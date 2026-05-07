@@ -167,6 +167,7 @@ class RoadNameAddressDataClient:
         output_dir: str | os.PathLike[str],
         *,
         overwrite: bool = False,
+        chunk_size: int = 1024 * 1024,
     ) -> Path:
         """Download one advertised dataset file and return the local ZIP path."""
 
@@ -181,9 +182,17 @@ class RoadNameAddressDataClient:
             params=params,
             headers={"Referer": f"{self.base_url}/jst/jstAddressDetailsSearch"},
             timeout=self.timeout,
+            stream=True,
         )
         raise_for_http_error(response, f"download {file.file_name}")
-        path.write_bytes(bytes(response.content))
+        iter_content = getattr(response, "iter_content", None)
+        if callable(iter_content):
+            with path.open("wb") as stream:
+                for chunk in iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        stream.write(chunk)
+        else:
+            path.write_bytes(bytes(response.content))
         return path
 
     def download_latest_full(
@@ -240,7 +249,10 @@ def iter_road_name_address_records(
         for line in _iter_decoded_lines(member.content, encoding=encoding):
             if not line.strip():
                 continue
-            yield _road_record(_split_line(line), source_name=member.name)
+            parts = _split_line(line)
+            if _is_no_data_parts(parts):
+                continue
+            yield _road_record(parts, source_name=member.name)
 
 
 def load_related_jibun_records(
@@ -266,7 +278,10 @@ def iter_related_jibun_records(
         for line in _iter_decoded_lines(member.content, encoding=encoding):
             if not line.strip():
                 continue
-            yield _related_jibun_record(_split_line(line), source_name=member.name)
+            parts = _split_line(line)
+            if _is_no_data_parts(parts):
+                continue
+            yield _related_jibun_record(parts, source_name=member.name)
 
 
 def archive_standard_date(path: str | os.PathLike[str]) -> date | None:
@@ -428,6 +443,10 @@ def _validate_decoding(content: bytes, encoding: str) -> None:
 
 def _split_line(line: str) -> list[str]:
     return [part.strip() for part in line.rstrip("\r\n").split("|")]
+
+
+def _is_no_data_parts(parts: list[str]) -> bool:
+    return len(parts) == 1 and parts[0].strip().lower().replace(" ", "") in {"nodata", "no_data"}
 
 
 def _road_record(parts: list[str], *, source_name: str) -> RoadNameAddressKoreanRecord:

@@ -86,6 +86,16 @@ def test_iter_records_from_cp949_zip() -> None:
     assert jibun[0].legal_eup_myeon_dong_name == "청운동"
 
 
+def test_iter_records_skips_no_data_daily_members() -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("AlterD.JUSUKR.20260405.TH_SGCO_RNADR_MST.TXT", b"No Data")
+        archive.writestr("AlterD.JUSUKR.20260405.TH_SGCO_RNADR_LNBR.TXT", b"No Data")
+
+    assert list(iter_road_name_address_records(buffer.getvalue())) == []
+    assert list(iter_related_jibun_records(buffer.getvalue())) == []
+
+
 @dataclass
 class FakeResponse:
     payload: dict[str, Any]
