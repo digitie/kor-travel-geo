@@ -83,6 +83,31 @@ parcel_rows = store.find_road_addresses_by_pnu("1111010100000010000")
 See [docs/address-db-schema.md](docs/address-db-schema.md) for the optimized
 SQLAlchemy schema, identifier structure, ETL flow, and future maintenance notes.
 
+## Legal-Dong Codes and PostGIS Boundaries
+
+PostGIS/GIS loading is available as an optional extra:
+
+```bash
+python -m pip install "pykraddr[postgis]"
+```
+
+```python
+from pathlib import Path
+from pykraddr.postgis import PostGISLegalDongStore
+
+url = "postgresql+psycopg://postgres:postgres@localhost:55433/pykraddr"
+
+with PostGISLegalDongStore(url, schema="kraddr") as store:
+    store.create_schema()
+    store.load_legal_dong_csv(Path("dataset/국토교통부_법정동코드_20250805.csv"))
+    result = store.load_boundary_zips(sorted(Path("dataset").glob("N3A_*.zip")))
+    print(result)
+```
+
+The PostGIS loader uses `psycopg` COPY for legal-dong CSV rows and GeoPandas /
+GeoAlchemy2 for SHP ZIP boundary loading. The WSL2 validation report is in
+[docs/legal-dong-postgis-report.md](docs/legal-dong-postgis-report.md).
+
 The TXT parser also works directly:
 
 ```python

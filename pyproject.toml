@@ -30,6 +30,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+postgis = [
+  "GeoAlchemy2>=0.15",
+  "geopandas>=0.14",
+  "psycopg[binary]>=3.1",
+  "pyogrio>=0.8",
+  "shapely>=2.0",
+]
 dev = [
   "pytest>=8",
   "ruff>=0.5",

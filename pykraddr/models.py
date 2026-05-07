@@ -77,6 +77,60 @@ class JusoPage(Generic[T]):
 
 
 @dataclass(frozen=True, slots=True)
+class LegalDongRecord:
+    """One legal-dong code row from data.go.kr/code.go.kr style CSV files."""
+
+    legal_dong_code: str
+    legal_dong_name: str
+    status_name: str = ""
+    previous_legal_dong_code: str | None = None
+    sido_name: str | None = None
+    sigungu_name: str | None = None
+    eup_myeon_dong_name: str | None = None
+    ri_name: str | None = None
+    raw: RawRecord = field(default_factory=dict, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "legal_dong_code", str(self.legal_dong_code).strip())
+        object.__setattr__(self, "legal_dong_name", str(self.legal_dong_name).strip())
+        object.__setattr__(self, "status_name", str(self.status_name).strip())
+        object.__setattr__(self, "raw", _freeze(self.raw))
+
+    @property
+    def is_active(self) -> bool:
+        return self.status_name not in {"폐지", "말소", "삭제", "N", "n"}
+
+    @property
+    def sido_code(self) -> str:
+        return self.legal_dong_code[:2]
+
+    @property
+    def sigungu_code(self) -> str:
+        return self.legal_dong_code[:5]
+
+    @property
+    def eup_myeon_dong_code(self) -> str:
+        return self.legal_dong_code[:8]
+
+    @property
+    def ri_code(self) -> str:
+        return self.legal_dong_code[8:10]
+
+    @property
+    def legal_dong_level(self) -> str:
+        code = self.legal_dong_code
+        if len(code) != 10:
+            return "unknown"
+        if code[2:] == "00000000":
+            return "sido"
+        if code[5:] == "00000":
+            return "sigungu"
+        if code[8:] == "00":
+            return "eup_myeon_dong"
+        return "ri"
+
+
+@dataclass(frozen=True, slots=True)
 class AddressSearchResult:
     """One row from the road-name address search API."""
 

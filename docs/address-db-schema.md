@@ -109,6 +109,48 @@ The store materializes:
 
 ## Tables
 
+### PostGIS Legal-Dong/GIS Schema
+
+PostgreSQL/PostGIS support lives in `pykraddr.postgis` and is intended to be
+run from WSL2 for local GIS work.
+
+Install the GIS extra in WSL2:
+
+```bash
+cd /mnt/f/dev/pykraddr
+python3 -m venv /tmp/pykraddr-venv
+source /tmp/pykraddr-venv/bin/activate
+python -m pip install -e ".[dev,postgis]"
+```
+
+The PostGIS schema adds:
+
+- `legal_dong_codes`: data.go.kr/code.go.kr legal-dong code master table.
+- `legal_dong_boundaries`: SHP boundary table with `geom MULTIPOLYGON(5179)`.
+- `legal_dong_boundary_mapping_issues`: view for missing/inactive source codes.
+
+The FK is:
+
+```text
+legal_dong_boundaries.legal_dong_code
+  -> legal_dong_codes.legal_dong_code
+```
+
+`legal_dong_boundaries.legal_dong_code` is nullable by design. The source SHP
+code remains in `source_code`, and rows that cannot be mapped are marked with
+`mapping_status`. This keeps the FK valid while preserving provider mismatch
+evidence for review.
+
+Bulk-load choices:
+
+- legal-dong CSV: `psycopg` COPY
+- SHP ZIP: GeoPandas/pyogrio read path
+- boundary write: `GeoDataFrame.to_postgis(..., chunksize=...)`
+- geometry index: PostGIS GiST index created through GeoAlchemy2
+
+See `docs/legal-dong-postgis-report.md` for the WSL2 command sequence and the
+validated `tripmate` dataset mismatch report.
+
 ### `road_name_addresses`
 
 This table stores the "도로명주소 한글" master rows.
