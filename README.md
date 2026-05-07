@@ -69,7 +69,19 @@ with RoadNameAddressStore("data/juso/rnaddrkor.sqlite") as store:
 ```
 
 `RoadNameAddressStore` uses SQLAlchemy 2 Core with SQLite by default. You can
-also pass an existing SQLAlchemy `Engine`.
+also pass an existing SQLAlchemy `Engine`. The store keeps the official TXT
+columns and adds indexed derived keys such as `sigungu_code`, `road_number`,
+`building_management_number`, and `pnu`.
+
+Useful lookup helpers:
+
+```python
+rows = store.get_road_addresses_by_management_number("1111010100100010000000001")
+parcel_rows = store.find_road_addresses_by_pnu("1111010100000010000")
+```
+
+See [docs/address-db-schema.md](docs/address-db-schema.md) for the optimized
+SQLAlchemy schema, identifier structure, ETL flow, and future maintenance notes.
 
 The TXT parser also works directly:
 

@@ -8,7 +8,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Column, DateTime, Index, MetaData, String, Table, create_engine, func, select
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Index,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    func,
+    select,
+    text,
+)
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Engine, RowMapping
 
@@ -23,6 +34,26 @@ from .models import RelatedJibunRecord, RoadNameAddressKoreanRecord
 
 ROAD_TABLE = "road_name_addresses"
 JIBUN_TABLE = "related_jibuns"
+
+ROAD_DERIVED_COLUMNS = (
+    "building_management_number",
+    "sido_code",
+    "sigungu_code",
+    "eup_myeon_dong_code",
+    "ri_code",
+    "road_sigungu_code",
+    "road_number",
+    "pnu",
+)
+JIBUN_DERIVED_COLUMNS = (
+    "sido_code",
+    "sigungu_code",
+    "eup_myeon_dong_code",
+    "ri_code",
+    "road_sigungu_code",
+    "road_number",
+    "pnu",
+)
 
 
 class RoadNameAddressStore:
@@ -56,9 +87,12 @@ class RoadNameAddressStore:
         self.close()
 
     def create_schema(self) -> None:
-        """Create tables and indexes when they do not exist."""
+        """Create tables, add compatible derived columns, and create indexes."""
 
         self.metadata.create_all(self.engine)
+        if self.engine.dialect.name == "sqlite":
+            self._add_missing_sqlite_columns()
+        self._create_indexes()
 
     def reset(self) -> None:
         """Delete all loaded address rows and sync metadata."""
@@ -202,6 +236,51 @@ class RoadNameAddressStore:
                 .first()
             )
 
+    def get_road_addresses_by_management_number(
+        self,
+        management_number: str,
+    ) -> list[RowMapping]:
+        """Return road-name rows for a 26-digit road/building management number."""
+
+        with self.engine.connect() as connection:
+            return list(
+                connection.execute(
+                    select(self.road_table).where(
+                        self.road_table.c.road_address_management_number == management_number
+                    )
+                )
+                .mappings()
+                .all()
+            )
+
+    def find_road_addresses_by_pnu(self, pnu: str, *, limit: int = 100) -> list[RowMapping]:
+        """Return road-name address rows attached to one 19-digit PNU parcel key."""
+
+        with self.engine.connect() as connection:
+            return list(
+                connection.execute(
+                    select(self.road_table)
+                    .where(self.road_table.c.pnu == pnu)
+                    .limit(limit)
+                )
+                .mappings()
+                .all()
+            )
+
+    def find_related_jibuns_by_pnu(self, pnu: str, *, limit: int = 100) -> list[RowMapping]:
+        """Return related-jibun rows attached to one 19-digit PNU parcel key."""
+
+        with self.engine.connect() as connection:
+            return list(
+                connection.execute(
+                    select(self.jibun_table)
+                    .where(self.jibun_table.c.pnu == pnu)
+                    .limit(limit)
+                )
+                .mappings()
+                .all()
+            )
+
     def get_metadata(self, key: str) -> str | None:
         with self.engine.connect() as connection:
             value = connection.scalar(
@@ -221,12 +300,13 @@ class RoadNameAddressStore:
         if not rows:
             return 0
         target = self.metadata.tables[table]
-        values = [{column: getattr(row, column) for column in columns} for row in rows]
+        values = [_row_values(table, columns, row) for row in rows]
         statement = sqlite_insert(target).values(values)
+        primary_key_columns = set(target.primary_key.columns.keys())
         update_values = {
             column: getattr(statement.excluded, column)
-            for column in columns
-            if column not in set(target.primary_key.columns.keys())
+            for column in target.columns.keys()
+            if column not in primary_key_columns
         }
         with self.engine.begin() as connection:
             connection.execute(
@@ -278,6 +358,83 @@ class RoadNameAddressStore:
             )
         )
 
+    def _add_missing_sqlite_columns(self) -> None:
+        """Add derived columns when opening a database created by an older release."""
+
+        tables = (self.road_table, self.jibun_table)
+        preparer = self.engine.dialect.identifier_preparer
+        with self.engine.begin() as connection:
+            for table in tables:
+                existing = {
+                    str(row["name"])
+                    for row in connection.execute(
+                        text(f"PRAGMA table_info({preparer.quote(table.name)})")
+                    ).mappings()
+                }
+                for column in table.columns:
+                    if column.name in existing:
+                        continue
+                    connection.execute(
+                        text(
+                            "ALTER TABLE "
+                            f"{preparer.quote(table.name)} "
+                            f"ADD COLUMN {preparer.quote(column.name)} VARCHAR NOT NULL DEFAULT ''"
+                        )
+                    )
+
+    def _create_indexes(self) -> None:
+        with self.engine.begin() as connection:
+            for table in (self.road_table, self.jibun_table):
+                for index in table.indexes:
+                    index.create(connection, checkfirst=True)
+
+    def backfill_derived_columns(self) -> None:
+        """Backfill derived code/PNU columns in a database loaded by an older version.
+
+        New full and daily loads fill these columns during upsert. This helper is
+        useful after upgrading an existing SQLite DB without reloading the full
+        monthly archive.
+        """
+
+        if self.engine.dialect.name != "sqlite":
+            raise NotImplementedError("backfill_derived_columns currently supports SQLite only")
+        with self.engine.begin() as connection:
+            connection.execute(
+                text(
+                    f"""
+                    UPDATE {ROAD_TABLE}
+                    SET
+                        building_management_number = road_address_management_number,
+                        sido_code = substr(legal_dong_code, 1, 2),
+                        sigungu_code = substr(legal_dong_code, 1, 5),
+                        eup_myeon_dong_code = substr(legal_dong_code, 1, 8),
+                        ri_code = substr(legal_dong_code, 9, 2),
+                        road_sigungu_code = substr(road_name_code, 1, 5),
+                        road_number = substr(road_name_code, 6),
+                        pnu = legal_dong_code || mountain_yn
+                              || printf('%04d', CAST(lot_main_no AS INTEGER))
+                              || printf('%04d', CAST(lot_sub_no AS INTEGER))
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    f"""
+                    UPDATE {JIBUN_TABLE}
+                    SET
+                        sido_code = substr(legal_dong_code, 1, 2),
+                        sigungu_code = substr(legal_dong_code, 1, 5),
+                        eup_myeon_dong_code = substr(legal_dong_code, 1, 8),
+                        ri_code = substr(legal_dong_code, 9, 2),
+                        road_sigungu_code = substr(road_name_code, 1, 5),
+                        road_number = substr(road_name_code, 6),
+                        pnu = legal_dong_code || mountain_yn
+                              || printf('%04d', CAST(lot_main_no AS INTEGER))
+                              || printf('%04d', CAST(lot_sub_no AS INTEGER))
+                    """
+                )
+            )
+
 
 def _make_metadata() -> MetaData:
     metadata = MetaData()
@@ -299,10 +456,22 @@ def _make_metadata() -> MetaData:
                 nullable=False,
                 default="",
             )
-            for name in ROAD_NAME_ADDRESS_COLUMNS
+            for name in (*ROAD_NAME_ADDRESS_COLUMNS, *ROAD_DERIVED_COLUMNS)
         ],
+        Index("ix_road_name_addresses_mgmt_no", "road_address_management_number"),
+        Index("ix_road_name_addresses_building_mgmt", "building_management_number"),
         Index("ix_road_name_addresses_legal_dong", "legal_dong_code"),
+        Index("ix_road_name_addresses_sigungu", "sigungu_code"),
+        Index("ix_road_name_addresses_emd", "eup_myeon_dong_code"),
         Index("ix_road_name_addresses_road_name", "road_name_code"),
+        Index(
+            "ix_road_name_addresses_road_lookup",
+            "road_name_code",
+            "underground_yn",
+            "building_main_no",
+            "building_sub_no",
+        ),
+        Index("ix_road_name_addresses_pnu", "pnu"),
         Index("ix_road_name_addresses_postal_code", "postal_code"),
     )
     Table(
@@ -323,9 +492,19 @@ def _make_metadata() -> MetaData:
                 nullable=False,
                 default="",
             )
-            for name in RELATED_JIBUN_COLUMNS
+            for name in (*RELATED_JIBUN_COLUMNS, *JIBUN_DERIVED_COLUMNS)
         ],
         Index("ix_related_jibuns_road_mgmt", "road_address_management_number"),
+        Index("ix_related_jibuns_legal_dong", "legal_dong_code"),
+        Index(
+            "ix_related_jibuns_legal_lot",
+            "legal_dong_code",
+            "mountain_yn",
+            "lot_main_no",
+            "lot_sub_no",
+        ),
+        Index("ix_related_jibuns_sigungu", "sigungu_code"),
+        Index("ix_related_jibuns_pnu", "pnu"),
     )
     Table(
         "sync_metadata",
@@ -388,3 +567,70 @@ def _first_month_or_date(text: str) -> str | None:
         if len(part) >= 6:
             return f"{part[:4]}-{part[4:6]}"
     return None
+
+
+def _row_values(table: str, columns: tuple[str, ...], row: Any) -> dict[str, str]:
+    values = {column: _clean(getattr(row, column)) for column in columns}
+    if table == ROAD_TABLE:
+        values.update(_legal_code_values(values["legal_dong_code"]))
+        values.update(_road_code_values(values["road_name_code"]))
+        values["building_management_number"] = values["road_address_management_number"]
+        values["pnu"] = _pnu(
+            values["legal_dong_code"],
+            values["mountain_yn"],
+            values["lot_main_no"],
+            values["lot_sub_no"],
+        )
+    elif table == JIBUN_TABLE:
+        values.update(_legal_code_values(values["legal_dong_code"]))
+        values.update(_road_code_values(values["road_name_code"]))
+        values["pnu"] = _pnu(
+            values["legal_dong_code"],
+            values["mountain_yn"],
+            values["lot_main_no"],
+            values["lot_sub_no"],
+        )
+    return values
+
+
+def _legal_code_values(legal_dong_code: str) -> dict[str, str]:
+    return {
+        "sido_code": legal_dong_code[:2],
+        "sigungu_code": legal_dong_code[:5],
+        "eup_myeon_dong_code": legal_dong_code[:8],
+        "ri_code": legal_dong_code[8:10],
+    }
+
+
+def _road_code_values(road_name_code: str) -> dict[str, str]:
+    return {
+        "road_sigungu_code": road_name_code[:5],
+        "road_number": road_name_code[5:12],
+    }
+
+
+def _pnu(
+    legal_dong_code: str,
+    mountain_yn: str,
+    lot_main_no: str,
+    lot_sub_no: str,
+) -> str:
+    return (
+        legal_dong_code
+        + (mountain_yn or "0")[:1]
+        + _zero_pad_number(lot_main_no, 4)
+        + _zero_pad_number(lot_sub_no, 4)
+    )
+
+
+def _zero_pad_number(value: str, width: int) -> str:
+    text_value = _clean(value)
+    if not text_value:
+        return "0" * width
+    return text_value.zfill(width)
+
+
+def _clean(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
