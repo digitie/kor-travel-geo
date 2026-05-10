@@ -90,6 +90,8 @@ parcel_rows = store.find_road_addresses_by_pnu("1111010100000010000")
 
 최적화된 SQLAlchemy 스키마, 식별자 구조, ETL 흐름, 유지보수 메모는
 [docs/address-db-schema.md](docs/address-db-schema.md)를 참고하세요.
+코드를 처음 읽는 사람을 위한 전체 흐름 안내는
+[docs/code-guide-for-beginners.md](docs/code-guide-for-beginners.md)에 정리했습니다.
 
 ## 법정동코드와 PostGIS 경계
 
