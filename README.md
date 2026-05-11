@@ -107,9 +107,23 @@ npm install
 npm run dev
 ```
 
-WSL 실행 기준 포트는 프론트엔드 `3010`, 백엔드 `3011`입니다. Kakao 지도 표시에는
-`NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`가 필요합니다. 자세한 내용은 [web/README.md](web/README.md)와
-[backend/README.md](backend/README.md)를 참고하세요.
+WSL 실행 기준 포트는 프론트엔드 `3010`, 백엔드 `3011`입니다. 브라우저 주소는
+Kakao JavaScript SDK 도메인 등록과 맞추기 위해 `http://localhost:3010`을
+기본으로 사용합니다.
+
+웹 UI는 다음 흐름을 제공합니다.
+
+- `샘플 탐색`: 프론트엔드와 지도 표시를 빠르게 확인하는 내장 샘플
+- `전체 목록`: PostGIS `address_serving_juso_road_address` 테이블을 페이지 단위로 조회
+- 검색 범위: 전체, 도로명, 지번, 코드
+- 목록 표시 개수: `5`, `10`, `20`, `50`, `100`개
+- 기본 표시 개수: `10`개
+- 표시 개수 저장: `pykraddr_page_size` 쿠키
+- 처리 중 상태: 목록 조회 중 회전 아이콘과 `처리 중` 배지 표시
+
+Kakao 지도 표시에는 `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`가 필요합니다. 실제 키는
+`web/.env.local`처럼 Git에서 무시되는 파일에만 둡니다. 자세한 내용은
+[web/README.md](web/README.md)와 [backend/README.md](backend/README.md)를 참고하세요.
 
 ## 법정동코드와 PostGIS 경계
 

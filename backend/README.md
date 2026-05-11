@@ -31,6 +31,10 @@ uvicorn pykraddr_api.main:app --app-dir backend --host 0.0.0.0 --port 3011 --rel
 - `query`: 도로명, 지번, 법정동코드, 도로명코드, PNU 성격의 검색어
 - `scope`: `all`, `road`, `jibun`, `code`
 - `page`: 1부터 시작
-- `page_size`: 최대 100
+- `page_size`: 1부터 100까지 허용하며, 웹 UI는 `5`, `10`, `20`, `50`, `100`개 선택지를 사용합니다.
+
+웹 UI는 기본 `page_size`를 `10`으로 사용하고, 사용자가 선택한 값은
+`pykraddr_page_size` 쿠키로 저장합니다. 백엔드는 쿠키를 직접 읽지 않고,
+프론트엔드가 전달한 `page_size` 쿼리 값을 기준으로 응답합니다.
 
 주소 좌표는 개별 건물 좌표가 아니라 PostGIS 법정동/시군구/시도 경계의 `ST_PointOnSurface` 결과입니다. 정확한 건물 출입구 좌표가 필요한 경우 별도의 주소점 테이블을 추가로 적재해서 조인해야 합니다.

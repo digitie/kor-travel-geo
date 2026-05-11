@@ -9,6 +9,7 @@ import {
   Database,
   Layers2,
   ListFilter,
+  LoaderCircle,
   LocateFixed,
   MapPin,
   RefreshCw,
@@ -45,7 +46,12 @@ type AddressListResponse = {
 };
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:3011";
-const pageSize = 50;
+const defaultPageSize = 10;
+const pageSizeCookieName = "pykraddr_page_size";
+const pageSizeCookieMaxAge = 60 * 60 * 24 * 365;
+const pageSizeOptions = [5, 10, 20, 50, 100] as const;
+
+type PageSize = (typeof pageSizeOptions)[number];
 
 const KakaoMapPanel = dynamic<KakaoMapPanelProps>(
   () => import("@/components/kakao-map-panel").then((mod) => mod.KakaoMapPanel),
@@ -75,6 +81,8 @@ export function AddressExplorer() {
   const [showBoundary, setShowBoundary] = useState(true);
   const [showRadius, setShowRadius] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSizeState] = useState<PageSize>(readPageSizeCookie);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [serverItems, setServerItems] = useState<AddressPlace[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverHasNext, setServerHasNext] = useState(false);
@@ -86,6 +94,7 @@ export function AddressExplorer() {
   const selected =
     visiblePlaces.find((place) => place.id === selectedId) ?? visiblePlaces[0] ?? SAMPLE_PLACES[0];
   const totalCount = mode === "sample" ? samplePlaces.length : serverTotal;
+  const processing = mode === "postgis" && loading;
 
   useEffect(() => {
     if (mode !== "postgis") {
@@ -130,7 +139,7 @@ export function AddressExplorer() {
 
     void loadAddresses();
     return () => controller.abort();
-  }, [mode, page, query, scope]);
+  }, [mode, page, pageSize, query, refreshKey, scope]);
 
   const updateQuery = (value: string) => {
     setQuery(value);
@@ -146,6 +155,12 @@ export function AddressExplorer() {
     setMode(value);
     setPage(1);
     setSelectedId(SAMPLE_PLACES[0].id);
+  };
+
+  const updatePageSize = (value: PageSize) => {
+    setPageSizeState(value);
+    writePageSizeCookie(value);
+    setPage(1);
   };
 
   return (
@@ -218,7 +233,7 @@ export function AddressExplorer() {
         <section className="grid flex-1 gap-4 py-4 lg:grid-cols-[430px_minmax(0,1fr)]">
           <aside className="flex min-h-[620px] flex-col gap-4">
             <div className="rounded-lg border border-[#d9dfeb] bg-white p-4 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#39485c]">
                   {mode === "postgis" ? (
                     <Server aria-hidden="true" size={18} />
@@ -226,10 +241,20 @@ export function AddressExplorer() {
                     <ListFilter aria-hidden="true" size={18} />
                   )}
                   {mode === "postgis" ? "전체 주소 목록" : "샘플 검색 결과"}
+                  {processing ? <LoadingBadge /> : null}
                 </div>
-                <span className="font-mono text-sm font-semibold text-[#0f766e]">
-                  {totalCount.toLocaleString("ko-KR")}
-                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  {mode === "postgis" ? (
+                    <PageSizeSelect
+                      value={pageSize}
+                      disabled={processing}
+                      onChange={updatePageSize}
+                    />
+                  ) : null}
+                  <span className="font-mono text-sm font-semibold text-[#0f766e]">
+                    {totalCount.toLocaleString("ko-KR")}
+                  </span>
+                </div>
               </div>
 
               {error ? (
@@ -240,8 +265,8 @@ export function AddressExplorer() {
               ) : null}
 
               <div className="mt-4 space-y-2">
-                {loading ? <LoadingRows /> : null}
-                {!loading && visiblePlaces.length > 0
+                {processing ? <LoadingRows count={pageSize} /> : null}
+                {!processing && visiblePlaces.length > 0
                   ? visiblePlaces.map((place) => (
                       <ResultRow
                         key={place.id}
@@ -251,7 +276,7 @@ export function AddressExplorer() {
                       />
                     ))
                   : null}
-                {!loading && visiblePlaces.length === 0 ? (
+                {!processing && visiblePlaces.length === 0 ? (
                   <div className="rounded-lg border border-dashed border-[#cfd7e5] bg-[#f9fbfd] px-4 py-8 text-center text-sm font-medium text-[#6f7f91]">
                     일치하는 주소 없음
                   </div>
@@ -262,11 +287,12 @@ export function AddressExplorer() {
                 <Pagination
                   page={page}
                   total={serverTotal}
+                  pageSize={pageSize}
                   hasNext={serverHasNext}
-                  loading={loading}
+                  loading={processing}
                   onPrevious={() => setPage((value) => Math.max(1, value - 1))}
                   onNext={() => setPage((value) => value + 1)}
-                  onRefresh={() => setPage((value) => value)}
+                  onRefresh={() => setRefreshKey((value) => value + 1)}
                 />
               ) : null}
             </div>
@@ -414,9 +440,51 @@ function AddressDetail({ selected }: { selected: AddressPlace }) {
   );
 }
 
+function PageSizeSelect({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: PageSize;
+  disabled: boolean;
+  onChange: (value: PageSize) => void;
+}) {
+  return (
+    <label className="flex h-9 items-center gap-2 rounded-lg border border-[#d6dee8] bg-white pl-3 pr-2 text-xs font-bold text-[#607086]">
+      표시
+      <select
+        aria-label="페이지당 주소 수"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(toPageSize(event.target.value))}
+        className="h-7 rounded-md border border-[#d6dee8] bg-[#f8fafc] px-2 font-mono text-xs font-semibold text-[#182033] outline-none transition focus:border-[#2b7a78] focus:ring-2 focus:ring-[#2b7a78]/15 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {pageSizeOptions.map((option) => (
+          <option key={option} value={option}>
+            {option}개
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function LoadingBadge() {
+  return (
+    <span
+      className="ml-1 inline-flex items-center gap-1.5 rounded bg-[#edf8f6] px-2 py-1 text-xs font-bold text-[#0f766e]"
+      aria-live="polite"
+    >
+      <LoaderCircle aria-hidden="true" className="animate-spin" size={14} />
+      처리 중
+    </span>
+  );
+}
+
 function Pagination({
   page,
   total,
+  pageSize,
   hasNext,
   loading,
   onPrevious,
@@ -425,6 +493,7 @@ function Pagination({
 }: {
   page: number;
   total: number;
+  pageSize: PageSize;
   hasNext: boolean;
   loading: boolean;
   onPrevious: () => void;
@@ -442,7 +511,7 @@ function Pagination({
           <ChevronLeft aria-hidden="true" size={17} />
         </IconButton>
         <IconButton disabled={loading} label="새로고침" onClick={onRefresh}>
-          <RefreshCw aria-hidden="true" size={16} />
+          <RefreshCw aria-hidden="true" className={loading ? "animate-spin" : ""} size={16} />
         </IconButton>
         <IconButton disabled={loading || !hasNext} label="다음" onClick={onNext}>
           <ChevronRight aria-hidden="true" size={17} />
@@ -502,10 +571,11 @@ function LayerToggle({
   );
 }
 
-function LoadingRows() {
+function LoadingRows({ count }: { count: number }) {
+  const rowCount = Math.min(count, 10);
   return (
     <>
-      {Array.from({ length: 5 }, (_, index) => (
+      {Array.from({ length: rowCount }, (_, index) => (
         <div
           key={index}
           className="h-[82px] animate-pulse rounded-lg border border-[#e2e7ef] bg-[#f5f8fb]"
@@ -524,6 +594,37 @@ function MapLoading() {
       </div>
     </div>
   );
+}
+
+function readPageSizeCookie(): PageSize {
+  if (typeof document === "undefined") {
+    return defaultPageSize;
+  }
+
+  const cookie = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(`${pageSizeCookieName}=`));
+  if (!cookie) {
+    return defaultPageSize;
+  }
+
+  const [, rawValue] = cookie.split("=");
+  return toPageSize(decodeURIComponent(rawValue ?? ""));
+}
+
+function writePageSizeCookie(value: PageSize) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.cookie = `${pageSizeCookieName}=${encodeURIComponent(
+    String(value),
+  )}; Max-Age=${pageSizeCookieMaxAge}; Path=/; SameSite=Lax`;
+}
+
+function toPageSize(value: string): PageSize {
+  const parsed = Number(value);
+  return pageSizeOptions.some((option) => option === parsed) ? (parsed as PageSize) : defaultPageSize;
 }
 
 function filterPlaces(places: AddressPlace[], query: string, scope: SearchScope) {
