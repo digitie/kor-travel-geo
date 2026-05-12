@@ -13,7 +13,6 @@ from shapely.geometry import MultiPolygon, Polygon, shape
 
 from .config import load_settings
 
-
 metadata = sa.MetaData()
 
 road_address_table = sa.Table(
@@ -75,7 +74,9 @@ def health() -> dict[str, Any]:
                 """
             )
         )
-        boundary_count = connection.scalar(sa.text("select count(*) from public.region_serving_boundary"))
+        boundary_count = connection.scalar(
+            sa.text("select count(*) from public.region_serving_boundary")
+        )
     return {
         "ok": True,
         "postgis": postgis_version,
@@ -265,10 +266,16 @@ def _row_to_address(row: sa.RowMapping) -> dict[str, Any]:
         "boundary": boundary,
         "radiusMeters": 150,
         "updatedAt": "",
-        "tags": [tag for tag in [row["sido_name"], row["sigungu_name"], row["boundary_level"]] if tag],
+        "tags": [
+            tag
+            for tag in [row["sido_name"], row["sigungu_name"], row["boundary_level"]]
+            if tag
+        ],
         "boundaryName": row["boundary_name"] or "",
         "boundaryLevel": row["boundary_level"] or "",
-        "coordinateSource": "postgis_boundary" if lat is not None and lng is not None else "fallback",
+        "coordinateSource": (
+            "postgis_boundary" if lat is not None and lng is not None else "fallback"
+        ),
     }
 
 

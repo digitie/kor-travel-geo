@@ -163,23 +163,23 @@ ix_legal_dong_boundaries_mapping_status
 ## WSL2 전체 재적재 명령
 
 ```bash
-cd /mnt/f/dev/pykraddr
-python3 -m venv ~/.cache/pykraddr-venv
-source ~/.cache/pykraddr-venv/bin/activate
+cd /mnt/f/dev/python-kraddr-geo
+python3 -m venv ~/.cache/kraddr-geo-venv
+source ~/.cache/kraddr-geo-venv/bin/activate
 python -m pip install -e ".[dev,postgis]"
 
-docker run -d --name pykraddr-postgis \
+docker run -d --name kraddr-geo-postgis \
   -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=pykraddr \
+  -e POSTGRES_DB=kraddr_geo \
   -p 55433:5432 \
   postgis/postgis:16-3.4
 ```
 
 ```python
 from pathlib import Path
-from pykraddr.postgis import PostGISLegalDongStore
+from kraddr.geo.postgis import PostGISLegalDongStore
 
-url = "postgresql+psycopg://postgres:postgres@localhost:55433/pykraddr"
+url = "postgresql+psycopg://postgres:postgres@localhost:55433/kraddr_geo"
 csv_path = Path("/mnt/f/dev/tripmate/dataset/국토교통부_법정동코드_20250805.csv")
 zip_paths = sorted(Path("/mnt/f/dev/tripmate/dataset").glob("N3A_*.zip"))
 

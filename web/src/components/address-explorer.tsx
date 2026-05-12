@@ -47,7 +47,7 @@ type AddressListResponse = {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:3011";
 const defaultPageSize = 10;
-const pageSizeCookieName = "pykraddr_page_size";
+const pageSizeCookieName = "kraddr_geo_page_size";
 const pageSizeCookieMaxAge = 60 * 60 * 24 * 365;
 const pageSizeOptions = [5, 10, 20, 50, 100] as const;
 

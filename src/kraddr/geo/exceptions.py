@@ -1,10 +1,10 @@
-"""pykraddr에서 사용하는 예외 클래스."""
+"""kraddr.geo에서 사용하는 예외 클래스."""
 
 from __future__ import annotations
 
 
 class KrAddrError(Exception):
-    """pykraddr 예외의 기준 클래스."""
+    """kraddr.geo 예외의 기준 클래스."""
 
 
 class KrAddrAuthError(KrAddrError):

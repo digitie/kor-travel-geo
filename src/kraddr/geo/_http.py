@@ -18,7 +18,7 @@ from .exceptions import (
 )
 
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (compatible; pykraddr/0.1; +https://business.juso.go.kr)"
+    "Mozilla/5.0 (compatible; python-kraddr-geo/0.1; +https://business.juso.go.kr)"
 )
 TRANSIENT_STATUSES = {429, 500, 502, 503, 504}
 
@@ -80,7 +80,7 @@ def build_session(retries: int = 3) -> SessionLike:
 
 
 def raise_for_http_error(response: ResponseLike, context: str) -> None:
-    """HTTP 상태 코드를 pykraddr 예외로 변환한다."""
+    """HTTP 상태 코드를 kraddr.geo 예외로 변환한다."""
 
     status = int(response.status_code)
     text = response.text[:300]

@@ -19,15 +19,15 @@ def load_settings() -> Settings:
     """환경 변수에서 설정을 읽는다."""
 
     _load_local_env()
-    database_url = os.environ.get("PYKRADDR_DATABASE_URL")
+    database_url = os.environ.get("KRADDR_GEO_DATABASE_URL")
     if not database_url:
         raise RuntimeError(
-            "PYKRADDR_DATABASE_URL 환경 변수가 필요합니다. "
+            "KRADDR_GEO_DATABASE_URL 환경 변수가 필요합니다. "
             "PostgreSQL/PostGIS 접속 문자열을 설정하세요."
         )
     return Settings(
         database_url=database_url,
-        schema=os.environ.get("PYKRADDR_DB_SCHEMA", "public"),
+        schema=os.environ.get("KRADDR_GEO_DB_SCHEMA", "public"),
     )
 
 

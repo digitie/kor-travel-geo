@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from pykraddr import KrAddrAuthError, KrAddrClient
+from kraddr.geo import KrAddrAuthError, KrAddrClient
 
 
 @dataclass

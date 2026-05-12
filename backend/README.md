@@ -1,4 +1,4 @@
-# pykraddr 백엔드
+# python-kraddr-geo 백엔드
 
 `backend` 디렉터리는 주소 목록 브라우징과 GIS 경계 조회를 위한 FastAPI 서버입니다. 기본 기준은 PostgreSQL + PostGIS + SQLAlchemy 2 + GeoAlchemy2이며, 경계 GeoJSON을 화면용 좌표로 정리할 때 Shapely를 사용합니다. GeoPandas는 같은 GIS 처리 스택의 필수 의존성으로 설치하고 상태 점검에서 버전을 확인합니다.
 
@@ -10,13 +10,13 @@
 ## WSL 실행
 
 ```bash
-cd /mnt/f/dev/pykraddr
+cd /mnt/f/dev/python-kraddr-geo
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r backend/requirements.txt
-export PYKRADDR_DATABASE_URL="postgresql+psycopg://사용자:비밀번호@localhost:55432/tripmate"
-export PYKRADDR_DB_SCHEMA="public"
-uvicorn pykraddr_api.main:app --app-dir backend --host 0.0.0.0 --port 3011 --reload
+export KRADDR_GEO_DATABASE_URL="postgresql+psycopg://사용자:비밀번호@localhost:55432/tripmate"
+export KRADDR_GEO_DB_SCHEMA="public"
+uvicorn kraddr_geo_api.main:app --app-dir backend --host 0.0.0.0 --port 3011 --reload
 ```
 
 로컬 비밀번호는 `backend/.env.local` 같은 무시되는 파일이나 셸 환경 변수로만 관리합니다. 저장소에는 실제 접속 문자열을 커밋하지 않습니다.
@@ -34,7 +34,7 @@ uvicorn pykraddr_api.main:app --app-dir backend --host 0.0.0.0 --port 3011 --rel
 - `page_size`: 1부터 100까지 허용하며, 웹 UI는 `5`, `10`, `20`, `50`, `100`개 선택지를 사용합니다.
 
 웹 UI는 기본 `page_size`를 `10`으로 사용하고, 사용자가 선택한 값은
-`pykraddr_page_size` 쿠키로 저장합니다. 백엔드는 쿠키를 직접 읽지 않고,
+`kraddr_geo_page_size` 쿠키로 저장합니다. 백엔드는 쿠키를 직접 읽지 않고,
 프론트엔드가 전달한 `page_size` 쿼리 값을 기준으로 응답합니다.
 
 주소 좌표는 개별 건물 좌표가 아니라 PostGIS 법정동/시군구/시도 경계의 `ST_PointOnSurface` 결과입니다. 정확한 건물 출입구 좌표가 필요한 경우 별도의 주소점 테이블을 추가로 적재해서 조인해야 합니다.

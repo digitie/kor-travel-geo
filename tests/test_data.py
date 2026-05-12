@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from pykraddr.data import (
+from kraddr.geo.data import (
     RoadNameAddressDataClient,
     iter_related_jibun_records,
     iter_road_name_address_records,

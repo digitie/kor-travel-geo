@@ -1,6 +1,6 @@
-# pykraddr
+# python-kraddr-geo
 
-`pykraddr`는 대한민국 Juso 도로명주소 API와
+`kraddr.geo`는 대한민국 Juso 도로명주소 API와
 `business.juso.go.kr`에서 내려받을 수 있는 "도로명주소 한글" TXT 자료를
 다루는 비공식 Python 라이브러리입니다.
 
@@ -17,7 +17,7 @@
 ## 검색 API
 
 ```python
-from pykraddr import KrAddrClient
+from kraddr.geo import KrAddrClient
 
 client = KrAddrClient.from_env("JUSO_CONFM_KEY")
 
@@ -46,7 +46,7 @@ print(coords.items[0].x, coords.items[0].y)
 ## 도로명주소 한글 자료
 
 ```python
-from pykraddr import RoadNameAddressDataClient, RoadNameAddressStore
+from kraddr.geo import RoadNameAddressDataClient, RoadNameAddressStore
 
 data = RoadNameAddressDataClient()
 zip_path = data.download_latest_full("data/juso")
@@ -100,7 +100,7 @@ PostgreSQL/PostGIS 조회 백엔드는 `backend/` 디렉터리에 있습니다.
 
 ```bash
 cd backend
-uvicorn pykraddr_api.main:app --app-dir . --host 0.0.0.0 --port 3011 --reload
+uvicorn kraddr_geo_api.main:app --app-dir . --host 0.0.0.0 --port 3011 --reload
 
 cd web
 npm install
@@ -118,7 +118,7 @@ Kakao JavaScript SDK 도메인 등록과 맞추기 위해 `http://localhost:3010
 - 검색 범위: 전체, 도로명, 지번, 코드
 - 목록 표시 개수: `5`, `10`, `20`, `50`, `100`개
 - 기본 표시 개수: `10`개
-- 표시 개수 저장: `pykraddr_page_size` 쿠키
+- 표시 개수 저장: `kraddr_geo_page_size` 쿠키
 - 처리 중 상태: 목록 조회 중 회전 아이콘과 `처리 중` 배지 표시
 
 Kakao 지도 표시에는 `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`가 필요합니다. 실제 키는
@@ -130,14 +130,14 @@ Kakao 지도 표시에는 `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`가 필요합니다.
 PostGIS/GIS 적재 기능은 선택 의존성으로 제공됩니다.
 
 ```bash
-python -m pip install "pykraddr[postgis]"
+python -m pip install "python-kraddr-geo[postgis]"
 ```
 
 ```python
 from pathlib import Path
-from pykraddr.postgis import PostGISLegalDongStore
+from kraddr.geo.postgis import PostGISLegalDongStore
 
-url = "postgresql+psycopg://postgres:postgres@localhost:55433/pykraddr"
+url = "postgresql+psycopg://postgres:postgres@localhost:55433/kraddr_geo"
 
 with PostGISLegalDongStore(url, schema="kraddr") as store:
     store.create_schema()
@@ -161,9 +161,9 @@ WSL2 검증 보고서는
 좌표에서 도로명주소를 얻는 기능은 오프라인 우선 방식입니다.
 
 ```python
-from pykraddr import ReverseGeocoder, RoadAddressPointStore, VWorldReverseGeocoder
+from kraddr.geo import ReverseGeocoder, RoadAddressPointStore, VWorldReverseGeocoder
 
-url = "postgresql+psycopg://postgres:postgres@localhost:55433/pykraddr"
+url = "postgresql+psycopg://postgres:postgres@localhost:55433/kraddr_geo"
 
 with RoadAddressPointStore(url, schema="kraddr") as store:
     store.load_navigation_building_archive("dataset/navigation_building.zip")
@@ -184,7 +184,7 @@ with RoadAddressPointStore(url, schema="kraddr") as store:
 TXT 파서는 직접 사용할 수도 있습니다.
 
 ```python
-from pykraddr import iter_road_name_address_records
+from kraddr.geo import iter_road_name_address_records
 
 for record in iter_road_name_address_records(zip_path):
     print(record.road_address_management_number, record.road_name)

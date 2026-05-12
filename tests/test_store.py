@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 
-from pykraddr import RoadNameAddressStore
+from kraddr.geo import RoadNameAddressStore
 
 
 def _road_line(change_code: str, building_name: str = "청운빌딩") -> str:

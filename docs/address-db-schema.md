@@ -83,7 +83,7 @@ API에서는 같은 식별자를 `bdMgtSn`으로 받으므로, 저장소는
 | 17-21 | 건물 본번, 0 채움 |
 | 22-26 | 건물 부번, 0 채움 |
 
-공급자 TXT 스키마는 복합 키를 표시하므로 pykraddr도 다음 복합 기본키를
+공급자 TXT 스키마는 복합 키를 표시하므로 kraddr.geo도 다음 복합 기본키를
 유지합니다.
 
 ```text
@@ -114,15 +114,15 @@ building_sub_no
 
 ### PostGIS 법정동/GIS 스키마
 
-PostgreSQL/PostGIS 지원은 `pykraddr.postgis`에 있으며, 로컬 GIS 작업은 WSL2에서
+PostgreSQL/PostGIS 지원은 `kraddr.geo.postgis`에 있으며, 로컬 GIS 작업은 WSL2에서
 실행하는 것을 기준으로 검증했습니다.
 
 WSL2 설치 예시:
 
 ```bash
-cd /mnt/f/dev/pykraddr
-python3 -m venv ~/.cache/pykraddr-venv
-source ~/.cache/pykraddr-venv/bin/activate
+cd /mnt/f/dev/python-kraddr-geo
+python3 -m venv ~/.cache/kraddr-geo-venv
+source ~/.cache/kraddr-geo-venv/bin/activate
 python -m pip install -e ".[dev,postgis]"
 ```
 
@@ -325,7 +325,7 @@ updated_at
 최신 "도로명주소 한글" 월 전체분 ZIP을 기준 스냅샷으로 사용합니다.
 
 ```python
-from pykraddr import RoadNameAddressDataClient, RoadNameAddressStore
+from kraddr.geo import RoadNameAddressDataClient, RoadNameAddressStore
 
 data = RoadNameAddressDataClient()
 zip_path = data.download_latest_full("data/juso/full")
@@ -416,7 +416,7 @@ backfill 전까지 파생 컬럼이 비어 있을 수 있습니다.
 다시 내려받지 않고 채우기:
 
 ```python
-from pykraddr import RoadNameAddressStore
+from kraddr.geo import RoadNameAddressStore
 
 with RoadNameAddressStore("data/juso/rnaddrkor.sqlite") as store:
     store.backfill_derived_columns()
@@ -427,7 +427,7 @@ with RoadNameAddressStore("data/juso/rnaddrkor.sqlite") as store:
 
 ## Codex 유지보수 체크리스트
 
-1. 테이블 컬럼을 바꾸기 전에 `pykraddr/data.py`를 먼저 읽습니다.
+1. 테이블 컬럼을 바꾸기 전에 `src/kraddr/geo/data.py`를 먼저 읽습니다.
 2. 파서 컬럼 순서는 공식 TXT 스키마와 정확히 일치해야 합니다.
 3. 코드는 앞 0이 중요하므로 공급자 컬럼은 문자열로 보관합니다.
 4. `pnu`도 숫자가 아니라 식별자 문자열입니다.
@@ -442,7 +442,7 @@ with RoadNameAddressStore("data/juso/rnaddrkor.sqlite") as store:
 ```powershell
 python -m ruff check .
 python -m pytest
-python -m mypy pykraddr
+python -m mypy src/kraddr/geo
 ```
 
 2026년 5월 구현 당시 실적:

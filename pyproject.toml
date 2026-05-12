@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pykraddr"
+name = "python-kraddr-geo"
 version = "0.1.0"
 description = "한국 Juso 도로명주소 API와 데이터셋을 다루는 Python 클라이언트 및 적재 도구."
 readme = "README.md"
@@ -45,10 +45,12 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["pykraddr*"]
+where = ["src"]
+include = ["kraddr*"]
+namespaces = true
 
 [tool.setuptools.package-data]
-pykraddr = ["py.typed"]
+"kraddr.geo" = ["py.typed"]
 
 [tool.ruff]
 line-length = 100
@@ -65,6 +67,7 @@ warn_unused_ignores = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+pythonpath = ["src"]
 markers = [
   "live: tests that call real Juso servers and require JUSO_CONFM_KEY",
 ]

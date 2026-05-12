@@ -3,8 +3,8 @@ from __future__ import annotations
 import io
 import zipfile
 
-from pykraddr import iter_legal_dong_records
-from pykraddr.legal_dong import records_from_openapi_rows
+from kraddr.geo import iter_legal_dong_records
+from kraddr.geo.legal_dong import records_from_openapi_rows
 
 LEGAL_DONG_CSV = "\n".join(
     [

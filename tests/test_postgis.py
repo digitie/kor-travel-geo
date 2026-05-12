@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pykraddr.postgis import (
+from kraddr.geo.postgis import (
     DEFAULT_LEGAL_DONG_ALIASES,
     LEGAL_DONG_ALIAS_TABLE,
     LEGAL_DONG_BOUNDARY_TABLE,

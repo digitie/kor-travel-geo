@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "pykraddr 주소 탐색",
-  description: "주소 검색 결과와 GIS 위치를 함께 확인하는 pykraddr 웹 UI",
+  title: "kraddr.geo 주소 탐색",
+  description: "주소 검색 결과와 GIS 위치를 함께 확인하는 kraddr.geo 웹 UI",
 };
 
 export default function RootLayout({

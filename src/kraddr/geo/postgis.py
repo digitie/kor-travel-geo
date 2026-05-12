@@ -563,11 +563,11 @@ def read_boundary_zip(path: str | Path, *, srid: int = 5179, encoding: str = "cp
     except ImportError as exc:
         raise RuntimeError(
             "경계 ZIP 적재에는 geopandas와 shapely가 필요합니다. "
-            "pykraddr[postgis]를 설치하세요."
+            "python-kraddr-geo[postgis]를 설치하세요."
         ) from exc
 
     archive_path = Path(path)
-    with tempfile.TemporaryDirectory(prefix="pykraddr-shp-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="kraddr-geo-shp-") as tmp:
         with zipfile.ZipFile(archive_path) as archive:
             archive.extractall(tmp)
         shp_files = list(Path(tmp).glob("*.shp"))

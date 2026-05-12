@@ -4,7 +4,7 @@ import io
 import zipfile
 from typing import Any
 
-from pykraddr.reverse import (
+from kraddr.geo.reverse import (
     NAVIGATION_BUILDING_COLUMNS,
     ReverseGeocoder,
     ReverseGeocodeResult,

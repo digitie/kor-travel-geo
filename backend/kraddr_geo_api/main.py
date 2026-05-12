@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import health, list_addresses
 
-app = FastAPI(title="pykraddr 주소 탐색 API")
+app = FastAPI(title="kraddr.geo 주소 탐색 API")
 
 app.add_middleware(
     CORSMiddleware,
