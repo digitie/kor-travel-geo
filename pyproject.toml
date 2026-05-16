@@ -25,16 +25,18 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "pydantic>=2.7",
   "requests>=2.31",
   "SQLAlchemy>=2.0",
 ]
 
 [project.optional-dependencies]
-postgis = [
-  "GeoAlchemy2>=0.15",
+spatialite = [
+  "alembic>=1.13",
   "geopandas>=0.14",
-  "psycopg[binary]>=3.1",
+  "py7zr>=0.21",
   "pyogrio>=0.8",
+  "pyproj>=3.6",
   "shapely>=2.0",
 ]
 dev = [

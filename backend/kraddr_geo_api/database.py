@@ -1,89 +1,55 @@
-"""PostgreSQL/PostGIS 데이터베이스 접근 계층."""
+"""SQLite/SpatiaLite-backed address and geocoding queries."""
 
 from __future__ import annotations
 
-import json
 from functools import lru_cache
 from typing import Any
 
-import geopandas as gpd
 import sqlalchemy as sa
-from geoalchemy2 import Geometry
-from shapely.geometry import MultiPolygon, Polygon, shape
+
+from kraddr.geo import SpatialiteAddressStore
 
 from .config import load_settings
 
-metadata = sa.MetaData()
-
-road_address_table = sa.Table(
-    "address_serving_juso_road_address",
-    metadata,
-    sa.Column("road_address_management_no", sa.String, primary_key=True),
-    sa.Column("legal_dong_code", sa.String),
-    sa.Column("road_name_code", sa.String),
-    sa.Column("sido_name", sa.String),
-    sa.Column("sigungu_name", sa.String),
-    sa.Column("legal_eupmyeondong_name", sa.String),
-    sa.Column("legal_ri_name", sa.String),
-    sa.Column("road_name", sa.String),
-    sa.Column("mountain_yn", sa.String),
-    sa.Column("jibun_main_no", sa.String),
-    sa.Column("jibun_sub_no", sa.String),
-    sa.Column("underground_yn", sa.String),
-    sa.Column("building_main_no", sa.String),
-    sa.Column("building_sub_no", sa.String),
-    sa.Column("postal_code", sa.String),
-    sa.Column("full_legal_dong_name", sa.String),
-    sa.Column("full_road_address", sa.String),
-    sa.Column("is_active", sa.Boolean),
-)
-
-boundary_table = sa.Table(
-    "region_serving_boundary",
-    metadata,
-    sa.Column("boundary_level", sa.String),
-    sa.Column("region_code", sa.String),
-    sa.Column("region_name", sa.String),
-    sa.Column("sido_code", sa.String),
-    sa.Column("sigungu_code", sa.String),
-    sa.Column("legal_dong_code", sa.String),
-    sa.Column("full_region_name", sa.String),
-    sa.Column("geom", Geometry("MULTIPOLYGON", srid=4326)),
-)
-
 
 @lru_cache(maxsize=1)
-def engine() -> sa.Engine:
-    """SQLAlchemy 2 엔진을 한 번만 만든다."""
-
+def store() -> SpatialiteAddressStore:
     settings = load_settings()
-    return sa.create_engine(settings.database_url, future=True, pool_pre_ping=True)
+    return SpatialiteAddressStore(
+        settings.spatialite_path,
+        load_spatialite=True,
+        vworld_api_key=settings.vworld_api_key,
+        vworld_domain=settings.vworld_domain,
+    )
 
 
 def health() -> dict[str, Any]:
-    """데이터베이스와 GIS 라이브러리 상태를 확인한다."""
+    """Return the backend and geocoding database status."""
 
-    with engine().connect() as connection:
-        postgis_version = connection.scalar(sa.text("select postgis_full_version()"))
-        road_count = connection.scalar(
+    current = store()
+    with current.engine.connect() as connection:
+        boundary_count = int(
+            connection.scalar(sa.text("select count(*) from juso_boundary_polygons")) or 0
+        )
+        sources = connection.execute(
             sa.text(
                 """
-                select count(*)
-                from public.address_serving_juso_road_address
-                where is_active is true
+                select source_dataset, count(*) as row_count
+                from juso_address_points
+                group by source_dataset
+                order by source_dataset
                 """
             )
-        )
-        boundary_count = connection.scalar(
-            sa.text("select count(*) from public.region_serving_boundary")
-        )
+        ).mappings().all()
     return {
         "ok": True,
-        "postgis": postgis_version,
-        "road_address_count": int(road_count or 0),
-        "boundary_count": int(boundary_count or 0),
+        "mode": "sqlite_spatialite",
+        "spatialite_path": str(load_settings().spatialite_path),
+        "address_point_count": current.count_points(),
+        "boundary_count": boundary_count,
+        "sources": [dict(row) for row in sources],
+        "spatialite_enabled": current.spatialite_enabled,
         "sqlalchemy": sa.__version__,
-        "geopandas": gpd.__version__,
     }
 
 
@@ -94,81 +60,27 @@ def list_addresses(
     page: int = 1,
     page_size: int = 50,
 ) -> dict[str, Any]:
-    """도로명주소 목록을 PostGIS 경계 중심점과 함께 조회한다."""
+    """Return address point candidates in the same shape used by the web UI."""
 
     normalized_page = max(page, 1)
     normalized_page_size = max(1, min(page_size, 100))
     offset = (normalized_page - 1) * normalized_page_size
     where_sql, params = _where_clause(query=query, scope=scope)
     params.update({"limit": normalized_page_size, "offset": offset})
-
     items_sql = sa.text(
         f"""
-        select
-            r.road_address_management_no,
-            r.legal_dong_code,
-            r.road_name_code,
-            r.sido_name,
-            r.sigungu_name,
-            r.legal_eupmyeondong_name,
-            r.legal_ri_name,
-            r.road_name,
-            r.mountain_yn,
-            r.jibun_main_no,
-            r.jibun_sub_no,
-            r.underground_yn,
-            r.building_main_no,
-            r.building_sub_no,
-            r.postal_code,
-            r.full_legal_dong_name,
-            r.full_road_address,
-            b.boundary_level,
-            b.full_region_name as boundary_name,
-            st_x(st_pointonsurface(b.geom)) as lng,
-            st_y(st_pointonsurface(b.geom)) as lat,
-            st_asgeojson(st_simplifypreservetopology(b.geom, 0.001), 5) as boundary_geojson
-        from public.address_serving_juso_road_address as r
-        left join lateral (
-            select *
-            from public.region_serving_boundary as b
-            where
-                (
-                    b.boundary_level = 'legal_dong'
-                    and b.legal_dong_code = r.legal_dong_code
-                )
-                or (
-                    b.boundary_level = 'sigungu'
-                    and b.sigungu_code = substring(r.legal_dong_code from 1 for 5)
-                )
-                or (
-                    b.boundary_level = 'sido'
-                    and b.sido_code = substring(r.legal_dong_code from 1 for 2)
-                )
-            order by
-                case b.boundary_level
-                    when 'legal_dong' then 1
-                    when 'sigungu' then 2
-                    else 3
-                end
-            limit 1
-        ) as b on true
+        select *
+        from juso_address_points
         where {where_sql}
-        order by r.road_address_management_no
+        order by source_priority, road_name_code, building_main_no, building_sub_no, point_id
         limit :limit offset :offset
         """
     )
-    count_sql = sa.text(
-        f"""
-        select count(*)
-        from public.address_serving_juso_road_address as r
-        where {where_sql}
-        """
-    )
-
-    with engine().connect() as connection:
+    count_sql = sa.text(f"select count(*) from juso_address_points where {where_sql}")
+    current = store()
+    with current.engine.connect() as connection:
         rows = connection.execute(items_sql, params).mappings().all()
         total = int(connection.scalar(count_sql, params) or 0)
-
     return {
         "items": [_row_to_address(row) for row in rows],
         "page": normalized_page,
@@ -178,13 +90,67 @@ def list_addresses(
     }
 
 
+def geocode(
+    *,
+    query: str = "",
+    road_name_code: str | None = None,
+    legal_dong_code: str | None = None,
+    underground_yn: str | None = None,
+    building_main_no: str | int | None = None,
+    building_sub_no: str | int | None = None,
+    crs: str = "EPSG:4326",
+    limit: int = 10,
+) -> dict[str, Any]:
+    candidates = store().get_coord(
+        {
+            "query": query or None,
+            "rnMgtSn": road_name_code,
+            "admCd": legal_dong_code,
+            "udrtYn": underground_yn,
+            "buldMnnm": building_main_no,
+            "buldSlno": building_sub_no,
+            "crs": crs,
+            "limit": limit,
+        }
+    )
+    return {
+        "items": [item.model_dump(mode="json") for item in candidates],
+        "total": len(candidates),
+    }
+
+
+def reverse_geocode(
+    *,
+    x: float,
+    y: float,
+    crs: str = "EPSG:4326",
+    max_distance_m: float = 50.0,
+) -> dict[str, Any]:
+    candidate = store().get_address(
+        {
+            "x": x,
+            "y": y,
+            "crs": crs,
+            "max_distance_m": max_distance_m,
+        }
+    )
+    return {"item": candidate.model_dump(mode="json") if candidate else None}
+
+
+def lookup_postal_code(zipcode: str, *, limit: int = 100, offset: int = 0) -> dict[str, Any]:
+    candidates = store().lookup_postal_code({"zipNo": zipcode, "limit": limit, "offset": offset})
+    return {
+        "items": [item.model_dump(mode="json") for item in candidates],
+        "total": len(candidates),
+    }
+
+
 def _where_clause(*, query: str, scope: str) -> tuple[str, dict[str, Any]]:
-    conditions = ["r.is_active is true"]
+    conditions = ["1 = 1"]
     params: dict[str, Any] = {}
     value = query.strip()
     if not value:
         return " and ".join(conditions), params
-
     like = f"%{_escape_like(value.lower())}%"
     prefix = f"{_escape_like(value)}%"
     params.update({"like": like, "prefix": prefix})
@@ -192,8 +158,8 @@ def _where_clause(*, query: str, scope: str) -> tuple[str, dict[str, Any]]:
         conditions.append(
             """
             (
-                lower(coalesce(r.full_road_address, '')) like :like escape '\\'
-                or lower(coalesce(r.road_name, '')) like :like escape '\\'
+                lower(coalesce(road_address, '')) like :like escape '\\'
+                or lower(coalesce(road_name, '')) like :like escape '\\'
             )
             """
         )
@@ -201,8 +167,8 @@ def _where_clause(*, query: str, scope: str) -> tuple[str, dict[str, Any]]:
         conditions.append(
             """
             (
-                lower(coalesce(r.full_legal_dong_name, '')) like :like escape '\\'
-                or coalesce(r.legal_dong_code, '') like :prefix escape '\\'
+                lower(coalesce(parcel_address, '')) like :like escape '\\'
+                or coalesce(legal_dong_code, '') like :prefix escape '\\'
             )
             """
         )
@@ -210,10 +176,10 @@ def _where_clause(*, query: str, scope: str) -> tuple[str, dict[str, Any]]:
         conditions.append(
             """
             (
-                coalesce(r.legal_dong_code, '') like :prefix escape '\\'
-                or coalesce(r.road_name_code, '') like :prefix escape '\\'
-                or coalesce(r.road_address_management_no, '') like :prefix escape '\\'
-                or coalesce(r.postal_code, '') like :prefix escape '\\'
+                coalesce(legal_dong_code, '') like :prefix escape '\\'
+                or coalesce(road_name_code, '') like :prefix escape '\\'
+                or coalesce(building_management_number, '') like :prefix escape '\\'
+                or coalesce(postal_code, '') like :prefix escape '\\'
             )
             """
         )
@@ -221,12 +187,13 @@ def _where_clause(*, query: str, scope: str) -> tuple[str, dict[str, Any]]:
         conditions.append(
             """
             (
-                lower(coalesce(r.full_road_address, '')) like :like escape '\\'
-                or lower(coalesce(r.full_legal_dong_name, '')) like :like escape '\\'
-                or coalesce(r.legal_dong_code, '') like :prefix escape '\\'
-                or coalesce(r.road_name_code, '') like :prefix escape '\\'
-                or coalesce(r.road_address_management_no, '') like :prefix escape '\\'
-                or coalesce(r.postal_code, '') like :prefix escape '\\'
+                lower(coalesce(road_address, '')) like :like escape '\\'
+                or lower(coalesce(parcel_address, '')) like :like escape '\\'
+                or lower(coalesce(building_name, '')) like :like escape '\\'
+                or coalesce(legal_dong_code, '') like :prefix escape '\\'
+                or coalesce(road_name_code, '') like :prefix escape '\\'
+                or coalesce(building_management_number, '') like :prefix escape '\\'
+                or coalesce(postal_code, '') like :prefix escape '\\'
             )
             """
         )
@@ -234,89 +201,40 @@ def _where_clause(*, query: str, scope: str) -> tuple[str, dict[str, Any]]:
 
 
 def _row_to_address(row: sa.RowMapping) -> dict[str, Any]:
-    legal_name = _join(
-        row["sido_name"],
-        row["sigungu_name"],
-        row["legal_eupmyeondong_name"],
-        row["legal_ri_name"],
-    )
-    jibun = _jibun_text(
-        legal_name,
-        row["mountain_yn"],
-        row["jibun_main_no"],
-        row["jibun_sub_no"],
-    )
-    boundary = _boundary_points(row["boundary_geojson"])
-    lat = row["lat"]
-    lng = row["lng"]
+    lon, lat = _to_wgs84(row["x"], row["y"])
     return {
-        "id": row["road_address_management_no"],
-        "title": row["full_road_address"] or jibun or row["road_address_management_no"],
+        "id": row["point_id"],
+        "title": row["road_address"] or row["parcel_address"] or row["point_id"],
         "category": "road",
-        "roadAddress": row["full_road_address"] or "",
-        "jibunAddress": jibun,
+        "roadAddress": row["road_address"] or "",
+        "jibunAddress": row["parcel_address"] or "",
         "postalCode": row["postal_code"] or "",
         "legalDongCode": row["legal_dong_code"] or "",
         "roadNameCode": row["road_name_code"] or "",
-        "pnu": _pnu(row),
-        "coordinate": {
-            "lat": float(lat) if lat is not None else 37.5665,
-            "lng": float(lng) if lng is not None else 126.978,
-        },
-        "boundary": boundary,
-        "radiusMeters": 150,
+        "pnu": "",
+        "coordinate": {"lat": lat, "lng": lon},
+        "boundary": [],
+        "radiusMeters": 40 if row["source_dataset"] == "location_summary" else 80,
         "updatedAt": "",
         "tags": [
             tag
-            for tag in [row["sido_name"], row["sigungu_name"], row["boundary_level"]]
+            for tag in [row["sido_name"], row["sigungu_name"], row["source_dataset"]]
             if tag
         ],
-        "boundaryName": row["boundary_name"] or "",
-        "boundaryLevel": row["boundary_level"] or "",
-        "coordinateSource": (
-            "postgis_boundary" if lat is not None and lng is not None else "fallback"
-        ),
+        "boundaryName": "",
+        "boundaryLevel": "",
+        "coordinateSource": row["source_dataset"] or row["source"] or "sqlite_spatialite",
     }
 
 
-def _boundary_points(value: Any) -> list[dict[str, float]]:
-    if not value:
-        return []
-    geometry = shape(json.loads(str(value)))
-    polygon: Polygon | None = None
-    if isinstance(geometry, Polygon):
-        polygon = geometry
-    elif isinstance(geometry, MultiPolygon):
-        polygon = max(geometry.geoms, key=lambda item: item.area)
-    if polygon is None:
-        return []
-    return [{"lng": float(x), "lat": float(y)} for x, y in polygon.exterior.coords]
-
-
-def _pnu(row: sa.RowMapping) -> str:
-    legal_dong_code = str(row["legal_dong_code"] or "")
-    mountain_yn = str(row["mountain_yn"] or "0")[:1]
-    main_no = str(row["jibun_main_no"] or "0").zfill(4)
-    sub_no = str(row["jibun_sub_no"] or "0").zfill(4)
-    return legal_dong_code + mountain_yn + main_no + sub_no
-
-
-def _jibun_text(
-    legal_name: str,
-    mountain_yn: Any,
-    main_no: Any,
-    sub_no: Any,
-) -> str:
-    main_text = str(main_no or "0").lstrip("0") or "0"
-    sub_text = str(sub_no or "0").lstrip("0") or "0"
-    lot = main_text if sub_text == "0" else f"{main_text}-{sub_text}"
-    if str(mountain_yn or "0") == "1":
-        lot = f"산 {lot}"
-    return _join(legal_name, lot)
-
-
-def _join(*values: Any) -> str:
-    return " ".join(str(value).strip() for value in values if str(value or "").strip())
+def _to_wgs84(x: Any, y: Any) -> tuple[float, float]:
+    try:
+        from pyproj import Transformer
+    except ImportError:
+        return float(x), float(y)
+    transformer = Transformer.from_crs("EPSG:5179", "EPSG:4326", always_xy=True)
+    lon, lat = transformer.transform(float(x), float(y))
+    return float(lon), float(lat)
 
 
 def _escape_like(value: str) -> str:

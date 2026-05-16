@@ -1,4 +1,4 @@
-"""웹 API 환경 설정."""
+"""Backend runtime settings."""
 
 from __future__ import annotations
 
@@ -9,31 +9,27 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    """백엔드 실행에 필요한 환경 설정."""
+    """Runtime settings for the SQLite/SpatiaLite backend."""
 
-    database_url: str
-    schema: str = "public"
+    spatialite_path: Path
+    vworld_api_key: str | None = None
+    vworld_domain: str | None = None
 
 
 def load_settings() -> Settings:
-    """환경 변수에서 설정을 읽는다."""
+    """Read settings from local env files and process environment."""
 
     _load_local_env()
-    database_url = os.environ.get("KRADDR_GEO_DATABASE_URL")
-    if not database_url:
-        raise RuntimeError(
-            "KRADDR_GEO_DATABASE_URL 환경 변수가 필요합니다. "
-            "PostgreSQL/PostGIS 접속 문자열을 설정하세요."
-        )
+    default_path = Path(__file__).resolve().parents[2] / "data" / "juso" / "kraddr_geo.sqlite"
+    path = Path(os.environ.get("KRADDR_GEO_SPATIALITE_PATH") or default_path)
     return Settings(
-        database_url=database_url,
-        schema=os.environ.get("KRADDR_GEO_DB_SCHEMA", "public"),
+        spatialite_path=path,
+        vworld_api_key=os.environ.get("VWORLD_API_KEY") or os.environ.get("VWORLD_KEY"),
+        vworld_domain=os.environ.get("VWORLD_DOMAIN"),
     )
 
 
 def _load_local_env() -> None:
-    """커밋하지 않는 로컬 환경 파일을 읽어 환경 변수 기본값으로 사용한다."""
-
     root = Path(__file__).resolve().parents[1]
     for path in (root / ".env.local", root / ".env"):
         if not path.exists():

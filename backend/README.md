@@ -1,40 +1,39 @@
-# python-kraddr-geo 백엔드
+# kraddr-geo FastAPI backend
 
-`backend` 디렉터리는 주소 목록 브라우징과 GIS 경계 조회를 위한 FastAPI 서버입니다. 기본 기준은 PostgreSQL + PostGIS + SQLAlchemy 2 + GeoAlchemy2이며, 경계 GeoJSON을 화면용 좌표로 정리할 때 Shapely를 사용합니다. GeoPandas는 같은 GIS 처리 스택의 필수 의존성으로 설치하고 상태 점검에서 버전을 확인합니다.
+`backend`는 SQLite + SpatiaLite 파일을 읽어 주소 목록, geocoding, reverse geocoding, 우편번호 조회를 제공하는 FastAPI 서버입니다.
 
-## 실행 포트
+## 환경 변수
 
-- 백엔드: `3011`
-- 프론트엔드: `3010`
+- `KRADDR_GEO_SPATIALITE_PATH`: 사용할 SQLite/SpatiaLite DB 경로
+- `VWORLD_API_KEY`: 로컬 결과가 없을 때 fallback으로 사용할 VWorld API 키
+- `VWORLD_DOMAIN`: VWorld API 호출 도메인
 
-## WSL 실행
+## 실행
 
-```bash
-cd /mnt/f/dev/python-kraddr-geo
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r backend/requirements.txt
-export KRADDR_GEO_DATABASE_URL="postgresql+psycopg://사용자:비밀번호@localhost:55432/tripmate"
-export KRADDR_GEO_DB_SCHEMA="public"
-uvicorn kraddr_geo_api.main:app --app-dir backend --host 0.0.0.0 --port 3011 --reload
+```powershell
+$env:KRADDR_GEO_SPATIALITE_PATH = "F:\dev\python-kraddr-geo\data\juso\kraddr_geo.sqlite"
+uvicorn kraddr_geo_api.main:app --app-dir backend --host 127.0.0.1 --port 3011
 ```
 
-로컬 비밀번호는 `backend/.env.local` 같은 무시되는 파일이나 셸 환경 변수로만 관리합니다. 저장소에는 실제 접속 문자열을 커밋하지 않습니다.
+## 엔드포인트
 
-## API
+- `GET /health`: DB 파일, 포인트/경계 건수, SpatiaLite 로드 상태 확인
+- `GET /addresses`: 주소 목록과 검색
+- `GET /geocode`: VWorld 유사 geocoding 응답
+- `GET /reverse-geocode`: VWorld 유사 reverse geocoding 응답
+- `GET /postal-codes/{zipcode}`: 우편번호 기반 주소 후보 조회
+- `POST /load-jobs`: TXT/ZIP/7Z/SHP 업로드 적재 작업 생성
+- `GET /load-jobs`: 최근 적재 작업 목록
+- `GET /load-jobs/{job_id}`: 적재 progress, 로드/스킵 건수, 오류 조회
 
-- `GET /health`: DB 연결, PostGIS, 주요 GIS 라이브러리 버전을 확인합니다.
-- `GET /addresses`: 도로명주소 목록을 페이지 단위로 조회합니다.
+좌표는 기본적으로 EPSG:5179 기준으로 저장하고, 요청 좌표계가 다르면 `pyproj`로 변환합니다.
 
-`/addresses` 주요 쿼리:
+`POST /load-jobs`는 `multipart/form-data`를 사용합니다.
 
-- `query`: 도로명, 지번, 법정동코드, 도로명코드, PNU 성격의 검색어
-- `scope`: `all`, `road`, `jibun`, `code`
-- `page`: 1부터 시작
-- `page_size`: 1부터 100까지 허용하며, 웹 UI는 `5`, `10`, `20`, `50`, `100`개 선택지를 사용합니다.
+- `files`: 여러 개 업로드 가능
+- `dataset`: `auto`, `location_summary`, `navigation_building`,
+  `navigation_road_section_entrance`, `boundary_shapes`
+- `replace`: 같은 자료를 먼저 삭제하고 넣을지 여부
 
-웹 UI는 기본 `page_size`를 `10`으로 사용하고, 사용자가 선택한 값은
-`kraddr_geo_page_size` 쿠키로 저장합니다. 백엔드는 쿠키를 직접 읽지 않고,
-프론트엔드가 전달한 `page_size` 쿼리 값을 기준으로 응답합니다.
-
-주소 좌표는 개별 건물 좌표가 아니라 PostGIS 법정동/시군구/시도 경계의 `ST_PointOnSurface` 결과입니다. 정확한 건물 출입구 좌표가 필요한 경우 별도의 주소점 테이블을 추가로 적재해서 조인해야 합니다.
+SHP 수동 적재는 `.shp`, `.dbf`, `.shx`를 같은 파일명 stem으로 함께 올리는 방식을
+지원합니다. `.prj`, `.cpg` 등 sidecar도 함께 보존됩니다.

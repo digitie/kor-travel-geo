@@ -1,192 +1,101 @@
 # python-kraddr-geo
 
-`kraddr.geo`는 대한민국 Juso 도로명주소 API와
-`business.juso.go.kr`에서 내려받을 수 있는 "도로명주소 한글" TXT 자료를
-다루는 비공식 Python 라이브러리입니다.
+`python-kraddr-geo`는 행정안전부/Juso 주소 자료를 내려받고, 로컬 SQLite + SpatiaLite 데이터베이스로 정리해 geocoding/reverse geocoding API를 제공하는 Python 라이브러리입니다.
 
-팝업 API는 의도적으로 감싸지 않습니다. 서버에서 호출하기 쉬운 검색 API,
-다운로드 자료 파싱, 데이터베이스 적재, PostGIS 기반 경계/주소점 조회에
-집중합니다.
+목표는 VWorld geo/reverse geo API와 최대한 비슷한 호출 흐름을 제공하면서도, 로컬 데이터가 충분할 때는 외부 API 없이 빠르게 결과를 돌려주는 것입니다.
 
-## 문서 작성 원칙
+## 주요 기능
 
-이 저장소의 설명 문서와 코드 docstring은 한글로 작성합니다. API 엔드포인트,
-환경 변수, 테이블명, 컬럼명, 클래스명, 명령어, URL처럼 원문 그대로 유지해야
-하는 기술 식별자는 예외입니다.
+- 도로명주소 파일 다운로드 및 파싱
+- 위치정보요약DB 출입구 좌표 적재
+- 내비게이션용DB 건물/출입구 좌표 적재
+- 구역의 도형 ZIP 적재와 행정구역 경계 보조 조회
+- SQLite + SpatiaLite 기반 공간 저장소
+- 우편번호에서 도로명주소/법정동코드 후보 조회
+- VWorld 유사 DTO 기반 `get_coord`, `get_address` 호출
+- 로컬 결과가 없을 때 `python-vworld-api`를 통한 fallback
+- FastAPI 백엔드와 Next.js 주소 브라우저
+- 웹/API 기반 TXT, ZIP, 7Z, SHP 수동 업로드 적재와 progress 조회
 
-## 검색 API
+## 설치
 
-```python
-from kraddr.geo import KrAddrClient
-
-client = KrAddrClient.from_env("JUSO_CONFM_KEY")
-
-page = client.search("세종대로 110", add_info=True)
-first = page.items[0]
-print(first.road_address, first.zip_code, first.administrative_code)
-
-coords = client.coordinates(
-    administrative_code=first.administrative_code,
-    road_name_code=first.road_name_code,
-    underground_yn=first.underground_yn,
-    building_main_no=first.building_main_no,
-    building_sub_no=first.building_sub_no or 0,
-)
-print(coords.items[0].x, coords.items[0].y)
+```powershell
+python -m pip install -e ".[dev,spatialite]"
 ```
 
-구현된 엔드포인트:
+선택 데이터 처리에 필요한 패키지는 `spatialite` extra에 포함되어 있습니다. SpatiaLite 확장을 로드할 수 없는 환경에서도 기본 `x`, `y`, WKT/WKB 컬럼과 B-tree 인덱스로 동작합니다.
 
-- `addrLinkApi.do`: 도로명주소 검색
-- `addrEngApi.do`: 영문주소 검색
-- `addrCoordApi.do`: 좌표 검색
-- `addrDetailApi.do`: 상세주소 검색
-- 지도 API 가이드/소스 ZIP 다운로드 헬퍼
+## 데이터 적재
 
-## 도로명주소 한글 자료
+현재 권장 적재 순서는 다음과 같습니다.
 
-```python
-from kraddr.geo import RoadNameAddressDataClient, RoadNameAddressStore
-
-data = RoadNameAddressDataClient()
-zip_path = data.download_latest_full("data/juso")
-
-with RoadNameAddressStore("data/juso/rnaddrkor.sqlite") as store:
-    store.load_full_archive(zip_path, replace=True)
-    print(store.count_road_addresses())
-```
-
-일변동 자료는 Juso 변동 사유 코드를 기준으로 반영합니다.
-
-- `31`: 신규
-- `34`: 변경
-- `63`: 삭제
-
-```python
-from datetime import date
-
-paths = data.download_daily_changes(
-    "data/juso/daily",
-    start=date(2026, 4, 1),
-    end=date(2026, 4, 30),
-)
-
-with RoadNameAddressStore("data/juso/rnaddrkor.sqlite") as store:
-    for path in paths:
-        store.apply_daily_archive(path)
-```
-
-`RoadNameAddressStore`는 SQLAlchemy 2 Core를 사용하며 기본 저장소는
-SQLite입니다. 기존 SQLAlchemy `Engine`을 직접 넘길 수도 있습니다. 공식 TXT
-컬럼을 보존하고, `sigungu_code`, `road_number`, `building_management_number`,
-`pnu` 같은 조회용 파생 키를 추가로 인덱싱합니다.
-
-자주 쓰는 조회 헬퍼:
-
-```python
-rows = store.get_road_addresses_by_management_number("1111010100100010000000001")
-parcel_rows = store.find_road_addresses_by_pnu("1111010100000010000")
-```
-
-최적화된 SQLAlchemy 스키마, 식별자 구조, ETL 흐름, 유지보수 메모는
-[docs/address-db-schema.md](docs/address-db-schema.md)를 참고하세요.
-코드를 처음 읽는 사람을 위한 전체 흐름 안내는
-[docs/code-guide-for-beginners.md](docs/code-guide-for-beginners.md)에 정리했습니다.
-
-## 웹 UI
-
-주소 탐색과 지도 표시를 위한 Next.js/Tailwind CSS 앱은 `web/` 디렉터리에 있고,
-PostgreSQL/PostGIS 조회 백엔드는 `backend/` 디렉터리에 있습니다.
-
-```bash
-cd backend
-uvicorn kraddr_geo_api.main:app --app-dir . --host 0.0.0.0 --port 3011 --reload
-
-cd web
-npm install
-npm run dev
-```
-
-WSL 실행 기준 포트는 프론트엔드 `3010`, 백엔드 `3011`입니다. 브라우저 주소는
-Kakao JavaScript SDK 도메인 등록과 맞추기 위해 `http://localhost:3010`을
-기본으로 사용합니다.
-
-웹 UI는 다음 흐름을 제공합니다.
-
-- `샘플 탐색`: 프론트엔드와 지도 표시를 빠르게 확인하는 내장 샘플
-- `전체 목록`: PostGIS `address_serving_juso_road_address` 테이블을 페이지 단위로 조회
-- 검색 범위: 전체, 도로명, 지번, 코드
-- 목록 표시 개수: `5`, `10`, `20`, `50`, `100`개
-- 기본 표시 개수: `10`개
-- 표시 개수 저장: `kraddr_geo_page_size` 쿠키
-- 처리 중 상태: 목록 조회 중 회전 아이콘과 `처리 중` 배지 표시
-
-Kakao 지도 표시에는 `NEXT_PUBLIC_KAKAO_JAVASCRIPT_KEY`가 필요합니다. 실제 키는
-`web/.env.local`처럼 Git에서 무시되는 파일에만 둡니다. 자세한 내용은
-[web/README.md](web/README.md)와 [backend/README.md](backend/README.md)를 참고하세요.
-
-## 법정동코드와 PostGIS 경계
-
-PostGIS/GIS 적재 기능은 선택 의존성으로 제공됩니다.
-
-```bash
-python -m pip install "python-kraddr-geo[postgis]"
-```
+1. 위치정보요약DB: 건물 출입구 좌표의 주 자료
+2. 내비게이션용DB: 건물 중심/대표 출입구와 도로구간 출입구 보조 자료
+3. 구역의 도형: 행정구역 경계와 교차검증 자료
+4. 기존 도로명주소/관련지번 SQLite: 주소 속성 보완 자료
 
 ```python
 from pathlib import Path
-from kraddr.geo.postgis import PostGISLegalDongStore
 
-url = "postgresql+psycopg://postgres:postgres@localhost:55433/kraddr_geo"
+from kraddr.geo import SpatialiteAddressStore
 
-with PostGISLegalDongStore(url, schema="kraddr") as store:
-    store.create_schema()
-    store.load_legal_dong_csv(Path("dataset/국토교통부_법정동코드_20250805.csv"))
-    result = store.load_boundary_zips(sorted(Path("dataset").glob("N3A_*.zip")))
-    print(result)
+store = SpatialiteAddressStore("data/juso/kraddr_geo.sqlite")
+store.load_location_summary_archive(Path("data/juso/202604_위치정보요약DB_전체분.zip"))
+store.load_boundary_zips(sorted(Path("data/juso/구역의 도형").glob("*.zip")))
 ```
 
-PostGIS 로더는 법정동 CSV에 `psycopg` COPY를 사용하고, SHP ZIP 경계 적재에는
-GeoPandas와 GeoAlchemy2를 사용합니다. 법정동코드의 기준은 CSV 마스터입니다.
-VWorld/N3A의 세종특별자치시 시도 경계 코드 `3600000000`처럼 소스별 코드가
-마스터와 다를 때는 `legal_dong_code_aliases` 별칭 테이블로 처리합니다.
+내비게이션용DB의 `.7z` 파일은 `py7zr`가 설치되어 있으면 바로 읽을 수 있습니다. 이미 TXT로 추출한 파일도 동일한 파서로 처리할 수 있습니다.
 
-WSL2 검증 보고서는
-[docs/legal-dong-postgis-report.md](docs/legal-dong-postgis-report.md)에 있고,
-지오코딩/리버스 지오코딩 준비 상태는
-[docs/geocoding-readiness.md](docs/geocoding-readiness.md)에 정리되어 있습니다.
-
-## 리버스 지오코딩
-
-좌표에서 도로명주소를 얻는 기능은 오프라인 우선 방식입니다.
+## API 예시
 
 ```python
-from kraddr.geo import ReverseGeocoder, RoadAddressPointStore, VWorldReverseGeocoder
+from kraddr.geo import (
+    PostalCodeLookupRequest,
+    SpatialiteAddressStore,
+    VWorldLikeGeocodeRequest,
+    VWorldLikeReverseGeocodeRequest,
+)
 
-url = "postgresql+psycopg://postgres:postgres@localhost:55433/kraddr_geo"
-
-with RoadAddressPointStore(url, schema="kraddr") as store:
-    store.load_navigation_building_archive("dataset/navigation_building.zip")
-    geocoder = ReverseGeocoder(
-        offline_store=store,
-        vworld=VWorldReverseGeocoder.from_env(),
-        max_offline_distance_m=50,
-    )
-    result = geocoder.reverse_road_address(lon=127.1013, lat=37.4023)
-    print(result.road_address if result else None)
+with SpatialiteAddressStore("data/juso/kraddr_geo.sqlite") as store:
+    coord = store.get_coord(VWorldLikeGeocodeRequest(query="부산광역시 중구 초량상로 1-2"))
+    address = store.get_address(VWorldLikeReverseGeocodeRequest(x=1139887.36, y=1680774.72))
+    postal = store.lookup_postal_code(PostalCodeLookupRequest(zipNo="48910"))
 ```
 
-오프라인 테이블은 Juso 내비게이션용DB 건물정보 TXT 좌표를 사용합니다. 오프라인
-저장소가 없거나 가까운 주소점이 없으면 `python-vworld-api`를 통해 VWorld Geocoder API
-2.0을 호출할 수 있습니다. 자세한 설계는
-[docs/reverse-geocoding.md](docs/reverse-geocoding.md)를 참고하세요.
-
-TXT 파서는 직접 사용할 수도 있습니다.
+VWorld fallback을 쓰려면 API 키를 넘깁니다.
 
 ```python
-from kraddr.geo import iter_road_name_address_records
-
-for record in iter_road_name_address_records(zip_path):
-    print(record.road_address_management_number, record.road_name)
-    break
+store = SpatialiteAddressStore(
+    "data/juso/kraddr_geo.sqlite",
+    vworld_api_key="...",
+    vworld_domain="...",
+)
 ```
+
+## 백엔드와 웹
+
+```powershell
+$env:KRADDR_GEO_SPATIALITE_PATH = "F:\dev\python-kraddr-geo\data\juso\kraddr_geo.sqlite"
+uvicorn kraddr_geo_api.main:app --app-dir backend --host 127.0.0.1 --port 3011
+```
+
+웹은 `web/`의 Next.js 앱입니다. 기본 API 주소는 `http://127.0.0.1:3011`입니다.
+
+수동 적재 API는 `POST /load-jobs`를 사용합니다. 여러 파일을 `files` 필드로 올리고,
+`dataset=auto`로 두면 파일명과 ZIP 내부 구조를 기준으로 위치정보요약DB,
+내비게이션용DB, 구역 도형을 판별합니다. SHP는 같은 stem의 `.shp/.dbf/.shx/.prj/.cpg`
+파일을 함께 올리면 임시 ZIP으로 묶어 경계 로더에 전달합니다. 작업 상태는
+`GET /load-jobs/{job_id}`에서 확인합니다.
+
+## 테스트
+
+```powershell
+python -m pytest -q
+python -m ruff check .
+cd web
+npm run lint
+npm run test
+npm run build
+```
+
+실제 대용량 자료 적재 검증은 `data/juso`의 ZIP/TXT 자료가 있는 로컬 환경에서 별도 smoke 스크립트로 수행합니다. 일반 테스트는 작은 fixture 중심으로 빠르게 유지합니다.

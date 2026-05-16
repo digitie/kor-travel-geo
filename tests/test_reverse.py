@@ -10,7 +10,6 @@ from kraddr.geo.reverse import (
     ReverseGeocodeResult,
     VWorldReverseGeocoder,
     iter_navigation_building_records,
-    make_address_point_metadata,
 )
 
 
@@ -84,15 +83,6 @@ def test_navigation_building_parser_falls_back_to_center_point() -> None:
     )
 
     assert rows[0].point_xy() == (965000.0, 1943000.0)
-
-
-def test_address_point_metadata_has_point_geometry() -> None:
-    metadata = make_address_point_metadata(schema="kraddr", srid=5179)
-    table = metadata.tables["kraddr.road_address_points"]
-
-    assert table.c.building_management_number.primary_key
-    assert table.c.geom.type.srid == 5179
-    assert table.c.geom.type.geometry_type == "POINT"
 
 
 class FakeVWorldClient:

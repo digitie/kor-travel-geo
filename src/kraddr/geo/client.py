@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from ._http import SessionLike, build_session, raise_for_http_error, response_json, without_none
@@ -25,6 +26,13 @@ from .models import (
 DEFAULT_API_BASE_URL = "https://business.juso.go.kr/addrlink"
 DEFAULT_ENV_NAMES = ("JUSO_CONFM_KEY", "JUSO_API_KEY", "KRADDR_CONFM_KEY")
 T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True)
+class JsonExchange:
+    request: Mapping[str, Any]
+    response: Mapping[str, Any]
+    body: Mapping[str, Any]
 
 
 class KrAddrClient:
@@ -155,6 +163,26 @@ class KrAddrClient:
         }
         return self._get_page("addrDetailApi.do", params, DetailAddress.from_api)
 
+    def debug_search(self, keyword: str, **kwargs: Any) -> Any:
+        from .debug import debug_search
+
+        return debug_search(self, keyword, **kwargs)
+
+    def debug_search_english(self, keyword: str, **kwargs: Any) -> Any:
+        from .debug import debug_search_english
+
+        return debug_search_english(self, keyword, **kwargs)
+
+    def debug_coordinates(self, **kwargs: Any) -> Any:
+        from .debug import debug_coordinates
+
+        return debug_coordinates(self, **kwargs)
+
+    def debug_detail_addresses(self, **kwargs: Any) -> Any:
+        from .debug import debug_detail_addresses
+
+        return debug_detail_addresses(self, **kwargs)
+
     def iter_search(
         self,
         keyword: str,
@@ -234,6 +262,31 @@ class KrAddrClient:
         raise_for_http_error(response, endpoint)
         payload = response_json(response, endpoint)
         return _parse_page(payload, parser, endpoint=endpoint)
+
+    def _request_json(self, endpoint: str, params: Mapping[str, Any]) -> JsonExchange:
+        request_params: dict[str, Any] = {
+            "confmKey": self.confm_key,
+            "resultType": "json",
+        }
+        request_params.update(params)
+        query = without_none(request_params)
+        url = f"{self.base_url}/{endpoint.strip('/')}"
+        response = self.session.get(url, params=query, timeout=self.timeout)
+        raise_for_http_error(response, endpoint)
+        payload = response_json(response, endpoint)
+        return JsonExchange(
+            request={
+                "method": "GET",
+                "url": url,
+                "query": query,
+            },
+            response={
+                "status_code": getattr(response, "status_code", None),
+                "headers": dict(getattr(response, "headers", {}) or {}),
+                "text": getattr(response, "text", ""),
+            },
+            body=payload,
+        )
 
 
 def _parse_page(

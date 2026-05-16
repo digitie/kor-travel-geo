@@ -17,8 +17,9 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { ManualLoadPanel } from "@/components/manual-load-panel";
 import {
   SAMPLE_PLACES,
   type AddressPlace,
@@ -27,7 +28,7 @@ import {
 } from "@/data/address-data";
 
 type SearchScope = "all" | "road" | "jibun" | "code";
-type DataMode = "sample" | "postgis";
+type DataMode = "sample" | "spatialite";
 
 type KakaoMapPanelProps = {
   places: AddressPlace[];
@@ -70,13 +71,13 @@ const scopes: { value: SearchScope; label: string }[] = [
 
 const modes: { value: DataMode; label: string; description: string }[] = [
   { value: "sample", label: "샘플 탐색", description: "프론트엔드 검증용 샘플" },
-  { value: "postgis", label: "전체 목록", description: "PostGIS 주소 DB" },
+  { value: "spatialite", label: "전체 목록", description: "SpatiaLite 주소 DB" },
 ];
 
 export function AddressExplorer() {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<SearchScope>("all");
-  const [mode, setMode] = useState<DataMode>("postgis");
+  const [mode, setMode] = useState<DataMode>("spatialite");
   const [selectedId, setSelectedId] = useState(SAMPLE_PLACES[0].id);
   const [showBoundary, setShowBoundary] = useState(true);
   const [showRadius, setShowRadius] = useState(false);
@@ -94,10 +95,10 @@ export function AddressExplorer() {
   const selected =
     visiblePlaces.find((place) => place.id === selectedId) ?? visiblePlaces[0] ?? SAMPLE_PLACES[0];
   const totalCount = mode === "sample" ? samplePlaces.length : serverTotal;
-  const processing = mode === "postgis" && loading;
+  const processing = mode === "spatialite" && loading;
 
   useEffect(() => {
-    if (mode !== "postgis") {
+    if (mode !== "spatialite") {
       return;
     }
 
@@ -162,6 +163,9 @@ export function AddressExplorer() {
     writePageSizeCookie(value);
     setPage(1);
   };
+  const refreshAddresses = useCallback(() => {
+    setRefreshKey((value) => value + 1);
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#f7f8fb] text-[#182033]">
@@ -174,7 +178,7 @@ export function AddressExplorer() {
             <div>
               <h1 className="text-2xl font-semibold tracking-normal text-[#111827]">주소 탐색</h1>
               <p className="mt-0.5 text-sm font-medium text-[#607086]">
-                PostgreSQL + PostGIS 기반 주소 브라우저
+                SQLite + SpatiaLite 기반 주소 브라우저
               </p>
             </div>
           </div>
@@ -235,16 +239,16 @@ export function AddressExplorer() {
             <div className="rounded-lg border border-[#d9dfeb] bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#39485c]">
-                  {mode === "postgis" ? (
+                  {mode === "spatialite" ? (
                     <Server aria-hidden="true" size={18} />
                   ) : (
                     <ListFilter aria-hidden="true" size={18} />
                   )}
-                  {mode === "postgis" ? "전체 주소 목록" : "샘플 검색 결과"}
+                  {mode === "spatialite" ? "전체 주소 목록" : "샘플 검색 결과"}
                   {processing ? <LoadingBadge /> : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  {mode === "postgis" ? (
+                  {mode === "spatialite" ? (
                     <PageSizeSelect
                       value={pageSize}
                       disabled={processing}
@@ -283,7 +287,7 @@ export function AddressExplorer() {
                 ) : null}
               </div>
 
-              {mode === "postgis" ? (
+              {mode === "spatialite" ? (
                 <Pagination
                   page={page}
                   total={serverTotal}
@@ -298,6 +302,7 @@ export function AddressExplorer() {
             </div>
 
             <AddressDetail selected={selected} />
+            <ManualLoadPanel apiBaseUrl={apiBaseUrl} onJobComplete={refreshAddresses} />
           </aside>
 
           <section className="flex min-h-[620px] flex-col overflow-hidden rounded-lg border border-[#d9dfeb] bg-white shadow-sm">

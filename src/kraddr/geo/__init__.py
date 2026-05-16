@@ -12,6 +12,14 @@ from .data import (
     load_related_jibun_records,
     load_road_name_address_records,
 )
+from .dto import (
+    CoordinateCandidate,
+    KRMoisAddressProbe,
+    KRMoisAddressValidationResult,
+    PostalCodeLookupRequest,
+    VWorldLikeGeocodeRequest,
+    VWorldLikeReverseGeocodeRequest,
+)
 from .exceptions import (
     KrAddrAuthError,
     KrAddrError,
@@ -21,6 +29,7 @@ from .exceptions import (
     KrAddrRequestError,
     KrAddrServerError,
 )
+from .fixtures import save_fixture, slugify
 from .legal_dong import (
     DATA_GO_KR_LEGAL_DONG_PAGE_URL,
     DataGoKrLegalDongClient,
@@ -39,17 +48,25 @@ from .models import (
     RelatedJibunRecord,
     RoadNameAddressKoreanRecord,
 )
-from .postgis import BoundaryLoadResult, PostGISLegalDongStore, make_postgis_metadata
 from .reverse import (
-    AddressPointLoadResult,
     NavigationBuildingRecord,
     ReverseGeocoder,
     ReverseGeocodeResult,
-    RoadAddressPointStore,
     VWorldReverseGeocoder,
     iter_navigation_building_records,
     load_navigation_building_records,
-    make_address_point_metadata,
+)
+from .spatialite import (
+    BoundarySpatialiteLoadResult,
+    LocationSummaryEntranceRecord,
+    NavigationRoadSectionEntranceRecord,
+    SpatialiteAddressStore,
+    SpatialiteLoadResult,
+    boundary_level_from_path,
+    iter_location_summary_records,
+    iter_navigation_road_section_entrance_records,
+    make_spatialite_metadata,
+    read_boundary_zip,
 )
 from .store import RoadNameAddressStore
 
@@ -57,9 +74,9 @@ JusoClient = KrAddrClient
 
 __all__ = [
     "AddressCoordinate",
-    "AddressPointLoadResult",
     "AddressSearchResult",
-    "BoundaryLoadResult",
+    "BoundarySpatialiteLoadResult",
+    "CoordinateCandidate",
     "DATA_GO_KR_LEGAL_DONG_PAGE_URL",
     "DataGoKrLegalDongClient",
     "DatasetFile",
@@ -67,6 +84,8 @@ __all__ = [
     "EnglishAddressSearchResult",
     "JusoClient",
     "JusoPage",
+    "KRMoisAddressProbe",
+    "KRMoisAddressValidationResult",
     "KrAddrAuthError",
     "KrAddrClient",
     "KrAddrError",
@@ -76,7 +95,10 @@ __all__ = [
     "KrAddrRequestError",
     "KrAddrServerError",
     "LegalDongRecord",
+    "LocationSummaryEntranceRecord",
     "NavigationBuildingRecord",
+    "NavigationRoadSectionEntranceRecord",
+    "PostalCodeLookupRequest",
     "ROAD_NAME_KOREAN_DETAIL_SN",
     "RelatedJibunRecord",
     "ReverseGeocodeResult",
@@ -84,19 +106,26 @@ __all__ = [
     "RoadNameAddressDataClient",
     "RoadNameAddressKoreanRecord",
     "RoadNameAddressStore",
-    "RoadAddressPointStore",
-    "PostGISLegalDongStore",
+    "read_boundary_zip",
+    "save_fixture",
+    "slugify",
+    "SpatialiteAddressStore",
+    "SpatialiteLoadResult",
+    "VWorldLikeGeocodeRequest",
+    "VWorldLikeReverseGeocodeRequest",
     "VWorldReverseGeocoder",
     "archive_standard_date",
+    "boundary_level_from_path",
     "iter_related_jibun_records",
     "iter_legal_dong_records",
     "iter_navigation_building_records",
+    "iter_location_summary_records",
+    "iter_navigation_road_section_entrance_records",
     "iter_road_name_address_records",
     "load_legal_dong_records",
     "load_navigation_building_records",
     "load_related_jibun_records",
     "load_road_name_address_records",
-    "make_postgis_metadata",
-    "make_address_point_metadata",
+    "make_spatialite_metadata",
     "records_from_openapi_rows",
 ]
