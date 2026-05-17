@@ -315,7 +315,7 @@ export function AddressExplorer() {
             <ManualLoadPanel apiBaseUrl={apiBaseUrl} onJobComplete={refreshAddresses} />
           </aside>
 
-          <section className="flex min-h-[620px] flex-col overflow-hidden rounded-lg border border-[#d9dfeb] bg-white shadow-sm">
+          <section className="flex min-h-[620px] flex-col overflow-hidden rounded-lg border border-[#d9dfeb] bg-white shadow-sm lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] lg:self-start">
             <div className="flex flex-col gap-3 border-b border-[#d9dfeb] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <LocateFixed aria-hidden="true" size={19} className="text-[#0f766e]" />

@@ -840,6 +840,9 @@ def make_spatialite_metadata() -> MetaData:
         Index("ix_juso_points_road_address", "road_address"),
         Index("ix_juso_points_parcel_address", "parcel_address"),
         Index("ix_juso_points_building_name", "building_name"),
+        Index("ix_juso_points_sido_name", "sido_name"),
+        Index("ix_juso_points_sigungu_name", "sigungu_name"),
+        Index("ix_juso_points_eup_myeon_dong_name", "eup_myeon_dong_name"),
     )
     Table(
         SPATIALITE_BOUNDARY_TABLE,
@@ -1467,6 +1470,18 @@ def _ensure_sqlite_performance_indexes(connection: Any) -> None:
         f"""
         CREATE INDEX IF NOT EXISTS ix_juso_points_building_name
         ON {SPATIALITE_ADDRESS_POINT_TABLE} (building_name)
+        """,
+        f"""
+        CREATE INDEX IF NOT EXISTS ix_juso_points_sido_name
+        ON {SPATIALITE_ADDRESS_POINT_TABLE} (sido_name)
+        """,
+        f"""
+        CREATE INDEX IF NOT EXISTS ix_juso_points_sigungu_name
+        ON {SPATIALITE_ADDRESS_POINT_TABLE} (sigungu_name)
+        """,
+        f"""
+        CREATE INDEX IF NOT EXISTS ix_juso_points_eup_myeon_dong_name
+        ON {SPATIALITE_ADDRESS_POINT_TABLE} (eup_myeon_dong_name)
         """,
     ):
         connection.execute(text(sql))

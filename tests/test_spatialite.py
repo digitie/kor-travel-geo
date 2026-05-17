@@ -264,6 +264,9 @@ def test_spatialite_store_prioritizes_location_summary_and_indexes(tmp_path) -> 
     assert "ix_juso_points_road_name" in index_names
     assert "ix_juso_points_parcel_address" in index_names
     assert "ix_juso_points_building_name" in index_names
+    assert "ix_juso_points_sido_name" in index_names
+    assert "ix_juso_points_sigungu_name" in index_names
+    assert "ix_juso_points_eup_myeon_dong_name" in index_names
     assert "ix_juso_points_road_lookup" in road_plan
     assert "ix_juso_points_postal_code" in postal_plan
     assert "ix_juso_points_xy" in xy_plan

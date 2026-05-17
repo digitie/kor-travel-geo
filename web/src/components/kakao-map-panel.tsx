@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Circle, CustomOverlayMap, Map, MapMarker, Polyline, useKakaoLoader } from "react-kakao-maps-sdk";
 
 import type { AddressPlace, Coordinate } from "@/data/address-data";
@@ -62,10 +63,18 @@ function KakaoMapCanvas({
   showRadius,
   onSelect,
 }: KakaoMapPanelProps) {
+  const mapRef = useRef<kakao.maps.Map | null>(null);
   const [, error] = useKakaoLoader({
     appkey: kakaoKey,
     libraries: ["services", "clusterer"],
   });
+
+  useEffect(() => {
+    if (!mapRef.current) {
+      return;
+    }
+    mapRef.current.setCenter(new kakao.maps.LatLng(selected.coordinate.lat, selected.coordinate.lng));
+  }, [selected.coordinate.lat, selected.coordinate.lng, selected.id]);
 
   if (error) {
     return (
@@ -87,6 +96,10 @@ function KakaoMapCanvas({
         className="h-full min-h-[520px] w-full"
         level={7}
         isPanto
+        onCreate={(map) => {
+          mapRef.current = map;
+          map.setCenter(new kakao.maps.LatLng(selected.coordinate.lat, selected.coordinate.lng));
+        }}
       >
         {showBoundary && selected.boundary.length > 1 ? (
           <Polyline
@@ -140,7 +153,7 @@ function StaticMapPreview({
   showRadius,
   onSelect,
 }: KakaoMapPanelProps) {
-  const bounds = mapBounds(places);
+  const bounds = mapBounds(places, selected.coordinate, showBoundary ? selected.boundary : []);
   const selectedPoint = toPercent(selected.coordinate, bounds);
   const boundaryPoints = selected.boundary.map((point) => toPercent(point, bounds));
 
@@ -211,22 +224,27 @@ function StaticMapPreview({
   );
 }
 
-function mapBounds(places: AddressPlace[]) {
-  const latitudes = places.map((place) => place.coordinate.lat);
-  const longitudes = places.map((place) => place.coordinate.lng);
-  const minLat = Math.min(...latitudes);
-  const maxLat = Math.max(...latitudes);
-  const minLng = Math.min(...longitudes);
-  const maxLng = Math.max(...longitudes);
+export function mapBounds(
+  places: AddressPlace[],
+  center: Coordinate,
+  extraPoints: Coordinate[] = [],
+) {
+  const coordinates = [...places.map((place) => place.coordinate), ...extraPoints];
+  const latitudes = coordinates.map((point) => point.lat);
+  const longitudes = coordinates.map((point) => point.lng);
+  const maxLatDelta = Math.max(...latitudes.map((lat) => Math.abs(lat - center.lat)), 0.01);
+  const maxLngDelta = Math.max(...longitudes.map((lng) => Math.abs(lng - center.lng)), 0.01);
+  const latRadius = Math.max(maxLatDelta + 0.01, 0.02);
+  const lngRadius = Math.max(maxLngDelta + 0.01, 0.02);
   return {
-    minLat: minLat - 0.01,
-    maxLat: maxLat + 0.01,
-    minLng: minLng - 0.01,
-    maxLng: maxLng + 0.01,
+    minLat: center.lat - latRadius,
+    maxLat: center.lat + latRadius,
+    minLng: center.lng - lngRadius,
+    maxLng: center.lng + lngRadius,
   };
 }
 
-function toPercent(point: Coordinate, bounds: ReturnType<typeof mapBounds>) {
+export function toPercent(point: Coordinate, bounds: ReturnType<typeof mapBounds>) {
   const x = ((point.lng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * 100;
   const y = 100 - ((point.lat - bounds.minLat) / (bounds.maxLat - bounds.minLat)) * 100;
   return {

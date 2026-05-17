@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from collections import OrderedDict
 from functools import lru_cache
 from typing import Any
 
@@ -98,8 +100,13 @@ def list_addresses(
             total = int(
                 connection.scalar(sa.text("select count(*) from juso_address_points")) or 0
             )
+        boundary_cache: dict[str, dict[str, Any]] = {}
+        items = [
+            _row_to_address(row, connection=connection, boundary_cache=boundary_cache)
+            for row in rows
+        ]
     return {
-        "items": [_row_to_address(row) for row in rows],
+        "items": items,
         "page": normalized_page,
         "page_size": normalized_page_size,
         "total": total,
@@ -168,14 +175,23 @@ _SEARCH_INDEXES = {
     "parcel_address": "ix_juso_points_parcel_address",
     "building_name": "ix_juso_points_building_name",
     "legal_dong_code": "ix_juso_points_legal_dong",
+    "sido_name": "ix_juso_points_sido_name",
+    "sigungu_name": "ix_juso_points_sigungu_name",
+    "eup_myeon_dong_name": "ix_juso_points_eup_myeon_dong_name",
     "road_name_code": "ix_juso_points_road_lookup",
     "building_management_number": "ix_juso_points_building_mgmt",
     "postal_code": "ix_juso_points_postal_lookup",
 }
 
 _SEARCH_COLUMNS_BY_SCOPE = {
-    "road": ("road_name", "road_address"),
-    "jibun": ("parcel_address", "legal_dong_code"),
+    "road": ("road_name", "road_address", "sido_name", "sigungu_name", "eup_myeon_dong_name"),
+    "jibun": (
+        "parcel_address",
+        "legal_dong_code",
+        "sido_name",
+        "sigungu_name",
+        "eup_myeon_dong_name",
+    ),
     "code": (
         "legal_dong_code",
         "road_name_code",
@@ -188,6 +204,9 @@ _SEARCH_COLUMNS_BY_SCOPE = {
         "parcel_address",
         "building_name",
         "legal_dong_code",
+        "sido_name",
+        "sigungu_name",
+        "eup_myeon_dong_name",
         "road_name_code",
         "building_management_number",
         "postal_code",
@@ -195,10 +214,14 @@ _SEARCH_COLUMNS_BY_SCOPE = {
 }
 _FTS_COLUMNS_BY_SCOPE = {
     "road": ("road_name", "road_address"),
-    "jibun": ("parcel_address",),
+    "jibun": ("parcel_address", "road_address"),
     "all": ("road_name", "road_address", "parcel_address", "building_name"),
 }
 _FTS_MIN_QUERY_LENGTH = 3
+_BOUNDARY_RESPONSE_CACHE_MAX_SIZE = 2048
+_BOUNDARY_RESPONSE_CACHE: OrderedDict[
+    int, tuple[tuple[str, str, str, int], dict[str, Any]]
+] = OrderedDict()
 
 
 def _search_address_rows(
@@ -347,8 +370,18 @@ def _prefix_end(value: str) -> str:
     return f"{value[:-1]}{chr(ord(value[-1]) + 1)}"
 
 
-def _row_to_address(row: sa.RowMapping) -> dict[str, Any]:
+def _row_to_address(
+    row: sa.RowMapping,
+    *,
+    connection: sa.Connection | None = None,
+    boundary_cache: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     lon, lat = _to_wgs84(row["x"], row["y"])
+    boundary = (
+        _boundary_for_address_row(connection, row, boundary_cache=boundary_cache)
+        if connection is not None
+        else _empty_boundary()
+    )
     return {
         "id": row["point_id"],
         "title": row["road_address"] or row["parcel_address"] or row["point_id"],
@@ -360,7 +393,7 @@ def _row_to_address(row: sa.RowMapping) -> dict[str, Any]:
         "roadNameCode": row["road_name_code"] or "",
         "pnu": "",
         "coordinate": {"lat": lat, "lng": lon},
-        "boundary": [],
+        "boundary": boundary["boundary"],
         "radiusMeters": 40 if row["source_dataset"] == "location_summary" else 80,
         "updatedAt": "",
         "tags": [
@@ -368,23 +401,177 @@ def _row_to_address(row: sa.RowMapping) -> dict[str, Any]:
             for tag in [row["sido_name"], row["sigungu_name"], row["source_dataset"]]
             if tag
         ],
-        "boundaryName": "",
-        "boundaryLevel": "",
+        "boundaryName": boundary["boundaryName"],
+        "boundaryLevel": boundary["boundaryLevel"],
         "coordinateSource": row["source_dataset"] or row["source"] or "sqlite_spatialite",
     }
 
 
-def _to_wgs84(x: Any, y: Any) -> tuple[float, float]:
+def _boundary_for_address_row(
+    connection: sa.Connection,
+    row: sa.RowMapping,
+    *,
+    boundary_cache: dict[str, dict[str, Any]] | None,
+) -> dict[str, Any]:
+    legal_dong_code = str(row["legal_dong_code"] or "")
+    if not legal_dong_code:
+        return _empty_boundary()
+
+    if boundary_cache is not None and legal_dong_code in boundary_cache:
+        return boundary_cache[legal_dong_code]
+
+    boundary_row = _find_boundary_row(connection, legal_dong_code)
+    if boundary_row is None:
+        result = _empty_boundary()
+    else:
+        boundary_id_key = f"boundary:{boundary_row['id']}"
+        if boundary_cache is not None and boundary_id_key in boundary_cache:
+            result = boundary_cache[boundary_id_key]
+        else:
+            result = _boundary_result(boundary_row)
+            if boundary_cache is not None:
+                boundary_cache[boundary_id_key] = result
+
+    if boundary_cache is not None:
+        boundary_cache[legal_dong_code] = result
+    return result
+
+
+def _find_boundary_row(connection: sa.Connection, legal_dong_code: str) -> sa.RowMapping | None:
+    sigungu_code = legal_dong_code[:5] if len(legal_dong_code) >= 5 else ""
+    sido_code = legal_dong_code[:2] if len(legal_dong_code) >= 2 else ""
+    legal_token = f"%{legal_dong_code}%"
+    emd_token = f"%{legal_dong_code[:8]}%" if len(legal_dong_code) >= 8 else legal_token
+    sigungu_token = f"%{sigungu_code}%" if sigungu_code else legal_token
+    sido_token = f"%{sido_code}%" if sido_code else legal_token
+    row = connection.execute(
+        sa.text(
+            """
+            select id, source_name, boundary_level, srid, geom_wkt
+            from juso_boundary_polygons
+            where legal_dong_code = :legal_dong_code
+               or source_code like :legal_token
+               or source_code like :emd_token
+               or (boundary_level = 'sigungu' and source_code like :sigungu_token)
+               or (boundary_level = 'sido' and source_code like :sido_token)
+            order by
+                case
+                    when legal_dong_code = :legal_dong_code then 0
+                    when boundary_level in ('legal_dong', 'eup_myeon_dong')
+                         and source_code like :emd_token then 1
+                    when boundary_level = 'sigungu'
+                         and source_code like :sigungu_token then 2
+                    when boundary_level = 'sido'
+                         and source_code like :sido_token then 3
+                    else 9
+                end,
+                id
+            limit 1
+            """
+        ),
+        {
+            "legal_dong_code": legal_dong_code,
+            "legal_token": legal_token,
+            "emd_token": emd_token,
+            "sigungu_token": sigungu_token,
+            "sido_token": sido_token,
+        },
+    ).mappings().first()
+    return row
+
+
+def _boundary_result(row: sa.RowMapping) -> dict[str, Any]:
+    geom_wkt = row["geom_wkt"] or ""
+    boundary_id = int(row["id"])
+    signature = (
+        str(row["source_name"] or ""),
+        str(row["boundary_level"] or ""),
+        str(row["srid"] or ""),
+        hash(geom_wkt),
+    )
+    cached = _BOUNDARY_RESPONSE_CACHE.get(boundary_id)
+    if cached is not None and cached[0] == signature:
+        _BOUNDARY_RESPONSE_CACHE.move_to_end(boundary_id)
+        return cached[1]
+
+    result = {
+        "boundary": _boundary_points(row),
+        "boundaryName": row["source_name"] or "",
+        "boundaryLevel": row["boundary_level"] or "",
+    }
+    if not result["boundary"]:
+        result = _empty_boundary()
+
+    _BOUNDARY_RESPONSE_CACHE[boundary_id] = (signature, result)
+    _BOUNDARY_RESPONSE_CACHE.move_to_end(boundary_id)
+    while len(_BOUNDARY_RESPONSE_CACHE) > _BOUNDARY_RESPONSE_CACHE_MAX_SIZE:
+        _BOUNDARY_RESPONSE_CACHE.popitem(last=False)
+    return result
+
+
+def _boundary_points(row: sa.RowMapping) -> list[dict[str, float]]:
     try:
-        transformer = _wgs84_transformer()
+        from shapely import wkt
+    except ImportError:
+        return []
+
+    try:
+        geometry = wkt.loads(row["geom_wkt"])
+    except Exception:
+        return []
+    if geometry.is_empty:
+        return []
+
+    if geometry.geom_type == "MultiPolygon":
+        geometry = max(geometry.geoms, key=lambda item: item.area)
+    if geometry.geom_type != "Polygon":
+        return []
+
+    srid = str(row["srid"] or "5179")
+    tolerance = 0.00025 if srid == "4326" else 25.0
+    geometry = geometry.simplify(tolerance, preserve_topology=True)
+    if geometry.geom_type == "MultiPolygon":
+        geometry = max(geometry.geoms, key=lambda item: item.area)
+    if geometry.geom_type != "Polygon":
+        return []
+
+    coordinates = list(geometry.exterior.coords)
+    if not coordinates:
+        return []
+    max_points = 800
+    if len(coordinates) > max_points:
+        step = math.ceil(len(coordinates) / max_points)
+        coordinates = coordinates[::step]
+        if coordinates[0] != coordinates[-1]:
+            coordinates.append(coordinates[0])
+
+    points = []
+    for x, y, *_ in coordinates:
+        lon, lat = _transform_to_wgs84(x, y, source_crs=f"EPSG:{srid}")
+        if math.isfinite(lat) and math.isfinite(lon):
+            points.append({"lat": lat, "lng": lon})
+    return points
+
+
+def _empty_boundary() -> dict[str, Any]:
+    return {"boundary": [], "boundaryName": "", "boundaryLevel": ""}
+
+
+def _to_wgs84(x: Any, y: Any) -> tuple[float, float]:
+    return _transform_to_wgs84(x, y, source_crs="EPSG:5179")
+
+
+def _transform_to_wgs84(x: Any, y: Any, *, source_crs: str) -> tuple[float, float]:
+    try:
+        transformer = _wgs84_transformer(source_crs)
     except ImportError:
         return float(x), float(y)
     lon, lat = transformer.transform(float(x), float(y))
     return float(lon), float(lat)
 
 
-@lru_cache(maxsize=1)
-def _wgs84_transformer() -> Any:
+@lru_cache(maxsize=8)
+def _wgs84_transformer(source_crs: str) -> Any:
     from pyproj import Transformer
 
-    return Transformer.from_crs("EPSG:5179", "EPSG:4326", always_xy=True)
+    return Transformer.from_crs(source_crs, "EPSG:4326", always_xy=True)
