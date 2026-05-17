@@ -50,7 +50,7 @@ def seeded_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                     "y": 1902000.0,
                     "srid": 5179,
                     "geom_wkt": "POINT (1131000 1902000)",
-                    "geom_wkb": b"0",
+                    "geom_wkb": b"\xff\xfe",
                     "loaded_at": now,
                     "raw_json": {},
                 },
@@ -165,3 +165,21 @@ def test_address_response_includes_best_available_boundary(seeded_backend) -> No
     assert place["boundaryLevel"] == "sigungu"
     assert len(place["boundary"]) >= 4
     assert {"lat", "lng"} <= set(place["boundary"][0])
+
+
+def test_reverse_geocode_response_excludes_binary_geometry_from_raw(
+    seeded_backend,
+) -> None:
+    del seeded_backend
+    client = TestClient(app)
+
+    response = client.get(
+        "/reverse-geocode",
+        params={"x": 1131000.0, "y": 1902000.0, "crs": "EPSG:5179", "max_distance_m": 5},
+    )
+
+    assert response.status_code == 200
+    item = response.json()["item"]
+    assert item["road_address"] == "강원특별자치도 동해시 동해대로 4491"
+    assert "geom_wkb" not in item["raw"]
+    assert "geom" not in item["raw"]

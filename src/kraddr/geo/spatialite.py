@@ -6,6 +6,7 @@ import json
 import math
 import os
 import struct
+import sys
 import tempfile
 import zipfile
 from collections.abc import Iterable, Iterator, Mapping, Sequence
@@ -58,6 +59,9 @@ SPATIALITE_BOUNDARY_TABLE = "juso_boundary_polygons"
 SPATIALITE_METADATA_TABLE = "juso_spatial_metadata"
 DEFAULT_SRID = 5179
 SEARCH_INDEX_READY_METADATA_KEY = "address_search_index_ready"
+SPATIALITE_GEOMETRY_BACKFILL_METADATA_KEY = "spatialite_geometry_backfilled"
+_SPATIALITE_DLL_DIRECTORIES: set[str] = set()
+_SPATIALITE_DLL_HANDLES: list[Any] = []
 
 LOCATION_SUMMARY_ENTRANCE_COLUMNS = (
     "sigungu_code",
@@ -747,6 +751,8 @@ class SpatialiteAddressStore:
             connection.execute(stmt, list(rows))
             if self.spatialite_enabled:
                 _refresh_point_geometries(connection, self.srid, [row["point_id"] for row in rows])
+            else:
+                _clear_spatialite_geometry_backfill_metadata(connection)
 
     def _upsert_boundary_rows(self, rows: Sequence[dict[str, Any]]) -> None:
         if not rows:
@@ -765,6 +771,8 @@ class SpatialiteAddressStore:
             connection.execute(stmt, list(rows))
             if self.spatialite_enabled:
                 _refresh_boundary_geometries(connection, self.srid)
+            else:
+                _clear_spatialite_geometry_backfill_metadata(connection)
 
 
 def make_spatialite_metadata() -> MetaData:
@@ -1268,7 +1276,7 @@ def _candidate_from_row(row: RowMapping) -> CoordinateCandidate:
         source=str(row["source_dataset"] or row["source"] or ""),
         coordinate_role=str(row["coordinate_role"] or ""),
         distance_m=float(row["distance_m"]) if row.get("distance_m") is not None else None,
-        raw=dict(row),
+        raw=_row_raw_for_public_result(row),
     )
 
 
@@ -1430,8 +1438,16 @@ def _reverse_result_from_row(row: RowMapping) -> ReverseGeocodeResult:
         crs="EPSG:5179",
         distance_m=candidate.distance_m,
         source=candidate.source,
-        raw=dict(row),
+        raw=_row_raw_for_public_result(row),
     )
+
+
+def _row_raw_for_public_result(row: RowMapping) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in dict(row).items()
+        if key not in {"geom", "geom_wkb"}
+    }
 
 
 def _set_sqlite_pragmas(connection: Any) -> None:
@@ -1615,8 +1631,9 @@ def _try_enable_spatialite(connection: Any, srid: int) -> bool:
     except Exception:
         return False
     loaded = False
-    for name in ("mod_spatialite", "mod_spatialite.dll", "libspatialite"):
+    for name in _spatialite_library_candidates():
         try:
+            _prepare_spatialite_dll_directory(name)
             raw.load_extension(name)
             loaded = True
             break
@@ -1628,26 +1645,112 @@ def _try_enable_spatialite(connection: Any, srid: int) -> bool:
         pass
     if not loaded:
         return False
-    try:
-        connection.execute(text("SELECT InitSpatialMetaData(1)"))
-    except Exception:
-        pass
+    if not _sqlite_table_exists(connection, "spatial_ref_sys"):
+        try:
+            connection.execute(text("SELECT InitSpatialMetaData(1)"))
+        except Exception:
+            pass
     return True
+
+
+def _spatialite_library_candidates() -> tuple[str, ...]:
+    candidates: list[str] = []
+    for key in (
+        "KRADDR_GEO_SPATIALITE_LIBRARY",
+        "SPATIALITE_LIBRARY_PATH",
+    ):
+        value = os.environ.get(key)
+        if value:
+            candidates.extend(_spatialite_candidates_from_value(value))
+
+    for key in (
+        "KRADDR_GEO_SPATIALITE_DIR",
+        "SPATIALITE_DIR",
+    ):
+        value = os.environ.get(key)
+        if value:
+            candidates.extend(_spatialite_candidates_from_directory(Path(value)))
+
+    module_path = Path(__file__).resolve()
+    roots = [Path.cwd(), *module_path.parents]
+    for root in roots:
+        candidates.extend(_spatialite_candidates_from_directory(root / "spatialite" / "bin"))
+        candidates.extend(_spatialite_candidates_from_directory(root / "spatialite"))
+
+    candidates.extend(
+        _spatialite_candidates_from_directory(Path(sys.prefix) / "Library" / "bin")
+    )
+    candidates.extend(("mod_spatialite", "mod_spatialite.dll", "libspatialite"))
+
+    unique: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(key)
+    return tuple(unique)
+
+
+def _spatialite_candidates_from_value(value: str) -> list[str]:
+    path = Path(value)
+    if path.is_dir():
+        return _spatialite_candidates_from_directory(path)
+    return [str(path)]
+
+
+def _spatialite_candidates_from_directory(path: Path) -> list[str]:
+    if not path.exists() or not path.is_dir():
+        return []
+    names = (
+        "mod_spatialite.dll",
+        "mod_spatialite",
+        "libspatialite.dll",
+        "libspatialite",
+    )
+    return [str(path / name) for name in names if (path / name).exists()]
+
+
+def _prepare_spatialite_dll_directory(library: str) -> None:
+    path = Path(library)
+    if not path.is_absolute():
+        return
+    directory = path.parent
+    if not directory.exists():
+        return
+    directory_text = str(directory)
+    if directory_text in _SPATIALITE_DLL_DIRECTORIES:
+        return
+    os.environ["PATH"] = f"{directory_text}{os.pathsep}{os.environ.get('PATH', '')}"
+    add_dll_directory = getattr(os, "add_dll_directory", None)
+    if add_dll_directory is not None:
+        try:
+            _SPATIALITE_DLL_HANDLES.append(add_dll_directory(directory_text))
+        except OSError:
+            pass
+    _SPATIALITE_DLL_DIRECTORIES.add(directory_text)
 
 
 def _ensure_spatialite_geometry(connection: Any, srid: int) -> bool:
     try:
         _add_geometry_column(connection, SPATIALITE_ADDRESS_POINT_TABLE, "geom", srid, "POINT")
         _add_geometry_column(connection, SPATIALITE_BOUNDARY_TABLE, "geom", srid, "MULTIPOLYGON")
-        connection.execute(
-            text(f"SELECT CreateSpatialIndex('{SPATIALITE_ADDRESS_POINT_TABLE}', 'geom')")
-        )
-        connection.execute(
-            text(f"SELECT CreateSpatialIndex('{SPATIALITE_BOUNDARY_TABLE}', 'geom')")
-        )
+        _backfill_spatialite_geometries(connection, srid)
+        _ensure_spatial_index(connection, SPATIALITE_ADDRESS_POINT_TABLE, "geom")
+        _ensure_spatial_index(connection, SPATIALITE_BOUNDARY_TABLE, "geom")
     except Exception:
         return False
     return True
+
+
+def _sqlite_table_exists(connection: Any, table_name: str) -> bool:
+    return bool(
+        connection.execute(
+            text("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :table_name"),
+            {"table_name": table_name},
+        ).first()
+    )
 
 
 def _add_geometry_column(
@@ -1676,6 +1779,152 @@ def _add_geometry_column(
     )
 
 
+def _backfill_spatialite_geometries(connection: Any, srid: int) -> None:
+    if _spatialite_geometry_backfill_ready(connection, srid):
+        return
+    if _spatialite_indexes_cover_current_rows(connection):
+        _mark_spatialite_geometry_backfilled(connection, srid)
+        return
+
+    point_needs_backfill = _has_null_geometry(connection, SPATIALITE_ADDRESS_POINT_TABLE)
+    boundary_needs_backfill = _has_null_geometry(connection, SPATIALITE_BOUNDARY_TABLE)
+    if point_needs_backfill:
+        _drop_spatial_index_for_backfill(connection, SPATIALITE_ADDRESS_POINT_TABLE, "geom")
+    if boundary_needs_backfill:
+        _drop_spatial_index_for_backfill(connection, SPATIALITE_BOUNDARY_TABLE, "geom")
+
+    connection.execute(
+        text(
+            f"""
+            UPDATE {SPATIALITE_ADDRESS_POINT_TABLE}
+               SET geom = MakePoint(x, y, :srid)
+             WHERE geom IS NULL
+            """
+        ),
+        {"srid": srid},
+    )
+    connection.execute(
+        text(
+            f"""
+            UPDATE {SPATIALITE_BOUNDARY_TABLE}
+               SET geom = CastToMultiPolygon(GeomFromText(geom_wkt, :srid))
+             WHERE geom IS NULL
+            """
+        ),
+        {"srid": srid},
+    )
+    _mark_spatialite_geometry_backfilled(connection, srid)
+
+
+def _has_null_geometry(connection: Any, table_name: str) -> bool:
+    return bool(
+        connection.execute(
+            text(f"SELECT 1 FROM {table_name} WHERE geom IS NULL LIMIT 1")
+        ).first()
+    )
+
+
+def _drop_spatial_index_for_backfill(connection: Any, table_name: str, column_name: str) -> None:
+    if not _spatial_index_enabled(connection, table_name, column_name):
+        return
+    try:
+        connection.execute(
+            text("SELECT DisableSpatialIndex(:table_name, :column_name)"),
+            {"table_name": table_name, "column_name": column_name},
+        )
+    except Exception:
+        pass
+    index_table = f"idx_{table_name}_{column_name}"
+    connection.execute(text(f"DROP TABLE IF EXISTS {index_table}"))
+
+
+def _spatialite_geometry_backfill_ready(connection: Any, srid: int) -> bool:
+    value = connection.execute(
+        text(
+            f"""
+            SELECT value
+              FROM {SPATIALITE_METADATA_TABLE}
+             WHERE key = :key
+            """
+        ),
+        {"key": SPATIALITE_GEOMETRY_BACKFILL_METADATA_KEY},
+    ).scalar()
+    return value == f"srid:{srid}"
+
+
+def _spatialite_indexes_cover_current_rows(connection: Any) -> bool:
+    point_index_count = _spatial_index_count(
+        connection, SPATIALITE_ADDRESS_POINT_TABLE, "geom"
+    )
+    boundary_index_count = _spatial_index_count(
+        connection, SPATIALITE_BOUNDARY_TABLE, "geom"
+    )
+    if point_index_count is None or boundary_index_count is None:
+        return False
+    return (
+        point_index_count == _table_count(connection, SPATIALITE_ADDRESS_POINT_TABLE)
+        and boundary_index_count == _table_count(connection, SPATIALITE_BOUNDARY_TABLE)
+    )
+
+
+def _table_count(connection: Any, table_name: str) -> int:
+    return int(connection.scalar(text(f"SELECT count(*) FROM {table_name}")) or 0)
+
+
+def _spatial_index_count(connection: Any, table_name: str, column_name: str) -> int | None:
+    index_table = f"idx_{table_name}_{column_name}"
+    if not _sqlite_table_exists(connection, index_table):
+        return None
+    return int(connection.scalar(text(f"SELECT count(*) FROM {index_table}")) or 0)
+
+
+def _mark_spatialite_geometry_backfilled(connection: Any, srid: int) -> None:
+    connection.execute(
+        text(
+            f"""
+            INSERT INTO {SPATIALITE_METADATA_TABLE} (key, value, updated_at)
+            VALUES (:key, :value, CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """
+        ),
+        {
+            "key": SPATIALITE_GEOMETRY_BACKFILL_METADATA_KEY,
+            "value": f"srid:{srid}",
+        },
+    )
+
+
+def _clear_spatialite_geometry_backfill_metadata(connection: Any) -> None:
+    connection.execute(
+        text(f"DELETE FROM {SPATIALITE_METADATA_TABLE} WHERE key = :key"),
+        {"key": SPATIALITE_GEOMETRY_BACKFILL_METADATA_KEY},
+    )
+
+
+def _ensure_spatial_index(connection: Any, table_name: str, column_name: str) -> None:
+    if _spatial_index_enabled(connection, table_name, column_name):
+        return
+    connection.execute(text(f"SELECT CreateSpatialIndex('{table_name}', '{column_name}')"))
+
+
+def _spatial_index_enabled(connection: Any, table_name: str, column_name: str) -> bool:
+    return bool(
+        connection.execute(
+            text(
+                """
+                SELECT spatial_index_enabled
+                  FROM geometry_columns
+                 WHERE f_table_name = :table_name
+                   AND f_geometry_column = :column_name
+                """
+            ),
+            {"table_name": table_name, "column_name": column_name},
+        ).scalar()
+    )
+
+
 def _refresh_point_geometries(connection: Any, srid: int, point_ids: Sequence[str]) -> None:
     if not point_ids:
         return
@@ -1696,7 +1945,7 @@ def _refresh_boundary_geometries(connection: Any, srid: int) -> None:
         text(
             f"""
             UPDATE {SPATIALITE_BOUNDARY_TABLE}
-               SET geom = GeomFromText(geom_wkt, :srid)
+               SET geom = CastToMultiPolygon(GeomFromText(geom_wkt, :srid))
              WHERE geom IS NULL
             """
         ),
