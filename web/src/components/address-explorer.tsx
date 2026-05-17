@@ -87,13 +87,14 @@ export function AddressExplorer() {
   const [serverItems, setServerItems] = useState<AddressPlace[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverHasNext, setServerHasNext] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const samplePlaces = useMemo(() => filterPlaces(SAMPLE_PLACES, query, scope), [query, scope]);
   const visiblePlaces = mode === "sample" ? samplePlaces : serverItems;
+  const mapPlaces = visiblePlaces.filter(hasKoreaCoordinate);
   const selected =
-    visiblePlaces.find((place) => place.id === selectedId) ?? visiblePlaces[0] ?? SAMPLE_PLACES[0];
+    mapPlaces.find((place) => place.id === selectedId) ?? mapPlaces[0] ?? SAMPLE_PLACES[0];
   const totalCount = mode === "sample" ? samplePlaces.length : serverTotal;
   const processing = mode === "spatialite" && loading;
 
@@ -127,9 +128,11 @@ export function AddressExplorer() {
           throw new Error(`주소 API 응답 오류: ${response.status}`);
         }
         const payload = (await response.json()) as AddressListResponse;
-        setServerItems(payload.items);
+        const validItems = payload.items.filter(hasKoreaCoordinate);
+        setServerItems(validItems);
         setServerTotal(payload.total);
         setServerHasNext(payload.has_next);
+        setSelectedId(validItems[0]?.id ?? SAMPLE_PLACES[0].id);
       } catch (caught) {
         if (controller.signal.aborted) {
           return;
@@ -339,7 +342,7 @@ export function AddressExplorer() {
             </div>
 
             <KakaoMapPanel
-              places={visiblePlaces.length > 0 ? visiblePlaces : SAMPLE_PLACES}
+              places={mapPlaces.length > 0 ? mapPlaces : SAMPLE_PLACES}
               selected={selected}
               showBoundary={showBoundary}
               showRadius={showRadius}
@@ -468,6 +471,7 @@ function PageSizeSelect({
         aria-label="페이지당 주소 수"
         value={value}
         disabled={disabled}
+        suppressHydrationWarning
         onChange={(event) => onChange(toPageSize(event.target.value))}
         className="h-7 rounded-md border border-[#d6dee8] bg-[#f8fafc] px-2 font-mono text-xs font-semibold text-[#182033] outline-none transition focus:border-[#2b7a78] focus:ring-2 focus:ring-[#2b7a78]/15 disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -549,6 +553,7 @@ function IconButton({
       type="button"
       aria-label={label}
       disabled={disabled}
+      suppressHydrationWarning
       onClick={onClick}
       className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#d6dee8] bg-white text-[#4c5d72] transition hover:bg-[#f4f7fb] disabled:cursor-not-allowed disabled:opacity-40"
     >
@@ -637,6 +642,11 @@ function writePageSizeCookie(value: PageSize) {
 function toPageSize(value: string): PageSize {
   const parsed = Number(value);
   return pageSizeOptions.some((option) => option === parsed) ? (parsed as PageSize) : defaultPageSize;
+}
+
+function hasKoreaCoordinate(place: AddressPlace) {
+  const { lat, lng } = place.coordinate;
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= 32 && lat <= 39.5 && lng >= 123 && lng <= 132;
 }
 
 function filterPlaces(places: AddressPlace[], query: string, scope: SearchScope) {

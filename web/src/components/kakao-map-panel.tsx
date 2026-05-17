@@ -21,11 +21,22 @@ export function KakaoMapPanel({
   showRadius,
   onSelect,
 }: KakaoMapPanelProps) {
+  const safePlaces = places.filter(hasRenderableCoordinate);
+  const safeSelected = hasRenderableCoordinate(selected) ? selected : safePlaces[0];
+
+  if (!safeSelected) {
+    return (
+      <div className="relative flex min-h-[520px] flex-1 items-center justify-center bg-[#eef3f7] text-sm font-semibold text-[#536579]">
+        표시 가능한 국내 좌표가 없습니다
+      </div>
+    );
+  }
+
   if (!kakaoKey) {
     return (
       <StaticMapPreview
-        places={places}
-        selected={selected}
+        places={safePlaces}
+        selected={safeSelected}
         showBoundary={showBoundary}
         showRadius={showRadius}
         onSelect={onSelect}
@@ -35,8 +46,8 @@ export function KakaoMapPanel({
 
   return (
     <KakaoMapCanvas
-      places={places}
-      selected={selected}
+      places={safePlaces}
+      selected={safeSelected}
       showBoundary={showBoundary}
       showRadius={showRadius}
       onSelect={onSelect}
@@ -71,6 +82,7 @@ function KakaoMapCanvas({
   return (
     <div className="relative min-h-[520px] flex-1">
       <Map
+        key={selected.id}
         center={selected.coordinate}
         className="h-full min-h-[520px] w-full"
         level={7}
@@ -225,4 +237,9 @@ function toPercent(point: Coordinate, bounds: ReturnType<typeof mapBounds>) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function hasRenderableCoordinate(place: AddressPlace) {
+  const { lat, lng } = place.coordinate;
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= 32 && lat <= 39.5 && lng >= 123 && lng <= 132;
 }
