@@ -244,9 +244,9 @@ export function AddressExplorer() {
           </div>
         </header>
 
-        <section className="grid flex-1 gap-4 py-4 lg:grid-cols-[430px_minmax(0,1fr)]">
-          <aside className="flex min-h-[620px] flex-col gap-4">
-            <div className="rounded-lg border border-[#d9dfeb] bg-white p-4 shadow-sm">
+        <section className="grid min-w-0 flex-1 gap-4 py-4 lg:grid-cols-[430px_minmax(0,1fr)]">
+          <aside className="flex min-h-[620px] min-w-0 max-w-full flex-col gap-4">
+            <div className="min-w-0 rounded-lg border border-[#d9dfeb] bg-white p-4 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#39485c]">
                   {mode === "spatialite" ? (
@@ -315,7 +315,7 @@ export function AddressExplorer() {
             <ManualLoadPanel apiBaseUrl={apiBaseUrl} onJobComplete={refreshAddresses} />
           </aside>
 
-          <section className="flex min-h-[620px] flex-col overflow-hidden rounded-lg border border-[#d9dfeb] bg-white shadow-sm lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] lg:self-start">
+          <section className="flex min-h-[620px] min-w-0 max-w-full flex-col overflow-hidden rounded-lg border border-[#d9dfeb] bg-white shadow-sm lg:sticky lg:top-4 lg:h-[calc(100vh-7rem)] lg:self-start">
             <div className="flex flex-col gap-3 border-b border-[#d9dfeb] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <LocateFixed aria-hidden="true" size={19} className="text-[#0f766e]" />
@@ -368,16 +368,16 @@ function ResultRow({
     <button
       type="button"
       onClick={() => onSelect(place.id)}
-      className={`grid w-full grid-cols-[1fr_auto] gap-3 rounded-lg border px-3 py-3 text-left transition ${
+      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-lg border px-3 py-3 text-left transition ${
         selected
           ? "border-[#2b7a78] bg-[#edf8f6] shadow-sm"
           : "border-[#e2e7ef] bg-white hover:border-[#b9c7d7] hover:bg-[#f7fafc]"
       }`}
     >
       <span className="min-w-0">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-sm font-semibold text-[#142033]">{place.title}</span>
-          <span className="rounded bg-[#edf0f5] px-1.5 py-0.5 text-[11px] font-bold text-[#536579]">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate text-sm font-semibold text-[#142033]">{place.title}</span>
+          <span className="shrink-0 rounded bg-[#edf0f5] px-1.5 py-0.5 text-[11px] font-bold text-[#536579]">
             {place.category === "road" ? "도로명" : "지번"}
           </span>
         </span>
@@ -415,7 +415,7 @@ function AddressDetail({ selected }: { selected: AddressPlace }) {
   ].filter(([, value]) => value);
 
   return (
-    <div className="rounded-lg border border-[#d9dfeb] bg-white p-4 shadow-sm">
+    <div className="min-w-0 rounded-lg border border-[#d9dfeb] bg-white p-4 shadow-sm">
       <div className="flex items-center gap-2 text-sm font-semibold text-[#39485c]">
         <Database aria-hidden="true" size={18} />
         주소 코드
