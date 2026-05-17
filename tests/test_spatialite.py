@@ -205,6 +205,21 @@ def test_spatialite_store_prioritizes_location_summary_and_indexes(tmp_path) -> 
                   AND y BETWEEN 1954000 AND 1954050
                 """,
             )
+            listing_plan = _query_plan(
+                connection,
+                """
+                EXPLAIN QUERY PLAN
+                SELECT *
+                FROM juso_address_points
+                ORDER BY
+                    source_priority,
+                    road_name_code,
+                    building_main_no,
+                    building_sub_no,
+                    point_id
+                LIMIT 10
+                """,
+            )
 
     assert summary_result.loaded == 1
     assert navigation_result.loaded == 2
@@ -217,9 +232,12 @@ def test_spatialite_store_prioritizes_location_summary_and_indexes(tmp_path) -> 
     assert "ix_juso_points_road_lookup" in index_names
     assert "ix_juso_points_xy" in index_names
     assert "ix_juso_points_postal_code" in index_names
+    assert "ix_juso_points_listing_order" in index_names
+    assert "ix_juso_points_postal_lookup" in index_names
     assert "ix_juso_points_road_lookup" in road_plan
     assert "ix_juso_points_postal_code" in postal_plan
     assert "ix_juso_points_xy" in xy_plan
+    assert "ix_juso_points_listing_order" in listing_plan
 
 
 def test_spatialite_store_validates_krmois_probe(tmp_path) -> None:

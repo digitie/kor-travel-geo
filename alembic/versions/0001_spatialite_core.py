@@ -71,6 +71,28 @@ def upgrade() -> None:
         ["road_name_code", "underground_yn", "building_main_no", "building_sub_no"],
     )
     op.create_index("ix_juso_points_postal_code", "juso_address_points", ["postal_code"])
+    op.create_index(
+        "ix_juso_points_postal_lookup",
+        "juso_address_points",
+        [
+            "postal_code",
+            "road_name_code",
+            "building_main_no",
+            "building_sub_no",
+            "source_priority",
+        ],
+    )
+    op.create_index(
+        "ix_juso_points_listing_order",
+        "juso_address_points",
+        [
+            "source_priority",
+            "road_name_code",
+            "building_main_no",
+            "building_sub_no",
+            "point_id",
+        ],
+    )
     op.create_index("ix_juso_points_xy", "juso_address_points", ["x", "y"])
     op.create_index("ix_juso_points_road_address", "juso_address_points", ["road_address"])
 
@@ -132,6 +154,8 @@ _POINT_INDEXES: Sequence[str] = (
     "ix_juso_points_legal_dong",
     "ix_juso_points_road_lookup",
     "ix_juso_points_postal_code",
+    "ix_juso_points_postal_lookup",
+    "ix_juso_points_listing_order",
     "ix_juso_points_xy",
     "ix_juso_points_road_address",
 )

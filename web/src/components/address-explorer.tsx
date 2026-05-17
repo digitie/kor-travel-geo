@@ -82,7 +82,7 @@ export function AddressExplorer() {
   const [showBoundary, setShowBoundary] = useState(true);
   const [showRadius, setShowRadius] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSizeState] = useState<PageSize>(readPageSizeCookie);
+  const [pageSize, setPageSizeState] = useState<PageSize>(defaultPageSize);
   const [refreshKey, setRefreshKey] = useState(0);
   const [serverItems, setServerItems] = useState<AddressPlace[]>([]);
   const [serverTotal, setServerTotal] = useState(0);
@@ -96,6 +96,13 @@ export function AddressExplorer() {
     visiblePlaces.find((place) => place.id === selectedId) ?? visiblePlaces[0] ?? SAMPLE_PLACES[0];
   const totalCount = mode === "sample" ? samplePlaces.length : serverTotal;
   const processing = mode === "spatialite" && loading;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPageSizeState(readPageSizeCookie());
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (mode !== "spatialite") {

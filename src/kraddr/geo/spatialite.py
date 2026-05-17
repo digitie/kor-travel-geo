@@ -263,6 +263,7 @@ class SpatialiteAddressStore:
         with self.engine.begin() as connection:
             if self.engine.dialect.name == "sqlite":
                 _set_sqlite_pragmas(connection)
+                _ensure_sqlite_performance_indexes(connection)
                 if load_spatialite:
                     self.spatialite_enabled = _try_enable_spatialite(connection, self.srid)
                     if self.spatialite_enabled:
@@ -789,6 +790,14 @@ def make_spatialite_metadata() -> MetaData:
         Index("ix_juso_points_source", "source"),
         Index("ix_juso_points_dataset_role", "source_dataset", "coordinate_role"),
         Index("ix_juso_points_priority", "source_priority"),
+        Index(
+            "ix_juso_points_listing_order",
+            "source_priority",
+            "road_name_code",
+            "building_main_no",
+            "building_sub_no",
+            "point_id",
+        ),
         Index("ix_juso_points_building_mgmt", "building_management_number"),
         Index("ix_juso_points_legal_dong", "legal_dong_code"),
         Index(
@@ -799,6 +808,14 @@ def make_spatialite_metadata() -> MetaData:
             "building_sub_no",
         ),
         Index("ix_juso_points_postal_code", "postal_code"),
+        Index(
+            "ix_juso_points_postal_lookup",
+            "postal_code",
+            "road_name_code",
+            "building_main_no",
+            "building_sub_no",
+            "source_priority",
+        ),
         Index("ix_juso_points_xy", "x", "y"),
         Index("ix_juso_points_road_address", "road_address"),
     )
@@ -1403,6 +1420,22 @@ def _set_sqlite_pragmas(connection: Any) -> None:
             connection.execute(text(sql))
         except Exception:
             continue
+
+
+def _ensure_sqlite_performance_indexes(connection: Any) -> None:
+    for sql in (
+        f"""
+        CREATE INDEX IF NOT EXISTS ix_juso_points_listing_order
+        ON {SPATIALITE_ADDRESS_POINT_TABLE}
+        (source_priority, road_name_code, building_main_no, building_sub_no, point_id)
+        """,
+        f"""
+        CREATE INDEX IF NOT EXISTS ix_juso_points_postal_lookup
+        ON {SPATIALITE_ADDRESS_POINT_TABLE}
+        (postal_code, road_name_code, building_main_no, building_sub_no, source_priority)
+        """,
+    ):
+        connection.execute(text(sql))
 
 
 def _try_enable_spatialite(connection: Any, srid: int) -> bool:
