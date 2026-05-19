@@ -13,7 +13,7 @@
 - SQLite + SpatiaLite 기반 공간 저장소
 - 우편번호에서 도로명주소/법정동코드 후보 조회
 - VWorld 유사 DTO 기반 `get_coord`, `get_address` 호출
-- 로컬 결과가 없을 때 `python-vworld-api`를 통한 fallback
+- 로컬 결과가 없을 때 `python-vworld-api`의 asyncio 클라이언트를 통한 fallback
 - FastAPI 백엔드와 Next.js 주소 브라우저
 - 웹/API 기반 TXT, ZIP, 7Z, SHP 수동 업로드 적재와 progress 조회
 
@@ -62,14 +62,26 @@ with SpatialiteAddressStore("data/juso/kraddr_geo.sqlite") as store:
     postal = store.lookup_postal_code(PostalCodeLookupRequest(zipNo="48910"))
 ```
 
-VWorld fallback을 쓰려면 API 키를 넘깁니다.
+동기 `get_coord`, `get_address`는 로컬 SQLite/SpatiaLite 조회만 수행합니다.
+VWorld fallback을 쓰려면 API 키를 넘기고 비동기 `aget_coord`, `aget_address`를 호출합니다.
 
 ```python
-store = SpatialiteAddressStore(
-    "data/juso/kraddr_geo.sqlite",
-    vworld_api_key="...",
-    vworld_domain="...",
-)
+import asyncio
+
+from kraddr.geo import SpatialiteAddressStore
+
+
+async def main() -> None:
+    async with SpatialiteAddressStore(
+        "data/juso/kraddr_geo.sqlite",
+        vworld_api_key="...",
+        vworld_domain="...",
+    ) as store:
+        coord = await store.aget_coord({"query": "부산광역시 중구 초량상로 1-2"})
+        address = await store.aget_address({"x": 127.1, "y": 37.4, "crs": "EPSG:4326"})
+
+
+asyncio.run(main())
 ```
 
 ## 백엔드와 웹

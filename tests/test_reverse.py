@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import zipfile
 from typing import Any
@@ -90,7 +91,7 @@ class FakeVWorldClient:
         self.payload = payload
         self.calls: list[dict[str, Any]] = []
 
-    def reverse_geocode_latlon(self, lat: float, lon: float, **kwargs: Any) -> dict[str, Any]:
+    async def reverse_geocode_latlon(self, lat: float, lon: float, **kwargs: Any) -> dict[str, Any]:
         self.calls.append({"lat": lat, "lon": lon, **kwargs})
         return self.payload
 
@@ -112,7 +113,7 @@ def test_vworld_reverse_geocoder_parses_road_response() -> None:
     )
     geocoder = VWorldReverseGeocoder(client=client)
 
-    result = geocoder.reverse_road_address(lon=127.1, lat=37.4)
+    result = asyncio.run(geocoder.reverse_road_address(lon=127.1, lat=37.4))
 
     assert result is not None
     assert result.source == "vworld"
@@ -150,7 +151,7 @@ def test_reverse_geocoder_prefers_offline_result() -> None:
     )
     geocoder = ReverseGeocoder(offline_store=offline, vworld=vworld)
 
-    result = geocoder.reverse_road_address(lon=127.1, lat=37.4)
+    result = asyncio.run(geocoder.reverse_road_address(lon=127.1, lat=37.4))
 
     assert result is not None
     assert result.source == "juso_navigation_db"
@@ -173,7 +174,7 @@ def test_reverse_geocoder_uses_vworld_when_offline_misses() -> None:
     )
     geocoder = ReverseGeocoder(offline_store=offline, vworld=vworld)
 
-    result = geocoder.reverse_road_address(lon=127.1, lat=37.4)
+    result = asyncio.run(geocoder.reverse_road_address(lon=127.1, lat=37.4))
 
     assert result is not None
     assert result.source == "vworld"

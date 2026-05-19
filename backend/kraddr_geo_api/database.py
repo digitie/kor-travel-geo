@@ -114,7 +114,7 @@ def list_addresses(
     }
 
 
-def geocode(
+async def geocode(
     *,
     query: str = "",
     road_name_code: str | None = None,
@@ -125,7 +125,7 @@ def geocode(
     crs: str = "EPSG:4326",
     limit: int = 10,
 ) -> dict[str, Any]:
-    candidates = store().get_coord(
+    candidates = await store().aget_coord(
         {
             "query": query or None,
             "rnMgtSn": road_name_code,
@@ -143,14 +143,14 @@ def geocode(
     }
 
 
-def reverse_geocode(
+async def reverse_geocode(
     *,
     x: float,
     y: float,
     crs: str = "EPSG:4326",
     max_distance_m: float = 50.0,
 ) -> dict[str, Any]:
-    candidate = store().get_address(
+    candidate = await store().aget_address(
         {
             "x": x,
             "y": y,
