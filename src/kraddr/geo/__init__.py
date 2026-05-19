@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from .client import KrAddrClient
+from .client import AsyncKrAddrClient, KrAddrClient
 from .data import (
     ROAD_NAME_KOREAN_DETAIL_SN,
+    AsyncRoadNameAddressDataClient,
     RoadNameAddressDataClient,
     archive_standard_date,
     iter_related_jibun_records,
@@ -32,6 +33,7 @@ from .exceptions import (
 from .fixtures import save_fixture, slugify
 from .legal_dong import (
     DATA_GO_KR_LEGAL_DONG_PAGE_URL,
+    AsyncDataGoKrLegalDongClient,
     DataGoKrLegalDongClient,
     iter_legal_dong_records,
     load_legal_dong_records,
@@ -75,6 +77,9 @@ JusoClient = KrAddrClient
 __all__ = [
     "AddressCoordinate",
     "AddressSearchResult",
+    "AsyncDataGoKrLegalDongClient",
+    "AsyncKrAddrClient",
+    "AsyncRoadNameAddressDataClient",
     "BoundarySpatialiteLoadResult",
     "CoordinateCandidate",
     "DATA_GO_KR_LEGAL_DONG_PAGE_URL",

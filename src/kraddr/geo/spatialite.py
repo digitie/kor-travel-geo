@@ -1039,7 +1039,7 @@ def _iter_navigation_archive_members(
 
 def _iter_7z_text_members(path: Path, *, wanted_prefix: str) -> Iterator[Any]:
     try:
-        import py7zr  # type: ignore[import-untyped]
+        import py7zr
     except ImportError as exc:
         raise RuntimeError(
             "Reading Juso .7z archives requires py7zr. Install python-kraddr-geo[spatialite]."
@@ -1300,7 +1300,7 @@ def _make_vworld_client(
     if not api_key and not domain:
         return None
     try:
-        from vworld import VworldClient  # type: ignore[import-not-found]
+        from vworld import VworldClient
     except ImportError as exc:
         raise RuntimeError("python-vworld-api is required for VWorld fallback.") from exc
     return VworldClient(api_key=api_key, domain=domain, timeout=timeout)
@@ -1849,7 +1849,7 @@ def _spatialite_geometry_backfill_ready(connection: Any, srid: int) -> bool:
         ),
         {"key": SPATIALITE_GEOMETRY_BACKFILL_METADATA_KEY},
     ).scalar()
-    return value == f"srid:{srid}"
+    return bool(value == f"srid:{srid}")
 
 
 def _spatialite_indexes_cover_current_rows(connection: Any) -> bool:

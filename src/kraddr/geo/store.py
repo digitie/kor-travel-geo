@@ -301,7 +301,7 @@ class RoadNameAddressStore:
             return 0
         target = self.metadata.tables[table]
         values = [_row_values(table, columns, row) for row in rows]
-        statement = sqlite_insert(target).values(values)
+        statement = sqlite_insert(target)
         primary_key_columns = set(target.primary_key.columns.keys())
         update_values = {
             column: getattr(statement.excluded, column)
@@ -313,7 +313,8 @@ class RoadNameAddressStore:
                 statement.on_conflict_do_update(
                     index_elements=[column.name for column in target.primary_key.columns],
                     set_=update_values,
-                )
+                ),
+                values,
             )
         return len(rows)
 

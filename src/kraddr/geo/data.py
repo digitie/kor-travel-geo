@@ -9,9 +9,24 @@ import zipfile
 from collections.abc import Iterable, Iterator, Mapping
 from datetime import date
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 
-from ._http import SessionLike, build_session, raise_for_http_error, response_json, without_none
+from ._http import (
+    AsyncSessionLike,
+    SessionLike,
+    aclose_response,
+    aclose_session,
+    aiter_response_bytes,
+    build_async_session,
+    build_session,
+    close_response,
+    close_session,
+    iter_response_bytes,
+    raise_for_http_error,
+    response_json,
+    without_none,
+)
 from .exceptions import KrAddrNoDataError, KrAddrParseError
 from .models import DatasetFile, RelatedJibunRecord, RoadNameAddressKoreanRecord
 
@@ -76,6 +91,38 @@ class RoadNameAddressDataClient:
         self.timeout = timeout
         self.base_url = base_url.rstrip("/")
         self.session = session or build_session(retries)
+        self.closed = False
+
+    def __enter__(self) -> RoadNameAddressDataClient:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        close_session(self.session)
+        self.closed = True
+
+    @classmethod
+    def aio(
+        cls,
+        *,
+        timeout: float = 60.0,
+        retries: int = 3,
+        base_url: str = DEFAULT_DATA_BASE_URL,
+        session: AsyncSessionLike | None = None,
+    ) -> AsyncRoadNameAddressDataClient:
+        return AsyncRoadNameAddressDataClient(
+            timeout=timeout,
+            retries=retries,
+            base_url=base_url,
+            session=session,
+        )
 
     def list_files(
         self,
@@ -184,15 +231,13 @@ class RoadNameAddressDataClient:
             timeout=self.timeout,
             stream=True,
         )
-        raise_for_http_error(response, f"{file.file_name} 다운로드")
-        iter_content = getattr(response, "iter_content", None)
-        if callable(iter_content):
+        try:
+            raise_for_http_error(response, f"{file.file_name} download")
             with path.open("wb") as stream:
-                for chunk in iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        stream.write(chunk)
-        else:
-            path.write_bytes(bytes(response.content))
+                for chunk in iter_response_bytes(response, chunk_size=chunk_size):
+                    stream.write(chunk)
+        finally:
+            close_response(response)
         return path
 
     def download_latest_full(
@@ -223,6 +268,171 @@ class RoadNameAddressDataClient:
         return [
             self.download_file(file, output_dir, overwrite=overwrite)
             for file in self.daily_files_between(start, end)
+        ]
+
+
+class AsyncRoadNameAddressDataClient:
+    """Asynchronous Juso road-name address data downloader."""
+
+    def __init__(
+        self,
+        *,
+        timeout: float = 60.0,
+        retries: int = 3,
+        base_url: str = DEFAULT_DATA_BASE_URL,
+        session: AsyncSessionLike | None = None,
+    ) -> None:
+        self.timeout = timeout
+        self.base_url = base_url.rstrip("/")
+        self.session = session or build_async_session(retries)
+        self.closed = False
+
+    async def __aenter__(self) -> AsyncRoadNameAddressDataClient:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        await aclose_session(self.session)
+        self.closed = True
+
+    async def list_files(
+        self,
+        *,
+        year: int | str,
+        month: int | str,
+        data_detail_sn: str = ROAD_NAME_KOREAN_DETAIL_SN,
+        expand: bool = False,
+    ) -> Mapping[str, Any]:
+        body = {
+            "rtlDtaDtlSn": data_detail_sn,
+            "year": str(year),
+            "month": int(month),
+            "expand": "Y" if expand else "N",
+        }
+        response = await self.session.post(
+            f"{self.base_url}/api/jst/selectAttrbDBDwldList",
+            json=body,
+            headers=_json_headers(),
+            timeout=self.timeout,
+        )
+        raise_for_http_error(response, "selectAttrbDBDwldList")
+        payload = response_json(response, "selectAttrbDBDwldList")
+        results = payload.get("results")
+        if not isinstance(results, Mapping):
+            raise KrAddrParseError("selectAttrbDBDwldList: results is not an object")
+        return results
+
+    async def latest_full_file(
+        self,
+        *,
+        today: date | None = None,
+        max_lookback_months: int = 36,
+    ) -> DatasetFile:
+        current = today or date.today()
+        year = current.year
+        month = current.month
+        for _ in range(max_lookback_months):
+            results = await self.list_files(year=year, month=month)
+            candidates = [
+                _dataset_file(row, "monthly_full")
+                for row in _rows(results.get("allMonthFileList"))
+                if _is_existing_file(row)
+            ]
+            if candidates:
+                return max(candidates, key=lambda item: item.standard_date)
+            year, month = _previous_month(year, month)
+        raise KrAddrNoDataError("No downloadable full road-name address archive was found")
+
+    async def daily_files(
+        self,
+        *,
+        year: int | str,
+        month: int | str,
+    ) -> list[DatasetFile]:
+        results = await self.list_files(year=year, month=month)
+        possible = _rows(results.get("possibleDataList"))
+        daily_kind = _daily_kind(possible)
+        return [
+            _dataset_file(row, "daily", daily_kind=daily_kind)
+            for row in _rows(results.get("dayFileList"))
+            if _is_existing_file(row)
+        ]
+
+    async def daily_files_between(self, start: date, end: date) -> list[DatasetFile]:
+        if end < start:
+            return []
+        files: list[DatasetFile] = []
+        year, month = start.year, start.month
+        while (year, month) <= (end.year, end.month):
+            for file in await self.daily_files(year=year, month=month):
+                file_date = _yyyymmdd(file.standard_date)
+                if file_date is not None and start <= file_date <= end:
+                    files.append(file)
+            year, month = _next_month(year, month)
+        return sorted(files, key=lambda item: item.standard_date)
+
+    async def download_file(
+        self,
+        file: DatasetFile,
+        output_dir: str | os.PathLike[str],
+        *,
+        overwrite: bool = False,
+        chunk_size: int = 1024 * 1024,
+    ) -> Path:
+        output = Path(output_dir)
+        output.mkdir(parents=True, exist_ok=True)
+        path = output / _safe_file_name(file.file_name or file.real_file_name)
+        if path.exists() and not overwrite:
+            return path
+        params = _download_params(file)
+        response = await self.session.get(
+            f"{self.base_url}/api/jst/download",
+            params=params,
+            headers={"Referer": f"{self.base_url}/jst/jstAddressDetailsSearch"},
+            timeout=self.timeout,
+            stream=True,
+        )
+        try:
+            raise_for_http_error(response, f"{file.file_name} download")
+            with path.open("wb") as stream:
+                async for chunk in aiter_response_bytes(response, chunk_size=chunk_size):
+                    stream.write(chunk)
+        finally:
+            await aclose_response(response)
+        return path
+
+    async def download_latest_full(
+        self,
+        output_dir: str | os.PathLike[str],
+        *,
+        today: date | None = None,
+        overwrite: bool = False,
+    ) -> Path:
+        return await self.download_file(
+            await self.latest_full_file(today=today),
+            output_dir,
+            overwrite=overwrite,
+        )
+
+    async def download_daily_changes(
+        self,
+        output_dir: str | os.PathLike[str],
+        *,
+        start: date,
+        end: date,
+        overwrite: bool = False,
+    ) -> list[Path]:
+        files = await self.daily_files_between(start, end)
+        return [
+            await self.download_file(file, output_dir, overwrite=overwrite)
+            for file in files
         ]
 
 

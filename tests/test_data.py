@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import zipfile
 from dataclasses import dataclass
@@ -146,6 +147,16 @@ class FakeSession:
         return FakeResponse({}, content=b"zip-bytes")
 
 
+class AsyncFakeSession:
+    headers: dict[str, str] = {}
+
+    async def post(self, url: str, **kwargs: Any) -> FakeResponse:
+        return FakeSession().post(url, **kwargs)
+
+    async def get(self, url: str, **kwargs: Any) -> FakeResponse:
+        return FakeResponse({}, content=b"zip-bytes")
+
+
 def test_latest_full_file_and_download_params(tmp_path) -> None:
     client = RoadNameAddressDataClient(session=FakeSession())
 
@@ -157,3 +168,18 @@ def test_latest_full_file_and_download_params(tmp_path) -> None:
     assert latest.request_type == "ALLRNADR_KOR"
     assert path.read_bytes() == b"zip-bytes"
     assert daily[0].request_type == "JUSUKRDAY"
+
+
+def test_async_latest_full_file_and_download_params(tmp_path) -> None:
+    async def run() -> None:
+        client = RoadNameAddressDataClient.aio(session=AsyncFakeSession())
+
+        latest = await client.latest_full_file(today=date(2026, 2, 1))
+        path = await client.download_file(latest, tmp_path)
+        daily = await client.daily_files(year=2026, month=1)
+
+        assert latest.standard_date == "202601"
+        assert path.read_bytes() == b"zip-bytes"
+        assert daily[0].request_type == "JUSUKRDAY"
+
+    asyncio.run(run())

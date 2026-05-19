@@ -7,12 +7,27 @@ import csv
 import io
 import os
 import zipfile
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
 from itertools import chain
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 
-from ._http import SessionLike, build_session, raise_for_http_error, response_json, without_none
+from ._http import (
+    AsyncSessionLike,
+    SessionLike,
+    aclose_response,
+    aclose_session,
+    aiter_response_bytes,
+    build_async_session,
+    build_session,
+    close_response,
+    close_session,
+    iter_response_bytes,
+    raise_for_http_error,
+    response_json,
+    without_none,
+)
 from .exceptions import KrAddrParseError
 from .models import LegalDongRecord
 
@@ -52,10 +67,42 @@ class DataGoKrLegalDongClient:
         self.service_key = service_key
         self.timeout = timeout
         self.session = session or build_session(retries)
+        self.closed = False
+
+    def __enter__(self) -> DataGoKrLegalDongClient:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def close(self) -> None:
+        close_session(self.session)
+        self.closed = True
 
     @classmethod
     def from_env(cls, env_var: str = "DATA_GO_KR_SERVICE_KEY") -> DataGoKrLegalDongClient:
         return cls(service_key=os.getenv(env_var))
+
+    @classmethod
+    def aio(
+        cls,
+        *,
+        service_key: str | None = None,
+        timeout: float = 60.0,
+        retries: int = 3,
+        session: AsyncSessionLike | None = None,
+    ) -> AsyncDataGoKrLegalDongClient:
+        return AsyncDataGoKrLegalDongClient(
+            service_key=service_key,
+            timeout=timeout,
+            retries=retries,
+            session=session,
+        )
 
     def download_file(
         self,
@@ -71,8 +118,13 @@ class DataGoKrLegalDongClient:
         if path.exists() and not overwrite:
             return path
         response = self.session.get(url, timeout=self.timeout, stream=True)
-        raise_for_http_error(response, "법정동 파일 다운로드")
-        path.write_bytes(bytes(response.content))
+        try:
+            raise_for_http_error(response, "legal dong file download")
+            with path.open("wb") as stream:
+                for chunk in iter_response_bytes(response, chunk_size=1024 * 1024):
+                    stream.write(chunk)
+        finally:
+            close_response(response)
         return path
 
     def iter_openapi_rows(
@@ -113,6 +165,102 @@ class DataGoKrLegalDongClient:
             if not rows:
                 return
             yield from rows
+            total_count = _int_or_none(payload.get("totalCount") or payload.get("total_count"))
+            if total_count is not None and page * per_page >= total_count:
+                return
+            if len(rows) < per_page:
+                return
+            page += 1
+
+
+class AsyncDataGoKrLegalDongClient:
+    """Asynchronous data.go.kr legal-dong client."""
+
+    def __init__(
+        self,
+        *,
+        service_key: str | None = None,
+        timeout: float = 60.0,
+        retries: int = 3,
+        session: AsyncSessionLike | None = None,
+    ) -> None:
+        self.service_key = service_key
+        self.timeout = timeout
+        self.session = session or build_async_session(retries)
+        self.closed = False
+
+    async def __aenter__(self) -> AsyncDataGoKrLegalDongClient:
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        await aclose_session(self.session)
+        self.closed = True
+
+    @classmethod
+    def from_env(cls, env_var: str = "DATA_GO_KR_SERVICE_KEY") -> AsyncDataGoKrLegalDongClient:
+        return cls(service_key=os.getenv(env_var))
+
+    async def download_file(
+        self,
+        url: str,
+        output_path: str | os.PathLike[str],
+        *,
+        overwrite: bool = False,
+    ) -> Path:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and not overwrite:
+            return path
+        response = await self.session.get(url, timeout=self.timeout, stream=True)
+        try:
+            raise_for_http_error(response, "legal dong file download")
+            with path.open("wb") as stream:
+                async for chunk in aiter_response_bytes(response, chunk_size=1024 * 1024):
+                    stream.write(chunk)
+        finally:
+            await aclose_response(response)
+        return path
+
+    async def iter_openapi_rows(
+        self,
+        api_url: str,
+        *,
+        service_key: str | None = None,
+        per_page: int = 1000,
+        extra_params: Mapping[str, Any] | None = None,
+    ) -> AsyncIterator[Mapping[str, Any]]:
+        key = service_key or self.service_key
+        if not key:
+            raise ValueError("A data.go.kr service key is required for OpenAPI calls")
+        page = 1
+        while True:
+            params = {
+                "serviceKey": key,
+                "page": page,
+                "perPage": per_page,
+                "returnType": "JSON",
+            }
+            params.update(extra_params or {})
+            response = await self.session.get(
+                api_url,
+                params=without_none(params),
+                timeout=self.timeout,
+            )
+            raise_for_http_error(response, "legal dong OpenAPI row fetch")
+            payload = response_json(response, "legal dong OpenAPI row fetch")
+            rows = _extract_rows(payload)
+            if not rows:
+                return
+            for row in rows:
+                yield row
             total_count = _int_or_none(payload.get("totalCount") or payload.get("total_count"))
             if total_count is not None and page * per_page >= total_count:
                 return

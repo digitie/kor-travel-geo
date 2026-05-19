@@ -37,6 +37,13 @@ def _road_line(change_code: str, building_name: str = "청운빌딩") -> str:
     )
 
 
+def _road_line_with_index(index: int) -> str:
+    parts = _road_line("31").split("|")
+    parts[0] = f"111101010010001{index:010d}"
+    parts[12] = str(index)
+    return "|".join(parts)
+
+
 def _jibun_line(change_code: str) -> str:
     return "|".join(
         [
@@ -147,3 +154,19 @@ def test_store_daily_update_upserts_existing_row(tmp_path) -> None:
 
         assert row is not None
         assert row["building_register_name"] == "수정빌딩"
+
+
+def test_store_large_sqlite_batch_uses_executemany(tmp_path) -> None:
+    full_path = tmp_path / "RNADDR_KOR_2601.zip"
+    full_path.write_bytes(
+        _archive(
+            "rnaddrkor_seoul.txt",
+            [_road_line_with_index(index) for index in range(2000)],
+        )
+    )
+
+    with RoadNameAddressStore(tmp_path / "addr.sqlite") as store:
+        counts = store.load_full_archive(full_path, batch_size=2000)
+
+        assert counts["road"] == 2000
+        assert store.count_road_addresses() == 2000

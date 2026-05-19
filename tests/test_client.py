@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,6 +31,21 @@ class FakeSession:
     def get(self, url: str, **kwargs: Any) -> FakeResponse:
         self.calls.append((url, dict(kwargs.get("params") or {})))
         return self.response
+
+
+class AsyncFakeSession:
+    def __init__(self, response: FakeResponse) -> None:
+        self.response = response
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.headers: dict[str, str] = {}
+        self.closed = False
+
+    async def get(self, url: str, **kwargs: Any) -> FakeResponse:
+        self.calls.append((url, dict(kwargs.get("params") or {})))
+        return self.response
+
+    async def aclose(self) -> None:
+        self.closed = True
 
 
 def test_search_parses_juso_page_and_additional_fields() -> None:
@@ -76,6 +92,45 @@ def test_search_parses_juso_page_and_additional_fields() -> None:
     assert session.calls[0][0].endswith("/addrLinkApi.do")
     assert session.calls[0][1]["resultType"] == "json"
     assert session.calls[0][1]["addInfoYn"] == "Y"
+
+
+def test_aio_search_parses_juso_page_and_closes_session() -> None:
+    async def run() -> None:
+        session = AsyncFakeSession(
+            FakeResponse(
+                payload={
+                    "results": {
+                        "common": {
+                            "totalCount": "1",
+                            "currentPage": "1",
+                            "countPerPage": "10",
+                            "errorCode": "0",
+                            "errorMessage": "OK",
+                        },
+                        "juso": {
+                            "roadAddr": "서울특별시 중구 세종대로 110",
+                            "zipNo": "04524",
+                            "admCd": "1114010300",
+                            "rnMgtSn": "111402005001",
+                            "udrtYn": "0",
+                            "buldMnnm": "110",
+                            "buldSlno": "0",
+                        },
+                    }
+                }
+            )
+        )
+
+        async with KrAddrClient.aio("test-key", session=session) as client:
+            page = await client.search("세종대로 110", add_info=True)
+
+        assert page.total_count == 1
+        assert page.items[0].road_address == "서울특별시 중구 세종대로 110"
+        assert session.calls[0][0].endswith("/addrLinkApi.do")
+        assert session.calls[0][1]["addInfoYn"] == "Y"
+        assert session.closed
+
+    asyncio.run(run())
 
 
 def test_client_requires_key() -> None:

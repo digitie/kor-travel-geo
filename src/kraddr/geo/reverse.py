@@ -185,7 +185,7 @@ class VWorldReverseGeocoder:
             self.client = client
             return
         try:
-            from vworld import VworldClient  # type: ignore[import-not-found]
+            from vworld import VworldClient
         except ImportError as exc:
             raise KrAddrRequestError(
                 "python-vworld-api is required for VWorld fallback reverse geocoding."
@@ -382,7 +382,7 @@ def _iter_navigation_building_text_members(path: str | Path | bytes) -> Iterator
 
 def _iter_navigation_building_7z_members(path: Path) -> Iterator[Any]:
     try:
-        import py7zr  # type: ignore[import-untyped]
+        import py7zr
     except ImportError as exc:
         raise RuntimeError(
             "Reading Juso navigation .7z archives requires py7zr. "
