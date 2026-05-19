@@ -26,4 +26,6 @@ with SpatialiteAddressStore("data/juso/kraddr_geo.sqlite") as store:
     )
 ```
 
-If no local candidate is found and VWorld credentials are configured, the same method can fallback to `python-vworld-api`.
+The synchronous method is local-only. If no local candidate is found and VWorld
+credentials are configured, `await store.aget_address(...)` falls back through
+`python-vworld-api`'s `AsyncVworldClient`.

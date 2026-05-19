@@ -5,7 +5,7 @@
 ## 환경 변수
 
 - `KRADDR_GEO_SPATIALITE_PATH`: 사용할 SQLite/SpatiaLite DB 경로
-- `VWORLD_API_KEY`: 로컬 결과가 없을 때 fallback으로 사용할 VWorld API 키
+- `VWORLD_API_KEY`: 로컬 결과가 없을 때 asyncio 기반 VWorld fallback으로 사용할 API 키
 - `VWORLD_DOMAIN`: VWorld API 호출 도메인
 
 ## 실행

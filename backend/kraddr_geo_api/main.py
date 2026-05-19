@@ -48,7 +48,7 @@ def get_addresses(
 
 
 @app.get("/geocode")
-def get_geocode(
+async def get_geocode(
     query: str = "",
     road_name_code: str | None = Query(None, alias="rnMgtSn"),
     legal_dong_code: str | None = Query(None, alias="admCd"),
@@ -58,7 +58,7 @@ def get_geocode(
     crs: str = "EPSG:4326",
     limit: int = Query(10, ge=1, le=100),
 ) -> dict[str, object]:
-    return geocode(
+    return await geocode(
         query=query,
         road_name_code=road_name_code,
         legal_dong_code=legal_dong_code,
@@ -71,13 +71,13 @@ def get_geocode(
 
 
 @app.get("/reverse-geocode")
-def get_reverse_geocode(
+async def get_reverse_geocode(
     x: float,
     y: float,
     crs: str = "EPSG:4326",
     max_distance_m: float = Query(50.0, ge=0),
 ) -> dict[str, object]:
-    return reverse_geocode(x=x, y=y, crs=crs, max_distance_m=max_distance_m)
+    return await reverse_geocode(x=x, y=y, crs=crs, max_distance_m=max_distance_m)
 
 
 @app.get("/postal-codes/{zipcode}")

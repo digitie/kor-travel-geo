@@ -237,11 +237,10 @@ class SpatialiteAddressStore:
     ) -> None:
         self.srid = srid
         self.spatialite_enabled = False
-        self.vworld_client = vworld_client or _make_vworld_client(
-            api_key=vworld_api_key,
-            domain=vworld_domain,
-            timeout=vworld_timeout,
-        )
+        self.vworld_client = vworld_client
+        self._vworld_api_key = vworld_api_key
+        self._vworld_domain = vworld_domain
+        self._vworld_timeout = vworld_timeout
         self.path: Path | None = None
         if isinstance(path_or_engine, Engine):
             self.engine = path_or_engine
@@ -258,11 +257,24 @@ class SpatialiteAddressStore:
     def close(self) -> None:
         self.engine.dispose()
 
+    async def aclose(self) -> None:
+        aclose = getattr(self.vworld_client, "aclose", None)
+        if aclose is not None:
+            await aclose()
+        self.vworld_client = None
+        self.close()
+
     def __enter__(self) -> SpatialiteAddressStore:
         return self
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+    async def __aenter__(self) -> SpatialiteAddressStore:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.aclose()
 
     def create_schema(self, *, load_spatialite: bool = True) -> None:
         self.metadata.create_all(self.engine)
@@ -513,8 +525,6 @@ class SpatialiteAddressStore:
     def get_coord(
         self,
         request: VWorldLikeGeocodeRequest | Mapping[str, Any],
-        *,
-        fallback: bool = True,
     ) -> list[CoordinateCandidate]:
         dto = _coerce_geocode_request(request)
         if dto.road_name_code and dto.building_main_no is not None:
@@ -526,22 +536,29 @@ class SpatialiteAddressStore:
         candidates = [
             _candidate_in_crs(_candidate_from_row(row), dto.crs) for row in rows[: dto.limit]
         ]
-        if candidates or not fallback or self.vworld_client is None or not dto.query:
+        return candidates
+
+    async def aget_coord(
+        self,
+        request: VWorldLikeGeocodeRequest | Mapping[str, Any],
+        *,
+        fallback: bool = True,
+    ) -> list[CoordinateCandidate]:
+        dto = _coerce_geocode_request(request)
+        candidates = self.get_coord(dto)
+        client = self._ensure_vworld_client() if fallback and dto.query else None
+        if candidates or client is None:
             return candidates
-        return _vworld_get_coord_candidates(self.vworld_client, dto)
+        return await _vworld_aget_coord_candidates(client, dto)
 
     def get_address(
         self,
         request: VWorldLikeReverseGeocodeRequest | Mapping[str, Any],
-        *,
-        fallback: bool = True,
     ) -> CoordinateCandidate | None:
         dto = _coerce_reverse_request(request)
         x, y = _transform_xy(dto.x, dto.y, dto.crs, f"EPSG:{self.srid}")
         result = self.nearest_road_address_xy(x=x, y=y, max_distance_m=dto.max_distance_m)
         if result is None:
-            if fallback and self.vworld_client is not None:
-                return _vworld_get_address_candidate(self.vworld_client, dto)
             return None
         return _candidate_in_crs(
             CoordinateCandidate(
@@ -561,6 +578,28 @@ class SpatialiteAddressStore:
             ),
             dto.crs,
         )
+
+    async def aget_address(
+        self,
+        request: VWorldLikeReverseGeocodeRequest | Mapping[str, Any],
+        *,
+        fallback: bool = True,
+    ) -> CoordinateCandidate | None:
+        dto = _coerce_reverse_request(request)
+        candidate = self.get_address(dto)
+        client = self._ensure_vworld_client() if fallback else None
+        if candidate is not None or client is None:
+            return candidate
+        return await _vworld_aget_address_candidate(client, dto)
+
+    def _ensure_vworld_client(self) -> Any | None:
+        if self.vworld_client is None:
+            self.vworld_client = _make_vworld_client(
+                api_key=self._vworld_api_key,
+                domain=self._vworld_domain,
+                timeout=self._vworld_timeout,
+            )
+        return self.vworld_client
 
     def nearest_road_address(
         self,
@@ -1300,13 +1339,13 @@ def _make_vworld_client(
     if not api_key and not domain:
         return None
     try:
-        from vworld import VworldClient
+        from vworld import AsyncVworldClient
     except ImportError as exc:
         raise RuntimeError("python-vworld-api is required for VWorld fallback.") from exc
-    return VworldClient(api_key=api_key, domain=domain, timeout=timeout)
+    return AsyncVworldClient(api_key=api_key, domain=domain, timeout=timeout)
 
 
-def _vworld_get_coord_candidates(
+async def _vworld_aget_coord_candidates(
     client: Any,
     dto: VWorldLikeGeocodeRequest,
 ) -> list[CoordinateCandidate]:
@@ -1315,7 +1354,7 @@ def _vworld_get_coord_candidates(
     types = ("road", "parcel") if dto.type == "both" else (dto.type,)
     candidates: list[CoordinateCandidate] = []
     for address_type in types:
-        payload = client.get_coord(
+        payload = await client.geocode(
             dto.query,
             type=address_type,
             crs=dto.crs,
@@ -1345,11 +1384,11 @@ def _vworld_get_coord_candidates(
     return candidates
 
 
-def _vworld_get_address_candidate(
+async def _vworld_aget_address_candidate(
     client: Any,
     dto: VWorldLikeReverseGeocodeRequest,
 ) -> CoordinateCandidate | None:
-    payload = client.get_address(
+    payload = await client.reverse_geocode(
         (dto.x, dto.y),
         type=dto.type,
         crs=dto.crs,

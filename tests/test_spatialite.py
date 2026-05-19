@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import zipfile
 
@@ -90,7 +91,7 @@ class FakeVWorldClient:
         self.coord_calls: list[dict[str, str]] = []
         self.address_calls: list[dict[str, object]] = []
 
-    def get_coord(self, address: str, type: str, **kwargs: str) -> dict[str, object]:
+    async def geocode(self, address: str, type: str, **kwargs: str) -> dict[str, object]:
         self.coord_calls.append({"address": address, "type": type, **kwargs})
         return {
             "response": {
@@ -102,7 +103,7 @@ class FakeVWorldClient:
             }
         }
 
-    def get_address(self, point, **kwargs: object) -> dict[str, object]:
+    async def reverse_geocode(self, point, **kwargs: object) -> dict[str, object]:
         self.address_calls.append({"point": point, **kwargs})
         return {
             "response": {
@@ -305,6 +306,33 @@ def test_spatialite_store_validates_krmois_probe(tmp_path) -> None:
 
 
 def test_spatialite_store_uses_vworld_fallback_when_local_data_misses(tmp_path) -> None:
+    async def run() -> FakeVWorldClient:
+        client = FakeVWorldClient()
+
+        async with SpatialiteAddressStore(
+            tmp_path / "kraddr_geo.sqlite",
+            load_spatialite=False,
+            vworld_client=client,
+        ) as store:
+            geocoded = await store.aget_coord({"query": "missing address", "crs": "EPSG:4326"})
+            reversed_candidate = await store.aget_address(
+                {"x": 127.1, "y": 37.4, "crs": "EPSG:4326", "max_distance_m": 10}
+            )
+
+        assert geocoded[0].source == "vworld"
+        assert geocoded[0].road_address == "fallback road"
+        assert reversed_candidate is not None
+        assert reversed_candidate.source == "vworld"
+        assert reversed_candidate.road_address == "fallback reverse road"
+        return client
+
+    client = asyncio.run(run())
+
+    assert client.coord_calls[0]["address"] == "missing address"
+    assert client.address_calls[0]["point"] == (127.1, 37.4)
+
+
+def test_spatialite_store_sync_methods_remain_local_only(tmp_path) -> None:
     client = FakeVWorldClient()
 
     with SpatialiteAddressStore(
@@ -317,13 +345,10 @@ def test_spatialite_store_uses_vworld_fallback_when_local_data_misses(tmp_path) 
             {"x": 127.1, "y": 37.4, "crs": "EPSG:4326", "max_distance_m": 10}
         )
 
-    assert geocoded[0].source == "vworld"
-    assert geocoded[0].road_address == "fallback road"
-    assert client.coord_calls[0]["address"] == "missing address"
-    assert reversed_candidate is not None
-    assert reversed_candidate.source == "vworld"
-    assert reversed_candidate.road_address == "fallback reverse road"
-    assert client.address_calls[0]["point"] == (127.1, 37.4)
+    assert geocoded == []
+    assert reversed_candidate is None
+    assert client.coord_calls == []
+    assert client.address_calls == []
 
 
 def _query_plan(connection, sql: str) -> str:

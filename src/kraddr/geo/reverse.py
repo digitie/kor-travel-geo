@@ -171,7 +171,7 @@ class NavigationBuildingRecord:
 
 
 class VWorldReverseGeocoder:
-    """Optional fallback through ``python-vworld-api``."""
+    """Async reverse-geocoding fallback through ``python-vworld-api``."""
 
     def __init__(
         self,
@@ -185,34 +185,45 @@ class VWorldReverseGeocoder:
             self.client = client
             return
         try:
-            from vworld import VworldClient
+            from vworld import AsyncVworldClient
         except ImportError as exc:
             raise KrAddrRequestError(
                 "python-vworld-api is required for VWorld fallback reverse geocoding."
             ) from exc
-        self.client = VworldClient(api_key=api_key, domain=domain, timeout=timeout)
+        self.client = AsyncVworldClient(api_key=api_key, domain=domain, timeout=timeout)
 
     @classmethod
     def from_env(cls, **kwargs: Any) -> VWorldReverseGeocoder:
         try:
-            from vworld import VworldClient
+            from vworld import AsyncVworldClient
         except ImportError as exc:
             raise KrAddrRequestError(
                 "python-vworld-api is required for VWorld fallback reverse geocoding."
             ) from exc
-        return cls(client=VworldClient.from_env(**kwargs))
+        return cls(client=AsyncVworldClient.from_env(**kwargs))
 
     @classmethod
     def from_env_file(cls, path: str | Path = ".env", **kwargs: Any) -> VWorldReverseGeocoder:
         try:
-            from vworld import VworldClient
+            from vworld import AsyncVworldClient
         except ImportError as exc:
             raise KrAddrRequestError(
                 "python-vworld-api is required for VWorld fallback reverse geocoding."
             ) from exc
-        return cls(client=VworldClient.from_env_file(path, **kwargs))
+        return cls(client=AsyncVworldClient.from_env_file(path, **kwargs))
 
-    def reverse_geocode(
+    async def aclose(self) -> None:
+        aclose = getattr(self.client, "aclose", None)
+        if aclose is not None:
+            await aclose()
+
+    async def __aenter__(self) -> VWorldReverseGeocoder:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.aclose()
+
+    async def reverse_geocode(
         self,
         *,
         lon: float,
@@ -222,7 +233,7 @@ class VWorldReverseGeocoder:
         simple: bool = False,
         crs: str = "EPSG:4326",
     ) -> tuple[ReverseGeocodeResult, ...]:
-        payload = self.client.reverse_geocode_latlon(
+        payload = await self.client.reverse_geocode_latlon(
             lat,
             lon,
             type=type,
@@ -234,7 +245,7 @@ class VWorldReverseGeocoder:
             _vworld_result(row, lon=lon, lat=lat, crs=crs) for row in _vworld_rows(payload)
         )
 
-    def reverse_road_address(
+    async def reverse_road_address(
         self,
         *,
         lon: float,
@@ -243,7 +254,7 @@ class VWorldReverseGeocoder:
         simple: bool = False,
         crs: str = "EPSG:4326",
     ) -> ReverseGeocodeResult | None:
-        results = self.reverse_geocode(
+        results = await self.reverse_geocode(
             lon=lon,
             lat=lat,
             type="both",
@@ -271,7 +282,7 @@ class ReverseGeocoder:
         self.vworld = vworld
         self.max_offline_distance_m = max_offline_distance_m
 
-    def reverse_road_address(self, *, lon: float, lat: float) -> ReverseGeocodeResult | None:
+    async def reverse_road_address(self, *, lon: float, lat: float) -> ReverseGeocodeResult | None:
         if self.offline_store is not None:
             result = self.offline_store.nearest_road_address(
                 lon=lon,
@@ -281,7 +292,7 @@ class ReverseGeocoder:
             if result is not None:
                 return result
         if self.vworld is not None:
-            return self.vworld.reverse_road_address(lon=lon, lat=lat)
+            return await self.vworld.reverse_road_address(lon=lon, lat=lat)
         return None
 
 

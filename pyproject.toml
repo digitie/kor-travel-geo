@@ -31,6 +31,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+vworld = [
+  "python-vworld-api>=0.1.0",
+]
 spatialite = [
   "alembic>=1.13",
   "geopandas>=0.14",
