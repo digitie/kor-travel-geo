@@ -8,7 +8,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: "Geist", "Geist Fallback", "Apple SD Gothic Neo", "Malgun Gothic", ui-sans-serif,
+  --font-sans: var(--font-noto-sans-kr), "Apple SD Gothic Neo", "Malgun Gothic", ui-sans-serif,
     system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", "SFMono-Regular", Consolas, ui-monospace,
     monospace;
@@ -27,7 +27,7 @@ body {
   min-height: 100%;
   background: var(--background);
   color: var(--foreground);
-  font-family: "Geist", "Geist Fallback", "Apple SD Gothic Neo", "Malgun Gothic", ui-sans-serif,
+  font-family: var(--font-noto-sans-kr), "Apple SD Gothic Neo", "Malgun Gothic", ui-sans-serif,
     system-ui, sans-serif;
 }
 

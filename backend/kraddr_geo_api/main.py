@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import geocode, health, list_addresses, lookup_postal_code, reverse_geocode
+from .database import (
+    close_async_store,
+    geocode,
+    health,
+    list_addresses,
+    lookup_postal_code,
+    reverse_geocode,
+)
 from .ingest import (
     DatasetKind,
     create_load_job,
@@ -18,7 +26,16 @@ from .ingest import (
     run_load_job,
 )
 
-app = FastAPI(title="kraddr.geo address API")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    try:
+        yield
+    finally:
+        await close_async_store()
+
+
+app = FastAPI(title="kraddr.geo address API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,18 +50,18 @@ app.add_middleware(
 
 
 @app.get("/health")
-def get_health() -> dict[str, object]:
-    return health()
+async def get_health() -> dict[str, object]:
+    return await health()
 
 
 @app.get("/addresses")
-def get_addresses(
+async def get_addresses(
     query: str = "",
     scope: str = Query("all", pattern="^(all|road|jibun|code)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
 ) -> dict[str, object]:
-    return list_addresses(query=query, scope=scope, page=page, page_size=page_size)
+    return await list_addresses(query=query, scope=scope, page=page, page_size=page_size)
 
 
 @app.get("/geocode")
@@ -81,12 +98,12 @@ async def get_reverse_geocode(
 
 
 @app.get("/postal-codes/{zipcode}")
-def get_postal_code(
+async def get_postal_code(
     zipcode: str,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ) -> dict[str, object]:
-    return lookup_postal_code(zipcode, limit=limit, offset=offset)
+    return await lookup_postal_code(zipcode, limit=limit, offset=offset)
 
 
 @app.post("/load-jobs")

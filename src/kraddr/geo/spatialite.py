@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import math
 import os
@@ -37,6 +38,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import Engine, RowMapping
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from .data import _content_bytes, _iter_decoded_lines, _iter_text_members, _split_line
 from .dto import (
@@ -279,14 +281,11 @@ class SpatialiteAddressStore:
     def create_schema(self, *, load_spatialite: bool = True) -> None:
         self.metadata.create_all(self.engine)
         with self.engine.begin() as connection:
-            if self.engine.dialect.name == "sqlite":
-                _set_sqlite_pragmas(connection)
-                _ensure_sqlite_performance_indexes(connection)
-                _ensure_sqlite_search_index(connection)
-                if load_spatialite:
-                    self.spatialite_enabled = _try_enable_spatialite(connection, self.srid)
-                    if self.spatialite_enabled:
-                        self.spatialite_enabled = _ensure_spatialite_geometry(connection, self.srid)
+            self.spatialite_enabled = _configure_sqlite_spatial_schema(
+                connection,
+                self.srid,
+                load_spatialite=load_spatialite,
+            )
 
     def reset(self) -> None:
         with self.engine.begin() as connection:
@@ -466,6 +465,7 @@ class SpatialiteAddressStore:
                 if geom is None or geom.is_empty:
                     skipped += 1
                     continue
+                geom_wkt, geom_wkb = _geometry_wkt_wkb(geom, srid=self.srid)
                 source_layer = str(data.get("__source_layer") or "unknown")
                 boundary_level = str(data.get("__boundary_level") or boundary_level_from_path(path))
                 raw_source_code = _boundary_source_code(data, source_layer=source_layer)
@@ -484,8 +484,8 @@ class SpatialiteAddressStore:
                         "boundary_level": boundary_level,
                         "mapping_status": "unverified",
                         "srid": self.srid,
-                        "geom_wkt": geom.wkt,
-                        "geom_wkb": bytes(geom.wkb),
+                        "geom_wkt": geom_wkt,
+                        "geom_wkb": geom_wkb,
                         "loaded_at": datetime.now(UTC),
                         "raw_json": _jsonable_mapping(data, skip={"geom"}),
                     }
@@ -814,6 +814,285 @@ class SpatialiteAddressStore:
                 _clear_spatialite_geometry_backfill_metadata(connection)
 
 
+class AsyncSpatialiteAddressStore:
+    """Async SQLAlchemy 2 store for serving local Juso geocoding data.
+
+    The synchronous store remains useful for bulk file loading. This async store is the
+    preferred runtime/query API for FastAPI and VWorld fallback flows.
+    """
+
+    def __init__(
+        self,
+        path_or_engine: str | os.PathLike[str] | AsyncEngine,
+        *,
+        srid: int = DEFAULT_SRID,
+        load_spatialite: bool = True,
+        vworld_client: Any | None = None,
+        vworld_api_key: str | None = None,
+        vworld_domain: str | None = None,
+        vworld_timeout: float = 10.0,
+        echo: bool = False,
+    ) -> None:
+        self.srid = srid
+        self.load_spatialite = load_spatialite
+        self.spatialite_enabled = False
+        self.vworld_client = vworld_client
+        self._vworld_api_key = vworld_api_key
+        self._vworld_domain = vworld_domain
+        self._vworld_timeout = vworld_timeout
+        self.path: Path | None = None
+        if isinstance(path_or_engine, AsyncEngine):
+            self.engine = path_or_engine
+        else:
+            self.path = Path(path_or_engine)
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.engine = create_async_engine(
+                f"sqlite+aiosqlite:///{self.path}",
+                echo=echo,
+            )
+        self.metadata = make_spatialite_metadata()
+        self.point_table = self.metadata.tables[SPATIALITE_ADDRESS_POINT_TABLE]
+        self.boundary_table = self.metadata.tables[SPATIALITE_BOUNDARY_TABLE]
+        self.metadata_table = self.metadata.tables[SPATIALITE_METADATA_TABLE]
+
+    @classmethod
+    async def open(
+        cls,
+        path_or_engine: str | os.PathLike[str] | AsyncEngine,
+        **kwargs: Any,
+    ) -> AsyncSpatialiteAddressStore:
+        store = cls(path_or_engine, **kwargs)
+        await store.create_schema(load_spatialite=store.load_spatialite)
+        return store
+
+    async def create_schema(self, *, load_spatialite: bool = True) -> None:
+        async with self.engine.begin() as connection:
+            await connection.run_sync(self.metadata.create_all)
+            self.spatialite_enabled = await connection.run_sync(
+                _configure_sqlite_spatial_schema,
+                self.srid,
+                load_spatialite=load_spatialite,
+            )
+
+    async def aclose(self) -> None:
+        aclose = getattr(self.vworld_client, "aclose", None)
+        if aclose is not None:
+            await aclose()
+        self.vworld_client = None
+        await self.engine.dispose()
+
+    async def __aenter__(self) -> AsyncSpatialiteAddressStore:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await self.aclose()
+
+    async def reset(self) -> None:
+        async with self.engine.begin() as connection:
+            await connection.execute(self.point_table.delete())
+            await connection.execute(self.boundary_table.delete())
+            await connection.execute(self.metadata_table.delete())
+
+    async def set_metadata(self, key: str, value: str) -> None:
+        now = datetime.now(UTC)
+        stmt = sqlite_insert(self.metadata_table).values(
+            key=key,
+            value=value,
+            updated_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["key"],
+            set_={"value": stmt.excluded.value, "updated_at": stmt.excluded.updated_at},
+        )
+        async with self.engine.begin() as connection:
+            await connection.execute(stmt)
+
+    async def delete_source(self, source: str) -> int:
+        async with self.engine.begin() as connection:
+            result = await connection.execute(
+                self.point_table.delete().where(self.point_table.c.source == source)
+            )
+            return int(result.rowcount or 0)
+
+    async def count_points(self) -> int:
+        async with self.engine.connect() as connection:
+            return int(
+                await connection.scalar(select(func.count()).select_from(self.point_table)) or 0
+            )
+
+    async def rebuild_search_index(self) -> None:
+        async with self.engine.begin() as connection:
+            await connection.run_sync(_ensure_sqlite_search_index)
+            await connection.execute(
+                text(
+                    f"""
+                    INSERT INTO {SPATIALITE_ADDRESS_SEARCH_TABLE}
+                        ({SPATIALITE_ADDRESS_SEARCH_TABLE})
+                    VALUES ('rebuild')
+                    """
+                )
+            )
+            await connection.run_sync(_mark_search_index_ready)
+
+    async def get_coord(
+        self,
+        request: VWorldLikeGeocodeRequest | Mapping[str, Any],
+        *,
+        fallback: bool = True,
+    ) -> list[CoordinateCandidate]:
+        dto = _coerce_geocode_request(request)
+        if dto.road_name_code and dto.building_main_no is not None:
+            rows = await self._query_by_road_key(dto)
+        elif dto.query:
+            rows = await self._query_by_address_text(dto.query, limit=dto.limit)
+        else:
+            return []
+        candidates = [
+            _candidate_in_crs(_candidate_from_row(row), dto.crs) for row in rows[: dto.limit]
+        ]
+        client = self._ensure_vworld_client() if fallback and dto.query else None
+        if candidates or client is None:
+            return candidates
+        return await _vworld_aget_coord_candidates(client, dto)
+
+    async def get_address(
+        self,
+        request: VWorldLikeReverseGeocodeRequest | Mapping[str, Any],
+        *,
+        fallback: bool = True,
+    ) -> CoordinateCandidate | None:
+        dto = _coerce_reverse_request(request)
+        x, y = _transform_xy(dto.x, dto.y, dto.crs, f"EPSG:{self.srid}")
+        result = await self.nearest_road_address_xy(
+            x=x,
+            y=y,
+            max_distance_m=dto.max_distance_m,
+        )
+        if result is not None:
+            return _candidate_in_crs(
+                CoordinateCandidate(
+                    x=result.x or x,
+                    y=result.y or y,
+                    crs=f"EPSG:{self.srid}",
+                    road_address=result.road_address,
+                    parcel_address=result.parcel_address,
+                    postal_code=result.postal_code,
+                    legal_dong_code=result.legal_dong_code,
+                    road_name_code=result.road_name_code,
+                    building_management_number=result.building_management_number,
+                    building_name=result.building_name,
+                    source=result.source,
+                    distance_m=result.distance_m,
+                    raw=dict(result.raw),
+                ),
+                dto.crs,
+            )
+        client = self._ensure_vworld_client() if fallback else None
+        if client is None:
+            return None
+        return await _vworld_aget_address_candidate(client, dto)
+
+    async def nearest_road_address(
+        self,
+        *,
+        lon: float,
+        lat: float,
+        max_distance_m: float | None = 50.0,
+    ) -> ReverseGeocodeResult | None:
+        x, y = _transform_xy(lon, lat, "EPSG:4326", f"EPSG:{self.srid}")
+        return await self.nearest_road_address_xy(x=x, y=y, max_distance_m=max_distance_m)
+
+    async def nearest_road_address_xy(
+        self,
+        *,
+        x: float,
+        y: float,
+        max_distance_m: float | None = 50.0,
+    ) -> ReverseGeocodeResult | None:
+        distance_expr = (
+            (self.point_table.c.x - x) * (self.point_table.c.x - x)
+            + (self.point_table.c.y - y) * (self.point_table.c.y - y)
+        )
+        stmt = select(
+            self.point_table,
+            func.sqrt(distance_expr).label("distance_m"),
+        )
+        if max_distance_m is not None:
+            stmt = stmt.where(
+                self.point_table.c.x.between(x - max_distance_m, x + max_distance_m),
+                self.point_table.c.y.between(y - max_distance_m, y + max_distance_m),
+            )
+        stmt = stmt.order_by(distance_expr, self.point_table.c.source_priority).limit(1)
+        async with self.engine.connect() as connection:
+            row = (await connection.execute(stmt)).mappings().first()
+        return _reverse_result_from_row(row) if row is not None else None
+
+    async def lookup_postal_code(
+        self,
+        request: PostalCodeLookupRequest | Mapping[str, Any] | str,
+    ) -> list[CoordinateCandidate]:
+        dto = _coerce_postal_request(request)
+        stmt = (
+            select(self.point_table)
+            .where(self.point_table.c.postal_code == dto.zipcode)
+            .order_by(
+                self.point_table.c.road_name_code,
+                self.point_table.c.building_main_no,
+                self.point_table.c.building_sub_no,
+                self.point_table.c.source_priority,
+            )
+            .limit(dto.limit)
+            .offset(dto.offset)
+        )
+        async with self.engine.connect() as connection:
+            rows = list((await connection.execute(stmt)).mappings().all())
+        return [_candidate_from_row(row) for row in rows]
+
+    async def _query_by_road_key(self, dto: VWorldLikeGeocodeRequest) -> list[RowMapping]:
+        stmt = select(self.point_table).where(
+            self.point_table.c.road_name_code == dto.road_name_code,
+            self.point_table.c.building_main_no == _number_text(dto.building_main_no),
+        )
+        if dto.underground_yn is not None:
+            stmt = stmt.where(self.point_table.c.underground_yn == dto.underground_yn)
+        if dto.building_sub_no is not None:
+            stmt = stmt.where(
+                self.point_table.c.building_sub_no == _number_text(dto.building_sub_no)
+            )
+        if dto.legal_dong_code is not None:
+            stmt = stmt.where(self.point_table.c.legal_dong_code == dto.legal_dong_code)
+        stmt = stmt.order_by(self.point_table.c.source_priority, self.point_table.c.coordinate_role)
+        async with self.engine.connect() as connection:
+            return list((await connection.execute(stmt)).mappings().all())
+
+    async def _query_by_address_text(self, query: str, *, limit: int) -> list[RowMapping]:
+        like = f"%{query.strip()}%"
+        stmt = (
+            select(self.point_table)
+            .where(
+                (self.point_table.c.road_address == query)
+                | (self.point_table.c.road_address.like(like))
+                | (self.point_table.c.building_name == query)
+            )
+            .order_by(
+                (self.point_table.c.road_address == query).desc(),
+                self.point_table.c.source_priority,
+            )
+            .limit(limit)
+        )
+        async with self.engine.connect() as connection:
+            return list((await connection.execute(stmt)).mappings().all())
+
+    def _ensure_vworld_client(self) -> Any | None:
+        if self.vworld_client is None:
+            self.vworld_client = _make_vworld_client(
+                api_key=self._vworld_api_key,
+                domain=self._vworld_domain,
+                timeout=self._vworld_timeout,
+            )
+        return self.vworld_client
+
+
 def make_spatialite_metadata() -> MetaData:
     metadata = MetaData()
     Table(
@@ -1004,6 +1283,9 @@ def read_boundary_zip(
             elif frame.crs.to_epsg() != srid:
                 frame = frame.to_crs(epsg=srid)
             frame = frame.rename_geometry("geom")
+            frame = frame[frame["geom"].notna() & ~frame["geom"].is_empty].copy()
+            if hasattr(frame["geom"], "make_valid"):
+                frame["geom"] = frame["geom"].make_valid()
 
             def force_multipolygon(geometry: Any) -> Any:
                 if isinstance(geometry, Polygon):
@@ -1011,6 +1293,7 @@ def read_boundary_zip(
                 return geometry
 
             frame["geom"] = frame["geom"].apply(force_multipolygon)
+            frame = frame.explode(index_parts=False, ignore_index=True)
             frame["__source_shp"] = shp_file.name
             frame["__source_layer"] = shp_file.stem.lower()
             frame["__boundary_level"] = boundary_level_from_path(shp_file.name)
@@ -1264,7 +1547,7 @@ def _base_point_row(
     building_use: str = "",
     raw: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    wkt = f"POINT({x} {y})"
+    wkt, wkb = _point_wkt_wkb(x, y, srid=srid)
     return {
         "point_id": point_id,
         "source": source,
@@ -1291,7 +1574,7 @@ def _base_point_row(
         "y": y,
         "srid": srid,
         "geom_wkt": wkt,
-        "geom_wkb": _point_wkb(x, y),
+        "geom_wkb": wkb,
         "loaded_at": datetime.now(UTC),
         "raw_json": dict(raw or {}),
     }
@@ -1489,6 +1772,25 @@ def _row_raw_for_public_result(row: RowMapping) -> dict[str, Any]:
     }
 
 
+def _configure_sqlite_spatial_schema(
+    connection: Any,
+    srid: int,
+    *,
+    load_spatialite: bool,
+) -> bool:
+    spatialite_enabled = False
+    if connection.dialect.name != "sqlite":
+        return spatialite_enabled
+    _set_sqlite_pragmas(connection)
+    _ensure_sqlite_performance_indexes(connection)
+    _ensure_sqlite_search_index(connection)
+    if load_spatialite:
+        spatialite_enabled = _try_enable_spatialite(connection, srid)
+        if spatialite_enabled:
+            spatialite_enabled = _ensure_spatialite_geometry(connection, srid)
+    return spatialite_enabled
+
+
 def _set_sqlite_pragmas(connection: Any) -> None:
     for sql in (
         "PRAGMA foreign_keys = ON",
@@ -1664,6 +1966,10 @@ def _try_enable_spatialite(connection: Any, srid: int) -> bool:
     if raw is None:
         raw = getattr(connection.connection, "connection", None)
     if raw is None:
+        return False
+    if inspect.iscoroutinefunction(getattr(raw, "enable_load_extension", None)):
+        return False
+    if inspect.iscoroutinefunction(getattr(raw, "load_extension", None)):
         return False
     try:
         raw.enable_load_extension(True)
@@ -2066,6 +2372,24 @@ def _number_text(value: int | str | None) -> str:
 
 def _distance(x1: float, y1: float, x2: float, y2: float) -> float:
     return math.hypot(x1 - x2, y1 - y2)
+
+
+def _point_wkt_wkb(x: float, y: float, *, srid: int) -> tuple[str, bytes]:
+    try:
+        from shapely.geometry import Point  # type: ignore[import-untyped]
+    except ImportError:
+        return f"POINT({x} {y})", _point_wkb(x, y)
+    return _geometry_wkt_wkb(Point(float(x), float(y)), srid=srid)
+
+
+def _geometry_wkt_wkb(geometry: Any, *, srid: int) -> tuple[str, bytes]:
+    wkt = str(geometry.wkt)
+    try:
+        from geoalchemy2.shape import from_shape
+    except ImportError:
+        return wkt, bytes(geometry.wkb)
+    element = from_shape(geometry, srid=srid, extended=False)
+    return wkt, bytes(element.data)
 
 
 def _point_wkb(x: float, y: float) -> bytes:

@@ -40,3 +40,15 @@ Small key/value table for loader timestamps, source names, and operational metad
 ## Alembic
 
 `alembic/versions/0001_spatialite_core.py` creates the core tables and indexes. Geometry columns are added by the runtime store only when SpatiaLite can be loaded.
+
+## Runtime query path
+
+FastAPI serving uses `AsyncSpatialiteAddressStore`, SQLAlchemy 2 asyncio, and the
+`sqlite+aiosqlite` driver. Loader code can still use the synchronous store because
+large Juso archive ingestion is file/CPU bound, while request/response paths should
+stay async.
+
+Point and boundary payloads are normalized through Shapely geometries and GeoAlchemy2
+shape conversion before they are stored as WKT/WKB fallback columns. When SpatiaLite
+is available, runtime setup backfills native `geom` columns and spatial indexes from
+the same geometry payloads.

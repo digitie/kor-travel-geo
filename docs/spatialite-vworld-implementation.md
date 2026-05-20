@@ -36,7 +36,10 @@ When SpatiaLite is available, geometry columns and spatial indexes are added in 
 `SpatialiteAddressStore.get_address()` accepts `VWorldLikeReverseGeocodeRequest`.
 `lookup_postal_code()` accepts `PostalCodeLookupRequest`.
 
-The synchronous `get_coord()` and `get_address()` methods are local-only. If local
-candidates are missing and a VWorld key/domain is configured, `aget_coord()` and
-`aget_address()` call `python-vworld-api` through `AsyncVworldClient` and normalize
-the response into the same candidate DTOs.
+`AsyncSpatialiteAddressStore.get_coord()` and `AsyncSpatialiteAddressStore.get_address()`
+are the preferred server-side runtime APIs. They use SQLAlchemy 2 asyncio for local
+SQLite/SpatiaLite reads and call `python-vworld-api` through `AsyncVworldClient`
+when local candidates are missing and VWorld credentials are configured.
+
+The synchronous `SpatialiteAddressStore` remains available for bulk dataset loading
+and local-only scripts.

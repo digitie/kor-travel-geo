@@ -8,10 +8,14 @@ from functools import lru_cache
 from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncConnection
 
-from kraddr.geo import SpatialiteAddressStore
+from kraddr.geo import AsyncSpatialiteAddressStore, SpatialiteAddressStore
 
 from .config import load_settings
+
+_ASYNC_STORE: AsyncSpatialiteAddressStore | None = None
+_ASYNC_STORE_KEY: tuple[str, str | None, str | None] | None = None
 
 
 @lru_cache(maxsize=1)
@@ -25,29 +29,63 @@ def store() -> SpatialiteAddressStore:
     )
 
 
-def health() -> dict[str, Any]:
+async def astore() -> AsyncSpatialiteAddressStore:
+    global _ASYNC_STORE, _ASYNC_STORE_KEY
+
+    settings = load_settings()
+    key = (
+        str(settings.spatialite_path),
+        settings.vworld_api_key,
+        settings.vworld_domain,
+    )
+    if _ASYNC_STORE is None or _ASYNC_STORE_KEY != key:
+        if _ASYNC_STORE is not None:
+            await _ASYNC_STORE.aclose()
+        _ASYNC_STORE = await AsyncSpatialiteAddressStore.open(
+            settings.spatialite_path,
+            load_spatialite=True,
+            vworld_api_key=settings.vworld_api_key,
+            vworld_domain=settings.vworld_domain,
+        )
+        _ASYNC_STORE_KEY = key
+    return _ASYNC_STORE
+
+
+async def close_async_store() -> None:
+    global _ASYNC_STORE, _ASYNC_STORE_KEY
+
+    if _ASYNC_STORE is not None:
+        await _ASYNC_STORE.aclose()
+    _ASYNC_STORE = None
+    _ASYNC_STORE_KEY = None
+
+
+async def health() -> dict[str, Any]:
     """Return the backend and geocoding database status."""
 
-    current = store()
-    with current.engine.connect() as connection:
+    current = await astore()
+    async with current.engine.connect() as connection:
         boundary_count = int(
-            connection.scalar(sa.text("select count(*) from juso_boundary_polygons")) or 0
+            await connection.scalar(sa.text("select count(*) from juso_boundary_polygons")) or 0
         )
-        sources = connection.execute(
-            sa.text(
-                """
-                select source_dataset, count(*) as row_count
-                from juso_address_points
-                group by source_dataset
-                order by source_dataset
-                """
+        sources = (
+            await connection.execute(
+                sa.text(
+                    """
+                    select source_dataset, count(*) as row_count
+                    from juso_address_points
+                    group by source_dataset
+                    order by source_dataset
+                    """
+                )
             )
         ).mappings().all()
+    settings = load_settings()
     return {
         "ok": True,
-        "mode": "sqlite_spatialite",
-        "spatialite_path": str(load_settings().spatialite_path),
-        "address_point_count": current.count_points(),
+        "mode": "sqlite_spatialite_async",
+        "spatialite_path": str(settings.spatialite_path),
+        "address_point_count": await current.count_points(),
         "boundary_count": boundary_count,
         "sources": [dict(row) for row in sources],
         "spatialite_enabled": current.spatialite_enabled,
@@ -55,7 +93,7 @@ def health() -> dict[str, Any]:
     }
 
 
-def list_addresses(
+async def list_addresses(
     *,
     query: str = "",
     scope: str = "all",
@@ -67,10 +105,10 @@ def list_addresses(
     normalized_page = max(page, 1)
     normalized_page_size = max(1, min(page_size, 100))
     offset = (normalized_page - 1) * normalized_page_size
-    current = store()
-    with current.engine.connect() as connection:
+    current = await astore()
+    async with current.engine.connect() as connection:
         if query.strip():
-            rows, total, has_next = _search_address_rows(
+            rows, total, has_next = await _search_address_rows(
                 connection,
                 query=query,
                 scope=scope,
@@ -79,32 +117,35 @@ def list_addresses(
             )
         else:
             params = {"limit": normalized_page_size + 1, "offset": offset}
-            rows = connection.execute(
-                sa.text(
-                    """
-                    select *
-                    from juso_address_points
-                    order by
-                        source_priority,
-                        road_name_code,
-                        building_main_no,
-                        building_sub_no,
-                        point_id
-                    limit :limit offset :offset
-                    """
-                ),
-                params,
+            rows = (
+                await connection.execute(
+                    sa.text(
+                        """
+                        select *
+                        from juso_address_points
+                        order by
+                            source_priority,
+                            road_name_code,
+                            building_main_no,
+                            building_sub_no,
+                            point_id
+                        limit :limit offset :offset
+                        """
+                    ),
+                    params,
+                )
             ).mappings().all()
             has_next = len(rows) > normalized_page_size
             rows = rows[:normalized_page_size]
             total = int(
-                connection.scalar(sa.text("select count(*) from juso_address_points")) or 0
+                await connection.scalar(sa.text("select count(*) from juso_address_points")) or 0
             )
         boundary_cache: dict[str, dict[str, Any]] = {}
-        items = [
-            _row_to_address(row, connection=connection, boundary_cache=boundary_cache)
-            for row in rows
-        ]
+        items = []
+        for row in rows:
+            items.append(
+                await _row_to_address(row, connection=connection, boundary_cache=boundary_cache)
+            )
     return {
         "items": items,
         "page": normalized_page,
@@ -125,7 +166,7 @@ async def geocode(
     crs: str = "EPSG:4326",
     limit: int = 10,
 ) -> dict[str, Any]:
-    candidates = await store().aget_coord(
+    candidates = await (await astore()).get_coord(
         {
             "query": query or None,
             "rnMgtSn": road_name_code,
@@ -150,7 +191,7 @@ async def reverse_geocode(
     crs: str = "EPSG:4326",
     max_distance_m: float = 50.0,
 ) -> dict[str, Any]:
-    candidate = await store().aget_address(
+    candidate = await (await astore()).get_address(
         {
             "x": x,
             "y": y,
@@ -161,8 +202,10 @@ async def reverse_geocode(
     return {"item": candidate.model_dump(mode="json") if candidate else None}
 
 
-def lookup_postal_code(zipcode: str, *, limit: int = 100, offset: int = 0) -> dict[str, Any]:
-    candidates = store().lookup_postal_code({"zipNo": zipcode, "limit": limit, "offset": offset})
+async def lookup_postal_code(zipcode: str, *, limit: int = 100, offset: int = 0) -> dict[str, Any]:
+    candidates = await (await astore()).lookup_postal_code(
+        {"zipNo": zipcode, "limit": limit, "offset": offset}
+    )
     return {
         "items": [item.model_dump(mode="json") for item in candidates],
         "total": len(candidates),
@@ -224,8 +267,8 @@ _BOUNDARY_RESPONSE_CACHE: OrderedDict[
 ] = OrderedDict()
 
 
-def _search_address_rows(
-    connection: sa.Connection,
+async def _search_address_rows(
+    connection: AsyncConnection,
     *,
     query: str,
     scope: str,
@@ -236,9 +279,9 @@ def _search_address_rows(
     if (
         scope in _FTS_COLUMNS_BY_SCOPE
         and len(value) >= _FTS_MIN_QUERY_LENGTH
-        and _has_ready_fts_index(connection)
+        and await _has_ready_fts_index(connection)
     ):
-        fts_rows, fts_total, fts_has_next = _search_address_rows_fts(
+        fts_rows, fts_total, fts_has_next = await _search_address_rows_fts(
             connection,
             query=value,
             scope=scope,
@@ -258,30 +301,32 @@ def _search_address_rows(
         """
         for column in columns
     ]
-    rows = connection.execute(
-        sa.text(
-            f"""
-            with candidate_rowids(rowid) as (
-                {" union ".join(rowid_queries)}
-            )
-            select p.*
-            from juso_address_points as p
-            join candidate_rowids as c on p.rowid = c.rowid
-            order by
-                p.source_priority,
-                p.road_name_code,
-                p.building_main_no,
-                p.building_sub_no,
-                p.point_id
-            limit :limit offset :offset
-            """
-        ),
-        {
-            "prefix_start": value,
-            "prefix_end": prefix_end,
-            "limit": page_size + 1,
-            "offset": offset,
-        },
+    rows = (
+        await connection.execute(
+            sa.text(
+                f"""
+                with candidate_rowids(rowid) as (
+                    {" union ".join(rowid_queries)}
+                )
+                select p.*
+                from juso_address_points as p
+                join candidate_rowids as c on p.rowid = c.rowid
+                order by
+                    p.source_priority,
+                    p.road_name_code,
+                    p.building_main_no,
+                    p.building_sub_no,
+                    p.point_id
+                limit :limit offset :offset
+                """
+            ),
+            {
+                "prefix_start": value,
+                "prefix_end": prefix_end,
+                "limit": page_size + 1,
+                "offset": offset,
+            },
+        )
     ).mappings().all()
     has_next = len(rows) > page_size
     rows = rows[:page_size]
@@ -289,8 +334,8 @@ def _search_address_rows(
     return list(rows), total, has_next
 
 
-def _search_address_rows_fts(
-    connection: sa.Connection,
+async def _search_address_rows_fts(
+    connection: AsyncConnection,
     *,
     query: str,
     scope: str,
@@ -298,30 +343,32 @@ def _search_address_rows_fts(
     offset: int,
 ) -> tuple[list[sa.RowMapping], int, bool]:
     match_query = _fts_match_query(query, scope=scope)
-    rows = connection.execute(
-        sa.text(
-            """
-            with candidate_rowids(rowid) as (
-                select rowid
-                from juso_address_fts
-                where juso_address_fts match :match_query
-            )
-            select p.*
-            from juso_address_points as p
-            join candidate_rowids as c on p.rowid = c.rowid
-            order by
-                p.source_priority,
-                p.road_name_code,
-                p.building_main_no,
-                p.building_sub_no,
-                p.point_id
-            limit :limit offset :offset
-            """
-        ),
-        {"match_query": match_query, "limit": page_size + 1, "offset": offset},
+    rows = (
+        await connection.execute(
+            sa.text(
+                """
+                with candidate_rowids(rowid) as (
+                    select rowid
+                    from juso_address_fts
+                    where juso_address_fts match :match_query
+                )
+                select p.*
+                from juso_address_points as p
+                join candidate_rowids as c on p.rowid = c.rowid
+                order by
+                    p.source_priority,
+                    p.road_name_code,
+                    p.building_main_no,
+                    p.building_sub_no,
+                    p.point_id
+                limit :limit offset :offset
+                """
+            ),
+            {"match_query": match_query, "limit": page_size + 1, "offset": offset},
+        )
     ).mappings().all()
     total = int(
-        connection.scalar(
+        await connection.scalar(
             sa.text(
                 """
                 select count(*)
@@ -338,13 +385,13 @@ def _search_address_rows_fts(
     return list(rows), total, has_next
 
 
-def _has_ready_fts_index(connection: sa.Connection) -> bool:
-    exists = connection.scalar(
+async def _has_ready_fts_index(connection: AsyncConnection) -> bool:
+    exists = await connection.scalar(
         sa.text("select 1 from sqlite_master where type = 'table' and name = 'juso_address_fts'")
     )
     if not exists:
         return False
-    ready = connection.scalar(
+    ready = await connection.scalar(
         sa.text(
             """
             select 1
@@ -370,15 +417,15 @@ def _prefix_end(value: str) -> str:
     return f"{value[:-1]}{chr(ord(value[-1]) + 1)}"
 
 
-def _row_to_address(
+async def _row_to_address(
     row: sa.RowMapping,
     *,
-    connection: sa.Connection | None = None,
+    connection: AsyncConnection | None = None,
     boundary_cache: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     lon, lat = _to_wgs84(row["x"], row["y"])
     boundary = (
-        _boundary_for_address_row(connection, row, boundary_cache=boundary_cache)
+        await _boundary_for_address_row(connection, row, boundary_cache=boundary_cache)
         if connection is not None
         else _empty_boundary()
     )
@@ -407,8 +454,8 @@ def _row_to_address(
     }
 
 
-def _boundary_for_address_row(
-    connection: sa.Connection,
+async def _boundary_for_address_row(
+    connection: AsyncConnection,
     row: sa.RowMapping,
     *,
     boundary_cache: dict[str, dict[str, Any]] | None,
@@ -420,7 +467,7 @@ def _boundary_for_address_row(
     if boundary_cache is not None and legal_dong_code in boundary_cache:
         return boundary_cache[legal_dong_code]
 
-    boundary_row = _find_boundary_row(connection, legal_dong_code)
+    boundary_row = await _find_boundary_row(connection, legal_dong_code)
     if boundary_row is None:
         result = _empty_boundary()
     else:
@@ -437,45 +484,50 @@ def _boundary_for_address_row(
     return result
 
 
-def _find_boundary_row(connection: sa.Connection, legal_dong_code: str) -> sa.RowMapping | None:
+async def _find_boundary_row(
+    connection: AsyncConnection,
+    legal_dong_code: str,
+) -> sa.RowMapping | None:
     sigungu_code = legal_dong_code[:5] if len(legal_dong_code) >= 5 else ""
     sido_code = legal_dong_code[:2] if len(legal_dong_code) >= 2 else ""
     legal_token = f"%{legal_dong_code}%"
     emd_token = f"%{legal_dong_code[:8]}%" if len(legal_dong_code) >= 8 else legal_token
     sigungu_token = f"%{sigungu_code}%" if sigungu_code else legal_token
     sido_token = f"%{sido_code}%" if sido_code else legal_token
-    row = connection.execute(
-        sa.text(
-            """
-            select id, source_name, boundary_level, srid, geom_wkt
-            from juso_boundary_polygons
-            where legal_dong_code = :legal_dong_code
-               or source_code like :legal_token
-               or source_code like :emd_token
-               or (boundary_level = 'sigungu' and source_code like :sigungu_token)
-               or (boundary_level = 'sido' and source_code like :sido_token)
-            order by
-                case
-                    when legal_dong_code = :legal_dong_code then 0
-                    when boundary_level in ('legal_dong', 'eup_myeon_dong')
-                         and source_code like :emd_token then 1
-                    when boundary_level = 'sigungu'
-                         and source_code like :sigungu_token then 2
-                    when boundary_level = 'sido'
-                         and source_code like :sido_token then 3
-                    else 9
-                end,
-                id
-            limit 1
-            """
-        ),
-        {
-            "legal_dong_code": legal_dong_code,
-            "legal_token": legal_token,
-            "emd_token": emd_token,
-            "sigungu_token": sigungu_token,
-            "sido_token": sido_token,
-        },
+    row = (
+        await connection.execute(
+            sa.text(
+                """
+                select id, source_name, boundary_level, srid, geom_wkt
+                from juso_boundary_polygons
+                where legal_dong_code = :legal_dong_code
+                   or source_code like :legal_token
+                   or source_code like :emd_token
+                   or (boundary_level = 'sigungu' and source_code like :sigungu_token)
+                   or (boundary_level = 'sido' and source_code like :sido_token)
+                order by
+                    case
+                        when legal_dong_code = :legal_dong_code then 0
+                        when boundary_level in ('legal_dong', 'eup_myeon_dong')
+                             and source_code like :emd_token then 1
+                        when boundary_level = 'sigungu'
+                             and source_code like :sigungu_token then 2
+                        when boundary_level = 'sido'
+                             and source_code like :sido_token then 3
+                        else 9
+                    end,
+                    id
+                limit 1
+                """
+            ),
+            {
+                "legal_dong_code": legal_dong_code,
+                "legal_token": legal_token,
+                "emd_token": emd_token,
+                "sigungu_token": sigungu_token,
+                "sido_token": sido_token,
+            },
+        )
     ).mappings().first()
     return row
 

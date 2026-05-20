@@ -28,6 +28,7 @@ dependencies = [
   "pydantic>=2.7",
   "httpx>=0.27",
   "SQLAlchemy>=2.0",
+  "aiosqlite>=0.20",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,7 @@ vworld = [
 ]
 spatialite = [
   "alembic>=1.13",
+  "geoalchemy2>=0.17",
   "geopandas>=0.14",
   "py7zr>=0.21",
   "pyogrio>=0.8",

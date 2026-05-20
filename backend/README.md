@@ -15,6 +15,10 @@ $env:KRADDR_GEO_SPATIALITE_PATH = "F:\dev\python-kraddr-geo\data\juso\kraddr_geo
 uvicorn kraddr_geo_api.main:app --app-dir backend --host 127.0.0.1 --port 3011
 ```
 
+WSL에서는 Windows `node.exe`/`npx` 대신 Linux Node를 쓰고, 서버를 `0.0.0.0`에
+바인딩하는 편이 안정적입니다. backend + web debug UI 동시 구동 절차는
+[`docs/wsl-debug-ui.md`](../docs/wsl-debug-ui.md)에 정리되어 있습니다.
+
 ## 엔드포인트
 
 - `GET /health`: DB 파일, 포인트/경계 건수, SpatiaLite 로드 상태 확인

@@ -5,6 +5,7 @@ import io
 import zipfile
 
 from kraddr.geo import (
+    AsyncSpatialiteAddressStore,
     SpatialiteAddressStore,
     VWorldLikeGeocodeRequest,
     iter_location_summary_records,
@@ -349,6 +350,40 @@ def test_spatialite_store_sync_methods_remain_local_only(tmp_path) -> None:
     assert reversed_candidate is None
     assert client.coord_calls == []
     assert client.address_calls == []
+
+
+def test_async_spatialite_store_queries_local_data(tmp_path) -> None:
+    db_path = tmp_path / "kraddr_geo.sqlite"
+    with SpatialiteAddressStore(db_path, load_spatialite=False) as store:
+        store.load_location_summary_records(
+            [
+                next(
+                    iter_location_summary_records(
+                        _zip_bytes("entrc_seoul.txt", _location_summary_line()),
+                        encoding="cp949",
+                    )
+                )
+            ]
+        )
+
+    async def run() -> None:
+        async with await AsyncSpatialiteAddressStore.open(
+            db_path,
+            load_spatialite=False,
+        ) as store:
+            geocoded = await store.get_coord({"query": "Jahamun-ro", "crs": "EPSG:5179"})
+            reverse = await store.get_address(
+                {"x": 953243.0, "y": 1954023.0, "crs": "EPSG:5179", "max_distance_m": 1}
+            )
+            postal = await store.lookup_postal_code("03047")
+
+        assert geocoded
+        assert geocoded[0].source == "location_summary"
+        assert reverse is not None
+        assert reverse.road_address == "Seoul Jongno-gu Jahamun-ro 96 (Pyeongan)"
+        assert postal
+
+    asyncio.run(run())
 
 
 def _query_plan(connection, sql: str) -> str:

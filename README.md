@@ -92,6 +92,8 @@ uvicorn kraddr_geo_api.main:app --app-dir backend --host 127.0.0.1 --port 3011
 ```
 
 웹은 `web/`의 Next.js 앱입니다. 기본 API 주소는 `http://127.0.0.1:3011`입니다.
+WSL에서 backend와 debug UI를 같이 띄우는 검증 절차는
+[WSL local server and debug UI](docs/wsl-debug-ui.md)를 참고합니다.
 
 수동 적재 API는 `POST /load-jobs`를 사용합니다. 여러 파일을 `files` 필드로 올리고,
 `dataset=auto`로 두면 파일명과 ZIP 내부 구조를 기준으로 위치정보요약DB,

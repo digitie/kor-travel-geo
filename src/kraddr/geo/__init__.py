@@ -59,6 +59,7 @@ from .reverse import (
     load_navigation_building_records,
 )
 from .spatialite import (
+    AsyncSpatialiteAddressStore,
     BoundarySpatialiteLoadResult,
     LocationSummaryEntranceRecord,
     NavigationRoadSectionEntranceRecord,
@@ -80,6 +81,7 @@ __all__ = [
     "AsyncDataGoKrLegalDongClient",
     "AsyncKrAddrClient",
     "AsyncRoadNameAddressDataClient",
+    "AsyncSpatialiteAddressStore",
     "BoundarySpatialiteLoadResult",
     "CoordinateCandidate",
     "DATA_GO_KR_LEGAL_DONG_PAGE_URL",
