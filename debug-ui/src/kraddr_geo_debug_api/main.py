@@ -32,6 +32,19 @@ app.add_middleware(
 )
 
 
+def run() -> None:
+    """Run the debug API with uvicorn for local inspection."""
+
+    import uvicorn
+
+    uvicorn.run(
+        "kraddr_geo_debug_api.main:app",
+        host="127.0.0.1",
+        port=3011,
+        reload=False,
+    )
+
+
 @app.get("/health")
 def get_health() -> dict[str, object]:
     return health()

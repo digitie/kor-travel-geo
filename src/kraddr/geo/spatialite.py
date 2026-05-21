@@ -40,12 +40,10 @@ from sqlalchemy.engine import Engine, RowMapping
 
 from .data import _content_bytes, _iter_decoded_lines, _iter_text_members, _split_line
 from .dto import (
+    AddressGeocodeRequest,
+    AddressReverseGeocodeRequest,
     CoordinateCandidate,
-    KRMoisAddressProbe,
-    KRMoisAddressValidationResult,
     PostalCodeLookupRequest,
-    VWorldLikeGeocodeRequest,
-    VWorldLikeReverseGeocodeRequest,
 )
 from .reverse import (
     NavigationBuildingRecord,
@@ -524,7 +522,7 @@ class SpatialiteAddressStore:
 
     def get_coord(
         self,
-        request: VWorldLikeGeocodeRequest | Mapping[str, Any],
+        request: AddressGeocodeRequest | Mapping[str, Any],
     ) -> list[CoordinateCandidate]:
         dto = _coerce_geocode_request(request)
         if dto.road_name_code and dto.building_main_no is not None:
@@ -540,7 +538,7 @@ class SpatialiteAddressStore:
 
     async def aget_coord(
         self,
-        request: VWorldLikeGeocodeRequest | Mapping[str, Any],
+        request: AddressGeocodeRequest | Mapping[str, Any],
         *,
         fallback: bool = True,
     ) -> list[CoordinateCandidate]:
@@ -553,7 +551,7 @@ class SpatialiteAddressStore:
 
     def get_address(
         self,
-        request: VWorldLikeReverseGeocodeRequest | Mapping[str, Any],
+        request: AddressReverseGeocodeRequest | Mapping[str, Any],
     ) -> CoordinateCandidate | None:
         dto = _coerce_reverse_request(request)
         x, y = _transform_xy(dto.x, dto.y, dto.crs, f"EPSG:{self.srid}")
@@ -581,7 +579,7 @@ class SpatialiteAddressStore:
 
     async def aget_address(
         self,
-        request: VWorldLikeReverseGeocodeRequest | Mapping[str, Any],
+        request: AddressReverseGeocodeRequest | Mapping[str, Any],
         *,
         fallback: bool = True,
     ) -> CoordinateCandidate | None:
@@ -657,88 +655,7 @@ class SpatialiteAddressStore:
             rows = list(connection.execute(stmt).mappings().all())
         return [_candidate_from_row(row) for row in rows]
 
-    def validate_krmois_probe(
-        self,
-        probe: KRMoisAddressProbe | Mapping[str, Any],
-    ) -> KRMoisAddressValidationResult:
-        dto = (
-            probe
-            if isinstance(probe, KRMoisAddressProbe)
-            else KRMoisAddressProbe.model_validate(probe)
-        )
-        input_x: float | None = None
-        input_y: float | None = None
-        if dto.lon is not None and dto.lat is not None:
-            input_x, input_y = _transform_xy(dto.lon, dto.lat, "EPSG:4326", f"EPSG:{self.srid}")
-        elif dto.x is not None and dto.y is not None:
-            input_x, input_y = _transform_xy(dto.x, dto.y, dto.crs, f"EPSG:{self.srid}")
-
-        geocode_candidate = None
-        geocode_distance = None
-        if dto.best_address:
-            matches = self.get_coord({"query": dto.best_address, "limit": 1, "crs": "EPSG:5179"})
-            if matches:
-                geocode_candidate = matches[0]
-                if input_x is not None and input_y is not None:
-                    geocode_distance = _distance(
-                        input_x,
-                        input_y,
-                        geocode_candidate.x,
-                        geocode_candidate.y,
-                    )
-
-        reverse_candidate = None
-        reverse_distance = None
-        if input_x is not None and input_y is not None:
-            result = self.nearest_road_address_xy(
-                x=input_x,
-                y=input_y,
-                max_distance_m=dto.distance_tolerance_m,
-            )
-            if result is not None:
-                reverse_candidate = CoordinateCandidate(
-                    x=result.x or input_x,
-                    y=result.y or input_y,
-                    crs="EPSG:5179",
-                    road_address=result.road_address,
-                    postal_code=result.postal_code,
-                    legal_dong_code=result.legal_dong_code,
-                    road_name_code=result.road_name_code,
-                    building_management_number=result.building_management_number,
-                    building_name=result.building_name,
-                    source=result.source,
-                    distance_m=result.distance_m,
-                    raw=dict(result.raw),
-                )
-                reverse_distance = result.distance_m
-
-        address_text = dto.best_address or ""
-        candidate_address = (
-            (geocode_candidate.road_address if geocode_candidate else None)
-            or (reverse_candidate.road_address if reverse_candidate else None)
-            or ""
-        )
-        distance_values = [
-            value for value in (geocode_distance, reverse_distance) if value is not None
-        ]
-        within_tolerance = (
-            bool(distance_values) and min(distance_values) <= dto.distance_tolerance_m
-        )
-        return KRMoisAddressValidationResult(
-            source_id=dto.source_id,
-            input_address=dto.best_address,
-            input_x=input_x,
-            input_y=input_y,
-            input_crs=dto.crs,
-            geocode_candidate=geocode_candidate,
-            reverse_candidate=reverse_candidate,
-            geocode_distance_m=geocode_distance,
-            reverse_distance_m=reverse_distance,
-            address_match=bool(address_text and address_text in candidate_address),
-            within_tolerance=within_tolerance,
-        )
-
-    def _query_by_road_key(self, dto: VWorldLikeGeocodeRequest) -> list[RowMapping]:
+    def _query_by_road_key(self, dto: AddressGeocodeRequest) -> list[RowMapping]:
         stmt = select(self.point_table).where(
             self.point_table.c.road_name_code == dto.road_name_code,
             self.point_table.c.building_main_no == _number_text(dto.building_main_no),
@@ -1347,7 +1264,7 @@ def _make_vworld_client(
 
 async def _vworld_aget_coord_candidates(
     client: Any,
-    dto: VWorldLikeGeocodeRequest,
+    dto: AddressGeocodeRequest,
 ) -> list[CoordinateCandidate]:
     if not dto.query:
         return []
@@ -1386,7 +1303,7 @@ async def _vworld_aget_coord_candidates(
 
 async def _vworld_aget_address_candidate(
     client: Any,
-    dto: VWorldLikeReverseGeocodeRequest,
+    dto: AddressReverseGeocodeRequest,
 ) -> CoordinateCandidate | None:
     payload = await client.reverse_geocode(
         (dto.x, dto.y),
@@ -1993,19 +1910,19 @@ def _refresh_boundary_geometries(connection: Any, srid: int) -> None:
 
 
 def _coerce_geocode_request(
-    request: VWorldLikeGeocodeRequest | Mapping[str, Any],
-) -> VWorldLikeGeocodeRequest:
-    if isinstance(request, VWorldLikeGeocodeRequest):
+    request: AddressGeocodeRequest | Mapping[str, Any],
+) -> AddressGeocodeRequest:
+    if isinstance(request, AddressGeocodeRequest):
         return request
-    return VWorldLikeGeocodeRequest.model_validate(request)
+    return AddressGeocodeRequest.model_validate(request)
 
 
 def _coerce_reverse_request(
-    request: VWorldLikeReverseGeocodeRequest | Mapping[str, Any],
-) -> VWorldLikeReverseGeocodeRequest:
-    if isinstance(request, VWorldLikeReverseGeocodeRequest):
+    request: AddressReverseGeocodeRequest | Mapping[str, Any],
+) -> AddressReverseGeocodeRequest:
+    if isinstance(request, AddressReverseGeocodeRequest):
         return request
-    return VWorldLikeReverseGeocodeRequest.model_validate(request)
+    return AddressReverseGeocodeRequest.model_validate(request)
 
 
 def _coerce_postal_request(

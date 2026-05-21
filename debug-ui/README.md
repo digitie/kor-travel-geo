@@ -1,6 +1,17 @@
-# kraddr-geo FastAPI backend
+# kraddr-geo debug UI
 
-`backend`는 SQLite + SpatiaLite 파일을 읽어 주소 목록, geocoding, reverse geocoding, 우편번호 조회를 제공하는 FastAPI 서버입니다.
+`debug-ui`는 SQLite + SpatiaLite 파일을 읽어 주소 목록, geocoding, reverse geocoding,
+우편번호 조회를 확인하는 디버그용 패키지입니다. Python 패키지는 FastAPI 백엔드를
+제공하고, `web/`에는 같은 API를 보는 Next.js UI가 들어 있습니다.
+
+## 설치
+
+루트 라이브러리와 디버그 UI 패키지를 editable로 함께 설치합니다.
+
+```powershell
+python -m pip install -e ".[dev,spatialite]"
+python -m pip install -e "debug-ui[dev,spatial]"
+```
 
 ## 환경 변수
 
@@ -12,15 +23,21 @@
 
 ```powershell
 $env:KRADDR_GEO_SPATIALITE_PATH = "F:\dev\python-kraddr-geo\data\juso\kraddr_geo.sqlite"
-uvicorn kraddr_geo_api.main:app --app-dir backend --host 127.0.0.1 --port 3011
+uvicorn kraddr_geo_debug_api.main:app --app-dir debug-ui/src --host 127.0.0.1 --port 3011
+```
+
+또는 패키지 스크립트를 사용할 수 있습니다.
+
+```powershell
+kraddr-geo-debug-api
 ```
 
 ## 엔드포인트
 
 - `GET /health`: DB 파일, 포인트/경계 건수, SpatiaLite 로드 상태 확인
 - `GET /addresses`: 주소 목록과 검색
-- `GET /geocode`: VWorld 유사 geocoding 응답
-- `GET /reverse-geocode`: VWorld 유사 reverse geocoding 응답
+- `GET /geocode`: 주소 geocoding 응답
+- `GET /reverse-geocode`: 좌표 기반 reverse geocoding 응답
 - `GET /postal-codes/{zipcode}`: 우편번호 기반 주소 후보 조회
 - `POST /load-jobs`: TXT/ZIP/7Z/SHP 업로드 적재 작업 생성
 - `GET /load-jobs`: 최근 적재 작업 목록
@@ -37,3 +54,11 @@ uvicorn kraddr_geo_api.main:app --app-dir backend --host 127.0.0.1 --port 3011
 
 SHP 수동 적재는 `.shp`, `.dbf`, `.shx`를 같은 파일명 stem으로 함께 올리는 방식을
 지원합니다. `.prj`, `.cpg` 등 sidecar도 함께 보존됩니다.
+
+## 웹 UI
+
+```powershell
+cd debug-ui/web
+npm install
+npm run dev
+```

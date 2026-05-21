@@ -18,11 +18,11 @@ Reverse geocoding은 `SpatialiteAddressStore`가 담당한다.
 ## API 예시
 
 ```python
-from kraddr.geo import SpatialiteAddressStore, VWorldLikeReverseGeocodeRequest
+from kraddr.geo import SpatialiteAddressStore, AddressReverseGeocodeRequest
 
 with SpatialiteAddressStore("data/juso/kraddr_geo.sqlite") as store:
     result = store.get_address(
-        VWorldLikeReverseGeocodeRequest(x=1139887.36, y=1680774.72, crs="EPSG:5179")
+        AddressReverseGeocodeRequest(x=1139887.36, y=1680774.72, crs="EPSG:5179")
     )
 ```
 

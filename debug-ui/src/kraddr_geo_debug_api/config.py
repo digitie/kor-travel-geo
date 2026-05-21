@@ -20,7 +20,7 @@ def load_settings() -> Settings:
     """Read settings from local env files and process environment."""
 
     _load_local_env()
-    default_path = Path(__file__).resolve().parents[2] / "data" / "juso" / "kraddr_geo.sqlite"
+    default_path = Path(__file__).resolve().parents[3] / "data" / "juso" / "kraddr_geo.sqlite"
     path = Path(os.environ.get("KRADDR_GEO_SPATIALITE_PATH") or default_path)
     return Settings(
         spatialite_path=path,
@@ -30,7 +30,7 @@ def load_settings() -> Settings:
 
 
 def _load_local_env() -> None:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     for path in (root / ".env.local", root / ".env"):
         if not path.exists():
             continue

@@ -8,7 +8,6 @@ from functools import lru_cache
 from typing import Any
 
 import sqlalchemy as sa
-
 from kraddr.geo import SpatialiteAddressStore
 
 from .config import load_settings

@@ -32,6 +32,8 @@ SpatiaLite를 사용할 수 있으면 geometry 컬럼과 spatial index를 같은
 
 ## VWorld 호환 표면
 
-`SpatialiteAddressStore.get_coord()`는 `VWorldLikeGeocodeRequest`를 받는다. `SpatialiteAddressStore.get_address()`는 `VWorldLikeReverseGeocodeRequest`를 받는다. `lookup_postal_code()`는 `PostalCodeLookupRequest`를 받는다.
+`SpatialiteAddressStore.get_coord()` accepts `AddressGeocodeRequest`.
+`SpatialiteAddressStore.get_address()` accepts `AddressReverseGeocodeRequest`.
+`lookup_postal_code()` accepts `PostalCodeLookupRequest`.
 
 로컬 후보가 없고 VWorld key/domain이 설정되어 있으면 store는 `python-vworld-api`를 호출하고 응답을 같은 후보 DTO로 정규화한다.

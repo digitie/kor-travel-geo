@@ -12,7 +12,7 @@
 - 구역의 도형 ZIP 적재와 행정구역 경계 보조 조회
 - SQLite + SpatiaLite 기반 공간 저장소
 - 우편번호에서 도로명주소/법정동코드 후보 조회
-- VWorld 유사 DTO 기반 `get_coord`, `get_address` 호출
+- 주소 geocoding DTO 기반 `get_coord`, `get_address` 호출
 - 로컬 결과가 없을 때 `python-vworld-api`의 asyncio 클라이언트를 통한 fallback
 - FastAPI 백엔드와 Next.js 주소 브라우저
 - 웹/API 기반 TXT, ZIP, 7Z, SHP 수동 업로드 적재와 progress 조회
@@ -52,13 +52,13 @@ store.load_boundary_zips(sorted(Path("data/juso/구역의 도형").glob("*.zip")
 from kraddr.geo import (
     PostalCodeLookupRequest,
     SpatialiteAddressStore,
-    VWorldLikeGeocodeRequest,
-    VWorldLikeReverseGeocodeRequest,
+    AddressGeocodeRequest,
+    AddressReverseGeocodeRequest,
 )
 
 with SpatialiteAddressStore("data/juso/kraddr_geo.sqlite") as store:
-    coord = store.get_coord(VWorldLikeGeocodeRequest(query="부산광역시 중구 초량상로 1-2"))
-    address = store.get_address(VWorldLikeReverseGeocodeRequest(x=1139887.36, y=1680774.72))
+    coord = store.get_coord(AddressGeocodeRequest(query="부산광역시 중구 초량상로 1-2"))
+    address = store.get_address(AddressReverseGeocodeRequest(x=1139887.36, y=1680774.72))
     postal = store.lookup_postal_code(PostalCodeLookupRequest(zipNo="48910"))
 ```
 
@@ -84,14 +84,17 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## 백엔드와 웹
+## 디버그 UI
+
+FastAPI 백엔드와 Next.js 웹 UI는 디버그 목적이므로 `debug-ui/`의 별도 Python
+패키지로 분리되어 있습니다.
 
 ```powershell
 $env:KRADDR_GEO_SPATIALITE_PATH = "F:\dev\python-kraddr-geo\data\juso\kraddr_geo.sqlite"
-uvicorn kraddr_geo_api.main:app --app-dir backend --host 127.0.0.1 --port 3011
+uvicorn kraddr_geo_debug_api.main:app --app-dir debug-ui/src --host 127.0.0.1 --port 3011
 ```
 
-웹은 `web/`의 Next.js 앱입니다. 기본 API 주소는 `http://127.0.0.1:3011`입니다.
+웹은 `debug-ui/web/`의 Next.js 앱입니다. 기본 API 주소는 `http://127.0.0.1:3011`입니다.
 
 수동 적재 API는 `POST /load-jobs`를 사용합니다. 여러 파일을 `files` 필드로 올리고,
 `dataset=auto`로 두면 파일명과 ZIP 내부 구조를 기준으로 위치정보요약DB,
@@ -104,7 +107,7 @@ uvicorn kraddr_geo_api.main:app --app-dir backend --host 127.0.0.1 --port 3011
 ```powershell
 python -m pytest -q
 python -m ruff check .
-cd web
+cd debug-ui/web
 npm run lint
 npm run test
 npm run build

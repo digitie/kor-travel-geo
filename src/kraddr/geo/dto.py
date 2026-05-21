@@ -1,4 +1,4 @@
-"""Pydantic DTOs for VWorld-like geocoding and reverse geocoding."""
+"""Pydantic DTOs for address geocoding and reverse geocoding."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 CoordinateCrs = Literal["EPSG:4326", "EPSG:5174", "EPSG:5179"]
 
 
-class VWorldLikeGeocodeRequest(BaseModel):
-    """Address-to-coordinate request compatible with VWorld-style parameters."""
+class AddressGeocodeRequest(BaseModel):
+    """Address-to-coordinate request."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -43,8 +43,8 @@ class VWorldLikeGeocodeRequest(BaseModel):
         return text or None
 
 
-class VWorldLikeReverseGeocodeRequest(BaseModel):
-    """Coordinate-to-address request compatible with VWorld-style parameters."""
+class AddressReverseGeocodeRequest(BaseModel):
+    """Coordinate-to-address request."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -96,42 +96,3 @@ class CoordinateCandidate(BaseModel):
     coordinate_role: str = ""
     distance_m: float | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-
-
-class KRMoisAddressProbe(BaseModel):
-    """One python-krmois-api address row to compare against kraddr-geo."""
-
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
-
-    address: str | None = None
-    road_address: str | None = None
-    parcel_address: str | None = None
-    x: float | None = None
-    y: float | None = None
-    lon: float | None = None
-    lat: float | None = None
-    crs: CoordinateCrs = "EPSG:5174"
-    distance_tolerance_m: float = Field(default=100.0, ge=0)
-    source_id: str | None = None
-
-    @property
-    def best_address(self) -> str | None:
-        return self.road_address or self.address or self.parcel_address
-
-
-class KRMoisAddressValidationResult(BaseModel):
-    """Comparison result for a python-krmois-api row."""
-
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
-
-    source_id: str | None = None
-    input_address: str | None = None
-    input_x: float | None = None
-    input_y: float | None = None
-    input_crs: CoordinateCrs
-    geocode_candidate: CoordinateCandidate | None = None
-    reverse_candidate: CoordinateCandidate | None = None
-    geocode_distance_m: float | None = None
-    reverse_distance_m: float | None = None
-    address_match: bool = False
-    within_tolerance: bool = False

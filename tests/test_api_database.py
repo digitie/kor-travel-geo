@@ -8,10 +8,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(ROOT / "backend"))
+sys.path.append(str(ROOT / "debug-ui" / "src"))
 
-from kraddr_geo_api import database  # noqa: E402
-from kraddr_geo_api.main import app  # noqa: E402
+from kraddr_geo_debug_api import database  # noqa: E402
+from kraddr_geo_debug_api.main import app  # noqa: E402
 
 
 @pytest.fixture()

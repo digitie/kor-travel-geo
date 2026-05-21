@@ -22,4 +22,4 @@
 - 최소 한 지역의 내비게이션용DB 파일을 적재하고 도로명주소 key 공유 여부를 비교한다.
 - 17개 지역 구역의 도형 ZIP을 모두 적재하고 지역별 7개 layer를 확인한다.
 - 도로명 key, 우편번호, nearest-neighbor 후보 query에 대해 `EXPLAIN QUERY PLAN`을 실행한다.
-- `python-krmois-api` sample 주소를 로컬 geocoding/reverse geocoding 결과와 비교한다.
+- 외부 sample 주소를 로컬 geocoding/reverse geocoding 결과와 비교한다.

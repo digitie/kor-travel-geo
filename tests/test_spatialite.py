@@ -5,8 +5,8 @@ import io
 import zipfile
 
 from kraddr.geo import (
+    AddressGeocodeRequest,
     SpatialiteAddressStore,
-    VWorldLikeGeocodeRequest,
     iter_location_summary_records,
     iter_navigation_building_records,
 )
@@ -151,7 +151,7 @@ def test_spatialite_store_prioritizes_location_summary_and_indexes(tmp_path) -> 
         navigation_result = store.load_navigation_building_records(navigation, source="nav-fixture")
         store.rebuild_search_index()
         candidates = store.get_coord(
-            VWorldLikeGeocodeRequest(
+            AddressGeocodeRequest(
                 rnMgtSn="111103100012",
                 udrtYn="0",
                 buldMnnm=96,
@@ -275,34 +275,6 @@ def test_spatialite_store_prioritizes_location_summary_and_indexes(tmp_path) -> 
     assert "ix_juso_points_road_name" in road_name_plan
     assert len(fts_rows) >= 1
     assert search_index_ready == "fts5_trigram"
-
-
-def test_spatialite_store_validates_krmois_probe(tmp_path) -> None:
-    summary = list(
-        iter_location_summary_records(
-            _zip_bytes("entrc_seoul.txt", _location_summary_line()),
-            encoding="cp949",
-        )
-    )
-
-    with SpatialiteAddressStore(tmp_path / "kraddr_geo.sqlite", load_spatialite=False) as store:
-        store.load_location_summary_records(summary, source="summary-fixture")
-        result = store.validate_krmois_probe(
-            {
-                "source_id": "mois-1",
-                "address": "Seoul Jongno-gu Jahamun-ro 96 (Pyeongan)",
-                "x": 953243.1,
-                "y": 1954023.1,
-                "crs": "EPSG:5179",
-                "distance_tolerance_m": 2,
-            }
-        )
-
-    assert result.source_id == "mois-1"
-    assert result.address_match is True
-    assert result.within_tolerance is True
-    assert result.reverse_distance_m is not None
-    assert result.reverse_distance_m < 1
 
 
 def test_spatialite_store_uses_vworld_fallback_when_local_data_misses(tmp_path) -> None:

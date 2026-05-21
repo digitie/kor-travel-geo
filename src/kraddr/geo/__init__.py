@@ -14,12 +14,10 @@ from .data import (
     load_road_name_address_records,
 )
 from .dto import (
+    AddressGeocodeRequest,
+    AddressReverseGeocodeRequest,
     CoordinateCandidate,
-    KRMoisAddressProbe,
-    KRMoisAddressValidationResult,
     PostalCodeLookupRequest,
-    VWorldLikeGeocodeRequest,
-    VWorldLikeReverseGeocodeRequest,
 )
 from .exceptions import (
     KrAddrAuthError,
@@ -89,8 +87,6 @@ __all__ = [
     "EnglishAddressSearchResult",
     "JusoClient",
     "JusoPage",
-    "KRMoisAddressProbe",
-    "KRMoisAddressValidationResult",
     "KrAddrAuthError",
     "KrAddrClient",
     "KrAddrError",
@@ -116,8 +112,8 @@ __all__ = [
     "slugify",
     "SpatialiteAddressStore",
     "SpatialiteLoadResult",
-    "VWorldLikeGeocodeRequest",
-    "VWorldLikeReverseGeocodeRequest",
+    "AddressGeocodeRequest",
+    "AddressReverseGeocodeRequest",
     "VWorldReverseGeocoder",
     "archive_standard_date",
     "boundary_level_from_path",
