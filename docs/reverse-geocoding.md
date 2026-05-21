@@ -1,21 +1,21 @@
 # Reverse geocoding
 
-Reverse geocoding is handled by `SpatialiteAddressStore`.
+Reverse geocoding은 `SpatialiteAddressStore`가 담당한다.
 
-## Local lookup flow
+## 로컬 조회 흐름
 
-1. Convert request coordinates into the store SRID, default EPSG:5179.
-2. Search `juso_address_points` with a bounding box over indexed `x`, `y`.
-3. Rank by planar distance, then `source_priority`.
-4. Return `ReverseGeocodeResult` with road-address text, legal dong code, postal code, coordinate role, and source dataset.
+1. 요청 좌표를 store SRID로 변환한다. 기본값은 EPSG:5179다.
+2. `juso_address_points`에서 `x`, `y` index를 활용한 bounding box 후보를 찾는다.
+3. 평면 거리와 `source_priority`를 기준으로 후보를 정렬한다.
+4. 도로명주소, 법정동 코드, 우편번호, 좌표 역할, 원천 dataset을 담은 `ReverseGeocodeResult`를 반환한다.
 
-## Data roles
+## 데이터 역할
 
-- 위치정보요약DB is the primary source because it provides entrance-level coordinates with direct road-address keys.
-- 내비게이션용DB complements it with building centers, navigation entrances, and road-section entrance rows.
-- 구역의 도형 validates whether the candidate point falls inside the expected administrative area and helps diagnose missing or stale codes.
+- 위치정보요약DB는 도로명주소 key와 직접 연결된 출입구 좌표를 제공하므로 기본 원천이다.
+- 내비게이션용DB는 건물 중심, 내비게이션 출입구, 도로 구간 출입구 row로 보완한다.
+- 구역의 도형은 후보 좌표가 기대 행정구역 안에 있는지 검증하고 누락/오래된 코드를 진단하는 데 쓴다.
 
-## API example
+## API 예시
 
 ```python
 from kraddr.geo import SpatialiteAddressStore, VWorldLikeReverseGeocodeRequest
@@ -26,6 +26,4 @@ with SpatialiteAddressStore("data/juso/kraddr_geo.sqlite") as store:
     )
 ```
 
-The synchronous method is local-only. If no local candidate is found and VWorld
-credentials are configured, `await store.aget_address(...)` falls back through
-`python-vworld-api`'s `AsyncVworldClient`.
+로컬 후보를 찾지 못했고 VWorld credential이 설정되어 있으면 같은 method가 `python-vworld-api` fallback을 호출할 수 있다.

@@ -1,33 +1,33 @@
-# Code guide for beginners
+# 처음 보는 사람을 위한 코드 안내
 
-This project has three main layers.
+이 프로젝트는 크게 세 계층으로 나뉜다.
 
-## Library
+## 라이브러리
 
-`src/kraddr/geo` contains the Python package.
+`src/kraddr/geo`에는 Python package가 들어 있다.
 
-- `data.py`: road-name address archive download and parsing.
-- `legal_dong.py`: legal-dong code API parsing.
-- `reverse.py`: navigation TXT parsing and simple reverse-geocoder helpers.
-- `spatialite.py`: SQLite/SpatiaLite schema, loaders, geocoding, reverse geocoding, postal-code lookup.
-- `dto.py`: Pydantic request/response DTOs for VWorld-like calls.
+- `data.py`: 도로명주소 archive 다운로드와 parsing
+- `legal_dong.py`: 법정동 코드 API parsing
+- `reverse.py`: 내비게이션 TXT parsing과 단순 reverse geocoder helper
+- `spatialite.py`: SQLite/SpatiaLite 스키마, loader, geocoding, reverse geocoding, 우편번호 조회
+- `dto.py`: VWorld와 비슷한 요청/응답 DTO
 
-Start with `spatialite.py` if you want to understand the current GIS behavior.
+현재 GIS 동작을 이해하려면 `spatialite.py`부터 보는 것이 가장 빠르다.
 
 ## Backend
 
-`backend/kraddr_geo_api` exposes the store through FastAPI.
+`backend/kraddr_geo_api`는 store를 FastAPI로 노출한다.
 
-- `config.py`: environment variables.
-- `database.py`: shared `SpatialiteAddressStore` instance and query helpers.
-- `ingest.py`: manual upload load jobs, file classification, progress snapshots.
-- `main.py`: HTTP routes.
+- `config.py`: 환경 변수
+- `database.py`: 공유 `SpatialiteAddressStore` instance와 query helper
+- `ingest.py`: 수동 upload load job, 파일 분류, progress snapshot
+- `main.py`: HTTP route
 
 ## Web
 
-`web/` is a Next.js address browser. It keeps the existing user-facing flow: sample search, full address list, paging, map preview, layer toggles, and manual file upload loading.
+`web/`은 Next.js 주소 탐색 UI다. 기존 사용자 흐름인 sample search, 전체 주소 목록, paging, map preview, layer toggle, 수동 파일 upload loading을 유지한다.
 
-## Typical development loop
+## 일반 개발 흐름
 
 ```powershell
 python -m pytest -q
@@ -38,4 +38,4 @@ npm run test
 npm run build
 ```
 
-For real-data validation, load `data/juso` into a local SQLite file first, then run direct `SpatialiteAddressStore` function calls for geocoding, reverse geocoding, postal-code lookup, and index-plan checks.
+실데이터 검증은 먼저 `data/juso`를 로컬 SQLite 파일로 적재한 뒤 `SpatialiteAddressStore` 함수를 직접 호출해 geocoding, reverse geocoding, 우편번호 조회, index plan을 확인한다.

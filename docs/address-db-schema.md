@@ -1,42 +1,41 @@
-# Address DB schema
+# 주소 DB 스키마
 
-The spatial serving schema is centered on one SQLite database.
+공간 serving 스키마는 하나의 SQLite 데이터베이스를 중심으로 구성한다. SpatiaLite 확장을 사용할 수 있으면 geometry 컬럼과 spatial index를 추가하고, 사용할 수 없는 환경에서도 `x`, `y`, WKT, WKB 컬럼으로 기본 조회가 동작하도록 유지한다.
 
 ## `juso_address_points`
 
-Stores all address point candidates.
+모든 주소 좌표 후보를 저장한다.
 
-- `point_id`: stable source-derived key
-- `source`: source file or loader name
+- `point_id`: 원천 데이터에서 파생한 안정 키
+- `source`: 원천 파일 또는 loader 이름
 - `source_dataset`: `location_summary`, `navigation_building`, `navigation_road_section_entrance`
-- `source_priority`: lower values win when duplicate candidates exist
-- `coordinate_role`: `entrance`, `building_center`, or related role
-- `road_name_code`, `underground_yn`, `building_main_no`, `building_sub_no`: exact road-address key
-- `legal_dong_code`, `postal_code`
-- `road_address`, `building_name`
-- `x`, `y`, `srid`
-- `geom_wkt`, `geom_wkb`
-- `raw_json`: source row details
+- `source_priority`: 중복 후보가 있을 때 낮은 값이 우선
+- `coordinate_role`: `entrance`, `building_center` 등 좌표 역할
+- `road_name_code`, `underground_yn`, `building_main_no`, `building_sub_no`: 도로명주소 정확 매칭 키
+- `legal_dong_code`, `postal_code`: 법정동 코드와 우편번호
+- `road_address`, `building_name`: 표시용 주소/건물명
+- `x`, `y`, `srid`: 저장 좌표와 좌표계
+- `geom_wkt`, `geom_wkb`: 공간 엔진 호환 geometry 표현
+- `raw_json`: 원천 row 세부 정보
 
 ## `juso_boundary_polygons`
 
-Stores district polygon layers extracted from every SHP in each regional ZIP.
+지역별 ZIP에 포함된 모든 SHP에서 추출한 행정구역 polygon layer를 저장한다.
 
-- `source_system`
-- `source_file`
-- `source_layer`: original SHP stem such as `tl_scco_sig`
-- `source_code`
-- `source_name`
-- `legal_dong_code`
-- `boundary_level`
-- `mapping_status`
-- `geom_wkt`, `geom_wkb`
-- `raw_json`
+- `source_system`: 원천 시스템 이름
+- `source_file`: 원천 파일 경로 또는 파일명
+- `source_layer`: `tl_scco_sig` 같은 원본 SHP stem
+- `source_code`, `source_name`: 원천 코드와 이름
+- `legal_dong_code`: 연결 가능한 법정동 코드
+- `boundary_level`: 시도/시군구/읍면동 등 경계 수준
+- `mapping_status`: 매핑 검증 상태
+- `geom_wkt`, `geom_wkb`: geometry 표현
+- `raw_json`: 원천 속성 전체
 
 ## `juso_spatial_metadata`
 
-Small key/value table for loader timestamps, source names, and operational metadata.
+loader 실행 시각, 원천 이름, 운영 메모 같은 작은 key/value metadata를 저장한다.
 
 ## Alembic
 
-`alembic/versions/0001_spatialite_core.py` creates the core tables and indexes. Geometry columns are added by the runtime store only when SpatiaLite can be loaded.
+`alembic/versions/0001_spatialite_core.py`가 핵심 테이블과 index를 만든다. geometry 컬럼은 런타임 store가 SpatiaLite 로드 가능 여부를 확인한 뒤 추가한다.
