@@ -1,8 +1,8 @@
 # python-kraddr-geo
 
-`python-kraddr-geo`는 행정안전부/Juso 주소 자료를 내려받고, 로컬 SQLite + SpatiaLite 데이터베이스로 정리해 geocoding/reverse geocoding API를 제공하는 Python 라이브러리입니다.
+`python-kraddr-geo`는 행정안전부/Juso 주소 자료를 내려받고, 로컬 SQLite + SpatiaLite 데이터베이스로 정리해 지오코딩/역지오코딩 API를 제공하는 Python 라이브러리입니다.
 
-목표는 VWorld geo/reverse geo API와 최대한 비슷한 호출 흐름을 제공하면서도, 로컬 데이터가 충분할 때는 외부 API 없이 빠르게 결과를 돌려주는 것입니다.
+목표는 VWorld 지오/역지오 API와 최대한 비슷한 호출 흐름을 제공하면서도, 로컬 데이터가 충분할 때는 외부 API 없이 빠르게 결과를 돌려주는 것입니다.
 
 ## 주요 기능
 
@@ -12,10 +12,10 @@
 - 구역의 도형 ZIP 적재와 행정구역 경계 보조 조회
 - SQLite + SpatiaLite 기반 공간 저장소
 - 우편번호에서 도로명주소/법정동코드 후보 조회
-- 주소 geocoding DTO 기반 `get_coord`, `get_address` 호출
-- 로컬 결과가 없을 때 `python-vworld-api`의 asyncio 클라이언트를 통한 fallback
+- 주소 지오코딩 DTO 기반 `get_coord`, `get_address` 호출
+- 로컬 결과가 없을 때 `python-vworld-api`의 asyncio 클라이언트를 통한 대체 호출
 - FastAPI 백엔드와 Next.js 주소 브라우저
-- 웹/API 기반 TXT, ZIP, 7Z, SHP 수동 업로드 적재와 progress 조회
+- 웹/API 기반 TXT, ZIP, 7Z, SHP 수동 업로드 적재와 진행률 조회
 
 ## 설치
 
@@ -24,6 +24,10 @@ python -m pip install -e ".[dev,spatialite]"
 ```
 
 선택 데이터 처리에 필요한 패키지는 `spatialite` extra에 포함되어 있습니다. SpatiaLite 확장을 로드할 수 없는 환경에서도 기본 `x`, `y`, WKT/WKB 컬럼과 B-tree 인덱스로 동작합니다.
+
+## 문서 언어
+
+이 저장소의 Markdown/RST 문서는 한국어로 작성합니다. 공식 API 필드명, 코드 식별자, 명령어, URL, 패키지명처럼 그대로 보존해야 하는 값만 원문을 유지합니다.
 
 ## 데이터 적재
 
@@ -63,7 +67,7 @@ with SpatialiteAddressStore("data/juso/kraddr_geo.sqlite") as store:
 ```
 
 동기 `get_coord`, `get_address`는 로컬 SQLite/SpatiaLite 조회만 수행합니다.
-VWorld fallback을 쓰려면 API 키를 넘기고 비동기 `aget_coord`, `aget_address`를 호출합니다.
+VWorld 대체 호출을 쓰려면 API 키를 넘기고 비동기 `aget_coord`, `aget_address`를 호출합니다.
 
 ```python
 import asyncio
@@ -113,4 +117,4 @@ npm run test
 npm run build
 ```
 
-실제 대용량 자료 적재 검증은 `data/juso`의 ZIP/TXT 자료가 있는 로컬 환경에서 별도 smoke 스크립트로 수행합니다. 일반 테스트는 작은 fixture 중심으로 빠르게 유지합니다.
+실제 대용량 자료 적재 검증은 `data/juso`의 ZIP/TXT 자료가 있는 로컬 환경에서 별도 스모크 스크립트로 수행합니다. 일반 테스트는 작은 고정 샘플 중심으로 빠르게 유지합니다.

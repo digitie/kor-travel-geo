@@ -1,4 +1,4 @@
-# kraddr-geo web
+# kraddr-geo 웹
 
 Next.js 기반 주소 브라우저입니다. 샘플 데이터와 FastAPI 백엔드의 실제 SpatiaLite 주소 목록을 같은 화면에서 확인할 수 있습니다.
 
@@ -23,8 +23,8 @@ NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:3011
 - Kakao 지도 표시
 - 경계/반경 레이어 토글
 - 백엔드 오류 표시와 새로고침
-- 여러 TXT/ZIP/7Z/SHP 파일 drag and drop 수동 적재
-- 적재 작업 progress, 현재 파일, 로드/스킵 건수, 오류 표시
+- 여러 TXT/ZIP/7Z/SHP 파일 끌어 놓기 수동 적재
+- 적재 작업 진행률, 현재 파일, 로드/스킵 건수, 오류 표시
 
 ## 테스트
 
