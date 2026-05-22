@@ -22,6 +22,7 @@
 - 시도별 ZIP 업로드와 작업 큐 기반 직렬 적재 워크플로(`/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch`)를 사양으로 명시한다.
 - `pyproject.toml`, `.env.example`, `Settings`, 기본 패키지 스캐폴드, 공통/주소 DTO와 단위 테스트를 추가한다.
 - `docs/dev-environment.md`를 추가하고 시스템 GDAL(`libgdal-dev`) 설치 + `pip install "gdal==$(gdal-config --version)"` 절차를 ADR-008로 명시한다.
+- 우편번호 적재 정책을 ADR-009로 확정: epost OpenAPI 데이터셋 `15000302`의 `downloadKnd=1`(전체) ZIP을 분기 1회 받아 `postal_pobox`/`postal_bulk_delivery`를 TRUNCATE 후 INSERT 한다. 실시간 lookup API(`15056971`)는 도입하지 않는다.
 
 ### Removed
 - 동기 라이브러리 API, monorepo 내부 디버그 UI, `ogr2ogr` subprocess 호출 경로를 사양에서 제거한다.

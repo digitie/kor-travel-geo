@@ -9,7 +9,7 @@
 | vworld OpenAPI | vworld.kr | 지오코딩 폴백, 통합 검색, WMS/WMTS | `KRADDR_GEO_VWORLD_API_KEY` | 서버측 |
 | juso 검색 | business.juso.go.kr | 도로명/지번 주소 검색 폴백 | `KRADDR_GEO_JUSO_API_KEY` | 서버측 |
 | juso 좌표 | business.juso.go.kr (별도 신청 가능) | 주소 → 좌표 변환 폴백 | `KRADDR_GEO_JUSO_COORD_API_KEY` (없으면 검색 키 재사용) | 서버측 |
-| epost 우편번호 다운로드 | data.go.kr (공공데이터포털) | 사서함·다량배달처 ZIP 자동 다운로드 | `KRADDR_GEO_EPOST_API_KEY` | 서버측 (로더 cron) |
+| epost 우편번호 다운로드 (데이터셋 `15000302`) | data.go.kr (공공데이터포털) | 사서함·다량배달처 ZIP 분기 1회 적재(ADR-009) | `KRADDR_GEO_EPOST_API_KEY` | 서버측 (로더 cron) |
 | Kakao Maps JS | developers.kakao.com | 프론트엔드 지도 | `NEXT_PUBLIC_KAKAO_JS_KEY` | 브라우저 (도메인 제한이 보안) |
 
 모든 백엔드 키는 `Settings`에서 `SecretStr`로 저장되어 로그·예외 메시지에 노출되지 않는다. 운영에서는 `.env` 권한 600 또는 systemd `EnvironmentFile`, 그것도 안 되면 vault(HashiCorp Vault / sops / age) 사용. Git에 평문으로 커밋 금지 — `pre-commit`에 `detect-secrets` 또는 `gitleaks` 추가 권장.
@@ -84,18 +84,29 @@ async with httpx.AsyncClient() as cx:
 
 ## epost (우편번호 다운로드 OpenAPI)
 
-- **발급처**: https://www.data.go.kr (공공데이터포털)
-- **데이터셋**: "과학기술정보통신부 우정사업본부_우편번호 다운로드 서비스" → 활용신청 → 즉시 승인 → "개발계정 상세보기"에서 일반 인증키(Encoding/Decoding 2종).
+- **데이터셋**: `15000302` — "과학기술정보통신부 우정사업본부_우편번호 다운로드 서비스" (https://www.data.go.kr/data/15000302/openapi.do)
+- **발급처**: https://www.data.go.kr (공공데이터포털) → 활용신청 → 즉시 승인 → "개발계정 상세보기"에서 일반 인증키(Encoding/Decoding 2종).
 - **인증키 형식**: Encoding된 키와 URL-Decoded 키가 함께 제공. `httpx`의 `params` 인자로 넘기면 Decoded 키를 쓰는 게 안전(httpx가 URL 인코딩 처리).
-- **쿼터**: 개발계정 10,000회/일. 우편번호 다운로드는 보통 월 1~수 회 호출이라 충분.
-- **응답**: 우편번호 ZIP 파일의 다운로드 URL. 종류 4가지 — 전체/변경분/범위주소/사서함주소.
+- **쿼터**: 개발계정 10,000회/일. 갱신 호출은 분기당 4종 × 1회 정도라 충분.
+- **응답**: 우편번호 ZIP 파일의 다운로드 URL을 담은 XML(`fileLocplc` 노드). 매칭 결과를 직접 주지 않으므로 ZIP을 받아 로컬 DB에 적재한 뒤 매칭한다(ADR-009).
+
+### `downloadKnd` 4종
+
+| 값 | 종류 | 본 프로젝트 적재 대상 |
+|----|------|----------------------|
+| 1 | 전체 | `postal_pobox`, `postal_bulk_delivery`(전량 갱신 시) |
+| 2 | 변경분 | 사용하지 않음 — 분기 1회 전체 갱신만 운영(ADR-009) |
+| 3 | 범위주소 | (선택) 보조 우편번호 검증용 |
+| 4 | 사서함주소 | `postal_pobox` 정합성 보강 |
+
+본 프로젝트는 **분기당 1회 `downloadKnd=1`(전체)** 호출로 운영한다. 변경분(`2`)을 누적 추적하지 않는 이유는 (a) 우편번호 데이터셋이 분기 단위로도 충분히 안정적이고, (b) 전체 ZIP 적재 후 `postal_*` 테이블을 TRUNCATE → INSERT 하는 편이 변경분 머지보다 단순·안전하기 때문이다(ADR-009 후속).
 
 ### 호출 예 (다운로드)
 
 ```python
 import httpx, xml.etree.ElementTree as ET
 
-# 다운로드 구분: 1=전체, 2=변경분, 3=범위주소, 4=사서함주소
+# 본 프로젝트 표준: 분기 1회, downloadKnd=1 (전체)
 async def fetch_zip_url(division: int = 1) -> str:
     async with httpx.AsyncClient(timeout=15.0) as cx:
         r = await cx.get(settings.epost_download_url, params={
@@ -113,7 +124,29 @@ async def download_zip(url: str, dst: str) -> None:
                     f.write(chunk)
 ```
 
-> 우편번호 ZIP 본문 인코딩은 EUC-KR과 UTF-8(BOM)이 시점에 따라 섞여 있다. 적재 전 `iconv` 또는 `chardet`으로 표준화하는 단계가 로더에 포함된다.
+> 우편번호 ZIP 본문 인코딩은 EUC-KR과 UTF-8(BOM)이 시점에 따라 섞여 있다. 적재 전 `iconv` 또는 `chardet`으로 표준화하는 단계가 로더에 포함된다(T-017 `pobox_loader.py`, `bulk_loader.py`).
+
+### 매칭 흐름
+
+본 API는 실시간 우편번호 조회 API가 아니라 **ZIP 메타 다운로드 서비스**다. 우편번호 매칭은 로컬 DB로 처리한다(ADR-009).
+
+```
+[분기 cron / 수동 트리거]
+  ↓
+GET /downloadAreaCodeService?serviceKey=...&downloadKnd=1
+  ↓
+XML 응답에서 fileLocplc(ZIP URL) 추출
+  ↓
+ZIP 스트리밍 다운로드 → 인코딩 표준화(EUC-KR/UTF-8)
+  ↓
+postal_pobox / postal_bulk_delivery TRUNCATE → INSERT
+  ↓
+docs/reverse-geocoding.md §우편번호 lookup 4단계 우선순위에서 사용
+```
+
+### 도입하지 않는 API
+
+- **`15056971` (우정사업본부_우편번호 정보조회, 실시간 lookup)** — 본 프로젝트는 분기 ZIP 적재 + 로컬 DB 매칭으로 충분하다고 결정했다(ADR-009). 실시간 lookup이 필요해지는 시점에 새 ADR로 재검토.
 
 ## Kakao Maps JavaScript SDK (프론트엔드)
 
