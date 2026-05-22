@@ -14,7 +14,6 @@
 | 항목 | 값 |
 |------|----|
 | GitHub 저장소 | `python-kraddr-geo` |
-| PyPI 배포 이름 | `python-kraddr-geo` |
 | Python import | `from kraddr.geo import ...` |
 | CLI 명령 | `kraddr-geo` |
 | 환경변수 prefix | `KRADDR_GEO_*` |

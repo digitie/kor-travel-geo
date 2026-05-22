@@ -6,7 +6,7 @@
 
 ### Changed
 - **(BREAKING)** `kraddr.geo` 패키지의 저장 엔진을 SQLite + SpatiaLite에서 PostgreSQL + PostGIS로 전환한다. 패키지 이름은 그대로지만 내부 구현은 완전히 새로 작성한다. 이전 구현은 `v1` 브랜치에 보존되어 있다.
-- GitHub 저장소 이름과 PyPI 배포 이름을 `python-kraddr-geo`로 명시하고, CLI 명령은 `kraddr-geo`, 환경변수 prefix는 `KRADDR_GEO_`, PostgreSQL DB 이름은 `kraddr_geo`로 통일한다.
+- GitHub 저장소 이름을 `python-kraddr-geo`로 명시하고, CLI 명령은 `kraddr-geo`, 환경변수 prefix는 `KRADDR_GEO_`, PostgreSQL DB 이름은 `kraddr_geo`로 통일한다.
 - 개발 정책: PC 개발은 WSL의 ext4 위에서 진행하고 작업 완료 시 NTFS의 프로젝트 디렉토리로 카피한다. 데이터(`data/`)는 NTFS 프로젝트 디렉토리 아래에 두고 테스트도 이를 참조한다.
 - **(BREAKING)** 라이브러리 진입점을 동기 `SpatialiteAddressStore`에서 비동기 `AsyncAddressClient`로 교체한다. 동기 호출이 필요하면 호출자가 `asyncio.run`으로 감싼다.
 - 응답 구조를 vworld와 호환되도록 정렬하고 자체 필드는 `x_extension` 네임스페이스로 격리한다.

@@ -17,7 +17,7 @@
 
 | 영역 | 이전 (v1) | 신규 (master, 첨부 사양 + 사용자 추가 명시) |
 |------|-----------|---------------------------------------------|
-| GitHub/PyPI 이름 | `python-kraddr-geo` | 동일 (`python-kraddr-geo`) |
+| GitHub 저장소 이름 | `python-kraddr-geo` | 동일 (`python-kraddr-geo`) |
 | Python 패키지 | `kraddr.geo` | 동일 (`kraddr.geo`) |
 | 백엔드 CLI / env / DB | `kraddr.geo` 라이브러리 직접 사용 | CLI `kraddr-geo`, env `KRADDR_GEO_*`, DB `kraddr_geo` |
 | 프론트엔드 | monorepo `debug-ui/` | 별도 Node.js 패키지 `kraddr-geo-ui` |
@@ -74,7 +74,7 @@
 
 - **개발 환경**: PC 개발은 WSL의 ext4 위에서 진행하고 작업 완료 시 NTFS의 프로젝트 디렉토리로 카피한다. `AGENTS.md`, `SKILL.md`, `docs/architecture.md`에 정책 섹션이 들어간다.
 - **데이터 위치**: 도로명주소 ZIP/SHP, postal TXT 등은 NTFS의 프로젝트 디렉토리 `data/` 아래에 둔다. ext4 작업 디렉토리에는 심볼릭 링크 또는 절대경로로 참조한다. 테스트도 NTFS 측 `data/`를 reference로 삼는다.
-- **식별자 통일**: GitHub/PyPI = `python-kraddr-geo`, Python import = `kraddr.geo`, CLI = `kraddr-geo`, env prefix = `KRADDR_GEO_`, PostgreSQL DB = `kraddr_geo`, 프론트엔드 패키지 = `kraddr-geo-ui`. `AGENTS.md`/`SKILL.md`의 식별자 표에 기록되어 혼동을 막는다.
+- **식별자 통일**: GitHub 저장소 = `python-kraddr-geo`, Python import = `kraddr.geo`, CLI = `kraddr-geo`, env prefix = `KRADDR_GEO_`, PostgreSQL DB = `kraddr_geo`, 프론트엔드 패키지 = `kraddr-geo-ui`. `AGENTS.md`/`SKILL.md`의 식별자 표에 기록되어 혼동을 막는다.
 
 ## 첨부 사양에서 다루지 않은 항목 (master에 남긴 결정)
 

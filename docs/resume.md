@@ -18,7 +18,7 @@
 `docs/tasks.md#T-001`: WSL ext4 작업 디렉토리(`~/dev/python-kraddr-geo/`)에서 `pyproject.toml`을 새로 작성한다.
 
 - `docs/backend-package.md` §3.1을 기준으로 의존성, optional extras(`api`/`loaders`/`dev`), mypy/ruff/pytest/importlinter 설정을 모두 채운다.
-- PyPI/프로젝트 이름은 `python-kraddr-geo`, 진입 스크립트는 `kraddr-geo = "kraddr.geo.cli.main:app"`, importlinter `root_package = "kraddr.geo"`.
+- 프로젝트 이름은 `python-kraddr-geo`, 진입 스크립트는 `kraddr-geo = "kraddr.geo.cli.main:app"`, importlinter `root_package = "kraddr.geo"`.
 - 작성 후 `pip install -e ".[api,loaders,dev]"`이 통과하는지만 확인(아직 코드가 없으므로 import 실패는 무관).
 
 ## 작업 시작 전 확인할 것

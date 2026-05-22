@@ -13,8 +13,8 @@ GitHub 저장소 이름은 `python-kraddr-geo`, Python 패키지는 `kraddr.geo`
 PC 개발은 **WSL의 ext4 파일시스템** 위에서 진행한다. NTFS 마운트(`/mnt/<drive>/...`) 위에서 직접 `git`/`pip`/`uvicorn`을 실행하지 않는다 — 파일 권한·inotify·심볼릭 링크·대량 I/O 성능에서 모두 손해를 본다.
 
 ```
-ext4 (개발):  ~/dev/python-kraddr-geo/           ← 모든 코드/가상환경/테스트
-NTFS (배포):  /mnt/<drive>/projects/python-kraddr-geo/   ← 작업 완료 후 카피
+ext4 (개발):  ~/dev/python-kraddr-geo/                  ← 모든 코드/가상환경/테스트 (source of truth)
+NTFS (카피본): /mnt/<drive>/projects/python-kraddr-geo/  ← 작업 완료 후 카피, Windows에서 접근
 ```
 
 - 작업이 완료되면 ext4 → NTFS로 카피하여 Windows에서도 접근 가능하게 둔다.
