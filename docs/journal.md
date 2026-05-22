@@ -2,6 +2,115 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (claude, GDAL 셋업 문서)
+
+**작업**: PR #3 마무리 — GDAL 시스템 의존성을 문서로 못박는다.
+
+**변경 파일**:
+- 신규: `docs/dev-environment.md` (WSL ext4 기준 셋업, conda/Docker 대안)
+- 갱신: `docs/geocoding-readiness.md` (체크리스트 0번 항목 — 시스템 GDAL 설치)
+- 갱신: `docs/resume.md` ("알려진 함정"에 GDAL 버전 미스매치, `libgdal-dev` 누락)
+- 갱신: `SKILL.md` §2 (빠른 시작에 `apt install libgdal-dev` + `gdal==$(gdal-config --version)` 핀 추가)
+- 갱신: `pyproject.toml` (`loaders` extra 위 주석 — 시스템 의존성/Docker 권장)
+- 갱신: `docs/decisions.md` (ADR-008 — 시스템 GDAL과 동일 버전 핀)
+
+**결정**:
+- ADR-008: `loaders` extra는 `pip install "gdal==$(gdal-config --version)"`로 시스템과 동일 버전 핀. 운영·CI는 `osgeo/gdal:*` Docker 베이스 표준화. ADR-005 보강.
+
+**검증**: 문서 전용 변경이라 코드 테스트 영향 없음. T-013 진행 시 실제 GDAL 환경에서 `dev-environment.md` 절차로 재현 가능.
+
+**다음**: T-004 (DTO 6종).
+
+---
+
+## 2026-05-23 (codex, 리뷰 3차 반영)
+
+**작업**: PR 리뷰 반영 — 설정 싱글톤 helper 역할 분리
+
+**변경 파일**:
+- 갱신: `src/kraddr/geo/settings.py`, `tests/unit/test_settings.py`, `docs/backend-package.md`
+
+**결정**:
+- `reset_settings()`는 인자 없이 싱글톤을 비우는 역할만 맡는다.
+- 테스트나 명시 주입이 필요할 때는 `set_settings(settings)`를 사용한다.
+
+**다음**: 기존 다음 작업 유지 — T-004 나머지 DTO 작성.
+
+---
+
+## 2026-05-23 (codex, 리뷰 2차 반영)
+
+**작업**: PR 리뷰 항목 5~10 반영 — DTO 필수성, validator 범위, CLI exit, ruff ignore, 예외명, namespace package 정리
+
+**변경 파일**:
+- 갱신: `src/kraddr/geo/dto/address.py`, `src/kraddr/geo/cli/main.py`, `src/kraddr/geo/exceptions.py`, `pyproject.toml`
+- 갱신: `tests/unit/test_dto_address.py`, `tests/unit/test_exceptions.py`
+- 갱신: `docs/backend-package.md`, `docs/decisions.md`
+- 삭제: `src/kraddr/__init__.py`
+
+**결정**:
+- `RefinedAddress.structure`는 사양대로 필수 `AddressStructure`로 둔다.
+- 빈 문자열 → `None` 변환 validator는 optional address fields에만 적용하고, `level0`은 빈 문자열을 명시적으로 거부한다.
+- `typer.Exit`는 인스턴스(`raise typer.Exit()`)로 raise한다.
+- `N815` ruff ignore는 vworld 호환 필드가 있는 `dto/address.py`에만 한정한다.
+- base 예외명은 `KraddrGeoError`로 확정한다(ADR-014).
+- `kraddr` parent는 PEP 420 implicit namespace package로 둔다(ADR-015).
+
+**다음**: 기존 다음 작업 유지 — T-004 나머지 DTO 작성.
+
+---
+
+## 2026-05-23 (codex)
+
+**작업**: PR 리뷰 반영 — 설정 기본값을 사양과 맞추고 README에 법적·데이터 사용 한계 추가
+
+**변경 파일**:
+- 갱신: `src/kraddr/geo/settings.py`, `.env.example`, `tests/unit/test_settings.py`, `README.md`
+
+**결정**:
+- `epost_download_url` 기본값은 브라우저 다운로드 페이지가 아니라 공공데이터포털 OpenAPI endpoint(`http://openapi.epost.go.kr/postal/downloadAreaCodeService/downloadAreaCodeService/getAreaCodeInfo`)로 둔다.
+- `pg_statement_timeout_ms` 기본값은 사양값 5초(`5000`)로 둔다. 별도 ADR 없이 사양에 맞춘다.
+- `api_default_radius_m` 기본값은 역지오코딩 hit rate를 위해 사양값 `200`으로 둔다.
+- `api_cors_origins` 기본값은 빈 tuple로 둔다. localhost 허용은 `.env` override에서만 명시한다.
+- README에 MIT 라이선스가 코드/문서에만 적용되고 외부 데이터/API 응답은 각 제공처 약관을 따른다는 한계를 명시했다.
+
+**다음**: 기존 다음 작업 유지 — T-004 나머지 DTO 작성.
+
+---
+
+## 2026-05-22 (codex)
+
+**작업**: T-001~T-003 구현 — Python 패키지 스캐폴드, 설정, 공통/주소 DTO와 단위 테스트 추가
+
+**변경 파일**:
+- 신규: `pyproject.toml`, `.env.example`
+- 신규: `src/kraddr/__init__.py`, `src/kraddr/geo/__init__.py`, `src/kraddr/geo/version.py`, `src/kraddr/geo/py.typed`
+- 신규: `src/kraddr/geo/settings.py`, `src/kraddr/geo/exceptions.py`, `src/kraddr/geo/client.py`, `src/kraddr/geo/cli/main.py`
+- 신규: `src/kraddr/geo/dto/common.py`, `src/kraddr/geo/dto/address.py`
+- 신규: `tests/unit/test_settings.py`, `tests/unit/test_dto_common.py`, `tests/unit/test_dto_address.py`
+- 갱신: `CHANGELOG.md`, `docs/tasks.md`, `docs/resume.md`
+
+**결정**:
+- import-linter는 도구 제약상 `root_package = "kraddr"`와 `containers = ["kraddr.geo"]` 조합으로 설정한다. 이는 문서의 `kraddr.geo` 계층 계약과 같은 의미이며 실제 도구 실행이 통과하는 형태다.
+- `AsyncAddressClient`와 CLI는 이번 범위에서 import/install 검증을 위한 자리표시자로만 둔다. 실제 지오코딩 기능은 T-010/T-011에서 구현한다.
+- 사용자가 지정한 SHP 기준 경로 `data/juso/도로명주소 전자지도`를 확인했다. 강원도 샘플의 11개 DBF 필드는 문서의 마스터 레이어(`TL_SPBD_BULD`, `TL_SPBD_ENTRC`, `TL_SPRD_MANAGE` 등)와 맞는다.
+
+**검증**:
+- `pip install -e ".[dev]"` 통과
+- `pip install -e ".[api,dev]"` 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 10 passed
+- `.venv/bin/python -m ruff check .` → 통과
+- `.venv/bin/python -m mypy src/kraddr/geo` → 통과
+- `.venv/bin/lint-imports` → Layered architecture kept
+
+**참고**:
+- 현재 작업 디렉토리가 `/mnt/f` NTFS 위라 문서의 WSL/NTFS 경고가 그대로 적용된다. 기본 `TMP`/`TEMP`가 Windows Temp(`/mnt/c/...`)를 가리키면 pytest 캡처가 시작 전 실패하므로 검증 시 Linux `/tmp`를 명시했다.
+- `loaders` extra는 현재 환경에 `gdal-config`가 없어 설치 검증하지 않았다. T-013에서 GDAL Python binding 설치 환경과 함께 별도 검증한다.
+
+**다음**: T-004 — 나머지 DTO(`geocode`, `reverse`, `search`, `zipcode`, `pobox`, `admin`)와 단위 테스트 작성.
+
+---
+
 ## 2026-05-22 (human, 추가 명시)
 
 **작업**: 사용자 추가 지시 반영 — 프로젝트/패키지 식별자 정정, WSL/NTFS 개발 정책, 데이터 위치(NTFS의 `data/`) 명시

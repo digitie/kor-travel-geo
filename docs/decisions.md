@@ -222,3 +222,94 @@ PostgreSQL 16 + PostGIS 3.4를 1차 저장소로 채택한다. SpatiaLite 기반
 
 ### 후속
 - (open) 운영 환경별 네트워크 정책 문서 정리
+
+---
+
+## ADR-014: 기본 예외명은 `KraddrGeoError`로 둔다
+
+- 상태: accepted
+- 날짜: 2026-05-23
+- 결정자: codex
+
+### 컨텍스트
+초기 사양에는 base 예외명이 `AddrKrError`로 적혀 있었다. 그러나 현재 패키지 식별자는 `kraddr.geo`로 확정되었고, 아직 공개 릴리스 전이라 외부 catch 코드와의 호환성 부담이 낮다.
+
+### 결정
+base 예외명은 `KraddrGeoError`로 둔다. 장기 호환 alias는 만들지 않는다.
+
+### 근거
+- 패키지명과 public API 이름이 일관된다.
+- 공개 릴리스 전 변경이므로 임시 alias 없이 정정하는 편이 단순하다.
+- downstream이 catch할 안정 base class 이름을 초기에 확정한다.
+
+### 결과(긍정)
+- 예외 계층이 `kraddr.geo` 식별자와 맞는다.
+- `AddrKrError`/`KraddrGeoError` 혼용을 피한다.
+
+### 결과(부정)
+- 이전 사양 초안을 기준으로 코드를 작성한 사용자가 있다면 import를 수정해야 한다.
+
+---
+
+## ADR-015: `kraddr`는 implicit namespace package로 둔다
+
+- 상태: accepted
+- 날짜: 2026-05-23
+- 결정자: codex
+
+### 컨텍스트
+이 저장소는 `kraddr.geo` 서브패키지를 제공한다. 향후 같은 환경에 `kraddr.tour` 같은 다른 `kraddr.*` 패키지가 설치될 수 있다. `src/kraddr/__init__.py`를 두면 PEP 420 namespace 병합을 막아 충돌 가능성이 생긴다.
+
+### 결정
+`src/kraddr/__init__.py`를 두지 않고 `kraddr`를 PEP 420 implicit namespace package로 둔다.
+
+### 근거
+- 여러 배포 패키지가 `kraddr.*` 하위 이름을 공유할 수 있다.
+- parent package 소유권을 이 저장소가 독점하지 않는다.
+- setuptools는 namespace package discovery(`namespaces = true`)로 `kraddr.geo`를 패키징한다.
+
+### 결과(긍정)
+- 향후 `kraddr.*` 패키지와 같은 Python 환경에서 공존하기 쉽다.
+- parent namespace에 불필요한 public API가 생기지 않는다.
+
+### 결과(부정)
+- 도구 설정에서 namespace package를 명시적으로 고려해야 한다.
+
+---
+
+## ADR-008: 로더 의존성은 시스템 GDAL과 동일 버전으로 핀한다
+
+- 상태: accepted
+- 날짜: 2026-05-22
+- 결정자: human
+
+### 컨텍스트
+ADR-005에서 `osgeo.gdal.VectorTranslate`를 in-process로 호출하기로 했다. Python `gdal` 패키지는 C++ 확장이라 시스템 `libgdal-dev`의 헤더·라이브러리에 빌드 시 의존하며, 런타임 ABI도 일치해야 한다. `pip install gdal>=3.8`만으로는 wheel이 시스템과 다른 버전을 가져와 `ImportError: undefined symbol` 또는 segfault가 발생할 수 있다.
+
+### 결정
+`loaders` extra는 시스템 GDAL과 **정확히 같은 버전**의 Python 바인딩에 핀한다. WSL 개발 환경에서는 다음 절차를 따른다.
+
+```bash
+sudo apt install -y libgdal-dev gdal-bin
+pip install "gdal==$(gdal-config --version)"
+pip install -e ".[loaders]"
+```
+
+운영·CI는 `osgeo/gdal:ubuntu-small-*` 베이스 Docker 이미지를 사용해 시스템 GDAL과 Python 바인딩 버전을 한 번에 묶는다(ADR-005 후속). conda 사용자는 `conda-forge`의 `gdal`을 쓰면 같은 효과.
+
+### 근거
+- Python `gdal`은 순수 파이썬이 아니라 C++ 확장 wheel. 시스템 GDAL과 ABI가 일치해야 안전.
+- `gdal-config`가 PATH에 있어야 wheel 빌드가 성공하므로 `libgdal-dev` 설치가 사실상 의무.
+- Docker 베이스를 표준화하면 운영·CI에서 환경 일관성을 보장.
+
+### 결과(긍정)
+- 적재 단계의 reproducibility 확보 — 같은 시스템 GDAL 위에서 같은 바인딩이 보장됨.
+- T-013(`SidoLoader`)에서 “설치는 됐는데 import 시 죽는” 케이스 제거.
+
+### 결과(부정)
+- 사용자가 `pip install -e ".[loaders]"`를 바로 실행하면 실패할 수 있어 `docs/dev-environment.md` 안내가 필수.
+- 다중 환경(ubuntu LTS·conda·Docker) 모두 문서화 부담.
+
+### 후속
+- (open) Docker 이미지(`docker/Dockerfile.loaders` 등) 작성은 T-013과 함께.
+- (open) GDAL upstream의 PEP 517 build backend 전환이 있으면 `gdal-config` 의존을 줄일 수 있음 — 재검토.

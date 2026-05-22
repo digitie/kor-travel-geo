@@ -30,16 +30,21 @@
 ## 2. 빠른 시작
 
 ```bash
-cd ~/dev/python-kraddr-geo                 # WSL ext4
-uv venv && uv pip install -e ".[api,loaders,dev]"
-cp .env.example .env && $EDITOR .env       # KRADDR_GEO_PG_DSN 채우기
-ln -s /mnt/d/projects/python-kraddr-geo/data data   # NTFS data를 참조
-docker compose up -d postgres              # postgis/postgis:16-3.4
+cd ~/dev/python-kraddr-geo                            # WSL ext4
+sudo apt install -y libgdal-dev gdal-bin              # loaders extra용 (ADR-008)
+uv venv && uv pip install -e ".[api,dev]"
+uv pip install "gdal==$(gdal-config --version)"        # 시스템 GDAL과 버전 매치
+uv pip install -e ".[loaders]"                         # 이제 안전하게 빌드
+cp .env.example .env && $EDITOR .env                  # KRADDR_GEO_PG_DSN 채우기
+ln -s /mnt/d/projects/python-kraddr-geo/data data     # NTFS data를 참조
+docker compose up -d postgres                         # postgis/postgis:16-3.4
 alembic upgrade head
 kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
     --pg-conn "host=localhost dbname=kraddr_geo user=addr password=..."
 uvicorn kraddr.geo.api.app:app --reload
 ```
+
+자세한 환경 셋업과 conda/Docker 대안은 `docs/dev-environment.md`.
 
 ## 3. 디렉토리 지도
 

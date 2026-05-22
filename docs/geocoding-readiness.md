@@ -18,20 +18,21 @@
 
 PC 개발은 WSL ext4에서 코드/가상환경/`git`을 운영하고, 데이터(`data/`)는 NTFS의 프로젝트 디렉토리(`/mnt/<drive>/projects/python-kraddr-geo/data/`) 아래에 둔다(AGENTS.md 참조). 아래 명령의 데이터 경로는 ext4 작업 디렉토리에서 NTFS의 `data/`를 가리키는 심볼릭 링크 또는 절대경로로 해석한다.
 
-1. **PostgreSQL 16 + PostGIS 3.4** 설치 및 기동
-2. `pg_trgm`, `unaccent` 확장 설치
+1. **시스템 GDAL 설치** — `sudo apt install libgdal-dev gdal-bin`. `gdal-config --version`으로 버전 확인 후 Python 바인딩 핀: `pip install "gdal==$(gdal-config --version)"`. 세부 절차는 `docs/dev-environment.md` 참조 (ADR-008).
+2. **PostgreSQL 16 + PostGIS 3.4** 설치 및 기동
+3. `pg_trgm`, `unaccent` 확장 설치
    ```sql
    CREATE EXTENSION IF NOT EXISTS pg_trgm;
    CREATE EXTENSION IF NOT EXISTS unaccent;
    CREATE EXTENSION IF NOT EXISTS postgis;
    ```
-3. `Settings.pg_dsn` 설정 (`postgresql+psycopg://...`)
-4. `alembic upgrade head`로 DDL 적용 (마스터 11개 + 보조 + 메타 + MV 정의)
-5. NTFS의 데이터 디렉토리를 ext4에서 참조: `ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`
-6. 17개 시도 ZIP 적재 (`kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full`)
-7. `kraddr-geo load pobox ./data/postal/202605/JUSO_사서함.txt`, `kraddr-geo load bulk ./data/postal/202605/도로명주소_zipcode.txt`
-8. `kraddr-geo refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`
-9. `kraddr-geo refresh vacuum` → 통계 갱신 (`VACUUM (ANALYZE) tl_spbd_buld` 등)
+4. `Settings.pg_dsn` 설정 (`postgresql+psycopg://...`)
+5. `alembic upgrade head`로 DDL 적용 (마스터 11개 + 보조 + 메타 + MV 정의)
+6. NTFS의 데이터 디렉토리를 ext4에서 참조: `ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`
+7. 17개 시도 ZIP 적재 (`kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full`)
+8. `kraddr-geo load pobox ./data/postal/202605/JUSO_사서함.txt`, `kraddr-geo load bulk ./data/postal/202605/도로명주소_zipcode.txt`
+9. `kraddr-geo refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`
+10. `kraddr-geo refresh vacuum` → 통계 갱신 (`VACUUM (ANALYZE) tl_spbd_buld` 등)
 10. `kraddr-geo validate all` — 행 수, FK, MV 일관성 검사
 
 ## 검증 시나리오
