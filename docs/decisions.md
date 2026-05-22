@@ -1,0 +1,224 @@
+# DECISIONS — Architecture Decision Records
+
+본 문서는 `addr-kr` / `addr-kr-ui` 프로젝트의 의사결정을 시간순으로 누적한다. 결정이 뒤집힐 때도 이전 기록은 지우지 않고 `superseded by ADR-XXX`로 표시한다.
+
+## ADR 표준 형식
+
+```
+# ADR-NNN: <결정 요약>
+
+- 상태: proposed | accepted | superseded by ADR-XXX
+- 날짜: YYYY-MM-DD
+- 결정자: <agent | human>
+
+## 컨텍스트
+<무엇이 문제였나. 어떤 제약·요구가 있었나.>
+
+## 결정
+<무엇을 정했는가. 한 문장으로.>
+
+## 근거
+- 
+
+## 결과(긍정)
+- 
+
+## 결과(부정)
+- 
+
+## 후속
+- (open) 추가 검증 필요한 사항
+```
+
+---
+
+## ADR-001: PostgreSQL + PostGIS를 1차 저장소로 채택한다
+
+- 상태: accepted
+- 날짜: 2026-05-22
+- 결정자: human
+
+### 컨텍스트
+이전(v1) 구현은 SQLite + SpatiaLite를 사용했다. 확장 로드 가능 여부가 실행 환경마다 달랐고, 대량 적재(전국 11개 마스터 + 도형) 시 쿼리 성능과 동시성 제어가 부족했다. EXPLAIN 결과의 재현성도 떨어졌다.
+
+### 결정
+PostgreSQL 16 + PostGIS 3.4를 1차 저장소로 채택한다. SpatiaLite 기반 구현은 `v1` 브랜치에 보존하고 master에서는 더 이상 유지보수하지 않는다.
+
+### 근거
+- 도로명주소 전자지도(SHP) 적재에 GDAL Python binding이 안정적으로 동작
+- `pg_trgm`, `unaccent`, MV(머티리얼라이즈드 뷰), 윈도우 함수 등 쿼리 도구 풍부
+- `psycopg` async 드라이버로 SQLAlchemy 2 async 패턴과 자연스럽게 결합
+- 디버거 EXPLAIN과 운영 쿼리가 같은 환경에서 평가됨
+
+### 결과(긍정)
+- 쿼리 튜닝의 자유도(인덱스 hint, `SET LOCAL`, 파티셔닝 등)
+- 운영 표준 도구(pg_dump, repmgr 등) 활용 가능
+
+### 결과(부정)
+- 배포 의존성 증가(PostgreSQL 서버 운영)
+- 단일 파일 배포(SpatiaLite의 장점)가 사라짐
+
+### 후속
+- (open) ARM 8GB 환경에서 `pg_pool_size`, `statement_timeout`, `work_mem`의 권장값 실측
+
+---
+
+## ADR-002: 라이브러리 API는 async-only로 둔다
+
+- 상태: accepted
+- 날짜: 2026-05-22
+- 결정자: human
+
+### 컨텍스트
+이전 구현은 동기/비동기 메서드를 둘 다 제공했다(`get_coord` + `aget_coord`). 코드 경로가 두 배가 되어 유지보수 비용이 컸다.
+
+### 결정
+`AsyncAddressClient`만 둔다. 동기가 필요한 사용자는 `asyncio.run`으로 감싼다.
+
+### 근거
+- 동기 인터페이스는 `asyncio.run` 한 줄로 충분히 대체
+- FastAPI, SQLAlchemy 2, httpx 모두 async 중심
+- 단위 테스트도 `pytest-asyncio`로 일원화
+
+### 결과(긍정)
+- 코드 경로 단순화, mypy strict 통과 용이
+- 배치 처리(`geocode_many`) 시 동시성 제어가 자연스러움
+
+### 결과(부정)
+- 동기 컨텍스트(Jupyter, 단순 스크립트)에서 한 줄 래퍼 필요
+
+---
+
+## ADR-003: 응답 구조는 vworld와 호환되도록 유지한다
+
+- 상태: accepted
+- 날짜: 2026-05-22
+- 결정자: human
+
+### 컨텍스트
+`addr-kr`이 vworld의 드롭인 대체로 쓰일 수 있어야 한다는 요구가 있다. 동시에 자체 부가 정보(`bd_mgt_sn`, `zip_source`, 신뢰도 등)도 노출해야 한다.
+
+### 결정
+응답 최상위 키(`service`, `status`, `input`, `refined`, `result`)는 vworld 그대로 따른다. 자체 확장은 `x_extension` 키 하나에 모은다.
+
+### 근거
+- 기존 vworld 소비자 코드 수정 없이 도입 가능
+- 확장 필드는 명확히 분리되어 호환성을 깨지 않음
+
+### 결과(긍정)
+- 폴백(`fallback="api"`) 시 vworld 원응답과 자연스럽게 섞임
+- OpenAPI 스키마가 단정적
+
+### 결과(부정)
+- `x_extension` 외 필드 추가는 즉시 거절해야 한다 — 리뷰어 규율 필요
+
+---
+
+## ADR-004: ORM 위에 raw SQL Repository를 둔다
+
+- 상태: accepted
+- 날짜: 2026-05-22
+- 결정자: human
+
+### 컨텍스트
+지오코딩 쿼리는 CTE와 윈도우 함수를 다용하고 EXPLAIN 결과를 손튜닝해야 한다. ORM의 표현력은 부족하고 디버깅이 어렵다.
+
+### 결정
+`infra/*_repo.py`는 `sqlalchemy.text()`로 raw SQL을 직접 실행한다. ORM 모델(`infra/models.py`)은 read-only 매핑 용도로만 둔다.
+
+### 근거
+- `text()`는 EXPLAIN 결과를 그대로 재현하기 쉬움
+- 인덱스 hint, `SET LOCAL`을 자유롭게 사용 가능
+- 안전성: pydantic DTO가 결과를 검증하므로 타입 누수 없음
+
+### 결과(긍정)
+- 쿼리 튜닝이 백엔드 PR 안에서 일관됨
+- 새 인덱스 추가 시 ORM 매핑 갱신 불필요
+
+### 결과(부정)
+- 컬럼 변경 시 SQL을 손으로 갱신해야 함 → CI에서 컬럼 존재성 통합 테스트로 방어
+
+### 후속
+- (open) bulk INSERT에 SQLAlchemy Core를 쓸지 검토
+
+---
+
+## ADR-005: 로더는 `ogr2ogr` subprocess 대신 GDAL Python binding을 쓴다
+
+- 상태: accepted
+- 날짜: 2026-05-22
+- 결정자: human
+
+### 컨텍스트
+이전 구현은 `ogr2ogr` subprocess를 사용했다. stderr 파싱, 진행률 미보고, 환경변수 누수 등 비용이 컸다.
+
+### 결정
+`osgeo.gdal.VectorTranslate`를 in-process로 호출한다. CP949 디코딩은 `open_options=["ENCODING=CP949"]`로 명시. `PG_USE_COPY`는 `gdal.config_options` 컨텍스트 매니저로 한정 적용(`gdal.SetConfigOption` 전역 호출 금지).
+
+### 근거
+- 진행률 callback으로 0~1.0 보고 — 작업 큐와 UI 프로그래스바 연결
+- callback 안의 `cancel_event` 확인으로 협조적 취소
+- subprocess 의존, stderr 파싱 비용 제거
+
+### 결과(긍정)
+- 작업 상태 관찰이 깔끔. 취소 동작 신뢰성 ↑
+- 환경변수 누수 위험 사라짐
+
+### 결과(부정)
+- GDAL Python binding 의존성 추가(설치 환경 까다로움) — Docker 이미지로 표준화
+
+---
+
+## ADR-006: 적재 작업은 단일 백엔드 인스턴스의 in-process 큐로 직렬 처리한다
+
+- 상태: accepted
+- 날짜: 2026-05-22
+- 결정자: human
+
+### 컨텍스트
+관리 UI가 적재를 트리거할 때 HTTP 요청이 길어지고 진행률을 폴링할 방법이 필요하다. 동시에 여러 시도를 병렬 적재하면 ARM 8GB 환경에서 `work_mem`/IOPS가 한꺼번에 고갈된다.
+
+### 결정
+`api/_jobs.py`에 `asyncio.Queue` + `Semaphore(1)` 기반 in-process 큐를 둔다. 단일 백엔드 인스턴스 가정. 다중 인스턴스가 필요해지면 Redis(RQ) 또는 PostgreSQL `LISTEN`/`NOTIFY`로 같은 인터페이스 유지하며 확장한다.
+
+### 근거
+- 동시 실행 1개 → 자원 고갈 방지
+- 진행률·취소·log_tail이 단일 프로세스 메모리에 자연스럽게 살아 있음
+- 외부 큐 시스템 도입 비용 회피
+
+### 결과(긍정)
+- 운영 단순. 작업 상태가 즉시 보임
+- 사용자가 화면을 닫아도 적재는 끝까지 진행
+
+### 결과(부정)
+- 프로세스 재시작 시 진행 중 작업 손실 → 매니페스트 기반 재개 필요
+- 다중 인스턴스 배포 불가(향후 ADR로 재검토)
+
+---
+
+## ADR-013: 프론트엔드 UI는 내부망 전용, 애플리케이션 인증 없음
+
+- 상태: accepted
+- 날짜: 2026-05-22
+- 결정자: human
+
+### 컨텍스트
+`addr-kr-ui`는 운영자·개발자용 디버깅/관리 도구다. 사용자 대상 서비스가 아니다.
+
+### 결정
+이 UI는 외부 인터넷에 노출하지 않고 사내망/VPN 뒤에서만 접근 가능하도록 배포한다. NextAuth, 미들웨어 가드, `X-Admin-Key` 헤더, 세션 쿠키 등 애플리케이션 레벨 인증을 두지 않는다. 보안 경계는 네트워크 레벨(nginx IP allowlist 또는 사내 SSO 게이트웨이)에서 만든다.
+
+### 근거
+- 디버거 워크플로(주소 입력 → 지도 클릭 → EXPLAIN)에 인증 마찰이 비용 대비 효과 없음
+- 네트워크 단 보호가 더 강력하고 운영 변경만으로 충분
+
+### 결과(긍정)
+- UI 코드와 백엔드 코드에 인증 로직이 침투하지 않음
+- `Next.js → 백엔드`는 동일 origin/VPC라 CORS·인증 헤더 불필요
+
+### 결과(부정)
+- 외부 노출이 필요해지면 운영(nginx/SSO 게이트웨이) 변경이 선행되어야 함
+- 마지막 수단으로 NextAuth 도입 시 새 ADR로 명시
+
+### 후속
+- (open) 운영 환경별 네트워크 정책 문서 정리

@@ -1,41 +1,54 @@
-# 주소 DB 스키마
+# 주소 DB 스키마 (요약)
 
-공간 제공 스키마는 하나의 SQLite 데이터베이스를 중심으로 구성한다. SpatiaLite 확장을 사용할 수 있으면 지오메트리 컬럼과 공간 인덱스를 추가하고, 사용할 수 없는 환경에서도 `x`, `y`, WKT, WKB 컬럼으로 기본 조회가 동작하도록 유지한다.
+`addr-kr`의 1차 저장소는 PostgreSQL + PostGIS다. 본 문서는 상위 요약만 두고, 컬럼·인덱스·MV·메타 테이블 전체 정의는 `docs/data-model.md`에 둔다.
 
-## `juso_address_points`
+> 이전(v1) SQLite + SpatiaLite 기반 스키마(`juso_address_points`, `juso_boundary_polygons`, `juso_spatial_metadata`)는 `v1` 브랜치에 보존되어 있다. master는 더 이상 그 스키마를 유지보수하지 않는다(ADR-001).
 
-모든 주소 좌표 후보를 저장한다.
+## 한눈에
 
-- `point_id`: 원천 데이터에서 파생한 안정 키
-- `source`: 원천 파일 또는 로더 이름
-- `source_dataset`: `location_summary`, `navigation_building`, `navigation_road_section_entrance`
-- `source_priority`: 중복 후보가 있을 때 낮은 값이 우선
-- `coordinate_role`: `entrance`, `building_center` 등 좌표 역할
-- `road_name_code`, `underground_yn`, `building_main_no`, `building_sub_no`: 도로명주소 정확 매칭 키
-- `legal_dong_code`, `postal_code`: 법정동 코드와 우편번호
-- `road_address`, `building_name`: 표시용 주소/건물명
-- `x`, `y`, `srid`: 저장 좌표와 좌표계
-- `geom_wkt`, `geom_wkb`: 공간 엔진 호환 지오메트리 표현
-- `raw_json`: 원천 행 세부 정보
+| 구분 | 테이블/뷰 | 역할 |
+|------|-----------|------|
+| 마스터 (11개) | `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`, `tl_scco_li`, `tl_kodis_bas`, `tl_sprd_manage`, `tl_sprd_intrvl`, `tl_sprd_rw`, `tl_spbd_eqb`, `tl_spbd_buld`, `tl_spbd_entrc` | 도로명주소 전자지도 원천 |
+| 보조 | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 (epost 다운로드) |
+| 메타 | `load_manifest`, `load_codes`, `geo_cache` | 적재 상태, MVM_RES_CD 매핑, 외부 API 캐시 |
+| 평면화 | `mv_geocode_target` | 지오코딩 쿼리용 MV (도로/지번 단일 lookup) |
 
-## `juso_boundary_polygons`
+## 좌표계
 
-지역별 ZIP에 포함된 모든 SHP에서 추출한 행정구역 다각형 레이어를 저장한다.
+- 저장: EPSG:5179 (대한민국 GRS80 UTM-K)
+- 응답: 기본 EPSG:4326. `crs` 입력으로 다른 EPSG 허용.
+- 응답에서 `(lon, lat)`는 `(ST_X, ST_Y)` 순서. 외부 인터페이스는 모두 `(lon, lat)` 고정 (SKILL.md §4-5).
 
-- `source_system`: 원천 시스템 이름
-- `source_file`: 원천 파일 경로 또는 파일명
-- `source_layer`: `tl_scco_sig` 같은 원본 SHP 파일명 줄기
-- `source_code`, `source_name`: 원천 코드와 이름
-- `legal_dong_code`: 연결 가능한 법정동 코드
-- `boundary_level`: 시도/시군구/읍면동 등 경계 수준
-- `mapping_status`: 매핑 검증 상태
-- `geom_wkt`, `geom_wkb`: 지오메트리 표현
-- `raw_json`: 원천 속성 전체
+## 핵심 식별자
 
-## `juso_spatial_metadata`
+| 약어 | 의미 |
+|------|------|
+| BJD_CD | 법정동코드 10자리 (시도2 + 시군구3 + 읍면동3 + 리2) |
+| RNCODE_FULL | 도로명코드 12자리 (SIG_CD 5 + RN_CD 7) |
+| BD_MGT_SN | 건물관리번호 25자리, 전국 unique |
+| BSI_ZON_NO | 건물의 기초구역번호 = 우편번호 5자리 |
+| BAS_ID | `TL_KODIS_BAS`의 기초구역번호 = 우편번호 |
+| MVM_RES_CD | 이동사유코드 (신규/수정/삭제 분기 키) |
+| MVMN_DE | 이동일자 YYYYMMDD |
 
-로더 실행 시각, 원천 이름, 운영 메모 같은 작은 key/value 메타데이터를 저장한다.
+`tl_spbd_buld`에는 `bjd_cd`, `rncode_full`, `buld_nm_nrm` 같은 조인 키가 PostgreSQL의 `GENERATED ALWAYS AS (...) STORED` 컬럼으로 미리 계산되어 있다.
+
+## 인덱스 (핵심)
+
+- 도로명 매칭: `tl_spbd_buld(rncode_full, buld_mnnm, buld_slno, buld_se_cd)`
+- 지번 매칭: `tl_spbd_buld(bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno)`
+- 우편번호 polygon: `tl_kodis_bas USING GIST(geom)`
+- 출입구 nearest: `tl_spbd_entrc USING GIST(geom)`
+- 도로명 trigram fuzzy: `tl_sprd_manage USING GIN(rn_nrm gin_trgm_ops)` (`pg_trgm`)
+
+`pg_trgm.similarity_threshold`는 트랜잭션 단위로만 `SET LOCAL` (SKILL.md §4-3).
+
+## `mv_geocode_target`
+
+건물·출입구·도로·동을 평면화한 머티리얼라이즈드 뷰. 지오코딩 라우터는 본 MV 단일 lookup으로 응답한다. 적재 후 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target` + `ANALYZE`.
+
+전체 DDL과 추가 인덱스는 `docs/data-model.md`를 본다.
 
 ## Alembic
 
-`alembic/versions/0001_spatialite_core.py`가 핵심 테이블과 인덱스를 만든다. 지오메트리 컬럼은 런타임 저장소가 SpatiaLite 로드 가능 여부를 확인한 뒤 추가한다.
+`alembic/versions/`에서 DDL을 관리한다. 마스터/보조/메타/MV 모두 IDempotent 마이그레이션 — 운영 중 재실행도 안전하도록 `IF NOT EXISTS` 또는 `DROP ... IF EXISTS` 명시.
