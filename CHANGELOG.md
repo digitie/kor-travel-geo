@@ -21,6 +21,7 @@
 - 외부 REST API(vworld, juso, epost, kakao maps)의 발급 절차와 호출 정책을 `docs/external-apis.md`로 정리한다.
 - 시도별 ZIP 업로드와 작업 큐 기반 직렬 적재 워크플로(`/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch`)를 사양으로 명시한다.
 - `pyproject.toml`, `.env.example`, `Settings`, 기본 패키지 스캐폴드, 공통/주소 DTO와 단위 테스트를 추가한다.
+- `docs/dev-environment.md`를 추가하고 시스템 GDAL(`libgdal-dev`) 설치 + `pip install "gdal==$(gdal-config --version)"` 절차를 ADR-008로 명시한다.
 
 ### Removed
 - 동기 라이브러리 API, monorepo 내부 디버그 UI, `ogr2ogr` subprocess 호출 경로를 사양에서 제거한다.

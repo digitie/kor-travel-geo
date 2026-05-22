@@ -40,6 +40,12 @@ api = [
   "uvicorn[standard]>=0.32",
   "prometheus-client>=0.21",
 ]
+# loaders extra는 시스템 GDAL(libgdal-dev)에 의존한다.
+#   1) sudo apt install libgdal-dev gdal-bin
+#   2) pip install "gdal==$(gdal-config --version)"   # 시스템 GDAL과 동일 버전으로 핀
+#   3) pip install -e ".[loaders]"
+# 운영/CI에서는 osgeo/gdal:* Docker 이미지를 베이스로 권장. 자세한 내용은
+# docs/dev-environment.md 및 docs/decisions.md ADR-005, ADR-008 참조.
 loaders = [
   "gdal>=3.8",
   "geopandas>=1.0",

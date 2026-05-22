@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (claude, GDAL 셋업 문서)
+
+**작업**: PR #3 마무리 — GDAL 시스템 의존성을 문서로 못박는다.
+
+**변경 파일**:
+- 신규: `docs/dev-environment.md` (WSL ext4 기준 셋업, conda/Docker 대안)
+- 갱신: `docs/geocoding-readiness.md` (체크리스트 0번 항목 — 시스템 GDAL 설치)
+- 갱신: `docs/resume.md` ("알려진 함정"에 GDAL 버전 미스매치, `libgdal-dev` 누락)
+- 갱신: `SKILL.md` §2 (빠른 시작에 `apt install libgdal-dev` + `gdal==$(gdal-config --version)` 핀 추가)
+- 갱신: `pyproject.toml` (`loaders` extra 위 주석 — 시스템 의존성/Docker 권장)
+- 갱신: `docs/decisions.md` (ADR-008 — 시스템 GDAL과 동일 버전 핀)
+
+**결정**:
+- ADR-008: `loaders` extra는 `pip install "gdal==$(gdal-config --version)"`로 시스템과 동일 버전 핀. 운영·CI는 `osgeo/gdal:*` Docker 베이스 표준화. ADR-005 보강.
+
+**검증**: 문서 전용 변경이라 코드 테스트 영향 없음. T-013 진행 시 실제 GDAL 환경에서 `dev-environment.md` 절차로 재현 가능.
+
+**다음**: T-004 (DTO 6종).
+
+---
+
 ## 2026-05-23 (codex, 리뷰 3차 반영)
 
 **작업**: PR 리뷰 반영 — 설정 싱글톤 helper 역할 분리
