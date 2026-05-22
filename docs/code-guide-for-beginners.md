@@ -1,41 +1,109 @@
 # 처음 보는 사람을 위한 코드 안내
 
-이 프로젝트는 크게 세 계층으로 나뉜다.
+`kraddr-geo` 백엔드와 `kraddr-geo-ui` 프론트엔드는 별도 패키지지만 한 시스템을 구성한다. 아래 순서대로 읽으면 큰 그림에서 세부로 자연스럽게 내려간다.
 
-## 라이브러리
+> 이전 SpatiaLite 기반 `kraddr.geo` 구현은 `v1` 브랜치에 보존되어 있다. master는 PostgreSQL + PostGIS 기반 새 사양으로 처음부터 다시 짓는다(ADR-001).
 
-`src/kraddr/geo`에는 Python 패키지가 들어 있다.
+## 1. 큰 그림
 
-- `data.py`: 도로명주소 아카이브 다운로드와 파싱
-- `legal_dong.py`: 법정동 코드 API 파싱
-- `reverse.py`: 내비게이션 TXT 파싱과 단순 역지오코더 보조 함수
-- `spatialite.py`: SQLite/SpatiaLite 스키마, 로더, 지오코딩, 역지오코딩, 우편번호 조회
-- `dto.py`: 주소 지오코딩 요청/응답 DTO
+1. `README.md` — 5분 안에 프로젝트가 무엇인지, 어떻게 띄우는지.
+2. `SKILL.md` — DO NOT 룰, 도메인 어휘, 자주 묻는 작업.
+3. `docs/architecture.md` — 두 패키지의 관계, 백엔드 계층, 데이터 흐름.
 
-현재 GIS 동작을 이해하려면 `spatialite.py`부터 보는 것이 가장 빠르다.
+## 2. 백엔드 (`kraddr-geo`)
 
-## 디버그 UI 백엔드
+의존 방향은 **dto → core → infra → client → api/cli** 한 방향(ADR-004).
 
-`debug-ui/src/kraddr_geo_debug_api`는 store를 FastAPI로 노출한다.
-
-- `config.py`: 환경 변수
-- `database.py`: 공유 `SpatialiteAddressStore` 인스턴스와 조회 보조 함수
-- `ingest.py`: 수동 업로드 적재 작업, 파일 분류, 진행 상태 스냅샷
-- `main.py`: HTTP 라우트
-
-## 디버그 UI 웹
-
-`debug-ui/web/`은 Next.js 주소 탐색 UI다. 기존 사용자 흐름인 샘플 검색, 전체 주소 목록, 페이지 이동, 지도 미리보기, 레이어 전환, 수동 파일 업로드 적재를 유지한다.
-
-## 일반 개발 흐름
-
-```powershell
-python -m pytest -q
-python -m ruff check .
-cd debug-ui/web
-npm run lint
-npm run test
-npm run build
+```
+src/kraddr/geo/
+  dto/         pydantic v2 입력/출력 (DB·FastAPI 의존성 없음)
+  core/        DB 무관 비즈니스 로직. Protocol에만 의존.
+  infra/       SQLAlchemy 2 async + raw SQL repository
+  loaders/     파일 적재 (GDAL Python binding, ogr2ogr 미사용)
+  client.py    AsyncAddressClient — 라이브러리 진입점
+  api/         FastAPI 라우터
+  cli/         typer CLI
 ```
 
-실데이터 검증은 먼저 `data/juso`를 로컬 SQLite 파일로 적재한 뒤 `SpatialiteAddressStore` 함수를 직접 호출해 지오코딩, 역지오코딩, 우편번호 조회, 인덱스 계획을 확인한다.
+이해를 빠르게 하려면:
+
+1. **dto**부터 본다. `dto/common.py`, `dto/geocode.py` — 입출력의 모양이 곧 시스템의 모양이다.
+2. **core/geocoder.py**를 본다. `parse_address` → `repo.lookup_by_road` → `RefinedAddress` 빌드 흐름.
+3. **infra/geocode_repo.py**의 raw SQL 상수 (`_LOOKUP_ROAD`, `_FUZZY_ROADS`).
+4. **client.py**의 `AsyncAddressClient` — 위 셋을 묶는 진입점.
+5. **api/routers/geocode.py** — 라우터는 client.geocode() 한 줄.
+
+세부 사양은 `docs/backend-package.md`에 있다.
+
+## 3. 프론트엔드 (`kraddr-geo-ui`)
+
+별도 Node.js 패키지(Next.js 14 + shadcn/ui + react-kakao-maps-sdk + TanStack Query). 사용자 대상이 아니라 개발자·운영자용 디버깅/관리 UI.
+
+```
+kraddr-geo-ui/
+  app/                 Next.js App Router. /debug/* + /admin/* + /api/proxy/[...]
+  components/          ui/(shadcn), kakao/, forms/, tables/, debug/, admin/, nav/
+  lib/                 api.ts, schemas.ts(zod), kakao.ts, queryClient.ts
+  hooks/               useGeocode, useReverse, useDebounce, useUpload, ...
+  scripts/gen-types.ts 백엔드 openapi.json → 타입·Zod 자동 생성
+```
+
+이해 순서:
+
+1. `lib/api.ts` — typed REST client (`openapi-fetch`).
+2. `app/debug/geocode/page.tsx` — 폼 + 지도 + JsonViewer가 한 화면에서 어떻게 묶이는지.
+3. `app/admin/load/page.tsx` — 업로드 단계 → 처리 단계 상태 머신.
+4. `components/admin/UploadStage.tsx` + `ProcessingStage.tsx` — 두 단계 분리 원칙.
+
+세부 사양은 `docs/frontend-package.md`에 있다.
+
+## 4. 데이터·로더
+
+- `docs/data-model.md` — PostgreSQL + PostGIS 스키마 reference.
+- `docs/backend-package.md` §9 — GDAL Python binding 시도 로더, MVM_RES_CD 증분 로더, 작업 큐, 업로드+일괄 처리.
+
+## 5. 외부 API
+
+`docs/external-apis.md`에 vworld / juso / epost / kakao maps의 발급 절차, 환경변수, 호출 예시, 재시도·회로차단 정책이 모여 있다.
+
+## 6. 검증
+
+```bash
+# 백엔드
+pip install -e ".[api,loaders,dev]"
+pytest -q
+ruff check .
+mypy src/kraddr/geo
+lint-imports
+
+# 프론트엔드
+cd kraddr-geo-ui
+npm ci
+npm run lint
+npm run type-check
+npm run test
+npm run build
+npm run test:e2e   # playwright
+```
+
+스키마 변경이 있다면 `python scripts/export_openapi.py` → `cd kraddr-geo-ui && npm run gen:types`로 frontend Zod/types를 재생성한다.
+
+## 7. 작업 흐름
+
+작업 1건은 다음 사이클을 돈다 (`docs/agent-guide.md` §B4.2):
+
+```
+[읽기] resume → architecture 관련 절 → 관련 ADR
+  ↓
+[코드] 변경 (한 PR / 한 commit 단위)
+  ↓
+[검증] pytest / ruff / mypy / lint-imports / (UI) playwright
+  ↓
+[기록] docs/journal.md 엔트리 추가
+  ↓
+[갱신] docs/resume.md 진척도 토글, docs/tasks.md 상태 변경
+  ↓
+[선택] ADR 추가, CHANGELOG 갱신
+  ↓
+[커밋] <scope> <verb>: <object> (#T-NNN)
+```
