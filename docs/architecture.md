@@ -110,6 +110,10 @@ PC 개발은 WSL의 ext4 위에서 진행한다. NTFS 마운트에서 직접 `gi
 - **데이터(`data/`)는 NTFS 측에만 둔다**. ext4 작업 디렉토리에는 심볼릭 링크(`ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`) 또는 절대경로로만 참조한다.
 - 통합/e2e 테스트, 전국 적재 검증, vworld 비교 등은 NTFS의 `data/`를 reference로 삼는다.
 
+## 적재 ↔ 서빙은 단일 스키마 + MV로 분리한다
+
+본 사양은 별도의 "서빙 어댑터 스키마"를 두지 않는다. 적재(`tl_spbd_*`, `tl_scco_*` 등 11개 마스터)와 서빙(`mv_geocode_target` 머티리얼라이즈드 뷰)이 **같은 DB·같은 search_path** 위에 있고, 라이브러리/REST API/디버거가 모두 `AsyncAddressClient.engine` 하나로 접근한다. 별도 `*_serving_*` 테이블을 만드는 패턴은 도입하지 않는다 — 동일 PK·동일 컬럼명에서 두 스키마가 갈라지면 회귀 시 침묵하기 쉽다. 평면화·denormalization이 필요하면 MV 또는 view로 표현하고, 컬럼명은 마스터 테이블과 일치시킨다(ADR-007 후속).
+
 ## 운영 환경
 
 - DB: PostgreSQL 16 + PostGIS 3.4 (또는 호환 마이너 버전). `pg_trgm`, `unaccent` 확장 사용.

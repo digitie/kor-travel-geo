@@ -24,6 +24,12 @@
 - `docs/dev-environment.md`를 추가하고 시스템 GDAL(`libgdal-dev`) 설치 + `pip install "gdal==$(gdal-config --version)"` 절차를 ADR-008로 명시한다.
 - 우편번호 적재 정책을 ADR-009로 확정: epost OpenAPI 데이터셋 `15000302`의 `downloadKnd=1`(전체) ZIP을 분기 1회 받아 `postal_pobox`/`postal_bulk_delivery`를 TRUNCATE 후 INSERT 한다. 실시간 lookup API(`15056971`)는 도입하지 않는다.
 - geocode/reverse/search/zipcode/pobox/admin DTO와 단위 테스트를 추가하고, `data/juso/도로명주소 전자지도` 실제 SHP/DBF 파일을 여는 레이어 검사 테스트를 추가한다.
+- ADR-010 추가: PNU 토지구분 매핑(`mntn_yn 0→1, 1→2`)과 조립 위치(`infra/` 또는 generated stored column). `core/`는 의미론적 `mntn_yn`만 보관.
+- ADR-011 추가: 적재 작업 상태를 `load_jobs` 테이블로 영속화. lifespan startup에서 잔존 `running→failed`, `queued`는 payload 존재 여부에 따라 재큐잉/`failed`. 다중 워커 안전성은 `pg_try_advisory_lock` + `FOR UPDATE SKIP LOCKED`.
+- 공간 쿼리 가이드: 반경/nearest는 `ent_pt_5179`(meter, GiST `idx_mv_geom5179`) 기준, `ent_pt_4326`은 응답 전용. 입력 좌표는 CTE/파라미터에서 한 번만 `ST_Transform`(SKILL.md §4-11).
+- MV 갱신 모드 두 가지 정의: 평시 `REFRESH CONCURRENTLY`, 분기 풀로드는 shadow MV(`mv_geocode_target_next`) 빌드 후 트랜잭션 RENAME swap.
+- engine factory(`infra/engine.py`) 단순화: DSN 보정은 `Settings.normalize_pg_dsn` 단일 책임. 중복 검사 제거.
+- 적재 ↔ 서빙 단일 스키마 정책 명시: 별도 `*_serving_*` 스키마 도입 금지, 평면화는 MV로만 표현(ADR-007 후속).
 
 ### Removed
 - 동기 라이브러리 API, monorepo 내부 디버그 UI, `ogr2ogr` subprocess 호출 경로를 사양에서 제거한다.

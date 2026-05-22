@@ -98,10 +98,127 @@ WITH DATA;
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);
 CREATE INDEX idx_mv_road  ON mv_geocode_target (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
 CREATE INDEX idx_mv_jibun ON mv_geocode_target (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
-CREATE INDEX idx_mv_geom4326 ON mv_geocode_target USING GIST (ent_pt_4326);
+CREATE INDEX idx_mv_geom5179 ON mv_geocode_target USING GIST (ent_pt_5179);  -- 거리/nearest 1차 경로
+CREATE INDEX idx_mv_geom4326 ON mv_geocode_target USING GIST (ent_pt_4326);  -- 응답 직렬화 보조
 ```
 
-적재 후 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`. ANALYZE는 자동 통계만 의존하지 말고 명시 실행한다.
+### MV 갱신 모드 (라이브 경합 시간 축소)
+
+`REFRESH MATERIALIZED VIEW CONCURRENTLY`는 무중단 조회를 보장하지만 전국 풀로드 직후엔 정렬·임시 파일·재계산 비용으로 조회 응답이 느려진다. I/O 총량이 줄어드는 건 아니고 **운영 조회와의 경합 시간이 길어진다**.
+
+본 사양은 두 모드를 둔다.
+
+| 상황 | 방법 |
+|------|------|
+| 평시 변동분 적재(`delta_loader` 후) | `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target;` → `ANALYZE` |
+| 분기 풀로드(전국 11개 마스터 재적재 후) | shadow MV 빌드 → 짧은 트랜잭션에서 RENAME swap (아래) |
+
+```sql
+-- shadow 빌드 (오프피크에 진행, 운영 조회는 mv_geocode_target에서 계속)
+SET lock_timeout = '5s';
+CREATE MATERIALIZED VIEW mv_geocode_target_next AS
+  SELECT ... -- 기존 정의와 동일
+  WITH DATA;
+CREATE UNIQUE INDEX ON mv_geocode_target_next (bd_mgt_sn);
+CREATE INDEX        ON mv_geocode_target_next (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
+CREATE INDEX        ON mv_geocode_target_next (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
+CREATE INDEX        ON mv_geocode_target_next USING GIST (ent_pt_5179);
+CREATE INDEX        ON mv_geocode_target_next USING GIST (ent_pt_4326);
+ANALYZE mv_geocode_target_next;
+
+-- 원자 swap (수 ms)
+BEGIN;
+  SET LOCAL lock_timeout = '2s';
+  DROP MATERIALIZED VIEW mv_geocode_target;
+  ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target;
+COMMIT;
+```
+
+주의:
+- **인덱스 이름**은 swap 시 새 MV에 함께 RENAME되지 않는다. 명시 이름(`idx_mv_geocode_target_pk` 등)을 유지하려면 swap 후 `ALTER INDEX ... RENAME`이 추가로 필요하다.
+- **권한·의존 객체**: `GRANT SELECT ON mv_geocode_target TO addr_kr_ro` 같은 운영 권한과 다른 MV의 의존성이 있으면 swap 전에 동일하게 새 MV에 반영.
+- **prepared statement invalidation**: 라우터가 캐시한 prepared statement는 `DROP`/`RENAME` 시 다음 호출에서 `cached plan must not change result type`으로 실패할 수 있다. swap 직후 일부 요청이 한 번 재컴파일되는 비용 또는 `DISCARD PLANS`를 운영 워커 한 곳에서 트리거.
+- **`lock_timeout`**: swap 트랜잭션이 운영 조회의 ACCESS SHARE를 못 기다리면 안전하게 abort. 위에 `2s` 정도.
+
+swap 트리거는 `loaders/postload.py`의 `do_full_swap=True` 옵션 또는 `kraddr-geo refresh mv --swap` CLI(T-018). `loaders/swap.py`의 스키마 단위 `atomic_schema_swap`은 별개로 staging 전용이며 본 MV swap과 혼동하지 않는다.
+
+## 공간 쿼리 가이드
+
+매 행 변환을 피하기 위해 **입력 좌표를 CTE에서 한 번만 변환**하고, 술어는 인덱스가 있는 컬럼(`ent_pt_5179` 또는 `ent_pt_4326`)을 그대로 사용한다(SKILL.md §4-11).
+
+**반경/nearest 쿼리는 5179 기준**으로 한다. PostGIS의 geometry 거리는 SRID 단위를 그대로 쓰므로, EPSG:4326에서 `:radius_m`을 넣으면 단위가 **도(degree)**가 되어 의도와 다르다. 5179는 GRS80 UTM-K로 단위가 meter라 `:radius_m`이 그대로 의미를 가진다.
+
+```sql
+-- 입력 좌표 (lon, lat, in_srid)를 5179로 한 번만 변환하고 GiST 인덱스 스캔
+WITH target_pt AS (
+  SELECT ST_Transform(
+    ST_SetSRID(ST_MakePoint(:x, :y), :in_srid),
+    5179
+  ) AS geom
+)
+SELECT t.bd_mgt_sn, t.road_nm, t.buld_nm,
+       ST_X(t.ent_pt_4326) AS lon, ST_Y(t.ent_pt_4326) AS lat,   -- 응답은 4326
+       ST_Distance(t.ent_pt_5179, p.geom) AS dist_m
+FROM mv_geocode_target t, target_pt p
+WHERE ST_DWithin(t.ent_pt_5179, p.geom, :radius_m)
+ORDER BY t.ent_pt_5179 <-> p.geom
+LIMIT :limit;
+```
+
+- `ent_pt_4326`은 응답에서 `(lon, lat)` 추출 전용. **거리 술어에 쓰면 안 된다**.
+- 입력 SRID(`:in_srid`)는 사용자 입력 `crs`에서 4326/5179만 허용(`docs/backend-package.md` §4 — `CRS` Annotated 정규화). 추가 SRID가 들어오면 repo 레벨에서 `InvalidCoordinateError`로 거부(SKILL.md §4-5와 별개의 SRID 화이트리스트).
+
+### 행정 polygon의 4326 변환
+
+`tl_kodis_bas`, `tl_scco_*` 등 polygon 테이블은 5179만 보관한다. Kakao Maps 등 4326을 요구하는 응답 경로용으로 변환 view를 둔다.
+
+```sql
+CREATE VIEW v_kodis_bas_4326 AS
+  SELECT bas_mgt_sn, bas_id, ST_Transform(geom, 4326) AS geom_4326
+  FROM tl_kodis_bas;
+CREATE VIEW v_scco_emd_4326 AS
+  SELECT emd_cd, emd_kor_nm, ST_Transform(geom, 4326) AS geom_4326
+  FROM tl_scco_emd;
+-- 필요 시 다른 행정 layer도 같은 패턴
+```
+
+폴리곤은 자주 변환되지 않는 응답 경로에만 등장하므로 view로 충분. 점이 빈도 높게 변환되는 `mv_geocode_target`만 컬럼으로 저장(ADR-007 후속).
+
+적재 후 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`(평시) 또는 위 swap 절차(분기). ANALYZE는 자동 통계만 의존하지 말고 명시 실행한다.
+
+## PNU 조립 (외부 시스템 연동)
+
+법원 등기·토지대장 등 외부 시스템과 조인하려면 **19자리 표준 PNU**가 필요하다. PNU 11번째 자리(토지구분)는 `1=일반, 2=산`인데 도로명주소 원천의 `mntn_yn`은 `0=대지, 1=산`이라 직접 결합하면 안 된다. 조립은 infra/저장 계층 책임이며 `core/`는 의미론적 `mntn_yn`만 보관한다(ADR-010).
+
+```python
+# src/kraddr/geo/infra/_pnu.py (T-016 또는 보조 helper)
+def land_type(mntn_yn: str) -> str:
+    """mntn_yn ('0'/'1') → PNU 토지구분 ('1'/'2')."""
+    return "2" if mntn_yn == "1" else "1"
+
+def pnu_from_row(row: dict) -> str:
+    """bjd_cd(10) + land_type(1) + lnbr_mnnm(4) + lnbr_slno(4) = 19자리."""
+    return (
+        row["bjd_cd"]
+        + land_type(row["mntn_yn"])
+        + f"{int(row['lnbr_mnnm']):04d}"
+        + f"{int(row['lnbr_slno']):04d}"
+    )
+```
+
+또는 `tl_spbd_buld`에 generated stored column으로 추가도 가능:
+
+```sql
+ALTER TABLE tl_spbd_buld ADD COLUMN pnu TEXT GENERATED ALWAYS AS (
+  bjd_cd
+  || CASE WHEN mntn_yn = '1' THEN '2' ELSE '1' END
+  || lpad(lnbr_mnnm::text, 4, '0')
+  || lpad(lnbr_slno::text, 4, '0')
+) STORED;
+CREATE INDEX idx_buld_pnu ON tl_spbd_buld (pnu) WHERE pnu IS NOT NULL;
+```
+
+위치는 ADR-010 후속에서 helper vs generated column 결정. 어느 쪽이든 **`core/`에는 PNU 조립 로직을 두지 않는다** — 외부 식별자 표준은 저장/조회 계층의 책임.
 
 ## 보조 우편번호
 
@@ -208,6 +325,25 @@ CREATE INDEX idx_geo_cache_expires ON geo_cache (expires_at);
 | 기타 (변동 없는 행 포함) | 참고 | skip |
 
 PK 매핑은 `docs/backend-package.md` §9.3의 `PK_MAP` 상수와 일치.
+
+### 한 배치당 PK 단일화 가정
+
+`apply_delta`는 한 staging 배치 안에서 (a) UPSERT 일괄 → (b) DELETE 일괄 순서로 수행한다. 같은 PK에 대해 `INSERT`(31)와 `DELETE`(63)가 한 배치에 같이 들어오면 UPSERT 후 DELETE가 실행되어 신규 행이 즉시 지워지는 out-of-order 위험이 있다.
+
+본 사양은 **한 staging 배치 내에서 같은 PK가 최대 1회만 등장한다**고 가정한다(도로명주소 변동분 SHP의 통상 구조). 이 가정이 데이터셋 갱신으로 깨질 경우, `apply_delta`는 staging에서 `MVMN_DE` 기준 마지막 이벤트만 남기는 단일화 단계를 추가한다.
+
+```sql
+-- staging 단일화 (가정이 깨졌을 때 활성화)
+WITH dedup AS (
+  SELECT DISTINCT ON (PK_COLS) *
+  FROM staging_schema.tl_xxx
+  ORDER BY PK_COLS, mvmn_de DESC
+)
+DELETE FROM staging_schema.tl_xxx;
+INSERT INTO staging_schema.tl_xxx SELECT * FROM dedup;
+```
+
+`apply_delta`는 staging 적재 직후 dedup 여부를 한 행 SQL로 점검(`SELECT count(*) - count(DISTINCT (pk))`)하고 0이 아니면 dedup CTE를 자동 트리거 — 운영상 가정 검증 + fail-safe.
 
 ## 좌표계
 
