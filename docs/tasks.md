@@ -7,8 +7,8 @@
 
 ## 대기 (우선순위 순)
 - [ ] T-005 `infra/engine.py` (async engine factory) + 통합 테스트
-- [ ] T-006 PostGIS 11개 마스터 + 보조 테이블 DDL을 `sql/ddl/`과 `alembic/versions/0001_*.py`에 작성
-- [ ] T-007 `mv_geocode_target` MV 정의 + `REFRESH MATERIALIZED VIEW CONCURRENTLY` 통합 테스트
+- [ ] T-006 PostGIS 11개 마스터 + 보조 + `load_jobs`(ADR-011) DDL을 `sql/ddl/`과 `alembic/versions/0001_*.py`에 작성. `tl_spbd_buld.pnu` generated column(ADR-010) 포함.
+- [ ] T-007 `mv_geocode_target` MV 정의 + `REFRESH MATERIALIZED VIEW CONCURRENTLY`(평시) + shadow MV swap(분기 풀로드, `docs/data-model.md` "MV 갱신 모드") 통합 테스트
 - [ ] T-008 `infra/geocode_repo.py` 구현 + Fake repo 단위 테스트
 - [ ] T-009 `core/normalize.py` (주소 정규화 순수 함수)
 - [ ] T-010 `core/geocoder.py` 구현 + Fake repo 단위 테스트
@@ -16,7 +16,7 @@
 - [ ] T-012 `api/app.py`, `api/routers/geocode.py` 작성 + e2e 테스트
 - [ ] T-013 `loaders/sido_loader.py` (GDAL Python binding) 작성 + 작은 시도 1개로 시연
 - [ ] T-014 `loaders/delta_loader.py` (MVM_RES_CD 머지) 작성 + 통합 테스트
-- [ ] T-015 `api/_jobs.py` 작업 큐 + `/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch` 엔드포인트
+- [ ] T-015 `api/_jobs.py` 작업 큐(`load_jobs` 영속화, lifespan recovery, advisory lock — ADR-011) + `/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch` 엔드포인트
 - [ ] T-016 reverse / search / zipcode / pobox 코어와 라우터
 - [ ] T-017 `loaders/pobox_loader.py`, `loaders/bulk_loader.py`
 - [ ] T-018 CLI(`kraddr-geo load all-sidos`, `kraddr-geo refresh mv`, `kraddr-geo validate`) 구현

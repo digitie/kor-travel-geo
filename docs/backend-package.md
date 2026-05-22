@@ -279,17 +279,22 @@ async with AsyncAddressClient() as client:    # .env에서 DSN 자동 로드
 ### 엔진 (`infra/engine.py`)
 
 ```python
+# Settings.pg_dsn은 이미 normalize_pg_dsn validator로 'postgresql+psycopg://' 형식이
+# 보장된다. engine factory에서 중복 보정하지 않는다.
 engine = create_async_engine(
-    dsn,
-    pool_size=10, max_overflow=5, pool_pre_ping=True,
-    pool_recycle=3600, poolclass=AsyncAdaptedQueuePool,
-    connect_args={"options": f"-c statement_timeout={statement_timeout_ms}"},
+    settings.pg_dsn,
+    pool_size=settings.pg_pool_size,
+    max_overflow=settings.pg_max_overflow,
+    pool_pre_ping=True,
+    pool_recycle=settings.pg_pool_recycle_s,
+    poolclass=AsyncAdaptedQueuePool,
+    connect_args={"options": f"-c statement_timeout={settings.pg_statement_timeout_ms}"},
     json_serializer=lambda o: orjson.dumps(o).decode(),
     json_deserializer=orjson.loads,
 )
 ```
 
-DSN이 `postgresql://`로 시작하면 자동으로 `postgresql+psycopg://`로 보정.
+DSN 정규화는 `Settings.normalize_pg_dsn` 단일 책임이다. 어떤 경로로 들어와도 (`.env`, env var, 직접 인자) settings가 한 번 보정하고, 다른 모듈은 그 결과를 신뢰한다.
 
 ### Repository 구현 (`infra/*_repo.py`)
 
@@ -411,9 +416,97 @@ async def atomic_schema_swap(engine, staging="staging_new", live="public"):
 설계:
 
 - 단일 백엔드 인스턴스 가정 (ADR-006).
-- `asyncio.Semaphore(1)` 직렬 처리.
-- `Job` dataclass: `job_id`, `kind`, `payload`, `state ∈ {queued, running, done, failed, cancelled}`, `progress (0..1)`, `current_stage`, `started_at`, `ended_at`, `error`, `log_tail (deque maxlen=200)`, `cancel_event (asyncio.Event)`.
+- `asyncio.Semaphore(1)`로 in-process 직렬 처리 + **`load_jobs` 테이블로 상태 영속화**(ADR-011).
+- `Job` dataclass(in-memory): `job_id`, `kind`, `payload`, `state ∈ {queued, running, done, failed, cancelled}`, `progress (0..1)`, `current_stage`, `started_at`, `ended_at`, `error`, `log_tail (deque maxlen=200)`, `cancel_event (asyncio.Event)`.
 - 핸들러 등록: `queue.register(kind, handler)`. `sido_load`, `pobox_load`, `bulk_load`, `mv_refresh` 등.
+
+#### `load_jobs` 영속 테이블 (ADR-011)
+
+`load_manifest`는 "성공한 적재의 watermark"로 유지하고, 작업 실행 상태는 별도 테이블로 분리한다.
+
+```sql
+CREATE TABLE load_jobs (
+  job_id         TEXT PRIMARY KEY,
+  kind           TEXT NOT NULL,
+  payload        JSONB NOT NULL,
+  state          TEXT NOT NULL CHECK (state IN ('queued','running','done','failed','cancelled')),
+  progress       NUMERIC(3,2) NOT NULL DEFAULT 0.0,
+  current_stage  TEXT,
+  source_checksum TEXT,
+  error_message  TEXT,
+  started_at     TIMESTAMPTZ,
+  finished_at    TIMESTAMPTZ,
+  heartbeat_at   TIMESTAMPTZ,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_load_jobs_state ON load_jobs (state) WHERE state IN ('queued','running');
+```
+
+`JobQueue._run`은 상태 전이 시점(`queued → running → done|failed|cancelled`)마다 `load_jobs`에 UPDATE를 보낸다. 진행률·current_stage는 1~5초 단위 throttle로 갱신해 부하 회피.
+
+#### lifespan 복구 (`api/app.py`)
+
+```python
+@asynccontextmanager
+async def lifespan(app):
+    # ... settings/engine 초기화 ...
+    async with engine.begin() as conn:
+        # 1) 잔존 RUNNING은 무조건 FAILED (재시작으로 끊긴 작업)
+        await conn.execute(text("""
+            UPDATE load_jobs
+               SET state = 'failed',
+                   error_message = COALESCE(error_message, '') || ' [recovered: process restart]',
+                   finished_at = now()
+             WHERE state = 'running'
+        """))
+        # 2) QUEUED는 payload 파일이 살아있으면 재큐잉, 아니면 FAILED
+        rows = (await conn.execute(text(
+            "SELECT job_id, kind, payload FROM load_jobs WHERE state = 'queued'"
+        ))).mappings().all()
+    for r in rows:
+        if _payload_still_resolvable(r["payload"]):
+            await queue.enqueue(r["kind"], r["payload"], job_id=r["job_id"])
+        else:
+            async with engine.begin() as conn:
+                await conn.execute(text(
+                    "UPDATE load_jobs SET state='failed', "
+                    "error_message='payload missing on restart', finished_at=now() "
+                    "WHERE job_id = :j"
+                ), {"j": r["job_id"]})
+    yield
+    # shutdown: 진행 중 작업 cancel
+```
+
+#### 다중 워커 환경 보강
+
+`uvicorn --workers N` (N>1)을 사용하면 in-process Semaphore가 워커마다 갈라진다. 사양의 기본은 `--workers 1`이지만, 워커가 늘어나는 운영 환경에 대비해 **DB 수준의 실행 직렬성**을 함께 둔다.
+
+```python
+# 워커가 작업을 실행하기 직전, DB advisory lock 한 자리만 점유 가능
+async with engine.begin() as conn:
+    locked = await conn.scalar(text(
+        "SELECT pg_try_advisory_lock(:slot)"
+    ), {"slot": ADVISORY_SLOT_LOAD_QUEUE})
+    if not locked:
+        return  # 다른 워커가 실행 중. 큐 픽업은 다음 폴링 사이클.
+    try:
+        # state='queued' 한 건 픽업
+        row = await conn.execute(text("""
+            SELECT job_id, kind, payload
+              FROM load_jobs
+             WHERE state = 'queued'
+             ORDER BY created_at
+             FOR UPDATE SKIP LOCKED
+             LIMIT 1
+        """))
+        # ... handler 실행 ...
+    finally:
+        await conn.execute(text(
+            "SELECT pg_advisory_unlock(:slot)"
+        ), {"slot": ADVISORY_SLOT_LOAD_QUEUE})
+```
+
+`pg_try_advisory_lock` + `FOR UPDATE SKIP LOCKED`의 이중 가드로 동일 작업이 두 워커에서 동시에 실행되는 케이스를 막는다. 단일 워커 환경에서는 advisory lock이 즉시 점유되어 비용은 거의 없다.
 
 ### 업로드 + 일괄 처리
 
