@@ -1,7 +1,0 @@
-python-kraddr-geo>=0.1.0
-fastapi>=0.124
-python-multipart>=0.0.20
-uvicorn[standard]>=0.38
-shapely>=2.0
-geopandas>=0.14
-pyproj>=3.6
