@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-22 갱신, by human)
+## 현재 진척도 (2026-05-23 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ master 브랜치를 문서·repo 설정만 남도록 정리
@@ -14,18 +14,19 @@
 - ✅ `dto/common.py`, `dto/address.py` 작성 — CRS 정규화, 불변 DTO, vworld 주소 구조 + 단위 테스트
 - ✅ 나머지 DTO(`geocode`, `reverse`, `search`, `zipcode`, `pobox`, `admin`) 구현
 - ✅ `data/juso/도로명주소 전자지도` 실제 SHP/DBF 파일 헤더·필드 검사 테스트 추가 (`강원특별자치도/51000`)
+- ✅ `infra/engine.py` async engine factory 구현 + 설정 전달 단위 테스트
+- ✅ PNU 산여부 매핑 helper, EPSG:5179 역지오코딩 SQL fragment, `load_jobs` 영속 상태 helper와 단위 테스트 추가
 - ⬜ DDL/Alembic 적용 (`sql/ddl/`, `alembic/`)
 - ⬜ `core/`, `infra/`, `client.py`, `api/`, `loaders/`, `cli/` 실제 기능 구현 (모두 `src/kraddr/geo/` 하위)
 - ⬜ 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-`docs/tasks.md#T-005`: `infra/engine.py` (async engine factory)를 작성하고 통합 테스트를 준비한다.
+`docs/tasks.md#T-006`: PostGIS 11개 마스터 + 보조/메타 테이블 DDL을 `sql/ddl/`과 `alembic/versions/0001_*.py`에 작성한다.
 
-- `docs/backend-package.md` §7.1을 기준으로 SQLAlchemy 2 async engine factory를 작성한다.
-- `postgresql://` DSN은 `postgresql+psycopg://`로 보정한다.
-- statement timeout, pool 설정, `orjson` serializer/deserializer를 `Settings`에서 읽는다.
-- Docker/PostGIS 통합 테스트가 어려우면 우선 engine construction 단위 테스트와 testcontainers skip 조건을 분리한다.
+- `docs/data-model.md` 기준으로 `load_jobs`, `idx_mv_geom5179`, `mv_geocode_target` 정의를 DDL에 반영한다.
+- PNU helper(`infra/pnu.py`)와 `load_jobs` SQL fragment(`infra/load_jobs.py`)의 규칙을 DDL/마이그레이션과 맞춘다.
+- Docker/PostGIS 통합 테스트가 어려우면 DDL idempotency와 SQL text 검증 단위 테스트를 먼저 분리한다.
 
 ## 작업 시작 전 확인할 것
 

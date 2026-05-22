@@ -6,7 +6,6 @@
 - (없음)
 
 ## 대기 (우선순위 순)
-- [ ] T-005 `infra/engine.py` (async engine factory) + 통합 테스트
 - [ ] T-006 PostGIS 11개 마스터 + 보조 테이블 DDL을 `sql/ddl/`과 `alembic/versions/0001_*.py`에 작성
 - [ ] T-007 `mv_geocode_target` MV 정의 + `REFRESH MATERIALIZED VIEW CONCURRENTLY` 통합 테스트
 - [ ] T-008 `infra/geocode_repo.py` 구현 + Fake repo 단위 테스트
@@ -29,6 +28,7 @@
 - [ ] T-025 `prometheus-client` 메트릭(외부 API 호출, 캐시 hit rate, 적재 작업)
 
 ## 완료
+- [x] T-005 `infra/engine.py` (async engine factory) + 단위 테스트 (2026-05-23)
 - [x] T-004 `dto/geocode.py`, `dto/reverse.py`, `dto/search.py`, `dto/zipcode.py`, `dto/pobox.py`, `dto/admin.py` 작성 (2026-05-23)
 - [x] T-003 `dto/common.py`, `dto/address.py` 작성 + 단위 테스트 (2026-05-22)
 - [x] T-002 `Settings` (pydantic-settings) + `.env.example` 작성 (2026-05-22)

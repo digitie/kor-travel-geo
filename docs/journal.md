@@ -127,6 +127,34 @@
 
 ---
 
+## 2026-05-23 (codex, 추가 구현)
+
+**작업**: 리뷰 반영 사항의 실제 코드 구현 — engine factory, PNU helper, 역지오코딩 SQL fragment, 적재 job 상태 helper와 촘촘한 단위 테스트 추가
+
+**변경 파일**:
+- 신규: `src/kraddr/geo/infra/engine.py`, `src/kraddr/geo/infra/pnu.py`, `src/kraddr/geo/infra/reverse_sql.py`, `src/kraddr/geo/infra/load_jobs.py`
+- 신규: `tests/unit/test_infra_engine.py`, `tests/unit/test_infra_pnu.py`, `tests/unit/test_infra_reverse_sql.py`, `tests/unit/test_infra_load_jobs.py`
+- 갱신: `docs/tasks.md`, `docs/resume.md`, `docs/journal.md`, `CHANGELOG.md`
+
+**결정**:
+- `infra/engine.py`는 `Settings.pg_dsn`이 이미 정규화된 값을 제공한다고 보고 중복 DSN 변환을 하지 않는다.
+- PNU 조립은 `mntn_yn` 원문 `0/1`을 PNU 토지구분코드 `1/2`로 변환하는 helper를 통과하게 한다.
+- 역지오코딩 SQL fragment는 입력 좌표만 CTE에서 EPSG:5179로 변환하고, 거리 조건과 KNN 정렬은 `ent_pt_5179` GiST 인덱스를 타도록 둔다.
+- 적재 job 재시작 복구 정책은 `RUNNING → FAILED`, 유효한 `PENDING → 재큐잉`, payload/checksum 불일치 `PENDING → FAILED`로 고정한다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 62 passed
+- `.venv/bin/ruff check .` → 통과
+- `.venv/bin/mypy src/kraddr/geo` → 통과
+- `.venv/bin/lint-imports` → Layered architecture kept
+
+**참고**:
+- 실제 PostgreSQL 연결 통합 테스트와 Alembic DDL은 T-006에서 이어서 구현한다.
+
+**다음**: T-006 — `sql/ddl/`, `alembic/versions/0001_*.py`에 PostGIS DDL 작성.
+
+---
+
 ## 2026-05-23 (codex)
 
 **작업**: 리뷰 의견 반영 — MV 갱신 전략, 공간 쿼리 단위, PNU 산여부 매핑, 적재 작업 영속 상태 사양 보강

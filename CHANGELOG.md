@@ -24,6 +24,7 @@
 - `docs/dev-environment.md`를 추가하고 시스템 GDAL(`libgdal-dev`) 설치 + `pip install "gdal==$(gdal-config --version)"` 절차를 ADR-008로 명시한다.
 - 우편번호 적재 정책을 ADR-009로 확정: epost OpenAPI 데이터셋 `15000302`의 `downloadKnd=1`(전체) ZIP을 분기 1회 받아 `postal_pobox`/`postal_bulk_delivery`를 TRUNCATE 후 INSERT 한다. 실시간 lookup API(`15056971`)는 도입하지 않는다.
 - geocode/reverse/search/zipcode/pobox/admin DTO와 단위 테스트를 추가하고, `data/juso/도로명주소 전자지도` 실제 SHP/DBF 파일을 여는 레이어 검사 테스트를 추가한다.
+- `infra/engine.py` async engine factory, PNU 산여부 매핑 helper, EPSG:5179 기반 역지오코딩 SQL fragment, 적재 job 영속 상태 helper와 단위 테스트를 추가한다.
 
 ### Removed
 - 동기 라이브러리 API, monorepo 내부 디버그 UI, `ogr2ogr` subprocess 호출 경로를 사양에서 제거한다.
