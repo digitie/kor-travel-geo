@@ -8,7 +8,7 @@
 |------|-----------|------|
 | 마스터 (11개) | `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`, `tl_scco_li`, `tl_kodis_bas`, `tl_sprd_manage`, `tl_sprd_intrvl`, `tl_sprd_rw`, `tl_spbd_eqb`, `tl_spbd_buld`, `tl_spbd_entrc` | 도로명주소 전자지도 원천 |
 | 보조 | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 (epost 다운로드) |
-| 메타 | `load_manifest`, `load_codes`, `geo_cache` | 적재 상태·MVM 매핑·외부 API 캐시 |
+| 메타 | `load_manifest`, `load_jobs`, `load_codes`, `geo_cache` | 적재 상태·작업 큐·MVM 매핑·외부 API 캐시 |
 | 평면화 | `mv_geocode_target` | 지오코딩 쿼리용 머티리얼라이즈드 뷰 |
 
 ## 11개 마스터 (도로명주소 전자지도)
@@ -98,10 +98,31 @@ WITH DATA;
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);
 CREATE INDEX idx_mv_road  ON mv_geocode_target (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
 CREATE INDEX idx_mv_jibun ON mv_geocode_target (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
+CREATE INDEX idx_mv_geom5179 ON mv_geocode_target USING GIST (ent_pt_5179);
 CREATE INDEX idx_mv_geom4326 ON mv_geocode_target USING GIST (ent_pt_4326);
 ```
 
-적재 후 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`. ANALYZE는 자동 통계만 의존하지 말고 명시 실행한다.
+평시 소량 증분 적재 후에는 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`를 사용한다. 분기 단위 전국 풀 적재처럼 재계산 비용이 큰 작업은 `mv_geocode_target_next`를 별도로 만들고 인덱스 생성과 `ANALYZE`를 끝낸 뒤, 짧은 트랜잭션에서 live/next 이름을 교체한다. 이 방식은 전체 I/O 자체를 없애지는 않지만 운영 조회와 경합하는 시간을 줄인다. swap 트랜잭션에는 `lock_timeout`을 짧게 두고, 인덱스 이름·권한·의존 객체를 함께 재설정한다.
+
+ANALYZE는 자동 통계만 의존하지 말고 명시 실행한다.
+
+공간 검색은 거리 단위가 meter인 EPSG:5179 컬럼을 우선 사용한다. 입력 좌표가 EPSG:4326이어도 바인딩 파라미터를 CTE에서 한 번만 EPSG:5179로 변환하고, 컬럼 쪽에는 `ST_Transform`을 걸지 않는다.
+
+```sql
+WITH target_pt AS (
+  SELECT ST_Transform(
+    ST_SetSRID(ST_MakePoint(:lon, :lat), :in_srid),
+    5179
+  ) AS geom
+)
+SELECT ...
+FROM mv_geocode_target t, target_pt p
+WHERE ST_DWithin(t.ent_pt_5179, p.geom, :radius_m)
+ORDER BY t.ent_pt_5179 <-> p.geom
+LIMIT :limit;
+```
+
+`ent_pt_4326`은 응답 좌표 생성과 지도 디버깅용으로 유지한다. EPSG:4326 geometry에 `radius_m`를 그대로 넣는 쿼리는 degree 단위로 계산되어 잘못된 결과를 낼 수 있으므로 금지한다.
 
 ## 보조 우편번호
 
@@ -161,6 +182,31 @@ CREATE TABLE load_manifest (
 );
 ```
 
+`load_manifest`는 성공한 적재의 watermark만 기록한다. 진행 중 작업 큐와 재시작 복구 상태는 별도 `load_jobs`에 둔다.
+
+### `load_jobs`
+
+```sql
+CREATE TABLE load_jobs (
+  job_id          UUID PRIMARY KEY,
+  kind            TEXT NOT NULL,
+  payload         JSONB NOT NULL,
+  state           TEXT NOT NULL CHECK (state IN ('PENDING','RUNNING','SUCCESS','FAILED','CANCELLED')),
+  progress        NUMERIC(5,4) NOT NULL DEFAULT 0,
+  current_stage   TEXT,
+  error_message   TEXT,
+  source_checksum TEXT,
+  heartbeat_at    TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at      TIMESTAMPTZ,
+  finished_at     TIMESTAMPTZ,
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_load_jobs_state_created ON load_jobs (state, created_at);
+```
+
+애플리케이션 시동 시 `RUNNING` 작업은 `FAILED`로 마크한다. `PENDING` 작업은 payload의 업로드 파일이 남아 있고 checksum이 맞으면 재큐잉하고, 파일이 없거나 checksum이 맞지 않으면 `FAILED`로 마크한다. 실제 실행 직렬성은 인메모리 `Semaphore(1)`에만 의존하지 말고 PostgreSQL advisory lock 또는 `SELECT ... FOR UPDATE SKIP LOCKED`로 보강한다.
+
 ### `load_codes` (MVM_RES_CD 매핑)
 
 코드 매핑을 settings/DB에서 읽어 핫픽스를 쉽게 한다(SKILL.md §4-6, ADR-006 후속).
@@ -216,3 +262,13 @@ PK 매핑은 `docs/backend-package.md` §9.3의 `PK_MAP` 상수와 일치.
 - **변환**: `ST_Transform(geom, target_srid)`. 응답에서 `(lon, lat)`는 `(ST_X, ST_Y)` 순서 (SKILL.md §4-5).
 
 `mv_geocode_target`은 두 좌표계(`ent_pt_5179`, `ent_pt_4326`)를 미리 가지고 있어 응답 시 변환 비용을 줄인다.
+
+## PNU 산여부 매핑
+
+`tl_spbd_buld.mntn_yn` 원문은 대지 `0`, 산 `1`이다. 19자리 표준 PNU를 조립할 때 11번째 토지구분코드는 원문 값을 그대로 쓰지 않고 일반대지 `1`, 산 `2`로 변환한다.
+
+```python
+land_type = "2" if raw_mntn_yn == "1" else "1"
+```
+
+이 변환은 지번 주소 파싱 결과를 표현하는 core 계층보다, PNU를 실제로 조립하는 infra helper 또는 generated column 쪽에 둔다.

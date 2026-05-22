@@ -127,6 +127,30 @@
 
 ---
 
+## 2026-05-23 (codex)
+
+**작업**: 리뷰 의견 반영 — MV 갱신 전략, 공간 쿼리 단위, PNU 산여부 매핑, 적재 작업 영속 상태 사양 보강
+
+**변경 파일**:
+- 갱신: `docs/data-model.md`, `docs/backend-package.md`, `docs/reverse-geocoding.md`, `docs/address-db-schema.md`, `docs/decisions.md`
+
+**결정**:
+- 평시 증분 적재는 `REFRESH MATERIALIZED VIEW CONCURRENTLY`를 유지하되, 전국 풀 적재는 shadow MV/table 생성 후 짧은 트랜잭션 swap으로 운영 조회와 경합하는 시간을 줄인다.
+- 반경 검색과 최근접 검색은 EPSG:5179 geometry에서 수행한다. EPSG:4326 geometry에 meter 반경을 직접 넣지 않고, 입력 파라미터만 CTE에서 한 번 변환한다.
+- 표준 PNU 조립 시 `mntn_yn` 원문 `0/1`을 그대로 쓰지 않고 PNU 토지구분코드 `1/2`로 변환한다.
+- `load_manifest`는 성공한 적재 watermark로만 두고, 작업 큐 상태는 `load_jobs`에 영속화한다(ADR-016).
+
+**검증**:
+- 문서 변경만 수행. 코드 테스트는 실행하지 않음.
+
+**참고**:
+- 작업 전 `git pull --ff-only origin codex/t004-dtos-juso-map`로 PR #5 브랜치를 원격과 동기화했다.
+- 기존 untracked `artifacts/`, `web/` 디렉터리는 이번 작업 범위가 아니므로 건드리지 않았다.
+
+**다음**: T-006/T-007 구현 시 `load_jobs`, `idx_mv_geom5179`, shadow MV swap 전략을 DDL과 통합 테스트에 반영.
+
+---
+
 ## 2026-05-22 (codex)
 
 **작업**: T-001~T-003 구현 — Python 패키지 스캐폴드, 설정, 공통/주소 DTO와 단위 테스트 추가

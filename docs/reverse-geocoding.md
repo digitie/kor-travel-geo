@@ -19,8 +19,8 @@ class ReverseInput(BaseModel):
 
 ## 흐름
 
-1. 입력 좌표를 EPSG:5179 WKT로 변환은 repo 내부에서 `ST_Transform`으로 처리. core는 좌표값만 넘긴다.
-2. `repo.nearest_entrance(point_5179_wkt=..., limit=1)` — `tl_spbd_entrc`의 GiST 인덱스로 최근접 출입구 1개.
+1. 입력 좌표를 EPSG:5179 geometry로 변환은 repo 내부에서 CTE로 한 번만 처리한다. core는 좌표값만 넘긴다.
+2. `repo.nearest_entrance(point_5179=..., limit=1)` — `tl_spbd_entrc` 또는 `mv_geocode_target.ent_pt_5179`의 GiST 인덱스로 최근접 출입구 1개.
 3. `near["dist_m"] <= inp.radius_m`이면 **출입구 hit** → 도로명/지번 둘 다 만들 수 있음.
    - 우편번호: `near["zip_no"]`가 있으면 `(zip_no, "building_bsi_zon_no")`. 없고 `inp.zipcode`면 `repo.zip_at(...)`로 4단계 fallback.
    - `inp.type ∈ {"both","road"}`이면 도로명 `ReverseItem` 생성 (`level5=road_nm`, `detail=본번-부번`, `x_extension.matched="entrance"`).
@@ -30,7 +30,7 @@ class ReverseInput(BaseModel):
 
 ## 우편번호 lookup 4단계 우선순위
 
-`repo.zip_at(point_5179_wkt=...)`는 `ZipSource` enum과 함께 `(zip_no, zip_source)`를 반환한다:
+`repo.zip_at(point_5179=...)`는 `ZipSource` enum과 함께 `(zip_no, zip_source)`를 반환한다:
 
 1. **`building_bsi_zon_no`** — 출입구의 건물 BSI에 우편번호가 들어있는 경우 (가장 신뢰도 높음)
 2. **`bulk_delivery`** — `postal_bulk_delivery`에서 `bd_mgt_sn` 매핑이 있는 경우
@@ -69,6 +69,7 @@ GET /v1/address/reverse?point=127.028601,37.500344&crs=EPSG:4326&type=both&zipco
 ## 알려진 함정
 
 - **좌표 순서**: 외부 인터페이스는 모두 `(lon, lat)`. `(lat, lon)`을 받으면 한국 범위 검증에서 즉시 실패하며, 범위에 우연히 들어맞으면 잘못된 위치를 반환한다(SKILL.md §4-5).
+- **거리 단위**: 반경 검색은 EPSG:5179 geometry에서 수행한다. EPSG:4326 geometry에 `radius_m`를 그대로 넣으면 degree 단위로 계산되어 잘못된 결과가 나온다. SQL에서는 입력 파라미터를 CTE에서 한 번만 `ST_Transform(..., 5179)`하고 컬럼 쪽에는 변환 함수를 걸지 않는다.
 - **`radius_m`이 너무 크면** 노이즈가 늘어 인접 건물이 hit될 수 있다. 기본 200m 권장.
 - **`type="road"` 단독 사용**: 출입구 hit 실패 시 동 폴리곤 fallback은 지번만 만들므로 빈 결과로 보일 수 있다.
 - **외부 API 폴백 미적용**: 현재 사양에서 `/v1/address/reverse`는 로컬 결과만 반환한다. vworld의 역지오코딩 폴백이 필요해지면 새 ADR로 결정.

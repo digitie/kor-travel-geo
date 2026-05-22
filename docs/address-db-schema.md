@@ -10,7 +10,7 @@
 |------|-----------|------|
 | 마스터 (11개) | `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`, `tl_scco_li`, `tl_kodis_bas`, `tl_sprd_manage`, `tl_sprd_intrvl`, `tl_sprd_rw`, `tl_spbd_eqb`, `tl_spbd_buld`, `tl_spbd_entrc` | 도로명주소 전자지도 원천 |
 | 보조 | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 (epost 다운로드) |
-| 메타 | `load_manifest`, `load_codes`, `geo_cache` | 적재 상태, MVM_RES_CD 매핑, 외부 API 캐시 |
+| 메타 | `load_manifest`, `load_jobs`, `load_codes`, `geo_cache` | 적재 상태, 작업 큐, MVM_RES_CD 매핑, 외부 API 캐시 |
 | 평면화 | `mv_geocode_target` | 지오코딩 쿼리용 MV (도로/지번 단일 lookup) |
 
 ## 좌표계
@@ -38,16 +38,20 @@
 - 도로명 매칭: `tl_spbd_buld(rncode_full, buld_mnnm, buld_slno, buld_se_cd)`
 - 지번 매칭: `tl_spbd_buld(bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno)`
 - 우편번호 polygon: `tl_kodis_bas USING GIST(geom)`
-- 출입구 nearest: `tl_spbd_entrc USING GIST(geom)`
+- 출입구 nearest: `tl_spbd_entrc USING GIST(geom)`, `mv_geocode_target USING GIST(ent_pt_5179)`
 - 도로명 trigram fuzzy: `tl_sprd_manage USING GIN(rn_nrm gin_trgm_ops)` (`pg_trgm`)
 
 `pg_trgm.similarity_threshold`는 트랜잭션 단위로만 `SET LOCAL` (SKILL.md §4-3).
 
 ## `mv_geocode_target`
 
-건물·출입구·도로·동을 평면화한 머티리얼라이즈드 뷰. 지오코딩 라우터는 본 MV 단일 lookup으로 응답한다. 적재 후 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target` + `ANALYZE`.
+건물·출입구·도로·동을 평면화한 머티리얼라이즈드 뷰. 지오코딩 라우터는 본 MV 단일 lookup으로 응답한다. 평시 증분 적재 후에는 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target` + `ANALYZE`를 사용하고, 전국 풀 적재 후에는 shadow MV/table을 먼저 구성한 뒤 짧은 트랜잭션에서 swap한다.
 
 전체 DDL과 추가 인덱스는 `docs/data-model.md`를 본다.
+
+## PNU
+
+표준 PNU 조립 시 `tl_spbd_buld.mntn_yn` 원문을 그대로 쓰지 않는다. 원문은 대지 `0`, 산 `1`이고, PNU 11번째 토지구분코드는 일반대지 `1`, 산 `2`다.
 
 ## Alembic
 
