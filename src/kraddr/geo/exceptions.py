@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-class AddrKrError(Exception):
+class KraddrGeoError(Exception):
     """Base exception carrying a stable error code and HTTP status."""
 
     code = "E0000"
@@ -24,7 +24,7 @@ class AddrKrError(Exception):
         super().__init__(self.message)
 
 
-class InvalidInputError(AddrKrError):
+class InvalidInputError(KraddrGeoError):
     code = "E0100"
     http_status = 400
 
@@ -37,31 +37,31 @@ class InvalidCoordinateError(InvalidInputError):
     code = "E0102"
 
 
-class RateLimitError(AddrKrError):
+class RateLimitError(KraddrGeoError):
     code = "E0200"
     http_status = 429
 
 
-class NotFoundError(AddrKrError):
+class NotFoundError(KraddrGeoError):
     code = "E0404"
     http_status = 404
 
 
-class DatabaseError(AddrKrError):
+class DatabaseError(KraddrGeoError):
     code = "E0500"
     http_status = 503
 
 
-class ExternalApiError(AddrKrError):
+class ExternalApiError(KraddrGeoError):
     code = "E0501"
     http_status = 502
 
 
-class LoaderError(AddrKrError):
+class LoaderError(KraddrGeoError):
     code = "E0502"
     http_status = 500
 
 
-class ConfigError(AddrKrError):
+class ConfigError(KraddrGeoError):
     code = "E0503"
     http_status = 500

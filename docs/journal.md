@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (codex, 리뷰 2차 반영)
+
+**작업**: PR 리뷰 항목 5~10 반영 — DTO 필수성, validator 범위, CLI exit, ruff ignore, 예외명, namespace package 정리
+
+**변경 파일**:
+- 갱신: `src/kraddr/geo/dto/address.py`, `src/kraddr/geo/cli/main.py`, `src/kraddr/geo/exceptions.py`, `pyproject.toml`
+- 갱신: `tests/unit/test_dto_address.py`, `tests/unit/test_exceptions.py`
+- 갱신: `docs/backend-package.md`, `docs/decisions.md`
+- 삭제: `src/kraddr/__init__.py`
+
+**결정**:
+- `RefinedAddress.structure`는 사양대로 필수 `AddressStructure`로 둔다.
+- 빈 문자열 → `None` 변환 validator는 optional address fields에만 적용하고, `level0`은 빈 문자열을 명시적으로 거부한다.
+- `typer.Exit`는 인스턴스(`raise typer.Exit()`)로 raise한다.
+- `N815` ruff ignore는 vworld 호환 필드가 있는 `dto/address.py`에만 한정한다.
+- base 예외명은 `KraddrGeoError`로 확정한다(ADR-014).
+- `kraddr` parent는 PEP 420 implicit namespace package로 둔다(ADR-015).
+
+**다음**: 기존 다음 작업 유지 — T-004 나머지 DTO 작성.
+
+---
+
 ## 2026-05-23 (codex)
 
 **작업**: PR 리뷰 반영 — 설정 기본값을 사양과 맞추고 README에 법적·데이터 사용 한계 추가

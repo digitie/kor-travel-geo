@@ -222,3 +222,55 @@ PostgreSQL 16 + PostGIS 3.4를 1차 저장소로 채택한다. SpatiaLite 기반
 
 ### 후속
 - (open) 운영 환경별 네트워크 정책 문서 정리
+
+---
+
+## ADR-014: 기본 예외명은 `KraddrGeoError`로 둔다
+
+- 상태: accepted
+- 날짜: 2026-05-23
+- 결정자: codex
+
+### 컨텍스트
+초기 사양에는 base 예외명이 `AddrKrError`로 적혀 있었다. 그러나 현재 패키지 식별자는 `kraddr.geo`로 확정되었고, 아직 공개 릴리스 전이라 외부 catch 코드와의 호환성 부담이 낮다.
+
+### 결정
+base 예외명은 `KraddrGeoError`로 둔다. 장기 호환 alias는 만들지 않는다.
+
+### 근거
+- 패키지명과 public API 이름이 일관된다.
+- 공개 릴리스 전 변경이므로 임시 alias 없이 정정하는 편이 단순하다.
+- downstream이 catch할 안정 base class 이름을 초기에 확정한다.
+
+### 결과(긍정)
+- 예외 계층이 `kraddr.geo` 식별자와 맞는다.
+- `AddrKrError`/`KraddrGeoError` 혼용을 피한다.
+
+### 결과(부정)
+- 이전 사양 초안을 기준으로 코드를 작성한 사용자가 있다면 import를 수정해야 한다.
+
+---
+
+## ADR-015: `kraddr`는 implicit namespace package로 둔다
+
+- 상태: accepted
+- 날짜: 2026-05-23
+- 결정자: codex
+
+### 컨텍스트
+이 저장소는 `kraddr.geo` 서브패키지를 제공한다. 향후 같은 환경에 `kraddr.tour` 같은 다른 `kraddr.*` 패키지가 설치될 수 있다. `src/kraddr/__init__.py`를 두면 PEP 420 namespace 병합을 막아 충돌 가능성이 생긴다.
+
+### 결정
+`src/kraddr/__init__.py`를 두지 않고 `kraddr`를 PEP 420 implicit namespace package로 둔다.
+
+### 근거
+- 여러 배포 패키지가 `kraddr.*` 하위 이름을 공유할 수 있다.
+- parent package 소유권을 이 저장소가 독점하지 않는다.
+- setuptools는 namespace package discovery(`namespaces = true`)로 `kraddr.geo`를 패키징한다.
+
+### 결과(긍정)
+- 향후 `kraddr.*` 패키지와 같은 Python 환경에서 공존하기 쉽다.
+- parent namespace에 불필요한 public API가 생기지 않는다.
+
+### 결과(부정)
+- 도구 설정에서 namespace package를 명시적으로 고려해야 한다.

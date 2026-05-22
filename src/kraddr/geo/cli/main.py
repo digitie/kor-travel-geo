@@ -15,4 +15,4 @@ def main(
 ) -> None:
     if version:
         typer.echo(__version__)
-        raise typer.Exit
+        raise typer.Exit()

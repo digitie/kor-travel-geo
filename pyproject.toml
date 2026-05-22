@@ -67,6 +67,7 @@ kraddr-geo = "kraddr.geo.cli.main:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = true
 
 [tool.setuptools.package-data]
 "kraddr.geo" = ["py.typed"]
@@ -79,6 +80,8 @@ pythonpath = ["src"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+explicit_package_bases = true
+mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [tool.ruff]
@@ -89,7 +92,7 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TCH", "RUF", "ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/kraddr/geo/dto/*.py" = ["N815"]
+"src/kraddr/geo/dto/address.py" = ["N815"]
 
 [tool.importlinter]
 root_package = "kraddr"
