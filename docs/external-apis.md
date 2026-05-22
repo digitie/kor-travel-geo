@@ -1,15 +1,15 @@
 # 외부 REST API 키 발급 및 사용
 
-본 문서는 `addr-kr`이 호출하는 외부 OpenAPI 4종(vworld, juso, epost, kakao maps)의 발급 절차, 환경변수 매핑, 호출 예시, 정책을 한 자리에 모은다. 첨부 사양서 §13.3을 기준으로 정리했다.
+본 문서는 `kraddr-geo`이 호출하는 외부 OpenAPI 4종(vworld, juso, epost, kakao maps)의 발급 절차, 환경변수 매핑, 호출 예시, 정책을 한 자리에 모은다. 첨부 사양서 §13.3을 기준으로 정리했다.
 
 ## 한눈에
 
 | 서비스 | 발급처 | 용도 | 환경변수 | 키 노출 위치 |
 |--------|--------|------|----------|--------------|
-| vworld OpenAPI | vworld.kr | 지오코딩 폴백, 통합 검색, WMS/WMTS | `ADDR_KR_VWORLD_API_KEY` | 서버측 |
-| juso 검색 | business.juso.go.kr | 도로명/지번 주소 검색 폴백 | `ADDR_KR_JUSO_API_KEY` | 서버측 |
-| juso 좌표 | business.juso.go.kr (별도 신청 가능) | 주소 → 좌표 변환 폴백 | `ADDR_KR_JUSO_COORD_API_KEY` (없으면 검색 키 재사용) | 서버측 |
-| epost 우편번호 다운로드 | data.go.kr (공공데이터포털) | 사서함·다량배달처 ZIP 자동 다운로드 | `ADDR_KR_EPOST_API_KEY` | 서버측 (로더 cron) |
+| vworld OpenAPI | vworld.kr | 지오코딩 폴백, 통합 검색, WMS/WMTS | `KRADDR_GEO_VWORLD_API_KEY` | 서버측 |
+| juso 검색 | business.juso.go.kr | 도로명/지번 주소 검색 폴백 | `KRADDR_GEO_JUSO_API_KEY` | 서버측 |
+| juso 좌표 | business.juso.go.kr (별도 신청 가능) | 주소 → 좌표 변환 폴백 | `KRADDR_GEO_JUSO_COORD_API_KEY` (없으면 검색 키 재사용) | 서버측 |
+| epost 우편번호 다운로드 | data.go.kr (공공데이터포털) | 사서함·다량배달처 ZIP 자동 다운로드 | `KRADDR_GEO_EPOST_API_KEY` | 서버측 (로더 cron) |
 | Kakao Maps JS | developers.kakao.com | 프론트엔드 지도 | `NEXT_PUBLIC_KAKAO_JS_KEY` | 브라우저 (도메인 제한이 보안) |
 
 모든 백엔드 키는 `Settings`에서 `SecretStr`로 저장되어 로그·예외 메시지에 노출되지 않는다. 운영에서는 `.env` 권한 600 또는 systemd `EnvironmentFile`, 그것도 안 되면 vault(HashiCorp Vault / sops / age) 사용. Git에 평문으로 커밋 금지 — `pre-commit`에 `detect-secrets` 또는 `gitleaks` 추가 권장.
@@ -26,7 +26,7 @@
 
 ```python
 import httpx
-from addr_kr.settings import get_settings
+from kraddr.geo.settings import get_settings
 
 settings = get_settings()
 async with httpx.AsyncClient(timeout=5.0) as cx:
@@ -40,7 +40,7 @@ async with httpx.AsyncClient(timeout=5.0) as cx:
         "format":  "json",
         "errorformat": "json",
         "key":     settings.vworld_api_key.get_secret_value(),
-    }, headers={"Referer": "https://addr-kr.your-domain.local"})
+    }, headers={"Referer": "https://kraddr-geo.your-domain.local"})
     data = r.json()
     # response.status: 'OK' / 'NOT_FOUND' / 'ERROR'
 ```
@@ -127,20 +127,20 @@ async def download_zip(url: str, dst: str) -> None:
 
 ```bash
 # .env (백엔드)
-ADDR_KR_PG_DSN=postgresql+psycopg://addr:CHANGEME@localhost:5432/addr_kr
-ADDR_KR_LOG_FORMAT=json
+KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:CHANGEME@localhost:5432/kraddr.geo
+KRADDR_GEO_LOG_FORMAT=json
 
 # 외부 API (모두 옵션. 없으면 폴백·자동다운로드 비활성화)
-ADDR_KR_VWORLD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-ADDR_KR_JUSO_API_KEY=devU01TX0FVVEgyMDIxMDExNTAxNTAxMDExMTAzMDM=
-ADDR_KR_JUSO_COORD_API_KEY=                # 비워두면 위 키 사용
-ADDR_KR_EPOST_API_KEY=urlDecoded+ServiceKey+Value==
+KRADDR_GEO_VWORLD_API_KEY=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+KRADDR_GEO_JUSO_API_KEY=devU01TX0FVVEgyMDIxMDExNTAxNTAxMDExMTAzMDM=
+KRADDR_GEO_JUSO_COORD_API_KEY=                # 비워두면 위 키 사용
+KRADDR_GEO_EPOST_API_KEY=urlDecoded+ServiceKey+Value==
 ```
 
 ```bash
-# addr-kr-ui/.env.local
+# kraddr-geo-ui/.env.local
 NEXT_PUBLIC_KAKAO_JS_KEY=your_kakao_javascript_app_key
-ADDR_KR_API_INTERNAL_URL=http://localhost:8000
+KRADDR_GEO_API_INTERNAL_URL=http://localhost:8000
 NEXT_PUBLIC_API_BASE_URL=/api/proxy
 ```
 

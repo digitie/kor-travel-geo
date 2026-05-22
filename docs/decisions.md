@@ -1,6 +1,6 @@
 # DECISIONS — Architecture Decision Records
 
-본 문서는 `addr-kr` / `addr-kr-ui` 프로젝트의 의사결정을 시간순으로 누적한다. 결정이 뒤집힐 때도 이전 기록은 지우지 않고 `superseded by ADR-XXX`로 표시한다.
+본 문서는 `kraddr-geo` / `kraddr-geo-ui` 프로젝트의 의사결정을 시간순으로 누적한다. 결정이 뒤집힐 때도 이전 기록은 지우지 않고 `superseded by ADR-XXX`로 표시한다.
 
 ## ADR 표준 형식
 
@@ -96,7 +96,7 @@ PostgreSQL 16 + PostGIS 3.4를 1차 저장소로 채택한다. SpatiaLite 기반
 - 결정자: human
 
 ### 컨텍스트
-`addr-kr`이 vworld의 드롭인 대체로 쓰일 수 있어야 한다는 요구가 있다. 동시에 자체 부가 정보(`bd_mgt_sn`, `zip_source`, 신뢰도 등)도 노출해야 한다.
+`kraddr-geo`이 vworld의 드롭인 대체로 쓰일 수 있어야 한다는 요구가 있다. 동시에 자체 부가 정보(`bd_mgt_sn`, `zip_source`, 신뢰도 등)도 노출해야 한다.
 
 ### 결정
 응답 최상위 키(`service`, `status`, `input`, `refined`, `result`)는 vworld 그대로 따른다. 자체 확장은 `x_extension` 키 하나에 모은다.
@@ -203,7 +203,7 @@ PostgreSQL 16 + PostGIS 3.4를 1차 저장소로 채택한다. SpatiaLite 기반
 - 결정자: human
 
 ### 컨텍스트
-`addr-kr-ui`는 운영자·개발자용 디버깅/관리 도구다. 사용자 대상 서비스가 아니다.
+`kraddr-geo-ui`는 운영자·개발자용 디버깅/관리 도구다. 사용자 대상 서비스가 아니다.
 
 ### 결정
 이 UI는 외부 인터넷에 노출하지 않고 사내망/VPN 뒤에서만 접근 가능하도록 배포한다. NextAuth, 미들웨어 가드, `X-Admin-Key` 헤더, 세션 쿠키 등 애플리케이션 레벨 인증을 두지 않는다. 보안 경계는 네트워크 레벨(nginx IP allowlist 또는 사내 SSO 게이트웨이)에서 만든다.

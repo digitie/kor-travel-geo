@@ -1,6 +1,6 @@
 # 역지오코딩
 
-`addr-kr`의 역지오코딩은 `core.reverse_geocoder.reverse_geocode()`와 `infra.reverse_repo.ReverseRepository`가 담당한다. 라이브러리 진입점은 `AsyncAddressClient.reverse_geocode(lon, lat, ...)`이며 REST 엔드포인트는 `GET /v1/address/reverse`다.
+`kraddr-geo`의 역지오코딩은 `core.reverse_geocoder.reverse_geocode()`와 `infra.reverse_repo.ReverseRepository`가 담당한다. 라이브러리 진입점은 `AsyncAddressClient.reverse_geocode(lon, lat, ...)`이며 REST 엔드포인트는 `GET /v1/address/reverse`다.
 
 > 이전(v1) SpatiaLite 기반 `SpatialiteAddressStore.get_address()`는 `v1` 브랜치에 보존되어 있다. master는 PostgreSQL + PostGIS / `AsyncAddressClient` 기준만 다룬다(ADR-001, ADR-002).
 
@@ -43,7 +43,7 @@ class ReverseInput(BaseModel):
 
 ```python
 import asyncio
-from addr_kr import AsyncAddressClient
+from kraddr.geo import AsyncAddressClient
 
 async def main():
     async with AsyncAddressClient() as client:
@@ -64,7 +64,7 @@ GET /v1/address/reverse?point=127.028601,37.500344&crs=EPSG:4326&type=both&zipco
 
 ## 디버깅 UI
 
-`addr-kr-ui`의 `/debug/reverse` 페이지에서 Kakao 지도를 클릭하면 (lon, lat)이 즉시 `/v1/address/reverse`로 전송되어 응답을 JSON 뷰어와 `ZipSourceBadge`로 시각화한다. EXPLAIN으로 인덱스 사용을 확인하려면 `/debug/explain`에서 raw SQL을 붙여 실행한다.
+`kraddr-geo-ui`의 `/debug/reverse` 페이지에서 Kakao 지도를 클릭하면 (lon, lat)이 즉시 `/v1/address/reverse`로 전송되어 응답을 JSON 뷰어와 `ZipSourceBadge`로 시각화한다. EXPLAIN으로 인덱스 사용을 확인하려면 `/debug/explain`에서 raw SQL을 붙여 실행한다.
 
 ## 알려진 함정
 

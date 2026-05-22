@@ -15,16 +15,19 @@
 
 기존 SpatiaLite + SQLite 기반 문서와 첨부 사양(PostgreSQL + PostGIS 기반)이 거의 모든 영역에서 충돌한다. 첨부파일을 우선해 master 문서를 새 사양으로 재구성했다.
 
-| 영역 | 이전 (master, v1) | 신규 (첨부 사양, master) |
-|------|-------------------|--------------------------|
-| 패키지명 | `kraddr.geo` | `addr-kr` (백엔드) + `addr-kr-ui` (프론트엔드) |
+| 영역 | 이전 (v1) | 신규 (master, 첨부 사양 + 사용자 추가 명시) |
+|------|-----------|---------------------------------------------|
+| GitHub/PyPI 이름 | `python-kraddr-geo` | 동일 (`python-kraddr-geo`) |
+| Python 패키지 | `kraddr.geo` | 동일 (`kraddr.geo`) |
+| 백엔드 CLI / env / DB | `kraddr.geo` 라이브러리 직접 사용 | CLI `kraddr-geo`, env `KRADDR_GEO_*`, DB `kraddr_geo` |
+| 프론트엔드 | monorepo `debug-ui/` | 별도 Node.js 패키지 `kraddr-geo-ui` |
 | 저장소 | SQLite + SpatiaLite | PostgreSQL 16 + PostGIS 3.4 |
 | 라이브러리 진입점 | 동기 `SpatialiteAddressStore` (+ async 보조) | async-only `AsyncAddressClient` (ADR-002) |
 | 응답 구조 | 자체 DTO | vworld 호환 + `x_extension` (ADR-003) |
 | ORM | SQLAlchemy + 일반 model | SQLAlchemy 2 async + raw SQL repository (ADR-004) |
 | 로더 | `ogr2ogr` subprocess | GDAL Python binding(in-process), CP949 명시, 진행률 callback (ADR-005) |
 | 증분 적재 | 매니페스트 부분 지원 | `MVM_RES_CD` 기반 INSERT/UPDATE/DELETE 머지 |
-| UI | monorepo `debug-ui/` (FastAPI + Next.js) | 별도 Node.js 패키지 `addr-kr-ui` (Next.js 14 + shadcn/ui + Kakao Maps) |
+| UI | monorepo `debug-ui/` (FastAPI + Next.js) | 별도 Node.js 패키지 `kraddr-geo-ui` (Next.js 14 + shadcn/ui + Kakao Maps) |
 | UI 인증 | 단순 노출 | 내부망 전용, 애플리케이션 인증 없음 (ADR-013) |
 | 적재 워크플로 | 단일 폼 | 2단계(업로드 완료 → 일괄 처리), `Semaphore(1)` 직렬 큐 (ADR-006) |
 
@@ -52,10 +55,10 @@
 | 파일 | 갱신 요지 |
 |------|----------|
 | `AGENTS.md` | 새 패키지/계층/DO NOT 룰 반영, 신규 문서로의 진입점 추가 |
-| `README.md` | `addr-kr` 빠른 시작, 진입점, 디렉토리 한 줄 설명, ADR 요약, 문서 지도 |
+| `README.md` | `kraddr-geo` 빠른 시작, 진입점, 디렉토리 한 줄 설명, ADR 요약, 문서 지도 |
 | `docs/address-db-schema.md` | PostgreSQL + PostGIS 11개 마스터 + 보조 + MV 요약. 세부는 data-model로 위임 |
 | `docs/code-guide-for-beginners.md` | 새 디렉토리(`dto/core/infra/client/api/cli`), 프론트엔드 별도 패키지, 작업 사이클 |
-| `docs/geocoding-readiness.md` | PostgreSQL/PostGIS readiness 체크리스트, GDAL/CP949 함정, `addr-kr validate` |
+| `docs/geocoding-readiness.md` | PostgreSQL/PostGIS readiness 체크리스트, GDAL/CP949 함정, `kraddr-geo validate` |
 | `docs/reverse-geocoding.md` | `AsyncAddressClient.reverse_geocode`, ReverseRepo Protocol, 출입구 hit + 동 polygon fallback, ZipSource 4단계 |
 | `docs/spatialite-vworld-implementation.md` | 파일명만 유지, 내용은 PostgreSQL + PostGIS / vworld 호환 구현으로 전환 (ADR-001 참조) |
 
@@ -64,6 +67,14 @@
 | 파일 | 역할 |
 |------|------|
 | `docs/reflection-summary.md` | 본 문서 — 사양 첨부파일 반영 결과 요약 |
+
+## 사용자 추가 명시 (이후 반영)
+
+다음 항목은 첨부 사양서에 없었지만 별도 지시로 master에 명시되었다:
+
+- **개발 환경**: PC 개발은 WSL의 ext4 위에서 진행하고 작업 완료 시 NTFS의 프로젝트 디렉토리로 카피한다. `AGENTS.md`, `SKILL.md`, `docs/architecture.md`에 정책 섹션이 들어간다.
+- **데이터 위치**: 도로명주소 ZIP/SHP, postal TXT 등은 NTFS의 프로젝트 디렉토리 `data/` 아래에 둔다. ext4 작업 디렉토리에는 심볼릭 링크 또는 절대경로로 참조한다. 테스트도 NTFS 측 `data/`를 reference로 삼는다.
+- **식별자 통일**: GitHub/PyPI = `python-kraddr-geo`, Python import = `kraddr.geo`, CLI = `kraddr-geo`, env prefix = `KRADDR_GEO_`, PostgreSQL DB = `kraddr_geo`, 프론트엔드 패키지 = `kraddr-geo-ui`. `AGENTS.md`/`SKILL.md`의 식별자 표에 기록되어 혼동을 막는다.
 
 ## 첨부 사양에서 다루지 않은 항목 (master에 남긴 결정)
 

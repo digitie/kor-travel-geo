@@ -1,19 +1,39 @@
-# addr-kr
+# python-kraddr-geo
 
-`addr-kr`은 도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**다. vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 더한다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`addr-kr-ui`](docs/frontend-package.md)로 운영한다.
+GitHub 저장소 이름은 `python-kraddr-geo`, Python 패키지는 `kraddr.geo`다. 도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**이며, vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 더한다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kraddr-geo-ui`](docs/frontend-package.md)로 운영한다.
 
-> **현재 상태**: master 브랜치는 신규 사양 문서만 포함하며 코드 구현은 아직 시작 전이다. 이전 SpatiaLite 기반 구현(`kraddr.geo`)은 `v1` 브랜치에 보존되어 있다(ADR-001).
+> **현재 상태**: master 브랜치는 신규 사양 문서만 포함하며 코드 구현은 아직 시작 전이다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있다(ADR-001).
 
 ## 문서 언어
 
 이 저장소의 Markdown/RST 문서는 한국어로 작성한다. 공식 API 필드명, 코드 식별자, 명령어, URL, 패키지명처럼 그대로 보존해야 하는 값만 원문을 유지한다.
 
+## 개발 환경 (PC, WSL)
+
+PC 개발은 **WSL의 ext4 파일시스템** 위에서 진행한다. NTFS 마운트(`/mnt/<drive>/...`) 위에서 직접 `git`/`pip`/`uvicorn`을 실행하지 않는다 — 파일 권한·inotify·심볼릭 링크·대량 I/O 성능에서 모두 손해를 본다.
+
+```
+ext4 (개발):  ~/dev/python-kraddr-geo/           ← 모든 코드/가상환경/테스트
+NTFS (배포):  /mnt/<drive>/projects/python-kraddr-geo/   ← 작업 완료 후 카피
+```
+
+- 작업이 완료되면 ext4 → NTFS로 카피하여 Windows에서도 접근 가능하게 둔다.
+- **데이터(`data/`)는 NTFS의 프로젝트 디렉토리 아래에 둔다**. 도로명주소 전자지도 ZIP/SHP, 사서함/다량배달처 TXT, 외부 API 캐시 dump 등 대용량 자료는 모두 `data/` 하위에 정리한다.
+- 테스트(단위·통합·e2e) 실행 시 데이터 경로는 NTFS의 `data/`를 참조한다. WSL에서는 `/mnt/<drive>/projects/python-kraddr-geo/data/...` 경로로 접근한다.
+- ext4 작업 디렉토리에는 `data/`를 **복사하지 않는다**. 필요하면 `data` → `/mnt/.../python-kraddr-geo/data` 심볼릭 링크를 둔다(`ln -s /mnt/d/projects/python-kraddr-geo/data data`).
+
 ## 빠른 시작 (구현 후 사용 예정)
 
 ```bash
+# WSL ext4 작업 디렉토리에서
+cd ~/dev/python-kraddr-geo
+
 # 의존성
 uv venv && uv pip install -e ".[api,loaders,dev]"
-cp .env.example .env && $EDITOR .env       # ADDR_KR_PG_DSN 채우기
+cp .env.example .env && $EDITOR .env       # KRADDR_GEO_PG_DSN 채우기
+
+# 데이터는 NTFS 측 (예시) — 심볼릭 링크 또는 절대경로
+ln -s /mnt/d/projects/python-kraddr-geo/data data
 
 # PostgreSQL + PostGIS (Docker 권장)
 docker compose up -d postgres              # postgis/postgis:16-3.4
@@ -22,17 +42,17 @@ docker compose up -d postgres              # postgis/postgis:16-3.4
 alembic upgrade head
 
 # 전국 적재 (시도별 ZIP 또는 폴더가 섞여 있어도 OK)
-addr-kr load all-sidos /data/jusoMap/202605 --mode full \
-    --pg-conn "host=localhost dbname=addr_kr user=addr password=..."
+kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
+    --pg-conn "host=localhost dbname=kraddr_geo user=addr password=..."
 
 # 서비스 기동
-uvicorn addr_kr.api.app:app --reload --port 8000
+uvicorn kraddr.geo.api.app:app --reload --port 8000
 ```
 
 프론트엔드(별도 저장소 또는 디렉토리):
 
 ```bash
-cd addr-kr-ui
+cd kraddr-geo-ui
 cp .env.local.example .env.local && $EDITOR .env.local   # KAKAO JS 키 등
 npm ci
 npm run gen:types        # 백엔드 openapi.json → 타입·Zod 자동 생성
@@ -41,16 +61,16 @@ npm run dev              # http://localhost:3000
 
 ## 진입점
 
-- **Python 라이브러리**: `from addr_kr import AsyncAddressClient` — asyncio 컨텍스트 매니저
-- **REST API**: `uvicorn addr_kr.api.app:app` — Swagger UI는 `http://localhost:8000/v1/docs`
-- **CLI**: `addr-kr --help` — `load`, `refresh`, `validate`, `healthz`
-- **디버그/관리 UI**: `addr-kr-ui` (별도 Node.js 패키지) — 내부망 전용 (ADR-013)
+- **Python 라이브러리**: `from kraddr.geo import AsyncAddressClient` — asyncio 컨텍스트 매니저
+- **REST API**: `uvicorn kraddr.geo.api.app:app` — Swagger UI는 `http://localhost:8000/v1/docs`
+- **CLI**: `kraddr-geo --help` — `load`, `refresh`, `validate`, `healthz`
+- **디버그/관리 UI**: `kraddr-geo-ui` (별도 Node.js 패키지) — 내부망 전용 (ADR-013)
 
 ## 라이브러리 사용 예
 
 ```python
 import asyncio
-from addr_kr import AsyncAddressClient
+from kraddr.geo import AsyncAddressClient
 
 async def main() -> None:
     async with AsyncAddressClient() as client:    # .env에서 DSN 자동 로드
@@ -73,13 +93,13 @@ asyncio.run(main())
 
 | 경로 | 역할 |
 |------|------|
-| `src/addr_kr/dto/` | pydantic v2 입력/출력 (DB·FastAPI 의존성 없음) |
-| `src/addr_kr/core/` | DB 무관 비즈니스 로직. Protocol에만 의존 |
-| `src/addr_kr/infra/` | DB 어댑터 (SQLAlchemy 2 async + raw SQL) |
-| `src/addr_kr/client.py` | `AsyncAddressClient` — 라이브러리 진입점 |
-| `src/addr_kr/api/` | FastAPI 라우터 |
-| `src/addr_kr/loaders/` | 시도 SHP, 사서함, 다량배달처, 증분 적재 |
-| `src/addr_kr/cli/` | typer CLI |
+| `src/kraddr/geo/dto/` | pydantic v2 입력/출력 (DB·FastAPI 의존성 없음) |
+| `src/kraddr/geo/core/` | DB 무관 비즈니스 로직. Protocol에만 의존 |
+| `src/kraddr/geo/infra/` | DB 어댑터 (SQLAlchemy 2 async + raw SQL) |
+| `src/kraddr/geo/client.py` | `AsyncAddressClient` — 라이브러리 진입점 |
+| `src/kraddr/geo/api/` | FastAPI 라우터 |
+| `src/kraddr/geo/loaders/` | 시도 SHP, 사서함, 다량배달처, 증분 적재 |
+| `src/kraddr/geo/cli/` | typer CLI |
 | `alembic/`, `sql/` | 스키마 마이그레이션과 DDL |
 | `tests/` | unit (Fake repo) / integration (testcontainers) / e2e |
 | `docs/` | 사양·결정·작업 기록 |
@@ -100,14 +120,14 @@ asyncio.run(main())
 
 ## 외부 REST API
 
-`addr-kr`은 로컬 DB가 1차이고 외부 API는 폴백/보조 용도다. 발급 절차·환경변수·호출 정책은 [`docs/external-apis.md`](docs/external-apis.md) 참조.
+`python-kraddr-geo`은 로컬 DB가 1차이고 외부 API는 폴백/보조 용도다. 발급 절차·환경변수·호출 정책은 [`docs/external-apis.md`](docs/external-apis.md) 참조.
 
 | 서비스 | 환경변수 | 용도 |
 |--------|---------|------|
-| vworld | `ADDR_KR_VWORLD_API_KEY` | 지오코딩 폴백, 통합 검색 |
-| juso 검색 | `ADDR_KR_JUSO_API_KEY` | 도로명/지번 검색 폴백 |
-| juso 좌표 | `ADDR_KR_JUSO_COORD_API_KEY` (없으면 위 키 재사용) | 좌표 변환 폴백 |
-| epost | `ADDR_KR_EPOST_API_KEY` | 사서함·다량배달처 ZIP 자동 다운로드 |
+| vworld | `KRADDR_GEO_VWORLD_API_KEY` | 지오코딩 폴백, 통합 검색 |
+| juso 검색 | `KRADDR_GEO_JUSO_API_KEY` | 도로명/지번 검색 폴백 |
+| juso 좌표 | `KRADDR_GEO_JUSO_COORD_API_KEY` (없으면 위 키 재사용) | 좌표 변환 폴백 |
+| epost | `KRADDR_GEO_EPOST_API_KEY` | 사서함·다량배달처 ZIP 자동 다운로드 |
 | Kakao Maps JS | `NEXT_PUBLIC_KAKAO_JS_KEY` (frontend) | 디버그/관리 UI 지도 |
 
 ## 기여
@@ -124,8 +144,8 @@ asyncio.run(main())
 - [`docs/architecture.md`](docs/architecture.md) — 두 패키지의 관계, 계층, 데이터 흐름
 - [`docs/decisions.md`](docs/decisions.md) — ADR 누적
 - [`docs/data-model.md`](docs/data-model.md) — PostgreSQL + PostGIS 스키마 reference
-- [`docs/backend-package.md`](docs/backend-package.md) — `addr-kr` 백엔드 사양서
-- [`docs/frontend-package.md`](docs/frontend-package.md) — `addr-kr-ui` 프론트엔드 사양서
+- [`docs/backend-package.md`](docs/backend-package.md) — `python-kraddr-geo` 백엔드 사양서 (`kraddr.geo` 패키지)
+- [`docs/frontend-package.md`](docs/frontend-package.md) — `kraddr-geo-ui` 프론트엔드 사양서
 - [`docs/agent-guide.md`](docs/agent-guide.md) — AI 에이전트 작업·문서화 가이드
 - [`docs/external-apis.md`](docs/external-apis.md) — vworld/juso/epost/kakao 발급·호출
 - [`docs/tasks.md`](docs/tasks.md), [`docs/resume.md`](docs/resume.md), [`docs/journal.md`](docs/journal.md) — 백로그·진척도·작업 일지

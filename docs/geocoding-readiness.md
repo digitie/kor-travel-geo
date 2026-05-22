@@ -1,6 +1,6 @@
 # 지오코딩 준비 상태
 
-`addr-kr`이 정상 동작하려면 PostgreSQL + PostGIS 환경, 마스터 + 보조 테이블 적재, MV refresh, ANALYZE까지 끝난 상태가 필요하다. 본 문서는 그 체크리스트와 알려진 빈틈을 정리한다.
+`kraddr-geo`이 정상 동작하려면 PostgreSQL + PostGIS 환경, 마스터 + 보조 테이블 적재, MV refresh, ANALYZE까지 끝난 상태가 필요하다. 본 문서는 그 체크리스트와 알려진 빈틈을 정리한다.
 
 > 이전(v1) SpatiaLite 기반 readiness 기준은 `v1` 브랜치 문서에서 본다. master는 PostgreSQL + PostGIS 기준만 다룬다(ADR-001).
 
@@ -16,6 +16,8 @@
 
 ## 환경 readiness 체크리스트
 
+PC 개발은 WSL ext4에서 코드/가상환경/`git`을 운영하고, 데이터(`data/`)는 NTFS의 프로젝트 디렉토리(`/mnt/<drive>/projects/python-kraddr-geo/data/`) 아래에 둔다(AGENTS.md 참조). 아래 명령의 데이터 경로는 ext4 작업 디렉토리에서 NTFS의 `data/`를 가리키는 심볼릭 링크 또는 절대경로로 해석한다.
+
 1. **PostgreSQL 16 + PostGIS 3.4** 설치 및 기동
 2. `pg_trgm`, `unaccent` 확장 설치
    ```sql
@@ -25,11 +27,12 @@
    ```
 3. `Settings.pg_dsn` 설정 (`postgresql+psycopg://...`)
 4. `alembic upgrade head`로 DDL 적용 (마스터 11개 + 보조 + 메타 + MV 정의)
-5. 17개 시도 ZIP 적재 (`addr-kr load all-sidos /data/jusoMap/202605 --mode full`)
-6. `addr-kr load pobox`, `addr-kr load bulk`로 보조 우편번호 적재
-7. `addr-kr refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`
-8. `addr-kr refresh vacuum` → 통계 갱신 (`VACUUM (ANALYZE) tl_spbd_buld` 등)
-9. `addr-kr validate all` — 행 수, FK, MV 일관성 검사
+5. NTFS의 데이터 디렉토리를 ext4에서 참조: `ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`
+6. 17개 시도 ZIP 적재 (`kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full`)
+7. `kraddr-geo load pobox ./data/postal/202605/JUSO_사서함.txt`, `kraddr-geo load bulk ./data/postal/202605/도로명주소_zipcode.txt`
+8. `kraddr-geo refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`
+9. `kraddr-geo refresh vacuum` → 통계 갱신 (`VACUUM (ANALYZE) tl_spbd_buld` 등)
+10. `kraddr-geo validate all` — 행 수, FK, MV 일관성 검사
 
 ## 검증 시나리오
 
@@ -48,10 +51,10 @@
 - **fuzzy 매칭 임계값**: `pg_trgm.similarity_threshold = 0.42`로 검증되어 있다. 0.3 미만은 noisy, 0.5 이상은 reject 과다. 데이터셋 갱신 시 재검증 권장.
 - **좌표계 혼동**: 외부 인터페이스는 `(lon, lat)` 고정. 내부 PostGIS도 `ST_MakePoint(lon, lat)` 순서(SKILL.md §4-5).
 
-## Readiness 자동화 (`addr-kr validate`)
+## Readiness 자동화 (`kraddr-geo validate`)
 
 ```bash
-addr-kr validate all
+kraddr-geo validate all
 ```
 
 본 명령은 다음을 한 번에 수행한다:

@@ -1,10 +1,10 @@
-# 백엔드 패키지 사양서 — `addr-kr`
+# 백엔드 패키지 사양서 — `python-kraddr-geo` (`kraddr.geo`)
 
-본 문서는 첨부 사양서(2026-05-22 작성)를 master 브랜치 문서 체계로 옮긴 정리본이다. 구현 시 본 문서를 1차 reference로 본다.
+본 문서는 첨부 사양서(2026-05-22 작성)를 master 브랜치 문서 체계로 옮긴 정리본이다. 구현 시 본 문서를 1차 reference로 본다. GitHub 저장소 이름은 `python-kraddr-geo`, Python import는 `kraddr.geo`, CLI는 `kraddr-geo`, 환경변수 prefix는 `KRADDR_GEO_`다.
 
 ## 1. 개요
 
-`addr-kr`은 한 코어(`core/`) 위에 두 인터페이스를 노출한다.
+`python-kraddr-geo`(이하 본 패키지)는 한 코어(`core/`) 위에 두 인터페이스를 노출한다.
 
 - **Python 라이브러리 API**: `AsyncAddressClient` — asyncio 컨텍스트 매니저
 - **REST API**: FastAPI 라우터가 라이브러리 API를 호출하는 얇은 wrapper. vworld 호환 응답.
@@ -23,7 +23,7 @@
 ## 2. 패키지 구조
 
 ```
-addr-kr/
+python-kraddr-geo/
 ├── pyproject.toml
 ├── README.md
 ├── SKILL.md
@@ -35,7 +35,7 @@ addr-kr/
 │   ├── tasks.md
 │   ├── resume.md
 │   └── journal.md
-├── src/addr_kr/
+├── src/kraddr/geo/
 │   ├── __init__.py
 │   ├── version.py
 │   ├── settings.py
@@ -128,7 +128,7 @@ __all__ = ["AsyncAddressClient", "dto", "exceptions", "__version__"]
 
 ```toml
 [project]
-name = "addr-kr"
+name = "python-kraddr-geo"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -153,7 +153,7 @@ dev     = ["pytest>=8.3", "pytest-asyncio>=0.24", "pytest-postgresql>=6.1",
            "import-linter>=2.0", "hypothesis>=6.115"]
 
 [project.scripts]
-addr-kr = "addr_kr.cli.main:app"
+kraddr-geo = "kraddr.geo.cli.main:app"
 
 [tool.mypy]
 python_version = "3.12"
@@ -167,19 +167,19 @@ target-version = "py312"
 select = ["E","F","W","I","N","UP","B","A","C4","SIM","TCH","RUF","ASYNC"]
 
 [tool.importlinter]
-root_package = "addr_kr"
+root_package = "kraddr.geo"
 [[tool.importlinter.contracts]]
 name = "Layered architecture"
 type = "layers"
-layers = ["addr_kr.api", "addr_kr.cli", "addr_kr.client",
-          "addr_kr.loaders", "addr_kr.infra",
-          "addr_kr.core", "addr_kr.dto"]
-ignore_imports = ["addr_kr.api.routers.admin -> addr_kr.loaders"]
+layers = ["kraddr.geo.api", "kraddr.geo.cli", "kraddr.geo.client",
+          "kraddr.geo.loaders", "kraddr.geo.infra",
+          "kraddr.geo.core", "kraddr.geo.dto"]
+ignore_imports = ["kraddr.geo.api.routers.admin -> kraddr.geo.loaders"]
 ```
 
 ### 3.2 `Settings` (pydantic-settings)
 
-`ADDR_KR_` prefix. 외부 API 키는 `SecretStr`. 전체 필드는 첨부 사양 §3.2 참조. 핵심:
+`KRADDR_GEO_` prefix. 외부 API 키는 `SecretStr`. 전체 필드는 첨부 사양 §3.2 참조. 핵심:
 
 | 카테고리 | 키 | 비고 |
 |----------|----|------|
@@ -236,7 +236,7 @@ ignore_imports = ["addr_kr.api.routers.admin -> addr_kr.loaders"]
 ## 5. 라이브러리 API
 
 ```python
-from addr_kr import AsyncAddressClient
+from kraddr.geo import AsyncAddressClient
 
 async with AsyncAddressClient() as client:    # .env에서 DSN 자동 로드
     r = await client.geocode("서울특별시 강남구 테헤란로 152")
@@ -303,7 +303,7 @@ raw SQL 상수(`_LOOKUP_ROAD`, `_LOOKUP_JIBUN`, `_FUZZY_ROADS` 등)를 `text(...
 
 ```python
 app = FastAPI(
-    title="addr-kr", version="0.1.0",
+    title="kraddr-geo", version="0.1.0",
     default_response_class=ORJSONResponse, lifespan=lifespan,
     docs_url="/v1/docs", openapi_url="/v1/openapi.json",
 )
@@ -426,30 +426,32 @@ async def atomic_schema_swap(engine, staging="staging_new", live="public"):
 
 ## 10. CLI
 
+데이터 경로는 NTFS의 프로젝트 디렉토리 `data/`를 가리킨다. WSL에서 작업할 때는 ext4 작업 디렉토리에 `ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`로 심볼릭 링크를 두거나 절대경로(`/mnt/<drive>/projects/python-kraddr-geo/data/...`)로 참조한다.
+
 ```bash
 # 전체 적재 (root에 시도별 폴더 또는 ZIP들이 섞여 있어도 OK)
-addr-kr load all-sidos /data/jusoMap/202605 --mode full \
-  --pg-conn "host=localhost dbname=addr_kr user=addr password=..."
+kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
+  --pg-conn "host=localhost dbname=kraddr_geo user=addr password=..."
 
 # 단일 시도 (ZIP 직접 입력)
-addr-kr load sido /data/jusoMap/202605/seoul.zip --mode full --pg-conn "..."
+kraddr-geo load sido ./data/jusoMap/202605/seoul.zip --mode full --pg-conn "..."
 
 # 증분 (변동분 SHP가 별도 폴더에 제공된다고 가정)
-addr-kr load sido /data/jusoMap/delta/202605/seoul --mode delta --pg-conn "..."
+kraddr-geo load sido ./data/jusoMap/delta/202605/seoul --mode delta --pg-conn "..."
 
 # 보조 우편번호
-addr-kr load pobox /data/postal/202605/JUSO_사서함.txt
-addr-kr load bulk  /data/postal/202605/도로명주소_zipcode.txt
+kraddr-geo load pobox ./data/postal/202605/JUSO_사서함.txt
+kraddr-geo load bulk  ./data/postal/202605/도로명주소_zipcode.txt
 
 # 후처리
-addr-kr refresh mv
-addr-kr refresh vacuum
+kraddr-geo refresh mv
+kraddr-geo refresh vacuum
 
 # 무결성 검증
-addr-kr validate all
+kraddr-geo validate all
 
 # 헬스 + 통계
-addr-kr healthz
+kraddr-geo healthz
 ```
 
 ## 11. 테스트
@@ -476,7 +478,7 @@ addr-kr healthz
 services:
   pg:
     image: postgis/postgis:16-3.4
-    env: { POSTGRES_PASSWORD: t, POSTGRES_DB: addr_kr }
+    env: { POSTGRES_PASSWORD: t, POSTGRES_DB: kraddr_geo }
     options: >-
       --health-cmd pg_isready --health-interval 10s
       --health-timeout 5s --health-retries 5
@@ -486,7 +488,7 @@ steps:
     with: { python-version: '3.12' }
   - run: pip install -e ".[api,loaders,dev]"
   - run: ruff check . && ruff format --check .
-  - run: mypy src/addr_kr
+  - run: mypy src/kraddr/geo
   - run: lint-imports
   - run: pytest -q --maxfail=1
 ```
@@ -512,9 +514,9 @@ steps:
 Type=simple
 User=addr
 WorkingDirectory=/opt/addr/app
-Environment=ADDR_KR_LOG_FORMAT=json
-EnvironmentFile=/etc/addr-kr/env
-ExecStart=/opt/addr/app/.venv/bin/uvicorn addr_kr.api.app:app \
+Environment=KRADDR_GEO_LOG_FORMAT=json
+EnvironmentFile=/etc/kraddr-geo/env
+ExecStart=/opt/addr/app/.venv/bin/uvicorn kraddr.geo.api.app:app \
           --host 127.0.0.1 --port 8000 --workers 2 --proxy-headers
 Restart=always
 RestartSec=3

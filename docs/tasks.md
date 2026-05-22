@@ -6,7 +6,7 @@
 - (없음)
 
 ## 대기 (우선순위 순)
-- [ ] T-001 `pyproject.toml` 작성 (`addr-kr` 패키지, optional extras `api`/`loaders`/`dev`)
+- [ ] T-001 `pyproject.toml` 작성 (`kraddr-geo` 패키지, optional extras `api`/`loaders`/`dev`)
 - [ ] T-002 `Settings` (pydantic-settings) + `.env.example` 작성
 - [ ] T-003 `dto/common.py`, `dto/address.py` 작성 + 단위 테스트
 - [ ] T-004 `dto/geocode.py`, `dto/reverse.py`, `dto/search.py`, `dto/zipcode.py`, `dto/pobox.py`, `dto/admin.py` 작성
@@ -23,10 +23,10 @@
 - [ ] T-015 `api/_jobs.py` 작업 큐 + `/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch` 엔드포인트
 - [ ] T-016 reverse / search / zipcode / pobox 코어와 라우터
 - [ ] T-017 `loaders/pobox_loader.py`, `loaders/bulk_loader.py`
-- [ ] T-018 CLI(`addr-kr load all-sidos`, `addr-kr refresh mv`, `addr-kr validate`) 구현
+- [ ] T-018 CLI(`kraddr-geo load all-sidos`, `kraddr-geo refresh mv`, `kraddr-geo validate`) 구현
 - [ ] T-019 외부 API 폴백(`fallback="api"`) — vworld, juso 호출 어댑터
 - [ ] T-020 OpenAPI export 스크립트 + CI에서 drift 검사
-- [ ] T-021 프론트엔드 패키지 `addr-kr-ui` 부트스트랩 (`docs/frontend-package.md` §A2)
+- [ ] T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩 (`docs/frontend-package.md` §A2)
 - [ ] T-022 프론트엔드 `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain` 페이지
 - [ ] T-023 프론트엔드 `/admin/load`(업로드 + 처리 워크플로), `/admin/tables`, `/admin/cache`, `/admin/logs`
 - [ ] T-024 `pre-commit`, `import-linter`, `mypy --strict` CI 정착

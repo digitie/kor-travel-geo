@@ -1,30 +1,51 @@
-# SKILL — addr-kr 에이전트 매뉴얼
+# SKILL — python-kraddr-geo 에이전트 매뉴얼
 
 > 이 파일은 당신(AI 에이전트)이 작업을 시작하기 전 반드시 읽어야 한다.
 > 1회만 읽으면 30분 이상의 디버깅을 줄일 수 있다.
 
 ## 1. 정체성
 
-`addr-kr`은 도로명주소 전자지도(PDF 사양)를 PostGIS에 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**이다. vworld API의 응답 형식을 호환하면서 자체 확장(`x_extension`)을 더한다. UI 패키지(`addr-kr-ui`)는 별도이며, 이 저장소는 백엔드만 다룬다.
+이 저장소(GitHub 이름 `python-kraddr-geo`, Python 패키지 `kraddr.geo`)는 도로명주소 전자지도(PDF 사양)를 PostGIS에 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**다. vworld API의 응답 형식을 호환하면서 자체 확장(`x_extension`)을 더한다. UI 패키지(`kraddr-geo-ui`)는 별도이며, 이 저장소는 백엔드만 다룬다.
 
-이전 SpatiaLite/SQLite 기반 구현(`kraddr.geo`)은 `v1` 브랜치에 보존되어 있다. master 브랜치는 PostgreSQL + PostGIS 기반 새 사양으로 재시작한다.
+이전 SpatiaLite/SQLite 기반 구현은 같은 `kraddr.geo` 패키지였으나 `v1` 브랜치에 보존되어 있다. master 브랜치는 PostgreSQL + PostGIS 기반 새 사양으로 재시작한다.
+
+### 식별자 매핑
+
+| 항목 | 값 |
+|------|----|
+| GitHub 저장소 | `python-kraddr-geo` |
+| PyPI 배포 이름 | `python-kraddr-geo` |
+| Python import | `from kraddr.geo import ...` |
+| CLI 명령 | `kraddr-geo` |
+| 환경변수 prefix | `KRADDR_GEO_*` |
+| PostgreSQL DB 이름 | `kraddr_geo` |
+| 프론트엔드 패키지 | `kraddr-geo-ui` |
+
+### 개발 환경 (PC, WSL)
+
+- **코드/가상환경/`git`은 WSL의 ext4** 위에서 운영한다 (예: `~/dev/python-kraddr-geo/`). NTFS 마운트에서 직접 작업하지 않는다.
+- **데이터(`data/`)는 NTFS의 프로젝트 디렉토리 아래**(예: `/mnt/d/projects/python-kraddr-geo/data/`)에 둔다. ext4 작업 디렉토리에는 심볼릭 링크(`ln -s /mnt/d/projects/python-kraddr-geo/data data`) 또는 절대경로로 참조한다.
+- **테스트는 NTFS의 `data/`를 reference**로 삼는다. 단위 테스트는 소량 픽스처(ext4)로 충분하지만 통합/e2e 테스트, 전국 적재 검증, vworld 비교 등은 NTFS 데이터를 사용한다.
+- **작업이 완료되면 ext4 → NTFS로 카피**한다. Git의 source of truth는 ext4 쪽이다.
 
 ## 2. 빠른 시작
 
 ```bash
+cd ~/dev/python-kraddr-geo                 # WSL ext4
 uv venv && uv pip install -e ".[api,loaders,dev]"
-cp .env.example .env && $EDITOR .env       # ADDR_KR_PG_DSN 채우기
+cp .env.example .env && $EDITOR .env       # KRADDR_GEO_PG_DSN 채우기
+ln -s /mnt/d/projects/python-kraddr-geo/data data   # NTFS data를 참조
 docker compose up -d postgres              # postgis/postgis:16-3.4
 alembic upgrade head
-addr-kr load all-sidos /data/jusoMap/202605 --mode full \
-    --pg-conn "host=localhost dbname=addr_kr user=addr password=..."
-uvicorn addr_kr.api.app:app --reload
+kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
+    --pg-conn "host=localhost dbname=kraddr_geo user=addr password=..."
+uvicorn kraddr.geo.api.app:app --reload
 ```
 
 ## 3. 디렉토리 지도
 
 ```
-src/addr_kr/
+src/kraddr/geo/
   dto/       — pydantic v2 입력/출력 (DB·FastAPI 의존성 없음)
   core/      — 비즈니스 로직 (Protocol에만 의존)
   infra/     — DB 어댑터 (SQLAlchemy 2 async, raw SQL)
@@ -47,7 +68,7 @@ src/addr_kr/
 7. **응답에 `x_extension` 외 자체 필드 추가 금지**: vworld 호환성을 깬다.
 8. **외부 API 키 평문 커밋 금지**: 모두 `SecretStr`. `.env`는 권한 600 또는 systemd `EnvironmentFile`/vault.
 9. **`ogr2ogr` subprocess 호출 금지**: GDAL Python binding(`gdal.VectorTranslate`) 사용. CP949 디코딩은 `open_options=["ENCODING=CP949"]`로 명시.
-10. **프론트엔드 패키지에 DB 드라이버 추가 금지**: `addr-kr-ui`는 백엔드 REST API만 호출. `pg`, `prisma` 같은 의존성 들어오면 ADR 위반.
+10. **프론트엔드 패키지에 DB 드라이버 추가 금지**: `kraddr-geo-ui`는 백엔드 REST API만 호출. `pg`, `prisma` 같은 의존성 들어오면 ADR 위반.
 
 ## 5. 자주 묻는 작업
 

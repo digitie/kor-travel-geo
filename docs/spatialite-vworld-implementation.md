@@ -2,7 +2,7 @@
 
 > **이름 보존 안내**: 본 파일은 이전(v1) `SpatiaLite + vworld 호환` 구현 계획 문서의 자리를 그대로 잇는다. master에서는 PostgreSQL + PostGIS로 전환했으므로 본문도 새 사양에 맞춰 갱신했다. 이전 SpatiaLite 기반 계획은 `v1` 브랜치에서 동일 파일명으로 확인할 수 있다(ADR-001).
 
-본 문서는 `addr-kr`이 vworld OpenAPI와 동일한 응답 구조를 유지하면서 1차 데이터를 PostgreSQL + PostGIS에서 직접 처리하는 방식을 정리한다.
+본 문서는 `kraddr-geo`이 vworld OpenAPI와 동일한 응답 구조를 유지하면서 1차 데이터를 PostgreSQL + PostGIS에서 직접 처리하는 방식을 정리한다.
 
 ## 데이터 우선순위
 
@@ -60,7 +60,7 @@ CREATE INDEX idx_sprd_manage_rn_trgm
 
 ## 적재 후 최적화
 
-`addr-kr refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`. 다음 PR 단위 또는 야간 cron으로 `addr-kr refresh vacuum`(`VACUUM (ANALYZE)`)와 (선택) `CLUSTER tl_spbd_buld USING idx_buld_road_match`를 실행한다. `maintenance_work_mem`은 트랜잭션 단위로만 상승(`SET LOCAL`).
+`kraddr-geo refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`. 다음 PR 단위 또는 야간 cron으로 `kraddr-geo refresh vacuum`(`VACUUM (ANALYZE)`)와 (선택) `CLUSTER tl_spbd_buld USING idx_buld_road_match`를 실행한다. `maintenance_work_mem`은 트랜잭션 단위로만 상승(`SET LOCAL`).
 
 ## 디버거에서 운영까지 동일 환경
 

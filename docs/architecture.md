@@ -1,12 +1,12 @@
 # 아키텍처
 
-본 문서는 `addr-kr` 백엔드와 `addr-kr-ui` 프론트엔드가 함께 구성하는 한 시스템의 큰 구조를 다룬다. 결정의 역사는 `decisions.md`(ADR)에서 별도로 관리한다.
+본 문서는 `kraddr-geo` 백엔드와 `kraddr-geo-ui` 프론트엔드가 함께 구성하는 한 시스템의 큰 구조를 다룬다. 결정의 역사는 `decisions.md`(ADR)에서 별도로 관리한다.
 
 ## 두 패키지, 한 시스템
 
 ```
 ┌──────────────────────────┐      HTTP (내부망)      ┌──────────────────────────┐
-│  addr-kr-ui              │ ──────────────────────▶ │  addr-kr (FastAPI)       │
+│  kraddr-geo-ui              │ ──────────────────────▶ │  kraddr-geo (FastAPI)       │
 │  Next.js 14 + shadcn/ui  │                         │  /v1/* + /v1/admin/*     │
 │  - /debug/*              │                         │  ─────────────────────── │
 │  - /admin/*              │ ◀────────────────────── │  AsyncAddressClient      │
@@ -22,21 +22,21 @@
 - 한 코어(`core/`) 위에 두 인터페이스(Python 라이브러리, REST API)를 노출한다. 두 인터페이스는 같은 함수를 호출하므로 동작이 갈리지 않는다.
 - 프론트엔드는 자체 DB 연결을 갖지 않는다. 모든 DB 접근은 `AsyncAddressClient.engine` 하나의 SQLAlchemy 2 async engine을 통과한다 — 디버거에서 본 EXPLAIN 결과가 운영 쿼리와 같은 환경에서 평가된다.
 
-## 백엔드 계층 (`addr-kr`)
+## 백엔드 계층 (`kraddr-geo`)
 
 | 계층 | 위치 | 의존 대상 | 의존하지 않는 것 |
 |------|------|-----------|------------------|
-| dto | `src/addr_kr/dto/` | pydantic v2 | DB, FastAPI, 파일시스템 |
-| core | `src/addr_kr/core/` | dto, 표준 라이브러리, Protocol | SQLAlchemy, FastAPI, 파일시스템 |
-| infra | `src/addr_kr/infra/` | core/Protocol, SQLAlchemy 2 async, GeoAlchemy 2, psycopg async | FastAPI |
-| loaders | `src/addr_kr/loaders/` | infra(엔진만), GeoPandas, GDAL Python binding | core, api |
-| client | `src/addr_kr/client.py` | core, infra, dto | api, cli, loaders |
-| api | `src/addr_kr/api/` | client, dto, FastAPI | loaders (admin 라우터만 예외) |
-| cli | `src/addr_kr/cli/` | client, loaders, typer | api |
+| dto | `src/kraddr/geo/dto/` | pydantic v2 | DB, FastAPI, 파일시스템 |
+| core | `src/kraddr/geo/core/` | dto, 표준 라이브러리, Protocol | SQLAlchemy, FastAPI, 파일시스템 |
+| infra | `src/kraddr/geo/infra/` | core/Protocol, SQLAlchemy 2 async, GeoAlchemy 2, psycopg async | FastAPI |
+| loaders | `src/kraddr/geo/loaders/` | infra(엔진만), GeoPandas, GDAL Python binding | core, api |
+| client | `src/kraddr/geo/client.py` | core, infra, dto | api, cli, loaders |
+| api | `src/kraddr/geo/api/` | client, dto, FastAPI | loaders (admin 라우터만 예외) |
+| cli | `src/kraddr/geo/cli/` | client, loaders, typer | api |
 
 의존 방향은 **dto → core → infra → client → api/cli** 한 방향이다. `import-linter`가 `pyproject.toml`의 `[tool.importlinter]` 계약으로 강제한다. 단 하나의 예외(`api.routers.admin → loaders`)는 적재 트리거를 admin 라우터가 직접 호출하기 때문이며 ADR에 명시한다.
 
-## 프론트엔드 계층 (`addr-kr-ui`)
+## 프론트엔드 계층 (`kraddr-geo-ui`)
 
 | 영역 | 선택 | 이유 |
 |------|------|------|
@@ -95,6 +95,20 @@ Next.js 업로드 폼  ──POST /v1/admin/upload/sido-zip──▶  api/router
                               ▼
                           PostgreSQL (master tables) → REFRESH MATERIALIZED VIEW
 ```
+
+## 개발 환경 (PC, WSL)
+
+PC 개발은 WSL의 ext4 위에서 진행한다. NTFS 마운트에서 직접 `git`/`pip`/`uvicorn`을 실행하지 않는다.
+
+```
+~/dev/python-kraddr-geo/                              ← 코드, 가상환경, 테스트 (ext4, source of truth)
+/mnt/<drive>/projects/python-kraddr-geo/              ← Windows에서도 보이는 카피본 (NTFS)
+/mnt/<drive>/projects/python-kraddr-geo/data/         ← 도로명주소 ZIP/SHP, postal TXT, 외부 dump (NTFS)
+```
+
+- 작업이 완료되면 ext4 → NTFS 프로젝트 디렉토리로 카피한다.
+- **데이터(`data/`)는 NTFS 측에만 둔다**. ext4 작업 디렉토리에는 심볼릭 링크(`ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`) 또는 절대경로로만 참조한다.
+- 통합/e2e 테스트, 전국 적재 검증, vworld 비교 등은 NTFS의 `data/`를 reference로 삼는다.
 
 ## 운영 환경
 

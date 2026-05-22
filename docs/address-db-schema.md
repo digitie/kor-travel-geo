@@ -1,6 +1,6 @@
 # 주소 DB 스키마 (요약)
 
-`addr-kr`의 1차 저장소는 PostgreSQL + PostGIS다. 본 문서는 상위 요약만 두고, 컬럼·인덱스·MV·메타 테이블 전체 정의는 `docs/data-model.md`에 둔다.
+`kraddr-geo`의 1차 저장소는 PostgreSQL + PostGIS다. 본 문서는 상위 요약만 두고, 컬럼·인덱스·MV·메타 테이블 전체 정의는 `docs/data-model.md`에 둔다.
 
 > 이전(v1) SQLite + SpatiaLite 기반 스키마(`juso_address_points`, `juso_boundary_polygons`, `juso_spatial_metadata`)는 `v1` 브랜치에 보존되어 있다. master는 더 이상 그 스키마를 유지보수하지 않는다(ADR-001).
 

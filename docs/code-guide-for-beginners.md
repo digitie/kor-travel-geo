@@ -1,6 +1,6 @@
 # 처음 보는 사람을 위한 코드 안내
 
-`addr-kr` 백엔드와 `addr-kr-ui` 프론트엔드는 별도 패키지지만 한 시스템을 구성한다. 아래 순서대로 읽으면 큰 그림에서 세부로 자연스럽게 내려간다.
+`kraddr-geo` 백엔드와 `kraddr-geo-ui` 프론트엔드는 별도 패키지지만 한 시스템을 구성한다. 아래 순서대로 읽으면 큰 그림에서 세부로 자연스럽게 내려간다.
 
 > 이전 SpatiaLite 기반 `kraddr.geo` 구현은 `v1` 브랜치에 보존되어 있다. master는 PostgreSQL + PostGIS 기반 새 사양으로 처음부터 다시 짓는다(ADR-001).
 
@@ -10,12 +10,12 @@
 2. `SKILL.md` — DO NOT 룰, 도메인 어휘, 자주 묻는 작업.
 3. `docs/architecture.md` — 두 패키지의 관계, 백엔드 계층, 데이터 흐름.
 
-## 2. 백엔드 (`addr-kr`)
+## 2. 백엔드 (`kraddr-geo`)
 
 의존 방향은 **dto → core → infra → client → api/cli** 한 방향(ADR-004).
 
 ```
-src/addr_kr/
+src/kraddr/geo/
   dto/         pydantic v2 입력/출력 (DB·FastAPI 의존성 없음)
   core/        DB 무관 비즈니스 로직. Protocol에만 의존.
   infra/       SQLAlchemy 2 async + raw SQL repository
@@ -35,12 +35,12 @@ src/addr_kr/
 
 세부 사양은 `docs/backend-package.md`에 있다.
 
-## 3. 프론트엔드 (`addr-kr-ui`)
+## 3. 프론트엔드 (`kraddr-geo-ui`)
 
 별도 Node.js 패키지(Next.js 14 + shadcn/ui + react-kakao-maps-sdk + TanStack Query). 사용자 대상이 아니라 개발자·운영자용 디버깅/관리 UI.
 
 ```
-addr-kr-ui/
+kraddr-geo-ui/
   app/                 Next.js App Router. /debug/* + /admin/* + /api/proxy/[...]
   components/          ui/(shadcn), kakao/, forms/, tables/, debug/, admin/, nav/
   lib/                 api.ts, schemas.ts(zod), kakao.ts, queryClient.ts
@@ -73,11 +73,11 @@ addr-kr-ui/
 pip install -e ".[api,loaders,dev]"
 pytest -q
 ruff check .
-mypy src/addr_kr
+mypy src/kraddr/geo
 lint-imports
 
 # 프론트엔드
-cd addr-kr-ui
+cd kraddr-geo-ui
 npm ci
 npm run lint
 npm run type-check
@@ -86,7 +86,7 @@ npm run build
 npm run test:e2e   # playwright
 ```
 
-스키마 변경이 있다면 `python scripts/export_openapi.py` → `cd addr-kr-ui && npm run gen:types`로 frontend Zod/types를 재생성한다.
+스키마 변경이 있다면 `python scripts/export_openapi.py` → `cd kraddr-geo-ui && npm run gen:types`로 frontend Zod/types를 재생성한다.
 
 ## 7. 작업 흐름
 

@@ -1,6 +1,6 @@
 # DATA MODEL — PostgreSQL + PostGIS 스키마
 
-본 문서는 `addr-kr`이 사용하는 PostgreSQL + PostGIS 테이블 구조의 reference다. DDL 자체는 `sql/ddl/` 하위 파일과 `alembic/versions/`에 둔다.
+본 문서는 `kraddr-geo`이 사용하는 PostgreSQL + PostGIS 테이블 구조의 reference다. DDL 자체는 `sql/ddl/` 하위 파일과 `alembic/versions/`에 둔다.
 
 ## 한눈에
 
