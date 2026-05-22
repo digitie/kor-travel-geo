@@ -99,6 +99,9 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TCH", "RUF", "A
 
 [tool.ruff.lint.per-file-ignores]
 "src/kraddr/geo/dto/address.py" = ["N815"]
+"src/kraddr/geo/dto/geocode.py" = ["A003", "TC001"]
+"src/kraddr/geo/dto/reverse.py" = ["A003", "TC001"]
+"src/kraddr/geo/dto/search.py" = ["A003", "TC001"]
 
 [tool.importlinter]
 root_package = "kraddr"
