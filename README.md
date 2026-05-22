@@ -130,6 +130,14 @@ asyncio.run(main())
 | epost | `KRADDR_GEO_EPOST_API_KEY` | 사서함·다량배달처 ZIP 자동 다운로드 |
 | Kakao Maps JS | `NEXT_PUBLIC_KAKAO_JS_KEY` (frontend) | 디버그/관리 UI 지도 |
 
+## 법적·데이터 사용 한계
+
+이 저장소의 MIT 라이선스는 저장소에 포함된 소스 코드와 문서에만 적용된다. 도로명주소 전자지도, juso, epost, vworld, Kakao Maps 등 외부 원천 데이터와 API 응답은 각 제공 기관의 이용약관·저작권·재배포 조건을 따른다.
+
+- 원천 ZIP/SHP/TXT, 외부 API 응답 캐시, 내려받은 우편번호 파일은 이 저장소에 커밋하지 않는다.
+- 운영자는 도로명주소 안내시스템, 공공데이터포털, vworld, Kakao Developers의 최신 약관과 호출 한도를 직접 확인해야 한다.
+- 본 패키지는 주소 정규화·지오코딩을 돕는 기술 도구이며, 토지·건축물·행정구역 경계의 법적 효력이나 공적 증명을 보장하지 않는다. 법적 판단이 필요한 업무는 해당 기관의 공식 공부와 고시를 기준으로 검증한다.
+
 ## 기여
 
 1. **반드시** [`SKILL.md`](SKILL.md) 먼저 읽기

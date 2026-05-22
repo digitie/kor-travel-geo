@@ -37,12 +37,12 @@ class Settings(BaseSettings):
     pg_dsn: str = "postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo"
     pg_pool_size: int = Field(default=10, ge=1)
     pg_max_overflow: int = Field(default=5, ge=0)
-    pg_statement_timeout_ms: int = Field(default=30_000, ge=1)
+    pg_statement_timeout_ms: int = Field(default=5_000, ge=1)
     pg_pool_recycle_s: int = Field(default=3_600, ge=1)
 
     api_title: str = "kraddr-geo"
-    api_cors_origins: tuple[str, ...] = ("http://localhost:3000",)
-    api_default_radius_m: int = Field(default=50, ge=1, le=2_000)
+    api_cors_origins: tuple[str, ...] = Field(default_factory=tuple)
+    api_default_radius_m: int = Field(default=200, ge=1, le=2_000)
     api_max_search_size: int = Field(default=100, ge=1, le=100)
 
     juso_api_key: SecretStr | None = None
@@ -52,7 +52,10 @@ class Settings(BaseSettings):
     vworld_api_key: SecretStr | None = None
     vworld_url: str = "https://api.vworld.kr/req/address"
     epost_api_key: SecretStr | None = None
-    epost_download_url: str = "https://www.epost.go.kr/search/zipcode/newAddressDown.jsp"
+    epost_download_url: str = (
+        "http://openapi.epost.go.kr/postal/downloadAreaCodeService/"
+        "downloadAreaCodeService/getAreaCodeInfo"
+    )
 
     cache_enabled: bool = True
     cache_ttl_days: int = Field(default=30, ge=1)

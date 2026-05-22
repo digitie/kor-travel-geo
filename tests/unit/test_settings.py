@@ -17,3 +17,15 @@ def test_settings_default_mvm_res_code_actions() -> None:
     assert settings.mvm_res_code_actions["31"] == "insert"
     assert settings.mvm_res_code_actions["34"] == "update"
     assert settings.mvm_res_code_actions["63"] == "delete"
+
+
+def test_settings_defaults_match_backend_spec() -> None:
+    settings = Settings()
+
+    assert settings.pg_statement_timeout_ms == 5_000
+    assert settings.api_cors_origins == ()
+    assert settings.api_default_radius_m == 200
+    assert settings.epost_download_url == (
+        "http://openapi.epost.go.kr/postal/downloadAreaCodeService/"
+        "downloadAreaCodeService/getAreaCodeInfo"
+    )
