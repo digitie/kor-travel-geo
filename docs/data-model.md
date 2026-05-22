@@ -105,6 +105,8 @@ CREATE INDEX idx_mv_geom4326 ON mv_geocode_target USING GIST (ent_pt_4326);
 
 ## 보조 우편번호
 
+두 테이블 모두 epost OpenAPI **데이터셋 `15000302`**에서 받은 ZIP을 분기 1회 전량 적재한다(`TRUNCATE` → `INSERT`). 변경분(`downloadKnd=2`) 누적은 운영하지 않는다 — 자세한 결정 근거는 ADR-009, 적재 흐름은 `docs/external-apis.md` "epost" 절 참조.
+
 ### `postal_pobox` (사서함)
 
 ```sql

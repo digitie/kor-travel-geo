@@ -31,7 +31,7 @@
 - [ ] `AGENTS.md`의 "식별자" 표와 "개발 환경 정책" 다시 읽기
 - [ ] `SKILL.md` §4 "DO NOT" 룰 다시 읽기
 - [ ] `docs/architecture.md`의 의존 방향 확인
-- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-006 확인
+- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-009, ADR-013~ 확인 (특히 ADR-007 MV, ADR-008 GDAL, ADR-009 epost)
 - [ ] 마지막 `docs/journal.md` 엔트리 읽기
 - [ ] NTFS의 `data/` 디렉토리가 준비되어 있고 ext4에서 심볼릭 링크 또는 절대경로로 접근 가능한지
 
