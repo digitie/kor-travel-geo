@@ -190,7 +190,7 @@ ignore_imports = ["kraddr.geo.api.routers.admin -> kraddr.geo.loaders"]
 | 로깅 | `log_level`, `log_format` | `json` 권장 |
 | 로더 | `loader_data_dir`, `loader_batch_size`, `loader_temp_schema` | |
 
-`get_settings()`는 lazy 싱글톤. 테스트에서 monkeypatch 후 reload 가능하도록 `_settings = None` 재설정 helper 권장.
+`get_settings()`는 lazy 싱글톤. 테스트에서는 `reset_settings()`로 싱글톤을 비우고, 명시 주입이 필요할 때만 `set_settings(settings)`를 사용한다.
 
 ### 3.3 예외
 

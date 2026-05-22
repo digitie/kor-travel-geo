@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (codex, 리뷰 3차 반영)
+
+**작업**: PR 리뷰 반영 — 설정 싱글톤 helper 역할 분리
+
+**변경 파일**:
+- 갱신: `src/kraddr/geo/settings.py`, `tests/unit/test_settings.py`, `docs/backend-package.md`
+
+**결정**:
+- `reset_settings()`는 인자 없이 싱글톤을 비우는 역할만 맡는다.
+- 테스트나 명시 주입이 필요할 때는 `set_settings(settings)`를 사용한다.
+
+**다음**: 기존 다음 작업 유지 — T-004 나머지 DTO 작성.
+
+---
+
 ## 2026-05-23 (codex, 리뷰 2차 반영)
 
 **작업**: PR 리뷰 항목 5~10 반영 — DTO 필수성, validator 범위, CLI exit, ruff ignore, 예외명, namespace package 정리

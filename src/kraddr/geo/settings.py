@@ -96,8 +96,15 @@ def get_settings() -> Settings:
     return _settings
 
 
-def reset_settings(settings: Settings | None = None) -> None:
-    """Reset the settings singleton, primarily for tests."""
+def set_settings(settings: Settings) -> None:
+    """Override the settings singleton, primarily for tests."""
 
     global _settings
     _settings = settings
+
+
+def reset_settings() -> None:
+    """Clear the settings singleton, primarily for tests."""
+
+    global _settings
+    _settings = None
