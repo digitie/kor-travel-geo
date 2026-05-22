@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (codex, T-004 + 실제 SHP/DBF 검사)
+
+**작업**: T-004 DTO 6종 구현 및 `data/juso/도로명주소 전자지도` 실제 파일 읽기 테스트 추가
+
+**변경 파일**:
+- 신규: `src/kraddr/geo/dto/geocode.py`, `src/kraddr/geo/dto/reverse.py`, `src/kraddr/geo/dto/search.py`, `src/kraddr/geo/dto/zipcode.py`, `src/kraddr/geo/dto/pobox.py`, `src/kraddr/geo/dto/admin.py`
+- 신규: `src/kraddr/geo/loaders/juso_map.py`
+- 신규: `tests/unit/test_dto_geocode.py`, `tests/unit/test_dto_reverse.py`, `tests/unit/test_dto_search_zipcode_pobox_admin.py`
+- 신규: `tests/integration/test_juso_map_files.py`
+- 갱신: `src/kraddr/geo/dto/__init__.py`, `pyproject.toml`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`
+
+**결정**:
+- DTO는 `docs/backend-package.md` §4의 wire contract를 우선해 pydantic v2 frozen model로 작성했다.
+- `type` 필드는 vworld/API wire field이므로 DTO 파일별로 `A003` ruff ignore를 한정 적용했다.
+- pydantic runtime이 nested DTO 타입을 해석해야 하므로 `GeocodeResponse`, `ReverseResultItem`, `SearchResultItem`의 address DTO imports는 runtime import로 유지하고 해당 파일에만 `TC001` ignore를 한정 적용했다.
+- GDAL 적재 구현은 T-013 범위로 남긴다. 다만 이번 작업에서 순수 Python으로 SHP/DBF 헤더를 직접 열어 `강원특별자치도/51000`의 11개 마스터 레이어와 `TL_SPBD_BULD` 필드(`BD_MGT_SN`, `BULD_MNNM`, `MVM_RES_CD`, `RN_CD`, `SIG_CD` 등)를 검증했다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 28 passed. 실제 파일 경로 `data/juso/도로명주소 전자지도/강원특별자치도/51000/*.shp|*.dbf|*.shx`를 열어 검사함.
+- `.venv/bin/python -m ruff check .` → 통과
+- `.venv/bin/python -m mypy src/kraddr/geo` → 통과
+- `.venv/bin/lint-imports` → Layered architecture kept
+
+**다음**: T-005 — `infra/engine.py` async engine factory + 통합 테스트 준비.
+
+---
+
 ## 2026-05-23 (claude, epost 데이터셋 정책)
 
 **작업**: 우편번호 외부 API 활용 정책을 ADR-009로 확정하고 관련 문서 보강.

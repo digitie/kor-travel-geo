@@ -12,19 +12,20 @@
 - ✅ 기본 패키지 스캐폴드 작성 — `src/kraddr/geo/`, 계층별 빈 패키지, `AsyncAddressClient` 자리표시자, Typer CLI 진입점
 - ✅ `Settings` + `.env.example` 작성 — `KRADDR_GEO_` prefix, DB/API/외부 API/cache/log/loader 설정
 - ✅ `dto/common.py`, `dto/address.py` 작성 — CRS 정규화, 불변 DTO, vworld 주소 구조 + 단위 테스트
+- ✅ 나머지 DTO(`geocode`, `reverse`, `search`, `zipcode`, `pobox`, `admin`) 구현
+- ✅ `data/juso/도로명주소 전자지도` 실제 SHP/DBF 파일 헤더·필드 검사 테스트 추가 (`강원특별자치도/51000`)
 - ⬜ DDL/Alembic 적용 (`sql/ddl/`, `alembic/`)
-- ⬜ 나머지 DTO(`geocode`, `reverse`, `search`, `zipcode`, `pobox`, `admin`) 구현
 - ⬜ `core/`, `infra/`, `client.py`, `api/`, `loaders/`, `cli/` 실제 기능 구현 (모두 `src/kraddr/geo/` 하위)
 - ⬜ 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-`docs/tasks.md#T-004`: 나머지 DTO(`geocode`, `reverse`, `search`, `zipcode`, `pobox`, `admin`)를 작성한다.
+`docs/tasks.md#T-005`: `infra/engine.py` (async engine factory)를 작성하고 통합 테스트를 준비한다.
 
-- `docs/backend-package.md` §4를 기준으로 pydantic v2 모델을 불변(`ConfigDict(frozen=True)`)으로 작성한다.
-- `ReverseInput`은 `(lon, lat)` 한국 좌표 범위 검증을 포함한다.
-- `ZipcodeInput`은 `address | point | bd_mgt_sn` 중 하나 필수 검증을 포함한다.
-- 각 DTO의 wire field가 vworld 호환 구조를 깨지 않는지 단위 테스트를 추가한다.
+- `docs/backend-package.md` §7.1을 기준으로 SQLAlchemy 2 async engine factory를 작성한다.
+- `postgresql://` DSN은 `postgresql+psycopg://`로 보정한다.
+- statement timeout, pool 설정, `orjson` serializer/deserializer를 `Settings`에서 읽는다.
+- Docker/PostGIS 통합 테스트가 어려우면 우선 engine construction 단위 테스트와 testcontainers skip 조건을 분리한다.
 
 ## 작업 시작 전 확인할 것
 
