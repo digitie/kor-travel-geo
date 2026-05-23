@@ -9,10 +9,12 @@
 | 구분 | 테이블/뷰 | 역할 | 출처 |
 |------|-----------|------|------|
 | 텍스트 1차 (4) | `tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc` | 행정/도로명/지번/우편번호 정본 매핑, 출입구 좌표, 내비 진입점/centroid | 행안부 텍스트 (월간) |
-| SHP polygon (7) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | 행정구역·우편번호·건물·도로 도형 | 도로명주소 전자지도 SHP (월간) |
+| SHP polygon/폴리라인 (9) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | 행정구역·우편번호·건물·도로 도형/관계 | 도로명주소 전자지도 SHP (월간) |
 | 우편번호 보조 (2) | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 | epost OpenAPI (분기, ADR-009) |
 | 메타 (5) | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `geo_cache` | 적재 watermark·MVM 매핑·작업 큐(ADR-011)·정합성 리포트(ADR-016)·외부 API 캐시 | |
 | 평면화 (1) | `mv_geocode_target` | 지오코딩 쿼리용 MV (ADR-007) | 위 1·2를 join |
+
+**합계 21개** (테이블 20 + MV 1). T-006(DDL)은 이 숫자를 기준으로 한다.
 
 ## 텍스트 1차 정본 (`loaders/text/`, ADR-012)
 
@@ -50,12 +52,18 @@ CREATE TABLE tl_juso_text (
   lnbr_slno         INT,                      -- 지번 부번
   -- 우편번호 정본
   zip_no            TEXT,                     -- 우편번호 5
-  -- PNU (ADR-010, 외부 시스템 조인용)
+  -- PNU (ADR-010, 외부 시스템 조인용).
+  -- 필수 필드(bjd_cd / mntn_yn / lnbr_mnnm)가 하나라도 NULL이면 NULL.
+  -- COALESCE(..., 0)는 조용한 잘못된 키를 만들기 때문에 사용하지 않는다.
+  -- lnbr_slno만 NULL인 경우는 부번 0으로 보정 — 정상적인 본번-only 지번 케이스.
   pnu               TEXT GENERATED ALWAYS AS (
-    bjd_cd
-    || CASE WHEN mntn_yn = '1' THEN '2' ELSE '1' END
-    || lpad(COALESCE(lnbr_mnnm, 0)::text, 4, '0')
-    || lpad(COALESCE(lnbr_slno, 0)::text, 4, '0')
+    CASE
+      WHEN bjd_cd IS NULL OR mntn_yn IS NULL OR lnbr_mnnm IS NULL THEN NULL
+      ELSE bjd_cd
+        || CASE WHEN mntn_yn = '1' THEN '2' ELSE '1' END
+        || lpad(lnbr_mnnm::text, 4, '0')
+        || lpad(COALESCE(lnbr_slno, 0)::text, 4, '0')
+    END
   ) STORED,
   -- 적재 메타
   source_file       TEXT,                     -- 원본 파일명 (시도별)
@@ -92,7 +100,7 @@ CREATE INDEX idx_juso_text_pnu   ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
 | 우편번호 | 5자리 | `zip_no` |
 | 건물관리번호 | 25자리 | `bd_mgt_sn` |
 
-> **정확한 컬럼 순서는 행안부 배포 파일의 "도로명주소_한글_TXT 파일레이아웃"을 따른다**. 본 표는 사용 컬럼만 정리한 것이며, T-013a(`juso_hangul_loader.py`) 구현 시 헤더 PDF 사양을 reference로 컬럼 인덱스를 박는다. 인코딩은 시기에 따라 CP949 또는 UTF-8 BOM이 섞이므로 `chardet` sniff 후 `iconv` 표준화.
+> **정확한 컬럼 순서는 행안부 배포 파일의 "도로명주소_한글_TXT 파일레이아웃"을 따른다**. 본 표는 사용 컬럼만 정리한 것이며, T-013a(`juso_hangul_loader.py`) 구현 시 헤더 PDF 사양을 reference로 컬럼 인덱스를 박는다. 인코딩은 행안부 배포 시점에 따라 **CP949 또는 UTF-8 BOM**이 섞이므로 외부 의존성 없이 stdlib만으로 3단 fallback한다 — (1) 첫 3바이트 `EF BB BF`면 `utf-8-sig`, (2) 아니면 `cp949` 시도, (3) `UnicodeDecodeError`면 `utf-8` 재시도. 행안부 텍스트는 사실상 이 두 인코딩만 등장하므로 `chardet`/`charset-normalizer` 같은 sniff 패키지 도입은 불필요.
 
 ### `tl_locsum_entrc` — 위치정보요약DB
 
@@ -321,12 +329,13 @@ WITH DATA;
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);
 CREATE INDEX idx_mv_road  ON mv_geocode_target (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
 CREATE INDEX idx_mv_jibun ON mv_geocode_target (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
-CREATE INDEX idx_mv_geom5179 ON mv_geocode_target USING GIST (pt_5179);  -- 거리/nearest 1차 경로
-CREATE INDEX idx_mv_geom4326 ON mv_geocode_target USING GIST (pt_4326);  -- 응답 직렬화 보조
+-- 거리/nearest 1차 경로. partial 인덱스로 NULL 좌표 행 제외 (출입구·centroid 둘 다 없는 건물).
+CREATE INDEX idx_mv_geom5179 ON mv_geocode_target USING GIST (pt_5179) WHERE pt_5179 IS NOT NULL;
+CREATE INDEX idx_mv_geom4326 ON mv_geocode_target USING GIST (pt_4326) WHERE pt_4326 IS NOT NULL;
 CREATE INDEX idx_mv_pt_source ON mv_geocode_target (pt_source);          -- entrance vs centroid 통계
 ```
 
-응답에는 `x_extension.pt_source = "entrance"|"centroid"`로 좌표 출처를 노출(ADR-003 호환). 라우터는 `pt_source = 'centroid'` 결과에 신뢰도(`confidence`)를 낮춰 반환 — `entrance` 매칭보다 정밀도가 떨어지기 때문.
+응답에는 `x_extension.pt_source = "entrance"|"centroid"`로 좌표 출처를 노출(ADR-003 호환). `pt_source = 'centroid'` 결과는 `entrance` 매칭보다 정밀도가 낮으므로 **`core/geocoder.py`(또는 `core/responses.py` 빌더)** 에서 `confidence`를 낮춰 반환한다 — `api/routers/*`가 아니라 코어/인프라 계층에서 처리해야 라이브러리 사용자(`AsyncAddressClient`)와 REST API 응답이 동일하다(ADR-002·ADR-004 일관성).
 
 ### MV 갱신 모드 (라이브 경합 시간 축소)
 
@@ -379,7 +388,9 @@ swap 트리거는 `loaders/postload.py`의 `do_full_swap=True` 옵션 또는 `kr
 **반경/nearest 쿼리는 5179 기준**으로 한다. PostGIS의 geometry 거리는 SRID 단위를 그대로 쓰므로, EPSG:4326에서 `:radius_m`을 넣으면 단위가 **도(degree)**가 되어 의도와 다르다. 5179는 GRS80 UTM-K로 단위가 meter라 `:radius_m`이 그대로 의미를 가진다.
 
 ```sql
--- 입력 좌표 (lon, lat, in_srid)를 5179로 한 번만 변환하고 GiST 인덱스 스캔
+-- 입력 좌표 (lon, lat, in_srid)를 5179로 한 번만 변환하고 GiST 인덱스 스캔.
+-- pt_5179 IS NOT NULL 가드는 필수 — MV에 좌표 없는 행(출입구·centroid 둘 다 없음)이
+-- 섞이면 <-> 연산자가 NULL geometry로 호출되어 GiST 인덱스를 못 타고 풀스캔으로 변질된다.
 WITH target_pt AS (
   SELECT ST_Transform(
     ST_SetSRID(ST_MakePoint(:x, :y), :in_srid),
@@ -390,13 +401,17 @@ SELECT t.bd_mgt_sn, t.road_nm, t.buld_nm, t.pt_source,
        ST_X(t.pt_4326) AS lon, ST_Y(t.pt_4326) AS lat,   -- 응답은 4326
        ST_Distance(t.pt_5179, p.geom) AS dist_m
 FROM mv_geocode_target t, target_pt p
-WHERE ST_DWithin(t.pt_5179, p.geom, :radius_m)
+WHERE t.pt_5179 IS NOT NULL                              -- (1) NULL 좌표 행 제외
+  AND ST_DWithin(t.pt_5179, p.geom, :radius_m)
 ORDER BY t.pt_5179 <-> p.geom
 LIMIT :limit;
 ```
 
+- 위 `WHERE pt_5179 IS NOT NULL` + partial index `idx_mv_geom5179 ... WHERE pt_5179 IS NOT NULL` 조합으로 좌표 없는 건물은 공간 쿼리에서 자동 제외된다.
+- 라우터·repo는 좌표 없는 건물(`pt_source IS NULL`)을 별도 경로로 처리(예: status='OK'이지만 `result.point=null`을 반환하거나, polygon centroid fallback을 마지막 보루로 시도). 공간 검색은 반드시 NULL을 거른 뒤 수행한다.
+
 - `pt_4326`은 응답에서 `(lon, lat)` 추출 전용. **거리 술어에 쓰면 안 된다**.
-- `pt_source = 'centroid'` 결과는 `entrance` 결과보다 정밀도가 낮으므로 라우터가 `confidence`를 낮춰 반환(ADR-012 후속).
+- `pt_source = 'centroid'` 결과는 `entrance` 결과보다 정밀도가 낮으므로 **코어 응답 빌더**(`core/geocoder.py`·`core/responses.py`)가 `confidence`를 낮춰 반환한다. 라우터에서 처리하지 말 것 — 라이브러리 호출과 REST 응답이 갈라진다.
 - 입력 SRID(`:in_srid`)는 사용자 입력 `crs`에서 4326/5179만 허용(`docs/backend-package.md` §4 — `CRS` Annotated 정규화). 추가 SRID가 들어오면 repo 레벨에서 `InvalidCoordinateError`로 거부(SKILL.md §4-5와 별개의 SRID 화이트리스트).
 
 ### 행정 polygon의 4326 변환

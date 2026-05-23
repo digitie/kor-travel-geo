@@ -2,6 +2,39 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (claude, ADR-012 사양 fixup)
+
+**작업**: PR #6 리뷰에서 발견된 정합성 문제 7건 정정 (1차 4건 + 2차 3건). PR #6 위에 stack PR로 분리.
+
+**변경 파일**:
+- `docs/data-model.md` —
+  - "한눈에" 표의 SHP polygon 개수 `7 → 9`로 정정. 마스터 합계 **20개 + MV 1 = 21개** 명시.
+  - `tl_juso_text.pnu` generated column을 NULL 안전 패턴(`CASE WHEN bjd_cd IS NULL OR mntn_yn IS NULL OR lnbr_mnnm IS NULL THEN NULL ELSE ... END`)으로 정정 — `COALESCE(..., 0)`로 만들던 가짜 PNU 제거.
+  - 텍스트 인코딩 sniff 방침을 `chardet` → stdlib BOM + cp949/utf-8 3단 fallback으로 명시.
+  - MV 공간 인덱스를 `WHERE pt_5179 IS NOT NULL` partial로 변경. 공간 쿼리 가이드의 SQL 예시에 `WHERE pt_5179 IS NOT NULL` 가드 추가 — NULL geometry로 `<->` 호출 시 GiST 인덱스 스캔 붕괴 방지.
+  - `pt_source='centroid'`의 `confidence` 패널티 처리 책임을 `api/routers/*` → `core/geocoder.py` 또는 `core/responses.py`로 이동 명시. 라이브러리·REST 응답 동일성(ADR-002/004) 보장.
+- `docs/backend-package.md` —
+  - §9 텍스트 로더 원칙에서 `chardet` 제거. `juso_hangul_loader.py` 예시 코드도 `chardet.detect`를 `BOM + cp949 try → utf-8 try → LoaderError` 패턴으로 교체.
+  - §9.7 작업 큐에 **Batch DAG: All-or-Nothing swap (ADR-017)** 절 추가. 자식 job 5종 → `consistency_check` → `mv_refresh swap` 자동 enqueue. `partial_failed` 상태 명시. `--skip-consistency` 강제 옵션.
+- `docs/decisions.md` — **ADR-017 신설**: 하이브리드 적재 batch DAG All-or-Nothing swap.
+- `SKILL.md` §4-11 — `WHERE pt_5179 IS NOT NULL` 가드와 confidence 책임 계층(core/responses.py)을 한 줄에 박음.
+- `docs/tasks.md` T-006/T-015 — 테이블 개수·partial index·batch DAG·`load_batch_id`/`parent_job_id` 인용. T-006 18 → **20** 정정.
+- `docs/resume.md` — ADR 확인 목록 ~ADR-017.
+
+**결정**:
+- PNU는 `bjd_cd`/`mntn_yn`/`lnbr_mnnm` 셋 중 하나라도 NULL이면 NULL. `COALESCE(..., 0)`로 0000_0000 가짜 키를 만드는 길은 차단. 외부 시스템 조인 무결성 확보.
+- 인코딩 sniff 패키지(`chardet`, `charset-normalizer`)를 도입하지 않는다. 행안부 텍스트는 CP949/UTF-8(BOM) 두 인코딩만 등장하므로 stdlib만으로 충분. 의존성 정책 일관.
+- 마스터 테이블 정확한 개수는 **텍스트 4 + SHP polygon/폴리라인 9 + 보조 2 + 메타 5 = 20개**. MV 1을 더해 객체 합계 21개.
+- 공간 쿼리는 항상 `WHERE pt_5179 IS NOT NULL` 가드 + partial GiST 인덱스 조합. MV에 좌표 NULL 행이 섞이는 것은 정상이지만 공간 연산자가 닿으면 인덱스 스캔이 깨진다.
+- `pt_source='centroid'` 결과의 신뢰도 패널티는 `core/`에서. 라우터에서 가공하면 라이브러리 호출자가 같은 보정을 못 받는다(ADR-002/004 일관성).
+- ADR-017: 적재는 batch DAG 운영. 5개 자식 job이 모두 `done`이어야 `consistency_check` 후 `mv_refresh swap` 트리거. 하나라도 실패하면 `partial_failed`로 운영자 개입 대기. `--skip-consistency` 강제 옵션은 명시 로깅.
+
+**참고**: 사용자가 별도로 지적한 codex PR #7(`tl_spbd_buld`, `tl_spbd_entrc` 중심 11개 SHP master DDL)은 ADR-012 이후 폐기 대상이라 본 PR 머지 후 close → T-006 새 DDL PR로 재시작 필요.
+
+**다음**: PR #6 + 본 PR 머지 → T-005 (`infra/engine.py`) → T-006 (DDL, ADR-012/017 기준 신규).
+
+---
+
 ## 2026-05-23 (claude, 텍스트 정본 + SHP polygon 하이브리드 전환)
 
 **작업**: ADR-005를 부분 supersede하고 ADR-012(텍스트 정본 1차 + SHP polygon 보조 하이브리드), ADR-016(적재 진행도/정합성 API), ADR-007 복원·재정의를 묶어 사양 단계에서 전환. 사용자 지시: NTFS의 `data/juso` 텍스트 자료 3종(도로명주소 한글_전체분, 위치정보요약DB_전체분, 내비게이션용DB_전체분) 활용으로 완성도 ↑.

@@ -7,7 +7,7 @@
 
 ## 대기 (우선순위 순)
 - [ ] T-005 `infra/engine.py` (async engine factory, `Settings.normalize_pg_dsn` 신뢰) + 통합 테스트
-- [ ] T-006 텍스트 4 + SHP polygon 7 + 보조 2 + 메타 5 = 18개 테이블 DDL을 `sql/ddl/`과 `alembic/versions/0001_*.py`에 작성. `tl_juso_text.pnu` generated column(ADR-010), `load_jobs`(ADR-011), `load_consistency_reports`(ADR-016) 포함.
+- [ ] T-006 텍스트 4 + SHP polygon/폴리라인 9 + 보조 2 + 메타 5 = **20개** 테이블 + MV 1 = 21개 DDL을 `sql/ddl/`과 `alembic/versions/0001_*.py`에 작성. `tl_juso_text.pnu` NULL 안전 generated column(ADR-010, 필수 필드 NULL 시 NULL), `load_jobs`(`load_batch_id`/`parent_job_id` 포함, ADR-011/017), `load_consistency_reports`(ADR-016) 포함. MV의 공간 인덱스는 partial(`WHERE pt_5179 IS NOT NULL`).
 - [ ] T-007 `mv_geocode_target` MV 정의(텍스트 정본 + 대표 출입구 + centroid fallback, `pt_source` 컬럼) + `REFRESH CONCURRENTLY`(평시) + shadow MV swap(분기) 통합 테스트
 - [ ] T-008 `infra/geocode_repo.py` 구현 + Fake repo 단위 테스트
 - [ ] T-009 `core/normalize.py` (주소 정규화 순수 함수)
@@ -19,7 +19,7 @@
 - [ ] **T-013c** `loaders/text/navi_loader.py` (내비게이션용DB, centroid + 진입점 kind)
 - [ ] **T-013d** `loaders/shp/polygons_loader.py` (GDAL VectorTranslate, polygon 7종만, ADR-005)
 - [ ] T-014 `loaders/shp/delta_loader.py` (MVM_RES_CD 머지, polygon만) + 텍스트 변동분 적용
-- [ ] T-015 `api/_jobs.py` 작업 큐(`load_jobs` 영속화, lifespan recovery, advisory lock — ADR-011) + 텍스트/SHP/정합성 핸들러 등록 + `/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch` 엔드포인트
+- [ ] T-015 `api/_jobs.py` 작업 큐(`load_jobs` 영속화, lifespan recovery, advisory lock — ADR-011) + 텍스트/SHP/정합성 핸들러 등록 + **batch DAG 오케스트레이션(ADR-017): 자식 job 5종이 모두 `done`이어야 `consistency_check` → `mv_refresh swap` 자동 enqueue. 하나라도 실패하면 batch `partial_failed`** + `/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch` 엔드포인트
 - [ ] T-016 reverse / search / zipcode / pobox 코어와 라우터
 - [ ] T-017 `loaders/pobox_loader.py`, `loaders/bulk_loader.py`
 - [ ] T-018 CLI(`kraddr-geo load all-sidos`, `kraddr-geo refresh mv`, `kraddr-geo validate`) 구현

@@ -36,6 +36,8 @@
 - ADR-016 추가: 적재 진행도(`AsyncAddressClient.load_status/list_load_jobs/submit_load/cancel_load`, `/v1/admin/loads/*` REST)와 정합성 리포트(`run_consistency_check`/`consistency_report`, `/v1/admin/consistency/*` REST, 케이스 C1~C10, `load_consistency_reports` JSONB)를 라이브러리·REST·디버그 UI에 일급 노출.
 - `tl_juso_text.pnu` generated stored column으로 ADR-010 매핑(`mntn_yn 0→1, 1→2`) 박음. PNU 19자리 정합성을 정합성 케이스 C9로 검증.
 - MV `mv_geocode_target` 컬럼명 변경: `ent_pt_5179`/`ent_pt_4326` → `pt_5179`/`pt_4326`. `pt_source` 신규.
+- 사양 정합성 fixup (PR #6 리뷰): SHP polygon 개수 `7 → 9` 정정(마스터 합계 20개 + MV 1). `tl_juso_text.pnu` NULL 안전(`COALESCE(..., 0)` 가짜 키 제거). 인코딩 sniff는 `chardet`이 아닌 stdlib BOM/CP949/UTF-8 3단 fallback. MV 공간 인덱스 `WHERE pt_5179 IS NOT NULL` partial + 공간 쿼리 NULL 가드 필수. `pt_source` 기반 `confidence` 패널티는 `core/`(`api/routers/*` 아님).
+- ADR-017 추가: 하이브리드 적재는 batch DAG. 자식 job 5종이 모두 `done`이어야 `consistency_check` → `mv_refresh swap` 자동 enqueue. 하나라도 실패하면 `partial_failed`. `--skip-consistency` 강제 옵션은 명시 로깅.
 
 ### Removed
 - 동기 라이브러리 API, monorepo 내부 디버그 UI, `ogr2ogr` subprocess 호출 경로를 사양에서 제거한다.
