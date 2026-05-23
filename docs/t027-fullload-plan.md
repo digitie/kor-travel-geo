@@ -138,11 +138,11 @@ python -c "import kraddr.geo; print(kraddr.geo.__version__)"
 
 ### Phase 1: DDL 적용
 
-초안의 inline SQL 실행 대신 `alembic upgrade head`를 사용한다. Alembic revision은 `SCHEMA_SQL`, `INDEX_SQL`, `POSTLOAD_SQL`, `MV_SQL`을 한 번에 적용하므로 빈 MV와 unique index까지 준비된다.
+`kraddr-geo init-db` 명령을 사용한다. `SCHEMA_SQL` → `INDEX_SQL` → `MV_SQL`을 순서대로 적용하므로 빈 MV와 unique index까지 준비된다. 이미 존재하는 인덱스/MV는 경고만 출력하고 계속 진행한다.
 
 ```bash
 export KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo
-alembic upgrade head
+kraddr-geo init-db
 ```
 
 확인 SQL:

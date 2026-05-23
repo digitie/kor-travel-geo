@@ -44,6 +44,34 @@ def main(
         raise typer.Exit()
 
 
+@app.command("init-db")
+def init_db() -> None:
+    """Create schema, extensions, indexes, and empty MV via SCHEMA_SQL + INDEX_SQL + MV_SQL."""
+    from sqlalchemy import text as sa_text
+
+    from kraddr.geo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL, iter_sql_statements
+
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            async with client.engine.begin() as conn:
+                for sql in iter_sql_statements(SCHEMA_SQL):
+                    await conn.execute(sa_text(sql))
+                for sql in iter_sql_statements(INDEX_SQL):
+                    try:
+                        await conn.execute(sa_text(sql))
+                    except Exception as exc:
+                        typer.echo(f"  index warning (may already exist): {exc}")
+                for sql in iter_sql_statements(MV_SQL):
+                    try:
+                        await conn.execute(sa_text(sql))
+                    except Exception as exc:
+                        typer.echo(f"  mv warning (may already exist): {exc}")
+        typer.echo("init-db: schema, indexes, and MV created.")
+
+    asyncio.run(run())
+
+
 @load_app.command("juso")
 def load_juso(path: Path, yyyymm: str | None = typer.Option(None, "--yyyymm")) -> None:
     async def run() -> None:

@@ -42,6 +42,19 @@ run() {
   "$@"
 }
 
+log "=== Preflight: tool versions ==="
+python --version
+if command -v gdalinfo >/dev/null 2>&1; then
+  gdalinfo --version
+else
+  echo "WARNING: gdalinfo not found. SHP loading (Phase 3) will fail."
+  echo "  Install with: sudo apt-get install -y gdal-bin libgdal-dev"
+  if [ -d "$SHP_ROOT" ]; then
+    echo "  SHP data exists at $SHP_ROOT — GDAL is required."
+    exit 1
+  fi
+fi
+
 log "=== Phase 0: Verify data directories ==="
 for d in \
   "$JUSO_TEXT_DIR" \
@@ -64,8 +77,8 @@ if [ "$PLAN_ONLY" = "1" ]; then
   exit 0
 fi
 
-log "=== Phase 1: DDL — alembic upgrade head ==="
-run alembic upgrade head
+log "=== Phase 1: DDL — kraddr-geo init-db ==="
+run kraddr-geo init-db
 
 log "=== Phase 2: Text loaders (juso, locsum, navi) ==="
 START=$(date +%s)
