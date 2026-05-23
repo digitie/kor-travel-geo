@@ -30,6 +30,12 @@
 - MV 갱신 모드 두 가지 정의: 평시 `REFRESH CONCURRENTLY`, 분기 풀로드는 shadow MV(`mv_geocode_target_next`) 빌드 후 트랜잭션 RENAME swap.
 - engine factory(`infra/engine.py`) 단순화: DSN 보정은 `Settings.normalize_pg_dsn` 단일 책임. 중복 검사 제거.
 - 적재 ↔ 서빙 단일 스키마 정책 명시: 별도 `*_serving_*` 스키마 도입 금지, 평면화는 MV로만 표현(ADR-007 후속).
+- **(BREAKING in spec)** ADR-012 추가: 적재를 행안부 텍스트 정본 1차(도로명주소 한글_전체분/위치정보요약DB_전체분/내비게이션용DB_전체분, `loaders/text/`, stdlib csv + `psycopg.copy()`) + SHP polygon 보조(`loaders/shp/`, GDAL Python binding 한정) 하이브리드로 전환. ADR-005는 polygon 적재로 partial supersede.
+- 마스터 테이블을 11개에서 14개로 재구성: 텍스트 4(`tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc`) + SHP polygon 7 + 보조 우편번호 2 + 메타 5(`load_jobs`, `load_consistency_reports` 신규 포함).
+- ADR-007 복원·재정의: 대표 출입구 선택을 위치정보요약DB의 `ent_se_cd` 기반으로 명시. MV에 `pt_source ∈ {entrance, centroid}` 컬럼 추가 — 출입구 0개 건물은 내비게이션용DB centroid를 fallback 좌표로 사용.
+- ADR-016 추가: 적재 진행도(`AsyncAddressClient.load_status/list_load_jobs/submit_load/cancel_load`, `/v1/admin/loads/*` REST)와 정합성 리포트(`run_consistency_check`/`consistency_report`, `/v1/admin/consistency/*` REST, 케이스 C1~C10, `load_consistency_reports` JSONB)를 라이브러리·REST·디버그 UI에 일급 노출.
+- `tl_juso_text.pnu` generated stored column으로 ADR-010 매핑(`mntn_yn 0→1, 1→2`) 박음. PNU 19자리 정합성을 정합성 케이스 C9로 검증.
+- MV `mv_geocode_target` 컬럼명 변경: `ent_pt_5179`/`ent_pt_4326` → `pt_5179`/`pt_4326`. `pt_source` 신규.
 
 ### Removed
 - 동기 라이브러리 API, monorepo 내부 디버그 UI, `ogr2ogr` subprocess 호출 경로를 사양에서 제거한다.
