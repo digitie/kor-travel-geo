@@ -2,6 +2,68 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (PR #11 follow-up — batch payload fail-fast 검증)
+
+**작업**: PR #11 후속 확인 결과 GitHub review thread/comment는 없었지만, 원격 브랜치에 `AsyncAddressClient.submit_load("full_load_batch", ...)`를 `insert_load_batch`로 라우팅하는 보강 커밋이 추가되어 있었다. 해당 방향은 REST와 라이브러리 표면을 일치시키므로 타당하다고 판단했고, 그 위에 잘못된 batch payload가 `load_jobs`에 root + 빈 child를 먼저 남기는 문제를 추가로 막았다.
+
+**구현 상세**:
+- `infra.batch.batch_children()`에서 enqueue 전 payload 검증을 수행한다. 기본 `payloads` 경로는 ADR-017 source child 5종(`juso_text_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`) 모두에 `path` 또는 `source_path`가 있어야 한다.
+- 명시 `children`/`child_jobs` 배열은 더 이상 잘못된 entry를 조용히 버리지 않는다. entry object, non-empty `kind`, object `payload`를 요구하고, 경로 기반 로더(`bulk_load` 포함)는 `path`/`source_path`가 없으면 `InvalidInputError(E0100)`를 던진다.
+- `AsyncAddressClient.submit_load("full_load_batch", ...)`는 검증 실패 시 `AdminRepository.insert_load_batch`와 `insert_load_job` 어느 쪽도 호출하지 않으므로, 불완전한 batch root가 DB에 영속되지 않는다.
+- `docs/backend-package.md`에 `full_load_batch` payload 예시와 검증 정책을 자세히 추가했다. REST와 라이브러리 표면이 같은 helper를 공유한다는 점을 명시했다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_infra_batch.py tests/unit/test_client_submit_load_batch.py -q` → 14 passed.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 65 passed, 1 skipped.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports` → Layered architecture kept.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/export_openapi.py --check --output openapi.json` → drift 없음.
+- 임시 DB `kraddr_geo_codex_pr11_followup`에서 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q` 실행 → 실제 `data/juso` 샘플 COPY + MV 생성 1 passed.
+
+**다음 작업**: PR #11에 후속 의견과 검증 결과를 남긴 뒤, 리뷰어가 원하면 payload schema를 OpenAPI DTO 수준에서 더 좁히는 작업을 별도 PR로 분리한다.
+
+## 2026-05-23 (PR #11 리뷰 fixup — 라이브러리 batch DAG 비대칭 해소)
+
+**작업**: PR #11 리뷰에서 발견된 라이브러리/REST 비대칭 이슈를 해결했다. `AsyncAddressClient.submit_load("full_load_batch", ...)`가 `AdminRepository.insert_load_job`을 직접 호출하던 경로를 `insert_load_batch`로 라우팅하여, 라이브러리 사용자도 REST `/v1/admin/loads`와 동일하게 root + 5종 child + DAG가 즉시 적재되도록 한다.
+
+**구현 상세**:
+- `src/kraddr/geo/infra/batch.py` 신규 모듈에 `BATCH_SOURCE_KINDS`와 `batch_children()`을 이동했다. `api/_jobs.py`의 동명 private 헬퍼는 제거하고 새 모듈을 import한다.
+- `AsyncAddressClient.submit_load`는 `kind == "full_load_batch"`일 때 `batch_children(payload)`로 child 구성을 결정해 `AdminRepository.insert_load_batch`를 호출한다. 비-batch kind는 종전대로 `insert_load_job`을 사용한다.
+- `infra/batch.py`는 `core/dto` 의존 없는 순수 모듈이라 client / api / loaders 어느 레이어에서도 import 가능. import-linter "Layered architecture" 컨트랙트 유지.
+
+**검증**:
+- `tests/unit/test_infra_batch.py` 신규 — default kind 순서, `payloads` 매핑 키, 명시 `children` 우선, 잘못된 entry drop을 검증.
+- `tests/unit/test_client_submit_load_batch.py` 신규 — `AsyncMock`으로 `insert_load_batch` / `insert_load_job` 호출 분기를 검증.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp python -m pytest tests/unit/ -q` → 51 passed.
+- `python -m ruff check`, `mypy --strict src/kraddr/geo/api/_jobs.py src/kraddr/geo/infra/batch.py src/kraddr/geo/client.py`, `lint-imports` 모두 통과.
+- `python scripts/export_openapi.py --check` → drift 없음 (DTO 변경 없음).
+
+**다음 작업**: T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩.
+
+## 2026-05-23 (codex, T-018~T-020 구현 + 신규 PR 준비)
+
+**작업**: PR #10 리뷰 fixup 위에서 T-018~T-020을 추가 구현하고, 사용자 요청대로 P1/P2 리뷰 반영 사항과 T-005~T-020 완료 범위를 하나의 신규 PR로 등록할 준비를 진행했다.
+
+**구현 상세**:
+- T-018: CLI 운영 명령을 확장했다. `kraddr-geo load all-sidos`는 juso/locsum/navi 필수 경로와 선택 SHP/epost 보조 경로를 받아 직접 적재 → 링크 해소 → C1~C10 정합성 검증 → optional MV refresh까지 묶는다. `load shp`, `load shp-all`, `load pobox`, `load bulk`, `load epost --kind=full`, `refresh mv --swap`, `validate consistency --cases/--scope`도 추가했다.
+- T-019: `infra/external_api.py`를 추가했다. `AsyncAddressClient.geocode(..., fallback="api")`는 로컬 DB 결과가 `NOT_FOUND`일 때만 외부 폴백을 호출한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 API + 좌표 API다. 외부 응답은 기존 `GeocodeResponse`로 변환하며 공급자 출처는 `x_extension.source`에만 둔다.
+- T-020: `scripts/export_openapi.py`를 추가해 `create_app().openapi()`를 `openapi.json`으로 내보낸다. `--check` 모드는 committed schema와 생성 결과가 다르면 실패한다. `.github/workflows/openapi.yml`은 PR마다 `.[api]` extra 설치 후 drift 검사를 실행한다.
+
+**문서**:
+- `docs/tasks.md`에서 T-018~T-020을 완료로 이동했다.
+- `docs/resume.md`의 다음 작업을 T-021 프론트엔드 부트스트랩으로 갱신했다.
+- `docs/backend-package.md`에 외부 API fallback 흐름과 OpenAPI export/CI drift 절차를 명시했다.
+- `docs/external-apis.md`에 구현 위치, 호출 순서, 응답 매핑 정책을 보강했다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 51 passed, 1 skipped. skipped 1건은 `KRADDR_GEO_TEST_PG_DSN` 미설정 시 건너뛰는 선택형 실제 PostgreSQL COPY 테스트다.
+- `KRADDR_GEO_TEST_PG_DSN='postgresql+psycopg://postgres:postgres@localhost:5432/kraddr_geo_codex_t020_verify' .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 검증 후 `kraddr_geo_codex_t020_verify` DB는 삭제했다.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports` → Layered architecture kept
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/export_openapi.py --check --output openapi.json` → 통과
+
 ## 2026-05-23 (codex, PR #10 리뷰 코멘트 반영)
 
 **작업**: PR #10 상위 리뷰 코멘트의 P1/P2 항목을 반영했다. P1은 ADR-017 batch DAG, C1~C10 정합성 검증, PNU NULL guard이고, P2는 reverse `both`, 텍스트 인코딩 fallback, `load_jobs` 진행률/log_tail, `x_extension` ADR 문서화를 중심으로 처리했다.

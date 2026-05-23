@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- PR #11 리뷰 반영: `AsyncAddressClient.submit_load("full_load_batch", ...)`이 root 행만 만들던 라이브러리/REST 비대칭을 해소한다. 라이브러리도 `AdminRepository.insert_load_batch`로 라우팅되어 root + 5종 child가 동시에 적재된다. `BATCH_SOURCE_KINDS`와 `batch_children()`은 `kraddr.geo.infra.batch` 모듈로 이동해 client / api 양쪽에서 공유한다.
+- PR #11 후속 보강: `full_load_batch` payload를 enqueue 전에 검증한다. 기본 `payloads` 경로는 source child 5종 모두에 `path` 또는 `source_path`가 있어야 하며, 잘못된 `children`/`child_jobs` entry는 조용히 무시하지 않고 `InvalidInputError(E0100)`로 거절한다.
+
 ### Changed
 - **(BREAKING)** `kraddr.geo` 패키지의 저장 엔진을 SQLite + SpatiaLite에서 PostgreSQL + PostGIS로 전환한다. 패키지 이름은 그대로지만 내부 구현은 완전히 새로 작성한다. 이전 구현은 `v1` 브랜치에 보존되어 있다.
 - GitHub 저장소 이름을 `python-kraddr-geo`로 명시하고, CLI 명령은 `kraddr-geo`, 환경변수 prefix는 `KRADDR_GEO_`, PostgreSQL DB 이름은 `kraddr_geo`로 통일한다.
@@ -21,6 +25,9 @@
 - PR #10 리뷰 반영: 정합성 검증을 C1~C10 전체로 확장하고, 각 케이스에 `count`, `ratio`, `threshold`, `metric`, `sample`을 채운다. batch DAG는 `source_set.load_batch_id`가 있는 리포트를 게이트로 사용한다.
 - PR #10 리뷰 반영: `JobQueue` handler 시그니처에 진행률 콜백을 추가하고, `load_jobs.log_tail`을 실제로 갱신한다. FastAPI lifespan은 기본 적재/정합성/MV refresh handler를 등록한다.
 - ADR-018 추가: PostGIS, `pg_trgm`, `unaccent` extension은 `x_extension` 스키마에 설치하고 모든 연결에서 `search_path=public,x_extension`를 사용한다.
+- T-018 CLI 운영 명령을 추가한다. `load all-sidos`, `load shp`, `load shp-all`, `load pobox`, `load bulk`, `load epost --kind=full`, `refresh mv --swap`, `validate consistency --cases/--scope`를 지원한다.
+- T-019 외부 API 폴백 어댑터를 추가한다. `fallback="api"`는 로컬 `NOT_FOUND` 이후 vworld 주소 좌표 API와 juso 검색+좌표 API를 순서대로 호출하며, 공급자 출처는 `x_extension.source`에만 기록한다.
+- T-020 OpenAPI export와 drift 검사를 추가한다. `scripts/export_openapi.py`, committed `openapi.json`, `.github/workflows/openapi.yml`을 통해 API 스키마 변경 누락을 CI에서 잡는다.
 - T-005~T-017 1차 구현: async engine factory, PostGIS/Alembic schema, `mv_geocode_target`, raw SQL repositories, core geocode/reverse/search/zipcode/pobox flows, `AsyncAddressClient`, FastAPI routers, persistent `load_jobs` queue, text/SHP/postal loaders를 추가한다.
 - 실제 `data/juso` 기반 검증 테스트를 추가한다. 도로명주소 한글 서울 파일, 위치정보요약DB ZIP member, 내비게이션용DB 서울 파일, 강원 SHP load plan을 직접 읽어 컬럼 인덱스·좌표·PNU 매핑을 검증한다.
 - 선택형 실제 PostgreSQL 적재 테스트를 추가한다. `KRADDR_GEO_TEST_PG_DSN`이 설정되면 DDL 적용 → 실제 파일 샘플 COPY 적재 → 위치정보↔텍스트 링크 해소 → `mv_geocode_target` 생성까지 실행한다.

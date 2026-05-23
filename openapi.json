@@ -1,0 +1,2647 @@
+{
+  "components": {
+    "schemas": {
+      "AddressStructure": {
+        "additionalProperties": false,
+        "description": "Structured address fields using vworld-compatible names.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "level0": {
+            "default": "대한민국",
+            "minLength": 1,
+            "title": "Level0",
+            "type": "string"
+          },
+          "level1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level1"
+          },
+          "level2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level2"
+          },
+          "level3": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level3"
+          },
+          "level4A": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level4A"
+          },
+          "level4AC": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level4Ac"
+          },
+          "level4L": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level4L"
+          },
+          "level4LC": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level4Lc"
+          },
+          "level5": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level5"
+          }
+        },
+        "title": "AddressStructure",
+        "type": "object"
+      },
+      "AddressType": {
+        "enum": [
+          "road",
+          "parcel"
+        ],
+        "type": "string"
+      },
+      "BBox": {
+        "additionalProperties": false,
+        "properties": {
+          "max_x": {
+            "title": "Max X",
+            "type": "number"
+          },
+          "max_y": {
+            "title": "Max Y",
+            "type": "number"
+          },
+          "min_x": {
+            "title": "Min X",
+            "type": "number"
+          },
+          "min_y": {
+            "title": "Min Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "min_x",
+          "min_y",
+          "max_x",
+          "max_y"
+        ],
+        "title": "BBox",
+        "type": "object"
+      },
+      "CRS": {
+        "description": "Coordinate reference system normalized as EPSG:XXXX",
+        "type": "string"
+      },
+      "ConsistencyCase": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "ratio": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio"
+          },
+          "sample": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Sample",
+            "type": "array"
+          },
+          "severity": {
+            "enum": [
+              "OK",
+              "INFO",
+              "WARN",
+              "ERROR"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "severity",
+          "count"
+        ],
+        "title": "ConsistencyCase",
+        "type": "object"
+      },
+      "ConsistencyReport": {
+        "additionalProperties": false,
+        "properties": {
+          "cases": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConsistencyCase"
+            },
+            "title": "Cases",
+            "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "generated_by": {
+            "default": "api",
+            "enum": [
+              "cli",
+              "api",
+              "cron"
+            ],
+            "title": "Generated By",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "severity_max": {
+            "enum": [
+              "OK",
+              "INFO",
+              "WARN",
+              "ERROR"
+            ],
+            "title": "Severity Max",
+            "type": "string"
+          },
+          "source_set": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Source Set",
+            "type": "object"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "scope",
+          "severity_max",
+          "source_set",
+          "started_at"
+        ],
+        "title": "ConsistencyReport",
+        "type": "object"
+      },
+      "ConsistencyReportSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "generated_by": {
+            "default": "api",
+            "enum": [
+              "cli",
+              "api",
+              "cron"
+            ],
+            "title": "Generated By",
+            "type": "string"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "severity_max": {
+            "enum": [
+              "OK",
+              "INFO",
+              "WARN",
+              "ERROR"
+            ],
+            "title": "Severity Max",
+            "type": "string"
+          },
+          "source_set": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Source Set",
+            "type": "object"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "scope",
+          "severity_max",
+          "source_set",
+          "started_at"
+        ],
+        "title": "ConsistencyReportSummary",
+        "type": "object"
+      },
+      "ConsistencyRunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cases"
+          },
+          "recent_days": {
+            "default": 7,
+            "maximum": 365.0,
+            "minimum": 1.0,
+            "title": "Recent Days",
+            "type": "integer"
+          },
+          "scope": {
+            "default": "full",
+            "enum": [
+              "full",
+              "sido",
+              "recent"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "sido": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sido"
+          }
+        },
+        "title": "ConsistencyRunRequest",
+        "type": "object"
+      },
+      "GeocodeExtension": {
+        "additionalProperties": false,
+        "properties": {
+          "bd_mgt_sn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bd Mgt Sn"
+          },
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "buld_nm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buld Nm"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "rncode_full": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rncode Full"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ResultSource",
+            "default": "local"
+          },
+          "zip_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip No"
+          },
+          "zip_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ZipSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "confidence"
+        ],
+        "title": "GeocodeExtension",
+        "type": "object"
+      },
+      "GeocodeInput": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Address",
+            "type": "string"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/CRS",
+            "default": "EPSG:4326"
+          },
+          "fallback": {
+            "default": "local_only",
+            "enum": [
+              "off",
+              "local_only",
+              "api"
+            ],
+            "title": "Fallback",
+            "type": "string"
+          },
+          "refine": {
+            "default": true,
+            "title": "Refine",
+            "type": "boolean"
+          },
+          "simple": {
+            "default": false,
+            "title": "Simple",
+            "type": "boolean"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AddressType",
+            "default": "road"
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "title": "GeocodeInput",
+        "type": "object"
+      },
+      "GeocodeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/GeocodeInput"
+          },
+          "refined": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefinedAddress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceMeta"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "x_extension": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeExtension"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "service",
+          "status",
+          "input"
+        ],
+        "title": "GeocodeResponse",
+        "type": "object"
+      },
+      "GeocodeResult": {
+        "additionalProperties": false,
+        "properties": {
+          "crs": {
+            "$ref": "#/components/schemas/CRS",
+            "default": "EPSG:4326"
+          },
+          "point": {
+            "$ref": "#/components/schemas/Point"
+          }
+        },
+        "required": [
+          "point"
+        ],
+        "title": "GeocodeResult",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoadJobStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "current_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Stage"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "heartbeat_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat At"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "full_load_batch",
+                  "juso_text_load",
+                  "locsum_load",
+                  "navi_load",
+                  "shp_polygons_load",
+                  "shp_polygons_delta",
+                  "pobox_load",
+                  "bulk_load",
+                  "mv_refresh",
+                  "consistency_check"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Kind"
+          },
+          "load_batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Batch Id"
+          },
+          "log_tail": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Log Tail",
+            "type": "array"
+          },
+          "parent_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Job Id"
+          },
+          "payload_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload Summary"
+          },
+          "progress": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Progress",
+            "type": "number"
+          },
+          "source_set": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Set"
+          },
+          "source_yyyymm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Yyyymm"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "kind",
+          "state"
+        ],
+        "title": "LoadJobStatus",
+        "type": "object"
+      },
+      "LoadSubmitRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "full_load_batch",
+                  "juso_text_load",
+                  "locsum_load",
+                  "navi_load",
+                  "shp_polygons_load",
+                  "shp_polygons_delta",
+                  "pobox_load",
+                  "bulk_load",
+                  "mv_refresh",
+                  "consistency_check"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Kind"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "LoadSubmitRequest",
+        "type": "object"
+      },
+      "NormalizeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "address"
+        ],
+        "title": "NormalizeRequest",
+        "type": "object"
+      },
+      "NormalizeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "normalized": {
+            "title": "Normalized",
+            "type": "string"
+          },
+          "original": {
+            "title": "Original",
+            "type": "string"
+          },
+          "tokens": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tokens",
+            "type": "array"
+          }
+        },
+        "required": [
+          "original",
+          "normalized"
+        ],
+        "title": "NormalizeResponse",
+        "type": "object"
+      },
+      "PoboxInput": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "default": "ALL",
+            "enum": [
+              "PO",
+              "PG",
+              "ALL"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "sgg_nm": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sgg Nm"
+          },
+          "si_nm": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Nm"
+          },
+          "size": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "title": "PoboxInput",
+        "type": "object"
+      },
+      "PoboxResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/PoboxInput"
+          },
+          "result": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PoboxResultItem"
+            },
+            "title": "Result",
+            "type": "array"
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceMeta"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "total": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "service",
+          "status",
+          "input"
+        ],
+        "title": "PoboxResponse",
+        "type": "object"
+      },
+      "PoboxResultItem": {
+        "additionalProperties": false,
+        "properties": {
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "emd_nm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emd Nm"
+          },
+          "pobox_kind": {
+            "enum": [
+              "PO",
+              "PG"
+            ],
+            "title": "Pobox Kind",
+            "type": "string"
+          },
+          "pobox_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pobox Name"
+          },
+          "pobox_no_mn": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pobox No Mn"
+          },
+          "pobox_no_sl": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pobox No Sl"
+          },
+          "sgg_nm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sgg Nm"
+          },
+          "si_nm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Si Nm"
+          },
+          "zip_no": {
+            "title": "Zip No",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zip_no",
+          "pobox_kind"
+        ],
+        "title": "PoboxResultItem",
+        "type": "object"
+      },
+      "Point": {
+        "additionalProperties": false,
+        "description": "Coordinate point. External interfaces use ``x=lon`` and ``y=lat``.",
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "Point",
+        "type": "object"
+      },
+      "RefinedAddress": {
+        "additionalProperties": false,
+        "properties": {
+          "structure": {
+            "$ref": "#/components/schemas/AddressStructure"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "structure"
+        ],
+        "title": "RefinedAddress",
+        "type": "object"
+      },
+      "ResultSource": {
+        "enum": [
+          "local",
+          "api_juso",
+          "api_vworld",
+          "cache"
+        ],
+        "type": "string"
+      },
+      "ReverseInput": {
+        "additionalProperties": false,
+        "properties": {
+          "crs": {
+            "$ref": "#/components/schemas/CRS",
+            "default": "EPSG:4326"
+          },
+          "point": {
+            "$ref": "#/components/schemas/Point"
+          },
+          "radius_m": {
+            "default": 200,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Radius M",
+            "type": "integer"
+          },
+          "type": {
+            "default": "both",
+            "enum": [
+              "both",
+              "road",
+              "parcel"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "zipcode": {
+            "default": true,
+            "title": "Zipcode",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "point"
+        ],
+        "title": "ReverseInput",
+        "type": "object"
+      },
+      "ReverseResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/ReverseInput"
+          },
+          "result": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReverseResultItem"
+            },
+            "title": "Result",
+            "type": "array"
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceMeta"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "service",
+          "status",
+          "input"
+        ],
+        "title": "ReverseResponse",
+        "type": "object"
+      },
+      "ReverseResultItem": {
+        "additionalProperties": false,
+        "properties": {
+          "distance_m": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance M"
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/ResultSource",
+            "default": "local"
+          },
+          "structure": {
+            "$ref": "#/components/schemas/AddressStructure"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/AddressType"
+          },
+          "zip_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ZipSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "zipcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zipcode"
+          }
+        },
+        "required": [
+          "type",
+          "text",
+          "structure"
+        ],
+        "title": "ReverseResultItem",
+        "type": "object"
+      },
+      "SearchInput": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BBox"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/CRS",
+            "default": "EPSG:4326"
+          },
+          "page": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "size": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "type": {
+            "default": "address",
+            "enum": [
+              "address",
+              "place",
+              "district",
+              "road"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SearchInput",
+        "type": "object"
+      },
+      "SearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/SearchInput"
+          },
+          "result": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "title": "Result",
+            "type": "array"
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceMeta"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "total": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "service",
+          "status",
+          "input"
+        ],
+        "title": "SearchResponse",
+        "type": "object"
+      },
+      "SearchResultItem": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ResultSource",
+            "default": "local"
+          },
+          "structure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AddressStructure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "address",
+              "place",
+              "district",
+              "road"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title"
+        ],
+        "title": "SearchResultItem",
+        "type": "object"
+      },
+      "ServiceMeta": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "operation": {
+            "title": "Operation",
+            "type": "string"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          },
+          "version": {
+            "default": "2.0",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "operation"
+        ],
+        "title": "ServiceMeta",
+        "type": "object"
+      },
+      "Status": {
+        "enum": [
+          "OK",
+          "NOT_FOUND",
+          "ERROR"
+        ],
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ZipSource": {
+        "enum": [
+          "building_bsi_zon_no",
+          "bulk_delivery",
+          "kodis_bas_within",
+          "kodis_bas_centroid",
+          "pobox"
+        ],
+        "title": "ZipSource",
+        "type": "string"
+      },
+      "ZipcodeInput": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "bd_mgt_sn": {
+            "anyOf": [
+              {
+                "maxLength": 25,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bd Mgt Sn"
+          },
+          "include_bulk": {
+            "default": true,
+            "title": "Include Bulk",
+            "type": "boolean"
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ZipcodeInput",
+        "type": "object"
+      },
+      "ZipcodeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/ZipcodeInput"
+          },
+          "result": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ZipcodeResultItem"
+            },
+            "title": "Result",
+            "type": "array"
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceMeta"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "service",
+          "status",
+          "input"
+        ],
+        "title": "ZipcodeResponse",
+        "type": "object"
+      },
+      "ZipcodeResultItem": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "bd_mgt_sn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bd Mgt Sn"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ZipSource"
+          },
+          "zip_no": {
+            "title": "Zip No",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zip_no",
+          "source"
+        ],
+        "title": "ZipcodeResultItem",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "kraddr-geo",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/address/geocode": {
+      "get": {
+        "operationId": "geocode_v1_address_geocode_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "address",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Address",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "default": "road",
+              "enum": [
+                "road",
+                "parcel"
+              ],
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "crs",
+            "required": false,
+            "schema": {
+              "default": "EPSG:4326",
+              "title": "Crs",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "refine",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Refine",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "simple",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Simple",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fallback",
+            "required": false,
+            "schema": {
+              "default": "local_only",
+              "enum": [
+                "off",
+                "local_only",
+                "api"
+              ],
+              "title": "Fallback",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Geocode",
+        "tags": [
+          "address"
+        ]
+      }
+    },
+    "/v1/address/pobox": {
+      "get": {
+        "operationId": "pobox_v1_address_pobox_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "si_nm",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Si Nm"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sgg_nm",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sgg Nm"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "ALL",
+              "enum": [
+                "PO",
+                "PG",
+                "ALL"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoboxResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pobox",
+        "tags": [
+          "pobox"
+        ]
+      }
+    },
+    "/v1/address/reverse": {
+      "get": {
+        "operationId": "reverse_geocode_v1_address_reverse_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "x",
+            "required": true,
+            "schema": {
+              "title": "X",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "y",
+            "required": true,
+            "schema": {
+              "title": "Y",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "crs",
+            "required": false,
+            "schema": {
+              "default": "EPSG:4326",
+              "title": "Crs",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "default": "both",
+              "enum": [
+                "both",
+                "road",
+                "parcel"
+              ],
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "zipcode",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Zipcode",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "radius_m",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2000,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Radius M"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReverseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reverse Geocode",
+        "tags": [
+          "address"
+        ]
+      }
+    },
+    "/v1/address/search": {
+      "get": {
+        "operationId": "search_v1_address_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "default": "address",
+              "enum": [
+                "address",
+                "place",
+                "district",
+                "road"
+              ],
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/v1/address/zipcode": {
+      "get": {
+        "operationId": "zipcode_v1_address_zipcode_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "address",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Address"
+            }
+          },
+          {
+            "in": "query",
+            "name": "x",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X"
+            }
+          },
+          {
+            "in": "query",
+            "name": "y",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Y"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bd_mgt_sn",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 25,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bd Mgt Sn"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_bulk",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Bulk",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZipcodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Zipcode",
+        "tags": [
+          "zipcode"
+        ]
+      }
+    },
+    "/v1/admin/consistency": {
+      "get": {
+        "operationId": "list_consistency_v1_admin_consistency_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity_at_least",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "INFO",
+                    "WARN",
+                    "ERROR"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity At Least"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConsistencyReportSummary"
+                  },
+                  "title": "Response List Consistency V1 Admin Consistency Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Consistency",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/consistency/run": {
+      "post": {
+        "operationId": "run_consistency_v1_admin_consistency_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsistencyRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadJobStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Consistency",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/consistency/{report_id}": {
+      "get": {
+        "operationId": "consistency_report_v1_admin_consistency__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsistencyReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Consistency Report",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/loads": {
+      "get": {
+        "operationId": "list_loads_v1_admin_loads_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LoadJobStatus"
+                  },
+                  "title": "Response List Loads V1 Admin Loads Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Loads",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "operationId": "submit_load_v1_admin_loads_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoadSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadJobStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Load",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/loads/{job_id}": {
+      "get": {
+        "operationId": "load_status_v1_admin_loads__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadJobStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Load Status",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/loads/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_load_v1_admin_loads__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadJobStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Load",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/normalize": {
+      "post": {
+        "operationId": "normalize_v1_admin_normalize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormalizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormalizeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Normalize",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/healthz": {
+      "get": {
+        "operationId": "healthz_v1_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Healthz V1 Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  }
+}

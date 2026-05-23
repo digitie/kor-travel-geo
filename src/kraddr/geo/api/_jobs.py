@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.infra.admin_repo import AdminRepository
+from kraddr.geo.infra.batch import BATCH_SOURCE_KINDS, batch_children
 
 
 class ProgressCallback(Protocol):
@@ -26,13 +27,6 @@ class ProgressCallback(Protocol):
 
 JobHandler = Callable[[dict[str, Any], asyncio.Event, ProgressCallback], Awaitable[None]]
 ADVISORY_SLOT_LOAD_QUEUE = 470017
-BATCH_SOURCE_KINDS = (
-    "juso_text_load",
-    "locsum_load",
-    "navi_load",
-    "shp_polygons_load",
-    "pobox_load",
-)
 _SOURCE_KIND_SQL = ", ".join(f"'{kind}'" for kind in BATCH_SOURCE_KINDS)
 
 
@@ -72,7 +66,7 @@ class JobQueue:
         *,
         job_id: str | None = None,
     ) -> str:
-        children = _batch_children(payload)
+        children = batch_children(payload)
         row = await AdminRepository(self.engine).insert_load_batch(
             payload=payload,
             children=children,
@@ -515,28 +509,3 @@ SELECT job_id, kind, load_batch_id, parent_job_id
                 )
             ).mappings().first()
         return dict(row) if row else None
-
-
-def _batch_children(payload: dict[str, Any]) -> Sequence[tuple[str, dict[str, Any]]]:
-    raw_children = payload.get("children") or payload.get("child_jobs")
-    if isinstance(raw_children, list):
-        children: list[tuple[str, dict[str, Any]]] = []
-        for child in raw_children:
-            if not isinstance(child, dict):
-                continue
-            kind = child.get("kind")
-            child_payload = child.get("payload") or {}
-            if isinstance(kind, str) and isinstance(child_payload, dict):
-                children.append((kind, child_payload))
-        if children:
-            return tuple(children)
-
-    payloads = payload.get("payloads")
-    if not isinstance(payloads, dict):
-        payloads = {}
-    default_children: list[tuple[str, dict[str, Any]]] = []
-    for kind in BATCH_SOURCE_KINDS:
-        child_payload = payloads.get(kind)
-        default_payload = dict(child_payload) if isinstance(child_payload, dict) else {}
-        default_children.append((kind, default_payload))
-    return tuple(default_children)

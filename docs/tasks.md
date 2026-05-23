@@ -6,9 +6,6 @@
 - (없음)
 
 ## 대기 (우선순위 순)
-- [ ] T-018 CLI(`kraddr-geo load all-sidos`, `kraddr-geo refresh mv`, `kraddr-geo validate`) 구현
-- [ ] T-019 외부 API 폴백(`fallback="api"`) — vworld, juso 호출 어댑터
-- [ ] T-020 OpenAPI export 스크립트 + CI에서 drift 검사
 - [ ] T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩 (`docs/frontend-package.md` §A2)
 - [ ] T-022 프론트엔드 `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain` 페이지
 - [ ] T-023 프론트엔드 `/admin/load`(업로드 + 처리 워크플로), `/admin/tables`, `/admin/cache`, `/admin/logs`
@@ -16,6 +13,9 @@
 - [ ] T-025 `prometheus-client` 메트릭(외부 API 호출, 캐시 hit rate, 적재 작업)
 - [ ] **T-026** 디버그 UI `/admin/consistency` 페이지(`docs/frontend-package.md` 후속 PR) — 백엔드 C1~C10 검증 SQL, `ConsistencyReport` 빌더, CLI/API 표면은 PR #10 fixup에서 완료
 ## 완료
+- [x] T-020 OpenAPI export 스크립트 + `openapi.json` 생성 + GitHub Actions drift 검사 (`scripts/export_openapi.py`, `.github/workflows/openapi.yml`) 구현 (2026-05-23)
+- [x] T-019 외부 API 폴백(`fallback="api"`) — vworld 주소 좌표 API와 juso 검색+좌표 API 어댑터 구현. 로컬 `NOT_FOUND`일 때만 호출하고 `x_extension.source`에 공급자 출처 기록 (2026-05-23)
+- [x] T-018 CLI 운영 명령 구현 — `load all-sidos`, `load shp`, `load shp-all`, `load pobox`, `load bulk`, `load epost --kind=full`, `refresh mv --swap`, `validate consistency --cases/--scope` (2026-05-23)
 - [x] PR #10 리뷰 fixup: ADR-017 batch DAG(`load_batch_id`, `parent_job_id`, `full_load_batch`), C1~C10 정합성 검증, PNU `mntn_yn IS NULL` guard, reverse `both`, 인코딩 fallback, `load_jobs.log_tail` 갱신 경로, ADR-018 문서화 (2026-05-23)
 - [x] T-017 `loaders/pobox_loader.py`, `loaders/bulk_loader.py` (epost 보조 우편번호 COPY 로더) 구현 (2026-05-23)
 - [x] T-016 reverse / search / zipcode / pobox 코어와 raw SQL repo, REST 라우터 구현 (2026-05-23)

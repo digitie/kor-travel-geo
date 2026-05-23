@@ -26,17 +26,19 @@
 - ✅ 실제 PostgreSQL(PostGIS) 샘플 적재 검증 — 별도 테스트 DB에서 DDL 적용 → 실제 파일 COPY 샘플 load → 링크 해소 → MV 생성 확인
 - ✅ PR #10 리뷰 반영 — `load_jobs` batch DAG(`load_batch_id`, `parent_job_id`, `full_load_batch`), C1~C10 정합성 검증, PNU NULL guard, reverse `both`, 인코딩 fallback, `log_tail` 갱신 경로 구현
 - ✅ ADR-017(batch DAG + 정합성 게이트)과 ADR-018(`x_extension` 스키마 격리) 문서화
-- ⬜ CLI는 T-018 범위가 남아 있음. 이번 작업에서 `load juso/locsum/navi`, `refresh mv`, `validate consistency`, `jobs` 기본 명령은 추가했지만 `load all-sidos`, `shp-all`, 업로드 워크플로용 CLI는 후속.
+- ✅ T-018 CLI 운영 명령 구현 — `load all-sidos`, `load shp/shp-all`, `load epost --kind=full`, `refresh mv --swap`, `validate consistency --cases/--scope`
+- ✅ T-019 외부 API 폴백 구현 — `fallback="api"`일 때 로컬 `NOT_FOUND` 후 vworld → juso 검색+좌표 순서로 호출
+- ✅ T-020 OpenAPI export 구현 — `scripts/export_openapi.py`, committed `openapi.json`, `.github/workflows/openapi.yml` drift 검사
+- ✅ PR #11 후속 반영 — `full_load_batch` REST/라이브러리 공유 DAG 경로 확인, enqueue 전 child payload fail-fast 검증, PR 코멘트용 검증 근거 정리
 - ⬜ 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-`docs/tasks.md#T-018`: CLI 표면을 운영 워크플로 기준으로 완성한다.
+`docs/tasks.md#T-021`: 프론트엔드 패키지 `kraddr-geo-ui`를 부트스트랩한다.
 
-- `kraddr-geo load all-sidos`와 `kraddr-geo load shp-all`을 추가해 전국 단위 full-load를 한 명령으로 묶는다.
-- `kraddr-geo load epost --kind=full`은 epost API key/ZIP 다운로드 정책(ADR-009)과 연결한다.
-- CLI에서 `load_jobs`를 직접 등록할지, 즉시 실행할지 운영 모드를 명확히 분리한다.
-- OpenAPI export(T-020) 전에 FastAPI 앱 import가 optional `api` extra 없이 실패하지 않는지 한 번 더 점검한다.
+- Next.js 14 + shadcn/ui + Tailwind 기반으로 별도 Node.js 패키지를 만든다.
+- `openapi.json`을 기준으로 타입 생성 스크립트(`gen:types`)를 연결한다.
+- 첫 화면은 디버그/관리 도구 목적에 맞게 `/debug/geocode` 또는 `/admin/load` 중 하나로 시작한다. 마케팅 랜딩 페이지를 만들지 않는다.
 
 ## 작업 시작 전 확인할 것
 

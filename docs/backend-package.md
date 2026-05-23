@@ -272,6 +272,8 @@ async with AsyncAddressClient() as client:    # .env에서 DSN 자동 로드
 4. 결과 없으면 `GeocodeResponse(status="NOT_FOUND")`.
 5. `RefinedAddress(text, structure)` 빌드. `GeocodeExtension(source="local", confidence, bd_mgt_sn, rncode_full, bjd_cd, zip_no, zip_source, buld_nm)`.
 
+`fallback="api"`는 core가 직접 HTTP를 호출하지 않는다. `AsyncAddressClient.geocode()`가 로컬 core 결과가 `NOT_FOUND`일 때만 `infra/external_api.py::ExternalGeocodeClient`를 호출한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 + 좌표 API다. 외부 응답도 동일한 `GeocodeResponse` DTO로 변환하며, 자체 출처는 `x_extension.source = "api_vworld" | "api_juso"`에만 넣는다.
+
 `reverse_geocoder`, `searcher`, `zipcoder`, `poboxer`도 같은 패턴.
 
 ## 7. DB 어댑터
@@ -704,6 +706,38 @@ CREATE INDEX idx_load_jobs_parent ON load_jobs (parent_job_id) WHERE parent_job_
 
 ADR-017에 따라 `full_load_batch`는 실행 핸들러가 없는 root job으로 남고, 실제 실행은 child job이 담당한다. source child 5종이 모두 `done`이 되면 큐가 `consistency_check`를 자동 등록한다. 정합성 리포트가 `ERROR`가 아니고 `source_set.load_batch_id`가 확인되면 `mv_refresh`를 `strategy='swap'`으로 등록한다. child 실패 또는 취소가 발생하면 root는 `failed`, 아직 대기 중인 같은 batch child는 `cancelled`가 된다.
 
+`full_load_batch` payload는 enqueue 직전에 `infra.batch.batch_children()`에서 검증한다. 기본 경로는 `payload.payloads` 객체에 source child 5종을 모두 넣어야 하며, 각 child payload는 실제 로더가 요구하는 `path` 또는 `source_path`를 포함해야 한다. 이 검증은 REST `/v1/admin/loads`와 라이브러리 `AsyncAddressClient.submit_load("full_load_batch", ...)`가 같은 helper를 공유하므로 두 표면에서 동일하게 적용된다.
+
+```json
+{
+  "payloads": {
+    "juso_text_load": {
+      "path": "/data/juso/202604_도로명주소 한글_전체분",
+      "source_yyyymm": "202604"
+    },
+    "locsum_load": {
+      "path": "/data/juso/202604_위치정보요약DB_전체분.zip",
+      "source_yyyymm": "202604"
+    },
+    "navi_load": {
+      "path": "/data/juso/202604_내비게이션용DB_전체분",
+      "source_yyyymm": "202604"
+    },
+    "shp_polygons_load": {
+      "path": "/data/juso/도로명주소 전자지도",
+      "mode": "full"
+    },
+    "pobox_load": {
+      "path": "/data/epost/zipcode_full.zip"
+    }
+  }
+}
+```
+
+`source_set` 같은 운영 메타데이터를 root payload에 추가로 보관할 수는 있지만, 자동으로 등록되는 `consistency_check` child에는 큐가 `load_batch_id`를 별도 주입한다. 따라서 batch swap gate가 의존하는 최소 식별자는 `load_consistency_reports.source_set.load_batch_id`다.
+
+고급 사용자는 `children` 또는 `child_jobs` 배열로 기본 5종을 대체할 수 있다. 이때 각 entry는 `{"kind": "...", "payload": {...}}` 형식이어야 하며, `juso_text_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`, `bulk_load`처럼 경로 기반 로더인 kind는 동일하게 `path`/`source_path`가 필요하다. 잘못된 entry를 조용히 버리지 않고 `InvalidInputError(E0100, HTTP 400)`로 거절한다. 잘못 만든 batch root와 빈 child가 `load_jobs`에 남아 이후 drain에서 실패하는 상황을 막기 위한 정책이다.
+
 #### lifespan 복구 (`api/app.py`)
 
 ```python
@@ -953,11 +987,22 @@ async def run_all_cases(
 
 데이터 경로는 NTFS의 프로젝트 디렉토리 `data/`를 가리킨다. WSL에서 작업할 때는 ext4 작업 디렉토리에 `ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`로 심볼릭 링크를 두거나 절대경로(`/mnt/<drive>/projects/python-kraddr-geo/data/...`)로 참조한다.
 
+CLI는 운영자가 WSL shell에서 직접 실행하는 **동기 관리 명령**이다. API의 `/v1/admin/loads`는 `load_jobs` 큐와 batch DAG를 통해 백그라운드 실행을 담당한다. 두 경로 모두 같은 loader/core/repository 코드를 쓰지만, CLI는 장기 실행 프로세스가 끊기면 shell exit code로 실패를 전달하고, API 큐는 `load_jobs` 상태로 실패를 남긴다.
+
 ```bash
 # === 텍스트 정본 적재 (ADR-012, GDAL 무의존) ===
 kraddr-geo load juso  ./data/juso/202603_도로명주소\ 한글_전체분 --yyyymm 202603
 kraddr-geo load locsum ./data/juso/202604_위치정보요약DB_전체분 --yyyymm 202604
 kraddr-geo load navi   ./data/juso/202604_내비게이션용DB_전체분 --yyyymm 202604
+
+# === 전국 단위 직접 풀로드 ===
+kraddr-geo load all-sidos \
+  --juso ./data/juso/202603_도로명주소\ 한글_전체분 \
+  --locsum ./data/juso/202604_위치정보요약DB_전체분.zip \
+  --navi ./data/juso/202604_내비게이션용DB_전체분 \
+  --shp-root ./data/juso/도로명주소\ 전자지도 \
+  --yyyymm 202604 \
+  --swap
 
 # === SHP polygon 적재 (ADR-005, GDAL 필요) ===
 kraddr-geo load shp ./data/juso/도로명주소\ 전자지도/강원특별자치도 --mode full
@@ -975,12 +1020,11 @@ kraddr-geo load epost --kind=full
 # === 후처리 ===
 kraddr-geo refresh mv                        # CONCURRENTLY (평시)
 kraddr-geo refresh mv --swap                 # shadow MV swap (분기 풀로드 후)
-kraddr-geo refresh vacuum
 
 # === 정합성 검증 (ADR-012, ADR-016) ===
 kraddr-geo validate consistency               # 모든 케이스 C1~C10
-kraddr-geo validate consistency --sido=seoul  # 시도 단위
-kraddr-geo validate consistency --cases=C4,C7 --json   # 특정 케이스만, JSON 출력
+kraddr-geo validate consistency --scope=full
+kraddr-geo validate consistency --cases=C4,C7 # 특정 케이스만 JSON 출력
 
 # === 작업 큐 상태 조회 (ADR-011, ADR-016) ===
 kraddr-geo jobs list                          # 최근 작업 목록
@@ -1033,7 +1077,14 @@ steps:
 
 ### OpenAPI export
 
-`scripts/export_openapi.py`가 `create_app().openapi()`를 `openapi.json`에 저장. CI에서 `git diff --exit-code openapi.json`으로 변경 누락 방지. 프론트엔드는 본 파일을 받아 `gen:types`.
+`scripts/export_openapi.py`가 `create_app().openapi()`를 `openapi.json`에 저장한다.
+
+```bash
+python scripts/export_openapi.py --output openapi.json
+python scripts/export_openapi.py --check --output openapi.json
+```
+
+`.github/workflows/openapi.yml`은 PR마다 패키지를 `.[api]` extra로 설치한 뒤 `--check`를 실행한다. API DTO/라우터가 바뀌었는데 `openapi.json`이 갱신되지 않으면 CI가 실패한다. 프론트엔드는 본 파일을 받아 `gen:types`.
 
 ## 13. 부록
 
