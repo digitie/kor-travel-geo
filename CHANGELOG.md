@@ -17,6 +17,9 @@
 - 디버그/관리 UI는 내부망 전용으로 운영하며 애플리케이션 인증을 두지 않는다(ADR-013).
 
 ### Added
+- T-005~T-017 1차 구현: async engine factory, PostGIS/Alembic schema, `mv_geocode_target`, raw SQL repositories, core geocode/reverse/search/zipcode/pobox flows, `AsyncAddressClient`, FastAPI routers, persistent `load_jobs` queue, text/SHP/postal loaders를 추가한다.
+- 실제 `data/juso` 기반 검증 테스트를 추가한다. 도로명주소 한글 서울 파일, 위치정보요약DB ZIP member, 내비게이션용DB 서울 파일, 강원 SHP load plan을 직접 읽어 컬럼 인덱스·좌표·PNU 매핑을 검증한다.
+- 선택형 실제 PostgreSQL 적재 테스트를 추가한다. `KRADDR_GEO_TEST_PG_DSN`이 설정되면 DDL 적용 → 실제 파일 샘플 COPY 적재 → 위치정보↔텍스트 링크 해소 → `mv_geocode_target` 생성까지 실행한다.
 - 문서 구조에 `SKILL.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/data-model.md`, `docs/tasks.md`, `docs/resume.md`, `docs/journal.md`를 도입한다.
 - 외부 REST API(vworld, juso, epost, kakao maps)의 발급 절차와 호출 정책을 `docs/external-apis.md`로 정리한다.
 - 시도별 ZIP 업로드와 작업 큐 기반 직렬 적재 워크플로(`/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch`)를 사양으로 명시한다.
@@ -26,16 +29,18 @@
 - geocode/reverse/search/zipcode/pobox/admin DTO와 단위 테스트를 추가하고, `data/juso/도로명주소 전자지도` 실제 SHP/DBF 파일을 여는 레이어 검사 테스트를 추가한다.
 - ADR-010 추가: PNU 토지구분 매핑(`mntn_yn 0→1, 1→2`)과 조립 위치(`infra/` 또는 generated stored column). `core/`는 의미론적 `mntn_yn`만 보관.
 - ADR-011 추가: 적재 작업 상태를 `load_jobs` 테이블로 영속화. lifespan startup에서 잔존 `running→failed`, `queued`는 payload 존재 여부에 따라 재큐잉/`failed`. 다중 워커 안전성은 `pg_try_advisory_lock` + `FOR UPDATE SKIP LOCKED`.
-- 공간 쿼리 가이드: 반경/nearest는 `ent_pt_5179`(meter, GiST `idx_mv_geom5179`) 기준, `ent_pt_4326`은 응답 전용. 입력 좌표는 CTE/파라미터에서 한 번만 `ST_Transform`(SKILL.md §4-11).
+- 공간 쿼리 가이드: 반경/nearest는 `pt_5179`(meter, GiST `idx_mv_geom5179`) 기준, `pt_4326`은 응답 전용. 입력 좌표는 CTE/파라미터에서 한 번만 `ST_Transform`(SKILL.md §4-11).
 - MV 갱신 모드 두 가지 정의: 평시 `REFRESH CONCURRENTLY`, 분기 풀로드는 shadow MV(`mv_geocode_target_next`) 빌드 후 트랜잭션 RENAME swap.
 - engine factory(`infra/engine.py`) 단순화: DSN 보정은 `Settings.normalize_pg_dsn` 단일 책임. 중복 검사 제거.
 - 적재 ↔ 서빙 단일 스키마 정책 명시: 별도 `*_serving_*` 스키마 도입 금지, 평면화는 MV로만 표현(ADR-007 후속).
 - **(BREAKING in spec)** ADR-012 추가: 적재를 행안부 텍스트 정본 1차(도로명주소 한글_전체분/위치정보요약DB_전체분/내비게이션용DB_전체분, `loaders/text/`, stdlib csv + `psycopg.copy()`) + SHP polygon 보조(`loaders/shp/`, GDAL Python binding 한정) 하이브리드로 전환. ADR-005는 polygon 적재로 partial supersede.
-- 마스터 테이블을 11개에서 14개로 재구성: 텍스트 4(`tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc`) + SHP polygon 7 + 보조 우편번호 2 + 메타 5(`load_jobs`, `load_consistency_reports` 신규 포함).
+- 마스터 테이블을 텍스트 4(`tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc`) + SHP polygon/폴리라인 9 + 보조 우편번호 2 + 메타 5(`load_jobs`, `load_consistency_reports` 신규 포함)로 재구성한다.
 - ADR-007 복원·재정의: 대표 출입구 선택을 위치정보요약DB의 `ent_se_cd` 기반으로 명시. MV에 `pt_source ∈ {entrance, centroid}` 컬럼 추가 — 출입구 0개 건물은 내비게이션용DB centroid를 fallback 좌표로 사용.
 - ADR-016 추가: 적재 진행도(`AsyncAddressClient.load_status/list_load_jobs/submit_load/cancel_load`, `/v1/admin/loads/*` REST)와 정합성 리포트(`run_consistency_check`/`consistency_report`, `/v1/admin/consistency/*` REST, 케이스 C1~C10, `load_consistency_reports` JSONB)를 라이브러리·REST·디버그 UI에 일급 노출.
 - `tl_juso_text.pnu` generated stored column으로 ADR-010 매핑(`mntn_yn 0→1, 1→2`) 박음. PNU 19자리 정합성을 정합성 케이스 C9로 검증.
 - MV `mv_geocode_target` 컬럼명 변경: `ent_pt_5179`/`ent_pt_4326` → `pt_5179`/`pt_4326`. `pt_source` 신규.
+- 위치정보요약DB 적재 사양을 실제 파일 기준으로 보정한다. `entrc_*.txt`에는 `bd_mgt_sn`이 직접 없으므로 원본 natural key를 적재한 뒤 `tl_juso_text`와 후처리 조인으로 `bd_mgt_sn`을 해소한다.
+- SHP 보조 적재 대상 표기를 polygon 7종에서 polygon/폴리라인 9종으로 명확화한다(`tl_sprd_manage`, `tl_sprd_intrvl`, `tl_sprd_rw` 포함).
 
 ### Removed
 - 동기 라이브러리 API, monorepo 내부 디버그 UI, `ogr2ogr` subprocess 호출 경로를 사양에서 제거한다.

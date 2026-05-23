@@ -389,13 +389,28 @@ loaders/
 원칙:
 
 - **stdlib `csv`** + **`psycopg.copy()`** 로 적재. GDAL 무의존.
-- 인코딩: `chardet`로 sniff 후 CP949/UTF-8 결정. 그 후 `iconv` 또는 `codecs.iterdecode`로 UTF-8 정규화.
+- 인코딩: BOM이 있으면 `utf-8-sig`, 그 외에는 CP949를 기본값으로 둔다. 실제 `data/juso`의 2026-03/2026-04 자료는 `file` 명령에서 ISO-8859처럼 보이지만 내용은 CP949 한글 바이트다. 임의 sample을 잘라 `cp949` strict decode로 판정하면 멀티바이트 문자가 sample 경계에서 잘려 오탐될 수 있으므로, 로더는 BOM 우선 + CP949 기본 전략을 쓴다.
 - 한 시도 단위로 staging 테이블에 COPY → master로 UPSERT. 파라미터 한도(SKILL.md §4-12) 회피.
 - 진행률 보고: 파일 크기 기준 byte offset 또는 처리 줄 수 기준. `Job.progress` (0~1)에 throttle 갱신.
 
 #### `juso_hangul_loader.py` (T-013a)
 
-`data/juso/202603_도로명주소 한글_전체분/*.txt`의 시도별 파일을 적재.
+`data/juso/202603_도로명주소 한글_전체분/*.txt`의 시도별 파일을 적재한다. 현재 구현은 `rnaddrkor_*.txt`만 `tl_juso_text`에 적재한다. `jibun_rnaddrkor_*.txt`는 지번-도로명 보조 관계 확장이 필요해지면 별도 테이블 또는 보조 적재로 분리한다.
+
+실제 파일 검증 결과(서울 첫 행 기준):
+
+| index | 의미 | 예 |
+|-------|------|----|
+| 0 | `bd_mgt_sn` | `11110101310001200009400000` |
+| 1 | `bjd_cd` | `1111010100` |
+| 2~5 | 시도/시군구/읍면동/리 | `서울특별시`, `종로구`, `청운동`, 빈 값 |
+| 6~8 | 산여부/지번 본번/부번 | `0`, `144`, `3` |
+| 9~10 | `rncode_full`, 도로명 | `111103100012`, `자하문로` |
+| 11~13 | 지하 여부/건물 본번/부번 | `0`, `94`, `0` |
+| 14~16 | 행정동코드/행정동명/우편번호 | `1111051500`, `청운효자동`, `03047` |
+| 22 | 건물명 | 비어 있거나 `평안빌` |
+
+`tl_juso_text.pnu`는 DB generated column이지만, 로더 단위 테스트에서도 같은 규칙(`mntn_yn 0→1`, `1→2`, 필수 지번 필드 결측 시 `NULL`)을 검증한다.
 
 ```python
 """도로명주소 한글_전체분 로더.
@@ -407,7 +422,7 @@ loaders/
   - 컬럼 인덱스: 행안부 'rnaddrkor 파일레이아웃' PDF 기준
 """
 from __future__ import annotations
-import csv, io, codecs, chardet
+import csv, io
 from pathlib import Path
 from collections.abc import Iterator
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -417,41 +432,38 @@ import structlog
 
 log = structlog.get_logger()
 
-# 컬럼 인덱스 (행안부 파일레이아웃 기준 — 실제 인덱스는 T-013a에서 검증 후 박는다)
-COLUMNS = [
-    "rncode_full",  # 0 도로명코드 12 (sig_cd 5 + rn_cd 7)
-    "ctp_kor_nm",   # 1 시도명
-    "sig_kor_nm",   # 2 시군구명
-    "emd_kor_nm",   # 3 읍면동명
-    "li_kor_nm",    # 4 리명
-    "rn",           # 5 도로명
-    "buld_se_cd",   # 6 지하여부
-    "buld_mnnm",    # 7 건물본번
-    "buld_slno",    # 8 건물부번
-    "adm_cd",       # 9 행정동코드
-    "adm_kor_nm",   # 10 행정동명
-    "bjd_cd",       # 11 법정동코드
-    "lnbr_mnnm",    # 12 지번본번
-    "lnbr_slno",    # 13 지번부번
-    "mntn_yn",      # 14 산여부
-    "zip_no",       # 15 우편번호
-    "bd_mgt_sn",    # 16 건물관리번호
-    "buld_nm",      # 17 시군구 건물명
-    # ... 나머지는 사용하지 않더라도 위치 확인용
-]
+# 실제 rnaddrkor_*.txt 검증 기준(2026-03):
+# 0 bd_mgt_sn, 1 bjd_cd, 2 시도, 3 시군구, 4 읍면동, 5 리,
+# 6 mntn_yn, 7 lnbr_mnnm, 8 lnbr_slno, 9 rncode_full, 10 rn,
+# 11 buld_se_cd, 12 buld_mnnm, 13 buld_slno, 14 adm_cd, 15 adm_kor_nm,
+# 16 zip_no, 22 buld_nm.
+COLUMNS = {
+    "bd_mgt_sn": 0,
+    "bjd_cd": 1,
+    "ctp_kor_nm": 2,
+    "sig_kor_nm": 3,
+    "emd_kor_nm": 4,
+    "li_kor_nm": 5,
+    "mntn_yn": 6,
+    "lnbr_mnnm": 7,
+    "lnbr_slno": 8,
+    "rncode_full": 9,
+    "rn": 10,
+    "buld_se_cd": 11,
+    "buld_mnnm": 12,
+    "buld_slno": 13,
+    "adm_cd": 14,
+    "adm_kor_nm": 15,
+    "zip_no": 16,
+    "buld_nm": 22,
+}
 
 def detect_encoding(path: Path, sample_bytes: int = 65_536) -> str:
     with path.open("rb") as f:
         raw = f.read(sample_bytes)
     if raw.startswith(b"\xef\xbb\xbf"):
         return "utf-8-sig"
-    guess = chardet.detect(raw)
-    enc = (guess["encoding"] or "cp949").lower()
-    # 한국어 텍스트는 cp949 또는 utf-8만 합법
-    if enc not in {"cp949", "euc-kr", "utf-8", "utf-8-sig"}:
-        log.warning("juso.encoding.unknown", path=str(path), guess=enc)
-        enc = "cp949"
-    return "cp949" if enc == "euc-kr" else enc
+    return "cp949"
 
 
 def iter_rows(path: Path, encoding: str) -> Iterator[dict[str, str | None]]:
@@ -460,12 +472,12 @@ def iter_rows(path: Path, encoding: str) -> Iterator[dict[str, str | None]]:
         text_stream = io.TextIOWrapper(raw, encoding=encoding, errors="replace", newline="")
         reader = csv.reader(text_stream, delimiter="|", quoting=csv.QUOTE_NONE)
         for line_no, row in enumerate(reader, start=1):
-            if len(row) < len(COLUMNS):
+            if len(row) < 23:
                 log.warning("juso.row.too_short", line=line_no, cols=len(row), path=str(path))
                 continue
             yield {
-                col: (row[i].strip() or None)
-                for i, col in enumerate(COLUMNS)
+                col: (row[index].strip() or None)
+                for col, index in COLUMNS.items()
             }
 
 
@@ -489,7 +501,7 @@ async def load_juso_hangul(
             await cur.execute("CREATE TEMP TABLE _juso_staging (LIKE tl_juso_text INCLUDING ALL)")
             async with cur.copy(
                 "COPY _juso_staging "
-                "(rncode_full, ctp_kor_nm, sig_kor_nm, emd_kor_nm, li_kor_nm, "
+                "(sig_cd, rn_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, li_kor_nm, "
                 " rn, buld_se_cd, buld_mnnm, buld_slno, adm_cd, adm_kor_nm, "
                 " bjd_cd, lnbr_mnnm, lnbr_slno, mntn_yn, zip_no, bd_mgt_sn, buld_nm, "
                 " sig_cd, source_file, source_yyyymm) "
@@ -499,8 +511,9 @@ async def load_juso_hangul(
                     if cancel_event and cancel_event.is_set():
                         raise asyncio.CancelledError("juso_hangul_loader cancelled")
                     sig_cd = (r["rncode_full"] or "")[:5]
+                    rn_cd = (r["rncode_full"] or "")[5:]
                     await copy.write_row([
-                        r["rncode_full"], r["ctp_kor_nm"], r["sig_kor_nm"], r["emd_kor_nm"],
+                        sig_cd, rn_cd, r["ctp_kor_nm"], r["sig_kor_nm"], r["emd_kor_nm"],
                         r["li_kor_nm"], r["rn"], r["buld_se_cd"],
                         int(r["buld_mnnm"]) if r["buld_mnnm"] else None,
                         int(r["buld_slno"]) if r["buld_slno"] else None,
@@ -508,7 +521,7 @@ async def load_juso_hangul(
                         int(r["lnbr_mnnm"]) if r["lnbr_mnnm"] else None,
                         int(r["lnbr_slno"]) if r["lnbr_slno"] else None,
                         r["mntn_yn"], r["zip_no"], r["bd_mgt_sn"], r["buld_nm"],
-                        sig_cd, file_path.name, source_yyyymm,
+                        file_path.name, source_yyyymm,
                     ])
                     # progress: 줄당 byte 추정. 정확도는 ±5%.
                     bytes_done += sum(len((v or "").encode(enc)) for v in r.values()) + 20
@@ -519,7 +532,8 @@ async def load_juso_hangul(
                 INSERT INTO tl_juso_text AS t (...)
                 SELECT ... FROM _juso_staging
                 ON CONFLICT (bd_mgt_sn) DO UPDATE SET
-                  rncode_full = EXCLUDED.rncode_full, ...
+                  sig_cd = EXCLUDED.sig_cd,
+                  rn_cd = EXCLUDED.rn_cd, ...
                   loaded_at = now();
             """)
             inserted = cur.rowcount
@@ -531,23 +545,32 @@ async def load_juso_hangul(
 
 #### `locsum_loader.py` (T-013b)
 
-`data/juso/202604_위치정보요약DB_전체분/*.txt` — 출입구 좌표(EPSG:5179).
+`data/juso/202604_위치정보요약DB_전체분.zip` — 출입구 좌표(EPSG:5179). 실제 자료는 ZIP 내부 `entrc_*.txt`로 배포되며, 작업 디렉터리에 반드시 풀 필요 없이 ZIP member를 직접 스트리밍할 수 있다.
 
-기본 컬럼 (행안부 사양 기준 — 실제 인덱스는 T-013b에서 검증):
+중요 구현 차이: 실제 `entrc_*.txt`는 `bd_mgt_sn`을 직접 제공하지 않는다. 따라서 `tl_locsum_entrc`는 다음 원본 키를 먼저 보관한다.
 
 | 컬럼 (예) | 의미 | DB 매핑 |
 |-----------|------|---------|
-| 건물관리번호 | 25자리 | `bd_mgt_sn` |
-| 출입구 일련번호 | int | `ent_man_no` |
-| 좌표X | meter (5179) | `geom.x` |
-| 좌표Y | meter (5179) | `geom.y` |
-| 출입구구분코드 | '0'/'1'~ | `ent_se_cd` |
+| 0 | 시군구 코드 | `sig_cd` |
+| 1 | 출입구 관리번호 | `ent_man_no` |
+| 2 | 법정동코드 | `bjd_cd` |
+| 6 | 도로명코드 12자리 | `sig_cd + rn_cd` |
+| 8~10 | 지하 여부/건물 본번/부번 | `buld_se_cd`, `buld_mnnm`, `buld_slno` |
+| 12 | 우편번호 | `zip_no` |
+| 14 | 출입구구분코드 | `ent_se_cd` |
+| 16~17 | X/Y 좌표 | `geometry(Point, 5179)` |
 
-좌표 적재는 `ST_MakePoint(:x, :y)` + `ST_SetSRID(..., 5179)`. COPY 시 EWKT(`SRID=5179;POINT(x y)`) 또는 `ST_GeomFromText`로 변환. `ent_se_cd` 값 분포는 적재 후 정합성 리포트 C3 케이스로 검증.
+좌표 적재는 COPY에서 EWKT(`SRID=5179;POINT(x y)`)로 넣는다. X/Y가 모두 비어 있는 행이 실제 파일에 존재하므로, `geom NOT NULL` 테이블에는 좌표가 있는 행만 적재한다. 적재 후 `loaders/postload.py::resolve_text_geometry_links()`가 `tl_juso_text`와 `rncode_full + buld_se_cd + buld_mnnm + buld_slno + bjd_cd (+ zip_no)`로 조인해 `bd_mgt_sn`을 채운다. `ent_se_cd` 값 분포와 `bd_mgt_sn` 해소 실패율은 정합성 리포트에서 추적한다.
 
 #### `navi_loader.py` (T-013c)
 
 `data/juso/202604_내비게이션용DB_전체분/*.txt` — 건물 centroid + 내비/차량/부속 출입구.
+
+현재 구현 범위:
+
+- `match_build_*.txt` → `tl_navi_buld_centroid`: `bd_mgt_sn`이 직접 들어 있으므로 centroid fallback의 안정적인 키로 사용한다. 실제 서울 첫 행 기준 `23~24`가 centroid X/Y, `25~26`이 대표 출입구에 가까운 보조 X/Y다. MV fallback은 `23~24` centroid를 쓴다.
+- `match_rs_entrc.txt` → `tl_navi_entrc`: 원본에는 `bd_mgt_sn`이 없고 `sig_cd`, entry no, `rncode_full`, 건물번호, 법정동코드, 진입점 코드, X/Y만 있다. `kind`는 `01→navi`, `02→vehicle`, `03→parcel`, 그 외 `aux`로 보관한다.
+- `match_jibun_*.txt`는 현재 MV/역지오코딩 1차 경로에는 사용하지 않는다. 지번 centroid 보강이 필요해지면 T-016 후속으로 별도 repo 경로에 붙인다.
 
 ```python
 KIND_MAP = {
@@ -573,7 +596,7 @@ KIND_MAP = {
 - `PG_USE_COPY=YES` (`gdal.config_options` 컨텍스트 매니저)
 - 진행률 callback + 협조적 취소
 
-대상은 polygon 7종(`tl_scco_*`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw`).
+대상은 polygon/폴리라인 9종이다. 문서 초기판의 "polygon 7종" 표현은 `tl_sprd_manage`, `tl_sprd_intrvl`처럼 도형이 없거나 속성 보조 성격인 도로 테이블을 빠뜨린 축약이었다. 구현상 load plan은 다음 9개를 명시한다: `TL_SCCO_CTPRVN`, `TL_SCCO_SIG`, `TL_SCCO_EMD`, `TL_SCCO_LI`, `TL_KODIS_BAS`, `TL_SPRD_MANAGE`, `TL_SPRD_INTRVL`, `TL_SPRD_RW`, `TL_SPBD_BULD`.
 
 #### `tl_spbd_buld_polygon` 분리 전략
 

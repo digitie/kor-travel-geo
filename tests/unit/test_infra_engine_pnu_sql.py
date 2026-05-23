@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+from kraddr.geo.infra.engine import _connect_options, make_async_engine
+from kraddr.geo.infra.pnu import build_pnu, pnu_land_type_from_mntn_yn
+from kraddr.geo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL
+from kraddr.geo.settings import Settings
+
+
+def test_engine_uses_settings_dsn_and_x_extension_search_path() -> None:
+    settings = Settings(
+        pg_dsn="postgresql://u:p@localhost:5432/kraddr_geo",
+        pg_statement_timeout_ms=4321,
+    )
+
+    engine = make_async_engine(settings)
+
+    assert str(engine.url).startswith("postgresql+psycopg://")
+    assert "statement_timeout=4321" in _connect_options(settings)
+    assert "search_path=public,x_extension" in _connect_options(settings)
+
+
+def test_pnu_mapping_is_standard_and_null_safe() -> None:
+    assert pnu_land_type_from_mntn_yn("0") == "1"
+    assert pnu_land_type_from_mntn_yn("1") == "2"
+    assert build_pnu(bjd_cd="1111010100", mntn_yn="0", lnbr_mnnm=144, lnbr_slno=3) == (
+        "1111010100101440003"
+    )
+    assert build_pnu(bjd_cd="1111010100", mntn_yn="1", lnbr_mnnm=108, lnbr_slno=0) == (
+        "1111010100201080000"
+    )
+    assert build_pnu(bjd_cd="1111010100", mntn_yn="0", lnbr_mnnm=None) is None
+
+
+def test_schema_contracts_follow_adr_012_and_016() -> None:
+    assert "CREATE SCHEMA IF NOT EXISTS x_extension" in SCHEMA_SQL
+    assert "CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA x_extension" in SCHEMA_SQL
+    assert "CREATE TABLE IF NOT EXISTS tl_juso_text" in SCHEMA_SQL
+    assert "CREATE TABLE IF NOT EXISTS tl_locsum_entrc" in SCHEMA_SQL
+    assert "CREATE TABLE IF NOT EXISTS load_jobs" in SCHEMA_SQL
+    assert "CREATE TABLE IF NOT EXISTS load_consistency_reports" in SCHEMA_SQL
+    assert "COALESCE(lnbr_mnnm, 0)" not in SCHEMA_SQL
+    assert "WHEN bjd_cd IS NULL" in SCHEMA_SQL
+    assert "mntn_yn NOT IN ('0', '1')" in SCHEMA_SQL
+
+
+def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
+    assert "pt_5179" in MV_SQL
+    assert "pt_4326" in MV_SQL
+    assert "pt_source" in MV_SQL
+    assert "tl_locsum_entrc" in MV_SQL
+    assert "tl_navi_buld_centroid" in MV_SQL
+    assert "idx_mv_geom5179" in MV_SQL
+    assert "WHERE pt_5179 IS NOT NULL" in MV_SQL
+    assert "ent_pt_4326" not in MV_SQL
+    assert "idx_juso_text_rn_trgm" in INDEX_SQL
+

@@ -9,7 +9,7 @@
 | 구분 | 테이블/뷰 | 역할 | 출처 |
 |------|-----------|------|------|
 | 텍스트 1차 (4) | `tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc` | 행정/도로명/지번/우편번호 정본 매핑, 출입구 좌표, 내비 진입점/centroid | 행안부 텍스트 (월간) |
-| SHP polygon (7) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | 행정구역·우편번호·건물·도로 도형 | 도로명주소 전자지도 SHP (월간) |
+| SHP polygon/폴리라인 (9) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | 행정구역·우편번호·건물 polygon, 도로 관리/구간/폴리라인 | 도로명주소 전자지도 SHP (월간) |
 | 우편번호 보조 (2) | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 | epost OpenAPI (분기, ADR-009) |
 | 메타 (5) | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `geo_cache` | 적재 watermark·MVM 매핑·작업 큐(ADR-011)·정합성 리포트(ADR-016)·외부 API 캐시 | |
 | 평면화 (1) | `mv_geocode_target` | 지오코딩 쿼리용 MV (ADR-007) | 위 1·2를 join |
@@ -50,12 +50,21 @@ CREATE TABLE tl_juso_text (
   lnbr_slno         INT,                      -- 지번 부번
   -- 우편번호 정본
   zip_no            TEXT,                     -- 우편번호 5
-  -- PNU (ADR-010, 외부 시스템 조인용)
+  -- PNU (ADR-010, 외부 시스템 조인용).
+  -- bjd_cd/mntn_yn/lnbr_mnnm 중 하나라도 NULL이면 NULL.
+  -- COALESCE(lnbr_mnnm, 0)는 조용한 가짜 PNU를 만들기 때문에 금지.
+  -- lnbr_slno만 NULL인 경우는 본번-only 지번으로 보고 0 보정.
   pnu               TEXT GENERATED ALWAYS AS (
-    bjd_cd
-    || CASE WHEN mntn_yn = '1' THEN '2' ELSE '1' END
-    || lpad(COALESCE(lnbr_mnnm, 0)::text, 4, '0')
-    || lpad(COALESCE(lnbr_slno, 0)::text, 4, '0')
+    CASE
+      WHEN bjd_cd IS NULL
+        OR mntn_yn NOT IN ('0', '1')
+        OR lnbr_mnnm IS NULL
+      THEN NULL
+      ELSE bjd_cd
+        || CASE WHEN mntn_yn = '1' THEN '2' ELSE '1' END
+        || lpad(lnbr_mnnm::text, 4, '0')
+        || lpad(COALESCE(lnbr_slno, 0)::text, 4, '0')
+    END
   ) STORED,
   -- 적재 메타
   source_file       TEXT,                     -- 원본 파일명 (시도별)
@@ -92,30 +101,48 @@ CREATE INDEX idx_juso_text_pnu   ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
 | 우편번호 | 5자리 | `zip_no` |
 | 건물관리번호 | 25자리 | `bd_mgt_sn` |
 
-> **정확한 컬럼 순서는 행안부 배포 파일의 "도로명주소_한글_TXT 파일레이아웃"을 따른다**. 본 표는 사용 컬럼만 정리한 것이며, T-013a(`juso_hangul_loader.py`) 구현 시 헤더 PDF 사양을 reference로 컬럼 인덱스를 박는다. 인코딩은 시기에 따라 CP949 또는 UTF-8 BOM이 섞이므로 `chardet` sniff 후 `iconv` 표준화.
+> **구현 기준 컬럼 순서(2026-03 실제 파일 검증)**: `rnaddrkor_*.txt`는 헤더 없는 `|` 구분 CP949 파일이며, 현재 구현은 실제 `data/juso/202603_도로명주소 한글_전체분/rnaddrkor_seoul.txt`의 첫 행을 기준으로 `0=bd_mgt_sn`, `1=bjd_cd`, `2=시도`, `3=시군구`, `4=읍면동`, `5=리`, `6=mntn_yn`, `7=lnbr_mnnm`, `8=lnbr_slno`, `9=rncode_full`, `10=rn`, `11=buld_se_cd`, `12=buld_mnnm`, `13=buld_slno`, `14=adm_cd`, `15=adm_kor_nm`, `16=zip_no`, `22=buld_nm`을 사용한다. 파일 끝에는 빈 컬럼이 붙을 수 있으므로 로더는 필요한 인덱스만 명시적으로 읽는다. 인코딩은 BOM이 있으면 `utf-8-sig`, 그 외에는 CP949를 기본값으로 둔다.
 
 ### `tl_locsum_entrc` — 위치정보요약DB
 
 건물 출입구 좌표의 **정본**. 한 건물에 출입구가 여러 개일 수 있고 `ent_se_cd`로 대표/부속을 구분한다.
 
+중요: 실제 `202604_위치정보요약DB_전체분.zip`의 `entrc_*.txt`는 `bd_mgt_sn`을 직접 제공하지 않는다. 원본은 `sig_cd`, `ent_man_no`, `bjd_cd`, `rncode_full`, 지상/지하, 건물 본·부번, 우편번호, 용도, 출입구 구분, 행정동명, X/Y 좌표를 제공한다. 따라서 테이블은 원본 natural key를 보존하고, 후처리(`loaders/postload.py`)에서 `tl_juso_text`와 `rncode_full + buld_se_cd + buld_mnnm + buld_slno + bjd_cd (+ zip_no)`로 조인해 `bd_mgt_sn`을 해소한다. 이 해소가 실패한 행은 reverse/geocode MV의 대표 출입구 후보에서 제외하되, 정합성 리포트에서 비율을 추적한다.
+
 ```sql
 CREATE TABLE tl_locsum_entrc (
-  bd_mgt_sn     TEXT NOT NULL,
-  ent_man_no    BIGINT NOT NULL,         -- 출입구 관리번호
+  sig_cd        TEXT NOT NULL,
+  ent_man_no    BIGINT NOT NULL,          -- 출입구 관리번호(시군구 내 일련)
+  bd_mgt_sn     TEXT,                     -- 후처리에서 해소. 원본에는 없음.
+  bjd_cd        TEXT NOT NULL,
+  ctp_kor_nm    TEXT,
+  sig_kor_nm    TEXT,
+  emd_kor_nm    TEXT,
+  rn_cd         TEXT NOT NULL,
+  rncode_full   TEXT GENERATED ALWAYS AS (sig_cd || rn_cd) STORED,
+  rn            TEXT,
+  buld_se_cd    TEXT,
+  buld_mnnm     INT,
+  buld_slno     INT,
+  zip_no        TEXT,
+  buld_use      TEXT,
   ent_se_cd     CHAR(1),                  -- '0' 대표, '1'~ 부속
-  buld_se_cd    CHAR(1),                  -- 지상/지하 일치 보강용
+  adm_kor_nm    TEXT,
   geom          geometry(Point, 5179) NOT NULL,
   source_file   TEXT,
   source_yyyymm TEXT,
   loaded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (bd_mgt_sn, ent_man_no)
+  PRIMARY KEY (sig_cd, ent_man_no)
 );
 CREATE INDEX idx_locsum_geom    ON tl_locsum_entrc USING GIST (geom);
-CREATE INDEX idx_locsum_bd      ON tl_locsum_entrc (bd_mgt_sn);
-CREATE INDEX idx_locsum_rep     ON tl_locsum_entrc (bd_mgt_sn, ent_se_cd, ent_man_no);
+CREATE INDEX idx_locsum_bd      ON tl_locsum_entrc (bd_mgt_sn) WHERE bd_mgt_sn IS NOT NULL;
+CREATE INDEX idx_locsum_rep     ON tl_locsum_entrc (bd_mgt_sn, ent_se_cd, ent_man_no) WHERE bd_mgt_sn IS NOT NULL;
+CREATE INDEX idx_locsum_resolve ON tl_locsum_entrc (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no);
 ```
 
 ADR-007의 "대표 출입구 1건" 규칙이 본 테이블의 `ent_se_cd`에 직접 의존한다.
+
+좌표 X/Y가 비어 있는 행이 실제 파일에 존재한다. `geom`은 `NOT NULL`이므로 현재 로더는 좌표가 모두 있는 행만 적재한다. 좌표 결측 행 수는 원본 품질 지표이며, 필요하면 `load_consistency_reports`의 C3 세부 metric으로 남긴다.
 
 ### `tl_navi_buld_centroid` — 내비게이션용DB 건물 중심
 
@@ -124,6 +151,12 @@ ADR-007의 "대표 출입구 1건" 규칙이 본 테이블의 `ent_se_cd`에 직
 ```sql
 CREATE TABLE tl_navi_buld_centroid (
   bd_mgt_sn      TEXT PRIMARY KEY,
+  bjd_cd          TEXT,
+  sig_cd          TEXT,
+  rn_cd           TEXT,
+  rncode_full     TEXT GENERATED ALWAYS AS (
+    CASE WHEN sig_cd IS NULL OR rn_cd IS NULL THEN NULL ELSE sig_cd || rn_cd END
+  ) STORED,
   centroid_5179  geometry(Point, 5179) NOT NULL,
   source_file    TEXT,
   source_yyyymm  TEXT,
@@ -138,17 +171,25 @@ CREATE INDEX idx_navi_centroid_geom ON tl_navi_buld_centroid USING GIST (centroi
 
 ```sql
 CREATE TABLE tl_navi_entrc (
-  bd_mgt_sn   TEXT NOT NULL,
+  sig_cd      TEXT NOT NULL,
   entry_no    BIGINT NOT NULL,
+  bd_mgt_sn   TEXT,                       -- match_rs_entrc 원본에는 없음. 후처리 해소.
+  bjd_cd      TEXT,
+  rn_cd       TEXT NOT NULL,
+  rncode_full TEXT GENERATED ALWAYS AS (sig_cd || rn_cd) STORED,
+  buld_se_cd  TEXT,
+  buld_mnnm   INT,
+  buld_slno   INT,
   kind        TEXT NOT NULL CHECK (kind IN ('navi','vehicle','parcel','aux')),
   geom        geometry(Point, 5179) NOT NULL,
   source_file TEXT,
   source_yyyymm TEXT,
   loaded_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (bd_mgt_sn, entry_no)
+  PRIMARY KEY (sig_cd, entry_no)
 );
 CREATE INDEX idx_navi_entrc_geom ON tl_navi_entrc USING GIST (geom);
-CREATE INDEX idx_navi_entrc_bd   ON tl_navi_entrc (bd_mgt_sn, kind);
+CREATE INDEX idx_navi_entrc_bd   ON tl_navi_entrc (bd_mgt_sn, kind) WHERE bd_mgt_sn IS NOT NULL;
+CREATE INDEX idx_navi_entrc_resolve ON tl_navi_entrc (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
 ```
 
 ## SHP 보조 (polygon/폴리라인 전용, ADR-005)
@@ -163,8 +204,8 @@ CREATE INDEX idx_navi_entrc_bd   ON tl_navi_entrc (bd_mgt_sn, kind);
 | `tl_scco_li` | `li_cd` | MULTIPOLYGON 5179 | 리 polygon |
 | `tl_kodis_bas` | `bas_mgt_sn` | MULTIPOLYGON 5179 | 우편번호(기초구역) polygon |
 | `tl_spbd_buld_polygon` | `bd_mgt_sn` | MULTIPOLYGON 5179 | 건물 polygon (JOIN key만 공유, 속성은 `tl_juso_text`) |
-| `tl_sprd_manage` | `(sig_cd, rds_man_no)` | (속성 보조) | 도로 관리. 텍스트와 일부 중복이지만 폴리라인 JOIN 키 |
-| `tl_sprd_intrvl` | `(sig_cd, rds_man_no, bsi_int_sn)` | | 도로 구간 |
+| `tl_sprd_manage` | `(sig_cd, rds_man_no)` | 속성 보조 | 도로 관리. 텍스트와 일부 중복이지만 폴리라인 JOIN 키 |
+| `tl_sprd_intrvl` | `(sig_cd, rds_man_no, bsi_int_sn)` | 속성 보조 | 도로 구간 |
 | `tl_sprd_rw` | `(sig_cd, rw_sn)` | MULTILINESTRING 5179 | 도로 폴리라인 |
 
 GDAL 적재는 `gdal.VectorTranslate(..., open_options=["ENCODING=CP949"], PG_USE_COPY="YES")`(ADR-005). 각 polygon 테이블에 GiST 인덱스를 둔다.
@@ -427,29 +468,41 @@ def land_type(mntn_yn: str) -> str:
     """mntn_yn ('0'/'1') → PNU 토지구분 ('1'/'2')."""
     return "2" if mntn_yn == "1" else "1"
 
-def pnu_from_row(row: dict) -> str:
-    """bjd_cd(10) + land_type(1) + lnbr_mnnm(4) + lnbr_slno(4) = 19자리."""
+def pnu_from_row(row: dict) -> str | None:
+    """bjd_cd(10) + land_type(1) + lnbr_mnnm(4) + lnbr_slno(4) = 19자리.
+
+    bjd_cd, mntn_yn, lnbr_mnnm이 없으면 조용히 0000을 만들지 말고 NULL
+    또는 검증 오류로 처리한다. lnbr_slno만 없으면 본번-only 지번으로 보고 0.
+    """
+    if not row["bjd_cd"] or row["mntn_yn"] not in {"0", "1"} or row["lnbr_mnnm"] is None:
+        return None
     return (
         row["bjd_cd"]
         + land_type(row["mntn_yn"])
         + f"{int(row['lnbr_mnnm']):04d}"
-        + f"{int(row['lnbr_slno']):04d}"
+        + f"{int(row.get('lnbr_slno') or 0):04d}"
     )
 ```
 
-또는 `tl_spbd_buld`에 generated stored column으로 추가도 가능:
+현재 구현은 `tl_juso_text`에 generated stored column으로 둔다:
 
 ```sql
-ALTER TABLE tl_spbd_buld ADD COLUMN pnu TEXT GENERATED ALWAYS AS (
-  bjd_cd
-  || CASE WHEN mntn_yn = '1' THEN '2' ELSE '1' END
-  || lpad(lnbr_mnnm::text, 4, '0')
-  || lpad(lnbr_slno::text, 4, '0')
+ALTER TABLE tl_juso_text ADD COLUMN pnu TEXT GENERATED ALWAYS AS (
+  CASE
+    WHEN bjd_cd IS NULL
+      OR mntn_yn NOT IN ('0', '1')
+      OR lnbr_mnnm IS NULL
+    THEN NULL
+    ELSE bjd_cd
+      || CASE WHEN mntn_yn = '1' THEN '2' ELSE '1' END
+      || lpad(lnbr_mnnm::text, 4, '0')
+      || lpad(COALESCE(lnbr_slno, 0)::text, 4, '0')
+  END
 ) STORED;
-CREATE INDEX idx_buld_pnu ON tl_spbd_buld (pnu) WHERE pnu IS NOT NULL;
+CREATE INDEX idx_juso_text_pnu ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
 ```
 
-위치는 ADR-010 후속에서 helper vs generated column 결정. 어느 쪽이든 **`core/`에는 PNU 조립 로직을 두지 않는다** — 외부 식별자 표준은 저장/조회 계층의 책임.
+Python helper(`src/kraddr/geo/infra/pnu.py`)는 로더 단위 테스트와 외부 연동 보조용으로만 둔다. **`core/`에는 PNU 조립 로직을 두지 않는다** — 외부 식별자 표준은 저장/조회 계층의 책임.
 
 ## 보조 우편번호
 

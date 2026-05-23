@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-22 갱신, by human)
+## 현재 진척도 (2026-05-23 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ master 브랜치를 문서·repo 설정만 남도록 정리
@@ -14,18 +14,27 @@
 - ✅ `dto/common.py`, `dto/address.py` 작성 — CRS 정규화, 불변 DTO, vworld 주소 구조 + 단위 테스트
 - ✅ 나머지 DTO(`geocode`, `reverse`, `search`, `zipcode`, `pobox`, `admin`) 구현
 - ✅ `data/juso/도로명주소 전자지도` 실제 SHP/DBF 파일 헤더·필드 검사 테스트 추가 (`강원특별자치도/51000`)
-- ⬜ DDL/Alembic 적용 (`sql/ddl/`, `alembic/`)
-- ⬜ `core/`, `infra/`, `client.py`, `api/`, `loaders/`, `cli/` 실제 기능 구현 (모두 `src/kraddr/geo/` 하위)
+- ✅ DDL/Alembic 적용 (`sql/ddl/`, `alembic/versions/0001_text_primary_postgis_schema.py`)
+- ✅ `infra/engine.py`, raw SQL repo(`geocode/reverse/search/zip/pobox/admin`) 구현
+- ✅ `core/normalize.py`, `core/geocoder.py`, `reverse/search/zipcode/pobox` 코어 구현
+- ✅ `AsyncAddressClient` 실제 기능 연결 — geocode/reverse/search/zipcode/pobox, load job 조회/등록/취소, consistency report 조회
+- ✅ FastAPI 앱/라우터 구현 — `/v1/address/*`, `/v1/admin/loads`, `/v1/admin/consistency/*`
+- ✅ 텍스트 정본 로더 구현 — `juso_hangul_loader.py`, `locsum_loader.py`, `navi_loader.py`
+- ✅ SHP 보조 로더/후처리 구현 — `polygons_loader.py`, `delta_loader.py`, `postload.py`, `consistency.py`
+- ✅ epost 보조 우편번호 로더 구현 — `pobox_loader.py`, `bulk_loader.py`
+- ✅ 실제 `data/juso` 파일 검증 — 도로명주소 한글 서울 파일, 위치정보요약DB ZIP member, 내비게이션용DB 서울 파일, 강원 SHP load plan
+- ✅ 실제 PostgreSQL(PostGIS) 샘플 적재 검증 — 별도 테스트 DB에서 DDL 적용 → 실제 파일 COPY 샘플 load → 링크 해소 → MV 생성 확인
+- ⬜ CLI는 T-018 범위가 남아 있음. 이번 작업에서 `load juso/locsum/navi`, `refresh mv`, `validate consistency`, `jobs` 기본 명령은 추가했지만 `load all-sidos`, `shp-all`, 업로드 워크플로용 CLI는 후속.
 - ⬜ 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-`docs/tasks.md#T-005`: `infra/engine.py` (async engine factory)를 작성하고 통합 테스트를 준비한다.
+`docs/tasks.md#T-018`: CLI 표면을 운영 워크플로 기준으로 완성한다.
 
-- `docs/backend-package.md` §7.1을 기준으로 SQLAlchemy 2 async engine factory를 작성한다.
-- `postgresql://` DSN은 `postgresql+psycopg://`로 보정한다.
-- statement timeout, pool 설정, `orjson` serializer/deserializer를 `Settings`에서 읽는다.
-- Docker/PostGIS 통합 테스트가 어려우면 우선 engine construction 단위 테스트와 testcontainers skip 조건을 분리한다.
+- `kraddr-geo load all-sidos`와 `kraddr-geo load shp-all`을 추가해 전국 단위 full-load를 한 명령으로 묶는다.
+- `kraddr-geo load epost --kind=full`은 epost API key/ZIP 다운로드 정책(ADR-009)과 연결한다.
+- CLI에서 `load_jobs`를 직접 등록할지, 즉시 실행할지 운영 모드를 명확히 분리한다.
+- OpenAPI export(T-020) 전에 FastAPI 앱 import가 optional `api` extra 없이 실패하지 않는지 한 번 더 점검한다.
 
 ## 작업 시작 전 확인할 것
 
@@ -47,6 +56,9 @@
 - 현재 셸처럼 `TMP`/`TEMP`가 Windows Temp(`/mnt/c/...`)를 가리키면 pytest 캡처가 `FileNotFoundError`로 실패할 수 있다. WSL에서는 `TMPDIR=/tmp TMP=/tmp TEMP=/tmp python -m pytest`처럼 Linux `/tmp`를 지정한다.
 - **GDAL 버전 미스매치**: Python `gdal` 패키지가 시스템 GDAL과 다른 버전이면 `ImportError: undefined symbol`. `pip install "gdal==$(gdal-config --version)"`로 핀(ADR-008, `docs/dev-environment.md`).
 - **`libgdal-dev` 누락**: `pip install -e ".[loaders]"`가 `gdal-config: command not found`로 실패. WSL에서는 `sudo apt install libgdal-dev gdal-bin` 후 재시도.
+- **위치정보요약DB에는 `bd_mgt_sn`이 직접 없다**: 실제 `entrc_*.txt`는 `sig_cd`, `ent_man_no`, `bjd_cd`, `rncode_full`, 건물번호, 우편번호, 좌표를 제공한다. 로더는 원본 키를 보존하고 `postload.resolve_text_geometry_links()`에서 `tl_juso_text`와 조인해 `bd_mgt_sn`을 해소한다.
+- **일부 위치정보요약DB 행은 좌표가 비어 있다**: `tl_locsum_entrc.geom`은 `NOT NULL`이므로 로더는 X/Y가 모두 있는 행만 적재한다. 좌표 결측 비율은 정합성 리포트(C3 확장)에서 별도 집계할 수 있다.
+- **실제 DB 적재 검증**: 로컬 PostGIS가 준비되어 있으면 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q`로 실제 `data/juso` 샘플 COPY와 MV 생성을 확인한다.
 
 ## 작업 후 의무사항
 
