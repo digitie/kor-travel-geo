@@ -16,17 +16,17 @@
 - ✅ `data/juso/도로명주소 전자지도` 실제 SHP/DBF 파일 헤더·필드 검사 테스트 추가 (`강원특별자치도/51000`)
 - ✅ `infra/engine.py` async engine factory 구현 + 설정 전달 단위 테스트
 - ✅ PNU 산여부 매핑 helper, EPSG:5179 역지오코딩 SQL fragment, `load_jobs` 영속 상태 helper와 단위 테스트 추가
-- ⬜ DDL/Alembic 적용 (`sql/ddl/`, `alembic/`)
+- ✅ PostGIS 11개 마스터 + 보조/메타 테이블 DDL과 Alembic 0001 revision 작성
 - ⬜ `core/`, `infra/`, `client.py`, `api/`, `loaders/`, `cli/` 실제 기능 구현 (모두 `src/kraddr/geo/` 하위)
 - ⬜ 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-`docs/tasks.md#T-006`: PostGIS 11개 마스터 + 보조/메타 테이블 DDL을 `sql/ddl/`과 `alembic/versions/0001_*.py`에 작성한다.
+`docs/tasks.md#T-007`: `mv_geocode_target` MV 정의와 `REFRESH MATERIALIZED VIEW CONCURRENTLY` 통합 테스트를 작성한다.
 
-- `docs/data-model.md` 기준으로 `load_jobs`, `idx_mv_geom5179`, `mv_geocode_target` 정의를 DDL에 반영한다.
-- PNU helper(`infra/pnu.py`)와 `load_jobs` SQL fragment(`infra/load_jobs.py`)의 규칙을 DDL/마이그레이션과 맞춘다.
-- Docker/PostGIS 통합 테스트가 어려우면 DDL idempotency와 SQL text 검증 단위 테스트를 먼저 분리한다.
+- `sql/mv.sql`의 `WITH NO DATA` MV를 테스트 DB에서 생성하고 seed row로 refresh 경로를 검증한다.
+- `idx_mv_geocode_target_pk` unique index가 있어 `CONCURRENTLY` refresh 가능 조건을 만족하는지 확인한다.
+- testcontainers/PostGIS가 어려우면 우선 Alembic offline SQL 생성과 MV SQL text 검증을 분리한다.
 
 ## 작업 시작 전 확인할 것
 

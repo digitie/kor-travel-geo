@@ -127,6 +127,36 @@
 
 ---
 
+## 2026-05-23 (codex, T-006)
+
+**작업**: T-006 구현 — PostGIS 11개 마스터 + 보조/메타 테이블 DDL과 Alembic 0001 revision 작성
+
+**변경 파일**:
+- 신규: `sql/ddl/001_extensions.sql`, `sql/ddl/010_master_tables.sql`, `sql/ddl/020_auxiliary_tables.sql`, `sql/ddl/030_meta_tables.sql`
+- 신규: `sql/indexes.sql`, `sql/mv.sql`, `sql/postload.sql`
+- 신규: `alembic.ini`, `alembic/env.py`, `alembic/versions/0001_initial_postgis_schema.py`
+- 신규: `tests/unit/test_sql_schema.py`, `tests/unit/test_alembic_schema.py`
+- 갱신: `pyproject.toml`, `CHANGELOG.md`, `docs/tasks.md`, `docs/resume.md`, `docs/journal.md`
+
+**결정**:
+- `sql/ddl/*.sql`과 `sql/*.sql`을 DDL의 source of truth로 두고, Alembic revision은 해당 SQL 파일을 순서대로 실행하는 얇은 wrapper로 둔다.
+- `tl_spbd_buld`에 `bjd_cd`, `rncode_full`, `buld_nm_nrm`, `pnu` generated column을 둔다. PNU의 산여부는 원문 `mntn_yn` `0/1`이 아니라 표준 토지구분코드 `1/2`로 변환한다.
+- `mv_geocode_target`은 migration 단계에서 `WITH NO DATA`로 만들고, 후처리에서 `REFRESH MATERIALIZED VIEW CONCURRENTLY`를 수행한다.
+- Alembic을 런타임 의존성에 추가한다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 72 passed
+- `.venv/bin/ruff check .` → 통과
+- `.venv/bin/mypy src/kraddr/geo` → 통과
+- `.venv/bin/lint-imports` → Layered architecture kept
+
+**참고**:
+- 실제 PostgreSQL 컨테이너에서 migration 적용과 MV concurrent refresh를 검증하는 통합 테스트는 T-007에서 이어서 작성한다.
+
+**다음**: T-007 — `mv_geocode_target` refresh 통합 테스트.
+
+---
+
 ## 2026-05-23 (codex, 추가 구현)
 
 **작업**: 리뷰 반영 사항의 실제 코드 구현 — engine factory, PNU helper, 역지오코딩 SQL fragment, 적재 job 상태 helper와 촘촘한 단위 테스트 추가
