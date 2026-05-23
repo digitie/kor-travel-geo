@@ -39,14 +39,14 @@
 - ✅ T-026 정합성 UI 구현 — `/admin/consistency`에서 C1~C10 report 목록·상세·재검증 enqueue 확인
 - ✅ FastAPI admin 보강 — `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`
 - ✅ PR #12 리뷰 보강 — 업로드 path traversal/크기 제한, 프록시 `/v1` 제한과 스트리밍 전달, React Query retry, EXPLAIN timeout, LoadConsole/Explain/Reverse/Consistency 에러 처리, CI `scripts` import 실패 수정
+- 🟡 PR #13/T-027 계획 보강 — `data/juso` 전체 인벤토리, Docker full-load 실행 금지선, 기준월 분리(`JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`), `PLAN_ONLY=1` preflight, 미지원 자료 후속 태스크를 문서화
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-PR #12 후속 CI와 리뷰 재확인을 기다린다. 리뷰가 없으면 다음 후보는 `/admin/load`의 장기 실행 UX 보강이다.
+PR #13은 실제 전체 적재를 바로 실행하지 말고, 먼저 `PLAN_ONLY=1 bash scripts/fullload_test.sh`로 경로 preflight만 확인한다. 그 다음 Docker 볼륨/로그 경로/중단 기준을 사람 리뷰로 확정한 뒤 전체 적재 실행 여부를 결정한다.
 
-- `fetch` 기반 raw upload는 backend stream 처리와 일치하고 Next.js 프록시도 전체 파일을 메모리에 버퍼링하지 않는다. 다만 업로드 진행률 이벤트는 없으므로 운영자가 대용량 ZIP 진행률을 봐야 하면 XHR 기반 progress bar를 추가한다.
-- `/admin/logs`는 현재 `load_jobs.log_tail` 최근 라인 조회다. 장기적으로 WebSocket/Server-Sent Events tail을 붙일 수 있다.
-- `/debug/reverse`는 Kakao 지도 클릭으로 좌표를 채우되 자동 조회는 하지 않는다. 클릭 즉시 reverse 호출이 필요하면 명시적 UX 결정 후 추가한다.
+- 현재 로컬 `data/juso`는 도로명주소 한글이 `202603`, 위치정보요약DB/내비게이션용DB가 `202604`라 C10 기준월 불일치가 날 수 있다. 동월 정합성을 보려면 `202604_도로명주소 한글_전체분`을 확보한 뒤 재계획한다.
+- `daily/*.zip`, `jibun_rnaddrkor_*`, `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니다. T-028~T-030으로 분리해 로더/ADR를 먼저 잡는다.
 
 ## 작업 시작 전 확인할 것
 
