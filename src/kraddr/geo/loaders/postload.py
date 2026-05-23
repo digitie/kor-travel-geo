@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -14,7 +16,16 @@ async def resolve_text_geometry_links(engine: AsyncEngine) -> None:
             await conn.execute(text(sql))
 
 
-async def refresh_mv(engine: AsyncEngine, *, concurrently: bool = True) -> None:
+async def refresh_mv(
+    engine: AsyncEngine,
+    *,
+    concurrently: bool = True,
+    strategy: Literal["concurrent", "swap"] = "concurrent",
+) -> None:
+    if strategy == "swap":
+        await rebuild_mv_next(engine)
+        await shadow_swap_mv(engine)
+        return
     statement = "REFRESH MATERIALIZED VIEW"
     if concurrently:
         statement += " CONCURRENTLY"
@@ -41,3 +52,16 @@ async def shadow_swap_mv(engine: AsyncEngine) -> None:
             text("ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target")
         )
         await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_target_old"))
+
+
+async def rebuild_mv_next(engine: AsyncEngine) -> None:
+    async with engine.begin() as conn:
+        for sql in iter_sql_statements(_mv_next_sql()):
+            await conn.execute(text(sql))
+
+
+def _mv_next_sql() -> str:
+    sql = MV_SQL.replace("mv_geocode_target", "mv_geocode_target_next")
+    sql = sql.replace("CREATE UNIQUE INDEX idx_mv_", "CREATE UNIQUE INDEX idx_mv_next_")
+    sql = sql.replace("CREATE INDEX idx_mv_", "CREATE INDEX idx_mv_next_")
+    return sql

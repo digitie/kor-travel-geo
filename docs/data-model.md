@@ -24,7 +24,7 @@
 
 ```sql
 CREATE TABLE tl_juso_text (
-  bd_mgt_sn         TEXT PRIMARY KEY,         -- 건물관리번호 25자리
+  bd_mgt_sn         TEXT PRIMARY KEY,         -- 건물관리번호. 사양은 25자리이나 실제 2026-03 서울 파일은 26자리
   -- 행정
   sig_cd            TEXT NOT NULL,            -- 시군구 코드 5
   ctp_kor_nm        TEXT,                     -- 시도명
@@ -57,6 +57,7 @@ CREATE TABLE tl_juso_text (
   pnu               TEXT GENERATED ALWAYS AS (
     CASE
       WHEN bjd_cd IS NULL
+        OR mntn_yn IS NULL
         OR mntn_yn NOT IN ('0', '1')
         OR lnbr_mnnm IS NULL
       THEN NULL
@@ -99,9 +100,9 @@ CREATE INDEX idx_juso_text_pnu   ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
 | 지번 부번 | int | `lnbr_slno` |
 | 산여부 | '0'/'1' | `mntn_yn` |
 | 우편번호 | 5자리 | `zip_no` |
-| 건물관리번호 | 25자리 | `bd_mgt_sn` |
+| 건물관리번호 | 25자리 또는 26자리 | `bd_mgt_sn` |
 
-> **구현 기준 컬럼 순서(2026-03 실제 파일 검증)**: `rnaddrkor_*.txt`는 헤더 없는 `|` 구분 CP949 파일이며, 현재 구현은 실제 `data/juso/202603_도로명주소 한글_전체분/rnaddrkor_seoul.txt`의 첫 행을 기준으로 `0=bd_mgt_sn`, `1=bjd_cd`, `2=시도`, `3=시군구`, `4=읍면동`, `5=리`, `6=mntn_yn`, `7=lnbr_mnnm`, `8=lnbr_slno`, `9=rncode_full`, `10=rn`, `11=buld_se_cd`, `12=buld_mnnm`, `13=buld_slno`, `14=adm_cd`, `15=adm_kor_nm`, `16=zip_no`, `22=buld_nm`을 사용한다. 파일 끝에는 빈 컬럼이 붙을 수 있으므로 로더는 필요한 인덱스만 명시적으로 읽는다. 인코딩은 BOM이 있으면 `utf-8-sig`, 그 외에는 CP949를 기본값으로 둔다.
+> **구현 기준 컬럼 순서(2026-03 실제 파일 검증)**: `rnaddrkor_*.txt`는 헤더 없는 `|` 구분 텍스트 파일이며, 현재 구현은 실제 `data/juso/202603_도로명주소 한글_전체분/rnaddrkor_seoul.txt`의 첫 행을 기준으로 `0=bd_mgt_sn`, `1=bjd_cd`, `2=시도`, `3=시군구`, `4=읍면동`, `5=리`, `6=mntn_yn`, `7=lnbr_mnnm`, `8=lnbr_slno`, `9=rncode_full`, `10=rn`, `11=buld_se_cd`, `12=buld_mnnm`, `13=buld_slno`, `14=adm_cd`, `15=adm_kor_nm`, `16=zip_no`, `22=buld_nm`을 사용한다. 파일 끝에는 빈 컬럼이 붙을 수 있으므로 로더는 필요한 인덱스만 명시적으로 읽는다. 인코딩은 BOM이 있으면 `utf-8-sig`, 그 외에는 `cp949` 검증을 먼저 시도하고 실패하면 `utf-8`을 시도한다. 서울 파일 524,678건은 `rncode_full` 결측이 0건이고 `bd_mgt_sn` 길이는 모두 26자리로 확인했다.
 
 ### `tl_locsum_entrc` — 위치정보요약DB
 
@@ -490,6 +491,7 @@ def pnu_from_row(row: dict) -> str | None:
 ALTER TABLE tl_juso_text ADD COLUMN pnu TEXT GENERATED ALWAYS AS (
   CASE
     WHEN bjd_cd IS NULL
+      OR mntn_yn IS NULL
       OR mntn_yn NOT IN ('0', '1')
       OR lnbr_mnnm IS NULL
     THEN NULL
@@ -599,7 +601,9 @@ CREATE INDEX idx_geo_cache_expires ON geo_cache (expires_at);
 
 ### `load_jobs` (ADR-011)
 
-적재 작업의 영속 상태. lifespan startup에서 잔존 `running → failed` 마크, `queued`는 payload 존재 여부에 따라 재큐잉/`failed`. 다중 워커 환경에서 `pg_try_advisory_lock` + `FOR UPDATE SKIP LOCKED`로 실행 직렬성 보강. 컬럼 정의는 `docs/backend-package.md` §9.7 참조.
+적재 작업의 영속 상태. lifespan startup에서 잔존 `running → failed` 마크, `queued`는 payload가 DB에 남아 있으면 drain을 재개한다. 다중 워커 환경에서는 `pg_try_advisory_xact_lock` + `FOR UPDATE SKIP LOCKED`로 작업 픽업을 보호한다. 컬럼 정의는 `docs/backend-package.md` §9.7 참조.
+
+PR #10 리뷰 반영으로 `load_batch_id`, `parent_job_id`를 추가했다(ADR-017). 전국 풀로드는 `full_load_batch` root job을 만들고 그 아래 `juso_text_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load` child를 묶는다. source child가 모두 성공해야 큐가 `consistency_check`를 자동 등록하고, 정합성 리포트가 `ERROR`가 아닐 때만 `mv_refresh`를 `strategy='swap'`으로 등록한다. 따라서 `load_jobs`는 단순 작업 이력 테이블이 아니라 적재 DAG의 현재 위치와 차단 사유를 설명하는 운영 감사 로그다.
 
 ### `load_consistency_reports` (ADR-016)
 

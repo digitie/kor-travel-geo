@@ -74,6 +74,8 @@ class LoadJobRow:
     job_id: str
     kind: str
     state: Literal["queued", "running", "done", "failed", "cancelled"]
+    load_batch_id: str | None = None
+    parent_job_id: str | None = None
     progress: float = 0.0
     current_stage: str | None = None
     source_yyyymm: str | None = None
@@ -202,6 +204,8 @@ class AdminRepo(Protocol):
         kind: str,
         payload: dict[str, Any],
         job_id: str | None = None,
+        load_batch_id: str | None = None,
+        parent_job_id: str | None = None,
     ) -> LoadJobRow: ...
 
     async def cancel_load_job(self, job_id: str) -> LoadJobRow | None: ...

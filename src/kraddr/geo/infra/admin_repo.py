@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, Literal
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.core.protocols import ConsistencyReportRow, LoadJobRow
@@ -14,7 +16,8 @@ from kraddr.geo.core.protocols import ConsistencyReportRow, LoadJobRow
 from ._rows import map_consistency_report, map_load_job
 
 _JOB_SELECT = """
-SELECT job_id, kind, state, progress, current_stage, source_yyyymm, source_set,
+SELECT job_id, kind, state, load_batch_id, parent_job_id,
+       progress, current_stage, source_yyyymm, source_set,
        started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
   FROM load_jobs
 """
@@ -65,29 +68,107 @@ class AdminRepository:
         kind: str,
         payload: dict[str, Any],
         job_id: str | None = None,
+        load_batch_id: str | None = None,
+        parent_job_id: str | None = None,
+        state: str = "queued",
+        progress: float = 0.0,
+        current_stage: str | None = None,
     ) -> LoadJobRow:
         resolved_job_id = job_id or f"job_{uuid4().hex}"
         payload_summary = _summarize_payload(payload)
         async with self.engine.begin() as conn:
             row = (
                 await conn.execute(
-                    text(
+                    _json_text(
                         """
-INSERT INTO load_jobs (job_id, kind, payload, state, payload_summary)
-VALUES (:job_id, :kind, :payload, 'queued', :payload_summary)
-RETURNING job_id, kind, state, progress, current_stage, source_yyyymm, source_set,
+INSERT INTO load_jobs
+  (job_id, kind, payload, state, load_batch_id, parent_job_id,
+   progress, current_stage, payload_summary)
+VALUES
+  (:job_id, :kind, :payload, :state, :load_batch_id, :parent_job_id,
+   :progress, :current_stage, :payload_summary)
+RETURNING job_id, kind, state, load_batch_id, parent_job_id,
+          progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
-"""
+""",
+                        "payload",
+                        "payload_summary",
                     ),
                     {
                         "job_id": resolved_job_id,
                         "kind": kind,
                         "payload": payload,
+                        "state": state,
+                        "load_batch_id": load_batch_id,
+                        "parent_job_id": parent_job_id,
+                        "progress": progress,
+                        "current_stage": current_stage,
                         "payload_summary": payload_summary,
                     },
                 )
             ).mappings().one()
         return map_load_job(dict(row))
+
+    async def insert_load_batch(
+        self,
+        *,
+        payload: dict[str, Any],
+        children: Sequence[tuple[str, dict[str, Any]]],
+        job_id: str | None = None,
+    ) -> LoadJobRow:
+        """Create a batch root row and first-stage child jobs in one transaction."""
+
+        root_job_id = job_id or f"batch_{uuid4().hex}"
+        root_summary = _summarize_payload(payload)
+        async with self.engine.begin() as conn:
+            root = (
+                await conn.execute(
+                    _json_text(
+                        """
+INSERT INTO load_jobs
+  (job_id, kind, payload, state, load_batch_id, progress, current_stage,
+   payload_summary, started_at, heartbeat_at)
+VALUES
+  (:job_id, 'full_load_batch', :payload, 'running', :load_batch_id, 0.0,
+   'source_loads', :payload_summary, now(), now())
+RETURNING job_id, kind, state, load_batch_id, parent_job_id,
+          progress, current_stage, source_yyyymm, source_set,
+          started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
+""",
+                        "payload",
+                        "payload_summary",
+                    ),
+                    {
+                        "job_id": root_job_id,
+                        "payload": payload,
+                        "load_batch_id": root_job_id,
+                        "payload_summary": root_summary,
+                    },
+                )
+            ).mappings().one()
+            for kind, child_payload in children:
+                await conn.execute(
+                    _json_text(
+                        """
+INSERT INTO load_jobs
+  (job_id, kind, payload, state, load_batch_id, parent_job_id, payload_summary)
+VALUES
+  (:job_id, :kind, :payload, 'queued', :load_batch_id, :parent_job_id,
+   :payload_summary)
+""",
+                        "payload",
+                        "payload_summary",
+                    ),
+                    {
+                        "job_id": f"job_{uuid4().hex}",
+                        "kind": kind,
+                        "payload": child_payload,
+                        "load_batch_id": root_job_id,
+                        "parent_job_id": root_job_id,
+                        "payload_summary": _summarize_payload(child_payload),
+                    },
+                )
+        return map_load_job(dict(root))
 
     async def cancel_load_job(self, job_id: str) -> LoadJobRow | None:
         async with self.engine.begin() as conn:
@@ -114,8 +195,9 @@ UPDATE load_jobs
    SET state = 'cancelled',
        finished_at = now(),
        heartbeat_at = now()
- WHERE job_id = :job_id
-RETURNING job_id, kind, state, progress, current_stage, source_yyyymm, source_set,
+WHERE job_id = :job_id
+RETURNING job_id, kind, state, load_batch_id, parent_job_id,
+          progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
 """
                     ),
@@ -186,3 +268,7 @@ def _summarize_payload(payload: dict[str, Any]) -> dict[str, Any]:
         else:
             summary[key] = type(value).__name__
     return summary
+
+
+def _json_text(sql: str, *json_params: str) -> Any:
+    return text(sql).bindparams(*(bindparam(name, type_=JSONB) for name in json_params))

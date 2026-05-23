@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import codecs
 import csv
 import io
 import zipfile
@@ -76,7 +77,14 @@ def detect_encoding(source: TextSource, *, sample_size: int = 64 * 1024) -> str:
         sample = file.read(sample_size)
     if sample.startswith(b"\xef\xbb\xbf"):
         return "utf-8-sig"
-    return "cp949"
+    for encoding in ("cp949", "utf-8"):
+        try:
+            codecs.getincrementaldecoder(encoding)().decode(sample, final=False)
+        except UnicodeDecodeError:
+            continue
+        return encoding
+    msg = f"{source.name} is neither cp949 nor utf-8 text"
+    raise LoaderError(msg)
 
 
 def iter_pipe_rows(

@@ -40,7 +40,11 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "CREATE TABLE IF NOT EXISTS load_consistency_reports" in SCHEMA_SQL
     assert "COALESCE(lnbr_mnnm, 0)" not in SCHEMA_SQL
     assert "WHEN bjd_cd IS NULL" in SCHEMA_SQL
+    assert "OR mntn_yn IS NULL" in SCHEMA_SQL
     assert "mntn_yn NOT IN ('0', '1')" in SCHEMA_SQL
+    assert "CHECK (char_length(bd_mgt_sn) BETWEEN 25 AND 26)" in SCHEMA_SQL
+    assert "load_batch_id" in SCHEMA_SQL
+    assert "parent_job_id" in SCHEMA_SQL
 
 
 def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
@@ -53,4 +57,3 @@ def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
     assert "WHERE pt_5179 IS NOT NULL" in MV_SQL
     assert "ent_pt_4326" not in MV_SQL
     assert "idx_juso_text_rn_trgm" in INDEX_SQL
-

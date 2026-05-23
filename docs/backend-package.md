@@ -668,7 +668,7 @@ async def atomic_schema_swap(engine, staging="staging_new", live="public"):
 - 단일 백엔드 인스턴스 가정 (ADR-006).
 - `asyncio.Semaphore(1)`로 in-process 직렬 처리 + **`load_jobs` 테이블로 상태 영속화**(ADR-011).
 - `Job` dataclass(in-memory): `job_id`, `kind`, `payload`, `state ∈ {queued, running, done, failed, cancelled}`, `progress (0..1)`, `current_stage`, `started_at`, `ended_at`, `error`, `log_tail (deque maxlen=200)`, `cancel_event (asyncio.Event)`.
-- 핸들러 등록: `queue.register(kind, handler)`. `sido_load`, `pobox_load`, `bulk_load`, `mv_refresh` 등.
+- 핸들러 등록: `queue.register(kind, handler)`. 핸들러 시그니처는 `(payload, cancel_event, progress_cb)`이며, `progress_cb(progress?, stage?, message?)`를 호출하면 `load_jobs.progress`, `current_stage`, `heartbeat_at`, `log_tail`이 함께 갱신된다. 기본 앱은 `juso_text_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`, `bulk_load`, `consistency_check`, `mv_refresh` 핸들러를 등록한다.
 
 #### `load_jobs` 영속 테이블 (ADR-011)
 
@@ -680,19 +680,29 @@ CREATE TABLE load_jobs (
   kind           TEXT NOT NULL,
   payload        JSONB NOT NULL,
   state          TEXT NOT NULL CHECK (state IN ('queued','running','done','failed','cancelled')),
-  progress       NUMERIC(3,2) NOT NULL DEFAULT 0.0,
+  load_batch_id  TEXT,                  -- ADR-017: batch root/child 묶음
+  parent_job_id  TEXT,                  -- ADR-017: child가 속한 full_load_batch root
+  progress       NUMERIC(5,4) NOT NULL DEFAULT 0.0 CHECK (progress >= 0 AND progress <= 1),
   current_stage  TEXT,
+  source_yyyymm  TEXT,
+  source_set     JSONB,
   source_checksum TEXT,
   error_message  TEXT,
+  log_tail       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  payload_summary JSONB,
   started_at     TIMESTAMPTZ,
   finished_at    TIMESTAMPTZ,
   heartbeat_at   TIMESTAMPTZ,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_load_jobs_state ON load_jobs (state) WHERE state IN ('queued','running');
+CREATE INDEX idx_load_jobs_batch ON load_jobs (load_batch_id, created_at) WHERE load_batch_id IS NOT NULL;
+CREATE INDEX idx_load_jobs_parent ON load_jobs (parent_job_id) WHERE parent_job_id IS NOT NULL;
 ```
 
 `JobQueue._run`은 상태 전이 시점(`queued → running → done|failed|cancelled`)마다 `load_jobs`에 UPDATE를 보낸다. 진행률·current_stage는 1~5초 단위 throttle로 갱신해 부하 회피.
+
+ADR-017에 따라 `full_load_batch`는 실행 핸들러가 없는 root job으로 남고, 실제 실행은 child job이 담당한다. source child 5종이 모두 `done`이 되면 큐가 `consistency_check`를 자동 등록한다. 정합성 리포트가 `ERROR`가 아니고 `source_set.load_batch_id`가 확인되면 `mv_refresh`를 `strategy='swap'`으로 등록한다. child 실패 또는 취소가 발생하면 root는 `failed`, 아직 대기 중인 같은 batch child는 `cancelled`가 된다.
 
 #### lifespan 복구 (`api/app.py`)
 
@@ -709,20 +719,13 @@ async def lifespan(app):
                    finished_at = now()
              WHERE state = 'running'
         """))
-        # 2) QUEUED는 payload 파일이 살아있으면 재큐잉, 아니면 FAILED
-        rows = (await conn.execute(text(
-            "SELECT job_id, kind, payload FROM load_jobs WHERE state = 'queued'"
-        ))).mappings().all()
-    for r in rows:
-        if _payload_still_resolvable(r["payload"]):
-            await queue.enqueue(r["kind"], r["payload"], job_id=r["job_id"])
-        else:
-            async with engine.begin() as conn:
-                await conn.execute(text(
-                    "UPDATE load_jobs SET state='failed', "
-                    "error_message='payload missing on restart', finished_at=now() "
-                    "WHERE job_id = :j"
-                ), {"j": r["job_id"]})
+        # 2) QUEUED는 payload가 DB에 남아 있으므로 drain 재개 대상
+        has_queued = await conn.scalar(text(
+            "SELECT EXISTS (SELECT 1 FROM load_jobs WHERE state = 'queued')"
+        ))
+    if has_queued:
+        # 구현에서는 내부 drain task를 한 번 깨워 queued 작업을 다시 픽업한다.
+        queue.spawn_drain_task()
     yield
     # shutdown: 진행 중 작업 cancel
 ```
@@ -921,20 +924,18 @@ class ConsistencyReport(FrozenModel):
 async def run_case(
     engine: AsyncEngine,
     code: str,
-    *,
-    scope_filter: str = "",           # 'WHERE sig_cd = '11000'' 등
-    sample_limit: int = 20,
 ) -> ConsistencyCase: ...
 
 # 전체 실행
 async def run_all_cases(
     engine: AsyncEngine,
     *,
-    scope: str,
+    scope: str = "full",
     cases: tuple[str, ...] = ("C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"),
-    on_progress: ProgressCallback | None = None,
+    source_set: dict[str, str] | None = None,  # batch DAG에서는 {"load_batch_id": "..."}
+    on_progress: ProgressReporter | None = None,
 ) -> ConsistencyReport:
-    """케이스 진행률을 on_progress로 보고. JobQueue에서 호출 시 LoadJobStatus.progress와 동기."""
+    """각 케이스의 count/ratio/threshold/metric/sample을 채우고 리포트를 DB에 저장."""
 ```
 
 #### 디버그 UI 노출
@@ -944,7 +945,7 @@ async def run_all_cases(
 ### 9.10 적재 진행도 로그·리포트 정책
 
 - **JSON 라인 로그**: `structlog`. 키는 `event`, `job_id`, `kind`, `stage`, `progress`, `rows`, `bytes`, `severity`. 작업 시작/단계 전환/완료/실패 4 시점은 필수, 나머지 진행 갱신은 5초~1MB throttle.
-- **`Job.log_tail` deque(maxlen=200)**: 최근 200줄 메모리. `load_jobs.log_tail` 컬럼(JSONB)에 종료 시 flush.
+- **`load_jobs.log_tail` JSONB**: 최근 200줄을 DB에 직접 보관한다. 작업 시작, 단계 전환, 완료, 실패, handler의 `progress_cb(..., message=...)` 호출 시 tail을 갱신한다. 프로세스 재시작 후에도 마지막 로그 단서가 남아야 하므로 메모리 전용 deque에 의존하지 않는다.
 - **`load_consistency_reports.cases`**: JSONB로 전체 케이스 결과를 한 행에 보관. 시계열 회귀는 `started_at` 인덱스로 조회.
 - **알람 정책**(ADR-011 후속, 운영 단계): `severity_max IN ('ERROR')`인 리포트가 생성되면 Prometheus alert (T-025).
 

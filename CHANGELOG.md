@@ -17,6 +17,10 @@
 - 디버그/관리 UI는 내부망 전용으로 운영하며 애플리케이션 인증을 두지 않는다(ADR-013).
 
 ### Added
+- PR #10 리뷰 반영: `load_jobs.load_batch_id`/`parent_job_id`와 `full_load_batch` DAG를 추가한다. source load 5종이 모두 성공하면 `consistency_check`를 자동 등록하고, 정합성 리포트가 `ERROR`가 아닐 때만 `mv_refresh`를 `strategy='swap'`으로 등록한다(ADR-017).
+- PR #10 리뷰 반영: 정합성 검증을 C1~C10 전체로 확장하고, 각 케이스에 `count`, `ratio`, `threshold`, `metric`, `sample`을 채운다. batch DAG는 `source_set.load_batch_id`가 있는 리포트를 게이트로 사용한다.
+- PR #10 리뷰 반영: `JobQueue` handler 시그니처에 진행률 콜백을 추가하고, `load_jobs.log_tail`을 실제로 갱신한다. FastAPI lifespan은 기본 적재/정합성/MV refresh handler를 등록한다.
+- ADR-018 추가: PostGIS, `pg_trgm`, `unaccent` extension은 `x_extension` 스키마에 설치하고 모든 연결에서 `search_path=public,x_extension`를 사용한다.
 - T-005~T-017 1차 구현: async engine factory, PostGIS/Alembic schema, `mv_geocode_target`, raw SQL repositories, core geocode/reverse/search/zipcode/pobox flows, `AsyncAddressClient`, FastAPI routers, persistent `load_jobs` queue, text/SHP/postal loaders를 추가한다.
 - 실제 `data/juso` 기반 검증 테스트를 추가한다. 도로명주소 한글 서울 파일, 위치정보요약DB ZIP member, 내비게이션용DB 서울 파일, 강원 SHP load plan을 직접 읽어 컬럼 인덱스·좌표·PNU 매핑을 검증한다.
 - 선택형 실제 PostgreSQL 적재 테스트를 추가한다. `KRADDR_GEO_TEST_PG_DSN`이 설정되면 DDL 적용 → 실제 파일 샘플 COPY 적재 → 위치정보↔텍스트 링크 해소 → `mv_geocode_target` 생성까지 실행한다.
@@ -41,6 +45,9 @@
 - MV `mv_geocode_target` 컬럼명 변경: `ent_pt_5179`/`ent_pt_4326` → `pt_5179`/`pt_4326`. `pt_source` 신규.
 - 위치정보요약DB 적재 사양을 실제 파일 기준으로 보정한다. `entrc_*.txt`에는 `bd_mgt_sn`이 직접 없으므로 원본 natural key를 적재한 뒤 `tl_juso_text`와 후처리 조인으로 `bd_mgt_sn`을 해소한다.
 - SHP 보조 적재 대상 표기를 polygon 7종에서 polygon/폴리라인 9종으로 명확화한다(`tl_sprd_manage`, `tl_sprd_intrvl`, `tl_sprd_rw` 포함).
+- reverse geocoding의 `type="both"`가 같은 최근접 후보를 도로명/지번 결과로 각각 반환하도록 보정한다.
+- 텍스트 로더 인코딩 감지를 `utf-8-sig` BOM → `cp949` 검증 → `utf-8` 검증 순서로 보강한다.
+- `tl_juso_text.pnu` generated column은 `mntn_yn IS NULL`을 명시적으로 가드한다. `bd_mgt_sn` 길이 체크는 사양 25자리와 실제 2026-03 서울 파일 26자리를 모두 수용하도록 `BETWEEN 25 AND 26`으로 좁힌다.
 
 ### Removed
 - 동기 라이브러리 API, monorepo 내부 디버그 UI, `ogr2ogr` subprocess 호출 경로를 사양에서 제거한다.

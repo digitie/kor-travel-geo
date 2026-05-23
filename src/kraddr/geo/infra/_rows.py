@@ -150,6 +150,8 @@ def map_load_job(row: Mapping[str, Any]) -> LoadJobRow:
         job_id=str(row["job_id"]),
         kind=str(row["kind"]),
         state=row["state"],
+        load_batch_id=row.get("load_batch_id"),
+        parent_job_id=row.get("parent_job_id"),
         progress=float(row.get("progress") or 0.0),
         current_stage=row.get("current_stage"),
         source_yyyymm=row.get("source_yyyymm"),

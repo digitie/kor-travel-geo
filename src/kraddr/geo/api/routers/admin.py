@@ -6,7 +6,8 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 
-from kraddr.geo.api.deps import get_client
+from kraddr.geo.api._jobs import JobQueue
+from kraddr.geo.api.deps import get_client, get_job_queue
 from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.core.normalize import parse_address
 from kraddr.geo.dto.admin import (
@@ -33,8 +34,13 @@ async def normalize(req: NormalizeRequest) -> NormalizeResponse:
 async def submit_load(
     req: LoadSubmitRequest,
     client: AsyncAddressClient = Depends(get_client),
+    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    return await client.submit_load(req.kind, req.payload)
+    if req.kind == "full_load_batch":
+        job_id = await queue.enqueue_batch(req.payload)
+    else:
+        job_id = await queue.enqueue(req.kind, req.payload)
+    return await client.load_status(job_id)
 
 
 @router.get("/loads", response_model=list[LoadJobStatus], response_model_exclude_none=True)
@@ -63,21 +69,28 @@ async def load_status(
 async def cancel_load(
     job_id: str,
     client: AsyncAddressClient = Depends(get_client),
+    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    return await client.cancel_load(job_id)
+    await queue.cancel(job_id)
+    return await client.load_status(job_id)
 
 
 @router.post("/consistency/run", response_model=LoadJobStatus, response_model_exclude_none=True)
 async def run_consistency(
     req: ConsistencyRunRequest,
     client: AsyncAddressClient = Depends(get_client),
+    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    return await client.run_consistency_check(
-        scope=req.scope,
-        sido=req.sido,
-        recent_days=req.recent_days,
-        cases=req.cases,
+    job_id = await queue.enqueue(
+        "consistency_check",
+        {
+            "scope": req.scope,
+            "sido": req.sido,
+            "recent_days": req.recent_days,
+            "cases": req.cases,
+        },
     )
+    return await client.load_status(job_id)
 
 
 @router.get(

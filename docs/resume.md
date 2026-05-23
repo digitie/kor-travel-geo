@@ -24,6 +24,8 @@
 - ✅ epost 보조 우편번호 로더 구현 — `pobox_loader.py`, `bulk_loader.py`
 - ✅ 실제 `data/juso` 파일 검증 — 도로명주소 한글 서울 파일, 위치정보요약DB ZIP member, 내비게이션용DB 서울 파일, 강원 SHP load plan
 - ✅ 실제 PostgreSQL(PostGIS) 샘플 적재 검증 — 별도 테스트 DB에서 DDL 적용 → 실제 파일 COPY 샘플 load → 링크 해소 → MV 생성 확인
+- ✅ PR #10 리뷰 반영 — `load_jobs` batch DAG(`load_batch_id`, `parent_job_id`, `full_load_batch`), C1~C10 정합성 검증, PNU NULL guard, reverse `both`, 인코딩 fallback, `log_tail` 갱신 경로 구현
+- ✅ ADR-017(batch DAG + 정합성 게이트)과 ADR-018(`x_extension` 스키마 격리) 문서화
 - ⬜ CLI는 T-018 범위가 남아 있음. 이번 작업에서 `load juso/locsum/navi`, `refresh mv`, `validate consistency`, `jobs` 기본 명령은 추가했지만 `load all-sidos`, `shp-all`, 업로드 워크플로용 CLI는 후속.
 - ⬜ 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩
 
@@ -41,7 +43,7 @@
 - [ ] `AGENTS.md`의 "식별자" 표와 "개발 환경 정책" 다시 읽기
 - [ ] `SKILL.md` §4 "DO NOT" 룰 다시 읽기
 - [ ] `docs/architecture.md`의 의존 방향 확인
-- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-016 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-007 대표 출입구, ADR-016 적재 진행도/정합성 API)
+- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-018 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마)
 - [ ] 마지막 `docs/journal.md` 엔트리 읽기
 - [ ] NTFS의 `data/` 디렉토리가 준비되어 있고 ext4에서 심볼릭 링크 또는 절대경로로 접근 가능한지
 

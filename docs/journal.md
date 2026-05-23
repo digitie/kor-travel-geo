@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (codex, PR #10 리뷰 코멘트 반영)
+
+**작업**: PR #10 상위 리뷰 코멘트의 P1/P2 항목을 반영했다. P1은 ADR-017 batch DAG, C1~C10 정합성 검증, PNU NULL guard이고, P2는 reverse `both`, 텍스트 인코딩 fallback, `load_jobs` 진행률/log_tail, `x_extension` ADR 문서화를 중심으로 처리했다.
+
+**주요 변경**:
+- `load_jobs`에 `load_batch_id`, `parent_job_id`를 추가하고 `full_load_batch` root job 아래 source load child 5종 → `consistency_check` → `mv_refresh(strategy='swap')` 순서로 이어지는 batch DAG를 구현했다.
+- `JobQueue` handler 시그니처를 `(payload, cancel_event, progress_cb)`로 확장했다. `progress_cb`는 `progress`, `current_stage`, `heartbeat_at`, `log_tail`을 DB에 갱신한다.
+- FastAPI lifespan에서 기본 handler를 등록한다. `juso_text_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`, `bulk_load`, `consistency_check`, `mv_refresh`가 큐에서 실제 실행된다.
+- `loaders/consistency.py`를 C1~C10 전체 케이스로 확장했다. 각 케이스는 `count`, `ratio`, `threshold`, `metric`, `sample`을 채운다. C4/C6/C7/C9는 `ERROR` 판정 근거가 명시되어 batch swap gate로 쓸 수 있다.
+- `tl_juso_text.pnu` generated column에 `mntn_yn IS NULL` 가드를 추가했다. 실제 `rnaddrkor_seoul.txt` 524,678건은 `bd_mgt_sn` 길이가 모두 26자리였으므로, 체크 제약은 `BETWEEN 25 AND 26`으로 좁혔다.
+- reverse `type="both"`가 도로명과 지번 결과를 모두 반환하도록 보정했다.
+- 텍스트 인코딩 감지는 BOM → CP949 검증 → UTF-8 검증 순서로 바꿨다.
+- ADR-017(batch DAG)과 ADR-018(`x_extension` 스키마 격리)을 `docs/decisions.md`에 추가했다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 47 passed, 1 skipped. skipped 1건은 `KRADDR_GEO_TEST_PG_DSN`이 없을 때만 건너뛰는 선택형 실제 PostgreSQL COPY 테스트다.
+- `KRADDR_GEO_TEST_PG_DSN='postgresql+psycopg://postgres:postgres@localhost:5432/kraddr_geo_codex_pr10_fix' .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 검증 후 `kraddr_geo_codex_pr10_fix` DB는 삭제했다.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports` → Layered architecture kept
+
+**다음**: PR #10에 반영 요약과 검증 결과를 코멘트로 남긴다.
+
 ## 2026-05-23 (codex, T-005~T-017 일괄 구현 + 실제 파일/DB 검증)
 
 **작업**: PR #7이 닫힌 뒤 최신 `origin/main`(`fa276dd`)에서 새 브랜치 `codex/t017-text-primary-load`를 만들고, ADR-012/ADR-016 기준으로 T-005부터 T-017까지 백엔드 1차 구현을 진행했다. 사용자의 추가 지시대로 `data/juso` 실제 파일을 반드시 열어 검증했고, 로컬 PostGIS에 별도 테스트 DB를 만들어 실제 샘플 COPY 적재와 MV 생성까지 확인했다.

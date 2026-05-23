@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS tl_juso_text (
   pnu             TEXT GENERATED ALWAYS AS (
     CASE
       WHEN bjd_cd IS NULL
+        OR mntn_yn IS NULL
         OR mntn_yn NOT IN ('0', '1')
         OR lnbr_mnnm IS NULL
       THEN NULL
@@ -48,7 +49,7 @@ CREATE TABLE IF NOT EXISTS tl_juso_text (
   source_file     TEXT,
   source_yyyymm   TEXT,
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (char_length(bd_mgt_sn) >= 24),
+  CHECK (char_length(bd_mgt_sn) BETWEEN 25 AND 26),
   CHECK (char_length(sig_cd) = 5),
   CHECK (char_length(rn_cd) = 7),
   CHECK (char_length(bjd_cd) = 10)
@@ -267,6 +268,8 @@ CREATE TABLE IF NOT EXISTS load_jobs (
   kind              TEXT NOT NULL,
   payload           JSONB NOT NULL,
   state             TEXT NOT NULL CHECK (state IN ('queued','running','done','failed','cancelled')),
+  load_batch_id     TEXT,
+  parent_job_id     TEXT,
   progress          NUMERIC(5,4) NOT NULL DEFAULT 0.0 CHECK (progress >= 0 AND progress <= 1),
   current_stage     TEXT,
   source_yyyymm     TEXT,

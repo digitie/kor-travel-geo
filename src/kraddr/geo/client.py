@@ -268,6 +268,8 @@ def _load_job_status(row: Any) -> LoadJobStatus:
         job_id=row.job_id,
         kind=row.kind,
         state=row.state,
+        load_batch_id=row.load_batch_id,
+        parent_job_id=row.parent_job_id,
         progress=row.progress,
         current_stage=row.current_stage,
         source_yyyymm=row.source_yyyymm,

@@ -51,6 +51,10 @@ CREATE INDEX IF NOT EXISTS idx_bulk_zip
 
 CREATE INDEX IF NOT EXISTS idx_load_jobs_state
   ON load_jobs (state) WHERE state IN ('queued','running');
+CREATE INDEX IF NOT EXISTS idx_load_jobs_batch
+  ON load_jobs (load_batch_id, created_at) WHERE load_batch_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_load_jobs_parent
+  ON load_jobs (parent_job_id) WHERE parent_job_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_load_jobs_created
   ON load_jobs (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_consistency_started

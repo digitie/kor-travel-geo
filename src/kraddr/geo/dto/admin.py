@@ -11,6 +11,7 @@ from .common import FrozenModel
 
 LoadJobState = Literal["queued", "running", "done", "failed", "cancelled"]
 LoadJobKind = Literal[
+    "full_load_batch",
     "juso_text_load",
     "locsum_load",
     "navi_load",
@@ -55,6 +56,8 @@ class LoadJobStatus(FrozenModel):
     job_id: str
     kind: LoadJobKind | str
     state: LoadJobState
+    load_batch_id: str | None = None
+    parent_job_id: str | None = None
     progress: float = Field(default=0.0, ge=0.0, le=1.0)
     current_stage: str | None = None
     source_yyyymm: str | None = None

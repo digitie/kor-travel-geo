@@ -59,6 +59,13 @@ class ReverseRepository:
                     },
                 )
             ).mappings().all()
+        if address_type == "both":
+            both: list[ReverseLookup] = []
+            for row in rows:
+                raw = dict(row)
+                both.append(map_reverse(raw, address_type="road"))
+                both.append(map_reverse(raw, address_type="parcel"))
+            return both
         if address_type == "parcel":
             return [map_reverse(dict(row), address_type="parcel") for row in rows]
         return [map_reverse(dict(row), address_type="road") for row in rows]
