@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from kraddr.geo.client import AsyncAddressClient
+from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.infra.admin_repo import LoadJobRow
 
 
@@ -54,7 +55,10 @@ async def test_submit_load_full_load_batch_dispatches_batch_path(
         "source_yyyymm": "202604",
         "payloads": {
             "juso_text_load": {"path": "/data/juso"},
+            "locsum_load": {"path": "/data/locsum"},
+            "navi_load": {"path": "/data/navi"},
             "shp_polygons_load": {"path": "/data/shp"},
+            "pobox_load": {"path": "/data/pobox.zip"},
         },
     }
     await client.submit_load("full_load_batch", payload)
@@ -65,9 +69,32 @@ async def test_submit_load_full_load_batch_dispatches_batch_path(
     assert kwargs["payload"] is payload
     children_by_kind = dict(kwargs["children"])
     assert children_by_kind["juso_text_load"] == {"path": "/data/juso"}
+    assert children_by_kind["locsum_load"] == {"path": "/data/locsum"}
     assert children_by_kind["shp_polygons_load"] == {"path": "/data/shp"}
-    # default kinds without explicit payloads remain in the children set
-    assert children_by_kind["locsum_load"] == {}
+
+
+@pytest.mark.asyncio
+async def test_submit_load_full_load_batch_rejects_incomplete_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    insert_batch = AsyncMock(return_value=_fake_row("full_load_batch"))
+    insert_job = AsyncMock(return_value=_fake_row("juso_text_load"))
+    monkeypatch.setattr(
+        "kraddr.geo.client.AdminRepository.insert_load_batch", insert_batch
+    )
+    monkeypatch.setattr(
+        "kraddr.geo.client.AdminRepository.insert_load_job", insert_job
+    )
+
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+    with pytest.raises(InvalidInputError, match="locsum_load"):
+        await client.submit_load(
+            "full_load_batch",
+            {"payloads": {"juso_text_load": {"path": "/data/juso"}}},
+        )
+
+    insert_batch.assert_not_awaited()
+    insert_job.assert_not_awaited()
 
 
 @pytest.mark.asyncio
