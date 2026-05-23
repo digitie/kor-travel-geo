@@ -6,7 +6,7 @@
 - (없음)
 
 ## 대기 (우선순위 순)
-- (없음 — 다음 백로그는 PR #12 리뷰 이후 추가)
+- T-027 실 데이터 전체 적재 검증 — WSL Docker PostGIS에 주소DB 전체분 적재, C1~C10 정합성 검증, geocode/reverse smoke test, 속도 벤치마크. 상세: `docs/t027-fullload-plan.md`
 
 ## 완료
 - [x] T-026 디버그 UI `/admin/consistency` 페이지 구현. `GET /v1/admin/consistency`, `GET /v1/admin/consistency/{report_id}`, `POST /v1/admin/consistency/run`을 사용해 C1~C10 리포트 목록, 케이스별 severity/count, 원본 JSON을 확인한다 (2026-05-23)
