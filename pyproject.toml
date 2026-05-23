@@ -32,6 +32,7 @@ dependencies = [
   "rapidfuzz>=3.10",
   "structlog>=24.4",
   "orjson>=3.10",
+  "alembic>=1.13",
 ]
 
 [project.optional-dependencies]
@@ -98,10 +99,19 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TCH", "RUF", "ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
+"alembic/**/*.py" = ["E501", "I001"]
+"src/kraddr/geo/api/**/*.py" = ["A002", "B008", "TC001", "TC002", "TC003"]
+"src/kraddr/geo/cli/main.py" = ["TC003"]
+"src/kraddr/geo/client.py" = ["A002", "TC001", "TC002", "TC003"]
+"src/kraddr/geo/core/*.py" = ["TC001", "TC002", "TC003"]
 "src/kraddr/geo/dto/address.py" = ["N815"]
+"src/kraddr/geo/dto/admin.py" = ["TC003"]
 "src/kraddr/geo/dto/geocode.py" = ["A003", "TC001"]
 "src/kraddr/geo/dto/reverse.py" = ["A003", "TC001"]
 "src/kraddr/geo/dto/search.py" = ["A003", "TC001"]
+"src/kraddr/geo/infra/*.py" = ["TC001", "TC002", "TC003"]
+"src/kraddr/geo/loaders/**/*.py" = ["TC001", "TC002", "TC003"]
+"tests/**/*.py" = ["ASYNC240"]
 
 [tool.importlinter]
 root_package = "kraddr"
