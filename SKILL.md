@@ -73,7 +73,7 @@ src/kraddr/geo/
 8. **외부 API 키 평문 커밋 금지**: 모두 `SecretStr`. `.env`는 권한 600 또는 systemd `EnvironmentFile`/vault.
 9. **`ogr2ogr` subprocess 호출 금지**: GDAL Python binding(`gdal.VectorTranslate`) 사용. CP949 디코딩은 `open_options=["ENCODING=CP949"]`로 명시.
 10. **프론트엔드 패키지에 DB 드라이버 추가 금지**: `kraddr-geo-ui`는 백엔드 REST API만 호출. `pg`, `prisma` 같은 의존성 들어오면 ADR 위반.
-11. **공간 쿼리 술어에서 좌표 형변환 금지**: 입력 좌표는 CTE/파라미터로 **한 번만** `ST_Transform`해서 상수로 굳히고, 술어는 `ST_DWithin(t.ent_pt_5179, p.geom, :radius_m)`처럼 컬럼은 그대로 둔다. `ST_Transform(t.ent_pt_5179, 4326)`이 술어에 들어가면 GiST 인덱스를 못 타고 매 행 변환이 돌아간다. **반경 검색은 `ent_pt_5179`(meter)** 기준으로 한다 — `ent_pt_4326`은 응답 직렬화 전용(`docs/data-model.md` "공간 쿼리 가이드").
+11. **공간 쿼리 술어에서 좌표 형변환 금지**: 입력 좌표는 CTE/파라미터로 **한 번만** `ST_Transform`해서 상수로 굳히고, 술어는 `ST_DWithin(t.pt_5179, p.geom, :radius_m)`처럼 컬럼은 그대로 둔다. `ST_Transform(t.pt_5179, 4326)`이 술어에 들어가면 GiST 인덱스를 못 타고 매 행 변환이 돌아간다. **반경 검색은 `pt_5179`(meter)** 기준으로 한다 — `pt_4326`은 응답 직렬화 전용. MV의 `pt_source` 컬럼이 좌표 출처(entrance vs centroid)를 노출하므로 라우터는 centroid 결과의 `confidence`를 낮춰 반환(ADR-007, ADR-012, `docs/data-model.md` "공간 쿼리 가이드").
 12. **SQLAlchemy bulk `insert().values(rows)` 파라미터 폭주 금지**: PostgreSQL 프로토콜은 한 쿼리당 최대 65,535개 파라미터. row × column이 ~30,000 이상이면 `psycopg.copy_*` 또는 `gdal.VectorTranslate(... PG_USE_COPY=YES)`로 전환한다(ADR-005). 안전 마진은 한도의 절반(30k) 권장.
 13. **작업 큐 상태를 in-memory만 신뢰 금지**: 적재 작업은 `load_jobs` 테이블로 영속화한다(ADR-011). lifespan startup에서 `state IN ('queued','running')` 잔존 행을 `failed`로 마크하고, 실행 직렬성은 advisory lock 또는 `SELECT ... FOR UPDATE SKIP LOCKED`로 DB 수준에서 보강.
 

@@ -145,7 +145,7 @@ PostgreSQL 16 + PostGIS 3.4를 1차 저장소로 채택한다. SpatiaLite 기반
 
 ## ADR-005: 로더는 `ogr2ogr` subprocess 대신 GDAL Python binding을 쓴다
 
-- 상태: accepted
+- 상태: **partially superseded by ADR-012** (텍스트 정본 1차로 전환, GDAL은 polygon/폴리라인 적재에만 사용)
 - 날짜: 2026-05-22
 - 결정자: human
 
@@ -427,3 +427,128 @@ ADR-006 결과(부정)의 "매니페스트 기반 재개 필요" open 항목을 
 ### 후속
 - (open) T-006 DDL에 `load_jobs` 포함. T-015 `_jobs.py` 구현 시 본 ADR의 lifespan recovery + advisory lock 패턴 사용.
 - (open) `uvicorn --workers N` 운영 결정은 별도 ADR — 본 ADR은 N>1 가능성을 열어두기만 한다.
+
+---
+
+## ADR-007: `mv_geocode_target`은 건물당 대표 출입구 1건만 보유한다
+
+- 상태: accepted (위치정보요약DB 기반으로 갱신, ADR-012 후속)
+- 날짜: 2026-05-23
+- 결정자: human
+
+### 컨텍스트
+출입구 데이터(`tl_locsum_entrc`, 위치정보요약DB 기반)는 한 건물(`BD_MGT_SN`)에 출입구가 여러 개일 수 있다. 평면화 MV가 단순 join으로 다대다를 펼치면 `UNIQUE (bd_mgt_sn)` 인덱스가 깨지고 `REFRESH MATERIALIZED VIEW CONCURRENTLY`가 불가능하며, 도로명/지번 lookup 결과도 출입구 수만큼 부풀어 라우터가 추가 dedup 로직을 떠안는다.
+
+### 결정
+`mv_geocode_target`은 건물당 **대표 출입구 한 건**만 보유한다. 선택 순서(SQL `DISTINCT ON (bd_mgt_sn)` 기반):
+
+1. `ent_se_cd = '0'` (대표 출입구 코드) 우선
+2. `buld_se_cd`(지상/지하)와 일치하는 출입구
+3. 모호하면 `ent_man_no` 오름차순 첫 한 건
+
+비대표 출입구가 필요한 use-case(내비 진입점, 차량 진입 등)는 `tl_locsum_entrc` 또는 `tl_navi_entrc`를 직접 조회한다. 출입구가 0개인 건물은 ADR-012 후속으로 `tl_navi_buld_centroid`의 centroid를 fallback 좌표로 사용한다.
+
+### 근거
+- 지오코딩 라우터가 `bd_mgt_sn` 단위 단일 row를 가정하므로 `UNIQUE` 인덱스 + CONCURRENTLY refresh 사용 가능.
+- 위치정보요약DB의 `ent_se_cd`는 SHP보다 명확해 대표 선택 규칙이 안정적.
+- 역지오코딩은 처음부터 `tl_locsum_entrc` 전체에서 GiST 최근접을 찾기 때문에 MV 단순화의 부담이 없다.
+
+### 결과(긍정)
+- 도로명/지번 lookup 결과가 항상 0 또는 1건. 라우터 로직 단순.
+- ADR-011 (load_jobs)과 결합해 적재→swap→이전 MV drop 흐름이 깔끔.
+
+### 결과(부정)
+- 비대표 출입구·내비 진입점 응답이 필요해지면 별도 조회 경로 필요(ADR-012가 텍스트 보조 테이블로 흡수).
+
+### 후속
+- (open) `ent_se_cd` 값 분포가 시도별로 다른지 실데이터 검증 — ADR-012의 정합성 검증 리포트에 포함.
+
+---
+
+## ADR-012: 적재는 행안부 텍스트 정본 1차 + SHP polygon 보조 하이브리드로 한다
+
+- 상태: accepted (ADR-005를 부분 supersede)
+- 날짜: 2026-05-23
+- 결정자: human
+
+### 컨텍스트
+첨부 사양서는 도로명주소 전자지도(SHP) 11개 마스터를 1차 데이터로 가정했다. 그러나 행안부는 같은 정보를 텍스트 정본 3종으로도 제공하며, **텍스트가 raw 정본**이고 SHP은 도형 적재용으로 가공된 파생물이다.
+
+| 자료 | 정본성 | 무엇이 들어있는가 |
+|------|--------|-------------------|
+| 도로명주소 한글_전체분 (월간) | 도로명주소·지번·우편번호·법정동·행정동의 **정본** | 좌표 없음. BD_MGT_SN ↔ 행정 매핑이 가장 완전 |
+| 위치정보요약DB_전체분 (월간) | 출입구 좌표(EPSG:5179)의 **정본** | BD_MGT_SN + ent_man_no, ent_se_cd 명확 |
+| 내비게이션용DB_전체분 (월간) | 내비 진입점·차량 진입점·건물 centroid의 **정본** | 출입구가 없는 건물의 fallback 좌표 |
+| 도로명주소 전자지도 SHP (월간) | **polygon/폴리라인의 정본** | 행정구역·우편번호·건물·도로 도형 |
+
+SHP만으로는 행정동 코드(`adm_cd`, vworld 응답 `level4A`/`level4AC`)와 출입구 분류가 충분하지 않다. ADR-005가 GDAL VectorTranslate로 모든 적재를 묶었던 결정은 사양 완성도 측면에서 손해다.
+
+### 결정
+**적재를 두 경로로 분리한다.**
+
+| 경로 | 대상 | 도구 | 의존성 |
+|------|------|------|--------|
+| **텍스트 1차** (`loaders/text/`) | `tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc` | stdlib `csv` + `psycopg.copy()` | GDAL 불필요 |
+| **SHP 보조** (`loaders/shp/`) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | GDAL Python binding (ADR-005 한정 유지) | `libgdal-dev` |
+
+`tl_spbd_buld_polygon`은 BD_MGT_SN PK만 공유하고 **속성은 모두 `tl_juso_text`에서** 채운다 — 도형과 속성의 책임을 명확히 분리.
+
+`mv_geocode_target`은 텍스트 1차 + 출입구 좌표 + centroid fallback을 합쳐 구성한다(`docs/data-model.md`). `pt_source ∈ {entrance, navi, centroid}` 컬럼으로 응답에 좌표 출처를 노출한다.
+
+### 근거
+- **정본 우선**: 행정동 코드, 도로명 텍스트, 우편번호 정본이 모두 텍스트에서 raw로. SHP DBF에 의존하지 않음.
+- **GDAL 의존성 축소**: 텍스트 적재는 stdlib만으로 동작. GDAL 환경 셋업 실패가 전체 적재를 막지 않음(polygon만 GDAL 필요).
+- **출입구 0개 건물 fallback**: 내비게이션용DB centroid가 빈자리를 메움 — 사양에 fallback 경로가 자연스럽게 박힘.
+- **v1 코드 경험**: v1 `store.py`/`data.py`가 이 세 텍스트를 이미 다뤘음 — 컬럼 매핑·CP949 디코딩 노하우를 reference로.
+
+### 결과(긍정)
+- 응답 완성도 ↑ — 행정동 정보가 vworld 호환 응답 전체에 자연스럽게.
+- 적재 환경 의존성 감소 — GDAL 없이도 80% 적재 가능. polygon만 GDAL.
+- 출입구 없는 건물의 fallback이 사양 단계에서 해결.
+- 텍스트와 SHP 사이의 BD_MGT_SN 정합성 검증으로 데이터 무결성 회귀 감지.
+
+### 결과(부정)
+- 마스터 테이블 종류 증가(11 → 14). MV 정의 복잡도 ↑(단 라우터는 MV만 보면 됨).
+- 두 변동분(텍스트 월간 + SHP polygon 월간) 기준일 정합성 운영 책임 추가 — `load_manifest`에 `source_set` 표기로 해결.
+- 라이선스 표시 의무(공공누리 1형) — 운영 README/응답 메타에 명시.
+
+### 후속
+- (open) ADR-005의 GDAL Python binding 결정은 polygon 적재에만 한정 — 본문 supersede 표시 완료.
+- (open) 텍스트 변동분(`도로명주소 한글_변동분`, `위치정보요약DB_변동분`)의 누적 적용 정책은 ADR-009(우편번호) 모델 따라 분기 풀로드만 운영하는 옵션 검토.
+- (open) 정합성 검증 리포트(`docs/data-model.md` "정합성 검증")의 임계값(예: 좌표 오차 95th percentile < 5m)을 실데이터로 캘리브레이션.
+
+---
+
+## ADR-016: 적재 진행 상태와 정합성 리포트는 라이브러리·API로 일급 노출한다
+
+- 상태: accepted
+- 날짜: 2026-05-23
+- 결정자: human
+
+### 컨텍스트
+ADR-006(in-process 큐)과 ADR-011(`load_jobs` 영속화)이 작업 상태를 DB에 적었지만, 외부 라이브러리 사용자(`AsyncAddressClient`)는 작업 큐 표면에 접근할 일이 직접 없다. 또한 ADR-012의 텍스트↔SHP 정합성 검증 결과를 디버그 UI(`kraddr-geo-ui /admin/load`)와 라이브러리 사용자가 모두 봐야 한다.
+
+### 결정
+다음을 사양에 일급 추가한다.
+
+1. **`AsyncAddressClient.load_status(job_id)` / `load_jobs(limit, kind)`** — 적재 작업 상태/진행률/`current_stage`/`log_tail` 조회. 라이브러리 사용자가 자체 앱에서 직접 폴링 가능.
+2. **`POST /v1/admin/loads`** + **`GET /v1/admin/loads/{job_id}`** + **`GET /v1/admin/loads?kind=...&state=...`** — REST 표면. WebSocket `/v1/admin/loads/{job_id}/stream`은 선택(structlog 라인 push).
+3. **`AsyncAddressClient.consistency_report(report_id?)` / `run_consistency_check(scope)`** — 텍스트↔SHP 정합성 리포트 생성/조회. ADR-012의 검증 케이스(아래)별 결과를 구조화된 JSON으로 반환.
+4. **`POST /v1/admin/consistency/run`** + **`GET /v1/admin/consistency/{report_id}`** + **`GET /v1/admin/consistency`** — REST.
+
+### 근거
+- 적재가 분기 풀로드로 30~60분 걸리므로 진행 상태가 외부에 노출되어야 운영 자동화가 가능.
+- 정합성 리포트는 한 번 생성하고 보관(`load_consistency_reports` 테이블)해 시계열로 회귀 추적.
+- 디버그 UI가 같은 라이브러리·REST 함수를 호출하므로 별도 어댑터 없이 일관.
+
+### 결과(긍정)
+- 외부 앱이 적재 cron을 자체 관찰 가능.
+- 정합성 회귀(예: 텍스트와 SHP 좌표 95th percentile 오차가 갑자기 증가)가 자동 감지 가능.
+
+### 결과(부정)
+- 라이브러리 API 표면이 늘어 mypy/import-linter 부담 약간 증가.
+- WebSocket 스트리밍은 T-015 작업 큐와 분리해서 추가하는 게 안전(별도 후속).
+
+### 후속
+- (open) `consistency_report`의 임계값과 알람 정책은 운영 단계에서 캘리브레이션.
+- (open) WebSocket `/v1/admin/loads/{job_id}/stream`은 T-015 본체 구현 후 별도 PR.
