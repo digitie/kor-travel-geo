@@ -1,5 +1,15 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/proxy";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export function backendPath(path: string): string {
   const trimmed = path.startsWith("/") ? path : `/${path}`;
   return trimmed.startsWith("/v1") ? trimmed : `/v1${trimmed}`;
@@ -15,7 +25,7 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `${response.status} ${response.statusText}`);
+    throw new ApiError(response.status, text || `${response.status} ${response.statusText}`);
   }
   return (await response.json()) as T;
 }

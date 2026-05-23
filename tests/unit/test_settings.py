@@ -34,6 +34,8 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.pg_statement_timeout_ms == 5_000
     assert settings.api_cors_origins == ()
     assert settings.api_default_radius_m == 200
+    assert settings.api_max_upload_bytes == 2 * 1024 * 1024 * 1024
+    assert settings.api_explain_timeout_ms == 3_000
     assert settings.epost_download_url == (
         "http://openapi.epost.go.kr/postal/downloadAreaCodeService/"
         "downloadAreaCodeService/getAreaCodeInfo"

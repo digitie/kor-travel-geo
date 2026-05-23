@@ -15,4 +15,6 @@ def test_metrics_render_includes_external_api_and_admin_gauges() -> None:
 
     assert "kraddr_geo_external_api_calls_total" in body
     assert "kraddr_geo_cache_entries" in body
+    assert "kraddr_geo_cache_hits " in body
+    assert "kraddr_geo_cache_hits_total" not in body
     assert "kraddr_geo_load_jobs" in body

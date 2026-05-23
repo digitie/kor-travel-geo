@@ -5,6 +5,13 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #12 리뷰 반영: `/v1/admin/upload/sido-zip`의 `sido` path traversal 가능성을 제거하고, `KRADDR_GEO_API_MAX_UPLOAD_BYTES` 초과 시 partial file을 삭제한 뒤 `InvalidInputError(E0100)`로 거절한다.
+- PR #12 리뷰 반영: `kraddr-geo-ui` 프록시는 `/v1/` 하위 경로만 허용하고 `authorization`/`cookie` 등 불필요한 헤더 전달을 차단한다. 업로드 본문은 `arrayBuffer()`로 전체 버퍼링하지 않고 `ReadableStream` + `duplex: "half"`로 백엔드에 전달한다.
+- PR #12 리뷰 반영: `requestJson()`은 `ApiError.status`를 보존하고 React Query retry는 4xx를 재시도하지 않는다.
+- PR #12 리뷰 반영: `/v1/admin/explain` 실행 전 `SET LOCAL` 성격의 `set_config('statement_timeout', ..., true)`를 적용한다. 기본값은 `KRADDR_GEO_API_EXPLAIN_TIMEOUT_MS=3000`.
+- PR #12 리뷰 반영: `LoadConsole`, `ExplainDebugger`, `ReverseDebugger`, `ConsistencyPanel`의 에러 처리와 입력 검증을 보강한다.
+- PR #12 리뷰 반영: `kraddr_geo_cache_hits_total` gauge를 Prometheus 관례에 맞게 `kraddr_geo_cache_hits`로 변경한다.
+- GitHub Actions backend 실패 수정: `tests/unit/test_openapi_export.py`가 CI에서도 `scripts.export_openapi`를 import할 수 있도록 `scripts/__init__.py`를 추가하고 pytest `pythonpath`에 repository root를 명시한다.
 - PR #11 리뷰 반영: `AsyncAddressClient.submit_load("full_load_batch", ...)`이 root 행만 만들던 라이브러리/REST 비대칭을 해소한다. 라이브러리도 `AdminRepository.insert_load_batch`로 라우팅되어 root + 5종 child가 동시에 적재된다. `BATCH_SOURCE_KINDS`와 `batch_children()`은 `kraddr.geo.infra.batch` 모듈로 이동해 client / api 양쪽에서 공유한다.
 - PR #11 후속 보강: `full_load_batch` payload를 enqueue 전에 검증한다. 기본 `payloads` 경로는 source child 5종 모두에 `path` 또는 `source_path`가 있어야 하며, 잘못된 `children`/`child_jobs` entry는 조용히 무시하지 않고 `InvalidInputError(E0100)`로 거절한다.
 

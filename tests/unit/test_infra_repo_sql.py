@@ -66,6 +66,7 @@ def test_admin_repo_explain_is_select_only_and_uses_json_format() -> None:
     source = inspect.getsource(admin_repo.AdminRepository.explain)
     assert "EXPLAIN (" in source
     assert "FORMAT JSON" in source
+    assert "set_config('statement_timeout'" in source
 
 
 def test_admin_repo_exposes_table_cache_log_metric_queries() -> None:
@@ -75,3 +76,20 @@ def test_admin_repo_exposes_table_cache_log_metric_queries() -> None:
     assert "geo_cache" in source
     assert "GROUP BY kind, state" in source
     assert "jsonb_array_length(log_tail)" in source
+
+
+def test_admin_upload_helpers_prevent_path_escape(tmp_path) -> None:
+    from kraddr.geo.api.routers import admin
+
+    assert admin._safe_filename("../../서울.zip") == "서울.zip"
+    assert "/" not in admin._safe_path_token("../../../etc/cron.d")
+    upload_dir = admin._safe_upload_dir(tmp_path, admin._safe_path_token("../../../etc/cron.d"))
+    assert upload_dir.relative_to((tmp_path / "uploads").resolve())
+
+
+def test_consistency_severity_filter_is_pushed_to_sql() -> None:
+    source = inspect.getsource(admin_repo.AdminRepository.list_consistency_reports)
+
+    assert "min_severity_rank" in source
+    assert "WHERE" in source
+    assert "severity_rank.get(report.severity_max" not in source

@@ -107,6 +107,7 @@ SELECT relname AS table_name,
         *,
         analyze: bool = False,
         buffers: bool = False,
+        timeout_ms: int = 3_000,
     ) -> object:
         query = _validated_explain_sql(sql)
         options = ["FORMAT JSON"]
@@ -114,7 +115,11 @@ SELECT relname AS table_name,
             options.append("ANALYZE")
         if buffers:
             options.append("BUFFERS")
-        async with self.engine.connect() as conn:
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text("SELECT set_config('statement_timeout', :timeout, true)"),
+                {"timeout": f"{timeout_ms}ms"},
+            )
             plan = await conn.scalar(text(f"EXPLAIN ({', '.join(options)}) {query}"))
         return plan
 
@@ -347,31 +352,40 @@ SELECT report_id, scope, severity_max, source_set, started_at, finished_at,
         limit: int = 20,
         severity_at_least: Literal["INFO", "WARN", "ERROR"] | None = None,
     ) -> list[ConsistencyReportRow]:
-        severity_rank = {"INFO": 1, "WARN": 2, "ERROR": 3}
-        min_rank = severity_rank.get(severity_at_least or "INFO", 0)
+        severity_rank = {"OK": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
+        clauses = []
+        params: dict[str, Any] = {"limit": limit}
+        if severity_at_least is not None:
+            clauses.append(
+                """
+CASE severity_max
+  WHEN 'OK' THEN 0
+  WHEN 'INFO' THEN 1
+  WHEN 'WARN' THEN 2
+  WHEN 'ERROR' THEN 3
+  ELSE 0
+END >= :min_severity_rank
+"""
+            )
+            params["min_severity_rank"] = severity_rank[severity_at_least]
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self.engine.connect() as conn:
             rows = (
                 await conn.execute(
                     text(
-                        """
+                        f"""
 SELECT report_id, scope, severity_max, source_set, started_at, finished_at,
        cases, generated_by
   FROM load_consistency_reports
+{where}
  ORDER BY started_at DESC
  LIMIT :limit
 """
                     ),
-                    {"limit": limit},
+                    params,
                 )
             ).mappings().all()
-        reports = [map_consistency_report(dict(row)) for row in rows]
-        if severity_at_least is None:
-            return reports
-        return [
-            report
-            for report in reports
-            if severity_rank.get(report.severity_max, 0) >= min_rank
-        ]
+        return [map_consistency_report(dict(row)) for row in rows]
 
 
 def _summarize_payload(payload: dict[str, Any]) -> dict[str, Any]:

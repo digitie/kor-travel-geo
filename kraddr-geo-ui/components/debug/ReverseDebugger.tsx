@@ -6,6 +6,7 @@ import { CoordinateMap } from "@/components/kakao/CoordinateMap";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { requestJson } from "@/lib/api";
+import { reverseFormSchema } from "@/lib/schemas";
 
 export function ReverseDebugger() {
   const [x, setX] = useState("127.028601");
@@ -15,8 +16,18 @@ export function ReverseDebugger() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const parsed = reverseFormSchema.safeParse({ x, y, radius_m: radius, type: "both" });
+    if (!parsed.success) {
+      setResult({ error: parsed.error.issues[0]?.message ?? "좌표 입력을 확인하세요" });
+      return;
+    }
     try {
-      const params = new URLSearchParams({ x, y, radius_m: radius, type: "both" });
+      const params = new URLSearchParams({
+        x: String(parsed.data.x),
+        y: String(parsed.data.y),
+        radius_m: String(parsed.data.radius_m),
+        type: parsed.data.type
+      });
       setResult(await requestJson(`/address/reverse?${params}`));
     } catch (error) {
       setResult({ error: error instanceof Error ? error.message : String(error) });
@@ -50,7 +61,7 @@ export function ReverseDebugger() {
       <Panel title="역지오코딩 결과">
         <div className="grid">
           <CoordinateMap
-            point={{ x: Number(x), y: Number(y) }}
+            point={previewPoint(x, y)}
             onClick={(point) => {
               setX(point.x.toFixed(6));
               setY(point.y.toFixed(6));
@@ -61,4 +72,16 @@ export function ReverseDebugger() {
       </Panel>
     </div>
   );
+}
+
+function previewPoint(x: string, y: string): { x: number; y: number } | null {
+  const point = { x: Number(x), y: Number(y) };
+  return Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    point.x >= 123 &&
+    point.x <= 132 &&
+    point.y >= 32 &&
+    point.y <= 39
+    ? point
+    : null;
 }

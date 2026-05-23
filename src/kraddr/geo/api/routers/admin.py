@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -27,9 +28,11 @@ from kraddr.geo.dto.admin import (
     TableStat,
     UploadSidoZipResponse,
 )
+from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.settings import get_settings
 
 router = APIRouter(tags=["admin"])
+_SAFE_TOKEN_RE = re.compile(r"[^0-9A-Za-z가-힣._-]+")
 
 
 @router.post("/normalize", response_model=NormalizeResponse)
@@ -83,10 +86,13 @@ async def upload_sido_zip(
     settings = get_settings()
     safe_name = _safe_filename(filename)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    upload_id = f"{timestamp}_{sido or Path(safe_name).stem}"
-    upload_dir = settings.loader_data_dir / "uploads" / upload_id
+    upload_id = f"{timestamp}_{_safe_path_token(sido or Path(safe_name).stem)}"
+    upload_dir = _safe_upload_dir(settings.loader_data_dir, upload_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    dest = upload_dir / safe_name
+    dest = (upload_dir / safe_name).resolve()
+    if not _is_relative_to(dest, upload_dir):
+        msg = "upload filename escapes upload directory"
+        raise InvalidInputError(msg)
     digest = hashlib.sha256()
     size = 0
     with dest.open("wb") as fh:
@@ -94,6 +100,10 @@ async def upload_sido_zip(
             if not chunk:
                 continue
             size += len(chunk)
+            if size > settings.api_max_upload_bytes:
+                dest.unlink(missing_ok=True)
+                msg = f"upload exceeds {settings.api_max_upload_bytes} bytes limit"
+                raise InvalidInputError(msg)
             digest.update(chunk)
             fh.write(chunk)
     return UploadSidoZipResponse(
@@ -238,7 +248,31 @@ async def consistency_report(
 
 
 def _safe_filename(filename: str) -> str:
-    name = Path(filename).name.replace("\\", "_")
+    name = _safe_path_token(filename)
     if not name or name in {".", ".."}:
         return "upload.bin"
     return name
+
+
+def _safe_path_token(value: str) -> str:
+    name = Path(value).name.replace("\\", "_").replace("/", "_")
+    name = name.replace("..", "_")
+    name = _SAFE_TOKEN_RE.sub("_", name).strip("._")
+    return name or "upload"
+
+
+def _safe_upload_dir(loader_data_dir: Path, upload_id: str) -> Path:
+    base = (loader_data_dir / "uploads").resolve()
+    resolved = (base / upload_id).resolve()
+    if not _is_relative_to(resolved, base):
+        msg = "upload path escapes base directory"
+        raise InvalidInputError(msg)
+    return resolved
+
+
+def _is_relative_to(path: Path, base: Path) -> bool:
+    try:
+        path.relative_to(base)
+    except ValueError:
+        return False
+    return True

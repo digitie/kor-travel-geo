@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { ApiError } from "@/lib/api";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -12,8 +13,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
             staleTime: 60_000,
             refetchOnWindowFocus: false,
             retry: (failureCount, error) => {
-              const status = error instanceof Response ? error.status : 0;
-              return status >= 400 && status < 500 ? false : failureCount < 2;
+              if (error instanceof ApiError && error.status < 500) {
+                return false;
+              }
+              return failureCount < 2;
             }
           }
         }

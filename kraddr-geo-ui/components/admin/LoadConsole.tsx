@@ -5,7 +5,7 @@ import { ChangeEvent, FormEvent, useReducer, useState } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { LoadJobStatus, postJson, requestJson } from "@/lib/api";
+import { API_BASE, LoadJobStatus, backendPath, postJson, requestJson } from "@/lib/api";
 import { loadWorkflowReducer } from "@/lib/load-workflow";
 import { guessSido } from "@/lib/sido";
 
@@ -41,6 +41,7 @@ export function LoadConsole() {
       await refreshJobs();
     } catch (error) {
       setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      dispatch({ type: "finish" });
     }
   }
 
@@ -48,22 +49,35 @@ export function LoadConsole() {
     const file = event.target.files?.[0];
     if (!file) return;
     dispatch({ type: "upload_start" });
-    const sido = guessSido(file.name);
-    const params = new URLSearchParams({ filename: file.name });
-    if (sido) params.set("sido", sido);
-    const response = await fetch(`/api/proxy/v1/admin/upload/sido-zip?${params}`, {
-      method: "POST",
-      body: file
-    });
-    const result = (await response.json()) as unknown;
-    setUploadResult(result);
-    dispatch({ type: "upload_done" });
+    try {
+      const sido = guessSido(file.name);
+      const params = new URLSearchParams({ filename: file.name });
+      if (sido) params.set("sido", sido);
+      const response = await fetch(
+        `${API_BASE}${backendPath(`/admin/upload/sido-zip?${params}`)}`,
+        {
+          method: "POST",
+          body: file
+        }
+      );
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`);
+      }
+      setUploadResult((await response.json()) as unknown);
+    } catch (error) {
+      setUploadResult({ error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      dispatch({ type: "upload_done" });
+    }
   }
 
   async function refreshJobs() {
     const result = await requestJson<LoadJobStatus[]>("/admin/loads?limit=20");
     setJobs(result);
-    if (result.every((job) => ["done", "failed", "cancelled"].includes(job.state))) {
+    if (
+      result.length > 0 &&
+      result.every((job) => ["done", "failed", "cancelled"].includes(job.state))
+    ) {
       dispatch({ type: "finish" });
     }
   }

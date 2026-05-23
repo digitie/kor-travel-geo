@@ -48,7 +48,7 @@ EXTERNAL_API_CALLS = _counter(
     ("provider", "outcome"),
 )
 CACHE_ENTRIES = _gauge("kraddr_geo_cache_entries", "Rows currently stored in geo_cache.")
-CACHE_HITS = _gauge("kraddr_geo_cache_hits_total", "Accumulated geo_cache hit count.")
+CACHE_HITS = _gauge("kraddr_geo_cache_hits", "Accumulated geo_cache hit count.")
 CACHE_EXPIRED = _gauge("kraddr_geo_cache_expired_entries", "Expired rows currently in geo_cache.")
 LOAD_JOBS = _gauge(
     "kraddr_geo_load_jobs",

@@ -18,20 +18,32 @@ export function ConsistencyPanel() {
   const [lastRun, setLastRun] = useState<unknown>(null);
 
   const openReport = useCallback(async (reportId: string) => {
-    setSelected(await requestJson<ConsistencyReport>(`/admin/consistency/${reportId}`));
+    try {
+      setSelected(await requestJson<ConsistencyReport>(`/admin/consistency/${reportId}`));
+    } catch (error) {
+      setLastRun({ error: error instanceof Error ? error.message : String(error) });
+    }
   }, []);
 
   const loadReports = useCallback(async () => {
-    const next = await requestJson<ConsistencyReportSummary[]>("/admin/consistency");
-    setReports(next);
-    if (next[0]) {
-      await openReport(next[0].report_id);
+    try {
+      const next = await requestJson<ConsistencyReportSummary[]>("/admin/consistency");
+      setReports(next);
+      if (next[0]) {
+        await openReport(next[0].report_id);
+      }
+    } catch (error) {
+      setLastRun({ error: error instanceof Error ? error.message : String(error) });
     }
   }, [openReport]);
 
   async function runConsistency() {
-    setLastRun(await postJson("/admin/consistency/run", { scope: "full" }));
-    await loadReports();
+    try {
+      setLastRun(await postJson("/admin/consistency/run", { scope: "full" }));
+      await loadReports();
+    } catch (error) {
+      setLastRun({ error: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   useEffect(() => {

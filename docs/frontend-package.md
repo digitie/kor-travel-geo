@@ -51,8 +51,8 @@ kraddr-geo-ui/
 │   └── check-sync.sh
 ├── app/
 │   ├── layout.tsx, page.tsx, globals.css, providers.tsx
-│   ├── debug/                     # geocode/reverse/search/normalize/zipcode/explain
-│   ├── admin/                     # tables/load/postal/cache/settings/logs
+│   ├── debug/                     # geocode/reverse/normalize/explain
+│   ├── admin/                     # tables/load/cache/logs/consistency
 │   └── api/
 │       └── proxy/[...path]/route.ts
 ├── components/
@@ -65,7 +65,7 @@ kraddr-geo-ui/
 │   ├── api.ts                     # fetch 기반 REST helper
 │   ├── schemas.ts                 # zod schemas (mirror of pydantic v2)
 │   ├── schemas.gen.ts             # auto-generated schema name list, do not edit
-│   ├── consistency.ts, format.ts, load-workflow.ts, sido.ts
+│   ├── consistency.ts, format.ts, load-workflow.ts, proxy.ts, sido.ts
 ├── types/                         # api.gen.ts (openapi-typescript), domain.ts
 └── tests/                         # unit (vitest), e2e (playwright)
 ```
@@ -122,7 +122,9 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> { ...
 
 ### A3.4 Next.js Route Handler 프록시
 
-`app/api/proxy/[...path]/route.ts`가 백엔드로 전달한다. 별도 인증 헤더 없음. body는 `request.arrayBuffer()`로 읽어 그대로 forward하므로 JSON 요청과 raw ZIP 업로드 요청을 같은 프록시로 처리한다. Next.js 16에서는 Route Handler context의 `params`가 Promise이므로 `const params = await context.params` 형태를 사용한다.
+`app/api/proxy/[...path]/route.ts`가 백엔드로 전달한다. JSON 요청과 raw ZIP 업로드 요청을 같은 프록시로 처리하되, GET/HEAD가 아닌 요청 본문은 `request.body`(`ReadableStream`)를 그대로 `fetch`에 넘긴다. 대용량 ZIP을 Next.js Route Handler 메모리에 `arrayBuffer()`로 통째 적재하지 않기 위한 정책이며, Node.js fetch 스트림 전달 요건에 맞춰 `duplex: "half"`를 명시한다. Next.js 16에서는 Route Handler context의 `params`가 Promise이므로 `const params = await context.params` 형태를 사용한다.
+
+프록시는 `/v1/` 하위 경로만 허용한다. `new URL()` 정규화 이후 `target.pathname`을 검사하므로 `/v1/../metrics` 같은 우회도 차단된다. 전달 헤더는 `accept`, `content-type`, `user-agent` allowlist만 사용하고 `authorization`/`cookie`/`x-forwarded-*` 등은 내부 백엔드로 넘기지 않는다.
 
 ### A3.5 `lib/queryClient.ts`
 
@@ -184,7 +186,7 @@ idle → uploading → upload_done → processing → finished → (reset) idle
 
 원칙: "파일 업로드와 입력 처리는 각각 다 끝나면 다음 단계로". 업로드 중 처리 시작 버튼 비활성, 처리 중 새 파일 추가 영역 닫힘.
 
-- 업로드: PR #12 구현은 raw request body를 `fetch`로 전송한다. `python-multipart` 의존을 피하고 backend stream 처리와 맞추기 위한 결정이다. 대용량 ZIP 업로드 진행률이 필요해지면 `XMLHttpRequest` 기반 progress bar를 후속으로 추가한다.
+- 업로드: PR #12 구현은 raw request body를 `fetch`로 전송한다. `python-multipart` 의존을 피하고 backend stream 처리와 맞추기 위한 결정이다. 브라우저 → Next.js → FastAPI 경로에서 파일 본문은 스트림으로 전달하고, Next.js Route Handler는 `arrayBuffer()`로 전체 파일을 버퍼링하지 않는다. 실패 시 `upload_done`으로 상태를 풀고 JSON 영역에 에러를 표시한다. 대용량 ZIP 업로드 진행률이 필요해지면 `XMLHttpRequest` 기반 progress bar를 후속으로 추가한다.
 - 시도명 추론: `lib/sido.ts`의 `guessSido(filename)` (`서울→seoul`, `부산→busan`, …).
 - 처리: 큐가 직렬로 한 job씩. UI는 사용자가 새로고침 버튼을 누르거나 후속 polling 구현으로 갱신한다. 모든 job이 종료 상태(`done`/`cancelled`/`failed`)면 `finished`.
 - 전체 취소: 모든 미종료 job에 cancel 요청. GDAL callback이 0 반환 → 즉시 중단.

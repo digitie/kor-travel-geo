@@ -38,12 +38,13 @@
 - ✅ T-025 Prometheus 메트릭 구현 — `/metrics`, 외부 API 호출 counter, cache/load job gauge
 - ✅ T-026 정합성 UI 구현 — `/admin/consistency`에서 C1~C10 report 목록·상세·재검증 enqueue 확인
 - ✅ FastAPI admin 보강 — `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`
+- ✅ PR #12 리뷰 보강 — 업로드 path traversal/크기 제한, 프록시 `/v1` 제한과 스트리밍 전달, React Query retry, EXPLAIN timeout, LoadConsole/Explain/Reverse/Consistency 에러 처리, CI `scripts` import 실패 수정
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-PR #12 리뷰를 기다린다. 리뷰가 없으면 다음 후보는 `/admin/load`의 장기 실행 UX 보강이다.
+PR #12 후속 CI와 리뷰 재확인을 기다린다. 리뷰가 없으면 다음 후보는 `/admin/load`의 장기 실행 UX 보강이다.
 
-- `fetch` 기반 raw upload는 backend와 일치하지만 업로드 진행률 이벤트가 없다. 운영자가 대용량 ZIP을 올릴 때 필요하면 XHR 기반 progress bar를 추가한다.
+- `fetch` 기반 raw upload는 backend stream 처리와 일치하고 Next.js 프록시도 전체 파일을 메모리에 버퍼링하지 않는다. 다만 업로드 진행률 이벤트는 없으므로 운영자가 대용량 ZIP 진행률을 봐야 하면 XHR 기반 progress bar를 추가한다.
 - `/admin/logs`는 현재 `load_jobs.log_tail` 최근 라인 조회다. 장기적으로 WebSocket/Server-Sent Events tail을 붙일 수 있다.
 - `/debug/reverse`는 Kakao 지도 클릭으로 좌표를 채우되 자동 조회는 하지 않는다. 클릭 즉시 reverse 호출이 필요하면 명시적 UX 결정 후 추가한다.
 

@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { postJson } from "@/lib/api";
+import { explainFormSchema } from "@/lib/schemas";
 
 export function ExplainDebugger() {
   const [sql, setSql] = useState("SELECT * FROM mv_geocode_target LIMIT 5");
@@ -14,8 +15,13 @@ export function ExplainDebugger() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const parsed = explainFormSchema.safeParse({ sql, analyze, buffers });
+    if (!parsed.success) {
+      setResult({ error: parsed.error.issues[0]?.message ?? "SQL 입력을 확인하세요" });
+      return;
+    }
     try {
-      setResult(await postJson("/admin/explain", { sql, analyze, buffers }));
+      setResult(await postJson("/admin/explain", parsed.data));
     } catch (error) {
       setResult({ error: error instanceof Error ? error.message : String(error) });
     }

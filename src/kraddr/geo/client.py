@@ -223,6 +223,7 @@ class AsyncAddressClient:
             req.sql,
             analyze=req.analyze,
             buffers=req.buffers,
+            timeout_ms=self.settings.api_explain_timeout_ms,
         )
         return ExplainResponse(plan=plan)
 
