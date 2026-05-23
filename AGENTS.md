@@ -38,6 +38,8 @@ PC 개발은 **WSL ext4** 위에서 수행한다. NTFS 마운트에서 직접 `g
 4. `docs/resume.md` — 현재 진척도와 "다음 한 작업"
 5. `docs/decisions.md` — 관련 ADR
 
+Windows 재설치, WSL 초기화, 새 Codex 세션에서 이어받는 상황이면 `docs/windows-reinstall-recovery.md`도 함께 읽는다. PR #13/T-027을 재개할 때는 실제 Docker 전체 적재를 바로 실행하지 말고, 해당 문서와 `docs/t027-fullload-plan.md`의 실행 금지선 및 `PLAN_ONLY=1` preflight 순서를 먼저 확인한다.
+
 ## 지시 우선순위
 
 1. 사용자 요청

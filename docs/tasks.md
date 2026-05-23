@@ -6,7 +6,10 @@
 - (없음)
 
 ## 대기 (우선순위 순)
-- (없음 — 다음 백로그는 PR #12 리뷰 이후 추가)
+- T-027 실 데이터 전체 적재 검증 — WSL Docker PostGIS에 주소DB 전체분 적재, C1~C10 정합성 검증, geocode/reverse smoke test, 속도 벤치마크. 상세: `docs/t027-fullload-plan.md`
+- T-028 일변동 ZIP 로더 — `data/juso/daily/*.zip`를 full-load 이후 증분 적용할 수 있도록 파일 구조 분석, `MVM_RES_CD` 매핑, 재실행 안전성을 설계한다.
+- T-029 `jibun_rnaddrkor_*` 활용 여부 결정 — 도로명주소 한글 전체분에 같이 배포되는 지번 매핑 텍스트를 현재 `tl_juso_text`와 어떻게 조화시킬지 ADR로 확정한다.
+- T-030 상세주소 동 도형/별도 건물 도형 로더 검토 — `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`의 전자지도 SHP와 중복·보완 관계를 조사한다.
 
 ## 완료
 - [x] T-026 디버그 UI `/admin/consistency` 페이지 구현. `GET /v1/admin/consistency`, `GET /v1/admin/consistency/{report_id}`, `POST /v1/admin/consistency/run`을 사용해 C1~C10 리포트 목록, 케이스별 severity/count, 원본 JSON을 확인한다 (2026-05-23)

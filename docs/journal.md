@@ -2,6 +2,38 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-24 (PR #13/T-027 — Windows 재설치·Codex 세션 복구 문서화)
+
+**작업**: Windows 재설치 후 `git pull`로 PR #13 작업을 문제없이 이어갈 수 있도록 복구 절차를 문서화했다. 실제 Docker 전체 적재와 `PLAN_ONLY=1` 실행은 하지 않았다.
+
+**보강 상세**:
+- `docs/windows-reinstall-recovery.md`를 추가했다. Git branch/PR을 영속 상태의 기준으로 두고, `data/`·`.env`·API 키·WSL distro·Docker volume의 백업 여부를 구분했다.
+- 재설치 후 WSL/GDAL/Python 환경 복구, PR #13 브랜치 checkout, `docs/t027-fullload-plan.md` 확인, `PLAN_ONLY=1 bash scripts/fullload_test.sh` preflight 순서를 명시했다.
+- Codex 레벨 복구는 repo에 넣을 내용과 로컬 세션 편의 기능을 분리했다. 문서에는 일반적인 `codex resume`, `codex fork`, `codex doctor`, `codex cloud` 확인 명령과 `CODEX_HOME`/`.codex` 백업 주의사항만 남겼다.
+- `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/dev-environment.md`, `docs/dev-environment-recovery.md`, `docs/resume.md`에서 새 복구 문서를 참조하도록 연결하고, 실제 적재는 사용자 명시 전 실행하지 않는 금지선을 맞췄다.
+
+**다음 작업**: PR #13 리뷰 후에도 실제 전체 적재는 바로 실행하지 않는다. 먼저 문서와 스크립트 syntax 확인을 거친 뒤, 사용자가 허용하면 `PLAN_ONLY=1` preflight 결과를 PR에 공유한다.
+
+## 2026-05-24 (PR #13/T-027 — Docker full-load 계획 보강)
+
+**작업**: 사용자 지시에 따라 실제 Docker 전체 적재 실행은 중단하고, `F:\dev\python-kraddr-geo\data\juso` 전체를 대상으로 한 계획/문서/스크립트 preflight 보강만 진행했다. 로컬 파일 시스템은 목록과 용량만 확인했고 DB 적재·Docker 실행은 하지 않았다.
+
+**확인한 데이터 인벤토리**:
+- `data/juso` 전체는 약 28GB다.
+- 현재 full-load에 바로 쓸 수 있는 자료는 `202603_도로명주소 한글_전체분`, `202604_위치정보요약DB_전체분.zip`, `202604_내비게이션용DB_전체분`, `도로명주소 전자지도`다.
+- `daily/*.zip`, `jibun_rnaddrkor_*`, `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`는 현재 로더의 직접 적재 대상이 아니므로 후속 태스크로 분리했다.
+
+**보강 상세**:
+- `docs/t027-fullload-plan.md`를 실행 전 리뷰 가능한 계획서로 재작성했다. 실행 금지선, Docker project/volume 안전장치, 기준월 분리, phase별 중단·재개, 산출물 경로, 미지원 자료 후속 태스크를 명시했다.
+- `scripts/fullload_test.sh`는 실행 산출물로 남기되 `PLAN_ONLY=1` preflight를 추가했다. 단일 `YYYYMM` 대신 `JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`을 분리하고, CLI 호출은 `kraddr-geo` console script로 맞췄다.
+- 초안 스크립트의 DDL inline SQL 실행을 `alembic upgrade head`로 바꾸고, 별도 적재 명령 뒤 누락될 수 있는 `resolve_text_geometry_links()`를 명시적으로 수행하도록 정리했다. MV 갱신은 full-load에 맞게 `refresh mv --swap`을 기본으로 둔다.
+- smoke test는 실제 DTO 구조(`GeocodeResponse.result.point`, `ReverseResponse.result`, `SearchResponse.result`, `ZipcodeResponse.result`)에 맞게 보정했다.
+
+**검증**:
+- `bash -n scripts/fullload_test.sh` → 통과. 실제 DB/Docker 적재 실행은 하지 않았다.
+
+**다음 작업**: PR #13 리뷰 후 `PLAN_ONLY=1 bash scripts/fullload_test.sh`만 먼저 실행한다. 전체 적재는 Docker 볼륨/로그 경로/중단 기준을 확인한 뒤 별도 지시가 있을 때 진행한다.
+
 ## 2026-05-24 (PR #12 리뷰 보강 — 보안·CI·에러 처리)
 
 **작업**: PR #12 top-level 리뷰 코멘트를 확인했다. inline review thread는 없었고, GitHub 기준 mergeable 상태라 Git 충돌은 없었다. 다만 backend CI가 `scripts.export_openapi` import 실패로 깨졌고, 리뷰의 C/H/M 항목과 추가 코멘트의 프록시 스트리밍 항목을 모두 코드로 반영했다.
