@@ -388,8 +388,8 @@ loaders/
 
 원칙:
 
-- **stdlib `csv`** + **`psycopg.copy()`** 로 적재. GDAL 무의존.
-- 인코딩: `chardet`로 sniff 후 CP949/UTF-8 결정. 그 후 `iconv` 또는 `codecs.iterdecode`로 UTF-8 정규화.
+- **stdlib `csv`** + **`psycopg.copy()`** 로 적재. GDAL/외부 인코딩 sniff 패키지 무의존.
+- 인코딩 판별: 행안부 텍스트는 사실상 **CP949 또는 UTF-8(BOM)** 두 가지만 등장한다. (1) 파일 첫 3바이트가 `EF BB BF`면 `utf-8-sig`, (2) 아니면 `cp949`로 디코딩 시도, (3) `UnicodeDecodeError` 발생 시 `utf-8` 재시도. `chardet`/`charset-normalizer` 등 추가 의존성은 두지 않는다.
 - 한 시도 단위로 staging 테이블에 COPY → master로 UPSERT. 파라미터 한도(SKILL.md §4-12) 회피.
 - 진행률 보고: 파일 크기 기준 byte offset 또는 처리 줄 수 기준. `Job.progress` (0~1)에 throttle 갱신.
 
@@ -407,7 +407,7 @@ loaders/
   - 컬럼 인덱스: 행안부 'rnaddrkor 파일레이아웃' PDF 기준
 """
 from __future__ import annotations
-import csv, io, codecs, chardet
+import csv, io
 from pathlib import Path
 from collections.abc import Iterator
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -416,6 +416,8 @@ import psycopg                          # COPY 사용
 import structlog
 
 log = structlog.get_logger()
+
+_UTF8_BOM = b"\xef\xbb\xbf"
 
 # 컬럼 인덱스 (행안부 파일레이아웃 기준 — 실제 인덱스는 T-013a에서 검증 후 박는다)
 COLUMNS = [
@@ -440,18 +442,26 @@ COLUMNS = [
     # ... 나머지는 사용하지 않더라도 위치 확인용
 ]
 
-def detect_encoding(path: Path, sample_bytes: int = 65_536) -> str:
+def detect_encoding(path: Path, probe_bytes: int = 65_536) -> str:
+    """BOM 확인 후 cp949 → utf-8 순서로 fallback. chardet 무의존."""
     with path.open("rb") as f:
-        raw = f.read(sample_bytes)
-    if raw.startswith(b"\xef\xbb\xbf"):
-        return "utf-8-sig"
-    guess = chardet.detect(raw)
-    enc = (guess["encoding"] or "cp949").lower()
-    # 한국어 텍스트는 cp949 또는 utf-8만 합법
-    if enc not in {"cp949", "euc-kr", "utf-8", "utf-8-sig"}:
-        log.warning("juso.encoding.unknown", path=str(path), guess=enc)
-        enc = "cp949"
-    return "cp949" if enc == "euc-kr" else enc
+        head = f.read(3)
+        if head == _UTF8_BOM:
+            return "utf-8-sig"
+        probe = head + f.read(probe_bytes - 3)
+    try:
+        probe.decode("cp949")
+        return "cp949"
+    except UnicodeDecodeError:
+        try:
+            probe.decode("utf-8")
+            return "utf-8"
+        except UnicodeDecodeError:
+            # 행안부 자료가 위 두 인코딩만 등장한다는 가정이 깨진 경우.
+            # 적재를 막고 사용자에게 명시적으로 알린다.
+            raise LoaderError(
+                f"unknown encoding for {path}; expected cp949 or utf-8(-sig)"
+            ) from None
 
 
 def iter_rows(path: Path, encoding: str) -> Iterator[dict[str, str | None]]:
@@ -734,6 +744,31 @@ async with engine.begin() as conn:
 ```
 
 `pg_try_advisory_lock` + `FOR UPDATE SKIP LOCKED`의 이중 가드로 동일 작업이 두 워커에서 동시에 실행되는 케이스를 막는다. 단일 워커 환경에서는 advisory lock이 즉시 점유되어 비용은 거의 없다.
+
+### Batch DAG: All-or-Nothing swap (ADR-017)
+
+하이브리드 적재(텍스트 4 + SHP polygon 9)는 자식 job 5종이 모두 `done`이어야 의미가 보존된다. 일부만 성공한 상태에서 `mv_refresh --swap`이 돌면 새 텍스트 + 옛 polygon 같은 가짜 정합성 데이터가 운영에 노출.
+
+본 사양은 `load_jobs`에 `load_batch_id`, `parent_job_id`를 추가하고 다음 DAG를 운영한다.
+
+```
+batch_id = "fullload_202604_<uuid8>"
+├── juso_text_load        ─┐
+├── locsum_load            │
+├── navi_load              ├─ 모두 state='done' 이어야 (waitgroup)
+├── shp_polygons_load      │
+└── pobox_load/bulk_load  ─┘
+        ↓ (자동 enqueue)
+   consistency_check (scope='batch', batch_id=...)
+        ↓ severity_max ∉ {'ERROR'} 이면
+   mv_refresh (mode='swap')
+        ↓
+   batch state='done'
+```
+
+자식 중 하나라도 `failed`/`cancelled`면 batch는 `partial_failed`로 마크. swap·정합성 검증은 트리거되지 않으며 운영자가 재시도 또는 롤백 결정.
+
+`kraddr-geo refresh mv --swap --skip-consistency`는 정합성 게이트를 우회하는 강제 옵션 — `load_jobs.payload`에 `skip_consistency: true`로 기록되고 structlog `severity=warning`으로 남는다.
 
 ### 업로드 + 일괄 처리
 

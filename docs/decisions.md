@@ -552,3 +552,50 @@ ADR-006(in-process 큐)과 ADR-011(`load_jobs` 영속화)이 작업 상태를 DB
 ### 후속
 - (open) `consistency_report`의 임계값과 알람 정책은 운영 단계에서 캘리브레이션.
 - (open) WebSocket `/v1/admin/loads/{job_id}/stream`은 T-015 본체 구현 후 별도 PR.
+
+---
+
+## ADR-017: 하이브리드 적재는 batch DAG로 묶고, 모두 성공한 경우에만 MV swap을 트리거한다
+
+- 상태: accepted
+- 날짜: 2026-05-23
+- 결정자: human
+
+### 컨텍스트
+ADR-012가 적재를 두 경로로 분리(텍스트 4 + SHP polygon 9)하면서, 한 사이클의 풀로드는 최소 5개 로더(`juso_text`, `locsum`, `navi`, `shp_polygons` 외 보조)가 함께 성공해야 의미 있는 데이터 상태가 된다. 이때 다음 race가 가능하다.
+
+- 텍스트 로더가 모두 성공해 `tl_juso_text`/`tl_locsum_entrc`가 새 데이터로 채워졌는데, SHP polygon 로더가 중간에 실패. `tl_spbd_buld_polygon`은 이전 데이터.
+- 그 상태에서 `kraddr-geo refresh mv --swap`(ADR-007 후속)이 동작하면 **새 텍스트 + 옛 polygon** 조합이 운영에 노출. 정합성 케이스 C2(SHP에만 존재)가 폭발.
+- 더 나쁜 경우: 일부 텍스트 로더만 성공한 뒤 swap이 돌면 행정동 코드와 출입구 좌표 사이가 어긋난 반쪽 데이터.
+
+### 결정
+적재 작업 큐(`api/_jobs.py`, ADR-006/011)는 **batch 단위 DAG**로 운영한다.
+
+- `load_batch_id` 별로 묶인 모든 자식 job이 `state='done'`이 되었을 때에만 `mv_refresh`(swap 모드) job이 큐에 자동 enqueue된다.
+- 하나라도 `failed`/`cancelled`면 swap을 트리거하지 않는다. `load_jobs` UPDATE로 batch 상태를 `partial_failed`로 마크하고 운영자가 재시도/롤백 결정.
+- 적재 batch에는 일반적으로 다음 자식 jobs가 포함된다.
+  - `juso_text_load` (시도별 × 17, 또는 단일 통합 1 — 선택)
+  - `locsum_load`
+  - `navi_load`
+  - `shp_polygons_load` (시도별 또는 통합)
+  - 모두 종료 후 → `mv_refresh` (swap 모드)
+- `load_consistency_reports`(ADR-016)는 swap **직전**에 자동 실행되어 `severity_max IN ('ERROR')`이면 swap을 막는다(staging의 정합성 게이트). `kraddr-geo refresh mv --swap --skip-consistency`로 강제 진행 옵션 제공(로그에 명시 기록).
+
+### 근거
+- 텍스트와 SHP 둘 다 성공해야 데이터 의미가 보존됨 — 부분 성공 swap은 운영에 가짜 정합성을 만든다.
+- 작업 큐의 in-process `Semaphore(1)`(ADR-006)와 `load_jobs` 영속화(ADR-011)는 이미 갖춰져 있어 DAG 추가는 컬럼 + lifecycle 한 단계만 보강하면 된다.
+- 정합성 게이트가 swap 직전에 돌면 운영 침투를 막을 마지막 보루.
+
+### 결과(긍정)
+- 운영 데이터가 항상 일관된 시점의 텍스트 + SHP 조합을 유지.
+- 정합성 게이트가 회귀 감지(ADR-016)에 자연스럽게 흡수됨.
+- 운영자가 partial_failed batch를 명시적으로 보고 재시도 결정 가능.
+
+### 결과(부정)
+- batch 상태 추적을 위한 `load_jobs.load_batch_id` 컬럼 + batch 메타 한 줄 추가.
+- 자식 job 실패 시 swap이 안 돼서 평시 변동분 갱신은 지연될 수 있음 — 운영자 개입 부담.
+- 강제 swap(`--skip-consistency`)이 남용되면 ADR 정신이 깨지므로 로그·알람 필수.
+
+### 후속
+- (open) `load_jobs` 스키마에 `load_batch_id TEXT`, `parent_job_id TEXT` 컬럼 추가 — T-006(DDL)·T-015 구현 시 반영.
+- (open) `mv_refresh` job 핸들러가 자동 enqueue되는 조건을 코드로 못박는 시점은 T-015에서.
