@@ -11,9 +11,32 @@ T-001~T-026 완료 (PR #11, #12 merged). 프론트엔드(`kraddr-geo-ui`) 부트
 
 ### 현재 작업
 
-- **T-027** (PR #13): 실 데이터 전체 적재 검증. Docker PostGIS + ext4 bind mount.
-  - 상태: 계획+스크립트 작성 완료, 실제 적재는 미수행.
+- **T-027** (PR #13, 브랜치 `claude/t027-docker-fullload-plan`):
+  실 데이터 전체 적재 검증. Docker PostGIS + ext4 bind mount.
+  - 상태: 계획+스크립트 작성 완료 (커밋 4개), 실제 적재는 미수행.
+  - 이번 세션에서 추가: `kraddr-geo init-db` CLI 명령, `--copy-data` 단계, bind mount 전환, 복구 문서.
   - 다음 단계: 로컬 WSL에서 `--copy-data` → 적재 → C1~C10 검증.
+
+### 잔존 기술 부채 (PR #12 리뷰 LOW)
+
+PR #12 리뷰(GitHub 코멘트 참조)에서 C1/C2/H1~H3/M1~M5는 `7a0fa07`에서 수정됨.
+아래 LOW 3건은 미수정:
+
+- L1: `proxy/route.ts` — `forwardedHeaders()`가 `cookie`/`authorization`도 전달. 내부망 전용이라 실질 위험 낮음.
+- L2: `ReverseDebugger.tsx` — 빈 입력 시 `Number('')=0`으로 아프리카 해상 표시. `NaN` 미처리.
+- L3: `ConsistencyPanel.tsx` — `loadReports()`/`openReport()`에 try/catch 없음. API 실패 시 UI 에러 상태 없음.
+
+### 브랜치 정리
+
+머지 완료된 리모트 브랜치 (삭제 가능):
+- `claude/move-progress-to-v1-t9qM4` — main과 동일. 삭제 권장.
+- `claude/spec-review-polish` — PR #8 merged.
+- `claude/spec-fixups-table-count-pnu` — PR merged.
+- `claude/epost-15000302-clarify` — PR merged.
+- `codex/t017-text-primary-load` — PR #10 merged.
+- `codex/t020-cli-api-openapi` — PR #11 merged.
+- `codex/t026-frontend-admin-ui` — PR #12 merged.
+- `codex/package-settings-dto` — PR merged.
 
 ### 후속 백로그
 
