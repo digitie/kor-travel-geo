@@ -2,6 +2,18 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-24 (PR #13/T-027 — Windows 재설치·Codex 세션 복구 문서화)
+
+**작업**: Windows 재설치 후 `git pull`로 PR #13 작업을 문제없이 이어갈 수 있도록 복구 절차를 문서화했다. 실제 Docker 전체 적재와 `PLAN_ONLY=1` 실행은 하지 않았다.
+
+**보강 상세**:
+- `docs/windows-reinstall-recovery.md`를 추가했다. Git branch/PR을 영속 상태의 기준으로 두고, `data/`·`.env`·API 키·WSL distro·Docker volume의 백업 여부를 구분했다.
+- 재설치 후 WSL/GDAL/Python 환경 복구, PR #13 브랜치 checkout, `docs/t027-fullload-plan.md` 확인, `PLAN_ONLY=1 bash scripts/fullload_test.sh` preflight 순서를 명시했다.
+- Codex 레벨 복구는 repo에 넣을 내용과 로컬 세션 편의 기능을 분리했다. 문서에는 일반적인 `codex resume`, `codex fork`, `codex doctor`, `codex cloud` 확인 명령과 `CODEX_HOME`/`.codex` 백업 주의사항만 남겼다.
+- `AGENTS.md`, `CLAUDE.md`, `README.md`, `docs/dev-environment.md`, `docs/dev-environment-recovery.md`, `docs/resume.md`에서 새 복구 문서를 참조하도록 연결하고, 실제 적재는 사용자 명시 전 실행하지 않는 금지선을 맞췄다.
+
+**다음 작업**: PR #13 리뷰 후에도 실제 전체 적재는 바로 실행하지 않는다. 먼저 문서와 스크립트 syntax 확인을 거친 뒤, 사용자가 허용하면 `PLAN_ONLY=1` preflight 결과를 PR에 공유한다.
+
 ## 2026-05-24 (PR #13/T-027 — Docker full-load 계획 보강)
 
 **작업**: 사용자 지시에 따라 실제 Docker 전체 적재 실행은 중단하고, `F:\dev\python-kraddr-geo\data\juso` 전체를 대상으로 한 계획/문서/스크립트 preflight 보강만 진행했다. 로컬 파일 시스템은 목록과 용량만 확인했고 DB 적재·Docker 실행은 하지 않았다.

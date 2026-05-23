@@ -1,6 +1,8 @@
 # 개발 환경 복구 가이드 (Windows 재설치 후)
 
-Windows 재설치/새 PC에서 이 프로젝트를 이어서 작업하기 위한 순서.
+Windows 재설치/새 PC에서 이 프로젝트를 이어서 작업하기 위한 빠른 순서다. 세션 handoff, Git/PR 기준, Codex `resume`/`fork`, 실행 금지선까지 포함한 상세 절차는 `docs/windows-reinstall-recovery.md`를 우선한다.
+
+PR #13/T-027을 재개하는 경우 재설치 직후 실제 Docker 전체 적재를 바로 실행하지 않는다. 먼저 `bash -n scripts/fullload_test.sh`로 syntax를 확인하고, 사용자가 허용한 경우에만 `PLAN_ONLY=1 bash scripts/fullload_test.sh` preflight를 실행한다.
 
 ## 1. WSL2 설치
 
@@ -73,14 +75,14 @@ docker compose -p kraddr-geo-t027 ps
 ```
 
 기존 pgdata가 `~/kraddr-geo-data/pgdata/`에 남아 있으면 DB가 이전 상태로 바로 올라온다.
-새로 적재하려면:
+사용자가 실제 전체 적재를 명시적으로 승인했고 기존 DB를 버려도 되는 경우에만 새로 적재한다.
 
 ```bash
 # pgdata 초기화
 rm -rf ~/kraddr-geo-data/pgdata/*
 docker compose -p kraddr-geo-t027 up -d
 
-# 전체 적재
+# 전체 적재 + 검증
 bash scripts/fullload_test.sh
 ```
 
@@ -113,7 +115,9 @@ F:\dev\python-kraddr-geo\data\     # NTFS — 원본 보관
 - [ ] Docker Desktop 또는 Docker CE 설치
 - [ ] `git clone` + venv + pip install
 - [ ] GDAL 설치 확인 (`gdalinfo --version`)
-- [ ] `bash scripts/fullload_test.sh --copy-data` (NTFS → ext4 복사)
-- [ ] `docker compose -p kraddr-geo-t027 up -d`
-- [ ] `bash scripts/fullload_test.sh` (적재 + 검증)
+- [ ] `bash -n scripts/fullload_test.sh`
+- [ ] 사용자가 허용한 경우 `PLAN_ONLY=1 bash scripts/fullload_test.sh`
+- [ ] 실제 전체 적재 승인 후에만 `bash scripts/fullload_test.sh --copy-data` (NTFS → ext4 복사)
+- [ ] 실제 전체 적재 승인 후에만 `docker compose -p kraddr-geo-t027 up -d`
+- [ ] 실제 전체 적재 승인 후에만 `bash scripts/fullload_test.sh` (적재 + 검증)
 - [ ] `.env` 시크릿 복원

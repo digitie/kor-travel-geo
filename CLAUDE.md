@@ -15,7 +15,9 @@ T-001~T-026 완료 (PR #11, #12 merged). 프론트엔드(`kraddr-geo-ui`) 부트
   실 데이터 전체 적재 검증. Docker PostGIS + ext4 bind mount.
   - 상태: 계획+스크립트 작성 완료 (커밋 4개), 실제 적재는 미수행.
   - 이번 세션에서 추가: `kraddr-geo init-db` CLI 명령, `--copy-data` 단계, bind mount 전환, 복구 문서.
-  - 다음 단계: 로컬 WSL에서 `--copy-data` → 적재 → C1~C10 검증.
+  - 추가 보강: Windows 재설치/새 Codex 세션 복구 문서(`docs/windows-reinstall-recovery.md`).
+  - 다음 단계: 실제 적재가 아니라 문서와 스크립트 syntax를 먼저 확인하고, 사용자가 허용하면 `PLAN_ONLY=1 bash scripts/fullload_test.sh` preflight 결과만 PR에 공유한다.
+  - 금지선: 사용자 명시 전 Docker 컨테이너 기동, `--copy-data`, 전체 적재, C1~C10 실검증, MV swap을 실행하지 않는다.
 
 ### 잔존 기술 부채 (PR #12 리뷰 LOW)
 
@@ -86,10 +88,13 @@ cd kraddr-geo-ui && npm run lint && npm run type-check && npm run test && npm ru
 # OpenAPI drift
 python scripts/export_openapi.py --check --output openapi.json
 
-# 전체 적재 (WSL + Docker)
-bash scripts/fullload_test.sh --copy-data   # NTFS→ext4 복사 (최초 1회)
-bash scripts/fullload_test.sh               # 적재+검증
-PLAN_ONLY=1 bash scripts/fullload_test.sh   # 경로만 확인 (dry run)
+# T-027 재개
+bash -n scripts/fullload_test.sh            # syntax 확인
+PLAN_ONLY=1 bash scripts/fullload_test.sh   # 경로만 확인 (preflight)
+
+# 실제 전체 적재는 사용자가 명시적으로 승인한 뒤에만 실행
+# bash scripts/fullload_test.sh --copy-data # NTFS→ext4 복사 (최초 1회)
+# bash scripts/fullload_test.sh             # 적재+검증
 ```
 
 ## 주요 결정 사항
@@ -103,4 +108,4 @@ PLAN_ONLY=1 bash scripts/fullload_test.sh   # 경로만 확인 (dry run)
 
 ## 환경 복구
 
-Windows 재설치 후 복구 순서: `docs/dev-environment-recovery.md` 참조.
+Windows 재설치 후 복구 순서: `docs/windows-reinstall-recovery.md`, `docs/dev-environment-recovery.md` 참조. Codex 세션 복구는 `codex resume`/`codex fork`를 쓸 수 있지만, 프로젝트 상태의 source of truth는 Git branch와 PR 문서다.

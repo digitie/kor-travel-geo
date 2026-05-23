@@ -40,10 +40,11 @@
 - ✅ FastAPI admin 보강 — `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`
 - ✅ PR #12 리뷰 보강 — 업로드 path traversal/크기 제한, 프록시 `/v1` 제한과 스트리밍 전달, React Query retry, EXPLAIN timeout, LoadConsole/Explain/Reverse/Consistency 에러 처리, CI `scripts` import 실패 수정
 - 🟡 PR #13/T-027 계획 보강 — `data/juso` 전체 인벤토리, Docker full-load 실행 금지선, 기준월 분리(`JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`), `PLAN_ONLY=1` preflight, 미지원 자료 후속 태스크를 문서화
+- 🟡 Windows 재설치/새 Codex 세션 복구 문서화 — `docs/windows-reinstall-recovery.md`에 Git/PR handoff, `data/`·`.env` 백업, WSL 복구, Codex `resume`/`fork`/로컬 백업 명령을 정리하고 `CLAUDE.md`/`docs/dev-environment-recovery.md`의 실제 적재 금지선을 동기화
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-PR #13은 실제 전체 적재를 바로 실행하지 말고, 먼저 `PLAN_ONLY=1 bash scripts/fullload_test.sh`로 경로 preflight만 확인한다. 그 다음 Docker 볼륨/로그 경로/중단 기준을 사람 리뷰로 확정한 뒤 전체 적재 실행 여부를 결정한다.
+PR #13은 실제 전체 적재를 바로 실행하지 말고, 먼저 `docs/windows-reinstall-recovery.md`와 `docs/t027-fullload-plan.md`를 확인한 뒤 `PLAN_ONLY=1 bash scripts/fullload_test.sh`로 경로 preflight만 확인한다. 그 다음 Docker 볼륨/로그 경로/중단 기준을 사람 리뷰로 확정한 뒤 전체 적재 실행 여부를 결정한다.
 
 - 현재 로컬 `data/juso`는 도로명주소 한글이 `202603`, 위치정보요약DB/내비게이션용DB가 `202604`라 C10 기준월 불일치가 날 수 있다. 동월 정합성을 보려면 `202604_도로명주소 한글_전체분`을 확보한 뒤 재계획한다.
 - `daily/*.zip`, `jibun_rnaddrkor_*`, `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니다. T-028~T-030으로 분리해 로더/ADR를 먼저 잡는다.
@@ -55,6 +56,7 @@ PR #13은 실제 전체 적재를 바로 실행하지 말고, 먼저 `PLAN_ONLY=
 - [ ] `docs/architecture.md`의 의존 방향 확인
 - [ ] `docs/decisions.md`의 ADR-001 ~ ADR-019 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마, ADR-019 Next.js 16 보안 하한선)
 - [ ] 마지막 `docs/journal.md` 엔트리 읽기
+- [ ] Windows 재설치/새 Codex 세션에서 이어받는 경우 `docs/windows-reinstall-recovery.md` 읽기
 - [ ] NTFS의 `data/` 디렉토리가 준비되어 있고 ext4에서 심볼릭 링크 또는 절대경로로 접근 가능한지
 
 ## 알려진 함정

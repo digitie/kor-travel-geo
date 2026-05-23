@@ -158,6 +158,7 @@ asyncio.run(main())
 - [`docs/frontend-package.md`](docs/frontend-package.md) — `kraddr-geo-ui` 프론트엔드 사양서
 - [`docs/agent-guide.md`](docs/agent-guide.md) — AI 에이전트 작업·문서화 가이드
 - [`docs/external-apis.md`](docs/external-apis.md) — vworld/juso/epost/kakao 발급·호출
+- [`docs/dev-environment.md`](docs/dev-environment.md), [`docs/dev-environment-recovery.md`](docs/dev-environment-recovery.md), [`docs/windows-reinstall-recovery.md`](docs/windows-reinstall-recovery.md) — WSL 개발 환경과 Windows 재설치 후 복구 절차
 - [`docs/tasks.md`](docs/tasks.md), [`docs/resume.md`](docs/resume.md), [`docs/journal.md`](docs/journal.md) — 백로그·진척도·작업 일지
 - [`docs/address-db-schema.md`](docs/address-db-schema.md), [`docs/geocoding-readiness.md`](docs/geocoding-readiness.md), [`docs/reverse-geocoding.md`](docs/reverse-geocoding.md), [`docs/spatialite-vworld-implementation.md`](docs/spatialite-vworld-implementation.md) — 주제별 요약
 - [`docs/reflection-summary.md`](docs/reflection-summary.md) — 사양 첨부파일 반영 내용 요약

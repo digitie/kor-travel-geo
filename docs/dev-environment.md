@@ -93,8 +93,15 @@ print(ds.GetLayer(0).GetFeatureCount())
 - **GDAL Python 바인딩 버전 미스매치**: `pip install gdal>=3.8`만으로는 시스템과 다른 wheel을 받아 import 시 `undefined symbol`. 위 §3의 핀 절차 필수.
 - **`libgdal-dev` 누락**: `gdal-config: command not found`. apt 설치만 하면 해결.
 
+## 7. Windows 재설치 후 복구
+
+Windows 재설치, WSL 초기화, 새 PC 이전 뒤에는 본 문서의 패키지 설치 절차만으로는 충분하지 않다. Git branch/PR 상태, NTFS `data/`, `.env`, Codex 세션 handoff를 함께 복구해야 한다.
+
+자세한 절차는 `docs/windows-reinstall-recovery.md`를 따른다. 특히 PR #13/T-027은 재설치 직후 실제 Docker full-load를 실행하지 말고 `git diff --check`, `bash -n scripts/fullload_test.sh`, 필요 시 `PLAN_ONLY=1 bash scripts/fullload_test.sh` 순서까지만 확인한다.
+
 ## 참고
 
 - `docs/geocoding-readiness.md` 0번 체크리스트 — readiness 점검 시 GDAL부터 본다.
 - `docs/decisions.md` ADR-005(GDAL Python binding), ADR-008(시스템 GDAL 버전 핀).
 - `docs/backend-package.md` §9.2 — `SidoLoader`에서 `gdal.VectorTranslate` 사용.
+- `docs/windows-reinstall-recovery.md` — 재설치·새 Codex 세션·PR #13 handoff 복구 절차.
