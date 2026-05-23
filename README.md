@@ -2,7 +2,7 @@
 
 GitHub 저장소 이름은 `python-kraddr-geo`, Python 패키지는 `kraddr.geo`다. 도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**이며, vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 더한다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kraddr-geo-ui`](docs/frontend-package.md)로 운영한다.
 
-> **현재 상태**: master 브랜치는 신규 사양 문서만 포함하며 코드 구현은 아직 시작 전이다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있다(ADR-001).
+> **현재 상태**: master 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드 핵심(T-005~T-020)을 포함한다. PR #12에서는 디버그/관리 UI(`kraddr-geo-ui`)와 운영 관측·CI 보강(T-021~T-026)을 추가한다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있다(ADR-001).
 
 ## 문서 언어
 
@@ -49,15 +49,17 @@ kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
 uvicorn kraddr.geo.api.app:app --reload --port 8000
 ```
 
-프론트엔드(별도 저장소 또는 디렉토리):
+프론트엔드(별도 저장소 또는 디렉토리, Next.js 16):
 
 ```bash
 cd kraddr-geo-ui
 cp .env.local.example .env.local && $EDITOR .env.local   # KAKAO JS 키 등
 npm ci
-npm run gen:types        # 백엔드 openapi.json → 타입·Zod 자동 생성
+npm run gen:types        # 백엔드 openapi.json → TypeScript 타입 생성
 npm run dev              # http://localhost:3000
 ```
+
+운영 콘솔은 `/debug/geocode`로 바로 진입한다. `NEXT_PUBLIC_KAKAO_JS_KEY`가 없으면 지도 영역은 좌표 프리뷰로 대체되며, 백엔드 API는 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시한다.
 
 ## 진입점
 

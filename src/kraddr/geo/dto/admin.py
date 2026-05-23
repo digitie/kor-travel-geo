@@ -32,6 +32,14 @@ class TableStat(FrozenModel):
     updated_at: str | None = None
 
 
+class UploadSidoZipResponse(FrozenModel):
+    upload_id: str
+    filename: str
+    path: str
+    size_bytes: int = Field(ge=0)
+    sha256: str = Field(min_length=64, max_length=64)
+
+
 class NormalizeRequest(FrozenModel):
     address: str = Field(min_length=1, max_length=200)
 

@@ -210,12 +210,12 @@ master 테이블로 INSERT/UPDATE/DELETE를 머지한다.
 
 | 룰 | 도구 | 단계 |
 |----|------|------|
-| Python 스타일 | ruff format / ruff check | pre-commit + CI |
+| Python 스타일 | ruff check | pre-commit + CI |
 | 타입 | mypy --strict | CI (느려서 pre-commit은 선택) |
 | 의존 방향 | import-linter | CI |
 | TS 타입 | tsc --noEmit | CI |
 | TS 스타일 | eslint + prettier | pre-commit + CI |
-| 백엔드↔프론트 스키마 동기 | `openapi.json` diff + ts-to-zod 산출 diff | CI |
+| 백엔드↔프론트 스키마 동기 | `openapi.json` diff + `openapi-typescript` 산출 diff | CI |
 | 문서 누락 (journal/resume) | custom pre-commit hook | pre-commit |
 | 테스트 | pytest, vitest, playwright | CI |
 | SQL DDL 유효성 | testcontainers + DDL apply 테스트 | CI |

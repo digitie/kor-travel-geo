@@ -9,6 +9,7 @@ from .admin import (
     NormalizeRequest,
     NormalizeResponse,
     TableStat,
+    UploadSidoZipResponse,
 )
 from .common import CRS, Page, Point, ServiceMeta, Status, ZipSource
 from .geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
@@ -46,6 +47,7 @@ __all__ = [
     "ServiceMeta",
     "Status",
     "TableStat",
+    "UploadSidoZipResponse",
     "ZipSource",
     "ZipcodeInput",
     "ZipcodeResponse",

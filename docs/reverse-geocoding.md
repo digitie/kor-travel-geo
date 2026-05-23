@@ -64,7 +64,7 @@ GET /v1/address/reverse?point=127.028601,37.500344&crs=EPSG:4326&type=both&zipco
 
 ## 디버깅 UI
 
-`kraddr-geo-ui`의 `/debug/reverse` 페이지에서 Kakao 지도를 클릭하면 (lon, lat)이 즉시 `/v1/address/reverse`로 전송되어 응답을 JSON 뷰어와 `ZipSourceBadge`로 시각화한다. EXPLAIN으로 인덱스 사용을 확인하려면 `/debug/explain`에서 raw SQL을 붙여 실행한다.
+`kraddr-geo-ui`의 `/debug/reverse` 페이지에서 Kakao 지도를 클릭하면 (lon, lat) 입력값이 갱신된다. 운영자가 조회 버튼을 누르면 `/v1/address/reverse` 응답을 JSON 뷰어로 확인한다. EXPLAIN으로 인덱스 사용을 확인하려면 `/debug/explain`에서 raw SQL을 붙여 실행한다.
 
 ## 알려진 함정
 

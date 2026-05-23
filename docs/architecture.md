@@ -7,15 +7,16 @@
 ```
 ┌──────────────────────────┐      HTTP (내부망)      ┌──────────────────────────┐
 │  kraddr-geo-ui              │ ──────────────────────▶ │  kraddr-geo (FastAPI)       │
-│  Next.js 14 + shadcn/ui  │                         │  /v1/* + /v1/admin/*     │
+│  Next.js 16 + Tailwind   │                         │  /v1/* + /v1/admin/*     │
 │  - /debug/*              │                         │  ─────────────────────── │
 │  - /admin/*              │ ◀────────────────────── │  AsyncAddressClient      │
-└──────────────────────────┘   OpenAPI → 타입·Zod    └──────────────────────────┘
+└──────────────────────────┘   OpenAPI → TS 타입     └──────────────────────────┘
                                                                  │
                                                                  ▼
                                                      ┌──────────────────────────┐
                                                      │  PostgreSQL + PostGIS    │
-                                                     │  pg_trgm · 11 master MV  │
+                                                     │  pg_trgm · master tables │
+                                                     │  + mv_geocode_target     │
                                                      └──────────────────────────┘
 ```
 
@@ -40,13 +41,13 @@
 
 | 영역 | 선택 | 이유 |
 |------|------|------|
-| 프레임워크 | Next.js 14 (App Router) + TypeScript strict | RSC, 디렉토리=URL, 서버측 프록시 단순 |
-| UI | shadcn/ui (Radix + Tailwind) | 소스 코드로 컴포넌트가 들어와 커스터마이즈 자유 |
-| 폼 | React Hook Form + Zod | Zod 스키마는 백엔드 pydantic v2와 미러 |
+| 프레임워크 | Next.js 16 (App Router) + TypeScript strict | RSC, 디렉토리=URL, 서버측 프록시 단순 |
+| UI | Tailwind 기반 자체 primitives | 운영 콘솔에 필요한 작은 컴포넌트부터 소스 코드로 관리 |
+| 폼 | controlled form + Zod helper | 초기 UI는 작은 폼 위주, Zod 스키마는 백엔드 pydantic v2와 미러 |
 | 지도 | react-kakao-maps-sdk | 한국 좌표·지명에 가장 풍부 |
-| 테이블 | TanStack Table v8 | 헤드리스, 정렬·필터·페이지네이션 |
+| 테이블 | native table 우선, TanStack Table v8 후속 | 초기 관리 화면은 행 수가 작고, 대량 필터·정렬이 필요하면 승격 |
 | 데이터 패칭 | TanStack Query v5 | 폴링·optimistic update |
-| 타입 동기 | openapi-typescript + openapi-fetch + ts-to-zod | 백엔드 `openapi.json`에서 자동 생성 |
+| 타입 동기 | openapi-typescript + 수동 Zod mirror | 백엔드 `openapi.json`에서 TypeScript 타입 생성, 폼 스키마는 리뷰 가능한 수동 mirror |
 
 자세한 디렉토리 구조, 컴포넌트 설계, 페이지별 화면은 `docs/frontend-package.md`를 본다.
 
@@ -73,28 +74,25 @@ infra.geocode_repo.GeocodeRepository
 PostgreSQL + PostGIS (pg_trgm)
 ```
 
-## 데이터 흐름 — 적재 (시도별)
+## 데이터 흐름 — 적재 (full-load batch)
 
 ```
-Next.js 업로드 폼  ──POST /v1/admin/upload/sido-zip──▶  api/routers/admin.upload_sido_zip
-                                                              │
-                                                              ▼
-                                                        디스크에 ZIP 저장 (uploads/)
-                                                              │
-모든 업로드 완료 → POST /v1/admin/load/sido-batch ──▶  api._jobs.queue.enqueue(...)
-                                                              │
-                                                              ▼
-                                          asyncio.Semaphore(1) — 직렬 처리
-                                                              │
-                                                              ▼
-                            loaders.sido_loader.SidoLoader.load_sido(...)
-                              │  ├ ZIP 해제 → SHP 디렉토리
-                              │  ├ gdal.VectorTranslate(..., open_options=["ENCODING=CP949"])
-                              │  ├ 진행률 callback → Job.progress
-                              │  └ (delta) loaders.delta_loader.apply_delta(...)
-                              ▼
-                          PostgreSQL (master tables) → REFRESH MATERIALIZED VIEW
+Next.js /admin/load
+  ├─ raw ZIP 업로드 ──POST /v1/admin/upload/sido-zip?filename=...──▶ uploads/
+  └─ batch 등록 ─────POST /v1/admin/loads kind=full_load_batch────▶ load_jobs root
+                                                                    │
+                                                                    ▼
+                                                     source child 5종 직렬 실행
+                                      juso_text · locsum · navi · shp_polygons · pobox
+                                                                    │
+                                                                    ▼
+                                                     consistency_check (C1~C10)
+                                                                    │
+                                                                    ▼
+                                            severity_max != ERROR 이면 mv_refresh swap enqueue
 ```
+
+REST 큐와 `AsyncAddressClient.submit_load("full_load_batch", ...)`는 같은 `infra.batch.batch_children()` 검증 helper를 사용한다. 잘못된 payload는 root job을 만들기 전에 `InvalidInputError(E0100)`로 거절한다.
 
 ## 개발 환경 (PC, WSL)
 
@@ -118,13 +116,13 @@ PC 개발은 WSL의 ext4 위에서 진행한다. NTFS 마운트에서 직접 `gi
 
 - DB: PostgreSQL 16 + PostGIS 3.4 (또는 호환 마이너 버전). `pg_trgm`, `unaccent` 확장 사용.
 - 백엔드 런타임: Python 3.12, `uvicorn --workers 2 --proxy-headers` 권장. ARM 8GB 환경에서는 워커 수를 보수적으로.
-- 프론트엔드: Node.js 20 LTS, Next.js 14. 사내망 또는 VPN 뒤에서만 접근 (별도 애플리케이션 인증 없음).
+- 프론트엔드: Node.js 20 LTS, Next.js 16. 사내망 또는 VPN 뒤에서만 접근 (별도 애플리케이션 인증 없음).
 - 외부 노출이 필요하면 nginx/traefik의 basic auth, IP allowlist 또는 사내 SSO 게이트웨이 뒤에 둔다. 애플리케이션 코드에 인증 로직을 침투시키지 않는다(ADR-013).
 
 ## 관찰가능성
 
-- 구조화 로그: `structlog` JSON. 디버그 UI의 `/admin/logs`가 WebSocket으로 tail.
-- 메트릭: `prometheus-client`. 외부 API 호출 카운터, 캐시 hit rate, 적재 작업 상태.
+- 구조화 로그: `structlog` JSON. PR #12의 `/admin/logs`는 우선 `load_jobs.log_tail` 최근 라인을 조회하며, WebSocket tail은 후속 후보로 둔다.
+- 메트릭: `prometheus-client`. `/metrics`에서 외부 API 호출 카운터, cache entries/hits/expired, 적재 작업 kind/state gauge를 노출한다.
 - 트레이싱: (선택) OpenTelemetry. 도입은 ADR로 별도 결정.
 
 ## 참고

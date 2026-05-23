@@ -6,15 +6,20 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from fastapi import FastAPI
-from fastapi.responses import ORJSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import ORJSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.api import _jobs
 from kraddr.geo.api.responses import register_exception_handlers
 from kraddr.geo.client import AsyncAddressClient
+from kraddr.geo.infra.metrics import (
+    PROMETHEUS_CONTENT_TYPE,
+    refresh_admin_metrics,
+    render_prometheus,
+)
 from kraddr.geo.loaders.bulk_loader import load_bulk_delivery
 from kraddr.geo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kraddr.geo.loaders.pobox_loader import load_pobox
@@ -61,6 +66,15 @@ def create_app() -> FastAPI:
     app.include_router(zipcode.router, prefix="/v1")
     app.include_router(pobox.router, prefix="/v1")
     app.include_router(admin.router, prefix="/v1/admin")
+
+    @app.get("/metrics", include_in_schema=False)
+    async def prometheus_metrics(request: Request) -> Response:
+        client = cast("AsyncAddressClient", request.app.state.client)
+        cache = await client.cache_metrics()
+        load_jobs = await client.load_job_metric_counts()
+        refresh_admin_metrics(cache=cache, load_jobs=load_jobs)
+        return Response(render_prometheus(), media_type=PROMETHEUS_CONTENT_TYPE)
+
     return app
 
 

@@ -63,6 +63,7 @@ dev = [
   "mypy>=1.13",
   "import-linter>=2.0",
   "hypothesis>=6.115",
+  "pre-commit>=4.0",
 ]
 
 [project.urls]
@@ -82,7 +83,7 @@ namespaces = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 
 [tool.mypy]
 python_version = "3.12"

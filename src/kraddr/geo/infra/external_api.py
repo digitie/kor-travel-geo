@@ -14,6 +14,7 @@ from kraddr.geo.dto.address import AddressStructure, RefinedAddress
 from kraddr.geo.dto.common import Point, ServiceMeta
 from kraddr.geo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
 from kraddr.geo.exceptions import ExternalApiError
+from kraddr.geo.infra.metrics import record_external_api_call
 from kraddr.geo.settings import Settings
 
 
@@ -90,6 +91,8 @@ class ExternalGeocodeClient:
         return _juso_response(inp, item, coord_item)
 
     async def _get_json(self, url: str, *, params: Mapping[str, Any]) -> dict[str, Any]:
+        provider = _provider_from_url(url)
+
         async def fetch(client: httpx.AsyncClient) -> dict[str, Any]:
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(3),
@@ -106,6 +109,7 @@ class ExternalGeocodeClient:
                     if not isinstance(data, dict):
                         msg = f"external API returned non-object JSON: {url}"
                         raise ExternalApiError(msg)
+                    record_external_api_call(provider, "success")
                     return data
             msg = f"external API retry loop did not return: {url}"
             raise ExternalApiError(msg)
@@ -116,8 +120,20 @@ class ExternalGeocodeClient:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 return await fetch(client)
         except httpx.HTTPError as exc:
+            record_external_api_call(provider, "failure")
             msg = f"external API request failed: {url}"
             raise ExternalApiError(msg) from exc
+
+
+def _provider_from_url(url: str) -> str:
+    lowered = url.lower()
+    if "vworld" in lowered:
+        return "vworld"
+    if "juso" in lowered:
+        return "juso"
+    if "epost" in lowered:
+        return "epost"
+    return "unknown"
 
 
 def _vworld_response(inp: GeocodeInput, payload: Mapping[str, Any]) -> GeocodeResponse | None:

@@ -2,6 +2,63 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-24 (PR #12 리뷰 보강 — 보안·CI·에러 처리)
+
+**작업**: PR #12 top-level 리뷰 코멘트를 확인했다. inline review thread는 없었고, GitHub 기준 mergeable 상태라 Git 충돌은 없었다. 다만 backend CI가 `scripts.export_openapi` import 실패로 깨졌고, 리뷰의 C/H/M 항목과 추가 코멘트의 프록시 스트리밍 항목을 모두 코드로 반영했다.
+
+**구현 상세**:
+- C1/C2: `/v1/admin/upload/sido-zip`에서 `sido`와 `filename`을 path token으로 정규화하고, resolved path가 `loader_data_dir/uploads` 밖으로 나가면 `InvalidInputError(E0100)`로 거절한다. `api_max_upload_bytes`(기본 2GiB)를 추가해 초과 업로드는 partial file 삭제 후 실패시킨다.
+- H1/L1: Next.js 프록시는 `new URL()` 정규화 이후 `/v1/` 하위 경로만 허용하고, 전달 헤더를 `accept`/`content-type`/`user-agent`로 제한한다.
+- 추가 코멘트: Next.js 프록시는 더 이상 `request.arrayBuffer()`로 업로드 본문 전체를 메모리에 올리지 않는다. GET/HEAD 외 요청은 `request.body` `ReadableStream`을 그대로 넘기고 Node.js fetch 요건에 맞춰 `duplex: "half"`를 설정한다.
+- H2: `ApiError`를 추가해 HTTP status를 보존하고, React Query retry가 4xx를 재시도하지 않게 했다.
+- H3: `/v1/admin/explain`은 실행 전 `set_config('statement_timeout', ..., true)`를 호출한다. 기본 timeout은 `api_explain_timeout_ms=3000`.
+- M1~M3/L2/L3: `LoadConsole`, `ReverseDebugger`, `ConsistencyPanel` 에러 처리를 보강하고 빈 jobs 배열 finished 전이를 막았다.
+- M4: Prometheus gauge 이름을 `kraddr_geo_cache_hits_total`에서 `kraddr_geo_cache_hits`로 변경했다.
+- M5: `ExplainDebugger`가 `explainFormSchema`를 사용해 SELECT/WITH와 세미콜론 금지를 클라이언트에서도 검증한다.
+- CI: `scripts/__init__.py`를 추가하고 pytest `pythonpath`에 repository root를 명시해 GitHub Actions의 pytest 수집 환경에서도 `scripts.export_openapi` import가 안정적으로 동작하게 했다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports` → Layered architecture kept
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/export_openapi.py --check --output openapi.json` → drift 없음
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 70 passed, 1 skipped
+- 임시 DB `kraddr_geo_codex_pr12_review`에서 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q` → 실제 `data/juso` 샘플 COPY + MV 생성 1 passed
+- `cd kraddr-geo-ui && npm run lint && npm run type-check && npm run test && npm run build` → 통과, Vitest 12 passed
+- `cd kraddr-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과, moderate advisory만 잔여
+
+**다음 작업**: PR #12 CI 재확인과 리뷰어 코멘트 답변.
+
+## 2026-05-23 (PR #12 — T-021~T-026 프론트엔드·관측·CI 구현)
+
+**작업**: PR #11을 main에 머지한 뒤, PR #11 후속 의견을 PR #12로 이관했다. PR #12 범위는 T-018~T-020이 main에 이미 포함된 상태에서 T-021~T-026을 실제 코드와 테스트로 마무리하는 것이다.
+
+**구현 상세**:
+- T-021: `kraddr-geo-ui` 패키지를 추가했다. Next.js 16(App Router), React 18, Tailwind, TanStack Query, `react-kakao-maps-sdk`, OpenAPI 타입 생성 스크립트(`npm run gen:types`)를 포함한다.
+- T-022: `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain` 페이지를 구현했다. 모든 요청은 `/api/proxy/[...path]` Route Handler를 통해 백엔드 `/v1/*`로 전달한다. Kakao JS key가 없으면 지도는 좌표 프리뷰로 fallback한다.
+- T-023: `/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs` 페이지를 구현했다. full-load batch payload 등록, raw ZIP 업로드, MV refresh enqueue, 테이블 통계, 캐시 메트릭, `load_jobs.log_tail` 조회를 확인할 수 있다.
+- T-024: 루트 `.pre-commit-config.yaml`과 `.github/workflows/ci.yml`을 추가했다. backend lint/type/import/test와 frontend type generation drift/lint/type/test/build를 분리된 job으로 검증한다.
+- T-025: `infra/metrics.py`와 `/metrics` endpoint를 추가했다. 외부 API 호출 결과, cache entries/hits/expired, load job kind/state 분포를 Prometheus 포맷으로 노출한다.
+- T-026: `/admin/consistency` 페이지를 추가했다. C1~C10 report 목록, 상세 case grid, 원본 JSON, 재검증 enqueue를 제공한다.
+- FastAPI admin 라우터와 `AsyncAddressClient`에 `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv` 표면을 연결했다.
+
+**결정**:
+- ADR-019를 추가했다. 신규 프론트엔드는 Next.js 14가 아니라 Next.js 16을 보안 하한선으로 둔다. `npm audit --omit=dev --audit-level=high`가 통과해야 한다.
+- `/v1/admin/upload/sido-zip`은 `python-multipart` 의존을 피하기 위해 multipart가 아닌 raw request body stream + query `filename` 형태로 구현했다. Next.js 프록시는 body를 `arrayBuffer()`로 읽어 그대로 전달한다.
+- `ruff format --check`는 기존 파일 포맷 churn이 커서 PR #12 CI 범위에서 제외했다. 이번 PR은 `ruff check`, `mypy`, `lint-imports`, `pytest`를 품질 게이트로 삼는다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .`
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py`
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports`
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/export_openapi.py --check --output openapi.json`
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q`
+- `KRADDR_GEO_TEST_PG_DSN=... .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` — 실제 `data/juso` 샘플 COPY와 MV 생성 검증
+- `cd kraddr-geo-ui && npm ci && npm run gen:types && npm run lint && npm run type-check && npm run test && npm run build`
+- `cd kraddr-geo-ui && npm audit --omit=dev --audit-level=high`
+
+**다음 작업**: PR #12 리뷰 대기. 후속 후보는 `/admin/load` 업로드 진행률(XHR progress), `/admin/logs` streaming tail, `/debug/reverse` 지도 클릭 즉시 조회 UX다.
+
 ## 2026-05-23 (PR #11 follow-up — batch payload fail-fast 검증)
 
 **작업**: PR #11 후속 확인 결과 GitHub review thread/comment는 없었지만, 원격 브랜치에 `AsyncAddressClient.submit_load("full_load_batch", ...)`를 `insert_load_batch`로 라우팅하는 보강 커밋이 추가되어 있었다. 해당 방향은 REST와 라이브러리 표면을 일치시키므로 타당하다고 판단했고, 그 위에 잘못된 batch payload가 `load_jobs`에 root + 빈 child를 먼저 남기는 문제를 추가로 막았다.
