@@ -8,11 +8,20 @@ from pathlib import Path
 import typer
 
 from kraddr.geo.client import AsyncAddressClient
-from kraddr.geo.loaders.consistency import run_all_cases
-from kraddr.geo.loaders.postload import refresh_mv
+from kraddr.geo.loaders.bulk_loader import load_bulk_delivery
+from kraddr.geo.loaders.consistency import DEFAULT_CASES, run_all_cases
+from kraddr.geo.loaders.epost_downloader import (
+    discover_epost_files,
+    download_epost_zip,
+    extract_epost_zip,
+)
+from kraddr.geo.loaders.pobox_loader import load_pobox
+from kraddr.geo.loaders.postload import refresh_mv, resolve_text_geometry_links
+from kraddr.geo.loaders.shp.polygons_loader import load_shp_polygons
 from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kraddr.geo.loaders.text.locsum_loader import load_locsum
 from kraddr.geo.loaders.text.navi_loader import load_navi
+from kraddr.geo.settings import get_settings
 from kraddr.geo.version import __version__
 
 app = typer.Typer(help="kraddr-geo command line tools.")
@@ -71,25 +80,187 @@ def load_navi_command(path: Path, yyyymm: str | None = typer.Option(None, "--yyy
     asyncio.run(run())
 
 
-@refresh_app.command("mv")
-def refresh_materialized_view(
-    concurrently: bool = typer.Option(True, "--concurrently/--no-concurrently"),
+@load_app.command("shp")
+def load_shp_command(
+    path: Path,
+    mode: str = typer.Option("full", "--mode", help="full 또는 delta"),
 ) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client.engine is not None
-            await refresh_mv(client.engine, concurrently=concurrently)
+            count = await load_shp_polygons(client.engine, path, mode=mode)
+            typer.echo(f"loaded SHP layers: {count}")
+
+    asyncio.run(run())
+
+
+@load_app.command("shp-all")
+def load_shp_all_command(
+    root: Path,
+    mode: str = typer.Option("full", "--mode", help="full 또는 delta"),
+) -> None:
+    async def run() -> None:
+        total = 0
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            for sido_dir in _sido_dirs(root):
+                count = await load_shp_polygons(client.engine, sido_dir, mode=mode)
+                total += count
+                typer.echo(f"{sido_dir.name}: {count} layers")
+        typer.echo(f"loaded SHP layers total: {total}")
+
+    asyncio.run(run())
+
+
+@load_app.command("pobox")
+def load_pobox_command(path: Path) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            count = await load_pobox(client.engine, path)
+            typer.echo(f"loaded postal_pobox rows: {count}")
+
+    asyncio.run(run())
+
+
+@load_app.command("bulk")
+def load_bulk_command(path: Path) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            count = await load_bulk_delivery(client.engine, path)
+            typer.echo(f"loaded postal_bulk_delivery rows: {count}")
+
+    asyncio.run(run())
+
+
+@load_app.command("epost")
+def load_epost_command(
+    source: Path | None = typer.Option(
+        None,
+        "--source",
+        help="다운로드 ZIP 또는 압축 해제 디렉터리",
+    ),
+    output_dir: Path = typer.Option(Path("data/epost"), "--output-dir"),
+    kind: str = typer.Option("full", "--kind", help="현재 full만 지원. downloadKnd=1"),
+) -> None:
+    async def run() -> None:
+        if kind != "full":
+            typer.echo("only --kind=full is supported for epost dataset 15000302", err=True)
+            raise typer.Exit(2)
+        resolved = source
+        if resolved is None:
+            resolved = await download_epost_zip(get_settings(), output_dir, download_kind="1")
+            typer.echo(f"downloaded epost ZIP: {resolved}")
+        if resolved.suffix.lower() == ".zip":
+            resolved = extract_epost_zip(resolved, output_dir / resolved.stem)
+            typer.echo(f"extracted epost ZIP: {resolved}")
+        pobox_file, bulk_file = discover_epost_files(resolved)
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            if pobox_file is not None:
+                count = await load_pobox(client.engine, pobox_file)
+                typer.echo(f"loaded postal_pobox rows: {count}")
+            if bulk_file is not None:
+                count = await load_bulk_delivery(client.engine, bulk_file)
+                typer.echo(f"loaded postal_bulk_delivery rows: {count}")
+        if pobox_file is None and bulk_file is None:
+            typer.echo("no pobox/bulk text files found in epost dataset", err=True)
+            raise typer.Exit(2)
+
+    asyncio.run(run())
+
+
+@load_app.command("all-sidos")
+def load_all_sidos_command(
+    juso_path: Path = typer.Option(..., "--juso"),
+    locsum_path: Path = typer.Option(..., "--locsum"),
+    navi_path: Path = typer.Option(..., "--navi"),
+    shp_root: Path | None = typer.Option(None, "--shp-root"),
+    pobox_path: Path | None = typer.Option(None, "--pobox"),
+    bulk_path: Path | None = typer.Option(None, "--bulk"),
+    yyyymm: str | None = typer.Option(None, "--yyyymm"),
+    refresh: bool = typer.Option(True, "--refresh/--no-refresh"),
+    swap: bool = typer.Option(True, "--swap/--concurrent"),
+    allow_consistency_error: bool = typer.Option(False, "--allow-consistency-error"),
+) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            juso_count = await load_juso_hangul(client.engine, juso_path, source_yyyymm=yyyymm)
+            typer.echo(f"loaded tl_juso_text rows: {juso_count}")
+            locsum_count = await load_locsum(client.engine, locsum_path, source_yyyymm=yyyymm)
+            typer.echo(f"loaded tl_locsum_entrc rows: {locsum_count}")
+            build_count, entrance_count = await load_navi(
+                client.engine,
+                navi_path,
+                source_yyyymm=yyyymm,
+            )
+            typer.echo(
+                f"loaded navi rows: centroid={build_count}, entrance={entrance_count}"
+            )
+            if shp_root is not None:
+                shp_total = 0
+                for sido_dir in _sido_dirs(shp_root):
+                    shp_total += await load_shp_polygons(client.engine, sido_dir, mode="full")
+                typer.echo(f"loaded SHP layers total: {shp_total}")
+            if pobox_path is not None:
+                count = await load_pobox(client.engine, pobox_path)
+                typer.echo(f"loaded postal_pobox rows: {count}")
+            if bulk_path is not None:
+                typer.echo(
+                    f"loaded postal_bulk_delivery rows: "
+                    f"{await load_bulk_delivery(client.engine, bulk_path)}"
+                )
+            await resolve_text_geometry_links(client.engine)
+            report = await run_all_cases(client.engine, generated_by="cli")
+            typer.echo(report.model_dump_json())
+            if report.severity_max == "ERROR" and not allow_consistency_error:
+                raise typer.Exit(2)
+            if refresh:
+                await refresh_mv(
+                    client.engine,
+                    concurrently=not swap,
+                    strategy="swap" if swap else "concurrent",
+                )
+                typer.echo("refreshed mv_geocode_target")
+
+    asyncio.run(run())
+
+
+@refresh_app.command("mv")
+def refresh_materialized_view(
+    concurrently: bool = typer.Option(True, "--concurrently/--no-concurrently"),
+    swap: bool = typer.Option(False, "--swap", help="Build shadow MV and rename-swap."),
+) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            await refresh_mv(
+                client.engine,
+                concurrently=concurrently and not swap,
+                strategy="swap" if swap else "concurrent",
+            )
             typer.echo("refreshed mv_geocode_target")
 
     asyncio.run(run())
 
 
 @validate_app.command("consistency")
-def validate_consistency() -> None:
+def validate_consistency(
+    cases: str | None = typer.Option(None, "--cases", help="Comma-separated case codes."),
+    scope: str = typer.Option("full", "--scope"),
+) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client.engine is not None
-            report = await run_all_cases(client.engine, generated_by="cli")
+            selected = tuple(part.strip() for part in cases.split(",")) if cases else DEFAULT_CASES
+            report = await run_all_cases(
+                client.engine,
+                scope=scope,
+                cases=selected,
+                generated_by="cli",
+            )
             typer.echo(report.model_dump_json())
 
     asyncio.run(run())
@@ -121,3 +292,16 @@ def cancel_job(job_id: str) -> None:
             typer.echo((await client.cancel_load(job_id)).model_dump_json())
 
     asyncio.run(run())
+
+
+def _sido_dirs(root: Path) -> tuple[Path, ...]:
+    if not root.exists():
+        typer.echo(f"path does not exist: {root}", err=True)
+        raise typer.Exit(2)
+    if any(root.glob("*.shp")):
+        return (root,)
+    dirs = tuple(sorted(path for path in root.iterdir() if path.is_dir()))
+    if not dirs:
+        typer.echo(f"no sido directories found: {root}", err=True)
+        raise typer.Exit(2)
+    return dirs

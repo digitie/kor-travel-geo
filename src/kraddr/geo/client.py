@@ -27,6 +27,7 @@ from .dto.search import SearchResponse, SearchType
 from .dto.zipcode import ZipcodeResponse
 from .infra.admin_repo import AdminRepository
 from .infra.engine import make_async_engine
+from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
 from .infra.pobox_repo import PoboxRepository
 from .infra.reverse_repo import ReverseRepository
@@ -89,7 +90,11 @@ class AsyncAddressClient:
             simple=simple,
             fallback=fallback,
         )
-        return await core_geocode(GeocodeRepository(self._engine()), inp)
+        response = await core_geocode(GeocodeRepository(self._engine()), inp)
+        if fallback != "api" or response.status != "NOT_FOUND":
+            return response
+        external = await ExternalGeocodeClient(self.settings).geocode(inp)
+        return external or response
 
     async def geocode_many(
         self,

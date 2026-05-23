@@ -1,0 +1,236 @@
+"""External geocoding API adapters used only as explicit fallback."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from typing import Any
+
+import httpx
+from pydantic import SecretStr
+from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
+
+from kraddr.geo.dto.address import AddressStructure, RefinedAddress
+from kraddr.geo.dto.common import Point, ServiceMeta
+from kraddr.geo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
+from kraddr.geo.exceptions import ExternalApiError
+from kraddr.geo.settings import Settings
+
+
+class ExternalGeocodeClient:
+    """Call approved provider APIs for ``fallback='api'`` geocoding."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self.settings = settings
+        self._http_client = http_client
+
+    async def geocode(self, inp: GeocodeInput) -> GeocodeResponse | None:
+        if self.settings.vworld_api_key is not None:
+            response = await self._vworld_geocode(inp)
+            if response is not None:
+                return response
+        if self.settings.juso_api_key is not None:
+            return await self._juso_coord_geocode(inp)
+        return None
+
+    async def _vworld_geocode(self, inp: GeocodeInput) -> GeocodeResponse | None:
+        assert self.settings.vworld_api_key is not None
+        payload = await self._get_json(
+            self.settings.vworld_url,
+            params={
+                "service": "address",
+                "request": "getcoord",
+                "version": "2.0",
+                "crs": inp.crs,
+                "address": inp.address,
+                "type": "road" if inp.type == "road" else "parcel",
+                "format": "json",
+                "errorformat": "json",
+                "key": self.settings.vworld_api_key.get_secret_value(),
+            },
+        )
+        return _vworld_response(inp, payload)
+
+    async def _juso_coord_geocode(self, inp: GeocodeInput) -> GeocodeResponse | None:
+        assert self.settings.juso_api_key is not None
+        search_payload = await self._get_json(
+            self.settings.juso_search_url,
+            params={
+                "confmKey": self.settings.juso_api_key.get_secret_value(),
+                "currentPage": 1,
+                "countPerPage": 1,
+                "keyword": inp.address,
+                "resultType": "json",
+            },
+        )
+        item = _first_juso_item(search_payload)
+        if item is None:
+            return None
+        coord_key = self.settings.juso_coord_api_key or self.settings.juso_api_key
+        coord_payload = await self._get_json(
+            self.settings.juso_coord_url,
+            params={
+                "confmKey": coord_key.get_secret_value(),
+                "admCd": item.get("admCd"),
+                "rnMgtSn": item.get("rnMgtSn"),
+                "udrtYn": item.get("udrtYn") or "0",
+                "buldMnnm": item.get("buldMnnm") or "0",
+                "buldSlno": item.get("buldSlno") or "0",
+                "resultType": "json",
+            },
+        )
+        coord_item = _first_juso_item(coord_payload)
+        if coord_item is None:
+            return None
+        return _juso_response(inp, item, coord_item)
+
+    async def _get_json(self, url: str, *, params: Mapping[str, Any]) -> dict[str, Any]:
+        async def fetch(client: httpx.AsyncClient) -> dict[str, Any]:
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(multiplier=0.2, max=2.0),
+                retry=retry_if_exception_type(
+                    (httpx.TimeoutException, httpx.TransportError, httpx.HTTPStatusError)
+                ),
+                reraise=True,
+            ):
+                with attempt:
+                    response = await client.get(url, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+                    if not isinstance(data, dict):
+                        msg = f"external API returned non-object JSON: {url}"
+                        raise ExternalApiError(msg)
+                    return data
+            msg = f"external API retry loop did not return: {url}"
+            raise ExternalApiError(msg)
+
+        try:
+            if self._http_client is not None:
+                return await fetch(self._http_client)
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                return await fetch(client)
+        except httpx.HTTPError as exc:
+            msg = f"external API request failed: {url}"
+            raise ExternalApiError(msg) from exc
+
+
+def _vworld_response(inp: GeocodeInput, payload: Mapping[str, Any]) -> GeocodeResponse | None:
+    response = _mapping(payload.get("response"))
+    if str(response.get("status", "")).upper() != "OK":
+        return None
+    result = response.get("result")
+    if isinstance(result, list):
+        result = result[0] if result else None
+    result_map = _mapping(result)
+    point = _point(_mapping(result_map.get("point")))
+    if point is None:
+        return None
+    text = str(result_map.get("text") or inp.address)
+    structure = _mapping(result_map.get("structure"))
+    return GeocodeResponse(
+        service=_service(inp),
+        status="OK",
+        input=inp,
+        refined=RefinedAddress(text=text, structure=_structure(structure)),
+        result=GeocodeResult(crs=inp.crs, point=point),
+        x_extension=GeocodeExtension(source="api_vworld", confidence=0.70),
+    )
+
+
+def _juso_response(
+    inp: GeocodeInput,
+    search_item: Mapping[str, Any],
+    coord_item: Mapping[str, Any],
+) -> GeocodeResponse | None:
+    point = _point_from_keys(coord_item, x_keys=("entX", "x", "X"), y_keys=("entY", "y", "Y"))
+    if point is None:
+        return None
+    text = str(search_item.get("roadAddr") or search_item.get("jibunAddr") or inp.address)
+    return GeocodeResponse(
+        service=_service(inp),
+        status="OK",
+        input=inp,
+        refined=RefinedAddress(
+            text=text,
+            structure=AddressStructure(
+                level4AC=_str_or_none(search_item.get("admCd")),
+                level5=_str_or_none(search_item.get("rn")),
+                detail=_str_or_none(search_item.get("buldMnnm")),
+            ),
+        ),
+        result=GeocodeResult(crs="EPSG:4326", point=point),
+        x_extension=GeocodeExtension(
+            source="api_juso",
+            confidence=0.65,
+            bd_mgt_sn=_str_or_none(search_item.get("bdMgtSn")),
+            rncode_full=_str_or_none(search_item.get("rnMgtSn")),
+            zip_no=_str_or_none(search_item.get("zipNo")),
+            zip_source="building_bsi_zon_no" if search_item.get("zipNo") else None,
+            buld_nm=_str_or_none(search_item.get("bdNm")),
+        ),
+    )
+
+
+def _service(_inp: GeocodeInput) -> ServiceMeta:
+    return ServiceMeta(
+        name="kraddr-geo",
+        operation="geocode",
+        time=datetime.now(UTC).isoformat(),
+    )
+
+
+def _first_juso_item(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    results = _mapping(payload.get("results"))
+    items = results.get("juso")
+    if not isinstance(items, list) or not items:
+        return None
+    first = items[0]
+    return first if isinstance(first, Mapping) else None
+
+
+def _point(raw: Mapping[str, Any]) -> Point | None:
+    return _point_from_keys(raw, x_keys=("x", "X"), y_keys=("y", "Y"))
+
+
+def _point_from_keys(
+    raw: Mapping[str, Any],
+    *,
+    x_keys: tuple[str, ...],
+    y_keys: tuple[str, ...],
+) -> Point | None:
+    x = next((raw[key] for key in x_keys if raw.get(key) not in (None, "")), None)
+    y = next((raw[key] for key in y_keys if raw.get(key) not in (None, "")), None)
+    if x is None or y is None:
+        return None
+    return Point(x=float(x), y=float(y))
+
+
+def _structure(raw: Mapping[str, Any]) -> AddressStructure:
+    return AddressStructure(
+        level1=_str_or_none(raw.get("level1")),
+        level2=_str_or_none(raw.get("level2")),
+        level4L=_str_or_none(raw.get("level4L")),
+        level4LC=_str_or_none(raw.get("level4LC")),
+        level4A=_str_or_none(raw.get("level4A")),
+        level4AC=_str_or_none(raw.get("level4AC")),
+        level5=_str_or_none(raw.get("level5")),
+        detail=_str_or_none(raw.get("detail")),
+    )
+
+
+def _mapping(value: object) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _str_or_none(value: object) -> str | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, SecretStr):
+        return value.get_secret_value()
+    return str(value)

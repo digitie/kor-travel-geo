@@ -272,6 +272,8 @@ async with AsyncAddressClient() as client:    # .env에서 DSN 자동 로드
 4. 결과 없으면 `GeocodeResponse(status="NOT_FOUND")`.
 5. `RefinedAddress(text, structure)` 빌드. `GeocodeExtension(source="local", confidence, bd_mgt_sn, rncode_full, bjd_cd, zip_no, zip_source, buld_nm)`.
 
+`fallback="api"`는 core가 직접 HTTP를 호출하지 않는다. `AsyncAddressClient.geocode()`가 로컬 core 결과가 `NOT_FOUND`일 때만 `infra/external_api.py::ExternalGeocodeClient`를 호출한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 + 좌표 API다. 외부 응답도 동일한 `GeocodeResponse` DTO로 변환하며, 자체 출처는 `x_extension.source = "api_vworld" | "api_juso"`에만 넣는다.
+
 `reverse_geocoder`, `searcher`, `zipcoder`, `poboxer`도 같은 패턴.
 
 ## 7. DB 어댑터
@@ -953,11 +955,22 @@ async def run_all_cases(
 
 데이터 경로는 NTFS의 프로젝트 디렉토리 `data/`를 가리킨다. WSL에서 작업할 때는 ext4 작업 디렉토리에 `ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`로 심볼릭 링크를 두거나 절대경로(`/mnt/<drive>/projects/python-kraddr-geo/data/...`)로 참조한다.
 
+CLI는 운영자가 WSL shell에서 직접 실행하는 **동기 관리 명령**이다. API의 `/v1/admin/loads`는 `load_jobs` 큐와 batch DAG를 통해 백그라운드 실행을 담당한다. 두 경로 모두 같은 loader/core/repository 코드를 쓰지만, CLI는 장기 실행 프로세스가 끊기면 shell exit code로 실패를 전달하고, API 큐는 `load_jobs` 상태로 실패를 남긴다.
+
 ```bash
 # === 텍스트 정본 적재 (ADR-012, GDAL 무의존) ===
 kraddr-geo load juso  ./data/juso/202603_도로명주소\ 한글_전체분 --yyyymm 202603
 kraddr-geo load locsum ./data/juso/202604_위치정보요약DB_전체분 --yyyymm 202604
 kraddr-geo load navi   ./data/juso/202604_내비게이션용DB_전체분 --yyyymm 202604
+
+# === 전국 단위 직접 풀로드 ===
+kraddr-geo load all-sidos \
+  --juso ./data/juso/202603_도로명주소\ 한글_전체분 \
+  --locsum ./data/juso/202604_위치정보요약DB_전체분.zip \
+  --navi ./data/juso/202604_내비게이션용DB_전체분 \
+  --shp-root ./data/juso/도로명주소\ 전자지도 \
+  --yyyymm 202604 \
+  --swap
 
 # === SHP polygon 적재 (ADR-005, GDAL 필요) ===
 kraddr-geo load shp ./data/juso/도로명주소\ 전자지도/강원특별자치도 --mode full
@@ -975,12 +988,11 @@ kraddr-geo load epost --kind=full
 # === 후처리 ===
 kraddr-geo refresh mv                        # CONCURRENTLY (평시)
 kraddr-geo refresh mv --swap                 # shadow MV swap (분기 풀로드 후)
-kraddr-geo refresh vacuum
 
 # === 정합성 검증 (ADR-012, ADR-016) ===
 kraddr-geo validate consistency               # 모든 케이스 C1~C10
-kraddr-geo validate consistency --sido=seoul  # 시도 단위
-kraddr-geo validate consistency --cases=C4,C7 --json   # 특정 케이스만, JSON 출력
+kraddr-geo validate consistency --scope=full
+kraddr-geo validate consistency --cases=C4,C7 # 특정 케이스만 JSON 출력
 
 # === 작업 큐 상태 조회 (ADR-011, ADR-016) ===
 kraddr-geo jobs list                          # 최근 작업 목록
@@ -1033,7 +1045,14 @@ steps:
 
 ### OpenAPI export
 
-`scripts/export_openapi.py`가 `create_app().openapi()`를 `openapi.json`에 저장. CI에서 `git diff --exit-code openapi.json`으로 변경 누락 방지. 프론트엔드는 본 파일을 받아 `gen:types`.
+`scripts/export_openapi.py`가 `create_app().openapi()`를 `openapi.json`에 저장한다.
+
+```bash
+python scripts/export_openapi.py --output openapi.json
+python scripts/export_openapi.py --check --output openapi.json
+```
+
+`.github/workflows/openapi.yml`은 PR마다 패키지를 `.[api]` extra로 설치한 뒤 `--check`를 실행한다. API DTO/라우터가 바뀌었는데 `openapi.json`이 갱신되지 않으면 CI가 실패한다. 프론트엔드는 본 파일을 받아 `gen:types`.
 
 ## 13. 부록
 

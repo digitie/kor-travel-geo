@@ -21,6 +21,9 @@
 - PR #10 리뷰 반영: 정합성 검증을 C1~C10 전체로 확장하고, 각 케이스에 `count`, `ratio`, `threshold`, `metric`, `sample`을 채운다. batch DAG는 `source_set.load_batch_id`가 있는 리포트를 게이트로 사용한다.
 - PR #10 리뷰 반영: `JobQueue` handler 시그니처에 진행률 콜백을 추가하고, `load_jobs.log_tail`을 실제로 갱신한다. FastAPI lifespan은 기본 적재/정합성/MV refresh handler를 등록한다.
 - ADR-018 추가: PostGIS, `pg_trgm`, `unaccent` extension은 `x_extension` 스키마에 설치하고 모든 연결에서 `search_path=public,x_extension`를 사용한다.
+- T-018 CLI 운영 명령을 추가한다. `load all-sidos`, `load shp`, `load shp-all`, `load pobox`, `load bulk`, `load epost --kind=full`, `refresh mv --swap`, `validate consistency --cases/--scope`를 지원한다.
+- T-019 외부 API 폴백 어댑터를 추가한다. `fallback="api"`는 로컬 `NOT_FOUND` 이후 vworld 주소 좌표 API와 juso 검색+좌표 API를 순서대로 호출하며, 공급자 출처는 `x_extension.source`에만 기록한다.
+- T-020 OpenAPI export와 drift 검사를 추가한다. `scripts/export_openapi.py`, committed `openapi.json`, `.github/workflows/openapi.yml`을 통해 API 스키마 변경 누락을 CI에서 잡는다.
 - T-005~T-017 1차 구현: async engine factory, PostGIS/Alembic schema, `mv_geocode_target`, raw SQL repositories, core geocode/reverse/search/zipcode/pobox flows, `AsyncAddressClient`, FastAPI routers, persistent `load_jobs` queue, text/SHP/postal loaders를 추가한다.
 - 실제 `data/juso` 기반 검증 테스트를 추가한다. 도로명주소 한글 서울 파일, 위치정보요약DB ZIP member, 내비게이션용DB 서울 파일, 강원 SHP load plan을 직접 읽어 컬럼 인덱스·좌표·PNU 매핑을 검증한다.
 - 선택형 실제 PostgreSQL 적재 테스트를 추가한다. `KRADDR_GEO_TEST_PG_DSN`이 설정되면 DDL 적용 → 실제 파일 샘플 COPY 적재 → 위치정보↔텍스트 링크 해소 → `mv_geocode_target` 생성까지 실행한다.
