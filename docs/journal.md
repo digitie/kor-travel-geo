@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-23 (PR #11 리뷰 fixup — 라이브러리 batch DAG 비대칭 해소)
+
+**작업**: PR #11 리뷰에서 발견된 라이브러리/REST 비대칭 이슈를 해결했다. `AsyncAddressClient.submit_load("full_load_batch", ...)`가 `AdminRepository.insert_load_job`을 직접 호출하던 경로를 `insert_load_batch`로 라우팅하여, 라이브러리 사용자도 REST `/v1/admin/loads`와 동일하게 root + 5종 child + DAG가 즉시 적재되도록 한다.
+
+**구현 상세**:
+- `src/kraddr/geo/infra/batch.py` 신규 모듈에 `BATCH_SOURCE_KINDS`와 `batch_children()`을 이동했다. `api/_jobs.py`의 동명 private 헬퍼는 제거하고 새 모듈을 import한다.
+- `AsyncAddressClient.submit_load`는 `kind == "full_load_batch"`일 때 `batch_children(payload)`로 child 구성을 결정해 `AdminRepository.insert_load_batch`를 호출한다. 비-batch kind는 종전대로 `insert_load_job`을 사용한다.
+- `infra/batch.py`는 `core/dto` 의존 없는 순수 모듈이라 client / api / loaders 어느 레이어에서도 import 가능. import-linter "Layered architecture" 컨트랙트 유지.
+
+**검증**:
+- `tests/unit/test_infra_batch.py` 신규 — default kind 순서, `payloads` 매핑 키, 명시 `children` 우선, 잘못된 entry drop을 검증.
+- `tests/unit/test_client_submit_load_batch.py` 신규 — `AsyncMock`으로 `insert_load_batch` / `insert_load_job` 호출 분기를 검증.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp python -m pytest tests/unit/ -q` → 51 passed.
+- `python -m ruff check`, `mypy --strict src/kraddr/geo/api/_jobs.py src/kraddr/geo/infra/batch.py src/kraddr/geo/client.py`, `lint-imports` 모두 통과.
+- `python scripts/export_openapi.py --check` → drift 없음 (DTO 변경 없음).
+
+**다음 작업**: T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩.
+
 ## 2026-05-23 (codex, T-018~T-020 구현 + 신규 PR 준비)
 
 **작업**: PR #10 리뷰 fixup 위에서 T-018~T-020을 추가 구현하고, 사용자 요청대로 P1/P2 리뷰 반영 사항과 T-005~T-020 완료 범위를 하나의 신규 PR로 등록할 준비를 진행했다.

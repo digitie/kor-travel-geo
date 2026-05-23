@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- PR #11 리뷰 반영: `AsyncAddressClient.submit_load("full_load_batch", ...)`이 root 행만 만들던 라이브러리/REST 비대칭을 해소한다. 라이브러리도 `AdminRepository.insert_load_batch`로 라우팅되어 root + 5종 child가 동시에 적재된다. `BATCH_SOURCE_KINDS`와 `batch_children()`은 `kraddr.geo.infra.batch` 모듈로 이동해 client / api 양쪽에서 공유한다.
+
 ### Changed
 - **(BREAKING)** `kraddr.geo` 패키지의 저장 엔진을 SQLite + SpatiaLite에서 PostgreSQL + PostGIS로 전환한다. 패키지 이름은 그대로지만 내부 구현은 완전히 새로 작성한다. 이전 구현은 `v1` 브랜치에 보존되어 있다.
 - GitHub 저장소 이름을 `python-kraddr-geo`로 명시하고, CLI 명령은 `kraddr-geo`, 환경변수 prefix는 `KRADDR_GEO_`, PostgreSQL DB 이름은 `kraddr_geo`로 통일한다.

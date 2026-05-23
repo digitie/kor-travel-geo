@@ -26,6 +26,7 @@ from .dto.reverse import ReverseResponse, ReverseType
 from .dto.search import SearchResponse, SearchType
 from .dto.zipcode import ZipcodeResponse
 from .infra.admin_repo import AdminRepository
+from .infra.batch import batch_children
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
@@ -204,7 +205,14 @@ class AsyncAddressClient:
         return [_load_job_status(row) for row in rows]
 
     async def submit_load(self, kind: str, payload: dict[str, Any]) -> LoadJobStatus:
-        row = await AdminRepository(self._engine()).insert_load_job(kind=kind, payload=payload)
+        repo = AdminRepository(self._engine())
+        if kind == "full_load_batch":
+            row = await repo.insert_load_batch(
+                payload=payload,
+                children=batch_children(payload),
+            )
+        else:
+            row = await repo.insert_load_job(kind=kind, payload=payload)
         return _load_job_status(row)
 
     async def cancel_load(self, job_id: str) -> LoadJobStatus:
