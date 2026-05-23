@@ -15,10 +15,14 @@ from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
 from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
+    CacheMetrics,
     ConsistencyCase,
     ConsistencyReport,
     ConsistencyReportSummary,
+    ExplainRequest,
+    ExplainResponse,
     LoadJobStatus,
+    TableStat,
 )
 from .dto.geocode import FallbackMode, GeocodeInput, GeocodeResponse
 from .dto.pobox import PoboxInput, PoboxKind, PoboxResponse
@@ -203,6 +207,35 @@ class AsyncAddressClient:
             since=since,
         )
         return [_load_job_status(row) for row in rows]
+
+    async def table_stats(self, *, limit: int = 200) -> list[TableStat]:
+        return await AdminRepository(self._engine()).table_stats(limit=limit)
+
+    async def explain(
+        self,
+        sql: str,
+        *,
+        analyze: bool = False,
+        buffers: bool = False,
+    ) -> ExplainResponse:
+        req = ExplainRequest(sql=sql, analyze=analyze, buffers=buffers)
+        plan = await AdminRepository(self._engine()).explain(
+            req.sql,
+            analyze=req.analyze,
+            buffers=req.buffers,
+        )
+        return ExplainResponse(plan=plan)
+
+    async def cache_metrics(self) -> CacheMetrics:
+        return await AdminRepository(self._engine()).cache_metrics(
+            enabled=self.settings.cache_enabled,
+        )
+
+    async def recent_logs(self, *, limit: int = 200) -> list[str]:
+        return await AdminRepository(self._engine()).recent_log_lines(limit=limit)
+
+    async def load_job_metric_counts(self) -> list[tuple[str, str, int]]:
+        return await AdminRepository(self._engine()).load_job_metric_counts()
 
     async def submit_load(self, kind: str, payload: dict[str, Any]) -> LoadJobStatus:
         repo = AdminRepository(self._engine())

@@ -37,23 +37,22 @@ src/kraddr/geo/
 
 ## 3. 프론트엔드 (`kraddr-geo-ui`)
 
-별도 Node.js 패키지(Next.js 14 + shadcn/ui + react-kakao-maps-sdk + TanStack Query). 사용자 대상이 아니라 개발자·운영자용 디버깅/관리 UI.
+별도 Node.js 패키지(Next.js 16 + Tailwind + react-kakao-maps-sdk + TanStack Query). 사용자 대상이 아니라 개발자·운영자용 디버깅/관리 UI.
 
 ```
 kraddr-geo-ui/
   app/                 Next.js App Router. /debug/* + /admin/* + /api/proxy/[...]
-  components/          ui/(shadcn), kakao/, forms/, tables/, debug/, admin/, nav/
-  lib/                 api.ts, schemas.ts(zod), kakao.ts, queryClient.ts
-  hooks/               useGeocode, useReverse, useDebounce, useUpload, ...
-  scripts/gen-types.ts 백엔드 openapi.json → 타입·Zod 자동 생성
+  components/          layout/, ui/, kakao/, debug/, admin/
+  lib/                 api.ts, schemas.ts(zod), consistency.ts, format.ts, load-workflow.ts, sido.ts
+  scripts/gen-types.mjs 백엔드 openapi.json → TypeScript 타입 생성
 ```
 
 이해 순서:
 
-1. `lib/api.ts` — typed REST client (`openapi-fetch`).
+1. `lib/api.ts` — Next.js 프록시(`/api/proxy`)를 호출하는 fetch helper.
 2. `app/debug/geocode/page.tsx` — 폼 + 지도 + JsonViewer가 한 화면에서 어떻게 묶이는지.
 3. `app/admin/load/page.tsx` — 업로드 단계 → 처리 단계 상태 머신.
-4. `components/admin/UploadStage.tsx` + `ProcessingStage.tsx` — 두 단계 분리 원칙.
+4. `components/admin/LoadConsole.tsx` — full-load batch payload, raw upload, MV refresh enqueue가 한 화면에 묶이는 방식.
 
 세부 사양은 `docs/frontend-package.md`에 있다.
 

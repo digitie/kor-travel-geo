@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 from kraddr.geo.api import _jobs
-from kraddr.geo.infra import geocode_repo, reverse_repo, search_repo
+from kraddr.geo.exceptions import InvalidInputError
+from kraddr.geo.infra import admin_repo, geocode_repo, reverse_repo, search_repo
 from kraddr.geo.loaders.consistency import CASE_SQL, DEFAULT_CASES
 
 
@@ -51,3 +54,24 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     assert '"strategy": "swap"' in queue_source
     assert "consistency report severity ERROR" in queue_source
     assert "log_tail" in queue_source
+
+
+def test_admin_repo_explain_is_select_only_and_uses_json_format() -> None:
+    assert admin_repo._validated_explain_sql(" SELECT 1 ") == "SELECT 1"
+    with pytest.raises(InvalidInputError):
+        admin_repo._validated_explain_sql("DELETE FROM x")
+    with pytest.raises(InvalidInputError):
+        admin_repo._validated_explain_sql("SELECT 1; SELECT 2")
+
+    source = inspect.getsource(admin_repo.AdminRepository.explain)
+    assert "EXPLAIN (" in source
+    assert "FORMAT JSON" in source
+
+
+def test_admin_repo_exposes_table_cache_log_metric_queries() -> None:
+    source = inspect.getsource(admin_repo.AdminRepository)
+
+    assert "pg_stat_user_tables" in source
+    assert "geo_cache" in source
+    assert "GROUP BY kind, state" in source
+    assert "jsonb_array_length(log_tail)" in source

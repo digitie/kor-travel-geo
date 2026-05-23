@@ -6,13 +6,15 @@
 - (없음)
 
 ## 대기 (우선순위 순)
-- [ ] T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩 (`docs/frontend-package.md` §A2)
-- [ ] T-022 프론트엔드 `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain` 페이지
-- [ ] T-023 프론트엔드 `/admin/load`(업로드 + 처리 워크플로), `/admin/tables`, `/admin/cache`, `/admin/logs`
-- [ ] T-024 `pre-commit`, `import-linter`, `mypy --strict` CI 정착
-- [ ] T-025 `prometheus-client` 메트릭(외부 API 호출, 캐시 hit rate, 적재 작업)
-- [ ] **T-026** 디버그 UI `/admin/consistency` 페이지(`docs/frontend-package.md` 후속 PR) — 백엔드 C1~C10 검증 SQL, `ConsistencyReport` 빌더, CLI/API 표면은 PR #10 fixup에서 완료
+- (없음 — 다음 백로그는 PR #12 리뷰 이후 추가)
+
 ## 완료
+- [x] T-026 디버그 UI `/admin/consistency` 페이지 구현. `GET /v1/admin/consistency`, `GET /v1/admin/consistency/{report_id}`, `POST /v1/admin/consistency/run`을 사용해 C1~C10 리포트 목록, 케이스별 severity/count, 원본 JSON을 확인한다 (2026-05-23)
+- [x] T-025 `prometheus-client` 메트릭 구현. 외부 API 호출 success/failure counter, `geo_cache` entries/hits/expired gauge, `load_jobs` kind/state gauge를 `/metrics`에서 노출한다. 라이브러리 단독 설치 환경에서는 no-op fallback으로 import 실패를 피한다 (2026-05-23)
+- [x] T-024 `pre-commit`, `import-linter`, `mypy` CI 정착. 루트 `.pre-commit-config.yaml`과 `.github/workflows/ci.yml`을 추가하고 backend/frontend lint·type-check·test·build·OpenAPI type drift 검사를 묶었다 (2026-05-23)
+- [x] T-023 프론트엔드 `/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs` 구현. full-load batch payload 입력, raw ZIP 업로드, MV refresh enqueue, 테이블 통계, 캐시 메트릭, `load_jobs.log_tail` 조회를 제공한다 (2026-05-23)
+- [x] T-022 프론트엔드 `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain` 구현. 지오코딩/역지오코딩/정규화/EXPLAIN 요청을 Next.js Route Handler 프록시로 백엔드에 전달하고 JSON 응답을 즉시 확인한다 (2026-05-23)
+- [x] T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩. Next.js 16 + React 18 + Tailwind + TanStack Query + `react-kakao-maps-sdk` + OpenAPI 타입 생성 스크립트 기반의 별도 Node.js 패키지를 추가했다 (2026-05-23)
 - [x] T-020 OpenAPI export 스크립트 + `openapi.json` 생성 + GitHub Actions drift 검사 (`scripts/export_openapi.py`, `.github/workflows/openapi.yml`) 구현 (2026-05-23)
 - [x] T-019 외부 API 폴백(`fallback="api"`) — vworld 주소 좌표 API와 juso 검색+좌표 API 어댑터 구현. 로컬 `NOT_FOUND`일 때만 호출하고 `x_extension.source`에 공급자 출처 기록 (2026-05-23)
 - [x] T-018 CLI 운영 명령 구현 — `load all-sidos`, `load shp`, `load shp-all`, `load pobox`, `load bulk`, `load epost --kind=full`, `refresh mv --swap`, `validate consistency --cases/--scope` (2026-05-23)

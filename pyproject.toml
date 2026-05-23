@@ -63,6 +63,7 @@ dev = [
   "mypy>=1.13",
   "import-linter>=2.0",
   "hypothesis>=6.115",
+  "pre-commit>=4.0",
 ]
 
 [project.urls]

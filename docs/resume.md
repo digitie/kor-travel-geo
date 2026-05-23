@@ -30,22 +30,29 @@
 - ✅ T-019 외부 API 폴백 구현 — `fallback="api"`일 때 로컬 `NOT_FOUND` 후 vworld → juso 검색+좌표 순서로 호출
 - ✅ T-020 OpenAPI export 구현 — `scripts/export_openapi.py`, committed `openapi.json`, `.github/workflows/openapi.yml` drift 검사
 - ✅ PR #11 후속 반영 — `full_load_batch` REST/라이브러리 공유 DAG 경로 확인, enqueue 전 child payload fail-fast 검증, PR 코멘트용 검증 근거 정리
-- ⬜ 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩
+- ✅ PR #12 기반 보강 — PR #11을 main에 머지하고, 후속 의견은 PR #12로 이관
+- ✅ T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩 — Next.js 16 + React 18 + Tailwind + TanStack Query + `react-kakao-maps-sdk`
+- ✅ T-022 디버그 페이지 구현 — `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain`
+- ✅ T-023 관리 페이지 구현 — `/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs`
+- ✅ T-024 품질 게이트 추가 — 루트 `pre-commit`, 통합 CI, frontend `gen:types` drift 검사, lint/type/test/build
+- ✅ T-025 Prometheus 메트릭 구현 — `/metrics`, 외부 API 호출 counter, cache/load job gauge
+- ✅ T-026 정합성 UI 구현 — `/admin/consistency`에서 C1~C10 report 목록·상세·재검증 enqueue 확인
+- ✅ FastAPI admin 보강 — `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-`docs/tasks.md#T-021`: 프론트엔드 패키지 `kraddr-geo-ui`를 부트스트랩한다.
+PR #12 리뷰를 기다린다. 리뷰가 없으면 다음 후보는 `/admin/load`의 장기 실행 UX 보강이다.
 
-- Next.js 14 + shadcn/ui + Tailwind 기반으로 별도 Node.js 패키지를 만든다.
-- `openapi.json`을 기준으로 타입 생성 스크립트(`gen:types`)를 연결한다.
-- 첫 화면은 디버그/관리 도구 목적에 맞게 `/debug/geocode` 또는 `/admin/load` 중 하나로 시작한다. 마케팅 랜딩 페이지를 만들지 않는다.
+- `fetch` 기반 raw upload는 backend와 일치하지만 업로드 진행률 이벤트가 없다. 운영자가 대용량 ZIP을 올릴 때 필요하면 XHR 기반 progress bar를 추가한다.
+- `/admin/logs`는 현재 `load_jobs.log_tail` 최근 라인 조회다. 장기적으로 WebSocket/Server-Sent Events tail을 붙일 수 있다.
+- `/debug/reverse`는 Kakao 지도 클릭으로 좌표를 채우되 자동 조회는 하지 않는다. 클릭 즉시 reverse 호출이 필요하면 명시적 UX 결정 후 추가한다.
 
 ## 작업 시작 전 확인할 것
 
 - [ ] `AGENTS.md`의 "식별자" 표와 "개발 환경 정책" 다시 읽기
 - [ ] `SKILL.md` §4 "DO NOT" 룰 다시 읽기
 - [ ] `docs/architecture.md`의 의존 방향 확인
-- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-018 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마)
+- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-019 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마, ADR-019 Next.js 16 보안 하한선)
 - [ ] 마지막 `docs/journal.md` 엔트리 읽기
 - [ ] NTFS의 `data/` 디렉토리가 준비되어 있고 ext4에서 심볼릭 링크 또는 절대경로로 접근 가능한지
 
@@ -63,6 +70,8 @@
 - **위치정보요약DB에는 `bd_mgt_sn`이 직접 없다**: 실제 `entrc_*.txt`는 `sig_cd`, `ent_man_no`, `bjd_cd`, `rncode_full`, 건물번호, 우편번호, 좌표를 제공한다. 로더는 원본 키를 보존하고 `postload.resolve_text_geometry_links()`에서 `tl_juso_text`와 조인해 `bd_mgt_sn`을 해소한다.
 - **일부 위치정보요약DB 행은 좌표가 비어 있다**: `tl_locsum_entrc.geom`은 `NOT NULL`이므로 로더는 X/Y가 모두 있는 행만 적재한다. 좌표 결측 비율은 정합성 리포트(C3 확장)에서 별도 집계할 수 있다.
 - **실제 DB 적재 검증**: 로컬 PostGIS가 준비되어 있으면 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q`로 실제 `data/juso` 샘플 COPY와 MV 생성을 확인한다.
+- **프론트엔드 TypeScript 캐시**: `kraddr-geo-ui/tsconfig.tsbuildinfo`는 생성물이다. `.gitignore` 대상이며 PR에 포함하지 않는다.
+- **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
 
 ## 작업 후 의무사항
 

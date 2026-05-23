@@ -27,7 +27,7 @@
 | ORM | SQLAlchemy + 일반 model | SQLAlchemy 2 async + raw SQL repository (ADR-004) |
 | 로더 | `ogr2ogr` subprocess | GDAL Python binding(in-process), CP949 명시, 진행률 callback (ADR-005) |
 | 증분 적재 | 매니페스트 부분 지원 | `MVM_RES_CD` 기반 INSERT/UPDATE/DELETE 머지 |
-| UI | monorepo `debug-ui/` (FastAPI + Next.js) | 별도 Node.js 패키지 `kraddr-geo-ui` (Next.js 14 + shadcn/ui + Kakao Maps) |
+| UI | monorepo `debug-ui/` (FastAPI + Next.js) | 별도 Node.js 패키지 `kraddr-geo-ui` (Next.js 16 + Tailwind + Kakao Maps) |
 | UI 인증 | 단순 노출 | 내부망 전용, 애플리케이션 인증 없음 (ADR-013) |
 | 적재 워크플로 | 단일 폼 | 2단계(업로드 완료 → 일괄 처리), `Semaphore(1)` 직렬 큐 (ADR-006) |
 

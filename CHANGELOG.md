@@ -17,10 +17,17 @@
 - base 예외명을 `KraddrGeoError`로 확정하고, `kraddr` parent package는 PEP 420 implicit namespace로 둔다.
 - **(BREAKING)** 라이브러리 진입점을 동기 `SpatialiteAddressStore`에서 비동기 `AsyncAddressClient`로 교체한다. 동기 호출이 필요하면 호출자가 `asyncio.run`으로 감싼다.
 - 응답 구조를 vworld와 호환되도록 정렬하고 자체 필드는 `x_extension` 네임스페이스로 격리한다.
-- 디버그/관리 UI를 monorepo 내부의 `debug-ui/` 대신 별도 Node.js 패키지 `kraddr-geo-ui`(Next.js 14 + shadcn/ui + react-kakao-maps-sdk)로 분리한다.
+- 디버그/관리 UI를 monorepo 내부의 `debug-ui/` 대신 별도 Node.js 패키지 `kraddr-geo-ui`(Next.js 16 + Tailwind + react-kakao-maps-sdk)로 분리한다.
 - 디버그/관리 UI는 내부망 전용으로 운영하며 애플리케이션 인증을 두지 않는다(ADR-013).
 
 ### Added
+- T-021~T-026 구현: `kraddr-geo-ui` Next.js 16 패키지, 디버그 페이지(`/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain`), 관리 페이지(`/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs`, `/admin/consistency`)를 추가한다.
+- `kraddr-geo-ui`는 `openapi.json`에서 `types/api.gen.ts`와 `lib/schemas.gen.ts`를 생성하는 `npm run gen:types`를 제공한다. CI는 생성 결과 drift가 있으면 실패한다.
+- `react-kakao-maps-sdk` 기반 좌표 지도 컴포넌트를 추가한다. `NEXT_PUBLIC_KAKAO_JS_KEY`가 없거나 지도 로딩에 실패하면 좌표 프리뷰로 대체되어 내부망/CI 환경에서도 화면이 깨지지 않는다.
+- FastAPI admin 표면을 확장한다. `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`를 추가하고 `AsyncAddressClient`에도 같은 조회 메서드를 연결한다.
+- `/metrics` Prometheus endpoint를 추가한다. 외부 API 호출 결과, `geo_cache` entries/hits/expired, `load_jobs` kind/state 분포를 노출하며, `prometheus-client`가 없는 library-only 환경에서는 no-op fallback으로 동작한다.
+- 루트 `.pre-commit-config.yaml`과 `.github/workflows/ci.yml`을 추가한다. 백엔드는 `ruff check`, `mypy`, `lint-imports`, `pytest`; 프론트엔드는 `npm ci`, `gen:types`, `lint`, `type-check`, `test`, `build`를 수행한다.
+- ADR-019 추가: `kraddr-geo-ui`의 런타임 보안 하한선을 Next.js 16으로 둔다. Next.js 14 계열 production high advisory를 신규 도입 시점부터 피한다.
 - PR #10 리뷰 반영: `load_jobs.load_batch_id`/`parent_job_id`와 `full_load_batch` DAG를 추가한다. source load 5종이 모두 성공하면 `consistency_check`를 자동 등록하고, 정합성 리포트가 `ERROR`가 아닐 때만 `mv_refresh`를 `strategy='swap'`으로 등록한다(ADR-017).
 - PR #10 리뷰 반영: 정합성 검증을 C1~C10 전체로 확장하고, 각 케이스에 `count`, `ratio`, `threshold`, `metric`, `sample`을 채운다. batch DAG는 `source_set.load_batch_id`가 있는 리포트를 게이트로 사용한다.
 - PR #10 리뷰 반영: `JobQueue` handler 시그니처에 진행률 콜백을 추가하고, `load_jobs.log_tail`을 실제로 갱신한다. FastAPI lifespan은 기본 적재/정합성/MV refresh handler를 등록한다.
@@ -33,7 +40,7 @@
 - 선택형 실제 PostgreSQL 적재 테스트를 추가한다. `KRADDR_GEO_TEST_PG_DSN`이 설정되면 DDL 적용 → 실제 파일 샘플 COPY 적재 → 위치정보↔텍스트 링크 해소 → `mv_geocode_target` 생성까지 실행한다.
 - 문서 구조에 `SKILL.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/data-model.md`, `docs/tasks.md`, `docs/resume.md`, `docs/journal.md`를 도입한다.
 - 외부 REST API(vworld, juso, epost, kakao maps)의 발급 절차와 호출 정책을 `docs/external-apis.md`로 정리한다.
-- 시도별 ZIP 업로드와 작업 큐 기반 직렬 적재 워크플로(`/v1/admin/upload/sido-zip`, `/v1/admin/load/sido-batch`)를 사양으로 명시한다.
+- 시도별 ZIP 업로드와 작업 큐 기반 직렬 적재 워크플로(`/v1/admin/upload/sido-zip`, `/v1/admin/loads`)를 사양으로 명시한다.
 - `pyproject.toml`, `.env.example`, `Settings`, 기본 패키지 스캐폴드, 공통/주소 DTO와 단위 테스트를 추가한다.
 - `docs/dev-environment.md`를 추가하고 시스템 GDAL(`libgdal-dev`) 설치 + `pip install "gdal==$(gdal-config --version)"` 절차를 ADR-008로 명시한다.
 - 우편번호 적재 정책을 ADR-009로 확정: epost OpenAPI 데이터셋 `15000302`의 `downloadKnd=1`(전체) ZIP을 분기 1회 받아 `postal_pobox`/`postal_bulk_delivery`를 TRUNCATE 후 INSERT 한다. 실시간 lookup API(`15056971`)는 도입하지 않는다.

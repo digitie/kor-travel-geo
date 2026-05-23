@@ -6,7 +6,7 @@
 
 ## 역할
 
-이 저장소(GitHub 이름 `python-kraddr-geo`, Python 패키지 `kraddr.geo`)는 도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS로 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 `kraddr-geo-ui`(Next.js 14 + shadcn/ui + react-kakao-maps-sdk)로 운영한다.
+이 저장소(GitHub 이름 `python-kraddr-geo`, Python 패키지 `kraddr.geo`)는 도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS로 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 `kraddr-geo-ui`(Next.js 16 + Tailwind + react-kakao-maps-sdk)로 운영한다.
 
 이전(v1) SpatiaLite + SQLite 기반 구현은 동일한 `kraddr.geo` 패키지였지만 `v1` 브랜치에 보존되어 있다. master는 PostgreSQL + PostGIS 기반 새 사양으로 처음부터 다시 구현한다(ADR-001).
 
