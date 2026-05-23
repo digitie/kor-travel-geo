@@ -6,7 +6,7 @@
 - (없음)
 
 ## 대기 (우선순위 순)
-- [ ] T-005 `infra/engine.py` (async engine factory, `Settings.normalize_pg_dsn` 신뢰) + 통합 테스트
+- [x] T-005 `infra/engine.py` (async engine factory, `Settings.normalize_pg_dsn` 신뢰) + 통합 테스트
 - [ ] T-006 텍스트 4 + SHP polygon 7 + 보조 2 + 메타 5 = 18개 테이블 DDL을 `sql/ddl/`과 `alembic/versions/0001_*.py`에 작성. `tl_juso_text.pnu` generated column(ADR-010), `load_jobs`(ADR-011), `load_consistency_reports`(ADR-016) 포함.
 - [ ] T-007 `mv_geocode_target` MV 정의(텍스트 정본 + 대표 출입구 + centroid fallback, `pt_source` 컬럼) + `REFRESH CONCURRENTLY`(평시) + shadow MV swap(분기) 통합 테스트
 - [ ] T-008 `infra/geocode_repo.py` 구현 + Fake repo 단위 테스트
