@@ -1,34 +1,42 @@
 #!/usr/bin/env bash
 # Full data load + consistency validation script.
-# Run from WSL with Docker PostGIS and data mounted at $DATA_DIR.
+#
+# Workflow:
+#   1. Copy data from NTFS to WSL ext4 (avoids cross-filesystem I/O penalty)
+#   2. Decompress archives on ext4
+#   3. Load into Docker PostGIS (bind-mounted host directories)
 #
 # Usage:
-#   export DATA_DIR=/mnt/f/dev/python-kraddr-geo/data
+#   # First time — copy NTFS data to ext4:
+#   bash scripts/fullload_test.sh --copy-data
+#
+#   # Load (data already on ext4):
 #   bash scripts/fullload_test.sh
 #
+#   # Preflight only (no DB commands):
+#   PLAN_ONLY=1 bash scripts/fullload_test.sh
+#
 # Prerequisites:
-#   - docker compose up -d  (PostGIS running on localhost:5432)
+#   - docker compose -p kraddr-geo-t027 up -d  (PostGIS on localhost:5432)
 #   - pip install -e ".[api,loaders,dev]"
 #   - GDAL system libraries installed (gdal-bin libgdal-dev)
 
 set -euo pipefail
 
-DATA_DIR="${DATA_DIR:-/mnt/f/dev/python-kraddr-geo/data}"
+# --- Paths ---
+NTFS_DATA="${NTFS_DATA:-/mnt/f/dev/python-kraddr-geo/data}"
+EXT4_DATA="${EXT4_DATA:-$HOME/kraddr-geo-data}"
+DATA_DIR="${DATA_DIR:-$EXT4_DATA}"
 PG_DSN="${KRADDR_GEO_PG_DSN:-postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo}"
 JUSO_YYYYMM="${JUSO_YYYYMM:-${YYYYMM:-202603}}"
 LOCSUM_YYYYMM="${LOCSUM_YYYYMM:-${YYYYMM:-202604}}"
 NAVI_YYYYMM="${NAVI_YYYYMM:-${YYYYMM:-202604}}"
 PLAN_ONLY="${PLAN_ONLY:-0}"
+COPY_DATA="${COPY_DATA:-0}"
 
 export KRADDR_GEO_PG_DSN="$PG_DSN"
 export KRADDR_GEO_LOADER_DATA_DIR="$DATA_DIR"
 export KRADDR_GEO_LOADER_BATCH_SIZE="${BATCH_SIZE:-10000}"
-
-JUSO_DIR="$DATA_DIR/juso"
-JUSO_TEXT_DIR="$JUSO_DIR/${JUSO_YYYYMM}_도로명주소 한글_전체분"
-LOCSUM_ZIP="$JUSO_DIR/${LOCSUM_YYYYMM}_위치정보요약DB_전체분.zip"
-NAVI_DIR="$JUSO_DIR/${NAVI_YYYYMM}_내비게이션용DB_전체분"
-SHP_ROOT="$JUSO_DIR/도로명주소 전자지도"
 
 log() {
   printf '\n[%s] %s\n' "$(date -Is)" "$*"
@@ -42,6 +50,62 @@ run() {
   "$@"
 }
 
+# --- Handle --copy-data flag ---
+for arg in "$@"; do
+  if [ "$arg" = "--copy-data" ]; then
+    COPY_DATA=1
+  fi
+done
+
+# === Phase -1: Copy NTFS → ext4 ===
+if [ "$COPY_DATA" = "1" ]; then
+  log "=== Phase -1: Copy NTFS data to ext4 ==="
+  echo "  Source (NTFS): $NTFS_DATA"
+  echo "  Target (ext4): $EXT4_DATA"
+
+  mkdir -p "$EXT4_DATA/juso" "$EXT4_DATA/epost" "$EXT4_DATA/pgdata"
+
+  JUSO_SRC="$NTFS_DATA/juso"
+
+  log "Copying juso text (한글 전체분)..."
+  cp -ru "$JUSO_SRC/${JUSO_YYYYMM}_도로명주소 한글_전체분" "$EXT4_DATA/juso/" 2>/dev/null || true
+
+  log "Copying locsum ZIP..."
+  cp -u "$JUSO_SRC/${LOCSUM_YYYYMM}_위치정보요약DB_전체분.zip" "$EXT4_DATA/juso/" 2>/dev/null || true
+
+  log "Copying navi..."
+  if [ -d "$JUSO_SRC/${NAVI_YYYYMM}_내비게이션용DB_전체분" ]; then
+    cp -ru "$JUSO_SRC/${NAVI_YYYYMM}_내비게이션용DB_전체분" "$EXT4_DATA/juso/"
+  elif [ -f "$JUSO_SRC/${NAVI_YYYYMM}_내비게이션용DB_전체분.7z" ]; then
+    log "Extracting navi 7z archive..."
+    mkdir -p "$EXT4_DATA/juso/${NAVI_YYYYMM}_내비게이션용DB_전체분"
+    7z x -o"$EXT4_DATA/juso/${NAVI_YYYYMM}_내비게이션용DB_전체분" \
+      "$JUSO_SRC/${NAVI_YYYYMM}_내비게이션용DB_전체분.7z" -aoa
+  fi
+
+  log "Copying SHP (전자지도)..."
+  if [ -d "$JUSO_SRC/도로명주소 전자지도" ]; then
+    cp -ru "$JUSO_SRC/도로명주소 전자지도" "$EXT4_DATA/juso/"
+  fi
+
+  log "Copying epost data..."
+  cp -u "$NTFS_DATA/epost/"*.zip "$EXT4_DATA/epost/" 2>/dev/null || true
+  cp -u "$NTFS_DATA/epost/"*.csv "$EXT4_DATA/epost/" 2>/dev/null || true
+
+  log "Disk usage after copy:"
+  du -sh "$EXT4_DATA"/* 2>/dev/null || true
+  df -h "$EXT4_DATA"
+  log "Copy complete. Re-run without --copy-data to start loading."
+  exit 0
+fi
+
+# --- Resolve paths ---
+JUSO_DIR="$DATA_DIR/juso"
+JUSO_TEXT_DIR="$JUSO_DIR/${JUSO_YYYYMM}_도로명주소 한글_전체분"
+LOCSUM_ZIP="$JUSO_DIR/${LOCSUM_YYYYMM}_위치정보요약DB_전체분.zip"
+NAVI_DIR="$JUSO_DIR/${NAVI_YYYYMM}_내비게이션용DB_전체분"
+SHP_ROOT="$JUSO_DIR/도로명주소 전자지도"
+
 log "=== Preflight: tool versions ==="
 python --version
 if command -v gdalinfo >/dev/null 2>&1; then
@@ -54,6 +118,9 @@ else
     exit 1
   fi
 fi
+
+log "=== Preflight: disk space ==="
+df -h "$DATA_DIR"
 
 log "=== Phase 0: Verify data directories ==="
 for d in \

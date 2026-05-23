@@ -8,7 +8,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ${KRADDR_PGDATA:-~/kraddr-geo-data/pgdata}:/var/lib/postgresql/data
+      - ${KRADDR_JUSO_DATA:-~/kraddr-geo-data/juso}:/data/juso:ro
     shm_size: "512mb"
     command:
       - "postgres"
@@ -31,6 +32,3 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-volumes:
-  pgdata:
