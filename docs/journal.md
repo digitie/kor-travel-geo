@@ -2,6 +2,32 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-24 (PR #14/T-027 — 실제 데이터로드 실행 중 포트 충돌 방지)
+
+**작업**: PR #13이 main에 머지된 뒤 `codex/t027-fullload-execution` 브랜치에서 실제 데이터로드를 시작했다. WSL ext4 클론(`~/dev/python-kraddr-geo`)에서 Python/GDAL 환경을 만들고, `F:\dev\python-kraddr-geo\data` 원본을 `~/kraddr-geo-data` 작업 사본으로 복사했다.
+
+**실행 로그**:
+- 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 기록한다.
+- 환경: WSL2 Ubuntu 24.04, AMD Ryzen 7 7840HS 16 vCPU, 메모리 29GiB, Docker 29.5.2, Docker Compose v5.1.4, Python 3.12.3, GDAL 3.8.4.
+- `--copy-data` 시작 `2026-05-24T17:31:15+09:00`, 종료 `2026-05-24T18:35:47+09:00`, 경과 약 1시간 4분 32초.
+- 복사 결과: `~/kraddr-geo-data/juso` 약 25GB, 파일 683개. `epost`는 현재 원본 파일이 없어 빈 디렉터리다.
+
+**발견한 문제**:
+- 로컬 5432 포트가 기존 `airflow-postgres-1` 컨테이너에서 이미 사용 중이었다.
+- T-027 기본 compose/스크립트가 `localhost:5432`를 그대로 사용하면 기존 DB에 DDL/적재를 실행할 위험이 있다.
+
+**보강 상세**:
+- `docker-compose.yml`의 외부 포트를 `${KRADDR_DB_PORT:-5432}:5432`로 파라미터화했다.
+- `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 `KRADDR_DB_PORT`를 반영한 DSN을 만든다.
+- `docs/t027-fullload-plan.md`, `docs/dev-environment-recovery.md`, `CLAUDE.md`에 `KRADDR_DB_PORT=15432` 사용 예와 포트 충돌 주의사항을 추가했다.
+
+**검증**:
+- `bash -n scripts/fullload_test.sh` 통과.
+- `DATA_DIR=/home/digitie/kraddr-geo-data KRADDR_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` 통과. 출력 DSN이 `localhost:15432`로 바뀌는 것을 확인했다.
+- `git diff --check` 통과.
+
+**다음 작업**: PR 생성 후 `KRADDR_DB_PORT=15432`로 Docker PostGIS를 기동하고 실제 적재를 계속 진행한다. 이후 발견되는 문제는 같은 PR에 누적한다.
+
 ## 2026-05-24 (PR #13/T-027 — Windows 재설치·Codex 세션 복구 문서화)
 
 **작업**: Windows 재설치 후 `git pull`로 PR #13 작업을 문제없이 이어갈 수 있도록 복구 절차를 문서화했다. 실제 Docker 전체 적재와 `PLAN_ONLY=1` 실행은 하지 않았다.

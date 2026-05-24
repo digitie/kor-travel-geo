@@ -70,14 +70,15 @@
 | 이미지 | `postgis/postgis:16-3.5` |
 | DB | `kraddr_geo` |
 | 사용자/비밀번호 | `addr` / `addr` |
-| 외부 포트 | `localhost:5432` |
-| 기본 DSN | `postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo` |
+| 외부 포트 | `localhost:${KRADDR_DB_PORT:-5432}` |
+| 기본 DSN | `postgresql+psycopg://addr:addr@localhost:${KRADDR_DB_PORT:-5432}/kraddr_geo` |
 | 볼륨 | compose project 전용 `pgdata` |
 
 운영성 데이터와 섞이지 않게 별도 project name을 권장한다.
+로컬의 다른 PostgreSQL이 5432 포트를 이미 쓰는 경우에는 `KRADDR_DB_PORT=15432`처럼 별도 포트를 지정한다. `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 `KRADDR_DB_PORT`를 반영해 DSN을 만든다.
 
 ```bash
-docker compose -p kraddr-geo-t027 up -d db
+KRADDR_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d db
 docker compose -p kraddr-geo-t027 ps
 ```
 
@@ -141,7 +142,8 @@ python -c "import kraddr.geo; print(kraddr.geo.__version__)"
 `kraddr-geo init-db` 명령을 사용한다. `SCHEMA_SQL` → `INDEX_SQL` → `MV_SQL`을 순서대로 적용하므로 빈 MV와 unique index까지 준비된다. 이미 존재하는 인덱스/MV는 경고만 출력하고 계속 진행한다.
 
 ```bash
-export KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo
+export KRADDR_DB_PORT=15432
+export KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:${KRADDR_DB_PORT}/kraddr_geo
 kraddr-geo init-db
 ```
 
