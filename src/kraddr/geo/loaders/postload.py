@@ -44,14 +44,18 @@ async def rebuild_mv(engine: AsyncEngine) -> None:
 async def shadow_swap_mv(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
-        await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target_old"))
-        await conn.execute(
-            text("ALTER MATERIALIZED VIEW mv_geocode_target RENAME TO mv_geocode_target_old")
-        )
+        current_mv = await conn.scalar(text("SELECT to_regclass('mv_geocode_target')"))
+        if current_mv is not None:
+            await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target_old"))
+            await conn.execute(
+                text("ALTER MATERIALIZED VIEW mv_geocode_target RENAME TO mv_geocode_target_old")
+            )
         await conn.execute(
             text("ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target")
         )
-        await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_target_old"))
+        if current_mv is not None:
+            await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_target_old"))
+        await conn.execute(text("ANALYZE mv_geocode_target"))
 
 
 async def rebuild_mv_next(engine: AsyncEngine) -> None:

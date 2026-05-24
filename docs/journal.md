@@ -20,12 +20,15 @@
 - `shp-all --mode full`과 `load all-sidos --shp-root`는 첫 시도만 full, 이후 시도는 append로 바꿔 전국 적재가 누적되도록 했다.
 - `tl_sprd_rw.geom`은 실제 SHP 헤더에 맞춰 `MULTIPOLYGON 5179`로 조정하고 문서도 도로면 polygon 기준으로 갱신했다.
 - `init-db`는 schema/index/MV statement를 별도 트랜잭션으로 실행해 MV 경고가 schema DDL을 롤백하지 않게 했다. 경고가 있으면 개수를 출력한다.
+- `refresh mv --swap`은 복구 중 기존 `mv_geocode_target`이 없어도 `mv_geocode_target_next`를 바로 운영 이름으로 승격한다. swap 후 `ANALYZE mv_geocode_target`도 수행한다.
+- `scripts/fullload_test.sh`는 기본 `KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS`를 30분으로 높인다. 대량 링크 해소와 shadow MV 빌드가 운영 기본값 5초에 막히지 않도록 하기 위함이다.
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py -q` → 6 passed.
 - `.venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py src/kraddr/geo/cli/main.py tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py` → 통과.
 - 실패로 오염된 SHP 보조 테이블 9개만 drop 후 `KRADDR_GEO_PG_DSN=...15432 .venv/bin/kraddr-geo init-db` 재실행. MV 생성은 timeout 경고가 났지만 SHP 테이블 스키마는 `MULTIPOLYGON 5179`로 복구됨을 확인했다.
 - `세종특별자치시` 실제 SHP 9개 레이어 적재 성공: 59.09초, 최대 RSS 약 128MiB, `tl_spbd_buld_polygon` 55,819행, `tl_sprd_intrvl` 100,009행 등 9개 테이블 row count 확인.
+- 전국 SHP 153개 레이어 적재 성공: 3시간 1분 34초, 최대 RSS 약 181MiB. 정확한 row count는 `tl_spbd_buld_polygon` 10,687,732행, `tl_sprd_intrvl` 16,993,167행, `tl_sprd_rw` 1,482,679행 등으로 확인했다.
 
 **다음 작업**: 변경분을 PR #14에 푸시하고, 같은 Docker DB에서 전국 `shp-all --mode full`을 재실행한다. 이후 pobox/bulk optional 단계, 링크 해소, MV swap, C1~C10 정합성, smoke test를 순서대로 계속 진행한다.
 
