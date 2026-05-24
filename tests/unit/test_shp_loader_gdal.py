@@ -32,13 +32,16 @@ def test_shp_load_plan_projects_source_columns_to_target_schema() -> None:
     assert "CTPRVN_CD AS ctprvn_cd" in source
     assert "BAS_MGT_SN AS bas_mgt_sn" in source
     assert "BD_MGT_SN AS bd_mgt_sn" in source
+    assert "RDS_SIG_CD AS rds_sig_cd" in source
+    assert "BULD_MNNM AS buld_mnnm" in source
     assert "RW_SN AS rw_sn" in source
     assert "GEOMETRY AS geom" not in source
 
 
-def test_road_attribute_layers_drop_geometry() -> None:
+def test_only_road_interval_layer_drops_geometry() -> None:
     source = inspect.getsource(polygons_loader._geometry_type)
 
-    assert '"TL_SPRD_MANAGE", "TL_SPRD_INTRVL"' in source
+    assert 'layer.name == "TL_SPRD_INTRVL"' in source
+    assert 'layer.name == "TL_SPRD_MANAGE"' in source
     assert '"NONE"' in source
     assert '"PROMOTE_TO_MULTI"' in source

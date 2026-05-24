@@ -174,6 +174,23 @@ CREATE TABLE IF NOT EXISTS tl_kodis_bas (
 
 CREATE TABLE IF NOT EXISTS tl_spbd_buld_polygon (
   bd_mgt_sn       TEXT PRIMARY KEY,
+  sig_cd          TEXT,
+  emd_cd          TEXT,
+  li_cd           TEXT,
+  bjd_cd          TEXT GENERATED ALWAYS AS (
+    CASE
+      WHEN sig_cd IS NULL OR emd_cd IS NULL OR li_cd IS NULL THEN NULL
+      ELSE sig_cd || emd_cd || li_cd
+    END
+  ) STORED,
+  rds_sig_cd      TEXT,
+  rn_cd           TEXT,
+  rncode_full     TEXT GENERATED ALWAYS AS (
+    CASE WHEN rds_sig_cd IS NULL OR rn_cd IS NULL THEN NULL ELSE rds_sig_cd || rn_cd END
+  ) STORED,
+  buld_se_cd      TEXT,
+  buld_mnnm       INTEGER,
+  buld_slno       INTEGER,
   geom            geometry(MultiPolygon, 5179) NOT NULL,
   source_file     TEXT,
   source_yyyymm   TEXT,
@@ -188,6 +205,7 @@ CREATE TABLE IF NOT EXISTS tl_sprd_manage (
     CASE WHEN rn_cd IS NULL THEN NULL ELSE sig_cd || rn_cd END
   ) STORED,
   rn              TEXT,
+  geom            geometry(MultiLineString, 5179),
   source_file     TEXT,
   source_yyyymm   TEXT,
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -352,6 +370,9 @@ CREATE INDEX IF NOT EXISTS idx_scco_li_geom ON tl_scco_li USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_geom ON tl_kodis_bas USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_id ON tl_kodis_bas (bas_id);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_geom ON tl_spbd_buld_polygon USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_resolve
+  ON tl_spbd_buld_polygon (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
+CREATE INDEX IF NOT EXISTS idx_sprd_manage_geom ON tl_sprd_manage USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sprd_rw_geom ON tl_sprd_rw USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sprd_manage_rn ON tl_sprd_manage (rncode_full);
 CREATE INDEX IF NOT EXISTS idx_sprd_intrvl_rds ON tl_sprd_intrvl (sig_cd, rds_man_no);

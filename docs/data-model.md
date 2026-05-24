@@ -208,8 +208,8 @@ CREATE INDEX idx_navi_entrc_resolve ON tl_navi_entrc (rncode_full, buld_se_cd, b
 | `tl_scco_emd` | `emd_cd` | MULTIPOLYGON 5179 | 읍면동 polygon |
 | `tl_scco_li` | `li_cd` | MULTIPOLYGON 5179 | 리 polygon |
 | `tl_kodis_bas` | `bas_mgt_sn` | MULTIPOLYGON 5179 | 우편번호(기초구역) polygon |
-| `tl_spbd_buld_polygon` | `bd_mgt_sn` | MULTIPOLYGON 5179 | 건물 polygon (JOIN key만 공유, 속성은 `tl_juso_text`) |
-| `tl_sprd_manage` | `(sig_cd, rds_man_no)` | 속성 보조 | 도로 관리. 텍스트와 일부 중복이지만 폴리라인 JOIN 키 |
+| `tl_spbd_buld_polygon` | `bd_mgt_sn` | MULTIPOLYGON 5179 | 건물 polygon. 원천 `BD_MGT_SN`은 실제 파일 기준 25자리라 정본 26자리 `bd_mgt_sn`과 직접 조인하지 않고, `rncode_full + 건물구분 + 본번/부번 + bjd_cd` natural key 검증용 속성을 함께 보관한다. |
+| `tl_sprd_manage` | `(sig_cd, rds_man_no)` | MULTILINESTRING 5179 | 도로 관리 LineString. C8 도로 인접성 검증은 이 geometry를 사용한다. |
 | `tl_sprd_intrvl` | `(sig_cd, rds_man_no, bsi_int_sn)` | 속성 보조 | 도로 구간 |
 | `tl_sprd_rw` | `(sig_cd, rw_sn)` | MULTIPOLYGON 5179 | 도로 폭/도로면 polygon. 2026년 실제 도로명주소 전자지도 `TL_SPRD_RW` SHP 헤더가 `Polygon`이므로 C8 인접성 검증도 도로면 polygon 기준으로 수행한다. |
 

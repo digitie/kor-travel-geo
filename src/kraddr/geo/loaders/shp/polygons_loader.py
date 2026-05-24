@@ -177,14 +177,21 @@ def _sql_statement(layer: JusoLayerFiles) -> str | None:
             "EVE_BSI_MN AS end_bsi_no FROM TL_SPRD_INTRVL"
         ),
         "TL_SPRD_RW": "SELECT SIG_CD AS sig_cd, RW_SN AS rw_sn FROM TL_SPRD_RW",
-        "TL_SPBD_BULD": "SELECT BD_MGT_SN AS bd_mgt_sn FROM TL_SPBD_BULD",
+        "TL_SPBD_BULD": (
+            "SELECT BD_MGT_SN AS bd_mgt_sn, SIG_CD AS sig_cd, EMD_CD AS emd_cd, "
+            "LI_CD AS li_cd, RDS_SIG_CD AS rds_sig_cd, RN_CD AS rn_cd, "
+            "BULD_SE_CD AS buld_se_cd, BULD_MNNM AS buld_mnnm, "
+            "BULD_SLNO AS buld_slno FROM TL_SPBD_BULD"
+        ),
     }
     return statements[layer.name]
 
 
 def _geometry_type(layer: JusoLayerFiles) -> str:
-    if layer.name in {"TL_SPRD_MANAGE", "TL_SPRD_INTRVL"}:
+    if layer.name == "TL_SPRD_INTRVL":
         return "NONE"
+    if layer.name == "TL_SPRD_MANAGE":
+        return "PROMOTE_TO_MULTI"
     return "PROMOTE_TO_MULTI"
 
 

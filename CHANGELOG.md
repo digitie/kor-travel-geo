@@ -11,6 +11,7 @@
 - T-027 후처리 재개성을 보강한다. `refresh mv --swap`은 기존 `mv_geocode_target`이 없는 복구 상황에서도 `mv_geocode_target_next`를 바로 승격할 수 있고, full-load 스크립트는 기본 statement timeout을 30분으로 높여 링크 해소/MV 빌드가 5초 기본값에 막히지 않게 한다.
 - T-027 실제 MV 검증에서 발견한 내비 centroid fallback 누락을 수정한다. 내비게이션용DB 건물 중심점의 `bd_mgt_sn`은 실제 파일 기준 25자리이고 정본 `tl_juso_text.bd_mgt_sn`은 26자리라 직접 조인되지 않는다. MV는 `rncode_full + 건물구분 + 본번/부번 + left(bjd_cd, 8)` 기준 대표 centroid를 선택한다.
 - T-027 반복 MV swap을 보강한다. shadow MV의 `idx_mv_next_*` 인덱스명이 운영 MV에 남으면 다음 rebuild에서 PostgreSQL 전역 인덱스 이름 충돌이 나므로, swap 전후에 운영 인덱스명(`idx_mv_*`)으로 정규화한다. 기존 MV가 있는 swap에서는 old MV를 먼저 drop한 뒤 next 인덱스를 rename해 새 운영 MV 인덱스가 사라지지 않게 한다.
+- T-027 실제 정합성 검증에서 발견한 SHP 건물 polygon 직접 조인 오류를 수정한다. `TL_SPBD_BULD.BD_MGT_SN`도 실제 파일 기준 25자리라 정본 26자리 `bd_mgt_sn`과 직접 조인하지 않고, polygon 테이블에 최소 natural key를 함께 적재해 C1/C2/C4/C5를 `rncode_full + 건물번호 + bjd_cd` 기준으로 검증한다. C8은 `rds_man_no`가 없는 `TL_SPRD_RW` 대신 `TL_SPRD_MANAGE` LineString geometry를 사용한다.
 - T-027 실제 데이터로드 실행 중 발견한 로컬 PostgreSQL 포트 충돌 위험을 줄인다. `docker-compose.yml`은 `KRADDR_DB_PORT`로 외부 포트를 바꿀 수 있고, `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 이 포트를 반영해 DSN을 만든다.
 - PR #12 리뷰 반영: `/v1/admin/upload/sido-zip`의 `sido` path traversal 가능성을 제거하고, `KRADDR_GEO_API_MAX_UPLOAD_BYTES` 초과 시 partial file을 삭제한 뒤 `InvalidInputError(E0100)`로 거절한다.
 - PR #12 리뷰 반영: `kraddr-geo-ui` 프록시는 `/v1/` 하위 경로만 허용하고 `authorization`/`cookie` 등 불필요한 헤더 전달을 차단한다. 업로드 본문은 `arrayBuffer()`로 전체 버퍼링하지 않고 `ReadableStream` + `duplex: "half"`로 백엔드에 전달한다.

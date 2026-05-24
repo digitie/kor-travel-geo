@@ -24,6 +24,7 @@
 - `scripts/fullload_test.sh`는 기본 `KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS`를 30분으로 높인다. 대량 링크 해소와 shadow MV 빌드가 운영 기본값 5초에 막히지 않도록 하기 위함이다.
 - 실제 MV 빌드 후 `pt_source='centroid'`가 0건인 것을 확인했다. 원인은 내비게이션용DB의 `bd_mgt_sn`이 25자리이고 정본 `tl_juso_text.bd_mgt_sn`은 26자리라 직접 조인이 불가능한 점이었다. 또한 내비 `bjd_cd`는 리 코드가 `00`인 경우가 많아 10자리 법정동 완전 일치도 부적합했다. MV fallback을 `rncode_full + 건물구분 + 본번/부번 + left(bjd_cd, 8)` 대표 centroid 조인으로 변경했다.
 - 두 번째 MV swap에서 `idx_mv_next_geocode_target_next_pk`가 이미 존재한다는 충돌을 확인했다. 첫 swap 때 shadow MV 인덱스명이 운영 MV에 그대로 남았기 때문이다. swap 전후에 `idx_mv_next_*` 이름을 운영명 `idx_mv_*`로 정규화하도록 보강했다. 이어 실제 재시도에서 old MV의 운영명 인덱스가 아직 있는 상태로 next 인덱스를 rename하려 하면 next 인덱스가 drop되는 것을 확인해, old MV를 먼저 drop한 뒤 next 인덱스를 rename하도록 순서를 조정했다.
+- 실제 C1~C10 정합성 검증에서 C1/C2가 전량 불일치했다. `TL_SPBD_BULD.BD_MGT_SN`도 25자리이고 정본은 26자리라 건물 polygon도 직접 `bd_mgt_sn` 조인이 불가능했다. `tl_spbd_buld_polygon`에 `RDS_SIG_CD`, `RN_CD`, `BULD_SE_CD`, `BULD_MNNM`, `BULD_SLNO`, `SIG_CD`, `EMD_CD`, `LI_CD`를 함께 적재하고 C1/C2/C4/C5를 natural key 기준으로 바꿨다. C8은 `TL_SPRD_RW`에 `rds_man_no`가 없어 전량 WARN이 나므로, `TL_SPRD_MANAGE` LineString geometry를 적재해 도로 인접성 검증에 사용하도록 바꿨다.
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py -q` → 6 passed.

@@ -606,13 +606,18 @@ KIND_MAP = {
 
 #### `tl_spbd_buld_polygon` 분리 전략
 
-SHP `TL_SPBD_BULD`는 건물 polygon + 속성을 함께 가지지만, 본 사양은 **polygon 컬럼만** 가져온다. 속성(도로명/지번/우편번호/건물명)은 `tl_juso_text`가 정본. JOIN 키는 `bd_mgt_sn` 하나.
+SHP `TL_SPBD_BULD`는 건물 polygon + 속성을 함께 가진다. 속성(도로명/지번/우편번호/건물명)의 정본은 여전히 `tl_juso_text`지만, 실제 SHP `BD_MGT_SN`은 25자리이고 텍스트 정본 `bd_mgt_sn`은 26자리라 직접 조인 키로 사용할 수 없다. 따라서 polygon 테이블에는 검증과 공간 조인을 위한 최소 natural key(`RDS_SIG_CD`, `RN_CD`, `BULD_SE_CD`, `BULD_MNNM`, `BULD_SLNO`, `SIG_CD`, `EMD_CD`, `LI_CD`)를 함께 적재한다.
 
 ```python
 opts = gdal.VectorTranslateOptions(
     format="PostgreSQL",
     layerName="tl_spbd_buld_polygon",
-    SQLStatement="SELECT BD_MGT_SN AS bd_mgt_sn FROM TL_SPBD_BULD",
+    SQLStatement=(
+        "SELECT BD_MGT_SN AS bd_mgt_sn, SIG_CD AS sig_cd, EMD_CD AS emd_cd, "
+        "LI_CD AS li_cd, RDS_SIG_CD AS rds_sig_cd, RN_CD AS rn_cd, "
+        "BULD_SE_CD AS buld_se_cd, BULD_MNNM AS buld_mnnm, "
+        "BULD_SLNO AS buld_slno FROM TL_SPBD_BULD"
+    ),
     layerCreationOptions=[
         "GEOMETRY_NAME=geom",
         "SPATIAL_INDEX=NONE",  # 별도 GiST 인덱스를 postload에서 생성

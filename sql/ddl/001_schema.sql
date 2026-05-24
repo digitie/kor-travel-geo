@@ -171,6 +171,23 @@ CREATE TABLE IF NOT EXISTS tl_kodis_bas (
 
 CREATE TABLE IF NOT EXISTS tl_spbd_buld_polygon (
   bd_mgt_sn       TEXT PRIMARY KEY,
+  sig_cd          TEXT,
+  emd_cd          TEXT,
+  li_cd           TEXT,
+  bjd_cd          TEXT GENERATED ALWAYS AS (
+    CASE
+      WHEN sig_cd IS NULL OR emd_cd IS NULL OR li_cd IS NULL THEN NULL
+      ELSE sig_cd || emd_cd || li_cd
+    END
+  ) STORED,
+  rds_sig_cd      TEXT,
+  rn_cd           TEXT,
+  rncode_full     TEXT GENERATED ALWAYS AS (
+    CASE WHEN rds_sig_cd IS NULL OR rn_cd IS NULL THEN NULL ELSE rds_sig_cd || rn_cd END
+  ) STORED,
+  buld_se_cd      TEXT,
+  buld_mnnm       INTEGER,
+  buld_slno       INTEGER,
   geom            geometry(MultiPolygon, 5179) NOT NULL,
   source_file     TEXT,
   source_yyyymm   TEXT,
@@ -185,6 +202,7 @@ CREATE TABLE IF NOT EXISTS tl_sprd_manage (
     CASE WHEN rn_cd IS NULL THEN NULL ELSE sig_cd || rn_cd END
   ) STORED,
   rn              TEXT,
+  geom            geometry(MultiLineString, 5179),
   source_file     TEXT,
   source_yyyymm   TEXT,
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
