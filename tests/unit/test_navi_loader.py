@@ -32,6 +32,8 @@ def test_iter_navi_build_rows_skips_missing_centroid_coordinates(tmp_path: Path)
     assert len(rows) == 1
     assert rows[0].bd_mgt_sn == "1111010100101440003031292"
     assert rows[0].centroid_x == 953243.01328
+    assert iter_navi_build_rows.__doc__ is not None
+    assert "rows yielded after coordinate-missing rows are skipped" in iter_navi_build_rows.__doc__
 
 
 def test_iter_navi_entrance_rows_skips_missing_coordinates(tmp_path: Path) -> None:
@@ -53,3 +55,8 @@ def test_iter_navi_entrance_rows_skips_missing_coordinates(tmp_path: Path) -> No
     assert len(rows) == 1
     assert rows[0].entry_no == 1332
     assert rows[0].x_5179 == 953135.056899
+    assert iter_navi_entrance_rows.__doc__ is not None
+    assert (
+        "rows yielded after coordinate-missing rows are skipped"
+        in iter_navi_entrance_rows.__doc__
+    )

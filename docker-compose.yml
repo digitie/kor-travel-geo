@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: addr
       POSTGRES_DB: kraddr_geo
     ports:
-      - "${KRADDR_DB_PORT:-5432}:5432"
+      - "${KRADDR_GEO_DB_PORT:-5432}:5432"
     volumes:
       - ${KRADDR_PGDATA:-~/kraddr-geo-data/pgdata}:/var/lib/postgresql/data
       - ${KRADDR_JUSO_DATA:-~/kraddr-geo-data/juso}:/data/juso:ro

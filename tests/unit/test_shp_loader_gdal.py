@@ -26,6 +26,14 @@ def test_vector_translate_uses_gdal_38_compatible_encoding_options() -> None:
     assert 'accessMode="overwrite"' not in source
 
 
+def test_full_mode_logs_row_count_snapshot_before_truncate() -> None:
+    source = inspect.getsource(polygons_loader._truncate_target_tables)
+
+    assert "_table_count_snapshot" in source
+    assert "approximate row counts before TRUNCATE" in source
+    assert source.index("_table_count_snapshot") < source.index("TRUNCATE TABLE")
+
+
 def test_shp_load_plan_projects_source_columns_to_target_schema() -> None:
     source = inspect.getsource(polygons_loader._sql_statement)
 

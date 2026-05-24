@@ -149,6 +149,11 @@ def iter_navi_build_rows(
     source_yyyymm: str | None,
     limit: int | None = None,
 ) -> Iterator[NaviBuildingRow]:
+    """Yield valid building centroid rows.
+
+    `limit` applies to rows yielded after coordinate-missing rows are skipped, not to
+    raw file rows scanned.
+    """
     yielded = 0
     for line_no, row in iter_pipe_rows(source, min_columns=27):
         if not row[23] or not row[24]:
@@ -170,6 +175,11 @@ def iter_navi_entrance_rows(
     source_yyyymm: str | None,
     limit: int | None = None,
 ) -> Iterator[NaviEntranceRow]:
+    """Yield valid entrance rows.
+
+    `limit` applies to rows yielded after coordinate-missing rows are skipped, not to
+    raw file rows scanned.
+    """
     yielded = 0
     for line_no, row in iter_pipe_rows(source, min_columns=10):
         if not row[8] or not row[9]:

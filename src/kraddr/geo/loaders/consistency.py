@@ -113,6 +113,7 @@ WITH distances AS (
          e.ent_man_no,
          nearest.dist_m
     FROM tl_locsum_entrc e
+    -- C4 assumes postload.resolve_text_geometry_links() has populated e.bd_mgt_sn.
     JOIN tl_juso_text j ON j.bd_mgt_sn = e.bd_mgt_sn
     JOIN LATERAL (
       SELECT ST_Distance(e.geom, p.geom) AS dist_m

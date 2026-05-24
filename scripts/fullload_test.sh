@@ -27,7 +27,7 @@ set -euo pipefail
 NTFS_DATA="${NTFS_DATA:-/mnt/f/dev/python-kraddr-geo/data}"
 EXT4_DATA="${EXT4_DATA:-$HOME/kraddr-geo-data}"
 DATA_DIR="${DATA_DIR:-$EXT4_DATA}"
-DB_PORT="${KRADDR_DB_PORT:-5432}"
+DB_PORT="${KRADDR_GEO_DB_PORT:-5432}"
 PG_DSN="${KRADDR_GEO_PG_DSN:-postgresql+psycopg://addr:addr@localhost:${DB_PORT}/kraddr_geo}"
 JUSO_YYYYMM="${JUSO_YYYYMM:-${YYYYMM:-202603}}"
 LOCSUM_YYYYMM="${LOCSUM_YYYYMM:-${YYYYMM:-202604}}"

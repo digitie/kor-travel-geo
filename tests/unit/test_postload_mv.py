@@ -28,3 +28,10 @@ def test_shadow_swap_normalizes_next_index_names() -> None:
     assert swap_source.index("DROP MATERIALIZED VIEW mv_geocode_target_old") < swap_source.index(
         "_rename_mv_next_indexes(conn)"
     )
+
+
+def test_stale_mv_next_index_drop_emits_warning() -> None:
+    source = inspect.getsource(postload._rename_mv_next_indexes)
+
+    assert "warnings.warn" in source
+    assert "stale MV index" in source

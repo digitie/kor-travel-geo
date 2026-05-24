@@ -208,10 +208,10 @@ CREATE INDEX idx_navi_entrc_resolve ON tl_navi_entrc (rncode_full, buld_se_cd, b
 | `tl_scco_emd` | `emd_cd` | MULTIPOLYGON 5179 | 읍면동 polygon |
 | `tl_scco_li` | `li_cd` | MULTIPOLYGON 5179 | 리 polygon |
 | `tl_kodis_bas` | `bas_mgt_sn` | MULTIPOLYGON 5179 | 우편번호(기초구역) polygon |
-| `tl_spbd_buld_polygon` | `bd_mgt_sn` | MULTIPOLYGON 5179 | 건물 polygon. 원천 `BD_MGT_SN`은 실제 파일 기준 25자리라 정본 26자리 `bd_mgt_sn`과 직접 조인하지 않고, `rncode_full + 건물구분 + 본번/부번 + bjd_cd` natural key 검증용 속성을 함께 보관한다. |
+| `tl_spbd_buld_polygon` | `bd_mgt_sn` | MULTIPOLYGON 5179 | 건물 polygon. 원천 `BD_MGT_SN`은 실제 파일 기준 25자리라 정본 26자리 `bd_mgt_sn`과 직접 조인하지 않고, `rncode_full + 건물구분 + 본번/부번 + bjd_cd` natural key 검증용 속성을 함께 보관한다. `LI_CD=''`는 generated `bjd_cd`에서 `00`으로 보정해 정본 10자리 법정동 코드와 맞춘다. |
 | `tl_sprd_manage` | `(sig_cd, rds_man_no)` | MULTILINESTRING 5179 | 도로 관리 LineString. C8 도로 인접성 검증은 이 geometry를 사용한다. |
 | `tl_sprd_intrvl` | `(sig_cd, rds_man_no, bsi_int_sn)` | 속성 보조 | 도로 구간 |
-| `tl_sprd_rw` | `(sig_cd, rw_sn)` | MULTIPOLYGON 5179 | 도로 폭/도로면 polygon. 2026년 실제 도로명주소 전자지도 `TL_SPRD_RW` SHP 헤더가 `Polygon`이므로 C8 인접성 검증도 도로면 polygon 기준으로 수행한다. |
+| `tl_sprd_rw` | `(sig_cd, rw_sn)` | MULTIPOLYGON 5179 | 도로 폭/도로면 polygon. 2026년 실제 도로명주소 전자지도 `TL_SPRD_RW` SHP 헤더가 `Polygon`이므로 테이블도 `MULTIPOLYGON`으로 보관한다. C8 인접성 검증은 `rds_man_no`가 있는 `tl_sprd_manage.geom`을 기준으로 수행한다. |
 
 GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY": "YES", "SHAPE_ENCODING": "CP949"})` 조합을 사용한다(ADR-005). GDAL 3.8 Python binding은 `VectorTranslateOptions(openOptions=...)`를 받지 않으므로 CP949 지정은 config option으로 고정한다. 각 polygon 테이블에 GiST 인덱스를 둔다.
 
@@ -230,7 +230,7 @@ GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY
 | **C5: navi centroid ↔ 건물 polygon centroid 일치** | `ST_Distance(navi.centroid_5179, ST_Centroid(buld_polygon.geom))` | 두 centroid 거리 | 1m 이내 `OK`, 10m 초과 `WARN` |
 | **C6: 우편번호 텍스트 ↔ kodis_bas polygon** | `ST_Contains(kodis_bas.geom, locsum.geom)` 와 `juso.zip_no = kodis_bas.bas_id` 비교 | 좌표가 우편번호 polygon 안인가 + 텍스트 zip_no와 일치하는가 | 일치 `OK`, polygon 외 `WARN`, zip_no 불일치 `ERROR` |
 | **C7: 행정구역 ↔ 좌표 polygon 일치** | `ST_Contains(scco_emd.geom, locsum.geom)` 와 `juso.bjd_cd[1..8] = scco_emd.emd_cd` 비교 | 좌표가 법정동 polygon 안인가 | `OK` / `WARN`(polygon 외) / `ERROR`(코드 불일치) |
-| **C8: 도로명 ↔ 도로 폴리라인 인접성** | `ST_DWithin(locsum.geom, sprd_rw.geom, 100m)` filtered by `rncode_full` | 좌표가 같은 도로명 폴리라인의 100m 이내인가 | 일치 `OK`, 외 `WARN` |
+| **C8: 도로명 ↔ 도로 폴리라인 인접성** | `ST_DWithin(locsum.geom, tl_sprd_manage.geom, 100m)` filtered by `rncode_full` | 좌표가 같은 도로명 관리 LineString의 100m 이내인가 | 일치 `OK`, 외 `WARN` |
 | **C9: PNU 자릿수 검증** | `length(pnu) = 19 AND substr(pnu, 11, 1) IN ('1','2')` | ADR-010 매핑이 올바른가 | `length != 19` 시 `ERROR` |
 | **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm` 비교 | 텍스트 적재월과 SHP 적재월이 같은가 | 다르면 `WARN` (월 차이 1 이내 OK) |
 

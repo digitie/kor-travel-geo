@@ -179,14 +179,17 @@ CREATE TABLE IF NOT EXISTS tl_spbd_buld_polygon (
   li_cd           TEXT,
   bjd_cd          TEXT GENERATED ALWAYS AS (
     CASE
-      WHEN sig_cd IS NULL OR emd_cd IS NULL OR li_cd IS NULL THEN NULL
-      ELSE sig_cd || emd_cd || li_cd
+      WHEN NULLIF(sig_cd, '') IS NULL OR NULLIF(emd_cd, '') IS NULL THEN NULL
+      ELSE sig_cd || emd_cd || COALESCE(NULLIF(li_cd, ''), '00')
     END
   ) STORED,
   rds_sig_cd      TEXT,
   rn_cd           TEXT,
   rncode_full     TEXT GENERATED ALWAYS AS (
-    CASE WHEN rds_sig_cd IS NULL OR rn_cd IS NULL THEN NULL ELSE rds_sig_cd || rn_cd END
+    CASE
+      WHEN NULLIF(rds_sig_cd, '') IS NULL OR NULLIF(rn_cd, '') IS NULL THEN NULL
+      ELSE rds_sig_cd || rn_cd
+    END
   ) STORED,
   buld_se_cd      TEXT,
   buld_mnnm       INTEGER,
@@ -202,7 +205,10 @@ CREATE TABLE IF NOT EXISTS tl_sprd_manage (
   rds_man_no      TEXT NOT NULL,
   rn_cd           TEXT,
   rncode_full     TEXT GENERATED ALWAYS AS (
-    CASE WHEN rn_cd IS NULL THEN NULL ELSE sig_cd || rn_cd END
+    CASE
+      WHEN NULLIF(sig_cd, '') IS NULL OR NULLIF(rn_cd, '') IS NULL THEN NULL
+      ELSE sig_cd || rn_cd
+    END
   ) STORED,
   rn              TEXT,
   geom            geometry(MultiLineString, 5179),

@@ -45,6 +45,9 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "CHECK (char_length(bd_mgt_sn) BETWEEN 25 AND 26)" in SCHEMA_SQL
     assert "load_batch_id" in SCHEMA_SQL
     assert "parent_job_id" in SCHEMA_SQL
+    assert "COALESCE(NULLIF(li_cd, ''), '00')" in SCHEMA_SQL
+    assert "NULLIF(rds_sig_cd, '') IS NULL" in SCHEMA_SQL
+    assert "NULLIF(rn_cd, '') IS NULL" in SCHEMA_SQL
 
 
 def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:

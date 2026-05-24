@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any, Literal
 
 from sqlalchemy import text
@@ -102,6 +103,12 @@ async def _rename_mv_next_indexes(conn: Any) -> None:
             {"index_name": target_name},
         )
         if target_exists is not None:
+            warnings.warn(
+                f"stale MV index {target_name} already exists; dropping {next_name} "
+                "to avoid the next shadow rebuild name collision",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             await conn.execute(text(f"DROP INDEX {next_name}"))
             continue
         await conn.execute(text(f"ALTER INDEX {next_name} RENAME TO {target_name}"))

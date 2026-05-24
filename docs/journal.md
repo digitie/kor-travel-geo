@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #14 리뷰 반영 — schema migration, SHP natural key, 리뷰 확인 프로토콜)
+
+**작업**: PR #14의 정식 review body(`# PR #14 리뷰 — T-027 actual full-load execution fixes`)와 마지막 Optional conversation comment를 모두 확인하고 반영했다.
+
+**반영 상세**:
+- H1: `alembic/versions/0002_t027_shp_schema_fixups.py`를 추가했다. 기존 DB에 `tl_spbd_buld_polygon` natural key 컬럼, `tl_sprd_manage.geom`, `tl_sprd_rw.geom` `MULTIPOLYGON` 타입 변경을 적용한다.
+- H2: `tl_spbd_buld_polygon.bjd_cd` generated column은 `LI_CD=''`를 `00`으로 보정하고, `rncode_full`은 빈 문자열을 NULL로 취급하도록 `SCHEMA_SQL`과 `sql/ddl/001_schema.sql`을 수정했다.
+- M1: stale 운영 MV index가 남아 있어 새 `idx_mv_next_*`를 drop하는 복구 경로에서 `warnings.warn`을 남기도록 했다.
+- M2: SHP full reset은 `TRUNCATE` 직전 대상 테이블별 approximate row count snapshot을 출력한다. 문서에는 full mode 중단 시 9개 SHP 테이블이 비거나 일부만 적재된 상태일 수 있음을 명시했다.
+- M3/L7: 내비 loader의 `limit`은 좌표 결측 skip 이후 yield row 기준임을 docstring으로 명시하고, C4 SQL에는 `resolve_text_geometry_links()` 선행 의존성을 주석으로 남겼다.
+- Optional: Docker 포트 환경변수를 저장소 prefix 규칙에 맞춰 `KRADDR_DB_PORT`에서 `KRADDR_GEO_DB_PORT`로 변경했다.
+- 반복 방지: `docs/agent-guide.md`에 PR 리뷰 확인 프로토콜을 추가했다. 앞으로 PR 리뷰 반영 시 conversation comments뿐 아니라 `reviews[].body`와 `review_threads[]`를 반드시 확인한다.
+
+**검증**:
+- `pytest tests/unit/test_alembic_migrations.py tests/unit/test_infra_engine_pnu_sql.py tests/unit/test_shp_loader_gdal.py tests/unit/test_postload_mv.py tests/unit/test_navi_loader.py tests/unit/test_consistency_sql.py -q` → 17 passed.
+- `ruff check .` → 통과.
+- `mypy src/kraddr/geo` → 통과.
+- `lint-imports` → Layered architecture kept.
+- `bash -n scripts/fullload_test.sh` → 통과.
+- `PATH="$PWD/.venv/bin:$PATH" DATA_DIR=/home/digitie/kraddr-geo-data KRADDR_GEO_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` → 통과. 출력 DSN은 `localhost:15432`.
+- `pytest -q` → 80 passed, 7 skipped.
+- 임시 DB `kraddr_geo_pr14_review`에서 `alembic upgrade head` → 0001, 0002 적용 성공. `LI_CD=''` 샘플 insert 시 generated `bjd_cd=1111010100`, `rncode_full=111103100012` 확인.
+- 실제 T-027 DB 영향 조회: `empty_li=0`, `empty_rn=0`, `empty_rds_sig=0`, `bjd_8=0`, `bjd_10=10,687,732`.
+
 ## 2026-05-25 (PR #14/T-027 — 실제 전국 SHP 재적재와 정합성 재검증)
 
 **작업**: `data/juso/도로명주소 전자지도` 실제 전국 SHP 17개 시도 × 9개 레이어를 새 natural-key 스키마로 Docker PostGIS에 재적재하고, C1~C10 정합성 검증을 실제 DB에서 재실행했다.
@@ -113,16 +137,16 @@
 - T-027 기본 compose/스크립트가 `localhost:5432`를 그대로 사용하면 기존 DB에 DDL/적재를 실행할 위험이 있다.
 
 **보강 상세**:
-- `docker-compose.yml`의 외부 포트를 `${KRADDR_DB_PORT:-5432}:5432`로 파라미터화했다.
-- `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 `KRADDR_DB_PORT`를 반영한 DSN을 만든다.
-- `docs/t027-fullload-plan.md`, `docs/dev-environment-recovery.md`, `CLAUDE.md`에 `KRADDR_DB_PORT=15432` 사용 예와 포트 충돌 주의사항을 추가했다.
+- `docker-compose.yml`의 외부 포트를 `${KRADDR_GEO_DB_PORT:-5432}:5432`로 파라미터화했다.
+- `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 `KRADDR_GEO_DB_PORT`를 반영한 DSN을 만든다.
+- `docs/t027-fullload-plan.md`, `docs/dev-environment-recovery.md`, `CLAUDE.md`에 `KRADDR_GEO_DB_PORT=15432` 사용 예와 포트 충돌 주의사항을 추가했다.
 
 **검증**:
 - `bash -n scripts/fullload_test.sh` 통과.
-- `DATA_DIR=/home/digitie/kraddr-geo-data KRADDR_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` 통과. 출력 DSN이 `localhost:15432`로 바뀌는 것을 확인했다.
+- `DATA_DIR=/home/digitie/kraddr-geo-data KRADDR_GEO_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` 통과. 출력 DSN이 `localhost:15432`로 바뀌는 것을 확인했다.
 - `git diff --check` 통과.
 
-**다음 작업**: PR 생성 후 `KRADDR_DB_PORT=15432`로 Docker PostGIS를 기동하고 실제 적재를 계속 진행한다. 이후 발견되는 문제는 같은 PR에 누적한다.
+**다음 작업**: PR 생성 후 `KRADDR_GEO_DB_PORT=15432`로 Docker PostGIS를 기동하고 실제 적재를 계속 진행한다. 이후 발견되는 문제는 같은 PR에 누적한다.
 
 ## 2026-05-24 (PR #13/T-027 — Windows 재설치·Codex 세션 복구 문서화)
 

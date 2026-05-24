@@ -59,11 +59,11 @@ F:\dev\python-kraddr-geo\data\  # NTFS 원본 보관
 
 Docker:
 ```bash
-KRADDR_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d   # 기동
+KRADDR_GEO_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d   # 기동
 docker compose -p kraddr-geo-t027 down                         # 중지 (pgdata 유지)
 ```
 
-로컬 5432 포트는 다른 PostgreSQL이 쓰는 경우가 흔하므로 T-027 검증은 `KRADDR_DB_PORT=15432`처럼 별도 포트를 권장한다. `KRADDR_GEO_PG_DSN`을 직접 지정하지 않으면 `scripts/fullload_test.sh`가 이 포트를 반영해 DSN을 만든다.
+로컬 5432 포트는 다른 PostgreSQL이 쓰는 경우가 흔하므로 T-027 검증은 `KRADDR_GEO_DB_PORT=15432`처럼 별도 포트를 권장한다. `KRADDR_GEO_PG_DSN`을 직접 지정하지 않으면 `scripts/fullload_test.sh`가 이 포트를 반영해 DSN을 만든다.
 
 ## 데이터 기준월
 

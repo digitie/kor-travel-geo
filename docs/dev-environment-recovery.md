@@ -68,24 +68,34 @@ WSL 자체를 재설치하면 소실되므로, 전체 적재는 다시 수행해
 cd ~/python-kraddr-geo
 
 # 전용 project name 사용 — 다른 compose 프로젝트와 격리
-KRADDR_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d
+KRADDR_GEO_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d
 
 # 상태 확인
 docker compose -p kraddr-geo-t027 ps
 ```
 
 기존 pgdata가 `~/kraddr-geo-data/pgdata/`에 남아 있으면 DB가 이전 상태로 바로 올라온다.
-로컬의 다른 PostgreSQL이 5432 포트를 이미 사용 중일 수 있으므로 T-027 검증은 `KRADDR_DB_PORT=15432`처럼 별도 포트를 지정하는 편이 안전하다. `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없으면 이 포트 값을 사용해 DSN을 만든다.
+로컬의 다른 PostgreSQL이 5432 포트를 이미 사용 중일 수 있으므로 T-027 검증은 `KRADDR_GEO_DB_PORT=15432`처럼 별도 포트를 지정하는 편이 안전하다. `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없으면 이 포트 값을 사용해 DSN을 만든다.
+
+PR #14 이전 DB를 재사용하는 경우에는 먼저 schema migration을 적용한다.
+
+```bash
+KRADDR_GEO_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d
+export KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo
+alembic upgrade head
+```
+
+`0002_t027_shp_schema_fixups`는 SHP 보조 테이블의 natural key 컬럼과 geometry 타입을 보정한다. `tl_spbd_buld_polygon.bjd_cd`/`rncode_full` generated column 재생성은 기존 row 수에 따라 시간이 걸릴 수 있다. 이미 PR #14 이전 스키마로 SHP를 적재했다면 migration 후 `kraddr-geo load shp-all ... --mode full`로 SHP 9개 테이블을 다시 적재한다.
 
 사용자가 실제 전체 적재를 명시적으로 승인했고 기존 DB를 버려도 되는 경우에만 새로 적재한다.
 
 ```bash
 # pgdata 초기화
 rm -rf ~/kraddr-geo-data/pgdata/*
-KRADDR_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d
+KRADDR_GEO_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d
 
 # 전체 적재 + 검증
-KRADDR_DB_PORT=15432 bash scripts/fullload_test.sh
+KRADDR_GEO_DB_PORT=15432 bash scripts/fullload_test.sh
 ```
 
 ## 7. 환경변수 (.env)
@@ -120,6 +130,6 @@ F:\dev\python-kraddr-geo\data\     # NTFS — 원본 보관
 - [ ] `bash -n scripts/fullload_test.sh`
 - [ ] 사용자가 허용한 경우 `PLAN_ONLY=1 bash scripts/fullload_test.sh`
 - [ ] 실제 전체 적재 승인 후에만 `bash scripts/fullload_test.sh --copy-data` (NTFS → ext4 복사)
-- [ ] 실제 전체 적재 승인 후에만 `KRADDR_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d`
-- [ ] 실제 전체 적재 승인 후에만 `KRADDR_DB_PORT=15432 bash scripts/fullload_test.sh` (적재 + 검증)
+- [ ] 실제 전체 적재 승인 후에만 `KRADDR_GEO_DB_PORT=15432 docker compose -p kraddr-geo-t027 up -d`
+- [ ] 실제 전체 적재 승인 후에만 `KRADDR_GEO_DB_PORT=15432 bash scripts/fullload_test.sh` (적재 + 검증)
 - [ ] `.env` 시크릿 복원

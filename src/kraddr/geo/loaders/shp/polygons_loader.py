@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import Connection, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.exceptions import LoaderError
@@ -202,9 +202,34 @@ def _truncate_target_tables(pg_url: str, table_names: tuple[str, ...]) -> None:
     try:
         tables = ", ".join(table_names)
         with engine.begin() as conn:
+            snapshot = _table_count_snapshot(conn, table_names)
+            if snapshot:
+                print(
+                    "SHP full reset: approximate row counts before TRUNCATE: "
+                    + ", ".join(f"{table}={count}" for table, count in snapshot)
+                )
             conn.execute(text(f"TRUNCATE TABLE {tables}"))
     finally:
         engine.dispose()
+
+
+def _table_count_snapshot(
+    conn: Connection, table_names: tuple[str, ...]
+) -> tuple[tuple[str, int], ...]:
+    rows: list[tuple[str, int]] = []
+    for table_name in table_names:
+        reltuples = conn.execute(
+            text(
+                """
+SELECT GREATEST(COALESCE(c.reltuples, 0), 0)::bigint
+  FROM pg_class c
+ WHERE c.oid = to_regclass(:table_name)
+"""
+            ),
+            {"table_name": table_name},
+        ).scalar()
+        rows.append((table_name, int(reltuples or 0)))
+    return tuple(rows)
 
 
 def _gdal_pg_destination(pg_url: str) -> str:
