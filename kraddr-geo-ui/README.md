@@ -12,7 +12,9 @@ npm run dev
 
 기본 진입점은 `/debug/geocode`다. `KRADDR_GEO_API_INTERNAL_URL`은 서버 사이드 프록시가 사용할 백엔드 주소이고, 브라우저는 `NEXT_PUBLIC_API_BASE_URL` 기본값인 `/api/proxy`만 호출한다.
 
-`NEXT_PUBLIC_KAKAO_JS_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 Kakao 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다.
+`NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다.
+
+지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 UI에서만 우회하지 않고 해당 저장소도 적극 수정한다.
 
 ## 검증
 

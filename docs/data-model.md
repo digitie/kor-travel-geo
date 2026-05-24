@@ -452,7 +452,7 @@ LIMIT :limit;
 
 ### 행정 polygon의 4326 변환
 
-`tl_kodis_bas`, `tl_scco_*` 등 polygon 테이블은 5179만 보관한다. Kakao Maps 등 4326을 요구하는 응답 경로용으로 변환 view를 둔다.
+`tl_kodis_bas`, `tl_scco_*` 등 polygon 테이블은 5179만 보관한다. VWorld/MapLibre 지도와 vworld 호환 API 응답처럼 4326을 요구하는 경로용으로 변환 view를 둔다.
 
 ```sql
 CREATE VIEW v_kodis_bas_4326 AS

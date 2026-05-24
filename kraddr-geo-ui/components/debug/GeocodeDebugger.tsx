@@ -2,7 +2,7 @@
 
 import { LocateFixed } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { CoordinateMap } from "@/components/kakao/CoordinateMap";
+import { CoordinateMap } from "@/components/vworld/CoordinateMap";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { requestJson } from "@/lib/api";

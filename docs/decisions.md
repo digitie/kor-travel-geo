@@ -688,3 +688,45 @@ SET search_path = public, x_extension;
 - 프론트엔드 문서의 프레임워크 표기는 Next.js 16으로 갱신한다.
 - CI는 Node.js 20을 사용하고 `npm ci`, `npm run gen:types`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 실행한다.
 - 향후 Next.js minor/patch 업데이트는 `npm audit --omit=dev --audit-level=high`를 기준으로 빠르게 흡수한다.
+
+---
+
+## ADR-020: 디버그 UI 지도는 VWorld WMTS + MapLibre를 사용하고 wrapper도 적극 보강한다
+
+- 상태: accepted
+- 날짜: 2026-05-25
+- 결정자: 사용자 요청, codex 구현
+
+### 컨텍스트
+
+PR #12까지의 `kraddr-geo-ui`는 Kakao Maps SDK를 기준으로 좌표 지도 컴포넌트를 만들었다. 그러나 이 프로젝트의 백엔드 응답은 vworld 호환 구조를 1차 공개 표면으로 삼고 있고, 외부 폴백도 vworld 주소 좌표 API를 먼저 호출한다. 디버그 UI가 다른 지도 공급자 위에서만 동작하면 운영자가 실제 vworld 기반 응답과 지도 타일을 같은 조건으로 비교하기 어렵다.
+
+별도 저장소 `digitie/maplibre-vworld-js`는 MapLibre GL JS 위에서 VWorld 지도 layer, marker, cluster를 재사용 가능한 형태로 제공하려는 목적에 맞다. 다만 현재 GitHub 의존성으로 설치했을 때 package `exports`가 가리키는 `dist/` 산출물이 포함되지 않아 소비자 프로젝트에서 직접 import하면 build 실패 위험이 있다.
+
+### 결정
+
+`kraddr-geo-ui`의 디버그 지도는 Kakao Maps SDK가 아니라 VWorld WMTS + MapLibre GL JS를 사용한다.
+
+- 브라우저 환경변수는 `NEXT_PUBLIC_VWORLD_API_KEY`다. 실제 키는 `.env.local`에만 두고 저장소에는 커밋하지 않는다.
+- 지도 타일 URL과 style 생성 규칙은 `digitie/maplibre-vworld-js`의 `getVWorldTileUrl()` / `getVWorldStyle()` 계약과 맞춘다.
+- `maplibre-vworld` package는 GitHub 의존성으로 추적하되, package install 결과가 안정화되기 전에는 `kraddr-geo-ui/lib/vworld.ts`의 로컬 helper로 WMTS raster style을 생성한다.
+- `digitie/maplibre-vworld-js`에서 패키징, 타입, CSS import, Next.js 호환성, VWorld layer/marker/cluster 공통 문제가 발견되면 이 저장소 전용 workaround에 그치지 않고 upstream도 적극 수정한다.
+
+### 근거
+
+- 디버그 UI가 백엔드의 vworld 호환 응답과 같은 공급자의 지도 타일 위에서 좌표를 확인할 수 있다.
+- MapLibre는 표준 WebGL 지도 엔진이므로 VWorld WMTS 외에도 후속 SHP/GeoJSON overlay, consistency sample 표시, load 검증 layer를 붙이기 쉽다.
+- `digitie/maplibre-vworld-js`를 개선하면 이 저장소뿐 아니라 다른 VWorld/MapLibre 소비자도 같은 보강을 재사용할 수 있다.
+
+### 구현 규칙
+
+- 좌표 callback과 marker 입력은 기존과 동일하게 `(lon, lat)` 순서를 유지한다.
+- `NEXT_PUBLIC_VWORLD_API_KEY`가 없거나 tile loading이 실패하면 같은 크기의 fallback preview를 보여 주어 CI/내부망/키 미등록 환경에서도 화면이 깨지지 않게 한다.
+- 실제 VWorld key는 문서, 코드, 테스트, PR 본문에 평문으로 남기지 않는다.
+- `maplibre-vworld` package root를 직접 import하는 변경은 `npm install` 직후 `dist/`/`types`/`exports`가 소비자 build에서 검증된 뒤에만 허용한다.
+
+### 결과
+
+- `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`가 지도 렌더링과 click/marker 동작을 담당한다.
+- `kraddr-geo-ui/lib/vworld.ts`는 upstream package 안정화 전까지 VWorld WMTS style helper 역할을 한다.
+- 프론트엔드 문서와 외부 API 문서는 Kakao Maps가 아니라 VWorld WMTS 기준으로 갱신한다.

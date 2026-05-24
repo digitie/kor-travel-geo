@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (디버그 UI 지도 VWorld/MapLibre 전환)
+
+**작업**: 사용자 지시에 따라 `kraddr-geo-ui`의 디버그 지도 방향을 Kakao Maps SDK에서 VWorld WMTS + MapLibre GL JS로 전환했다. 실제 VWorld API key는 저장소에 기록하지 않고, `.env.local`의 `NEXT_PUBLIC_VWORLD_API_KEY`로만 주입하는 정책을 유지했다.
+
+**구현 상세**:
+- `react-kakao-maps-sdk` 의존성을 제거하고, 직접 사용하는 `maplibre-gl`을 명시 의존성으로 추가했다.
+- `components/kakao/CoordinateMap.tsx`를 `components/vworld/CoordinateMap.tsx`로 교체했다. 지도 click은 기존과 동일하게 `(lon, lat)` 순서로 callback을 호출하고, marker도 EPSG:4326 좌표를 그대로 사용한다.
+- `lib/vworld.ts`에 VWorld WMTS tile URL과 MapLibre raster style helper를 추가했다. `Base`/`gray`/`midnight`/`Hybrid`는 `png`, `Satellite`는 `jpeg` 타일을 사용한다.
+- `NEXT_PUBLIC_VWORLD_API_KEY`가 없거나 지도 로딩에 실패하면 기존처럼 같은 크기의 좌표 fallback preview를 보여 준다.
+
+**문서화**:
+- ADR-020을 추가했다. 디버그 UI 지도는 VWorld WMTS + MapLibre를 기준으로 하고, `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 나오면 해당 저장소도 적극 수정 대상에 포함한다고 명시했다.
+- `docs/frontend-package.md`, `docs/external-apis.md`, `docs/architecture.md`, `README.md`, `docs/resume.md` 등에 VWorld 지도 환경변수와 upstream 보강 원칙을 반영했다.
+
+**검증**:
+- `cd kraddr-geo-ui && npm run lint` → 통과.
+- `cd kraddr-geo-ui && npm run type-check` → 통과.
+- `cd kraddr-geo-ui && npm run test` → 6 files / 15 tests 통과. VWorld WMTS helper 단위 테스트를 포함한다.
+- `cd kraddr-geo-ui && npm ci --ignore-scripts && npm run build` → 통과. HTTPS Git dependency lockfile 재현성을 확인했다.
+- `cd kraddr-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과. Next.js/Vitest 경로의 moderate advisory는 잔여.
+- `NEXT_PUBLIC_VWORLD_API_KEY=<local only> npm run dev -- --hostname 127.0.0.1 --port 3001` 후 `HEAD /debug/reverse` → 200 OK.
+
 ## 2026-05-25 (PR #14 추가 리뷰 반영 — L1~L6, C2/C4/C6/C7 재검토)
 
 **작업**: PR #14의 최종 리뷰 body와 thread-aware review fetch 결과를 다시 확인했다. unresolved inline thread는 없었고, 추가 반영 대상은 N1/N2와 가능하면 L1~L6, C2/C4/C6/C7 재검토였다.

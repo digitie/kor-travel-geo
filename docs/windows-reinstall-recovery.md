@@ -52,7 +52,7 @@ git push origin claude/t027-docker-fullload-plan
 |------|------|-----------|
 | 원천 데이터 | `F:\dev\python-kraddr-geo\data\juso\...` | 저장소에 포함하지 않는 대용량 자료 |
 | 환경 파일 | `.env`, `.env.local`, systemd `EnvironmentFile` | DB DSN, API 키, 로컬 경로 |
-| API 키 | vworld, juso, epost, Kakao Maps | 평문 커밋 금지 |
+| API 키 | vworld, juso, epost, 프론트엔드 VWorld WMTS | 평문 커밋 금지 |
 | Docker volume dump | `kraddr_geo` 운영/검증 DB가 이미 의미 있는 상태일 때만 | Docker volume은 재설치로 사라질 수 있음 |
 | WSL distro export | 재현 비용이 큰 개발 환경 | 패키지/셸 설정을 통째로 보존 |
 

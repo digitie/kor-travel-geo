@@ -37,12 +37,12 @@ src/kraddr/geo/
 
 ## 3. 프론트엔드 (`kraddr-geo-ui`)
 
-별도 Node.js 패키지(Next.js 16 + Tailwind + react-kakao-maps-sdk + TanStack Query). 사용자 대상이 아니라 개발자·운영자용 디버깅/관리 UI.
+별도 Node.js 패키지(Next.js 16 + Tailwind + MapLibre GL JS + VWorld WMTS + TanStack Query). 사용자 대상이 아니라 개발자·운영자용 디버깅/관리 UI.
 
 ```
 kraddr-geo-ui/
   app/                 Next.js App Router. /debug/* + /admin/* + /api/proxy/[...]
-  components/          layout/, ui/, kakao/, debug/, admin/
+  components/          layout/, ui/, vworld/, debug/, admin/
   lib/                 api.ts, schemas.ts(zod), consistency.ts, format.ts, load-workflow.ts, sido.ts
   scripts/gen-types.mjs 백엔드 openapi.json → TypeScript 타입 생성
 ```
@@ -63,7 +63,7 @@ kraddr-geo-ui/
 
 ## 5. 외부 API
 
-`docs/external-apis.md`에 vworld / juso / epost / kakao maps의 발급 절차, 환경변수, 호출 예시, 재시도·회로차단 정책이 모여 있다.
+`docs/external-apis.md`에 vworld / juso / epost의 발급 절차, 환경변수, 호출 예시, 재시도·회로차단 정책이 모여 있다. 프론트엔드 지도는 VWorld WMTS + MapLibre를 쓰며, 공통 wrapper 문제가 나오면 `digitie/maplibre-vworld-js`도 함께 수정한다.
 
 ## 6. 검증
 
