@@ -189,7 +189,14 @@ INSERT INTO tl_locsum_entrc AS t (
 SELECT sig_cd, ent_man_no, bjd_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, rn_cd, rn,
        buld_se_cd, buld_mnnm, buld_slno, zip_no, buld_use, ent_se_cd, adm_kor_nm,
        geom, source_file, source_yyyymm
-  FROM _locsum_staging
+  FROM (
+    SELECT DISTINCT ON (sig_cd, ent_man_no)
+           sig_cd, ent_man_no, bjd_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, rn_cd, rn,
+           buld_se_cd, buld_mnnm, buld_slno, zip_no, buld_use, ent_se_cd, adm_kor_nm,
+           geom, source_file, source_yyyymm
+      FROM _locsum_staging
+     ORDER BY sig_cd, ent_man_no, source_yyyymm DESC NULLS LAST, source_file DESC, ctid DESC
+  ) AS s
 ON CONFLICT (sig_cd, ent_man_no) DO UPDATE SET
   bjd_cd = EXCLUDED.bjd_cd,
   ctp_kor_nm = EXCLUDED.ctp_kor_nm,
