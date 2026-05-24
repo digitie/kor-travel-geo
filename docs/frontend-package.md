@@ -141,9 +141,13 @@ new QueryClient({
 
 `maplibre-gl`을 직접 사용해 VWorld WMTS raster style을 렌더링한다. 지도 URL과 style 생성 규칙은 `digitie/maplibre-vworld-js`의 `getVWorldTileUrl()` / `getVWorldStyle()` 계약과 맞춘다.
 
-현재 `digitie/maplibre-vworld-js` GitHub 의존성은 `package.json`에 추적하지만, GitHub install 결과물에는 `dist/`가 포함되지 않아 패키지 root를 직접 import하면 Next.js build가 깨진다. 따라서 `kraddr-geo-ui/lib/vworld.ts`에 같은 WMTS style helper를 임시 bridge로 둔다. 이 bridge는 장기 fork가 아니라 upstream 패키징 보강 전까지의 안전장치다.
+`CoordinateMap.tsx`는 실제 MapLibre 인스턴스, marker, click callback, tile error 처리를 담당한다. 상위 화면은 `components/vworld/LazyCoordinateMap.tsx`를 import한다. 이 wrapper는 `next/dynamic(..., { ssr: false })`로 MapLibre 번들을 클라이언트 런타임에만 불러오며, 로딩 중에는 같은 높이의 skeleton을 보여 준다. `maplibre-gl`은 브라우저 전역 객체와 WebGL에 의존하므로, 디버그 페이지에서 정적 import를 직접 늘리지 않는다.
 
-지도 키는 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 키가 없거나 MapLibre/VWorld tile 로딩에 실패하면 같은 크기의 좌표 프리뷰 또는 loading overlay로 대체한다. 이 fallback 덕분에 CI, 내부망 테스트, VWorld 도메인 등록 전 개발 환경에서 화면이 비어 보이지 않는다.
+현재 `digitie/maplibre-vworld-js`는 package install 결과물에 `dist/`가 포함되지 않아 package root를 직접 import하면 Next.js build가 깨질 수 있다. 그래서 `kraddr-geo-ui/package.json`에는 `maplibre-vworld` 의존성을 선언하지 않는다. 추적은 GitHub PR/리뷰와 문서의 후속 항목으로 수행하고, `kraddr-geo-ui/lib/vworld.ts`에 같은 WMTS style helper를 임시 bridge로 둔다. 이 bridge는 장기 fork가 아니라 upstream 패키징 보강 전까지의 안전장치다.
+
+지도 키는 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 키가 없으면 같은 크기의 좌표 프리뷰로 대체한다. MapLibre/VWorld tile error는 일시적 네트워크 실패와 치명 오류를 구분한다. tile fetch 실패는 redacted URL로 `console.warn`만 남기고, 누적 임계치 이상이거나 style/WebGL 계열 오류일 때만 overlay를 보여 준다. 이 fallback 덕분에 CI, 내부망 테스트, VWorld 도메인 등록 전 개발 환경에서 화면이 비어 보이지 않는다.
+
+VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnight`는 z19까지, `Hybrid`/`Satellite`는 z18까지만 요청한다. marker 위치 갱신은 지도 클릭 후 되튐을 줄이기 위해 `flyTo({ animate: false, duration: 0 })`로 즉시 이동한다.
 
 ### A3.6.1 `digitie/maplibre-vworld-js` 보강 원칙
 
@@ -154,7 +158,9 @@ new QueryClient({
 - **패키징 문제**: GitHub 또는 npm install 후 `dist/`/`exports`/`types`가 없어서 소비자 build가 실패하면 `maplibre-vworld-js`의 배포 산출물 생성 또는 `files`/`exports` 구성을 고친다.
 - **타입 문제**: React 18/19, MapLibre GL JS, Vite/Next.js에서 타입 오류가 나면 upstream 타입 선언과 테스트를 보강한다.
 - **기능 문제**: VWorld `Base`/`gray`/`midnight`/`Hybrid`/`Satellite` layer, marker, click, clustering, attribution 중 공통 컴포넌트화할 수 있는 문제는 upstream에 반영한다.
-- **로컬 bridge 제거 조건**: `maplibre-vworld` 패키지가 install 직후 `import { VWorldMap, Marker, getVWorldStyle } from "maplibre-vworld"` 형태로 안정 빌드되면 `kraddr-geo-ui/lib/vworld.ts`와 직접 MapLibre wiring을 줄이고 upstream 컴포넌트를 사용한다.
+- **의존성 선언 조건**: `maplibre-vworld` 패키지가 안정 태그 또는 SHA로 고정 가능하고, `npm ci` 직후 `import { VWorldMap, Marker, getVWorldStyle } from "maplibre-vworld"` 형태가 Next.js build에서 검증되기 전까지는 `package.json`에 선언하지 않는다.
+- **로컬 bridge 제거 조건**: 위 조건이 만족되면 `kraddr-geo-ui/lib/vworld.ts`와 직접 MapLibre wiring을 줄이고 upstream 컴포넌트를 사용한다.
+- **보안·운영 조건**: 브라우저 노출 키는 VWorld 콘솔에서 origin/referrer 제한이 실제 WMTS에도 적용되는지 운영자가 확인한다. 향후 CSP를 켜면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 포함한다.
 
 ### A3.7 Provider 체인 (`app/providers.tsx`)
 

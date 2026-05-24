@@ -304,6 +304,19 @@ textarea {
   justify-self: center;
 }
 
+.vworld-map-skeleton {
+  align-items: center;
+  background:
+    linear-gradient(90deg, rgb(15 118 110 / 8%) 1px, transparent 1px),
+    linear-gradient(rgb(29 78 216 / 8%) 1px, transparent 1px),
+    #f3f6fa;
+  background-size: 32px 32px;
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  justify-items: center;
+}
+
 .vworld-map .maplibregl-ctrl-attrib {
   font-size: 10px;
 }

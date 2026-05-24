@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #15 리뷰 반영: `kraddr-geo-ui`에서 미사용 `maplibre-vworld` GitHub 의존성을 제거하고, upstream 안정화 전 package dependency를 선언하지 않는 정책을 ADR-020과 프론트엔드 문서에 명시한다.
+- PR #15 리뷰 반영: VWorld MapLibre 지도는 `next/dynamic(..., { ssr: false })` wrapper로 지연 로딩하고 skeleton을 제공해 SSR/WebGL 충돌과 초기 번들 비대를 줄인다.
+- PR #15 리뷰 반영: VWorld tile fetch 오류를 transient로 분리해 즉시 fatal overlay로 고정하지 않고, redacted warning과 누적 임계치로 처리한다. `Hybrid`/`Satellite`는 z18 maxZoom을 적용한다.
 - PR #14 추가 리뷰 반영: `tl_sprd_rw`에 기존 `MULTILINESTRING` row가 있는 DB에서도 `0002_t027_shp_schema_fixups`가 중단되지 않도록 non-polygon row 감지 시 `tl_sprd_rw`를 비운 뒤 `MULTIPOLYGON` 타입으로 전환한다.
 - PR #14 Low 항목 보강: MV shadow swap 인덱스 rename을 live catalog 기반으로 유도하고, locsum staging 중복 선택 순서를 `ctid` 대신 `staging_seq`로 안정화한다. Navi loader는 EPSG:5179 좌표가 `0`인 sentinel row를 skip하며, GDAL PostgreSQL conninfo에는 기본 `connect_timeout=10`을 넣는다.
 - PR #14 C2/C4/C6/C7 재검토: C2 리포트 metric에 `missing_resolve_key`와 `missing_text`를 분리해 남은 오류 원인 분석이 가능하게 하고, C4 `error_count`는 500m 초과 건수로 명시한다. C6/C7은 polygon 경계 위 점을 오탐하지 않도록 `ST_Contains` 대신 `ST_Covers`를 사용한다.

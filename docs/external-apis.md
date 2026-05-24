@@ -53,17 +53,21 @@ async with httpx.AsyncClient(timeout=5.0) as cx:
 - **권장 분리**: 서버측 폴백 키(`KRADDR_GEO_VWORLD_API_KEY`)와 프론트엔드 WMTS 키(`NEXT_PUBLIC_VWORLD_API_KEY`)를 분리한다. 로컬 개발용 키에는 `localhost:3000`, `127.0.0.1:3000`만 등록하고 운영 키에는 내부망 도메인만 등록한다.
 - **사용 레이어**: 기본은 `Base`. 필요하면 `gray`, `midnight`, `Hybrid`, `Satellite`를 `CoordinateMap.layerType`으로 선택한다.
 - **타일 URL 규칙**: `https://api.vworld.kr/req/wmts/1.0.0/{key}/{layer}/{z}/{y}/{x}.{ext}`. `Base`/`gray`/`midnight`/`Hybrid`는 `png`, `Satellite`는 `jpeg`.
-- **소스 코드 위치**: `kraddr-geo-ui/lib/vworld.ts`가 VWorld WMTS URL과 MapLibre raster style을 생성하고, `components/vworld/CoordinateMap.tsx`가 click/marker/fallback을 담당한다.
+- **zoom 한계**: `Base`/`gray`/`midnight`는 z19까지, `Hybrid`/`Satellite`는 z18까지만 요청한다. 상한을 넘긴 tile 404는 운영 장애로 보지 않고 MapLibre 컴포넌트에서 transient error로 다룬다.
+- **attribution**: MapLibre raster source의 attribution은 `공간정보 오픈플랫폼 브이월드`로 표기한다. 운영자는 VWorld 최신 이용약관에서 요구 표기가 바뀌었는지 배포 전 확인한다.
+- **소스 코드 위치**: `kraddr-geo-ui/lib/vworld.ts`가 VWorld WMTS URL과 MapLibre raster style을 생성하고, `components/vworld/LazyCoordinateMap.tsx`가 Next.js dynamic import, `components/vworld/CoordinateMap.tsx`가 click/marker/fallback/error 처리를 담당한다.
+- **CSP 주의**: 현재 UI는 CSP를 강제하지 않지만, 향후 도입하면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 반드시 포함한다.
+- **키 제한·회전**: `NEXT_PUBLIC_VWORLD_API_KEY`는 타일 URL path에 노출된다. 도메인/referrer 제한이 WMTS에 실제 적용되는지 VWorld 콘솔과 운영 환경에서 확인하고, 의심 노출 또는 제한 미적용이 확인되면 키를 회수·재발급한다.
 
 ### `digitie/maplibre-vworld-js`와의 관계
 
-디버그 UI는 `digitie/maplibre-vworld-js`를 장기적으로 활용하는 방향이다. 다만 현재 GitHub install 결과물에는 `dist/` 산출물이 포함되지 않아 `maplibre-vworld` package root를 직접 import하면 소비자 build가 실패할 수 있다. 따라서 이 저장소는 동일한 VWorld WMTS style 계약을 로컬 helper로 고정하고, `maplibre-vworld` GitHub 의존성을 추적해 upstream 보강 대상으로 둔다.
+디버그 UI는 `digitie/maplibre-vworld-js`를 장기적으로 활용하는 방향이다. 다만 현재 GitHub install 결과물에는 `dist/` 산출물이 포함되지 않아 `maplibre-vworld` package root를 직접 import하면 소비자 build가 실패할 수 있다. 따라서 이 저장소는 동일한 VWorld WMTS style 계약을 로컬 helper로 고정하고, `maplibre-vworld` GitHub 의존성은 `package.json`에 선언하지 않는다. upstream 추적은 GitHub PR/리뷰와 문서의 후속 항목으로 관리한다.
 
 문제 발생 시 원칙:
 
 - `maplibre-vworld-js`의 `exports`, `files`, `dist`, type declaration 누락으로 생기는 build 실패는 upstream 저장소를 수정한다.
 - VWorld layer helper, MapLibre marker/click/cluster, CSS import, React/Next.js 타입 호환성처럼 재사용 가능한 문제는 `kraddr-geo-ui` 전용 workaround에 묻지 않고 upstream PR/커밋으로 보강한다.
-- `kraddr-geo-ui`의 로컬 helper는 운영 디버그 UI를 당장 깨지 않게 하는 bridge다. upstream package가 안정화되면 직접 import로 줄인다.
+- `kraddr-geo-ui`의 로컬 helper는 운영 디버그 UI를 당장 깨지 않게 하는 bridge다. upstream package가 안정 태그 또는 SHA로 고정 가능하고 `npm ci` 직후 Next.js build가 검증되면 직접 import로 줄인다.
 
 ## juso (도로명주소 안내시스템)
 

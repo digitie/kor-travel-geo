@@ -1,12 +1,13 @@
 "use client";
 
 import maplibregl, {
+  type ErrorEvent as MapLibreErrorEvent,
   type Map as MapLibreMap,
   type MapMouseEvent,
   type Marker as MapLibreMarker
 } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
-import { getVWorldRasterStyle, type VWorldLayerType } from "@/lib/vworld";
+import { getVWorldMaxZoom, getVWorldRasterStyle, type VWorldLayerType } from "@/lib/vworld";
 
 export type Coordinate = {
   x: number;
@@ -15,6 +16,13 @@ export type Coordinate = {
 
 const DEFAULT_CENTER = { x: 126.978, y: 37.5665 };
 const DEFAULT_ZOOM = 15;
+const TILE_ERROR_OVERLAY_THRESHOLD = 6;
+
+type MapResourceError = Error & {
+  status?: number;
+  statusText?: string;
+  url?: string;
+};
 
 export function CoordinateMap({
   point,
@@ -50,6 +58,7 @@ function LoadedCoordinateMap({
   const markerRef = useRef<MapLibreMarker | null>(null);
   const onClickRef = useRef<typeof onClick>(onClick);
   const initialCenterRef = useRef(point ?? DEFAULT_CENTER);
+  const transientTileErrorsRef = useRef(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +76,7 @@ function LoadedCoordinateMap({
     const map = new maplibregl.Map({
       center: [initialCenterRef.current.x, initialCenterRef.current.y],
       container,
-      maxZoom: 19,
+      maxZoom: getVWorldMaxZoom(layerType),
       minZoom: 6,
       style: getVWorldRasterStyle(apiKey, layerType),
       zoom: DEFAULT_ZOOM
@@ -75,8 +84,22 @@ function LoadedCoordinateMap({
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
-    const handleLoad = () => setLoaded(true);
-    const handleError = () => setError("지도 로딩 실패");
+    const handleLoad = () => {
+      transientTileErrorsRef.current = 0;
+      setLoaded(true);
+    };
+    const handleError = (event: MapLibreErrorEvent) => {
+      if (isTransientTileError(event)) {
+        transientTileErrorsRef.current += 1;
+        warnMapTileError(event);
+        if (transientTileErrorsRef.current >= TILE_ERROR_OVERLAY_THRESHOLD) {
+          setError("지도 타일 로딩이 불안정합니다");
+        }
+        return;
+      }
+
+      setError("지도 로딩 실패");
+    };
     const handleClick = (event: MapMouseEvent) => {
       onClickRef.current?.({ x: event.lngLat.lng, y: event.lngLat.lat });
     };
@@ -113,8 +136,10 @@ function LoadedCoordinateMap({
       .setLngLat([point.x, point.y])
       .addTo(map);
     map.flyTo({
+      animate: false,
       center: [point.x, point.y],
-      essential: true,
+      duration: 0,
+      essential: false,
       zoom: Math.max(map.getZoom(), DEFAULT_ZOOM)
     });
   }, [loaded, point]);
@@ -129,6 +154,44 @@ function LoadedCoordinateMap({
       ) : null}
     </div>
   );
+}
+
+function isTransientTileError(event: MapLibreErrorEvent): boolean {
+  const error = event.error as MapResourceError;
+  const status = error.status;
+  const message = error.message.toLowerCase();
+  const sourceId = "sourceId" in event ? String(event.sourceId) : "";
+  const url = error.url ?? "";
+
+  return (
+    sourceId === "vworld" ||
+    url.includes("/req/wmts/") ||
+    message.includes("tile") ||
+    message.includes("failed to fetch") ||
+    status === 404 ||
+    status === 408 ||
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  );
+}
+
+function warnMapTileError(event: MapLibreErrorEvent): void {
+  const error = event.error as MapResourceError;
+
+  console.warn("VWorld tile load warning", {
+    message: error.message,
+    sourceId: "sourceId" in event ? event.sourceId : undefined,
+    status: error.status,
+    statusText: error.statusText,
+    url: redactVWorldTileUrl(error.url)
+  });
+}
+
+function redactVWorldTileUrl(url: string | undefined): string | undefined {
+  return url?.replace(/\/req\/wmts\/1\.0\.0\/[^/]+/, "/req/wmts/1.0.0/[redacted]");
 }
 
 function CoordinateFallback({ point, note }: { point: Coordinate | null; note: string }) {

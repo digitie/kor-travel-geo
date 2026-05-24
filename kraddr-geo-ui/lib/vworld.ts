@@ -3,6 +3,8 @@ import type { StyleSpecification } from "maplibre-gl";
 export type VWorldLayerType = "Base" | "gray" | "midnight" | "Hybrid" | "Satellite";
 
 const RASTER_LAYER_TYPES = new Set<VWorldLayerType>(["Base", "gray", "midnight", "Hybrid"]);
+const LIMITED_ZOOM_LAYER_TYPES = new Set<VWorldLayerType>(["Hybrid", "Satellite"]);
+const VWORLD_ATTRIBUTION = "공간정보 오픈플랫폼 브이월드";
 
 export function getVWorldTileUrl(apiKey: string, layerType: VWorldLayerType): string {
   const trimmedKey = apiKey.trim();
@@ -13,18 +15,25 @@ export function getVWorldTileUrl(apiKey: string, layerType: VWorldLayerType): st
   )}/${layerType}/{z}/{y}/{x}.${extension}`;
 }
 
+export function getVWorldMaxZoom(layerType: VWorldLayerType): number {
+  return LIMITED_ZOOM_LAYER_TYPES.has(layerType) ? 18 : 19;
+}
+
 export function getVWorldRasterStyle(
   apiKey: string,
   layerType: VWorldLayerType = "Base"
 ): StyleSpecification {
+  const maxzoom = getVWorldMaxZoom(layerType);
+
   return {
     version: 8,
     sources: {
       vworld: {
         type: "raster",
         tiles: [getVWorldTileUrl(apiKey, layerType)],
+        maxzoom,
         tileSize: 256,
-        attribution: "VWorld"
+        attribution: VWORLD_ATTRIBUTION
       }
     },
     layers: [

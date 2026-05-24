@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #15 리뷰 보강 — VWorld MapLibre 안정화)
+
+**작업**: PR #15 리뷰의 merge condition을 반영했다. 디버그 UI는 VWorld WMTS + MapLibre GL JS 방향을 유지하되, upstream package가 안정화되기 전까지 `maplibre-vworld` GitHub 의존성을 UI 패키지 graph에 올리지 않는 정책으로 정리했다.
+
+**구현 상세**:
+- `maplibre-vworld` 미사용 GitHub 의존성을 `kraddr-geo-ui/package.json`과 lockfile에서 제거했다. upstream 보강은 별도 PR로 진행하고, 안정 태그 또는 SHA에서 install/build가 검증된 뒤 다시 도입한다.
+- `components/vworld/LazyCoordinateMap.tsx`를 추가해 `CoordinateMap`을 `next/dynamic(..., { ssr: false })`로 지연 로딩한다. `/debug/geocode`, `/debug/reverse`는 이 wrapper만 import한다.
+- `CoordinateMap.tsx`에서 VWorld tile fetch 오류를 transient로 분리했다. tile URL은 key가 드러나지 않도록 redaction한 뒤 경고 로그만 남기고, 누적 임계치 이상이거나 tile 외 오류일 때만 overlay를 표시한다.
+- `lib/vworld.ts`에 레이어별 `maxZoom`을 추가했다. `Base`/`gray`/`midnight`는 z19, `Hybrid`/`Satellite`는 z18로 제한한다. attribution 표기도 `공간정보 오픈플랫폼 브이월드`로 보정했다.
+- marker 위치 갱신 시 `flyTo({ animate: false, duration: 0 })`를 사용해 지도 클릭 후 불필요한 애니메이션 되튐을 줄였다.
+
+**문서화**:
+- ADR-020, `docs/frontend-package.md`, `docs/external-apis.md`, `docs/resume.md`, changelog에 dependency 미선언 정책, dynamic import, tile error 처리, zoom 한계, CSP/key 제한 주의사항을 명시했다.
+- PR 리뷰를 놓치지 않도록 `docs/resume.md`의 알려진 함정에 conversation comment와 formal review를 모두 확인하는 루틴을 추가했다.
+
+**검증**:
+- `cd kraddr-geo-ui && npm run lint` → 통과.
+- `cd kraddr-geo-ui && npm run type-check` → 통과.
+- `cd kraddr-geo-ui && npm run test` → 7 files / 18 tests 통과. `CoordinateMap` fallback과 dynamic loading skeleton 테스트를 포함한다.
+- `cd kraddr-geo-ui && npm ci --ignore-scripts` → 통과. `maplibre-vworld` GitHub dependency 없이 cold install을 확인했다.
+- `cd kraddr-geo-ui && npm run build` → 통과. `/debug/geocode`, `/debug/reverse`가 static route로 생성되고 지도 bundle은 dynamic import 경로로 분리된다.
+- `cd kraddr-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과. Next.js/Vitest 경로의 moderate advisory는 잔여다.
+- `cd kraddr-geo-ui && npm run dev -- --hostname 127.0.0.1 --port 3001` 후 `HEAD /debug/reverse` → 200 OK. 서버 렌더 단계에서는 skeleton이 표시되고 지도 bundle은 클라이언트 chunk로 분리됨을 HTML에서 확인했다.
+
 ## 2026-05-25 (디버그 UI 지도 VWorld/MapLibre 전환)
 
 **작업**: 사용자 지시에 따라 `kraddr-geo-ui`의 디버그 지도 방향을 Kakao Maps SDK에서 VWorld WMTS + MapLibre GL JS로 전환했다. 실제 VWorld API key는 저장소에 기록하지 않고, `.env.local`의 `NEXT_PUBLIC_VWORLD_API_KEY`로만 주입하는 정책을 유지했다.

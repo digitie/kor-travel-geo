@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getVWorldRasterStyle, getVWorldTileUrl } from "@/lib/vworld";
+import { getVWorldMaxZoom, getVWorldRasterStyle, getVWorldTileUrl } from "@/lib/vworld";
 
 describe("VWorld MapLibre style", () => {
   it("VWorld WMTS URL은 좌표 타일 placeholder와 API key를 보존한다", () => {
@@ -16,7 +16,8 @@ describe("VWorld MapLibre style", () => {
     const style = getVWorldRasterStyle("sample-key", "gray");
 
     expect(style.sources.vworld).toMatchObject({
-      attribution: "VWorld",
+      attribution: "공간정보 오픈플랫폼 브이월드",
+      maxzoom: 19,
       tileSize: 256,
       type: "raster"
     });
@@ -27,5 +28,13 @@ describe("VWorld MapLibre style", () => {
         type: "raster"
       }
     ]);
+  });
+
+  it("항공사진 계열은 VWorld z18 한계에 맞춘다", () => {
+    expect(getVWorldMaxZoom("Base")).toBe(19);
+    expect(getVWorldMaxZoom("Satellite")).toBe(18);
+    expect(getVWorldRasterStyle("sample-key", "Hybrid").sources.vworld).toMatchObject({
+      maxzoom: 18
+    });
   });
 });
