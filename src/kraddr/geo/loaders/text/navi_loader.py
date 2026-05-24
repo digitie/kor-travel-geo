@@ -149,9 +149,13 @@ def iter_navi_build_rows(
     source_yyyymm: str | None,
     limit: int | None = None,
 ) -> Iterator[NaviBuildingRow]:
-    for index, (line_no, row) in enumerate(iter_pipe_rows(source, min_columns=27)):
-        if limit is not None and index >= limit:
+    yielded = 0
+    for line_no, row in iter_pipe_rows(source, min_columns=27):
+        if not row[23] or not row[24]:
+            continue
+        if limit is not None and yielded >= limit:
             return
+        yielded += 1
         yield parse_navi_build_row(
             row,
             source_name=source.name,
@@ -166,9 +170,13 @@ def iter_navi_entrance_rows(
     source_yyyymm: str | None,
     limit: int | None = None,
 ) -> Iterator[NaviEntranceRow]:
-    for index, (line_no, row) in enumerate(iter_pipe_rows(source, min_columns=10)):
-        if limit is not None and index >= limit:
+    yielded = 0
+    for line_no, row in iter_pipe_rows(source, min_columns=10):
+        if not row[8] or not row[9]:
+            continue
+        if limit is not None and yielded >= limit:
             return
+        yielded += 1
         yield parse_navi_entrance_row(
             row,
             source_name=source.name,
