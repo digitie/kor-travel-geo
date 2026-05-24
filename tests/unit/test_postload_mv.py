@@ -25,3 +25,6 @@ def test_shadow_swap_normalizes_next_index_names() -> None:
 
     assert "normalize_mv_index_names(engine)" in refresh_source
     assert "_rename_mv_next_indexes(conn)" in swap_source
+    assert swap_source.index("DROP MATERIALIZED VIEW mv_geocode_target_old") < swap_source.index(
+        "_rename_mv_next_indexes(conn)"
+    )

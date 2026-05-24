@@ -65,9 +65,9 @@ async def shadow_swap_mv(engine: AsyncEngine) -> None:
         await conn.execute(
             text("ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target")
         )
-        await _rename_mv_next_indexes(conn)
         if current_mv is not None:
             await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_target_old"))
+        await _rename_mv_next_indexes(conn)
         await conn.execute(text("ANALYZE mv_geocode_target"))
 
 
