@@ -164,7 +164,11 @@ CREATE TABLE tl_navi_buld_centroid (
   loaded_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_navi_centroid_geom ON tl_navi_buld_centroid USING GIST (centroid_5179);
+CREATE INDEX idx_navi_centroid_resolve
+  ON tl_navi_buld_centroid (rncode_full, buld_se_cd, buld_mnnm, buld_slno, (left(bjd_cd, 8)));
 ```
+
+2026년 실제 내비게이션용DB의 `bd_mgt_sn`은 25자리이고 도로명주소 한글 정본의 `bd_mgt_sn`은 26자리라 직접 조인하지 않는다. 또한 내비 `bjd_cd`는 리 코드가 `00`인 경우가 많으므로 centroid fallback은 `rncode_full + 건물구분 + 본번/부번 + left(bjd_cd, 8)` 기준으로 대표 centroid를 선택한다.
 
 ### `tl_navi_entrc` — 내비게이션용DB 진입점 (부속 출입구/차량 진입)
 
@@ -356,8 +360,13 @@ SELECT
     ELSE NULL                                          -- 좌표 없음 (응답 시 status='NOT_FOUND' 또는 polygon centroid fallback)
   END AS pt_source
 FROM tl_juso_text j
-LEFT JOIN best_entrc be          ON be.bd_mgt_sn = j.bd_mgt_sn
-LEFT JOIN tl_navi_buld_centroid nc ON nc.bd_mgt_sn = j.bd_mgt_sn
+LEFT JOIN best_entrc be ON be.bd_mgt_sn = j.bd_mgt_sn
+LEFT JOIN best_navi nc
+  ON nc.rncode_full = j.rncode_full
+ AND nc.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+ AND nc.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+ AND nc.buld_slno IS NOT DISTINCT FROM j.buld_slno
+ AND nc.bjd_emd_cd = left(j.bjd_cd, 8)
 WITH DATA;
 
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);

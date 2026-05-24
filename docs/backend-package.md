@@ -570,7 +570,7 @@ async def load_juso_hangul(
 
 현재 구현 범위:
 
-- `match_build_*.txt` → `tl_navi_buld_centroid`: `bd_mgt_sn`이 직접 들어 있으므로 centroid fallback의 안정적인 키로 사용한다. 실제 서울 첫 행 기준 `23~24`가 centroid X/Y, `25~26`이 대표 출입구에 가까운 보조 X/Y다. MV fallback은 `23~24` centroid를 쓴다.
+- `match_build_*.txt` → `tl_navi_buld_centroid`: 원본 `bd_mgt_sn`은 들어 있지만 실제 2026년 파일 기준 25자리이고, 도로명주소 한글 정본의 `bd_mgt_sn`은 26자리라 직접 조인 키로 쓰지 않는다. centroid fallback은 `rncode_full`, 건물구분, 본번/부번, 법정동 읍면동 8자리(`left(bjd_cd, 8)`)로 대표 centroid를 고른다. 내비 파일의 법정동코드는 리 코드가 `00`인 경우가 많으므로 정본의 10자리 법정동과 완전 일치시키면 centroid fallback이 거의 붙지 않는다. 실제 서울 첫 행 기준 `23~24`가 centroid X/Y, `25~26`이 대표 출입구에 가까운 보조 X/Y다. MV fallback은 `23~24` centroid를 쓴다.
 - `match_rs_entrc.txt` → `tl_navi_entrc`: 원본에는 `bd_mgt_sn`이 없고 `sig_cd`, entry no, `rncode_full`, 건물번호, 법정동코드, 진입점 코드, X/Y만 있다. `kind`는 `01→navi`, `02→vehicle`, `03→parcel`, 그 외 `aux`로 보관한다.
 - `match_jibun_*.txt`는 현재 MV/역지오코딩 1차 경로에는 사용하지 않는다. 지번 centroid 보강이 필요해지면 T-016 후속으로 별도 repo 경로에 붙인다.
 
