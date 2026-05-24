@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-23 갱신, by codex)
+## 현재 진척도 (2026-05-25 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ master 브랜치를 문서·repo 설정만 남도록 정리
@@ -41,13 +41,21 @@
 - ✅ PR #12 리뷰 보강 — 업로드 path traversal/크기 제한, 프록시 `/v1` 제한과 스트리밍 전달, React Query retry, EXPLAIN timeout, LoadConsole/Explain/Reverse/Consistency 에러 처리, CI `scripts` import 실패 수정
 - 🟡 PR #13/T-027 계획 보강 — `data/juso` 전체 인벤토리, Docker full-load 실행 금지선, 기준월 분리(`JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`), `PLAN_ONLY=1` preflight, 미지원 자료 후속 태스크를 문서화
 - 🟡 Windows 재설치/새 Codex 세션 복구 문서화 — `docs/windows-reinstall-recovery.md`에 Git/PR handoff, `data/`·`.env` 백업, WSL 복구, Codex `resume`/`fork`/로컬 백업 명령을 정리하고 `CLAUDE.md`/`docs/dev-environment-recovery.md`의 실제 적재 금지선을 동기화
+- 🟡 PR #14/T-027 실제 전체 적재 실행 — WSL ext4 작업 사본 `~/kraddr-geo-data`와 Docker PostGIS(`localhost:15432`)에서 텍스트/NAVI/SHP/MV 적재를 수행
+- ✅ 실제 SHP 17개 시도 × 9개 레이어 재적재 완료 — 153 레이어, 3시간 10분 4초, `tl_spbd_buld_polygon` 10,687,732행, `tl_sprd_intrvl` 16,993,167행, `tl_sprd_rw` 1,482,679행
+- ✅ 실제 SHP natural key 스키마 검증 — `bjd_cd`/건물번호/geometry 전 건 채움, `rds_sig_cd`/`rncode_full` NULL 581건 확인
+- ✅ C4/C5 정합성 SQL 보강 — natural key 중복 polygon 다대다 거리 오염을 막기 위해 nearest polygon 1개만 평가하도록 수정
+- ✅ 실제 smoke test 보강 — psycopg optional filter 타입 추론 오류를 `CAST(:param AS ...)`로 수정하고 geocode/reverse/search/zipcode smoke 통과
+- 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-PR #13은 실제 전체 적재를 바로 실행하지 말고, 먼저 `docs/windows-reinstall-recovery.md`와 `docs/t027-fullload-plan.md`를 확인한 뒤 `PLAN_ONLY=1 bash scripts/fullload_test.sh`로 경로 preflight만 확인한다. 그 다음 Docker 볼륨/로그 경로/중단 기준을 사람 리뷰로 확정한 뒤 전체 적재 실행 여부를 결정한다.
+PR #14 브랜치에서 C4/C5 nearest polygon 보강과 optional filter 캐스팅 보강을 커밋·푸시하고 PR에 실제 전체 적재/정합성/smoke 결과를 코멘트한다. 이어서 가능한 범위의 전체 테스트(`pytest`, `ruff`, 필요 시 `mypy`, `lint-imports`)를 수행한다.
 
-- 현재 로컬 `data/juso`는 도로명주소 한글이 `202603`, 위치정보요약DB/내비게이션용DB가 `202604`라 C10 기준월 불일치가 날 수 있다. 동월 정합성을 보려면 `202604_도로명주소 한글_전체분`을 확보한 뒤 재계획한다.
-- `daily/*.zip`, `jibun_rnaddrkor_*`, `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니다. T-028~T-030으로 분리해 로더/ADR를 먼저 잡는다.
+- 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
+- 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
+- `source_file` 컬럼은 GDAL append 경로에서 전 건 NULL이다. 적재 추적성이 필요하면 후속 PR에서 채움 전략을 설계한다.
+- `daily/*.zip`, `jibun_rnaddrkor_*`, `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니다. T-028~T-031로 분리해 로더/ADR를 먼저 잡는다.
 
 ## 작업 시작 전 확인할 것
 

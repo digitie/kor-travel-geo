@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- 실제 smoke test에서 확인한 PostgreSQL/psycopg optional filter 파라미터 타입 추론 오류를 수정한다. `geocode`, `zipcode`, `pobox` raw SQL의 `:param IS NULL` 필터는 `CAST(:param AS text/integer/boolean)`로 명시한다.
+- T-027 실제 consistency 재검증에서 발견한 C4/C5 다대다 거리 오염을 수정한다. 같은 natural key에 SHP 건물 polygon이 여러 개인 경우 모든 후보와 조인하지 않고, 출입구 또는 내비 centroid에 가장 가까운 polygon 1개만 평가한다.
 - T-027 실제 SHP 적재 검증 중 발견한 GDAL/PostGIS 로더 문제를 보정한다. GDAL 3.8 호환을 위해 CP949는 `SHAPE_ENCODING` config option으로 지정하고, full SHP 적재는 운영 테이블을 한 번 `TRUNCATE`한 뒤 기존 DDL 스키마에 `append`한다. `shp-all --mode full`은 첫 시도만 full, 이후 시도는 append로 전환해 전국 적재분이 시도별 overwrite로 사라지지 않게 한다.
 - T-027 실제 SHP 헤더 기준으로 `TL_SPRD_RW`를 `MULTIPOLYGON 5179` 도로면 polygon으로 바로잡는다. 기존 `MULTILINESTRING` 정의는 2026년 전자지도 실제 파일과 맞지 않아 적재 실패를 유발할 수 있었다.
 - `kraddr-geo init-db`가 이미 대량 데이터가 들어간 DB에서 MV 생성 timeout을 만나도 앞선 schema DDL을 롤백하지 않도록 schema/index/MV statement를 별도 트랜잭션으로 실행하고, 경고 개수를 명시한다.

@@ -22,12 +22,12 @@ SELECT bd_mgt_sn, rncode_full, rn AS road_nm, buld_mnnm, buld_slno, buld_se_cd,
 _LOOKUP_ROAD = text(
     _BASE_SELECT
     + """
- WHERE (:si IS NULL OR si_nm = :si)
-   AND (:sgg IS NULL OR sgg_nm = :sgg)
+ WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
+   AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
    AND rn_nrm = :road_nrm
    AND buld_mnnm = :mnnm
    AND buld_slno = :slno
-   AND (:buld_se_cd IS NULL OR buld_se_cd = :buld_se_cd)
+   AND (CAST(:buld_se_cd AS text) IS NULL OR buld_se_cd = CAST(:buld_se_cd AS text))
  ORDER BY CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END, bd_mgt_sn
  LIMIT 1
 """
@@ -36,9 +36,9 @@ _LOOKUP_ROAD = text(
 _LOOKUP_JIBUN = text(
     _BASE_SELECT
     + """
- WHERE (:si IS NULL OR si_nm = :si)
-   AND (:sgg IS NULL OR sgg_nm = :sgg)
-   AND (:emd IS NULL OR emd_nm = :emd OR li_nm = :emd)
+ WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
+   AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
+   AND (CAST(:emd AS text) IS NULL OR emd_nm = CAST(:emd AS text) OR li_nm = CAST(:emd AS text))
    AND mntn_yn = :mntn_yn
    AND lnbr_mnnm = :mnnm
    AND lnbr_slno = :slno
@@ -51,8 +51,8 @@ _FUZZY_ROADS = text(
     _BASE_SELECT
     + """
        , similarity(rn_nrm, :road_nrm) AS confidence
- WHERE (:si IS NULL OR si_nm = :si)
-   AND (:sgg IS NULL OR sgg_nm = :sgg)
+ WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
+   AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
    AND rn_nrm % :road_nrm
    AND buld_mnnm = :mnnm
  ORDER BY similarity(rn_nrm, :road_nrm) DESC,

@@ -6,7 +6,14 @@ import pytest
 
 from kraddr.geo.api import _jobs
 from kraddr.geo.exceptions import InvalidInputError
-from kraddr.geo.infra import admin_repo, geocode_repo, reverse_repo, search_repo
+from kraddr.geo.infra import (
+    admin_repo,
+    geocode_repo,
+    pobox_repo,
+    reverse_repo,
+    search_repo,
+    zip_repo,
+)
 from kraddr.geo.loaders.consistency import CASE_SQL, DEFAULT_CASES
 
 
@@ -27,6 +34,18 @@ def test_trgm_repos_use_set_local_not_global_threshold() -> None:
     assert "SET LOCAL pg_trgm.similarity_threshold" in geocode_source
     assert "SET LOCAL pg_trgm.similarity_threshold" in search_source
     assert "SET pg_trgm.similarity_threshold" not in geocode_source.replace("SET LOCAL", "")
+
+
+def test_optional_filters_cast_parameters_for_psycopg_type_inference() -> None:
+    geocode_sql = str(geocode_repo._LOOKUP_ROAD)
+    zip_sql = str(zip_repo._ZIP_BY_ADDRESS)
+    pobox_sql = str(pobox_repo._POBOX_SQL)
+
+    assert "CAST(:si AS text) IS NULL" in geocode_sql
+    assert "CAST(:buld_se_cd AS text) IS NULL" in geocode_sql
+    assert "CAST(:mnnm AS integer) IS NULL" in zip_sql
+    assert "CAST(:include_bulk AS boolean)" in str(zip_repo._ZIP_BY_BD)
+    assert "CAST(:query AS text) IS NULL" in pobox_sql
 
 
 def test_reverse_repo_expands_both_address_type() -> None:

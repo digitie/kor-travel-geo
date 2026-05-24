@@ -2,6 +2,69 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #14/T-027 — 실제 전국 SHP 재적재와 정합성 재검증)
+
+**작업**: `data/juso/도로명주소 전자지도` 실제 전국 SHP 17개 시도 × 9개 레이어를 새 natural-key 스키마로 Docker PostGIS에 재적재하고, C1~C10 정합성 검증을 실제 DB에서 재실행했다.
+
+**실행 로그**:
+- 상세 로그: `artifacts/fullload/20260524_173115/execution-log.md` (git ignore 산출물)
+- 환경: WSL2 Ubuntu 24.04, AMD Ryzen 7 7840HS 16 vCPU, 메모리 29GiB, Docker 29.5.2, Python 3.12.3, GDAL 3.8.4
+- DB: `kraddr-geo-t027-db-1`, `localhost:15432`, `kraddr_geo`
+- SHP 재적재 경과: 3시간 10분 4초, exit status 0, 최대 RSS 187,100KB
+- 종료 직후 DB 크기: 24GB
+- 디스크 여유: ext4 약 796GB, C: 약 682GB, F: 약 264GB
+
+**확정 row count**:
+- `tl_scco_ctprvn`: 17
+- `tl_scco_sig`: 255
+- `tl_scco_emd`: 5,067
+- `tl_scco_li`: 15,161
+- `tl_kodis_bas`: 34,516
+- `tl_sprd_manage`: 875,221
+- `tl_sprd_rw`: 1,482,679
+- `tl_sprd_intrvl`: 16,993,167
+- `tl_spbd_buld_polygon`: 10,687,732
+
+**발견한 문제**:
+- `TL_SPBD_BULD` natural key(`rncode_full`, `bjd_cd`, 건물구분, 본번, 부번)는 중복 polygon을 많이 가진다. 같은 natural key에 polygon이 여러 개인 경우 C4/C5가 모든 후보와 다대다 거리값을 만들며 180km급 이상치를 대량 보고했다.
+- `rds_sig_cd`/`rncode_full`이 NULL인 SHP 건물 polygon이 581건 있었다. 나머지 natural-key 컬럼과 geometry는 전 건 채워졌다.
+- `source_file` 컬럼은 현재 GDAL append 경로에서 전 건 NULL이다. 적재 추적성 보강 후보로 남긴다.
+- 대부분 시도 `TL_SPRD_RW.shp`, 일부 `TL_SPBD_BULD.shp`/행정구역 polygon에서 GDAL ring winding order 자동 보정 경고가 반복됐다. 적재는 실패 없이 완료됐다.
+- 실제 smoke test에서 `geocode` SQL의 `:si IS NULL` 선택 필터가 psycopg `AmbiguousParameter`를 일으켰다. PostgreSQL은 `IS NULL`에 먼저 등장한 바인딩 파라미터의 타입을 추론하지 못할 수 있다.
+
+**보강 상세**:
+- C4는 같은 natural key SHP polygon 후보 중 `e.geom <-> p.geom` 기준 가장 가까운 polygon 1개만 평가하도록 `JOIN LATERAL ... LIMIT 1`로 수정했다.
+- C5는 같은 natural key SHP polygon 후보 중 `n.centroid_5179 <-> p.geom` 기준 가장 가까운 polygon 1개만 평가하도록 수정했다.
+- 단위 테스트는 C4/C5가 LATERAL nearest 후보를 사용함을 확인하도록 보강했다.
+- `geocode`, `zipcode`, `pobox` raw SQL의 optional filter는 `CAST(:param AS text/integer/boolean)`로 명시해 psycopg 타입 추론 실패를 막았다.
+
+**정합성 결과**:
+- 1차 재검증: 4분 59.41초, `severity_max=ERROR`
+  - C4: 257,783건, `over_500m=11,649`
+  - C5: 3,277,327건
+- C4/C5 nearest 보강 후 2차 재검증: 6분 27.54초, `severity_max=ERROR`
+  - C1 WARN: 32,531건
+  - C2 ERROR: 34,699건
+  - C3 WARN: 3,510,265건
+  - C4 ERROR: 3,415건, `over_500m=16`, `p95=3.82m`, `p99=15.50m`
+  - C5 WARN: 202건
+  - C6 ERROR: 803건
+  - C7 ERROR: 6,817건
+  - C8 WARN: 24,471건
+  - C9 OK: 0건
+  - C10 OK: 0건
+
+**검증**:
+- `ruff check src/kraddr/geo/loaders/consistency.py tests/unit/test_consistency_sql.py` 통과.
+- `pytest tests/unit/test_consistency_sql.py -q`는 pytest capture 임시파일 `FileNotFoundError`로 테스트 실행 전 실패.
+- `pytest -s tests/unit/test_consistency_sql.py -q` → 2 passed.
+- SHP 9개 테이블 `ANALYZE` → 4.14초, 성공.
+- `ruff check src/kraddr/geo/infra/geocode_repo.py src/kraddr/geo/infra/zip_repo.py src/kraddr/geo/infra/pobox_repo.py tests/unit/test_infra_repo_sql.py` 통과.
+- `pytest -s tests/unit/test_infra_repo_sql.py tests/unit/test_consistency_sql.py -q` → 12 passed.
+- smoke test: `서울특별시 종로구 필운대로 93` geocode OK, reverse OK(10건), search 3건, zipcode OK(3건).
+
+**다음 작업**: C4/C5 nearest 보강을 커밋·푸시하고 PR #14에 실제 전수 적재/정합성 결과를 코멘트한다. 이어서 MV/클라이언트 smoke와 전체 테스트를 가능한 범위까지 수행하고, 남은 C2/C4/C6/C7 원천 데이터 품질 항목은 후속 분석 후보로 분리한다.
+
 ## 2026-05-24 (PR #14/T-027 — 실제 SHP 적재 중 GDAL/PostGIS 스키마 보강)
 
 **작업**: 실제 `data/juso/도로명주소 전자지도`를 Docker PostGIS에 적재하는 과정에서 SHP 로더의 GDAL 옵션, geometry 타입, full-load overwrite 전략 문제를 확인하고 보강했다.

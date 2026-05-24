@@ -16,14 +16,14 @@ _POBOX_SQL = text(
 SELECT zip_no, pobox_kind, pobox_name, pobox_no_mn, pobox_no_sl,
        si_nm, sgg_nm, emd_nm, bjd_cd, count(*) OVER () AS total
   FROM postal_pobox
- WHERE (:kind = 'ALL' OR pobox_kind = :kind)
-   AND (:si_nm IS NULL OR si_nm = :si_nm)
-   AND (:sgg_nm IS NULL OR sgg_nm = :sgg_nm)
+ WHERE (CAST(:kind AS text) = 'ALL' OR pobox_kind = CAST(:kind AS text))
+   AND (CAST(:si_nm AS text) IS NULL OR si_nm = CAST(:si_nm AS text))
+   AND (CAST(:sgg_nm AS text) IS NULL OR sgg_nm = CAST(:sgg_nm AS text))
    AND (
-     :query IS NULL
-     OR pobox_name ILIKE '%' || :query || '%'
-     OR zip_no = :query
-     OR bjd_cd = :query
+     CAST(:query AS text) IS NULL
+     OR pobox_name ILIKE '%' || CAST(:query AS text) || '%'
+     OR zip_no = CAST(:query AS text)
+     OR bjd_cd = CAST(:query AS text)
    )
  ORDER BY zip_no, pobox_kind, pobox_no_mn NULLS LAST
  LIMIT :limit OFFSET :offset

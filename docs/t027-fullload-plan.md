@@ -301,6 +301,81 @@ artifacts/fullload/<run_id>/
 
 `artifacts/`는 git에 커밋하지 않는다. PR에는 요약과 주요 오류 sample만 문서/코멘트로 남긴다.
 
+## PR #14 실제 실행 관찰 결과
+
+2026-05-24~2026-05-25에 `codex/t027-fullload-execution` 브랜치에서 실제 전국 적재를 수행했다. 상세 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있으며, 해당 경로는 git ignore 대상이다.
+
+### 실행 환경
+
+| 항목 | 값 |
+|------|----|
+| 작업 디렉터리 | `/home/digitie/dev/python-kraddr-geo` |
+| 데이터 작업 사본 | `/home/digitie/kraddr-geo-data` |
+| Docker compose project | `kraddr-geo-t027` |
+| PostgreSQL container | `kraddr-geo-t027-db-1` |
+| PostgreSQL port | `15432` |
+| WSL | Ubuntu 24.04, WSL2 |
+| CPU/RAM | AMD Ryzen 7 7840HS 16 vCPU, RAM 약 29GiB |
+| Docker/GDAL/Python | Docker 29.5.2, GDAL 3.8.4, Python 3.12.3 |
+
+### SHP 재적재 결과
+
+- 대상: `도로명주소 전자지도` 17개 시도 × 9개 레이어 = 153 레이어
+- 경과: 3시간 10분 4초
+- 결과: 성공, exit status 0
+- 최대 RSS: 187,100KB
+- 종료 직후 DB 크기: 24GB
+- 종료 직후 디스크 여유: ext4 약 796GB, C: 약 682GB, F: 약 264GB
+
+정확한 row count:
+
+| 테이블 | 건수 |
+|--------|------:|
+| `tl_scco_ctprvn` | 17 |
+| `tl_scco_sig` | 255 |
+| `tl_scco_emd` | 5,067 |
+| `tl_scco_li` | 15,161 |
+| `tl_kodis_bas` | 34,516 |
+| `tl_sprd_manage` | 875,221 |
+| `tl_sprd_rw` | 1,482,679 |
+| `tl_sprd_intrvl` | 16,993,167 |
+| `tl_spbd_buld_polygon` | 10,687,732 |
+
+새 natural-key 컬럼 검증:
+
+- `tl_spbd_buld_polygon.bjd_cd`, 건물구분, 본번, 부번, geometry는 전 건 채워졌다.
+- `rds_sig_cd`/`rncode_full`은 581건이 NULL이었다. 원천 SHP에 도로명 시군구 코드가 비어 있는 건물로 확인되며, natural-key 기반 정합성 해석에서 별도 고려가 필요하다.
+- `tl_sprd_manage.geom`은 875,221건 전부 채워졌다.
+- `source_file`은 현재 GDAL append 경로에서 전 건 NULL이다. 추적성이 필요하면 후속 개선에서 채움 전략을 설계한다.
+
+### consistency 결과
+
+SHP 9개 테이블 `ANALYZE` 후 `kraddr-geo validate consistency --scope full`을 실행했다.
+
+처음 실행에서는 C4/C5가 같은 natural key의 중복 polygon 후보를 모두 조인해 다대다 거리 이상치를 대량 생성했다. 이후 C4/C5를 가장 가까운 polygon 1개만 평가하도록 보강한 뒤 재실행했다.
+
+최종 결과:
+
+| 케이스 | 심각도 | 건수 | 참고 |
+|--------|--------|-----:|------|
+| C1 | WARN | 32,531 | 텍스트에만 있는 natural-key 건 |
+| C2 | ERROR | 34,699 | SHP polygon에만 있는 natural-key 건 |
+| C3 | WARN | 3,510,265 | 위치정보요약DB 직접 출입구 미해소 |
+| C4 | ERROR | 3,415 | 50m 초과, 이 중 500m 초과 16건 |
+| C5 | WARN | 202 | 내비 centroid와 SHP centroid 10m 초과 |
+| C6 | ERROR | 803 | 우편번호 기초구역 polygon 외부 |
+| C7 | ERROR | 6,817 | 행정구역 polygon 외부 |
+| C8 | WARN | 24,471 | 같은 도로명 LineString 100m 밖 |
+| C9 | OK | 0 | PNU 형식 오류 없음 |
+| C10 | OK | 0 | 적재 기준월 리포트 기준 불일치 없음 |
+
+해석:
+
+- C1/C2는 25자리 SHP `BD_MGT_SN`과 26자리 정본 `bd_mgt_sn`을 직접 비교하던 전수 불일치 문제에서 natural-key 비교로 줄었다.
+- C4/C5는 nearest polygon 보강 후 현실적인 규모로 줄었다. C4의 500m 초과 16건은 실제 원천 좌표 또는 잔여 매칭 이상치로 별도 분석 대상이다.
+- C6/C7은 재적재 전후 같은 건수로 남아 있어, 적재 실패보다는 원천 좌표와 polygon 경계 간 데이터 품질 항목으로 분류한다.
+- C8은 `tl_sprd_manage.geom` 기반으로 전환한 뒤 전체 WARN이 아니라 0.84% 수준으로 줄었다.
+
 ## PR #13에서 보강한 계획상 수정점
 
 - 단일 `YYYYMM` 대신 `JUSO_YYYYMM`, `LOCSUM_YYYYMM`, `NAVI_YYYYMM`을 분리한다.

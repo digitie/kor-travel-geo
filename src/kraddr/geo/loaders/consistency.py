@@ -111,15 +111,20 @@ SELECT count(*)::bigint AS count,
 WITH distances AS (
   SELECT j.bd_mgt_sn,
          e.ent_man_no,
-         ST_Distance(e.geom, p.geom) AS dist_m
+         nearest.dist_m
     FROM tl_locsum_entrc e
     JOIN tl_juso_text j ON j.bd_mgt_sn = e.bd_mgt_sn
-    JOIN tl_spbd_buld_polygon p
-      ON p.rncode_full = j.rncode_full
-     AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
-     AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
-     AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
-     AND p.bjd_cd = j.bjd_cd
+    JOIN LATERAL (
+      SELECT ST_Distance(e.geom, p.geom) AS dist_m
+        FROM tl_spbd_buld_polygon p
+       WHERE p.rncode_full = j.rncode_full
+         AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+         AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+         AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
+         AND p.bjd_cd = j.bjd_cd
+       ORDER BY e.geom <-> p.geom
+       LIMIT 1
+    ) nearest ON true
 ),
 stats AS (
   SELECT count(*)::bigint AS total,
@@ -174,7 +179,7 @@ WITH best_navi AS (
 ),
 distances AS (
   SELECT j.bd_mgt_sn,
-         ST_Distance(n.centroid_5179, ST_Centroid(p.geom)) AS dist_m
+         nearest.dist_m
     FROM tl_juso_text j
     JOIN best_navi n
       ON n.rncode_full = j.rncode_full
@@ -182,12 +187,17 @@ distances AS (
      AND n.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
      AND n.buld_slno IS NOT DISTINCT FROM j.buld_slno
      AND n.bjd_emd_cd = left(j.bjd_cd, 8)
-    JOIN tl_spbd_buld_polygon p
-      ON p.rncode_full = j.rncode_full
-     AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
-     AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
-     AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
-     AND p.bjd_cd = j.bjd_cd
+    JOIN LATERAL (
+      SELECT ST_Distance(n.centroid_5179, ST_Centroid(p.geom)) AS dist_m
+        FROM tl_spbd_buld_polygon p
+       WHERE p.rncode_full = j.rncode_full
+         AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+         AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+         AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
+         AND p.bjd_cd = j.bjd_cd
+       ORDER BY n.centroid_5179 <-> p.geom
+       LIMIT 1
+    ) nearest ON true
 ),
 stats AS (
   SELECT count(*)::bigint AS total,
