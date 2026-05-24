@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS tl_sprd_rw (
   sig_cd          TEXT NOT NULL,
   rw_sn           TEXT NOT NULL,
   rds_man_no      TEXT,
-  geom            geometry(MultiLineString, 5179) NOT NULL,
+  geom            geometry(MultiPolygon, 5179) NOT NULL,
   source_file     TEXT,
   source_yyyymm   TEXT,
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),

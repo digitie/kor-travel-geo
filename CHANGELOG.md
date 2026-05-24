@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- T-027 실제 SHP 적재 검증 중 발견한 GDAL/PostGIS 로더 문제를 보정한다. GDAL 3.8 호환을 위해 CP949는 `SHAPE_ENCODING` config option으로 지정하고, full SHP 적재는 운영 테이블을 한 번 `TRUNCATE`한 뒤 기존 DDL 스키마에 `append`한다. `shp-all --mode full`은 첫 시도만 full, 이후 시도는 append로 전환해 전국 적재분이 시도별 overwrite로 사라지지 않게 한다.
+- T-027 실제 SHP 헤더 기준으로 `TL_SPRD_RW`를 `MULTIPOLYGON 5179` 도로면 polygon으로 바로잡는다. 기존 `MULTILINESTRING` 정의는 2026년 전자지도 실제 파일과 맞지 않아 적재 실패를 유발할 수 있었다.
+- `kraddr-geo init-db`가 이미 대량 데이터가 들어간 DB에서 MV 생성 timeout을 만나도 앞선 schema DDL을 롤백하지 않도록 schema/index/MV statement를 별도 트랜잭션으로 실행하고, 경고 개수를 명시한다.
 - T-027 실제 데이터로드 실행 중 발견한 로컬 PostgreSQL 포트 충돌 위험을 줄인다. `docker-compose.yml`은 `KRADDR_DB_PORT`로 외부 포트를 바꿀 수 있고, `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 이 포트를 반영해 DSN을 만든다.
 - PR #12 리뷰 반영: `/v1/admin/upload/sido-zip`의 `sido` path traversal 가능성을 제거하고, `KRADDR_GEO_API_MAX_UPLOAD_BYTES` 초과 시 partial file을 삭제한 뒤 `InvalidInputError(E0100)`로 거절한다.
 - PR #12 리뷰 반영: `kraddr-geo-ui` 프록시는 `/v1/` 하위 경로만 허용하고 `authorization`/`cookie` 등 불필요한 헤더 전달을 차단한다. 업로드 본문은 `arrayBuffer()`로 전체 버퍼링하지 않고 `ReadableStream` + `duplex: "half"`로 백엔드에 전달한다.

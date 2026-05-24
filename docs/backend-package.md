@@ -594,11 +594,15 @@ KIND_MAP = {
 원칙은 ADR-005를 유지:
 
 - `osgeo.gdal.VectorTranslate` in-process
-- `open_options=["ENCODING=CP949"]`
+- GDAL 3.8 Python binding에서는 `VectorTranslateOptions(openOptions=...)`가 허용되지 않으므로 `gdal.config_options({"SHAPE_ENCODING": "CP949"})`로 CP949를 지정한다.
 - `PG_USE_COPY=YES` (`gdal.config_options` 컨텍스트 매니저)
 - 진행률 callback + 협조적 취소
 
-대상은 polygon/폴리라인 9종이다. 문서 초기판의 "polygon 7종" 표현은 `tl_sprd_manage`, `tl_sprd_intrvl`처럼 도형이 없거나 속성 보조 성격인 도로 테이블을 빠뜨린 축약이었다. 구현상 load plan은 다음 9개를 명시한다: `TL_SCCO_CTPRVN`, `TL_SCCO_SIG`, `TL_SCCO_EMD`, `TL_SCCO_LI`, `TL_KODIS_BAS`, `TL_SPRD_MANAGE`, `TL_SPRD_INTRVL`, `TL_SPRD_RW`, `TL_SPBD_BULD`.
+대상은 polygon/도로 보조 9종이다. 문서 초기판의 "polygon 7종" 표현은 `tl_sprd_manage`, `tl_sprd_intrvl`처럼 도형이 없거나 속성 보조 성격인 도로 테이블을 빠뜨린 축약이었다. 구현상 load plan은 다음 9개를 명시한다: `TL_SCCO_CTPRVN`, `TL_SCCO_SIG`, `TL_SCCO_EMD`, `TL_SCCO_LI`, `TL_KODIS_BAS`, `TL_SPRD_MANAGE`, `TL_SPRD_INTRVL`, `TL_SPRD_RW`, `TL_SPBD_BULD`.
+
+2026년 실제 전자지도 파일 기준으로 `TL_SPRD_RW`는 `LineString`이 아니라 `Polygon` 레이어다. 따라서 운영 테이블 `tl_sprd_rw.geom`은 `MULTIPOLYGON 5179`로 둔다. 도로명 인접성 검증(C8)은 출입구 point와 도로면 polygon 사이의 `ST_DWithin`으로 해석한다.
+
+`SQLStatement`에는 JOIN 키와 필요한 속성 컬럼만 alias한다. OGR SQL 결과 레이어는 geometry를 별도 필드로 쓰지 않아도 원본 geometry를 유지하므로 `GEOMETRY AS geom` 같은 가짜 문자열 필드를 만들지 않는다. geometry 컬럼명은 대상 PostgreSQL 테이블의 `geom`과 `GEOMETRY_NAME=geom` 설정으로 맞춘다.
 
 #### `tl_spbd_buld_polygon` 분리 전략
 
@@ -608,13 +612,14 @@ SHP `TL_SPBD_BULD`는 건물 polygon + 속성을 함께 가지지만, 본 사양
 opts = gdal.VectorTranslateOptions(
     format="PostgreSQL",
     layerName="tl_spbd_buld_polygon",
-    SQLStatement="SELECT BD_MGT_SN AS bd_mgt_sn, GEOMETRY AS geom FROM TL_SPBD_BULD",
+    SQLStatement="SELECT BD_MGT_SN AS bd_mgt_sn FROM TL_SPBD_BULD",
     layerCreationOptions=[
         "GEOMETRY_NAME=geom",
         "SPATIAL_INDEX=NONE",  # 별도 GiST 인덱스를 postload에서 생성
     ],
     srcSRS="EPSG:5179", dstSRS="EPSG:5179",
-    accessMode="overwrite",
+    accessMode="append",
+    geometryType="PROMOTE_TO_MULTI",
 )
 ```
 
@@ -625,7 +630,7 @@ postload에서 `CREATE INDEX ON tl_spbd_buld_polygon USING GIST (geom)`.
 원칙:
 
 - `ogr2ogr` subprocess 제거. `osgeo.gdal.VectorTranslate` in-process (ADR-005).
-- CP949 디코딩: `open_options=["ENCODING=CP949"]`.
+- CP949 디코딩: GDAL 3.8 호환을 위해 `gdal.config_options({"SHAPE_ENCODING": "CP949"})` 사용.
 - 진행률 callback: `gdal.VectorTranslate(callback=...)`로 0~1.0 보고 → 작업 큐에 반영.
 - 협조적 취소: callback에서 `cancel_event` 확인, 0 반환 시 GDAL 즉시 중단.
 - ZIP 입력 직접 처리: `_extract_zip`(zip slip 방어), `_find_shp_dir`.

@@ -207,9 +207,9 @@ CREATE INDEX idx_navi_entrc_resolve ON tl_navi_entrc (rncode_full, buld_se_cd, b
 | `tl_spbd_buld_polygon` | `bd_mgt_sn` | MULTIPOLYGON 5179 | 건물 polygon (JOIN key만 공유, 속성은 `tl_juso_text`) |
 | `tl_sprd_manage` | `(sig_cd, rds_man_no)` | 속성 보조 | 도로 관리. 텍스트와 일부 중복이지만 폴리라인 JOIN 키 |
 | `tl_sprd_intrvl` | `(sig_cd, rds_man_no, bsi_int_sn)` | 속성 보조 | 도로 구간 |
-| `tl_sprd_rw` | `(sig_cd, rw_sn)` | MULTILINESTRING 5179 | 도로 폴리라인 |
+| `tl_sprd_rw` | `(sig_cd, rw_sn)` | MULTIPOLYGON 5179 | 도로 폭/도로면 polygon. 2026년 실제 도로명주소 전자지도 `TL_SPRD_RW` SHP 헤더가 `Polygon`이므로 C8 인접성 검증도 도로면 polygon 기준으로 수행한다. |
 
-GDAL 적재는 `gdal.VectorTranslate(..., open_options=["ENCODING=CP949"], PG_USE_COPY="YES")`(ADR-005). 각 polygon 테이블에 GiST 인덱스를 둔다.
+GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY": "YES", "SHAPE_ENCODING": "CP949"})` 조합을 사용한다(ADR-005). GDAL 3.8 Python binding은 `VectorTranslateOptions(openOptions=...)`를 받지 않으므로 CP949 지정은 config option으로 고정한다. 각 polygon 테이블에 GiST 인덱스를 둔다.
 
 ## 정합성 검증 (텍스트 ↔ SHP, ADR-016)
 

@@ -54,20 +54,31 @@ def init_db() -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client.engine is not None
-            async with client.engine.begin() as conn:
-                for sql in iter_sql_statements(SCHEMA_SQL):
+            for sql in iter_sql_statements(SCHEMA_SQL):
+                async with client.engine.begin() as conn:
                     await conn.execute(sa_text(sql))
-                for sql in iter_sql_statements(INDEX_SQL):
-                    try:
+
+            warnings = 0
+            for sql in iter_sql_statements(INDEX_SQL):
+                try:
+                    async with client.engine.begin() as conn:
                         await conn.execute(sa_text(sql))
-                    except Exception as exc:
-                        typer.echo(f"  index warning (may already exist): {exc}")
-                for sql in iter_sql_statements(MV_SQL):
-                    try:
+                except Exception as exc:
+                    warnings += 1
+                    typer.echo(f"  index warning (may already exist): {exc}")
+
+            for sql in iter_sql_statements(MV_SQL):
+                try:
+                    async with client.engine.begin() as conn:
                         await conn.execute(sa_text(sql))
-                    except Exception as exc:
-                        typer.echo(f"  mv warning (may already exist): {exc}")
-        typer.echo("init-db: schema, indexes, and MV created.")
+                except Exception as exc:
+                    warnings += 1
+                    typer.echo(f"  mv warning (may already exist): {exc}")
+
+        if warnings:
+            typer.echo(f"init-db: schema created with {warnings} warning(s).")
+        else:
+            typer.echo("init-db: schema, indexes, and MV created.")
 
     asyncio.run(run())
 
@@ -131,8 +142,12 @@ def load_shp_all_command(
         total = 0
         async with AsyncAddressClient() as client:
             assert client.engine is not None
-            for sido_dir in _sido_dirs(root):
-                count = await load_shp_polygons(client.engine, sido_dir, mode=mode)
+            for index, sido_dir in enumerate(_sido_dirs(root)):
+                count = await load_shp_polygons(
+                    client.engine,
+                    sido_dir,
+                    mode=_shp_mode_for_index(mode, index),
+                )
                 total += count
                 typer.echo(f"{sido_dir.name}: {count} layers")
         typer.echo(f"loaded SHP layers total: {total}")
@@ -229,8 +244,12 @@ def load_all_sidos_command(
             )
             if shp_root is not None:
                 shp_total = 0
-                for sido_dir in _sido_dirs(shp_root):
-                    shp_total += await load_shp_polygons(client.engine, sido_dir, mode="full")
+                for index, sido_dir in enumerate(_sido_dirs(shp_root)):
+                    shp_total += await load_shp_polygons(
+                        client.engine,
+                        sido_dir,
+                        mode=_shp_mode_for_index("full", index),
+                    )
                 typer.echo(f"loaded SHP layers total: {shp_total}")
             if pobox_path is not None:
                 count = await load_pobox(client.engine, pobox_path)
@@ -333,3 +352,9 @@ def _sido_dirs(root: Path) -> tuple[Path, ...]:
         typer.echo(f"no sido directories found: {root}", err=True)
         raise typer.Exit(2)
     return dirs
+
+
+def _shp_mode_for_index(requested_mode: str, index: int) -> str:
+    if requested_mode == "full" and index > 0:
+        return "append"
+    return requested_mode
