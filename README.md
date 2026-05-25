@@ -59,7 +59,7 @@ npm run gen:types        # 백엔드 openapi.json → TypeScript 타입 생성
 npm run dev              # http://localhost:3000
 ```
 
-운영 콘솔은 `/debug/geocode`로 바로 진입한다. `NEXT_PUBLIC_KAKAO_JS_KEY`가 없으면 지도 영역은 좌표 프리뷰로 대체되며, 백엔드 API는 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시한다.
+운영 콘솔은 `/debug/geocode`로 바로 진입한다. `NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 영역은 좌표 프리뷰로 대체되며, 백엔드 API는 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시한다.
 
 ## 진입점
 
@@ -127,18 +127,20 @@ asyncio.run(main())
 | 서비스 | 환경변수 | 용도 |
 |--------|---------|------|
 | vworld | `KRADDR_GEO_VWORLD_API_KEY` | 지오코딩 폴백, 통합 검색 |
+| vworld WMTS | `NEXT_PUBLIC_VWORLD_API_KEY` (frontend) | 디버그/관리 UI 지도 |
 | juso 검색 | `KRADDR_GEO_JUSO_API_KEY` | 도로명/지번 검색 폴백 |
 | juso 좌표 | `KRADDR_GEO_JUSO_COORD_API_KEY` (없으면 위 키 재사용) | 좌표 변환 폴백 |
 | epost | `KRADDR_GEO_EPOST_API_KEY` | 사서함·다량배달처 ZIP 자동 다운로드 |
-| Kakao Maps JS | `NEXT_PUBLIC_KAKAO_JS_KEY` (frontend) | 디버그/관리 UI 지도 |
 
 ## 법적·데이터 사용 한계
 
-이 저장소의 MIT 라이선스는 저장소에 포함된 소스 코드와 문서에만 적용된다. 도로명주소 전자지도, juso, epost, vworld, Kakao Maps 등 외부 원천 데이터와 API 응답은 각 제공 기관의 이용약관·저작권·재배포 조건을 따른다.
+이 저장소의 MIT 라이선스는 저장소에 포함된 소스 코드와 문서에만 적용된다. 도로명주소 전자지도, juso, epost, vworld 등 외부 원천 데이터와 API 응답은 각 제공 기관의 이용약관·저작권·재배포 조건을 따른다.
 
 - 원천 ZIP/SHP/TXT, 외부 API 응답 캐시, 내려받은 우편번호 파일은 이 저장소에 커밋하지 않는다.
-- 운영자는 도로명주소 안내시스템, 공공데이터포털, vworld, Kakao Developers의 최신 약관과 호출 한도를 직접 확인해야 한다.
+- 운영자는 도로명주소 안내시스템, 공공데이터포털, vworld의 최신 약관과 호출 한도를 직접 확인해야 한다.
 - 본 패키지는 주소 정규화·지오코딩을 돕는 기술 도구이며, 토지·건축물·행정구역 경계의 법적 효력이나 공적 증명을 보장하지 않는다. 법적 판단이 필요한 업무는 해당 기관의 공식 공부와 고시를 기준으로 검증한다.
+
+디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 검증된 GitHub SHA를 package dependency로 소비하며, 공통 wrapper 또는 패키징 문제가 나오면 이 저장소에서만 우회하지 않고 upstream도 적극 수정 대상에 포함한다.
 
 ## 기여
 
@@ -157,7 +159,7 @@ asyncio.run(main())
 - [`docs/backend-package.md`](docs/backend-package.md) — `python-kraddr-geo` 백엔드 사양서 (`kraddr.geo` 패키지)
 - [`docs/frontend-package.md`](docs/frontend-package.md) — `kraddr-geo-ui` 프론트엔드 사양서
 - [`docs/agent-guide.md`](docs/agent-guide.md) — AI 에이전트 작업·문서화 가이드
-- [`docs/external-apis.md`](docs/external-apis.md) — vworld/juso/epost/kakao 발급·호출
+- [`docs/external-apis.md`](docs/external-apis.md) — vworld/juso/epost 발급·호출
 - [`docs/dev-environment.md`](docs/dev-environment.md), [`docs/dev-environment-recovery.md`](docs/dev-environment-recovery.md), [`docs/windows-reinstall-recovery.md`](docs/windows-reinstall-recovery.md) — WSL 개발 환경과 Windows 재설치 후 복구 절차
 - [`docs/tasks.md`](docs/tasks.md), [`docs/resume.md`](docs/resume.md), [`docs/journal.md`](docs/journal.md) — 백로그·진척도·작업 일지
 - [`docs/address-db-schema.md`](docs/address-db-schema.md), [`docs/geocoding-readiness.md`](docs/geocoding-readiness.md), [`docs/reverse-geocoding.md`](docs/reverse-geocoding.md), [`docs/spatialite-vworld-implementation.md`](docs/spatialite-vworld-implementation.md) — 주제별 요약

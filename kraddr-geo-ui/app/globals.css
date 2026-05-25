@@ -1,3 +1,5 @@
+@import "maplibre-vworld/style.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -273,12 +275,50 @@ textarea {
   padding: 18px;
 }
 
-.kakao-map {
+.vworld-map-shell {
   border: 1px solid var(--line);
   border-radius: 8px;
   height: 260px;
   overflow: hidden;
+  position: relative;
   width: 100%;
+}
+
+.vworld-map {
+  height: 100%;
+  width: 100%;
+}
+
+.vworld-map-overlay {
+  align-items: center;
+  background: rgb(255 255 255 / 82%);
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.vworld-map-overlay span {
+  justify-self: center;
+}
+
+.vworld-map-skeleton {
+  align-items: center;
+  background:
+    linear-gradient(90deg, rgb(15 118 110 / 8%) 1px, transparent 1px),
+    linear-gradient(rgb(29 78 216 / 8%) 1px, transparent 1px),
+    #f3f6fa;
+  background-size: 32px 32px;
+  color: var(--muted);
+  display: grid;
+  font-size: 13px;
+  justify-items: center;
+}
+
+.vworld-map .maplibregl-ctrl-attrib {
+  font-size: 10px;
 }
 
 .map-marker {

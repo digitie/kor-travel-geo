@@ -31,7 +31,7 @@
 - ✅ T-020 OpenAPI export 구현 — `scripts/export_openapi.py`, committed `openapi.json`, `.github/workflows/openapi.yml` drift 검사
 - ✅ PR #11 후속 반영 — `full_load_batch` REST/라이브러리 공유 DAG 경로 확인, enqueue 전 child payload fail-fast 검증, PR 코멘트용 검증 근거 정리
 - ✅ PR #12 기반 보강 — PR #11을 main에 머지하고, 후속 의견은 PR #12로 이관
-- ✅ T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩 — Next.js 16 + React 18 + Tailwind + TanStack Query + `react-kakao-maps-sdk`
+- ✅ T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩 — Next.js 16 + React 18 + Tailwind + TanStack Query. 지도는 MapLibre GL JS + VWorld WMTS를 사용하며, `digitie/maplibre-vworld-js` 문제도 적극 수정 대상으로 둔다.
 - ✅ T-022 디버그 페이지 구현 — `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain`
 - ✅ T-023 관리 페이지 구현 — `/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs`
 - ✅ T-024 품질 게이트 추가 — 루트 `pre-commit`, 통합 CI, frontend `gen:types` drift 검사, lint/type/test/build
@@ -39,6 +39,7 @@
 - ✅ T-026 정합성 UI 구현 — `/admin/consistency`에서 C1~C10 report 목록·상세·재검증 enqueue 확인
 - ✅ FastAPI admin 보강 — `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`
 - ✅ PR #12 리뷰 보강 — 업로드 path traversal/크기 제한, 프록시 `/v1` 제한과 스트리밍 전달, React Query retry, EXPLAIN timeout, LoadConsole/Explain/Reverse/Consistency 에러 처리, CI `scripts` import 실패 수정
+- ✅ PR #15 리베이스/리뷰 보강 — PR #14 merge 이후 최신 `main` 위로 rebase하고, `maplibre-vworld`를 upstream main commit `a5b3c65`로 고정해 helper/CSS를 실제 package에서 소비한다. `CoordinateMap`의 dynamic import/SSR 차단, VWorld tile transient error 처리, skeleton/fallback 테스트는 유지하고, `VWorldMap` 컴포넌트 전체 대체는 click/fallback/error overlay 동작을 맞추는 후속 PR로 분리한다.
 - 🟡 PR #13/T-027 계획 보강 — `data/juso` 전체 인벤토리, Docker full-load 실행 금지선, 기준월 분리(`JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`), `PLAN_ONLY=1` preflight, 미지원 자료 후속 태스크를 문서화
 - 🟡 Windows 재설치/새 Codex 세션 복구 문서화 — `docs/windows-reinstall-recovery.md`에 Git/PR handoff, `data/`·`.env` 백업, WSL 복구, Codex `resume`/`fork`/로컬 백업 명령을 정리하고 `CLAUDE.md`/`docs/dev-environment-recovery.md`의 실제 적재 금지선을 동기화
 - 🟡 PR #14/T-027 실제 전체 적재 실행 — WSL ext4 작업 사본 `~/kraddr-geo-data`와 Docker PostGIS(`localhost:15432`)에서 텍스트/NAVI/SHP/MV 적재를 수행
@@ -53,7 +54,7 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-PR #14 추가 리뷰 반영 커밋을 푸시한 뒤 PR에 N1/N2, L1~L6, C2/C4/C6/C7 반영 내역과 검증 결과를 코멘트한다. 이 PR은 close 예정이므로 남은 실제 데이터 품질 분석과 sample 지도 확인, `source_file` 추적성 보강은 별도 후속 PR에서 진행한다.
+PR #15 rebase/update를 완료한 뒤 PR에 PR #14 merge 반영, `maplibre-vworld-js` upstream main `a5b3c65` 소비, 검증 결과를 코멘트한다. 이어서 별도 후속 PR에서 `kraddr-geo-ui`의 VWorld 디버그 지도 동작과 `maplibre-vworld-js`의 공통 컴포넌트 동작을 항목별로 맞춘다. 바로 전체 컴포넌트를 교체하지 말고 click callback, marker 제어, tile error hook/redaction, key 미설정 fallback, SSR-safe wrapper를 각각 비교한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
@@ -65,7 +66,7 @@ PR #14 추가 리뷰 반영 커밋을 푸시한 뒤 PR에 N1/N2, L1~L6, C2/C4/C6
 - [ ] `AGENTS.md`의 "식별자" 표와 "개발 환경 정책" 다시 읽기
 - [ ] `SKILL.md` §4 "DO NOT" 룰 다시 읽기
 - [ ] `docs/architecture.md`의 의존 방향 확인
-- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-019 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마, ADR-019 Next.js 16 보안 하한선)
+- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-020 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마, ADR-019 Next.js 16 보안 하한선, ADR-020 VWorld MapLibre 지도)
 - [ ] 마지막 `docs/journal.md` 엔트리 읽기
 - [ ] Windows 재설치/새 Codex 세션에서 이어받는 경우 `docs/windows-reinstall-recovery.md` 읽기
 - [ ] NTFS의 `data/` 디렉토리가 준비되어 있고 ext4에서 심볼릭 링크 또는 절대경로로 접근 가능한지
@@ -86,6 +87,8 @@ PR #14 추가 리뷰 반영 커밋을 푸시한 뒤 PR에 N1/N2, L1~L6, C2/C4/C6
 - **실제 DB 적재 검증**: 로컬 PostGIS가 준비되어 있으면 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q`로 실제 `data/juso` 샘플 COPY와 MV 생성을 확인한다.
 - **프론트엔드 TypeScript 캐시**: `kraddr-geo-ui/tsconfig.tsbuildinfo`는 생성물이다. `.gitignore` 대상이며 PR에 포함하지 않는다.
 - **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
+- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정되어 있고 `dist`/`exports`/`types`/`style.css`가 포함됨을 확인했다. SHA를 바꾸면 `npm ci`/`type-check`/`test`/Next.js build를 다시 확인한다. `VWorldMap` 컴포넌트 전체 대체는 click callback, key 미설정 fallback, transient tile error redaction/overlay, SSR-safe wrapper 동작을 upstream과 맞추는 후속 PR에서 진행한다.
+- **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
 
 ## 작업 후 의무사항
 

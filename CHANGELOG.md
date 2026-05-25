@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #15 rebase 반영: PR #14 merge 이후 `codex/maplibre-vworld-ui`를 최신 `main` 위로 올리고, `maplibre-vworld`를 upstream main commit `a5b3c65` GitHub SHA로 고정해 실제 helper/CSS package를 소비한다. zod v4 peer dependency도 `kraddr-geo-ui`에서 직접 맞춘다.
+- PR #15 리뷰 반영: VWorld MapLibre 지도는 `next/dynamic(..., { ssr: false })` wrapper로 지연 로딩하고 skeleton을 제공해 SSR/WebGL 충돌과 초기 번들 비대를 줄인다.
+- PR #15 리뷰 반영: VWorld tile fetch 오류를 transient로 분리해 즉시 fatal overlay로 고정하지 않고, redacted warning과 누적 임계치로 처리한다. `Hybrid`/`Satellite`는 z18 maxZoom을 적용한다.
 - PR #14 추가 리뷰 반영: `tl_sprd_rw`에 기존 `MULTILINESTRING` row가 있는 DB에서도 `0002_t027_shp_schema_fixups`가 중단되지 않도록 non-polygon row 감지 시 `tl_sprd_rw`를 비운 뒤 `MULTIPOLYGON` 타입으로 전환한다.
 - PR #14 Low 항목 보강: MV shadow swap 인덱스 rename을 live catalog 기반으로 유도하고, locsum staging 중복 선택 순서를 `ctid` 대신 `staging_seq`로 안정화한다. Navi loader는 EPSG:5179 좌표가 `0`인 sentinel row를 skip하며, GDAL PostgreSQL conninfo에는 기본 `connect_timeout=10`을 넣는다.
 - PR #14 C2/C4/C6/C7 재검토: C2 리포트 metric에 `missing_resolve_key`와 `missing_text`를 분리해 남은 오류 원인 분석이 가능하게 하고, C4 `error_count`는 500m 초과 건수로 명시한다. C6/C7은 polygon 경계 위 점을 오탐하지 않도록 `ST_Contains` 대신 `ST_Covers`를 사용한다.
@@ -41,15 +44,16 @@
 - base 예외명을 `KraddrGeoError`로 확정하고, `kraddr` parent package는 PEP 420 implicit namespace로 둔다.
 - **(BREAKING)** 라이브러리 진입점을 동기 `SpatialiteAddressStore`에서 비동기 `AsyncAddressClient`로 교체한다. 동기 호출이 필요하면 호출자가 `asyncio.run`으로 감싼다.
 - 응답 구조를 vworld와 호환되도록 정렬하고 자체 필드는 `x_extension` 네임스페이스로 격리한다.
-- 디버그/관리 UI를 monorepo 내부의 `debug-ui/` 대신 별도 Node.js 패키지 `kraddr-geo-ui`(Next.js 16 + Tailwind + react-kakao-maps-sdk)로 분리한다.
+- 디버그/관리 UI를 monorepo 내부의 `debug-ui/` 대신 별도 Node.js 패키지 `kraddr-geo-ui`(Next.js 16 + Tailwind + MapLibre GL JS + VWorld WMTS)로 분리한다.
 - 디버그/관리 UI는 내부망 전용으로 운영하며 애플리케이션 인증을 두지 않는다(ADR-013).
+- 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
 - Windows 재설치·새 Codex 세션 복구 문서를 추가한다. `docs/windows-reinstall-recovery.md`는 Git/PR handoff, `data/`·`.env` 백업, WSL/GDAL 복구, Codex `resume`/`fork`/로컬 백업 명령, PR #13의 실행 금지선을 정리한다. `CLAUDE.md`와 `docs/dev-environment-recovery.md`도 실제 전체 적재는 사용자 명시 후에만 실행하도록 맞춘다.
 - PR #13/T-027 계획 보강: Docker PostGIS 기반 실제 `data/juso` 전체 적재 검증 계획서를 실행 전 리뷰 가능한 수준으로 확장하고, `PLAN_ONLY=1` preflight를 지원하는 `scripts/fullload_test.sh`를 정리한다. 실제 전체 적재 실행은 아직 수행하지 않는다.
 - T-021~T-026 구현: `kraddr-geo-ui` Next.js 16 패키지, 디버그 페이지(`/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain`), 관리 페이지(`/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs`, `/admin/consistency`)를 추가한다.
 - `kraddr-geo-ui`는 `openapi.json`에서 `types/api.gen.ts`와 `lib/schemas.gen.ts`를 생성하는 `npm run gen:types`를 제공한다. CI는 생성 결과 drift가 있으면 실패한다.
-- `react-kakao-maps-sdk` 기반 좌표 지도 컴포넌트를 추가한다. `NEXT_PUBLIC_KAKAO_JS_KEY`가 없거나 지도 로딩에 실패하면 좌표 프리뷰로 대체되어 내부망/CI 환경에서도 화면이 깨지지 않는다.
+- MapLibre GL JS + VWorld WMTS 기반 좌표 지도 컴포넌트를 추가한다. `NEXT_PUBLIC_VWORLD_API_KEY`가 없거나 지도 로딩에 실패하면 좌표 프리뷰로 대체되어 내부망/CI 환경에서도 화면이 깨지지 않는다.
 - FastAPI admin 표면을 확장한다. `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`를 추가하고 `AsyncAddressClient`에도 같은 조회 메서드를 연결한다.
 - `/metrics` Prometheus endpoint를 추가한다. 외부 API 호출 결과, `geo_cache` entries/hits/expired, `load_jobs` kind/state 분포를 노출하며, `prometheus-client`가 없는 library-only 환경에서는 no-op fallback으로 동작한다.
 - 루트 `.pre-commit-config.yaml`과 `.github/workflows/ci.yml`을 추가한다. 백엔드는 `ruff check`, `mypy`, `lint-imports`, `pytest`; 프론트엔드는 `npm ci`, `gen:types`, `lint`, `type-check`, `test`, `build`를 수행한다.
@@ -65,7 +69,7 @@
 - 실제 `data/juso` 기반 검증 테스트를 추가한다. 도로명주소 한글 서울 파일, 위치정보요약DB ZIP member, 내비게이션용DB 서울 파일, 강원 SHP load plan을 직접 읽어 컬럼 인덱스·좌표·PNU 매핑을 검증한다.
 - 선택형 실제 PostgreSQL 적재 테스트를 추가한다. `KRADDR_GEO_TEST_PG_DSN`이 설정되면 DDL 적용 → 실제 파일 샘플 COPY 적재 → 위치정보↔텍스트 링크 해소 → `mv_geocode_target` 생성까지 실행한다.
 - 문서 구조에 `SKILL.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/data-model.md`, `docs/tasks.md`, `docs/resume.md`, `docs/journal.md`를 도입한다.
-- 외부 REST API(vworld, juso, epost, kakao maps)의 발급 절차와 호출 정책을 `docs/external-apis.md`로 정리한다.
+- 외부 REST API와 프론트엔드 지도(vworld, juso, epost)의 발급 절차와 호출 정책을 `docs/external-apis.md`로 정리한다.
 - 시도별 ZIP 업로드와 작업 큐 기반 직렬 적재 워크플로(`/v1/admin/upload/sido-zip`, `/v1/admin/loads`)를 사양으로 명시한다.
 - `pyproject.toml`, `.env.example`, `Settings`, 기본 패키지 스캐폴드, 공통/주소 DTO와 단위 테스트를 추가한다.
 - `docs/dev-environment.md`를 추가하고 시스템 GDAL(`libgdal-dev`) 설치 + `pip install "gdal==$(gdal-config --version)"` 절차를 ADR-008로 명시한다.
