@@ -87,6 +87,7 @@ src/kraddr/geo/
 | 응답 필드 추가 (자체 확장) | `dto/<name>.py`의 `*Extension` 클래스 |
 | 새 에러 코드 추가 | `exceptions.py` + `api/responses.py` 매핑 |
 | 외부 API 폴백 호출 | `httpx.AsyncClient` + `tenacity` 재시도. 키는 `Settings`에서 `SecretStr`로 |
+| PR 리뷰 반영 | `docs/agent-guide.md` §B4.3. `gh pr view comments`만 보지 말고 `reviews[].body`, `review_threads[]`, 마지막 conversation comment를 모두 확인 |
 
 ## 6. 도메인 어휘
 

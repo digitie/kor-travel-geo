@@ -27,7 +27,8 @@ set -euo pipefail
 NTFS_DATA="${NTFS_DATA:-/mnt/f/dev/python-kraddr-geo/data}"
 EXT4_DATA="${EXT4_DATA:-$HOME/kraddr-geo-data}"
 DATA_DIR="${DATA_DIR:-$EXT4_DATA}"
-PG_DSN="${KRADDR_GEO_PG_DSN:-postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo}"
+DB_PORT="${KRADDR_GEO_DB_PORT:-5432}"
+PG_DSN="${KRADDR_GEO_PG_DSN:-postgresql+psycopg://addr:addr@localhost:${DB_PORT}/kraddr_geo}"
 JUSO_YYYYMM="${JUSO_YYYYMM:-${YYYYMM:-202603}}"
 LOCSUM_YYYYMM="${LOCSUM_YYYYMM:-${YYYYMM:-202604}}"
 NAVI_YYYYMM="${NAVI_YYYYMM:-${YYYYMM:-202604}}"
@@ -37,6 +38,7 @@ COPY_DATA="${COPY_DATA:-0}"
 export KRADDR_GEO_PG_DSN="$PG_DSN"
 export KRADDR_GEO_LOADER_DATA_DIR="$DATA_DIR"
 export KRADDR_GEO_LOADER_BATCH_SIZE="${BATCH_SIZE:-10000}"
+export KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS="${KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS:-1800000}"
 
 log() {
   printf '\n[%s] %s\n' "$(date -Is)" "$*"

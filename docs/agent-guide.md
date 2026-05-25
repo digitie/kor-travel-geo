@@ -145,7 +145,28 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
           └─→ [커밋] [scope] verb: object (#issue-id)
 ```
 
-### B4.3 컨텍스트 손실 시뮬레이션
+### B4.3 PR 리뷰 확인 프로토콜
+
+PR 리뷰를 반영할 때는 GitHub의 "Conversation comment", "Review body", "Inline review thread"가 서로 다른 표면이라는 점을 전제로 한다. `gh pr view --json comments`만 보면 정식 review body(`latestReviews`/`reviews`)나 inline thread를 놓칠 수 있다. 특히 리뷰 제목이 `# PR #NN 리뷰 — ...` 형태로 review body에 들어간 경우 conversation comment 목록에는 보이지 않는다.
+
+필수 절차:
+
+1. PR 번호와 head branch를 확인한다.
+   ```bash
+   gh pr view <PR_NUMBER> --json number,title,url,state,headRefName,baseRefName,reviewDecision,statusCheckRollup
+   ```
+2. thread-aware 스크립트로 세 표면을 한 번에 저장한다.
+   ```bash
+   python3 /mnt/c/Users/digit/.codex/plugins/cache/openai-curated/github/0d4f5414/skills/gh-address-comments/scripts/fetch_comments.py > /tmp/pr-comments.json
+   ```
+3. `conversation_comments`, `reviews[].body`, `review_threads[]`를 모두 읽는다. 리뷰 본문 첫 줄, 예를 들어 `# PR #14 리뷰 — T-027 actual full-load execution fixes` 같은 제목도 별도 항목으로 체크한다.
+4. 항목을 `High`, `Medium`, `Low`, `Optional`, `설명만 필요`로 분류하고, 반영 여부를 `docs/journal.md` 또는 PR 코멘트에 남긴다.
+5. `review_threads`가 비어 있어도 review body의 H/M/L 섹션은 actionable일 수 있다. "thread 없음"은 "리뷰 없음"이 아니다.
+6. 마지막 conversation comment도 별도로 확인한다. 본문 리뷰 뒤에 후속 Optional 제안이 붙을 수 있다.
+
+반영 후 PR에 남길 요약은 "어떤 리뷰 항목을 코드로 반영했는지", "문서만 보강한 항목", "후속으로 이관한 항목", "검증 명령"을 분리해 쓴다.
+
+### B4.4 컨텍스트 손실 시뮬레이션
 
 주기적으로(예: 매주 금요일):
 

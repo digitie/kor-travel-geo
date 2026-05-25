@@ -2,6 +2,179 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #14 추가 리뷰 반영 — L1~L6, C2/C4/C6/C7 재검토)
+
+**작업**: PR #14의 최종 리뷰 body와 thread-aware review fetch 결과를 다시 확인했다. unresolved inline thread는 없었고, 추가 반영 대상은 N1/N2와 가능하면 L1~L6, C2/C4/C6/C7 재검토였다.
+
+**반영 상세**:
+- N1: `0002_t027_shp_schema_fixups`가 기존 `tl_sprd_rw`의 `MULTILINESTRING` row 때문에 `MULTIPOLYGON` cast에서 실패하지 않도록, non-polygon row가 있으면 `tl_sprd_rw`를 먼저 `TRUNCATE`하고 타입을 변경한다. recovery/fullload 문서에도 이 destructive-but-required 동작과 이후 SHP full reset 필요성을 명시했다.
+- N2/L1: MV shadow swap 인덱스 rename은 `MV_NEXT_INDEX_RENAMES` 고정 목록이 아니라 `pg_index`/`pg_class` live catalog에서 `idx_mv_next_%`를 조회해 target name을 유도한다. stale 운영 인덱스가 있어 새 next index를 drop하는 경우에는 `logging.warning`과 `warnings.warn`을 모두 남긴다.
+- L2: `copy_locsum_rows()` staging 중복 제거의 tie-breaker를 `ctid`에서 temp `staging_seq BIGSERIAL`로 바꿨다. 같은 staging batch 안에서 마지막으로 copy된 row가 명시적으로 선택된다.
+- L3: navi build/entrance loader가 빈 좌표뿐 아니라 `0`/`0.0` sentinel 좌표도 skip한다. EPSG:5179에서 원점 좌표는 한국 주소 데이터로 볼 수 없으므로 실제 적재 오염을 막는다.
+- L5/L6: `shp-all --mode full`의 첫 시도 full, 이후 append 시퀀스를 helper와 테스트로 분리했다. GDAL PostgreSQL conninfo에는 기본 `connect_timeout=10`을 추가하고 URL query의 `connect_timeout`을 존중한다.
+- C2/C4/C6/C7: C2 metric에 `missing_resolve_key`와 `missing_text`를 분리해 남은 `ERROR`의 성격을 후속 분석할 수 있게 했다. C4 metric은 `error_count=over_500m`를 명시한다. C6/C7은 경계 위 point를 false positive로 보지 않도록 `ST_Contains`에서 `ST_Covers`로 바꿨다.
+
+**검증**:
+- 대상 단위 테스트 20개 → 통과.
+- `pytest -q` → 84 passed, 7 skipped.
+- `ruff check .` → 통과.
+- `mypy src/kraddr/geo` → 통과.
+- `lint-imports` → Layered architecture kept.
+- `bash -n scripts/fullload_test.sh` → 통과.
+- 실제 T-027 Docker DB(`localhost:15432`)에서 C2/C4/C6/C7만 선택 재검증했다. 경과 3분 53.82초, 최대 RSS 80,076KB, `severity_max=ERROR`.
+  - C2: 34,699건 유지. 새 metric은 `missing_text=34,118`, `missing_resolve_key=581`.
+  - C4: 3,415건 유지. `over_500m=16`, `error_count=16`, `p95=3.82m`, `p99=15.50m`.
+  - C6: 803건 유지. `ST_Covers` 전환 후에도 `outside_polygon=803`.
+  - C7: 6,817건 유지. `ST_Covers` 전환 후에도 `outside_polygon=6,817`.
+
+**다음 작업**: PR #14는 close 예정이므로 C2/C4/C6/C7의 원천 데이터 품질 분석, sample별 지도 확인, source_file 추적성 보강은 후속 PR에서 진행한다.
+
+## 2026-05-25 (PR #14 리뷰 반영 — schema migration, SHP natural key, 리뷰 확인 프로토콜)
+
+**작업**: PR #14의 정식 review body(`# PR #14 리뷰 — T-027 actual full-load execution fixes`)와 마지막 Optional conversation comment를 모두 확인하고 반영했다.
+
+**반영 상세**:
+- H1: `alembic/versions/0002_t027_shp_schema_fixups.py`를 추가했다. 기존 DB에 `tl_spbd_buld_polygon` natural key 컬럼, `tl_sprd_manage.geom`, `tl_sprd_rw.geom` `MULTIPOLYGON` 타입 변경을 적용한다.
+- H2: `tl_spbd_buld_polygon.bjd_cd` generated column은 `LI_CD=''`를 `00`으로 보정하고, `rncode_full`은 빈 문자열을 NULL로 취급하도록 `SCHEMA_SQL`과 `sql/ddl/001_schema.sql`을 수정했다.
+- M1: stale 운영 MV index가 남아 있어 새 `idx_mv_next_*`를 drop하는 복구 경로에서 `warnings.warn`을 남기도록 했다.
+- M2: SHP full reset은 `TRUNCATE` 직전 대상 테이블별 approximate row count snapshot을 출력한다. 문서에는 full mode 중단 시 9개 SHP 테이블이 비거나 일부만 적재된 상태일 수 있음을 명시했다.
+- M3/L7: 내비 loader의 `limit`은 좌표 결측 skip 이후 yield row 기준임을 docstring으로 명시하고, C4 SQL에는 `resolve_text_geometry_links()` 선행 의존성을 주석으로 남겼다.
+- Optional: Docker 포트 환경변수를 저장소 prefix 규칙에 맞춰 `KRADDR_DB_PORT`에서 `KRADDR_GEO_DB_PORT`로 변경했다.
+- 반복 방지: `docs/agent-guide.md`에 PR 리뷰 확인 프로토콜을 추가했다. 앞으로 PR 리뷰 반영 시 conversation comments뿐 아니라 `reviews[].body`와 `review_threads[]`를 반드시 확인한다.
+
+**검증**:
+- `pytest tests/unit/test_alembic_migrations.py tests/unit/test_infra_engine_pnu_sql.py tests/unit/test_shp_loader_gdal.py tests/unit/test_postload_mv.py tests/unit/test_navi_loader.py tests/unit/test_consistency_sql.py -q` → 17 passed.
+- `ruff check .` → 통과.
+- `mypy src/kraddr/geo` → 통과.
+- `lint-imports` → Layered architecture kept.
+- `bash -n scripts/fullload_test.sh` → 통과.
+- `PATH="$PWD/.venv/bin:$PATH" DATA_DIR=/home/digitie/kraddr-geo-data KRADDR_GEO_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` → 통과. 출력 DSN은 `localhost:15432`.
+- `pytest -q` → 80 passed, 7 skipped.
+- 임시 DB `kraddr_geo_pr14_review`에서 `alembic upgrade head` → 0001, 0002 적용 성공. `LI_CD=''` 샘플 insert 시 generated `bjd_cd=1111010100`, `rncode_full=111103100012` 확인.
+- 실제 T-027 DB 영향 조회: `empty_li=0`, `empty_rn=0`, `empty_rds_sig=0`, `bjd_8=0`, `bjd_10=10,687,732`.
+
+## 2026-05-25 (PR #14/T-027 — 실제 전국 SHP 재적재와 정합성 재검증)
+
+**작업**: `data/juso/도로명주소 전자지도` 실제 전국 SHP 17개 시도 × 9개 레이어를 새 natural-key 스키마로 Docker PostGIS에 재적재하고, C1~C10 정합성 검증을 실제 DB에서 재실행했다.
+
+**실행 로그**:
+- 상세 로그: `artifacts/fullload/20260524_173115/execution-log.md` (git ignore 산출물)
+- 환경: WSL2 Ubuntu 24.04, AMD Ryzen 7 7840HS 16 vCPU, 메모리 29GiB, Docker 29.5.2, Python 3.12.3, GDAL 3.8.4
+- DB: `kraddr-geo-t027-db-1`, `localhost:15432`, `kraddr_geo`
+- SHP 재적재 경과: 3시간 10분 4초, exit status 0, 최대 RSS 187,100KB
+- 종료 직후 DB 크기: 24GB
+- 디스크 여유: ext4 약 796GB, C: 약 682GB, F: 약 264GB
+
+**확정 row count**:
+- `tl_scco_ctprvn`: 17
+- `tl_scco_sig`: 255
+- `tl_scco_emd`: 5,067
+- `tl_scco_li`: 15,161
+- `tl_kodis_bas`: 34,516
+- `tl_sprd_manage`: 875,221
+- `tl_sprd_rw`: 1,482,679
+- `tl_sprd_intrvl`: 16,993,167
+- `tl_spbd_buld_polygon`: 10,687,732
+
+**발견한 문제**:
+- `TL_SPBD_BULD` natural key(`rncode_full`, `bjd_cd`, 건물구분, 본번, 부번)는 중복 polygon을 많이 가진다. 같은 natural key에 polygon이 여러 개인 경우 C4/C5가 모든 후보와 다대다 거리값을 만들며 180km급 이상치를 대량 보고했다.
+- `rds_sig_cd`/`rncode_full`이 NULL인 SHP 건물 polygon이 581건 있었다. 나머지 natural-key 컬럼과 geometry는 전 건 채워졌다.
+- `source_file` 컬럼은 현재 GDAL append 경로에서 전 건 NULL이다. 적재 추적성 보강 후보로 남긴다.
+- 대부분 시도 `TL_SPRD_RW.shp`, 일부 `TL_SPBD_BULD.shp`/행정구역 polygon에서 GDAL ring winding order 자동 보정 경고가 반복됐다. 적재는 실패 없이 완료됐다.
+- 실제 smoke test에서 `geocode` SQL의 `:si IS NULL` 선택 필터가 psycopg `AmbiguousParameter`를 일으켰다. PostgreSQL은 `IS NULL`에 먼저 등장한 바인딩 파라미터의 타입을 추론하지 못할 수 있다.
+
+**보강 상세**:
+- C4는 같은 natural key SHP polygon 후보 중 `e.geom <-> p.geom` 기준 가장 가까운 polygon 1개만 평가하도록 `JOIN LATERAL ... LIMIT 1`로 수정했다.
+- C5는 같은 natural key SHP polygon 후보 중 `n.centroid_5179 <-> p.geom` 기준 가장 가까운 polygon 1개만 평가하도록 수정했다.
+- 단위 테스트는 C4/C5가 LATERAL nearest 후보를 사용함을 확인하도록 보강했다.
+- `geocode`, `zipcode`, `pobox` raw SQL의 optional filter는 `CAST(:param AS text/integer/boolean)`로 명시해 psycopg 타입 추론 실패를 막았다.
+
+**정합성 결과**:
+- 1차 재검증: 4분 59.41초, `severity_max=ERROR`
+  - C4: 257,783건, `over_500m=11,649`
+  - C5: 3,277,327건
+- C4/C5 nearest 보강 후 2차 재검증: 6분 27.54초, `severity_max=ERROR`
+  - C1 WARN: 32,531건
+  - C2 ERROR: 34,699건
+  - C3 WARN: 3,510,265건
+  - C4 ERROR: 3,415건, `over_500m=16`, `p95=3.82m`, `p99=15.50m`
+  - C5 WARN: 202건
+  - C6 ERROR: 803건
+  - C7 ERROR: 6,817건
+  - C8 WARN: 24,471건
+  - C9 OK: 0건
+  - C10 OK: 0건
+
+**검증**:
+- `ruff check src/kraddr/geo/loaders/consistency.py tests/unit/test_consistency_sql.py` 통과.
+- `pytest tests/unit/test_consistency_sql.py -q`는 pytest capture 임시파일 `FileNotFoundError`로 테스트 실행 전 실패.
+- `pytest -s tests/unit/test_consistency_sql.py -q` → 2 passed.
+- SHP 9개 테이블 `ANALYZE` → 4.14초, 성공.
+- `ruff check src/kraddr/geo/infra/geocode_repo.py src/kraddr/geo/infra/zip_repo.py src/kraddr/geo/infra/pobox_repo.py tests/unit/test_infra_repo_sql.py` 통과.
+- `pytest -s tests/unit/test_infra_repo_sql.py tests/unit/test_consistency_sql.py -q` → 12 passed.
+- smoke test: `서울특별시 종로구 필운대로 93` geocode OK, reverse OK(10건), search 3건, zipcode OK(3건).
+
+**다음 작업**: C4/C5 nearest 보강을 커밋·푸시하고 PR #14에 실제 전수 적재/정합성 결과를 코멘트한다. 이어서 MV/클라이언트 smoke와 전체 테스트를 가능한 범위까지 수행하고, 남은 C2/C4/C6/C7 원천 데이터 품질 항목은 후속 분석 후보로 분리한다.
+
+## 2026-05-24 (PR #14/T-027 — 실제 SHP 적재 중 GDAL/PostGIS 스키마 보강)
+
+**작업**: 실제 `data/juso/도로명주소 전자지도`를 Docker PostGIS에 적재하는 과정에서 SHP 로더의 GDAL 옵션, geometry 타입, full-load overwrite 전략 문제를 확인하고 보강했다.
+
+**발견한 문제**:
+- GDAL 3.8 Python binding은 `VectorTranslateOptions(openOptions=...)`를 받지 않아 SHP 적재가 `TypeError`로 중단되었다.
+- `openOptions` 제거 후에는 `accessMode="overwrite"`가 운영 테이블을 원천 DBF 스키마로 재생성하면서 `tl_scco_ctprvn.geom`이 `Polygon`으로 바뀌었고, 실제 `MultiPolygon` 삽입에서 실패했다.
+- `shp-all --mode full`은 17개 시도 디렉터리를 순회하는데, 각 시도마다 overwrite/full을 그대로 적용하면 앞 시도 데이터가 뒤 시도 적재 때 사라질 수 있다.
+- 실제 2026년 전자지도 17개 시도 파일을 확인한 결과 `TL_SPRD_RW.shp`는 모두 `Polygon` 레이어다. 기존 `tl_sprd_rw.geom geometry(MultiLineString, 5179)` 정의와 맞지 않았다.
+- 실패 후 복구를 위해 `init-db`를 다시 실행하자, 이미 대량 텍스트 데이터가 들어간 상태에서는 MV 생성이 5초 statement timeout에 걸렸고 같은 트랜잭션의 앞선 DDL까지 롤백될 수 있음을 확인했다.
+
+**보강 상세**:
+- SHP 로더는 CP949를 `gdal.config_options({"SHAPE_ENCODING": "CP949"})`로 지정한다.
+- full 모드는 대상 9개 테이블을 명시적으로 `TRUNCATE`한 뒤 GDAL은 항상 기존 PostgreSQL 테이블에 `append`한다. 원천 DBF 전체 컬럼으로 운영 테이블을 재생성하지 않는다.
+- `SQLStatement`는 JOIN 키와 필요한 속성 컬럼만 alias한다. OGR SQL 결과가 geometry를 유지하므로 `GEOMETRY AS geom` 같은 가짜 문자열 필드를 만들지 않는다.
+- `shp-all --mode full`과 `load all-sidos --shp-root`는 첫 시도만 full, 이후 시도는 append로 바꿔 전국 적재가 누적되도록 했다.
+- `tl_sprd_rw.geom`은 실제 SHP 헤더에 맞춰 `MULTIPOLYGON 5179`로 조정하고 문서도 도로면 polygon 기준으로 갱신했다.
+- `init-db`는 schema/index/MV statement를 별도 트랜잭션으로 실행해 MV 경고가 schema DDL을 롤백하지 않게 했다. 경고가 있으면 개수를 출력한다.
+- `refresh mv --swap`은 복구 중 기존 `mv_geocode_target`이 없어도 `mv_geocode_target_next`를 바로 운영 이름으로 승격한다. swap 후 `ANALYZE mv_geocode_target`도 수행한다.
+- `scripts/fullload_test.sh`는 기본 `KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS`를 30분으로 높인다. 대량 링크 해소와 shadow MV 빌드가 운영 기본값 5초에 막히지 않도록 하기 위함이다.
+- 실제 MV 빌드 후 `pt_source='centroid'`가 0건인 것을 확인했다. 원인은 내비게이션용DB의 `bd_mgt_sn`이 25자리이고 정본 `tl_juso_text.bd_mgt_sn`은 26자리라 직접 조인이 불가능한 점이었다. 또한 내비 `bjd_cd`는 리 코드가 `00`인 경우가 많아 10자리 법정동 완전 일치도 부적합했다. MV fallback을 `rncode_full + 건물구분 + 본번/부번 + left(bjd_cd, 8)` 대표 centroid 조인으로 변경했다.
+- 두 번째 MV swap에서 `idx_mv_next_geocode_target_next_pk`가 이미 존재한다는 충돌을 확인했다. 첫 swap 때 shadow MV 인덱스명이 운영 MV에 그대로 남았기 때문이다. swap 전후에 `idx_mv_next_*` 이름을 운영명 `idx_mv_*`로 정규화하도록 보강했다. 이어 실제 재시도에서 old MV의 운영명 인덱스가 아직 있는 상태로 next 인덱스를 rename하려 하면 next 인덱스가 drop되는 것을 확인해, old MV를 먼저 drop한 뒤 next 인덱스를 rename하도록 순서를 조정했다.
+- 실제 C1~C10 정합성 검증에서 C1/C2가 전량 불일치했다. `TL_SPBD_BULD.BD_MGT_SN`도 25자리이고 정본은 26자리라 건물 polygon도 직접 `bd_mgt_sn` 조인이 불가능했다. `tl_spbd_buld_polygon`에 `RDS_SIG_CD`, `RN_CD`, `BULD_SE_CD`, `BULD_MNNM`, `BULD_SLNO`, `SIG_CD`, `EMD_CD`, `LI_CD`를 함께 적재하고 C1/C2/C4/C5를 natural key 기준으로 바꿨다. C8은 `TL_SPRD_RW`에 `rds_man_no`가 없어 전량 WARN이 나므로, `TL_SPRD_MANAGE` LineString geometry를 적재해 도로 인접성 검증에 사용하도록 바꿨다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py -q` → 6 passed.
+- `.venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py src/kraddr/geo/cli/main.py tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py` → 통과.
+- 실패로 오염된 SHP 보조 테이블 9개만 drop 후 `KRADDR_GEO_PG_DSN=...15432 .venv/bin/kraddr-geo init-db` 재실행. MV 생성은 timeout 경고가 났지만 SHP 테이블 스키마는 `MULTIPOLYGON 5179`로 복구됨을 확인했다.
+- `세종특별자치시` 실제 SHP 9개 레이어 적재 성공: 59.09초, 최대 RSS 약 128MiB, `tl_spbd_buld_polygon` 55,819행, `tl_sprd_intrvl` 100,009행 등 9개 테이블 row count 확인.
+- 전국 SHP 153개 레이어 적재 성공: 3시간 1분 34초, 최대 RSS 약 181MiB. 정확한 row count는 `tl_spbd_buld_polygon` 10,687,732행, `tl_sprd_intrvl` 16,993,167행, `tl_sprd_rw` 1,482,679행 등으로 확인했다.
+
+**다음 작업**: 변경분을 PR #14에 푸시하고, 같은 Docker DB에서 전국 `shp-all --mode full`을 재실행한다. 이후 pobox/bulk optional 단계, 링크 해소, MV swap, C1~C10 정합성, smoke test를 순서대로 계속 진행한다.
+
+## 2026-05-24 (PR #14/T-027 — 실제 데이터로드 실행 중 포트 충돌 방지)
+
+**작업**: PR #13이 main에 머지된 뒤 `codex/t027-fullload-execution` 브랜치에서 실제 데이터로드를 시작했다. WSL ext4 클론(`~/dev/python-kraddr-geo`)에서 Python/GDAL 환경을 만들고, `F:\dev\python-kraddr-geo\data` 원본을 `~/kraddr-geo-data` 작업 사본으로 복사했다.
+
+**실행 로그**:
+- 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 기록한다.
+- 환경: WSL2 Ubuntu 24.04, AMD Ryzen 7 7840HS 16 vCPU, 메모리 29GiB, Docker 29.5.2, Docker Compose v5.1.4, Python 3.12.3, GDAL 3.8.4.
+- `--copy-data` 시작 `2026-05-24T17:31:15+09:00`, 종료 `2026-05-24T18:35:47+09:00`, 경과 약 1시간 4분 32초.
+- 복사 결과: `~/kraddr-geo-data/juso` 약 25GB, 파일 683개. `epost`는 현재 원본 파일이 없어 빈 디렉터리다.
+
+**발견한 문제**:
+- 로컬 5432 포트가 기존 `airflow-postgres-1` 컨테이너에서 이미 사용 중이었다.
+- T-027 기본 compose/스크립트가 `localhost:5432`를 그대로 사용하면 기존 DB에 DDL/적재를 실행할 위험이 있다.
+
+**보강 상세**:
+- `docker-compose.yml`의 외부 포트를 `${KRADDR_GEO_DB_PORT:-5432}:5432`로 파라미터화했다.
+- `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 `KRADDR_GEO_DB_PORT`를 반영한 DSN을 만든다.
+- `docs/t027-fullload-plan.md`, `docs/dev-environment-recovery.md`, `CLAUDE.md`에 `KRADDR_GEO_DB_PORT=15432` 사용 예와 포트 충돌 주의사항을 추가했다.
+
+**검증**:
+- `bash -n scripts/fullload_test.sh` 통과.
+- `DATA_DIR=/home/digitie/kraddr-geo-data KRADDR_GEO_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` 통과. 출력 DSN이 `localhost:15432`로 바뀌는 것을 확인했다.
+- `git diff --check` 통과.
+
+**다음 작업**: PR 생성 후 `KRADDR_GEO_DB_PORT=15432`로 Docker PostGIS를 기동하고 실제 적재를 계속 진행한다. 이후 발견되는 문제는 같은 PR에 누적한다.
+
 ## 2026-05-24 (PR #13/T-027 — Windows 재설치·Codex 세션 복구 문서화)
 
 **작업**: Windows 재설치 후 `git pull`로 PR #13 작업을 문제없이 이어갈 수 있도록 복구 절차를 문서화했다. 실제 Docker 전체 적재와 `PLAN_ONLY=1` 실행은 하지 않았다.

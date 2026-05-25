@@ -174,6 +174,26 @@ CREATE TABLE IF NOT EXISTS tl_kodis_bas (
 
 CREATE TABLE IF NOT EXISTS tl_spbd_buld_polygon (
   bd_mgt_sn       TEXT PRIMARY KEY,
+  sig_cd          TEXT,
+  emd_cd          TEXT,
+  li_cd           TEXT,
+  bjd_cd          TEXT GENERATED ALWAYS AS (
+    CASE
+      WHEN NULLIF(sig_cd, '') IS NULL OR NULLIF(emd_cd, '') IS NULL THEN NULL
+      ELSE sig_cd || emd_cd || COALESCE(NULLIF(li_cd, ''), '00')
+    END
+  ) STORED,
+  rds_sig_cd      TEXT,
+  rn_cd           TEXT,
+  rncode_full     TEXT GENERATED ALWAYS AS (
+    CASE
+      WHEN NULLIF(rds_sig_cd, '') IS NULL OR NULLIF(rn_cd, '') IS NULL THEN NULL
+      ELSE rds_sig_cd || rn_cd
+    END
+  ) STORED,
+  buld_se_cd      TEXT,
+  buld_mnnm       INTEGER,
+  buld_slno       INTEGER,
   geom            geometry(MultiPolygon, 5179) NOT NULL,
   source_file     TEXT,
   source_yyyymm   TEXT,
@@ -185,9 +205,13 @@ CREATE TABLE IF NOT EXISTS tl_sprd_manage (
   rds_man_no      TEXT NOT NULL,
   rn_cd           TEXT,
   rncode_full     TEXT GENERATED ALWAYS AS (
-    CASE WHEN rn_cd IS NULL THEN NULL ELSE sig_cd || rn_cd END
+    CASE
+      WHEN NULLIF(sig_cd, '') IS NULL OR NULLIF(rn_cd, '') IS NULL THEN NULL
+      ELSE sig_cd || rn_cd
+    END
   ) STORED,
   rn              TEXT,
+  geom            geometry(MultiLineString, 5179),
   source_file     TEXT,
   source_yyyymm   TEXT,
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -210,7 +234,7 @@ CREATE TABLE IF NOT EXISTS tl_sprd_rw (
   sig_cd          TEXT NOT NULL,
   rw_sn           TEXT NOT NULL,
   rds_man_no      TEXT,
-  geom            geometry(MultiLineString, 5179) NOT NULL,
+  geom            geometry(MultiPolygon, 5179) NOT NULL,
   source_file     TEXT,
   source_yyyymm   TEXT,
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -334,6 +358,10 @@ CREATE INDEX IF NOT EXISTS idx_locsum_resolve
 
 CREATE INDEX IF NOT EXISTS idx_navi_centroid_geom
   ON tl_navi_buld_centroid USING GIST (centroid_5179);
+CREATE INDEX IF NOT EXISTS idx_navi_centroid_resolve
+  ON tl_navi_buld_centroid (
+    rncode_full, buld_se_cd, buld_mnnm, buld_slno, (left(bjd_cd, 8))
+  );
 CREATE INDEX IF NOT EXISTS idx_navi_entrc_geom
   ON tl_navi_entrc USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_navi_entrc_bd
@@ -348,6 +376,9 @@ CREATE INDEX IF NOT EXISTS idx_scco_li_geom ON tl_scco_li USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_geom ON tl_kodis_bas USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_id ON tl_kodis_bas (bas_id);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_geom ON tl_spbd_buld_polygon USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_resolve
+  ON tl_spbd_buld_polygon (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
+CREATE INDEX IF NOT EXISTS idx_sprd_manage_geom ON tl_sprd_manage USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sprd_rw_geom ON tl_sprd_rw USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sprd_manage_rn ON tl_sprd_manage (rncode_full);
 CREATE INDEX IF NOT EXISTS idx_sprd_intrvl_rds ON tl_sprd_intrvl (sig_cd, rds_man_no);
@@ -388,6 +419,21 @@ WITH best_entrc AS (
    ORDER BY bd_mgt_sn,
             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END,
             ent_man_no
+),
+best_navi AS (
+  SELECT DISTINCT ON (
+         rncode_full, buld_se_cd, buld_mnnm, buld_slno, left(bjd_cd, 8)
+         )
+         rncode_full,
+         buld_se_cd,
+         buld_mnnm,
+         buld_slno,
+         left(bjd_cd, 8) AS bjd_emd_cd,
+         centroid_5179
+    FROM tl_navi_buld_centroid
+   WHERE rncode_full IS NOT NULL
+     AND bjd_cd IS NOT NULL
+   ORDER BY rncode_full, buld_se_cd, buld_mnnm, buld_slno, left(bjd_cd, 8), bd_mgt_sn
 )
 SELECT
   j.bd_mgt_sn,
@@ -423,7 +469,12 @@ SELECT
   END AS pt_source
 FROM tl_juso_text j
 LEFT JOIN best_entrc be ON be.bd_mgt_sn = j.bd_mgt_sn
-LEFT JOIN tl_navi_buld_centroid nc ON nc.bd_mgt_sn = j.bd_mgt_sn
+LEFT JOIN best_navi nc
+  ON nc.rncode_full = j.rncode_full
+ AND nc.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+ AND nc.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+ AND nc.buld_slno IS NOT DISTINCT FROM j.buld_slno
+ AND nc.bjd_emd_cd = left(j.bjd_cd, 8)
 WITH DATA;
 
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);

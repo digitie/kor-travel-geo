@@ -35,7 +35,12 @@ WITH total AS (
 violations AS (
   SELECT j.bd_mgt_sn, j.sig_cd, j.rn, j.buld_mnnm, j.buld_slno
     FROM tl_juso_text j
-    LEFT JOIN tl_spbd_buld_polygon p ON p.bd_mgt_sn = j.bd_mgt_sn
+    LEFT JOIN tl_spbd_buld_polygon p
+      ON p.rncode_full = j.rncode_full
+     AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+     AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+     AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
+     AND p.bjd_cd = j.bjd_cd
    WHERE p.bd_mgt_sn IS NULL
 )
 SELECT count(*)::bigint AS count,
@@ -56,19 +61,47 @@ WITH total AS (
   SELECT count(*)::bigint AS total FROM tl_spbd_buld_polygon
 ),
 violations AS (
-  SELECT p.bd_mgt_sn, p.source_file, p.source_yyyymm
+  SELECT p.bd_mgt_sn,
+         p.rncode_full,
+         p.bjd_cd,
+         p.buld_mnnm,
+         p.buld_slno,
+         CASE
+           WHEN p.rncode_full IS NULL
+             OR p.bjd_cd IS NULL
+             OR p.buld_mnnm IS NULL
+             OR p.buld_slno IS NULL
+           THEN 'missing_resolve_key'
+           ELSE 'missing_text'
+         END AS reason
     FROM tl_spbd_buld_polygon p
-    LEFT JOIN tl_juso_text j ON j.bd_mgt_sn = p.bd_mgt_sn
+    LEFT JOIN tl_juso_text j
+      ON j.rncode_full = p.rncode_full
+     AND j.buld_se_cd IS NOT DISTINCT FROM p.buld_se_cd
+     AND j.buld_mnnm IS NOT DISTINCT FROM p.buld_mnnm
+     AND j.buld_slno IS NOT DISTINCT FROM p.buld_slno
+     AND j.bjd_cd = p.bjd_cd
    WHERE j.bd_mgt_sn IS NULL
+),
+stats AS (
+  SELECT count(*)::bigint AS count,
+         count(*) FILTER (WHERE reason = 'missing_resolve_key')::bigint
+           AS missing_resolve_key,
+         count(*) FILTER (WHERE reason = 'missing_text')::bigint AS missing_text
+    FROM violations
 )
-SELECT count(*)::bigint AS count,
+SELECT count,
        (SELECT total FROM total) AS total,
-       '{}'::jsonb AS metric,
+       jsonb_build_object(
+         'missing_resolve_key', missing_resolve_key,
+         'missing_text', missing_text,
+         'error_count', count
+       ) AS metric,
        COALESCE(
          (SELECT jsonb_agg(to_jsonb(s)) FROM (SELECT * FROM violations LIMIT 20) s),
          '[]'::jsonb
        ) AS sample
-  FROM violations
+  FROM stats
 """,
     ),
     "C3": CaseSpec(
@@ -99,11 +132,23 @@ SELECT count(*)::bigint AS count,
         threshold="50m 초과 WARN, 500m 초과 ERROR",
         sql="""
 WITH distances AS (
-  SELECT e.bd_mgt_sn,
+  SELECT j.bd_mgt_sn,
          e.ent_man_no,
-         ST_Distance(e.geom, p.geom) AS dist_m
+         nearest.dist_m
     FROM tl_locsum_entrc e
-    JOIN tl_spbd_buld_polygon p ON p.bd_mgt_sn = e.bd_mgt_sn
+    -- C4 assumes postload.resolve_text_geometry_links() has populated e.bd_mgt_sn.
+    JOIN tl_juso_text j ON j.bd_mgt_sn = e.bd_mgt_sn
+    JOIN LATERAL (
+      SELECT ST_Distance(e.geom, p.geom) AS dist_m
+        FROM tl_spbd_buld_polygon p
+       WHERE p.rncode_full = j.rncode_full
+         AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+         AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+         AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
+         AND p.bjd_cd = j.bjd_cd
+       ORDER BY e.geom <-> p.geom
+       LIMIT 1
+    ) nearest ON true
 ),
 stats AS (
   SELECT count(*)::bigint AS total,
@@ -128,7 +173,8 @@ SELECT over_50m AS count,
          'p95_m', p95_m,
          'p99_m', p99_m,
          'over_50m', over_50m,
-         'over_500m', over_500m
+         'over_500m', over_500m,
+         'error_count', over_500m
        ) AS metric,
        COALESCE(
          (SELECT jsonb_agg(to_jsonb(v)) FROM violations v),
@@ -141,11 +187,42 @@ SELECT over_50m AS count,
         name="내비 centroid와 건물 polygon centroid 거리 이상치",
         threshold="10m 초과 WARN",
         sql="""
-WITH distances AS (
-  SELECT n.bd_mgt_sn,
-         ST_Distance(n.centroid_5179, ST_Centroid(p.geom)) AS dist_m
-    FROM tl_navi_buld_centroid n
-    JOIN tl_spbd_buld_polygon p ON p.bd_mgt_sn = n.bd_mgt_sn
+WITH best_navi AS (
+  SELECT DISTINCT ON (
+         rncode_full, buld_se_cd, buld_mnnm, buld_slno, left(bjd_cd, 8)
+         )
+         rncode_full,
+         buld_se_cd,
+         buld_mnnm,
+         buld_slno,
+         left(bjd_cd, 8) AS bjd_emd_cd,
+         centroid_5179
+    FROM tl_navi_buld_centroid
+   WHERE rncode_full IS NOT NULL
+     AND bjd_cd IS NOT NULL
+   ORDER BY rncode_full, buld_se_cd, buld_mnnm, buld_slno, left(bjd_cd, 8), bd_mgt_sn
+),
+distances AS (
+  SELECT j.bd_mgt_sn,
+         nearest.dist_m
+    FROM tl_juso_text j
+    JOIN best_navi n
+      ON n.rncode_full = j.rncode_full
+     AND n.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+     AND n.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+     AND n.buld_slno IS NOT DISTINCT FROM j.buld_slno
+     AND n.bjd_emd_cd = left(j.bjd_cd, 8)
+    JOIN LATERAL (
+      SELECT ST_Distance(n.centroid_5179, ST_Centroid(p.geom)) AS dist_m
+        FROM tl_spbd_buld_polygon p
+       WHERE p.rncode_full = j.rncode_full
+         AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+         AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+         AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
+         AND p.bjd_cd = j.bjd_cd
+       ORDER BY n.centroid_5179 <-> p.geom
+       LIMIT 1
+    ) nearest ON true
 ),
 stats AS (
   SELECT count(*)::bigint AS total,
@@ -188,11 +265,11 @@ violations AS (
          ent_man_no,
          CASE
            WHEN bas_id IS NULL THEN 'missing_zip_polygon'
-           WHEN NOT ST_Contains(bas_geom, geom) THEN 'outside_zip_polygon'
+           WHEN NOT ST_Covers(bas_geom, geom) THEN 'outside_zip_polygon'
            ELSE 'ok'
          END AS reason
     FROM base
-   WHERE bas_id IS NULL OR NOT ST_Contains(bas_geom, geom)
+   WHERE bas_id IS NULL OR NOT ST_Covers(bas_geom, geom)
 ),
 stats AS (
   SELECT (SELECT count(*)::bigint FROM base) AS total,
@@ -231,11 +308,11 @@ violations AS (
          ent_man_no,
          CASE
            WHEN emd_geom IS NULL THEN 'missing_emd_polygon'
-           WHEN NOT ST_Contains(emd_geom, geom) THEN 'outside_emd_polygon'
+           WHEN NOT ST_Covers(emd_geom, geom) THEN 'outside_emd_polygon'
            ELSE 'ok'
          END AS reason
     FROM base
-   WHERE emd_geom IS NULL OR NOT ST_Contains(emd_geom, geom)
+   WHERE emd_geom IS NULL OR NOT ST_Covers(emd_geom, geom)
 ),
 stats AS (
   SELECT (SELECT count(*)::bigint FROM base) AS total,
@@ -271,13 +348,11 @@ violations AS (
   SELECT b.bd_mgt_sn, b.rncode_full, b.ent_man_no
     FROM base b
    WHERE NOT EXISTS (
-         SELECT 1
+       SELECT 1
            FROM tl_sprd_manage m
-           JOIN tl_sprd_rw rw
-             ON rw.sig_cd = m.sig_cd
-            AND rw.rds_man_no = m.rds_man_no
           WHERE m.rncode_full = b.rncode_full
-            AND ST_DWithin(b.geom, rw.geom, 100)
+            AND m.geom IS NOT NULL
+            AND ST_DWithin(b.geom, m.geom, 100)
        )
 )
 SELECT count(*)::bigint AS count,

@@ -171,6 +171,26 @@ CREATE TABLE IF NOT EXISTS tl_kodis_bas (
 
 CREATE TABLE IF NOT EXISTS tl_spbd_buld_polygon (
   bd_mgt_sn       TEXT PRIMARY KEY,
+  sig_cd          TEXT,
+  emd_cd          TEXT,
+  li_cd           TEXT,
+  bjd_cd          TEXT GENERATED ALWAYS AS (
+    CASE
+      WHEN NULLIF(sig_cd, '') IS NULL OR NULLIF(emd_cd, '') IS NULL THEN NULL
+      ELSE sig_cd || emd_cd || COALESCE(NULLIF(li_cd, ''), '00')
+    END
+  ) STORED,
+  rds_sig_cd      TEXT,
+  rn_cd           TEXT,
+  rncode_full     TEXT GENERATED ALWAYS AS (
+    CASE
+      WHEN NULLIF(rds_sig_cd, '') IS NULL OR NULLIF(rn_cd, '') IS NULL THEN NULL
+      ELSE rds_sig_cd || rn_cd
+    END
+  ) STORED,
+  buld_se_cd      TEXT,
+  buld_mnnm       INTEGER,
+  buld_slno       INTEGER,
   geom            geometry(MultiPolygon, 5179) NOT NULL,
   source_file     TEXT,
   source_yyyymm   TEXT,
@@ -182,9 +202,13 @@ CREATE TABLE IF NOT EXISTS tl_sprd_manage (
   rds_man_no      TEXT NOT NULL,
   rn_cd           TEXT,
   rncode_full     TEXT GENERATED ALWAYS AS (
-    CASE WHEN rn_cd IS NULL THEN NULL ELSE sig_cd || rn_cd END
+    CASE
+      WHEN NULLIF(sig_cd, '') IS NULL OR NULLIF(rn_cd, '') IS NULL THEN NULL
+      ELSE sig_cd || rn_cd
+    END
   ) STORED,
   rn              TEXT,
+  geom            geometry(MultiLineString, 5179),
   source_file     TEXT,
   source_yyyymm   TEXT,
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -207,7 +231,7 @@ CREATE TABLE IF NOT EXISTS tl_sprd_rw (
   sig_cd          TEXT NOT NULL,
   rw_sn           TEXT NOT NULL,
   rds_man_no      TEXT,
-  geom            geometry(MultiLineString, 5179) NOT NULL,
+  geom            geometry(MultiPolygon, 5179) NOT NULL,
   source_file     TEXT,
   source_yyyymm   TEXT,
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),

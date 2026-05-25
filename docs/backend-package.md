@@ -570,7 +570,7 @@ async def load_juso_hangul(
 
 현재 구현 범위:
 
-- `match_build_*.txt` → `tl_navi_buld_centroid`: `bd_mgt_sn`이 직접 들어 있으므로 centroid fallback의 안정적인 키로 사용한다. 실제 서울 첫 행 기준 `23~24`가 centroid X/Y, `25~26`이 대표 출입구에 가까운 보조 X/Y다. MV fallback은 `23~24` centroid를 쓴다.
+- `match_build_*.txt` → `tl_navi_buld_centroid`: 원본 `bd_mgt_sn`은 들어 있지만 실제 2026년 파일 기준 25자리이고, 도로명주소 한글 정본의 `bd_mgt_sn`은 26자리라 직접 조인 키로 쓰지 않는다. centroid fallback은 `rncode_full`, 건물구분, 본번/부번, 법정동 읍면동 8자리(`left(bjd_cd, 8)`)로 대표 centroid를 고른다. 내비 파일의 법정동코드는 리 코드가 `00`인 경우가 많으므로 정본의 10자리 법정동과 완전 일치시키면 centroid fallback이 거의 붙지 않는다. 실제 서울 첫 행 기준 `23~24`가 centroid X/Y, `25~26`이 대표 출입구에 가까운 보조 X/Y다. MV fallback은 `23~24` centroid를 쓴다.
 - `match_rs_entrc.txt` → `tl_navi_entrc`: 원본에는 `bd_mgt_sn`이 없고 `sig_cd`, entry no, `rncode_full`, 건물번호, 법정동코드, 진입점 코드, X/Y만 있다. `kind`는 `01→navi`, `02→vehicle`, `03→parcel`, 그 외 `aux`로 보관한다.
 - `match_jibun_*.txt`는 현재 MV/역지오코딩 1차 경로에는 사용하지 않는다. 지번 centroid 보강이 필요해지면 T-016 후속으로 별도 repo 경로에 붙인다.
 
@@ -594,27 +594,37 @@ KIND_MAP = {
 원칙은 ADR-005를 유지:
 
 - `osgeo.gdal.VectorTranslate` in-process
-- `open_options=["ENCODING=CP949"]`
+- GDAL 3.8 Python binding에서는 `VectorTranslateOptions(openOptions=...)`가 허용되지 않으므로 `gdal.config_options({"SHAPE_ENCODING": "CP949"})`로 CP949를 지정한다.
 - `PG_USE_COPY=YES` (`gdal.config_options` 컨텍스트 매니저)
 - 진행률 callback + 협조적 취소
 
-대상은 polygon/폴리라인 9종이다. 문서 초기판의 "polygon 7종" 표현은 `tl_sprd_manage`, `tl_sprd_intrvl`처럼 도형이 없거나 속성 보조 성격인 도로 테이블을 빠뜨린 축약이었다. 구현상 load plan은 다음 9개를 명시한다: `TL_SCCO_CTPRVN`, `TL_SCCO_SIG`, `TL_SCCO_EMD`, `TL_SCCO_LI`, `TL_KODIS_BAS`, `TL_SPRD_MANAGE`, `TL_SPRD_INTRVL`, `TL_SPRD_RW`, `TL_SPBD_BULD`.
+대상은 polygon/도로 보조 9종이다. 문서 초기판의 "polygon 7종" 표현은 `tl_sprd_manage`, `tl_sprd_intrvl`처럼 도형이 없거나 속성 보조 성격인 도로 테이블을 빠뜨린 축약이었다. 구현상 load plan은 다음 9개를 명시한다: `TL_SCCO_CTPRVN`, `TL_SCCO_SIG`, `TL_SCCO_EMD`, `TL_SCCO_LI`, `TL_KODIS_BAS`, `TL_SPRD_MANAGE`, `TL_SPRD_INTRVL`, `TL_SPRD_RW`, `TL_SPBD_BULD`.
+
+2026년 실제 전자지도 파일 기준으로 `TL_SPRD_RW`는 `LineString`이 아니라 `Polygon` 레이어다. 따라서 운영 테이블 `tl_sprd_rw.geom`은 `MULTIPOLYGON 5179`로 둔다. 도로명 인접성 검증(C8)은 `rds_man_no`가 있는 `TL_SPRD_MANAGE`의 도로명 중심선/관리 선형 geometry와 출입구 point 사이의 `ST_DWithin`으로 해석한다.
+
+`SQLStatement`에는 JOIN 키와 필요한 속성 컬럼만 alias한다. OGR SQL 결과 레이어는 geometry를 별도 필드로 쓰지 않아도 원본 geometry를 유지하므로 `GEOMETRY AS geom` 같은 가짜 문자열 필드를 만들지 않는다. geometry 컬럼명은 대상 PostgreSQL 테이블의 `geom`과 `GEOMETRY_NAME=geom` 설정으로 맞춘다.
 
 #### `tl_spbd_buld_polygon` 분리 전략
 
-SHP `TL_SPBD_BULD`는 건물 polygon + 속성을 함께 가지지만, 본 사양은 **polygon 컬럼만** 가져온다. 속성(도로명/지번/우편번호/건물명)은 `tl_juso_text`가 정본. JOIN 키는 `bd_mgt_sn` 하나.
+SHP `TL_SPBD_BULD`는 건물 polygon + 속성을 함께 가진다. 속성(도로명/지번/우편번호/건물명)의 정본은 여전히 `tl_juso_text`지만, 실제 SHP `BD_MGT_SN`은 25자리이고 텍스트 정본 `bd_mgt_sn`은 26자리라 직접 조인 키로 사용할 수 없다. 따라서 polygon 테이블에는 검증과 공간 조인을 위한 최소 natural key(`RDS_SIG_CD`, `RN_CD`, `BULD_SE_CD`, `BULD_MNNM`, `BULD_SLNO`, `SIG_CD`, `EMD_CD`, `LI_CD`)를 함께 적재한다.
 
 ```python
 opts = gdal.VectorTranslateOptions(
     format="PostgreSQL",
     layerName="tl_spbd_buld_polygon",
-    SQLStatement="SELECT BD_MGT_SN AS bd_mgt_sn, GEOMETRY AS geom FROM TL_SPBD_BULD",
+    SQLStatement=(
+        "SELECT BD_MGT_SN AS bd_mgt_sn, SIG_CD AS sig_cd, EMD_CD AS emd_cd, "
+        "LI_CD AS li_cd, RDS_SIG_CD AS rds_sig_cd, RN_CD AS rn_cd, "
+        "BULD_SE_CD AS buld_se_cd, BULD_MNNM AS buld_mnnm, "
+        "BULD_SLNO AS buld_slno FROM TL_SPBD_BULD"
+    ),
     layerCreationOptions=[
         "GEOMETRY_NAME=geom",
         "SPATIAL_INDEX=NONE",  # 별도 GiST 인덱스를 postload에서 생성
     ],
     srcSRS="EPSG:5179", dstSRS="EPSG:5179",
-    accessMode="overwrite",
+    accessMode="append",
+    geometryType="PROMOTE_TO_MULTI",
 )
 ```
 
@@ -625,7 +635,7 @@ postload에서 `CREATE INDEX ON tl_spbd_buld_polygon USING GIST (geom)`.
 원칙:
 
 - `ogr2ogr` subprocess 제거. `osgeo.gdal.VectorTranslate` in-process (ADR-005).
-- CP949 디코딩: `open_options=["ENCODING=CP949"]`.
+- CP949 디코딩: GDAL 3.8 호환을 위해 `gdal.config_options({"SHAPE_ENCODING": "CP949"})` 사용.
 - 진행률 callback: `gdal.VectorTranslate(callback=...)`로 0~1.0 보고 → 작업 큐에 반영.
 - 협조적 취소: callback에서 `cancel_event` 확인, 0 반환 시 GDAL 즉시 중단.
 - ZIP 입력 직접 처리: `_extract_zip`(zip slip 방어), `_find_shp_dir`.

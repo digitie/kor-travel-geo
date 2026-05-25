@@ -21,7 +21,7 @@ SELECT zip_no, 'building_bsi_zon_no' AS source,
 UNION ALL
 SELECT zip_no, 'bulk_delivery' AS source, NULL AS address, bd_mgt_sn, detail
   FROM postal_bulk_delivery
- WHERE :include_bulk AND bd_mgt_sn = :bd_mgt_sn
+ WHERE CAST(:include_bulk AS boolean) AND bd_mgt_sn = :bd_mgt_sn
 """
 )
 
@@ -44,9 +44,13 @@ SELECT zip_no, 'building_bsi_zon_no' AS source,
        si_nm || ' ' || sgg_nm || ' ' || rn || ' ' || buld_mnnm::text AS address,
        bd_mgt_sn, buld_nm AS detail
   FROM mv_geocode_target
- WHERE (:road_nrm IS NULL OR rn_nrm = :road_nrm)
-   AND (:emd IS NULL OR emd_nm = :emd OR li_nm = :emd)
-   AND (:mnnm IS NULL OR buld_mnnm = :mnnm OR lnbr_mnnm = :mnnm)
+ WHERE (CAST(:road_nrm AS text) IS NULL OR rn_nrm = CAST(:road_nrm AS text))
+   AND (CAST(:emd AS text) IS NULL OR emd_nm = CAST(:emd AS text) OR li_nm = CAST(:emd AS text))
+   AND (
+     CAST(:mnnm AS integer) IS NULL
+     OR buld_mnnm = CAST(:mnnm AS integer)
+     OR lnbr_mnnm = CAST(:mnnm AS integer)
+   )
    AND zip_no IS NOT NULL
  ORDER BY CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END, bd_mgt_sn
  LIMIT 10
