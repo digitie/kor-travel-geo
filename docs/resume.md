@@ -57,14 +57,16 @@
 - ✅ T-032 성능 튜닝 완료 — C4/C6/C7 export 중복 공간 스캔 제거, 정합성 CTE materialization, SHP 다중 시도 적재의 마지막 1회 `ANALYZE`, postload timeout 보강을 반영했다. 사용자 지시에 따라 실제 실행 검증은 세종특별시·경상남도 축소 데이터 1회만 수행했고, 전국 full test와 반복 trial은 T-033~T-035로 분리했다. 상세: `docs/t032-performance-tuning.md`
 - ✅ PR #19 리뷰 반영 — temp table prepare/export를 명시적 transaction으로 고정하고, SQL splitter를 `infra.sql.iter_sql_statements()`로 통합했다. postload timeout docstring/`None` 옵션, SHP `ANALYZE` table별 transaction, T-033~T-035 후속 ID, migration lock 주석을 추가했다.
 - ✅ T-033 전국 full-load 재검증 — 빈 DB `kraddr_geo_t033`에 실제 전국 데이터를 적재해 4시간 8분 2초 기준선, SHP 153 layers, MV 6,416,637행, smoke test 통과, data-quality CSV 8개 export 결과를 확보했다. `TL_SPRD_INTRVL` GDAL INSERT 병목이 재확인되어 T-034 우선 튜닝 대상으로 둔다. 상세: `docs/t033-full-load-revalidation.md`
+- ✅ T-034 SHP append 병목 튜닝 — geometry 없는 `TL_SPRD_INTRVL`을 GDAL append 대신 DBF 직접 scan + `psycopg COPY` 경로로 분리했다. 세종 단일 레이어는 36.12초 → 1.59초, 경기도 2,677,715행은 새 경로 15.88초, 세종 9개 SHP 레이어 전체는 31.69초로 검증했다. 상세: `docs/t034-shp-append-tuning.md`
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-T-033 PR을 마무리한다. 현재 우선순위는 `codex/t033-full-load-revalidation` 브랜치를 푸시하고 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge하는 것이다. 다음 구현 작업은 T-034 SHP GDAL append 병목 튜닝이다.
+T-034 PR을 마무리한다. 현재 우선순위는 `codex/t034-shp-append-tuning` 브랜치를 푸시하고 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge하는 것이다. 다음 구현 작업은 T-035 MV refresh/swap 벤치마크다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
+- T-034에서 `TL_SPRD_INTRVL` 전용 COPY 경로는 검증했지만, `TL_SPBD_BULD`는 여전히 GDAL append 경로다. 전국 전체 SHP 시간은 T-027 최종 클린 로드에서 다시 확인한다.
 - `maplibre-vworld-js` upstream main은 `1d87eca`이고, 현재 `kraddr-geo-ui`는 `11321fe`에 고정되어 있다. T-036에서 별도 PR로 동기화한다.
 - PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
 - `daily/*.zip`, `jibun_rnaddrkor_*`, `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니다. T-028~T-031로 분리해 로더/ADR를 먼저 잡는다.

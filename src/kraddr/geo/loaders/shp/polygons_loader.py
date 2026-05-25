@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+import psycopg
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.exceptions import LoaderError
-from kraddr.geo.loaders.juso_map import JusoLayerFiles, discover_sido_dataset
+from kraddr.geo.loaders.juso_map import (
+    DbfHeader,
+    JusoLayerFiles,
+    discover_sido_dataset,
+    read_dbf_header,
+)
 
 ProgressCallback = Callable[[float], None]
 
@@ -39,6 +45,20 @@ TARGET_TABLES: dict[str, str] = {
     "TL_SPRD_RW": "tl_sprd_rw",
     "TL_SPBD_BULD": "tl_spbd_buld_polygon",
 }
+
+ROAD_INTERVAL_LAYER_NAME = "TL_SPRD_INTRVL"
+ROAD_INTERVAL_SOURCE_FIELDS = (
+    "SIG_CD",
+    "RDS_MAN_NO",
+    "BSI_INT_SN",
+    "ODD_BSI_MN",
+    "EVE_BSI_MN",
+)
+ROAD_INTERVAL_COPY_SQL = """
+COPY tl_sprd_intrvl
+(sig_cd, rds_man_no, bsi_int_sn, start_bsi_no, end_bsi_no, source_file, source_yyyymm)
+FROM STDIN
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +167,23 @@ def _load_plans_sync(
                 on_progress((layer_index + complete) / len(plans))
             return 1
 
+        if plan.source_layer == ROAD_INTERVAL_LAYER_NAME:
+            def copy_progress(
+                complete: float,
+                *,
+                layer_index: int = index,
+            ) -> None:
+                _emit_layer_progress(layer_index, len(plans), complete, on_progress)
+
+            _copy_road_interval_dbf(
+                pg_url,
+                plan,
+                on_layer_progress=copy_progress,
+                cancel_event=cancel_event,
+            )
+            loaded += 1
+            continue
+
         options = gdal.VectorTranslateOptions(
             format="PostgreSQL",
             layerName=plan.target_table,
@@ -176,6 +213,95 @@ def _load_plans_sync(
     if on_progress:
         on_progress(1.0)
     return loaded
+
+
+def _emit_layer_progress(
+    layer_index: int,
+    layer_count: int,
+    complete: float,
+    on_progress: ProgressCallback | None,
+) -> None:
+    if on_progress:
+        on_progress((layer_index + complete) / layer_count)
+
+
+def _copy_road_interval_dbf(
+    pg_url: str,
+    plan: ShpLoadPlan,
+    *,
+    on_layer_progress: ProgressCallback | None,
+    cancel_event: asyncio.Event | None,
+) -> int:
+    copied = 0
+    header = read_dbf_header(plan.dbf_path)
+    libpq_url = make_url(pg_url).set(drivername="postgresql").render_as_string(
+        hide_password=False
+    )
+    with psycopg.connect(libpq_url) as conn, conn.cursor() as cur:
+        with cur.copy(ROAD_INTERVAL_COPY_SQL) as copy:
+            for processed, row in enumerate(
+                _iter_road_interval_copy_rows(plan, header=header),
+                start=1,
+            ):
+                if cancel_event and cancel_event.is_set():
+                    raise asyncio.CancelledError("shp road interval loader cancelled")
+                copy.write_row(row)
+                copied += 1
+                if on_layer_progress and processed % 100_000 == 0:
+                    on_layer_progress(processed / max(header.record_count, 1))
+        conn.commit()
+    if on_layer_progress:
+        on_layer_progress(1.0)
+    return copied
+
+
+def _iter_road_interval_copy_rows(
+    plan: ShpLoadPlan,
+    *,
+    header: DbfHeader | None = None,
+) -> Iterator[tuple[str | None, str | None, str | None, str | None, str | None, str, str | None]]:
+    resolved_header = header or read_dbf_header(plan.dbf_path)
+    offsets = _dbf_field_offsets(resolved_header, ROAD_INTERVAL_SOURCE_FIELDS)
+    with plan.dbf_path.open("rb") as file:
+        file.seek(resolved_header.header_length)
+        for record_no in range(1, resolved_header.record_count + 1):
+            record = file.read(resolved_header.record_length)
+            if len(record) != resolved_header.record_length:
+                msg = f"{plan.dbf_path}:{record_no} has truncated DBF record"
+                raise LoaderError(msg)
+            if record[:1] == b"*":
+                continue
+            yield (
+                _dbf_value(record, offsets["SIG_CD"]),
+                _dbf_value(record, offsets["RDS_MAN_NO"]),
+                _dbf_value(record, offsets["BSI_INT_SN"]),
+                _dbf_value(record, offsets["ODD_BSI_MN"]),
+                _dbf_value(record, offsets["EVE_BSI_MN"]),
+                plan.source_file,
+                plan.source_yyyymm,
+            )
+
+
+def _dbf_field_offsets(
+    header: DbfHeader,
+    required_fields: tuple[str, ...],
+) -> dict[str, tuple[int, int]]:
+    offsets: dict[str, tuple[int, int]] = {}
+    offset = 1
+    for field in header.fields:
+        offsets[field.name] = (offset, offset + field.length)
+        offset += field.length
+    missing = [field for field in required_fields if field not in offsets]
+    if missing:
+        msg = f"DBF is missing required field(s): {', '.join(missing)}"
+        raise LoaderError(msg)
+    return offsets
+
+
+def _dbf_value(record: bytes, offset: tuple[int, int]) -> str | None:
+    raw = record[offset[0] : offset[1]].rstrip(b"\x00")
+    value = raw.decode("cp949").strip()
+    return value or None
 
 
 def _sql_statement(

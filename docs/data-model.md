@@ -217,6 +217,8 @@ CREATE INDEX idx_navi_entrc_resolve ON tl_navi_entrc (rncode_full, buld_se_cd, b
 
 GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY": "YES", "SHAPE_ENCODING": "CP949"})` 조합을 사용한다(ADR-005). GDAL 3.8 Python binding은 `VectorTranslateOptions(openOptions=...)`를 받지 않으므로 CP949 지정은 config option으로 고정한다. 각 polygon 테이블에 GiST 인덱스를 둔다.
 
+`tl_sprd_intrvl`은 T-034부터 예외적으로 GDAL을 거치지 않는다. 이 테이블은 geometry가 없는 도로 구간 속성 보조 테이블이고 실제 DBF의 필요한 필드가 모두 고정되어 있으므로, `TL_SPRD_INTRVL.dbf`를 직접 scan한 뒤 `COPY tl_sprd_intrvl (...) FROM STDIN`으로 적재한다. 이 경로는 기존 `source_file`/`source_yyyymm` 추적 컬럼을 유지하되, GDAL PostgreSQL driver의 append insert 병목을 피하기 위한 성능 전용 경로다.
+
 ## 정합성 검증 (텍스트 ↔ SHP, ADR-016)
 
 텍스트 정본과 SHP polygon은 같은 BD_MGT_SN을 다른 경로로 적재하므로 **정기 정합성 검증**이 필수다. `kraddr-geo validate consistency` CLI 또는 라이브러리 `AsyncAddressClient.run_consistency_check()`(ADR-016)가 다음 케이스를 검사한다.
