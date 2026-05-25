@@ -59,17 +59,18 @@
 - ✅ T-033 전국 full-load 재검증 — 빈 DB `kraddr_geo_t033`에 실제 전국 데이터를 적재해 4시간 8분 2초 기준선, SHP 153 layers, MV 6,416,637행, smoke test 통과, data-quality CSV 8개 export 결과를 확보했다. `TL_SPRD_INTRVL` GDAL INSERT 병목이 재확인되어 T-034 우선 튜닝 대상으로 둔다. 상세: `docs/t033-full-load-revalidation.md`
 - ✅ T-034 SHP append 병목 튜닝 — geometry 없는 `TL_SPRD_INTRVL`을 GDAL append 대신 DBF 직접 scan + `psycopg COPY` 경로로 분리했다. 세종 단일 레이어는 36.12초 → 1.59초, 경기도 2,677,715행은 새 경로 15.88초, 세종 9개 SHP 레이어 전체는 31.69초로 검증했다. 상세: `docs/t034-shp-append-tuning.md`
 - ✅ T-035 MV refresh/swap 벤치마크 — `scripts/benchmark_mv_refresh.py`를 추가하고 전국 DB에서 `CONCURRENTLY` 1분 49.64초, shadow swap 2분 16.28초를 측정했다. swap rename/index rename 구간은 약 0.016초였고, `ANALYZE`를 별도 transaction으로 분리했다. 상세: `docs/t035-mv-refresh-benchmark.md`
+- ✅ T-036 `maplibre-vworld-js` main 동기화 — `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다. 최신 upstream은 `redactVWorldUrl()`와 redaction 표기 `***`를 쓰므로, UI 내부 경계에서는 `redactVWorldUrl as redactVWorldTileUrl` alias로 기존 컴포넌트 계약을 유지하고 테스트를 갱신했다. 상세: `docs/t036-maplibre-vworld-sync.md`
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-T-035 PR을 마무리한다. 현재 우선순위는 `codex/t035-mv-refresh-benchmark` 브랜치를 푸시하고 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge하는 것이다. 다음 구현 작업은 T-036 `maplibre-vworld-js` main 동기화다.
+T-036 PR을 마무리한다. 현재 우선순위는 `codex/t036-maplibre-vworld-sync` 브랜치를 푸시하고 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge하는 것이다. T-036이 끝난 뒤에는 사용자 지시에 따라 PR #22 → PR #21 → PR #20 순서로 신규 리뷰 코멘트를 읽고 반영 가능한 내용을 처리한다. 그 다음 구현 작업은 T-028 일변동 ZIP 로더다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
 - T-034에서 `TL_SPRD_INTRVL` 전용 COPY 경로는 검증했지만, `TL_SPBD_BULD`는 여전히 GDAL append 경로다. 전국 전체 SHP 시간은 T-027 최종 클린 로드에서 다시 확인한다.
 - T-035에서 `kraddr_geo_t033` MV는 여러 번 refresh/swap됐고 최종 상태는 `mv_geocode_target=6,416,637`, `mv_geocode_target_next/old` 없음, index 이름 `idx_mv_*` 정상이다.
-- `maplibre-vworld-js` upstream main은 `1d87eca`이고, 현재 `kraddr-geo-ui`는 `11321fe`에 고정되어 있다. T-036에서 별도 PR로 동기화한다.
+- `maplibre-vworld-js` upstream main 확인 커밋은 `c91c9f304669ce3f5fc4915f21186b23731d5816`이고, 현재 `kraddr-geo-ui`는 이 SHA에 맞춰져 있다. 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하므로 `kraddr-geo-ui/lib/vworld.ts`에서 기존 내부 이름으로 alias한다.
 - PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
 - `daily/*.zip`, `jibun_rnaddrkor_*`, `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니다. T-028~T-031로 분리해 로더/ADR를 먼저 잡는다.
 
@@ -99,7 +100,7 @@ T-035 PR을 마무리한다. 현재 우선순위는 `codex/t035-mv-refresh-bench
 - **실제 DB 적재 검증**: 로컬 PostGIS가 준비되어 있으면 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q`로 실제 `data/juso` 샘플 COPY와 MV 생성을 확인한다.
 - **프론트엔드 TypeScript 캐시**: `kraddr-geo-ui/tsconfig.tsbuildinfo`는 생성물이다. `.gitignore` 대상이며 PR에 포함하지 않는다.
 - **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
-- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#11321fe`로 고정되어 있고 `dist`/`exports`/`types`/`style.css`, click/error/flyTo hook, tile error helper가 포함됨을 확인했다. SHA를 바꾸면 `npm ci`/`type-check`/`test`/Next.js build를 다시 확인한다. `VWorldMap` 컴포넌트 전체 대체는 click callback, key 미설정 fallback, transient tile error redaction/overlay, SSR-safe wrapper 동작을 upstream과 맞추는 후속 PR에서 진행한다.
+- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#c91c9f304669ce3f5fc4915f21186b23731d5816`로 고정되어 있고 `dist`/`exports`/`types`/`style.css`, click/error/flyTo hook, tile error helper가 포함됨을 확인했다. SHA를 바꾸면 Linux Node/npm으로 `npm ci`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. `VWorldMap` 컴포넌트 전체 대체는 click callback, key 미설정 fallback, transient tile error redaction/overlay, SSR-safe wrapper 동작을 upstream과 맞추는 후속 PR에서 진행한다.
 - **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
 
 ## 작업 후 의무사항

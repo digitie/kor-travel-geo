@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-036 VWorld dependency 동기화: `kraddr-geo-ui`의 `maplibre-vworld`를 `digitie/maplibre-vworld-js` upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신한다. 최신 helper 이름 `redactVWorldUrl()`는 내부 alias `redactVWorldTileUrl`로 재수출해 디버그 UI 컴포넌트 계약을 유지하고, redaction 표기 `***`를 테스트로 고정한다.
 - T-035 MV refresh/swap 벤치마크: `scripts/benchmark_mv_refresh.py`를 추가해 `CONCURRENTLY`와 shadow swap을 phase별로 계측한다. 전국 DB 기준 `CONCURRENTLY`는 1분 49.64초, shadow swap은 2분 16.28초였고, swap rename/index rename 구간은 약 0.016초로 측정됐다. `shadow_swap_mv()`는 rename transaction과 `ANALYZE` transaction을 분리해 lock window를 줄인다.
 - T-034 SHP append 병목 튜닝: geometry 없는 `TL_SPRD_INTRVL` 레이어를 GDAL append 대신 DBF 직접 scan + `psycopg COPY`로 적재한다. 세종 100,009행 단일 레이어는 36.12초에서 1.59초로 줄었고, 경기도 2,677,715행은 새 경로에서 15.88초에 적재됐다.
 - T-033 전국 full-load 재검증: 빈 Docker DB `kraddr_geo_t033`에 실제 전국 데이터를 다시 적재하고, 4시간 8분 2초 기준선, row count, C1~C10 정합성, smoke test, C2/C4/C6/C7 data-quality export 결과를 문서화한다.

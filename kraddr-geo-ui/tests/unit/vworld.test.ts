@@ -85,7 +85,7 @@ describe("VWorld MapLibre style", () => {
 
   it("VWorld tile URL의 API key를 upstream helper로 마스킹한다", () => {
     expect(redactVWorldTileUrl("https://api.vworld.kr/req/wmts/1.0.0/sample-key/Base/1/2/3.png")).toBe(
-      "https://api.vworld.kr/req/wmts/1.0.0/[redacted]/Base/1/2/3.png"
+      "https://api.vworld.kr/req/wmts/1.0.0/***/Base/1/2/3.png"
     );
   });
 });

@@ -6,13 +6,13 @@
 - 없음
 
 ## 대기 (우선순위 순)
-- T-036 `maplibre-vworld-js` main 동기화 — 현재 `kraddr-geo-ui`는 `digitie/maplibre-vworld-js#11321fe`에 고정되어 있으나 upstream main은 `1d87eca`까지 진행됐다. 최신 main을 확인하고, dependency SHA 갱신·타입/테스트/문서 반영을 별도 PR로 진행한다.
 - T-028 일변동 ZIP 로더 — `data/juso/daily/*.zip`를 full-load 이후 증분 적용할 수 있도록 파일 구조 분석, `MVM_RES_CD` 매핑, 재실행 안전성을 설계한다.
 - T-029 `jibun_rnaddrkor_*` 활용 여부 결정 — 도로명주소 한글 전체분에 같이 배포되는 지번 매핑 텍스트를 현재 `tl_juso_text`와 어떻게 조화시킬지 ADR로 확정한다.
 - T-030 상세주소 동 도형/별도 건물 도형 로더 검토 — `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`의 전자지도 SHP와 중복·보완 관계를 조사한다.
 - T-027 최종 실 데이터 클린 적재 검증 — 남은 튜닝/증분/보조 로더 작업을 모두 머지한 뒤 Docker DB를 삭제하고 처음부터 다시 적재한다. C1~C10 정합성, geocode/reverse/search/zipcode smoke test, data-quality export, 성능 로그를 최종 회귀 기준으로 남긴다. 상세: `docs/t027-fullload-plan.md`
 
 ## 완료
+- [x] T-036 `maplibre-vworld-js` main 동기화. `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신하고, `redactVWorldUrl()` helper를 기존 내부 이름 `redactVWorldTileUrl`로 alias해 디버그 UI 계약을 유지했다. 최신 upstream redaction 표기 `***`를 테스트로 고정하고 frontend `npm ci`/lint/type/test/build를 검증했다. 상세: `docs/t036-maplibre-vworld-sync.md` (2026-05-26)
 - [x] T-035 MV refresh/swap 벤치마크. `scripts/benchmark_mv_refresh.py`로 전국 DB `kraddr_geo_t033`에서 `CONCURRENTLY`와 shadow swap을 비교했다. `CONCURRENTLY`는 1분 49.64초, shadow swap은 2분 16.28초였고, swap rename/index rename 구간은 약 0.016초였다. `shadow_swap_mv()`는 `ANALYZE`를 별도 transaction으로 분리했다. 상세: `docs/t035-mv-refresh-benchmark.md` (2026-05-26)
 - [x] T-034 SHP GDAL append 병목 튜닝. `TL_SPRD_INTRVL`은 geometry 없는 DBF 속성 레이어라 GDAL append 대신 직접 DBF scan + `psycopg COPY` 경로로 분기했다. 세종 단일 레이어는 36.12초에서 1.59초로 줄었고, 경기도 2,677,715행은 새 경로에서 15.88초에 적재됐다. 상세: `docs/t034-shp-append-tuning.md` (2026-05-26)
 - [x] T-033 전국 full-load 성능 재검증. PR #20에서 `kraddr_geo_t033` 빈 DB에 실제 전국 데이터 full-load를 수행했다. 전체 4시간 8분 2초, SHP 153 layers, MV 6,416,637행, smoke test 통과, data-quality CSV 8개 export를 기록했다. 상세: `docs/t033-full-load-revalidation.md` (2026-05-26)

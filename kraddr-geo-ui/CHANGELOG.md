@@ -12,6 +12,7 @@
 - Vitest 단위 테스트: 시도 추론, load workflow reducer, consistency severity, schema name generation, API path helper.
 
 ### Changed
+- `maplibre-vworld`를 upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 동기화한다. 최신 upstream redaction helper는 `redactVWorldUrl()`이며, UI 내부에서는 기존 import 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 재수출한다.
 - `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정하고, VWorld WMTS helper와 CSS를 upstream package에서 소비한다.
 - `maplibre-vworld`를 upstream PR #9 commit `11321fe`로 동기화하고, VWorld tile error 분류와 URL redaction을 upstream helper로 공유한다.
 - upstream zod v4 peer dependency에 맞춰 `zod ^4.4.3`을 직접 의존성으로 둔다.
