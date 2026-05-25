@@ -2,6 +2,47 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #19 리뷰 반영 — T-032 머지 전 보강)
+
+**작업**: PR #19 formal review를 확인하고 머지 권장 조건(M1, M3+L1, L9)과 즉시 처리 가능한 Low 항목을 반영했다.
+
+**반영 상세**:
+- `export_data_quality_samples()`는 prepare temp table 생성과 export query를 명시적 `async with conn.begin()` 안에서 실행한다. DB transaction 뒤에 CSV를 쓰도록 해 `ON COMMIT DROP` temp table 계약과 lock 시간을 분리했다.
+- `data_quality`의 로컬 SQL splitter를 제거하고 `infra.sql.iter_sql_statements()`로 통합했다. 공용 splitter는 string literal, quoted identifier, comment, dollar quote 안의 세미콜론을 보존한다.
+- `resolve_text_geometry_links()`는 기본 30분 transaction-local timeout 의도를 docstring으로 설명하고, `statement_timeout_ms=None`이면 caller/session timeout을 유지하도록 열어뒀다.
+- `load_shp_polygons(analyze=...)` docstring을 추가하고, `_analyze_target_tables()`는 테이블마다 별도 transaction으로 `ANALYZE`를 실행한다. 대상 테이블 dedup은 `_unique_target_tables()` helper로 의도를 고정했다.
+- `docs/tasks.md`에 T-033(전국 full-load 재검증), T-034(SHP GDAL append 병목 튜닝), T-035(MV refresh/swap 벤치마크)를 추가했다.
+- Alembic `0003_t032_performance_indexes.py`에는 대용량 운영 DB에서 일반 `CREATE INDEX`를 점검 창에 적용해야 한다는 주석을 남겼다.
+
+**검증**: 리뷰 반영 뒤 대상 단위 테스트 41개 통과, 전체 `pytest -q` 104 passed / 7 skipped, `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `git diff --check` 모두 통과했다.
+
+## 2026-05-25 (T-032 — 세종·경남 축소 검증 1회)
+
+**작업**: 사용자 지시에 따라 반복 횟수를 1회로 낮추고, 세종특별시·경상남도 축소 데이터만 실제 Docker DB(`kraddr_geo_t032`)에 적재했다. 전국 full test와 반복 trial은 수행하지 않았다.
+
+**결과**:
+- `load all-sidos --no-refresh --allow-consistency-error`는 SHP 18개 layer 적재까지 완료했으나 `resolve_text_geometry_links()` 첫 UPDATE가 기본 5초 `statement_timeout`에 걸려 실패했다. 경과 2시간 1분 13초, 최대 RSS 163,672KB.
+- 실패를 반영해 `resolve_text_geometry_links()`에 transaction-local 30분 timeout을 추가했다.
+- 같은 DB에서 후처리만 재실행해 28.53초, 최대 RSS 77,156KB로 성공했다.
+- C4/C6/C7 data-quality export는 11.25초, 최대 RSS 79,884KB로 CSV 6개를 생성했다.
+- C4/C6/C7 정합성은 14.88초, 최대 RSS 80,204KB로 완료했다. `severity_max=ERROR`이며 C4 213건(`over_500m=2`), C6 77건, C7 851건이다.
+
+**관찰**: 두 시도 축소 검증에서도 `TL_SPRD_INTRVL` 1,960,217행, `TL_SPBD_BULD` 1,324,177행 append가 전체 시간을 지배했다. GDAL `PG_USE_COPY=YES` 설정에도 `pg_stat_activity`에서는 일부 구간이 INSERT 형태로 관측되어, 후속 PR에서 GDAL COPY 강제 여부와 `TL_SPRD_INTRVL` 전용 loader를 다시 검토한다.
+
+**검증**: 대상 단위 테스트 38개, 전체 `pytest -q` 101 passed / 7 skipped, `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `git diff --check` 모두 통과했다.
+
+## 2026-05-25 (T-032 — 성능 튜닝 범위 축소)
+
+**작업**: PR #18 merge 이후 T-032를 시작했다. 사용자 지시에 따라 성능 튜닝 반복 기준은 기존 "10회 이상"에서 "세종특별시·경상남도 축소 데이터 1회 검증"으로 낮췄다. 전체 전국 full test와 반복 trial은 후속 안정화 단계로 미룬다.
+
+**구현 방향**:
+- C4 data-quality export는 nearest polygon 거리 계산을 `_kraddr_dq_c4_distances` 임시 테이블로 한 번 만들고, sample CSV와 bucket CSV가 같은 결과를 재사용하도록 바꾼다.
+- C6/C7 data-quality export는 polygon mismatch 결과를 case별 임시 violation 테이블로 한 번 만들고, sample CSV와 region summary CSV가 같은 결과를 재사용하도록 바꾼다.
+- C4/C6/C7 정합성 SQL은 PostgreSQL planner가 고비용 CTE를 중복 평가하지 않도록 `MATERIALIZED` CTE를 명시한다.
+- `load shp-all` 및 `load all-sidos --shp-root`는 여러 시도 SHP를 연속 적재할 때 각 시도마다 통계를 갱신하지 않고 마지막 시도 뒤 1회만 `ANALYZE`한다.
+
+**검증 계획**: `kraddr_geo_t032` Docker DB에서 세종특별자치시·경상남도 데이터 1회만 적재/검증한다. 현재 실행 중이며, 완료 결과와 경과 시간은 이 항목 또는 후속 항목에 이어 적는다.
+
 ## 2026-05-25 (PR #18 rebase — VWorld debug helper sync)
 
 **작업**: 사용자 지시에 따라 T-032 성능 튜닝 전에 PR #18을 먼저 처리했다. PR #17이 main에 merge되어 `CHANGELOG.md`, `docs/journal.md`, `docs/resume.md`에서 충돌이 발생했으며, PR #17 데이터 품질 기록과 PR #18 VWorld sync 기록을 모두 보존하는 방식으로 rebase했다.

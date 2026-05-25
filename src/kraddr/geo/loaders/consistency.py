@@ -131,7 +131,7 @@ SELECT count(*)::bigint AS count,
         name="출입구 좌표와 건물 polygon 거리 이상치",
         threshold="50m 초과 WARN, 500m 초과 ERROR",
         sql="""
-WITH distances AS (
+WITH distances AS MATERIALIZED (
   SELECT j.bd_mgt_sn,
          e.ent_man_no,
          nearest.dist_m
@@ -252,14 +252,14 @@ SELECT over_10m AS count,
         name="우편번호 텍스트와 기초구역 polygon 불일치",
         threshold="zip_no polygon 누락 WARN, 좌표 외부 ERROR",
         sql="""
-WITH base AS (
+WITH base AS MATERIALIZED (
   SELECT j.bd_mgt_sn, j.zip_no, e.ent_man_no, e.geom, k.bas_id, k.geom AS bas_geom
     FROM tl_juso_text j
     JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
     LEFT JOIN tl_kodis_bas k ON k.bas_id = j.zip_no
    WHERE j.zip_no IS NOT NULL
 ),
-violations AS (
+violations AS MATERIALIZED (
   SELECT bd_mgt_sn,
          zip_no,
          ent_man_no,
@@ -296,13 +296,13 @@ SELECT count,
         name="행정구역 polygon과 출입구 좌표 불일치",
         threshold="polygon 누락 WARN, 좌표 외부 ERROR",
         sql="""
-WITH base AS (
+WITH base AS MATERIALIZED (
   SELECT j.bd_mgt_sn, left(j.bjd_cd, 8) AS emd_cd, e.ent_man_no, e.geom, p.geom AS emd_geom
     FROM tl_juso_text j
     JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
     LEFT JOIN tl_scco_emd p ON p.emd_cd = left(j.bjd_cd, 8)
 ),
-violations AS (
+violations AS MATERIALIZED (
   SELECT bd_mgt_sn,
          emd_cd,
          ent_man_no,

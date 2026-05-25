@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from kraddr.geo.infra.engine import _connect_options, make_async_engine
 from kraddr.geo.infra.pnu import build_pnu, pnu_land_type_from_mntn_yn
-from kraddr.geo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL
+from kraddr.geo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL, iter_sql_statements
 from kraddr.geo.settings import Settings
 
 
@@ -63,3 +63,24 @@ def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
     assert "WHERE pt_5179 IS NOT NULL" in MV_SQL
     assert "ent_pt_4326" not in MV_SQL
     assert "idx_juso_text_rn_trgm" in INDEX_SQL
+    assert "idx_juso_text_resolve" in INDEX_SQL
+    assert "rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no" in INDEX_SQL
+
+
+def test_iter_sql_statements_preserves_semicolons_inside_literals_and_comments() -> None:
+    sql = """
+-- comment with ; should not split
+SELECT ';' AS literal;
+/* block ; comment */
+SELECT 'it''s; ok' AS escaped;
+DO $$ BEGIN RAISE NOTICE ';'; END $$;
+SELECT "$not_dollar$;still_identifier";
+"""
+
+    statements = iter_sql_statements(sql)
+
+    assert len(statements) == 4
+    assert "SELECT ';' AS literal" in statements[0]
+    assert "SELECT 'it''s; ok' AS escaped" in statements[1]
+    assert "RAISE NOTICE ';'" in statements[2]
+    assert 'SELECT "$not_dollar$;still_identifier"' in statements[3]

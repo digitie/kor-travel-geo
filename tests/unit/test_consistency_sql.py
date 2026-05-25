@@ -18,6 +18,7 @@ def test_building_polygon_cases_use_natural_key_not_management_number() -> None:
     assert "postload.resolve_text_geometry_links()" in c4
     assert "JOIN LATERAL" in c4
     assert "ORDER BY e.geom <-> p.geom" in c4
+    assert "WITH distances AS MATERIALIZED" in c4
     assert "'error_count', over_500m" in c4
     assert "best_navi" in c5
     assert "JOIN LATERAL" in c5
@@ -30,6 +31,10 @@ def test_polygon_contains_cases_treat_boundary_points_as_inside() -> None:
 
     assert "ST_Covers(bas_geom, geom)" in c6
     assert "ST_Covers(emd_geom, geom)" in c7
+    assert "WITH base AS MATERIALIZED" in c6
+    assert "violations AS MATERIALIZED" in c6
+    assert "WITH base AS MATERIALIZED" in c7
+    assert "violations AS MATERIALIZED" in c7
     assert "ST_Contains" not in c6
     assert "ST_Contains" not in c7
 

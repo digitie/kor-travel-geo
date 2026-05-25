@@ -153,12 +153,14 @@ def load_shp_all_command(
         total = 0
         async with AsyncAddressClient() as client:
             assert client.engine is not None
-            for sido_dir, effective_mode in _shp_all_work_items(root, mode):
+            items = _shp_all_work_items(root, mode)
+            for index, (sido_dir, effective_mode) in enumerate(items):
                 count = await load_shp_polygons(
                     client.engine,
                     sido_dir,
                     mode=effective_mode,
                     source_yyyymm=yyyymm,
+                    analyze=index == len(items) - 1,
                 )
                 total += count
                 typer.echo(f"{sido_dir.name}: {count} layers")
@@ -256,12 +258,14 @@ def load_all_sidos_command(
             )
             if shp_root is not None:
                 shp_total = 0
-                for index, sido_dir in enumerate(_sido_dirs(shp_root)):
+                sido_dirs = _sido_dirs(shp_root)
+                for index, sido_dir in enumerate(sido_dirs):
                     shp_total += await load_shp_polygons(
                         client.engine,
                         sido_dir,
                         mode=_shp_mode_for_index("full", index),
                         source_yyyymm=yyyymm,
+                        analyze=index == len(sido_dirs) - 1,
                     )
                 typer.echo(f"loaded SHP layers total: {shp_total}")
             if pobox_path is not None:

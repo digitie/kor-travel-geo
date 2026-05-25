@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 SCHEMA_SQL = """
 CREATE SCHEMA IF NOT EXISTS x_extension;
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA x_extension;
@@ -346,6 +348,8 @@ CREATE INDEX IF NOT EXISTS idx_juso_text_buld_nm_trgm
   ON tl_juso_text USING GIN (buld_nm_nrm gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_juso_text_pnu
   ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_juso_text_resolve
+  ON tl_juso_text (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no);
 
 CREATE INDEX IF NOT EXISTS idx_locsum_geom
   ON tl_locsum_entrc USING GIST (geom);
@@ -525,6 +529,77 @@ ANALYZE tl_navi_entrc;
 
 
 def iter_sql_statements(sql: str) -> tuple[str, ...]:
-    """Return non-empty SQL statements split for simple migration execution."""
+    """Return non-empty SQL statements while preserving quoted semicolons."""
 
-    return tuple(part.strip() for part in sql.split(";") if part.strip())
+    statements: list[str] = []
+    start = 0
+    index = 0
+    quote: str | None = None
+    dollar_tag: str | None = None
+    line_comment = False
+    block_comment = False
+
+    while index < len(sql):
+        char = sql[index]
+        next_char = sql[index + 1] if index + 1 < len(sql) else ""
+
+        if line_comment:
+            if char == "\n":
+                line_comment = False
+            index += 1
+            continue
+
+        if block_comment:
+            if char == "*" and next_char == "/":
+                block_comment = False
+                index += 2
+                continue
+            index += 1
+            continue
+
+        if dollar_tag is not None:
+            if sql.startswith(dollar_tag, index):
+                index += len(dollar_tag)
+                dollar_tag = None
+                continue
+            index += 1
+            continue
+
+        if quote is not None:
+            if char == quote:
+                if quote == "'" and next_char == "'":
+                    index += 2
+                    continue
+                quote = None
+            index += 1
+            continue
+
+        if char == "-" and next_char == "-":
+            line_comment = True
+            index += 2
+            continue
+        if char == "/" and next_char == "*":
+            block_comment = True
+            index += 2
+            continue
+        if char in {"'", '"'}:
+            quote = char
+            index += 1
+            continue
+        if char == "$":
+            match = re.match(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$", sql[index:])
+            if match is not None:
+                dollar_tag = match.group(0)
+                index += len(dollar_tag)
+                continue
+        if char == ";":
+            statement = sql[start:index].strip()
+            if statement:
+                statements.append(statement)
+            start = index + 1
+        index += 1
+
+    statement = sql[start:].strip()
+    if statement:
+        statements.append(statement)
+    return tuple(statements)

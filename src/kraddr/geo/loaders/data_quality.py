@@ -12,7 +12,117 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kraddr.geo.infra.sql import iter_sql_statements
+
 DATA_QUALITY_CASES = ("C2", "C4", "C6", "C7")
+
+
+# Prepare batches create ON COMMIT DROP temp tables that are reused by the
+# export specs below. export_data_quality_samples() keeps prepare + export in
+# one explicit transaction so those temp tables cannot disappear between steps.
+CASE_PREPARE_SQL: dict[str, str] = {
+    "C4": """
+DROP TABLE IF EXISTS _kraddr_dq_c4_distances;
+CREATE TEMP TABLE _kraddr_dq_c4_distances ON COMMIT DROP AS
+WITH distances AS (
+  SELECT j.bd_mgt_sn,
+         e.ent_man_no,
+         j.rncode_full,
+         j.bjd_cd,
+         e.source_file AS entrance_source_file,
+         nearest.polygon_bd_mgt_sn,
+         nearest.polygon_source_file,
+         ST_Distance(e.geom, nearest.geom) AS dist_m,
+         e.geom AS entrance_geom,
+         nearest.geom AS polygon_geom
+    FROM tl_locsum_entrc e
+    JOIN tl_juso_text j ON j.bd_mgt_sn = e.bd_mgt_sn
+    JOIN LATERAL (
+      SELECT p.bd_mgt_sn AS polygon_bd_mgt_sn,
+             p.source_file AS polygon_source_file,
+             p.geom
+        FROM tl_spbd_buld_polygon p
+       WHERE p.rncode_full = j.rncode_full
+         AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+         AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+         AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
+         AND p.bjd_cd = j.bjd_cd
+       ORDER BY e.geom <-> p.geom
+       LIMIT 1
+    ) nearest ON true
+)
+SELECT * FROM distances;
+CREATE INDEX _kraddr_dq_c4_distances_dist_idx
+  ON _kraddr_dq_c4_distances (dist_m DESC);
+ANALYZE _kraddr_dq_c4_distances;
+""",
+    "C6": """
+DROP TABLE IF EXISTS _kraddr_dq_c6_violations;
+CREATE TEMP TABLE _kraddr_dq_c6_violations ON COMMIT DROP AS
+WITH base AS (
+  SELECT j.bd_mgt_sn,
+         j.zip_no,
+         e.ent_man_no,
+         e.geom,
+         e.source_file,
+         e.source_yyyymm,
+         k.bas_id,
+         k.geom AS bas_geom
+    FROM tl_juso_text j
+    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
+    LEFT JOIN tl_kodis_bas k ON k.bas_id = j.zip_no
+   WHERE j.zip_no IS NOT NULL
+)
+SELECT 'C6' AS case_code,
+       CASE
+         WHEN bas_id IS NULL THEN 'missing_zip_polygon'
+         WHEN NOT ST_Covers(bas_geom, geom) THEN 'outside_zip_polygon'
+         ELSE 'ok'
+       END AS reason,
+       bd_mgt_sn,
+       zip_no AS region_key,
+       ent_man_no,
+       source_file,
+       source_yyyymm,
+       round(ST_X(ST_Transform(geom, 4326))::numeric, 8)::float8 AS lon,
+       round(ST_Y(ST_Transform(geom, 4326))::numeric, 8)::float8 AS lat
+  FROM base
+ WHERE bas_id IS NULL OR NOT ST_Covers(bas_geom, geom);
+ANALYZE _kraddr_dq_c6_violations;
+""",
+    "C7": """
+DROP TABLE IF EXISTS _kraddr_dq_c7_violations;
+CREATE TEMP TABLE _kraddr_dq_c7_violations ON COMMIT DROP AS
+WITH base AS (
+  SELECT j.bd_mgt_sn,
+         left(j.bjd_cd, 8) AS emd_cd,
+         e.ent_man_no,
+         e.geom,
+         e.source_file,
+         e.source_yyyymm,
+         p.geom AS emd_geom
+    FROM tl_juso_text j
+    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
+    LEFT JOIN tl_scco_emd p ON p.emd_cd = left(j.bjd_cd, 8)
+)
+SELECT 'C7' AS case_code,
+       CASE
+         WHEN emd_geom IS NULL THEN 'missing_emd_polygon'
+         WHEN NOT ST_Covers(emd_geom, geom) THEN 'outside_emd_polygon'
+         ELSE 'ok'
+       END AS reason,
+       bd_mgt_sn,
+       emd_cd AS region_key,
+       ent_man_no,
+       source_file,
+       source_yyyymm,
+       round(ST_X(ST_Transform(geom, 4326))::numeric, 8)::float8 AS lon,
+       round(ST_Y(ST_Transform(geom, 4326))::numeric, 8)::float8 AS lat
+  FROM base
+ WHERE emd_geom IS NULL OR NOT ST_Covers(emd_geom, geom);
+ANALYZE _kraddr_dq_c7_violations;
+""",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,43 +292,35 @@ SELECT count(*)::bigint AS rows,
             "delta_lat",
         ),
         sql="""
-WITH distances AS (
-  SELECT j.bd_mgt_sn,
-         e.ent_man_no,
-         j.rncode_full,
-         j.bjd_cd,
-         e.source_file AS entrance_source_file,
-         nearest.polygon_bd_mgt_sn,
-         nearest.polygon_source_file,
-         ST_Distance(e.geom, nearest.geom) AS dist_m,
-         round(ST_X(ST_Transform(e.geom, 4326))::numeric, 8)::float8 AS entrance_lon,
-         round(ST_Y(ST_Transform(e.geom, 4326))::numeric, 8)::float8 AS entrance_lat,
-         round(ST_X(ST_Transform(ST_PointOnSurface(nearest.geom), 4326))::numeric, 8)::float8
+WITH samples AS (
+  SELECT CASE
+           WHEN dist_m > 500 THEN '500+'
+           WHEN dist_m > 100 THEN '100-500'
+           ELSE '50-100'
+         END AS bucket,
+         round(dist_m::numeric, 2)::float8 AS dist_m,
+         bd_mgt_sn,
+         ent_man_no,
+         rncode_full,
+         bjd_cd,
+         entrance_source_file,
+         polygon_bd_mgt_sn,
+         polygon_source_file,
+         round(ST_X(ST_Transform(entrance_geom, 4326))::numeric, 8)::float8
+           AS entrance_lon,
+         round(ST_Y(ST_Transform(entrance_geom, 4326))::numeric, 8)::float8
+           AS entrance_lat,
+         round(ST_X(ST_Transform(ST_PointOnSurface(polygon_geom), 4326))::numeric, 8)::float8
            AS polygon_lon,
-         round(ST_Y(ST_Transform(ST_PointOnSurface(nearest.geom), 4326))::numeric, 8)::float8
+         round(ST_Y(ST_Transform(ST_PointOnSurface(polygon_geom), 4326))::numeric, 8)::float8
            AS polygon_lat
-    FROM tl_locsum_entrc e
-    JOIN tl_juso_text j ON j.bd_mgt_sn = e.bd_mgt_sn
-    JOIN LATERAL (
-      SELECT p.bd_mgt_sn AS polygon_bd_mgt_sn,
-             p.source_file AS polygon_source_file,
-             p.geom
-        FROM tl_spbd_buld_polygon p
-       WHERE p.rncode_full = j.rncode_full
-         AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
-         AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
-         AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
-         AND p.bjd_cd = j.bjd_cd
-       ORDER BY e.geom <-> p.geom
-       LIMIT 1
-    ) nearest ON true
+    FROM _kraddr_dq_c4_distances
+   WHERE dist_m > 50
+   ORDER BY dist_m DESC, bd_mgt_sn
+   LIMIT :limit
 )
-SELECT CASE
-         WHEN dist_m > 500 THEN '500+'
-         WHEN dist_m > 100 THEN '100-500'
-         ELSE '50-100'
-       END AS bucket,
-       round(dist_m::numeric, 2)::float8 AS dist_m,
+SELECT bucket,
+       dist_m,
        bd_mgt_sn,
        ent_man_no,
        rncode_full,
@@ -232,10 +334,7 @@ SELECT CASE
        polygon_lat,
        round((entrance_lon - polygon_lon)::numeric, 8)::float8 AS delta_lon,
        round((entrance_lat - polygon_lat)::numeric, 8)::float8 AS delta_lat
-  FROM distances
- WHERE dist_m > 50
- ORDER BY dist_m DESC, bd_mgt_sn
- LIMIT :limit
+  FROM samples
 """,
     ),
     ExportSpec(
@@ -244,23 +343,7 @@ SELECT CASE
         filename="c4_distance_buckets.csv",
         columns=("bucket", "rows", "min_m", "avg_m", "max_m"),
         sql="""
-WITH distances AS (
-  SELECT ST_Distance(e.geom, nearest.geom) AS dist_m
-    FROM tl_locsum_entrc e
-    JOIN tl_juso_text j ON j.bd_mgt_sn = e.bd_mgt_sn
-    JOIN LATERAL (
-      SELECT p.geom
-        FROM tl_spbd_buld_polygon p
-       WHERE p.rncode_full = j.rncode_full
-         AND p.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
-         AND p.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
-         AND p.buld_slno IS NOT DISTINCT FROM j.buld_slno
-         AND p.bjd_cd = j.bjd_cd
-       ORDER BY e.geom <-> p.geom
-       LIMIT 1
-    ) nearest ON true
-),
-buckets AS (
+WITH buckets AS (
   SELECT CASE
            WHEN dist_m > 500 THEN '500+'
            WHEN dist_m > 100 THEN '100-500'
@@ -274,7 +357,7 @@ buckets AS (
            ELSE 0
          END AS bucket_order,
          dist_m
-    FROM distances
+    FROM _kraddr_dq_c4_distances
 )
 SELECT bucket,
        count(*)::bigint AS rows,
@@ -302,39 +385,8 @@ SELECT bucket,
             "lat",
         ),
         sql="""
-WITH base AS (
-  SELECT j.bd_mgt_sn,
-         j.zip_no,
-         e.ent_man_no,
-         e.geom,
-         e.source_file,
-         e.source_yyyymm,
-         k.bas_id,
-         k.geom AS bas_geom
-    FROM tl_juso_text j
-    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
-    LEFT JOIN tl_kodis_bas k ON k.bas_id = j.zip_no
-   WHERE j.zip_no IS NOT NULL
-),
-violations AS (
-  SELECT 'C6' AS case_code,
-         CASE
-           WHEN bas_id IS NULL THEN 'missing_zip_polygon'
-           WHEN NOT ST_Covers(bas_geom, geom) THEN 'outside_zip_polygon'
-           ELSE 'ok'
-         END AS reason,
-         bd_mgt_sn,
-         zip_no AS region_key,
-         ent_man_no,
-         source_file,
-         source_yyyymm,
-         round(ST_X(ST_Transform(geom, 4326))::numeric, 8)::float8 AS lon,
-         round(ST_Y(ST_Transform(geom, 4326))::numeric, 8)::float8 AS lat
-    FROM base
-   WHERE bas_id IS NULL OR NOT ST_Covers(bas_geom, geom)
-)
 SELECT *
-  FROM violations
+  FROM _kraddr_dq_c6_violations
  ORDER BY reason, region_key, bd_mgt_sn
  LIMIT :limit
 """,
@@ -345,29 +397,12 @@ SELECT *
         filename="c6_region_summary.csv",
         columns=("case_code", "region_key", "rows", "missing_polygon", "outside_polygon"),
         sql="""
-WITH base AS (
-  SELECT j.bd_mgt_sn, j.zip_no, e.geom, k.bas_id, k.geom AS bas_geom
-    FROM tl_juso_text j
-    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
-    LEFT JOIN tl_kodis_bas k ON k.bas_id = j.zip_no
-   WHERE j.zip_no IS NOT NULL
-),
-violations AS (
-  SELECT zip_no AS region_key,
-         CASE
-           WHEN bas_id IS NULL THEN 'missing_zip_polygon'
-           WHEN NOT ST_Covers(bas_geom, geom) THEN 'outside_zip_polygon'
-           ELSE 'ok'
-         END AS reason
-    FROM base
-   WHERE bas_id IS NULL OR NOT ST_Covers(bas_geom, geom)
-)
 SELECT 'C6' AS case_code,
        region_key,
        count(*)::bigint AS rows,
        count(*) FILTER (WHERE reason = 'missing_zip_polygon')::bigint AS missing_polygon,
        count(*) FILTER (WHERE reason = 'outside_zip_polygon')::bigint AS outside_polygon
-  FROM violations
+  FROM _kraddr_dq_c6_violations
  GROUP BY region_key
  ORDER BY rows DESC, region_key
  LIMIT :limit
@@ -389,37 +424,8 @@ SELECT 'C6' AS case_code,
             "lat",
         ),
         sql="""
-WITH base AS (
-  SELECT j.bd_mgt_sn,
-         left(j.bjd_cd, 8) AS emd_cd,
-         e.ent_man_no,
-         e.geom,
-         e.source_file,
-         e.source_yyyymm,
-         p.geom AS emd_geom
-    FROM tl_juso_text j
-    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
-    LEFT JOIN tl_scco_emd p ON p.emd_cd = left(j.bjd_cd, 8)
-),
-violations AS (
-  SELECT 'C7' AS case_code,
-         CASE
-           WHEN emd_geom IS NULL THEN 'missing_emd_polygon'
-           WHEN NOT ST_Covers(emd_geom, geom) THEN 'outside_emd_polygon'
-           ELSE 'ok'
-         END AS reason,
-         bd_mgt_sn,
-         emd_cd AS region_key,
-         ent_man_no,
-         source_file,
-         source_yyyymm,
-         round(ST_X(ST_Transform(geom, 4326))::numeric, 8)::float8 AS lon,
-         round(ST_Y(ST_Transform(geom, 4326))::numeric, 8)::float8 AS lat
-    FROM base
-   WHERE emd_geom IS NULL OR NOT ST_Covers(emd_geom, geom)
-)
 SELECT *
-  FROM violations
+  FROM _kraddr_dq_c7_violations
  ORDER BY reason, region_key, bd_mgt_sn
  LIMIT :limit
 """,
@@ -430,28 +436,12 @@ SELECT *
         filename="c7_region_summary.csv",
         columns=("case_code", "region_key", "rows", "missing_polygon", "outside_polygon"),
         sql="""
-WITH base AS (
-  SELECT j.bd_mgt_sn, left(j.bjd_cd, 8) AS emd_cd, e.geom, p.geom AS emd_geom
-    FROM tl_juso_text j
-    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
-    LEFT JOIN tl_scco_emd p ON p.emd_cd = left(j.bjd_cd, 8)
-),
-violations AS (
-  SELECT emd_cd AS region_key,
-         CASE
-           WHEN emd_geom IS NULL THEN 'missing_emd_polygon'
-           WHEN NOT ST_Covers(emd_geom, geom) THEN 'outside_emd_polygon'
-           ELSE 'ok'
-         END AS reason
-    FROM base
-   WHERE emd_geom IS NULL OR NOT ST_Covers(emd_geom, geom)
-)
 SELECT 'C7' AS case_code,
        region_key,
        count(*)::bigint AS rows,
        count(*) FILTER (WHERE reason = 'missing_emd_polygon')::bigint AS missing_polygon,
        count(*) FILTER (WHERE reason = 'outside_emd_polygon')::bigint AS outside_polygon
-  FROM violations
+  FROM _kraddr_dq_c7_violations
  GROUP BY region_key
  ORDER BY rows DESC, region_key
  LIMIT :limit
@@ -467,7 +457,13 @@ async def export_data_quality_samples(
     cases: tuple[str, ...] = DATA_QUALITY_CASES,
     limit: int = 200,
 ) -> tuple[Path, ...]:
-    """Export reproducible CSV samples for the T-027 C2/C4/C6/C7 follow-up."""
+    """Export reproducible CSV samples for the T-027 C2/C4/C6/C7 follow-up.
+
+    C4/C6/C7 prepare SQL creates transaction-scoped temp tables and the
+    matching export specs read them immediately. The explicit transaction keeps
+    that contract stable even if connection options change later; CSV writes are
+    performed after the DB work finishes so file I/O does not extend locks.
+    """
     selected = set(cases)
     unknown = selected.difference(DATA_QUALITY_CASES)
     if unknown:
@@ -478,15 +474,26 @@ async def export_data_quality_samples(
     directory = Path(output_dir)
     await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=True)
     paths: list[Path] = []
-    async with engine.connect() as conn:
+    exports: list[tuple[ExportSpec, tuple[dict[str, Any], ...]]] = []
+    async with engine.connect() as conn, conn.begin():
+        for case_code in DATA_QUALITY_CASES:
+            if case_code not in selected:
+                continue
+            prepare_sql = CASE_PREPARE_SQL.get(case_code)
+            if prepare_sql is None:
+                continue
+            for statement in iter_sql_statements(prepare_sql):
+                await conn.execute(text(statement))
         for spec in EXPORT_SPECS:
             if spec.case_code not in selected:
                 continue
             result = await conn.execute(text(spec.sql), {"limit": limit})
             rows = tuple(dict(row) for row in result.mappings())
-            path = directory / spec.filename
-            _write_csv(path, spec.columns, rows)
-            paths.append(path)
+            exports.append((spec, rows))
+    for spec, rows in exports:
+        path = directory / spec.filename
+        _write_csv(path, spec.columns, rows)
+        paths.append(path)
     return tuple(paths)
 
 

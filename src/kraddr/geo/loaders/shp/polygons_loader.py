@@ -88,15 +88,24 @@ async def load_shp_polygons(
     *,
     mode: str = "full",
     source_yyyymm: str | None = None,
+    analyze: bool = True,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
+    """Load ADR-012 auxiliary SHP layers into their PostGIS target tables.
+
+    Set analyze=False only when a higher-level batch loads several 시도 folders
+    back-to-back and will call the final batch with analyze=True. That keeps
+    planner statistics fresh while avoiding 17 시도 x 9 layers repeated ANALYZE
+    work during nationwide loads.
+    """
     plans = build_shp_load_plan(path, source_yyyymm=source_yyyymm)
     return await asyncio.to_thread(
         _load_plans_sync,
         engine.url.render_as_string(hide_password=False),
         plans,
         mode,
+        analyze,
         on_progress,
         cancel_event,
     )
@@ -106,6 +115,7 @@ def _load_plans_sync(
     pg_url: str,
     plans: tuple[ShpLoadPlan, ...],
     mode: str,
+    analyze: bool,
     on_progress: ProgressCallback | None,
     cancel_event: asyncio.Event | None,
 ) -> int:
@@ -158,6 +168,11 @@ def _load_plans_sync(
             msg = f"GDAL VectorTranslate failed for {plan.source_layer}"
             raise LoaderError(msg)
         loaded += 1
+    if analyze:
+        _analyze_target_tables(
+            pg_url,
+            _unique_target_tables(plans),
+        )
     if on_progress:
         on_progress(1.0)
     return loaded
@@ -240,6 +255,22 @@ def _truncate_target_tables(pg_url: str, table_names: tuple[str, ...]) -> None:
             conn.execute(text(f"TRUNCATE TABLE {tables}"))
     finally:
         engine.dispose()
+
+
+def _analyze_target_tables(pg_url: str, table_names: tuple[str, ...]) -> None:
+    if not table_names:
+        return
+    engine = create_engine(pg_url)
+    try:
+        for table_name in table_names:
+            with engine.begin() as conn:
+                conn.execute(text(f"ANALYZE {table_name}"))
+    finally:
+        engine.dispose()
+
+
+def _unique_target_tables(plans: tuple[ShpLoadPlan, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(plan.target_table for plan in plans))
 
 
 def _table_count_snapshot(

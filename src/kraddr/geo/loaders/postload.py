@@ -14,8 +14,25 @@ from kraddr.geo.infra.sql import MV_SQL, POSTLOAD_SQL, iter_sql_statements
 LOGGER = logging.getLogger(__name__)
 
 
-async def resolve_text_geometry_links(engine: AsyncEngine) -> None:
+async def resolve_text_geometry_links(
+    engine: AsyncEngine,
+    *,
+    statement_timeout_ms: int | None = 1_800_000,
+) -> None:
+    """Resolve text master rows to entrance and navigation geometry rows.
+
+    This is a post-load maintenance step, not an online lookup path. The default
+    transaction-local statement timeout is therefore 30 minutes so large
+    two-sido or nationwide link updates do not inherit the 5 second API query
+    timeout. Pass None when the caller deliberately wants to keep the current
+    connection/session timeout unchanged.
+    """
     async with engine.begin() as conn:
+        if statement_timeout_ms is not None:
+            await conn.execute(
+                text("SELECT set_config('statement_timeout', :timeout_ms, true)"),
+                {"timeout_ms": str(statement_timeout_ms)},
+            )
         for sql in iter_sql_statements(POSTLOAD_SQL):
             await conn.execute(text(sql))
 

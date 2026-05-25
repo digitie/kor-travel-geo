@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from kraddr.geo.loaders.juso_map import MASTER_LAYER_NAMES
 from kraddr.geo.loaders.shp import polygons_loader
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def test_gdal_pg_destination_converts_sqlalchemy_url_to_pg_conninfo() -> None:
@@ -45,6 +42,29 @@ def test_full_mode_logs_row_count_snapshot_before_truncate() -> None:
     assert "_table_count_snapshot" in source
     assert "approximate row counts before TRUNCATE" in source
     assert source.index("_table_count_snapshot") < source.index("TRUNCATE TABLE")
+
+
+def test_shp_loader_analyzes_target_tables_after_requested_batch() -> None:
+    source = inspect.getsource(polygons_loader._load_plans_sync)
+    analyze_source = inspect.getsource(polygons_loader._analyze_target_tables)
+
+    assert "if analyze:" in source
+    assert "_analyze_target_tables" in source
+    assert "_unique_target_tables(plans)" in source
+    assert "ANALYZE {table_name}" in analyze_source
+    assert analyze_source.index("for table_name in table_names") < analyze_source.index(
+        "with engine.begin()"
+    )
+
+
+def test_unique_target_tables_preserves_order() -> None:
+    plans = (
+        polygons_loader.ShpLoadPlan("A", "table_a", Path("a.shp"), Path("a.dbf"), "a.shp"),
+        polygons_loader.ShpLoadPlan("B", "table_b", Path("b.shp"), Path("b.dbf"), "b.shp"),
+        polygons_loader.ShpLoadPlan("C", "table_a", Path("c.shp"), Path("c.dbf"), "c.shp"),
+    )
+
+    assert polygons_loader._unique_target_tables(plans) == ("table_a", "table_b")
 
 
 def test_shp_load_plan_projects_source_columns_to_target_schema() -> None:
