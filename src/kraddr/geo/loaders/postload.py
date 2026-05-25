@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import warnings
 from typing import Any, Literal
 
@@ -10,16 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.infra.sql import MV_SQL, POSTLOAD_SQL, iter_sql_statements
 
-MV_NEXT_INDEX_RENAMES: tuple[tuple[str, str], ...] = (
-    ("idx_mv_next_geocode_target_next_pk", "idx_mv_geocode_target_pk"),
-    ("idx_mv_next_road", "idx_mv_road"),
-    ("idx_mv_next_jibun", "idx_mv_jibun"),
-    ("idx_mv_next_rn_trgm", "idx_mv_rn_trgm"),
-    ("idx_mv_next_buld_nm_trgm", "idx_mv_buld_nm_trgm"),
-    ("idx_mv_next_geom5179", "idx_mv_geom5179"),
-    ("idx_mv_next_geom4326", "idx_mv_geom4326"),
-    ("idx_mv_next_pt_source", "idx_mv_pt_source"),
-)
+LOGGER = logging.getLogger(__name__)
 
 
 async def resolve_text_geometry_links(engine: AsyncEngine) -> None:
@@ -91,24 +83,53 @@ async def normalize_mv_index_names(engine: AsyncEngine) -> None:
 
 
 async def _rename_mv_next_indexes(conn: Any) -> None:
-    for next_name, target_name in MV_NEXT_INDEX_RENAMES:
-        next_exists = await conn.scalar(
-            text("SELECT to_regclass(:index_name)"),
-            {"index_name": next_name},
-        )
-        if next_exists is None:
-            continue
+    for next_name, target_name in await _mv_next_index_renames(conn):
         target_exists = await conn.scalar(
             text("SELECT to_regclass(:index_name)"),
             {"index_name": target_name},
         )
         if target_exists is not None:
-            warnings.warn(
+            message = (
                 f"stale MV index {target_name} already exists; dropping {next_name} "
-                "to avoid the next shadow rebuild name collision",
-                RuntimeWarning,
-                stacklevel=2,
+                "to avoid the next shadow rebuild name collision"
             )
-            await conn.execute(text(f"DROP INDEX {next_name}"))
+            LOGGER.warning(message)
+            warnings.warn(message, RuntimeWarning, stacklevel=2)
+            await conn.execute(text(f"DROP INDEX {_quote_identifier(next_name)}"))
             continue
-        await conn.execute(text(f"ALTER INDEX {next_name} RENAME TO {target_name}"))
+        await conn.execute(
+            text(
+                f"ALTER INDEX {_quote_identifier(next_name)} "
+                f"RENAME TO {_quote_identifier(target_name)}"
+            )
+        )
+
+
+async def _mv_next_index_renames(conn: Any) -> tuple[tuple[str, str], ...]:
+    result = await conn.execute(
+        text(
+            """
+SELECT i.relname AS index_name
+  FROM pg_class i
+  JOIN pg_index ix ON ix.indexrelid = i.oid
+  JOIN pg_class t ON t.oid = ix.indrelid
+  JOIN pg_namespace n ON n.oid = i.relnamespace
+ WHERE n.nspname = current_schema()
+   AND t.relname IN ('mv_geocode_target', 'mv_geocode_target_next')
+   AND i.relname LIKE 'idx_mv_next_%'
+ ORDER BY i.relname
+"""
+        )
+    )
+    names = tuple(str(row[0]) for row in result)
+    return tuple((name, _mv_target_index_name(name)) for name in names)
+
+
+def _mv_target_index_name(next_name: str) -> str:
+    suffix = next_name.removeprefix("idx_mv_next_")
+    suffix = suffix.replace("geocode_target_next", "geocode_target")
+    return f"idx_mv_{suffix}"
+
+
+def _quote_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'

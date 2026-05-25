@@ -13,4 +13,6 @@ def test_t027_shp_schema_fixups_migration_covers_reviewed_changes() -> None:
     assert "ADD COLUMN IF NOT EXISTS {column}" in migration
     assert "COALESCE(NULLIF(li_cd, ''), '00')" in migration
     assert "ADD COLUMN IF NOT EXISTS geom geometry(MultiLineString, 5179)" in migration
+    assert "GeometryType(geom) NOT IN ('POLYGON', 'MULTIPOLYGON')" in migration
+    assert "TRUNCATE TABLE tl_sprd_rw" in migration
     assert "ALTER COLUMN geom TYPE geometry(MultiPolygon, 5179)" in migration

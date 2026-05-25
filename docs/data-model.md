@@ -224,12 +224,12 @@ GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY
 | 케이스 | SQL 시그니처 | 의미 | 대응 |
 |--------|--------------|------|------|
 | **C1: 텍스트에만 존재** (BD_MGT_SN) | `juso \ buld_polygon` | 도로명주소 정본에는 있는데 SHP polygon이 없음 | 신축·미반영. `WARN` (확인 항목) |
-| **C2: SHP에만 존재** | `buld_polygon \ juso` | polygon은 있는데 텍스트가 누락 | `ERROR` — 텍스트 적재 누락 의심 |
+| **C2: SHP에만 존재** | `buld_polygon \ juso` | polygon은 있는데 텍스트가 누락, 또는 SHP natural key 자체가 비어 비교 불가 | `ERROR` — metric의 `missing_text`/`missing_resolve_key`를 나눠 후속 분석 |
 | **C3: 출입구 0개 건물 비율** | `juso \ locsum` | 위치정보요약DB에 출입구가 없는 건물 | `INFO` — `navi_centroid` fallback으로 흡수. 비율이 임계(예: 5%) 초과 시 `WARN` |
-| **C4: 출입구 좌표 ↔ 건물 polygon 거리** | `ST_Distance(locsum.geom, buld_polygon.geom)` | 출입구가 건물 polygon 외부, 또는 멀리 떨어짐 | 5m 이내 `OK`, 50m 초과 `WARN`, 500m 초과 `ERROR` |
+| **C4: 출입구 좌표 ↔ 건물 polygon 거리** | `ST_Distance(locsum.geom, buld_polygon.geom)` | 출입구가 건물 polygon 외부, 또는 멀리 떨어짐 | 5m 이내 `OK`, 50m 초과 `WARN`, 500m 초과 `ERROR`; `error_count`는 500m 초과 건수 |
 | **C5: navi centroid ↔ 건물 polygon centroid 일치** | `ST_Distance(navi.centroid_5179, ST_Centroid(buld_polygon.geom))` | 두 centroid 거리 | 1m 이내 `OK`, 10m 초과 `WARN` |
-| **C6: 우편번호 텍스트 ↔ kodis_bas polygon** | `ST_Contains(kodis_bas.geom, locsum.geom)` 와 `juso.zip_no = kodis_bas.bas_id` 비교 | 좌표가 우편번호 polygon 안인가 + 텍스트 zip_no와 일치하는가 | 일치 `OK`, polygon 외 `WARN`, zip_no 불일치 `ERROR` |
-| **C7: 행정구역 ↔ 좌표 polygon 일치** | `ST_Contains(scco_emd.geom, locsum.geom)` 와 `juso.bjd_cd[1..8] = scco_emd.emd_cd` 비교 | 좌표가 법정동 polygon 안인가 | `OK` / `WARN`(polygon 외) / `ERROR`(코드 불일치) |
+| **C6: 우편번호 텍스트 ↔ kodis_bas polygon** | `ST_Covers(kodis_bas.geom, locsum.geom)` 와 `juso.zip_no = kodis_bas.bas_id` 비교 | 좌표가 우편번호 polygon 안 또는 경계 위인가 + 텍스트 zip_no와 일치하는가 | 일치 `OK`, polygon 외 `WARN`, zip_no 불일치 `ERROR` |
+| **C7: 행정구역 ↔ 좌표 polygon 일치** | `ST_Covers(scco_emd.geom, locsum.geom)` 와 `juso.bjd_cd[1..8] = scco_emd.emd_cd` 비교 | 좌표가 법정동 polygon 안 또는 경계 위인가 | `OK` / `WARN`(polygon 외) / `ERROR`(코드 불일치) |
 | **C8: 도로명 ↔ 도로 폴리라인 인접성** | `ST_DWithin(locsum.geom, tl_sprd_manage.geom, 100m)` filtered by `rncode_full` | 좌표가 같은 도로명 관리 LineString의 100m 이내인가 | 일치 `OK`, 외 `WARN` |
 | **C9: PNU 자릿수 검증** | `length(pnu) = 19 AND substr(pnu, 11, 1) IN ('1','2')` | ADR-010 매핑이 올바른가 | `length != 19` 시 `ERROR` |
 | **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm` 비교 | 텍스트 적재월과 SHP 적재월이 같은가 | 다르면 `WARN` (월 차이 1 이내 OK) |

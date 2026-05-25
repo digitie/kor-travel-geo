@@ -60,7 +60,7 @@ def test_consistency_cases_cover_c1_through_c10_with_metrics() -> None:
     assert tuple(f"C{index}" for index in range(1, 11)) == DEFAULT_CASES
     assert set(CASE_SQL) == set(DEFAULT_CASES)
     assert "ST_Distance" in CASE_SQL["C4"].sql
-    assert "ST_Contains" in CASE_SQL["C6"].sql
+    assert "ST_Covers" in CASE_SQL["C6"].sql
     assert "ST_DWithin" in CASE_SQL["C8"].sql
     assert "source_yyyymm" in CASE_SQL["C10"].sql
 

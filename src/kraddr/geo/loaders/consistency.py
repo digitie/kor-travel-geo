@@ -61,7 +61,19 @@ WITH total AS (
   SELECT count(*)::bigint AS total FROM tl_spbd_buld_polygon
 ),
 violations AS (
-  SELECT p.bd_mgt_sn, p.rncode_full, p.bjd_cd, p.buld_mnnm, p.buld_slno
+  SELECT p.bd_mgt_sn,
+         p.rncode_full,
+         p.bjd_cd,
+         p.buld_mnnm,
+         p.buld_slno,
+         CASE
+           WHEN p.rncode_full IS NULL
+             OR p.bjd_cd IS NULL
+             OR p.buld_mnnm IS NULL
+             OR p.buld_slno IS NULL
+           THEN 'missing_resolve_key'
+           ELSE 'missing_text'
+         END AS reason
     FROM tl_spbd_buld_polygon p
     LEFT JOIN tl_juso_text j
       ON j.rncode_full = p.rncode_full
@@ -70,15 +82,26 @@ violations AS (
      AND j.buld_slno IS NOT DISTINCT FROM p.buld_slno
      AND j.bjd_cd = p.bjd_cd
    WHERE j.bd_mgt_sn IS NULL
+),
+stats AS (
+  SELECT count(*)::bigint AS count,
+         count(*) FILTER (WHERE reason = 'missing_resolve_key')::bigint
+           AS missing_resolve_key,
+         count(*) FILTER (WHERE reason = 'missing_text')::bigint AS missing_text
+    FROM violations
 )
-SELECT count(*)::bigint AS count,
+SELECT count,
        (SELECT total FROM total) AS total,
-       '{}'::jsonb AS metric,
+       jsonb_build_object(
+         'missing_resolve_key', missing_resolve_key,
+         'missing_text', missing_text,
+         'error_count', count
+       ) AS metric,
        COALESCE(
          (SELECT jsonb_agg(to_jsonb(s)) FROM (SELECT * FROM violations LIMIT 20) s),
          '[]'::jsonb
        ) AS sample
-  FROM violations
+  FROM stats
 """,
     ),
     "C3": CaseSpec(
@@ -150,7 +173,8 @@ SELECT over_50m AS count,
          'p95_m', p95_m,
          'p99_m', p99_m,
          'over_50m', over_50m,
-         'over_500m', over_500m
+         'over_500m', over_500m,
+         'error_count', over_500m
        ) AS metric,
        COALESCE(
          (SELECT jsonb_agg(to_jsonb(v)) FROM violations v),
@@ -241,11 +265,11 @@ violations AS (
          ent_man_no,
          CASE
            WHEN bas_id IS NULL THEN 'missing_zip_polygon'
-           WHEN NOT ST_Contains(bas_geom, geom) THEN 'outside_zip_polygon'
+           WHEN NOT ST_Covers(bas_geom, geom) THEN 'outside_zip_polygon'
            ELSE 'ok'
          END AS reason
     FROM base
-   WHERE bas_id IS NULL OR NOT ST_Contains(bas_geom, geom)
+   WHERE bas_id IS NULL OR NOT ST_Covers(bas_geom, geom)
 ),
 stats AS (
   SELECT (SELECT count(*)::bigint FROM base) AS total,
@@ -284,11 +308,11 @@ violations AS (
          ent_man_no,
          CASE
            WHEN emd_geom IS NULL THEN 'missing_emd_polygon'
-           WHEN NOT ST_Contains(emd_geom, geom) THEN 'outside_emd_polygon'
+           WHEN NOT ST_Covers(emd_geom, geom) THEN 'outside_emd_polygon'
            ELSE 'ok'
          END AS reason
     FROM base
-   WHERE emd_geom IS NULL OR NOT ST_Contains(emd_geom, geom)
+   WHERE emd_geom IS NULL OR NOT ST_Covers(emd_geom, geom)
 ),
 stats AS (
   SELECT (SELECT count(*)::bigint FROM base) AS total,

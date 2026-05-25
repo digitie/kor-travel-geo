@@ -20,12 +20,19 @@ def test_iter_navi_build_rows_skips_missing_centroid_coordinates(tmp_path: Path)
     missing_centroid[4] = "111103100012"
     missing_centroid[10] = "1111010100101440003031291"
 
+    zero_centroid = missing_centroid.copy()
+    zero_centroid[10] = "1111010100101440003031290"
+    zero_centroid[23] = "0"
+    zero_centroid[24] = "0.0"
+
     valid = missing_centroid.copy()
     valid[10] = "1111010100101440003031292"
     valid[23] = "953243.01328"
     valid[24] = "1954025.806161"
 
-    source = _write_pipe_file(tmp_path / "match_build_sample.txt", [missing_centroid, valid])
+    source = _write_pipe_file(
+        tmp_path / "match_build_sample.txt", [missing_centroid, zero_centroid, valid]
+    )
 
     rows = list(iter_navi_build_rows(source, source_yyyymm="202604"))
 
@@ -33,7 +40,7 @@ def test_iter_navi_build_rows_skips_missing_centroid_coordinates(tmp_path: Path)
     assert rows[0].bd_mgt_sn == "1111010100101440003031292"
     assert rows[0].centroid_x == 953243.01328
     assert iter_navi_build_rows.__doc__ is not None
-    assert "rows yielded after coordinate-missing rows are skipped" in iter_navi_build_rows.__doc__
+    assert "zero-sentinel" in iter_navi_build_rows.__doc__
 
 
 def test_iter_navi_entrance_rows_skips_missing_coordinates(tmp_path: Path) -> None:
@@ -43,12 +50,19 @@ def test_iter_navi_entrance_rows_skips_missing_coordinates(tmp_path: Path) -> No
     missing_coordinate[2] = "111103100012"
     missing_coordinate[7] = "01"
 
+    zero_coordinate = missing_coordinate.copy()
+    zero_coordinate[1] = "1330"
+    zero_coordinate[8] = "0.0"
+    zero_coordinate[9] = "0"
+
     valid = missing_coordinate.copy()
     valid[1] = "1332"
     valid[8] = "953135.056899"
     valid[9] = "1954051.245815"
 
-    source = _write_pipe_file(tmp_path / "match_rs_entrc.txt", [missing_coordinate, valid])
+    source = _write_pipe_file(
+        tmp_path / "match_rs_entrc.txt", [missing_coordinate, zero_coordinate, valid]
+    )
 
     rows = list(iter_navi_entrance_rows(source, source_yyyymm="202604"))
 
@@ -56,7 +70,4 @@ def test_iter_navi_entrance_rows_skips_missing_coordinates(tmp_path: Path) -> No
     assert rows[0].entry_no == 1332
     assert rows[0].x_5179 == 953135.056899
     assert iter_navi_entrance_rows.__doc__ is not None
-    assert (
-        "rows yielded after coordinate-missing rows are skipped"
-        in iter_navi_entrance_rows.__doc__
-    )
+    assert "zero-sentinel" in iter_navi_entrance_rows.__doc__

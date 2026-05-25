@@ -12,8 +12,16 @@ def test_gdal_pg_destination_converts_sqlalchemy_url_to_pg_conninfo() -> None:
 
     assert destination == (
         "PG:dbname='kraddr_geo' host='localhost' port='15432' "
-        "user='addr' password='p\\'w'"
+        "user='addr' password='p\\'w' connect_timeout='10'"
     )
+
+
+def test_gdal_pg_destination_uses_query_connect_timeout() -> None:
+    destination = polygons_loader._gdal_pg_destination(
+        "postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo?connect_timeout=30"
+    )
+
+    assert "connect_timeout='30'" in destination
 
 
 def test_vector_translate_uses_gdal_38_compatible_encoding_options() -> None:

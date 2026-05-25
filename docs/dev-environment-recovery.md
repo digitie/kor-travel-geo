@@ -85,7 +85,7 @@ export KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_g
 alembic upgrade head
 ```
 
-`0002_t027_shp_schema_fixups`는 SHP 보조 테이블의 natural key 컬럼과 geometry 타입을 보정한다. `tl_spbd_buld_polygon.bjd_cd`/`rncode_full` generated column 재생성은 기존 row 수에 따라 시간이 걸릴 수 있다. 이미 PR #14 이전 스키마로 SHP를 적재했다면 migration 후 `kraddr-geo load shp-all ... --mode full`로 SHP 9개 테이블을 다시 적재한다.
+`0002_t027_shp_schema_fixups`는 SHP 보조 테이블의 natural key 컬럼과 geometry 타입을 보정한다. `tl_spbd_buld_polygon.bjd_cd`/`rncode_full` generated column 재생성은 기존 row 수에 따라 시간이 걸릴 수 있다. PR #14 이전 스키마로 `tl_sprd_rw`에 `MULTILINESTRING` 데이터가 들어 있으면 `MULTIPOLYGON`으로 cast할 수 없으므로 migration은 해당 테이블에 non-polygon row가 있는 경우 `tl_sprd_rw`를 먼저 비운 뒤 타입을 바꾼다. 이미 PR #14 이전 스키마로 SHP를 적재했다면 migration 후 `kraddr-geo load shp-all ... --mode full`로 SHP 9개 테이블을 다시 적재한다.
 
 사용자가 실제 전체 적재를 명시적으로 승인했고 기존 DB를 버려도 되는 경우에만 새로 적재한다.
 

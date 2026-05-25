@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #14 추가 리뷰 반영 — L1~L6, C2/C4/C6/C7 재검토)
+
+**작업**: PR #14의 최종 리뷰 body와 thread-aware review fetch 결과를 다시 확인했다. unresolved inline thread는 없었고, 추가 반영 대상은 N1/N2와 가능하면 L1~L6, C2/C4/C6/C7 재검토였다.
+
+**반영 상세**:
+- N1: `0002_t027_shp_schema_fixups`가 기존 `tl_sprd_rw`의 `MULTILINESTRING` row 때문에 `MULTIPOLYGON` cast에서 실패하지 않도록, non-polygon row가 있으면 `tl_sprd_rw`를 먼저 `TRUNCATE`하고 타입을 변경한다. recovery/fullload 문서에도 이 destructive-but-required 동작과 이후 SHP full reset 필요성을 명시했다.
+- N2/L1: MV shadow swap 인덱스 rename은 `MV_NEXT_INDEX_RENAMES` 고정 목록이 아니라 `pg_index`/`pg_class` live catalog에서 `idx_mv_next_%`를 조회해 target name을 유도한다. stale 운영 인덱스가 있어 새 next index를 drop하는 경우에는 `logging.warning`과 `warnings.warn`을 모두 남긴다.
+- L2: `copy_locsum_rows()` staging 중복 제거의 tie-breaker를 `ctid`에서 temp `staging_seq BIGSERIAL`로 바꿨다. 같은 staging batch 안에서 마지막으로 copy된 row가 명시적으로 선택된다.
+- L3: navi build/entrance loader가 빈 좌표뿐 아니라 `0`/`0.0` sentinel 좌표도 skip한다. EPSG:5179에서 원점 좌표는 한국 주소 데이터로 볼 수 없으므로 실제 적재 오염을 막는다.
+- L5/L6: `shp-all --mode full`의 첫 시도 full, 이후 append 시퀀스를 helper와 테스트로 분리했다. GDAL PostgreSQL conninfo에는 기본 `connect_timeout=10`을 추가하고 URL query의 `connect_timeout`을 존중한다.
+- C2/C4/C6/C7: C2 metric에 `missing_resolve_key`와 `missing_text`를 분리해 남은 `ERROR`의 성격을 후속 분석할 수 있게 했다. C4 metric은 `error_count=over_500m`를 명시한다. C6/C7은 경계 위 point를 false positive로 보지 않도록 `ST_Contains`에서 `ST_Covers`로 바꿨다.
+
+**검증**:
+- 대상 단위 테스트 20개 → 통과.
+- `pytest -q` → 84 passed, 7 skipped.
+- `ruff check .` → 통과.
+- `mypy src/kraddr/geo` → 통과.
+- `lint-imports` → Layered architecture kept.
+- `bash -n scripts/fullload_test.sh` → 통과.
+- 실제 T-027 Docker DB(`localhost:15432`)에서 C2/C4/C6/C7만 선택 재검증했다. 경과 3분 53.82초, 최대 RSS 80,076KB, `severity_max=ERROR`.
+  - C2: 34,699건 유지. 새 metric은 `missing_text=34,118`, `missing_resolve_key=581`.
+  - C4: 3,415건 유지. `over_500m=16`, `error_count=16`, `p95=3.82m`, `p99=15.50m`.
+  - C6: 803건 유지. `ST_Covers` 전환 후에도 `outside_polygon=803`.
+  - C7: 6,817건 유지. `ST_Covers` 전환 후에도 `outside_polygon=6,817`.
+
+**다음 작업**: PR #14는 close 예정이므로 C2/C4/C6/C7의 원천 데이터 품질 분석, sample별 지도 확인, source_file 추적성 보강은 후속 PR에서 진행한다.
+
 ## 2026-05-25 (PR #14 리뷰 반영 — schema migration, SHP natural key, 리뷰 확인 프로토콜)
 
 **작업**: PR #14의 정식 review body(`# PR #14 리뷰 — T-027 actual full-load execution fixes`)와 마지막 Optional conversation comment를 모두 확인하고 반영했다.

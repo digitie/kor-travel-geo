@@ -76,6 +76,25 @@ ALTER TABLE IF EXISTS tl_sprd_manage
 
     op.execute(
         """
+DO $$
+BEGIN
+  IF to_regclass('tl_sprd_rw') IS NOT NULL
+     AND EXISTS (
+       SELECT 1
+         FROM tl_sprd_rw
+        WHERE geom IS NOT NULL
+          AND GeometryType(geom) NOT IN ('POLYGON', 'MULTIPOLYGON')
+        LIMIT 1
+     ) THEN
+    RAISE NOTICE
+      'truncating tl_sprd_rw before MultiPolygon migration because non-polygon rows exist';
+    TRUNCATE TABLE tl_sprd_rw;
+  END IF;
+END $$;
+"""
+    )
+    op.execute(
+        """
 ALTER TABLE IF EXISTS tl_sprd_rw
   ALTER COLUMN geom TYPE geometry(MultiPolygon, 5179)
   USING ST_Multi(geom)::geometry(MultiPolygon, 5179)

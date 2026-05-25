@@ -151,12 +151,12 @@ def iter_navi_build_rows(
 ) -> Iterator[NaviBuildingRow]:
     """Yield valid building centroid rows.
 
-    `limit` applies to rows yielded after coordinate-missing rows are skipped, not to
-    raw file rows scanned.
+    `limit` applies to rows yielded after coordinate-missing or zero-sentinel
+    coordinate rows are skipped, not to raw file rows scanned.
     """
     yielded = 0
     for line_no, row in iter_pipe_rows(source, min_columns=27):
-        if not row[23] or not row[24]:
+        if not _has_real_5179_coordinates(row[23], row[24]):
             continue
         if limit is not None and yielded >= limit:
             return
@@ -177,12 +177,12 @@ def iter_navi_entrance_rows(
 ) -> Iterator[NaviEntranceRow]:
     """Yield valid entrance rows.
 
-    `limit` applies to rows yielded after coordinate-missing rows are skipped, not to
-    raw file rows scanned.
+    `limit` applies to rows yielded after coordinate-missing or zero-sentinel
+    coordinate rows are skipped, not to raw file rows scanned.
     """
     yielded = 0
     for line_no, row in iter_pipe_rows(source, min_columns=10):
-        if not row[8] or not row[9]:
+        if not _has_real_5179_coordinates(row[8], row[9]):
             continue
         if limit is not None and yielded >= limit:
             return
@@ -227,6 +227,17 @@ async def load_navi(
         on_progress=on_progress,
         cancel_event=cancel_event,
     )
+
+
+def _has_real_5179_coordinates(x_raw: str, y_raw: str) -> bool:
+    if not x_raw or not y_raw:
+        return False
+    try:
+        x = float(x_raw)
+        y = float(y_raw)
+    except ValueError:
+        return True
+    return x != 0.0 and y != 0.0
 
 
 async def copy_navi_rows(

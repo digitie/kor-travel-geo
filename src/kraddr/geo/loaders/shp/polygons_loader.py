@@ -234,12 +234,14 @@ SELECT GREATEST(COALESCE(c.reltuples, 0), 0)::bigint
 
 def _gdal_pg_destination(pg_url: str) -> str:
     url = make_url(pg_url)
+    connect_timeout = str(url.query.get("connect_timeout", "10"))
     parts = {
         "dbname": url.database,
         "host": url.host,
         "port": str(url.port) if url.port is not None else None,
         "user": url.username,
         "password": url.password,
+        "connect_timeout": connect_timeout,
     }
     return "PG:" + " ".join(
         f"{key}={_quote_pg_conninfo(value)}" for key, value in parts.items() if value

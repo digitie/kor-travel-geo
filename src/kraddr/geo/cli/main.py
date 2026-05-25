@@ -142,11 +142,11 @@ def load_shp_all_command(
         total = 0
         async with AsyncAddressClient() as client:
             assert client.engine is not None
-            for index, sido_dir in enumerate(_sido_dirs(root)):
+            for sido_dir, effective_mode in _shp_all_work_items(root, mode):
                 count = await load_shp_polygons(
                     client.engine,
                     sido_dir,
-                    mode=_shp_mode_for_index(mode, index),
+                    mode=effective_mode,
                 )
                 total += count
                 typer.echo(f"{sido_dir.name}: {count} layers")
@@ -358,3 +358,10 @@ def _shp_mode_for_index(requested_mode: str, index: int) -> str:
     if requested_mode == "full" and index > 0:
         return "append"
     return requested_mode
+
+
+def _shp_all_work_items(root: Path, requested_mode: str) -> tuple[tuple[Path, str], ...]:
+    return tuple(
+        (sido_dir, _shp_mode_for_index(requested_mode, index))
+        for index, sido_dir in enumerate(_sido_dirs(root))
+    )

@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #14 추가 리뷰 반영: `tl_sprd_rw`에 기존 `MULTILINESTRING` row가 있는 DB에서도 `0002_t027_shp_schema_fixups`가 중단되지 않도록 non-polygon row 감지 시 `tl_sprd_rw`를 비운 뒤 `MULTIPOLYGON` 타입으로 전환한다.
+- PR #14 Low 항목 보강: MV shadow swap 인덱스 rename을 live catalog 기반으로 유도하고, locsum staging 중복 선택 순서를 `ctid` 대신 `staging_seq`로 안정화한다. Navi loader는 EPSG:5179 좌표가 `0`인 sentinel row를 skip하며, GDAL PostgreSQL conninfo에는 기본 `connect_timeout=10`을 넣는다.
+- PR #14 C2/C4/C6/C7 재검토: C2 리포트 metric에 `missing_resolve_key`와 `missing_text`를 분리해 남은 오류 원인 분석이 가능하게 하고, C4 `error_count`는 500m 초과 건수로 명시한다. C6/C7은 polygon 경계 위 점을 오탐하지 않도록 `ST_Contains` 대신 `ST_Covers`를 사용한다.
 - PR #14 리뷰 반영: SHP 보조 테이블 스키마 변경을 기존 DB에도 적용할 수 있도록 Alembic `0002_t027_shp_schema_fixups` migration을 추가한다. `tl_spbd_buld_polygon` natural key 컬럼, `tl_sprd_manage.geom`, `tl_sprd_rw.geom` 타입 변경을 포함한다.
 - PR #14 리뷰 반영: `tl_spbd_buld_polygon.bjd_cd` generated column은 SHP `LI_CD=''`를 법정동 리 코드 `00`으로 보정하고, `rncode_full`은 빈 문자열을 NULL로 취급한다.
 - PR #14 리뷰 반영: T-027 Docker 포트 환경변수를 저장소 prefix 규칙에 맞춰 `KRADDR_DB_PORT`에서 `KRADDR_GEO_DB_PORT`로 변경한다.
