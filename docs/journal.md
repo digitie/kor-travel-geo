@@ -2,6 +2,32 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-033 — 전국 full-load 성능 재검증)
+
+**작업**: PR #19 merge 이후 `codex/t033-full-load-revalidation` 브랜치에서 빈 Docker DB `kraddr_geo_t033`를 만들고 실제 전국 `data/juso` full-load를 다시 실행했다. 사용자 지시에 따라 로그와 시스템 상태를 상세히 남기고, T-034/T-035 튜닝 전 기준선으로 문서화했다.
+
+**실행 환경**:
+- Docker PostGIS: `kraddr-geo-t027-db-1`, `localhost:15432`, DB `kraddr_geo_t033`.
+- 데이터: ext4 mirror `/home/digitie/kraddr-geo-data`, 원본 `/mnt/f/dev/python-kraddr-geo/data/juso`.
+- 로그: `artifacts/t033-full-load-20260525_224643/` (git ignore).
+
+**결과**:
+- full-load 전체 wall clock 4시간 8분 2초, 최대 RSS 187,964KB, exit status 0.
+- 텍스트 3종은 1,098초에 완료했다. `tl_juso_text=6,416,637`, `tl_locsum_entrc=6,405,091`, `tl_navi_buld_centroid=10,687,317`, `tl_navi_entrc=12,830`.
+- SHP 17개 시도 × 9개 레이어 총 153 layers를 완료했다. `tl_sprd_intrvl=16,993,167`, `tl_sprd_rw=1,482,679`, `tl_spbd_buld_polygon=10,687,732`.
+- `resolve_text_geometry_links()`는 약 2분 32초, `refresh mv --swap`은 약 2분 28초에 완료했다. `mv_geocode_target=6,416,637`.
+- Smoke test는 geocode/reverse/search/zipcode 모두 `OK`.
+- C1~C10 정합성은 `severity_max=ERROR`로 완료했다. 기존 실제 데이터 품질 이슈인 C2 34,699건, C4 over_500m 16건, C6 803건, C7 6,817건이 재현됐다.
+- C2/C4/C6/C7 data-quality CSV 8개를 1분 20.41초에 export했다.
+
+**관찰**:
+- `TL_SPRD_INTRVL`은 geometry 없는 interval 테이블인데도 GDAL `VectorTranslate` 경로에서 `INSERT INTO "tl_sprd_intrvl" ... VALUES ...`로 관측됐다. 경기도 interval 단일 레이어가 약 24분 이상 걸려 T-034의 최우선 튜닝 대상이다.
+- `TL_SPBD_BULD`도 batch INSERT 형태로 관측됐다. geometry 포함 대형 레이어라 비용은 예상되지만 COPY 적용 여부 확인이 필요하다.
+- SHP 적재 중 DB CPU는 대체로 30~50%, 메모리는 4~9GiB 수준이었다. C4/C5 정합성 검증에서는 메모리가 약 14GiB까지 올라갔다.
+- `TL_SPRD_RW`, `TL_SPBD_BULD`, 일부 행정경계 SHP에서 winding order 자동 보정 경고가 반복됐지만 적재는 계속 진행됐다.
+
+**다음 작업**: PR #20으로 T-033 문서 PR을 열고 20분 리뷰 대기 후, 코멘트 반영 또는 무코멘트면 main에 merge한다. 이후 T-034에서 `TL_SPRD_INTRVL` 전용 COPY 로더 또는 GDAL 옵션 분리 튜닝을 진행한다.
+
 ## 2026-05-25 (PR #19 리뷰 반영 — T-032 머지 전 보강)
 
 **작업**: PR #19 formal review를 확인하고 머지 권장 조건(M1, M3+L1, L9)과 즉시 처리 가능한 Low 항목을 반영했다.
