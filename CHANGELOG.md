@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #19 리뷰 반영: T-032 data-quality export의 temp table 준비와 조회를 명시적 transaction으로 고정하고, SQL statement splitter를 공용 함수로 통합해 quoted semicolon을 보존한다. postload timeout/docstring, SHP `ANALYZE` transaction 범위, T-033~T-035 후속 추적도 함께 보강한다.
 - T-032 성능 튜닝 초안: C4/C6/C7 data-quality export의 중복 공간 스캔을 임시 테이블 재사용으로 줄이고, C4/C6/C7 정합성 CTE를 `MATERIALIZED`로 고정한다. 여러 시도 SHP 적재 시 `ANALYZE`는 마지막 시도 뒤 1회만 수행한다. 실제 실행 검증은 사용자 지시에 따라 세종특별시·경상남도 축소 데이터 1회로 제한한다.
 - PR #17 보강: SHP 보조 로더가 GDAL append 경로에서도 `source_file`과 `source_yyyymm`을 SQL projection에 넣어 C2/C4/C6/C7 후속 분석에서 polygon 원천 파일을 추적할 수 있게 한다.
 - 후속 VWorld sync: `maplibre-vworld`를 upstream PR #9 commit `11321fe`로 동기화하고, 디버그 UI의 VWorld tile error 분류와 URL redaction을 `maplibre-vworld-js` helper와 공유한다.

@@ -8,7 +8,9 @@ from kraddr.geo.loaders import postload
 def test_resolve_text_geometry_links_uses_postload_timeout() -> None:
     source = inspect.getsource(postload.resolve_text_geometry_links)
 
-    assert "statement_timeout_ms: int = 1_800_000" in source
+    assert "statement_timeout_ms: int | None = 1_800_000" in source
+    assert "Pass None" in source
+    assert "statement_timeout_ms is not None" in source
     assert "set_config('statement_timeout', :timeout_ms, true)" in source
     assert "POSTLOAD_SQL" in source
 

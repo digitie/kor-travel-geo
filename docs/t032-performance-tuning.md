@@ -216,9 +216,28 @@ git diff --check
 - `lint-imports` → Layered architecture KEPT
 - `git diff --check` → 통과
 
+## PR #19 리뷰 반영
+
+PR #19 리뷰에서 지적된 머지 전 필수 항목과 즉시 처리 가능한 보강은 다음처럼 반영했다.
+
+| 리뷰 항목 | 반영 내용 |
+|-----------|-----------|
+| M1 temp table 트랜잭션 경계 | `export_data_quality_samples()`가 `async with conn.begin()`으로 prepare SQL과 export SQL을 하나의 명시적 트랜잭션에서 수행한다. CSV 파일 쓰기는 DB transaction 이후로 밀어 파일 I/O가 DB lock 시간을 늘리지 않게 했다. |
+| M2/L4 SQL splitter 중복·취약성 | `data_quality`의 로컬 splitter를 제거하고 `infra.sql.iter_sql_statements()`를 재사용한다. 공용 splitter는 문자열 리터럴, quoted identifier, line/block comment, PostgreSQL dollar quote 내부의 `;`를 보존한다. |
+| M3/L1 postload timeout 계약 | `resolve_text_geometry_links()`에 docstring을 추가했다. 기본 30분 timeout은 대량 후처리 전용이고 transaction-local이며, `statement_timeout_ms=None`이면 caller/session timeout을 유지한다. |
+| L1 SHP/data-quality 주석 | `load_shp_polygons(analyze=...)` docstring과 `CASE_PREPARE_SQL` 주석을 추가해 `analyze=False`와 temp table 재사용 계약을 명시했다. |
+| L2 SHP ANALYZE transaction | `_analyze_target_tables()`가 테이블마다 별도 transaction으로 `ANALYZE`를 수행하도록 바꿔 table별 lock 점유 시간을 줄였다. |
+| L3 dedup 의도 명시 | `dict.fromkeys(...)` dedup을 `_unique_target_tables()` helper로 감싸 순서 보존 unique라는 의도를 테스트로 고정했다. |
+| L9 후속 ID | 전국 full-load 재검증은 T-033, SHP GDAL append 병목 튜닝은 T-034, MV refresh/swap 벤치마크는 T-035로 `docs/tasks.md` 대기 큐에 등록했다. |
+| L10 migration lock 주석 | Alembic `0003_t032_performance_indexes.py`에 운영 대용량 DB에서는 점검 창에서 적용해야 한다는 주석을 추가했다. |
+
+M4의 `idx_juso_text_resolve` leading order와 `zip_no` 단독 lookup 검증은 이번 PR에서 새 인덱스를 더 만들지 않는다. 이 인덱스의 1차 목적은 `resolve_text_geometry_links()`와 C1/C2/C4/C5 natural key 조인 대칭성 확보이며, `zip_no` 단독 scan은 C6 전국 EXPLAIN과 함께 T-033/T-034에서 별도 확인한다. 필요성이 확인되면 `tl_juso_text(zip_no)` 단독 인덱스 또는 composite 컬럼 축소를 후속 migration으로 다룬다.
+
+리뷰 반영 후에는 대상 단위 테스트 41개, 전체 `pytest -q` 104 passed / 7 skipped, `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `git diff --check`를 다시 확인했다.
+
 ## 후속
 
-- 전국 full-load 전체 실행은 이번 PR에서 수행하지 않았다.
-- MV refresh/swap 벤치마크도 이번 PR에서 수행하지 않았다.
-- `TL_SPRD_INTRVL`과 `TL_SPBD_BULD`의 GDAL append 병목은 후속 PR에서 별도 측정한다.
+- T-033 전국 full-load 전체 실행은 이번 PR에서 수행하지 않았다.
+- T-035 MV refresh/swap 벤치마크도 이번 PR에서 수행하지 않았다.
+- T-034 `TL_SPRD_INTRVL`과 `TL_SPBD_BULD`의 GDAL append 병목은 후속 PR에서 별도 측정한다.
 - C2 export는 이번 T-032 최적화 범위에서 제외했다. C2는 공간 조인보다 natural key 존재성 검사가 중심이라 C4/C6/C7 대비 우선순위가 낮다.

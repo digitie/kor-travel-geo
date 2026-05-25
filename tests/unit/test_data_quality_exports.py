@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING
 
 import pytest
 
+from kraddr.geo.infra.sql import iter_sql_statements
 from kraddr.geo.loaders.data_quality import (
     CASE_PREPARE_SQL,
     DATA_QUALITY_CASES,
     EXPORT_SPECS,
     _csv_value,
-    _iter_sql_statements,
     _write_csv,
     export_data_quality_samples,
 )
@@ -144,11 +145,19 @@ def test_write_csv_serializes_nulls_booleans_and_ignores_extra_keys(tmp_path: Pa
 
 
 def test_iter_sql_statements_splits_prepare_batches() -> None:
-    statements = _iter_sql_statements(CASE_PREPARE_SQL["C4"])
+    statements = iter_sql_statements(CASE_PREPARE_SQL["C4"])
 
     assert statements[0] == "DROP TABLE IF EXISTS _kraddr_dq_c4_distances"
     assert statements[-1] == "ANALYZE _kraddr_dq_c4_distances"
     assert len(statements) == 4
+
+
+def test_export_keeps_temp_table_prepare_and_queries_in_one_transaction() -> None:
+    source = inspect.getsource(export_data_quality_samples)
+
+    assert "async with engine.connect() as conn, conn.begin()" in source
+    assert "iter_sql_statements(prepare_sql)" in source
+    assert "exports.append((spec, rows))" in source
 
 
 @pytest.mark.asyncio

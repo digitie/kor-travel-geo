@@ -12,9 +12,14 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kraddr.geo.infra.sql import iter_sql_statements
+
 DATA_QUALITY_CASES = ("C2", "C4", "C6", "C7")
 
 
+# Prepare batches create ON COMMIT DROP temp tables that are reused by the
+# export specs below. export_data_quality_samples() keeps prepare + export in
+# one explicit transaction so those temp tables cannot disappear between steps.
 CASE_PREPARE_SQL: dict[str, str] = {
     "C4": """
 DROP TABLE IF EXISTS _kraddr_dq_c4_distances;
@@ -452,7 +457,13 @@ async def export_data_quality_samples(
     cases: tuple[str, ...] = DATA_QUALITY_CASES,
     limit: int = 200,
 ) -> tuple[Path, ...]:
-    """Export reproducible CSV samples for the T-027 C2/C4/C6/C7 follow-up."""
+    """Export reproducible CSV samples for the T-027 C2/C4/C6/C7 follow-up.
+
+    C4/C6/C7 prepare SQL creates transaction-scoped temp tables and the
+    matching export specs read them immediately. The explicit transaction keeps
+    that contract stable even if connection options change later; CSV writes are
+    performed after the DB work finishes so file I/O does not extend locks.
+    """
     selected = set(cases)
     unknown = selected.difference(DATA_QUALITY_CASES)
     if unknown:
@@ -463,23 +474,26 @@ async def export_data_quality_samples(
     directory = Path(output_dir)
     await asyncio.to_thread(directory.mkdir, parents=True, exist_ok=True)
     paths: list[Path] = []
-    async with engine.connect() as conn:
+    exports: list[tuple[ExportSpec, tuple[dict[str, Any], ...]]] = []
+    async with engine.connect() as conn, conn.begin():
         for case_code in DATA_QUALITY_CASES:
             if case_code not in selected:
                 continue
             prepare_sql = CASE_PREPARE_SQL.get(case_code)
             if prepare_sql is None:
                 continue
-            for statement in _iter_sql_statements(prepare_sql):
+            for statement in iter_sql_statements(prepare_sql):
                 await conn.execute(text(statement))
         for spec in EXPORT_SPECS:
             if spec.case_code not in selected:
                 continue
             result = await conn.execute(text(spec.sql), {"limit": limit})
             rows = tuple(dict(row) for row in result.mappings())
-            path = directory / spec.filename
-            _write_csv(path, spec.columns, rows)
-            paths.append(path)
+            exports.append((spec, rows))
+    for spec, rows in exports:
+        path = directory / spec.filename
+        _write_csv(path, spec.columns, rows)
+        paths.append(path)
     return tuple(paths)
 
 
@@ -506,7 +520,3 @@ def _csv_value(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
-
-
-def _iter_sql_statements(sql: str) -> tuple[str, ...]:
-    return tuple(part.strip() for part in sql.split(";") if part.strip())

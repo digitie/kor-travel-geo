@@ -3,15 +3,19 @@
 작업 항목은 `T-NNN` 형식의 ID로 관리한다. 새 작업은 "대기"의 우선순위 순서대로 들어가고, 진행 중이 되면 담당자를 표시한다. 완료된 작업은 "완료" 섹션 상단에 누적한다.
 
 ## 진행 중
-- T-032 full-load/정합성 성능 튜닝 — C4/C6/C7 중복 공간 스캔 제거, SHP 다중 시도 적재 통계 갱신 비용 축소, 세종특별시·경상남도 축소 검증 1회 결과를 정리한다. 전체 전국 full test와 반복 trial은 후속으로 미룬다. 상세: `docs/t032-performance-tuning.md`
+- 없음
 
 ## 대기 (우선순위 순)
+- T-033 전국 full-load 성능 재검증 — T-032의 세종특별시·경상남도 축소 검증을 전국 17개 시도 전체로 확장한다. `load all-sidos`, C1~C10 정합성, geocode/reverse/search/zipcode smoke, data-quality export를 같은 Docker DB에서 끝까지 수행하고, T-032 변경 전후 비교가 가능한 경과 시간·RSS·row count·실패 지점을 문서화한다.
+- T-034 SHP GDAL append 병목 튜닝 — 두 시도 축소 검증에서도 시간을 지배한 `TL_SPRD_INTRVL`, `TL_SPBD_BULD` 적재를 별도로 계측한다. `PG_USE_COPY=YES`가 실제 COPY 경로로 적용되는지 로그와 `pg_stat_activity`로 확인하고, 필요하면 `TL_SPRD_INTRVL` 전용 COPY 로더 또는 GDAL 옵션 분리를 검토한다.
+- T-035 MV refresh/swap 벤치마크 — `REFRESH MATERIALIZED VIEW CONCURRENTLY`와 shadow MV build + rename swap을 같은 데이터셋에서 비교한다. lock wait, 임시 파일/I/O, index build 시간, `idx_mv_*` rename 복구 경로를 함께 기록해 운영 점검 창 기준을 만든다.
 - T-027 실 데이터 전체 적재 검증 — WSL Docker PostGIS에 주소DB 전체분 적재, C1~C10 정합성 검증, geocode/reverse smoke test, 속도 벤치마크. 상세: `docs/t027-fullload-plan.md`
 - T-028 일변동 ZIP 로더 — `data/juso/daily/*.zip`를 full-load 이후 증분 적용할 수 있도록 파일 구조 분석, `MVM_RES_CD` 매핑, 재실행 안전성을 설계한다.
 - T-029 `jibun_rnaddrkor_*` 활용 여부 결정 — 도로명주소 한글 전체분에 같이 배포되는 지번 매핑 텍스트를 현재 `tl_juso_text`와 어떻게 조화시킬지 ADR로 확정한다.
 - T-030 상세주소 동 도형/별도 건물 도형 로더 검토 — `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`의 전자지도 SHP와 중복·보완 관계를 조사한다.
 
 ## 완료
+- [x] T-032 full-load/정합성 성능 튜닝. PR #19에서 C4/C6/C7 중복 공간 스캔 제거, 정합성 CTE materialization, SHP 다중 시도 적재 마지막 1회 `ANALYZE`, postload timeout 보강, 세종특별시·경상남도 축소 검증 1회를 완료했다. 전국 full test와 반복 trial은 T-033~T-035로 분리했다. 상세: `docs/t032-performance-tuning.md` (2026-05-25)
 - [x] T-031 T-027 데이터 품질 후속 분석. PR #17에서 C2/C4/C6/C7 CSV export CLI, SHP `source_file` 추적성, 실제 Docker DB 1차 실행 결과를 정리했다. 상세: `docs/t027-data-quality-followup.md` (2026-05-25)
 - [x] T-026 디버그 UI `/admin/consistency` 페이지 구현. `GET /v1/admin/consistency`, `GET /v1/admin/consistency/{report_id}`, `POST /v1/admin/consistency/run`을 사용해 C1~C10 리포트 목록, 케이스별 severity/count, 원본 JSON을 확인한다 (2026-05-23)
 - [x] T-025 `prometheus-client` 메트릭 구현. 외부 API 호출 success/failure counter, `geo_cache` entries/hits/expired gauge, `load_jobs` kind/state gauge를 `/metrics`에서 노출한다. 라이브러리 단독 설치 환경에서는 no-op fallback으로 import 실패를 피한다 (2026-05-23)
