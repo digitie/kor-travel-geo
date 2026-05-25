@@ -5,6 +5,7 @@ import json
 import pytest
 
 from scripts.benchmark_mv_refresh import (
+    BenchmarkMetadata,
     BenchmarkPhase,
     BenchmarkResult,
     RelationStats,
@@ -20,9 +21,25 @@ def test_mv_refresh_benchmark_parser_requires_strategy() -> None:
     with pytest.raises(SystemExit):
         parser.parse_args([])
 
-    args = parser.parse_args(["--strategy", "swap", "--output", "out.json"])
+    args = parser.parse_args(
+        [
+            "--strategy",
+            "swap",
+            "--output",
+            "out.json",
+            "--trial-index",
+            "2",
+            "--cache-warm-hint",
+            "warm",
+            "--note",
+            "idle docker db",
+        ]
+    )
     assert args.strategy == "swap"
     assert str(args.output) == "out.json"
+    assert args.trial_index == 2
+    assert args.cache_warm_hint == "warm"
+    assert args.note == ["idle docker db"]
 
 
 def test_mv_refresh_benchmark_json_is_stable() -> None:
@@ -44,18 +61,40 @@ def test_mv_refresh_benchmark_json_is_stable() -> None:
         before=stats,
         after=stats,
         phases=(BenchmarkPhase(name="refresh_concurrently", seconds=0.9),),
+        metadata=BenchmarkMetadata(
+            trial_index=1,
+            cache_warm_hint="warm",
+            notes=("idle docker db",),
+            concurrent_sessions_before=0,
+            concurrent_sessions_after=0,
+            wait_events_before=(("IO:BufFileWrite", 1),),
+            wait_events_after=(),
+        ),
     )
 
     payload = json.loads(result_to_json(result))
 
+    assert payload["schema_version"] == 2
     assert payload["strategy"] == "concurrent"
     assert payload["before"]["row_count"] == 10
     assert payload["phases"] == [{"name": "refresh_concurrently", "seconds": 0.9}]
+    assert payload["metadata"] == {
+        "trial_index": 1,
+        "cache_warm_hint": "warm",
+        "notes": ["idle docker db"],
+        "concurrent_sessions_before": 0,
+        "concurrent_sessions_after": 0,
+        "wait_events_before": [["IO:BufFileWrite", 1]],
+        "wait_events_after": [],
+    }
 
 
 def test_mv_refresh_benchmark_names_rebuild_phases() -> None:
     assert _statement_phase_name("SET search_path = public, x_extension") == (
         "rebuild.set_search_path"
+    )
+    assert _statement_phase_name("SET LOCAL maintenance_work_mem = '1GB'") == (
+        "rebuild.set_maintenance_work_mem"
     )
     assert _statement_phase_name(
         "CREATE MATERIALIZED VIEW mv_geocode_target_next AS SELECT 1"

@@ -22,6 +22,7 @@ def test_shadow_swap_handles_missing_current_mv() -> None:
     assert "if current_mv is not None" in source
     assert "ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target" in source
     assert "ANALYZE mv_geocode_target" in source
+    assert "SET LOCAL lock_timeout = '2s'" in source
     assert source.count("async with engine.begin()") == 2
 
 
@@ -30,14 +31,14 @@ def test_shadow_swap_normalizes_next_index_names() -> None:
     swap_source = inspect.getsource(postload.shadow_swap_mv)
 
     assert "normalize_mv_index_names(engine)" in refresh_source
-    assert "_rename_mv_next_indexes(conn)" in swap_source
+    assert "rename_mv_next_indexes_for_conn(conn)" in swap_source
     assert swap_source.index("DROP MATERIALIZED VIEW mv_geocode_target_old") < swap_source.index(
-        "_rename_mv_next_indexes(conn)"
+        "rename_mv_next_indexes_for_conn(conn)"
     )
 
 
 def test_stale_mv_next_index_drop_emits_warning() -> None:
-    source = inspect.getsource(postload._rename_mv_next_indexes)
+    source = inspect.getsource(postload.rename_mv_next_indexes_for_conn)
 
     assert "LOGGER.warning" in source
     assert "warnings.warn" in source

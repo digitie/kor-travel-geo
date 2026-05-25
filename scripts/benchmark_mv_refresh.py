@@ -18,19 +18,21 @@ from pathlib import Path
 from typing import Literal
 
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from kraddr.geo.infra.engine import make_async_engine
 from kraddr.geo.infra.sql import iter_sql_statements
 from kraddr.geo.loaders.postload import (
-    _rename_mv_next_indexes,
     build_mv_next_sql,
     normalize_mv_index_names,
+    rename_mv_next_indexes_for_conn,
 )
 from kraddr.geo.settings import get_settings
 
 Strategy = Literal["concurrent", "swap"]
 PhaseRunner = Callable[[AsyncEngine], Awaitable[None]]
+BENCHMARK_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +54,17 @@ class BenchmarkPhase:
 
 
 @dataclass(frozen=True, slots=True)
+class BenchmarkMetadata:
+    trial_index: int
+    cache_warm_hint: str
+    notes: tuple[str, ...]
+    concurrent_sessions_before: int
+    concurrent_sessions_after: int
+    wait_events_before: tuple[tuple[str, int], ...]
+    wait_events_after: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class BenchmarkResult:
     strategy: Strategy
     started_at: str
@@ -60,6 +73,8 @@ class BenchmarkResult:
     before: RelationStats
     after: RelationStats
     phases: tuple[BenchmarkPhase, ...]
+    metadata: BenchmarkMetadata
+    schema_version: int = BENCHMARK_SCHEMA_VERSION
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -77,11 +92,36 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional JSON output path. Parent directories are created.",
     )
+    parser.add_argument(
+        "--trial-index",
+        type=int,
+        default=1,
+        help="1-based trial number recorded in JSON metadata.",
+    )
+    parser.add_argument(
+        "--cache-warm-hint",
+        default="unknown",
+        help="Free-form cache state hint, e.g. cold, warm, repeated-same-db.",
+    )
+    parser.add_argument(
+        "--note",
+        action="append",
+        help="Additional metadata note. May be passed multiple times.",
+    )
     return parser
 
 
-async def run_benchmark(engine: AsyncEngine, strategy: Strategy) -> BenchmarkResult:
+async def run_benchmark(
+    engine: AsyncEngine,
+    strategy: Strategy,
+    *,
+    trial_index: int = 1,
+    cache_warm_hint: str = "unknown",
+    notes: Sequence[str] = (),
+) -> BenchmarkResult:
     before = await collect_relation_stats(engine)
+    concurrent_before = await _concurrent_session_count(engine)
+    wait_events_before = await _wait_event_snapshot(engine)
     started = datetime.now(UTC)
     start_clock = time.perf_counter()
     if strategy == "concurrent":
@@ -101,6 +141,8 @@ async def run_benchmark(engine: AsyncEngine, strategy: Strategy) -> BenchmarkRes
     total_seconds = time.perf_counter() - start_clock
     finished = datetime.now(UTC)
     after = await collect_relation_stats(engine)
+    concurrent_after = await _concurrent_session_count(engine)
+    wait_events_after = await _wait_event_snapshot(engine)
     return BenchmarkResult(
         strategy=strategy,
         started_at=started.isoformat(),
@@ -109,6 +151,15 @@ async def run_benchmark(engine: AsyncEngine, strategy: Strategy) -> BenchmarkRes
         before=before,
         after=after,
         phases=phases,
+        metadata=BenchmarkMetadata(
+            trial_index=trial_index,
+            cache_warm_hint=cache_warm_hint,
+            notes=tuple(notes),
+            concurrent_sessions_before=concurrent_before,
+            concurrent_sessions_after=concurrent_after,
+            wait_events_before=wait_events_before,
+            wait_events_after=wait_events_after,
+        ),
     )
 
 
@@ -180,6 +231,7 @@ async def _refresh_concurrently(engine: AsyncEngine) -> None:
 
 async def _analyze_mv(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
         await conn.execute(text("ANALYZE mv_geocode_target"))
 
 
@@ -226,11 +278,12 @@ async def _shadow_swap_phases(engine: AsyncEngine) -> tuple[BenchmarkPhase, ...]
                 "DROP MATERIALIZED VIEW mv_geocode_target_old",
             )
         start = time.perf_counter()
-        await _rename_mv_next_indexes(conn)
+        await rename_mv_next_indexes_for_conn(conn)
         results.append(
             BenchmarkPhase(name="swap.rename_indexes", seconds=time.perf_counter() - start)
         )
     async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
         await _timed_execute(conn, results, "swap.analyze_live", "ANALYZE mv_geocode_target")
     return tuple(results)
 
@@ -249,8 +302,14 @@ async def _timed_execute(
 def _statement_phase_name(sql: str) -> str:
     normalized = " ".join(sql.split())
     upper = normalized.upper()
-    if upper.startswith("SET "):
+    if upper.startswith("SET SEARCH_PATH") or upper.startswith("SET LOCAL SEARCH_PATH"):
         return "rebuild.set_search_path"
+    if upper.startswith("SET MAINTENANCE_WORK_MEM") or upper.startswith(
+        "SET LOCAL MAINTENANCE_WORK_MEM"
+    ):
+        return "rebuild.set_maintenance_work_mem"
+    if upper.startswith("SET "):
+        return "rebuild.set"
     if upper.startswith("DROP MATERIALIZED VIEW"):
         return "rebuild.drop_next"
     if upper.startswith("CREATE MATERIALIZED VIEW"):
@@ -275,9 +334,46 @@ def _created_index_name(normalized_sql: str) -> str:
 async def _optional_int(conn: AsyncConnection, sql: str) -> int | None:
     try:
         value = await conn.scalar(text(sql))
-    except Exception:  # pragma: no cover - missing MV only in manual preflight
+    except ProgrammingError:  # pragma: no cover - missing MV only in manual preflight
+        await conn.rollback()
         return None
     return int(value) if value is not None else None
+
+
+async def _concurrent_session_count(engine: AsyncEngine) -> int:
+    async with engine.connect() as conn:
+        return int(
+            await conn.scalar(
+                text(
+                    """
+SELECT count(*)
+  FROM pg_stat_activity
+ WHERE datname = current_database()
+   AND pid <> pg_backend_pid()
+   AND state <> 'idle'
+"""
+                )
+            )
+            or 0
+        )
+
+
+async def _wait_event_snapshot(engine: AsyncEngine) -> tuple[tuple[str, int], ...]:
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                """
+SELECT COALESCE(wait_event_type, '') || ':' || wait_event AS wait_event,
+       count(*)::int AS sessions
+  FROM pg_stat_activity
+ WHERE datname = current_database()
+   AND wait_event IS NOT NULL
+ GROUP BY wait_event_type, wait_event
+ ORDER BY wait_event
+"""
+            )
+        )
+        return tuple((str(row[0]), int(row[1])) for row in result)
 
 
 async def _mv_index_sizes(conn: AsyncConnection) -> tuple[tuple[str, int], ...]:
@@ -307,7 +403,13 @@ async def _async_main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     engine = make_async_engine(get_settings())
     try:
-        result = await run_benchmark(engine, args.strategy)
+        result = await run_benchmark(
+            engine,
+            args.strategy,
+            trial_index=args.trial_index,
+            cache_warm_hint=args.cache_warm_hint,
+            notes=args.note or (),
+        )
     finally:
         await engine.dispose()
     payload = result_to_json(result)

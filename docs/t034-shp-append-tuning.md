@@ -35,10 +35,12 @@ INSERT INTO "tl_sprd_intrvl" (...) VALUES (...)
 
 | 파일 | 내용 |
 |------|------|
-| `src/kraddr/geo/loaders/shp/polygons_loader.py` | `TL_SPRD_INTRVL` 전용 DBF parser + `COPY` 적재 경로 추가 |
-| `tests/unit/test_shp_loader_gdal.py` | synthetic DBF 기반 projection 테스트, 직접 COPY 경로 라우팅 테스트 추가 |
+| `src/kraddr/geo/loaders/shp/polygons_loader.py` | `TL_SPRD_INTRVL` 전용 DBF parser + `COPY` 적재 경로 추가, row dataclass 기반 COPY projection, CP949/truncated record 오류 문맥 보강 |
+| `tests/unit/test_shp_loader_gdal.py` | synthetic DBF 기반 projection 테스트, 직접 COPY 경로 라우팅, deleted record skip, decode/truncated 오류 테스트 추가 |
 
 DB 스키마 변경은 없다. `tl_sprd_intrvl`의 기존 컬럼과 PK `(sig_cd, rds_man_no, bsi_int_sn)`를 그대로 사용한다.
+
+T-036 후속 리뷰 반영으로 COPY 컬럼과 row tuple shape는 `RoadIntervalRow` dataclass와 `ROAD_INTERVAL_COPY_COLUMNS` 상수에서 함께 관리한다. 스키마 컬럼을 바꿀 때 SQL column list와 `copy.write_row()` tuple 순서가 흩어지지 않도록 하기 위한 방어다. DBF decode 실패는 `LoaderError`에 파일 경로, record 번호, 필드명, byte slice를 포함하고, record truncation도 expected/actual byte 수, header `record_count`, file size를 함께 출력한다.
 
 ## 실행 환경
 
@@ -178,6 +180,7 @@ KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t03
 - 이번 PR은 전체 전국 full-load를 다시 돌리지 않았다. 전국 재적재는 T-027 최종 클린 로드에서 DB 삭제 후 처음부터 검증한다.
 - DBF parser는 현재 `TL_SPRD_INTRVL`의 실제 필드와 CP949/ASCII 숫자 필드에 맞춰 최소 구현했다. 다른 DBF 레이어로 일반화하지 않는다.
 - 동일 시도 `TL_SPRD_INTRVL`을 append 모드로 중복 재실행하면 기존 GDAL append와 마찬가지로 PK 충돌이 날 수 있다. full-load의 첫 시도는 truncate, 이후 시도는 시도별 key가 달라 충돌하지 않는 운영 경로를 기준으로 한다.
+- deleted record(`record[:1] == b"*"`)는 copy 대상에서 제외한다. parser 내부 `record_no`는 deleted record를 포함한 DBF header record index이고, progress의 `processed`/`copied`는 실제 copy row 기준이다. progress denominator는 header `record_count`라 deleted record가 많으면 마지막 1.0 callback 전까지 약간 낮게 보일 수 있다.
 
 ## 검증
 
@@ -197,4 +200,5 @@ TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo/loa
 
 - T-035: MV refresh/swap benchmark를 별도 PR에서 진행한다.
 - T-036: `maplibre-vworld-js` upstream main과 UI dependency SHA를 동기화한다.
+- T-037: `TL_SPBD_BULD` 등 geometry 포함 대형 SHP 레이어의 GDAL append 병목을 별도 후보로 등록한다. 도형 레이어는 geometry 변환과 winding 보정이 얽혀 있어 `TL_SPRD_INTRVL`처럼 단순 DBF COPY로 옮기지 않는다.
 - T-027: 남은 튜닝과 증분 로더 작업을 모두 머지한 뒤 DB를 삭제하고 실제 전체 데이터를 처음부터 다시 적재한다.

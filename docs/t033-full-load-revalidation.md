@@ -80,6 +80,10 @@ TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
 | smoke test | 완료 | 약 1초 | geocode/reverse/search/zipcode 모두 `OK` |
 | data-quality sample export | 완료 | 1분 20.41초 | C2/C4/C6/C7 CSV 8개 생성, 최대 RSS 80,272KB |
 
+SHP 3시간 37분 32초는 `fullload.log`의 Phase 3 시작/종료 timestamp 차이를 기준으로 읽은 값이다. 전체 wall clock에서 다른 phase를 산술 차감한 추정값이 아니므로, timestamp 단위 반올림과 shell 출력 flush 시점 때문에 1분 안팎의 오차가 있을 수 있다. T-036 후속 보강으로 `scripts/fullload_test.sh`는 다음 클린 로드부터 `juso`, `locsum`, `navi`, SHP, 링크 해소, MV swap을 각각 초 단위로 출력한다.
+
+이번 수치는 단발 실행 결과다. 같은 Docker DB를 idle 상태로 두고 실행했지만 OS page cache, 직전 DB 작업, 다른 WSL 프로세스에 따른 분산은 별도로 추정하지 않았다. T-027 최종 클린 로드에서는 같은 스크립트의 phase별 timer 출력을 그대로 붙여 단발 측정 한계를 더 명확히 남긴다.
+
 ## 최종 row count
 
 | 테이블 | 행 수 |
@@ -125,7 +129,9 @@ TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
 | C7 | ERROR | 6,817 | `outside_polygon=6,817`, `missing_polygon=0` |
 | C8 | WARN | 24,471 | 같은 도로명 100m 밖 |
 | C9 | OK | 0 | PNU 형식 오류 없음 |
-| C10 | OK | 0 | 현재 구현 기준 distinct month violation 없음 |
+| C10 | OK | 0 | `load_manifest` 대상 table의 `source_yyyymm` distinct count 기준. 이 수동 CLI 실행에서는 manifest 기반 비교 대상이 0건이라 OK로 해석한다 |
+
+C10은 현재 row-level `source_yyyymm` 컬럼을 전수 비교하지 않고, `load_manifest.table_name IN ('tl_juso_text', 'tl_locsum_entrc', 'tl_navi_buld_centroid', 'tl_navi_entrc', 'tl_spbd_buld_polygon')`에 기록된 `source_yyyymm`의 distinct count만 본다. 따라서 `JUSO_YYYYMM=202603`, `LOCSUM_YYYYMM=202604`, `NAVI_YYYYMM=202604`처럼 자료 기준월이 섞인 이번 수동 실행에서 C10 `OK 0`은 "모든 원천 row 기준월이 같다"는 뜻이 아니라 "manifest 기준으로 비교할 위반 row가 없었다"는 뜻이다.
 
 ## Data-quality export
 
@@ -156,6 +162,7 @@ T-032의 전국 이전 DB 결과와 동일한 핵심 수치가 재현됐다. PR 
 - `TL_SPRD_INTRVL`은 geometry 없는 interval 테이블인데도 GDAL `VectorTranslate` 경로에서 `INSERT INTO "tl_sprd_intrvl" ... VALUES ...` 형태로 관측됐다. `PG_USE_COPY=YES`가 이 레이어에 기대대로 적용되지 않는 것으로 보이며, T-034의 최우선 튜닝 후보로 둔다.
 - 경기도 `TL_SPRD_INTRVL` 한 레이어만 약 24분 이상 걸렸다. 텍스트 정본 3종 전체가 1,098초였으므로, SHP interval 레이어가 전국 full-load의 주요 병목이라는 판단 근거가 충분하다.
 - `TL_SPBD_BULD`도 `INSERT INTO "tl_spbd_buld_polygon" ...` 형태로 관측됐다. geometry 포함 대형 레이어라 비용은 예상되지만, COPY 또는 GDAL 옵션 검증 대상이다.
+- `tl_navi_entrc=12,830`은 `tl_navi_buld_centroid=10,687,317` 대비 매우 작다. 현재 문서는 적재 결과만 기록했으며, 원천 `match_rs_entrc.txt` row count와 loader 적재 row count의 1:1 일치 여부는 후속 클린 로드나 별도 원천 검증에서 확인한다.
 - `TL_SPRD_RW`, `TL_SPBD_BULD`, 일부 행정경계 SHP에서 winding order 자동 보정 경고가 반복됐다. GDAL이 자동 보정했고 적재는 계속 진행됐다.
 - SHP 적재 중 DB CPU는 대체로 30~50% 수준, 메모리는 4~9GiB 수준이었다. C4/C5 정합성 검증에서는 CPU가 2~3 core 수준, 메모리가 약 14GiB까지 올라갔다. 전체적으로 메모리 포화보다는 로더 append 경로와 WAL/쓰기 비용이 병목으로 보인다.
 
@@ -163,4 +170,5 @@ T-032의 전국 이전 DB 결과와 동일한 핵심 수치가 재현됐다. PR 
 
 - T-034: `TL_SPRD_INTRVL` 전용 COPY 로더 또는 GDAL 옵션 분리 실험. 가능하면 경기도 단일 시도를 benchmark fixture로 사용하고, 전국 full-load에서의 예상 절감 시간을 추정한다.
 - T-035: 본 실행의 MV swap refresh 시간을 기준선으로 삼아 `REFRESH CONCURRENTLY`와 shadow swap을 비교한다.
+- T-037: `TL_SPBD_BULD` 등 geometry 포함 대형 SHP 레이어의 GDAL append/COPY/staging table 전략을 별도 튜닝 후보로 둔다.
 - T-027: 마지막 전체 검증 단계에서는 DB를 삭제하고 처음부터 다시 로드해 T-034/T-035 개선분이 전체 파이프라인에서도 정상 동작하는지 확인한다.

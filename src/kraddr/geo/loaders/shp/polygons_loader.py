@@ -54,11 +54,44 @@ ROAD_INTERVAL_SOURCE_FIELDS = (
     "ODD_BSI_MN",
     "EVE_BSI_MN",
 )
-ROAD_INTERVAL_COPY_SQL = """
+ROAD_INTERVAL_COPY_COLUMNS = (
+    "sig_cd",
+    "rds_man_no",
+    "bsi_int_sn",
+    "start_bsi_no",
+    "end_bsi_no",
+    "source_file",
+    "source_yyyymm",
+)
+ROAD_INTERVAL_COPY_SQL = f"""
 COPY tl_sprd_intrvl
-(sig_cd, rds_man_no, bsi_int_sn, start_bsi_no, end_bsi_no, source_file, source_yyyymm)
+({", ".join(ROAD_INTERVAL_COPY_COLUMNS)})
 FROM STDIN
 """
+
+
+@dataclass(frozen=True, slots=True)
+class RoadIntervalRow:
+    sig_cd: str | None
+    rds_man_no: str | None
+    bsi_int_sn: str | None
+    start_bsi_no: str | None
+    end_bsi_no: str | None
+    source_file: str
+    source_yyyymm: str | None
+
+    def to_copy_tuple(
+        self,
+    ) -> tuple[str | None, str | None, str | None, str | None, str | None, str, str | None]:
+        return (
+            self.sig_cd,
+            self.rds_man_no,
+            self.bsi_int_sn,
+            self.start_bsi_no,
+            self.end_bsi_no,
+            self.source_file,
+            self.source_yyyymm,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,7 +270,10 @@ def _copy_road_interval_dbf(
     libpq_url = make_url(pg_url).set(drivername="postgresql").render_as_string(
         hide_password=False
     )
-    with psycopg.connect(libpq_url) as conn, conn.cursor() as cur:
+    # psycopg opens an implicit transaction for the context manager. Keep
+    # autocommit disabled and commit explicitly after COPY completes so a
+    # cancellation/error rolls the partial layer back on context exit.
+    with psycopg.connect(libpq_url, autocommit=False) as conn, conn.cursor() as cur:
         with cur.copy(ROAD_INTERVAL_COPY_SQL) as copy:
             for processed, row in enumerate(
                 _iter_road_interval_copy_rows(plan, header=header),
@@ -245,7 +281,7 @@ def _copy_road_interval_dbf(
             ):
                 if cancel_event and cancel_event.is_set():
                     raise asyncio.CancelledError("shp road interval loader cancelled")
-                copy.write_row(row)
+                copy.write_row(row.to_copy_tuple())
                 copied += 1
                 if on_layer_progress and processed % 100_000 == 0:
                     on_layer_progress(processed / max(header.record_count, 1))
@@ -259,26 +295,61 @@ def _iter_road_interval_copy_rows(
     plan: ShpLoadPlan,
     *,
     header: DbfHeader | None = None,
-) -> Iterator[tuple[str | None, str | None, str | None, str | None, str | None, str, str | None]]:
+) -> Iterator[RoadIntervalRow]:
     resolved_header = header or read_dbf_header(plan.dbf_path)
     offsets = _dbf_field_offsets(resolved_header, ROAD_INTERVAL_SOURCE_FIELDS)
+    file_size = plan.dbf_path.stat().st_size
     with plan.dbf_path.open("rb") as file:
         file.seek(resolved_header.header_length)
         for record_no in range(1, resolved_header.record_count + 1):
             record = file.read(resolved_header.record_length)
             if len(record) != resolved_header.record_length:
-                msg = f"{plan.dbf_path}:{record_no} has truncated DBF record"
+                msg = (
+                    f"{plan.dbf_path}:{record_no} truncated DBF record: "
+                    f"expected {resolved_header.record_length} bytes, got {len(record)} "
+                    f"(record_count={resolved_header.record_count}, file_size={file_size})"
+                )
                 raise LoaderError(msg)
             if record[:1] == b"*":
                 continue
-            yield (
-                _dbf_value(record, offsets["SIG_CD"]),
-                _dbf_value(record, offsets["RDS_MAN_NO"]),
-                _dbf_value(record, offsets["BSI_INT_SN"]),
-                _dbf_value(record, offsets["ODD_BSI_MN"]),
-                _dbf_value(record, offsets["EVE_BSI_MN"]),
-                plan.source_file,
-                plan.source_yyyymm,
+            yield RoadIntervalRow(
+                sig_cd=_dbf_value(
+                    record,
+                    offsets["SIG_CD"],
+                    plan=plan,
+                    record_no=record_no,
+                    field_name="SIG_CD",
+                ),
+                rds_man_no=_dbf_value(
+                    record,
+                    offsets["RDS_MAN_NO"],
+                    plan=plan,
+                    record_no=record_no,
+                    field_name="RDS_MAN_NO",
+                ),
+                bsi_int_sn=_dbf_value(
+                    record,
+                    offsets["BSI_INT_SN"],
+                    plan=plan,
+                    record_no=record_no,
+                    field_name="BSI_INT_SN",
+                ),
+                start_bsi_no=_dbf_value(
+                    record,
+                    offsets["ODD_BSI_MN"],
+                    plan=plan,
+                    record_no=record_no,
+                    field_name="ODD_BSI_MN",
+                ),
+                end_bsi_no=_dbf_value(
+                    record,
+                    offsets["EVE_BSI_MN"],
+                    plan=plan,
+                    record_no=record_no,
+                    field_name="EVE_BSI_MN",
+                ),
+                source_file=plan.source_file,
+                source_yyyymm=plan.source_yyyymm,
             )
 
 
@@ -298,9 +369,23 @@ def _dbf_field_offsets(
     return offsets
 
 
-def _dbf_value(record: bytes, offset: tuple[int, int]) -> str | None:
+def _dbf_value(
+    record: bytes,
+    offset: tuple[int, int],
+    *,
+    plan: ShpLoadPlan,
+    record_no: int,
+    field_name: str,
+) -> str | None:
     raw = record[offset[0] : offset[1]].rstrip(b"\x00")
-    value = raw.decode("cp949").strip()
+    try:
+        value = raw.decode("cp949").strip()
+    except UnicodeDecodeError as exc:
+        msg = (
+            f"{plan.dbf_path}:{record_no} field {field_name} failed CP949 decode "
+            f"at byte slice {offset[0]}:{offset[1]}: {exc}"
+        )
+        raise LoaderError(msg) from exc
     return value or None
 
 

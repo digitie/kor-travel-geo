@@ -140,36 +140,54 @@ echo "  JUSO_YYYYMM=$JUSO_YYYYMM"
 echo "  LOCSUM_YYYYMM=$LOCSUM_YYYYMM"
 echo "  NAVI_YYYYMM=$NAVI_YYYYMM"
 echo "  PG_DSN=$PG_DSN"
+echo "  KRADDR_GEO_DB_PORT=$DB_PORT (used only when KRADDR_GEO_PG_DSN is unset)"
 
 if [ "$PLAN_ONLY" = "1" ]; then
   log "PLAN_ONLY=1: data path preflight finished; no database/load commands executed."
   exit 0
 fi
 
+TOTAL_START=$(date +%s)
+
 log "=== Phase 1: DDL — kraddr-geo init-db ==="
+PHASE_START=$(date +%s)
 run kraddr-geo init-db
+DDL_ELAPSED=$(( $(date +%s) - PHASE_START ))
+echo "DDL/init-db completed in ${DDL_ELAPSED}s"
 
 log "=== Phase 2: Text loaders (juso, locsum, navi) ==="
-START=$(date +%s)
+TEXT_START=$(date +%s)
 
 echo "--- 2a: juso_hangul ---"
+PHASE_START=$(date +%s)
 run kraddr-geo load juso "$JUSO_TEXT_DIR" --yyyymm "$JUSO_YYYYMM"
+JUSO_ELAPSED=$(( $(date +%s) - PHASE_START ))
+echo "juso_hangul completed in ${JUSO_ELAPSED}s"
 
 echo "--- 2b: locsum ---"
+PHASE_START=$(date +%s)
 run kraddr-geo load locsum "$LOCSUM_ZIP" --yyyymm "$LOCSUM_YYYYMM"
+LOCSUM_ELAPSED=$(( $(date +%s) - PHASE_START ))
+echo "locsum completed in ${LOCSUM_ELAPSED}s"
 
 echo "--- 2c: navi ---"
+PHASE_START=$(date +%s)
 run kraddr-geo load navi "$NAVI_DIR" --yyyymm "$NAVI_YYYYMM"
+NAVI_ELAPSED=$(( $(date +%s) - PHASE_START ))
+echo "navi completed in ${NAVI_ELAPSED}s"
 
-TEXT_ELAPSED=$(( $(date +%s) - START ))
-echo "Text loaders completed in ${TEXT_ELAPSED}s"
+TEXT_ELAPSED=$(( $(date +%s) - TEXT_START ))
+echo "Text loaders completed in ${TEXT_ELAPSED}s (juso=${JUSO_ELAPSED}s, locsum=${LOCSUM_ELAPSED}s, navi=${NAVI_ELAPSED}s)"
 
 log "=== Phase 3: SHP polygons (optional) ==="
+PHASE_START=$(date +%s)
 if [ -d "$SHP_ROOT" ]; then
   run kraddr-geo load shp-all "$SHP_ROOT" --mode full
 else
   echo "SKIP: SHP data not found at $SHP_ROOT"
 fi
+SHP_ELAPSED=$(( $(date +%s) - PHASE_START ))
+echo "SHP phase completed in ${SHP_ELAPSED}s"
 
 log "=== Phase 4: Pobox + Bulk (optional) ==="
 POBOX="$DATA_DIR/epost/zipcode_full.zip"
@@ -187,6 +205,7 @@ else
 fi
 
 log "=== Phase 5: Post-load — geometry links + MV refresh ==="
+PHASE_START=$(date +%s)
 python - <<'PY'
 import asyncio
 
@@ -203,7 +222,13 @@ async def main() -> None:
 
 asyncio.run(main())
 PY
+LINK_ELAPSED=$(( $(date +%s) - PHASE_START ))
+echo "geometry link resolution completed in ${LINK_ELAPSED}s"
+
+PHASE_START=$(date +%s)
 run kraddr-geo refresh mv --swap
+MV_ELAPSED=$(( $(date +%s) - PHASE_START ))
+echo "MV swap refresh completed in ${MV_ELAPSED}s"
 
 log "=== Phase 6: Row counts ==="
 python - <<'PY'
@@ -273,5 +298,5 @@ async def main():
 asyncio.run(main())
 PY
 
-TOTAL_ELAPSED=$(( $(date +%s) - START ))
+TOTAL_ELAPSED=$(( $(date +%s) - TOTAL_START ))
 log "=== DONE === Total elapsed: ${TOTAL_ELAPSED}s"

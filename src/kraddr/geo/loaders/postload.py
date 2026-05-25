@@ -77,8 +77,9 @@ async def shadow_swap_mv(engine: AsyncEngine) -> None:
         )
         if current_mv is not None:
             await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_target_old"))
-        await _rename_mv_next_indexes(conn)
+        await rename_mv_next_indexes_for_conn(conn)
     async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
         await conn.execute(text("ANALYZE mv_geocode_target"))
 
 
@@ -97,10 +98,17 @@ def build_mv_next_sql() -> str:
 
 async def normalize_mv_index_names(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        await _rename_mv_next_indexes(conn)
+        await rename_mv_next_indexes_for_conn(conn)
 
 
-async def _rename_mv_next_indexes(conn: Any) -> None:
+async def rename_mv_next_indexes_for_conn(conn: Any) -> None:
+    """Rename shadow MV indexes on an existing SQLAlchemy connection.
+
+    The shadow swap path needs this helper inside the same transaction that
+    renames `mv_geocode_target_next` to the live MV. Keep this public so
+    benchmark/maintenance scripts do not need to import underscore-prefixed
+    internals just to share the production index rename logic.
+    """
     for next_name, target_name in await _mv_next_index_renames(conn):
         target_exists = await conn.scalar(
             text("SELECT to_regclass(:index_name)"),
@@ -121,6 +129,10 @@ async def _rename_mv_next_indexes(conn: Any) -> None:
                 f"RENAME TO {_quote_identifier(target_name)}"
             )
         )
+
+
+async def _rename_mv_next_indexes(conn: Any) -> None:
+    await rename_mv_next_indexes_for_conn(conn)
 
 
 async def _mv_next_index_renames(conn: Any) -> tuple[tuple[str, str], ...]:
