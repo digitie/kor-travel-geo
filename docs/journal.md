@@ -2,6 +2,17 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (T-031 데이터 품질 후속 PR 분리)
+
+**작업**: PR #14가 close 예정이므로, 추가 TODO를 PR #14에 계속 쌓지 않고 별도 후속 PR에서 다룰 수 있도록 T-031 문서를 추가했다.
+
+**반영 상세**:
+- `docs/t027-data-quality-followup.md`를 추가해 C2/C4/C6/C7 잔여 `ERROR`의 현재 수치, 분석 원칙, sample 산출물, 지도 확인, 원천 파일 역추적 순서를 정의했다.
+- `docs/tasks.md`에 T-031을 추가하고, `docs/resume.md`의 다음 작업을 후속 PR 기준으로 바꿨다.
+- `CHANGELOG.md`에 후속 분석 문서 추가를 기록했다.
+
+**다음 작업**: T-031 PR에서는 sample 추출 SQL, 지도 확인 경로, `source_file` 추적성 보강 전략을 구현하고 실제 산출물 요약을 PR 본문에 첨부한다.
+
 ## 2026-05-25 (PR #15 리베이스 — maplibre-vworld package 소비)
 
 **작업**: PR #14가 main에 merge된 뒤 `codex/maplibre-vworld-ui`를 최신 `main` 위로 rebase했다. 이후 upstream `digitie/maplibre-vworld-js` main commit `a5b3c65`를 확인하고, `kraddr-geo-ui`가 VWorld helper/CSS를 실제 `maplibre-vworld` package에서 소비하도록 갱신했다.

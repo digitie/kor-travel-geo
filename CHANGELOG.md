@@ -49,6 +49,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
+- PR #14 close 이후 이어갈 T-027 데이터 품질 후속 분석 문서를 추가한다. C2/C4/C6/C7 잔여 `ERROR`를 sample, 지도 확인, 원천 파일 역추적으로 분류하는 절차와 산출물 기준을 `docs/t027-data-quality-followup.md`에 정리한다.
 - Windows 재설치·새 Codex 세션 복구 문서를 추가한다. `docs/windows-reinstall-recovery.md`는 Git/PR handoff, `data/`·`.env` 백업, WSL/GDAL 복구, Codex `resume`/`fork`/로컬 백업 명령, PR #13의 실행 금지선을 정리한다. `CLAUDE.md`와 `docs/dev-environment-recovery.md`도 실제 전체 적재는 사용자 명시 후에만 실행하도록 맞춘다.
 - PR #13/T-027 계획 보강: Docker PostGIS 기반 실제 `data/juso` 전체 적재 검증 계획서를 실행 전 리뷰 가능한 수준으로 확장하고, `PLAN_ONLY=1` preflight를 지원하는 `scripts/fullload_test.sh`를 정리한다. 실제 전체 적재 실행은 아직 수행하지 않는다.
 - T-021~T-026 구현: `kraddr-geo-ui` Next.js 16 패키지, 디버그 페이지(`/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain`), 관리 페이지(`/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs`, `/admin/consistency`)를 추가한다.

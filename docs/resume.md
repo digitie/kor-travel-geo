@@ -50,11 +50,12 @@
 - ✅ PR #14 리뷰 반영 — Alembic `0002_t027_shp_schema_fixups`, SHP generated column 빈 문자열 보정, `KRADDR_GEO_DB_PORT` 네이밍, MV index 경고, SHP truncate row snapshot, PR 리뷰 확인 프로토콜 문서화
 - ✅ PR #14 추가 리뷰 반영 — `tl_sprd_rw` migration non-polygon row guard, MV index rename live catalog 유도, locsum `staging_seq`, navi zero-coordinate skip, GDAL `connect_timeout`, C6/C7 `ST_Covers` 전환
 - ✅ 실제 C2/C4/C6/C7 선택 재검증 — C2 `missing_text=34,118`/`missing_resolve_key=581`, C4 `over_500m=16`, C6 803/C7 6,817 유지 확인
+- 🟡 T-031 데이터 품질 후속 분석 PR 분리 — PR #14 close 이후 이어갈 C2/C4/C6/C7 sample/지도/원천 파일 역추적 계획을 `docs/t027-data-quality-followup.md`에 정리
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-PR #15 rebase/update를 완료한 뒤 PR에 PR #14 merge 반영, `maplibre-vworld-js` upstream main `a5b3c65` 소비, 검증 결과를 코멘트한다. 이어서 별도 후속 PR에서 `kraddr-geo-ui`의 VWorld 디버그 지도 동작과 `maplibre-vworld-js`의 공통 컴포넌트 동작을 항목별로 맞춘다. 바로 전체 컴포넌트를 교체하지 말고 click callback, marker 제어, tile error hook/redaction, key 미설정 fallback, SSR-safe wrapper를 각각 비교한다.
+PR #17/T-031 후속 PR에서는 `docs/t027-data-quality-followup.md` 기준으로 C2/C4/C6/C7 sample 추출 SQL과 지도 확인 절차를 구현한다. PR #14에는 새 TODO를 더 쌓지 않고, PR #17 안정화 뒤 별도 성능 튜닝 PR과 VWorld debug UI 동기화 PR을 순서대로 진행한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
