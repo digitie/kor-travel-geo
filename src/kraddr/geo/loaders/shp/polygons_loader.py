@@ -88,6 +88,7 @@ async def load_shp_polygons(
     *,
     mode: str = "full",
     source_yyyymm: str | None = None,
+    analyze: bool = True,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
@@ -97,6 +98,7 @@ async def load_shp_polygons(
         engine.url.render_as_string(hide_password=False),
         plans,
         mode,
+        analyze,
         on_progress,
         cancel_event,
     )
@@ -106,6 +108,7 @@ def _load_plans_sync(
     pg_url: str,
     plans: tuple[ShpLoadPlan, ...],
     mode: str,
+    analyze: bool,
     on_progress: ProgressCallback | None,
     cancel_event: asyncio.Event | None,
 ) -> int:
@@ -158,6 +161,11 @@ def _load_plans_sync(
             msg = f"GDAL VectorTranslate failed for {plan.source_layer}"
             raise LoaderError(msg)
         loaded += 1
+    if analyze:
+        _analyze_target_tables(
+            pg_url,
+            tuple(dict.fromkeys(plan.target_table for plan in plans)),
+        )
     if on_progress:
         on_progress(1.0)
     return loaded
@@ -238,6 +246,18 @@ def _truncate_target_tables(pg_url: str, table_names: tuple[str, ...]) -> None:
                     + ", ".join(f"{table}={count}" for table, count in snapshot)
                 )
             conn.execute(text(f"TRUNCATE TABLE {tables}"))
+    finally:
+        engine.dispose()
+
+
+def _analyze_target_tables(pg_url: str, table_names: tuple[str, ...]) -> None:
+    if not table_names:
+        return
+    engine = create_engine(pg_url)
+    try:
+        with engine.begin() as conn:
+            for table_name in table_names:
+                conn.execute(text(f"ANALYZE {table_name}"))
     finally:
         engine.dispose()
 

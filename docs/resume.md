@@ -54,11 +54,12 @@
 - ✅ PR #17/T-031 보강 — `kraddr-geo validate data-quality-samples` CLI와 C2/C4/C6/C7 CSV export SQL을 추가하고, SHP loader가 `source_file`/`source_yyyymm`을 적재하도록 보강
 - ✅ PR #17 실제 Docker DB 검증 — `localhost:15432`에서 CSV 8개 export 성공(2분 52.45초, RSS 79,956KB). C2 `missing_resolve_key` 581건은 전부 `rds_sig_cd` 결측, C4 500m+ 상위 7건은 출입구 경도 약 `+2.0`도 이상치 패턴 확인
 - ✅ PR #18 VWorld debug helper sync — T-032 성능 튜닝 전에 `maplibre-vworld-js` PR #9 commit `11321fe`와 `kraddr-geo-ui` helper 소비 상태를 최신 main 위에서 정리하고 frontend lint/type/test/build 재검증
+- 🟡 T-032 성능 튜닝 진행 중 — C4/C6/C7 export 중복 공간 스캔 제거, 정합성 CTE materialization, SHP 다중 시도 적재의 마지막 1회 `ANALYZE`로 범위를 좁혔다. 사용자 지시에 따라 이번 PR의 실제 실행 검증은 세종특별시·경상남도 축소 데이터 1회만 수행하고, 전국 full test와 반복 trial은 후속으로 미룬다. 상세: `docs/t032-performance-tuning.md`
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-PR #18을 푸시하고 PR 본문/코멘트에 최신 main rebase와 frontend 재검증 결과를 남긴다. PR #18 안정화 뒤 별도 T-032 성능 튜닝 PR을 시작한다. T-032에서는 C4/C6/C7 중복 스캔 제거, full-load/postload/MV swap 속도를 10회 이상 trial and error로 비교한다.
+T-032 PR을 마무리한다. 현재 우선순위는 세종특별시·경상남도 축소 데이터 1회 검증 결과를 문서화하고, 전체 전국 full test와 반복 trial을 후속 작업으로 명확히 남기는 것이다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.

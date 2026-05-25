@@ -47,6 +47,16 @@ def test_full_mode_logs_row_count_snapshot_before_truncate() -> None:
     assert source.index("_table_count_snapshot") < source.index("TRUNCATE TABLE")
 
 
+def test_shp_loader_analyzes_target_tables_after_requested_batch() -> None:
+    source = inspect.getsource(polygons_loader._load_plans_sync)
+    analyze_source = inspect.getsource(polygons_loader._analyze_target_tables)
+
+    assert "if analyze:" in source
+    assert "_analyze_target_tables" in source
+    assert "dict.fromkeys(plan.target_table for plan in plans)" in source
+    assert "ANALYZE {table_name}" in analyze_source
+
+
 def test_shp_load_plan_projects_source_columns_to_target_schema() -> None:
     source = inspect.getsource(polygons_loader._sql_statement)
 

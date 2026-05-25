@@ -14,8 +14,16 @@ from kraddr.geo.infra.sql import MV_SQL, POSTLOAD_SQL, iter_sql_statements
 LOGGER = logging.getLogger(__name__)
 
 
-async def resolve_text_geometry_links(engine: AsyncEngine) -> None:
+async def resolve_text_geometry_links(
+    engine: AsyncEngine,
+    *,
+    statement_timeout_ms: int = 1_800_000,
+) -> None:
     async with engine.begin() as conn:
+        await conn.execute(
+            text("SELECT set_config('statement_timeout', :timeout_ms, true)"),
+            {"timeout_ms": str(statement_timeout_ms)},
+        )
         for sql in iter_sql_statements(POSTLOAD_SQL):
             await conn.execute(text(sql))
 

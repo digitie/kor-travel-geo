@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+
 from typer.testing import CliRunner
 
 from kraddr.geo.cli.main import (
@@ -7,6 +9,8 @@ from kraddr.geo.cli.main import (
     _shp_all_work_items,
     _shp_mode_for_index,
     app,
+    load_all_sidos_command,
+    load_shp_all_command,
 )
 
 
@@ -41,6 +45,16 @@ def test_shp_all_work_items_apply_full_mode_only_to_first_sido(tmp_path) -> None
     items = _shp_all_work_items(tmp_path, "full")
 
     assert items == ((first, "full"), (second, "append"))
+
+
+def test_multi_sido_shp_load_analyzes_only_after_last_sido() -> None:
+    shp_all_source = inspect.getsource(load_shp_all_command)
+    all_sidos_source = inspect.getsource(load_all_sidos_command)
+
+    assert "items = _shp_all_work_items(root, mode)" in shp_all_source
+    assert "analyze=index == len(items) - 1" in shp_all_source
+    assert "sido_dirs = _sido_dirs(shp_root)" in all_sidos_source
+    assert "analyze=index == len(sido_dirs) - 1" in all_sidos_source
 
 
 def test_data_quality_case_parser_deduplicates_and_rejects_unknown() -> None:

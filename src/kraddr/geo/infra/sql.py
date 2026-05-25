@@ -346,6 +346,8 @@ CREATE INDEX IF NOT EXISTS idx_juso_text_buld_nm_trgm
   ON tl_juso_text USING GIN (buld_nm_nrm gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_juso_text_pnu
   ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_juso_text_resolve
+  ON tl_juso_text (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no);
 
 CREATE INDEX IF NOT EXISTS idx_locsum_geom
   ON tl_locsum_entrc USING GIST (geom);

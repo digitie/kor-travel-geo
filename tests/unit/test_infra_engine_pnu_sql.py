@@ -63,3 +63,5 @@ def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
     assert "WHERE pt_5179 IS NOT NULL" in MV_SQL
     assert "ent_pt_4326" not in MV_SQL
     assert "idx_juso_text_rn_trgm" in INDEX_SQL
+    assert "idx_juso_text_resolve" in INDEX_SQL
+    assert "rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no" in INDEX_SQL
