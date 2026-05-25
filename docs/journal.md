@@ -2,6 +2,37 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (PR #20~#22 post-merge 리뷰 반영)
+
+**작업**: T-036 PR #23이 main에 merge된 뒤, 사용자 지시 순서대로 PR #22 → PR #21 → PR #20 리뷰 코멘트를 thread-aware 방식으로 확인했다. 세 PR 모두 merged 상태였고 conversation comment 1개씩만 있었으며 formal review와 inline review thread는 없었다.
+
+**PR #22 반영**:
+- `postload.rename_mv_next_indexes_for_conn(conn)` public helper를 추가해 benchmark script가 `_rename_mv_next_indexes` private helper를 직접 import하지 않게 했다.
+- `scripts/benchmark_mv_refresh.py`에 `schema_version=2`, `metadata`(`trial_index`, `cache_warm_hint`, `notes`, active session 수, wait event snapshot)를 추가했다.
+- `_optional_int()`는 `ProgrammingError`만 잡고 rollback한 뒤 `None`을 반환한다.
+- benchmark와 production `shadow_swap_mv()`의 `ANALYZE` transaction에도 `SET LOCAL lock_timeout = '2s'`를 적용했다.
+- `docs/data-model.md` shadow swap 예시는 실제 `idx_mv_next_*` → `idx_mv_*` index rename 단계를 보여주도록 보강했다.
+
+**PR #21 반영**:
+- `TL_SPRD_INTRVL` COPY row를 `RoadIntervalRow` dataclass로 묶고, `ROAD_INTERVAL_COPY_COLUMNS`와 tuple shape를 같은 코드 표면에 둔다.
+- CP949 decode 실패와 truncated record 오류 메시지에 파일, record, field, byte size 문맥을 포함한다.
+- psycopg COPY connection은 `autocommit=False`를 명시하고 explicit commit 의도를 주석으로 남겼다.
+- deleted record skip, CP949 decode error, truncated record error 단위 테스트를 추가했다.
+
+**PR #20 반영**:
+- `scripts/fullload_test.sh`에 DDL, juso, locsum, navi, SHP, link, MV, total timer를 추가했다.
+- `docs/t033-full-load-revalidation.md`에 SHP 시간 출처, 단발 측정 한계, C10 `OK 0` 의미, `tl_navi_entrc` 원천 cross-check 필요성을 명시했다.
+- `TL_SPBD_BULD` 등 geometry 포함 대형 SHP 튜닝을 T-037 후보로 등록했다.
+
+**검증 진행**:
+- `pytest tests/unit/test_mv_refresh_benchmark.py tests/unit/test_postload_mv.py -q` → 8 passed.
+- `pytest tests/unit/test_shp_loader_gdal.py -q` → 16 passed.
+- 대상 `ruff check` → 통과.
+- 전체 `pytest -q` → 113 passed / 7 skipped.
+- `ruff check .`, `mypy src/kraddr/geo scripts/benchmark_mv_refresh.py`, `lint-imports`, `bash -n scripts/fullload_test.sh`, `git diff --check` → 통과.
+
+**다음 작업**: PR을 열어 20분 리뷰 대기 후, 코멘트가 있으면 반영하고 없으면 main에 merge한다.
+
 ## 2026-05-26 (T-036 — `maplibre-vworld-js` main 동기화)
 
 **작업**: PR #22 merge 이후 `codex/t036-maplibre-vworld-sync` 브랜치에서 `kraddr-geo-ui`의 `maplibre-vworld` dependency를 `digitie/maplibre-vworld-js` 최신 main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다.

@@ -236,7 +236,7 @@ GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY
 | **C7: 행정구역 ↔ 좌표 polygon 일치** | `ST_Covers(scco_emd.geom, locsum.geom)` 와 `juso.bjd_cd[1..8] = scco_emd.emd_cd` 비교 | 좌표가 법정동 polygon 안 또는 경계 위인가 | `OK` / `WARN`(polygon 외) / `ERROR`(코드 불일치) |
 | **C8: 도로명 ↔ 도로 폴리라인 인접성** | `ST_DWithin(locsum.geom, tl_sprd_manage.geom, 100m)` filtered by `rncode_full` | 좌표가 같은 도로명 관리 LineString의 100m 이내인가 | 일치 `OK`, 외 `WARN` |
 | **C9: PNU 자릿수 검증** | `length(pnu) = 19 AND substr(pnu, 11, 1) IN ('1','2')` | ADR-010 매핑이 올바른가 | `length != 19` 시 `ERROR` |
-| **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm` 비교 | 텍스트 적재월과 SHP 적재월이 같은가 | 다르면 `WARN` (월 차이 1 이내 OK) |
+| **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm` 비교 | `load_manifest`에 기록된 적재 작업 기준월이 한 배치 안에서 갈라지는가 | manifest 대상 table의 distinct month가 2종 이상이면 `WARN` |
 
 각 케이스의 결과는 `load_consistency_reports` 테이블에 구조화된 JSON으로 저장된다.
 
@@ -405,12 +405,22 @@ CREATE MATERIALIZED VIEW mv_geocode_target_next AS
        LEFT JOIN best_entrc be ON ...
        LEFT JOIN tl_navi_buld_centroid nc ON ...
   WITH DATA;
-CREATE UNIQUE INDEX ON mv_geocode_target_next (bd_mgt_sn);
-CREATE INDEX        ON mv_geocode_target_next (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
-CREATE INDEX        ON mv_geocode_target_next (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
-CREATE INDEX        ON mv_geocode_target_next USING GIST (pt_5179);
-CREATE INDEX        ON mv_geocode_target_next USING GIST (pt_4326);
-CREATE INDEX        ON mv_geocode_target_next (pt_source);
+CREATE UNIQUE INDEX idx_mv_next_geocode_target_next_pk
+    ON mv_geocode_target_next (bd_mgt_sn);
+CREATE INDEX idx_mv_next_road
+    ON mv_geocode_target_next (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
+CREATE INDEX idx_mv_next_jibun
+    ON mv_geocode_target_next (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
+CREATE INDEX idx_mv_next_rn_trgm
+    ON mv_geocode_target_next USING GIN (rn_norm gin_trgm_ops);
+CREATE INDEX idx_mv_next_buld_nm_trgm
+    ON mv_geocode_target_next USING GIN (buld_nm gin_trgm_ops);
+CREATE INDEX idx_mv_next_geom5179
+    ON mv_geocode_target_next USING GIST (pt_5179);
+CREATE INDEX idx_mv_next_geom4326
+    ON mv_geocode_target_next USING GIST (pt_4326);
+CREATE INDEX idx_mv_next_pt_source
+    ON mv_geocode_target_next (pt_source);
 
 -- rename swap (T-035 실측 기준 rename/index rename 구간 약 0.016초)
 BEGIN;
@@ -419,11 +429,21 @@ BEGIN;
   ALTER MATERIALIZED VIEW mv_geocode_target RENAME TO mv_geocode_target_old;
   ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target;
   DROP MATERIALIZED VIEW mv_geocode_target_old;
-  -- idx_mv_next_* 인덱스를 idx_mv_* 운영명으로 RENAME
+  ALTER INDEX idx_mv_next_geocode_target_next_pk RENAME TO idx_mv_geocode_target_pk;
+  ALTER INDEX idx_mv_next_road RENAME TO idx_mv_road;
+  ALTER INDEX idx_mv_next_jibun RENAME TO idx_mv_jibun;
+  ALTER INDEX idx_mv_next_rn_trgm RENAME TO idx_mv_rn_trgm;
+  ALTER INDEX idx_mv_next_buld_nm_trgm RENAME TO idx_mv_buld_nm_trgm;
+  ALTER INDEX idx_mv_next_geom5179 RENAME TO idx_mv_geom5179;
+  ALTER INDEX idx_mv_next_geom4326 RENAME TO idx_mv_geom4326;
+  ALTER INDEX idx_mv_next_pt_source RENAME TO idx_mv_pt_source;
 COMMIT;
 
 -- ANALYZE는 swap lock window 밖에서 별도 transaction으로 실행
-ANALYZE mv_geocode_target;
+BEGIN;
+  SET LOCAL lock_timeout = '2s';
+  ANALYZE mv_geocode_target;
+COMMIT;
 ```
 
 주의:

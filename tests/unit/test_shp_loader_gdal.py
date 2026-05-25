@@ -169,7 +169,7 @@ def test_road_interval_dbf_rows_project_to_copy_columns(tmp_path: Path) -> None:
         source_yyyymm="202604",
     )
 
-    rows = list(polygons_loader._iter_road_interval_copy_rows(plan))
+    rows = [row.to_copy_tuple() for row in polygons_loader._iter_road_interval_copy_rows(plan)]
 
     assert rows == [
         (
@@ -191,6 +191,92 @@ def test_road_interval_dbf_rows_project_to_copy_columns(tmp_path: Path) -> None:
             "202604",
         ),
     ]
+
+
+def test_road_interval_dbf_skips_deleted_records(tmp_path: Path) -> None:
+    dbf_path = tmp_path / "TL_SPRD_INTRVL.dbf"
+    _write_dbf(
+        dbf_path,
+        fields=(
+            ("SIG_CD", "C", 5),
+            ("RDS_MAN_NO", "N", 12),
+            ("BSI_INT_SN", "N", 10),
+            ("ODD_BSI_MN", "N", 5),
+            ("EVE_BSI_MN", "N", 5),
+        ),
+        rows=(
+            {"SIG_CD": "36110", "RDS_MAN_NO": "1", "BSI_INT_SN": "1"},
+            {"SIG_CD": "36110", "RDS_MAN_NO": "2", "BSI_INT_SN": "2"},
+        ),
+        deleted_rows={0},
+    )
+    plan = polygons_loader.ShpLoadPlan(
+        source_layer="TL_SPRD_INTRVL",
+        target_table="tl_sprd_intrvl",
+        shp_path=tmp_path / "TL_SPRD_INTRVL.shp",
+        dbf_path=dbf_path,
+        source_file="세종특별자치시/36000/TL_SPRD_INTRVL.shp",
+    )
+
+    rows = [row.to_copy_tuple() for row in polygons_loader._iter_road_interval_copy_rows(plan)]
+
+    assert len(rows) == 1
+    assert rows[0][:3] == ("36110", "2", "2")
+
+
+def test_road_interval_dbf_decode_error_includes_record_context(tmp_path: Path) -> None:
+    dbf_path = tmp_path / "TL_SPRD_INTRVL.dbf"
+    _write_dbf(
+        dbf_path,
+        fields=(
+            ("SIG_CD", "C", 5),
+            ("RDS_MAN_NO", "N", 12),
+            ("BSI_INT_SN", "N", 10),
+            ("ODD_BSI_MN", "N", 5),
+            ("EVE_BSI_MN", "N", 5),
+        ),
+        rows=({"SIG_CD": "36110", "RDS_MAN_NO": "1", "BSI_INT_SN": "1"},),
+    )
+    data = bytearray(dbf_path.read_bytes())
+    header = polygons_loader.read_dbf_header(dbf_path)
+    data[header.header_length + 1] = 0xFF
+    dbf_path.write_bytes(bytes(data))
+    plan = polygons_loader.ShpLoadPlan(
+        source_layer="TL_SPRD_INTRVL",
+        target_table="tl_sprd_intrvl",
+        shp_path=tmp_path / "TL_SPRD_INTRVL.shp",
+        dbf_path=dbf_path,
+        source_file="세종특별자치시/36000/TL_SPRD_INTRVL.shp",
+    )
+
+    with pytest.raises(LoaderError, match=r"1 field SIG_CD failed CP949 decode"):
+        list(polygons_loader._iter_road_interval_copy_rows(plan))
+
+
+def test_road_interval_dbf_truncated_record_error_includes_size_context(tmp_path: Path) -> None:
+    dbf_path = tmp_path / "TL_SPRD_INTRVL.dbf"
+    _write_dbf(
+        dbf_path,
+        fields=(
+            ("SIG_CD", "C", 5),
+            ("RDS_MAN_NO", "N", 12),
+            ("BSI_INT_SN", "N", 10),
+            ("ODD_BSI_MN", "N", 5),
+            ("EVE_BSI_MN", "N", 5),
+        ),
+        rows=({"SIG_CD": "36110", "RDS_MAN_NO": "1", "BSI_INT_SN": "1"},),
+    )
+    dbf_path.write_bytes(dbf_path.read_bytes()[:-2])
+    plan = polygons_loader.ShpLoadPlan(
+        source_layer="TL_SPRD_INTRVL",
+        target_table="tl_sprd_intrvl",
+        shp_path=tmp_path / "TL_SPRD_INTRVL.shp",
+        dbf_path=dbf_path,
+        source_file="세종특별자치시/36000/TL_SPRD_INTRVL.shp",
+    )
+
+    with pytest.raises(LoaderError, match=r"expected \d+ bytes, got \d+"):
+        list(polygons_loader._iter_road_interval_copy_rows(plan))
 
 
 def test_road_interval_dbf_requires_all_projection_fields(tmp_path: Path) -> None:
@@ -222,7 +308,9 @@ def _write_dbf(
     *,
     fields: tuple[tuple[str, str, int], ...],
     rows: tuple[dict[str, str], ...],
+    deleted_rows: set[int] | None = None,
 ) -> None:
+    deleted_rows = deleted_rows or set()
     header_length = 32 + len(fields) * 32 + 1
     record_length = 1 + sum(length for _, _, length in fields)
     header = bytearray(32)
@@ -239,8 +327,8 @@ def _write_dbf(
         descriptor[16] = length
         descriptors.extend(descriptor)
     body = bytearray()
-    for row in rows:
-        body.append(0x20)
+    for index, row in enumerate(rows):
+        body.append(0x2A if index in deleted_rows else 0x20)
         for name, field_type, length in fields:
             raw = row.get(name, "").encode("cp949")
             raw = raw.rjust(length) if field_type == "N" else raw.ljust(length)

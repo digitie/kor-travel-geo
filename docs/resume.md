@@ -60,11 +60,12 @@
 - ✅ T-034 SHP append 병목 튜닝 — geometry 없는 `TL_SPRD_INTRVL`을 GDAL append 대신 DBF 직접 scan + `psycopg COPY` 경로로 분리했다. 세종 단일 레이어는 36.12초 → 1.59초, 경기도 2,677,715행은 새 경로 15.88초, 세종 9개 SHP 레이어 전체는 31.69초로 검증했다. 상세: `docs/t034-shp-append-tuning.md`
 - ✅ T-035 MV refresh/swap 벤치마크 — `scripts/benchmark_mv_refresh.py`를 추가하고 전국 DB에서 `CONCURRENTLY` 1분 49.64초, shadow swap 2분 16.28초를 측정했다. swap rename/index rename 구간은 약 0.016초였고, `ANALYZE`를 별도 transaction으로 분리했다. 상세: `docs/t035-mv-refresh-benchmark.md`
 - ✅ T-036 `maplibre-vworld-js` main 동기화 — `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다. 최신 upstream은 `redactVWorldUrl()`와 redaction 표기 `***`를 쓰므로, UI 내부 경계에서는 `redactVWorldUrl as redactVWorldTileUrl` alias로 기존 컴포넌트 계약을 유지하고 테스트를 갱신했다. 상세: `docs/t036-maplibre-vworld-sync.md`
+- 🟡 PR #20~#22 post-merge 리뷰 반영 진행 — T-036 merge 이후 사용자 지시 순서대로 PR #22, #21, #20 리뷰 코멘트를 thread-aware로 확인했다. 새 브랜치 `codex/postmerge-review-fixups-pr22-pr20`에서 benchmark metadata/public helper, DBF COPY 오류 문맥, full-load phase timer/doc 명확화를 반영 중이다. 상세: `docs/postmerge-review-fixups-pr20-pr22.md`
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-T-036 PR을 마무리한다. 현재 우선순위는 `codex/t036-maplibre-vworld-sync` 브랜치를 푸시하고 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge하는 것이다. T-036이 끝난 뒤에는 사용자 지시에 따라 PR #22 → PR #21 → PR #20 순서로 신규 리뷰 코멘트를 읽고 반영 가능한 내용을 처리한다. 그 다음 구현 작업은 T-028 일변동 ZIP 로더다.
+PR #20~#22 post-merge 리뷰 반영 PR을 마무리한다. 현재 우선순위는 `codex/postmerge-review-fixups-pr22-pr20` 브랜치에서 전체 검증을 돌리고 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge하는 것이다. 그 다음 구현 작업은 T-028 일변동 ZIP 로더다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.

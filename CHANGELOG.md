@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #20~#22 post-merge 리뷰 반영: T-035 benchmark JSON에 `schema_version=2`와 metadata를 추가하고, MV index rename public helper/좁은 예외 처리/ANALYZE lock timeout을 보강한다. T-034 `TL_SPRD_INTRVL` DBF COPY 로더는 row dataclass, CP949/truncated 오류 문맥, deleted record 테스트를 추가한다. T-033 full-load 스크립트는 자료별 timer와 C10/SHP 시간 설명을 보강한다.
 - T-036 VWorld dependency 동기화: `kraddr-geo-ui`의 `maplibre-vworld`를 `digitie/maplibre-vworld-js` upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신한다. 최신 helper 이름 `redactVWorldUrl()`는 내부 alias `redactVWorldTileUrl`로 재수출해 디버그 UI 컴포넌트 계약을 유지하고, redaction 표기 `***`를 테스트로 고정한다.
 - T-035 MV refresh/swap 벤치마크: `scripts/benchmark_mv_refresh.py`를 추가해 `CONCURRENTLY`와 shadow swap을 phase별로 계측한다. 전국 DB 기준 `CONCURRENTLY`는 1분 49.64초, shadow swap은 2분 16.28초였고, swap rename/index rename 구간은 약 0.016초로 측정됐다. `shadow_swap_mv()`는 rename transaction과 `ANALYZE` transaction을 분리해 lock window를 줄인다.
 - T-034 SHP append 병목 튜닝: geometry 없는 `TL_SPRD_INTRVL` 레이어를 GDAL append 대신 DBF 직접 scan + `psycopg COPY`로 적재한다. 세종 100,009행 단일 레이어는 36.12초에서 1.59초로 줄었고, 경기도 2,677,715행은 새 경로에서 15.88초에 적재됐다.
