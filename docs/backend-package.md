@@ -674,6 +674,8 @@ TL_SPBD_EQB, TL_SPBD_BULD, TL_SPBD_ENTRC
 
 `VACUUM (ANALYZE)` → `SET LOCAL maintenance_work_mem='1500MB'` → `REFRESH MATERIALIZED VIEW mv_geocode_target` → `ANALYZE mv_geocode_target` → (옵션) `CLUSTER ... USING idx_buld_road_match`.
 
+T-035 이후 MV 갱신 성능 비교는 `scripts/benchmark_mv_refresh.py`로 재현한다. 실제 전국 DB `kraddr_geo_t033` 기준 `CONCURRENTLY`는 1분 49.64초, shadow swap은 2분 16.28초였고, shadow swap의 rename/index rename 구간은 약 0.016초였다. `shadow_swap_mv()`는 rename transaction과 `ANALYZE` transaction을 분리해 swap lock window에 통계 갱신 시간을 포함하지 않는다. 상세 수치와 phase별 index build 시간은 `docs/t035-mv-refresh-benchmark.md`를 본다.
+
 ### 무중단 스왑 (`loaders/swap.py`)
 
 ```python

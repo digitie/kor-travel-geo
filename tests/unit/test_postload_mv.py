@@ -22,6 +22,7 @@ def test_shadow_swap_handles_missing_current_mv() -> None:
     assert "if current_mv is not None" in source
     assert "ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target" in source
     assert "ANALYZE mv_geocode_target" in source
+    assert source.count("async with engine.begin()") == 2
 
 
 def test_shadow_swap_normalizes_next_index_names() -> None:

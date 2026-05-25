@@ -78,16 +78,17 @@ async def shadow_swap_mv(engine: AsyncEngine) -> None:
         if current_mv is not None:
             await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_target_old"))
         await _rename_mv_next_indexes(conn)
+    async with engine.begin() as conn:
         await conn.execute(text("ANALYZE mv_geocode_target"))
 
 
 async def rebuild_mv_next(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        for sql in iter_sql_statements(_mv_next_sql()):
+        for sql in iter_sql_statements(build_mv_next_sql()):
             await conn.execute(text(sql))
 
 
-def _mv_next_sql() -> str:
+def build_mv_next_sql() -> str:
     sql = MV_SQL.replace("mv_geocode_target", "mv_geocode_target_next")
     sql = sql.replace("CREATE UNIQUE INDEX idx_mv_", "CREATE UNIQUE INDEX idx_mv_next_")
     sql = sql.replace("CREATE INDEX idx_mv_", "CREATE INDEX idx_mv_next_")
