@@ -701,7 +701,7 @@ SET search_path = public, x_extension;
 
 PR #12까지의 `kraddr-geo-ui`는 Kakao Maps SDK를 기준으로 좌표 지도 컴포넌트를 만들었다. 그러나 이 프로젝트의 백엔드 응답은 vworld 호환 구조를 1차 공개 표면으로 삼고 있고, 외부 폴백도 vworld 주소 좌표 API를 먼저 호출한다. 디버그 UI가 다른 지도 공급자 위에서만 동작하면 운영자가 실제 vworld 기반 응답과 지도 타일을 같은 조건으로 비교하기 어렵다.
 
-별도 저장소 `digitie/maplibre-vworld-js`는 MapLibre GL JS 위에서 VWorld 지도 layer, marker, cluster를 재사용 가능한 형태로 제공하려는 목적에 맞다. PR #15 최초 리뷰 시점에는 GitHub 의존성으로 설치했을 때 package `exports`가 가리키는 `dist/` 산출물이 포함되지 않아 소비자 프로젝트에서 직접 import하면 build 실패 위험이 있었다. 이후 upstream PR #6/#7이 merge되어 `dist/`, `exports`, `types`, `style.css`, zod v4 peer dependency가 정리되었고, `kraddr-geo-ui`는 검증된 commit `a5b3c65`를 GitHub SHA로 고정해 소비한다.
+별도 저장소 `digitie/maplibre-vworld-js`는 MapLibre GL JS 위에서 VWorld 지도 layer, marker, cluster를 재사용 가능한 형태로 제공하려는 목적에 맞다. PR #15 최초 리뷰 시점에는 GitHub 의존성으로 설치했을 때 package `exports`가 가리키는 `dist/` 산출물이 포함되지 않아 소비자 프로젝트에서 직접 import하면 build 실패 위험이 있었다. 이후 upstream PR #6/#7이 merge되어 `dist/`, `exports`, `types`, `style.css`, zod v4 peer dependency가 정리되었고, 후속 PR에서는 upstream PR #9 commit `11321fe`의 click/error/flyTo helper까지 소비한다.
 
 ### 결정
 
@@ -709,9 +709,9 @@ PR #12까지의 `kraddr-geo-ui`는 Kakao Maps SDK를 기준으로 좌표 지도 
 
 - 브라우저 환경변수는 `NEXT_PUBLIC_VWORLD_API_KEY`다. 실제 키는 `.env.local`에만 두고 저장소에는 커밋하지 않는다.
 - 지도 타일 URL, style 생성 규칙, CSS import는 `digitie/maplibre-vworld-js`의 package API를 사용한다. `kraddr-geo-ui/lib/vworld.ts`는 로컬 구현을 갖지 않고 `maplibre-vworld`의 `getVWorldTileUrl()`, `getVWorldStyle()`, `getVWorldMaxZoom()`, `VWorldLayerType`를 재수출한다.
-- `maplibre-vworld` package는 CI에서 SSH key 없이 설치할 수 있도록 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정한다. upstream이 npm registry release 또는 stable tag를 제공하면 lockfile drift와 검증 결과를 확인한 뒤 dependency spec을 바꾼다.
+- `maplibre-vworld` package는 CI에서 SSH key 없이 설치할 수 있도록 `git+https://github.com/digitie/maplibre-vworld-js.git#11321fe`로 고정한다. upstream이 npm registry release 또는 stable tag를 제공하면 lockfile drift와 검증 결과를 확인한 뒤 dependency spec을 바꾼다.
 - `maplibre-vworld/style.css`를 전역 CSS에서 import해 MapLibre GL 기본 CSS와 upstream package CSS를 한 경로에서 가져온다.
-- `VWorldMap` 컴포넌트 전체 대체는 후속 PR에서 검토한다. 현재 `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`는 디버그 화면 전용 동작, 즉 지도 클릭 시 `(lon, lat)` callback, key 미설정 fallback, tile error redaction, transient overlay 임계치, marker 즉시 이동, SSR 차단 wrapper를 직접 보장한다.
+- `VWorldMap` 컴포넌트 전체 대체는 단계적으로 검토한다. 현재 `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`는 디버그 화면 전용 동작, 즉 지도 클릭 시 `(lon, lat)` callback, key 미설정 fallback, transient overlay 임계치, marker 즉시 이동, SSR 차단 wrapper를 직접 보장한다. VWorld tile 오류 분류와 URL redaction은 `maplibre-vworld`의 `isVWorldTileError()`/`redactVWorldTileUrl()` helper를 사용한다.
 - `digitie/maplibre-vworld-js`에서 패키징, 타입, CSS import, Next.js 호환성, VWorld layer/marker/cluster 공통 문제가 발견되면 이 저장소 전용 workaround에 그치지 않고 upstream도 적극 수정한다.
 
 ### 근거
@@ -737,6 +737,6 @@ PR #12까지의 `kraddr-geo-ui`는 Kakao Maps SDK를 기준으로 좌표 지도 
 - `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`가 지도 렌더링과 click/marker 동작을 담당한다.
 - `kraddr-geo-ui/components/vworld/LazyCoordinateMap.tsx`가 Next.js dynamic import, SSR 차단, skeleton UI를 담당한다.
 - `kraddr-geo-ui/lib/vworld.ts`는 upstream package의 VWorld helper 재수출 지점이다.
-- `maplibre-vworld` GitHub 의존성은 `a5b3c65`로 재도입했다. React 18 소비자와 upstream zod v4 peer dependency를 맞추기 위해 `kraddr-geo-ui`도 `zod ^4.4.3`을 직접 의존성으로 둔다.
+- `maplibre-vworld` GitHub 의존성은 `11321fe`로 갱신했다. React 18 소비자와 upstream zod v4 peer dependency를 맞추기 위해 `kraddr-geo-ui`도 `zod ^4.4.3`을 직접 의존성으로 둔다.
 - 프론트엔드 문서와 외부 API 문서는 Kakao Maps가 아니라 VWorld WMTS 기준으로 갱신한다.
 - 후속 PR에서는 `CoordinateMap`의 디버그 UI 전용 동작을 `maplibre-vworld-js`의 재사용 가능한 props/hook/test로 옮길 수 있는지 검토한다. 이때 바로 컴포넌트 전체를 교체하지 않고 click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식을 항목별로 맞춘다.

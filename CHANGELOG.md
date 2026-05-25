@@ -6,6 +6,7 @@
 
 ### Fixed
 - PR #17 보강: SHP 보조 로더가 GDAL append 경로에서도 `source_file`과 `source_yyyymm`을 SQL projection에 넣어 C2/C4/C6/C7 후속 분석에서 polygon 원천 파일을 추적할 수 있게 한다.
+- 후속 VWorld sync: `maplibre-vworld`를 upstream PR #9 commit `11321fe`로 동기화하고, 디버그 UI의 VWorld tile error 분류와 URL redaction을 `maplibre-vworld-js` helper와 공유한다.
 - PR #15 rebase 반영: PR #14 merge 이후 `codex/maplibre-vworld-ui`를 최신 `main` 위로 올리고, `maplibre-vworld`를 upstream main commit `a5b3c65` GitHub SHA로 고정해 실제 helper/CSS package를 소비한다. zod v4 peer dependency도 `kraddr-geo-ui`에서 직접 맞춘다.
 - PR #15 리뷰 반영: VWorld MapLibre 지도는 `next/dynamic(..., { ssr: false })` wrapper로 지연 로딩하고 skeleton을 제공해 SSR/WebGL 충돌과 초기 번들 비대를 줄인다.
 - PR #15 리뷰 반영: VWorld tile fetch 오류를 transient로 분리해 즉시 fatal overlay로 고정하지 않고, redacted warning과 누적 임계치로 처리한다. `Hybrid`/`Satellite`는 z18 maxZoom을 적용한다.

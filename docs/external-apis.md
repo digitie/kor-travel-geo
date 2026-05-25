@@ -61,9 +61,9 @@ async with httpx.AsyncClient(timeout=5.0) as cx:
 
 ### `digitie/maplibre-vworld-js`와의 관계
 
-디버그 UI는 `digitie/maplibre-vworld-js`를 실제 package dependency로 사용한다. PR #6/#7 merge 이후 commit `a5b3c65`는 GitHub install 결과물에 `dist/`, package `exports`, `types`, `style.css`를 포함하고, `maplibre-gl ^5.24.0`, React 18/19, zod v4 peer dependency를 선언한다. `kraddr-geo-ui`는 `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정하고, `zod ^4.4.3`을 직접 의존성으로 둔다.
+디버그 UI는 `digitie/maplibre-vworld-js`를 실제 package dependency로 사용한다. PR #6/#7 merge 이후 GitHub install 결과물에는 `dist/`, package `exports`, `types`, `style.css`가 포함되어 있고, PR #9 commit `11321fe`는 click/error/flyTo hook과 tile error helper를 추가한다. `kraddr-geo-ui`는 `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#11321fe`로 고정하고, `zod ^4.4.3`을 직접 의존성으로 둔다.
 
-다만 `VWorldMap` 컴포넌트 전체 대체는 별도 후속 PR에서 진행한다. 현재 디버그 UI는 지도 표시 외에 click callback, key 미설정 fallback, transient tile error redaction/overlay, marker 즉시 이동, SSR-safe dynamic wrapper를 보장해야 한다. 이 동작들을 upstream props/hook/test와 맞춘 뒤 공통화한다.
+다만 `VWorldMap` 컴포넌트 전체 대체는 단계적으로 진행한다. 현재 디버그 UI는 지도 표시 외에 click callback, key 미설정 fallback, transient tile error redaction/overlay, marker 즉시 이동, SSR-safe dynamic wrapper를 보장해야 한다. 이 PR에서는 tile error 분류와 URL redaction을 upstream helper로 맞추고, 나머지는 props/hook/test 기준을 더 좁힌 뒤 공통화한다.
 
 문제 발생 시 원칙:
 
