@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #17 보강: SHP 보조 로더가 GDAL append 경로에서도 `source_file`과 `source_yyyymm`을 SQL projection에 넣어 C2/C4/C6/C7 후속 분석에서 polygon 원천 파일을 추적할 수 있게 한다.
 - PR #15 rebase 반영: PR #14 merge 이후 `codex/maplibre-vworld-ui`를 최신 `main` 위로 올리고, `maplibre-vworld`를 upstream main commit `a5b3c65` GitHub SHA로 고정해 실제 helper/CSS package를 소비한다. zod v4 peer dependency도 `kraddr-geo-ui`에서 직접 맞춘다.
 - PR #15 리뷰 반영: VWorld MapLibre 지도는 `next/dynamic(..., { ssr: false })` wrapper로 지연 로딩하고 skeleton을 제공해 SSR/WebGL 충돌과 초기 번들 비대를 줄인다.
 - PR #15 리뷰 반영: VWorld tile fetch 오류를 transient로 분리해 즉시 fatal overlay로 고정하지 않고, redacted warning과 누적 임계치로 처리한다. `Hybrid`/`Satellite`는 z18 maxZoom을 적용한다.
@@ -49,6 +50,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
+- PR #17 보강: `kraddr-geo validate data-quality-samples` CLI와 `loaders/data_quality.py`를 추가한다. C2/C4/C6/C7 후속 분석용 sample, 거리 bucket, region summary CSV를 재현 가능한 SQL로 export한다.
 - PR #14 close 이후 이어갈 T-027 데이터 품질 후속 분석 문서를 추가한다. C2/C4/C6/C7 잔여 `ERROR`를 sample, 지도 확인, 원천 파일 역추적으로 분류하는 절차와 산출물 기준을 `docs/t027-data-quality-followup.md`에 정리한다.
 - Windows 재설치·새 Codex 세션 복구 문서를 추가한다. `docs/windows-reinstall-recovery.md`는 Git/PR handoff, `data/`·`.env` 백업, WSL/GDAL 복구, Codex `resume`/`fork`/로컬 백업 명령, PR #13의 실행 금지선을 정리한다. `CLAUDE.md`와 `docs/dev-environment-recovery.md`도 실제 전체 적재는 사용자 명시 후에만 실행하도록 맞춘다.
 - PR #13/T-027 계획 보강: Docker PostGIS 기반 실제 `data/juso` 전체 적재 검증 계획서를 실행 전 리뷰 가능한 수준으로 확장하고, `PLAN_ONLY=1` preflight를 지원하는 `scripts/fullload_test.sh`를 정리한다. 실제 전체 적재 실행은 아직 수행하지 않는다.

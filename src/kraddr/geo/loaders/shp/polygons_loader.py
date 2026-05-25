@@ -47,22 +47,35 @@ class ShpLoadPlan:
     target_table: str
     shp_path: Path
     dbf_path: Path
+    source_file: str
+    source_yyyymm: str | None = None
     sql_statement: str | None = None
     geometry_type: str = "PROMOTE_TO_MULTI"
 
 
-def build_shp_load_plan(path: Path | str) -> tuple[ShpLoadPlan, ...]:
+def build_shp_load_plan(
+    path: Path | str,
+    *,
+    source_yyyymm: str | None = None,
+) -> tuple[ShpLoadPlan, ...]:
     dataset = discover_sido_dataset(path)
     plans: list[ShpLoadPlan] = []
     for layer_name in POLYGON_LAYER_NAMES:
         layer = dataset.layer(layer_name)
+        source_file = _source_file_label(dataset.sido_name, dataset.sig_code, layer)
         plans.append(
             ShpLoadPlan(
                 source_layer=layer.name,
                 target_table=TARGET_TABLES[layer.name],
                 shp_path=layer.shp_path,
                 dbf_path=layer.dbf_path,
-                sql_statement=_sql_statement(layer),
+                source_file=source_file,
+                source_yyyymm=source_yyyymm,
+                sql_statement=_sql_statement(
+                    layer,
+                    source_file=source_file,
+                    source_yyyymm=source_yyyymm,
+                ),
                 geometry_type=_geometry_type(layer),
             )
         )
@@ -74,10 +87,11 @@ async def load_shp_polygons(
     path: Path | str,
     *,
     mode: str = "full",
+    source_yyyymm: str | None = None,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
-    plans = build_shp_load_plan(path)
+    plans = build_shp_load_plan(path, source_yyyymm=source_yyyymm)
     return await asyncio.to_thread(
         _load_plans_sync,
         engine.url.render_as_string(hide_password=False),
@@ -149,39 +163,54 @@ def _load_plans_sync(
     return loaded
 
 
-def _sql_statement(layer: JusoLayerFiles) -> str | None:
+def _sql_statement(
+    layer: JusoLayerFiles,
+    *,
+    source_file: str,
+    source_yyyymm: str | None,
+) -> str | None:
+    metadata = _metadata_projection(
+        source_file=source_file,
+        source_yyyymm=source_yyyymm,
+    )
     statements = {
         "TL_SCCO_CTPRVN": (
-            "SELECT CTPRVN_CD AS ctprvn_cd, CTP_KOR_NM AS ctp_kor_nm "
+            "SELECT CTPRVN_CD AS ctprvn_cd, CTP_KOR_NM AS ctp_kor_nm"
+            f"{metadata} "
             "FROM TL_SCCO_CTPRVN"
         ),
         "TL_SCCO_SIG": (
-            "SELECT SIG_CD AS sig_cd, SIG_KOR_NM AS sig_kor_nm FROM TL_SCCO_SIG"
+            "SELECT SIG_CD AS sig_cd, SIG_KOR_NM AS sig_kor_nm"
+            f"{metadata} FROM TL_SCCO_SIG"
         ),
         "TL_SCCO_EMD": (
-            "SELECT EMD_CD AS emd_cd, EMD_KOR_NM AS emd_kor_nm FROM TL_SCCO_EMD"
+            "SELECT EMD_CD AS emd_cd, EMD_KOR_NM AS emd_kor_nm"
+            f"{metadata} FROM TL_SCCO_EMD"
         ),
         "TL_SCCO_LI": (
-            "SELECT LI_CD AS li_cd, LI_KOR_NM AS li_kor_nm FROM TL_SCCO_LI"
+            "SELECT LI_CD AS li_cd, LI_KOR_NM AS li_kor_nm"
+            f"{metadata} FROM TL_SCCO_LI"
         ),
         "TL_KODIS_BAS": (
-            "SELECT BAS_MGT_SN AS bas_mgt_sn, BAS_ID AS bas_id FROM TL_KODIS_BAS"
+            "SELECT BAS_MGT_SN AS bas_mgt_sn, BAS_ID AS bas_id"
+            f"{metadata} FROM TL_KODIS_BAS"
         ),
         "TL_SPRD_MANAGE": (
-            "SELECT SIG_CD AS sig_cd, RDS_MAN_NO AS rds_man_no, RN_CD AS rn_cd, RN AS rn "
+            "SELECT SIG_CD AS sig_cd, RDS_MAN_NO AS rds_man_no, RN_CD AS rn_cd, RN AS rn"
+            f"{metadata} "
             "FROM TL_SPRD_MANAGE"
         ),
         "TL_SPRD_INTRVL": (
             "SELECT SIG_CD AS sig_cd, RDS_MAN_NO AS rds_man_no, "
             "BSI_INT_SN AS bsi_int_sn, ODD_BSI_MN AS start_bsi_no, "
-            "EVE_BSI_MN AS end_bsi_no FROM TL_SPRD_INTRVL"
+            f"EVE_BSI_MN AS end_bsi_no{metadata} FROM TL_SPRD_INTRVL"
         ),
-        "TL_SPRD_RW": "SELECT SIG_CD AS sig_cd, RW_SN AS rw_sn FROM TL_SPRD_RW",
+        "TL_SPRD_RW": f"SELECT SIG_CD AS sig_cd, RW_SN AS rw_sn{metadata} FROM TL_SPRD_RW",
         "TL_SPBD_BULD": (
             "SELECT BD_MGT_SN AS bd_mgt_sn, SIG_CD AS sig_cd, EMD_CD AS emd_cd, "
             "LI_CD AS li_cd, RDS_SIG_CD AS rds_sig_cd, RN_CD AS rn_cd, "
             "BULD_SE_CD AS buld_se_cd, BULD_MNNM AS buld_mnnm, "
-            "BULD_SLNO AS buld_slno FROM TL_SPBD_BULD"
+            f"BULD_SLNO AS buld_slno{metadata} FROM TL_SPBD_BULD"
         ),
     }
     return statements[layer.name]
@@ -251,3 +280,28 @@ def _gdal_pg_destination(pg_url: str) -> str:
 def _quote_pg_conninfo(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace("'", "\\'")
     return f"'{escaped}'"
+
+
+def _source_file_label(
+    sido_name: str,
+    sig_code: str,
+    layer: JusoLayerFiles,
+) -> str:
+    return f"{sido_name}/{sig_code}/{layer.shp_path.name}"
+
+
+def _metadata_projection(
+    *,
+    source_file: str,
+    source_yyyymm: str | None,
+) -> str:
+    return (
+        f", {_sql_literal(source_file)} AS source_file, "
+        f"{_sql_literal(source_yyyymm)} AS source_yyyymm"
+    )
+
+
+def _sql_literal(value: str | None) -> str:
+    if value is None:
+        return "NULL"
+    return "'" + value.replace("'", "''") + "'"

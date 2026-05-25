@@ -362,7 +362,7 @@ artifacts/fullload/<run_id>/
 - `tl_spbd_buld_polygon.bjd_cd`, 건물구분, 본번, 부번, geometry는 전 건 채워졌다.
 - `rds_sig_cd`/`rncode_full`은 581건이 NULL이었다. 원천 SHP에 도로명 시군구 코드가 비어 있는 건물로 확인되며, natural-key 기반 정합성 해석에서 별도 고려가 필요하다.
 - `tl_sprd_manage.geom`은 875,221건 전부 채워졌다.
-- `source_file`은 현재 GDAL append 경로에서 전 건 NULL이다. 추적성이 필요하면 후속 개선에서 채움 전략을 설계한다.
+- `source_file`은 PR #17 이전 GDAL append 경로에서 전 건 NULL이었다. PR #17부터 SHP loader가 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`을 projection에 넣으므로, 원천 파일 역추적이 필요한 DB는 SHP 보조 레이어를 재적재해야 한다.
 
 ### consistency 결과
 

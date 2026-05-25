@@ -78,6 +78,8 @@ CREATE INDEX idx_juso_text_rn_trgm ON tl_juso_text USING GIN (rn_nrm gin_trgm_op
 CREATE INDEX idx_juso_text_pnu   ON tl_juso_text (pnu) WHERE pnu IS NOT NULL;
 ```
 
+텍스트 로더의 `source_file`은 `rnaddrkor_seoul.txt`, `entrc_seoul.txt`처럼 원본 파일명을 보관한다. PR #17부터 SHP 보조 로더도 같은 컬럼을 채운다. SHP의 경우 값은 `<시도>/<시군구코드>/<레이어>.shp` 형식이며, 예를 들어 `Seoul/11000/TL_SPBD_BULD.shp`처럼 적재된 시도와 레이어까지 추적할 수 있어야 한다. PR #17 이전에 적재된 실제 T-027 DB는 SHP `source_file`이 NULL이므로, C2/C4 원천 파일 역추적이 필요하면 SHP 보조 레이어를 재적재한다.
+
 #### 파일 포맷 (도로명주소 한글_전체분)
 
 행안부 배포 ZIP을 풀면 시도별 `.txt` 파일이 들어 있다(예: `rnaddrkor_seoul.txt`). 각 행은 `|`로 구분된 약 30개 컬럼.
@@ -235,6 +237,8 @@ GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY
 | **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm` 비교 | 텍스트 적재월과 SHP 적재월이 같은가 | 다르면 `WARN` (월 차이 1 이내 OK) |
 
 각 케이스의 결과는 `load_consistency_reports` 테이블에 구조화된 JSON으로 저장된다.
+
+T-031 후속 분석에서는 `kraddr-geo validate data-quality-samples`가 C2/C4/C6/C7에 대해 별도 CSV를 생성한다. 이 CSV는 운영 gate가 아니라 리뷰/지도 확인용 산출물이며, C2 reason별 sample, C4 거리 bucket과 좌표 차이, C6/C7 region summary를 포함한다. `artifacts/`는 git에 커밋하지 않고 PR 본문에는 핵심 표와 재현 명령만 옮긴다.
 
 ```sql
 CREATE TABLE load_consistency_reports (
