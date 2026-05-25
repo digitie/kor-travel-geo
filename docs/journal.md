@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-036 — `maplibre-vworld-js` main 동기화)
+
+**작업**: PR #22 merge 이후 `codex/t036-maplibre-vworld-sync` 브랜치에서 `kraddr-geo-ui`의 `maplibre-vworld` dependency를 `digitie/maplibre-vworld-js` 최신 main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다.
+
+**반영 상세**:
+- `kraddr-geo-ui/package.json`과 lockfile의 `maplibre-vworld` GitHub SHA를 `11321fe8b8f4da849ee5c24ba18a27206a55e26e`에서 `c91c9f304669ce3f5fc4915f21186b23731d5816`로 올렸다. CI에서 SSH key 없이 설치되어야 하므로 dependency와 `resolved`는 모두 `git+https`를 유지한다.
+- 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하고, redaction 표기는 `[redacted]` 대신 `***`를 사용한다.
+- `kraddr-geo-ui/lib/vworld.ts`는 `redactVWorldUrl as redactVWorldTileUrl` alias를 둬 기존 `CoordinateMap` import 계약을 유지한다.
+- VWorld helper 테스트는 최신 upstream redaction 표기 `***`를 검증하도록 갱신했다.
+- `docs/t036-maplibre-vworld-sync.md`에 upstream 확인 SHA, API 변경, WSL Linux Node 검증 명령, 남은 작업 순서를 기록했다.
+
+**검증**:
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm ci --ignore-scripts` → 통과. 기존 moderate advisory 7건은 유지.
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run lint` → 통과.
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run type-check` → 통과.
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run test` → 7 files / 22 tests 통과.
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run build` → 통과.
+
+**다음 작업**: PR을 열어 20분 리뷰 대기 후 코멘트가 없거나 반영 완료되면 main에 merge한다. 이후 사용자 지시대로 PR #22, PR #21, PR #20 순서로 신규 리뷰 코멘트를 확인하고 반영 가능한 항목을 처리한다.
+
 ## 2026-05-26 (T-035 — MV refresh/swap 벤치마크)
 
 **작업**: PR #21 merge 이후 `codex/t035-mv-refresh-benchmark` 브랜치에서 `mv_geocode_target` 갱신 전략을 실제 전국 DB `kraddr_geo_t033`에서 비교했다. 재현 가능한 계측을 위해 `scripts/benchmark_mv_refresh.py`를 추가하고, `CONCURRENTLY`와 shadow swap의 phase별 시간, temp file/byte 증가, index 크기를 JSON으로 남겼다.

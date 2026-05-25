@@ -3,6 +3,6 @@ export {
   getVWorldStyle as getVWorldRasterStyle,
   getVWorldTileUrl,
   isVWorldTileError,
-  redactVWorldTileUrl,
+  redactVWorldUrl as redactVWorldTileUrl,
   type VWorldLayerType
 } from "maplibre-vworld";
