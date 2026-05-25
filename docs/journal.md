@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-035 — MV refresh/swap 벤치마크)
+
+**작업**: PR #21 merge 이후 `codex/t035-mv-refresh-benchmark` 브랜치에서 `mv_geocode_target` 갱신 전략을 실제 전국 DB `kraddr_geo_t033`에서 비교했다. 재현 가능한 계측을 위해 `scripts/benchmark_mv_refresh.py`를 추가하고, `CONCURRENTLY`와 shadow swap의 phase별 시간, temp file/byte 증가, index 크기를 JSON으로 남겼다.
+
+**실행 환경**:
+- Docker PostGIS: `kraddr-geo-t027-db-1`, `localhost:15432`, DB `kraddr_geo_t033`.
+- 데이터 상태: T-033 전국 full-load 결과, `mv_geocode_target=6,416,637`, DB size 약 26GB.
+- 시스템: WSL2 Linux `6.6.87.2-microsoft-standard-WSL2`, 16 logical cores, RAM 29GiB, 실행 시 available 약 27GiB.
+- artifact: `artifacts/t035-mv-refresh-20260526_045339/` (git ignore).
+
+**측정 결과**:
+- `CONCURRENTLY`: `/usr/bin/time` wall clock 1분 49.64초. phase는 `refresh_concurrently=106.68초`, `analyze=4.96초`. temp는 +91 files, +12,309,605,099 bytes. 실행 중 `BufFileWrite` I/O wait가 관측됐다.
+- `swap`: `/usr/bin/time` wall clock 2분 16.28초. `rebuild.create_next=68.79초`, index build 합계 약 63.29초, `swap.analyze_live=4.89초`. temp는 +44 files, +9,150,995,144 bytes.
+- swap의 rename/index rename 구간(`drop_old_pre`, `rename_live_to_old`, `rename_next_to_live`, `drop_old_post`, `rename_indexes`) 합계는 약 0.016초였다.
+
+**반영 상세**:
+- `scripts/benchmark_mv_refresh.py`는 `--strategy concurrent|swap`와 `--output`을 받아 phase별 JSON을 출력한다.
+- `postload.build_mv_next_sql()`을 공개 helper로 분리해 실제 swap SQL과 benchmark script가 같은 SQL 생성 경로를 공유한다.
+- 기존 `shadow_swap_mv()`가 rename/drop 이후 `ANALYZE`까지 같은 transaction에서 실행하던 점을 확인하고, rename transaction과 `ANALYZE` transaction을 분리했다. 이로써 swap lock-sensitive 구간에 약 4.9초짜리 통계 갱신을 포함하지 않는다.
+- 최종 검증에서 `mv_geocode_target_next`, `mv_geocode_target_old`는 남지 않았고, 운영 index 이름은 `idx_mv_*`로 정상 정규화됐다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_mv_refresh_benchmark.py tests/unit/test_postload_mv.py -q` → 8 passed.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check scripts/benchmark_mv_refresh.py tests/unit/test_mv_refresh_benchmark.py tests/unit/test_postload_mv.py src/kraddr/geo/loaders/postload.py` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy scripts/benchmark_mv_refresh.py src/kraddr/geo/loaders/postload.py` → 통과.
+
+**다음 작업**: PR을 열어 20분 리뷰 대기 후 코멘트가 없거나 반영 완료되면 main에 merge한다. 이후 T-036에서 `maplibre-vworld-js` upstream main과 UI dependency를 동기화한다.
+
 ## 2026-05-26 (T-034 — SHP append 병목 튜닝)
 
 **작업**: PR #20 merge 이후 `codex/t034-shp-append-tuning` 브랜치에서 T-033의 최우선 병목이었던 `TL_SPRD_INTRVL` 적재 경로를 보강했다. geometry가 없는 DBF 속성 레이어는 GDAL `VectorTranslate` append를 우회해 직접 DBF scan + `psycopg COPY`로 적재하도록 분기했다.

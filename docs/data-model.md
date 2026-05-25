@@ -398,7 +398,7 @@ CREATE INDEX idx_mv_pt_source ON mv_geocode_target (pt_source);          -- entr
 
 ```sql
 -- shadow 빌드 (오프피크에 진행, 운영 조회는 mv_geocode_target에서 계속)
-SET lock_timeout = '5s';
+DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target_next;
 CREATE MATERIALIZED VIEW mv_geocode_target_next AS
   WITH best_entrc AS (...) -- 본 MV 정의와 동일 (ADR-007 대표 출입구 + centroid fallback)
   SELECT ... FROM tl_juso_text j
@@ -411,14 +411,19 @@ CREATE INDEX        ON mv_geocode_target_next (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_
 CREATE INDEX        ON mv_geocode_target_next USING GIST (pt_5179);
 CREATE INDEX        ON mv_geocode_target_next USING GIST (pt_4326);
 CREATE INDEX        ON mv_geocode_target_next (pt_source);
-ANALYZE mv_geocode_target_next;
 
--- 원자 swap (수 ms)
+-- rename swap (T-035 실측 기준 rename/index rename 구간 약 0.016초)
 BEGIN;
   SET LOCAL lock_timeout = '2s';
-  DROP MATERIALIZED VIEW mv_geocode_target;
+  DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target_old;
+  ALTER MATERIALIZED VIEW mv_geocode_target RENAME TO mv_geocode_target_old;
   ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target;
+  DROP MATERIALIZED VIEW mv_geocode_target_old;
+  -- idx_mv_next_* 인덱스를 idx_mv_* 운영명으로 RENAME
 COMMIT;
+
+-- ANALYZE는 swap lock window 밖에서 별도 transaction으로 실행
+ANALYZE mv_geocode_target;
 ```
 
 주의:
@@ -427,7 +432,9 @@ COMMIT;
 - **prepared statement invalidation**: 라우터가 캐시한 prepared statement는 `DROP`/`RENAME` 시 다음 호출에서 `cached plan must not change result type`으로 실패할 수 있다. swap 직후 일부 요청이 한 번 재컴파일되는 비용 또는 `DISCARD PLANS`를 운영 워커 한 곳에서 트리거.
 - **`lock_timeout`**: swap 트랜잭션이 운영 조회의 ACCESS SHARE를 못 기다리면 안전하게 abort. 위에 `2s` 정도.
 
-swap 트리거는 `loaders/postload.py`의 `do_full_swap=True` 옵션 또는 `kraddr-geo refresh mv --swap` CLI(T-018). `loaders/swap.py`의 스키마 단위 `atomic_schema_swap`은 별개로 staging 전용이며 본 MV swap과 혼동하지 않는다.
+T-035 전국 DB 벤치마크에서 `CONCURRENTLY`는 1분 49.64초, shadow swap은 2분 16.28초였다. 단발 idle DB에서는 `CONCURRENTLY`가 더 짧았지만 temp I/O가 약 12.31GB 증가했고 `BufFileWrite` wait가 관측됐다. shadow swap은 총시간이 더 길지만 rename/index rename 구간은 약 0.016초로 짧았고, `ANALYZE`는 별도 transaction으로 분리했다. 자세한 수치는 `docs/t035-mv-refresh-benchmark.md`를 기준으로 한다.
+
+swap 트리거는 `kraddr-geo refresh mv --swap` CLI(T-018)와 `loaders/postload.py::refresh_mv(strategy="swap")`이다. `loaders/swap.py`의 스키마 단위 `atomic_schema_swap`은 별개로 staging 전용이며 본 MV swap과 혼동하지 않는다.
 
 ## 공간 쿼리 가이드
 
