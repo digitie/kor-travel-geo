@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getVWorldMaxZoom, getVWorldRasterStyle, getVWorldTileUrl } from "@/lib/vworld";
+import {
+  getVWorldMaxZoom,
+  getVWorldRasterStyle,
+  getVWorldTileUrl,
+  isVWorldTileError,
+  redactVWorldTileUrl
+} from "@/lib/vworld";
 
 describe("VWorld MapLibre style", () => {
   it("VWorld WMTS URL은 좌표 타일 placeholder와 API key를 보존한다", () => {
@@ -63,5 +69,23 @@ describe("VWorld MapLibre style", () => {
         minzoom: 0
       }
     ]);
+  });
+
+  it("VWorld tile 오류를 upstream helper로 분류한다", () => {
+    expect(
+      isVWorldTileError({
+        error: Object.assign(new Error("not found"), {
+          status: 404,
+          url: "https://api.vworld.kr/req/wmts/1.0.0/sample-key/Base/1/2/3.png"
+        }),
+        sourceId: "vworld-Base"
+      } as never)
+    ).toBe(true);
+  });
+
+  it("VWorld tile URL의 API key를 upstream helper로 마스킹한다", () => {
+    expect(redactVWorldTileUrl("https://api.vworld.kr/req/wmts/1.0.0/sample-key/Base/1/2/3.png")).toBe(
+      "https://api.vworld.kr/req/wmts/1.0.0/[redacted]/Base/1/2/3.png"
+    );
   });
 });

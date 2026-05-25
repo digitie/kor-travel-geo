@@ -13,6 +13,7 @@
 
 ### Changed
 - `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정하고, VWorld WMTS helper와 CSS를 upstream package에서 소비한다.
+- `maplibre-vworld`를 upstream PR #9 commit `11321fe`로 동기화하고, VWorld tile error 분류와 URL redaction을 upstream helper로 공유한다.
 - upstream zod v4 peer dependency에 맞춰 `zod ^4.4.3`을 직접 의존성으로 둔다.
 - VWorld tile transient error는 즉시 fatal overlay로 고정하지 않고 redacted warning과 누적 임계치로 처리한다.
 - VWorld `Hybrid`/`Satellite`는 z18, `Base`/`gray`/`midnight`는 z19 maxZoom을 적용한다.

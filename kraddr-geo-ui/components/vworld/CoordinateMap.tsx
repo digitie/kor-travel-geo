@@ -7,7 +7,13 @@ import maplibregl, {
   type Marker as MapLibreMarker
 } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
-import { getVWorldMaxZoom, getVWorldRasterStyle, type VWorldLayerType } from "@/lib/vworld";
+import {
+  getVWorldMaxZoom,
+  getVWorldRasterStyle,
+  isVWorldTileError,
+  redactVWorldTileUrl,
+  type VWorldLayerType
+} from "@/lib/vworld";
 
 export type Coordinate = {
   x: number;
@@ -89,7 +95,7 @@ function LoadedCoordinateMap({
       setLoaded(true);
     };
     const handleError = (event: MapLibreErrorEvent) => {
-      if (isTransientTileError(event)) {
+      if (isVWorldTileError(event)) {
         transientTileErrorsRef.current += 1;
         warnMapTileError(event);
         if (transientTileErrorsRef.current >= TILE_ERROR_OVERLAY_THRESHOLD) {
@@ -156,28 +162,6 @@ function LoadedCoordinateMap({
   );
 }
 
-function isTransientTileError(event: MapLibreErrorEvent): boolean {
-  const error = event.error as MapResourceError;
-  const status = error.status;
-  const message = error.message.toLowerCase();
-  const sourceId = "sourceId" in event ? String(event.sourceId) : "";
-  const url = error.url ?? "";
-
-  return (
-    sourceId.startsWith("vworld") ||
-    url.includes("/req/wmts/") ||
-    message.includes("tile") ||
-    message.includes("failed to fetch") ||
-    status === 404 ||
-    status === 408 ||
-    status === 429 ||
-    status === 500 ||
-    status === 502 ||
-    status === 503 ||
-    status === 504
-  );
-}
-
 function warnMapTileError(event: MapLibreErrorEvent): void {
   const error = event.error as MapResourceError;
 
@@ -188,10 +172,6 @@ function warnMapTileError(event: MapLibreErrorEvent): void {
     statusText: error.statusText,
     url: redactVWorldTileUrl(error.url)
   });
-}
-
-function redactVWorldTileUrl(url: string | undefined): string | undefined {
-  return url?.replace(/\/req\/wmts\/1\.0\.0\/[^/]+/, "/req/wmts/1.0.0/[redacted]");
 }
 
 function CoordinateFallback({ point, note }: { point: Coordinate | null; note: string }) {

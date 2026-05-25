@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #18 rebase — VWorld debug helper sync)
+
+**작업**: 사용자 지시에 따라 T-032 성능 튜닝 전에 PR #18을 먼저 처리했다. PR #17이 main에 merge되어 `CHANGELOG.md`, `docs/journal.md`, `docs/resume.md`에서 충돌이 발생했으며, PR #17 데이터 품질 기록과 PR #18 VWorld sync 기록을 모두 보존하는 방식으로 rebase했다.
+
+**검증**:
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과. high 기준 취약점 없음, moderate 7건은 기존 Next/PostCSS 및 Vitest/Vite 경로 잔여.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 22 tests 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
+- `git diff --check` → 통과.
+
+**다음 작업**: PR #18을 푸시하고 PR 본문/코멘트를 갱신한다. PR #18 안정화 후 별도 T-032 성능 튜닝 PR을 시작한다.
+
 ## 2026-05-25 (PR #17/T-031 — 데이터 품질 export와 실제 DB 검증)
 
 **작업**: PR #16 merge 확인 후 PR #17을 최신 `main` 위로 rebase했다. 충돌은 `docs/journal.md`, `docs/resume.md`에서만 발생했고, T-031 기록과 PR #15/VWorld 기록을 모두 보존하는 방식으로 해결했다.
@@ -37,6 +51,25 @@
 - `CHANGELOG.md`에 후속 분석 문서 추가를 기록했다.
 
 **다음 작업**: T-031 PR에서는 sample 추출 SQL, 지도 확인 경로, `source_file` 추적성 보강 전략을 구현하고 실제 산출물 요약을 PR 본문에 첨부한다.
+
+## 2026-05-25 (후속 PR — VWorld debug 동작 upstream sync)
+
+**작업**: `maplibre-vworld-js` PR #9를 먼저 열어 `VWorldMap`의 click/error/flyTo hook과 VWorld tile error/redaction helper를 추가했다. 이어 `kraddr-geo-ui` 후속 브랜치에서 upstream commit `11321fe`로 dependency를 동기화하고, 디버그 UI의 tile error 분류와 URL redaction을 upstream helper로 교체했다.
+
+**구현 상세**:
+- `maplibre-vworld` dependency를 `git+https://github.com/digitie/maplibre-vworld-js.git#11321fe`로 갱신했다. lockfile의 `resolved`도 SSH가 아니라 HTTPS를 유지한다.
+- `kraddr-geo-ui/lib/vworld.ts`에서 `isVWorldTileError()`와 `redactVWorldTileUrl()`를 재수출한다.
+- `components/vworld/CoordinateMap.tsx`는 로컬 `isTransientTileError()`/`redactVWorldTileUrl()` 중복 구현을 제거하고 upstream helper를 사용한다. key 미설정 fallback, overlay 임계치, marker 즉시 이동, SSR dynamic wrapper는 기존 UI 계약대로 유지한다.
+- VWorld helper 단위 테스트에 tile error 분류와 key redaction 검증을 추가했다.
+
+**검증**:
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 22 tests 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm audit --audit-level=high` → high 기준 통과. 잔여 advisory는 Next/PostCSS와 Vitest/Vite 경로의 moderate 7건이다.
+- `git diff --check` → 통과.
 
 ## 2026-05-25 (PR #15 리베이스 — maplibre-vworld package 소비)
 
