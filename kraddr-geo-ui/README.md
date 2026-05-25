@@ -14,7 +14,7 @@ npm run dev
 
 `NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다.
 
-지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 UI에서만 우회하지 않고 해당 저장소도 적극 수정한다.
+지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정하며, 패키징·타입·Next.js 호환 문제가 발견되면 이 UI에서만 우회하지 않고 해당 저장소도 적극 수정한다.
 
 ## 검증
 

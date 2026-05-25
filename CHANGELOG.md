@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
-- PR #15 리뷰 반영: `kraddr-geo-ui`에서 미사용 `maplibre-vworld` GitHub 의존성을 제거하고, upstream 안정화 전 package dependency를 선언하지 않는 정책을 ADR-020과 프론트엔드 문서에 명시한다.
+- PR #15 rebase 반영: PR #14 merge 이후 `codex/maplibre-vworld-ui`를 최신 `main` 위로 올리고, `maplibre-vworld`를 upstream main commit `a5b3c65` GitHub SHA로 고정해 실제 helper/CSS package를 소비한다. zod v4 peer dependency도 `kraddr-geo-ui`에서 직접 맞춘다.
 - PR #15 리뷰 반영: VWorld MapLibre 지도는 `next/dynamic(..., { ssr: false })` wrapper로 지연 로딩하고 skeleton을 제공해 SSR/WebGL 충돌과 초기 번들 비대를 줄인다.
 - PR #15 리뷰 반영: VWorld tile fetch 오류를 transient로 분리해 즉시 fatal overlay로 고정하지 않고, redacted warning과 누적 임계치로 처리한다. `Hybrid`/`Satellite`는 z18 maxZoom을 적용한다.
 - PR #14 추가 리뷰 반영: `tl_sprd_rw`에 기존 `MULTILINESTRING` row가 있는 DB에서도 `0002_t027_shp_schema_fixups`가 중단되지 않도록 non-polygon row 감지 시 `tl_sprd_rw`를 비운 뒤 `MULTIPOLYGON` 타입으로 전환한다.

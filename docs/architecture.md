@@ -44,14 +44,14 @@
 | 프레임워크 | Next.js 16 (App Router) + TypeScript strict | RSC, 디렉토리=URL, 서버측 프록시 단순 |
 | UI | Tailwind 기반 자체 primitives | 운영 콘솔에 필요한 작은 컴포넌트부터 소스 코드로 관리 |
 | 폼 | controlled form + Zod helper | 초기 UI는 작은 폼 위주, Zod 스키마는 백엔드 pydantic v2와 미러 |
-| 지도 | MapLibre GL JS + VWorld WMTS | vworld 호환 검증 표면과 같은 공급자의 지도 타일 사용, `digitie/maplibre-vworld-js` 보강 가능 |
+| 지도 | MapLibre GL JS + VWorld WMTS + `maplibre-vworld` helper | vworld 호환 검증 표면과 같은 공급자의 지도 타일 사용, `digitie/maplibre-vworld-js` 보강 가능 |
 | 테이블 | native table 우선, TanStack Table v8 후속 | 초기 관리 화면은 행 수가 작고, 대량 필터·정렬이 필요하면 승격 |
 | 데이터 패칭 | TanStack Query v5 | 폴링·optimistic update |
 | 타입 동기 | openapi-typescript + 수동 Zod mirror | 백엔드 `openapi.json`에서 TypeScript 타입 생성, 폼 스키마는 리뷰 가능한 수동 mirror |
 
 자세한 디렉토리 구조, 컴포넌트 설계, 페이지별 화면은 `docs/frontend-package.md`를 본다.
 
-VWorld 지도 연동은 `kraddr-geo-ui` 로컬 코드만의 책임으로 보지 않는다. MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 `digitie/maplibre-vworld-js`도 적극 수정 대상에 포함한다. 이 원칙은 디버그 UI가 장기적으로 재사용 가능한 VWorld MapLibre wrapper 위에 얹히도록 하기 위한 것이다.
+VWorld 지도 연동은 `kraddr-geo-ui` 로컬 코드만의 책임으로 보지 않는다. `maplibre-vworld` package는 검증된 GitHub SHA로 소비하고, MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 `digitie/maplibre-vworld-js`도 적극 수정 대상에 포함한다. 이 원칙은 디버그 UI가 장기적으로 재사용 가능한 VWorld MapLibre wrapper 위에 얹히도록 하기 위한 것이다.
 
 ## 데이터 흐름 — 지오코딩
 

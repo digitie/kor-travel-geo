@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #15 리베이스 — maplibre-vworld package 소비)
+
+**작업**: PR #14가 main에 merge된 뒤 `codex/maplibre-vworld-ui`를 최신 `main` 위로 rebase했다. 이후 upstream `digitie/maplibre-vworld-js` main commit `a5b3c65`를 확인하고, `kraddr-geo-ui`가 VWorld helper/CSS를 실제 `maplibre-vworld` package에서 소비하도록 갱신했다.
+
+**구현 상세**:
+- `maplibre-vworld` dependency를 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정했다. CI에서 SSH key 없이 설치되어야 하므로 package-lock의 `resolved`도 `git+https`로 유지했다.
+- `kraddr-geo-ui/lib/vworld.ts`는 로컬 구현을 제거하고 `getVWorldTileUrl()`, `getVWorldStyle()`, `getVWorldMaxZoom()`, `VWorldLayerType`를 upstream package에서 재수출한다.
+- 전역 CSS는 `maplibre-vworld/style.css`를 import한다. 이 package export가 MapLibre GL 기본 CSS와 package CSS를 함께 제공한다.
+- upstream style source id가 `vworld-${layerType}`이고 `Hybrid`는 `vworld-satellite`와 `vworld-Hybrid`를 함께 쓰므로, tile error source 판별을 `vworld` prefix 기준으로 바꿨다.
+- Vitest/jsdom에서 upstream bundle이 `maplibre-gl` worker URL과 React `require()` 경로를 건드리는 문제를 테스트 setup shim으로 보정했다. 이 현상은 후속 `maplibre-vworld-js` 정합화 PR에서 upstream 테스트/번들 개선 후보로 추적한다.
+
+**문서화**:
+- ADR-020, `docs/frontend-package.md`, `docs/external-apis.md`, `docs/architecture.md`, README, changelog, `docs/resume.md`를 최신 package 소비 상태로 갱신했다.
+- `VWorldMap` 컴포넌트 전체 대체는 이번 PR에 넣지 않고 후속 PR로 분리했다. 후속 PR은 click callback, marker 제어, tile error hook/redaction, key 미설정 fallback, SSR-safe wrapper를 `kraddr-geo-ui`와 `maplibre-vworld-js` 사이에서 맞추는 작업이다.
+
+**검증**:
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 20 tests 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
+- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm audit --audit-level=high` → high 기준 통과. 잔여 advisory는 Next/PostCSS와 Vitest/Vite 경로의 moderate 7건이다.
+- `git diff --check` → 통과.
+
 ## 2026-05-25 (PR #15 리뷰 보강 — VWorld MapLibre 안정화)
 
 **작업**: PR #15 리뷰의 merge condition을 반영했다. 디버그 UI는 VWorld WMTS + MapLibre GL JS 방향을 유지하되, upstream package가 안정화되기 전까지 `maplibre-vworld` GitHub 의존성을 UI 패키지 graph에 올리지 않는 정책으로 정리했다.

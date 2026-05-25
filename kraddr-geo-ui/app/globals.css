@@ -1,4 +1,4 @@
-@import "maplibre-gl/dist/maplibre-gl.css";
+@import "maplibre-vworld/style.css";
 
 @tailwind base;
 @tailwind components;

@@ -164,7 +164,7 @@ function isTransientTileError(event: MapLibreErrorEvent): boolean {
   const url = error.url ?? "";
 
   return (
-    sourceId === "vworld" ||
+    sourceId.startsWith("vworld") ||
     url.includes("/req/wmts/") ||
     message.includes("tile") ||
     message.includes("failed to fetch") ||

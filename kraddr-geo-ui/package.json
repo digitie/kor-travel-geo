@@ -17,10 +17,11 @@
     "@tanstack/react-query": "^5.90.10",
     "lucide-react": "^0.468.0",
     "maplibre-gl": "^5.24.0",
+    "maplibre-vworld": "git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65",
     "next": "^16.2.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zod": "^3.25.76"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
