@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-034 — SHP append 병목 튜닝)
+
+**작업**: PR #20 merge 이후 `codex/t034-shp-append-tuning` 브랜치에서 T-033의 최우선 병목이었던 `TL_SPRD_INTRVL` 적재 경로를 보강했다. geometry가 없는 DBF 속성 레이어는 GDAL `VectorTranslate` append를 우회해 직접 DBF scan + `psycopg COPY`로 적재하도록 분기했다.
+
+**실행 환경**:
+- Docker PostGIS: `kraddr-geo-t027-db-1`, `localhost:15432`.
+- 데이터: ext4 mirror `/home/digitie/kraddr-geo-data/juso/도로명주소 전자지도`.
+- 시스템: WSL2 Linux `6.6.87.2-microsoft-standard-WSL2`, 16 logical cores, RAM 29GiB, 실행 시 available 약 27GiB.
+- 디스크: ext4 `/dev/sdd` 1007G 중 758G available, NTFS `/mnt/f` 932G 중 267G available.
+
+**반영 상세**:
+- `polygons_loader._load_plans_sync()`에서 `TL_SPRD_INTRVL`만 `_copy_road_interval_dbf()`로 라우팅한다.
+- DBF parser는 `SIG_CD`, `RDS_MAN_NO`, `BSI_INT_SN`, `ODD_BSI_MN`, `EVE_BSI_MN`만 추출하고, 기존 추적 컬럼 `source_file`, `source_yyyymm`을 유지한다.
+- 도형 레이어(`TL_SPBD_BULD`, `TL_SPRD_RW`, 행정경계 등)는 기존 GDAL 경로를 그대로 사용한다.
+- synthetic DBF unit test를 추가해 필드 순서, 숫자 필드 공백 trim, 빈 값 `None` 처리, COPY row projection을 고정했다.
+
+**측정 결과**:
+- 세종 `TL_SPRD_INTRVL` 100,009행 단일 레이어: 기존 GDAL 경로 36.12초 → 새 COPY 경로 1.59초.
+- 경기도 `TL_SPRD_INTRVL` 2,677,715행 단일 레이어: 새 COPY 경로 15.88초. T-033 관찰상 기존 경기도 레이어는 약 24분 이상이었다.
+- 세종 9개 SHP 레이어 전체 CLI 적재: 31.69초, `tl_sprd_intrvl=100,009`, `tl_spbd_buld_polygon=55,819`, `tl_sprd_rw=7,429`.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py -q` → 12 passed.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py` → 통과.
+- 실제 Docker DB `kraddr_geo_t034_before`, `kraddr_geo_t034_after`, `kraddr_geo_t034_sejong`에서 기준선/개선 후/9개 레이어 전체 적재를 확인했다.
+
+**다음 작업**: PR을 열어 20분 리뷰 대기 후 코멘트가 없거나 반영 완료되면 main에 merge한다. 이후 T-035에서 MV refresh/swap benchmark를 진행한다. `TL_SPBD_BULD` GDAL append 병목은 도형 포함 대형 레이어라 이번 PR에서는 유지하고, 별도 튜닝 후보로 남긴다.
+
 ## 2026-05-26 (T-033 — 전국 full-load 성능 재검증)
 
 **작업**: PR #19 merge 이후 `codex/t033-full-load-revalidation` 브랜치에서 빈 Docker DB `kraddr_geo_t033`를 만들고 실제 전국 `data/juso` full-load를 다시 실행했다. 사용자 지시에 따라 로그와 시스템 상태를 상세히 남기고, T-034/T-035 튜닝 전 기준선으로 문서화했다.

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import inspect
+import struct
 from pathlib import Path
 
+import pytest
+
+from kraddr.geo.exceptions import LoaderError
 from kraddr.geo.loaders.juso_map import MASTER_LAYER_NAMES
 from kraddr.geo.loaders.shp import polygons_loader
 
@@ -116,3 +120,129 @@ def test_only_road_interval_layer_drops_geometry() -> None:
     assert 'layer.name == "TL_SPRD_MANAGE"' in source
     assert '"NONE"' in source
     assert '"PROMOTE_TO_MULTI"' in source
+
+
+def test_road_interval_layer_uses_direct_dbf_copy_path() -> None:
+    source = inspect.getsource(polygons_loader._load_plans_sync)
+
+    assert "ROAD_INTERVAL_LAYER_NAME" in source
+    assert "_copy_road_interval_dbf" in source
+    assert source.index("_copy_road_interval_dbf") < source.index("gdal.VectorTranslate")
+
+
+def test_road_interval_dbf_rows_project_to_copy_columns(tmp_path: Path) -> None:
+    dbf_path = tmp_path / "TL_SPRD_INTRVL.dbf"
+    _write_dbf(
+        dbf_path,
+        fields=(
+            ("BSI_INT_SN", "N", 10),
+            ("EVE_BSI_MN", "N", 5),
+            ("ODD_BSI_MN", "N", 5),
+            ("RDS_MAN_NO", "N", 12),
+            ("SIG_CD", "C", 5),
+        ),
+        rows=(
+            {
+                "BSI_INT_SN": "45438",
+                "EVE_BSI_MN": "58",
+                "ODD_BSI_MN": "57",
+                "RDS_MAN_NO": "1",
+                "SIG_CD": "36110",
+            },
+            {
+                "BSI_INT_SN": "42562",
+                "EVE_BSI_MN": "",
+                "ODD_BSI_MN": "59",
+                "RDS_MAN_NO": "2",
+                "SIG_CD": "36110",
+            },
+        ),
+    )
+    shp_path = tmp_path / "TL_SPRD_INTRVL.shp"
+    shp_path.touch()
+    plan = polygons_loader.ShpLoadPlan(
+        source_layer="TL_SPRD_INTRVL",
+        target_table="tl_sprd_intrvl",
+        shp_path=shp_path,
+        dbf_path=dbf_path,
+        source_file="세종특별자치시/36000/TL_SPRD_INTRVL.shp",
+        source_yyyymm="202604",
+    )
+
+    rows = list(polygons_loader._iter_road_interval_copy_rows(plan))
+
+    assert rows == [
+        (
+            "36110",
+            "1",
+            "45438",
+            "57",
+            "58",
+            "세종특별자치시/36000/TL_SPRD_INTRVL.shp",
+            "202604",
+        ),
+        (
+            "36110",
+            "2",
+            "42562",
+            "59",
+            None,
+            "세종특별자치시/36000/TL_SPRD_INTRVL.shp",
+            "202604",
+        ),
+    ]
+
+
+def test_road_interval_dbf_requires_all_projection_fields(tmp_path: Path) -> None:
+    dbf_path = tmp_path / "TL_SPRD_INTRVL.dbf"
+    _write_dbf(
+        dbf_path,
+        fields=(
+            ("BSI_INT_SN", "N", 10),
+            ("EVE_BSI_MN", "N", 5),
+            ("ODD_BSI_MN", "N", 5),
+            ("SIG_CD", "C", 5),
+        ),
+        rows=({"BSI_INT_SN": "1", "EVE_BSI_MN": "2", "ODD_BSI_MN": "1", "SIG_CD": "36110"},),
+    )
+    plan = polygons_loader.ShpLoadPlan(
+        source_layer="TL_SPRD_INTRVL",
+        target_table="tl_sprd_intrvl",
+        shp_path=tmp_path / "TL_SPRD_INTRVL.shp",
+        dbf_path=dbf_path,
+        source_file="세종특별자치시/36000/TL_SPRD_INTRVL.shp",
+    )
+
+    with pytest.raises(LoaderError, match="RDS_MAN_NO"):
+        list(polygons_loader._iter_road_interval_copy_rows(plan))
+
+
+def _write_dbf(
+    path: Path,
+    *,
+    fields: tuple[tuple[str, str, int], ...],
+    rows: tuple[dict[str, str], ...],
+) -> None:
+    header_length = 32 + len(fields) * 32 + 1
+    record_length = 1 + sum(length for _, _, length in fields)
+    header = bytearray(32)
+    header[0] = 0x03
+    header[1:4] = b"\x7e\x05\x1a"
+    header[4:8] = struct.pack("<I", len(rows))
+    header[8:10] = struct.pack("<H", header_length)
+    header[10:12] = struct.pack("<H", record_length)
+    descriptors = bytearray()
+    for name, field_type, length in fields:
+        descriptor = bytearray(32)
+        descriptor[: len(name)] = name.encode("ascii")
+        descriptor[11] = ord(field_type)
+        descriptor[16] = length
+        descriptors.extend(descriptor)
+    body = bytearray()
+    for row in rows:
+        body.append(0x20)
+        for name, field_type, length in fields:
+            raw = row.get(name, "").encode("cp949")
+            raw = raw.rjust(length) if field_type == "N" else raw.ljust(length)
+            body.extend(raw[:length])
+    path.write_bytes(bytes(header + descriptors + b"\r" + body + b"\x1a"))
