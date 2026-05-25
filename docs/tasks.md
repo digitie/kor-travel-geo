@@ -3,10 +3,11 @@
 작업 항목은 `T-NNN` 형식의 ID로 관리한다. 새 작업은 "대기"의 우선순위 순서대로 들어가고, 진행 중이 되면 담당자를 표시한다. 완료된 작업은 "완료" 섹션 상단에 누적한다.
 
 ## 진행 중
-- (없음)
+- T-031 T-027 데이터 품질 후속 분석 — PR #17에서 C2/C4/C6/C7 CSV export CLI, SHP `source_file` 추적성, 실제 Docker DB 1차 실행 결과를 정리한다. 상세: `docs/t027-data-quality-followup.md`
 
 ## 대기 (우선순위 순)
 - T-027 실 데이터 전체 적재 검증 — WSL Docker PostGIS에 주소DB 전체분 적재, C1~C10 정합성 검증, geocode/reverse smoke test, 속도 벤치마크. 상세: `docs/t027-fullload-plan.md`
+- T-032 full-load/정합성 성능 튜닝 — PR #17 안정화 후 별도 PR에서 10회 이상 trial and error로 COPY, postload, MV swap, C2/C4/C6/C7 export 속도를 비교한다.
 - T-028 일변동 ZIP 로더 — `data/juso/daily/*.zip`를 full-load 이후 증분 적용할 수 있도록 파일 구조 분석, `MVM_RES_CD` 매핑, 재실행 안전성을 설계한다.
 - T-029 `jibun_rnaddrkor_*` 활용 여부 결정 — 도로명주소 한글 전체분에 같이 배포되는 지번 매핑 텍스트를 현재 `tl_juso_text`와 어떻게 조화시킬지 ADR로 확정한다.
 - T-030 상세주소 동 도형/별도 건물 도형 로더 검토 — `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`의 전자지도 SHP와 중복·보완 관계를 조사한다.

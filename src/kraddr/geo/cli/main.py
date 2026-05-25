@@ -10,6 +10,10 @@ import typer
 from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.loaders.bulk_loader import load_bulk_delivery
 from kraddr.geo.loaders.consistency import DEFAULT_CASES, run_all_cases
+from kraddr.geo.loaders.data_quality import (
+    DATA_QUALITY_CASES,
+    export_data_quality_samples,
+)
 from kraddr.geo.loaders.epost_downloader import (
     discover_epost_files,
     download_epost_zip,
@@ -123,11 +127,17 @@ def load_navi_command(path: Path, yyyymm: str | None = typer.Option(None, "--yyy
 def load_shp_command(
     path: Path,
     mode: str = typer.Option("full", "--mode", help="full 또는 delta"),
+    yyyymm: str | None = typer.Option(None, "--yyyymm"),
 ) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client.engine is not None
-            count = await load_shp_polygons(client.engine, path, mode=mode)
+            count = await load_shp_polygons(
+                client.engine,
+                path,
+                mode=mode,
+                source_yyyymm=yyyymm,
+            )
             typer.echo(f"loaded SHP layers: {count}")
 
     asyncio.run(run())
@@ -137,6 +147,7 @@ def load_shp_command(
 def load_shp_all_command(
     root: Path,
     mode: str = typer.Option("full", "--mode", help="full 또는 delta"),
+    yyyymm: str | None = typer.Option(None, "--yyyymm"),
 ) -> None:
     async def run() -> None:
         total = 0
@@ -147,6 +158,7 @@ def load_shp_all_command(
                     client.engine,
                     sido_dir,
                     mode=effective_mode,
+                    source_yyyymm=yyyymm,
                 )
                 total += count
                 typer.echo(f"{sido_dir.name}: {count} layers")
@@ -249,6 +261,7 @@ def load_all_sidos_command(
                         client.engine,
                         sido_dir,
                         mode=_shp_mode_for_index("full", index),
+                        source_yyyymm=yyyymm,
                     )
                 typer.echo(f"loaded SHP layers total: {shp_total}")
             if pobox_path is not None:
@@ -313,6 +326,40 @@ def validate_consistency(
     asyncio.run(run())
 
 
+@validate_app.command("data-quality-samples")
+def validate_data_quality_samples(
+    output_dir: Path = typer.Option(
+        Path("artifacts/fullload/data-quality"),
+        "--output-dir",
+        help="CSV 산출물을 저장할 디렉터리",
+    ),
+    cases: str = typer.Option(
+        ",".join(DATA_QUALITY_CASES),
+        "--cases",
+        help="Comma-separated case codes. 지원: C2,C4,C6,C7",
+    ),
+    limit: int = typer.Option(200, "--limit", min=1, max=10_000),
+) -> None:
+    async def run() -> None:
+        try:
+            selected = _data_quality_cases(cases)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(2) from exc
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            paths = await export_data_quality_samples(
+                client.engine,
+                output_dir,
+                cases=selected,
+                limit=limit,
+            )
+        for path in paths:
+            typer.echo(str(path))
+
+    asyncio.run(run())
+
+
 @jobs_app.command("list")
 def list_jobs(limit: int = typer.Option(20, "--limit", min=1, max=200)) -> None:
     async def run() -> None:
@@ -365,3 +412,17 @@ def _shp_all_work_items(root: Path, requested_mode: str) -> tuple[tuple[Path, st
         (sido_dir, _shp_mode_for_index(requested_mode, index))
         for index, sido_dir in enumerate(_sido_dirs(root))
     )
+
+
+def _data_quality_cases(raw: str) -> tuple[str, ...]:
+    selected = tuple(dict.fromkeys(part.strip().upper() for part in raw.split(",") if part.strip()))
+    unknown = tuple(code for code in selected if code not in DATA_QUALITY_CASES)
+    if unknown:
+        allowed = ",".join(DATA_QUALITY_CASES)
+        joined = ",".join(unknown)
+        msg = f"unsupported data quality case(s): {joined}; allowed: {allowed}"
+        raise ValueError(msg)
+    if not selected:
+        msg = "at least one data quality case is required"
+        raise ValueError(msg)
+    return selected

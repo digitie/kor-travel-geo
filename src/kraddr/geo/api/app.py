@@ -141,6 +141,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             engine,
             _payload_path(payload),
             mode=_payload_str(payload, "mode") or "full",
+            source_yyyymm=_payload_str(payload, "source_yyyymm"),
             cancel_event=cancel_event,
         )
         await progress(progress=1.0, stage="shp_polygons_load", message=f"{count} layers loaded")

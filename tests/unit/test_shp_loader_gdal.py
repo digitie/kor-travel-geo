@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import inspect
+from typing import TYPE_CHECKING
 
+from kraddr.geo.loaders.juso_map import MASTER_LAYER_NAMES
 from kraddr.geo.loaders.shp import polygons_loader
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_gdal_pg_destination_converts_sqlalchemy_url_to_pg_conninfo() -> None:
@@ -51,7 +56,37 @@ def test_shp_load_plan_projects_source_columns_to_target_schema() -> None:
     assert "RDS_SIG_CD AS rds_sig_cd" in source
     assert "BULD_MNNM AS buld_mnnm" in source
     assert "RW_SN AS rw_sn" in source
+    assert "source_file" in source
+    assert "source_yyyymm" in source
     assert "GEOMETRY AS geom" not in source
+
+
+def test_shp_load_plan_embeds_source_trace_metadata(tmp_path: Path) -> None:
+    sig_dir = tmp_path / "Seoul" / "11000"
+    sig_dir.mkdir(parents=True)
+    for layer_name in MASTER_LAYER_NAMES:
+        for suffix in (".shp", ".shx", ".dbf"):
+            (sig_dir / f"{layer_name}{suffix}").touch()
+
+    plans = polygons_loader.build_shp_load_plan(
+        tmp_path / "Seoul",
+        source_yyyymm="202604",
+    )
+    building = next(plan for plan in plans if plan.source_layer == "TL_SPBD_BULD")
+
+    assert building.source_file == "Seoul/11000/TL_SPBD_BULD.shp"
+    assert building.source_yyyymm == "202604"
+    assert building.sql_statement is not None
+    assert "'Seoul/11000/TL_SPBD_BULD.shp' AS source_file" in building.sql_statement
+    assert "'202604' AS source_yyyymm" in building.sql_statement
+
+
+def test_shp_sql_literal_escapes_quotes_and_allows_null_month() -> None:
+    assert polygons_loader._sql_literal("a'b") == "'a''b'"
+    assert polygons_loader._metadata_projection(
+        source_file="a'b.shp",
+        source_yyyymm=None,
+    ) == ", 'a''b.shp' AS source_file, NULL AS source_yyyymm"
 
 
 def test_only_road_interval_layer_drops_geometry() -> None:

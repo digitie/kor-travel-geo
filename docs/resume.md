@@ -50,15 +50,18 @@
 - ✅ PR #14 리뷰 반영 — Alembic `0002_t027_shp_schema_fixups`, SHP generated column 빈 문자열 보정, `KRADDR_GEO_DB_PORT` 네이밍, MV index 경고, SHP truncate row snapshot, PR 리뷰 확인 프로토콜 문서화
 - ✅ PR #14 추가 리뷰 반영 — `tl_sprd_rw` migration non-polygon row guard, MV index rename live catalog 유도, locsum `staging_seq`, navi zero-coordinate skip, GDAL `connect_timeout`, C6/C7 `ST_Covers` 전환
 - ✅ 실제 C2/C4/C6/C7 선택 재검증 — C2 `missing_text=34,118`/`missing_resolve_key=581`, C4 `over_500m=16`, C6 803/C7 6,817 유지 확인
+- 🟡 T-031 데이터 품질 후속 분석 PR 분리 — PR #14 close 이후 이어갈 C2/C4/C6/C7 sample/지도/원천 파일 역추적 계획을 `docs/t027-data-quality-followup.md`에 정리
+- ✅ PR #17/T-031 보강 — `kraddr-geo validate data-quality-samples` CLI와 C2/C4/C6/C7 CSV export SQL을 추가하고, SHP loader가 `source_file`/`source_yyyymm`을 적재하도록 보강
+- ✅ PR #17 실제 Docker DB 검증 — `localhost:15432`에서 CSV 8개 export 성공(2분 52.45초, RSS 79,956KB). C2 `missing_resolve_key` 581건은 전부 `rds_sig_cd` 결측, C4 500m+ 상위 7건은 출입구 경도 약 `+2.0`도 이상치 패턴 확인
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-PR #15 rebase/update를 완료한 뒤 PR에 PR #14 merge 반영, `maplibre-vworld-js` upstream main `a5b3c65` 소비, 검증 결과를 코멘트한다. 이어서 별도 후속 PR에서 `kraddr-geo-ui`의 VWorld 디버그 지도 동작과 `maplibre-vworld-js`의 공통 컴포넌트 동작을 항목별로 맞춘다. 바로 전체 컴포넌트를 교체하지 말고 click callback, marker 제어, tile error hook/redaction, key 미설정 fallback, SSR-safe wrapper를 각각 비교한다.
+PR #17에 구현/검증 결과를 푸시하고 리뷰 요청한다. PR #17 안정화 뒤에는 별도 T-032 성능 튜닝 PR을 열어 C4/C6/C7 중복 스캔 제거와 full-load/postload/MV swap 속도를 10회 이상 trial and error로 비교한다. 그 다음 `kraddr-geo-ui`의 VWorld debug map 동작을 최신 `maplibre-vworld-js`와 맞춘다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
-- `source_file` 컬럼은 GDAL append 경로에서 전 건 NULL이다. 적재 추적성이 필요하면 후속 PR에서 채움 전략을 설계한다.
+- PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
 - `daily/*.zip`, `jibun_rnaddrkor_*`, `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니다. T-028~T-031로 분리해 로더/ADR를 먼저 잡는다.
 
 ## 작업 시작 전 확인할 것

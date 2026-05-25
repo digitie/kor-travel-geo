@@ -2,6 +2,42 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-25 (PR #17/T-031 — 데이터 품질 export와 실제 DB 검증)
+
+**작업**: PR #16 merge 확인 후 PR #17을 최신 `main` 위로 rebase했다. 충돌은 `docs/journal.md`, `docs/resume.md`에서만 발생했고, T-031 기록과 PR #15/VWorld 기록을 모두 보존하는 방식으로 해결했다.
+
+**구현 상세**:
+- `src/kraddr/geo/loaders/data_quality.py`를 추가했다. C2/C4/C6/C7 후속 분석용 CSV 8종(`c2_samples`, `c2_missing_key_summary`, `c4_distance_samples`, `c4_distance_buckets`, `c6/c7 samples`, `c6/c7 region_summary`)을 같은 SQL로 재현할 수 있다.
+- `kraddr-geo validate data-quality-samples` CLI를 추가했다. `--cases C2,C4,C6,C7`, `--limit`, `--output-dir`로 산출 범위를 제어한다.
+- SHP 보조 로더가 GDAL `SQLStatement` projection에 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`을 넣도록 보강했다. 기존 T-027 DB는 재적재 전이라 polygon `source_file`이 NULL이지만, 이후 재적재분부터 원천 파일 역추적이 가능하다.
+- C4 sample CSV에는 출입구 좌표, 가장 가까운 polygon 대표점 좌표, `delta_lon`, `delta_lat`를 함께 넣어 500m+ 이상치의 좌표계/원천 오류 패턴을 빠르게 볼 수 있게 했다.
+
+**실제 검증**:
+- Docker DB: `kraddr-geo-t027-db-1`, `localhost:15432`.
+- `kraddr-geo validate data-quality-samples --cases C2,C4,C6,C7 --limit 5` → CSV 8개 생성, 2분 52.45초, 최대 RSS 79,956KB.
+- `kraddr-geo validate data-quality-samples --cases C4 --limit 20` → C4 CSV 2개 생성, 2분 22.90초, 최대 RSS 80,008KB.
+- `delta_lon`/`delta_lat` 컬럼 추가 후 `kraddr-geo validate data-quality-samples --cases C4 --limit 3` → 2분 18.48초, 최대 RSS 80,124KB. 상위 3건의 `delta_lon`은 각각 약 `1.9998~1.9999`도였다.
+- C2 `missing_resolve_key` 581건은 모두 `rds_sig_cd` 결측으로 확인했다. 기존 DB는 PR #17 이전 적재분이라 SHP `source_file`도 NULL이다.
+- C4 bucket은 `0~50=2,887,827`, `50~100=2,847`, `100~500=552`, `500+=16`이었다. 500m+ 상위 7건은 출입구 경도만 polygon보다 약 `+2.0`도 동쪽으로 튄 패턴이라, 다음 지도 overlay와 원천 row 확인 대상으로 분리한다.
+- C6 상위 region은 `54002=49`, `48700=23`, `54004=15`; C7 상위 region은 `48121103=216`, `28260101=167`, `41273104=165`였다.
+
+**검증 명령**:
+- `pytest tests/unit/test_data_quality_exports.py tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py -q` → 21 passed.
+- `ruff check` 대상 파일 묶음 → 통과.
+
+**다음 작업**: PR #17에 푸시하고 리뷰 요청한다. 안정화 후 별도 T-032 PR에서 C4/C6/C7 export 중복 스캔 제거와 full-load/postload/MV swap 속도 튜닝을 10회 이상 trial and error로 기록한다.
+
+## 2026-05-25 (T-031 데이터 품질 후속 PR 분리)
+
+**작업**: PR #14가 close 예정이므로, 추가 TODO를 PR #14에 계속 쌓지 않고 별도 후속 PR에서 다룰 수 있도록 T-031 문서를 추가했다.
+
+**반영 상세**:
+- `docs/t027-data-quality-followup.md`를 추가해 C2/C4/C6/C7 잔여 `ERROR`의 현재 수치, 분석 원칙, sample 산출물, 지도 확인, 원천 파일 역추적 순서를 정의했다.
+- `docs/tasks.md`에 T-031을 추가하고, `docs/resume.md`의 다음 작업을 후속 PR 기준으로 바꿨다.
+- `CHANGELOG.md`에 후속 분석 문서 추가를 기록했다.
+
+**다음 작업**: T-031 PR에서는 sample 추출 SQL, 지도 확인 경로, `source_file` 추적성 보강 전략을 구현하고 실제 산출물 요약을 PR 본문에 첨부한다.
+
 ## 2026-05-25 (PR #15 리베이스 — maplibre-vworld package 소비)
 
 **작업**: PR #14가 main에 merge된 뒤 `codex/maplibre-vworld-ui`를 최신 `main` 위로 rebase했다. 이후 upstream `digitie/maplibre-vworld-js` main commit `a5b3c65`를 확인하고, `kraddr-geo-ui`가 VWorld helper/CSS를 실제 `maplibre-vworld` package에서 소비하도록 갱신했다.

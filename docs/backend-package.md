@@ -604,6 +604,15 @@ KIND_MAP = {
 
 `SQLStatement`에는 JOIN 키와 필요한 속성 컬럼만 alias한다. OGR SQL 결과 레이어는 geometry를 별도 필드로 쓰지 않아도 원본 geometry를 유지하므로 `GEOMETRY AS geom` 같은 가짜 문자열 필드를 만들지 않는다. geometry 컬럼명은 대상 PostgreSQL 테이블의 `geom`과 `GEOMETRY_NAME=geom` 설정으로 맞춘다.
 
+PR #17부터 SHP 로더는 모든 9개 보조 레이어 projection에 다음 추적 컬럼도 함께 넣는다.
+
+```sql
+, '<시도>/<시군구코드>/<레이어>.shp' AS source_file,
+  '<YYYYMM 또는 NULL>' AS source_yyyymm
+```
+
+예를 들어 서울 `TL_SPBD_BULD.shp`를 `--yyyymm=202604`로 적재하면 `source_file='Seoul/11000/TL_SPBD_BULD.shp'`, `source_yyyymm='202604'`가 된다. 기존 T-027 실제 DB처럼 PR #17 이전에 적재된 SHP row는 이 값이 NULL일 수 있으므로, C2/C4 원천 파일 역추적이 필요하면 SHP 보조 레이어를 재적재해야 한다.
+
 #### `tl_spbd_buld_polygon` 분리 전략
 
 SHP `TL_SPBD_BULD`는 건물 polygon + 속성을 함께 가진다. 속성(도로명/지번/우편번호/건물명)의 정본은 여전히 `tl_juso_text`지만, 실제 SHP `BD_MGT_SN`은 25자리이고 텍스트 정본 `bd_mgt_sn`은 26자리라 직접 조인 키로 사용할 수 없다. 따라서 polygon 테이블에는 검증과 공간 조인을 위한 최소 natural key(`RDS_SIG_CD`, `RN_CD`, `BULD_SE_CD`, `BULD_MNNM`, `BULD_SLNO`, `SIG_CD`, `EMD_CD`, `LI_CD`)를 함께 적재한다.
@@ -616,7 +625,9 @@ opts = gdal.VectorTranslateOptions(
         "SELECT BD_MGT_SN AS bd_mgt_sn, SIG_CD AS sig_cd, EMD_CD AS emd_cd, "
         "LI_CD AS li_cd, RDS_SIG_CD AS rds_sig_cd, RN_CD AS rn_cd, "
         "BULD_SE_CD AS buld_se_cd, BULD_MNNM AS buld_mnnm, "
-        "BULD_SLNO AS buld_slno FROM TL_SPBD_BULD"
+        "BULD_SLNO AS buld_slno, "
+        "'Seoul/11000/TL_SPBD_BULD.shp' AS source_file, "
+        "'202604' AS source_yyyymm FROM TL_SPBD_BULD"
     ),
     layerCreationOptions=[
         "GEOMETRY_NAME=geom",
@@ -1015,8 +1026,8 @@ kraddr-geo load all-sidos \
   --swap
 
 # === SHP polygon 적재 (ADR-005, GDAL 필요) ===
-kraddr-geo load shp ./data/juso/도로명주소\ 전자지도/강원특별자치도 --mode full
-kraddr-geo load shp-all ./data/juso/도로명주소\ 전자지도 --mode full
+kraddr-geo load shp ./data/juso/도로명주소\ 전자지도/강원특별자치도 --mode full --yyyymm 202604
+kraddr-geo load shp-all ./data/juso/도로명주소\ 전자지도 --mode full --yyyymm 202604
 
 # 변동분 (SHP polygon만)
 kraddr-geo load shp ./data/juso/delta/202605/seoul --mode delta
@@ -1035,6 +1046,12 @@ kraddr-geo refresh mv --swap                 # shadow MV swap (분기 풀로드 
 kraddr-geo validate consistency               # 모든 케이스 C1~C10
 kraddr-geo validate consistency --scope=full
 kraddr-geo validate consistency --cases=C4,C7 # 특정 케이스만 JSON 출력
+
+# === T-031 데이터 품질 후속 sample export ===
+kraddr-geo validate data-quality-samples \
+  --cases C2,C4,C6,C7 \
+  --limit 200 \
+  --output-dir artifacts/fullload/data-quality
 
 # === 작업 큐 상태 조회 (ADR-011, ADR-016) ===
 kraddr-geo jobs list                          # 최근 작업 목록
