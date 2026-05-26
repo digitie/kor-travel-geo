@@ -58,6 +58,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
+- T-028 일변동 ZIP 로더를 추가한다. `kraddr-geo load daily-juso`와 API job kind `daily_juso_delta`는 `TH_SGCO_RNADR_MST.TXT`를 `tl_juso_text`에 UPSERT/DELETE로 적용하고, `TH_SGCO_RNADR_LNBR.TXT`는 T-029 전까지 manifest에 미지원 행 수로 기록한다. 실제 `20260401_dailyjusukrdata.zip` MST 422행과 `20260404` `No Data` member를 검증했다.
 - PR #17 보강: `kraddr-geo validate data-quality-samples` CLI와 `loaders/data_quality.py`를 추가한다. C2/C4/C6/C7 후속 분석용 sample, 거리 bucket, region summary CSV를 재현 가능한 SQL로 export한다.
 - PR #14 close 이후 이어갈 T-027 데이터 품질 후속 분석 문서를 추가한다. C2/C4/C6/C7 잔여 `ERROR`를 sample, 지도 확인, 원천 파일 역추적으로 분류하는 절차와 산출물 기준을 `docs/t027-data-quality-followup.md`에 정리한다.
 - Windows 재설치·새 Codex 세션 복구 문서를 추가한다. `docs/windows-reinstall-recovery.md`는 Git/PR handoff, `data/`·`.env` 백업, WSL/GDAL 복구, Codex `resume`/`fork`/로컬 백업 명령, PR #13의 실행 금지선을 정리한다. `CLAUDE.md`와 `docs/dev-environment-recovery.md`도 실제 전체 적재는 사용자 명시 후에만 실행하도록 맞춘다.

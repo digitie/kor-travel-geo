@@ -25,6 +25,7 @@ from kraddr.geo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kraddr.geo.loaders.pobox_loader import load_pobox
 from kraddr.geo.loaders.postload import refresh_mv, resolve_text_geometry_links
 from kraddr.geo.loaders.shp.polygons_loader import load_shp_polygons
+from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
 from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kraddr.geo.loaders.text.locsum_loader import load_locsum
 from kraddr.geo.loaders.text.navi_loader import load_navi
@@ -111,6 +112,28 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             cancel_event=cancel_event,
         )
         await progress(progress=1.0, stage="locsum_load", message=f"{count} rows loaded")
+
+    async def daily_juso(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        await progress(stage="daily_juso_delta", message="도로명주소 일변동 적재 시작")
+        result = await load_daily_juso_delta(
+            engine,
+            _payload_path(payload),
+            source_yyyymm=_payload_str(payload, "source_yyyymm"),
+            limit_per_file=_payload_int(payload, "limit_per_file"),
+            cancel_event=cancel_event,
+        )
+        await progress(
+            progress=1.0,
+            stage="daily_juso_delta",
+            message=(
+                f"{result.processed_rows} rows processed, "
+                f"{result.upserted_rows} upserted, {result.deleted_rows} deleted"
+            ),
+        )
 
     async def navi(
         payload: dict[str, Any],
@@ -208,6 +231,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")
 
     queue.register("juso_text_load", juso)
+    queue.register("daily_juso_delta", daily_juso)
     queue.register("locsum_load", locsum)
     queue.register("navi_load", navi)
     queue.register("shp_polygons_load", shp)

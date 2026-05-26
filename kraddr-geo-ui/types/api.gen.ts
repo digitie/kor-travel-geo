@@ -646,7 +646,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Kind */
-            kind: ("full_load_batch" | "juso_text_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
+            kind: ("full_load_batch" | "juso_text_load" | "daily_juso_delta" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
             /** Load Batch Id */
             load_batch_id?: string | null;
             /**
@@ -682,7 +682,7 @@ export interface components {
         /** LoadSubmitRequest */
         LoadSubmitRequest: {
             /** Kind */
-            kind: ("full_load_batch" | "juso_text_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
+            kind: ("full_load_batch" | "juso_text_load" | "daily_juso_delta" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
             /** Payload */
             payload?: {
                 [key: string]: unknown;

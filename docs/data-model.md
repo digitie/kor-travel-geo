@@ -664,11 +664,21 @@ PR #10 리뷰 반영으로 `load_batch_id`, `parent_job_id`를 추가했다(ADR-
 
 PK 매핑은 `docs/backend-package.md` §9.3의 `PK_MAP` 상수와 일치.
 
+### 도로명주소 한글 일변동 ZIP
+
+T-028 이후 `daily_juso_loader.py`는 `data/juso/daily/*.zip`의 `TH_SGCO_RNADR_MST.TXT`를 `tl_juso_text`에 적용한다. 처리 대상 PK는 `bd_mgt_sn`이다.
+
+`MST` member의 `MVM_RES_CD`는 skip 대상이 아니라 운영 변경 사유다. 매핑에 없는 코드가 나오면 제공자 사양이 바뀐 것으로 보고 적재를 중단한다. 이는 "기타 코드는 skip"이라는 SHP generic delta의 보수적 설명보다 강한 규칙이다. 주소 정본 daily에서 알 수 없는 코드를 무시하면 최신 주소가 누락될 수 있기 때문이다.
+
+`TH_SGCO_RNADR_LNBR.TXT`는 현재 `tl_juso_text`에 쓰지 않는다. 이 파일은 건물↔지번 보조 관계를 제공하므로, 대표 지번 1개를 가진 `tl_juso_text`에 임의로 덮어쓰면 silent data loss가 생긴다. T-028은 행 수만 manifest에 남기고, T-029에서 `jibun_rnaddrkor_*`와 함께 1:N 보조 테이블 여부를 결정한다(ADR-021).
+
 ### 한 배치당 PK 단일화 가정
 
 `apply_delta`는 한 staging 배치 안에서 (a) UPSERT 일괄 → (b) DELETE 일괄 순서로 수행한다. 같은 PK에 대해 `INSERT`(31)와 `DELETE`(63)가 한 배치에 같이 들어오면 UPSERT 후 DELETE가 실행되어 신규 행이 즉시 지워지는 out-of-order 위험이 있다.
 
 본 사양은 **한 staging 배치 내에서 같은 PK가 최대 1회만 등장한다**고 가정한다(도로명주소 변동분 SHP의 통상 구조). 이 가정이 데이터셋 갱신으로 깨질 경우, `apply_delta`는 staging에서 `MVMN_DE` 기준 마지막 이벤트만 남기는 단일화 단계를 추가한다.
+
+단, `daily_juso_loader.py`는 같은 `bd_mgt_sn`이 한 batch 안에 여러 번 등장해도 자동으로 최신 1건을 고른다. 기준은 `mvmn_de DESC`, `source_file DESC`, `staging_seq DESC`다. 여러 날짜 ZIP을 디렉터리 단위로 넘기는 운영 절차를 지원하기 위해 SHP generic delta보다 한 단계 더 보수적으로 구현했다.
 
 ```sql
 -- staging 단일화 (가정이 깨졌을 때 활성화)

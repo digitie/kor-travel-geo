@@ -20,6 +20,7 @@ def test_cli_exposes_t018_operational_commands() -> None:
     for command in (
         ["load", "--help"],
         ["load", "all-sidos", "--help"],
+        ["load", "daily-juso", "--help"],
         ["load", "shp-all", "--help"],
         ["load", "epost", "--help"],
         ["refresh", "mv", "--help"],
