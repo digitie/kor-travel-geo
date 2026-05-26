@@ -22,6 +22,12 @@ from kraddr.geo.loaders.text.parcel_link_loader import (
     load_daily_parcel_link_delta,
     load_juso_parcel_link_snapshot,
 )
+from kraddr.geo.loaders.text.roadaddr_entrance_loader import (
+    RoadAddrEntranceRow,
+    discover_roadaddr_entrance_sources,
+    iter_roadaddr_entrance_rows,
+    load_roadaddr_entrances,
+)
 from kraddr.geo.settings import Settings
 
 DATA_ROOTS = (
@@ -91,6 +97,26 @@ async def test_real_postgres_can_load_actual_juso_samples_when_dsn_is_set() -> N
             daily_zip,
             limit_per_file=5,
         )
+        roadaddr_zip = (
+            data_root
+            / "도로명주소 출입구 정보"
+            / "도로명주소출입구_전체분_세종특별자치시.zip"
+        )
+        if not roadaddr_zip.exists():
+            pytest.skip(f"actual roadaddr entrance data is not available: {roadaddr_zip}")
+        roadaddr_rows = list(
+            iter_roadaddr_entrance_rows(
+                discover_roadaddr_entrance_sources(roadaddr_zip)[0],
+                source_yyyymm=None,
+                limit=3,
+            )
+        )
+        await _insert_roadaddr_text_parents(engine, tuple(roadaddr_rows))
+        roadaddr_result = await load_roadaddr_entrances(
+            engine,
+            roadaddr_zip,
+            limit_per_file=3,
+        )
         locsum_count = await load_locsum(
             engine,
             data_root / "202604_위치정보요약DB_전체분.zip",
@@ -134,6 +160,33 @@ SELECT last_mvmn_de, row_count, source_yyyymm,
                 )
             ).mappings().one()
             parcel_count = await conn.scalar(text("SELECT count(*) FROM tl_juso_parcel_link"))
+            roadaddr_manifest = (
+                await conn.execute(
+                    text(
+                        """
+SELECT row_count, source_yyyymm,
+       source_set ->> 'kind' AS kind,
+       source_set ->> 'upserted_rows' AS upserted_rows
+  FROM load_manifest
+ WHERE table_name = 'tl_roadaddr_entrc'
+"""
+                    )
+                )
+            ).mappings().one()
+            roadaddr_mv = (
+                await conn.execute(
+                    text(
+                        """
+SELECT pt_source,
+       round(ST_X(pt_5179)::numeric, 6)::float8 AS x_5179,
+       round(ST_Y(pt_5179)::numeric, 6)::float8 AS y_5179
+  FROM mv_geocode_target
+ WHERE bd_mgt_sn = :bd_mgt_sn
+"""
+                    ),
+                    {"bd_mgt_sn": roadaddr_rows[0].bd_mgt_sn},
+                )
+            ).mappings().one()
 
         assert juso_count >= 2
         assert daily_result.processed_rows == 3
@@ -153,6 +206,16 @@ SELECT last_mvmn_de, row_count, source_yyyymm,
         assert parcel_manifest["source_yyyymm"] == "202604"
         assert parcel_manifest["upserted_rows"] == "5"
         assert parcel_count is not None and parcel_count >= 5
+        assert roadaddr_result.processed_rows == 3
+        assert roadaddr_result.upserted_rows == 3
+        assert roadaddr_result.source_yyyymm == "202605"
+        assert roadaddr_manifest["kind"] == "roadaddr_entrance_full"
+        assert roadaddr_manifest["row_count"] == 3
+        assert roadaddr_manifest["source_yyyymm"] == "202605"
+        assert roadaddr_manifest["upserted_rows"] == "3"
+        assert roadaddr_mv["pt_source"] == "entrance"
+        assert roadaddr_mv["x_5179"] == pytest.approx(round(roadaddr_rows[0].x_5179, 6))
+        assert roadaddr_mv["y_5179"] == pytest.approx(round(roadaddr_rows[0].y_5179, 6))
         assert locsum_count >= 2
         assert navi_build_count >= 2
         assert navi_ent_count >= 1
@@ -195,6 +258,46 @@ ON CONFLICT (bd_mgt_sn) DO NOTHING
                     "mntn_yn": row.mntn_yn,
                     "lnbr_mnnm": row.lnbr_mnnm,
                     "lnbr_slno": row.lnbr_slno,
+                    "source_file": row.source_file,
+                    "source_yyyymm": row.source_yyyymm,
+                },
+            )
+
+
+async def _insert_roadaddr_text_parents(
+    engine,
+    rows: tuple[RoadAddrEntranceRow, ...],
+) -> None:
+    async with engine.begin() as conn:
+        for row in rows:
+            await conn.execute(
+                text(
+                    """
+INSERT INTO tl_juso_text (
+  bd_mgt_sn, sig_cd, rn_cd, bjd_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, li_kor_nm,
+  rn, buld_se_cd, buld_mnnm, buld_slno, zip_no, source_file, source_yyyymm
+) VALUES (
+  :bd_mgt_sn, :sig_cd, :rn_cd, :bjd_cd, :ctp_kor_nm, :sig_kor_nm, :emd_kor_nm,
+  :li_kor_nm, :rn, :buld_se_cd, :buld_mnnm, :buld_slno, :zip_no, :source_file,
+  :source_yyyymm
+)
+ON CONFLICT (bd_mgt_sn) DO NOTHING
+"""
+                ),
+                {
+                    "bd_mgt_sn": row.bd_mgt_sn,
+                    "sig_cd": row.sig_cd,
+                    "rn_cd": row.rn_cd,
+                    "bjd_cd": row.bjd_cd,
+                    "ctp_kor_nm": row.ctp_kor_nm,
+                    "sig_kor_nm": row.sig_kor_nm,
+                    "emd_kor_nm": row.emd_kor_nm,
+                    "li_kor_nm": row.li_kor_nm,
+                    "rn": row.rn,
+                    "buld_se_cd": row.buld_se_cd,
+                    "buld_mnnm": row.buld_mnnm,
+                    "buld_slno": row.buld_slno,
+                    "zip_no": row.zip_no,
                     "source_file": row.source_file,
                     "source_yyyymm": row.source_yyyymm,
                 },

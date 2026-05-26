@@ -30,6 +30,7 @@ from kraddr.geo.loaders.text.parcel_link_loader import (
     load_daily_parcel_link_delta,
     load_juso_parcel_link_snapshot,
 )
+from kraddr.geo.loaders.text.roadaddr_entrance_loader import load_roadaddr_entrances
 from kraddr.geo.settings import get_settings
 from kraddr.geo.version import __version__
 
@@ -180,6 +181,34 @@ def load_daily_parcel_links_command(
                 f"deleted={result.deleted_rows}, "
                 f"no_data_sources={result.skipped_no_data_sources}, "
                 f"last_mvmn_de={result.last_mvmn_de or '-'}"
+            )
+
+    asyncio.run(run())
+
+
+@load_app.command("roadaddr-entrances")
+def load_roadaddr_entrances_command(
+    path: Path,
+    yyyymm: str | None = typer.Option(None, "--yyyymm"),
+    limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
+    append: bool = typer.Option(False, "--append", help="기존 출입구를 비우지 않고 upsert한다."),
+) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            result = await load_roadaddr_entrances(
+                client.engine,
+                path,
+                source_yyyymm=yyyymm,
+                limit_per_file=limit_per_file,
+                replace=not append,
+            )
+            typer.echo(
+                "loaded tl_roadaddr_entrc snapshot: "
+                f"processed={result.processed_rows}, "
+                f"upserted={result.upserted_rows}, "
+                f"source_count={result.source_count}, "
+                f"source_yyyymm={result.source_yyyymm or '-'}"
             )
 
     asyncio.run(run())

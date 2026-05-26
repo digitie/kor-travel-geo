@@ -58,6 +58,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
+- T-039 `도로명주소 출입구 정보` direct entrance loader를 추가한다. `RNENTDATA_2605_*.txt`를 `tl_roadaddr_entrc`에 적재하고, `mv_geocode_target` 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 실제 전국 17개 ZIP 6,418,169행 구조와 세종 Docker DB 샘플 적재를 검증했으며, 202605 기준월 특성상 기본 full-load child에는 자동 포함하지 않는다.
 - T-038 `tl_juso_parcel_link` DDL/로더를 추가한다. `jibun_rnaddrkor_*` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 건물↔지번 1:N 테이블에 적재하고, CLI `load parcel-links`/`load daily-parcel-links`, API job kind `juso_parcel_link_load`/`juso_parcel_link_delta`, full-load batch 기본 child, 관리 UI 기본 payload를 연결했다.
 - T-030 별도 도형/출입구 자료 검토를 추가한다. 세종 실제 ZIP 기준으로 상세주소 동 도형, 구역의 도형, 도로명주소 건물 도형, 도로명주소 출입구 정보의 layer/geometry/text 구조를 확인하고, 기본 full-load에는 즉시 섞지 않고 T-039~T-041로 분리하기로 ADR-023에서 확정했다.
 - T-029 `jibun_rnaddrkor_*` 활용 결정을 추가한다. 실제 파일 계측 결과를 근거로 대표 PNU를 덮어쓰지 않고 후속 `tl_juso_parcel_link` 1:N 테이블로 분리하기로 ADR-022에서 확정했으며, 실제 `jibun_rnaddrkor_seoul.txt`와 daily `LNBR` member 구조 테스트를 추가했다.
@@ -97,7 +98,7 @@
 - engine factory(`infra/engine.py`) 단순화: DSN 보정은 `Settings.normalize_pg_dsn` 단일 책임. 중복 검사 제거.
 - 적재 ↔ 서빙 단일 스키마 정책 명시: 별도 `*_serving_*` 스키마 도입 금지, 평면화는 MV로만 표현(ADR-007 후속).
 - **(BREAKING in spec)** ADR-012 추가: 적재를 행안부 텍스트 정본 1차(도로명주소 한글_전체분/위치정보요약DB_전체분/내비게이션용DB_전체분, `loaders/text/`, stdlib csv + `psycopg.copy()`) + SHP polygon 보조(`loaders/shp/`, GDAL Python binding 한정) 하이브리드로 전환. ADR-005는 polygon 적재로 partial supersede.
-- 마스터 테이블을 텍스트 4(`tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc`) + SHP polygon/폴리라인 9 + 보조 우편번호 2 + 메타 5(`load_jobs`, `load_consistency_reports` 신규 포함)로 재구성한다.
+- 마스터 테이블을 텍스트 4(`tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc`) + SHP polygon/폴리라인 9 + 보조 우편번호 2 + 메타 5(`load_jobs`, `load_consistency_reports` 신규 포함)로 재구성한다. 이후 T-039에서 선택 direct 출입구 테이블 `tl_roadaddr_entrc`를 추가했다.
 - ADR-007 복원·재정의: 대표 출입구 선택을 위치정보요약DB의 `ent_se_cd` 기반으로 명시. MV에 `pt_source ∈ {entrance, centroid}` 컬럼 추가 — 출입구 0개 건물은 내비게이션용DB centroid를 fallback 좌표로 사용.
 - ADR-016 추가: 적재 진행도(`AsyncAddressClient.load_status/list_load_jobs/submit_load/cancel_load`, `/v1/admin/loads/*` REST)와 정합성 리포트(`run_consistency_check`/`consistency_report`, `/v1/admin/consistency/*` REST, 케이스 C1~C10, `load_consistency_reports` JSONB)를 라이브러리·REST·디버그 UI에 일급 노출.
 - `tl_juso_text.pnu` generated stored column으로 ADR-010 매핑(`mntn_yn 0→1, 1→2`) 박음. PNU 19자리 정합성을 정합성 케이스 C9로 검증.

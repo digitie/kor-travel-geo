@@ -96,6 +96,8 @@ Next.js /admin/load
 
 REST 큐와 `AsyncAddressClient.submit_load("full_load_batch", ...)`는 같은 `infra.batch.batch_children()` 검증 helper를 사용한다. 잘못된 payload는 root job을 만들기 전에 `InvalidInputError(E0100)`로 거절한다.
 
+`roadaddr_entrance_load`는 T-039부터 등록된 선택 child다. direct `bd_mgt_sn + EPSG:5179` 출입구를 `tl_roadaddr_entrc`에 적재하고 MV 대표 좌표 1순위 후보로 사용하지만, 현재 로컬 자료 기준월이 `202605`라 기본 full-load 6종에는 자동 포함하지 않는다. 같은 기준월의 전체분을 확보했거나 C10 기준월 불일치를 의도적으로 감수하는 검증에서는 `children` 또는 `child_jobs`에 명시해 batch에 포함한다.
+
 ## 데이터 흐름 — 일변동 적용
 
 ```

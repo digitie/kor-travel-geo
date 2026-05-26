@@ -33,6 +33,7 @@ from kraddr.geo.loaders.text.parcel_link_loader import (
     load_daily_parcel_link_delta,
     load_juso_parcel_link_snapshot,
 )
+from kraddr.geo.loaders.text.roadaddr_entrance_loader import load_roadaddr_entrances
 from kraddr.geo.version import __version__
 
 from .routers import admin, geocode, healthz, pobox, reverse, search, zipcode
@@ -181,6 +182,26 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             ),
         )
 
+    async def roadaddr_entrances(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        await progress(stage="roadaddr_entrance_load", message="도로명주소 출입구 정보 적재 시작")
+        result = await load_roadaddr_entrances(
+            engine,
+            _payload_path(payload),
+            source_yyyymm=_payload_str(payload, "source_yyyymm"),
+            limit_per_file=_payload_int(payload, "limit_per_file"),
+            replace=_payload_bool(payload, "replace", default=True),
+            cancel_event=cancel_event,
+        )
+        await progress(
+            progress=1.0,
+            stage="roadaddr_entrance_load",
+            message=f"{result.processed_rows} rows processed, {result.upserted_rows} upserted",
+        )
+
     async def navi(
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
@@ -280,6 +301,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
     queue.register("daily_juso_delta", daily_juso)
     queue.register("juso_parcel_link_load", parcel_links)
     queue.register("juso_parcel_link_delta", daily_parcel_links)
+    queue.register("roadaddr_entrance_load", roadaddr_entrances)
     queue.register("locsum_load", locsum)
     queue.register("navi_load", navi)
     queue.register("shp_polygons_load", shp)

@@ -83,6 +83,11 @@ def test_explicit_children_require_path_for_known_loaders() -> None:
         batch_children({"children": [{"kind": "shp_polygons_load", "payload": {}}]})
 
 
+def test_custom_roadaddr_entrance_child_requires_path() -> None:
+    with pytest.raises(InvalidInputError, match="roadaddr_entrance_load"):
+        batch_children({"children": [{"kind": "roadaddr_entrance_load", "payload": {}}]})
+
+
 def test_source_path_is_accepted_for_child_payloads() -> None:
     children = batch_children(
         {

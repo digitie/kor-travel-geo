@@ -16,6 +16,7 @@ LoadJobKind = Literal[
     "daily_juso_delta",
     "juso_parcel_link_load",
     "juso_parcel_link_delta",
+    "roadaddr_entrance_load",
     "locsum_load",
     "navi_load",
     "shp_polygons_load",

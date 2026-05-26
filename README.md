@@ -63,6 +63,11 @@ kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
 kraddr-geo load daily-juso ./data/juso/daily/20260401_dailyjusukrdata.zip
 kraddr-geo load daily-parcel-links ./data/juso/daily/20260401_dailyjusukrdata.zip
 
+# 선택: 도로명주소 출입구 정보 direct 좌표 적재
+# 현재 로컬 원천은 202605 기준월이라 기본 full-load에는 자동 포함하지 않습니다.
+kraddr-geo load roadaddr-entrances "./data/juso/도로명주소 출입구 정보" --yyyymm 202605
+kraddr-geo refresh mv --swap
+
 # 서비스 기동
 uvicorn kraddr.geo.api.app:app --reload --port 8000
 ```

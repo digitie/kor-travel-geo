@@ -38,6 +38,7 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "CREATE TABLE IF NOT EXISTS tl_juso_parcel_link" in SCHEMA_SQL
     assert "REFERENCES tl_juso_text(bd_mgt_sn) ON DELETE CASCADE" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_locsum_entrc" in SCHEMA_SQL
+    assert "CREATE TABLE IF NOT EXISTS tl_roadaddr_entrc" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS load_jobs" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS load_consistency_reports" in SCHEMA_SQL
     assert "COALESCE(lnbr_mnnm, 0)" not in SCHEMA_SQL
@@ -52,12 +53,14 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "NULLIF(rn_cd, '') IS NULL" in SCHEMA_SQL
     assert "idx_juso_parcel_link_pnu" in INDEX_SQL
     assert "idx_juso_parcel_link_road" in INDEX_SQL
+    assert "idx_roadaddr_entrc_geom" in INDEX_SQL
 
 
 def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
     assert "pt_5179" in MV_SQL
     assert "pt_4326" in MV_SQL
     assert "pt_source" in MV_SQL
+    assert "tl_roadaddr_entrc" in MV_SQL
     assert "tl_locsum_entrc" in MV_SQL
     assert "tl_navi_buld_centroid" in MV_SQL
     assert "best_navi" in MV_SQL

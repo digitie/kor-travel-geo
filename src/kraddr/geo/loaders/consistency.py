@@ -108,13 +108,32 @@ SELECT count,
         name="대표 출입구가 해소되지 않은 건물",
         threshold="5% 초과 WARN, 그 이하는 INFO",
         sql="""
-WITH total AS (
+WITH serving_entrc AS MATERIALIZED (
+  SELECT DISTINCT ON (bd_mgt_sn)
+         bd_mgt_sn,
+         ent_man_no,
+         geom,
+         source_kind
+    FROM (
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             0 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
+             1 AS source_priority,
+             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
+        FROM tl_locsum_entrc
+       WHERE bd_mgt_sn IS NOT NULL
+    ) e
+   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
+),
+total AS (
   SELECT count(*)::bigint AS total FROM tl_juso_text
 ),
 violations AS (
   SELECT j.bd_mgt_sn, j.sig_cd, j.rn, j.buld_mnnm, j.buld_slno
     FROM tl_juso_text j
-    LEFT JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
+    LEFT JOIN serving_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
    WHERE e.bd_mgt_sn IS NULL
 )
 SELECT count(*)::bigint AS count,
@@ -131,12 +150,31 @@ SELECT count(*)::bigint AS count,
         name="출입구 좌표와 건물 polygon 거리 이상치",
         threshold="50m 초과 WARN, 500m 초과 ERROR",
         sql="""
-WITH distances AS MATERIALIZED (
+WITH serving_entrc AS MATERIALIZED (
+  SELECT DISTINCT ON (bd_mgt_sn)
+         bd_mgt_sn,
+         ent_man_no,
+         geom,
+         source_kind
+    FROM (
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             0 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
+             1 AS source_priority,
+             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
+        FROM tl_locsum_entrc
+       WHERE bd_mgt_sn IS NOT NULL
+    ) e
+   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
+),
+distances AS MATERIALIZED (
   SELECT j.bd_mgt_sn,
          e.ent_man_no,
+         e.source_kind,
          nearest.dist_m
-    FROM tl_locsum_entrc e
-    -- C4 assumes postload.resolve_text_geometry_links() has populated e.bd_mgt_sn.
+    FROM serving_entrc e
     JOIN tl_juso_text j ON j.bd_mgt_sn = e.bd_mgt_sn
     JOIN LATERAL (
       SELECT ST_Distance(e.geom, p.geom) AS dist_m
@@ -160,7 +198,7 @@ stats AS (
     FROM distances
 ),
 violations AS (
-  SELECT bd_mgt_sn, ent_man_no, round(dist_m::numeric, 2)::float8 AS dist_m
+  SELECT bd_mgt_sn, ent_man_no, source_kind, round(dist_m::numeric, 2)::float8 AS dist_m
     FROM distances
    WHERE dist_m > 50
    ORDER BY dist_m DESC
@@ -252,10 +290,30 @@ SELECT over_10m AS count,
         name="우편번호 텍스트와 기초구역 polygon 불일치",
         threshold="zip_no polygon 누락 WARN, 좌표 외부 ERROR",
         sql="""
-WITH base AS MATERIALIZED (
-  SELECT j.bd_mgt_sn, j.zip_no, e.ent_man_no, e.geom, k.bas_id, k.geom AS bas_geom
+WITH serving_entrc AS MATERIALIZED (
+  SELECT DISTINCT ON (bd_mgt_sn)
+         bd_mgt_sn,
+         ent_man_no,
+         geom,
+         source_kind
+    FROM (
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             0 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
+             1 AS source_priority,
+             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
+        FROM tl_locsum_entrc
+       WHERE bd_mgt_sn IS NOT NULL
+    ) e
+   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
+),
+base AS MATERIALIZED (
+  SELECT j.bd_mgt_sn, j.zip_no, e.ent_man_no, e.source_kind, e.geom,
+         k.bas_id, k.geom AS bas_geom
     FROM tl_juso_text j
-    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
+    JOIN serving_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
     LEFT JOIN tl_kodis_bas k ON k.bas_id = j.zip_no
    WHERE j.zip_no IS NOT NULL
 ),
@@ -263,6 +321,7 @@ violations AS MATERIALIZED (
   SELECT bd_mgt_sn,
          zip_no,
          ent_man_no,
+         source_kind,
          CASE
            WHEN bas_id IS NULL THEN 'missing_zip_polygon'
            WHEN NOT ST_Covers(bas_geom, geom) THEN 'outside_zip_polygon'
@@ -296,16 +355,37 @@ SELECT count,
         name="행정구역 polygon과 출입구 좌표 불일치",
         threshold="polygon 누락 WARN, 좌표 외부 ERROR",
         sql="""
-WITH base AS MATERIALIZED (
-  SELECT j.bd_mgt_sn, left(j.bjd_cd, 8) AS emd_cd, e.ent_man_no, e.geom, p.geom AS emd_geom
+WITH serving_entrc AS MATERIALIZED (
+  SELECT DISTINCT ON (bd_mgt_sn)
+         bd_mgt_sn,
+         ent_man_no,
+         geom,
+         source_kind
+    FROM (
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             0 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
+             1 AS source_priority,
+             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
+        FROM tl_locsum_entrc
+       WHERE bd_mgt_sn IS NOT NULL
+    ) e
+   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
+),
+base AS MATERIALIZED (
+  SELECT j.bd_mgt_sn, left(j.bjd_cd, 8) AS emd_cd, e.ent_man_no, e.source_kind,
+         e.geom, p.geom AS emd_geom
     FROM tl_juso_text j
-    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
+    JOIN serving_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
     LEFT JOIN tl_scco_emd p ON p.emd_cd = left(j.bjd_cd, 8)
 ),
 violations AS MATERIALIZED (
   SELECT bd_mgt_sn,
          emd_cd,
          ent_man_no,
+         source_kind,
          CASE
            WHEN emd_geom IS NULL THEN 'missing_emd_polygon'
            WHEN NOT ST_Covers(emd_geom, geom) THEN 'outside_emd_polygon'
@@ -339,13 +419,32 @@ SELECT count,
         name="도로명 폴리라인과 출입구 좌표 인접성 불일치",
         threshold="같은 도로명 100m 밖 WARN",
         sql="""
-WITH base AS (
-  SELECT j.bd_mgt_sn, j.rncode_full, e.ent_man_no, e.geom
+WITH serving_entrc AS MATERIALIZED (
+  SELECT DISTINCT ON (bd_mgt_sn)
+         bd_mgt_sn,
+         ent_man_no,
+         geom,
+         source_kind
+    FROM (
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             0 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
+             1 AS source_priority,
+             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
+        FROM tl_locsum_entrc
+       WHERE bd_mgt_sn IS NOT NULL
+    ) e
+   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
+),
+base AS (
+  SELECT j.bd_mgt_sn, j.rncode_full, e.ent_man_no, e.source_kind, e.geom
     FROM tl_juso_text j
-    JOIN tl_locsum_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
+    JOIN serving_entrc e ON e.bd_mgt_sn = j.bd_mgt_sn
 ),
 violations AS (
-  SELECT b.bd_mgt_sn, b.rncode_full, b.ent_man_no
+  SELECT b.bd_mgt_sn, b.rncode_full, b.ent_man_no, b.source_kind
     FROM base b
    WHERE NOT EXISTS (
        SELECT 1
@@ -398,6 +497,7 @@ WITH sources AS (
    WHERE table_name IN (
          'tl_juso_text',
          'tl_locsum_entrc',
+         'tl_roadaddr_entrc',
          'tl_navi_buld_centroid',
          'tl_navi_entrc',
          'tl_spbd_buld_polygon'

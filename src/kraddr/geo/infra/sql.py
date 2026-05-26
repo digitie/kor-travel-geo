@@ -114,6 +114,39 @@ CREATE TABLE IF NOT EXISTS tl_locsum_entrc (
   PRIMARY KEY (sig_cd, ent_man_no)
 );
 
+CREATE TABLE IF NOT EXISTS tl_roadaddr_entrc (
+  bd_mgt_sn       TEXT NOT NULL,
+  bjd_cd          TEXT NOT NULL,
+  ctp_kor_nm      TEXT,
+  sig_kor_nm      TEXT,
+  emd_kor_nm      TEXT,
+  li_kor_nm       TEXT,
+  sig_cd          TEXT NOT NULL,
+  rn_cd           TEXT NOT NULL,
+  rncode_full     TEXT GENERATED ALWAYS AS (sig_cd || rn_cd) STORED,
+  rn              TEXT,
+  buld_se_cd      TEXT,
+  buld_mnnm       INTEGER,
+  buld_slno       INTEGER,
+  zip_no          TEXT,
+  notice_de       TEXT,
+  raw_col_13      TEXT,
+  ent_man_no      BIGINT,
+  ent_source_cd   TEXT NOT NULL,
+  ent_detail_cd   TEXT NOT NULL,
+  geom            geometry(Point, 5179) NOT NULL,
+  source_file     TEXT,
+  source_yyyymm   TEXT,
+  loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (bd_mgt_sn),
+  CHECK (char_length(bd_mgt_sn) BETWEEN 25 AND 26),
+  CHECK (char_length(bjd_cd) = 10),
+  CHECK (char_length(sig_cd) = 5),
+  CHECK (char_length(rn_cd) = 7),
+  CHECK (zip_no IS NULL OR char_length(zip_no) = 5),
+  CHECK (notice_de IS NULL OR char_length(notice_de) = 8)
+);
+
 CREATE TABLE IF NOT EXISTS tl_navi_buld_centroid (
   bd_mgt_sn       TEXT PRIMARY KEY,
   bjd_cd          TEXT,
@@ -396,6 +429,13 @@ CREATE INDEX IF NOT EXISTS idx_locsum_rep
 CREATE INDEX IF NOT EXISTS idx_locsum_resolve
   ON tl_locsum_entrc (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no);
 
+CREATE INDEX IF NOT EXISTS idx_roadaddr_entrc_geom
+  ON tl_roadaddr_entrc USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_roadaddr_entrc_bd
+  ON tl_roadaddr_entrc (bd_mgt_sn, ent_man_no);
+CREATE INDEX IF NOT EXISTS idx_roadaddr_entrc_road
+  ON tl_roadaddr_entrc (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
+
 CREATE INDEX IF NOT EXISTS idx_navi_centroid_geom
   ON tl_navi_buld_centroid USING GIST (centroid_5179);
 CREATE INDEX IF NOT EXISTS idx_navi_centroid_resolve
@@ -454,11 +494,22 @@ WITH best_entrc AS (
          bd_mgt_sn,
          ent_man_no,
          geom AS ent_pt_5179
-    FROM tl_locsum_entrc
-   WHERE bd_mgt_sn IS NOT NULL
+    FROM (
+      SELECT bd_mgt_sn, ent_man_no, geom, 0 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+      UNION ALL
+      SELECT bd_mgt_sn,
+             ent_man_no,
+             geom,
+             1 AS source_priority,
+             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
+        FROM tl_locsum_entrc
+       WHERE bd_mgt_sn IS NOT NULL
+    ) e
    ORDER BY bd_mgt_sn,
-            CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END,
-            ent_man_no
+            source_priority,
+            rep_priority,
+            ent_man_no NULLS LAST
 ),
 best_navi AS (
   SELECT DISTINCT ON (

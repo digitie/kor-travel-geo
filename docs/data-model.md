@@ -8,7 +8,7 @@
 
 | 구분 | 테이블/뷰 | 역할 | 출처 |
 |------|-----------|------|------|
-| 텍스트 1차 (4) | `tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc` | 행정/도로명/지번/우편번호 정본 매핑, 출입구 좌표, 내비 진입점/centroid | 행안부 텍스트 (월간) |
+| 텍스트 1차/보조 (5) | `tl_juso_text`, `tl_locsum_entrc`, `tl_roadaddr_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc` | 행정/도로명/지번/우편번호 정본 매핑, 출입구 좌표, direct 출입구 보완, 내비 진입점/centroid | 행안부 텍스트 (월간/별도) |
 | SHP polygon/폴리라인 (9) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | 행정구역·우편번호·건물 polygon, 도로 관리/구간/폴리라인 | 도로명주소 전자지도 SHP (월간) |
 | 우편번호 보조 (2) | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 | epost OpenAPI (분기, ADR-009) |
 | 메타 (5) | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `geo_cache` | 적재 watermark·MVM 매핑·작업 큐(ADR-011)·정합성 리포트(ADR-016)·외부 API 캐시 | |
@@ -147,6 +147,46 @@ ADR-007의 "대표 출입구 1건" 규칙이 본 테이블의 `ent_se_cd`에 직
 
 좌표 X/Y가 비어 있는 행이 실제 파일에 존재한다. `geom`은 `NOT NULL`이므로 현재 로더는 좌표가 모두 있는 행만 적재한다. 좌표 결측 행 수는 원본 품질 지표이며, 필요하면 `load_consistency_reports`의 C3 세부 metric으로 남긴다.
 
+### `tl_roadaddr_entrc` — 도로명주소 출입구 정보 (T-039)
+
+`data/juso/도로명주소 출입구 정보/*.zip`의 `RNENTDATA_2605_*.txt`를 적재한다. 이 원천은 위치정보요약DB와 달리 `bd_mgt_sn`을 직접 제공하므로 후처리 해소가 필요 없다. T-039 실제 파일 검증 결과 세종/경남 샘플에서 `bd_mgt_sn`은 행마다 유일했고, `ent_man_no`는 일부 행에서 비어 있었다. 따라서 PK는 `bd_mgt_sn` 단독이며 `ent_man_no`는 nullable 보존 필드다.
+
+```sql
+CREATE TABLE tl_roadaddr_entrc (
+  bd_mgt_sn     TEXT PRIMARY KEY,
+  bjd_cd        TEXT NOT NULL,
+  ctp_kor_nm    TEXT,
+  sig_kor_nm    TEXT,
+  emd_kor_nm    TEXT,
+  li_kor_nm     TEXT,
+  sig_cd        TEXT NOT NULL,
+  rn_cd         TEXT NOT NULL,
+  rncode_full   TEXT GENERATED ALWAYS AS (sig_cd || rn_cd) STORED,
+  rn            TEXT,
+  buld_se_cd    TEXT,
+  buld_mnnm     INT,
+  buld_slno     INT,
+  zip_no        TEXT,
+  notice_de     TEXT,
+  raw_col_13    TEXT,
+  ent_man_no    BIGINT,
+  ent_source_cd TEXT NOT NULL,
+  ent_detail_cd TEXT NOT NULL,
+  geom          geometry(Point, 5179) NOT NULL,
+  source_file   TEXT,
+  source_yyyymm TEXT,
+  loaded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_roadaddr_entrc_geom ON tl_roadaddr_entrc USING GIST (geom);
+CREATE INDEX idx_roadaddr_entrc_bd   ON tl_roadaddr_entrc (bd_mgt_sn, ent_man_no);
+CREATE INDEX idx_roadaddr_entrc_road
+  ON tl_roadaddr_entrc (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
+```
+
+`mv_geocode_target`은 이 테이블이 채워져 있으면 `tl_locsum_entrc`보다 먼저 대표 출입구 후보로 사용한다. API 응답의 `pt_source`는 기존 호환성을 위해 `entrance`로 유지한다. direct source 여부는 `tl_roadaddr_entrc.source_file`, `source_yyyymm`, 정합성 sample의 `source_kind='roadaddr'`로 추적한다.
+
+실제 전국 구조는 17개 ZIP, 총 6,418,169행이다. 세종 ZIP은 원천 27,868행 중 좌표 결측/`0/0` sentinel을 제외한 27,779행이 적재 대상이었다.
+
 ### `tl_navi_buld_centroid` — 내비게이션용DB 건물 중심
 
 출입구가 없거나 비대표인 건물의 fallback 좌표(ADR-012 후속).
@@ -229,12 +269,12 @@ GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY
 |--------|--------------|------|------|
 | **C1: 텍스트에만 존재** (BD_MGT_SN) | `juso \ buld_polygon` | 도로명주소 정본에는 있는데 SHP polygon이 없음 | 신축·미반영. `WARN` (확인 항목) |
 | **C2: SHP에만 존재** | `buld_polygon \ juso` | polygon은 있는데 텍스트가 누락, 또는 SHP natural key 자체가 비어 비교 불가 | `ERROR` — metric의 `missing_text`/`missing_resolve_key`를 나눠 후속 분석 |
-| **C3: 출입구 0개 건물 비율** | `juso \ locsum` | 위치정보요약DB에 출입구가 없는 건물 | `INFO` — `navi_centroid` fallback으로 흡수. 비율이 임계(예: 5%) 초과 시 `WARN` |
-| **C4: 출입구 좌표 ↔ 건물 polygon 거리** | `ST_Distance(locsum.geom, buld_polygon.geom)` | 출입구가 건물 polygon 외부, 또는 멀리 떨어짐 | 5m 이내 `OK`, 50m 초과 `WARN`, 500m 초과 `ERROR`; `error_count`는 500m 초과 건수 |
+| **C3: 출입구 0개 건물 비율** | `juso \ serving_entrc` | direct 출입구와 위치정보요약DB 대표 출입구를 모두 보아도 출입구가 없는 건물 | `INFO` — `navi_centroid` fallback으로 흡수. 비율이 임계(예: 5%) 초과 시 `WARN` |
+| **C4: 출입구 좌표 ↔ 건물 polygon 거리** | `ST_Distance(serving_entrc.geom, buld_polygon.geom)` | serving 출입구가 건물 polygon 외부, 또는 멀리 떨어짐 | 5m 이내 `OK`, 50m 초과 `WARN`, 500m 초과 `ERROR`; `error_count`는 500m 초과 건수 |
 | **C5: navi centroid ↔ 건물 polygon centroid 일치** | `ST_Distance(navi.centroid_5179, ST_Centroid(buld_polygon.geom))` | 두 centroid 거리 | 1m 이내 `OK`, 10m 초과 `WARN` |
-| **C6: 우편번호 텍스트 ↔ kodis_bas polygon** | `ST_Covers(kodis_bas.geom, locsum.geom)` 와 `juso.zip_no = kodis_bas.bas_id` 비교 | 좌표가 우편번호 polygon 안 또는 경계 위인가 + 텍스트 zip_no와 일치하는가 | 일치 `OK`, polygon 외 `WARN`, zip_no 불일치 `ERROR` |
-| **C7: 행정구역 ↔ 좌표 polygon 일치** | `ST_Covers(scco_emd.geom, locsum.geom)` 와 `juso.bjd_cd[1..8] = scco_emd.emd_cd` 비교 | 좌표가 법정동 polygon 안 또는 경계 위인가 | `OK` / `WARN`(polygon 외) / `ERROR`(코드 불일치) |
-| **C8: 도로명 ↔ 도로 폴리라인 인접성** | `ST_DWithin(locsum.geom, tl_sprd_manage.geom, 100m)` filtered by `rncode_full` | 좌표가 같은 도로명 관리 LineString의 100m 이내인가 | 일치 `OK`, 외 `WARN` |
+| **C6: 우편번호 텍스트 ↔ kodis_bas polygon** | `ST_Covers(kodis_bas.geom, serving_entrc.geom)` 와 `juso.zip_no = kodis_bas.bas_id` 비교 | 좌표가 우편번호 polygon 안 또는 경계 위인가 + 텍스트 zip_no와 일치하는가 | 일치 `OK`, polygon 외 `WARN`, zip_no 불일치 `ERROR` |
+| **C7: 행정구역 ↔ 좌표 polygon 일치** | `ST_Covers(scco_emd.geom, serving_entrc.geom)` 와 `juso.bjd_cd[1..8] = scco_emd.emd_cd` 비교 | 좌표가 법정동 polygon 안 또는 경계 위인가 | `OK` / `WARN`(polygon 외) / `ERROR`(코드 불일치) |
+| **C8: 도로명 ↔ 도로 폴리라인 인접성** | `ST_DWithin(serving_entrc.geom, tl_sprd_manage.geom, 100m)` filtered by `rncode_full` | 좌표가 같은 도로명 관리 LineString의 100m 이내인가 | 일치 `OK`, 외 `WARN` |
 | **C9: PNU 자릿수 검증** | `length(pnu) = 19 AND substr(pnu, 11, 1) IN ('1','2')` | ADR-010 매핑이 올바른가 | `length != 19` 시 `ERROR` |
 | **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm` 비교 | `load_manifest`에 기록된 적재 작업 기준월이 한 배치 안에서 갈라지는가 | manifest 대상 table의 distinct month가 2종 이상이면 `WARN` |
 
@@ -248,7 +288,7 @@ CREATE TABLE load_consistency_reports (
   scope          TEXT NOT NULL,            -- 'full' / 'sido:seoul' / 'recent:7d'
   started_at     TIMESTAMPTZ NOT NULL,
   finished_at    TIMESTAMPTZ,
-  source_set     JSONB NOT NULL,           -- {juso_yyyymm, locsum_yyyymm, navi_yyyymm, shp_yyyymm}
+  source_set     JSONB NOT NULL,           -- {juso_yyyymm, locsum_yyyymm, roadaddr_entrance_yyyymm, navi_yyyymm, shp_yyyymm}
   cases          JSONB NOT NULL,           -- {C1: {count, severity, sample: [...]}, C2: ...}
   severity_max   TEXT NOT NULL CHECK (severity_max IN ('OK','INFO','WARN','ERROR')),
   generated_by   TEXT                      -- 'cli' / 'api' / 'cron'
@@ -305,7 +345,11 @@ CREATE INDEX idx_juso_text_jibun
 -- 우편번호 polygon (reverse zipcode)
 CREATE INDEX idx_kodis_bas_geom ON tl_kodis_bas USING GIST (geom);
 
--- 출입구 nearest (reverse geocode) — 위치정보요약DB 텍스트 정본 사용
+-- direct 출입구 nearest (reverse geocode 1순위 후보)
+CREATE INDEX idx_roadaddr_entrc_geom ON tl_roadaddr_entrc USING GIST (geom);
+CREATE INDEX idx_roadaddr_entrc_bd   ON tl_roadaddr_entrc (bd_mgt_sn, ent_man_no);
+
+-- 출입구 nearest (reverse geocode 2순위 후보) — 위치정보요약DB 텍스트 정본 사용
 CREATE INDEX idx_locsum_geom ON tl_locsum_entrc USING GIST (geom);
 CREATE INDEX idx_locsum_bd   ON tl_locsum_entrc (bd_mgt_sn);
 CREATE INDEX idx_locsum_rep  ON tl_locsum_entrc (bd_mgt_sn, ent_se_cd, ent_man_no);  -- 대표 출입구 선택용
@@ -323,20 +367,29 @@ CREATE INDEX idx_juso_text_rn_trgm
 
 ## 평면화: `mv_geocode_target` (ADR-007, ADR-012)
 
-지오코딩이 사용하는 단일 머티리얼라이즈드 뷰. **텍스트 정본**(`tl_juso_text`)에 **대표 출입구 좌표**(`tl_locsum_entrc`)와 **centroid fallback**(`tl_navi_buld_centroid`)을 합쳐 단일 lookup으로 응답한다. `pt_source` 컬럼이 응답 좌표의 출처를 노출한다.
+지오코딩이 사용하는 단일 머티리얼라이즈드 뷰. **텍스트 정본**(`tl_juso_text`)에 **대표 출입구 좌표**(`tl_roadaddr_entrc` 또는 `tl_locsum_entrc`)와 **centroid fallback**(`tl_navi_buld_centroid`)을 합쳐 단일 lookup으로 응답한다. `pt_source` 컬럼이 응답 좌표의 큰 분류를 노출한다.
 
 ```sql
 CREATE MATERIALIZED VIEW mv_geocode_target AS
 WITH best_entrc AS (
-  -- ADR-007 대표 출입구 1건 선택 (ent_se_cd='0' 우선 → ent_man_no 오름차순)
+  -- ADR-024 direct entrance 우선 → ADR-007 locsum 대표 출입구 우선
   SELECT DISTINCT ON (bd_mgt_sn)
          bd_mgt_sn,
          ent_man_no,
          geom AS ent_pt_5179
-  FROM tl_locsum_entrc
-  ORDER BY bd_mgt_sn,
-           (CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END),
-           ent_man_no
+  FROM (
+    SELECT bd_mgt_sn, ent_man_no, geom, 0 AS source_priority, 0 AS rep_priority
+      FROM tl_roadaddr_entrc
+    UNION ALL
+    SELECT bd_mgt_sn,
+           ent_man_no,
+           geom,
+           1 AS source_priority,
+           CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
+      FROM tl_locsum_entrc
+     WHERE bd_mgt_sn IS NOT NULL
+  ) e
+  ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
 )
 SELECT
   j.bd_mgt_sn,
@@ -361,7 +414,7 @@ SELECT
   COALESCE(be.ent_pt_5179, nc.centroid_5179) AS pt_5179,
   ST_Transform(COALESCE(be.ent_pt_5179, nc.centroid_5179), 4326) AS pt_4326,
   CASE
-    WHEN be.ent_pt_5179 IS NOT NULL THEN 'entrance'   -- 위치정보요약DB 대표 출입구
+    WHEN be.ent_pt_5179 IS NOT NULL THEN 'entrance'   -- direct 또는 위치정보요약DB 대표 출입구
     WHEN nc.centroid_5179 IS NOT NULL THEN 'centroid' -- 내비게이션용DB 건물 중심
     ELSE NULL                                          -- 좌표 없음 (응답 시 status='NOT_FOUND' 또는 polygon centroid fallback)
   END AS pt_source
@@ -400,7 +453,7 @@ CREATE INDEX idx_mv_pt_source ON mv_geocode_target (pt_source);          -- entr
 -- shadow 빌드 (오프피크에 진행, 운영 조회는 mv_geocode_target에서 계속)
 DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target_next;
 CREATE MATERIALIZED VIEW mv_geocode_target_next AS
-  WITH best_entrc AS (...) -- 본 MV 정의와 동일 (ADR-007 대표 출입구 + centroid fallback)
+  WITH best_entrc AS (...) -- 본 MV 정의와 동일 (ADR-024 direct 우선 + ADR-007 대표 출입구 + centroid fallback)
   SELECT ... FROM tl_juso_text j
        LEFT JOIN best_entrc be ON ...
        LEFT JOIN tl_navi_buld_centroid nc ON ...
@@ -735,13 +788,13 @@ CREATE TABLE tl_juso_parcel_link (
 
 ## 별도 도형/출입구 원천 후보 (ADR-023)
 
-다음 자료는 현재 master table에 아직 적재하지 않는다. T-030 실제 세종 ZIP 검토 결과, 기준월과 레이어 의미가 현행 full-load 기본 source와 다르므로 후속 작업으로 분리한다.
+다음 자료는 T-030 실제 세종 ZIP 검토 결과, 기준월과 레이어 의미가 현행 full-load 기본 source와 달라 후속 작업으로 분리했다.
 
 | 자료 | 확인한 성격 | 후속 |
 |------|-------------|------|
-| `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트 | T-039 |
+| `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트 | T-039 완료. `tl_roadaddr_entrc`로 적재 |
 | `도로명주소 건물 도형` | `TL_SGCO_RNADR_MST` polygon, `TL_SPBD_ENTRC` point, `TL_SPOT_CNTC` polyline bundle | T-040 |
 | `건물군 내 상세주소 동 도형` | 상세주소 동 polygon + 동 출입구 point | T-041 |
 | `구역의 도형` | 전자지도 중복 행정구역 + `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA` 추가 | T-041 |
 
-이 후보들은 `mv_geocode_target`의 `bd_mgt_sn` unique 계약과 대표 좌표 의미를 바로 바꾸지 않는다. 후속 loader가 도입되면 기준월(`source_yyyymm`)과 기존 좌표 source와의 우선순위를 별도 ADR/정합성 케이스로 함께 정의한다.
+T-039는 `mv_geocode_target`의 `bd_mgt_sn` unique 계약을 유지한 채 direct entrance를 대표 좌표 1순위 후보로만 사용한다. T-040/T-041 후보는 아직 기본 full-load child에 포함하지 않는다.
