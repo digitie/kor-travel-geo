@@ -67,11 +67,12 @@
 - ✅ T-038 `tl_juso_parcel_link` DDL/로더 — `jibun_rnaddrkor_*` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 별도 1:N 테이블에 적재한다. CLI/API job kind/full-load batch/UI 기본 payload를 연결했고, Docker DB `kraddr_geo_t038`에서 실제 서울 `jibun` 2행과 daily LNBR 5행 적재를 검증했다. 상세: `docs/t038-parcel-link-loader.md`
 - ✅ T-039 `도로명주소 출입구 정보` direct entrance loader — `RNENTDATA_2605_*.txt`를 `tl_roadaddr_entrc`에 별도 적재하고, MV 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 실제 전국 17개 ZIP 6,418,169행 구조, 세종 유효 좌표 27,779행, Docker DB `kraddr_geo_t039` 샘플 적재와 MV 우선순위를 검증했다. 상세: `docs/t039-roadaddr-entrance-loader.md`
 - ✅ T-040 `도로명주소 건물 도형` bundle 비교 — 세종/경남 실제 address building bundle을 전자지도 `TL_SPBD_BULD`/`TL_SPBD_ENTRC`와 비교했다. address polygon key 교집합은 세종 15,339/27,792, 경남 345,290/656,230으로 단순 중복이 아니어서 serving loader는 보류하고 분석 후보로 분리했다. 상세: `docs/t040-building-shape-bundle.md`
+- ✅ T-041 상세주소 동 도형/구역 추가 레이어 검토 — 세종/경남 실제 `건물군 내 상세주소 동 도형`이 전자지도 `TL_SPBD_BULD`의 부분집합임을 확인했다. `구역의 도형`의 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복이고, `TL_SCCO_GEMD`/`TL_SPPN_MAKAREA`만 별도 overlay/분석 후보로 남긴다. 상세: `docs/t041-detail-zone-shape-layers.md`
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-T-040 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge한다. 그 다음 구현 작업은 T-041 상세주소 동 도형/구역 추가 레이어 검토다.
+T-041 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge한다. 그 다음 구현 작업은 T-037 geometry 포함 SHP 대형 레이어 적재 튜닝이다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
@@ -79,7 +80,7 @@ T-040 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있
 - T-035에서 `kraddr_geo_t033` MV는 여러 번 refresh/swap됐고 최종 상태는 `mv_geocode_target=6,416,637`, `mv_geocode_target_next/old` 없음, index 이름 `idx_mv_*` 정상이다.
 - `maplibre-vworld-js` upstream main 확인 커밋은 `c91c9f304669ce3f5fc4915f21186b23731d5816`이고, 현재 `kraddr-geo-ui`는 이 SHA에 맞춰져 있다. 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하므로 `kraddr-geo-ui/lib/vworld.ts`에서 기존 내부 이름으로 alias한다.
 - PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
-- `daily/*.zip`는 T-028 이후 MST를 `tl_juso_text`에 적용할 수 있고, T-038 이후 `LNBR`를 `tl_juso_parcel_link`에 별도 delta로 적용할 수 있다. `도로명주소 출입구 정보`는 T-039 이후 `tl_roadaddr_entrc`에 적재할 수 있으며 MV 대표 출입구 1순위 후보가 된다. `도로명주소 건물 도형`은 T-040 이후 분석 helper로 비교 가능하지만 serving loader는 보류한다. 남은 별도 도형 묶음은 T-041 후보로 분리했다.
+- `daily/*.zip`는 T-028 이후 MST를 `tl_juso_text`에 적용할 수 있고, T-038 이후 `LNBR`를 `tl_juso_parcel_link`에 별도 delta로 적용할 수 있다. `도로명주소 출입구 정보`는 T-039 이후 `tl_roadaddr_entrc`에 적재할 수 있으며 MV 대표 출입구 1순위 후보가 된다. `도로명주소 건물 도형`은 T-040 이후 분석 helper로 비교 가능하지만 serving loader는 보류한다. T-041 상세주소 동/구역 추가 레이어도 `scripts/compare_extra_shape_layers.py`로 비교 가능하지만 기본 full-load/MV에는 섞지 않는다.
 
 ## 작업 시작 전 확인할 것
 

@@ -180,5 +180,5 @@ KRADDR_GEO_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15432/kraddr_ge
 ## 남은 작업
 
 - T-040: 완료. `도로명주소 건물 도형` bundle과 전자지도 `TL_SPBD_BULD` 비교.
-- T-041: 상세주소 동 도형/구역 추가 레이어 검토.
+- T-041: 완료. 상세주소 동 도형과 구역 추가 레이어는 기본 full-load/MV에 섞지 않고 별도 overlay/분석 후보로 둔다.
 - T-027 최종 클린 적재: `tl_roadaddr_entrc`를 포함할지 운영 모드별로 분기하고, 포함 시 C10 기준월 경고와 C3/C4/C6/C7 변화량을 기록한다.

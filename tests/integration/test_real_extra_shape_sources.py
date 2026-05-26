@@ -9,6 +9,10 @@ from pathlib import Path
 import pytest
 
 from kraddr.geo.loaders.building_shape_bundle import compare_building_shape_bundle
+from kraddr.geo.loaders.extra_shape_layers import (
+    compare_detail_dong_shape_bundle,
+    compare_zone_shape_bundle,
+)
 
 DATA_ROOT = Path("data/juso")
 ALT_DATA_ROOTS = (
@@ -53,6 +57,52 @@ def test_actual_zone_zip_overlaps_electronic_map_and_adds_two_layers() -> None:
     assert layers["TL_SCCO_GEMD"].rows == 24
     assert layers["TL_SPPN_MAKAREA"].shape_type == "Polygon"
     assert layers["TL_SPPN_MAKAREA"].rows == 146
+
+
+def test_actual_detail_dong_sejong_is_electronic_building_subset() -> None:
+    comparison = compare_detail_dong_shape_bundle(
+        _require(
+            DATA_ROOT
+            / "건물군 내 상세주소 동 도형"
+            / "건물군내동도형_전체분_세종특별자치시.zip"
+        ),
+        _require(DATA_ROOT / "도로명주소 전자지도" / "세종특별자치시"),
+    )
+
+    assert comparison.detail_dong_layer.row_count == 40478
+    assert comparison.detail_entrance_layer.row_count == 4098
+    assert comparison.electronic_building_layer.row_count == 55819
+    assert comparison.detail_building_overlap.intersection_count == 40478
+    assert comparison.detail_building_overlap.left_only_count == 0
+    assert comparison.detail_building_overlap.right_only_count == 15341
+    assert comparison.address_management_stats.distinct_count == 12453
+    assert comparison.address_management_stats.duplicate_count == 28025
+    assert comparison.entrance_building_ref_overlap.left.row_count == 4098
+    assert comparison.entrance_building_ref_overlap.left.distinct_count == 2182
+    assert comparison.entrance_building_ref_overlap.left_only_count == 0
+    assert comparison.entrance_building_ref_overlap.right_only_count == 38296
+
+
+def test_actual_zone_sejong_duplicate_layers_are_exact_key_matches() -> None:
+    comparison = compare_zone_shape_bundle(
+        _require(DATA_ROOT / "구역의 도형" / "구역의도형_전체분_세종특별자치시.zip"),
+        _require(DATA_ROOT / "도로명주소 전자지도" / "세종특별자치시"),
+    )
+    overlaps = {item.layer_name: item.key_overlap for item in comparison.duplicate_layer_overlaps}
+
+    assert overlaps["TL_SCCO_CTPRVN"].intersection_count == 1
+    assert overlaps["TL_SCCO_SIG"].intersection_count == 1
+    assert overlaps["TL_SCCO_EMD"].intersection_count == 33
+    assert overlaps["TL_SCCO_LI"].intersection_count == 117
+    assert overlaps["TL_KODIS_BAS"].intersection_count == 155
+    assert all(item.left_only_count == 0 for item in overlaps.values())
+    assert all(item.right_only_count == 0 for item in overlaps.values())
+    assert comparison.gemd_layer.row_count == 24
+    assert comparison.gemd_emd_key_overlap.intersection_count == 0
+    assert comparison.gemd_emd_key_overlap.left_only_count == 24
+    assert comparison.gemd_emd_key_overlap.right_only_count == 33
+    assert comparison.makarea_layer.row_count == 146
+    assert comparison.makarea_key_stats.distinct_count == 146
 
 
 def test_actual_building_shape_zip_is_address_bundle_not_electronic_map_duplicate() -> None:
@@ -110,6 +160,45 @@ def test_actual_building_shape_bundle_gyeongnam_key_overlap_slow() -> None:
     assert comparison.entrance_key_overlap.right_only_count == 19
     assert comparison.connection_entrance_ref_overlap.intersection_count == 652660
     assert comparison.connection_entrance_ref_overlap.left_only_count == 0
+
+
+@pytest.mark.skipif(
+    getenv("KRADDR_GEO_SLOW_REAL_DATA") != "1",
+    reason="set KRADDR_GEO_SLOW_REAL_DATA=1 to scan the large Gyeongnam detail/zone DBFs",
+)
+def test_actual_detail_and_zone_gyeongnam_key_overlap_slow() -> None:
+    detail = compare_detail_dong_shape_bundle(
+        _require(
+            DATA_ROOT / "건물군 내 상세주소 동 도형" / "건물군내동도형_전체분_경상남도.zip"
+        ),
+        _require(DATA_ROOT / "도로명주소 전자지도" / "경상남도"),
+    )
+    zone = compare_zone_shape_bundle(
+        _require(DATA_ROOT / "구역의 도형" / "구역의도형_전체분_경상남도.zip"),
+        _require(DATA_ROOT / "도로명주소 전자지도" / "경상남도"),
+    )
+    zone_overlaps = {item.layer_name: item.key_overlap for item in zone.duplicate_layer_overlaps}
+
+    assert detail.detail_dong_layer.row_count == 923702
+    assert detail.electronic_building_layer.row_count == 1269029
+    assert detail.detail_building_overlap.intersection_count == 923702
+    assert detail.detail_building_overlap.left_only_count == 0
+    assert detail.detail_building_overlap.right_only_count == 345327
+    assert detail.address_management_stats.distinct_count == 310945
+    assert detail.address_management_stats.duplicate_count == 612757
+    assert detail.entrance_building_ref_overlap.left.distinct_count == 16260
+    assert detail.entrance_building_ref_overlap.right_only_count == 907442
+    assert zone_overlaps["TL_SCCO_SIG"].intersection_count == 22
+    assert zone_overlaps["TL_SCCO_EMD"].intersection_count == 546
+    assert zone_overlaps["TL_SCCO_LI"].intersection_count == 1832
+    assert zone_overlaps["TL_KODIS_BAS"].intersection_count == 2338
+    assert all(item.left_only_count == 0 for item in zone_overlaps.values())
+    assert all(item.right_only_count == 0 for item in zone_overlaps.values())
+    assert zone.gemd_layer.row_count == 305
+    assert zone.gemd_emd_key_overlap.left_only_count == 305
+    assert zone.gemd_emd_key_overlap.right_only_count == 546
+    assert zone.makarea_layer.row_count == 3486
+    assert zone.makarea_key_stats.distinct_count == 3486
 
 
 def test_actual_road_address_entrance_zip_is_direct_text_with_bd_mgt_sn_and_5179_point() -> None:

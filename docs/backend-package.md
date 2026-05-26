@@ -467,10 +467,10 @@ API job kind는 `roadaddr_entrance_load`다. payload는 다른 경로 기반 loa
 
 #### 별도 도형 묶음 (T-030 후속)
 
-`건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`은 현재 full-load source child에 포함하지 않는다. T-030/T-040 실제 파일 검토 결과, 이 자료들은 기준월과 레이어 의미가 다르므로 기본 serving path에 즉시 섞지 않고 후속 분석 대상으로 분리했다.
+`건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`은 현재 full-load source child에 포함하지 않는다. T-030/T-041 실제 파일 검토 결과, 이 자료들은 기준월과 레이어 의미가 다르므로 기본 serving path에 즉시 섞지 않고 후속 분석 대상으로 분리했다.
 
 - T-040: 완료. `도로명주소 건물 도형` address polygon/entrance/connection bundle은 `scripts/compare_building_shape_bundle.py`로 전자지도와 비교할 수 있지만, serving loader는 보류한다.
-- T-041: 상세주소 동 도형과 `구역의 도형` 추가 레이어(`TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`) 검토.
+- T-041: 완료. 상세주소 동 도형은 `scripts/compare_extra_shape_layers.py`로 전자지도 건물과 비교할 수 있고, `구역의 도형`은 중복 5개 레이어와 추가 2개 레이어를 구분해 비교할 수 있다. 둘 다 기본 full-load/MV에는 섞지 않는다.
 
 상세 근거는 ADR-023과 `docs/t030-extra-shape-sources.md`를 본다.
 
