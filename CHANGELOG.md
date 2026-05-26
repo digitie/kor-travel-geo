@@ -58,6 +58,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
+- T-040 `도로명주소 건물 도형` bundle 비교 helper를 추가한다. 실제 세종/경남 `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`를 전자지도 `TL_SPBD_BULD`/`TL_SPBD_ENTRC`와 natural key로 비교했고, 단순 중복이 아니므로 현행 serving table에는 섞지 않기로 ADR-025에서 결정했다.
 - T-039 `도로명주소 출입구 정보` direct entrance loader를 추가한다. `RNENTDATA_2605_*.txt`를 `tl_roadaddr_entrc`에 적재하고, `mv_geocode_target` 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 실제 전국 17개 ZIP 6,418,169행 구조와 세종 Docker DB 샘플 적재를 검증했으며, 202605 기준월 특성상 기본 full-load child에는 자동 포함하지 않는다.
 - T-038 `tl_juso_parcel_link` DDL/로더를 추가한다. `jibun_rnaddrkor_*` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 건물↔지번 1:N 테이블에 적재하고, CLI `load parcel-links`/`load daily-parcel-links`, API job kind `juso_parcel_link_load`/`juso_parcel_link_delta`, full-load batch 기본 child, 관리 UI 기본 payload를 연결했다.
 - T-030 별도 도형/출입구 자료 검토를 추가한다. 세종 실제 ZIP 기준으로 상세주소 동 도형, 구역의 도형, 도로명주소 건물 도형, 도로명주소 출입구 정보의 layer/geometry/text 구조를 확인하고, 기본 full-load에는 즉시 섞지 않고 T-039~T-041로 분리하기로 ADR-023에서 확정했다.

@@ -6,12 +6,12 @@
 - 없음
 
 ## 대기 (우선순위 순)
-- T-040 `도로명주소 건물 도형` bundle 비교 — `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`를 전자지도 `TL_SPBD_BULD`와 비교해 loader 필요성을 결정한다.
 - T-041 상세주소 동 도형/구역 추가 레이어 검토 — `건물군 내 상세주소 동 도형`, `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`의 디버그 UI/상세주소 기능 활용 여부를 결정한다.
 - T-037 geometry 포함 SHP 대형 레이어 적재 튜닝 — `TL_SPBD_BULD` 등 도형 포함 레이어의 GDAL append 병목을 `PG_USE_COPY`, staging table, layer별 옵션 조합으로 실험하고 실제 세종/경기도 기준 시간을 문서화한다.
 - T-027 최종 실 데이터 클린 적재 검증 — 남은 튜닝/증분/보조 로더 작업을 모두 머지한 뒤 Docker DB를 삭제하고 처음부터 다시 적재한다. C1~C10 정합성, geocode/reverse/search/zipcode smoke test, data-quality export, 성능 로그를 최종 회귀 기준으로 남긴다. 상세: `docs/t027-fullload-plan.md`
 
 ## 완료
+- [x] T-040 `도로명주소 건물 도형` bundle 비교. 세종/경남 실제 `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`를 전자지도 `TL_SPBD_BULD`/`TL_SPBD_ENTRC`와 natural key로 비교했고, 단순 중복이 아니므로 현행 serving table에는 섞지 않기로 ADR-025에서 결정했다. 비교 helper/script와 실제 파일 테스트를 추가했다. 상세: `docs/t040-building-shape-bundle.md` (2026-05-26)
 - [x] T-039 `도로명주소 출입구 정보` direct entrance loader 구현. `RNENTDATA_2605_*.txt`를 `tl_roadaddr_entrc`에 별도 적재하고, MV 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 실제 전국 17개 ZIP 6,418,169행 구조, 세종 유효 좌표 27,779행, Docker DB 샘플 적재와 MV 우선순위를 검증했다. 상세: `docs/t039-roadaddr-entrance-loader.md` (2026-05-26)
 - [x] T-038 `tl_juso_parcel_link` DDL/로더 구현. `jibun_rnaddrkor_*` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 별도 1:N 테이블에 적재하고, CLI/API job kind/full-load batch/UI 기본 payload를 연결했다. 실제 Docker DB에서 `jibun_rnaddrkor_seoul.txt`와 `20260401_dailyjusukrdata.zip` LNBR 샘플 적재를 검증했다. 상세: `docs/t038-parcel-link-loader.md` (2026-05-26)
 - [x] T-030 상세주소 동 도형/별도 건물 도형 로더 검토. 세종 실제 ZIP 기준으로 `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`의 layer/geometry/text 구조를 확인하고, 기본 full-load에 즉시 섞지 않고 T-039~T-041로 분리하기로 ADR-023에서 확정했다. 상세: `docs/t030-extra-shape-sources.md` (2026-05-26)

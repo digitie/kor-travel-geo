@@ -3,9 +3,12 @@ from __future__ import annotations
 import struct
 import zipfile
 from dataclasses import dataclass
+from os import getenv
 from pathlib import Path
 
 import pytest
+
+from kraddr.geo.loaders.building_shape_bundle import compare_building_shape_bundle
 
 DATA_ROOT = Path("data/juso")
 ALT_DATA_ROOTS = (
@@ -67,6 +70,46 @@ def test_actual_building_shape_zip_is_address_bundle_not_electronic_map_duplicat
     assert layers["TL_SPBD_ENTRC"].rows == 28111
     assert layers["TL_SPOT_CNTC"].shape_type == "PolyLine"
     assert layers["TL_SPOT_CNTC"].rows == 27776
+
+
+def test_actual_building_shape_bundle_sejong_key_overlap_is_not_simple_duplicate() -> None:
+    comparison = compare_building_shape_bundle(
+        _require(DATA_ROOT / "도로명주소 건물 도형" / "건물도형_전체분_세종특별자치시.zip"),
+        _require(DATA_ROOT / "도로명주소 전자지도" / "세종특별자치시"),
+    )
+
+    assert comparison.bundle_address_layer.row_count == 27792
+    assert comparison.electronic_building_layer.row_count == 55819
+    assert comparison.address_key_overlap.intersection_count == 15339
+    assert comparison.address_key_overlap.left_only_count == 12453
+    assert comparison.address_key_overlap.right_only_count == 40480
+    assert comparison.entrance_key_overlap.intersection_count == 27766
+    assert comparison.entrance_key_overlap.left_only_count == 345
+    assert comparison.entrance_key_overlap.right_only_count == 21
+    assert comparison.connection_entrance_ref_overlap.intersection_count == 27774
+    assert comparison.connection_entrance_ref_overlap.left_only_count == 2
+
+
+@pytest.mark.skipif(
+    getenv("KRADDR_GEO_SLOW_REAL_DATA") != "1",
+    reason="set KRADDR_GEO_SLOW_REAL_DATA=1 to scan the large Gyeongnam DBFs",
+)
+def test_actual_building_shape_bundle_gyeongnam_key_overlap_slow() -> None:
+    comparison = compare_building_shape_bundle(
+        _require(DATA_ROOT / "도로명주소 건물 도형" / "건물도형_전체분_경상남도.zip"),
+        _require(DATA_ROOT / "도로명주소 전자지도" / "경상남도"),
+    )
+
+    assert comparison.bundle_address_layer.row_count == 656230
+    assert comparison.electronic_building_layer.row_count == 1269029
+    assert comparison.address_key_overlap.intersection_count == 345290
+    assert comparison.address_key_overlap.left_only_count == 310940
+    assert comparison.address_key_overlap.right_only_count == 923739
+    assert comparison.entrance_key_overlap.intersection_count == 656114
+    assert comparison.entrance_key_overlap.left_only_count == 5302
+    assert comparison.entrance_key_overlap.right_only_count == 19
+    assert comparison.connection_entrance_ref_overlap.intersection_count == 652660
+    assert comparison.connection_entrance_ref_overlap.left_only_count == 0
 
 
 def test_actual_road_address_entrance_zip_is_direct_text_with_bd_mgt_sn_and_5179_point() -> None:

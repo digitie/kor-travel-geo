@@ -793,8 +793,8 @@ CREATE TABLE tl_juso_parcel_link (
 | 자료 | 확인한 성격 | 후속 |
 |------|-------------|------|
 | `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트 | T-039 완료. `tl_roadaddr_entrc`로 적재 |
-| `도로명주소 건물 도형` | `TL_SGCO_RNADR_MST` polygon, `TL_SPBD_ENTRC` point, `TL_SPOT_CNTC` polyline bundle | T-040 |
+| `도로명주소 건물 도형` | `TL_SGCO_RNADR_MST` polygon, `TL_SPBD_ENTRC` point, `TL_SPOT_CNTC` polyline bundle | T-040 완료. 단순 중복이 아니므로 별도 분석 후보로 유지 |
 | `건물군 내 상세주소 동 도형` | 상세주소 동 polygon + 동 출입구 point | T-041 |
 | `구역의 도형` | 전자지도 중복 행정구역 + `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA` 추가 | T-041 |
 
-T-039는 `mv_geocode_target`의 `bd_mgt_sn` unique 계약을 유지한 채 direct entrance를 대표 좌표 1순위 후보로만 사용한다. T-040/T-041 후보는 아직 기본 full-load child에 포함하지 않는다.
+T-039는 `mv_geocode_target`의 `bd_mgt_sn` unique 계약을 유지한 채 direct entrance를 대표 좌표 1순위 후보로만 사용한다. T-040은 address building bundle의 natural key overlap을 비교한 결과 단순 중복이 아니라고 결론냈지만, 현행 serving table에는 섞지 않는다. T-041 후보도 아직 기본 full-load child에 포함하지 않는다.
