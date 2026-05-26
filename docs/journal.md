@@ -2,6 +2,42 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-039 — PR 전 검증 보강)
+
+**작업**: T-039 PR 생성 전 전체 검증을 돌리며 문서/DDL/테스트 계약을 보강했다.
+
+**반영 상세**:
+- 기본 DDL 문자열(`sql/ddl/001_schema.sql`, `infra/sql.py`)에서 `tl_roadaddr_entrc.ent_man_no`를 Alembic 0005와 동일하게 nullable로 맞췄다. 반대로 기존 `tl_locsum_entrc.ent_man_no`는 `sig_cd + ent_man_no` PK이므로 `NOT NULL`을 유지한다.
+- `tests/unit/test_consistency_sql.py`는 T-039의 `serving_entrc` CTE와 `source_kind` sample을 검증하도록 갱신했다.
+- `docs/backend-package.md`, `docs/t039-roadaddr-entrance-loader.md`, `README.md`에 T-039 이전 MV가 있는 DB에서는 direct 출입구 적재 뒤 `kraddr-geo refresh mv --swap`을 권장한다고 명시했다.
+
+**검증**:
+- `python -m pytest -q` → 141 passed, 3 skipped.
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check --output openapi.json`, `git diff --check` → 통과.
+- Docker PostGIS `localhost:15432`의 새 `kraddr_geo_t039` DB에서 `tests/integration/test_optional_real_postgres_load.py` → 1 passed in 2.86s.
+- `kraddr-geo-ui`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
+
+## 2026-05-26 (T-039 — `도로명주소 출입구 정보` direct entrance loader)
+
+**작업**: PR #28 merge 이후 `codex/t039-direct-entrance-loader` 브랜치에서 `RNENTDATA_2605_*.txt` direct entrance 원천을 적재하는 T-039를 구현했다.
+
+**반영 상세**:
+- `tl_roadaddr_entrc` 테이블과 Alembic `0005_t039_roadaddr_entrance_table`을 추가했다. 실제 파일에서 `ent_man_no`가 비는 행이 있어 PK는 `bd_mgt_sn` 단독으로 두고, `ent_man_no`는 nullable 원천 보존 필드로 둔다.
+- `src/kraddr/geo/loaders/text/roadaddr_entrance_loader.py`를 추가했다. 디렉터리 입력 시 17개 ZIP 내부의 `RNENTDATA_*.txt` member를 직접 발견하고, 좌표 결측/`0/0` sentinel row는 skip한다.
+- CLI `kraddr-geo load roadaddr-entrances`와 API job kind `roadaddr_entrance_load`를 추가했다.
+- `mv_geocode_target` 대표 좌표 선택 순서를 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid`로 바꿨다. 응답 호환성을 위해 direct entrance도 기존 `pt_source='entrance'`로 둔다.
+- C3/C4/C6/C7/C8 정합성 SQL은 `tl_roadaddr_entrc`와 `tl_locsum_entrc`를 합친 대표 출입구 CTE를 사용하게 했고, C10 기준월 비교에 `tl_roadaddr_entrc`를 포함했다.
+
+**실제 파일/DB 검증**:
+- 전국 17개 ZIP을 직접 읽어 총 6,418,169행, 모든 행 19컬럼, `ent_source_cd='RM'`, `ent_detail_cd='01'`을 확인했다.
+- 세종 ZIP은 원천 27,868행, distinct `bd_mgt_sn` 27,868, 빈 `ent_man_no` 9건, 유효 좌표 적재 대상 27,779행이었다.
+- 경남 ZIP은 원천 657,845행, distinct `bd_mgt_sn` 657,845, 빈 `ent_man_no` 100건이었다.
+- Docker PostGIS `localhost:15432`에 `kraddr_geo_t039` DB를 만들고 선택형 실제 적재 테스트를 실행했다. 결과는 `1 passed in 2.74s`이며 세종 RNENTDATA 3행이 `tl_roadaddr_entrc`와 `load_manifest`에 반영됐고, MV의 `pt_5179`가 direct entrance 좌표를 사용함을 확인했다.
+- 대상 테스트 `tests/unit/test_roadaddr_entrance_loader.py`, `tests/integration/test_real_roadaddr_entrance_files.py`, schema/batch/CLI 계약 테스트 → 29 passed.
+- 대상 `ruff check`와 `mypy src/kraddr/geo` → 통과.
+
+**다음 작업**: 전체 검증과 frontend/OpenAPI drift 확인 후 PR을 열어 20분 리뷰 대기한다.
+
 ## 2026-05-26 (T-038 — `tl_juso_parcel_link` DDL/로더 구현)
 
 **작업**: PR #27 merge 이후 `codex/t038-parcel-link-loader` 브랜치에서 ADR-022의 보조 지번 1:N 테이블을 실제 구현했다.

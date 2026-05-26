@@ -16,7 +16,9 @@ BATCH_SOURCE_KINDS: tuple[str, ...] = (
     "pobox_load",
 )
 
-PATH_REQUIRED_KINDS: frozenset[str] = frozenset((*BATCH_SOURCE_KINDS, "bulk_load"))
+PATH_REQUIRED_KINDS: frozenset[str] = frozenset(
+    (*BATCH_SOURCE_KINDS, "roadaddr_entrance_load", "bulk_load")
+)
 PATH_KEYS: tuple[str, ...] = ("path", "source_path")
 
 

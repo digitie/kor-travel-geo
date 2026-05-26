@@ -19,7 +19,7 @@
 
 | 자료 | 결정 | 후속 |
 |------|------|------|
-| `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트라 가장 유용한 보완 후보 | T-039 direct entrance loader 검토 |
+| `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트라 가장 유용한 보완 후보 | T-039 완료. `tl_roadaddr_entrc` 선택 적재 |
 | `도로명주소 건물 도형` | 주소 단위 polygon/entrance/connection bundle. 전자지도 `TL_SPBD_BULD` 단순 중복이 아님 | T-040 address building bundle loader 검토 |
 | `건물군 내 상세주소 동 도형` | 상세주소 동/동 출입구 레벨. 주소 대표 좌표보다 세밀한 UI/품질 분석용 | T-041 상세주소 동 도형 loader 검토 |
 | `구역의 도형` | 기존 전자지도 행정구역/기초구역과 대부분 중복, `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA` 추가 | T-041 또는 관리 UI용 low priority |
@@ -90,14 +90,14 @@ ZIP 안에는 SHP가 아니라 `RNENTDATA_2605_36110.txt` 하나가 있다. 첫 
 | 15~16 | 출입구/좌표 구분 코드 | 예: `RM`, `01` |
 | 17~18 | EPSG:5179 X/Y | meter 좌표 |
 
-이 자료는 `tl_locsum_entrc`와 달리 `bd_mgt_sn`을 직접 제공한다. 따라서 위치정보요약DB의 natural key 후해소가 실패하는 건이나 C4 이상치 분석에 직접 보완 후보가 된다. 다만 기존 `tl_locsum_entrc`, `tl_navi_entrc`, `TL_SPBD_ENTRC`와 어떤 우선순위로 병합할지 별도 검증이 필요하다.
+이 자료는 `tl_locsum_entrc`와 달리 `bd_mgt_sn`을 직접 제공한다. 따라서 위치정보요약DB의 natural key 후해소가 실패하는 건이나 C4 이상치 분석에 직접 보완 후보가 된다. T-039에서 별도 테이블 `tl_roadaddr_entrc`와 loader를 추가했고, MV 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 다만 기준월이 `202605`라 기본 full-load 6종에는 자동 포함하지 않고 명시적 선택 적재로 둔다.
 
 ## 결정
 
 ADR-023:
 
 1. 현재 full-load source child에는 네 자료를 추가하지 않는다.
-2. `도로명주소 출입구 정보`를 가장 먼저 후속 후보(T-039)로 둔다. direct `bd_mgt_sn + 5179 point`라 현재 결측/이상치 분석에 바로 도움이 될 수 있다.
+2. `도로명주소 출입구 정보`는 T-039에서 구현했다. direct `bd_mgt_sn + 5179 point`라 현재 결측/이상치 분석에 바로 도움이 될 수 있지만, 기준월 차이 때문에 기본 full-load 자동 포함은 제외한다.
 3. `도로명주소 건물 도형`은 T-040에서 전자지도 `TL_SPBD_BULD`와의 차이를 세종/경남 기준으로 비교한 뒤 loader 여부를 결정한다.
 4. 상세주소 동 도형과 구역 추가 레이어는 serving API가 아니라 디버그 UI/품질 분석/상세주소 기능이 필요할 때 T-041로 분리한다.
 5. 모든 후속 loader는 `source_yyyymm` 기준월을 명시하고, 현재 full-load 기준월과 섞을 때 C10 또는 별도 consistency note로 드러나야 한다.
@@ -123,6 +123,6 @@ ADR-023:
 
 ## 다음 작업
 
-- T-039: `도로명주소 출입구 정보` direct entrance text loader 검토/구현.
+- T-039: 완료. `도로명주소 출입구 정보` direct entrance text loader와 `tl_roadaddr_entrc` 선택 적재 구현.
 - T-040: `도로명주소 건물 도형` bundle과 전자지도 `TL_SPBD_BULD` 차이 분석.
 - T-041: 상세주소 동 도형과 구역 추가 레이어의 디버그 UI/품질 분석 활용 여부 결정.

@@ -22,6 +22,13 @@ CREATE INDEX IF NOT EXISTS idx_locsum_rep
 CREATE INDEX IF NOT EXISTS idx_locsum_resolve
   ON tl_locsum_entrc (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no);
 
+CREATE INDEX IF NOT EXISTS idx_roadaddr_entrc_geom
+  ON tl_roadaddr_entrc USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_roadaddr_entrc_bd
+  ON tl_roadaddr_entrc (bd_mgt_sn, ent_man_no);
+CREATE INDEX IF NOT EXISTS idx_roadaddr_entrc_road
+  ON tl_roadaddr_entrc (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
+
 CREATE INDEX IF NOT EXISTS idx_navi_centroid_geom
   ON tl_navi_buld_centroid USING GIST (centroid_5179);
 CREATE INDEX IF NOT EXISTS idx_navi_entrc_geom

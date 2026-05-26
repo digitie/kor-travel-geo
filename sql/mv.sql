@@ -9,11 +9,37 @@ WITH best_entrc AS (
          bd_mgt_sn,
          ent_man_no,
          geom AS ent_pt_5179
-    FROM tl_locsum_entrc
-   WHERE bd_mgt_sn IS NOT NULL
+    FROM (
+      SELECT bd_mgt_sn, ent_man_no, geom, 0 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+      UNION ALL
+      SELECT bd_mgt_sn,
+             ent_man_no,
+             geom,
+             1 AS source_priority,
+             CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
+        FROM tl_locsum_entrc
+       WHERE bd_mgt_sn IS NOT NULL
+    ) e
    ORDER BY bd_mgt_sn,
-            CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END,
-            ent_man_no
+            source_priority,
+            rep_priority,
+            ent_man_no NULLS LAST
+),
+best_navi AS (
+  SELECT DISTINCT ON (
+         rncode_full, buld_se_cd, buld_mnnm, buld_slno, left(bjd_cd, 8)
+         )
+         rncode_full,
+         buld_se_cd,
+         buld_mnnm,
+         buld_slno,
+         left(bjd_cd, 8) AS bjd_emd_cd,
+         centroid_5179
+    FROM tl_navi_buld_centroid
+   WHERE rncode_full IS NOT NULL
+     AND bjd_cd IS NOT NULL
+   ORDER BY rncode_full, buld_se_cd, buld_mnnm, buld_slno, left(bjd_cd, 8), bd_mgt_sn
 )
 SELECT
   j.bd_mgt_sn,
@@ -49,7 +75,12 @@ SELECT
   END AS pt_source
 FROM tl_juso_text j
 LEFT JOIN best_entrc be ON be.bd_mgt_sn = j.bd_mgt_sn
-LEFT JOIN tl_navi_buld_centroid nc ON nc.bd_mgt_sn = j.bd_mgt_sn
+LEFT JOIN best_navi nc
+  ON nc.rncode_full = j.rncode_full
+ AND nc.buld_se_cd IS NOT DISTINCT FROM j.buld_se_cd
+ AND nc.buld_mnnm IS NOT DISTINCT FROM j.buld_mnnm
+ AND nc.buld_slno IS NOT DISTINCT FROM j.buld_slno
+ AND nc.bjd_emd_cd = left(j.bjd_cd, 8)
 WITH DATA;
 
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);

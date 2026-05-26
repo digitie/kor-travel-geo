@@ -49,6 +49,7 @@ def downgrade() -> None:
         "tl_scco_ctprvn",
         "tl_navi_entrc",
         "tl_navi_buld_centroid",
+        "tl_roadaddr_entrc",
         "tl_locsum_entrc",
         "tl_juso_parcel_link",
         "tl_juso_text",
