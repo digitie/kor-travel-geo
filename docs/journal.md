@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (문서 정합성 재검토와 task 순서 재정렬)
+
+**작업**: 사용자 지시에 따라 `main` 최신 문서와 실제 CLI/최근 ADR 사이의 불일치를 전체적으로 재검토하고 문서에 반영했다. 코드는 작성하지 않았다.
+
+**반영 상세**:
+- README/SKILL의 현재 상태와 quick start를 갱신했다. `load all-sidos` 예시는 실제 CLI 옵션(`--juso`, `--jibun`, `--locsum`, `--navi`, `--shp-root`, `--yyyymm`) 기준으로 바꿨다.
+- 현재형 문서의 브랜치 표현을 `master`에서 `main`으로 바로잡았다. 단, `master table` 같은 DB 도메인 용어와 과거 작업 일지의 역사적 표현은 유지했다.
+- `SKILL.md`의 “백엔드만 다룬다” 설명을 같은 저장소 안의 별도 Node.js 패키지 `kraddr-geo-ui`를 함께 관리한다는 설명으로 정리했다.
+- T-046 백업 artifact metadata는 신규 구현에서 `ops.artifacts`로 수렴한다는 ADR-033 방향을 `docs/architecture.md`, `docs/t046-db-backup-restore.md`, `docs/decisions.md`에 맞췄다.
+- `docs/tasks.md`와 `docs/resume.md`의 후속 순서를 T-043 → T-049 → T-045 → T-046 → T-042 → T-027 → T-047 → T-044로 재정렬했다. 데이터·운영 gate를 먼저 안정화한 뒤 지도 UI 경계화를 진행하는 순서다.
+- 점검표와 남겨 둔 범위는 `docs/doc-consistency-audit-20260527.md`에 기록했다.
+
+**검증**:
+- `git diff --check` 통과.
+- 현재 환경에는 `python` alias, `pytest`, `ruff`, `uv`가 없어 `pytest`/`ruff` 게이트는 실행하지 못했다. 후속 구현 작업 전 가상환경 복구가 필요하다.
+
 ## 2026-05-27 (README 법적 고지 — AI 활용 학습 목적과 데이터 준수 표기)
 
 **작업**: 사용자 지시에 따라 README의 법적 고지에 프로젝트 목적과 데이터 사용 준수 원칙을 명시했다.

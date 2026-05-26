@@ -8,7 +8,7 @@
 **도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 한국 주소 지오코딩 라이브러리·REST API**입니다. vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 지원합니다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kraddr-geo-ui`](docs/frontend-package.md)로 운영합니다.
 
 > [!NOTE]
-> **현재 상태**: `master` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드 핵심(T-005~T-020)과 디버그/관리 UI 및 운영 관측(T-021~T-026) 파이프라인을 포함하고 있습니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
+> **현재 상태**: `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다. T-005~T-041 구현·실데이터 검증 기록과 T-042~T-049 후속 운영/성능/자료 보강 계획이 문서화되어 있습니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
 
 ---
 
@@ -55,9 +55,14 @@ docker compose up -d postgres              # postgis/postgis:16-3.4
 # 스키마 적용
 kraddr-geo init-db
 
-# 전국 적재 (시도별 ZIP 분할 적재)
-kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
-    --pg-conn "host=localhost dbname=kraddr_geo user=addr password=..."
+# 전국 적재 (텍스트 원천 + 선택 SHP, 현재 CLI 옵션 형태)
+kraddr-geo load all-sidos \
+    --juso "./data/juso/도로명주소 한글_전체분" \
+    --jibun "./data/juso/도로명주소 한글_전체분" \
+    --locsum "./data/juso/위치정보요약DB" \
+    --navi "./data/juso/내비게이션용DB" \
+    --shp-root "./data/jusoMap/202605" \
+    --yyyymm 202605
 
 # full-load 이후 일변동 ZIP 적용
 kraddr-geo load daily-juso ./data/juso/daily/20260401_dailyjusukrdata.zip
@@ -156,6 +161,7 @@ asyncio.run(main())
 | **ADR-029** | 원천 자료 기준월은 source set으로 명시하고 혼합 적재는 확인 절차를 거침 |
 | **ADR-030** | 적재 완료 DB 백업/복원은 병렬 directory dump + 압축 아카이브로 수행 |
 | **ADR-031** | 전국 적재 후 쿼리 성능은 반복 벤치마크로 gate하고 보조 view/MV 도입을 허용 |
+| **ADR-032** | `maplibre-vworld-js`는 최신으로 소비하고 `kraddr-geo` 특화 기능은 이 저장소에서 구현 |
 | **ADR-033** | 운영 메타데이터는 `ops` 스키마의 감사·스냅샷·릴리스 테이블로 관리 |
 
 전체 ADR 본문은 [`docs/decisions.md`](docs/decisions.md)에서 확인하실 수 있습니다.

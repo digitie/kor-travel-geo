@@ -2,7 +2,7 @@
 
 `kraddr-geo` 백엔드와 `kraddr-geo-ui` 프론트엔드는 별도 패키지지만 한 시스템을 구성한다. 아래 순서대로 읽으면 큰 그림에서 세부로 자연스럽게 내려간다.
 
-> 이전 SpatiaLite 기반 `kraddr.geo` 구현은 `v1` 브랜치에 보존되어 있다. master는 PostgreSQL + PostGIS 기반 새 사양으로 처음부터 다시 짓는다(ADR-001).
+> 이전 SpatiaLite 기반 `kraddr.geo` 구현은 `v1` 브랜치에 보존되어 있다. `main`은 PostgreSQL + PostGIS 기반 새 사양으로 처음부터 다시 짓는다(ADR-001).
 
 ## 1. 큰 그림
 
