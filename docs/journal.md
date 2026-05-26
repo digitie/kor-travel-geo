@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-048 — `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의)
+
+**작업**: 사용자 지시에 따라 `maplibre-vworld-js` 사용 시 항상 최신 버전을 확인하고, 이 라이브러리의 특화 기능은 upstream `vworld.js`가 아니라 `kraddr-geo-ui` 쪽에서 구현한다는 원칙을 문서와 dependency에 반영했다.
+
+**반영 상세**:
+- `git ls-remote https://github.com/digitie/maplibre-vworld-js.git refs/heads/main`으로 upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`을 확인했다.
+- `kraddr-geo-ui/package.json`과 `package-lock.json`의 `maplibre-vworld` dependency를 최신 확인 SHA로 갱신했다. CI에서 SSH key 없이 설치되도록 dependency와 lockfile `resolved`는 `git+https` 형식을 유지한다.
+- ADR-032를 추가했다. VWorld layer/style, marker/popup/cluster primitive, tile error redaction, package export/type/CSS처럼 범용 기능은 `digitie/maplibre-vworld-js`에서 보강하고, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 fallback UX는 `kraddr-geo-ui` domain wrapper에서 구현한다.
+- `README.md`, `docs/architecture.md`, `docs/frontend-package.md`, `docs/external-apis.md`, `docs/tasks.md`, `docs/resume.md`, `docs/t036-maplibre-vworld-sync.md`, `CHANGELOG.md`를 같은 방향으로 갱신했다.
+
+**결정**:
+- `maplibre-vworld` dependency를 건드리는 PR은 최신 `main` 또는 stable release 확인 결과를 남긴다.
+- upstream에 보낼 것은 범용 VWorld/MapLibre 기능이며, 주소 지오코딩 디버그/관리 UI에만 의미가 있는 기능은 이 저장소에서 구현한다.
+- SHA 갱신 후에는 `kraddr-geo-ui`에서 `npm ci`, lint, type-check, test, build를 재검증한다.
+
 ## 2026-05-26 (T-047 등록 — 전국 적재 후 쿼리 성능 벤치마크와 튜닝 설계)
 
 **작업**: 사용자 지시에 따라 전국 전체 적재 이후 지오코딩/역지오코딩/검색 쿼리 속도를 다수 반복 측정하고, 병목이 있으면 보조 view/materialized view까지 적극 도입하는 성능 튜닝 계획을 문서화했다. 코드는 작성하지 않았다.

@@ -5,10 +5,11 @@
 ## [Unreleased]
 
 ### Fixed
+- T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의: `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`로 갱신한다. ADR-032를 추가해 VWorld layer/style, marker primitive, tile error redaction, 패키징/타입처럼 범용 기능은 `digitie/maplibre-vworld-js`에서 보강하고, geocode/reverse 입력 연결, API 응답 overlay, 정합성·성능·적재 상태 표시, 이 프로젝트 fallback UX는 `kraddr-geo-ui` domain wrapper에서 구현하도록 명시한다.
 - T-047 문서/계획 추가: 전국 full-load 후 지오코딩/역지오코딩/검색 쿼리를 다수 반복 측정해 p50/p95/p99, `EXPLAIN ANALYZE`, buffer, 동시성 결과로 튜닝하는 ADR-031을 정리한다. 속도를 최우선 gate로 두고, 필요하면 인덱스와 SQL 재작성뿐 아니라 read-only 보조 view/materialized view도 적극 도입하는 방향을 문서화한다. 코드는 아직 작성하지 않는다.
 - T-046 문서/계획 추가: 적재 완료 PostgreSQL/PostGIS DB를 `pg_dump -Fd --jobs` directory dump와 `tar.zst` 압축 아카이브로 백업하고, 새 빈 DB에 `pg_restore -Fd --jobs`로 복원하는 설계를 ADR-030으로 정리한다. 백그라운드 진행률, 취소, 완료 callback, UI 다운로드 링크, 대구광역시 부분 적재 기반 검증 시나리오를 문서화한다. 코드는 아직 작성하지 않는다.
 - T-045 문서/계획 추가: 원천별 업데이트 시점이 달라 같은 기준월이 아닐 수 있음을 ADR-029로 정리하고, `source_set` 기반 기준월 선택, CLI mismatch 확인 UX, API/라이브러리 발견/계획 함수 분리, UI 다중 파일/DND 업로드와 업로드/적재 진행률·취소 설계를 문서화한다.
-- VWorld 문서/계획 보강: 디버그 UI를 `maplibre-vworld-js`의 `VWorldMap` 또는 동등한 Hook/component로 완전히 포팅하는 T-044를 추가하고, ADR-028을 통해 부족한 기능은 `python-kraddr-geo`에서 우회하지 않고 `digitie/maplibre-vworld-js`를 적극 수정한 뒤 검증된 SHA로 소비하도록 정리한다.
+- VWorld 문서/계획 보강: 디버그 UI를 `maplibre-vworld-js`의 `VWorldMap` 또는 동등한 Hook/component 기반 domain wrapper로 경계화하는 T-044를 추가하고, ADR-028을 통해 부족한 범용 기능은 `python-kraddr-geo`에서 우회하지 않고 `digitie/maplibre-vworld-js`를 적극 수정한 뒤 검증된 SHA로 소비하도록 정리한다.
 - T-041 문서 보강: `TL_SPPN_MAKAREA`를 단순 overlay 후보가 아니라 국가지점번호 표기 의무지역 polygon으로 정리하고, ADR-027을 추가해 `tl_sppn_makarea` 별도 테이블, reverse geocode `sppn_area` 보조 후보, 국가지점번호 geocode 검증/문맥 보강 설계를 문서화한다. 코드는 아직 구현하지 않는다.
 - T-037 SHP geometry 포함 대형 레이어 튜닝: `TL_SPBD_BULD`를 운영 테이블 직접 GDAL append 대신 projection staging table + 운영 테이블 insert-select 경로로 적재한다. 세종 단일 레이어는 기존 38.36초에서 18.59초로 줄었고, 경기도 1,649,975행은 40분 17.15초에 성공했다. raw staging이 원본 DBF 전체 속성 COPY로 22분 이상 지연된 중간 실패도 문서화해 projection staging 필요성을 명시한다.
 - PR #20~#22 post-merge 리뷰 반영: T-035 benchmark JSON에 `schema_version=2`와 metadata를 추가하고, MV index rename public helper/좁은 예외 처리/ANALYZE lock timeout을 보강한다. T-034 `TL_SPRD_INTRVL` DBF COPY 로더는 row dataclass, CP949/truncated 오류 문맥, deleted record 테스트를 추가한다. T-033 full-load 스크립트는 자료별 timer와 C10/SHP 시간 설명을 보강한다.

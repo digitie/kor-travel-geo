@@ -184,7 +184,7 @@ asyncio.run(main())
 - 운영자는 도로명주소 안내시스템, 공공데이터포털, vworld의 최신 약관과 API 호출 한도를 직접 확인하고 관리해야 합니다.
 - 본 패키지는 주소 정규화 및 지오코딩을 돕는 '기술적 도구'에 불과하며, 토지·건축물·행정구역 경계의 법적 효력이나 공적 증명을 보장하지 않습니다. 법적 판단이 필요한 업무는 해당 기관의 공식 고시를 기준으로 검증하십시오.
 
-디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 검증된 GitHub SHA를 package dependency로 소비하며, 공통 wrapper 또는 패키징 문제가 나오면 이 저장소에서만 우회하지 않고 upstream도 적극 수정 대상에 포함합니다.
+디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 최신 확인 SHA 또는 stable release를 package dependency로 소비합니다. VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 upstream도 적극 수정 대상에 포함하고, 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI fallback처럼 이 저장소 특화 기능은 `kraddr-geo-ui`의 domain wrapper에서 구현합니다.
 
 ---
 
