@@ -1,4 +1,20 @@
-# T-045: 원천 자료 기준월 선택과 대용량 업로드/적재 UX 설계
+# T-045: 원천 자료 기준월 선택과 대용량 업로드/적재 UX
+
+## 구현 상태
+
+- 상태: 구현 완료
+- 구현 브랜치: `codex/t045-source-set-load-ux`
+- 기준 ADR: ADR-029
+- 주요 파일:
+  - 백엔드 DTO: `src/kraddr/geo/dto/admin.py`
+  - source set 탐지/계획: `src/kraddr/geo/infra/source_set.py`
+  - upload set 저장소: `src/kraddr/geo/infra/uploads.py`
+  - REST: `src/kraddr/geo/api/routers/admin.py`
+  - 라이브러리: `src/kraddr/geo/client.py`
+  - CLI: `src/kraddr/geo/cli/main.py`
+  - UI: `kraddr-geo-ui/components/admin/LoadConsole.tsx`
+  - UI 상태 helper: `kraddr-geo-ui/lib/load-workflow.ts`
+  - 테스트: `tests/unit/test_source_set_plan.py`, `kraddr-geo-ui/tests/unit/load-workflow.test.ts`
 
 ## 배경
 
@@ -18,7 +34,7 @@
 1. 실제로는 다른 기준월인 자료를 같은 기준월로 기록해 정합성 C10과 운영 감사가 부정확해진다.
 2. 운영자가 의도적으로 최신 출입구 자료를 섞어 쓰려는 상황과, 실수로 다른 월을 골라 적재하는 상황을 구분할 수 없다.
 
-T-045는 이 문제를 해결하기 위해 원천 묶음(`source_set`)을 명시적인 계획 객체로 만들고, CLI/API/라이브러리/UI에서 사용자가 의도한 방식대로 진행하도록 UX 계약을 정의한다. 본 문서는 구현 전 설계 문서이며, 코드는 아직 작성하지 않는다.
+T-045는 이 문제를 해결하기 위해 원천 묶음(`source_set`)을 명시적인 계획 객체로 만들고, CLI/API/라이브러리/UI에서 사용자가 의도한 방식대로 진행하도록 UX 계약을 구현했다. 현재 구현은 source set 탐지, 기준월 확인 token, persistent upload set, REST/라이브러리/CLI, `/admin/load` UI의 다중 파일 업로드와 full-load batch 등록까지 포함한다.
 
 ## 결정 요약
 
@@ -27,6 +43,53 @@ T-045는 이 문제를 해결하기 위해 원천 묶음(`source_set`)을 명시
 3. API/라이브러리는 prompt를 띄우지 않는다. 대신 디렉터리를 읽어 후보를 매칭하는 함수와, 각 원천의 기준월/경로를 명시해서 적재 계획을 만드는 함수를 분리한다.
 4. UI는 파일 선택 또는 업로드 완료 후 source set을 분석하고, 기준월이 맞지 않으면 확인 팝업을 띄운다. 사용자가 계속 진행을 명시하면 그 확인 사실을 batch payload에 남긴다.
 5. 대용량 적재는 `업로드 → 파일 저장 완료 → 적재 시작` 순서로만 진행한다. 업로드와 적재의 진행률은 별도 퍼센트로 표시하고, 둘 다 중간 취소가 가능해야 한다.
+
+## 구현 요약
+
+### Source kind와 child job 매핑
+
+구현된 source kind는 다음 순서로 처리한다.
+
+| source kind | 필수 | child job | 비고 |
+|-------------|------|-----------|------|
+| `juso` | 예 | `juso_text_load` | 도로명주소 한글 전체분. `도로명주소 한글`, `rnaddrkor` 파일명으로 탐지한다. |
+| `parcel_link` | 예 | `juso_parcel_link_load` | 같은 도로명주소 한글 전체분 또는 `jibun_rnaddrkor` 파일로 탐지한다. 도로명주소 전체분 디렉터리는 `juso`와 `parcel_link` 후보를 함께 만든다. |
+| `locsum` | 예 | `locsum_load` | 위치정보요약DB, `locsum`, `entrc` 이름으로 탐지한다. |
+| `navi` | 예 | `navi_load` | 내비게이션용DB, `navi` 이름으로 탐지한다. |
+| `shp` | 예 | `shp_polygons_load` | 전자지도 SHP 디렉터리 또는 `TL_SPBD_BULD.shp` 부모 디렉터리를 후보로 둔다. child payload에는 `mode="full"`을 넣는다. |
+| `roadaddr_entrance` | 아니오 | `roadaddr_entrance_load` | `RNENTDATA_*` 또는 `출입구` 이름으로 탐지한다. |
+| `sppn_makarea` | 아니오 | 없음 | ADR-027/T-042 구현 전까지 source set metadata에는 남기되 child job은 만들지 않는다. |
+| `pobox` | 아니오 | `pobox_load` | 사서함/우편번호 보조 자료. 명시적으로 선택된 경우에만 child job이 된다. |
+| `bulk` | 아니오 | `bulk_load` | 다량배달처 보조 자료. 명시적으로 선택된 경우에만 child job이 된다. |
+
+기준월 추론은 경로의 마지막 4개 part에서 `YYYYMM`을 먼저 찾고, 없으면 파일명에서 `YYMM`을 찾아 `20YYMM`으로 보정한다. 예를 들어 `RNENTDATA_2605_11.txt`는 `202605`로 해석한다.
+
+### Plan payload
+
+`build_full_load_source_set_plan()`은 `full_load_batch` 등록에 사용할 `batch_payload`를 만든다. 새 구현은 기존 `payloads` mapping 대신 명시적인 `children` 배열을 사용한다. 이 방식은 optional source가 빠졌을 때 `pobox_load` 같은 기본 child가 빈 payload로 생성되는 문제를 피하고, `roadaddr_entrance_load`처럼 후속에 추가된 child도 정합성 gate가 기다릴 수 있게 한다.
+
+`batch_payload.source_set`에는 다음 감사 필드가 들어간다.
+
+| 필드 | 의미 |
+|------|------|
+| `source_set_id` | 기준월과 후보 경로 기반의 짧은 해시가 붙은 식별자 |
+| `yyyymm_by_kind` | source kind별 기준월 |
+| `mixed_yyyymm` | 기준월이 2개 이상인지 여부 |
+| `mixed_yyyymm_acknowledged` | 혼합 기준월 확인 token이 검증됐는지 여부 |
+| `acknowledged_by` / `acknowledged_at` | 확인 주체와 시각 |
+| `confirmation_token_hash` | 원문 확인 문구를 저장하지 않기 위한 SHA-256 hash |
+| `candidate_paths` | 선택된 후보 경로 |
+| `candidate_sha256` | 파일 또는 디렉터리 inventory fingerprint |
+
+### 혼합 기준월 확인 token
+
+혼합 기준월인 경우 서버와 UI/CLI가 같은 규칙으로 확인 문구를 만든다.
+
+```text
+<정렬된 기준월 목록을 "/"로 연결> 혼합 적재 확인
+```
+
+예: `juso=202603`, `locsum=202604`, `roadaddr_entrance=202605`이면 `202603/202604/202605 혼합 적재 확인`이다. API와 라이브러리는 prompt를 띄우지 않고, 이 문구가 정확히 들어온 경우에만 plan 생성을 허용한다.
 
 ## 용어
 
@@ -46,7 +109,7 @@ T-045는 이 문제를 해결하기 위해 원천 묶음(`source_set`)을 명시
 디렉터리 또는 업로드 세션 경로를 읽어 원천 후보를 자동 매칭한다.
 
 ```python
-async def discover_load_sources(
+def discover_load_sources(
     root_path: Path,
     *,
     include_optional: bool = True,
@@ -85,26 +148,22 @@ class SourceSetDiscovery(FrozenModel):
     warning: str | None = None
 ```
 
-이 함수는 적재를 시작하지 않는다. UI와 CLI가 사용자에게 보여 줄 후보 테이블을 만드는 데만 사용한다.
+이 함수는 적재를 시작하지 않는다. UI와 CLI가 사용자에게 보여 줄 후보 테이블을 만드는 데만 사용한다. `AsyncAddressClient.discover_load_sources()`는 같은 helper를 async public method 형태로 감싼다.
 
 ### 명시 기준월 계획 함수
 
 사용자가 각 원천의 기준월 또는 경로를 명시했을 때만 실제 적재 계획을 만든다.
 
 ```python
-async def build_full_load_source_set_plan(
+def build_full_load_source_set_plan(
     *,
     root_path: Path | None = None,
-    juso_yyyymm: str,
-    locsum_yyyymm: str,
-    navi_yyyymm: str,
-    shp_yyyymm: str,
-    parcel_link_yyyymm: str | None = None,
-    roadaddr_entrance_yyyymm: str | None = None,
-    sppn_makarea_yyyymm: str | None = None,
-    explicit_paths: dict[str, Path] | None = None,
+    versions: dict[str, str] | None = None,
+    explicit_paths: dict[str, str] | None = None,
+    include_optional: bool = True,
     allow_mixed_yyyymm: bool = False,
     confirmation_token: str | None = None,
+    acknowledged_by: str = "api",
 ) -> SourceSetPlan: ...
 ```
 
@@ -116,6 +175,7 @@ async def build_full_load_source_set_plan(
 - `allow_mixed_yyyymm=False`인데 기준월이 서로 다르면 계획 생성은 실패한다.
 - `allow_mixed_yyyymm=True`인 경우에도 `confirmation_token` 또는 CLI 대화 확인이 있어야 실제 `full_load_batch` 등록으로 넘어간다.
 - 계획에는 child job payload가 포함되지만, 이 함수 자체는 큐에 job을 만들지 않는다.
+- `AsyncAddressClient.build_full_load_source_set_plan()`은 같은 helper를 async public method 형태로 감싼다.
 
 ### 큐 등록 함수
 
@@ -124,8 +184,6 @@ async def build_full_load_source_set_plan(
 ```python
 async def submit_full_load_source_set(
     plan: SourceSetPlan,
-    *,
-    requested_by: Literal["cli", "api", "ui"],
 ) -> LoadJobStatus: ...
 ```
 
@@ -145,7 +203,7 @@ async def submit_full_load_source_set(
 ### 자동 발견 모드
 
 ```bash
-kraddr-geo load full-set ./data/juso --discover
+kraddr-geo load full-set ./data/juso
 ```
 
 동작:
@@ -302,26 +360,38 @@ C10은 더 이상 단순히 "모든 source_yyyymm이 같은가"만 보지 않는
 - `mixed_yyyymm=True`인데 확인 기록이 없으면 `ERROR`로 본다.
 - 정합성 sample에는 `yyyymm_by_kind`와 `acknowledged_by`를 포함한다.
 
-## 테스트 계획
+## 테스트 및 검증
 
-T-045 구현 시 최소 테스트:
+구현 테스트:
 
-- 디렉터리 scan이 `202603`, `202604`, `202605` 후보를 source kind별로 올바르게 매칭한다.
-- 같은 기준월 source set은 확인 없이 plan 생성이 가능하다.
-- 혼합 기준월 source set은 `allow_mixed_yyyymm=False`에서 실패한다.
-- 혼합 기준월 source set은 올바른 confirmation token이 있을 때만 plan 생성이 가능하다.
-- CLI 비대화형 실행은 기준월 불일치 시 실패한다.
-- CLI 대화형 실행은 확인 문구가 정확할 때만 진행한다.
-- REST `discover`와 `plan`은 prompt 없이 구조화된 warning을 반환한다.
-- UI reducer는 `idle → uploading → upload_done → source_review → confirming_mismatch → processing → finished` 상태 전이를 보존한다.
-- 업로드 중 취소는 partial file을 남기지 않는다.
-- 적재 중 취소는 root/child job 상태를 일관되게 `cancelled` 또는 `failed`로 정리한다.
+| 항목 | 테스트 |
+|------|--------|
+| 디렉터리 scan | `tests/unit/test_source_set_plan.py::test_source_set_discovery_matches_required_sources_and_mixed_months` |
+| 업로드 부모 경로 날짜 오인 방지 | `tests/unit/test_source_set_plan.py::test_infer_yyyymm_prefers_nearest_file_or_directory_name` |
+| optional 제외 | `tests/unit/test_source_set_plan.py::test_source_set_discovery_can_exclude_optional_sources` |
+| 같은 기준월 plan | `tests/unit/test_source_set_plan.py::test_source_set_plan_builds_single_month_batch_without_confirmation` |
+| 혼합 기준월 거절/승인 | `tests/unit/test_source_set_plan.py::test_source_set_plan_requires_explicit_mixed_confirmation` |
+| upload set 저장/취소 | `tests/unit/test_source_set_plan.py::test_upload_set_stores_files_safely_and_can_be_cancelled` |
+| 업로드 크기 제한 실패 | `tests/unit/test_source_set_plan.py::test_upload_set_marks_failed_file_when_size_limit_is_exceeded` |
+| REST route 노출 | `tests/unit/test_api_app_contract.py::test_create_app_exposes_expected_routes_without_starting_lifespan` |
+| CLI full-set 노출/확인 문구 | `tests/unit/test_cli_contract.py::test_cli_exposes_t018_operational_commands`, `tests/unit/test_cli_contract.py::test_full_set_command_requires_specific_mixed_confirmation` |
+| batch DAG successor | `tests/unit/test_infra_repo_sql.py::test_job_queue_batch_successors_wait_for_all_source_children` |
+| UI 상태 전이/token/progress | `kraddr-geo-ui/tests/unit/load-workflow.test.ts` |
 
-## 후속 구현 범위
+검증 명령:
 
-- 백엔드 DTO: `SourceCandidate`, `SourceSetDiscovery`, `SourceSetPlan`, `UploadSetStatus`, `UploadFileStatus`
-- 라이브러리: `discover_load_sources()`, `build_full_load_source_set_plan()`, `submit_full_load_source_set()`
-- CLI: `kraddr-geo load full-set`
-- REST: `/v1/admin/load-sources/*`, `/v1/admin/uploads/*`
-- UI: `/admin/load` 다중 파일/DND 업로드, 기준월 mismatch modal, 업로드/적재 진행률, 취소 UX
-- 정합성: C10의 acknowledged mixed source set 처리
+```bash
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_source_set_plan.py tests/unit/test_api_app_contract.py tests/unit/test_client_submit_load_batch.py tests/unit/test_infra_repo_sql.py -q
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo tests/unit/test_source_set_plan.py tests/unit/test_api_app_contract.py tests/unit/test_client_submit_load_batch.py tests/unit/test_infra_repo_sql.py
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo
+cd kraddr-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run lint
+cd kraddr-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run type-check
+cd kraddr-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run test -- load-workflow
+```
+
+## 남은 후속 범위
+
+- C10 정합성은 `source_set`의 `mixed_yyyymm_acknowledged`와 `acknowledged_by`를 더 세밀하게 읽어 INFO/WARN/ERROR를 조정할 수 있다. 현재 구현은 batch payload에 감사 필드를 남기는 단계까지 완료했다.
+- `ops.dataset_snapshots`에 source set 확정 정보를 자동으로 연결하는 작업은 T-027/T-047의 full-load gate 보강과 함께 진행한다.
+- 업로드 세션은 JSON manifest 기반 local filesystem registry다. 여러 API 인스턴스가 같은 upload set을 다뤄야 하는 배포라면 공유 파일시스템 또는 object storage manifest backend가 필요하다.
+- UI의 대용량 업로드는 브라우저 XHR progress를 사용한다. 파일별 재시도 버튼과 새로고침 후 업로드 진행률 복구는 후속 개선으로 남긴다.

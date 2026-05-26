@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX 구현: source set 탐지/계획 DTO와 helper, JSON manifest 기반 upload set 저장소, `/v1/admin/uploads/*`, `/v1/admin/load-sources/*`, `AsyncAddressClient` 메서드, `kraddr-geo load full-set`, `/admin/load` 다중 파일/DND 업로드·기준월 mismatch modal·업로드/적재 진행률·취소 UX를 추가한다. 혼합 기준월은 정확한 확인 문구 없이는 plan 생성이 실패하고, batch payload는 명시 child job과 source set 감사 필드를 남긴다.
 - T-043 PR #23~#41 리뷰 코멘트 audit/fixup: GitHub conversation/review/inline/thread 표면을 재확인하고, VWorld alias/test, daily delta 운영 문서와 `--limit-per-file` 경고, `TL_SPBD_BULD` staging advisory lock/skip metric, ADR-027 남은 위험을 보강한다.
 - 문서 정합성 재검토: 현재형 문서의 `master` 표현을 `main`으로 바로잡고, README/SKILL의 `load all-sidos` 예시를 실제 CLI 옵션 형태로 갱신했다. `kraddr-geo-ui`가 같은 저장소의 별도 Node.js 패키지라는 설명, README ADR-032 누락, T-046 백업 artifact의 `ops.artifacts` 수렴 원칙, 후속 task 순서도 함께 정리했다.
 - README 법적 고지 보강: 이 프로젝트가 AI 활용 방식과 개발 워크플로를 학습·검증하기 위한 기술 연구 프로젝트이며, 외부 원천 데이터/API는 제공 기관의 이용약관·저작권·재배포 조건·호출 한도를 준수하는 것을 전제로 사용한다고 명시한다.

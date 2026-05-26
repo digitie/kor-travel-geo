@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.infra.admin_repo import AdminRepository
-from kraddr.geo.infra.batch import BATCH_SOURCE_KINDS, batch_children
+from kraddr.geo.infra.batch import batch_children
 
 
 class ProgressCallback(Protocol):
@@ -27,7 +27,7 @@ class ProgressCallback(Protocol):
 
 JobHandler = Callable[[dict[str, Any], asyncio.Event, ProgressCallback], Awaitable[None]]
 ADVISORY_SLOT_LOAD_QUEUE = 470017
-_SOURCE_KIND_SQL = ", ".join(f"'{kind}'" for kind in BATCH_SOURCE_KINDS)
+_CONTROL_KIND_SQL = "'full_load_batch', 'consistency_check', 'mv_refresh'"
 
 
 class JobQueue:
@@ -295,7 +295,7 @@ UPDATE load_jobs
         parent_job_id = row["parent_job_id"]
         if batch_id is None or kind == "full_load_batch":
             return
-        if kind in BATCH_SOURCE_KINDS:
+        if kind not in {"full_load_batch", "consistency_check", "mv_refresh"}:
             await self._maybe_enqueue_consistency(str(batch_id), str(parent_job_id or batch_id))
         elif kind == "consistency_check":
             await self._maybe_enqueue_mv_refresh(str(batch_id), str(parent_job_id or batch_id))
@@ -309,8 +309,8 @@ UPDATE load_jobs
                     text(
                         f"""
 SELECT
-  count(*) FILTER (WHERE kind IN ({_SOURCE_KIND_SQL})) AS total,
-  count(*) FILTER (WHERE kind IN ({_SOURCE_KIND_SQL}) AND state = 'done') AS done,
+  count(*) FILTER (WHERE kind NOT IN ({_CONTROL_KIND_SQL})) AS total,
+  count(*) FILTER (WHERE kind NOT IN ({_CONTROL_KIND_SQL}) AND state = 'done') AS done,
   count(*) FILTER (WHERE state IN ('failed','cancelled')) AS failed,
   count(*) FILTER (WHERE kind = 'consistency_check') AS consistency_count
   FROM load_jobs

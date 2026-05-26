@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-045 — source set 기준월 선택과 대용량 업로드/적재 UX 구현)
+
+**작업**: ADR-029의 source set 설계를 실제 DTO, 탐지/계획 helper, upload set 저장소, REST, 라이브러리, CLI, `/admin/load` UI와 테스트로 구현했다.
+
+**반영 상세**:
+- `SourceCandidate`, `SourceSetDiscovery`, `SourceSetPlan`, `UploadSetStatus`, `UploadFileStatus` DTO를 추가했다.
+- `infra.source_set`에서 원천 후보를 자동 탐지하고, source kind별 기준월과 명시 `children` batch payload를 만드는 helper를 추가했다.
+- `infra.uploads`에서 upload set을 JSON manifest로 영속화하고, raw stream 파일 저장, `*.part` atomic rename, sha256, 기준월/source kind 추론, 크기 제한 실패 상태, 취소를 구현했다.
+- `/v1/admin/uploads/*`와 `/v1/admin/load-sources/*`를 추가하고, `/v1/admin/loads kind=full_load_batch`가 명시 child job 목록을 받도록 UI/라이브러리/CLI를 연결했다.
+- `kraddr-geo load full-set`은 자동 발견 후 기준월이 섞이면 정확한 확인 문구 없이는 plan을 만들지 않는다.
+- `/admin/load`는 다중 파일 선택과 DND, XHR upload progress, upload set cancel, source set review, 기준월 mismatch modal, 적재 진행률과 root job cancel을 제공한다.
+
+**검증**:
+- `tests/unit/test_source_set_plan.py`에서 source 탐지, optional 제외, 같은 기준월 plan, 혼합 기준월 확인, upload 저장/취소, 크기 제한 실패를 검증했다.
+- `kraddr-geo-ui/tests/unit/load-workflow.test.ts`에서 상태 전이, 확인 token 생성, 진행률 계산을 검증했다.
+- 중간 검증으로 backend targeted pytest, backend ruff/mypy, frontend lint/type-check/load-workflow test를 통과했다. 최종 PR 검증에서는 전체 backend/frontend gate와 OpenAPI drift 검사를 다시 수행한다.
+
+**후속**:
+- C10 정합성 severity 조정은 `source_set.mixed_yyyymm_acknowledged`를 더 읽도록 별도 보강한다.
+- `ops.dataset_snapshots`에 source set 확정 정보를 자동 연결하는 일은 T-027/T-047 full-load gate 보강 때 이어간다.
+- 다음 작업은 T-046 백업/복원 구현이다.
+
 ## 2026-05-27 (T-049 — 운영 메타데이터·감사·릴리스 스키마 구현)
 
 **작업**: ADR-033의 `ops` 운영 메타데이터 설계를 실제 DDL, Alembic migration, DTO/API/client, 관리 UI, 테스트로 구현했다.

@@ -223,23 +223,23 @@ T-044 경계화 포팅 원칙:
 ### `/admin/load` 상태 머신
 
 ```
-idle → selecting_files → uploading → upload_done → source_review
-     → confirming_mismatch? → processing → finished → (reset) idle
+idle → uploading → source_review → plan_ready → processing → finished
+                    └─ mixed yyyymm modal ─┘
+     → cancelled / failed → (reset) idle
 ```
 
 원칙: "파일 업로드와 입력 처리는 각각 다 끝나면 다음 단계로". 파일이 서버에 모두 저장되고 source set 분석이 끝나기 전에는 적재 시작 버튼을 활성화하지 않는다. 업로드 중에는 처리 시작 버튼을 비활성화하고, 처리 중에는 새 파일 추가 영역을 닫는다.
 
 - 파일 선택: `<input type="file" multiple>`과 drag and drop을 모두 지원한다. 디렉터리 drag가 가능한 브라우저에서는 `webkitRelativePath` 또는 동등한 relative path를 보존해 ZIP 묶음과 SHP sidecar 파일을 같은 upload set으로 보낸다.
 - 업로드: T-045 구현은 upload set API를 사용한다. `POST /v1/admin/uploads`로 세션을 만들고, 각 파일은 `PUT /v1/admin/uploads/{upload_set_id}/files`에 raw stream으로 보낸다. 대용량 ZIP 업로드 진행률을 안정적으로 표시하기 위해 `XMLHttpRequest.upload.onprogress` 또는 동등한 업로드 progress wrapper를 사용한다. Next.js Route Handler는 파일 본문을 `arrayBuffer()`로 전체 버퍼링하지 않고 백엔드로 스트리밍한다.
-- 업로드 진행률: 파일별 `uploaded_bytes / total_bytes`와 전체 `sum(uploaded_bytes) / sum(total_bytes)`를 별도 progress bar로 표시한다. 실패 파일은 재시도 버튼을 제공하고, 사용자가 전체 취소를 누르면 진행 중 요청을 abort한 뒤 서버 upload set cancel을 호출한다.
+- 업로드 진행률: 파일별 `uploaded_bytes / total_bytes`와 전체 `sum(uploaded_bytes) / sum(total_bytes)`를 표시한다. 사용자가 전체 취소를 누르면 진행 중 요청을 abort한 뒤 서버 upload set cancel을 호출한다. 파일별 재시도 버튼은 후속 개선으로 남긴다.
 - source review: 모든 파일 저장이 완료되면 `POST /v1/admin/load-sources/discover`를 호출해 원천 후보, 기준월, 필수 원천 누락, 추천 source set을 표로 보여 준다.
 - 기준월 mismatch 팝업: `mixed_yyyymm=true`이면 적재 시작 전에 modal을 띄운다. modal은 `juso`, `parcel_link`, `locsum`, `navi`, `shp`, `roadaddr_entrance`, `sppn_makarea`의 기준월과 경로를 보여 주고, C10 정합성 리포트에 혼합 기준월이 남는다는 점을 설명한다. 사용자가 계속 진행을 선택하면 서버가 요구하는 confirmation token 또는 문구를 `POST /v1/admin/load-sources/plan`에 함께 보낸다.
-- 시도명 추론: `lib/sido.ts`의 `guessSido(filename)` (`서울→seoul`, `부산→busan`, …).
 - 처리: `SourceSetPlan.batch_payload`가 확정된 뒤에만 `POST /v1/admin/loads kind=full_load_batch`를 호출한다. 큐가 직렬로 한 job씩 실행하며, UI는 root job과 child job을 폴링해 적재 진행률을 표시한다.
 - 적재 진행률: 업로드 진행률과 분리한다. root `full_load_batch`의 `progress`, child job의 `current_stage`, `log_tail`을 함께 보여 주며, child별 가중 평균이 제공되면 전체 적재 퍼센트로 표시한다.
 - 전체 취소: 업로드 단계에서는 upload set cancel + 브라우저 요청 abort를 수행한다. 적재 단계에서는 root job에 cancel 요청을 보내고, 서버는 실행 중 child의 협조적 cancel event와 대기 중 child의 `cancelled` 상태 전이를 담당한다. GDAL callback이 0 반환 → 즉시 중단.
 
-UploadStage / SourceSetReviewStage / ProcessingStage 컴포넌트와 reducer 패턴은 T-045 구현 시 갱신한다. 테스트는 다중 파일 선택, DND, 기준월 mismatch modal, 업로드 취소, 적재 취소, 새로고침 후 진행률 복구를 포함해야 한다.
+현재 구현은 `LoadConsole.tsx` 단일 컴포넌트와 `lib/load-workflow.ts` reducer/helper로 구성된다. 테스트는 상태 전이, 혼합 기준월 확인 문구, 진행률 계산을 우선 고정했고, 다중 파일/DND/modal/취소 흐름의 렌더링 테스트와 새로고침 후 진행률 복구는 후속 보강 후보로 남긴다.
 
 ### `/admin/backups` 상태 머신 (ADR-030, T-046)
 

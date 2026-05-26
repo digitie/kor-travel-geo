@@ -30,6 +30,8 @@ from .dto.admin import (
     OpsArtifact,
     RollbackPlan,
     ServingRelease,
+    SourceSetDiscovery,
+    SourceSetPlan,
     TableStat,
     TableStatsSnapshot,
 )
@@ -46,6 +48,10 @@ from .infra.geocode_repo import GeocodeRepository
 from .infra.pobox_repo import PoboxRepository
 from .infra.reverse_repo import ReverseRepository
 from .infra.search_repo import SearchRepository
+from .infra.source_set import (
+    build_full_load_source_set_plan,
+    discover_load_sources,
+)
 from .infra.zip_repo import ZipRepository
 from .settings import Settings, get_settings
 
@@ -405,6 +411,42 @@ class AsyncAddressClient:
             snapshot_id=snapshot_id,
             limit=limit,
         )
+
+    async def discover_load_sources(
+        self,
+        root_path: str,
+        *,
+        include_optional: bool = True,
+    ) -> SourceSetDiscovery:
+        from pathlib import Path
+
+        return discover_load_sources(Path(root_path), include_optional=include_optional)
+
+    async def build_full_load_source_set_plan(
+        self,
+        *,
+        root_path: str | None = None,
+        versions: dict[str, str] | None = None,
+        explicit_paths: dict[str, str] | None = None,
+        include_optional: bool = True,
+        allow_mixed_yyyymm: bool = False,
+        confirmation_token: str | None = None,
+        acknowledged_by: str = "api",
+    ) -> SourceSetPlan:
+        from pathlib import Path
+
+        return build_full_load_source_set_plan(
+            root_path=Path(root_path) if root_path else None,
+            versions=versions,
+            explicit_paths=explicit_paths,
+            include_optional=include_optional,
+            allow_mixed_yyyymm=allow_mixed_yyyymm,
+            confirmation_token=confirmation_token,
+            acknowledged_by=acknowledged_by,
+        )
+
+    async def submit_full_load_source_set(self, plan: SourceSetPlan) -> LoadJobStatus:
+        return await self.submit_load("full_load_batch", plan.batch_payload)
 
     async def submit_load(self, kind: str, payload: dict[str, Any]) -> LoadJobStatus:
         repo = AdminRepository(self._engine())

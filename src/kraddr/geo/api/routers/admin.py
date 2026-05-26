@@ -33,11 +33,29 @@ from kraddr.geo.dto.admin import (
     OpsArtifact,
     RollbackPlan,
     ServingRelease,
+    SourceSetDiscovery,
+    SourceSetDiscoveryRequest,
+    SourceSetPlan,
+    SourceSetPlanRequest,
     TableStat,
     TableStatsSnapshot,
+    UploadFileStatus,
+    UploadSetCreateRequest,
+    UploadSetStatus,
     UploadSidoZipResponse,
 )
 from kraddr.geo.exceptions import InvalidInputError
+from kraddr.geo.infra.source_set import (
+    build_full_load_source_set_plan,
+    discover_load_sources,
+)
+from kraddr.geo.infra.uploads import (
+    cancel_upload_set,
+    create_upload_set,
+    get_upload_set,
+    store_upload_file,
+    upload_set_root,
+)
 from kraddr.geo.settings import get_settings
 
 router = APIRouter(tags=["admin"])
@@ -128,6 +146,84 @@ async def upload_sido_zip(
         path=str(dest),
         size_bytes=size,
         sha256=digest.hexdigest(),
+    )
+
+
+@router.post(
+    "/uploads",
+    response_model=UploadSetStatus,
+    response_model_exclude_none=True,
+)
+async def create_upload_session(req: UploadSetCreateRequest) -> UploadSetStatus:
+    return await create_upload_set(get_settings().loader_data_dir, req)
+
+
+@router.get(
+    "/uploads/{upload_set_id}",
+    response_model=UploadSetStatus,
+    response_model_exclude_none=True,
+)
+async def upload_session_status(upload_set_id: str) -> UploadSetStatus:
+    return await get_upload_set(get_settings().loader_data_dir, upload_set_id)
+
+
+@router.put(
+    "/uploads/{upload_set_id}/files",
+    response_model=UploadFileStatus,
+    response_model_exclude_none=True,
+)
+async def put_upload_file(
+    upload_set_id: str,
+    request: Request,
+    filename: str = Query(min_length=1),
+    relative_path: str | None = None,
+) -> UploadFileStatus:
+    settings = get_settings()
+    return await store_upload_file(
+        settings.loader_data_dir,
+        upload_set_id,
+        filename=filename,
+        relative_path=relative_path,
+        chunks=request.stream(),
+        max_bytes=settings.api_max_upload_bytes,
+    )
+
+
+@router.post(
+    "/uploads/{upload_set_id}/cancel",
+    response_model=UploadSetStatus,
+    response_model_exclude_none=True,
+)
+async def cancel_upload_session(upload_set_id: str) -> UploadSetStatus:
+    return await cancel_upload_set(get_settings().loader_data_dir, upload_set_id)
+
+
+@router.post(
+    "/load-sources/discover",
+    response_model=SourceSetDiscovery,
+    response_model_exclude_none=True,
+)
+async def discover_load_source_set(req: SourceSetDiscoveryRequest) -> SourceSetDiscovery:
+    root_path = _source_root_from_request(req.root_path, req.upload_set_id)
+    assert root_path is not None
+    return discover_load_sources(root_path, include_optional=req.include_optional)
+
+
+@router.post(
+    "/load-sources/plan",
+    response_model=SourceSetPlan,
+    response_model_exclude_none=True,
+)
+async def plan_load_source_set(req: SourceSetPlanRequest) -> SourceSetPlan:
+    root_path = _source_root_from_request(req.root_path, req.upload_set_id, required=False)
+    return build_full_load_source_set_plan(
+        root_path=root_path,
+        versions=req.versions,
+        explicit_paths=req.explicit_paths,
+        include_optional=req.include_optional,
+        allow_mixed_yyyymm=req.allow_mixed_yyyymm,
+        confirmation_token=req.confirmation_token,
+        acknowledged_by=req.acknowledged_by,
     )
 
 
@@ -477,6 +573,22 @@ def _is_relative_to(path: Path, base: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _source_root_from_request(
+    root_path: str | None,
+    upload_set_id: str | None,
+    *,
+    required: bool = True,
+) -> Path | None:
+    if upload_set_id:
+        return upload_set_root(get_settings().loader_data_dir, upload_set_id)
+    if root_path:
+        return Path(root_path)
+    if required:
+        msg = "root_path or upload_set_id is required"
+        raise InvalidInputError(msg)
+    return None
 
 
 def _audit_request(request: Request) -> _AuditRequest:

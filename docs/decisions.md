@@ -816,7 +816,7 @@ T-044 완료 조건:
 
 ## ADR-029: 원천 자료 기준월은 source set으로 명시하고 혼합 적재는 확인 절차를 거친다
 
-- 상태: accepted (T-049 1차 구현 완료)
+- 상태: accepted (T-045 구현 완료)
 - 날짜: 2026-05-26
 - 결정자: 사용자 요청, codex
 
@@ -861,12 +861,12 @@ REST는 `/v1/admin/load-sources/discover`, `/v1/admin/load-sources/plan`, `/v1/a
 
 - `load_jobs.payload.source_set`, `load_jobs.source_set`, `load_manifest.source_set`, `load_consistency_reports.source_set`에는 원천별 기준월과 확인 여부가 남아야 한다.
 - `mixed_yyyymm=True`이면서 `mixed_yyyymm_acknowledged=False`인 batch는 등록 또는 C10에서 차단되어야 한다.
-- UI의 `/admin/load` 상태 머신은 `idle → uploading → upload_done → source_review → confirming_mismatch → processing → finished`를 표현할 수 있어야 한다.
+- UI의 `/admin/load` 상태 머신은 `idle → uploading → source_review → plan_ready → processing → finished`와 `cancelled`/`failed` 전이를 표현할 수 있어야 한다. 혼합 기준월 확인은 `source_review` 단계의 modal로 처리한다.
 - 업로드 파일은 저장 완료 전에는 운영 원천으로 취급하지 않는다. partial file은 `*.part`로 저장하고, checksum 확인 후 atomic rename한다.
 
 ### 후속
 
-- (open) T-045에서 DTO, CLI, REST, UI를 구현한다.
+- (done) T-045에서 DTO, CLI, REST, UI를 구현했다.
 - (open) C10 정합성 SQL/리포트가 acknowledged mixed source set을 `INFO` 또는 `WARN`으로 표현하도록 보강한다.
 - (open) 기존 `load all-sidos --yyyymm`는 새 `load full-set` 명시 기준월 모드로 대체하거나 deprecated 안내를 추가한다.
 
