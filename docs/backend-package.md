@@ -398,7 +398,7 @@ loaders/
 
 #### `juso_hangul_loader.py` (T-013a)
 
-`data/juso/202603_도로명주소 한글_전체분/*.txt`의 시도별 파일을 적재한다. 현재 구현은 `rnaddrkor_*.txt`만 `tl_juso_text`에 적재한다. `jibun_rnaddrkor_*.txt`는 지번-도로명 보조 관계 확장이 필요해지면 별도 테이블 또는 보조 적재로 분리한다.
+`data/juso/202603_도로명주소 한글_전체분/*.txt`의 시도별 파일을 적재한다. 현재 구현은 `rnaddrkor_*.txt`만 `tl_juso_text`에 적재한다. `jibun_rnaddrkor_*.txt`는 대표 지번이 아니라 건물↔지번 1:N 보조 관계이므로 `tl_juso_text.pnu`에 덮어쓰지 않는다. T-038에서 `tl_juso_parcel_link` DDL과 loader를 별도 구현한다(ADR-022).
 
 #### `daily_juso_loader.py` (T-028)
 
@@ -413,7 +413,7 @@ loaders/
 - 한 batch 안에 같은 `bd_mgt_sn`이 여러 번 나오면 `mvmn_de DESC`, `source_file DESC`, `staging_seq DESC` 기준 최신 1건만 반영한다.
 - member 내용이 `No Data`이면 컬럼 수 오류로 보지 않고 skip하며 `skipped_no_data_sources`에 기록한다.
 
-`AlterD.JUSUKR.*.TH_SGCO_RNADR_LNBR.TXT`는 현재 master table에 쓰지 않는다. 이 member는 건물↔지번 보조 관계를 담으므로 `jibun_rnaddrkor_*`와 함께 1:N 테이블 설계를 확정해야 한다. T-028은 `unsupported_lnbr_rows`만 세어 `load_manifest.source_set`에 남긴다. 상세 결정은 ADR-021과 `docs/t028-daily-juso-delta.md`를 본다.
+`AlterD.JUSUKR.*.TH_SGCO_RNADR_LNBR.TXT`는 현재 master table에 쓰지 않는다. 이 member는 건물↔지번 보조 관계를 담으므로 T-038의 `tl_juso_parcel_link` loader에서 `jibun_rnaddrkor_*`와 같은 테이블에 적용한다. T-028은 그 전까지 `unsupported_lnbr_rows`만 세어 `load_manifest.source_set`에 남긴다. 상세 결정은 ADR-021, ADR-022, `docs/t028-daily-juso-delta.md`, `docs/t029-jibun-rnaddrkor-decision.md`를 본다.
 
 실제 파일 검증 결과(서울 첫 행 기준):
 

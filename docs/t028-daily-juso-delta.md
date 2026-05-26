@@ -93,7 +93,7 @@ ORDER BY bd_mgt_sn, mvmn_de DESC NULLS LAST, source_file DESC, staging_seq DESC
 
 - 현재 `tl_juso_text`는 건물 1행에 대표 지번 1개만 보관한다.
 - `LNBR` member는 건물관리번호와 지번의 보조 관계를 별도로 제공하므로, 향후 `jibun_rnaddrkor_*`와 함께 1:N 관계 테이블을 설계해야 한다.
-- 이 결정은 T-029에서 `jibun_rnaddrkor_*` 활용 여부와 함께 ADR로 확정한다.
+- 이 결정은 T-029에서 `jibun_rnaddrkor_*` 활용 여부와 함께 ADR-022로 확정했다. 후속 구현은 `tl_juso_parcel_link` 1:N 테이블로 분리한다.
 
 단, 파일을 완전히 무시하지는 않는다. 로더는 `LNBR` member를 발견해 행 수를 세고, `DailyJusoLoadResult.unsupported_lnbr_rows` 및 `load_manifest.source_set.unsupported_lnbr_rows`에 기록한다. 이렇게 하면 운영자가 "ZIP 안에 적용하지 않은 행이 있었다"는 사실을 manifest에서 확인할 수 있다.
 
@@ -176,6 +176,6 @@ loaded daily tl_juso_text delta: processed=422, upserted=242, deleted=180, lnbr_
 
 ## 남은 작업
 
-- T-029: `jibun_rnaddrkor_*`와 `TH_SGCO_RNADR_LNBR.TXT`를 함께 보고, 건물↔지번 1:N 보조 테이블을 둘지 결정한다.
+- T-038: `jibun_rnaddrkor_*`와 `TH_SGCO_RNADR_LNBR.TXT`를 함께 적재하는 `tl_juso_parcel_link` 1:N 보조 테이블을 구현한다.
 - T-027 최종 클린 로드: T-028 이후에는 full-load 뒤 daily ZIP 일부를 적용하고 MV refresh/정합성 검증을 추가 smoke로 넣는다.
 - daily delta를 여러 날짜 순으로 자동 적용하는 scheduler는 아직 두지 않는다. 운영자는 디렉터리 경로를 넘겨 수동 일괄 적용하거나 `load_jobs`에 날짜별 작업을 등록한다.

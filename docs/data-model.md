@@ -670,7 +670,7 @@ T-028 이후 `daily_juso_loader.py`는 `data/juso/daily/*.zip`의 `TH_SGCO_RNADR
 
 `MST` member의 `MVM_RES_CD`는 skip 대상이 아니라 운영 변경 사유다. 매핑에 없는 코드가 나오면 제공자 사양이 바뀐 것으로 보고 적재를 중단한다. 이는 "기타 코드는 skip"이라는 SHP generic delta의 보수적 설명보다 강한 규칙이다. 주소 정본 daily에서 알 수 없는 코드를 무시하면 최신 주소가 누락될 수 있기 때문이다.
 
-`TH_SGCO_RNADR_LNBR.TXT`는 현재 `tl_juso_text`에 쓰지 않는다. 이 파일은 건물↔지번 보조 관계를 제공하므로, 대표 지번 1개를 가진 `tl_juso_text`에 임의로 덮어쓰면 silent data loss가 생긴다. T-028은 행 수만 manifest에 남기고, T-029에서 `jibun_rnaddrkor_*`와 함께 1:N 보조 테이블 여부를 결정한다(ADR-021).
+`TH_SGCO_RNADR_LNBR.TXT`는 현재 `tl_juso_text`에 쓰지 않는다. 이 파일은 건물↔지번 보조 관계를 제공하므로, 대표 지번 1개를 가진 `tl_juso_text`에 임의로 덮어쓰면 silent data loss가 생긴다. T-028은 행 수만 manifest에 남기고, ADR-022의 후속 T-038에서 `jibun_rnaddrkor_*`와 함께 `tl_juso_parcel_link`로 적재한다.
 
 ### 한 배치당 PK 단일화 가정
 
@@ -700,3 +700,34 @@ INSERT INTO staging_schema.tl_xxx SELECT * FROM dedup;
 - **변환**: `ST_Transform(geom, target_srid)`. 응답에서 `(lon, lat)`는 `(ST_X, ST_Y)` 순서 (SKILL.md §4-5).
 
 `mv_geocode_target`은 두 좌표계(`pt_5179`, `pt_4326`)를 미리 가지고 있어 응답 시 변환 비용을 줄인다.
+
+## 보조 지번 링크 후보 (ADR-022, T-038 예정)
+
+`jibun_rnaddrkor_*`와 daily `TH_SGCO_RNADR_LNBR.TXT`는 현재 master table에는 아직 적재하지 않는다. T-029 실제 파일 검토 결과, 이 원천은 대표 PNU가 아니라 건물↔지번 1:N 보조 관계다. 따라서 `tl_juso_text.pnu`에 덮어쓰지 않고 후속 T-038에서 별도 테이블 `tl_juso_parcel_link`를 도입한다.
+
+초안:
+
+```sql
+CREATE TABLE tl_juso_parcel_link (
+  bd_mgt_sn     TEXT NOT NULL REFERENCES tl_juso_text(bd_mgt_sn) ON DELETE CASCADE,
+  pnu           TEXT NOT NULL,
+  bjd_cd        TEXT NOT NULL,
+  mntn_yn       CHAR(1) NOT NULL,
+  lnbr_mnnm     INTEGER NOT NULL,
+  lnbr_slno     INTEGER NOT NULL DEFAULT 0,
+  sig_cd        TEXT NOT NULL,
+  rn_cd         TEXT NOT NULL,
+  buld_se_cd    TEXT,
+  buld_mnnm     INTEGER,
+  buld_slno     INTEGER,
+  source_kind   TEXT NOT NULL CHECK (source_kind IN ('jibun_full','daily_lnbr')),
+  source_file   TEXT,
+  source_yyyymm TEXT,
+  last_mvmn_de  TEXT,
+  loaded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (bd_mgt_sn, pnu),
+  CHECK (char_length(pnu) = 19)
+);
+```
+
+전국 `jibun_rnaddrkor_*` 실제 계측값은 1,769,370행, distinct `bd_mgt_sn` 986,309, 2개 이상 보조 지번을 가진 건물 334,789건이다. 상세 근거는 `docs/t029-jibun-rnaddrkor-decision.md`를 본다.

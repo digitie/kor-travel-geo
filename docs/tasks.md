@@ -6,13 +6,14 @@
 - 없음
 
 ## 대기 (우선순위 순)
-- T-029 `jibun_rnaddrkor_*` 활용 여부 결정 — 도로명주소 한글 전체분에 같이 배포되는 지번 매핑 텍스트를 현재 `tl_juso_text`와 어떻게 조화시킬지 ADR로 확정한다.
 - T-030 상세주소 동 도형/별도 건물 도형 로더 검토 — `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`의 전자지도 SHP와 중복·보완 관계를 조사한다.
+- T-038 `tl_juso_parcel_link` DDL/로더 구현 — T-029/ADR-022 결정에 따라 `jibun_rnaddrkor_*` full snapshot과 daily `LNBR` delta를 건물↔지번 1:N 테이블로 적재한다.
 - T-037 geometry 포함 SHP 대형 레이어 적재 튜닝 — `TL_SPBD_BULD` 등 도형 포함 레이어의 GDAL append 병목을 `PG_USE_COPY`, staging table, layer별 옵션 조합으로 실험하고 실제 세종/경기도 기준 시간을 문서화한다.
 - T-027 최종 실 데이터 클린 적재 검증 — 남은 튜닝/증분/보조 로더 작업을 모두 머지한 뒤 Docker DB를 삭제하고 처음부터 다시 적재한다. C1~C10 정합성, geocode/reverse/search/zipcode smoke test, data-quality export, 성능 로그를 최종 회귀 기준으로 남긴다. 상세: `docs/t027-fullload-plan.md`
 
 ## 완료
-- [x] T-028 일변동 ZIP 로더. `data/juso/daily/*.zip`의 `TH_SGCO_RNADR_MST.TXT`를 `tl_juso_text`에 UPSERT/DELETE로 적용하고, `TH_SGCO_RNADR_LNBR.TXT`는 T-029 전까지 manifest에 미지원 행 수로 기록한다. 실제 `20260401_dailyjusukrdata.zip` MST 422행과 `20260404` `No Data` member를 검증했다. 상세: `docs/t028-daily-juso-delta.md` (2026-05-26)
+- [x] T-029 `jibun_rnaddrkor_*` 활용 여부 결정. 실제 전국 `jibun_rnaddrkor_*` 1,769,370행과 daily `LNBR` 구조를 확인하고, `tl_juso_text.pnu`에 덮어쓰지 않고 후속 `tl_juso_parcel_link` 1:N 테이블로 분리하기로 ADR-022에서 확정했다. 상세: `docs/t029-jibun-rnaddrkor-decision.md` (2026-05-26)
+- [x] T-028 일변동 ZIP 로더. `data/juso/daily/*.zip`의 `TH_SGCO_RNADR_MST.TXT`를 `tl_juso_text`에 UPSERT/DELETE로 적용하고, `TH_SGCO_RNADR_LNBR.TXT`는 T-038 전까지 manifest에 미지원 행 수로 기록한다. 실제 `20260401_dailyjusukrdata.zip` MST 422행과 `20260404` `No Data` member를 검증했다. 상세: `docs/t028-daily-juso-delta.md` (2026-05-26)
 - [x] PR #20~#22 post-merge 리뷰 반영. PR #22 → PR #21 → PR #20 순서로 리뷰 코멘트를 확인하고, T-035 benchmark metadata/public helper/lock timeout, T-034 DBF COPY 오류 문맥/row dataclass/deleted record test, T-033 full-load phase timer/C10 설명을 보강했다. 상세: `docs/postmerge-review-fixups-pr20-pr22.md` (2026-05-26)
 - [x] T-036 `maplibre-vworld-js` main 동기화. `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신하고, `redactVWorldUrl()` helper를 기존 내부 이름 `redactVWorldTileUrl`로 alias해 디버그 UI 계약을 유지했다. 최신 upstream redaction 표기 `***`를 테스트로 고정하고 frontend `npm ci`/lint/type/test/build를 검증했다. 상세: `docs/t036-maplibre-vworld-sync.md` (2026-05-26)
 - [x] T-035 MV refresh/swap 벤치마크. `scripts/benchmark_mv_refresh.py`로 전국 DB `kraddr_geo_t033`에서 `CONCURRENTLY`와 shadow swap을 비교했다. `CONCURRENTLY`는 1분 49.64초, shadow swap은 2분 16.28초였고, swap rename/index rename 구간은 약 0.016초였다. `shadow_swap_mv()`는 `ANALYZE`를 별도 transaction으로 분리했다. 상세: `docs/t035-mv-refresh-benchmark.md` (2026-05-26)

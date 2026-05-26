@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-029 — `jibun_rnaddrkor_*` 활용 결정)
+
+**작업**: PR #25 merge 이후 `codex/t029-jibun-rnaddrkor-decision` 브랜치에서 `jibun_rnaddrkor_*`와 daily `TH_SGCO_RNADR_LNBR.TXT`의 실제 구조와 cardinality를 확인했다.
+
+**실제 파일 확인**:
+- `jibun_rnaddrkor_seoul.txt` 첫 행은 14컬럼이며, daily `LNBR`도 같은 14컬럼 구조를 쓰되 마지막 컬럼에 `MVM_RES_CD`가 들어간다.
+- 전국 `jibun_rnaddrkor_*`: 1,769,370행, distinct `bd_mgt_sn` 986,309, 2개 이상 보조 지번을 가진 건물 334,789건, 한 건물 최대 545행.
+- 서울 `jibun_rnaddrkor_seoul.txt`: 89,290행, distinct `bd_mgt_sn` 52,280, 2개 이상 보조 지번을 가진 건물 13,318건.
+- 서울 `jibun_rnaddrkor` PNU와 `rnaddrkor` 대표 PNU 비교: 89,290행 중 89,289행이 대표 PNU와 다르고, `rnaddrkor`에서 찾지 못한 `bd_mgt_sn`은 0건이었다.
+- daily `20260401` LNBR: 204행, distinct `bd_mgt_sn` 72, 2개 이상 변경 지번을 가진 건물 31건, 코드 분포 `31=74`, `63=130`.
+
+**결정**:
+- `jibun_rnaddrkor_*`와 daily `LNBR`는 `tl_juso_text.pnu`에 덮어쓰지 않는다.
+- 후속 T-038에서 `tl_juso_parcel_link` 별도 1:N 테이블을 도입한다.
+- `mv_geocode_target`은 계속 `bd_mgt_sn` unique를 유지하고, 보조 지번은 지번 검색 후보 확장/디버그 표시/정합성 검증에 단계적으로 연결한다.
+- ADR-022와 `docs/t029-jibun-rnaddrkor-decision.md`에 근거와 테이블 초안을 기록했다.
+
+**검증 진행**:
+- `pytest tests/integration/test_real_jibun_rnaddrkor_files.py -q` → 2 passed.
+- 전체 `pytest -q` → 124 passed / 3 skipped.
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
+
+**다음 작업**: 전체 검증 후 PR을 열어 20분 리뷰 대기한다.
+
 ## 2026-05-26 (T-028 — 도로명주소 일변동 ZIP 로더)
 
 **작업**: PR #24 merge 이후 `codex/t028-daily-delta-loader` 브랜치에서 `data/juso/daily/*.zip` 일변동 ZIP 로더를 구현했다.
