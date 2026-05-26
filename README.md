@@ -156,6 +156,7 @@ asyncio.run(main())
 | **ADR-029** | 원천 자료 기준월은 source set으로 명시하고 혼합 적재는 확인 절차를 거침 |
 | **ADR-030** | 적재 완료 DB 백업/복원은 병렬 directory dump + 압축 아카이브로 수행 |
 | **ADR-031** | 전국 적재 후 쿼리 성능은 반복 벤치마크로 gate하고 보조 view/MV 도입을 허용 |
+| **ADR-033** | 운영 메타데이터는 `ops` 스키마의 감사·스냅샷·릴리스 테이블로 관리 |
 
 전체 ADR 본문은 [`docs/decisions.md`](docs/decisions.md)에서 확인하실 수 있습니다.
 

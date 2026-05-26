@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-049 문서/계획 추가: 유지보수·관리 관점에서 `ops` 스키마를 도입하고 `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`를 추가하는 ADR-033과 구현 task를 정리한다. active serving release, rollback lineage, artifact checksum/retention, maintenance window, redacted audit event를 운영 메타데이터의 기본 축으로 둔다. 코드는 아직 작성하지 않는다.
 - T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의: `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`로 갱신한다. ADR-032를 추가해 VWorld layer/style, marker primitive, tile error redaction, 패키징/타입처럼 범용 기능은 `digitie/maplibre-vworld-js`에서 보강하고, geocode/reverse 입력 연결, API 응답 overlay, 정합성·성능·적재 상태 표시, 이 프로젝트 fallback UX는 `kraddr-geo-ui` domain wrapper에서 구현하도록 명시한다.
 - T-047 문서/계획 추가: 전국 full-load 후 지오코딩/역지오코딩/검색 쿼리를 다수 반복 측정해 p50/p95/p99, `EXPLAIN ANALYZE`, buffer, 동시성 결과로 튜닝하는 ADR-031을 정리한다. 속도를 최우선 gate로 두고, 필요하면 인덱스와 SQL 재작성뿐 아니라 read-only 보조 view/materialized view도 적극 도입하는 방향을 문서화한다. 코드는 아직 작성하지 않는다.
 - T-046 문서/계획 추가: 적재 완료 PostgreSQL/PostGIS DB를 `pg_dump -Fd --jobs` directory dump와 `tar.zst` 압축 아카이브로 백업하고, 새 빈 DB에 `pg_restore -Fd --jobs`로 복원하는 설계를 ADR-030으로 정리한다. 백그라운드 진행률, 취소, 완료 callback, UI 다운로드 링크, 대구광역시 부분 적재 기반 검증 시나리오를 문서화한다. 코드는 아직 작성하지 않는다.
