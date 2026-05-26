@@ -11,7 +11,7 @@
 | 텍스트 1차/보조 (5) | `tl_juso_text`, `tl_locsum_entrc`, `tl_roadaddr_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc` | 행정/도로명/지번/우편번호 정본 매핑, 출입구 좌표, direct 출입구 보완, 내비 진입점/centroid | 행안부 텍스트 (월간/별도) |
 | SHP polygon/폴리라인 (9) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | 행정구역·우편번호·건물 polygon, 도로 관리/구간/폴리라인 | 도로명주소 전자지도 SHP (월간) |
 | 우편번호 보조 (2) | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 | epost OpenAPI (분기, ADR-009) |
-| 메타 (5) | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `geo_cache` | 적재 watermark·MVM 매핑·작업 큐(ADR-011)·정합성 리포트(ADR-016)·외부 API 캐시 | |
+| 메타 (6) | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `db_backup_artifacts`, `geo_cache` | 적재 watermark·MVM 매핑·작업 큐(ADR-011)·정합성 리포트(ADR-016)·DB 백업 artifact(ADR-030)·외부 API 캐시 | |
 | 평면화 (1) | `mv_geocode_target` | 지오코딩 쿼리용 MV (ADR-007) | 위 1·2를 join |
 
 ## 텍스트 1차 정본 (`loaders/text/`, ADR-012)
@@ -705,6 +705,43 @@ CREATE INDEX idx_geo_cache_expires ON geo_cache (expires_at);
 적재 작업의 영속 상태. lifespan startup에서 잔존 `running → failed` 마크, `queued`는 payload가 DB에 남아 있으면 drain을 재개한다. 다중 워커 환경에서는 `pg_try_advisory_xact_lock` + `FOR UPDATE SKIP LOCKED`로 작업 픽업을 보호한다. 컬럼 정의는 `docs/backend-package.md` §9.7 참조.
 
 PR #10 리뷰 반영으로 `load_batch_id`, `parent_job_id`를 추가했다(ADR-017). 전국 풀로드는 `full_load_batch` root job을 만들고 그 아래 `juso_text_load`, `juso_parcel_link_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load` child를 묶는다. source child가 모두 성공해야 큐가 `consistency_check`를 자동 등록하고, 정합성 리포트가 `ERROR`가 아닐 때만 `mv_refresh`를 `strategy='swap'`으로 등록한다. 따라서 `load_jobs`는 단순 작업 이력 테이블이 아니라 적재 DAG의 현재 위치와 차단 사유를 설명하는 운영 감사 로그다.
+
+T-046 이후 같은 큐는 `db_backup`, `db_restore` 같은 적재 외 관리 작업도 담는다. 기존 이름이 `load_jobs`라 다소 좁지만, 작업 상태·진행률·취소·log tail·startup recovery 요구가 동일하므로 초기 구현은 재사용한다. REST 표면은 `/v1/admin/jobs/*` 중립 alias를 우선 노출한다.
+
+### `db_backup_artifacts` (ADR-030, T-046 설계)
+
+백업 파일 metadata. 실제 DDL은 T-046 구현 PR에서 확정하지만, 설계 기준은 다음과 같다.
+
+```sql
+CREATE TABLE db_backup_artifacts (
+  artifact_id          TEXT PRIMARY KEY,
+  job_id               TEXT NOT NULL REFERENCES load_jobs(job_id),
+  state                TEXT NOT NULL CHECK (state IN ('creating','available','failed','deleted','expired')),
+  profile              TEXT NOT NULL CHECK (profile IN ('serving-ready','lean-serving','forensic')),
+  format               TEXT NOT NULL CHECK (format IN ('directory_tar_zstd','custom')),
+  archive_path         TEXT NOT NULL,
+  archive_filename     TEXT NOT NULL,
+  size_bytes           BIGINT,
+  sha256               TEXT,
+  manifest             JSONB NOT NULL DEFAULT '{}'::jsonb,
+  source_set           JSONB,
+  row_counts           JSONB,
+  download_token_hash  TEXT,
+  callback_url         TEXT,
+  callback_state       TEXT CHECK (callback_state IN ('none','pending','delivered','retrying','failed')),
+  error_message        TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at          TIMESTAMPTZ,
+  expires_at           TIMESTAMPTZ
+);
+
+CREATE INDEX idx_db_backup_artifacts_state ON db_backup_artifacts (state, created_at DESC);
+CREATE INDEX idx_db_backup_artifacts_job ON db_backup_artifacts (job_id);
+```
+
+`archive_path`는 서버 내부 보관 경로다. API 응답과 callback payload에는 운영자가 볼 수 있는 범위에서만 노출하고, 다운로드는 별도 tokenized endpoint를 사용한다. `manifest`에는 PostgreSQL/PostGIS version, Alembic revision, backup profile, `pg_dump` jobs, source set, 핵심 row count, checksum을 넣는다. callback 실패는 artifact 실패와 별개이므로 `callback_state`로 따로 관리한다.
+
+복원 작업은 새 artifact를 만들지 않지만, 사용한 `artifact_id`, target DB, validation summary를 `load_jobs.payload`와 `log_tail`에 남긴다. 복원 이력 테이블이 필요해질 만큼 감사 요구가 커지면 `db_restore_runs`를 별도 추가한다.
 
 ### `load_consistency_reports` (ADR-016)
 

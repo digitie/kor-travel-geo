@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-046 등록 — 적재 완료 DB 백업/복원 설계)
+
+**작업**: 사용자 지시에 따라 완전히 적재한 PostgreSQL/PostGIS DB를 압축 artifact로 백업하고 새 DB로 복원하는 운영 설계를 문서화했다. 코드는 작성하지 않았다.
+
+**반영 상세**:
+- ADR-030을 추가했다. 대용량 운영 기본값은 plain SQL/DDL dump가 아니라 `pg_dump -Fd --jobs` directory dump와 `tar.zst` 압축 아카이브다.
+- `docs/t046-db-backup-restore.md`를 추가했다. 백업 profile, manifest, checksum, callback, 진행률 phase, 복원 안전장치, `/admin/backups` UI, 취소/실패 처리, 보안 allowlist를 상세히 정리했다.
+- `docs/backend-package.md`, `docs/frontend-package.md`, `docs/architecture.md`, `docs/data-model.md`, `docs/tasks.md`, `docs/resume.md`, `docs/agent-guide.md`, `README.md`, `CHANGELOG.md`를 같은 방향으로 갱신했다.
+
+**결정**:
+- `db_backup`과 `db_restore`는 백그라운드 job으로 실행하고, 상태 조회·취소·SSE는 중립 `/v1/admin/jobs/*` 표면을 우선 사용한다.
+- 백업 파일은 브라우저 로컬 경로가 아니라 서버 allowlist 하위 경로에 저장한다. UI 다운로드 링크는 완료 artifact를 로컬로 받기 위한 부가 경로다.
+- 구현 검증은 전국 full-load가 아니라 대구광역시 부분 적재 DB `kraddr_geo_t046_daegu` → `kraddr_geo_t046_daegu_restore` backup/restore로 먼저 수행한다.
+
 ## 2026-05-26 (T-045 등록 — source set 기준월 선택과 업로드/적재 UX)
 
 **작업**: 사용자 지시에 따라 원천 자료별 기준월이 다를 수 있음을 전제로 한 적재 UX와 API/CLI 함수 분리 설계를 문서화했다. 코드는 작성하지 않았다.

@@ -216,8 +216,8 @@ master 테이블로 INSERT/UPDATE/DELETE를 머지한다.
 "언젠가 고침"이 아닌, 추적 가능한 TODO만:
 
 ```python
-# TODO(T-046): MVM_RES_CD 매핑을 실제 변동분 데이터로 검증
-# FIXME(T-099): pool_recycle이 statement_timeout과 충돌. PG 16.4+에서만 재현.
+# TODO(T-900): MVM_RES_CD 매핑을 실제 변동분 데이터로 검증
+# FIXME(T-901): pool_recycle이 statement_timeout과 충돌. PG 16.4+에서만 재현.
 # XXX: PostGIS 3.4 미만에서 ST_PointOnSurface가 polygon 외부 점 반환 가능 — 3.4+ 강제
 ```
 

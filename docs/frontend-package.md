@@ -213,6 +213,7 @@ T-044 완전 포팅 원칙:
 | `/admin/cache` | 캐시 hit rate 시계열, 비우기 | `GET /v1/admin/cache/metrics` |
 | `/admin/logs` | `load_jobs.log_tail` 최근 라인 조회 | `GET /v1/admin/logs` |
 | `/admin/consistency` | C1~C10 정합성 리포트 조회·재검증 | `GET/POST /v1/admin/consistency*` |
+| `/admin/backups` | DB 백업/복원 작업, 진행률, callback 상태, artifact 다운로드 | `POST/GET /v1/admin/backups`, `POST /v1/admin/restores`, `GET /v1/admin/jobs/{id}/events` |
 
 `/admin/postal`, `/admin/settings`, WebSocket log stream은 문서상 장기 후보였지만 PR #12 구현 범위에는 넣지 않았다. 후속 PR에서 별도 백엔드 표면을 먼저 확정한 뒤 추가한다.
 
@@ -236,6 +237,30 @@ idle → selecting_files → uploading → upload_done → source_review
 - 전체 취소: 업로드 단계에서는 upload set cancel + 브라우저 요청 abort를 수행한다. 적재 단계에서는 root job에 cancel 요청을 보내고, 서버는 실행 중 child의 협조적 cancel event와 대기 중 child의 `cancelled` 상태 전이를 담당한다. GDAL callback이 0 반환 → 즉시 중단.
 
 UploadStage / SourceSetReviewStage / ProcessingStage 컴포넌트와 reducer 패턴은 T-045 구현 시 갱신한다. 테스트는 다중 파일 선택, DND, 기준월 mismatch modal, 업로드 취소, 적재 취소, 새로고침 후 진행률 복구를 포함해야 한다.
+
+### `/admin/backups` 상태 머신 (ADR-030, T-046)
+
+```
+idle → configuring_backup → backup_preflight → backup_running
+     → backup_done → artifact_ready → (reset) idle
+
+idle → selecting_artifact → restore_preflight → restore_running
+     → restore_done → validation_summary → (reset) idle
+```
+
+원칙: 백업/복원은 브라우저 요청 안에서 끝내지 않는다. UI는 작업 등록만 수행하고, 이후 `LoadJobStatus(kind="db_backup" | "db_restore")`와 `BackupArtifact` metadata를 통해 상태를 추적한다.
+
+- 백업 생성 탭: 저장 위치 allowlist, 상대 경로, profile(`serving-ready`, `lean-serving`, `forensic`), jobs, compression level, callback URL을 입력한다. 저장 위치는 사용자의 로컬 다운로드 경로가 아니라 백엔드 서버가 접근 가능한 경로임을 UI 라벨에 명확히 표시한다.
+- 진행 중 탭: `db_backup`, `db_restore` job을 함께 보여 준다. 우선 `GET /v1/admin/jobs/{job_id}/events` Server-Sent Events를 사용하고, 연결이 끊기면 TanStack Query polling으로 2초 간격 조회한다.
+- 진행률: 백업은 `preflight → dump → archive → checksum → finalize`, 복원은 `preflight → extract → restore → analyze → validate → finalize` phase를 표시한다. `pg_dump`/`pg_restore` progress는 추정값이므로 stage label, elapsed time, 처리 object/file, archive 크기를 함께 보여 준다.
+- 취소: 작업이 `queued` 또는 `running`일 때만 취소 버튼을 노출한다. 취소 후에는 서버가 partial dump dir, `.part` archive, 새 target DB를 어떻게 정리했는지 `log_tail`과 summary로 보여 준다.
+- 백업 목록 탭: artifact id, 파일명, 크기, SHA256 앞 12자리, 생성일, profile, source set, callback 상태, 만료 예정일을 table로 표시한다. `done` artifact만 다운로드 버튼을 노출한다.
+- 다운로드: 다운로드 링크는 브라우저 로컬 저장을 위한 보조 경로다. 백업 파일은 이미 서버 지정 경로에 저장되어 있으므로, UI는 서버 경로와 다운로드 링크를 구분해서 표시한다.
+- 복원 탭: artifact 선택 또는 서버 경로 입력, target DB 이름, jobs, smoke test 여부, consistency 여부를 입력한다. 현재 연결 DB 이름과 같은 target은 클라이언트에서도 막고, 서버 preflight 실패 메시지도 그대로 보여 준다.
+- 복원 안전장치: 기본 모드는 `new_database`만 노출한다. `replace_current`는 구현하더라도 별도 위험 모달, typed confirmation, 선행 백업 확인, maintenance mode 표시 없이는 실행하지 않는다.
+- callback 상태: terminal callback이 성공하면 `callback_state=delivered`, 실패 후 재시도 중이면 `retrying`, 재시도 소진이면 `failed`로 표시한다. callback 실패는 백업 파일 성공 여부와 분리해서 보여 준다.
+
+테스트는 backup form validation, SSE → polling fallback, 완료 후 다운로드 버튼 표시, callback 상태 badge, cancel flow, restore target DB 위험 입력 차단, corrupted artifact preflight 오류 표시를 포함해야 한다. 통합 검증은 대구광역시 부분 적재 DB를 대상으로 수행하고 전국 full-load는 실행하지 않는다.
 
 ## A7. DB 일관성 — 단일 엔진
 
