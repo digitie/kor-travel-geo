@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-037 — SHP geometry 포함 대형 레이어 적재 튜닝)
+
+**작업**: PR #31 merge 이후 `codex/t037-shp-geometry-tuning` 브랜치에서 `TL_SPBD_BULD` 직접 GDAL append 병목을 projection staging table 경로로 보강했다.
+
+**반영 상세**:
+- `src/kraddr/geo/loaders/shp/polygons_loader.py`에서 `TL_SPBD_BULD`만 `_kraddr_stage_spbd_buld_polygon` staging table로 분기한다.
+- staging 생성은 `accessMode="overwrite"`, `PG_USE_COPY=YES`, `SHAPE_ENCODING=CP949`, 기존 `plan.sql_statement` projection을 함께 사용한다.
+- 운영 테이블 insert는 `SET LOCAL search_path = public, x_extension` 후 `INSERT ... SELECT`로 수행하고, `ST_Multi(geom)::geometry(MultiPolygon, 5179)`와 문자열 trim/NULL 정규화, 건물번호 integer cast를 명시했다.
+- staging table은 시작 전과 종료 `finally`에서 모두 drop한다.
+- `docs/t037-shp-geometry-tuning.md`를 추가하고 `docs/backend-package.md`, `docs/t034-shp-append-tuning.md`, `docs/t027-fullload-plan.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**실제 파일 검증**:
+- 세종 단일 `TL_SPBD_BULD`: 기존 append 38.36초 → projection staging 18.59초, 55,819행, source 추적 컬럼 전량 채움, staging table 없음.
+- 경기도 raw staging은 원본 DBF 전체 속성을 복사해 22분 58.46초 동안 끝나지 않아 `pg_terminate_backend()`로 중단했다. 중단 지점은 GDAL feature 617,214 부근이었다.
+- 경기도 projection staging: 1,649,975행, 40분 17.15초, source 추적 컬럼 전량 채움, staging table 없음.
+- 세종 public CLI `kraddr-geo load shp ... --mode full --yyyymm 202604`: 9개 레이어 적재 성공, 1분 19.54초, `tl_spbd_buld_polygon=55,819`, `tl_sprd_intrvl=100,009`, `tl_sprd_rw=7,429`.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py -q` → 17 passed.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo/loaders/shp/polygons_loader.py` → 통과.
+
+**다음 작업**: 전체 검증 후 PR을 열어 약 20분 리뷰 대기한다. 리뷰가 없거나 반영이 끝나면 main에 merge하고 T-027 최종 실 데이터 클린 적재 검증으로 진행한다.
+
 ## 2026-05-26 (T-041 — 상세주소 동 도형/구역 추가 레이어 검토)
 
 **작업**: PR #30 merge 이후 `codex/t041-extra-shape-layer-review` 브랜치에서 `건물군 내 상세주소 동 도형`과 `구역의 도형`을 실제 세종/경남 파일로 전자지도와 비교했다.

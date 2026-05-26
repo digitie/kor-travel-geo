@@ -6,10 +6,10 @@
 - 없음
 
 ## 대기 (우선순위 순)
-- T-037 geometry 포함 SHP 대형 레이어 적재 튜닝 — `TL_SPBD_BULD` 등 도형 포함 레이어의 GDAL append 병목을 `PG_USE_COPY`, staging table, layer별 옵션 조합으로 실험하고 실제 세종/경기도 기준 시간을 문서화한다.
 - T-027 최종 실 데이터 클린 적재 검증 — 남은 튜닝/증분/보조 로더 작업을 모두 머지한 뒤 Docker DB를 삭제하고 처음부터 다시 적재한다. C1~C10 정합성, geocode/reverse/search/zipcode smoke test, data-quality export, 성능 로그를 최종 회귀 기준으로 남긴다. 상세: `docs/t027-fullload-plan.md`
 
 ## 완료
+- [x] T-037 geometry 포함 SHP 대형 레이어 적재 튜닝. `TL_SPBD_BULD`를 운영 테이블 직접 append 대신 projection staging table + 운영 테이블 insert-select 경로로 분기했다. 세종 단일 레이어는 기존 38.36초에서 18.59초로 줄었고, 경기도 1,649,975행은 40분 17.15초에 성공했다. 상세: `docs/t037-shp-geometry-tuning.md` (2026-05-26)
 - [x] T-041 상세주소 동 도형/구역 추가 레이어 검토. 세종/경남 실제 `건물군 내 상세주소 동 도형`이 전자지도 `TL_SPBD_BULD`의 부분집합임을 확인했고, `구역의 도형` 중 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복임을 확인했다. `TL_SCCO_GEMD`/`TL_SPPN_MAKAREA`는 별도 overlay/분석 후보로 보류한다. 상세: `docs/t041-detail-zone-shape-layers.md` (2026-05-26)
 - [x] T-040 `도로명주소 건물 도형` bundle 비교. 세종/경남 실제 `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`를 전자지도 `TL_SPBD_BULD`/`TL_SPBD_ENTRC`와 natural key로 비교했고, 단순 중복이 아니므로 현행 serving table에는 섞지 않기로 ADR-025에서 결정했다. 비교 helper/script와 실제 파일 테스트를 추가했다. 상세: `docs/t040-building-shape-bundle.md` (2026-05-26)
 - [x] T-039 `도로명주소 출입구 정보` direct entrance loader 구현. `RNENTDATA_2605_*.txt`를 `tl_roadaddr_entrc`에 별도 적재하고, MV 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 실제 전국 17개 ZIP 6,418,169행 구조, 세종 유효 좌표 27,779행, Docker DB 샘플 적재와 MV 우선순위를 검증했다. 상세: `docs/t039-roadaddr-entrance-loader.md` (2026-05-26)

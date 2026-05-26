@@ -27,7 +27,7 @@ INSERT INTO "tl_sprd_intrvl" (...) VALUES (...)
 - PostgreSQL에는 `psycopg` sync connection의 `COPY ... FROM STDIN`으로 적재한다.
 - 전체 `load_shp_polygons()` 인터페이스와 진행률 callback 계약은 유지한다.
 
-이 변경은 도형 처리, 좌표계 변환, winding order 보정에는 관여하지 않는다. 따라서 `TL_SPBD_BULD`, `TL_SPRD_RW`, 행정경계 polygon 레이어는 계속 GDAL `VectorTranslate`가 담당한다.
+이 변경은 도형 처리, 좌표계 변환, winding order 보정에는 관여하지 않는다. T-034 당시에는 `TL_SPBD_BULD`, `TL_SPRD_RW`, 행정경계 polygon 레이어가 계속 GDAL `VectorTranslate` 직접 append 경로를 담당했다. 이후 T-037에서 `TL_SPBD_BULD`만 projection staging table 경로로 분기했다.
 
 ## 구현 범위
 
@@ -176,7 +176,7 @@ KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t03
 
 ## 남은 한계
 
-- `TL_SPBD_BULD`는 여전히 GDAL append 경로에서 batch insert 형태로 관측된다. geometry 포함 대형 레이어라 `COPY`만으로 단순 대체하기 어렵고, GDAL option 조합 또는 staging table 전략을 별도 PR에서 검토해야 한다.
+- `TL_SPBD_BULD`는 T-037에서 projection staging table 경로로 보강했다. 세종 단일 레이어는 기존 append 38.36초에서 18.59초로 줄었지만, 경기도 1,649,975행 단일 레이어는 여전히 40분 17.15초가 걸렸다. 대형 geometry SHP decode/COPY stream 비용은 후속 튜닝 후보로 남는다.
 - 이번 PR은 전체 전국 full-load를 다시 돌리지 않았다. 전국 재적재는 T-027 최종 클린 로드에서 DB 삭제 후 처음부터 검증한다.
 - DBF parser는 현재 `TL_SPRD_INTRVL`의 실제 필드와 CP949/ASCII 숫자 필드에 맞춰 최소 구현했다. 다른 DBF 레이어로 일반화하지 않는다.
 - 동일 시도 `TL_SPRD_INTRVL`을 append 모드로 중복 재실행하면 기존 GDAL append와 마찬가지로 PK 충돌이 날 수 있다. full-load의 첫 시도는 truncate, 이후 시도는 시도별 key가 달라 충돌하지 않는 운영 경로를 기준으로 한다.
@@ -200,5 +200,5 @@ TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo/loa
 
 - T-035: MV refresh/swap benchmark를 별도 PR에서 진행한다.
 - T-036: `maplibre-vworld-js` upstream main과 UI dependency SHA를 동기화한다.
-- T-037: `TL_SPBD_BULD` 등 geometry 포함 대형 SHP 레이어의 GDAL append 병목을 별도 후보로 등록한다. 도형 레이어는 geometry 변환과 winding 보정이 얽혀 있어 `TL_SPRD_INTRVL`처럼 단순 DBF COPY로 옮기지 않는다.
+- T-037: 완료. `TL_SPBD_BULD`는 GDAL projection staging + 운영 테이블 insert-select 경로로 바꿨다. 도형 레이어는 geometry 변환과 winding 보정이 얽혀 있어 `TL_SPRD_INTRVL`처럼 단순 DBF COPY로 옮기지 않는다.
 - T-027: 남은 튜닝과 증분 로더 작업을 모두 머지한 뒤 DB를 삭제하고 실제 전체 데이터를 처음부터 다시 적재한다.

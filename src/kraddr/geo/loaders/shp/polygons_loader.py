@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from sqlalchemy import create_engine, text
@@ -47,6 +48,8 @@ TARGET_TABLES: dict[str, str] = {
 }
 
 ROAD_INTERVAL_LAYER_NAME = "TL_SPRD_INTRVL"
+BUILDING_POLYGON_LAYER_NAME = "TL_SPBD_BULD"
+BUILDING_POLYGON_STAGE_TABLE = "_kraddr_stage_spbd_buld_polygon"
 ROAD_INTERVAL_SOURCE_FIELDS = (
     "SIG_CD",
     "RDS_MAN_NO",
@@ -217,6 +220,17 @@ def _load_plans_sync(
             loaded += 1
             continue
 
+        if plan.source_layer == BUILDING_POLYGON_LAYER_NAME:
+            _copy_building_polygon_with_stage(
+                pg_url,
+                plan,
+                gdal_module=gdal,
+                callback=callback,
+                cancel_event=cancel_event,
+            )
+            loaded += 1
+            continue
+
         options = gdal.VectorTranslateOptions(
             format="PostgreSQL",
             layerName=plan.target_table,
@@ -289,6 +303,101 @@ def _copy_road_interval_dbf(
     if on_layer_progress:
         on_layer_progress(1.0)
     return copied
+
+
+def _copy_building_polygon_with_stage(
+    pg_url: str,
+    plan: ShpLoadPlan,
+    *,
+    gdal_module: Any,
+    callback: Callable[[float, str, object], int],
+    cancel_event: asyncio.Event | None,
+) -> None:
+    _drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)
+    try:
+        options = gdal_module.VectorTranslateOptions(
+            format="PostgreSQL",
+            layerName=BUILDING_POLYGON_STAGE_TABLE,
+            SQLStatement=plan.sql_statement,
+            layerCreationOptions=["GEOMETRY_NAME=geom", "SPATIAL_INDEX=NONE"],
+            srcSRS="EPSG:5179",
+            dstSRS="EPSG:5179",
+            accessMode="overwrite",
+            geometryType=plan.geometry_type,
+            callback=callback,
+        )
+        with gdal_module.config_options({"PG_USE_COPY": "YES", "SHAPE_ENCODING": "CP949"}):
+            result = gdal_module.VectorTranslate(
+                _gdal_pg_destination(pg_url),
+                str(plan.shp_path),
+                options=options,
+            )
+        if result is None:
+            msg = f"GDAL VectorTranslate failed for {plan.source_layer} staging"
+            raise LoaderError(msg)
+        if cancel_event and cancel_event.is_set():
+            raise asyncio.CancelledError("shp building polygon loader cancelled")
+        _insert_building_polygon_stage(pg_url, plan)
+    finally:
+        _drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)
+
+
+def _insert_building_polygon_stage(pg_url: str, plan: ShpLoadPlan) -> None:
+    engine = create_engine(pg_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("SET LOCAL search_path = public, x_extension"))
+            conn.execute(
+                text(
+                    f"""
+INSERT INTO {plan.target_table} (
+  bd_mgt_sn,
+  sig_cd,
+  emd_cd,
+  li_cd,
+  rds_sig_cd,
+  rn_cd,
+  buld_se_cd,
+  buld_mnnm,
+  buld_slno,
+  geom,
+  source_file,
+  source_yyyymm
+)
+SELECT
+  NULLIF(BTRIM(bd_mgt_sn::text), ''),
+  NULLIF(BTRIM(sig_cd::text), ''),
+  NULLIF(BTRIM(emd_cd::text), ''),
+  NULLIF(BTRIM(li_cd::text), ''),
+  NULLIF(BTRIM(rds_sig_cd::text), ''),
+  NULLIF(BTRIM(rn_cd::text), ''),
+  NULLIF(BTRIM(buld_se_cd::text), ''),
+  NULLIF(BTRIM(buld_mnnm::text), '')::integer,
+  NULLIF(BTRIM(buld_slno::text), '')::integer,
+  ST_Multi(geom)::geometry(MultiPolygon, 5179),
+  :source_file,
+  :source_yyyymm
+FROM {BUILDING_POLYGON_STAGE_TABLE}
+WHERE NULLIF(BTRIM(bd_mgt_sn::text), '') IS NOT NULL
+  AND geom IS NOT NULL
+"""
+                ),
+                {
+                    "source_file": plan.source_file,
+                    "source_yyyymm": plan.source_yyyymm,
+                },
+            )
+    finally:
+        engine.dispose()
+
+
+def _drop_stage_table(pg_url: str, table_name: str) -> None:
+    engine = create_engine(pg_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+    finally:
+        engine.dispose()
 
 
 def _iter_road_interval_copy_rows(

@@ -32,12 +32,14 @@ def test_gdal_pg_destination_uses_query_connect_timeout() -> None:
 
 def test_vector_translate_uses_gdal_38_compatible_encoding_options() -> None:
     source = inspect.getsource(polygons_loader._load_plans_sync)
+    stage_source = inspect.getsource(polygons_loader._copy_building_polygon_with_stage)
 
     assert "openOptions" not in source
     assert '"SHAPE_ENCODING": "CP949"' in source
     assert "_gdal_pg_destination(pg_url)" in source
     assert 'accessMode="append"' in source
     assert 'accessMode="overwrite"' not in source
+    assert 'accessMode="overwrite"' in stage_source
 
 
 def test_full_mode_logs_row_count_snapshot_before_truncate() -> None:
@@ -128,6 +130,26 @@ def test_road_interval_layer_uses_direct_dbf_copy_path() -> None:
     assert "ROAD_INTERVAL_LAYER_NAME" in source
     assert "_copy_road_interval_dbf" in source
     assert source.index("_copy_road_interval_dbf") < source.index("gdal.VectorTranslate")
+
+
+def test_building_polygon_layer_uses_staging_table_copy_path() -> None:
+    source = inspect.getsource(polygons_loader._load_plans_sync)
+    stage_source = inspect.getsource(polygons_loader._copy_building_polygon_with_stage)
+    insert_source = inspect.getsource(polygons_loader._insert_building_polygon_stage)
+
+    assert "BUILDING_POLYGON_LAYER_NAME" in source
+    assert "_copy_building_polygon_with_stage" in source
+    assert source.index("_copy_building_polygon_with_stage") < source.index(
+        "gdal.VectorTranslate"
+    )
+    assert "BUILDING_POLYGON_STAGE_TABLE" in stage_source
+    assert "SQLStatement=plan.sql_statement" in stage_source
+    assert '"PG_USE_COPY": "YES"' in stage_source
+    assert '"SHAPE_ENCODING": "CP949"' in stage_source
+    assert "finally:" in stage_source
+    assert "_drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)" in stage_source
+    assert "ST_Multi(geom)::geometry(MultiPolygon, 5179)" in insert_source
+    assert "SET LOCAL search_path = public, x_extension" in insert_source
 
 
 def test_road_interval_dbf_rows_project_to_copy_columns(tmp_path: Path) -> None:
