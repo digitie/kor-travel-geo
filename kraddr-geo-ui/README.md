@@ -18,6 +18,8 @@ npm run dev
 
 ## 검증
 
+WSL ext4 작업 디렉토리에서는 Windows `npm` 대신 Linux Node/npm을 사용한다. Windows `npm`은 UNC cleanup 오류를 낼 수 있어 검증 결과가 흔들릴 수 있다.
+
 ```bash
 npm run lint
 npm run type-check

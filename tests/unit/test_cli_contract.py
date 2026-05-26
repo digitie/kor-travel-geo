@@ -10,6 +10,10 @@ from kraddr.geo.cli.main import (
     _shp_mode_for_index,
     app,
     load_all_sidos_command,
+    load_daily_juso_command,
+    load_daily_parcel_links_command,
+    load_parcel_links_command,
+    load_roadaddr_entrances_command,
     load_shp_all_command,
 )
 
@@ -59,6 +63,17 @@ def test_multi_sido_shp_load_analyzes_only_after_last_sido() -> None:
     assert "analyze=index == len(items) - 1" in shp_all_source
     assert "sido_dirs = _sido_dirs(shp_root)" in all_sidos_source
     assert "analyze=index == len(sido_dirs) - 1" in all_sidos_source
+
+
+def test_limit_per_file_commands_warn_test_only() -> None:
+    for command in (
+        load_daily_juso_command,
+        load_parcel_links_command,
+        load_daily_parcel_links_command,
+        load_roadaddr_entrances_command,
+    ):
+        source = inspect.getsource(command)
+        assert "_warn_limit_per_file(limit_per_file)" in source
 
 
 def test_data_quality_case_parser_deduplicates_and_rejects_unknown() -> None:

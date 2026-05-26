@@ -93,6 +93,15 @@ def init_db() -> None:
     asyncio.run(run())
 
 
+def _warn_limit_per_file(limit_per_file: int | None) -> None:
+    if limit_per_file is not None:
+        typer.echo(
+            "warning: --limit-per-file is for parser/load smoke tests only; "
+            "do not use it for production loads.",
+            err=True,
+        )
+
+
 @load_app.command("juso")
 def load_juso(path: Path, yyyymm: str | None = typer.Option(None, "--yyyymm")) -> None:
     async def run() -> None:
@@ -110,6 +119,8 @@ def load_daily_juso_command(
     yyyymm: str | None = typer.Option(None, "--yyyymm"),
     limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
 ) -> None:
+    _warn_limit_per_file(limit_per_file)
+
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client.engine is not None
@@ -139,6 +150,8 @@ def load_parcel_links_command(
     limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
     append: bool = typer.Option(False, "--append", help="기존 링크를 비우지 않고 upsert한다."),
 ) -> None:
+    _warn_limit_per_file(limit_per_file)
+
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client.engine is not None
@@ -165,6 +178,8 @@ def load_daily_parcel_links_command(
     yyyymm: str | None = typer.Option(None, "--yyyymm"),
     limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
 ) -> None:
+    _warn_limit_per_file(limit_per_file)
+
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client.engine is not None
@@ -193,6 +208,8 @@ def load_roadaddr_entrances_command(
     limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
     append: bool = typer.Option(False, "--append", help="기존 출입구를 비우지 않고 upsert한다."),
 ) -> None:
+    _warn_limit_per_file(limit_per_file)
+
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client.engine is not None

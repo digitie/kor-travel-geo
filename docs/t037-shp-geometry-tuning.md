@@ -170,12 +170,14 @@ FROM tl_spbd_buld_polygon;
 - projection을 staging에 적용해 불필요한 DBF 속성 컬럼 전송을 막는다.
 - 운영 테이블 insert-select 구간에서 trimming, NULL normalization, geometry type cast를 명시적으로 관리한다.
 - 실패/취소 시 staging table을 남기지 않는다.
+- `TL_SPBD_BULD` staging 경로는 `pg_try_advisory_lock(hashtext('kraddr_geo:tl_spbd_buld_polygon_stage'))`로 같은 DB 안 동시 실행을 fail-fast한다. 두 터미널에서 CLI를 동시에 실행해도 고정 staging table을 서로 덮어쓰지 않는다.
+- staging row count와 운영 insert row count를 비교해 `bd_mgt_sn` 공백 또는 `geom IS NULL`로 skip된 행을 stdout에 남긴다.
 
 다만 대형 geometry 파일에서는 여전히 GDAL SHP decode + COPY stream 자체가 길다. 경기도 1,649,975 polygon은 단일 레이어만 40분 17초가 걸렸다. 전국 전체 시간은 T-027 최종 클린 로드에서 다시 확인해야 하며, 경기도급 대형 시도의 추가 개선은 별도 PR 후보로 남긴다.
 
 ## 운영상 주의
 
-- staging table 이름은 고정이다. 현재 `load_jobs`와 full-load batch는 직렬 실행을 전제로 하므로 같은 DB에서 두 개의 `TL_SPBD_BULD` 적재를 동시에 실행하지 않는다.
+- staging table 이름은 고정이다. 현재 `load_jobs`와 full-load batch는 직렬 실행을 전제로 하고, CLI 동시 실행은 advisory lock으로 즉시 실패시킨다.
 - `mode="full"`은 대상 운영 테이블을 먼저 truncate한다. staging/insert 중 실패하면 해당 레이어 운영 테이블이 비어 있을 수 있다. 전국 full-load에서는 ADR-017 batch gate와 MV swap이 최종 노출을 막아야 한다.
 - staging table은 `finally`에서 drop되지만, 프로세스가 강제 종료되면 다음 실행 시작 시 다시 drop한다.
 - `pg_stat_progress_copy`의 `tuples_processed`는 이번 경기도 실행에서 누적형으로 안정적으로 보이지 않았다. 진행률 판단은 최종 row count와 `/usr/bin/time` 값을 기준으로 한다.

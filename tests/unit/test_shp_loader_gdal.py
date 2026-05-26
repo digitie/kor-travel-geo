@@ -148,6 +148,16 @@ def test_building_polygon_layer_uses_staging_table_copy_path() -> None:
     assert '"SHAPE_ENCODING": "CP949"' in stage_source
     assert "finally:" in stage_source
     assert "_drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)" in stage_source
+    assert "_acquire_building_polygon_stage_lock(pg_url)" in stage_source
+    assert "_release_building_polygon_stage_lock(lock_engine, lock_conn)" in stage_source
+    assert "pg_try_advisory_lock(hashtext(:lock_key))" in inspect.getsource(
+        polygons_loader._acquire_building_polygon_stage_lock
+    )
+    assert "pg_advisory_unlock(hashtext(:lock_key))" in inspect.getsource(
+        polygons_loader._release_building_polygon_stage_lock
+    )
+    assert "staged_count" in insert_source
+    assert "skipped invalid rows" in insert_source
     assert "ST_Multi(geom)::geometry(MultiPolygon, 5179)" in insert_source
     assert "SET LOCAL search_path = public, x_extension" in insert_source
 
