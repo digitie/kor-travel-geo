@@ -150,7 +150,7 @@ Next.js /admin/backups
   │                                             manifest/checksum/log + tar.zst archive
   │                                                                 │
   │                                                                 ▼
-  │                                            db_backup_artifacts metadata + callback
+  │                                            ops.artifacts metadata + callback
   │                                                                 │
   └─ 진행률 조회 ───GET /v1/admin/jobs/{id}/events 또는 polling────┘
       완료 후 ─────GET /v1/admin/backups/{artifact_id}/download────▶ streaming download

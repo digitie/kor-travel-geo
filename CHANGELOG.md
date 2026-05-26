@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- 문서 정합성 재검토: 현재형 문서의 `master` 표현을 `main`으로 바로잡고, README/SKILL의 `load all-sidos` 예시를 실제 CLI 옵션 형태로 갱신했다. `kraddr-geo-ui`가 같은 저장소의 별도 Node.js 패키지라는 설명, README ADR-032 누락, T-046 백업 artifact의 `ops.artifacts` 수렴 원칙, 후속 task 순서도 함께 정리했다.
 - README 법적 고지 보강: 이 프로젝트가 AI 활용 방식과 개발 워크플로를 학습·검증하기 위한 기술 연구 프로젝트이며, 외부 원천 데이터/API는 제공 기관의 이용약관·저작권·재배포 조건·호출 한도를 준수하는 것을 전제로 사용한다고 명시한다.
 - T-049 문서/계획 추가: 유지보수·관리 관점에서 `ops` 스키마를 도입하고 `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`를 추가하는 ADR-033과 구현 task를 정리한다. active serving release, rollback lineage, artifact checksum/retention, maintenance window, redacted audit event를 운영 메타데이터의 기본 축으로 둔다. 코드는 아직 작성하지 않는다.
 - T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의: `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`로 갱신한다. ADR-032를 추가해 VWorld layer/style, marker primitive, tile error redaction, 패키징/타입처럼 범용 기능은 `digitie/maplibre-vworld-js`에서 보강하고, geocode/reverse 입력 연결, API 응답 overlay, 정합성·성능·적재 상태 표시, 이 프로젝트 fallback UX는 `kraddr-geo-ui` domain wrapper에서 구현하도록 명시한다.

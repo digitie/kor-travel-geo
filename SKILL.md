@@ -5,9 +5,9 @@
 
 ## 1. 정체성
 
-이 저장소(GitHub 이름 `python-kraddr-geo`, Python 패키지 `kraddr.geo`)는 도로명주소 전자지도(PDF 사양)를 PostGIS에 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**다. vworld API의 응답 형식을 호환하면서 자체 확장(`x_extension`)을 더한다. UI 패키지(`kraddr-geo-ui`)는 별도이며, 이 저장소는 백엔드만 다룬다.
+이 저장소(GitHub 이름 `python-kraddr-geo`, Python 패키지 `kraddr.geo`)는 도로명주소 전자지도(PDF 사양)를 PostGIS에 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**다. vworld API의 응답 형식을 호환하면서 자체 확장(`x_extension`)을 더한다. `kraddr-geo-ui`는 같은 저장소 안에서 관리하는 별도 Node.js 패키지이며, 디버그/관리 UI로 백엔드 REST API만 호출한다.
 
-이전 SpatiaLite/SQLite 기반 구현은 같은 `kraddr.geo` 패키지였으나 `v1` 브랜치에 보존되어 있다. master 브랜치는 PostgreSQL + PostGIS 기반 새 사양으로 재시작한다.
+이전 SpatiaLite/SQLite 기반 구현은 같은 `kraddr.geo` 패키지였으나 `v1` 브랜치에 보존되어 있다. `main` 브랜치는 PostgreSQL + PostGIS 기반 새 사양으로 재시작한다.
 
 ### 식별자 매핑
 
@@ -39,8 +39,13 @@ cp .env.example .env && $EDITOR .env                  # KRADDR_GEO_PG_DSN 채우
 ln -s /mnt/d/projects/python-kraddr-geo/data data     # NTFS data를 참조
 docker compose up -d postgres                         # postgis/postgis:16-3.4
 alembic upgrade head
-kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
-    --pg-conn "host=localhost dbname=kraddr_geo user=addr password=..."
+kraddr-geo load all-sidos \
+  --juso "./data/juso/도로명주소 한글_전체분" \
+  --jibun "./data/juso/도로명주소 한글_전체분" \
+  --locsum "./data/juso/위치정보요약DB" \
+  --navi "./data/juso/내비게이션용DB" \
+  --shp-root "./data/jusoMap/202605" \
+  --yyyymm 202605
 uvicorn kraddr.geo.api.app:app --reload
 ```
 
@@ -58,6 +63,8 @@ src/kraddr/geo/
   api/       — FastAPI 라우터 (client.py를 호출)
   cli/       — typer CLI
 ```
+
+프론트엔드 작업은 `kraddr-geo-ui/`에서 수행한다. 이 패키지는 Next.js 기반 내부 디버그/관리 UI이며, DB 드라이버를 직접 갖지 않고 `/v1/*` REST API만 호출한다.
 
 의존 방향은 **dto → core → infra → client → api/cli** 한 방향. `import-linter`가 CI에서 강제한다.
 

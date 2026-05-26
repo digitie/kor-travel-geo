@@ -2,7 +2,7 @@
 
 `kraddr-geo`의 역지오코딩은 `core.reverse_geocoder.reverse_geocode()`와 `infra.reverse_repo.ReverseRepository`가 담당한다. 라이브러리 진입점은 `AsyncAddressClient.reverse_geocode(lon, lat, ...)`이며 REST 엔드포인트는 `GET /v1/address/reverse`다.
 
-> 이전(v1) SpatiaLite 기반 `SpatialiteAddressStore.get_address()`는 `v1` 브랜치에 보존되어 있다. master는 PostgreSQL + PostGIS / `AsyncAddressClient` 기준만 다룬다(ADR-001, ADR-002).
+> 이전(v1) SpatiaLite 기반 `SpatialiteAddressStore.get_address()`는 `v1` 브랜치에 보존되어 있다. `main`은 PostgreSQL + PostGIS / `AsyncAddressClient` 기준만 다룬다(ADR-001, ADR-002).
 
 ## 입력
 

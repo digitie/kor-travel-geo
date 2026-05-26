@@ -5,8 +5,8 @@
 ## 현재 진척도 (2026-05-27 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
-- ✅ master 브랜치를 문서·repo 설정만 남도록 정리
-- ✅ 신규 사양(`kraddr.geo` 패키지의 PostgreSQL+PostGIS 재구현 + `kraddr-geo-ui` 프론트엔드) 문서 골격을 master에 반영
+- ✅ `main` 브랜치를 문서·repo 설정만 남도록 정리
+- ✅ 신규 사양(`kraddr.geo` 패키지의 PostgreSQL+PostGIS 재구현 + `kraddr-geo-ui` 프론트엔드) 문서 골격을 `main`에 반영
 - ✅ 식별자 정정 및 WSL/NTFS 개발 정책, NTFS의 `data/` 정책을 모든 문서에 명시
 - ✅ `pyproject.toml` 신규 작성 — `name = "python-kraddr-geo"`, scripts `kraddr-geo = "kraddr.geo.cli.main:app"`
 - ✅ 기본 패키지 스캐폴드 작성 — `src/kraddr/geo/`, 계층별 빈 패키지, `AsyncAddressClient` 자리표시자, Typer CLI 진입점
@@ -72,11 +72,12 @@
 - ✅ T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의 — upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`을 확인하고 `kraddr-geo-ui` dependency/lockfile을 갱신했다. ADR-032를 추가해 범용 VWorld/MapLibre 기능은 upstream, 지오코딩/역지오코딩/관리 UI 특화 기능은 이 저장소 domain wrapper에서 구현하는 원칙을 확정했다.
 - 🟡 T-049 운영 메타데이터·감사·릴리스 스키마 설계 등록 — ADR-033과 `docs/t049-ops-metadata-schema.md`를 추가했다. 후속 구현은 `ops` 스키마, `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`, `/v1/admin/ops/*`, `/admin/ops`를 포함한다.
 - ✅ README 법적 고지 보강 — 프로젝트가 AI 활용 방식과 개발 워크플로를 학습·검증하기 위한 기술 연구 프로젝트이며, 외부 원천 데이터/API는 제공 기관의 조건을 준수하는 것을 전제로 사용한다고 명시했다.
+- ✅ 문서 정합성 재검토 — `master`/`main` 표현, README/SKILL quick start CLI 예시, `kraddr-geo-ui` 소유 설명, T-046 artifact registry 명칭, README ADR 목록, 후속 task 순서를 현재 코드와 ADR에 맞춰 정리했다. 상세: `docs/doc-consistency-audit-20260527.md`
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-043 PR #23~최신 PR 리뷰 코멘트 일괄 audit/fixup이다. 각 PR의 conversation comment, formal review body, inline review thread를 모두 확인하고, 반영 가능한 내용은 후속 fixup PR로 옮긴다. 그 다음 후보는 T-049 운영 메타데이터·감사·릴리스 스키마 구현, T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX 구현, T-046 적재 완료 DB 백업/복원 및 UI 구현이다. T-049에서는 `ops` 스키마와 audit/snapshot/release/artifact/maintenance/table-stats 테이블, `/v1/admin/ops/*`, `/admin/ops`, secret redaction 테스트를 구현한다. T-045에서는 source set 발견/계획 함수, CLI 기준월 mismatch 확인, UI 다중 파일/DND 업로드, 업로드/적재 진행률, 취소 UX를 구현한다. T-046에서는 `pg_dump -Fd --jobs` directory dump + `tar.zst` artifact, `db_backup`/`db_restore` job, callback, `/admin/backups` UI, 대구광역시 부분 적재 DB backup → restore 검증을 수행하되 artifact registry는 가능하면 T-049의 `ops.artifacts`를 사용한다. 이후 T-044 디버그 UI를 최신 `maplibre-vworld-js` 기반 domain wrapper로 경계화하고, T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회, T-027 최종 실 데이터 클린 적재 검증을 진행한다. T-027은 Docker DB를 삭제하고 처음부터 다시 적재하므로 실행 전 `docs/t027-fullload-plan.md`의 phase timer와 중단·재개 정책을 다시 확인한다. T-027 이후에는 T-047 전국 적재 후 쿼리 성능 벤치마크를 즉시 실행해 지오코딩/역지오코딩/검색 p95/p99를 운영 gate로 삼고, 필요하면 보조 view/MV까지 도입한다.
+다음 작업은 T-043 PR #23~최신 PR 리뷰 코멘트 일괄 audit/fixup이다. 각 PR의 conversation comment, formal review body, inline review thread를 모두 확인하고, 반영 가능한 내용은 후속 fixup PR로 옮긴다. 그 다음 후보는 T-049 운영 메타데이터·감사·릴리스 스키마 구현, T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX 구현, T-046 적재 완료 DB 백업/복원 및 UI 구현이다. T-049에서는 `ops` 스키마와 audit/snapshot/release/artifact/maintenance/table-stats 테이블, `/v1/admin/ops/*`, `/admin/ops`, secret redaction 테스트를 구현한다. T-045에서는 source set 발견/계획 함수, CLI 기준월 mismatch 확인, UI 다중 파일/DND 업로드, 업로드/적재 진행률, 취소 UX를 구현한다. T-046에서는 `pg_dump -Fd --jobs` directory dump + `tar.zst` artifact, `db_backup`/`db_restore` job, callback, `/admin/backups` UI, 대구광역시 부분 적재 DB backup → restore 검증을 수행하되 artifact registry는 T-049의 `ops.artifacts`를 기본값으로 사용한다. 이후 T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회와 T-027 최종 실 데이터 클린 적재 검증을 진행한다. T-027은 Docker DB를 삭제하고 처음부터 다시 적재하므로 실행 전 `docs/t027-fullload-plan.md`의 phase timer와 중단·재개 정책을 다시 확인한다. T-027 이후에는 T-047 전국 적재 후 쿼리 성능 벤치마크를 즉시 실행해 지오코딩/역지오코딩/검색 p95/p99를 운영 gate로 삼고, 필요하면 보조 view/MV까지 도입한다. 데이터·운영 gate가 안정화되면 T-044 디버그 UI를 최신 `maplibre-vworld-js` 기반 domain wrapper로 경계화한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.

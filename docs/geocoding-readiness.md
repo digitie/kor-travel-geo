@@ -2,7 +2,7 @@
 
 `kraddr-geo`이 정상 동작하려면 PostgreSQL + PostGIS 환경, 마스터 + 보조 테이블 적재, MV refresh, ANALYZE까지 끝난 상태가 필요하다. 본 문서는 그 체크리스트와 알려진 빈틈을 정리한다.
 
-> 이전(v1) SpatiaLite 기반 readiness 기준은 `v1` 브랜치 문서에서 본다. master는 PostgreSQL + PostGIS 기준만 다룬다(ADR-001).
+> 이전(v1) SpatiaLite 기반 readiness 기준은 `v1` 브랜치 문서에서 본다. `main`은 PostgreSQL + PostGIS 기준만 다룬다(ADR-001).
 
 ## 강한 입력 데이터
 
@@ -29,7 +29,7 @@ PC 개발은 WSL ext4에서 코드/가상환경/`git`을 운영하고, 데이터
 4. `Settings.pg_dsn` 설정 (`postgresql+psycopg://...`)
 5. `alembic upgrade head`로 DDL 적용 (마스터 11개 + 보조 + 메타 + MV 정의)
 6. NTFS의 데이터 디렉토리를 ext4에서 참조: `ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`
-7. 17개 시도 ZIP 적재 (`kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full`)
+7. 17개 시도 원천 적재 (`kraddr-geo load all-sidos --juso ... --locsum ... --navi ... --shp-root ... --yyyymm 202605`)
 8. `kraddr-geo load pobox ./data/postal/202605/JUSO_사서함.txt`, `kraddr-geo load bulk ./data/postal/202605/도로명주소_zipcode.txt`
 9. `kraddr-geo refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`
 10. `kraddr-geo refresh vacuum` → 통계 갱신 (`VACUUM (ANALYZE) tl_spbd_buld` 등)

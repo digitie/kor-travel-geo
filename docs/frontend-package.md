@@ -1,6 +1,6 @@
 # 프론트엔드 패키지 사양서 — `kraddr-geo-ui`
 
-본 문서는 첨부 사양서(2026-05-22 작성) Part A를 master 문서 체계로 옮긴 정리본이다. 디버깅 UI + DB 관리 UI를 한 Node.js 패키지로 통합 운영한다.
+본 문서는 첨부 사양서(2026-05-22 작성) Part A를 `main` 문서 체계로 옮긴 정리본이다. 디버깅 UI + DB 관리 UI를 한 Node.js 패키지로 통합 운영한다.
 
 ## A1. 개요
 
@@ -52,7 +52,7 @@ kraddr-geo-ui/
 ├── app/
 │   ├── layout.tsx, page.tsx, globals.css, providers.tsx
 │   ├── debug/                     # geocode/reverse/normalize/explain
-│   ├── admin/                     # tables/load/cache/logs/consistency
+│   ├── admin/                     # tables/load/cache/logs/consistency/backups/performance/ops
 │   └── api/
 │       └── proxy/[...path]/route.ts
 ├── components/
@@ -286,6 +286,20 @@ UI 원칙:
 - 프론트엔드는 DB에 직접 연결하지 않는다. benchmark artifact metadata와 plan JSON은 백엔드 REST로만 가져온다.
 
 테스트는 threshold badge, baseline/trial 비교 정렬, slow sample 클릭, 큰 plan JSON rendering, API 실패 상태를 포함한다.
+
+### `/admin/ops` 후보 화면 (ADR-033, T-049)
+
+T-049 구현 후 관리 UI는 운영자가 현재 DB 상태와 위험 작업 이력을 한 화면에서 확인할 수 있게 해야 한다. `/admin/load`, `/admin/backups`, `/admin/performance`가 각각 작업 실행 화면이라면 `/admin/ops`는 감사·스냅샷·릴리스·artifact를 묶어 보는 관제 화면이다.
+
+화면 구성:
+
+- dataset snapshot 목록: source set 기준월, 필수 원천 누락 여부, row count, consistency report, performance report, backup artifact 연결.
+- serving release 목록: active 여부, MV swap 시각, dataset snapshot, rollback 대상, code/schema version.
+- artifact 목록: `db_backup`, `restore_log`, `consistency_export`, `performance_report`, `source_inventory`, `schema_diff`를 같은 table에서 필터링한다.
+- audit event 목록: actor, action, target, job id, redacted payload, result, 생성 시각. API key, DSN password, token, callback secret, 주소 원문은 표시하지 않는다.
+- maintenance window: 활성 window, 만료 시각, 허용된 위험 작업, typed confirmation 상태.
+
+테스트는 secret redaction 표시, active release 한 건 강조, artifact type filter, audit event pagination, maintenance window 만료 상태를 포함한다.
 
 ## A7. DB 일관성 — 단일 엔진
 

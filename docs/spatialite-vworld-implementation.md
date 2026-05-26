@@ -1,6 +1,6 @@
 # PostGIS · vworld 호환 구현 (구 SpatiaLite 문서)
 
-> **이름 보존 안내**: 본 파일은 이전(v1) `SpatiaLite + vworld 호환` 구현 계획 문서의 자리를 그대로 잇는다. master에서는 PostgreSQL + PostGIS로 전환했으므로 본문도 새 사양에 맞춰 갱신했다. 이전 SpatiaLite 기반 계획은 `v1` 브랜치에서 동일 파일명으로 확인할 수 있다(ADR-001).
+> **이름 보존 안내**: 본 파일은 이전(v1) `SpatiaLite + vworld 호환` 구현 계획 문서의 자리를 그대로 잇는다. `main`에서는 PostgreSQL + PostGIS로 전환했으므로 본문도 새 사양에 맞춰 갱신했다. 이전 SpatiaLite 기반 계획은 `v1` 브랜치에서 동일 파일명으로 확인할 수 있다(ADR-001).
 
 본 문서는 `kraddr-geo`이 vworld OpenAPI와 동일한 응답 구조를 유지하면서 1차 데이터를 PostgreSQL + PostGIS에서 직접 처리하는 방식을 정리한다.
 
