@@ -470,9 +470,23 @@ API job kind는 `roadaddr_entrance_load`다. payload는 다른 경로 기반 loa
 `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`은 현재 full-load source child에 포함하지 않는다. T-030/T-041 실제 파일 검토 결과, 이 자료들은 기준월과 레이어 의미가 다르므로 기본 serving path에 즉시 섞지 않고 후속 분석 대상으로 분리했다.
 
 - T-040: 완료. `도로명주소 건물 도형` address polygon/entrance/connection bundle은 `scripts/compare_building_shape_bundle.py`로 전자지도와 비교할 수 있지만, serving loader는 보류한다.
-- T-041: 완료. 상세주소 동 도형은 `scripts/compare_extra_shape_layers.py`로 전자지도 건물과 비교할 수 있고, `구역의 도형`은 중복 5개 레이어와 추가 2개 레이어를 구분해 비교할 수 있다. 둘 다 기본 full-load/MV에는 섞지 않는다.
+- T-041: 완료. 상세주소 동 도형은 `scripts/compare_extra_shape_layers.py`로 전자지도 건물과 비교할 수 있고, `구역의 도형`은 중복 5개 레이어와 추가 2개 레이어를 구분해 비교할 수 있다. 상세주소 동과 `TL_SCCO_GEMD`는 기본 full-load/MV에는 섞지 않는다.
+- ADR-027: `TL_SPPN_MAKAREA`는 지점번호표기 의무지역 polygon이므로 단순 overlay 후보에서 국가지점번호 보조 geocode/reverse 데이터 후보로 승격한다. 구현 시에도 `mv_geocode_target`에는 union하지 않고 `tl_sppn_makarea` 별도 테이블과 `x_extension` 확장으로 연결한다.
 
 상세 근거는 ADR-023과 `docs/t030-extra-shape-sources.md`를 본다.
+
+#### 국가지점번호 표기 의무지역 (`TL_SPPN_MAKAREA`, 구현 전)
+
+`TL_SPPN_MAKAREA`는 건물이 없어 도로명주소가 부여되지 않는 산악·해안·도서·하천 주변 등에서 국가지점번호를 표기해야 하는 의무지역 polygon이다. 이름은 `SPPN`(Spot Point Position Number) + `MAKAREA`(Marking Area)로 해석한다.
+
+후속 구현의 원칙:
+
+- `tl_sppn_makarea` 별도 테이블로 적재한다.
+- primary key는 실제 세종/경남 파일에서 distinct로 확인한 `SIG_CD + MAKAREA_ID`를 사용한다.
+- `MAKAREA_NM`은 표시명으로만 보존하고 unique key로 쓰지 않는다.
+- reverse geocode는 도로명/지번 후보가 없거나 낮은 confidence일 때 `ST_Covers(tl_sppn_makarea.geom, target_pt_5179)`로 보조 후보를 찾는다.
+- geocode는 국가지점번호 문자열 parser/generator가 좌표를 계산한 뒤, 해당 좌표가 표기 의무지역에 속하는지 검증하고 `x_extension.sppn_makarea`에 구역 문맥을 붙인다.
+- 이 레이어는 개별 국가지점번호판 point 목록이 아니므로, `MAKAREA_NM`만으로 정밀 좌표를 만들지 않는다. 구역명 검색이 필요하면 centroid/bbox 기반 낮은 confidence `search` 기능으로 분리한다.
 
 실제 파일 검증 결과(서울 첫 행 기준):
 

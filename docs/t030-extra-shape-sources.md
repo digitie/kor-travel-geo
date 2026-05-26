@@ -22,7 +22,7 @@
 | `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트라 가장 유용한 보완 후보 | T-039 완료. `tl_roadaddr_entrc` 선택 적재 |
 | `도로명주소 건물 도형` | 주소 단위 polygon/entrance/connection bundle. 전자지도 `TL_SPBD_BULD` 단순 중복이 아님 | T-040 완료. 분석 helper 유지, serving loader 보류 |
 | `건물군 내 상세주소 동 도형` | 상세주소 동/동 출입구 레벨. 세종/경남 기준 전자지도 건물 polygon의 부분집합 | T-041 완료. overlay/상세주소 기능 후보 |
-| `구역의 도형` | 기존 전자지도 행정구역/기초구역 5개는 key 기준 완전 중복, `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`만 추가 | T-041 완료. 추가 2개만 별도 overlay 후보 |
+| `구역의 도형` | 기존 전자지도 행정구역/기초구역 5개는 key 기준 완전 중복, `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`만 추가 | T-041 완료. `TL_SCCO_GEMD`는 별도 overlay 후보, `TL_SPPN_MAKAREA`는 ADR-027에 따라 국가지점번호 보조 geocode/reverse 데이터 후보 |
 
 ## 실제 파일 구조
 
@@ -53,7 +53,15 @@
 | `TL_SCCO_GEMD` | Polygon | 24 | 추가 |
 | `TL_SPPN_MAKAREA` | Polygon | 146 | 추가 |
 
-현재 전자지도 로더가 이미 행정구역과 기초구역을 적재하므로 즉시 추가할 필요는 낮다. 다만 `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`는 행정/고시 구역 표시나 관리 UI에 필요할 수 있어 low priority 후속으로 둔다.
+현재 전자지도 로더가 이미 행정구역과 기초구역을 적재하므로 중복 5개 레이어를 다시 추가할 필요는 낮다. `TL_SCCO_GEMD`는 기존 읍면동과 key가 겹치지 않는 별도 고시/행정 구역 overlay 후보로 둔다.
+
+`TL_SPPN_MAKAREA`는 별도로 취급한다. 이 레이어는 지점번호표기 의무지역 polygon으로, 건물이 없어 도로명주소가 부여되지 않는 산악·해안·도서·하천 주변 등에서 국가지점번호를 표기해야 하는 구역을 나타낸다. 따라서 단순 관리 UI overlay뿐 아니라 다음 geocode/reverse geocode 보조 기능에 사용할 수 있다.
+
+- reverse geocode: 입력 좌표가 도로명/지번 주소 후보를 찾지 못하거나 confidence가 낮은 비거주지역이면, 좌표가 어떤 `TL_SPPN_MAKAREA` polygon 안에 있는지 확인해 국가지점번호 표기 의무지역 문맥을 제공한다.
+- geocode: `라마 1234 5678` 같은 국가지점번호 문자열 parser/generator가 좌표를 계산한 뒤, 그 좌표가 표기 의무지역에 속하는지 검증하고 `MAKAREA_NM` 같은 구역 metadata를 붙인다.
+- 검색/지도: 구역명(`MAKAREA_NM`) 기반 검색은 정확한 주소 geocode가 아니라 polygon centroid/bbox를 반환하는 낮은 confidence 구역 검색으로 분리한다.
+
+주의할 점은 `TL_SPPN_MAKAREA`가 개별 국가지점번호판 point 목록이 아니라 의무지역 경계 polygon이라는 점이다. 실제 표지판 위치나 시설물 목록이 필요한 경우 별도 원천이 필요하다.
 
 ### 도로명주소 건물 도형
 
@@ -99,8 +107,9 @@ ADR-023:
 1. 현재 full-load source child에는 네 자료를 추가하지 않는다.
 2. `도로명주소 출입구 정보`는 T-039에서 구현했다. direct `bd_mgt_sn + 5179 point`라 현재 결측/이상치 분석에 바로 도움이 될 수 있지만, 기준월 차이 때문에 기본 full-load 자동 포함은 제외한다.
 3. `도로명주소 건물 도형`은 T-040에서 전자지도 `TL_SPBD_BULD`와의 차이를 세종/경남 기준으로 비교했다. 단순 중복이 아니므로 loader가 필요하면 별도 분석 테이블로 둔다.
-4. 상세주소 동 도형과 구역 추가 레이어는 T-041에서 검토했다. serving API가 아니라 디버그 UI/품질 분석/상세주소 기능이 필요할 때 별도 overlay 테이블로 붙인다.
-5. 모든 후속 loader는 `source_yyyymm` 기준월을 명시하고, 현재 full-load 기준월과 섞을 때 C10 또는 별도 consistency note로 드러나야 한다.
+4. 상세주소 동 도형과 구역 추가 레이어는 T-041에서 검토했다. 상세주소 동과 `TL_SCCO_GEMD`는 serving API가 아니라 디버그 UI/품질 분석/상세주소 기능이 필요할 때 별도 overlay 테이블로 붙인다.
+5. `TL_SPPN_MAKAREA`는 ADR-027에 따라 국가지점번호 표기 의무지역 데이터로 별도 적재한다. 단, 현행 `mv_geocode_target` 주소 MV에는 섞지 않고 reverse/geocode enrichment 경로로 연결한다.
+6. 모든 후속 loader는 `source_yyyymm` 기준월을 명시하고, 현재 full-load 기준월과 섞을 때 C10 또는 별도 consistency note로 드러나야 한다.
 
 ## 검증
 
@@ -125,4 +134,4 @@ ADR-023:
 
 - T-039: 완료. `도로명주소 출입구 정보` direct entrance text loader와 `tl_roadaddr_entrc` 선택 적재 구현.
 - T-040: 완료. `도로명주소 건물 도형` bundle과 전자지도 `TL_SPBD_BULD` 차이 분석.
-- T-041: 완료. 상세주소 동 도형은 전자지도 건물 부분집합으로 확인했고, 구역 추가 레이어는 `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`만 별도 후보로 남겼다.
+- T-041: 완료. 상세주소 동 도형은 전자지도 건물 부분집합으로 확인했고, 구역 추가 레이어는 `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`만 별도 후보로 남겼다. 이후 ADR-027에서 `TL_SPPN_MAKAREA`는 국가지점번호 보조 geocode/reverse 데이터 후보로 승격했다.
