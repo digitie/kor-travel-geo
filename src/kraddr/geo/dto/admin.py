@@ -44,6 +44,20 @@ MaintenanceWindowKind = Literal[
 ]
 MaintenanceWindowState = Literal["scheduled", "active", "ending", "ended", "cancelled", "failed"]
 StatsObjectKind = Literal["table", "materialized_view", "index", "toast", "other"]
+SourceKind = Literal[
+    "juso",
+    "parcel_link",
+    "locsum",
+    "navi",
+    "shp",
+    "roadaddr_entrance",
+    "sppn_makarea",
+    "pobox",
+    "bulk",
+]
+SourceConfidence = Literal["high", "medium", "low"]
+UploadSetState = Literal["created", "uploading", "uploaded", "cancelled", "failed"]
+UploadFileState = Literal["pending", "uploading", "uploaded", "cancelled", "failed"]
 
 
 class TableStat(FrozenModel):
@@ -59,6 +73,98 @@ class UploadSidoZipResponse(FrozenModel):
     path: str
     size_bytes: int = Field(ge=0)
     sha256: str = Field(min_length=64, max_length=64)
+
+
+class SourceCandidate(FrozenModel):
+    kind: SourceKind
+    path: str
+    inferred_yyyymm: str | None = Field(default=None, pattern=r"^\d{6}$")
+    sido_count: int | None = Field(default=None, ge=0)
+    file_count: int | None = Field(default=None, ge=0)
+    byte_size: int | None = Field(default=None, ge=0)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    confidence: SourceConfidence
+    note: str | None = None
+
+
+class SourceSetDiscoveryRequest(FrozenModel):
+    root_path: str | None = None
+    upload_set_id: str | None = None
+    include_optional: bool = True
+
+
+class SourceSetDiscovery(FrozenModel):
+    root_path: str
+    candidates: tuple[SourceCandidate, ...] = ()
+    recommended: dict[str, SourceCandidate] = Field(default_factory=dict)
+    missing_required: tuple[str, ...] = ()
+    mixed_yyyymm: bool = False
+    yyyymm_by_kind: dict[str, str | None] = Field(default_factory=dict)
+    warning: str | None = None
+
+
+class SourceSetPlanRequest(FrozenModel):
+    root_path: str | None = None
+    upload_set_id: str | None = None
+    versions: dict[str, str] = Field(default_factory=dict)
+    explicit_paths: dict[str, str] = Field(default_factory=dict)
+    include_optional: bool = True
+    allow_mixed_yyyymm: bool = False
+    confirmation_token: str | None = None
+    acknowledged_by: Literal["cli", "api", "ui"] = "api"
+
+
+class SourceSetPlan(FrozenModel):
+    source_set_id: str
+    root_path: str | None = None
+    candidates: tuple[SourceCandidate, ...] = ()
+    selected: dict[str, SourceCandidate] = Field(default_factory=dict)
+    missing_required: tuple[str, ...] = ()
+    yyyymm_by_kind: dict[str, str | None] = Field(default_factory=dict)
+    mixed_yyyymm: bool = False
+    mixed_yyyymm_acknowledged: bool = False
+    acknowledged_by: Literal["cli", "api", "ui"] | None = None
+    acknowledged_at: datetime | None = None
+    confirmation_token_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    expected_confirmation_token: str | None = None
+    candidate_paths: dict[str, str] = Field(default_factory=dict)
+    candidate_sha256: dict[str, str | None] = Field(default_factory=dict)
+    batch_payload: dict[str, Any] = Field(default_factory=dict)
+    warning: str | None = None
+
+
+class UploadSetCreateRequest(FrozenModel):
+    purpose: Literal["full_load_source_set"] = "full_load_source_set"
+
+
+class UploadFileStatus(FrozenModel):
+    upload_set_id: str
+    file_id: str
+    filename: str
+    relative_path: str | None = None
+    path: str
+    state: UploadFileState
+    size_bytes: int = Field(default=0, ge=0)
+    uploaded_bytes: int = Field(default=0, ge=0)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    inferred_yyyymm: str | None = Field(default=None, pattern=r"^\d{6}$")
+    source_kind: SourceKind | None = None
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class UploadSetStatus(FrozenModel):
+    upload_set_id: str
+    purpose: str
+    state: UploadSetState
+    root_path: str
+    files: tuple[UploadFileStatus, ...] = ()
+    total_bytes: int = Field(default=0, ge=0)
+    uploaded_bytes: int = Field(default=0, ge=0)
+    created_at: datetime
+    updated_at: datetime
+    error_message: str | None = None
 
 
 class NormalizeRequest(FrozenModel):

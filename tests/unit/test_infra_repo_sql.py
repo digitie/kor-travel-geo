@@ -73,6 +73,7 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     assert '"strategy": "swap"' in queue_source
     assert "consistency report severity ERROR" in queue_source
     assert "log_tail" in queue_source
+    assert "kind NOT IN" in queue_source
 
 
 def test_admin_repo_explain_is_select_only_and_uses_json_format() -> None:

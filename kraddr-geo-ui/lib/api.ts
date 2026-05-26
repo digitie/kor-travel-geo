@@ -48,6 +48,88 @@ export type LoadJobStatus = {
   payload_summary?: Record<string, unknown> | null;
 };
 
+export type SourceKind =
+  | "juso"
+  | "parcel_link"
+  | "locsum"
+  | "navi"
+  | "shp"
+  | "roadaddr_entrance"
+  | "sppn_makarea"
+  | "pobox"
+  | "bulk";
+
+export type SourceCandidate = {
+  kind: SourceKind;
+  path: string;
+  inferred_yyyymm?: string | null;
+  sido_count?: number | null;
+  file_count?: number | null;
+  byte_size?: number | null;
+  sha256?: string | null;
+  confidence: "high" | "medium" | "low";
+  note?: string | null;
+};
+
+export type SourceSetDiscovery = {
+  root_path: string;
+  candidates: SourceCandidate[];
+  recommended: Partial<Record<SourceKind, SourceCandidate>>;
+  missing_required: string[];
+  mixed_yyyymm: boolean;
+  yyyymm_by_kind: Partial<Record<SourceKind, string | null>>;
+  warning?: string | null;
+};
+
+export type SourceSetPlan = {
+  source_set_id: string;
+  root_path?: string | null;
+  candidates: SourceCandidate[];
+  selected: Partial<Record<SourceKind, SourceCandidate>>;
+  missing_required: string[];
+  yyyymm_by_kind: Partial<Record<SourceKind, string | null>>;
+  mixed_yyyymm: boolean;
+  mixed_yyyymm_acknowledged: boolean;
+  acknowledged_by?: "cli" | "api" | "ui" | null;
+  acknowledged_at?: string | null;
+  confirmation_token_hash?: string | null;
+  expected_confirmation_token?: string | null;
+  candidate_paths: Record<string, string>;
+  candidate_sha256: Record<string, string | null>;
+  batch_payload: Record<string, unknown>;
+  warning?: string | null;
+};
+
+export type UploadFileStatus = {
+  upload_set_id: string;
+  file_id: string;
+  filename: string;
+  relative_path?: string | null;
+  path: string;
+  state: "pending" | "uploading" | "uploaded" | "cancelled" | "failed";
+  size_bytes: number;
+  uploaded_bytes: number;
+  sha256?: string | null;
+  inferred_yyyymm?: string | null;
+  source_kind?: SourceKind | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UploadSetStatus = {
+  upload_set_id: string;
+  purpose: string;
+  state: "created" | "uploading" | "uploaded" | "cancelled" | "failed";
+  root_path: string;
+  files: UploadFileStatus[];
+  total_bytes: number;
+  uploaded_bytes: number;
+  created_at: string;
+  updated_at: string;
+  error_message?: string | null;
+};
+
 export type TableStat = {
   table_name: string;
   row_count: number;
