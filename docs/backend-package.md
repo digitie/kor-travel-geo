@@ -675,6 +675,8 @@ KIND_MAP = {
 
 단, `TL_SPRD_INTRVL`은 예외다. 이 레이어는 실제 파일 기준 geometry가 필요 없는 DBF 속성 보조 테이블이고, T-033 전국 full-load에서 GDAL append가 `PG_USE_COPY=YES` 설정에도 행 단위 insert 병목을 만들었다. T-034부터는 `TL_SPRD_INTRVL.dbf`를 직접 읽어 `SIG_CD`, `RDS_MAN_NO`, `BSI_INT_SN`, `ODD_BSI_MN`, `EVE_BSI_MN`만 추출한 뒤 `psycopg COPY`로 `tl_sprd_intrvl`에 적재한다. 외부 호출 표면(`load_shp_polygons`, CLI `load shp`, `load shp-all`)은 그대로이며, source 추적 컬럼도 다른 SHP 레이어와 같은 `source_file=<시도>/<시군구코드>/TL_SPRD_INTRVL.shp`, `source_yyyymm=<옵션값>`을 유지한다.
 
+`TL_SPBD_BULD`도 T-037부터 예외 경로를 탄다. 이 레이어는 건물 polygon geometry를 보존해야 하므로 DBF 직접 COPY로 대체하지 않는다. 대신 GDAL이 `public._kraddr_stage_spbd_buld_polygon` staging table을 `accessMode="overwrite"`로 만들고, 기존 `SQLStatement` projection을 적용해 필요한 key 컬럼과 geometry만 COPY한다. 이후 PostgreSQL 내부 `INSERT ... SELECT`로 `tl_spbd_buld_polygon`에 옮기며, 이때 `ST_Multi(geom)::geometry(MultiPolygon, 5179)`, 문자열 trim/NULL 정규화, 건물번호 integer cast를 명시한다. PostGIS extension이 `x_extension`에 있으므로 insert transaction에서는 `SET LOCAL search_path = public, x_extension`를 설정한다. staging table은 시작 전과 종료 `finally`에서 모두 drop한다.
+
 대상은 polygon/도로 보조 9종이다. 문서 초기판의 "polygon 7종" 표현은 `tl_sprd_manage`, `tl_sprd_intrvl`처럼 도형이 없거나 속성 보조 성격인 도로 테이블을 빠뜨린 축약이었다. 구현상 load plan은 다음 9개를 명시한다: `TL_SCCO_CTPRVN`, `TL_SCCO_SIG`, `TL_SCCO_EMD`, `TL_SCCO_LI`, `TL_KODIS_BAS`, `TL_SPRD_MANAGE`, `TL_SPRD_INTRVL`, `TL_SPRD_RW`, `TL_SPBD_BULD`.
 
 2026년 실제 전자지도 파일 기준으로 `TL_SPRD_RW`는 `LineString`이 아니라 `Polygon` 레이어다. 따라서 운영 테이블 `tl_sprd_rw.geom`은 `MULTIPOLYGON 5179`로 둔다. 도로명 인접성 검증(C8)은 `rds_man_no`가 있는 `TL_SPRD_MANAGE`의 도로명 중심선/관리 선형 geometry와 출입구 point 사이의 `ST_DWithin`으로 해석한다.
@@ -695,9 +697,9 @@ PR #17부터 SHP 로더는 모든 9개 보조 레이어 projection에 다음 추
 SHP `TL_SPBD_BULD`는 건물 polygon + 속성을 함께 가진다. 속성(도로명/지번/우편번호/건물명)의 정본은 여전히 `tl_juso_text`지만, 실제 SHP `BD_MGT_SN`은 25자리이고 텍스트 정본 `bd_mgt_sn`은 26자리라 직접 조인 키로 사용할 수 없다. 따라서 polygon 테이블에는 검증과 공간 조인을 위한 최소 natural key(`RDS_SIG_CD`, `RN_CD`, `BULD_SE_CD`, `BULD_MNNM`, `BULD_SLNO`, `SIG_CD`, `EMD_CD`, `LI_CD`)를 함께 적재한다.
 
 ```python
-opts = gdal.VectorTranslateOptions(
+stage_opts = gdal.VectorTranslateOptions(
     format="PostgreSQL",
-    layerName="tl_spbd_buld_polygon",
+    layerName="_kraddr_stage_spbd_buld_polygon",
     SQLStatement=(
         "SELECT BD_MGT_SN AS bd_mgt_sn, SIG_CD AS sig_cd, EMD_CD AS emd_cd, "
         "LI_CD AS li_cd, RDS_SIG_CD AS rds_sig_cd, RN_CD AS rn_cd, "
@@ -708,12 +710,39 @@ opts = gdal.VectorTranslateOptions(
     ),
     layerCreationOptions=[
         "GEOMETRY_NAME=geom",
-        "SPATIAL_INDEX=NONE",  # 별도 GiST 인덱스를 postload에서 생성
+        "SPATIAL_INDEX=NONE",
     ],
     srcSRS="EPSG:5179", dstSRS="EPSG:5179",
-    accessMode="append",
+    accessMode="overwrite",
     geometryType="PROMOTE_TO_MULTI",
 )
+```
+
+운영 테이블 insert는 staging 완료 뒤 DB 내부에서 수행한다.
+
+```sql
+SET LOCAL search_path = public, x_extension;
+
+INSERT INTO tl_spbd_buld_polygon (
+  bd_mgt_sn, sig_cd, emd_cd, li_cd, rds_sig_cd, rn_cd,
+  buld_se_cd, buld_mnnm, buld_slno, geom, source_file, source_yyyymm
+)
+SELECT
+  NULLIF(BTRIM(bd_mgt_sn::text), ''),
+  NULLIF(BTRIM(sig_cd::text), ''),
+  NULLIF(BTRIM(emd_cd::text), ''),
+  NULLIF(BTRIM(li_cd::text), ''),
+  NULLIF(BTRIM(rds_sig_cd::text), ''),
+  NULLIF(BTRIM(rn_cd::text), ''),
+  NULLIF(BTRIM(buld_se_cd::text), ''),
+  NULLIF(BTRIM(buld_mnnm::text), '')::integer,
+  NULLIF(BTRIM(buld_slno::text), '')::integer,
+  ST_Multi(geom)::geometry(MultiPolygon, 5179),
+  :source_file,
+  :source_yyyymm
+FROM _kraddr_stage_spbd_buld_polygon
+WHERE NULLIF(BTRIM(bd_mgt_sn::text), '') IS NOT NULL
+  AND geom IS NOT NULL;
 ```
 
 postload에서 `CREATE INDEX ON tl_spbd_buld_polygon USING GIST (geom)`.
