@@ -214,6 +214,7 @@ T-044 완전 포팅 원칙:
 | `/admin/logs` | `load_jobs.log_tail` 최근 라인 조회 | `GET /v1/admin/logs` |
 | `/admin/consistency` | C1~C10 정합성 리포트 조회·재검증 | `GET/POST /v1/admin/consistency*` |
 | `/admin/backups` | DB 백업/복원 작업, 진행률, callback 상태, artifact 다운로드 | `POST/GET /v1/admin/backups`, `POST /v1/admin/restores`, `GET /v1/admin/jobs/{id}/events` |
+| `/admin/performance` | 전국 DB query benchmark 결과, p95/p99 threshold, slow plan 조회 | `POST/GET /v1/admin/performance/benchmarks*` |
 
 `/admin/postal`, `/admin/settings`, WebSocket log stream은 문서상 장기 후보였지만 PR #12 구현 범위에는 넣지 않았다. 후속 PR에서 별도 백엔드 표면을 먼저 확정한 뒤 추가한다.
 
@@ -261,6 +262,28 @@ idle → selecting_artifact → restore_preflight → restore_running
 - callback 상태: terminal callback이 성공하면 `callback_state=delivered`, 실패 후 재시도 중이면 `retrying`, 재시도 소진이면 `failed`로 표시한다. callback 실패는 백업 파일 성공 여부와 분리해서 보여 준다.
 
 테스트는 backup form validation, SSE → polling fallback, 완료 후 다운로드 버튼 표시, callback 상태 badge, cancel flow, restore target DB 위험 입력 차단, corrupted artifact preflight 오류 표시를 포함해야 한다. 통합 검증은 대구광역시 부분 적재 DB를 대상으로 수행하고 전국 full-load는 실행하지 않는다.
+
+### `/admin/performance` 후보 화면 (ADR-031, T-047)
+
+T-047 1차 구현은 CLI와 artifact 중심으로도 충분하지만, 반복 튜닝이 길어지면 관리 UI에서 benchmark 결과를 바로 비교할 수 있어야 한다.
+
+화면 구성:
+
+- run 목록: run id, git commit, DB size, source set, corpus, iterations, concurrency, 시작/종료 시각.
+- summary table: query군별 p50/p90/p95/p99, timeout, error, threshold 초과 여부.
+- 전후 비교: baseline과 selected trial의 개선율, buffer read/temp write 변화, plan hash 변화.
+- slow sample: case id, 입력값, 응답 상태, latency, rows, plan JSON 링크.
+- plan viewer: `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, SETTINGS)` JSON을 tree/table로 표시한다.
+- tuning note: 적용한 index/view/MV 후보, build time, size, refresh 영향.
+
+UI 원칙:
+
+- chart보다 table 우선. 운영자는 p95/p99, threshold 초과, slow sample을 빠르게 스캔해야 한다.
+- threshold 초과는 색상 badge와 정렬로 드러내되, 과한 장식은 피한다.
+- plan JSON은 크므로 기본 collapsed 상태로 열고, 필요한 node만 펼친다.
+- 프론트엔드는 DB에 직접 연결하지 않는다. benchmark artifact metadata와 plan JSON은 백엔드 REST로만 가져온다.
+
+테스트는 threshold badge, baseline/trial 비교 정렬, slow sample 클릭, 큰 plan JSON rendering, API 실패 상태를 포함한다.
 
 ## A7. DB 일관성 — 단일 엔진
 

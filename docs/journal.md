@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-047 등록 — 전국 적재 후 쿼리 성능 벤치마크와 튜닝 설계)
+
+**작업**: 사용자 지시에 따라 전국 전체 적재 이후 지오코딩/역지오코딩/검색 쿼리 속도를 다수 반복 측정하고, 병목이 있으면 보조 view/materialized view까지 적극 도입하는 성능 튜닝 계획을 문서화했다. 코드는 작성하지 않았다.
+
+**반영 상세**:
+- ADR-031을 추가했다. T-047은 p50/p95/p99, timeout, buffer, plan, 동시성 결과를 운영 준비 gate로 둔다.
+- `docs/t047-query-performance-tuning.md`를 추가했다. benchmark corpus, 측정 방법, 초기 latency 목표, 튜닝 루프, 최소 실험 수, 보조 view/MV 후보, 산출물 구조, 후속 PR 순서를 상세히 정리했다.
+- `docs/backend-package.md`, `docs/frontend-package.md`, `docs/architecture.md`, `docs/data-model.md`, `docs/t027-fullload-plan.md`, `docs/tasks.md`, `docs/resume.md`, `README.md`, `CHANGELOG.md`를 같은 방향으로 갱신했다.
+
+**결정**:
+- 속도는 정합성 이후 별도 gate로 관리한다. 전국 DB에서 목표를 초과하는 query군은 반드시 후보 실험을 수행한다.
+- 보조 view/MV는 source of truth가 아니라 master table 또는 `mv_geocode_target`에서 재생성 가능한 read-only serving accelerator로만 허용한다.
+- 튜닝 PR은 변경 전/후 p95/p99, plan, buffer, full-load/MV refresh/backup 부작용을 함께 기록해야 한다.
+
 ## 2026-05-26 (T-046 등록 — 적재 완료 DB 백업/복원 설계)
 
 **작업**: 사용자 지시에 따라 완전히 적재한 PostgreSQL/PostGIS DB를 압축 artifact로 백업하고 새 DB로 복원하는 운영 설계를 문서화했다. 코드는 작성하지 않았다.

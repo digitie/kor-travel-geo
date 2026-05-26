@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-047 문서/계획 추가: 전국 full-load 후 지오코딩/역지오코딩/검색 쿼리를 다수 반복 측정해 p50/p95/p99, `EXPLAIN ANALYZE`, buffer, 동시성 결과로 튜닝하는 ADR-031을 정리한다. 속도를 최우선 gate로 두고, 필요하면 인덱스와 SQL 재작성뿐 아니라 read-only 보조 view/materialized view도 적극 도입하는 방향을 문서화한다. 코드는 아직 작성하지 않는다.
 - T-046 문서/계획 추가: 적재 완료 PostgreSQL/PostGIS DB를 `pg_dump -Fd --jobs` directory dump와 `tar.zst` 압축 아카이브로 백업하고, 새 빈 DB에 `pg_restore -Fd --jobs`로 복원하는 설계를 ADR-030으로 정리한다. 백그라운드 진행률, 취소, 완료 callback, UI 다운로드 링크, 대구광역시 부분 적재 기반 검증 시나리오를 문서화한다. 코드는 아직 작성하지 않는다.
 - T-045 문서/계획 추가: 원천별 업데이트 시점이 달라 같은 기준월이 아닐 수 있음을 ADR-029로 정리하고, `source_set` 기반 기준월 선택, CLI mismatch 확인 UX, API/라이브러리 발견/계획 함수 분리, UI 다중 파일/DND 업로드와 업로드/적재 진행률·취소 설계를 문서화한다.
 - VWorld 문서/계획 보강: 디버그 UI를 `maplibre-vworld-js`의 `VWorldMap` 또는 동등한 Hook/component로 완전히 포팅하는 T-044를 추가하고, ADR-028을 통해 부족한 기능은 `python-kraddr-geo`에서 우회하지 않고 `digitie/maplibre-vworld-js`를 적극 수정한 뒤 검증된 SHA로 소비하도록 정리한다.
