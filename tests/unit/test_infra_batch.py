@@ -27,6 +27,7 @@ def test_payloads_mapping_is_picked_up_per_kind() -> None:
         )
     )
     assert children["juso_text_load"] == {"path": "/data/juso_text_load"}
+    assert children["juso_parcel_link_load"] == {"path": "/data/juso_parcel_link_load"}
     assert children["shp_polygons_load"] == {"path": "/data/shp", "mode": "full"}
     assert children["locsum_load"] == {"path": "/data/locsum_load"}
 
@@ -47,7 +48,7 @@ def test_explicit_children_override_default_set() -> None:
 
 
 def test_default_batch_requires_all_source_payload_paths() -> None:
-    with pytest.raises(InvalidInputError, match="locsum_load"):
+    with pytest.raises(InvalidInputError, match="juso_parcel_link_load"):
         batch_children({"payloads": {"juso_text_load": {"path": "/data/juso"}}})
 
 

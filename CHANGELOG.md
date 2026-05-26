@@ -58,6 +58,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
+- T-038 `tl_juso_parcel_link` DDL/로더를 추가한다. `jibun_rnaddrkor_*` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 건물↔지번 1:N 테이블에 적재하고, CLI `load parcel-links`/`load daily-parcel-links`, API job kind `juso_parcel_link_load`/`juso_parcel_link_delta`, full-load batch 기본 child, 관리 UI 기본 payload를 연결했다.
 - T-030 별도 도형/출입구 자료 검토를 추가한다. 세종 실제 ZIP 기준으로 상세주소 동 도형, 구역의 도형, 도로명주소 건물 도형, 도로명주소 출입구 정보의 layer/geometry/text 구조를 확인하고, 기본 full-load에는 즉시 섞지 않고 T-039~T-041로 분리하기로 ADR-023에서 확정했다.
 - T-029 `jibun_rnaddrkor_*` 활용 결정을 추가한다. 실제 파일 계측 결과를 근거로 대표 PNU를 덮어쓰지 않고 후속 `tl_juso_parcel_link` 1:N 테이블로 분리하기로 ADR-022에서 확정했으며, 실제 `jibun_rnaddrkor_seoul.txt`와 daily `LNBR` member 구조 테스트를 추가했다.
 - T-028 일변동 ZIP 로더를 추가한다. `kraddr-geo load daily-juso`와 API job kind `daily_juso_delta`는 `TH_SGCO_RNADR_MST.TXT`를 `tl_juso_text`에 UPSERT/DELETE로 적용하고, `TH_SGCO_RNADR_LNBR.TXT`는 T-038 전까지 manifest에 미지원 행 수로 기록한다. 실제 `20260401_dailyjusukrdata.zip` MST 422행과 `20260404` `No Data` member를 검증했다.

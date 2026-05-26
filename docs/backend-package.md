@@ -398,7 +398,7 @@ loaders/
 
 #### `juso_hangul_loader.py` (T-013a)
 
-`data/juso/202603_도로명주소 한글_전체분/*.txt`의 시도별 파일을 적재한다. 현재 구현은 `rnaddrkor_*.txt`만 `tl_juso_text`에 적재한다. `jibun_rnaddrkor_*.txt`는 대표 지번이 아니라 건물↔지번 1:N 보조 관계이므로 `tl_juso_text.pnu`에 덮어쓰지 않는다. T-038에서 `tl_juso_parcel_link` DDL과 loader를 별도 구현한다(ADR-022).
+`data/juso/202603_도로명주소 한글_전체분/*.txt`의 시도별 파일을 적재한다. 현재 구현은 `rnaddrkor_*.txt`만 `tl_juso_text`에 적재한다. `jibun_rnaddrkor_*.txt`는 대표 지번이 아니라 건물↔지번 1:N 보조 관계이므로 `tl_juso_text.pnu`에 덮어쓰지 않는다. 보조 관계는 `parcel_link_loader.py`가 `tl_juso_parcel_link`에 별도 적재한다(ADR-022, T-038).
 
 #### `daily_juso_loader.py` (T-028)
 
@@ -413,7 +413,18 @@ loaders/
 - 한 batch 안에 같은 `bd_mgt_sn`이 여러 번 나오면 `mvmn_de DESC`, `source_file DESC`, `staging_seq DESC` 기준 최신 1건만 반영한다.
 - member 내용이 `No Data`이면 컬럼 수 오류로 보지 않고 skip하며 `skipped_no_data_sources`에 기록한다.
 
-`AlterD.JUSUKR.*.TH_SGCO_RNADR_LNBR.TXT`는 현재 master table에 쓰지 않는다. 이 member는 건물↔지번 보조 관계를 담으므로 T-038의 `tl_juso_parcel_link` loader에서 `jibun_rnaddrkor_*`와 같은 테이블에 적용한다. T-028은 그 전까지 `unsupported_lnbr_rows`만 세어 `load_manifest.source_set`에 남긴다. 상세 결정은 ADR-021, ADR-022, `docs/t028-daily-juso-delta.md`, `docs/t029-jibun-rnaddrkor-decision.md`를 본다.
+`AlterD.JUSUKR.*.TH_SGCO_RNADR_LNBR.TXT`는 `daily_juso_loader.py`가 직접 반영하지 않는다. 이 member는 건물↔지번 보조 관계를 담으므로 T-038의 `parcel_link_loader.py`가 `tl_juso_parcel_link`에 daily delta로 적용한다. 즉 같은 daily ZIP을 MST 반영용 `daily_juso_delta`와 LNBR 반영용 `juso_parcel_link_delta`로 나누어 실행한다. 상세 결정은 ADR-021, ADR-022, `docs/t028-daily-juso-delta.md`, `docs/t029-jibun-rnaddrkor-decision.md`, `docs/t038-parcel-link-loader.md`를 본다.
+
+#### `parcel_link_loader.py` (T-038)
+
+`jibun_rnaddrkor_*.txt` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 `tl_juso_parcel_link`에 적재한다.
+
+- full snapshot: `kraddr-geo load parcel-links <도로명주소 한글 전체분 경로> --yyyymm 202603`
+- daily delta: `kraddr-geo load daily-parcel-links <daily ZIP 또는 디렉터리>`
+- API 작업 kind: `juso_parcel_link_load`, `juso_parcel_link_delta`
+- full-load batch 기본 child 순서: `juso_text_load` 다음에 `juso_parcel_link_load`
+
+이 테이블은 serving MV를 즉시 다중화하지 않는다. 후속 지번 검색 확장 또는 UI 상세 패널이 필요할 때 `tl_juso_parcel_link.pnu -> bd_mgt_sn -> mv_geocode_target` 순서로 연결한다.
 
 #### 별도 도형/출입구 묶음 (T-030)
 
@@ -721,7 +732,7 @@ async def atomic_schema_swap(engine, staging="staging_new", live="public"):
 - 단일 백엔드 인스턴스 가정 (ADR-006).
 - `asyncio.Semaphore(1)`로 in-process 직렬 처리 + **`load_jobs` 테이블로 상태 영속화**(ADR-011).
 - `Job` dataclass(in-memory): `job_id`, `kind`, `payload`, `state ∈ {queued, running, done, failed, cancelled}`, `progress (0..1)`, `current_stage`, `started_at`, `ended_at`, `error`, `log_tail (deque maxlen=200)`, `cancel_event (asyncio.Event)`.
-- 핸들러 등록: `queue.register(kind, handler)`. 핸들러 시그니처는 `(payload, cancel_event, progress_cb)`이며, `progress_cb(progress?, stage?, message?)`를 호출하면 `load_jobs.progress`, `current_stage`, `heartbeat_at`, `log_tail`이 함께 갱신된다. 기본 앱은 `juso_text_load`, `daily_juso_delta`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`, `bulk_load`, `consistency_check`, `mv_refresh` 핸들러를 등록한다.
+- 핸들러 등록: `queue.register(kind, handler)`. 핸들러 시그니처는 `(payload, cancel_event, progress_cb)`이며, `progress_cb(progress?, stage?, message?)`를 호출하면 `load_jobs.progress`, `current_stage`, `heartbeat_at`, `log_tail`이 함께 갱신된다. 기본 앱은 `juso_text_load`, `daily_juso_delta`, `juso_parcel_link_load`, `juso_parcel_link_delta`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`, `bulk_load`, `consistency_check`, `mv_refresh` 핸들러를 등록한다.
 
 #### `load_jobs` 영속 테이블 (ADR-011)
 
@@ -755,14 +766,18 @@ CREATE INDEX idx_load_jobs_parent ON load_jobs (parent_job_id) WHERE parent_job_
 
 `JobQueue._run`은 상태 전이 시점(`queued → running → done|failed|cancelled`)마다 `load_jobs`에 UPDATE를 보낸다. 진행률·current_stage는 1~5초 단위 throttle로 갱신해 부하 회피.
 
-ADR-017에 따라 `full_load_batch`는 실행 핸들러가 없는 root job으로 남고, 실제 실행은 child job이 담당한다. source child 5종이 모두 `done`이 되면 큐가 `consistency_check`를 자동 등록한다. 정합성 리포트가 `ERROR`가 아니고 `source_set.load_batch_id`가 확인되면 `mv_refresh`를 `strategy='swap'`으로 등록한다. child 실패 또는 취소가 발생하면 root는 `failed`, 아직 대기 중인 같은 batch child는 `cancelled`가 된다.
+ADR-017에 따라 `full_load_batch`는 실행 핸들러가 없는 root job으로 남고, 실제 실행은 child job이 담당한다. source child 6종이 모두 `done`이 되면 큐가 `consistency_check`를 자동 등록한다. 정합성 리포트가 `ERROR`가 아니고 `source_set.load_batch_id`가 확인되면 `mv_refresh`를 `strategy='swap'`으로 등록한다. child 실패 또는 취소가 발생하면 root는 `failed`, 아직 대기 중인 같은 batch child는 `cancelled`가 된다.
 
-`full_load_batch` payload는 enqueue 직전에 `infra.batch.batch_children()`에서 검증한다. 기본 경로는 `payload.payloads` 객체에 source child 5종을 모두 넣어야 하며, 각 child payload는 실제 로더가 요구하는 `path` 또는 `source_path`를 포함해야 한다. 이 검증은 REST `/v1/admin/loads`와 라이브러리 `AsyncAddressClient.submit_load("full_load_batch", ...)`가 같은 helper를 공유하므로 두 표면에서 동일하게 적용된다.
+`full_load_batch` payload는 enqueue 직전에 `infra.batch.batch_children()`에서 검증한다. 기본 경로는 `payload.payloads` 객체에 source child 6종을 모두 넣어야 하며, 각 child payload는 실제 로더가 요구하는 `path` 또는 `source_path`를 포함해야 한다. 이 검증은 REST `/v1/admin/loads`와 라이브러리 `AsyncAddressClient.submit_load("full_load_batch", ...)`가 같은 helper를 공유하므로 두 표면에서 동일하게 적용된다.
 
 ```json
 {
   "payloads": {
     "juso_text_load": {
+      "path": "/data/juso/202604_도로명주소 한글_전체분",
+      "source_yyyymm": "202604"
+    },
+    "juso_parcel_link_load": {
       "path": "/data/juso/202604_도로명주소 한글_전체분",
       "source_yyyymm": "202604"
     },
@@ -787,7 +802,7 @@ ADR-017에 따라 `full_load_batch`는 실행 핸들러가 없는 root job으로
 
 `source_set` 같은 운영 메타데이터를 root payload에 추가로 보관할 수는 있지만, 자동으로 등록되는 `consistency_check` child에는 큐가 `load_batch_id`를 별도 주입한다. 따라서 batch swap gate가 의존하는 최소 식별자는 `load_consistency_reports.source_set.load_batch_id`다.
 
-고급 사용자는 `children` 또는 `child_jobs` 배열로 기본 5종을 대체할 수 있다. 이때 각 entry는 `{"kind": "...", "payload": {...}}` 형식이어야 하며, `juso_text_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`, `bulk_load`처럼 경로 기반 로더인 kind는 동일하게 `path`/`source_path`가 필요하다. 잘못된 entry를 조용히 버리지 않고 `InvalidInputError(E0100, HTTP 400)`로 거절한다. 잘못 만든 batch root와 빈 child가 `load_jobs`에 남아 이후 drain에서 실패하는 상황을 막기 위한 정책이다.
+고급 사용자는 `children` 또는 `child_jobs` 배열로 기본 6종을 대체할 수 있다. 이때 각 entry는 `{"kind": "...", "payload": {...}}` 형식이어야 하며, `juso_text_load`, `juso_parcel_link_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`, `bulk_load`처럼 경로 기반 로더인 kind는 동일하게 `path`/`source_path`가 필요하다. 잘못된 entry를 조용히 버리지 않고 `InvalidInputError(E0100, HTTP 400)`로 거절한다. 잘못 만든 batch root와 빈 child가 `load_jobs`에 남아 이후 drain에서 실패하는 상황을 막기 위한 정책이다.
 
 #### lifespan 복구 (`api/app.py`)
 

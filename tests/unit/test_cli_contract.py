@@ -21,6 +21,8 @@ def test_cli_exposes_t018_operational_commands() -> None:
         ["load", "--help"],
         ["load", "all-sidos", "--help"],
         ["load", "daily-juso", "--help"],
+        ["load", "parcel-links", "--help"],
+        ["load", "daily-parcel-links", "--help"],
         ["load", "shp-all", "--help"],
         ["load", "epost", "--help"],
         ["refresh", "mv", "--help"],

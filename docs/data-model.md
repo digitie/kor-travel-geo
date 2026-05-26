@@ -645,7 +645,7 @@ CREATE INDEX idx_geo_cache_expires ON geo_cache (expires_at);
 
 적재 작업의 영속 상태. lifespan startup에서 잔존 `running → failed` 마크, `queued`는 payload가 DB에 남아 있으면 drain을 재개한다. 다중 워커 환경에서는 `pg_try_advisory_xact_lock` + `FOR UPDATE SKIP LOCKED`로 작업 픽업을 보호한다. 컬럼 정의는 `docs/backend-package.md` §9.7 참조.
 
-PR #10 리뷰 반영으로 `load_batch_id`, `parent_job_id`를 추가했다(ADR-017). 전국 풀로드는 `full_load_batch` root job을 만들고 그 아래 `juso_text_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load` child를 묶는다. source child가 모두 성공해야 큐가 `consistency_check`를 자동 등록하고, 정합성 리포트가 `ERROR`가 아닐 때만 `mv_refresh`를 `strategy='swap'`으로 등록한다. 따라서 `load_jobs`는 단순 작업 이력 테이블이 아니라 적재 DAG의 현재 위치와 차단 사유를 설명하는 운영 감사 로그다.
+PR #10 리뷰 반영으로 `load_batch_id`, `parent_job_id`를 추가했다(ADR-017). 전국 풀로드는 `full_load_batch` root job을 만들고 그 아래 `juso_text_load`, `juso_parcel_link_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load` child를 묶는다. source child가 모두 성공해야 큐가 `consistency_check`를 자동 등록하고, 정합성 리포트가 `ERROR`가 아닐 때만 `mv_refresh`를 `strategy='swap'`으로 등록한다. 따라서 `load_jobs`는 단순 작업 이력 테이블이 아니라 적재 DAG의 현재 위치와 차단 사유를 설명하는 운영 감사 로그다.
 
 ### `load_consistency_reports` (ADR-016)
 
@@ -670,7 +670,7 @@ T-028 이후 `daily_juso_loader.py`는 `data/juso/daily/*.zip`의 `TH_SGCO_RNADR
 
 `MST` member의 `MVM_RES_CD`는 skip 대상이 아니라 운영 변경 사유다. 매핑에 없는 코드가 나오면 제공자 사양이 바뀐 것으로 보고 적재를 중단한다. 이는 "기타 코드는 skip"이라는 SHP generic delta의 보수적 설명보다 강한 규칙이다. 주소 정본 daily에서 알 수 없는 코드를 무시하면 최신 주소가 누락될 수 있기 때문이다.
 
-`TH_SGCO_RNADR_LNBR.TXT`는 현재 `tl_juso_text`에 쓰지 않는다. 이 파일은 건물↔지번 보조 관계를 제공하므로, 대표 지번 1개를 가진 `tl_juso_text`에 임의로 덮어쓰면 silent data loss가 생긴다. T-028은 행 수만 manifest에 남기고, ADR-022의 후속 T-038에서 `jibun_rnaddrkor_*`와 함께 `tl_juso_parcel_link`로 적재한다.
+`TH_SGCO_RNADR_LNBR.TXT`는 `tl_juso_text`에 쓰지 않는다. 이 파일은 건물↔지번 보조 관계를 제공하므로, 대표 지번 1개를 가진 `tl_juso_text`에 임의로 덮어쓰면 silent data loss가 생긴다. T-038 이후에는 `juso_parcel_link_delta`가 `jibun_rnaddrkor_*` full snapshot과 같은 `tl_juso_parcel_link` 테이블에 LNBR delta를 적용한다.
 
 ### 한 배치당 PK 단일화 가정
 
@@ -701,11 +701,11 @@ INSERT INTO staging_schema.tl_xxx SELECT * FROM dedup;
 
 `mv_geocode_target`은 두 좌표계(`pt_5179`, `pt_4326`)를 미리 가지고 있어 응답 시 변환 비용을 줄인다.
 
-## 보조 지번 링크 후보 (ADR-022, T-038 예정)
+## 보조 지번 링크 (ADR-022, T-038)
 
-`jibun_rnaddrkor_*`와 daily `TH_SGCO_RNADR_LNBR.TXT`는 현재 master table에는 아직 적재하지 않는다. T-029 실제 파일 검토 결과, 이 원천은 대표 PNU가 아니라 건물↔지번 1:N 보조 관계다. 따라서 `tl_juso_text.pnu`에 덮어쓰지 않고 후속 T-038에서 별도 테이블 `tl_juso_parcel_link`를 도입한다.
+`jibun_rnaddrkor_*`와 daily `TH_SGCO_RNADR_LNBR.TXT`는 대표 PNU가 아니라 건물↔지번 1:N 보조 관계다. T-038에서 `tl_juso_text.pnu`에 덮어쓰지 않고 별도 테이블 `tl_juso_parcel_link`로 도입했다.
 
-초안:
+DDL 요약:
 
 ```sql
 CREATE TABLE tl_juso_parcel_link (
@@ -725,12 +725,13 @@ CREATE TABLE tl_juso_parcel_link (
   source_yyyymm TEXT,
   last_mvmn_de  TEXT,
   loaded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (bd_mgt_sn, pnu),
-  CHECK (char_length(pnu) = 19)
+  PRIMARY KEY (bd_mgt_sn, pnu)
 );
 ```
 
-전국 `jibun_rnaddrkor_*` 실제 계측값은 1,769,370행, distinct `bd_mgt_sn` 986,309, 2개 이상 보조 지번을 가진 건물 334,789건이다. 상세 근거는 `docs/t029-jibun-rnaddrkor-decision.md`를 본다.
+인덱스는 `pnu`, 도로명 건물번호 키(`rncode_full`, `buld_se_cd`, `buld_mnnm`, `buld_slno`), 지번 키(`bjd_cd`, `mntn_yn`, `lnbr_mnnm`, `lnbr_slno`)에 둔다.
+
+전국 `jibun_rnaddrkor_*` 실제 계측값은 1,769,370행, distinct `bd_mgt_sn` 986,309, 2개 이상 보조 지번을 가진 건물 334,789건이다. 상세 근거는 `docs/t029-jibun-rnaddrkor-decision.md`와 `docs/t038-parcel-link-loader.md`를 본다.
 
 ## 별도 도형/출입구 원천 후보 (ADR-023)
 

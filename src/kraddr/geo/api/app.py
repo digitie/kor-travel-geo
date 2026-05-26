@@ -29,6 +29,10 @@ from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
 from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kraddr.geo.loaders.text.locsum_loader import load_locsum
 from kraddr.geo.loaders.text.navi_loader import load_navi
+from kraddr.geo.loaders.text.parcel_link_loader import (
+    load_daily_parcel_link_delta,
+    load_juso_parcel_link_snapshot,
+)
 from kraddr.geo.version import __version__
 
 from .routers import admin, geocode, healthz, pobox, reverse, search, zipcode
@@ -135,6 +139,48 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             ),
         )
 
+    async def parcel_links(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        await progress(stage="juso_parcel_link_load", message="건물-지번 링크 적재 시작")
+        result = await load_juso_parcel_link_snapshot(
+            engine,
+            _payload_path(payload),
+            source_yyyymm=_payload_str(payload, "source_yyyymm"),
+            limit_per_file=_payload_int(payload, "limit_per_file"),
+            replace=_payload_bool(payload, "replace", default=True),
+            cancel_event=cancel_event,
+        )
+        await progress(
+            progress=1.0,
+            stage="juso_parcel_link_load",
+            message=f"{result.processed_rows} rows processed, {result.upserted_rows} upserted",
+        )
+
+    async def daily_parcel_links(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        await progress(stage="juso_parcel_link_delta", message="건물-지번 일변동 적재 시작")
+        result = await load_daily_parcel_link_delta(
+            engine,
+            _payload_path(payload),
+            source_yyyymm=_payload_str(payload, "source_yyyymm"),
+            limit_per_file=_payload_int(payload, "limit_per_file"),
+            cancel_event=cancel_event,
+        )
+        await progress(
+            progress=1.0,
+            stage="juso_parcel_link_delta",
+            message=(
+                f"{result.processed_rows} rows processed, "
+                f"{result.upserted_rows} upserted, {result.deleted_rows} deleted"
+            ),
+        )
+
     async def navi(
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
@@ -232,6 +278,8 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
 
     queue.register("juso_text_load", juso)
     queue.register("daily_juso_delta", daily_juso)
+    queue.register("juso_parcel_link_load", parcel_links)
+    queue.register("juso_parcel_link_delta", daily_parcel_links)
     queue.register("locsum_load", locsum)
     queue.register("navi_load", navi)
     queue.register("shp_polygons_load", shp)
@@ -261,6 +309,11 @@ def _payload_int(payload: dict[str, Any], key: str) -> int | None:
     if isinstance(value, str) and value.isdecimal():
         return int(value)
     return None
+
+
+def _payload_bool(payload: dict[str, Any], key: str, *, default: bool) -> bool:
+    value = payload.get(key)
+    return value if isinstance(value, bool) else default
 
 
 def _source_set(payload: dict[str, Any]) -> dict[str, str]:

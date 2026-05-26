@@ -26,6 +26,10 @@ from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
 from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kraddr.geo.loaders.text.locsum_loader import load_locsum
 from kraddr.geo.loaders.text.navi_loader import load_navi
+from kraddr.geo.loaders.text.parcel_link_loader import (
+    load_daily_parcel_link_delta,
+    load_juso_parcel_link_snapshot,
+)
 from kraddr.geo.settings import get_settings
 from kraddr.geo.version import __version__
 
@@ -120,6 +124,60 @@ def load_daily_juso_command(
                 f"upserted={result.upserted_rows}, "
                 f"deleted={result.deleted_rows}, "
                 f"lnbr_skipped={result.unsupported_lnbr_rows}, "
+                f"no_data_sources={result.skipped_no_data_sources}, "
+                f"last_mvmn_de={result.last_mvmn_de or '-'}"
+            )
+
+    asyncio.run(run())
+
+
+@load_app.command("parcel-links")
+def load_parcel_links_command(
+    path: Path,
+    yyyymm: str | None = typer.Option(None, "--yyyymm"),
+    limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
+    append: bool = typer.Option(False, "--append", help="기존 링크를 비우지 않고 upsert한다."),
+) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            result = await load_juso_parcel_link_snapshot(
+                client.engine,
+                path,
+                source_yyyymm=yyyymm,
+                limit_per_file=limit_per_file,
+                replace=not append,
+            )
+            typer.echo(
+                "loaded tl_juso_parcel_link snapshot: "
+                f"processed={result.processed_rows}, "
+                f"upserted={result.upserted_rows}, "
+                f"source_count={result.source_count}"
+            )
+
+    asyncio.run(run())
+
+
+@load_app.command("daily-parcel-links")
+def load_daily_parcel_links_command(
+    path: Path,
+    yyyymm: str | None = typer.Option(None, "--yyyymm"),
+    limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
+) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            result = await load_daily_parcel_link_delta(
+                client.engine,
+                path,
+                source_yyyymm=yyyymm,
+                limit_per_file=limit_per_file,
+            )
+            typer.echo(
+                "loaded daily tl_juso_parcel_link delta: "
+                f"processed={result.processed_rows}, "
+                f"upserted={result.upserted_rows}, "
+                f"deleted={result.deleted_rows}, "
                 f"no_data_sources={result.skipped_no_data_sources}, "
                 f"last_mvmn_de={result.last_mvmn_de or '-'}"
             )
@@ -260,6 +318,7 @@ def load_epost_command(
 @load_app.command("all-sidos")
 def load_all_sidos_command(
     juso_path: Path = typer.Option(..., "--juso"),
+    jibun_path: Path | None = typer.Option(None, "--jibun"),
     locsum_path: Path = typer.Option(..., "--locsum"),
     navi_path: Path = typer.Option(..., "--navi"),
     shp_root: Path | None = typer.Option(None, "--shp-root"),
@@ -275,6 +334,12 @@ def load_all_sidos_command(
             assert client.engine is not None
             juso_count = await load_juso_hangul(client.engine, juso_path, source_yyyymm=yyyymm)
             typer.echo(f"loaded tl_juso_text rows: {juso_count}")
+            parcel_result = await load_juso_parcel_link_snapshot(
+                client.engine,
+                jibun_path or juso_path,
+                source_yyyymm=yyyymm,
+            )
+            typer.echo(f"loaded tl_juso_parcel_link rows: {parcel_result.upserted_rows}")
             locsum_count = await load_locsum(client.engine, locsum_path, source_yyyymm=yyyymm)
             typer.echo(f"loaded tl_locsum_entrc rows: {locsum_count}")
             build_count, entrance_count = await load_navi(

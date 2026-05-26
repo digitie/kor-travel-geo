@@ -11,14 +11,14 @@
 
 ## 결론
 
-`jibun_rnaddrkor_*`와 daily `LNBR` member는 `tl_juso_text`의 대표 PNU를 대체하지 않는다. 둘 다 건물관리번호(`bd_mgt_sn`)와 보조 지번(PNU)의 **1:N 관계**를 표현하는 원천이므로, 후속 구현에서 별도 테이블 `tl_juso_parcel_link`를 추가한다.
+`jibun_rnaddrkor_*`와 daily `LNBR` member는 `tl_juso_text`의 대표 PNU를 대체하지 않는다. 둘 다 건물관리번호(`bd_mgt_sn`)와 보조 지번(PNU)의 **1:N 관계**를 표현하는 원천이므로, T-038에서 별도 테이블 `tl_juso_parcel_link`를 추가했다.
 
 이번 T-029 PR에서는 DDL/loader를 바로 추가하지 않고 다음 결정을 확정한다.
 
 1. `tl_juso_text.pnu`는 기존 정본 대표 지번으로 유지한다.
 2. `jibun_rnaddrkor_*`는 full-load 시 `tl_juso_parcel_link`의 기준 snapshot으로 적재한다.
 3. daily `TH_SGCO_RNADR_LNBR.TXT`는 같은 테이블의 delta source로 사용한다.
-4. `tl_juso_parcel_link` 구현은 T-038 후속 작업으로 분리한다.
+4. `tl_juso_parcel_link` 구현은 T-038에서 완료했다.
 
 ## 실제 파일 구조
 
@@ -76,9 +76,9 @@ daily `LNBR` 예시:
 
 daily `LNBR`도 한 건물관리번호에 여러 행이 올 수 있으므로 T-028의 `tl_juso_text` delta와 분리해야 한다.
 
-## 후속 테이블 초안
+## 구현된 테이블
 
-T-038에서 구현할 테이블 초안:
+T-038에서 다음 테이블과 로더를 구현했다.
 
 ```sql
 CREATE TABLE tl_juso_parcel_link (
@@ -139,5 +139,5 @@ T-038에서 테이블과 로더를 추가하더라도 즉시 `mv_geocode_target`
 
 ## 다음 작업
 
-- T-038: `tl_juso_parcel_link` DDL/Alembic, full snapshot loader, daily LNBR delta loader, manifest/정합성 테스트 구현.
+- T-038: 완료. `tl_juso_parcel_link` DDL/Alembic, full snapshot loader, daily LNBR delta loader, manifest/실제 파일 테스트를 구현했다. 상세는 `docs/t038-parcel-link-loader.md`를 본다.
 - T-027 최종 클린 적재: T-038 이후에는 full-load 뒤 parcel link snapshot과 daily LNBR delta까지 적용하는 smoke를 추가한다.
