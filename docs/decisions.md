@@ -816,7 +816,7 @@ T-044 완료 조건:
 
 ## ADR-029: 원천 자료 기준월은 source set으로 명시하고 혼합 적재는 확인 절차를 거친다
 
-- 상태: accepted (문서 설계, 구현 전)
+- 상태: accepted (T-049 1차 구현 완료)
 - 날짜: 2026-05-26
 - 결정자: 사용자 요청, codex
 
@@ -1084,7 +1084,7 @@ CREATE SCHEMA IF NOT EXISTS ops;
 
 `public`은 주소 원천·serving 테이블과 view/materialized view를 유지하고, `x_extension`은 PostGIS 보조 extension 격리 용도로 유지한다. `ops`는 운영 감사, 데이터셋 snapshot, serving release, artifact registry, maintenance window, table stats snapshot만 담는다. 애플리케이션 SQL은 `search_path`에 기대지 않고 `ops.<table>`을 명시한다.
 
-T-049 구현 시 다음 테이블을 추가한다.
+T-049 구현에서 다음 테이블을 추가했다.
 
 | 테이블 | 목적 |
 |--------|------|
@@ -1114,10 +1114,14 @@ REST 표면은 `/v1/admin/ops/*`를 기본으로 둔다.
 
 - `GET /v1/admin/ops/snapshots`
 - `GET /v1/admin/ops/releases`
+- `POST /v1/admin/ops/releases/{release_id}/rollback-plan`
 - `GET /v1/admin/ops/artifacts`
 - `GET /v1/admin/ops/audit-events`
+- `GET /v1/admin/ops/maintenance-windows`
 - `POST /v1/admin/ops/maintenance-windows`
 - `POST /v1/admin/ops/maintenance-windows/{window_id}/end`
+- `GET /v1/admin/ops/table-stats`
+- `POST /v1/admin/ops/table-stats/capture`
 
 프론트엔드는 `/admin/ops` 또는 기존 `/admin/load`, `/admin/backups`, `/admin/consistency` 내부 탭에서 시작한다. 첫 UI는 active release, 최근 snapshot, artifact 목록, maintenance window 상태, 주요 table/MV size를 보여 주면 충분하다.
 
@@ -1130,10 +1134,9 @@ REST 표면은 `/v1/admin/ops/*`를 기본으로 둔다.
 
 ### 결과
 
-- T-049를 신규 백로그로 추가한다.
-- `docs/t049-ops-metadata-schema.md`에 상세 schema, API, UI, 구현 순서, 검증 기준을 둔다.
-- T-045/T-046/T-047 구현 시 snapshot, artifact, maintenance window 연계를 고려한다.
-- 코드와 DDL은 아직 작성하지 않는다.
+- T-049 구현 PR에서 `ops` 스키마 DDL, Alembic `0006_t049_ops_metadata_schema`, DTO/API/client/UI, redaction/hash helper, append-only audit trigger, active release partial unique index, table stats snapshot capture를 추가했다.
+- `docs/t049-ops-metadata-schema.md`에 구현 상태와 남은 연결점을 둔다.
+- T-045/T-046/T-047 구현 시 source set 확정, backup/restore artifact, performance report, MV swap gate를 snapshot/artifact/release에 실제로 연결한다.
 
 ---
 

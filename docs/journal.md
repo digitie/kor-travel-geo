@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-049 — 운영 메타데이터·감사·릴리스 스키마 구현)
+
+**작업**: ADR-033의 `ops` 운영 메타데이터 설계를 실제 DDL, Alembic migration, DTO/API/client, 관리 UI, 테스트로 구현했다.
+
+**반영 상세**:
+- `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`를 `sql/ddl/001_schema.sql`과 `src/kraddr/geo/infra/sql.py`에 추가하고, 기존 DB upgrade용 Alembic `0006_t049_ops_metadata_schema.py`를 작성했다.
+- `ops.audit_events`는 append-only trigger로 UPDATE/DELETE를 막고, `ops.serving_releases`는 `state='active'` partial unique index로 active release 한 건만 허용한다.
+- `kraddr.geo.core.redaction`을 추가해 API key, DSN, password, token, callback secret, 주소 원문을 audit payload에 평문 저장하지 않도록 했다.
+- `AdminRepository`, `AsyncAddressClient`, `/v1/admin/ops/*` API를 추가했다. audit event/snapshot/release/artifact/maintenance/table stats 조회, rollback plan, maintenance window 생성/종료, table stats snapshot capture를 제공한다.
+- `kraddr-geo-ui`에 `/admin/ops` 화면을 추가했다. release, snapshot, artifact, audit event, maintenance window, table stats snapshot을 조회하고 maintenance window 생성과 stats capture를 실행할 수 있다.
+- OpenAPI와 frontend generated type/schema 목록을 갱신했다.
+
+**검증**:
+- `.venv/bin/python -m pytest -q` → 155 passed, 5 skipped.
+- `.venv/bin/python -m ruff check .` 통과.
+- `.venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py` 통과.
+- `.venv/bin/lint-imports` 통과.
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run lint` 통과.
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run type-check` 통과.
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run test` → 22 passed.
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run build` 통과.
+
+**남은 연결**:
+- T-045/T-027에서 source set 확정과 full-load/daily completion을 `ops.dataset_snapshots`에 연결한다.
+- T-046에서 backup/restore 산출물을 `ops.artifacts`에 등록한다.
+- T-047에서 성능 리포트와 전후 table stats snapshot을 `ops.artifacts`/`ops.table_stats_snapshots`에 연결한다.
+- MV swap 성공 시 `ops.serving_releases` active row 교체는 T-027/T-047 gate와 함께 보강한다.
+
 ## 2026-05-27 (T-043 — PR #23~#41 리뷰 코멘트 audit/fixup)
 
 **작업**: 사용자 지시에 따라 PR #23부터 최신 PR #41까지 GitHub 리뷰 표면을 thread-aware로 다시 확인하고, 반영 가능한 항목을 코드/문서로 보강했다.

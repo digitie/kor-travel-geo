@@ -30,6 +30,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target")
+    op.execute("DROP SCHEMA IF EXISTS ops CASCADE")
     for table in (
         "geo_cache",
         "load_consistency_reports",

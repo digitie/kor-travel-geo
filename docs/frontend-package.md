@@ -287,19 +287,20 @@ UI 원칙:
 
 테스트는 threshold badge, baseline/trial 비교 정렬, slow sample 클릭, 큰 plan JSON rendering, API 실패 상태를 포함한다.
 
-### `/admin/ops` 후보 화면 (ADR-033, T-049)
+### `/admin/ops` 화면 (ADR-033, T-049)
 
-T-049 구현 후 관리 UI는 운영자가 현재 DB 상태와 위험 작업 이력을 한 화면에서 확인할 수 있게 해야 한다. `/admin/load`, `/admin/backups`, `/admin/performance`가 각각 작업 실행 화면이라면 `/admin/ops`는 감사·스냅샷·릴리스·artifact를 묶어 보는 관제 화면이다.
+T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/load`, `/admin/backups`, `/admin/performance`가 각각 작업 실행 화면이라면 `/admin/ops`는 감사·스냅샷·릴리스·artifact를 묶어 보는 관제 화면이다. 첫 구현은 조회와 운영 메타데이터 capture/maintenance window 등록에 집중하고, backup/restore/performance artifact의 세부 다운로드·비교 UI는 T-046/T-047에서 확장한다.
 
 화면 구성:
 
-- dataset snapshot 목록: source set 기준월, 필수 원천 누락 여부, row count, consistency report, performance report, backup artifact 연결.
-- serving release 목록: active 여부, MV swap 시각, dataset snapshot, rollback 대상, code/schema version.
-- artifact 목록: `db_backup`, `restore_log`, `consistency_export`, `performance_report`, `source_inventory`, `schema_diff`를 같은 table에서 필터링한다.
-- audit event 목록: actor, action, target, job id, redacted payload, result, 생성 시각. API key, DSN password, token, callback secret, 주소 원문은 표시하지 않는다.
-- maintenance window: 활성 window, 만료 시각, 허용된 위험 작업, typed confirmation 상태.
+- dataset snapshot 목록: snapshot id, state, row count key 수를 표시한다. source set 상세 drilldown은 T-045에서 보강한다.
+- serving release 목록: release id, active/superseded 상태, release kind, serving MV 이름을 표시한다. active row는 DB partial unique index로 한 건만 허용된다.
+- artifact 목록: `db_backup`, `db_restore_log`, `consistency_report`, `perf_report`, `source_inventory`, `schema_diff`를 같은 table에서 표시한다. 다운로드/삭제 action은 T-046에서 추가한다.
+- audit event 목록: action, outcome, 생성 시각을 표시한다. API key, DSN password, token, callback secret, 주소 원문은 backend redaction을 거친 payload만 받는다.
+- maintenance window: `full_load`, `restore`, `schema_migration`, `mv_refresh`, `read_only`, `exclusive` window를 typed confirmation과 함께 생성한다. confirmation 원문은 DB에 저장하지 않고 hash만 저장한다.
+- table stats snapshot: `POST /v1/admin/ops/table-stats/capture`로 table/MV/index size와 추정 row count snapshot을 수집하고 최근 결과를 표시한다.
 
-테스트는 secret redaction 표시, active release 한 건 강조, artifact type filter, audit event pagination, maintenance window 만료 상태를 포함한다.
+테스트는 현재 backend redaction/route contract와 frontend lint/type/build로 시작한다. 후속 UI 고도화 시 secret redaction 표시, active release 한 건 강조, artifact type filter, audit event pagination, maintenance window 만료 상태를 추가한다.
 
 ## A7. DB 일관성 — 단일 엔진
 

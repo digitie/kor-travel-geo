@@ -21,4 +21,13 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/admin/upload/sido-zip" in paths
     assert "/v1/admin/maintenance/refresh-mv" in paths
     assert "/v1/admin/consistency/run" in paths
+    assert "/v1/admin/ops/audit-events" in paths
+    assert "/v1/admin/ops/snapshots" in paths
+    assert "/v1/admin/ops/releases" in paths
+    assert "/v1/admin/ops/releases/{release_id}/rollback-plan" in paths
+    assert "/v1/admin/ops/artifacts" in paths
+    assert "/v1/admin/ops/maintenance-windows" in paths
+    assert "/v1/admin/ops/maintenance-windows/{window_id}/end" in paths
+    assert "/v1/admin/ops/table-stats" in paths
+    assert "/v1/admin/ops/table-stats/capture" in paths
     assert "/metrics" in paths

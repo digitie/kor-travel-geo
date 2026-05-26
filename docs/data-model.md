@@ -732,15 +732,15 @@ PR #10 리뷰 반영으로 `load_batch_id`, `parent_job_id`를 추가했다(ADR-
 
 T-046 이후 같은 큐는 `db_backup`, `db_restore` 같은 적재 외 관리 작업도 담는다. 기존 이름이 `load_jobs`라 다소 좁지만, 작업 상태·진행률·취소·log tail·startup recovery 요구가 동일하므로 초기 구현은 재사용한다. REST 표면은 `/v1/admin/jobs/*` 중립 alias를 우선 노출한다.
 
-### `ops` 운영 메타데이터 스키마 (ADR-033, T-049 설계)
+### `ops` 운영 메타데이터 스키마 (ADR-033, T-049)
 
-T-049부터 운영 메타데이터는 `ops` 스키마에 둔다. `public`은 주소 원천·serving 객체를 유지하고, `x_extension`은 PostGIS 보조 extension 격리 용도로 유지한다. `ops` 객체는 감사, 데이터셋 snapshot, serving release, artifact registry, maintenance window, table stats snapshot을 담당한다.
+T-049부터 운영 메타데이터는 `ops` 스키마에 둔다. `public`은 주소 원천·serving 객체를 유지하고, `x_extension`은 PostGIS 보조 extension 격리 용도로 유지한다. `ops` 객체는 감사, 데이터셋 snapshot, serving release, artifact registry, maintenance window, table stats snapshot을 담당한다. 실제 DDL은 `sql/ddl/001_schema.sql`, 신규 migration은 `alembic/versions/0006_t049_ops_metadata_schema.py`에 있다.
 
 ```sql
 CREATE SCHEMA IF NOT EXISTS ops;
 ```
 
-계획 테이블:
+구현 테이블:
 
 | 테이블 | 역할 | 핵심 연결 |
 |--------|------|-----------|
@@ -753,7 +753,7 @@ CREATE SCHEMA IF NOT EXISTS ops;
 
 `ops.audit_events.payload_redacted`와 `ops.artifacts.manifest`에는 API key, DSN password, callback secret, download token을 평문 저장하지 않는다. 주소 원문도 감사 목적에 꼭 필요하지 않으면 hash 또는 마스킹 값만 저장한다.
 
-active serving release는 한 건만 허용한다. 구현 시 `ops.serving_releases(state) WHERE state='active'` partial unique index 또는 동등한 constraint를 둔다. rollback은 과거 row를 다시 active로 바꾸지 않고 새 release row를 만들어 lineage를 보존한다.
+active serving release는 한 건만 허용한다. `idx_ops_serving_releases_one_active` partial unique index가 `state='active'` row를 한 건으로 제한한다. rollback은 과거 row를 다시 active로 바꾸지 않고 새 release row를 만들어 lineage를 보존한다.
 
 T-046에서 설계한 `db_backup_artifacts`는 신규 구현 시 `ops.artifacts`의 `artifact_type='db_backup'`으로 수렴한다. 이미 별도 `db_backup_artifacts`가 만들어진 배포를 지원해야 하면 compatibility view 또는 migration으로 흡수한다.
 
