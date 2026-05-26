@@ -21,8 +21,8 @@
 |------|------|------|
 | `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트라 가장 유용한 보완 후보 | T-039 완료. `tl_roadaddr_entrc` 선택 적재 |
 | `도로명주소 건물 도형` | 주소 단위 polygon/entrance/connection bundle. 전자지도 `TL_SPBD_BULD` 단순 중복이 아님 | T-040 완료. 분석 helper 유지, serving loader 보류 |
-| `건물군 내 상세주소 동 도형` | 상세주소 동/동 출입구 레벨. 주소 대표 좌표보다 세밀한 UI/품질 분석용 | T-041 상세주소 동 도형 loader 검토 |
-| `구역의 도형` | 기존 전자지도 행정구역/기초구역과 대부분 중복, `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA` 추가 | T-041 또는 관리 UI용 low priority |
+| `건물군 내 상세주소 동 도형` | 상세주소 동/동 출입구 레벨. 세종/경남 기준 전자지도 건물 polygon의 부분집합 | T-041 완료. overlay/상세주소 기능 후보 |
+| `구역의 도형` | 기존 전자지도 행정구역/기초구역 5개는 key 기준 완전 중복, `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`만 추가 | T-041 완료. 추가 2개만 별도 overlay 후보 |
 
 ## 실제 파일 구조
 
@@ -99,7 +99,7 @@ ADR-023:
 1. 현재 full-load source child에는 네 자료를 추가하지 않는다.
 2. `도로명주소 출입구 정보`는 T-039에서 구현했다. direct `bd_mgt_sn + 5179 point`라 현재 결측/이상치 분석에 바로 도움이 될 수 있지만, 기준월 차이 때문에 기본 full-load 자동 포함은 제외한다.
 3. `도로명주소 건물 도형`은 T-040에서 전자지도 `TL_SPBD_BULD`와의 차이를 세종/경남 기준으로 비교했다. 단순 중복이 아니므로 loader가 필요하면 별도 분석 테이블로 둔다.
-4. 상세주소 동 도형과 구역 추가 레이어는 serving API가 아니라 디버그 UI/품질 분석/상세주소 기능이 필요할 때 T-041로 분리한다.
+4. 상세주소 동 도형과 구역 추가 레이어는 T-041에서 검토했다. serving API가 아니라 디버그 UI/품질 분석/상세주소 기능이 필요할 때 별도 overlay 테이블로 붙인다.
 5. 모든 후속 loader는 `source_yyyymm` 기준월을 명시하고, 현재 full-load 기준월과 섞을 때 C10 또는 별도 consistency note로 드러나야 한다.
 
 ## 검증
@@ -125,4 +125,4 @@ ADR-023:
 
 - T-039: 완료. `도로명주소 출입구 정보` direct entrance text loader와 `tl_roadaddr_entrc` 선택 적재 구현.
 - T-040: 완료. `도로명주소 건물 도형` bundle과 전자지도 `TL_SPBD_BULD` 차이 분석.
-- T-041: 상세주소 동 도형과 구역 추가 레이어의 디버그 UI/품질 분석 활용 여부 결정.
+- T-041: 완료. 상세주소 동 도형은 전자지도 건물 부분집합으로 확인했고, 구역 추가 레이어는 `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`만 별도 후보로 남겼다.

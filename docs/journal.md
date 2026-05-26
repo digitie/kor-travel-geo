@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-041 — 상세주소 동 도형/구역 추가 레이어 검토)
+
+**작업**: PR #30 merge 이후 `codex/t041-extra-shape-layer-review` 브랜치에서 `건물군 내 상세주소 동 도형`과 `구역의 도형`을 실제 세종/경남 파일로 전자지도와 비교했다.
+
+**반영 상세**:
+- `src/kraddr/geo/loaders/shape_dbf.py`를 추가해 DBF/SHP layer summary와 key set overlap helper를 공용화했다.
+- T-040 `building_shape_bundle.py`는 공용 helper를 사용하도록 정리했다.
+- `src/kraddr/geo/loaders/extra_shape_layers.py`와 `scripts/compare_extra_shape_layers.py`를 추가했다.
+- ADR-026을 추가했다. 상세주소 동 도형과 구역 추가 레이어는 기본 `full_load_batch`/`mv_geocode_target`에 섞지 않고, 필요 시 별도 overlay/분석 테이블로 둔다.
+
+**실제 파일 검증**:
+- 세종 상세주소 동 polygon은 40,478행이고 전자지도 `TL_SPBD_BULD` 55,819행의 부분집합이었다. `BD_MGT_SN + EQB_MAN_SN` 교집합은 40,478, detail only 0, 전자지도 only 15,341이다.
+- 경남 상세주소 동 polygon은 923,702행이고 전자지도 `TL_SPBD_BULD` 1,269,029행의 부분집합이었다. 교집합은 923,702, detail only 0, 전자지도 only 345,327이다.
+- 세종 `구역의 도형` 중 `TL_SCCO_CTPRVN`, `TL_SCCO_SIG`, `TL_SCCO_EMD`, `TL_SCCO_LI`, `TL_KODIS_BAS`는 전자지도와 key 기준 완전 중복이었다. 경남도 같은 결과다.
+- `TL_SCCO_GEMD`는 기존 `TL_SCCO_EMD`와 key 교집합이 0건이고, `TL_SPPN_MAKAREA`는 `SIG_CD + MAKAREA_ID`가 distinct key였다.
+
+**검증**:
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_building_shape_bundle.py tests/unit/test_extra_shape_layers.py tests/integration/test_real_extra_shape_sources.py -q` → 11 passed, 2 skipped.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp KRADDR_GEO_SLOW_REAL_DATA=1 .venv/bin/python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_detail_and_zone_gyeongnam_key_overlap_slow -q` → 1 passed in 16.74s.
+- `scripts/compare_extra_shape_layers.py`로 세종 실제 파일 JSON 출력을 확인했다.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 148 passed, 5 skipped.
+- `ruff check .`, `mypy src/kraddr/geo scripts/compare_extra_shape_layers.py scripts/compare_building_shape_bundle.py`, `lint-imports`, `git diff --check` → 통과.
+
+**다음 작업**: 전체 검증 후 PR을 열어 약 20분 리뷰 대기한다. 리뷰가 없으면 main에 merge하고 T-037 geometry 포함 SHP 대형 레이어 적재 튜닝으로 진행한다.
+
 ## 2026-05-26 (T-040 — `도로명주소 건물 도형` bundle 비교)
 
 **작업**: PR #29 merge 이후 `codex/t040-building-shape-bundle` 브랜치에서 `도로명주소 건물 도형` bundle과 기존 전자지도 건물/출입구 레이어의 natural key overlap을 실제 파일로 비교했다.
