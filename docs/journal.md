@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-040 — `도로명주소 건물 도형` bundle 비교)
+
+**작업**: PR #29 merge 이후 `codex/t040-building-shape-bundle` 브랜치에서 `도로명주소 건물 도형` bundle과 기존 전자지도 건물/출입구 레이어의 natural key overlap을 실제 파일로 비교했다.
+
+**반영 상세**:
+- `src/kraddr/geo/loaders/building_shape_bundle.py`를 추가했다. ZIP 내부 `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`와 전자지도 `TL_SPBD_BULD`, `TL_SPBD_ENTRC`의 DBF key set을 순수 Python으로 비교한다.
+- `scripts/compare_building_shape_bundle.py`를 추가해 세종/경남 비교 결과를 JSON으로 재현할 수 있게 했다.
+- ADR-025를 추가했다. `도로명주소 건물 도형`은 단순 중복이 아니지만 현행 `tl_spbd_buld_polygon`/serving MV에는 섞지 않고, 후속 loader가 필요하면 `tl_roadaddr_buld_polygon`, `tl_roadaddr_buld_entrc`, `tl_roadaddr_spot_cntc` 같은 별도 테이블로 둔다.
+- 세종 실제 비교는 기본 integration test로 넣고, 경남 full key scan은 `KRADDR_GEO_SLOW_REAL_DATA=1` 선택 테스트로 분리했다.
+
+**실제 파일 검증**:
+- 세종 address polygon key: bundle 27,792 distinct, 전자지도 `TL_SPBD_BULD` 55,819 distinct, 교집합 15,339, bundle only 12,453, 전자지도 only 40,480.
+- 경남 address polygon key: bundle 656,230 distinct, 전자지도 `TL_SPBD_BULD` 1,269,029 distinct, 교집합 345,290, bundle only 310,940, 전자지도 only 923,739.
+- 세종 출입구 key: bundle 28,111, 전자지도 27,787, 교집합 27,766, bundle only 345, 전자지도 only 21.
+- 경남 출입구 key: bundle 661,416, 전자지도 656,133, 교집합 656,114, bundle only 5,302, 전자지도 only 19.
+
+**검증**:
+- `python -m pytest tests/unit/test_building_shape_bundle.py tests/integration/test_real_extra_shape_sources.py -q` → 7 passed, 1 skipped.
+- `KRADDR_GEO_SLOW_REAL_DATA=1 python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_building_shape_bundle_gyeongnam_key_overlap_slow -q` → 1 passed in 18.48s.
+- `python -m pytest -q` → 144 passed, 4 skipped.
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `git diff --check` → 통과.
+
 ## 2026-05-26 (T-039 — PR 전 검증 보강)
 
 **작업**: T-039 PR 생성 전 전체 검증을 돌리며 문서/DDL/테스트 계약을 보강했다.

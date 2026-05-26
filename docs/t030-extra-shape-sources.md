@@ -20,7 +20,7 @@
 | 자료 | 결정 | 후속 |
 |------|------|------|
 | `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트라 가장 유용한 보완 후보 | T-039 완료. `tl_roadaddr_entrc` 선택 적재 |
-| `도로명주소 건물 도형` | 주소 단위 polygon/entrance/connection bundle. 전자지도 `TL_SPBD_BULD` 단순 중복이 아님 | T-040 address building bundle loader 검토 |
+| `도로명주소 건물 도형` | 주소 단위 polygon/entrance/connection bundle. 전자지도 `TL_SPBD_BULD` 단순 중복이 아님 | T-040 완료. 분석 helper 유지, serving loader 보류 |
 | `건물군 내 상세주소 동 도형` | 상세주소 동/동 출입구 레벨. 주소 대표 좌표보다 세밀한 UI/품질 분석용 | T-041 상세주소 동 도형 loader 검토 |
 | `구역의 도형` | 기존 전자지도 행정구역/기초구역과 대부분 중복, `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA` 추가 | T-041 또는 관리 UI용 low priority |
 
@@ -65,7 +65,7 @@
 | `TL_SPBD_ENTRC` | Point | 28,111 | `SIG_CD`, `BUL_MAN_NO`, `ENTRC_SE`, `ENT_MAN_NO`, `EQB_MAN_SN` |
 | `TL_SPOT_CNTC` | PolyLine | 27,776 | `ENT_MAN_NO`, `RDS_MAN_NO`, `RDS_SIG_CD`, `BSI_INT_SN` |
 
-전자지도 `TL_SPBD_BULD` 세종 row count는 55,819이고, 이 ZIP의 `TL_SGCO_RNADR_MST`는 27,792다. 이름이 비슷해도 단순 중복이 아니라 주소 단위 bundle이다. direct address polygon/entrance/road connection으로 C2/C4/C8 후속 분석에 가치가 있지만, 기준월이 `202605`이고 현재 full-load 기준월(`202603/202604`)과 다르므로 즉시 serving path에 섞지 않는다.
+전자지도 `TL_SPBD_BULD` 세종 row count는 55,819이고, 이 ZIP의 `TL_SGCO_RNADR_MST`는 27,792다. T-040 natural key 비교 결과 세종 address polygon key 교집합은 15,339건, 경남은 345,290건으로 단순 중복이 아니다. direct address polygon/entrance/road connection으로 C2/C4/C8 후속 분석에 가치가 있지만, 기준월이 `202605`이고 현재 full-load 기준월(`202603/202604`)과 다르므로 즉시 serving path에 섞지 않는다.
 
 ### 도로명주소 출입구 정보
 
@@ -98,7 +98,7 @@ ADR-023:
 
 1. 현재 full-load source child에는 네 자료를 추가하지 않는다.
 2. `도로명주소 출입구 정보`는 T-039에서 구현했다. direct `bd_mgt_sn + 5179 point`라 현재 결측/이상치 분석에 바로 도움이 될 수 있지만, 기준월 차이 때문에 기본 full-load 자동 포함은 제외한다.
-3. `도로명주소 건물 도형`은 T-040에서 전자지도 `TL_SPBD_BULD`와의 차이를 세종/경남 기준으로 비교한 뒤 loader 여부를 결정한다.
+3. `도로명주소 건물 도형`은 T-040에서 전자지도 `TL_SPBD_BULD`와의 차이를 세종/경남 기준으로 비교했다. 단순 중복이 아니므로 loader가 필요하면 별도 분석 테이블로 둔다.
 4. 상세주소 동 도형과 구역 추가 레이어는 serving API가 아니라 디버그 UI/품질 분석/상세주소 기능이 필요할 때 T-041로 분리한다.
 5. 모든 후속 loader는 `source_yyyymm` 기준월을 명시하고, 현재 full-load 기준월과 섞을 때 C10 또는 별도 consistency note로 드러나야 한다.
 
@@ -124,5 +124,5 @@ ADR-023:
 ## 다음 작업
 
 - T-039: 완료. `도로명주소 출입구 정보` direct entrance text loader와 `tl_roadaddr_entrc` 선택 적재 구현.
-- T-040: `도로명주소 건물 도형` bundle과 전자지도 `TL_SPBD_BULD` 차이 분석.
+- T-040: 완료. `도로명주소 건물 도형` bundle과 전자지도 `TL_SPBD_BULD` 차이 분석.
 - T-041: 상세주소 동 도형과 구역 추가 레이어의 디버그 UI/품질 분석 활용 여부 결정.
