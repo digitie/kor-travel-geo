@@ -153,6 +153,7 @@ asyncio.run(main())
 | **ADR-005** | SHP 적재는 GDAL Python binding만 허용 (`ogr2ogr` subprocess 금지) |
 | **ADR-013** | 프론트엔드 UI는 사내 내부망 전용으로 애플리케이션 인증 제거 |
 | **ADR-020** | 프론트엔드 지도는 VWorld WMTS + MapLibre GL JS 기반으로 채택 |
+| **ADR-029** | 원천 자료 기준월은 source set으로 명시하고 혼합 적재는 확인 절차를 거침 |
 
 전체 ADR 본문은 [`docs/decisions.md`](docs/decisions.md)에서 확인하실 수 있습니다.
 

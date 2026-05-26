@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Fixed
+- T-045 문서/계획 추가: 원천별 업데이트 시점이 달라 같은 기준월이 아닐 수 있음을 ADR-029로 정리하고, `source_set` 기반 기준월 선택, CLI mismatch 확인 UX, API/라이브러리 발견/계획 함수 분리, UI 다중 파일/DND 업로드와 업로드/적재 진행률·취소 설계를 문서화한다.
+- VWorld 문서/계획 보강: 디버그 UI를 `maplibre-vworld-js`의 `VWorldMap` 또는 동등한 Hook/component로 완전히 포팅하는 T-044를 추가하고, ADR-028을 통해 부족한 기능은 `python-kraddr-geo`에서 우회하지 않고 `digitie/maplibre-vworld-js`를 적극 수정한 뒤 검증된 SHA로 소비하도록 정리한다.
 - T-041 문서 보강: `TL_SPPN_MAKAREA`를 단순 overlay 후보가 아니라 국가지점번호 표기 의무지역 polygon으로 정리하고, ADR-027을 추가해 `tl_sppn_makarea` 별도 테이블, reverse geocode `sppn_area` 보조 후보, 국가지점번호 geocode 검증/문맥 보강 설계를 문서화한다. 코드는 아직 구현하지 않는다.
 - T-037 SHP geometry 포함 대형 레이어 튜닝: `TL_SPBD_BULD`를 운영 테이블 직접 GDAL append 대신 projection staging table + 운영 테이블 insert-select 경로로 적재한다. 세종 단일 레이어는 기존 38.36초에서 18.59초로 줄었고, 경기도 1,649,975행은 40분 17.15초에 성공했다. raw staging이 원본 DBF 전체 속성 COPY로 22분 이상 지연된 중간 실패도 문서화해 projection staging 필요성을 명시한다.
 - PR #20~#22 post-merge 리뷰 반영: T-035 benchmark JSON에 `schema_version=2`와 metadata를 추가하고, MV index rename public helper/좁은 예외 처리/ANALYZE lock timeout을 보강한다. T-034 `TL_SPRD_INTRVL` DBF COPY 로더는 row dataclass, CP949/truncated 오류 문맥, deleted record 테스트를 추가한다. T-033 full-load 스크립트는 자료별 timer와 C10/SHP 시간 설명을 보강한다.

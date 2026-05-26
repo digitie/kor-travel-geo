@@ -160,7 +160,15 @@ VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnig
 - VWorld tile 404/408/429/5xx와 네트워크 실패는 upstream helper로 분류한 뒤 즉시 치명 오류로 고정하지 않고 redacted warning과 누적 임계치로 처리한다.
 - marker 갱신 시 애니메이션 되튐을 피하고, SSR 단계에서는 `next/dynamic(..., { ssr: false })`와 skeleton만 노출한다.
 
-이 동작들은 후속 PR에서 `maplibre-vworld-js`의 재사용 가능한 props/hook/test로 옮길 수 있는지 항목별로 맞춘다. 공통화가 끝난 부분부터 `CoordinateMap.tsx`의 직접 MapLibre wiring을 줄인다.
+이 동작들은 T-044에서 `maplibre-vworld-js`의 재사용 가능한 props/hook/test로 옮긴다. 최종 목표는 `CoordinateMap.tsx`가 직접 `maplibregl.Map`, marker lifecycle, tile error classification을 소유하지 않고, upstream `VWorldMap` 또는 동등한 Hook/component를 감싸는 얇은 domain wrapper가 되는 것이다.
+
+T-044 완전 포팅 원칙:
+
+- `maplibre-vworld-js` public API가 click callback, marker 제어, `flyToOptions`, tile error hook/redaction, key 미설정 fallback, SSR-safe 사용법을 제공해야 한다.
+- 해당 기능이 upstream에 없으면 `kraddr-geo-ui`에 임시 workaround를 추가하지 말고 `digitie/maplibre-vworld-js` 저장소를 직접 수정한다.
+- upstream 수정은 별도 PR 또는 검증 가능한 commit으로 남긴 뒤, `kraddr-geo-ui/package.json`의 `maplibre-vworld` SHA와 lockfile을 갱신한다.
+- upstream과 소비자 양쪽에서 test/build를 돌리고, PR 본문과 `docs/journal.md`에 upstream PR/commit, 검증 명령, 남은 차이를 기록한다.
+- 포팅 후에도 `NEXT_PUBLIC_VWORLD_API_KEY` 미설정 fallback, `(lon, lat)` 좌표 순서, redacted logging, transient overlay 임계치, Next.js dynamic import skeleton은 유지해야 한다.
 
 리뷰 기준:
 
@@ -168,7 +176,7 @@ VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnig
 - **타입 문제**: React 18/19, MapLibre GL JS, Vite/Next.js에서 타입 오류가 나면 upstream 타입 선언과 테스트를 보강한다.
 - **기능 문제**: VWorld `Base`/`gray`/`midnight`/`Hybrid`/`Satellite` layer, marker, click, clustering, attribution 중 공통 컴포넌트화할 수 있는 문제는 upstream에 반영한다.
 - **의존성 선언 상태**: `maplibre-vworld`는 `git+https://github.com/digitie/maplibre-vworld-js.git#c91c9f304669ce3f5fc4915f21186b23731d5816`로 선언되어 있으며, `kraddr-geo-ui/lib/vworld.ts`는 upstream helper 재수출과 `redactVWorldUrl` 호환 alias만 담당한다.
-- **컴포넌트 대체 조건**: click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식이 upstream에서 같은 의미로 제공되고 테스트되면 `CoordinateMap.tsx`의 직접 MapLibre wiring을 줄이고 upstream 컴포넌트를 사용한다.
+- **컴포넌트 대체 조건**: click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식이 upstream에서 같은 의미로 제공되고 테스트되면 `CoordinateMap.tsx`의 직접 MapLibre wiring을 제거하고 upstream 컴포넌트 또는 Hook을 사용한다.
 - **보안·운영 조건**: 브라우저 노출 키는 VWorld 콘솔에서 origin/referrer 제한이 실제 WMTS에도 적용되는지 운영자가 확인한다. 향후 CSP를 켜면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 포함한다.
 
 ### A3.7 Provider 체인 (`app/providers.tsx`)
@@ -201,7 +209,7 @@ VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnig
 | 경로 | 기능 | 주요 API |
 |------|------|----------|
 | `/admin/tables` | 테이블 통계 (행/디스크/인덱스/마지막 VACUUM) | `GET /v1/admin/tables` |
-| `/admin/load` | 적재 작업 제출과 진행상황 모니터링 | `POST /v1/admin/upload/sido-zip`, `POST /v1/admin/loads`, `POST /v1/admin/maintenance/refresh-mv`, `GET /v1/admin/loads` |
+| `/admin/load` | 다중 파일 업로드, source set 기준월 확인, 적재 작업 제출과 진행상황 모니터링 | `POST/PUT /v1/admin/uploads*`, `POST /v1/admin/load-sources/*`, `POST /v1/admin/loads`, `POST /v1/admin/maintenance/refresh-mv`, `GET /v1/admin/loads` |
 | `/admin/cache` | 캐시 hit rate 시계열, 비우기 | `GET /v1/admin/cache/metrics` |
 | `/admin/logs` | `load_jobs.log_tail` 최근 라인 조회 | `GET /v1/admin/logs` |
 | `/admin/consistency` | C1~C10 정합성 리포트 조회·재검증 | `GET/POST /v1/admin/consistency*` |
@@ -211,17 +219,23 @@ VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnig
 ### `/admin/load` 상태 머신
 
 ```
-idle → uploading → upload_done → processing → finished → (reset) idle
+idle → selecting_files → uploading → upload_done → source_review
+     → confirming_mismatch? → processing → finished → (reset) idle
 ```
 
-원칙: "파일 업로드와 입력 처리는 각각 다 끝나면 다음 단계로". 업로드 중 처리 시작 버튼 비활성, 처리 중 새 파일 추가 영역 닫힘.
+원칙: "파일 업로드와 입력 처리는 각각 다 끝나면 다음 단계로". 파일이 서버에 모두 저장되고 source set 분석이 끝나기 전에는 적재 시작 버튼을 활성화하지 않는다. 업로드 중에는 처리 시작 버튼을 비활성화하고, 처리 중에는 새 파일 추가 영역을 닫는다.
 
-- 업로드: PR #12 구현은 raw request body를 `fetch`로 전송한다. `python-multipart` 의존을 피하고 backend stream 처리와 맞추기 위한 결정이다. 브라우저 → Next.js → FastAPI 경로에서 파일 본문은 스트림으로 전달하고, Next.js Route Handler는 `arrayBuffer()`로 전체 파일을 버퍼링하지 않는다. 실패 시 `upload_done`으로 상태를 풀고 JSON 영역에 에러를 표시한다. 대용량 ZIP 업로드 진행률이 필요해지면 `XMLHttpRequest` 기반 progress bar를 후속으로 추가한다.
+- 파일 선택: `<input type="file" multiple>`과 drag and drop을 모두 지원한다. 디렉터리 drag가 가능한 브라우저에서는 `webkitRelativePath` 또는 동등한 relative path를 보존해 ZIP 묶음과 SHP sidecar 파일을 같은 upload set으로 보낸다.
+- 업로드: T-045 구현은 upload set API를 사용한다. `POST /v1/admin/uploads`로 세션을 만들고, 각 파일은 `PUT /v1/admin/uploads/{upload_set_id}/files`에 raw stream으로 보낸다. 대용량 ZIP 업로드 진행률을 안정적으로 표시하기 위해 `XMLHttpRequest.upload.onprogress` 또는 동등한 업로드 progress wrapper를 사용한다. Next.js Route Handler는 파일 본문을 `arrayBuffer()`로 전체 버퍼링하지 않고 백엔드로 스트리밍한다.
+- 업로드 진행률: 파일별 `uploaded_bytes / total_bytes`와 전체 `sum(uploaded_bytes) / sum(total_bytes)`를 별도 progress bar로 표시한다. 실패 파일은 재시도 버튼을 제공하고, 사용자가 전체 취소를 누르면 진행 중 요청을 abort한 뒤 서버 upload set cancel을 호출한다.
+- source review: 모든 파일 저장이 완료되면 `POST /v1/admin/load-sources/discover`를 호출해 원천 후보, 기준월, 필수 원천 누락, 추천 source set을 표로 보여 준다.
+- 기준월 mismatch 팝업: `mixed_yyyymm=true`이면 적재 시작 전에 modal을 띄운다. modal은 `juso`, `parcel_link`, `locsum`, `navi`, `shp`, `roadaddr_entrance`, `sppn_makarea`의 기준월과 경로를 보여 주고, C10 정합성 리포트에 혼합 기준월이 남는다는 점을 설명한다. 사용자가 계속 진행을 선택하면 서버가 요구하는 confirmation token 또는 문구를 `POST /v1/admin/load-sources/plan`에 함께 보낸다.
 - 시도명 추론: `lib/sido.ts`의 `guessSido(filename)` (`서울→seoul`, `부산→busan`, …).
-- 처리: 큐가 직렬로 한 job씩. UI는 사용자가 새로고침 버튼을 누르거나 후속 polling 구현으로 갱신한다. 모든 job이 종료 상태(`done`/`cancelled`/`failed`)면 `finished`.
-- 전체 취소: 모든 미종료 job에 cancel 요청. GDAL callback이 0 반환 → 즉시 중단.
+- 처리: `SourceSetPlan.batch_payload`가 확정된 뒤에만 `POST /v1/admin/loads kind=full_load_batch`를 호출한다. 큐가 직렬로 한 job씩 실행하며, UI는 root job과 child job을 폴링해 적재 진행률을 표시한다.
+- 적재 진행률: 업로드 진행률과 분리한다. root `full_load_batch`의 `progress`, child job의 `current_stage`, `log_tail`을 함께 보여 주며, child별 가중 평균이 제공되면 전체 적재 퍼센트로 표시한다.
+- 전체 취소: 업로드 단계에서는 upload set cancel + 브라우저 요청 abort를 수행한다. 적재 단계에서는 root job에 cancel 요청을 보내고, 서버는 실행 중 child의 협조적 cancel event와 대기 중 child의 `cancelled` 상태 전이를 담당한다. GDAL callback이 0 반환 → 즉시 중단.
 
-UploadStage / ProcessingStage 컴포넌트와 reducer 패턴은 첨부 §A6.3.4 ~ §A6.3.7 참조.
+UploadStage / SourceSetReviewStage / ProcessingStage 컴포넌트와 reducer 패턴은 T-045 구현 시 갱신한다. 테스트는 다중 파일 선택, DND, 기준월 mismatch modal, 업로드 취소, 적재 취소, 새로고침 후 진행률 복구를 포함해야 한다.
 
 ## A7. DB 일관성 — 단일 엔진
 
