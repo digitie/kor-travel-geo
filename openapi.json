@@ -775,6 +775,7 @@
                 "enum": [
                   "full_load_batch",
                   "juso_text_load",
+                  "daily_juso_delta",
                   "locsum_load",
                   "navi_load",
                   "shp_polygons_load",
@@ -907,6 +908,7 @@
                 "enum": [
                   "full_load_batch",
                   "juso_text_load",
+                  "daily_juso_delta",
                   "locsum_load",
                   "navi_load",
                   "shp_polygons_load",

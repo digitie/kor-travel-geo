@@ -177,5 +177,5 @@ TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy scripts/benchmark_mv_ref
 ## 후속
 
 - T-036: `maplibre-vworld-js` upstream main 동기화.
-- T-028: 일변동 ZIP 로더. 증분 데이터가 부족하면 synthetic 증분 fixture를 만들어 재실행 안전성을 검증한다.
+- T-028: 완료. 일변동 ZIP 로더는 실제 `20260401`/`20260404` daily ZIP과 synthetic fixture로 검증했다.
 - T-027: 모든 후속 작업이 끝난 뒤 DB를 삭제하고 처음부터 다시 full-load + MV refresh + smoke + consistency를 검증한다.

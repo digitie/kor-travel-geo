@@ -96,6 +96,27 @@ Next.js /admin/load
 
 REST 큐와 `AsyncAddressClient.submit_load("full_load_batch", ...)`는 같은 `infra.batch.batch_children()` 검증 helper를 사용한다. 잘못된 payload는 root job을 만들기 전에 `InvalidInputError(E0100)`로 거절한다.
 
+## 데이터 흐름 — 일변동 적용
+
+```
+운영자/스케줄러
+  ├─ CLI: kraddr-geo load daily-juso data/juso/daily/20260401_dailyjusukrdata.zip
+  └─ API: POST /v1/admin/loads kind=daily_juso_delta
+                                                                    │
+                                                                    ▼
+                                                     daily_juso_loader.py
+                                      TH_SGCO_RNADR_MST.TXT → tl_juso_text
+                                      TH_SGCO_RNADR_LNBR.TXT → manifest count only
+                                                                    │
+                                                                    ▼
+                                                     load_manifest daily watermark
+                                                                    │
+                                                                    ▼
+                                            필요 시 resolve_text_geometry_links + mv_refresh
+```
+
+일변동은 full-load batch의 기본 child가 아니다. full-load가 끝난 운영 DB에 후속으로 적용하는 별도 작업이며, 적용 후 조회 표면에 반영하려면 운영자가 `refresh mv` 또는 `mv_refresh` job을 실행한다. `LNBR` member는 현재 master table에 쓰지 않고 T-029에서 지번 1:N 관계 테이블 여부를 결정한다(ADR-021).
+
 ## 개발 환경 (PC, WSL)
 
 PC 개발은 WSL의 ext4 위에서 진행한다. NTFS 마운트에서 직접 `git`/`pip`/`uvicorn`을 실행하지 않는다.

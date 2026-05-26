@@ -2,6 +2,36 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-028 — 도로명주소 일변동 ZIP 로더)
+
+**작업**: PR #24 merge 이후 `codex/t028-daily-delta-loader` 브랜치에서 `data/juso/daily/*.zip` 일변동 ZIP 로더를 구현했다.
+
+**반영 상세**:
+- `src/kraddr/geo/loaders/text/daily_juso_loader.py`를 추가했다. `AlterD.JUSUKR.*.TH_SGCO_RNADR_MST.TXT`를 읽어 `tl_juso_text`에 UPSERT/DELETE로 반영한다.
+- `MVM_RES_CD`는 `Settings.mvm_res_code_actions`를 사용한다. 기본값은 `31/33=insert`, `34/35/36=update`, `63/64=delete`이며, 알 수 없는 코드는 `LoaderError`로 중단한다.
+- 한 batch 안의 동일 `bd_mgt_sn`은 `mvmn_de DESC`, `source_file DESC`, `staging_seq DESC` 기준 최신 1건만 master에 반영한다.
+- `TH_SGCO_RNADR_LNBR.TXT`는 현재 master table에 쓰지 않고 `unsupported_lnbr_rows`로 집계해 `load_manifest.source_set`에 남긴다. T-029에서 `jibun_rnaddrkor_*`와 함께 1:N 지번 관계 테이블 여부를 결정한다.
+- member 내용이 `No Data`인 경우 컬럼 수 오류로 보지 않고 skip하며 `skipped_no_data_sources`에 기록한다.
+- CLI `kraddr-geo load daily-juso`와 API job kind `daily_juso_delta`를 추가했고, `openapi.json` 및 `kraddr-geo-ui/types/api.gen.ts`를 갱신했다.
+- ADR-021과 `docs/t028-daily-juso-delta.md`를 추가해 MST/LNBR 분리, manifest watermark, 실제 파일 검증 수치를 문서화했다.
+
+**실제 파일 확인**:
+- `/mnt/f/dev/python-kraddr-geo/data/juso/daily/20260401_dailyjusukrdata.zip`의 MST member는 422행이며 코드 분포는 `31=185`, `34=57`, `63=180`이었다.
+- 같은 ZIP의 LNBR member는 204행이며 이번 구현에서는 manifest에 미지원 행 수로만 기록한다.
+- `/mnt/f/dev/python-kraddr-geo/data/juso/daily/20260404_dailyjusukrdata.zip`은 MST/LNBR 모두 `No Data`였다.
+
+**검증 진행**:
+- `pytest tests/unit/test_daily_juso_loader.py tests/integration/test_real_juso_text_loaders.py::test_actual_daily_juso_zip_loads_mst_rows_and_skips_no_data_members tests/unit/test_cli_contract.py -q` → 11 passed.
+- `pytest tests/integration/test_real_juso_text_loaders.py -q` → 실제 NTFS `data/juso` fallback으로 5 passed.
+- Docker PostGIS `localhost:15432`에 전용 DB `kraddr_geo_t028`을 생성하고 `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t028 pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 이 검증은 daily sample 3행 적용 뒤 `load_manifest.last_mvmn_de=20260402`, `row_count=3`, `unsupported_lnbr_rows=204`까지 확인한다.
+- 대상 `ruff check`와 대상 `mypy` → 통과.
+- `scripts/export_openapi.py`와 frontend `npm run gen:types` 실행.
+- 전체 `pytest -q` → 122 passed / 3 skipped.
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
+- frontend `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
+
+**다음 작업**: 전체 검증과 실제 PostgreSQL sample daily load를 실행한 뒤 PR을 열어 리뷰 대기한다.
+
 ## 2026-05-26 (PR #20~#22 post-merge 리뷰 반영)
 
 **작업**: T-036 PR #23이 main에 merge된 뒤, 사용자 지시 순서대로 PR #22 → PR #21 → PR #20 리뷰 코멘트를 thread-aware 방식으로 확인했다. 세 PR 모두 merged 상태였고 conversation comment 1개씩만 있었으며 formal review와 inline review thread는 없었다.

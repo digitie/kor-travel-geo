@@ -59,6 +59,9 @@ kraddr-geo init-db
 kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full \
     --pg-conn "host=localhost dbname=kraddr_geo user=addr password=..."
 
+# full-load 이후 일변동 ZIP 적용
+kraddr-geo load daily-juso ./data/juso/daily/20260401_dailyjusukrdata.zip
+
 # 서비스 기동
 uvicorn kraddr.geo.api.app:app --reload --port 8000
 ```

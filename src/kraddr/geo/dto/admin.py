@@ -13,6 +13,7 @@ LoadJobState = Literal["queued", "running", "done", "failed", "cancelled"]
 LoadJobKind = Literal[
     "full_load_batch",
     "juso_text_load",
+    "daily_juso_delta",
     "locsum_load",
     "navi_load",
     "shp_polygons_load",

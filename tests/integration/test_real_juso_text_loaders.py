@@ -5,6 +5,11 @@ from pathlib import Path
 import pytest
 
 from kraddr.geo.loaders.shp.polygons_loader import POLYGON_LAYER_NAMES, build_shp_load_plan
+from kraddr.geo.loaders.text.daily_juso_loader import (
+    discover_daily_juso_sources,
+    is_no_data_source,
+    iter_daily_juso_rows,
+)
 from kraddr.geo.loaders.text.juso_hangul_loader import (
     discover_juso_hangul_files,
     iter_juso_rows,
@@ -18,10 +23,23 @@ from kraddr.geo.loaders.text.navi_loader import (
 )
 
 DATA_ROOT = Path("data/juso")
+ALT_DATA_ROOTS = (
+    Path("/mnt/f/dev/python-kraddr-geo/data/juso"),
+    Path("/home/digitie/kraddr-geo-data/juso"),
+)
 
 
 def _require(path: Path) -> Path:
     if not path.exists():
+        try:
+            relative = path.relative_to(DATA_ROOT)
+        except ValueError:
+            relative = None
+        if relative is not None:
+            for root in ALT_DATA_ROOTS:
+                candidate = root / relative
+                if candidate.exists():
+                    return candidate
         pytest.skip(f"actual juso data not available: {path}")
     return path
 
@@ -43,6 +61,28 @@ def test_actual_juso_hangul_file_loads_rows_and_pnu_mapping() -> None:
     assert first.zip_no == "03047"
     assert first.pnu == "1111010100101440003"
     assert all(row.source_file == "rnaddrkor_seoul.txt" for row in rows)
+
+
+def test_actual_daily_juso_zip_loads_mst_rows_and_skips_no_data_members() -> None:
+    archive = _require(DATA_ROOT / "daily" / "20260401_dailyjusukrdata.zip")
+    sources = discover_daily_juso_sources(archive)
+
+    rows = list(iter_daily_juso_rows(sources.mst[0], source_yyyymm=None))
+
+    assert len(rows) == 422
+    assert len(sources.lnbr) == 1
+    assert rows[0].mvmn_de == "20260402"
+    assert rows[0].juso.source_yyyymm == "202604"
+    assert {row.mvm_res_cd for row in rows} == {"31", "34", "63"}
+    assert sum(1 for row in rows if row.mvm_res_cd == "31") == 185
+    assert sum(1 for row in rows if row.mvm_res_cd == "34") == 57
+    assert sum(1 for row in rows if row.mvm_res_cd == "63") == 180
+
+    no_data_archive = _require(DATA_ROOT / "daily" / "20260404_dailyjusukrdata.zip")
+    no_data_sources = discover_daily_juso_sources(no_data_archive)
+    assert is_no_data_source(no_data_sources.mst[0])
+    assert is_no_data_source(no_data_sources.lnbr[0])
+    assert list(iter_daily_juso_rows(no_data_sources.mst[0], source_yyyymm=None)) == []
 
 
 def test_actual_locsum_zip_member_loads_entrance_coordinates_without_bd_mgt_sn() -> None:

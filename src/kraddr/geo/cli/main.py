@@ -22,6 +22,7 @@ from kraddr.geo.loaders.epost_downloader import (
 from kraddr.geo.loaders.pobox_loader import load_pobox
 from kraddr.geo.loaders.postload import refresh_mv, resolve_text_geometry_links
 from kraddr.geo.loaders.shp.polygons_loader import load_shp_polygons
+from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
 from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kraddr.geo.loaders.text.locsum_loader import load_locsum
 from kraddr.geo.loaders.text.navi_loader import load_navi
@@ -94,6 +95,34 @@ def load_juso(path: Path, yyyymm: str | None = typer.Option(None, "--yyyymm")) -
             assert client.engine is not None
             count = await load_juso_hangul(client.engine, path, source_yyyymm=yyyymm)
             typer.echo(f"loaded tl_juso_text rows: {count}")
+
+    asyncio.run(run())
+
+
+@load_app.command("daily-juso")
+def load_daily_juso_command(
+    path: Path,
+    yyyymm: str | None = typer.Option(None, "--yyyymm"),
+    limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
+) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            result = await load_daily_juso_delta(
+                client.engine,
+                path,
+                source_yyyymm=yyyymm,
+                limit_per_file=limit_per_file,
+            )
+            typer.echo(
+                "loaded daily tl_juso_text delta: "
+                f"processed={result.processed_rows}, "
+                f"upserted={result.upserted_rows}, "
+                f"deleted={result.deleted_rows}, "
+                f"lnbr_skipped={result.unsupported_lnbr_rows}, "
+                f"no_data_sources={result.skipped_no_data_sources}, "
+                f"last_mvmn_de={result.last_mvmn_de or '-'}"
+            )
 
     asyncio.run(run())
 

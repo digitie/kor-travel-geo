@@ -55,6 +55,32 @@ class JusoTextRow:
         )
 
 
+def juso_text_copy_tuple(row: JusoTextRow) -> tuple[object, ...]:
+    return (
+        row.bd_mgt_sn,
+        row.sig_cd,
+        row.rn_cd,
+        row.ctp_kor_nm,
+        row.sig_kor_nm,
+        row.emd_kor_nm,
+        row.li_kor_nm,
+        row.bjd_cd,
+        row.adm_cd,
+        row.adm_kor_nm,
+        row.rn,
+        row.buld_se_cd,
+        row.buld_mnnm,
+        row.buld_slno,
+        row.buld_nm,
+        row.mntn_yn,
+        row.lnbr_mnnm,
+        row.lnbr_slno,
+        row.zip_no,
+        row.source_file,
+        row.source_yyyymm,
+    )
+
+
 def discover_juso_hangul_files(path: Path | str) -> tuple[TextSource, ...]:
     return discover_text_sources(path, pattern="rnaddrkor_*.txt")
 
@@ -159,31 +185,7 @@ FROM STDIN
                 for row in rows:
                     if cancel_event and cancel_event.is_set():
                         raise asyncio.CancelledError("juso_hangul_loader cancelled")
-                    await copy.write_row(
-                        (
-                            row.bd_mgt_sn,
-                            row.sig_cd,
-                            row.rn_cd,
-                            row.ctp_kor_nm,
-                            row.sig_kor_nm,
-                            row.emd_kor_nm,
-                            row.li_kor_nm,
-                            row.bjd_cd,
-                            row.adm_cd,
-                            row.adm_kor_nm,
-                            row.rn,
-                            row.buld_se_cd,
-                            row.buld_mnnm,
-                            row.buld_slno,
-                            row.buld_nm,
-                            row.mntn_yn,
-                            row.lnbr_mnnm,
-                            row.lnbr_slno,
-                            row.zip_no,
-                            row.source_file,
-                            row.source_yyyymm,
-                        )
-                    )
+                    await copy.write_row(juso_text_copy_tuple(row))
                     count += 1
                     if on_progress and count % 10_000 == 0:
                         on_progress(0.0)
@@ -240,4 +242,3 @@ def _iter_many(
 
 def _alchemy_to_libpq(engine: AsyncEngine) -> str:
     return engine.url.set(drivername="postgresql").render_as_string(hide_password=False)
-
