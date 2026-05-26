@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- README 법적 고지 보강: 이 프로젝트가 AI 활용 방식과 개발 워크플로를 학습·검증하기 위한 기술 연구 프로젝트이며, 외부 원천 데이터/API는 제공 기관의 이용약관·저작권·재배포 조건·호출 한도를 준수하는 것을 전제로 사용한다고 명시한다.
 - T-049 문서/계획 추가: 유지보수·관리 관점에서 `ops` 스키마를 도입하고 `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`를 추가하는 ADR-033과 구현 task를 정리한다. active serving release, rollback lineage, artifact checksum/retention, maintenance window, redacted audit event를 운영 메타데이터의 기본 축으로 둔다. 코드는 아직 작성하지 않는다.
 - T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의: `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`로 갱신한다. ADR-032를 추가해 VWorld layer/style, marker primitive, tile error redaction, 패키징/타입처럼 범용 기능은 `digitie/maplibre-vworld-js`에서 보강하고, geocode/reverse 입력 연결, API 응답 overlay, 정합성·성능·적재 상태 표시, 이 프로젝트 fallback UX는 `kraddr-geo-ui` domain wrapper에서 구현하도록 명시한다.
 - T-047 문서/계획 추가: 전국 full-load 후 지오코딩/역지오코딩/검색 쿼리를 다수 반복 측정해 p50/p95/p99, `EXPLAIN ANALYZE`, buffer, 동시성 결과로 튜닝하는 ADR-031을 정리한다. 속도를 최우선 gate로 두고, 필요하면 인덱스와 SQL 재작성뿐 아니라 read-only 보조 view/materialized view도 적극 도입하는 방향을 문서화한다. 코드는 아직 작성하지 않는다.
