@@ -27,7 +27,7 @@ KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS=1800000 \
 
 - 원천 데이터를 임의로 보정하지 않는다. 우선 원천 간 차이를 재현 가능한 sample과 SQL로 분류한다.
 - sample은 `bd_mgt_sn`, natural key, 좌표, 거리, 관련 polygon id, 가능한 경우 `source_file`을 함께 남긴다.
-- 지도 확인은 디버그 UI와 VWorld/MapLibre wrapper를 사용한다. wrapper 문제나 표시 한계가 발견되면 `digitie/maplibre-vworld-js`도 수정 대상에 포함한다.
+- 지도 확인은 디버그 UI와 VWorld/MapLibre wrapper를 사용한다. 범용 wrapper 문제나 표시 한계가 발견되면 `digitie/maplibre-vworld-js`도 수정 대상에 포함하고, 데이터 품질 sample 표시처럼 이 프로젝트에만 의미가 있는 overlay는 `kraddr-geo-ui`에 둔다.
 - C6/C7은 `ST_Covers`를 기준으로 한다. `ST_Contains`로 되돌리지 않는다.
 - full-load DB를 다시 만들 때는 `docs/t027-fullload-plan.md`의 Docker project/volume/timeout 기준을 따른다.
 

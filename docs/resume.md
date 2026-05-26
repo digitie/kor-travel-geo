@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-26 갱신, by codex)
+## 현재 진척도 (2026-05-27 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ master 브랜치를 문서·repo 설정만 남도록 정리
@@ -31,7 +31,7 @@
 - ✅ T-020 OpenAPI export 구현 — `scripts/export_openapi.py`, committed `openapi.json`, `.github/workflows/openapi.yml` drift 검사
 - ✅ PR #11 후속 반영 — `full_load_batch` REST/라이브러리 공유 DAG 경로 확인, enqueue 전 child payload fail-fast 검증, PR 코멘트용 검증 근거 정리
 - ✅ PR #12 기반 보강 — PR #11을 main에 머지하고, 후속 의견은 PR #12로 이관
-- ✅ T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩 — Next.js 16 + React 18 + Tailwind + TanStack Query. 지도는 MapLibre GL JS + VWorld WMTS를 사용하며, `digitie/maplibre-vworld-js` 문제도 적극 수정 대상으로 둔다.
+- ✅ T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩 — Next.js 16 + React 18 + Tailwind + TanStack Query. 지도는 MapLibre GL JS + VWorld WMTS를 사용하며, 범용 `digitie/maplibre-vworld-js` 문제도 적극 수정 대상으로 둔다.
 - ✅ T-022 디버그 페이지 구현 — `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain`
 - ✅ T-023 관리 페이지 구현 — `/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs`
 - ✅ T-024 품질 게이트 추가 — 루트 `pre-commit`, 통합 CI, frontend `gen:types` drift 검사, lint/type/test/build
@@ -69,17 +69,18 @@
 - ✅ T-040 `도로명주소 건물 도형` bundle 비교 — 세종/경남 실제 address building bundle을 전자지도 `TL_SPBD_BULD`/`TL_SPBD_ENTRC`와 비교했다. address polygon key 교집합은 세종 15,339/27,792, 경남 345,290/656,230으로 단순 중복이 아니어서 serving loader는 보류하고 분석 후보로 분리했다. 상세: `docs/t040-building-shape-bundle.md`
 - ✅ T-041 상세주소 동 도형/구역 추가 레이어 검토 — 세종/경남 실제 `건물군 내 상세주소 동 도형`이 전자지도 `TL_SPBD_BULD`의 부분집합임을 확인했다. `구역의 도형`의 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복이다. `TL_SCCO_GEMD`는 별도 overlay/분석 후보로 남기고, `TL_SPPN_MAKAREA`는 ADR-027에서 국가지점번호 보조 geocode/reverse 데이터 후보로 승격했다. 상세: `docs/t041-detail-zone-shape-layers.md`
 - ✅ T-037 geometry 포함 SHP 대형 레이어 적재 튜닝 — `TL_SPBD_BULD`를 projection staging table + 운영 테이블 insert-select 경로로 분기했다. 세종 단일 레이어는 기존 append 38.36초에서 18.59초로 줄었고, 경기도 1,649,975행 단일 레이어는 40분 17.15초에 성공했다. 세종 SHP 9개 레이어 public CLI 적재도 Docker DB에서 확인했다. 상세: `docs/t037-shp-geometry-tuning.md`
+- ✅ T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의 — upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`을 확인하고 `kraddr-geo-ui` dependency/lockfile을 갱신했다. ADR-032를 추가해 범용 VWorld/MapLibre 기능은 upstream, 지오코딩/역지오코딩/관리 UI 특화 기능은 이 저장소 domain wrapper에서 구현하는 원칙을 확정했다.
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-043 PR #23~최신 PR 리뷰 코멘트 일괄 audit/fixup이다. 각 PR의 conversation comment, formal review body, inline review thread를 모두 확인하고, 반영 가능한 내용은 후속 fixup PR로 옮긴다. 그 다음 후보는 T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX 구현, T-046 적재 완료 DB 백업/복원 및 UI 구현이다. T-045에서는 source set 발견/계획 함수, CLI 기준월 mismatch 확인, UI 다중 파일/DND 업로드, 업로드/적재 진행률, 취소 UX를 구현한다. T-046에서는 `pg_dump -Fd --jobs` directory dump + `tar.zst` artifact, `db_backup`/`db_restore` job, callback, `/admin/backups` UI, 대구광역시 부분 적재 DB backup → restore 검증을 수행한다. 이후 T-044 디버그 UI `maplibre-vworld-js` 완전 포팅, T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회, T-027 최종 실 데이터 클린 적재 검증을 진행한다. T-027은 Docker DB를 삭제하고 처음부터 다시 적재하므로 실행 전 `docs/t027-fullload-plan.md`의 phase timer와 중단·재개 정책을 다시 확인한다. T-027 이후에는 T-047 전국 적재 후 쿼리 성능 벤치마크를 즉시 실행해 지오코딩/역지오코딩/검색 p95/p99를 운영 gate로 삼고, 필요하면 보조 view/MV까지 도입한다.
+다음 작업은 T-043 PR #23~최신 PR 리뷰 코멘트 일괄 audit/fixup이다. 각 PR의 conversation comment, formal review body, inline review thread를 모두 확인하고, 반영 가능한 내용은 후속 fixup PR로 옮긴다. 그 다음 후보는 T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX 구현, T-046 적재 완료 DB 백업/복원 및 UI 구현이다. T-045에서는 source set 발견/계획 함수, CLI 기준월 mismatch 확인, UI 다중 파일/DND 업로드, 업로드/적재 진행률, 취소 UX를 구현한다. T-046에서는 `pg_dump -Fd --jobs` directory dump + `tar.zst` artifact, `db_backup`/`db_restore` job, callback, `/admin/backups` UI, 대구광역시 부분 적재 DB backup → restore 검증을 수행한다. 이후 T-044 디버그 UI를 최신 `maplibre-vworld-js` 기반 domain wrapper로 경계화하고, T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회, T-027 최종 실 데이터 클린 적재 검증을 진행한다. T-044에서는 범용 VWorld/MapLibre 기능만 upstream에 두고, 지오코딩/역지오코딩/관리 UI 특화 기능은 이 저장소에서 구현한다. T-027은 Docker DB를 삭제하고 처음부터 다시 적재하므로 실행 전 `docs/t027-fullload-plan.md`의 phase timer와 중단·재개 정책을 다시 확인한다. T-027 이후에는 T-047 전국 적재 후 쿼리 성능 벤치마크를 즉시 실행해 지오코딩/역지오코딩/검색 p95/p99를 운영 gate로 삼고, 필요하면 보조 view/MV까지 도입한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
 - T-034에서 `TL_SPRD_INTRVL` 전용 COPY 경로를 검증했고, T-037에서 `TL_SPBD_BULD` projection staging 경로도 검증했다. 전국 전체 SHP 시간은 T-027 최종 클린 로드에서 다시 확인한다.
 - T-035에서 `kraddr_geo_t033` MV는 여러 번 refresh/swap됐고 최종 상태는 `mv_geocode_target=6,416,637`, `mv_geocode_target_next/old` 없음, index 이름 `idx_mv_*` 정상이다.
-- `maplibre-vworld-js` upstream main 확인 커밋은 `c91c9f304669ce3f5fc4915f21186b23731d5816`이고, 현재 `kraddr-geo-ui`는 이 SHA에 맞춰져 있다. 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하므로 `kraddr-geo-ui/lib/vworld.ts`에서 기존 내부 이름으로 alias한다. T-044에서는 이 helper 소비 상태를 넘어서 `VWorldMap`/Hook으로 완전히 포팅하고, 필요한 upstream 기능은 해당 프로젝트 PR로 보강한다.
+- `maplibre-vworld-js` upstream main 확인 커밋은 `1a28b1099ab6c9c03e892e469974aee8c07deda1`이고, 현재 `kraddr-geo-ui`는 이 SHA에 맞춰져 있다. 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하므로 `kraddr-geo-ui/lib/vworld.ts`에서 기존 내부 이름으로 alias한다. T-044에서는 이 helper 소비 상태를 넘어서 `VWorldMap`/Hook 기반으로 경계화하되, 범용 지도 primitive만 upstream에 두고 지오코딩/역지오코딩/관리 UI 특화 기능은 이 저장소 wrapper에 남긴다.
 - PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
 - `daily/*.zip`는 T-028 이후 MST를 `tl_juso_text`에 적용할 수 있고, T-038 이후 `LNBR`를 `tl_juso_parcel_link`에 별도 delta로 적용할 수 있다. `도로명주소 출입구 정보`는 T-039 이후 `tl_roadaddr_entrc`에 적재할 수 있으며 MV 대표 출입구 1순위 후보가 된다. `도로명주소 건물 도형`은 T-040 이후 분석 helper로 비교 가능하지만 serving loader는 보류한다. T-041 상세주소 동/구역 추가 레이어도 `scripts/compare_extra_shape_layers.py`로 비교 가능하다. 단, `TL_SPPN_MAKAREA`는 ADR-027에 따라 국가지점번호 보조 데이터로 별도 loader/조회 경로를 만들 수 있다.
 - 원천별 업데이트 시점은 서로 다를 수 있다. ADR-029/T-045 설계에 따라 새 full-load UX는 단일 `yyyymm`이 아니라 `source_set.yyyymm_by_kind`를 사용해야 하며, 기준월이 섞이면 CLI/UI에서 의도 확인을 받아야 한다. API/라이브러리는 prompt 없이 `discover_load_sources()`와 `build_full_load_source_set_plan()`을 분리 제공한다.
@@ -112,7 +113,7 @@
 - **실제 DB 적재 검증**: 로컬 PostGIS가 준비되어 있으면 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q`로 실제 `data/juso` 샘플 COPY와 MV 생성을 확인한다.
 - **프론트엔드 TypeScript 캐시**: `kraddr-geo-ui/tsconfig.tsbuildinfo`는 생성물이다. `.gitignore` 대상이며 PR에 포함하지 않는다.
 - **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
-- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#c91c9f304669ce3f5fc4915f21186b23731d5816`로 고정되어 있고 `dist`/`exports`/`types`/`style.css`, click/error/flyTo hook, tile error helper가 포함됨을 확인했다. SHA를 바꾸면 Linux Node/npm으로 `npm ci`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. `VWorldMap` 컴포넌트 전체 대체는 click callback, key 미설정 fallback, transient tile error redaction/overlay, SSR-safe wrapper 동작을 upstream과 맞추는 후속 PR에서 진행한다.
+- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#1a28b1099ab6c9c03e892e469974aee8c07deda1`로 고정되어 있고 `dist`/`exports`/`types`/`style.css`, click/error/flyTo hook, tile error helper가 포함됨을 확인했다. SHA를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm으로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. `VWorldMap` 컴포넌트 대체는 범용 지도 primitive를 upstream 최신 API로 소비하고, key 미설정 fallback 문구, API 응답 overlay, transient overlay 임계치 같은 `kraddr-geo-ui` 특화 동작을 domain wrapper에 남기는 방식으로 진행한다.
 - **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
 
 ## 작업 후 의무사항
