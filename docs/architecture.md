@@ -82,7 +82,11 @@ PostgreSQL + PostGIS (pg_trgm)
 
 ```
 Next.js /admin/load
-  ├─ raw ZIP 업로드 ──POST /v1/admin/upload/sido-zip?filename=...──▶ uploads/
+  ├─ 다중 파일 선택/DND
+  ├─ upload set 생성 ──POST /v1/admin/uploads──────────────────────▶ uploads/<upload_set_id>/
+  ├─ 파일 저장 ───────PUT /v1/admin/uploads/{id}/files────────────▶ *.part → checksum → atomic rename
+  ├─ source set 분석 ─POST /v1/admin/load-sources/discover────────▶ SourceSetDiscovery
+  ├─ 기준월 mismatch 확인 ──POST /v1/admin/load-sources/plan──────▶ SourceSetPlan
   └─ batch 등록 ─────POST /v1/admin/loads kind=full_load_batch────▶ load_jobs root
                                                                     │
                                                                     ▼
@@ -97,6 +101,8 @@ Next.js /admin/load
 ```
 
 REST 큐와 `AsyncAddressClient.submit_load("full_load_batch", ...)`는 같은 `infra.batch.batch_children()` 검증 helper를 사용한다. 잘못된 payload는 root job을 만들기 전에 `InvalidInputError(E0100)`로 거절한다.
+
+ADR-029/T-045부터 full-load 입력은 단일 `yyyymm`이 아니라 원천별 기준월을 가진 `source_set`으로 다룬다. CLI는 기준월이 서로 다른 source set을 발견하면 사용자에게 의도한 혼합 적재인지 확인하고, API/라이브러리는 prompt 없이 `discover_load_sources()`와 `build_full_load_source_set_plan()`을 분리 제공한다. UI는 모든 파일 저장이 끝난 뒤 source set을 분석하고, 기준월이 맞지 않으면 팝업 확인을 거쳐 적재를 시작한다.
 
 `roadaddr_entrance_load`는 T-039부터 등록된 선택 child다. direct `bd_mgt_sn + EPSG:5179` 출입구를 `tl_roadaddr_entrc`에 적재하고 MV 대표 좌표 1순위 후보로 사용하지만, 현재 로컬 자료 기준월이 `202605`라 기본 full-load 6종에는 자동 포함하지 않는다. 같은 기준월의 전체분을 확보했거나 C10 기준월 불일치를 의도적으로 감수하는 검증에서는 `children` 또는 `child_jobs`에 명시해 batch에 포함한다.
 

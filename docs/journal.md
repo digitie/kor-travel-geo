@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-045 등록 — source set 기준월 선택과 업로드/적재 UX)
+
+**작업**: 사용자 지시에 따라 원천 자료별 기준월이 다를 수 있음을 전제로 한 적재 UX와 API/CLI 함수 분리 설계를 문서화했다. 코드는 작성하지 않았다.
+
+**반영 상세**:
+- ADR-029를 추가했다. 원천 묶음은 단일 `yyyymm`이 아니라 `source_set.yyyymm_by_kind`로 기록하고, 혼합 기준월은 사용자 확인을 거쳐야 한다.
+- `docs/t045-source-set-load-ux.md`를 추가했다. CLI 대화형 확인, 비대화형 confirmation token, `discover_load_sources()`와 `build_full_load_source_set_plan()` 함수 분리, upload set API, UI 다중 파일/DND 업로드, 업로드/적재 진행률과 취소 UX를 상세히 정리했다.
+- `docs/backend-package.md`, `docs/frontend-package.md`, `docs/architecture.md`, `docs/data-model.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`를 같은 방향으로 갱신했다.
+
+**결정**:
+- API/라이브러리는 사용자 prompt를 띄우지 않고 발견/계획/등록을 분리한다.
+- CLI와 UI는 기준월 mismatch를 사용자에게 표로 보여 주고, 명시 확인 없이는 적재를 시작하지 않는다.
+- 업로드는 DB 적재와 분리한다. 모든 파일 저장과 checksum/기준월 분석이 끝난 뒤에만 `full_load_batch`를 등록한다.
+
 ## 2026-05-26 (T-044 등록 — `maplibre-vworld-js` 완전 포팅)
 
 **작업**: 사용자 지시에 따라 디버그 UI를 `maplibre-vworld-js`로 완전히 포팅하는 작업을 백로그와 ADR에 추가했다.

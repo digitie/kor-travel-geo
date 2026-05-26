@@ -209,7 +209,7 @@ T-044 완전 포팅 원칙:
 | 경로 | 기능 | 주요 API |
 |------|------|----------|
 | `/admin/tables` | 테이블 통계 (행/디스크/인덱스/마지막 VACUUM) | `GET /v1/admin/tables` |
-| `/admin/load` | 적재 작업 제출과 진행상황 모니터링 | `POST /v1/admin/upload/sido-zip`, `POST /v1/admin/loads`, `POST /v1/admin/maintenance/refresh-mv`, `GET /v1/admin/loads` |
+| `/admin/load` | 다중 파일 업로드, source set 기준월 확인, 적재 작업 제출과 진행상황 모니터링 | `POST/PUT /v1/admin/uploads*`, `POST /v1/admin/load-sources/*`, `POST /v1/admin/loads`, `POST /v1/admin/maintenance/refresh-mv`, `GET /v1/admin/loads` |
 | `/admin/cache` | 캐시 hit rate 시계열, 비우기 | `GET /v1/admin/cache/metrics` |
 | `/admin/logs` | `load_jobs.log_tail` 최근 라인 조회 | `GET /v1/admin/logs` |
 | `/admin/consistency` | C1~C10 정합성 리포트 조회·재검증 | `GET/POST /v1/admin/consistency*` |
@@ -219,17 +219,23 @@ T-044 완전 포팅 원칙:
 ### `/admin/load` 상태 머신
 
 ```
-idle → uploading → upload_done → processing → finished → (reset) idle
+idle → selecting_files → uploading → upload_done → source_review
+     → confirming_mismatch? → processing → finished → (reset) idle
 ```
 
-원칙: "파일 업로드와 입력 처리는 각각 다 끝나면 다음 단계로". 업로드 중 처리 시작 버튼 비활성, 처리 중 새 파일 추가 영역 닫힘.
+원칙: "파일 업로드와 입력 처리는 각각 다 끝나면 다음 단계로". 파일이 서버에 모두 저장되고 source set 분석이 끝나기 전에는 적재 시작 버튼을 활성화하지 않는다. 업로드 중에는 처리 시작 버튼을 비활성화하고, 처리 중에는 새 파일 추가 영역을 닫는다.
 
-- 업로드: PR #12 구현은 raw request body를 `fetch`로 전송한다. `python-multipart` 의존을 피하고 backend stream 처리와 맞추기 위한 결정이다. 브라우저 → Next.js → FastAPI 경로에서 파일 본문은 스트림으로 전달하고, Next.js Route Handler는 `arrayBuffer()`로 전체 파일을 버퍼링하지 않는다. 실패 시 `upload_done`으로 상태를 풀고 JSON 영역에 에러를 표시한다. 대용량 ZIP 업로드 진행률이 필요해지면 `XMLHttpRequest` 기반 progress bar를 후속으로 추가한다.
+- 파일 선택: `<input type="file" multiple>`과 drag and drop을 모두 지원한다. 디렉터리 drag가 가능한 브라우저에서는 `webkitRelativePath` 또는 동등한 relative path를 보존해 ZIP 묶음과 SHP sidecar 파일을 같은 upload set으로 보낸다.
+- 업로드: T-045 구현은 upload set API를 사용한다. `POST /v1/admin/uploads`로 세션을 만들고, 각 파일은 `PUT /v1/admin/uploads/{upload_set_id}/files`에 raw stream으로 보낸다. 대용량 ZIP 업로드 진행률을 안정적으로 표시하기 위해 `XMLHttpRequest.upload.onprogress` 또는 동등한 업로드 progress wrapper를 사용한다. Next.js Route Handler는 파일 본문을 `arrayBuffer()`로 전체 버퍼링하지 않고 백엔드로 스트리밍한다.
+- 업로드 진행률: 파일별 `uploaded_bytes / total_bytes`와 전체 `sum(uploaded_bytes) / sum(total_bytes)`를 별도 progress bar로 표시한다. 실패 파일은 재시도 버튼을 제공하고, 사용자가 전체 취소를 누르면 진행 중 요청을 abort한 뒤 서버 upload set cancel을 호출한다.
+- source review: 모든 파일 저장이 완료되면 `POST /v1/admin/load-sources/discover`를 호출해 원천 후보, 기준월, 필수 원천 누락, 추천 source set을 표로 보여 준다.
+- 기준월 mismatch 팝업: `mixed_yyyymm=true`이면 적재 시작 전에 modal을 띄운다. modal은 `juso`, `parcel_link`, `locsum`, `navi`, `shp`, `roadaddr_entrance`, `sppn_makarea`의 기준월과 경로를 보여 주고, C10 정합성 리포트에 혼합 기준월이 남는다는 점을 설명한다. 사용자가 계속 진행을 선택하면 서버가 요구하는 confirmation token 또는 문구를 `POST /v1/admin/load-sources/plan`에 함께 보낸다.
 - 시도명 추론: `lib/sido.ts`의 `guessSido(filename)` (`서울→seoul`, `부산→busan`, …).
-- 처리: 큐가 직렬로 한 job씩. UI는 사용자가 새로고침 버튼을 누르거나 후속 polling 구현으로 갱신한다. 모든 job이 종료 상태(`done`/`cancelled`/`failed`)면 `finished`.
-- 전체 취소: 모든 미종료 job에 cancel 요청. GDAL callback이 0 반환 → 즉시 중단.
+- 처리: `SourceSetPlan.batch_payload`가 확정된 뒤에만 `POST /v1/admin/loads kind=full_load_batch`를 호출한다. 큐가 직렬로 한 job씩 실행하며, UI는 root job과 child job을 폴링해 적재 진행률을 표시한다.
+- 적재 진행률: 업로드 진행률과 분리한다. root `full_load_batch`의 `progress`, child job의 `current_stage`, `log_tail`을 함께 보여 주며, child별 가중 평균이 제공되면 전체 적재 퍼센트로 표시한다.
+- 전체 취소: 업로드 단계에서는 upload set cancel + 브라우저 요청 abort를 수행한다. 적재 단계에서는 root job에 cancel 요청을 보내고, 서버는 실행 중 child의 협조적 cancel event와 대기 중 child의 `cancelled` 상태 전이를 담당한다. GDAL callback이 0 반환 → 즉시 중단.
 
-UploadStage / ProcessingStage 컴포넌트와 reducer 패턴은 첨부 §A6.3.4 ~ §A6.3.7 참조.
+UploadStage / SourceSetReviewStage / ProcessingStage 컴포넌트와 reducer 패턴은 T-045 구현 시 갱신한다. 테스트는 다중 파일 선택, DND, 기준월 mismatch modal, 업로드 취소, 적재 취소, 새로고침 후 진행률 복구를 포함해야 한다.
 
 ## A7. DB 일관성 — 단일 엔진
 

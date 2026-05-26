@@ -276,7 +276,7 @@ GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY
 | **C7: 행정구역 ↔ 좌표 polygon 일치** | `ST_Covers(scco_emd.geom, serving_entrc.geom)` 와 `juso.bjd_cd[1..8] = scco_emd.emd_cd` 비교 | 좌표가 법정동 polygon 안 또는 경계 위인가 | `OK` / `WARN`(polygon 외) / `ERROR`(코드 불일치) |
 | **C8: 도로명 ↔ 도로 폴리라인 인접성** | `ST_DWithin(serving_entrc.geom, tl_sprd_manage.geom, 100m)` filtered by `rncode_full` | 좌표가 같은 도로명 관리 LineString의 100m 이내인가 | 일치 `OK`, 외 `WARN` |
 | **C9: PNU 자릿수 검증** | `length(pnu) = 19 AND substr(pnu, 11, 1) IN ('1','2')` | ADR-010 매핑이 올바른가 | `length != 19` 시 `ERROR` |
-| **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm` 비교 | `load_manifest`에 기록된 적재 작업 기준월이 한 배치 안에서 갈라지는가 | manifest 대상 table의 distinct month가 2종 이상이면 `WARN` |
+| **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm`와 `source_set.yyyymm_by_kind` 비교 | `load_manifest`에 기록된 적재 작업 기준월이 한 배치 안에서 갈라지는가, 갈라졌다면 운영자가 의도적으로 승인했는가 | 승인 없는 혼합 기준월은 `ERROR`, 승인된 혼합 기준월은 `INFO` 또는 `WARN`과 note |
 
 각 케이스의 결과는 `load_consistency_reports` 테이블에 구조화된 JSON으로 저장된다.
 
@@ -288,13 +288,15 @@ CREATE TABLE load_consistency_reports (
   scope          TEXT NOT NULL,            -- 'full' / 'sido:seoul' / 'recent:7d'
   started_at     TIMESTAMPTZ NOT NULL,
   finished_at    TIMESTAMPTZ,
-  source_set     JSONB NOT NULL,           -- {juso_yyyymm, locsum_yyyymm, roadaddr_entrance_yyyymm, navi_yyyymm, shp_yyyymm}
+  source_set     JSONB NOT NULL,           -- {yyyymm_by_kind, mixed_yyyymm, mixed_yyyymm_acknowledged, ...}
   cases          JSONB NOT NULL,           -- {C1: {count, severity, sample: [...]}, C2: ...}
   severity_max   TEXT NOT NULL CHECK (severity_max IN ('OK','INFO','WARN','ERROR')),
   generated_by   TEXT                      -- 'cli' / 'api' / 'cron'
 );
 CREATE INDEX idx_consistency_started ON load_consistency_reports (started_at DESC);
 ```
+
+ADR-029 이후 C10은 "모든 기준월이 같아야 한다"만 검사하지 않는다. 실제 원천 배포 주기가 다르므로 source set이 `mixed_yyyymm=true`일 수 있다. 이때 `mixed_yyyymm_acknowledged=true`, `acknowledged_by`, `acknowledged_at`이 함께 있으면 운영자가 의도적으로 혼합한 것으로 보고 리포트 note에 남긴다. 확인 기록이 없으면 실수 가능성이 크므로 `ERROR`로 보고 swap gate를 막는다.
 
 ### `cases` JSONB 구조 예시
 
@@ -655,9 +657,13 @@ CREATE TABLE load_manifest (
   row_count          BIGINT NOT NULL DEFAULT 0,
   source_zip         TEXT,
   source_checksum    TEXT,
+  source_yyyymm      TEXT,
+  source_set         JSONB,
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
+
+`source_yyyymm`은 단일 테이블/로더 기준월이다. 전국 full-load처럼 여러 원천을 묶는 작업은 `source_set`에 원천별 기준월과 경로를 남긴다. 예를 들어 `tl_juso_text`는 `source_yyyymm='202603'`, `tl_locsum_entrc`는 `source_yyyymm='202604'`일 수 있고, batch root 또는 consistency report의 `source_set.yyyymm_by_kind`가 이 혼합 상태를 설명한다.
 
 ### `load_codes` (MVM_RES_CD 매핑)
 
