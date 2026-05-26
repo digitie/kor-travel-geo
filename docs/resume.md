@@ -73,7 +73,7 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-현재 문서 작업이 끝나면 PR을 열어 리뷰 대기한다. 다음 구현 후보는 T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회이며, 그 다음 T-027 최종 실 데이터 클린 적재 검증을 진행한다. T-027은 Docker DB를 삭제하고 처음부터 다시 적재하므로 실행 전 `docs/t027-fullload-plan.md`의 phase timer와 중단·재개 정책을 다시 확인한다.
+다음 작업은 T-043 PR #23~#33 리뷰 코멘트 일괄 audit/fixup이다. 각 PR의 conversation comment, formal review body, inline review thread를 모두 확인하고, 반영 가능한 내용은 후속 fixup PR로 옮긴다. 그 다음 구현 후보는 T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회이며, 이후 T-027 최종 실 데이터 클린 적재 검증을 진행한다. T-027은 Docker DB를 삭제하고 처음부터 다시 적재하므로 실행 전 `docs/t027-fullload-plan.md`의 phase timer와 중단·재개 정책을 다시 확인한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.

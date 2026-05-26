@@ -2,6 +2,19 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-043 등록 — PR #23~#33 리뷰 audit/fixup)
+
+**작업**: 사용자 지시에 따라 PR #23부터 최신 PR #33까지의 리뷰 코멘트를 다시 읽고 반영하는 후속 작업을 백로그에 추가했다.
+
+**반영 상세**:
+- `docs/tasks.md` 대기 목록 최상단에 T-043을 추가했다.
+- 대상 범위는 PR #23~#33이다. PR #33은 먼저 main에 merge한 뒤 이 작업을 등록했다.
+- 확인 표면은 `comments`, `reviews`, `latestReviews`, pull request review comments, GraphQL `reviewThreads`를 모두 포함한다.
+- 완료 산출물은 `docs/postmerge-review-fixups-pr23-pr33.md`로 지정했다.
+- `docs/resume.md`의 다음 작업을 T-043으로 갱신했다.
+
+**다음 작업**: T-043을 실제로 수행할 때 PR별 코멘트/스레드 표를 만들고, 반영 가능한 변경은 후속 fixup PR로 올린다.
+
 ## 2026-05-26 (T-041 후속 — `TL_SPPN_MAKAREA` 문서 보강)
 
 **작업**: 사용자 설명을 반영해 `TL_SPPN_MAKAREA`를 단순 overlay 후보가 아니라 국가지점번호 표기 의무지역 polygon으로 문서화했다. 코드는 작성하지 않았다.
