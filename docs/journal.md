@@ -2,6 +2,19 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-044 등록 — `maplibre-vworld-js` 완전 포팅)
+
+**작업**: 사용자 지시에 따라 디버그 UI를 `maplibre-vworld-js`로 완전히 포팅하는 작업을 백로그와 ADR에 추가했다.
+
+**반영 상세**:
+- `docs/tasks.md`에 T-044를 추가했다. 범위는 `CoordinateMap.tsx`의 직접 MapLibre wiring을 upstream `VWorldMap` 또는 동등한 Hook/component로 대체하는 것이다.
+- ADR-028을 추가했다. 부족한 click callback, marker 제어, `flyToOptions`, tile error hook/redaction, key 미설정 fallback, SSR-safe 사용법, 타입/패키징 문제는 `python-kraddr-geo`에서 우회하지 않고 `digitie/maplibre-vworld-js`를 직접 수정한다.
+- `docs/frontend-package.md`, `docs/architecture.md`, `docs/t036-maplibre-vworld-sync.md`, `docs/resume.md`, `CHANGELOG.md`를 같은 방향으로 갱신했다.
+
+**결정**:
+- T-044는 두 저장소 작업으로 본다. 필요한 upstream 보강은 `maplibre-vworld-js` PR/commit으로 남기고, 그 검증된 SHA를 `kraddr-geo-ui` dependency로 소비한다.
+- 완료 조건에는 upstream test/build와 `kraddr-geo-ui`의 `npm ci`, lint, type-check, test, build 검증을 포함한다.
+
 ## 2026-05-26 (T-043 등록 — PR #23~#33 리뷰 audit/fixup)
 
 **작업**: 사용자 지시에 따라 PR #23부터 최신 PR #33까지의 리뷰 코멘트를 다시 읽고 반영하는 후속 작업을 백로그에 추가했다.

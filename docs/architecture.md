@@ -53,6 +53,8 @@
 
 VWorld 지도 연동은 `kraddr-geo-ui` 로컬 코드만의 책임으로 보지 않는다. `maplibre-vworld` package는 검증된 GitHub SHA로 소비하고, MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 `digitie/maplibre-vworld-js`도 적극 수정 대상에 포함한다. 이 원칙은 디버그 UI가 장기적으로 재사용 가능한 VWorld MapLibre wrapper 위에 얹히도록 하기 위한 것이다.
 
+T-044부터는 이 원칙을 더 강하게 적용한다. `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`의 직접 MapLibre wiring을 유지하는 것이 아니라, upstream `maplibre-vworld-js`의 `VWorldMap` 또는 동등한 Hook/component로 완전히 포팅한다. 필요한 click callback, marker 제어, tile error overlay, key fallback, SSR-safe 사용법이 upstream에 부족하면 이 저장소에서만 우회하지 않고 upstream을 수정한 뒤 검증된 SHA를 다시 소비한다.
+
 ## 데이터 흐름 — 지오코딩
 
 ```

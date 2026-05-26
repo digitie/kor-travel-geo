@@ -73,13 +73,13 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-043 PR #23~#33 리뷰 코멘트 일괄 audit/fixup이다. 각 PR의 conversation comment, formal review body, inline review thread를 모두 확인하고, 반영 가능한 내용은 후속 fixup PR로 옮긴다. 그 다음 구현 후보는 T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회이며, 이후 T-027 최종 실 데이터 클린 적재 검증을 진행한다. T-027은 Docker DB를 삭제하고 처음부터 다시 적재하므로 실행 전 `docs/t027-fullload-plan.md`의 phase timer와 중단·재개 정책을 다시 확인한다.
+다음 작업은 T-043 PR #23~최신 PR 리뷰 코멘트 일괄 audit/fixup이다. 각 PR의 conversation comment, formal review body, inline review thread를 모두 확인하고, 반영 가능한 내용은 후속 fixup PR로 옮긴다. 그 다음 후보는 T-044 디버그 UI `maplibre-vworld-js` 완전 포팅이다. T-044에서는 `CoordinateMap` 직접 MapLibre wiring을 upstream `VWorldMap` 또는 Hook으로 대체하고, 부족한 기능은 `digitie/maplibre-vworld-js` 저장소를 직접 수정한다. 이후 T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회와 T-027 최종 실 데이터 클린 적재 검증을 진행한다. T-027은 Docker DB를 삭제하고 처음부터 다시 적재하므로 실행 전 `docs/t027-fullload-plan.md`의 phase timer와 중단·재개 정책을 다시 확인한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
 - T-034에서 `TL_SPRD_INTRVL` 전용 COPY 경로를 검증했고, T-037에서 `TL_SPBD_BULD` projection staging 경로도 검증했다. 전국 전체 SHP 시간은 T-027 최종 클린 로드에서 다시 확인한다.
 - T-035에서 `kraddr_geo_t033` MV는 여러 번 refresh/swap됐고 최종 상태는 `mv_geocode_target=6,416,637`, `mv_geocode_target_next/old` 없음, index 이름 `idx_mv_*` 정상이다.
-- `maplibre-vworld-js` upstream main 확인 커밋은 `c91c9f304669ce3f5fc4915f21186b23731d5816`이고, 현재 `kraddr-geo-ui`는 이 SHA에 맞춰져 있다. 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하므로 `kraddr-geo-ui/lib/vworld.ts`에서 기존 내부 이름으로 alias한다.
+- `maplibre-vworld-js` upstream main 확인 커밋은 `c91c9f304669ce3f5fc4915f21186b23731d5816`이고, 현재 `kraddr-geo-ui`는 이 SHA에 맞춰져 있다. 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하므로 `kraddr-geo-ui/lib/vworld.ts`에서 기존 내부 이름으로 alias한다. T-044에서는 이 helper 소비 상태를 넘어서 `VWorldMap`/Hook으로 완전히 포팅하고, 필요한 upstream 기능은 해당 프로젝트 PR로 보강한다.
 - PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
 - `daily/*.zip`는 T-028 이후 MST를 `tl_juso_text`에 적용할 수 있고, T-038 이후 `LNBR`를 `tl_juso_parcel_link`에 별도 delta로 적용할 수 있다. `도로명주소 출입구 정보`는 T-039 이후 `tl_roadaddr_entrc`에 적재할 수 있으며 MV 대표 출입구 1순위 후보가 된다. `도로명주소 건물 도형`은 T-040 이후 분석 helper로 비교 가능하지만 serving loader는 보류한다. T-041 상세주소 동/구역 추가 레이어도 `scripts/compare_extra_shape_layers.py`로 비교 가능하다. 단, `TL_SPPN_MAKAREA`는 ADR-027에 따라 국가지점번호 보조 데이터로 별도 loader/조회 경로를 만들 수 있다.
 

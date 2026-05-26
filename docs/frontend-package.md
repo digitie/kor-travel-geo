@@ -160,7 +160,15 @@ VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnig
 - VWorld tile 404/408/429/5xx와 네트워크 실패는 upstream helper로 분류한 뒤 즉시 치명 오류로 고정하지 않고 redacted warning과 누적 임계치로 처리한다.
 - marker 갱신 시 애니메이션 되튐을 피하고, SSR 단계에서는 `next/dynamic(..., { ssr: false })`와 skeleton만 노출한다.
 
-이 동작들은 후속 PR에서 `maplibre-vworld-js`의 재사용 가능한 props/hook/test로 옮길 수 있는지 항목별로 맞춘다. 공통화가 끝난 부분부터 `CoordinateMap.tsx`의 직접 MapLibre wiring을 줄인다.
+이 동작들은 T-044에서 `maplibre-vworld-js`의 재사용 가능한 props/hook/test로 옮긴다. 최종 목표는 `CoordinateMap.tsx`가 직접 `maplibregl.Map`, marker lifecycle, tile error classification을 소유하지 않고, upstream `VWorldMap` 또는 동등한 Hook/component를 감싸는 얇은 domain wrapper가 되는 것이다.
+
+T-044 완전 포팅 원칙:
+
+- `maplibre-vworld-js` public API가 click callback, marker 제어, `flyToOptions`, tile error hook/redaction, key 미설정 fallback, SSR-safe 사용법을 제공해야 한다.
+- 해당 기능이 upstream에 없으면 `kraddr-geo-ui`에 임시 workaround를 추가하지 말고 `digitie/maplibre-vworld-js` 저장소를 직접 수정한다.
+- upstream 수정은 별도 PR 또는 검증 가능한 commit으로 남긴 뒤, `kraddr-geo-ui/package.json`의 `maplibre-vworld` SHA와 lockfile을 갱신한다.
+- upstream과 소비자 양쪽에서 test/build를 돌리고, PR 본문과 `docs/journal.md`에 upstream PR/commit, 검증 명령, 남은 차이를 기록한다.
+- 포팅 후에도 `NEXT_PUBLIC_VWORLD_API_KEY` 미설정 fallback, `(lon, lat)` 좌표 순서, redacted logging, transient overlay 임계치, Next.js dynamic import skeleton은 유지해야 한다.
 
 리뷰 기준:
 
@@ -168,7 +176,7 @@ VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnig
 - **타입 문제**: React 18/19, MapLibre GL JS, Vite/Next.js에서 타입 오류가 나면 upstream 타입 선언과 테스트를 보강한다.
 - **기능 문제**: VWorld `Base`/`gray`/`midnight`/`Hybrid`/`Satellite` layer, marker, click, clustering, attribution 중 공통 컴포넌트화할 수 있는 문제는 upstream에 반영한다.
 - **의존성 선언 상태**: `maplibre-vworld`는 `git+https://github.com/digitie/maplibre-vworld-js.git#c91c9f304669ce3f5fc4915f21186b23731d5816`로 선언되어 있으며, `kraddr-geo-ui/lib/vworld.ts`는 upstream helper 재수출과 `redactVWorldUrl` 호환 alias만 담당한다.
-- **컴포넌트 대체 조건**: click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식이 upstream에서 같은 의미로 제공되고 테스트되면 `CoordinateMap.tsx`의 직접 MapLibre wiring을 줄이고 upstream 컴포넌트를 사용한다.
+- **컴포넌트 대체 조건**: click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식이 upstream에서 같은 의미로 제공되고 테스트되면 `CoordinateMap.tsx`의 직접 MapLibre wiring을 제거하고 upstream 컴포넌트 또는 Hook을 사용한다.
 - **보안·운영 조건**: 브라우저 노출 키는 VWorld 콘솔에서 origin/referrer 제한이 실제 WMTS에도 적용되는지 운영자가 확인한다. 향후 CSP를 켜면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 포함한다.
 
 ### A3.7 Provider 체인 (`app/providers.tsx`)

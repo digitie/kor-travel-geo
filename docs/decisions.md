@@ -695,7 +695,7 @@ SET search_path = public, x_extension;
 
 ## ADR-020: 디버그 UI 지도는 VWorld WMTS + MapLibre를 사용하고 wrapper도 적극 보강한다
 
-- 상태: accepted
+- 상태: accepted, amended by ADR-028
 - 날짜: 2026-05-25
 - 결정자: 사용자 요청, codex 구현
 
@@ -742,6 +742,69 @@ PR #12까지의 `kraddr-geo-ui`는 Kakao Maps SDK를 기준으로 좌표 지도 
 - `maplibre-vworld` GitHub 의존성은 `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다. React 18 소비자와 upstream zod v4 peer dependency를 맞추기 위해 `kraddr-geo-ui`도 `zod ^4.4.3`을 직접 의존성으로 둔다.
 - 프론트엔드 문서와 외부 API 문서는 Kakao Maps가 아니라 VWorld WMTS 기준으로 갱신한다.
 - 후속 PR에서는 `CoordinateMap`의 디버그 UI 전용 동작을 `maplibre-vworld-js`의 재사용 가능한 props/hook/test로 옮길 수 있는지 검토한다. 이때 바로 컴포넌트 전체를 교체하지 않고 click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식을 항목별로 맞춘다.
+
+---
+
+## ADR-028: 디버그 UI 지도 구현은 `maplibre-vworld-js`로 완전 포팅한다
+
+- 상태: accepted (문서 설계, 구현 전)
+- 날짜: 2026-05-26
+- 결정자: 사용자 요청, codex
+
+### 컨텍스트
+
+ADR-020은 Kakao Maps SDK를 제거하고 VWorld WMTS + MapLibre GL JS를 디버그 UI 지도 표준으로 정했다. 이후 `kraddr-geo-ui`는 `digitie/maplibre-vworld-js`를 GitHub SHA로 소비하며 tile URL, style 생성, maxZoom, tile error 분류, URL redaction helper와 CSS를 upstream package에서 가져온다.
+
+그러나 현재 `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`는 MapLibre map instance, marker, click callback, transient tile error overlay, fallback preview를 직접 wiring한다. 이 직접 wiring은 디버그 UI 요구를 빠르게 만족시키는 데는 좋았지만, 장기적으로는 `maplibre-vworld-js`가 제공해야 할 공통 VWorld MapLibre 기능이 이 저장소에 남아 있는 상태다.
+
+### 결정
+
+후속 T-044에서 디버그 UI 지도 구현을 `maplibre-vworld-js`의 `VWorldMap` 또는 동등한 재사용 컴포넌트/Hook으로 완전히 포팅한다.
+
+완전 포팅의 의미는 다음과 같다.
+
+1. `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`는 직접 `new maplibregl.Map(...)`, source/layer 생성, marker lifecycle, tile error 분류를 소유하지 않는다.
+2. VWorld style/layer/marker/click/error/flyTo/fallback 계약은 `maplibre-vworld-js`의 public API에서 제공한다.
+3. `kraddr-geo-ui`는 도메인별 얇은 wrapper만 유지한다. wrapper의 책임은 API 응답 좌표를 `(lon, lat)`로 넘기고, 디버그 화면 레이아웃과 skeleton을 연결하는 수준으로 제한한다.
+4. `NEXT_PUBLIC_VWORLD_API_KEY` 미설정 fallback, SSR-safe 사용, transient tile error overlay, redacted logging, marker 즉시 이동, click callback `(lon, lat)` 순서가 기존 디버그 UI 동작과 동일해야 한다.
+5. `maplibre-vworld-js`에 부족한 기능·타입·패키징·테스트가 있으면 이 저장소에서 우회하지 않고 upstream을 직접 수정한다. 필요한 경우 `digitie/maplibre-vworld-js`에 별도 PR을 만들고, merge 또는 검증된 commit SHA를 `kraddr-geo-ui` dependency로 고정한다.
+
+### 구현 절차
+
+T-044는 두 저장소를 함께 다루는 작업으로 본다.
+
+1. `python-kraddr-geo`에서 현재 `CoordinateMap` 계약을 목록화한다.
+2. `maplibre-vworld-js` 최신 `main`을 확인하고, `VWorldMap`이 같은 계약을 제공하는지 비교한다.
+3. 부족한 upstream 기능을 `maplibre-vworld-js`에 먼저 구현한다.
+   - click callback `(lon, lat)`
+   - controlled/uncontrolled marker 위치
+   - `flyToOptions`와 즉시 이동 옵션
+   - VWorld tile error 분류와 URL redaction
+   - key 미설정/지도 생성 실패 fallback surface
+   - SSR-safe import guidance 또는 wrapper
+   - TypeScript props와 React 18/19 호환성
+   - package `exports`, `types`, `style.css`, `dist` 산출물
+4. upstream test/build를 통과시킨 뒤 PR을 올린다.
+5. `python-kraddr-geo`에서 dependency SHA를 검증된 upstream commit으로 갱신한다.
+6. `kraddr-geo-ui`의 `CoordinateMap` 직접 wiring을 upstream component/hook 소비로 줄인다.
+7. `kraddr-geo-ui`에서 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 수행한다.
+8. Playwright 또는 브라우저 검증이 가능한 환경에서는 `/debug/geocode`, `/debug/reverse`에서 지도 표시, marker 이동, click reverse 입력, tile error/fallback 상태를 확인한다.
+
+### 결과 기준
+
+T-044 완료 조건:
+
+- `kraddr-geo-ui/lib/vworld.ts`는 upstream public API 재수출 또는 아주 얇은 alias만 유지한다.
+- `CoordinateMap.tsx`는 domain wrapper가 되고, MapLibre primitive lifecycle은 upstream으로 이동한다.
+- upstream에 필요한 수정이 있었다면 `digitie/maplibre-vworld-js` PR/commit 링크와 검증 결과를 `docs/frontend-package.md`, `docs/journal.md`, PR 본문에 남긴다.
+- `python-kraddr-geo` PR만으로 해결할 수 없는 upstream 이슈는 TODO로 남기지 않고, 최소한 upstream issue/PR 또는 별도 branch 작업으로 추적한다.
+
+### 위험과 제약
+
+- 지도 컴포넌트는 브라우저/WebGL 의존성이 강하므로 SSR 단계 import가 다시 생기면 Next.js build 또는 hydration에서 깨질 수 있다.
+- VWorld API key는 브라우저 노출 키이지만 저장소와 PR 본문에 평문으로 남기지 않는다.
+- upstream SHA 갱신은 lockfile `resolved`가 `git+https`인지 확인한다. CI는 SSH key 없이 설치되어야 한다.
+- `maplibre-vworld-js`가 npm stable release를 제공하기 전까지는 GitHub SHA 고정과 소비자 build 검증을 함께 기록한다.
 
 ---
 
