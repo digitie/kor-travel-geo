@@ -178,6 +178,31 @@ plain SQL/DDL dump는 대용량 운영 기본값으로 사용하지 않는다. `
 
 T-046 구현 검증은 전국 full-load를 다시 실행하지 않고 대구광역시 부분 적재 DB로 수행한다. 백업 원본 DB는 `kraddr_geo_t046_daegu`, 복원 target은 `kraddr_geo_t046_daegu_restore`로 분리하고, `mv_geocode_target` row count와 대구 geocode/reverse smoke test가 복원 후에도 유지되는지 확인한다.
 
+## 데이터 흐름 — 운영 메타데이터와 릴리스 추적 (ADR-033, T-049)
+
+```
+full-load / daily / restore / mv_refresh / benchmark
+  │
+  ├─ load_jobs 상태 전환
+  │      └─ ops.audit_events append-only 기록
+  │
+  ├─ source_set + row count + schema/code version capture
+  │      └─ ops.dataset_snapshots
+  │
+  ├─ consistency / performance / backup / export 산출물
+  │      └─ ops.artifacts(checksum, retention, callback, download token hash)
+  │
+  ├─ table/MV/index size와 통계 capture
+  │      └─ ops.table_stats_snapshots
+  │
+  └─ MV shadow swap 성공
+         └─ ops.serving_releases(active 1건, rollback lineage)
+```
+
+`ops` 스키마는 주소 원천 데이터가 아니라 운영 제어면이다. `public`의 master table과 serving MV는 조회 source of truth이고, `ops.dataset_snapshots`와 `ops.serving_releases`는 "어떤 source of truth 상태가 운영에 노출됐는가"를 설명한다. destructive restore, schema migration, full reset은 `ops.maintenance_windows`의 active window와 typed confirmation 없이는 실행하지 않는다.
+
+T-046의 백업 artifact, T-047의 성능 리포트, C2/C4/C6/C7 data-quality export는 모두 `ops.artifacts`로 수렴한다. 이 공통 registry를 쓰면 checksum, 보존 기간, callback, download link, 관련 job/snapshot/release를 같은 방식으로 추적할 수 있다.
+
 ## 데이터 흐름 — 일변동 적용
 
 ```

@@ -11,7 +11,7 @@
 | 텍스트 1차/보조 (5) | `tl_juso_text`, `tl_locsum_entrc`, `tl_roadaddr_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc` | 행정/도로명/지번/우편번호 정본 매핑, 출입구 좌표, direct 출입구 보완, 내비 진입점/centroid | 행안부 텍스트 (월간/별도) |
 | SHP polygon/폴리라인 (9) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | 행정구역·우편번호·건물 polygon, 도로 관리/구간/폴리라인 | 도로명주소 전자지도 SHP (월간) |
 | 우편번호 보조 (2) | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 | epost OpenAPI (분기, ADR-009) |
-| 메타 (6) | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `db_backup_artifacts`, `geo_cache` | 적재 watermark·MVM 매핑·작업 큐(ADR-011)·정합성 리포트(ADR-016)·DB 백업 artifact(ADR-030)·외부 API 캐시 | |
+| 메타/운영 | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `geo_cache`, `ops.*` | 적재 watermark·MVM 매핑·작업 큐(ADR-011)·정합성 리포트(ADR-016)·외부 API 캐시·운영 감사/스냅샷/릴리스/artifact(ADR-033) | |
 | 평면화 (1) | `mv_geocode_target` | 지오코딩 쿼리용 MV (ADR-007) | 위 1·2를 join |
 
 ## 텍스트 1차 정본 (`loaders/text/`, ADR-012)
@@ -732,9 +732,34 @@ PR #10 리뷰 반영으로 `load_batch_id`, `parent_job_id`를 추가했다(ADR-
 
 T-046 이후 같은 큐는 `db_backup`, `db_restore` 같은 적재 외 관리 작업도 담는다. 기존 이름이 `load_jobs`라 다소 좁지만, 작업 상태·진행률·취소·log tail·startup recovery 요구가 동일하므로 초기 구현은 재사용한다. REST 표면은 `/v1/admin/jobs/*` 중립 alias를 우선 노출한다.
 
+### `ops` 운영 메타데이터 스키마 (ADR-033, T-049 설계)
+
+T-049부터 운영 메타데이터는 `ops` 스키마에 둔다. `public`은 주소 원천·serving 객체를 유지하고, `x_extension`은 PostGIS 보조 extension 격리 용도로 유지한다. `ops` 객체는 감사, 데이터셋 snapshot, serving release, artifact registry, maintenance window, table stats snapshot을 담당한다.
+
+```sql
+CREATE SCHEMA IF NOT EXISTS ops;
+```
+
+계획 테이블:
+
+| 테이블 | 역할 | 핵심 연결 |
+|--------|------|-----------|
+| `ops.audit_events` | 관리 작업과 위험 작업의 append-only 감사 이벤트 | `load_jobs.job_id`, request/trace id, resource id |
+| `ops.dataset_snapshots` | source set, row count, code/schema version, 검증 결과를 하나의 데이터셋 상태로 고정 | `load_consistency_reports`, `ops.artifacts`, `load_jobs` |
+| `ops.serving_releases` | 현재 active serving release와 rollback lineage 기록 | `ops.dataset_snapshots`, `mv_geocode_target` swap job |
+| `ops.artifacts` | backup, restore log, consistency export, performance report, source inventory, schema diff 공통 registry | `load_jobs`, `ops.dataset_snapshots`, `ops.serving_releases` |
+| `ops.maintenance_windows` | destructive restore, schema migration, full reset, exclusive MV swap 차단/허용 상태 | `load_jobs`, `ops.audit_events` |
+| `ops.table_stats_snapshots` | table/MV/index row count, size, bloat, analyze 상태 추세 | `ops.dataset_snapshots`, T-047 benchmark |
+
+`ops.audit_events.payload_redacted`와 `ops.artifacts.manifest`에는 API key, DSN password, callback secret, download token을 평문 저장하지 않는다. 주소 원문도 감사 목적에 꼭 필요하지 않으면 hash 또는 마스킹 값만 저장한다.
+
+active serving release는 한 건만 허용한다. 구현 시 `ops.serving_releases(state) WHERE state='active'` partial unique index 또는 동등한 constraint를 둔다. rollback은 과거 row를 다시 active로 바꾸지 않고 새 release row를 만들어 lineage를 보존한다.
+
+T-046에서 설계한 `db_backup_artifacts`는 신규 구현 시 `ops.artifacts`의 `artifact_type='db_backup'`으로 수렴한다. 이미 별도 `db_backup_artifacts`가 만들어진 배포를 지원해야 하면 compatibility view 또는 migration으로 흡수한다.
+
 ### `db_backup_artifacts` (ADR-030, T-046 설계)
 
-백업 파일 metadata. 실제 DDL은 T-046 구현 PR에서 확정하지만, 설계 기준은 다음과 같다.
+백업 파일 metadata. ADR-033 이후 신규 구현에서는 `ops.artifacts`를 우선 사용한다. 아래 구조는 T-046 당시의 전용 테이블 설계이며, 구현 시에는 `ops.artifacts`로 통합하거나 compatibility view로 보존한다.
 
 ```sql
 CREATE TABLE db_backup_artifacts (

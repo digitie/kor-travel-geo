@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-049 등록 — 운영 메타데이터·감사·릴리스 스키마)
+
+**작업**: 사용자 지시에 따라 유지보수와 관리 관점에서 추가해야 할 운영 기능, 테이블, 스키마를 ADR과 Task로 정리했다. 코드는 작성하지 않았다.
+
+**반영 상세**:
+- ADR-033을 추가했다. 운영 메타데이터 전용 `ops` 스키마를 두고, 감사 이벤트, 데이터셋 snapshot, serving release, artifact registry, maintenance window, table stats snapshot을 관리하도록 결정했다.
+- `docs/t049-ops-metadata-schema.md`를 추가했다. 각 테이블의 목적, 핵심 컬럼, API/UI 범위, 구현 순서, 검증 기준을 상세히 정리했다.
+- `docs/tasks.md`에 T-049를 추가했다. destructive restore, schema migration, full reset은 active maintenance window와 typed confirmation 없이는 실패해야 한다는 요구도 포함했다.
+- `docs/data-model.md`, `docs/architecture.md`, `README.md`, `CHANGELOG.md`, `docs/resume.md`를 같은 방향으로 갱신했다.
+
+**결정**:
+- `public`은 주소 원천·serving 객체, `x_extension`은 PostGIS 보조 extension, `ops`는 운영 제어면으로 분리한다.
+- T-046의 `db_backup_artifacts`는 신규 구현에서는 `ops.artifacts`의 `artifact_type='db_backup'`으로 수렴한다.
+- 감사 테이블에는 API key, DSN password, token, callback secret, 주소 원문을 평문 저장하지 않는다.
+
 ## 2026-05-27 (T-048 — `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의)
 
 **작업**: 사용자 지시에 따라 `maplibre-vworld-js` 사용 시 항상 최신 버전을 확인하고, 이 라이브러리의 특화 기능은 upstream `vworld.js`가 아니라 `kraddr-geo-ui` 쪽에서 구현한다는 원칙을 문서와 dependency에 반영했다.
