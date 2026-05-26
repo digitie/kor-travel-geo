@@ -78,6 +78,33 @@ infra.geocode_repo.GeocodeRepository
 PostgreSQL + PostGIS (pg_trgm)
 ```
 
+## 데이터 흐름 — 쿼리 성능 벤치마크와 튜닝 (ADR-031, T-047)
+
+```
+전국 full-load 완료 DB
+  ├─ row count/source_set/DB 설정 snapshot
+  ├─ benchmark corpus 실행
+  │   ├─ 도로명 exact / 지번 exact
+  │   ├─ fuzzy geocode / 통합 search
+  │   ├─ reverse nearest / reverse radius
+  │   └─ zipcode / no-result / invalid
+  ├─ EXPLAIN ANALYZE BUFFERS + pg_stat_statements 저장
+  └─ p50/p95/p99/timeout/error/buffer report
+        │
+        ▼
+  목표 초과 query군 분석
+        │
+        ├─ query rewrite / index / partial index 실험
+        ├─ KNN·5179 공간 index·UNION ALL 분기 실험
+        └─ 필요 시 read-only 보조 view/MV 도입
+             ├─ mv_geocode_exact_key
+             ├─ mv_geocode_text_search
+             ├─ mv_reverse_point_5179
+             └─ mv_zipcode_lookup
+```
+
+T-047의 보조 view/MV는 별도 source of truth가 아니다. master table 또는 `mv_geocode_target`에서 재생성 가능한 serving accelerator이며, API 응답 구조와 vworld 호환 계약은 그대로 유지한다. 새 보조 객체를 도입하면 refresh/swap 순서, index build time, disk size, `ANALYZE`, T-046 backup/restore 영향까지 함께 측정한다.
+
 ## 데이터 흐름 — 적재 (full-load batch)
 
 ```

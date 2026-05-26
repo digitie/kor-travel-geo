@@ -556,6 +556,30 @@ CREATE VIEW v_scco_emd_4326 AS
 
 적재 후 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`(평시) 또는 위 swap 절차(분기). ANALYZE는 자동 통계만 의존하지 말고 명시 실행한다.
 
+## 쿼리 성능 보조 view/MV 후보 (ADR-031, T-047 설계)
+
+T-047은 전국 full-load 이후 지오코딩/역지오코딩/검색 쿼리 p95/p99를 별도 gate로 측정한다. 기존 `mv_geocode_target`만으로 목표 latency를 만족하지 못하면 read-only 보조 view 또는 materialized view를 도입할 수 있다.
+
+중요한 제약:
+
+- 보조 객체는 source of truth가 아니다. master table 또는 `mv_geocode_target`에서 재생성 가능해야 한다.
+- API 응답 구조는 바꾸지 않는다. 보조 객체는 repo 내부 query path를 빠르게 하는 용도다.
+- 보조 MV 도입 시 refresh/swap, index build, `ANALYZE`, disk size, T-046 backup/restore 영향을 함께 기록한다.
+- 기존 `mv_geocode_target`의 `bd_mgt_sn` unique 계약과 좌표 출처(`pt_source`) 의미를 깨면 안 된다.
+
+후보 객체:
+
+| 후보 | 목적 | 핵심 컬럼 예시 | 주요 인덱스 후보 |
+|------|------|----------------|------------------|
+| `mv_geocode_exact_key` | 도로명/지번 exact lookup | `bd_mgt_sn`, `rncode_full`, `bjd_cd`, 건물번호, PNU, 표시 주소, 좌표 key | btree composite, `INCLUDE` 응답 컬럼 |
+| `mv_geocode_text_search` | fuzzy geocode/search | 정규화 주소 문자열, 도로명 token, 건물명 token, 행정명 token | `gin_trgm_ops`, query군별 partial index |
+| `mv_reverse_point_5179` | reverse nearest/radius | `bd_mgt_sn`, `address_type`, `pt_source`, `pt_5179`, `pt_4326`, 우선순위 | GiST `pt_5179`, btree filter |
+| `mv_zipcode_lookup` | zipcode lookup | `zip_no`, `sido`, `sig`, 도로명/지번 표시 최소 컬럼 | btree `zip_no`, `zip_no + sig_cd` |
+| `v_admin_boundary_4326` | 디버그 지도 표시 | 행정/기초구역 polygon 4326 변환 | 일반 view, 필요 시 materialized |
+| `mv_sppn_reverse_area` | 국가지점번호 보조 reverse | `TL_SPPN_MAKAREA` polygon key와 면적/우선순위 | GiST polygon, 면적 정렬 key |
+
+보조 객체를 실제 DDL로 추가하기 전에는 `docs/t047-query-performance-tuning.md`의 benchmark 절차로 semantic parity와 성능 개선을 모두 증명한다. p95/p99 개선 없이 단순히 query를 보기 좋게 만들기 위한 view는 추가하지 않는다.
+
 ## PNU 조립 (외부 시스템 연동)
 
 법원 등기·토지대장 등 외부 시스템과 조인하려면 **19자리 표준 PNU**가 필요하다. PNU 11번째 자리(토지구분)는 `1=일반, 2=산`인데 도로명주소 원천의 `mntn_yn`은 `0=대지, 1=산`이라 직접 결합하면 안 된다. 조립은 infra/저장 계층 책임이며 `core/`는 의미론적 `mntn_yn`만 보관한다(ADR-010).
