@@ -70,7 +70,7 @@
 - ✅ T-041 상세주소 동 도형/구역 추가 레이어 검토 — 세종/경남 실제 `건물군 내 상세주소 동 도형`이 전자지도 `TL_SPBD_BULD`의 부분집합임을 확인했다. `구역의 도형`의 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복이다. `TL_SCCO_GEMD`는 별도 overlay/분석 후보로 남기고, `TL_SPPN_MAKAREA`는 ADR-027에서 국가지점번호 보조 geocode/reverse 데이터 후보로 승격했다. 상세: `docs/t041-detail-zone-shape-layers.md`
 - ✅ T-037 geometry 포함 SHP 대형 레이어 적재 튜닝 — `TL_SPBD_BULD`를 projection staging table + 운영 테이블 insert-select 경로로 분기했다. 세종 단일 레이어는 기존 append 38.36초에서 18.59초로 줄었고, 경기도 1,649,975행 단일 레이어는 40분 17.15초에 성공했다. 세종 SHP 9개 레이어 public CLI 적재도 Docker DB에서 확인했다. 상세: `docs/t037-shp-geometry-tuning.md`
 - ✅ T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의 — upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`을 확인하고 `kraddr-geo-ui` dependency/lockfile을 갱신했다. ADR-032를 추가해 범용 VWorld/MapLibre 기능은 upstream, 지오코딩/역지오코딩/관리 UI 특화 기능은 이 저장소 domain wrapper에서 구현하는 원칙을 확정했다.
-- 🟡 T-049 운영 메타데이터·감사·릴리스 스키마 설계 등록 — ADR-033과 `docs/t049-ops-metadata-schema.md`를 추가했다. 후속 구현은 `ops` 스키마, `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`, `/v1/admin/ops/*`, `/admin/ops`를 포함한다.
+- ✅ T-049 운영 메타데이터·감사·릴리스 스키마 구현 — `ops` 스키마 6개 테이블, append-only audit trigger, active release partial unique index, redacted audit payload/hash helper, `/v1/admin/ops/*` API, `/admin/ops` UI, table stats snapshot capture, typed maintenance confirmation hash를 추가했다. 상세: `docs/t049-ops-metadata-schema.md`
 - ✅ README 법적 고지 보강 — 프로젝트가 AI 활용 방식과 개발 워크플로를 학습·검증하기 위한 기술 연구 프로젝트이며, 외부 원천 데이터/API는 제공 기관의 조건을 준수하는 것을 전제로 사용한다고 명시했다.
 - ✅ 문서 정합성 재검토 — `master`/`main` 표현, README/SKILL quick start CLI 예시, `kraddr-geo-ui` 소유 설명, T-046 artifact registry 명칭, README ADR 목록, 후속 task 순서를 현재 코드와 ADR에 맞춰 정리했다. 상세: `docs/doc-consistency-audit-20260527.md`
 - ✅ T-043 PR #23~#41 리뷰 코멘트 audit/fixup — conversation/review/inline/thread 표면을 모두 확인하고 unresolved review thread 0개를 기록했다. VWorld alias/test, daily delta 운영 문서와 `--limit-per-file` 경고, `TL_SPBD_BULD` staging advisory lock/skip metric, ADR-027 위험 섹션 등을 보강했다. 상세: `docs/postmerge-review-fixups-pr23-latest.md`
@@ -78,7 +78,7 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-049 운영 메타데이터·감사·릴리스 스키마 구현이다. `ops` 스키마와 `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`를 구현하고, `load_jobs` 상태 전환과 위험 작업을 redacted audit event에 연결한다. API는 `/v1/admin/ops/*`, UI는 `/admin/ops` 또는 기존 관리 화면 탭으로 시작한다. secret/DSN/token/address 원문이 감사 테이블에 평문 저장되지 않는 테스트를 반드시 포함한다. 그 다음 후보는 T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX, T-046 적재 완료 DB 백업/복원 및 UI, T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회, T-027 최종 실 데이터 클린 적재 검증, T-047 전국 적재 후 쿼리 성능 벤치마크, T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화 순서다.
+다음 작업은 T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX 구현이다. 원천별 업데이트 시점이 다를 수 있으므로 `source_set` 계획 객체, 기준월 mismatch 확인 UX, API/라이브러리의 발견 함수와 명시 계획 함수를 분리해야 한다. UI는 다중 파일 선택/DND 업로드, 업로드 진행률, 적재 진행률, 취소, 기준월 불일치 확인 팝업을 제공한다. 그 다음 후보는 T-046 적재 완료 DB 백업/복원 및 UI, T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회, T-027 최종 실 데이터 클린 적재 검증, T-047 전국 적재 후 쿼리 성능 벤치마크, T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화 순서다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
@@ -89,7 +89,7 @@
 - `daily/*.zip`는 T-028 이후 MST를 `tl_juso_text`에 적용할 수 있고, T-038 이후 `LNBR`를 `tl_juso_parcel_link`에 별도 delta로 적용할 수 있다. `도로명주소 출입구 정보`는 T-039 이후 `tl_roadaddr_entrc`에 적재할 수 있으며 MV 대표 출입구 1순위 후보가 된다. `도로명주소 건물 도형`은 T-040 이후 분석 helper로 비교 가능하지만 serving loader는 보류한다. T-041 상세주소 동/구역 추가 레이어도 `scripts/compare_extra_shape_layers.py`로 비교 가능하다. 단, `TL_SPPN_MAKAREA`는 ADR-027에 따라 국가지점번호 보조 데이터로 별도 loader/조회 경로를 만들 수 있다.
 - 원천별 업데이트 시점은 서로 다를 수 있다. ADR-029/T-045 설계에 따라 새 full-load UX는 단일 `yyyymm`이 아니라 `source_set.yyyymm_by_kind`를 사용해야 하며, 기준월이 섞이면 CLI/UI에서 의도 확인을 받아야 한다. API/라이브러리는 prompt 없이 `discover_load_sources()`와 `build_full_load_source_set_plan()`을 분리 제공한다.
 - T-046 백업/복원은 코드를 아직 작성하지 않은 설계 상태다. 구현 시 plain SQL/DDL dump를 기본값으로 두지 말고, `pg_dump -Fd --jobs` 산출물을 `tar.zst`로 묶는 `directory_tar_zstd`를 기본으로 한다. 복원은 새 빈 DB 기본, 대구광역시 부분 적재 DB로 최초 검증, 전국 full-load 재실행은 후속 T-027에서 수행한다.
-- T-049 운영 메타데이터도 설계 상태다. 구현 시 `ops` 스키마를 사용하고, `load_jobs` 상태 전환과 위험 작업은 `ops.audit_events`에 redacted payload로 남긴다. active serving release는 `ops.serving_releases`에서 한 건만 허용하고, destructive restore/schema migration/full reset은 `ops.maintenance_windows`의 active window와 typed confirmation 없이 실행하지 않는다.
+- T-049 운영 메타데이터는 1차 구현 상태다. 현재 구현은 DDL/API/UI와 redacted audit event, maintenance window 생성/종료, table stats snapshot capture를 제공한다. T-045/T-046/T-047을 진행할 때 source set 확정, backup/restore artifact, 성능 리포트, MV swap 성공 지점을 `ops.dataset_snapshots`, `ops.artifacts`, `ops.serving_releases`에 실제로 연결하는 보강이 이어져야 한다.
 - T-047 쿼리 성능 튜닝도 설계 상태다. 전국 full-load DB에서 exact/fuzzy geocode, reverse, search, zipcode, no-result 경로를 다수 반복 측정하고, 목표를 초과하면 index/query rewrite뿐 아니라 `mv_geocode_exact_key`, `mv_geocode_text_search`, `mv_reverse_point_5179` 같은 read-only 보조 MV 후보를 실험한다.
 
 ## 작업 시작 전 확인할 것

@@ -15,14 +15,23 @@ from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
 from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
+    AuditEvent,
     CacheMetrics,
     ConsistencyCase,
     ConsistencyReport,
     ConsistencyReportSummary,
+    DatasetSnapshot,
     ExplainRequest,
     ExplainResponse,
     LoadJobStatus,
+    MaintenanceWindow,
+    MaintenanceWindowCreate,
+    MaintenanceWindowEnd,
+    OpsArtifact,
+    RollbackPlan,
+    ServingRelease,
     TableStat,
+    TableStatsSnapshot,
 )
 from .dto.geocode import FallbackMode, GeocodeInput, GeocodeResponse
 from .dto.pobox import PoboxInput, PoboxKind, PoboxResponse
@@ -237,6 +246,165 @@ class AsyncAddressClient:
 
     async def load_job_metric_counts(self) -> list[tuple[str, str, int]]:
         return await AdminRepository(self._engine()).load_job_metric_counts()
+
+    async def record_audit_event(
+        self,
+        *,
+        action: str,
+        actor_type: str = "api",
+        outcome: str = "started",
+        payload: dict[str, Any] | None = None,
+        actor_id: str | None = None,
+        client_ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        job_id: str | None = None,
+        error_code: str | None = None,
+    ) -> AuditEvent:
+        return await AdminRepository(self._engine()).record_audit_event(
+            action=action,
+            actor_type=actor_type,
+            outcome=outcome,
+            payload=payload,
+            actor_id=actor_id,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            trace_id=trace_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            job_id=job_id,
+            error_code=error_code,
+        )
+
+    async def list_audit_events(
+        self,
+        *,
+        limit: int = 50,
+        action: str | None = None,
+        outcome: str | None = None,
+    ) -> list[AuditEvent]:
+        return await AdminRepository(self._engine()).list_audit_events(
+            limit=limit,
+            action=action,
+            outcome=outcome,
+        )
+
+    async def list_dataset_snapshots(
+        self,
+        *,
+        limit: int = 20,
+        state: str | None = None,
+    ) -> list[DatasetSnapshot]:
+        return await AdminRepository(self._engine()).list_dataset_snapshots(
+            limit=limit,
+            state=state,
+        )
+
+    async def list_serving_releases(
+        self,
+        *,
+        limit: int = 20,
+        state: str | None = None,
+    ) -> list[ServingRelease]:
+        return await AdminRepository(self._engine()).list_serving_releases(
+            limit=limit,
+            state=state,
+        )
+
+    async def rollback_plan(self, release_id: str) -> RollbackPlan:
+        plan = await AdminRepository(self._engine()).rollback_plan(release_id)
+        if plan is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"serving release not found: {release_id}")
+        return plan
+
+    async def list_artifacts(
+        self,
+        *,
+        limit: int = 50,
+        artifact_type: str | None = None,
+        state: str | None = None,
+    ) -> list[OpsArtifact]:
+        return await AdminRepository(self._engine()).list_artifacts(
+            limit=limit,
+            artifact_type=artifact_type,
+            state=state,
+        )
+
+    async def list_maintenance_windows(
+        self,
+        *,
+        limit: int = 50,
+        state: str | None = None,
+    ) -> list[MaintenanceWindow]:
+        return await AdminRepository(self._engine()).list_maintenance_windows(
+            limit=limit,
+            state=state,
+        )
+
+    async def create_maintenance_window(
+        self,
+        req: MaintenanceWindowCreate,
+    ) -> MaintenanceWindow:
+        window = await AdminRepository(self._engine()).create_maintenance_window(req)
+        await self.record_audit_event(
+            action="maintenance_window.create",
+            outcome="started",
+            payload=req.model_dump(exclude={"confirmation"}),
+            resource_type="maintenance_window",
+            resource_id=window.window_id,
+        )
+        return window
+
+    async def end_maintenance_window(
+        self,
+        window_id: str,
+        req: MaintenanceWindowEnd,
+    ) -> MaintenanceWindow:
+        window = await AdminRepository(self._engine()).end_maintenance_window(
+            window_id=window_id,
+            confirmation=req.confirmation,
+            closed_by_job_id=req.closed_by_job_id,
+        )
+        if window is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"active maintenance window not found: {window_id}")
+        await self.record_audit_event(
+            action="maintenance_window.end",
+            outcome="succeeded",
+            payload=req.model_dump(exclude={"confirmation"}),
+            resource_type="maintenance_window",
+            resource_id=window.window_id,
+        )
+        return window
+
+    async def list_table_stats_snapshots(
+        self,
+        *,
+        limit: int = 200,
+        snapshot_id: str | None = None,
+    ) -> list[TableStatsSnapshot]:
+        return await AdminRepository(self._engine()).list_table_stats_snapshots(
+            limit=limit,
+            snapshot_id=snapshot_id,
+        )
+
+    async def capture_table_stats_snapshots(
+        self,
+        *,
+        snapshot_id: str | None = None,
+        limit: int = 500,
+    ) -> list[TableStatsSnapshot]:
+        return await AdminRepository(self._engine()).capture_table_stats_snapshots(
+            snapshot_id=snapshot_id,
+            limit=limit,
+        )
 
     async def submit_load(self, kind: str, payload: dict[str, Any]) -> LoadJobStatus:
         repo = AdminRepository(self._engine())

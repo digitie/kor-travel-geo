@@ -1,8 +1,30 @@
-# T-049: 운영 메타데이터·감사·릴리스 스키마 설계
+# T-049: 운영 메타데이터·감사·릴리스 스키마 구현
 
 ## 범위
 
-본 문서는 유지보수와 운영 관리를 위해 추가해야 할 기능, 테이블, 스키마를 정리한다. 구현 전 설계이며, 코드는 작성하지 않는다. 실제 DDL, Alembic migration, DTO, API, UI, 테스트는 후속 T-049 구현 PR에서 진행한다.
+본 문서는 유지보수와 운영 관리를 위해 추가한 기능, 테이블, 스키마를 정리한다. T-049 구현 PR 기준으로 DDL, Alembic migration, DTO, API, UI, 테스트가 1차 반영됐다. T-045/T-046/T-047에서 생성될 source set, backup/restore artifact, performance report는 이 스키마에 이어서 연결한다.
+
+## 구현 상태
+
+2026-05-27 구현 기준:
+
+- `sql/ddl/001_schema.sql`와 `src/kraddr/geo/infra/sql.py`에 `ops` 스키마와 6개 테이블을 추가했다.
+- 기존 DB upgrade용 Alembic migration은 `alembic/versions/0006_t049_ops_metadata_schema.py`다.
+- `ops.audit_events`는 `BEFORE UPDATE OR DELETE` trigger로 append-only를 강제한다.
+- `ops.serving_releases`는 `idx_ops_serving_releases_one_active` partial unique index로 `state='active'` row를 한 건만 허용한다.
+- `kraddr.geo.core.redaction`은 audit payload를 저장하기 전에 API key, DSN, password, token, callback secret, 주소 원문을 제거하거나 hash marker로 치환한다.
+- `AsyncAddressClient`와 `/v1/admin/ops/*` API는 audit event, dataset snapshot, serving release, artifact, maintenance window, table stats snapshot 조회를 제공한다.
+- `/v1/admin/ops/maintenance-windows`는 typed confirmation을 hash로 저장하고, `/end`는 같은 confirmation hash가 맞는 active/scheduled/ending window만 종료한다.
+- `/v1/admin/ops/table-stats/capture`는 `pg_class`, `pg_namespace`, `pg_stat_user_tables`를 읽어 table/MV/index size와 추정 row count를 `ops.table_stats_snapshots`에 저장한다.
+- `kraddr-geo-ui`에는 `/admin/ops` 화면을 추가했다. release, snapshot, artifact, audit event, maintenance window, table stats snapshot을 한 화면에서 조회하고 maintenance window 생성과 table stats capture를 실행할 수 있다.
+- 테스트는 redaction, DTO validation, DDL/index/trigger 문자열, Alembic migration, API route contract, repository source contract를 포함한다.
+
+아직 남은 연결점:
+
+- full-load/daily delta 완료 후 `ops.dataset_snapshots` row를 자동 생성하는 흐름은 T-045/T-027에서 source set plan과 함께 보강한다.
+- MV shadow swap 성공 시 `ops.serving_releases` active row를 교체하는 흐름은 T-027/T-047에서 실제 swap gate와 함께 연결한다.
+- T-046 백업/복원 artifact는 `ops.artifacts(artifact_type='db_backup'|'db_restore_log')`에 저장하도록 구현한다.
+- T-047 성능 리포트는 `ops.artifacts(artifact_type='perf_report')`와 `ops.table_stats_snapshots` capture 전후 차이로 연결한다.
 
 ## 문제 인식
 
@@ -206,16 +228,18 @@ append-only 운영 감사 이벤트다. 주소 검색 요청 전체를 저장하
 
 ## API와 UI 범위
 
-T-049 구현 시 최소 API:
+T-049 1차 구현 API:
 
 - `GET /v1/admin/ops/snapshots`
-- `GET /v1/admin/ops/snapshots/{snapshot_id}`
 - `GET /v1/admin/ops/releases`
 - `POST /v1/admin/ops/releases/{release_id}/rollback-plan`
 - `GET /v1/admin/ops/artifacts`
 - `GET /v1/admin/ops/audit-events`
+- `GET /v1/admin/ops/maintenance-windows`
 - `POST /v1/admin/ops/maintenance-windows`
 - `POST /v1/admin/ops/maintenance-windows/{window_id}/end`
+- `GET /v1/admin/ops/table-stats`
+- `POST /v1/admin/ops/table-stats/capture`
 
 UI는 `/admin/ops` 또는 기존 `/admin/backups`, `/admin/load`, `/admin/consistency` 안의 탭으로 시작한다. 첫 구현은 다음을 보여 주면 충분하다.
 
@@ -225,15 +249,15 @@ UI는 `/admin/ops` 또는 기존 `/admin/backups`, `/admin/load`, `/admin/consis
 - maintenance window 생성/종료
 - 주요 table/MV row count와 size 추세
 
-## 구현 순서
+## 구현 순서와 남은 보강
 
-1. Alembic migration으로 `ops` 스키마와 6개 테이블을 추가한다.
-2. 공통 redaction/hash helper를 만든다. secret, DSN, token, 주소 원문 저장 방지 테스트를 먼저 작성한다.
-3. `load_jobs` 생성/상태 전환, `mv_refresh`, `db_backup`, `db_restore`, source set plan 확정 지점에서 audit event를 남긴다.
-4. full-load 또는 일변동 적용 후 `ops.dataset_snapshots`와 `ops.table_stats_snapshots`를 생성한다.
-5. MV swap 성공 시 `ops.serving_releases` active row를 교체한다.
-6. T-046 백업 artifact와 T-047 성능 리포트를 `ops.artifacts`로 연결한다.
-7. REST/AsyncAddressClient DTO와 관리 UI를 추가한다.
+1. 완료: Alembic migration으로 `ops` 스키마와 6개 테이블을 추가한다.
+2. 완료: 공통 redaction/hash helper를 만든다. secret, DSN, token, 주소 원문 저장 방지 테스트를 먼저 작성한다.
+3. 부분 완료: `load.submit`, `mv_refresh.submit`, `load.cancel`, `consistency_check.submit`, maintenance window 생성/종료, rollback plan 조회는 audit event를 남긴다. source set plan 확정, backup/restore, serving release activate는 후속 작업에서 연결한다.
+4. 부분 완료: `/v1/admin/ops/table-stats/capture`로 `ops.table_stats_snapshots`를 생성할 수 있다. full-load 또는 일변동 적용 후 자동 dataset snapshot 생성은 T-045/T-027에서 연결한다.
+5. 대기: MV swap 성공 시 `ops.serving_releases` active row를 교체한다.
+6. 대기: T-046 백업 artifact와 T-047 성능 리포트를 `ops.artifacts`로 연결한다.
+7. 완료: REST/AsyncAddressClient DTO와 관리 UI를 추가한다.
 
 ## 검증 기준
 

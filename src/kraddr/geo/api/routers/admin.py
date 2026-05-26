@@ -6,7 +6,7 @@ import hashlib
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypedDict
 
 from fastapi import APIRouter, Depends, Query, Request
 
@@ -15,17 +15,26 @@ from kraddr.geo.api.deps import get_client, get_job_queue
 from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.core.normalize import parse_address
 from kraddr.geo.dto.admin import (
+    AuditEvent,
     CacheMetrics,
     ConsistencyReport,
     ConsistencyReportSummary,
     ConsistencyRunRequest,
+    DatasetSnapshot,
     ExplainRequest,
     ExplainResponse,
     LoadJobStatus,
     LoadSubmitRequest,
+    MaintenanceWindow,
+    MaintenanceWindowCreate,
+    MaintenanceWindowEnd,
     NormalizeRequest,
     NormalizeResponse,
+    OpsArtifact,
+    RollbackPlan,
+    ServingRelease,
     TableStat,
+    TableStatsSnapshot,
     UploadSidoZipResponse,
 )
 from kraddr.geo.exceptions import InvalidInputError
@@ -33,6 +42,13 @@ from kraddr.geo.settings import get_settings
 
 router = APIRouter(tags=["admin"])
 _SAFE_TOKEN_RE = re.compile(r"[^0-9A-Za-z가-힣._-]+")
+
+
+class _AuditRequest(TypedDict):
+    client_ip: str | None
+    user_agent: str | None
+    request_id: str | None
+    trace_id: str | None
 
 
 @router.post("/normalize", response_model=NormalizeResponse)
@@ -117,17 +133,29 @@ async def upload_sido_zip(
 
 @router.post("/maintenance/refresh-mv", response_model=LoadJobStatus)
 async def refresh_mv(
+    request: Request,
     strategy: Literal["concurrent", "swap"] = "concurrent",
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
     job_id = await queue.enqueue("mv_refresh", {"strategy": strategy})
-    return await client.load_status(job_id)
+    status = await client.load_status(job_id)
+    await client.record_audit_event(
+        action="mv_refresh.submit",
+        outcome="started",
+        payload={"strategy": strategy},
+        resource_type="load_job",
+        resource_id=job_id,
+        job_id=job_id,
+        **_audit_request(request),
+    )
+    return status
 
 
 @router.post("/loads", response_model=LoadJobStatus, response_model_exclude_none=True)
 async def submit_load(
     req: LoadSubmitRequest,
+    request: Request,
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
@@ -135,7 +163,17 @@ async def submit_load(
         job_id = await queue.enqueue_batch(req.payload)
     else:
         job_id = await queue.enqueue(req.kind, req.payload)
-    return await client.load_status(job_id)
+    status = await client.load_status(job_id)
+    await client.record_audit_event(
+        action="load.submit",
+        outcome="started",
+        payload={"kind": req.kind, "payload": req.payload},
+        resource_type="load_job",
+        resource_id=job_id,
+        job_id=job_id,
+        **_audit_request(request),
+    )
+    return status
 
 
 @router.get("/jobs", response_model=list[LoadJobStatus], response_model_exclude_none=True)
@@ -163,10 +201,11 @@ async def job_status(
 )
 async def cancel_job(
     job_id: str,
+    request: Request,
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    return await cancel_load(job_id, client=client, queue=queue)
+    return await cancel_load(job_id, request=request, client=client, queue=queue)
 
 
 @router.get("/loads", response_model=list[LoadJobStatus], response_model_exclude_none=True)
@@ -194,16 +233,28 @@ async def load_status(
 )
 async def cancel_load(
     job_id: str,
+    request: Request,
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
     await queue.cancel(job_id)
-    return await client.load_status(job_id)
+    status = await client.load_status(job_id)
+    await client.record_audit_event(
+        action="load.cancel",
+        outcome="cancelled",
+        payload={"job_id": job_id},
+        resource_type="load_job",
+        resource_id=job_id,
+        job_id=job_id,
+        **_audit_request(request),
+    )
+    return status
 
 
 @router.post("/consistency/run", response_model=LoadJobStatus, response_model_exclude_none=True)
 async def run_consistency(
     req: ConsistencyRunRequest,
+    request: Request,
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
@@ -216,7 +267,17 @@ async def run_consistency(
             "cases": req.cases,
         },
     )
-    return await client.load_status(job_id)
+    status = await client.load_status(job_id)
+    await client.record_audit_event(
+        action="consistency_check.submit",
+        outcome="started",
+        payload=req.model_dump(),
+        resource_type="load_job",
+        resource_id=job_id,
+        job_id=job_id,
+        **_audit_request(request),
+    )
+    return status
 
 
 @router.get(
@@ -245,6 +306,146 @@ async def consistency_report(
     client: AsyncAddressClient = Depends(get_client),
 ) -> ConsistencyReport:
     return await client.consistency_report(report_id)
+
+
+@router.get(
+    "/ops/audit-events",
+    response_model=list[AuditEvent],
+    response_model_exclude_none=True,
+)
+async def list_ops_audit_events(
+    limit: int = Query(default=50, ge=1, le=500),
+    action: str | None = None,
+    outcome: str | None = None,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[AuditEvent]:
+    return await client.list_audit_events(limit=limit, action=action, outcome=outcome)
+
+
+@router.get(
+    "/ops/snapshots",
+    response_model=list[DatasetSnapshot],
+    response_model_exclude_none=True,
+)
+async def list_ops_snapshots(
+    limit: int = Query(default=20, ge=1, le=200),
+    state: str | None = None,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[DatasetSnapshot]:
+    return await client.list_dataset_snapshots(limit=limit, state=state)
+
+
+@router.get(
+    "/ops/releases",
+    response_model=list[ServingRelease],
+    response_model_exclude_none=True,
+)
+async def list_ops_releases(
+    limit: int = Query(default=20, ge=1, le=200),
+    state: str | None = None,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[ServingRelease]:
+    return await client.list_serving_releases(limit=limit, state=state)
+
+
+@router.post(
+    "/ops/releases/{release_id}/rollback-plan",
+    response_model=RollbackPlan,
+    response_model_exclude_none=True,
+)
+async def rollback_plan(
+    release_id: str,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RollbackPlan:
+    plan = await client.rollback_plan(release_id)
+    await client.record_audit_event(
+        action="serving_release.rollback_plan",
+        outcome="succeeded",
+        payload={"release_id": release_id},
+        resource_type="serving_release",
+        resource_id=release_id,
+        **_audit_request(request),
+    )
+    return plan
+
+
+@router.get(
+    "/ops/artifacts",
+    response_model=list[OpsArtifact],
+    response_model_exclude_none=True,
+)
+async def list_ops_artifacts(
+    limit: int = Query(default=50, ge=1, le=500),
+    artifact_type: str | None = None,
+    state: str | None = None,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[OpsArtifact]:
+    return await client.list_artifacts(limit=limit, artifact_type=artifact_type, state=state)
+
+
+@router.get(
+    "/ops/maintenance-windows",
+    response_model=list[MaintenanceWindow],
+    response_model_exclude_none=True,
+)
+async def list_ops_maintenance_windows(
+    limit: int = Query(default=50, ge=1, le=500),
+    state: str | None = None,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[MaintenanceWindow]:
+    return await client.list_maintenance_windows(limit=limit, state=state)
+
+
+@router.post(
+    "/ops/maintenance-windows",
+    response_model=MaintenanceWindow,
+    response_model_exclude_none=True,
+)
+async def create_ops_maintenance_window(
+    req: MaintenanceWindowCreate,
+    client: AsyncAddressClient = Depends(get_client),
+) -> MaintenanceWindow:
+    return await client.create_maintenance_window(req)
+
+
+@router.post(
+    "/ops/maintenance-windows/{window_id}/end",
+    response_model=MaintenanceWindow,
+    response_model_exclude_none=True,
+)
+async def end_ops_maintenance_window(
+    window_id: str,
+    req: MaintenanceWindowEnd,
+    client: AsyncAddressClient = Depends(get_client),
+) -> MaintenanceWindow:
+    return await client.end_maintenance_window(window_id, req)
+
+
+@router.get(
+    "/ops/table-stats",
+    response_model=list[TableStatsSnapshot],
+    response_model_exclude_none=True,
+)
+async def list_ops_table_stats(
+    limit: int = Query(default=200, ge=1, le=1000),
+    snapshot_id: str | None = None,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[TableStatsSnapshot]:
+    return await client.list_table_stats_snapshots(limit=limit, snapshot_id=snapshot_id)
+
+
+@router.post(
+    "/ops/table-stats/capture",
+    response_model=list[TableStatsSnapshot],
+    response_model_exclude_none=True,
+)
+async def capture_ops_table_stats(
+    snapshot_id: str | None = None,
+    limit: int = Query(default=500, ge=1, le=2000),
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[TableStatsSnapshot]:
+    return await client.capture_table_stats_snapshots(snapshot_id=snapshot_id, limit=limit)
 
 
 def _safe_filename(filename: str) -> str:
@@ -276,3 +477,12 @@ def _is_relative_to(path: Path, base: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _audit_request(request: Request) -> _AuditRequest:
+    return {
+        "client_ip": request.client.host if request.client else None,
+        "user_agent": request.headers.get("user-agent"),
+        "request_id": request.headers.get("x-request-id"),
+        "trace_id": request.headers.get("traceparent"),
+    }

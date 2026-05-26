@@ -68,3 +68,21 @@ CREATE INDEX IF NOT EXISTS idx_consistency_started
   ON load_consistency_reports (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_geo_cache_expires
   ON geo_cache (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_ops_audit_events_occurred
+  ON ops.audit_events (occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_audit_events_action
+  ON ops.audit_events (action, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_dataset_snapshots_created
+  ON ops.dataset_snapshots (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_serving_releases_created
+  ON ops.serving_releases (created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_serving_releases_one_active
+  ON ops.serving_releases (state) WHERE state = 'active';
+CREATE INDEX IF NOT EXISTS idx_ops_artifacts_type_created
+  ON ops.artifacts (artifact_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_maintenance_windows_active
+  ON ops.maintenance_windows (kind, state, starts_at)
+  WHERE state IN ('scheduled','active','ending');
+CREATE INDEX IF NOT EXISTS idx_ops_table_stats_snapshots_captured
+  ON ops.table_stats_snapshots (captured_at DESC, schema_name, object_name);

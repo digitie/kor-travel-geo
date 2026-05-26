@@ -28,3 +28,16 @@ def test_t032_performance_index_migration_covers_resolve_key() -> None:
     assert "CREATE INDEX IF NOT EXISTS idx_juso_text_resolve" in migration
     assert "rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no" in migration
     assert "DROP INDEX IF EXISTS idx_juso_text_resolve" in migration
+
+
+def test_t049_ops_metadata_migration_covers_ops_schema() -> None:
+    migration = Path("alembic/versions/0006_t049_ops_metadata_schema.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "revision = \"0006_t049_ops_metadata_schema\"" in migration
+    assert "down_revision = \"0005_t039_roadaddr_entrance_table\"" in migration
+    assert "CREATE SCHEMA IF NOT EXISTS ops" in migration
+    assert "idx_ops_serving_releases_one_active" in migration
+    assert "audit_events_append_only" in migration
+    assert '"table_stats_snapshots"' in migration

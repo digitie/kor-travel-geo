@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import datetime
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -12,7 +12,23 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.core.protocols import ConsistencyReportRow, LoadJobRow
-from kraddr.geo.dto.admin import CacheMetrics, TableStat
+from kraddr.geo.core.redaction import (
+    hash_confirmation,
+    hash_identifier,
+    redact_audit_payload,
+)
+from kraddr.geo.dto.admin import (
+    AuditEvent,
+    CacheMetrics,
+    DatasetSnapshot,
+    MaintenanceWindow,
+    MaintenanceWindowCreate,
+    OpsArtifact,
+    RollbackPlan,
+    ServingRelease,
+    TableStat,
+    TableStatsSnapshot,
+)
 from kraddr.geo.exceptions import InvalidInputError
 
 from ._rows import map_consistency_report, map_load_job
@@ -22,6 +38,52 @@ SELECT job_id, kind, state, load_batch_id, parent_job_id,
        progress, current_stage, source_yyyymm, source_set,
        started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
   FROM load_jobs
+"""
+
+_AUDIT_SELECT = """
+SELECT event_id, occurred_at, actor_type, actor_id, client_ip_hash,
+       user_agent_hash, request_id, trace_id, action, resource_type,
+       resource_id, job_id, outcome, error_code, payload_redacted,
+       payload_hash
+  FROM ops.audit_events
+"""
+
+_SNAPSHOT_SELECT = """
+SELECT snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
+       git_commit, alembic_revision, postgres_version, postgis_version,
+       row_counts, table_stats_artifact_id, consistency_report_id,
+       performance_artifact_id, backup_artifact_id, created_by_job_id,
+       created_at, validated_at
+  FROM ops.dataset_snapshots
+"""
+
+_RELEASE_SELECT = """
+SELECT release_id, snapshot_id, state, release_kind, previous_release_id,
+       rollback_target_release_id, mv_name, mv_hash, consistency_gate,
+       performance_gate, activated_by_job_id, activated_at, notes, created_at
+  FROM ops.serving_releases
+"""
+
+_ARTIFACT_SELECT = """
+SELECT artifact_id, artifact_type, state, storage_kind, storage_uri,
+       display_name, media_type, compression, size_bytes, sha256,
+       retention_class, expires_at, job_id, snapshot_id, release_id,
+       manifest, callback_url, callback_state, created_at, finished_at
+  FROM ops.artifacts
+"""
+
+_MAINTENANCE_SELECT = """
+SELECT window_id, kind, state, starts_at, ends_at, actual_started_at,
+       actual_ended_at, reason, requested_by, approved_by, blocks,
+       created_by_job_id, closed_by_job_id, created_at
+  FROM ops.maintenance_windows
+"""
+
+_TABLE_STATS_SNAPSHOT_SELECT = """
+SELECT stats_id, snapshot_id, captured_at, schema_name, object_name,
+       object_kind, estimated_rows, exact_rows, total_bytes, table_bytes,
+       index_bytes, toast_bytes, dead_tuples, last_vacuum, last_analyze, stats
+  FROM ops.table_stats_snapshots
 """
 
 
@@ -184,6 +246,397 @@ SELECT job_id, kind, state, log_tail
             prefix = f"{row['job_id']} {row['kind']} {row['state']}"
             lines.extend(f"{prefix} | {line}" for line in tail if isinstance(line, str))
         return lines[-limit:]
+
+    async def record_audit_event(
+        self,
+        *,
+        action: str,
+        actor_type: str,
+        outcome: str,
+        payload: dict[str, Any] | None = None,
+        actor_id: str | None = None,
+        client_ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        job_id: str | None = None,
+        error_code: str | None = None,
+    ) -> AuditEvent:
+        payload_redacted, payload_hash = redact_audit_payload(payload)
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    _json_text(
+                        """
+INSERT INTO ops.audit_events
+  (event_id, actor_type, actor_id, client_ip_hash, user_agent_hash,
+   request_id, trace_id, action, resource_type, resource_id, job_id,
+   outcome, error_code, payload_redacted, payload_hash)
+VALUES
+  (:event_id, :actor_type, :actor_id, :client_ip_hash, :user_agent_hash,
+   :request_id, :trace_id, :action, :resource_type, :resource_id, :job_id,
+   :outcome, :error_code, :payload_redacted, :payload_hash)
+RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
+          user_agent_hash, request_id, trace_id, action, resource_type,
+          resource_id, job_id, outcome, error_code, payload_redacted,
+          payload_hash
+""",
+                        "payload_redacted",
+                    ),
+                    {
+                        "event_id": str(uuid4()),
+                        "actor_type": actor_type,
+                        "actor_id": actor_id,
+                        "client_ip_hash": hash_identifier(client_ip) if client_ip else None,
+                        "user_agent_hash": hash_identifier(user_agent) if user_agent else None,
+                        "request_id": request_id,
+                        "trace_id": trace_id,
+                        "action": action,
+                        "resource_type": resource_type,
+                        "resource_id": resource_id,
+                        "job_id": job_id,
+                        "outcome": outcome,
+                        "error_code": error_code,
+                        "payload_redacted": payload_redacted,
+                        "payload_hash": payload_hash,
+                    },
+                )
+            ).mappings().one()
+        return _audit_event(dict(row))
+
+    async def list_audit_events(
+        self,
+        *,
+        limit: int = 50,
+        action: str | None = None,
+        outcome: str | None = None,
+    ) -> list[AuditEvent]:
+        clauses = []
+        params: dict[str, Any] = {"limit": limit}
+        if action is not None:
+            clauses.append("action = :action")
+            params["action"] = action
+        if outcome is not None:
+            clauses.append("outcome = :outcome")
+            params["outcome"] = outcome
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(_AUDIT_SELECT + where + " ORDER BY occurred_at DESC LIMIT :limit"),
+                    params,
+                )
+            ).mappings().all()
+        return [_audit_event(dict(row)) for row in rows]
+
+    async def list_dataset_snapshots(
+        self,
+        *,
+        limit: int = 20,
+        state: str | None = None,
+    ) -> list[DatasetSnapshot]:
+        where = " WHERE state = :state" if state is not None else ""
+        params: dict[str, Any] = {"limit": limit}
+        if state is not None:
+            params["state"] = state
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(_SNAPSHOT_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
+                    params,
+                )
+            ).mappings().all()
+        return [_dataset_snapshot(dict(row)) for row in rows]
+
+    async def list_serving_releases(
+        self,
+        *,
+        limit: int = 20,
+        state: str | None = None,
+    ) -> list[ServingRelease]:
+        where = " WHERE state = :state" if state is not None else ""
+        params: dict[str, Any] = {"limit": limit}
+        if state is not None:
+            params["state"] = state
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(_RELEASE_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
+                    params,
+                )
+            ).mappings().all()
+        return [_serving_release(dict(row)) for row in rows]
+
+    async def rollback_plan(self, release_id: str) -> RollbackPlan | None:
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(_RELEASE_SELECT + " WHERE release_id = :release_id"),
+                    {"release_id": release_id},
+                )
+            ).mappings().first()
+        if row is None:
+            return None
+        release = _serving_release(dict(row))
+        blockers: tuple[str, ...] = ()
+        if release.state == "failed":
+            blockers = ("failed release는 rollback 기준으로 사용할 수 없다",)
+        return RollbackPlan(
+            release_id=release.release_id,
+            snapshot_id=release.snapshot_id,
+            typed_confirmation=f"ROLLBACK {release.release_id}",
+            blockers=blockers,
+            steps=(
+                "active maintenance window 확인",
+                "현재 active release를 superseded로 전환",
+                "대상 snapshot 기준 serving object swap",
+                "rollback serving release row 생성",
+                "ops.audit_events에 승인 근거 기록",
+            ),
+        )
+
+    async def list_artifacts(
+        self,
+        *,
+        limit: int = 50,
+        artifact_type: str | None = None,
+        state: str | None = None,
+    ) -> list[OpsArtifact]:
+        clauses = []
+        params: dict[str, Any] = {"limit": limit}
+        if artifact_type is not None:
+            clauses.append("artifact_type = :artifact_type")
+            params["artifact_type"] = artifact_type
+        if state is not None:
+            clauses.append("state = :state")
+            params["state"] = state
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(_ARTIFACT_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
+                    params,
+                )
+            ).mappings().all()
+        return [_ops_artifact(dict(row)) for row in rows]
+
+    async def list_maintenance_windows(
+        self,
+        *,
+        limit: int = 50,
+        state: str | None = None,
+    ) -> list[MaintenanceWindow]:
+        where = " WHERE state = :state" if state is not None else ""
+        params: dict[str, Any] = {"limit": limit}
+        if state is not None:
+            params["state"] = state
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(_MAINTENANCE_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
+                    params,
+                )
+            ).mappings().all()
+        return [_maintenance_window(dict(row)) for row in rows]
+
+    async def create_maintenance_window(
+        self,
+        req: MaintenanceWindowCreate,
+    ) -> MaintenanceWindow:
+        state = "active"
+        blocks = req.blocks or _default_maintenance_blocks(req.kind)
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    _json_text(
+                        """
+INSERT INTO ops.maintenance_windows
+  (window_id, kind, state, starts_at, ends_at, actual_started_at,
+   reason, requested_by, approved_by, confirmation_hash, blocks,
+   created_by_job_id)
+VALUES
+  (:window_id, :kind, :state, COALESCE(:starts_at, now()), :ends_at, now(),
+   :reason, :requested_by, :approved_by, :confirmation_hash, :blocks,
+   :created_by_job_id)
+RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
+          actual_ended_at, reason, requested_by, approved_by, blocks,
+          created_by_job_id, closed_by_job_id, created_at
+""",
+                        "blocks",
+                    ),
+                    {
+                        "window_id": str(uuid4()),
+                        "kind": req.kind,
+                        "state": state,
+                        "starts_at": req.starts_at,
+                        "ends_at": req.ends_at,
+                        "reason": req.reason,
+                        "requested_by": req.requested_by,
+                        "approved_by": req.approved_by,
+                        "confirmation_hash": hash_confirmation(req.confirmation),
+                        "blocks": blocks,
+                        "created_by_job_id": req.created_by_job_id,
+                    },
+                )
+            ).mappings().one()
+        return _maintenance_window(dict(row))
+
+    async def end_maintenance_window(
+        self,
+        *,
+        window_id: str,
+        confirmation: str,
+        closed_by_job_id: str | None = None,
+    ) -> MaintenanceWindow | None:
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        """
+UPDATE ops.maintenance_windows
+   SET state = 'ended',
+       actual_ended_at = now(),
+       closed_by_job_id = :closed_by_job_id
+ WHERE window_id = :window_id
+   AND state IN ('scheduled','active','ending')
+   AND confirmation_hash = :confirmation_hash
+RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
+          actual_ended_at, reason, requested_by, approved_by, blocks,
+          created_by_job_id, closed_by_job_id, created_at
+"""
+                    ),
+                    {
+                        "window_id": window_id,
+                        "confirmation_hash": hash_confirmation(confirmation),
+                        "closed_by_job_id": closed_by_job_id,
+                    },
+                )
+            ).mappings().first()
+        return _maintenance_window(dict(row)) if row else None
+
+    async def list_table_stats_snapshots(
+        self,
+        *,
+        limit: int = 200,
+        snapshot_id: str | None = None,
+    ) -> list[TableStatsSnapshot]:
+        where = " WHERE snapshot_id = :snapshot_id" if snapshot_id is not None else ""
+        params: dict[str, Any] = {"limit": limit}
+        if snapshot_id is not None:
+            params["snapshot_id"] = snapshot_id
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        _TABLE_STATS_SNAPSHOT_SELECT
+                        + where
+                        + " ORDER BY captured_at DESC, schema_name, object_name LIMIT :limit"
+                    ),
+                    params,
+                )
+            ).mappings().all()
+        return [_table_stats_snapshot(dict(row)) for row in rows]
+
+    async def capture_table_stats_snapshots(
+        self,
+        *,
+        snapshot_id: str | None = None,
+        limit: int = 500,
+    ) -> list[TableStatsSnapshot]:
+        captured_at = datetime.now(UTC)
+        async with self.engine.begin() as conn:
+            stats_rows = (
+                await conn.execute(
+                    text(
+                        """
+SELECT n.nspname AS schema_name,
+       c.relname AS object_name,
+       CASE c.relkind
+         WHEN 'r' THEN 'table'
+         WHEN 'p' THEN 'table'
+         WHEN 'm' THEN 'materialized_view'
+         WHEN 'i' THEN 'index'
+         WHEN 'I' THEN 'index'
+         WHEN 't' THEN 'toast'
+         ELSE 'other'
+       END AS object_kind,
+       GREATEST(c.reltuples, 0)::bigint AS estimated_rows,
+       pg_total_relation_size(c.oid)::bigint AS total_bytes,
+       CASE WHEN c.relkind IN ('r','p','m')
+            THEN pg_relation_size(c.oid)::bigint
+            ELSE NULL
+       END AS table_bytes,
+       CASE WHEN c.relkind IN ('r','p','m')
+            THEN pg_indexes_size(c.oid)::bigint
+            WHEN c.relkind IN ('i','I')
+            THEN pg_relation_size(c.oid)::bigint
+            ELSE NULL
+       END AS index_bytes,
+       CASE WHEN c.relkind IN ('r','p','m')
+            THEN GREATEST(
+              pg_total_relation_size(c.oid)
+              - pg_relation_size(c.oid)
+              - pg_indexes_size(c.oid),
+              0
+            )::bigint
+            ELSE NULL
+       END AS toast_bytes,
+       GREATEST(COALESCE(s.n_dead_tup, 0), 0)::bigint AS dead_tuples,
+       s.last_vacuum,
+       s.last_analyze
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
+ WHERE n.nspname IN ('public', 'ops')
+   AND c.relkind IN ('r','p','m','i','I','t')
+ ORDER BY n.nspname, c.relname
+ LIMIT :limit
+"""
+                    ),
+                    {"limit": limit},
+                )
+            ).mappings().all()
+            records = [
+                {
+                    "stats_id": str(uuid4()),
+                    "snapshot_id": snapshot_id,
+                    "captured_at": captured_at,
+                    "schema_name": row["schema_name"],
+                    "object_name": row["object_name"],
+                    "object_kind": row["object_kind"],
+                    "estimated_rows": row["estimated_rows"],
+                    "exact_rows": None,
+                    "total_bytes": row["total_bytes"],
+                    "table_bytes": row["table_bytes"],
+                    "index_bytes": row["index_bytes"],
+                    "toast_bytes": row["toast_bytes"],
+                    "dead_tuples": row["dead_tuples"],
+                    "last_vacuum": row["last_vacuum"],
+                    "last_analyze": row["last_analyze"],
+                    "stats": {"source": "pg_class_pg_stat_user_tables"},
+                }
+                for row in stats_rows
+            ]
+            if records:
+                await conn.execute(
+                    _json_text(
+                        """
+INSERT INTO ops.table_stats_snapshots
+  (stats_id, snapshot_id, captured_at, schema_name, object_name, object_kind,
+   estimated_rows, exact_rows, total_bytes, table_bytes, index_bytes,
+   toast_bytes, dead_tuples, last_vacuum, last_analyze, stats)
+VALUES
+  (:stats_id, :snapshot_id, :captured_at, :schema_name, :object_name, :object_kind,
+   :estimated_rows, :exact_rows, :total_bytes, :table_bytes, :index_bytes,
+   :toast_bytes, :dead_tuples, :last_vacuum, :last_analyze, :stats)
+""",
+                        "stats",
+                    ),
+                    records,
+                )
+        return [_table_stats_snapshot(record) for record in records]
 
     async def insert_load_job(
         self,
@@ -386,6 +839,169 @@ SELECT report_id, scope, severity_max, source_set, started_at, finished_at,
                 )
             ).mappings().all()
         return [map_consistency_report(dict(row)) for row in rows]
+
+
+def _audit_event(row: Mapping[str, Any]) -> AuditEvent:
+    return AuditEvent(
+        event_id=str(row["event_id"]),
+        occurred_at=row["occurred_at"],
+        actor_type=row["actor_type"],
+        actor_id=row.get("actor_id"),
+        client_ip_hash=row.get("client_ip_hash"),
+        user_agent_hash=row.get("user_agent_hash"),
+        request_id=row.get("request_id"),
+        trace_id=row.get("trace_id"),
+        action=str(row["action"]),
+        resource_type=row.get("resource_type"),
+        resource_id=row.get("resource_id"),
+        job_id=row.get("job_id"),
+        outcome=row["outcome"],
+        error_code=row.get("error_code"),
+        payload_redacted=_json_dict(row.get("payload_redacted")),
+        payload_hash=str(row["payload_hash"]),
+    )
+
+
+def _dataset_snapshot(row: Mapping[str, Any]) -> DatasetSnapshot:
+    return DatasetSnapshot(
+        snapshot_id=str(row["snapshot_id"]),
+        state=row["state"],
+        parent_snapshot_id=_optional_str(row.get("parent_snapshot_id")),
+        source_set=_json_dict(row.get("source_set")),
+        source_set_hash=str(row["source_set_hash"]),
+        git_commit=row.get("git_commit"),
+        alembic_revision=row.get("alembic_revision"),
+        postgres_version=row.get("postgres_version"),
+        postgis_version=row.get("postgis_version"),
+        row_counts=_int_dict(row.get("row_counts")),
+        table_stats_artifact_id=_optional_str(row.get("table_stats_artifact_id")),
+        consistency_report_id=row.get("consistency_report_id"),
+        performance_artifact_id=_optional_str(row.get("performance_artifact_id")),
+        backup_artifact_id=_optional_str(row.get("backup_artifact_id")),
+        created_by_job_id=row.get("created_by_job_id"),
+        created_at=row["created_at"],
+        validated_at=row.get("validated_at"),
+    )
+
+
+def _serving_release(row: Mapping[str, Any]) -> ServingRelease:
+    return ServingRelease(
+        release_id=str(row["release_id"]),
+        snapshot_id=str(row["snapshot_id"]),
+        state=row["state"],
+        release_kind=row["release_kind"],
+        previous_release_id=_optional_str(row.get("previous_release_id")),
+        rollback_target_release_id=_optional_str(row.get("rollback_target_release_id")),
+        mv_name=str(row.get("mv_name") or "mv_geocode_target"),
+        mv_hash=row.get("mv_hash"),
+        consistency_gate=_json_dict(row.get("consistency_gate")),
+        performance_gate=_json_dict(row.get("performance_gate")),
+        activated_by_job_id=row.get("activated_by_job_id"),
+        activated_at=row.get("activated_at"),
+        notes=row.get("notes"),
+        created_at=row["created_at"],
+    )
+
+
+def _ops_artifact(row: Mapping[str, Any]) -> OpsArtifact:
+    return OpsArtifact(
+        artifact_id=str(row["artifact_id"]),
+        artifact_type=str(row["artifact_type"]),
+        state=row["state"],
+        storage_kind=row["storage_kind"],
+        storage_uri=row.get("storage_uri"),
+        display_name=row.get("display_name"),
+        media_type=row.get("media_type"),
+        compression=row.get("compression"),
+        size_bytes=_optional_int(row.get("size_bytes")),
+        sha256=row.get("sha256"),
+        retention_class=row.get("retention_class"),
+        expires_at=row.get("expires_at"),
+        job_id=row.get("job_id"),
+        snapshot_id=_optional_str(row.get("snapshot_id")),
+        release_id=_optional_str(row.get("release_id")),
+        manifest=_json_dict(row.get("manifest")),
+        callback_url=row.get("callback_url"),
+        callback_state=row.get("callback_state"),
+        created_at=row["created_at"],
+        finished_at=row.get("finished_at"),
+    )
+
+
+def _maintenance_window(row: Mapping[str, Any]) -> MaintenanceWindow:
+    return MaintenanceWindow(
+        window_id=str(row["window_id"]),
+        kind=row["kind"],
+        state=row["state"],
+        starts_at=row.get("starts_at"),
+        ends_at=row.get("ends_at"),
+        actual_started_at=row.get("actual_started_at"),
+        actual_ended_at=row.get("actual_ended_at"),
+        reason=str(row["reason"]),
+        requested_by=row.get("requested_by"),
+        approved_by=row.get("approved_by"),
+        blocks=_json_dict(row.get("blocks")),
+        created_by_job_id=row.get("created_by_job_id"),
+        closed_by_job_id=row.get("closed_by_job_id"),
+        created_at=row["created_at"],
+    )
+
+
+def _table_stats_snapshot(row: Mapping[str, Any]) -> TableStatsSnapshot:
+    return TableStatsSnapshot(
+        stats_id=str(row["stats_id"]),
+        snapshot_id=_optional_str(row.get("snapshot_id")),
+        captured_at=row["captured_at"],
+        schema_name=str(row["schema_name"]),
+        object_name=str(row["object_name"]),
+        object_kind=row["object_kind"],
+        estimated_rows=_optional_int(row.get("estimated_rows")),
+        exact_rows=_optional_int(row.get("exact_rows")),
+        total_bytes=_optional_int(row.get("total_bytes")),
+        table_bytes=_optional_int(row.get("table_bytes")),
+        index_bytes=_optional_int(row.get("index_bytes")),
+        toast_bytes=_optional_int(row.get("toast_bytes")),
+        dead_tuples=_optional_int(row.get("dead_tuples")),
+        last_vacuum=row.get("last_vacuum"),
+        last_analyze=row.get("last_analyze"),
+        stats=_json_dict(row.get("stats")),
+    )
+
+
+def _default_maintenance_blocks(kind: str) -> dict[str, Any]:
+    if kind in {"restore", "schema_migration", "exclusive"}:
+        return {"jobs": ["*"], "api": ["admin.loads", "admin.maintenance", "admin.ops"]}
+    if kind == "full_load":
+        return {"jobs": ["full_load_batch", "mv_refresh", "db_restore"]}
+    if kind == "mv_refresh":
+        return {"jobs": ["full_load_batch", "mv_refresh"]}
+    if kind == "read_only":
+        return {"jobs": ["full_load_batch", "mv_refresh", "db_restore"], "writes": ["admin"]}
+    return {}
+
+
+def _json_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
+
+
+def _int_dict(value: Any) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        return {}
+    result: dict[str, int] = {}
+    for key, item in value.items():
+        if isinstance(item, int):
+            result[str(key)] = item
+    return result
+
+
+def _optional_int(value: Any) -> int | None:
+    return int(value) if value is not None else None
+
+
+def _optional_str(value: Any) -> str | None:
+    return str(value) if value is not None else None
 
 
 def _summarize_payload(payload: dict[str, Any]) -> dict[str, Any]:

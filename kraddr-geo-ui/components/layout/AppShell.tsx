@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Search,
   Server,
+  ShieldCheck,
   TerminalSquare
 } from "lucide-react";
 import Link from "next/link";
@@ -26,7 +27,8 @@ const adminLinks = [
   { href: "/admin/tables", label: "Tables", icon: Database },
   { href: "/admin/cache", label: "Cache", icon: BarChart3 },
   { href: "/admin/logs", label: "Logs", icon: FileText },
-  { href: "/admin/consistency", label: "Consistency", icon: ListChecks }
+  { href: "/admin/consistency", label: "Consistency", icon: ListChecks },
+  { href: "/admin/ops", label: "Ops", icon: ShieldCheck }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

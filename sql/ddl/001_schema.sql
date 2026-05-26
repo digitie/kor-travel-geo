@@ -390,3 +390,141 @@ CREATE TABLE IF NOT EXISTS geo_cache (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at        TIMESTAMPTZ NOT NULL
 );
+
+CREATE SCHEMA IF NOT EXISTS ops;
+
+CREATE TABLE IF NOT EXISTS ops.audit_events (
+  event_id          UUID PRIMARY KEY,
+  occurred_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_type        TEXT NOT NULL CHECK (actor_type IN ('system','cli','api','ui','scheduler')),
+  actor_id          TEXT,
+  client_ip_hash    TEXT,
+  user_agent_hash   TEXT,
+  request_id        TEXT,
+  trace_id          TEXT,
+  action            TEXT NOT NULL,
+  resource_type     TEXT,
+  resource_id       TEXT,
+  job_id            TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
+  outcome           TEXT NOT NULL CHECK (outcome IN ('started','succeeded','failed','cancelled','denied')),
+  error_code        TEXT,
+  payload_redacted  JSONB NOT NULL DEFAULT '{}'::jsonb,
+  payload_hash      TEXT NOT NULL CHECK (char_length(payload_hash) = 64),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE OR REPLACE FUNCTION ops.audit_events_append_only()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'ops.audit_events is append-only';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_ops_audit_events_append_only ON ops.audit_events;
+CREATE TRIGGER trg_ops_audit_events_append_only
+  BEFORE UPDATE OR DELETE ON ops.audit_events
+  FOR EACH ROW EXECUTE FUNCTION ops.audit_events_append_only();
+
+CREATE TABLE IF NOT EXISTS ops.dataset_snapshots (
+  snapshot_id                 UUID PRIMARY KEY,
+  state                       TEXT NOT NULL CHECK (state IN ('building','validated','rejected','released','retired')),
+  parent_snapshot_id          UUID REFERENCES ops.dataset_snapshots(snapshot_id) ON DELETE SET NULL,
+  source_set                  JSONB NOT NULL DEFAULT '{}'::jsonb,
+  source_set_hash             TEXT NOT NULL CHECK (char_length(source_set_hash) = 64),
+  git_commit                  TEXT,
+  alembic_revision            TEXT,
+  postgres_version            TEXT,
+  postgis_version             TEXT,
+  row_counts                  JSONB NOT NULL DEFAULT '{}'::jsonb,
+  table_stats_artifact_id     UUID,
+  consistency_report_id       TEXT REFERENCES load_consistency_reports(report_id) ON DELETE SET NULL,
+  performance_artifact_id     UUID,
+  backup_artifact_id          UUID,
+  created_by_job_id           TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  validated_at                TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS ops.serving_releases (
+  release_id                  UUID PRIMARY KEY,
+  snapshot_id                 UUID NOT NULL REFERENCES ops.dataset_snapshots(snapshot_id) ON DELETE RESTRICT,
+  state                       TEXT NOT NULL CHECK (state IN ('pending','active','superseded','rolled_back','failed')),
+  release_kind                TEXT NOT NULL CHECK (release_kind IN ('full_load','daily_delta','restore','manual_rebuild','rollback')),
+  previous_release_id         UUID REFERENCES ops.serving_releases(release_id) ON DELETE SET NULL,
+  rollback_target_release_id  UUID REFERENCES ops.serving_releases(release_id) ON DELETE SET NULL,
+  mv_name                     TEXT NOT NULL DEFAULT 'mv_geocode_target',
+  mv_hash                     TEXT,
+  consistency_gate            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  performance_gate            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  activated_by_job_id         TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
+  activated_at                TIMESTAMPTZ,
+  notes                       TEXT,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ops.artifacts (
+  artifact_id                 UUID PRIMARY KEY,
+  artifact_type               TEXT NOT NULL CHECK (artifact_type IN (
+                                'db_backup','db_restore_log','consistency_report',
+                                'data_quality_export','perf_report','source_inventory',
+                                'schema_diff','openapi_snapshot','other'
+                              )),
+  state                       TEXT NOT NULL CHECK (state IN ('creating','available','failed','deleted','expired')),
+  storage_kind                TEXT NOT NULL CHECK (storage_kind IN ('local_file','s3','gcs','none')),
+  storage_uri                 TEXT,
+  display_name                TEXT,
+  media_type                  TEXT,
+  compression                 TEXT,
+  size_bytes                  BIGINT CHECK (size_bytes IS NULL OR size_bytes >= 0),
+  sha256                      TEXT CHECK (sha256 IS NULL OR char_length(sha256) = 64),
+  retention_class             TEXT,
+  expires_at                  TIMESTAMPTZ,
+  job_id                      TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
+  snapshot_id                 UUID REFERENCES ops.dataset_snapshots(snapshot_id) ON DELETE SET NULL,
+  release_id                  UUID REFERENCES ops.serving_releases(release_id) ON DELETE SET NULL,
+  manifest                    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  download_token_hash         TEXT,
+  callback_url                TEXT,
+  callback_state              TEXT,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finished_at                 TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS ops.maintenance_windows (
+  window_id                   UUID PRIMARY KEY,
+  kind                        TEXT NOT NULL CHECK (kind IN ('full_load','restore','schema_migration','mv_refresh','read_only','exclusive')),
+  state                       TEXT NOT NULL CHECK (state IN ('scheduled','active','ending','ended','cancelled','failed')),
+  starts_at                   TIMESTAMPTZ,
+  ends_at                     TIMESTAMPTZ,
+  actual_started_at           TIMESTAMPTZ,
+  actual_ended_at             TIMESTAMPTZ,
+  reason                      TEXT NOT NULL,
+  requested_by                TEXT,
+  approved_by                 TEXT,
+  confirmation_hash           TEXT NOT NULL CHECK (char_length(confirmation_hash) = 64),
+  blocks                      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by_job_id           TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
+  closed_by_job_id            TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ops.table_stats_snapshots (
+  stats_id                    UUID PRIMARY KEY,
+  snapshot_id                 UUID REFERENCES ops.dataset_snapshots(snapshot_id) ON DELETE SET NULL,
+  captured_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  schema_name                 TEXT NOT NULL,
+  object_name                 TEXT NOT NULL,
+  object_kind                 TEXT NOT NULL CHECK (object_kind IN ('table','materialized_view','index','toast','other')),
+  estimated_rows              BIGINT CHECK (estimated_rows IS NULL OR estimated_rows >= 0),
+  exact_rows                  BIGINT CHECK (exact_rows IS NULL OR exact_rows >= 0),
+  total_bytes                 BIGINT CHECK (total_bytes IS NULL OR total_bytes >= 0),
+  table_bytes                 BIGINT CHECK (table_bytes IS NULL OR table_bytes >= 0),
+  index_bytes                 BIGINT CHECK (index_bytes IS NULL OR index_bytes >= 0),
+  toast_bytes                 BIGINT CHECK (toast_bytes IS NULL OR toast_bytes >= 0),
+  dead_tuples                 BIGINT CHECK (dead_tuples IS NULL OR dead_tuples >= 0),
+  last_vacuum                 TIMESTAMPTZ,
+  last_analyze                TIMESTAMPTZ,
+  stats                       JSONB NOT NULL DEFAULT '{}'::jsonb
+);

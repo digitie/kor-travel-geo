@@ -121,6 +121,166 @@
         ],
         "type": "string"
       },
+      "AuditEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "actor_type": {
+            "enum": [
+              "system",
+              "cli",
+              "api",
+              "ui",
+              "scheduler"
+            ],
+            "title": "Actor Type",
+            "type": "string"
+          },
+          "client_ip_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip Hash"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "started",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "denied"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "payload_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Payload Hash",
+            "type": "string"
+          },
+          "payload_redacted": {
+            "additionalProperties": true,
+            "title": "Payload Redacted",
+            "type": "object"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Type"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "user_agent_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent Hash"
+          }
+        },
+        "required": [
+          "event_id",
+          "occurred_at",
+          "actor_type",
+          "action",
+          "outcome",
+          "payload_hash"
+        ],
+        "title": "AuditEvent",
+        "type": "object"
+      },
       "BBox": {
         "additionalProperties": false,
         "properties": {
@@ -466,6 +626,179 @@
           }
         },
         "title": "ConsistencyRunRequest",
+        "type": "object"
+      },
+      "DatasetSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "alembic_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alembic Revision"
+          },
+          "backup_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Artifact Id"
+          },
+          "consistency_report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consistency Report Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job Id"
+          },
+          "git_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Commit"
+          },
+          "parent_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Snapshot Id"
+          },
+          "performance_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performance Artifact Id"
+          },
+          "postgis_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postgis Version"
+          },
+          "postgres_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postgres Version"
+          },
+          "row_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Row Counts",
+            "type": "object"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "source_set": {
+            "additionalProperties": true,
+            "title": "Source Set",
+            "type": "object"
+          },
+          "source_set_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Source Set Hash",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "building",
+              "validated",
+              "rejected",
+              "released",
+              "retired"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "table_stats_artifact_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Stats Artifact Id"
+          },
+          "validated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validated At"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "state",
+          "source_set_hash",
+          "created_at"
+        ],
+        "title": "DatasetSnapshot",
         "type": "object"
       },
       "ExplainRequest": {
@@ -944,6 +1277,279 @@
         "title": "LoadSubmitRequest",
         "type": "object"
       },
+      "MaintenanceWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Ended At"
+          },
+          "actual_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Started At"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "blocks": {
+            "additionalProperties": true,
+            "title": "Blocks",
+            "type": "object"
+          },
+          "closed_by_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed By Job Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job Id"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "kind": {
+            "enum": [
+              "full_load",
+              "restore",
+              "schema_migration",
+              "mv_refresh",
+              "read_only",
+              "exclusive"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          },
+          "state": {
+            "enum": [
+              "scheduled",
+              "active",
+              "ending",
+              "ended",
+              "cancelled",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "window_id": {
+            "title": "Window Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window_id",
+          "kind",
+          "state",
+          "reason",
+          "created_at"
+        ],
+        "title": "MaintenanceWindow",
+        "type": "object"
+      },
+      "MaintenanceWindowCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "blocks": {
+            "additionalProperties": true,
+            "title": "Blocks",
+            "type": "object"
+          },
+          "confirmation": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "created_by_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By Job Id"
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At"
+          },
+          "kind": {
+            "enum": [
+              "full_load",
+              "restore",
+              "schema_migration",
+              "mv_refresh",
+              "read_only",
+              "exclusive"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "starts_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts At"
+          }
+        },
+        "required": [
+          "kind",
+          "reason",
+          "confirmation"
+        ],
+        "title": "MaintenanceWindowCreate",
+        "type": "object"
+      },
+      "MaintenanceWindowEnd": {
+        "additionalProperties": false,
+        "properties": {
+          "closed_by_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed By Job Id"
+          },
+          "confirmation": {
+            "maxLength": 200,
+            "minLength": 3,
+            "title": "Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmation"
+        ],
+        "title": "MaintenanceWindowEnd",
+        "type": "object"
+      },
       "NormalizeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -985,6 +1591,218 @@
           "normalized"
         ],
         "title": "NormalizeResponse",
+        "type": "object"
+      },
+      "OpsArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "artifact_type": {
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "callback_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback State"
+          },
+          "callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Url"
+          },
+          "compression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compression"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "manifest": {
+            "additionalProperties": true,
+            "title": "Manifest",
+            "type": "object"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Type"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "retention_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Class"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "state": {
+            "enum": [
+              "creating",
+              "available",
+              "failed",
+              "deleted",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "storage_kind": {
+            "enum": [
+              "local_file",
+              "s3",
+              "gcs",
+              "none"
+            ],
+            "title": "Storage Kind",
+            "type": "string"
+          },
+          "storage_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Uri"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "state",
+          "storage_kind",
+          "created_at"
+        ],
+        "title": "OpsArtifact",
         "type": "object"
       },
       "PoboxInput": {
@@ -1375,6 +2193,51 @@
         "title": "ReverseResultItem",
         "type": "object"
       },
+      "RollbackPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "blockers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "release_id": {
+            "title": "Release Id",
+            "type": "string"
+          },
+          "requires_maintenance_window": {
+            "default": true,
+            "title": "Requires Maintenance Window",
+            "type": "boolean"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "steps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "typed_confirmation": {
+            "title": "Typed Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "snapshot_id",
+          "typed_confirmation"
+        ],
+        "title": "RollbackPlan",
+        "type": "object"
+      },
       "SearchInput": {
         "additionalProperties": false,
         "properties": {
@@ -1583,6 +2446,137 @@
         "title": "ServiceMeta",
         "type": "object"
       },
+      "ServingRelease": {
+        "additionalProperties": false,
+        "properties": {
+          "activated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated At"
+          },
+          "activated_by_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated By Job Id"
+          },
+          "consistency_gate": {
+            "additionalProperties": true,
+            "title": "Consistency Gate",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "mv_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mv Hash"
+          },
+          "mv_name": {
+            "default": "mv_geocode_target",
+            "title": "Mv Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "performance_gate": {
+            "additionalProperties": true,
+            "title": "Performance Gate",
+            "type": "object"
+          },
+          "previous_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Release Id"
+          },
+          "release_id": {
+            "title": "Release Id",
+            "type": "string"
+          },
+          "release_kind": {
+            "enum": [
+              "full_load",
+              "daily_delta",
+              "restore",
+              "manual_rebuild",
+              "rollback"
+            ],
+            "title": "Release Kind",
+            "type": "string"
+          },
+          "rollback_target_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Target Release Id"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "superseded",
+              "rolled_back",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "release_id",
+          "snapshot_id",
+          "state",
+          "release_kind",
+          "created_at"
+        ],
+        "title": "ServingRelease",
+        "type": "object"
+      },
       "Status": {
         "enum": [
           "OK",
@@ -1632,6 +2626,172 @@
           "row_count"
         ],
         "title": "TableStat",
+        "type": "object"
+      },
+      "TableStatsSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "dead_tuples": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dead Tuples"
+          },
+          "estimated_rows": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Rows"
+          },
+          "exact_rows": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exact Rows"
+          },
+          "index_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Bytes"
+          },
+          "last_analyze": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Analyze"
+          },
+          "last_vacuum": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Vacuum"
+          },
+          "object_kind": {
+            "enum": [
+              "table",
+              "materialized_view",
+              "index",
+              "toast",
+              "other"
+            ],
+            "title": "Object Kind",
+            "type": "string"
+          },
+          "object_name": {
+            "title": "Object Name",
+            "type": "string"
+          },
+          "schema_name": {
+            "title": "Schema Name",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "title": "Stats",
+            "type": "object"
+          },
+          "stats_id": {
+            "title": "Stats Id",
+            "type": "string"
+          },
+          "table_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Bytes"
+          },
+          "toast_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Toast Bytes"
+          },
+          "total_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Bytes"
+          }
+        },
+        "required": [
+          "stats_id",
+          "captured_at",
+          "schema_name",
+          "object_name",
+          "object_kind"
+        ],
+        "title": "TableStatsSnapshot",
         "type": "object"
       },
       "UploadSidoZipResponse": {
@@ -3092,6 +4252,626 @@
           }
         },
         "summary": "Normalize",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/artifacts": {
+      "get": {
+        "operationId": "list_ops_artifacts_v1_admin_ops_artifacts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "artifact_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Artifact Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OpsArtifact"
+                  },
+                  "title": "Response List Ops Artifacts V1 Admin Ops Artifacts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Artifacts",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/audit-events": {
+      "get": {
+        "operationId": "list_ops_audit_events_v1_admin_ops_audit_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Outcome"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEvent"
+                  },
+                  "title": "Response List Ops Audit Events V1 Admin Ops Audit Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Audit Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/maintenance-windows": {
+      "get": {
+        "operationId": "list_ops_maintenance_windows_v1_admin_ops_maintenance_windows_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MaintenanceWindow"
+                  },
+                  "title": "Response List Ops Maintenance Windows V1 Admin Ops Maintenance Windows Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Maintenance Windows",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "operationId": "create_ops_maintenance_window_v1_admin_ops_maintenance_windows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceWindowCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Ops Maintenance Window",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/maintenance-windows/{window_id}/end": {
+      "post": {
+        "operationId": "end_ops_maintenance_window_v1_admin_ops_maintenance_windows__window_id__end_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "window_id",
+            "required": true,
+            "schema": {
+              "title": "Window Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceWindowEnd"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaintenanceWindow"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "End Ops Maintenance Window",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/releases": {
+      "get": {
+        "operationId": "list_ops_releases_v1_admin_ops_releases_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ServingRelease"
+                  },
+                  "title": "Response List Ops Releases V1 Admin Ops Releases Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Releases",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/releases/{release_id}/rollback-plan": {
+      "post": {
+        "operationId": "rollback_plan_v1_admin_ops_releases__release_id__rollback_plan_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "release_id",
+            "required": true,
+            "schema": {
+              "title": "Release Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RollbackPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback Plan",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/snapshots": {
+      "get": {
+        "operationId": "list_ops_snapshots_v1_admin_ops_snapshots_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetSnapshot"
+                  },
+                  "title": "Response List Ops Snapshots V1 Admin Ops Snapshots Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Snapshots",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/table-stats": {
+      "get": {
+        "operationId": "list_ops_table_stats_v1_admin_ops_table_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "snapshot_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Snapshot Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TableStatsSnapshot"
+                  },
+                  "title": "Response List Ops Table Stats V1 Admin Ops Table Stats Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Table Stats",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/table-stats/capture": {
+      "post": {
+        "operationId": "capture_ops_table_stats_v1_admin_ops_table_stats_capture_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "snapshot_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Snapshot Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 2000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TableStatsSnapshot"
+                  },
+                  "title": "Response Capture Ops Table Stats V1 Admin Ops Table Stats Capture Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capture Ops Table Stats",
         "tags": [
           "admin"
         ]
