@@ -415,6 +415,16 @@ loaders/
 
 `AlterD.JUSUKR.*.TH_SGCO_RNADR_LNBR.TXT`는 현재 master table에 쓰지 않는다. 이 member는 건물↔지번 보조 관계를 담으므로 T-038의 `tl_juso_parcel_link` loader에서 `jibun_rnaddrkor_*`와 같은 테이블에 적용한다. T-028은 그 전까지 `unsupported_lnbr_rows`만 세어 `load_manifest.source_set`에 남긴다. 상세 결정은 ADR-021, ADR-022, `docs/t028-daily-juso-delta.md`, `docs/t029-jibun-rnaddrkor-decision.md`를 본다.
 
+#### 별도 도형/출입구 묶음 (T-030)
+
+`건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`는 현재 full-load source child에 포함하지 않는다. T-030 실제 파일 검토 결과, 네 자료는 기준월과 레이어 의미가 다르므로 기본 serving path에 즉시 섞지 않고 다음 후속으로 분리했다.
+
+- T-039: `도로명주소 출입구 정보` direct entrance text loader 후보. direct `bd_mgt_sn + EPSG:5179` 좌표를 제공한다.
+- T-040: `도로명주소 건물 도형` address polygon/entrance/connection bundle 비교.
+- T-041: 상세주소 동 도형과 `구역의 도형` 추가 레이어(`TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`) 검토.
+
+상세 근거는 ADR-023과 `docs/t030-extra-shape-sources.md`를 본다.
+
 실제 파일 검증 결과(서울 첫 행 기준):
 
 | index | 의미 | 예 |
