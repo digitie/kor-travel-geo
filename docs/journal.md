@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-043 — PR #23~#41 리뷰 코멘트 audit/fixup)
+
+**작업**: 사용자 지시에 따라 PR #23부터 최신 PR #41까지 GitHub 리뷰 표면을 thread-aware로 다시 확인하고, 반영 가능한 항목을 코드/문서로 보강했다.
+
+**반영 상세**:
+- GraphQL `pullRequest.comments`, `reviews`, `reviewThreads`와 REST review comment API를 함께 조회했다. 대상 PR 전체에서 unresolved review thread는 0개였다.
+- `kraddr-geo-ui/lib/vworld.ts`의 `redactVWorldTileUrl` alias 수명 주석과 redaction test의 API key 누설 방지 assert를 추가했다.
+- `kraddr-geo-ui/README.md`에 WSL ext4에서는 Linux Node/npm을 사용하라는 검증 경고를 추가했다.
+- `docs/t035-mv-refresh-benchmark.md`에 session/wait event metadata 해석 가이드를 보강했다.
+- `docs/t028-daily-juso-delta.md`에 신규 `MVM_RES_CD` 대응 절차, dedup 정렬 전제, `No Data` sentinel, checksum, queue 직렬화, daily 후 MV refresh 정책을 추가했다.
+- CLI의 `--limit-per-file` 옵션 사용 시 stderr 경고를 출력하도록 했다.
+- `TL_SPBD_BULD` projection staging 경로에 advisory lock을 추가하고, staging row count 대비 insert row count 차이를 skip metric으로 출력하도록 했다.
+- ADR-027에 `TL_SPPN_MAKAREA` 원천 `Polygon` → 운영 `MultiPolygon` 변환 원칙과 T-042 진입 전 남은 위험을 추가했다.
+- 상세 audit 표와 후속 이관 항목은 `docs/postmerge-review-fixups-pr23-latest.md`에 남겼다.
+
+**검증**:
+- `git diff --check` 통과.
+- `.venv/bin/python -m pytest -q` → 150 passed, 5 skipped.
+- `.venv/bin/python -m ruff check .` 통과.
+- `.venv/bin/python -m mypy src/kraddr/geo` 통과.
+- `.venv/bin/lint-imports` 통과.
+- 프론트엔드 로컬 검증은 Linux Node가 없고 Windows `npm`만 잡혀 UNC 경로 오류가 나므로 실행하지 않았다. GitHub Actions frontend job에서 확인한다.
+
 ## 2026-05-27 (문서 정합성 재검토와 task 순서 재정렬)
 
 **작업**: 사용자 지시에 따라 `main` 최신 문서와 실제 CLI/최근 ADR 사이의 불일치를 전체적으로 재검토하고 문서에 반영했다. 코드는 작성하지 않았다.

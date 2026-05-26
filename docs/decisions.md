@@ -1510,6 +1510,8 @@ CREATE INDEX idx_sppn_makarea_geom
   USING GIST (geom);
 ```
 
+원천 SHP는 T-041 세종/경남 측정 기준 `Polygon`으로 제공된다. 운영 테이블은 다른 polygon 계열과 같은 방식으로 `MultiPolygon`으로 통일하고, loader에서 `ST_Multi()` 또는 GDAL `PROMOTE_TO_MULTI`로 변환한다.
+
 ### 쿼리 원칙
 
 reverse geocode는 입력 좌표를 한 번만 EPSG:5179로 변환하고, polygon 컬럼에는 함수를 씌우지 않는다.
@@ -1532,6 +1534,13 @@ LIMIT 5;
 - T-041 문서와 데이터 모델 문서에서 `TL_SPPN_MAKAREA`를 단순 overlay 후보가 아니라 국가지점번호 보조 geocode/reverse 데이터 후보로 승격한다.
 - 구현은 아직 하지 않는다. 후속 태스크에서 DDL, loader, reverse/geocode enrichment, 디버그 UI overlay를 나눠 구현한다.
 - T-027 최종 클린 로드는 이 후속 구현이 들어가기 전까지 `TL_SPPN_MAKAREA`를 기본 full-load child로 포함하지 않는다.
+
+### 남은 위험
+
+- 현재 문서의 의미 해석은 행정안전부 국가지점번호 제도 설명과 사용자 제공 설명을 함께 사용한다. T-042 구현 전에는 도로명주소 전자지도 사양서에서 `TL_SPPN_MAKAREA` 레이어 정의를 1차 출처로 재확인한다.
+- reverse geocode에서 "주소 후보 confidence가 낮을 때"의 trigger는 아직 수치화하지 않았다. T-042에서는 기존 도로명/지번 후보 거리, 건물 polygon 유무, `ST_Covers(tl_sppn_makarea.geom, point)` 결과를 조합해 명시한다.
+- 응답 schema는 `x_extension.sppn_makarea`와 `type='sppn_area'` 후보 중 하나를 선택해야 한다. vworld 호환 필드를 오염시키지 않는 쪽을 우선한다.
+- 국가지점번호 문자열 parser/generator는 별도 표준 인용이 필요하다. T-042에서 형식과 좌표 변환 규칙의 출처를 문서화한다.
 
 ### 참고
 

@@ -10,7 +10,7 @@ from typing import Any
 
 import psycopg
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Connection, make_url
+from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.exceptions import LoaderError
@@ -50,6 +50,7 @@ TARGET_TABLES: dict[str, str] = {
 ROAD_INTERVAL_LAYER_NAME = "TL_SPRD_INTRVL"
 BUILDING_POLYGON_LAYER_NAME = "TL_SPBD_BULD"
 BUILDING_POLYGON_STAGE_TABLE = "_kraddr_stage_spbd_buld_polygon"
+BUILDING_POLYGON_STAGE_LOCK_KEY = "kraddr_geo:tl_spbd_buld_polygon_stage"
 ROAD_INTERVAL_SOURCE_FIELDS = (
     "SIG_CD",
     "RDS_MAN_NO",
@@ -313,8 +314,9 @@ def _copy_building_polygon_with_stage(
     callback: Callable[[float, str, object], int],
     cancel_event: asyncio.Event | None,
 ) -> None:
-    _drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)
+    lock_engine, lock_conn = _acquire_building_polygon_stage_lock(pg_url)
     try:
+        _drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)
         options = gdal_module.VectorTranslateOptions(
             format="PostgreSQL",
             layerName=BUILDING_POLYGON_STAGE_TABLE,
@@ -339,7 +341,10 @@ def _copy_building_polygon_with_stage(
             raise asyncio.CancelledError("shp building polygon loader cancelled")
         _insert_building_polygon_stage(pg_url, plan)
     finally:
-        _drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)
+        try:
+            _drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)
+        finally:
+            _release_building_polygon_stage_lock(lock_engine, lock_conn)
 
 
 def _insert_building_polygon_stage(pg_url: str, plan: ShpLoadPlan) -> None:
@@ -347,7 +352,12 @@ def _insert_building_polygon_stage(pg_url: str, plan: ShpLoadPlan) -> None:
     try:
         with engine.begin() as conn:
             conn.execute(text("SET LOCAL search_path = public, x_extension"))
-            conn.execute(
+            staged_count = int(
+                conn.execute(
+                    text(f"SELECT count(*) FROM {BUILDING_POLYGON_STAGE_TABLE}")
+                ).scalar_one()
+            )
+            result = conn.execute(
                 text(
                     f"""
 INSERT INTO {plan.target_table} (
@@ -387,7 +397,49 @@ WHERE NULLIF(BTRIM(bd_mgt_sn::text), '') IS NOT NULL
                     "source_yyyymm": plan.source_yyyymm,
                 },
             )
+            inserted_count = result.rowcount if result.rowcount >= 0 else staged_count
+            skipped_count = staged_count - inserted_count
+            if skipped_count:
+                print(
+                    "SHP building polygon staging skipped invalid rows: "
+                    f"source_layer={plan.source_layer}, "
+                    f"source_file={plan.source_file}, "
+                    f"staged={staged_count}, inserted={inserted_count}, "
+                    f"skipped={skipped_count}"
+                )
     finally:
+        engine.dispose()
+
+
+def _acquire_building_polygon_stage_lock(pg_url: str) -> tuple[Engine, Connection]:
+    engine = create_engine(pg_url)
+    conn = engine.connect()
+    try:
+        locked = conn.execute(
+            text("SELECT pg_try_advisory_lock(hashtext(:lock_key))"),
+            {"lock_key": BUILDING_POLYGON_STAGE_LOCK_KEY},
+        ).scalar_one()
+        if not bool(locked):
+            msg = (
+                "another TL_SPBD_BULD staging load is already running in this DB; "
+                "retry after it finishes"
+            )
+            raise LoaderError(msg)
+        return engine, conn
+    except Exception:
+        conn.close()
+        engine.dispose()
+        raise
+
+
+def _release_building_polygon_stage_lock(engine: Engine, conn: Connection) -> None:
+    try:
+        conn.execute(
+            text("SELECT pg_advisory_unlock(hashtext(:lock_key))"),
+            {"lock_key": BUILDING_POLYGON_STAGE_LOCK_KEY},
+        )
+    finally:
+        conn.close()
         engine.dispose()
 
 

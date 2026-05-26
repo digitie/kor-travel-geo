@@ -115,6 +115,8 @@ kraddr-geo load daily-parcel-links data/juso/daily/20260401_dailyjusukrdata.zip
 
 `daily_juso_delta`는 여전히 MST만 `tl_juso_text`에 반영한다. daily ZIP의 LNBR까지 적용하려면 같은 ZIP을 `juso_parcel_link_delta`로 한 번 더 실행한다. 두 작업을 분리한 이유는 운영자가 MST와 보조 지번 delta의 실패/재시도 단위를 따로 볼 수 있게 하기 위해서다.
 
+PR #28 이후 `full_load_batch` 기본 child는 5종이 아니라 6종이다. 외부 CI, cron, 직접 API 호출, Python client payload가 아직 `juso_text_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load` 5종만 넘기면 enqueue 전에 `InvalidInputError(E0100)`로 거절된다. 운영자는 `juso_parcel_link_load`를 `juso_text_load` 바로 뒤에 추가하고, 경로는 같은 도로명주소 한글 전체분 디렉터리를 사용한다.
+
 ## 실제 파일 검증
 
 추가/보강 테스트:

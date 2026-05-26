@@ -84,8 +84,13 @@ describe("VWorld MapLibre style", () => {
   });
 
   it("VWorld tile URL의 API key를 upstream helper로 마스킹한다", () => {
-    expect(redactVWorldTileUrl("https://api.vworld.kr/req/wmts/1.0.0/sample-key/Base/1/2/3.png")).toBe(
-      "https://api.vworld.kr/req/wmts/1.0.0/***/Base/1/2/3.png"
+    const redacted = redactVWorldTileUrl(
+      "https://api.vworld.kr/req/wmts/1.0.0/sample-key/Base/1/2/3.png"
     );
+
+    expect(redacted).toBe("https://api.vworld.kr/req/wmts/1.0.0/***/Base/1/2/3.png");
+    expect(redacted).not.toContain("sample-key");
+    expect(redacted.startsWith("https://api.vworld.kr/req/wmts/1.0.0/")).toBe(true);
+    expect(redacted.endsWith("/Base/1/2/3.png")).toBe(true);
   });
 });
