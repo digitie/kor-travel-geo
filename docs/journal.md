@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-030 — 별도 도형/출입구 자료 검토)
+
+**작업**: PR #26 merge 이후 `codex/t030-extra-shape-sources` 브랜치에서 별도 도형/출입구 ZIP 4종을 실제 세종특별자치시 파일로 확인했다.
+
+**실제 파일 확인**:
+- `건물군내동도형_전체분_세종특별자치시.zip`: `TL_SGCO_RNADR_DONG` Polygon 40,478행, `TL_SPBD_ENTRC_DONG` Point 4,098행.
+- `구역의도형_전체분_세종특별자치시.zip`: 기존 전자지도와 중복되는 `TL_SCCO_*`, `TL_KODIS_BAS` 외에 `TL_SCCO_GEMD` 24행, `TL_SPPN_MAKAREA` 146행이 있다.
+- `건물도형_전체분_세종특별자치시.zip`: `TL_SGCO_RNADR_MST` Polygon 27,792행, `TL_SPBD_ENTRC` Point 28,111행, `TL_SPOT_CNTC` PolyLine 27,776행.
+- `도로명주소출입구_전체분_세종특별자치시.zip`: `RNENTDATA_2605_36110.txt` 19컬럼 텍스트이며 direct `bd_mgt_sn`, 도로명주소 키, 출입구 관리번호, EPSG:5179 X/Y를 제공한다.
+
+**결정**:
+- 네 자료를 현재 full-load 기본 source child에는 즉시 추가하지 않는다.
+- `도로명주소 출입구 정보`는 direct `bd_mgt_sn + 5179 point`라 T-039 후보로 둔다.
+- `도로명주소 건물 도형`은 전자지도 `TL_SPBD_BULD` 단순 중복이 아니므로 T-040에서 bundle 비교를 진행한다.
+- 상세주소 동 도형과 구역 추가 레이어는 T-041에서 디버그 UI/상세주소/품질 분석 용도를 따로 검토한다.
+- ADR-023과 `docs/t030-extra-shape-sources.md`에 근거와 후속 순서를 기록했다.
+
+**검증 진행**:
+- `pytest tests/integration/test_real_extra_shape_sources.py -q` → 4 passed.
+- `pytest -q` → 128 passed / 3 skipped.
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
+
+**다음 작업**: 전체 검증 후 PR을 열어 20분 리뷰 대기한다.
+
 ## 2026-05-26 (T-029 — `jibun_rnaddrkor_*` 활용 결정)
 
 **작업**: PR #25 merge 이후 `codex/t029-jibun-rnaddrkor-decision` 브랜치에서 `jibun_rnaddrkor_*`와 daily `TH_SGCO_RNADR_LNBR.TXT`의 실제 구조와 cardinality를 확인했다.

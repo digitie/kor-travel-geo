@@ -731,3 +731,16 @@ CREATE TABLE tl_juso_parcel_link (
 ```
 
 전국 `jibun_rnaddrkor_*` 실제 계측값은 1,769,370행, distinct `bd_mgt_sn` 986,309, 2개 이상 보조 지번을 가진 건물 334,789건이다. 상세 근거는 `docs/t029-jibun-rnaddrkor-decision.md`를 본다.
+
+## 별도 도형/출입구 원천 후보 (ADR-023)
+
+다음 자료는 현재 master table에 아직 적재하지 않는다. T-030 실제 세종 ZIP 검토 결과, 기준월과 레이어 의미가 현행 full-load 기본 source와 다르므로 후속 작업으로 분리한다.
+
+| 자료 | 확인한 성격 | 후속 |
+|------|-------------|------|
+| `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트 | T-039 |
+| `도로명주소 건물 도형` | `TL_SGCO_RNADR_MST` polygon, `TL_SPBD_ENTRC` point, `TL_SPOT_CNTC` polyline bundle | T-040 |
+| `건물군 내 상세주소 동 도형` | 상세주소 동 polygon + 동 출입구 point | T-041 |
+| `구역의 도형` | 전자지도 중복 행정구역 + `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA` 추가 | T-041 |
+
+이 후보들은 `mv_geocode_target`의 `bd_mgt_sn` unique 계약과 대표 좌표 의미를 바로 바꾸지 않는다. 후속 loader가 도입되면 기준월(`source_yyyymm`)과 기존 좌표 source와의 우선순위를 별도 ADR/정합성 케이스로 함께 정의한다.
