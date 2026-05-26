@@ -6,6 +6,7 @@
 - 없음
 
 ## 대기 (우선순위 순)
+- T-043 PR #23~#33 리뷰 코멘트 일괄 audit/fixup — T-036 이후 누적된 PR #23부터 최신 merged/open PR #33까지 GitHub 리뷰 표면을 다시 읽는다. `gh pr view <번호> --json comments,reviews,latestReviews`만 보지 말고 `gh api repos/digitie/python-kraddr-geo/pulls/<번호>/comments`와 GraphQL `reviewThreads`까지 확인한다. 각 PR별로 conversation comment, formal review body, inline review thread, unresolved/resolved 상태를 표로 정리하고, 반영 가능한 내용은 코드/문서 수정 PR로 반영한다. 이미 merge된 PR의 코멘트는 후속 fixup PR에 이관하고, open PR이 있으면 해당 PR에 직접 반영한다. 완료 산출물은 `docs/postmerge-review-fixups-pr23-pr33.md`에 남기고, 반영 후 원 PR 또는 후속 PR에 요약 코멘트를 작성한다.
 - T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회 — `구역의 도형`의 지점번호표기 의무지역 polygon을 `tl_sppn_makarea` 별도 테이블로 적재한다. reverse geocode는 좌표 포함 여부를 `sppn_area` 보조 후보 또는 `x_extension.sppn_makarea`로 노출하고, geocode는 국가지점번호 문자열 parser/generator가 계산한 좌표를 의무지역 polygon으로 검증한다. 구현 전 문서 설계: ADR-027, `docs/t041-detail-zone-shape-layers.md`
 - T-027 최종 실 데이터 클린 적재 검증 — 남은 튜닝/증분/보조 로더 작업을 모두 머지한 뒤 Docker DB를 삭제하고 처음부터 다시 적재한다. C1~C10 정합성, geocode/reverse/search/zipcode smoke test, data-quality export, 성능 로그를 최종 회귀 기준으로 남긴다. 상세: `docs/t027-fullload-plan.md`
 
