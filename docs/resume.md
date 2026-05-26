@@ -61,12 +61,13 @@
 - ✅ T-035 MV refresh/swap 벤치마크 — `scripts/benchmark_mv_refresh.py`를 추가하고 전국 DB에서 `CONCURRENTLY` 1분 49.64초, shadow swap 2분 16.28초를 측정했다. swap rename/index rename 구간은 약 0.016초였고, `ANALYZE`를 별도 transaction으로 분리했다. 상세: `docs/t035-mv-refresh-benchmark.md`
 - ✅ T-036 `maplibre-vworld-js` main 동기화 — `kraddr-geo-ui`의 `maplibre-vworld` dependency를 upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다. 최신 upstream은 `redactVWorldUrl()`와 redaction 표기 `***`를 쓰므로, UI 내부 경계에서는 `redactVWorldUrl as redactVWorldTileUrl` alias로 기존 컴포넌트 계약을 유지하고 테스트를 갱신했다. 상세: `docs/t036-maplibre-vworld-sync.md`
 - ✅ PR #20~#22 post-merge 리뷰 반영 — T-036 merge 이후 사용자 지시 순서대로 PR #22, #21, #20 리뷰 코멘트를 thread-aware로 확인하고, benchmark metadata/public helper, DBF COPY 오류 문맥, full-load phase timer/doc 명확화를 PR #24로 반영했다. 상세: `docs/postmerge-review-fixups-pr20-pr22.md`
-- ✅ T-028 일변동 ZIP 로더 — `data/juso/daily/*.zip`의 `TH_SGCO_RNADR_MST.TXT`를 `tl_juso_text`에 적용하는 daily delta loader, CLI `load daily-juso`, API job kind `daily_juso_delta`를 추가했다. `TH_SGCO_RNADR_LNBR.TXT`는 T-029 전까지 manifest에 미지원 행 수로 기록한다. 실제 `20260401_dailyjusukrdata.zip` MST 422행과 `20260404` `No Data` member를 검증했다. 상세: `docs/t028-daily-juso-delta.md`
+- ✅ T-028 일변동 ZIP 로더 — `data/juso/daily/*.zip`의 `TH_SGCO_RNADR_MST.TXT`를 `tl_juso_text`에 적용하는 daily delta loader, CLI `load daily-juso`, API job kind `daily_juso_delta`를 추가했다. `TH_SGCO_RNADR_LNBR.TXT`는 T-038 전까지 manifest에 미지원 행 수로 기록한다. 실제 `20260401_dailyjusukrdata.zip` MST 422행과 `20260404` `No Data` member를 검증했다. 상세: `docs/t028-daily-juso-delta.md`
+- ✅ T-029 `jibun_rnaddrkor_*` 활용 결정 — 실제 전국 `jibun_rnaddrkor_*` 1,769,370행과 daily `LNBR` 구조를 확인했다. 둘 다 대표 PNU가 아니라 건물↔지번 1:N 관계로 보고, `tl_juso_text.pnu`에 덮어쓰지 않고 후속 `tl_juso_parcel_link` 테이블로 분리하기로 ADR-022에서 확정했다. 상세: `docs/t029-jibun-rnaddrkor-decision.md`
 - 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-T-028 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge한다. 그 다음 구현 작업은 T-029 `jibun_rnaddrkor_*` 활용 여부 결정이다.
+T-029 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있으면 최대한 반영하고 없으면 main에 merge한다. 그 다음 구현 작업은 T-030 상세주소 동 도형/별도 건물 도형 로더 검토다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
@@ -74,7 +75,7 @@ T-028 PR을 열어 약 20분 리뷰 코멘트를 기다린 뒤, 코멘트가 있
 - T-035에서 `kraddr_geo_t033` MV는 여러 번 refresh/swap됐고 최종 상태는 `mv_geocode_target=6,416,637`, `mv_geocode_target_next/old` 없음, index 이름 `idx_mv_*` 정상이다.
 - `maplibre-vworld-js` upstream main 확인 커밋은 `c91c9f304669ce3f5fc4915f21186b23731d5816`이고, 현재 `kraddr-geo-ui`는 이 SHA에 맞춰져 있다. 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하므로 `kraddr-geo-ui/lib/vworld.ts`에서 기존 내부 이름으로 alias한다.
 - PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
-- `daily/*.zip`는 T-028 이후 MST만 적용 가능하다. `jibun_rnaddrkor_*`, daily `LNBR`, `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니다. T-029~T-031로 분리해 로더/ADR를 먼저 잡는다.
+- `daily/*.zip`는 T-028 이후 MST만 적용 가능하다. `jibun_rnaddrkor_*`와 daily `LNBR`는 ADR-022에 따라 후속 `tl_juso_parcel_link`로 분리한다. `건물군 내 상세주소 동 도형`, `도로명주소 출입구 정보`는 현재 full-load 스크립트의 적재 대상이 아니며 T-030에서 중복·보완 관계를 조사한다.
 
 ## 작업 시작 전 확인할 것
 

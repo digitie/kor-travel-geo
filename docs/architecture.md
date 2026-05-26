@@ -115,7 +115,7 @@ REST 큐와 `AsyncAddressClient.submit_load("full_load_batch", ...)`는 같은 `
                                             필요 시 resolve_text_geometry_links + mv_refresh
 ```
 
-일변동은 full-load batch의 기본 child가 아니다. full-load가 끝난 운영 DB에 후속으로 적용하는 별도 작업이며, 적용 후 조회 표면에 반영하려면 운영자가 `refresh mv` 또는 `mv_refresh` job을 실행한다. `LNBR` member는 현재 master table에 쓰지 않고 T-029에서 지번 1:N 관계 테이블 여부를 결정한다(ADR-021).
+일변동은 full-load batch의 기본 child가 아니다. full-load가 끝난 운영 DB에 후속으로 적용하는 별도 작업이며, 적용 후 조회 표면에 반영하려면 운영자가 `refresh mv` 또는 `mv_refresh` job을 실행한다. `LNBR` member는 현재 master table에 쓰지 않고, ADR-022의 후속 T-038에서 `tl_juso_parcel_link` 1:N 테이블로 적재한다.
 
 ## 개발 환경 (PC, WSL)
 
