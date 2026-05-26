@@ -35,6 +35,8 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "CREATE SCHEMA IF NOT EXISTS x_extension" in SCHEMA_SQL
     assert "CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA x_extension" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_juso_text" in SCHEMA_SQL
+    assert "CREATE TABLE IF NOT EXISTS tl_juso_parcel_link" in SCHEMA_SQL
+    assert "REFERENCES tl_juso_text(bd_mgt_sn) ON DELETE CASCADE" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_locsum_entrc" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS load_jobs" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS load_consistency_reports" in SCHEMA_SQL
@@ -48,6 +50,8 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "COALESCE(NULLIF(li_cd, ''), '00')" in SCHEMA_SQL
     assert "NULLIF(rds_sig_cd, '') IS NULL" in SCHEMA_SQL
     assert "NULLIF(rn_cd, '') IS NULL" in SCHEMA_SQL
+    assert "idx_juso_parcel_link_pnu" in INDEX_SQL
+    assert "idx_juso_parcel_link_road" in INDEX_SQL
 
 
 def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:

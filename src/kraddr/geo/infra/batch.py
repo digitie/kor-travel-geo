@@ -9,6 +9,7 @@ from kraddr.geo.exceptions import InvalidInputError
 
 BATCH_SOURCE_KINDS: tuple[str, ...] = (
     "juso_text_load",
+    "juso_parcel_link_load",
     "locsum_load",
     "navi_load",
     "shp_polygons_load",

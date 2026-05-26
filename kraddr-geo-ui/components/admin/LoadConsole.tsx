@@ -11,6 +11,7 @@ import { guessSido } from "@/lib/sido";
 
 const defaultPayloads = {
   juso_text_load: "data/juso/202603_도로명주소 한글_전체분",
+  juso_parcel_link_load: "data/juso/202603_도로명주소 한글_전체분",
   locsum_load: "data/juso/202604_위치정보요약DB_전체분.zip",
   navi_load: "data/juso/202604_내비게이션용DB_전체분",
   shp_polygons_load: "data/juso/도로명주소 전자지도",

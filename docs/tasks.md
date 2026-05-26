@@ -6,7 +6,6 @@
 - 없음
 
 ## 대기 (우선순위 순)
-- T-038 `tl_juso_parcel_link` DDL/로더 구현 — T-029/ADR-022 결정에 따라 `jibun_rnaddrkor_*` full snapshot과 daily `LNBR` delta를 건물↔지번 1:N 테이블로 적재한다.
 - T-039 `도로명주소 출입구 정보` direct entrance loader 검토/구현 — direct `bd_mgt_sn + EPSG:5179` 텍스트를 `tl_locsum_entrc`/`tl_navi_entrc`와 어떻게 병합할지 결정한다.
 - T-040 `도로명주소 건물 도형` bundle 비교 — `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`를 전자지도 `TL_SPBD_BULD`와 비교해 loader 필요성을 결정한다.
 - T-041 상세주소 동 도형/구역 추가 레이어 검토 — `건물군 내 상세주소 동 도형`, `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA`의 디버그 UI/상세주소 기능 활용 여부를 결정한다.
@@ -14,6 +13,7 @@
 - T-027 최종 실 데이터 클린 적재 검증 — 남은 튜닝/증분/보조 로더 작업을 모두 머지한 뒤 Docker DB를 삭제하고 처음부터 다시 적재한다. C1~C10 정합성, geocode/reverse/search/zipcode smoke test, data-quality export, 성능 로그를 최종 회귀 기준으로 남긴다. 상세: `docs/t027-fullload-plan.md`
 
 ## 완료
+- [x] T-038 `tl_juso_parcel_link` DDL/로더 구현. `jibun_rnaddrkor_*` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 별도 1:N 테이블에 적재하고, CLI/API job kind/full-load batch/UI 기본 payload를 연결했다. 실제 Docker DB에서 `jibun_rnaddrkor_seoul.txt`와 `20260401_dailyjusukrdata.zip` LNBR 샘플 적재를 검증했다. 상세: `docs/t038-parcel-link-loader.md` (2026-05-26)
 - [x] T-030 상세주소 동 도형/별도 건물 도형 로더 검토. 세종 실제 ZIP 기준으로 `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보`의 layer/geometry/text 구조를 확인하고, 기본 full-load에 즉시 섞지 않고 T-039~T-041로 분리하기로 ADR-023에서 확정했다. 상세: `docs/t030-extra-shape-sources.md` (2026-05-26)
 - [x] T-029 `jibun_rnaddrkor_*` 활용 여부 결정. 실제 전국 `jibun_rnaddrkor_*` 1,769,370행과 daily `LNBR` 구조를 확인하고, `tl_juso_text.pnu`에 덮어쓰지 않고 후속 `tl_juso_parcel_link` 1:N 테이블로 분리하기로 ADR-022에서 확정했다. 상세: `docs/t029-jibun-rnaddrkor-decision.md` (2026-05-26)
 - [x] T-028 일변동 ZIP 로더. `data/juso/daily/*.zip`의 `TH_SGCO_RNADR_MST.TXT`를 `tl_juso_text`에 UPSERT/DELETE로 적용하고, `TH_SGCO_RNADR_LNBR.TXT`는 T-038 전까지 manifest에 미지원 행 수로 기록한다. 실제 `20260401_dailyjusukrdata.zip` MST 422행과 `20260404` `No Data` member를 검증했다. 상세: `docs/t028-daily-juso-delta.md` (2026-05-26)

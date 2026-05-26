@@ -50,7 +50,7 @@ def downgrade() -> None:
         "tl_navi_entrc",
         "tl_navi_buld_centroid",
         "tl_locsum_entrc",
+        "tl_juso_parcel_link",
         "tl_juso_text",
     ):
         op.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
-

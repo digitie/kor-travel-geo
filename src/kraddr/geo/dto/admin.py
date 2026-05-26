@@ -14,6 +14,8 @@ LoadJobKind = Literal[
     "full_load_batch",
     "juso_text_load",
     "daily_juso_delta",
+    "juso_parcel_link_load",
+    "juso_parcel_link_delta",
     "locsum_load",
     "navi_load",
     "shp_polygons_load",

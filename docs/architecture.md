@@ -84,8 +84,8 @@ Next.js /admin/load
   └─ batch 등록 ─────POST /v1/admin/loads kind=full_load_batch────▶ load_jobs root
                                                                     │
                                                                     ▼
-                                                     source child 5종 직렬 실행
-                                      juso_text · locsum · navi · shp_polygons · pobox
+                                                     source child 6종 직렬 실행
+                       juso_text · juso_parcel_link · locsum · navi · shp_polygons · pobox
                                                                     │
                                                                     ▼
                                                      consistency_check (C1~C10)
@@ -106,7 +106,7 @@ REST 큐와 `AsyncAddressClient.submit_load("full_load_batch", ...)`는 같은 `
                                                                     ▼
                                                      daily_juso_loader.py
                                       TH_SGCO_RNADR_MST.TXT → tl_juso_text
-                                      TH_SGCO_RNADR_LNBR.TXT → manifest count only
+                                      TH_SGCO_RNADR_LNBR.TXT → tl_juso_parcel_link
                                                                     │
                                                                     ▼
                                                      load_manifest daily watermark
@@ -115,7 +115,7 @@ REST 큐와 `AsyncAddressClient.submit_load("full_load_batch", ...)`는 같은 `
                                             필요 시 resolve_text_geometry_links + mv_refresh
 ```
 
-일변동은 full-load batch의 기본 child가 아니다. full-load가 끝난 운영 DB에 후속으로 적용하는 별도 작업이며, 적용 후 조회 표면에 반영하려면 운영자가 `refresh mv` 또는 `mv_refresh` job을 실행한다. `LNBR` member는 현재 master table에 쓰지 않고, ADR-022의 후속 T-038에서 `tl_juso_parcel_link` 1:N 테이블로 적재한다.
+일변동은 full-load batch의 기본 child가 아니다. full-load가 끝난 운영 DB에 후속으로 적용하는 별도 작업이며, 적용 후 조회 표면에 반영하려면 운영자가 `refresh mv` 또는 `mv_refresh` job을 실행한다. `MST`는 `daily_juso_delta`, `LNBR`는 `juso_parcel_link_delta`로 분리 적용한다. 이 분리는 도로명주소 정본 변경과 보조 지번 1:N 변경의 실패/재시도 단위를 분리하기 위한 것이다.
 
 ## 개발 환경 (PC, WSL)
 

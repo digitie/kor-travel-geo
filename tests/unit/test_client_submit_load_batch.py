@@ -55,6 +55,7 @@ async def test_submit_load_full_load_batch_dispatches_batch_path(
         "source_yyyymm": "202604",
         "payloads": {
             "juso_text_load": {"path": "/data/juso"},
+            "juso_parcel_link_load": {"path": "/data/juso"},
             "locsum_load": {"path": "/data/locsum"},
             "navi_load": {"path": "/data/navi"},
             "shp_polygons_load": {"path": "/data/shp"},
@@ -69,6 +70,7 @@ async def test_submit_load_full_load_batch_dispatches_batch_path(
     assert kwargs["payload"] is payload
     children_by_kind = dict(kwargs["children"])
     assert children_by_kind["juso_text_load"] == {"path": "/data/juso"}
+    assert children_by_kind["juso_parcel_link_load"] == {"path": "/data/juso"}
     assert children_by_kind["locsum_load"] == {"path": "/data/locsum"}
     assert children_by_kind["shp_polygons_load"] == {"path": "/data/shp"}
 
@@ -87,7 +89,7 @@ async def test_submit_load_full_load_batch_rejects_incomplete_payloads(
     )
 
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
-    with pytest.raises(InvalidInputError, match="locsum_load"):
+    with pytest.raises(InvalidInputError, match="juso_parcel_link_load"):
         await client.submit_load(
             "full_load_batch",
             {"payloads": {"juso_text_load": {"path": "/data/juso"}}},

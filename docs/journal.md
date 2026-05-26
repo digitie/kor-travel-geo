@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-038 — `tl_juso_parcel_link` DDL/로더 구현)
+
+**작업**: PR #27 merge 이후 `codex/t038-parcel-link-loader` 브랜치에서 ADR-022의 보조 지번 1:N 테이블을 실제 구현했다.
+
+**반영 상세**:
+- `tl_juso_parcel_link` 테이블, 인덱스 3종, Alembic `0004_t038_parcel_link_table`을 추가했다. `bd_mgt_sn`은 `tl_juso_text` FK + `ON DELETE CASCADE`, PK는 `(bd_mgt_sn, pnu)`다.
+- `src/kraddr/geo/loaders/text/parcel_link_loader.py`를 추가했다. `jibun_rnaddrkor_*` full snapshot은 기본 `TRUNCATE` 후 UPSERT하고, daily `LNBR`은 `MVM_RES_CD` mapping에 따라 UPSERT/DELETE한다.
+- CLI `kraddr-geo load parcel-links`, `kraddr-geo load daily-parcel-links`를 추가했다.
+- API job kind `juso_parcel_link_load`, `juso_parcel_link_delta`를 추가했고, `full_load_batch` 기본 child 순서에 `juso_text_load` 직후 `juso_parcel_link_load`를 넣었다.
+- `kraddr-geo-ui` `/admin/load` 기본 payload에도 `juso_parcel_link_load`를 추가했다.
+- `daily_juso_delta`는 MST 전용으로 유지하고, 같은 ZIP의 LNBR은 `juso_parcel_link_delta`로 별도 적용한다.
+
+**실제 파일/DB 검증**:
+- 실제 `jibun_rnaddrkor_seoul.txt`를 새 iterator로 파싱해 PNU `1111012000101500000`, `1114010300100680000`을 확인했다.
+- 실제 `20260401_dailyjusukrdata.zip`의 LNBR 204행을 새 iterator로 파싱하고 첫 행 PNU `4148025326100310007`, `mvmn_de=20260402`, `MVM_RES_CD=31`을 확인했다.
+- Docker PostGIS `localhost:15432`에 `kraddr_geo_t038` DB를 만들고 선택형 실제 적재 테스트를 실행했다. 결과는 `1 passed in 2.81s`이며 snapshot 2행, daily LNBR 5행이 `tl_juso_parcel_link`와 `load_manifest`에 반영됐다.
+- 전체 `pytest -q` → 133 passed / 3 skipped.
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
+- frontend `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
+
+**다음 작업**: PR을 열어 20분 리뷰 대기한다. 리뷰 코멘트가 있으면 최대한 반영하고, 없으면 main에 merge한 뒤 T-039로 진행한다.
+
 ## 2026-05-26 (T-030 — 별도 도형/출입구 자료 검토)
 
 **작업**: PR #26 merge 이후 `codex/t030-extra-shape-sources` 브랜치에서 별도 도형/출입구 ZIP 4종을 실제 세종특별자치시 파일로 확인했다.
