@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-041 문서 보강: `TL_SPPN_MAKAREA`를 단순 overlay 후보가 아니라 국가지점번호 표기 의무지역 polygon으로 정리하고, ADR-027을 추가해 `tl_sppn_makarea` 별도 테이블, reverse geocode `sppn_area` 보조 후보, 국가지점번호 geocode 검증/문맥 보강 설계를 문서화한다. 코드는 아직 구현하지 않는다.
 - T-037 SHP geometry 포함 대형 레이어 튜닝: `TL_SPBD_BULD`를 운영 테이블 직접 GDAL append 대신 projection staging table + 운영 테이블 insert-select 경로로 적재한다. 세종 단일 레이어는 기존 38.36초에서 18.59초로 줄었고, 경기도 1,649,975행은 40분 17.15초에 성공했다. raw staging이 원본 DBF 전체 속성 COPY로 22분 이상 지연된 중간 실패도 문서화해 projection staging 필요성을 명시한다.
 - PR #20~#22 post-merge 리뷰 반영: T-035 benchmark JSON에 `schema_version=2`와 metadata를 추가하고, MV index rename public helper/좁은 예외 처리/ANALYZE lock timeout을 보강한다. T-034 `TL_SPRD_INTRVL` DBF COPY 로더는 row dataclass, CP949/truncated 오류 문맥, deleted record 테스트를 추가한다. T-033 full-load 스크립트는 자료별 timer와 C10/SHP 시간 설명을 보강한다.
 - T-036 VWorld dependency 동기화: `kraddr-geo-ui`의 `maplibre-vworld`를 `digitie/maplibre-vworld-js` upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신한다. 최신 helper 이름 `redactVWorldUrl()`는 내부 alias `redactVWorldTileUrl`로 재수출해 디버그 UI 컴포넌트 계약을 유지하고, redaction 표기 `***`를 테스트로 고정한다.
@@ -59,7 +60,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
-- T-041 상세주소 동 도형/구역 추가 레이어 비교 helper를 추가한다. 실제 세종/경남 `건물군 내 상세주소 동 도형`은 전자지도 `TL_SPBD_BULD`의 부분집합으로 확인했고, `구역의 도형` 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복이었다. `TL_SCCO_GEMD`/`TL_SPPN_MAKAREA`는 별도 overlay/분석 후보로 보류한다.
+- T-041 상세주소 동 도형/구역 추가 레이어 비교 helper를 추가한다. 실제 세종/경남 `건물군 내 상세주소 동 도형`은 전자지도 `TL_SPBD_BULD`의 부분집합으로 확인했고, `구역의 도형` 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복이었다. `TL_SCCO_GEMD`는 별도 overlay/분석 후보로 보류하고, `TL_SPPN_MAKAREA`는 ADR-027에서 국가지점번호 보조 데이터 후보로 승격한다.
 - T-040 `도로명주소 건물 도형` bundle 비교 helper를 추가한다. 실제 세종/경남 `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`를 전자지도 `TL_SPBD_BULD`/`TL_SPBD_ENTRC`와 natural key로 비교했고, 단순 중복이 아니므로 현행 serving table에는 섞지 않기로 ADR-025에서 결정했다.
 - T-039 `도로명주소 출입구 정보` direct entrance loader를 추가한다. `RNENTDATA_2605_*.txt`를 `tl_roadaddr_entrc`에 적재하고, `mv_geocode_target` 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 실제 전국 17개 ZIP 6,418,169행 구조와 세종 Docker DB 샘플 적재를 검증했으며, 202605 기준월 특성상 기본 full-load child에는 자동 포함하지 않는다.
 - T-038 `tl_juso_parcel_link` DDL/로더를 추가한다. `jibun_rnaddrkor_*` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 건물↔지번 1:N 테이블에 적재하고, CLI `load parcel-links`/`load daily-parcel-links`, API job kind `juso_parcel_link_load`/`juso_parcel_link_delta`, full-load batch 기본 child, 관리 UI 기본 payload를 연결했다.

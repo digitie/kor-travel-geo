@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-26 (T-041 후속 — `TL_SPPN_MAKAREA` 문서 보강)
+
+**작업**: 사용자 설명을 반영해 `TL_SPPN_MAKAREA`를 단순 overlay 후보가 아니라 국가지점번호 표기 의무지역 polygon으로 문서화했다. 코드는 작성하지 않았다.
+
+**반영 상세**:
+- `docs/t041-detail-zone-shape-layers.md`에 `TL_SPPN_MAKAREA`의 네이밍(`SPPN`, `MAKAREA`), 업무 의미, 지점번호표기 의무지역 개념, geocode/reverse geocode 활용 방식을 상세히 추가했다.
+- ADR-027을 추가했다. `TL_SPPN_MAKAREA`는 `mv_geocode_target`에 union하지 않고, 후속 `tl_sppn_makarea` 별도 테이블과 `x_extension.sppn_makarea` 또는 `type='sppn_area'` 후보로 노출한다.
+- `docs/data-model.md`, `docs/backend-package.md`, `docs/t030-extra-shape-sources.md`, `docs/t027-fullload-plan.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`를 같은 방향으로 갱신했다.
+
+**결정**:
+- `TL_SPPN_MAKAREA`는 개별 국가지점번호판 point 목록이 아니라 표기 의무지역 polygon이다.
+- geocode는 국가지점번호 문자열 parser/generator가 좌표를 계산한 뒤 해당 좌표가 의무지역에 속하는지 검증하는 enrichment로 사용한다.
+- reverse geocode는 도로명/지번 주소 후보가 없거나 confidence가 낮은 비거주지역에서 `ST_Covers` 기반 보조 후보로 사용한다.
+- 구현 후속 작업은 T-042로 등록했다.
+
+**검증**:
+- 문서 변경만 수행했다. `git diff --check`로 whitespace를 확인한다.
+
 ## 2026-05-26 (T-037 — SHP geometry 포함 대형 레이어 적재 튜닝)
 
 **작업**: PR #31 merge 이후 `codex/t037-shp-geometry-tuning` 브랜치에서 `TL_SPBD_BULD` 직접 GDAL append 병목을 projection staging table 경로로 보강했다.

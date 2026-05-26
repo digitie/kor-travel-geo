@@ -991,7 +991,7 @@ T-040에서 세종특별자치시와 경상남도 실제 파일을 비교했다.
 
 ## ADR-026: 상세주소 동 도형과 구역 추가 레이어는 serving MV가 아니라 별도 overlay/분석 후보로 둔다
 
-- 상태: accepted
+- 상태: accepted, partially amended by ADR-027
 - 날짜: 2026-05-26
 - 결정자: codex, T-041 구현
 
@@ -1042,6 +1042,8 @@ T-030에서 `건물군 내 상세주소 동 도형`과 `구역의 도형` ZIP이
 4. 이 레이어들은 serving 대표 좌표를 바꾸는 원천이 아니라 디버그 UI overlay, 상세주소 기능, 품질 분석용 원천으로 취급한다.
 5. 기준월이 `202605` 계열이므로 기존 `202603~202604` full-load와 섞을 때는 C10 경고 또는 별도 consistency note로 드러낸다.
 
+ADR-027은 이 결정 중 `TL_SPPN_MAKAREA`의 용도를 보강한다. `TL_SPPN_MAKAREA`는 여전히 `mv_geocode_target`에는 union하지 않지만, 단순 overlay보다 높은 가치가 있는 국가지점번호 표기 의무지역 polygon이므로 별도 테이블로 적재해 geocode/reverse geocode 보조 데이터로 활용한다.
+
 ### 근거
 
 - `mv_geocode_target`은 1주소 1행과 대표 좌표를 전제로 한다. 상세주소 동 polygon/출입구를 즉시 펼치면 결과 cardinality와 응답 계약이 바뀐다.
@@ -1058,5 +1060,87 @@ T-030에서 `건물군 내 상세주소 동 도형`과 `구역의 도형` ZIP이
 
 ### 남은 위험
 
-- `TL_SCCO_GEMD`와 `TL_SPPN_MAKAREA`의 정확한 업무 의미는 제공자 PDF/레이아웃 문서 해석이 더 필요하다. 이번 결정은 key overlap과 현행 serving 계약 기준의 보류 결정이다.
+- `TL_SCCO_GEMD`의 정확한 업무 의미는 제공자 PDF/레이아웃 문서 해석이 더 필요하다. 이번 결정은 key overlap과 현행 serving 계약 기준의 보류 결정이다.
+- `TL_SPPN_MAKAREA`는 ADR-027에서 국가지점번호 보조 데이터로 용도를 확정했지만, 개별 국가지점번호판 point 목록이 아니라 표기 의무지역 polygon이라는 한계를 갖는다. 국가지점번호 문자열 parser/generator는 별도 설계가 필요하다.
 - 상세주소 동 도형을 사용자 기능으로 노출하려면 주소 검색 결과에서 동/호/출입구를 어떻게 랭킹하고 응답할지 별도 DTO/API 설계가 필요하다.
+
+---
+
+## ADR-027: `TL_SPPN_MAKAREA`는 국가지점번호 보조 지오코딩 데이터로 별도 적재한다
+
+- 상태: accepted (문서 설계, 구현 전)
+- 날짜: 2026-05-26
+- 결정자: codex, 사용자 T-041 보강 지시
+
+### 컨텍스트
+
+ADR-026은 `구역의 도형` ZIP에서 추가 가치가 있는 레이어로 `TL_SCCO_GEMD`와 `TL_SPPN_MAKAREA`를 식별했지만, 둘 다 기본 serving path에는 넣지 않고 overlay/분석 후보로 보류했다. 이후 `TL_SPPN_MAKAREA`의 의미를 다시 확인했다.
+
+`TL_SPPN_MAKAREA`는 "지점번호표기 의무지역" polygon으로 해석한다.
+
+| 이름 부분 | 의미 |
+|-----------|------|
+| `TL` | Table 또는 Layer |
+| `SPPN` | Spot Point Position Number, 국가지점번호/지점번호 계열 |
+| `MAKAREA` | Marking Area, 표기 의무 구역 |
+
+행정안전부 설명자료는 국가지점번호 제도를 산악·해안 등 건물이 없는 비거주지역에서 사고·재난 발생 시 정확한 위치 안내를 돕기 위한 제도로 설명한다. 같은 설명자료는 표기 대상 지역을 도로명이 부여된 도로에서 100m 이상 떨어진 지역 중 시·도지사가 필요하다고 고시한 지역으로 설명하고, 표기 대상 시설물을 지면 또는 수면에서 50cm 이상 노출된 고정 시설물로 설명한다.
+
+따라서 `TL_SPPN_MAKAREA`는 주소가 없거나 주소 후보 confidence가 낮은 비거주지역에서 geocode/reverse geocode를 보조할 수 있다. 다만 이 레이어는 개별 국가지점번호판이나 시설물 point 목록이 아니라 의무지역의 경계 polygon이다.
+
+### 결정
+
+`TL_SPPN_MAKAREA`를 별도 테이블 `tl_sppn_makarea`로 적재하는 후속 작업을 둔다.
+
+1. `mv_geocode_target`에는 union하지 않는다. 이 MV는 도로명/지번 주소 1행 계약을 유지한다.
+2. reverse geocode는 입력 좌표가 `tl_sppn_makarea.geom`에 포함될 때 국가지점번호 표기 의무지역 metadata를 보조 후보로 반환할 수 있다.
+3. geocode는 국가지점번호 문자열 parser/generator가 좌표를 계산한 뒤, 그 좌표가 `tl_sppn_makarea` 안에 있는지 검증하고 `MAKAREA_NM` 등 구역 문맥을 붙인다.
+4. `MAKAREA_NM`만으로 정확한 geocode 좌표를 만들지는 않는다. 구역명 검색은 polygon centroid/bbox를 낮은 confidence로 반환하는 별도 `search` 또는 관리 UI overlay 기능으로 분리한다.
+5. 응답 확장은 vworld 호환 필드를 오염시키지 않고 `x_extension.sppn_makarea` 또는 명시적인 `type='sppn_area'` 후보로 둔다.
+6. 후속 loader는 `SIG_CD + MAKAREA_ID`를 primary key로 사용하고, `source_file`, `source_yyyymm`, `loaded_at`을 남긴다.
+
+### 제안 테이블
+
+```sql
+CREATE TABLE tl_sppn_makarea (
+  sig_cd        TEXT NOT NULL,
+  makarea_id    TEXT NOT NULL,
+  makarea_nm    TEXT,
+  geom          geometry(MultiPolygon, 5179) NOT NULL,
+  source_file   TEXT NOT NULL,
+  source_yyyymm TEXT,
+  loaded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (sig_cd, makarea_id)
+);
+
+CREATE INDEX idx_sppn_makarea_geom
+  ON tl_sppn_makarea
+  USING GIST (geom);
+```
+
+### 쿼리 원칙
+
+reverse geocode는 입력 좌표를 한 번만 EPSG:5179로 변환하고, polygon 컬럼에는 함수를 씌우지 않는다.
+
+```sql
+WITH target_pt AS (
+  SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179) AS geom
+)
+SELECT m.sig_cd, m.makarea_id, m.makarea_nm
+FROM tl_sppn_makarea m, target_pt p
+WHERE ST_Covers(m.geom, p.geom)
+ORDER BY ST_Area(m.geom) ASC
+LIMIT 5;
+```
+
+`ST_Contains` 대신 `ST_Covers`를 사용해 경계 위 좌표도 포함한다. 여러 구역이 겹치면 작은 면적을 우선하고, 필요하면 행정구역 코드(`SIG_CD`)와 거리/면적 metric을 함께 반환한다.
+
+### 결과
+
+- T-041 문서와 데이터 모델 문서에서 `TL_SPPN_MAKAREA`를 단순 overlay 후보가 아니라 국가지점번호 보조 geocode/reverse 데이터 후보로 승격한다.
+- 구현은 아직 하지 않는다. 후속 태스크에서 DDL, loader, reverse/geocode enrichment, 디버그 UI overlay를 나눠 구현한다.
+- T-027 최종 클린 로드는 이 후속 구현이 들어가기 전까지 `TL_SPPN_MAKAREA`를 기본 full-load child로 포함하지 않는다.
+
+### 참고
+
+- 행정안전부 설명자료: `https://www.mois.go.kr/frt/bbs/type001/commonSelectBoardArticle.do?bbsId=BBSMSTR_000000000009&nttId=66987`
