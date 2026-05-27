@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from kraddr.geo.api import _jobs
 from kraddr.geo.api.responses import register_exception_handlers
 from kraddr.geo.client import AsyncAddressClient
+from kraddr.geo.infra.backup import run_backup_job, run_restore_job
 from kraddr.geo.infra.metrics import (
     PROMETHEUS_CONTENT_TYPE,
     refresh_admin_metrics,
@@ -34,6 +35,7 @@ from kraddr.geo.loaders.text.parcel_link_loader import (
     load_juso_parcel_link_snapshot,
 )
 from kraddr.geo.loaders.text.roadaddr_entrance_loader import load_roadaddr_entrances
+from kraddr.geo.settings import get_settings
 from kraddr.geo.version import __version__
 
 from .routers import admin, geocode, healthz, pobox, reverse, search, zipcode
@@ -88,6 +90,8 @@ app = create_app()
 
 
 def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> None:
+    settings = get_settings()
+
     async def juso(
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
@@ -297,7 +301,23 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
         await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")
 
+    async def db_backup(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        await run_backup_job(engine, settings, payload, cancel_event, progress)
+
+    async def db_restore(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        await run_restore_job(engine, settings, payload, cancel_event, progress)
+
     queue.register("juso_text_load", juso)
+    queue.register("db_backup", db_backup)
+    queue.register("db_restore", db_restore)
     queue.register("daily_juso_delta", daily_juso)
     queue.register("juso_parcel_link_load", parcel_links)
     queue.register("juso_parcel_link_delta", daily_parcel_links)

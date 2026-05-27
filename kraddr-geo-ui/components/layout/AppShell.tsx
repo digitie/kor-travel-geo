@@ -1,5 +1,6 @@
 import {
   Activity,
+  Archive,
   BarChart3,
   Braces,
   Database,
@@ -24,6 +25,7 @@ const debugLinks = [
 
 const adminLinks = [
   { href: "/admin/load", label: "Load", icon: GitBranch },
+  { href: "/admin/backups", label: "Backups", icon: Archive },
   { href: "/admin/tables", label: "Tables", icon: Database },
   { href: "/admin/cache", label: "Cache", icon: BarChart3 },
   { href: "/admin/logs", label: "Logs", icon: FileText },

@@ -1,7 +1,14 @@
 import pytest
 from pydantic import ValidationError
 
-from kraddr.geo.dto.admin import CacheMetrics, ExplainRequest, LoadJobStatus, UploadSidoZipResponse
+from kraddr.geo.dto.admin import (
+    BackupCreateRequest,
+    CacheMetrics,
+    ExplainRequest,
+    LoadJobStatus,
+    RestoreCreateRequest,
+    UploadSidoZipResponse,
+)
 from kraddr.geo.dto.common import Point, ServiceMeta
 from kraddr.geo.dto.pobox import PoboxInput, PoboxResponse, PoboxResultItem
 from kraddr.geo.dto.search import BBox, SearchInput
@@ -59,6 +66,9 @@ def test_admin_debug_dtos_are_bounded() -> None:
     assert ExplainRequest(sql="SELECT 1").analyze is False
     assert LoadJobStatus(job_id="job-1", kind="sido_load", state="queued").progress == 0.0
     assert CacheMetrics(enabled=True, entries=0, hits=0, expired=0).enabled is True
+    assert BackupCreateRequest().format == "directory_tar_zstd"
+    assert BackupCreateRequest(jobs=8, compression_level=5).profile == "serving-ready"
+    assert RestoreCreateRequest(target_database="kraddr_geo_restore").mode == "new_database"
     assert (
         UploadSidoZipResponse(
             upload_id="u1",

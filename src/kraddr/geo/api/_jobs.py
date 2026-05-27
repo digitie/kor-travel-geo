@@ -27,7 +27,8 @@ class ProgressCallback(Protocol):
 
 JobHandler = Callable[[dict[str, Any], asyncio.Event, ProgressCallback], Awaitable[None]]
 ADVISORY_SLOT_LOAD_QUEUE = 470017
-_CONTROL_KIND_SQL = "'full_load_batch', 'consistency_check', 'mv_refresh'"
+_CONTROL_KINDS = {"full_load_batch", "consistency_check", "mv_refresh", "db_backup", "db_restore"}
+_CONTROL_KIND_SQL = ", ".join(f"'{kind}'" for kind in sorted(_CONTROL_KINDS))
 
 
 class JobQueue:
@@ -126,12 +127,14 @@ UPDATE load_jobs
                 if handler is None:
                     await self._fail(job_id, f"no handler registered for load kind: {kind}")
                     continue
+                payload_with_job = dict(payload)
+                payload_with_job.setdefault("_job_id", job_id)
                 cancel_event = asyncio.Event()
                 self._cancel_events[job_id] = cancel_event
                 progress = self._progress_callback(job_id)
                 try:
                     await progress(progress=0.01, stage="running", message="job started")
-                    await handler(payload, cancel_event, progress)
+                    await handler(payload_with_job, cancel_event, progress)
                 except asyncio.CancelledError:
                     await self._cancelled(job_id)
                 except Exception as exc:
@@ -295,7 +298,7 @@ UPDATE load_jobs
         parent_job_id = row["parent_job_id"]
         if batch_id is None or kind == "full_load_batch":
             return
-        if kind not in {"full_load_batch", "consistency_check", "mv_refresh"}:
+        if kind not in _CONTROL_KINDS:
             await self._maybe_enqueue_consistency(str(batch_id), str(parent_job_id or batch_id))
         elif kind == "consistency_check":
             await self._maybe_enqueue_mv_refresh(str(batch_id), str(parent_job_id or batch_id))

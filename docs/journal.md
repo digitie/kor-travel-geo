@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-046 — 적재 완료 DB 백업/복원 및 UI 구현)
+
+**작업**: ADR-030의 적재 완료 DB 백업/복원 설계를 실제 DTO, 설정, 실행 로직, REST API, CLI, 관리 UI, 테스트, 대구광역시 부분 DB 검증으로 구현했다.
+
+**반영 상세**:
+- `db_backup`, `db_restore` job kind와 `BackupCreateRequest`, `RestoreCreateRequest`, `BackupArtifact` DTO를 추가했다.
+- `KRADDR_GEO_BACKUP_ALLOWED_DIRS`, 임시 디렉터리, 병렬 jobs, 압축 level, TTL, callback allowlist, download token secret 설정을 추가했다.
+- `infra.backup`에서 allowlist/symlink escape 검증, `pg_dump -Fd --jobs`, `.part` 기반 `tar.zst` archive, manifest/checksum, `pg_restore -Fd --jobs`, target DB empty/current DB guard, callback, HMAC download token을 구현했다.
+- `pg_dump`/`pg_restore` password는 argv에 넣지 않고 `PGPASSWORD` 환경변수로 넘기도록 해 process argument와 log 노출을 줄였다.
+- `ops.artifacts` helper를 확장해 `db_backup` artifact metadata를 저장하고, backup/restore 작업을 기존 영속 `load_jobs` 큐에 연결했다.
+- `/v1/admin/backups`, `/v1/admin/restores`, `/v1/admin/jobs/{job_id}/events`, `kraddr-geo backup/restore`, `/admin/backups` UI를 추가했다.
+- OpenAPI와 `kraddr-geo-ui` 생성 타입/schema를 갱신했다.
+
+**검증**:
+- Backend targeted pytest 32건, `ruff`, `mypy`를 통과했다.
+- Frontend `eslint`, `tsc --noEmit`, `vitest`, `next build`를 통과했다.
+- Playwright 검증은 사용자 지시에 따라 Windows Node에서 수행했다. `/admin/backups` 화면에서 백업 시작, 복원 시작, 다운로드 링크 노출을 API mock으로 확인했고 screenshot은 `C:\Users\digit\AppData\Local\Temp\t046-admin-backups-windows.png`에 저장했다.
+- Docker PostGIS에서 대구광역시 부분 원천을 실제 적재한 뒤 `/tmp/kraddr-t046/backups/t046_daegu_backup.tar.zst` 백업과 새 DB 복원을 수행했다. 원본/복원 row count는 `tl_juso_text=228,875`, `tl_juso_parcel_link=26,594`, `tl_locsum_entrc=228,610`, `tl_navi_buld_centroid=291,281`, `mv_geocode_target=228,875`로 일치했고, `대구광역시 중구 공평로 88` geocode/reverse smoke test가 모두 `OK`였다.
+
+**후속**:
+- callback retry/backoff, restore 취소 시 target DB drop/quarantine 정책, 디스크 여유 공간 사전 추정, PostgreSQL/PostGIS major mismatch hard-fail은 hardening task로 남긴다.
+- 전국 full-load 재실행과 전체 쿼리 성능 벤치마크는 T-027/T-047에서 진행한다.
+- 다음 작업은 T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회 구현이다.
+
 ## 2026-05-27 (T-045 — source set 기준월 선택과 대용량 업로드/적재 UX 구현)
 
 **작업**: ADR-029의 source set 설계를 실제 DTO, 탐지/계획 helper, upload set 저장소, REST, 라이브러리, CLI, `/admin/load` UI와 테스트로 구현했다.

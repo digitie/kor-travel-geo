@@ -342,6 +342,22 @@ class AsyncAddressClient:
             state=state,
         )
 
+    async def get_artifact(self, artifact_id: str) -> OpsArtifact:
+        artifact = await AdminRepository(self._engine()).get_artifact(artifact_id)
+        if artifact is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"artifact not found: {artifact_id}")
+        return artifact
+
+    async def delete_artifact(self, artifact_id: str) -> OpsArtifact:
+        artifact = await AdminRepository(self._engine()).mark_artifact_deleted(artifact_id)
+        if artifact is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"artifact not found: {artifact_id}")
+        return artifact
+
     async def list_maintenance_windows(
         self,
         *,

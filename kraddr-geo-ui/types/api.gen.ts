@@ -89,6 +89,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Backups */
+        get: operations["list_backups_v1_admin_backups_get"];
+        put?: never;
+        /** Submit Backup */
+        post: operations["submit_backup_v1_admin_backups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/backups/{artifact_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Backup */
+        get: operations["get_backup_v1_admin_backups__artifact_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/backups/{artifact_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete Backup */
+        post: operations["delete_backup_v1_admin_backups__artifact_id__delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/backups/{artifact_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Backup */
+        get: operations["download_backup_v1_admin_backups__artifact_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/cache/metrics": {
         parameters: {
             query?: never;
@@ -219,6 +288,23 @@ export interface paths {
         put?: never;
         /** Cancel Job */
         post: operations["cancel_job_v1_admin_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/jobs/{job_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Job Events */
+        get: operations["job_events_v1_admin_jobs__job_id__events_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -516,6 +602,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/restores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Restore */
+        post: operations["submit_restore_v1_admin_restores_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/tables": {
         parameters: {
             query?: never;
@@ -726,6 +829,94 @@ export interface components {
             min_x: number;
             /** Min Y */
             min_y: number;
+        };
+        /** BackupArtifact */
+        BackupArtifact: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Artifact Type */
+            artifact_type: string;
+            /** Callback State */
+            callback_state?: string | null;
+            /** Callback Url */
+            callback_url?: string | null;
+            /** Compression */
+            compression?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Download Url */
+            download_url?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Job Id */
+            job_id?: string | null;
+            /** Manifest */
+            manifest?: {
+                [key: string]: unknown;
+            };
+            /** Media Type */
+            media_type?: string | null;
+            /** Release Id */
+            release_id?: string | null;
+            /** Retention Class */
+            retention_class?: string | null;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Snapshot Id */
+            snapshot_id?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "creating" | "available" | "failed" | "deleted" | "expired";
+            /**
+             * Storage Kind
+             * @enum {string}
+             */
+            storage_kind: "local_file" | "s3" | "gcs" | "none";
+            /** Storage Uri */
+            storage_uri?: string | null;
+        };
+        /** BackupCreateRequest */
+        BackupCreateRequest: {
+            /** Callback Url */
+            callback_url?: string | null;
+            /** Compression Level */
+            compression_level?: number | null;
+            /** Destination Dir */
+            destination_dir?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /**
+             * Format
+             * @default directory_tar_zstd
+             * @constant
+             */
+            format: "directory_tar_zstd";
+            /**
+             * Include Materialized Views
+             * @default true
+             */
+            include_materialized_views: boolean;
+            /** Jobs */
+            jobs?: number | null;
+            /**
+             * Profile
+             * @default serving-ready
+             * @enum {string}
+             */
+            profile: "serving-ready" | "lean-serving" | "forensic";
+            /** Retention Days */
+            retention_days?: number | null;
         };
         /** @description Coordinate reference system normalized as EPSG:XXXX */
         CRS: string;
@@ -995,7 +1186,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Kind */
-            kind: ("full_load_batch" | "juso_text_load" | "daily_juso_delta" | "juso_parcel_link_load" | "juso_parcel_link_delta" | "roadaddr_entrance_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
+            kind: ("full_load_batch" | "db_backup" | "db_restore" | "juso_text_load" | "daily_juso_delta" | "juso_parcel_link_load" | "juso_parcel_link_delta" | "roadaddr_entrance_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
             /** Load Batch Id */
             load_batch_id?: string | null;
             /**
@@ -1031,7 +1222,7 @@ export interface components {
         /** LoadSubmitRequest */
         LoadSubmitRequest: {
             /** Kind */
-            kind: ("full_load_batch" | "juso_text_load" | "daily_juso_delta" | "juso_parcel_link_load" | "juso_parcel_link_delta" | "roadaddr_entrance_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
+            kind: ("full_load_batch" | "db_backup" | "db_restore" | "juso_text_load" | "daily_juso_delta" | "juso_parcel_link_load" | "juso_parcel_link_delta" | "roadaddr_entrance_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -1263,6 +1454,44 @@ export interface components {
             structure: components["schemas"]["AddressStructure"];
             /** Text */
             text: string;
+        };
+        /** RestoreCreateRequest */
+        RestoreCreateRequest: {
+            /** Archive Path */
+            archive_path?: string | null;
+            /** Artifact Id */
+            artifact_id?: string | null;
+            /** Callback Url */
+            callback_url?: string | null;
+            /** Confirmation */
+            confirmation?: string | null;
+            /** Jobs */
+            jobs?: number | null;
+            /**
+             * Mode
+             * @default new_database
+             * @enum {string}
+             */
+            mode: "new_database" | "replace_current";
+            /**
+             * Run Analyze
+             * @default true
+             */
+            run_analyze: boolean;
+            /**
+             * Run Consistency
+             * @default false
+             */
+            run_consistency: boolean;
+            /**
+             * Run Smoke Test
+             * @default true
+             */
+            run_smoke_test: boolean;
+            /** Target Database */
+            target_database?: string | null;
+            /** Target Dsn */
+            target_dsn?: string | null;
         };
         /** @enum {string} */
         ResultSource: "local" | "api_juso" | "api_vworld" | "cache";
@@ -2023,6 +2252,166 @@ export interface operations {
             };
         };
     };
+    list_backups_v1_admin_backups_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                state?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupArtifact"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_backup_v1_admin_backups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoadJobStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_backup_v1_admin_backups__artifact_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupArtifact"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_backup_v1_admin_backups__artifact_id__delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupArtifact"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_backup_v1_admin_backups__artifact_id__download_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     cache_metrics_v1_admin_cache_metrics_get: {
         parameters: {
             query?: never;
@@ -2254,6 +2643,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoadJobStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_events_v1_admin_jobs__job_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -2868,6 +3288,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TableStatsSnapshot"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_restore_v1_admin_restores_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
             /** @description Validation Error */
