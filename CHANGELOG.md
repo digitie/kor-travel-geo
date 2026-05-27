@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-051 에이전트별 고정 worktree와 CodeGraph 운용 문서화: ChatGPT Codex `geo-codex`, Claude Code `geo-claude`, Google Antigravity 2.0 `geo-antigravity` worktree를 고정하고 작업마다 branch만 새로 따도록 ADR-034, 개발 환경 문서, 에이전트 가이드를 보강했다. CodeGraph는 각 worktree에서 최초 `codegraph init -i`, 이후 `codegraph sync`로 유지하며 `.codegraph/`를 Git ignore 대상으로 추가했다.
 - PR #34~#47 리뷰 코멘트 audit/fixup: PR #35의 `source_set` typed schema를 nested JSON 보존형으로 보강하고 OpenAPI/프론트엔드 타입을 갱신했다. PR #43의 `ops.audit_events.job_id` FK는 `ON DELETE NO ACTION`으로 변경해 감사 이벤트와 job 연결이 조용히 끊기지 않게 했다. PR #38/#42 후속으로 `maplibre-vworld-js` 최신 `7947b2e` 동기화와 WSL Linux Node frontend 검증 helper를 추가했다.
 - T-027 최종 클린 적재 보강: 실제 `data/juso` 전국 원천을 빈 Docker PostGIS DB에 처음부터 적재해 총 3,934초, `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`, smoke `OK`를 확인했다. 기준월이 다른 `tl_roadaddr_entrc=202605`를 serving 1순위로 쓰면 C4/C6/C7이 증가해, MV와 정합성 serving CTE를 `tl_locsum_entrc` 우선 + same-month direct fallback으로 보정했다. C10은 row-level `source_yyyymm` 집계를 우선해 `distinct_months=3` WARN을 보고한다.
 - T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회 구현: `tl_sppn_makarea` DDL/Alembic, GDAL Python binding loader, `kraddr-geo load sppn-makarea`, API job kind `sppn_makarea_load`, source set optional child, 국가지점번호 parser/formatter, geocode/reverse `x_extension.sppn_makarea`를 추가한다. Docker PostGIS에서 세종 `구역의 도형` 실제 ZIP 146행을 적재했고, `금이산` polygon 내부 점을 `다바 7363 4856`으로 formatter → geocode/reverse 조회까지 검증했다.
