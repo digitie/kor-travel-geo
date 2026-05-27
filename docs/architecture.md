@@ -132,7 +132,7 @@ REST 큐와 `AsyncAddressClient.submit_load("full_load_batch", ...)`는 같은 `
 
 ADR-029/T-045부터 full-load 입력은 단일 `yyyymm`이 아니라 원천별 기준월을 가진 `source_set`으로 다룬다. CLI는 기준월이 서로 다른 source set을 발견하면 사용자에게 의도한 혼합 적재인지 확인하고, API/라이브러리는 prompt 없이 `discover_load_sources()`와 `build_full_load_source_set_plan()`을 분리 제공한다. UI는 모든 파일 저장이 끝난 뒤 source set을 분석하고, 기준월이 맞지 않으면 확인 modal을 거쳐 적재를 시작한다. 새 plan은 `payloads` mapping 대신 명시 `children` 배열을 만들어 선택 원천만 batch DAG에 포함한다.
 
-`roadaddr_entrance_load`는 T-039부터 등록된 선택 child다. direct `bd_mgt_sn + EPSG:5179` 출입구를 `tl_roadaddr_entrc`에 적재하고 MV 대표 좌표 1순위 후보로 사용하지만, 현재 로컬 자료 기준월이 `202605`라 기본 full-load 6종에는 자동 포함하지 않는다. 같은 기준월의 전체분을 확보했거나 C10 기준월 불일치를 의도적으로 감수하는 검증에서는 `children` 또는 `child_jobs`에 명시해 batch에 포함한다.
+`roadaddr_entrance_load`는 T-039부터 등록된 선택 child다. direct `bd_mgt_sn + EPSG:5179` 출입구를 `tl_roadaddr_entrc`에 적재한다. T-027 최종 클린 적재 재검증 이후 MV/정합성 serving CTE는 `tl_locsum_entrc`를 먼저 쓰고, direct 출입구는 `tl_roadaddr_entrc.source_yyyymm`이 `tl_juso_text.source_yyyymm`와 같은 기준월일 때만 fallback 후보로 사용한다. 현재 로컬 자료 기준월은 direct 출입구가 `202605`, 텍스트 정본이 `202603`이라 기본 full-load 6종에는 자동 포함하지 않고, 명시 child로 적재하더라도 serving 좌표에는 승격하지 않는다.
 
 ## 데이터 흐름 — DB 백업/복원 (ADR-030, T-046)
 

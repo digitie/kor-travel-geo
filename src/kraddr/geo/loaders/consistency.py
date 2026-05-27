@@ -115,15 +115,20 @@ WITH serving_entrc AS MATERIALIZED (
          geom,
          source_kind
     FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             0 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-      UNION ALL
       SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             1 AS source_priority,
+             0 AS source_priority,
              CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
         FROM tl_locsum_entrc
        WHERE bd_mgt_sn IS NOT NULL
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             1 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+       WHERE source_yyyymm IN (
+         SELECT DISTINCT source_yyyymm
+           FROM tl_juso_text
+          WHERE source_yyyymm IS NOT NULL
+       )
     ) e
    ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
 ),
@@ -157,15 +162,20 @@ WITH serving_entrc AS MATERIALIZED (
          geom,
          source_kind
     FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             0 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-      UNION ALL
       SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             1 AS source_priority,
+             0 AS source_priority,
              CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
         FROM tl_locsum_entrc
        WHERE bd_mgt_sn IS NOT NULL
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             1 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+       WHERE source_yyyymm IN (
+         SELECT DISTINCT source_yyyymm
+           FROM tl_juso_text
+          WHERE source_yyyymm IS NOT NULL
+       )
     ) e
    ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
 ),
@@ -297,15 +307,20 @@ WITH serving_entrc AS MATERIALIZED (
          geom,
          source_kind
     FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             0 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-      UNION ALL
       SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             1 AS source_priority,
+             0 AS source_priority,
              CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
         FROM tl_locsum_entrc
        WHERE bd_mgt_sn IS NOT NULL
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             1 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+       WHERE source_yyyymm IN (
+         SELECT DISTINCT source_yyyymm
+           FROM tl_juso_text
+          WHERE source_yyyymm IS NOT NULL
+       )
     ) e
    ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
 ),
@@ -362,15 +377,20 @@ WITH serving_entrc AS MATERIALIZED (
          geom,
          source_kind
     FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             0 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-      UNION ALL
       SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             1 AS source_priority,
+             0 AS source_priority,
              CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
         FROM tl_locsum_entrc
        WHERE bd_mgt_sn IS NOT NULL
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             1 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+       WHERE source_yyyymm IN (
+         SELECT DISTINCT source_yyyymm
+           FROM tl_juso_text
+          WHERE source_yyyymm IS NOT NULL
+       )
     ) e
    ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
 ),
@@ -426,15 +446,20 @@ WITH serving_entrc AS MATERIALIZED (
          geom,
          source_kind
     FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
-             0 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-      UNION ALL
       SELECT bd_mgt_sn, ent_man_no, geom, 'locsum' AS source_kind,
-             1 AS source_priority,
+             0 AS source_priority,
              CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
         FROM tl_locsum_entrc
        WHERE bd_mgt_sn IS NOT NULL
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 'roadaddr' AS source_kind,
+             1 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+       WHERE source_yyyymm IN (
+         SELECT DISTINCT source_yyyymm
+           FROM tl_juso_text
+          WHERE source_yyyymm IS NOT NULL
+       )
     ) e
    ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
 ),
@@ -491,8 +516,44 @@ SELECT count(*)::bigint AS count,
         name="텍스트/SHP 적재 기준월 불일치",
         threshold="기준월 2종 이상 WARN",
         sql="""
-WITH sources AS (
-  SELECT table_name, source_yyyymm
+WITH row_sources AS (
+  SELECT 'tl_juso_text' AS table_name, source_yyyymm, count(*)::bigint AS row_count
+    FROM tl_juso_text
+   WHERE source_yyyymm IS NOT NULL
+   GROUP BY source_yyyymm
+  UNION ALL
+  SELECT 'tl_locsum_entrc' AS table_name, source_yyyymm, count(*)::bigint AS row_count
+    FROM tl_locsum_entrc
+   WHERE source_yyyymm IS NOT NULL
+   GROUP BY source_yyyymm
+  UNION ALL
+  SELECT 'tl_roadaddr_entrc' AS table_name, source_yyyymm, count(*)::bigint AS row_count
+    FROM tl_roadaddr_entrc
+   WHERE source_yyyymm IS NOT NULL
+   GROUP BY source_yyyymm
+  UNION ALL
+  SELECT 'tl_navi_buld_centroid' AS table_name, source_yyyymm, count(*)::bigint AS row_count
+    FROM tl_navi_buld_centroid
+   WHERE source_yyyymm IS NOT NULL
+   GROUP BY source_yyyymm
+  UNION ALL
+  SELECT 'tl_navi_entrc' AS table_name, source_yyyymm, count(*)::bigint AS row_count
+    FROM tl_navi_entrc
+   WHERE source_yyyymm IS NOT NULL
+   GROUP BY source_yyyymm
+  UNION ALL
+  SELECT 'tl_spbd_buld_polygon' AS table_name, source_yyyymm, count(*)::bigint AS row_count
+    FROM tl_spbd_buld_polygon
+   WHERE source_yyyymm IS NOT NULL
+   GROUP BY source_yyyymm
+  UNION ALL
+  SELECT 'tl_sppn_makarea' AS table_name, source_yyyymm, count(*)::bigint AS row_count
+    FROM tl_sppn_makarea
+   WHERE source_yyyymm IS NOT NULL
+   GROUP BY source_yyyymm
+),
+manifest_sources AS (
+  SELECT table_name, source_yyyymm, row_count::bigint
     FROM load_manifest
    WHERE table_name IN (
          'tl_juso_text',
@@ -500,9 +561,22 @@ WITH sources AS (
          'tl_roadaddr_entrc',
          'tl_navi_buld_centroid',
          'tl_navi_entrc',
-         'tl_spbd_buld_polygon'
+         'tl_spbd_buld_polygon',
+         'tl_sppn_makarea'
        )
      AND source_yyyymm IS NOT NULL
+),
+sources AS (
+  SELECT table_name, source_yyyymm, row_count, 'rows' AS evidence
+    FROM row_sources
+  UNION ALL
+  SELECT table_name, source_yyyymm, row_count, 'manifest' AS evidence
+    FROM manifest_sources m
+   WHERE NOT EXISTS (
+     SELECT 1
+       FROM row_sources r
+      WHERE r.table_name = m.table_name
+   )
 ),
 stats AS (
   SELECT count(*)::bigint AS total,

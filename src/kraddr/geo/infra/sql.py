@@ -700,16 +700,21 @@ WITH best_entrc AS (
          ent_man_no,
          geom AS ent_pt_5179
     FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 0 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-      UNION ALL
       SELECT bd_mgt_sn,
              ent_man_no,
              geom,
-             1 AS source_priority,
+             0 AS source_priority,
              CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
         FROM tl_locsum_entrc
        WHERE bd_mgt_sn IS NOT NULL
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 1 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+       WHERE source_yyyymm IN (
+         SELECT DISTINCT source_yyyymm
+           FROM tl_juso_text
+          WHERE source_yyyymm IS NOT NULL
+       )
     ) e
    ORDER BY bd_mgt_sn,
             source_priority,

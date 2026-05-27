@@ -8,7 +8,7 @@
 **도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 한국 주소 지오코딩 라이브러리·REST API**입니다. vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 지원합니다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kraddr-geo-ui`](docs/frontend-package.md)로 운영합니다.
 
 > [!NOTE]
-> **현재 상태**: `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다. T-005~T-042 구현·실데이터 검증 기록, T-049 운영 메타데이터 1차 구현, T-045 source set 기준월 선택과 대용량 업로드/적재 UX, T-046 DB 백업/복원 UI와 대구 부분 DB 실제 backup/restore 검증이 반영되어 있으며, T-027/T-047/T-044 후속 운영·성능·지도 UI 보강 계획이 문서화되어 있습니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
+> **현재 상태**: `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다. T-005~T-042 구현·실데이터 검증 기록, T-049 운영 메타데이터 1차 구현, T-045 source set 기준월 선택과 대용량 업로드/적재 UX, T-046 DB 백업/복원 UI와 대구 부분 DB 실제 backup/restore 검증이 반영되어 있습니다. T-027 최종 클린 적재에서는 실제 전국 `data/juso`를 빈 Docker PostGIS DB에 처음부터 적재해 `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`, smoke `OK`를 확인했고, 남은 후속은 T-047 쿼리 성능 튜닝과 T-044 지도 UI 경계화입니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
 
 ---
 
@@ -70,6 +70,7 @@ kraddr-geo load daily-parcel-links ./data/juso/daily/20260401_dailyjusukrdata.zi
 
 # 선택: 도로명주소 출입구 정보 direct 좌표 적재
 # 현재 로컬 원천은 202605 기준월이라 기본 full-load에는 자동 포함하지 않습니다.
+# 기준월이 텍스트 정본과 다르면 적재는 되지만 serving MV 좌표에는 승격되지 않습니다.
 kraddr-geo load roadaddr-entrances "./data/juso/도로명주소 출입구 정보" --yyyymm 202605
 kraddr-geo refresh mv --swap
 

@@ -89,6 +89,7 @@ print(ds.GetLayer(0).GetFeatureCount())
 ## 6. 알려진 함정
 
 - **TMP가 Windows Temp를 가리키는 경우**: WSL에서 `TMP=/mnt/c/...`로 셸이 열리면 pytest capture가 `FileNotFoundError`로 실패한다. `TMPDIR=/tmp TMP=/tmp TEMP=/tmp pytest -q`로 Linux `/tmp`를 명시한다(docs/resume.md "알려진 함정").
+- **Playwright/UI 브라우저 테스트**: 사용자 지시에 따라 Playwright는 Windows Node/브라우저 환경에서 실행한다. WSL에서는 백엔드, Node unit/type/build 검증까지만 수행하고, 실제 브라우저 렌더링·screenshot·지도 상호작용 검증은 Windows에서 명령과 screenshot 경로를 함께 기록한다.
 - **NTFS에서 직접 git/pip 실행**: 권한·inotify·심볼릭 링크 모두 손해. 코드/가상환경은 ext4에 두고 결과만 NTFS로 카피(AGENTS.md, SKILL.md §1).
 - **GDAL Python 바인딩 버전 미스매치**: `pip install gdal>=3.8`만으로는 시스템과 다른 wheel을 받아 import 시 `undefined symbol`. 위 §3의 핀 절차 필수.
 - **`libgdal-dev` 누락**: `gdal-config: command not found`. apt 설치만 하면 해결.

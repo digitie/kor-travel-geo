@@ -12,9 +12,11 @@
 
 기존 대표 출입구 좌표는 `tl_locsum_entrc`에 적재한 위치정보요약DB를 기반으로 한다. 이 원천은 좌표 품질은 좋지만 실제 `entrc_*.txt`가 `bd_mgt_sn`을 직접 제공하지 않아, 적재 후 `rncode_full + 건물번호 + bjd_cd + zip_no`로 `tl_juso_text`와 후해소해야 한다. 전국 full-load에서 `tl_locsum_entrc.bd_mgt_sn` 해소 실패가 C3 WARN의 큰 원인이었다.
 
-`도로명주소 출입구 정보`는 direct `bd_mgt_sn + EPSG:5179 point`를 제공한다. T-039는 이 원천을 별도 테이블 `tl_roadaddr_entrc`에 저장하고, 이 테이블이 채워져 있으면 `mv_geocode_target`의 대표 출입구 후보로 `tl_locsum_entrc`보다 먼저 사용하게 한다.
+`도로명주소 출입구 정보`는 direct `bd_mgt_sn + EPSG:5179 point`를 제공한다. T-039는 이 원천을 별도 테이블 `tl_roadaddr_entrc`에 저장한다. T-027 최종 클린 적재 재검증 전에는 이 테이블이 채워져 있으면 `mv_geocode_target`의 대표 출입구 후보로 `tl_locsum_entrc`보다 먼저 사용하도록 설계했지만, 2026-05-27 전국 실제 적재에서 기준월이 다른 direct 출입구(`202605`)를 `juso=202603`, SHP/locsum/navi=`202604` 세트에 즉시 섞으면 C4/C6/C7 오류가 크게 늘어나는 것이 확인됐다.
 
-단, 이 원천은 202605 계열이고 기존 full-load 기준월(`juso=202603`, `locsum/navi/shp=202604`)과 다르다. 따라서 기본 `full_load_batch` child에는 넣지 않고, 운영자가 별도 job/CLI로 명시 실행한다. 기준월 혼합은 C10에 `tl_roadaddr_entrc`를 포함해 드러낸다.
+따라서 현재 운영 기본값은 `tl_locsum_entrc` 대표 출입구를 먼저 사용하고, `tl_roadaddr_entrc`는 `source_yyyymm`이 `tl_juso_text.source_yyyymm`와 같은 기준월일 때만 fallback serving 후보로 승격한다. 기준월이 다른 direct 출입구는 테이블에 적재해 원천 추적, 분석, 미래 같은 기준월 세트 검증에는 사용하되, 기본 `mv_geocode_target` 좌표와 C3/C4/C6/C7/C8 serving CTE에는 반영하지 않는다.
+
+이 원천은 202605 계열이고 기존 full-load 기준월(`juso=202603`, `locsum/navi/shp=202604`)과 다르다. 따라서 기본 `full_load_batch` child에는 넣지 않고, 운영자가 별도 job/CLI로 명시 실행한다. 기준월 혼합은 C10에 `tl_roadaddr_entrc`를 포함해 드러낸다. C10은 T-027 최종 클린 적재 보강 이후 `load_manifest`뿐 아니라 각 테이블의 row-level `source_yyyymm`도 집계하므로, 현재 로컬 조합은 `distinct_months=3` WARN으로 기록된다.
 
 ## 실제 파일 구조와 계측
 
@@ -125,7 +127,7 @@ kraddr-geo load roadaddr-entrances "data/juso/도로명주소 출입구 정보" 
 6. 기본값으로 `tl_roadaddr_entrc`를 `TRUNCATE`한 뒤 `bd_mgt_sn` 기준 UPSERT한다.
 7. `load_manifest(table_name='tl_roadaddr_entrc')`에 `source_yyyymm`, checksum, `source_set.kind='roadaddr_entrance_full'`을 기록한다.
 
-적재 직후 조회 표면에 반영하려면 `kraddr-geo refresh mv --swap`을 실행한다. 기존 DB가 T-039 이전 MV 정의를 갖고 있으면 `REFRESH MATERIALIZED VIEW CONCURRENTLY`만으로는 direct 출입구 우선순위가 생기지 않는다. shadow swap은 현재 코드의 `MV_SQL`로 새 MV를 빌드하므로 T-039 정의 전환까지 함께 처리한다.
+적재 직후 조회 표면에 반영하려면 `kraddr-geo refresh mv --swap`을 실행한다. 기존 DB가 T-039 이전 MV 정의를 갖고 있으면 `REFRESH MATERIALIZED VIEW CONCURRENTLY`만으로는 direct 출입구 fallback 규칙이 생기지 않는다. shadow swap은 현재 코드의 `MV_SQL`로 새 MV를 빌드하므로 T-039/T-027 정의 전환까지 함께 처리한다.
 
 API job kind:
 
@@ -137,16 +139,28 @@ API job kind:
 
 `mv_geocode_target`의 대표 좌표 선택 순서:
 
-1. `tl_roadaddr_entrc` direct entrance
-2. `tl_locsum_entrc` 대표 출입구(`ent_se_cd='0'` 우선)
+1. `tl_locsum_entrc` 대표 출입구(`ent_se_cd='0'` 우선)
+2. `tl_roadaddr_entrc` direct entrance 중 `source_yyyymm`이 `tl_juso_text.source_yyyymm`와 같은 후보
 3. `tl_navi_buld_centroid` centroid fallback
 
 응답의 `pt_source`는 direct entrance와 locsum entrance 모두 기존 계약처럼 `entrance`로 유지한다. API 응답의 호환성을 깨지 않기 위해 새 `pt_source` 값을 만들지 않았다. 원천별 세부 추적은 `source_file`, `source_yyyymm`, 정합성 sample의 `source_kind`로 확인한다.
 
 정합성 변경:
 
-- C3/C4/C6/C7/C8은 `tl_roadaddr_entrc`와 `tl_locsum_entrc`를 합친 대표 출입구 CTE를 사용한다.
-- C10은 `tl_roadaddr_entrc`의 `source_yyyymm`도 기준월 비교 대상에 포함한다.
+- C3/C4/C6/C7/C8은 `tl_locsum_entrc`와 same-month `tl_roadaddr_entrc`를 합친 대표 출입구 CTE를 사용한다.
+- C10은 `tl_roadaddr_entrc`의 row-level `source_yyyymm`도 기준월 비교 대상에 포함한다.
+
+### T-027 최종 클린 적재에서 확인한 정책 보정
+
+2026-05-27 Docker PostGIS 최종 클린 적재에서 `tl_roadaddr_entrc` 전국 6,404,697건을 `202605`로 적재했다. 기존 우선순위(`roadaddr → locsum → navi`)로 C1~C10을 실행하면 direct 출입구가 `juso=202603`/SHP=`202604`와 다른 기준월이라 C4/C6/C7이 다음처럼 증가했다.
+
+| 조건 | C4 `over_50m` | C4 `over_500m` | C6 | C7 |
+|------|--------------:|---------------:|---:|---:|
+| `roadaddr` 우선 | 12,225 | 91 | 3,593 | 9,827 |
+| `locsum`만 임시 비교 | 3,415 | 16 | 803 | 6,817 |
+| same-month gate 적용 후 | 3,415 | 16 | 803 | 6,817 |
+
+따라서 direct 출입구는 "있으면 무조건 더 정확한 좌표"로 보지 않는다. 같은 기준월 세트가 확보되기 전에는 분석용 테이블로 유지하고, serving 좌표는 기존 locsum/navi 경로를 사용한다. 같은 기준월의 `rnaddrkor_*`와 `RNENTDATA_*`를 확보한 뒤 direct 출입구를 다시 승격하려면 `kraddr-geo refresh mv --swap`과 C3/C4/C6/C7/C8 재검증 결과를 PR 또는 운영 로그에 남긴다.
 
 ## 검증
 
@@ -175,10 +189,10 @@ KRADDR_GEO_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15432/kraddr_ge
 - `1 passed in 2.74s`
 - 실제 세종 `RNENTDATA_2605_36110.txt` 3행을 `tl_roadaddr_entrc`에 적재.
 - `load_manifest.kind='roadaddr_entrance_full'`, `row_count=3`, `source_yyyymm='202605'`, `upserted_rows=3` 확인.
-- 같은 `bd_mgt_sn`을 가진 테스트 parent를 `tl_juso_text`에 넣고 MV를 생성해, `pt_source='entrance'`와 `pt_5179` 좌표가 `tl_roadaddr_entrc` 좌표와 일치함을 확인.
+- 같은 `bd_mgt_sn`과 같은 `source_yyyymm`을 가진 테스트 parent를 `tl_juso_text`에 넣고 MV를 생성하면, `pt_source='entrance'`와 `pt_5179` 좌표가 `tl_roadaddr_entrc` 좌표와 일치해야 한다. 기준월이 다르면 direct 출입구는 적재되어도 serving 후보로 쓰지 않는다.
 
 ## 남은 작업
 
 - T-040: 완료. `도로명주소 건물 도형` bundle과 전자지도 `TL_SPBD_BULD` 비교.
 - T-041: 완료. 상세주소 동 도형과 구역 추가 레이어는 기본 full-load/MV에 섞지 않고 별도 overlay/분석 후보로 둔다.
-- T-027 최종 클린 적재: `tl_roadaddr_entrc`를 포함할지 운영 모드별로 분기하고, 포함 시 C10 기준월 경고와 C3/C4/C6/C7 변화량을 기록한다.
+- T-027 최종 클린 적재: 완료. `tl_roadaddr_entrc`는 적재하되 기준월이 다른 경우 serving 후보에서 제외하는 same-month gate를 추가했다. C10은 row-level 기준월 집계로 `202603/202604/202605` 혼합을 WARN으로 보고한다.

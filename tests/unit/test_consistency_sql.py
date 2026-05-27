@@ -16,6 +16,8 @@ def test_building_polygon_cases_use_natural_key_not_management_number() -> None:
     assert "'error_count', count" in c2
     assert "WITH serving_entrc AS MATERIALIZED" in c4
     assert "FROM tl_roadaddr_entrc" in c4
+    assert c4.index("FROM tl_locsum_entrc") < c4.index("FROM tl_roadaddr_entrc")
+    assert "WHERE source_yyyymm IN (" in c4
     assert "UNION ALL" in c4
     assert "JOIN tl_juso_text j ON j.bd_mgt_sn = e.bd_mgt_sn" in c4
     assert "source_kind" in c4
@@ -35,9 +37,13 @@ def test_polygon_contains_cases_treat_boundary_points_as_inside() -> None:
     assert "ST_Covers(bas_geom, geom)" in c6
     assert "ST_Covers(emd_geom, geom)" in c7
     assert "WITH serving_entrc AS MATERIALIZED" in c6
+    assert c6.index("FROM tl_locsum_entrc") < c6.index("FROM tl_roadaddr_entrc")
+    assert "WHERE source_yyyymm IN (" in c6
     assert "base AS MATERIALIZED" in c6
     assert "violations AS MATERIALIZED" in c6
     assert "WITH serving_entrc AS MATERIALIZED" in c7
+    assert c7.index("FROM tl_locsum_entrc") < c7.index("FROM tl_roadaddr_entrc")
+    assert "WHERE source_yyyymm IN (" in c7
     assert "base AS MATERIALIZED" in c7
     assert "violations AS MATERIALIZED" in c7
     assert "ST_Contains" not in c6
@@ -51,5 +57,20 @@ def test_road_adjacency_uses_manage_linestring_geometry() -> None:
     assert "m.geom IS NOT NULL" in c8
     assert "ST_DWithin(b.geom, m.geom, 100)" in c8
     assert "FROM tl_roadaddr_entrc" in c8
+    assert c8.index("FROM tl_locsum_entrc") < c8.index("FROM tl_roadaddr_entrc")
+    assert "WHERE source_yyyymm IN (" in c8
     assert "source_kind" in c8
     assert "JOIN tl_sprd_rw" not in c8
+
+
+def test_c10_includes_optional_sppn_makarea_manifest() -> None:
+    c10 = CASE_SQL["C10"].sql
+
+    assert "WITH row_sources AS" in c10
+    assert "row_count" in c10
+    assert "'rows' AS evidence" in c10
+    assert "'manifest' AS evidence" in c10
+    assert "'tl_juso_text' AS table_name" in c10
+    assert "'tl_spbd_buld_polygon' AS table_name" in c10
+    assert "'tl_sppn_makarea'" in c10
+    assert "source_yyyymm IS NOT NULL" in c10

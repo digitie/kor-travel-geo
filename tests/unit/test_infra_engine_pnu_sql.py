@@ -66,6 +66,8 @@ def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
     assert "pt_source" in MV_SQL
     assert "tl_roadaddr_entrc" in MV_SQL
     assert "tl_locsum_entrc" in MV_SQL
+    assert MV_SQL.index("FROM tl_locsum_entrc") < MV_SQL.index("FROM tl_roadaddr_entrc")
+    assert "WHERE source_yyyymm IN (" in MV_SQL
     assert "tl_navi_buld_centroid" in MV_SQL
     assert "best_navi" in MV_SQL
     assert "left(bjd_cd, 8)" in MV_SQL

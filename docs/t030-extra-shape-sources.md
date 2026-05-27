@@ -98,7 +98,7 @@ ZIP 안에는 SHP가 아니라 `RNENTDATA_2605_36110.txt` 하나가 있다. 첫 
 | 15~16 | 출입구/좌표 구분 코드 | 예: `RM`, `01` |
 | 17~18 | EPSG:5179 X/Y | meter 좌표 |
 
-이 자료는 `tl_locsum_entrc`와 달리 `bd_mgt_sn`을 직접 제공한다. 따라서 위치정보요약DB의 natural key 후해소가 실패하는 건이나 C4 이상치 분석에 직접 보완 후보가 된다. T-039에서 별도 테이블 `tl_roadaddr_entrc`와 loader를 추가했고, MV 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 다만 기준월이 `202605`라 기본 full-load 6종에는 자동 포함하지 않고 명시적 선택 적재로 둔다.
+이 자료는 `tl_locsum_entrc`와 달리 `bd_mgt_sn`을 직접 제공한다. 따라서 위치정보요약DB의 natural key 후해소가 실패하는 건이나 C4 이상치 분석에 직접 보완 후보가 된다. T-039에서 별도 테이블 `tl_roadaddr_entrc`와 loader를 추가했다. T-027 최종 클린 적재 재검증 이후 MV 대표 좌표는 `tl_locsum_entrc`를 먼저 쓰고, `tl_roadaddr_entrc`는 `source_yyyymm`이 `tl_juso_text.source_yyyymm`와 같은 기준월일 때만 fallback으로 사용한다. 현재 로컬 원천은 기준월이 `202605`라 기본 full-load 6종에는 자동 포함하지 않고 명시적 선택 적재/분석용으로 둔다.
 
 ## 결정
 

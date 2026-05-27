@@ -99,6 +99,17 @@ SELECT sig_cd, makarea_id, makarea_nm,
                     )
                 )
             ).mappings().one()
+            manifest = (
+                await conn.execute(
+                    text(
+                        """
+SELECT row_count, source_yyyymm, source_set ->> 'kind' AS kind
+  FROM load_manifest
+ WHERE table_name = 'tl_sppn_makarea'
+"""
+                    )
+                )
+            ).mappings().one()
 
         sppn = format_national_point_number_from_5179(
             Point(x=float(sample["x5179"]), y=float(sample["y5179"]))
@@ -116,6 +127,9 @@ SELECT sig_cd, makarea_id, makarea_nm,
         assert summary["keys"] == 146
         assert summary["all_multipolygon"] is True
         assert summary["all_valid"] is True
+        assert manifest["row_count"] == 146
+        assert manifest["source_yyyymm"] == "202605"
+        assert manifest["kind"] == "sppn_makarea"
         assert geocode_response.status == "OK"
         assert geocode_response.x_extension is not None
         assert geocode_response.x_extension.national_point_number == sppn.text
