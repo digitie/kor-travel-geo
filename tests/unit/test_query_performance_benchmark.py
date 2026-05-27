@@ -29,13 +29,19 @@ def test_query_benchmark_parser_defaults() -> None:
     assert args.warmup == 1
     assert args.concurrency is None
     assert args.statement_timeout_ms == 5_000
+    assert args.pool_size is None
+    assert args.max_overflow is None
 
 
 def test_query_benchmark_parser_accepts_multiple_concurrency_values() -> None:
     parser = build_parser()
-    args = parser.parse_args(["--concurrency", "1", "--concurrency", "4"])
+    args = parser.parse_args(
+        ["--concurrency", "1", "--concurrency", "4", "--pool-size", "64", "--max-overflow", "0"]
+    )
 
     assert args.concurrency == [1, 4]
+    assert args.pool_size == 64
+    assert args.max_overflow == 0
 
 
 def test_percentile_uses_linear_interpolation() -> None:

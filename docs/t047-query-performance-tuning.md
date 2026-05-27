@@ -92,11 +92,76 @@ after plan은 `idx_mv_jibun_name_exact`를 사용했고, `si_nm`/`sgg_nm`/`mntn_
 
 ### 남은 후속
 
-- `standard` 1,000건 이상, `stress` 10,000건 이상 corpus를 만든다.
-- 동시성 64와 REST API end-to-end latency를 측정한다.
+- `stress` 10,000건 이상 corpus를 만든다.
+- REST API end-to-end latency를 측정한다.
 - T-057 `sig_cd`/`bjd_cd`/bbox region hint를 같은 harness에 붙여 hint vs no-hint p95/p99를 비교한다.
 - Q3/Q4 search/fuzzy는 `UNION ALL` 분리, query split, text-search slim MV 후보를 별도 trial로 검증한다.
 - `idx_mv_jibun_name_exact`가 MV refresh/swap, backup profile, disk envelope에 미치는 영향을 다음 full-load 회귀에서 다시 기록한다.
+
+## 2026-05-28 standard corpus 1차 측정
+
+PR #51 머지 후 같은 harness를 최신 `main` 위에서 실행했다. 이 run은 T-047의 `standard` 최소 규모를 처음 충족한 DB-only client wall time 측정이다.
+
+### Corpus와 실행 조건
+
+| 항목 | 값 |
+|------|----:|
+| run id | `t047-standard-20260528` |
+| case count | 1,100 |
+| `cases_per_group` | 100 |
+| corpus sha256 | `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f` |
+| measured iterations | 1 |
+| warmup iterations | 1 |
+| concurrency | 1, 4, 16, 64 |
+| SQLAlchemy pool | 기본값 `pool_size=10`, `max_overflow=5` |
+| errors | 0 |
+| `pg_stat_statements` | 비활성 |
+
+동시성 1/16/64 p95 핵심:
+
+| query군 | p95 c1 | p95 c16 | p95 c64 |
+|---------|-------:|--------:|--------:|
+| Q1 도로명 exact | 8.52ms | 27.99ms | 459.16ms |
+| Q2 지번 exact | 4.66ms | 24.59ms | 339.66ms |
+| Q3 fuzzy geocode | 15.30ms | 41.18ms | 353.92ms |
+| Q4 통합 search | 62.12ms | 116.06ms | 421.36ms |
+| Q5 reverse nearest | 4.95ms | 27.97ms | 274.55ms |
+| Q6 reverse radius | 5.00ms | 28.32ms | 206.62ms |
+| Q7 zipcode address | 6.27ms | 25.68ms | 455.22ms |
+| Q7 zipcode point | 4.88ms | 28.03ms | 276.14ms |
+| Q8 no-result reverse | 4.90ms | 26.52ms | 230.42ms |
+| Q8 no-result road | 4.76ms | 27.55ms | 222.18ms |
+| Q11 국가지점번호 reverse | 5.16ms | 30.64ms | 167.53ms |
+
+관찰:
+
+- 동시성 1에서는 Q4 통합 search가 가장 느렸지만 p95 `62.12ms`로 ADR-031 DB 목표 `150ms` 안에 있다.
+- 동시성 16까지는 모든 query군이 목표 안에 들어왔다.
+- 동시성 64에서는 client wall time 기준 Q1/Q2/Q3/Q4/Q5/Q7/Q8 tail이 크게 오른다. 이 run은 기본 pool 최대 15개 connection을 사용하므로 결과에는 DB 실행시간뿐 아니라 pool 대기와 Python scheduling이 섞여 있다.
+
+### Trial 002 — pool-size 64 비교
+
+pool 대기와 DB contention을 분리하기 위해 같은 `corpus.json`을 재사용하고 동시성 64만 `--pool-size 64 --max-overflow 0`으로 다시 실행했다.
+
+| query군 | p95 c64 기본 pool | p95 c64 pool 64 | 해석 |
+|---------|------------------:|----------------:|------|
+| Q1 도로명 exact | 459.16ms | 371.57ms | pool 대기 일부 감소, 여전히 tail 큼 |
+| Q2 지번 exact | 339.66ms | 156.76ms | name-key index + 충분한 pool에서 크게 안정 |
+| Q3 fuzzy geocode | 353.92ms | 417.46ms | connection 증가가 CPU/search contention을 키움 |
+| Q4 통합 search | 421.36ms | 481.22ms | Q3와 같은 패턴, query split 후보 |
+| Q5 reverse nearest | 274.55ms | 250.54ms | 소폭 개선 |
+| Q6 reverse radius | 206.62ms | 251.50ms | 약간 악화 |
+| Q7 zipcode address | 455.22ms | 374.73ms | pool 대기 일부 감소 |
+| Q7 zipcode point | 276.14ms | 280.90ms | 거의 동일 |
+| Q8 no-result reverse | 230.42ms | 131.61ms | pool 대기 영향이 컸음 |
+| Q8 no-result road | 222.18ms | 122.75ms | pool 대기 영향이 컸음 |
+| Q11 국가지점번호 reverse | 167.53ms | 156.74ms | 소폭 개선 |
+
+결론:
+
+- 동시성 64 tail은 단일 원인이 아니다. Q2/Q8은 pool 확대로 확실히 좋아졌지만, Q3/Q4는 오히려 악화되어 DB CPU 또는 trigram 후보 경합을 의심해야 한다.
+- 운영 API 기본 pool을 무작정 64로 올리는 것은 적절하지 않다. API worker 수, pool 크기, admission control을 함께 잡고, Q3/Q4는 query split/`UNION ALL`/text-search slim MV를 별도 trial로 봐야 한다.
+- 후속 T-047/T-057에서는 REST API e2e latency와 `pg_stat_statements`를 활성화한 DB execution aggregate가 필요하다. 현재 harness의 wall time은 end-to-end DB client 관점이라 pool 대기를 포함한다.
 
 ## 목표
 
