@@ -40,7 +40,7 @@
 - ✅ FastAPI admin 보강 — `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`
 - ✅ PR #12 리뷰 보강 — 업로드 path traversal/크기 제한, 프록시 `/v1` 제한과 스트리밍 전달, React Query retry, EXPLAIN timeout, LoadConsole/Explain/Reverse/Consistency 에러 처리, CI `scripts` import 실패 수정
 - ✅ PR #15 리베이스/리뷰 보강 — PR #14 merge 이후 최신 `main` 위로 rebase하고, `maplibre-vworld`를 upstream main commit `a5b3c65`로 고정해 helper/CSS를 실제 package에서 소비한다. 이후 후속 PR에서는 upstream PR #9 commit `11321fe`로 동기화해 VWorld tile error/redaction helper까지 공유한다.
-- 🟡 PR #13/T-027 계획 보강 — `data/juso` 전체 인벤토리, Docker full-load 실행 금지선, 기준월 분리(`JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`), `PLAN_ONLY=1` preflight, 미지원 자료 후속 태스크를 문서화
+- ✅ PR #13/T-027 계획 보강 — `data/juso` 전체 인벤토리, Docker full-load 실행 금지선, 기준월 분리(`JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`), `PLAN_ONLY=1` preflight, 미지원 자료 후속 태스크를 문서화
 - 🟡 Windows 재설치/새 Codex 세션 복구 문서화 — `docs/windows-reinstall-recovery.md`에 Git/PR handoff, `data/`·`.env` 백업, WSL 복구, Codex `resume`/`fork`/로컬 백업 명령을 정리하고 `CLAUDE.md`/`docs/dev-environment-recovery.md`의 실제 적재 금지선을 동기화
 - 🟡 PR #14/T-027 실제 전체 적재 실행 — WSL ext4 작업 사본 `~/kraddr-geo-data`와 Docker PostGIS(`localhost:15432`)에서 텍스트/NAVI/SHP/MV 적재를 수행
 - ✅ 실제 SHP 17개 시도 × 9개 레이어 재적재 완료 — 153 레이어, 3시간 10분 4초, `tl_spbd_buld_polygon` 10,687,732행, `tl_sprd_intrvl` 16,993,167행, `tl_sprd_rw` 1,482,679행
@@ -50,7 +50,7 @@
 - ✅ PR #14 리뷰 반영 — Alembic `0002_t027_shp_schema_fixups`, SHP generated column 빈 문자열 보정, `KRADDR_GEO_DB_PORT` 네이밍, MV index 경고, SHP truncate row snapshot, PR 리뷰 확인 프로토콜 문서화
 - ✅ PR #14 추가 리뷰 반영 — `tl_sprd_rw` migration non-polygon row guard, MV index rename live catalog 유도, locsum `staging_seq`, navi zero-coordinate skip, GDAL `connect_timeout`, C6/C7 `ST_Covers` 전환
 - ✅ 실제 C2/C4/C6/C7 선택 재검증 — C2 `missing_text=34,118`/`missing_resolve_key=581`, C4 `over_500m=16`, C6 803/C7 6,817 유지 확인
-- 🟡 T-031 데이터 품질 후속 분석 PR 분리 — PR #14 close 이후 이어갈 C2/C4/C6/C7 sample/지도/원천 파일 역추적 계획을 `docs/t027-data-quality-followup.md`에 정리
+- ✅ T-031 데이터 품질 후속 분석 PR 분리 — PR #14 close 이후 이어갈 C2/C4/C6/C7 sample/지도/원천 파일 역추적 계획을 `docs/t027-data-quality-followup.md`에 정리
 - ✅ PR #17/T-031 보강 — `kraddr-geo validate data-quality-samples` CLI와 C2/C4/C6/C7 CSV export SQL을 추가하고, SHP loader가 `source_file`/`source_yyyymm`을 적재하도록 보강
 - ✅ PR #17 실제 Docker DB 검증 — `localhost:15432`에서 CSV 8개 export 성공(2분 52.45초, RSS 79,956KB). C2 `missing_resolve_key` 581건은 전부 `rds_sig_cd` 결측, C4 500m+ 상위 7건은 출입구 경도 약 `+2.0`도 이상치 패턴 확인
 - ✅ PR #18 VWorld debug helper sync — T-032 성능 튜닝 전에 `maplibre-vworld-js` PR #9 commit `11321fe`와 `kraddr-geo-ui` helper 소비 상태를 최신 main 위에서 정리하고 frontend lint/type/test/build 재검증
@@ -65,7 +65,7 @@
 - ✅ T-029 `jibun_rnaddrkor_*` 활용 결정 — 실제 전국 `jibun_rnaddrkor_*` 1,769,370행과 daily `LNBR` 구조를 확인했다. 둘 다 대표 PNU가 아니라 건물↔지번 1:N 관계로 보고, `tl_juso_text.pnu`에 덮어쓰지 않고 후속 `tl_juso_parcel_link` 테이블로 분리하기로 ADR-022에서 확정했다. 상세: `docs/t029-jibun-rnaddrkor-decision.md`
 - ✅ T-030 별도 도형/출입구 자료 검토 — `건물군 내 상세주소 동 도형`, `구역의 도형`, `도로명주소 건물 도형`, `도로명주소 출입구 정보` 세종 ZIP을 열어 layer/geometry/text 구조를 확인했다. 기본 full-load에는 즉시 섞지 않고 T-039~T-041로 분리하기로 ADR-023에서 확정했다. 상세: `docs/t030-extra-shape-sources.md`
 - ✅ T-038 `tl_juso_parcel_link` DDL/로더 — `jibun_rnaddrkor_*` full snapshot과 daily `TH_SGCO_RNADR_LNBR.TXT` delta를 별도 1:N 테이블에 적재한다. CLI/API job kind/full-load batch/UI 기본 payload를 연결했고, Docker DB `kraddr_geo_t038`에서 실제 서울 `jibun` 2행과 daily LNBR 5행 적재를 검증했다. 상세: `docs/t038-parcel-link-loader.md`
-- ✅ T-039 `도로명주소 출입구 정보` direct entrance loader — `RNENTDATA_2605_*.txt`를 `tl_roadaddr_entrc`에 별도 적재하고, MV 대표 좌표는 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 실제 전국 17개 ZIP 6,418,169행 구조, 세종 유효 좌표 27,779행, Docker DB `kraddr_geo_t039` 샘플 적재와 MV 우선순위를 검증했다. 상세: `docs/t039-roadaddr-entrance-loader.md`
+- ✅ T-039 `도로명주소 출입구 정보` direct entrance loader — `RNENTDATA_2605_*.txt`를 `tl_roadaddr_entrc`에 별도 적재한다. T-027 최종 클린 적재 보강 이후 MV 대표 좌표는 `tl_locsum_entrc` → same-month `tl_roadaddr_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 실제 전국 17개 ZIP 6,418,169행 구조, 세종 유효 좌표 27,779행, Docker DB `kraddr_geo_t039` 샘플 적재와 T-027 same-month gate를 검증했다. 상세: `docs/t039-roadaddr-entrance-loader.md`
 - ✅ T-040 `도로명주소 건물 도형` bundle 비교 — 세종/경남 실제 address building bundle을 전자지도 `TL_SPBD_BULD`/`TL_SPBD_ENTRC`와 비교했다. address polygon key 교집합은 세종 15,339/27,792, 경남 345,290/656,230으로 단순 중복이 아니어서 serving loader는 보류하고 분석 후보로 분리했다. 상세: `docs/t040-building-shape-bundle.md`
 - ✅ T-041 상세주소 동 도형/구역 추가 레이어 검토 — 세종/경남 실제 `건물군 내 상세주소 동 도형`이 전자지도 `TL_SPBD_BULD`의 부분집합임을 확인했다. `구역의 도형`의 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복이다. `TL_SCCO_GEMD`는 별도 overlay/분석 후보로 남기고, `TL_SPPN_MAKAREA`는 ADR-027에서 국가지점번호 보조 geocode/reverse 데이터 후보로 승격했다. 상세: `docs/t041-detail-zone-shape-layers.md`
 - ✅ T-037 geometry 포함 SHP 대형 레이어 적재 튜닝 — `TL_SPBD_BULD`를 projection staging table + 운영 테이블 insert-select 경로로 분기했다. 세종 단일 레이어는 기존 append 38.36초에서 18.59초로 줄었고, 경기도 1,649,975행 단일 레이어는 40분 17.15초에 성공했다. 세종 SHP 9개 레이어 public CLI 적재도 Docker DB에서 확인했다. 상세: `docs/t037-shp-geometry-tuning.md`
@@ -77,19 +77,20 @@
 - ✅ README 법적 고지 보강 — 프로젝트가 AI 활용 방식과 개발 워크플로를 학습·검증하기 위한 기술 연구 프로젝트이며, 외부 원천 데이터/API는 제공 기관의 조건을 준수하는 것을 전제로 사용한다고 명시했다.
 - ✅ 문서 정합성 재검토 — `master`/`main` 표현, README/SKILL quick start CLI 예시, `kraddr-geo-ui` 소유 설명, T-046 artifact registry 명칭, README ADR 목록, 후속 task 순서를 현재 코드와 ADR에 맞춰 정리했다. 상세: `docs/doc-consistency-audit-20260527.md`
 - ✅ T-043 PR #23~#41 리뷰 코멘트 audit/fixup — conversation/review/inline/thread 표면을 모두 확인하고 unresolved review thread 0개를 기록했다. VWorld alias/test, daily delta 운영 문서와 `--limit-per-file` 경고, `TL_SPBD_BULD` staging advisory lock/skip metric, ADR-027 위험 섹션 등을 보강했다. 상세: `docs/postmerge-review-fixups-pr23-latest.md`
-- 🟡 실제 C1~C10 재검증 완료 — C4/C5는 크게 개선됐지만 C2/C4/C6/C7은 실제 데이터 기준 `ERROR`가 남아 후속 분석 필요
+- ✅ T-027 최종 실 데이터 클린 적재 1회 완료 — Docker PostGIS `localhost:15432`의 빈 DB에 실제 `data/juso` 원천을 처음부터 적재했다. 총 3,934초, `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`, smoke `OK`를 확인했다. direct `tl_roadaddr_entrc=202605`를 `juso=202603` 세트에 바로 serving 승격하면 C4/C6/C7이 증가해, MV/정합성 serving CTE는 `tl_locsum_entrc` 우선 + same-month direct fallback으로 보정했다.
+- ✅ 실제 C1~C10 재검증 완료 — 보정 후 C1~C10은 611.71초에 완료됐고 `severity_max=ERROR`다. C2 34,699건, C4 3,415건(`over_500m=16`), C6 803건, C7 6,817건은 기존 실제 데이터 품질 이슈로 유지된다. C10은 row-level 기준월 집계로 `distinct_months=3` WARN을 보고한다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-027 최종 실 데이터 클린 적재 검증이다. 남은 구현이 main에 머지된 뒤 Docker DB를 비우고 실제 `data/juso` 원천을 처음부터 다시 적재해 C1~C10 정합성, geocode/reverse/search/zipcode smoke, data-quality export, `sppn_makarea` optional source 포함 여부, 전체 시간/시스템 상태를 최종 회귀 기준으로 남긴다. 그 다음 후보는 T-047 전국 적재 후 쿼리 성능 벤치마크, T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화 순서다.
+다음 작업은 T-027 최종 클린 적재 보강 PR을 열고 리뷰를 기다린 뒤 main에 머지하는 것이다. 머지 후에는 T-047 전국 적재 후 쿼리 성능 벤치마크를 같은 DB 상태에서 시작한다. T-047은 p50/p95/p99, `EXPLAIN ANALYZE`, `pg_stat_statements`, 동시성 결과와 튜닝 전후 차이를 문서화한다. 그 다음 후보는 T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
-- 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
+- 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
 - T-034에서 `TL_SPRD_INTRVL` 전용 COPY 경로를 검증했고, T-037에서 `TL_SPBD_BULD` projection staging 경로도 검증했다. 전국 전체 SHP 시간은 T-027 최종 클린 로드에서 다시 확인한다.
 - T-035에서 `kraddr_geo_t033` MV는 여러 번 refresh/swap됐고 최종 상태는 `mv_geocode_target=6,416,637`, `mv_geocode_target_next/old` 없음, index 이름 `idx_mv_*` 정상이다.
 - `maplibre-vworld-js` upstream main 확인 커밋은 `1a28b1099ab6c9c03e892e469974aee8c07deda1`이고, 현재 `kraddr-geo-ui`는 이 SHA에 맞춰져 있다. 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하므로 `kraddr-geo-ui/lib/vworld.ts`에서 기존 내부 이름으로 alias한다. T-044에서는 이 helper 소비 상태를 넘어서 `VWorldMap`/Hook 기반으로 경계화하되, 범용 지도 primitive만 upstream에 두고 지오코딩/역지오코딩/관리 UI 특화 기능은 이 저장소 wrapper에 남긴다.
 - PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
-- `daily/*.zip`는 T-028 이후 MST를 `tl_juso_text`에 적용할 수 있고, T-038 이후 `LNBR`를 `tl_juso_parcel_link`에 별도 delta로 적용할 수 있다. `도로명주소 출입구 정보`는 T-039 이후 `tl_roadaddr_entrc`에 적재할 수 있으며 MV 대표 출입구 1순위 후보가 된다. `도로명주소 건물 도형`은 T-040 이후 분석 helper로 비교 가능하지만 serving loader는 보류한다. T-041 상세주소 동/구역 추가 레이어도 `scripts/compare_extra_shape_layers.py`로 비교 가능하다. `TL_SPPN_MAKAREA`는 T-042 이후 `tl_sppn_makarea` 별도 loader/조회 경로가 있으며, source set에서는 optional `sppn_makarea_load` child로 연결된다.
+- `daily/*.zip`는 T-028 이후 MST를 `tl_juso_text`에 적용할 수 있고, T-038 이후 `LNBR`를 `tl_juso_parcel_link`에 별도 delta로 적용할 수 있다. `도로명주소 출입구 정보`는 T-039 이후 `tl_roadaddr_entrc`에 적재할 수 있으며, 같은 기준월 세트에서만 MV fallback 후보가 된다. `도로명주소 건물 도형`은 T-040 이후 분석 helper로 비교 가능하지만 serving loader는 보류한다. T-041 상세주소 동/구역 추가 레이어도 `scripts/compare_extra_shape_layers.py`로 비교 가능하다. `TL_SPPN_MAKAREA`는 T-042 이후 `tl_sppn_makarea` 별도 loader/조회 경로가 있으며, source set에서는 optional `sppn_makarea_load` child로 연결된다.
 - 원천별 업데이트 시점은 서로 다를 수 있다. ADR-029/T-045 구현에 따라 새 full-load UX는 단일 `yyyymm`이 아니라 `source_set.yyyymm_by_kind`를 사용하며, 기준월이 섞이면 CLI/UI에서 정확한 `YYYYMM/... 혼합 적재 확인` 문구를 받아야 한다. API/라이브러리는 prompt 없이 `discover_load_sources()`와 `build_full_load_source_set_plan()`을 분리 제공한다. `/admin/load`는 업로드가 끝난 뒤 source set을 분석하고 `full_load_batch`의 명시 `children` payload를 등록한다.
 - T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. 남은 hardening은 callback retry/backoff, restore 취소 시 target DB drop/quarantine 정책, 디스크 여유 공간 사전 추정, PostgreSQL/PostGIS major mismatch hard-fail이다. 전국 full-load 재실행은 후속 T-027에서 수행한다.
 - T-049 운영 메타데이터는 1차 구현 상태다. 현재 구현은 DDL/API/UI와 redacted audit event, maintenance window 생성/종료, table stats snapshot capture를 제공한다. T-045/T-046/T-047을 진행할 때 source set 확정, backup/restore artifact, 성능 리포트, MV swap 성공 지점을 `ops.dataset_snapshots`, `ops.artifacts`, `ops.serving_releases`에 실제로 연결하는 보강이 이어져야 한다.

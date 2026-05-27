@@ -164,6 +164,8 @@ geometryType=PROMOTE_TO_MULTI
 
 loader는 `_staging_sppn_makarea`라는 고정 staging table을 사용하므로, 같은 DB에서 동시에 두 개의 `TL_SPPN_MAKAREA` 적재가 실행되면 서로 stage를 지울 수 있다. 이를 막기 위해 `pg_try_advisory_lock(hashtext('kraddr.geo.loaders.sppn_makarea_loader.stage'))`를 적재 전체 구간에 걸고, lock을 얻지 못하면 fail-fast한다. API batch queue는 기본적으로 직렬이지만, CLI를 직접 여러 개 실행하는 운영자 실수를 방어하기 위한 장치다.
 
+적재가 끝나면 `load_manifest.table_name='tl_sppn_makarea'`를 갱신한다. `row_count`, `source_yyyymm`, `source_set.kind='sppn_makarea'`, `source_files`를 남겨 C10 기준월 정합성과 최종 full-load 실행 로그에서 optional source를 함께 추적할 수 있게 한다.
+
 실제 적재 중 발견해 수정한 문제:
 
 - 최초 초안은 문자 컬럼 정규화에 `REPLACE(col, chr(0), '')`를 사용했다.

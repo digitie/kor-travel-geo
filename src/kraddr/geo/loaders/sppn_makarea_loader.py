@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 import zipfile
 from collections.abc import Callable
@@ -179,6 +180,12 @@ def _load_sources_sync(
                     _drop_stage(pg_url)
         if analyze:
             _analyze_target(pg_url)
+        _record_manifest(
+            pg_url,
+            sources=sources,
+            mode=mode,
+            source_yyyymm=source_yyyymm,
+        )
         if on_progress:
             on_progress(1.0)
         return total_rows
@@ -363,6 +370,65 @@ def _analyze_target(pg_url: str) -> None:
     try:
         with engine.begin() as conn:
             conn.execute(text(f"ANALYZE {TARGET_TABLE}"))
+    finally:
+        engine.dispose()
+
+
+def _record_manifest(
+    pg_url: str,
+    *,
+    sources: tuple[SppnMakareaSource, ...],
+    mode: str,
+    source_yyyymm: str | None,
+) -> None:
+    engine = create_engine(pg_url)
+    source_files = [source.source_file for source in sources]
+    try:
+        with engine.begin() as conn:
+            row_count = conn.execute(text(f"SELECT count(*) FROM {TARGET_TABLE}")).scalar_one()
+            conn.execute(
+                text(
+                    """
+INSERT INTO load_manifest (
+  table_name, last_full_load_at, last_delta_at, row_count, source_zip,
+  source_checksum, source_yyyymm, source_set, updated_at
+) VALUES (
+  :table_name,
+  CASE WHEN :mode = 'full' THEN now() ELSE NULL END,
+  CASE WHEN :mode <> 'full' THEN now() ELSE NULL END,
+  :row_count,
+  :source_zip,
+  NULL,
+  :source_yyyymm,
+  CAST(:source_set AS jsonb),
+  now()
+)
+ON CONFLICT (table_name) DO UPDATE
+   SET last_full_load_at = COALESCE(EXCLUDED.last_full_load_at, load_manifest.last_full_load_at),
+       last_delta_at = COALESCE(EXCLUDED.last_delta_at, load_manifest.last_delta_at),
+       row_count = EXCLUDED.row_count,
+       source_zip = EXCLUDED.source_zip,
+       source_yyyymm = EXCLUDED.source_yyyymm,
+       source_set = EXCLUDED.source_set,
+       updated_at = now()
+"""
+                ),
+                {
+                    "table_name": TARGET_TABLE,
+                    "mode": mode,
+                    "row_count": row_count,
+                    "source_zip": ", ".join(source_files),
+                    "source_yyyymm": source_yyyymm,
+                    "source_set": json.dumps(
+                        {
+                            "kind": "sppn_makarea",
+                            "mode": mode,
+                            "source_files": source_files,
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            )
     finally:
         engine.dispose()
 

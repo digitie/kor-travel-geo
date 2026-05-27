@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-027 — 최종 실 데이터 클린 적재와 same-month direct 출입구 gate)
+
+**작업**: PR #46 머지 후 최신 main에서 Docker PostGIS DB를 비우고 실제 `data/juso` 원천을 처음부터 적재했다. `scripts/fullload_test.sh`를 T-038/T-039/T-042 이후 원천까지 포함하도록 보강하고, 전체 실행 로그·시스템 상태·row count·정합성 결과·data-quality export를 `artifacts/fullload/20260527_135155/`에 남겼다.
+
+**반영 상세**:
+- full-load script는 `tl_juso_parcel_link`, `tl_roadaddr_entrc`, `tl_sppn_makarea`를 함께 적재하고, source별 기준월(`JUSO=202603`, `LOCSUM/NAVI/SHP=202604`, `ROADADDR/SPPN=202605`)을 PLAN_ONLY와 로그에 명시한다.
+- 실제 적재는 총 3,934초가 걸렸다. 주요 단계는 텍스트 825초, SHP 1,525초, direct 출입구 216초, SPPN 의무지역 33초, geometry link 140초, MV swap 159초였다.
+- 최종 row count는 `tl_juso_text=6,416,637`, `tl_juso_parcel_link=1,769,370`, `tl_roadaddr_entrc=6,404,697`, `tl_sppn_makarea=24,204`, `mv_geocode_target=6,416,637`이다.
+- direct 출입구를 기존 T-039 설계대로 1순위 serving 좌표로 쓰면 기준월 차이 때문에 C4/C6/C7이 악화됐다. `roadaddr` 우선 결과는 C4 12,225건(`over_500m=91`), C6 3,593건, C7 9,827건이었다.
+- `tl_locsum_entrc`만 임시 비교하면 기존 기준선인 C4 3,415건(`over_500m=16`), C6 803건, C7 6,817건으로 돌아왔다. 이에 MV와 C3/C4/C6/C7/C8 serving CTE를 `locsum` 우선 + same-month `roadaddr` fallback으로 보정했다.
+- C10은 `load_manifest`만 보던 한계를 수정해 row-level `source_yyyymm` 집계를 우선하고 manifest를 fallback으로 쓰게 했다. 현재 로컬 혼합 세트는 `distinct_months=3`, `severity=WARN`으로 기록된다.
+
+**검증**:
+- Targeted unit tests: `tests/unit/test_consistency_sql.py`, `tests/unit/test_infra_engine_pnu_sql.py` 통과.
+- 보강 후 MV swap refresh 성공. `pt_source` 분포는 `centroid=3,496,182`, `entrance=2,906,372`, `NULL=14,083`이다.
+- 보강 후 전체 C1~C10 재검증은 611.71초, 최대 RSS 82,424KB로 완료했다. `severity_max=ERROR`는 기존 C2/C4/C6/C7 원천 품질 이슈 때문이다.
+- smoke test는 geocode/reverse/search/zipcode 모두 `OK`.
+- data-quality export는 C2/C4/C6/C7 CSV 8개를 86.18초, 최대 RSS 82,292KB로 생성했다. C4 bucket은 `0-50=2,887,827`, `50-100=2,847`, `100-500=552`, `500+=16`이다.
+
+**후속**:
+- T-027 보강 PR을 열고 리뷰 대기 후 main에 머지한다.
+- T-047은 이 클린 DB를 기준으로 query latency baseline과 튜닝 전후 차이를 기록한다.
+- Playwright가 필요한 UI 검증은 사용자 지시에 따라 Windows Node/브라우저에서 수행한다.
+
 ## 2026-05-27 (T-042 — `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회 구현)
 
 **작업**: ADR-027의 `TL_SPPN_MAKAREA` 설계를 실제 DDL, loader, CLI/API job, source set optional child, geocode/reverse 보조 조회로 구현했다.

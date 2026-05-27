@@ -183,7 +183,7 @@ CREATE INDEX idx_roadaddr_entrc_road
   ON tl_roadaddr_entrc (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);
 ```
 
-`mv_geocode_target`은 이 테이블이 채워져 있으면 `tl_locsum_entrc`보다 먼저 대표 출입구 후보로 사용한다. API 응답의 `pt_source`는 기존 호환성을 위해 `entrance`로 유지한다. direct source 여부는 `tl_roadaddr_entrc.source_file`, `source_yyyymm`, 정합성 sample의 `source_kind='roadaddr'`로 추적한다.
+`tl_roadaddr_entrc`는 direct `bd_mgt_sn + EPSG:5179` 좌표를 제공하지만, 기준월이 다른 원천을 바로 serving 좌표로 승격하면 실제 전국 데이터에서 C4/C6/C7 오류가 증가할 수 있다. 따라서 `mv_geocode_target`은 `tl_locsum_entrc`를 먼저 사용하고, `tl_roadaddr_entrc.source_yyyymm`이 현재 `tl_juso_text.source_yyyymm` 집합과 같은 경우에만 direct 출입구를 fallback 후보로 사용한다. API 응답의 `pt_source`는 기존 호환성을 위해 `entrance`로 유지한다. direct source 여부는 `tl_roadaddr_entrc.source_file`, `source_yyyymm`, 정합성 sample의 `source_kind='roadaddr'`로 추적한다.
 
 실제 전국 구조는 17개 ZIP, 총 6,418,169행이다. 세종 ZIP은 원천 27,868행 중 좌표 결측/`0/0` sentinel을 제외한 27,779행이 적재 대상이었다.
 
@@ -269,14 +269,14 @@ GDAL 적재는 `gdal.VectorTranslate(...)`와 `gdal.config_options({"PG_USE_COPY
 |--------|--------------|------|------|
 | **C1: 텍스트에만 존재** (BD_MGT_SN) | `juso \ buld_polygon` | 도로명주소 정본에는 있는데 SHP polygon이 없음 | 신축·미반영. `WARN` (확인 항목) |
 | **C2: SHP에만 존재** | `buld_polygon \ juso` | polygon은 있는데 텍스트가 누락, 또는 SHP natural key 자체가 비어 비교 불가 | `ERROR` — metric의 `missing_text`/`missing_resolve_key`를 나눠 후속 분석 |
-| **C3: 출입구 0개 건물 비율** | `juso \ serving_entrc` | direct 출입구와 위치정보요약DB 대표 출입구를 모두 보아도 출입구가 없는 건물 | `INFO` — `navi_centroid` fallback으로 흡수. 비율이 임계(예: 5%) 초과 시 `WARN` |
+| **C3: 출입구 0개 건물 비율** | `juso \ serving_entrc` | 위치정보요약DB 대표 출입구와 same-month direct 출입구를 모두 보아도 출입구가 없는 건물 | `INFO` — `navi_centroid` fallback으로 흡수. 비율이 임계(예: 5%) 초과 시 `WARN` |
 | **C4: 출입구 좌표 ↔ 건물 polygon 거리** | `ST_Distance(serving_entrc.geom, buld_polygon.geom)` | serving 출입구가 건물 polygon 외부, 또는 멀리 떨어짐 | 5m 이내 `OK`, 50m 초과 `WARN`, 500m 초과 `ERROR`; `error_count`는 500m 초과 건수 |
 | **C5: navi centroid ↔ 건물 polygon centroid 일치** | `ST_Distance(navi.centroid_5179, ST_Centroid(buld_polygon.geom))` | 두 centroid 거리 | 1m 이내 `OK`, 10m 초과 `WARN` |
 | **C6: 우편번호 텍스트 ↔ kodis_bas polygon** | `ST_Covers(kodis_bas.geom, serving_entrc.geom)` 와 `juso.zip_no = kodis_bas.bas_id` 비교 | 좌표가 우편번호 polygon 안 또는 경계 위인가 + 텍스트 zip_no와 일치하는가 | 일치 `OK`, polygon 외 `WARN`, zip_no 불일치 `ERROR` |
 | **C7: 행정구역 ↔ 좌표 polygon 일치** | `ST_Covers(scco_emd.geom, serving_entrc.geom)` 와 `juso.bjd_cd[1..8] = scco_emd.emd_cd` 비교 | 좌표가 법정동 polygon 안 또는 경계 위인가 | `OK` / `WARN`(polygon 외) / `ERROR`(코드 불일치) |
 | **C8: 도로명 ↔ 도로 폴리라인 인접성** | `ST_DWithin(serving_entrc.geom, tl_sprd_manage.geom, 100m)` filtered by `rncode_full` | 좌표가 같은 도로명 관리 LineString의 100m 이내인가 | 일치 `OK`, 외 `WARN` |
 | **C9: PNU 자릿수 검증** | `length(pnu) = 19 AND substr(pnu, 11, 1) IN ('1','2')` | ADR-010 매핑이 올바른가 | `length != 19` 시 `ERROR` |
-| **C10: 변동분 기준일 정합** | `load_manifest.source_yyyymm`와 `source_set.yyyymm_by_kind` 비교 | `load_manifest`에 기록된 적재 작업 기준월이 한 배치 안에서 갈라지는가, 갈라졌다면 운영자가 의도적으로 승인했는가 | 승인 없는 혼합 기준월은 `ERROR`, 승인된 혼합 기준월은 `INFO` 또는 `WARN`과 note |
+| **C10: 변동분 기준일 정합** | row-level `source_yyyymm` 집계 + `load_manifest.source_yyyymm` fallback | 적재된 테이블별 기준월이 한 배치 안에서 갈라지는가, 갈라졌다면 운영자가 의도적으로 승인했는가 | 현재 CLI 리포트는 2종 이상이면 `WARN`. batch/source set gate에서는 승인 없는 혼합 기준월을 `ERROR`로 차단하고, 승인된 혼합 기준월은 `INFO` 또는 `WARN`과 note로 남긴다 |
 
 각 케이스의 결과는 `load_consistency_reports` 테이블에 구조화된 JSON으로 저장된다.
 
@@ -296,7 +296,9 @@ CREATE TABLE load_consistency_reports (
 CREATE INDEX idx_consistency_started ON load_consistency_reports (started_at DESC);
 ```
 
-ADR-029 이후 C10은 "모든 기준월이 같아야 한다"만 검사하지 않는다. 실제 원천 배포 주기가 다르므로 source set이 `mixed_yyyymm=true`일 수 있다. 이때 `mixed_yyyymm_acknowledged=true`, `acknowledged_by`, `acknowledged_at`이 함께 있으면 운영자가 의도적으로 혼합한 것으로 보고 리포트 note에 남긴다. 확인 기록이 없으면 실수 가능성이 크므로 `ERROR`로 보고 swap gate를 막는다.
+ADR-029 이후 C10은 "모든 기준월이 같아야 한다"만 검사하지 않는다. 실제 원천 배포 주기가 다르므로 source set이 `mixed_yyyymm=true`일 수 있다. 이때 `mixed_yyyymm_acknowledged=true`, `acknowledged_by`, `acknowledged_at`이 함께 있으면 운영자가 의도적으로 혼합한 것으로 보고 리포트 note에 남긴다. 확인 기록이 없으면 실수 가능성이 크므로 batch/swap gate에서 `ERROR`로 막는다.
+
+T-027 최종 클린 적재 보강 이후 C10 SQL은 `load_manifest`만 보지 않는다. 각 운영 테이블의 row-level `source_yyyymm`을 먼저 집계하고, row-level 기록이 없는 테이블에 한해서 `load_manifest`를 fallback으로 사용한다. 예를 들어 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_buld_centroid`/`tl_navi_entrc`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`인 로컬 검증 조합은 `distinct_months=3`, `severity=WARN`으로 나타난다.
 
 ### `cases` JSONB 구조 예시
 
@@ -369,27 +371,32 @@ CREATE INDEX idx_juso_text_rn_trgm
 
 ## 평면화: `mv_geocode_target` (ADR-007, ADR-012)
 
-지오코딩이 사용하는 단일 머티리얼라이즈드 뷰. **텍스트 정본**(`tl_juso_text`)에 **대표 출입구 좌표**(`tl_roadaddr_entrc` 또는 `tl_locsum_entrc`)와 **centroid fallback**(`tl_navi_buld_centroid`)을 합쳐 단일 lookup으로 응답한다. `pt_source` 컬럼이 응답 좌표의 큰 분류를 노출한다.
+지오코딩이 사용하는 단일 머티리얼라이즈드 뷰. **텍스트 정본**(`tl_juso_text`)에 **대표 출입구 좌표**(`tl_locsum_entrc`, 같은 기준월일 때만 `tl_roadaddr_entrc`)와 **centroid fallback**(`tl_navi_buld_centroid`)을 합쳐 단일 lookup으로 응답한다. `pt_source` 컬럼이 응답 좌표의 큰 분류를 노출한다.
 
 ```sql
 CREATE MATERIALIZED VIEW mv_geocode_target AS
 WITH best_entrc AS (
-  -- ADR-024 direct entrance 우선 → ADR-007 locsum 대표 출입구 우선
+  -- ADR-007 locsum 대표 출입구 우선, ADR-024 direct entrance는 same-month일 때만 fallback
   SELECT DISTINCT ON (bd_mgt_sn)
          bd_mgt_sn,
          ent_man_no,
          geom AS ent_pt_5179
   FROM (
-    SELECT bd_mgt_sn, ent_man_no, geom, 0 AS source_priority, 0 AS rep_priority
-      FROM tl_roadaddr_entrc
-    UNION ALL
     SELECT bd_mgt_sn,
            ent_man_no,
            geom,
-           1 AS source_priority,
+           0 AS source_priority,
            CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
       FROM tl_locsum_entrc
      WHERE bd_mgt_sn IS NOT NULL
+    UNION ALL
+    SELECT bd_mgt_sn, ent_man_no, geom, 1 AS source_priority, 0 AS rep_priority
+      FROM tl_roadaddr_entrc
+     WHERE source_yyyymm IN (
+       SELECT DISTINCT source_yyyymm
+         FROM tl_juso_text
+        WHERE source_yyyymm IS NOT NULL
+     )
   ) e
   ORDER BY bd_mgt_sn, source_priority, rep_priority, ent_man_no NULLS LAST
 )

@@ -71,3 +71,13 @@ def test_sppn_loader_stage_table_is_advisory_locked() -> None:
     assert "pg_try_advisory_lock(hashtext(:lock_key))" in source
     assert "pg_advisory_unlock(hashtext(:lock_key))" in source
     assert "another TL_SPPN_MAKAREA staging load is already running" in source
+
+
+def test_sppn_loader_records_load_manifest_for_c10() -> None:
+    source = inspect.getsource(sppn_makarea_loader._record_manifest)
+
+    assert "INSERT INTO load_manifest" in source
+    assert '"table_name": TARGET_TABLE' in source
+    assert sppn_makarea_loader.TARGET_TABLE == "tl_sppn_makarea"
+    assert '"kind": "sppn_makarea"' in source
+    assert "CAST(:source_set AS jsonb)" in source
