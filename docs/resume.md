@@ -84,7 +84,20 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-047 전국 적재 후 쿼리 성능 벤치마크와 튜닝이다. 이미 T-027 최종 클린 적재 DB의 row count와 정합성 기준선이 있으므로, 같은 데이터 상태에서 exact/fuzzy geocode, reverse nearest/radius, search, zipcode, no-result 경로를 반복 측정한다. p50/p95/p99, `EXPLAIN ANALYZE`, `pg_stat_statements`, 동시성 결과, 튜닝 전후 차이를 문서화하고 목표 초과 query군은 index/query rewrite/read-only 보조 MV까지 적극 실험한다. 그 다음 후보는 T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화와 T-050 운영 hardening이다.
+2026-05-27 사용자 RFC로 새 task 8건(T-052~T-059)을 백로그에 추가했다. 운영 안전성·외부 라이브러리 정리부터, 기능 보강, 환경 검토 순서로 처리한다. 자세한 우선순위는 `docs/tasks.md`를 본다.
+
+1. **T-056** `python-kraddr-base` Address 부분 병합 + 외부 라이브러리 삭제. 외부 lib archive 전에 흡수 PR을 먼저 만든다. 상세: `docs/t056-kraddr-base-address-merge.md`, ADR-035.
+2. **T-058** restore hot-swap (`ALTER DATABASE RENAME` 기반, 같은 cluster). T-046 위에서 hot-swap + rollback 절차를 명문화한다. 상세: `docs/t058-restore-hot-swap.md`, ADR-036.
+3. **T-059** CLI/Job 동시 실행 보호 표준화 (PostgreSQL advisory lock 기반 cross-process). 인벤토리부터 시작해 보호되지 않는 경로 11개에 차례로 적용. 상세: `docs/t059-concurrent-job-protection.md`.
+4. **T-054** 외부 IP 한국만 허용 (FastAPI middleware + GeoIP DB). 상세: `docs/t054-korea-only-geoip.md`, ADR-037.
+5. **T-057** 행정구역 hint(`sig_cd`/`bjd_cd`/`bbox`) 기반 검색 가속. T-047과 함께 측정. 상세: `docs/t057-region-hint-search.md`.
+6. **T-053** Admin Web UI 통계/유지보수/관리/튜닝 + C1~C10 상세 분석 UI/CSV (TanStack Query + Zustand). 상세: `docs/t053-admin-ui-ops-statistics.md`.
+7. **T-052** API v1(vworld 호환) / v2(kakao/naver 흡수 + 통합 candidate) 분리 + AI-friendly `docs/api-reference/`. 상세: `docs/t052-api-providers-v1-v2.md`, ADR-038.
+8. **T-055** N150 16GB / NVMe 1TB Ubuntu 26.04 vs Odroid 환경 측정. 하드웨어 도착 후 실측. 상세: `docs/t055-deployment-n150-odroid.md`.
+
+기존 대기 task(T-027/T-047/T-044/T-050)도 그대로 유지한다. T-047은 T-057 hint와 함께 측정하면 효율적이다.
+
+당장 한 작업으로 **T-056 인벤토리**가 가장 빨리 시작 가능하다. `~/dev/python-kraddr-base`의 HEAD SHA와 흡수 대상 파일 목록을 `docs/t056-kraddr-base-address-merge.md`에 채우는 것으로 시작한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
