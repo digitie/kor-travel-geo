@@ -12,9 +12,15 @@ from .admin import (
     UploadSidoZipResponse,
 )
 from .common import CRS, Page, Point, ServiceMeta, Status, ZipSource
-from .geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
+from .geocode import (
+    GeocodeExtension,
+    GeocodeInput,
+    GeocodeResponse,
+    GeocodeResult,
+    SppnMakareaContext,
+)
 from .pobox import PoboxInput, PoboxResponse, PoboxResultItem
-from .reverse import ReverseInput, ReverseResponse, ReverseResultItem
+from .reverse import ReverseExtension, ReverseInput, ReverseResponse, ReverseResultItem
 from .search import BBox, SearchInput, SearchResponse, SearchResultItem
 from .zipcode import ZipcodeInput, ZipcodeResponse, ZipcodeResultItem
 
@@ -38,6 +44,7 @@ __all__ = [
     "PoboxResultItem",
     "Point",
     "RefinedAddress",
+    "ReverseExtension",
     "ReverseInput",
     "ReverseResponse",
     "ReverseResultItem",
@@ -45,6 +52,7 @@ __all__ = [
     "SearchResponse",
     "SearchResultItem",
     "ServiceMeta",
+    "SppnMakareaContext",
     "Status",
     "TableStat",
     "UploadSidoZipResponse",

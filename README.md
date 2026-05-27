@@ -8,7 +8,7 @@
 **도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 한국 주소 지오코딩 라이브러리·REST API**입니다. vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 지원합니다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kraddr-geo-ui`](docs/frontend-package.md)로 운영합니다.
 
 > [!NOTE]
-> **현재 상태**: `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다. T-005~T-041 구현·실데이터 검증 기록, T-049 운영 메타데이터 1차 구현, T-045 source set 기준월 선택과 대용량 업로드/적재 UX, T-046 DB 백업/복원 UI와 대구 부분 DB 실제 backup/restore 검증이 반영되어 있으며, T-042/T-027/T-047/T-044 후속 운영·성능·자료 보강 계획이 문서화되어 있습니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
+> **현재 상태**: `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다. T-005~T-042 구현·실데이터 검증 기록, T-049 운영 메타데이터 1차 구현, T-045 source set 기준월 선택과 대용량 업로드/적재 UX, T-046 DB 백업/복원 UI와 대구 부분 DB 실제 backup/restore 검증이 반영되어 있으며, T-027/T-047/T-044 후속 운영·성능·지도 UI 보강 계획이 문서화되어 있습니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
 
 ---
 

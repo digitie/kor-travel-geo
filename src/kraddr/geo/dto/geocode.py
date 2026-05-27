@@ -35,6 +35,18 @@ class GeocodeResult(FrozenModel):
     point: Point
 
 
+class SppnMakareaContext(FrozenModel):
+    sig_cd: str
+    makarea_id: str
+    makarea_nm: str | None = None
+    ntfc_yn: str | None = None
+    ntfc_de: str | None = None
+    mvm_res_cd: str | None = None
+    source_file: str | None = None
+    source_yyyymm: str | None = None
+    area_m2: float | None = Field(default=None, ge=0.0)
+
+
 class GeocodeExtension(FrozenModel):
     source: ResultSource = "local"
     confidence: float = Field(ge=0.0, le=1.0)
@@ -44,6 +56,8 @@ class GeocodeExtension(FrozenModel):
     zip_no: str | None = None
     zip_source: ZipSource | None = None
     buld_nm: str | None = None
+    national_point_number: str | None = None
+    sppn_makarea: SppnMakareaContext | None = None
 
 
 class GeocodeResponse(FrozenModel):

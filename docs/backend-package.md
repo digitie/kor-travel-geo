@@ -520,34 +520,37 @@ API job kind는 `roadaddr_entrance_load`다. payload는 다른 경로 기반 loa
 
 - T-040: 완료. `도로명주소 건물 도형` address polygon/entrance/connection bundle은 `scripts/compare_building_shape_bundle.py`로 전자지도와 비교할 수 있지만, serving loader는 보류한다.
 - T-041: 완료. 상세주소 동 도형은 `scripts/compare_extra_shape_layers.py`로 전자지도 건물과 비교할 수 있고, `구역의 도형`은 중복 5개 레이어와 추가 2개 레이어를 구분해 비교할 수 있다. 상세주소 동과 `TL_SCCO_GEMD`는 기본 full-load/MV에는 섞지 않는다.
-- ADR-027: `TL_SPPN_MAKAREA`는 지점번호표기 의무지역 polygon이므로 단순 overlay 후보에서 국가지점번호 보조 geocode/reverse 데이터 후보로 승격한다. 구현 시에도 `mv_geocode_target`에는 union하지 않고 `tl_sppn_makarea` 별도 테이블과 `x_extension` 확장으로 연결한다.
+- ADR-027/T-042: `TL_SPPN_MAKAREA`는 지점번호표기 의무지역 polygon이므로 단순 overlay 후보에서 국가지점번호 보조 geocode/reverse 데이터로 승격했다. 구현 후에도 `mv_geocode_target`에는 union하지 않고 `tl_sppn_makarea` 별도 테이블과 `x_extension` 확장으로 연결한다.
 
 상세 근거는 ADR-023과 `docs/t030-extra-shape-sources.md`를 본다.
 
-#### 국가지점번호 표기 의무지역 (`TL_SPPN_MAKAREA`, 구현 전)
+#### 국가지점번호 표기 의무지역 (`TL_SPPN_MAKAREA`, T-042 구현)
 
 `TL_SPPN_MAKAREA`는 건물이 없어 도로명주소가 부여되지 않는 산악·해안·도서·하천 주변 등에서 국가지점번호를 표기해야 하는 의무지역 polygon이다. 이름은 `SPPN`(Spot Point Position Number) + `MAKAREA`(Marking Area)로 해석한다.
 
-후속 구현의 원칙:
+구현 원칙:
 
 - `tl_sppn_makarea` 별도 테이블로 적재한다.
 - primary key는 실제 세종/경남 파일에서 distinct로 확인한 `SIG_CD + MAKAREA_ID`를 사용한다.
 - `MAKAREA_NM`은 표시명으로만 보존하고 unique key로 쓰지 않는다.
 - reverse geocode는 도로명/지번 후보가 없거나 낮은 confidence일 때 `ST_Covers(tl_sppn_makarea.geom, target_pt_5179)`로 보조 후보를 찾는다.
-- geocode는 국가지점번호 문자열 parser/generator가 좌표를 계산한 뒤, 해당 좌표가 표기 의무지역에 속하는지 검증하고 `x_extension.sppn_makarea`에 구역 문맥을 붙인다.
+- geocode는 국가지점번호 문자열 parser가 EPSG:5179 10m cell 중심 좌표를 계산한 뒤, 해당 좌표가 표기 의무지역에 속하는지 검증하고 `x_extension.national_point_number`와 `x_extension.sppn_makarea`에 구역 문맥을 붙인다.
+- EPSG:5179 좌표를 국가지점번호 문자열로 바꾸는 formatter도 제공한다. 실제 polygon 내부 점 기반 테스트와 향후 지도 UI 표시에서 사용한다.
 - 이 레이어는 개별 국가지점번호판 point 목록이 아니므로, `MAKAREA_NM`만으로 정밀 좌표를 만들지 않는다. 구역명 검색이 필요하면 centroid/bbox 기반 낮은 confidence `search` 기능으로 분리한다.
 
-실제 파일 검증 결과(서울 첫 행 기준):
+구현 표면:
 
-| index | 의미 | 예 |
-|-------|------|----|
-| 0 | `bd_mgt_sn` | `11110101310001200009400000` |
-| 1 | `bjd_cd` | `1111010100` |
-| 2~5 | 시도/시군구/읍면동/리 | `서울특별시`, `종로구`, `청운동`, 빈 값 |
-| 6~8 | 산여부/지번 본번/부번 | `0`, `144`, `3` |
-| 9~10 | `rncode_full`, 도로명 | `111103100012`, `자하문로` |
-| 11~13 | 지하 여부/건물 본번/부번 | `0`, `94`, `0` |
-| 14~16 | 행정동코드/행정동명/우편번호 | `1111051500`, `청운효자동`, `03047` |
+| 표면 | 내용 |
+|------|------|
+| DDL | `tl_sppn_makarea`, `idx_sppn_makarea_geom`, `idx_sppn_makarea_sig`, Alembic `0007_t042_sppn_makarea` |
+| loader | `load_sppn_makarea()` — ZIP/디렉터리/SHP 입력, GDAL `VectorTranslate`, staging insert-select, `MultiPolygon 5179` 정규화 |
+| CLI | `kraddr-geo load sppn-makarea <path> --yyyymm YYYYMM --mode full\|append\|delta` |
+| API queue | `sppn_makarea_load` job kind |
+| source set | optional `sppn_makarea` source가 발견되면 `sppn_makarea_load` child를 만들고 `mode="full"`을 넣음 |
+| geocode | 국가지점번호 parser → `GeocodeRepository.lookup_sppn_area()` → `GeocodeResponse.x_extension.sppn_makarea` |
+| reverse | `ReverseRepository.sppn_areas()` → `ReverseResponse.x_extension.sppn_makarea` |
+
+실제 검증은 세종 `구역의 도형/구역의도형_전체분_세종특별자치시.zip`으로 수행했다. Docker PostGIS에서 146행을 적재했고, 모든 key가 distinct이며 모든 geometry가 valid `MultiPolygon`이었다. `금이산` polygon 내부 점을 formatter로 `다바 7363 4856`으로 만든 뒤 geocode/reverse 보조 조회가 같은 `sppn_makarea` 문맥을 반환하는 것도 확인했다. 상세 로그는 `docs/t042-sppn-makarea.md`를 본다.
 | 22 | 건물명 | 비어 있거나 `평안빌` |
 
 `tl_juso_text.pnu`는 DB generated column이지만, 로더 단위 테스트에서도 같은 규칙(`mntn_yn 0→1`, `1→2`, 필수 지번 필드 결측 시 `NULL`)을 검증한다.

@@ -39,6 +39,8 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "REFERENCES tl_juso_text(bd_mgt_sn) ON DELETE CASCADE" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_locsum_entrc" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_roadaddr_entrc" in SCHEMA_SQL
+    assert "CREATE TABLE IF NOT EXISTS tl_sppn_makarea" in SCHEMA_SQL
+    assert "geometry(MultiPolygon, 5179) NOT NULL" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS load_jobs" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS load_consistency_reports" in SCHEMA_SQL
     assert "COALESCE(lnbr_mnnm, 0)" not in SCHEMA_SQL
@@ -54,6 +56,8 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "idx_juso_parcel_link_pnu" in INDEX_SQL
     assert "idx_juso_parcel_link_road" in INDEX_SQL
     assert "idx_roadaddr_entrc_geom" in INDEX_SQL
+    assert "idx_sppn_makarea_geom" in INDEX_SQL
+    assert "idx_sppn_makarea_sig" in INDEX_SQL
 
 
 def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:

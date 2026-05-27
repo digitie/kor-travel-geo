@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from kraddr.geo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
+from kraddr.geo.dto.address import AddressStructure, RefinedAddress
+from kraddr.geo.dto.geocode import (
+    GeocodeExtension,
+    GeocodeInput,
+    GeocodeResponse,
+    GeocodeResult,
+    SppnMakareaContext,
+)
 
 from .normalize import parse_address
-from .protocols import AddressLookup, GeocodeRepo
+from .protocols import AddressLookup, GeocodeRepo, SppnAreaLookup
 from .responses import refined_from_lookup, service_meta
+from .sppn import NationalPointNumber, parse_national_point_number
 
 
 def _confidence(row: AddressLookup) -> float:
@@ -36,7 +44,51 @@ def _response_from_row(inp: GeocodeInput, row: AddressLookup) -> GeocodeResponse
     )
 
 
+def _sppn_context(area: SppnAreaLookup) -> SppnMakareaContext:
+    return SppnMakareaContext(
+        sig_cd=area.sig_cd,
+        makarea_id=area.makarea_id,
+        makarea_nm=area.makarea_nm,
+        ntfc_yn=area.ntfc_yn,
+        ntfc_de=area.ntfc_de,
+        mvm_res_cd=area.mvm_res_cd,
+        source_file=area.source_file,
+        source_yyyymm=area.source_yyyymm,
+        area_m2=area.area_m2,
+    )
+
+
+def _response_from_sppn(
+    inp: GeocodeInput,
+    sppn: NationalPointNumber,
+    area: SppnAreaLookup,
+) -> GeocodeResponse:
+    return GeocodeResponse(
+        service=service_meta("geocode"),
+        status="OK",
+        input=inp,
+        refined=RefinedAddress(
+            text=f"국가지점번호 {sppn.text}",
+            structure=AddressStructure(),
+        ),
+        result=GeocodeResult(crs="EPSG:4326", point=area.point) if area.point else None,
+        x_extension=GeocodeExtension(
+            source="local",
+            confidence=0.72,
+            national_point_number=sppn.text,
+            sppn_makarea=_sppn_context(area),
+        ),
+    )
+
+
 async def geocode(repo: GeocodeRepo, inp: GeocodeInput) -> GeocodeResponse:
+    sppn = parse_national_point_number(inp.address)
+    if sppn is not None:
+        area = await repo.lookup_sppn_area(sppn.point_5179)
+        if area is None:
+            return GeocodeResponse(service=service_meta("geocode"), status="NOT_FOUND", input=inp)
+        return _response_from_sppn(inp, sppn, area)
+
     parts = parse_address(inp.address)
     row: AddressLookup | None
     if inp.type == "road":

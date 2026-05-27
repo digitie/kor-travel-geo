@@ -14,6 +14,7 @@ from kraddr.geo.core.protocols import (
     PoboxLookup,
     ReverseLookup,
     SearchLookup,
+    SppnAreaLookup,
     ZipLookup,
 )
 from kraddr.geo.dto.common import Point, ZipSource
@@ -108,6 +109,22 @@ def map_reverse(
 ) -> ReverseLookup:
     base = map_address(row, address_type=address_type)
     return ReverseLookup(**asdict(base), distance_m=float(row["distance_m"]))
+
+
+def map_sppn_area(row: Mapping[str, Any]) -> SppnAreaLookup:
+    area_m2 = row.get("area_m2")
+    return SppnAreaLookup(
+        sig_cd=str(row["sig_cd"]),
+        makarea_id=str(row["makarea_id"]),
+        makarea_nm=row.get("makarea_nm"),
+        ntfc_yn=row.get("ntfc_yn"),
+        ntfc_de=row.get("ntfc_de"),
+        mvm_res_cd=row.get("mvm_res_cd"),
+        source_file=row.get("source_file"),
+        source_yyyymm=row.get("source_yyyymm"),
+        area_m2=float(area_m2) if area_m2 is not None else None,
+        point=_point(row),
+    )
 
 
 def map_search(row: Mapping[str, Any]) -> SearchLookup:

@@ -1120,10 +1120,13 @@ export interface components {
             buld_nm?: string | null;
             /** Confidence */
             confidence: number;
+            /** National Point Number */
+            national_point_number?: string | null;
             /** Rncode Full */
             rncode_full?: string | null;
             /** @default local */
             source: components["schemas"]["ResultSource"];
+            sppn_makarea?: components["schemas"]["SppnMakareaContext"] | null;
             /** Zip No */
             zip_no?: string | null;
             zip_source?: components["schemas"]["ZipSource"] | null;
@@ -1186,7 +1189,7 @@ export interface components {
             /** Job Id */
             job_id: string;
             /** Kind */
-            kind: ("full_load_batch" | "db_backup" | "db_restore" | "juso_text_load" | "daily_juso_delta" | "juso_parcel_link_load" | "juso_parcel_link_delta" | "roadaddr_entrance_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
+            kind: ("full_load_batch" | "db_backup" | "db_restore" | "juso_text_load" | "daily_juso_delta" | "juso_parcel_link_load" | "juso_parcel_link_delta" | "roadaddr_entrance_load" | "sppn_makarea_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
             /** Load Batch Id */
             load_batch_id?: string | null;
             /**
@@ -1222,7 +1225,7 @@ export interface components {
         /** LoadSubmitRequest */
         LoadSubmitRequest: {
             /** Kind */
-            kind: ("full_load_batch" | "db_backup" | "db_restore" | "juso_text_load" | "daily_juso_delta" | "juso_parcel_link_load" | "juso_parcel_link_delta" | "roadaddr_entrance_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
+            kind: ("full_load_batch" | "db_backup" | "db_restore" | "juso_text_load" | "daily_juso_delta" | "juso_parcel_link_load" | "juso_parcel_link_delta" | "roadaddr_entrance_load" | "sppn_makarea_load" | "locsum_load" | "navi_load" | "shp_polygons_load" | "shp_polygons_delta" | "pobox_load" | "bulk_load" | "mv_refresh" | "consistency_check") | string;
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -1495,6 +1498,14 @@ export interface components {
         };
         /** @enum {string} */
         ResultSource: "local" | "api_juso" | "api_vworld" | "cache";
+        /** ReverseExtension */
+        ReverseExtension: {
+            /**
+             * Sppn Makarea
+             * @default []
+             */
+            sppn_makarea: components["schemas"]["SppnMakareaContext"][];
+        };
         /** ReverseInput */
         ReverseInput: {
             /** @default EPSG:4326 */
@@ -1527,6 +1538,7 @@ export interface components {
             result: components["schemas"]["ReverseResultItem"][];
             service: components["schemas"]["ServiceMeta"];
             status: components["schemas"]["Status"];
+            x_extension?: components["schemas"]["ReverseExtension"] | null;
         };
         /** ReverseResultItem */
         ReverseResultItem: {
@@ -1846,6 +1858,27 @@ export interface components {
             versions?: {
                 [key: string]: string;
             };
+        };
+        /** SppnMakareaContext */
+        SppnMakareaContext: {
+            /** Area M2 */
+            area_m2?: number | null;
+            /** Makarea Id */
+            makarea_id: string;
+            /** Makarea Nm */
+            makarea_nm?: string | null;
+            /** Mvm Res Cd */
+            mvm_res_cd?: string | null;
+            /** Ntfc De */
+            ntfc_de?: string | null;
+            /** Ntfc Yn */
+            ntfc_yn?: string | null;
+            /** Sig Cd */
+            sig_cd: string;
+            /** Source File */
+            source_file?: string | null;
+            /** Source Yyyymm */
+            source_yyyymm?: string | null;
         };
         /** @enum {string} */
         Status: "OK" | "NOT_FOUND" | "ERROR";
