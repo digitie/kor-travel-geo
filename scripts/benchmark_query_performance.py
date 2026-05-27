@@ -114,6 +114,8 @@ class EnvironmentSnapshot:
     platform: str
     cpu_count: int | None
     cwd: str
+    pg_pool_size: int
+    pg_max_overflow: int
     database_version: str | None
     postgis_version: str | None
     pg_stat_statements: bool
@@ -202,6 +204,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=5_000,
         help="SET LOCAL statement_timeout for each measured query.",
+    )
+    parser.add_argument(
+        "--pool-size",
+        type=int,
+        help="Override SQLAlchemy pool_size for this benchmark run.",
+    )
+    parser.add_argument(
+        "--max-overflow",
+        type=int,
+        help="Override SQLAlchemy max_overflow for this benchmark run.",
     )
     parser.add_argument(
         "--explain-slowest-per-group",
@@ -437,13 +449,19 @@ async def run_benchmark(
     cases: Sequence[BenchmarkCase],
     *,
     run_id: str,
+    settings: Settings,
     concurrency_levels: Sequence[int],
     iterations: int,
     warmup: int,
     statement_timeout_ms: int,
 ) -> BenchmarkReport:
     started_at = datetime.now(UTC).isoformat()
-    environment = await collect_environment(engine, run_id=run_id, started_at=started_at)
+    environment = await collect_environment(
+        engine,
+        run_id=run_id,
+        started_at=started_at,
+        settings=settings,
+    )
     measurements: list[Measurement] = []
     for concurrency in concurrency_levels:
         total_iterations = warmup + iterations
@@ -477,6 +495,7 @@ async def collect_environment(
     *,
     run_id: str,
     started_at: str,
+    settings: Settings,
 ) -> EnvironmentSnapshot:
     async with engine.connect() as conn:
         database_version = await _optional_scalar_str(conn, "SELECT version()")
@@ -519,6 +538,8 @@ SELECT EXISTS (
         platform=platform.platform(),
         cpu_count=os.cpu_count(),
         cwd=str(Path.cwd()),
+        pg_pool_size=settings.pg_pool_size,
+        pg_max_overflow=settings.pg_max_overflow,
         database_version=database_version,
         postgis_version=postgis_version,
         pg_stat_statements=pg_stat_statements,
@@ -602,6 +623,8 @@ def write_summary_markdown(report: BenchmarkReport, output_path: Path) -> None:
         f"- Git: `{report.environment.git_branch}` / `{report.environment.git_commit}`",
         f"- Python: `{report.environment.python_version}`",
         f"- Platform: `{report.environment.platform}`",
+        f"- Pool: `size={report.environment.pg_pool_size}, "
+        f"max_overflow={report.environment.pg_max_overflow}`",
         f"- `pg_stat_statements`: `{report.environment.pg_stat_statements}`",
         "",
         "### Row count",
@@ -937,11 +960,21 @@ def _run_id() -> str:
     return datetime.now(UTC).strftime("t047-%Y%m%d-%H%M%S")
 
 
-def _settings_with_dsn(pg_dsn: str | None) -> Settings:
+def _settings_for_run(
+    pg_dsn: str | None,
+    *,
+    pool_size: int | None,
+    max_overflow: int | None,
+) -> Settings:
     settings = get_settings()
-    if pg_dsn is None:
-        return settings
-    return settings.model_copy(update={"pg_dsn": pg_dsn})
+    updates: dict[str, str | int] = {}
+    if pg_dsn is not None:
+        updates["pg_dsn"] = pg_dsn
+    if pool_size is not None:
+        updates["pg_pool_size"] = pool_size
+    if max_overflow is not None:
+        updates["pg_max_overflow"] = max_overflow
+    return settings.model_copy(update=updates) if updates else settings
 
 
 def _hash_cases(cases: Sequence[BenchmarkCase]) -> str:
@@ -953,7 +986,12 @@ async def _amain(args: argparse.Namespace) -> None:
     run_id = args.run_id or _run_id()
     output_dir = args.output_dir or Path("artifacts") / "perf" / run_id
     output_dir.mkdir(parents=True, exist_ok=True)
-    engine = make_async_engine(_settings_with_dsn(args.pg_dsn))
+    settings = _settings_for_run(
+        args.pg_dsn,
+        pool_size=args.pool_size,
+        max_overflow=args.max_overflow,
+    )
+    engine = make_async_engine(settings)
     try:
         if args.corpus:
             cases = corpus_from_json(args.corpus)
@@ -977,6 +1015,7 @@ async def _amain(args: argparse.Namespace) -> None:
             engine,
             cases,
             run_id=run_id,
+            settings=settings,
             concurrency_levels=tuple(args.concurrency or [1]),
             iterations=args.iterations,
             warmup=args.warmup,

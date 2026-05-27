@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 00:45 (T-047 standard corpus와 pool 비교)
+
+**작업**: PR #51 머지 후 최신 `origin/main`에서 T-047 benchmark harness를 사용해 1,100건 standard corpus와 동시성 64 pool 비교를 수행했다.
+
+**반영 상세**:
+- `scripts/benchmark_query_performance.py`에 `--pool-size`, `--max-overflow` 옵션을 추가했다. `environment.json`과 `summary.md`에는 실제 pool 설정을 기록한다.
+- 같은 corpus로 기본 pool(`pool_size=10`, `max_overflow=5`)과 pool 64(`pool_size=64`, `max_overflow=0`) 동시성 64를 비교했다.
+- `docs/t047-query-performance-tuning.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`에 결과와 후속 후보를 기록했다.
+
+**측정**:
+- `t047-standard-20260528`: 1,100 cases, concurrency 1/4/16/64, warmup 1, measured iteration 1, error 0.
+- 기본 pool에서 동시성 16까지는 모든 query군 p95가 ADR-031 1차 목표 안에 들어왔다. 동시성 64에서는 Q1/Q2/Q3/Q4/Q5/Q7/Q8 tail이 크게 증가했다.
+- `t047-standard-pool64-20260528`: 같은 corpus, concurrency 64, pool 64, error 0. Q2 지번 exact p95는 339.66ms → 156.76ms, Q8 no-result road p95는 222.18ms → 122.75ms로 개선됐다. 반면 Q3 fuzzy p95는 353.92ms → 417.46ms, Q4 search p95는 421.36ms → 481.22ms로 악화됐다.
+
+**검증**:
+- `ruff check scripts/benchmark_query_performance.py tests/unit/test_query_performance_benchmark.py` 통과.
+- `mypy scripts/benchmark_query_performance.py` 통과.
+- `pytest tests/unit/test_query_performance_benchmark.py -q` 6건 통과.
+
+**후속**:
+- Q3/Q4는 pool 확대가 답이 아니므로 query split, `UNION ALL`, text-search slim MV 후보를 별도 trial로 검증한다.
+- `pg_stat_statements` 활성화 또는 DB execution aggregate 대체 방식을 마련해 pool wait와 DB 실행 시간을 더 명확히 나눈다.
+- REST API e2e latency와 T-057 region hint 비교를 이어간다.
+
 ## 2026-05-27 23:45 (T-047 1차 query benchmark harness + 지번 exact 튜닝)
 
 **작업**: T-047 중단 지점을 최신 `main`(#50) 위로 복구하고, query benchmark harness와 첫 번째 실제 튜닝을 완료했다.
