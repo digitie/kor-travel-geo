@@ -6,9 +6,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.core.normalize import AddrParts
-from kraddr.geo.core.protocols import AddressLookup
+from kraddr.geo.core.protocols import AddressLookup, SppnAreaLookup
+from kraddr.geo.dto.common import Point
 
-from ._rows import map_address
+from ._rows import map_address, map_sppn_area
 
 _BASE_SELECT = """
 SELECT bd_mgt_sn, rncode_full, rn AS road_nm, buld_mnnm, buld_slno, buld_se_cd,
@@ -59,6 +60,29 @@ _FUZZY_ROADS = text(
           CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END,
           bd_mgt_sn
  LIMIT :limit
+"""
+)
+
+_SPPN_AREA_BY_POINT = text(
+    """
+WITH target_pt AS (
+  SELECT ST_SetSRID(ST_MakePoint(:x, :y), 5179) AS geom
+)
+SELECT m.sig_cd,
+       m.makarea_id,
+       m.makarea_nm,
+       m.ntfc_yn,
+       m.ntfc_de,
+       m.mvm_res_cd,
+       m.source_file,
+       m.source_yyyymm,
+       ST_Area(m.geom) AS area_m2,
+       ST_X(ST_Transform(p.geom, 4326)) AS lon,
+       ST_Y(ST_Transform(p.geom, 4326)) AS lat
+  FROM tl_sppn_makarea m, target_pt p
+ WHERE ST_Covers(m.geom, p.geom)
+ ORDER BY ST_Area(m.geom) ASC, m.sig_cd, m.makarea_id
+ LIMIT 1
 """
 )
 
@@ -125,3 +149,13 @@ class GeocodeRepository:
                 )
             ).mappings().all()
         return [map_address(dict(row), address_type="road") for row in rows]
+
+    async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None:
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    _SPPN_AREA_BY_POINT,
+                    {"x": point_5179.x, "y": point_5179.y},
+                )
+            ).mappings().first()
+        return map_sppn_area(dict(row)) if row else None

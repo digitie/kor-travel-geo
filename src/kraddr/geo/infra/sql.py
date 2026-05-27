@@ -236,6 +236,26 @@ CREATE TABLE IF NOT EXISTS tl_kodis_bas (
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS tl_sppn_makarea (
+  sig_cd          TEXT NOT NULL,
+  makarea_id      TEXT NOT NULL,
+  ntfc_yn         TEXT,
+  makarea_nm      TEXT,
+  ntfc_de         TEXT,
+  mvm_res_cd      TEXT,
+  mvmn_resn       TEXT,
+  opert_de        TEXT,
+  makarea_ar      NUMERIC(12,3),
+  mvmn_desc       TEXT,
+  geom            geometry(MultiPolygon, 5179) NOT NULL,
+  source_file     TEXT NOT NULL,
+  source_yyyymm   TEXT,
+  loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (sig_cd, makarea_id),
+  CHECK (char_length(sig_cd) = 5),
+  CHECK (btrim(makarea_id) <> '')
+);
+
 CREATE TABLE IF NOT EXISTS tl_spbd_buld_polygon (
   bd_mgt_sn       TEXT PRIMARY KEY,
   sig_cd          TEXT,
@@ -620,6 +640,8 @@ CREATE INDEX IF NOT EXISTS idx_scco_emd_geom ON tl_scco_emd USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_scco_li_geom ON tl_scco_li USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_geom ON tl_kodis_bas USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_id ON tl_kodis_bas (bas_id);
+CREATE INDEX IF NOT EXISTS idx_sppn_makarea_geom ON tl_sppn_makarea USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_sppn_makarea_sig ON tl_sppn_makarea (sig_cd);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_geom ON tl_spbd_buld_polygon USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_resolve
   ON tl_spbd_buld_polygon (rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd);

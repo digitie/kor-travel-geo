@@ -31,6 +31,7 @@ from kraddr.geo.loaders.epost_downloader import (
 from kraddr.geo.loaders.pobox_loader import load_pobox
 from kraddr.geo.loaders.postload import refresh_mv, resolve_text_geometry_links
 from kraddr.geo.loaders.shp.polygons_loader import load_shp_polygons
+from kraddr.geo.loaders.sppn_makarea_loader import load_sppn_makarea
 from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
 from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kraddr.geo.loaders.text.locsum_loader import load_locsum
@@ -314,6 +315,26 @@ def load_shp_all_command(
                 total += count
                 typer.echo(f"{sido_dir.name}: {count} layers")
         typer.echo(f"loaded SHP layers total: {total}")
+
+    asyncio.run(run())
+
+
+@load_app.command("sppn-makarea")
+def load_sppn_makarea_command(
+    path: Path,
+    mode: str = typer.Option("full", "--mode", help="full, append 또는 delta"),
+    yyyymm: str | None = typer.Option(None, "--yyyymm"),
+) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            count = await load_sppn_makarea(
+                client.engine,
+                path,
+                mode=mode,
+                source_yyyymm=yyyymm,
+            )
+            typer.echo(f"loaded tl_sppn_makarea rows: {count}")
 
     asyncio.run(run())
 

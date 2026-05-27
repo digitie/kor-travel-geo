@@ -28,6 +28,7 @@ SOURCE_TO_JOB_KIND: dict[str, str] = {
     "navi": "navi_load",
     "shp": "shp_polygons_load",
     "roadaddr_entrance": "roadaddr_entrance_load",
+    "sppn_makarea": "sppn_makarea_load",
     "pobox": "pobox_load",
     "bulk": "bulk_load",
 }
@@ -185,7 +186,7 @@ def infer_yyyymm(path: Path) -> str | None:
 
 def guess_source_kind(path: Path) -> str | None:
     name = path.name.lower()
-    if "tl_sppn_makarea" in name:
+    if "tl_sppn_makarea" in name or "구역의도형" in path.name or "구역의 도형" in path.name:
         return "sppn_makarea"
     if "rnentdata" in name or "출입구" in path.name:
         return "roadaddr_entrance"
@@ -312,6 +313,8 @@ def _batch_children(
             "source_set": source_set,
         }
         if source_kind == "shp":
+            payload["mode"] = "full"
+        if source_kind == "sppn_makarea":
             payload["mode"] = "full"
         children.append({"kind": job_kind, "payload": payload})
     return children

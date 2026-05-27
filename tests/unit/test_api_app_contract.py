@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import inspect
+
+from kraddr.geo.api import app as app_module
 from kraddr.geo.api.app import create_app
 
 
@@ -43,3 +46,10 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/admin/ops/table-stats" in paths
     assert "/v1/admin/ops/table-stats/capture" in paths
     assert "/metrics" in paths
+
+
+def test_api_queue_registers_sppn_makarea_loader() -> None:
+    source = inspect.getsource(app_module._register_default_handlers)
+
+    assert "load_sppn_makarea(" in source
+    assert 'queue.register("sppn_makarea_load", sppn_makarea)' in source

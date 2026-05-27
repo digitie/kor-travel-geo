@@ -1206,6 +1206,17 @@
             "title": "Confidence",
             "type": "number"
           },
+          "national_point_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "National Point Number"
+          },
           "rncode_full": {
             "anyOf": [
               {
@@ -1220,6 +1231,16 @@
           "source": {
             "$ref": "#/components/schemas/ResultSource",
             "default": "local"
+          },
+          "sppn_makarea": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SppnMakareaContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "zip_no": {
             "anyOf": [
@@ -1439,6 +1460,7 @@
                   "juso_parcel_link_load",
                   "juso_parcel_link_delta",
                   "roadaddr_entrance_load",
+                  "sppn_makarea_load",
                   "locsum_load",
                   "navi_load",
                   "shp_polygons_load",
@@ -1577,6 +1599,7 @@
                   "juso_parcel_link_load",
                   "juso_parcel_link_delta",
                   "roadaddr_entrance_load",
+                  "sppn_makarea_load",
                   "locsum_load",
                   "navi_load",
                   "shp_polygons_load",
@@ -2498,6 +2521,21 @@
         ],
         "type": "string"
       },
+      "ReverseExtension": {
+        "additionalProperties": false,
+        "properties": {
+          "sppn_makarea": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SppnMakareaContext"
+            },
+            "title": "Sppn Makarea",
+            "type": "array"
+          }
+        },
+        "title": "ReverseExtension",
+        "type": "object"
+      },
       "ReverseInput": {
         "additionalProperties": false,
         "properties": {
@@ -2556,6 +2594,16 @@
           },
           "status": {
             "$ref": "#/components/schemas/Status"
+          },
+          "x_extension": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReverseExtension"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -3465,6 +3513,103 @@
           }
         },
         "title": "SourceSetPlanRequest",
+        "type": "object"
+      },
+      "SppnMakareaContext": {
+        "additionalProperties": false,
+        "properties": {
+          "area_m2": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area M2"
+          },
+          "makarea_id": {
+            "title": "Makarea Id",
+            "type": "string"
+          },
+          "makarea_nm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Makarea Nm"
+          },
+          "mvm_res_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mvm Res Cd"
+          },
+          "ntfc_de": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ntfc De"
+          },
+          "ntfc_yn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ntfc Yn"
+          },
+          "sig_cd": {
+            "title": "Sig Cd",
+            "type": "string"
+          },
+          "source_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File"
+          },
+          "source_yyyymm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Yyyymm"
+          }
+        },
+        "required": [
+          "sig_cd",
+          "makarea_id"
+        ],
+        "title": "SppnMakareaContext",
         "type": "object"
       },
       "Status": {

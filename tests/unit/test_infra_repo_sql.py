@@ -27,6 +27,16 @@ def test_reverse_sql_transforms_input_once_and_keeps_indexed_column_raw() -> Non
     assert "ORDER BY t.pt_5179 <-> p.geom" in sql
 
 
+def test_sppn_reverse_sql_uses_covers_and_keeps_polygon_indexed_column_raw() -> None:
+    sql = str(reverse_repo._SPPN_AREAS_SQL)
+
+    assert "WITH target_pt AS" in sql
+    assert "ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), :in_srid), 5179)" in sql
+    assert "ST_Covers(m.geom, p.geom)" in sql
+    assert "ST_Transform(m.geom" not in sql
+    assert "ORDER BY ST_Area(m.geom) ASC" in sql
+
+
 def test_trgm_repos_use_set_local_not_global_threshold() -> None:
     geocode_source = inspect.getsource(geocode_repo.GeocodeRepository.fuzzy_roads)
     search_source = inspect.getsource(search_repo.SearchRepository.search)
@@ -54,6 +64,14 @@ def test_reverse_repo_expands_both_address_type() -> None:
     assert 'address_type == "both"' in source
     assert 'address_type="road"' in source
     assert 'address_type="parcel"' in source
+
+
+def test_sppn_geocode_sql_verifies_point_inside_makarea_polygon() -> None:
+    sql = str(geocode_repo._SPPN_AREA_BY_POINT)
+
+    assert "ST_SetSRID(ST_MakePoint(:x, :y), 5179)" in sql
+    assert "ST_Covers(m.geom, p.geom)" in sql
+    assert "ST_Transform(m.geom" not in sql
 
 
 def test_consistency_cases_cover_c1_through_c10_with_metrics() -> None:

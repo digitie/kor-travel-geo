@@ -41,3 +41,17 @@ def test_t049_ops_metadata_migration_covers_ops_schema() -> None:
     assert "idx_ops_serving_releases_one_active" in migration
     assert "audit_events_append_only" in migration
     assert '"table_stats_snapshots"' in migration
+
+
+def test_t042_sppn_makarea_migration_covers_table_and_indexes() -> None:
+    migration = Path("alembic/versions/0007_t042_sppn_makarea.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "revision = \"0007_t042_sppn_makarea\"" in migration
+    assert "down_revision = \"0006_t049_ops_metadata_schema\"" in migration
+    assert "CREATE TABLE IF NOT EXISTS tl_sppn_makarea" in migration
+    assert "geometry(MultiPolygon, 5179) NOT NULL" in migration
+    assert "PRIMARY KEY (sig_cd, makarea_id)" in migration
+    assert "idx_sppn_makarea_geom" in migration
+    assert "DROP TABLE IF EXISTS tl_sppn_makarea" in migration

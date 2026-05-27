@@ -6,9 +6,16 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
+from kraddr.geo.core.geocoder import geocode
+from kraddr.geo.core.sppn import format_national_point_number_from_5179
+from kraddr.geo.dto.common import Point
+from kraddr.geo.dto.geocode import GeocodeInput
 from kraddr.geo.infra.engine import make_async_engine
+from kraddr.geo.infra.geocode_repo import GeocodeRepository
+from kraddr.geo.infra.reverse_repo import ReverseRepository
 from kraddr.geo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL, iter_sql_statements
 from kraddr.geo.loaders.postload import resolve_text_geometry_links
+from kraddr.geo.loaders.sppn_makarea_loader import load_sppn_makarea
 from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
 from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kraddr.geo.loaders.text.locsum_loader import load_locsum
@@ -35,6 +42,89 @@ DATA_ROOTS = (
     Path("/mnt/f/dev/python-kraddr-geo/data/juso"),
     Path("/home/digitie/kraddr-geo-data/juso"),
 )
+
+
+@pytest.mark.asyncio
+async def test_real_postgres_can_load_sppn_makarea_and_lookup_when_dsn_is_set() -> None:
+    dsn = os.getenv("KRADDR_GEO_TEST_PG_DSN")
+    if not dsn:
+        pytest.skip("set KRADDR_GEO_TEST_PG_DSN to run actual PostgreSQL SPPN load")
+
+    data_root = _data_root()
+    if data_root is None:
+        pytest.skip("actual data/juso directory is not available")
+    zone_zip = data_root / "구역의 도형" / "구역의도형_전체분_세종특별자치시.zip"
+    if not zone_zip.exists():
+        pytest.skip(f"actual zone shape data is not available: {zone_zip}")
+
+    pytest.importorskip("osgeo.gdal")
+    engine = make_async_engine(Settings(pg_dsn=dsn))
+    try:
+        async with engine.begin() as conn:
+            for sql in iter_sql_statements(SCHEMA_SQL):
+                await conn.execute(text(sql))
+            for sql in iter_sql_statements(INDEX_SQL):
+                await conn.execute(text(sql))
+
+        count = await load_sppn_makarea(engine, zone_zip, source_yyyymm="202605")
+
+        async with engine.connect() as conn:
+            summary = (
+                await conn.execute(
+                    text(
+                        """
+SELECT count(*) AS rows,
+       count(DISTINCT sig_cd || ':' || makarea_id) AS keys,
+       bool_and(ST_GeometryType(geom) = 'ST_MultiPolygon') AS all_multipolygon,
+       bool_and(ST_IsValid(geom)) AS all_valid
+  FROM tl_sppn_makarea
+"""
+                    )
+                )
+            ).mappings().one()
+            sample = (
+                await conn.execute(
+                    text(
+                        """
+SELECT sig_cd, makarea_id, makarea_nm,
+       ST_X(ST_PointOnSurface(geom)) AS x5179,
+       ST_Y(ST_PointOnSurface(geom)) AS y5179,
+       ST_X(ST_Transform(ST_PointOnSurface(geom), 4326)) AS lon,
+       ST_Y(ST_Transform(ST_PointOnSurface(geom), 4326)) AS lat
+  FROM tl_sppn_makarea
+ WHERE makarea_nm IS NOT NULL
+ ORDER BY ST_Area(geom) DESC
+ LIMIT 1
+"""
+                    )
+                )
+            ).mappings().one()
+
+        sppn = format_national_point_number_from_5179(
+            Point(x=float(sample["x5179"]), y=float(sample["y5179"]))
+        )
+        assert sppn is not None
+        geocode_response = await geocode(GeocodeRepository(engine), GeocodeInput(address=sppn.text))
+        reverse_areas = await ReverseRepository(engine).sppn_areas(
+            Point(x=float(sample["lon"]), y=float(sample["lat"])),
+            crs="EPSG:4326",
+            limit=5,
+        )
+
+        assert count == 146
+        assert summary["rows"] == 146
+        assert summary["keys"] == 146
+        assert summary["all_multipolygon"] is True
+        assert summary["all_valid"] is True
+        assert geocode_response.status == "OK"
+        assert geocode_response.x_extension is not None
+        assert geocode_response.x_extension.national_point_number == sppn.text
+        assert geocode_response.x_extension.sppn_makarea is not None
+        assert geocode_response.x_extension.sppn_makarea.sig_cd == sample["sig_cd"]
+        assert reverse_areas
+        assert reverse_areas[0].sig_cd == sample["sig_cd"]
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

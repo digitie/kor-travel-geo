@@ -16,6 +16,7 @@ from kraddr.geo.cli.main import (
     load_parcel_links_command,
     load_roadaddr_entrances_command,
     load_shp_all_command,
+    load_sppn_makarea_command,
 )
 
 
@@ -31,6 +32,7 @@ def test_cli_exposes_t018_operational_commands() -> None:
         ["load", "full-set", "--help"],
         ["load", "roadaddr-entrances", "--help"],
         ["load", "shp-all", "--help"],
+        ["load", "sppn-makarea", "--help"],
         ["load", "epost", "--help"],
         ["refresh", "mv", "--help"],
         ["validate", "consistency", "--help"],
@@ -69,6 +71,15 @@ def test_multi_sido_shp_load_analyzes_only_after_last_sido() -> None:
     assert "analyze=index == len(items) - 1" in shp_all_source
     assert "sido_dirs = _sido_dirs(shp_root)" in all_sidos_source
     assert "analyze=index == len(sido_dirs) - 1" in all_sidos_source
+
+
+def test_sppn_makarea_cli_load_exposes_source_yyyymm_and_mode() -> None:
+    source = inspect.getsource(load_sppn_makarea_command)
+
+    assert "load_sppn_makarea(" in source
+    assert "--yyyymm" in source
+    assert "--mode" in source
+    assert 'typer.echo(f"loaded tl_sppn_makarea rows: {count}")' in source
 
 
 def test_limit_per_file_commands_warn_test_only() -> None:

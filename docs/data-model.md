@@ -887,26 +887,35 @@ CREATE TABLE tl_juso_parcel_link (
 | `도로명주소 출입구 정보` | direct `bd_mgt_sn + EPSG:5179` 텍스트 | T-039 완료. `tl_roadaddr_entrc`로 적재 |
 | `도로명주소 건물 도형` | `TL_SGCO_RNADR_MST` polygon, `TL_SPBD_ENTRC` point, `TL_SPOT_CNTC` polyline bundle | T-040 완료. 단순 중복이 아니므로 별도 분석 후보로 유지 |
 | `건물군 내 상세주소 동 도형` | 상세주소 동 polygon + 동 출입구 point. 전자지도 건물 polygon 부분집합으로 확인 | T-041 완료, 별도 overlay 후보 |
-| `구역의 도형` | 전자지도 중복 행정구역 + `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA` 추가 | T-041 완료. `TL_SCCO_GEMD`는 별도 overlay 후보, `TL_SPPN_MAKAREA`는 ADR-027에 따라 국가지점번호 보조 geocode/reverse 데이터 후보 |
+| `구역의 도형` | 전자지도 중복 행정구역 + `TL_SCCO_GEMD`, `TL_SPPN_MAKAREA` 추가 | T-041 완료. `TL_SCCO_GEMD`는 별도 overlay 후보, `TL_SPPN_MAKAREA`는 T-042에서 국가지점번호 보조 geocode/reverse 데이터로 구현 |
 
-T-039는 `mv_geocode_target`의 `bd_mgt_sn` unique 계약을 유지한 채 direct entrance를 대표 좌표 1순위 후보로만 사용한다. T-040은 address building bundle의 natural key overlap을 비교한 결과 단순 중복이 아니라고 결론냈지만, 현행 serving table에는 섞지 않는다. T-041은 상세주소 동 도형이 전자지도 건물 부분집합이고 구역 중복 레이어가 전자지도와 key 기준 완전 중복임을 확인했다. 다만 `TL_SPPN_MAKAREA`는 단순 overlay가 아니라 국가지점번호 표기 의무지역 polygon이므로 ADR-027에서 별도 보조 데이터로 승격한다.
+T-039는 `mv_geocode_target`의 `bd_mgt_sn` unique 계약을 유지한 채 direct entrance를 대표 좌표 1순위 후보로만 사용한다. T-040은 address building bundle의 natural key overlap을 비교한 결과 단순 중복이 아니라고 결론냈지만, 현행 serving table에는 섞지 않는다. T-041은 상세주소 동 도형이 전자지도 건물 부분집합이고 구역 중복 레이어가 전자지도와 key 기준 완전 중복임을 확인했다. `TL_SPPN_MAKAREA`는 단순 overlay가 아니라 국가지점번호 표기 의무지역 polygon이므로 T-042에서 `tl_sppn_makarea` 별도 테이블과 geocode/reverse `x_extension.sppn_makarea` 보조 경로로 구현했다.
 
-### `tl_sppn_makarea` 제안 스키마 (ADR-027, 구현 전)
+### `tl_sppn_makarea` 스키마 (ADR-027, T-042 구현)
 
 `TL_SPPN_MAKAREA`는 "지점번호표기 의무지역" polygon이다. 주소가 없는 산악·해안·하천·도서 등 비거주지역에서 국가지점번호 geocode/reverse geocode를 보조할 수 있지만, 개별 국가지점번호판 point 목록은 아니다. 따라서 `mv_geocode_target`에 union하지 않고 별도 테이블로 둔다.
 
-제안 DDL:
+DDL:
 
 ```sql
-CREATE TABLE tl_sppn_makarea (
-  sig_cd        TEXT NOT NULL,
-  makarea_id    TEXT NOT NULL,
-  makarea_nm    TEXT,
-  geom          geometry(MultiPolygon, 5179) NOT NULL,
-  source_file   TEXT NOT NULL,
-  source_yyyymm TEXT,
-  loaded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (sig_cd, makarea_id)
+CREATE TABLE IF NOT EXISTS tl_sppn_makarea (
+  sig_cd          TEXT NOT NULL,
+  makarea_id      TEXT NOT NULL,
+  ntfc_yn         TEXT,
+  makarea_nm      TEXT,
+  ntfc_de         TEXT,
+  mvm_res_cd      TEXT,
+  mvmn_resn       TEXT,
+  opert_de        TEXT,
+  makarea_ar      NUMERIC(12,3),
+  mvmn_desc       TEXT,
+  geom            geometry(MultiPolygon, 5179) NOT NULL,
+  source_file     TEXT NOT NULL,
+  source_yyyymm   TEXT,
+  loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (sig_cd, makarea_id),
+  CHECK (char_length(sig_cd) = 5),
+  CHECK (btrim(makarea_id) <> '')
 );
 
 CREATE INDEX idx_sppn_makarea_geom
@@ -923,10 +932,15 @@ CREATE INDEX idx_sppn_makarea_sig
 |------|------|
 | `sig_cd` | 시군구 코드. 원천 key 일부이며 행정구역 join 품질 검증에 사용 |
 | `makarea_id` | 시군구 내 표기 의무지역 ID. `SIG_CD + MAKAREA_ID`를 primary key로 사용 |
+| `ntfc_yn`, `ntfc_de` | 고시 여부와 고시일 |
 | `makarea_nm` | 표기 의무지역명. 중복 가능성이 있으므로 unique key로 쓰지 않음 |
+| `mvm_res_cd`, `mvmn_resn`, `opert_de`, `mvmn_desc` | 원천 변동/작업 metadata |
+| `makarea_ar` | 원천 면적 값. 실제 query에서는 `ST_Area(geom)`도 함께 사용할 수 있음 |
 | `geom` | EPSG:5179 MultiPolygon. reverse geocode 포함 여부 판단에 사용 |
 | `source_file`, `source_yyyymm`, `loaded_at` | 원천 추적과 기준월 정합성 기록 |
 
-reverse geocode 쿼리는 입력 좌표를 한 번만 5179로 변환하고 `ST_Covers(m.geom, p.geom)`로 GiST index를 타게 한다. 경계 위 좌표를 놓치지 않기 위해 `ST_Contains`보다 `ST_Covers`를 우선한다. 여러 구역에 포함되면 면적이 작은 polygon을 우선한다.
+reverse geocode 쿼리는 입력 좌표를 한 번만 5179로 변환하고 `ST_Covers(m.geom, p.geom)`로 GiST index를 타게 한다. 경계 위 좌표를 놓치지 않기 위해 `ST_Contains`보다 `ST_Covers`를 우선한다. 여러 구역에 포함되면 면적이 작은 polygon을 우선한다. 응답은 vworld 호환 주소 후보를 오염시키지 않고 `ReverseResponse.x_extension.sppn_makarea` 배열에 담는다.
 
-geocode에서 국가지점번호 문자열을 처리하려면 별도 parser/generator가 필요하다. `tl_sppn_makarea`는 parser가 계산한 point가 표기 의무지역에 속하는지 검증하고, `MAKAREA_NM` 같은 문맥을 `x_extension`에 붙이는 역할을 맡는다. 구역명만으로 좌표를 반환하는 기능은 주소 geocode가 아니라 구역 검색이므로, 도입한다면 낮은 confidence centroid/bbox 결과로 분리한다.
+geocode에서 국가지점번호 문자열은 `core.sppn` parser가 EPSG:5179 10m cell 중심을 계산한다. `tl_sppn_makarea`는 계산된 point가 표기 의무지역에 속하는지 검증하고, `MAKAREA_NM` 같은 문맥을 `GeocodeResponse.x_extension.sppn_makarea`에 붙이는 역할을 맡는다. 좌표에서 국가지점번호 문자열을 만드는 formatter도 제공해 실제 polygon 내부 점 기반 테스트와 향후 UI 표시를 지원한다. 구역명만으로 좌표를 반환하는 기능은 주소 geocode가 아니라 구역 검색이므로, 도입한다면 낮은 confidence centroid/bbox 결과로 분리한다.
+
+T-042 실제 검증은 세종 `구역의 도형` ZIP으로 수행했다. Docker PostGIS `kraddr_geo_t042_sppn`에 146행을 적재했고, 146개 key가 모두 distinct이며 모든 geometry가 valid `MultiPolygon`임을 확인했다. `금이산` polygon 내부 점은 formatter 결과 `다바 7363 4856`으로 변환됐고, geocode/reverse 보조 조회가 같은 `sppn_makarea` 문맥을 반환했다. 상세 실행 로그와 시스템 상태는 `docs/t042-sppn-makarea.md`에 둔다.

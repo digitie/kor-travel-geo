@@ -96,6 +96,7 @@ def test_source_set_plan_builds_single_month_batch_without_confirmation(
     _touch(tmp_path / "202604_내비게이션용DB_전체분" / "navi.txt")
     _touch(tmp_path / "202604_도로명주소 전자지도" / "TL_SPBD_BULD.shp")
     _touch(tmp_path / "202604_도로명주소 출입구 정보" / "RNENTDATA_2404_11.txt")
+    _touch(tmp_path / "202604_구역의 도형" / "36110" / "TL_SPPN_MAKAREA.shp")
 
     plan = build_full_load_source_set_plan(root_path=tmp_path)
 
@@ -109,6 +110,8 @@ def test_source_set_plan_builds_single_month_batch_without_confirmation(
     assert children_by_kind["juso_text_load"]["source_yyyymm"] == "202604"
     assert children_by_kind["roadaddr_entrance_load"]["source_yyyymm"] == "202604"
     assert children_by_kind["shp_polygons_load"]["mode"] == "full"
+    assert children_by_kind["sppn_makarea_load"]["mode"] == "full"
+    assert children_by_kind["sppn_makarea_load"]["source_yyyymm"] == "202604"
     assert "source_set" in children_by_kind["locsum_load"]
 
 
@@ -118,10 +121,12 @@ def test_source_set_discovery_can_exclude_optional_sources(tmp_path: Path) -> No
     _touch(tmp_path / "202604_내비게이션용DB_전체분" / "navi.txt")
     _touch(tmp_path / "202604_도로명주소 전자지도" / "TL_SPBD_BULD.shp")
     _touch(tmp_path / "202604_도로명주소 출입구 정보" / "RNENTDATA_2404_11.txt")
+    _touch(tmp_path / "202604_구역의 도형" / "36110" / "TL_SPPN_MAKAREA.shp")
 
     discovery = discover_load_sources(tmp_path, include_optional=False)
 
     assert "roadaddr_entrance" not in discovery.recommended
+    assert "sppn_makarea" not in discovery.recommended
     assert discovery.missing_required == ()
 
 

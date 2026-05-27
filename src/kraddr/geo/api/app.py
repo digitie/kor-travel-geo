@@ -26,6 +26,7 @@ from kraddr.geo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kraddr.geo.loaders.pobox_loader import load_pobox
 from kraddr.geo.loaders.postload import refresh_mv, resolve_text_geometry_links
 from kraddr.geo.loaders.shp.polygons_loader import load_shp_polygons
+from kraddr.geo.loaders.sppn_makarea_loader import load_sppn_makarea
 from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
 from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kraddr.geo.loaders.text.locsum_loader import load_locsum
@@ -240,6 +241,21 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
         await progress(progress=1.0, stage="shp_polygons_load", message=f"{count} layers loaded")
 
+    async def sppn_makarea(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        await progress(stage="sppn_makarea_load", message="국가지점번호 표기 의무지역 적재 시작")
+        count = await load_sppn_makarea(
+            engine,
+            _payload_path(payload),
+            mode=_payload_str(payload, "mode") or "full",
+            source_yyyymm=_payload_str(payload, "source_yyyymm"),
+            cancel_event=cancel_event,
+        )
+        await progress(progress=1.0, stage="sppn_makarea_load", message=f"{count} rows loaded")
+
     async def pobox(
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
@@ -325,6 +341,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
     queue.register("locsum_load", locsum)
     queue.register("navi_load", navi)
     queue.register("shp_polygons_load", shp)
+    queue.register("sppn_makarea_load", sppn_makarea)
     queue.register("pobox_load", pobox)
     queue.register("bulk_load", bulk)
     queue.register("consistency_check", consistency)

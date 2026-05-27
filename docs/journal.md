@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-042 — `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회 구현)
+
+**작업**: ADR-027의 `TL_SPPN_MAKAREA` 설계를 실제 DDL, loader, CLI/API job, source set optional child, geocode/reverse 보조 조회로 구현했다.
+
+**반영 상세**:
+- `tl_sppn_makarea` DDL과 Alembic `0007_t042_sppn_makarea`를 추가했다. 원천 `Polygon`은 운영 `MultiPolygon 5179`로 정규화한다.
+- `load_sppn_makarea()`를 추가했다. `구역의 도형` ZIP, 디렉터리, 추출된 SHP 입력을 탐지하고 GDAL Python binding으로 staging table에 적재한 뒤 `SIG_CD + MAKAREA_ID` 기준으로 upsert한다.
+- `kraddr-geo load sppn-makarea`, API queue kind `sppn_makarea_load`, source set optional `sppn_makarea` child를 연결했다.
+- `core.sppn`에 국가지점번호 parser와 EPSG:5179 좌표 formatter를 추가했다.
+- geocode는 국가지점번호 문자열을 좌표로 변환한 뒤 `ST_Covers(tl_sppn_makarea.geom, point)`로 검증하고, `x_extension.national_point_number`와 `x_extension.sppn_makarea`를 반환한다.
+- reverse geocode는 도로명/지번 후보가 없어도 polygon 포함 여부가 있으면 `status="OK"`와 `x_extension.sppn_makarea`를 반환한다.
+- 실제 적재 중 `REPLACE(col, chr(0), '')`가 PostgreSQL에서 `null character not permitted`를 유발하는 문제를 발견해 `NULLIF(BTRIM(col::text), '')`로 수정했다.
+
+**검증**:
+- Targeted unit/contract pytest 48건을 통과했다.
+- Docker PostGIS `kraddr_geo_t042_sppn`에 세종 `구역의 도형/구역의도형_전체분_세종특별자치시.zip`을 실제 적재했다. 결과는 146행, 146 distinct key, source_yyyymm `202605`, 전체 valid MultiPolygon이었다.
+- timed load는 `elapsed_s=1.35`, `max_rss_kb=131092`였다.
+- `금이산` polygon 내부 `ST_PointOnSurface()`를 formatter로 `다바 7363 4856`으로 변환했고, geocode/reverse 보조 조회가 모두 `makarea_id=29`, `makarea_nm=금이산`을 반환했다.
+- optional integration test `test_real_postgres_can_load_sppn_makarea_and_lookup_when_dsn_is_set`를 실제 DB DSN으로 실행해 통과했다.
+
+**후속**:
+- T-027 최종 클린 로드에서 `sppn_makarea` optional source를 포함할지 결정하고, 포함 시 전국 row count와 시간을 기록한다.
+- T-047 성능 벤치마크에 국가지점번호 geocode/reverse Q11을 포함한다.
+- T-044에서 최신 `maplibre-vworld-js` wrapper 기반 `TL_SPPN_MAKAREA` polygon overlay를 추가한다.
+
 ## 2026-05-27 (T-046 — 적재 완료 DB 백업/복원 및 UI 구현)
 
 **작업**: ADR-030의 적재 완료 DB 백업/복원 설계를 실제 DTO, 설정, 실행 로직, REST API, CLI, 관리 UI, 테스트, 대구광역시 부분 DB 검증으로 구현했다.

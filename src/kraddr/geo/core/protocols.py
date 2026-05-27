@@ -39,6 +39,20 @@ class ReverseLookup(AddressLookup):
 
 
 @dataclass(frozen=True, slots=True)
+class SppnAreaLookup:
+    sig_cd: str
+    makarea_id: str
+    makarea_nm: str | None = None
+    ntfc_yn: str | None = None
+    ntfc_de: str | None = None
+    mvm_res_cd: str | None = None
+    source_file: str | None = None
+    source_yyyymm: str | None = None
+    area_m2: float | None = None
+    point: Point | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class SearchLookup:
     type: Literal["address", "place", "district", "road"]
     title: str
@@ -121,6 +135,8 @@ class GeocodeRepo(Protocol):
 
     async def fuzzy_roads(self, parts: AddrParts, *, limit: int = 5) -> list[AddressLookup]: ...
 
+    async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None: ...
+
 
 @runtime_checkable
 class ReverseRepo(Protocol):
@@ -133,6 +149,14 @@ class ReverseRepo(Protocol):
         radius_m: int,
         limit: int = 5,
     ) -> list[ReverseLookup]: ...
+
+    async def sppn_areas(
+        self,
+        point: Point,
+        *,
+        crs: str,
+        limit: int = 5,
+    ) -> list[SppnAreaLookup]: ...
 
 
 @runtime_checkable
@@ -236,3 +260,7 @@ class FakeGeocodeRepo:
 
     async def fuzzy_roads(self, parts: AddrParts, *, limit: int = 5) -> list[AddressLookup]:
         return self.fuzzy_result[:limit]
+
+    async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None:
+        _ = point_5179
+        return None

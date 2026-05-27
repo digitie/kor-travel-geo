@@ -58,7 +58,7 @@ T-045는 이 문제를 해결하기 위해 원천 묶음(`source_set`)을 명시
 | `navi` | 예 | `navi_load` | 내비게이션용DB, `navi` 이름으로 탐지한다. |
 | `shp` | 예 | `shp_polygons_load` | 전자지도 SHP 디렉터리 또는 `TL_SPBD_BULD.shp` 부모 디렉터리를 후보로 둔다. child payload에는 `mode="full"`을 넣는다. |
 | `roadaddr_entrance` | 아니오 | `roadaddr_entrance_load` | `RNENTDATA_*` 또는 `출입구` 이름으로 탐지한다. |
-| `sppn_makarea` | 아니오 | 없음 | ADR-027/T-042 구현 전까지 source set metadata에는 남기되 child job은 만들지 않는다. |
+| `sppn_makarea` | 아니오 | `sppn_makarea_load` | T-042 이후 `구역의 도형` 또는 `TL_SPPN_MAKAREA`가 선택되면 국가지점번호 표기 의무지역 polygon을 `tl_sppn_makarea`에 적재한다. child payload에는 `mode="full"`을 넣는다. |
 | `pobox` | 아니오 | `pobox_load` | 사서함/우편번호 보조 자료. 명시적으로 선택된 경우에만 child job이 된다. |
 | `bulk` | 아니오 | `bulk_load` | 다량배달처 보조 자료. 명시적으로 선택된 경우에만 child job이 된다. |
 

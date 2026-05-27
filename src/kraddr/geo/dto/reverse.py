@@ -17,6 +17,7 @@ from .common import (
     Status,
     ZipSource,
 )
+from .geocode import SppnMakareaContext
 
 ReverseType = Literal["both", "road", "parcel"]
 
@@ -47,8 +48,13 @@ class ReverseResultItem(FrozenModel):
     distance_m: float | None = Field(default=None, ge=0.0)
 
 
+class ReverseExtension(FrozenModel):
+    sppn_makarea: tuple[SppnMakareaContext, ...] = ()
+
+
 class ReverseResponse(FrozenModel):
     service: ServiceMeta
     status: Status
     input: ReverseInput
     result: tuple[ReverseResultItem, ...] = ()
+    x_extension: ReverseExtension | None = None
