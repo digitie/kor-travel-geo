@@ -760,6 +760,8 @@ CREATE SCHEMA IF NOT EXISTS ops;
 
 `ops.audit_events.payload_redacted`와 `ops.artifacts.manifest`에는 API key, DSN password, callback secret, download token을 평문 저장하지 않는다. 주소 원문도 감사 목적에 꼭 필요하지 않으면 hash 또는 마스킹 값만 저장한다.
 
+`ops.audit_events.job_id` FK는 `ON DELETE NO ACTION`이다. 감사 이벤트가 연결된 `load_jobs` row를 삭제하면 운영 의사결정과 실행 이력의 연결이 끊기므로, DB가 삭제를 막고 별도 retention/archive 정책을 요구해야 한다.
+
 active serving release는 한 건만 허용한다. `idx_ops_serving_releases_one_active` partial unique index가 `state='active'` row를 한 건으로 제한한다. rollback은 과거 row를 다시 active로 바꾸지 않고 새 release row를 만들어 lineage를 보존한다.
 
 T-046에서 설계한 `db_backup_artifacts`는 신규 구현 시 `ops.artifacts`의 `artifact_type='db_backup'`으로 수렴한다. 이미 별도 `db_backup_artifacts`가 만들어진 배포를 지원해야 하면 compatibility view 또는 migration으로 흡수한다.

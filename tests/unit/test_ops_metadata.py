@@ -27,8 +27,15 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in SCHEMA_SQL
 
+    audit_sql = SCHEMA_SQL.split("CREATE TABLE IF NOT EXISTS ops.audit_events", 1)[1].split(
+        "CREATE OR REPLACE FUNCTION",
+        1,
+    )[0]
+
     assert "ops.audit_events_append_only" in SCHEMA_SQL
     assert "trg_ops_audit_events_append_only" in SCHEMA_SQL
+    assert "job_id            TEXT REFERENCES load_jobs(job_id) ON DELETE NO ACTION" in audit_sql
+    assert "ON DELETE SET NULL" not in audit_sql
     assert "idx_ops_serving_releases_one_active" in INDEX_SQL
     assert "WHERE state = 'active'" in INDEX_SQL
     assert any("ops.table_stats_snapshots" in sql for sql in iter_sql_statements(SCHEMA_SQL))

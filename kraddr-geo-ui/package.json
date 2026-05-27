@@ -17,7 +17,7 @@
     "@tanstack/react-query": "^5.90.10",
     "lucide-react": "^0.468.0",
     "maplibre-gl": "^5.24.0",
-    "maplibre-vworld": "git+https://github.com/digitie/maplibre-vworld-js.git#1a28b1099ab6c9c03e892e469974aee8c07deda1",
+    "maplibre-vworld": "git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b",
     "next": "^16.2.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

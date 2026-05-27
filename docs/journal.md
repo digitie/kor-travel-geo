@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (PR #34~#47 리뷰 코멘트 audit/fixup)
+
+**작업**: 사용자 지시에 따라 PR #34부터 #47까지 GitHub conversation comment, formal review body, inline review thread, GraphQL `reviewThreads`를 다시 확인했다. PR #34~#43에는 post-merge 리뷰 코멘트가 있었고, PR #44는 Windows Playwright 확인 메모, PR #45~#47은 확인 시점 기준 신규 코멘트가 없었다. unresolved current review thread는 0개였다.
+
+**반영 상세**:
+- `docs/postmerge-review-fixups-pr34-latest.md`를 추가해 PR별 코멘트, 이번 반영, 후속 이관 항목, 재사용할 GraphQL query template을 기록했다.
+- PR #35 M3 반영: `LoadJobStatus.source_set`, `ConsistencyReport.source_set`, 내부 row protocol, `run_all_cases(source_set=...)` 타입을 `dict[str, Any]`로 넓혀 `SourceSetPlan`의 nested JSON을 보존한다. `openapi.json`, `kraddr-geo-ui/types/api.gen.ts`, `kraddr-geo-ui/lib/api.ts`도 함께 갱신했다.
+- PR #43 M5 반영: `ops.audit_events.job_id` FK를 `ON DELETE SET NULL`에서 `ON DELETE NO ACTION`으로 변경했다. fresh DDL과 Alembic `0008_pr34_review_followups`를 추가해 감사 이벤트와 job 연결이 조용히 끊기지 않게 했다.
+- PR #38/PR #42 후속 반영: `maplibre-vworld-js` upstream `main` 최신 SHA `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`를 확인해 `kraddr-geo-ui` dependency/lockfile과 문서를 갱신하고, Windows `npm` 오사용을 막는 `scripts/frontend_check.sh`를 추가했다.
+
+**검증 계획**:
+- 백엔드: `pytest`, `ruff`, `mypy`, `lint-imports`, OpenAPI drift check.
+- 프론트엔드: WSL Linux Node/npm으로 `scripts/frontend_check.sh` 실행. Playwright는 사용자 지시에 따라 Windows Node/브라우저에서만 수행한다.
+
+**후속**:
+- T-050 운영 hardening을 백로그에 추가했다. upload set cleanup TTL/lock, callback HMAC/retry, backup/restore sub-progress, snapshot/release 자동 생성 hook, table stats cron, destructive confirmation flow, 실제 PostgreSQL constraint integration test를 묶어 처리한다.
+
 ## 2026-05-27 (T-027 — 최종 실 데이터 클린 적재와 same-month direct 출입구 gate)
 
 **작업**: PR #46 머지 후 최신 main에서 Docker PostGIS DB를 비우고 실제 `data/juso` 원천을 처음부터 적재했다. `scripts/fullload_test.sh`를 T-038/T-039/T-042 이후 원천까지 포함하도록 보강하고, 전체 실행 로그·시스템 상태·row count·정합성 결과·data-quality export를 `artifacts/fullload/20260527_135155/`에 남겼다.

@@ -14,7 +14,7 @@ npm run dev
 
 `NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다.
 
-지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 `git+https://github.com/digitie/maplibre-vworld-js.git#c91c9f304669ce3f5fc4915f21186b23731d5816`로 고정하며, 패키징·타입·Next.js 호환 문제가 발견되면 이 UI에서만 우회하지 않고 해당 저장소도 적극 수정한다. 최신 upstream redaction helper는 `redactVWorldUrl()`이고, UI 내부에서는 기존 컴포넌트 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 사용한다.
+지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 최신 확인 SHA인 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정하며, 패키징·타입·Next.js 호환 문제가 발견되면 이 UI에서만 우회하지 않고 해당 저장소도 적극 수정한다. 최신 upstream redaction helper는 `redactVWorldUrl()`이고, UI 내부에서는 기존 컴포넌트 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 사용한다.
 
 ## 검증
 
@@ -26,6 +26,10 @@ npm run type-check
 npm run test
 npm run build
 ```
+
+저장소 루트의 `scripts/frontend_check.sh`는 Windows `npm`이 PATH에 잡힌 경우 즉시 실패하고, Linux Node/npm에서 `gen:types`, lint, type-check, unit test, build를 순서대로 실행한다. 의존성을 새로 받는 검증이면 `scripts/frontend_check.sh --install`을 사용한다.
+
+Playwright와 실제 브라우저 렌더링 검증은 사용자 지시에 따라 Windows Node/브라우저 환경에서 수행한다. PR에는 Windows에서 실행한 명령, 브라우저, 스크린샷 경로를 함께 남긴다.
 
 ## 범위
 

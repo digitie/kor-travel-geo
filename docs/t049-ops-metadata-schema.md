@@ -83,7 +83,7 @@ append-only 운영 감사 이벤트다. 주소 검색 요청 전체를 저장하
 | `request_id`, `trace_id` | API/로그 correlation |
 | `action` | `full_load.submit`, `mv_refresh.swap`, `db_restore.confirm` 등 |
 | `resource_type`, `resource_id` | 대상 job, snapshot, release, artifact |
-| `job_id` | 관련 `load_jobs.job_id` |
+| `job_id` | 관련 `load_jobs.job_id`. 감사 이벤트가 있으면 `load_jobs` row 삭제가 막히도록 FK는 `ON DELETE NO ACTION`이다. 감사 이력에서 job 연결을 조용히 NULL 처리하지 않는다. |
 | `outcome` | `started`, `succeeded`, `failed`, `cancelled`, `denied` |
 | `error_code` | 실패 시 표준 error code |
 | `payload_redacted` | secret과 장문 주소를 제거한 JSON |
@@ -93,6 +93,7 @@ append-only 운영 감사 이벤트다. 주소 검색 요청 전체를 저장하
 
 - API key, DSN password, backup download token, callback secret은 절대 저장하지 않는다.
 - 주소 문자열은 관리 작업 근거에 꼭 필요한 경우에도 일부 마스킹하거나 hash만 저장한다.
+- `ops.audit_events.job_id`는 `ON DELETE SET NULL`을 쓰지 않는다. 오래된 `load_jobs`를 정리해야 하면 먼저 retention 정책에 따라 감사 이력을 archive하거나, 삭제가 아니라 상태/보존 등급을 바꾸는 방향을 검토한다.
 - retention은 기본 180일 이상으로 두되, 운영 정책에 따라 월별 partition 또는 archive를 둔다.
 
 ### `ops.dataset_snapshots`

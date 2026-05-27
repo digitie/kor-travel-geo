@@ -16,7 +16,7 @@
 
 T-044에서는 이 보류분을 해소한다. 목표는 `CoordinateMap.tsx`의 직접 MapLibre lifecycle 소유를 줄이고, upstream `maplibre-vworld-js`의 최신 `VWorldMap` 또는 동등한 Hook/component를 감싸는 domain wrapper로 만드는 것이다. 부족한 범용 upstream 기능이 있으면 `python-kraddr-geo`에 workaround를 쌓지 않고 `digitie/maplibre-vworld-js`를 직접 수정한다. 단, geocode/reverse 입력 연결, 정합성/성능/적재 overlay, key 미설정 fallback 문구와 layout처럼 이 프로젝트에만 의미가 있는 기능은 `kraddr-geo-ui` wrapper에서 구현한다.
 
-2026-05-27 후속 T-048에서 최신 upstream `main`은 `1a28b1099ab6c9c03e892e469974aee8c07deda1`로 다시 확인되었다. 현재 dependency는 이 SHA로 갱신됐으며, 최신성 확인과 책임 경계는 ADR-032를 따른다.
+2026-05-27 후속 PR #34~#47 리뷰 audit/fixup에서 최신 upstream `main`은 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 다시 확인되었다. 현재 dependency는 이 SHA로 갱신됐으며, 최신성 확인과 책임 경계는 ADR-032를 따른다.
 
 ## 업스트림 확인
 

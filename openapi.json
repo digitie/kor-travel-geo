@@ -816,9 +816,7 @@
             "type": "string"
           },
           "source_set": {
-            "additionalProperties": {
-              "type": "string"
-            },
+            "additionalProperties": true,
             "title": "Source Set",
             "type": "object"
           },
@@ -882,9 +880,7 @@
             "type": "string"
           },
           "source_set": {
-            "additionalProperties": {
-              "type": "string"
-            },
+            "additionalProperties": true,
             "title": "Source Set",
             "type": "object"
           },
@@ -1530,9 +1526,7 @@
           "source_set": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "type": "string"
-                },
+                "additionalProperties": true,
                 "type": "object"
               },
               {

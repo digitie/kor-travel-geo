@@ -65,6 +65,17 @@ def test_pobox_defaults_and_response() -> None:
 def test_admin_debug_dtos_are_bounded() -> None:
     assert ExplainRequest(sql="SELECT 1").analyze is False
     assert LoadJobStatus(job_id="job-1", kind="sido_load", state="queued").progress == 0.0
+    nested_source_set = {
+        "load_batch_id": "batch-1",
+        "yyyymm_by_kind": {"juso": "202603", "locsum": "202604"},
+    }
+    status = LoadJobStatus(
+        job_id="job-2",
+        kind="full_load_batch",
+        state="running",
+        source_set=nested_source_set,
+    )
+    assert status.source_set == nested_source_set
     assert CacheMetrics(enabled=True, entries=0, hits=0, expired=0).enabled is True
     assert BackupCreateRequest().format == "directory_tar_zstd"
     assert BackupCreateRequest(jobs=8, compression_level=5).profile == "serving-ready"
