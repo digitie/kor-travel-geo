@@ -625,7 +625,7 @@ async def run_all_cases(
     scope: str = "full",
     cases: tuple[str, ...] = DEFAULT_CASES,
     generated_by: Literal["cli", "api", "cron"] = "api",
-    source_set: dict[str, str] | None = None,
+    source_set: dict[str, Any] | None = None,
     on_progress: ProgressReporter | None = None,
 ) -> ConsistencyReport:
     started_at = datetime.now(UTC)

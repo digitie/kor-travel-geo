@@ -41,8 +41,15 @@ export type LoadJobStatus = {
   job_id: string;
   kind: string;
   state: "queued" | "running" | "done" | "failed" | "cancelled";
+  load_batch_id?: string | null;
+  parent_job_id?: string | null;
   progress: number;
   current_stage?: string | null;
+  source_yyyymm?: string | null;
+  source_set?: Record<string, unknown> | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  heartbeat_at?: string | null;
   error_message?: string | null;
   log_tail?: string[];
   payload_summary?: Record<string, unknown> | null;
@@ -160,7 +167,7 @@ export type ConsistencyReportSummary = {
   report_id: string;
   scope: string;
   severity_max: "OK" | "INFO" | "WARN" | "ERROR";
-  source_set: Record<string, string>;
+  source_set: Record<string, unknown>;
   started_at: string;
   finished_at?: string | null;
   generated_by: "cli" | "api" | "cron";

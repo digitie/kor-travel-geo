@@ -55,3 +55,15 @@ def test_t042_sppn_makarea_migration_covers_table_and_indexes() -> None:
     assert "PRIMARY KEY (sig_cd, makarea_id)" in migration
     assert "idx_sppn_makarea_geom" in migration
     assert "DROP TABLE IF EXISTS tl_sppn_makarea" in migration
+
+
+def test_pr34_review_followups_migration_preserves_audit_job_links() -> None:
+    migration = Path("alembic/versions/0008_pr34_review_followups.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "revision = \"0008_pr34_review_followups\"" in migration
+    assert "down_revision = \"0007_t042_sppn_makarea\"" in migration
+    assert "DROP CONSTRAINT IF EXISTS audit_events_job_id_fkey" in migration
+    assert "ON DELETE NO ACTION" in migration
+    assert "ON DELETE SET NULL" in migration

@@ -143,7 +143,7 @@ new QueryClient({
 
 `CoordinateMap.tsx`는 실제 MapLibre 인스턴스, marker, click callback, tile error 처리를 담당한다. 상위 화면은 `components/vworld/LazyCoordinateMap.tsx`를 import한다. 이 wrapper는 `next/dynamic(..., { ssr: false })`로 MapLibre 번들을 클라이언트 런타임에만 불러오며, 로딩 중에는 같은 높이의 skeleton을 보여 준다. `maplibre-gl`은 브라우저 전역 객체와 WebGL에 의존하므로, 디버그 페이지에서 정적 import를 직접 늘리지 않는다.
 
-`maplibre-vworld`는 최신 `main` 또는 stable release를 확인한 뒤 검증된 버전으로 고정한다. 현재 확인된 upstream `main` 최신 커밋은 `1a28b1099ab6c9c03e892e469974aee8c07deda1`이며, dependency는 `git+https://github.com/digitie/maplibre-vworld-js.git#1a28b1099ab6c9c03e892e469974aee8c07deda1`이다. 이 upstream 계열은 PR #6/#7 merge 이후 `dist/`, package `exports`, `types`, `style.css`, zod v4 peer dependency를 포함하고, PR #9 이후 `onMapClick`/`onMapError`/`flyToOptions`와 tile error helper를 제공한다. 최신 helper 이름은 `redactVWorldUrl()`이며, `kraddr-geo-ui/lib/vworld.ts`는 기존 내부 컴포넌트 계약을 유지하기 위해 `redactVWorldUrl as redactVWorldTileUrl` alias를 둔다. CI에서 SSH key 없이 설치되어야 하므로 lockfile의 `resolved`도 `git+https`를 유지한다. 패키지 SHA를 바꿀 때는 WSL Linux Node/npm으로 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 실행해 소비자 build가 유지되는지 먼저 확인한다.
+`maplibre-vworld`는 최신 `main` 또는 stable release를 확인한 뒤 검증된 버전으로 고정한다. 현재 확인된 upstream `main` 최신 커밋은 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`이며, dependency는 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`이다. 이 upstream 계열은 PR #6/#7 merge 이후 `dist/`, package `exports`, `types`, `style.css`, zod v4 peer dependency를 포함하고, PR #9 이후 `onMapClick`/`onMapError`/`flyToOptions`와 tile error helper를 제공한다. 최신 helper 이름은 `redactVWorldUrl()`이며, `kraddr-geo-ui/lib/vworld.ts`는 기존 내부 컴포넌트 계약을 유지하기 위해 `redactVWorldUrl as redactVWorldTileUrl` alias를 둔다. CI에서 SSH key 없이 설치되어야 하므로 lockfile의 `resolved`도 `git+https`를 유지한다. 패키지 SHA를 바꿀 때는 WSL Linux Node/npm으로 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 실행해 소비자 build가 유지되는지 먼저 확인한다.
 
 지도 키는 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 키가 없으면 같은 크기의 좌표 프리뷰로 대체한다. MapLibre/VWorld tile error는 일시적 네트워크 실패와 치명 오류를 구분한다. tile fetch 실패는 redacted URL로 `console.warn`만 남기고, 누적 임계치 이상이거나 style/WebGL 계열 오류일 때만 overlay를 보여 준다. 이 fallback 덕분에 CI, 내부망 테스트, VWorld 도메인 등록 전 개발 환경에서 화면이 비어 보이지 않는다.
 
@@ -177,7 +177,7 @@ T-044 경계화 포팅 원칙:
 - **타입 문제**: React 18/19, MapLibre GL JS, Vite/Next.js에서 타입 오류가 나면 upstream 타입 선언과 테스트를 보강한다.
 - **기능 문제**: VWorld `Base`/`gray`/`midnight`/`Hybrid`/`Satellite` layer, marker, click, clustering, attribution 중 공통 컴포넌트화할 수 있는 문제는 upstream에 반영한다.
 - **프로젝트 특화 기능**: geocode/reverse form 상태, API 응답 overlay, 정합성/성능/적재 결과 표시, 이 프로젝트 fallback 문구와 임계치는 `kraddr-geo-ui`가 책임진다.
-- **의존성 선언 상태**: `maplibre-vworld`는 `git+https://github.com/digitie/maplibre-vworld-js.git#1a28b1099ab6c9c03e892e469974aee8c07deda1`로 선언되어 있으며, `kraddr-geo-ui/lib/vworld.ts`는 upstream helper 재수출과 `redactVWorldUrl` 호환 alias만 담당한다.
+- **의존성 선언 상태**: `maplibre-vworld`는 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 선언되어 있으며, `kraddr-geo-ui/lib/vworld.ts`는 upstream helper 재수출과 `redactVWorldUrl` 호환 alias만 담당한다.
 - **컴포넌트 대체 조건**: click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식이 upstream에서 같은 의미로 제공되고 테스트되면 `CoordinateMap.tsx`의 직접 MapLibre wiring을 제거하고 upstream 컴포넌트 또는 Hook을 사용한다.
 - **보안·운영 조건**: 브라우저 노출 키는 VWorld 콘솔에서 origin/referrer 제한이 실제 WMTS에도 적용되는지 운영자가 확인한다. 향후 CSP를 켜면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 포함한다.
 

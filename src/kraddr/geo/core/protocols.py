@@ -93,7 +93,7 @@ class LoadJobRow:
     progress: float = 0.0
     current_stage: str | None = None
     source_yyyymm: str | None = None
-    source_set: dict[str, str] | None = None
+    source_set: dict[str, Any] | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     heartbeat_at: datetime | None = None
@@ -120,7 +120,7 @@ class ConsistencyReportRow:
     report_id: str
     scope: str
     severity_max: Literal["OK", "INFO", "WARN", "ERROR"]
-    source_set: dict[str, str]
+    source_set: dict[str, Any]
     started_at: datetime
     finished_at: datetime | None = None
     cases: tuple[ConsistencyCaseRow, ...] = ()

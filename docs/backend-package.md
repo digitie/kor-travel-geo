@@ -1353,7 +1353,7 @@ async def run_all_cases(
     *,
     scope: str = "full",
     cases: tuple[str, ...] = ("C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"),
-    source_set: dict[str, str] | None = None,  # batch DAG에서는 {"load_batch_id": "..."}
+    source_set: dict[str, Any] | None = None,  # batch DAG와 ADR-029 SourceSetPlan 중첩 JSON
     on_progress: ProgressReporter | None = None,
 ) -> ConsistencyReport:
     """각 케이스의 count/ratio/threshold/metric/sample을 채우고 리포트를 DB에 저장."""
