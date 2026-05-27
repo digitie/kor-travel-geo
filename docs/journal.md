@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (사용자 RFC 반영 — T-052~T-059 백로그 + ADR-035~ADR-038)
+
+**작업**: 사용자 RFC(restore hot-swap, vworld/kakao/naver multi-provider + v1/v2 API + AI-friendly 문서, Web UI 통계/유지보수/관리/튜닝 + C1~C10 분석 UI/CSV, CLI 동시 실행 보호, 한국 IP만 허용, N150/Odroid 환경 검토, `python-kraddr-base` Address 부분 병합 + 외부 라이브러리 삭제, 행정구역 hint 검색 가속)를 task 8건과 ADR 4건으로 문서화했다. 코드는 작성하지 않았다.
+
+**반영 상세**:
+- `docs/tasks.md`에 T-052~T-059 신규 항목 추가 + 우선순위 재정렬. 운영 안전성(T-056, T-058, T-059, T-054)을 먼저, 기능 보강(T-057, T-053, T-052) 다음, 운영 환경 비교(T-055)는 하드웨어 도착 후.
+- `docs/decisions.md`에 ADR-035(`python-kraddr-base` Address 흡수 + 외부 라이브러리 삭제), ADR-036(restore hot-swap `ALTER DATABASE RENAME` 기반), ADR-037(외부 IP 한국만 허용), ADR-038(API v1/v2 분리 + 외부 provider 흡수 + AI-friendly 문서)을 추가했다.
+- 각 task별 design doc 8건 신규: `docs/t052-api-providers-v1-v2.md`, `docs/t053-admin-ui-ops-statistics.md`, `docs/t054-korea-only-geoip.md`, `docs/t055-deployment-n150-odroid.md`, `docs/t056-kraddr-base-address-merge.md`, `docs/t057-region-hint-search.md`, `docs/t058-restore-hot-swap.md`, `docs/t059-concurrent-job-protection.md`.
+- 각 design doc은 "상태/목적/현황/결정/구현 sketch/검증/남은 위험/관련 ADR-Task" 구조로 작성해 사람과 AI agent 모두가 cold start로 진입할 수 있게 했다.
+- `CHANGELOG.md`/`docs/resume.md`에 같은 내용을 동기화했다.
+
+**현황 확인 결과 (사용자가 "반영되어 있으면 스킵" 조건을 건 항목)**:
+- restore hot-swap: 현 시점 `docs/t046-db-backup-restore.md`/ADR-030은 "기본 새 빈 DB + `replace_current` 위험 경로"만 명문화. hot-swap 절차 자체는 미반영 → **스킵하지 않고 T-058로 등록**.
+- CLI 중복 실행 보호: in-process semaphore + `load_jobs` advisory lock + `TL_SPBD_BULD` staging lock + `ops.serving_releases` active partial unique는 이미 있음. cross-process 표준화는 일부만 적용 → **T-059로 인벤토리 + 표준화 등록**.
+
+**다음 작업**: 우선순위에 따라 T-056부터 또는 T-027 베이스라인 활용 가능한 T-057/T-059부터 구현 PR을 만든다. 본 PR은 문서/계획만 포함하므로 코드/DDL은 후속 PR에서 처리한다.
+
+**검증**:
+- `git diff --check` 통과 예정(문서 전용).
+- `pytest -q`, `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`는 본 PR이 코드 변경이 없으므로 회귀 차원에서 baseline만 통과 확인.
+
 ## 2026-05-27 (T-051 — 에이전트별 worktree와 CodeGraph 운용 문서화)
 
 **작업**: 사용자 요청에 따라 ChatGPT Codex, Claude Code, Google Antigravity 2.0이 같은 checkout을 공유하지 않고 에이전트별 고정 Git worktree를 유지하는 정책을 문서화했다.

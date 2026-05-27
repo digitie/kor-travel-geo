@@ -1665,3 +1665,206 @@ LIMIT 5;
 ### 참고
 
 - 행정안전부 설명자료: `https://www.mois.go.kr/frt/bbs/type001/commonSelectBoardArticle.do?bbsId=BBSMSTR_000000000009&nttId=66987`
+
+---
+
+## ADR-035: `python-kraddr-base`의 Address 조합/분리 코드를 흡수하고 외부 라이브러리 의존성을 끊는다
+
+- 상태: accepted (문서 설계, 구현 전)
+- 날짜: 2026-05-27
+- 결정자: 사용자 요청, claude
+
+### 컨텍스트
+
+같은 WSL ext4 환경의 `~/dev/python-kraddr-base`는 한국 주소 도메인 공통 helper(주소 조합/분리, 정규화, 외부 API client 등)를 제공해 왔다. 사용자 RFC에 따라 `python-kraddr-base` 라이브러리는 archive 예정이다. 본 저장소 `python-kraddr-geo`는 이 라이브러리에 명시·암시적으로 의존하는 표면이 있을 수 있으므로, 필요한 부분만 흡수해 외부 dependency를 제거해야 한다.
+
+### 결정
+
+`python-kraddr-base` 중 **주소 문자열의 조합(compose)과 분리(parse) 코드만** 본 저장소로 흡수한다.
+
+- 흡수 대상: `kraddr.base.address.parser`, `kraddr.base.address.composer`, `kraddr.base.address.types`, `kraddr.base.address.normalize` (실제 모듈명/경로는 인벤토리 단계에서 확정).
+- 흡수 위치: `src/kraddr/geo/core/address/{parser,composer,types,normalize}.py`. 기존 `core/normalize.py`는 thin shim으로 유지해 하위 호환 보장.
+- 흡수 파일 최상단에 origin(원본 commit SHA + 원본 경로) 주석을 추가한다.
+- 단위 테스트와 fixtures도 함께 이관(`tests/unit/core/test_address_*.py`).
+- 흡수 대상이 아닌 모듈(외부 API client, I/O helper 등)은 가져오지 않는다.
+- 본 저장소의 `pyproject.toml`/`requirements*.txt`에서 `kraddr-base` dependency를 제거하고, 모든 `from kraddr.base.*` import를 `from kraddr.geo.core.address.*`로 교체한다.
+
+### 근거
+
+- `python-kraddr-base`는 곧 archive되므로, 본 저장소가 의존하면 빌드/CI/배포 위험이 발생한다.
+- Address 조합/분리는 본 저장소의 PNU generated column 규칙(ADR-010)과 직접 맞물려 있어 같은 저장소에서 관리하는 것이 정합성에 좋다.
+- 라이브러리 분리를 유지하기에는 본 저장소가 유일한 consumer일 가능성이 높다.
+
+### 결과
+
+- T-056에서 흡수 PR을 작성한다.
+- 흡수 완료 후 `python-kraddr-base`는 read-only archive로 전환하고, journal에 archive URL과 마지막 commit SHA를 남긴다.
+- 흡수 전후 응답 차이가 없는지 fixture 기반 회귀 테스트로 확인한다.
+
+### 남은 위험
+
+- 흡수 대상 모듈이 다른 외부 라이브러리에 의존한다면 단순 흡수가 어려울 수 있다. 발견 시 미흡수 결정 또는 본 저장소에서 재작성.
+- 라이선스가 호환되지 않으면 코드 그대로 가져오지 않고 본 저장소에서 동일 의미의 helper를 처음부터 작성한다.
+- archive 시점 이후 외부에서 fix가 들어오면 본 저장소는 자동 반영하지 않는다. cherry-pick 또는 별도 PR로 처리.
+
+---
+
+## ADR-036: 적재 완료 DB Restore는 같은 cluster 안 `ALTER DATABASE RENAME` 기반 hot-swap을 1차 패턴으로 지원한다
+
+- 상태: accepted (문서 설계, 구현 전, ADR-030 결과 섹션 amend)
+- 날짜: 2026-05-27
+- 결정자: 사용자 요청, claude
+
+### 컨텍스트
+
+ADR-030 / T-046은 적재 완료 DB의 backup/restore 워크플로를 정의했지만, 복원은 "기본 새 빈 DB"만 명문화하고 운영 serving DB로의 즉시 전환(hot-swap)은 "별도 위험 경로"로만 언급했다. 운영 시나리오:
+
+1. T-046으로 복원본 DB(`kraddr_geo_restore_<ts>`)를 만든다.
+2. smoke/consistency/performance gate가 통과한다.
+3. 운영 serving DB(`kraddr_geo`)를 복원본으로 즉시 교체한다.
+
+이를 위한 결정과 절차를 명문화한다.
+
+### 결정
+
+복원본 DB가 운영 serving DB와 **같은 PostgreSQL cluster 안**에 있는 경우, `ALTER DATABASE ... RENAME TO ...` 기반 hot-swap을 1차 패턴으로 지원한다.
+
+1. 사전 조건: `ops.maintenance_windows(kind='restore', state='active')` + typed confirmation hash 일치 + 복원본 DB smoke/consistency 통과.
+2. swap 절차:
+   - maintenance용 별도 DB(`postgres` 또는 admin DB) connection 사용.
+   - 두 DB의 기존 connection을 `pg_terminate_backend`로 종료.
+   - 운영 DB → `<current>_previous_<ts>` 로 rename.
+   - 복원본 DB → `<current>` 로 rename.
+   - application engine pool refresh.
+   - post-swap smoke test 실행.
+3. release/audit 연계:
+   - 새 `ops.serving_releases(release_kind='restore', previous_release_id=...)` row 생성.
+   - `ops.audit_events`에 `serving_release.hot_swap.started|succeeded|failed|rolled_back` 4종 outcome 기록.
+4. rollback 절차: `<current>_previous_<ts>` alias가 retention 기간 안이면 같은 절차로 반대 방향 rename. 새 `release_kind='rollback'` row 생성, `rollback_target_release_id`로 원본 release 참조.
+5. 다른 host/cluster로의 fail-over(cluster 간 hot-swap)는 본 ADR 범위가 아니다. 별도 ADR/task에서 다룬다.
+
+### 근거
+
+- `ALTER DATABASE ... RENAME`은 metadata-only ALTER로 < 1초 안에 완료. application DSN을 바꾸지 않고 같은 cluster 안에서 즉시 교체 가능.
+- ADR-033의 `ops.serving_releases` + `ops.maintenance_windows` + active partial unique index가 동시 swap을 DB 수준에서 1건으로 제한한다.
+- application 변경 범위는 engine pool refresh + maintenance connection helper로 한정된다. application 코드 침투 최소.
+- DSN switch 방식(다른 host fail-over)은 본 task scope를 넘는다. 별도 ADR/task.
+
+### 결과
+
+- T-058에서 hot-swap 구현 PR을 작성한다.
+- ADR-030 "결과/후속" 섹션에 본 결정을 참조하는 amend를 추가한다.
+- REST: `POST /v1/admin/restores/{job_id}/hot-swap`, `POST /v1/admin/serving-releases/{release_id}/rollback`.
+- CLI: `kraddr-geo serving hot-swap`, `kraddr-geo serving rollback`.
+- 통합 검증은 대구광역시 부분 DB로 backup → restore → hot-swap → smoke → rollback round-trip.
+
+### 남은 위험
+
+- swap 중 `pg_terminate_backend`로 모든 connection을 끊으므로 in-flight query 중단이 호출자에게 노출된다. LB drain + 호출자 retry로 보완.
+- multi-process(Gunicorn workers) 환경은 worker별 engine refresh 신호 필요.
+- `<current>_previous_<ts>` alias retention 종료 후에는 rollback 불가. retention 기간(권장 7일)을 운영자가 설정.
+- 복원본 DB가 다른 PostgreSQL major version에서 만들어졌다면 hot-swap 거절(major mismatch hard-fail).
+
+---
+
+## ADR-037: 외부 IP에서 호출되는 REST API는 대한민국 IP만 허용한다
+
+- 상태: accepted (문서 설계, 구현 전)
+- 날짜: 2026-05-27
+- 결정자: 사용자 요청, claude
+
+### 컨텍스트
+
+본 라이브러리는 행안부 도로명주소·우편번호·내비DB·전자지도 자료와 vworld/kakao/naver fallback을 사용한다. 모두 한국 사용 전제로 약관이 작성되어 있고, 외부 fallback의 호출 한도도 한국 IP 기준이다. REST API 표면을 한국 외 공용 IP에 그대로 노출하면 약관·호출 한도·법적 책임 모두 문제가 된다. ADR-013은 디버그/관리 UI를 사내 내부망 전용으로 두었지만, 일반 `/v1/*` 엔드포인트의 외부 노출 정책은 명문화되지 않았다.
+
+### 결정
+
+REST API 표면은 **외부(공용) IP에서 호출될 때 대한민국 IP만 허용**한다.
+
+1. 적용 대상: `/v1/geocode`, `/v1/reverse`, `/v1/search`, `/v1/zipcode`, `/v1/pobox`, `/v1/admin/*`, `/v2/*`(T-052 신규).
+2. 적용 제외: `/healthz`, `/metrics`(uptime/probe 호환).
+3. 내부 사설/loopback IP는 그대로 허용(`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `::1/128`, `fc00::/7`, `fe80::/10`).
+4. 외부 공용 IP는 GeoIP DB(MaxMind GeoLite2 Country 등) 조회로 country code `KR`만 허용.
+5. `Settings.geoip_allow_cidrs`/`geoip_deny_cidrs`로 명시 override 가능. 우선순위: `deny > allow > 사설/loopback > KR > 기본 deny`.
+6. 구현 위치: FastAPI middleware(`api/middleware/geoip_gate.py`). nginx/reverse proxy layer는 추가 layer로 운영 가능하지만 기본 안전망은 application에서 보장.
+7. deny 발생 시 HTTP 403 + 한국어/영어 분리 메시지 + `ops.audit_events(action='geoip.denied', payload_redacted={client_country, path, ...})` 기록. IP는 hash로만 저장(ADR-033).
+8. GeoIP DB 부재 시 `geoip_gate_mode`로 동작 선택:
+   - `strict`(기본): 외부 IP 전부 deny.
+   - `permissive`: 모두 allow + log warning(개발 환경).
+   - `off`: gate 비활성화(테스트 전용).
+9. `X-Forwarded-For` 처리: `Settings.geoip_trusted_proxies`에 명시된 hop만큼 pop해 실제 client IP 추출. trust 안 된 proxy 뒤의 값은 무시.
+
+### 근거
+
+- 외부 데이터 약관(도로명주소, 우편번호, vworld 등)과 호출 한도가 한국 IP 기준이다. 한국 외 호출은 약관 위반 위험.
+- ADR-013은 디버그/관리 UI만 다뤘다. 일반 REST 표면의 외부 노출은 별도 결정 필요.
+- 라이브러리 사용자가 `uvicorn kraddr.geo.api.app:app`만 실행해도 외부 차단이 작동해야 한다. application layer 보호가 1차 안전망.
+- 사설/loopback 허용으로 사내망/Docker 네트워크는 영향 없음.
+
+### 결과
+
+- T-054에서 middleware + GeoIpSettings + audit 연계를 구현한다.
+- `kraddr-geo geoip check <ip>` CLI 진단 helper 추가.
+- 운영자는 월 1회 MaxMind license key로 GeoIP DB 갱신.
+- `/admin/stats`(T-053)에 KR vs non-KR 요청 분포 시각화.
+
+### 남은 위험
+
+- GeoIP DB는 IP-country 매핑이 100% 정확하지 않다. mobile/CDN IP 갱신 lag.
+- `X-Forwarded-For` spoofing — `trusted_proxies` 미설정 시 잘못된 client IP 신뢰.
+- 한국 사용자가 외부 VPN/proxy를 통해 접근하면 차단 가능. 운영 공지 필요.
+- 본 gate는 application layer다. nginx/firewall layer 차단이 더 빠르고 안전하므로, 본 라이브러리는 "기본 안전망" 위치.
+
+---
+
+## ADR-038: API 표면을 v1(vworld 호환)과 v2(외부 provider 흡수 + 통합 candidate)로 분리하고 AI-friendly 문서를 둔다
+
+- 상태: accepted (문서 설계, 구현 전)
+- 날짜: 2026-05-27
+- 결정자: 사용자 요청, claude
+
+### 컨텍스트
+
+본 라이브러리는 vworld OpenAPI 응답 형식 호환을 핵심 정체성으로 둔다(ADR-007/-012). 그러나 운영 현장에서는 kakao Local API와 naver Geocoding/Reverse API 패턴(키워드 검색, 카테고리, 도로명/지번 동시 응답, region polygon 정보 등)도 활용 가치가 있다. 한 응답 schema에 vworld + kakao + naver를 모두 욱여넣으면 vworld 호환이 깨지고, 분리하지 않으면 새 기능을 받기 어렵다.
+
+### 결정
+
+API 표면을 **v1**(기존 호환)과 **v2**(신규)로 분리한다.
+
+1. **v1**: `/v1/*` 경로 + 현재 DTO 그대로 동결. vworld 호환 key 명명(`addresses[]`, `result.point`, `x_extension.*`) 유지.
+2. **v2**: `/v2/geocode`, `/v2/reverse`, `/v2/search`, `/v2/region/lookup`, `/v2/zipcode/{zip_no}`, (선택) `/v2/transform`. 자체 candidate-list schema, `confidence`/`match_kind`/`source` 명시.
+3. 라이브러리: `AsyncAddressClient`에 `geocode_v2`, `reverse_v2`, `search_v2` 함수 추가. v1 함수는 그대로.
+4. 외부 provider adapter:
+   - `infra/external/vworld.py`(기존): v1/v2 양쪽으로 candidate 변환.
+   - `infra/external/kakao.py`(신규): kakao Local API → v2 candidate.
+   - `infra/external/naver.py`(신규): naver Geocoding/Reverse → v2 candidate.
+   - 외부 API key 미설정 시 adapter 사용 불가 상태로 두고 fallback은 즉시 local 응답만 반환.
+5. v2 입력은 region hint(T-057 `sig_cd`/`bjd_cd`/`bbox`)를 1차 시민으로 받는다.
+6. 문서화:
+   - `docs/api-reference/` 디렉터리에 v1/v2/library/operators 분류로 markdown.
+   - 각 endpoint별 "요약/사용 시나리오/입력 schema/출력 schema/예시(curl + Python + JSON)/에러/관련 ADR" 표준 구조.
+   - `docs/api-reference/llm-summary.md`: AI agent용 전체 표면 압축 요약.
+   - OpenAPI는 v1/v2 paths 모두 포함, frontend `types/api.gen.ts` 자동 갱신.
+7. v1과 v2 모두 외부 호출은 `geo_cache` 캐시(ADR-009/-019).
+
+### 근거
+
+- vworld 호환은 기존 SDK 사용자(`kraddr-geo-ui` 포함 외부 클라이언트)에게 중요한 contract. 깨지면 안 된다.
+- kakao/naver 응답 패턴을 v1에 강제 흡수하면 vworld key 명명이 흐려진다.
+- 외부 provider는 fallback에서만 호출(ADR-019). 본 라이브러리의 기본 응답은 local PostGIS.
+- AI agent와 사람이 동시에 읽을 수 있는 문서가 있어야 운영/디버깅이 효율적.
+
+### 결과
+
+- T-052에서 v2 DTO/router/adapter/문서 PR을 작성한다.
+- `docs/api-reference/` skeleton + `llm-summary.md` 생성.
+- v1 동결: 회귀 0 검증. `openapi.json`의 `/v1/*` paths schema diff 없음.
+- kakao/naver adapter: recorded fixture 기반 단위 테스트.
+- 6~12개월 후 v1 deprecation 일정은 별도 ADR.
+
+### 남은 위험
+
+- v1 + v2 동시 유지 비용. maintenance burden 증가.
+- kakao/naver는 약관별 캐싱·재배포 제한이 다르다. cache TTL과 source 표기 정책을 ADR-019 후속에서 보강.
+- v2 응답이 vworld key 명명과 분리되어, 일부 SDK 사용자가 두 schema 모두 다뤄야 한다. `docs/api-reference/v2/migration-from-v1.md` 작성으로 완화.
+- 외부 provider 약관 변경 시 adapter 즉시 갱신 필요. 운영 모니터링.
