@@ -44,6 +44,9 @@ AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, WSL ext4의 `~/de
 - 예: `git fetch origin main && git switch -c agent/codex-next origin/main`
 - 같은 branch를 여러 worktree에서 checkout하지 않는다. branch 이름에는 `agent/<agent>-<task>`처럼 소유자를 넣는다.
 - CodeGraph는 worktree마다 1회 `codegraph init -i`로 초기화하고, 이후 branch 전환·pull·merge 뒤에는 재초기화하지 않고 `codegraph sync`로 유지한다.
+- 동기화 상태는 `codegraph status`로 확인한다. `codegraph init -i`는 최초 1회 인덱싱용이고, 평상시 상태 확인용 명령은 아니다.
+- 프로젝트 루트의 `.codex/config.toml`은 CodeGraph MCP stdio 서버를 등록한다. Codex Desktop 재시작 전에는 현재 세션 도구로 노출되지 않을 수 있으나, 설정 파일은 유지한다.
+- `kraddr-geo-ui` 컴포넌트 또는 공용 UI primitive를 수정하기 전에는 CodeGraph MCP의 `codegraph_explore` 도구로 영향 범위(호출자, 참조 파일, 테스트 표면)를 먼저 확인한다. MCP가 아직 노출되지 않은 과도기 세션에서는 그 사실을 작업 로그에 남기고 `codegraph sync`, `codegraph status`, `codegraph context`/`codegraph impact` CLI로 임시 확인한다.
 - `.codegraph/`는 로컬 인덱스이므로 Git에 커밋하지 않는다. `.gitignore`에 포함되어 있어야 한다.
 
 작업 전에 반드시 다음을 읽는다:

@@ -440,6 +440,8 @@ WITH DATA;
 CREATE UNIQUE INDEX idx_mv_geocode_target_pk ON mv_geocode_target (bd_mgt_sn);
 CREATE INDEX idx_mv_road  ON mv_geocode_target (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
 CREATE INDEX idx_mv_jibun ON mv_geocode_target (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
+CREATE INDEX idx_mv_jibun_name_exact ON mv_geocode_target
+  (si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno, emd_nm, li_nm, pt_source, bd_mgt_sn);
 CREATE INDEX idx_mv_geom5179 ON mv_geocode_target USING GIST (pt_5179);  -- 거리/nearest 1차 경로
 CREATE INDEX idx_mv_geom4326 ON mv_geocode_target USING GIST (pt_4326);  -- 응답 직렬화 보조
 CREATE INDEX idx_mv_pt_source ON mv_geocode_target (pt_source);          -- entrance vs centroid 통계
@@ -473,6 +475,9 @@ CREATE INDEX idx_mv_next_road
     ON mv_geocode_target_next (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
 CREATE INDEX idx_mv_next_jibun
     ON mv_geocode_target_next (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
+CREATE INDEX idx_mv_next_jibun_name_exact
+    ON mv_geocode_target_next (si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno,
+                               emd_nm, li_nm, pt_source, bd_mgt_sn);
 CREATE INDEX idx_mv_next_rn_trgm
     ON mv_geocode_target_next USING GIN (rn_norm gin_trgm_ops);
 CREATE INDEX idx_mv_next_buld_nm_trgm
@@ -494,6 +499,7 @@ BEGIN;
   ALTER INDEX idx_mv_next_geocode_target_next_pk RENAME TO idx_mv_geocode_target_pk;
   ALTER INDEX idx_mv_next_road RENAME TO idx_mv_road;
   ALTER INDEX idx_mv_next_jibun RENAME TO idx_mv_jibun;
+  ALTER INDEX idx_mv_next_jibun_name_exact RENAME TO idx_mv_jibun_name_exact;
   ALTER INDEX idx_mv_next_rn_trgm RENAME TO idx_mv_rn_trgm;
   ALTER INDEX idx_mv_next_buld_nm_trgm RENAME TO idx_mv_buld_nm_trgm;
   ALTER INDEX idx_mv_next_geom5179 RENAME TO idx_mv_geom5179;

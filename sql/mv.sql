@@ -88,6 +88,8 @@ CREATE INDEX idx_mv_road
   ON mv_geocode_target (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
 CREATE INDEX idx_mv_jibun
   ON mv_geocode_target (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
+CREATE INDEX idx_mv_jibun_name_exact
+  ON mv_geocode_target (si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno, emd_nm, li_nm, pt_source, bd_mgt_sn);
 CREATE INDEX idx_mv_rn_trgm
   ON mv_geocode_target USING GIN (rn_nrm gin_trgm_ops);
 CREATE INDEX idx_mv_buld_nm_trgm

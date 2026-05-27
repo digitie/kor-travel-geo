@@ -79,6 +79,53 @@ codegraph status
 
 문서 기준으로 `codegraph init -i`는 `.codegraph/`를 만들고 즉시 전체 인덱스를 생성한다. `codegraph sync`는 바뀐 파일만 증분 반영한다. MCP watcher가 켜진 환경에서는 자동 동기화가 되더라도, 이 저장소에서는 branch 전환 직후 수동 `codegraph sync`를 실행해 에이전트가 낡은 인덱스를 보지 않게 한다.
 
+### 1.2.1 Codex MCP 등록
+
+프로젝트 루트에는 CodeGraph MCP stdio 서버 설정을 둔다. 이 설정은 저장소별로 공유 가능한 개발 도구 설정이며, API key나 비밀값을 포함하지 않는다.
+
+```toml
+[mcp_servers.codegraph]
+enabled = true
+command = "codegraph"
+args = ["serve", "--mcp"]
+```
+
+WSL에서 Linux standalone `codegraph`가 PATH에 잡혀 있으면 위 설정을 우선 사용한다. 순수 Node/npm 환경에서 `@colbymchenry/codegraph` 패키지의 `mcp` 엔트리를 직접 쓰는 팀원은 아래처럼 바꿔도 된다.
+
+```toml
+[mcp_servers.codegraph]
+enabled = true
+command = "npx"
+args = ["-y", "@colbymchenry/codegraph", "mcp"]
+```
+
+단, WSL에서 Windows npm shim이 먼저 잡히면 `npx`가 UNC 경로 경고를 내거나 WSL 프로젝트 경로를 제대로 넘기지 못할 수 있다. 이 저장소의 기본값은 `codegraph install --print-config codex`가 제안한 `codegraph serve --mcp` 방식이다.
+
+설정을 추가한 뒤에는 Codex Desktop을 재시작해야 MCP 도구가 현재 세션에 노출된다. 재시작 전에도 CLI 명령은 그대로 사용할 수 있다.
+
+### 1.2.2 작업 전 명령과 `codegraph_explore`
+
+CodeGraph 관련 필수 명령은 다음 두 가지다.
+
+```bash
+# worktree 최초 1회 인덱싱 초기화
+codegraph init -i
+
+# 현재 인덱스 동기화 상태 확인
+codegraph status
+```
+
+새 branch 생성, pull, rebase, merge 뒤에는 먼저 `codegraph sync`를 실행하고 `codegraph status`로 `Index is up to date` 상태를 확인한다.
+
+`kraddr-geo-ui`의 React 컴포넌트, `components/vworld/*`, 공용 UI primitive, `maplibre-vworld-js` 소비 경계를 바꾸기 전에는 CodeGraph MCP의 `codegraph_explore` 도구를 먼저 호출해 영향도를 평가한다. 최소 확인 범위는 다음과 같다.
+
+- 수정 대상 파일을 import하는 호출자와 page route
+- 같은 props/type을 공유하는 컴포넌트
+- 관련 unit/component 테스트와 Playwright 시나리오
+- `maplibre-vworld-js`로 옮길 수 있는 범용 기능과 이 저장소에 남아야 하는 domain wrapper 기능
+
+MCP가 아직 노출되지 않은 세션에서는 작업 로그에 "MCP 미노출로 CLI 대체"를 남기고, 임시로 `codegraph context <task>` 또는 `codegraph impact <symbol>`를 사용한다. 다음 Codex Desktop 재시작 뒤에는 `codegraph_explore`를 우선 사용한다.
+
 ## 2. 시스템 패키지 (Ubuntu/WSL)
 
 ```bash

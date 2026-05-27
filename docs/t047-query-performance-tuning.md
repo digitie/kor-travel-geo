@@ -2,9 +2,101 @@
 
 ## 범위
 
-본 문서는 전국 전체 데이터가 적재된 PostgreSQL + PostGIS DB를 대상으로 지오코딩/역지오코딩/검색 쿼리 속도를 반복 측정하고, 병목이 확인되면 인덱스, 쿼리 재작성, 보조 view 또는 materialized view까지 적극 도입하는 성능 튜닝 계획이다.
+본 문서는 전국 전체 데이터가 적재된 PostgreSQL + PostGIS DB를 대상으로 지오코딩/역지오코딩/검색 쿼리 속도를 반복 측정하고, 병목이 확인되면 인덱스, 쿼리 재작성, 보조 view 또는 materialized view까지 적극 도입하는 성능 튜닝 계획과 실행 결과를 누적한다.
 
-이번 문서는 구현 전 설계만 다룬다. 코드는 작성하지 않는다. 실제 full-load, benchmark, migration, UI 구현은 후속 T-047 구현 PR에서 수행한다.
+2026-05-27 1차 구현 PR에서는 benchmark harness와 deterministic corpus 저장 형식을 추가하고, T-027 최종 클린 적재 DB에서 발견한 지번 exact lookup 병목을 `idx_mv_jibun_name_exact` 인덱스로 1차 튜닝했다. 더 큰 `standard`/`stress` corpus, 동시성 64, REST API 전체 latency, T-057 region hint 비교는 후속 PR에서 이어간다.
+
+## 2026-05-27 1차 구현 결과
+
+### 추가한 도구
+
+`scripts/benchmark_query_performance.py`를 추가했다. 이 스크립트는 `mv_geocode_target`과 `tl_sppn_makarea`에서 deterministic corpus를 만들거나 기존 corpus JSON을 재사용하고, raw SQL repository의 쿼리 상수를 직접 실행해 다음 artifact를 `artifacts/perf/<run-id>/`에 저장한다.
+
+- `corpus.json`, `corpus-summary.json`
+- `benchmark.json`
+- `environment.json`
+- `summary.md`
+- query군별 slow sample `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, SETTINGS)` JSON
+
+단위 테스트는 percentile 계산, warmup 제외 summary, corpus JSON round-trip, CLI parser 기본값을 검증한다.
+
+### T-027 최종 클린 DB 상태
+
+Smoke benchmark는 Docker PostgreSQL `localhost:15432/kraddr_geo`의 T-027 최종 클린 적재 DB에서 수행했다.
+
+| 항목 | 값 |
+|------|----:|
+| `mv_geocode_target` | 6,416,637 |
+| `tl_sppn_makarea` | 24,204 |
+| `pt_source=entrance` | 2,906,372 |
+| `pt_source=centroid` | 3,496,182 |
+| `pg_stat_statements` | 비활성 |
+
+### Trial 001 — 지번 exact name-key 인덱스
+
+초기 smoke run에서 `Q2_PARCEL_EXACT` 단일 샘플의 client latency가 `2830.59ms`였다. `EXPLAIN`은 기존 `idx_mv_jibun(bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno)`를 사용했지만, 지번 주소 parser가 `bjd_cd`를 아직 모르는 상태에서 `si_nm`/`sgg_nm`/`emd_nm 또는 li_nm`으로 조회하므로 선두 컬럼을 타지 못했다. plan의 DB execution time도 `333.417ms`였고, client wall time은 cold I/O/JIT 영향까지 받아 더 컸다.
+
+다음 인덱스를 추가했다.
+
+```sql
+CREATE INDEX idx_mv_jibun_name_exact
+  ON mv_geocode_target (
+    si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno,
+    emd_nm, li_nm, pt_source, bd_mgt_sn
+  );
+```
+
+실제 전국 DB에서 index build time과 size는 다음과 같았다.
+
+| 항목 | 값 |
+|------|----:|
+| build time | 56.03초 |
+| index size | 761 MiB |
+
+같은 corpus를 재사용한 smoke 전후 비교:
+
+| query군 | before client | before plan execution | after client | after plan execution |
+|---------|--------------:|----------------------:|-------------:|---------------------:|
+| Q2 지번 exact | 2830.59ms | 333.417ms | 5.58ms | 0.100ms |
+
+after plan은 `idx_mv_jibun_name_exact`를 사용했고, `si_nm`/`sgg_nm`/`mntn_yn`/`lnbr_mnnm`/`lnbr_slno`가 `Index Cond`로 들어갔다. `emd_nm = :emd OR li_nm = :emd`는 index scan 뒤 filter로 남지만 후보가 이미 매우 작아 sort 비용은 사실상 사라졌다.
+
+### Post-index small concurrency run
+
+`cases_per_group=5`, `iterations=3`, `warmup=1`, 동시성 `1/4/16`으로 55개 case corpus를 실행했다. 이 run은 `standard`가 아니라 PR 검증용 small benchmark다.
+
+| query군 | conc | samples | errors | p50 ms | p95 ms | p99 ms | max ms |
+|---------|-----:|--------:|-------:|-------:|-------:|-------:|-------:|
+| Q1 도로명 exact | 1 | 15 | 0 | 3.44 | 4.73 | 5.06 | 5.14 |
+| Q1 도로명 exact | 16 | 15 | 0 | 36.05 | 91.81 | 96.50 | 97.67 |
+| Q2 지번 exact | 1 | 15 | 0 | 2.91 | 4.65 | 4.74 | 4.76 |
+| Q2 지번 exact | 16 | 15 | 0 | 30.41 | 41.85 | 42.77 | 43.00 |
+| Q3 fuzzy geocode | 1 | 15 | 0 | 7.36 | 8.29 | 8.30 | 8.31 |
+| Q3 fuzzy geocode | 16 | 15 | 0 | 52.00 | 101.30 | 102.17 | 102.39 |
+| Q4 통합 search | 1 | 15 | 0 | 8.49 | 10.58 | 10.79 | 10.84 |
+| Q4 통합 search | 16 | 15 | 0 | 56.52 | 106.33 | 108.89 | 109.53 |
+| Q5 reverse nearest | 1 | 15 | 0 | 3.09 | 4.04 | 4.34 | 4.41 |
+| Q5 reverse nearest | 16 | 15 | 0 | 34.15 | 39.42 | 39.71 | 39.79 |
+| Q6 reverse radius | 1 | 15 | 0 | 3.23 | 4.93 | 4.94 | 4.94 |
+| Q6 reverse radius | 16 | 15 | 0 | 30.50 | 47.00 | 62.38 | 66.23 |
+| Q7 zipcode address | 1 | 15 | 0 | 3.41 | 5.10 | 5.60 | 5.72 |
+| Q7 zipcode point | 1 | 15 | 0 | 2.95 | 3.47 | 3.63 | 3.67 |
+| Q8 no-result road | 1 | 15 | 0 | 3.56 | 5.25 | 5.28 | 5.29 |
+| Q11 국가지점번호 reverse | 1 | 15 | 0 | 3.51 | 6.31 | 6.95 | 7.11 |
+
+관찰:
+
+- 단일 동시성 DB p95는 모든 query군이 ADR-031 1차 목표 안에 들어왔다.
+- 동시성 16에서는 Q1/Q3/Q4 tail latency가 90~110ms 구간으로 증가했다. 아직 DB p95 목표를 크게 넘지는 않지만, `standard` corpus와 동시성 64에서는 Q3/Q4가 다음 튜닝 후보가 될 가능성이 높다.
+- `pg_stat_statements`가 비활성이라 statement aggregate는 수집하지 못했다. 후속 run에서는 extension 활성화 여부 또는 대체 집계 방식을 먼저 확인한다.
+
+### 남은 후속
+
+- `standard` 1,000건 이상, `stress` 10,000건 이상 corpus를 만든다.
+- 동시성 64와 REST API end-to-end latency를 측정한다.
+- T-057 `sig_cd`/`bjd_cd`/bbox region hint를 같은 harness에 붙여 hint vs no-hint p95/p99를 비교한다.
+- Q3/Q4 search/fuzzy는 `UNION ALL` 분리, query split, text-search slim MV 후보를 별도 trial로 검증한다.
+- `idx_mv_jibun_name_exact`가 MV refresh/swap, backup profile, disk envelope에 미치는 영향을 다음 full-load 회귀에서 다시 기록한다.
 
 ## 목표
 

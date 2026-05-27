@@ -73,6 +73,8 @@ def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
     assert "left(bjd_cd, 8)" in MV_SQL
     assert "nc.bjd_emd_cd = left(j.bjd_cd, 8)" in MV_SQL
     assert "idx_mv_geom5179" in MV_SQL
+    assert "idx_mv_jibun_name_exact" in MV_SQL
+    assert "si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno" in MV_SQL
     assert "WHERE pt_5179 IS NOT NULL" in MV_SQL
     assert "ent_pt_4326" not in MV_SQL
     assert "idx_juso_text_rn_trgm" in INDEX_SQL
