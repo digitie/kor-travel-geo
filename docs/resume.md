@@ -72,6 +72,7 @@
 - ✅ T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의 — upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`을 확인하고 `kraddr-geo-ui` dependency/lockfile을 갱신했다. ADR-032를 추가해 범용 VWorld/MapLibre 기능은 upstream, 지오코딩/역지오코딩/관리 UI 특화 기능은 이 저장소 domain wrapper에서 구현하는 원칙을 확정했다.
 - ✅ T-049 운영 메타데이터·감사·릴리스 스키마 구현 — `ops` 스키마 6개 테이블, append-only audit trigger, active release partial unique index, redacted audit payload/hash helper, `/v1/admin/ops/*` API, `/admin/ops` UI, table stats snapshot capture, typed maintenance confirmation hash를 추가했다. 상세: `docs/t049-ops-metadata-schema.md`
 - ✅ T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX 구현 — source set 탐지/계획 DTO와 helper, JSON manifest 기반 upload set 저장소, `/v1/admin/uploads/*` 및 `/v1/admin/load-sources/*`, `AsyncAddressClient` 메서드, `kraddr-geo load full-set`, `/admin/load` 다중 파일/DND 업로드·기준월 확인 modal·업로드/적재 진행률·취소 UX를 추가했다. 혼합 기준월은 정확한 확인 문구가 있어야 plan을 만들 수 있고, batch payload는 명시 `children`과 source set 감사 필드를 남긴다. 상세: `docs/t045-source-set-load-ux.md`
+- ✅ T-046 적재 완료 DB 백업/복원 및 UI 구현 — `pg_dump -Fd --jobs` directory dump + `tar.zst` archive, `ops.artifacts` metadata, `/v1/admin/backups`, `/v1/admin/restores`, `/v1/admin/jobs/{job_id}/events`, `kraddr-geo backup/restore`, `/admin/backups` UI를 추가했다. 대구광역시 부분 DB 실제 적재 후 83MiB archive 백업, 새 DB 복원, row count 일치, geocode/reverse smoke `OK`를 확인했다. 상세: `docs/t046-db-backup-restore.md`
 - ✅ README 법적 고지 보강 — 프로젝트가 AI 활용 방식과 개발 워크플로를 학습·검증하기 위한 기술 연구 프로젝트이며, 외부 원천 데이터/API는 제공 기관의 조건을 준수하는 것을 전제로 사용한다고 명시했다.
 - ✅ 문서 정합성 재검토 — `master`/`main` 표현, README/SKILL quick start CLI 예시, `kraddr-geo-ui` 소유 설명, T-046 artifact registry 명칭, README ADR 목록, 후속 task 순서를 현재 코드와 ADR에 맞춰 정리했다. 상세: `docs/doc-consistency-audit-20260527.md`
 - ✅ T-043 PR #23~#41 리뷰 코멘트 audit/fixup — conversation/review/inline/thread 표면을 모두 확인하고 unresolved review thread 0개를 기록했다. VWorld alias/test, daily delta 운영 문서와 `--limit-per-file` 경고, `TL_SPBD_BULD` staging advisory lock/skip metric, ADR-027 위험 섹션 등을 보강했다. 상세: `docs/postmerge-review-fixups-pr23-latest.md`
@@ -79,7 +80,7 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-046 적재 완료 DB 백업/복원 및 UI 구현이다. 전국 full-load를 매번 다시 돌리지 않고 검증된 DB 상태를 보존할 수 있도록 `pg_dump -Fd --jobs` directory dump와 `tar.zst` archive, `ops.artifacts` metadata, 백그라운드 진행률/취소/callback/download UI를 구현한다. 검증은 전국 full-load가 아니라 대구광역시 부분 적재 DB로 backup → restore → row count/smoke test를 수행한다. 그 다음 후보는 T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회, T-027 최종 실 데이터 클린 적재 검증, T-047 전국 적재 후 쿼리 성능 벤치마크, T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화 순서다.
+다음 작업은 T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회 구현이다. `구역의 도형`의 지점번호표기 의무지역 polygon을 별도 테이블로 적재하고, reverse geocode 보조 후보와 국가지점번호 geocode 검증/문맥 보강에 활용한다. 그 다음 후보는 T-027 최종 실 데이터 클린 적재 검증, T-047 전국 적재 후 쿼리 성능 벤치마크, T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화 순서다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다.
@@ -89,7 +90,7 @@
 - PR #17 이전에 적재된 실제 T-027 DB의 SHP `source_file`은 전 건 NULL이다. PR #17 이후 SHP를 재적재하면 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`가 채워진다.
 - `daily/*.zip`는 T-028 이후 MST를 `tl_juso_text`에 적용할 수 있고, T-038 이후 `LNBR`를 `tl_juso_parcel_link`에 별도 delta로 적용할 수 있다. `도로명주소 출입구 정보`는 T-039 이후 `tl_roadaddr_entrc`에 적재할 수 있으며 MV 대표 출입구 1순위 후보가 된다. `도로명주소 건물 도형`은 T-040 이후 분석 helper로 비교 가능하지만 serving loader는 보류한다. T-041 상세주소 동/구역 추가 레이어도 `scripts/compare_extra_shape_layers.py`로 비교 가능하다. 단, `TL_SPPN_MAKAREA`는 ADR-027에 따라 국가지점번호 보조 데이터로 별도 loader/조회 경로를 만들 수 있다.
 - 원천별 업데이트 시점은 서로 다를 수 있다. ADR-029/T-045 구현에 따라 새 full-load UX는 단일 `yyyymm`이 아니라 `source_set.yyyymm_by_kind`를 사용하며, 기준월이 섞이면 CLI/UI에서 정확한 `YYYYMM/... 혼합 적재 확인` 문구를 받아야 한다. API/라이브러리는 prompt 없이 `discover_load_sources()`와 `build_full_load_source_set_plan()`을 분리 제공한다. `/admin/load`는 업로드가 끝난 뒤 source set을 분석하고 `full_load_batch`의 명시 `children` payload를 등록한다.
-- T-046 백업/복원은 코드를 아직 작성하지 않은 설계 상태다. 구현 시 plain SQL/DDL dump를 기본값으로 두지 말고, `pg_dump -Fd --jobs` 산출물을 `tar.zst`로 묶는 `directory_tar_zstd`를 기본으로 한다. 복원은 새 빈 DB 기본, 대구광역시 부분 적재 DB로 최초 검증, 전국 full-load 재실행은 후속 T-027에서 수행한다.
+- T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. 남은 hardening은 callback retry/backoff, restore 취소 시 target DB drop/quarantine 정책, 디스크 여유 공간 사전 추정, PostgreSQL/PostGIS major mismatch hard-fail이다. 전국 full-load 재실행은 후속 T-027에서 수행한다.
 - T-049 운영 메타데이터는 1차 구현 상태다. 현재 구현은 DDL/API/UI와 redacted audit event, maintenance window 생성/종료, table stats snapshot capture를 제공한다. T-045/T-046/T-047을 진행할 때 source set 확정, backup/restore artifact, 성능 리포트, MV swap 성공 지점을 `ops.dataset_snapshots`, `ops.artifacts`, `ops.serving_releases`에 실제로 연결하는 보강이 이어져야 한다.
 - T-047 쿼리 성능 튜닝도 설계 상태다. 전국 full-load DB에서 exact/fuzzy geocode, reverse, search, zipcode, no-result 경로를 다수 반복 측정하고, 목표를 초과하면 index/query rewrite뿐 아니라 `mv_geocode_exact_key`, `mv_geocode_text_search`, `mv_reverse_point_5179` 같은 read-only 보조 MV 후보를 실험한다.
 

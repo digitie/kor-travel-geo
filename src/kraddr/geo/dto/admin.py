@@ -12,6 +12,8 @@ from .common import FrozenModel
 LoadJobState = Literal["queued", "running", "done", "failed", "cancelled"]
 LoadJobKind = Literal[
     "full_load_batch",
+    "db_backup",
+    "db_restore",
     "juso_text_load",
     "daily_juso_delta",
     "juso_parcel_link_load",
@@ -58,6 +60,9 @@ SourceKind = Literal[
 SourceConfidence = Literal["high", "medium", "low"]
 UploadSetState = Literal["created", "uploading", "uploaded", "cancelled", "failed"]
 UploadFileState = Literal["pending", "uploading", "uploaded", "cancelled", "failed"]
+BackupFormat = Literal["directory_tar_zstd"]
+BackupProfile = Literal["serving-ready", "lean-serving", "forensic"]
+RestoreMode = Literal["new_database", "replace_current"]
 
 
 class TableStat(FrozenModel):
@@ -73,6 +78,32 @@ class UploadSidoZipResponse(FrozenModel):
     path: str
     size_bytes: int = Field(ge=0)
     sha256: str = Field(min_length=64, max_length=64)
+
+
+class BackupCreateRequest(FrozenModel):
+    destination_dir: str | None = None
+    profile: BackupProfile = "serving-ready"
+    format: BackupFormat = "directory_tar_zstd"
+    jobs: int | None = Field(default=None, ge=1, le=64)
+    compression_level: int | None = Field(default=None, ge=1, le=19)
+    callback_url: str | None = None
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    retention_days: int | None = Field(default=None, ge=1, le=3650)
+    include_materialized_views: bool = True
+
+
+class RestoreCreateRequest(FrozenModel):
+    artifact_id: str | None = None
+    archive_path: str | None = None
+    target_database: str | None = Field(default=None, min_length=1, max_length=63)
+    target_dsn: str | None = None
+    mode: RestoreMode = "new_database"
+    jobs: int | None = Field(default=None, ge=1, le=64)
+    run_analyze: bool = True
+    run_smoke_test: bool = True
+    run_consistency: bool = False
+    callback_url: str | None = None
+    confirmation: str | None = Field(default=None, max_length=200)
 
 
 class SourceCandidate(FrozenModel):
@@ -336,6 +367,10 @@ class OpsArtifact(FrozenModel):
     callback_state: str | None = None
     created_at: datetime
     finished_at: datetime | None = None
+
+
+class BackupArtifact(OpsArtifact):
+    download_url: str | None = None
 
 
 class MaintenanceWindowCreate(FrozenModel):

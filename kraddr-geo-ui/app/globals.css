@@ -247,6 +247,38 @@ textarea {
   opacity: 0.55;
 }
 
+.checkbox-row {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.checkbox-row input {
+  height: 16px;
+  width: 16px;
+}
+
+.toolbar-inline {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.icon-button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-grid;
+  height: 34px;
+  justify-items: center;
+  text-decoration: none;
+  width: 34px;
+}
+
 .drop-zone {
   align-items: center;
   border: 1px dashed var(--line);

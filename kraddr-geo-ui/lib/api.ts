@@ -210,14 +210,27 @@ export type OpsArtifact = {
   artifact_type: string;
   state: "creating" | "available" | "failed" | "deleted" | "expired";
   storage_kind: "local_file" | "s3" | "gcs" | "none";
+  storage_uri?: string | null;
   display_name?: string | null;
+  media_type?: string | null;
+  compression?: string | null;
   size_bytes?: number | null;
   sha256?: string | null;
+  retention_class?: string | null;
+  expires_at?: string | null;
   job_id?: string | null;
   snapshot_id?: string | null;
   release_id?: string | null;
+  manifest?: Record<string, unknown>;
+  callback_url?: string | null;
+  callback_state?: string | null;
   created_at: string;
   finished_at?: string | null;
+};
+
+export type BackupArtifact = OpsArtifact & {
+  artifact_type: "db_backup";
+  download_url?: string | null;
 };
 
 export type MaintenanceWindow = {

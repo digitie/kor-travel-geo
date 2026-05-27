@@ -11,6 +11,7 @@ import typer
 
 from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.exceptions import InvalidInputError
+from kraddr.geo.infra.backup import run_backup_job, run_restore_job
 from kraddr.geo.infra.source_set import (
     build_full_load_source_set_plan,
     confirmation_token_for,
@@ -50,10 +51,14 @@ load_app = typer.Typer(help="Load data sources.")
 refresh_app = typer.Typer(help="Run post-load refresh operations.")
 validate_app = typer.Typer(help="Validate loaded data.")
 jobs_app = typer.Typer(help="Inspect persistent load jobs.")
+backup_app = typer.Typer(help="Create and inspect DB backup artifacts.")
+restore_app = typer.Typer(help="Restore DB backup artifacts.")
 app.add_typer(load_app, name="load")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(validate_app, name="validate")
 app.add_typer(jobs_app, name="jobs")
+app.add_typer(backup_app, name="backup")
+app.add_typer(restore_app, name="restore")
 
 
 @app.callback()
@@ -605,6 +610,113 @@ def cancel_job(job_id: str) -> None:
     asyncio.run(run())
 
 
+@backup_app.command("create")
+def create_backup(
+    destination_dir: Path | None = typer.Option(None, "--destination-dir"),
+    profile: str = typer.Option("serving-ready", "--profile"),
+    jobs: int | None = typer.Option(None, "--jobs", min=1, max=64),
+    compression_level: int | None = typer.Option(None, "--compression-level", min=1, max=19),
+    callback_url: str | None = typer.Option(None, "--callback-url"),
+    display_name: str | None = typer.Option(None, "--display-name"),
+) -> None:
+    """Run a foreground DB backup job and persist metadata in ops.artifacts."""
+
+    async def run() -> None:
+        payload = _without_none(
+            {
+                "destination_dir": str(destination_dir) if destination_dir else None,
+                "profile": profile,
+                "jobs": jobs,
+                "compression_level": compression_level,
+                "callback_url": callback_url,
+                "display_name": display_name,
+            }
+        )
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            await run_backup_job(
+                client.engine,
+                client.settings,
+                payload,
+                asyncio.Event(),
+                _cli_progress,
+            )
+
+    asyncio.run(run())
+
+
+@backup_app.command("list")
+def list_backups(limit: int = typer.Option(20, "--limit", min=1, max=200)) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            artifacts = await client.list_artifacts(
+                artifact_type="db_backup",
+                limit=limit,
+            )
+        for artifact in artifacts:
+            typer.echo(
+                f"{artifact.artifact_id}\t{artifact.state}\t"
+                f"{artifact.size_bytes or 0}\t{artifact.display_name or '-'}"
+            )
+
+    asyncio.run(run())
+
+
+@backup_app.command("show")
+def show_backup(artifact_id: str) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            typer.echo((await client.get_artifact(artifact_id)).model_dump_json())
+
+    asyncio.run(run())
+
+
+@backup_app.command("delete")
+def delete_backup(artifact_id: str) -> None:
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            typer.echo((await client.delete_artifact(artifact_id)).model_dump_json())
+
+    asyncio.run(run())
+
+
+@restore_app.command("create")
+def create_restore(
+    artifact_id: str | None = typer.Option(None, "--artifact-id"),
+    archive_path: Path | None = typer.Option(None, "--archive-path"),
+    target_database: str | None = typer.Option(None, "--target-database"),
+    target_dsn: str | None = typer.Option(None, "--target-dsn"),
+    jobs: int | None = typer.Option(None, "--jobs", min=1, max=64),
+    no_analyze: bool = typer.Option(False, "--no-analyze"),
+    no_smoke_test: bool = typer.Option(False, "--no-smoke-test"),
+) -> None:
+    """Run a foreground restore job against a new empty target DB."""
+
+    async def run() -> None:
+        payload = _without_none(
+            {
+                "artifact_id": artifact_id,
+                "archive_path": str(archive_path) if archive_path else None,
+                "target_database": target_database,
+                "target_dsn": target_dsn,
+                "jobs": jobs,
+                "run_analyze": not no_analyze,
+                "run_smoke_test": not no_smoke_test,
+            }
+        )
+        async with AsyncAddressClient() as client:
+            assert client.engine is not None
+            await run_restore_job(
+                client.engine,
+                client.settings,
+                payload,
+                asyncio.Event(),
+                _cli_progress,
+            )
+
+    asyncio.run(run())
+
+
 def _echo_source_discovery(discovery: SourceSetDiscovery) -> None:
     for candidate in discovery.candidates:
         typer.echo(
@@ -651,3 +763,18 @@ def _data_quality_cases(raw: str) -> tuple[str, ...]:
         msg = "at least one data quality case is required"
         raise ValueError(msg)
     return selected
+
+
+def _without_none(payload: dict[str, object | None]) -> dict[str, object]:
+    return {key: value for key, value in payload.items() if value is not None}
+
+
+async def _cli_progress(
+    *,
+    progress: float | None = None,
+    stage: str | None = None,
+    message: str | None = None,
+) -> None:
+    value = f"{progress:.2%}" if progress is not None else "--"
+    typer.echo(f"{value}\t{stage or '-'}\t{message or ''}")
+    await asyncio.sleep(0)

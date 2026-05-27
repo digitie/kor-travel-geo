@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
+from collections.abc import AsyncIterator
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import FileResponse, StreamingResponse
 
 from kraddr.geo.api._jobs import JobQueue
 from kraddr.geo.api.deps import get_client, get_job_queue
@@ -16,6 +20,8 @@ from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.core.normalize import parse_address
 from kraddr.geo.dto.admin import (
     AuditEvent,
+    BackupArtifact,
+    BackupCreateRequest,
     CacheMetrics,
     ConsistencyReport,
     ConsistencyReportSummary,
@@ -31,6 +37,7 @@ from kraddr.geo.dto.admin import (
     NormalizeRequest,
     NormalizeResponse,
     OpsArtifact,
+    RestoreCreateRequest,
     RollbackPlan,
     ServingRelease,
     SourceSetDiscovery,
@@ -45,6 +52,12 @@ from kraddr.geo.dto.admin import (
     UploadSidoZipResponse,
 )
 from kraddr.geo.exceptions import InvalidInputError
+from kraddr.geo.infra.backup import (
+    BACKUP_ARTIFACT_TYPE,
+    backup_download_url,
+    resolve_existing_archive_path,
+    validate_download_token,
+)
 from kraddr.geo.infra.source_set import (
     build_full_load_source_set_plan,
     discover_load_sources,
@@ -56,7 +69,7 @@ from kraddr.geo.infra.uploads import (
     store_upload_file,
     upload_set_root,
 )
-from kraddr.geo.settings import get_settings
+from kraddr.geo.settings import Settings, get_settings
 
 router = APIRouter(tags=["admin"])
 _SAFE_TOKEN_RE = re.compile(r"[^0-9A-Za-z가-힣._-]+")
@@ -272,6 +285,134 @@ async def submit_load(
     return status
 
 
+@router.post("/backups", response_model=LoadJobStatus, response_model_exclude_none=True)
+async def submit_backup(
+    req: BackupCreateRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+    queue: JobQueue = Depends(get_job_queue),
+) -> LoadJobStatus:
+    payload = req.model_dump(exclude_none=True)
+    job_id = await queue.enqueue("db_backup", payload)
+    status = await client.load_status(job_id)
+    await client.record_audit_event(
+        action="db_backup.submit",
+        outcome="started",
+        payload=payload,
+        resource_type="load_job",
+        resource_id=job_id,
+        job_id=job_id,
+        **_audit_request(request),
+    )
+    return status
+
+
+@router.get("/backups", response_model=list[BackupArtifact], response_model_exclude_none=True)
+async def list_backups(
+    limit: int = Query(default=50, ge=1, le=500),
+    state: str | None = None,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[BackupArtifact]:
+    settings = get_settings()
+    artifacts = await client.list_artifacts(
+        limit=limit,
+        artifact_type=BACKUP_ARTIFACT_TYPE,
+        state=state,
+    )
+    return [_backup_artifact_response(artifact, settings=settings) for artifact in artifacts]
+
+
+@router.get(
+    "/backups/{artifact_id}",
+    response_model=BackupArtifact,
+    response_model_exclude_none=True,
+)
+async def get_backup(
+    artifact_id: str,
+    client: AsyncAddressClient = Depends(get_client),
+) -> BackupArtifact:
+    artifact = await client.get_artifact(artifact_id)
+    if artifact.artifact_type != BACKUP_ARTIFACT_TYPE:
+        msg = f"artifact is not a db_backup: {artifact_id}"
+        raise InvalidInputError(msg)
+    return _backup_artifact_response(artifact, settings=get_settings())
+
+
+@router.get("/backups/{artifact_id}/download", response_model=None)
+async def download_backup(
+    artifact_id: str,
+    token: str = Query(min_length=64, max_length=64),
+    client: AsyncAddressClient = Depends(get_client),
+) -> FileResponse:
+    settings = get_settings()
+    artifact = await client.get_artifact(artifact_id)
+    if artifact.artifact_type != BACKUP_ARTIFACT_TYPE or artifact.state != "available":
+        msg = f"backup artifact is not available: {artifact_id}"
+        raise InvalidInputError(msg)
+    validate_download_token(artifact, settings, token)
+    if not artifact.storage_uri:
+        msg = f"backup artifact has no storage_uri: {artifact_id}"
+        raise InvalidInputError(msg)
+    archive_path = resolve_existing_archive_path(artifact.storage_uri, settings)
+    return FileResponse(
+        archive_path,
+        media_type=artifact.media_type or "application/octet-stream",
+        filename=artifact.display_name or archive_path.name,
+    )
+
+
+@router.post(
+    "/backups/{artifact_id}/delete",
+    response_model=BackupArtifact,
+    response_model_exclude_none=True,
+)
+async def delete_backup(
+    artifact_id: str,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> BackupArtifact:
+    settings = get_settings()
+    artifact = await client.get_artifact(artifact_id)
+    if artifact.artifact_type != BACKUP_ARTIFACT_TYPE:
+        msg = f"artifact is not a db_backup: {artifact_id}"
+        raise InvalidInputError(msg)
+    if artifact.storage_uri:
+        with suppress(FileNotFoundError):
+            resolve_existing_archive_path(artifact.storage_uri, settings).unlink()
+    deleted = await client.delete_artifact(artifact_id)
+    await client.record_audit_event(
+        action="db_backup.delete",
+        outcome="succeeded",
+        payload={"artifact_id": artifact_id},
+        resource_type="artifact",
+        resource_id=artifact_id,
+        **_audit_request(request),
+    )
+    return _backup_artifact_response(deleted, settings=settings)
+
+
+@router.post("/restores", response_model=LoadJobStatus, response_model_exclude_none=True)
+async def submit_restore(
+    req: RestoreCreateRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+    queue: JobQueue = Depends(get_job_queue),
+) -> LoadJobStatus:
+    payload = req.model_dump(exclude_none=True)
+    job_id = await queue.enqueue("db_restore", payload)
+    status = await client.load_status(job_id)
+    await client.record_audit_event(
+        action="db_restore.submit",
+        outcome="started",
+        payload=payload,
+        resource_type="load_job",
+        resource_id=job_id,
+        job_id=job_id,
+        **_audit_request(request),
+    )
+    return status
+
+
 @router.get("/jobs", response_model=list[LoadJobStatus], response_model_exclude_none=True)
 async def list_jobs(
     kind: str | None = None,
@@ -288,6 +429,26 @@ async def job_status(
     client: AsyncAddressClient = Depends(get_client),
 ) -> LoadJobStatus:
     return await load_status(job_id, client=client)
+
+
+@router.get("/jobs/{job_id}/events", response_model=None)
+async def job_events(
+    job_id: str,
+    client: AsyncAddressClient = Depends(get_client),
+) -> StreamingResponse:
+    async def event_stream() -> AsyncIterator[str]:
+        last_payload: str | None = None
+        while True:
+            status = await client.load_status(job_id)
+            payload = status.model_dump_json()
+            if payload != last_payload:
+                yield f"event: status\ndata: {payload}\n\n"
+                last_payload = payload
+            if status.state in {"done", "failed", "cancelled"}:
+                break
+            await asyncio.sleep(2)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post(
@@ -542,6 +703,13 @@ async def capture_ops_table_stats(
     client: AsyncAddressClient = Depends(get_client),
 ) -> list[TableStatsSnapshot]:
     return await client.capture_table_stats_snapshots(snapshot_id=snapshot_id, limit=limit)
+
+
+def _backup_artifact_response(artifact: OpsArtifact, *, settings: Settings) -> BackupArtifact:
+    download_url = None
+    if artifact.state == "available" and artifact.sha256:
+        download_url = backup_download_url(artifact, settings)
+    return BackupArtifact(**artifact.model_dump(), download_url=download_url)
 
 
 def _safe_filename(filename: str) -> str:

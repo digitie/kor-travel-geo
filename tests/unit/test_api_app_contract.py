@@ -14,6 +14,7 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/address/pobox" in paths
     assert "/v1/admin/loads" in paths
     assert "/v1/admin/jobs" in paths
+    assert "/v1/admin/jobs/{job_id}/events" in paths
     assert "/v1/admin/tables" in paths
     assert "/v1/admin/explain" in paths
     assert "/v1/admin/cache/metrics" in paths
@@ -25,6 +26,11 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/admin/uploads/{upload_set_id}/cancel" in paths
     assert "/v1/admin/load-sources/discover" in paths
     assert "/v1/admin/load-sources/plan" in paths
+    assert "/v1/admin/backups" in paths
+    assert "/v1/admin/backups/{artifact_id}" in paths
+    assert "/v1/admin/backups/{artifact_id}/download" in paths
+    assert "/v1/admin/backups/{artifact_id}/delete" in paths
+    assert "/v1/admin/restores" in paths
     assert "/v1/admin/maintenance/refresh-mv" in paths
     assert "/v1/admin/consistency/run" in paths
     assert "/v1/admin/ops/audit-events" in paths

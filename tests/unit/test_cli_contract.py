@@ -35,6 +35,10 @@ def test_cli_exposes_t018_operational_commands() -> None:
         ["refresh", "mv", "--help"],
         ["validate", "consistency", "--help"],
         ["validate", "data-quality-samples", "--help"],
+        ["backup", "create", "--help"],
+        ["backup", "list", "--help"],
+        ["backup", "show", "--help"],
+        ["restore", "create", "--help"],
     ):
         result = runner.invoke(app, command)
         assert result.exit_code == 0, result.output

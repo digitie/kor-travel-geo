@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 LoadCodeAction = Literal["insert", "update", "delete"]
 
@@ -71,6 +71,17 @@ class Settings(BaseSettings):
     mvm_res_code_actions: dict[str, LoadCodeAction] = Field(
         default_factory=_default_mvm_res_code_actions
     )
+    backup_allowed_dirs: Annotated[tuple[Path, ...], NoDecode] = (Path("data/backups"),)
+    backup_temp_dir: Path = Path("/tmp/kraddr-geo-backup")
+    backup_default_jobs: int = Field(default=4, ge=1, le=64)
+    backup_default_compression_level: int = Field(default=3, ge=1, le=19)
+    backup_artifact_ttl_days: int = Field(default=30, ge=1)
+    backup_callback_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    )
+    backup_download_token_secret: SecretStr | None = None
 
     @field_validator("pg_dsn", mode="before")
     @classmethod
@@ -84,6 +95,28 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_log_level(cls, value: object) -> str:
         return str(value).upper()
+
+    @field_validator("backup_allowed_dirs", mode="before")
+    @classmethod
+    def normalize_backup_allowed_dirs(cls, value: object) -> tuple[Path, ...]:
+        if isinstance(value, str):
+            return tuple(Path(part.strip()) for part in value.split(",") if part.strip())
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(Path(part) for part in value)
+        return (Path(str(value)),)
+
+    @field_validator("backup_callback_allowed_hosts", mode="before")
+    @classmethod
+    def normalize_backup_callback_allowed_hosts(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, str):
+            return tuple(part.strip().lower() for part in value.split(",") if part.strip())
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(part).lower() for part in value)
+        return (str(value).lower(),)
 
 
 _settings: Settings | None = None

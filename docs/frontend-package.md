@@ -251,10 +251,10 @@ idle → selecting_artifact → restore_preflight → restore_running
      → restore_done → validation_summary → (reset) idle
 ```
 
-원칙: 백업/복원은 브라우저 요청 안에서 끝내지 않는다. UI는 작업 등록만 수행하고, 이후 `LoadJobStatus(kind="db_backup" | "db_restore")`와 `BackupArtifact` metadata를 통해 상태를 추적한다.
+원칙: 백업/복원은 브라우저 요청 안에서 끝내지 않는다. UI는 작업 등록만 수행하고, 이후 `LoadJobStatus(kind="db_backup" | "db_restore")`와 `BackupArtifact` metadata를 통해 상태를 추적한다. T-046 1차 UI는 `/admin/backups`에 백업 생성, 복원 등록, job 목록, cancel, artifact 다운로드/삭제를 구현했다.
 
 - 백업 생성 탭: 저장 위치 allowlist, 상대 경로, profile(`serving-ready`, `lean-serving`, `forensic`), jobs, compression level, callback URL을 입력한다. 저장 위치는 사용자의 로컬 다운로드 경로가 아니라 백엔드 서버가 접근 가능한 경로임을 UI 라벨에 명확히 표시한다.
-- 진행 중 탭: `db_backup`, `db_restore` job을 함께 보여 준다. 우선 `GET /v1/admin/jobs/{job_id}/events` Server-Sent Events를 사용하고, 연결이 끊기면 TanStack Query polling으로 2초 간격 조회한다.
+- 진행 중 영역: `db_backup`, `db_restore` job을 함께 보여 준다. 백엔드는 `GET /v1/admin/jobs/{job_id}/events` Server-Sent Events를 제공하지만, T-046 1차 UI는 안정성을 우선해 TanStack Query polling으로 상태를 갱신한다. SSE 연결과 polling fallback 전환 UI는 후속 고도화 후보로 남긴다.
 - 진행률: 백업은 `preflight → dump → archive → checksum → finalize`, 복원은 `preflight → extract → restore → analyze → validate → finalize` phase를 표시한다. `pg_dump`/`pg_restore` progress는 추정값이므로 stage label, elapsed time, 처리 object/file, archive 크기를 함께 보여 준다.
 - 취소: 작업이 `queued` 또는 `running`일 때만 취소 버튼을 노출한다. 취소 후에는 서버가 partial dump dir, `.part` archive, 새 target DB를 어떻게 정리했는지 `log_tail`과 summary로 보여 준다.
 - 백업 목록 탭: artifact id, 파일명, 크기, SHA256 앞 12자리, 생성일, profile, source set, callback 상태, 만료 예정일을 table로 표시한다. `done` artifact만 다운로드 버튼을 노출한다.
@@ -263,7 +263,7 @@ idle → selecting_artifact → restore_preflight → restore_running
 - 복원 안전장치: 기본 모드는 `new_database`만 노출한다. `replace_current`는 구현하더라도 별도 위험 모달, typed confirmation, 선행 백업 확인, maintenance mode 표시 없이는 실행하지 않는다.
 - callback 상태: terminal callback이 성공하면 `callback_state=delivered`, 실패 후 재시도 중이면 `retrying`, 재시도 소진이면 `failed`로 표시한다. callback 실패는 백업 파일 성공 여부와 분리해서 보여 준다.
 
-테스트는 backup form validation, SSE → polling fallback, 완료 후 다운로드 버튼 표시, callback 상태 badge, cancel flow, restore target DB 위험 입력 차단, corrupted artifact preflight 오류 표시를 포함해야 한다. 통합 검증은 대구광역시 부분 적재 DB를 대상으로 수행하고 전국 full-load는 실행하지 않는다.
+T-046에서 reducer/helper unit test와 Windows Playwright 렌더 검증을 수행했다. Windows Playwright는 API route를 mock해 `/admin/backups`에서 `Backup 시작`, `Restore 시작`, artifact download link 표시를 확인했다. 후속 UI 테스트는 SSE → polling fallback, callback 상태 badge, corrupted artifact preflight 오류 표시를 추가한다. 통합 검증은 대구광역시 부분 적재 DB를 대상으로 수행했고 전국 full-load는 실행하지 않았다.
 
 ### `/admin/performance` 후보 화면 (ADR-031, T-047)
 
@@ -289,13 +289,13 @@ UI 원칙:
 
 ### `/admin/ops` 화면 (ADR-033, T-049)
 
-T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/load`, `/admin/backups`, `/admin/performance`가 각각 작업 실행 화면이라면 `/admin/ops`는 감사·스냅샷·릴리스·artifact를 묶어 보는 관제 화면이다. 첫 구현은 조회와 운영 메타데이터 capture/maintenance window 등록에 집중하고, backup/restore/performance artifact의 세부 다운로드·비교 UI는 T-046/T-047에서 확장한다.
+T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/load`, `/admin/backups`, `/admin/performance`가 각각 작업 실행 화면이라면 `/admin/ops`는 감사·스냅샷·릴리스·artifact를 묶어 보는 관제 화면이다. 첫 구현은 조회와 운영 메타데이터 capture/maintenance window 등록에 집중한다. backup/restore artifact의 세부 다운로드·삭제 action은 T-046 `/admin/backups`에서 제공하고, performance artifact 비교 UI는 T-047에서 확장한다.
 
 화면 구성:
 
 - dataset snapshot 목록: snapshot id, state, row count key 수를 표시한다. source set 상세 drilldown은 T-045에서 보강한다.
 - serving release 목록: release id, active/superseded 상태, release kind, serving MV 이름을 표시한다. active row는 DB partial unique index로 한 건만 허용된다.
-- artifact 목록: `db_backup`, `db_restore_log`, `consistency_report`, `perf_report`, `source_inventory`, `schema_diff`를 같은 table에서 표시한다. 다운로드/삭제 action은 T-046에서 추가한다.
+- artifact 목록: `db_backup`, `db_restore_log`, `consistency_report`, `perf_report`, `source_inventory`, `schema_diff`를 같은 table에서 표시한다. `/admin/ops`는 전체 관제 목록을 유지하고, `db_backup` 다운로드/삭제 action은 `/admin/backups`의 작업 화면에서 수행한다.
 - audit event 목록: action, outcome, 생성 시각을 표시한다. API key, DSN password, token, callback secret, 주소 원문은 backend redaction을 거친 payload만 받는다.
 - maintenance window: `full_load`, `restore`, `schema_migration`, `mv_refresh`, `read_only`, `exclusive` window를 typed confirmation과 함께 생성한다. confirmation 원문은 DB에 저장하지 않고 hash만 저장한다.
 - table stats snapshot: `POST /v1/admin/ops/table-stats/capture`로 table/MV/index size와 추정 row count snapshot을 수집하고 최근 결과를 표시한다.

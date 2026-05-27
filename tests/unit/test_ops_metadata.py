@@ -107,4 +107,7 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "hash_identifier(client_ip)" in source
     assert "hash_confirmation(req.confirmation)" in source
     assert "capture_table_stats_snapshots" in source
+    assert "insert_artifact" in source
+    assert "update_artifact" in source
+    assert "mark_artifact_deleted" in source
     assert "pg_class" in source

@@ -422,6 +422,146 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
             ).mappings().all()
         return [_ops_artifact(dict(row)) for row in rows]
 
+    async def get_artifact(self, artifact_id: str) -> OpsArtifact | None:
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(_ARTIFACT_SELECT + " WHERE artifact_id = :artifact_id"),
+                    {"artifact_id": artifact_id},
+                )
+            ).mappings().first()
+        return _ops_artifact(dict(row)) if row else None
+
+    async def insert_artifact(
+        self,
+        *,
+        artifact_id: str,
+        artifact_type: str,
+        state: str,
+        storage_kind: str,
+        storage_uri: str | None = None,
+        display_name: str | None = None,
+        media_type: str | None = None,
+        compression: str | None = None,
+        size_bytes: int | None = None,
+        sha256: str | None = None,
+        retention_class: str | None = None,
+        expires_at: datetime | None = None,
+        job_id: str | None = None,
+        snapshot_id: str | None = None,
+        release_id: str | None = None,
+        manifest: dict[str, Any] | None = None,
+        download_token_hash: str | None = None,
+        callback_url: str | None = None,
+        callback_state: str | None = None,
+    ) -> OpsArtifact:
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    _json_text(
+                        """
+INSERT INTO ops.artifacts
+  (artifact_id, artifact_type, state, storage_kind, storage_uri, display_name,
+   media_type, compression, size_bytes, sha256, retention_class, expires_at,
+   job_id, snapshot_id, release_id, manifest, download_token_hash,
+   callback_url, callback_state)
+VALUES
+  (:artifact_id, :artifact_type, :state, :storage_kind, :storage_uri, :display_name,
+   :media_type, :compression, :size_bytes, :sha256, :retention_class, :expires_at,
+   :job_id, :snapshot_id, :release_id, :manifest, :download_token_hash,
+   :callback_url, :callback_state)
+RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
+          display_name, media_type, compression, size_bytes, sha256,
+          retention_class, expires_at, job_id, snapshot_id, release_id,
+          manifest, callback_url, callback_state, created_at, finished_at
+""",
+                        "manifest",
+                    ),
+                    {
+                        "artifact_id": artifact_id,
+                        "artifact_type": artifact_type,
+                        "state": state,
+                        "storage_kind": storage_kind,
+                        "storage_uri": storage_uri,
+                        "display_name": display_name,
+                        "media_type": media_type,
+                        "compression": compression,
+                        "size_bytes": size_bytes,
+                        "sha256": sha256,
+                        "retention_class": retention_class,
+                        "expires_at": expires_at,
+                        "job_id": job_id,
+                        "snapshot_id": snapshot_id,
+                        "release_id": release_id,
+                        "manifest": manifest or {},
+                        "download_token_hash": download_token_hash,
+                        "callback_url": callback_url,
+                        "callback_state": callback_state,
+                    },
+                )
+            ).mappings().one()
+        return _ops_artifact(dict(row))
+
+    async def update_artifact(
+        self,
+        artifact_id: str,
+        *,
+        state: str | None = None,
+        storage_uri: str | None = None,
+        display_name: str | None = None,
+        size_bytes: int | None = None,
+        sha256: str | None = None,
+        manifest: dict[str, Any] | None = None,
+        callback_state: str | None = None,
+        finished: bool = False,
+    ) -> OpsArtifact | None:
+        assignments = []
+        params: dict[str, Any] = {"artifact_id": artifact_id}
+        if state is not None:
+            assignments.append("state = :state")
+            params["state"] = state
+        if storage_uri is not None:
+            assignments.append("storage_uri = :storage_uri")
+            params["storage_uri"] = storage_uri
+        if display_name is not None:
+            assignments.append("display_name = :display_name")
+            params["display_name"] = display_name
+        if size_bytes is not None:
+            assignments.append("size_bytes = :size_bytes")
+            params["size_bytes"] = size_bytes
+        if sha256 is not None:
+            assignments.append("sha256 = :sha256")
+            params["sha256"] = sha256
+        if manifest is not None:
+            assignments.append("manifest = :manifest")
+            params["manifest"] = manifest
+        if callback_state is not None:
+            assignments.append("callback_state = :callback_state")
+            params["callback_state"] = callback_state
+        if finished:
+            assignments.append("finished_at = COALESCE(finished_at, now())")
+        if not assignments:
+            return await self.get_artifact(artifact_id)
+        stmt = text(
+            f"""
+UPDATE ops.artifacts
+   SET {', '.join(assignments)}
+ WHERE artifact_id = :artifact_id
+RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
+          display_name, media_type, compression, size_bytes, sha256,
+          retention_class, expires_at, job_id, snapshot_id, release_id,
+          manifest, callback_url, callback_state, created_at, finished_at
+"""
+        )
+        if manifest is not None:
+            stmt = stmt.bindparams(bindparam("manifest", type_=JSONB))
+        async with self.engine.begin() as conn:
+            row = (await conn.execute(stmt, params)).mappings().first()
+        return _ops_artifact(dict(row)) if row else None
+
+    async def mark_artifact_deleted(self, artifact_id: str) -> OpsArtifact | None:
+        return await self.update_artifact(artifact_id, state="deleted", finished=True)
+
     async def list_maintenance_windows(
         self,
         *,

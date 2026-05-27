@@ -40,3 +40,17 @@ def test_settings_defaults_match_backend_spec() -> None:
         "http://openapi.epost.go.kr/postal/downloadAreaCodeService/"
         "downloadAreaCodeService/getAreaCodeInfo"
     )
+    assert settings.backup_allowed_dirs == (settings.loader_data_dir / "backups",)
+    assert settings.backup_default_jobs == 4
+    assert settings.backup_default_compression_level == 3
+    assert "localhost" in settings.backup_callback_allowed_hosts
+
+
+def test_settings_normalize_backup_csv_values() -> None:
+    settings = Settings(
+        backup_allowed_dirs="/tmp/a,/tmp/b",
+        backup_callback_allowed_hosts="localhost,internal.example",
+    )
+
+    assert tuple(path.as_posix() for path in settings.backup_allowed_dirs) == ("/tmp/a", "/tmp/b")
+    assert settings.backup_callback_allowed_hosts == ("localhost", "internal.example")
