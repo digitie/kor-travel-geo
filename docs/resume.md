@@ -80,10 +80,11 @@
 - ✅ PR #34~#47 리뷰 코멘트 audit/fixup — conversation/review/inline/thread 표면을 다시 확인했고 unresolved current thread 0개를 기록했다. `source_set` DTO/OpenAPI/TS 타입을 nested JSON 보존으로 보강하고, `ops.audit_events.job_id` FK를 `ON DELETE NO ACTION`으로 바꿨으며, `maplibre-vworld-js` 최신 `7947b2e` 동기화와 WSL frontend 검증 helper를 추가했다. 상세: `docs/postmerge-review-fixups-pr34-latest.md`
 - ✅ T-027 최종 실 데이터 클린 적재 1회 완료 — Docker PostGIS `localhost:15432`의 빈 DB에 실제 `data/juso` 원천을 처음부터 적재했다. 총 3,934초, `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`, smoke `OK`를 확인했다. direct `tl_roadaddr_entrc=202605`를 `juso=202603` 세트에 바로 serving 승격하면 C4/C6/C7이 증가해, MV/정합성 serving CTE는 `tl_locsum_entrc` 우선 + same-month direct fallback으로 보정했다.
 - ✅ 실제 C1~C10 재검증 완료 — 보정 후 C1~C10은 611.71초에 완료됐고 `severity_max=ERROR`다. C2 34,699건, C4 3,415건(`over_500m=16`), C6 803건, C7 6,817건은 기존 실제 데이터 품질 이슈로 유지된다. C10은 row-level 기준월 집계로 `distinct_months=3` WARN을 보고한다.
+- ✅ T-051 에이전트별 고정 worktree와 CodeGraph 운용 문서화 — ChatGPT Codex `~/dev/geo-codex`, Claude Code `~/dev/geo-claude`, Google Antigravity 2.0 `~/dev/geo-antigravity`를 고정 worktree로 두고 작업마다 branch만 새로 따도록 ADR-034와 개발 문서를 추가했다. CodeGraph `v0.9.6`을 WSL에 설치하고 세 worktree 모두 `codegraph init -i && codegraph status`까지 실행했다. `.codegraph/`는 ignore한다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 PR #47에 이번 PR #34~#47 리뷰 audit/fixup 보강을 푸시하고 코멘트로 결과를 남긴 뒤 리뷰를 기다리는 것이다. PR #47이 안정화되면 main에 머지하고, T-047 전국 적재 후 쿼리 성능 벤치마크를 같은 DB 상태에서 시작한다. T-047은 p50/p95/p99, `EXPLAIN ANALYZE`, `pg_stat_statements`, 동시성 결과와 튜닝 전후 차이를 문서화한다. 그 다음 후보는 T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화와 T-050 운영 hardening이다.
+다음 작업은 T-047 전국 적재 후 쿼리 성능 벤치마크와 튜닝이다. 이미 T-027 최종 클린 적재 DB의 row count와 정합성 기준선이 있으므로, 같은 데이터 상태에서 exact/fuzzy geocode, reverse nearest/radius, search, zipcode, no-result 경로를 반복 측정한다. p50/p95/p99, `EXPLAIN ANALYZE`, `pg_stat_statements`, 동시성 결과, 튜닝 전후 차이를 문서화하고 목표 초과 query군은 index/query rewrite/read-only 보조 MV까지 적극 실험한다. 그 다음 후보는 T-044 최신 `maplibre-vworld-js` 기반 domain wrapper 경계화와 T-050 운영 hardening이다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
@@ -101,6 +102,7 @@
 ## 작업 시작 전 확인할 것
 
 - [ ] `AGENTS.md`의 "식별자" 표와 "개발 환경 정책" 다시 읽기
+- [ ] 자기 에이전트 고정 worktree에서 작업 중인지 확인하고, 새 작업 branch를 만든 뒤 `codegraph sync` 실행
 - [ ] `SKILL.md` §4 "DO NOT" 룰 다시 읽기
 - [ ] `docs/architecture.md`의 의존 방향 확인
 - [ ] `docs/decisions.md`의 ADR-001 ~ ADR-020 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마, ADR-019 Next.js 16 보안 하한선, ADR-020 VWorld MapLibre 지도)
@@ -126,6 +128,7 @@
 - **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
 - **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정되어 있고 `dist`/`exports`/`types`/`style.css`, click/error/flyTo hook, tile error helper가 포함됨을 확인했다. SHA를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm으로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. `VWorldMap` 컴포넌트 대체는 범용 지도 primitive를 upstream 최신 API로 소비하고, key 미설정 fallback 문구, API 응답 overlay, transient overlay 임계치 같은 `kraddr-geo-ui` 특화 동작을 domain wrapper에 남기는 방식으로 진행한다.
 - **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
+- **CodeGraph/Windows npm shim**: WSL에서 `codegraph`가 `/mnt/c/Users/.../npm/codegraph`를 가리키고 `node: not found`로 실패하면 Windows npm shim이 PATH에 앞선 것이다. WSL에서는 Linux installer 또는 Linux Node/npm 설치를 사용하고, worktree별 `.codegraph/`가 있으면 `codegraph sync`로 갱신한다.
 
 ## 작업 후 의무사항
 

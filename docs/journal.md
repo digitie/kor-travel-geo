@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 (T-051 — 에이전트별 worktree와 CodeGraph 운용 문서화)
+
+**작업**: 사용자 요청에 따라 ChatGPT Codex, Claude Code, Google Antigravity 2.0이 같은 checkout을 공유하지 않고 에이전트별 고정 Git worktree를 유지하는 정책을 문서화했다.
+
+**반영 상세**:
+- ADR-034를 추가해 `~/dev/geo-codex`, `~/dev/geo-claude`, `~/dev/geo-antigravity` worktree와 `agent/<agent>-*` branch prefix를 확정했다.
+- `docs/dev-environment.md`에는 최초 `git worktree add` 절차, 새 작업 branch 생성 절차, CodeGraph `init -i`/`sync`/`status` 운용 절차를 상세히 적었다.
+- `AGENTS.md`, `SKILL.md`, `README.md`, `docs/agent-guide.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`에 핵심 규칙을 동기화했다.
+- `.codegraph/`를 `.gitignore`에 추가해 로컬 SQLite 인덱스가 PR diff에 섞이지 않게 했다.
+
+**검증**:
+- CodeGraph 원문 문서에서 `codegraph init -i`가 `.codegraph/` 생성과 즉시 인덱싱을 수행하고, 기존 인덱스는 `codegraph sync`로 증분 갱신한다는 점을 확인했다.
+- 최초 확인 시 로컬 WSL PATH에는 Windows npm shim(`/mnt/c/Users/digit/AppData/Roaming/npm/codegraph`)이 먼저 잡히며 `node: not found`로 실패했다. CodeGraph Linux installer로 `v0.9.6`을 `~/.codegraph`/`~/.local/bin`에 설치한 뒤 `codegraph --version`이 정상 동작함을 확인했다.
+- `~/dev/geo-codex`, `~/dev/geo-claude`, `~/dev/geo-antigravity` worktree를 생성했다. 각 worktree에서 `codegraph init -i && codegraph status`를 실행했고, 201 files, 2,796 nodes, 6,251 edges, DB size 5.58 MB, `node:sqlite`/WAL, `Index is up to date` 상태를 확인했다.
+- `git diff --check`, `.venv/bin/ruff check .`, `.venv/bin/mypy src/kraddr/geo`, `.venv/bin/lint-imports`, `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q`를 실행했다. 결과는 `191 passed, 6 skipped`다.
+
+**후속**:
+- 이후 모든 새 작업은 해당 에이전트 고정 worktree에서 branch만 새로 따고, branch 전환 뒤 `codegraph sync`로 인덱스를 맞춘다.
+
 ## 2026-05-27 (PR #34~#47 리뷰 코멘트 audit/fixup)
 
 **작업**: 사용자 지시에 따라 PR #34부터 #47까지 GitHub conversation comment, formal review body, inline review thread, GraphQL `reviewThreads`를 다시 확인했다. PR #34~#43에는 post-merge 리뷰 코멘트가 있었고, PR #44는 Windows Playwright 확인 메모, PR #45~#47은 확인 시점 기준 신규 코멘트가 없었다. unresolved current review thread는 0개였다.

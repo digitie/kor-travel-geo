@@ -13,6 +13,72 @@ cd python-kraddr-geo
 ln -s /mnt/<drive>/projects/python-kraddr-geo/data data
 ```
 
+## 1.1 에이전트별 고정 Git worktree
+
+AI 에이전트가 동시에 또는 순차로 작업할 때는 같은 checkout에서 branch를 계속 갈아타지 않는다. 기준 clone(`~/dev/python-kraddr-geo`)은 `main` 동기화와 worktree 관리용으로 두고, 실제 작업은 에이전트별 고정 worktree에서 수행한다.
+
+| 에이전트 | worktree 경로 | idle branch 예시 | 작업 branch 예시 |
+|----------|---------------|------------------|------------------|
+| ChatGPT Codex | `~/dev/geo-codex` | `agent/codex-worktree` | `agent/codex-t047-benchmark` |
+| Claude Code | `~/dev/geo-claude` | `agent/claude-worktree` | `agent/claude-review-fixup` |
+| Google Antigravity 2.0 | `~/dev/geo-antigravity` | `agent/antigravity-worktree` | `agent/antigravity-ui-sync` |
+
+최초 1회 생성:
+
+```bash
+cd ~/dev/python-kraddr-geo
+git fetch origin main
+git worktree add ../geo-codex -b agent/codex-worktree origin/main
+git worktree add ../geo-claude -b agent/claude-worktree origin/main
+git worktree add ../geo-antigravity -b agent/antigravity-worktree origin/main
+```
+
+이미 worktree가 있으면 재생성하지 않는다. 새 작업은 해당 에이전트 worktree에서 작업 branch만 새로 딴다.
+
+```bash
+cd ~/dev/geo-codex
+git status --short                 # 변경사항이 없어야 다음 작업을 시작
+git fetch origin main
+git switch -c agent/codex-next origin/main
+```
+
+사용자가 로컬 `main`을 이미 fast-forward로 맞춘 상태라면 아래 축약형도 가능하다.
+
+```bash
+git fetch
+git switch -c agent/codex-next main
+```
+
+다만 여러 worktree에서 `main` 자체를 checkout하려 하면 Git이 막을 수 있으므로, 자동화와 AI 에이전트에는 `origin/main`을 시작점으로 쓰는 형태를 권장한다. 같은 branch를 두 worktree에서 동시에 checkout하지 말고, branch 이름에는 `agent/codex-*`, `agent/claude-*`, `agent/antigravity-*`처럼 소유자를 넣는다.
+
+## 1.2 CodeGraph 인덱스
+
+CodeGraph는 저장소별 코드 지식 그래프를 `.codegraph/` 디렉터리에 만든다. 이 디렉터리는 로컬 SQLite 인덱스이며 Git에 커밋하지 않는다. `.gitignore`에는 반드시 `.codegraph/`가 포함되어야 한다.
+
+WSL에서 `codegraph`가 없거나 `/mnt/c/Users/.../npm/codegraph` 같은 Windows npm shim을 가리켜 `node: not found`가 나면 Linux용 standalone installer를 사용한다.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
+hash -r
+codegraph --version
+```
+
+각 worktree에서 최초 1회만 초기화한다.
+
+```bash
+cd ~/dev/geo-codex
+codegraph init -i
+```
+
+이후 작업 시작, branch 전환, `git pull`, rebase, merge 뒤에는 재초기화하지 않고 증분 갱신만 수행한다.
+
+```bash
+codegraph sync
+codegraph status
+```
+
+문서 기준으로 `codegraph init -i`는 `.codegraph/`를 만들고 즉시 전체 인덱스를 생성한다. `codegraph sync`는 바뀐 파일만 증분 반영한다. MCP watcher가 켜진 환경에서는 자동 동기화가 되더라도, 이 저장소에서는 branch 전환 직후 수동 `codegraph sync`를 실행해 에이전트가 낡은 인덱스를 보지 않게 한다.
+
 ## 2. 시스템 패키지 (Ubuntu/WSL)
 
 ```bash

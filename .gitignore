@@ -21,6 +21,7 @@ dist/
 .venv/
 .wsl-node/
 .codex_tmp/
+.codegraph/
 
 data/
 *.sqlite

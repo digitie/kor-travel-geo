@@ -8,7 +8,7 @@
 
 이 저장소(GitHub 이름 `python-kraddr-geo`, Python 패키지 `kraddr.geo`)는 도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS로 적재해 제공하는 **한국 주소 지오코딩 라이브러리·REST API**다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 `kraddr-geo-ui`(Next.js 16 + Tailwind + MapLibre GL JS + VWorld WMTS)로 운영한다.
 
-이전(v1) SpatiaLite + SQLite 기반 구현은 동일한 `kraddr.geo` 패키지였지만 `v1` 브랜치에 보존되어 있다. master는 PostgreSQL + PostGIS 기반 새 사양으로 처음부터 다시 구현한다(ADR-001).
+이전(v1) SpatiaLite + SQLite 기반 구현은 동일한 `kraddr.geo` 패키지였지만 `v1` 브랜치에 보존되어 있다. `main`은 PostgreSQL + PostGIS 기반 새 사양으로 처음부터 다시 구현한다(ADR-001).
 
 ## 식별자 (혼동 방지)
 
@@ -29,6 +29,22 @@ PC 개발은 **WSL ext4** 위에서 수행한다. NTFS 마운트에서 직접 `g
 - **데이터(`data/`)**: NTFS의 프로젝트 디렉토리 아래에 둔다 (예: `/mnt/d/projects/python-kraddr-geo/data/`). 작업 디렉토리에는 심볼릭 링크만 두거나 절대경로로 참조한다.
 - **테스트**: 통합/e2e 테스트는 NTFS의 `data/`를 reference로 삼는다. 픽스처는 소량으로 ext4에 둘 수 있으나, 대용량 검증(전국 적재, 전수 round-trip)은 NTFS 경로 사용을 전제로 한다.
 - **카피 정책**: 작업이 완료되면 ext4 → NTFS의 프로젝트 디렉토리로 카피한다. Git은 ext4 쪽이 source of truth.
+
+## 에이전트별 고정 worktree와 CodeGraph
+
+AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, WSL ext4의 `~/dev` 아래 고정 worktree를 유지한다(ADR-034).
+
+| 에이전트 | 고정 worktree |
+|----------|---------------|
+| ChatGPT Codex | `~/dev/geo-codex` |
+| Claude Code | `~/dev/geo-claude` |
+| Google Antigravity 2.0 | `~/dev/geo-antigravity` |
+
+- worktree는 에이전트별로 1회만 생성하고, 작업마다 해당 worktree 안에서 새 branch만 만든다.
+- 예: `git fetch origin main && git switch -c agent/codex-next origin/main`
+- 같은 branch를 여러 worktree에서 checkout하지 않는다. branch 이름에는 `agent/<agent>-<task>`처럼 소유자를 넣는다.
+- CodeGraph는 worktree마다 1회 `codegraph init -i`로 초기화하고, 이후 branch 전환·pull·merge 뒤에는 재초기화하지 않고 `codegraph sync`로 유지한다.
+- `.codegraph/`는 로컬 인덱스이므로 Git에 커밋하지 않는다. `.gitignore`에 포함되어 있어야 한다.
 
 작업 전에 반드시 다음을 읽는다:
 

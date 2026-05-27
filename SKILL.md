@@ -27,6 +27,13 @@
 - **테스트는 NTFS의 `data/`를 reference**로 삼는다. 단위 테스트는 소량 픽스처(ext4)로 충분하지만 통합/e2e 테스트, 전국 적재 검증, vworld 비교 등은 NTFS 데이터를 사용한다.
 - **작업이 완료되면 ext4 → NTFS로 카피**한다. Git의 source of truth는 ext4 쪽이다.
 
+### 에이전트별 worktree / CodeGraph
+
+- ChatGPT Codex는 `~/dev/geo-codex`, Claude Code는 `~/dev/geo-claude`, Google Antigravity 2.0은 `~/dev/geo-antigravity` worktree를 고정으로 사용한다.
+- worktree는 에이전트별로 유지하고 작업마다 새 branch만 만든다. 새 작업 시작 예시는 `git fetch origin main && git switch -c agent/codex-next origin/main`이다.
+- CodeGraph는 worktree마다 최초 1회 `codegraph init -i`로 초기화한다. `.codegraph/`가 이미 있으면 `codegraph init`을 반복하지 말고 `codegraph sync`로 증분 갱신한다.
+- `.codegraph/`는 로컬 SQLite 인덱스이므로 커밋하지 않는다.
+
 ## 2. 빠른 시작
 
 ```bash

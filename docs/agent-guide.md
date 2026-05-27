@@ -118,6 +118,8 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
 
 ### B4.1 새 세션의 첫 5분 (총 10분 안에 컨텍스트 확보)
 
+작업 디렉터리는 에이전트별 고정 worktree를 우선한다. ChatGPT Codex는 `~/dev/geo-codex`, Claude Code는 `~/dev/geo-claude`, Google Antigravity 2.0은 `~/dev/geo-antigravity`를 사용한다. worktree가 없다면 `docs/dev-environment.md` §1.1 절차로 생성하고, `.codegraph/`가 없다면 해당 worktree에서 `codegraph init -i`를 최초 1회 실행한다. 이미 초기화된 worktree에서는 새 작업 branch를 만든 직후 `codegraph sync`와 `codegraph status`로 인덱스를 맞춘다.
+
 | 순서 | 행동 | 시간 |
 |------|------|------|
 | 1 | `README.md` 처음부터 끝까지 | 2분 |
@@ -131,6 +133,7 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
 
 ```
 작업 1건 ─┬─→ [읽기] resume → architecture 관련 절 → 관련 ADR
+          ├─→ [분기] 고정 worktree에서 새 branch 생성 → codegraph sync
           │
           ├─→ [코드] 변경 (한 PR / 한 commit 단위)
           │
