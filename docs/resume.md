@@ -81,23 +81,11 @@
 - ✅ T-027 최종 실 데이터 클린 적재 1회 완료 — Docker PostGIS `localhost:15432`의 빈 DB에 실제 `data/juso` 원천을 처음부터 적재했다. 총 3,934초, `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`, smoke `OK`를 확인했다. direct `tl_roadaddr_entrc=202605`를 `juso=202603` 세트에 바로 serving 승격하면 C4/C6/C7이 증가해, MV/정합성 serving CTE는 `tl_locsum_entrc` 우선 + same-month direct fallback으로 보정했다.
 - ✅ 실제 C1~C10 재검증 완료 — 보정 후 C1~C10은 611.71초에 완료됐고 `severity_max=ERROR`다. C2 34,699건, C4 3,415건(`over_500m=16`), C6 803건, C7 6,817건은 기존 실제 데이터 품질 이슈로 유지된다. C10은 row-level 기준월 집계로 `distinct_months=3` WARN을 보고한다.
 - ✅ T-051 에이전트별 고정 worktree와 CodeGraph 운용 문서화 — ChatGPT Codex `~/dev/geo-codex`, Claude Code `~/dev/geo-claude`, Google Antigravity 2.0 `~/dev/geo-antigravity`를 고정 worktree로 두고 작업마다 branch만 새로 따도록 ADR-034와 개발 문서를 추가했다. CodeGraph `v0.9.6`을 WSL에 설치하고 세 worktree 모두 `codegraph init -i && codegraph status`까지 실행했다. `.codegraph/`는 ignore한다.
+- ✅ T-047 1차 query benchmark harness와 지번 exact 튜닝 — `scripts/benchmark_query_performance.py`와 단위 테스트를 추가하고, T-027 최종 클린 DB에서 smoke 및 small concurrency benchmark를 실행했다. `idx_mv_jibun_name_exact`를 추가해 Q2 지번 exact 단일 샘플 client latency를 2830.59ms → 5.58ms로 줄였고, index build time 56.03초/size 761MiB를 기록했다. 상세: `docs/t047-query-performance-tuning.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-2026-05-27 사용자 RFC로 새 task 8건(T-052~T-059)을 백로그에 추가했다. 운영 안전성·외부 라이브러리 정리부터, 기능 보강, 환경 검토 순서로 처리한다. 자세한 우선순위는 `docs/tasks.md`를 본다.
-
-1. **T-056** `python-kraddr-base` Address 부분 병합 + 외부 라이브러리 삭제. 외부 lib archive 전에 흡수 PR을 먼저 만든다. 상세: `docs/t056-kraddr-base-address-merge.md`, ADR-035.
-2. **T-058** restore hot-swap (`ALTER DATABASE RENAME` 기반, 같은 cluster). T-046 위에서 hot-swap + rollback 절차를 명문화한다. 상세: `docs/t058-restore-hot-swap.md`, ADR-036.
-3. **T-059** CLI/Job 동시 실행 보호 표준화 (PostgreSQL advisory lock 기반 cross-process). 인벤토리부터 시작해 보호되지 않는 경로 11개에 차례로 적용. 상세: `docs/t059-concurrent-job-protection.md`.
-4. **T-054** 외부 IP 한국만 허용 (FastAPI middleware + GeoIP DB). 상세: `docs/t054-korea-only-geoip.md`, ADR-037.
-5. **T-057** 행정구역 hint(`sig_cd`/`bjd_cd`/`bbox`) 기반 검색 가속. T-047과 함께 측정. 상세: `docs/t057-region-hint-search.md`.
-6. **T-053** Admin Web UI 통계/유지보수/관리/튜닝 + C1~C10 상세 분석 UI/CSV (TanStack Query + Zustand). 상세: `docs/t053-admin-ui-ops-statistics.md`.
-7. **T-052** API v1(vworld 호환) / v2(kakao/naver 흡수 + 통합 candidate) 분리 + AI-friendly `docs/api-reference/`. 상세: `docs/t052-api-providers-v1-v2.md`, ADR-038.
-8. **T-055** N150 16GB / NVMe 1TB Ubuntu 26.04 vs Odroid 환경 측정. 하드웨어 도착 후 실측. 상세: `docs/t055-deployment-n150-odroid.md`.
-
-기존 대기 task(T-027/T-047/T-044/T-050)도 그대로 유지한다. T-047은 T-057 hint와 함께 측정하면 효율적이다.
-
-당장 한 작업으로 **T-056 인벤토리**가 가장 빨리 시작 가능하다. `~/dev/python-kraddr-base`의 HEAD SHA와 흡수 대상 파일 목록을 `docs/t056-kraddr-base-address-merge.md`에 채우는 것으로 시작한다.
+다음 작업은 T-047 후속 standard/stress benchmark 또는 새 RFC 우선순위의 T-056 인벤토리다. T-047 후속은 `standard` 1,000건 이상, 동시성 64, REST API end-to-end latency, `pg_stat_statements`, T-057 region hint 비교를 같은 harness에 붙이는 작업이다. task 순서를 엄격히 운영 안전성 우선으로 잡으면 T-056(`python-kraddr-base` Address 흡수) → T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-057(행정구역 hint 검색 가속) → T-053(Admin Web UI 통계/튜닝) → T-052(API v1/v2와 provider 통합) → T-055(N150/Odroid 실측) 순서다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
@@ -142,6 +130,7 @@
 - **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정되어 있고 `dist`/`exports`/`types`/`style.css`, click/error/flyTo hook, tile error helper가 포함됨을 확인했다. SHA를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm으로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. `VWorldMap` 컴포넌트 대체는 범용 지도 primitive를 upstream 최신 API로 소비하고, key 미설정 fallback 문구, API 응답 overlay, transient overlay 임계치 같은 `kraddr-geo-ui` 특화 동작을 domain wrapper에 남기는 방식으로 진행한다.
 - **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
 - **CodeGraph/Windows npm shim**: WSL에서 `codegraph`가 `/mnt/c/Users/.../npm/codegraph`를 가리키고 `node: not found`로 실패하면 Windows npm shim이 PATH에 앞선 것이다. WSL에서는 Linux installer 또는 Linux Node/npm 설치를 사용하고, worktree별 `.codegraph/`가 있으면 `codegraph sync`로 갱신한다.
+- **CodeGraph MCP 재시작 필요**: 프로젝트 루트 `.codex/config.toml`에 CodeGraph MCP 설정을 추가했지만 Codex Desktop 재시작 전에는 현재 세션 도구로 노출되지 않을 수 있다. 재시작 후 `codegraph_explore`가 보이면 컴포넌트 수정 전 영향도 확인에 우선 사용한다.
 
 ## 작업 후 의무사항
 

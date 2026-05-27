@@ -1,0 +1,4 @@
+[mcp_servers.codegraph]
+enabled = true
+command = "codegraph"
+args = ["serve", "--mcp"]

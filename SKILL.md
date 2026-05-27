@@ -32,6 +32,9 @@
 - ChatGPT Codex는 `~/dev/geo-codex`, Claude Code는 `~/dev/geo-claude`, Google Antigravity 2.0은 `~/dev/geo-antigravity` worktree를 고정으로 사용한다.
 - worktree는 에이전트별로 유지하고 작업마다 새 branch만 만든다. 새 작업 시작 예시는 `git fetch origin main && git switch -c agent/codex-next origin/main`이다.
 - CodeGraph는 worktree마다 최초 1회 `codegraph init -i`로 초기화한다. `.codegraph/`가 이미 있으면 `codegraph init`을 반복하지 말고 `codegraph sync`로 증분 갱신한다.
+- 현재 인덱스 상태는 `codegraph status`로 확인한다.
+- Codex MCP 설정은 프로젝트 루트 `.codex/config.toml`에 둔다. Codex Desktop을 재시작한 뒤 CodeGraph MCP 도구가 노출된다.
+- `kraddr-geo-ui`의 React 컴포넌트, 지도 wrapper, 공용 UI primitive를 수정하기 전에는 CodeGraph MCP의 `codegraph_explore`로 영향도를 먼저 평가한다. 확인 대상은 호출자, import 경로, 관련 테스트, `maplibre-vworld-js` 경계다.
 - `.codegraph/`는 로컬 SQLite 인덱스이므로 커밋하지 않는다.
 
 ## 2. 빠른 시작

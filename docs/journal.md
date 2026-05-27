@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-27 23:45 (T-047 1차 query benchmark harness + 지번 exact 튜닝)
+
+**작업**: T-047 중단 지점을 최신 `main`(#50) 위로 복구하고, query benchmark harness와 첫 번째 실제 튜닝을 완료했다.
+
+**반영 상세**:
+- `scripts/benchmark_query_performance.py`를 추가했다. `mv_geocode_target`/`tl_sppn_makarea`에서 deterministic corpus를 만들고, geocode/reverse/search/zipcode raw SQL을 실행해 `corpus.json`, `benchmark.json`, `environment.json`, `summary.md`, slow sample `EXPLAIN` JSON을 `artifacts/perf/<run-id>/`에 저장한다.
+- `tests/unit/test_query_performance_benchmark.py`를 추가해 percentile, warmup 제외 summary, parser 기본값, corpus JSON round-trip을 검증했다.
+- T-027 최종 클린 DB(`mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`)에서 smoke benchmark를 실행했다.
+- Q2 지번 exact가 기존 `idx_mv_jibun(bjd_cd, ...)` 경로에서 느린 것을 확인하고, `idx_mv_jibun_name_exact(si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno, emd_nm, li_nm, pt_source, bd_mgt_sn)`를 추가했다. 기존 DB용 Alembic `0009_t047_jibun_name_exact_index`와 fresh MV SQL을 함께 갱신했다.
+- CodeGraph MCP 설정(`.codex/config.toml`)과 관련 문서 보강을 최신 `main` 위에 보존했다.
+
+**측정**:
+- index build: 56.03초, 761MiB.
+- 같은 corpus smoke 전후: Q2 지번 exact client latency 2830.59ms → 5.58ms, plan execution 333.417ms → 0.100ms.
+- post-index small concurrency run: `cases_per_group=5`, `iterations=3`, `warmup=1`, 동시성 1/4/16. 단일 동시성의 모든 query군 p95가 ADR-031 1차 목표 안에 들어왔고, 동시성 16에서는 Q1/Q3/Q4 tail이 90~110ms 구간으로 증가했다.
+
+**검증**:
+- `ruff check scripts/benchmark_query_performance.py tests/unit/test_query_performance_benchmark.py` 통과.
+- `pytest tests/unit/test_query_performance_benchmark.py -q` 6건 통과.
+- 실제 DB smoke benchmark와 post-index concurrency benchmark 실행 완료. artifact는 ignore 대상인 `artifacts/perf/`에 보관했다.
+
+**후속**:
+- `standard`/`stress` corpus, 동시성 64, REST API end-to-end latency, `pg_stat_statements`, T-057 region hint 비교를 다음 T-047 후속 PR에서 진행한다.
+
 ## 2026-05-27 (사용자 RFC 반영 — T-052~T-059 백로그 + ADR-035~ADR-038)
 
 **작업**: 사용자 RFC(restore hot-swap, vworld/kakao/naver multi-provider + v1/v2 API + AI-friendly 문서, Web UI 통계/유지보수/관리/튜닝 + C1~C10 분석 UI/CSV, CLI 동시 실행 보호, 한국 IP만 허용, N150/Odroid 환경 검토, `python-kraddr-base` Address 부분 병합 + 외부 라이브러리 삭제, 행정구역 hint 검색 가속)를 task 8건과 ADR 4건으로 문서화했다. 코드는 작성하지 않았다.
@@ -22,6 +46,38 @@
 **검증**:
 - `git diff --check` 통과 예정(문서 전용).
 - `pytest -q`, `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`는 본 PR이 코드 변경이 없으므로 회귀 차원에서 baseline만 통과 확인.
+
+## 2026-05-27 (T-047 중단 기록 — CodeGraph MCP 설정과 벤치마크 harness 초안)
+
+**작업**: 사용자 지시에 따라 T-047 진행 중 Codex Desktop 재시작을 위해 작업을 중단하고 현재 상태를 기록했다. 이 시점에는 PR/commit/push를 하지 않았다.
+
+**현재 branch/worktree**:
+- worktree: `~/dev/geo-codex`
+- branch: `agent/codex-t047-query-performance`
+- 기준: `origin/main`
+
+**반영된 미커밋 변경**:
+- `.codex/config.toml`: CodeGraph MCP stdio 서버 설정 추가. `codegraph install --print-config codex`가 제안한 `command = "codegraph"`, `args = ["serve", "--mcp"]` 방식을 사용했다. WSL에서 `npx -y @colbymchenry/codegraph mcp`는 Windows npm shim/UNC 경로 경고가 발생할 수 있어 기본값으로 쓰지 않았다.
+- `README.md`, `AGENTS.md`, `SKILL.md`, `docs/dev-environment.md`, `docs/agent-guide.md`, `docs/decisions.md`: CodeGraph `init -i`/`status`, MCP 재시작 필요성, 컴포넌트 수정 전 `codegraph_explore` 영향도 확인 규칙을 보강했다.
+- `scripts/benchmark_query_performance.py`: T-047 query benchmark harness 초안 추가. `mv_geocode_target`, `tl_sppn_makarea`, zipcode/search/reverse/geocode SQL을 대상으로 corpus 생성, 반복 측정, summary/JSON/plan artifact 저장 구조를 작성했다.
+- `tests/unit/test_query_performance_benchmark.py`: percentile, summary aggregation, corpus JSON round-trip 단위 테스트 추가.
+
+**검증된 것**:
+- `codegraph sync && codegraph status` 실행 결과 `Index is up to date`를 확인했다. sync 당시에는 새 Python 파일 2개가 인덱스에 반영됐다.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp PYTHONPATH=... /home/digitie/dev/python-kraddr-geo/.venv/bin/python -m pytest tests/unit/test_query_performance_benchmark.py -q` 실행 결과 6건 통과.
+- `ps` 확인 시 benchmark/pytest/ruff/gh/docker compose 장기 실행 프로세스는 없었다.
+
+**아직 끝나지 않은 것**:
+- `scripts/benchmark_query_performance.py`와 테스트는 ruff를 한 차례 보정했지만, 마지막 상태에서 전체 `ruff`, `mypy`, 실제 Docker DB smoke benchmark를 아직 다시 실행하지 않았다.
+- 실제 DB 스모크 benchmark, `EXPLAIN` plan artifact 생성, `docs/t047-query-performance-tuning.md` 구현 결과 보강, `docs/resume.md` 최종 완료 토글, `CHANGELOG.md` 갱신, commit/push/PR 생성은 남아 있다.
+- Codex Desktop 재시작 전이므로 현재 세션에는 CodeGraph MCP 도구가 아직 노출되지 않는다. 재시작 후 `codegraph_explore` 도구가 보이면 UI 컴포넌트 작업 때 먼저 사용한다.
+
+**재개 순서**:
+1. Codex Desktop 재시작 후 `~/dev/geo-codex`에서 `git status --short --branch` 확인.
+2. `codegraph sync && codegraph status` 실행.
+3. `ruff check scripts/benchmark_query_performance.py tests/unit/test_query_performance_benchmark.py`를 venv Python으로 재실행.
+4. 같은 단위 테스트를 다시 실행.
+5. Docker DB `localhost:15432` 상태를 확인한 뒤 작은 T-047 smoke benchmark를 실행한다.
 
 ## 2026-05-27 (T-051 — 에이전트별 worktree와 CodeGraph 운용 문서화)
 

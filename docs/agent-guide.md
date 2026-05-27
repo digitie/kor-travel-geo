@@ -118,7 +118,7 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
 
 ### B4.1 새 세션의 첫 5분 (총 10분 안에 컨텍스트 확보)
 
-작업 디렉터리는 에이전트별 고정 worktree를 우선한다. ChatGPT Codex는 `~/dev/geo-codex`, Claude Code는 `~/dev/geo-claude`, Google Antigravity 2.0은 `~/dev/geo-antigravity`를 사용한다. worktree가 없다면 `docs/dev-environment.md` §1.1 절차로 생성하고, `.codegraph/`가 없다면 해당 worktree에서 `codegraph init -i`를 최초 1회 실행한다. 이미 초기화된 worktree에서는 새 작업 branch를 만든 직후 `codegraph sync`와 `codegraph status`로 인덱스를 맞춘다.
+작업 디렉터리는 에이전트별 고정 worktree를 우선한다. ChatGPT Codex는 `~/dev/geo-codex`, Claude Code는 `~/dev/geo-claude`, Google Antigravity 2.0은 `~/dev/geo-antigravity`를 사용한다. worktree가 없다면 `docs/dev-environment.md` §1.1 절차로 생성하고, `.codegraph/`가 없다면 해당 worktree에서 `codegraph init -i`를 최초 1회 실행한다. 이미 초기화된 worktree에서는 새 작업 branch를 만든 직후 `codegraph sync`와 `codegraph status`로 인덱스를 맞춘다. `codegraph status`는 인덱스가 현재 branch와 맞는지 확인하는 필수 상태 점검이다.
 
 | 순서 | 행동 | 시간 |
 |------|------|------|
@@ -129,11 +129,14 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
 | 5 | `docs/journal.md` 최근 3 엔트리 | 2분 |
 | 6 | `docs/tasks.md`에서 resume이 가리키는 항목 확인 | 1분 |
 
+컴포넌트 작업(`kraddr-geo-ui/components/**`, App Router client component, 지도 wrapper, 공용 UI primitive)은 수정 전에 CodeGraph MCP의 `codegraph_explore`로 영향도를 먼저 확인한다. 확인 결과에는 호출자, 관련 테스트, props/type 공유 지점, `maplibre-vworld-js`와의 책임 경계를 포함한다. Codex Desktop 재시작 전처럼 MCP 도구가 아직 노출되지 않은 세션에서는 `codegraph sync`, `codegraph status`, `codegraph context <task>` 또는 `codegraph impact <symbol>` 결과로 임시 확인하고, 그 사유를 PR 설명이나 `docs/journal.md`에 남긴다.
+
 ### B4.2 작업 사이클
 
 ```
 작업 1건 ─┬─→ [읽기] resume → architecture 관련 절 → 관련 ADR
-          ├─→ [분기] 고정 worktree에서 새 branch 생성 → codegraph sync
+          ├─→ [분기] 고정 worktree에서 새 branch 생성 → codegraph sync → codegraph status
+          ├─→ [탐색] 컴포넌트 수정이면 codegraph_explore 영향도 확인
           │
           ├─→ [코드] 변경 (한 PR / 한 commit 단위)
           │
