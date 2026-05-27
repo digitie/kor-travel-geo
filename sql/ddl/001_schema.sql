@@ -425,7 +425,7 @@ CREATE TABLE IF NOT EXISTS ops.audit_events (
   action            TEXT NOT NULL,
   resource_type     TEXT,
   resource_id       TEXT,
-  job_id            TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
+  job_id            TEXT REFERENCES load_jobs(job_id) ON DELETE NO ACTION,
   outcome           TEXT NOT NULL CHECK (outcome IN ('started','succeeded','failed','cancelled','denied')),
   error_code        TEXT,
   payload_redacted  JSONB NOT NULL DEFAULT '{}'::jsonb,

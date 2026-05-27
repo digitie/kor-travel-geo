@@ -988,7 +988,7 @@ export interface components {
             severity_max: "OK" | "INFO" | "WARN" | "ERROR";
             /** Source Set */
             source_set: {
-                [key: string]: string;
+                [key: string]: unknown;
             };
             /**
              * Started At
@@ -1017,7 +1017,7 @@ export interface components {
             severity_max: "OK" | "INFO" | "WARN" | "ERROR";
             /** Source Set */
             source_set: {
-                [key: string]: string;
+                [key: string]: unknown;
             };
             /**
              * Started At
@@ -1210,7 +1210,7 @@ export interface components {
             progress: number;
             /** Source Set */
             source_set?: {
-                [key: string]: string;
+                [key: string]: unknown;
             } | null;
             /** Source Yyyymm */
             source_yyyymm?: string | null;
