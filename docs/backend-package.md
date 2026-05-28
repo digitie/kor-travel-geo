@@ -192,6 +192,7 @@ ignore_imports = ["kraddr.geo.api.routers.admin -> kraddr.geo.loaders"]
 | 캐시 | `cache_enabled`, `cache_ttl_days` | `geo_cache` 테이블 사용 |
 | 로깅 | `log_level`, `log_format` | `json` 권장 |
 | 로더 | `loader_data_dir`, `loader_batch_size`, `loader_temp_schema` | |
+| 운영 table stats | `ops_table_stats_capture_interval_minutes`, `ops_table_stats_capture_limit`, `ops_table_stats_capture_on_startup` | API lifespan의 `ops.table_stats_snapshots` opt-in 주기 capture. 기본 interval 0은 비활성 |
 | 백업/복원 | `backup_allowed_dirs`, `backup_temp_dir`, `backup_default_jobs`, `backup_artifact_ttl_days`, `backup_callback_allowed_hosts`, `backup_callback_secret`, `backup_callback_max_attempts`, `backup_callback_backoff_ms` | T-046/T-050. 서버 측 allowlist 경로에만 `.tar.zst` artifact 저장, callback은 HMAC 서명과 retry/backoff 적용 |
 | 성능 벤치마크 | `perf_artifact_dir`, `perf_default_iterations`, `perf_default_concurrency`, `perf_query_timeout_ms` | T-047. 전국 DB query benchmark 산출물과 기본 반복 횟수 |
 
@@ -399,7 +400,7 @@ reverse / search 라우터도 `sig_cd`/`bjd_cd`를 같은 의미로 받는다. z
 - `GET  /v1/admin/ops/releases`, `POST /v1/admin/ops/releases/{id}/rollback-plan` — active serving release와 rollback lineage 조회/계획. active release는 DB 제약으로 한 건만 허용한다.
 - `GET  /v1/admin/ops/artifacts` — backup, restore log, consistency export, performance report, source inventory 공통 artifact metadata 조회.
 - `GET  /v1/admin/ops/maintenance-windows`, `POST /v1/admin/ops/maintenance-windows`, `POST /v1/admin/ops/maintenance-windows/{id}/end` — destructive restore, schema migration, full reset 같은 위험 작업을 위한 maintenance window 등록/종료. typed confirmation은 hash로만 저장한다.
-- `GET  /v1/admin/ops/table-stats`, `POST /v1/admin/ops/table-stats/capture` — table/MV/index size와 추정 row count snapshot 조회/수집.
+- `GET  /v1/admin/ops/table-stats`, `POST /v1/admin/ops/table-stats/capture` — table/MV/index size와 추정 row count snapshot 조회/수집. `snapshot_id`를 생략하면 현재 active serving release snapshot에 연결하며, API scheduler 설정을 켜면 같은 capture 경로를 주기 실행한다. 동시 실행은 PostgreSQL advisory transaction lock으로 한 번만 통과시킨다.
 - `POST /v1/admin/backups` — T-046 DB 백업 작업 등록. `pg_dump -Fd --jobs` 결과를 `tar.zst` artifact로 저장한다.
 - `GET  /v1/admin/backups`, `GET /v1/admin/backups/{artifact_id}` — 백업 artifact 목록과 metadata 조회
 - `GET  /v1/admin/backups/{artifact_id}/download` — 완료된 artifact streaming 다운로드. token과 allowlist 검증을 요구한다.

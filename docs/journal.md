@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 08:25 (T-050 운영 hardening 5차 — table stats 주기 capture)
+
+**작업**: T-050 남은 항목 중 `ops.table_stats_snapshots` 주기 capture를 구현했다.
+
+**반영**:
+- `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`, `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_LIMIT`, `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_ON_STARTUP` 설정을 추가했다.
+- FastAPI lifespan에서 interval이 1 이상일 때만 background task를 띄워 `AdminRepository.capture_table_stats_snapshots()`를 주기 실행한다.
+- 여러 API worker의 동시 capture 중복을 줄이기 위해 `pg_try_advisory_xact_lock(0x4B4700A0)`을 capture transaction 앞에 추가했다.
+- 수동/주기 capture에서 `snapshot_id`를 생략하면 현재 active serving release의 `snapshot_id`에 자동 연결한다.
+- 연결 방식은 각 row의 `stats.snapshot_link`에 `explicit`, `active_serving_release`, `unlinked`로 남긴다.
+- T-050/T-049/backend/frontend/data-model/resume/tasks/CHANGELOG 문서를 갱신했다.
+
+**검증 예정**:
+- backend targeted gate와 전체 backend gate를 실행한 뒤 PR을 열어 CI 완료 후 5분 대기/리뷰 확인/머지한다.
+
+**후속**:
+- 이 PR merge 후 T-050 destructive confirmation flow 통합으로 이어간다.
+
 ## 2026-05-29 07:20 (PR #69~#75 post-merge 리뷰 audit/fixup)
 
 **작업**: 사용자 지시에 따라 PR #69부터 최신 PR #75까지 conversation/review/latestReview/reviewThreads를 재확인하고, formal review에서 바로 반영 가능한 항목을 코드와 문서로 보강했다.

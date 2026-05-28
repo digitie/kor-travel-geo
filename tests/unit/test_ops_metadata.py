@@ -118,6 +118,11 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "hash_identifier(client_ip)" in source
     assert "hash_confirmation(req.confirmation)" in source
     assert "capture_table_stats_snapshots" in source
+    assert "_active_release_snapshot_id_for_conn" in module_source
+    assert "active_serving_release" in module_source
+    assert "snapshot_link" in module_source
+    assert "_OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0" in module_source
+    assert "pg_try_advisory_xact_lock" in module_source
     assert "insert_artifact" in source
     assert "update_artifact" in source
     assert "mark_artifact_deleted" in source
@@ -146,3 +151,17 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
     assert "record_restore_candidate" in restore_source
     assert "release_state" in restore_source
     assert "snapshot_id" in restore_source
+
+
+def test_table_stats_scheduler_is_opt_in_and_uses_settings() -> None:
+    from kraddr.geo.api import app
+
+    module_source = inspect.getsource(app)
+    scheduler_source = inspect.getsource(app._start_table_stats_capture_scheduler)
+    loop_source = inspect.getsource(app._run_table_stats_capture_scheduler)
+
+    assert "ops_table_stats_capture_interval_minutes <= 0" in scheduler_source
+    assert "asyncio.create_task" in scheduler_source
+    assert "ops_table_stats_capture_on_startup" in loop_source
+    assert "ops_table_stats_capture_limit" in module_source
+    assert "capture_table_stats_snapshots(" in module_source
