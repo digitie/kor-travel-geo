@@ -533,6 +533,58 @@ c64 p99에서 `w4/p4/a4`는 Q4 search를 981.13ms에서 623.44ms, Q3 fuzzy를 12
 - `w2/p8/a8`은 Q6 reverse radius, Q8 no-result, Q11 SPPN reverse가 더 안정적이었다. reverse/no-result p99까지 SLO에 넣으면 `w4/p4/a4`만으로는 부족하다.
 - 운영 기본값은 계속 admission 비활성화로 둔다. 아직 `iterations=1` exploratory run이므로, 실제 권장 profile은 `w4/p4/a4`와 `w2/p8/a8`을 `iterations=3` 이상으로 재측정하고, 필요하면 reverse와 text query의 별도 limit 또는 endpoint별 worker pool 분리를 검토한 뒤 정한다.
 
+## 2026-05-28 T-047 REST admission candidate 반복 측정
+
+exploratory grid에서 후보로 남긴 `w2/p8/a8`과 `w4/p4/a4`를 기본 profile과 함께 `iterations=3`으로 재측정했다. 이번 run은 운영 profile 확정 전 반복성 확인용이다.
+
+측정 profile:
+
+| run | workers | worker별 pool | worker별 admission | artifact |
+|-----|--------:|--------------:|-------------------:|----------|
+| `default-repeat` | 1 | 10 + overflow 5 | 비활성 | `artifacts/perf/t047-rest-repeat-default-20260528` |
+| `w2/p8/a8-repeat` | 2 | 8 | 8 | `artifacts/perf/t047-rest-repeat-w2-p8-a8-20260528` |
+| `w4/p4/a4-repeat` | 4 | 4 | 4 | `artifacts/perf/t047-rest-repeat-w4-p4-a4-20260528` |
+
+모든 run은 같은 corpus SHA `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f`, REST case 1,000건, measurement 16,000건, `iterations=3`, `warmup=1`, concurrency `1/4/16/64`로 실행했고 error는 모두 0이었다.
+
+c64 p95 비교:
+
+| API group | default | w2/p8/a8 | w4/p4/a4 | 최저 |
+|-----------|--------:|---------:|---------:|------|
+| Q1 geocode road | 697.24ms | 589.43ms | 760.64ms | w2 |
+| Q2 geocode parcel | 811.63ms | 667.80ms | 604.94ms | w4 |
+| Q3 geocode fuzzy | 654.86ms | 699.54ms | 698.59ms | default |
+| Q4 search | 873.12ms | 596.35ms | 662.85ms | w2 |
+| Q5 reverse nearest | 715.71ms | 761.95ms | 708.67ms | w4 |
+| Q6 reverse radius | 760.81ms | 585.87ms | 597.00ms | w2 |
+| Q7 zipcode address | 710.50ms | 673.18ms | 579.06ms | w4 |
+| Q7 zipcode point | 664.27ms | 693.01ms | 564.27ms | w4 |
+| Q8 geocode no-result | 703.92ms | 619.63ms | 542.88ms | w4 |
+| Q11 SPPN reverse | 509.74ms | 411.88ms | 395.44ms | w4 |
+
+c64 p99 비교:
+
+| API group | default | w2/p8/a8 | w4/p4/a4 | 최저 |
+|-----------|--------:|---------:|---------:|------|
+| Q1 geocode road | 1251.86ms | 956.86ms | 1184.38ms | w2 |
+| Q2 geocode parcel | 1026.81ms | 971.82ms | 991.11ms | w2 |
+| Q3 geocode fuzzy | 994.92ms | 895.34ms | 920.23ms | w2 |
+| Q4 search | 1192.49ms | 975.88ms | 1092.35ms | w2 |
+| Q5 reverse nearest | 873.75ms | 1123.02ms | 939.07ms | default |
+| Q6 reverse radius | 1085.85ms | 1077.85ms | 895.00ms | w4 |
+| Q7 zipcode address | 1012.90ms | 967.62ms | 965.96ms | w4 |
+| Q7 zipcode point | 972.02ms | 991.64ms | 882.75ms | w4 |
+| Q8 geocode no-result | 876.42ms | 761.41ms | 752.18ms | w4 |
+| Q11 SPPN reverse | 616.20ms | 509.20ms | 487.59ms | w4 |
+
+해석:
+
+- 반복 측정에서는 `iterations=1` 결과와 달리 `w4/p4/a4`가 모든 text-heavy 경로의 최저값을 차지하지 않았다. Q1/Q4 p95와 Q1~Q4 p99는 `w2/p8/a8`이 더 안정적이었다.
+- Q3 fuzzy는 p95 기준 기본 profile이 654.86ms로 가장 낮았고, p99 기준으로만 `w2/p8/a8`이 895.34ms로 좋아졌다. worker/pool/admission 조합만으로 Q3 fuzzy를 확정 개선했다고 보기 어렵다.
+- Q7/Q8/Q11은 `w4/p4/a4`가 반복 run에서도 가장 안정적이었다.
+- 단일 운영 권장 profile을 지금 확정하지 않는다. admission control은 계속 optional로 두고, 운영 배포 전에는 workload mix에 따라 `w2/p8/a8` 또는 `w4/p4/a4`를 선택 검증한다.
+- T-047에서 새 인덱스나 pool 기본값을 더 바꾸기보다, Q3 fuzzy 후보 축소는 T-057 region hint 또는 text-search slim MV 실험으로 넘긴다.
+
 ## 2026-05-28 PR #51/#52 post-merge 리뷰 반영 메모
 
 PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와 review thread는 없었다. 상세 매핑은 `docs/postmerge-review-fixups-pr51-pr52.md`에 둔다.
