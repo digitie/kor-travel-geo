@@ -7,11 +7,16 @@ import pytest
 
 from kraddr.geo.dto.admin import OpsArtifact, RestoreCreateRequest
 from kraddr.geo.exceptions import InvalidInputError
+from kraddr.geo.infra import backup as backup_module
 from kraddr.geo.infra.backup import (
     backup_download_token,
     build_pg_dump_command,
     build_pg_restore_command,
     build_tar_create_command,
+    callback_headers,
+    callback_payload_bytes,
+    callback_signature,
+    deliver_callback,
     read_json,
     resolve_backup_destination,
     resolve_restore_target_dsn,
@@ -161,3 +166,155 @@ def test_download_token_is_deterministic_and_validates() -> None:
     validate_download_token(artifact, settings, token)
     with pytest.raises(InvalidInputError, match="invalid"):
         validate_download_token(artifact, settings, "0" * 64)
+
+
+def test_callback_payload_is_signed_with_timestamp_and_callback_id() -> None:
+    settings = Settings(backup_callback_secret="callback-secret")
+    artifact = OpsArtifact(
+        artifact_id="artifact-1",
+        artifact_type="db_backup",
+        state="available",
+        storage_kind="local_file",
+        size_bytes=10,
+        sha256="a" * 64,
+        job_id="job-1",
+        created_at="2026-05-27T00:00:00Z",
+    )
+    body = callback_payload_bytes(
+        artifact,
+        event="db_backup.done",
+        callback_id="cb_test",
+        timestamp="2026-05-28T00:00:00+00:00",
+        attempt=1,
+        max_attempts=3,
+    )
+
+    headers = callback_headers(
+        settings,
+        event="db_backup.done",
+        callback_id="cb_test",
+        timestamp="2026-05-28T00:00:00+00:00",
+        body=body,
+    )
+
+    assert b"callback-secret" not in body
+    assert headers["x-kraddr-geo-event"] == "db_backup.done"
+    assert headers["x-kraddr-geo-callback-id"] == "cb_test"
+    assert headers["x-kraddr-geo-signature"] == "sha256=" + callback_signature(
+        settings,
+        callback_id="cb_test",
+        timestamp="2026-05-28T00:00:00+00:00",
+        body=body,
+    )
+
+
+@pytest.mark.asyncio
+async def test_callback_delivery_retries_with_fresh_callback_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, bytes, dict[str, str]]] = []
+
+    class _Response:
+        def raise_for_status(self) -> None:
+            return None
+
+    class _FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 5.0
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,
+            *,
+            content: bytes,
+            headers: dict[str, str],
+        ) -> _Response:
+            calls.append((url, content, headers))
+            if len(calls) == 1:
+                raise RuntimeError("temporary callback failure")
+            return _Response()
+
+    monkeypatch.setattr(backup_module.httpx, "AsyncClient", _FakeAsyncClient)
+    settings = Settings(
+        backup_callback_allowed_hosts=("localhost",),
+        backup_callback_secret="callback-secret",
+        backup_callback_max_attempts=2,
+        backup_callback_backoff_ms=0,
+    )
+    artifact = OpsArtifact(
+        artifact_id="artifact-1",
+        artifact_type="db_backup",
+        state="available",
+        storage_kind="local_file",
+        callback_url="http://localhost:9000/hooks/backup",
+        sha256="a" * 64,
+        created_at="2026-05-27T00:00:00Z",
+    )
+
+    result = await deliver_callback(artifact, settings=settings, event="db_backup.done")
+
+    assert result is not None
+    assert result.state == "delivered"
+    assert result.attempts == 2
+    assert len(calls) == 2
+    assert calls[0][2]["x-kraddr-geo-callback-id"] != calls[1][2]["x-kraddr-geo-callback-id"]
+    assert all(call[0] == "http://localhost:9000/hooks/backup" for call in calls)
+
+
+@pytest.mark.asyncio
+async def test_callback_delivery_records_failed_retry_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, str]] = []
+
+    class _FakeAsyncClient:
+        def __init__(self, *, timeout: float) -> None:
+            assert timeout == 5.0
+
+        async def __aenter__(self) -> _FakeAsyncClient:
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,
+            *,
+            content: bytes,
+            headers: dict[str, str],
+        ) -> object:
+            assert content.startswith(b"{")
+            calls.append(headers)
+            raise RuntimeError(f"still failing: {url}")
+
+    monkeypatch.setattr(backup_module.httpx, "AsyncClient", _FakeAsyncClient)
+    settings = Settings(
+        backup_callback_allowed_hosts=("localhost",),
+        backup_callback_secret="callback-secret",
+        backup_callback_max_attempts=2,
+        backup_callback_backoff_ms=0,
+    )
+    artifact = OpsArtifact(
+        artifact_id="artifact-1",
+        artifact_type="db_backup",
+        state="available",
+        storage_kind="local_file",
+        callback_url="http://localhost:9000/hooks/backup",
+        created_at="2026-05-27T00:00:00Z",
+    )
+
+    result = await deliver_callback(artifact, settings=settings, event="db_backup.done")
+
+    assert result is not None
+    assert result.state == "failed"
+    assert result.attempts == 2
+    assert result.last_error == "still failing: http://localhost:9000/hooks/backup"
+    assert len(result.callback_ids) == 2
+    assert len(calls) == 2

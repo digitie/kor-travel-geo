@@ -67,6 +67,14 @@ class PreparedCommand:
     env: Mapping[str, str] | None = None
 
 
+@dataclass(frozen=True)
+class CallbackDeliveryResult:
+    state: str
+    attempts: int
+    callback_ids: tuple[str, ...]
+    last_error: str | None = None
+
+
 async def run_backup_job(
     engine: AsyncEngine,
     settings: Settings,
@@ -212,13 +220,13 @@ async def run_backup_job(
             msg = f"backup artifact disappeared: {artifact.artifact_id}"
             raise RuntimeError(msg)
         artifact = updated_artifact
-        callback_state = await deliver_callback(
+        callback_result = await deliver_callback(
             artifact,
             settings=settings,
             event="db_backup.done",
         )
-        if callback_state is not None:
-            await repo.update_artifact(artifact.artifact_id, callback_state=callback_state)
+        if callback_result is not None:
+            await record_callback_delivery(repo, artifact, callback_result)
         await progress(progress=1.0, stage="finalize", message=f"backup 완료: {archive_path}")
     except asyncio.CancelledError:
         await repo.update_artifact(
@@ -236,13 +244,13 @@ async def run_backup_job(
             finished=True,
         )
         if failed is not None:
-            callback_state = await deliver_callback(
+            callback_result = await deliver_callback(
                 failed,
                 settings=settings,
                 event="db_backup.failed",
             )
-            if callback_state is not None:
-                await repo.update_artifact(failed.artifact_id, callback_state=callback_state)
+            if callback_result is not None:
+                await record_callback_delivery(repo, failed, callback_result)
         raise
     finally:
         partial_archive_path.unlink(missing_ok=True)
@@ -371,13 +379,13 @@ async def run_restore_job(
             msg = f"restore artifact disappeared: {restore_artifact.artifact_id}"
             raise RuntimeError(msg)
         restore_artifact = updated_restore_artifact
-        callback_state = await deliver_callback(
+        callback_result = await deliver_callback(
             restore_artifact,
             settings=settings,
             event="db_restore.done",
         )
-        if callback_state is not None:
-            await repo.update_artifact(restore_artifact.artifact_id, callback_state=callback_state)
+        if callback_result is not None:
+            await record_callback_delivery(repo, restore_artifact, callback_result)
         await progress(progress=1.0, stage="finalize", message=f"restore 완료: {target_database}")
     except asyncio.CancelledError:
         await repo.update_artifact(
@@ -395,13 +403,13 @@ async def run_restore_job(
             finished=True,
         )
         if failed is not None:
-            callback_state = await deliver_callback(
+            callback_result = await deliver_callback(
                 failed,
                 settings=settings,
                 event="db_restore.failed",
             )
-            if callback_state is not None:
-                await repo.update_artifact(failed.artifact_id, callback_state=callback_state)
+            if callback_result is not None:
+                await record_callback_delivery(repo, failed, callback_result)
         raise
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -986,28 +994,143 @@ async def deliver_callback(
     *,
     settings: Settings,
     event: str,
-) -> str | None:
+) -> CallbackDeliveryResult | None:
     if not artifact.callback_url:
         return None
+    validate_callback_url(artifact.callback_url, settings.backup_callback_allowed_hosts)
+    attempts = max(1, settings.backup_callback_max_attempts)
+    backoff_s = settings.backup_callback_backoff_ms / 1_000
+    callback_ids: list[str] = []
+    last_error: str | None = None
     try:
-        validate_callback_url(artifact.callback_url, settings.backup_callback_allowed_hosts)
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.post(
-                artifact.callback_url,
-                json={
-                    "event": event,
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_type": artifact.artifact_type,
-                    "state": artifact.state,
-                    "size_bytes": artifact.size_bytes,
-                    "sha256": artifact.sha256,
-                    "job_id": artifact.job_id,
-                },
-            )
-            response.raise_for_status()
-    except Exception:
-        return "failed"
-    return "delivered"
+            for attempt in range(1, attempts + 1):
+                callback_id = f"cb_{uuid4().hex}"
+                callback_ids.append(callback_id)
+                timestamp = datetime.now(UTC).isoformat(timespec="seconds")
+                body = callback_payload_bytes(
+                    artifact,
+                    event=event,
+                    callback_id=callback_id,
+                    timestamp=timestamp,
+                    attempt=attempt,
+                    max_attempts=attempts,
+                )
+                headers = callback_headers(
+                    settings,
+                    event=event,
+                    callback_id=callback_id,
+                    timestamp=timestamp,
+                    body=body,
+                )
+                try:
+                    response = await client.post(
+                        artifact.callback_url,
+                        content=body,
+                        headers=headers,
+                    )
+                    response.raise_for_status()
+                    return CallbackDeliveryResult(
+                        state="delivered",
+                        attempts=attempt,
+                        callback_ids=tuple(callback_ids),
+                    )
+                except Exception as exc:
+                    last_error = str(exc)
+                    if attempt < attempts and backoff_s > 0:
+                        await asyncio.sleep(backoff_s * (2 ** (attempt - 1)))
+    except Exception as exc:
+        last_error = str(exc)
+    return CallbackDeliveryResult(
+        state="failed",
+        attempts=len(callback_ids) or 1,
+        callback_ids=tuple(callback_ids),
+        last_error=last_error,
+    )
+
+
+async def record_callback_delivery(
+    repo: AdminRepository,
+    artifact: OpsArtifact,
+    result: CallbackDeliveryResult,
+) -> None:
+    manifest = dict(artifact.manifest)
+    manifest["callback_delivery"] = {
+        "state": result.state,
+        "attempts": result.attempts,
+        "callback_ids": list(result.callback_ids),
+        "last_error": result.last_error,
+        "recorded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+    }
+    await repo.update_artifact(
+        artifact.artifact_id,
+        callback_state=result.state,
+        manifest=manifest,
+    )
+
+
+def callback_payload_bytes(
+    artifact: OpsArtifact,
+    *,
+    event: str,
+    callback_id: str,
+    timestamp: str,
+    attempt: int,
+    max_attempts: int,
+) -> bytes:
+    payload = {
+        "event": event,
+        "callback_id": callback_id,
+        "timestamp": timestamp,
+        "attempt": attempt,
+        "max_attempts": max_attempts,
+        "artifact_id": artifact.artifact_id,
+        "artifact_type": artifact.artifact_type,
+        "state": artifact.state,
+        "size_bytes": artifact.size_bytes,
+        "sha256": artifact.sha256,
+        "job_id": artifact.job_id,
+    }
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+
+
+def callback_headers(
+    settings: Settings,
+    *,
+    event: str,
+    callback_id: str,
+    timestamp: str,
+    body: bytes,
+) -> dict[str, str]:
+    signature = callback_signature(
+        settings,
+        callback_id=callback_id,
+        timestamp=timestamp,
+        body=body,
+    )
+    return {
+        "content-type": "application/json",
+        "x-kraddr-geo-event": event,
+        "x-kraddr-geo-callback-id": callback_id,
+        "x-kraddr-geo-timestamp": timestamp,
+        "x-kraddr-geo-signature": f"sha256={signature}",
+    }
+
+
+def callback_signature(
+    settings: Settings,
+    *,
+    callback_id: str,
+    timestamp: str,
+    body: bytes,
+) -> str:
+    message = timestamp.encode() + b"." + callback_id.encode() + b"." + body
+    return hmac.new(_callback_secret(settings), message, hashlib.sha256).hexdigest()
 
 
 def backup_download_token(artifact: OpsArtifact, settings: Settings) -> str:
@@ -1033,6 +1156,13 @@ def _download_token_secret(settings: Settings) -> bytes:
     if secret is not None:
         return secret.get_secret_value().encode()
     return hashlib.sha256(settings.pg_dsn.encode()).digest()
+
+
+def _callback_secret(settings: Settings) -> bytes:
+    secret = settings.backup_callback_secret
+    if secret is not None:
+        return secret.get_secret_value().encode()
+    return _download_token_secret(settings)
 
 
 def _preflight_backup_tools() -> None:

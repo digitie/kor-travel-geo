@@ -261,7 +261,7 @@ idle → selecting_artifact → restore_preflight → restore_running
 - 다운로드: 다운로드 링크는 브라우저 로컬 저장을 위한 보조 경로다. 백업 파일은 이미 서버 지정 경로에 저장되어 있으므로, UI는 서버 경로와 다운로드 링크를 구분해서 표시한다.
 - 복원 탭: artifact 선택 또는 서버 경로 입력, target DB 이름, jobs, smoke test 여부, consistency 여부를 입력한다. 현재 연결 DB 이름과 같은 target은 클라이언트에서도 막고, 서버 preflight 실패 메시지도 그대로 보여 준다.
 - 복원 안전장치: 기본 모드는 `new_database`만 노출한다. `replace_current`는 구현하더라도 별도 위험 모달, typed confirmation, 선행 백업 확인, maintenance mode 표시 없이는 실행하지 않는다.
-- callback 상태: terminal callback이 성공하면 `callback_state=delivered`, 실패 후 재시도 중이면 `retrying`, 재시도 소진이면 `failed`로 표시한다. callback 실패는 백업 파일 성공 여부와 분리해서 보여 준다.
+- callback 상태: terminal callback이 성공하면 `callback_state=delivered`, 재시도 소진 뒤 실패하면 `failed`, 아직 callback을 보내기 전이면 `pending`으로 표시한다. callback 실패는 백업 파일 성공 여부와 분리해서 보여 주고, 상세 drawer에서는 `manifest.callback_delivery.attempts`와 `callback_ids`를 확인할 수 있게 한다.
 
 T-046에서 reducer/helper unit test와 Windows Playwright 렌더 검증을 수행했다. Windows Playwright는 API route를 mock해 `/admin/backups`에서 `Backup 시작`, `Restore 시작`, artifact download link 표시를 확인했다. 후속 UI 테스트는 SSE → polling fallback, callback 상태 badge, corrupted artifact preflight 오류 표시를 추가한다. 통합 검증은 대구광역시 부분 적재 DB를 대상으로 수행했고 전국 full-load는 실행하지 않았다.
 
