@@ -46,6 +46,7 @@ ROW_COUNT_OBJECTS = (
     "tl_spbd_buld_polygon",
     "tl_spbd_eqb",
     "mv_geocode_target",
+    "mv_geocode_text_search",
 )
 
 
@@ -496,6 +497,7 @@ def build_pg_dump_command(
         argv.append("--exclude-table-data=geo_cache")
     if not include_materialized_views:
         argv.append("--exclude-table-data=mv_geocode_target")
+        argv.append("--exclude-table-data=mv_geocode_text_search")
     return PreparedCommand(tuple(argv), tuple(redact_command(argv)), env or None)
 
 
@@ -684,13 +686,22 @@ SELECT current_database() AS name,
             "jobs": jobs,
             "profile": req.profile,
             "include_materialized_views": req.include_materialized_views,
-            "exclude_table_data": ["geo_cache"] if req.profile == "lean-serving" else [],
+            "exclude_table_data": _excluded_table_data(req),
             "retention_days": req.retention_days or settings.backup_artifact_ttl_days,
         },
         "source_set": await infer_source_set(engine),
         "row_counts": row_counts,
         "checksums": {},
-    }
+}
+
+
+def _excluded_table_data(req: BackupCreateRequest) -> list[str]:
+    excluded: list[str] = []
+    if req.profile == "lean-serving":
+        excluded.append("geo_cache")
+    if not req.include_materialized_views:
+        excluded.extend(["mv_geocode_target", "mv_geocode_text_search"])
+    return excluded
 
 
 async def collect_row_counts(conn: Any) -> dict[str, int]:

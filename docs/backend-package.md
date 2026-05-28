@@ -1216,7 +1216,7 @@ benchmark job은 `load_jobs(kind="query_benchmark")` 또는 후속 generic job t
 2. index: btree composite/`INCLUDE`, `gin_trgm_ops`, partial index, GiST 5179 geometry.
 3. read-only 보조 view/MV: `mv_geocode_exact_key`, `mv_geocode_text_search`, `mv_reverse_point_5179`, `mv_zipcode_lookup`.
 
-보조 view/MV는 source of truth가 아니며, 기존 master table 또는 `mv_geocode_target`에서 재생성 가능해야 한다. 도입 PR은 전후 p95/p99, plan, buffer, index/MV size, refresh/swap 시간 영향, T-046 backup/restore 영향을 모두 기록한다.
+보조 view/MV는 source of truth가 아니며, 기존 master table 또는 `mv_geocode_target`에서 재생성 가능해야 한다. 도입 PR은 전후 p95/p99, plan, buffer, index/MV size, refresh/swap 시간 영향, T-046 backup/restore 영향을 모두 기록한다. T-061에서 `mv_geocode_text_search`가 실제 helper MV로 추가됐으며, Q3 fuzzy geocode와 Q4 broad search fallback의 후보 추출에 사용한다. Q4 exact preflight는 기존 `mv_geocode_target` exact index를 유지한다.
 
 ### 9.8 적재 진행도/상태 — 라이브러리·API 표면 (ADR-016)
 

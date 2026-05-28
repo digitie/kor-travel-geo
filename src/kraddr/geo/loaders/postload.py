@@ -9,7 +9,7 @@ from typing import Any, Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from kraddr.geo.infra.sql import MV_SQL, POSTLOAD_SQL, iter_sql_statements
+from kraddr.geo.infra.sql import MV_SQL, POSTLOAD_SQL, TEXT_SEARCH_MV_SQL, iter_sql_statements
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +46,7 @@ async def refresh_mv(
     if strategy == "swap":
         await normalize_mv_index_names(engine)
         await rebuild_mv_next(engine)
+        await rebuild_text_search_mv_next(engine)
         await shadow_swap_mv(engine)
         return
     statement = "REFRESH MATERIALIZED VIEW"
@@ -53,13 +54,29 @@ async def refresh_mv(
         statement += " CONCURRENTLY"
     statement += " mv_geocode_target"
     async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
         await conn.execute(text(statement))
+        text_search_exists = await conn.scalar(text("SELECT to_regclass('mv_geocode_text_search')"))
+        if text_search_exists is None:
+            for sql in iter_sql_statements(TEXT_SEARCH_MV_SQL):
+                await conn.execute(text(sql))
+        else:
+            text_search_statement = "REFRESH MATERIALIZED VIEW"
+            if concurrently:
+                text_search_statement += " CONCURRENTLY"
+            text_search_statement += " mv_geocode_text_search"
+            await conn.execute(text(text_search_statement))
         await conn.execute(text("ANALYZE mv_geocode_target"))
+        await conn.execute(text("ANALYZE mv_geocode_text_search"))
 
 
 async def rebuild_mv(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search"))
         for sql in iter_sql_statements(MV_SQL):
+            await conn.execute(text(sql))
+        for sql in iter_sql_statements(TEXT_SEARCH_MV_SQL):
             await conn.execute(text(sql))
 
 
@@ -67,25 +84,54 @@ async def shadow_swap_mv(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
         current_mv = await conn.scalar(text("SELECT to_regclass('mv_geocode_target')"))
+        current_text_search_mv = await conn.scalar(
+            text("SELECT to_regclass('mv_geocode_text_search')")
+        )
+        await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search_old"))
         if current_mv is not None:
             await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target_old"))
+        if current_text_search_mv is not None:
+            await conn.execute(
+                text(
+                    "ALTER MATERIALIZED VIEW mv_geocode_text_search "
+                    "RENAME TO mv_geocode_text_search_old"
+                )
+            )
+        if current_mv is not None:
             await conn.execute(
                 text("ALTER MATERIALIZED VIEW mv_geocode_target RENAME TO mv_geocode_target_old")
             )
         await conn.execute(
             text("ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target")
         )
+        await conn.execute(
+            text(
+                "ALTER MATERIALIZED VIEW mv_geocode_text_search_next "
+                "RENAME TO mv_geocode_text_search"
+            )
+        )
+        if current_text_search_mv is not None:
+            await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_text_search_old"))
         if current_mv is not None:
             await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_target_old"))
         await rename_mv_next_indexes_for_conn(conn)
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
         await conn.execute(text("ANALYZE mv_geocode_target"))
+        await conn.execute(text("ANALYZE mv_geocode_text_search"))
 
 
 async def rebuild_mv_next(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
         for sql in iter_sql_statements(build_mv_next_sql()):
+            await conn.execute(text(sql))
+
+
+async def rebuild_text_search_mv_next(engine: AsyncEngine) -> None:
+    async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        for sql in iter_sql_statements(build_text_search_mv_next_sql()):
             await conn.execute(text(sql))
 
 
@@ -93,6 +139,17 @@ def build_mv_next_sql() -> str:
     sql = MV_SQL.replace("mv_geocode_target", "mv_geocode_target_next")
     sql = sql.replace("CREATE UNIQUE INDEX idx_mv_", "CREATE UNIQUE INDEX idx_mv_next_")
     sql = sql.replace("CREATE INDEX idx_mv_", "CREATE INDEX idx_mv_next_")
+    return sql
+
+
+def build_text_search_mv_next_sql() -> str:
+    sql = TEXT_SEARCH_MV_SQL.replace("mv_geocode_text_search", "mv_geocode_text_search_next")
+    sql = sql.replace("mv_geocode_target", "mv_geocode_target_next")
+    sql = sql.replace(
+        "CREATE UNIQUE INDEX idx_mv_text_search_",
+        "CREATE UNIQUE INDEX idx_mv_next_text_search_",
+    )
+    sql = sql.replace("CREATE INDEX idx_mv_text_search_", "CREATE INDEX idx_mv_next_text_search_")
     return sql
 
 
@@ -145,7 +202,12 @@ SELECT i.relname AS index_name
   JOIN pg_class t ON t.oid = ix.indrelid
   JOIN pg_namespace n ON n.oid = i.relnamespace
  WHERE n.nspname = current_schema()
-   AND t.relname IN ('mv_geocode_target', 'mv_geocode_target_next')
+   AND t.relname IN (
+       'mv_geocode_target',
+       'mv_geocode_target_next',
+       'mv_geocode_text_search',
+       'mv_geocode_text_search_next'
+   )
    AND i.relname LIKE 'idx_mv_next_%'
  ORDER BY i.relname
 """

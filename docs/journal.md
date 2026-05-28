@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 02:30 (T-061 Q3 fuzzy slim text-search 구조)
+
+**작업**: `mv_geocode_target`에서 재생성 가능한 read-only helper MV `mv_geocode_text_search`를 추가하고, Q3 fuzzy geocode와 Q4 broad search fallback 후보 추출에 연결했다.
+
+**반영**:
+- `alembic/versions/0013_t061_text_search_mv.py`와 `TEXT_SEARCH_MV_SQL`을 추가했다.
+- `GeocodeRepository.fuzzy_roads()`는 helper MV에서 candidate를 먼저 뽑고 `bd_mgt_sn`으로 `mv_geocode_target`에 join한다.
+- `SearchRepository.search()`는 Q4 exact preflight를 기존 target index 경로로 유지하고, exact가 없을 때 broad fallback만 helper MV를 사용한다.
+- shadow swap은 `mv_geocode_target_next`와 `mv_geocode_text_search_next`를 함께 만들고 같은 rename window에서 교체한다.
+- backup materialized-view 제외 옵션은 `mv_geocode_target`과 `mv_geocode_text_search` data를 함께 제외한다.
+- `scripts/benchmark_query_performance.py`와 `scripts/benchmark_mv_refresh.py`가 helper MV row/size와 refresh/swap cost를 기록하도록 보강했다.
+
+**실측**:
+- T-057 corpus 기준 Q3 fuzzy c64 p95는 359.25ms → 227.57ms, `sig_cd` hint는 193.36ms → 182.27ms, wide는 255.36ms → 200.69ms.
+- helper MV는 6,416,637행, heap 854MiB, index 1,572MiB, total 2,426MiB.
+- helper-only rebuild는 채택 DDL 기준 82.77초.
+- helper 포함 shadow swap은 497.54초, helper text-search build/index phase는 약 85.37초, rename/drop/index rename lock window는 약 1.06초.
+- 실제 DB semantic parity test는 `tests/integration/test_optional_real_postgres_text_search.py`로 통과했다.
+
+**검증**:
+- targeted unit/ruff, 실제 DB parity test, T-057 corpus before/after benchmark, generated `search_fuzzy` benchmark, helper 포함 shadow swap benchmark.
+
+**후속**:
+- T-061 PR merge 후 사용자 최신 순서에 따라 T-050 운영 hardening을 진행한다.
+
 ## 2026-05-28 23:58 (T-053 Admin UI C1~C10 상세 분석/수동 판정 콘솔)
 
 **작업**: 사용자 재확인 의도를 먼저 문서에 구체화한 뒤 C1~C10 sample 분석/판정용 backend API와 admin UI를 구현했다.

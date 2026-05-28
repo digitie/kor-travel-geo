@@ -596,13 +596,13 @@ T-047은 전국 full-load 이후 지오코딩/역지오코딩/검색 쿼리 p95/
 | 후보 | 목적 | 핵심 컬럼 예시 | 주요 인덱스 후보 |
 |------|------|----------------|------------------|
 | `mv_geocode_exact_key` | 도로명/지번 exact lookup | `bd_mgt_sn`, `rncode_full`, `bjd_cd`, 건물번호, PNU, 표시 주소, 좌표 key | btree composite, `INCLUDE` 응답 컬럼 |
-| `mv_geocode_text_search` | fuzzy geocode/search | 정규화 주소 문자열, 도로명 token, 건물명 token, 행정명 token | `gin_trgm_ops`, query군별 partial index |
+| `mv_geocode_text_search` | fuzzy geocode/search | `bd_mgt_sn`, `sido_cd`, `sig_cd`, `bjd_cd`, `si_nm`, `sgg_nm`, `rn_nrm`, `buld_nm_nrm`, `buld_mnnm`, `pt_source` | `rn_nrm`/`buld_nm_nrm` `gin_trgm_ops`, region+건물본번 btree |
 | `mv_reverse_point_5179` | reverse nearest/radius | `bd_mgt_sn`, `address_type`, `pt_source`, `pt_5179`, `pt_4326`, 우선순위 | GiST `pt_5179`, btree filter |
 | `mv_zipcode_lookup` | zipcode lookup | `zip_no`, `sido`, `sig`, 도로명/지번 표시 최소 컬럼 | btree `zip_no`, `zip_no + sig_cd` |
 | `v_admin_boundary_4326` | 디버그 지도 표시 | 행정/기초구역 polygon 4326 변환 | 일반 view, 필요 시 materialized |
 | `mv_sppn_reverse_area` | 국가지점번호 보조 reverse | `TL_SPPN_MAKAREA` polygon key와 면적/우선순위 | GiST polygon, 면적 정렬 key |
 
-보조 객체를 실제 DDL로 추가하기 전에는 `docs/t047-query-performance-tuning.md`의 benchmark 절차로 semantic parity와 성능 개선을 모두 증명한다. p95/p99 개선 없이 단순히 query를 보기 좋게 만들기 위한 view는 추가하지 않는다.
+T-061에서 `mv_geocode_text_search`는 실제 DDL로 승격했다. 이 객체는 `mv_geocode_target`에서 재생성하는 read-only helper이며, Q3 fuzzy geocode와 Q4 broad search fallback의 후보 추출에만 사용한다. Q4 exact preflight는 기존 `mv_geocode_target` exact index가 충분히 빨라 그대로 유지한다. helper MV를 추가·변경할 때는 `docs/t061-slim-text-search.md`처럼 semantic parity, Q3/Q4 p95/p99, helper size, shadow swap, backup envelope를 함께 기록한다.
 
 ## PNU 조립 (외부 시스템 연동)
 

@@ -666,6 +666,7 @@ async def collect_environment(
         postgis_version = await _optional_scalar_str(conn, "SELECT postgis_full_version()")
         row_counts = {
             "mv_geocode_target": await _optional_count(conn, "mv_geocode_target"),
+            "mv_geocode_text_search": await _optional_count(conn, "mv_geocode_text_search"),
             "tl_sppn_makarea": await _optional_count(conn, "tl_sppn_makarea"),
             "postal_bulk_delivery": await _optional_count(conn, "postal_bulk_delivery"),
         }
@@ -673,14 +674,20 @@ async def collect_environment(
             name: await _optional_relation_size(conn, name)
             for name in (
                 "mv_geocode_target",
+                "mv_geocode_text_search",
                 "tl_sppn_makarea",
                 "idx_mv_geocode_target_pk",
+                "idx_mv_text_search_pk",
                 "idx_mv_road",
                 "idx_mv_jibun",
                 "idx_mv_rn_trgm",
                 "idx_mv_buld_nm_trgm",
                 "idx_mv_rn_nrm_exact",
                 "idx_mv_buld_nm_nrm_exact",
+                "idx_mv_text_search_sig_buld",
+                "idx_mv_text_search_bjd_prefix_buld",
+                "idx_mv_text_search_rn_trgm",
+                "idx_mv_text_search_buld_nm_trgm",
                 "idx_mv_geom5179",
             )
         }

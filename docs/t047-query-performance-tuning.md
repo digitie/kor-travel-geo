@@ -667,6 +667,28 @@ T-047 관점의 결론:
 - Q3 fuzzy 후속은 T-061 `mv_geocode_text_search` 또는 slim text-search 후보 테이블로 분리한다.
 - T-052 v2 API에서 `RegionHint`를 정식 request model로 승격하되, 외부 provider가 hint를 보존하지 못하는 경우의 fallback 정책을 문서화한다.
 
+## 2026-05-28 T-061 slim text-search helper
+
+T-061에서 `mv_geocode_text_search`를 실제 read-only helper MV로 추가했다. 상세 DDL, 인덱스, semantic parity, 운영 비용은 `docs/t061-slim-text-search.md`에 둔다.
+
+핵심 결과:
+
+| query | 기준 c64 p95 | T-061 c64 p95 | 기준 execute p95 | T-061 execute p95 |
+|-------|-------------:|--------------:|-----------------:|------------------:|
+| Q3 fuzzy | 359.25ms | 227.57ms | 30.78ms | 31.69ms |
+| Q3 fuzzy + `sig_cd` | 193.36ms | 182.27ms | 28.62ms | 24.61ms |
+| Q3 fuzzy wide | 255.36ms | 200.69ms | 26.26ms | 28.42ms |
+| Q4 exact search | 230.39ms | 177.14ms | 22.21ms | 23.06ms |
+| Q4 exact search + `sig_cd` | 210.12ms | 268.28ms | 22.23ms | 23.58ms |
+
+판단:
+
+- Q3 fuzzy는 helper MV로 후보 row width와 region+건물본번 후보 폭을 줄여 p95를 낮췄다.
+- Q4 exact preflight는 기존 target exact index가 충분히 빠르므로 helper로 옮기지 않았다.
+- Q4 broad fallback은 helper를 사용하며, 새 generated corpus의 `search_fuzzy` execute p95는 c1/c16/c64에서 `9.14ms`/`31.27ms`/`31.59ms`였다.
+- helper MV의 채택 DDL 기준 크기는 heap `854MiB`, index `1,572MiB`, total `2,426MiB`다.
+- helper 포함 shadow swap은 `497.54초`였고, T-047 exact index 포함 기준 `352.85초`보다 약 `144.69초` 늘었다. rename/drop/index rename의 lock window는 약 `1.06초`로 유지됐다.
+
 ## 2026-05-28 PR #51/#52 post-merge 리뷰 반영 메모
 
 PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와 review thread는 없었다. 상세 매핑은 `docs/postmerge-review-fixups-pr51-pr52.md`에 둔다.
@@ -865,7 +887,7 @@ T-047 구현 PR에서는 다음 루프를 반복한다.
 | 후보 | 목적 | 기본 아이디어 |
 |------|------|---------------|
 | `mv_geocode_exact_key` | Q1/Q2 exact geocode 가속 | 도로명/지번 exact key와 응답에 필요한 최소 컬럼만 보관 |
-| `mv_geocode_text_search` | Q3/Q4 fuzzy/search 가속 | 정규화된 검색 문자열, token, trgm 전용 컬럼을 분리 |
+| `mv_geocode_text_search` | Q3/Q4 fuzzy/search 가속 | `bd_mgt_sn`, region code, `rn_nrm`, `buld_nm_nrm`, `buld_mnnm`, `pt_source`만 둔 helper MV |
 | `mv_reverse_point_5179` | Q5/Q6 reverse 가속 | `bd_mgt_sn`, `address_type`, `pt_source`, `pt_5179`, 응답 key만 가진 slim point MV |
 | `mv_zipcode_lookup` | Q7 zipcode lookup 가속 | `zip_no`, `sido`, `sig`, 도로명/지번 표시용 최소 컬럼 |
 | `v_admin_boundary_4326` | 디버그 지도 표시 | polygon 응답 변환 비용을 UI/디버그 경로에서 분리 |

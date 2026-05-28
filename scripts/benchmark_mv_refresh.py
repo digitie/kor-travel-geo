@@ -25,6 +25,7 @@ from kraddr.geo.infra.engine import make_async_engine
 from kraddr.geo.infra.sql import iter_sql_statements
 from kraddr.geo.loaders.postload import (
     build_mv_next_sql,
+    build_text_search_mv_next_sql,
     normalize_mv_index_names,
     rename_mv_next_indexes_for_conn,
 )
@@ -32,7 +33,7 @@ from kraddr.geo.settings import get_settings
 
 Strategy = Literal["concurrent", "swap"]
 PhaseRunner = Callable[[AsyncEngine], Awaitable[None]]
-BENCHMARK_SCHEMA_VERSION = 2
+BENCHMARK_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +42,10 @@ class RelationStats:
     total_bytes: int | None
     heap_bytes: int | None
     index_bytes: int | None
+    text_search_row_count: int | None
+    text_search_total_bytes: int | None
+    text_search_heap_bytes: int | None
+    text_search_index_bytes: int | None
     database_bytes: int
     temp_files: int
     temp_bytes: int
@@ -129,6 +134,7 @@ async def run_benchmark(
             engine,
             (
                 ("refresh_concurrently", _refresh_concurrently),
+                ("refresh_text_search_concurrently", _refresh_text_search_concurrently),
                 ("analyze", _analyze_mv),
             ),
         )
@@ -136,6 +142,7 @@ async def run_benchmark(
         phases = (
             *await _run_phases(engine, (("normalize_index_names", normalize_mv_index_names),)),
             *await _rebuild_mv_next_phases(engine),
+            *await _rebuild_text_search_mv_next_phases(engine),
             *await _shadow_swap_phases(engine),
         )
     total_seconds = time.perf_counter() - start_clock
@@ -180,6 +187,22 @@ async def collect_relation_stats(engine: AsyncEngine) -> RelationStats:
                 """
 SELECT pg_indexes_size('mv_geocode_target')
 """,
+            ),
+            text_search_row_count=await _optional_int(
+                conn,
+                "SELECT count(*) FROM mv_geocode_text_search",
+            ),
+            text_search_total_bytes=await _optional_int(
+                conn,
+                "SELECT pg_total_relation_size('mv_geocode_text_search')",
+            ),
+            text_search_heap_bytes=await _optional_int(
+                conn,
+                "SELECT pg_relation_size('mv_geocode_text_search')",
+            ),
+            text_search_index_bytes=await _optional_int(
+                conn,
+                "SELECT pg_indexes_size('mv_geocode_text_search')",
             ),
             database_bytes=int(
                 await conn.scalar(text("SELECT pg_database_size(current_database())")) or 0
@@ -226,20 +249,43 @@ async def _run_phases(
 
 async def _refresh_concurrently(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
         await conn.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target"))
+
+
+async def _refresh_text_search_concurrently(engine: AsyncEngine) -> None:
+    async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        await conn.execute(
+            text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_text_search")
+        )
 
 
 async def _analyze_mv(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
         await conn.execute(text("ANALYZE mv_geocode_target"))
+        await conn.execute(text("ANALYZE mv_geocode_text_search"))
 
 
 async def _rebuild_mv_next_phases(engine: AsyncEngine) -> tuple[BenchmarkPhase, ...]:
     results: list[BenchmarkPhase] = []
     async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
         for sql in iter_sql_statements(build_mv_next_sql()):
             name = _statement_phase_name(sql)
+            start = time.perf_counter()
+            await conn.execute(text(sql))
+            results.append(BenchmarkPhase(name=name, seconds=time.perf_counter() - start))
+    return tuple(results)
+
+
+async def _rebuild_text_search_mv_next_phases(engine: AsyncEngine) -> tuple[BenchmarkPhase, ...]:
+    results: list[BenchmarkPhase] = []
+    async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        for sql in iter_sql_statements(build_text_search_mv_next_sql()):
+            name = _statement_phase_name(sql).replace("rebuild.", "rebuild_text_search.", 1)
             start = time.perf_counter()
             await conn.execute(text(sql))
             results.append(BenchmarkPhase(name=name, seconds=time.perf_counter() - start))
@@ -251,6 +297,15 @@ async def _shadow_swap_phases(engine: AsyncEngine) -> tuple[BenchmarkPhase, ...]
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
         current_mv = await conn.scalar(text("SELECT to_regclass('mv_geocode_target')"))
+        current_text_search_mv = await conn.scalar(
+            text("SELECT to_regclass('mv_geocode_text_search')")
+        )
+        await _timed_execute(
+            conn,
+            results,
+            "swap.drop_text_search_old_pre",
+            "DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search_old",
+        )
         if current_mv is not None:
             await _timed_execute(
                 conn,
@@ -258,6 +313,15 @@ async def _shadow_swap_phases(engine: AsyncEngine) -> tuple[BenchmarkPhase, ...]
                 "swap.drop_old_pre",
                 "DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target_old",
             )
+        if current_text_search_mv is not None:
+            await _timed_execute(
+                conn,
+                results,
+                "swap.rename_text_search_live_to_old",
+                "ALTER MATERIALIZED VIEW mv_geocode_text_search "
+                "RENAME TO mv_geocode_text_search_old",
+            )
+        if current_mv is not None:
             await _timed_execute(
                 conn,
                 results,
@@ -270,6 +334,20 @@ async def _shadow_swap_phases(engine: AsyncEngine) -> tuple[BenchmarkPhase, ...]
             "swap.rename_next_to_live",
             "ALTER MATERIALIZED VIEW mv_geocode_target_next RENAME TO mv_geocode_target",
         )
+        await _timed_execute(
+            conn,
+            results,
+            "swap.rename_text_search_next_to_live",
+            "ALTER MATERIALIZED VIEW mv_geocode_text_search_next "
+            "RENAME TO mv_geocode_text_search",
+        )
+        if current_text_search_mv is not None:
+            await _timed_execute(
+                conn,
+                results,
+                "swap.drop_text_search_old_post",
+                "DROP MATERIALIZED VIEW mv_geocode_text_search_old",
+            )
         if current_mv is not None:
             await _timed_execute(
                 conn,
@@ -387,7 +465,7 @@ SELECT i.relname AS index_name,
   JOIN pg_class t ON t.oid = ix.indrelid
   JOIN pg_namespace n ON n.oid = i.relnamespace
  WHERE n.nspname = current_schema()
-   AND t.relname = 'mv_geocode_target'
+   AND t.relname IN ('mv_geocode_target', 'mv_geocode_text_search')
  ORDER BY i.relname
 """
         )
