@@ -19,6 +19,7 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
     assert "CREATE SCHEMA IF NOT EXISTS ops" in SCHEMA_SQL
     for table_name in (
         "ops.audit_events",
+        "ops.consistency_case_samples",
         "ops.dataset_snapshots",
         "ops.serving_releases",
         "ops.artifacts",
@@ -37,6 +38,8 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
     assert "job_id            TEXT REFERENCES load_jobs(job_id) ON DELETE NO ACTION" in audit_sql
     assert "ON DELETE SET NULL" not in audit_sql
     assert "idx_ops_serving_releases_one_active" in INDEX_SQL
+    assert "idx_ops_consistency_case_samples_report" in INDEX_SQL
+    assert "idx_ops_consistency_case_samples_4326" in INDEX_SQL
     assert "WHERE state = 'active'" in INDEX_SQL
     assert any("ops.table_stats_snapshots" in sql for sql in iter_sql_statements(SCHEMA_SQL))
 

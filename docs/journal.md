@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 23:58 (T-053 Admin UI C1~C10 상세 분석/수동 판정 콘솔)
+
+**작업**: 사용자 재확인 의도를 먼저 문서에 구체화한 뒤 C1~C10 sample 분석/판정용 backend API와 admin UI를 구현했다.
+
+**반영**:
+- `docs/t053-admin-ui-ops-statistics.md`에 C1~C10 기준 설명, 지도 overlay, table 비교, 단건/bulk 승인·거절·보류, recheck, v1/v2 API 경계를 정리했다.
+- `ops.consistency_case_samples` DDL/Alembic을 추가하고 `run_all_cases()`가 report JSONB 요약과 sample row를 함께 저장하도록 바꿨다. 기존 report는 sample 조회 시 lazy backfill한다.
+- `/v1/admin/consistency/case-definitions`, sample list/summary, 단건·bulk decision, recheck, CSV export API와 `AsyncAddressClient` 메서드를 추가했다.
+- `/admin/consistency/[report_id]` 상세 화면을 추가하고 TanStack Query, TanStack Table, Zustand, `maplibre-vworld-js` wrapper 기반 지도 preview를 연결했다.
+- OpenAPI와 `kraddr-geo-ui` 생성 타입을 갱신했고, Zustand/query helper 테스트를 추가했다.
+
+**검증**:
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`
+- `scripts/export_openapi.py --check --output openapi.json`
+- `kraddr-geo-ui`: `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`
+
+**후속**:
+- T-053 PR merge 후 사용자 최신 지시에 따라 T-061 Q3 fuzzy slim text-search 구조를 먼저 진행한다.
+
 ## 2026-05-28 22:39 (PR #69 리뷰 반영 — v2 candidate distance/precision 보강)
 
 **작업**: PR #69 formal review의 provider 비교 코멘트를 T-052 PR에 바로 반영했다.

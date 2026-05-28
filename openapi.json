@@ -939,6 +939,99 @@
         "title": "CandidateV2",
         "type": "object"
       },
+      "ConsistencyBulkDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_state": {
+            "enum": [
+              "approved",
+              "rejected",
+              "deferred"
+            ],
+            "title": "Decision State",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reason_code": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
+          },
+          "sample_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Sample Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decision_state",
+          "reason_code",
+          "sample_ids"
+        ],
+        "title": "ConsistencyBulkDecisionRequest",
+        "type": "object"
+      },
+      "ConsistencyBulkDecisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "case_code": {
+            "title": "Case Code",
+            "type": "string"
+          },
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConsistencyCaseSample"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "updated_count": {
+            "minimum": 0.0,
+            "title": "Updated Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "report_id",
+          "case_code",
+          "updated_count"
+        ],
+        "title": "ConsistencyBulkDecisionResponse",
+        "type": "object"
+      },
       "ConsistencyCase": {
         "additionalProperties": false,
         "properties": {
@@ -1030,6 +1123,335 @@
           "count"
         ],
         "title": "ConsistencyCase",
+        "type": "object"
+      },
+      "ConsistencyCaseDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "abnormal_criteria": {
+            "title": "Abnormal Criteria",
+            "type": "string"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "compares": {
+            "title": "Compares",
+            "type": "string"
+          },
+          "decision_guide": {
+            "title": "Decision Guide",
+            "type": "string"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "likely_causes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Likely Causes",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Threshold"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "compares",
+          "abnormal_criteria",
+          "decision_guide"
+        ],
+        "title": "ConsistencyCaseDefinition",
+        "type": "object"
+      },
+      "ConsistencyCaseSample": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox_4326": {
+            "additionalProperties": true,
+            "title": "Bbox 4326",
+            "type": "object"
+          },
+          "bd_mgt_sn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bd Mgt Sn"
+          },
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "case_code": {
+            "title": "Case Code",
+            "type": "string"
+          },
+          "case_metric": {
+            "additionalProperties": true,
+            "title": "Case Metric",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_state": {
+            "default": "unreviewed",
+            "enum": [
+              "unreviewed",
+              "approved",
+              "rejected",
+              "deferred"
+            ],
+            "title": "Decision State",
+            "type": "string"
+          },
+          "distance_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance M"
+          },
+          "has_line": {
+            "default": false,
+            "title": "Has Line",
+            "type": "boolean"
+          },
+          "has_polygon": {
+            "default": false,
+            "title": "Has Polygon",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsistencySamplePoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "rncode_full": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rncode Full"
+          },
+          "sample_id": {
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "sample_rank": {
+            "minimum": 0.0,
+            "title": "Sample Rank",
+            "type": "integer"
+          },
+          "severity": {
+            "enum": [
+              "OK",
+              "INFO",
+              "WARN",
+              "ERROR"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sig Cd"
+          },
+          "source_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Kind"
+          },
+          "source_snapshot": {
+            "additionalProperties": true,
+            "title": "Source Snapshot",
+            "type": "object"
+          },
+          "source_yyyymm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Yyyymm"
+          }
+        },
+        "required": [
+          "sample_id",
+          "report_id",
+          "case_code",
+          "severity",
+          "sample_rank",
+          "created_at"
+        ],
+        "title": "ConsistencyCaseSample",
+        "type": "object"
+      },
+      "ConsistencyCaseSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "by_decision": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Decision",
+            "type": "object"
+          },
+          "by_severity": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Severity",
+            "type": "object"
+          },
+          "by_sig_cd": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Sig Cd",
+            "type": "object"
+          },
+          "case_code": {
+            "title": "Case Code",
+            "type": "string"
+          },
+          "distance": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Distance",
+            "type": "object"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "report_id",
+          "case_code",
+          "total"
+        ],
+        "title": "ConsistencyCaseSummary",
         "type": "object"
       },
       "ConsistencyReport": {
@@ -1215,6 +1637,169 @@
           }
         },
         "title": "ConsistencyRunRequest",
+        "type": "object"
+      },
+      "ConsistencySampleDecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "decision_state": {
+            "enum": [
+              "approved",
+              "rejected",
+              "deferred"
+            ],
+            "title": "Decision State",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reason_code": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer"
+          }
+        },
+        "required": [
+          "decision_state",
+          "reason_code"
+        ],
+        "title": "ConsistencySampleDecisionRequest",
+        "type": "object"
+      },
+      "ConsistencySamplePage": {
+        "additionalProperties": false,
+        "properties": {
+          "case_code": {
+            "title": "Case Code",
+            "type": "string"
+          },
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConsistencyCaseSample"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "total": {
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "report_id",
+          "case_code",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "ConsistencySamplePage",
+        "type": "object"
+      },
+      "ConsistencySamplePoint": {
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "ConsistencySamplePoint",
+        "type": "object"
+      },
+      "ConsistencySampleRecheckResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "case_code": {
+            "title": "Case Code",
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "exists_in_current_mv": {
+            "title": "Exists In Current Mv",
+            "type": "boolean"
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsistencySamplePoint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "report_id": {
+            "title": "Report Id",
+            "type": "string"
+          },
+          "sample_id": {
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sample_id",
+          "report_id",
+          "case_code",
+          "exists_in_current_mv"
+        ],
+        "title": "ConsistencySampleRecheckResponse",
         "type": "object"
       },
       "DatasetSnapshot": {
@@ -6053,6 +6638,31 @@
         ]
       }
     },
+    "/v1/admin/consistency/case-definitions": {
+      "get": {
+        "operationId": "consistency_case_definitions_v1_admin_consistency_case_definitions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConsistencyCaseDefinition"
+                  },
+                  "title": "Response Consistency Case Definitions V1 Admin Consistency Case Definitions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Consistency Case Definitions",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/consistency/run": {
       "post": {
         "operationId": "run_consistency_v1_admin_consistency_run_post",
@@ -6131,6 +6741,542 @@
           }
         },
         "summary": "Consistency Report",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/samples": {
+      "get": {
+        "operationId": "list_consistency_case_samples_v1_admin_consistency__report_id__cases__case_code__samples_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "case_code",
+            "required": true,
+            "schema": {
+              "title": "Case Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "OK",
+                    "INFO",
+                    "WARN",
+                    "ERROR"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "unreviewed",
+                    "approved",
+                    "rejected",
+                    "deferred"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Decision"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sig_cd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 5,
+                  "minLength": 2,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sig Cd"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bjd_cd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "minLength": 8,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bjd Cd"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bd_mgt_sn",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 25,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bd Mgt Sn"
+            }
+          },
+          {
+            "in": "query",
+            "name": "reason_code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reason Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_yyyymm",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{6}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Yyyymm"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_distance_m",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Min Distance M"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_distance_m",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Max Distance M"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order_by",
+            "required": false,
+            "schema": {
+              "default": "sample_rank",
+              "maxLength": 40,
+              "title": "Order By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "desc",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Desc",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "enum": [
+                "json",
+                "csv"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsistencySamplePage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Consistency Case Samples",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/samples/bulk-decision": {
+      "post": {
+        "operationId": "bulk_update_consistency_sample_decisions_v1_admin_consistency__report_id__cases__case_code__samples_bulk_decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "case_code",
+            "required": true,
+            "schema": {
+              "title": "Case Code",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsistencyBulkDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsistencyBulkDecisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Update Consistency Sample Decisions",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/samples/{sample_id}/decision": {
+      "patch": {
+        "operationId": "update_consistency_sample_decision_v1_admin_consistency__report_id__cases__case_code__samples__sample_id__decision_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "case_code",
+            "required": true,
+            "schema": {
+              "title": "Case Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "title": "Sample Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsistencySampleDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsistencyCaseSample"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Consistency Sample Decision",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/samples/{sample_id}/recheck": {
+      "post": {
+        "operationId": "recheck_consistency_sample_v1_admin_consistency__report_id__cases__case_code__samples__sample_id__recheck_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "case_code",
+            "required": true,
+            "schema": {
+              "title": "Case Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sample_id",
+            "required": true,
+            "schema": {
+              "title": "Sample Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsistencySampleRecheckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recheck Consistency Sample",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/summary": {
+      "get": {
+        "operationId": "consistency_case_summary_v1_admin_consistency__report_id__cases__case_code__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "case_code",
+            "required": true,
+            "schema": {
+              "title": "Case Code",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsistencyCaseSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Consistency Case Summary",
         "tags": [
           "admin"
         ]
