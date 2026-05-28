@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 12:57 (T-047 REST API e2e latency)
+
+**작업**: SQL benchmark corpus를 실제 `/v1/address/*` HTTP 요청으로 변환하는 REST API benchmark harness를 추가하고, 표준 corpus e2e latency를 측정했다.
+
+**반영 상세**:
+- `scripts/benchmark_api_latency.py`를 추가했다. 저장 corpus를 geocode/reverse/search/zipcode 요청으로 변환하고 `benchmark.json`, `summary.md`, `api-cases.json`, `environment.json`을 남긴다.
+- SQL-only invalid reverse case `(0, 0)`은 public REST DTO에서 한국 밖 좌표로 거절되는 것이 맞으므로 REST latency corpus에서 제외했다.
+- 내부 `pydantic.ValidationError`가 FastAPI exception handler를 지나 HTTP 500이 되던 문제를 보정했다. 한국 밖 reverse 좌표는 이제 HTTP 400 + `E0102`로 응답한다.
+
+**측정**:
+- artifact: `artifacts/perf/t047-rest-e2e-standard-20260528-r2`.
+- corpus SHA: `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f`.
+- REST case 1,000건, measurement 8,000건, error 0.
+- c1 p95는 6.95~16.18ms, c16 p95는 43.79~97.13ms였다.
+- c64 p95는 Q3 fuzzy 810.53ms, Q6 reverse radius 773.89ms, Q4 search 753.25ms, Q7 zipcode point 734.30ms 순이었다.
+
+**후속**:
+- API worker 수, DB pool size, admission control 조합을 e2e로 비교한다.
+- Q3 fuzzy는 REST tail도 가장 크므로 T-057 region hint 또는 `mv_geocode_text_search` 후보 실험을 유지한다.
+
 ## 2026-05-28 12:26 (T-047 stress corpus benchmark)
 
 **작업**: PR #51/#52 후속 액션 중 `stress` 10,000건 이상 corpus 조건을 실제 T-027 Docker DB에서 측정했다.
