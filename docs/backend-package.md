@@ -932,6 +932,8 @@ CREATE INDEX idx_load_jobs_parent ON load_jobs (parent_job_id) WHERE parent_job_
 
 ADR-017에 따라 `full_load_batch`는 실행 핸들러가 없는 root job으로 남고, 실제 실행은 child job이 담당한다. source child 6종이 모두 `done`이 되면 큐가 `consistency_check`를 자동 등록한다. 정합성 리포트가 `ERROR`가 아니고 `source_set.load_batch_id`가 확인되면 `mv_refresh`를 `strategy='swap'`으로 등록한다. child 실패 또는 취소가 발생하면 root는 `failed`, 아직 대기 중인 같은 batch child는 `cancelled`가 된다.
 
+T-050 4차 이후 `mv_refresh` handler가 성공하면 `ops.dataset_snapshots`와 `ops.serving_releases`를 자동 기록한다. `full_load_batch`가 등록한 swap은 root payload의 `source_set`, 최신 consistency report, 주요 row count를 snapshot으로 고정하고 `release_kind='full_load'` active release를 만든다. 단독 refresh는 `release_kind='manual_rebuild'`로 기록한다. 새 active release를 만들기 전 기존 active release는 같은 transaction에서 `superseded`로 전환하며, 변경 이력은 `ops.audit_events`에 남긴다.
+
 `full_load_batch` payload는 enqueue 직전에 `infra.batch.batch_children()`에서 검증한다. 기본 경로는 `payload.payloads` 객체에 source child 6종을 모두 넣어야 하며, 각 child payload는 실제 로더가 요구하는 `path` 또는 `source_path`를 포함해야 한다. 이 검증은 REST `/v1/admin/loads`와 라이브러리 `AsyncAddressClient.submit_load("full_load_batch", ...)`가 같은 helper를 공유하므로 두 표면에서 동일하게 적용된다.
 
 ```json
@@ -965,6 +967,8 @@ ADR-017에 따라 `full_load_batch`는 실행 핸들러가 없는 root job으로
 ```
 
 `source_set` 같은 운영 메타데이터를 root payload에 추가로 보관할 수는 있지만, 자동으로 등록되는 `consistency_check` child에는 큐가 `load_batch_id`를 별도 주입한다. 따라서 batch swap gate가 의존하는 최소 식별자는 `load_consistency_reports.source_set.load_batch_id`다.
+
+restore job은 기본적으로 새 빈 DB에 복원하므로 복원 완료만으로 serving이 바뀌지는 않는다. T-050 4차 이후 `db_restore` 성공 시 현재 운영 DB의 ops metadata에는 `validated` dataset snapshot과 `pending` restore release 후보만 기록한다. 해당 후보에는 target database, restore artifact id, 원본 backup manifest의 source set/row count/runtime 정보가 들어가며, 실제 active 승격은 T-058 hot-swap 절차에서 maintenance window와 typed confirmation을 거쳐 처리한다.
 
 고급 사용자는 `children` 또는 `child_jobs` 배열로 기본 6종을 대체할 수 있다. 이때 각 entry는 `{"kind": "...", "payload": {...}}` 형식이어야 하며, `juso_text_load`, `juso_parcel_link_load`, `locsum_load`, `navi_load`, `shp_polygons_load`, `pobox_load`, `bulk_load`처럼 경로 기반 로더인 kind는 동일하게 `path`/`source_path`가 필요하다. 잘못된 entry를 조용히 버리지 않고 `InvalidInputError(E0100, HTTP 400)`로 거절한다. 잘못 만든 batch root와 빈 child가 `load_jobs`에 남아 이후 drain에서 실패하는 상황을 막기 위한 정책이다.
 

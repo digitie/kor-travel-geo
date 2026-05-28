@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.core.protocols import ConsistencyReportRow, LoadJobRow
 from kraddr.geo.core.redaction import (
+    canonical_payload_hash,
     hash_confirmation,
     hash_identifier,
     redact_audit_payload,
@@ -42,6 +44,7 @@ from kraddr.geo.dto.admin import (
 )
 from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.infra.uploads import extract_upload_set_ids
+from kraddr.geo.version import __version__
 
 from ._rows import map_consistency_report, map_load_job
 
@@ -97,6 +100,19 @@ SELECT stats_id, snapshot_id, captured_at, schema_name, object_name,
        index_bytes, toast_bytes, dead_tuples, last_vacuum, last_analyze, stats
   FROM ops.table_stats_snapshots
 """
+
+_ROW_COUNT_OBJECTS = (
+    "tl_juso_text",
+    "tl_juso_parcel_link",
+    "tl_locsum_entrc",
+    "tl_roadaddr_entrc",
+    "tl_navi_buld_centroid",
+    "tl_navi_entrc",
+    "tl_spbd_buld_polygon",
+    "tl_spbd_eqb",
+    "mv_geocode_target",
+    "mv_geocode_text_search",
+)
 
 _CONSISTENCY_SAMPLE_SELECT = """
 SELECT sample_id::text AS sample_id, report_id, case_code, severity, sample_rank,
@@ -411,6 +427,94 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
             ).mappings().all()
         return [_serving_release(dict(row)) for row in rows]
 
+    async def record_mv_refresh_release(
+        self,
+        *,
+        job_id: str | None = None,
+        load_batch_id: str | None = None,
+        strategy: str | None = None,
+        notes: str | None = None,
+    ) -> tuple[DatasetSnapshot, ServingRelease]:
+        """Record the dataset state exposed by a successful MV refresh."""
+
+        async with self.engine.begin() as conn:
+            report = (
+                await _latest_consistency_gate_for_batch(conn, load_batch_id)
+                if load_batch_id
+                else None
+            )
+            if report is not None and report["severity_max"] == "ERROR":
+                msg = "cannot release dataset with ERROR consistency gate"
+                raise RuntimeError(msg)
+            batch_source_set = (
+                await _load_batch_source_set(conn, load_batch_id) if load_batch_id else {}
+            )
+            source_set = batch_source_set or _json_dict(report.get("source_set") if report else {})
+            if not source_set:
+                source_set = await _infer_current_source_set(conn)
+            if load_batch_id:
+                source_set = dict(source_set)
+                source_set.setdefault("load_batch_id", load_batch_id)
+
+            consistency_gate = (
+                {
+                    "report_id": str(report["report_id"]),
+                    "severity_max": str(report["severity_max"]),
+                    "load_batch_id": load_batch_id,
+                }
+                if report is not None
+                else {}
+            )
+            release_kind = "full_load" if load_batch_id else "manual_rebuild"
+            release_notes = notes or (
+                f"mv_refresh strategy={strategy or 'unknown'}"
+                + (f"; load_batch_id={load_batch_id}" if load_batch_id else "")
+            )
+            return await _insert_dataset_snapshot_and_release(
+                conn,
+                snapshot_state="released",
+                release_state="active",
+                release_kind=release_kind,
+                source_set=source_set,
+                row_counts=await _collect_row_counts_for_conn(conn),
+                consistency_report_id=str(report["report_id"]) if report else None,
+                consistency_gate=consistency_gate,
+                created_by_job_id=job_id,
+                activated_by_job_id=job_id,
+                notes=release_notes,
+            )
+
+    async def record_restore_candidate(
+        self,
+        *,
+        restore_artifact_id: str,
+        target_database: str,
+        source_manifest: Mapping[str, Any],
+        source_artifact_id: str | None = None,
+        job_id: str | None = None,
+    ) -> tuple[DatasetSnapshot, ServingRelease]:
+        """Record a restored database as a validated pending release candidate."""
+
+        database = _json_dict(source_manifest.get("database"))
+        async with self.engine.begin() as conn:
+            return await _insert_dataset_snapshot_and_release(
+                conn,
+                snapshot_state="validated",
+                release_state="pending",
+                release_kind="restore",
+                source_set=_json_dict(source_manifest.get("source_set")),
+                row_counts=_int_dict(source_manifest.get("row_counts")),
+                backup_artifact_id=source_artifact_id,
+                created_by_job_id=job_id,
+                git_commit=_optional_text(source_manifest.get("git_commit")),
+                postgres_version=_optional_text(database.get("postgres_version")),
+                postgis_version=_optional_text(database.get("postgis_version")),
+                notes=(
+                    f"restore target_database={target_database}; "
+                    f"restore_artifact_id={restore_artifact_id}"
+                ),
+            )
+
     async def rollback_plan(self, release_id: str) -> RollbackPlan | None:
         async with self.engine.connect() as conn:
             row = (
@@ -554,6 +658,8 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
         size_bytes: int | None = None,
         sha256: str | None = None,
         manifest: dict[str, Any] | None = None,
+        snapshot_id: str | None = None,
+        release_id: str | None = None,
         callback_state: str | None = None,
         finished: bool = False,
     ) -> OpsArtifact | None:
@@ -577,6 +683,12 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
         if manifest is not None:
             assignments.append("manifest = :manifest")
             params["manifest"] = manifest
+        if snapshot_id is not None:
+            assignments.append("snapshot_id = :snapshot_id")
+            params["snapshot_id"] = snapshot_id
+        if release_id is not None:
+            assignments.append("release_id = :release_id")
+            params["release_id"] = release_id
         if callback_state is not None:
             assignments.append("callback_state = :callback_state")
             params["callback_state"] = callback_state
@@ -1580,6 +1692,326 @@ VALUES
             "action": action,
             "resource_type": resource_type,
             "resource_id": resource_id,
+            "payload_redacted": payload_redacted,
+            "payload_hash": payload_hash,
+        },
+    )
+
+
+async def _latest_consistency_gate_for_batch(
+    conn: Any,
+    load_batch_id: str | None,
+) -> Mapping[str, Any] | None:
+    if not load_batch_id:
+        return None
+    row = (
+        await conn.execute(
+            text(
+                """
+SELECT report_id, severity_max, source_set
+  FROM load_consistency_reports
+ WHERE source_set ->> 'load_batch_id' = :load_batch_id
+ ORDER BY started_at DESC
+ LIMIT 1
+"""
+            ),
+            {"load_batch_id": load_batch_id},
+        )
+    ).mappings().first()
+    return dict(row) if row else None
+
+
+async def _load_batch_source_set(conn: Any, load_batch_id: str | None) -> dict[str, Any]:
+    if not load_batch_id:
+        return {}
+    payload = await conn.scalar(
+        text(
+            """
+SELECT payload
+  FROM load_jobs
+ WHERE job_id = :load_batch_id
+   AND kind = 'full_load_batch'
+"""
+        ),
+        {"load_batch_id": load_batch_id},
+    )
+    if not isinstance(payload, Mapping):
+        return {}
+    source_set = payload.get("source_set")
+    return _json_dict(source_set)
+
+
+async def _infer_current_source_set(conn: Any) -> dict[str, Any]:
+    tables = {
+        "juso": "tl_juso_text",
+        "parcel_link": "tl_juso_parcel_link",
+        "locsum": "tl_locsum_entrc",
+        "navi": "tl_navi_buld_centroid",
+        "shp": "tl_spbd_buld_polygon",
+        "roadaddr_entrance": "tl_roadaddr_entrc",
+        "sppn_makarea": "tl_sppn_makarea",
+    }
+    yyyymm_by_kind: dict[str, str | None] = {}
+    for kind, table_name in tables.items():
+        exists = await conn.scalar(
+            text("SELECT to_regclass(:name)"),
+            {"name": f"public.{table_name}"},
+        )
+        if exists is None:
+            yyyymm_by_kind[kind] = None
+            continue
+        value = await conn.scalar(text(f"SELECT max(source_yyyymm) FROM public.{table_name}"))
+        yyyymm_by_kind[kind] = str(value) if value is not None else None
+    values = {value for value in yyyymm_by_kind.values() if value}
+    return {
+        "yyyymm_by_kind": yyyymm_by_kind,
+        "mixed_yyyymm": len(values) > 1,
+        "source": "database_manifest_inference",
+    }
+
+
+async def _collect_row_counts_for_conn(conn: Any) -> dict[str, int]:
+    row_counts: dict[str, int] = {}
+    for name in _ROW_COUNT_OBJECTS:
+        exists = await conn.scalar(text("SELECT to_regclass(:name)"), {"name": f"public.{name}"})
+        if exists is None:
+            continue
+        count = await conn.scalar(text(f"SELECT count(*)::bigint FROM public.{name}"))
+        row_counts[name] = int(count or 0)
+    return row_counts
+
+
+async def _runtime_versions_for_conn(conn: Any) -> dict[str, str | None]:
+    row = (
+        await conn.execute(
+            text(
+                """
+SELECT current_setting('server_version') AS postgres_version,
+       (SELECT extversion FROM pg_extension WHERE extname = 'postgis') AS postgis_version,
+       to_regclass('public.alembic_version') AS alembic_version_table
+"""
+            )
+        )
+    ).mappings().one()
+    alembic_revision = None
+    if row["alembic_version_table"] is not None:
+        alembic_revision = await conn.scalar(text("SELECT version_num FROM alembic_version"))
+    return {
+        "git_commit": os.environ.get("KRADDR_GEO_GIT_COMMIT", __version__),
+        "alembic_revision": _optional_text(alembic_revision),
+        "postgres_version": _optional_text(row.get("postgres_version")),
+        "postgis_version": _optional_text(row.get("postgis_version")),
+    }
+
+
+async def _mv_hash_for_conn(conn: Any) -> str | None:
+    exists = await conn.scalar(
+        text("SELECT to_regclass('public.mv_geocode_target')")
+    )
+    if exists is None:
+        return None
+    return _optional_text(
+        await conn.scalar(
+            text(
+                """
+SELECT md5(
+  COALESCE(pg_get_viewdef('public.mv_geocode_target'::regclass, true), '')
+  || ':'
+  || COALESCE((SELECT count(*)::text FROM public.mv_geocode_target), '0')
+)
+"""
+            )
+        )
+    )
+
+
+async def _insert_dataset_snapshot_and_release(
+    conn: Any,
+    *,
+    snapshot_state: str,
+    release_state: str,
+    release_kind: str,
+    source_set: Mapping[str, Any],
+    row_counts: Mapping[str, int],
+    consistency_report_id: str | None = None,
+    consistency_gate: Mapping[str, Any] | None = None,
+    performance_gate: Mapping[str, Any] | None = None,
+    backup_artifact_id: str | None = None,
+    created_by_job_id: str | None = None,
+    activated_by_job_id: str | None = None,
+    git_commit: str | None = None,
+    alembic_revision: str | None = None,
+    postgres_version: str | None = None,
+    postgis_version: str | None = None,
+    mv_hash: str | None = None,
+    notes: str | None = None,
+) -> tuple[DatasetSnapshot, ServingRelease]:
+    runtime = await _runtime_versions_for_conn(conn)
+    previous = (
+        await conn.execute(
+            text(
+                """
+SELECT release_id, snapshot_id
+  FROM ops.serving_releases
+ WHERE state = 'active'
+ ORDER BY activated_at DESC NULLS LAST, created_at DESC
+ LIMIT 1
+ FOR UPDATE
+"""
+            )
+        )
+    ).mappings().first()
+    parent_snapshot_id = _optional_str(previous["snapshot_id"]) if previous else None
+    previous_release_id = _optional_str(previous["release_id"]) if previous else None
+
+    if release_state == "active":
+        await conn.execute(
+            text(
+                """
+UPDATE ops.serving_releases
+   SET state = 'superseded'
+ WHERE state = 'active'
+"""
+            )
+        )
+
+    snapshot_id = str(uuid4())
+    release_id = str(uuid4())
+    snapshot_row = (
+        await conn.execute(
+            _json_text(
+                """
+INSERT INTO ops.dataset_snapshots
+  (snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
+   git_commit, alembic_revision, postgres_version, postgis_version,
+   row_counts, consistency_report_id, backup_artifact_id, created_by_job_id,
+   validated_at)
+VALUES
+  (:snapshot_id, :state, :parent_snapshot_id, :source_set, :source_set_hash,
+   :git_commit, :alembic_revision, :postgres_version, :postgis_version,
+   :row_counts, :consistency_report_id, :backup_artifact_id, :created_by_job_id,
+   CASE WHEN :validated THEN now() ELSE NULL END)
+RETURNING snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
+          git_commit, alembic_revision, postgres_version, postgis_version,
+          row_counts, table_stats_artifact_id, consistency_report_id,
+          performance_artifact_id, backup_artifact_id, created_by_job_id,
+          created_at, validated_at
+""",
+                "source_set",
+                "row_counts",
+            ),
+            {
+                "snapshot_id": snapshot_id,
+                "state": snapshot_state,
+                "parent_snapshot_id": parent_snapshot_id,
+                "source_set": dict(source_set),
+                "source_set_hash": canonical_payload_hash(source_set),
+                "git_commit": git_commit or runtime["git_commit"],
+                "alembic_revision": alembic_revision or runtime["alembic_revision"],
+                "postgres_version": postgres_version or runtime["postgres_version"],
+                "postgis_version": postgis_version or runtime["postgis_version"],
+                "row_counts": dict(row_counts),
+                "consistency_report_id": consistency_report_id,
+                "backup_artifact_id": backup_artifact_id,
+                "created_by_job_id": created_by_job_id,
+                "validated": snapshot_state in {"validated", "released"},
+            },
+        )
+    ).mappings().one()
+
+    release_row = (
+        await conn.execute(
+            _json_text(
+                """
+INSERT INTO ops.serving_releases
+  (release_id, snapshot_id, state, release_kind, previous_release_id,
+   mv_name, mv_hash, consistency_gate, performance_gate, activated_by_job_id,
+   activated_at, notes)
+VALUES
+  (:release_id, :snapshot_id, :state, :release_kind, :previous_release_id,
+   'mv_geocode_target', :mv_hash, :consistency_gate, :performance_gate,
+   :activated_by_job_id, CASE WHEN :active THEN now() ELSE NULL END, :notes)
+RETURNING release_id, snapshot_id, state, release_kind, previous_release_id,
+          rollback_target_release_id, mv_name, mv_hash, consistency_gate,
+          performance_gate, activated_by_job_id, activated_at, notes, created_at
+""",
+                "consistency_gate",
+                "performance_gate",
+            ),
+            {
+                "release_id": release_id,
+                "snapshot_id": snapshot_id,
+                "state": release_state,
+                "release_kind": release_kind,
+                "previous_release_id": previous_release_id,
+                "mv_hash": mv_hash if mv_hash is not None else (
+                    await _mv_hash_for_conn(conn) if release_state == "active" else None
+                ),
+                "consistency_gate": dict(consistency_gate or {}),
+                "performance_gate": dict(performance_gate or {}),
+                "activated_by_job_id": activated_by_job_id if release_state == "active" else None,
+                "active": release_state == "active",
+                "notes": notes,
+            },
+        )
+    ).mappings().one()
+
+    await _insert_ops_audit_event(
+        conn,
+        action=(
+            "serving_release.activate"
+            if release_state == "active"
+            else "serving_release.candidate"
+        ),
+        actor_type="system",
+        outcome="succeeded",
+        resource_type="serving_release",
+        resource_id=release_id,
+        job_id=activated_by_job_id or created_by_job_id,
+        payload={
+            "snapshot_id": snapshot_id,
+            "release_id": release_id,
+            "release_kind": release_kind,
+            "release_state": release_state,
+            "previous_release_id": previous_release_id,
+            "source_set_hash": canonical_payload_hash(source_set),
+        },
+    )
+    return _dataset_snapshot(dict(snapshot_row)), _serving_release(dict(release_row))
+
+
+async def _insert_ops_audit_event(
+    conn: Any,
+    *,
+    action: str,
+    actor_type: str,
+    outcome: str,
+    resource_type: str,
+    resource_id: str,
+    payload: Mapping[str, Any],
+    job_id: str | None = None,
+) -> None:
+    payload_redacted, payload_hash = redact_audit_payload(payload)
+    await conn.execute(
+        _json_text(
+            """
+INSERT INTO ops.audit_events
+  (event_id, actor_type, action, resource_type, resource_id, job_id,
+   outcome, payload_redacted, payload_hash)
+VALUES
+  (:event_id, :actor_type, :action, :resource_type, :resource_id, :job_id,
+   :outcome, :payload_redacted, :payload_hash)
+""",
+            "payload_redacted",
+        ),
+        {
+            "event_id": str(uuid4()),
+            "actor_type": actor_type,
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "job_id": job_id,
+            "outcome": outcome,
             "payload_redacted": payload_redacted,
             "payload_hash": payload_hash,
         },

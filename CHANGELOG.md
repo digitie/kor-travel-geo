@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-050 운영 hardening 4차: `mv_refresh` 성공 시 `ops.dataset_snapshots`와 active `ops.serving_releases`를 자동 생성하고, 기존 active release는 `superseded`로 전환한다. restore 성공 시에는 hot-swap 전 단계로 `validated` snapshot과 `pending` restore release 후보를 기록하고 restore artifact에 snapshot/release id를 연결한다.
 - T-050 운영 hardening 3차: backup/restore의 `dump`, `dump checksum`, `archive`, `checksum`, `extract`, `restore` 구간에 file/archive size 기반 sub-progress를 추가했다. DB schema/API DTO 변경 없이 기존 `load_jobs.progress`, `current_stage`, `log_tail`에 dump 디렉터리 크기, archive 입력/출력 byte, checksum 처리 byte, extract 디렉터리 성장량을 기록한다.
 - T-050 운영 hardening 2차: backup/restore callback을 HMAC-SHA256 서명 payload와 retry/backoff 기반 delivery로 보강했다. callback은 `callback_id`, `timestamp`, `attempt`, `max_attempts`를 포함하고, `x-kraddr-geo-signature` header로 서명한다. 최종 delivery 상태와 attempt ID 목록은 `ops.artifacts.callback_state` 및 `manifest.callback_delivery`에 기록한다.
 - T-050 운영 hardening 1차: upload set cleanup TTL과 실행 중 job 참조 보호를 추가했다. `kraddr-geo uploads cleanup`은 queued/running `load_jobs` payload에 남은 `upload_set_id` 또는 upload set 경로를 보호하고, TTL·active grace가 지난 stale/orphan upload set만 삭제한다. 기본값은 `KRADDR_GEO_UPLOAD_SET_TTL_DAYS=30`, `KRADDR_GEO_UPLOAD_SET_ACTIVE_GRACE_MINUTES=360`이다.

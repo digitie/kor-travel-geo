@@ -111,6 +111,7 @@ def test_ops_dtos_validate_core_contracts() -> None:
 
 def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     source = inspect.getsource(admin_repo.AdminRepository)
+    module_source = inspect.getsource(admin_repo)
 
     assert "record_audit_event" in source
     assert "redact_audit_payload" in source
@@ -121,3 +122,24 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "update_artifact" in source
     assert "mark_artifact_deleted" in source
     assert "pg_class" in source
+    assert "record_mv_refresh_release" in source
+    assert "record_restore_candidate" in source
+    assert "canonical_payload_hash" in module_source
+    assert "source_set_hash" in module_source
+    assert "UPDATE ops.serving_releases" in module_source
+    assert "serving_release.activate" in module_source
+
+
+def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
+    from kraddr.geo.api import app
+    from kraddr.geo.infra import backup
+
+    app_source = inspect.getsource(app._register_default_handlers)
+    restore_source = inspect.getsource(backup.run_restore_job)
+
+    assert "record_mv_refresh_release" in app_source
+    assert "load_batch_id" in app_source
+    assert "serving release 활성화" in app_source
+    assert "record_restore_candidate" in restore_source
+    assert "release_state" in restore_source
+    assert "snapshot_id" in restore_source

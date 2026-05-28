@@ -19,10 +19,15 @@
 - `kraddr-geo-ui`에는 `/admin/ops` 화면을 추가했다. release, snapshot, artifact, audit event, maintenance window, table stats snapshot을 한 화면에서 조회하고 maintenance window 생성과 table stats capture를 실행할 수 있다.
 - 테스트는 redaction, DTO validation, DDL/index/trigger 문자열, Alembic migration, API route contract, repository source contract를 포함한다.
 
+T-050 4차 이후 연결된 지점:
+
+- full-load batch가 등록한 MV shadow swap 성공 시 `ops.dataset_snapshots` row와 active `ops.serving_releases` row를 자동 생성한다.
+- 단독 MV refresh는 `release_kind='manual_rebuild'` active release로 기록한다.
+- restore 성공 시에는 serving 전환 전 단계의 `validated` snapshot과 `pending` restore release 후보를 자동 생성하고 restore artifact와 연결한다.
+
 아직 남은 연결점:
 
-- full-load/daily delta 완료 후 `ops.dataset_snapshots` row를 자동 생성하는 흐름은 T-045/T-027에서 source set plan과 함께 보강한다.
-- MV shadow swap 성공 시 `ops.serving_releases` active row를 교체하는 흐름은 T-027/T-047에서 실제 swap gate와 함께 연결한다.
+- daily delta 완료 후 `ops.dataset_snapshots` row를 자동 생성하는 흐름은 후속 delta refresh gate에서 보강한다.
 - T-046 백업/복원 artifact는 `ops.artifacts(artifact_type='db_backup'|'db_restore_log')`에 저장하도록 구현한다.
 - T-047 성능 리포트는 `ops.artifacts(artifact_type='perf_report')`와 `ops.table_stats_snapshots` capture 전후 차이로 연결한다.
 
@@ -254,9 +259,9 @@ UI는 `/admin/ops` 또는 기존 `/admin/backups`, `/admin/load`, `/admin/consis
 
 1. 완료: Alembic migration으로 `ops` 스키마와 6개 테이블을 추가한다.
 2. 완료: 공통 redaction/hash helper를 만든다. secret, DSN, token, 주소 원문 저장 방지 테스트를 먼저 작성한다.
-3. 부분 완료: `load.submit`, `mv_refresh.submit`, `load.cancel`, `consistency_check.submit`, maintenance window 생성/종료, rollback plan 조회는 audit event를 남긴다. source set plan 확정, backup/restore, serving release activate는 후속 작업에서 연결한다.
-4. 부분 완료: `/v1/admin/ops/table-stats/capture`로 `ops.table_stats_snapshots`를 생성할 수 있다. full-load 또는 일변동 적용 후 자동 dataset snapshot 생성은 T-045/T-027에서 연결한다.
-5. 대기: MV swap 성공 시 `ops.serving_releases` active row를 교체한다.
+3. 부분 완료: `load.submit`, `mv_refresh.submit`, `load.cancel`, `consistency_check.submit`, maintenance window 생성/종료, rollback plan 조회는 audit event를 남긴다. T-050 4차에서 serving release activate/candidate audit을 추가했다. source set plan 확정과 backup artifact 세부 audit은 후속으로 연결한다.
+4. 부분 완료: `/v1/admin/ops/table-stats/capture`로 `ops.table_stats_snapshots`를 생성할 수 있다. full-load MV swap과 restore는 자동 dataset snapshot으로 연결했고, daily delta snapshot은 후속 delta refresh gate에서 연결한다.
+5. 완료: MV swap 성공 시 `ops.serving_releases` active row를 교체한다.
 6. 대기: T-046 백업 artifact와 T-047 성능 리포트를 `ops.artifacts`로 연결한다.
 7. 완료: REST/AsyncAddressClient DTO와 관리 UI를 추가한다.
 
