@@ -31,11 +31,11 @@
 
 ## 다음 실행 순서
 
-1. API worker 수, DB pool size, admission control grid를 REST e2e로 비교한다. pool64 단일 process는 Q3 fuzzy만 개선하고 다수 경로를 악화시켰으므로, 기본 pool 상향이 아니라 worker/admission 조합으로 다시 좁힌다.
+1. `w4/p4/a4`와 `w2/p8/a8` REST profile을 `iterations=3` 이상으로 재측정한다. exploratory grid에서는 `w4/p4/a4`가 geocode/search/zipcode-heavy 경로를 가장 많이 낮췄고, `w2/p8/a8`은 reverse/no-result/SPPN 쪽이 더 안정적이었다.
 2. Q3 fuzzy 후보 축소: T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 SQL/REST 전후를 비교한다.
 3. backup archive 압축 단계: 로컬 `zstd` CLI 설치 또는 backup helper fallback 압축 경로 검증 뒤 `tar.zst` 크기와 wall time을 재측정한다.
 4. T-052 또는 SQL 재사용 확대 시점에 SQL 상수 public module을 추출한다.
 
 ## 검증
 
-T-060 자체는 문서 반영이었다. 후속 T-047 관측성 보강에서는 benchmark artifact schema 2, `pg_stat_statements` snapshot/delta, checkout/execute 분리 측정이 추가됐다. 이어서 T-047 operational impact run에서 exact index 3개 포함 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했고, stress run에서 11,000건 corpus c1/c4/c16/c64를 측정했다. REST API e2e run도 추가해 HTTP/JSON/FastAPI overhead를 대조했다. 마지막으로 REST pool64 단일 process 비교를 수행했고, Q3 fuzzy 외 다수 경로가 악화되어 운영 기본 pool 단순 상향은 보류했다.
+T-060 자체는 문서 반영이었다. 후속 T-047 관측성 보강에서는 benchmark artifact schema 2, `pg_stat_statements` snapshot/delta, checkout/execute 분리 측정이 추가됐다. 이어서 T-047 operational impact run에서 exact index 3개 포함 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했고, stress run에서 11,000건 corpus c1/c4/c16/c64를 측정했다. REST API e2e run도 추가해 HTTP/JSON/FastAPI overhead를 대조했다. REST pool64 단일 process 비교에서는 Q3 fuzzy 외 다수 경로가 악화되어 운영 기본 pool 단순 상향을 보류했다. 이후 `/v1/address/*` optional admission control과 worker/pool/admission exploratory grid를 추가했고, 권장 profile은 반복 측정 후 확정하기로 했다.

@@ -2,6 +2,32 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 14:06 (T-047 REST worker/pool/admission grid)
+
+**작업**: REST API c64 tail을 줄이기 위해 `/v1/address/*` 전용 optional admission control을 추가하고, worker/pool/admission 조합을 exploratory benchmark로 비교했다.
+
+**반영 상세**:
+- `KRADDR_GEO_API_MAX_CONCURRENCY`가 설정된 경우에만 주소 API 요청을 process-local semaphore로 제한한다. 기본값은 unset이라 기존 동작은 유지된다.
+- `KRADDR_GEO_API_ADMISSION_TIMEOUT_MS`는 semaphore 대기 timeout이다. timeout 시 HTTP 429 + `E0200`을 반환한다.
+- health/admin/metrics 경로는 admission control 대상에서 제외했다.
+
+**측정**:
+- 기준 corpus SHA: `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f`.
+- 각 run은 REST case 1,000건, measurement 8,000건, `iterations=1`, `warmup=1`, concurrency `1/4/16/64`, error 0이었다.
+- artifacts:
+  - `artifacts/perf/t047-rest-grid-w1-p16-a16-20260528`
+  - `artifacts/perf/t047-rest-grid-w2-p8-a8-20260528`
+  - `artifacts/perf/t047-rest-grid-w4-p4-a4-20260528`
+
+**결론**:
+- `w4/p4/a4`는 Q4 search c64 p95를 753.25ms에서 435.63ms로, Q3 fuzzy를 810.53ms에서 550.35ms로 낮췄다. Q1/Q2/Q7도 개선됐다.
+- `w2/p8/a8`은 Q6 reverse radius, Q8 no-result, Q11 SPPN reverse에서 더 안정적이었다.
+- Q5 reverse nearest와 일부 p99는 아직 악화 구간이 있어 운영 권장값으로 확정하지 않는다.
+
+**후속**:
+- `w4/p4/a4`와 `w2/p8/a8`을 `iterations=3` 이상으로 재측정한다.
+- Q3 fuzzy 후보 축소는 T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 이어간다.
+
 ## 2026-05-28 13:19 (T-047 REST API pool64 비교)
 
 **작업**: REST API e2e latency에서 DB pool만 64로 키웠을 때 c64 tail이 개선되는지 확인했다.

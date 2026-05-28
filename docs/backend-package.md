@@ -184,7 +184,7 @@ ignore_imports = ["kraddr.geo.api.routers.admin -> kraddr.geo.loaders"]
 | 카테고리 | 키 | 비고 |
 |----------|----|------|
 | DB | `pg_dsn`, `pg_pool_size`, `pg_max_overflow`, `pg_statement_timeout_ms`, `pg_pool_recycle_s` | `postgresql+psycopg://...` |
-| API | `api_title`, `api_cors_origins`, `api_default_radius_m`, `api_max_search_size`, `api_max_upload_bytes`, `api_explain_timeout_ms` | 업로드 기본 상한 2GiB, EXPLAIN 기본 timeout 3초 |
+| API | `api_title`, `api_cors_origins`, `api_default_radius_m`, `api_max_search_size`, `api_max_upload_bytes`, `api_explain_timeout_ms`, `api_max_concurrency`, `api_admission_timeout_ms` | 업로드 기본 상한 2GiB, EXPLAIN 기본 timeout 3초. `api_max_concurrency`는 unset이면 비활성화하며 `/v1/address/*` 요청을 process별 semaphore로 제한한다. |
 | 외부 | `juso_api_key`, `juso_search_url`, `juso_coord_url`, `juso_coord_api_key`, `vworld_api_key`, `vworld_url`, `epost_api_key`, `epost_download_url` | 모두 `SecretStr` 또는 URL |
 | 캐시 | `cache_enabled`, `cache_ttl_days` | `geo_cache` 테이블 사용 |
 | 로깅 | `log_level`, `log_format` | `json` 권장 |
