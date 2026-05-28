@@ -101,12 +101,13 @@
 - ✅ T-052/T-053 선행 정리 — PR #67 리뷰 후속으로 T-056의 라이선스 표현을 "공개 주소 코드 규칙 기반 독립 구현, GPL 원본 코드 미복사"로 바로잡았다. 사용자 확인에 따라 "조합/분리"가 코드 식별자 조합·분해·정규화 의도였음을 문서화했고, Juso 검색 결과에 좌표 API 필수 코드가 없으면 coord API를 호출하지 않는 회귀 테스트를 추가했다.
 - ✅ T-052 외부 API 스타일 비교 + API v1/v2 분리 + AI-friendly 문서화 — v2는 Kakao/Naver/Google/VWorld 직접 wrapper가 아니라 각 API 스타일의 장점을 참고한 자체 candidate schema로 정리했다. `/v2/geocode`, `/v2/reverse`, `/v2/search`, `AsyncAddressClient.geocode_v2/reverse_v2/search_v2`, `docs/api-reference/`, OpenAPI와 frontend 생성 타입을 추가했다. 기존 v1 fallback은 ADR-019의 vworld/juso만 유지한다. 상세: `docs/t052-api-providers-v1-v2.md`
 - ✅ T-053 Admin UI C1~C10 상세 분석/수동 판정 콘솔 — 사용자 재확인 의도를 먼저 문서화한 뒤 `ops.consistency_case_samples` row-per-sample 저장, case definition/sample list/summary/single·bulk decision/recheck/CSV admin API, OpenAPI/프론트 타입, `/admin/consistency/[report_id]` 상세 UI를 추가했다. UI는 TanStack Query, TanStack Table, Zustand와 `maplibre-vworld-js` wrapper 기반 지도 preview를 사용한다. 상세: `docs/t053-admin-ui-ops-statistics.md`
+- ✅ T-061 Q3 fuzzy slim text-search 구조 — `mv_geocode_target`에서 재생성 가능한 `mv_geocode_text_search` helper MV를 추가해 Q3 fuzzy geocode와 Q4 broad search fallback 후보 추출을 분리했다. T-057 corpus 기준 Q3 fuzzy c64 p95는 359.25ms → 227.57ms, `sig_cd` hint는 193.36ms → 182.27ms, wide는 255.36ms → 200.69ms로 개선됐다. helper는 6,416,637행/2,426MiB이고 helper 포함 shadow swap은 497.54초였다. 상세: `docs/t061-slim-text-search.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 사용자 최신 지시에 따라 T-061 Q3 fuzzy slim text-search 구조다. T-057에서 `sig_cd`/`bjd_cd` hint만으로는 Q3 fuzzy tail을 충분히 줄이지 못했으므로, `mv_geocode_target`에서 응답에 필요한 최소 key와 text-search 전용 컬럼만 분리한 slim 후보 구조를 설계하고 같은 corpus로 p95/p99, plan, buffer, refresh/swap, 디스크, backup envelope를 비교한다.
+다음 작업은 사용자 최신 지시에 따라 T-050 운영 hardening 후속이다. PR #34~#47 audit에서 남긴 upload set cleanup TTL과 실행 중 job 참조 lock/grace period, backup/restore callback HMAC·retry·replay protection, file/archive size 기반 sub-progress, full-load/MV/restore job 완료 hook의 `ops.dataset_snapshots`/`ops.serving_releases` 자동 생성, `ops.table_stats_snapshots` 주기 capture, destructive confirmation flow 통합, 실제 PostgreSQL constraint integration test를 순서대로 좁힌다.
 
-그 이후의 작업 후보는 사용자 최신 지시에 따라 T-050(운영 hardening) → T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-055(N150/Odroid 실측) 순서다. T-027 최종 클린 적재 검증은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
+그 이후의 작업 후보는 사용자 최신 지시에 따라 T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-055(N150/Odroid 실측) 순서다. T-027 최종 클린 적재 검증은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
@@ -119,7 +120,7 @@
 - T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. 남은 hardening은 callback retry/backoff, restore 취소 시 target DB drop/quarantine 정책, 디스크 여유 공간 사전 추정, PostgreSQL/PostGIS major mismatch hard-fail이다. 전국 full-load 재실행은 후속 T-027에서 수행한다.
 - T-049 운영 메타데이터는 1차 구현 상태다. 현재 구현은 DDL/API/UI와 redacted audit event, maintenance window 생성/종료, table stats snapshot capture를 제공한다. T-045/T-046/T-047을 진행할 때 source set 확정, backup/restore artifact, 성능 리포트, MV swap 성공 지점을 `ops.dataset_snapshots`, `ops.artifacts`, `ops.serving_releases`에 실제로 연결하는 보강이 이어져야 한다.
 - T-050은 PR #34~#47 리뷰 audit에서 남긴 운영 hardening 묶음이다. upload set cleanup TTL과 참조 lock, callback HMAC/retry/replay protection, size 기반 backup/restore sub-progress, snapshot/release 자동 생성 hook, table stats cron, destructive confirmation flow, 실제 PostgreSQL constraint integration test를 포함한다.
-- T-047 쿼리 성능 튜닝은 여러 기준선과 후속 측정이 쌓인 상태다. 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool64, REST worker/pool/admission exploratory grid와 candidate 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교까지 완료했다. 남은 핵심은 Q3 fuzzy 후보 폭을 직접 줄이는 T-061 slim text-search 구조다.
+- T-047 쿼리 성능 튜닝은 여러 기준선과 후속 측정이 쌓인 상태다. 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool64, REST worker/pool/admission exploratory grid와 candidate 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
 
 ## 작업 시작 전 확인할 것
 

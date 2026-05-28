@@ -107,6 +107,8 @@ PostgreSQL + PostGIS (pg_trgm)
 
 T-047의 보조 view/MV는 별도 source of truth가 아니다. master table 또는 `mv_geocode_target`에서 재생성 가능한 serving accelerator이며, API 응답 구조와 vworld 호환 계약은 그대로 유지한다. 새 보조 객체를 도입하면 refresh/swap 순서, index build time, disk size, `ANALYZE`, T-046 backup/restore 영향까지 함께 측정한다.
 
+T-061에서 `mv_geocode_text_search`가 실제 read-only helper MV로 추가됐다. Q3 fuzzy geocode와 Q4 broad search fallback은 이 helper에서 `bd_mgt_sn` 후보를 먼저 추출한 뒤 `mv_geocode_target`에 join한다. Q4 exact preflight는 기존 target exact index를 유지한다.
+
 ## 데이터 흐름 — 적재 (full-load batch)
 
 ```

@@ -153,6 +153,8 @@ swap.rename_indexes
 
 T-036 후속 리뷰 반영으로 `scripts/benchmark_mv_refresh.py` 출력 JSON은 `schema_version=2`와 `metadata`를 포함한다. `metadata.concurrent_sessions_before/after`는 같은 DB의 idle이 아닌 다른 session 수를 기록하고, `metadata.wait_events_before/after`는 `pg_stat_activity`의 wait event snapshot을 남긴다. 단, wait event는 benchmark 시작/종료 snapshot이므로 실행 중 순간적으로 보인 `BufFileWrite` 같은 이벤트를 완전한 time series로 보존하지는 않는다.
 
+T-061 이후 출력 JSON은 `schema_version=3`이며, `mv_geocode_text_search` row count/size와 helper rebuild/swap phase를 함께 기록한다.
+
 해석 시 다음 두 가지를 구분한다.
 
 - `concurrent_sessions_before/after`는 `state <> 'idle'`인 세션을 세므로 `idle in transaction`과 `idle in transaction (aborted)`도 포함한다. 두 상태는 lock을 쥐고 있을 수 있어 영향 세션으로 보는 것이 의도다.

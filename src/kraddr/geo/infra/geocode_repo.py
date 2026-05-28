@@ -28,6 +28,16 @@ _REGION_FILTER = """
    AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
 """
 
+_TEXT_SEARCH_REGION_FILTER = """
+   AND (CAST(:sig_cd_filter AS text) IS NULL OR ts.sig_cd = CAST(:sig_cd_filter AS text))
+   AND (
+     CAST(:sig_cd_prefix AS text) IS NULL
+     OR ts.sido_cd = left(CAST(:sig_cd_prefix AS text), 2)
+   )
+   AND (CAST(:bjd_cd_filter AS text) IS NULL OR ts.bjd_cd = CAST(:bjd_cd_filter AS text))
+   AND (CAST(:bjd_cd_prefix AS text) IS NULL OR ts.bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
+"""
+
 _LOOKUP_ROAD = text(
     _BASE_SELECT
     + """
@@ -63,19 +73,34 @@ _LOOKUP_JIBUN = text(
 )
 
 _FUZZY_ROADS = text(
-    _BASE_SELECT
-    + """
-       , similarity(rn_nrm, :road_nrm) AS confidence
- WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
-   AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
+    """
+WITH candidates AS MATERIALIZED (
+  SELECT ts.bd_mgt_sn,
+         similarity(ts.rn_nrm, :road_nrm) AS confidence
+    FROM mv_geocode_text_search ts
+   WHERE (CAST(:si AS text) IS NULL OR ts.si_nm = CAST(:si AS text))
+     AND (CAST(:sgg AS text) IS NULL OR ts.sgg_nm = CAST(:sgg AS text))
 """
-    + _REGION_FILTER
+    + _TEXT_SEARCH_REGION_FILTER
     + """
-   AND rn_nrm % :road_nrm
-   AND buld_mnnm = :mnnm
- ORDER BY similarity(rn_nrm, :road_nrm) DESC,
-          CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END,
-          bd_mgt_sn
+     AND ts.rn_nrm % :road_nrm
+     AND ts.buld_mnnm = :mnnm
+   ORDER BY confidence DESC,
+            CASE WHEN ts.pt_source = 'entrance' THEN 0 ELSE 1 END,
+            ts.bd_mgt_sn
+   LIMIT :limit
+)
+SELECT t.bd_mgt_sn, t.rncode_full, t.rn AS road_nm, t.buld_mnnm, t.buld_slno, t.buld_se_cd,
+       t.buld_nm, t.bjd_cd, t.adm_cd, t.adm_kor_nm, t.mntn_yn, t.lnbr_mnnm, t.lnbr_slno,
+       t.zip_no, t.si_nm, t.sgg_nm, t.emd_nm, t.li_nm, t.pnu, t.pt_source,
+       CASE WHEN t.pt_4326 IS NULL THEN NULL ELSE ST_X(t.pt_4326) END AS lon,
+       CASE WHEN t.pt_4326 IS NULL THEN NULL ELSE ST_Y(t.pt_4326) END AS lat,
+       c.confidence
+  FROM candidates c
+  JOIN mv_geocode_target t ON t.bd_mgt_sn = c.bd_mgt_sn
+ ORDER BY c.confidence DESC,
+          CASE WHEN t.pt_source = 'entrance' THEN 0 ELSE 1 END,
+          t.bd_mgt_sn
  LIMIT :limit
 """
 )

@@ -84,3 +84,15 @@ def test_pr34_review_followups_migration_preserves_audit_job_links() -> None:
     assert "DROP CONSTRAINT IF EXISTS audit_events_job_id_fkey" in migration
     assert "ON DELETE NO ACTION" in migration
     assert "ON DELETE SET NULL" in migration
+
+
+def test_t061_text_search_mv_migration_adds_slim_helper() -> None:
+    migration = Path("alembic/versions/0013_t061_text_search_mv.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "revision = \"0013_t061_text_search_mv\"" in migration
+    assert "down_revision = \"0012_t053_consistency_samples\"" in migration
+    assert "TEXT_SEARCH_MV_SQL" in migration
+    assert "ANALYZE mv_geocode_text_search" in migration
+    assert "DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search" in migration

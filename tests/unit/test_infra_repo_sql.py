@@ -54,6 +54,8 @@ def test_search_repo_uses_exact_preflight_before_broad_trgm_search() -> None:
     exact_sql = str(search_repo._SEARCH_EXACT_SQL)
     source = inspect.getsource(search_repo.SearchRepository.search)
 
+    assert "FROM mv_geocode_target" in exact_sql
+    assert "mv_geocode_text_search" not in exact_sql
     assert "rn_nrm = :query_nrm" in exact_sql
     assert "buld_nm_nrm = :query_nrm" in exact_sql
     assert "_SEARCH_EXACT_SQL" in source
@@ -61,13 +63,32 @@ def test_search_repo_uses_exact_preflight_before_broad_trgm_search() -> None:
     assert source.index("_SEARCH_EXACT_SQL") < source.index("_SEARCH_SQL")
 
 
-def test_mv_sql_includes_search_exact_indexes() -> None:
+def test_text_search_queries_use_slim_mv_before_target_join() -> None:
+    fuzzy_sql = str(geocode_repo._FUZZY_ROADS)
+    search_sql = str(search_repo._SEARCH_SQL)
+
+    assert "WITH candidates AS MATERIALIZED" in fuzzy_sql
+    assert "FROM mv_geocode_text_search ts" in fuzzy_sql
+    assert "JOIN mv_geocode_target t ON t.bd_mgt_sn = c.bd_mgt_sn" in fuzzy_sql
+    assert "WITH query_input AS" in search_sql
+    assert "FROM mv_geocode_text_search ts" in search_sql
+    assert "JOIN mv_geocode_target t ON t.bd_mgt_sn = s.bd_mgt_sn" in search_sql
+
+
+def test_mv_sql_includes_search_indexes_and_slim_text_search_mv() -> None:
     mv_sql = infra_sql.MV_SQL
+    text_search_sql = infra_sql.TEXT_SEARCH_MV_SQL
 
     assert "idx_mv_rn_nrm_exact" in mv_sql
     assert "ON mv_geocode_target (rn_nrm, bd_mgt_sn)" in mv_sql
     assert "idx_mv_buld_nm_nrm_exact" in mv_sql
     assert "WHERE buld_nm_nrm IS NOT NULL" in mv_sql
+    assert "CREATE MATERIALIZED VIEW mv_geocode_text_search AS" in text_search_sql
+    assert "FROM mv_geocode_target" in text_search_sql
+    assert "left(bjd_cd, 5) AS sig_cd" in text_search_sql
+    assert "idx_mv_text_search_rn_trgm" in text_search_sql
+    assert "idx_mv_text_search_bjd_prefix_buld" in text_search_sql
+    assert "idx_mv_text_search_rn_exact" not in text_search_sql
 
 
 def test_optional_filters_cast_parameters_for_psycopg_type_inference() -> None:

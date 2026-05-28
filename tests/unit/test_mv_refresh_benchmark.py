@@ -48,6 +48,10 @@ def test_mv_refresh_benchmark_json_is_stable() -> None:
         total_bytes=100,
         heap_bytes=40,
         index_bytes=60,
+        text_search_row_count=10,
+        text_search_total_bytes=80,
+        text_search_heap_bytes=30,
+        text_search_index_bytes=50,
         database_bytes=1_000,
         temp_files=2,
         temp_bytes=3_000,
@@ -74,9 +78,10 @@ def test_mv_refresh_benchmark_json_is_stable() -> None:
 
     payload = json.loads(result_to_json(result))
 
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["strategy"] == "concurrent"
     assert payload["before"]["row_count"] == 10
+    assert payload["before"]["text_search_total_bytes"] == 80
     assert payload["phases"] == [{"name": "refresh_concurrently", "seconds": 0.9}]
     assert payload["metadata"] == {
         "trial_index": 1,
@@ -106,3 +111,7 @@ def test_mv_refresh_benchmark_names_rebuild_phases() -> None:
     assert _statement_phase_name("ANALYZE mv_geocode_target_next") == (
         "rebuild.analyze_next"
     )
+    assert _statement_phase_name(
+        "CREATE INDEX idx_mv_next_text_search_rn_trgm "
+        "ON mv_geocode_text_search_next USING GIN (rn_nrm gin_trgm_ops)"
+    ) == "rebuild.index.idx_mv_next_text_search_rn_trgm"

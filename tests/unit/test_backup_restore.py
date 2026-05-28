@@ -86,6 +86,7 @@ def test_pg_dump_command_uses_directory_format_and_redacts_password(tmp_path: Pa
     assert cmd.argv[:4] == ("pg_dump", "--format=directory", "--jobs=4", "--verbose")
     assert "--exclude-table-data=geo_cache" in cmd.argv
     assert "--exclude-table-data=mv_geocode_target" in cmd.argv
+    assert "--exclude-table-data=mv_geocode_text_search" in cmd.argv
     assert "secret" not in " ".join(cmd.argv)
     assert "secret" not in " ".join(cmd.safe_argv)
     assert cmd.env == {"PGPASSWORD": "secret"}
