@@ -2117,6 +2117,8 @@ export interface operations {
                 refine?: boolean;
                 simple?: boolean;
                 fallback?: "off" | "local_only" | "api";
+                sig_cd?: string | null;
+                bjd_cd?: string | null;
             };
             header?: never;
             path?: never;
@@ -2189,6 +2191,8 @@ export interface operations {
                 type?: "both" | "road" | "parcel";
                 zipcode?: boolean;
                 radius_m?: number | null;
+                sig_cd?: string | null;
+                bjd_cd?: string | null;
             };
             header?: never;
             path?: never;
@@ -2223,6 +2227,8 @@ export interface operations {
                 type?: "address" | "place" | "district" | "road";
                 page?: number;
                 size?: number;
+                sig_cd?: string | null;
+                bjd_cd?: string | null;
             };
             header?: never;
             path?: never;

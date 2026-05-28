@@ -19,7 +19,8 @@ async def search(
     type: Literal["address", "place", "district", "road"] = "address",
     page: int = Query(default=1, ge=1),
     size: int = Query(default=10, ge=1, le=100),
+    sig_cd: str | None = Query(default=None, pattern=r"^(\d{2}|\d{5})$"),
+    bjd_cd: str | None = Query(default=None, pattern=r"^(\d{8}|\d{10})$"),
     client: AsyncAddressClient = Depends(get_client),
 ) -> SearchResponse:
-    return await client.search(query, type=type, page=page, size=size)
-
+    return await client.search(query, type=type, page=page, size=size, sig_cd=sig_cd, bjd_cd=bjd_cd)

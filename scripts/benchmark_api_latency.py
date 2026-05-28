@@ -410,55 +410,65 @@ async def _measure_case(
 
 def _api_case_for_corpus(case: CorpusCase) -> ApiCase | None:
     params = case.params
-    if case.sql_name == "road_exact":
+    if case.sql_name in {"road_exact", "road_exact_sig"}:
         return _api_case(
             case,
-            "geocode_road",
+            "geocode_road_hint" if case.sql_name == "road_exact_sig" else "geocode_road",
             "/v1/address/geocode",
             {
                 "address": _road_address(params),
                 "type": "road",
                 "fallback": "local_only",
+                **_api_region_hint_params(params),
             },
         )
-    if case.sql_name == "parcel_exact":
+    if case.sql_name in {"parcel_exact", "parcel_exact_bjd"}:
         return _api_case(
             case,
-            "geocode_parcel",
+            "geocode_parcel_hint" if case.sql_name == "parcel_exact_bjd" else "geocode_parcel",
             "/v1/address/geocode",
             {
                 "address": _parcel_address(params),
                 "type": "parcel",
                 "fallback": "local_only",
+                **_api_region_hint_params(params),
             },
         )
-    if case.sql_name == "fuzzy_geocode":
+    if case.sql_name in {"fuzzy_geocode", "fuzzy_geocode_wide", "fuzzy_geocode_sig"}:
         return _api_case(
             case,
-            "geocode_fuzzy",
+            "geocode_fuzzy_hint" if case.sql_name == "fuzzy_geocode_sig" else "geocode_fuzzy",
             "/v1/address/geocode",
             {
                 "address": _fuzzy_address(params),
                 "type": "road",
                 "fallback": "local_only",
+                **_api_region_hint_params(params),
             },
             expected_status=None,
         )
-    if case.sql_name == "search":
+    if case.sql_name in {"search", "search_sig"}:
         return _api_case(
             case,
-            "search",
+            "search_hint" if case.sql_name == "search_sig" else "search",
             "/v1/address/search",
             {
                 "query": str(params["query"]),
                 "type": "address",
                 "page": 1,
                 "size": int(cast("int", params["limit"])),
+                **_api_region_hint_params(params),
             },
         )
     if case.sql_name == "no_result_reverse":
         return None
-    if case.sql_name in {"reverse_nearest", "reverse_radius", "sppn_reverse"}:
+    if case.sql_name in {
+        "reverse_nearest",
+        "reverse_nearest_sig",
+        "reverse_radius",
+        "reverse_radius_sig",
+        "sppn_reverse",
+    }:
         return _api_case(
             case,
             f"reverse_{case.sql_name}",
@@ -469,6 +479,7 @@ def _api_case_for_corpus(case: CorpusCase) -> ApiCase | None:
                 "crs": "EPSG:4326",
                 "type": "both",
                 "radius_m": int(cast("int", params.get("radius_m") or 200)),
+                **_api_region_hint_params(params),
             },
             expected_status=case.expected_status,
         )
@@ -531,7 +542,7 @@ def _api_case(
 
 def _road_address(params: Mapping[str, ParamValue]) -> str:
     parts = [
-        str(params["si"]),
+        str(params["si"]) if params.get("si") else None,
         str(params["sgg"]) if params.get("sgg") else None,
         "지하" if params.get("buld_se_cd") == "1" else None,
         str(params["road_nrm"]),
@@ -542,7 +553,7 @@ def _road_address(params: Mapping[str, ParamValue]) -> str:
 
 def _parcel_address(params: Mapping[str, ParamValue]) -> str:
     parts = [
-        str(params["si"]),
+        str(params["si"]) if params.get("si") else None,
         str(params["sgg"]) if params.get("sgg") else None,
         str(params["emd"]) if params.get("emd") else None,
         "산" if str(params.get("mntn_yn")) == "1" else None,
@@ -571,12 +582,23 @@ def _fuzzy_address(params: Mapping[str, ParamValue]) -> str:
     else:
         mutated = f"{road}길"
     parts = [
-        str(params["si"]),
+        str(params["si"]) if params.get("si") else None,
         str(params["sgg"]) if params.get("sgg") else None,
         mutated,
         _number(params["mnnm"], params.get("slno")),
     ]
     return _join(parts)
+
+
+def _api_region_hint_params(params: Mapping[str, ParamValue]) -> dict[str, str]:
+    hints: dict[str, str] = {}
+    sig_cd = params.get("sig_cd_filter") or params.get("sig_cd_prefix")
+    if isinstance(sig_cd, str) and sig_cd:
+        hints["sig_cd"] = sig_cd.rstrip("%")
+    bjd_cd = params.get("bjd_cd_filter") or params.get("bjd_cd_prefix")
+    if isinstance(bjd_cd, str) and bjd_cd:
+        hints["bjd_cd"] = bjd_cd.rstrip("%")
+    return hints
 
 
 def _number(main: ParamValue, sub: ParamValue) -> str:

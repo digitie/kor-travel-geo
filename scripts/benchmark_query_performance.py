@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from sqlalchemy import TextClause, text
 from sqlalchemy.exc import DBAPIError, ProgrammingError
 
+from kraddr.geo.dto.region import EMPTY_REGION_PARAMS, RegionHint
 from kraddr.geo.infra.engine import make_async_engine
 from kraddr.geo.infra.geocode_repo import _FUZZY_ROADS, _LOOKUP_JIBUN, _LOOKUP_ROAD
 from kraddr.geo.infra.reverse_repo import _NEAREST_SQL, _SPPN_AREAS_SQL
@@ -141,9 +142,23 @@ class BenchmarkReport:
 
 QUERY_SPECS: dict[str, QuerySpec] = {
     "road_exact": QuerySpec("road_exact", "Q1_ROAD_EXACT", _LOOKUP_ROAD),
+    "road_exact_sig": QuerySpec("road_exact_sig", "Q1_ROAD_EXACT", _LOOKUP_ROAD),
     "parcel_exact": QuerySpec("parcel_exact", "Q2_PARCEL_EXACT", _LOOKUP_JIBUN),
+    "parcel_exact_bjd": QuerySpec("parcel_exact_bjd", "Q2_PARCEL_EXACT", _LOOKUP_JIBUN),
     "fuzzy_geocode": QuerySpec(
         "fuzzy_geocode",
+        "Q3_FUZZY_GEOCODE",
+        _FUZZY_ROADS,
+        ("SET LOCAL pg_trgm.similarity_threshold = 0.42",),
+    ),
+    "fuzzy_geocode_wide": QuerySpec(
+        "fuzzy_geocode_wide",
+        "Q3_FUZZY_GEOCODE",
+        _FUZZY_ROADS,
+        ("SET LOCAL pg_trgm.similarity_threshold = 0.42",),
+    ),
+    "fuzzy_geocode_sig": QuerySpec(
+        "fuzzy_geocode_sig",
         "Q3_FUZZY_GEOCODE",
         _FUZZY_ROADS,
         ("SET LOCAL pg_trgm.similarity_threshold = 0.42",),
@@ -154,8 +169,16 @@ QUERY_SPECS: dict[str, QuerySpec] = {
         _SEARCH_SQL,
         ("SET LOCAL pg_trgm.similarity_threshold = 0.35",),
     ),
+    "search_sig": QuerySpec(
+        "search_sig",
+        "Q4_SEARCH",
+        _SEARCH_SQL,
+        ("SET LOCAL pg_trgm.similarity_threshold = 0.35",),
+    ),
     "reverse_nearest": QuerySpec("reverse_nearest", "Q5_REVERSE_NEAREST", _NEAREST_SQL),
+    "reverse_nearest_sig": QuerySpec("reverse_nearest_sig", "Q5_REVERSE_NEAREST", _NEAREST_SQL),
     "reverse_radius": QuerySpec("reverse_radius", "Q6_REVERSE_RADIUS", _NEAREST_SQL),
+    "reverse_radius_sig": QuerySpec("reverse_radius_sig", "Q6_REVERSE_RADIUS", _NEAREST_SQL),
     "zipcode_address": QuerySpec("zipcode_address", "Q7_ZIPCODE", _ZIP_BY_ADDRESS),
     "zipcode_point": QuerySpec("zipcode_point", "Q7_ZIPCODE", _ZIP_BY_POINT),
     "no_result_road": QuerySpec("no_result_road", "Q8_NO_RESULT", _LOOKUP_ROAD),
@@ -313,6 +336,20 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
                 source="mv_geocode_target",
             )
         )
+        road_wide_params = dict(params)
+        road_wide_params["si"] = None
+        road_wide_params["sgg"] = None
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q1-road-sig-{idx:03d}",
+                group="Q1_ROAD_EXACT",
+                sql_name="road_exact_sig",
+                params=_with_region_params(road_wide_params, sig_cd=str(row["sig_cd"])),
+                label=_row_label(row),
+                source="mv_geocode_target",
+                note="si/sgg removed and sig_cd filter applied",
+            )
+        )
         fuzzy_params = dict(params)
         fuzzy_params["road_nrm"] = _fuzzy_token(str(params["road_nrm"]))
         fuzzy_params["limit"] = 5
@@ -327,14 +364,53 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
                 note="road_nrm shortened to force trigram path",
             )
         )
+        fuzzy_wide_params = dict(fuzzy_params)
+        fuzzy_wide_params["si"] = None
+        fuzzy_wide_params["sgg"] = None
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q3-fuzzy-wide-{idx:03d}",
+                group="Q3_FUZZY_GEOCODE",
+                sql_name="fuzzy_geocode_wide",
+                params=fuzzy_wide_params,
+                label=_row_label(row),
+                source="mv_geocode_target",
+                note="si/sgg removed to measure wide trigram path",
+            )
+        )
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q3-fuzzy-sig-{idx:03d}",
+                group="Q3_FUZZY_GEOCODE",
+                sql_name="fuzzy_geocode_sig",
+                params=_with_region_params(fuzzy_wide_params, sig_cd=str(row["sig_cd"])),
+                label=_row_label(row),
+                source="mv_geocode_target",
+                note="si/sgg removed and sig_cd filter applied",
+            )
+        )
         cases.append(
             BenchmarkCase(
                 case_id=f"Q4-search-{idx:03d}",
                 group="Q4_SEARCH",
                 sql_name="search",
-                params={"query": row["rn"], "limit": 10, "offset": 0},
+                params=_with_empty_region_params({"query": row["rn"], "limit": 10, "offset": 0}),
                 label=str(row["rn"]),
                 source="mv_geocode_target",
+            )
+        )
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q4-search-sig-{idx:03d}",
+                group="Q4_SEARCH",
+                sql_name="search_sig",
+                params=_with_region_params(
+                    {"query": row["rn"], "limit": 10, "offset": 0},
+                    sig_cd=str(row["sig_cd"]),
+                ),
+                label=str(row["rn"]),
+                source="mv_geocode_target",
+                note="sig_cd filter applied to search query",
             )
         )
         cases.append(
@@ -353,19 +429,36 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
         )
 
     for idx, row in enumerate(parcel_rows, start=1):
+        parcel_params = _parcel_params(row)
         cases.append(
             BenchmarkCase(
                 case_id=f"Q2-parcel-{idx:03d}",
                 group="Q2_PARCEL_EXACT",
                 sql_name="parcel_exact",
-                params=_parcel_params(row),
+                params=parcel_params,
                 label=_row_label(row),
                 source="mv_geocode_target",
+            )
+        )
+        parcel_wide_params = dict(parcel_params)
+        parcel_wide_params["si"] = None
+        parcel_wide_params["sgg"] = None
+        parcel_wide_params["emd"] = None
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q2-parcel-bjd-{idx:03d}",
+                group="Q2_PARCEL_EXACT",
+                sql_name="parcel_exact_bjd",
+                params=_with_region_params(parcel_wide_params, bjd_cd=str(row["bjd_cd"])),
+                label=_row_label(row),
+                source="mv_geocode_target",
+                note="si/sgg/emd removed and bjd_cd filter applied",
             )
         )
 
     for idx, row in enumerate(point_rows, start=1):
         point_params: Params = {
+            **EMPTY_REGION_PARAMS,
             "x": cast("float", row["lon"]),
             "y": cast("float", row["lat"]),
             "in_srid": 4326,
@@ -384,12 +477,37 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
         )
         cases.append(
             BenchmarkCase(
+                case_id=f"Q5-reverse-nearest-sig-{idx:03d}",
+                group="Q5_REVERSE_NEAREST",
+                sql_name="reverse_nearest_sig",
+                params=_with_region_params(point_params, sig_cd=str(row["sig_cd"])),
+                label=_row_label(row),
+                source="mv_geocode_target",
+                note="sig_cd filter applied to nearest query",
+            )
+        )
+        cases.append(
+            BenchmarkCase(
                 case_id=f"Q6-reverse-radius-{idx:03d}",
                 group="Q6_REVERSE_RADIUS",
                 sql_name="reverse_radius",
                 params={**point_params, "radius_m": 200},
                 label=_row_label(row),
                 source="mv_geocode_target",
+            )
+        )
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q6-reverse-radius-sig-{idx:03d}",
+                group="Q6_REVERSE_RADIUS",
+                sql_name="reverse_radius_sig",
+                params=_with_region_params(
+                    {**point_params, "radius_m": 200},
+                    sig_cd=str(row["sig_cd"]),
+                ),
+                label=_row_label(row),
+                source="mv_geocode_target",
+                note="sig_cd filter applied to radius query",
             )
         )
         cases.append(
@@ -413,6 +531,7 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
                 group="Q8_NO_RESULT",
                 sql_name="no_result_road",
                 params={
+                    **EMPTY_REGION_PARAMS,
                     "si": "없는시",
                     "sgg": None,
                     "road_nrm": f"없는도로{idx}",
@@ -431,6 +550,7 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
                 group="Q8_NO_RESULT",
                 sql_name="no_result_reverse",
                 params={
+                    **EMPTY_REGION_PARAMS,
                     "x": 0.0,
                     "y": 0.0,
                     "in_srid": 4326,
@@ -615,7 +735,7 @@ def corpus_from_json(path: Path) -> tuple[BenchmarkCase, ...]:
                 case_id=str(item["case_id"]),
                 group=cast("QueryGroup", item["group"]),
                 sql_name=str(item["sql_name"]),
-                params=dict(item["params"]),
+                params=_with_empty_region_params(dict(item["params"])),
                 label=str(item["label"]),
                 source=str(item["source"]),
                 expected_status=str(item.get("expected_status", "OK")),
@@ -892,7 +1012,7 @@ async def _execute_case(
         await conn.execute(text(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'"))
         for setup in spec.setup_sql:
             await conn.execute(text(setup))
-        if case.sql_name == "search":
+        if _is_search_sql(case):
             return await _execute_search_case(conn, case)
         result = await conn.execute(spec.statement, case.params)
         return len(result.fetchall())
@@ -911,7 +1031,7 @@ async def _explain_case(
             await conn.execute(text(setup))
         statement = spec.statement
         params = case.params
-        if case.sql_name == "search" and await _search_exact_match_exists(conn, case):
+        if _is_search_sql(case) and await _search_exact_match_exists(conn, case):
             statement = _SEARCH_EXACT_SQL
             params = _search_exact_params(case.params)
         explain_sql = "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, SETTINGS) " + str(statement)
@@ -945,6 +1065,7 @@ def _search_exact_params(params: Params) -> Params:
         "query_nrm": _normalize_search_query(str(params["query"])),
         "limit": int(cast("int", params["limit"])),
         "offset": int(cast("int", params["offset"])),
+        **_region_params_from_params(params),
     }
 
 
@@ -974,7 +1095,8 @@ async def _sample_mv_rows(
         filters.extend(["pt_4326 IS NOT NULL", "pt_5179 IS NOT NULL"])
     where = " AND ".join(filters)
     sql = f"""
-SELECT bd_mgt_sn, si_nm, sgg_nm, emd_nm, li_nm, rn, rn_nrm, buld_mnnm,
+SELECT bd_mgt_sn, left(bjd_cd, 5) AS sig_cd, bjd_cd, si_nm, sgg_nm, emd_nm, li_nm,
+       rn, rn_nrm, buld_mnnm,
        buld_slno, buld_se_cd, mntn_yn, lnbr_mnnm, lnbr_slno, zip_no,
        ST_X(pt_4326) AS lon, ST_Y(pt_4326) AS lat
   FROM mv_geocode_target TABLESAMPLE SYSTEM (0.2) REPEATABLE (47)
@@ -984,11 +1106,13 @@ SELECT bd_mgt_sn, si_nm, sgg_nm, emd_nm, li_nm, rn, rn_nrm, buld_mnnm,
     try:
         rows = (await conn.execute(text(sql), {"limit": limit})).mappings().all()
     except (DBAPIError, ProgrammingError):
+        await conn.rollback()
         rows = []
     if len(rows) >= limit:
         return [dict(row) for row in rows]
     fallback = f"""
-SELECT bd_mgt_sn, si_nm, sgg_nm, emd_nm, li_nm, rn, rn_nrm, buld_mnnm,
+SELECT bd_mgt_sn, left(bjd_cd, 5) AS sig_cd, bjd_cd, si_nm, sgg_nm, emd_nm, li_nm,
+       rn, rn_nrm, buld_mnnm,
        buld_slno, buld_se_cd, mntn_yn, lnbr_mnnm, lnbr_slno, zip_no,
        ST_X(pt_4326) AS lon, ST_Y(pt_4326) AS lat
   FROM mv_geocode_target
@@ -1018,11 +1142,13 @@ SELECT sig_cd, makarea_id, makarea_nm,
         rows = (await conn.execute(text(sql), {"limit": limit})).mappings().all()
         return [dict(row) for row in rows]
     except (DBAPIError, ProgrammingError):
+        await conn.rollback()
         return []
 
 
 def _road_params(row: Mapping[str, Any]) -> Params:
     return {
+        **EMPTY_REGION_PARAMS,
         "si": row["si_nm"],
         "sgg": row["sgg_nm"],
         "road_nrm": row["rn_nrm"],
@@ -1034,6 +1160,7 @@ def _road_params(row: Mapping[str, Any]) -> Params:
 
 def _parcel_params(row: Mapping[str, Any]) -> Params:
     return {
+        **EMPTY_REGION_PARAMS,
         "si": row["si_nm"],
         "sgg": row["sgg_nm"],
         "emd": row["li_nm"] or row["emd_nm"],
@@ -1060,6 +1187,28 @@ def _fuzzy_token(value: str) -> str:
     if len(value) <= 3:
         return value
     return value[:-1]
+
+
+def _with_empty_region_params(params: Params) -> Params:
+    return {**EMPTY_REGION_PARAMS, **params}
+
+
+def _with_region_params(
+    params: Params,
+    *,
+    sig_cd: str | None = None,
+    bjd_cd: str | None = None,
+) -> Params:
+    hint = RegionHint(sig_cd=sig_cd, bjd_cd=bjd_cd)
+    return {**params, **hint.sql_params()}
+
+
+def _region_params_from_params(params: Params) -> Params:
+    return {name: params.get(name) for name in EMPTY_REGION_PARAMS}
+
+
+def _is_search_sql(case: BenchmarkCase) -> bool:
+    return case.sql_name in {"search", "search_sig"}
 
 
 async def _optional_count(conn: AsyncConnection, relation: str) -> int | None:

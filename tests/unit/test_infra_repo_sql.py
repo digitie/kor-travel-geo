@@ -69,11 +69,16 @@ def test_mv_sql_includes_search_exact_indexes() -> None:
 
 def test_optional_filters_cast_parameters_for_psycopg_type_inference() -> None:
     geocode_sql = str(geocode_repo._LOOKUP_ROAD)
+    reverse_sql = str(reverse_repo._NEAREST_SQL)
+    search_sql = str(search_repo._SEARCH_SQL)
     zip_sql = str(zip_repo._ZIP_BY_ADDRESS)
     pobox_sql = str(pobox_repo._POBOX_SQL)
 
     assert "CAST(:si AS text) IS NULL" in geocode_sql
     assert "CAST(:buld_se_cd AS text) IS NULL" in geocode_sql
+    assert "CAST(:sig_cd_filter AS text) IS NULL" in geocode_sql
+    assert "CAST(:bjd_cd_prefix AS text) IS NULL" in reverse_sql
+    assert "CAST(:sig_cd_prefix AS text) IS NULL" in search_sql
     assert "CAST(:mnnm AS integer) IS NULL" in zip_sql
     assert "CAST(:include_bulk AS boolean)" in str(zip_repo._ZIP_BY_BD)
     assert "CAST(:query AS text) IS NULL" in pobox_sql

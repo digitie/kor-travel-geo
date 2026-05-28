@@ -21,6 +21,8 @@ async def reverse_geocode(
     type: Literal["both", "road", "parcel"] = "both",
     zipcode: bool = True,
     radius_m: int | None = Query(default=None, ge=1, le=2000),
+    sig_cd: str | None = Query(default=None, pattern=r"^(\d{2}|\d{5})$"),
+    bjd_cd: str | None = Query(default=None, pattern=r"^(\d{8}|\d{10})$"),
     client: AsyncAddressClient = Depends(get_client),
 ) -> ReverseResponse:
     return await client.reverse_geocode(
@@ -30,5 +32,6 @@ async def reverse_geocode(
         type=type,
         zipcode=zipcode,
         radius_m=radius_m,
+        sig_cd=sig_cd,
+        bjd_cd=bjd_cd,
     )
-

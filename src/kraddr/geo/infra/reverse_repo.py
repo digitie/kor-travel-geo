@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.core.protocols import ReverseLookup, SppnAreaLookup
 from kraddr.geo.dto.common import Point
+from kraddr.geo.dto.region import RegionHint, region_params
 
 from ._rows import map_reverse, map_sppn_area
 
@@ -25,6 +26,10 @@ SELECT t.bd_mgt_sn, t.rncode_full, t.rn AS road_nm, t.buld_mnnm, t.buld_slno,
        ST_Distance(t.pt_5179, p.geom) AS distance_m
   FROM mv_geocode_target t, target_pt p
  WHERE t.pt_5179 IS NOT NULL
+   AND (CAST(:sig_cd_filter AS text) IS NULL OR t.bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
+   AND (CAST(:sig_cd_prefix AS text) IS NULL OR t.bjd_cd LIKE CAST(:sig_cd_prefix AS text))
+   AND (CAST(:bjd_cd_filter AS text) IS NULL OR t.bjd_cd = CAST(:bjd_cd_filter AS text))
+   AND (CAST(:bjd_cd_prefix AS text) IS NULL OR t.bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
    AND ST_DWithin(t.pt_5179, p.geom, :radius_m)
  ORDER BY t.pt_5179 <-> p.geom
  LIMIT :limit
@@ -67,6 +72,7 @@ class ReverseRepository:
         address_type: Literal["both", "road", "parcel"],
         radius_m: int,
         limit: int = 5,
+        region_hint: RegionHint | None = None,
     ) -> list[ReverseLookup]:
         in_srid = int(crs.split(":", 1)[1])
         async with self.engine.connect() as conn:
@@ -74,6 +80,7 @@ class ReverseRepository:
                 await conn.execute(
                     _NEAREST_SQL,
                     {
+                        **region_params(region_hint),
                         "x": point.x,
                         "y": point.y,
                         "in_srid": in_srid,

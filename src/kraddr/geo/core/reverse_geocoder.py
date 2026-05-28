@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from kraddr.geo.dto.geocode import SppnMakareaContext
+from kraddr.geo.dto.region import RegionHint
 from kraddr.geo.dto.reverse import (
     ReverseExtension,
     ReverseInput,
@@ -28,13 +29,19 @@ def _sppn_context(area: SppnAreaLookup) -> SppnMakareaContext:
     )
 
 
-async def reverse_geocode(repo: ReverseRepo, inp: ReverseInput) -> ReverseResponse:
+async def reverse_geocode(
+    repo: ReverseRepo,
+    inp: ReverseInput,
+    *,
+    region_hint: RegionHint | None = None,
+) -> ReverseResponse:
     rows = await repo.nearest(
         inp.point,
         crs=inp.crs,
         address_type=inp.type,
         radius_m=inp.radius_m,
         limit=5,
+        region_hint=region_hint,
     )
     sppn_areas = await repo.sppn_areas(inp.point, crs=inp.crs, limit=5)
     items = tuple(

@@ -39,13 +39,16 @@ def test_format_national_point_number_from_epsg5179_round_trips_cell() -> None:
 
 
 class _SppnGeocodeRepo:
-    async def lookup_by_road(self, parts):
+    async def lookup_by_road(self, parts, *, region_hint=None):
+        _ = region_hint
         return None
 
-    async def lookup_by_jibun(self, parts):
+    async def lookup_by_jibun(self, parts, *, region_hint=None):
+        _ = region_hint
         return None
 
-    async def fuzzy_roads(self, parts, *, limit: int = 5):
+    async def fuzzy_roads(self, parts, *, limit: int = 5, region_hint=None):
+        _ = region_hint
         return []
 
     async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None:
@@ -85,8 +88,9 @@ class _SppnReverseRepo:
         address_type: str,
         radius_m: int,
         limit: int = 5,
+        region_hint=None,
     ):
-        _ = (point, crs, address_type, radius_m, limit)
+        _ = (point, crs, address_type, radius_m, limit, region_hint)
         return []
 
     async def sppn_areas(

@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from kraddr.geo.dto.common import AddressType, Point, ZipSource
+from kraddr.geo.dto.region import RegionHint
 
 from .normalize import AddrParts
 
@@ -129,11 +130,27 @@ class ConsistencyReportRow:
 
 @runtime_checkable
 class GeocodeRepo(Protocol):
-    async def lookup_by_road(self, parts: AddrParts) -> AddressLookup | None: ...
+    async def lookup_by_road(
+        self,
+        parts: AddrParts,
+        *,
+        region_hint: RegionHint | None = None,
+    ) -> AddressLookup | None: ...
 
-    async def lookup_by_jibun(self, parts: AddrParts) -> AddressLookup | None: ...
+    async def lookup_by_jibun(
+        self,
+        parts: AddrParts,
+        *,
+        region_hint: RegionHint | None = None,
+    ) -> AddressLookup | None: ...
 
-    async def fuzzy_roads(self, parts: AddrParts, *, limit: int = 5) -> list[AddressLookup]: ...
+    async def fuzzy_roads(
+        self,
+        parts: AddrParts,
+        *,
+        limit: int = 5,
+        region_hint: RegionHint | None = None,
+    ) -> list[AddressLookup]: ...
 
     async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None: ...
 
@@ -148,6 +165,7 @@ class ReverseRepo(Protocol):
         address_type: Literal["both", "road", "parcel"],
         radius_m: int,
         limit: int = 5,
+        region_hint: RegionHint | None = None,
     ) -> list[ReverseLookup]: ...
 
     async def sppn_areas(
@@ -168,6 +186,7 @@ class SearchRepo(Protocol):
         search_type: Literal["address", "place", "district", "road"],
         page: int,
         size: int,
+        region_hint: RegionHint | None = None,
     ) -> tuple[list[SearchLookup], int]: ...
 
 
@@ -252,13 +271,34 @@ class FakeGeocodeRepo:
     jibun_result: AddressLookup | None = None
     fuzzy_result: list[AddressLookup] = field(default_factory=list)
 
-    async def lookup_by_road(self, parts: AddrParts) -> AddressLookup | None:
+    last_region_hint: RegionHint | None = None
+
+    async def lookup_by_road(
+        self,
+        parts: AddrParts,
+        *,
+        region_hint: RegionHint | None = None,
+    ) -> AddressLookup | None:
+        self.last_region_hint = region_hint
         return self.road_result
 
-    async def lookup_by_jibun(self, parts: AddrParts) -> AddressLookup | None:
+    async def lookup_by_jibun(
+        self,
+        parts: AddrParts,
+        *,
+        region_hint: RegionHint | None = None,
+    ) -> AddressLookup | None:
+        self.last_region_hint = region_hint
         return self.jibun_result
 
-    async def fuzzy_roads(self, parts: AddrParts, *, limit: int = 5) -> list[AddressLookup]:
+    async def fuzzy_roads(
+        self,
+        parts: AddrParts,
+        *,
+        limit: int = 5,
+        region_hint: RegionHint | None = None,
+    ) -> list[AddressLookup]:
+        self.last_region_hint = region_hint
         return self.fuzzy_result[:limit]
 
     async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None:

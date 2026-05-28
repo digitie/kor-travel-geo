@@ -7,6 +7,7 @@ from kraddr.geo.core.normalize import parse_address
 from kraddr.geo.core.protocols import AddressLookup, FakeGeocodeRepo
 from kraddr.geo.dto.common import Point
 from kraddr.geo.dto.geocode import GeocodeInput
+from kraddr.geo.dto.region import RegionHint
 
 
 def _lookup(*, confidence: float = 1.0, pt_source: str = "entrance") -> AddressLookup:
@@ -77,3 +78,17 @@ async def test_geocode_lowers_confidence_for_centroid_fallback() -> None:
     assert response.x_extension is not None
     assert response.x_extension.confidence == pytest.approx(0.82)
 
+
+@pytest.mark.asyncio
+async def test_geocode_forwards_region_hint_to_repository() -> None:
+    repo = FakeGeocodeRepo(road_result=_lookup())
+    hint = RegionHint(sig_cd="11110")
+
+    response = await geocode(
+        repo,
+        GeocodeInput(address="자하문로 94"),
+        region_hint=hint,
+    )
+
+    assert response.status == "OK"
+    assert repo.last_region_hint == hint
