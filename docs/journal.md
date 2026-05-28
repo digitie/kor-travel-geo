@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 09:45 (PR #51/#52 post-merge 리뷰 반영)
+
+**작업**: 사용자 지시에 따라 PR #51과 PR #52의 post-merge 리뷰 코멘트를 다시 확인하고, 후속 액션을 진행 가능한 문서 상태로 정리했다.
+
+**확인 결과**:
+- PR #51: conversation comment 1건, review 0건, review thread 0건.
+- PR #52: conversation comment 1건, review 0건, review thread 0건.
+- 두 PR 모두 unresolved inline thread는 없었다.
+
+**반영 상세**:
+- `docs/postmerge-review-fixups-pr51-pr52.md`를 추가해 리뷰 항목별 처리 상태를 정리했다.
+- `docs/t047-query-performance-tuning.md`에 corpus 생성 알고리즘, 후보 확정 run profile, PR #51/#52 후속 액션 표를 보강했다.
+- `docs/tasks.md`에서 T-060을 완료로 옮기고, 남은 T-047 후속을 `pg_stat_statements`, `standard --iterations 3`, stress corpus, pool wait/DB execution 분리, T-047 index 운영 영향, Q3 fuzzy/T-057 region hint로 명확히 정리했다.
+- `docs/resume.md`와 `CHANGELOG.md`를 동기화했다.
+
+**후속**:
+- 다음 T-047 측정 PR은 관측성/운영 영향 묶음으로 시작하는 것이 자연스럽다. 단, 운영 안전성 우선순위를 더 엄격히 적용하면 T-056부터 진행한다.
+
 ## 2026-05-28 08:55 (T-047 Q4 search exact preflight 튜닝)
 
 **작업**: Q4 통합 search의 broad trigram 병목을 줄이기 위해 exact preflight 경로와 전용 btree index를 추가했다.
