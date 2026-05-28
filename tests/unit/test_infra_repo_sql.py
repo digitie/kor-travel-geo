@@ -14,6 +14,7 @@ from kraddr.geo.infra import (
     search_repo,
     zip_repo,
 )
+from kraddr.geo.infra import sql as infra_sql
 from kraddr.geo.loaders.consistency import CASE_SQL, DEFAULT_CASES
 
 
@@ -44,6 +45,26 @@ def test_trgm_repos_use_set_local_not_global_threshold() -> None:
     assert "SET LOCAL pg_trgm.similarity_threshold" in geocode_source
     assert "SET LOCAL pg_trgm.similarity_threshold" in search_source
     assert "SET pg_trgm.similarity_threshold" not in geocode_source.replace("SET LOCAL", "")
+
+
+def test_search_repo_uses_exact_preflight_before_broad_trgm_search() -> None:
+    exact_sql = str(search_repo._SEARCH_EXACT_SQL)
+    source = inspect.getsource(search_repo.SearchRepository.search)
+
+    assert "rn_nrm = :query_nrm" in exact_sql
+    assert "buld_nm_nrm = :query_nrm" in exact_sql
+    assert "_SEARCH_EXACT_SQL" in source
+    assert "exact_total > 0" in source
+    assert source.index("_SEARCH_EXACT_SQL") < source.index("_SEARCH_SQL")
+
+
+def test_mv_sql_includes_search_exact_indexes() -> None:
+    mv_sql = infra_sql.MV_SQL
+
+    assert "idx_mv_rn_nrm_exact" in mv_sql
+    assert "ON mv_geocode_target (rn_nrm, bd_mgt_sn)" in mv_sql
+    assert "idx_mv_buld_nm_nrm_exact" in mv_sql
+    assert "WHERE buld_nm_nrm IS NOT NULL" in mv_sql
 
 
 def test_optional_filters_cast_parameters_for_psycopg_type_inference() -> None:

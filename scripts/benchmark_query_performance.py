@@ -29,7 +29,7 @@ from sqlalchemy.exc import DBAPIError, ProgrammingError
 from kraddr.geo.infra.engine import make_async_engine
 from kraddr.geo.infra.geocode_repo import _FUZZY_ROADS, _LOOKUP_JIBUN, _LOOKUP_ROAD
 from kraddr.geo.infra.reverse_repo import _NEAREST_SQL, _SPPN_AREAS_SQL
-from kraddr.geo.infra.search_repo import _SEARCH_SQL
+from kraddr.geo.infra.search_repo import _SEARCH_EXACT_SQL, _SEARCH_SQL, _normalize_search_query
 from kraddr.geo.infra.zip_repo import _ZIP_BY_ADDRESS, _ZIP_BY_POINT
 from kraddr.geo.settings import Settings, get_settings
 
@@ -515,6 +515,8 @@ async def collect_environment(
                 "idx_mv_jibun",
                 "idx_mv_rn_trgm",
                 "idx_mv_buld_nm_trgm",
+                "idx_mv_rn_nrm_exact",
+                "idx_mv_buld_nm_nrm_exact",
                 "idx_mv_geom5179",
             )
         }
@@ -758,6 +760,8 @@ async def _execute_case(
         await conn.execute(text(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'"))
         for setup in spec.setup_sql:
             await conn.execute(text(setup))
+        if case.sql_name == "search":
+            return await _execute_search_case(conn, case)
         result = await conn.execute(spec.statement, case.params)
         return len(result.fetchall())
 
@@ -769,14 +773,47 @@ async def _explain_case(
     statement_timeout_ms: int,
 ) -> object:
     spec = _spec_for_case(case)
-    explain_sql = "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, SETTINGS) " + str(spec.statement)
     async with conn.begin():
         await conn.execute(text(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'"))
         for setup in spec.setup_sql:
             await conn.execute(text(setup))
-        result = await conn.execute(text(explain_sql), case.params)
+        statement = spec.statement
+        params = case.params
+        if case.sql_name == "search" and await _search_exact_match_exists(conn, case):
+            statement = _SEARCH_EXACT_SQL
+            params = _search_exact_params(case.params)
+        explain_sql = "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, SETTINGS) " + str(statement)
+        result = await conn.execute(text(explain_sql), params)
         first = result.scalar_one()
     return first
+
+
+async def _execute_search_case(conn: AsyncConnection, case: BenchmarkCase) -> int:
+    exact_params = _search_exact_params(case.params)
+    exact_rows = (await conn.execute(_SEARCH_EXACT_SQL, exact_params)).fetchall()
+    exact_total = int(exact_rows[0]._mapping["total"]) if exact_rows else 0
+    if exact_total > 0:
+        return len(exact_rows)
+    result = await conn.execute(_SEARCH_SQL, case.params)
+    return len(result.fetchall())
+
+
+async def _search_exact_match_exists(
+    conn: AsyncConnection,
+    case: BenchmarkCase,
+) -> bool:
+    exact_params = _search_exact_params(case.params)
+    exact_rows = (await conn.execute(_SEARCH_EXACT_SQL, exact_params)).fetchall()
+    exact_total = int(exact_rows[0]._mapping["total"]) if exact_rows else 0
+    return exact_total > 0
+
+
+def _search_exact_params(params: Params) -> Params:
+    return {
+        "query_nrm": _normalize_search_query(str(params["query"])),
+        "limit": int(cast("int", params["limit"])),
+        "offset": int(cast("int", params["offset"])),
+    }
 
 
 def _spec_for_case(case: BenchmarkCase) -> QuerySpec:

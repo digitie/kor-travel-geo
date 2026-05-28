@@ -442,6 +442,11 @@ CREATE INDEX idx_mv_road  ON mv_geocode_target (rncode_full, buld_mnnm, buld_sln
 CREATE INDEX idx_mv_jibun ON mv_geocode_target (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
 CREATE INDEX idx_mv_jibun_name_exact ON mv_geocode_target
   (si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno, emd_nm, li_nm, pt_source, bd_mgt_sn);
+CREATE INDEX idx_mv_rn_nrm_exact ON mv_geocode_target (rn_nrm, bd_mgt_sn);
+CREATE INDEX idx_mv_buld_nm_nrm_exact ON mv_geocode_target
+  (buld_nm_nrm, bd_mgt_sn) WHERE buld_nm_nrm IS NOT NULL;
+CREATE INDEX idx_mv_rn_trgm ON mv_geocode_target USING GIN (rn_nrm gin_trgm_ops);
+CREATE INDEX idx_mv_buld_nm_trgm ON mv_geocode_target USING GIN (buld_nm_nrm gin_trgm_ops);
 CREATE INDEX idx_mv_geom5179 ON mv_geocode_target USING GIST (pt_5179);  -- 거리/nearest 1차 경로
 CREATE INDEX idx_mv_geom4326 ON mv_geocode_target USING GIST (pt_4326);  -- 응답 직렬화 보조
 CREATE INDEX idx_mv_pt_source ON mv_geocode_target (pt_source);          -- entrance vs centroid 통계

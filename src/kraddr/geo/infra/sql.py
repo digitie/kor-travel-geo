@@ -788,6 +788,10 @@ CREATE INDEX idx_mv_jibun_name_exact
     si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno,
     emd_nm, li_nm, pt_source, bd_mgt_sn
   );
+CREATE INDEX idx_mv_rn_nrm_exact
+  ON mv_geocode_target (rn_nrm, bd_mgt_sn);
+CREATE INDEX idx_mv_buld_nm_nrm_exact
+  ON mv_geocode_target (buld_nm_nrm, bd_mgt_sn) WHERE buld_nm_nrm IS NOT NULL;
 CREATE INDEX idx_mv_rn_trgm
   ON mv_geocode_target USING GIN (rn_nrm gin_trgm_ops);
 CREATE INDEX idx_mv_buld_nm_trgm

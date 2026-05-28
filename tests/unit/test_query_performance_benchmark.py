@@ -12,6 +12,7 @@ from scripts.benchmark_query_performance import (
     BenchmarkCase,
     Measurement,
     _case_group_counts,
+    _search_exact_params,
     build_parser,
     corpus_from_json,
     corpus_to_json,
@@ -135,3 +136,13 @@ def test_corpus_json_roundtrip(tmp_path: Path) -> None:
     assert loaded == cases
     assert json.loads(path.read_text(encoding="utf-8"))[0]["case_id"] == "Q1-road-001"
     assert _case_group_counts(loaded) == {"Q1_ROAD_EXACT": 1}
+
+
+def test_search_exact_preflight_params_match_repository_normalization() -> None:
+    params = {"query": "선릉로 111길", "limit": 10, "offset": 20}
+
+    assert _search_exact_params(params) == {
+        "query_nrm": "선릉로111길",
+        "limit": 10,
+        "offset": 20,
+    }
