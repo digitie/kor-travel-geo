@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     loader_temp_schema: str = "staging"
     upload_set_ttl_days: int = Field(default=30, ge=1)
     upload_set_active_grace_minutes: int = Field(default=360, ge=1)
+    ops_table_stats_capture_interval_minutes: int = Field(default=0, ge=0)
+    ops_table_stats_capture_limit: int = Field(default=500, ge=1, le=2_000)
+    ops_table_stats_capture_on_startup: bool = False
     mvm_res_code_actions: dict[str, LoadCodeAction] = Field(
         default_factory=_default_mvm_res_code_actions
     )

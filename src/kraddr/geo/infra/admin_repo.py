@@ -114,6 +114,8 @@ _ROW_COUNT_OBJECTS = (
     "mv_geocode_text_search",
 )
 
+_OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0
+
 _CONSISTENCY_SAMPLE_SELECT = """
 SELECT sample_id::text AS sample_id, report_id, case_code, severity, sample_rank,
        bd_mgt_sn, rncode_full, sig_cd, bjd_cd, distance_m, source_yyyymm,
@@ -852,6 +854,21 @@ RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
     ) -> list[TableStatsSnapshot]:
         captured_at = datetime.now(UTC)
         async with self.engine.begin() as conn:
+            locked = await conn.scalar(
+                text("SELECT pg_try_advisory_xact_lock(:lock_key)"),
+                {"lock_key": _OPS_TABLE_STATS_ADVISORY_LOCK},
+            )
+            if locked is not True:
+                return []
+            resolved_snapshot_id = snapshot_id
+            snapshot_link = "explicit"
+            if resolved_snapshot_id is None:
+                resolved_snapshot_id = await _active_release_snapshot_id_for_conn(conn)
+                snapshot_link = (
+                    "active_serving_release"
+                    if resolved_snapshot_id is not None
+                    else "unlinked"
+                )
             stats_rows = (
                 await conn.execute(
                     text(
@@ -906,7 +923,7 @@ SELECT n.nspname AS schema_name,
             records = [
                 {
                     "stats_id": str(uuid4()),
-                    "snapshot_id": snapshot_id,
+                    "snapshot_id": resolved_snapshot_id,
                     "captured_at": captured_at,
                     "schema_name": row["schema_name"],
                     "object_name": row["object_name"],
@@ -920,7 +937,10 @@ SELECT n.nspname AS schema_name,
                     "dead_tuples": row["dead_tuples"],
                     "last_vacuum": row["last_vacuum"],
                     "last_analyze": row["last_analyze"],
-                    "stats": {"source": "pg_class_pg_stat_user_tables"},
+                    "stats": {
+                        "source": "pg_class_pg_stat_user_tables",
+                        "snapshot_link": snapshot_link,
+                    },
                 }
                 for row in stats_rows
             ]
@@ -1994,6 +2014,21 @@ RETURNING release_id, snapshot_id, state, release_kind, previous_release_id,
         },
     )
     return _dataset_snapshot(dict(snapshot_row)), _serving_release(dict(release_row))
+
+
+async def _active_release_snapshot_id_for_conn(conn: Any) -> str | None:
+    value = await conn.scalar(
+        text(
+            """
+SELECT snapshot_id::text
+  FROM ops.serving_releases
+ WHERE state = 'active'
+ ORDER BY activated_at DESC NULLS LAST, created_at DESC
+ LIMIT 1
+"""
+        )
+    )
+    return _optional_str(value)
 
 
 async def _insert_ops_audit_event(

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any, cast
 
@@ -43,6 +44,8 @@ from kraddr.geo.version import __version__
 
 from .routers import admin, geocode, healthz, pobox, reverse, search, v2, zipcode
 
+_LOGGER = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -54,9 +57,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _register_default_handlers(queue, client.engine)
     app.state.job_queue = queue
     await queue.recover_startup()
+    table_stats_task = _start_table_stats_capture_scheduler(client.engine, get_settings())
+    app.state.table_stats_capture_task = table_stats_task
     try:
         yield
     finally:
+        if table_stats_task is not None:
+            table_stats_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await table_stats_task
         await client.__aexit__(None, None, None)
 
 
@@ -126,6 +135,40 @@ def _install_admission_control(app: FastAPI, settings: Settings) -> None:
 
 
 app = create_app()
+
+
+def _start_table_stats_capture_scheduler(
+    engine: AsyncEngine,
+    settings: Settings,
+) -> asyncio.Task[None] | None:
+    if settings.ops_table_stats_capture_interval_minutes <= 0:
+        return None
+    return asyncio.create_task(_run_table_stats_capture_scheduler(engine, settings))
+
+
+async def _run_table_stats_capture_scheduler(engine: AsyncEngine, settings: Settings) -> None:
+    interval_s = settings.ops_table_stats_capture_interval_minutes * 60
+    if settings.ops_table_stats_capture_on_startup:
+        await _capture_table_stats_once(engine, settings)
+
+    while True:
+        await asyncio.sleep(interval_s)
+        await _capture_table_stats_once(engine, settings)
+
+
+async def _capture_table_stats_once(engine: AsyncEngine, settings: Settings) -> None:
+    try:
+        rows = await AdminRepository(engine).capture_table_stats_snapshots(
+            limit=settings.ops_table_stats_capture_limit,
+        )
+    except Exception:
+        _LOGGER.exception("failed to capture ops.table_stats_snapshots")
+        return
+
+    _LOGGER.info(
+        "captured ops.table_stats_snapshots",
+        extra={"row_count": len(rows), "limit": settings.ops_table_stats_capture_limit},
+    )
 
 
 def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> None:

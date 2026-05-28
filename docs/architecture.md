@@ -208,6 +208,8 @@ full-load / daily / restore / mv_refresh / benchmark
 
 T-046의 백업 artifact, T-047의 성능 리포트, C2/C4/C6/C7 data-quality export는 모두 `ops.artifacts`로 수렴한다. 이 공통 registry를 쓰면 checksum, 보존 기간, callback, download link, 관련 job/snapshot/release를 같은 방식으로 추적할 수 있다.
 
+T-050 5차부터 `ops.table_stats_snapshots`는 수동 capture API뿐 아니라 API lifespan의 opt-in scheduler로도 쌓을 수 있다. 기본값은 비활성이라 개발 서버가 예기치 않은 write를 만들지 않고, interval을 켜면 주기 결과가 현재 active serving release snapshot에 자동 연결된다. 여러 API worker가 동시에 깨어나도 capture transaction은 advisory lock으로 한 번만 통과한다.
+
 ## 데이터 흐름 — 일변동 적용
 
 ```

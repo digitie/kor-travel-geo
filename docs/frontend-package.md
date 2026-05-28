@@ -298,7 +298,7 @@ T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/loa
 - artifact 목록: `db_backup`, `db_restore_log`, `consistency_report`, `perf_report`, `source_inventory`, `schema_diff`를 같은 table에서 표시한다. `/admin/ops`는 전체 관제 목록을 유지하고, `db_backup` 다운로드/삭제 action은 `/admin/backups`의 작업 화면에서 수행한다.
 - audit event 목록: action, outcome, 생성 시각을 표시한다. API key, DSN password, token, callback secret, 주소 원문은 backend redaction을 거친 payload만 받는다.
 - maintenance window: `full_load`, `restore`, `schema_migration`, `mv_refresh`, `read_only`, `exclusive` window를 typed confirmation과 함께 생성한다. confirmation 원문은 DB에 저장하지 않고 hash만 저장한다.
-- table stats snapshot: `POST /v1/admin/ops/table-stats/capture`로 table/MV/index size와 추정 row count snapshot을 수집하고 최근 결과를 표시한다.
+- table stats snapshot: `POST /v1/admin/ops/table-stats/capture`로 table/MV/index size와 추정 row count snapshot을 수동 수집하고 최근 결과를 표시한다. 백엔드에서 `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`를 켜면 같은 목록에 주기 capture 결과가 쌓이며, `snapshot_id` 미지정 결과는 현재 active serving release snapshot에 연결된다.
 
 테스트는 현재 backend redaction/route contract와 frontend lint/type/build로 시작한다. 후속 UI 고도화 시 secret redaction 표시, active release 한 건 강조, artifact type filter, audit event pagination, maintenance window 만료 상태를 추가한다.
 

@@ -25,6 +25,13 @@ T-050 4차 이후 연결된 지점:
 - 단독 MV refresh는 `release_kind='manual_rebuild'` active release로 기록한다.
 - restore 성공 시에는 serving 전환 전 단계의 `validated` snapshot과 `pending` restore release 후보를 자동 생성하고 restore artifact와 연결한다.
 
+T-050 5차 이후 연결된 지점:
+
+- `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`가 1 이상이면 API lifespan에서 `ops.table_stats_snapshots` 주기 capture task를 시작한다.
+- 수동/주기 capture에서 `snapshot_id`를 생략하면 현재 active serving release의 `snapshot_id`에 자동 연결한다.
+- active release가 없거나 명시 연결이 아닌 경우도 `stats.snapshot_link`에 연결 방식을 남겨 trend 해석 기준을 보존한다.
+- 여러 API worker가 같은 주기로 capture를 실행해도 `pg_try_advisory_xact_lock(0x4B4700A0)`으로 동시 실행을 한 번만 통과시켜 중복 row를 줄인다.
+
 아직 남은 연결점:
 
 - daily delta 완료 후 `ops.dataset_snapshots` row를 자동 생성하는 흐름은 후속 delta refresh gate에서 보강한다.
@@ -231,6 +238,8 @@ append-only 운영 감사 이벤트다. 주소 검색 요청 전체를 저장하
 
 - 전국 full-load, MV swap, backup, restore, performance benchmark 전후에 capture한다.
 - `exact_rows`는 대형 테이블에서 비용이 크므로 모든 run에서 강제하지 않는다. `estimated_rows`와 표본/핵심 테이블 exact count를 섞는다.
+- API 내장 scheduler는 기본 비활성이다. `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`를 1 이상으로 설정하면 분 단위 주기로 capture하며, `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_ON_STARTUP=true`일 때만 서버 시작 직후 1회를 추가 수행한다.
+- `snapshot_id` 미지정 capture는 현재 active serving release의 `snapshot_id`에 연결하고, 연결 방식은 `stats.snapshot_link`에 기록한다.
 
 ## API와 UI 범위
 
@@ -260,7 +269,7 @@ UI는 `/admin/ops` 또는 기존 `/admin/backups`, `/admin/load`, `/admin/consis
 1. 완료: Alembic migration으로 `ops` 스키마와 6개 테이블을 추가한다.
 2. 완료: 공통 redaction/hash helper를 만든다. secret, DSN, token, 주소 원문 저장 방지 테스트를 먼저 작성한다.
 3. 부분 완료: `load.submit`, `mv_refresh.submit`, `load.cancel`, `consistency_check.submit`, maintenance window 생성/종료, rollback plan 조회는 audit event를 남긴다. T-050 4차에서 serving release activate/candidate audit을 추가했다. source set plan 확정과 backup artifact 세부 audit은 후속으로 연결한다.
-4. 부분 완료: `/v1/admin/ops/table-stats/capture`로 `ops.table_stats_snapshots`를 생성할 수 있다. full-load MV swap과 restore는 자동 dataset snapshot으로 연결했고, daily delta snapshot은 후속 delta refresh gate에서 연결한다.
+4. 완료: `/v1/admin/ops/table-stats/capture`로 `ops.table_stats_snapshots`를 생성할 수 있고, opt-in scheduler가 같은 capture 경로를 주기 실행한다. full-load MV swap과 restore는 자동 dataset snapshot으로 연결했고, daily delta snapshot은 후속 delta refresh gate에서 연결한다.
 5. 완료: MV swap 성공 시 `ops.serving_releases` active row를 교체한다.
 6. 대기: T-046 백업 artifact와 T-047 성능 리포트를 `ops.artifacts`로 연결한다.
 7. 완료: REST/AsyncAddressClient DTO와 관리 UI를 추가한다.

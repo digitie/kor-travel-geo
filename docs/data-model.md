@@ -773,7 +773,7 @@ CREATE SCHEMA IF NOT EXISTS ops;
 | `ops.serving_releases` | 현재 active serving release와 rollback lineage 기록 | `ops.dataset_snapshots`, `mv_geocode_target` swap job |
 | `ops.artifacts` | backup, restore log, consistency export, performance report, source inventory, schema diff 공통 registry | `load_jobs`, `ops.dataset_snapshots`, `ops.serving_releases` |
 | `ops.maintenance_windows` | destructive restore, schema migration, full reset, exclusive MV swap 차단/허용 상태 | `load_jobs`, `ops.audit_events` |
-| `ops.table_stats_snapshots` | table/MV/index row count, size, bloat, analyze 상태 추세 | `ops.dataset_snapshots`, T-047 benchmark |
+| `ops.table_stats_snapshots` | table/MV/index row count, size, bloat, analyze 상태 추세. T-050 5차부터 수동 capture와 API opt-in 주기 capture가 모두 현재 active serving release snapshot에 자동 연결된다. | `ops.dataset_snapshots`, T-047 benchmark |
 
 `ops.audit_events.payload_redacted`와 `ops.artifacts.manifest`에는 API key, DSN password, callback secret, download token을 평문 저장하지 않는다. 주소 원문도 감사 목적에 꼭 필요하지 않으면 hash 또는 마스킹 값만 저장한다.
 
