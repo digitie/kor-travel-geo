@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 22:39 (PR #69 리뷰 반영 — v2 candidate distance/precision 보강)
+
+**작업**: PR #69 formal review의 provider 비교 코멘트를 T-052 PR에 바로 반영했다.
+
+**반영**:
+- `CandidateV2.distance_m`을 first-class 필드로 추가하고 reverse 변환에서 `metadata.distance_m`와 함께 채운다.
+- reverse v2 `confidence`를 고정 `1.0`에서 `1 - distance_m / radius_m` 기반 근접도 점수로 바꿨다.
+- `CandidateV2.point_precision` enum을 추가하고, 현재 채움 범위와 후속 `pt_source` 연결 필요성을 API reference에 명시했다.
+- `V2Source`가 현재 구현 가능한 `local`/`vworld`/`juso`/`cache`만 허용하며 Kakao/Naver/Google live adapter는 별도 task/ADR에서 확장한다는 문구를 보강했다.
+
+**검증**:
+- PR #69 commit 갱신 전 targeted/unit/OpenAPI/frontend type 검증을 다시 수행한다.
+
+## 2026-05-28 20:43 (T-052 API v1/v2 분리와 AI-friendly 문서화)
+
+**작업**: vworld 호환 v1 표면을 유지하면서 신규 v2 candidate schema와 API reference를 추가했다.
+
+**반영**:
+- 사용자 재확인에 따라 v2는 Kakao/Naver/Google/VWorld 직접 wrapper가 아니라 각 API 스타일의 장점을 참고한 `kraddr-geo` 자체 API로 정리했다.
+- `src/kraddr/geo/dto/v2.py`, `core/v2.py`, `api/routers/v2.py`를 추가하고 `/v2/geocode`, `/v2/reverse`, `/v2/search`를 연결했다.
+- `AsyncAddressClient.geocode_v2()`, `reverse_v2()`, `search_v2()`를 추가했다.
+- `docs/api-reference/`와 LLM 요약 문서를 추가했고, `openapi.json` 및 `kraddr-geo-ui` 생성 타입을 갱신했다.
+- v1 외부 fallback은 기존 ADR-019의 vworld/juso만 유지하고, Kakao/Naver/Google 호출과 새 API key는 추가하지 않았다.
+
+**후속**:
+- T-052 PR merge 후 T-053 코딩 전에 먼저 C1~C10 분석/판별/승인 UI 요구를 문서에 상세화한다.
+- T-053 완료 뒤에는 사용자 최신 지시에 따라 T-061 Q3 fuzzy slim text-search를 먼저 진행한다.
+
 ## 2026-05-28 19:48 (T-052/T-053 선행 정리 — PR #67 리뷰 후속)
 
 **작업**: PR #67 리뷰 후속과 사용자 확인사항을 T-052/T-053 본작업 전 선행 정리로 반영했다.

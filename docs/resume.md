@@ -99,12 +99,13 @@
 - ✅ T-044 `maplibre-vworld-js` 0.1.0 기준 문서-only 재확인 — GitHub tag `v0.1.0` commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`의 package manifest, public export, `VWorldMap`, marker/layer primitive, VWorld helper를 확인했다. npm registry에는 아직 `maplibre-vworld@0.1.0`이 없어 dependency는 바꾸지 않았고, 사용자 지시에 따라 upstream 코드는 직접 수정하지 않았다. 상세: `docs/t044-maplibre-vworld-010-review.md`
 - ✅ T-056 `python-kraddr-base` Address 코드 helper 정리 — 실제 `~/dev/python-kraddr-base`는 Git checkout이 아니고 `GPL-3.0-or-later`라 원본 코드를 복사하지 않았다. 대신 `core/address/codes.py`에 시군구/법정동/도로명관리번호/도로명주소관리번호 helper를 공개 주소 코드 규칙 기반 독립 구현으로 두고, Juso fallback 좌표 API 파라미터 정규화에 연결했다. 상세: `docs/t056-kraddr-base-address-merge.md`
 - ✅ T-052/T-053 선행 정리 — PR #67 리뷰 후속으로 T-056의 라이선스 표현을 "공개 주소 코드 규칙 기반 독립 구현, GPL 원본 코드 미복사"로 바로잡았다. 사용자 확인에 따라 "조합/분리"가 코드 식별자 조합·분해·정규화 의도였음을 문서화했고, Juso 검색 결과에 좌표 API 필수 코드가 없으면 coord API를 호출하지 않는 회귀 테스트를 추가했다.
+- ✅ T-052 외부 API 스타일 비교 + API v1/v2 분리 + AI-friendly 문서화 — v2는 Kakao/Naver/Google/VWorld 직접 wrapper가 아니라 각 API 스타일의 장점을 참고한 자체 candidate schema로 정리했다. `/v2/geocode`, `/v2/reverse`, `/v2/search`, `AsyncAddressClient.geocode_v2/reverse_v2/search_v2`, `docs/api-reference/`, OpenAPI와 frontend 생성 타입을 추가했다. 기존 v1 fallback은 ADR-019의 vworld/juso만 유지한다. 상세: `docs/t052-api-providers-v1-v2.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 사용자 최신 지시에 따라 T-052 외부 provider 비교 + API v1/v2 분리 + AI-friendly 문서화다. T-056 `core.address` helper를 provider adapter 공통 주소 코드 정규화 계층으로 재사용하고, v1 호환 표면은 유지하면서 v2 DTO/router/client/API reference skeleton을 먼저 작게 세운다.
+다음 작업은 사용자 최신 지시에 따라 T-053 Admin UI C1~C10 상세 분석/수동 판별 콘솔이다. 코딩 전에 `docs/t053-admin-ui-ops-statistics.md`를 먼저 보강해 C1~C10 기준 설명, maplibre-vworld-js 지도 오버레이, 테이블 비교, sample 승인/거절/보류/메모/재검증 흐름, 필요한 v1/v2 API 확장을 구체화한다.
 
-그 이후의 작업 후보는 T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-061(Q3 fuzzy slim text-search 구조) → T-050(운영 hardening) → T-055(N150/Odroid 실측) 순서다.
+그 이후의 작업 후보는 사용자 최신 지시에 따라 T-061(Q3 fuzzy slim text-search 구조) → T-050(운영 hardening) → T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-055(N150/Odroid 실측) 순서다. T-027 최종 클린 적재 검증은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.

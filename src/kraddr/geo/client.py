@@ -13,6 +13,12 @@ from .core.geocoder import geocode as core_geocode
 from .core.poboxer import pobox as core_pobox
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
+from .core.v2 import (
+    geocode_v2_from_search,
+    geocode_v2_from_v1,
+    reverse_v2_from_v1,
+    search_v2_from_v1,
+)
 from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
     AuditEvent,
@@ -40,6 +46,15 @@ from .dto.pobox import PoboxInput, PoboxKind, PoboxResponse
 from .dto.region import RegionHint
 from .dto.reverse import ReverseResponse, ReverseType
 from .dto.search import SearchResponse, SearchType
+from .dto.v2 import (
+    BBoxV2,
+    GeocodeV2Input,
+    GeocodeV2Response,
+    ReverseV2Input,
+    ReverseV2Response,
+    SearchV2Input,
+    SearchV2Response,
+)
 from .dto.zipcode import ZipcodeResponse
 from .infra.admin_repo import AdminRepository
 from .infra.batch import batch_children
@@ -145,6 +160,52 @@ class AsyncAddressClient:
 
         return tuple(await asyncio.gather(*(one(address) for address in addresses)))
 
+    async def geocode_v2(
+        self,
+        *,
+        query: str | None = None,
+        road_address: str | None = None,
+        jibun_address: str | None = None,
+        keyword: str | None = None,
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
+        bbox: BBoxV2 | None = None,
+        limit: int = 10,
+        fallback: Literal["none", "api"] = "none",
+    ) -> GeocodeV2Response:
+        inp = GeocodeV2Input(
+            query=query,
+            road_address=road_address,
+            jibun_address=jibun_address,
+            keyword=keyword,
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+            bbox=bbox,
+            limit=limit,
+            fallback=fallback,
+        )
+        if keyword and not any((query, road_address, jibun_address)):
+            search_response = await self.search_v2(
+                query=keyword,
+                type="place",
+                size=limit,
+                sig_cd=sig_cd,
+                bjd_cd=bjd_cd,
+                bbox=bbox,
+            )
+            return geocode_v2_from_search(inp, search_response)
+
+        address = road_address or jibun_address or query or keyword
+        assert address is not None
+        response = await self.geocode(
+            address,
+            type="parcel" if jibun_address and not road_address else "road",
+            fallback="api" if fallback == "api" else "local_only",
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+        )
+        return geocode_v2_from_v1(inp, response)
+
     async def reverse_geocode(
         self,
         x: float,
@@ -173,6 +234,39 @@ class AsyncAddressClient:
             region_hint=self._region_hint(sig_cd, bjd_cd),
         )
 
+    async def reverse_v2(
+        self,
+        lon: float,
+        lat: float,
+        *,
+        crs: str = "EPSG:4326",
+        include_region: bool = True,
+        include_zipcode: bool = True,
+        radius_m: int | None = None,
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
+    ) -> ReverseV2Response:
+        inp = ReverseV2Input(
+            lon=lon,
+            lat=lat,
+            crs=crs,
+            include_region=include_region,
+            include_zipcode=include_zipcode,
+            radius_m=radius_m or self.settings.api_default_radius_m,
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+        )
+        response = await self.reverse_geocode(
+            lon,
+            lat,
+            crs=crs,
+            zipcode=include_zipcode,
+            radius_m=inp.radius_m,
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+        )
+        return reverse_v2_from_v1(inp, response)
+
     async def search(
         self,
         query: str,
@@ -192,6 +286,38 @@ class AsyncAddressClient:
             inp,
             region_hint=self._region_hint(sig_cd, bjd_cd),
         )
+
+    async def search_v2(
+        self,
+        *,
+        query: str,
+        type: Literal["address", "place", "district", "road", "category"] = "address",
+        category_group_code: str | None = None,
+        page: int = 1,
+        size: int = 10,
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
+        bbox: BBoxV2 | None = None,
+    ) -> SearchV2Response:
+        inp = SearchV2Input(
+            query=query,
+            type=type,
+            category_group_code=category_group_code,
+            page=page,
+            size=size,
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+            bbox=bbox,
+        )
+        response = await self.search(
+            query,
+            type="place" if type == "category" else type,
+            page=page,
+            size=size,
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+        )
+        return search_v2_from_v1(inp, response)
 
     async def zipcode(
         self,

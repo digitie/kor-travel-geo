@@ -84,3 +84,30 @@ async def test_admission_control_skips_non_address_paths() -> None:
         )
 
     assert [response.status_code for response in responses] == [200, 200]
+
+
+@pytest.mark.asyncio
+async def test_admission_control_limits_v2_paths() -> None:
+    app = FastAPI()
+    _install_admission_control(app, Settings(api_max_concurrency=1))
+    active = 0
+    max_active = 0
+
+    @app.get("/v2/slow")
+    async def slow() -> dict[str, str]:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return {"status": "OK"}
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        responses = await asyncio.gather(
+            client.get("/v2/slow"),
+            client.get("/v2/slow"),
+        )
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert max_active == 1
