@@ -65,6 +65,14 @@ def test_build_api_cases_maps_geocode_addresses() -> None:
                 label="서울특별시 강남구 테헤란로 152",
                 source="mv_geocode_target",
             ),
+            CorpusCase(
+                case_id="Q4-search-fuzzy-001",
+                group="Q4_SEARCH",
+                sql_name="search_fuzzy",
+                params={"query": "테헤란로임의불일치", "limit": 10},
+                label="테헤란로",
+                source="synthetic",
+            ),
         )
     )
 
@@ -75,6 +83,9 @@ def test_build_api_cases_maps_geocode_addresses() -> None:
     assert cases[1].params["type"] == "parcel"
     assert cases[2].params["address"] == "테헤란길 152"
     assert cases[2].params["sig_cd"] == "11680"
+    assert cases[3].path == "/v1/address/search"
+    assert cases[3].sql_name == "search_fuzzy"
+    assert cases[3].params["query"] == "테헤란로임의불일치"
 
 
 def test_address_helpers_preserve_parseable_road_suffixes() -> None:

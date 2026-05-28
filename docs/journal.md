@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 17:42 (T-062 PR #53~#64 리뷰 audit/fixup)
+
+**작업**: T-057 merge 직후 사용자 지시에 따라 PR #53부터 #64까지 아직 별도 audit하지 않은 PR 리뷰를 모두 재확인했다.
+
+**확인**:
+- 각 PR의 conversation comment, formal review, inline review thread, GraphQL `reviewThreads`를 확인했다.
+- 모든 PR의 unresolved review thread는 0건이었다.
+
+**직접 반영**:
+- PR #53: search exact preflight의 Python/SQL 정규화 규칙을 문서화하고, shadow MV index 문서 오타를 수정했다. exact preflight가 없는 broad trigram fallback을 계속 측정하도록 `search_fuzzy` benchmark case와 REST 변환 case를 추가했다.
+- PR #55: `pg_stat_statements` 조회/reset을 `x_extension` schema-qualified SQL로 고정했다.
+- PR #59: reverse 좌표 bounds validation을 `PydanticCustomError("kraddr_geo.coordinate_bounds", ...)` 기반 structured mapping으로 바꿔 문자열 전체 매칭 의존을 제거했다.
+- PR #62: REST admission repeat 문서에 c64 tail 중심 비교 이유를 추가했다.
+- PR #63: `tar.zst` SHA256 checksum 시간을 측정하고, backup envelope와 `tar.zst`의 의미를 단일 artifact 포장/checksum 단순화 중심으로 보강했다.
+
+**후속**:
+- 다음 작업은 사용자 추가 지시에 따라 T-044를 `maplibre-vworld-js` 0.1.0 기준으로 다시 확인하는 문서-only PR이다. upstream 코드는 직접 수정하지 않고 `python-kraddr-geo` 문서에 보완점을 남긴다.
+
+**검증**:
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`, `git diff --check`, `codegraph sync`를 통과했다.
+- 전체 pytest 결과는 216 passed, 6 skipped, 3 warnings다.
+
 ## 2026-05-28 16:20 (T-057 행정구역 hint 기반 검색 가속)
 
 **작업**: `sig_cd`/`bjd_cd` 명시 hint를 라이브러리와 REST API, raw SQL repository, T-047 SQL/REST benchmark harness에 연결했다.

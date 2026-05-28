@@ -892,6 +892,8 @@ UI 요구사항도 있다. 백업/복원은 오래 걸리므로 요청-응답으
 
 T-046의 기본 백업 형식은 `pg_dump -Fd --jobs <N>` directory format dump를 임시 디렉터리에 만든 뒤, `manifest.json`, checksum, job log와 함께 `tar.zst` 단일 압축 아카이브로 저장하는 방식으로 한다. 복원은 archive를 해제하고 `pg_restore -Fd --jobs <N>`로 새 빈 DB에 수행한다.
 
+T-047 전국 DB 실측 보정: `pg_dump -Fd` directory 내부의 대형 table data는 이미 `.dat.gz`로 압축되어 있어 `tar.zst` 포장 단계의 추가 압축률은 매우 작았다. dump directory 4,313,361,824 bytes가 archive 4,308,457,630 bytes가 되어 약 4.9MiB만 줄었다. 따라서 이 ADR의 `tar.zst`는 압축률보다 단일 artifact 보관, UI 다운로드, checksum 검증을 단순화하기 위한 포장 형식으로 해석한다.
+
 세부 결정:
 
 1. 운영 기본값은 `directory_tar_zstd`다. `pg_dump -Fp` plain SQL은 디버깅 목적 외에는 사용하지 않는다.

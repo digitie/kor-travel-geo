@@ -447,10 +447,15 @@ def _api_case_for_corpus(case: CorpusCase) -> ApiCase | None:
             },
             expected_status=None,
         )
-    if case.sql_name in {"search", "search_sig"}:
+    if case.sql_name in {"search", "search_sig", "search_fuzzy"}:
+        api_sql_name = {
+            "search": "search",
+            "search_sig": "search_hint",
+            "search_fuzzy": "search_fuzzy",
+        }[case.sql_name]
         return _api_case(
             case,
-            "search_hint" if case.sql_name == "search_sig" else "search",
+            api_sql_name,
             "/v1/address/search",
             {
                 "query": str(params["query"]),

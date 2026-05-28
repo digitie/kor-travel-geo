@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from typing import TYPE_CHECKING
 
@@ -36,6 +37,17 @@ def test_query_benchmark_parser_defaults() -> None:
     assert args.max_overflow is None
     assert args.reset_pg_stat_statements is False
     assert args.pg_stat_limit == 50
+
+
+def test_pg_stat_statements_uses_extension_schema_prefix() -> None:
+    import scripts.benchmark_query_performance as benchmark
+
+    capture_source = inspect.getsource(benchmark.capture_pg_stat_statements)
+    status_source = inspect.getsource(benchmark._pg_stat_statements_status)
+
+    assert "x_extension.pg_stat_statements_reset()" in capture_source
+    assert "FROM x_extension.pg_stat_statements" in capture_source
+    assert "x_extension.pg_stat_statements LIMIT 1" in status_source
 
 
 def test_query_benchmark_parser_accepts_multiple_concurrency_values() -> None:
@@ -171,6 +183,22 @@ def test_search_exact_preflight_params_match_repository_normalization() -> None:
         "bjd_cd_filter": None,
         "bjd_cd_prefix": None,
     }
+
+
+def test_search_fuzzy_case_uses_search_execution_path() -> None:
+    import scripts.benchmark_query_performance as benchmark
+
+    case = BenchmarkCase(
+        case_id="Q4-search-fuzzy-001",
+        group="Q4_SEARCH",
+        sql_name="search_fuzzy",
+        params={"query": "퇴계임의불일치", "limit": 10, "offset": 0},
+        label="퇴계로",
+        source="synthetic",
+    )
+
+    assert "search_fuzzy" in benchmark.QUERY_SPECS
+    assert benchmark._is_search_sql(case)
 
 
 def test_pg_stat_delta_uses_queryid_and_sorts_by_total_exec_time() -> None:

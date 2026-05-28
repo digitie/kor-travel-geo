@@ -175,6 +175,12 @@ QUERY_SPECS: dict[str, QuerySpec] = {
         _SEARCH_SQL,
         ("SET LOCAL pg_trgm.similarity_threshold = 0.35",),
     ),
+    "search_fuzzy": QuerySpec(
+        "search_fuzzy",
+        "Q4_SEARCH",
+        _SEARCH_SQL,
+        ("SET LOCAL pg_trgm.similarity_threshold = 0.35",),
+    ),
     "reverse_nearest": QuerySpec("reverse_nearest", "Q5_REVERSE_NEAREST", _NEAREST_SQL),
     "reverse_nearest_sig": QuerySpec("reverse_nearest_sig", "Q5_REVERSE_NEAREST", _NEAREST_SQL),
     "reverse_radius": QuerySpec("reverse_radius", "Q6_REVERSE_RADIUS", _NEAREST_SQL),
@@ -411,6 +417,23 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
                 label=str(row["rn"]),
                 source="mv_geocode_target",
                 note="sig_cd filter applied to search query",
+            )
+        )
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q4-search-fuzzy-{idx:03d}",
+                group="Q4_SEARCH",
+                sql_name="search_fuzzy",
+                params=_with_empty_region_params(
+                    {
+                        "query": f"{row['rn']}임의불일치",
+                        "limit": 10,
+                        "offset": 0,
+                    }
+                ),
+                label=str(row["rn"]),
+                source="synthetic",
+                note="intentional no-exact-match search case for broad trigram fallback",
             )
         )
         cases.append(
@@ -768,7 +791,7 @@ async def capture_pg_stat_statements(
             return payload
         if reset:
             try:
-                await conn.execute(text("SELECT pg_stat_statements_reset()"))
+                await conn.execute(text("SELECT x_extension.pg_stat_statements_reset()"))
                 await conn.commit()
             except (DBAPIError, ProgrammingError) as exc:
                 await conn.rollback()
@@ -787,7 +810,7 @@ SELECT queryid::text AS queryid,
        shared_blks_read,
        temp_blks_written,
        left(query, 4000) AS query
-  FROM pg_stat_statements
+  FROM x_extension.pg_stat_statements
  WHERE dbid = (
        SELECT oid FROM pg_database WHERE datname = current_database()
  )
@@ -1208,7 +1231,7 @@ def _region_params_from_params(params: Params) -> Params:
 
 
 def _is_search_sql(case: BenchmarkCase) -> bool:
-    return case.sql_name in {"search", "search_sig"}
+    return case.sql_name in {"search", "search_sig", "search_fuzzy"}
 
 
 async def _optional_count(conn: AsyncConnection, relation: str) -> int | None:
@@ -1259,7 +1282,7 @@ SELECT EXISTS (
     if not installed:
         return False, "pg_stat_statements extension is not installed"
     try:
-        await conn.execute(text("SELECT 1 FROM pg_stat_statements LIMIT 1"))
+        await conn.execute(text("SELECT 1 FROM x_extension.pg_stat_statements LIMIT 1"))
     except (DBAPIError, ProgrammingError) as exc:
         await conn.rollback()
         return False, _redact_error(exc)
