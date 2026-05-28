@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 14:56 (T-047 backup archive 압축 측정)
+
+**작업**: T-047 인덱스 운영 영향 측정에서 남겨 둔 `tar.zst` archive 단계를 실제 `zstd` CLI로 측정했다.
+
+**측정**:
+- `apt download zstd` 후 `/tmp/codex-zstd/usr/bin/zstd`를 사용했다.
+- zstd: `v1.5.5`.
+- 입력: `artifacts/perf/t047-operational-impact-20260528/pgdump-dir`.
+- 출력: `artifacts/perf/t047-operational-impact-20260528/pgdump-dir.tar.zst`.
+- 명령: `tar --use-compress-program=/tmp/codex-zstd/usr/bin/zstd\ -T0\ -3`.
+- archive wall time: 33.31초.
+- max RSS: 112,768KiB.
+- dump directory bytes: 4,313,361,824.
+- archive bytes: 4,308,457,630.
+- SHA256: `94f404bdf9a4a3956009f961f966e7bca3b90f42eecfc083e83add7b1ea87883`.
+
+**결론**:
+- `pg_dump -Fd` directory 내부의 대형 table data는 이미 `.dat.gz`라 `zstd` 포장 단계에서 크기 감소는 거의 없었다.
+- archive 단계 자체는 33.31초로 짧았다. 전국 DB 백업 envelope는 `pg_dump -Fd` 2분 21.60초 + archive 33.31초 + checksum 단계로 보면 된다.
+- T-047 자체 잔여였던 backup archive 측정은 완료했다. Q3 fuzzy 후보 축소는 T-057 region hint 또는 text-search slim MV 후속으로 넘긴다.
+
 ## 2026-05-28 14:35 (T-047 REST admission candidate 반복 측정)
 
 **작업**: REST worker/pool/admission exploratory grid에서 후보로 남긴 `w2/p8/a8`, `w4/p4/a4`를 기본 profile과 함께 `iterations=3`으로 반복 측정했다.

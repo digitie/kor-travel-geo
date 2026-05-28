@@ -333,7 +333,35 @@ shadow `swap` phase 중 T-047 exact index 비용:
 | dump command RSS max | 32,200KiB |
 | filesystem output | 8,424,792 blocks |
 
-현재 WSL 환경에는 `zstd` CLI가 없어 T-046의 최종 `tar.zst` archive 단계는 실행하지 못했다. 따라서 이번 PR의 백업 수치는 archive 압축 전 `pg_dump -Fd` dump directory 기준이다. 다음 backup archive 측정 전에는 `zstd` CLI를 설치하거나 backup helper에 검증된 fallback 압축 경로를 추가해야 한다.
+이후 `apt download zstd`로 로컬 `/tmp/codex-zstd/usr/bin/zstd`를 확보해 T-046 방식의 최종 archive 단계도 직접 측정했다.
+
+실행:
+
+```bash
+tar --use-compress-program=/tmp/codex-zstd/usr/bin/zstd\ -T0\ -3 \
+  -cf artifacts/perf/t047-operational-impact-20260528/pgdump-dir.tar.zst \
+  -C artifacts/perf/t047-operational-impact-20260528 \
+  pgdump-dir pgdump.log pgdump.time mv-concurrent.json mv-swap.json
+```
+
+archive 결과:
+
+| 항목 | 값 |
+|------|----:|
+| zstd | `v1.5.5` |
+| archive wall time | 33.31초 |
+| archive user/system time | 9.30초 / 65.83초 |
+| archive CPU | 225% |
+| archive RSS max | 112,768KiB |
+| dump directory bytes | 4,313,361,824 |
+| archive bytes | 4,308,457,630 |
+| archive SHA256 | `94f404bdf9a4a3956009f961f966e7bca3b90f42eecfc083e83add7b1ea87883` |
+
+해석:
+
+- `pg_dump -Fd` 산출물의 대형 table data가 이미 `.dat.gz`로 압축되어 있어, `tar.zst` 단계는 크기를 크게 줄이지 못했다. 이번 run의 archive는 dump directory보다 약 4.9MiB 작았다.
+- 그래도 단일 `.tar.zst` artifact 포장은 33.31초로 짧았고, UI 다운로드·외부 보관·checksum 검증을 단순화하는 장점은 유지된다.
+- 전국 DB 백업 envelope는 `pg_dump -Fd` 2분 21.60초 + archive 33.31초 + checksum 단계로 보는 것이 맞다. checksum은 archive SHA256 산출물까지 생성했지만 별도 `/usr/bin/time` 측정은 하지 않았다.
 
 ## 2026-05-28 T-047 stress corpus benchmark
 
@@ -599,7 +627,7 @@ PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와
 | 항목 | 다음 처리 |
 |------|-----------|
 | `pg_stat_statements` | Docker/PostgreSQL 설정, schema extension, before/after/delta artifact, 활성 DB의 `standard --iterations 3` run을 완료했다. |
-| 인덱스 운영 비용 | T-047 exact index 3개 포함 상태에서 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했다. `tar.zst` archive는 로컬 `zstd` CLI 부재로 후속에 남긴다. |
+| 인덱스 운영 비용 | T-047 exact index 3개 포함 상태에서 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했다. 이후 `apt download zstd`로 `tar.zst` archive도 직접 측정해 33.31초/4,308,457,630 bytes/SHA256 `94f404bdf9a4a3956009f961f966e7bca3b90f42eecfc083e83add7b1ea87883`를 기록했다. |
 | SQL 상수 public module | T-052 v2 API 또는 SQL 재사용 표면 확대 시 `infra.*_repo`의 underscore 상수를 public SQL module로 추출한다. |
 | Q3 fuzzy | T-057 region hint 또는 text-search slim MV 후보로 도로명 trgm 후보 폭을 줄인다. |
 | stress corpus | 11,000건 corpus와 88,000 measurement로 c1/c4/c16/c64를 측정했다. error 0, c16 p95 34ms 이하, c64 tail은 대부분 checkout 대기였다. |
