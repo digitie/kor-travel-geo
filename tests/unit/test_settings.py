@@ -50,6 +50,9 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.backup_default_jobs == 4
     assert settings.backup_default_compression_level == 3
     assert "localhost" in settings.backup_callback_allowed_hosts
+    assert settings.backup_callback_secret is None
+    assert settings.backup_callback_max_attempts == 3
+    assert settings.backup_callback_backoff_ms == 500
 
 
 def test_settings_normalize_backup_csv_values() -> None:

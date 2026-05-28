@@ -900,7 +900,7 @@ T-047 전국 DB 실측 보정: `pg_dump -Fd` directory 내부의 대형 table da
 2. 백업 profile은 `serving-ready`, `lean-serving`, `forensic`으로 나눈다. 기본 `serving-ready`는 `mv_geocode_target` data를 포함해 복원 직후 조회가 가능해야 한다.
 3. 백업/복원 작업 kind는 `db_backup`, `db_restore`로 둔다. 초기 구현은 기존 `load_jobs` 기반 영속 큐를 재사용하되, REST 표면은 중립 alias `/v1/admin/jobs/*`를 우선 사용한다.
 4. 백업 파일은 사용자가 지정한 서버 측 allowlist 하위 경로에 저장한다. 브라우저 로컬 경로를 직접 쓰지 않는다.
-5. callback URL은 allowlist host만 허용한다. T-046 1차 구현은 terminal state(`done`, `failed`, `cancelled`)에서 1회 delivery를 시도하고, callback 실패는 백업/복원 성공 여부와 별도로 `callback_state`에 기록한다. 제한 횟수 재시도와 backoff는 후속 hardening에서 추가한다.
+5. callback URL은 allowlist host만 허용한다. T-050 2차 이후 terminal delivery 경로(`done`, `failed`)는 제한 횟수 retry와 exponential backoff를 적용하고, payload body는 timestamp와 callback ID를 포함해 HMAC-SHA256으로 서명한다. callback 실패는 백업/복원 성공 여부와 별도로 `callback_state`와 `manifest.callback_delivery`에 기록한다.
 6. UI는 `/admin/backups` 페이지를 추가한다. 백업 생성, 진행 중 작업, 백업 목록, 복원 탭을 제공하고, 완료된 artifact에는 다운로드 링크를 표시한다.
 7. 복원은 기본적으로 새 빈 DB에만 허용한다. 현재 운영 DB를 덮어쓰는 `replace_current`는 maintenance mode, typed confirmation, 선행 백업, rollback plan을 요구하는 별도 위험 경로로 둔다.
 
@@ -937,10 +937,11 @@ T-047 전국 DB 실측 보정: `pg_dump -Fd` directory 내부의 대형 table da
 - `pg_dump`/`pg_restore` command builder는 DSN password를 argv에서 제거하고 `PGPASSWORD` 환경변수로 주입한다. 로그용 command도 password를 포함하지 않는다.
 - `KRADDR_GEO_BACKUP_ALLOWED_DIRS`와 `KRADDR_GEO_BACKUP_CALLBACK_ALLOWED_HOSTS`는 문서 예시처럼 comma-separated env 값을 받을 수 있도록 `NoDecode` + validator로 처리한다.
 - 대구광역시 부분 적재 DB `kraddr_geo_t046_daegu`를 `t046_daegu_backup.tar.zst`로 백업하고, `kraddr_geo_t046_daegu_restore`에 복원해 row count와 geocode/reverse smoke test를 비교했다.
+- T-050 2차에서 callback HMAC header, retry/backoff, attempt별 callback ID, `manifest.callback_delivery` 기록을 추가했다. 수신자 측 replay 저장소는 이 저장소가 관리하지 않으므로 운영 endpoint에서 timestamp window와 callback ID de-duplication을 적용해야 한다.
 
 ### 후속
 
-- (open) callback retry/backoff와 delivery attempt audit를 추가한다.
+- (open) callback 수신 endpoint 예제와 replay window/de-duplication 운영 가이드를 추가한다.
 - (open) restore 취소 시 target DB drop/quarantine 정책을 구현한다.
 - (open) 디스크 여유 공간 사전 추정과 PostgreSQL/PostGIS major mismatch hard-fail 정책을 추가한다.
 - (open) 같은 호스트 초고속 재해복구가 필요하면 물리 snapshot 전략을 별도 ADR로 검토한다.

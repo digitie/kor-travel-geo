@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 04:29 (T-050 운영 hardening 2차 — backup/restore callback)
+
+**작업**: T-046 backup/restore callback을 1회 단순 전송에서 HMAC 서명, retry/backoff, replay 판별 가능한 전송 계약으로 보강했다.
+
+**반영**:
+- `KRADDR_GEO_BACKUP_CALLBACK_MAX_ATTEMPTS`, `KRADDR_GEO_BACKUP_CALLBACK_BACKOFF_MS`, `KRADDR_GEO_BACKUP_CALLBACK_SECRET` 설정을 추가했다.
+- callback payload는 `callback_id`, `timestamp`, `attempt`, `max_attempts`를 포함하고, compact JSON byte를 기준으로 HMAC-SHA256 서명한다.
+- header는 `x-kraddr-geo-event`, `x-kraddr-geo-callback-id`, `x-kraddr-geo-timestamp`, `x-kraddr-geo-signature`를 보낸다.
+- 각 retry attempt마다 새 `callback_id`를 발급하고, delivery 결과를 `ops.artifacts.callback_state`와 `manifest.callback_delivery`에 기록한다.
+- callback 실패는 backup/restore artifact 자체의 성공/실패를 뒤집지 않는다.
+- `docs/t050-ops-hardening.md`와 `docs/t046-db-backup-restore.md`에 실제 payload/header/운영 기록 방식을 갱신했다.
+
+**검증**:
+- 대상 `ruff check`
+- 대상 `pytest tests/unit/test_backup_restore.py tests/unit/test_settings.py -q`
+- 대상 `mypy --no-incremental src/kraddr/geo/infra/backup.py src/kraddr/geo/settings.py`
+
+**후속**:
+- PR merge 후 T-050 3차로 backup/restore file/archive size 기반 sub-progress를 진행한다.
+
 ## 2026-05-29 03:35 (T-050 운영 hardening 1차 — upload set cleanup)
 
 **작업**: T-050을 여러 PR로 나누기로 하고, 첫 단위로 upload set cleanup TTL과 실행 중 job 참조 보호를 구현했다.

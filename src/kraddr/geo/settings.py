@@ -85,6 +85,9 @@ class Settings(BaseSettings):
         "127.0.0.1",
         "::1",
     )
+    backup_callback_secret: SecretStr | None = None
+    backup_callback_max_attempts: int = Field(default=3, ge=1, le=10)
+    backup_callback_backoff_ms: int = Field(default=500, ge=0, le=60_000)
     backup_download_token_secret: SecretStr | None = None
 
     @field_validator("pg_dsn", mode="before")

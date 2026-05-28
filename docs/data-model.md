@@ -803,7 +803,7 @@ CREATE TABLE db_backup_artifacts (
   row_counts           JSONB,
   download_token_hash  TEXT,
   callback_url         TEXT,
-  callback_state       TEXT CHECK (callback_state IN ('none','pending','delivered','retrying','failed')),
+  callback_state       TEXT CHECK (callback_state IN ('none','pending','delivered','failed')),
   error_message        TEXT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   finished_at          TIMESTAMPTZ,
@@ -814,7 +814,7 @@ CREATE INDEX idx_db_backup_artifacts_state ON db_backup_artifacts (state, create
 CREATE INDEX idx_db_backup_artifacts_job ON db_backup_artifacts (job_id);
 ```
 
-`archive_path`는 서버 내부 보관 경로다. API 응답과 callback payload에는 운영자가 볼 수 있는 범위에서만 노출하고, 다운로드는 별도 tokenized endpoint를 사용한다. `manifest`에는 PostgreSQL/PostGIS version, Alembic revision, backup profile, `pg_dump` jobs, source set, 핵심 row count, checksum을 넣는다. callback 실패는 artifact 실패와 별개이므로 `callback_state`로 따로 관리한다.
+`archive_path`는 서버 내부 보관 경로다. API 응답에는 운영자가 볼 수 있는 범위에서만 노출하고, 다운로드는 별도 tokenized endpoint를 사용한다. T-050 이후 callback payload에는 서버 내부 경로를 직접 넣지 않고 artifact id, state, size, checksum, job id, `callback_id`, timestamp, attempt 정보를 HMAC 서명 header와 함께 보낸다. `manifest`에는 PostgreSQL/PostGIS version, Alembic revision, backup profile, `pg_dump` jobs, source set, 핵심 row count, checksum, callback delivery 결과를 넣는다. callback 실패는 artifact 실패와 별개이므로 `callback_state`로 따로 관리한다.
 
 복원 작업은 새 artifact를 만들지 않지만, 사용한 `artifact_id`, target DB, validation summary를 `load_jobs.payload`와 `log_tail`에 남긴다. 복원 이력 테이블이 필요해질 만큼 감사 요구가 커지면 `db_restore_runs`를 별도 추가한다.
 

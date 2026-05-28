@@ -192,7 +192,7 @@ ignore_imports = ["kraddr.geo.api.routers.admin -> kraddr.geo.loaders"]
 | 캐시 | `cache_enabled`, `cache_ttl_days` | `geo_cache` 테이블 사용 |
 | 로깅 | `log_level`, `log_format` | `json` 권장 |
 | 로더 | `loader_data_dir`, `loader_batch_size`, `loader_temp_schema` | |
-| 백업/복원 | `backup_allowed_dirs`, `backup_temp_dir`, `backup_default_jobs`, `backup_artifact_ttl_days`, `backup_callback_allowed_hosts` | T-046. 서버 측 allowlist 경로에만 `.tar.zst` artifact 저장 |
+| 백업/복원 | `backup_allowed_dirs`, `backup_temp_dir`, `backup_default_jobs`, `backup_artifact_ttl_days`, `backup_callback_allowed_hosts`, `backup_callback_secret`, `backup_callback_max_attempts`, `backup_callback_backoff_ms` | T-046/T-050. 서버 측 allowlist 경로에만 `.tar.zst` artifact 저장, callback은 HMAC 서명과 retry/backoff 적용 |
 | 성능 벤치마크 | `perf_artifact_dir`, `perf_default_iterations`, `perf_default_concurrency`, `perf_query_timeout_ms` | T-047. 전국 DB query benchmark 산출물과 기본 반복 횟수 |
 
 `get_settings()`는 lazy 싱글톤. 테스트에서는 `reset_settings()`로 싱글톤을 비우고, 명시 주입이 필요할 때만 `set_settings(settings)`를 사용한다.
