@@ -1,0 +1,70 @@
+"""Provider-neutral v2 address endpoints."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends
+
+from kraddr.geo.api.deps import get_client
+from kraddr.geo.client import AsyncAddressClient
+from kraddr.geo.dto.v2 import (
+    GeocodeV2Input,
+    GeocodeV2Response,
+    ReverseV2Input,
+    ReverseV2Response,
+    SearchV2Input,
+    SearchV2Response,
+)
+
+router = APIRouter(tags=["v2"])
+
+
+@router.post("/geocode", response_model=GeocodeV2Response, response_model_exclude_none=True)
+async def geocode_v2(
+    req: GeocodeV2Input,
+    client: AsyncAddressClient = Depends(get_client),
+) -> GeocodeV2Response:
+    return await client.geocode_v2(
+        query=req.query,
+        road_address=req.road_address,
+        jibun_address=req.jibun_address,
+        keyword=req.keyword,
+        sig_cd=req.sig_cd,
+        bjd_cd=req.bjd_cd,
+        bbox=req.bbox,
+        limit=req.limit,
+        fallback=req.fallback,
+    )
+
+
+@router.post("/reverse", response_model=ReverseV2Response, response_model_exclude_none=True)
+async def reverse_v2(
+    req: ReverseV2Input,
+    client: AsyncAddressClient = Depends(get_client),
+) -> ReverseV2Response:
+    return await client.reverse_v2(
+        req.lon,
+        req.lat,
+        crs=req.crs,
+        include_region=req.include_region,
+        include_zipcode=req.include_zipcode,
+        radius_m=req.radius_m,
+        sig_cd=req.sig_cd,
+        bjd_cd=req.bjd_cd,
+    )
+
+
+@router.post("/search", response_model=SearchV2Response, response_model_exclude_none=True)
+async def search_v2(
+    req: SearchV2Input,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SearchV2Response:
+    return await client.search_v2(
+        query=req.query,
+        type=req.type,
+        category_group_code=req.category_group_code,
+        page=req.page,
+        size=req.size,
+        sig_cd=req.sig_cd,
+        bjd_cd=req.bjd_cd,
+        bbox=req.bbox,
+    )

@@ -121,6 +121,119 @@
         ],
         "type": "string"
       },
+      "AddressV2": {
+        "additionalProperties": false,
+        "description": "Provider-neutral address projection.",
+        "properties": {
+          "admin_dong_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Dong Code"
+          },
+          "building_management_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Building Management Number"
+          },
+          "full": {
+            "title": "Full",
+            "type": "string"
+          },
+          "legal_dong_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Dong Code"
+          },
+          "parcel_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parcel Address"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code"
+          },
+          "road_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Road Address"
+          },
+          "road_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Road Name"
+          },
+          "road_name_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Road Name Code"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AddressType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "full"
+        ],
+        "title": "AddressV2",
+        "type": "object"
+      },
       "AuditEvent": {
         "additionalProperties": false,
         "properties": {
@@ -308,6 +421,36 @@
           "max_y"
         ],
         "title": "BBox",
+        "type": "object"
+      },
+      "BBoxV2": {
+        "additionalProperties": false,
+        "description": "EPSG:4326 bounding box in external `(lon, lat)` order.",
+        "properties": {
+          "max_lat": {
+            "title": "Max Lat",
+            "type": "number"
+          },
+          "max_lon": {
+            "title": "Max Lon",
+            "type": "number"
+          },
+          "min_lat": {
+            "title": "Min Lat",
+            "type": "number"
+          },
+          "min_lon": {
+            "title": "Min Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "min_lon",
+          "min_lat",
+          "max_lon",
+          "max_lat"
+        ],
+        "title": "BBoxV2",
         "type": "object"
       },
       "BackupArtifact": {
@@ -669,6 +812,131 @@
           "expired"
         ],
         "title": "CacheMetrics",
+        "type": "object"
+      },
+      "CandidateV2": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AddressV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BBoxV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "distance_m": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance M"
+          },
+          "match_kind": {
+            "enum": [
+              "road",
+              "parcel",
+              "postal",
+              "keyword",
+              "category",
+              "region",
+              "sppn"
+            ],
+            "title": "Match Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlaceV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "point_precision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "exact",
+                  "interpolated",
+                  "centroid",
+                  "approximate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point Precision"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "default": "local",
+            "enum": [
+              "local",
+              "vworld",
+              "juso",
+              "cache"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confidence",
+          "match_kind"
+        ],
+        "title": "CandidateV2",
         "type": "object"
       },
       "ConsistencyCase": {
@@ -1376,6 +1644,154 @@
           "point"
         ],
         "title": "GeocodeResult",
+        "type": "object"
+      },
+      "GeocodeV2Input": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BBoxV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{8}|\\d{10})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "fallback": {
+            "default": "none",
+            "enum": [
+              "none",
+              "api"
+            ],
+            "title": "Fallback",
+            "type": "string"
+          },
+          "jibun_address": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jibun Address"
+          },
+          "keyword": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword"
+          },
+          "limit": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "road_address": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Road Address"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{2}|\\d{5})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sig Cd"
+          }
+        },
+        "title": "GeocodeV2Input",
+        "type": "object"
+      },
+      "GeocodeV2Response": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CandidateV2"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "input": {
+            "$ref": "#/components/schemas/GeocodeV2Input"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "string"
+          },
+          "region_hint_applied": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "status",
+          "input"
+        ],
+        "title": "GeocodeV2Response",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -2151,6 +2567,64 @@
         "title": "OpsArtifact",
         "type": "object"
       },
+      "PlaceV2": {
+        "additionalProperties": false,
+        "properties": {
+          "category_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Code"
+          },
+          "category_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Name"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PlaceV2",
+        "type": "object"
+      },
       "PoboxInput": {
         "additionalProperties": false,
         "properties": {
@@ -2391,6 +2865,122 @@
           "structure"
         ],
         "title": "RefinedAddress",
+        "type": "object"
+      },
+      "RegionHint": {
+        "additionalProperties": false,
+        "description": "Optional administrative-code hint used to narrow local SQL search space.",
+        "properties": {
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "8-digit legal dong prefix or 10-digit legal dong code.",
+            "title": "Bjd Cd"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "2-digit sido prefix or 5-digit sigungu code.",
+            "title": "Sig Cd"
+          }
+        },
+        "title": "RegionHint",
+        "type": "object"
+      },
+      "RegionV2": {
+        "additionalProperties": false,
+        "properties": {
+          "admin_dong": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Dong"
+          },
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "eup_myeon_dong": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eup Myeon Dong"
+          },
+          "legal_dong": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Dong"
+          },
+          "sido": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sido"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sig Cd"
+          },
+          "sigungu": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sigungu"
+          }
+        },
+        "title": "RegionV2",
         "type": "object"
       },
       "RestoreCreateRequest": {
@@ -2677,6 +3267,109 @@
         "title": "ReverseResultItem",
         "type": "object"
       },
+      "ReverseV2Input": {
+        "additionalProperties": false,
+        "properties": {
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{8}|\\d{10})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/CRS",
+            "default": "EPSG:4326"
+          },
+          "include_region": {
+            "default": true,
+            "title": "Include Region",
+            "type": "boolean"
+          },
+          "include_zipcode": {
+            "default": true,
+            "title": "Include Zipcode",
+            "type": "boolean"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          },
+          "radius_m": {
+            "default": 200,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Radius M",
+            "type": "integer"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{2}|\\d{5})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sig Cd"
+          }
+        },
+        "required": [
+          "lon",
+          "lat"
+        ],
+        "title": "ReverseV2Input",
+        "type": "object"
+      },
+      "ReverseV2Response": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CandidateV2"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "input": {
+            "$ref": "#/components/schemas/ReverseV2Input"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "string"
+          },
+          "region_hint_applied": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "status",
+          "input"
+        ],
+        "title": "ReverseV2Response",
+        "type": "object"
+      },
       "RollbackPlan": {
         "additionalProperties": false,
         "properties": {
@@ -2893,6 +3586,139 @@
           "title"
         ],
         "title": "SearchResultItem",
+        "type": "object"
+      },
+      "SearchV2Input": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BBoxV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{8}|\\d{10})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "category_group_code": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Group Code"
+          },
+          "page": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{2}|\\d{5})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sig Cd"
+          },
+          "size": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "type": {
+            "default": "address",
+            "enum": [
+              "address",
+              "place",
+              "district",
+              "road",
+              "category"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SearchV2Input",
+        "type": "object"
+      },
+      "SearchV2Response": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CandidateV2"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "input": {
+            "$ref": "#/components/schemas/SearchV2Input"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "string"
+          },
+          "region_hint_applied": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionHint"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "total": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "input"
+        ],
+        "title": "SearchV2Response",
         "type": "object"
       },
       "ServiceMeta": {
@@ -6960,6 +7786,129 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v2/geocode": {
+      "post": {
+        "operationId": "geocode_v2_v2_geocode_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeocodeV2Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeocodeV2Response"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Geocode V2",
+        "tags": [
+          "v2"
+        ]
+      }
+    },
+    "/v2/reverse": {
+      "post": {
+        "operationId": "reverse_v2_v2_reverse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseV2Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReverseV2Response"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reverse V2",
+        "tags": [
+          "v2"
+        ]
+      }
+    },
+    "/v2/search": {
+      "post": {
+        "operationId": "search_v2_v2_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchV2Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchV2Response"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search V2",
+        "tags": [
+          "v2"
         ]
       }
     }

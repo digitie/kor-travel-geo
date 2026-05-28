@@ -40,7 +40,7 @@ from kraddr.geo.loaders.text.roadaddr_entrance_loader import load_roadaddr_entra
 from kraddr.geo.settings import Settings, get_settings
 from kraddr.geo.version import __version__
 
-from .routers import admin, geocode, healthz, pobox, reverse, search, zipcode
+from .routers import admin, geocode, healthz, pobox, reverse, search, v2, zipcode
 
 
 @asynccontextmanager
@@ -78,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(zipcode.router, prefix="/v1")
     app.include_router(pobox.router, prefix="/v1")
     app.include_router(admin.router, prefix="/v1/admin")
+    app.include_router(v2.router, prefix="/v2")
 
     @app.get("/metrics", include_in_schema=False)
     async def prometheus_metrics(request: Request) -> Response:
@@ -102,7 +103,7 @@ def _install_admission_control(app: FastAPI, settings: Settings) -> None:
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if not request.url.path.startswith("/v1/address/"):
+        if not (request.url.path.startswith("/v1/address/") or request.url.path.startswith("/v2/")):
             return await call_next(request)
 
         try:

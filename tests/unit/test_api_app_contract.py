@@ -15,6 +15,9 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/address/search" in paths
     assert "/v1/address/zipcode" in paths
     assert "/v1/address/pobox" in paths
+    assert "/v2/geocode" in paths
+    assert "/v2/reverse" in paths
+    assert "/v2/search" in paths
     assert "/v1/admin/loads" in paths
     assert "/v1/admin/jobs" in paths
     assert "/v1/admin/jobs/{job_id}/events" in paths

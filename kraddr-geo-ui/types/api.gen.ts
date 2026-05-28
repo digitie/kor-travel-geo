@@ -738,6 +738,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/geocode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Geocode V2 */
+        post: operations["geocode_v2_v2_geocode_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/reverse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reverse V2 */
+        post: operations["reverse_v2_v2_reverse_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search V2 */
+        post: operations["search_v2_v2_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -773,6 +824,31 @@ export interface components {
         };
         /** @enum {string} */
         AddressType: "road" | "parcel";
+        /**
+         * AddressV2
+         * @description Provider-neutral address projection.
+         */
+        AddressV2: {
+            /** Admin Dong Code */
+            admin_dong_code?: string | null;
+            /** Building Management Number */
+            building_management_number?: string | null;
+            /** Full */
+            full: string;
+            /** Legal Dong Code */
+            legal_dong_code?: string | null;
+            /** Parcel Address */
+            parcel_address?: string | null;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** Road Address */
+            road_address?: string | null;
+            /** Road Name */
+            road_name?: string | null;
+            /** Road Name Code */
+            road_name_code?: string | null;
+            type?: components["schemas"]["AddressType"] | null;
+        };
         /** AuditEvent */
         AuditEvent: {
             /** Action */
@@ -829,6 +905,20 @@ export interface components {
             min_x: number;
             /** Min Y */
             min_y: number;
+        };
+        /**
+         * BBoxV2
+         * @description EPSG:4326 bounding box in external `(lon, lat)` order.
+         */
+        BBoxV2: {
+            /** Max Lat */
+            max_lat: number;
+            /** Max Lon */
+            max_lon: number;
+            /** Min Lat */
+            min_lat: number;
+            /** Min Lon */
+            min_lon: number;
         };
         /** BackupArtifact */
         BackupArtifact: {
@@ -930,6 +1020,35 @@ export interface components {
             expired: number;
             /** Hits */
             hits: number;
+        };
+        /** CandidateV2 */
+        CandidateV2: {
+            address?: components["schemas"]["AddressV2"] | null;
+            bbox?: components["schemas"]["BBoxV2"] | null;
+            /** Confidence */
+            confidence: number;
+            /** Distance M */
+            distance_m?: number | null;
+            /**
+             * Match Kind
+             * @enum {string}
+             */
+            match_kind: "road" | "parcel" | "postal" | "keyword" | "category" | "region" | "sppn";
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            place?: components["schemas"]["PlaceV2"] | null;
+            point?: components["schemas"]["Point"] | null;
+            /** Point Precision */
+            point_precision?: ("exact" | "interpolated" | "centroid" | "approximate") | null;
+            region?: components["schemas"]["RegionV2"] | null;
+            /**
+             * Source
+             * @default local
+             * @enum {string}
+             */
+            source: "local" | "vworld" | "juso" | "cache";
         };
         /** ConsistencyCase */
         ConsistencyCase: {
@@ -1171,6 +1290,46 @@ export interface components {
             crs: components["schemas"]["CRS"];
             point: components["schemas"]["Point"];
         };
+        /** GeocodeV2Input */
+        GeocodeV2Input: {
+            bbox?: components["schemas"]["BBoxV2"] | null;
+            /** Bjd Cd */
+            bjd_cd?: string | null;
+            /**
+             * Fallback
+             * @default none
+             * @enum {string}
+             */
+            fallback: "none" | "api";
+            /** Jibun Address */
+            jibun_address?: string | null;
+            /** Keyword */
+            keyword?: string | null;
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
+            /** Query */
+            query?: string | null;
+            /** Road Address */
+            road_address?: string | null;
+            /** Sig Cd */
+            sig_cd?: string | null;
+        };
+        /** GeocodeV2Response */
+        GeocodeV2Response: {
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: components["schemas"]["CandidateV2"][];
+            input: components["schemas"]["GeocodeV2Input"];
+            /** Query Id */
+            query_id?: string;
+            region_hint_applied?: components["schemas"]["RegionHint"] | null;
+            status: components["schemas"]["Status"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1377,6 +1536,19 @@ export interface components {
             /** Storage Uri */
             storage_uri?: string | null;
         };
+        /** PlaceV2 */
+        PlaceV2: {
+            /** Category Code */
+            category_code?: string | null;
+            /** Category Name */
+            category_name?: string | null;
+            /** Name */
+            name: string;
+            /** Phone */
+            phone?: string | null;
+            /** Url */
+            url?: string | null;
+        };
         /** PoboxInput */
         PoboxInput: {
             /**
@@ -1457,6 +1629,39 @@ export interface components {
             structure: components["schemas"]["AddressStructure"];
             /** Text */
             text: string;
+        };
+        /**
+         * RegionHint
+         * @description Optional administrative-code hint used to narrow local SQL search space.
+         */
+        RegionHint: {
+            /**
+             * Bjd Cd
+             * @description 8-digit legal dong prefix or 10-digit legal dong code.
+             */
+            bjd_cd?: string | null;
+            /**
+             * Sig Cd
+             * @description 2-digit sido prefix or 5-digit sigungu code.
+             */
+            sig_cd?: string | null;
+        };
+        /** RegionV2 */
+        RegionV2: {
+            /** Admin Dong */
+            admin_dong?: string | null;
+            /** Bjd Cd */
+            bjd_cd?: string | null;
+            /** Eup Myeon Dong */
+            eup_myeon_dong?: string | null;
+            /** Legal Dong */
+            legal_dong?: string | null;
+            /** Sido */
+            sido?: string | null;
+            /** Sig Cd */
+            sig_cd?: string | null;
+            /** Sigungu */
+            sigungu?: string | null;
         };
         /** RestoreCreateRequest */
         RestoreCreateRequest: {
@@ -1555,6 +1760,47 @@ export interface components {
             /** Zipcode */
             zipcode?: string | null;
         };
+        /** ReverseV2Input */
+        ReverseV2Input: {
+            /** Bjd Cd */
+            bjd_cd?: string | null;
+            /** @default EPSG:4326 */
+            crs: components["schemas"]["CRS"];
+            /**
+             * Include Region
+             * @default true
+             */
+            include_region: boolean;
+            /**
+             * Include Zipcode
+             * @default true
+             */
+            include_zipcode: boolean;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /**
+             * Radius M
+             * @default 200
+             */
+            radius_m: number;
+            /** Sig Cd */
+            sig_cd?: string | null;
+        };
+        /** ReverseV2Response */
+        ReverseV2Response: {
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: components["schemas"]["CandidateV2"][];
+            input: components["schemas"]["ReverseV2Input"];
+            /** Query Id */
+            query_id?: string;
+            region_hint_applied?: components["schemas"]["RegionHint"] | null;
+            status: components["schemas"]["Status"];
+        };
         /** RollbackPlan */
         RollbackPlan: {
             /**
@@ -1638,6 +1884,52 @@ export interface components {
              * @enum {string}
              */
             type: "address" | "place" | "district" | "road";
+        };
+        /** SearchV2Input */
+        SearchV2Input: {
+            bbox?: components["schemas"]["BBoxV2"] | null;
+            /** Bjd Cd */
+            bjd_cd?: string | null;
+            /** Category Group Code */
+            category_group_code?: string | null;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /** Query */
+            query: string;
+            /** Sig Cd */
+            sig_cd?: string | null;
+            /**
+             * Size
+             * @default 10
+             */
+            size: number;
+            /**
+             * Type
+             * @default address
+             * @enum {string}
+             */
+            type: "address" | "place" | "district" | "road" | "category";
+        };
+        /** SearchV2Response */
+        SearchV2Response: {
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: components["schemas"]["CandidateV2"][];
+            input: components["schemas"]["SearchV2Input"];
+            /** Query Id */
+            query_id?: string;
+            region_hint_applied?: components["schemas"]["RegionHint"] | null;
+            status: components["schemas"]["Status"];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** ServiceMeta */
         ServiceMeta: {
@@ -3583,6 +3875,105 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    geocode_v2_v2_geocode_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GeocodeV2Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeocodeV2Response"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reverse_v2_v2_reverse_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReverseV2Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReverseV2Response"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_v2_v2_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchV2Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchV2Response"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
