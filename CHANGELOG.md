@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-050 운영 hardening 1차: upload set cleanup TTL과 실행 중 job 참조 보호를 추가했다. `kraddr-geo uploads cleanup`은 queued/running `load_jobs` payload에 남은 `upload_set_id` 또는 upload set 경로를 보호하고, TTL·active grace가 지난 stale/orphan upload set만 삭제한다. 기본값은 `KRADDR_GEO_UPLOAD_SET_TTL_DAYS=30`, `KRADDR_GEO_UPLOAD_SET_ACTIVE_GRACE_MINUTES=360`이다.
 - T-056 `python-kraddr-base` Address 코드 helper 정리: 실제 `~/dev/python-kraddr-base`는 Git checkout이 아니고 license가 `GPL-3.0-or-later`라 원본 코드를 복사하지 않았다. 대신 `core/address/codes.py`에 시군구/법정동/도로명관리번호/도로명주소관리번호 helper를 공개 주소 코드 규칙 기반 독립 구현으로 두고, Juso fallback 좌표 API의 `admCd`/`rnMgtSn`/`udrtYn`/`buldMnnm`/`buldSlno` 파라미터 정규화에 연결했다. 사용자 최신 지시에 따라 다음 실행 순서는 T-052/T-053 선행 정리 → T-052 → T-053으로 조정했다.
 - T-052/T-053 선행 정리: PR #67 리뷰 후속으로 T-056의 `clean-room` 표현을 공개 주소 코드 규칙 기반 독립 구현으로 바로잡고, 사용자 확인에 따라 "조합/분리"가 코드 식별자 조합·분해·정규화 의도였음을 문서화했다. Juso 검색 결과에 좌표 API 필수 코드가 없으면 coord API를 호출하지 않는 회귀 테스트도 추가했다.
 - T-044 `maplibre-vworld-js` 0.1.0 기준 문서-only 재확인: GitHub tag `v0.1.0` commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`의 package manifest와 public API를 확인했다. npm registry에는 아직 `maplibre-vworld@0.1.0`이 없어 dependency는 바꾸지 않았고, upstream 코드는 직접 수정하지 않았다. `VWorldMap`, marker/layer primitive, tile error helper 기준의 후속 wrapper 구현 메모를 문서에 남겼다.

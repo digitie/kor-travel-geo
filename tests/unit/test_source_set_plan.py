@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,9 @@ from kraddr.geo.infra.source_set import (
 )
 from kraddr.geo.infra.uploads import (
     cancel_upload_set,
+    cleanup_upload_sets,
     create_upload_set,
+    extract_upload_set_ids,
     get_upload_set,
     store_upload_file,
 )
@@ -180,8 +183,83 @@ async def test_upload_set_marks_failed_file_when_size_limit_is_exceeded(
     assert loaded.files[0].uploaded_bytes == 6
 
 
+@pytest.mark.asyncio
+async def test_upload_set_cleanup_respects_ttl_and_active_job_refs(tmp_path: Path) -> None:
+    now = datetime(2026, 5, 28, tzinfo=UTC)
+    stale = now - timedelta(days=31)
+    stale_upload = await create_upload_set(tmp_path, UploadSetCreateRequest())
+    active_upload = await create_upload_set(tmp_path, UploadSetCreateRequest())
+    recent_upload = await create_upload_set(tmp_path, UploadSetCreateRequest())
+
+    _rewrite_upload_manifest(stale_upload, updated_at=stale)
+    _rewrite_upload_manifest(active_upload, updated_at=stale)
+
+    result = cleanup_upload_sets(
+        tmp_path,
+        ttl_days=30,
+        active_grace_minutes=360,
+        active_upload_set_ids={active_upload.upload_set_id},
+        now=now,
+    )
+
+    assert result.scanned == 3
+    assert result.deleted == 1
+    assert result.skipped_active == 1
+    assert result.skipped_recent == 1
+    assert not Path(stale_upload.root_path).parent.exists()
+    assert Path(active_upload.root_path).parent.exists()
+    assert Path(recent_upload.root_path).parent.exists()
+
+
+@pytest.mark.asyncio
+async def test_upload_set_cleanup_dry_run_reports_without_deleting(tmp_path: Path) -> None:
+    now = datetime(2026, 5, 28, tzinfo=UTC)
+    stale_upload = await create_upload_set(tmp_path, UploadSetCreateRequest())
+    _rewrite_upload_manifest(stale_upload, updated_at=now - timedelta(days=40))
+
+    result = cleanup_upload_sets(
+        tmp_path,
+        ttl_days=30,
+        active_grace_minutes=360,
+        now=now,
+        dry_run=True,
+    )
+
+    assert result.deleted == 0
+    assert result.entries[0].reason == "ttl_expired"
+    assert result.entries[0].deleted is False
+    assert Path(stale_upload.root_path).parent.exists()
+
+
+def test_extract_upload_set_ids_from_payload_paths() -> None:
+    payload = {
+        "upload_set_id": "upload_20260528T010203Z_abcdefabcdef",
+        "children": [
+            {
+                "payload": {
+                    "path": (
+                        "/data/uploads/upload_20260528T040506Z_123456abcdef/"
+                        "files/202605_도로명주소.zip"
+                    )
+                }
+            }
+        ],
+    }
+
+    assert extract_upload_set_ids(payload) == {
+        "upload_20260528T010203Z_abcdefabcdef",
+        "upload_20260528T040506Z_123456abcdef",
+    }
+
+
 async def _chunks(payload: bytes):
     yield payload
+
+
+def _rewrite_upload_manifest(upload_set, *, updated_at: datetime) -> None:
+    root = Path(upload_set.root_path).parent
+    status = upload_set.model_copy(update={"updated_at": updated_at})
+    (root / "upload-set.json").write_text(status.model_dump_json(), encoding="utf-8")
 
 
 def _touch(path: Path) -> None:

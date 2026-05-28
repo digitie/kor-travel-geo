@@ -1034,7 +1034,9 @@ async with engine.begin() as conn:
 3. **source set 분석/확인**: 모든 파일 저장이 끝나면 `POST /v1/admin/load-sources/discover`가 upload set 또는 서버 디렉터리를 읽어 원천 후보와 기준월을 반환한다. 기준월이 섞여 있으면 UI/CLI가 사용자 확인을 받은 뒤 `POST /v1/admin/load-sources/plan`으로 `SourceSetPlan`을 만든다.
 4. **처리**: 확정된 `SourceSetPlan.batch_payload`만 `POST /v1/admin/loads`에 `kind="full_load_batch"`로 등록한다. 큐가 직렬 처리한다. 진행률은 `/v1/admin/loads` 또는 compatibility alias `/v1/admin/jobs`로 폴링한다.
 
-기존 `POST /v1/admin/upload/sido-zip?filename=...&sido=...`는 단일 시도 ZIP 업로드 호환 경로로 유지할 수 있지만, `/admin/load`의 대용량 full-load UX는 upload set API를 우선 사용한다. 업로드 디렉토리는 `settings.loader_data_dir/uploads/`. `upload_set_id = "{timestamp}_{short_hash}"`로 충돌을 방지하고, 완료되지 않은 partial file과 30일 이상 된 upload set은 cron이 정리한다.
+기존 `POST /v1/admin/upload/sido-zip?filename=...&sido=...`는 단일 시도 ZIP 업로드 호환 경로로 유지할 수 있지만, `/admin/load`의 대용량 full-load UX는 upload set API를 우선 사용한다. 업로드 디렉토리는 `settings.loader_data_dir/uploads/`. `upload_set_id = "{timestamp}_{short_hash}"`로 충돌을 방지하고, 완료되지 않은 partial file과 30일 이상 된 upload set은 `kraddr-geo uploads cleanup` cron이 정리한다.
+
+T-050 1차 hardening 이후 cleanup은 `load_jobs.state IN ('queued','running')` payload에서 `upload_set_id` 또는 upload set 경로를 찾으면 해당 디렉터리를 삭제하지 않는다. 기본 TTL은 `KRADDR_GEO_UPLOAD_SET_TTL_DAYS=30`, active grace는 `KRADDR_GEO_UPLOAD_SET_ACTIVE_GRACE_MINUTES=360`이다. 운영자는 먼저 `kraddr-geo uploads cleanup --dry-run`으로 삭제 후보를 확인한 뒤 실제 cleanup을 실행한다.
 
 업로드 진행률과 적재 진행률은 같은 값이 아니다. UI는 업로드 단계에서는 브라우저가 전송한 byte 기준 퍼센트를 표시하고, 적재 단계에서는 root/child `load_jobs.progress`의 가중 평균을 표시한다. 업로드 취소는 upload set cancel과 클라이언트 전송 abort로 처리하고, 적재 취소는 root `full_load_batch`에 대한 `/v1/admin/loads/{job_id}/cancel`로 처리한다.
 

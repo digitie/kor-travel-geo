@@ -40,6 +40,8 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.api_explain_timeout_ms == 3_000
     assert settings.api_max_concurrency is None
     assert settings.api_admission_timeout_ms == 30_000
+    assert settings.upload_set_ttl_days == 30
+    assert settings.upload_set_active_grace_minutes == 360
     assert settings.epost_download_url == (
         "http://openapi.epost.go.kr/postal/downloadAreaCodeService/"
         "downloadAreaCodeService/getAreaCodeInfo"

@@ -217,6 +217,14 @@ def test_admin_upload_helpers_prevent_path_escape(tmp_path) -> None:
     assert upload_dir.relative_to((tmp_path / "uploads").resolve())
 
 
+def test_admin_repo_active_upload_refs_scan_queued_and_running_payloads() -> None:
+    source = inspect.getsource(admin_repo.AdminRepository.active_upload_set_ids)
+
+    assert "state IN ('queued','running')" in source
+    assert "payload::text LIKE '%upload_%'" in source
+    assert "extract_upload_set_ids" in source
+
+
 def test_consistency_severity_filter_is_pushed_to_sql() -> None:
     source = inspect.getsource(admin_repo.AdminRepository.list_consistency_reports)
 

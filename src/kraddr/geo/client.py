@@ -77,6 +77,7 @@ from .infra.source_set import (
     build_full_load_source_set_plan,
     discover_load_sources,
 )
+from .infra.uploads import UploadSetCleanupResult, cleanup_upload_sets
 from .infra.zip_repo import ZipRepository
 from .settings import Settings, get_settings
 
@@ -587,6 +588,25 @@ class AsyncAddressClient:
         return await AdminRepository(self._engine()).capture_table_stats_snapshots(
             snapshot_id=snapshot_id,
             limit=limit,
+        )
+
+    async def cleanup_upload_sets(
+        self,
+        *,
+        ttl_days: int | None = None,
+        active_grace_minutes: int | None = None,
+        dry_run: bool = False,
+    ) -> UploadSetCleanupResult:
+        repo = AdminRepository(self._engine())
+        active_refs = await repo.active_upload_set_ids()
+        return cleanup_upload_sets(
+            self.settings.loader_data_dir,
+            ttl_days=ttl_days or self.settings.upload_set_ttl_days,
+            active_grace_minutes=(
+                active_grace_minutes or self.settings.upload_set_active_grace_minutes
+            ),
+            active_upload_set_ids=active_refs,
+            dry_run=dry_run,
         )
 
     async def discover_load_sources(

@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 03:35 (T-050 운영 hardening 1차 — upload set cleanup)
+
+**작업**: T-050을 여러 PR로 나누기로 하고, 첫 단위로 upload set cleanup TTL과 실행 중 job 참조 보호를 구현했다.
+
+**반영**:
+- `kraddr.geo.infra.uploads.cleanup_upload_sets()`를 추가했다. `loader_data_dir/uploads/upload_*`를 스캔하고 TTL이 지난 upload set을 삭제한다.
+- `load_jobs.state IN ('queued','running')` payload에서 `upload_set_id` 또는 upload set 경로가 발견되면 삭제하지 않는다.
+- manifest가 깨졌거나 없는 `upload_*` 디렉터리는 orphan으로 보되 TTL과 active grace가 모두 지난 경우에만 삭제한다.
+- `AsyncAddressClient.cleanup_upload_sets()`와 `kraddr-geo uploads cleanup` CLI를 추가했다.
+- 기본 설정 `KRADDR_GEO_UPLOAD_SET_TTL_DAYS=30`, `KRADDR_GEO_UPLOAD_SET_ACTIVE_GRACE_MINUTES=360`을 추가했다.
+- `docs/t050-ops-hardening.md`에 T-050 전체 분할 순서와 1차 cleanup 운영 규칙을 정리했다.
+
+**검증 예정**:
+- `tests/unit/test_source_set_plan.py`, `tests/unit/test_settings.py`, `tests/unit/test_infra_repo_sql.py` targeted test 후 전체 backend gate를 실행한다.
+
+**후속**:
+- PR merge 후 T-050 2차로 backup/restore callback HMAC, retry/backoff, replay protection을 진행한다.
+
 ## 2026-05-29 02:30 (T-061 Q3 fuzzy slim text-search 구조)
 
 **작업**: `mv_geocode_target`에서 재생성 가능한 read-only helper MV `mv_geocode_text_search`를 추가하고, Q3 fuzzy geocode와 Q4 broad search fallback 후보 추출에 연결했다.
