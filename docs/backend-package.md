@@ -386,7 +386,7 @@ reverse / search 라우터도 `sig_cd`/`bjd_cd`를 같은 의미로 받는다. z
 - `POST /v1/admin/normalize` — 주소 정규화 디버거
 - `GET  /v1/admin/tables` — `pg_class` 기반 통계
 - `POST /v1/admin/explain` — `SELECT`/`WITH`만 허용, `EXPLAIN(FORMAT JSON [, ANALYZE, BUFFERS])`, `api_explain_timeout_ms`를 `SET LOCAL`로 적용
-- `POST /v1/admin/maintenance/refresh-mv` — `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`
+- `POST /v1/admin/maintenance/refresh-mv` — `kraddr-geo`의 MV orchestration으로 `mv_geocode_target`과 T-061 이후 `mv_geocode_text_search` helper를 함께 갱신한다.
 - `POST /v1/admin/maintenance/analyze?table=...` — 테이블명 화이트리스트 검증(`isalnum`)
 - `POST /v1/admin/upload/sido-zip?filename=...&sido=...` — 시도 ZIP raw body 스트리밍 업로드(SHA256 해시 반환). `filename`과 `sido`는 path token으로 정규화하고 `loader_data_dir/uploads` 밖으로 resolve되면 거절한다. `api_max_upload_bytes` 초과 시 partial file을 삭제하고 실패한다.
 - `POST /v1/admin/uploads`, `PUT /v1/admin/uploads/{upload_set_id}/files`, `GET /v1/admin/uploads/{upload_set_id}`, `POST /v1/admin/uploads/{upload_set_id}/cancel` — T-045 대용량 다중 파일 업로드 세션. 모든 파일 저장과 checksum 확인이 끝난 뒤 source set 분석으로 넘어간다.
@@ -873,7 +873,9 @@ TL_SPBD_EQB, TL_SPBD_BULD, TL_SPBD_ENTRC
 
 ### 후처리 (`loaders/postload.py`)
 
-`VACUUM (ANALYZE)` → `SET LOCAL maintenance_work_mem='1500MB'` → `REFRESH MATERIALIZED VIEW mv_geocode_target` → `ANALYZE mv_geocode_target` → (옵션) `CLUSTER ... USING idx_buld_road_match`.
+`VACUUM (ANALYZE)` → `SET LOCAL maintenance_work_mem='1500MB'` → `kraddr-geo refresh mv` 또는 `refresh_mv()` orchestration → `ANALYZE mv_geocode_target` → (옵션) `CLUSTER ... USING idx_buld_road_match`.
+
+T-061 이후에는 `mv_geocode_text_search`가 `mv_geocode_target`에서 파생되는 read-only helper MV다. 운영자가 psql에서 `REFRESH MATERIALIZED VIEW mv_geocode_target`만 직접 실행하면 helper가 stale해질 수 있으므로 raw 단독 refresh는 금지하고 `kraddr-geo refresh mv`, `/v1/admin/maintenance/refresh-mv`, `refresh_mv(strategy=...)` 경로를 사용한다.
 
 T-035 이후 MV 갱신 성능 비교는 `scripts/benchmark_mv_refresh.py`로 재현한다. 실제 전국 DB `kraddr_geo_t033` 기준 `CONCURRENTLY`는 1분 49.64초, shadow swap은 2분 16.28초였고, shadow swap의 rename/index rename 구간은 약 0.016초였다. `shadow_swap_mv()`는 rename transaction과 `ANALYZE` transaction을 분리해 swap lock window에 통계 갱신 시간을 포함하지 않는다. 상세 수치와 phase별 index build 시간은 `docs/t035-mv-refresh-benchmark.md`를 본다.
 
@@ -1467,6 +1469,8 @@ kraddr-geo load epost --kind=full
 # === 후처리 ===
 kraddr-geo refresh mv                        # CONCURRENTLY (평시)
 kraddr-geo refresh mv --swap                 # shadow MV swap (분기 풀로드 후)
+
+# T-061 이후 raw psql refresh 대신 위 orchestration을 사용한다.
 
 # === 정합성 검증 (ADR-012, ADR-016) ===
 kraddr-geo validate consistency               # 모든 케이스 C1~C10

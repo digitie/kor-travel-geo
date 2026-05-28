@@ -348,14 +348,17 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         strategy = _payload_str(payload, "strategy") or "concurrent"
         await progress(stage="mv_refresh", message=f"MV refresh 시작: {strategy}")
         await resolve_text_geometry_links(engine)
+        repo = AdminRepository(engine)
+        load_batch_id = _payload_str(payload, "load_batch_id")
+        await repo.ensure_load_batch_release_gate(load_batch_id)
         await refresh_mv(
             engine,
             concurrently=strategy != "swap",
             strategy="swap" if strategy == "swap" else "concurrent",
         )
-        snapshot, release = await AdminRepository(engine).record_mv_refresh_release(
+        snapshot, release = await repo.record_mv_refresh_release(
             job_id=_payload_str(payload, "_job_id"),
-            load_batch_id=_payload_str(payload, "load_batch_id"),
+            load_batch_id=load_batch_id,
             strategy=strategy,
         )
         await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")

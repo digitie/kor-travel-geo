@@ -105,11 +105,12 @@
 - ✅ T-050 운영 hardening 1차 — upload set cleanup TTL, queued/running job 참조 보호, active grace, `kraddr-geo uploads cleanup` CLI를 완료했다. 상세: `docs/t050-ops-hardening.md`
 - ✅ T-050 운영 hardening 2차 — backup/restore callback HMAC, retry/backoff, replay protection을 완료했다. callback payload는 timestamp/callback ID/body HMAC으로 서명하고, retry attempt와 최종 delivery 상태를 artifact manifest에 기록한다. 상세: `docs/t050-ops-hardening.md`
 - ✅ T-050 운영 hardening 3차 — backup/restore file/archive size 기반 sub-progress를 완료했다. dump/archive/checksum/extract 구간에서 파일 크기 sampler를 사용해 기존 `load_jobs.progress/current_stage/log_tail`에 byte 기반 보조 진행률을 남긴다. 상세: `docs/t050-ops-hardening.md`
-- 🟡 T-050 운영 hardening 4차 — full-load/MV/restore 완료 hook의 `ops.dataset_snapshots`/`ops.serving_releases` 자동 생성을 진행 중이다. `mv_refresh` 성공 시 active release를 만들고, restore 성공 시 pending restore release 후보를 만든다. 상세: `docs/t050-ops-hardening.md`
+- ✅ T-050 운영 hardening 4차 — full-load/MV/restore 완료 hook의 `ops.dataset_snapshots`/`ops.serving_releases` 자동 생성을 완료했다. `mv_refresh` 성공 시 active release를 만들고, restore 성공 시 pending restore release 후보를 만든다. PR #75 리뷰 후속으로 load-batch ERROR gate를 MV swap 이전으로 옮기고 `mv_hash` 중복 count를 줄였다. 상세: `docs/t050-ops-hardening.md`
+- 🟡 PR #69~#75 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #75까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. 직접 반영 항목은 `maplibre-vworld` lockfile URL, consistency sample 조회 최적화, backup progress sample 캐시, release hook gate/count 보강, 운영 runbook 문서화다. 상세: `docs/postmerge-review-fixups-pr69-pr75.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-050 4차 full-load/MV/restore 완료 hook PR을 검증·머지한 뒤, PR #69부터 최신 PR까지 conversation/review/inline/thread를 모두 상세히 읽고 반영하는 것이다. 그 review audit/fixup PR까지 머지한 뒤 `ops.table_stats_snapshots` 주기 capture를 진행한다. 이후 destructive confirmation flow 통합, 실제 PostgreSQL constraint integration test를 순서대로 좁힌다.
+다음 작업은 PR #69~#75 review audit/fixup PR을 검증·머지한 뒤 `ops.table_stats_snapshots` 주기 capture를 진행하는 것이다. 이후 destructive confirmation flow 통합, 실제 PostgreSQL constraint integration test를 순서대로 좁힌다.
 
 그 이후의 작업 후보는 사용자 최신 지시에 따라 T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-055(N150/Odroid 실측) 순서다. T-027 최종 클린 적재 검증은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
 
@@ -123,7 +124,7 @@
 - 원천별 업데이트 시점은 서로 다를 수 있다. ADR-029/T-045 구현에 따라 새 full-load UX는 단일 `yyyymm`이 아니라 `source_set.yyyymm_by_kind`를 사용하며, 기준월이 섞이면 CLI/UI에서 정확한 `YYYYMM/... 혼합 적재 확인` 문구를 받아야 한다. API/라이브러리는 prompt 없이 `discover_load_sources()`와 `build_full_load_source_set_plan()`을 분리 제공한다. `/admin/load`는 업로드가 끝난 뒤 source set을 분석하고 `full_load_batch`의 명시 `children` payload를 등록한다.
 - T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. T-050 2차에서 callback HMAC/retry/backoff/attempt 기록을 보강했고, 3차에서 dump/archive/checksum/extract file size sampler를 완료했다. 4차에서는 restore 성공 시 pending restore release 후보를 기록한다. 남은 hardening은 restore 취소 시 target DB drop/quarantine 정책, 디스크 여유 공간 사전 추정, PostgreSQL/PostGIS major mismatch hard-fail이다. 전국 full-load 재실행은 후속 T-027에서 수행한다.
 - T-049 운영 메타데이터는 1차 구현 상태다. 현재 구현은 DDL/API/UI와 redacted audit event, maintenance window 생성/종료, table stats snapshot capture를 제공한다. T-050 4차에서 MV swap/restore 성공 지점을 `ops.dataset_snapshots`와 `ops.serving_releases`에 연결하는 중이며, 성능 리포트와 table stats trend 연결은 후속으로 이어간다.
-- T-050은 PR #34~#47 리뷰 audit에서 남긴 운영 hardening 묶음이다. 1차 upload set cleanup TTL/참조 lock/grace period, 2차 callback HMAC/retry/replay protection, 3차 size 기반 backup/restore sub-progress를 완료했고, 4차 snapshot/release hook을 PR 검증 중이다. 남은 항목은 table stats cron, destructive confirmation flow, 실제 PostgreSQL constraint integration test다.
+- T-050은 PR #34~#47 리뷰 audit에서 남긴 운영 hardening 묶음이다. 1차 upload set cleanup TTL/참조 lock/grace period, 2차 callback HMAC/retry/replay protection, 3차 size 기반 backup/restore sub-progress, 4차 snapshot/release hook을 완료했다. PR #69~#75 리뷰 audit/fixup은 별도 PR로 진행 중이다. 남은 항목은 table stats cron, destructive confirmation flow, 실제 PostgreSQL constraint integration test다.
 - T-047 쿼리 성능 튜닝은 여러 기준선과 후속 측정이 쌓인 상태다. 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool64, REST worker/pool/admission exploratory grid와 candidate 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
 
 ## 작업 시작 전 확인할 것

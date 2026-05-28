@@ -193,6 +193,26 @@ def test_size_progress_helpers_report_file_and_directory_bytes(tmp_path: Path) -
     assert probe.maybe_message(sample) == "dump 디렉터리 1.5 KiB/2.0 KiB"
 
 
+def test_size_progress_probe_throttles_directory_walks(tmp_path: Path) -> None:
+    data_file = tmp_path / "a.bin"
+    data_file.write_bytes(b"a" * 1024)
+    probe = SizeProgressProbe(
+        tmp_path,
+        "dump 디렉터리",
+        total_bytes=4096,
+        emit_interval_s=60,
+    )
+
+    first = probe.sample()
+    data_file.write_bytes(b"a" * 2048)
+    cached = probe.sample()
+    refreshed = probe.sample(force=True)
+
+    assert first.current_bytes == 1024
+    assert cached.current_bytes == 1024
+    assert refreshed.current_bytes == 2048
+
+
 def test_estimated_progress_uses_size_sample_when_available() -> None:
     value = backup_module._estimated_progress(
         (0.70, 0.90),

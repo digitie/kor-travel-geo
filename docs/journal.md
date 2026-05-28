@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 07:20 (PR #69~#75 post-merge 리뷰 audit/fixup)
+
+**작업**: 사용자 지시에 따라 PR #69부터 최신 PR #75까지 conversation/review/latestReview/reviewThreads를 재확인하고, formal review에서 바로 반영 가능한 항목을 코드와 문서로 보강했다.
+
+**반영**:
+- `kraddr-geo-ui/package-lock.json`의 `maplibre-vworld` resolved URL을 `git+https`로 맞췄다.
+- `AsyncAddressClient.list_consistency_case_samples()`가 표본 결과가 있을 때는 report 존재 확인 쿼리를 추가 실행하지 않도록 줄였다.
+- `SizeProgressProbe`가 directory size sample을 interval 안에서 캐시해 backup/restore hot path의 반복 `rglob/stat` 부하를 줄였다.
+- `mv_refresh`의 load-batch ERROR gate를 swap 이전으로 옮기고, release hook의 post-swap gate raise와 `mv_geocode_target` 중복 count를 제거했다.
+- T-053 표본/전수 범위, callback retry 멱등성, helper MV raw refresh 금지, T-055 helper sizing, T-050 release ledger transaction 경계를 문서화했다.
+- 상세 리뷰별 반영/보류 표는 `docs/postmerge-review-fixups-pr69-pr75.md`에 정리했다.
+
+**검증 예정**:
+- backend 전체 gate와 frontend gate를 실행한 뒤 PR을 열어 CI 완료 후 5분 대기/리뷰 확인/머지한다.
+
+**후속**:
+- 이 PR merge 후 T-050 `ops.table_stats_snapshots` 주기 capture로 이어간다.
+
 ## 2026-05-29 06:27 (T-050 운영 hardening 4차 — snapshot/release hook)
 
 **작업**: full-load/MV refresh/restore 성공 지점을 `ops.dataset_snapshots`와 `ops.serving_releases`에 자동 연결하는 hook을 추가했다.

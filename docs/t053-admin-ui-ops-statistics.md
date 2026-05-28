@@ -208,11 +208,12 @@ CREATE INDEX idx_consistency_case_samples_4326
 ### 적재 정책
 
 - `run_all_cases()` 실행 시 기존 `load_consistency_reports.cases` JSONB는 그대로 채우고(요약), 동시에 `ops.consistency_case_samples`에도 row 단위 insert한다.
-- sample 수는 케이스별 cap이 있다. 1차 구현은 현재 `ConsistencyCase.sample` cap을 그대로 row로 펼치고, cap 정책이 부족해지면 시군구별 stratified sampling을 후속으로 보강한다.
+- sample 수는 케이스별 cap이 있다. 1차 구현은 현재 `ConsistencyCase.sample` cap을 그대로 row로 펼치고, cap 정책이 부족해지면 시군구별 stratified sampling을 후속으로 보강한다. 즉 `ops.consistency_case_samples`는 **report에 캡처된 대표 표본 검토 테이블**이지 전체 위반 모집단 테이블이 아니다. C2 34,699건처럼 전수 위반을 사람이 모두 CSV로 내려받아 분석해야 하면 case별 full-violation export job을 별도 후속으로 만든다.
 - `sample_id`는 `report_id + case_code + sample_rank + source key`를 기반으로 재현 가능한 UUIDv5로 만든다. 같은 report 재조회에서 UI selection과 review mutation이 흔들리지 않아야 한다.
 - `ops` schema 정책상 secret/주소 원문 평문 저장 금지(ADR-033). `bd_mgt_sn`, `rncode_full`, `bjd_cd`, `sig_cd`, 거리 metric, source month는 OK이고 원문 주소는 저장하지 않는다.
 - T-056 `core.address` helper를 사용해 `sig_cd`, `bjd_cd`, `rncode_full`, 도로명주소관리번호 필터 입력을 API와 UI 양쪽에서 같은 규칙으로 정규화한다.
 - 이미 생성된 오래된 report는 `cases` JSONB를 펼쳐 sample table에 lazy backfill할 수 있어야 한다. `GET /samples`가 table row를 찾지 못하면 해당 report의 JSONB sample을 한 번 펼쳐 저장한 뒤 조회한다.
+- `reason_code`는 UI에서 권장 어휘를 dropdown으로 제공하지만, 서버는 1차 구현에서 80자 이하 자유 문자열을 허용한다. API 직접 호출자는 UI 권장값을 우선 사용해야 reason별 집계가 깨끗하게 유지된다. 서버 enum 승격은 운영 집계 요구가 커지는 시점의 후속이다.
 
 ### REST 표면
 

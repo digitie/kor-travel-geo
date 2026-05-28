@@ -731,7 +731,8 @@ class AsyncAddressClient:
         page: int = 1,
         page_size: int = 100,
     ) -> ConsistencySamplePage:
-        page_result = await AdminRepository(self._engine()).list_consistency_case_samples(
+        repo = AdminRepository(self._engine())
+        page_result = await repo.list_consistency_case_samples(
             report_id=report_id,
             case_code=case_code,
             severity=severity,
@@ -749,11 +750,12 @@ class AsyncAddressClient:
             page=page,
             page_size=page_size,
         )
-        report_exists = await AdminRepository(self._engine()).consistency_report(report_id)
-        if page_result.total == 0 and report_exists is None:
-            from .exceptions import NotFoundError
+        if page_result.total == 0:
+            report_exists = await repo.consistency_report(report_id)
+            if report_exists is None:
+                from .exceptions import NotFoundError
 
-            raise NotFoundError(f"consistency report not found: {report_id}")
+                raise NotFoundError(f"consistency report not found: {report_id}")
         return page_result
 
     async def consistency_case_summary(

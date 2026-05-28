@@ -63,6 +63,7 @@
 - N150 4 cores → concurrency 64에서 CPU saturation 정도.
 - NVMe random read IOPS → fuzzy geocode `pg_trgm` 인덱스 scan 영향.
 - 16 GB RAM → `shared_buffers` 기본값(전체 25%)에서 entire MV가 메모리 hot인지.
+- T-061 `mv_geocode_text_search` helper는 6,416,637행 기준 heap 854MiB, index 1,572MiB, total 2,426MiB다. shadow swap 중 temp는 +57 files / +11.67GiB였으므로 N150/Odroid 측정에서는 target MV와 helper MV를 합친 디스크, swap peak temp 여유, GIN index build의 `maintenance_work_mem`/temp spill을 별도 표로 남긴다.
 
 ### 3. 백업/복원 (T-046 cycle)
 
