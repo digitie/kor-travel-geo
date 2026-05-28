@@ -70,6 +70,8 @@ class Settings(BaseSettings):
     loader_data_dir: Path = Path("data")
     loader_batch_size: int = Field(default=5_000, ge=1)
     loader_temp_schema: str = "staging"
+    upload_set_ttl_days: int = Field(default=30, ge=1)
+    upload_set_active_grace_minutes: int = Field(default=360, ge=1)
     mvm_res_code_actions: dict[str, LoadCodeAction] = Field(
         default_factory=_default_mvm_res_code_actions
     )

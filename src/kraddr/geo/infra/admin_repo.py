@@ -41,6 +41,7 @@ from kraddr.geo.dto.admin import (
     TableStatsSnapshot,
 )
 from kraddr.geo.exceptions import InvalidInputError
+from kraddr.geo.infra.uploads import extract_upload_set_ids
 
 from ._rows import map_consistency_report, map_load_job
 
@@ -147,6 +148,25 @@ class AdminRepository:
         async with self.engine.connect() as conn:
             rows = (await conn.execute(sql, params)).mappings().all()
         return [map_load_job(dict(row)) for row in rows]
+
+    async def active_upload_set_ids(self) -> set[str]:
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        """
+SELECT payload
+  FROM load_jobs
+ WHERE state IN ('queued','running')
+   AND payload::text LIKE '%upload_%'
+"""
+                    )
+                )
+            ).mappings().all()
+        refs: set[str] = set()
+        for row in rows:
+            refs.update(extract_upload_set_ids(row["payload"]))
+        return refs
 
     async def table_stats(self, *, limit: int = 200) -> list[TableStat]:
         async with self.engine.connect() as conn:

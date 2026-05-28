@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import shutil
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
+from typing import Any
 from uuid import uuid4
 
 from kraddr.geo.dto.admin import (
@@ -18,6 +22,46 @@ from kraddr.geo.exceptions import InvalidInputError, NotFoundError
 from kraddr.geo.infra.source_set import guess_source_kind, infer_yyyymm
 
 _MANIFEST = "upload-set.json"
+_UPLOAD_SET_ID_RE = re.compile(r"upload_\d{8}T\d{6}Z_[0-9a-f]{12}")
+_TERMINAL_STATES = {"uploaded", "cancelled", "failed"}
+
+
+@dataclass(frozen=True)
+class UploadSetCleanupEntry:
+    upload_set_id: str
+    state: str
+    reason: str
+    path: str
+    updated_at: datetime | None = None
+    deleted: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        if self.updated_at is not None:
+            payload["updated_at"] = self.updated_at.isoformat()
+        return payload
+
+
+@dataclass(frozen=True)
+class UploadSetCleanupResult:
+    scanned: int
+    deleted: int
+    skipped_active: int
+    skipped_recent: int
+    invalid_manifests: int
+    dry_run: bool
+    entries: tuple[UploadSetCleanupEntry, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "scanned": self.scanned,
+            "deleted": self.deleted,
+            "skipped_active": self.skipped_active,
+            "skipped_recent": self.skipped_recent,
+            "invalid_manifests": self.invalid_manifests,
+            "dry_run": self.dry_run,
+            "entries": [entry.to_dict() for entry in self.entries],
+        }
 
 
 async def create_upload_set(base_dir: Path, req: UploadSetCreateRequest) -> UploadSetStatus:
@@ -40,6 +84,102 @@ async def create_upload_set(base_dir: Path, req: UploadSetCreateRequest) -> Uplo
 
 async def get_upload_set(base_dir: Path, upload_set_id: str) -> UploadSetStatus:
     return _read_status(_upload_root(base_dir, upload_set_id))
+
+
+def cleanup_upload_sets(
+    base_dir: Path,
+    *,
+    ttl_days: int,
+    active_grace_minutes: int,
+    active_upload_set_ids: set[str] | frozenset[str] = frozenset(),
+    now: datetime | None = None,
+    dry_run: bool = False,
+) -> UploadSetCleanupResult:
+    current = now or datetime.now(UTC)
+    stale_cutoff = current - timedelta(days=ttl_days)
+    active_cutoff = current - timedelta(minutes=active_grace_minutes)
+    uploads_root = (base_dir / "uploads").resolve()
+    entries: list[UploadSetCleanupEntry] = []
+    if not uploads_root.exists():
+        return UploadSetCleanupResult(
+            scanned=0,
+            deleted=0,
+            skipped_active=0,
+            skipped_recent=0,
+            invalid_manifests=0,
+            dry_run=dry_run,
+            entries=(),
+        )
+
+    scanned = deleted = skipped_active = skipped_recent = invalid_manifests = 0
+    for root in sorted(path for path in uploads_root.iterdir() if path.is_dir()):
+        upload_set_id = root.name
+        if not _UPLOAD_SET_ID_RE.fullmatch(upload_set_id):
+            continue
+        scanned += 1
+        if upload_set_id in active_upload_set_ids:
+            skipped_active += 1
+            entries.append(
+                UploadSetCleanupEntry(
+                    upload_set_id=upload_set_id,
+                    state="active",
+                    reason="referenced_by_queued_or_running_job",
+                    path=str(root),
+                    deleted=False,
+                )
+            )
+            continue
+
+        status: UploadSetStatus | None = None
+        try:
+            status = _read_status(root)
+            state: str = status.state
+            updated_at = status.updated_at
+        except Exception:
+            invalid_manifests += 1
+            state = "orphan"
+            updated_at = datetime.fromtimestamp(root.stat().st_mtime, UTC)
+
+        terminal = status is None or state in _TERMINAL_STATES
+        stale_enough = updated_at <= stale_cutoff
+        grace_elapsed = terminal or updated_at <= active_cutoff
+        if not (stale_enough and grace_elapsed):
+            skipped_recent += 1
+            entries.append(
+                UploadSetCleanupEntry(
+                    upload_set_id=upload_set_id,
+                    state=state,
+                    reason="not_stale_enough",
+                    path=str(root),
+                    updated_at=updated_at,
+                    deleted=False,
+                )
+            )
+            continue
+
+        if not dry_run:
+            shutil.rmtree(root)
+            deleted += 1
+        entries.append(
+            UploadSetCleanupEntry(
+                upload_set_id=upload_set_id,
+                state=state,
+                reason="ttl_expired",
+                path=str(root),
+                updated_at=updated_at,
+                deleted=not dry_run,
+            )
+        )
+
+    return UploadSetCleanupResult(
+        scanned=scanned,
+        deleted=deleted,
+        skipped_active=skipped_active,
+        skipped_recent=skipped_recent,
+        invalid_manifests=invalid_manifests,
+        dry_run=dry_run,
+        entries=tuple(entries),
+    )
 
 
 async def cancel_upload_set(base_dir: Path, upload_set_id: str) -> UploadSetStatus:
@@ -140,6 +280,22 @@ async def store_upload_file(
 
 def upload_set_root(base_dir: Path, upload_set_id: str) -> Path:
     return _upload_root(base_dir, upload_set_id) / "files"
+
+
+def extract_upload_set_ids(value: Any) -> set[str]:
+    found: set[str] = set()
+    if isinstance(value, str):
+        found.update(_UPLOAD_SET_ID_RE.findall(value))
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            if key == "upload_set_id" and isinstance(child, str):
+                found.update(_UPLOAD_SET_ID_RE.findall(child))
+            else:
+                found.update(extract_upload_set_ids(child))
+    elif isinstance(value, (list, tuple, set)):
+        for child in value:
+            found.update(extract_upload_set_ids(child))
+    return found
 
 
 def _upload_root(base_dir: Path, upload_set_id: str) -> Path:

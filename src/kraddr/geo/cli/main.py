@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -52,12 +53,14 @@ load_app = typer.Typer(help="Load data sources.")
 refresh_app = typer.Typer(help="Run post-load refresh operations.")
 validate_app = typer.Typer(help="Validate loaded data.")
 jobs_app = typer.Typer(help="Inspect persistent load jobs.")
+uploads_app = typer.Typer(help="Maintain filesystem upload sets.")
 backup_app = typer.Typer(help="Create and inspect DB backup artifacts.")
 restore_app = typer.Typer(help="Restore DB backup artifacts.")
 app.add_typer(load_app, name="load")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(validate_app, name="validate")
 app.add_typer(jobs_app, name="jobs")
+app.add_typer(uploads_app, name="uploads")
 app.add_typer(backup_app, name="backup")
 app.add_typer(restore_app, name="restore")
 
@@ -627,6 +630,30 @@ def cancel_job(job_id: str) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
             typer.echo((await client.cancel_load(job_id)).model_dump_json())
+
+    asyncio.run(run())
+
+
+@uploads_app.command("cleanup")
+def cleanup_uploads(
+    ttl_days: int | None = typer.Option(None, "--ttl-days", min=1),
+    active_grace_minutes: int | None = typer.Option(
+        None,
+        "--active-grace-minutes",
+        min=1,
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Delete stale upload sets while preserving queued/running job references."""
+
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            result = await client.cleanup_upload_sets(
+                ttl_days=ttl_days,
+                active_grace_minutes=active_grace_minutes,
+                dry_run=dry_run,
+            )
+        typer.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
 
     asyncio.run(run())
 
