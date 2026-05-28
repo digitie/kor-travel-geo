@@ -247,7 +247,7 @@ CREATE INDEX idx_sppn_makarea_sig
 
 ### 후속 구현 범위
 
-T-042에서 1~3번은 구현했다. 남은 UI overlay는 T-044의 최신 `maplibre-vworld-js` domain wrapper 경계화 후 처리한다.
+T-042에서 1~3번은 구현했다. 남은 UI overlay는 T-044의 `maplibre-vworld-js` 0.1.0 문서-only 재확인 결과를 바탕으로 별도 UI 구현 PR에서 처리한다.
 
 1. 완료: `TL_SPPN_MAKAREA` loader와 `tl_sppn_makarea` DDL 추가.
 2. 완료: reverse geocode에서 기존 도로명/지번 후보와 응답 계약이 섞이지 않도록 `x_extension.sppn_makarea`로 보조 문맥을 노출.

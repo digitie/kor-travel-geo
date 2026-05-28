@@ -14,7 +14,7 @@ npm run dev
 
 `NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다.
 
-지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 최신 확인 SHA인 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정하며, 패키징·타입·Next.js 호환 문제가 발견되면 이 UI에서만 우회하지 않고 해당 저장소도 적극 수정한다. 최신 upstream redaction helper는 `redactVWorldUrl()`이고, UI 내부에서는 기존 컴포넌트 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 사용한다.
+지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 현재 확인 SHA인 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정한다. T-044에서는 `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb` 기준 public API를 문서-only로 재확인했지만, npm registry에 0.1.0 package가 없어 dependency는 아직 바꾸지 않았다. 최신 upstream redaction helper는 `redactVWorldUrl()`이고, UI 내부에서는 기존 컴포넌트 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 사용한다.
 
 ## 검증
 

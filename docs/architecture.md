@@ -51,9 +51,9 @@
 
 자세한 디렉토리 구조, 컴포넌트 설계, 페이지별 화면은 `docs/frontend-package.md`를 본다.
 
-VWorld 지도 연동은 `kraddr-geo-ui` 로컬 코드만의 책임으로 보지 않는다. `maplibre-vworld` package는 항상 최신 `main` 또는 stable release를 확인한 뒤 검증된 SHA로 소비한다. MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 `digitie/maplibre-vworld-js`도 적극 수정 대상에 포함한다. 반대로 geocode/reverse 디버그 입력, 정합성/성능/적재 overlay, 관리 UI fallback처럼 이 프로젝트에만 의미가 있는 기능은 `kraddr-geo-ui` domain wrapper에서 구현한다.
+VWorld 지도 연동은 `kraddr-geo-ui` 로컬 코드만의 책임으로 보지 않는다. `maplibre-vworld` package는 항상 최신 `main` 또는 stable release를 확인한 뒤 검증된 SHA로 소비한다. 2026-05-28 T-044에서는 `maplibre-vworld-js` `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb` 기준으로 public API를 문서-only로 재확인했고, upstream 코드는 직접 수정하지 않았다. MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 별도 upstream task/PR로 분리한다. 반대로 geocode/reverse 디버그 입력, 정합성/성능/적재 overlay, 관리 UI fallback처럼 이 프로젝트에만 의미가 있는 기능은 `kraddr-geo-ui` domain wrapper에서 구현한다.
 
-T-044부터는 이 원칙을 더 강하게 적용한다. `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`의 직접 MapLibre lifecycle 소유를 줄이고, upstream `maplibre-vworld-js`의 최신 `VWorldMap` 또는 동등한 Hook/component를 감싸는 domain wrapper로 만든다. 필요한 click callback, marker 제어, tile error redaction, SSR-safe 사용법 같은 범용 기능이 upstream에 부족하면 이 저장소에서만 우회하지 않고 upstream을 수정한 뒤 검증된 최신 SHA를 다시 소비한다. key 미설정 fallback 문구와 layout, API 응답 overlay, 운영 콘솔 상태 연결은 이 저장소에 남긴다.
+T-044의 0.1.0 재확인 결론은 `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`의 직접 MapLibre lifecycle 소유를 줄이고, 후속 구현 PR에서 upstream `VWorldMap` 또는 동등한 Hook/component를 감싸는 domain wrapper로 바꾸는 것이다. 필요한 click callback, marker 제어, tile error redaction, SSR-safe 사용법 같은 범용 기능이 upstream에 부족하면 이 저장소에서만 우회하지 않고 별도 upstream 작업으로 분리한다. key 미설정 fallback 문구와 layout, API 응답 overlay, 운영 콘솔 상태 연결은 이 저장소에 남긴다.
 
 ## 데이터 흐름 — 지오코딩
 
