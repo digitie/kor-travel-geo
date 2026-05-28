@@ -90,10 +90,11 @@
 - ✅ T-047 인덱스 운영 영향 측정 — exact btree index 3개 포함 상태에서 MV refresh/swap, 디스크, 백업 envelope를 측정했다. `CONCURRENTLY` refresh는 T-035 기준 111.64초에서 133.28초, shadow `swap`은 137.15초에서 352.85초로 늘었다. exact index 3개 build phase 합계는 180.35초, exact index total size는 1.43GiB, `pg_dump -Fd --jobs=4` dump directory는 2분 21.60초/4.02GiB였다. 로컬 `zstd` CLI 부재로 최종 `tar.zst` archive 측정은 후속에 남겼다. 상세: `docs/t047-query-performance-tuning.md`
 - ✅ T-047 stress corpus benchmark — 11,000건 corpus SHA `2123e09...`와 88,000 measurement로 기본 pool `c1/c4/c16/c64`를 측정했다. error 0, c16 p95 34ms 이하였고, c64 tail은 대부분 checkout 대기였다. Q3 fuzzy c64는 p95 335.01ms 중 checkout p95 304.91ms/execute p95 32.07ms, Q4 search c64는 p95 302.21ms 중 checkout p95 280.41ms/execute p95 27.77ms였다. 상세: `docs/t047-query-performance-tuning.md`
 - ✅ T-047 REST API e2e latency — `scripts/benchmark_api_latency.py`를 추가해 저장 corpus를 `/v1/address/*` 요청으로 변환하고, 1,000 REST case/8,000 measurement를 측정했다. error 0, c1 p95 6.95~16.18ms, c16 p95 43.79~97.13ms, c64 p95 479.65~810.53ms였다. 한국 밖 reverse 좌표가 내부 `pydantic.ValidationError`로 500을 반환하던 문제도 HTTP 400 `E0102`로 보정했다. 상세: `docs/t047-query-performance-tuning.md`
+- ✅ T-047 REST API pool64 비교 — 같은 REST corpus를 uvicorn 단일 process에서 `KRADDR_GEO_PG_POOL_SIZE=64`, `KRADDR_GEO_PG_MAX_OVERFLOW=0`으로 재측정했다. error 0이었고 Q3 fuzzy c64 p95는 810.53ms → 557.25ms로 개선됐지만, Q1/Q2/Q4/Q5/Q7/Q8은 대부분 악화되어 운영 기본 pool을 64로 단순 상향하지 않기로 했다. 다음 비교는 API worker 수, pool size, admission control grid로 진행한다. 상세: `docs/t047-query-performance-tuning.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업 후보는 Q3 fuzzy 후보 축소다. T-057 region hint 또는 `mv_geocode_text_search` 후보를 잡아 DB client benchmark와 REST e2e를 함께 비교한다. 그 밖에 API worker 수, DB pool size, admission control 조합 비교와 `tar.zst` backup archive 재측정이 남아 있다. task 순서를 엄격히 운영 안전성 우선으로 잡으면 T-056(`python-kraddr-base` Address 흡수) → T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-057(행정구역 hint 검색 가속) → T-053(Admin Web UI 통계/튜닝) → T-052(API v1/v2와 provider 통합) → T-055(N150/Odroid 실측) 순서다.
+다음 작업 후보는 API worker 수, DB pool size, admission control grid 비교다. pool64 단일 process는 Q3만 뚜렷하게 개선하고 다수 경로를 악화시켰으므로, worker 1/2/4와 worker별 pool 8/16/32, API 동시 처리 상한 16/32/64를 같은 REST corpus로 비교한다. 그 밖에 Q3 fuzzy 후보 축소(T-057 region hint 또는 `mv_geocode_text_search`)와 `tar.zst` backup archive 재측정이 남아 있다. task 순서를 엄격히 운영 안전성 우선으로 잡으면 T-056(`python-kraddr-base` Address 흡수) → T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-057(행정구역 hint 검색 가속) → T-053(Admin Web UI 통계/튜닝) → T-052(API v1/v2와 provider 통합) → T-055(N150/Odroid 실측) 순서다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
@@ -106,7 +107,7 @@
 - T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. 남은 hardening은 callback retry/backoff, restore 취소 시 target DB drop/quarantine 정책, 디스크 여유 공간 사전 추정, PostgreSQL/PostGIS major mismatch hard-fail이다. 전국 full-load 재실행은 후속 T-027에서 수행한다.
 - T-049 운영 메타데이터는 1차 구현 상태다. 현재 구현은 DDL/API/UI와 redacted audit event, maintenance window 생성/종료, table stats snapshot capture를 제공한다. T-045/T-046/T-047을 진행할 때 source set 확정, backup/restore artifact, 성능 리포트, MV swap 성공 지점을 `ops.dataset_snapshots`, `ops.artifacts`, `ops.serving_releases`에 실제로 연결하는 보강이 이어져야 한다.
 - T-050은 PR #34~#47 리뷰 audit에서 남긴 운영 hardening 묶음이다. upload set cleanup TTL과 참조 lock, callback HMAC/retry/replay protection, size 기반 backup/restore sub-progress, snapshot/release 자동 생성 hook, table stats cron, destructive confirmation flow, 실제 PostgreSQL constraint integration test를 포함한다.
-- T-047 쿼리 성능 튜닝도 설계 상태다. 전국 full-load DB에서 exact/fuzzy geocode, reverse, search, zipcode, no-result 경로를 다수 반복 측정하고, 목표를 초과하면 index/query rewrite뿐 아니라 `mv_geocode_exact_key`, `mv_geocode_text_search`, `mv_reverse_point_5179` 같은 read-only 보조 MV 후보를 실험한다.
+- T-047 쿼리 성능 튜닝은 여러 기준선과 후속 측정이 쌓인 상태다. 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool64 비교까지 완료했고, 남은 핵심은 API worker/pool/admission control grid, Q3 fuzzy 후보 축소, T-057 region hint 비교, `tar.zst` archive 측정이다.
 
 ## 작업 시작 전 확인할 것
 

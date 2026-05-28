@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-047 REST API pool64 비교: 같은 1,000 REST case/8,000 measurement corpus를 uvicorn 단일 process에서 DB pool 64(`max_overflow=0`)로 재측정했다. error 0이었고 Q3 fuzzy c64 p95는 810.53ms → 557.25ms로 개선됐지만, Q1/Q2/Q4/Q5/Q7/Q8은 대부분 악화되어 운영 기본 pool을 단순히 64로 올리지 않기로 했다. 다음 실험은 `workers × pool size × admission limit` grid와 T-057 region hint 비교로 좁혔다.
 - T-047 REST API e2e latency: 저장 corpus를 `/v1/address/*` 요청으로 변환하는 `scripts/benchmark_api_latency.py`를 추가하고, 1,000 REST case/8,000 measurement를 `c1/c4/c16/c64`로 측정했다. error 0이었고 c1 p95는 6.95~16.18ms, c16 p95는 43.79~97.13ms, c64 p95는 479.65~810.53ms였다. 한국 밖 reverse 좌표가 내부 `pydantic.ValidationError`로 HTTP 500을 내던 문제도 400 `E0102`로 변환되도록 보강했다.
 - T-047 stress corpus benchmark: 11,000건 corpus SHA `2123e09...`와 88,000 measurement로 기본 pool `c1/c4/c16/c64`를 재측정했다. error 0이었고 c16까지는 모든 query군 p95가 34ms 이하였으며, c64 tail은 대부분 pool checkout 대기였다(Q3 fuzzy p95 335.01ms 중 checkout 304.91ms/execute 32.07ms, Q4 search p95 302.21ms 중 checkout 280.41ms/execute 27.77ms). 다음 튜닝은 REST e2e latency, pool/admission control, Q3 fuzzy 후보 축소로 좁혔다.
 - T-047 인덱스 운영 영향 측정: exact btree index 3개 포함 상태에서 MV refresh/swap, 디스크, 백업 envelope를 실측했다. `CONCURRENTLY` refresh는 111.64초 기준선 대비 133.28초, shadow `swap`은 137.15초 기준선 대비 352.85초였고, exact index 3개 build phase 합계는 180.35초였다. DB 전체는 31.90GiB, MV total은 4.78GiB, exact index 3개 합계는 1.43GiB였으며, `pg_dump -Fd --jobs=4` dump directory는 2분 21.60초/4.02GiB로 생성됐다. 로컬 `zstd` CLI 부재로 최종 `tar.zst` archive 측정은 후속으로 남겼다.

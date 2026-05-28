@@ -450,6 +450,47 @@ DB client benchmark와 HTTP API 전체 경로의 차이를 보기 위해 `script
 - reverse API는 core에서 nearest와 SPPN area를 모두 조회하므로, raw DB benchmark의 `reverse_nearest` 단일 SQL보다 무겁다.
 - 다음 운영 튜닝은 API worker 수, DB pool size, admission control 조합을 e2e로 비교해야 한다. Q3 fuzzy는 REST에서도 가장 큰 tail을 보여 T-057 region hint 또는 `mv_geocode_text_search` 후보의 우선순위가 유지된다.
 
+## 2026-05-28 T-047 REST API pool64 비교
+
+기본 pool REST e2e 결과의 c64 tail이 큰 이유를 더 좁히기 위해 같은 uvicorn 단일 process와 같은 저장 corpus를 유지하고 DB pool만 `KRADDR_GEO_PG_POOL_SIZE=64`, `KRADDR_GEO_PG_MAX_OVERFLOW=0`으로 키워 다시 측정했다.
+
+측정 profile:
+
+| 항목 | 값 |
+|------|----|
+| artifact | `artifacts/perf/t047-rest-e2e-pool64-20260528` |
+| 비교 기준 | `artifacts/perf/t047-rest-e2e-standard-20260528-r2` |
+| corpus SHA-256 | `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f` |
+| REST case count | 1,000 |
+| measurement count | 8,000 |
+| iterations / warmup | `iterations=1`, `warmup=1` |
+| concurrency | `1/4/16/64` |
+| API process | uvicorn 단일 process |
+| pool | `size=64`, `max_overflow=0` |
+| error | 0 |
+
+c64 p95/p99 비교:
+
+| API group | 기본 pool p95 | pool64 p95 | 기본 pool p99 | pool64 p99 | 해석 |
+|-----------|--------------:|-----------:|--------------:|-----------:|------|
+| Q1 geocode road | 581.42ms | 850.38ms | 735.34ms | 1048.07ms | 악화 |
+| Q2 geocode parcel | 500.22ms | 762.19ms | 807.93ms | 1070.92ms | 악화 |
+| Q3 geocode fuzzy | 810.53ms | 557.25ms | 1265.29ms | 941.47ms | 개선 |
+| Q4 search | 753.25ms | 864.84ms | 981.13ms | 1032.68ms | 악화 |
+| Q5 reverse nearest | 560.95ms | 817.91ms | 682.69ms | 976.34ms | 악화 |
+| Q6 reverse radius | 773.89ms | 757.39ms | 871.68ms | 957.02ms | p95만 소폭 개선 |
+| Q7 zipcode address | 667.67ms | 802.69ms | 867.93ms | 1085.07ms | 악화 |
+| Q7 zipcode point | 734.30ms | 805.47ms | 1015.46ms | 1208.73ms | 악화 |
+| Q8 geocode no-result | 655.28ms | 798.95ms | 867.84ms | 901.06ms | 악화 |
+| Q11 SPPN reverse | 479.65ms | 494.07ms | 513.51ms | 666.26ms | 거의 동일 또는 악화 |
+
+해석:
+
+- DB client benchmark의 pool64는 checkout 대기를 크게 줄였지만, REST 단일 process에서는 같은 효과가 전면적으로 재현되지 않았다.
+- Q3 fuzzy는 c64 p95가 810.53ms에서 557.25ms로 줄어 connection 대기 완화 효과가 있었지만, Q1/Q2/Q4/Q5/Q7/Q8은 오히려 tail이 커졌다.
+- 단일 uvicorn process에서 pool을 64로 키우면 DB 동시 실행과 Python/HTTP scheduling 경합이 같이 늘어난다. 따라서 운영 기본값을 pool64로 단순 상향하지 않는다.
+- 다음 비교는 `workers × pool size × admission limit` grid로 잡는다. 예를 들어 worker 1/2/4, worker별 pool 8/16/32, API 동시 처리 상한 16/32/64를 같은 REST corpus로 비교하고, Q3 fuzzy 후보 축소는 T-057 region hint와 함께 별도 SQL/REST 전후를 기록한다.
+
 ## 2026-05-28 PR #51/#52 post-merge 리뷰 반영 메모
 
 PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와 review thread는 없었다. 상세 매핑은 `docs/postmerge-review-fixups-pr51-pr52.md`에 둔다.
