@@ -1686,7 +1686,7 @@ LIMIT 5;
 
 ---
 
-## ADR-035: `python-kraddr-base`의 Address 코드 helper를 clean-room으로 흡수하고 외부 라이브러리 의존성을 끊는다
+## ADR-035: `python-kraddr-base`의 Address 코드 helper를 독립 구현하고 외부 라이브러리 의존성을 끊는다
 
 - 상태: accepted (2026-05-28 구현 반영)
 - 날짜: 2026-05-27, 2026-05-28 개정
@@ -1698,9 +1698,11 @@ LIMIT 5;
 
 2026-05-28 인벤토리 결과, `~/dev/python-kraddr-base`는 Git checkout이 아니었고(`.git` 없음), license는 `GPL-3.0-or-later`였다. 사전 예상과 달리 `kraddr.base.address.parser/composer/types/normalize` package는 없고, 실제 Address 표면은 `src/kraddr/base/addresses.py` 단일 파일의 시군구/법정동/도로명관리번호/도로명주소관리번호 DTO와 mapping helper였다. 본 저장소는 MIT이므로 GPL 원본 코드를 직접 복사할 수 없다.
 
+2026-05-28 사용자 확인에 따라 "Address 코드에 대한 조합/분리"는 주소 문자열 parser/composer가 아니라 코드 식별자의 조합·분해·정규화를 뜻하는 것으로 확정한다.
+
 ### 결정
 
-`python-kraddr-base` 원본 코드는 복사하지 않고, 본 저장소에 필요한 Address 코드 정규화/조합 helper만 `src/kraddr/geo/core/address/`에 clean-room으로 구현한다.
+`python-kraddr-base` 원본 코드는 복사하지 않고, 본 저장소에 필요한 Address 코드 정규화/조합 helper만 `src/kraddr/geo/core/address/`에 공개 주소 코드 규칙 기반 독립 구현으로 둔다.
 
 - 구현 대상: `SigunguCode`, `LegalDongCode`, `RoadNameCode`, `RoadNameAddressCode`, `AddressCodeSet`, `admCd`/`rnMgtSn`/`bdMgtSn` 계열 mapping helper.
 - 기존 `core/normalize.py`의 도로명/지번 문자열 parser는 유지한다. 원본 패키지에 별도 문자열 parser가 없었기 때문이다.
@@ -1711,9 +1713,9 @@ LIMIT 5;
 ### 근거
 
 - `python-kraddr-base`는 곧 archive되므로, 본 저장소가 의존하면 빌드/CI/배포 위험이 발생한다.
-- Address 조합/분리는 본 저장소의 PNU generated column 규칙(ADR-010)과 직접 맞물려 있어 같은 저장소에서 관리하는 것이 정합성에 좋다.
+- Address 코드 조합/분리는 본 저장소의 PNU generated column 규칙(ADR-010)과 직접 맞물려 있어 같은 저장소에서 관리하는 것이 정합성에 좋다.
 - 라이브러리 분리를 유지하기에는 본 저장소가 유일한 consumer일 가능성이 높다.
-- GPL 원본을 MIT 저장소에 직접 복사하면 라이선스가 오염된다. clean-room 구현이면 라이선스와 유지보수 경계를 둘 다 지킬 수 있다.
+- GPL 원본을 MIT 저장소에 직접 복사하면 라이선스가 오염된다. 공개 주소 코드 규칙 기반 독립 구현이면 라이선스와 유지보수 경계를 둘 다 지킬 수 있다.
 
 ### 결과
 
@@ -1724,7 +1726,7 @@ LIMIT 5;
 
 ### 남은 위험
 
-- `RoadNameAddressCode`는 26자리 도로명주소관리번호 자체만으로는 `admCd`의 리 코드 2자리를 복원할 수 없다. 외부 Juso 좌표 API 요청처럼 full `admCd`가 필요한 경로는 `AddressCodeSet`처럼 원본 `admCd`를 함께 보존하는 helper를 사용한다.
+- `RoadNameAddressCode`는 26자리 도로명주소관리번호 자체만으로는 `admCd`의 리 코드 2자리를 복원할 수 없다. 외부 Juso 좌표 API 요청처럼 full `admCd`가 필요한 경로는 `AddressCodeSet`처럼 원본 `admCd`를 함께 보존하는 helper를 사용한다. 필수 코드가 없으면 fallback adapter는 좌표 API를 호출하지 않고 local `NOT_FOUND` 흐름으로 돌아간다.
 - archive 시점 이후 외부에서 fix가 들어오면 본 저장소는 자동 반영하지 않는다. 별도 PR로 재구현 여부를 판단한다.
 
 ---

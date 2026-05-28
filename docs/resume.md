@@ -97,11 +97,12 @@
 - ✅ T-057 행정구역 hint 기반 검색 가속 1차 구현과 실측 — `RegionHint(sig_cd,bjd_cd)`를 추가하고 `AsyncAddressClient.geocode/search/reverse_geocode`, `/v1/address/geocode`, `/v1/address/search`, `/v1/address/reverse`에 선택 hint를 연결했다. 응답 구조는 vworld 호환을 유지하고, 현재 MV에 물리 `sig_cd`가 없으므로 `bjd_cd` prefix filter로 적용한다. SQL standard run은 900 case/8,100 measurement/error 0, REST smoke는 320 case/1,920 measurement/error 0이었다. Q3 fuzzy c64 p95는 SQL에서 307.45ms → 267.99ms, REST smoke에서 651.62ms → 520.43ms로 개선됐지만 충분한 결정타는 아니어서 T-061 slim text-search 구조로 넘긴다. 상세: `docs/t057-region-hint-search.md`
 - ✅ T-062 PR #53~#64 post-merge 리뷰 audit/fixup — PR #53부터 #64까지 conversation/review/inline/thread와 GraphQL `reviewThreads`를 재확인했고 unresolved thread 0건을 기록했다. 직접 반영 항목은 search exact preflight 정규화 문서화와 `search_fuzzy` benchmark case, `pg_stat_statements` schema prefix, reverse 좌표 validation의 structured error mapping, REST admission repeat 설명, backup archive checksum과 `tar.zst` 해석 보강이다. 상세: `docs/postmerge-review-fixups-pr53-pr64.md`
 - ✅ T-044 `maplibre-vworld-js` 0.1.0 기준 문서-only 재확인 — GitHub tag `v0.1.0` commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`의 package manifest, public export, `VWorldMap`, marker/layer primitive, VWorld helper를 확인했다. npm registry에는 아직 `maplibre-vworld@0.1.0`이 없어 dependency는 바꾸지 않았고, 사용자 지시에 따라 upstream 코드는 직접 수정하지 않았다. 상세: `docs/t044-maplibre-vworld-010-review.md`
-- ✅ T-056 `python-kraddr-base` Address 코드 helper 정리 — 실제 `~/dev/python-kraddr-base`는 Git checkout이 아니고 `GPL-3.0-or-later`라 원본 코드를 복사하지 않았다. 대신 `core/address/codes.py`에 시군구/법정동/도로명관리번호/도로명주소관리번호 helper를 clean-room으로 구현하고, Juso fallback 좌표 API 파라미터 정규화에 연결했다. 상세: `docs/t056-kraddr-base-address-merge.md`
+- ✅ T-056 `python-kraddr-base` Address 코드 helper 정리 — 실제 `~/dev/python-kraddr-base`는 Git checkout이 아니고 `GPL-3.0-or-later`라 원본 코드를 복사하지 않았다. 대신 `core/address/codes.py`에 시군구/법정동/도로명관리번호/도로명주소관리번호 helper를 공개 주소 코드 규칙 기반 독립 구현으로 두고, Juso fallback 좌표 API 파라미터 정규화에 연결했다. 상세: `docs/t056-kraddr-base-address-merge.md`
+- ✅ T-052/T-053 선행 정리 — PR #67 리뷰 후속으로 T-056의 라이선스 표현을 "공개 주소 코드 규칙 기반 독립 구현, GPL 원본 코드 미복사"로 바로잡았다. 사용자 확인에 따라 "조합/분리"가 코드 식별자 조합·분해·정규화 의도였음을 문서화했고, Juso 검색 결과에 좌표 API 필수 코드가 없으면 coord API를 호출하지 않는 회귀 테스트를 추가했다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 사용자 최신 지시에 따라 T-052/T-053 선행 정리다. 먼저 T-052의 v1/v2 API 경계, provider adapter 분리, `docs/api-reference/` skeleton과 T-053의 admin statistics/performance/consistency sample table 의존성을 한 번 더 맞춘 뒤, T-052 PR → T-053 PR 순서로 진행한다.
+다음 작업은 사용자 최신 지시에 따라 T-052 외부 provider 비교 + API v1/v2 분리 + AI-friendly 문서화다. T-056 `core.address` helper를 provider adapter 공통 주소 코드 정규화 계층으로 재사용하고, v1 호환 표면은 유지하면서 v2 DTO/router/client/API reference skeleton을 먼저 작게 세운다.
 
 그 이후의 작업 후보는 T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-061(Q3 fuzzy slim text-search 구조) → T-050(운영 hardening) → T-055(N150/Odroid 실측) 순서다.
 

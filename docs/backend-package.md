@@ -279,7 +279,7 @@ await client.reverse_geocode(127.0, 37.5, sig_cd="11")
 
 ### 주소 코드 helper (`core/address/`, T-056)
 
-`python-kraddr-base`의 Address 표면을 확인한 결과 원본 패키지는 GPL-3.0-or-later이고 Git checkout이 아니었으므로 코드를 복사하지 않았다. 본 저장소는 `core/address/codes.py`에 시군구/법정동/도로명관리번호/도로명주소관리번호 helper를 clean-room으로 둔다.
+`python-kraddr-base`의 Address 표면을 확인한 결과 원본 패키지는 GPL-3.0-or-later이고 Git checkout이 아니었으므로 코드를 복사하지 않았다. 본 저장소는 `core/address/codes.py`에 시군구/법정동/도로명관리번호/도로명주소관리번호 helper를 공개 주소 코드 규칙 기반 독립 구현으로 둔다. 사용자 확인에 따라 T-056의 "조합/분리"는 주소 문자열이 아니라 코드 식별자의 조합·분해·정규화를 뜻한다.
 
 - `SigunguCode`, `LegalDongCode`, `RoadNameCode`, `RoadNameAddressCode`, `AddressCodeSet`
 - `admCd`, `rnMgtSn`, `udrtYn`, `buldMnnm`, `buldSlno`, `bdMgtSn` mapping helper

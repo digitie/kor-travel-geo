@@ -91,3 +91,37 @@ async def test_external_geocode_client_maps_juso_search_and_coord_response() -> 
     assert response.x_extension.source == "api_juso"
     assert response.x_extension.bd_mgt_sn == "1168010100108250000028924"
     assert response.x_extension.zip_no == "06236"
+
+
+@pytest.mark.asyncio
+async def test_external_geocode_client_skips_juso_coord_when_code_parts_are_missing() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if "addrLinkApi" not in str(request.url):
+            pytest.fail("coord API must not be called without admCd/rnMgtSn code parts")
+        return httpx.Response(
+            200,
+            json={
+                "results": {
+                    "juso": [
+                        {
+                            "roadAddr": "서울특별시 강남구 테헤란로 152",
+                            "buldMnnm": "152",
+                            "buldSlno": "0",
+                        }
+                    ]
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = ExternalGeocodeClient(
+            Settings(
+                juso_api_key=SecretStr("juso-key"),
+                juso_search_url="https://business.juso.go.kr/addrlink/addrLinkApi.do",
+                juso_coord_url="https://business.juso.go.kr/addrlink/addrCoordApi.do",
+            ),
+            http_client=http_client,
+        )
+        response = await client.geocode(GeocodeInput(address="테헤란로 152"))
+
+    assert response is None
