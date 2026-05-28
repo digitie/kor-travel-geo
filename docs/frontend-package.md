@@ -255,7 +255,7 @@ idle → selecting_artifact → restore_preflight → restore_running
 
 - 백업 생성 탭: 저장 위치 allowlist, 상대 경로, profile(`serving-ready`, `lean-serving`, `forensic`), jobs, compression level, callback URL을 입력한다. 저장 위치는 사용자의 로컬 다운로드 경로가 아니라 백엔드 서버가 접근 가능한 경로임을 UI 라벨에 명확히 표시한다.
 - 진행 중 영역: `db_backup`, `db_restore` job을 함께 보여 준다. 백엔드는 `GET /v1/admin/jobs/{job_id}/events` Server-Sent Events를 제공하지만, T-046 1차 UI는 안정성을 우선해 TanStack Query polling으로 상태를 갱신한다. SSE 연결과 polling fallback 전환 UI는 후속 고도화 후보로 남긴다.
-- 진행률: 백업은 `preflight → dump → archive → checksum → finalize`, 복원은 `preflight → extract → restore → analyze → validate → finalize` phase를 표시한다. `pg_dump`/`pg_restore` progress는 추정값이므로 stage label, elapsed time, 처리 object/file, archive 크기를 함께 보여 준다.
+- 진행률: 백업은 `preflight → dump → dump checksum → archive → checksum → finalize`, 복원은 `preflight → extract → restore → analyze → validate → finalize` phase를 표시한다. `pg_dump`/`pg_restore` progress는 추정값이므로 stage label, elapsed time, 처리 object/file, dump 디렉터리 크기, archive 입력/출력 byte, checksum byte를 함께 보여 준다.
 - 취소: 작업이 `queued` 또는 `running`일 때만 취소 버튼을 노출한다. 취소 후에는 서버가 partial dump dir, `.part` archive, 새 target DB를 어떻게 정리했는지 `log_tail`과 summary로 보여 준다.
 - 백업 목록 탭: artifact id, 파일명, 크기, SHA256 앞 12자리, 생성일, profile, source set, callback 상태, 만료 예정일을 table로 표시한다. `done` artifact만 다운로드 버튼을 노출한다.
 - 다운로드: 다운로드 링크는 브라우저 로컬 저장을 위한 보조 경로다. 백업 파일은 이미 서버 지정 경로에 저장되어 있으므로, UI는 서버 경로와 다운로드 링크를 구분해서 표시한다.

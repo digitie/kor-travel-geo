@@ -938,6 +938,7 @@ T-047 전국 DB 실측 보정: `pg_dump -Fd` directory 내부의 대형 table da
 - `KRADDR_GEO_BACKUP_ALLOWED_DIRS`와 `KRADDR_GEO_BACKUP_CALLBACK_ALLOWED_HOSTS`는 문서 예시처럼 comma-separated env 값을 받을 수 있도록 `NoDecode` + validator로 처리한다.
 - 대구광역시 부분 적재 DB `kraddr_geo_t046_daegu`를 `t046_daegu_backup.tar.zst`로 백업하고, `kraddr_geo_t046_daegu_restore`에 복원해 row count와 geocode/reverse smoke test를 비교했다.
 - T-050 2차에서 callback HMAC header, retry/backoff, attempt별 callback ID, `manifest.callback_delivery` 기록을 추가했다. 수신자 측 replay 저장소는 이 저장소가 관리하지 않으므로 운영 endpoint에서 timestamp window와 callback ID de-duplication을 적용해야 한다.
+- T-050 3차에서 dump/archive/checksum/extract 구간에 file/archive size sampler를 추가했다. schema 변경 없이 기존 `load_jobs.progress`, `current_stage`, `log_tail`에 byte 기반 보조 진행률을 남긴다.
 
 ### 후속
 

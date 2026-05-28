@@ -9,6 +9,8 @@ from kraddr.geo.dto.admin import OpsArtifact, RestoreCreateRequest
 from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.infra import backup as backup_module
 from kraddr.geo.infra.backup import (
+    SizeProgressProbe,
+    SizeProgressSample,
     backup_download_token,
     build_pg_dump_command,
     build_pg_restore_command,
@@ -17,6 +19,8 @@ from kraddr.geo.infra.backup import (
     callback_payload_bytes,
     callback_signature,
     deliver_callback,
+    format_bytes,
+    path_size_bytes,
     read_json,
     resolve_backup_destination,
     resolve_restore_target_dsn,
@@ -166,6 +170,37 @@ def test_download_token_is_deterministic_and_validates() -> None:
     validate_download_token(artifact, settings, token)
     with pytest.raises(InvalidInputError, match="invalid"):
         validate_download_token(artifact, settings, "0" * 64)
+
+
+def test_size_progress_helpers_report_file_and_directory_bytes(tmp_path: Path) -> None:
+    (tmp_path / "a.bin").write_bytes(b"a" * 1024)
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "b.bin").write_bytes(b"b" * 512)
+
+    assert path_size_bytes(tmp_path) == 1536
+    assert format_bytes(1536) == "1.5 KiB"
+
+    probe = SizeProgressProbe(
+        tmp_path,
+        "dump 디렉터리",
+        total_bytes=2048,
+        emit_interval_s=0,
+    )
+    sample = probe.sample()
+
+    assert sample.current_bytes == 1536
+    assert probe.maybe_message(sample) == "dump 디렉터리 1.5 KiB/2.0 KiB"
+
+
+def test_estimated_progress_uses_size_sample_when_available() -> None:
+    value = backup_module._estimated_progress(
+        (0.70, 0.90),
+        line_count=0,
+        sample=SizeProgressSample(current_bytes=50, total_bytes=100),
+    )
+
+    assert value == pytest.approx(0.80)
 
 
 def test_callback_payload_is_signed_with_timestamp_and_callback_id() -> None:

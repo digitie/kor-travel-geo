@@ -196,12 +196,13 @@ logs/
 | phase | progress 범위 | 기준 |
 |-------|----------------|------|
 | `preflight` | 0.00~0.05 | 경로/용량/DB metadata 확인 |
-| `dump` | 0.05~0.70 | `pg_dump --verbose` object count와 dump 디렉터리 증가량 |
-| `archive` | 0.70~0.90 | 압축된 byte / dump 디렉터리 예상 byte |
-| `checksum` | 0.90~0.97 | archive SHA256 계산 byte |
+| `dump` | 0.05~0.65 | `pg_dump --verbose` object count와 dump 디렉터리 증가량 |
+| `dump checksum` | 0.65~0.70 | `manifest.json`과 dump 디렉터리 checksum 처리 byte |
+| `archive` | 0.70~0.90 | `.part` archive 증가량 / archive 입력 byte |
+| `checksum` | 0.90~0.97 | archive SHA256 읽은 byte / 전체 archive byte |
 | `finalize` | 0.97~1.00 | metadata 저장, callback, cleanup |
 
-`pg_dump`는 정확한 row-level progress를 제공하지 않으므로 진행률은 phase별 추정값이다. UI에는 "추정 진행률"임을 표시하되, `current_stage`, 현재 처리 파일, 현재 archive 크기, elapsed time을 함께 보여 준다.
+`pg_dump`는 정확한 row-level progress를 제공하지 않으므로 진행률은 phase별 추정값이다. T-050 3차 이후 dump/archive/checksum/extract 구간은 기존 line count 추정에 file size sampler를 더한다. UI에는 "추정 진행률"임을 표시하되, `current_stage`, 현재 처리 파일, dump 디렉터리 크기, archive 입력/출력 크기, checksum byte, elapsed time을 함께 보여 준다. `tar.zst` output은 입력보다 작을 수 있으므로 archive byte progress는 완료율 확정값이 아니라 정체 여부를 보기 위한 보조 지표다.
 
 ## 복원 작업 흐름
 
@@ -227,8 +228,8 @@ logs/
 | phase | progress 범위 | 기준 |
 |-------|----------------|------|
 | `preflight` | 0.00~0.05 | archive/target DB 검증 |
-| `extract` | 0.05~0.20 | 압축 해제 byte |
-| `restore` | 0.20~0.80 | `pg_restore --verbose` object count |
+| `extract` | 0.05~0.20 | extract 디렉터리 증가량 / archive byte |
+| `restore` | 0.20~0.80 | `pg_restore --verbose` object count와 dump 디렉터리 총량 |
 | `analyze` | 0.80~0.90 | 대상 table ANALYZE |
 | `validate` | 0.90~0.98 | row count, smoke, 선택 consistency |
 | `finalize` | 0.98~1.00 | metadata 저장, callback, cleanup |
@@ -423,7 +424,7 @@ T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, 
 
 1. `/v1/admin/backups` 또는 CLI로 `db_backup` job을 등록한다.
 2. 저장 위치는 테스트 전용 디렉터리로 둔다.
-3. 진행률이 `preflight → dump → archive → checksum → finalize`를 지나 `done`이 되는지 확인한다.
+3. 진행률이 `preflight → dump → dump checksum → archive → checksum → finalize`를 지나 `done`이 되는지 확인한다.
 4. artifact 파일이 존재하고 size > 0인지 확인한다.
 5. `manifest.json`에 DB 이름, row counts, source set, format, jobs가 들어 있는지 확인한다.
 6. SHA256이 metadata와 일치하는지 확인한다.

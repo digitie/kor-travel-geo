@@ -3,7 +3,7 @@
 작업 항목은 `T-NNN` 형식의 ID로 관리한다. 새 작업은 "대기"의 우선순위 순서대로 들어가고, 진행 중이 되면 담당자를 표시한다. 완료된 작업은 "완료" 섹션 상단에 누적한다.
 
 ## 진행 중
-- T-050 운영 hardening 후속 — 여러 PR로 나눠 진행한다. 1차 upload set cleanup TTL/실행 중 job 참조 보호는 완료했고, 2차 backup/restore callback HMAC·retry·replay protection PR을 진행 중이다. 남은 순서는 file/archive size 기반 sub-progress → full-load/MV/restore 완료 hook의 `ops.dataset_snapshots`/`ops.serving_releases` 자동 생성 → `ops.table_stats_snapshots` 주기 capture → destructive confirmation flow → 실제 PostgreSQL FK/trigger/partial unique integration test다. 상세: `docs/t050-ops-hardening.md`
+- T-050 운영 hardening 후속 — 여러 PR로 나눠 진행한다. 1차 upload set cleanup TTL/실행 중 job 참조 보호와 2차 backup/restore callback HMAC·retry·replay protection은 완료했고, 3차 file/archive size 기반 sub-progress PR을 진행 중이다. 남은 순서는 full-load/MV/restore 완료 hook의 `ops.dataset_snapshots`/`ops.serving_releases` 자동 생성 → `ops.table_stats_snapshots` 주기 capture → destructive confirmation flow → 실제 PostgreSQL FK/trigger/partial unique integration test다. 상세: `docs/t050-ops-hardening.md`
 
 ## 대기 (우선순위 순)
 
