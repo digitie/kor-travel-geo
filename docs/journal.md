@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 13:19 (T-047 REST API pool64 비교)
+
+**작업**: REST API e2e latency에서 DB pool만 64로 키웠을 때 c64 tail이 개선되는지 확인했다.
+
+**측정**:
+- artifact: `artifacts/perf/t047-rest-e2e-pool64-20260528`.
+- 비교 기준: `artifacts/perf/t047-rest-e2e-standard-20260528-r2`.
+- corpus SHA: `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f`.
+- uvicorn 단일 process, `KRADDR_GEO_PG_POOL_SIZE=64`, `KRADDR_GEO_PG_MAX_OVERFLOW=0`.
+- REST case 1,000건, measurement 8,000건, error 0.
+
+**결론**:
+- Q3 fuzzy c64 p95는 810.53ms에서 557.25ms로 개선됐고, Q6 reverse radius p95는 773.89ms에서 757.39ms로 소폭 개선됐다.
+- Q1/Q2/Q4/Q5/Q7/Q8은 대부분 악화됐다. 예를 들어 Q4 search c64 p95는 753.25ms에서 864.84ms로, Q1 도로명 geocode c64 p95는 581.42ms에서 850.38ms로 커졌다.
+- REST 단일 process에서는 pool64가 checkout 대기만 줄이는 해법이 아니라 DB 동시 실행과 Python/HTTP scheduling 경합을 키울 수 있다. 운영 기본 pool을 64로 단순 상향하지 않고, 다음 실험은 worker 수, pool size, admission control 조합 grid로 진행한다.
+
+**후속**:
+- Q3 fuzzy 후보 축소는 T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 SQL/REST 전후를 비교한다.
+- API worker/pool/admission control grid를 같은 REST corpus로 측정한다.
+
 ## 2026-05-28 12:57 (T-047 REST API e2e latency)
 
 **작업**: SQL benchmark corpus를 실제 `/v1/address/*` HTTP 요청으로 변환하는 REST API benchmark harness를 추가하고, 표준 corpus e2e latency를 측정했다.
