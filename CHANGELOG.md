@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-047 REST admission candidate 반복 측정: 기본 profile, `w2/p8/a8`, `w4/p4/a4`를 같은 REST corpus로 `iterations=3` 재측정했다. 세 run 모두 16,000 measurement/error 0이었다. `w2/p8/a8`은 Q1/Q4 p95와 Q1~Q4 p99가 더 안정적이었고, `w4/p4/a4`는 Q7/Q8/Q11에서 강했다. Q3 fuzzy는 p95 기준 기본 profile이 가장 낮아 worker/pool/admission만으로 확정 개선했다고 보지 않고, T-057 region hint 또는 text-search slim MV 후속으로 넘긴다.
 - T-047 REST worker/pool/admission grid: `/v1/address/*` 전용 optional admission control(`KRADDR_GEO_API_MAX_CONCURRENCY`, `KRADDR_GEO_API_ADMISSION_TIMEOUT_MS`)을 추가하고 같은 REST corpus로 `w1/p16/a16`, `w2/p8/a8`, `w4/p4/a4`를 측정했다. 세 run 모두 error 0이었다. `w4/p4/a4`는 Q4 search c64 p95를 753.25ms → 435.63ms, Q3 fuzzy를 810.53ms → 550.35ms로 낮췄지만 Q5 reverse/Q8 no-result는 악화됐다. 기본값은 admission 비활성으로 유지하고, 권장 profile은 `w4/p4/a4`와 `w2/p8/a8`의 `iterations=3` 재측정 후 확정한다.
 - T-047 REST API pool64 비교: 같은 1,000 REST case/8,000 measurement corpus를 uvicorn 단일 process에서 DB pool 64(`max_overflow=0`)로 재측정했다. error 0이었고 Q3 fuzzy c64 p95는 810.53ms → 557.25ms로 개선됐지만, Q1/Q2/Q4/Q5/Q7/Q8은 대부분 악화되어 운영 기본 pool을 단순히 64로 올리지 않기로 했다. 다음 실험은 `workers × pool size × admission limit` grid와 T-057 region hint 비교로 좁혔다.
 - T-047 REST API e2e latency: 저장 corpus를 `/v1/address/*` 요청으로 변환하는 `scripts/benchmark_api_latency.py`를 추가하고, 1,000 REST case/8,000 measurement를 `c1/c4/c16/c64`로 측정했다. error 0이었고 c1 p95는 6.95~16.18ms, c16 p95는 43.79~97.13ms, c64 p95는 479.65~810.53ms였다. 한국 밖 reverse 좌표가 내부 `pydantic.ValidationError`로 HTTP 500을 내던 문제도 400 `E0102`로 변환되도록 보강했다.

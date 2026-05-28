@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 14:35 (T-047 REST admission candidate 반복 측정)
+
+**작업**: REST worker/pool/admission exploratory grid에서 후보로 남긴 `w2/p8/a8`, `w4/p4/a4`를 기본 profile과 함께 `iterations=3`으로 반복 측정했다.
+
+**측정**:
+- corpus SHA: `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f`.
+- 각 run은 REST case 1,000건, measurement 16,000건, `iterations=3`, `warmup=1`, concurrency `1/4/16/64`, error 0이었다.
+- artifacts:
+  - `artifacts/perf/t047-rest-repeat-default-20260528`
+  - `artifacts/perf/t047-rest-repeat-w2-p8-a8-20260528`
+  - `artifacts/perf/t047-rest-repeat-w4-p4-a4-20260528`
+
+**결론**:
+- `w2/p8/a8`은 Q1 road/Q4 search의 c64 p95와 Q1~Q4 p99가 더 안정적이었다. Q4 search p95는 default 873.12ms에서 596.35ms로 줄었다.
+- `w4/p4/a4`는 Q7 zipcode, Q8 no-result, Q11 SPPN에서 가장 안정적이었다. Q8 no-result p95는 default 703.92ms에서 542.88ms로 줄었다.
+- Q3 fuzzy는 p95 기준 default가 654.86ms로 가장 낮았고, p99 기준으로만 `w2/p8/a8`이 가장 낮았다. worker/pool/admission 조합만으로 Q3를 해결했다고 보지 않는다.
+
+**후속**:
+- T-047 안에서 pool 기본값을 더 바꾸지 않고, Q3 fuzzy 후보 축소는 T-057 region hint 또는 text-search slim MV 실험으로 넘긴다.
+- 남은 T-047 자체 작업은 `zstd` 준비 후 backup `tar.zst` archive 측정 정도다.
+
 ## 2026-05-28 14:06 (T-047 REST worker/pool/admission grid)
 
 **작업**: REST API c64 tail을 줄이기 위해 `/v1/address/*` 전용 optional admission control을 추가하고, worker/pool/admission 조합을 exploratory benchmark로 비교했다.
