@@ -17,6 +17,7 @@ from scripts.benchmark_query_performance import (
     corpus_from_json,
     corpus_to_json,
     percentile,
+    pg_stat_delta,
     summarize_measurements,
 )
 
@@ -32,6 +33,8 @@ def test_query_benchmark_parser_defaults() -> None:
     assert args.statement_timeout_ms == 5_000
     assert args.pool_size is None
     assert args.max_overflow is None
+    assert args.reset_pg_stat_statements is False
+    assert args.pg_stat_limit == 50
 
 
 def test_query_benchmark_parser_accepts_multiple_concurrency_values() -> None:
@@ -82,6 +85,8 @@ def test_summarize_measurements_excludes_warmup_and_counts_errors() -> None:
             ok=True,
             elapsed_ms=10.0,
             row_count=1,
+            checkout_ms=1.0,
+            execute_ms=9.0,
         ),
         Measurement(
             case_id="ok2",
@@ -93,6 +98,8 @@ def test_summarize_measurements_excludes_warmup_and_counts_errors() -> None:
             ok=True,
             elapsed_ms=30.0,
             row_count=3,
+            checkout_ms=3.0,
+            execute_ms=27.0,
         ),
         Measurement(
             case_id="err",
@@ -114,6 +121,8 @@ def test_summarize_measurements_excludes_warmup_and_counts_errors() -> None:
     assert summary[0].samples == 3
     assert summary[0].errors == 1
     assert summary[0].p50_ms == 20.0
+    assert summary[0].p95_checkout_ms == 2.9
+    assert summary[0].p95_execute_ms == 26.1
     assert summary[0].avg_rows == 2.0
 
 
@@ -146,3 +155,54 @@ def test_search_exact_preflight_params_match_repository_normalization() -> None:
         "limit": 10,
         "offset": 20,
     }
+
+
+def test_pg_stat_delta_uses_queryid_and_sorts_by_total_exec_time() -> None:
+    before = {
+        "available": True,
+        "rows": [
+            {
+                "queryid": "10",
+                "calls": 2,
+                "total_exec_time_ms": 20.0,
+                "result_rows": 4,
+                "query": "SELECT 1",
+            },
+            {
+                "queryid": "20",
+                "calls": 1,
+                "total_exec_time_ms": 5.0,
+                "result_rows": 1,
+                "query": "SELECT 2",
+            },
+        ],
+    }
+    after = {
+        "available": True,
+        "rows": [
+            {
+                "queryid": "20",
+                "calls": 4,
+                "total_exec_time_ms": 35.0,
+                "result_rows": 7,
+                "query": "SELECT 2",
+            },
+            {
+                "queryid": "10",
+                "calls": 3,
+                "total_exec_time_ms": 25.0,
+                "result_rows": 5,
+                "query": "SELECT 1",
+            },
+        ],
+    }
+
+    delta = pg_stat_delta(before, after)
+
+    assert delta["available"] is True
+    rows = delta["rows"]
+    assert rows[0]["queryid"] == "20"
+    assert rows[0]["delta_calls"] == 3
+    assert rows[0]["delta_total_exec_time_ms"] == 30.0
+    assert rows[0]["delta_mean_exec_time_ms"] == 10.0
+    assert rows[0]["delta_result_rows"] == 6

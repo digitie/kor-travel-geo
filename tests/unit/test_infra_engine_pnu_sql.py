@@ -34,6 +34,7 @@ def test_pnu_mapping_is_standard_and_null_safe() -> None:
 def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "CREATE SCHEMA IF NOT EXISTS x_extension" in SCHEMA_SQL
     assert "CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA x_extension" in SCHEMA_SQL
+    assert "CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA x_extension" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_juso_text" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_juso_parcel_link" in SCHEMA_SQL
     assert "REFERENCES tl_juso_text(bd_mgt_sn) ON DELETE CASCADE" in SCHEMA_SQL

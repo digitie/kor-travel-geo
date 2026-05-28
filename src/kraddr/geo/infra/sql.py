@@ -9,6 +9,7 @@ CREATE SCHEMA IF NOT EXISTS x_extension;
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA x_extension;
 CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA x_extension;
 CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA x_extension;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA x_extension;
 SET search_path = public, x_extension;
 
 CREATE TABLE IF NOT EXISTS tl_juso_text (
