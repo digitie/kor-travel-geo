@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 18:26 (T-044 `maplibre-vworld-js` 0.1.0 문서-only 재확인)
+
+**작업**: 사용자 지시에 따라 `maplibre-vworld-js` 0.1.0 기준으로 upstream code/API를 재확인하고, upstream 코드는 직접 수정하지 않은 채 이 저장소 문서에만 T-044 보완점을 반영했다.
+
+**확인**:
+- GitHub tag `v0.1.0`은 commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`이고, commit message는 `chore: release v0.1.0`이다.
+- GitHub release는 없었고, npm registry에서도 `maplibre-vworld@0.1.0`과 `maplibre-vworld-js@0.1.0`은 `E404`였다.
+- package name/version은 `maplibre-vworld`/`0.1.0`이며, `dist/`, `exports`, `types`, `style.css`, `VWorldMap`, marker/layer primitive, VWorld helper가 포함되어 있었다.
+- 현재 `kraddr-geo-ui` dependency는 여전히 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`에 고정되어 있고, 이번 작업에서는 dependency를 갱신하지 않았다.
+
+**결론**:
+- T-044는 0.1.0 기준 문서-only 재확인으로 완료한다.
+- 실제 `CoordinateMap` 전환은 별도 구현 PR에서 `VWorldMap`/`Marker`/`PolygonArea` 소비를 검토한다.
+- upstream 범용 기능 보강이 필요하면 이번 T-044 안에서 수정하지 않고 별도 upstream task/PR로 분리한다.
+
+**문서**:
+- `docs/t044-maplibre-vworld-010-review.md`
+- `docs/tasks.md`
+- `docs/frontend-package.md`
+- `docs/external-apis.md`
+- `docs/decisions.md`
+- `docs/resume.md`
+
+**검증**:
+- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`, `git diff --check`, `codegraph sync`를 통과했다.
+- 전체 pytest 결과는 216 passed, 6 skipped, 3 warnings다.
+
 ## 2026-05-28 17:42 (T-062 PR #53~#64 리뷰 audit/fixup)
 
 **작업**: T-057 merge 직후 사용자 지시에 따라 PR #53부터 #64까지 아직 별도 audit하지 않은 PR 리뷰를 모두 재확인했다.

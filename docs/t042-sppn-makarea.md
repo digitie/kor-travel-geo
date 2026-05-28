@@ -20,7 +20,7 @@ T-042는 T-041/ADR-027에서 문서화한 `TL_SPPN_MAKAREA`를 실제 운영 스
 
 - `MAKAREA_NM`만으로 좌표를 반환하는 구역명 검색. 이는 주소 geocode가 아니라 polygon 검색 또는 관리 UI overlay 검색에 가깝다.
 - `mv_geocode_target` union. 주소 1행 계약과 `bd_mgt_sn` 중심 lookup을 깨지 않기 위해 제외한다.
-- 디버그 UI polygon overlay. T-044의 `maplibre-vworld-js` domain wrapper 경계화 이후 최신 지도 primitive로 구현한다.
+- 디버그 UI polygon overlay. T-044의 `maplibre-vworld-js` 0.1.0 문서-only 재확인 결과를 바탕으로, 별도 UI 구현 PR에서 `PolygonArea` 또는 동등한 지도 primitive로 구현한다.
 - 전국 `구역의 도형` 전체 적재. 이번 실제 검증은 세종특별자치시 파일로 수행했고, T-027 최종 클린 로드에서 전국 적재 포함 여부와 시간을 다시 기록한다.
 
 ## 원천 데이터와 key
@@ -332,4 +332,4 @@ KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo
 
 - T-027 최종 클린 로드에서 전국 `구역의 도형` source set을 포함할지 결정하고, 포함한다면 row count와 적재 시간을 전체 로그에 남긴다.
 - T-047에서 Q11 국가지점번호 geocode/reverse latency, plan, buffer 사용량을 측정한다.
-- T-044에서 최신 `maplibre-vworld-js` 기반 debug UI wrapper에 `TL_SPPN_MAKAREA` polygon overlay와 reverse result overlay를 추가한다.
+- 별도 UI 구현 PR에서 `maplibre-vworld-js` 0.1.0의 `PolygonArea` 또는 동등한 지도 primitive를 활용해 `TL_SPPN_MAKAREA` polygon overlay와 reverse result overlay를 추가한다.

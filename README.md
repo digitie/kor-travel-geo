@@ -8,7 +8,7 @@
 **도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 한국 주소 지오코딩 라이브러리·REST API**입니다. vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 지원합니다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kraddr-geo-ui`](docs/frontend-package.md)로 운영합니다.
 
 > [!NOTE]
-> **현재 상태**: `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다. T-005~T-042 구현·실데이터 검증 기록, T-049 운영 메타데이터 1차 구현, T-045 source set 기준월 선택과 대용량 업로드/적재 UX, T-046 DB 백업/복원 UI와 대구 부분 DB 실제 backup/restore 검증이 반영되어 있습니다. T-027 최종 클린 적재에서는 실제 전국 `data/juso`를 빈 Docker PostGIS DB에 처음부터 적재해 `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`, smoke `OK`를 확인했습니다. T-047 1차에서는 query benchmark harness와 지번 exact 인덱스 튜닝을 추가했고, 남은 후속은 T-047 standard/stress benchmark, T-057 region hint, T-044 지도 UI 경계화입니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
+> **현재 상태**: `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다. T-005~T-042 구현·실데이터 검증 기록, T-049 운영 메타데이터 1차 구현, T-045 source set 기준월 선택과 대용량 업로드/적재 UX, T-046 DB 백업/복원 UI와 대구 부분 DB 실제 backup/restore 검증이 반영되어 있습니다. T-027 최종 클린 적재에서는 실제 전국 `data/juso`를 빈 Docker PostGIS DB에 처음부터 적재해 `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`, smoke `OK`를 확인했습니다. T-047 주요 benchmark와 T-057 region hint 1차 실측, T-044 `maplibre-vworld-js` 0.1.0 기준 문서-only 재확인까지 완료했습니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
 
 ---
 
@@ -201,7 +201,7 @@ asyncio.run(main())
 - 운영자는 도로명주소 안내시스템, 공공데이터포털, vworld의 최신 약관과 API 호출 한도를 직접 확인하고 관리해야 합니다.
 - 본 패키지는 주소 정규화 및 지오코딩을 돕는 '기술적 도구'에 불과하며, 토지·건축물·행정구역 경계의 법적 효력이나 공적 증명을 보장하지 않습니다. 법적 판단이 필요한 업무는 해당 기관의 공식 고시를 기준으로 검증하십시오.
 
-디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 최신 확인 SHA 또는 stable release를 package dependency로 소비합니다. VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 upstream도 적극 수정 대상에 포함하고, 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI fallback처럼 이 저장소 특화 기능은 `kraddr-geo-ui`의 domain wrapper에서 구현합니다.
+디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 최신 확인 SHA 또는 stable release를 package dependency로 소비합니다. T-044에서는 `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb` 기준으로 `VWorldMap`, marker/layer primitive, tile error helper를 문서-only로 재확인했으며 upstream 코드는 수정하지 않았습니다. VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 별도 upstream task/PR로 분리하고, 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI fallback처럼 이 저장소 특화 기능은 `kraddr-geo-ui`의 domain wrapper에서 구현합니다.
 
 ---
 

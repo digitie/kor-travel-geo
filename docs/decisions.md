@@ -751,7 +751,7 @@ PR #12까지의 `kraddr-geo-ui`는 Kakao Maps SDK를 기준으로 좌표 지도 
 - 날짜: 2026-05-26
 - 결정자: 사용자 요청, codex
 
-> 최신 운영 정의는 ADR-032를 우선한다. ADR-028의 초기 표현인 "완전 포팅"은 `kraddr-geo-ui` 특화 기능까지 upstream으로 옮긴다는 의미가 아니라, 범용 VWorld/MapLibre primitive는 최신 `maplibre-vworld-js`에서 소비하고 이 저장소의 geocode/reverse/admin 특화 UX는 domain wrapper로 경계화한다는 의미로 개정됐다.
+> 최신 운영 정의는 ADR-032를 우선한다. ADR-028의 초기 표현인 "완전 포팅"은 `kraddr-geo-ui` 특화 기능까지 upstream으로 옮긴다는 의미가 아니라, 범용 VWorld/MapLibre primitive는 최신 `maplibre-vworld-js`에서 소비하고 이 저장소의 geocode/reverse/admin 특화 UX는 domain wrapper로 경계화한다는 의미로 개정됐다. 2026-05-28 T-044 재확인 범위는 `maplibre-vworld-js` 0.1.0 code/API 기준 문서-only 보강으로 한정하고, upstream 코드는 직접 수정하지 않는다.
 
 ### 컨텍스트
 
@@ -769,16 +769,16 @@ ADR-020은 Kakao Maps SDK를 제거하고 VWorld WMTS + MapLibre GL JS를 디버
 2. VWorld style/layer, tile URL, maxZoom, marker primitive, 공통 tile error/redaction, package `exports`/`types`/`style.css` 계약은 `maplibre-vworld-js`의 public API에서 제공한다.
 3. `kraddr-geo-ui`는 도메인별 wrapper를 유지한다. wrapper의 책임은 API 응답 좌표를 `(lon, lat)`로 넘기고, geocode/reverse 디버그 폼과 skeleton, 오류 overlay 문구, 내부 분석 상태를 연결하는 것이다.
 4. `NEXT_PUBLIC_VWORLD_API_KEY` 미설정 fallback, SSR-safe 사용, transient tile error overlay, redacted logging, marker 즉시 이동, click callback `(lon, lat)` 순서가 기존 디버그 UI 동작과 동일해야 한다.
-5. `maplibre-vworld-js`에 범용 기능·타입·패키징·테스트가 부족하면 upstream을 직접 수정한다. 반대로 `python-kraddr-geo`의 주소 디버깅, 작업 상태, 정합성/성능 분석, API 응답 표시처럼 이 라이브러리 특화 기능은 이 저장소에서 구현한다.
+5. `maplibre-vworld-js`에 범용 기능·타입·패키징·테스트가 부족하면 T-044 문서-only 범위에서는 보완점을 기록하고, 실제 수정은 별도 upstream task/PR로 분리한다. 반대로 `python-kraddr-geo`의 주소 디버깅, 작업 상태, 정합성/성능 분석, API 응답 표시처럼 이 라이브러리 특화 기능은 이 저장소에서 구현한다.
 6. `maplibre-vworld-js`는 사용할 때마다 최신 `main` 또는 최신 stable release를 확인하고, 검증된 최신 버전으로 갱신한다. 임시로 오래된 SHA에 고정하는 것은 허용하지 않는다.
 
 ### 구현 절차
 
-T-044는 두 저장소를 함께 다루는 작업으로 본다.
+T-044의 2026-05-28 재확인 범위는 문서-only 작업으로 본다. `maplibre-vworld-js` 0.1.0 public API를 읽고 이 저장소의 소비 경계와 후속 구현 메모를 정리하되, upstream 코드는 직접 수정하지 않는다. 실제 UI wrapper 전환 또는 upstream 보강이 필요하면 별도 후속 task/PR로 분리한다.
 
 1. `python-kraddr-geo`에서 현재 `CoordinateMap` 계약을 목록화한다.
-2. `maplibre-vworld-js` 최신 `main` 또는 stable release를 확인하고, dependency가 최신인지 비교한다.
-3. 부족한 범용 upstream 기능은 `maplibre-vworld-js`에 먼저 구현한다.
+2. `maplibre-vworld-js` `v0.1.0` tag와 최신 `main`을 확인하고, 현재 dependency가 어느 기준에 있는지 비교한다.
+3. 부족한 범용 upstream 기능은 T-044 안에서 직접 수정하지 않고 별도 upstream task/PR 후보로 기록한다.
    - VWorld layer/style helper
    - controlled/uncontrolled marker primitive
    - `flyToOptions`와 즉시 이동 옵션
@@ -792,27 +792,27 @@ T-044는 두 저장소를 함께 다루는 작업으로 본다.
    - VWorld key 미설정 시 이 프로젝트의 좌표 preview fallback 문구와 layout
    - transient tile error를 이 프로젝트의 debug UX에 맞게 표시하는 overlay 임계치
    - 관리 UI 상태, benchmark, load/consistency 결과와 지도 연결
-5. upstream 수정이 필요하면 test/build를 통과시킨 뒤 PR을 올린다.
-6. `python-kraddr-geo`에서 dependency를 검증된 최신 upstream commit 또는 release로 갱신한다.
-7. `kraddr-geo-ui`의 `CoordinateMap`은 upstream component/hook과 이 저장소 domain wrapper의 경계를 명확히 한다.
-8. `kraddr-geo-ui`에서 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 수행한다.
-9. Playwright 또는 브라우저 검증이 가능한 환경에서는 `/debug/geocode`, `/debug/reverse`에서 지도 표시, marker 이동, click reverse 입력, tile error/fallback 상태를 확인한다.
+5. 실제 upstream 수정이 필요하면 별도 task에서 test/build를 통과시킨 뒤 PR을 올린다.
+6. 실제 소비자 구현 PR에서는 `python-kraddr-geo`에서 dependency를 검증된 upstream commit 또는 release/tag로 갱신한다.
+7. 실제 소비자 구현 PR에서 `kraddr-geo-ui`의 `CoordinateMap`은 upstream component/hook과 이 저장소 domain wrapper의 경계를 명확히 한다.
+8. 실제 소비자 구현 PR에서 `kraddr-geo-ui`의 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 수행한다.
+9. Playwright 또는 브라우저 검증이 가능한 환경에서는 실제 소비자 구현 PR에서 `/debug/geocode`, `/debug/reverse`의 지도 표시, marker 이동, click reverse 입력, tile error/fallback 상태를 확인한다.
 
 ### 결과 기준
 
 T-044 완료 조건:
 
-- `kraddr-geo-ui/lib/vworld.ts`는 upstream public API 재수출 또는 아주 얇은 alias만 유지한다.
-- `CoordinateMap.tsx`는 domain wrapper가 되고, MapLibre primitive lifecycle은 upstream으로 이동한다. 단, 이 프로젝트의 주소 디버그/관리 UI 특화 동작은 wrapper에 남긴다.
-- upstream에 필요한 수정이 있었다면 `digitie/maplibre-vworld-js` PR/commit 링크와 검증 결과를 `docs/frontend-package.md`, `docs/journal.md`, PR 본문에 남긴다.
-- `python-kraddr-geo` PR만으로 해결할 수 없는 upstream 이슈는 TODO로 남기지 않고, 최소한 upstream issue/PR 또는 별도 branch 작업으로 추적한다.
+- `maplibre-vworld-js` 0.1.0 tag/commit, package manifest, public export, `VWorldMap`, marker/layer primitive, helper API를 문서화한다.
+- 현재 `CoordinateMap.tsx`가 직접 소유하는 domain 동작과 0.1.0 public API로 대체 가능한 범용 primitive를 문서화한다.
+- upstream 코드를 직접 수정하지 않았다는 점과 실제 UI/dependency 전환은 후속 PR에서 검증해야 한다는 점을 명시한다.
+- 상세 기록은 `docs/t044-maplibre-vworld-010-review.md`에 둔다.
 
 ### 위험과 제약
 
 - 지도 컴포넌트는 브라우저/WebGL 의존성이 강하므로 SSR 단계 import가 다시 생기면 Next.js build 또는 hydration에서 깨질 수 있다.
 - VWorld API key는 브라우저 노출 키이지만 저장소와 PR 본문에 평문으로 남기지 않는다.
 - upstream SHA 또는 release 갱신은 lockfile `resolved`가 `git+https`인지 확인한다. CI는 SSH key 없이 설치되어야 한다.
-- `maplibre-vworld-js`가 npm stable release를 제공하기 전까지는 최신 `main` GitHub SHA 고정과 소비자 build 검증을 함께 기록한다.
+- 2026-05-28 현재 `maplibre-vworld@0.1.0`은 npm registry에서 확인되지 않았다. 실제 소비는 GitHub tag 또는 commit SHA 기준으로 검증해야 한다.
 
 ---
 
@@ -1030,7 +1030,7 @@ ADR-020과 ADR-028은 VWorld WMTS + MapLibre GL JS 전환 과정에서 `digitie/
 
 ### 결정
 
-`kraddr-geo-ui`는 `maplibre-vworld-js`를 항상 최신 확인 버전으로 소비한다. 현재 확인된 upstream `main` 최신 커밋은 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`이며, `kraddr-geo-ui/package.json`과 lockfile은 이 SHA를 사용한다.
+`kraddr-geo-ui`는 `maplibre-vworld-js`를 항상 최신 확인 버전으로 소비한다. 현재 `kraddr-geo-ui/package.json`과 lockfile은 upstream commit `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`을 사용한다. 2026-05-28 T-044 문서-only 재확인에서는 `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`를 기준으로 package/API를 재확인했다. `v0.1.0`은 현재 UI 고정 SHA보다 26 commits ahead지만, 이번 T-044 범위에서는 dependency 갱신과 upstream 코드 수정을 하지 않는다.
 
 책임 경계는 다음과 같다.
 
@@ -1055,14 +1055,14 @@ ADR-020과 ADR-028은 VWorld WMTS + MapLibre GL JS 전환 과정에서 `digitie/
 - `maplibre-vworld` dependency를 건드리는 PR은 `git ls-remote https://github.com/digitie/maplibre-vworld-js.git refs/heads/main` 또는 최신 release 확인 결과를 문서와 PR 본문에 남긴다.
 - npm registry stable release가 없거나 아직 검증 전이면 GitHub dependency는 `git+https://...#<verified-sha>` 형식으로 둔다. SSH `git@github.com:` 또는 `github:` shorthand로 lockfile이 바뀌면 CI 환경에서 key 없이 설치되지 않을 수 있으므로 되돌린다.
 - 최신 upstream을 올린 뒤 `kraddr-geo-ui`에서 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 실행한다.
-- 최신 upstream에 범용 결함이 있으면 `maplibre-vworld-js` 저장소를 직접 수정한다. 이 저장소에는 장기 workaround를 쌓지 않는다.
+- 최신 upstream에 범용 결함이 있으면 별도 upstream task/PR로 분리한다. 이 저장소에는 장기 workaround를 쌓지 않는다. 단, T-044 0.1.0 재확인 범위는 문서-only이므로 upstream 코드를 직접 수정하지 않는다.
 - 프로젝트 특화 기능은 upstream PR로 보내지 않는다. 필요한 경우 `maplibre-vworld-js`에는 범용 extension point만 추가하고, 실제 주소 디버그/관리 동작은 이 저장소 wrapper에서 구현한다.
 - `VWorldMap` 또는 hook으로 포팅하더라도 `CoordinateMap.tsx`는 완전히 사라질 필요가 없다. 남아 있다면 upstream primitive를 감싸는 domain wrapper여야 하며, 직접 MapLibre lifecycle을 다시 소유하지 않아야 한다.
 
 ### 결과
 
-- 현재 `kraddr-geo-ui`는 `maplibre-vworld`를 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 갱신한다.
-- T-044의 의미는 "모든 지도 관련 기능을 upstream으로 이동"이 아니라 "범용 지도 primitive는 upstream 최신 API로 소비하고, `kraddr-geo-ui` 특화 UX는 이 저장소에서 명확히 경계화"로 재정의한다.
+- 현재 `kraddr-geo-ui`는 `maplibre-vworld`를 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 유지한다.
+- T-044의 2026-05-28 결과는 "0.1.0 public API 기준 문서-only 재확인"이다. "모든 지도 관련 기능을 upstream으로 이동"이 아니라 "범용 지도 primitive는 upstream API로 소비하고, `kraddr-geo-ui` 특화 UX는 이 저장소에서 명확히 경계화"로 재정의한다.
 - 이후 maplibre-vworld 관련 작업은 최신성 확인, 책임 경계, 양쪽 저장소 검증 결과를 함께 남긴다.
 
 ---
@@ -1678,7 +1678,7 @@ LIMIT 5;
 - `TL_SPPN_MAKAREA`는 개별 국가지점번호판 point 목록이 아니므로, polygon 포함 여부는 "해당 좌표가 표기 의무지역 안에 있다"는 문맥만 제공한다. 실제 시설물 point 원천을 확보하면 별도 source와 confidence 정책을 둔다.
 - reverse geocode는 도로명/지번 후보 유무와 관계없이 `sppn_makarea` 보조 조회를 수행한다. 응답 크기와 latency가 문제되면 T-047에서 후보 confidence 또는 radius 정책으로 제한한다.
 - 국가지점번호 parser/formatter는 공개 설명의 100km 한글 격자와 10m cell 규칙을 구현했다. 도로명주소 전자지도 PDF 사양서에 더 엄격한 표기 변형이 있으면 T-047/T-044 전에 parser 허용 범위를 재검토한다.
-- 디버그 UI polygon overlay는 아직 구현하지 않았다. T-044에서 최신 `maplibre-vworld-js` wrapper로 추가한다.
+- 디버그 UI polygon overlay는 아직 구현하지 않았다. T-044의 0.1.0 문서-only 재확인 결과를 바탕으로 별도 UI 구현 PR에서 `PolygonArea` 또는 동등한 지도 primitive로 추가한다.
 
 ### 참고
 
