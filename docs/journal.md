@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 11:20 (T-047 active observability run)
+
+**작업**: T-047 관측성 보강이 머지된 뒤, 실제 Docker DB에 `pg_stat_statements`를 활성화하고 저장 corpus로 반복 benchmark를 수행했다.
+
+**DB 조치**:
+- `kraddr-geo-t027-db-1` 컨테이너를 `shared_preload_libraries=pg_stat_statements` 설정으로 재생성했다. bind mount `/home/digitie/kraddr-geo-data/pgdata`는 유지했다.
+- 기존 DB는 Alembic version table이 없어 `alembic upgrade head`가 0001부터 시작했고, 33자 revision ID `0005_t039_roadaddr_entrance_table`가 기본 `varchar(32)`에 걸리는 문제가 드러났다.
+- revision ID를 `0005_t039_roadaddr_entrc`로 줄이고, 모든 revision/down_revision 길이 32자 이하 테스트를 추가했다.
+- 이 실측 DB는 이미 스키마 객체가 존재하는 수동 full-load DB라 `pg_stat_statements` extension을 직접 만든 뒤 `alembic stamp head`로 현재 상태를 기록했다.
+
+**측정**:
+- corpus: `artifacts/perf/t047-search-exact-split-20260528/corpus.json`, SHA `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f`, 1,100건.
+- 기본 pool run: `iterations=3`, `warmup=1`, concurrency `1/4/16/64`, measurement 17,600건, error 0, `pg_stat_statements=true`.
+- pool64 run: 같은 corpus, `pool_size=64`, `max_overflow=0`, concurrency 64, measurement 4,400건, error 0.
+- 기본 pool c64는 Q4 search p95 330.80ms 중 checkout p95 307.88ms, execute p95 28.09ms로 대부분 connection checkout 대기였다.
+- pool64 c64는 Q4 search p95 162.50ms, checkout p95 28.12ms, execute p95 128.11ms로 pool 대기는 줄었지만 DB 실행 시간이 커졌다. Q3 fuzzy는 pool64 c64 p95 167.87ms, execute p95 128.72ms로 다음 후보 축소 대상이다.
+
+**산출물**:
+- `artifacts/perf/t047-active-observability-20260528`
+- `artifacts/perf/t047-active-observability-pool64-20260528`
+
+**후속**:
+- T-047 인덱스 3개의 운영 영향(MV refresh/swap, backup archive, 디스크 envelope)을 측정한다.
+- Q3 fuzzy 후보 축소는 T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 비교한다.
+
 ## 2026-05-28 10:35 (T-047 관측성 benchmark 보강)
 
 **작업**: PR #51/#52 후속 액션 중 `pg_stat_statements`와 pool wait/DB execution 분리를 benchmark harness에 반영했다.

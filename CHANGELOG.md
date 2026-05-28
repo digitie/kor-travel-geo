@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-047 active observability run: Docker DB를 `pg_stat_statements` preload 상태로 재시작하고 extension을 활성화한 뒤, 1,100건 corpus SHA `ef460f8...`로 `standard --iterations 3`를 실행했다. 기본 pool c64 tail은 대부분 checkout 대기였고(Q4 p95 330.80ms 중 checkout p95 307.88ms), pool 64 c64에서는 checkout p95가 28.12ms로 줄고 Q4 p95가 162.50ms로 낮아졌다. Alembic 기본 version table 한계에 걸리던 33자 revision ID도 32자 이하로 정정하고 회귀 테스트를 추가했다.
 - T-047 관측성 benchmark 보강: `scripts/benchmark_query_performance.py` artifact schema를 2로 올리고 measurement별 `checkout_ms`/`execute_ms`, summary별 `p95_checkout_ms`/`p95_execute_ms`를 기록해 pool 대기와 SQL 실행 시간을 분리했다. `pg_stat_statements` 전후 snapshot/delta artifact와 reset 옵션을 추가했고, Docker/PostgreSQL fresh 환경은 `shared_preload_libraries=pg_stat_statements`와 schema extension을 포함하도록 보강했다. 기존 T-027 DB smoke에서는 extension 미설치 상태가 artifact에 명시됐고, 11개 smoke query는 모두 성공했다.
 - PR #51/#52 post-merge 리뷰 코멘트 audit/fixup: 두 PR의 conversation/review/inline/thread 표면을 재확인하고 unresolved thread 0건을 기록했다. Q4 search split은 PR #53에서 exact preflight로 반영됐고, 남은 `pg_stat_statements`, T-047 index 운영 영향, stress corpus, pool wait/DB execution 분리, SQL 상수 public module, Q3 fuzzy/T-057 region hint는 후속 액션으로 문서화했다.
 - T-047 Q4 search exact preflight 튜닝: `rn_nrm`/`buld_nm_nrm` exact btree index와 저장소 2단계 search 경로를 추가했다. Q4 100건 standard corpus는 모두 exact preflight로 처리됐고, `Q4-search-038` plan execution은 broad trigram 42.39ms에서 exact 0.56ms로 감소했다. Q4 p95는 default pool c1/c4/c16에서 62.12/70.62/116.06ms → 12.23/22.39/52.27ms, pool64 c64에서 481.22ms → 295.85ms로 개선됐다.

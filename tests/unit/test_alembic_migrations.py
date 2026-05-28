@@ -3,6 +3,23 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def _migration_revision_lines() -> list[str]:
+    lines: list[str] = []
+    for path in sorted(Path("alembic/versions").glob("*.py")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith(("revision = ", "down_revision = ")):
+                lines.append(line)
+    return lines
+
+
+def test_alembic_revision_ids_fit_default_version_table() -> None:
+    for line in _migration_revision_lines():
+        if "None" in line:
+            continue
+        revision_id = line.split("=", 1)[1].strip().strip('"')
+        assert len(revision_id) <= 32
+
+
 def test_t027_shp_schema_fixups_migration_covers_reviewed_changes() -> None:
     migration = Path("alembic/versions/0002_t027_shp_schema_fixups.py").read_text(
         encoding="utf-8"
@@ -36,7 +53,7 @@ def test_t049_ops_metadata_migration_covers_ops_schema() -> None:
     )
 
     assert "revision = \"0006_t049_ops_metadata_schema\"" in migration
-    assert "down_revision = \"0005_t039_roadaddr_entrance_table\"" in migration
+    assert "down_revision = \"0005_t039_roadaddr_entrc\"" in migration
     assert "CREATE SCHEMA IF NOT EXISTS ops" in migration
     assert "idx_ops_serving_releases_one_active" in migration
     assert "audit_events_append_only" in migration
