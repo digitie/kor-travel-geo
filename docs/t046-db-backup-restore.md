@@ -59,6 +59,8 @@ T-046에서는 코드 구현, 단위 테스트, 관리 UI, OpenAPI 타입 동기
 1. `pg_dump -Fd --jobs <N>`로 임시 디렉터리에 PostgreSQL directory format dump를 만든다.
 2. 임시 디렉터리와 metadata JSON을 `tar`로 묶고 `zstd`로 압축해 단일 `.tar.zst` 파일로 저장한다.
 
+T-047 전국 DB 실측에서는 `pg_dump -Fd` 산출물의 대형 table data가 이미 `.dat.gz`로 압축되어 있어 `tar.zst` 단계의 추가 압축률은 매우 작았다. dump directory 4,313,361,824 bytes가 archive 4,308,457,630 bytes가 되어 약 4.9MiB만 줄었다. 따라서 `directory_tar_zstd` 선택의 핵심 가치는 압축률이 아니라 병렬 dump/restore와 단일 artifact 보관, UI 다운로드, checksum 검증 단순화다.
+
 이 방식의 장점:
 
 - `pg_dump -Fd`는 dump 단계에서 병렬 작업을 사용할 수 있다.

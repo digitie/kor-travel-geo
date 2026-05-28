@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import Field, model_validator
+from pydantic_core import PydanticCustomError
 
 from .address import AddressStructure
 from .common import (
@@ -33,7 +34,7 @@ class ReverseInput(FrozenModel):
     def validate_korea_lon_lat(self) -> ReverseInput:
         if not (123 < self.point.x < 132 and 32 < self.point.y < 39):
             msg = "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
-            raise ValueError(msg)
+            raise PydanticCustomError("kraddr_geo.coordinate_bounds", msg)
         return self
 
 

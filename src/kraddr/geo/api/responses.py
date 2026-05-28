@@ -8,6 +8,9 @@ from pydantic import ValidationError
 
 from kraddr.geo.exceptions import InvalidCoordinateError, InvalidInputError, KraddrGeoError
 
+_COORDINATE_BOUNDS_ERROR = "kraddr_geo.coordinate_bounds"
+_COORDINATE_BOUNDS_MESSAGE = "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
+
 
 def error_payload(exc: KraddrGeoError) -> dict[str, object]:
     body: dict[str, object] = {
@@ -34,9 +37,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 
 def _validation_error_to_domain(exc: ValidationError) -> KraddrGeoError:
-    message = str(exc)
-    if "point must be within Korea lon/lat bounds" in message:
-        return InvalidCoordinateError(
-            "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
-        )
-    return InvalidInputError("invalid request data", hint=message)
+    errors = exc.errors()
+    if any(error.get("type") == _COORDINATE_BOUNDS_ERROR for error in errors):
+        return InvalidCoordinateError(_COORDINATE_BOUNDS_MESSAGE)
+    return InvalidInputError("invalid request data", hint=str(errors))
