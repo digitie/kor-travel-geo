@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 10:35 (T-047 관측성 benchmark 보강)
+
+**작업**: PR #51/#52 후속 액션 중 `pg_stat_statements`와 pool wait/DB execution 분리를 benchmark harness에 반영했다.
+
+**반영 상세**:
+- `scripts/benchmark_query_performance.py`의 artifact schema를 2로 올리고, measurement에 `checkout_ms`와 `execute_ms`를 추가했다.
+- summary에는 `p95_checkout_ms`와 `p95_execute_ms`를 추가해 동시성 tail에서 connection pool 대기와 SQL 실행 시간을 분리해 볼 수 있게 했다.
+- `pg-stat-statements-before.json`, `pg-stat-statements-after.json`, `pg-stat-statements-delta.json` artifact를 추가하고, `--reset-pg-stat-statements`, `--pg-stat-limit` 옵션을 넣었다.
+- `docker-compose.yml`, fresh schema SQL, Alembic `0011_t047_pg_stat_statements`에 `pg_stat_statements` preload/extension 경로를 추가했다.
+
+**검증**:
+- T-027 클린 DB(`localhost:15432`, `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`)에서 `cases_per_group=1`, `iterations=1`, `warmup=0`, `concurrency=1` smoke benchmark를 실행했다.
+- smoke 11개 query군은 모두 error 0이었다. 현재 기존 DB는 `pg_stat_statements` extension 미설치 상태라 snapshot artifact는 `available=false`, `error=pg_stat_statements extension is not installed`를 기록했다.
+
+**후속**:
+- Docker DB를 restart/upgrade한 뒤 `--reset-pg-stat-statements`와 저장 corpus로 `standard --iterations 3`를 다시 실행한다.
+- T-047 인덱스 3개(`idx_mv_jibun_name_exact`, `idx_mv_rn_nrm_exact`, `idx_mv_buld_nm_nrm_exact`)의 MV refresh/swap, backup archive, 디스크 envelope 영향을 별도 PR에서 측정한다.
+
 ## 2026-05-28 09:45 (PR #51/#52 post-merge 리뷰 반영)
 
 **작업**: 사용자 지시에 따라 PR #51과 PR #52의 post-merge 리뷰 코멘트를 다시 확인하고, 후속 액션을 진행 가능한 문서 상태로 정리했다.

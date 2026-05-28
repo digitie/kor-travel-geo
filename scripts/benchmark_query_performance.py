@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-BENCHMARK_SCHEMA_VERSION = 1
+BENCHMARK_SCHEMA_VERSION = 2
 
 type QueryGroup = Literal[
     "Q1_ROAD_EXACT",
@@ -87,6 +87,8 @@ class Measurement:
     elapsed_ms: float
     row_count: int
     error: str | None = None
+    checkout_ms: float | None = None
+    execute_ms: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +101,8 @@ class SummaryRow:
     p50_ms: float | None
     p90_ms: float | None
     p95_ms: float | None
+    p95_checkout_ms: float | None
+    p95_execute_ms: float | None
     p99_ms: float | None
     max_ms: float | None
     avg_rows: float | None
@@ -226,6 +230,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Existing corpus JSON file. If omitted, corpus is generated from DB.",
     )
+    parser.add_argument(
+        "--reset-pg-stat-statements",
+        action="store_true",
+        help="Reset pg_stat_statements after corpus/environment capture and before measurements.",
+    )
+    parser.add_argument(
+        "--pg-stat-limit",
+        type=int,
+        default=50,
+        help="Maximum pg_stat_statements rows to store in before/after snapshots.",
+    )
     return parser
 
 
@@ -255,6 +270,8 @@ def summarize_measurements(measurements: Sequence[Measurement]) -> tuple[Summary
     for (group, sql_name, concurrency), rows in sorted(grouped.items()):
         ok_rows = [row for row in rows if row.ok]
         elapsed = [row.elapsed_ms for row in ok_rows]
+        checkout = [row.checkout_ms for row in ok_rows if row.checkout_ms is not None]
+        execute = [row.execute_ms for row in ok_rows if row.execute_ms is not None]
         avg_rows = statistics.fmean(row.row_count for row in ok_rows) if ok_rows else None
         summaries.append(
             SummaryRow(
@@ -266,6 +283,8 @@ def summarize_measurements(measurements: Sequence[Measurement]) -> tuple[Summary
                 p50_ms=_round_optional(percentile(elapsed, 50)),
                 p90_ms=_round_optional(percentile(elapsed, 90)),
                 p95_ms=_round_optional(percentile(elapsed, 95)),
+                p95_checkout_ms=_round_optional(percentile(checkout, 95)),
+                p95_execute_ms=_round_optional(percentile(execute, 95)),
                 p99_ms=_round_optional(percentile(elapsed, 99)),
                 max_ms=_round_optional(max(elapsed) if elapsed else None),
                 avg_rows=_round_optional(avg_rows),
@@ -454,9 +473,11 @@ async def run_benchmark(
     iterations: int,
     warmup: int,
     statement_timeout_ms: int,
+    started_at: str | None = None,
+    environment: EnvironmentSnapshot | None = None,
 ) -> BenchmarkReport:
-    started_at = datetime.now(UTC).isoformat()
-    environment = await collect_environment(
+    started_at = started_at or datetime.now(UTC).isoformat()
+    environment = environment or await collect_environment(
         engine,
         run_id=run_id,
         started_at=started_at,
@@ -520,17 +541,7 @@ async def collect_environment(
                 "idx_mv_geom5179",
             )
         }
-        pg_stat_statements = bool(
-            await conn.scalar(
-                text(
-                    """
-SELECT EXISTS (
-    SELECT 1 FROM pg_extension WHERE extname='pg_stat_statements'
-)
-"""
-                )
-            )
-        )
+        pg_stat_statements, _ = await _pg_stat_statements_status(conn)
     return EnvironmentSnapshot(
         run_id=run_id,
         started_at=started_at,
@@ -614,6 +625,113 @@ def corpus_from_json(path: Path) -> tuple[BenchmarkCase, ...]:
     return tuple(cases)
 
 
+async def capture_pg_stat_statements(
+    engine: AsyncEngine,
+    *,
+    limit: int,
+    reset: bool = False,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": BENCHMARK_SCHEMA_VERSION,
+        "captured_at": datetime.now(UTC).isoformat(),
+        "available": False,
+        "reset_requested": reset,
+        "reset_error": None,
+        "error": None,
+        "rows": [],
+    }
+    async with engine.connect() as conn:
+        available, status_error = await _pg_stat_statements_status(conn)
+        payload["available"] = available
+        if not available:
+            payload["error"] = status_error
+            return payload
+        if reset:
+            try:
+                await conn.execute(text("SELECT pg_stat_statements_reset()"))
+                await conn.commit()
+            except (DBAPIError, ProgrammingError) as exc:
+                await conn.rollback()
+                payload["reset_error"] = _redact_error(exc)
+        try:
+            rows = (
+                await conn.execute(
+                    text(
+                        """
+SELECT queryid::text AS queryid,
+       calls,
+       total_exec_time,
+       mean_exec_time,
+       rows AS result_rows,
+       shared_blks_hit,
+       shared_blks_read,
+       temp_blks_written,
+       left(query, 4000) AS query
+  FROM pg_stat_statements
+ WHERE dbid = (
+       SELECT oid FROM pg_database WHERE datname = current_database()
+ )
+   AND query NOT ILIKE '%pg_stat_statements%'
+ ORDER BY total_exec_time DESC
+ LIMIT :limit
+"""
+                    ),
+                    {"limit": limit},
+                )
+            ).mappings().all()
+            payload["rows"] = [_plain_pg_stat_row(dict(row)) for row in rows]
+        except (DBAPIError, ProgrammingError) as exc:
+            payload["error"] = _redact_error(exc)
+    return payload
+
+
+def pg_stat_delta(before: Mapping[str, Any], after: Mapping[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "schema_version": BENCHMARK_SCHEMA_VERSION,
+        "captured_at": datetime.now(UTC).isoformat(),
+        "available": bool(before.get("available")) and bool(after.get("available")),
+        "error": None,
+        "rows": [],
+    }
+    if not payload["available"]:
+        payload["error"] = before.get("error") or after.get("error") or "snapshot unavailable"
+        return payload
+
+    before_rows = {
+        _pg_stat_row_key(row): row
+        for row in cast("Sequence[Mapping[str, Any]]", before.get("rows", []))
+    }
+    delta_rows: list[dict[str, Any]] = []
+    for row in cast("Sequence[Mapping[str, Any]]", after.get("rows", [])):
+        key = _pg_stat_row_key(row)
+        previous = before_rows.get(key, {})
+        calls = int(row.get("calls", 0)) - int(previous.get("calls", 0))
+        total_exec_time = float(row.get("total_exec_time_ms", 0.0)) - float(
+            previous.get("total_exec_time_ms", 0.0)
+        )
+        result_rows = int(row.get("result_rows", 0)) - int(previous.get("result_rows", 0))
+        if calls <= 0 and total_exec_time <= 0 and result_rows <= 0:
+            continue
+        delta_rows.append(
+            {
+                "queryid": row.get("queryid"),
+                "delta_calls": calls,
+                "delta_total_exec_time_ms": round(total_exec_time, 3),
+                "delta_mean_exec_time_ms": round(total_exec_time / calls, 3)
+                if calls > 0
+                else None,
+                "delta_result_rows": result_rows,
+                "query": row.get("query"),
+            }
+        )
+    payload["rows"] = sorted(
+        delta_rows,
+        key=lambda item: float(item["delta_total_exec_time_ms"]),
+        reverse=True,
+    )
+    return payload
+
+
 def write_summary_markdown(report: BenchmarkReport, output_path: Path) -> None:
     lines = [
         f"# T-047 query benchmark: {report.run_id}",
@@ -642,9 +760,9 @@ def write_summary_markdown(report: BenchmarkReport, output_path: Path) -> None:
             "## Latency summary",
             "",
             "| group | sql | conc | samples | errors | p50 ms | p90 ms | p95 ms | "
-            "p99 ms | max ms | avg rows |",
+            "p95 checkout ms | p95 execute ms | p99 ms | max ms | avg rows |",
             "|-------|-----|-----:|--------:|-------:|-------:|-------:|-------:|"
-            "-------:|-------:|---------:|",
+            "----------------:|---------------:|-------:|-------:|---------:|",
         ]
     )
     for row in report.summaries:
@@ -652,7 +770,8 @@ def write_summary_markdown(report: BenchmarkReport, output_path: Path) -> None:
             "| "
             f"`{row.group}` | `{row.sql_name}` | {row.concurrency} | {row.samples} | "
             f"{row.errors} | {_md_num(row.p50_ms)} | {_md_num(row.p90_ms)} | "
-            f"{_md_num(row.p95_ms)} | {_md_num(row.p99_ms)} | {_md_num(row.max_ms)} | "
+            f"{_md_num(row.p95_ms)} | {_md_num(row.p95_checkout_ms)} | "
+            f"{_md_num(row.p95_execute_ms)} | {_md_num(row.p99_ms)} | {_md_num(row.max_ms)} | "
             f"{_md_num(row.avg_rows)} |"
         )
     lines.extend(
@@ -720,9 +839,16 @@ async def _measure_case(
     statement_timeout_ms: int,
 ) -> Measurement:
     start = time.perf_counter()
+    checkout_ms: float | None = None
+    execute_ms: float | None = None
+    execute_start: float | None = None
     try:
+        checkout_start = time.perf_counter()
         async with engine.connect() as conn:
+            checkout_ms = round((time.perf_counter() - checkout_start) * 1000, 3)
+            execute_start = time.perf_counter()
             row_count = await _execute_case(conn, case, statement_timeout_ms=statement_timeout_ms)
+            execute_ms = round((time.perf_counter() - execute_start) * 1000, 3)
         return Measurement(
             case_id=case.case_id,
             group=case.group,
@@ -733,8 +859,12 @@ async def _measure_case(
             ok=True,
             elapsed_ms=round((time.perf_counter() - start) * 1000, 3),
             row_count=row_count,
+            checkout_ms=checkout_ms,
+            execute_ms=execute_ms,
         )
     except (DBAPIError, ProgrammingError, TimeoutError, ValueError) as exc:
+        if execute_start is not None and execute_ms is None:
+            execute_ms = round((time.perf_counter() - execute_start) * 1000, 3)
         return Measurement(
             case_id=case.case_id,
             group=case.group,
@@ -746,6 +876,8 @@ async def _measure_case(
             elapsed_ms=round((time.perf_counter() - start) * 1000, 3),
             row_count=0,
             error=_redact_error(exc),
+            checkout_ms=checkout_ms,
+            execute_ms=execute_ms,
         )
 
 
@@ -963,6 +1095,49 @@ async def _optional_scalar_str(conn: AsyncConnection, sql: str) -> str | None:
     return str(value) if value is not None else None
 
 
+async def _pg_stat_statements_status(conn: AsyncConnection) -> tuple[bool, str | None]:
+    installed = bool(
+        await conn.scalar(
+            text(
+                """
+SELECT EXISTS (
+    SELECT 1 FROM pg_extension WHERE extname='pg_stat_statements'
+)
+"""
+            )
+        )
+    )
+    if not installed:
+        return False, "pg_stat_statements extension is not installed"
+    try:
+        await conn.execute(text("SELECT 1 FROM pg_stat_statements LIMIT 1"))
+    except (DBAPIError, ProgrammingError) as exc:
+        await conn.rollback()
+        return False, _redact_error(exc)
+    return True, None
+
+
+def _plain_pg_stat_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "queryid": str(row["queryid"]) if row.get("queryid") is not None else None,
+        "calls": int(row.get("calls") or 0),
+        "total_exec_time_ms": round(float(row.get("total_exec_time") or 0.0), 3),
+        "mean_exec_time_ms": round(float(row.get("mean_exec_time") or 0.0), 3),
+        "result_rows": int(row.get("result_rows") or 0),
+        "shared_blks_hit": int(row.get("shared_blks_hit") or 0),
+        "shared_blks_read": int(row.get("shared_blks_read") or 0),
+        "temp_blks_written": int(row.get("temp_blks_written") or 0),
+        "query": str(row.get("query") or ""),
+    }
+
+
+def _pg_stat_row_key(row: Mapping[str, Any]) -> str:
+    queryid = row.get("queryid")
+    if queryid not in (None, ""):
+        return str(queryid)
+    return str(row.get("query") or "")
+
+
 def _round_optional(value: float | None) -> float | None:
     return round(value, 3) if value is not None else None
 
@@ -1023,6 +1198,9 @@ async def _amain(args: argparse.Namespace) -> None:
     run_id = args.run_id or _run_id()
     output_dir = args.output_dir or Path("artifacts") / "perf" / run_id
     output_dir.mkdir(parents=True, exist_ok=True)
+    if args.pg_stat_limit < 1:
+        msg = "--pg-stat-limit must be at least 1"
+        raise ValueError(msg)
     settings = _settings_for_run(
         args.pg_dsn,
         pool_size=args.pool_size,
@@ -1048,6 +1226,22 @@ async def _amain(args: argparse.Namespace) -> None:
             ),
             encoding="utf-8",
         )
+        started_at = datetime.now(UTC).isoformat()
+        environment = await collect_environment(
+            engine,
+            run_id=run_id,
+            started_at=started_at,
+            settings=settings,
+        )
+        pg_stat_before = await capture_pg_stat_statements(
+            engine,
+            limit=args.pg_stat_limit,
+            reset=args.reset_pg_stat_statements,
+        )
+        (output_dir / "pg-stat-statements-before.json").write_text(
+            json.dumps(pg_stat_before, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         report = await run_benchmark(
             engine,
             cases,
@@ -1057,10 +1251,24 @@ async def _amain(args: argparse.Namespace) -> None:
             iterations=args.iterations,
             warmup=args.warmup,
             statement_timeout_ms=args.statement_timeout_ms,
+            started_at=started_at,
+            environment=environment,
         )
         (output_dir / "benchmark.json").write_text(report_to_json(report), encoding="utf-8")
         (output_dir / "environment.json").write_text(
             json.dumps(asdict(report.environment), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        pg_stat_after = await capture_pg_stat_statements(
+            engine,
+            limit=args.pg_stat_limit,
+        )
+        (output_dir / "pg-stat-statements-after.json").write_text(
+            json.dumps(pg_stat_after, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        (output_dir / "pg-stat-statements-delta.json").write_text(
+            json.dumps(pg_stat_delta(pg_stat_before, pg_stat_after), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         write_summary_markdown(report, output_dir / "summary.md")
