@@ -1166,7 +1166,7 @@ GET  /v1/admin/jobs/{job_id}/events
 POST /v1/admin/jobs/{job_id}/cancel
 ```
 
-백업 진행률은 `preflight → dump → archive → checksum → finalize`, 복원 진행률은 `preflight → extract → restore → analyze → validate → finalize` 단계로 보고한다. `pg_dump`와 `pg_restore`는 정확한 row progress를 제공하지 않으므로 progress는 phase별 추정값이다. UI와 API는 추정 progress뿐 아니라 `current_stage`, 현재 처리 object/file, archive 크기, elapsed time을 함께 노출해야 한다.
+백업 진행률은 `preflight → dump → dump checksum → archive → checksum → finalize`, 복원 진행률은 `preflight → extract → restore → analyze → validate → finalize` 단계로 보고한다. `pg_dump`와 `pg_restore`는 정확한 row progress를 제공하지 않으므로 progress는 phase별 추정값이다. UI와 API는 추정 progress뿐 아니라 `current_stage`, 현재 처리 object/file, dump 디렉터리 크기, archive 입력/출력 byte, checksum byte, elapsed time을 함께 노출해야 한다.
 
 복원은 기본적으로 새 빈 DB에만 허용한다. 현재 연결 중인 운영 DB와 같은 target은 preflight에서 거절한다. `replace_current`가 필요하면 T-046 기본 구현 밖의 위험 경로로 두고, maintenance mode, typed confirmation, 선행 백업, rollback plan을 요구한다.
 

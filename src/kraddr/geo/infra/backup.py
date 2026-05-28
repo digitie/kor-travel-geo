@@ -10,9 +10,10 @@ import os
 import secrets
 import shutil
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import Any, Protocol
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -73,6 +74,39 @@ class CallbackDeliveryResult:
     attempts: int
     callback_ids: tuple[str, ...]
     last_error: str | None = None
+
+
+@dataclass(frozen=True)
+class SizeProgressSample:
+    current_bytes: int
+    total_bytes: int | None = None
+
+
+@dataclass
+class SizeProgressProbe:
+    path: Path
+    label: str
+    total_bytes: int | None = None
+    emit_interval_s: float = 5.0
+    _last_emit_at: float = field(default=0.0, init=False, repr=False)
+
+    def sample(self) -> SizeProgressSample:
+        return SizeProgressSample(
+            current_bytes=path_size_bytes(self.path),
+            total_bytes=self.total_bytes,
+        )
+
+    def maybe_message(self, sample: SizeProgressSample, *, force: bool = False) -> str | None:
+        now = monotonic()
+        if not force and now - self._last_emit_at < self.emit_interval_s:
+            return None
+        self._last_emit_at = now
+        if sample.total_bytes and sample.total_bytes > 0:
+            return (
+                f"{self.label} {format_bytes(sample.current_bytes)}"
+                f"/{format_bytes(sample.total_bytes)}"
+            )
+        return f"{self.label} {format_bytes(sample.current_bytes)}"
 
 
 async def run_backup_job(
@@ -156,19 +190,28 @@ async def run_backup_job(
             cancel_event=cancel_event,
             progress=progress,
             stage="dump",
-            bounds=(0.05, 0.70),
+            bounds=(0.05, 0.65),
             log_path=log_path,
+            size_probe=SizeProgressProbe(dump_dir, "dump 디렉터리"),
         )
         manifest_path = work_dir / "manifest.json"
         write_json(manifest_path, manifest)
         checksums_path = work_dir / "checksums.sha256"
+        await progress(
+            progress=0.65,
+            stage="dump",
+            message=f"dump checksum 생성 시작: {format_bytes(path_size_bytes(dump_dir))}",
+        )
         await write_checksums(
             checksums_path,
             roots=(manifest_path, dump_dir),
             base_dir=work_dir,
             cancel_event=cancel_event,
+            progress=progress,
+            bounds=(0.65, 0.70),
         )
 
+        archive_input_bytes = path_size_bytes(work_dir)
         tar_cmd = build_tar_create_command(
             partial_archive_path,
             work_dir,
@@ -177,7 +220,10 @@ async def run_backup_job(
         await progress(
             progress=0.70,
             stage="archive",
-            message=f"archive 생성 시작: {' '.join(tar_cmd.safe_argv)}",
+            message=(
+                f"archive 생성 시작: {' '.join(tar_cmd.safe_argv)} "
+                f"(입력 {format_bytes(archive_input_bytes)})"
+            ),
         )
         await run_process_with_progress(
             tar_cmd,
@@ -186,6 +232,11 @@ async def run_backup_job(
             stage="archive",
             bounds=(0.70, 0.90),
             log_path=log_path,
+            size_probe=SizeProgressProbe(
+                partial_archive_path,
+                "archive 파일",
+                total_bytes=archive_input_bytes,
+            ),
         )
         os.chmod(partial_archive_path, 0o600)
 
@@ -317,7 +368,12 @@ async def run_restore_job(
         log_dir.mkdir()
 
         extract_cmd = build_tar_extract_command(archive_path, extract_dir)
-        await progress(progress=0.05, stage="extract", message="archive 해제 시작")
+        archive_size_bytes = archive_path.stat().st_size
+        await progress(
+            progress=0.05,
+            stage="extract",
+            message=f"archive 해제 시작: {format_bytes(archive_size_bytes)}",
+        )
         await run_process_with_progress(
             extract_cmd,
             cancel_event=cancel_event,
@@ -325,6 +381,11 @@ async def run_restore_job(
             stage="extract",
             bounds=(0.05, 0.20),
             log_path=log_path,
+            size_probe=SizeProgressProbe(
+                extract_dir,
+                "extract 디렉터리",
+                total_bytes=archive_size_bytes,
+            ),
         )
         manifest = read_json(extract_dir / "manifest.json")
         await verify_internal_checksums(extract_dir, cancel_event=cancel_event)
@@ -341,7 +402,10 @@ async def run_restore_job(
         await progress(
             progress=0.20,
             stage="restore",
-            message=f"pg_restore 시작: {' '.join(restore_cmd.safe_argv)}",
+            message=(
+                f"pg_restore 시작: {' '.join(restore_cmd.safe_argv)} "
+                f"(dump {format_bytes(path_size_bytes(dump_dir))})"
+            ),
         )
         await run_process_with_progress(
             restore_cmd,
@@ -761,6 +825,7 @@ async def run_process_with_progress(
     stage: str,
     bounds: tuple[float, float],
     log_path: Path,
+    size_probe: SizeProgressProbe | None = None,
 ) -> None:
     with log_path.open("a", encoding="utf-8") as log_file:
         _write_log(log_file, stage=stage, message=f"exec: {' '.join(cmd.safe_argv)}")
@@ -786,7 +851,16 @@ async def run_process_with_progress(
             except TimeoutError:
                 if process.returncode is not None:
                     break
-                await progress(progress=_estimated_progress(bounds, line_count), stage=stage)
+                sample = size_probe.sample() if size_probe is not None else None
+                await progress(
+                    progress=_estimated_progress(bounds, line_count, sample),
+                    stage=stage,
+                    message=(
+                        size_probe.maybe_message(sample)
+                        if size_probe is not None and sample is not None
+                        else None
+                    ),
+                )
                 continue
             if not line:
                 if process.returncode is not None or process.stdout.at_eof():
@@ -795,10 +869,19 @@ async def run_process_with_progress(
             line_count += 1
             decoded = line.decode("utf-8", errors="replace").rstrip()
             _write_log(log_file, stage=stage, message=decoded)
+            sample = size_probe.sample() if size_probe is not None else None
+            size_message = (
+                size_probe.maybe_message(sample)
+                if size_probe is not None and sample is not None
+                else None
+            )
+            message = _trim_message(decoded)
+            if size_message is not None:
+                message = _trim_message(f"{message} ({size_message})")
             await progress(
-                progress=_estimated_progress(bounds, line_count),
+                progress=_estimated_progress(bounds, line_count, sample),
                 stage=stage,
-                message=_trim_message(decoded),
+                message=message,
             )
         return_code = await process.wait()
         if return_code != 0:
@@ -807,13 +890,56 @@ async def run_process_with_progress(
             raise RuntimeError(msg)
 
 
-def _estimated_progress(bounds: tuple[float, float], line_count: int) -> float:
+def _estimated_progress(
+    bounds: tuple[float, float],
+    line_count: int,
+    sample: SizeProgressSample | None = None,
+) -> float:
     start, end = bounds
-    return min(end, start + (end - start) * min(0.98, line_count / 200))
+    line_value = start + (end - start) * min(0.98, line_count / 200)
+    if sample is None or sample.total_bytes is None or sample.total_bytes <= 0:
+        return min(end, line_value)
+    size_fraction = min(0.98, sample.current_bytes / sample.total_bytes)
+    size_value = start + (end - start) * size_fraction
+    return min(end, max(line_value, size_value))
 
 
 def _trim_message(message: str) -> str:
     return message if len(message) <= 500 else f"{message[:497]}..."
+
+
+def path_size_bytes(path: Path) -> int:
+    if path.is_file():
+        return _safe_path_size(path)
+    if not path.is_dir():
+        return 0
+    total = 0
+    try:
+        for child in path.rglob("*"):
+            if child.is_file():
+                total += _safe_path_size(child)
+    except OSError:
+        return total
+    return total
+
+
+def _safe_path_size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
+def format_bytes(value: int) -> str:
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    size = float(max(0, value))
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} B"
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{int(size)} B"
 
 
 def _write_log(log_file: Any, *, stage: str, message: str) -> None:
@@ -836,6 +962,7 @@ async def sha256_file(
     digest = hashlib.sha256()
     total = path.stat().st_size  # noqa: ASYNC240
     read_bytes = 0
+    last_emit_at = 0.0
     with path.open("rb") as fh:
         while True:
             _ensure_not_cancelled(cancel_event)
@@ -847,7 +974,14 @@ async def sha256_file(
             if progress is not None and bounds is not None and total > 0:
                 start, end = bounds
                 value = start + (end - start) * min(1.0, read_bytes / total)
-                await progress(progress=value, stage="checksum")
+                now = monotonic()
+                message = None
+                if now - last_emit_at >= 5.0 or read_bytes >= total:
+                    last_emit_at = now
+                    message = (
+                        f"checksum {format_bytes(read_bytes)}/{format_bytes(total)}"
+                    )
+                await progress(progress=value, stage="checksum", message=message)
     return digest.hexdigest()
 
 
@@ -857,12 +991,30 @@ async def write_checksums(
     roots: tuple[Path, ...],
     base_dir: Path,
     cancel_event: asyncio.Event,
+    progress: ProgressReporter | None = None,
+    bounds: tuple[float, float] | None = None,
 ) -> None:
     lines: list[str] = []
-    for root in roots:
-        for path in _iter_checksum_files(root):
-            digest = await sha256_file(path, cancel_event=cancel_event)
-            lines.append(f"{digest}  {path.relative_to(base_dir).as_posix()}")
+    files = [path for root in roots for path in _iter_checksum_files(root)]
+    total_bytes = sum(_safe_path_size(path) for path in files)
+    processed_bytes = 0
+    last_emit_at = 0.0
+    for path in files:
+        digest = await sha256_file(path, cancel_event=cancel_event)
+        processed_bytes += _safe_path_size(path)
+        lines.append(f"{digest}  {path.relative_to(base_dir).as_posix()}")
+        if progress is not None and bounds is not None and total_bytes > 0:
+            start, end = bounds
+            value = start + (end - start) * min(1.0, processed_bytes / total_bytes)
+            now = monotonic()
+            message = None
+            if now - last_emit_at >= 5.0 or processed_bytes >= total_bytes:
+                last_emit_at = now
+                message = (
+                    f"dump checksum {format_bytes(processed_bytes)}"
+                    f"/{format_bytes(total_bytes)}"
+                )
+            await progress(progress=value, stage="dump", message=message)
     target.write_text("\n".join(lines) + "\n", encoding="utf-8")  # noqa: ASYNC240
     os.chmod(target, 0o600)
 

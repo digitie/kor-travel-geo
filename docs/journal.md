@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 05:17 (T-050 운영 hardening 3차 — backup/restore sub-progress)
+
+**작업**: backup/restore의 대용량 단계가 멈춘 것처럼 보이지 않도록 file/archive size 기반 sub-progress를 추가했다.
+
+**반영**:
+- `SizeProgressProbe`와 byte formatter를 추가해 진행 중인 파일 또는 디렉터리 크기를 주기적으로 샘플링한다.
+- `pg_dump` 실행 중 dump 디렉터리 크기를 `log_tail`에 남기고, dump checksum 생성 구간을 `0.65~0.70` progress로 분리했다.
+- `tar.zst` archive 생성 전에 입력 크기를 계산하고, `.part` archive 파일 성장량을 보조 진행률로 기록한다.
+- archive SHA256 계산 중 읽은 byte/전체 byte를 기록한다.
+- restore extract 구간에서 extract 디렉터리 성장량을 archive 크기와 함께 기록하고, `pg_restore` 시작 메시지에는 dump 디렉터리 총량을 포함한다.
+- `docs/t050-ops-hardening.md`, `docs/t046-db-backup-restore.md`, resume/tasks/CHANGELOG를 갱신했다.
+
+**검증**:
+- 대상 `ruff check src/kraddr/geo/infra/backup.py tests/unit/test_backup_restore.py`
+- 대상 `pytest tests/unit/test_backup_restore.py -q`
+- 대상 `mypy --no-incremental src/kraddr/geo/infra/backup.py`
+
+**후속**:
+- PR merge 후 T-050 4차로 full-load/MV/restore 완료 hook의 `ops.dataset_snapshots`/`ops.serving_releases` 자동 생성을 진행한다.
+
 ## 2026-05-29 04:29 (T-050 운영 hardening 2차 — backup/restore callback)
 
 **작업**: T-046 backup/restore callback을 1회 단순 전송에서 HMAC 서명, retry/backoff, replay 판별 가능한 전송 계약으로 보강했다.
