@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 12:26 (T-047 stress corpus benchmark)
+
+**작업**: PR #51/#52 후속 액션 중 `stress` 10,000건 이상 corpus 조건을 실제 T-027 Docker DB에서 측정했다.
+
+**측정**:
+- corpus: `artifacts/perf/t047-stress-20260528/corpus.json`, SHA `2123e09e41f96760b4a8451d98518a87aee6289cc8b238b8a8b2896b51665f23`, 11,000건.
+- run: 기본 pool `size=10`, `max_overflow=5`, `iterations=1`, `warmup=1`, concurrency `1/4/16/64`.
+- measurement 88,000건, error 0, `pg_stat_statements=true`.
+- c16까지는 모든 query군 p95가 34ms 이하로 들어왔다.
+- c64 tail은 대부분 checkout 대기였다. Q3 fuzzy p95 335.01ms 중 checkout p95 304.91ms, execute p95 32.07ms였고, Q4 search p95 302.21ms 중 checkout p95 280.41ms, execute p95 27.77ms였다.
+- `pg_stat_statements` delta top은 Q3 fuzzy 계열 40,910.80ms/8,000 calls, Q1 road exact 21,453.97ms/8,000 calls, Q4 search 18,161.25ms/8,000 calls 순이었다.
+
+**후속**:
+- 다음 T-047 측정은 REST API e2e latency에서 HTTP overhead와 DB checkout/execute split을 대조한다.
+- Q3 fuzzy 총 execution time이 가장 크므로 T-057 region hint 또는 `mv_geocode_text_search` 후보 실험은 유지한다.
+
 ## 2026-05-28 12:06 (T-047 인덱스 운영 영향 측정)
 
 **작업**: T-047 exact btree index 3개(`idx_mv_jibun_name_exact`, `idx_mv_rn_nrm_exact`, `idx_mv_buld_nm_nrm_exact`)가 MV refresh/swap, 디스크, 백업 단계에 주는 운영 영향을 실측했다.
