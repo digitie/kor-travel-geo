@@ -12,6 +12,7 @@ import typer
 
 from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.exceptions import InvalidInputError
+from kraddr.geo.infra.admin_repo import AdminRepository
 from kraddr.geo.infra.backup import run_backup_job, run_restore_job
 from kraddr.geo.infra.source_set import (
     build_full_load_source_set_plan,
@@ -547,7 +548,11 @@ def refresh_materialized_view(
                 concurrently=concurrently and not swap,
                 strategy="swap" if swap else "concurrent",
             )
-            typer.echo("refreshed mv_geocode_target")
+            _, release = await AdminRepository(client.engine).record_mv_refresh_release(
+                strategy="swap" if swap else "concurrent",
+                notes="CLI refresh mv",
+            )
+            typer.echo(f"refreshed mv_geocode_target; release={release.release_id}")
 
     asyncio.run(run())
 

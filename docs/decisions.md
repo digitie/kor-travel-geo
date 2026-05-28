@@ -1151,6 +1151,7 @@ REST 표면은 `/v1/admin/ops/*`를 기본으로 둔다.
 - T-049 구현 PR에서 `ops` 스키마 DDL, Alembic `0006_t049_ops_metadata_schema`, DTO/API/client/UI, redaction/hash helper, append-only audit trigger, active release partial unique index, table stats snapshot capture를 추가했다.
 - `docs/t049-ops-metadata-schema.md`에 구현 상태와 남은 연결점을 둔다.
 - T-045/T-046/T-047 구현 시 source set 확정, backup/restore artifact, performance report, MV swap gate를 snapshot/artifact/release에 실제로 연결한다.
+- T-050 4차에서 `mv_refresh` 성공 시 `ops.dataset_snapshots`와 active `ops.serving_releases`를 자동 생성하도록 연결했다. restore 성공은 serving 전환이 아니므로 `validated` snapshot과 `pending` restore release 후보만 만들고, active 승격은 T-058 hot-swap으로 넘긴다.
 
 ---
 

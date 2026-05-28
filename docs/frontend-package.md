@@ -294,7 +294,7 @@ T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/loa
 화면 구성:
 
 - dataset snapshot 목록: snapshot id, state, row count key 수를 표시한다. source set 상세 drilldown은 T-045에서 보강한다.
-- serving release 목록: release id, active/superseded 상태, release kind, serving MV 이름을 표시한다. active row는 DB partial unique index로 한 건만 허용된다.
+- serving release 목록: release id, active/superseded/pending 상태, release kind, serving MV 이름을 표시한다. T-050 4차 이후 full-load/MV refresh 성공은 active release로 자동 기록되고, restore 성공은 hot-swap 전 단계의 pending restore 후보로 자동 기록된다. active row는 DB partial unique index로 한 건만 허용된다.
 - artifact 목록: `db_backup`, `db_restore_log`, `consistency_report`, `perf_report`, `source_inventory`, `schema_diff`를 같은 table에서 표시한다. `/admin/ops`는 전체 관제 목록을 유지하고, `db_backup` 다운로드/삭제 action은 `/admin/backups`의 작업 화면에서 수행한다.
 - audit event 목록: action, outcome, 생성 시각을 표시한다. API key, DSN password, token, callback secret, 주소 원문은 backend redaction을 거친 payload만 받는다.
 - maintenance window: `full_load`, `restore`, `schema_migration`, `mv_refresh`, `read_only`, `exclusive` window를 typed confirmation과 함께 생성한다. confirmation 원문은 DB에 저장하지 않고 hash만 저장한다.

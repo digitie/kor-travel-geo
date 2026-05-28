@@ -443,6 +443,31 @@ async def run_restore_job(
             msg = f"restore artifact disappeared: {restore_artifact.artifact_id}"
             raise RuntimeError(msg)
         restore_artifact = updated_restore_artifact
+        await progress(
+            progress=0.98,
+            stage="finalize",
+            message="restore snapshot/release 후보 기록",
+        )
+        snapshot, release = await repo.record_restore_candidate(
+            restore_artifact_id=restore_artifact.artifact_id,
+            target_database=target_database,
+            source_manifest=manifest,
+            source_artifact_id=source_artifact.artifact_id if source_artifact else None,
+            job_id=_payload_job_id(payload),
+        )
+        relinked_restore_artifact = await repo.update_artifact(
+            restore_artifact.artifact_id,
+            snapshot_id=snapshot.snapshot_id,
+            release_id=release.release_id,
+            manifest={
+                **restore_manifest,
+                "snapshot_id": snapshot.snapshot_id,
+                "release_id": release.release_id,
+                "release_state": release.state,
+            },
+        )
+        if relinked_restore_artifact is not None:
+            restore_artifact = relinked_restore_artifact
         callback_result = await deliver_callback(
             restore_artifact,
             settings=settings,

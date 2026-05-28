@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 06:27 (T-050 운영 hardening 4차 — snapshot/release hook)
+
+**작업**: full-load/MV refresh/restore 성공 지점을 `ops.dataset_snapshots`와 `ops.serving_releases`에 자동 연결하는 hook을 추가했다.
+
+**반영**:
+- `mv_refresh` 성공 후 active serving release와 released dataset snapshot을 기록한다.
+- full-load batch에서 온 refresh는 root `source_set`과 최신 consistency gate를 연결하고, 단독 refresh는 `manual_rebuild` release로 기록한다.
+- 새 active release 생성 전 기존 active release는 `superseded`로 전환한다.
+- restore 성공 후에는 hot-swap 전 단계의 `validated` snapshot과 `pending` restore release 후보를 만들고 restore artifact manifest에 `snapshot_id`/`release_id`를 연결한다.
+- `docs/t050-ops-hardening.md`, backend/frontend 문서, resume/tasks/CHANGELOG를 갱신했다.
+- 사용자 최신 지시에 따라 이 PR merge 후 다음 작업은 PR #69부터 최신 PR까지 review audit/fixup을 먼저 진행한다.
+
+**검증**:
+- 대상 `ruff check src/kraddr/geo/infra/admin_repo.py src/kraddr/geo/api/app.py src/kraddr/geo/infra/backup.py src/kraddr/geo/cli/main.py tests/unit/test_ops_metadata.py`
+- 대상 `mypy --no-incremental src/kraddr/geo/infra/admin_repo.py src/kraddr/geo/api/app.py src/kraddr/geo/infra/backup.py src/kraddr/geo/cli/main.py`
+- 대상 `pytest tests/unit/test_backup_restore.py tests/unit/test_ops_metadata.py tests/unit/test_infra_repo_sql.py -q`
+- `lint-imports`
+
+**후속**:
+- T-050 4차 PR merge 후 PR #69부터 최신 PR까지 review audit/fixup을 진행한다.
+- 이후 `ops.table_stats_snapshots` 주기 capture로 이어간다.
+
 ## 2026-05-29 05:17 (T-050 운영 hardening 3차 — backup/restore sub-progress)
 
 **작업**: backup/restore의 대용량 단계가 멈춘 것처럼 보이지 않도록 file/archive size 기반 sub-progress를 추가했다.

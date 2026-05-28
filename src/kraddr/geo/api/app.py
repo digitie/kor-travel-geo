@@ -16,6 +16,7 @@ from kraddr.geo.api import _jobs
 from kraddr.geo.api.responses import error_payload, register_exception_handlers
 from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.exceptions import RateLimitError
+from kraddr.geo.infra.admin_repo import AdminRepository
 from kraddr.geo.infra.backup import run_backup_job, run_restore_job
 from kraddr.geo.infra.metrics import (
     PROMETHEUS_CONTENT_TYPE,
@@ -352,7 +353,19 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             concurrently=strategy != "swap",
             strategy="swap" if strategy == "swap" else "concurrent",
         )
+        snapshot, release = await AdminRepository(engine).record_mv_refresh_release(
+            job_id=_payload_str(payload, "_job_id"),
+            load_batch_id=_payload_str(payload, "load_batch_id"),
+            strategy=strategy,
+        )
         await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")
+        await progress(
+            stage="serving_release",
+            message=(
+                f"serving release 활성화: {release.release_id} "
+                f"snapshot={snapshot.snapshot_id}"
+            ),
+        )
 
     async def db_backup(
         payload: dict[str, Any],
