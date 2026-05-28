@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 08:55 (T-047 Q4 search exact preflight 튜닝)
+
+**작업**: Q4 통합 search의 broad trigram 병목을 줄이기 위해 exact preflight 경로와 전용 btree index를 추가했다.
+
+**반영 상세**:
+- `src/kraddr/geo/infra/search_repo.py`: search repository가 공백 제거 query로 `rn_nrm`/`buld_nm_nrm` exact preflight를 먼저 실행하고, exact 결과가 있으면 그 결과 집합만 반환한다. exact 결과가 없을 때만 기존 broad trigram search로 fallback한다.
+- `src/kraddr/geo/infra/sql.py`, `alembic/versions/0010_t047_search_exact_indexes.py`: `idx_mv_rn_nrm_exact`, `idx_mv_buld_nm_nrm_exact`를 추가했다.
+- `scripts/benchmark_query_performance.py`: Q4 search benchmark가 raw `_SEARCH_SQL`만 직접 실행하지 않고 운영 repository와 같은 exact preflight를 재현하도록 수정했다.
+- `tests/unit/test_infra_repo_sql.py`, `tests/unit/test_query_performance_benchmark.py`: SQL/index 계약과 benchmark search preflight 파라미터를 고정했다.
+
+**측정**:
+- 실제 T-027 클린 DB에서 index build time/size: `idx_mv_rn_nrm_exact` 120.45초/389MiB, `idx_mv_buld_nm_nrm_exact` 51.90초/316MiB.
+- standard corpus Q4 100건은 모두 exact preflight로 처리됐다(`min_exact_total=13`, `max_exact_total=1,562`).
+- `Q4-search-038`(`퇴계로88나길`) plan execution은 broad trigram 42.39ms → exact preflight 0.56ms로 감소했다.
+- Q4 p95: default pool c1/c4/c16은 62.12/70.62/116.06ms → 12.23/22.39/52.27ms, pool64 c64는 481.22ms → 295.85ms. default pool c64는 pool 대기와 다른 query군 경합이 섞여 421.36ms → 622.38ms로 악화되어 SQL 효과 판단값으로 쓰지 않는다.
+
+**후속**:
+- 사용자 지시에 따라 현재 PR 머지 후 PR #51/#52 리뷰 코멘트를 다시 확인하고, actionable 항목 또는 후속 액션을 문서화한다.
+- T-047 남은 항목은 `pg_stat_statements`, REST API e2e latency, stress 10,000건 corpus, Q3 fuzzy 후보 축소, T-057 region hint 비교다.
+
 ## 2026-05-28 00:45 (T-047 standard corpus와 pool 비교)
 
 **작업**: PR #51 머지 후 최신 `origin/main`에서 T-047 benchmark harness를 사용해 1,100건 standard corpus와 동시성 64 pool 비교를 수행했다.
