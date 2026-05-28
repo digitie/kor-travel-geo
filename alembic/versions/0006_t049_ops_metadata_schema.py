@@ -1,7 +1,7 @@
 """T-049 operational metadata schema
 
 Revision ID: 0006_t049_ops_metadata_schema
-Revises: 0005_t039_roadaddr_entrance_table
+Revises: 0005_t039_roadaddr_entrc
 Create Date: 2026-05-27
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 from kraddr.geo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
 
 revision = "0006_t049_ops_metadata_schema"
-down_revision = "0005_t039_roadaddr_entrance_table"
+down_revision = "0005_t039_roadaddr_entrc"
 branch_labels = None
 depends_on = None
 
