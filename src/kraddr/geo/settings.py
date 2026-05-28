@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     api_max_search_size: int = Field(default=100, ge=1, le=100)
     api_max_upload_bytes: int = Field(default=2 * 1024 * 1024 * 1024, ge=1)
     api_explain_timeout_ms: int = Field(default=3_000, ge=1)
+    api_max_concurrency: int | None = Field(default=None, ge=1)
+    api_admission_timeout_ms: int = Field(default=30_000, ge=1)
 
     juso_api_key: SecretStr | None = None
     juso_search_url: str = "https://business.juso.go.kr/addrlink/addrLinkApi.do"

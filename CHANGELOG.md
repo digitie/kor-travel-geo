@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-047 REST worker/pool/admission grid: `/v1/address/*` 전용 optional admission control(`KRADDR_GEO_API_MAX_CONCURRENCY`, `KRADDR_GEO_API_ADMISSION_TIMEOUT_MS`)을 추가하고 같은 REST corpus로 `w1/p16/a16`, `w2/p8/a8`, `w4/p4/a4`를 측정했다. 세 run 모두 error 0이었다. `w4/p4/a4`는 Q4 search c64 p95를 753.25ms → 435.63ms, Q3 fuzzy를 810.53ms → 550.35ms로 낮췄지만 Q5 reverse/Q8 no-result는 악화됐다. 기본값은 admission 비활성으로 유지하고, 권장 profile은 `w4/p4/a4`와 `w2/p8/a8`의 `iterations=3` 재측정 후 확정한다.
 - T-047 REST API pool64 비교: 같은 1,000 REST case/8,000 measurement corpus를 uvicorn 단일 process에서 DB pool 64(`max_overflow=0`)로 재측정했다. error 0이었고 Q3 fuzzy c64 p95는 810.53ms → 557.25ms로 개선됐지만, Q1/Q2/Q4/Q5/Q7/Q8은 대부분 악화되어 운영 기본 pool을 단순히 64로 올리지 않기로 했다. 다음 실험은 `workers × pool size × admission limit` grid와 T-057 region hint 비교로 좁혔다.
 - T-047 REST API e2e latency: 저장 corpus를 `/v1/address/*` 요청으로 변환하는 `scripts/benchmark_api_latency.py`를 추가하고, 1,000 REST case/8,000 measurement를 `c1/c4/c16/c64`로 측정했다. error 0이었고 c1 p95는 6.95~16.18ms, c16 p95는 43.79~97.13ms, c64 p95는 479.65~810.53ms였다. 한국 밖 reverse 좌표가 내부 `pydantic.ValidationError`로 HTTP 500을 내던 문제도 400 `E0102`로 변환되도록 보강했다.
 - T-047 stress corpus benchmark: 11,000건 corpus SHA `2123e09...`와 88,000 measurement로 기본 pool `c1/c4/c16/c64`를 재측정했다. error 0이었고 c16까지는 모든 query군 p95가 34ms 이하였으며, c64 tail은 대부분 pool checkout 대기였다(Q3 fuzzy p95 335.01ms 중 checkout 304.91ms/execute 32.07ms, Q4 search p95 302.21ms 중 checkout 280.41ms/execute 27.77ms). 다음 튜닝은 REST e2e latency, pool/admission control, Q3 fuzzy 후보 축소로 좁혔다.

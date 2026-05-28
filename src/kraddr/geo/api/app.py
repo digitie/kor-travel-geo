@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, cast
@@ -13,8 +13,9 @@ from fastapi.responses import ORJSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.api import _jobs
-from kraddr.geo.api.responses import register_exception_handlers
+from kraddr.geo.api.responses import error_payload, register_exception_handlers
 from kraddr.geo.client import AsyncAddressClient
+from kraddr.geo.exceptions import RateLimitError
 from kraddr.geo.infra.backup import run_backup_job, run_restore_job
 from kraddr.geo.infra.metrics import (
     PROMETHEUS_CONTENT_TYPE,
@@ -36,7 +37,7 @@ from kraddr.geo.loaders.text.parcel_link_loader import (
     load_juso_parcel_link_snapshot,
 )
 from kraddr.geo.loaders.text.roadaddr_entrance_loader import load_roadaddr_entrances
-from kraddr.geo.settings import get_settings
+from kraddr.geo.settings import Settings, get_settings
 from kraddr.geo.version import __version__
 
 from .routers import admin, geocode, healthz, pobox, reverse, search, zipcode
@@ -59,6 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(
         title="kraddr-geo",
         version=__version__,
@@ -68,6 +70,7 @@ def create_app() -> FastAPI:
         openapi_url="/v1/openapi.json",
     )
     register_exception_handlers(app)
+    _install_admission_control(app, settings)
     app.include_router(healthz.router, prefix="/v1")
     app.include_router(geocode.router, prefix="/v1")
     app.include_router(reverse.router, prefix="/v1")
@@ -85,6 +88,39 @@ def create_app() -> FastAPI:
         return Response(render_prometheus(), media_type=PROMETHEUS_CONTENT_TYPE)
 
     return app
+
+
+def _install_admission_control(app: FastAPI, settings: Settings) -> None:
+    if settings.api_max_concurrency is None:
+        return
+
+    semaphore = asyncio.Semaphore(settings.api_max_concurrency)
+    timeout_s = settings.api_admission_timeout_ms / 1_000
+
+    @app.middleware("http")
+    async def admission_control(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        if not request.url.path.startswith("/v1/address/"):
+            return await call_next(request)
+
+        try:
+            await asyncio.wait_for(semaphore.acquire(), timeout=timeout_s)
+        except TimeoutError:
+            error = RateLimitError(
+                "too many concurrent address API requests",
+                hint=(
+                    "increase KRADDR_GEO_API_MAX_CONCURRENCY or retry after current "
+                    "requests complete"
+                ),
+            )
+            return ORJSONResponse(error_payload(error), status_code=error.http_status)
+
+        try:
+            return await call_next(request)
+        finally:
+            semaphore.release()
 
 
 app = create_app()

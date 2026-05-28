@@ -491,6 +491,48 @@ c64 p95/p99 비교:
 - 단일 uvicorn process에서 pool을 64로 키우면 DB 동시 실행과 Python/HTTP scheduling 경합이 같이 늘어난다. 따라서 운영 기본값을 pool64로 단순 상향하지 않는다.
 - 다음 비교는 `workers × pool size × admission limit` grid로 잡는다. 예를 들어 worker 1/2/4, worker별 pool 8/16/32, API 동시 처리 상한 16/32/64를 같은 REST corpus로 비교하고, Q3 fuzzy 후보 축소는 T-057 region hint와 함께 별도 SQL/REST 전후를 기록한다.
 
+## 2026-05-28 T-047 REST worker/pool/admission grid
+
+REST c64 tail을 줄이기 위해 `/v1/address/*` 전용 process-local admission control을 추가했다. 기본값은 비활성화이고, `KRADDR_GEO_API_MAX_CONCURRENCY`가 설정된 경우에만 해당 process 안에서 동시에 실행할 주소 API 요청 수를 제한한다. 제한 대기 시간은 `KRADDR_GEO_API_ADMISSION_TIMEOUT_MS`로 정하며, timeout이 나면 vworld 호환 error envelope의 HTTP 429 `E0200`을 반환한다.
+
+이번 측정은 총 DB connection과 총 admission slot을 대략 16으로 맞추고 worker 분산 효과를 보는 exploratory grid다. uvicorn worker별로 settings와 semaphore가 따로 만들어지므로 아래 `admission` 값은 worker별 값이다.
+
+측정 profile:
+
+| run | workers | worker별 pool | worker별 admission | artifact |
+|-----|--------:|--------------:|-------------------:|----------|
+| `default` | 1 | 10 + overflow 5 | 비활성 | `artifacts/perf/t047-rest-e2e-standard-20260528-r2` |
+| `pool64` | 1 | 64 | 비활성 | `artifacts/perf/t047-rest-e2e-pool64-20260528` |
+| `w1p16a16` | 1 | 16 | 16 | `artifacts/perf/t047-rest-grid-w1-p16-a16-20260528` |
+| `w2p8a8` | 2 | 8 | 8 | `artifacts/perf/t047-rest-grid-w2-p8-a8-20260528` |
+| `w4p4a4` | 4 | 4 | 4 | `artifacts/perf/t047-rest-grid-w4-p4-a4-20260528` |
+
+모든 run은 같은 corpus SHA `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f`, REST case 1,000건, measurement 8,000건, `iterations=1`, `warmup=1`, concurrency `1/4/16/64`로 실행했고 error는 모두 0이었다.
+
+c64 p95 비교:
+
+| API group | default | pool64 | w1/p16/a16 | w2/p8/a8 | w4/p4/a4 | 최저 |
+|-----------|--------:|-------:|-----------:|---------:|---------:|------|
+| Q1 geocode road | 581.42ms | 850.38ms | 749.66ms | 715.07ms | 516.13ms | w4 |
+| Q2 geocode parcel | 500.22ms | 762.19ms | 848.71ms | 616.04ms | 477.59ms | w4 |
+| Q3 geocode fuzzy | 810.53ms | 557.25ms | 722.95ms | 619.14ms | 550.35ms | w4 |
+| Q4 search | 753.25ms | 864.84ms | 913.49ms | 591.01ms | 435.63ms | w4 |
+| Q5 reverse nearest | 560.95ms | 817.91ms | 583.91ms | 583.97ms | 636.82ms | default |
+| Q6 reverse radius | 773.89ms | 757.39ms | 907.36ms | 627.26ms | 720.07ms | w2 |
+| Q7 zipcode address | 667.67ms | 802.69ms | 878.27ms | 572.37ms | 559.37ms | w4 |
+| Q7 zipcode point | 734.30ms | 805.47ms | 976.60ms | 609.41ms | 505.59ms | w4 |
+| Q8 geocode no-result | 655.28ms | 798.95ms | 716.43ms | 613.11ms | 787.79ms | w2 |
+| Q11 SPPN reverse | 479.65ms | 494.07ms | 512.90ms | 398.76ms | 441.09ms | w2 |
+
+c64 p99에서 `w4/p4/a4`는 Q4 search를 981.13ms에서 623.44ms, Q3 fuzzy를 1265.29ms에서 894.47ms, Q2 parcel을 807.93ms에서 582.73ms로 낮췄다. 반면 Q5 reverse nearest는 682.69ms에서 976.57ms, Q6 reverse radius는 871.68ms에서 951.81ms, Q8 no-result는 867.84ms에서 901.91ms로 나빠졌다.
+
+해석:
+
+- 단일 process에서 admission을 16으로 둔 `w1/p16/a16`은 pool64보다도 나쁜 경로가 많았다. 병목은 단순 connection 수만이 아니라 process scheduling과 query mix 경합이다.
+- `w4/p4/a4`는 geocode/search/zipcode-heavy 경로의 c64 p95를 가장 많이 낮췄다. 특히 Q4 search는 753.25ms에서 435.63ms로 줄었다.
+- `w2/p8/a8`은 Q6 reverse radius, Q8 no-result, Q11 SPPN reverse가 더 안정적이었다. reverse/no-result p99까지 SLO에 넣으면 `w4/p4/a4`만으로는 부족하다.
+- 운영 기본값은 계속 admission 비활성화로 둔다. 아직 `iterations=1` exploratory run이므로, 실제 권장 profile은 `w4/p4/a4`와 `w2/p8/a8`을 `iterations=3` 이상으로 재측정하고, 필요하면 reverse와 text query의 별도 limit 또는 endpoint별 worker pool 분리를 검토한 뒤 정한다.
+
 ## 2026-05-28 PR #51/#52 post-merge 리뷰 반영 메모
 
 PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와 review thread는 없었다. 상세 매핑은 `docs/postmerge-review-fixups-pr51-pr52.md`에 둔다.
