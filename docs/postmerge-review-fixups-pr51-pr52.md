@@ -20,7 +20,7 @@
 | 출처 | 항목 | 처리 |
 |------|------|------|
 | PR #51 M1, PR #52 M2 | `pg_stat_statements` 비활성 | T-047 관측성 보강 PR에서 Docker preload 설정, fresh schema/Alembic extension, before/after/delta artifact, reset 옵션을 추가했다. 이어서 실제 T-027 DB를 preload 상태로 재시작하고 `standard --iterations 3` active run을 완료했다. |
-| PR #51 M2 | `idx_mv_jibun_name_exact` 운영 영향 미평가 | PR #53에서 Q4 exact index 2개가 추가됐으므로, 다음 운영 영향 측정은 T-047 인덱스 3개를 묶어 MV refresh/swap, backup archive, 디스크 envelope를 재측정한다. |
+| PR #51 M2 | `idx_mv_jibun_name_exact` 운영 영향 미평가 | T-047 인덱스 3개를 묶어 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 재측정했다. `CONCURRENTLY` refresh는 133.28초, shadow `swap`은 352.85초였고 exact index 3개 build phase 합계는 180.35초였다. `tar.zst` archive는 로컬 `zstd` CLI 부재로 후속에 남겼다. |
 | PR #51 M3 | benchmark가 underscore SQL 상수 import | 의도적으로 production path와 측정 path를 맞춘 결정은 유지한다. T-052 v2 API 또는 SQL 재사용 표면이 커질 때 public SQL module 추출을 함께 수행한다. |
 | PR #51 M4 | small corpus 분산 한계 | PR #52의 1,100건 standard corpus로 1차 해소했다. 후보 확정 run은 `standard` 3회 이상 또는 `stress` 10,000건 이상으로 수행하도록 T-047 문서에 명시했다. |
 | PR #51 M5 | corpus deterministic 보장 설명 부족 | T-047 문서에 현재 corpus 생성 방식(`TABLESAMPLE ... REPEATABLE (47)`, fallback `ORDER BY bd_mgt_sn`, 저장 corpus SHA 재사용)을 추가했다. |
@@ -31,12 +31,12 @@
 
 ## 다음 실행 순서
 
-1. T-047 operational impact run: T-047 인덱스 3개 포함 상태에서 MV refresh/swap, backup archive 크기, 디스크 여유 envelope를 측정한다.
-2. T-047 stress run: 10,000건 이상 corpus로 c1/c4/c16/c64를 측정한다.
+1. T-047 stress run: 10,000건 이상 corpus로 c1/c4/c16/c64를 측정한다.
+2. REST API e2e latency에서 DB checkout/execute split과 HTTP overhead를 대조한다.
 3. Q3 fuzzy 후보 축소: T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 비교한다.
-4. REST API e2e latency에서 DB checkout/execute split과 HTTP overhead를 대조한다.
+4. backup archive 압축 단계: 로컬 `zstd` CLI 설치 또는 backup helper fallback 압축 경로 검증 뒤 `tar.zst` 크기와 wall time을 재측정한다.
 5. T-052 또는 SQL 재사용 확대 시점에 SQL 상수 public module을 추출한다.
 
 ## 검증
 
-T-060 자체는 문서 반영이었다. 후속 T-047 관측성 보강에서는 benchmark artifact schema 2, `pg_stat_statements` snapshot/delta, checkout/execute 분리 측정이 추가됐다.
+T-060 자체는 문서 반영이었다. 후속 T-047 관측성 보강에서는 benchmark artifact schema 2, `pg_stat_statements` snapshot/delta, checkout/execute 분리 측정이 추가됐다. 이어서 T-047 operational impact run에서 exact index 3개 포함 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했다.

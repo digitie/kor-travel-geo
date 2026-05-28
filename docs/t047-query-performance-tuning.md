@@ -273,6 +273,68 @@ pool 64 비교:
 
 pool 64는 checkout 대기를 크게 줄였지만, c64에서 DB execute p95가 60~129ms로 커졌다. 운영 기본 pool을 단순히 64로 키우는 것보다 API worker 수, admission control, pool size를 함께 잡고 Q3/Q4 후보 폭을 줄이는 것이 다음 순서다.
 
+## 2026-05-28 T-047 인덱스 운영 영향 측정
+
+T-047에서 추가된 exact btree index 3개가 MV refresh/swap, 디스크, 백업 단계에 미치는 영향을 측정했다.
+
+전제:
+
+- DB: `postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo`
+- row count: `mv_geocode_target=6,416,637`
+- 측정 artifact: `artifacts/perf/t047-operational-impact-20260528`
+- 장기 MV 작업은 `KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS=1800000`으로 실행했다.
+- 첫 `swap` 시도는 기본 statement timeout 5초에 걸려 실패했다. `mv_geocode_target_next`/`mv_geocode_target_old`는 남지 않았고, 기존 live MV row count는 유지됐다.
+
+MV 크기와 인덱스:
+
+| 항목 | 크기 |
+|------|-----:|
+| DB 전체 | 31.90GiB |
+| `mv_geocode_target` total | 4.78GiB |
+| `mv_geocode_target` heap | 1.85GiB |
+| `mv_geocode_target` indexes | 2.93GiB |
+| `idx_mv_jibun_name_exact` | 760.71MiB |
+| `idx_mv_rn_nrm_exact` | 388.72MiB |
+| `idx_mv_buld_nm_nrm_exact` | 315.96MiB |
+| T-047 exact index 3개 합계 | 1.43GiB |
+
+MV refresh/swap:
+
+| 전략 | T-035 기준 | T-047 측정 | temp delta | 비고 |
+|------|-----------:|-----------:|-----------:|------|
+| `CONCURRENTLY` | 111.64초 | 133.28초 | +11.31GiB / +80 files | 총시간 +21.64초 |
+| shadow `swap` | 137.15초 | 352.85초 | +9.63GiB / +42 files | 총시간 +215.70초 |
+
+shadow `swap` phase 중 T-047 exact index 비용:
+
+| phase | 시간 |
+|-------|-----:|
+| `rebuild.create_next` | 98.67초 |
+| `idx_mv_next_jibun_name_exact` | 46.54초 |
+| `idx_mv_next_rn_nrm_exact` | 95.44초 |
+| `idx_mv_next_buld_nm_nrm_exact` | 38.38초 |
+| exact index 3개 합계 | 180.35초 |
+| `swap.rename_live_to_old` + `rename_next_to_live` + `drop_old_post` + `rename_indexes` | 0.03초 |
+| `swap.analyze_live` | 5.71초 |
+
+해석:
+
+- T-047 exact index 3개는 조회 p95를 크게 낮추지만, shadow `swap` rebuild 시간에는 약 180초의 인덱스 build 비용을 추가한다.
+- live rename 구간은 여전히 0.03초 수준이라 lock window 자체는 짧다. 문제는 shadow MV와 인덱스를 만드는 사전 작업 시간이다.
+- `CONCURRENTLY`는 총시간 증가가 21.64초로 작지만, 운영 MV를 직접 갱신하고 temp I/O는 11.31GiB로 더 컸다.
+- 짧은 점검 창에서 live lock window가 핵심이면 `swap`을 유지하되, 운영자는 rebuild 시간이 5~6분대로 늘어난다는 점을 알아야 한다. 총시간이 더 중요하고 조회 경합이 낮은 idle 시간에는 `CONCURRENTLY`가 여전히 더 짧다.
+
+백업/disk envelope:
+
+| 항목 | 값 |
+|------|----:|
+| `pg_dump -Fd --jobs=4` wall time | 2분 21.60초 |
+| dump directory size | 4.02GiB |
+| dump command RSS max | 32,200KiB |
+| filesystem output | 8,424,792 blocks |
+
+현재 WSL 환경에는 `zstd` CLI가 없어 T-046의 최종 `tar.zst` archive 단계는 실행하지 못했다. 따라서 이번 PR의 백업 수치는 archive 압축 전 `pg_dump -Fd` dump directory 기준이다. 다음 backup archive 측정 전에는 `zstd` CLI를 설치하거나 backup helper에 검증된 fallback 압축 경로를 추가해야 한다.
+
 ## 2026-05-28 PR #51/#52 post-merge 리뷰 반영 메모
 
 PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와 review thread는 없었다. 상세 매핑은 `docs/postmerge-review-fixups-pr51-pr52.md`에 둔다.
@@ -287,7 +349,7 @@ PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와
 | 항목 | 다음 처리 |
 |------|-----------|
 | `pg_stat_statements` | Docker/PostgreSQL 설정, schema extension, before/after/delta artifact, 활성 DB의 `standard --iterations 3` run을 완료했다. |
-| 인덱스 운영 비용 | `idx_mv_jibun_name_exact`, `idx_mv_rn_nrm_exact`, `idx_mv_buld_nm_nrm_exact` 포함 상태에서 MV refresh/swap, backup archive, 디스크 envelope를 재측정한다. |
+| 인덱스 운영 비용 | T-047 exact index 3개 포함 상태에서 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했다. `tar.zst` archive는 로컬 `zstd` CLI 부재로 후속에 남긴다. |
 | SQL 상수 public module | T-052 v2 API 또는 SQL 재사용 표면 확대 시 `infra.*_repo`의 underscore 상수를 public SQL module로 추출한다. |
 | Q3 fuzzy | T-057 region hint 또는 text-search slim MV 후보로 도로명 trgm 후보 폭을 줄인다. |
 | stress corpus | 10,000건 이상 corpus를 생성해 c1/c4/c16/c64를 다시 측정한다. |

@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 12:06 (T-047 인덱스 운영 영향 측정)
+
+**작업**: T-047 exact btree index 3개(`idx_mv_jibun_name_exact`, `idx_mv_rn_nrm_exact`, `idx_mv_buld_nm_nrm_exact`)가 MV refresh/swap, 디스크, 백업 단계에 주는 운영 영향을 실측했다.
+
+**측정**:
+- DB: Docker PostGIS `localhost:15432`, `mv_geocode_target=6,416,637`.
+- 첫 shadow `swap`은 기본 statement timeout 5초에 걸려 실패했다. `mv_geocode_target_next`/`mv_geocode_target_old` 잔여 객체는 없었고 live MV row count는 유지됐다.
+- `KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS=1800000`으로 재실행한 결과, `CONCURRENTLY` refresh는 133.28초, shadow `swap`은 352.85초였다.
+- T-035 기준선 대비 `CONCURRENTLY`는 +21.64초, shadow `swap`은 +215.70초다.
+- shadow `swap` 중 exact index 3개 build phase 합계는 180.35초였다. live rename/drop/index rename 구간은 0.03초 수준으로 lock window는 여전히 짧았다.
+- DB 전체는 31.90GiB, `mv_geocode_target` total은 4.78GiB, MV index total은 2.93GiB, exact index 3개 합계는 1.43GiB였다.
+- `pg_dump -Fd --jobs=4` dump directory 생성은 2분 21.60초, 4.02GiB, max RSS 32,200KiB였다.
+
+**산출물**:
+- `artifacts/perf/t047-operational-impact-20260528/mv-concurrent.json`
+- `artifacts/perf/t047-operational-impact-20260528/mv-swap.json`
+- `artifacts/perf/t047-operational-impact-20260528/pgdump.time`
+
+**후속**:
+- 현재 WSL 환경에는 `zstd` CLI가 없어 최종 `tar.zst` archive 측정은 수행하지 못했다. 다음 backup archive 측정 전 `zstd` 설치 또는 backup helper fallback 압축 경로를 검증한다.
+- T-047 다음 순서는 `stress` 10,000건 이상 corpus, REST API e2e latency, Q3 fuzzy 후보 축소다.
+
 ## 2026-05-28 11:20 (T-047 active observability run)
 
 **작업**: T-047 관측성 보강이 머지된 뒤, 실제 Docker DB에 `pg_stat_statements`를 활성화하고 저장 corpus로 반복 benchmark를 수행했다.
