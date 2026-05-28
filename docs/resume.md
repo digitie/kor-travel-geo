@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-27 갱신, by codex)
+## 현재 진척도 (2026-05-28 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ `main` 브랜치를 문서·repo 설정만 남도록 정리
@@ -87,10 +87,11 @@
 - ✅ PR #51/#52 post-merge 리뷰 audit/fixup — conversation/review/inline/thread를 다시 확인했다. 두 PR 모두 post-merge conversation review 1건씩, review 0건, review thread 0건이었다. Q4 search split은 PR #53에서 반영됐고, `pg_stat_statements`, T-047 index 운영 영향, stress corpus, pool wait/DB execution 분리, SQL 상수 public module, Q3 fuzzy/T-057 region hint는 후속 액션으로 정리했다. 상세: `docs/postmerge-review-fixups-pr51-pr52.md`
 - ✅ T-047 관측성 benchmark 보강 — artifact schema 2에 measurement별 `checkout_ms`/`execute_ms`, summary별 `p95_checkout_ms`/`p95_execute_ms`를 추가했고, `pg_stat_statements` before/after/delta artifact와 reset 옵션을 추가했다. Docker fresh DB는 `shared_preload_libraries=pg_stat_statements`와 schema extension을 포함한다. 기존 T-027 DB smoke는 extension 미설치 상태를 artifact로 남겼고, 11개 query군 error 0으로 통과했다. 상세: `docs/t047-query-performance-tuning.md`
 - ✅ T-047 active observability run — `kraddr-geo-t027-db-1`을 `pg_stat_statements` preload 상태로 재시작하고 extension을 활성화했다. 저장 corpus 1,100건 SHA `ef460f8...`로 `standard --iterations 3`를 실행했고 measurement 17,600건 error 0을 확인했다. 기본 pool c64 Q4 p95 330.80ms 중 checkout p95가 307.88ms라 tail 대부분이 pool 대기였고, pool64 c64 Q4 p95는 162.50ms로 낮아졌다. Alembic 33자 revision ID 문제도 32자 이하로 정정했다. 상세: `docs/t047-query-performance-tuning.md`
+- ✅ T-047 인덱스 운영 영향 측정 — exact btree index 3개 포함 상태에서 MV refresh/swap, 디스크, 백업 envelope를 측정했다. `CONCURRENTLY` refresh는 T-035 기준 111.64초에서 133.28초, shadow `swap`은 137.15초에서 352.85초로 늘었다. exact index 3개 build phase 합계는 180.35초, exact index total size는 1.43GiB, `pg_dump -Fd --jobs=4` dump directory는 2분 21.60초/4.02GiB였다. 로컬 `zstd` CLI 부재로 최종 `tar.zst` archive 측정은 후속에 남겼다. 상세: `docs/t047-query-performance-tuning.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업 후보는 T-047 인덱스 3개(`idx_mv_jibun_name_exact`, `idx_mv_rn_nrm_exact`, `idx_mv_buld_nm_nrm_exact`)의 운영 영향 측정이다. MV refresh/swap 시간, backup archive 크기, 디스크 envelope를 측정해 active observability 결과와 함께 문서화한다. 그 다음은 Q3 fuzzy 후보 축소(T-057 region hint 또는 `mv_geocode_text_search`)나 REST API e2e latency다. task 순서를 엄격히 운영 안전성 우선으로 잡으면 T-056(`python-kraddr-base` Address 흡수) → T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-057(행정구역 hint 검색 가속) → T-053(Admin Web UI 통계/튜닝) → T-052(API v1/v2와 provider 통합) → T-055(N150/Odroid 실측) 순서다.
+다음 작업 후보는 T-047 `stress` 10,000건 이상 corpus와 REST API e2e latency 측정이다. Q3 fuzzy 후보 축소는 T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 비교한다. `tar.zst` backup archive 측정은 로컬 `zstd` CLI 설치 또는 backup helper fallback 압축 경로 검증 뒤 재시도한다. task 순서를 엄격히 운영 안전성 우선으로 잡으면 T-056(`python-kraddr-base` Address 흡수) → T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-057(행정구역 hint 검색 가속) → T-053(Admin Web UI 통계/튜닝) → T-052(API v1/v2와 provider 통합) → T-055(N150/Odroid 실측) 순서다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
