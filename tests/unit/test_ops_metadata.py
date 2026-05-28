@@ -124,9 +124,12 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "pg_class" in source
     assert "record_mv_refresh_release" in source
     assert "record_restore_candidate" in source
+    assert "ensure_load_batch_release_gate" in source
     assert "canonical_payload_hash" in module_source
     assert "source_set_hash" in module_source
     assert "UPDATE ops.serving_releases" in module_source
+    assert "mv_hash=mv_hash" in module_source
+    assert "CAST(:mv_row_count AS text)" in module_source
     assert "serving_release.activate" in module_source
 
 
@@ -137,9 +140,9 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
     app_source = inspect.getsource(app._register_default_handlers)
     restore_source = inspect.getsource(backup.run_restore_job)
 
+    assert "ensure_load_batch_release_gate" in app_source
     assert "record_mv_refresh_release" in app_source
     assert "load_batch_id" in app_source
-    assert "serving release 활성화" in app_source
     assert "record_restore_candidate" in restore_source
     assert "release_state" in restore_source
     assert "snapshot_id" in restore_source

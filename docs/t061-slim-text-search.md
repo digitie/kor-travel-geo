@@ -18,6 +18,8 @@ T-057의 `sig_cd`/`bjd_cd` hint는 Q3 fuzzy tail을 낮췄지만, `mv_geocode_ta
 - Q4 broad trigram fallback만 helper MV를 사용한다.
 - helper MV는 target MV와 같은 세대로 swap되어야 하므로, shadow swap에서 `mv_geocode_target_next`와 `mv_geocode_text_search_next`를 함께 만들고 같은 rename window에서 교체한다.
 
+운영자는 `mv_geocode_target`만 psql에서 직접 `REFRESH MATERIALIZED VIEW` 하지 않는다. `mv_geocode_text_search`는 target에서 파생되는 helper라 target만 단독 refresh하면 Q3/Q4 후보가 이전 세대에 머물 수 있다. 평시에는 `kraddr-geo refresh mv` 또는 `/v1/admin/maintenance/refresh-mv`, 풀로드 후에는 `kraddr-geo refresh mv --swap` 같은 orchestration 경로만 사용한다.
+
 ## 구현
 
 `mv_geocode_text_search` 컬럼은 조회 후보 추출에 필요한 최소값으로 제한했다.
@@ -98,6 +100,8 @@ shadow swap benchmark artifact는 `artifacts/perf/t061-mv-swap-20260528.json`이
 | temp 증가 | 57 files / 11.67GiB |
 
 T-047 exact index 포함 shadow swap 기준 `352.85초`와 비교하면 helper 포함 swap은 약 `+144.69초`다. 조회 p95 개선은 있지만 helper index 6개가 refresh/swap과 backup envelope를 늘리므로, 운영에서는 shadow swap을 기본으로 유지하고 refresh window를 명확히 잡아야 한다.
+
+T-055 N150/Odroid sizing에서는 helper MV total `2,426MiB`, swap 중 임시 파일 증가 `11.67GiB`, GIN index build의 `maintenance_work_mem`/temp disk 사용량을 별도 항목으로 기록한다.
 
 ## 검증
 

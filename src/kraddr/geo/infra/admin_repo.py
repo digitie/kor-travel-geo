@@ -443,9 +443,6 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                 if load_batch_id
                 else None
             )
-            if report is not None and report["severity_max"] == "ERROR":
-                msg = "cannot release dataset with ERROR consistency gate"
-                raise RuntimeError(msg)
             batch_source_set = (
                 await _load_batch_source_set(conn, load_batch_id) if load_batch_id else {}
             )
@@ -470,19 +467,33 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                 f"mv_refresh strategy={strategy or 'unknown'}"
                 + (f"; load_batch_id={load_batch_id}" if load_batch_id else "")
             )
+            row_counts = await _collect_row_counts_for_conn(conn)
+            mv_hash = await _mv_hash_for_conn(conn, row_counts.get("mv_geocode_target"))
             return await _insert_dataset_snapshot_and_release(
                 conn,
                 snapshot_state="released",
                 release_state="active",
                 release_kind=release_kind,
                 source_set=source_set,
-                row_counts=await _collect_row_counts_for_conn(conn),
+                row_counts=row_counts,
                 consistency_report_id=str(report["report_id"]) if report else None,
                 consistency_gate=consistency_gate,
                 created_by_job_id=job_id,
                 activated_by_job_id=job_id,
+                mv_hash=mv_hash,
                 notes=release_notes,
             )
+
+    async def ensure_load_batch_release_gate(self, load_batch_id: str | None) -> None:
+        """Fail before MV swap when the latest load-batch consistency gate is blocking."""
+
+        if not load_batch_id:
+            return
+        async with self.engine.connect() as conn:
+            report = await _latest_consistency_gate_for_batch(conn, load_batch_id)
+        if report is not None and report["severity_max"] == "ERROR":
+            msg = "cannot release dataset with ERROR consistency gate"
+            raise RuntimeError(msg)
 
     async def record_restore_candidate(
         self,
@@ -1804,12 +1815,16 @@ SELECT current_setting('server_version') AS postgres_version,
     }
 
 
-async def _mv_hash_for_conn(conn: Any) -> str | None:
+async def _mv_hash_for_conn(conn: Any, mv_row_count: int | None = None) -> str | None:
     exists = await conn.scalar(
         text("SELECT to_regclass('public.mv_geocode_target')")
     )
     if exists is None:
         return None
+    if mv_row_count is None:
+        mv_row_count = int(
+            await conn.scalar(text("SELECT count(*)::bigint FROM public.mv_geocode_target")) or 0
+        )
     return _optional_text(
         await conn.scalar(
             text(
@@ -1817,10 +1832,11 @@ async def _mv_hash_for_conn(conn: Any) -> str | None:
 SELECT md5(
   COALESCE(pg_get_viewdef('public.mv_geocode_target'::regclass, true), '')
   || ':'
-  || COALESCE((SELECT count(*)::text FROM public.mv_geocode_target), '0')
+  || CAST(:mv_row_count AS text)
 )
 """
-            )
+            ),
+            {"mv_row_count": str(mv_row_count)},
         )
     )
 

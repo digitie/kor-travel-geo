@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #69~#75 post-merge 리뷰 audit/fixup: `maplibre-vworld` lockfile URL을 `git+https`로 맞추고, consistency sample 목록의 불필요한 report 조회를 줄였으며, backup/restore byte progress sampler에 캐시를 추가했다. T-050 release hook은 load-batch ERROR gate를 MV swap 전에 확인하고 `mv_geocode_target` count를 `mv_hash` 계산에 재사용한다. T-053 표본/전수 범위, T-061 helper MV raw refresh 금지, callback retry 멱등성, T-055 helper sizing도 문서화했다.
 - T-050 운영 hardening 4차: `mv_refresh` 성공 시 `ops.dataset_snapshots`와 active `ops.serving_releases`를 자동 생성하고, 기존 active release는 `superseded`로 전환한다. restore 성공 시에는 hot-swap 전 단계로 `validated` snapshot과 `pending` restore release 후보를 기록하고 restore artifact에 snapshot/release id를 연결한다.
 - T-050 운영 hardening 3차: backup/restore의 `dump`, `dump checksum`, `archive`, `checksum`, `extract`, `restore` 구간에 file/archive size 기반 sub-progress를 추가했다. DB schema/API DTO 변경 없이 기존 `load_jobs.progress`, `current_stage`, `log_tail`에 dump 디렉터리 크기, archive 입력/출력 byte, checksum 처리 byte, extract 디렉터리 성장량을 기록한다.
 - T-050 운영 hardening 2차: backup/restore callback을 HMAC-SHA256 서명 payload와 retry/backoff 기반 delivery로 보강했다. callback은 `callback_id`, `timestamp`, `attempt`, `max_attempts`를 포함하고, `x-kraddr-geo-signature` header로 서명한다. 최종 delivery 상태와 attempt ID 목록은 `ops.artifacts.callback_state` 및 `manifest.callback_delivery`에 기록한다.

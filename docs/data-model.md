@@ -464,7 +464,7 @@ CREATE INDEX idx_mv_pt_source ON mv_geocode_target (pt_source);          -- entr
 
 | 상황 | 방법 |
 |------|------|
-| 평시 변동분 적재(`delta_loader` 후) | `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target;` → `ANALYZE` |
+| 평시 변동분 적재(`delta_loader` 후) | `kraddr-geo refresh mv` 또는 `refresh_mv(strategy='concurrent')` → `ANALYZE` |
 | 분기 풀로드(전국 11개 마스터 재적재 후) | shadow MV 빌드 → 짧은 트랜잭션에서 RENAME swap (아래) |
 
 ```sql
@@ -578,7 +578,7 @@ CREATE VIEW v_scco_emd_4326 AS
 
 폴리곤은 자주 변환되지 않는 응답 경로에만 등장하므로 view로 충분. 점이 빈도 높게 변환되는 `mv_geocode_target`만 컬럼으로 저장(ADR-007 후속).
 
-적재 후 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`(평시) 또는 위 swap 절차(분기). ANALYZE는 자동 통계만 의존하지 말고 명시 실행한다.
+적재 후 `kraddr-geo refresh mv`(평시) 또는 `kraddr-geo refresh mv --swap`(분기)을 사용한다. ANALYZE는 자동 통계만 의존하지 말고 명시 실행한다. T-061 이후에는 `mv_geocode_text_search` helper도 같은 세대로 갱신해야 하므로 psql에서 `REFRESH MATERIALIZED VIEW mv_geocode_target`만 단독 실행하지 않는다.
 
 ## 쿼리 성능 보조 view/MV 후보 (ADR-031, T-047 설계)
 
@@ -602,7 +602,7 @@ T-047은 전국 full-load 이후 지오코딩/역지오코딩/검색 쿼리 p95/
 | `v_admin_boundary_4326` | 디버그 지도 표시 | 행정/기초구역 polygon 4326 변환 | 일반 view, 필요 시 materialized |
 | `mv_sppn_reverse_area` | 국가지점번호 보조 reverse | `TL_SPPN_MAKAREA` polygon key와 면적/우선순위 | GiST polygon, 면적 정렬 key |
 
-T-061에서 `mv_geocode_text_search`는 실제 DDL로 승격했다. 이 객체는 `mv_geocode_target`에서 재생성하는 read-only helper이며, Q3 fuzzy geocode와 Q4 broad search fallback의 후보 추출에만 사용한다. Q4 exact preflight는 기존 `mv_geocode_target` exact index가 충분히 빨라 그대로 유지한다. helper MV를 추가·변경할 때는 `docs/t061-slim-text-search.md`처럼 semantic parity, Q3/Q4 p95/p99, helper size, shadow swap, backup envelope를 함께 기록한다.
+T-061에서 `mv_geocode_text_search`는 실제 DDL로 승격했다. 이 객체는 `mv_geocode_target`에서 재생성하는 read-only helper이며, Q3 fuzzy geocode와 Q4 broad search fallback의 후보 추출에만 사용한다. Q4 exact preflight는 기존 `mv_geocode_target` exact index가 충분히 빨라 그대로 유지한다. helper MV를 추가·변경할 때는 `docs/t061-slim-text-search.md`처럼 semantic parity, Q3/Q4 p95/p99, helper size, shadow swap, backup envelope를 함께 기록한다. helper가 생긴 뒤 MV 갱신은 target과 helper를 같이 다루는 orchestration 경로만 사용한다.
 
 ## PNU 조립 (외부 시스템 연동)
 

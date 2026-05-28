@@ -88,13 +88,30 @@ class SizeProgressProbe:
     label: str
     total_bytes: int | None = None
     emit_interval_s: float = 5.0
+    sample_interval_s: float | None = None
     _last_emit_at: float = field(default=0.0, init=False, repr=False)
+    _last_sample_at: float = field(default=0.0, init=False, repr=False)
+    _last_sample: SizeProgressSample | None = field(default=None, init=False, repr=False)
 
-    def sample(self) -> SizeProgressSample:
-        return SizeProgressSample(
+    def sample(self, *, force: bool = False) -> SizeProgressSample:
+        now = monotonic()
+        interval = (
+            self.emit_interval_s if self.sample_interval_s is None else self.sample_interval_s
+        )
+        if (
+            not force
+            and self._last_sample is not None
+            and interval > 0
+            and now - self._last_sample_at < interval
+        ):
+            return self._last_sample
+        sample = SizeProgressSample(
             current_bytes=path_size_bytes(self.path),
             total_bytes=self.total_bytes,
         )
+        self._last_sample = sample
+        self._last_sample_at = now
+        return sample
 
     def maybe_message(self, sample: SizeProgressSample, *, force: bool = False) -> str | None:
         now = monotonic()
