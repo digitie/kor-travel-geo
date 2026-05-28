@@ -10,6 +10,7 @@ import httpx
 from pydantic import SecretStr
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from kraddr.geo.core.address import address_code_set_from_mapping
 from kraddr.geo.dto.address import AddressStructure, RefinedAddress
 from kraddr.geo.dto.common import Point, ServiceMeta
 from kraddr.geo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
@@ -72,16 +73,23 @@ class ExternalGeocodeClient:
         item = _first_juso_item(search_payload)
         if item is None:
             return None
+        try:
+            codes = address_code_set_from_mapping(item)
+        except ValueError:
+            return None
+        if codes.legal_dong_code is None or codes.road_name_address_code is None:
+            return None
         coord_key = self.settings.juso_coord_api_key or self.settings.juso_api_key
+        road_address = codes.road_name_address_code
         coord_payload = await self._get_json(
             self.settings.juso_coord_url,
             params={
                 "confmKey": coord_key.get_secret_value(),
-                "admCd": item.get("admCd"),
-                "rnMgtSn": item.get("rnMgtSn"),
-                "udrtYn": item.get("udrtYn") or "0",
-                "buldMnnm": item.get("buldMnnm") or "0",
-                "buldSlno": item.get("buldSlno") or "0",
+                "admCd": codes.legal_dong_code.code,
+                "rnMgtSn": road_address.road_name_code.code,
+                "udrtYn": road_address.underground_flag,
+                "buldMnnm": str(road_address.building_main_number),
+                "buldSlno": str(road_address.building_sub_number),
                 "resultType": "json",
             },
         )

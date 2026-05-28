@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 19:20 (T-056 `python-kraddr-base` Address 코드 helper 정리)
+
+**작업**: `~/dev/python-kraddr-base`의 실제 Address 표면을 확인하고, 본 저장소에서 필요한 주소 코드 helper를 clean-room으로 구현했다.
+
+**확인**:
+- `/home/digitie/dev/python-kraddr-base`는 Git checkout이 아니었다. `.git`이 없어 `git rev-parse HEAD`는 실패했다.
+- package license는 `GPL-3.0-or-later`였고, 본 저장소는 MIT이므로 원본 코드를 복사하지 않았다.
+- 실제 Address 표면은 예상했던 `kraddr.base.address.*` package가 아니라 `src/kraddr/base/addresses.py` 단일 파일이었다.
+
+**반영**:
+- `src/kraddr/geo/core/address/codes.py`에 `SigunguCode`, `LegalDongCode`, `RoadNameCode`, `RoadNameAddressCode`, `AddressCodeSet`과 mapping/정규화 helper를 추가했다.
+- Juso fallback 좌표 API 호출은 `AddressCodeSet`으로 `admCd`, `rnMgtSn`, `udrtYn`, `buldMnnm`, `buldSlno`를 정규화한 뒤 요청한다.
+- `docs/t056-kraddr-base-address-merge.md`, ADR-035, 백엔드/아키텍처 문서, resume/tasks/CHANGELOG를 갱신했다.
+
+**후속**:
+- 사용자 최신 지시에 따라 T-056 이후에는 T-052/T-053 선행 정리 → T-052 → T-053 순서로 진행한다.
+
+## 2026-05-28 18:26 (T-044 `maplibre-vworld-js` 0.1.0 문서-only 재확인)
+
 ## 2026-05-28 18:26 (T-044 `maplibre-vworld-js` 0.1.0 문서-only 재확인)
 
 **작업**: 사용자 지시에 따라 `maplibre-vworld-js` 0.1.0 기준으로 upstream code/API를 재확인하고, upstream 코드는 직접 수정하지 않은 채 이 저장소 문서에만 T-044 보완점을 반영했다.
