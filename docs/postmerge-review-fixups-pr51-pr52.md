@@ -20,7 +20,7 @@
 | 출처 | 항목 | 처리 |
 |------|------|------|
 | PR #51 M1, PR #52 M2 | `pg_stat_statements` 비활성 | T-047 관측성 보강 PR에서 Docker preload 설정, fresh schema/Alembic extension, before/after/delta artifact, reset 옵션을 추가했다. 이어서 실제 T-027 DB를 preload 상태로 재시작하고 `standard --iterations 3` active run을 완료했다. |
-| PR #51 M2 | `idx_mv_jibun_name_exact` 운영 영향 미평가 | T-047 인덱스 3개를 묶어 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 재측정했다. `CONCURRENTLY` refresh는 133.28초, shadow `swap`은 352.85초였고 exact index 3개 build phase 합계는 180.35초였다. `tar.zst` archive는 로컬 `zstd` CLI 부재로 후속에 남겼다. |
+| PR #51 M2 | `idx_mv_jibun_name_exact` 운영 영향 미평가 | T-047 인덱스 3개를 묶어 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 재측정했다. `CONCURRENTLY` refresh는 133.28초, shadow `swap`은 352.85초였고 exact index 3개 build phase 합계는 180.35초였다. 이후 `apt download zstd`로 확보한 `zstd v1.5.5`로 `tar.zst` archive도 실제 측정해 33.31초/4,308,457,630 bytes/SHA256 `94f404bdf9a4a3956009f961f966e7bca3b90f42eecfc083e83add7b1ea87883`를 기록했다. |
 | PR #51 M3 | benchmark가 underscore SQL 상수 import | 의도적으로 production path와 측정 path를 맞춘 결정은 유지한다. T-052 v2 API 또는 SQL 재사용 표면이 커질 때 public SQL module 추출을 함께 수행한다. |
 | PR #51 M4 | small corpus 분산 한계 | PR #52의 1,100건 standard corpus로 1차 해소했다. 후보 확정 run은 `standard` 3회 이상 또는 `stress` 10,000건 이상으로 수행하도록 T-047 문서에 명시했다. |
 | PR #51 M5 | corpus deterministic 보장 설명 부족 | T-047 문서에 현재 corpus 생성 방식(`TABLESAMPLE ... REPEATABLE (47)`, fallback `ORDER BY bd_mgt_sn`, 저장 corpus SHA 재사용)을 추가했다. |
@@ -32,9 +32,8 @@
 ## 다음 실행 순서
 
 1. Q3 fuzzy 후보 축소: T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 SQL/REST 전후를 비교한다. worker/pool/admission 반복 측정에서는 Q3 p95가 기본 profile에서 가장 낮아, concurrency profile만으로 해결됐다고 보지 않는다.
-2. backup archive 압축 단계: 로컬 `zstd` CLI 설치 또는 backup helper fallback 압축 경로 검증 뒤 `tar.zst` 크기와 wall time을 재측정한다.
-3. T-052 또는 SQL 재사용 확대 시점에 SQL 상수 public module을 추출한다.
+2. T-052 또는 SQL 재사용 확대 시점에 SQL 상수 public module을 추출한다.
 
 ## 검증
 
-T-060 자체는 문서 반영이었다. 후속 T-047 관측성 보강에서는 benchmark artifact schema 2, `pg_stat_statements` snapshot/delta, checkout/execute 분리 측정이 추가됐다. 이어서 T-047 operational impact run에서 exact index 3개 포함 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했고, stress run에서 11,000건 corpus c1/c4/c16/c64를 측정했다. REST API e2e run도 추가해 HTTP/JSON/FastAPI overhead를 대조했다. REST pool64 단일 process 비교에서는 Q3 fuzzy 외 다수 경로가 악화되어 운영 기본 pool 단순 상향을 보류했다. 이후 `/v1/address/*` optional admission control과 worker/pool/admission exploratory grid를 추가했다. 반복 측정 결과 `w2/p8/a8`과 `w4/p4/a4`가 서로 다른 query군에서 강했고, Q3 fuzzy는 p95 기준 기본 profile이 가장 낮아 T-057 후속으로 넘긴다.
+T-060 자체는 문서 반영이었다. 후속 T-047 관측성 보강에서는 benchmark artifact schema 2, `pg_stat_statements` snapshot/delta, checkout/execute 분리 측정이 추가됐다. 이어서 T-047 operational impact run에서 exact index 3개 포함 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했고, `apt download zstd`로 확보한 `zstd v1.5.5`로 `tar.zst` archive 단계도 실제 측정했다. stress run에서는 11,000건 corpus c1/c4/c16/c64를 측정했다. REST API e2e run도 추가해 HTTP/JSON/FastAPI overhead를 대조했다. REST pool64 단일 process 비교에서는 Q3 fuzzy 외 다수 경로가 악화되어 운영 기본 pool 단순 상향을 보류했다. 이후 `/v1/address/*` optional admission control과 worker/pool/admission exploratory grid를 추가했다. 반복 측정 결과 `w2/p8/a8`과 `w4/p4/a4`가 서로 다른 query군에서 강했고, Q3 fuzzy는 p95 기준 기본 profile이 가장 낮아 T-057 후속으로 넘긴다.
