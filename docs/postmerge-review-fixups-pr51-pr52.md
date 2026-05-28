@@ -25,18 +25,17 @@
 | PR #51 M4 | small corpus 분산 한계 | PR #52의 1,100건 standard corpus로 1차 해소했다. 후보 확정 run은 `standard` 3회 이상 또는 `stress` 10,000건 이상으로 수행하도록 T-047 문서에 명시했다. |
 | PR #51 M5 | corpus deterministic 보장 설명 부족 | T-047 문서에 현재 corpus 생성 방식(`TABLESAMPLE ... REPEATABLE (47)`, fallback `ORDER BY bd_mgt_sn`, 저장 corpus SHA 재사용)을 추가했다. |
 | PR #52 M1 | Q3/Q4 c64 p95 초과 | Q4는 PR #53 exact preflight로 개선했다. Q3 fuzzy 후보 축소는 T-057 region hint 또는 text-search slim MV 실험으로 남긴다. |
-| PR #52 M3 | `stress` 10,000건 미수행 | T-047 후속 benchmark 항목으로 유지한다. |
+| PR #52 M3 | `stress` 10,000건 미수행 | 11,000건 corpus SHA `2123e09...`와 88,000 measurement로 기본 pool `c1/c4/c16/c64`를 측정했다. error 0, c16 p95 34ms 이하였고, c64 tail은 대부분 checkout 대기였다. |
 | PR #52 M4 | client wall time이 pool wait/DB execution 미분리 | T-047 관측성 보강 PR에서 measurement별 `checkout_ms`/`execute_ms`, summary별 `p95_checkout_ms`/`p95_execute_ms`를 추가했다. active run에서 기본 pool c64 tail 대부분이 checkout 대기임을 확인했다. REST e2e 대조는 후속으로 남긴다. |
 | PR #52 M5 | `iterations=1` sample 부족 | 후보 확정 run은 `--iterations 3` 이상으로 수행하도록 T-047 문서에 명시했다. |
 
 ## 다음 실행 순서
 
-1. T-047 stress run: 10,000건 이상 corpus로 c1/c4/c16/c64를 측정한다.
-2. REST API e2e latency에서 DB checkout/execute split과 HTTP overhead를 대조한다.
-3. Q3 fuzzy 후보 축소: T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 비교한다.
-4. backup archive 압축 단계: 로컬 `zstd` CLI 설치 또는 backup helper fallback 압축 경로 검증 뒤 `tar.zst` 크기와 wall time을 재측정한다.
-5. T-052 또는 SQL 재사용 확대 시점에 SQL 상수 public module을 추출한다.
+1. REST API e2e latency에서 DB checkout/execute split과 HTTP overhead를 대조한다.
+2. Q3 fuzzy 후보 축소: T-057 region hint 또는 `mv_geocode_text_search` 후보와 함께 비교한다.
+3. backup archive 압축 단계: 로컬 `zstd` CLI 설치 또는 backup helper fallback 압축 경로 검증 뒤 `tar.zst` 크기와 wall time을 재측정한다.
+4. T-052 또는 SQL 재사용 확대 시점에 SQL 상수 public module을 추출한다.
 
 ## 검증
 
-T-060 자체는 문서 반영이었다. 후속 T-047 관측성 보강에서는 benchmark artifact schema 2, `pg_stat_statements` snapshot/delta, checkout/execute 분리 측정이 추가됐다. 이어서 T-047 operational impact run에서 exact index 3개 포함 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했다.
+T-060 자체는 문서 반영이었다. 후속 T-047 관측성 보강에서는 benchmark artifact schema 2, `pg_stat_statements` snapshot/delta, checkout/execute 분리 측정이 추가됐다. 이어서 T-047 operational impact run에서 exact index 3개 포함 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했고, stress run에서 11,000건 corpus c1/c4/c16/c64를 측정했다.

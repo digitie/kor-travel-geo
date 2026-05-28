@@ -335,6 +335,73 @@ shadow `swap` phase 중 T-047 exact index 비용:
 
 현재 WSL 환경에는 `zstd` CLI가 없어 T-046의 최종 `tar.zst` archive 단계는 실행하지 못했다. 따라서 이번 PR의 백업 수치는 archive 압축 전 `pg_dump -Fd` dump directory 기준이다. 다음 backup archive 측정 전에는 `zstd` CLI를 설치하거나 backup helper에 검증된 fallback 압축 경로를 추가해야 한다.
 
+## 2026-05-28 T-047 stress corpus benchmark
+
+PR #51/#52 후속 액션 중 `stress` 10,000건 이상 corpus 조건을 충족하기 위해 query군당 1,000건을 생성해 기본 pool에서 재측정했다.
+
+측정 profile:
+
+| 항목 | 값 |
+|------|----|
+| artifact | `artifacts/perf/t047-stress-20260528` |
+| corpus SHA-256 | `2123e09e41f96760b4a8451d98518a87aee6289cc8b238b8a8b2896b51665f23` |
+| case count | 11,000 |
+| measurement count | 88,000 |
+| iterations / warmup | `iterations=1`, `warmup=1` |
+| concurrency | `1/4/16/64` |
+| pool | `size=10`, `max_overflow=5` |
+| error | 0 |
+| `pg_stat_statements` | `available=true` |
+
+case 분포:
+
+| query군 | 건수 |
+|---------|-----:|
+| Q1 도로명 exact | 1,000 |
+| Q2 지번 exact | 1,000 |
+| Q3 fuzzy geocode | 1,000 |
+| Q4 search | 1,000 |
+| Q5 reverse nearest | 1,000 |
+| Q6 reverse radius | 1,000 |
+| Q7 zipcode | 2,000 |
+| Q8 no-result | 2,000 |
+| Q11 SPPN | 1,000 |
+
+핵심 p95:
+
+| query군 | c1 p95 | c16 p95 | c64 p95 | c64 checkout p95 | c64 execute p95 |
+|---------|-------:|--------:|--------:|-----------------:|----------------:|
+| Q1 도로명 exact | 8.61ms | 25.43ms | 338.56ms | 317.54ms | 21.26ms |
+| Q2 지번 exact | 4.62ms | 24.00ms | 197.35ms | 180.73ms | 19.65ms |
+| Q3 fuzzy | 12.94ms | 33.73ms | 335.01ms | 304.91ms | 32.07ms |
+| Q4 search | 7.90ms | 28.75ms | 302.21ms | 280.41ms | 27.77ms |
+| Q5 reverse nearest | 4.41ms | 23.34ms | 154.29ms | 134.27ms | 16.05ms |
+| Q6 reverse radius | 4.40ms | 23.19ms | 157.28ms | 138.89ms | 16.71ms |
+| Q7 zipcode address | 4.83ms | 23.30ms | 353.08ms | 334.48ms | 18.47ms |
+| Q7 zipcode point | 4.17ms | 22.99ms | 141.27ms | 123.85ms | 16.44ms |
+| Q8 no-result road | 4.34ms | 21.21ms | 181.66ms | 164.89ms | 15.74ms |
+| Q8 no-result reverse | 4.20ms | 21.08ms | 181.09ms | 161.97ms | 15.73ms |
+| Q11 SPPN reverse | 4.51ms | 21.81ms | 187.43ms | 170.85ms | 17.18ms |
+
+`pg_stat_statements` delta top:
+
+| 순위 | calls | total exec | mean exec |
+|------|------:|-----------:|----------:|
+| Q3 fuzzy road 계열 | 8,000 | 40,910.80ms | 5.11ms |
+| Q1 road exact 계열 | 8,000 | 21,453.97ms | 2.68ms |
+| Q4 search 계열 | 8,000 | 18,161.25ms | 2.27ms |
+| Q7 zipcode address 계열 | 8,000 | 3,733.88ms | 0.47ms |
+| Q11 SPPN reverse 계열 | 8,000 | 1,929.07ms | 0.24ms |
+| Q5/Q6 reverse nearest/radius 계열 | 24,000 | 1,412.82ms | 0.06ms |
+
+해석:
+
+- stress corpus에서도 c16까지는 모든 query군 p95가 34ms 안쪽이었다. DB execute p95 기준으로는 Q3 27.50ms, Q4 20.74ms라 1차 목표 안에 들어온다.
+- c64 p95 초과는 대부분 pool checkout 대기다. 예를 들어 Q3 c64는 p95 335.01ms 중 checkout p95 304.91ms, execute p95 32.07ms였고, Q4 c64는 p95 302.21ms 중 checkout p95 280.41ms, execute p95 27.77ms였다.
+- 가장 느린 client sample은 Q7 zipcode address c64 971.86ms였지만, 이 역시 checkout p95가 334.48ms로 지배적이다.
+- 다음 튜닝은 단일 SQL index를 추가하기보다 API worker 수, DB pool size, admission control, REST e2e latency를 함께 측정해야 한다.
+- Q3 fuzzy는 `pg_stat_statements` 총 execution time이 가장 크므로, T-057 region hint나 `mv_geocode_text_search` 후보로 query scope를 줄이는 실험은 여전히 유효하다.
+
 ## 2026-05-28 PR #51/#52 post-merge 리뷰 반영 메모
 
 PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와 review thread는 없었다. 상세 매핑은 `docs/postmerge-review-fixups-pr51-pr52.md`에 둔다.
@@ -352,7 +419,7 @@ PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와
 | 인덱스 운영 비용 | T-047 exact index 3개 포함 상태에서 MV refresh/swap, `pg_dump -Fd`, 디스크 envelope를 측정했다. `tar.zst` archive는 로컬 `zstd` CLI 부재로 후속에 남긴다. |
 | SQL 상수 public module | T-052 v2 API 또는 SQL 재사용 표면 확대 시 `infra.*_repo`의 underscore 상수를 public SQL module로 추출한다. |
 | Q3 fuzzy | T-057 region hint 또는 text-search slim MV 후보로 도로명 trgm 후보 폭을 줄인다. |
-| stress corpus | 10,000건 이상 corpus를 생성해 c1/c4/c16/c64를 다시 측정한다. |
+| stress corpus | 11,000건 corpus와 88,000 measurement로 c1/c4/c16/c64를 측정했다. error 0, c16 p95 34ms 이하, c64 tail은 대부분 checkout 대기였다. |
 | pool wait/DB execution 분리 | `checkout_ms`/`execute_ms`를 artifact에 추가했고, active observability run에서 기본 pool c64 tail 대부분이 checkout 대기임을 확인했다. REST e2e 대조는 후속으로 남긴다. |
 
 ## 목표
