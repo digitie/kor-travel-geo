@@ -10,6 +10,7 @@ from kraddr.geo.dto.geocode import (
     GeocodeResult,
     SppnMakareaContext,
 )
+from kraddr.geo.dto.region import RegionHint
 
 from .normalize import parse_address
 from .protocols import AddressLookup, GeocodeRepo, SppnAreaLookup
@@ -81,7 +82,12 @@ def _response_from_sppn(
     )
 
 
-async def geocode(repo: GeocodeRepo, inp: GeocodeInput) -> GeocodeResponse:
+async def geocode(
+    repo: GeocodeRepo,
+    inp: GeocodeInput,
+    *,
+    region_hint: RegionHint | None = None,
+) -> GeocodeResponse:
     sppn = parse_national_point_number(inp.address)
     if sppn is not None:
         area = await repo.lookup_sppn_area(sppn.point_5179)
@@ -92,12 +98,12 @@ async def geocode(repo: GeocodeRepo, inp: GeocodeInput) -> GeocodeResponse:
     parts = parse_address(inp.address)
     row: AddressLookup | None
     if inp.type == "road":
-        row = await repo.lookup_by_road(parts)
+        row = await repo.lookup_by_road(parts, region_hint=region_hint)
         if row is None and inp.fallback != "off":
-            fuzzy = await repo.fuzzy_roads(parts, limit=5)
+            fuzzy = await repo.fuzzy_roads(parts, limit=5, region_hint=region_hint)
             row = fuzzy[0] if fuzzy else None
     else:
-        row = await repo.lookup_by_jibun(parts)
+        row = await repo.lookup_by_jibun(parts, region_hint=region_hint)
 
     if row is None:
         return GeocodeResponse(service=service_meta("geocode"), status="NOT_FOUND", input=inp)

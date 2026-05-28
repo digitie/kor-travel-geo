@@ -13,6 +13,7 @@ from scripts.benchmark_query_performance import (
     Measurement,
     _case_group_counts,
     _search_exact_params,
+    _with_region_params,
     build_parser,
     corpus_from_json,
     corpus_to_json,
@@ -142,18 +143,33 @@ def test_corpus_json_roundtrip(tmp_path: Path) -> None:
 
     loaded = corpus_from_json(path)
 
-    assert loaded == cases
+    assert loaded[0].case_id == cases[0].case_id
+    assert loaded[0].params == {
+        "sig_cd_filter": None,
+        "sig_cd_prefix": None,
+        "bjd_cd_filter": None,
+        "bjd_cd_prefix": None,
+        "si": "서울특별시",
+        "mnnm": 1,
+    }
     assert json.loads(path.read_text(encoding="utf-8"))[0]["case_id"] == "Q1-road-001"
     assert _case_group_counts(loaded) == {"Q1_ROAD_EXACT": 1}
 
 
 def test_search_exact_preflight_params_match_repository_normalization() -> None:
-    params = {"query": "선릉로 111길", "limit": 10, "offset": 20}
+    params = _with_region_params(
+        {"query": "선릉로 111길", "limit": 10, "offset": 20},
+        sig_cd="11680",
+    )
 
     assert _search_exact_params(params) == {
         "query_nrm": "선릉로111길",
         "limit": 10,
         "offset": 20,
+        "sig_cd_filter": "11680",
+        "sig_cd_prefix": None,
+        "bjd_cd_filter": None,
+        "bjd_cd_prefix": None,
     }
 
 

@@ -45,6 +45,26 @@ def test_build_api_cases_maps_geocode_addresses() -> None:
                 label="강원특별자치도 춘천시 신북읍 산 12-3",
                 source="mv_geocode_target",
             ),
+            CorpusCase(
+                case_id="Q3-fuzzy-sig-001",
+                group="Q3_FUZZY_GEOCODE",
+                sql_name="fuzzy_geocode_sig",
+                params={
+                    "si": None,
+                    "sgg": None,
+                    "road_nrm": "테헤란로",
+                    "mnnm": 152,
+                    "slno": 0,
+                    "buld_se_cd": "0",
+                    "sig_cd_filter": "11680",
+                    "sig_cd_prefix": None,
+                    "bjd_cd_filter": None,
+                    "bjd_cd_prefix": None,
+                    "limit": 5,
+                },
+                label="서울특별시 강남구 테헤란로 152",
+                source="mv_geocode_target",
+            ),
         )
     )
 
@@ -53,6 +73,8 @@ def test_build_api_cases_maps_geocode_addresses() -> None:
     assert cases[0].params["type"] == "road"
     assert cases[1].params["address"] == "강원특별자치도 춘천시 신북읍 산 12-3"
     assert cases[1].params["type"] == "parcel"
+    assert cases[2].params["address"] == "테헤란길 152"
+    assert cases[2].params["sig_cd"] == "11680"
 
 
 def test_address_helpers_preserve_parseable_road_suffixes() -> None:

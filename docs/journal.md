@@ -2,6 +2,32 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-28 16:20 (T-057 행정구역 hint 기반 검색 가속)
+
+**작업**: `sig_cd`/`bjd_cd` 명시 hint를 라이브러리와 REST API, raw SQL repository, T-047 SQL/REST benchmark harness에 연결했다.
+
+**반영 상세**:
+- `RegionHint` DTO를 추가했다. `sig_cd`는 2자리 시도 prefix 또는 5자리 시군구 코드, `bjd_cd`는 8자리 법정동 prefix 또는 10자리 법정동 코드를 받는다.
+- `/v1/address/geocode`, `/v1/address/search`, `/v1/address/reverse`는 선택 `sig_cd`/`bjd_cd` query parameter를 받는다.
+- 응답 구조는 vworld 호환 그대로 유지한다. hint가 있는 geocode 요청에서 로컬 `NOT_FOUND`가 나오면 외부 fallback은 호출하지 않는다.
+- 현재 `mv_geocode_target`에는 물리 `sig_cd`가 없으므로 `sig_cd`는 `bjd_cd` prefix filter로 적용한다.
+- OpenAPI와 프론트엔드 생성 타입을 갱신했다.
+
+**측정**:
+- SQL standard artifact: `artifacts/perf/t057-region-hint-standard-20260528`.
+- SQL corpus SHA: `e38bff5631a3b68fe6094e9124641a22f24770b9a040e8a70d067f1ea651d61f`.
+- SQL run: 900 case, 8,100 measurement, error 0.
+- SQL Q3 fuzzy c64 p95: 307.45ms → 267.99ms.
+- REST smoke artifact: `artifacts/perf/t057-region-hint-rest-smoke-20260528`.
+- REST run: 320 case, 1,920 measurement, error 0.
+- REST Q3 fuzzy c64 p95: 651.62ms → 520.43ms.
+
+**결론**:
+- 명시 region hint는 유지할 가치가 있다.
+- Q3 fuzzy는 hint로 개선되지만 충분한 종결 조건은 아니다. wide no-hint 경로가 일부 더 낮게 나와 trgm 후보 폭 자체를 줄이는 구조가 필요하다.
+- 후속은 T-061 `mv_geocode_text_search` 또는 동등한 slim text-search 후보 테이블로 분리한다.
+- T-057 PR merge 뒤에는 사용자 지시에 따라 최근 PR 중 리뷰를 아직 확인하지 않은 항목을 모두 audit/fixup한 뒤 다음 task로 넘어간다.
+
 ## 2026-05-28 14:56 (T-047 backup archive 압축 측정)
 
 **작업**: T-047 인덱스 운영 영향 측정에서 남겨 둔 `tar.zst` archive 단계를 실제 `zstd` CLI로 측정했다.

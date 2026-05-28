@@ -20,6 +20,7 @@ from .geocode import (
     SppnMakareaContext,
 )
 from .pobox import PoboxInput, PoboxResponse, PoboxResultItem
+from .region import RegionHint
 from .reverse import ReverseExtension, ReverseInput, ReverseResponse, ReverseResultItem
 from .search import BBox, SearchInput, SearchResponse, SearchResultItem
 from .zipcode import ZipcodeInput, ZipcodeResponse, ZipcodeResultItem
@@ -44,6 +45,7 @@ __all__ = [
     "PoboxResultItem",
     "Point",
     "RefinedAddress",
+    "RegionHint",
     "ReverseExtension",
     "ReverseInput",
     "ReverseResponse",

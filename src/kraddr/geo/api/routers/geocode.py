@@ -21,6 +21,8 @@ async def geocode(
     refine: bool = True,
     simple: bool = False,
     fallback: Literal["off", "local_only", "api"] = "local_only",
+    sig_cd: str | None = Query(default=None, pattern=r"^(\d{2}|\d{5})$"),
+    bjd_cd: str | None = Query(default=None, pattern=r"^(\d{8}|\d{10})$"),
     client: AsyncAddressClient = Depends(get_client),
 ) -> GeocodeResponse:
     return await client.geocode(
@@ -30,5 +32,6 @@ async def geocode(
         refine=refine,
         simple=simple,
         fallback=fallback,
+        sig_cd=sig_cd,
+        bjd_cd=bjd_cd,
     )
-

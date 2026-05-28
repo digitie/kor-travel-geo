@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.core.protocols import SearchLookup
+from kraddr.geo.dto.region import RegionHint, region_params
 
 from ._rows import map_search
 
@@ -24,8 +25,14 @@ WITH matched AS (
            similarity(buld_nm_nrm, :query_nrm)
          ) AS score
     FROM mv_geocode_target
-   WHERE rn_nrm = :query_nrm
-      OR (buld_nm_nrm = :query_nrm AND buld_nm_nrm IS NOT NULL)
+   WHERE (CAST(:sig_cd_filter AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
+     AND (CAST(:sig_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_prefix AS text))
+     AND (CAST(:bjd_cd_filter AS text) IS NULL OR bjd_cd = CAST(:bjd_cd_filter AS text))
+     AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
+     AND (
+       rn_nrm = :query_nrm
+       OR (buld_nm_nrm = :query_nrm AND buld_nm_nrm IS NOT NULL)
+     )
 )
 SELECT *, count(*) OVER () AS total
   FROM matched
@@ -47,10 +54,16 @@ WITH scored AS (
            similarity(buld_nm_nrm, regexp_replace(:query, '\\s+', '', 'g'))
          ) AS score
     FROM mv_geocode_target
-   WHERE rn_nrm ILIKE '%' || regexp_replace(:query, '\\s+', '', 'g') || '%'
-      OR buld_nm_nrm ILIKE '%' || regexp_replace(:query, '\\s+', '', 'g') || '%'
-      OR rn_nrm % regexp_replace(:query, '\\s+', '', 'g')
-      OR buld_nm_nrm % regexp_replace(:query, '\\s+', '', 'g')
+   WHERE (CAST(:sig_cd_filter AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
+     AND (CAST(:sig_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_prefix AS text))
+     AND (CAST(:bjd_cd_filter AS text) IS NULL OR bjd_cd = CAST(:bjd_cd_filter AS text))
+     AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
+     AND (
+       rn_nrm ILIKE '%' || regexp_replace(:query, '\\s+', '', 'g') || '%'
+       OR buld_nm_nrm ILIKE '%' || regexp_replace(:query, '\\s+', '', 'g') || '%'
+       OR rn_nrm % regexp_replace(:query, '\\s+', '', 'g')
+       OR buld_nm_nrm % regexp_replace(:query, '\\s+', '', 'g')
+     )
 )
 SELECT *, count(*) OVER () AS total
   FROM scored
@@ -75,15 +88,18 @@ class SearchRepository:
         search_type: Literal["address", "place", "district", "road"],
         page: int,
         size: int,
+        region_hint: RegionHint | None = None,
     ) -> tuple[list[SearchLookup], int]:
         if search_type not in {"address", "road"}:
             return ([], 0)
         offset = (page - 1) * size
-        params = {"query": query, "limit": size, "offset": offset}
+        hint_params = region_params(region_hint)
+        params = {"query": query, "limit": size, "offset": offset, **hint_params}
         exact_params = {
             "query_nrm": _normalize_search_query(query),
             "limit": size,
             "offset": offset,
+            **hint_params,
         }
         async with self.engine.begin() as conn:
             await conn.execute(text("SET LOCAL pg_trgm.similarity_threshold = 0.35"))

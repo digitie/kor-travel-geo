@@ -4346,6 +4346,40 @@
               "title": "Fallback",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "sig_cd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(\\d{2}|\\d{5})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sig Cd"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bjd_cd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(\\d{8}|\\d{10})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bjd Cd"
+            }
           }
         ],
         "responses": {
@@ -4573,6 +4607,40 @@
               ],
               "title": "Radius M"
             }
+          },
+          {
+            "in": "query",
+            "name": "sig_cd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(\\d{2}|\\d{5})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sig Cd"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bjd_cd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(\\d{8}|\\d{10})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bjd Cd"
+            }
           }
         ],
         "responses": {
@@ -4655,6 +4723,40 @@
               "minimum": 1,
               "title": "Size",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sig_cd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(\\d{2}|\\d{5})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sig Cd"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bjd_cd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(\\d{8}|\\d{10})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bjd Cd"
             }
           }
         ],

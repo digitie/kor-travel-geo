@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from kraddr.geo.core.normalize import AddrParts
 from kraddr.geo.core.protocols import AddressLookup, SppnAreaLookup
 from kraddr.geo.dto.common import Point
+from kraddr.geo.dto.region import RegionHint, region_params
 
 from ._rows import map_address, map_sppn_area
 
@@ -20,11 +21,21 @@ SELECT bd_mgt_sn, rncode_full, rn AS road_nm, buld_mnnm, buld_slno, buld_se_cd,
   FROM mv_geocode_target
 """
 
+_REGION_FILTER = """
+   AND (CAST(:sig_cd_filter AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
+   AND (CAST(:sig_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_prefix AS text))
+   AND (CAST(:bjd_cd_filter AS text) IS NULL OR bjd_cd = CAST(:bjd_cd_filter AS text))
+   AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
+"""
+
 _LOOKUP_ROAD = text(
     _BASE_SELECT
     + """
  WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
    AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
+"""
+    + _REGION_FILTER
+    + """
    AND rn_nrm = :road_nrm
    AND buld_mnnm = :mnnm
    AND buld_slno = :slno
@@ -40,6 +51,9 @@ _LOOKUP_JIBUN = text(
  WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
    AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
    AND (CAST(:emd AS text) IS NULL OR emd_nm = CAST(:emd AS text) OR li_nm = CAST(:emd AS text))
+"""
+    + _REGION_FILTER
+    + """
    AND mntn_yn = :mntn_yn
    AND lnbr_mnnm = :mnnm
    AND lnbr_slno = :slno
@@ -54,6 +68,9 @@ _FUZZY_ROADS = text(
        , similarity(rn_nrm, :road_nrm) AS confidence
  WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
    AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
+"""
+    + _REGION_FILTER
+    + """
    AND rn_nrm % :road_nrm
    AND buld_mnnm = :mnnm
  ORDER BY similarity(rn_nrm, :road_nrm) DESC,
@@ -93,7 +110,12 @@ class GeocodeRepository:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def lookup_by_road(self, parts: AddrParts) -> AddressLookup | None:
+    async def lookup_by_road(
+        self,
+        parts: AddrParts,
+        *,
+        region_hint: RegionHint | None = None,
+    ) -> AddressLookup | None:
         if parts.road_nrm is None or parts.mnnm is None:
             return None
         async with self.engine.connect() as conn:
@@ -101,6 +123,7 @@ class GeocodeRepository:
                 await conn.execute(
                     _LOOKUP_ROAD,
                     {
+                        **region_params(region_hint),
                         "si": parts.si,
                         "sgg": parts.sgg,
                         "road_nrm": parts.road_nrm,
@@ -112,7 +135,12 @@ class GeocodeRepository:
             ).mappings().first()
         return map_address(dict(row), address_type="road") if row else None
 
-    async def lookup_by_jibun(self, parts: AddrParts) -> AddressLookup | None:
+    async def lookup_by_jibun(
+        self,
+        parts: AddrParts,
+        *,
+        region_hint: RegionHint | None = None,
+    ) -> AddressLookup | None:
         if parts.mnnm is None:
             return None
         async with self.engine.connect() as conn:
@@ -120,6 +148,7 @@ class GeocodeRepository:
                 await conn.execute(
                     _LOOKUP_JIBUN,
                     {
+                        **region_params(region_hint),
                         "si": parts.si,
                         "sgg": parts.sgg,
                         "emd": parts.li or parts.emd,
@@ -131,7 +160,13 @@ class GeocodeRepository:
             ).mappings().first()
         return map_address(dict(row), address_type="parcel") if row else None
 
-    async def fuzzy_roads(self, parts: AddrParts, *, limit: int = 5) -> list[AddressLookup]:
+    async def fuzzy_roads(
+        self,
+        parts: AddrParts,
+        *,
+        limit: int = 5,
+        region_hint: RegionHint | None = None,
+    ) -> list[AddressLookup]:
         if parts.road_nrm is None or parts.mnnm is None:
             return []
         async with self.engine.begin() as conn:
@@ -140,6 +175,7 @@ class GeocodeRepository:
                 await conn.execute(
                     _FUZZY_ROADS,
                     {
+                        **region_params(region_hint),
                         "si": parts.si,
                         "sgg": parts.sgg,
                         "road_nrm": parts.road_nrm,

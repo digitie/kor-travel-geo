@@ -37,6 +37,7 @@ from .dto.admin import (
 )
 from .dto.geocode import FallbackMode, GeocodeInput, GeocodeResponse
 from .dto.pobox import PoboxInput, PoboxKind, PoboxResponse
+from .dto.region import RegionHint
 from .dto.reverse import ReverseResponse, ReverseType
 from .dto.search import SearchResponse, SearchType
 from .dto.zipcode import ZipcodeResponse
@@ -92,6 +93,12 @@ class AsyncAddressClient:
             self.engine = make_async_engine(self.settings)
         return self.engine
 
+    @staticmethod
+    def _region_hint(sig_cd: str | None, bjd_cd: str | None) -> RegionHint | None:
+        if sig_cd is None and bjd_cd is None:
+            return None
+        return RegionHint(sig_cd=sig_cd, bjd_cd=bjd_cd)
+
     async def geocode(
         self,
         address: str,
@@ -101,6 +108,8 @@ class AsyncAddressClient:
         refine: bool = True,
         simple: bool = False,
         fallback: FallbackMode = "local_only",
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
     ) -> GeocodeResponse:
         inp = GeocodeInput(
             address=address,
@@ -110,8 +119,13 @@ class AsyncAddressClient:
             simple=simple,
             fallback=fallback,
         )
-        response = await core_geocode(GeocodeRepository(self._engine()), inp)
-        if fallback != "api" or response.status != "NOT_FOUND":
+        region_hint = self._region_hint(sig_cd, bjd_cd)
+        response = await core_geocode(
+            GeocodeRepository(self._engine()),
+            inp,
+            region_hint=region_hint,
+        )
+        if fallback != "api" or response.status != "NOT_FOUND" or region_hint is not None:
             return response
         external = await ExternalGeocodeClient(self.settings).geocode(inp)
         return external or response
@@ -140,6 +154,8 @@ class AsyncAddressClient:
         type: ReverseType = "both",
         zipcode: bool = True,
         radius_m: int | None = None,
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
     ) -> ReverseResponse:
         from .dto.common import Point
         from .dto.reverse import ReverseInput
@@ -151,7 +167,11 @@ class AsyncAddressClient:
             zipcode=zipcode,
             radius_m=radius_m or self.settings.api_default_radius_m,
         )
-        return await core_reverse_geocode(ReverseRepository(self._engine()), inp)
+        return await core_reverse_geocode(
+            ReverseRepository(self._engine()),
+            inp,
+            region_hint=self._region_hint(sig_cd, bjd_cd),
+        )
 
     async def search(
         self,
@@ -161,11 +181,17 @@ class AsyncAddressClient:
         page: int = 1,
         size: int = 10,
         crs: str = "EPSG:4326",
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
     ) -> SearchResponse:
         from .dto.search import SearchInput
 
         inp = SearchInput(query=query, type=type, page=page, size=size, crs=crs)
-        return await core_search(SearchRepository(self._engine()), inp)
+        return await core_search(
+            SearchRepository(self._engine()),
+            inp,
+            region_hint=self._region_hint(sig_cd, bjd_cd),
+        )
 
     async def zipcode(
         self,

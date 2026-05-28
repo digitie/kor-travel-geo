@@ -613,6 +613,58 @@ c64 p99 비교:
 - 단일 운영 권장 profile을 지금 확정하지 않는다. admission control은 계속 optional로 두고, 운영 배포 전에는 workload mix에 따라 `w2/p8/a8` 또는 `w4/p4/a4`를 선택 검증한다.
 - T-047에서 새 인덱스나 pool 기본값을 더 바꾸기보다, Q3 fuzzy 후보 축소는 T-057 region hint 또는 text-search slim MV 실험으로 넘긴다.
 
+## 2026-05-28 T-057 region hint 비교
+
+T-047의 Q3 fuzzy 후보 축소 가설 중 하나로 `sig_cd`/`bjd_cd` 명시 hint를 구현하고 같은 benchmark harness에서 측정했다. 상세 구현과 전체 표는 `docs/t057-region-hint-search.md`에 둔다.
+
+이번 PR에서 추가한 범위:
+
+- `AsyncAddressClient.geocode/search/reverse_geocode()`와 `/v1/address/geocode`, `/v1/address/search`, `/v1/address/reverse`가 선택 `sig_cd`/`bjd_cd`를 받는다.
+- repository SQL은 hint를 `bjd_cd` prefix filter로 적용한다. 현재 `mv_geocode_target`에는 물리 `sig_cd` 컬럼이 없으므로 `sig_cd=11680`은 `bjd_cd LIKE '11680%'`로 처리한다.
+- SQL benchmark에는 `road_exact_sig`, `parcel_exact_bjd`, `fuzzy_geocode_wide`, `fuzzy_geocode_sig`, `search_sig`, `reverse_nearest_sig`, `reverse_radius_sig` case를 추가했다.
+- REST benchmark harness는 hint case를 실제 query parameter로 변환한다.
+
+DB standard run:
+
+| 항목 | 값 |
+|------|----|
+| artifact | `artifacts/perf/t057-region-hint-standard-20260528` |
+| corpus SHA-256 | `e38bff5631a3b68fe6094e9124641a22f24770b9a040e8a70d067f1ea651d61f` |
+| case count / measurement | 900 / 8,100 |
+| concurrency | `1, 16, 64` |
+| error | 0 |
+
+DB p95 핵심:
+
+| query | c64 기준 | c64 hint | 해석 |
+|-------|-------------:|---------:|------|
+| Q1 도로명 exact | 342.91ms | 341.12ms | 차이 작음 |
+| Q2 지번 exact | 231.11ms | 226.78ms | 소폭 개선 |
+| Q3 fuzzy | 307.45ms | 267.99ms | 개선 |
+| Q4 search | 290.39ms | 279.96ms | 소폭 개선 |
+| Q5 reverse nearest | 223.70ms | 207.41ms | 개선 |
+| Q6 reverse radius | 229.89ms | 175.27ms | 개선 폭 큼 |
+
+Q3 비교에서 `fuzzy_geocode_sig`는 기존 parsed-region fuzzy보다 좋아졌지만, wide no-hint 경로도 c64 p95 `253.23ms`로 더 낮았다. 따라서 region hint는 유지하되, Q3 자체를 끝내는 튜닝으로 보지 않는다.
+
+REST smoke:
+
+| 항목 | 값 |
+|------|----|
+| artifact | `artifacts/perf/t057-region-hint-rest-smoke-20260528` |
+| REST case count / measurement | 320 / 1,920 |
+| concurrency | `1, 16, 64` |
+| error | 0 |
+
+REST c64 p95는 Q1 도로명 `805.64ms → 484.20ms`, Q3 fuzzy `651.62ms → 520.43ms`, Q4 search `898.96ms → 661.50ms`, Q6 reverse radius `652.94ms → 541.62ms`로 좋아졌다. 반대로 Q2 지번은 `540.93ms → 658.92ms`, Q5 reverse nearest는 `514.86ms → 687.42ms`로 나빠졌다. 이 REST run은 smoke 규모라 운영 profile 결정에는 쓰지 않고, API 표면과 대략적인 방향성 검증으로만 본다.
+
+T-047 관점의 결론:
+
+- 명시 hint 입력은 유용하므로 유지한다.
+- 신규 index는 추가하지 않는다. `bjd_cd` prefix filter만으로 낮은 위험의 1차 효과를 얻었고, 시도별 partial index는 아직 refresh/swap 비용을 정당화하지 못한다.
+- Q3 fuzzy 후속은 T-061 `mv_geocode_text_search` 또는 slim text-search 후보 테이블로 분리한다.
+- T-052 v2 API에서 `RegionHint`를 정식 request model로 승격하되, 외부 provider가 hint를 보존하지 못하는 경우의 fallback 정책을 문서화한다.
+
 ## 2026-05-28 PR #51/#52 post-merge 리뷰 반영 메모
 
 PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와 review thread는 없었다. 상세 매핑은 `docs/postmerge-review-fixups-pr51-pr52.md`에 둔다.

@@ -124,6 +124,10 @@ async def main() -> None:
         for item in rr.result:
             print(item.type, item.text, item.zipcode)
 
+        # 행정구역 hint가 확실하면 후보 검색 범위를 줄일 수 있다.
+        hinted = await client.geocode("테헤란로 152", sig_cd="11680")
+        print(hinted.status)
+
 asyncio.run(main())
 ```
 
