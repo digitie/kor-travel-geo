@@ -402,6 +402,54 @@ case 분포:
 - 다음 튜닝은 단일 SQL index를 추가하기보다 API worker 수, DB pool size, admission control, REST e2e latency를 함께 측정해야 한다.
 - Q3 fuzzy는 `pg_stat_statements` 총 execution time이 가장 크므로, T-057 region hint나 `mv_geocode_text_search` 후보로 query scope를 줄이는 실험은 여전히 유효하다.
 
+## 2026-05-28 T-047 REST API e2e latency
+
+DB client benchmark와 HTTP API 전체 경로의 차이를 보기 위해 `scripts/benchmark_api_latency.py`를 추가했다. 이 스크립트는 저장 corpus를 `/v1/address/*` GET 요청으로 변환하고, client wall time을 JSON/Markdown artifact로 저장한다.
+
+측정 전 발견한 API 보정:
+
+- SQL benchmark의 `Q8 no-result reverse`는 `(0, 0)`을 직접 SQL로 보내지만, public REST API의 `ReverseInput`은 한국 lon/lat 범위 밖 좌표를 invalid input으로 거절한다.
+- 기존에는 내부 `pydantic.ValidationError`가 FastAPI handler에 잡히지 않아 HTTP 500이 반환됐다.
+- 이번 PR에서 Pydantic validation error handler를 추가해 한국 밖 좌표를 HTTP 400 + `E0102`로 변환했다.
+- REST latency corpus에서는 이 SQL-only invalid reverse case를 제외했다.
+
+측정 profile:
+
+| 항목 | 값 |
+|------|----|
+| artifact | `artifacts/perf/t047-rest-e2e-standard-20260528-r2` |
+| corpus | `artifacts/perf/t047-search-exact-split-20260528/corpus.json` |
+| corpus SHA-256 | `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f` |
+| REST case count | 1,000 |
+| measurement count | 8,000 |
+| iterations / warmup | `iterations=1`, `warmup=1` |
+| concurrency | `1/4/16/64` |
+| base URL | `http://127.0.0.1:18080` |
+| error | 0 |
+
+핵심 p95:
+
+| API group | c1 p95 | c16 p95 | c64 p95 | c64 p99 | 비고 |
+|-----------|-------:|--------:|--------:|--------:|------|
+| Q1 geocode road | 9.77ms | 55.31ms | 581.42ms | 735.34ms | DB client stress c64 338.56ms |
+| Q2 geocode parcel | 6.95ms | 43.79ms | 500.22ms | 807.93ms | DB client stress c64 197.35ms |
+| Q3 geocode fuzzy | 16.18ms | 97.13ms | 810.53ms | 1265.29ms | 가장 큰 REST tail |
+| Q4 search | 11.50ms | 61.01ms | 753.25ms | 981.13ms | 응답 평균 4.54KiB |
+| Q5 reverse nearest | 10.59ms | 79.84ms | 560.95ms | 682.69ms | REST는 nearest + SPPN area 둘 다 조회 |
+| Q6 reverse radius | 10.92ms | 81.12ms | 773.89ms | 871.68ms | REST는 nearest + SPPN area 둘 다 조회 |
+| Q7 zipcode address | 7.23ms | 53.73ms | 667.67ms | 867.93ms |  |
+| Q7 zipcode point | 7.09ms | 51.25ms | 734.30ms | 1015.46ms |  |
+| Q8 geocode no-result | 10.61ms | 82.28ms | 655.28ms | 867.84ms |  |
+| Q11 SPPN reverse | 9.98ms | 70.17ms | 479.65ms | 513.51ms |  |
+
+해석:
+
+- c1에서는 REST e2e overhead가 대체로 2~7ms 수준이다. 예를 들어 Q4 search는 DB client stress c1 p95 7.90ms, REST c1 p95 11.50ms였다.
+- c16에서는 REST p95가 43~97ms로 올라가지만 error 0이고, API 단일 process + 기본 DB pool 기준으로는 아직 대화형 범위다.
+- c64에서는 DB client benchmark보다 REST tail이 더 커진다. HTTP/JSON serialization, FastAPI routing, 단일 uvicorn process scheduling, 기본 DB pool checkout 대기가 함께 섞인 값이다.
+- reverse API는 core에서 nearest와 SPPN area를 모두 조회하므로, raw DB benchmark의 `reverse_nearest` 단일 SQL보다 무겁다.
+- 다음 운영 튜닝은 API worker 수, DB pool size, admission control 조합을 e2e로 비교해야 한다. Q3 fuzzy는 REST에서도 가장 큰 tail을 보여 T-057 region hint 또는 `mv_geocode_text_search` 후보의 우선순위가 유지된다.
+
 ## 2026-05-28 PR #51/#52 post-merge 리뷰 반영 메모
 
 PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와 review thread는 없었다. 상세 매핑은 `docs/postmerge-review-fixups-pr51-pr52.md`에 둔다.
@@ -420,7 +468,7 @@ PR #51/#52 post-merge 리뷰는 conversation comment 1건씩이었고, review와
 | SQL 상수 public module | T-052 v2 API 또는 SQL 재사용 표면 확대 시 `infra.*_repo`의 underscore 상수를 public SQL module로 추출한다. |
 | Q3 fuzzy | T-057 region hint 또는 text-search slim MV 후보로 도로명 trgm 후보 폭을 줄인다. |
 | stress corpus | 11,000건 corpus와 88,000 measurement로 c1/c4/c16/c64를 측정했다. error 0, c16 p95 34ms 이하, c64 tail은 대부분 checkout 대기였다. |
-| pool wait/DB execution 분리 | `checkout_ms`/`execute_ms`를 artifact에 추가했고, active observability run에서 기본 pool c64 tail 대부분이 checkout 대기임을 확인했다. REST e2e 대조는 후속으로 남긴다. |
+| pool wait/DB execution 분리 | `checkout_ms`/`execute_ms`를 artifact에 추가했고, active/stress run에서 기본 pool c64 tail 대부분이 checkout 대기임을 확인했다. REST e2e run도 완료해 HTTP/JSON/FastAPI overhead가 c64 tail을 더 키우는 것을 확인했다. |
 
 ## 목표
 
