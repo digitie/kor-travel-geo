@@ -1,8 +1,9 @@
 """Pure helpers for Korean address code composition.
 
-The helpers in this module are a clean-room implementation for this MIT
-package. T-056 found that the local base package copy is GPL-3.0-or-later and
-is not a Git checkout, so source code was not copied from it.
+The helpers in this module are an independent implementation based on public
+Korean address-code rules. T-056 found that the local base package copy is
+GPL-3.0-or-later and is not a Git checkout, so source code was not copied from
+it.
 """
 
 from __future__ import annotations
