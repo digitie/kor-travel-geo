@@ -37,6 +37,13 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export async function patchJson<T>(path: string, body: unknown): Promise<T> {
+  return requestJson<T>(path, {
+    method: "PATCH",
+    body: JSON.stringify(body)
+  });
+}
+
 export type LoadJobStatus = {
   job_id: string;
   kind: string;
@@ -175,6 +182,98 @@ export type ConsistencyReportSummary = {
 
 export type ConsistencyReport = ConsistencyReportSummary & {
   cases: ConsistencyCase[];
+};
+
+export type ConsistencyDecisionState = "unreviewed" | "approved" | "rejected" | "deferred";
+
+export type ConsistencyCaseDefinition = {
+  code: string;
+  name: string;
+  compares: string;
+  abnormal_criteria: string;
+  evidence: string[];
+  likely_causes: string[];
+  decision_guide: string;
+  threshold?: string | null;
+};
+
+export type ConsistencySamplePoint = {
+  x: number;
+  y: number;
+};
+
+export type ConsistencyCaseSample = {
+  sample_id: string;
+  report_id: string;
+  case_code: string;
+  severity: "OK" | "INFO" | "WARN" | "ERROR";
+  sample_rank: number;
+  bd_mgt_sn?: string | null;
+  rncode_full?: string | null;
+  sig_cd?: string | null;
+  bjd_cd?: string | null;
+  distance_m?: number | null;
+  source_yyyymm?: string | null;
+  source_kind?: string | null;
+  case_metric: Record<string, unknown>;
+  source_snapshot: Record<string, unknown>;
+  point?: ConsistencySamplePoint | null;
+  bbox_4326: Record<string, unknown>;
+  has_polygon: boolean;
+  has_line: boolean;
+  decision_state: ConsistencyDecisionState;
+  reason_code?: string | null;
+  note?: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  created_at: string;
+};
+
+export type ConsistencySamplePage = {
+  report_id: string;
+  case_code: string;
+  total: number;
+  page: number;
+  page_size: number;
+  items: ConsistencyCaseSample[];
+};
+
+export type ConsistencyCaseSummary = {
+  report_id: string;
+  case_code: string;
+  total: number;
+  by_severity: Record<string, number>;
+  by_decision: Record<string, number>;
+  by_sig_cd: Record<string, number>;
+  distance: Record<string, number>;
+};
+
+export type ConsistencySampleDecisionRequest = {
+  decision_state: Exclude<ConsistencyDecisionState, "unreviewed">;
+  reason_code: string;
+  note?: string | null;
+  reviewer?: string | null;
+};
+
+export type ConsistencyBulkDecisionRequest = ConsistencySampleDecisionRequest & {
+  sample_ids: string[];
+};
+
+export type ConsistencyBulkDecisionResponse = {
+  report_id: string;
+  case_code: string;
+  updated_count: number;
+  items: ConsistencyCaseSample[];
+};
+
+export type ConsistencySampleRecheckResponse = {
+  sample_id: string;
+  report_id: string;
+  case_code: string;
+  exists_in_current_mv: boolean;
+  point?: ConsistencySamplePoint | null;
+  stale: boolean;
+  evidence: Record<string, unknown>;
 };
 
 export type AuditEvent = {

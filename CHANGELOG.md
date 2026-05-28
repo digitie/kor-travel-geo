@@ -94,6 +94,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
+- T-053 Admin UI C1~C10 상세 분석/수동 판정 콘솔을 추가한다. `ops.consistency_case_samples`에 정합성 sample을 row 단위로 저장하고, `/v1/admin/consistency/*`에 case definitions, sample list/summary, 단건·bulk 승인/거절/보류, lightweight recheck, CSV export를 추가한다. `/admin/consistency/[report_id]`는 TanStack Query, TanStack Table, Zustand, `maplibre-vworld-js` 기반 지도 preview를 사용해 기준 설명, table 비교, 지도, source snapshot, 판정 액션을 한 화면에 제공한다.
 - T-052 API v1/v2 분리와 AI-friendly API reference를 추가한다. v2는 Kakao/Naver/Google/VWorld 직접 wrapper가 아니라 각 API 스타일의 장점을 참고한 자체 candidate schema이며, `/v2/geocode`, `/v2/reverse`, `/v2/search`, `AsyncAddressClient.geocode_v2/reverse_v2/search_v2`, `CandidateV2.distance_m`/`point_precision`, `docs/api-reference/`, OpenAPI와 frontend 생성 타입을 포함한다.
 - T-041 상세주소 동 도형/구역 추가 레이어 비교 helper를 추가한다. 실제 세종/경남 `건물군 내 상세주소 동 도형`은 전자지도 `TL_SPBD_BULD`의 부분집합으로 확인했고, `구역의 도형` 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복이었다. `TL_SCCO_GEMD`는 별도 overlay/분석 후보로 보류하고, `TL_SPPN_MAKAREA`는 ADR-027에서 국가지점번호 보조 데이터 후보로 승격한다.
 - T-040 `도로명주소 건물 도형` bundle 비교 helper를 추가한다. 실제 세종/경남 `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`를 전자지도 `TL_SPBD_BULD`/`TL_SPBD_ENTRC`와 natural key로 비교했고, 단순 중복이 아니므로 현행 serving table에는 섞지 않기로 ADR-025에서 결정했다.

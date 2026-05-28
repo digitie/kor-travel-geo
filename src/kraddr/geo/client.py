@@ -9,6 +9,7 @@ from typing import Any, Literal, Self
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from .core.consistency_definitions import CASE_DEFINITIONS
 from .core.geocoder import geocode as core_geocode
 from .core.poboxer import pobox as core_pobox
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
@@ -23,9 +24,17 @@ from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
     AuditEvent,
     CacheMetrics,
+    ConsistencyBulkDecisionRequest,
+    ConsistencyBulkDecisionResponse,
     ConsistencyCase,
+    ConsistencyCaseDefinition,
+    ConsistencyCaseSample,
+    ConsistencyCaseSummary,
     ConsistencyReport,
     ConsistencyReportSummary,
+    ConsistencySampleDecisionRequest,
+    ConsistencySamplePage,
+    ConsistencySampleRecheckResponse,
     DatasetSnapshot,
     ExplainRequest,
     ExplainResponse,
@@ -678,6 +687,140 @@ class AsyncAddressClient:
             )
             for row in rows
         ]
+
+    async def consistency_case_definitions(self) -> tuple[ConsistencyCaseDefinition, ...]:
+        return CASE_DEFINITIONS
+
+    async def list_consistency_case_samples(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+        severity: str | None = None,
+        decision: str | None = None,
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
+        bd_mgt_sn: str | None = None,
+        reason_code: str | None = None,
+        source_kind: str | None = None,
+        source_yyyymm: str | None = None,
+        min_distance_m: float | None = None,
+        max_distance_m: float | None = None,
+        order_by: str = "sample_rank",
+        desc: bool = False,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> ConsistencySamplePage:
+        page_result = await AdminRepository(self._engine()).list_consistency_case_samples(
+            report_id=report_id,
+            case_code=case_code,
+            severity=severity,
+            decision=decision,
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+            bd_mgt_sn=bd_mgt_sn,
+            reason_code=reason_code,
+            source_kind=source_kind,
+            source_yyyymm=source_yyyymm,
+            min_distance_m=min_distance_m,
+            max_distance_m=max_distance_m,
+            order_by=order_by,
+            desc=desc,
+            page=page,
+            page_size=page_size,
+        )
+        report_exists = await AdminRepository(self._engine()).consistency_report(report_id)
+        if page_result.total == 0 and report_exists is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"consistency report not found: {report_id}")
+        return page_result
+
+    async def consistency_case_summary(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+    ) -> ConsistencyCaseSummary:
+        if await AdminRepository(self._engine()).consistency_report(report_id) is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"consistency report not found: {report_id}")
+        return await AdminRepository(self._engine()).consistency_case_summary(
+            report_id=report_id,
+            case_code=case_code,
+        )
+
+    async def update_consistency_sample_decision(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+        sample_id: str,
+        req: ConsistencySampleDecisionRequest,
+        actor_type: str = "api",
+        client_ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> ConsistencyCaseSample:
+        row = await AdminRepository(self._engine()).update_consistency_sample_decision(
+            report_id=report_id,
+            case_code=case_code,
+            sample_id=sample_id,
+            req=req,
+            actor_type=actor_type,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+        if row is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"consistency sample not found: {sample_id}")
+        return row
+
+    async def bulk_update_consistency_sample_decisions(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+        req: ConsistencyBulkDecisionRequest,
+        actor_type: str = "api",
+        client_ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> ConsistencyBulkDecisionResponse:
+        return await AdminRepository(self._engine()).bulk_update_consistency_sample_decisions(
+            report_id=report_id,
+            case_code=case_code,
+            req=req,
+            actor_type=actor_type,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+
+    async def recheck_consistency_sample(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+        sample_id: str,
+    ) -> ConsistencySampleRecheckResponse:
+        row = await AdminRepository(self._engine()).recheck_consistency_sample(
+            report_id=report_id,
+            case_code=case_code,
+            sample_id=sample_id,
+        )
+        if row is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"consistency sample not found: {sample_id}")
+        return row
 
 
 def open_client(

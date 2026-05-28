@@ -30,6 +30,7 @@ LoadJobKind = Literal[
     "consistency_check",
 ]
 ConsistencySeverity = Literal["OK", "INFO", "WARN", "ERROR"]
+ConsistencyDecisionState = Literal["unreviewed", "approved", "rejected", "deferred"]
 OpsActorType = Literal["system", "cli", "api", "ui", "scheduler"]
 OpsAuditOutcome = Literal["started", "succeeded", "failed", "cancelled", "denied"]
 DatasetSnapshotState = Literal["building", "validated", "rejected", "released", "retired"]
@@ -280,6 +281,96 @@ class ConsistencyReportSummary(FrozenModel):
 
 class ConsistencyReport(ConsistencyReportSummary):
     cases: tuple[ConsistencyCase, ...] = ()
+
+
+class ConsistencyCaseDefinition(FrozenModel):
+    code: str
+    name: str
+    compares: str
+    abnormal_criteria: str
+    evidence: tuple[str, ...] = ()
+    likely_causes: tuple[str, ...] = ()
+    decision_guide: str
+    threshold: str | None = None
+
+
+class ConsistencySamplePoint(FrozenModel):
+    x: float
+    y: float
+
+
+class ConsistencyCaseSample(FrozenModel):
+    sample_id: str
+    report_id: str
+    case_code: str
+    severity: ConsistencySeverity
+    sample_rank: int = Field(ge=0)
+    bd_mgt_sn: str | None = None
+    rncode_full: str | None = None
+    sig_cd: str | None = None
+    bjd_cd: str | None = None
+    distance_m: float | None = None
+    source_yyyymm: str | None = None
+    source_kind: str | None = None
+    case_metric: dict[str, Any] = Field(default_factory=dict)
+    source_snapshot: dict[str, Any] = Field(default_factory=dict)
+    point: ConsistencySamplePoint | None = None
+    bbox_4326: dict[str, Any] = Field(default_factory=dict)
+    has_polygon: bool = False
+    has_line: bool = False
+    decision_state: ConsistencyDecisionState = "unreviewed"
+    reason_code: str | None = None
+    note: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    created_at: datetime
+
+
+class ConsistencySamplePage(FrozenModel):
+    report_id: str
+    case_code: str
+    total: int = Field(ge=0)
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1)
+    items: tuple[ConsistencyCaseSample, ...] = ()
+
+
+class ConsistencyCaseSummary(FrozenModel):
+    report_id: str
+    case_code: str
+    total: int = Field(ge=0)
+    by_severity: dict[str, int] = Field(default_factory=dict)
+    by_decision: dict[str, int] = Field(default_factory=dict)
+    by_sig_cd: dict[str, int] = Field(default_factory=dict)
+    distance: dict[str, float] = Field(default_factory=dict)
+
+
+class ConsistencySampleDecisionRequest(FrozenModel):
+    decision_state: Literal["approved", "rejected", "deferred"]
+    reason_code: str = Field(min_length=1, max_length=80)
+    note: str | None = Field(default=None, max_length=2000)
+    reviewer: str | None = Field(default=None, max_length=120)
+
+
+class ConsistencyBulkDecisionRequest(ConsistencySampleDecisionRequest):
+    sample_ids: tuple[str, ...] = Field(min_length=1, max_length=1000)
+
+
+class ConsistencyBulkDecisionResponse(FrozenModel):
+    report_id: str
+    case_code: str
+    updated_count: int = Field(ge=0)
+    items: tuple[ConsistencyCaseSample, ...] = ()
+
+
+class ConsistencySampleRecheckResponse(FrozenModel):
+    sample_id: str
+    report_id: str
+    case_code: str
+    exists_in_current_mv: bool
+    point: ConsistencySamplePoint | None = None
+    stale: bool = False
+    evidence: dict[str, Any] = Field(default_factory=dict)
 
 
 class AuditEvent(FrozenModel):

@@ -192,6 +192,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/consistency/case-definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consistency Case Definitions */
+        get: operations["consistency_case_definitions_v1_admin_consistency_case_definitions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/consistency/run": {
         parameters: {
             query?: never;
@@ -218,6 +235,91 @@ export interface paths {
         };
         /** Consistency Report */
         get: operations["consistency_report_v1_admin_consistency__report_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Consistency Case Samples */
+        get: operations["list_consistency_case_samples_v1_admin_consistency__report_id__cases__case_code__samples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/samples/bulk-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bulk Update Consistency Sample Decisions */
+        post: operations["bulk_update_consistency_sample_decisions_v1_admin_consistency__report_id__cases__case_code__samples_bulk_decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/samples/{sample_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Consistency Sample Decision */
+        patch: operations["update_consistency_sample_decision_v1_admin_consistency__report_id__cases__case_code__samples__sample_id__decision_patch"];
+        trace?: never;
+    };
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/samples/{sample_id}/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recheck Consistency Sample */
+        post: operations["recheck_consistency_sample_v1_admin_consistency__report_id__cases__case_code__samples__sample_id__recheck_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/consistency/{report_id}/cases/{case_code}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consistency Case Summary */
+        get: operations["consistency_case_summary_v1_admin_consistency__report_id__cases__case_code__summary_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1050,6 +1152,36 @@ export interface components {
              */
             source: "local" | "vworld" | "juso" | "cache";
         };
+        /** ConsistencyBulkDecisionRequest */
+        ConsistencyBulkDecisionRequest: {
+            /**
+             * Decision State
+             * @enum {string}
+             */
+            decision_state: "approved" | "rejected" | "deferred";
+            /** Note */
+            note?: string | null;
+            /** Reason Code */
+            reason_code: string;
+            /** Reviewer */
+            reviewer?: string | null;
+            /** Sample Ids */
+            sample_ids: string[];
+        };
+        /** ConsistencyBulkDecisionResponse */
+        ConsistencyBulkDecisionResponse: {
+            /** Case Code */
+            case_code: string;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["ConsistencyCaseSample"][];
+            /** Report Id */
+            report_id: string;
+            /** Updated Count */
+            updated_count: number;
+        };
         /** ConsistencyCase */
         ConsistencyCase: {
             /** Code */
@@ -1080,6 +1212,128 @@ export interface components {
             severity: "OK" | "INFO" | "WARN" | "ERROR";
             /** Threshold */
             threshold?: string | null;
+        };
+        /** ConsistencyCaseDefinition */
+        ConsistencyCaseDefinition: {
+            /** Abnormal Criteria */
+            abnormal_criteria: string;
+            /** Code */
+            code: string;
+            /** Compares */
+            compares: string;
+            /** Decision Guide */
+            decision_guide: string;
+            /**
+             * Evidence
+             * @default []
+             */
+            evidence: string[];
+            /**
+             * Likely Causes
+             * @default []
+             */
+            likely_causes: string[];
+            /** Name */
+            name: string;
+            /** Threshold */
+            threshold?: string | null;
+        };
+        /** ConsistencyCaseSample */
+        ConsistencyCaseSample: {
+            /** Bbox 4326 */
+            bbox_4326?: {
+                [key: string]: unknown;
+            };
+            /** Bd Mgt Sn */
+            bd_mgt_sn?: string | null;
+            /** Bjd Cd */
+            bjd_cd?: string | null;
+            /** Case Code */
+            case_code: string;
+            /** Case Metric */
+            case_metric?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Decision State
+             * @default unreviewed
+             * @enum {string}
+             */
+            decision_state: "unreviewed" | "approved" | "rejected" | "deferred";
+            /** Distance M */
+            distance_m?: number | null;
+            /**
+             * Has Line
+             * @default false
+             */
+            has_line: boolean;
+            /**
+             * Has Polygon
+             * @default false
+             */
+            has_polygon: boolean;
+            /** Note */
+            note?: string | null;
+            point?: components["schemas"]["ConsistencySamplePoint"] | null;
+            /** Reason Code */
+            reason_code?: string | null;
+            /** Report Id */
+            report_id: string;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By */
+            reviewed_by?: string | null;
+            /** Rncode Full */
+            rncode_full?: string | null;
+            /** Sample Id */
+            sample_id: string;
+            /** Sample Rank */
+            sample_rank: number;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "OK" | "INFO" | "WARN" | "ERROR";
+            /** Sig Cd */
+            sig_cd?: string | null;
+            /** Source Kind */
+            source_kind?: string | null;
+            /** Source Snapshot */
+            source_snapshot?: {
+                [key: string]: unknown;
+            };
+            /** Source Yyyymm */
+            source_yyyymm?: string | null;
+        };
+        /** ConsistencyCaseSummary */
+        ConsistencyCaseSummary: {
+            /** By Decision */
+            by_decision?: {
+                [key: string]: number;
+            };
+            /** By Severity */
+            by_severity?: {
+                [key: string]: number;
+            };
+            /** By Sig Cd */
+            by_sig_cd?: {
+                [key: string]: number;
+            };
+            /** Case Code */
+            case_code: string;
+            /** Distance */
+            distance?: {
+                [key: string]: number;
+            };
+            /** Report Id */
+            report_id: string;
+            /** Total */
+            total: number;
         };
         /** ConsistencyReport */
         ConsistencyReport: {
@@ -1161,6 +1415,66 @@ export interface components {
             scope: "full" | "sido" | "recent";
             /** Sido */
             sido?: string | null;
+        };
+        /** ConsistencySampleDecisionRequest */
+        ConsistencySampleDecisionRequest: {
+            /**
+             * Decision State
+             * @enum {string}
+             */
+            decision_state: "approved" | "rejected" | "deferred";
+            /** Note */
+            note?: string | null;
+            /** Reason Code */
+            reason_code: string;
+            /** Reviewer */
+            reviewer?: string | null;
+        };
+        /** ConsistencySamplePage */
+        ConsistencySamplePage: {
+            /** Case Code */
+            case_code: string;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["ConsistencyCaseSample"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Report Id */
+            report_id: string;
+            /** Total */
+            total: number;
+        };
+        /** ConsistencySamplePoint */
+        ConsistencySamplePoint: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** ConsistencySampleRecheckResponse */
+        ConsistencySampleRecheckResponse: {
+            /** Case Code */
+            case_code: string;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /** Exists In Current Mv */
+            exists_in_current_mv: boolean;
+            point?: components["schemas"]["ConsistencySamplePoint"] | null;
+            /** Report Id */
+            report_id: string;
+            /** Sample Id */
+            sample_id: string;
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
         };
         /** DatasetSnapshot */
         DatasetSnapshot: {
@@ -2795,6 +3109,26 @@ export interface operations {
             };
         };
     };
+    consistency_case_definitions_v1_admin_consistency_case_definitions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsistencyCaseDefinition"][];
+                };
+            };
+        };
+    };
     run_consistency_v1_admin_consistency_run_post: {
         parameters: {
             query?: never;
@@ -2846,6 +3180,192 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConsistencyReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_consistency_case_samples_v1_admin_consistency__report_id__cases__case_code__samples_get: {
+        parameters: {
+            query?: {
+                severity?: ("OK" | "INFO" | "WARN" | "ERROR") | null;
+                decision?: ("unreviewed" | "approved" | "rejected" | "deferred") | null;
+                sig_cd?: string | null;
+                bjd_cd?: string | null;
+                bd_mgt_sn?: string | null;
+                reason_code?: string | null;
+                source_kind?: string | null;
+                source_yyyymm?: string | null;
+                min_distance_m?: number | null;
+                max_distance_m?: number | null;
+                order_by?: string;
+                desc?: boolean;
+                page?: number;
+                page_size?: number;
+                format?: "json" | "csv";
+            };
+            header?: never;
+            path: {
+                report_id: string;
+                case_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsistencySamplePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_update_consistency_sample_decisions_v1_admin_consistency__report_id__cases__case_code__samples_bulk_decision_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                case_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsistencyBulkDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsistencyBulkDecisionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_consistency_sample_decision_v1_admin_consistency__report_id__cases__case_code__samples__sample_id__decision_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                case_code: string;
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsistencySampleDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsistencyCaseSample"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recheck_consistency_sample_v1_admin_consistency__report_id__cases__case_code__samples__sample_id__recheck_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                case_code: string;
+                sample_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsistencySampleRecheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consistency_case_summary_v1_admin_consistency__report_id__cases__case_code__summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+                case_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsistencyCaseSummary"];
                 };
             };
             /** @description Validation Error */

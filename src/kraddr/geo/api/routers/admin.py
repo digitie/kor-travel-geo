@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import hashlib
+import io
 import re
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -23,9 +25,17 @@ from kraddr.geo.dto.admin import (
     BackupArtifact,
     BackupCreateRequest,
     CacheMetrics,
+    ConsistencyBulkDecisionRequest,
+    ConsistencyBulkDecisionResponse,
+    ConsistencyCaseDefinition,
+    ConsistencyCaseSample,
+    ConsistencyCaseSummary,
     ConsistencyReport,
     ConsistencyReportSummary,
     ConsistencyRunRequest,
+    ConsistencySampleDecisionRequest,
+    ConsistencySamplePage,
+    ConsistencySampleRecheckResponse,
     DatasetSnapshot,
     ExplainRequest,
     ExplainResponse,
@@ -554,6 +564,140 @@ async def list_consistency(
 
 
 @router.get(
+    "/consistency/case-definitions",
+    response_model=list[ConsistencyCaseDefinition],
+    response_model_exclude_none=True,
+)
+async def consistency_case_definitions(
+    client: AsyncAddressClient = Depends(get_client),
+) -> tuple[ConsistencyCaseDefinition, ...]:
+    return await client.consistency_case_definitions()
+
+
+@router.get(
+    "/consistency/{report_id}/cases/{case_code}/samples",
+    response_model=ConsistencySamplePage,
+    response_model_exclude_none=True,
+)
+async def list_consistency_case_samples(
+    report_id: str,
+    case_code: str,
+    severity: Literal["OK", "INFO", "WARN", "ERROR"] | None = None,
+    decision: Literal["unreviewed", "approved", "rejected", "deferred"] | None = None,
+    sig_cd: str | None = Query(default=None, min_length=2, max_length=5),
+    bjd_cd: str | None = Query(default=None, min_length=8, max_length=10),
+    bd_mgt_sn: str | None = Query(default=None, min_length=1, max_length=25),
+    reason_code: str | None = Query(default=None, min_length=1, max_length=80),
+    source_kind: str | None = Query(default=None, min_length=1, max_length=80),
+    source_yyyymm: str | None = Query(default=None, pattern=r"^\d{6}$"),
+    min_distance_m: float | None = Query(default=None, ge=0),
+    max_distance_m: float | None = Query(default=None, ge=0),
+    order_by: str = Query(default="sample_rank", max_length=40),
+    desc: bool = False,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=500),
+    output_format: Literal["json", "csv"] = Query(default="json", alias="format"),
+    client: AsyncAddressClient = Depends(get_client),
+) -> ConsistencySamplePage | StreamingResponse:
+    result = await client.list_consistency_case_samples(
+        report_id=report_id,
+        case_code=case_code,
+        severity=severity,
+        decision=decision,
+        sig_cd=sig_cd,
+        bjd_cd=bjd_cd,
+        bd_mgt_sn=bd_mgt_sn,
+        reason_code=reason_code,
+        source_kind=source_kind,
+        source_yyyymm=source_yyyymm,
+        min_distance_m=min_distance_m,
+        max_distance_m=max_distance_m,
+        order_by=order_by,
+        desc=desc,
+        page=page,
+        page_size=page_size,
+    )
+    if output_format == "csv":
+        return _samples_csv_response(result)
+    return result
+
+
+@router.get(
+    "/consistency/{report_id}/cases/{case_code}/summary",
+    response_model=ConsistencyCaseSummary,
+    response_model_exclude_none=True,
+)
+async def consistency_case_summary(
+    report_id: str,
+    case_code: str,
+    client: AsyncAddressClient = Depends(get_client),
+) -> ConsistencyCaseSummary:
+    return await client.consistency_case_summary(report_id=report_id, case_code=case_code)
+
+
+@router.patch(
+    "/consistency/{report_id}/cases/{case_code}/samples/{sample_id}/decision",
+    response_model=ConsistencyCaseSample,
+    response_model_exclude_none=True,
+)
+async def update_consistency_sample_decision(
+    report_id: str,
+    case_code: str,
+    sample_id: str,
+    req: ConsistencySampleDecisionRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> ConsistencyCaseSample:
+    return await client.update_consistency_sample_decision(
+        report_id=report_id,
+        case_code=case_code,
+        sample_id=sample_id,
+        req=req,
+        actor_type="ui",
+        **_audit_request(request),
+    )
+
+
+@router.post(
+    "/consistency/{report_id}/cases/{case_code}/samples/bulk-decision",
+    response_model=ConsistencyBulkDecisionResponse,
+    response_model_exclude_none=True,
+)
+async def bulk_update_consistency_sample_decisions(
+    report_id: str,
+    case_code: str,
+    req: ConsistencyBulkDecisionRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> ConsistencyBulkDecisionResponse:
+    return await client.bulk_update_consistency_sample_decisions(
+        report_id=report_id,
+        case_code=case_code,
+        req=req,
+        actor_type="ui",
+        **_audit_request(request),
+    )
+
+
+@router.post(
+    "/consistency/{report_id}/cases/{case_code}/samples/{sample_id}/recheck",
+    response_model=ConsistencySampleRecheckResponse,
+    response_model_exclude_none=True,
+)
+async def recheck_consistency_sample(
+    report_id: str,
+    case_code: str,
+    sample_id: str,
+    client: AsyncAddressClient = Depends(get_client),
+) -> ConsistencySampleRecheckResponse:
+    return await client.recheck_consistency_sample(
+        report_id=report_id,
+        case_code=case_code,
+        sample_id=sample_id,
+    )
+
+
+@router.get(
     "/consistency/{report_id}",
     response_model=ConsistencyReport,
     response_model_exclude_none=True,
@@ -710,6 +854,74 @@ def _backup_artifact_response(artifact: OpsArtifact, *, settings: Settings) -> B
     if artifact.state == "available" and artifact.sha256:
         download_url = backup_download_url(artifact, settings)
     return BackupArtifact(**artifact.model_dump(), download_url=download_url)
+
+
+def _samples_csv_response(page: ConsistencySamplePage) -> StreamingResponse:
+    buffer = io.StringIO()
+    buffer.write("\ufeff")
+    fieldnames = (
+        "sample_id",
+        "report_id",
+        "case_code",
+        "severity",
+        "sample_rank",
+        "decision_state",
+        "reason_code",
+        "reviewed_by",
+        "reviewed_at",
+        "bd_mgt_sn",
+        "rncode_full",
+        "sig_cd",
+        "bjd_cd",
+        "distance_m",
+        "source_kind",
+        "source_yyyymm",
+        "lon",
+        "lat",
+        "has_polygon",
+        "has_line",
+        "note",
+        "case_metric",
+        "source_snapshot",
+    )
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    for sample in page.items:
+        writer.writerow(_sample_csv_row(sample))
+    filename = f"{page.report_id}_{page.case_code}_samples.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={_safe_filename(filename)}"},
+    )
+
+
+def _sample_csv_row(sample: ConsistencyCaseSample) -> dict[str, object]:
+    return {
+        "sample_id": sample.sample_id,
+        "report_id": sample.report_id,
+        "case_code": sample.case_code,
+        "severity": sample.severity,
+        "sample_rank": sample.sample_rank,
+        "decision_state": sample.decision_state,
+        "reason_code": sample.reason_code or "",
+        "reviewed_by": sample.reviewed_by or "",
+        "reviewed_at": sample.reviewed_at.isoformat() if sample.reviewed_at else "",
+        "bd_mgt_sn": sample.bd_mgt_sn or "",
+        "rncode_full": sample.rncode_full or "",
+        "sig_cd": sample.sig_cd or "",
+        "bjd_cd": sample.bjd_cd or "",
+        "distance_m": sample.distance_m if sample.distance_m is not None else "",
+        "source_kind": sample.source_kind or "",
+        "source_yyyymm": sample.source_yyyymm or "",
+        "lon": sample.point.x if sample.point else "",
+        "lat": sample.point.y if sample.point else "",
+        "has_polygon": sample.has_polygon,
+        "has_line": sample.has_line,
+        "note": sample.note or "",
+        "case_metric": sample.case_metric,
+        "source_snapshot": sample.source_snapshot,
+    }
 
 
 def _safe_filename(filename: str) -> str:

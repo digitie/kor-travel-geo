@@ -8,11 +8,11 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import uuid4
 
-from sqlalchemy import bindparam, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.dto.admin import ConsistencyCase, ConsistencyReport
+from kraddr.geo.infra.admin_repo import AdminRepository
 
 ProgressReporter = Callable[[float, str], Awaitable[None]]
 
@@ -646,20 +646,7 @@ async def run_all_cases(
         cases=tuple(case_results),
         generated_by=generated_by,
     )
-    async with engine.begin() as conn:
-        await conn.execute(
-            _json_text(
-                """
-INSERT INTO load_consistency_reports
-  (report_id, scope, started_at, finished_at, source_set, cases, severity_max, generated_by)
-VALUES
-  (:report_id, :scope, :started_at, :finished_at, :source_set, :cases, :severity_max, :generated_by)
-""",
-                "source_set",
-                "cases",
-            ),
-            report.model_dump(mode="json"),
-        )
+    await AdminRepository(engine).insert_consistency_report(report)
     return report
 
 
@@ -701,7 +688,3 @@ def _max_severity(cases: tuple[ConsistencyCase, ...]) -> Literal["OK", "INFO", "
     order = {"OK": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
     reverse = {value: key for key, value in order.items()}
     return reverse[max(order[case.severity] for case in cases)]  # type: ignore[return-value]
-
-
-def _json_text(sql: str, *json_params: str) -> Any:
-    return text(sql).bindparams(*(bindparam(name, type_=JSONB) for name in json_params))

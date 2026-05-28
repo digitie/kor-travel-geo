@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -20,6 +21,16 @@ from kraddr.geo.core.redaction import (
 from kraddr.geo.dto.admin import (
     AuditEvent,
     CacheMetrics,
+    ConsistencyBulkDecisionRequest,
+    ConsistencyBulkDecisionResponse,
+    ConsistencyCase,
+    ConsistencyCaseSample,
+    ConsistencyCaseSummary,
+    ConsistencyReport,
+    ConsistencySampleDecisionRequest,
+    ConsistencySamplePage,
+    ConsistencySamplePoint,
+    ConsistencySampleRecheckResponse,
     DatasetSnapshot,
     MaintenanceWindow,
     MaintenanceWindowCreate,
@@ -84,6 +95,17 @@ SELECT stats_id, snapshot_id, captured_at, schema_name, object_name,
        object_kind, estimated_rows, exact_rows, total_bytes, table_bytes,
        index_bytes, toast_bytes, dead_tuples, last_vacuum, last_analyze, stats
   FROM ops.table_stats_snapshots
+"""
+
+_CONSISTENCY_SAMPLE_SELECT = """
+SELECT sample_id::text AS sample_id, report_id, case_code, severity, sample_rank,
+       bd_mgt_sn, rncode_full, sig_cd, bjd_cd, distance_m, source_yyyymm,
+       source_kind, case_metric, source_snapshot,
+       CASE WHEN point_4326 IS NULL THEN NULL ELSE ST_X(point_4326) END AS lon,
+       CASE WHEN point_4326 IS NULL THEN NULL ELSE ST_Y(point_4326) END AS lat,
+       bbox_4326, has_polygon, has_line, decision_state, reason_code, note,
+       reviewed_by, reviewed_at, created_at
+  FROM ops.consistency_case_samples
 """
 
 
@@ -922,6 +944,26 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
             ).mappings().one()
         return map_load_job(dict(updated))
 
+    async def insert_consistency_report(self, report: ConsistencyReport) -> None:
+        sample_rows = _consistency_sample_rows(report)
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                _json_text(
+                    """
+INSERT INTO load_consistency_reports
+  (report_id, scope, started_at, finished_at, source_set, cases, severity_max, generated_by)
+VALUES
+  (:report_id, :scope, :started_at, :finished_at, :source_set, :cases, :severity_max, :generated_by)
+""",
+                    "source_set",
+                    "cases",
+                ),
+                report.model_dump(mode="json"),
+            )
+            if sample_rows:
+                await _insert_consistency_sample_rows(conn, sample_rows)
+                await _hydrate_consistency_sample_points(conn, report.report_id)
+
     async def consistency_report(self, report_id: str) -> ConsistencyReportRow | None:
         async with self.engine.connect() as conn:
             row = (
@@ -979,6 +1021,710 @@ SELECT report_id, scope, severity_max, source_set, started_at, finished_at,
                 )
             ).mappings().all()
         return [map_consistency_report(dict(row)) for row in rows]
+
+    async def ensure_consistency_case_samples(self, report_id: str) -> bool:
+        async with self.engine.connect() as conn:
+            count = await conn.scalar(
+                text(
+                    """
+SELECT count(*)::bigint
+  FROM ops.consistency_case_samples
+ WHERE report_id = :report_id
+"""
+                ),
+                {"report_id": report_id},
+            )
+        if int(count or 0) > 0:
+            return True
+
+        row = await self.consistency_report(report_id)
+        if row is None:
+            return False
+        report = _consistency_report_dto(row)
+        sample_rows = _consistency_sample_rows(report)
+        if not sample_rows:
+            return True
+        async with self.engine.begin() as conn:
+            await _insert_consistency_sample_rows(conn, sample_rows)
+            await _hydrate_consistency_sample_points(conn, report_id)
+        return True
+
+    async def list_consistency_case_samples(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+        severity: str | None = None,
+        decision: str | None = None,
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
+        bd_mgt_sn: str | None = None,
+        reason_code: str | None = None,
+        source_kind: str | None = None,
+        source_yyyymm: str | None = None,
+        min_distance_m: float | None = None,
+        max_distance_m: float | None = None,
+        order_by: str = "sample_rank",
+        desc: bool = False,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> ConsistencySamplePage:
+        if not await self.ensure_consistency_case_samples(report_id):
+            return ConsistencySamplePage(
+                report_id=report_id,
+                case_code=case_code,
+                total=0,
+                page=page,
+                page_size=page_size,
+                items=(),
+            )
+        clauses = ["report_id = :report_id", "case_code = :case_code"]
+        params: dict[str, Any] = {
+            "report_id": report_id,
+            "case_code": case_code,
+            "limit": page_size,
+            "offset": (page - 1) * page_size,
+        }
+        _append_optional_clause(clauses, params, "severity", severity)
+        _append_optional_clause(clauses, params, "decision_state", decision, param_name="decision")
+        _append_optional_clause(clauses, params, "sig_cd", sig_cd)
+        _append_optional_clause(clauses, params, "bjd_cd", bjd_cd)
+        _append_optional_clause(clauses, params, "bd_mgt_sn", bd_mgt_sn)
+        _append_optional_clause(clauses, params, "reason_code", reason_code)
+        _append_optional_clause(clauses, params, "source_kind", source_kind)
+        _append_optional_clause(clauses, params, "source_yyyymm", source_yyyymm)
+        if min_distance_m is not None:
+            clauses.append("distance_m >= :min_distance_m")
+            params["min_distance_m"] = min_distance_m
+        if max_distance_m is not None:
+            clauses.append("distance_m <= :max_distance_m")
+            params["max_distance_m"] = max_distance_m
+
+        order_expr = _consistency_sample_order_expr(order_by)
+        direction = "DESC" if desc else "ASC"
+        where = " AND ".join(clauses)
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        f"""
+SELECT *, count(*) OVER()::bigint AS total_count
+  FROM ({_CONSISTENCY_SAMPLE_SELECT}) s
+ WHERE {where}
+ ORDER BY {order_expr} {direction} NULLS LAST, sample_rank ASC
+ LIMIT :limit OFFSET :offset
+"""
+                    ),
+                    params,
+                )
+            ).mappings().all()
+        total = int(rows[0]["total_count"]) if rows else 0
+        return ConsistencySamplePage(
+            report_id=report_id,
+            case_code=case_code,
+            total=total,
+            page=page,
+            page_size=page_size,
+            items=tuple(_consistency_sample(dict(row)) for row in rows),
+        )
+
+    async def consistency_case_summary(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+    ) -> ConsistencyCaseSummary:
+        await self.ensure_consistency_case_samples(report_id)
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        """
+WITH base AS (
+  SELECT *
+    FROM ops.consistency_case_samples
+   WHERE report_id = :report_id
+     AND case_code = :case_code
+),
+severity AS (
+  SELECT COALESCE(jsonb_object_agg(severity, count), '{}'::jsonb) AS value
+    FROM (
+      SELECT severity, count(*)::bigint AS count
+        FROM base
+       GROUP BY severity
+    ) s
+),
+decision AS (
+  SELECT COALESCE(jsonb_object_agg(decision_state, count), '{}'::jsonb) AS value
+    FROM (
+      SELECT decision_state, count(*)::bigint AS count
+        FROM base
+       GROUP BY decision_state
+    ) d
+),
+sig AS (
+  SELECT COALESCE(jsonb_object_agg(sig_cd, count), '{}'::jsonb) AS value
+    FROM (
+      SELECT sig_cd, count(*)::bigint AS count
+        FROM base
+       WHERE sig_cd IS NOT NULL
+       GROUP BY sig_cd
+       ORDER BY count DESC
+       LIMIT 50
+    ) g
+),
+dist AS (
+  SELECT count(distance_m)::bigint AS distance_count,
+         min(distance_m)::float8 AS min_m,
+         max(distance_m)::float8 AS max_m,
+         avg(distance_m)::float8 AS avg_m,
+         percentile_cont(0.95) WITHIN GROUP (ORDER BY distance_m)::float8 AS p95_m
+    FROM base
+   WHERE distance_m IS NOT NULL
+)
+SELECT (SELECT count(*)::bigint FROM base) AS total,
+       (SELECT value FROM severity) AS by_severity,
+       (SELECT value FROM decision) AS by_decision,
+       (SELECT value FROM sig) AS by_sig_cd,
+       jsonb_build_object(
+         'count', distance_count,
+         'min_m', min_m,
+         'max_m', max_m,
+         'avg_m', avg_m,
+         'p95_m', p95_m
+       ) AS distance
+  FROM dist
+"""
+                    ),
+                    {"report_id": report_id, "case_code": case_code},
+                )
+            ).mappings().one()
+        return ConsistencyCaseSummary(
+            report_id=report_id,
+            case_code=case_code,
+            total=int(row["total"] or 0),
+            by_severity=_int_dict(row.get("by_severity")),
+            by_decision=_int_dict(row.get("by_decision")),
+            by_sig_cd=_int_dict(row.get("by_sig_cd")),
+            distance=_float_dict(row.get("distance")),
+        )
+
+    async def update_consistency_sample_decision(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+        sample_id: str,
+        req: ConsistencySampleDecisionRequest,
+        actor_type: str = "api",
+        client_ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> ConsistencyCaseSample | None:
+        payload = {
+            "report_id": report_id,
+            "case_code": case_code,
+            "sample_id": sample_id,
+            "decision_state": req.decision_state,
+            "reason_code": req.reason_code,
+            "note": req.note,
+            "reviewer": req.reviewer,
+        }
+        payload_redacted, payload_hash = redact_audit_payload(payload)
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    _json_text(
+                        """
+UPDATE ops.consistency_case_samples
+   SET decision_state = :decision_state,
+       reason_code = :reason_code,
+       note = :note,
+       reviewed_by = :reviewed_by,
+       reviewed_at = now()
+ WHERE report_id = :report_id
+   AND case_code = :case_code
+   AND sample_id::text = :sample_id
+RETURNING *
+""",
+                    ),
+                    {
+                        "report_id": report_id,
+                        "case_code": case_code,
+                        "sample_id": sample_id,
+                        "decision_state": req.decision_state,
+                        "reason_code": req.reason_code,
+                        "note": req.note,
+                        "reviewed_by": req.reviewer,
+                    },
+                )
+            ).mappings().first()
+            if row is None:
+                return None
+            selected = (
+                await conn.execute(
+                    text(_CONSISTENCY_SAMPLE_SELECT + " WHERE sample_id::text = :sample_id"),
+                    {"sample_id": sample_id},
+                )
+            ).mappings().one()
+            await _insert_consistency_decision_audit(
+                conn,
+                action="consistency.sample.decision",
+                actor_type=actor_type,
+                actor_id=req.reviewer,
+                client_ip=client_ip,
+                user_agent=user_agent,
+                request_id=request_id,
+                trace_id=trace_id,
+                resource_type="consistency_sample",
+                resource_id=sample_id,
+                payload_redacted=payload_redacted,
+                payload_hash=payload_hash,
+            )
+        return _consistency_sample(dict(selected))
+
+    async def bulk_update_consistency_sample_decisions(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+        req: ConsistencyBulkDecisionRequest,
+        actor_type: str = "api",
+        client_ip: str | None = None,
+        user_agent: str | None = None,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> ConsistencyBulkDecisionResponse:
+        payload = {
+            "report_id": report_id,
+            "case_code": case_code,
+            "sample_ids": req.sample_ids,
+            "decision_state": req.decision_state,
+            "reason_code": req.reason_code,
+            "note": req.note,
+            "reviewer": req.reviewer,
+        }
+        payload_redacted, payload_hash = redact_audit_payload(payload)
+        async with self.engine.begin() as conn:
+            updated_ids = (
+                await conn.execute(
+                    text(
+                        """
+UPDATE ops.consistency_case_samples
+   SET decision_state = :decision_state,
+       reason_code = :reason_code,
+       note = :note,
+       reviewed_by = :reviewed_by,
+       reviewed_at = now()
+ WHERE report_id = :report_id
+   AND case_code = :case_code
+   AND sample_id::text = ANY(:sample_ids)
+RETURNING sample_id::text
+"""
+                    ),
+                    {
+                        "report_id": report_id,
+                        "case_code": case_code,
+                        "sample_ids": list(req.sample_ids),
+                        "decision_state": req.decision_state,
+                        "reason_code": req.reason_code,
+                        "note": req.note,
+                        "reviewed_by": req.reviewer,
+                    },
+                )
+            ).mappings().all()
+            ids = [str(row["sample_id"]) for row in updated_ids]
+            if not ids:
+                return ConsistencyBulkDecisionResponse(
+                    report_id=report_id,
+                    case_code=case_code,
+                    updated_count=0,
+                    items=(),
+                )
+            rows = (
+                await conn.execute(
+                    text(_CONSISTENCY_SAMPLE_SELECT + " WHERE sample_id::text = ANY(:sample_ids)"),
+                    {"sample_ids": ids},
+                )
+            ).mappings().all()
+            await _insert_consistency_decision_audit(
+                conn,
+                action="consistency.sample.bulk_decision",
+                actor_type=actor_type,
+                actor_id=req.reviewer,
+                client_ip=client_ip,
+                user_agent=user_agent,
+                request_id=request_id,
+                trace_id=trace_id,
+                resource_type="consistency_sample_bulk",
+                resource_id=f"{report_id}:{case_code}",
+                payload_redacted=payload_redacted,
+                payload_hash=payload_hash,
+            )
+        return ConsistencyBulkDecisionResponse(
+            report_id=report_id,
+            case_code=case_code,
+            updated_count=len(rows),
+            items=tuple(_consistency_sample(dict(row)) for row in rows),
+        )
+
+    async def recheck_consistency_sample(
+        self,
+        *,
+        report_id: str,
+        case_code: str,
+        sample_id: str,
+    ) -> ConsistencySampleRecheckResponse | None:
+        await self.ensure_consistency_case_samples(report_id)
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        _CONSISTENCY_SAMPLE_SELECT
+                        + """
+ WHERE report_id = :report_id
+   AND case_code = :case_code
+   AND sample_id::text = :sample_id
+"""
+                    ),
+                    {"report_id": report_id, "case_code": case_code, "sample_id": sample_id},
+                )
+            ).mappings().first()
+            if row is None:
+                return None
+            current = None
+            if row.get("bd_mgt_sn"):
+                current = (
+                    await conn.execute(
+                        text(
+                            """
+SELECT bd_mgt_sn,
+       CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_X(pt_4326) END AS lon,
+       CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_Y(pt_4326) END AS lat,
+       pt_source
+  FROM mv_geocode_target
+ WHERE bd_mgt_sn = :bd_mgt_sn
+"""
+                        ),
+                        {"bd_mgt_sn": row["bd_mgt_sn"]},
+                    )
+                ).mappings().first()
+        point = None
+        if current and current.get("lon") is not None and current.get("lat") is not None:
+            point = ConsistencySamplePoint(x=float(current["lon"]), y=float(current["lat"]))
+        return ConsistencySampleRecheckResponse(
+            sample_id=sample_id,
+            report_id=report_id,
+            case_code=case_code,
+            exists_in_current_mv=current is not None,
+            point=point,
+            stale=_point_changed(dict(row), dict(current) if current is not None else None),
+            evidence=dict(current) if current is not None else {},
+        )
+
+
+def _consistency_report_dto(row: ConsistencyReportRow) -> ConsistencyReport:
+    return ConsistencyReport(
+        report_id=row.report_id,
+        scope=row.scope,
+        severity_max=row.severity_max,
+        source_set=row.source_set,
+        started_at=row.started_at,
+        finished_at=row.finished_at,
+        generated_by=row.generated_by,
+        cases=tuple(
+            ConsistencyCase(
+                code=case.code,
+                name=case.name,
+                severity=case.severity,
+                count=case.count,
+                ratio=case.ratio,
+                threshold=case.threshold,
+                metric=case.metric,
+                sample=case.sample,
+                note=case.note,
+            )
+            for case in row.cases
+        ),
+    )
+
+
+def _consistency_sample_rows(report: ConsistencyReport) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for case in report.cases:
+        for rank, sample in enumerate(case.sample):
+            bd_mgt_sn = _optional_text(sample.get("bd_mgt_sn"))
+            rows.append(
+                {
+                    "sample_id": _sample_uuid(report.report_id, case.code, rank, sample),
+                    "report_id": report.report_id,
+                    "case_code": case.code,
+                    "severity": _sample_severity(case.code, case.severity, sample),
+                    "sample_rank": rank,
+                    "bd_mgt_sn": bd_mgt_sn,
+                    "rncode_full": _optional_text(sample.get("rncode_full")),
+                    "sig_cd": _sample_sig_cd(sample, bd_mgt_sn),
+                    "bjd_cd": _optional_text(sample.get("bjd_cd") or sample.get("emd_cd")),
+                    "distance_m": _sample_distance(sample),
+                    "source_yyyymm": _optional_text(sample.get("source_yyyymm")),
+                    "source_kind": _optional_text(
+                        sample.get("source_kind") or sample.get("evidence")
+                    ),
+                    "case_metric": _sample_case_metric(case.metric, sample),
+                    "source_snapshot": dict(sample),
+                    "bbox_4326": {},
+                    "has_polygon": case.code in {"C1", "C2", "C4", "C5", "C6", "C7"},
+                    "has_line": case.code == "C8",
+                }
+            )
+    return rows
+
+
+async def _insert_consistency_sample_rows(conn: Any, rows: list[dict[str, Any]]) -> None:
+    await conn.execute(
+        _json_text(
+            """
+INSERT INTO ops.consistency_case_samples
+  (sample_id, report_id, case_code, severity, sample_rank, bd_mgt_sn, rncode_full,
+   sig_cd, bjd_cd, distance_m, source_yyyymm, source_kind, case_metric,
+   source_snapshot, bbox_4326, has_polygon, has_line)
+VALUES
+  (:sample_id, :report_id, :case_code, :severity, :sample_rank, :bd_mgt_sn, :rncode_full,
+   :sig_cd, :bjd_cd, :distance_m, :source_yyyymm, :source_kind, :case_metric,
+   :source_snapshot, :bbox_4326, :has_polygon, :has_line)
+ON CONFLICT (sample_id) DO NOTHING
+""",
+            "case_metric",
+            "source_snapshot",
+            "bbox_4326",
+        ),
+        rows,
+    )
+
+
+async def _hydrate_consistency_sample_points(conn: Any, report_id: str) -> None:
+    await conn.execute(
+        text(
+            """
+UPDATE ops.consistency_case_samples s
+   SET point_5179 = t.pt_5179,
+       point_4326 = t.pt_4326
+  FROM mv_geocode_target t
+ WHERE s.report_id = :report_id
+   AND s.bd_mgt_sn = t.bd_mgt_sn
+   AND s.point_4326 IS NULL
+"""
+        ),
+        {"report_id": report_id},
+    )
+
+
+async def _insert_consistency_decision_audit(
+    conn: Any,
+    *,
+    action: str,
+    actor_type: str,
+    actor_id: str | None,
+    client_ip: str | None,
+    user_agent: str | None,
+    request_id: str | None,
+    trace_id: str | None,
+    resource_type: str,
+    resource_id: str,
+    payload_redacted: dict[str, Any],
+    payload_hash: str,
+) -> None:
+    await conn.execute(
+        _json_text(
+            """
+INSERT INTO ops.audit_events
+  (event_id, actor_type, actor_id, client_ip_hash, user_agent_hash,
+   request_id, trace_id, action, resource_type, resource_id, outcome,
+   payload_redacted, payload_hash)
+VALUES
+  (:event_id, :actor_type, :actor_id, :client_ip_hash, :user_agent_hash,
+   :request_id, :trace_id, :action, :resource_type, :resource_id, 'succeeded',
+   :payload_redacted, :payload_hash)
+""",
+            "payload_redacted",
+        ),
+        {
+            "event_id": str(uuid4()),
+            "actor_type": actor_type,
+            "actor_id": actor_id,
+            "client_ip_hash": hash_identifier(client_ip) if client_ip else None,
+            "user_agent_hash": hash_identifier(user_agent) if user_agent else None,
+            "request_id": request_id,
+            "trace_id": trace_id,
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "payload_redacted": payload_redacted,
+            "payload_hash": payload_hash,
+        },
+    )
+
+
+def _consistency_sample(row: Mapping[str, Any]) -> ConsistencyCaseSample:
+    lon = row.get("lon")
+    lat = row.get("lat")
+    point = None
+    if lon is not None and lat is not None:
+        point = ConsistencySamplePoint(x=float(lon), y=float(lat))
+    return ConsistencyCaseSample(
+        sample_id=str(row["sample_id"]),
+        report_id=str(row["report_id"]),
+        case_code=str(row["case_code"]),
+        severity=row["severity"],
+        sample_rank=int(row["sample_rank"] or 0),
+        bd_mgt_sn=row.get("bd_mgt_sn"),
+        rncode_full=row.get("rncode_full"),
+        sig_cd=row.get("sig_cd"),
+        bjd_cd=row.get("bjd_cd"),
+        distance_m=float(row["distance_m"]) if row.get("distance_m") is not None else None,
+        source_yyyymm=row.get("source_yyyymm"),
+        source_kind=row.get("source_kind"),
+        case_metric=_json_dict(row.get("case_metric")),
+        source_snapshot=_json_dict(row.get("source_snapshot")),
+        point=point,
+        bbox_4326=_json_dict(row.get("bbox_4326")),
+        has_polygon=bool(row.get("has_polygon")),
+        has_line=bool(row.get("has_line")),
+        decision_state=row.get("decision_state") or "unreviewed",
+        reason_code=row.get("reason_code"),
+        note=row.get("note"),
+        reviewed_by=row.get("reviewed_by"),
+        reviewed_at=row.get("reviewed_at"),
+        created_at=row["created_at"],
+    )
+
+
+def _append_optional_clause(
+    clauses: list[str],
+    params: dict[str, Any],
+    column: str,
+    value: str | None,
+    *,
+    param_name: str | None = None,
+) -> None:
+    if value is None:
+        return
+    name = param_name or column
+    clauses.append(f"{column} = :{name}")
+    params[name] = value
+
+
+def _consistency_sample_order_expr(order_by: str) -> str:
+    allowed = {
+        "sample_rank": "sample_rank",
+        "distance_m": "distance_m",
+        "severity": "severity",
+        "decision_state": "decision_state",
+        "reviewed_at": "reviewed_at",
+        "created_at": "created_at",
+        "sig_cd": "sig_cd",
+    }
+    return allowed.get(order_by, "sample_rank")
+
+
+def _sample_uuid(report_id: str, case_code: str, rank: int, sample: Mapping[str, Any]) -> str:
+    stable_payload = json.dumps(sample, default=str, ensure_ascii=True, sort_keys=True)
+    stable_key = "|".join(
+        (
+            report_id,
+            case_code,
+            str(rank),
+            str(sample.get("bd_mgt_sn") or ""),
+            str(sample.get("rncode_full") or ""),
+            str(sample.get("bjd_cd") or sample.get("emd_cd") or ""),
+            stable_payload,
+        )
+    )
+    return str(uuid5(NAMESPACE_URL, f"kraddr.geo/consistency/{stable_key}"))
+
+
+def _sample_sig_cd(sample: Mapping[str, Any], bd_mgt_sn: str | None) -> str | None:
+    sig_cd = _optional_text(sample.get("sig_cd"))
+    if sig_cd:
+        return sig_cd
+    bjd_cd = _optional_text(sample.get("bjd_cd") or sample.get("emd_cd"))
+    if bjd_cd and len(bjd_cd) >= 5:
+        return bjd_cd[:5]
+    if bd_mgt_sn and len(bd_mgt_sn) >= 5:
+        return bd_mgt_sn[:5]
+    return None
+
+
+def _sample_distance(sample: Mapping[str, Any]) -> float | None:
+    for key in ("distance_m", "dist_m"):
+        value = sample.get(key)
+        if value is not None:
+            return float(value)
+    return None
+
+
+def _sample_case_metric(
+    case_metric: Mapping[str, float] | None,
+    sample: Mapping[str, Any],
+) -> dict[str, Any]:
+    metric: dict[str, Any] = {"case": dict(case_metric or {})}
+    sample_metric: dict[str, Any] = {}
+    for key, value in sample.items():
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            sample_metric[str(key)] = float(value)
+    if sample_metric:
+        metric["sample"] = sample_metric
+    return metric
+
+
+def _sample_severity(
+    case_code: str,
+    case_severity: Literal["OK", "INFO", "WARN", "ERROR"],
+    sample: Mapping[str, Any],
+) -> Literal["OK", "INFO", "WARN", "ERROR"]:
+    if case_code in {"C2", "C9"}:
+        return "ERROR"
+    if case_code == "C4":
+        distance_m = _sample_distance(sample)
+        return "ERROR" if distance_m is not None and distance_m > 500 else "WARN"
+    if case_code in {"C6", "C7"}:
+        reason = str(sample.get("reason") or "")
+        return "ERROR" if reason.startswith("outside_") else "WARN"
+    if case_code == "C3":
+        return case_severity
+    if case_code == "C10":
+        return "WARN"
+    return "WARN" if case_severity != "OK" else "OK"
+
+
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text_value = str(value)
+    return text_value or None
+
+
+def _float_dict(value: Any) -> dict[str, float]:
+    if not isinstance(value, Mapping):
+        return {}
+    result: dict[str, float] = {}
+    for key, item in value.items():
+        if item is not None:
+            result[str(key)] = float(item)
+    return result
+
+
+def _point_changed(row: Mapping[str, Any], current: Mapping[str, Any] | None) -> bool:
+    if current is None:
+        return row.get("bd_mgt_sn") is not None
+    if row.get("lon") is None or row.get("lat") is None:
+        return current.get("lon") is not None or current.get("lat") is not None
+    if current.get("lon") is None or current.get("lat") is None:
+        return True
+    return abs(float(row["lon"]) - float(current["lon"])) > 0.000001 or abs(
+        float(row["lat"]) - float(current["lat"])
+    ) > 0.000001
 
 
 def _audit_event(row: Mapping[str, Any]) -> AuditEvent:

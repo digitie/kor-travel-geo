@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import inspect
+from datetime import UTC, datetime
 
 import pytest
 
 from kraddr.geo.api import _jobs
+from kraddr.geo.core.consistency_definitions import CASE_DEFINITIONS
+from kraddr.geo.dto.admin import ConsistencyCase, ConsistencyReport
 from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.infra import (
     admin_repo,
@@ -103,10 +106,52 @@ def test_sppn_geocode_sql_verifies_point_inside_makarea_polygon() -> None:
 def test_consistency_cases_cover_c1_through_c10_with_metrics() -> None:
     assert tuple(f"C{index}" for index in range(1, 11)) == DEFAULT_CASES
     assert set(CASE_SQL) == set(DEFAULT_CASES)
+    assert tuple(case.code for case in CASE_DEFINITIONS) == DEFAULT_CASES
     assert "ST_Distance" in CASE_SQL["C4"].sql
     assert "ST_Covers" in CASE_SQL["C6"].sql
     assert "ST_DWithin" in CASE_SQL["C8"].sql
     assert "source_yyyymm" in CASE_SQL["C10"].sql
+
+
+def test_consistency_sample_rows_are_stable_and_decision_ready() -> None:
+    now = datetime.now(UTC)
+    report = ConsistencyReport(
+        report_id="consistency_test",
+        scope="full",
+        severity_max="ERROR",
+        source_set={},
+        started_at=now,
+        finished_at=now,
+        generated_by="api",
+        cases=(
+            ConsistencyCase(
+                code="C4",
+                name="출입구 좌표와 건물 polygon 거리 이상치",
+                severity="ERROR",
+                count=1,
+                threshold="50m 초과 WARN, 500m 초과 ERROR",
+                metric={"over_500m": 1.0},
+                sample=(
+                    {
+                        "bd_mgt_sn": "1111010100100010000000001",
+                        "ent_man_no": "1",
+                        "source_kind": "locsum",
+                        "dist_m": 650.25,
+                    },
+                ),
+            ),
+        ),
+    )
+
+    first = admin_repo._consistency_sample_rows(report)
+    second = admin_repo._consistency_sample_rows(report)
+
+    assert first[0]["sample_id"] == second[0]["sample_id"]
+    assert first[0]["severity"] == "ERROR"
+    assert first[0]["sig_cd"] == "11110"
+    assert first[0]["distance_m"] == 650.25
+    assert first[0]["has_polygon"] is True
+    assert first[0]["source_snapshot"]["bd_mgt_sn"] == "1111010100100010000000001"
 
 
 def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
