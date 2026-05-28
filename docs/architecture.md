@@ -37,6 +37,8 @@
 
 의존 방향은 **dto → core → infra → client → api/cli** 한 방향이다. `import-linter`가 `pyproject.toml`의 `[tool.importlinter]` 계약으로 강제한다. 단 하나의 예외(`api.routers.admin → loaders`)는 적재 트리거를 admin 라우터가 직접 호출하기 때문이며 ADR에 명시한다.
 
+T-056 이후 `core/address/`는 시군구/법정동/도로명관리번호/도로명주소관리번호 같은 순수 주소 코드 helper만 맡는다. 도로명/지번 문자열 parser는 `core/normalize.py`에 남기고, 외부 Juso fallback adapter는 `infra`에서 이 helper를 호출해 provider 파라미터를 정규화한다.
+
 ## 프론트엔드 계층 (`kraddr-geo-ui`)
 
 | 영역 | 선택 | 이유 |

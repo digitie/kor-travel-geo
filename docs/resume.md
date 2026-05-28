@@ -97,12 +97,13 @@
 - ✅ T-057 행정구역 hint 기반 검색 가속 1차 구현과 실측 — `RegionHint(sig_cd,bjd_cd)`를 추가하고 `AsyncAddressClient.geocode/search/reverse_geocode`, `/v1/address/geocode`, `/v1/address/search`, `/v1/address/reverse`에 선택 hint를 연결했다. 응답 구조는 vworld 호환을 유지하고, 현재 MV에 물리 `sig_cd`가 없으므로 `bjd_cd` prefix filter로 적용한다. SQL standard run은 900 case/8,100 measurement/error 0, REST smoke는 320 case/1,920 measurement/error 0이었다. Q3 fuzzy c64 p95는 SQL에서 307.45ms → 267.99ms, REST smoke에서 651.62ms → 520.43ms로 개선됐지만 충분한 결정타는 아니어서 T-061 slim text-search 구조로 넘긴다. 상세: `docs/t057-region-hint-search.md`
 - ✅ T-062 PR #53~#64 post-merge 리뷰 audit/fixup — PR #53부터 #64까지 conversation/review/inline/thread와 GraphQL `reviewThreads`를 재확인했고 unresolved thread 0건을 기록했다. 직접 반영 항목은 search exact preflight 정규화 문서화와 `search_fuzzy` benchmark case, `pg_stat_statements` schema prefix, reverse 좌표 validation의 structured error mapping, REST admission repeat 설명, backup archive checksum과 `tar.zst` 해석 보강이다. 상세: `docs/postmerge-review-fixups-pr53-pr64.md`
 - ✅ T-044 `maplibre-vworld-js` 0.1.0 기준 문서-only 재확인 — GitHub tag `v0.1.0` commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`의 package manifest, public export, `VWorldMap`, marker/layer primitive, VWorld helper를 확인했다. npm registry에는 아직 `maplibre-vworld@0.1.0`이 없어 dependency는 바꾸지 않았고, 사용자 지시에 따라 upstream 코드는 직접 수정하지 않았다. 상세: `docs/t044-maplibre-vworld-010-review.md`
+- ✅ T-056 `python-kraddr-base` Address 코드 helper 정리 — 실제 `~/dev/python-kraddr-base`는 Git checkout이 아니고 `GPL-3.0-or-later`라 원본 코드를 복사하지 않았다. 대신 `core/address/codes.py`에 시군구/법정동/도로명관리번호/도로명주소관리번호 helper를 clean-room으로 구현하고, Juso fallback 좌표 API 파라미터 정규화에 연결했다. 상세: `docs/t056-kraddr-base-address-merge.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-056 `python-kraddr-base` Address 부분 병합 + 외부 라이브러리 삭제다. 같은 WSL 환경의 `~/dev/python-kraddr-base`를 read-only로 확인하고, 주소 조합/분리(parse/compose)에 해당하는 순수 로직만 이 저장소의 `core/normalize` 또는 신규 `core/address`로 흡수한다. 외부 dependency는 추가하지 않고, 테스트와 fixtures도 함께 이관한다.
+다음 작업은 사용자 최신 지시에 따라 T-052/T-053 선행 정리다. 먼저 T-052의 v1/v2 API 경계, provider adapter 분리, `docs/api-reference/` skeleton과 T-053의 admin statistics/performance/consistency sample table 의존성을 한 번 더 맞춘 뒤, T-052 PR → T-053 PR 순서로 진행한다.
 
-그 이후의 작업 후보는 T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-061(Q3 fuzzy slim text-search 구조) → T-053(Admin Web UI 통계/튜닝) → T-052(API v1/v2와 provider 통합) → T-055(N150/Odroid 실측) 순서다.
+그 이후의 작업 후보는 T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-061(Q3 fuzzy slim text-search 구조) → T-050(운영 hardening) → T-055(N150/Odroid 실측) 순서다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.

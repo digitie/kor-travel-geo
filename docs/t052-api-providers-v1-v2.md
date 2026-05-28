@@ -130,6 +130,7 @@ class AsyncAddressClient:
 ## 외부 provider adapter 정책
 
 - 본 라이브러리의 default mode는 local PostGIS 응답이다. 외부 API는 `fallback="api"` 또는 v2의 `source=` 명시 시에만 호출.
+- T-056에서 추가한 `core.address` helper를 provider adapter의 공통 주소 코드 정규화 계층으로 사용한다. Juso 계열 `admCd`/`rnMgtSn`/`udrtYn`/`buldMnnm`/`buldSlno`, vworld/kakao/naver가 반환하는 법정동/도로명관리번호 유사 필드는 adapter 안에서 먼저 정규화한 뒤 v2 candidate로 변환한다.
 - adapter 책임:
   - `infra/external/vworld.py` — 기존(ADR-019). 응답을 v1 또는 v2 candidate로 변환.
   - `infra/external/kakao.py` — 신규. kakao Local API 응답을 v2 candidate로 변환. API key는 `KRADDR_GEO_KAKAO_REST_API_KEY` (옵션).
@@ -188,13 +189,14 @@ docs/api-reference/
 ## 구현 순서
 
 1. `docs/api-reference/` skeleton 생성 + `llm-summary.md`.
-2. v1 표면 동결 — 현재 응답 형식을 `api-reference/v1/*.md`로 캡처.
-3. v2 DTO 초안 (`src/kraddr/geo/dto/v2/__init__.py`).
-4. v2 router skeleton (`src/kraddr/geo/api/v2/*`) — 응답은 local 우선, candidate-list.
-5. `AsyncAddressClient.geocode_v2/reverse_v2/search_v2` 추가.
-6. kakao/naver adapter (`infra/external/kakao.py`, `naver.py`) — fallback에서만 호출.
-7. OpenAPI export에 `/v2/*` 포함, `kraddr-geo-ui`도 `types/api.gen.ts` 자동 갱신.
-8. `docs/api-reference/v2/*.md` 완성.
+2. T-056 `core.address` helper를 기준으로 provider별 주소 코드 field mapping 표를 확정.
+3. v1 표면 동결 — 현재 응답 형식을 `api-reference/v1/*.md`로 캡처.
+4. v2 DTO 초안 (`src/kraddr/geo/dto/v2/__init__.py`).
+5. v2 router skeleton (`src/kraddr/geo/api/v2/*`) — 응답은 local 우선, candidate-list.
+6. `AsyncAddressClient.geocode_v2/reverse_v2/search_v2` 추가.
+7. kakao/naver adapter (`infra/external/kakao.py`, `naver.py`) — fallback에서만 호출.
+8. OpenAPI export에 `/v2/*` 포함, `kraddr-geo-ui`도 `types/api.gen.ts` 자동 갱신.
+9. `docs/api-reference/v2/*.md` 완성.
 
 ## 검증 기준
 

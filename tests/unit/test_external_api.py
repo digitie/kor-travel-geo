@@ -65,6 +65,11 @@ async def test_external_geocode_client_maps_juso_search_and_coord_response() -> 
                     }
                 },
             )
+        assert request.url.params["admCd"] == "1168010100"
+        assert request.url.params["rnMgtSn"] == "116803122001"
+        assert request.url.params["udrtYn"] == "0"
+        assert request.url.params["buldMnnm"] == "152"
+        assert request.url.params["buldSlno"] == "0"
         return httpx.Response(
             200,
             json={"results": {"juso": [{"entX": "127.036", "entY": "37.501"}]}},

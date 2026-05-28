@@ -82,6 +82,7 @@ CREATE INDEX idx_consistency_case_samples_4326
 - `run_all_cases()` 실행 시 기존 `load_consistency_reports.cases` JSONB는 그대로 채우고(요약), 동시에 `ops.consistency_case_samples`에도 row 단위 insert한다.
 - sample 수는 케이스별 cap이 있다(예: case당 1,000건). cap을 넘으면 stratified sampling (시군구별 비율 유지).
 - `ops` schema 정책상 secret/주소 원문 평문 저장 금지(ADR-033). `bd_mgt_sn`은 자체 식별자이므로 OK, 주소 텍스트는 저장하지 않는다.
+- T-056 `core.address` helper를 사용해 `sig_cd`, `bjd_cd`, `rncode_full`, 도로명주소관리번호 필터 입력을 API와 UI 양쪽에서 같은 규칙으로 정규화한다.
 
 ### REST 표면
 
@@ -208,13 +209,14 @@ export const useConsistencyAnalysisStore = create<ConsistencyAnalysisState>()((s
 ## 구현 순서
 
 1. `ops.consistency_case_samples` DDL + Alembic migration.
-2. `run_all_cases()` 변경 — sample row 별도 적재.
-3. `/v1/admin/consistency/.../samples` REST endpoint + CSV streaming.
-4. `kraddr-geo-ui/app/admin/consistency/[report_id]/page.tsx` 보강 — 4탭 구조.
-5. `lib/stores/consistency-analysis-store.ts` + 다른 zustand store 추가.
-6. `/admin/stats`, `/admin/maintenance` 신규 page.
-7. `/admin/ops` cross-reference view 보강.
-8. `/admin/performance` T-047 benchmark 연계.
+2. T-056 `core.address` 정규화 helper를 admin filter validation에 연결.
+3. `run_all_cases()` 변경 — sample row 별도 적재.
+4. `/v1/admin/consistency/.../samples` REST endpoint + CSV streaming.
+5. `kraddr-geo-ui/app/admin/consistency/[report_id]/page.tsx` 보강 — 4탭 구조.
+6. `lib/stores/consistency-analysis-store.ts` + 다른 zustand store 추가.
+7. `/admin/stats`, `/admin/maintenance` 신규 page.
+8. `/admin/ops` cross-reference view 보강.
+9. `/admin/performance` T-047 benchmark 연계.
 
 ## 검증 기준
 

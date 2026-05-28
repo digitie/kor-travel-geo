@@ -54,6 +54,9 @@ python-kraddr-geo/
 │   ├── core/
 │   │   ├── protocols.py
 │   │   ├── normalize.py
+│   │   ├── address/
+│   │   │   ├── __init__.py
+│   │   │   └── codes.py
 │   │   ├── geocoder.py
 │   │   ├── reverse_geocoder.py
 │   │   ├── searcher.py
@@ -274,6 +277,14 @@ await client.reverse_geocode(127.0, 37.5, sig_cd="11")
 - 처리: NFC 정규화, 괄호 노트 분리, 공백 정규화, 시도 별칭 정규화(`서울→서울특별시` 등), 시군구 매칭, 도로명/지번 분기 (`ROAD_RE`/`JIBUN_RE`).
 - 산물: `si`, `sgg`, `sgg_nrm`, `emd`, `li`, `road`, `road_nrm`, `mnnm`, `slno`, `mt`(산 여부), `under`(지하), `detail`, `bracket_note`, `is_road`.
 
+### 주소 코드 helper (`core/address/`, T-056)
+
+`python-kraddr-base`의 Address 표면을 확인한 결과 원본 패키지는 GPL-3.0-or-later이고 Git checkout이 아니었으므로 코드를 복사하지 않았다. 본 저장소는 `core/address/codes.py`에 시군구/법정동/도로명관리번호/도로명주소관리번호 helper를 clean-room으로 둔다.
+
+- `SigunguCode`, `LegalDongCode`, `RoadNameCode`, `RoadNameAddressCode`, `AddressCodeSet`
+- `admCd`, `rnMgtSn`, `udrtYn`, `buldMnnm`, `buldSlno`, `bdMgtSn` mapping helper
+- Juso fallback 좌표 API 호출 전 파라미터 정규화
+
 ### `core/geocoder.py` 흐름
 
 1. `parse_address` → `AddrParts`. `sgg_nrm` 없으면 `InvalidAddressError`.
@@ -282,7 +293,7 @@ await client.reverse_geocode(127.0, 37.5, sig_cd="11")
 4. 결과 없으면 `GeocodeResponse(status="NOT_FOUND")`.
 5. `RefinedAddress(text, structure)` 빌드. `GeocodeExtension(source="local", confidence, bd_mgt_sn, rncode_full, bjd_cd, zip_no, zip_source, buld_nm)`.
 
-`fallback="api"`는 core가 직접 HTTP를 호출하지 않는다. `AsyncAddressClient.geocode()`가 로컬 core 결과가 `NOT_FOUND`일 때만 `infra/external_api.py::ExternalGeocodeClient`를 호출한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 + 좌표 API다. 외부 응답도 동일한 `GeocodeResponse` DTO로 변환하며, 자체 출처는 `x_extension.source = "api_vworld" | "api_juso"`에만 넣는다. 단, T-057 region hint가 명시된 요청에서는 외부 provider가 hint를 보존하지 못하므로 로컬 `NOT_FOUND` 뒤에도 외부 fallback을 호출하지 않는다.
+`fallback="api"`는 core가 직접 HTTP를 호출하지 않는다. `AsyncAddressClient.geocode()`가 로컬 core 결과가 `NOT_FOUND`일 때만 `infra/external_api.py::ExternalGeocodeClient`를 호출한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 + 좌표 API다. Juso 좌표 API의 `admCd`/`rnMgtSn`/`udrtYn`/`buldMnnm`/`buldSlno`는 `core.address.AddressCodeSet`으로 정규화한 뒤 전달한다(T-056). 외부 응답도 동일한 `GeocodeResponse` DTO로 변환하며, 자체 출처는 `x_extension.source = "api_vworld" | "api_juso"`에만 넣는다. 단, T-057 region hint가 명시된 요청에서는 외부 provider가 hint를 보존하지 못하므로 로컬 `NOT_FOUND` 뒤에도 외부 fallback을 호출하지 않는다.
 
 `reverse_geocoder`, `searcher`, `zipcoder`, `poboxer`도 같은 패턴.
 
