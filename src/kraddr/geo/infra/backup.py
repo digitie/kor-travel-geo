@@ -355,7 +355,7 @@ async def run_restore_job(
         )
         await repo.record_audit_event(
             action="maintenance_window.authorize",
-            actor_type="job",
+            actor_type="system",
             outcome="succeeded",
             payload={
                 "kind": "restore",
