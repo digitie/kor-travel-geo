@@ -9,7 +9,9 @@ export function buildProxyTarget(
 ): URL | null {
   const target = new URL(`/${pathSegments.join("/")}`, internalBase);
   target.search = search;
-  return target.pathname.startsWith("/v1/") ? target : null;
+  return target.pathname.startsWith("/v1/") || target.pathname.startsWith("/v2/")
+    ? target
+    : null;
 }
 
 export function forwardedProxyHeaders(source: Headers): Headers {

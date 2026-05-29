@@ -5,8 +5,12 @@ import { FormEvent, useState } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
-import { requestJson } from "@/lib/api";
+import { postJson } from "@/lib/api";
 import { reverseFormSchema } from "@/lib/schemas";
+import type { components } from "@/types/api.gen";
+
+type ReverseV2Input = components["schemas"]["ReverseV2Input"];
+type ReverseV2Response = components["schemas"]["ReverseV2Response"];
 
 export function ReverseDebugger() {
   const [x, setX] = useState("127.028601");
@@ -16,19 +20,21 @@ export function ReverseDebugger() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const parsed = reverseFormSchema.safeParse({ x, y, radius_m: radius, type: "both" });
+    const parsed = reverseFormSchema.safeParse({ x, y, radius_m: radius });
     if (!parsed.success) {
       setResult({ error: parsed.error.issues[0]?.message ?? "좌표 입력을 확인하세요" });
       return;
     }
     try {
-      const params = new URLSearchParams({
-        x: String(parsed.data.x),
-        y: String(parsed.data.y),
-        radius_m: String(parsed.data.radius_m),
-        type: parsed.data.type
-      });
-      setResult(await requestJson(`/address/reverse?${params}`));
+      const body: ReverseV2Input = {
+        lon: parsed.data.x,
+        lat: parsed.data.y,
+        crs: "EPSG:4326",
+        include_region: true,
+        include_zipcode: true,
+        radius_m: parsed.data.radius_m
+      };
+      setResult(await postJson<ReverseV2Response>("/v2/reverse", body));
     } catch (error) {
       setResult({ error: error instanceof Error ? error.message : String(error) });
     }

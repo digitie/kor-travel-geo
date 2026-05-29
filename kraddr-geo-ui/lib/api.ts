@@ -12,7 +12,7 @@ export class ApiError extends Error {
 
 export function backendPath(path: string): string {
   const trimmed = path.startsWith("/") ? path : `/${path}`;
-  return trimmed.startsWith("/v1") ? trimmed : `/v1${trimmed}`;
+  return trimmed.startsWith("/v1") || trimmed.startsWith("/v2") ? trimmed : `/v1${trimmed}`;
 }
 
 export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
