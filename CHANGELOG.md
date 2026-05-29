@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-050 운영 hardening 7차: `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 실제 PostgreSQL 제약 통합 테스트를 추가했다. `ops.audit_events.job_id` FK, append-only trigger, `ops.serving_releases` active partial unique index, `ops.table_stats_snapshots.snapshot_id` FK를 실제 Docker PostgreSQL 별도 DB에서 확인한다. 운영 DB 오지정을 줄이기 위해 disposable DB 이름 guard와 필수 extension package 사전 skip을 둔다.
 - T-050 운영 hardening 6차: `db_restore`의 `replace_current` 위험 경로를 active `restore` maintenance window와 typed confirmation에 연결했다. `target_dsn`은 허용하지 않고 target DB 이름은 현재 DB 이름과 같아야 하며, 확인 문구는 `RESTORE <현재 DB 이름>`이어야 한다.
 - T-050 운영 hardening 5차: `ops.table_stats_snapshots` opt-in 주기 capture를 추가했다. 기본 interval은 0으로 비활성화하며, `snapshot_id`를 생략한 수동/주기 capture는 현재 active serving release snapshot에 자동 연결하고 연결 방식은 `stats.snapshot_link`에 기록한다. capture transaction은 advisory lock으로 동시 실행 중복을 줄인다.
 - PR #69~#75 post-merge 리뷰 audit/fixup: `maplibre-vworld` lockfile URL을 `git+https`로 맞추고, consistency sample 목록의 불필요한 report 조회를 줄였으며, backup/restore byte progress sampler에 캐시를 추가했다. T-050 release hook은 load-batch ERROR gate를 MV swap 전에 확인하고 `mv_geocode_target` count를 `mv_hash` 계산에 재사용한다. T-053 표본/전수 범위, T-061 helper MV raw refresh 금지, callback retry 멱등성, T-055 helper sizing도 문서화했다.

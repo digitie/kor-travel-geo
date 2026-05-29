@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 09:45 (T-050 운영 hardening 7차 — 실제 PostgreSQL 제약 통합 테스트)
+
+**작업**: T-050 마지막 항목인 실제 PostgreSQL FK/trigger/partial unique integration test를 추가했다.
+
+**반영**:
+- `tests/integration/test_optional_real_postgres_ops_constraints.py`를 추가했다.
+- `KRADDR_GEO_TEST_PG_DSN`이 없으면 skip하고, 설정되면 `SCHEMA_SQL`/`INDEX_SQL`을 실제 DB에 적용한 뒤 운영 메타데이터 제약을 검증한다.
+- `ops.audit_events.job_id` FK가 감사 이벤트가 붙은 `load_jobs` 삭제를 막는지 확인한다.
+- `ops.audit_events` append-only trigger가 `UPDATE`와 `DELETE`를 모두 막는지 확인한다.
+- `ops.serving_releases` active partial unique index가 active release 1건만 허용하고 pending release는 허용하는지 확인한다.
+- `ops.table_stats_snapshots.snapshot_id` FK가 잘못된 dataset snapshot 참조를 막고 유효한 참조는 허용하는지 확인한다.
+- PR #79 리뷰 Low 제안에 따라 DSN 대상 DB 이름 guard와 필수 extension package 사전 skip을 추가했다.
+- T-050/resume/tasks/CHANGELOG 문서를 T-050 완료 상태로 갱신했다.
+
+**검증**:
+- `ruff check tests/integration/test_optional_real_postgres_ops_constraints.py`
+- DSN 미설정: `pytest tests/integration/test_optional_real_postgres_ops_constraints.py -q` → `1 skipped`
+- 실제 Docker PostgreSQL 별도 DB `kraddr_geo_t050_ops_constraints`: `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t050_ops_constraints pytest tests/integration/test_optional_real_postgres_ops_constraints.py -q` → `1 passed`
+- 테스트 완료 후 별도 DB를 삭제했다.
+
+**후속**:
+- 이 PR merge 후 T-058 restore hot-swap으로 이어간다.
+
 ## 2026-05-29 09:15 (T-050 운영 hardening 6차 — destructive confirmation flow)
 
 **작업**: T-050 남은 항목 중 destructive confirmation flow를 기존 `db_restore` 위험 경로에 연결했다.
