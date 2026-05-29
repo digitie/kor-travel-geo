@@ -10,6 +10,7 @@
 - 디버그 UI가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 런타임 config로 읽고, `/admin/settings`에서 브라우저 저장값으로 수정·복원할 수 있게 했다.
 
 ### Fixed
+- 단독 구 이름 도로명주소 조회 보정: `수지구 성복1로 35`처럼 DB에는 `용인시 수지구`로 저장되어 있지만 사용자가 `구` 이름만 입력한 경우에도 exact 도로명 조회 실패 뒤 제한적인 suffix retry로 후보를 찾는다. 기본 lookup은 `sgg_nm = :sgg`를 유지하고, fallback은 선행 와일드카드 `LIKE` 없이 도로명/건물번호 exact 후보 안에서만 `right(sgg_nm, ...)`를 적용한다.
 - PR #69~#86 post-merge 리뷰 audit/fixup: PR #69부터 최신 PR #86까지 formal review와 review thread를 재확인했고 thread 0건을 기록했다. PR #84 리뷰 후속으로 GeoIP gate가 admission control보다 먼저 실행되도록 middleware 설치 순서를 바꾸고, `testclient` 호스트명 특별 허용을 제거했으며, `X-Forwarded-For`의 `host:port`/`[IPv6]:port` 표기를 파싱하도록 보강했다.
 - T-027 최종 클린 재적재 검증: 새 Docker compose project와 빈 pgdata에서 실제 전국 `data/juso`와 `20260401_dailyjusukrdata.zip`을 처음부터 적재했다. 전체 3,963초, `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`, smoke `OK`, active serving release `faa1f42b-f5b9-4ef0-af0b-1a422d938ed3`를 확인했다. `scripts/fullload_test.sh`는 선택 `DAILY_JUSO_ZIP`/`DAILY_YYYYMM` phase를 지원하며, C2/C4/C6/C7 data-quality CSV와 DB size snapshot을 문서화했다.
 - T-055 N150/Odroid 운영 환경 비교 준비: 장비 도착 전 수행 가능한 runbook과 산출물 구조를 확정하고, `scripts/capture_deployment_envelope.py`를 추가해 OS/CPU/메모리/NVMe/Docker/GDAL/PostgreSQL/fio/sysbench/zstd envelope를 `system-envelope.json/md`로 캡처한다. `fio`/`sysbench` probe는 `--run-probes`를 명시할 때만 실행하며, 실제 하드웨어 실측은 T-063으로 보류한다.

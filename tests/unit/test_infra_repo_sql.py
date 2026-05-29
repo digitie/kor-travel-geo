@@ -7,6 +7,7 @@ import pytest
 
 from kraddr.geo.api import _jobs
 from kraddr.geo.core.consistency_definitions import CASE_DEFINITIONS
+from kraddr.geo.core.normalize import AddrParts
 from kraddr.geo.dto.admin import ConsistencyCase, ConsistencyReport
 from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.infra import (
@@ -106,6 +107,20 @@ def test_optional_filters_cast_parameters_for_psycopg_type_inference() -> None:
     assert "CAST(:mnnm AS integer) IS NULL" in zip_sql
     assert "CAST(:include_bulk AS boolean)" in str(zip_repo._ZIP_BY_BD)
     assert "CAST(:query AS text) IS NULL" in pobox_sql
+
+
+def test_geocode_uses_separate_suffix_retry_for_district_only_compound_sigungu_names() -> None:
+    lookup_sql = str(geocode_repo._LOOKUP_ROAD)
+    suffix_sql = str(geocode_repo._LOOKUP_ROAD_SGG_SUFFIX)
+    source = inspect.getsource(geocode_repo.GeocodeRepository.lookup_by_road)
+
+    assert "sgg_nm LIKE '% ' || CAST(:sgg AS text)" not in lookup_sql
+    assert "right(sgg_nm, char_length(CAST(:sgg_suffix AS text)))" in suffix_sql
+    assert "_LOOKUP_ROAD_SGG_SUFFIX" in source
+    assert source.index("_LOOKUP_ROAD") < source.index("_LOOKUP_ROAD_SGG_SUFFIX")
+    assert geocode_repo._sgg_suffix(AddrParts(raw="", normalized="", sgg="수지구")) == "수지구"
+    assert geocode_repo._sgg_suffix(AddrParts(raw="", normalized="", sgg="용인시 수지구")) is None
+    assert geocode_repo._sgg_suffix(AddrParts(raw="", normalized="", sgg="용인시")) is None
 
 
 def test_reverse_repo_expands_both_address_type() -> None:

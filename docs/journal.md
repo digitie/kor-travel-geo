@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-30 00:55 (단독 구 이름 도로명주소 조회 보정)
+
+**작업**: `수지구 성복1로 35`처럼 시군구가 복합명(`용인시 수지구`)으로 저장되어 있지만 사용자가 단독 구 이름만 입력한 도로명주소 조회를 보정했다.
+
+**반영**:
+- 기본 도로명 exact lookup은 기존처럼 `sgg_nm = :sgg` 조건을 유지한다.
+- 정확 조회가 실패하고 입력 시군구가 공백 없는 단독 `구` 이름일 때만 별도 suffix retry를 1회 수행한다.
+- suffix retry는 선행 와일드카드 `LIKE`를 쓰지 않고, `rn_nrm`/건물번호 exact 조건으로 후보를 좁힌 뒤 `right(sgg_nm, char_length(:sgg_suffix))`를 적용한다.
+
+**검증**:
+- `수지구 성복1로 35`, `용인시 수지구 성복1로 35`, `경기도 용인시 수지구 성복1로 35`, `성복1로 35` 모두 실제 Docker DB에서 `OK` 확인
+- fallback query `EXPLAIN (ANALYZE, BUFFERS)` → `idx_mv_rn_nrm_exact` index scan, execution time 약 0.49ms
+- `ruff check src/kraddr/geo/infra/geocode_repo.py tests/unit/test_infra_repo_sql.py`
+- `pytest tests/unit/test_infra_repo_sql.py tests/unit/test_core_geocoder.py -q` → `23 passed`
+
 ## 2026-05-30 00:15 (VWorld 인증키 런타임 설정 UI)
 
 **작업**: VWorld 인증키를 `.env`에서 런타임으로 읽고, UI에서 저장·수정할 수 있도록 보강했다.
