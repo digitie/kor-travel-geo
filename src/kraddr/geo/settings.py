@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -48,6 +49,13 @@ class Settings(BaseSettings):
     api_explain_timeout_ms: int = Field(default=3_000, ge=1)
     api_max_concurrency: int | None = Field(default=None, ge=1)
     api_admission_timeout_ms: int = Field(default=30_000, ge=1)
+    geoip_db_path: Path | None = Path("data/geoip/GeoLite2-Country.mmdb")
+    geoip_gate_mode: Literal["strict", "permissive", "off"] = "strict"
+    geoip_allow_cidrs: Annotated[tuple[IPv4Network | IPv6Network, ...], NoDecode] = ()
+    geoip_deny_cidrs: Annotated[tuple[IPv4Network | IPv6Network, ...], NoDecode] = ()
+    geoip_open_paths: Annotated[tuple[str, ...], NoDecode] = ("/v1/healthz", "/metrics")
+    geoip_trusted_proxies: Annotated[tuple[IPv4Network | IPv6Network, ...], NoDecode] = ()
+    geoip_audit_denials: bool = True
 
     juso_api_key: SecretStr | None = None
     juso_search_url: str = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
@@ -127,6 +135,45 @@ class Settings(BaseSettings):
         if isinstance(value, (list, tuple, set)):
             return tuple(str(part).lower() for part in value)
         return (str(value).lower(),)
+
+    @field_validator(
+        "geoip_allow_cidrs",
+        "geoip_deny_cidrs",
+        "geoip_trusted_proxies",
+        mode="before",
+    )
+    @classmethod
+    def normalize_geoip_cidrs(cls, value: object) -> tuple[IPv4Network | IPv6Network, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, str):
+            return tuple(
+                ip_network(part.strip(), strict=False)
+                for part in value.split(",")
+                if part.strip()
+            )
+        if isinstance(value, (list, tuple, set)):
+            return tuple(ip_network(str(part), strict=False) for part in value)
+        return (ip_network(str(value), strict=False),)
+
+    @field_validator("geoip_open_paths", mode="before")
+    @classmethod
+    def normalize_geoip_open_paths(cls, value: object) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, str):
+            return tuple(part.strip() for part in value.split(",") if part.strip())
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(part) for part in value)
+        return (str(value),)
+
+    @field_validator("geoip_db_path", mode="before")
+    @classmethod
+    def normalize_geoip_db_path(cls, value: object) -> Path | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return Path(text) if text else None
 
 
 _settings: Settings | None = None

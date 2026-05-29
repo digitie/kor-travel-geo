@@ -19,6 +19,7 @@
 | `E0101` | 400 | 잘못된 주소 | 주소 문자열이 비어 있거나 정규화할 수 없음 |
 | `E0102` | 400 | 잘못된 좌표 | `(lon, lat)`가 한국 영역 밖이거나 좌표 순서가 틀림 |
 | `E0200` | 429 | rate limit | admission control 또는 외부 provider quota 보호 |
+| `E0403` | 403 | 지역 접근 제한 | T-054 GeoIP gate에서 한국 외 공용 IP 또는 DB 부재 strict 차단 |
 | `E0404` | 404 | 찾을 수 없음 | 대상 주소, job, artifact, report 없음 |
 | `E0409` | 409 | 동시 실행 충돌 | T-059 이후 같은 advisory lock key의 CLI/API 운영 작업이 이미 실행 중 |
 | `E0500` | 503 | DB 오류 | PostgreSQL 연결/쿼리 실패 |
