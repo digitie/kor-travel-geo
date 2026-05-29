@@ -35,6 +35,8 @@ NAVI_YYYYMM="${NAVI_YYYYMM:-${YYYYMM:-202604}}"
 SHP_YYYYMM="${SHP_YYYYMM:-${YYYYMM:-202604}}"
 ROADADDR_ENTRANCE_YYYYMM="${ROADADDR_ENTRANCE_YYYYMM:-202605}"
 SPPN_MAKAREA_YYYYMM="${SPPN_MAKAREA_YYYYMM:-202605}"
+DAILY_JUSO_ZIP="${DAILY_JUSO_ZIP:-}"
+DAILY_YYYYMM="${DAILY_YYYYMM:-}"
 PLAN_ONLY="${PLAN_ONLY:-0}"
 COPY_DATA="${COPY_DATA:-0}"
 PYTHON_BIN="${PYTHON:-python}"
@@ -171,6 +173,8 @@ echo "  NAVI_YYYYMM=$NAVI_YYYYMM"
 echo "  SHP_YYYYMM=$SHP_YYYYMM"
 echo "  ROADADDR_ENTRANCE_YYYYMM=$ROADADDR_ENTRANCE_YYYYMM"
 echo "  SPPN_MAKAREA_YYYYMM=$SPPN_MAKAREA_YYYYMM"
+echo "  DAILY_JUSO_ZIP=${DAILY_JUSO_ZIP:-'(not set; daily delta skipped)'}"
+echo "  DAILY_YYYYMM=${DAILY_YYYYMM:-'(infer from delta file)'}"
 echo "  PG_DSN=$PG_DSN"
 echo "  KRADDR_GEO_DB_PORT=$DB_PORT (used only when KRADDR_GEO_PG_DSN is unset)"
 if [ -d "$ROADADDR_ENTRANCE_DIR" ]; then
@@ -182,6 +186,10 @@ if [ -d "$SPPN_MAKAREA_DIR" ]; then
   echo "  SPPN_MAKAREA_DIR=$SPPN_MAKAREA_DIR"
 else
   echo "  SPPN_MAKAREA_DIR missing; optional SPPN makarea load will be skipped"
+fi
+if [ -n "$DAILY_JUSO_ZIP" ] && [ ! -f "$DAILY_JUSO_ZIP" ]; then
+  echo "MISSING: DAILY_JUSO_ZIP=$DAILY_JUSO_ZIP"
+  exit 1
 fi
 
 if [ "$PLAN_ONLY" = "1" ]; then
@@ -255,6 +263,21 @@ else
 fi
 SPPN_MAKAREA_ELAPSED=$(( $(date +%s) - PHASE_START ))
 echo "SPPN makarea phase completed in ${SPPN_MAKAREA_ELAPSED}s"
+
+log "=== Phase 3c: Daily delta (optional) ==="
+PHASE_START=$(date +%s)
+if [ -n "$DAILY_JUSO_ZIP" ]; then
+  DAILY_ARGS=("$DAILY_JUSO_ZIP")
+  if [ -n "$DAILY_YYYYMM" ]; then
+    DAILY_ARGS+=("--yyyymm" "$DAILY_YYYYMM")
+  fi
+  run "$KRADDR_GEO_BIN" load daily-juso "${DAILY_ARGS[@]}"
+  run "$KRADDR_GEO_BIN" load daily-parcel-links "${DAILY_ARGS[@]}"
+else
+  echo "SKIP: DAILY_JUSO_ZIP is not set"
+fi
+DAILY_ELAPSED=$(( $(date +%s) - PHASE_START ))
+echo "daily delta phase completed in ${DAILY_ELAPSED}s"
 
 log "=== Phase 4: Pobox + Bulk (optional) ==="
 POBOX="$DATA_DIR/epost/zipcode_full.zip"
