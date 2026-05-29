@@ -12,7 +12,7 @@ npm run dev
 
 기본 진입점은 `/debug/geocode`다. `KRADDR_GEO_API_INTERNAL_URL`은 서버 사이드 프록시가 사용할 백엔드 주소이고, 브라우저는 `NEXT_PUBLIC_API_BASE_URL` 기본값인 `/api/proxy`만 호출한다. 지오코딩/역지오코딩 디버그 화면은 `/v2/geocode`, `/v2/reverse` REST API를 사용하며, 관리·정규화·EXPLAIN 화면은 아직 `/v1/admin/*` 운영 API를 사용한다.
 
-`NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다.
+`NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다. 실행 중에는 `/api/runtime-config`가 `.env.local` 또는 컨테이너 환경변수의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽어 브라우저에 전달한다. `/admin/settings`에서 VWorld 인증키를 입력하면 브라우저 localStorage override로 저장되고, 기본값 버튼을 누르면 `.env` 기본값으로 되돌아간다.
 
 지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 현재 확인 SHA인 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정한다. T-044에서는 `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb` 기준 public API를 문서-only로 재확인했지만, npm registry에 0.1.0 package가 없어 dependency는 아직 바꾸지 않았다. 최신 upstream redaction helper는 `redactVWorldUrl()`이고, UI 내부에서는 기존 컴포넌트 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 사용한다.
 
@@ -46,6 +46,7 @@ docker run --rm \
   --add-host=host.docker.internal:host-gateway \
   -e KRADDR_GEO_API_INTERNAL_URL=http://host.docker.internal:8000 \
   -e NEXT_PUBLIC_API_BASE_URL=/api/proxy \
+  -e NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key \
   -p 3000:3000 \
   kraddr-geo-ui:debug-v2
 ```
