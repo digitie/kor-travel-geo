@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-28 갱신, by codex)
+## 현재 진척도 (2026-05-29 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ `main` 브랜치를 문서·repo 설정만 남도록 정리
@@ -109,12 +109,13 @@
 - ✅ PR #69~#75 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #75까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. 직접 반영 항목은 `maplibre-vworld` lockfile URL, consistency sample 조회 최적화, backup progress sample 캐시, release hook gate/count 보강, 운영 runbook 문서화다. 상세: `docs/postmerge-review-fixups-pr69-pr75.md`
 - ✅ T-050 운영 hardening 5차 — API lifespan 기반 opt-in scheduler로 `ops.table_stats_snapshots` 주기 capture를 추가했다. 기본 interval은 0으로 비활성화하고, 수동/주기 capture에서 `snapshot_id`를 생략하면 현재 active serving release snapshot에 자동 연결한다. 상세: `docs/t050-ops-hardening.md`
 - ✅ T-050 운영 hardening 6차 — `db_restore`의 `replace_current` 위험 경로를 active `restore` maintenance window와 typed confirmation에 연결했다. `target_dsn`은 허용하지 않고 target DB 이름은 현재 DB 이름과 같아야 하며 확인 문구는 `RESTORE <현재 DB 이름>`이다. 상세: `docs/t050-ops-hardening.md`
+- ✅ T-050 운영 hardening 7차 — 실제 PostgreSQL FK/trigger/partial unique integration test를 추가했다. `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 테스트가 `ops.audit_events.job_id` FK, append-only trigger, active release partial unique index, `ops.table_stats_snapshots.snapshot_id` FK를 실제 DB에서 검증한다. 별도 Docker DB `kraddr_geo_t050_ops_constraints`에서 `1 passed`를 확인했다. 상세: `docs/t050-ops-hardening.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 실제 PostgreSQL FK/trigger/partial unique integration test로 T-050을 닫는 것이다. 이후 사용자 최신 우선순위에 따라 T-058 restore hot-swap → T-059 CLI/Job 동시 실행 보호 → T-054 한국 IP gate → T-055 N150/Odroid 실측 준비를 진행한다.
+다음 작업은 T-058 restore hot-swap이다. 이후 사용자 최신 우선순위에 따라 T-059 CLI/Job 동시 실행 보호 → T-054 한국 IP gate → T-055 N150/Odroid 실측 준비를 진행한다.
 
-그 이후의 작업 후보는 사용자 최신 지시에 따라 T-058(restore hot-swap) → T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-055(N150/Odroid 실측) 순서다. T-027 최종 클린 적재 검증은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
+그 이후의 작업 후보는 사용자 최신 지시에 따라 T-059(CLI/Job 동시 실행 보호) → T-054(한국 IP만 허용) → T-055(N150/Odroid 실측) 순서다. T-027 최종 클린 적재 검증은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
@@ -126,7 +127,7 @@
 - 원천별 업데이트 시점은 서로 다를 수 있다. ADR-029/T-045 구현에 따라 새 full-load UX는 단일 `yyyymm`이 아니라 `source_set.yyyymm_by_kind`를 사용하며, 기준월이 섞이면 CLI/UI에서 정확한 `YYYYMM/... 혼합 적재 확인` 문구를 받아야 한다. API/라이브러리는 prompt 없이 `discover_load_sources()`와 `build_full_load_source_set_plan()`을 분리 제공한다. `/admin/load`는 업로드가 끝난 뒤 source set을 분석하고 `full_load_batch`의 명시 `children` payload를 등록한다.
 - T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. T-050 2차에서 callback HMAC/retry/backoff/attempt 기록을 보강했고, 3차에서 dump/archive/checksum/extract file size sampler를 완료했다. 4차에서는 restore 성공 시 pending restore release 후보를 기록한다. 남은 hardening은 restore 취소 시 target DB drop/quarantine 정책, 디스크 여유 공간 사전 추정, PostgreSQL/PostGIS major mismatch hard-fail이다. 전국 full-load 재실행은 후속 T-027에서 수행한다.
 - T-049 운영 메타데이터는 1차 구현 상태다. 현재 구현은 DDL/API/UI와 redacted audit event, maintenance window 생성/종료, table stats snapshot capture를 제공한다. T-050 4차에서 MV swap/restore 성공 지점을 `ops.dataset_snapshots`와 `ops.serving_releases`에 연결했고, 5차에서 table stats capture를 active serving snapshot에 자동 연결했다. 성능 리포트와 table stats trend 비교 UI는 후속으로 이어간다.
-- T-050은 PR #34~#47 리뷰 audit에서 남긴 운영 hardening 묶음이다. 1차 upload set cleanup TTL/참조 lock/grace period, 2차 callback HMAC/retry/replay protection, 3차 size 기반 backup/restore sub-progress, 4차 snapshot/release hook, 5차 table stats 주기 capture, 6차 destructive confirmation flow를 완료했다. 남은 항목은 실제 PostgreSQL constraint integration test다.
+- T-050은 PR #34~#47 리뷰 audit에서 남긴 운영 hardening 묶음이다. 1차 upload set cleanup TTL/참조 lock/grace period, 2차 callback HMAC/retry/replay protection, 3차 size 기반 backup/restore sub-progress, 4차 snapshot/release hook, 5차 table stats 주기 capture, 6차 destructive confirmation flow, 7차 실제 PostgreSQL constraint integration test까지 완료했다.
 - T-047 쿼리 성능 튜닝은 여러 기준선과 후속 측정이 쌓인 상태다. 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool64, REST worker/pool/admission exploratory grid와 candidate 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
 
 ## 작업 시작 전 확인할 것
