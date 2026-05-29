@@ -21,10 +21,13 @@ if TYPE_CHECKING:
 async def test_real_postgres_ops_constraints_when_dsn_is_set() -> None:
     dsn = os.getenv("KRADDR_GEO_TEST_PG_DSN")
     if not dsn:
-        pytest.skip("set KRADDR_GEO_TEST_PG_DSN to run actual PostgreSQL ops constraints")
+        pytest.skip(
+            "set KRADDR_GEO_TEST_PG_DSN to a disposable PostGIS-enabled test database"
+        )
 
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
+        await _require_disposable_postgis_database(engine)
         await _apply_schema(engine)
         async with engine.connect() as conn:
             outer = await conn.begin()
@@ -36,6 +39,47 @@ async def test_real_postgres_ops_constraints_when_dsn_is_set() -> None:
                 await outer.rollback()
     finally:
         await engine.dispose()
+
+
+async def _require_disposable_postgis_database(engine: AsyncEngine) -> None:
+    async with engine.connect() as conn:
+        database_name = await conn.scalar(text("SELECT current_database()"))
+        available_extensions = (
+            await conn.execute(
+                text(
+                    """
+SELECT name
+  FROM pg_available_extensions
+ WHERE name IN ('postgis', 'pg_trgm', 'unaccent', 'pg_stat_statements')
+"""
+                )
+            )
+        ).scalars()
+        missing_extensions = {
+            "postgis",
+            "pg_trgm",
+            "unaccent",
+            "pg_stat_statements",
+        } - set(available_extensions)
+
+    if database_name is None or not _looks_like_disposable_test_database(str(database_name)):
+        pytest.skip(
+            "KRADDR_GEO_TEST_PG_DSN must point to a disposable test database "
+            "whose name includes 'test' or starts with 'kraddr_geo_t'; "
+            f"got {database_name!r}"
+        )
+    if missing_extensions:
+        missing = ", ".join(sorted(missing_extensions))
+        pytest.skip(f"PostGIS test database is missing required extension packages: {missing}")
+
+
+def _looks_like_disposable_test_database(database_name: str) -> bool:
+    normalized = database_name.lower()
+    return (
+        "test" in normalized
+        or normalized.startswith("kraddr_geo_t")
+        or normalized.startswith("tmp_")
+    )
 
 
 async def _apply_schema(engine: AsyncEngine) -> None:

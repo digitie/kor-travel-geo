@@ -208,7 +208,7 @@ POST /v1/admin/restores
 
 ## 7차: 실제 PostgreSQL 제약 통합 테스트
 
-T-049/T-050의 운영 메타데이터는 단위 테스트에서 SQL 문자열과 repository 동작을 확인했지만, FK·trigger·partial unique index는 PostgreSQL catalog에 실제로 올라간 뒤에만 의미가 있다. 7차에서는 `KRADDR_GEO_TEST_PG_DSN`이 설정된 경우에만 실행되는 선택형 통합 테스트를 추가했다.
+T-049/T-050의 운영 메타데이터는 단위 테스트에서 SQL 문자열과 repository 동작을 확인했지만, FK·trigger·partial unique index는 PostgreSQL catalog에 실제로 올라간 뒤에만 의미가 있다. 7차에서는 `KRADDR_GEO_TEST_PG_DSN`이 설정된 경우에만 실행되는 선택형 통합 테스트를 추가했다. 이 DSN은 `postgis`, `pg_trgm`, `unaccent`, `pg_stat_statements` extension package를 사용할 수 있는 disposable test DB를 가리켜야 한다.
 
 ```bash
 KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t050_ops_constraints \
@@ -223,6 +223,11 @@ KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo
 - `ops.table_stats_snapshots.snapshot_id` FK가 없는 dataset snapshot 참조를 막고, 유효한 snapshot 참조는 저장되는지 확인한다.
 
 테스트 데이터는 하나의 outer transaction 안에 넣고 마지막에 rollback한다. 실패 기대 케이스는 savepoint로 감싸므로, 실제 PostgreSQL 오류가 발생해도 같은 테스트 안에서 다음 제약을 계속 확인할 수 있다. DDL과 index 적용은 기존 선택형 PostgreSQL 테스트와 동일하게 `SCHEMA_SQL`/`INDEX_SQL`을 사용한다.
+
+안전장치:
+
+- DSN 대상 DB 이름이 `test`를 포함하거나 `kraddr_geo_t*`, `tmp_*` 형태가 아니면 skip한다. `SCHEMA_SQL`/`INDEX_SQL`은 idempotent지만 DDL은 commit되므로 운영 DB 오지정을 방지하기 위한 guard다.
+- 필수 extension package가 없는 일반 PostgreSQL DB는 schema 적용 전에 skip한다.
 
 ### 7차 검증
 

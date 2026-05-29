@@ -13,6 +13,7 @@
 - `ops.audit_events` append-only trigger가 `UPDATE`와 `DELETE`를 모두 막는지 확인한다.
 - `ops.serving_releases` active partial unique index가 active release 1건만 허용하고 pending release는 허용하는지 확인한다.
 - `ops.table_stats_snapshots.snapshot_id` FK가 잘못된 dataset snapshot 참조를 막고 유효한 참조는 허용하는지 확인한다.
+- PR #79 리뷰 Low 제안에 따라 DSN 대상 DB 이름 guard와 필수 extension package 사전 skip을 추가했다.
 - T-050/resume/tasks/CHANGELOG 문서를 T-050 완료 상태로 갱신했다.
 
 **검증**:
