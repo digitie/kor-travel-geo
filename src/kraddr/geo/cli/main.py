@@ -57,6 +57,7 @@ jobs_app = typer.Typer(help="Inspect persistent load jobs.")
 uploads_app = typer.Typer(help="Maintain filesystem upload sets.")
 backup_app = typer.Typer(help="Create and inspect DB backup artifacts.")
 restore_app = typer.Typer(help="Restore DB backup artifacts.")
+serving_app = typer.Typer(help="Plan serving database release operations.")
 app.add_typer(load_app, name="load")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(validate_app, name="validate")
@@ -64,6 +65,7 @@ app.add_typer(jobs_app, name="jobs")
 app.add_typer(uploads_app, name="uploads")
 app.add_typer(backup_app, name="backup")
 app.add_typer(restore_app, name="restore")
+app.add_typer(serving_app, name="serving")
 
 
 @app.callback()
@@ -766,6 +768,33 @@ def create_restore(
                 asyncio.Event(),
                 _cli_progress,
             )
+
+    asyncio.run(run())
+
+
+@serving_app.command("hot-swap-plan")
+def serving_hot_swap_plan(
+    restore_database: str = typer.Option(..., "--restore-db"),
+    previous_alias: str | None = typer.Option(None, "--previous-alias"),
+    previous_alias_retention_days: int = typer.Option(
+        7,
+        "--previous-alias-retention-days",
+        min=1,
+        max=3650,
+    ),
+) -> None:
+    """Print a restore hot-swap preflight plan without executing ALTER DATABASE."""
+
+    from kraddr.geo.dto.admin import RestoreHotSwapPlanRequest
+
+    async def run() -> None:
+        req = RestoreHotSwapPlanRequest(
+            restore_database=restore_database,
+            previous_alias=previous_alias,
+            previous_alias_retention_days=previous_alias_retention_days,
+        )
+        async with AsyncAddressClient() as client:
+            typer.echo((await client.restore_hot_swap_plan(req)).model_dump_json())
 
     asyncio.run(run())
 

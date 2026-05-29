@@ -2,9 +2,9 @@
 
 ## 상태
 
-- 상태: 설계 (구현 전, 일부 반영 가능성 확인 필요)
-- 대상 브랜치: `agent/<agent>-t058-*`
-- 관련 ADR: ADR-036(예정), ADR-030(amend 가능성)
+- 상태: 1차 구현 완료 (hot-swap plan/preflight API·CLI)
+- 대상 브랜치: `codex/t058-restore-hot-swap`
+- 관련 ADR: ADR-036, ADR-030(amend)
 - 사용자 RFC: 2026-05-27 — "리스토어 시 핫스왑과 유사한 방식 → 반영되어 있으면 스킵."
 
 ## 현황 확인 (먼저 스킵 가능 여부 검토)
@@ -18,7 +18,7 @@
 
 → 현재 명문화된 정책은 "**새 빈 DB 복원만 기본 지원**"이고, 운영 serving DB로의 즉시 전환(hot-swap)은 **별도 위험 경로**로만 언급되어 있으며 절차 자체는 미명문화 상태다.
 
-**결론**: T-058은 스킵하지 않고 진행한다. 명문화되지 않은 hot-swap 패턴을 두 가지 옵션(DB rename / DSN switch)으로 비교 + 절차화 + `ops.serving_releases`/`ops.maintenance_windows`와 연계한다.
+**결론**: T-058은 스킵하지 않고 진행했다. 명문화되지 않은 hot-swap 패턴을 두 가지 옵션(DB rename / DSN switch)으로 비교했고, 1차 구현에서는 실제 rename 실행 전 운영자가 확인해야 하는 plan/preflight 표면을 API·CLI로 제공한다.
 
 ## 목적
 
@@ -190,41 +190,47 @@ async def rollback_hot_swap(release_id: UUID) -> HotSwapResult:
 
 `previous_alias` 보존 기간 동안만 rollback 가능. 보존 기간(예: 7일) 후 자동 삭제 또는 운영자 명시 삭제.
 
-## REST 표면
+## 1차 구현 표면
+
+### REST
 
 ```text
-POST /v1/admin/restores/{job_id}/hot-swap
-   - body: { "previous_alias_retention_days": 7, "confirmation_token": "..." }
-   - 응답: HotSwapResult
-
-POST /v1/admin/serving-releases/{release_id}/rollback
-   - body: { "confirmation_token": "..." }
-   - 응답: HotSwapResult (new rollback release)
-
-GET  /v1/admin/serving-releases
-   - active release + rollback candidates 표시
+POST /v1/admin/restores/hot-swap-plan
+{
+  "restore_database": "kraddr_geo_restore_20260529",
+  "previous_alias_retention_days": 7
+}
 ```
 
-확장:
+응답은 다음을 포함한다.
+
+- `current_database`: 현재 `KRADDR_GEO_PG_DSN`의 DB 이름
+- `restore_database`: rename 대상 복원본 DB
+- `previous_alias`: 현재 DB를 보존할 alias
+- `maintenance_database`: `ALTER DATABASE ... RENAME`을 실행할 maintenance 연결 DB (`postgres`)
+- `typed_confirmation`: maintenance window 생성/실행 시 사용할 확인 문구 (`HOT_SWAP <current> FROM <restore>`)
+- `rollback_confirmation`: alias 보존 기간 안에 수동 rollback할 때 사용할 확인 문구
+- `can_execute`, `blockers`: 현재 cluster 안 DB 존재 여부와 alias 충돌 검증 결과
+- `steps`, `sql`: 운영자가 리뷰할 절차와 SQL
+
+실제 rename은 1차 API에서 자동 실행하지 않는다. `SCHEMA_SQL`/ops metadata가 어느 DB에 기록되는지, application worker별 engine refresh가 어떻게 전파되는지, 실패 시 자동 rollback 기준을 별도 검증해야 하기 때문이다. 대신 plan은 정확한 SQL과 typed confirmation을 제공해 운영자가 maintenance window를 열고 수동으로 수행하거나, 후속 실행 API에서 같은 계약을 재사용할 수 있게 한다.
+
+후속 확장:
 
 - 같은 maintenance window 안에서 hot-swap → smoke → (자동) rollback 시도 시퀀스.
 - `/v1/admin/restores/{job_id}` 응답에 "hot-swap 가능 여부" 필드.
+- `POST /v1/admin/restores/{job_id}/hot-swap`: plan과 같은 typed confirmation을 받아 실제 rename을 수행.
+- `POST /v1/admin/serving-releases/{release_id}/rollback`: `previous_alias` 보존 기간 안 rollback 수행.
 
-## CLI
+### CLI
 
 ```bash
-# 사전: backup/restore로 복원본 DB 준비된 상태
-kraddr-geo serving hot-swap \
+kraddr-geo serving hot-swap-plan \
   --restore-db kraddr_geo_restore_20260527_123456 \
-  --confirmation "restore_hot_swap kraddr_geo from kraddr_geo_restore_20260527_123456" \
   --previous-alias-retention-days 7
-
-# rollback
-kraddr-geo serving rollback --release-id <release_id> \
-  --confirmation "rollback serving_release <release_id>"
 ```
 
-`--confirmation`은 typed text. 그 hash가 `ops.maintenance_windows.confirmation_hash`와 일치해야 함(ADR-033 패턴).
+CLI는 REST와 같은 `RestoreHotSwapPlan` JSON을 출력한다. `typed_confirmation`을 그대로 사용해 `ops.maintenance_windows(kind='restore')`를 열고, `sql` 배열을 운영자가 실행 전 리뷰한다.
 
 ## audit / release / window 연계 (T-049)
 
@@ -246,10 +252,11 @@ kraddr-geo serving rollback --release-id <release_id> \
 
 ## 검증 기준
 
-- 통합 테스트: 대구광역시 부분 DB 적재 + T-046 backup + 새 DB 복원 + hot-swap + smoke + rollback. WSL Docker PostGIS에서 end-to-end.
-- 단위 테스트: HotSwapResult DTO, `confirmation_token` 검증, `previous_alias` naming, audit event 기록 형식.
-- 동시성: 두 hot-swap이 같은 maintenance window에서 동시 시작 시 두 번째는 fail-fast(active maintenance window는 1건).
-- rollback round-trip: 같은 release pair에 대한 swap + rollback이 데이터/release lineage를 정확히 보존.
+- 1차 구현 단위 테스트: `RestoreHotSwapPlan` DTO, typed confirmation, rollback confirmation, `previous_alias` naming, SQL command 순서, blocker 산출.
+- 1차 구현 API/OpenAPI: `/v1/admin/restores/hot-swap-plan` schema export와 frontend type generation drift 없음.
+- 후속 실행 통합 테스트: 대구광역시 부분 DB 적재 + T-046 backup + 새 DB 복원 + hot-swap + smoke + rollback. WSL Docker PostGIS에서 end-to-end.
+- 후속 동시성: 두 hot-swap이 같은 maintenance window에서 동시 시작 시 두 번째는 fail-fast(active maintenance window와 advisory lock 조합).
+- 후속 rollback round-trip: 같은 release pair에 대한 swap + rollback이 데이터/release lineage를 정확히 보존.
 
 ## 남은 위험
 

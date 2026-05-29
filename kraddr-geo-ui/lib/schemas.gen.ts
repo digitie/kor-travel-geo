@@ -51,6 +51,8 @@ export const apiSchemaNames = [
   "RegionHint",
   "RegionV2",
   "RestoreCreateRequest",
+  "RestoreHotSwapPlan",
+  "RestoreHotSwapPlanRequest",
   "ResultSource",
   "ReverseExtension",
   "ReverseInput",

@@ -3681,6 +3681,116 @@
         "title": "RestoreCreateRequest",
         "type": "object"
       },
+      "RestoreHotSwapPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "blockers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "can_execute": {
+            "default": false,
+            "title": "Can Execute",
+            "type": "boolean"
+          },
+          "current_database": {
+            "title": "Current Database",
+            "type": "string"
+          },
+          "maintenance_database": {
+            "title": "Maintenance Database",
+            "type": "string"
+          },
+          "previous_alias": {
+            "title": "Previous Alias",
+            "type": "string"
+          },
+          "previous_alias_retention_days": {
+            "minimum": 1.0,
+            "title": "Previous Alias Retention Days",
+            "type": "integer"
+          },
+          "restore_database": {
+            "title": "Restore Database",
+            "type": "string"
+          },
+          "rollback_confirmation": {
+            "title": "Rollback Confirmation",
+            "type": "string"
+          },
+          "sql": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sql",
+            "type": "array"
+          },
+          "steps": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "typed_confirmation": {
+            "title": "Typed Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_database",
+          "restore_database",
+          "previous_alias",
+          "maintenance_database",
+          "typed_confirmation",
+          "rollback_confirmation",
+          "previous_alias_retention_days"
+        ],
+        "title": "RestoreHotSwapPlan",
+        "type": "object"
+      },
+      "RestoreHotSwapPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "previous_alias": {
+            "anyOf": [
+              {
+                "maxLength": 63,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Alias"
+          },
+          "previous_alias_retention_days": {
+            "default": 7,
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Previous Alias Retention Days",
+            "type": "integer"
+          },
+          "restore_database": {
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Restore Database",
+            "type": "string"
+          }
+        },
+        "required": [
+          "restore_database"
+        ],
+        "title": "RestoreHotSwapPlanRequest",
+        "type": "object"
+      },
       "ResultSource": {
         "enum": [
           "local",
@@ -8603,6 +8713,47 @@
           }
         },
         "summary": "Submit Restore",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/restores/hot-swap-plan": {
+      "post": {
+        "operationId": "restore_hot_swap_plan_v1_admin_restores_hot_swap_plan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreHotSwapPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreHotSwapPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Hot Swap Plan",
         "tags": [
           "admin"
         ]

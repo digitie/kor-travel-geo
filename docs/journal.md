@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 11:05 (T-058 restore hot-swap plan/preflight)
+
+**작업**: T-058의 restore hot-swap 패턴을 실제 rename 실행 전 plan/preflight 표면으로 구현했다.
+
+**반영**:
+- `RestoreHotSwapPlanRequest`/`RestoreHotSwapPlan` DTO를 추가했다.
+- `infra/hotswap.py`에서 current DB, restore DB, previous alias, maintenance DB, typed confirmation, rollback confirmation, blocker, SQL/steps를 산출한다.
+- `/v1/admin/restores/hot-swap-plan` API와 `AsyncAddressClient.restore_hot_swap_plan()`을 추가했다.
+- `kraddr-geo serving hot-swap-plan` CLI를 추가했다.
+- OpenAPI와 `kraddr-geo-ui` 생성 타입을 갱신했다.
+- 실제 `ALTER DATABASE ... RENAME` 실행은 ops metadata 위치와 worker별 engine refresh/rollback round-trip 검증이 더 필요해 후속 실행 표면으로 분리하고, T-058 문서에 명시했다.
+
+**검증 예정**:
+- hot-swap plan 단위 테스트, DTO/API/OpenAPI drift, backend/frontend gate를 실행한 뒤 PR을 올린다.
+
+**후속**:
+- 이 PR merge 후 T-059 CLI/Job 동시 실행 보호 표준화로 이어간다.
+
 ## 2026-05-29 09:45 (T-050 운영 hardening 7차 — 실제 PostgreSQL 제약 통합 테스트)
 
 **작업**: T-050 마지막 항목인 실제 PostgreSQL FK/trigger/partial unique integration test를 추가했다.
