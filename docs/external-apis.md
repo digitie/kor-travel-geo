@@ -47,7 +47,7 @@ async with httpx.AsyncClient(timeout=5.0) as cx:
 
 ## vworld WMTS + MapLibre (프론트엔드)
 
-`kraddr-geo-ui`의 지도는 Kakao Maps SDK가 아니라 MapLibre GL JS + VWorld WMTS를 사용한다. 지도 타일은 브라우저에서 직접 호출되므로 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 이 값은 브라우저 번들에 들어가는 공개 키이며 저장소 문서·예시에는 실제 키를 쓰지 않는다.
+`kraddr-geo-ui`의 지도는 Kakao Maps SDK가 아니라 MapLibre GL JS + VWorld WMTS를 사용한다. 지도 타일은 브라우저에서 직접 호출되므로 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 이 값은 공개 키이며 저장소 문서·예시에는 실제 키를 쓰지 않는다. UI는 `/api/runtime-config`에서 서버 런타임 env를 읽고, `/admin/settings`에서 브라우저 localStorage override를 저장·수정할 수 있다.
 
 - **발급처**: 서버측 vworld OpenAPI 키와 동일하게 https://www.vworld.kr/dev/v4api.do
 - **권장 분리**: 서버측 폴백 키(`KRADDR_GEO_VWORLD_API_KEY`)와 프론트엔드 WMTS 키(`NEXT_PUBLIC_VWORLD_API_KEY`)를 분리한다. 로컬 개발용 키에는 `localhost:3000`, `127.0.0.1:3000`만 등록하고 운영 키에는 내부망 도메인만 등록한다.

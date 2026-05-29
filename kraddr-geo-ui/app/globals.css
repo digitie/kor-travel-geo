@@ -459,6 +459,40 @@ textarea {
   font-size: 10px;
 }
 
+.settings-status {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-status div {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+  padding-bottom: 10px;
+}
+
+.settings-status span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-status strong {
+  font-size: 14px;
+}
+
+.settings-icon {
+  align-items: center;
+  background: #eef6f5;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--brand);
+  display: grid;
+  height: 56px;
+  justify-items: center;
+  margin-top: 16px;
+  width: 56px;
+}
+
 .map-marker {
   background: #fff;
   border: 1px solid var(--line);

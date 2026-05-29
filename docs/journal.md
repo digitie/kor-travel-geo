@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-30 00:15 (VWorld 인증키 런타임 설정 UI)
+
+**작업**: VWorld 인증키를 `.env`에서 런타임으로 읽고, UI에서 저장·수정할 수 있도록 보강했다.
+
+**반영**:
+- `/api/runtime-config`가 서버 런타임의 `NEXT_PUBLIC_VWORLD_API_KEY`를 `no-store` JSON으로 반환한다.
+- `VWorldKeyProvider`가 `.env` 기본값을 읽고, 브라우저 localStorage override가 있으면 그 값을 우선 적용한다.
+- `/admin/settings`에서 인증키 입력, 저장, `.env` 기본값 복원을 지원한다.
+- `CoordinateMap`은 기존 build-time `process.env` 직접 참조 대신 provider의 런타임 키를 사용한다.
+
+**검증**:
+- `npm run lint`
+- `npm run type-check`
+- `npm run test` → `33 passed`
+- `npm run build`
+- `docker build -t kraddr-geo-ui:debug-v2 ./kraddr-geo-ui`
+- Docker UI `/api/runtime-config` → 사용자 제공 VWorld 키 반환 확인
+- Docker UI `/api/proxy/v2/geocode` smoke `OK`
+- Windows Playwright: `8 passed`
+
 ## 2026-05-29 23:20 (디버그 UI v2 REST 전환과 Windows Playwright e2e)
 
 **작업**: 디버그 UI의 geocode/reverse 화면이 v2 REST API를 직접 사용하는지 재확인하고, v1 기반 호출을 v2 요청 body 중심으로 전환했다.

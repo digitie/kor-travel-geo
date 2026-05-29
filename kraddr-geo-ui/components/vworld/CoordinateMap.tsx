@@ -14,6 +14,7 @@ import {
   redactVWorldTileUrl,
   type VWorldLayerType
 } from "@/lib/vworld";
+import { useVWorldApiKey } from "@/lib/vworld-key";
 
 export type Coordinate = {
   x: number;
@@ -39,10 +40,10 @@ export function CoordinateMap({
   onClick?: (point: Coordinate) => void;
   layerType?: VWorldLayerType;
 }) {
-  const apiKey = process.env.NEXT_PUBLIC_VWORLD_API_KEY;
+  const { apiKey, loading } = useVWorldApiKey();
 
   if (!apiKey) {
-    return <CoordinateFallback point={point} note="VWorld API 키 미설정" />;
+    return <CoordinateFallback point={point} note={loading ? "VWorld API 키 확인 중" : "VWorld API 키 미설정"} />;
   }
 
   return <LoadedCoordinateMap apiKey={apiKey} layerType={layerType} onClick={onClick} point={point} />;

@@ -80,7 +80,7 @@ NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key           # 브라우저 노출, 
 
 `KRADDR_GEO_API_INTERNAL_URL`은 `NEXT_PUBLIC_` 접두사가 없어 서버 사이드에서만 접근 가능. 인증/시크릿은 두지 않는다(ADR-013).
 
-`NEXT_PUBLIC_VWORLD_API_KEY` 발급은 `docs/external-apis.md` VWorld 프론트엔드 지도 항목 참조. 브라우저 번들에 포함되는 공개 키이므로 저장소에는 실제 값을 커밋하지 않고, VWorld 콘솔에서 로컬/스테이징/운영 도메인을 각각 제한한다.
+`NEXT_PUBLIC_VWORLD_API_KEY` 발급은 `docs/external-apis.md` VWorld 프론트엔드 지도 항목 참조. 저장소에는 실제 값을 커밋하지 않고, VWorld 콘솔에서 로컬/스테이징/운영 도메인을 각각 제한한다. UI는 이 값을 빌드 타임 상수로 직접 박지 않고 `/api/runtime-config`에서 런타임에 읽는다. `/admin/settings`는 `.env` 기본값을 보여 주고, 사용자가 저장한 값은 브라우저 localStorage override로 적용한다. 기본값 버튼은 override를 지우고 `.env` 값으로 되돌린다.
 
 ## A3. 공통 기반
 
@@ -223,8 +223,9 @@ Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우
 | `/admin/consistency` | C1~C10 정합성 리포트 조회·재검증 | `GET/POST /v1/admin/consistency*` |
 | `/admin/backups` | DB 백업/복원 작업, 진행률, callback 상태, artifact 다운로드 | `POST/GET /v1/admin/backups`, `POST /v1/admin/restores`, `GET /v1/admin/jobs/{id}/events` |
 | `/admin/performance` | 전국 DB query benchmark 결과, p95/p99 threshold, slow plan 조회 | `POST/GET /v1/admin/performance/benchmarks*` |
+| `/admin/settings` | VWorld 인증키 확인·브라우저 override 저장·기본값 복원 | `GET /api/runtime-config` |
 
-`/admin/postal`, `/admin/settings`, WebSocket log stream은 문서상 장기 후보였지만 PR #12 구현 범위에는 넣지 않았다. 후속 PR에서 별도 백엔드 표면을 먼저 확정한 뒤 추가한다.
+`/admin/postal`과 WebSocket log stream은 문서상 장기 후보였지만 PR #12 구현 범위에는 넣지 않았다. 후속 PR에서 별도 백엔드 표면을 먼저 확정한 뒤 추가한다.
 
 ### `/admin/load` 상태 머신
 

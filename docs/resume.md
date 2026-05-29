@@ -119,6 +119,7 @@
 - ✅ PR #69~#86 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #86까지 formal review와 review thread를 재확인했고 thread 0건을 기록했다. PR #84 리뷰 후속으로 GeoIP gate를 admission control보다 먼저 실행하도록 순서를 바꾸고, `testclient` 특별 허용 제거와 `X-Forwarded-For` port 표기 파싱을 보강했다. 상세: `docs/postmerge-review-fixups-pr69-pr86.md`
 - ✅ Python 라이브러리 API v2 단일화 — `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답의 표준 Python API로 승격하고, `geocode_v2/reverse_v2/search_v2/reverse_geocode` 공개 메서드를 제거했다. REST `/v1/*`는 내부 어댑터로 vworld 호환 응답을 유지한다. ADR-039와 `docs/api-reference/`를 갱신했다.
 - ✅ 디버그 UI v2 REST 전환 — `/debug/geocode`와 `/debug/reverse`를 `/v2/geocode`, `/v2/reverse` POST body 기반으로 전환하고, proxy가 `/v1/*`와 `/v2/*`를 모두 허용하도록 보강했다. Docker image `kraddr-geo-ui:debug-v2` 실행과 Windows Playwright e2e 6개를 통과시켰다.
+- ✅ VWorld 인증키 런타임 설정 UI — `/api/runtime-config`가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽고, `/admin/settings`에서 브라우저 localStorage override로 저장·수정·기본값 복원을 지원한다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 
@@ -132,6 +133,7 @@
 - PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
 - 디버그 UI의 실제 브라우저 회귀는 `kraddr-geo-ui` Docker image를 띄운 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test`로 실행한다. WSL Playwright는 공유 라이브러리 차이로 보조 검증에만 쓴다.
+- VWorld 지도 키는 `kraddr-geo-ui/.env.local` 또는 Docker `NEXT_PUBLIC_VWORLD_API_KEY` runtime env에서 읽는다. `/admin/settings`의 저장값은 브라우저 localStorage override이며 저장소에 커밋하지 않는다.
 
 ## 작업 시작 전 확인할 것
 

@@ -7,6 +7,7 @@
 - T-020 연계: `openapi.json` 기반 타입 생성 스크립트 추가.
 - Playwright e2e 테스트를 추가해 `/debug/geocode`, `/debug/reverse`의 v2 REST 요청 body와 입력 검증을 브라우저에서 확인한다.
 - Docker image 실행을 위한 `Dockerfile`과 `.dockerignore`를 추가한다.
+- `/api/runtime-config`와 `/admin/settings`를 추가해 `.env`의 VWorld 인증키를 런타임에 읽고, 브라우저에서 저장·수정할 수 있게 한다.
 - MapLibre GL JS + VWorld WMTS 기반 좌표 지도 컴포넌트와 key 미설정 fallback 프리뷰 추가.
 - VWorld 지도 컴포넌트 dynamic import wrapper와 skeleton 테스트 추가.
 - `digitie/maplibre-vworld-js` 연동 원칙 문서화: 패키징·타입·Next.js 호환 문제가 나오면 UI workaround만 두지 않고 upstream도 적극 수정한다.
