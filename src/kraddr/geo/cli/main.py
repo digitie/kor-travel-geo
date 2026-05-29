@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -14,6 +15,12 @@ from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.infra.admin_repo import AdminRepository
 from kraddr.geo.infra.backup import run_backup_job, run_restore_job
+from kraddr.geo.infra.concurrency import (
+    AdvisoryLockKey,
+    AdvisoryLockNamespace,
+    ConcurrentExecutionError,
+    cross_process_lock,
+)
 from kraddr.geo.infra.source_set import (
     build_full_load_source_set_plan,
     confirmation_token_for,
@@ -47,6 +54,8 @@ from kraddr.geo.settings import get_settings
 from kraddr.geo.version import __version__
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncEngine
+
     from kraddr.geo.dto.admin import SourceSetDiscovery
 
 app = typer.Typer(help="kraddr-geo command line tools.")
@@ -68,6 +77,39 @@ app.add_typer(restore_app, name="restore")
 app.add_typer(serving_app, name="serving")
 
 
+async def _run_with_cli_lock[T](
+    engine: AsyncEngine,
+    key: AdvisoryLockKey,
+    operation: Callable[[], Awaitable[T]],
+) -> T:
+    try:
+        async with cross_process_lock(engine, key):
+            return await operation()
+    except ConcurrentExecutionError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(2) from exc
+
+
+def _global_lock(namespace: AdvisoryLockNamespace) -> AdvisoryLockKey:
+    return AdvisoryLockKey.global_key(namespace)
+
+
+def _path_lock(namespace: AdvisoryLockNamespace, path: Path) -> AdvisoryLockKey:
+    return AdvisoryLockKey.for_resource(namespace, path.expanduser().resolve(strict=False))
+
+
+def _value_lock(namespace: AdvisoryLockNamespace, value: object) -> AdvisoryLockKey:
+    return AdvisoryLockKey.for_resource(namespace, value)
+
+
+def _shp_namespace(mode: str) -> AdvisoryLockNamespace:
+    return (
+        AdvisoryLockNamespace.LOAD_SHP_DELTA
+        if mode.lower() == "delta"
+        else AdvisoryLockNamespace.LOAD_SHP_POLYGONS
+    )
+
+
 @app.callback()
 def main(
     version: bool = typer.Option(False, "--version", help="Show version and exit."),
@@ -86,27 +128,36 @@ def init_db() -> None:
 
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            for sql in iter_sql_statements(SCHEMA_SQL):
-                async with client.engine.begin() as conn:
-                    await conn.execute(sa_text(sql))
-
+            assert client._engine() is not None
             warnings = 0
-            for sql in iter_sql_statements(INDEX_SQL):
-                try:
-                    async with client.engine.begin() as conn:
-                        await conn.execute(sa_text(sql))
-                except Exception as exc:
-                    warnings += 1
-                    typer.echo(f"  index warning (may already exist): {exc}")
 
-            for sql in iter_sql_statements(MV_SQL):
-                try:
-                    async with client.engine.begin() as conn:
+            async def operation() -> None:
+                nonlocal warnings
+                for sql in iter_sql_statements(SCHEMA_SQL):
+                    async with client._engine().begin() as conn:
                         await conn.execute(sa_text(sql))
-                except Exception as exc:
-                    warnings += 1
-                    typer.echo(f"  mv warning (may already exist): {exc}")
+
+                for sql in iter_sql_statements(INDEX_SQL):
+                    try:
+                        async with client._engine().begin() as conn:
+                            await conn.execute(sa_text(sql))
+                    except Exception as exc:
+                        warnings += 1
+                        typer.echo(f"  index warning (may already exist): {exc}")
+
+                for sql in iter_sql_statements(MV_SQL):
+                    try:
+                        async with client._engine().begin() as conn:
+                            await conn.execute(sa_text(sql))
+                    except Exception as exc:
+                        warnings += 1
+                        typer.echo(f"  mv warning (may already exist): {exc}")
+
+            await _run_with_cli_lock(
+                client._engine(),
+                _global_lock(AdvisoryLockNamespace.INIT_DB),
+                operation,
+            )
 
         if warnings:
             typer.echo(f"init-db: schema created with {warnings} warning(s).")
@@ -129,8 +180,12 @@ def _warn_limit_per_file(limit_per_file: int | None) -> None:
 def load_juso(path: Path, yyyymm: str | None = typer.Option(None, "--yyyymm")) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            count = await load_juso_hangul(client.engine, path, source_yyyymm=yyyymm)
+            assert client._engine() is not None
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_JUSO_TEXT, path),
+                lambda: load_juso_hangul(client._engine(), path, source_yyyymm=yyyymm),
+            )
             typer.echo(f"loaded tl_juso_text rows: {count}")
 
     asyncio.run(run())
@@ -146,12 +201,16 @@ def load_daily_juso_command(
 
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            result = await load_daily_juso_delta(
-                client.engine,
-                path,
-                source_yyyymm=yyyymm,
-                limit_per_file=limit_per_file,
+            assert client._engine() is not None
+            result = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_DAILY_JUSO, path),
+                lambda: load_daily_juso_delta(
+                    client._engine(),
+                    path,
+                    source_yyyymm=yyyymm,
+                    limit_per_file=limit_per_file,
+                ),
             )
             typer.echo(
                 "loaded daily tl_juso_text delta: "
@@ -177,13 +236,17 @@ def load_parcel_links_command(
 
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            result = await load_juso_parcel_link_snapshot(
-                client.engine,
-                path,
-                source_yyyymm=yyyymm,
-                limit_per_file=limit_per_file,
-                replace=not append,
+            assert client._engine() is not None
+            result = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_PARCEL_LINK, path),
+                lambda: load_juso_parcel_link_snapshot(
+                    client._engine(),
+                    path,
+                    source_yyyymm=yyyymm,
+                    limit_per_file=limit_per_file,
+                    replace=not append,
+                ),
             )
             typer.echo(
                 "loaded tl_juso_parcel_link snapshot: "
@@ -205,12 +268,16 @@ def load_daily_parcel_links_command(
 
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            result = await load_daily_parcel_link_delta(
-                client.engine,
-                path,
-                source_yyyymm=yyyymm,
-                limit_per_file=limit_per_file,
+            assert client._engine() is not None
+            result = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_DAILY_PARCEL, path),
+                lambda: load_daily_parcel_link_delta(
+                    client._engine(),
+                    path,
+                    source_yyyymm=yyyymm,
+                    limit_per_file=limit_per_file,
+                ),
             )
             typer.echo(
                 "loaded daily tl_juso_parcel_link delta: "
@@ -235,13 +302,17 @@ def load_roadaddr_entrances_command(
 
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            result = await load_roadaddr_entrances(
-                client.engine,
-                path,
-                source_yyyymm=yyyymm,
-                limit_per_file=limit_per_file,
-                replace=not append,
+            assert client._engine() is not None
+            result = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_ROADADDR_ENTRANCES, path),
+                lambda: load_roadaddr_entrances(
+                    client._engine(),
+                    path,
+                    source_yyyymm=yyyymm,
+                    limit_per_file=limit_per_file,
+                    replace=not append,
+                ),
             )
             typer.echo(
                 "loaded tl_roadaddr_entrc snapshot: "
@@ -258,8 +329,12 @@ def load_roadaddr_entrances_command(
 def load_locsum_command(path: Path, yyyymm: str | None = typer.Option(None, "--yyyymm")) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            count = await load_locsum(client.engine, path, source_yyyymm=yyyymm)
+            assert client._engine() is not None
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_LOCSUM, path),
+                lambda: load_locsum(client._engine(), path, source_yyyymm=yyyymm),
+            )
             typer.echo(f"loaded tl_locsum_entrc rows: {count}")
 
     asyncio.run(run())
@@ -269,8 +344,12 @@ def load_locsum_command(path: Path, yyyymm: str | None = typer.Option(None, "--y
 def load_navi_command(path: Path, yyyymm: str | None = typer.Option(None, "--yyyymm")) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            build_count, entrance_count = await load_navi(client.engine, path, source_yyyymm=yyyymm)
+            assert client._engine() is not None
+            build_count, entrance_count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_NAVI, path),
+                lambda: load_navi(client._engine(), path, source_yyyymm=yyyymm),
+            )
             typer.echo(
                 f"loaded tl_navi_buld_centroid rows: {build_count}, "
                 f"tl_navi_entrc rows: {entrance_count}"
@@ -287,12 +366,16 @@ def load_shp_command(
 ) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            count = await load_shp_polygons(
-                client.engine,
-                path,
-                mode=mode,
-                source_yyyymm=yyyymm,
+            assert client._engine() is not None
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(_shp_namespace(mode), path),
+                lambda: load_shp_polygons(
+                    client._engine(),
+                    path,
+                    mode=mode,
+                    source_yyyymm=yyyymm,
+                ),
             )
             typer.echo(f"loaded SHP layers: {count}")
 
@@ -308,18 +391,26 @@ def load_shp_all_command(
     async def run() -> None:
         total = 0
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            items = _shp_all_work_items(root, mode)
-            for index, (sido_dir, effective_mode) in enumerate(items):
-                count = await load_shp_polygons(
-                    client.engine,
-                    sido_dir,
-                    mode=effective_mode,
-                    source_yyyymm=yyyymm,
-                    analyze=index == len(items) - 1,
-                )
-                total += count
-                typer.echo(f"{sido_dir.name}: {count} layers")
+            assert client._engine() is not None
+            async def operation() -> None:
+                nonlocal total
+                items = _shp_all_work_items(root, mode)
+                for index, (sido_dir, effective_mode) in enumerate(items):
+                    count = await load_shp_polygons(
+                        client._engine(),
+                        sido_dir,
+                        mode=effective_mode,
+                        source_yyyymm=yyyymm,
+                        analyze=index == len(items) - 1,
+                    )
+                    total += count
+                    typer.echo(f"{sido_dir.name}: {count} layers")
+
+            await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(_shp_namespace(mode), root),
+                operation,
+            )
         typer.echo(f"loaded SHP layers total: {total}")
 
     asyncio.run(run())
@@ -333,12 +424,16 @@ def load_sppn_makarea_command(
 ) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            count = await load_sppn_makarea(
-                client.engine,
-                path,
-                mode=mode,
-                source_yyyymm=yyyymm,
+            assert client._engine() is not None
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_SPPN_MAKAREA, path),
+                lambda: load_sppn_makarea(
+                    client._engine(),
+                    path,
+                    mode=mode,
+                    source_yyyymm=yyyymm,
+                ),
             )
             typer.echo(f"loaded tl_sppn_makarea rows: {count}")
 
@@ -349,8 +444,12 @@ def load_sppn_makarea_command(
 def load_pobox_command(path: Path) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            count = await load_pobox(client.engine, path)
+            assert client._engine() is not None
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_POBOX, path),
+                lambda: load_pobox(client._engine(), path),
+            )
             typer.echo(f"loaded postal_pobox rows: {count}")
 
     asyncio.run(run())
@@ -360,8 +459,12 @@ def load_pobox_command(path: Path) -> None:
 def load_bulk_command(path: Path) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            count = await load_bulk_delivery(client.engine, path)
+            assert client._engine() is not None
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_BULK, path),
+                lambda: load_bulk_delivery(client._engine(), path),
+            )
             typer.echo(f"loaded postal_bulk_delivery rows: {count}")
 
     asyncio.run(run())
@@ -377,29 +480,49 @@ def load_epost_command(
     output_dir: Path = typer.Option(Path("data/epost"), "--output-dir"),
     kind: str = typer.Option("full", "--kind", help="현재 full만 지원. downloadKnd=1"),
 ) -> None:
+    epost_lock_resource = source or output_dir.expanduser().resolve(strict=False)
+
     async def run() -> None:
-        if kind != "full":
-            typer.echo("only --kind=full is supported for epost dataset 15000302", err=True)
-            raise typer.Exit(2)
-        resolved = source
-        if resolved is None:
-            resolved = await download_epost_zip(get_settings(), output_dir, download_kind="1")
-            typer.echo(f"downloaded epost ZIP: {resolved}")
-        if resolved.suffix.lower() == ".zip":
-            resolved = extract_epost_zip(resolved, output_dir / resolved.stem)
-            typer.echo(f"extracted epost ZIP: {resolved}")
-        pobox_file, bulk_file = discover_epost_files(resolved)
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            if pobox_file is not None:
-                count = await load_pobox(client.engine, pobox_file)
-                typer.echo(f"loaded postal_pobox rows: {count}")
-            if bulk_file is not None:
-                count = await load_bulk_delivery(client.engine, bulk_file)
-                typer.echo(f"loaded postal_bulk_delivery rows: {count}")
-        if pobox_file is None and bulk_file is None:
-            typer.echo("no pobox/bulk text files found in epost dataset", err=True)
-            raise typer.Exit(2)
+            assert client._engine() is not None
+
+            async def operation() -> None:
+                if kind != "full":
+                    typer.echo(
+                        "only --kind=full is supported for epost dataset 15000302",
+                        err=True,
+                    )
+                    raise typer.Exit(2)
+                resolved = source
+                if resolved is None:
+                    resolved = await download_epost_zip(
+                        get_settings(),
+                        output_dir,
+                        download_kind="1",
+                    )
+                    typer.echo(f"downloaded epost ZIP: {resolved}")
+                if resolved.suffix.lower() == ".zip":
+                    resolved = extract_epost_zip(resolved, output_dir / resolved.stem)
+                    typer.echo(f"extracted epost ZIP: {resolved}")
+                pobox_file, bulk_file = discover_epost_files(resolved)
+                if pobox_file is not None:
+                    count = await load_pobox(client._engine(), pobox_file)
+                    typer.echo(f"loaded postal_pobox rows: {count}")
+                if bulk_file is not None:
+                    count = await load_bulk_delivery(client._engine(), bulk_file)
+                    typer.echo(f"loaded postal_bulk_delivery rows: {count}")
+                if pobox_file is None and bulk_file is None:
+                    typer.echo("no pobox/bulk text files found in epost dataset", err=True)
+                    raise typer.Exit(2)
+
+            await _run_with_cli_lock(
+                client._engine(),
+                _value_lock(
+                    AdvisoryLockNamespace.LOAD_EPOST,
+                    epost_lock_resource,
+                ),
+                operation,
+            )
 
     asyncio.run(run())
 
@@ -418,59 +541,83 @@ def load_all_sidos_command(
     swap: bool = typer.Option(True, "--swap/--concurrent"),
     allow_consistency_error: bool = typer.Option(False, "--allow-consistency-error"),
 ) -> None:
+    full_batch_lock_resource = "|".join(
+        str(path.expanduser().resolve(strict=False))
+        for path in (juso_path, jibun_path or juso_path, locsum_path, navi_path)
+    )
+
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            juso_count = await load_juso_hangul(client.engine, juso_path, source_yyyymm=yyyymm)
-            typer.echo(f"loaded tl_juso_text rows: {juso_count}")
-            parcel_result = await load_juso_parcel_link_snapshot(
-                client.engine,
-                jibun_path or juso_path,
-                source_yyyymm=yyyymm,
-            )
-            typer.echo(f"loaded tl_juso_parcel_link rows: {parcel_result.upserted_rows}")
-            locsum_count = await load_locsum(client.engine, locsum_path, source_yyyymm=yyyymm)
-            typer.echo(f"loaded tl_locsum_entrc rows: {locsum_count}")
-            build_count, entrance_count = await load_navi(
-                client.engine,
-                navi_path,
-                source_yyyymm=yyyymm,
-            )
-            typer.echo(
-                f"loaded navi rows: centroid={build_count}, entrance={entrance_count}"
-            )
-            if shp_root is not None:
-                shp_total = 0
-                sido_dirs = _sido_dirs(shp_root)
-                for index, sido_dir in enumerate(sido_dirs):
-                    shp_total += await load_shp_polygons(
-                        client.engine,
-                        sido_dir,
-                        mode=_shp_mode_for_index("full", index),
-                        source_yyyymm=yyyymm,
-                        analyze=index == len(sido_dirs) - 1,
-                    )
-                typer.echo(f"loaded SHP layers total: {shp_total}")
-            if pobox_path is not None:
-                count = await load_pobox(client.engine, pobox_path)
-                typer.echo(f"loaded postal_pobox rows: {count}")
-            if bulk_path is not None:
+            assert client._engine() is not None
+
+            async def operation() -> None:
+                juso_count = await load_juso_hangul(
+                    client._engine(),
+                    juso_path,
+                    source_yyyymm=yyyymm,
+                )
+                typer.echo(f"loaded tl_juso_text rows: {juso_count}")
+                parcel_result = await load_juso_parcel_link_snapshot(
+                    client._engine(),
+                    jibun_path or juso_path,
+                    source_yyyymm=yyyymm,
+                )
+                typer.echo(f"loaded tl_juso_parcel_link rows: {parcel_result.upserted_rows}")
+                locsum_count = await load_locsum(
+                    client._engine(),
+                    locsum_path,
+                    source_yyyymm=yyyymm,
+                )
+                typer.echo(f"loaded tl_locsum_entrc rows: {locsum_count}")
+                build_count, entrance_count = await load_navi(
+                    client._engine(),
+                    navi_path,
+                    source_yyyymm=yyyymm,
+                )
                 typer.echo(
-                    f"loaded postal_bulk_delivery rows: "
-                    f"{await load_bulk_delivery(client.engine, bulk_path)}"
+                    f"loaded navi rows: centroid={build_count}, entrance={entrance_count}"
                 )
-            await resolve_text_geometry_links(client.engine)
-            report = await run_all_cases(client.engine, generated_by="cli")
-            typer.echo(report.model_dump_json())
-            if report.severity_max == "ERROR" and not allow_consistency_error:
-                raise typer.Exit(2)
-            if refresh:
-                await refresh_mv(
-                    client.engine,
-                    concurrently=not swap,
-                    strategy="swap" if swap else "concurrent",
-                )
-                typer.echo("refreshed mv_geocode_target")
+                if shp_root is not None:
+                    shp_total = 0
+                    sido_dirs = _sido_dirs(shp_root)
+                    for index, sido_dir in enumerate(sido_dirs):
+                        shp_total += await load_shp_polygons(
+                            client._engine(),
+                            sido_dir,
+                            mode=_shp_mode_for_index("full", index),
+                            source_yyyymm=yyyymm,
+                            analyze=index == len(sido_dirs) - 1,
+                        )
+                    typer.echo(f"loaded SHP layers total: {shp_total}")
+                if pobox_path is not None:
+                    count = await load_pobox(client._engine(), pobox_path)
+                    typer.echo(f"loaded postal_pobox rows: {count}")
+                if bulk_path is not None:
+                    typer.echo(
+                        f"loaded postal_bulk_delivery rows: "
+                        f"{await load_bulk_delivery(client._engine(), bulk_path)}"
+                    )
+                await resolve_text_geometry_links(client._engine())
+                report = await run_all_cases(client._engine(), generated_by="cli")
+                typer.echo(report.model_dump_json())
+                if report.severity_max == "ERROR" and not allow_consistency_error:
+                    raise typer.Exit(2)
+                if refresh:
+                    await refresh_mv(
+                        client._engine(),
+                        concurrently=not swap,
+                        strategy="swap" if swap else "concurrent",
+                    )
+                    typer.echo("refreshed mv_geocode_target")
+
+            await _run_with_cli_lock(
+                client._engine(),
+                _value_lock(
+                    AdvisoryLockNamespace.LOAD_FULL_BATCH,
+                    full_batch_lock_resource,
+                ),
+                operation,
+            )
 
     asyncio.run(run())
 
@@ -531,7 +678,12 @@ def load_full_set_command(
         if not submit:
             return
         async with AsyncAddressClient() as client:
-            job = await client.submit_full_load_source_set(plan)
+            assert client._engine() is not None
+            job = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_FULL_SET, root_path),
+                lambda: client.submit_full_load_source_set(plan),
+            )
         typer.echo(f"submitted full_load_batch job: {job.job_id}")
 
     asyncio.run(run())
@@ -544,17 +696,25 @@ def refresh_materialized_view(
 ) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            await refresh_mv(
-                client.engine,
-                concurrently=concurrently and not swap,
-                strategy="swap" if swap else "concurrent",
+            assert client._engine() is not None
+            async def operation() -> str:
+                await refresh_mv(
+                    client._engine(),
+                    concurrently=concurrently and not swap,
+                    strategy="swap" if swap else "concurrent",
+                )
+                _, release = await AdminRepository(client._engine()).record_mv_refresh_release(
+                    strategy="swap" if swap else "concurrent",
+                    notes="CLI refresh mv",
+                )
+                return release.release_id
+
+            release_id = await _run_with_cli_lock(
+                client._engine(),
+                _global_lock(AdvisoryLockNamespace.MV_REFRESH),
+                operation,
             )
-            _, release = await AdminRepository(client.engine).record_mv_refresh_release(
-                strategy="swap" if swap else "concurrent",
-                notes="CLI refresh mv",
-            )
-            typer.echo(f"refreshed mv_geocode_target; release={release.release_id}")
+            typer.echo(f"refreshed mv_geocode_target; release={release_id}")
 
     asyncio.run(run())
 
@@ -566,13 +726,17 @@ def validate_consistency(
 ) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
+            assert client._engine() is not None
             selected = tuple(part.strip() for part in cases.split(",")) if cases else DEFAULT_CASES
-            report = await run_all_cases(
-                client.engine,
-                scope=scope,
-                cases=selected,
-                generated_by="cli",
+            report = await _run_with_cli_lock(
+                client._engine(),
+                _value_lock(AdvisoryLockNamespace.CONSISTENCY_RUN, f"{scope}:{','.join(selected)}"),
+                lambda: run_all_cases(
+                    client._engine(),
+                    scope=scope,
+                    cases=selected,
+                    generated_by="cli",
+                ),
             )
             typer.echo(report.model_dump_json())
 
@@ -600,9 +764,9 @@ def validate_data_quality_samples(
             typer.echo(str(exc), err=True)
             raise typer.Exit(2) from exc
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
+            assert client._engine() is not None
             paths = await export_data_quality_samples(
-                client.engine,
+                client._engine(),
                 output_dir,
                 cases=selected,
                 limit=limit,
@@ -655,10 +819,15 @@ def cleanup_uploads(
 
     async def run() -> None:
         async with AsyncAddressClient() as client:
-            result = await client.cleanup_upload_sets(
-                ttl_days=ttl_days,
-                active_grace_minutes=active_grace_minutes,
-                dry_run=dry_run,
+            assert client._engine() is not None
+            result = await _run_with_cli_lock(
+                client._engine(),
+                _global_lock(AdvisoryLockNamespace.UPLOADS_CLEANUP),
+                lambda: client.cleanup_upload_sets(
+                    ttl_days=ttl_days,
+                    active_grace_minutes=active_grace_minutes,
+                    dry_run=dry_run,
+                ),
             )
         typer.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
 
@@ -688,13 +857,17 @@ def create_backup(
             }
         )
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            await run_backup_job(
-                client.engine,
-                client.settings,
-                payload,
-                asyncio.Event(),
-                _cli_progress,
+            assert client._engine() is not None
+            await _run_with_cli_lock(
+                client._engine(),
+                _global_lock(AdvisoryLockNamespace.BACKUP_CREATE),
+                lambda: run_backup_job(
+                    client._engine(),
+                    client.settings,
+                    payload,
+                    asyncio.Event(),
+                    _cli_progress,
+                ),
             )
 
     asyncio.run(run())
@@ -760,13 +933,20 @@ def create_restore(
             }
         )
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
-            await run_restore_job(
-                client.engine,
-                client.settings,
-                payload,
-                asyncio.Event(),
-                _cli_progress,
+            assert client._engine() is not None
+            await _run_with_cli_lock(
+                client._engine(),
+                _value_lock(
+                    AdvisoryLockNamespace.RESTORE_CREATE,
+                    target_database or target_dsn or artifact_id or archive_path or "default",
+                ),
+                lambda: run_restore_job(
+                    client._engine(),
+                    client.settings,
+                    payload,
+                    asyncio.Event(),
+                    _cli_progress,
+                ),
             )
 
     asyncio.run(run())

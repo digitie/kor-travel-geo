@@ -112,10 +112,11 @@
 - ✅ T-050 운영 hardening 7차 — 실제 PostgreSQL FK/trigger/partial unique integration test를 추가했다. `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 테스트가 `ops.audit_events.job_id` FK, append-only trigger, active release partial unique index, `ops.table_stats_snapshots.snapshot_id` FK를 실제 DB에서 검증한다. 별도 Docker DB `kraddr_geo_t050_ops_constraints`에서 `1 passed`를 확인했다. 상세: `docs/t050-ops-hardening.md`
 - ✅ T-058 restore hot-swap plan/preflight — 같은 cluster 안 `ALTER DATABASE ... RENAME` 패턴을 1차 절차로 고정하고, `/v1/admin/restores/hot-swap-plan`과 `kraddr-geo serving hot-swap-plan`이 current DB, restore DB, previous alias, typed confirmation, rollback confirmation, blockers, SQL/steps를 산출하게 했다. 실제 rename 실행은 metadata 위치와 worker별 engine refresh 검증 뒤 후속 실행 표면으로 분리한다. 상세: `docs/t058-restore-hot-swap.md`
 - ✅ PR #69~#80 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #80까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. 수동 table stats capture lock 충돌은 `409 E0409`로 구분하고, `replace_current` restore의 maintenance window 인가 통과는 `maintenance_window.authorize` audit event로 남긴다. 상세: `docs/postmerge-review-fixups-pr69-pr80.md`
+- ✅ T-059 CLI/Job 동시 실행 보호 표준화 — `infra.concurrency`의 PostgreSQL session advisory lock helper를 추가하고, 주요 CLI 운영 명령과 FastAPI `JobQueue` handler가 같은 lock key를 공유하도록 했다. 중복 실행은 `E0409/HTTP 409` 또는 CLI exit code 2로 fail-fast한다. Docker PostgreSQL smoke에서 `MV_REFRESH` 중복 lock 차단을 확인했다. 상세: `docs/t059-concurrent-job-protection.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-059 CLI/Job 동시 실행 보호 표준화다. 이후 사용자 최신 우선순위에 따라 T-054 한국 IP gate → T-055 N150/Odroid 실측 준비를 진행한다.
+다음 작업은 T-054 한국 IP 외부 접근 차단(Geo-IP gate)이다. 이후 사용자 최신 우선순위에 따라 T-055 N150/Odroid 실측 준비를 진행한다.
 
 그 이후의 작업 후보는 사용자 최신 지시에 따라 T-054(한국 IP만 허용) → T-055(N150/Odroid 실측) 순서다. T-027 최종 클린 적재 검증은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
 

@@ -19,6 +19,11 @@ from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.exceptions import RateLimitError
 from kraddr.geo.infra.admin_repo import AdminRepository
 from kraddr.geo.infra.backup import run_backup_job, run_restore_job
+from kraddr.geo.infra.concurrency import (
+    AdvisoryLockKey,
+    AdvisoryLockNamespace,
+    cross_process_lock,
+)
 from kraddr.geo.infra.metrics import (
     PROMETHEUS_CONTENT_TYPE,
     refresh_admin_metrics,
@@ -169,6 +174,41 @@ async def _capture_table_stats_once(engine: AsyncEngine, settings: Settings) -> 
         "captured ops.table_stats_snapshots",
         extra={"row_count": len(rows), "limit": settings.ops_table_stats_capture_limit},
     )
+
+
+def _locked_job_handler(
+    engine: AsyncEngine,
+    namespace: AdvisoryLockNamespace,
+    resource: Callable[[dict[str, Any]], object],
+    handler: _jobs.JobHandler,
+) -> _jobs.JobHandler:
+    async def wrapped(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        key = AdvisoryLockKey.for_resource(namespace, resource(payload))
+        async with cross_process_lock(engine, key):
+            await handler(payload, cancel_event, progress)
+
+    return wrapped
+
+
+def _locked_global_job_handler(
+    engine: AsyncEngine,
+    namespace: AdvisoryLockNamespace,
+    handler: _jobs.JobHandler,
+) -> _jobs.JobHandler:
+    async def wrapped(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        _ = payload
+        async with cross_process_lock(engine, AdvisoryLockKey.global_key(namespace)):
+            await handler(payload, cancel_event, progress)
+
+    return wrapped
 
 
 def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> None:
@@ -427,21 +467,106 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
     ) -> None:
         await run_restore_job(engine, settings, payload, cancel_event, progress)
 
-    queue.register("juso_text_load", juso)
-    queue.register("db_backup", db_backup)
-    queue.register("db_restore", db_restore)
-    queue.register("daily_juso_delta", daily_juso)
-    queue.register("juso_parcel_link_load", parcel_links)
-    queue.register("juso_parcel_link_delta", daily_parcel_links)
-    queue.register("roadaddr_entrance_load", roadaddr_entrances)
-    queue.register("locsum_load", locsum)
-    queue.register("navi_load", navi)
-    queue.register("shp_polygons_load", shp)
-    queue.register("sppn_makarea_load", sppn_makarea)
-    queue.register("pobox_load", pobox)
-    queue.register("bulk_load", bulk)
-    queue.register("consistency_check", consistency)
-    queue.register("mv_refresh", mv_refresh)
+    queue.register(
+        "juso_text_load",
+        _locked_job_handler(engine, AdvisoryLockNamespace.LOAD_JUSO_TEXT, _payload_lock_path, juso),
+    )
+    queue.register(
+        "db_backup",
+        _locked_global_job_handler(engine, AdvisoryLockNamespace.BACKUP_CREATE, db_backup),
+    )
+    queue.register(
+        "db_restore",
+        _locked_job_handler(
+            engine,
+            AdvisoryLockNamespace.RESTORE_CREATE,
+            _restore_lock_resource,
+            db_restore,
+        ),
+    )
+    queue.register(
+        "daily_juso_delta",
+        _locked_job_handler(
+            engine,
+            AdvisoryLockNamespace.LOAD_DAILY_JUSO,
+            _payload_lock_path,
+            daily_juso,
+        ),
+    )
+    queue.register(
+        "juso_parcel_link_load",
+        _locked_job_handler(
+            engine,
+            AdvisoryLockNamespace.LOAD_PARCEL_LINK,
+            _payload_lock_path,
+            parcel_links,
+        ),
+    )
+    queue.register(
+        "juso_parcel_link_delta",
+        _locked_job_handler(
+            engine,
+            AdvisoryLockNamespace.LOAD_DAILY_PARCEL,
+            _payload_lock_path,
+            daily_parcel_links,
+        ),
+    )
+    queue.register(
+        "roadaddr_entrance_load",
+        _locked_job_handler(
+            engine,
+            AdvisoryLockNamespace.LOAD_ROADADDR_ENTRANCES,
+            _payload_lock_path,
+            roadaddr_entrances,
+        ),
+    )
+    queue.register(
+        "locsum_load",
+        _locked_job_handler(engine, AdvisoryLockNamespace.LOAD_LOCSUM, _payload_lock_path, locsum),
+    )
+    queue.register(
+        "navi_load",
+        _locked_job_handler(engine, AdvisoryLockNamespace.LOAD_NAVI, _payload_lock_path, navi),
+    )
+    queue.register(
+        "shp_polygons_load",
+        _locked_job_handler(
+            engine,
+            AdvisoryLockNamespace.LOAD_SHP_POLYGONS,
+            _payload_lock_path,
+            shp,
+        ),
+    )
+    queue.register(
+        "sppn_makarea_load",
+        _locked_job_handler(
+            engine,
+            AdvisoryLockNamespace.LOAD_SPPN_MAKAREA,
+            _payload_lock_path,
+            sppn_makarea,
+        ),
+    )
+    queue.register(
+        "pobox_load",
+        _locked_job_handler(engine, AdvisoryLockNamespace.LOAD_POBOX, _payload_lock_path, pobox),
+    )
+    queue.register(
+        "bulk_load",
+        _locked_job_handler(engine, AdvisoryLockNamespace.LOAD_BULK, _payload_lock_path, bulk),
+    )
+    queue.register(
+        "consistency_check",
+        _locked_job_handler(
+            engine,
+            AdvisoryLockNamespace.CONSISTENCY_RUN,
+            _consistency_lock_resource,
+            consistency,
+        ),
+    )
+    queue.register(
+        "mv_refresh",
+        _locked_global_job_handler(engine, AdvisoryLockNamespace.MV_REFRESH, mv_refresh),
+    )
 
 
 def _payload_path(payload: dict[str, Any]) -> Path:
@@ -450,6 +575,26 @@ def _payload_path(payload: dict[str, Any]) -> Path:
         msg = "load payload requires 'path' or 'source_path'"
         raise ValueError(msg)
     return Path(value)
+
+
+def _payload_lock_path(payload: dict[str, Any]) -> str:
+    return str(_payload_path(payload).expanduser().resolve(strict=False))
+
+
+def _restore_lock_resource(payload: dict[str, Any]) -> object:
+    return (
+        payload.get("target_database")
+        or payload.get("target_dsn")
+        or payload.get("artifact_id")
+        or payload.get("archive_path")
+        or "default"
+    )
+
+
+def _consistency_lock_resource(payload: dict[str, Any]) -> str:
+    raw_cases = payload.get("cases")
+    cases = ",".join(str(item) for item in raw_cases) if isinstance(raw_cases, list) else "all"
+    return f"{payload.get('scope') or 'full'}:{cases}"
 
 
 def _payload_str(payload: dict[str, Any], key: str) -> str | None:

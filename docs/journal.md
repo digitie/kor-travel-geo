@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 13:45 (T-059 CLI/Job 동시 실행 보호 표준화)
+
+**작업**: PostgreSQL advisory lock 기반 cross-process 실행 보호를 CLI와 API job handler에 표준 적용했다.
+
+**반영**:
+- `src/kraddr/geo/infra/concurrency.py`를 추가해 `AdvisoryLockNamespace`, `AdvisoryLockKey`, `ConcurrentExecutionError(E0409/409)`, `cross_process_lock()`을 제공한다.
+- 주요 CLI 운영 명령(`init-db`, `load *`, `refresh mv`, `validate consistency`, `uploads cleanup`, `backup create`, `restore create`)이 명령별/path별/target별 lock key를 잡고 중복 실행 시 exit code 2로 fail-fast한다.
+- FastAPI `JobQueue` 기본 handler도 같은 lock key를 잡도록 등록해 CLI와 API job이 같은 자원을 동시에 만지는 것을 막는다.
+- 실제 Docker PostgreSQL에서 같은 `MV_REFRESH` key를 두 connection으로 잡아 두 번째 connection이 `E0409/409`로 막히는 smoke를 확인했다.
+- CLI 단독 실행을 `load_jobs` row로 노출하는 운영 가시화는 후속으로 남겼다.
+
+**검증**:
+- `ruff check src/kraddr/geo/infra/concurrency.py src/kraddr/geo/cli/main.py src/kraddr/geo/api/app.py tests/unit/test_concurrency.py tests/unit/test_api_app_contract.py`
+- `pytest tests/unit/test_api_app_contract.py tests/unit/test_concurrency.py -q` → `6 passed`
+- `pytest tests/unit/test_concurrency.py tests/unit/test_client_submit_load_batch.py tests/unit/test_backup_restore.py -q` → `23 passed`
+- Docker PostgreSQL smoke: 같은 `MV_REFRESH` key의 두 번째 connection이 `E0409/409`로 차단됨
+- `ruff check .`, `pytest -q` → `261 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+
+**후속**:
+- 이 PR merge 후 T-054 한국 IP 외부 접근 차단으로 이어간다.
+
 ## 2026-05-29 12:35 (PR #69~#80 post-merge 리뷰 audit/fixup)
 
 **작업**: 사용자 지시에 따라 현재 작업 PR #80 merge 뒤 PR #69부터 최신 PR #80까지 상세 리뷰와 review thread를 다시 확인했다.
