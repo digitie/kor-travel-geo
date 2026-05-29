@@ -67,6 +67,7 @@ from .dto.v2 import (
     SearchV2Response,
 )
 from .dto.zipcode import ZipcodeResponse
+from .exceptions import InvalidAddressError
 from .infra.admin_repo import AdminRepository
 from .infra.batch import batch_children
 from .infra.engine import make_async_engine
@@ -164,13 +165,24 @@ class AsyncAddressClient:
 
         address = road_address or jibun_address or query or keyword
         assert address is not None
-        response = await self._geocode_v1(
-            address,
-            type="parcel" if jibun_address and not road_address else "road",
-            fallback="api" if fallback == "api" else "local_only",
-            sig_cd=sig_cd,
-            bjd_cd=bjd_cd,
-        )
+        try:
+            response = await self._geocode_v1(
+                address,
+                type="parcel" if jibun_address and not road_address else "road",
+                fallback="api" if fallback == "api" else "local_only",
+                sig_cd=sig_cd,
+                bjd_cd=bjd_cd,
+            )
+        except InvalidAddressError:
+            search_response = await self.search(
+                query=address,
+                type="district",
+                size=limit,
+                sig_cd=sig_cd,
+                bjd_cd=bjd_cd,
+                bbox=bbox,
+            )
+            return geocode_v2_from_search(inp, search_response)
         return geocode_v2_from_v1(inp, response)
 
     async def _geocode_v1(

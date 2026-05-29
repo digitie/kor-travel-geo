@@ -163,7 +163,9 @@ def _address_from_v1(
         road_address=full if address_type == "road" else None,
         parcel_address=full if address_type == "parcel" else None,
         postal_code=postal_code or _as_str(metadata.get("zip_no")),
-        legal_dong_code=structure.level4LC if structure else None,
+        legal_dong_code=(
+            structure.level4LC if structure and len(structure.level4LC or "") >= 8 else None
+        ),
         admin_dong_code=structure.level4AC if structure else None,
         road_name=structure.level5 if structure else None,
         road_name_code=_as_str(metadata.get("rncode_full")),
@@ -185,9 +187,12 @@ def _region_from_structure(structure: AddressStructure | None) -> RegionV2 | Non
         )
     ):
         return None
+    code = structure.level4LC
+    sig_cd = code[:5] if code and len(code) >= 5 else None
+    bjd_cd = code if code and len(code) >= 8 else None
     return RegionV2(
-        sig_cd=structure.level4LC[:5] if structure.level4LC else None,
-        bjd_cd=structure.level4LC,
+        sig_cd=sig_cd,
+        bjd_cd=bjd_cd,
         sido=structure.level1,
         sigungu=structure.level2,
         legal_dong=structure.level4L,

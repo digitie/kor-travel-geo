@@ -17,9 +17,12 @@ from kraddr.geo.dto.v2 import (
     CandidateV2,
     GeocodeV2Input,
     GeocodeV2Response,
+    RegionV2,
     ReverseV2Input,
     SearchV2Input,
+    SearchV2Response,
 )
+from kraddr.geo.exceptions import InvalidAddressError
 
 
 def _v1_geocode_response(inp: GeocodeInput) -> GeocodeResponse:
@@ -69,6 +72,42 @@ async def test_async_client_geocode_wraps_internal_v1_geocode(
     assert response.candidates[0].address.road_name_code == "116803122001"
     assert response.candidates[0].region is not None
     assert response.candidates[0].region.sig_cd == "11680"
+
+
+@pytest.mark.asyncio
+async def test_async_client_geocode_promotes_region_only_input_to_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        raise InvalidAddressError("address number could not be parsed")
+
+    async def fake_search(self: AsyncAddressClient, **kwargs: Any) -> SearchV2Response:
+        assert kwargs["query"] == "수지구"
+        assert kwargs["type"] == "district"
+        return SearchV2Response(
+            status="OK",
+            input=SearchV2Input(query="수지구", type="district"),
+            candidates=(
+                CandidateV2(
+                    confidence=0.95,
+                    match_kind="region",
+                    point=Point(x=127.0887, y=37.3328),
+                    region=RegionV2(sig_cd="41465", sido="경기도", sigungu="용인시 수지구"),
+                ),
+            ),
+            total=1,
+        )
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(AsyncAddressClient, "search", fake_search)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(road_address="수지구")
+
+    assert response.status == "OK"
+    assert response.candidates[0].match_kind == "region"
+    assert response.candidates[0].region is not None
+    assert response.candidates[0].region.sig_cd == "41465"
 
 
 @pytest.mark.asyncio

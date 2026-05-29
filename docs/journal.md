@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-30 02:20 (상위 주소 geocode 후보와 내비 검색 후속 문서화)
+
+**작업**: 별도 geocode 경로를 만들지 않고, 상세번호 없는 상위 주소 입력을 기존 `/v2/geocode` 후보 흐름 안에서 처리하도록 보강했다.
+
+**반영**:
+- `/v2/geocode`에서 도로명/지번 parser가 번호 부재로 실패하면 같은 입력을 `search(type="district")` 후보로 승격한다.
+- `district` 검색은 `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`, `tl_scco_li` polygon을 사용하고 대표점은 `ST_PointOnSurface`로 계산한다.
+- 실제 Docker DB에서 `수지구` 입력의 첫 후보가 `용인시 수지구(sig_cd=41465)`와 대표점 `(127.08875165616607, 37.3327969096687)`를 반환함을 확인했다.
+- 사용자 지시에 따라 `내비게이션용DB_전체분`의 `시군구용건물명` 컬럼을 후속 T-065 검색 보강으로 등록하고, 적재/정규화/검색 helper MV/성능 기록 요구사항을 문서화했다.
+
+**검증**:
+- `pytest tests/unit/test_infra_repo_sql.py tests/unit/test_v2_api.py -q` → `27 passed`
+- `/v2/geocode` `{"road_address":"수지구"}` smoke `OK`
+- `/v2/search` `{"query":"수지구","type":"district"}` smoke `OK`
+
 ## 2026-05-30 01:40 (외부 API fallback 인증키 오류 명시화)
 
 **작업**: `fallback="api"` 요청에서 외부 API fallback이 실패할 때 인증키/설정 문제와 단순 미검색이 구분되도록 보강했다.

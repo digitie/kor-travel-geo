@@ -25,6 +25,8 @@
 
 `distance_m`은 향후 nearby/category 검색에서 기준점이 있을 때 first-class 필드로 사용한다. 현재 local road/address 검색은 거리 기준점이 없으므로 보통 `null`이다. `confidence`는 search score이며 geocode/reverse의 confidence와 같은 척도로 비교하지 않는다.
 
+`type="district"`는 `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`, `tl_scco_li` 행정구역 polygon을 검색한다. 후보의 `match_kind`는 `region`이며, `point`는 polygon 내부 대표점(`ST_PointOnSurface`)이다. `수지구`처럼 복합 시군구명의 마지막 `구`만 입력해도 `용인시 수지구` 후보가 우선 반환된다.
+
 ## 예시
 
 ```bash
@@ -45,4 +47,4 @@ async with AsyncAddressClient() as client:
 
 ## 구현 메모
 
-`type="category"`는 현재 local place 검색으로 흡수된다. `category_group_code`는 Kakao 스타일을 참고한 분류 hint이지만 Kakao API를 직접 호출하지 않는다.
+`type="category"`는 현재 local place 검색으로 흡수된다. `category_group_code`는 Kakao 스타일을 참고한 분류 hint이지만 Kakao API를 직접 호출하지 않는다. 내비게이션용DB_전체분의 `시군구용건물명`은 후속 T-065에서 검색 후보에 포함한다.
