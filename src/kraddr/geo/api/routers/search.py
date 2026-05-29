@@ -23,4 +23,11 @@ async def search(
     bjd_cd: str | None = Query(default=None, pattern=r"^(\d{8}|\d{10})$"),
     client: AsyncAddressClient = Depends(get_client),
 ) -> SearchResponse:
-    return await client.search(query, type=type, page=page, size=size, sig_cd=sig_cd, bjd_cd=bjd_cd)
+    return await client._search_v1(
+        query,
+        type=type,
+        page=page,
+        size=size,
+        sig_cd=sig_cd,
+        bjd_cd=bjd_cd,
+    )

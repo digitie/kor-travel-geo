@@ -199,9 +199,9 @@ NEXT_PUBLIC_API_BASE_URL=/api/proxy
 
 ## 외부 API 호출 정책 (재시도·차단·로깅)
 
-- **구현 위치**: `src/kraddr/geo/infra/external_api.py`. `AsyncAddressClient.geocode(..., fallback="api")`에서 로컬 DB 결과가 `NOT_FOUND`일 때만 호출한다. core 계층은 HTTP와 API key를 전혀 알지 않는다.
+- **구현 위치**: `src/kraddr/geo/infra/external_api.py`. `AsyncAddressClient.geocode(..., fallback="api")`에서 내부 v1 호환 geocode 결과가 로컬 `NOT_FOUND`일 때만 호출하고, 공개 응답은 후보 schema로 투영한다. core 계층은 HTTP와 API key를 전혀 알지 않는다.
 - **호출 순서**: vworld 주소 좌표 API를 먼저 시도하고, 키가 없거나 결과가 없으면 juso 검색 API + juso 좌표 API를 시도한다. 두 공급자 모두 실패하거나 키가 없으면 로컬 `NOT_FOUND` 응답을 그대로 반환한다.
-- **응답 매핑**: 외부 응답도 `GeocodeResponse`로 변환한다. 공급자 출처는 `x_extension.source`에만 `api_vworld` 또는 `api_juso`로 남긴다. vworld 호환 최상위 응답 구조는 바꾸지 않는다(ADR-003).
+- **응답 매핑**: 외부 응답은 내부적으로 `GeocodeResponse`로 변환한 뒤 Python 공개 API에서는 `CandidateV2.source`에 `vworld` 또는 `juso`로 남긴다. REST v1에서는 기존처럼 `x_extension.source`에 `api_vworld` 또는 `api_juso`를 보존한다.
 - **재시도**: `tenacity`로 5xx와 timeout만 3회 지수 backoff. 4xx는 즉시 실패(키 오류, 입력 오류).
 - **회로차단**: 같은 외부 서비스에 1분 내 5회 연속 실패하면 60초 동안 폴백 호출 차단(로컬만 응답). `httpx` + 자체 카운터 또는 `purgatory`.
 - **쿼터 보호**: 일 한도의 80%에 도달하면 Prometheus 알람. 90% 초과 시 자동으로 polling 인터벌 늘리거나 폴백 비활성화.

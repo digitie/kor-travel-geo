@@ -24,10 +24,10 @@
 `AsyncAddressClient`의 기존 함수에 선택 parameter를 추가했다.
 
 ```python
-await client.geocode("테헤란로 152", sig_cd="11680")
-await client.geocode("청운동 1-1", bjd_cd="1111010100")
-await client.search("선릉로", sig_cd="11680")
-await client.reverse_geocode(127.0, 37.5, sig_cd="11")
+await client.geocode(query="테헤란로 152", sig_cd="11680")
+await client.geocode(query="청운동 1-1", bjd_cd="1111010100")
+await client.search(query="선릉로", sig_cd="11680")
+await client.reverse(127.0, 37.5, sig_cd="11")
 ```
 
 `sig_cd`는 2자리 시도 prefix 또는 5자리 시군구 코드를 받는다. `bjd_cd`는 8자리 법정동 prefix 또는 10자리 법정동 코드를 받는다.

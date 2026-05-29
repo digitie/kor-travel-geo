@@ -68,7 +68,7 @@ curl -X POST "http://localhost:8000/v2/geocode" \
 
 ```python
 async with AsyncAddressClient() as client:
-    response = await client.geocode_v2(
+    response = await client.geocode(
         query="서울특별시 강남구 테헤란로 152",
         fallback="api",
         sig_cd="11680",

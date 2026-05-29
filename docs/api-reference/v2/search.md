@@ -35,7 +35,7 @@ curl -X POST "http://localhost:8000/v2/search" \
 
 ```python
 async with AsyncAddressClient() as client:
-    response = await client.search_v2(
+    response = await client.search(
         query="테헤란로",
         type="road",
         sig_cd="11680",

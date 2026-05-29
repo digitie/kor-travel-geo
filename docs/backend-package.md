@@ -6,10 +6,10 @@
 
 `python-kraddr-geo`(이하 본 패키지)는 한 코어(`core/`) 위에 두 인터페이스를 노출한다.
 
-- **Python 라이브러리 API**: `AsyncAddressClient` — asyncio 컨텍스트 매니저
-- **REST API**: FastAPI 라우터가 라이브러리 API를 호출하는 얇은 wrapper. vworld 호환 응답.
+- **Python 라이브러리 API**: `AsyncAddressClient` — asyncio 컨텍스트 매니저, 주소 조회는 후보 목록 응답만 공개
+- **REST API**: FastAPI 라우터가 core/repository 경로를 호출하는 얇은 wrapper. `/v1/*`는 vworld 호환, `/v2/*`는 후보 목록 응답.
 
-두 인터페이스는 같은 코어 함수(`core.geocoder.geocode`, `core.reverse_geocoder.reverse_geocode` 등)를 호출하므로 동작이 갈리지 않는다. 코어는 DB 어댑터(Repository Protocol)를 받아 작동하므로 단위 테스트 시 in-memory Fake 어댑터로 교체 가능하다.
+두 인터페이스는 같은 코어 함수(`core.geocoder.geocode`, `core.reverse_geocoder.reverse_geocode` 등)를 호출하므로 동작이 갈리지 않는다. REST v1 호환 응답은 `AsyncAddressClient`의 내부 adapter에서만 사용하고, 공개 Python API는 v2 candidate schema로 투영한다. 코어는 DB 어댑터(Repository Protocol)를 받아 작동하므로 단위 테스트 시 in-memory Fake 어댑터로 교체 가능하다.
 
 ### 핵심 원칙
 
@@ -246,21 +246,22 @@ ignore_imports = ["kraddr.geo.api.routers.admin -> kraddr.geo.loaders"]
 from kraddr.geo import AsyncAddressClient
 
 async with AsyncAddressClient() as client:    # .env에서 DSN 자동 로드
-    r = await client.geocode("서울특별시 강남구 테헤란로 152")
-    if r.status == "OK":
-        print(r.result.point)            # Point(x=127.028..., y=37.500...)
-        print(r.refined.text)            # '서울특별시 강남구 테헤란로 152'
-        print(r.x_extension.bd_mgt_sn)   # '11680101...'
+    r = await client.geocode(query="서울특별시 강남구 테헤란로 152")
+    if r.status == "OK" and r.candidates:
+        candidate = r.candidates[0]
+        print(candidate.point)       # Point(x=127.028..., y=37.500...)
+        print(candidate.address.full if candidate.address else None)
+        print(candidate.source)      # 'local', 'vworld', 'juso', ...
 ```
 
-`AsyncAddressClient`의 메서드: `geocode`, `reverse_geocode`, `search`, `zipcode`, `pobox`, `geocode_many(addresses, concurrency=8)`. 편의 헬퍼 `open_client()`도 제공.
+`AsyncAddressClient`의 공개 메서드: `geocode`, `reverse`, `search`, `zipcode`, `pobox`, `geocode_many(queries, concurrency=8)`. 편의 헬퍼 `open_client()`도 제공.
 
-`geocode`, `reverse_geocode`, `search`는 T-057 이후 선택 `sig_cd`/`bjd_cd` hint를 받는다. `sig_cd`는 2자리 시도 prefix 또는 5자리 시군구 코드, `bjd_cd`는 8자리 법정동 prefix 또는 10자리 법정동 코드다. 현재 serving MV에는 물리 `sig_cd` 컬럼이 없으므로 SQL에서는 `bjd_cd` prefix filter로 적용한다. 예를 들어 `sig_cd="11680"`은 `bjd_cd LIKE '11680%'`로 좁힌다.
+`geocode`, `reverse`, `search`는 T-057 이후 선택 `sig_cd`/`bjd_cd` hint를 받는다. `sig_cd`는 2자리 시도 prefix 또는 5자리 시군구 코드, `bjd_cd`는 8자리 법정동 prefix 또는 10자리 법정동 코드다. 현재 serving MV에는 물리 `sig_cd` 컬럼이 없으므로 SQL에서는 `bjd_cd` prefix filter로 적용한다. 예를 들어 `sig_cd="11680"`은 `bjd_cd LIKE '11680%'`로 좁힌다.
 
 ```python
-await client.geocode("테헤란로 152", sig_cd="11680")
-await client.search("선릉로", sig_cd="11680")
-await client.reverse_geocode(127.0, 37.5, sig_cd="11")
+await client.geocode(query="테헤란로 152", sig_cd="11680")
+await client.search(query="선릉로", sig_cd="11680")
+await client.reverse(127.0, 37.5, sig_cd="11")
 ```
 
 배치 호출은 내부 `asyncio.Semaphore(concurrency)`로 동시성 제한.
@@ -295,7 +296,7 @@ await client.reverse_geocode(127.0, 37.5, sig_cd="11")
 4. 결과 없으면 `GeocodeResponse(status="NOT_FOUND")`.
 5. `RefinedAddress(text, structure)` 빌드. `GeocodeExtension(source="local", confidence, bd_mgt_sn, rncode_full, bjd_cd, zip_no, zip_source, buld_nm)`.
 
-`fallback="api"`는 core가 직접 HTTP를 호출하지 않는다. `AsyncAddressClient.geocode()`가 로컬 core 결과가 `NOT_FOUND`일 때만 `infra/external_api.py::ExternalGeocodeClient`를 호출한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 + 좌표 API다. Juso 좌표 API의 `admCd`/`rnMgtSn`/`udrtYn`/`buldMnnm`/`buldSlno`는 `core.address.AddressCodeSet`으로 정규화한 뒤 전달한다(T-056). 외부 응답도 동일한 `GeocodeResponse` DTO로 변환하며, 자체 출처는 `x_extension.source = "api_vworld" | "api_juso"`에만 넣는다. 단, T-057 region hint가 명시된 요청에서는 외부 provider가 hint를 보존하지 못하므로 로컬 `NOT_FOUND` 뒤에도 외부 fallback을 호출하지 않는다.
+`fallback="api"`는 core가 직접 HTTP를 호출하지 않는다. `AsyncAddressClient.geocode()`가 내부 v1 호환 geocode 경로를 실행하다가 로컬 core 결과가 `NOT_FOUND`일 때만 `infra/external_api.py::ExternalGeocodeClient`를 호출하고, 결과를 후보 schema로 투영한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 + 좌표 API다. Juso 좌표 API의 `admCd`/`rnMgtSn`/`udrtYn`/`buldMnnm`/`buldSlno`는 `core.address.AddressCodeSet`으로 정규화한 뒤 전달한다(T-056). 외부 응답은 내부적으로 `GeocodeResponse` DTO로 변환한 뒤 공개 응답에서는 `CandidateV2.source = "vworld" | "juso"`로 노출한다. 단, T-057 region hint가 명시된 요청에서는 외부 provider가 hint를 보존하지 못하므로 로컬 `NOT_FOUND` 뒤에도 외부 fallback을 호출하지 않는다.
 
 `reverse_geocoder`, `searcher`, `zipcoder`, `poboxer`도 같은 패턴.
 
@@ -373,9 +374,9 @@ async def geocode(
     bjd_cd:  str | None = Query(default=None, pattern=r"^(\d{8}|\d{10})$"),
     client:  AsyncAddressClient = Depends(get_client),
 ) -> GeocodeResponse:
-    return await client.geocode(address, type=type, crs=crs,
-                                refine=refine, simple=simple, fallback=fallback,
-                                sig_cd=sig_cd, bjd_cd=bjd_cd)
+    return await client._geocode_v1(address, type=type, crs=crs,
+                                    refine=refine, simple=simple, fallback=fallback,
+                                    sig_cd=sig_cd, bjd_cd=bjd_cd)
 ```
 
 reverse / search 라우터도 `sig_cd`/`bjd_cd`를 같은 의미로 받는다. zipcode / pobox 라우터는 기존 표면을 유지한다. 검증은 DTO와 query parameter schema가 맡고, 코어 호출은 한 줄이다.

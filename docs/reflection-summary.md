@@ -59,7 +59,7 @@
 | `docs/address-db-schema.md` | PostgreSQL + PostGIS 11개 마스터 + 보조 + MV 요약. 세부는 data-model로 위임 |
 | `docs/code-guide-for-beginners.md` | 새 디렉토리(`dto/core/infra/client/api/cli`), 프론트엔드 별도 패키지, 작업 사이클 |
 | `docs/geocoding-readiness.md` | PostgreSQL/PostGIS readiness 체크리스트, GDAL/CP949 함정, `kraddr-geo validate` |
-| `docs/reverse-geocoding.md` | `AsyncAddressClient.reverse_geocode`, ReverseRepo Protocol, 출입구 hit + 동 polygon fallback, ZipSource 4단계 |
+| `docs/reverse-geocoding.md` | `AsyncAddressClient.reverse`, ReverseRepo Protocol, 출입구 hit + 동 polygon fallback, ZipSource 4단계 |
 | `docs/spatialite-vworld-implementation.md` | 파일명만 유지, 내용은 PostgreSQL + PostGIS / vworld 호환 구현으로 전환 (ADR-001 참조) |
 
 ### 신규 요약 (1개)

@@ -129,6 +129,52 @@ class AsyncAddressClient:
 
     async def geocode(
         self,
+        query: str | None = None,
+        *,
+        road_address: str | None = None,
+        jibun_address: str | None = None,
+        keyword: str | None = None,
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
+        bbox: BBoxV2 | None = None,
+        limit: int = 10,
+        fallback: Literal["none", "api"] = "none",
+    ) -> GeocodeV2Response:
+        inp = GeocodeV2Input(
+            query=query,
+            road_address=road_address,
+            jibun_address=jibun_address,
+            keyword=keyword,
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+            bbox=bbox,
+            limit=limit,
+            fallback=fallback,
+        )
+        if keyword and not any((query, road_address, jibun_address)):
+            search_response = await self.search(
+                query=keyword,
+                type="place",
+                size=limit,
+                sig_cd=sig_cd,
+                bjd_cd=bjd_cd,
+                bbox=bbox,
+            )
+            return geocode_v2_from_search(inp, search_response)
+
+        address = road_address or jibun_address or query or keyword
+        assert address is not None
+        response = await self._geocode_v1(
+            address,
+            type="parcel" if jibun_address and not road_address else "road",
+            fallback="api" if fallback == "api" else "local_only",
+            sig_cd=sig_cd,
+            bjd_cd=bjd_cd,
+        )
+        return geocode_v2_from_v1(inp, response)
+
+    async def _geocode_v1(
+        self,
         address: str,
         *,
         type: Literal["road", "parcel"] = "road",
@@ -160,66 +206,19 @@ class AsyncAddressClient:
 
     async def geocode_many(
         self,
-        addresses: Iterable[str],
+        queries: Iterable[str],
         *,
         concurrency: int = 8,
-        type: Literal["road", "parcel"] = "road",
-    ) -> tuple[GeocodeResponse, ...]:
+    ) -> tuple[GeocodeV2Response, ...]:
         semaphore = asyncio.Semaphore(concurrency)
 
-        async def one(address: str) -> GeocodeResponse:
+        async def one(query: str) -> GeocodeV2Response:
             async with semaphore:
-                return await self.geocode(address, type=type)
+                return await self.geocode(query=query)
 
-        return tuple(await asyncio.gather(*(one(address) for address in addresses)))
+        return tuple(await asyncio.gather(*(one(query) for query in queries)))
 
-    async def geocode_v2(
-        self,
-        *,
-        query: str | None = None,
-        road_address: str | None = None,
-        jibun_address: str | None = None,
-        keyword: str | None = None,
-        sig_cd: str | None = None,
-        bjd_cd: str | None = None,
-        bbox: BBoxV2 | None = None,
-        limit: int = 10,
-        fallback: Literal["none", "api"] = "none",
-    ) -> GeocodeV2Response:
-        inp = GeocodeV2Input(
-            query=query,
-            road_address=road_address,
-            jibun_address=jibun_address,
-            keyword=keyword,
-            sig_cd=sig_cd,
-            bjd_cd=bjd_cd,
-            bbox=bbox,
-            limit=limit,
-            fallback=fallback,
-        )
-        if keyword and not any((query, road_address, jibun_address)):
-            search_response = await self.search_v2(
-                query=keyword,
-                type="place",
-                size=limit,
-                sig_cd=sig_cd,
-                bjd_cd=bjd_cd,
-                bbox=bbox,
-            )
-            return geocode_v2_from_search(inp, search_response)
-
-        address = road_address or jibun_address or query or keyword
-        assert address is not None
-        response = await self.geocode(
-            address,
-            type="parcel" if jibun_address and not road_address else "road",
-            fallback="api" if fallback == "api" else "local_only",
-            sig_cd=sig_cd,
-            bjd_cd=bjd_cd,
-        )
-        return geocode_v2_from_v1(inp, response)
-
-    async def reverse_geocode(
+    async def _reverse_geocode_v1(
         self,
         x: float,
         y: float,
@@ -247,7 +246,7 @@ class AsyncAddressClient:
             region_hint=self._region_hint(sig_cd, bjd_cd),
         )
 
-    async def reverse_v2(
+    async def reverse(
         self,
         lon: float,
         lat: float,
@@ -269,7 +268,7 @@ class AsyncAddressClient:
             sig_cd=sig_cd,
             bjd_cd=bjd_cd,
         )
-        response = await self.reverse_geocode(
+        response = await self._reverse_geocode_v1(
             lon,
             lat,
             crs=crs,
@@ -284,26 +283,6 @@ class AsyncAddressClient:
         self,
         query: str,
         *,
-        type: SearchType = "address",
-        page: int = 1,
-        size: int = 10,
-        crs: str = "EPSG:4326",
-        sig_cd: str | None = None,
-        bjd_cd: str | None = None,
-    ) -> SearchResponse:
-        from .dto.search import SearchInput
-
-        inp = SearchInput(query=query, type=type, page=page, size=size, crs=crs)
-        return await core_search(
-            SearchRepository(self._engine()),
-            inp,
-            region_hint=self._region_hint(sig_cd, bjd_cd),
-        )
-
-    async def search_v2(
-        self,
-        *,
-        query: str,
         type: Literal["address", "place", "district", "road", "category"] = "address",
         category_group_code: str | None = None,
         page: int = 1,
@@ -322,7 +301,7 @@ class AsyncAddressClient:
             bjd_cd=bjd_cd,
             bbox=bbox,
         )
-        response = await self.search(
+        response = await self._search_v1(
             query,
             type="place" if type == "category" else type,
             page=page,
@@ -331,6 +310,26 @@ class AsyncAddressClient:
             bjd_cd=bjd_cd,
         )
         return search_v2_from_v1(inp, response)
+
+    async def _search_v1(
+        self,
+        query: str,
+        *,
+        type: SearchType = "address",
+        page: int = 1,
+        size: int = 10,
+        crs: str = "EPSG:4326",
+        sig_cd: str | None = None,
+        bjd_cd: str | None = None,
+    ) -> SearchResponse:
+        from .dto.search import SearchInput
+
+        inp = SearchInput(query=query, type=type, page=page, size=size, crs=crs)
+        return await core_search(
+            SearchRepository(self._engine()),
+            inp,
+            region_hint=self._region_hint(sig_cd, bjd_cd),
+        )
 
     async def zipcode(
         self,

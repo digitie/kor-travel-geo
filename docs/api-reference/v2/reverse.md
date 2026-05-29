@@ -35,7 +35,7 @@ curl -X POST "http://localhost:8000/v2/reverse" \
 
 ```python
 async with AsyncAddressClient() as client:
-    response = await client.reverse_v2(127.036, 37.501, radius_m=200)
+    response = await client.reverse(127.036, 37.501, radius_m=200)
 ```
 
 ## 구현 메모

@@ -25,7 +25,7 @@ async def geocode(
     bjd_cd: str | None = Query(default=None, pattern=r"^(\d{8}|\d{10})$"),
     client: AsyncAddressClient = Depends(get_client),
 ) -> GeocodeResponse:
-    return await client.geocode(
+    return await client._geocode_v1(
         address,
         type=type,
         crs=crs,

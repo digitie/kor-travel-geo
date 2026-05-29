@@ -34,15 +34,7 @@ curl -G "http://localhost:8000/v1/address/geocode" \
   --data-urlencode "fallback=api"
 ```
 
-```python
-async with AsyncAddressClient() as client:
-    response = await client.geocode(
-        "서울특별시 강남구 테헤란로 152",
-        type="road",
-        fallback="api",
-        sig_cd="11680",
-    )
-```
+Python 라이브러리 공개 표면은 후보 목록 응답만 제공한다. vworld 호환 v1 응답이 필요하면 REST `/v1/address/geocode`를 직접 호출한다.
 
 ## Provider fallback
 

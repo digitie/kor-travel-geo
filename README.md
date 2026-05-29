@@ -113,19 +113,20 @@ from kraddr.geo import AsyncAddressClient
 async def main() -> None:
     async with AsyncAddressClient() as client:    # .env에서 DSN 자동 로드
         # 지오코딩 (Geocode)
-        r = await client.geocode("서울특별시 강남구 테헤란로 152")
-        if r.status == "OK":
-            print(r.result.point)            # Point(x=127.028..., y=37.500...)
-            print(r.refined.text)            # '서울특별시 강남구 테헤란로 152'
-            print(r.x_extension.bd_mgt_sn)   # '11680101...'
+        r = await client.geocode(query="서울특별시 강남구 테헤란로 152")
+        if r.status == "OK" and r.candidates:
+            candidate = r.candidates[0]
+            print(candidate.point)       # Point(x=127.028..., y=37.500...)
+            print(candidate.address.full if candidate.address else None)
+            print(candidate.source)      # 'local', 'vworld', 'juso', ...
 
         # 역지오코딩 (Reverse Geocode)
-        rr = await client.reverse_geocode(127.028601, 37.500344, type="both")
-        for item in rr.result:
-            print(item.type, item.text, item.zipcode)
+        rr = await client.reverse(127.028601, 37.500344, include_zipcode=True)
+        for item in rr.candidates:
+            print(item.match_kind, item.address.full if item.address else None, item.distance_m)
 
         # 행정구역 hint가 확실하면 후보 검색 범위를 줄일 수 있다.
-        hinted = await client.geocode("테헤란로 152", sig_cd="11680")
+        hinted = await client.geocode(query="테헤란로 152", sig_cd="11680")
         print(hinted.status)
 
 asyncio.run(main())
@@ -171,6 +172,7 @@ asyncio.run(main())
 | **ADR-032** | `maplibre-vworld-js`는 최신으로 소비하고 `kraddr-geo` 특화 기능은 이 저장소에서 구현 |
 | **ADR-033** | 운영 메타데이터는 `ops` 스키마의 감사·스냅샷·릴리스 테이블로 관리 |
 | **ADR-034** | AI 에이전트별 고정 Git worktree와 CodeGraph 인덱스를 사용 |
+| **ADR-039** | Python 라이브러리는 후보 목록 API만 공개하고 `_v2` 접미사를 제거 |
 
 전체 ADR 본문은 [`docs/decisions.md`](docs/decisions.md)에서 확인하실 수 있습니다.
 
