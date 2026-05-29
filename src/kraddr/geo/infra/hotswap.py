@@ -15,7 +15,7 @@ from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.settings import Settings
 
 _DATABASE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
-_DEFAULT_MAINTENANCE_DATABASE = "postgres"
+_MAX_DATABASE_IDENTIFIER_LENGTH = 63
 
 
 async def inspect_restore_hot_swap_plan(
@@ -26,8 +26,13 @@ async def inspect_restore_hot_swap_plan(
 
     current_database = _current_database(settings)
     restore_database = _validate_database_identifier(req.restore_database, "restore_database")
-    previous_alias = _resolve_previous_alias(current_database, req.previous_alias)
-    maintenance_database = _maintenance_database(current_database)
+    generated_at = datetime.now(UTC)
+    previous_alias = _resolve_previous_alias(
+        current_database,
+        req.previous_alias,
+        generated_at=generated_at,
+    )
+    maintenance_database = _maintenance_database(current_database, req.maintenance_database)
     maintenance_dsn = _dsn_for_database(settings.pg_dsn, maintenance_database)
 
     engine = create_async_engine(maintenance_dsn)
@@ -55,6 +60,7 @@ SELECT datname
         settings,
         req,
         existing_databases={str(row) for row in rows},
+        generated_at=generated_at,
     )
 
 
@@ -62,7 +68,7 @@ def build_restore_hot_swap_plan(
     settings: Settings,
     req: RestoreHotSwapPlanRequest,
     *,
-    existing_databases: Collection[str] = (),
+    existing_databases: Collection[str] | None = None,
     generated_at: datetime | None = None,
 ) -> RestoreHotSwapPlan:
     """Build a deterministic restore hot-swap plan.
@@ -79,12 +85,12 @@ def build_restore_hot_swap_plan(
         req.previous_alias,
         generated_at=generated_at,
     )
-    maintenance_database = _maintenance_database(current_database)
+    maintenance_database = _maintenance_database(current_database, req.maintenance_database)
     blockers = _hot_swap_blockers(
         current_database=current_database,
         restore_database=restore_database,
         previous_alias=previous_alias,
-        existing_databases=set(existing_databases),
+        existing_databases=set(existing_databases) if existing_databases is not None else None,
     )
     sql = (
         _terminate_backends_sql(current_database),
@@ -129,14 +135,14 @@ def _hot_swap_blockers(
     current_database: str,
     restore_database: str,
     previous_alias: str,
-    existing_databases: set[str],
+    existing_databases: set[str] | None,
 ) -> list[str]:
     blockers: list[str] = []
     if current_database == restore_database:
         blockers.append("restore_database must differ from current database")
     if current_database == previous_alias or restore_database == previous_alias:
         blockers.append("previous_alias must differ from current and restore database")
-    if existing_databases:
+    if existing_databases is not None:
         if current_database not in existing_databases:
             blockers.append(f"current database does not exist in cluster: {current_database}")
         if restore_database not in existing_databases:
@@ -154,11 +160,12 @@ def _current_database(settings: Settings) -> str:
     return _validate_database_identifier(current_database, "current_database")
 
 
-def _maintenance_database(current_database: str) -> str:
-    if current_database == _DEFAULT_MAINTENANCE_DATABASE:
+def _maintenance_database(current_database: str, maintenance_database: str) -> str:
+    validated = _validate_database_identifier(maintenance_database, "maintenance_database")
+    if current_database == validated:
         msg = "current database cannot be the maintenance database for hot-swap"
         raise InvalidInputError(msg)
-    return _DEFAULT_MAINTENANCE_DATABASE
+    return validated
 
 
 def _dsn_for_database(dsn: str, database: str) -> str:
@@ -174,7 +181,9 @@ def _resolve_previous_alias(
     if previous_alias is not None:
         return _validate_database_identifier(previous_alias, "previous_alias")
     timestamp = (generated_at or datetime.now(UTC)).strftime("%Y%m%d_%H%M%S")
-    alias = f"{current_database}_previous_{timestamp}"
+    suffix = f"_previous_{timestamp}"
+    max_prefix_length = _MAX_DATABASE_IDENTIFIER_LENGTH - len(suffix)
+    alias = f"{current_database[:max_prefix_length]}{suffix}"
     return _validate_database_identifier(alias, "previous_alias")
 
 

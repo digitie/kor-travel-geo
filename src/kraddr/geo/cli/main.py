@@ -782,6 +782,7 @@ def serving_hot_swap_plan(
         min=1,
         max=3650,
     ),
+    maintenance_database: str = typer.Option("postgres", "--maintenance-db"),
 ) -> None:
     """Print a restore hot-swap preflight plan without executing ALTER DATABASE."""
 
@@ -792,6 +793,7 @@ def serving_hot_swap_plan(
             restore_database=restore_database,
             previous_alias=previous_alias,
             previous_alias_retention_days=previous_alias_retention_days,
+            maintenance_database=maintenance_database,
         )
         async with AsyncAddressClient() as client:
             typer.echo((await client.restore_hot_swap_plan(req)).model_dump_json())

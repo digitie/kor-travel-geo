@@ -112,6 +112,7 @@ class RestoreHotSwapPlanRequest(FrozenModel):
     restore_database: str = Field(min_length=1, max_length=63)
     previous_alias: str | None = Field(default=None, min_length=1, max_length=63)
     previous_alias_retention_days: int = Field(default=7, ge=1, le=3650)
+    maintenance_database: str = Field(default="postgres", min_length=1, max_length=63)
 
 
 class RestoreHotSwapPlan(FrozenModel):

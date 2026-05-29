@@ -198,7 +198,8 @@ async def rollback_hot_swap(release_id: UUID) -> HotSwapResult:
 POST /v1/admin/restores/hot-swap-plan
 {
   "restore_database": "kraddr_geo_restore_20260529",
-  "previous_alias_retention_days": 7
+  "previous_alias_retention_days": 7,
+  "maintenance_database": "postgres"
 }
 ```
 
@@ -207,7 +208,7 @@ POST /v1/admin/restores/hot-swap-plan
 - `current_database`: 현재 `KRADDR_GEO_PG_DSN`의 DB 이름
 - `restore_database`: rename 대상 복원본 DB
 - `previous_alias`: 현재 DB를 보존할 alias
-- `maintenance_database`: `ALTER DATABASE ... RENAME`을 실행할 maintenance 연결 DB (`postgres`)
+- `maintenance_database`: `ALTER DATABASE ... RENAME`을 실행할 maintenance 연결 DB (기본 `postgres`, managed/hardened cluster는 다른 DB 지정 가능)
 - `typed_confirmation`: maintenance window 생성/실행 시 사용할 확인 문구 (`HOT_SWAP <current> FROM <restore>`)
 - `rollback_confirmation`: alias 보존 기간 안에 수동 rollback할 때 사용할 확인 문구
 - `can_execute`, `blockers`: 현재 cluster 안 DB 존재 여부와 alias 충돌 검증 결과
@@ -227,10 +228,13 @@ POST /v1/admin/restores/hot-swap-plan
 ```bash
 kraddr-geo serving hot-swap-plan \
   --restore-db kraddr_geo_restore_20260527_123456 \
-  --previous-alias-retention-days 7
+  --previous-alias-retention-days 7 \
+  --maintenance-db postgres
 ```
 
 CLI는 REST와 같은 `RestoreHotSwapPlan` JSON을 출력한다. `typed_confirmation`을 그대로 사용해 `ops.maintenance_windows(kind='restore')`를 열고, `sql` 배열을 운영자가 실행 전 리뷰한다.
+
+자동 `previous_alias`는 `datetime.now(UTC)`를 한 번만 고정해 DB 존재 확인과 반환 plan이 같은 alias를 보도록 한다. 현재 DB 이름이 긴 경우에는 `_previous_YYYYMMDD_HHMMSS` suffix를 보존하고 앞부분을 잘라 PostgreSQL 63자 제한 안에 맞춘다.
 
 ## audit / release / window 연계 (T-049)
 

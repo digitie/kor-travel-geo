@@ -2071,6 +2071,11 @@ export interface components {
         };
         /** RestoreHotSwapPlanRequest */
         RestoreHotSwapPlanRequest: {
+            /**
+             * Maintenance Database
+             * @default postgres
+             */
+            maintenance_database: string;
             /** Previous Alias */
             previous_alias?: string | null;
             /**

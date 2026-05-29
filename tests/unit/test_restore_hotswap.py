@@ -66,6 +66,54 @@ def test_restore_hot_swap_plan_reports_missing_and_conflicting_databases() -> No
     )
 
 
+def test_restore_hot_swap_plan_distinguishes_unchecked_from_empty_database_inventory() -> None:
+    settings = Settings(pg_dsn="postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo")
+    unchecked = build_restore_hot_swap_plan(
+        settings,
+        RestoreHotSwapPlanRequest(restore_database="kraddr_geo_restore_20260529"),
+    )
+    checked_empty = build_restore_hot_swap_plan(
+        settings,
+        RestoreHotSwapPlanRequest(restore_database="kraddr_geo_restore_20260529"),
+        existing_databases=set(),
+    )
+
+    assert unchecked.can_execute is True
+    assert checked_empty.can_execute is False
+    assert checked_empty.blockers[:2] == (
+        "current database does not exist in cluster: kraddr_geo",
+        "restore database does not exist in cluster: kraddr_geo_restore_20260529",
+    )
+
+
+def test_restore_hot_swap_plan_truncates_long_generated_previous_alias() -> None:
+    settings = Settings(
+        pg_dsn="postgresql+psycopg://addr:addr@localhost:5432/"
+        "kraddr_geo_serving_database_name_that_is_long_but_valid",
+    )
+    plan = build_restore_hot_swap_plan(
+        settings,
+        RestoreHotSwapPlanRequest(restore_database="kraddr_geo_restore_20260529"),
+        generated_at=datetime(2026, 5, 29, 1, 2, 3, tzinfo=UTC),
+    )
+
+    assert len(plan.previous_alias) == 63
+    assert plan.previous_alias.endswith("_previous_20260529_010203")
+
+
+def test_restore_hot_swap_plan_allows_custom_maintenance_database() -> None:
+    settings = Settings(pg_dsn="postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo")
+    plan = build_restore_hot_swap_plan(
+        settings,
+        RestoreHotSwapPlanRequest(
+            restore_database="kraddr_geo_restore_20260529",
+            maintenance_database="kraddr_geo_admin",
+        ),
+    )
+
+    assert plan.maintenance_database == "kraddr_geo_admin"
+
+
 def test_restore_hot_swap_plan_rejects_unsafe_database_identifiers() -> None:
     settings = Settings(pg_dsn="postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo")
     with pytest.raises(InvalidInputError, match="restore_database must match"):

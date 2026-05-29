@@ -3758,6 +3758,13 @@
       "RestoreHotSwapPlanRequest": {
         "additionalProperties": false,
         "properties": {
+          "maintenance_database": {
+            "default": "postgres",
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Maintenance Database",
+            "type": "string"
+          },
           "previous_alias": {
             "anyOf": [
               {
