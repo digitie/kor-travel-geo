@@ -22,6 +22,7 @@ from kraddr.geo.infra.backup import run_backup_job, run_restore_job
 from kraddr.geo.infra.concurrency import (
     AdvisoryLockKey,
     AdvisoryLockNamespace,
+    ConcurrentExecutionError,
     cross_process_lock,
 )
 from kraddr.geo.infra.metrics import (
@@ -188,8 +189,12 @@ def _locked_job_handler(
         progress: _jobs.ProgressCallback,
     ) -> None:
         key = AdvisoryLockKey.for_resource(namespace, resource(payload))
-        async with cross_process_lock(engine, key):
-            await handler(payload, cancel_event, progress)
+        try:
+            async with cross_process_lock(engine, key):
+                await handler(payload, cancel_event, progress)
+        except ConcurrentExecutionError as exc:
+            await progress(stage="lock_conflict", message=f"{exc.code}: {exc.message}")
+            raise
 
     return wrapped
 
@@ -205,8 +210,12 @@ def _locked_global_job_handler(
         progress: _jobs.ProgressCallback,
     ) -> None:
         _ = payload
-        async with cross_process_lock(engine, AdvisoryLockKey.global_key(namespace)):
-            await handler(payload, cancel_event, progress)
+        try:
+            async with cross_process_lock(engine, AdvisoryLockKey.global_key(namespace)):
+                await handler(payload, cancel_event, progress)
+        except ConcurrentExecutionError as exc:
+            await progress(stage="lock_conflict", message=f"{exc.code}: {exc.message}")
+            raise
 
     return wrapped
 

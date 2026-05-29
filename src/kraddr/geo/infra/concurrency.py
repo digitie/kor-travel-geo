@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import zlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import IntEnum
-from typing import Literal
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -40,7 +38,6 @@ class AdvisoryLockNamespace(IntEnum):
     HOT_SWAP = 0x4B47_0072
     CONSISTENCY_RUN = 0x4B47_0080
     BENCHMARK_QUERY = 0x4B47_0090
-    OPS_TABLE_STATS = 0x4B47_00A0
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,32 +79,16 @@ class ConcurrentExecutionError(KraddrGeoError):
 async def cross_process_lock(
     engine: AsyncEngine,
     key: AdvisoryLockKey,
-    *,
-    on_busy: Literal["fail_fast", "wait"] = "fail_fast",
-    wait_timeout_s: float | None = None,
 ) -> AsyncIterator[None]:
     """Acquire a session-level PostgreSQL advisory lock for one operation."""
 
     async with engine.connect() as conn:
-        if on_busy == "fail_fast":
-            acquired = await conn.scalar(
-                text("SELECT pg_try_advisory_lock(:lock_key)"),
-                {"lock_key": key.as_int()},
-            )
-            if acquired is not True:
-                raise ConcurrentExecutionError(key)
-        else:
-            lock_coro = conn.execute(
-                text("SELECT pg_advisory_lock(:lock_key)"),
-                {"lock_key": key.as_int()},
-            )
-            if wait_timeout_s is None:
-                await lock_coro
-            else:
-                try:
-                    await asyncio.wait_for(lock_coro, timeout=wait_timeout_s)
-                except TimeoutError as exc:
-                    raise ConcurrentExecutionError(key) from exc
+        acquired = await conn.scalar(
+            text("SELECT pg_try_advisory_lock(:lock_key)"),
+            {"lock_key": key.as_int()},
+        )
+        if acquired is not True:
+            raise ConcurrentExecutionError(key)
         try:
             yield
         finally:

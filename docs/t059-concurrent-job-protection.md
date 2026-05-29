@@ -87,10 +87,11 @@ class AdvisoryLockNamespace(IntEnum):
     HOT_SWAP             = 0x4B47_0072
     CONSISTENCY_RUN      = 0x4B47_0080
     BENCHMARK_QUERY      = 0x4B47_0090
-    OPS_TABLE_STATS      = 0x4B47_00A0
 ```
 
 high 32 bits = namespace, low 32 bits = resource ID(예: source path hash, target DB name hash). 충돌 없이 같은 namespace 안에서 여러 lock 가능.
+
+`ops.table_stats_snapshots` capture는 PR #81에서 이미 `_OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0`와 transaction-level lock으로 분리 구현되어 있다. 이번 T-059의 session-level namespace enum에는 넣지 않아 "같은 lock 체계"처럼 오해하지 않게 한다.
 
 ### helper
 
@@ -109,33 +110,21 @@ class AdvisoryLockKey:
 async def cross_process_lock(
     engine: AsyncEngine,
     key: AdvisoryLockKey,
-    *,
-    on_busy: Literal["fail_fast", "wait"] = "fail_fast",
-    wait_timeout_s: float | None = None,
 ) -> AsyncIterator[None]:
     """PostgreSQL advisory lock으로 cross-process 직렬화.
 
-    fail_fast: 즉시 ConcurrentExecutionError 발생.
-    wait: lock 획득까지 wait_timeout_s만큼 대기.
+    이미 같은 key를 다른 session이 잡고 있으면 즉시 ConcurrentExecutionError를 발생시킨다.
     """
     async with engine.connect() as conn:
-        # Session-level lock (transaction과 분리)
-        if on_busy == "fail_fast":
-            acquired = await conn.scalar(
-                text("SELECT pg_try_advisory_lock(:key)"),
-                {"key": key.as_int()},
+        acquired = await conn.scalar(
+            text("SELECT pg_try_advisory_lock(:key)"),
+            {"key": key.as_int()},
+        )
+        if not acquired:
+            raise ConcurrentExecutionError(
+                f"{key.namespace.name} (resource_hash={key.resource_hash:08x}) "
+                f"is already running in another process. Wait for it to finish."
             )
-            if not acquired:
-                raise ConcurrentExecutionError(
-                    f"{key.namespace.name} (resource_hash={key.resource_hash:08x}) "
-                    f"is already running in another process. Wait for it to finish."
-                )
-        else:
-            await conn.execute(
-                text("SET LOCAL lock_timeout = :timeout"),
-                {"timeout": f"{int(wait_timeout_s * 1000)}ms"},
-            )
-            await conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": key.as_int()})
         try:
             yield
         finally:
@@ -152,14 +141,14 @@ CLI 명령 진입 시 advisory lock 획득:
 def load_juso_command(path: Path, yyyymm: str | None = typer.Option(None)) -> None:
     async def run():
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
+            engine = client._engine()
             key = AdvisoryLockKey(
                 namespace=AdvisoryLockNamespace.LOAD_JUSO_TEXT,
                 resource_hash=zlib.crc32(str(path.resolve()).encode("utf-8")) & 0xFFFFFFFF,
             )
             try:
-                async with cross_process_lock(client.engine, key, on_busy="fail_fast"):
-                    await load_juso_hangul(client.engine, path, source_yyyymm=yyyymm)
+                async with cross_process_lock(engine, key):
+                    await load_juso_hangul(engine, path, source_yyyymm=yyyymm)
             except ConcurrentExecutionError as exc:
                 typer.echo(f"Error: {exc}", err=True)
                 raise typer.Exit(code=2)
@@ -174,7 +163,7 @@ resource_hash로 path 별 분리:
 
 global lock(같은 namespace의 모든 resource 차단)이 필요한 경우:
 
-- `MV_SWAP`, `INIT_DB`, `HOT_SWAP` 등은 resource_hash=0 고정(`global`).
+- `MV_REFRESH`, `INIT_DB`, `HOT_SWAP` 등은 resource_hash=0 고정(`global`).
 - 그 외(`LOAD_JUSO_TEXT` 같은 path 단위)는 path hash.
 
 ## API 적용 표준
@@ -188,7 +177,7 @@ async def juso_load_handler(payload, cancel_event, progress):
         namespace=AdvisoryLockNamespace.LOAD_JUSO_TEXT,
         resource_hash=zlib.crc32(payload["path"].encode("utf-8")) & 0xFFFFFFFF,
     )
-    async with cross_process_lock(engine, key, on_busy="fail_fast"):
+    async with cross_process_lock(engine, key):
         result = await load_juso_hangul(engine, Path(payload["path"]), source_yyyymm=payload.get("source_yyyymm"))
         ...
 ```
@@ -247,8 +236,9 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 4. [완료] **CLI 적용**: 주요 `load *`, `refresh mv`, `validate consistency`, `uploads cleanup`, `backup create`, `restore create`에 advisory lock 적용.
 5. [완료] **API handler 적용**: `JobQueue` 기본 handler 등록 시 같은 lock key를 획득.
 6. [완료] **에러 코드 등록**: `ConcurrentExecutionError(E0409, HTTP 409)`를 도메인 오류로 둔다.
-7. [후속] **운영 가시성**: CLI 단독 실행도 `load_jobs` row 생성 + advisory lock과 연계.
-8. [완료] **문서화**:
+7. [완료] **queue 충돌 가시성**: API job handler가 lock 충돌을 만나면 `lock_conflict` progress event를 먼저 남긴 뒤 job을 `failed`로 닫는다.
+8. [후속] **운영 가시성**: CLI 단독 실행도 `load_jobs` row 생성 + advisory lock과 연계.
+9. [완료] **문서화**:
    - `docs/backend-package.md`에 cross-process protection 정책 섹션 추가.
    - `docs/api-reference/library/error-codes.md`에 `E0409` 항목.
    - `docs/operators/runbook.md`(향후)에 "동시 실행 차단 만났을 때 처리 절차".
@@ -256,6 +246,7 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 ## 검증
 
 - 단위 테스트: `AdvisoryLockKey` 직렬화, `cross_process_lock` unlock, busy fail-fast, CLI/API handler source contract.
+- `wait` 모드는 1차에서 사용하지 않아 제거했다. 모든 호출부는 fail-fast이며, 큐 worker를 오래 막지 않는다.
 - smoke(WSL Docker PostGIS): 같은 `MV_REFRESH` key를 두 connection에서 획득 시도 → 두 번째 `ConcurrentExecutionError(E0409/409)`.
 - targeted gate:
   - `ruff check src/kraddr/geo/infra/concurrency.py src/kraddr/geo/cli/main.py src/kraddr/geo/api/app.py tests/unit/test_concurrency.py tests/unit/test_api_app_contract.py`
@@ -276,6 +267,7 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 ## 운영 가이드
 
 - 운영자가 "왜 fail-fast?" 보면 `kraddr-geo jobs running` 또는 `/admin/load`에서 진행 중 작업 확인 후 결정.
+- API queue handler에서 lock 충돌이 나면 해당 job은 `failed`가 된다. 일반 loader 실패와 구분할 수 있게 `log_tail`에 `current_stage='lock_conflict'`, `message='E0409: ...'` progress event를 먼저 남긴다. 자동 재큐/재시도는 이번 1차 범위 밖이다.
 - advisory lock은 connection이 살아 있는 동안만 유지. process kill -9 시 connection 종료 → lock 자동 해제.
 - 단, connection이 LB/network 단절로 살아 있는 것처럼 보이고 실제로는 idle인 경우 lock이 stale될 수 있음. PostgreSQL `tcp_keepalives_*` 설정으로 detect.
 
@@ -285,6 +277,7 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 - 한 process가 같은 advisory lock을 nested로 호출 가능. session-level lock은 reentrant이므로 안전 — 다만 unlock 횟수가 lock 횟수와 일치해야 함.
 - `pg_try_advisory_lock(bigint)` 외 `(int, int)` 시그니처도 있다. 본 task는 `bigint` 단일 인자 형태 사용.
 - application engine이 connection pool을 사용하면 lock 해제 후 같은 connection이 풀로 돌아가도 lock이 풀려 있음(connection-level). 다만 connection이 풀에 있는 동안에도 lock이 살아 있을 경우 다른 caller가 같은 connection을 가져가면 unexpected behavior. helper에서 `lock + unlock`을 한 connection 안에서 명시적으로 처리(위 코드 그대로).
+- 이번 1차는 동일 명령/동일 job kind + 동일 resource의 cross-process 중복 실행 차단을 우선한다. 예를 들어 full snapshot load와 daily delta처럼 서로 다른 namespace가 같은 물리 table을 쓸 수 있는 kind 간 경합은 `JobQueue` in-process 직렬화와 개별 loader의 staging/table lock에 의존하며, 필요하면 table 단위 공유 namespace를 후속으로 추가한다.
 
 ## 관련 ADR/Task
 

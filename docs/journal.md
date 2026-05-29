@@ -10,6 +10,7 @@
 - `src/kraddr/geo/infra/concurrency.py`를 추가해 `AdvisoryLockNamespace`, `AdvisoryLockKey`, `ConcurrentExecutionError(E0409/409)`, `cross_process_lock()`을 제공한다.
 - 주요 CLI 운영 명령(`init-db`, `load *`, `refresh mv`, `validate consistency`, `uploads cleanup`, `backup create`, `restore create`)이 명령별/path별/target별 lock key를 잡고 중복 실행 시 exit code 2로 fail-fast한다.
 - FastAPI `JobQueue` 기본 handler도 같은 lock key를 잡도록 등록해 CLI와 API job이 같은 자원을 동시에 만지는 것을 막는다.
+- PR #82 리뷰 후속으로 미사용 `wait` 경로와 혼동 가능한 `OPS_TABLE_STATS` enum 멤버를 제거하고, API queue의 lock 충돌은 `lock_conflict` progress event 후 `failed`로 닫는다고 문서화했다.
 - 실제 Docker PostgreSQL에서 같은 `MV_REFRESH` key를 두 connection으로 잡아 두 번째 connection이 `E0409/409`로 막히는 smoke를 확인했다.
 - CLI 단독 실행을 `load_jobs` row로 노출하는 운영 가시화는 후속으로 남겼다.
 

@@ -933,7 +933,7 @@ CREATE INDEX idx_load_jobs_parent ON load_jobs (parent_job_id) WHERE parent_job_
 
 `JobQueue._run`은 상태 전이 시점(`queued → running → done|failed|cancelled`)마다 `load_jobs`에 UPDATE를 보낸다. 진행률·current_stage는 1~5초 단위 throttle로 갱신해 부하 회피.
 
-T-059 이후 주요 운영 handler는 `infra.concurrency.cross_process_lock()`으로 PostgreSQL session advisory lock을 함께 잡는다. 같은 lock key를 CLI와 API job handler가 공유하므로 같은 파일/target DB/MV refresh/backup/restore 작업이 두 process에서 동시에 시작되면 두 번째 작업은 `ConcurrentExecutionError(E0409, HTTP 409)`로 fail-fast한다. CLI는 같은 오류를 stderr에 출력하고 exit code 2로 종료한다. CLI 단독 실행을 `load_jobs` row로 노출하는 운영 가시화는 후속으로 둔다.
+T-059 이후 주요 운영 handler는 `infra.concurrency.cross_process_lock()`으로 PostgreSQL session advisory lock을 함께 잡는다. 같은 lock key를 CLI와 API job handler가 공유하므로 같은 파일/target DB/MV refresh/backup/restore 작업이 두 process에서 동시에 시작되면 두 번째 작업은 `ConcurrentExecutionError(E0409, HTTP 409)`로 fail-fast한다. CLI는 같은 오류를 stderr에 출력하고 exit code 2로 종료한다. API queue handler는 lock 충돌 시 `lock_conflict` progress event를 먼저 남기고 job을 `failed`로 닫는다. CLI 단독 실행을 `load_jobs` row로 노출하는 운영 가시화와 서로 다른 job kind가 같은 물리 table을 쓰는 경합의 table 단위 lock은 후속으로 둔다.
 
 ADR-017에 따라 `full_load_batch`는 실행 핸들러가 없는 root job으로 남고, 실제 실행은 child job이 담당한다. source child 6종이 모두 `done`이 되면 큐가 `consistency_check`를 자동 등록한다. 정합성 리포트가 `ERROR`가 아니고 `source_set.load_batch_id`가 확인되면 `mv_refresh`를 `strategy='swap'`으로 등록한다. child 실패 또는 취소가 발생하면 root는 `failed`, 아직 대기 중인 같은 batch child는 `cancelled`가 된다.
 
