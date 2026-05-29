@@ -114,12 +114,13 @@
 - ✅ PR #69~#80 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #80까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. 수동 table stats capture lock 충돌은 `409 E0409`로 구분하고, `replace_current` restore의 maintenance window 인가 통과는 `maintenance_window.authorize` audit event로 남긴다. 상세: `docs/postmerge-review-fixups-pr69-pr80.md`
 - ✅ T-059 CLI/Job 동시 실행 보호 표준화 — `infra.concurrency`의 PostgreSQL session advisory lock helper를 추가하고, 주요 CLI 운영 명령과 FastAPI `JobQueue` handler가 같은 lock key를 공유하도록 했다. 중복 실행은 `E0409/HTTP 409` 또는 CLI exit code 2로 fail-fast한다. Docker PostgreSQL smoke에서 `MV_REFRESH` 중복 lock 차단을 확인했다. 상세: `docs/t059-concurrent-job-protection.md`
 - ✅ PR #69~#82 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #82까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. PR #81 리뷰에서 발견된 `maintenance_window.authorize` audit의 `actor_type="job"` CHECK 위반을 `system`으로 고치고, table stats scheduler `skip_if_locked=True` 의도를 호출부에 명시했다. 상세: `docs/postmerge-review-fixups-pr69-pr82.md`
+- ✅ T-054 한국 IP GeoIP gate — FastAPI middleware가 내부/loopback은 허용하고 외부 공용 IP는 GeoIP country `KR`만 통과시키게 했다. 기본 `strict` 모드에서는 GeoIP DB가 없으면 공용 IP를 `E0403/403`으로 차단하며, allow/deny CIDR, trusted proxy `X-Forwarded-For`, `geoip.denied` audit, `kraddr-geo geoip check`를 지원한다. 상세: `docs/t054-korea-only-geoip.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-054 한국 IP 외부 접근 차단(Geo-IP gate)이다. 이후 사용자 최신 우선순위에 따라 T-055 N150/Odroid 실측 준비를 진행한다.
+다음 작업은 T-055 N150/Odroid 실측 준비다.
 
-그 이후의 작업 후보는 사용자 최신 지시에 따라 T-054(한국 IP만 허용) → T-055(N150/Odroid 실측) 순서다. T-027 최종 클린 적재 검증은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
+그 이후의 작업 후보는 사용자 최신 지시에 따라 T-055(N150/Odroid 실측) 이후 T-027 최종 클린 적재 검증이다. T-027은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.

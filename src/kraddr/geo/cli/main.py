@@ -21,6 +21,7 @@ from kraddr.geo.infra.concurrency import (
     ConcurrentExecutionError,
     cross_process_lock,
 )
+from kraddr.geo.infra.geoip import build_geoip_reader, classify_ip
 from kraddr.geo.infra.source_set import (
     build_full_load_source_set_plan,
     confirmation_token_for,
@@ -67,6 +68,7 @@ uploads_app = typer.Typer(help="Maintain filesystem upload sets.")
 backup_app = typer.Typer(help="Create and inspect DB backup artifacts.")
 restore_app = typer.Typer(help="Restore DB backup artifacts.")
 serving_app = typer.Typer(help="Plan serving database release operations.")
+geoip_app = typer.Typer(help="Inspect Korea-only GeoIP gate decisions.")
 app.add_typer(load_app, name="load")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(validate_app, name="validate")
@@ -75,6 +77,7 @@ app.add_typer(uploads_app, name="uploads")
 app.add_typer(backup_app, name="backup")
 app.add_typer(restore_app, name="restore")
 app.add_typer(serving_app, name="serving")
+app.add_typer(geoip_app, name="geoip")
 
 
 async def _run_with_cli_lock[T](
@@ -117,6 +120,31 @@ def main(
     if version:
         typer.echo(__version__)
         raise typer.Exit()
+
+
+@geoip_app.command("check")
+def geoip_check(ip: str) -> None:
+    """Print Korea-only gate decision for one IP address."""
+    settings = get_settings()
+    decision = classify_ip(
+        ip,
+        reader=build_geoip_reader(settings),
+        mode=settings.geoip_gate_mode,
+        allow_cidrs=settings.geoip_allow_cidrs,
+        deny_cidrs=settings.geoip_deny_cidrs,
+    )
+    typer.echo(
+        json.dumps(
+            {
+                "ip": decision.client_ip,
+                "action": decision.action,
+                "reason": decision.reason,
+                "country_code": decision.country_code,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
 
 
 @app.command("init-db")

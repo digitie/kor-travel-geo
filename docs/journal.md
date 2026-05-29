@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 15:35 (T-054 한국 IP GeoIP gate)
+
+**작업**: 외부 공용 IP에서 호출되는 REST API를 대한민국 IP로 제한하는 1차 middleware를 구현했다.
+
+**반영**:
+- `infra.geoip`에 IP/CIDR 분류, MaxMind country reader, trusted proxy `X-Forwarded-For` 처리, open path 판정을 추가했다.
+- FastAPI middleware가 `/v1/healthz`, `/metrics`를 제외한 REST 표면에서 내부/loopback은 허용하고 공용 IP는 country `KR`만 허용한다.
+- strict/permissive/off mode, allow/deny CIDR, trusted proxy, audit 설정을 `Settings`와 `.env.example`에 추가했다.
+- deny 응답은 `E0403/403`이며, `geoip.denied` audit event에는 IP 원문을 payload에 넣지 않고 `AdminRepository`의 hash 경로를 사용한다.
+- `kraddr-geo geoip check <ip>` 진단 명령과 단위/middleware 테스트를 추가했다.
+
+**검증**:
+- `ruff check src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py tests/unit/test_geoip_gate.py tests/unit/test_settings.py`
+- `pytest tests/unit/test_geoip_gate.py tests/unit/test_settings.py tests/unit/test_api_app_contract.py -q` → `14 passed`
+- `mypy --no-incremental src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py`
+- CLI smoke: `kraddr-geo geoip check 8.8.8.8` → `geoip_db_unavailable` deny
+- `ruff check .`, `pytest -q` → `268 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+
+**후속**:
+- 이 PR merge 후 T-055 N150/Odroid 실측 준비로 이어간다.
+
 ## 2026-05-29 14:45 (PR #69~#82 post-merge 리뷰 audit/fixup)
 
 **작업**: 사용자 지시에 따라 PR #82 merge 뒤 PR #69부터 최신 PR #82까지 formal review와 review thread를 다시 확인했다.

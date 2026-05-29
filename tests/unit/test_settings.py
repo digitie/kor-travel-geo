@@ -56,13 +56,27 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.backup_callback_secret is None
     assert settings.backup_callback_max_attempts == 3
     assert settings.backup_callback_backoff_ms == 500
+    assert settings.geoip_db_path == settings.loader_data_dir / "geoip/GeoLite2-Country.mmdb"
+    assert settings.geoip_gate_mode == "strict"
+    assert settings.geoip_open_paths == ("/v1/healthz", "/metrics")
+    assert settings.geoip_allow_cidrs == ()
+    assert settings.geoip_deny_cidrs == ()
+    assert settings.geoip_trusted_proxies == ()
+    assert settings.geoip_audit_denials is True
 
 
 def test_settings_normalize_backup_csv_values() -> None:
     settings = Settings(
         backup_allowed_dirs="/tmp/a,/tmp/b",
         backup_callback_allowed_hosts="localhost,internal.example",
+        geoip_allow_cidrs="203.0.113.0/24,2001:db8::/32",
+        geoip_trusted_proxies="127.0.0.1/32",
+        geoip_open_paths="/v1/healthz,/metrics",
     )
 
     assert tuple(path.as_posix() for path in settings.backup_allowed_dirs) == ("/tmp/a", "/tmp/b")
     assert settings.backup_callback_allowed_hosts == ("localhost", "internal.example")
+    assert str(settings.geoip_allow_cidrs[0]) == "203.0.113.0/24"
+    assert str(settings.geoip_allow_cidrs[1]) == "2001:db8::/32"
+    assert str(settings.geoip_trusted_proxies[0]) == "127.0.0.1/32"
+    assert settings.geoip_open_paths == ("/v1/healthz", "/metrics")

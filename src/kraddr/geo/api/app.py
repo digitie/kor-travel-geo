@@ -14,6 +14,7 @@ from fastapi.responses import ORJSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kraddr.geo.api import _jobs
+from kraddr.geo.api.middleware.geoip_gate import install_geoip_gate
 from kraddr.geo.api.responses import error_payload, register_exception_handlers
 from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.exceptions import RateLimitError
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
         openapi_url="/v1/openapi.json",
     )
     register_exception_handlers(app)
+    install_geoip_gate(app, settings)
     _install_admission_control(app, settings)
     app.include_router(healthz.router, prefix="/v1")
     app.include_router(geocode.router, prefix="/v1")

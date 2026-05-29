@@ -2,9 +2,9 @@
 
 ## 상태
 
-- 상태: 설계 (구현 전)
-- 대상 브랜치: `agent/<agent>-t054-*`
-- 관련 ADR: ADR-037(예정)
+- 상태: 1차 구현 완료 (2026-05-29)
+- 대상 브랜치: `codex/t054-korea-geoip-gate`
+- 관련 ADR: ADR-037
 - 사용자 RFC: 2026-05-27 — "한국에서만 쓸 수 있도록 (외부 IP에서 접속하는 API 접근은 한국에서만 쓸 수 있도록)."
 
 ## 목적
@@ -17,11 +17,11 @@
 
 | 표면 | gate 적용 여부 | 비고 |
 |------|----------------|------|
-| `POST /v1/geocode`, `POST /v1/reverse`, `GET /v1/search`, `GET /v1/zipcode`, `GET /v1/pobox` | 적용 | 외부 자료 사용 |
+| `/v1/address/geocode`, `/v1/address/reverse`, `/v1/address/search`, `/v1/address/zipcode`, `/v1/address/pobox` | 적용 | 외부 자료 사용 |
 | `POST /v2/geocode`, `/v2/reverse`, `/v2/search` (T-052) | 적용 | 외부 자료 사용 |
 | `/v1/admin/*` (관리 표면) | 적용(강력) | 내부망 가정. 외부 KR IP라도 admin은 별도 allowlist 권장 |
-| `/healthz`, `/metrics` | 미적용 | LB/uptime probe 호환 |
-| `/openapi.json`, `/docs`, `/redoc` | 적용 가능(선택) | 외부 KR만 허용 |
+| `/v1/healthz`, `/metrics` | 미적용 | LB/uptime probe 호환 |
+| `/v1/openapi.json`, `/v1/docs` | 적용 | 외부 KR만 허용 |
 | `kraddr-geo` CLI | 미적용 | local execution |
 | `AsyncAddressClient` (라이브러리 직접 호출) | 미적용 | local execution |
 
@@ -74,7 +74,7 @@ class KoreaOnlyMiddleware:
         await self.app(scope, receive, send)
 ```
 
-- 장점: 코드 안에 정책 명확, audit_event 기록 가능, `/healthz`/`/metrics` 같은 오픈 path 단일 위치에서 통제.
+- 장점: 코드 안에 정책 명확, audit_event 기록 가능, `/v1/healthz`/`/metrics` 같은 오픈 path 단일 위치에서 통제.
 - 단점: middleware에서 GeoIP DB 메모리 사용. `KRADDR_GEO_GEOIP_DB_PATH` 미설정 시 fallback 정책 필요.
 
 ### Option B — nginx/reverse proxy layer
@@ -94,7 +94,7 @@ class KoreaOnlyMiddleware:
 
 MaxMind GeoLite2 Country DB(무료) 또는 IP2Location LITE.
 
-- `KRADDR_GEO_GEOIP_DB_PATH`: 로컬 `.mmdb` 또는 `.bin` 파일 경로. 기본 `data/geoip/GeoLite2-Country.mmdb`.
+- `KRADDR_GEO_GEOIP_DB_PATH`: 로컬 `.mmdb` 파일 경로. 기본 `data/geoip/GeoLite2-Country.mmdb`.
 - 갱신: 운영자가 월 1회 cron으로 download. 본 라이브러리는 자동 download 안 함(라이선스 키 required, 운영자 책임).
 - DB 부재 시 정책:
   - `geoip_gate_mode = "strict"`: 모든 외부 IP deny (보수적, 기본값).
@@ -103,7 +103,9 @@ MaxMind GeoLite2 Country DB(무료) 또는 IP2Location LITE.
 
 ### 캐시
 
-같은 IP의 lookup은 LRU cache(`functools.lru_cache(maxsize=10_000)`)로 메모리 캐시. GeoIP DB가 disk 기반이라 in-process 호출 cost는 작지만 hot path latency 절약.
+같은 IP의 lookup은 in-process LRU 성격의 10,000개 `OrderedDict` cache로 메모리 캐시한다. GeoIP DB가 disk 기반이라 in-process 호출 cost는 작지만 hot path latency를 줄인다.
+
+1차 구현은 `api` extra에 `maxminddb>=2.6,<3`을 추가하고, DB 파일이 있을 때만 MaxMind reader를 연다. DB가 없거나 열 수 없으면 strict 모드에서 공용 IP는 `geoip_db_unavailable`로 차단하고, permissive 모드에서는 allow한다.
 
 ## settings
 
@@ -113,7 +115,7 @@ class GeoIpSettings(BaseModel):
     geoip_gate_mode: Literal["strict","permissive","off"] = "strict"
     geoip_allow_cidrs: tuple[IPv4Network | IPv6Network, ...] = ()
     geoip_deny_cidrs: tuple[IPv4Network | IPv6Network, ...] = ()
-    geoip_open_paths: tuple[str, ...] = ("/healthz","/metrics")
+    geoip_open_paths: tuple[str, ...] = ("/v1/healthz","/metrics")
     geoip_trusted_proxies: tuple[IPv4Network | IPv6Network, ...] = ()
     geoip_audit_denials: bool = True
 ```
@@ -128,15 +130,18 @@ deny 시 HTTP 403 + 한국어/영어 message 분리:
 
 ```json
 {
-  "code": "E_FORBIDDEN_REGION",
-  "message": "이 서비스는 대한민국 IP에서만 호출할 수 있습니다.",
-  "message_en": "This service is restricted to requests from South Korea.",
-  "client_country": "US",
-  "trace_id": "..."
+  "response": {
+    "status": "ERROR",
+    "errorCode": "E0403",
+    "errorMessage": "이 서비스는 대한민국 IP에서만 호출할 수 있습니다.",
+    "message_en": "This service is restricted to requests from South Korea.",
+    "client_country": "US",
+    "reason": "non_kr_public_ip"
+  }
 }
 ```
 
-`code`는 `dto/errors.py`에 enum으로 등록.
+응답 구조는 기존 오류 응답과 같이 최상위 `response`를 사용한다.
 
 ## audit 연계 (T-049)
 
@@ -150,7 +155,7 @@ deny 발생 시 `ops.audit_events`에 다음을 기록(payload는 redacted):
   "client_ip_hash": "...",  // SHA256 of client_ip, NOT raw IP
   "user_agent_hash": "...",
   "payload_redacted": {
-    "path": "/v1/geocode",
+    "path": "/v1/address/geocode",
     "method": "POST",
     "client_country": "US",
     "reason": "non_kr_public_ip"
@@ -162,19 +167,25 @@ IP 원문 평문 저장 금지(ADR-033). hash만 저장.
 
 ## CLI/도구
 
-- `kraddr-geo geoip check <ip>`: 디버그용. 주어진 IP가 어떤 분류로 평가되는지 출력.
-- `kraddr-geo geoip stats`: 최근 deny 통계.
+- `kraddr-geo geoip check <ip>`: 디버그용. 주어진 IP가 어떤 분류로 평가되는지 JSON으로 출력.
+- `kraddr-geo geoip stats`: 최근 deny 통계는 후속이다. 1차에서는 `/v1/admin/ops/audit-events?action=geoip.denied`로 확인한다.
 
 ## 검증
 
-- 단위 테스트: classify_ip(sample IPv4/IPv6, allow/deny cidrs) → 예상 결정.
-- middleware 통합 테스트: FastAPI TestClient + mock GeoIP reader.
-- `/healthz`, `/metrics`는 deny 대상에서 제외되는지 확인.
-- DB 부재 + `strict` 모드에서 외부 IP 차단.
-- trusted_proxies 환경에서 `X-Forwarded-For` 끝에서부터 hop 만큼 pop하는지 확인.
-- 한국 KR IP 샘플(SK Telecom/KT/LG U+/AWS Seoul) → allow.
-- 외부 IP 샘플(US/CN/JP) → deny.
-- ops.audit_events에 `geoip.denied` row 생성.
+- 단위 테스트: `classify_ip()`가 내부 IP, KR 공용 IP, deny/allow CIDR, DB 부재 strict, permissive를 예상대로 판정한다.
+- middleware 통합 테스트: FastAPI `TestClient` + mock GeoIP reader로 `/v1/address/*` 403, `/v1/healthz` open을 확인한다.
+- trusted proxy 테스트: trusted peer일 때만 `X-Forwarded-For`에서 마지막 untrusted client를 선택한다.
+- CLI smoke: `kraddr-geo geoip check 8.8.8.8` → strict + DB 부재에서 `geoip_db_unavailable` deny.
+- targeted gate:
+  - `ruff check src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py tests/unit/test_geoip_gate.py tests/unit/test_settings.py`
+  - `pytest tests/unit/test_geoip_gate.py tests/unit/test_settings.py tests/unit/test_api_app_contract.py -q` → `14 passed`
+  - `mypy --no-incremental src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py`
+- full backend gate:
+  - `ruff check .`
+  - `pytest -q` → `268 passed, 8 skipped`
+  - `mypy --no-incremental src/kraddr/geo`
+  - `lint-imports`
+- 실제 MaxMind DB 기반 KR/US 샘플 lookup과 `ops.audit_events` DB row 생성은 운영 DB/GeoIP DB가 준비된 환경의 후속 통합 테스트로 둔다.
 
 ## 운영 가이드
 
@@ -193,6 +204,6 @@ IP 원문 평문 저장 금지(ADR-033). hash만 저장.
 ## 관련 ADR/Task
 
 - ADR-013: 디버그/관리 UI는 사내 내부망 전용.
-- ADR-037(예정): 한국 IP gate 정책.
+- ADR-037: 한국 IP gate 정책.
 - T-049: ops.audit_events에 deny 기록.
 - T-053: `/admin/stats`에 KR vs non-KR 요청 분포 시각화.

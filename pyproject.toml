@@ -40,6 +40,7 @@ api = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.32",
   "prometheus-client>=0.21",
+  "maxminddb>=2.6,<3",
 ]
 # loaders extra는 시스템 GDAL(libgdal-dev)에 의존한다.
 #   1) sudo apt install libgdal-dev gdal-bin
