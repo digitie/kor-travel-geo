@@ -159,6 +159,8 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
     assert "validate_replace_current_restore_request" in restore_source
     assert "require_active_maintenance_window" in restore_source
     assert "maintenance_window.authorize" in restore_source
+    assert 'actor_type="system"' in restore_source
+    assert 'actor_type="job"' not in restore_source
     assert "hash_confirmation(confirmation)" in restore_source
     assert "confirmation_hash" in restore_source
     assert "replace_current target_database must match" in backup_source
@@ -178,3 +180,4 @@ def test_table_stats_scheduler_is_opt_in_and_uses_settings() -> None:
     assert "ops_table_stats_capture_on_startup" in loop_source
     assert "ops_table_stats_capture_limit" in module_source
     assert "capture_table_stats_snapshots(" in module_source
+    assert "skip_if_locked=True" in module_source

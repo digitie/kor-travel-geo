@@ -166,6 +166,7 @@ async def _capture_table_stats_once(engine: AsyncEngine, settings: Settings) -> 
     try:
         rows = await AdminRepository(engine).capture_table_stats_snapshots(
             limit=settings.ops_table_stats_capture_limit,
+            skip_if_locked=True,
         )
     except Exception:
         _LOGGER.exception("failed to capture ops.table_stats_snapshots")

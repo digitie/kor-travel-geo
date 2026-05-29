@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 14:45 (PR #69~#82 post-merge 리뷰 audit/fixup)
+
+**작업**: 사용자 지시에 따라 PR #82 merge 뒤 PR #69부터 최신 PR #82까지 formal review와 review thread를 다시 확인했다.
+
+**반영**:
+- 모든 대상 PR의 GraphQL `reviewThreads.totalCount`는 0이었다.
+- PR #81 리뷰에서 발견된 실제 런타임 버그를 수정했다. `replace_current` restore의 `maintenance_window.authorize` audit event가 `ops.audit_events.actor_type` CHECK에 없는 `job`을 쓰지 않도록 `system`으로 바꿨다.
+- table stats scheduler 호출부에 `skip_if_locked=True`를 명시해 scheduler는 lock 충돌 시 조용히 skip하고, 수동 capture만 `409 E0409`로 실패한다는 의도를 고정했다.
+- 상세 리뷰별 반영/보류 표는 `docs/postmerge-review-fixups-pr69-pr82.md`에 정리했다.
+
+**검증**:
+- `ruff check src/kraddr/geo/infra/backup.py src/kraddr/geo/api/app.py tests/unit/test_ops_metadata.py`
+- `pytest tests/unit/test_ops_metadata.py tests/unit/test_backup_restore.py -q` → `22 passed`
+- `mypy --no-incremental src/kraddr/geo/infra/backup.py src/kraddr/geo/api/app.py`
+- `ruff check .`, `pytest -q` → `261 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+
+**후속**:
+- 이 PR merge 후 T-054 한국 IP 외부 접근 차단으로 이어간다.
+
 ## 2026-05-29 13:45 (T-059 CLI/Job 동시 실행 보호 표준화)
 
 **작업**: PostgreSQL advisory lock 기반 cross-process 실행 보호를 CLI와 API job handler에 표준 적용했다.
