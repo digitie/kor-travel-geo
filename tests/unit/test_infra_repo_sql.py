@@ -61,7 +61,18 @@ def test_search_repo_uses_exact_preflight_before_broad_trgm_search() -> None:
     assert "buld_nm_nrm = :query_nrm" in exact_sql
     assert "_SEARCH_EXACT_SQL" in source
     assert "exact_total > 0" in source
-    assert source.index("_SEARCH_EXACT_SQL") < source.index("_SEARCH_SQL")
+    assert source.index("_SEARCH_EXACT_SQL") < source.rindex("_SEARCH_SQL")
+
+
+def test_search_repo_supports_district_candidates_from_admin_polygons() -> None:
+    sql = str(search_repo._DISTRICT_SEARCH_SQL)
+    source = inspect.getsource(search_repo.SearchRepository.search)
+
+    assert "tl_scco_sig" in sql
+    assert "tl_scco_emd" in sql
+    assert "ST_PointOnSurface" in sql
+    assert "map_region_search" in source
+    assert 'search_type == "district"' in source
 
 
 def test_text_search_queries_use_slim_mv_before_target_join() -> None:

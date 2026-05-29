@@ -212,6 +212,8 @@ CREATE INDEX idx_navi_centroid_resolve
 
 2026년 실제 내비게이션용DB의 `bd_mgt_sn`은 25자리이고 도로명주소 한글 정본의 `bd_mgt_sn`은 26자리라 직접 조인하지 않는다. 또한 내비 `bjd_cd`는 리 코드가 `00`인 경우가 많으므로 centroid fallback은 `rncode_full + 건물구분 + 본번/부번 + left(bjd_cd, 8)` 기준으로 대표 centroid를 선택한다.
 
+상위 주소/건물명 검색 품질을 높이려면 `내비게이션용DB_전체분`의 건물명 계열 컬럼도 serving 검색 보조 데이터로 보존해야 한다. 특히 사용자 지시에 따라 `시군구용건물명`은 후속 T-065에서 실제 파일 컬럼 위치와 값 분포를 재확인한 뒤 `sigungu_buld_nm` 및 공백 제거 정규화 컬럼으로 적재하고, `mv_geocode_text_search` 또는 별도 검색 helper MV에 포함한다. 이 작업은 새 외부 원천 추가가 아니라 이미 필수 적재 대상인 내비게이션용DB를 더 완전하게 활용하는 보강이다.
+
 ### `tl_navi_entrc` — 내비게이션용DB 진입점 (부속 출입구/차량 진입)
 
 내비 진입점, 차량 진입점, 부속 출입구 등을 `kind`로 구분 보관. 본 사양에서는 reverse_geocode/매칭의 1차 경로에 사용하지 않고, 향후 `include=entrance_kind` 같은 옵션이 추가되면 활용.

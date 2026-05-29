@@ -122,10 +122,11 @@
 - ✅ VWorld 인증키 런타임 설정 UI — `/api/runtime-config`가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽고, `/admin/settings`에서 브라우저 localStorage override로 저장·수정·기본값 복원을 지원한다.
 - ✅ 단독 구 이름 도로명주소 조회 보정 — `수지구 성복1로 35`처럼 복합 시군구명(`용인시 수지구`)의 마지막 `구`만 입력한 경우 exact 도로명 조회 실패 뒤 제한적 suffix retry로 찾는다. 기본 조회는 `sgg_nm = :sgg`를 유지하고, fallback은 `rn_nrm`/건물번호 exact 후보 안에서 `right(sgg_nm, ...)`를 적용한다.
 - ✅ 외부 API fallback 인증키 오류 명시화 — `fallback="api"`에서 백엔드 provider 키가 없으면 `E0503`, VWorld/Juso 인증키 오류는 `E0501`로 반환한다. UI 지도 키 `NEXT_PUBLIC_VWORLD_API_KEY`는 fallback 키가 아니며, 백엔드는 `KRADDR_GEO_VWORLD_API_KEY` 또는 `KRADDR_GEO_JUSO_API_KEY`를 읽는다.
+- ✅ 상위 주소 geocode 후보 — `/v2/geocode`에서 상세번호 없는 행정구역 입력은 `district` 검색 후보로 승격한다. `tl_scco_*` polygon의 `ST_PointOnSurface` 대표점을 쓰며, 실제 DB에서 `수지구` 첫 후보 `용인시 수지구(sig_cd=41465)`를 확인했다. 상세: `docs/t064-region-only-geocode.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-즉시 실행 가능한 대기 task는 없다. T-055의 실제 N150/Odroid 실측은 장비가 있어야 의미가 있으므로 T-063으로 보류한다.
+다음 우선 작업은 T-065다. `내비게이션용DB_전체분/match_build_*.txt`의 `시군구용건물명` 컬럼을 적재·정규화하고 검색 helper MV에 포함해, 상위 주소/건물명 후보 recall과 latency 전후를 기록한다.
 
 - 최신 T-027 실행 로그는 로컬 산출물 `artifacts/fullload/20260529_1643_final/` 아래에 있다. 이 경로는 git ignore 대상이다.
 - 최신 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,454건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603/202604`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.

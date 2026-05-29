@@ -138,6 +138,30 @@ def map_search(row: Mapping[str, Any]) -> SearchLookup:
     )
 
 
+def map_region_search(row: Mapping[str, Any]) -> SearchLookup:
+    title = str(row["title"])
+    score = float(row["score"]) if row.get("score") is not None else None
+    lookup = AddressLookup(
+        bd_mgt_sn=f"region:{row['code']}",
+        text=title,
+        address_type="road",
+        point=_point(row),
+        si_nm=row.get("si_nm"),
+        sgg_nm=row.get("sgg_nm"),
+        emd_nm=row.get("emd_nm"),
+        li_nm=row.get("li_nm"),
+        bjd_cd=row.get("region_code"),
+        confidence=score or 0.0,
+    )
+    return SearchLookup(
+        type="district",
+        title=title,
+        address=title,
+        lookup=lookup,
+        score=score,
+    )
+
+
 def map_zip(row: Mapping[str, Any]) -> ZipLookup:
     return ZipLookup(
         zip_no=str(row["zip_no"]),

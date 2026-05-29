@@ -58,6 +58,8 @@
 - `bbox`: Google-style viewport/bounds 표현을 참고한 후보 범위 필드다. 현재 로컬 geocode 변환에서는 없을 수 있다.
 - `metadata`: 로컬 DB 또는 기존 v1 fallback에서 온 보조 필드다. 안정 공개 필드로 의존하기 전에는 문서화가 필요하다.
 
+상세번호 없이 행정구역까지만 입력한 경우에도 같은 endpoint가 후보를 반환한다. 예를 들어 `road_address="수지구"`는 내부적으로 `district` 검색 후보로 승격되며, `match_kind="region"`인 `용인시 수지구` 후보와 대표점 좌표를 반환한다. 대표점은 행정구역 polygon의 `ST_PointOnSurface`를 사용한다.
+
 ## 예시
 
 ```bash

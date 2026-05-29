@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from kraddr.geo.core.protocols import SearchLookup
 from kraddr.geo.dto.region import RegionHint, region_params
 
-from ._rows import map_search
+from ._rows import map_region_search, map_search
 
 _SEARCH_EXACT_SQL = text(
     """
@@ -86,6 +86,135 @@ SELECT *, count(*) OVER () AS total
 """
 )
 
+_DISTRICT_SEARCH_SQL = text(
+    """
+WITH query_input AS (
+  SELECT regexp_replace(:query, '\\s+', '', 'g') AS query_nrm
+),
+districts AS (
+  SELECT c.ctprvn_cd AS code,
+         c.ctp_kor_nm AS title,
+         c.ctp_kor_nm AS si_nm,
+         NULL::text AS sgg_nm,
+         NULL::text AS emd_nm,
+         NULL::text AS li_nm,
+         c.ctprvn_cd AS region_code,
+         CASE WHEN ST_IsEmpty(c.geom) THEN NULL
+              ELSE ST_X(ST_Transform(ST_PointOnSurface(c.geom), 4326))
+          END AS lon,
+         CASE WHEN ST_IsEmpty(c.geom) THEN NULL
+              ELSE ST_Y(ST_Transform(ST_PointOnSurface(c.geom), 4326))
+          END AS lat
+    FROM tl_scco_ctprvn c
+   WHERE (
+       CAST(:sig_cd_filter AS text) IS NULL
+       OR c.ctprvn_cd = left(CAST(:sig_cd_filter AS text), 2)
+     )
+     AND (
+       CAST(:sig_cd_prefix AS text) IS NULL
+       OR c.ctprvn_cd = left(CAST(:sig_cd_prefix AS text), 2)
+     )
+     AND (
+       CAST(:bjd_cd_filter AS text) IS NULL
+       OR c.ctprvn_cd = left(CAST(:bjd_cd_filter AS text), 2)
+     )
+     AND (
+       CAST(:bjd_cd_prefix AS text) IS NULL
+       OR c.ctprvn_cd = left(CAST(:bjd_cd_prefix AS text), 2)
+     )
+  UNION ALL
+  SELECT s.sig_cd AS code,
+         concat_ws(' ', c.ctp_kor_nm, s.sig_kor_nm) AS title,
+         c.ctp_kor_nm AS si_nm,
+         s.sig_kor_nm AS sgg_nm,
+         NULL::text AS emd_nm,
+         NULL::text AS li_nm,
+         s.sig_cd AS region_code,
+         CASE WHEN ST_IsEmpty(s.geom) THEN NULL
+              ELSE ST_X(ST_Transform(ST_PointOnSurface(s.geom), 4326))
+          END AS lon,
+         CASE WHEN ST_IsEmpty(s.geom) THEN NULL
+              ELSE ST_Y(ST_Transform(ST_PointOnSurface(s.geom), 4326))
+          END AS lat
+    FROM tl_scco_sig s
+    LEFT JOIN tl_scco_ctprvn c ON c.ctprvn_cd = left(s.sig_cd, 2)
+   WHERE (CAST(:sig_cd_filter AS text) IS NULL OR s.sig_cd = CAST(:sig_cd_filter AS text))
+     AND (CAST(:sig_cd_prefix AS text) IS NULL OR s.sig_cd LIKE CAST(:sig_cd_prefix AS text))
+     AND (CAST(:bjd_cd_filter AS text) IS NULL OR s.sig_cd = left(CAST(:bjd_cd_filter AS text), 5))
+     AND (
+       CAST(:bjd_cd_prefix AS text) IS NULL
+       OR s.sig_cd LIKE left(CAST(:bjd_cd_prefix AS text), 5) || '%'
+     )
+  UNION ALL
+  SELECT e.emd_cd AS code,
+         concat_ws(' ', c.ctp_kor_nm, s.sig_kor_nm, e.emd_kor_nm) AS title,
+         c.ctp_kor_nm AS si_nm,
+         s.sig_kor_nm AS sgg_nm,
+         e.emd_kor_nm AS emd_nm,
+         NULL::text AS li_nm,
+         e.emd_cd AS region_code,
+         CASE WHEN ST_IsEmpty(e.geom) THEN NULL
+              ELSE ST_X(ST_Transform(ST_PointOnSurface(e.geom), 4326))
+          END AS lon,
+         CASE WHEN ST_IsEmpty(e.geom) THEN NULL
+              ELSE ST_Y(ST_Transform(ST_PointOnSurface(e.geom), 4326))
+          END AS lat
+    FROM tl_scco_emd e
+    LEFT JOIN tl_scco_sig s ON s.sig_cd = left(e.emd_cd, 5)
+    LEFT JOIN tl_scco_ctprvn c ON c.ctprvn_cd = left(e.emd_cd, 2)
+   WHERE (CAST(:sig_cd_filter AS text) IS NULL OR left(e.emd_cd, 5) = CAST(:sig_cd_filter AS text))
+     AND (CAST(:sig_cd_prefix AS text) IS NULL OR e.emd_cd LIKE CAST(:sig_cd_prefix AS text))
+     AND (CAST(:bjd_cd_filter AS text) IS NULL OR e.emd_cd = left(CAST(:bjd_cd_filter AS text), 8))
+     AND (CAST(:bjd_cd_prefix AS text) IS NULL OR e.emd_cd LIKE CAST(:bjd_cd_prefix AS text))
+  UNION ALL
+  SELECT l.li_cd AS code,
+         concat_ws(' ', c.ctp_kor_nm, s.sig_kor_nm, e.emd_kor_nm, l.li_kor_nm) AS title,
+         c.ctp_kor_nm AS si_nm,
+         s.sig_kor_nm AS sgg_nm,
+         e.emd_kor_nm AS emd_nm,
+         l.li_kor_nm AS li_nm,
+         l.li_cd AS region_code,
+         CASE WHEN ST_IsEmpty(l.geom) THEN NULL
+              ELSE ST_X(ST_Transform(ST_PointOnSurface(l.geom), 4326))
+          END AS lon,
+         CASE WHEN ST_IsEmpty(l.geom) THEN NULL
+              ELSE ST_Y(ST_Transform(ST_PointOnSurface(l.geom), 4326))
+          END AS lat
+    FROM tl_scco_li l
+    LEFT JOIN tl_scco_emd e ON e.emd_cd = left(l.li_cd, 8)
+    LEFT JOIN tl_scco_sig s ON s.sig_cd = left(l.li_cd, 5)
+    LEFT JOIN tl_scco_ctprvn c ON c.ctprvn_cd = left(l.li_cd, 2)
+   WHERE (CAST(:sig_cd_filter AS text) IS NULL OR left(l.li_cd, 5) = CAST(:sig_cd_filter AS text))
+     AND (CAST(:sig_cd_prefix AS text) IS NULL OR l.li_cd LIKE CAST(:sig_cd_prefix AS text))
+     AND (CAST(:bjd_cd_filter AS text) IS NULL OR l.li_cd = CAST(:bjd_cd_filter AS text))
+     AND (CAST(:bjd_cd_prefix AS text) IS NULL OR l.li_cd LIKE CAST(:bjd_cd_prefix AS text))
+),
+ranked AS (
+  SELECT d.*,
+         CASE
+           WHEN regexp_replace(d.title, '\\s+', '', 'g') = q.query_nrm THEN 1.0
+           WHEN regexp_replace(
+             coalesce(d.li_nm, d.emd_nm, d.sgg_nm, d.si_nm),
+             '\\s+', '', 'g'
+           ) = q.query_nrm THEN 0.98
+           WHEN right(
+             regexp_replace(d.title, '\\s+', '', 'g'),
+             char_length(q.query_nrm)
+           ) = q.query_nrm THEN 0.95
+           WHEN regexp_replace(d.title, '\\s+', '', 'g') LIKE '%' || q.query_nrm || '%' THEN 0.85
+           ELSE 0.0
+         END AS score
+    FROM districts d
+    CROSS JOIN query_input q
+)
+SELECT *, count(*) OVER () AS total
+  FROM ranked
+ WHERE score > 0
+ ORDER BY score DESC, char_length(code), title
+ LIMIT :limit OFFSET :offset
+"""
+)
+
 
 def _normalize_search_query(query: str) -> str:
     return "".join(query.split())
@@ -104,11 +233,21 @@ class SearchRepository:
         size: int,
         region_hint: RegionHint | None = None,
     ) -> tuple[list[SearchLookup], int]:
-        if search_type not in {"address", "road"}:
+        if search_type not in {"address", "road", "district"}:
             return ([], 0)
         offset = (page - 1) * size
         hint_params = region_params(region_hint)
         params = {"query": query, "limit": size, "offset": offset, **hint_params}
+        if search_type == "district":
+            async with self.engine.begin() as conn:
+                rows = (
+                    await conn.execute(
+                        _DISTRICT_SEARCH_SQL,
+                        params,
+                    )
+                ).mappings().all()
+            total = int(rows[0]["total"]) if rows else 0
+            return ([map_region_search(dict(row)) for row in rows], total)
         exact_params = {
             "query_nrm": _normalize_search_query(query),
             "limit": size,

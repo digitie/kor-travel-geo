@@ -298,6 +298,8 @@ await client.reverse(127.0, 37.5, sig_cd="11")
 
 `fallback="api"`는 core가 직접 HTTP를 호출하지 않는다. `AsyncAddressClient.geocode()`가 내부 v1 호환 geocode 경로를 실행하다가 로컬 core 결과가 `NOT_FOUND`일 때만 `infra/external_api.py::ExternalGeocodeClient`를 호출하고, 결과를 후보 schema로 투영한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 + 좌표 API다. Juso 좌표 API의 `admCd`/`rnMgtSn`/`udrtYn`/`buldMnnm`/`buldSlno`는 `core.address.AddressCodeSet`으로 정규화한 뒤 전달한다(T-056). 외부 응답은 내부적으로 `GeocodeResponse` DTO로 변환한 뒤 공개 응답에서는 `CandidateV2.source = "vworld" | "juso"`로 노출한다. 단, T-057 region hint가 명시된 요청에서는 외부 provider가 hint를 보존하지 못하므로 로컬 `NOT_FOUND` 뒤에도 외부 fallback을 호출하지 않는다.
 
+T-064 이후 `/v2/geocode`는 상세번호가 없는 상위 주소 입력도 별도 endpoint 없이 처리한다. 일반 도로명/지번 parser가 번호 부재로 실패하면 같은 입력을 `search(type="district")`로 넘기고, `tl_scco_ctprvn/sig/emd/li` polygon 후보를 `CandidateV2.match_kind="region"`으로 반환한다. 대표점은 `ST_PointOnSurface`를 사용한다. `ST_Centroid`는 polygon 밖으로 나갈 수 있어 화면 선택 후보의 기본 대표점으로 쓰지 않는다.
+
 `reverse_geocoder`, `searcher`, `zipcoder`, `poboxer`도 같은 패턴.
 
 ## 7. DB 어댑터
@@ -760,6 +762,8 @@ KIND_MAP = {
 ```
 
 내비게이션용DB는 여러 파일로 구성(건물·부속·도로). 본 로더는 두 마스터에 분리 적재:
+
+사용자 지시에 따라 `match_build_*.txt`의 `시군구용건물명`은 후속 T-065에서 반드시 검색 데이터로 승격한다. 현재 로더는 centroid/진입점 좌표 중심으로 적재하므로, 후속에서는 실제 컬럼 위치를 재확인하고 `sigungu_buld_nm`/`sigungu_buld_nm_nrm`을 저장한 뒤 `mv_geocode_text_search` 또는 별도 helper MV의 후보 추출에 포함한다. 전후 recall/latency는 T-047 benchmark 방식으로 기록한다.
 - `tl_navi_buld_centroid` ← 건물 파일의 centroid 좌표
 - `tl_navi_entrc` ← 진입점 파일들에 `kind` 매핑
 
