@@ -23,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from kraddr.geo.core.redaction import hash_confirmation
 from kraddr.geo.dto.admin import (
     BackupCreateRequest,
     OpsArtifact,
@@ -348,7 +349,25 @@ async def run_restore_job(
             settings=settings,
             target_database=target_database,
         )
-        await repo.require_active_maintenance_window(kind="restore", confirmation=confirmation)
+        window = await repo.require_active_maintenance_window(
+            kind="restore",
+            confirmation=confirmation,
+        )
+        await repo.record_audit_event(
+            action="maintenance_window.authorize",
+            actor_type="job",
+            outcome="succeeded",
+            payload={
+                "kind": "restore",
+                "mode": req.mode,
+                "target_database": target_database,
+                "confirmation_hash": hash_confirmation(confirmation),
+                "source_artifact_id": source_artifact.artifact_id if source_artifact else None,
+            },
+            resource_type="maintenance_window",
+            resource_id=window.window_id,
+            job_id=_payload_job_id(payload),
+        )
     else:
         current_database = database_name_from_dsn(settings.pg_dsn)
         if current_database == target_database:

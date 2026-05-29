@@ -111,6 +111,7 @@
 - ✅ T-050 운영 hardening 6차 — `db_restore`의 `replace_current` 위험 경로를 active `restore` maintenance window와 typed confirmation에 연결했다. `target_dsn`은 허용하지 않고 target DB 이름은 현재 DB 이름과 같아야 하며 확인 문구는 `RESTORE <현재 DB 이름>`이다. 상세: `docs/t050-ops-hardening.md`
 - ✅ T-050 운영 hardening 7차 — 실제 PostgreSQL FK/trigger/partial unique integration test를 추가했다. `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 테스트가 `ops.audit_events.job_id` FK, append-only trigger, active release partial unique index, `ops.table_stats_snapshots.snapshot_id` FK를 실제 DB에서 검증한다. 별도 Docker DB `kraddr_geo_t050_ops_constraints`에서 `1 passed`를 확인했다. 상세: `docs/t050-ops-hardening.md`
 - ✅ T-058 restore hot-swap plan/preflight — 같은 cluster 안 `ALTER DATABASE ... RENAME` 패턴을 1차 절차로 고정하고, `/v1/admin/restores/hot-swap-plan`과 `kraddr-geo serving hot-swap-plan`이 current DB, restore DB, previous alias, typed confirmation, rollback confirmation, blockers, SQL/steps를 산출하게 했다. 실제 rename 실행은 metadata 위치와 worker별 engine refresh 검증 뒤 후속 실행 표면으로 분리한다. 상세: `docs/t058-restore-hot-swap.md`
+- ✅ PR #69~#80 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #80까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. 수동 table stats capture lock 충돌은 `409 E0409`로 구분하고, `replace_current` restore의 maintenance window 인가 통과는 `maintenance_window.authorize` audit event로 남긴다. 상세: `docs/postmerge-review-fixups-pr69-pr80.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 

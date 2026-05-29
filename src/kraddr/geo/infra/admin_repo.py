@@ -115,6 +115,7 @@ _ROW_COUNT_OBJECTS = (
 )
 
 _OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0
+TABLE_STATS_CAPTURE_LOCKED_MESSAGE = "table stats capture is already running"
 
 _CONSISTENCY_SAMPLE_SELECT = """
 SELECT sample_id::text AS sample_id, report_id, case_code, severity, sample_rank,
@@ -883,6 +884,7 @@ RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
         *,
         snapshot_id: str | None = None,
         limit: int = 500,
+        skip_if_locked: bool = True,
     ) -> list[TableStatsSnapshot]:
         captured_at = datetime.now(UTC)
         async with self.engine.begin() as conn:
@@ -891,6 +893,12 @@ RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
                 {"lock_key": _OPS_TABLE_STATS_ADVISORY_LOCK},
             )
             if locked is not True:
+                if not skip_if_locked:
+                    raise InvalidInputError(
+                        TABLE_STATS_CAPTURE_LOCKED_MESSAGE,
+                        code="E0409",
+                        http_status=409,
+                    )
                 return []
             resolved_snapshot_id = snapshot_id
             snapshot_link = "explicit"
