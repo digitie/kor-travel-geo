@@ -13,7 +13,6 @@ from typing import Any, Literal, Protocol, cast
 from kraddr.geo.settings import Settings
 
 _LOGGER = logging.getLogger(__name__)
-_TEST_CLIENT_HOSTS = {"testclient"}
 
 IPAddress = IPv4Address | IPv6Address
 IPNetwork = IPv4Network | IPv6Network
@@ -92,8 +91,6 @@ def classify_ip(
 
     ip = _parse_ip(raw_ip)
     if ip is None:
-        if client_ip in _TEST_CLIENT_HOSTS:
-            return GeoIpDecision("allow", "test_client", client_ip)
         return GeoIpDecision("deny", "invalid_client_ip", client_ip)
 
     normalized = str(ip)
@@ -156,8 +153,17 @@ def is_open_path(path: str, open_paths: tuple[str, ...]) -> bool:
 def _parse_ip(raw_ip: str | None) -> IPAddress | None:
     if raw_ip is None:
         return None
+    value = raw_ip.strip()
+    if value.startswith("["):
+        bracket_end = value.find("]")
+        if bracket_end > 1:
+            value = value[1:bracket_end]
+    elif value.count(":") == 1:
+        host, port = value.rsplit(":", 1)
+        if port.isdigit():
+            value = host
     try:
-        return ip_address(raw_ip.strip())
+        return ip_address(value)
     except ValueError:
         return None
 

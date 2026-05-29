@@ -7,13 +7,14 @@
 
 ## 대기 (우선순위 순)
 
-2026-05-29 기준 즉시 실행 가능한 대기 task는 없다. 운영 메타데이터(T-049), source set/백업 UX(T-045/T-046), T-047 주요 성능 실측, T-057 region hint 1차 구현, T-044 `maplibre-vworld-js` 0.1.0 문서-only 재확인, T-056 `python-kraddr-base` Address 코드 helper 정리, T-052 v1/v2 API 분리와 AI-friendly 문서화, T-053 admin UI C1~C10 분석/승인 콘솔, T-061 Q3 fuzzy slim text-search, T-050 운영 hardening, T-058 restore hot-swap plan, T-059 동시 실행 보호, T-054 한국 IP gate, T-055 N150/Odroid 실측 준비, T-027 최종 클린 재적재는 완료됐다.
+2026-05-29 기준 즉시 실행 가능한 대기 task는 없다. 운영 메타데이터(T-049), source set/백업 UX(T-045/T-046), T-047 주요 성능 실측, T-057 region hint 1차 구현, T-044 `maplibre-vworld-js` 0.1.0 문서-only 재확인, T-056 `python-kraddr-base` Address 코드 helper 정리, T-052 v1/v2 API 분리와 AI-friendly 문서화, T-053 admin UI C1~C10 분석/승인 콘솔, T-061 Q3 fuzzy slim text-search, T-050 운영 hardening, T-058 restore hot-swap plan, T-059 동시 실행 보호, T-054 한국 IP gate, T-055 N150/Odroid 실측 준비, T-027 최종 클린 재적재, PR #69~#86 리뷰 audit/fixup은 완료됐다.
 
 ## 보류 (외부 조건)
 
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] PR #69~#86 post-merge 리뷰 audit/fixup. PR #69부터 최신 PR #86까지 conversation/review/latestReview와 GraphQL review thread를 다시 확인했고, 대상 PR 모두 thread 0건이었다. PR #84 리뷰 후속으로 GeoIP gate를 admission control보다 먼저 실행하도록 middleware 순서를 바꾸고, `testclient` 특별 허용을 제거했으며, `X-Forwarded-For`의 `host:port`/`[IPv6]:port` 파싱을 보강했다. 상세: `docs/postmerge-review-fixups-pr69-pr86.md` (2026-05-29)
 - [x] T-027 최종 실 데이터 클린 재적재 검증. 새 Docker compose project `kraddr-geo-t027-final`과 전용 `pgdata-final-20260529`에서 실제 전국 `data/juso`와 `20260401_dailyjusukrdata.zip`을 처음부터 적재했다. 전체 3,963초, `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`, active serving release `faa1f42b-f5b9-4ef0-af0b-1a422d938ed3`, smoke `OK`를 확인했다. C1~C10은 실제 원천 품질 이슈로 `severity_max=ERROR`이며 C2/C4/C6/C7 data-quality CSV 8개와 DB size snapshot을 남겼다. 상세: `docs/t027-fullload-plan.md` (2026-05-29)
 - [x] T-055 N150/Odroid 운영 환경 비교 준비. 장비 도착 전 수행 가능한 범위를 완료했다. `scripts/capture_deployment_envelope.py`가 시스템 envelope를 `system-envelope.json/md`로 캡처하고, `fio`/`sysbench`는 `--run-probes`일 때만 실행한다. T-047 SQL/REST benchmark, MV refresh benchmark, T-027 full-load script를 장비별 같은 산출물 구조로 실행하는 runbook을 `docs/t055-deployment-n150-odroid.md`에 고정했다. 실제 하드웨어 실측은 T-063으로 보류한다. (2026-05-29)
 - [x] T-054 한국 IP 외부 접근 차단(GeoIP gate). FastAPI middleware가 내부/loopback은 허용하고 외부 공용 IP는 GeoIP country `KR`만 통과시키게 했다. 기본 `strict` 모드에서는 GeoIP DB가 없으면 공용 IP를 `E0403/403`으로 차단하며, allow/deny CIDR, trusted proxy `X-Forwarded-For`, `geoip.denied` audit, `kraddr-geo geoip check`를 지원한다. 상세: `docs/t054-korea-only-geoip.md`, ADR-037 (2026-05-29)

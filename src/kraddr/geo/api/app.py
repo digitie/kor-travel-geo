@@ -87,8 +87,8 @@ def create_app() -> FastAPI:
         openapi_url="/v1/openapi.json",
     )
     register_exception_handlers(app)
-    install_geoip_gate(app, settings)
     _install_admission_control(app, settings)
+    install_geoip_gate(app, settings)
     app.include_router(healthz.router, prefix="/v1")
     app.include_router(geocode.router, prefix="/v1")
     app.include_router(reverse.router, prefix="/v1")
