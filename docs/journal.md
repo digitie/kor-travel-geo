@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 18:05 (T-027 최종 실 데이터 클린 재적재 검증)
+
+**작업**: 남은 튜닝/증분/보조 로더 작업을 모두 반영한 최신 코드로 실제 전국 데이터를 빈 Docker PostGIS DB에 처음부터 다시 적재했다.
+
+**반영**:
+- `scripts/fullload_test.sh`에 선택 `DAILY_JUSO_ZIP`/`DAILY_YYYYMM` phase를 추가해 full snapshot 뒤 실제 daily MST/LNBR delta를 함께 검증할 수 있게 했다.
+- 새 compose project `kraddr-geo-t027-final`, port `15434`, 전용 `pgdata-final-20260529`로 기존 DB와 분리해 클린 로드를 실행했다.
+- 전체 3,963초, `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`, active serving release `faa1f42b-f5b9-4ef0-af0b-1a422d938ed3`를 확인했다.
+- `20260401_dailyjusukrdata.zip`은 `daily-juso` 422건 처리/upsert 242/delete 180, `daily-parcel-links` 204건 처리/upsert 74/delete 82로 적용됐다.
+- C1~C10은 `severity_max=ERROR`이며 C2/C4/C6/C7은 기존 실제 원천 품질 이슈로 남았다. C2/C4/C6/C7 data-quality CSV 8개와 DB size snapshot을 남겼다.
+
+**검증**:
+- `PLAN_ONLY=1` preflight 통과
+- `bash scripts/fullload_test.sh` → exit status 0, wall clock 1:06:02
+- `kraddr-geo validate consistency --scope full` → `consistency_163e89acfb4a41e0a8c19599c2faa678`
+- smoke: geocode/reverse/search/zipcode `OK`
+- `kraddr-geo validate data-quality-samples --cases C2,C4,C6,C7 --limit 20` → CSV 8개 생성
+
+**후속**:
+- 즉시 실행 가능한 대기 task는 없다.
+- N150/Odroid 실제 장비가 준비되면 T-063 실측을 진행한다.
+
 ## 2026-05-29 16:20 (T-055 N150/Odroid 운영 환경 비교 준비)
 
 **작업**: 실제 N150/Odroid 장비 도착 전 수행 가능한 측정 준비를 완료했다.
