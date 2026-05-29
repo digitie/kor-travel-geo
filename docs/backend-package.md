@@ -1175,7 +1175,7 @@ POST /v1/admin/jobs/{job_id}/cancel
 
 백업 진행률은 `preflight → dump → dump checksum → archive → checksum → finalize`, 복원 진행률은 `preflight → extract → restore → analyze → validate → finalize` 단계로 보고한다. `pg_dump`와 `pg_restore`는 정확한 row progress를 제공하지 않으므로 progress는 phase별 추정값이다. UI와 API는 추정 progress뿐 아니라 `current_stage`, 현재 처리 object/file, dump 디렉터리 크기, archive 입력/출력 byte, checksum byte, elapsed time을 함께 노출해야 한다.
 
-복원은 기본적으로 새 빈 DB에만 허용한다. 현재 연결 중인 운영 DB와 같은 target은 preflight에서 거절한다. `replace_current`가 필요하면 T-046 기본 구현 밖의 위험 경로로 두고, maintenance mode, typed confirmation, 선행 백업, rollback plan을 요구한다.
+복원은 기본적으로 새 빈 DB에만 허용한다. 현재 연결 중인 운영 DB와 같은 target은 preflight에서 거절한다. T-050 6차부터 `replace_current`는 숨김 위험 경로로만 남기되, `target_dsn`을 받지 않고 target DB 이름이 현재 DB 이름과 같고 확인 문구가 `RESTORE <현재 DB 이름>`이며 같은 확인 문구 hash를 가진 active `restore` maintenance window가 있을 때만 preflight를 통과한다. 선행 백업, rollback plan, 실제 hot-swap 절차는 T-058에서 이어서 다룬다.
 
 구현 검증은 전국 full-load를 다시 실행하지 않고 대구광역시 부분 적재 DB로 수행했다. `kraddr_geo_t046_daegu`를 백업하고 `kraddr_geo_t046_daegu_restore`에 복원한 뒤 row count, `mv_geocode_target`, 대구 주소 geocode/reverse smoke test를 비교했다. 검증 결과 `tl_juso_text=228,875`, `tl_juso_parcel_link=26,594`, `tl_locsum_entrc=228,610`, `tl_navi_buld_centroid=291,281`, `mv_geocode_target=228,875`가 원본과 복원 DB에서 일치했고, 백업 artifact는 86,752,398 bytes였다. smoke 주소 `대구광역시 중구 공평로 88`은 geocode/reverse 모두 `OK`였다.
 

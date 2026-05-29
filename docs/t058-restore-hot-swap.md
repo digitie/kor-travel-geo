@@ -14,6 +14,7 @@
 - "기본 모드는 새 빈 DB에 `pg_restore -Fd --jobs`로 복원한다."
 - "복원은 archive를 풀어 `pg_restore -Fd --jobs <N>`로 새 빈 DB에 수행한다."
 - "`replace_current`가 필요하면 T-046 기본 구현 밖의 위험 경로로 두고, maintenance mode와 명시 확인을 요구한다."
+- T-050 6차에서 `replace_current` preflight는 현재 DB명 target, `RESTORE <현재 DB 이름>` typed confirmation, active `restore` maintenance window를 요구하도록 보강됐다.
 
 → 현재 명문화된 정책은 "**새 빈 DB 복원만 기본 지원**"이고, 운영 serving DB로의 즉시 전환(hot-swap)은 **별도 위험 경로**로만 언급되어 있으며 절차 자체는 미명문화 상태다.
 

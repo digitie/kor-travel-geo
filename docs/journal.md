@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 09:15 (T-050 운영 hardening 6차 — destructive confirmation flow)
+
+**작업**: T-050 남은 항목 중 destructive confirmation flow를 기존 `db_restore` 위험 경로에 연결했다.
+
+**반영**:
+- `AdminRepository.require_active_maintenance_window()`를 추가해 active window, 유효 기간, confirmation hash를 함께 확인한다.
+- `db_restore`의 `replace_current` 모드는 `target_dsn`을 받지 않고 target DB 이름이 현재 설정 DB 이름과 같아야 하며, 확인 문구 `RESTORE <현재 DB 이름>`이 일치해야 하고, 같은 확인 문구 hash를 가진 active `restore` maintenance window가 있어야 한다.
+- 잘못된 target DB로 `replace_current`를 지정해 빈 DB preflight를 우회하는 경로를 차단했다.
+- T-046/T-050/T-058/backend/frontend/resume/tasks/CHANGELOG 문서를 갱신했다.
+
+**검증 예정**:
+- backup/restore 단위 테스트와 ops metadata source contract를 실행한 뒤 전체 backend gate를 확인한다.
+
+**후속**:
+- 이 PR merge 후 실제 PostgreSQL FK/trigger/partial unique integration test로 T-050을 마무리한다.
+
 ## 2026-05-29 08:25 (T-050 운영 hardening 5차 — table stats 주기 capture)
 
 **작업**: T-050 남은 항목 중 `ops.table_stats_snapshots` 주기 capture를 구현했다.

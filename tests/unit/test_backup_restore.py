@@ -27,6 +27,7 @@ from kraddr.geo.infra.backup import (
     safe_artifact_path,
     validate_callback_url,
     validate_download_token,
+    validate_replace_current_restore_request,
     verify_internal_checksums,
     write_checksums,
     write_json,
@@ -149,6 +150,52 @@ def test_restore_target_dsn_is_built_from_current_settings() -> None:
     target = resolve_restore_target_dsn(req, settings)
 
     assert target == "postgresql+psycopg://addr:secret@localhost:5432/kraddr_geo_restore"
+
+
+def test_replace_current_restore_requires_exact_target_and_confirmation() -> None:
+    settings = Settings(pg_dsn="postgresql://addr:secret@localhost:5432/kraddr_geo")
+    req = RestoreCreateRequest(
+        target_database="kraddr_geo",
+        mode="replace_current",
+        confirmation="RESTORE kraddr_geo",
+    )
+
+    confirmation = validate_replace_current_restore_request(
+        req,
+        settings=settings,
+        target_database="kraddr_geo",
+    )
+
+    assert confirmation == "RESTORE kraddr_geo"
+
+    wrong_target = req.model_copy(update={"target_database": "kraddr_geo_restore"})
+    with pytest.raises(InvalidInputError, match="must match the current database"):
+        validate_replace_current_restore_request(
+            wrong_target,
+            settings=settings,
+            target_database="kraddr_geo_restore",
+        )
+
+    dsn_target = req.model_copy(
+        update={
+            "target_database": None,
+            "target_dsn": "postgresql+psycopg://addr:secret@otherhost:5432/kraddr_geo",
+        }
+    )
+    with pytest.raises(InvalidInputError, match="requires target_database"):
+        validate_replace_current_restore_request(
+            dsn_target,
+            settings=settings,
+            target_database="kraddr_geo",
+        )
+
+    wrong_confirmation = req.model_copy(update={"confirmation": "RESTORE other"})
+    with pytest.raises(InvalidInputError, match="requires confirmation: RESTORE kraddr_geo"):
+        validate_replace_current_restore_request(
+            wrong_confirmation,
+            settings=settings,
+            target_database="kraddr_geo",
+        )
 
 
 def test_download_token_is_deterministic_and_validates() -> None:
