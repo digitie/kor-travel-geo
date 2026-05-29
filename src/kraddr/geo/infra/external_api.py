@@ -14,7 +14,7 @@ from kraddr.geo.core.address import address_code_set_from_mapping
 from kraddr.geo.dto.address import AddressStructure, RefinedAddress
 from kraddr.geo.dto.common import Point, ServiceMeta
 from kraddr.geo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
-from kraddr.geo.exceptions import ExternalApiError
+from kraddr.geo.exceptions import ConfigError, ExternalApiError
 from kraddr.geo.infra.metrics import record_external_api_call
 from kraddr.geo.settings import Settings
 
@@ -32,6 +32,15 @@ class ExternalGeocodeClient:
         self._http_client = http_client
 
     async def geocode(self, inp: GeocodeInput) -> GeocodeResponse | None:
+        if self.settings.vworld_api_key is None and self.settings.juso_api_key is None:
+            msg = "external API fallback is enabled but no provider API key is configured"
+            raise ConfigError(
+                msg,
+                hint=(
+                    "Set KRADDR_GEO_VWORLD_API_KEY or KRADDR_GEO_JUSO_API_KEY "
+                    "for fallback='api'. NEXT_PUBLIC_VWORLD_API_KEY is only for the UI map."
+                ),
+            )
         if self.settings.vworld_api_key is not None:
             response = await self._vworld_geocode(inp)
             if response is not None:
@@ -56,6 +65,7 @@ class ExternalGeocodeClient:
                 "key": self.settings.vworld_api_key.get_secret_value(),
             },
         )
+        _raise_for_vworld_error(payload)
         return _vworld_response(inp, payload)
 
     async def _juso_coord_geocode(self, inp: GeocodeInput) -> GeocodeResponse | None:
@@ -70,6 +80,7 @@ class ExternalGeocodeClient:
                 "resultType": "json",
             },
         )
+        _raise_for_juso_error(search_payload, provider="juso search")
         item = _first_juso_item(search_payload)
         if item is None:
             return None
@@ -93,6 +104,7 @@ class ExternalGeocodeClient:
                 "resultType": "json",
             },
         )
+        _raise_for_juso_error(coord_payload, provider="juso coord")
         coord_item = _first_juso_item(coord_payload)
         if coord_item is None:
             return None
@@ -165,6 +177,33 @@ def _vworld_response(inp: GeocodeInput, payload: Mapping[str, Any]) -> GeocodeRe
         result=GeocodeResult(crs=inp.crs, point=point),
         x_extension=GeocodeExtension(source="api_vworld", confidence=0.70),
     )
+
+
+def _raise_for_vworld_error(payload: Mapping[str, Any]) -> None:
+    response = _mapping(payload.get("response"))
+    if str(response.get("status", "")).upper() != "ERROR":
+        return
+    error = _mapping(response.get("error"))
+    code = str(error.get("code") or "UNKNOWN")
+    text = str(error.get("text") or "VWorld API request failed")
+    if code.upper() in {"INVALID_KEY", "INVALIDKEY", "AUTH_ERROR"}:
+        msg = "VWorld API authentication failed"
+        raise ExternalApiError(msg, hint=f"{code}: {text}")
+    msg = "VWorld API returned an error"
+    raise ExternalApiError(msg, hint=f"{code}: {text}")
+
+
+def _raise_for_juso_error(payload: Mapping[str, Any], *, provider: str) -> None:
+    common = _mapping(_mapping(payload.get("results")).get("common"))
+    code = str(common.get("errorCode") or "0")
+    if code in {"0", "00"}:
+        return
+    message = str(common.get("errorMessage") or "Juso API request failed")
+    if code in {"E0001", "E0005"} or "KEY" in message.upper():
+        msg = f"{provider} API authentication failed"
+        raise ExternalApiError(msg, hint=f"{code}: {message}")
+    msg = f"{provider} API returned an error"
+    raise ExternalApiError(msg, hint=f"{code}: {message}")
 
 
 def _juso_response(
