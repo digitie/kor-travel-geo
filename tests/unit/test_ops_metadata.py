@@ -117,6 +117,9 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "redact_audit_payload" in source
     assert "hash_identifier(client_ip)" in source
     assert "hash_confirmation(req.confirmation)" in source
+    assert "require_active_maintenance_window" in source
+    assert "starts_at <= now()" in source
+    assert "confirmation_hash = :confirmation_hash" in source
     assert "capture_table_stats_snapshots" in source
     assert "_active_release_snapshot_id_for_conn" in module_source
     assert "active_serving_release" in module_source
@@ -144,11 +147,15 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
 
     app_source = inspect.getsource(app._register_default_handlers)
     restore_source = inspect.getsource(backup.run_restore_job)
+    backup_source = inspect.getsource(backup)
 
     assert "ensure_load_batch_release_gate" in app_source
     assert "record_mv_refresh_release" in app_source
     assert "load_batch_id" in app_source
     assert "record_restore_candidate" in restore_source
+    assert "validate_replace_current_restore_request" in restore_source
+    assert "require_active_maintenance_window" in restore_source
+    assert "replace_current target_database must match" in backup_source
     assert "release_state" in restore_source
     assert "snapshot_id" in restore_source
 

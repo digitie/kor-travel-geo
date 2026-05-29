@@ -823,6 +823,38 @@ RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
             ).mappings().first()
         return _maintenance_window(dict(row)) if row else None
 
+    async def require_active_maintenance_window(
+        self,
+        *,
+        kind: str,
+        confirmation: str,
+    ) -> MaintenanceWindow:
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        _MAINTENANCE_SELECT
+                        + """
+ WHERE kind = :kind
+   AND state = 'active'
+   AND starts_at <= now()
+   AND (ends_at IS NULL OR ends_at >= now())
+   AND confirmation_hash = :confirmation_hash
+ ORDER BY actual_started_at DESC NULLS LAST, created_at DESC
+ LIMIT 1
+"""
+                    ),
+                    {
+                        "kind": kind,
+                        "confirmation_hash": hash_confirmation(confirmation),
+                    },
+                )
+            ).mappings().first()
+        if row is None:
+            msg = f"active {kind} maintenance window with matching confirmation is required"
+            raise InvalidInputError(msg)
+        return _maintenance_window(dict(row))
+
     async def list_table_stats_snapshots(
         self,
         *,

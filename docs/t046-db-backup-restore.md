@@ -376,7 +376,7 @@ T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, 
 
 - 기본 target은 새 DB 이름이다.
 - 현재 연결 중인 DB 이름과 같은 target은 금지한다.
-- `replace_current` 모드는 숨김 또는 별도 위험 모달 뒤로 둔다.
+- `replace_current` 모드는 숨김 또는 별도 위험 모달 뒤로 둔다. T-050 6차부터 이 모드는 `target_dsn`을 받지 않고 target DB 이름이 현재 DB 이름과 같으며, 확인 문구 `RESTORE <현재 DB 이름>`이 일치하고, 같은 확인 문구 hash를 가진 active `restore` maintenance window가 있을 때만 실행된다.
 - 복원 시작 전 archive metadata, PostGIS/PostgreSQL 버전, Alembic revision, 예상 복원 크기를 보여 준다.
 
 ## 작업 큐와 취소

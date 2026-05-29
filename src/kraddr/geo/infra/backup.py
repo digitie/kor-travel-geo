@@ -343,10 +343,12 @@ async def run_restore_job(
         msg = "restore target database name could not be resolved"
         raise InvalidInputError(msg)
     if req.mode == "replace_current":
-        expected = f"RESTORE {database_name_from_dsn(settings.pg_dsn) or ''}"
-        if req.confirmation != expected:
-            msg = f"replace_current requires confirmation: {expected}"
-            raise InvalidInputError(msg)
+        confirmation = validate_replace_current_restore_request(
+            req,
+            settings=settings,
+            target_database=target_database,
+        )
+        await repo.require_active_maintenance_window(kind="restore", confirmation=confirmation)
     else:
         current_database = database_name_from_dsn(settings.pg_dsn)
         if current_database == target_database:
@@ -737,6 +739,29 @@ def resolve_restore_target_dsn(req: RestoreCreateRequest, settings: Settings) ->
         raise InvalidInputError(msg)
     current = make_url(settings.pg_dsn)
     return current.set(database=req.target_database).render_as_string(hide_password=False)
+
+
+def validate_replace_current_restore_request(
+    req: RestoreCreateRequest,
+    *,
+    settings: Settings,
+    target_database: str,
+) -> str:
+    current_database = database_name_from_dsn(settings.pg_dsn)
+    if current_database is None:
+        msg = "current database name could not be resolved"
+        raise InvalidInputError(msg)
+    if req.target_dsn is not None:
+        msg = "replace_current requires target_database, not target_dsn"
+        raise InvalidInputError(msg)
+    if req.target_database != current_database or target_database != current_database:
+        msg = "replace_current target_database must match the current database"
+        raise InvalidInputError(msg)
+    expected = f"RESTORE {current_database}"
+    if req.confirmation != expected:
+        msg = f"replace_current requires confirmation: {expected}"
+        raise InvalidInputError(msg)
+    return expected
 
 
 async def resolve_restore_archive(
