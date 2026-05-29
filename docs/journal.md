@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-30 01:40 (외부 API fallback 인증키 오류 명시화)
+
+**작업**: `fallback="api"` 요청에서 외부 API fallback이 실패할 때 인증키/설정 문제와 단순 미검색이 구분되도록 보강했다.
+
+**반영**:
+- 백엔드 fallback은 `KRADDR_GEO_VWORLD_API_KEY` 또는 `KRADDR_GEO_JUSO_API_KEY`를 사용한다. UI 지도용 `NEXT_PUBLIC_VWORLD_API_KEY`만 있으면 fallback 키로 보지 않는다.
+- `fallback="api"`인데 provider 키가 하나도 없으면 `E0503` 설정 오류와 함께 필요한 환경변수 hint를 반환한다.
+- VWorld `INVALID_KEY`, Juso `E0001`/KEY 오류는 `E0501` 외부 API 인증 오류로 명시해 반환한다.
+- 로컬 `.env`에는 사용자 제공 VWorld 키를 `KRADDR_GEO_VWORLD_API_KEY`로 추가하고 권한을 `600`으로 조정했다. `.env`는 gitignore 대상이라 커밋하지 않는다.
+
+**검증**:
+- 키 없음 상태 `/v2/geocode fallback=api` → HTTP 500, `E0503`, `KRADDR_GEO_VWORLD_API_KEY` hint 확인
+- 잘못된 VWorld 키 상태 `/v2/geocode fallback=api` → HTTP 502, `E0501`, `VWorld API authentication failed`, `INVALID_KEY` hint 확인
+- 사용자 제공 키로 `ExternalGeocodeClient` live VWorld geocode `OK`
+- `pytest tests/unit/test_external_api.py -q` → `6 passed`
+
 ## 2026-05-30 00:55 (단독 구 이름 도로명주소 조회 보정)
 
 **작업**: `수지구 성복1로 35`처럼 시군구가 복합명(`용인시 수지구`)으로 저장되어 있지만 사용자가 단독 구 이름만 입력한 도로명주소 조회를 보정했다.

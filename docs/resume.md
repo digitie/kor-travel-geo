@@ -121,6 +121,7 @@
 - ✅ 디버그 UI v2 REST 전환 — `/debug/geocode`와 `/debug/reverse`를 `/v2/geocode`, `/v2/reverse` POST body 기반으로 전환하고, proxy가 `/v1/*`와 `/v2/*`를 모두 허용하도록 보강했다. Docker image `kraddr-geo-ui:debug-v2` 실행과 Windows Playwright e2e 6개를 통과시켰다.
 - ✅ VWorld 인증키 런타임 설정 UI — `/api/runtime-config`가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽고, `/admin/settings`에서 브라우저 localStorage override로 저장·수정·기본값 복원을 지원한다.
 - ✅ 단독 구 이름 도로명주소 조회 보정 — `수지구 성복1로 35`처럼 복합 시군구명(`용인시 수지구`)의 마지막 `구`만 입력한 경우 exact 도로명 조회 실패 뒤 제한적 suffix retry로 찾는다. 기본 조회는 `sgg_nm = :sgg`를 유지하고, fallback은 `rn_nrm`/건물번호 exact 후보 안에서 `right(sgg_nm, ...)`를 적용한다.
+- ✅ 외부 API fallback 인증키 오류 명시화 — `fallback="api"`에서 백엔드 provider 키가 없으면 `E0503`, VWorld/Juso 인증키 오류는 `E0501`로 반환한다. UI 지도 키 `NEXT_PUBLIC_VWORLD_API_KEY`는 fallback 키가 아니며, 백엔드는 `KRADDR_GEO_VWORLD_API_KEY` 또는 `KRADDR_GEO_JUSO_API_KEY`를 읽는다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 
@@ -134,7 +135,7 @@
 - PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
 - 디버그 UI의 실제 브라우저 회귀는 `kraddr-geo-ui` Docker image를 띄운 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test`로 실행한다. WSL Playwright는 공유 라이브러리 차이로 보조 검증에만 쓴다.
-- VWorld 지도 키는 `kraddr-geo-ui/.env.local` 또는 Docker `NEXT_PUBLIC_VWORLD_API_KEY` runtime env에서 읽는다. `/admin/settings`의 저장값은 브라우저 localStorage override이며 저장소에 커밋하지 않는다.
+- VWorld 지도 키는 `kraddr-geo-ui/.env.local` 또는 Docker `NEXT_PUBLIC_VWORLD_API_KEY` runtime env에서 읽는다. 외부 주소 API fallback 키는 루트 `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`다. `/admin/settings`의 저장값은 브라우저 localStorage override이며 저장소에 커밋하지 않는다.
 
 ## 작업 시작 전 확인할 것
 

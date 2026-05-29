@@ -5,6 +5,7 @@ import pytest
 from pydantic import SecretStr
 
 from kraddr.geo.dto.geocode import GeocodeInput
+from kraddr.geo.exceptions import ConfigError, ExternalApiError
 from kraddr.geo.infra.external_api import ExternalGeocodeClient
 from kraddr.geo.settings import Settings
 
@@ -29,7 +30,7 @@ async def test_external_geocode_client_maps_vworld_response() -> None:
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         client = ExternalGeocodeClient(
-            Settings(vworld_api_key=SecretStr("vworld-key")),
+            Settings(_env_file=None, vworld_api_key=SecretStr("vworld-key")),
             http_client=http_client,
         )
         response = await client.geocode(GeocodeInput(address="서울특별시 강남구 테헤란로 152"))
@@ -78,6 +79,7 @@ async def test_external_geocode_client_maps_juso_search_and_coord_response() -> 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         client = ExternalGeocodeClient(
             Settings(
+                _env_file=None,
                 juso_api_key=SecretStr("juso-key"),
                 juso_search_url="https://business.juso.go.kr/addrlink/addrLinkApi.do",
                 juso_coord_url="https://business.juso.go.kr/addrlink/addrCoordApi.do",
@@ -116,6 +118,7 @@ async def test_external_geocode_client_skips_juso_coord_when_code_parts_are_miss
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         client = ExternalGeocodeClient(
             Settings(
+                _env_file=None,
                 juso_api_key=SecretStr("juso-key"),
                 juso_search_url="https://business.juso.go.kr/addrlink/addrLinkApi.do",
                 juso_coord_url="https://business.juso.go.kr/addrlink/addrCoordApi.do",
@@ -125,3 +128,78 @@ async def test_external_geocode_client_skips_juso_coord_when_code_parts_are_miss
         response = await client.geocode(GeocodeInput(address="테헤란로 152"))
 
     assert response is None
+
+
+@pytest.mark.asyncio
+async def test_external_geocode_client_reports_missing_provider_keys() -> None:
+    client = ExternalGeocodeClient(Settings(_env_file=None))
+
+    with pytest.raises(ConfigError) as exc_info:
+        await client.geocode(GeocodeInput(address="없는 주소"))
+
+    assert exc_info.value.code == "E0503"
+    assert "KRADDR_GEO_VWORLD_API_KEY" in (exc_info.value.hint or "")
+    assert "NEXT_PUBLIC_VWORLD_API_KEY" in (exc_info.value.hint or "")
+
+
+@pytest.mark.asyncio
+async def test_external_geocode_client_reports_vworld_auth_error() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "response": {
+                    "status": "ERROR",
+                    "error": {
+                        "level": "2",
+                        "code": "INVALID_KEY",
+                        "text": "등록되지 않은 인증키입니다.",
+                    },
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = ExternalGeocodeClient(
+            Settings(_env_file=None, vworld_api_key=SecretStr("bad-key")),
+            http_client=http_client,
+        )
+        with pytest.raises(ExternalApiError) as exc_info:
+            await client.geocode(GeocodeInput(address="없는 주소"))
+
+    assert exc_info.value.code == "E0501"
+    assert exc_info.value.message == "VWorld API authentication failed"
+    assert "INVALID_KEY" in (exc_info.value.hint or "")
+
+
+@pytest.mark.asyncio
+async def test_external_geocode_client_reports_juso_auth_error() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": {
+                    "common": {
+                        "errorCode": "E0001",
+                        "errorMessage": "승인되지 않은 KEY 입니다.",
+                    },
+                    "juso": None,
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = ExternalGeocodeClient(
+            Settings(
+                _env_file=None,
+                juso_api_key=SecretStr("bad-key"),
+                juso_search_url="https://business.juso.go.kr/addrlink/addrLinkApi.do",
+            ),
+            http_client=http_client,
+        )
+        with pytest.raises(ExternalApiError) as exc_info:
+            await client.geocode(GeocodeInput(address="없는 주소"))
+
+    assert exc_info.value.code == "E0501"
+    assert exc_info.value.message == "juso search API authentication failed"
+    assert "E0001" in (exc_info.value.hint or "")

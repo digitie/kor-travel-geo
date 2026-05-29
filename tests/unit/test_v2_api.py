@@ -8,7 +8,7 @@ import pytest
 from kraddr.geo.api.app import create_app
 from kraddr.geo.api.deps import get_client
 from kraddr.geo.client import AsyncAddressClient
-from kraddr.geo.core.v2 import reverse_v2_from_v1
+from kraddr.geo.core.v2 import geocode_v2_from_v1, reverse_v2_from_v1
 from kraddr.geo.dto.address import AddressStructure, RefinedAddress
 from kraddr.geo.dto.common import Point, ServiceMeta
 from kraddr.geo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
@@ -142,6 +142,22 @@ def test_v2_input_preserves_bbox() -> None:
     assert geocode.bbox.min_lon == pytest.approx(127.0)
     assert search.bbox is not None
     assert search.bbox.max_lat == pytest.approx(37.6)
+
+
+def test_geocode_v2_maps_external_provider_sources() -> None:
+    inp = GeocodeV2Input(road_address="서울특별시 중구 세종대로 110", fallback="api")
+    response = _v1_geocode_response(
+        GeocodeInput(address="서울특별시 중구 세종대로 110", fallback="api")
+    ).model_copy(
+        update={
+            "x_extension": GeocodeExtension(
+                source="api_vworld",
+                confidence=0.7,
+            )
+        }
+    )
+
+    assert geocode_v2_from_v1(inp, response).candidates[0].source == "vworld"
 
 
 def test_reverse_v2_promotes_distance_and_uses_distance_confidence() -> None:
