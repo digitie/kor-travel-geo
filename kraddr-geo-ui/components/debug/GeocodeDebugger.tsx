@@ -5,21 +5,42 @@ import { FormEvent, useState } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
-import { requestJson } from "@/lib/api";
+import { postJson } from "@/lib/api";
+import { geocodeFormSchema } from "@/lib/schemas";
+import type { components } from "@/types/api.gen";
+
+type GeocodeV2Input = components["schemas"]["GeocodeV2Input"];
+type GeocodeV2Response = components["schemas"]["GeocodeV2Response"];
 
 export function GeocodeDebugger() {
   const [address, setAddress] = useState("서울특별시 강남구 테헤란로 152");
   const [type, setType] = useState("road");
-  const [fallback, setFallback] = useState("local_only");
+  const [fallback, setFallback] = useState("none");
   const [result, setResult] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const parsed = geocodeFormSchema.safeParse({ address, type, fallback });
+    if (!parsed.success) {
+      setResult({ error: parsed.error.issues[0]?.message ?? "주소 입력을 확인하세요" });
+      return;
+    }
     setLoading(true);
     try {
-      const params = new URLSearchParams({ address, type, fallback });
-      setResult(await requestJson(`/address/geocode?${params}`));
+      const body: GeocodeV2Input =
+        parsed.data.type === "parcel"
+          ? {
+              jibun_address: parsed.data.address,
+              fallback: parsed.data.fallback,
+              limit: 10
+            }
+          : {
+              road_address: parsed.data.address,
+              fallback: parsed.data.fallback,
+              limit: 10
+            };
+      setResult(await postJson<GeocodeV2Response>("/v2/geocode", body));
     } catch (error) {
       setResult({ error: error instanceof Error ? error.message : String(error) });
     } finally {
@@ -50,9 +71,8 @@ export function GeocodeDebugger() {
                 value={fallback}
                 onChange={(e) => setFallback(e.target.value)}
               >
-                <option value="local_only">local_only</option>
+                <option value="none">none</option>
                 <option value="api">api</option>
-                <option value="off">off</option>
               </select>
             </div>
           </div>
@@ -74,7 +94,8 @@ export function GeocodeDebugger() {
 
 function extractPoint(result: unknown): { x: number; y: number } | null {
   if (!result || typeof result !== "object") return null;
-  const point = (result as { result?: { point?: { x?: unknown; y?: unknown } } }).result?.point;
+  const point = (result as { candidates?: { point?: { x?: unknown; y?: unknown } | null }[] })
+    .candidates?.[0]?.point;
   return typeof point?.x === "number" && typeof point.y === "number"
     ? { x: point.x, y: point.y }
     : null;

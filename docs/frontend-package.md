@@ -11,7 +11,7 @@
 - **디버깅 UI**: 지오코딩·역지오코딩·통합검색·정규화·SQL EXPLAIN을 지도와 함께 시각 검증
 - **DB 관리 UI**: 테이블 통계, 적재 작업 큐, MV refresh, 사서함/다량배달처 갱신, 캐시 메트릭, 외부 API 키 관리, 로그 뷰어
 
-두 영역 모두 같은 백엔드 REST API(`/v1/*` 및 `/v1/admin/*`)를 호출한다. 빌드 시 백엔드 `openapi.json`에서 TypeScript 타입과 schema 이름 목록을 생성한다. 폼 입력 Zod 스키마는 `lib/schemas.ts`에 수동 mirror로 둔다. 이 구조는 OpenAPI drift와 폼 입력 drift를 각각 분리해서 리뷰할 수 있게 한다.
+두 영역 모두 같은 백엔드 REST API를 호출한다. 지오코딩/역지오코딩 디버그 화면은 `/v2/geocode`, `/v2/reverse`를 쓰고, 운영·정규화·EXPLAIN 화면은 `/v1/admin/*`를 쓴다. 빌드 시 백엔드 `openapi.json`에서 TypeScript 타입과 schema 이름 목록을 생성한다. 폼 입력 Zod 스키마는 `lib/schemas.ts`에 수동 mirror로 둔다. 이 구조는 OpenAPI drift와 폼 입력 drift를 각각 분리해서 리뷰할 수 있게 한다.
 
 ### A1.2 핵심 결정 (요약)
 
@@ -25,7 +25,7 @@
 | 데이터 패칭 | TanStack Query v5 |
 | 타입 동기 | openapi-typescript + 수동 Zod mirror |
 | 코드 표시 | 자체 `JsonBlock` 컴포넌트 |
-| 테스트 | Vitest + @testing-library/react, Playwright는 e2e 후속 |
+| 테스트 | Vitest + @testing-library/react, Playwright e2e |
 
 ### A1.3 보안 모델 (내부 전용)
 
@@ -114,7 +114,7 @@ export const GeocodeInputSchema = z.object({
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/proxy";
 export function backendPath(path: string): string {
   const trimmed = path.startsWith("/") ? path : `/${path}`;
-  return trimmed.startsWith("/v1") ? trimmed : `/v1${trimmed}`;
+  return trimmed.startsWith("/v1") || trimmed.startsWith("/v2") ? trimmed : `/v1${trimmed}`;
 }
 export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> { ... }
 export async function postJson<T>(path: string, body: unknown): Promise<T> { ... }
@@ -124,7 +124,7 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> { ...
 
 `app/api/proxy/[...path]/route.ts`가 백엔드로 전달한다. JSON 요청과 raw ZIP 업로드 요청을 같은 프록시로 처리하되, GET/HEAD가 아닌 요청 본문은 `request.body`(`ReadableStream`)를 그대로 `fetch`에 넘긴다. 대용량 ZIP을 Next.js Route Handler 메모리에 `arrayBuffer()`로 통째 적재하지 않기 위한 정책이며, Node.js fetch 스트림 전달 요건에 맞춰 `duplex: "half"`를 명시한다. Next.js 16에서는 Route Handler context의 `params`가 Promise이므로 `const params = await context.params` 형태를 사용한다.
 
-프록시는 `/v1/` 하위 경로만 허용한다. `new URL()` 정규화 이후 `target.pathname`을 검사하므로 `/v1/../metrics` 같은 우회도 차단된다. 전달 헤더는 `accept`, `content-type`, `user-agent` allowlist만 사용하고 `authorization`/`cookie`/`x-forwarded-*` 등은 내부 백엔드로 넘기지 않는다.
+프록시는 `/v1/`과 `/v2/` 하위 경로만 허용한다. `new URL()` 정규화 이후 `target.pathname`을 검사하므로 `/v1/../metrics` 같은 우회도 차단된다. 전달 헤더는 `accept`, `content-type`, `user-agent` allowlist만 사용하고 `authorization`/`cookie`/`x-forwarded-*` 등은 내부 백엔드로 넘기지 않는다.
 
 ### A3.5 `lib/queryClient.ts`
 
@@ -181,14 +181,20 @@ T-044 경계화 포팅 원칙:
 - **컴포넌트 대체 조건**: click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식이 upstream에서 같은 의미로 제공되고 테스트되면 `CoordinateMap.tsx`의 직접 MapLibre wiring을 제거하고 upstream 컴포넌트 또는 Hook을 사용한다.
 - **보안·운영 조건**: 브라우저 노출 키는 VWorld 콘솔에서 origin/referrer 제한이 실제 WMTS에도 적용되는지 운영자가 확인한다. 향후 CSP를 켜면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 포함한다.
 
-### A3.7 Provider 체인 (`app/providers.tsx`)
+### A3.7 Playwright e2e
+
+Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우저 네트워크를 가로채 `/api/proxy/v2/geocode`와 `/api/proxy/v2/reverse` 요청을 확인한다. 이 방식은 실제 DB 결과에 의존하지 않고, UI가 v2 REST body를 잘못 만들거나 v1 endpoint로 되돌아가면 즉시 실패한다.
+
+실제 실행은 사용자 지시에 따라 Windows Node/브라우저 환경에서 수행한다. Docker UI를 띄운 뒤 Windows에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test --config playwright.config.ts --project chromium --workers 1`로 실행한다. WSL에서는 Linux Node/npm으로 lint/type/unit/build를 확인하고, Playwright는 보조 검증으로만 사용한다.
+
+### A3.8 Provider 체인 (`app/providers.tsx`)
 
 `QueryClientProvider` → children. ThemeProvider, Toaster, ReactQueryDevtools는 실제 사용 요구가 생기면 추가한다.
 
 ## A4. 공통 컴포넌트
 
 - **CoordinateMap**: MapLibre GL JS와 VWorld WMTS raster style을 사용한다. `NEXT_PUBLIC_VWORLD_API_KEY`가 없거나 로딩 실패 시 좌표 프리뷰로 대체한다. 좌표 입력과 click callback은 모두 `(lon, lat)` 순서다.
-- **GeocodeDebugger**: `address`, `type`, `fallback`을 받아 `/v1/address/geocode`를 호출하고 JSON 응답과 지도/좌표 프리뷰를 함께 표시한다.
+- **GeocodeDebugger**: `address`, `type`, `fallback`을 받아 `/v2/geocode`를 호출하고 JSON 응답과 지도/좌표 프리뷰를 함께 표시한다.
 - **TableStatsPanel**: `GET /v1/admin/tables` 결과를 native table로 보여준다. 수천 행 이상 필터·정렬이 필요해지면 TanStack Table로 승격한다.
 - **JsonBlock**: JSON 응답과 EXPLAIN plan을 monospace pre 영역으로 표시. 별도 코드 표시 라이브러리는 production dependency로 두지 않는다.
 - **ZipSourceBadge**: `ZipSource` enum별 색상/라벨 메타데이터로 시각화.

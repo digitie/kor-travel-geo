@@ -3,10 +3,11 @@ import { ApiError, backendPath } from "@/lib/api";
 import { buildProxyRequestInit, buildProxyTarget, forwardedProxyHeaders } from "@/lib/proxy";
 
 describe("backendPath", () => {
-  it("백엔드 v1 prefix를 안정적으로 붙인다", () => {
+  it("기본 백엔드 v1 prefix를 안정적으로 붙이고 명시 v2 경로는 보존한다", () => {
     expect(backendPath("/address/geocode")).toBe("/v1/address/geocode");
     expect(backendPath("admin/tables")).toBe("/v1/admin/tables");
     expect(backendPath("/v1/admin/loads")).toBe("/v1/admin/loads");
+    expect(backendPath("/v2/geocode")).toBe("/v2/geocode");
   });
 
   it("API 오류는 status를 보존한다", () => {
@@ -16,9 +17,12 @@ describe("backendPath", () => {
     expect(error.message).toBe("invalid");
   });
 
-  it("프록시는 /v1 하위 경로만 허용한다", () => {
+  it("프록시는 /v1 및 /v2 하위 경로만 허용한다", () => {
     expect(buildProxyTarget(["v1", "admin", "tables"], "", "http://backend")?.pathname).toBe(
       "/v1/admin/tables"
+    );
+    expect(buildProxyTarget(["v2", "geocode"], "", "http://backend")?.pathname).toBe(
+      "/v2/geocode"
     );
     expect(buildProxyTarget(["openapi.json"], "", "http://backend")).toBeNull();
     expect(buildProxyTarget(["v1", "..", "metrics"], "", "http://backend")).toBeNull();

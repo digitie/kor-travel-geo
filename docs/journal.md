@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 23:20 (디버그 UI v2 REST 전환과 Windows Playwright e2e)
+
+**작업**: 디버그 UI의 geocode/reverse 화면이 v2 REST API를 직접 사용하는지 재확인하고, v1 기반 호출을 v2 요청 body 중심으로 전환했다.
+
+**반영**:
+- `/debug/geocode`는 `/v2/geocode`에 `road_address` 또는 `jibun_address`, `fallback`, `limit`을 POST한다.
+- `/debug/reverse`는 `/v2/reverse`에 `lon`, `lat`, `crs`, `include_region`, `include_zipcode`, `radius_m`을 POST한다.
+- 프론트엔드 proxy와 `backendPath()`가 `/v1/*`와 `/v2/*`를 모두 보존하되, non-versioned path는 기존처럼 `/v1`로 보낸다.
+- `kraddr-geo-ui` Dockerfile을 추가하고, Docker 이미지 실행 runbook을 README에 보강했다.
+- Playwright e2e 6개를 추가해 도로명/지번 geocode body, 빈 주소 차단, reverse 기본 body, reverse 입력 변경, 범위 밖 좌표 차단을 검증한다.
+
+**검증**:
+- `npm run lint`
+- `npm run type-check`
+- `npm run test` → `30 passed`
+- Windows Playwright: `6 passed`
+- `npm run build`
+- `docker build -t kraddr-geo-ui:debug-v2 ./kraddr-geo-ui`
+- Docker UI `http://127.0.0.1:13088`에서 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse` POST smoke `OK`
+
+**후속**:
+- 실제 백엔드와 연결한 UI e2e는 Docker UI + Windows Playwright 조합을 기준으로 실행한다.
+
 ## 2026-05-29 21:37 (Python 라이브러리 API v2 단일화)
 
 **작업**: 사용자 요청에 따라 Python 라이브러리 주소 조회 API에서 v1-style 공개 메서드를 제거하고 v2 후보 schema를 접미사 없는 기본 메서드로 승격했다.

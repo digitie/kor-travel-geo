@@ -118,6 +118,7 @@
 - ✅ T-055 N150/Odroid 운영 환경 비교 준비 — 실제 장비 도착 전 실행 가능한 준비를 완료했다. `scripts/capture_deployment_envelope.py`로 OS/CPU/메모리/NVMe/Docker/GDAL/PostgreSQL/fio/sysbench/zstd envelope를 캡처하고, T-027 full-load, T-047 SQL/REST benchmark, MV refresh/swap benchmark 실행 runbook과 산출물 구조를 `docs/t055-deployment-n150-odroid.md`에 고정했다. 실제 하드웨어 실측은 T-063으로 보류한다.
 - ✅ PR #69~#86 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #86까지 formal review와 review thread를 재확인했고 thread 0건을 기록했다. PR #84 리뷰 후속으로 GeoIP gate를 admission control보다 먼저 실행하도록 순서를 바꾸고, `testclient` 특별 허용 제거와 `X-Forwarded-For` port 표기 파싱을 보강했다. 상세: `docs/postmerge-review-fixups-pr69-pr86.md`
 - ✅ Python 라이브러리 API v2 단일화 — `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답의 표준 Python API로 승격하고, `geocode_v2/reverse_v2/search_v2/reverse_geocode` 공개 메서드를 제거했다. REST `/v1/*`는 내부 어댑터로 vworld 호환 응답을 유지한다. ADR-039와 `docs/api-reference/`를 갱신했다.
+- ✅ 디버그 UI v2 REST 전환 — `/debug/geocode`와 `/debug/reverse`를 `/v2/geocode`, `/v2/reverse` POST body 기반으로 전환하고, proxy가 `/v1/*`와 `/v2/*`를 모두 허용하도록 보강했다. Docker image `kraddr-geo-ui:debug-v2` 실행과 Windows Playwright e2e 6개를 통과시켰다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 
@@ -130,6 +131,7 @@
 - T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
 - PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
+- 디버그 UI의 실제 브라우저 회귀는 `kraddr-geo-ui` Docker image를 띄운 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test`로 실행한다. WSL Playwright는 공유 라이브러리 차이로 보조 검증에만 쓴다.
 
 ## 작업 시작 전 확인할 것
 

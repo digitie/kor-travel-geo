@@ -6,6 +6,7 @@
 
 ### Changed
 - **(BREAKING)** Python 라이브러리 주소 조회 표면을 v2 candidate schema로 단일화했다. `AsyncAddressClient.geocode()`, `reverse()`, `search()`가 각각 `GeocodeV2Response`, `ReverseV2Response`, `SearchV2Response`를 반환하며, 공개 API에서 `geocode_v2()`, `reverse_v2()`, `search_v2()`, `reverse_geocode()`를 제거했다. REST `/v1/*`의 vworld 호환 응답은 내부 adapter로 유지한다.
+- 디버그 UI의 geocode/reverse 화면을 `/v2/geocode`, `/v2/reverse` POST 기반으로 전환했다. proxy는 `/v1/*`와 `/v2/*`를 모두 허용하며, Windows Playwright e2e 6개로 v2 요청 body와 입력 검증을 고정한다.
 
 ### Fixed
 - PR #69~#86 post-merge 리뷰 audit/fixup: PR #69부터 최신 PR #86까지 formal review와 review thread를 재확인했고 thread 0건을 기록했다. PR #84 리뷰 후속으로 GeoIP gate가 admission control보다 먼저 실행되도록 middleware 설치 순서를 바꾸고, `testclient` 호스트명 특별 허용을 제거했으며, `X-Forwarded-For`의 `host:port`/`[IPv6]:port` 표기를 파싱하도록 보강했다.
