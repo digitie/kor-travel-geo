@@ -23,7 +23,7 @@ async def geocode_v2(
     req: GeocodeV2Input,
     client: AsyncAddressClient = Depends(get_client),
 ) -> GeocodeV2Response:
-    return await client.geocode_v2(
+    return await client.geocode(
         query=req.query,
         road_address=req.road_address,
         jibun_address=req.jibun_address,
@@ -41,7 +41,7 @@ async def reverse_v2(
     req: ReverseV2Input,
     client: AsyncAddressClient = Depends(get_client),
 ) -> ReverseV2Response:
-    return await client.reverse_v2(
+    return await client.reverse(
         req.lon,
         req.lat,
         crs=req.crs,
@@ -58,7 +58,7 @@ async def search_v2(
     req: SearchV2Input,
     client: AsyncAddressClient = Depends(get_client),
 ) -> SearchV2Response:
-    return await client.search_v2(
+    return await client.search(
         query=req.query,
         type=req.type,
         category_group_code=req.category_group_code,

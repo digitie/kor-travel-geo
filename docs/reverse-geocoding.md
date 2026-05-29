@@ -1,6 +1,6 @@
 # 역지오코딩
 
-`kraddr-geo`의 역지오코딩은 `core.reverse_geocoder.reverse_geocode()`와 `infra.reverse_repo.ReverseRepository`가 담당한다. 라이브러리 진입점은 `AsyncAddressClient.reverse_geocode(lon, lat, ...)`이며 REST 엔드포인트는 `GET /v1/address/reverse`다.
+`kraddr-geo`의 역지오코딩은 `core.reverse_geocoder.reverse_geocode()`와 `infra.reverse_repo.ReverseRepository`가 담당한다. 라이브러리 진입점은 후보 목록 응답을 반환하는 `AsyncAddressClient.reverse(lon, lat, ...)`이며 REST v1 엔드포인트는 `GET /v1/address/reverse`다.
 
 > 이전(v1) SpatiaLite 기반 `SpatialiteAddressStore.get_address()`는 `v1` 브랜치에 보존되어 있다. `main`은 PostgreSQL + PostGIS / `AsyncAddressClient` 기준만 다룬다(ADR-001, ADR-002).
 
@@ -47,9 +47,10 @@ from kraddr.geo import AsyncAddressClient
 
 async def main():
     async with AsyncAddressClient() as client:
-        r = await client.reverse_geocode(127.028601, 37.500344, type="both", zipcode=True)
-        for item in r.result:
-            print(item.type, item.text, item.zipcode, item.x_extension.get("zip_source"))
+        r = await client.reverse(127.028601, 37.500344, include_zipcode=True)
+        for item in r.candidates:
+            address = item.address.full if item.address else None
+            print(item.match_kind, address, item.distance_m)
 
 asyncio.run(main())
 ```

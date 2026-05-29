@@ -23,7 +23,7 @@ T-052 1차 PR은 v1 표면을 유지하면서 v2 DTO/router/client와 AI-friendl
 
 - `src/kraddr/geo/dto/v2.py`: `GeocodeV2Input/Response`, `ReverseV2Input/Response`, `SearchV2Input/Response`, `CandidateV2`, `AddressV2`, `RegionV2`, `PlaceV2`를 추가했다. PR #69 리뷰 후속으로 `distance_m`과 `point_precision`도 v2 candidate의 정식 필드로 올렸다.
 - `src/kraddr/geo/api/routers/v2.py`: `POST /v2/geocode`, `POST /v2/reverse`, `POST /v2/search`를 추가했다.
-- `AsyncAddressClient`: `geocode_v2()`, `reverse_v2()`, `search_v2()`를 추가했다.
+- `AsyncAddressClient`: Python 공개 API는 후보 목록 응답을 기본으로 하며 `geocode()`, `reverse()`, `search()` 이름만 노출한다. REST v1 호환 응답은 `/v1/*`와 내부 어댑터에 남긴다.
 - `core/v2.py`: v1 응답을 v2 candidate schema로 변환한다. 기존 fallback 출처인 `api_vworld`, `api_juso`는 v2에서 각각 `vworld`, `juso`로 정규화한다.
 - `docs/api-reference/`: 사람과 AI agent가 함께 읽을 API reference와 LLM 요약을 추가했다.
 - `openapi.json`과 `kraddr-geo-ui` 생성 타입은 v2 schema를 포함하도록 갱신한다.
@@ -51,7 +51,7 @@ T-052 1차 PR은 v1 표면을 유지하면서 v2 DTO/router/client와 AI-friendl
 
 - REST: `GET /v1/address/geocode`, `GET /v1/address/reverse`, `GET /v1/address/search`, `GET /v1/zipcode`, `GET /v1/pobox`, `/v1/admin/*`(운영 화면).
 - DTO: 현재 `dto/geocode.py`/`dto/reverse.py`/`dto/search.py`의 응답 모델. vworld key 명명(`addresses[]`, `result.point`, `x_extension.*`)을 보존.
-- 라이브러리: `AsyncAddressClient.geocode()`, `.reverse()`, `.search()`, `.zipcode()`, `.pobox()`.
+- 라이브러리: `AsyncAddressClient.geocode()`, `.reverse()`, `.search()`, `.zipcode()`, `.pobox()`. 주소 조회 3종은 v2 candidate schema만 반환한다.
 - OpenAPI: `openapi.json`의 `/v1/*` paths.
 
 이 동결은 `kraddr-geo-ui`(디버그/관리 UI), 외부 vworld-호환 SDK 사용자, 운영 cron 스크립트를 깨지 않기 위한 것이다.
@@ -111,20 +111,16 @@ class GeocodeV2Response(FrozenModel):
     query_id: str
 ```
 
-`dto/v2/reverse.py`, `dto/v2/search.py`도 유사한 candidate-list 형태.
+`dto/v2/reverse.py`, `dto/v2/search.py`도 유사한 후보 목록 형태.
 
 ### 라이브러리 표면
 
 ```python
 class AsyncAddressClient:
-    # v1은 그대로
-    async def geocode(self, ...) -> GeocodeResponse: ...
-
-    # v2 신규
-    async def geocode_v2(
+    async def geocode(
         self,
-        *,
         query: str | None = None,
+        *,
         road_address: str | None = None,
         jibun_address: str | None = None,
         keyword: str | None = None,
@@ -135,9 +131,11 @@ class AsyncAddressClient:
         fallback: Literal["none","api"] = "none",
     ) -> GeocodeV2Response: ...
 
-    async def reverse_v2(self, lon: float, lat: float, *, include_region: bool = True, ...) -> ReverseV2Response: ...
-    async def search_v2(self, *, query: str, category_group_code: str | None = None, sig_cd: str | None = None, ...) -> SearchV2Response: ...
+    async def reverse(self, lon: float, lat: float, *, include_region: bool = True, ...) -> ReverseV2Response: ...
+    async def search(self, query: str, *, category_group_code: str | None = None, sig_cd: str | None = None, ...) -> SearchV2Response: ...
 ```
+
+2026-05-29 보정: Python API에서는 v1 메서드와 `_v2` 접미사 메서드를 공개하지 않는다. REST `/v1/*`는 기존 vworld 호환 사용자를 위해 유지하되, `AsyncAddressClient` 내부 어댑터가 담당한다.
 
 ## 외부 API 직접 호출 정책
 
@@ -196,8 +194,8 @@ docs/api-reference/
 2. 완료: T-056 `core.address` helper를 기준으로 juso 좌표 API 필수 코드 정규화를 재사용.
 3. 완료: v1 표면 동결 — 현재 응답 형식을 `api-reference/v1/*.md`로 캡처.
 4. 완료: v2 DTO 초안 (`src/kraddr/geo/dto/v2.py`).
-5. 완료: v2 router skeleton (`src/kraddr/geo/api/routers/v2.py`) — 응답은 local 우선, candidate-list.
-6. 완료: `AsyncAddressClient.geocode_v2/reverse_v2/search_v2` 추가.
+5. 완료: v2 router skeleton (`src/kraddr/geo/api/routers/v2.py`) — 응답은 local 우선, 후보 목록.
+6. 완료: `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답으로 제공하고, Python 공개 API에서 `_v2` 접미사를 제거.
 7. 완료: 새 외부 provider adapter는 추가하지 않는 것으로 확정. v2는 local/vworld/juso/cache source만 표현한다.
 8. 완료: OpenAPI export에 `/v2/*` 포함, `kraddr-geo-ui`도 `types/api.gen.ts` 자동 갱신.
 9. 완료: `docs/api-reference/v2/*.md` 1차 작성.
@@ -208,7 +206,7 @@ docs/api-reference/
 - v2 응답 schema 단위 테스트 — DTO validation, candidate 변환, region hint propagation.
 - v2 router/client 변환 단위 테스트 — local/vworld/juso fallback 결과를 자체 candidate schema로 변환한다.
 - `docs/api-reference/`의 모든 예시가 실제 응답과 일치(CI에서 sample request 실행).
-- `AsyncAddressClient.geocode_v2` 라이브러리 사용 시 명시적 import만으로 동작.
+- `AsyncAddressClient.geocode` 라이브러리 사용 시 명시적 import만으로 후보 목록 응답이 동작.
 
 ## 남은 위험
 

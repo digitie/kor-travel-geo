@@ -51,16 +51,16 @@ def _v1_geocode_response(inp: GeocodeInput) -> GeocodeResponse:
 
 
 @pytest.mark.asyncio
-async def test_async_client_geocode_v2_wraps_v1_geocode(
+async def test_async_client_geocode_wraps_internal_v1_geocode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
         return _v1_geocode_response(GeocodeInput(address=address))
 
-    monkeypatch.setattr(AsyncAddressClient, "geocode", fake_geocode)
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
 
-    response = await client.geocode_v2(query="서울특별시 강남구 테헤란로 152", sig_cd="11680")
+    response = await client.geocode(query="서울특별시 강남구 테헤란로 152", sig_cd="11680")
 
     assert response.status == "OK"
     assert response.region_hint_applied is not None
@@ -74,7 +74,7 @@ async def test_async_client_geocode_v2_wraps_v1_geocode(
 @pytest.mark.asyncio
 async def test_v2_geocode_route_uses_client_dependency() -> None:
     class FakeClient:
-        async def geocode_v2(self, **kwargs: Any) -> GeocodeV2Response:
+        async def geocode(self, **kwargs: Any) -> GeocodeV2Response:
             assert kwargs["bbox"] is not None
             inp = GeocodeV2Input(query=kwargs["query"], bbox=kwargs["bbox"])
             return GeocodeV2Response(
@@ -111,6 +111,16 @@ async def test_v2_geocode_route_uses_client_dependency() -> None:
     assert body["status"] == "OK"
     assert body["input"]["bbox"]["min_lon"] == pytest.approx(127.0)
     assert body["candidates"][0]["match_kind"] == "road"
+
+
+def test_async_client_has_unsuffixed_v2_python_api() -> None:
+    assert hasattr(AsyncAddressClient, "geocode")
+    assert hasattr(AsyncAddressClient, "reverse")
+    assert hasattr(AsyncAddressClient, "search")
+    assert not hasattr(AsyncAddressClient, "geocode_v2")
+    assert not hasattr(AsyncAddressClient, "reverse_v2")
+    assert not hasattr(AsyncAddressClient, "search_v2")
+    assert not hasattr(AsyncAddressClient, "reverse_geocode")
 
 
 def test_geocode_v2_input_requires_query_surface() -> None:

@@ -8,7 +8,7 @@
 |------|------|------|--------|
 | v1 | `/v1/address/*`, `/v1/admin/*` | vworld 호환 응답, 기존 UI/SDK/운영 스크립트 | 최상위 응답 구조 유지, 자체 필드는 `x_extension`만 사용 |
 | v2 | `/v2/*` | 외부 API 스타일의 장점을 참고한 자체 후보 목록 | 자체 schema, candidate 중심 |
-| library | `AsyncAddressClient` | Python async API | REST와 같은 core 경로 사용 |
+| library | `AsyncAddressClient` | Python async API | 주소 조회는 후보 목록 응답만 공개, REST v1 호환 응답은 HTTP 표면으로 분리 |
 
 ## 현재 구현 범위
 

@@ -31,7 +31,7 @@ src/kraddr/geo/
 2. **core/geocoder.py**를 본다. `parse_address` → `repo.lookup_by_road` → `RefinedAddress` 빌드 흐름.
 3. **infra/geocode_repo.py**의 raw SQL 상수 (`_LOOKUP_ROAD`, `_FUZZY_ROADS`).
 4. **client.py**의 `AsyncAddressClient` — 위 셋을 묶는 진입점.
-5. **api/routers/geocode.py** — 라우터는 client.geocode() 한 줄.
+5. **api/routers/geocode.py** — REST v1 라우터는 client의 내부 v1 adapter를 호출한다.
 
 세부 사양은 `docs/backend-package.md`에 있다.
 

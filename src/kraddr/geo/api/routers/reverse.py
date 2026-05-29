@@ -25,7 +25,7 @@ async def reverse_geocode(
     bjd_cd: str | None = Query(default=None, pattern=r"^(\d{8}|\d{10})$"),
     client: AsyncAddressClient = Depends(get_client),
 ) -> ReverseResponse:
-    return await client.reverse_geocode(
+    return await client._reverse_geocode_v1(
         x,
         y,
         crs=crs,

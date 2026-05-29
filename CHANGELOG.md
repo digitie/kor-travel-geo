@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **(BREAKING)** Python 라이브러리 주소 조회 표면을 v2 candidate schema로 단일화했다. `AsyncAddressClient.geocode()`, `reverse()`, `search()`가 각각 `GeocodeV2Response`, `ReverseV2Response`, `SearchV2Response`를 반환하며, 공개 API에서 `geocode_v2()`, `reverse_v2()`, `search_v2()`, `reverse_geocode()`를 제거했다. REST `/v1/*`의 vworld 호환 응답은 내부 adapter로 유지한다.
+
 ### Fixed
 - PR #69~#86 post-merge 리뷰 audit/fixup: PR #69부터 최신 PR #86까지 formal review와 review thread를 재확인했고 thread 0건을 기록했다. PR #84 리뷰 후속으로 GeoIP gate가 admission control보다 먼저 실행되도록 middleware 설치 순서를 바꾸고, `testclient` 호스트명 특별 허용을 제거했으며, `X-Forwarded-For`의 `host:port`/`[IPv6]:port` 표기를 파싱하도록 보강했다.
 - T-027 최종 클린 재적재 검증: 새 Docker compose project와 빈 pgdata에서 실제 전국 `data/juso`와 `20260401_dailyjusukrdata.zip`을 처음부터 적재했다. 전체 3,963초, `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`, smoke `OK`, active serving release `faa1f42b-f5b9-4ef0-af0b-1a422d938ed3`를 확인했다. `scripts/fullload_test.sh`는 선택 `DAILY_JUSO_ZIP`/`DAILY_YYYYMM` phase를 지원하며, C2/C4/C6/C7 data-quality CSV와 DB size snapshot을 문서화했다.

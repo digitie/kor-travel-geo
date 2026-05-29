@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 21:37 (Python 라이브러리 API v2 단일화)
+
+**작업**: 사용자 요청에 따라 Python 라이브러리 주소 조회 API에서 v1-style 공개 메서드를 제거하고 v2 후보 schema를 접미사 없는 기본 메서드로 승격했다.
+
+**반영**:
+- `AsyncAddressClient.geocode()`, `reverse()`, `search()`가 각각 `GeocodeV2Response`, `ReverseV2Response`, `SearchV2Response`를 반환한다.
+- 공개 Python API에서 `geocode_v2()`, `reverse_v2()`, `search_v2()`, `reverse_geocode()`를 제거했다.
+- REST `/v1/*` 라우터는 내부 `_geocode_v1`, `_reverse_geocode_v1`, `_search_v1` adapter를 호출해 vworld 호환 응답을 유지한다.
+- REST `/v2/*` 라우터는 접미사 없는 Python 메서드를 호출한다.
+- ADR-039, README, API reference, backend/reverse/external API 문서를 갱신했다.
+
+**검증 예정**:
+- v2/client 단위 테스트, v1/v2 라우터 contract 테스트, ruff/mypy/lint-imports를 실행한다.
+
+**후속**:
+- 기존 Python 사용자가 vworld 호환 DTO를 직접 기대하는 경우 REST `/v1/*` 또는 별도 migration 문서를 안내한다.
+
 ## 2026-05-29 18:45 (PR #69~#86 post-merge 리뷰 audit/fixup)
 
 **작업**: 사용자 지시에 따라 T-027 PR merge 뒤 PR #69부터 최신 PR #86까지 conversation/review/latestReview/reviewThreads를 다시 확인했다.

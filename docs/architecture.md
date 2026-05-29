@@ -66,7 +66,7 @@ HTTP GET /v1/address/geocode?address=...
 api.routers.geocode      ←  Pydantic 입력 검증
    │
    ▼
-AsyncAddressClient.geocode(...)
+AsyncAddressClient._geocode_v1(...)
    │
    ▼
 core.geocoder.geocode(repo, inp)
@@ -79,6 +79,8 @@ infra.geocode_repo.GeocodeRepository
    ▼
 PostgreSQL + PostGIS (pg_trgm)
 ```
+
+Python 공개 API의 `AsyncAddressClient.geocode()`는 위 내부 v1 호환 경로를 실행한 뒤 후보 목록 응답으로 투영한다. REST `/v1/address/geocode`만 vworld 호환 DTO를 그대로 반환한다.
 
 ## 데이터 흐름 — 쿼리 성능 벤치마크와 튜닝 (ADR-031, T-047)
 
