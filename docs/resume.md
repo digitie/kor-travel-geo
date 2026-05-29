@@ -120,6 +120,7 @@
 - ✅ Python 라이브러리 API v2 단일화 — `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답의 표준 Python API로 승격하고, `geocode_v2/reverse_v2/search_v2/reverse_geocode` 공개 메서드를 제거했다. REST `/v1/*`는 내부 어댑터로 vworld 호환 응답을 유지한다. ADR-039와 `docs/api-reference/`를 갱신했다.
 - ✅ 디버그 UI v2 REST 전환 — `/debug/geocode`와 `/debug/reverse`를 `/v2/geocode`, `/v2/reverse` POST body 기반으로 전환하고, proxy가 `/v1/*`와 `/v2/*`를 모두 허용하도록 보강했다. Docker image `kraddr-geo-ui:debug-v2` 실행과 Windows Playwright e2e 6개를 통과시켰다.
 - ✅ VWorld 인증키 런타임 설정 UI — `/api/runtime-config`가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽고, `/admin/settings`에서 브라우저 localStorage override로 저장·수정·기본값 복원을 지원한다.
+- ✅ 단독 구 이름 도로명주소 조회 보정 — `수지구 성복1로 35`처럼 복합 시군구명(`용인시 수지구`)의 마지막 `구`만 입력한 경우 exact 도로명 조회 실패 뒤 제한적 suffix retry로 찾는다. 기본 조회는 `sgg_nm = :sgg`를 유지하고, fallback은 `rn_nrm`/건물번호 exact 후보 안에서 `right(sgg_nm, ...)`를 적용한다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 

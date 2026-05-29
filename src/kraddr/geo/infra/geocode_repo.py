@@ -41,8 +41,26 @@ _TEXT_SEARCH_REGION_FILTER = """
 _LOOKUP_ROAD = text(
     _BASE_SELECT
     + """
- WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
+WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
    AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
+"""
+    + _REGION_FILTER
+    + """
+   AND rn_nrm = :road_nrm
+   AND buld_mnnm = :mnnm
+   AND buld_slno = :slno
+   AND (CAST(:buld_se_cd AS text) IS NULL OR buld_se_cd = CAST(:buld_se_cd AS text))
+ ORDER BY CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END, bd_mgt_sn
+ LIMIT 1
+"""
+)
+
+_LOOKUP_ROAD_SGG_SUFFIX = text(
+    _BASE_SELECT
+    + """
+ WHERE CAST(:sgg_suffix AS text) IS NOT NULL
+   AND (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
+   AND right(sgg_nm, char_length(CAST(:sgg_suffix AS text))) = CAST(:sgg_suffix AS text)
 """
     + _REGION_FILTER
     + """
@@ -58,7 +76,7 @@ _LOOKUP_ROAD = text(
 _LOOKUP_JIBUN = text(
     _BASE_SELECT
     + """
- WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
+WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
    AND (CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))
    AND (CAST(:emd AS text) IS NULL OR emd_nm = CAST(:emd AS text) OR li_nm = CAST(:emd AS text))
 """
@@ -77,7 +95,7 @@ _FUZZY_ROADS = text(
 WITH candidates AS MATERIALIZED (
   SELECT ts.bd_mgt_sn,
          similarity(ts.rn_nrm, :road_nrm) AS confidence
-    FROM mv_geocode_text_search ts
+   FROM mv_geocode_text_search ts
    WHERE (CAST(:si AS text) IS NULL OR ts.si_nm = CAST(:si AS text))
      AND (CAST(:sgg AS text) IS NULL OR ts.sgg_nm = CAST(:sgg AS text))
 """
@@ -129,6 +147,12 @@ SELECT m.sig_cd,
 )
 
 
+def _sgg_suffix(parts: AddrParts) -> str | None:
+    if parts.sgg is None or " " in parts.sgg or not parts.sgg.endswith("구"):
+        return None
+    return parts.sgg
+
+
 class GeocodeRepository:
     """Geocode lookups against ``mv_geocode_target``."""
 
@@ -158,6 +182,21 @@ class GeocodeRepository:
                     },
                 )
             ).mappings().first()
+            if row is None and (sgg_suffix := _sgg_suffix(parts)) is not None:
+                row = (
+                    await conn.execute(
+                        _LOOKUP_ROAD_SGG_SUFFIX,
+                        {
+                            **region_params(region_hint),
+                            "si": parts.si,
+                            "sgg_suffix": sgg_suffix,
+                            "road_nrm": parts.road_nrm,
+                            "mnnm": parts.mnnm,
+                            "slno": parts.slno,
+                            "buld_se_cd": parts.buld_se_cd,
+                        },
+                    )
+                ).mappings().first()
         return map_address(dict(row), address_type="road") if row else None
 
     async def lookup_by_jibun(
