@@ -116,6 +116,7 @@
 - ✅ PR #69~#82 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #82까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. PR #81 리뷰에서 발견된 `maintenance_window.authorize` audit의 `actor_type="job"` CHECK 위반을 `system`으로 고치고, table stats scheduler `skip_if_locked=True` 의도를 호출부에 명시했다. 상세: `docs/postmerge-review-fixups-pr69-pr82.md`
 - ✅ T-054 한국 IP GeoIP gate — FastAPI middleware가 내부/loopback은 허용하고 외부 공용 IP는 GeoIP country `KR`만 통과시키게 했다. 기본 `strict` 모드에서는 GeoIP DB가 없으면 공용 IP를 `E0403/403`으로 차단하며, allow/deny CIDR, trusted proxy `X-Forwarded-For`, `geoip.denied` audit, `kraddr-geo geoip check`를 지원한다. 상세: `docs/t054-korea-only-geoip.md`
 - ✅ T-055 N150/Odroid 운영 환경 비교 준비 — 실제 장비 도착 전 실행 가능한 준비를 완료했다. `scripts/capture_deployment_envelope.py`로 OS/CPU/메모리/NVMe/Docker/GDAL/PostgreSQL/fio/sysbench/zstd envelope를 캡처하고, T-027 full-load, T-047 SQL/REST benchmark, MV refresh/swap benchmark 실행 runbook과 산출물 구조를 `docs/t055-deployment-n150-odroid.md`에 고정했다. 실제 하드웨어 실측은 T-063으로 보류한다.
+- ✅ PR #69~#86 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #86까지 formal review와 review thread를 재확인했고 thread 0건을 기록했다. PR #84 리뷰 후속으로 GeoIP gate를 admission control보다 먼저 실행하도록 순서를 바꾸고, `testclient` 특별 허용 제거와 `X-Forwarded-For` port 표기 파싱을 보강했다. 상세: `docs/postmerge-review-fixups-pr69-pr86.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
@@ -126,6 +127,7 @@
 - `maplibre-vworld-js` 0.1.0 기준 확인 결과는 `docs/t044-maplibre-vworld-010-review.md`에 있다. `v0.1.0` tag commit은 `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`이고, 현재 `kraddr-geo-ui` dependency는 아직 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`에 고정되어 있다. npm registry에는 아직 `maplibre-vworld@0.1.0`이 없으므로 실제 dependency 갱신은 별도 PR에서 GitHub tag/commit 기준으로 검증해야 한다. upstream 코드는 T-044에서 직접 수정하지 않는다.
 - T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. 전국 T-027 DB의 `serving-ready` 백업 생성은 운영 보존 절차로 별도 실행한다.
 - T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
+- PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
 
 ## 작업 시작 전 확인할 것

@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 18:45 (PR #69~#86 post-merge 리뷰 audit/fixup)
+
+**작업**: 사용자 지시에 따라 T-027 PR merge 뒤 PR #69부터 최신 PR #86까지 conversation/review/latestReview/reviewThreads를 다시 확인했다.
+
+**반영**:
+- PR #69~#86 모두 merged 상태, conversation comment 0건, GraphQL review thread 0건임을 확인했다.
+- PR #84 사후 리뷰를 반영해 GeoIP gate가 admission control보다 바깥에서 먼저 실행되도록 middleware 설치 순서를 바꿨다.
+- `classify_ip()`의 `testclient` 호스트명 특별 허용을 제거해 잘못된 client host는 `invalid_client_ip`로 deny되게 했다.
+- `X-Forwarded-For` 항목이 `1.2.3.4:port` 또는 `[IPv6]:port` 형태여도 마지막 untrusted client IP를 추출하도록 보강했다.
+- `docs/postmerge-review-fixups-pr69-pr86.md`와 `docs/t054-korea-only-geoip.md`에 반영/보류 항목을 정리했다.
+
+**검증**:
+- `ruff check src/kraddr/geo/api/app.py src/kraddr/geo/infra/geoip.py tests/unit/test_geoip_gate.py`
+- `pytest tests/unit/test_geoip_gate.py tests/unit/test_api_admission_control.py tests/unit/test_api_app_contract.py -q` → `14 passed`
+- `mypy --no-incremental src/kraddr/geo/api/app.py src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py`
+
+**후속**:
+- v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock은 후속 후보로 유지한다.
+
 ## 2026-05-29 18:05 (T-027 최종 실 데이터 클린 재적재 검증)
 
 **작업**: 남은 튜닝/증분/보조 로더 작업을 모두 반영한 최신 코드로 실제 전국 데이터를 빈 Docker PostGIS DB에 처음부터 다시 적재했다.

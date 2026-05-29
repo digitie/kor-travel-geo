@@ -124,6 +124,12 @@ class GeoIpSettings(BaseModel):
 
 `geoip_audit_denials`: deny 발생 시 `ops.audit_events`에 `action="geoip.denied"` 자동 기록.
 
+`geoip_open_paths`는 exact path와 그 하위 prefix를 함께 연다. 예를 들어 기본값 `/metrics`는 `/metrics`와 `/metrics/...`를 모두 gate 밖에 둔다. 새 open path를 추가할 때는 해당 prefix 아래에 민감한 route를 mount하지 않는다.
+
+PR #84 사후 리뷰 반영으로 GeoIP gate는 admission control보다 바깥에서 먼저 실행된다. 따라서 non-KR/denylist 요청은 동시성 semaphore를 점유하기 전에 403으로 차단된다. 테스트 편의를 위한 `testclient` 호스트명 특별 허용은 제거했고, 테스트는 명시 client IP 또는 mock reader를 주입한다.
+
+`X-Forwarded-For` 항목은 bare IP 외에 `1.2.3.4:5678`, `[2001:4860:4860::8888]:443` 형태도 client IP로 해석한다.
+
 ## 응답
 
 deny 시 HTTP 403 + 한국어/영어 message 분리:
@@ -175,6 +181,7 @@ IP 원문 평문 저장 금지(ADR-033). hash만 저장.
 - 단위 테스트: `classify_ip()`가 내부 IP, KR 공용 IP, deny/allow CIDR, DB 부재 strict, permissive를 예상대로 판정한다.
 - middleware 통합 테스트: FastAPI `TestClient` + mock GeoIP reader로 `/v1/address/*` 403, `/v1/healthz` open을 확인한다.
 - trusted proxy 테스트: trusted peer일 때만 `X-Forwarded-For`에서 마지막 untrusted client를 선택한다.
+- middleware 순서 테스트: admission semaphore가 이미 차 있어도 non-KR 요청은 `429`가 아니라 GeoIP `403`으로 먼저 차단되는지 확인한다.
 - CLI smoke: `kraddr-geo geoip check 8.8.8.8` → strict + DB 부재에서 `geoip_db_unavailable` deny.
 - targeted gate:
   - `ruff check src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py tests/unit/test_geoip_gate.py tests/unit/test_settings.py`
