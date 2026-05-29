@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-059 CLI/Job 동시 실행 보호 표준화: `infra.concurrency`의 PostgreSQL session advisory lock helper를 추가하고, 주요 CLI 운영 명령과 FastAPI `JobQueue` handler가 같은 lock key를 공유하도록 했다. 중복 실행은 `E0409/HTTP 409` 또는 CLI exit code 2로 fail-fast한다.
 - PR #69~#80 post-merge 리뷰 audit/fixup: PR #69부터 #80까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. 수동 table stats capture는 scheduler lock 충돌 시 빈 성공 응답 대신 `409 E0409`를 반환하며, `replace_current` restore의 maintenance window 인가 통과는 `maintenance_window.authorize` audit event로 남긴다.
 - PR #80 리뷰 후속: restore hot-swap plan의 자동 `previous_alias` 생성에 단일 UTC timestamp를 고정해 DB 존재 확인과 반환 plan이 같은 alias를 보도록 했다. 빈 DB inventory를 "미확인"과 구분하고, 긴 현재 DB 이름은 PostgreSQL 63자 제한에 맞게 prefix를 자르며, managed/hardened cluster를 위해 `maintenance_database`를 API/CLI에서 지정할 수 있게 했다.
 - T-050 운영 hardening 7차: `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 실제 PostgreSQL 제약 통합 테스트를 추가했다. `ops.audit_events.job_id` FK, append-only trigger, `ops.serving_releases` active partial unique index, `ops.table_stats_snapshots.snapshot_id` FK를 실제 Docker PostgreSQL 별도 DB에서 확인한다. 운영 DB 오지정을 줄이기 위해 disposable DB 이름 guard와 필수 extension package 사전 skip을 둔다.

@@ -3,18 +3,18 @@
 작업 항목은 `T-NNN` 형식의 ID로 관리한다. 새 작업은 "대기"의 우선순위 순서대로 들어가고, 진행 중이 되면 담당자를 표시한다. 완료된 작업은 "완료" 섹션 상단에 누적한다.
 
 ## 진행 중
-- 없음. 다음 PR 대상은 T-059 CLI/Job 동시 실행 보호 표준화다.
+- 없음. 다음 PR 대상은 T-054 한국 IP 외부 접근 차단(Geo-IP gate)이다.
 
 ## 대기 (우선순위 순)
 
-2026-05-29 기준 우선순위다. 운영 메타데이터(T-049), source set/백업 UX(T-045/T-046), T-047 주요 성능 실측, T-057 region hint 1차 구현, T-044 `maplibre-vworld-js` 0.1.0 문서-only 재확인, T-056 `python-kraddr-base` Address 코드 helper 정리, T-052 v1/v2 API 분리와 AI-friendly 문서화, T-053 admin UI C1~C10 분석/승인 콘솔, T-061 Q3 fuzzy slim text-search, T-050 운영 hardening, T-058 restore hot-swap plan은 완료됐다. 사용자 최신 지시에 따라 다음 실행 순서는 T-059 동시 실행 보호 → T-054 한국 IP gate → T-055 N150/Odroid 준비 → T-027 최종 클린 적재 검증으로 둔다.
+2026-05-29 기준 우선순위다. 운영 메타데이터(T-049), source set/백업 UX(T-045/T-046), T-047 주요 성능 실측, T-057 region hint 1차 구현, T-044 `maplibre-vworld-js` 0.1.0 문서-only 재확인, T-056 `python-kraddr-base` Address 코드 helper 정리, T-052 v1/v2 API 분리와 AI-friendly 문서화, T-053 admin UI C1~C10 분석/승인 콘솔, T-061 Q3 fuzzy slim text-search, T-050 운영 hardening, T-058 restore hot-swap plan, T-059 동시 실행 보호는 완료됐다. 사용자 최신 지시에 따라 다음 실행 순서는 T-054 한국 IP gate → T-055 N150/Odroid 준비 → T-027 최종 클린 적재 검증으로 둔다.
 
-- T-059 CLI/Job 동시 실행 보호 표준화 — `asyncio.Semaphore(1)` + `load_jobs` advisory lock + `TL_SPBD_BULD` staging advisory lock으로 in-process는 직렬화돼 있지만, 다른 프로세스의 CLI 동시 실행은 일부만 보호된다. 사용자 RFC에 따라 "중복 실행되면 안 되는" CLI 명령(특히 `kraddr-geo load *`, `kraddr-geo refresh mv`, `kraddr-geo backup/restore *`)에 PostgreSQL `pg_try_advisory_lock` 기반 cross-process 보호를 일관 도입하고, 중복 실행 시 명확한 오류 메시지와 함께 fail-fast하도록 표준화한다. 이미 보호된 경로는 인벤토리만 만들고 그대로 둔다. 상세: `docs/t059-concurrent-job-protection.md`
 - T-054 한국 IP 외부 접근 차단(Geo-IP gate) — 사용자 RFC에 따라 외부 IP에서 호출되는 REST API 표면(`/v1/geocode`, `/v1/reverse`, `/v1/search`, `/v1/zipcode`, `/v1/pobox`, `/v1/admin/*`)을 대한민국 IP대역으로만 허용한다. 내부 사설 IP(`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.1`, IPv6 link-local 등)는 그대로 허용하고, public IP는 country lookup으로 `KR`만 통과시킨다. middleware 구현, GeoIP DB 갱신 정책, IP allow-list override, audit log 연계를 설계한다. 상세: `docs/t054-korea-only-geoip.md`, ADR-037
 - T-055 N150/Odroid 운영 환경 비교 — 사용자 RFC에 따라 Intel N150(16GB RAM, NVMe 1TB) + Ubuntu 26.04 환경에서 전국 full-load와 serving 응답 latency를 측정해 기존 Odroid 환경과 비교한다. CPU 코어 수, NVMe random IOPS, ext4 vs btrfs, Docker PostGIS 16+3.5 vs PG 17 옵션, NUMA 영향, swap/zram 설정을 envelope로 기록한다. T-047의 benchmark corpus를 같은 SHA로 실행하고 결과를 `artifacts/perf/n150-vs-odroid-*`로 보관한다. 하드웨어 도착 후 본격 측정하되, 그 전까지는 측정 plan과 envelope만 docs에 둔다. 상세: `docs/t055-deployment-n150-odroid.md`
 - T-027 최종 실 데이터 클린 적재 검증 — 남은 튜닝/증분/보조 로더 작업을 모두 머지한 뒤 Docker DB를 삭제하고 처음부터 다시 적재한다. C1~C10 정합성, geocode/reverse/search/zipcode smoke test, data-quality export, 성능 로그를 최종 회귀 기준으로 남긴다. 상세: `docs/t027-fullload-plan.md`
 
 ## 완료
+- [x] T-059 CLI/Job 동시 실행 보호 표준화. `infra.concurrency`의 PostgreSQL session advisory lock helper를 추가하고, 주요 CLI 운영 명령과 FastAPI `JobQueue` handler가 같은 lock key를 공유하도록 했다. 같은 key를 다른 connection이 이미 잡고 있으면 `E0409/HTTP 409` 또는 CLI exit code 2로 fail-fast한다. Docker PostgreSQL smoke에서 `MV_REFRESH` 중복 lock 차단을 확인했다. 상세: `docs/t059-concurrent-job-protection.md` (2026-05-29)
 - [x] PR #69~#80 post-merge 리뷰 audit/fixup. PR #69부터 최신 PR #80까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. 수동 table stats capture lock 충돌은 `409 E0409`로 구분하고, `replace_current` restore의 maintenance window 인가 통과는 `maintenance_window.authorize` audit event로 남긴다. 상세: `docs/postmerge-review-fixups-pr69-pr80.md` (2026-05-29)
 - [x] T-058 적재 완료 DB restore hot-swap plan/preflight. 같은 cluster 안 `ALTER DATABASE ... RENAME` 패턴을 1차 운영 절차로 고정하고, `/v1/admin/restores/hot-swap-plan`과 `kraddr-geo serving hot-swap-plan`이 current DB, restore DB, previous alias, typed confirmation, rollback confirmation, blockers, SQL/steps를 산출하도록 했다. 실제 rename 실행은 metadata 위치와 worker별 engine refresh를 더 검증한 뒤 후속 실행 표면으로 분리한다. 상세: `docs/t058-restore-hot-swap.md`, ADR-036 (2026-05-29)
 - [x] T-050 운영 hardening 7차 실제 PostgreSQL 제약 통합 테스트. `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 테스트를 추가해 실제 PostgreSQL에서 `ops.audit_events.job_id` FK, append-only trigger, `ops.serving_releases` active partial unique index, `ops.table_stats_snapshots.snapshot_id` FK를 검증한다. Docker PostgreSQL 별도 DB `kraddr_geo_t050_ops_constraints`에서 `1 passed`를 확인했다. 상세: `docs/t050-ops-hardening.md` (2026-05-29)

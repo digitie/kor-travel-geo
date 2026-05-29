@@ -2,9 +2,17 @@
 
 ## 상태
 
-- 상태: 설계 + 일부 인벤토리 (구현 전)
-- 대상 브랜치: `agent/<agent>-t059-*`
+- 상태: 1차 구현 완료 (2026-05-29)
+- 대상 브랜치: `codex/t059-concurrent-job-protection`
 - 사용자 RFC: 2026-05-27 — "CLI 중 중복실행되면 안 되는 옵션인 경우 명시적으로 막을 것 (구현되어 있으면 생략)."
+
+## 1차 구현 요약
+
+- `src/kraddr/geo/infra/concurrency.py`를 추가해 `AdvisoryLockNamespace`, `AdvisoryLockKey`, `ConcurrentExecutionError(E0409/HTTP 409)`, `cross_process_lock()`을 표준 helper로 둔다.
+- CLI 직접 실행 경로는 같은 helper를 사용해 중복 실행 시 exit code 2로 fail-fast한다.
+- FastAPI `JobQueue` handler 등록도 같은 lock key를 공유하므로 CLI와 API job이 같은 자원을 동시에 만지면 두 번째 작업이 `E0409`로 실패한다.
+- 실제 Docker PostgreSQL에서 같은 `MV_REFRESH` key를 두 connection으로 잡아 두 번째 lock이 `E0409/409`로 막히는 smoke를 확인했다.
+- CLI 단독 실행을 `load_jobs` row로 노출하는 운영 가시화는 후속으로 남긴다. 이번 1차는 cross-process 실행 차단에 집중한다.
 
 ## 현황 인벤토리
 
@@ -35,6 +43,7 @@
 | `kraddr-geo restore create` 중복 실행 | 같은 target DB에 동시 복원 | 높음 |
 | `kraddr-geo validate consistency` 중복 실행 | 같은 scope의 report가 두 개 동시 생성 | 낮음 |
 | `kraddr-geo benchmark queries` 중복 실행 | DB 부하 ↑, 결과 신뢰성 ↓ | 낮음 |
+| `kraddr-geo uploads cleanup` 중복 실행 | stale upload set 삭제 race | 중 |
 
 `load_jobs` 영속 큐가 일부를 직렬화하지만, CLI는 큐를 거치지 않고 직접 loader를 호출하는 경우도 있어 cross-process 보호가 필요하다.
 
@@ -50,7 +59,7 @@ PostgreSQL advisory lock은 cross-process 보호에 적합하다.
 
 ### key 영역 표준화
 
-`infra/concurrency.py`(신규)에 key 영역 enum:
+`infra/concurrency.py`의 key 영역 enum:
 
 ```python
 class AdvisoryLockNamespace(IntEnum):
@@ -66,21 +75,23 @@ class AdvisoryLockNamespace(IntEnum):
     LOAD_DAILY_PARCEL    = 0x4B47_0025
     LOAD_SHP_POLYGONS    = 0x4B47_0030
     LOAD_SHP_DELTA       = 0x4B47_0031
-    LOAD_ROADADDR        = 0x4B47_0040
+    LOAD_ROADADDR_ENTRANCES = 0x4B47_0040
     LOAD_SPPN_MAKAREA    = 0x4B47_0041
     LOAD_POBOX           = 0x4B47_0050
     LOAD_BULK            = 0x4B47_0051
+    LOAD_EPOST           = 0x4B47_0052
+    UPLOADS_CLEANUP      = 0x4B47_0053
     MV_REFRESH           = 0x4B47_0060
-    MV_SWAP              = 0x4B47_0061
     BACKUP_CREATE        = 0x4B47_0070
     RESTORE_CREATE       = 0x4B47_0071
     HOT_SWAP             = 0x4B47_0072
     CONSISTENCY_RUN      = 0x4B47_0080
     BENCHMARK_QUERY      = 0x4B47_0090
-    OPS_TABLE_STATS      = 0x4B47_00A0
 ```
 
 high 32 bits = namespace, low 32 bits = resource ID(예: source path hash, target DB name hash). 충돌 없이 같은 namespace 안에서 여러 lock 가능.
+
+`ops.table_stats_snapshots` capture는 PR #81에서 이미 `_OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0`와 transaction-level lock으로 분리 구현되어 있다. 이번 T-059의 session-level namespace enum에는 넣지 않아 "같은 lock 체계"처럼 오해하지 않게 한다.
 
 ### helper
 
@@ -99,33 +110,21 @@ class AdvisoryLockKey:
 async def cross_process_lock(
     engine: AsyncEngine,
     key: AdvisoryLockKey,
-    *,
-    on_busy: Literal["fail_fast", "wait"] = "fail_fast",
-    wait_timeout_s: float | None = None,
 ) -> AsyncIterator[None]:
     """PostgreSQL advisory lock으로 cross-process 직렬화.
 
-    fail_fast: 즉시 ConcurrentExecutionError 발생.
-    wait: lock 획득까지 wait_timeout_s만큼 대기.
+    이미 같은 key를 다른 session이 잡고 있으면 즉시 ConcurrentExecutionError를 발생시킨다.
     """
     async with engine.connect() as conn:
-        # Session-level lock (transaction과 분리)
-        if on_busy == "fail_fast":
-            acquired = await conn.scalar(
-                text("SELECT pg_try_advisory_lock(:key)"),
-                {"key": key.as_int()},
+        acquired = await conn.scalar(
+            text("SELECT pg_try_advisory_lock(:key)"),
+            {"key": key.as_int()},
+        )
+        if not acquired:
+            raise ConcurrentExecutionError(
+                f"{key.namespace.name} (resource_hash={key.resource_hash:08x}) "
+                f"is already running in another process. Wait for it to finish."
             )
-            if not acquired:
-                raise ConcurrentExecutionError(
-                    f"{key.namespace.name} (resource_hash={key.resource_hash:08x}) "
-                    f"is already running in another process. Wait for it to finish."
-                )
-        else:
-            await conn.execute(
-                text("SET LOCAL lock_timeout = :timeout"),
-                {"timeout": f"{int(wait_timeout_s * 1000)}ms"},
-            )
-            await conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": key.as_int()})
         try:
             yield
         finally:
@@ -142,14 +141,14 @@ CLI 명령 진입 시 advisory lock 획득:
 def load_juso_command(path: Path, yyyymm: str | None = typer.Option(None)) -> None:
     async def run():
         async with AsyncAddressClient() as client:
-            assert client.engine is not None
+            engine = client._engine()
             key = AdvisoryLockKey(
                 namespace=AdvisoryLockNamespace.LOAD_JUSO_TEXT,
                 resource_hash=zlib.crc32(str(path.resolve()).encode("utf-8")) & 0xFFFFFFFF,
             )
             try:
-                async with cross_process_lock(client.engine, key, on_busy="fail_fast"):
-                    await load_juso_hangul(client.engine, path, source_yyyymm=yyyymm)
+                async with cross_process_lock(engine, key):
+                    await load_juso_hangul(engine, path, source_yyyymm=yyyymm)
             except ConcurrentExecutionError as exc:
                 typer.echo(f"Error: {exc}", err=True)
                 raise typer.Exit(code=2)
@@ -164,7 +163,7 @@ resource_hash로 path 별 분리:
 
 global lock(같은 namespace의 모든 resource 차단)이 필요한 경우:
 
-- `MV_SWAP`, `INIT_DB`, `HOT_SWAP` 등은 resource_hash=0 고정(`global`).
+- `MV_REFRESH`, `INIT_DB`, `HOT_SWAP` 등은 resource_hash=0 고정(`global`).
 - 그 외(`LOAD_JUSO_TEXT` 같은 path 단위)는 path hash.
 
 ## API 적용 표준
@@ -178,7 +177,7 @@ async def juso_load_handler(payload, cancel_event, progress):
         namespace=AdvisoryLockNamespace.LOAD_JUSO_TEXT,
         resource_hash=zlib.crc32(payload["path"].encode("utf-8")) & 0xFFFFFFFF,
     )
-    async with cross_process_lock(engine, key, on_busy="fail_fast"):
+    async with cross_process_lock(engine, key):
         result = await load_juso_hangul(engine, Path(payload["path"]), source_yyyymm=payload.get("source_yyyymm"))
         ...
 ```
@@ -190,7 +189,8 @@ CLI과 API의 lock key가 같으면 cross-process 보호 자연 작동.
 ```python
 class ConcurrentExecutionError(Exception):
     """동시 실행 차단 시 발생. CLI는 exit code 2, API는 HTTP 409 매핑."""
-    code = "E_CONCURRENT_EXECUTION"
+    code = "E0409"
+    http_status = 409
 
     def __init__(self, namespace: str, resource_hash: int, running_since: datetime | None = None):
         self.namespace = namespace
@@ -206,11 +206,12 @@ API 응답:
 
 ```json
 {
-  "code": "E_CONCURRENT_EXECUTION",
-  "message": "LOAD_JUSO_TEXT (resource=a1b2c3d4) is already running",
-  "namespace": "LOAD_JUSO_TEXT",
-  "resource_hash": "a1b2c3d4",
-  "advice": "기존 작업이 끝난 뒤 다시 시도하거나 /v1/admin/jobs에서 진행 중인 job을 확인하세요."
+  "response": {
+    "status": "ERROR",
+    "errorCode": "E0409",
+    "errorMessage": "LOAD_JUSO_TEXT is already running for resource a1b2c3d4",
+    "hint": "기존 작업이 끝난 뒤 다시 시도하세요."
+  }
 }
 ```
 
@@ -225,35 +226,48 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 1. CLI 단독 실행도 `load_jobs(kind, payload)` row 생성(가시화 + audit). 같은 advisory lock 키로 cross-process 직렬화 + `load_jobs`로 진행 상태 노출.
 2. `pg_locks` view 직접 조회(advisory lock holder process info).
 
-권장: **1번**. 모든 운영 작업은 `load_jobs`에 등록되어 `/admin/load` UI에서 가시화. CLI는 큐를 거치지 않더라도 `load_jobs.kind='cli:load_juso_text'` 등으로 audit row 생성.
+권장: **1번**. 모든 운영 작업은 `load_jobs`에 등록되어 `/admin/load` UI에서 가시화. CLI는 큐를 거치지 않더라도 `load_jobs.kind='cli:load_juso_text'` 등으로 audit row 생성. 1차 구현에서는 아직 이 가시화 row를 만들지 않고 advisory lock fail-fast만 적용했다.
 
 ## 진행 순서
 
-1. **인벤토리 확정**: 본 문서 "보호되는 경로 / 보호되지 않는 경로" 표를 실제 코드 grep으로 검증 + 갱신.
-2. **`infra/concurrency.py` 신규**: `AdvisoryLockNamespace`, `AdvisoryLockKey`, `cross_process_lock`, `ConcurrentExecutionError`.
-3. **단위 테스트**: 같은 key 두 번 lock → fail-fast / 다른 key → 동시 가능 / unlock 후 재 lock 가능.
-4. **CLI 적용**: 보호되지 않은 경로 11개에 차례로 advisory lock 적용. PR 단위로 분할 가능.
-5. **API handler 적용**: 같은 lock key를 handler에서도 획득.
-6. **에러 코드 등록**: `dto/errors.py`에 `E_CONCURRENT_EXECUTION` enum + HTTP 409 매핑.
-7. **운영 가시성**: CLI 단독 실행도 `load_jobs` row 생성 + advisory lock과 연계.
-8. **문서화**:
+1. [완료] **인벤토리 확정**: 본 문서 "보호되는 경로 / 보호되지 않는 경로" 표를 실제 코드 grep으로 검증 + 갱신.
+2. [완료] **`infra/concurrency.py` 신규**: `AdvisoryLockNamespace`, `AdvisoryLockKey`, `cross_process_lock`, `ConcurrentExecutionError`.
+3. [완료] **단위 테스트**: key 직렬화, lock/unlock, busy fail-fast.
+4. [완료] **CLI 적용**: 주요 `load *`, `refresh mv`, `validate consistency`, `uploads cleanup`, `backup create`, `restore create`에 advisory lock 적용.
+5. [완료] **API handler 적용**: `JobQueue` 기본 handler 등록 시 같은 lock key를 획득.
+6. [완료] **에러 코드 등록**: `ConcurrentExecutionError(E0409, HTTP 409)`를 도메인 오류로 둔다.
+7. [완료] **queue 충돌 가시성**: API job handler가 lock 충돌을 만나면 `lock_conflict` progress event를 먼저 남긴 뒤 job을 `failed`로 닫는다.
+8. [후속] **운영 가시성**: CLI 단독 실행도 `load_jobs` row 생성 + advisory lock과 연계.
+9. [완료] **문서화**:
    - `docs/backend-package.md`에 cross-process protection 정책 섹션 추가.
-   - `docs/api-reference/library/error-codes.md`에 E_CONCURRENT_EXECUTION 항목.
+   - `docs/api-reference/library/error-codes.md`에 `E0409` 항목.
    - `docs/operators/runbook.md`(향후)에 "동시 실행 차단 만났을 때 처리 절차".
 
 ## 검증
 
-- 통합 테스트(WSL Docker PostGIS):
+- 단위 테스트: `AdvisoryLockKey` 직렬화, `cross_process_lock` unlock, busy fail-fast, CLI/API handler source contract.
+- `wait` 모드는 1차에서 사용하지 않아 제거했다. 모든 호출부는 fail-fast이며, 큐 worker를 오래 막지 않는다.
+- smoke(WSL Docker PostGIS): 같은 `MV_REFRESH` key를 두 connection에서 획득 시도 → 두 번째 `ConcurrentExecutionError(E0409/409)`.
+- targeted gate:
+  - `ruff check src/kraddr/geo/infra/concurrency.py src/kraddr/geo/cli/main.py src/kraddr/geo/api/app.py tests/unit/test_concurrency.py tests/unit/test_api_app_contract.py`
+  - `pytest tests/unit/test_api_app_contract.py tests/unit/test_concurrency.py -q` → `6 passed`
+  - `pytest tests/unit/test_concurrency.py tests/unit/test_client_submit_load_batch.py tests/unit/test_backup_restore.py -q` → `23 passed`
+  - `mypy --no-incremental src/kraddr/geo/infra/concurrency.py src/kraddr/geo/cli/main.py src/kraddr/geo/api/app.py`
+- full backend gate:
+  - `ruff check .`
+  - `pytest -q` → `261 passed, 8 skipped`
+  - `mypy --no-incremental src/kraddr/geo`
+  - `lint-imports`
+- 후속 통합 테스트 후보:
   - 두 CLI shell에서 같은 `load juso` 동시 실행 → 두 번째 fail-fast.
   - 한 CLI + 한 API 호출 동시 → 두 번째 fail-fast.
   - 다른 path 두 개 동시 → 모두 정상 실행.
   - lock holder가 ctrl+C로 종료 → connection close → advisory lock 자동 해제 → 다음 실행 가능.
-- 단위 테스트: AdvisoryLockKey 직렬화, ConcurrentExecutionError 매핑.
-- API 통합 테스트: HTTP 409 응답 schema 검증.
 
 ## 운영 가이드
 
 - 운영자가 "왜 fail-fast?" 보면 `kraddr-geo jobs running` 또는 `/admin/load`에서 진행 중 작업 확인 후 결정.
+- API queue handler에서 lock 충돌이 나면 해당 job은 `failed`가 된다. 일반 loader 실패와 구분할 수 있게 `log_tail`에 `current_stage='lock_conflict'`, `message='E0409: ...'` progress event를 먼저 남긴다. 자동 재큐/재시도는 이번 1차 범위 밖이다.
 - advisory lock은 connection이 살아 있는 동안만 유지. process kill -9 시 connection 종료 → lock 자동 해제.
 - 단, connection이 LB/network 단절로 살아 있는 것처럼 보이고 실제로는 idle인 경우 lock이 stale될 수 있음. PostgreSQL `tcp_keepalives_*` 설정으로 detect.
 
@@ -263,6 +277,7 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 - 한 process가 같은 advisory lock을 nested로 호출 가능. session-level lock은 reentrant이므로 안전 — 다만 unlock 횟수가 lock 횟수와 일치해야 함.
 - `pg_try_advisory_lock(bigint)` 외 `(int, int)` 시그니처도 있다. 본 task는 `bigint` 단일 인자 형태 사용.
 - application engine이 connection pool을 사용하면 lock 해제 후 같은 connection이 풀로 돌아가도 lock이 풀려 있음(connection-level). 다만 connection이 풀에 있는 동안에도 lock이 살아 있을 경우 다른 caller가 같은 connection을 가져가면 unexpected behavior. helper에서 `lock + unlock`을 한 connection 안에서 명시적으로 처리(위 코드 그대로).
+- 이번 1차는 동일 명령/동일 job kind + 동일 resource의 cross-process 중복 실행 차단을 우선한다. 예를 들어 full snapshot load와 daily delta처럼 서로 다른 namespace가 같은 물리 table을 쓸 수 있는 kind 간 경합은 `JobQueue` in-process 직렬화와 개별 loader의 staging/table lock에 의존하며, 필요하면 table 단위 공유 namespace를 후속으로 추가한다.
 
 ## 관련 ADR/Task
 

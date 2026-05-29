@@ -67,4 +67,6 @@ def test_api_queue_registers_sppn_makarea_loader() -> None:
     source = inspect.getsource(app_module._register_default_handlers)
 
     assert "load_sppn_makarea(" in source
-    assert 'queue.register("sppn_makarea_load", sppn_makarea)' in source
+    assert '"sppn_makarea_load"' in source
+    assert "AdvisoryLockNamespace.LOAD_SPPN_MAKAREA" in source
+    assert "sppn_makarea" in source
