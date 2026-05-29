@@ -108,6 +108,27 @@ class RestoreCreateRequest(FrozenModel):
     confirmation: str | None = Field(default=None, max_length=200)
 
 
+class RestoreHotSwapPlanRequest(FrozenModel):
+    restore_database: str = Field(min_length=1, max_length=63)
+    previous_alias: str | None = Field(default=None, min_length=1, max_length=63)
+    previous_alias_retention_days: int = Field(default=7, ge=1, le=3650)
+    maintenance_database: str = Field(default="postgres", min_length=1, max_length=63)
+
+
+class RestoreHotSwapPlan(FrozenModel):
+    current_database: str
+    restore_database: str
+    previous_alias: str
+    maintenance_database: str
+    typed_confirmation: str
+    rollback_confirmation: str
+    previous_alias_retention_days: int = Field(ge=1)
+    can_execute: bool = False
+    blockers: tuple[str, ...] = ()
+    steps: tuple[str, ...] = ()
+    sql: tuple[str, ...] = ()
+
+
 class SourceCandidate(FrozenModel):
     kind: SourceKind
     path: str

@@ -721,6 +721,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/restores/hot-swap-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore Hot Swap Plan */
+        post: operations["restore_hot_swap_plan_v1_admin_restores_hot_swap_plan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/tables": {
         parameters: {
             query?: never;
@@ -2014,6 +2031,60 @@ export interface components {
             target_database?: string | null;
             /** Target Dsn */
             target_dsn?: string | null;
+        };
+        /** RestoreHotSwapPlan */
+        RestoreHotSwapPlan: {
+            /**
+             * Blockers
+             * @default []
+             */
+            blockers: string[];
+            /**
+             * Can Execute
+             * @default false
+             */
+            can_execute: boolean;
+            /** Current Database */
+            current_database: string;
+            /** Maintenance Database */
+            maintenance_database: string;
+            /** Previous Alias */
+            previous_alias: string;
+            /** Previous Alias Retention Days */
+            previous_alias_retention_days: number;
+            /** Restore Database */
+            restore_database: string;
+            /** Rollback Confirmation */
+            rollback_confirmation: string;
+            /**
+             * Sql
+             * @default []
+             */
+            sql: string[];
+            /**
+             * Steps
+             * @default []
+             */
+            steps: string[];
+            /** Typed Confirmation */
+            typed_confirmation: string;
+        };
+        /** RestoreHotSwapPlanRequest */
+        RestoreHotSwapPlanRequest: {
+            /**
+             * Maintenance Database
+             * @default postgres
+             */
+            maintenance_database: string;
+            /** Previous Alias */
+            previous_alias?: string | null;
+            /**
+             * Previous Alias Retention Days
+             * @default 7
+             */
+            previous_alias_retention_days: number;
+            /** Restore Database */
+            restore_database: string;
         };
         /** @enum {string} */
         ResultSource: "local" | "api_juso" | "api_vworld" | "cache";
@@ -4172,6 +4243,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoadJobStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_hot_swap_plan_v1_admin_restores_hot_swap_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreHotSwapPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreHotSwapPlan"];
                 };
             };
             /** @description Validation Error */

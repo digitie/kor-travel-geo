@@ -48,6 +48,8 @@ from kraddr.geo.dto.admin import (
     NormalizeResponse,
     OpsArtifact,
     RestoreCreateRequest,
+    RestoreHotSwapPlan,
+    RestoreHotSwapPlanRequest,
     RollbackPlan,
     ServingRelease,
     SourceSetDiscovery,
@@ -421,6 +423,33 @@ async def submit_restore(
         **_audit_request(request),
     )
     return status
+
+
+@router.post(
+    "/restores/hot-swap-plan",
+    response_model=RestoreHotSwapPlan,
+    response_model_exclude_none=True,
+)
+async def restore_hot_swap_plan(
+    req: RestoreHotSwapPlanRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RestoreHotSwapPlan:
+    plan = await client.restore_hot_swap_plan(req)
+    await client.record_audit_event(
+        action="serving_release.hot_swap_plan",
+        outcome="succeeded" if plan.can_execute else "denied",
+        payload={
+            "current_database": plan.current_database,
+            "restore_database": plan.restore_database,
+            "previous_alias": plan.previous_alias,
+            "blockers": plan.blockers,
+        },
+        resource_type="database",
+        resource_id=plan.restore_database,
+        **_audit_request(request),
+    )
+    return plan
 
 
 @router.get("/jobs", response_model=list[LoadJobStatus], response_model_exclude_none=True)

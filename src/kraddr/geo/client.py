@@ -43,6 +43,8 @@ from .dto.admin import (
     MaintenanceWindowCreate,
     MaintenanceWindowEnd,
     OpsArtifact,
+    RestoreHotSwapPlan,
+    RestoreHotSwapPlanRequest,
     RollbackPlan,
     ServingRelease,
     SourceSetDiscovery,
@@ -70,6 +72,7 @@ from .infra.batch import batch_children
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
+from .infra.hotswap import inspect_restore_hot_swap_plan
 from .infra.pobox_repo import PoboxRepository
 from .infra.reverse_repo import ReverseRepository
 from .infra.search_repo import SearchRepository
@@ -519,6 +522,12 @@ class AsyncAddressClient:
 
             raise NotFoundError(f"artifact not found: {artifact_id}")
         return artifact
+
+    async def restore_hot_swap_plan(
+        self,
+        req: RestoreHotSwapPlanRequest,
+    ) -> RestoreHotSwapPlan:
+        return await inspect_restore_hot_swap_plan(self.settings, req)
 
     async def list_maintenance_windows(
         self,

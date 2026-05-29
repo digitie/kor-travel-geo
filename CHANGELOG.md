@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- PR #80 리뷰 후속: restore hot-swap plan의 자동 `previous_alias` 생성에 단일 UTC timestamp를 고정해 DB 존재 확인과 반환 plan이 같은 alias를 보도록 했다. 빈 DB inventory를 "미확인"과 구분하고, 긴 현재 DB 이름은 PostgreSQL 63자 제한에 맞게 prefix를 자르며, managed/hardened cluster를 위해 `maintenance_database`를 API/CLI에서 지정할 수 있게 했다.
 - T-050 운영 hardening 7차: `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 실제 PostgreSQL 제약 통합 테스트를 추가했다. `ops.audit_events.job_id` FK, append-only trigger, `ops.serving_releases` active partial unique index, `ops.table_stats_snapshots.snapshot_id` FK를 실제 Docker PostgreSQL 별도 DB에서 확인한다. 운영 DB 오지정을 줄이기 위해 disposable DB 이름 guard와 필수 extension package 사전 skip을 둔다.
 - T-050 운영 hardening 6차: `db_restore`의 `replace_current` 위험 경로를 active `restore` maintenance window와 typed confirmation에 연결했다. `target_dsn`은 허용하지 않고 target DB 이름은 현재 DB 이름과 같아야 하며, 확인 문구는 `RESTORE <현재 DB 이름>`이어야 한다.
 - T-050 운영 hardening 5차: `ops.table_stats_snapshots` opt-in 주기 capture를 추가했다. 기본 interval은 0으로 비활성화하며, `snapshot_id`를 생략한 수동/주기 capture는 현재 active serving release snapshot에 자동 연결하고 연결 방식은 `stats.snapshot_link`에 기록한다. capture transaction은 advisory lock으로 동시 실행 중복을 줄인다.
@@ -102,6 +103,7 @@
 - 디버그/관리 UI 지도는 Kakao Maps SDK에서 MapLibre GL JS + VWorld WMTS로 전환한다. `digitie/maplibre-vworld-js`의 패키징·타입·Next.js 호환 문제가 발견되면 이 저장소 전용 workaround에 묻지 않고 upstream도 적극 수정한다.
 
 ### Added
+- T-058 restore hot-swap plan/preflight를 추가한다. `/v1/admin/restores/hot-swap-plan`, `kraddr-geo serving hot-swap-plan`, `RestoreHotSwapPlan` DTO가 같은 cluster 안 `ALTER DATABASE ... RENAME` 패턴의 current DB, restore DB, previous alias, typed confirmation, rollback confirmation, blockers, SQL/steps를 산출한다. 실제 rename 실행은 metadata 위치와 worker별 engine refresh를 더 검증한 뒤 후속 실행 표면으로 분리한다.
 - T-061 Q3 fuzzy slim text-search 구조를 추가한다. `mv_geocode_text_search` helper MV와 Alembic 0013을 추가하고, Q3 fuzzy geocode와 Q4 broad search fallback 후보 추출을 helper MV로 분리했다. Q4 exact preflight는 기존 `mv_geocode_target` exact index를 유지한다. T-057 corpus 기준 Q3 fuzzy c64 p95는 359.25ms → 227.57ms, `sig_cd` hint는 193.36ms → 182.27ms, wide는 255.36ms → 200.69ms로 개선됐다. helper는 6,416,637행/2,426MiB이며 helper 포함 shadow swap은 497.54초로 측정됐다.
 - T-053 Admin UI C1~C10 상세 분석/수동 판정 콘솔을 추가한다. `ops.consistency_case_samples`에 정합성 sample을 row 단위로 저장하고, `/v1/admin/consistency/*`에 case definitions, sample list/summary, 단건·bulk 승인/거절/보류, lightweight recheck, CSV export를 추가한다. `/admin/consistency/[report_id]`는 TanStack Query, TanStack Table, Zustand, `maplibre-vworld-js` 기반 지도 preview를 사용해 기준 설명, table 비교, 지도, source snapshot, 판정 액션을 한 화면에 제공한다.
 - T-052 API v1/v2 분리와 AI-friendly API reference를 추가한다. v2는 Kakao/Naver/Google/VWorld 직접 wrapper가 아니라 각 API 스타일의 장점을 참고한 자체 candidate schema이며, `/v2/geocode`, `/v2/reverse`, `/v2/search`, `AsyncAddressClient.geocode_v2/reverse_v2/search_v2`, `CandidateV2.distance_m`/`point_precision`, `docs/api-reference/`, OpenAPI와 frontend 생성 타입을 포함한다.

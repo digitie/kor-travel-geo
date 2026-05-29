@@ -2,6 +2,46 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 11:40 (PR #80 리뷰 후속 — restore hot-swap plan 보강)
+
+**작업**: PR #80 formal review에서 나온 restore hot-swap plan의 edge case를 반영했다.
+
+**반영**:
+- 자동 `previous_alias` 생성 시 `datetime.now(UTC)`를 한 번만 고정해 DB 존재 확인과 반환 plan이 같은 alias를 보도록 했다.
+- `existing_databases=None`은 미확인, 빈 set은 실제 확인 결과 0건으로 구분해 missing DB blocker를 보고한다.
+- 현재 DB 이름이 긴 경우 `_previous_YYYYMMDD_HHMMSS` suffix를 보존하고 prefix를 잘라 PostgreSQL 63자 identifier 제한을 지킨다.
+- managed/hardened cluster에서 `postgres` DB 접속이 제한될 수 있으므로 `maintenance_database`를 API/CLI 요청으로 지정할 수 있게 했다.
+
+**검증**:
+- `scripts/export_openapi.py`, `kraddr-geo-ui npm run gen:types`
+- `ruff check src/kraddr/geo/dto/admin.py src/kraddr/geo/infra/hotswap.py src/kraddr/geo/client.py src/kraddr/geo/api/routers/admin.py src/kraddr/geo/cli/main.py tests/unit/test_restore_hotswap.py`
+- `pytest tests/unit/test_restore_hotswap.py tests/unit/test_dto_search_zipcode_pobox_admin.py tests/unit/test_openapi_export.py -q` → `13 passed`
+- `mypy --no-incremental src/kraddr/geo/infra/hotswap.py src/kraddr/geo/dto/admin.py src/kraddr/geo/client.py src/kraddr/geo/api/routers/admin.py src/kraddr/geo/cli/main.py`
+- CLI smoke: `kraddr-geo serving hot-swap-plan --restore-db kraddr_geo_restore_missing --maintenance-db postgres`
+- `ruff check .`, `pytest -q` → `257 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+- `kraddr-geo-ui` Linux npm gate: `lint`, `type-check`, `test`, `build`
+
+**후속**:
+- PR #80 CI 완료 후 5분 대기, 리뷰 재확인, merge를 진행한다.
+
+## 2026-05-29 11:05 (T-058 restore hot-swap plan/preflight)
+
+**작업**: T-058의 restore hot-swap 패턴을 실제 rename 실행 전 plan/preflight 표면으로 구현했다.
+
+**반영**:
+- `RestoreHotSwapPlanRequest`/`RestoreHotSwapPlan` DTO를 추가했다.
+- `infra/hotswap.py`에서 current DB, restore DB, previous alias, maintenance DB, typed confirmation, rollback confirmation, blocker, SQL/steps를 산출한다.
+- `/v1/admin/restores/hot-swap-plan` API와 `AsyncAddressClient.restore_hot_swap_plan()`을 추가했다.
+- `kraddr-geo serving hot-swap-plan` CLI를 추가했다.
+- OpenAPI와 `kraddr-geo-ui` 생성 타입을 갱신했다.
+- 실제 `ALTER DATABASE ... RENAME` 실행은 ops metadata 위치와 worker별 engine refresh/rollback round-trip 검증이 더 필요해 후속 실행 표면으로 분리하고, T-058 문서에 명시했다.
+
+**검증 예정**:
+- hot-swap plan 단위 테스트, DTO/API/OpenAPI drift, backend/frontend gate를 실행한 뒤 PR을 올린다.
+
+**후속**:
+- 이 PR merge 후 T-059 CLI/Job 동시 실행 보호 표준화로 이어간다.
+
 ## 2026-05-29 09:45 (T-050 운영 hardening 7차 — 실제 PostgreSQL 제약 통합 테스트)
 
 **작업**: T-050 마지막 항목인 실제 PostgreSQL FK/trigger/partial unique integration test를 추가했다.
