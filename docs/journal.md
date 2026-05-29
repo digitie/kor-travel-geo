@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 12:35 (PR #69~#80 post-merge 리뷰 audit/fixup)
+
+**작업**: 사용자 지시에 따라 현재 작업 PR #80 merge 뒤 PR #69부터 최신 PR #80까지 상세 리뷰와 review thread를 다시 확인했다.
+
+**반영**:
+- PR #69~#75는 기존 `docs/postmerge-review-fixups-pr69-pr75.md`와 PR #76 반영 상태를 재확인했다.
+- 모든 대상 PR의 GraphQL `reviewThreads.totalCount`는 0이었다.
+- PR #77 후속으로 수동 table stats capture가 scheduler lock 충돌을 `[]` 성공처럼 반환하지 않고 `409 E0409`로 보고하도록 했다. scheduler만 기존처럼 `skip_if_locked=True`로 조용히 건너뛴다.
+- PR #78 후속으로 `replace_current` restore가 active maintenance window를 통과할 때 `ops.audit_events(action='maintenance_window.authorize')`를 남기게 했다. window는 기간 gate로 유지하며 자동 소비하지 않는다고 문서화했다.
+- PR #79와 #80은 머지 전 반영된 리뷰 후속이 main에 포함됐음을 재확인했다.
+
+**검증**:
+- `ruff check src/kraddr/geo/infra/admin_repo.py src/kraddr/geo/client.py src/kraddr/geo/infra/backup.py tests/unit/test_ops_metadata.py`
+- `pytest tests/unit/test_ops_metadata.py tests/unit/test_backup_restore.py -q` → `22 passed`
+- `mypy --no-incremental src/kraddr/geo/infra/admin_repo.py src/kraddr/geo/client.py src/kraddr/geo/infra/backup.py`
+- `ruff check .`, `pytest -q` → `257 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+
+**후속**:
+- 이 PR merge 후 T-059 CLI/Job 동시 실행 보호 표준화로 이어간다.
+
 ## 2026-05-29 11:40 (PR #80 리뷰 후속 — restore hot-swap plan 보강)
 
 **작업**: PR #80 formal review에서 나온 restore hot-swap plan의 edge case를 반영했다.

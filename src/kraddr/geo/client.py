@@ -593,10 +593,12 @@ class AsyncAddressClient:
         *,
         snapshot_id: str | None = None,
         limit: int = 500,
+        skip_if_locked: bool = False,
     ) -> list[TableStatsSnapshot]:
         return await AdminRepository(self._engine()).capture_table_stats_snapshots(
             snapshot_id=snapshot_id,
             limit=limit,
+            skip_if_locked=skip_if_locked,
         )
 
     async def cleanup_upload_sets(

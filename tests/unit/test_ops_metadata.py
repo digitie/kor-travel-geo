@@ -126,6 +126,9 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "snapshot_link" in module_source
     assert "_OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0" in module_source
     assert "pg_try_advisory_xact_lock" in module_source
+    assert "TABLE_STATS_CAPTURE_LOCKED_MESSAGE" in module_source
+    assert "skip_if_locked" in source
+    assert "http_status=409" in source
     assert "insert_artifact" in source
     assert "update_artifact" in source
     assert "mark_artifact_deleted" in source
@@ -155,6 +158,9 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
     assert "record_restore_candidate" in restore_source
     assert "validate_replace_current_restore_request" in restore_source
     assert "require_active_maintenance_window" in restore_source
+    assert "maintenance_window.authorize" in restore_source
+    assert "hash_confirmation(confirmation)" in restore_source
+    assert "confirmation_hash" in restore_source
     assert "replace_current target_database must match" in backup_source
     assert "release_state" in restore_source
     assert "snapshot_id" in restore_source
