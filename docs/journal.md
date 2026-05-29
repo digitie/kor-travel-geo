@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-29 16:20 (T-055 N150/Odroid 운영 환경 비교 준비)
+
+**작업**: 실제 N150/Odroid 장비 도착 전 수행 가능한 측정 준비를 완료했다.
+
+**반영**:
+- `scripts/capture_deployment_envelope.py`를 추가해 OS/CPU/메모리/NVMe/Docker/GDAL/PostgreSQL/fio/sysbench/zstd 정보를 `system-envelope.json`과 `system-envelope.md`로 캡처한다.
+- 기본 실행은 부하가 낮은 시스템 정보만 수집하고, `fio`/`sysbench`는 `--run-probes`를 명시한 경우에만 실행하게 했다.
+- T-027 full-load, T-047 SQL benchmark, REST e2e benchmark, MV refresh/swap benchmark를 같은 `artifacts/perf/n150-vs-odroid-*` 구조로 남기는 runbook을 `docs/t055-deployment-n150-odroid.md`에 고정했다.
+- 실제 장비 실측은 하드웨어가 있어야 의미가 있으므로 T-063으로 보류하고, 다음 실행 가능 작업을 T-027 최종 클린 적재 검증으로 정리했다.
+
+**검증**:
+- `ruff check scripts/capture_deployment_envelope.py tests/unit/test_capture_deployment_envelope.py`
+- `pytest tests/unit/test_capture_deployment_envelope.py -q` → `5 passed`
+- `python scripts/capture_deployment_envelope.py --env-label wsl-smoke --data-dir data --output-dir /tmp/kraddr-t055-envelope-smoke`
+- `ruff check .`
+- `pytest -q` → `273 passed, 8 skipped`
+- `mypy --no-incremental src/kraddr/geo`
+- `lint-imports`
+
+**후속**:
+- PR merge 후 T-027 최종 실 데이터 클린 적재 검증으로 이어간다.
+- N150/Odroid 장비가 준비되면 T-063에서 T-055 runbook으로 최소 3회 반복 실측한다.
+
 ## 2026-05-29 15:35 (T-054 한국 IP GeoIP gate)
 
 **작업**: 외부 공용 IP에서 호출되는 REST API를 대한민국 IP로 제한하는 1차 middleware를 구현했다.

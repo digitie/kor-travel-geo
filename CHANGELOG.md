@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Fixed
+- T-055 N150/Odroid 운영 환경 비교 준비: 장비 도착 전 수행 가능한 runbook과 산출물 구조를 확정하고, `scripts/capture_deployment_envelope.py`를 추가해 OS/CPU/메모리/NVMe/Docker/GDAL/PostgreSQL/fio/sysbench/zstd envelope를 `system-envelope.json/md`로 캡처한다. `fio`/`sysbench` probe는 `--run-probes`를 명시할 때만 실행하며, 실제 하드웨어 실측은 T-063으로 보류한다.
 - T-054 한국 IP GeoIP gate: FastAPI middleware를 추가해 내부/loopback은 허용하고 외부 공용 IP는 GeoIP country `KR`만 통과시키도록 했다. 기본 `strict` 모드에서는 GeoIP DB가 없으면 공용 IP를 `E0403/403`으로 차단하며, allow/deny CIDR, trusted proxy `X-Forwarded-For`, `geoip.denied` audit, `kraddr-geo geoip check`를 지원한다.
 - PR #69~#82 post-merge 리뷰 audit/fixup: PR #69부터 #82까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. `replace_current` restore의 `maintenance_window.authorize` audit event가 실제 PostgreSQL `ops.audit_events.actor_type` CHECK를 위반하지 않도록 `actor_type="system"`으로 수정하고, table stats scheduler의 `skip_if_locked=True` 의도를 호출부에 명시했다.
 - T-059 CLI/Job 동시 실행 보호 표준화: `infra.concurrency`의 PostgreSQL session advisory lock helper를 추가하고, 주요 CLI 운영 명령과 FastAPI `JobQueue` handler가 같은 lock key를 공유하도록 했다. 중복 실행은 `E0409/HTTP 409` 또는 CLI exit code 2로 fail-fast한다.

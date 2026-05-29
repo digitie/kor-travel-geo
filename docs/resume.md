@@ -115,12 +115,13 @@
 - ✅ T-059 CLI/Job 동시 실행 보호 표준화 — `infra.concurrency`의 PostgreSQL session advisory lock helper를 추가하고, 주요 CLI 운영 명령과 FastAPI `JobQueue` handler가 같은 lock key를 공유하도록 했다. 중복 실행은 `E0409/HTTP 409` 또는 CLI exit code 2로 fail-fast한다. Docker PostgreSQL smoke에서 `MV_REFRESH` 중복 lock 차단을 확인했다. 상세: `docs/t059-concurrent-job-protection.md`
 - ✅ PR #69~#82 post-merge 리뷰 audit/fixup — PR #69부터 최신 PR #82까지 formal review와 review thread를 재확인했고 unresolved thread 0건을 기록했다. PR #81 리뷰에서 발견된 `maintenance_window.authorize` audit의 `actor_type="job"` CHECK 위반을 `system`으로 고치고, table stats scheduler `skip_if_locked=True` 의도를 호출부에 명시했다. 상세: `docs/postmerge-review-fixups-pr69-pr82.md`
 - ✅ T-054 한국 IP GeoIP gate — FastAPI middleware가 내부/loopback은 허용하고 외부 공용 IP는 GeoIP country `KR`만 통과시키게 했다. 기본 `strict` 모드에서는 GeoIP DB가 없으면 공용 IP를 `E0403/403`으로 차단하며, allow/deny CIDR, trusted proxy `X-Forwarded-For`, `geoip.denied` audit, `kraddr-geo geoip check`를 지원한다. 상세: `docs/t054-korea-only-geoip.md`
+- ✅ T-055 N150/Odroid 운영 환경 비교 준비 — 실제 장비 도착 전 실행 가능한 준비를 완료했다. `scripts/capture_deployment_envelope.py`로 OS/CPU/메모리/NVMe/Docker/GDAL/PostgreSQL/fio/sysbench/zstd envelope를 캡처하고, T-027 full-load, T-047 SQL/REST benchmark, MV refresh/swap benchmark 실행 runbook과 산출물 구조를 `docs/t055-deployment-n150-odroid.md`에 고정했다. 실제 하드웨어 실측은 T-063으로 보류한다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 작업은 T-055 N150/Odroid 실측 준비다.
+다음 작업은 T-027 최종 실 데이터 클린 적재 검증이다.
 
-그 이후의 작업 후보는 사용자 최신 지시에 따라 T-055(N150/Odroid 실측) 이후 T-027 최종 클린 적재 검증이다. T-027은 남은 튜닝/증분/보조 로더 작업이 끝난 뒤 마지막에 수행한다.
+T-055의 실제 N150/Odroid 실측은 장비가 있어야 의미가 있으므로 T-063으로 보류했다. 현재 대기 중인 실행 가능 task는 T-027 최종 클린 적재 검증이다.
 
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 있다. 이 경로는 git ignore 대상이다.
 - 현재 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,699건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
@@ -134,6 +135,7 @@
 - T-049 운영 메타데이터는 1차 구현 상태다. 현재 구현은 DDL/API/UI와 redacted audit event, maintenance window 생성/종료, table stats snapshot capture를 제공한다. T-050 4차에서 MV swap/restore 성공 지점을 `ops.dataset_snapshots`와 `ops.serving_releases`에 연결했고, 5차에서 table stats capture를 active serving snapshot에 자동 연결했다. 성능 리포트와 table stats trend 비교 UI는 후속으로 이어간다.
 - T-050은 PR #34~#47 리뷰 audit에서 남긴 운영 hardening 묶음이다. 1차 upload set cleanup TTL/참조 lock/grace period, 2차 callback HMAC/retry/replay protection, 3차 size 기반 backup/restore sub-progress, 4차 snapshot/release hook, 5차 table stats 주기 capture, 6차 destructive confirmation flow, 7차 실제 PostgreSQL constraint integration test까지 완료했다.
 - T-047 쿼리 성능 튜닝은 여러 기준선과 후속 측정이 쌓인 상태다. 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool64, REST worker/pool/admission exploratory grid와 candidate 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
+- T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
 
 ## 작업 시작 전 확인할 것
 
