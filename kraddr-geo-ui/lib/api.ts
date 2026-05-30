@@ -339,6 +339,11 @@ export type BackupArtifact = OpsArtifact & {
   download_url?: string | null;
 };
 
+export type BackupAllowedDirs = {
+  dirs: string[];
+  default_dir?: string | null;
+};
+
 export type MaintenanceWindow = {
   window_id: string;
   kind: "full_load" | "restore" | "schema_migration" | "mv_refresh" | "read_only" | "exclusive";

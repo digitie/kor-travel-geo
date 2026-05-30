@@ -6,6 +6,7 @@ export const apiSchemaNames = [
   "AuditEvent",
   "BBox",
   "BBoxV2",
+  "BackupAllowedDirs",
   "BackupArtifact",
   "BackupCreateRequest",
   "CRS",

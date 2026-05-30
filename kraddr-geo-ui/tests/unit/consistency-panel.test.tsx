@@ -155,7 +155,7 @@ describe("ConsistencyPanel", () => {
     await screen.findByText("consistency_1");
     await screen.findByText("#1");
 
-    expect(screen.getByText("샘플 선택 대기")).toBeInTheDocument();
+    expect(screen.getByText("표본 선택 대기")).toBeInTheDocument();
     expect(screen.queryByTestId("lazy-coordinate-map")).not.toBeInTheDocument();
     expect(mapMock.LazyCoordinateMap).not.toHaveBeenCalled();
 

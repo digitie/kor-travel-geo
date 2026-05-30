@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { TableStat, requestJson } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { tableDescription } from "@/lib/table-descriptions";
 
 export function TableStatsPanel() {
   const [rows, setRows] = useState<TableStat[]>([]);
@@ -30,16 +31,18 @@ export function TableStatsPanel() {
       <table className="table">
         <thead>
           <tr>
-            <th>table</th>
-            <th>rows</th>
-            <th>size</th>
-            <th>updated_at</th>
+            <th>테이블</th>
+            <th>설명</th>
+            <th>행 수</th>
+            <th>크기</th>
+            <th>최근 갱신</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.table_name}>
               <td>{row.table_name}</td>
+              <td className="table-description">{tableDescription(row.table_name)}</td>
               <td>{row.row_count.toLocaleString()}</td>
               <td>{formatBytes(row.size_bytes)}</td>
               <td>{row.updated_at ?? "-"}</td>

@@ -563,6 +563,12 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.table-description {
+  color: #344054;
+  font-size: 13px;
+  max-width: 360px;
+}
+
 .status {
   border-radius: 999px;
   display: inline-flex;
@@ -767,6 +773,28 @@ textarea {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+}
+
+.map-section {
+  display: grid;
+  gap: 10px;
+}
+
+.map-section-title {
+  color: var(--ink);
+  font-size: 15px;
+  margin: 0;
+}
+
+.map-section .map-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.map-section .vworld-map-shell,
+.map-section .map-box {
+  height: 60vh;
+  min-height: 440px;
 }
 
 .table-pane {

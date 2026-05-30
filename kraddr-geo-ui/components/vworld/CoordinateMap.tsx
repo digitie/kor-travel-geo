@@ -144,7 +144,17 @@ function LoadedCoordinateMap({
     const handleClick = (event: MapMouseEvent) => {
       onClickRef.current?.({ x: event.lngLat.lng, y: event.lngLat.lat });
     };
-    const resizeObserver = new ResizeObserver(() => map.resize());
+    // Coalesce resize callbacks into a single animation frame. Calling map.resize()
+    // synchronously inside the ResizeObserver callback can retrigger layout and produce
+    // a "ResizeObserver loop" that pins the main thread and freezes the tab.
+    let resizeFrame = 0;
+    const resizeObserver = new ResizeObserver(() => {
+      if (resizeFrame) return;
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = 0;
+        mapRef.current?.resize();
+      });
+    });
 
     map.on("load", handleLoad);
     map.on("error", handleError);
@@ -153,6 +163,7 @@ function LoadedCoordinateMap({
     mapRef.current = map;
 
     return () => {
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
       markerRef.current?.remove();
       markerRef.current = null;
       resizeObserver.disconnect();

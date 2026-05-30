@@ -13,7 +13,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { BackupArtifact, LoadJobStatus, postJson, requestJson } from "@/lib/api";
+import { BackupAllowedDirs, BackupArtifact, LoadJobStatus, postJson, requestJson } from "@/lib/api";
 import {
   backupDownloadHref,
   backupProfileLabel,
@@ -28,6 +28,7 @@ type BackupProfile = (typeof profiles)[number];
 
 export function BackupsPanel() {
   const [destinationDir, setDestinationDir] = useState("data/backups");
+  const [allowedDirs, setAllowedDirs] = useState<string[]>([]);
   const [profile, setProfile] = useState<BackupProfile>("serving-ready");
   const [jobs, setJobs] = useState(4);
   const [compressionLevel, setCompressionLevel] = useState(3);
@@ -120,6 +121,22 @@ export function BackupsPanel() {
   }, []);
 
   useEffect(() => {
+    async function loadAllowedDirs() {
+      try {
+        const config = await requestJson<BackupAllowedDirs>("/admin/backups/allowed-dirs");
+        setAllowedDirs(config.dirs);
+        if (config.default_dir) {
+          setDestinationDir(config.default_dir);
+        }
+      } catch {
+        // 허용 디렉터리 조회 실패 시 직접 입력 폴백을 유지한다.
+        setAllowedDirs([]);
+      }
+    }
+    void loadAllowedDirs();
+  }, []);
+
+  useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
       void loadAll();
@@ -140,15 +157,29 @@ export function BackupsPanel() {
       >
         <form className="form-grid" onSubmit={submitBackup}>
           <div className="field">
-            <label htmlFor="backup-destination">destination_dir</label>
-            <input
-              id="backup-destination"
-              value={destinationDir}
-              onChange={(event) => setDestinationDir(event.target.value)}
-            />
+            <label htmlFor="backup-destination">백업본 저장 폴더 (destination_dir)</label>
+            {allowedDirs.length > 0 ? (
+              <select
+                id="backup-destination"
+                value={destinationDir}
+                onChange={(event) => setDestinationDir(event.target.value)}
+              >
+                {allowedDirs.map((dir) => (
+                  <option key={dir} value={dir}>
+                    {dir}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id="backup-destination"
+                value={destinationDir}
+                onChange={(event) => setDestinationDir(event.target.value)}
+              />
+            )}
           </div>
           <div className="field">
-            <label htmlFor="backup-profile">profile</label>
+            <label htmlFor="backup-profile">백업 프로파일 (profile)</label>
             <select
               id="backup-profile"
               value={profile}
@@ -163,7 +194,7 @@ export function BackupsPanel() {
           </div>
           <NumberField
             id="backup-jobs"
-            label="jobs"
+            label="병렬 작업 수 (jobs)"
             max={64}
             min={1}
             value={jobs}
@@ -171,14 +202,14 @@ export function BackupsPanel() {
           />
           <NumberField
             id="backup-compression"
-            label="compression_level"
+            label="압축 레벨 (compression_level)"
             max={19}
             min={1}
             value={compressionLevel}
             onChange={setCompressionLevel}
           />
           <div className="field">
-            <label htmlFor="backup-callback">callback_url</label>
+            <label htmlFor="backup-callback">완료 알림 URL (callback_url)</label>
             <input
               id="backup-callback"
               value={callbackUrl}
@@ -187,7 +218,7 @@ export function BackupsPanel() {
           </div>
           <button className="button" type="submit">
             <Archive size={16} />
-            Backup 시작
+            백업 시작
           </button>
         </form>
       </Panel>
@@ -195,7 +226,7 @@ export function BackupsPanel() {
       <Panel title="DB Restore">
         <form className="form-grid" onSubmit={submitRestore}>
           <div className="field">
-            <label htmlFor="restore-artifact">artifact_id</label>
+            <label htmlFor="restore-artifact">복원할 백업본 (artifact_id)</label>
             <select
               id="restore-artifact"
               value={restoreArtifactId}
@@ -212,7 +243,7 @@ export function BackupsPanel() {
             </select>
           </div>
           <div className="field">
-            <label htmlFor="restore-archive">archive_path</label>
+            <label htmlFor="restore-archive">백업본 직접 경로 (archive_path)</label>
             <input
               id="restore-archive"
               value={restoreArchivePath}
@@ -220,7 +251,7 @@ export function BackupsPanel() {
             />
           </div>
           <div className="field">
-            <label htmlFor="restore-target">target_database</label>
+            <label htmlFor="restore-target">복원 대상 DB 이름 (target_database)</label>
             <input
               id="restore-target"
               value={targetDatabase}
@@ -229,7 +260,7 @@ export function BackupsPanel() {
           </div>
           <NumberField
             id="restore-jobs"
-            label="jobs"
+            label="병렬 작업 수 (jobs)"
             max={64}
             min={1}
             value={restoreJobs}

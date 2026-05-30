@@ -326,7 +326,6 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
               </div>
 
               <div className="detail-pane">
-                <MapPreview sample={selectedSample} />
                 <DecisionPanel
                   onAction={(state) => setDecisionForm(openDecisionForm("single", state))}
                   onRecheck={() => recheckMutation.mutate()}
@@ -335,10 +334,15 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
                 />
                 <a className="button secondary" href={csvHref}>
                   <Download size={16} />
-                  CSV
+                  CSV 내려받기
                 </a>
               </div>
             </div>
+
+            <section className="map-section">
+              <h3 className="map-section-title">선택한 표본 위치</h3>
+              <MapPreview sample={selectedSample} />
+            </section>
           </section>
         </div>
       </Panel>
@@ -388,7 +392,7 @@ function useSampleColumns({
         )
       },
       {
-        header: "sample",
+        header: "표본",
         accessorKey: "sample_rank",
         cell: ({ row }) => (
           <button
@@ -401,27 +405,27 @@ function useSampleColumns({
         )
       },
       {
-        header: "severity",
+        header: "심각도",
         accessorKey: "severity",
         cell: ({ row }) => <StatusBadge value={row.original.severity} />
       },
       {
-        header: "decision",
+        header: "판정",
         accessorKey: "decision_state",
         cell: ({ row }) => <DecisionBadge value={row.original.decision_state} />
       },
-      { header: "bd_mgt_sn", accessorKey: "bd_mgt_sn" },
-      { header: "sig_cd", accessorKey: "sig_cd" },
+      { header: "건물관리번호", accessorKey: "bd_mgt_sn" },
+      { header: "시군구코드", accessorKey: "sig_cd" },
       {
-        header: "distance",
+        header: "거리",
         accessorKey: "distance_m",
         cell: ({ row }) =>
           row.original.distance_m === null || row.original.distance_m === undefined
             ? "-"
             : `${row.original.distance_m.toFixed(2)}m`
       },
-      { header: "source", accessorKey: "source_kind" },
-      { header: "reason", accessorKey: "reason_code" }
+      { header: "원천", accessorKey: "source_kind" },
+      { header: "사유", accessorKey: "reason_code" }
     ],
     [onSelect, onToggle, selectedSampleId, selectedSampleIds]
   );
@@ -484,11 +488,11 @@ function FilterToolbar({
         onChange={(event) => onChange({ ...filters, severity: event.target.value, page: 1 })}
         value={filters.severity}
       >
-        <option value="">severity 전체</option>
-        <option value="ERROR">ERROR</option>
-        <option value="WARN">WARN</option>
-        <option value="INFO">INFO</option>
-        <option value="OK">OK</option>
+        <option value="">심각도 전체</option>
+        <option value="ERROR">오류 (ERROR)</option>
+        <option value="WARN">경고 (WARN)</option>
+        <option value="INFO">정보 (INFO)</option>
+        <option value="OK">정상 (OK)</option>
       </select>
       <select
         onChange={(event) => onChange({ ...filters, decision: event.target.value, page: 1 })}
@@ -503,17 +507,17 @@ function FilterToolbar({
       <input
         maxLength={5}
         onChange={(event) => onChange({ ...filters, sigCd: event.target.value, page: 1 })}
-        placeholder="sig_cd"
+        placeholder="시군구코드 (예: 41465)"
         value={filters.sigCd}
       />
       <select
         onChange={(event) => onChange({ ...filters, orderBy: event.target.value, page: 1 })}
         value={filters.orderBy}
       >
-        <option value="sample_rank">sample</option>
-        <option value="distance_m">distance</option>
-        <option value="severity">severity</option>
-        <option value="reviewed_at">reviewed</option>
+        <option value="sample_rank">정렬: 표본 순서</option>
+        <option value="distance_m">정렬: 거리</option>
+        <option value="severity">정렬: 심각도</option>
+        <option value="reviewed_at">정렬: 검토 시각</option>
       </select>
       <label className="checkbox-row">
         <input
@@ -521,7 +525,7 @@ function FilterToolbar({
           onChange={(event) => onChange({ ...filters, desc: event.target.checked, page: 1 })}
           type="checkbox"
         />
-        desc
+        내림차순
       </label>
     </div>
   );
@@ -564,28 +568,32 @@ function MapPreview({ sample }: { sample: ConsistencyCaseSample | null }) {
       <div className="map-preview">
         <div className="map-box map-placeholder">
           <div className="map-marker">
-            <strong>샘플 선택 대기</strong>
-            <span>테이블에서 sample을 선택하면 지도와 증거를 로드합니다</span>
+            <strong>표본 선택 대기</strong>
+            <span>위 표에서 표본을 선택하면 지도와 증거를 표시합니다</span>
           </div>
-        </div>
-        <div className="map-legend">
-          <span>case</span>
-          <span>거리 없음</span>
-          <span>point</span>
-          <span>line 없음</span>
         </div>
       </div>
     );
   }
 
+  const point = sample.point ?? null;
   return (
     <div className="map-preview">
-      <LazyCoordinateMap point={sample.point ?? null} />
+      {point ? (
+        <LazyCoordinateMap point={point} />
+      ) : (
+        <div className="map-box map-placeholder">
+          <div className="map-marker">
+            <strong>좌표 없음</strong>
+            <span>이 표본에는 표시할 좌표가 없습니다 (증거는 아래 상세에서 확인)</span>
+          </div>
+        </div>
+      )}
       <div className="map-legend">
-        <span>{sample.case_code}</span>
-        <span>{sample.distance_m ? `${sample.distance_m.toFixed(2)}m` : "거리 없음"}</span>
-        <span>{sample.has_polygon ? "polygon" : "point"}</span>
-        <span>{sample.has_line ? "line" : "line 없음"}</span>
+        <span>분류 {sample.case_code}</span>
+        <span>{sample.distance_m ? `거리 ${sample.distance_m.toFixed(2)}m` : "거리 정보 없음"}</span>
+        <span>{sample.has_polygon ? "건물 도형 있음" : "건물 도형 없음"}</span>
+        <span>{sample.has_line ? "도로선 있음" : "도로선 없음"}</span>
       </div>
     </div>
   );

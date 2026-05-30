@@ -107,6 +107,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/backups/allowed-dirs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Backup Allowed Dirs */
+        get: operations["backup_allowed_dirs_v1_admin_backups_allowed_dirs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/backups/{artifact_id}": {
         parameters: {
             query?: never;
@@ -1038,6 +1055,19 @@ export interface components {
             min_lat: number;
             /** Min Lon */
             min_lon: number;
+        };
+        /**
+         * BackupAllowedDirs
+         * @description Server-side allowlist of directories usable for backup output.
+         */
+        BackupAllowedDirs: {
+            /** Default Dir */
+            default_dir?: string | null;
+            /**
+             * Dirs
+             * @default []
+             */
+            dirs: string[];
         };
         /** BackupArtifact */
         BackupArtifact: {
@@ -3051,6 +3081,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backup_allowed_dirs_v1_admin_backups_allowed_dirs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupAllowedDirs"];
                 };
             };
         };
