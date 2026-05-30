@@ -36,6 +36,7 @@ def test_shadow_swap_handles_missing_current_mv() -> None:
     assert "ANALYZE mv_geocode_target" in source
     assert "ANALYZE mv_geocode_text_search" in source
     assert "SET LOCAL lock_timeout = '2s'" in source
+    assert "SET LOCAL statement_timeout = 0" in source
     assert source.count("async with engine.begin()") == 2
 
 

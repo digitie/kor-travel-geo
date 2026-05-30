@@ -684,10 +684,12 @@ async def collect_environment(
                 "idx_mv_buld_nm_trgm",
                 "idx_mv_rn_nrm_exact",
                 "idx_mv_buld_nm_nrm_exact",
+                "idx_mv_sigungu_buld_nm_nrm_exact",
                 "idx_mv_text_search_sig_buld",
                 "idx_mv_text_search_bjd_prefix_buld",
                 "idx_mv_text_search_rn_trgm",
                 "idx_mv_text_search_buld_nm_trgm",
+                "idx_mv_text_search_sigungu_buld_nm_trgm",
                 "idx_mv_geom5179",
             )
         }

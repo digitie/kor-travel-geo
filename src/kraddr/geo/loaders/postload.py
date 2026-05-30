@@ -117,6 +117,7 @@ async def shadow_swap_mv(engine: AsyncEngine) -> None:
         await rename_mv_next_indexes_for_conn(conn)
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
         await conn.execute(text("ANALYZE mv_geocode_target"))
         await conn.execute(text("ANALYZE mv_geocode_text_search"))
 

@@ -10,16 +10,21 @@ WITH best_entrc AS (
          ent_man_no,
          geom AS ent_pt_5179
     FROM (
-      SELECT bd_mgt_sn, ent_man_no, geom, 0 AS source_priority, 0 AS rep_priority
-        FROM tl_roadaddr_entrc
-      UNION ALL
       SELECT bd_mgt_sn,
              ent_man_no,
              geom,
-             1 AS source_priority,
+             0 AS source_priority,
              CASE WHEN ent_se_cd = '0' THEN 0 ELSE 1 END AS rep_priority
         FROM tl_locsum_entrc
        WHERE bd_mgt_sn IS NOT NULL
+      UNION ALL
+      SELECT bd_mgt_sn, ent_man_no, geom, 1 AS source_priority, 0 AS rep_priority
+        FROM tl_roadaddr_entrc
+       WHERE source_yyyymm IN (
+         SELECT DISTINCT source_yyyymm
+           FROM tl_juso_text
+          WHERE source_yyyymm IS NOT NULL
+       )
     ) e
    ORDER BY bd_mgt_sn,
             source_priority,
@@ -35,7 +40,9 @@ best_navi AS (
          buld_mnnm,
          buld_slno,
          left(bjd_cd, 8) AS bjd_emd_cd,
-         centroid_5179
+         centroid_5179,
+         sigungu_buld_nm,
+         sigungu_buld_nm_nrm
     FROM tl_navi_buld_centroid
    WHERE rncode_full IS NOT NULL
      AND bjd_cd IS NOT NULL
@@ -51,6 +58,8 @@ SELECT
   j.buld_se_cd,
   j.buld_nm,
   j.buld_nm_nrm,
+  NULLIF(nc.sigungu_buld_nm, '') AS sigungu_buld_nm,
+  NULLIF(nc.sigungu_buld_nm_nrm, '') AS sigungu_buld_nm_nrm,
   j.bjd_cd,
   j.adm_cd,
   j.adm_kor_nm,
@@ -90,10 +99,17 @@ CREATE INDEX idx_mv_jibun
   ON mv_geocode_target (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
 CREATE INDEX idx_mv_jibun_name_exact
   ON mv_geocode_target (si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno, emd_nm, li_nm, pt_source, bd_mgt_sn);
+CREATE INDEX idx_mv_rn_nrm_exact
+  ON mv_geocode_target (rn_nrm, bd_mgt_sn);
+CREATE INDEX idx_mv_buld_nm_nrm_exact
+  ON mv_geocode_target (buld_nm_nrm, bd_mgt_sn) WHERE buld_nm_nrm IS NOT NULL;
 CREATE INDEX idx_mv_rn_trgm
   ON mv_geocode_target USING GIN (rn_nrm gin_trgm_ops);
 CREATE INDEX idx_mv_buld_nm_trgm
   ON mv_geocode_target USING GIN (buld_nm_nrm gin_trgm_ops);
+CREATE INDEX idx_mv_sigungu_buld_nm_nrm_exact
+  ON mv_geocode_target (sigungu_buld_nm_nrm, bd_mgt_sn)
+  WHERE sigungu_buld_nm_nrm IS NOT NULL;
 CREATE INDEX idx_mv_geom5179
   ON mv_geocode_target USING GIST (pt_5179) WHERE pt_5179 IS NOT NULL;
 CREATE INDEX idx_mv_geom4326

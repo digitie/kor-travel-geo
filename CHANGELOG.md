@@ -10,7 +10,8 @@
 - 디버그 UI가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 런타임 config로 읽고, `/admin/settings`에서 브라우저 저장값으로 수정·복원할 수 있게 했다.
 
 ### Fixed
-- 상위 주소 geocode 후보: `/v2/geocode`에서 상세번호가 없는 행정구역 입력은 별도 endpoint 없이 `district` 검색 후보로 승격한다. `tl_scco_*` polygon의 `ST_PointOnSurface` 대표점을 반환하며, `수지구` 입력은 `용인시 수지구` 후보를 우선 반환한다. 내비게이션용DB_전체분의 `시군구용건물명` 검색 반영은 T-065 후속으로 문서화했다.
+- T-065 내비게이션용DB `시군구용건물명` 검색 반영: `match_build_*.txt` 20번째 컬럼을 `sigungu_buld_nm`으로 적재하고 `sigungu_buld_nm_nrm`을 `mv_geocode_target`/`mv_geocode_text_search`에 포함했다. `/v2/search` exact preflight와 broad trigram fallback이 이 값을 함께 점수화하며, 실제 DB에서 `엄마집`, `P-101동` + `sig_cd=26110` 검색이 `NOT_FOUND`에서 후보 반환으로 개선됐다. shadow swap 후 `ANALYZE` transaction과 MV refresh release metadata 기록도 대형 DB statement timeout에 걸리지 않도록 보강했다.
+- 상위 주소 geocode 후보: `/v2/geocode`에서 상세번호가 없는 행정구역 입력은 별도 endpoint 없이 `district` 검색 후보로 승격한다. `tl_scco_*` polygon의 `ST_PointOnSurface` 대표점을 반환하며, `수지구` 입력은 `용인시 수지구` 후보를 우선 반환한다.
 - 외부 API fallback 오류 명시화: `fallback="api"`인데 백엔드 provider 키가 없으면 `E0503` 설정 오류로 `KRADDR_GEO_VWORLD_API_KEY`/`KRADDR_GEO_JUSO_API_KEY` 필요성을 반환한다. VWorld `INVALID_KEY`와 Juso KEY 오류는 `E0501` 외부 API 인증 오류로 반환해 단순 `NOT_FOUND`와 구분한다.
 - 단독 구 이름 도로명주소 조회 보정: `수지구 성복1로 35`처럼 DB에는 `용인시 수지구`로 저장되어 있지만 사용자가 `구` 이름만 입력한 경우에도 exact 도로명 조회 실패 뒤 제한적인 suffix retry로 후보를 찾는다. 기본 lookup은 `sgg_nm = :sgg`를 유지하고, fallback은 선행 와일드카드 `LIKE` 없이 도로명/건물번호 exact 후보 안에서만 `right(sgg_nm, ...)`를 적용한다.
 - PR #69~#86 post-merge 리뷰 audit/fixup: PR #69부터 최신 PR #86까지 formal review와 review thread를 재확인했고 thread 0건을 기록했다. PR #84 리뷰 후속으로 GeoIP gate가 admission control보다 먼저 실행되도록 middleware 설치 순서를 바꾸고, `testclient` 호스트명 특별 허용을 제거했으며, `X-Forwarded-For`의 `host:port`/`[IPv6]:port` 표기를 파싱하도록 보강했다.

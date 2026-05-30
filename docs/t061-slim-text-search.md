@@ -30,6 +30,7 @@ T-057의 `sig_cd`/`bjd_cd` hint는 Q3 fuzzy tail을 낮췄지만, `mv_geocode_ta
 | `sido_cd`, `sig_cd`, `bjd_cd` | region hint filter |
 | `si_nm`, `sgg_nm` | 기존 parser 지역명 filter 보존 |
 | `rn_nrm`, `buld_nm_nrm` | trigram/exact text 후보 |
+| `sigungu_buld_nm_nrm` | T-065 내비게이션용DB `시군구용건물명` 검색 후보 |
 | `buld_mnnm` | 도로명 fuzzy의 건물 본번 filter |
 | `pt_source` | 기존 fuzzy 정렬의 entrance 우선순위 보존 |
 
@@ -43,8 +44,11 @@ T-057의 `sig_cd`/`bjd_cd` hint는 Q3 fuzzy tail을 낮췄지만, `mv_geocode_ta
 | `idx_mv_text_search_bjd_prefix_buld` | 8/10자리 `bjd_cd` hint + 건물 본번 |
 | `idx_mv_text_search_rn_trgm` | 도로명 fuzzy |
 | `idx_mv_text_search_buld_nm_trgm` | 건물명 broad search fallback |
+| `idx_mv_text_search_sigungu_buld_nm_trgm` | T-065 `시군구용건물명` broad search fallback |
 
 초기안에는 helper exact index와 `buld_mnnm` 단독 index도 포함했지만, Q4 exact는 기존 target index를 유지하기로 하면서 제거했다. 이 조정으로 helper rebuild 시간이 `235.22초`에서 `82.77초`로 줄고, helper total size가 `3.4GiB`에서 `2.4GiB`로 줄었다.
+
+T-065에서는 helper 컬럼과 인덱스가 하나 늘었다. 202604 전국 DB 기준 helper row count는 `6,416,642`, heap `904MB`, indexes `1,582MB`, total `2,486MB`이고, 새 `idx_mv_text_search_sigungu_buld_nm_trgm`은 약 `10MB`였다. 상세 전후 recall/latency는 `docs/t065-navi-building-name-search.md`에 둔다.
 
 ## 성능 결과
 

@@ -22,7 +22,8 @@ WITH matched AS (
          CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_Y(pt_4326) END AS lat,
          GREATEST(
            similarity(rn_nrm, :query_nrm),
-           similarity(buld_nm_nrm, :query_nrm)
+           similarity(buld_nm_nrm, :query_nrm),
+           similarity(sigungu_buld_nm_nrm, :query_nrm)
          ) AS score
     FROM mv_geocode_target
    WHERE (CAST(:sig_cd_filter AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
@@ -32,6 +33,7 @@ WITH matched AS (
      AND (
        rn_nrm = :query_nrm
        OR (buld_nm_nrm = :query_nrm AND buld_nm_nrm IS NOT NULL)
+       OR (sigungu_buld_nm_nrm = :query_nrm AND sigungu_buld_nm_nrm IS NOT NULL)
      )
 )
 SELECT *, count(*) OVER () AS total
@@ -50,7 +52,8 @@ scored AS MATERIALIZED (
   SELECT ts.bd_mgt_sn,
          GREATEST(
            similarity(ts.rn_nrm, q.query_nrm),
-           similarity(ts.buld_nm_nrm, q.query_nrm)
+           similarity(ts.buld_nm_nrm, q.query_nrm),
+           similarity(ts.sigungu_buld_nm_nrm, q.query_nrm)
          ) AS score
     FROM mv_geocode_text_search ts
     CROSS JOIN query_input q
@@ -64,8 +67,10 @@ scored AS MATERIALIZED (
      AND (
        ts.rn_nrm ILIKE '%' || q.query_nrm || '%'
        OR ts.buld_nm_nrm ILIKE '%' || q.query_nrm || '%'
+       OR ts.sigungu_buld_nm_nrm ILIKE '%' || q.query_nrm || '%'
        OR ts.rn_nrm % q.query_nrm
        OR ts.buld_nm_nrm % q.query_nrm
+       OR ts.sigungu_buld_nm_nrm % q.query_nrm
      )
 ),
 ranked AS (

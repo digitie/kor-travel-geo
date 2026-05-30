@@ -40,6 +40,7 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "REFERENCES tl_juso_text(bd_mgt_sn) ON DELETE CASCADE" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_locsum_entrc" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_roadaddr_entrc" in SCHEMA_SQL
+    assert "sigungu_buld_nm_nrm" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS tl_sppn_makarea" in SCHEMA_SQL
     assert "geometry(MultiPolygon, 5179) NOT NULL" in SCHEMA_SQL
     assert "CREATE TABLE IF NOT EXISTS load_jobs" in SCHEMA_SQL
@@ -80,6 +81,7 @@ def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
     assert "ent_pt_4326" not in MV_SQL
     assert "idx_juso_text_rn_trgm" in INDEX_SQL
     assert "idx_juso_text_resolve" in INDEX_SQL
+    assert "idx_navi_centroid_sigungu_buld_nm_trgm" in INDEX_SQL
     assert "rncode_full, buld_se_cd, buld_mnnm, buld_slno, bjd_cd, zip_no" in INDEX_SQL
 
 

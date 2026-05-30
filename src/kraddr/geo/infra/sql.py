@@ -165,6 +165,10 @@ CREATE TABLE IF NOT EXISTS tl_navi_buld_centroid (
   buld_slno       INTEGER,
   zip_no          TEXT,
   buld_nm         TEXT,
+  sigungu_buld_nm TEXT,
+  sigungu_buld_nm_nrm TEXT GENERATED ALWAYS AS (
+    regexp_replace(COALESCE(sigungu_buld_nm, ''), '\\s+', '', 'g')
+  ) STORED,
   buld_use        TEXT,
   adm_cd          TEXT,
   adm_kor_nm      TEXT,
@@ -658,6 +662,9 @@ CREATE INDEX IF NOT EXISTS idx_navi_centroid_resolve
   ON tl_navi_buld_centroid (
     rncode_full, buld_se_cd, buld_mnnm, buld_slno, (left(bjd_cd, 8))
   );
+CREATE INDEX IF NOT EXISTS idx_navi_centroid_sigungu_buld_nm_trgm
+  ON tl_navi_buld_centroid USING GIN (sigungu_buld_nm_nrm gin_trgm_ops)
+  WHERE sigungu_buld_nm_nrm IS NOT NULL AND sigungu_buld_nm_nrm <> '';
 CREATE INDEX IF NOT EXISTS idx_navi_entrc_geom
   ON tl_navi_entrc USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_navi_entrc_bd
@@ -772,7 +779,9 @@ best_navi AS (
          buld_mnnm,
          buld_slno,
          left(bjd_cd, 8) AS bjd_emd_cd,
-         centroid_5179
+         centroid_5179,
+         sigungu_buld_nm,
+         sigungu_buld_nm_nrm
     FROM tl_navi_buld_centroid
    WHERE rncode_full IS NOT NULL
      AND bjd_cd IS NOT NULL
@@ -788,6 +797,8 @@ SELECT
   j.buld_se_cd,
   j.buld_nm,
   j.buld_nm_nrm,
+  NULLIF(nc.sigungu_buld_nm, '') AS sigungu_buld_nm,
+  NULLIF(nc.sigungu_buld_nm_nrm, '') AS sigungu_buld_nm_nrm,
   j.bjd_cd,
   j.adm_cd,
   j.adm_kor_nm,
@@ -834,6 +845,9 @@ CREATE INDEX idx_mv_rn_nrm_exact
   ON mv_geocode_target (rn_nrm, bd_mgt_sn);
 CREATE INDEX idx_mv_buld_nm_nrm_exact
   ON mv_geocode_target (buld_nm_nrm, bd_mgt_sn) WHERE buld_nm_nrm IS NOT NULL;
+CREATE INDEX idx_mv_sigungu_buld_nm_nrm_exact
+  ON mv_geocode_target (sigungu_buld_nm_nrm, bd_mgt_sn)
+  WHERE sigungu_buld_nm_nrm IS NOT NULL;
 CREATE INDEX idx_mv_rn_trgm
   ON mv_geocode_target USING GIN (rn_nrm gin_trgm_ops);
 CREATE INDEX idx_mv_buld_nm_trgm
@@ -859,6 +873,7 @@ SELECT
   sgg_nm,
   rn_nrm,
   buld_nm_nrm,
+  sigungu_buld_nm_nrm,
   buld_mnnm,
   pt_source
 FROM mv_geocode_target
@@ -879,6 +894,9 @@ CREATE INDEX idx_mv_text_search_rn_trgm
 CREATE INDEX idx_mv_text_search_buld_nm_trgm
   ON mv_geocode_text_search USING GIN (buld_nm_nrm gin_trgm_ops)
   WHERE buld_nm_nrm IS NOT NULL;
+CREATE INDEX idx_mv_text_search_sigungu_buld_nm_trgm
+  ON mv_geocode_text_search USING GIN (sigungu_buld_nm_nrm gin_trgm_ops)
+  WHERE sigungu_buld_nm_nrm IS NOT NULL;
 """
 
 POSTLOAD_SQL = """

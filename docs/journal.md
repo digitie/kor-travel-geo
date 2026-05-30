@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-30 08:45 (T-065 내비게이션용DB 시군구용건물명 검색 반영)
+
+**작업**: `내비게이션용DB_전체분/match_build_*.txt`의 `시군구용건물명`을 적재·정규화하고 검색 후보에 반영했다.
+
+**반영**:
+- 실제 202604 전국 파일에서 `시군구용건물명`이 20번째 컬럼(`row[19]`)임을 확인했다. non-empty row는 `773,407 / 10,721,310`, distinct 값은 `77,790`개였다.
+- `tl_navi_buld_centroid`에 `sigungu_buld_nm`과 generated column `sigungu_buld_nm_nrm`을 추가하고, loader COPY/upsert 경로에 연결했다.
+- `mv_geocode_target`과 `mv_geocode_text_search`가 `sigungu_buld_nm_nrm`을 포함하도록 확장했다.
+- `/v2/search` exact preflight와 broad trigram fallback에서 `sigungu_buld_nm_nrm`을 점수화한다.
+- 실제 검증 중 shadow swap 후 `ANALYZE` transaction이 기본 statement timeout에 걸려, `shadow_swap_mv()`의 후속 ANALYZE transaction에도 `SET LOCAL statement_timeout = 0`을 추가했다.
+- 두 번째 검증에서는 release metadata 기록 중 `SELECT max(source_yyyymm) FROM tl_navi_buld_centroid`가 기본 statement timeout에 걸려, `record_mv_refresh_release()`에도 운영 작업용 `SET LOCAL statement_timeout = 0`을 추가했다.
+
+**실제 DB 검증**:
+- Docker DB `localhost:15434`에 새 컬럼을 적용하고 NAVI를 재적재했다. 결과는 `tl_navi_buld_centroid=10,687,317`, `tl_navi_entrc=12,830`, 소요 `457초`.
+- `mv_geocode_target`/`mv_geocode_text_search`를 새 컬럼 포함 상태로 재생성했다. 수동 `SET statement_timeout=0` 후 `ANALYZE`는 `12초`에 완료됐다.
+- timeout 보강 뒤 release metadata 기록 경로를 직접 재호출해 active release `7b3455b6-e682-4d16-92f7-65fcad33e219` 생성을 확인했다.
+- 변경 전 `NOT_FOUND`였던 `/v2/search` `엄마집`, `sig_cd=26110`은 부산광역시 중구 영주로 58 후보를 반환했다. 20회 API 측정 p50 `6.03ms`, p95 `7.42ms`.
+- 변경 전 `NOT_FOUND`였던 `/v2/search` `P-101동`, `sig_cd=26110`은 부산광역시 중구 초량상로 13 등 후보 4건을 반환했다. 20회 API 측정 p50 `16.53ms`, p95 `20.12ms`.
+
+**검증**:
+- `pytest tests/unit/test_navi_loader.py tests/unit/test_infra_repo_sql.py tests/unit/test_infra_engine_pnu_sql.py tests/unit/test_alembic_migrations.py -q` → `34 passed`
+- `pytest tests/integration/test_real_juso_text_loaders.py::test_actual_navi_files_load_building_centroid_and_entrance_rows -q` → `1 passed`
+- `ruff check ...` → 통과
+- Docker UI proxy `/api/proxy/v2/search` `엄마집`, `sig_cd=26110` → `OK`
+
 ## 2026-05-30 02:20 (상위 주소 geocode 후보와 내비 검색 후속 문서화)
 
 **작업**: 별도 geocode 경로를 만들지 않고, 상세번호 없는 상위 주소 입력을 기존 `/v2/geocode` 후보 흐름 안에서 처리하도록 보강했다.

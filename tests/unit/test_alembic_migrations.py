@@ -96,3 +96,18 @@ def test_t061_text_search_mv_migration_adds_slim_helper() -> None:
     assert "TEXT_SEARCH_MV_SQL" in migration
     assert "ANALYZE mv_geocode_text_search" in migration
     assert "DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search" in migration
+
+
+def test_t065_navi_name_search_migration_rebuilds_search_helper() -> None:
+    migration = Path("alembic/versions/0014_t065_navi_name_search.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "revision = \"0014_t065_navi_name_search\"" in migration
+    assert "down_revision = \"0013_t061_text_search_mv\"" in migration
+    assert "sigungu_buld_nm" in migration
+    assert "sigungu_buld_nm_nrm" in migration
+    assert "idx_navi_centroid_sigungu_buld_nm_trgm" in migration
+    assert "DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search" in migration
+    assert "SET LOCAL statement_timeout = 0" in migration
+    assert "TEXT_SEARCH_MV_SQL" in migration

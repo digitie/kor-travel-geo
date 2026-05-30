@@ -30,12 +30,8 @@
 
 사용자 지시에 따라 상위 주소 후보 기능은 행정구역 polygon만으로 끝내지 않는다. `내비게이션용DB_전체분`도 검색 품질에 직접 사용해야 하며, 특히 원천의 `시군구용건물명` 칼럼을 검색 후보에 포함해야 한다.
 
-현재 `navi_loader.py`는 건물 중심점과 진입점 좌표를 serving fallback 좌표로 적재하지만, `시군구용건물명`을 검색용 컬럼으로 보존하지 않는다. 후속 작업은 다음 순서로 진행한다.
+T-065에서 이 후속을 구현했다. `navi_loader.py`는 `match_build_*.txt`의 20번째 컬럼을 `sigungu_buld_nm`으로 보존하고, generated column `sigungu_buld_nm_nrm`을 `mv_geocode_target`과 `mv_geocode_text_search`에 전달한다. `v2/search`는 `rn_nrm`/`buld_nm_nrm`뿐 아니라 `sigungu_buld_nm_nrm`도 exact preflight와 broad trigram fallback에서 사용한다.
 
-1. 실제 `match_build_*.txt`의 `시군구용건물명` 컬럼 위치와 값 분포를 전국 파일에서 다시 확인한다.
-2. `tl_navi_buld_centroid` 또는 별도 검색 보조 테이블에 `sigungu_buld_nm`, 정규화 컬럼(`sigungu_buld_nm_nrm`)을 추가한다.
-3. loader가 해당 컬럼을 적재하고, 기존 row dedup 기준과 충돌하지 않게 migration을 작성한다.
-4. `mv_geocode_text_search` 또는 별도 search helper MV에 이 이름을 포함해 `v2/search` 및 상위 주소 geocode 후보 랭킹에 반영한다.
-5. `시군구용건물명` 검색 전후의 recall/latency를 T-047 방식으로 측정하고, 문서에 전후 차이를 기록한다.
+실제 202604 전국 파일 기준 `시군구용건물명` non-empty row는 `773,407 / 10,721,310`건이고 distinct 값은 `77,790`개다. 변경 전 `NOT_FOUND`였던 `엄마집`, `P-101동` + `sig_cd=26110` 검색은 변경 후 후보를 반환한다. 상세한 컬럼 위치, 적재 시간, helper MV 크기, 전후 recall/latency는 `docs/t065-navi-building-name-search.md`에 기록했다.
 
 이 후속은 새 외부 원천을 뜻하지 않는다. 이미 쓰는 `내비게이션용DB_전체분`을 더 완전하게 적재하고 검색 인덱스에 반영하는 작업이다.

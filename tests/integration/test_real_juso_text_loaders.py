@@ -112,6 +112,13 @@ def test_actual_navi_files_load_building_centroid_and_entrance_rows() -> None:
     build = next(
         iter_navi_build_rows(build_sources["match_build_seoul.txt"], source_yyyymm="202604")
     )
+    build_with_sigungu_name = next(
+        row
+        for row in iter_navi_build_rows(
+            build_sources["match_build_seoul.txt"], source_yyyymm="202604"
+        )
+        if row.sigungu_buld_nm
+    )
     entrance = next(
         iter_navi_entrance_rows(entrance_sources["match_rs_entrc.txt"], source_yyyymm="202604")
     )
@@ -123,6 +130,7 @@ def test_actual_navi_files_load_building_centroid_and_entrance_rows() -> None:
     assert build.centroid_y == pytest.approx(1954025.806161)
     assert build.entrance_x == pytest.approx(953241.683263)
     assert build.entrance_y == pytest.approx(1954023.466812)
+    assert build_with_sigungu_name.sigungu_buld_nm == "에이동"
     assert entrance.sig_cd == "11110"
     assert entrance.entry_no == 1331
     assert entrance.kind == "navi"

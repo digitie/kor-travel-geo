@@ -20,6 +20,7 @@ KIND_CODE_MAP = {
     "02": "vehicle",
     "03": "parcel",
 }
+SIGUNGU_BULD_NM_INDEX = 19
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,7 @@ class NaviBuildingRow:
     zip_no: str | None
     bd_mgt_sn: str
     buld_nm: str | None
+    sigungu_buld_nm: str | None
     buld_use: str | None
     adm_cd: str | None
     adm_kor_nm: str | None
@@ -101,6 +103,9 @@ def parse_navi_build_row(
         zip_no=row[9] or None,
         bd_mgt_sn=bd_mgt_sn,
         buld_nm=row[11] or None,
+        sigungu_buld_nm=(row[SIGUNGU_BULD_NM_INDEX] or None)
+        if len(row) > SIGUNGU_BULD_NM_INDEX
+        else None,
         buld_use=row[12] or None,
         adm_cd=row[13] or None,
         adm_kor_nm=row[14] or None,
@@ -263,7 +268,7 @@ CREATE TEMP TABLE _navi_build_staging (
                 """
 COPY _navi_build_staging
 (bd_mgt_sn, bjd_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, sig_cd, rn_cd, rn, buld_se_cd,
- buld_mnnm, buld_slno, zip_no, buld_nm, buld_use, adm_cd, adm_kor_nm,
+ buld_mnnm, buld_slno, zip_no, buld_nm, sigungu_buld_nm, buld_use, adm_cd, adm_kor_nm,
  centroid_5179, source_file, source_yyyymm)
 FROM STDIN
 """
@@ -286,6 +291,7 @@ FROM STDIN
                             build_row.buld_slno,
                             build_row.zip_no,
                             build_row.buld_nm,
+                            build_row.sigungu_buld_nm,
                             build_row.buld_use,
                             build_row.adm_cd,
                             build_row.adm_kor_nm,
@@ -299,11 +305,11 @@ FROM STDIN
                 """
 INSERT INTO tl_navi_buld_centroid AS t (
   bd_mgt_sn, bjd_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, sig_cd, rn_cd, rn, buld_se_cd,
-  buld_mnnm, buld_slno, zip_no, buld_nm, buld_use, adm_cd, adm_kor_nm,
+  buld_mnnm, buld_slno, zip_no, buld_nm, sigungu_buld_nm, buld_use, adm_cd, adm_kor_nm,
   centroid_5179, source_file, source_yyyymm
 )
 SELECT bd_mgt_sn, bjd_cd, ctp_kor_nm, sig_kor_nm, emd_kor_nm, sig_cd, rn_cd, rn, buld_se_cd,
-       buld_mnnm, buld_slno, zip_no, buld_nm, buld_use, adm_cd, adm_kor_nm,
+       buld_mnnm, buld_slno, zip_no, buld_nm, sigungu_buld_nm, buld_use, adm_cd, adm_kor_nm,
        centroid_5179, source_file, source_yyyymm
   FROM _navi_build_staging
 ON CONFLICT (bd_mgt_sn) DO UPDATE SET
@@ -319,6 +325,7 @@ ON CONFLICT (bd_mgt_sn) DO UPDATE SET
   buld_slno = EXCLUDED.buld_slno,
   zip_no = EXCLUDED.zip_no,
   buld_nm = EXCLUDED.buld_nm,
+  sigungu_buld_nm = EXCLUDED.sigungu_buld_nm,
   buld_use = EXCLUDED.buld_use,
   adm_cd = EXCLUDED.adm_cd,
   adm_kor_nm = EXCLUDED.adm_kor_nm,
