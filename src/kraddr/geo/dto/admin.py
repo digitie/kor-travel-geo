@@ -74,6 +74,13 @@ class TableStat(FrozenModel):
     updated_at: str | None = None
 
 
+class BackupAllowedDirs(FrozenModel):
+    """Server-side allowlist of directories usable for backup output."""
+
+    dirs: tuple[str, ...] = ()
+    default_dir: str | None = None
+
+
 class UploadSidoZipResponse(FrozenModel):
     upload_id: str
     filename: str

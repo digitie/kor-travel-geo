@@ -453,6 +453,33 @@
         "title": "BBoxV2",
         "type": "object"
       },
+      "BackupAllowedDirs": {
+        "additionalProperties": false,
+        "description": "Server-side allowlist of directories usable for backup output.",
+        "properties": {
+          "default_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Dir"
+          },
+          "dirs": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Dirs",
+            "type": "array"
+          }
+        },
+        "title": "BackupAllowedDirs",
+        "type": "object"
+      },
       "BackupArtifact": {
         "additionalProperties": false,
         "properties": {
@@ -6581,6 +6608,27 @@
           }
         },
         "summary": "Submit Backup",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/backups/allowed-dirs": {
+      "get": {
+        "operationId": "backup_allowed_dirs_v1_admin_backups_allowed_dirs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupAllowedDirs"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Backup Allowed Dirs",
         "tags": [
           "admin"
         ]

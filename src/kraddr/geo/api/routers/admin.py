@@ -22,6 +22,7 @@ from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.core.normalize import parse_address
 from kraddr.geo.dto.admin import (
     AuditEvent,
+    BackupAllowedDirs,
     BackupArtifact,
     BackupCreateRequest,
     CacheMetrics,
@@ -317,6 +318,17 @@ async def submit_backup(
         **_audit_request(request),
     )
     return status
+
+
+@router.get(
+    "/backups/allowed-dirs",
+    response_model=BackupAllowedDirs,
+    response_model_exclude_none=True,
+)
+async def backup_allowed_dirs() -> BackupAllowedDirs:
+    settings = get_settings()
+    dirs = tuple(str(path) for path in settings.backup_allowed_dirs)
+    return BackupAllowedDirs(dirs=dirs, default_dir=dirs[0] if dirs else None)
 
 
 @router.get("/backups", response_model=list[BackupArtifact], response_model_exclude_none=True)
