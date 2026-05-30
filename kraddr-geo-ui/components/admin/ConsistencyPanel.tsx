@@ -60,6 +60,13 @@ type SampleFilters = {
 
 const PAGE_SIZE = 50;
 
+// Stable empty reference so `samples` doesn't get a brand-new array on every render
+// while the samples query is loading. Passing a fresh `[]` into useReactTable on each
+// render makes TanStack Table's auto-reset fire a state update every render, which spins
+// React into an infinite re-render loop that pins the main thread and freezes the tab
+// (notably when switching cases C1~C10, whose refetch leaves the data briefly undefined).
+const EMPTY_SAMPLES: ConsistencyCaseSample[] = [];
+
 export function ConsistencyPanel({ initialReportId = null }: { initialReportId?: string | null }) {
   const queryClient = useQueryClient();
   const [selectedReportId, setSelectedReportId] = useState<string | null>(initialReportId);
@@ -145,7 +152,10 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
 
   const selectedCase = reportQuery.data?.cases.find((item) => item.code === selectedCaseCode);
   const selectedDefinition = definitionsByCode.get(selectedCaseCode);
-  const samples = samplesQuery.data?.items ?? [];
+  const samples = useMemo(
+    () => samplesQuery.data?.items ?? EMPTY_SAMPLES,
+    [samplesQuery.data]
+  );
   const selectedSample = samples.find((sample) => sample.sample_id === selectedSampleId) ?? null;
 
   const runMutation = useMutation({
