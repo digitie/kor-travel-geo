@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-30 10:10 (T-066 Consistency 탭 진입 프리즈 완화)
+
+**작업**: `/admin/consistency` 진입 시 브라우저 탭이 멈추는 현상을 우선 확인하고, 초기 렌더에서 무거운 지도 컴포넌트가 자동 로드되지 않도록 수정했다.
+
+**반영**:
+- 백엔드 consistency list/detail/sample/summary API는 Docker DB 기준 모두 정상 응답함을 확인했다.
+- 기존 UI는 sample을 고르기 전에도 첫 `point` 샘플을 자동으로 지도에 넣어 `LazyCoordinateMap`과 MapLibre/VWorld 타일 요청을 즉시 시작했다.
+- `selectedSampleId`가 없으면 `selectedSample=null`로 유지하고, sample 선택 전에는 지도 대신 가벼운 placeholder를 표시한다.
+- `tests/unit/consistency-panel.test.tsx`를 추가해 샘플 목록 로드만으로는 `LazyCoordinateMap`이 호출되지 않고, 사용자가 sample을 클릭한 뒤에만 지도 컴포넌트가 로드되는지 고정했다.
+
+**검증**:
+- `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run test -- consistency-panel consistency` → `2 passed`, `4 tests`
+- WSL Playwright headless Chromium은 `libasound.so.2` 누락으로 실행하지 못했다. 최종 브라우저 회귀는 사용자가 지정한 Windows Playwright 환경에서 확인한다.
+
 ## 2026-05-30 08:45 (T-065 내비게이션용DB 시군구용건물명 검색 반영)
 
 **작업**: `내비게이션용DB_전체분/match_build_*.txt`의 `시군구용건물명`을 적재·정규화하고 검색 후보에 반영했다.
