@@ -69,7 +69,9 @@ const EMPTY_SAMPLES: ConsistencyCaseSample[] = [];
 
 export function ConsistencyPanel({ initialReportId = null }: { initialReportId?: string | null }) {
   const queryClient = useQueryClient();
-  const [selectedReportId, setSelectedReportId] = useState<string | null>(initialReportId);
+  // `null` = no explicit user pick yet; the effective id falls back to the
+  // `initialReportId` prop and then the first report (derived below).
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [filters, setFilters] = useState<SampleFilters>({
     severity: "",
     decision: "unreviewed",
@@ -97,16 +99,21 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
     queryKey: ["consistency-case-definitions"],
     queryFn: () => requestJson<ConsistencyCaseDefinition[]>("/admin/consistency/case-definitions")
   });
+  // Effective selection: the user's explicit pick, otherwise the initial prop,
+  // otherwise the first report. Derived during render (no effect + setState).
+  const effectiveReportId =
+    selectedReportId ?? initialReportId ?? reportsQuery.data?.[0]?.report_id ?? null;
+
   const reportQuery = useQuery({
-    queryKey: ["consistency-report", selectedReportId],
-    queryFn: () => requestJson<ConsistencyReport>(`/admin/consistency/${selectedReportId}`),
-    enabled: selectedReportId !== null
+    queryKey: ["consistency-report", effectiveReportId],
+    queryFn: () => requestJson<ConsistencyReport>(`/admin/consistency/${effectiveReportId}`),
+    enabled: effectiveReportId !== null
   });
   const samplesPath = useMemo(
     () =>
-      selectedReportId
+      effectiveReportId
         ? consistencySamplesPath({
-            reportId: selectedReportId,
+            reportId: effectiveReportId,
             caseCode: selectedCaseCode,
             severity: filters.severity || undefined,
             decision: filters.decision || undefined,
@@ -117,7 +124,7 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
             pageSize: PAGE_SIZE
           })
         : null,
-    [filters, selectedCaseCode, selectedReportId]
+    [filters, selectedCaseCode, effectiveReportId]
   );
   const samplesQuery = useQuery({
     queryKey: ["consistency-samples", samplesPath],
@@ -125,19 +132,13 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
     enabled: samplesPath !== null
   });
   const summaryQuery = useQuery({
-    queryKey: ["consistency-summary", selectedReportId, selectedCaseCode],
+    queryKey: ["consistency-summary", effectiveReportId, selectedCaseCode],
     queryFn: () =>
       requestJson<ConsistencyCaseSummary>(
-        `/admin/consistency/${selectedReportId}/cases/${selectedCaseCode}/summary`
+        `/admin/consistency/${effectiveReportId}/cases/${selectedCaseCode}/summary`
       ),
-    enabled: selectedReportId !== null
+    enabled: effectiveReportId !== null
   });
-
-  useEffect(() => {
-    if (!selectedReportId && reportsQuery.data?.[0]) {
-      setSelectedReportId(reportsQuery.data[0].report_id);
-    }
-  }, [reportsQuery.data, selectedReportId]);
 
   useEffect(() => {
     const cases = reportQuery.data?.cases ?? [];
@@ -168,7 +169,7 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
 
   const decisionMutation = useMutation({
     mutationFn: (form: DecisionForm) => submitDecision(form, {
-      reportId: selectedReportId,
+      reportId: effectiveReportId,
       caseCode: selectedCaseCode,
       sampleId: selectedSampleId,
       sampleIds: selectedSampleIds
@@ -185,10 +186,15 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
   const recheckMutation = useMutation({
     mutationFn: () =>
       postJson<ConsistencySampleRecheckResponse>(
-        `/admin/consistency/${selectedReportId}/cases/${selectedCaseCode}/samples/${selectedSampleId}/recheck`,
+        `/admin/consistency/${effectiveReportId}/cases/${selectedCaseCode}/samples/${selectedSampleId}/recheck`,
         {}
       ),
-    onSuccess: (data) => setLastRun(data)
+    onSuccess: (data) => {
+      setLastRun(data);
+      // Re-checking a sample can change its decision/metrics — refresh the views.
+      void queryClient.invalidateQueries({ queryKey: ["consistency-samples"] });
+      void queryClient.invalidateQueries({ queryKey: ["consistency-summary"] });
+    }
   });
 
   const columns = useSampleColumns({
@@ -206,10 +212,10 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
   });
 
   const csvHref =
-    selectedReportId !== null
+    effectiveReportId !== null
       ? `${API_BASE}${backendPath(
           consistencySamplesPath({
-            reportId: selectedReportId,
+            reportId: effectiveReportId,
             caseCode: selectedCaseCode,
             severity: filters.severity || undefined,
             decision: filters.decision || undefined,
@@ -247,7 +253,7 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
         <div className="report-list">
           {(reportsQuery.data ?? []).map((report) => (
             <Link
-              className={report.report_id === selectedReportId ? "report-row active" : "report-row"}
+              className={report.report_id === effectiveReportId ? "report-row active" : "report-row"}
               href={`/admin/consistency/${report.report_id}`}
               key={report.report_id}
               onClick={() => setSelectedReportId(report.report_id)}
@@ -393,6 +399,7 @@ function useSampleColumns({
         header: "",
         cell: ({ row }) => (
           <input
+            aria-label={`표본 #${row.original.sample_rank + 1} 선택`}
             checked={selectedSampleIds.includes(row.original.sample_id)}
             onChange={() => onToggle(row.original.sample_id)}
             type="checkbox"
@@ -493,6 +500,7 @@ function FilterToolbar({
   return (
     <div className="filter-bar">
       <select
+        aria-label="심각도 필터"
         onChange={(event) => onChange({ ...filters, severity: event.target.value, page: 1 })}
         value={filters.severity}
       >
@@ -503,6 +511,7 @@ function FilterToolbar({
         <option value="OK">정상 (OK)</option>
       </select>
       <select
+        aria-label="판정 필터"
         onChange={(event) => onChange({ ...filters, decision: event.target.value, page: 1 })}
         value={filters.decision}
       >
@@ -513,12 +522,14 @@ function FilterToolbar({
         <option value="deferred">보류</option>
       </select>
       <input
+        aria-label="시군구코드 필터"
         maxLength={5}
         onChange={(event) => onChange({ ...filters, sigCd: event.target.value, page: 1 })}
         placeholder="시군구코드 (예: 41465)"
         value={filters.sigCd}
       />
       <select
+        aria-label="정렬 기준"
         onChange={(event) => onChange({ ...filters, orderBy: event.target.value, page: 1 })}
         value={filters.orderBy}
       >
