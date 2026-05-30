@@ -7,10 +7,10 @@
 ```bash
 npm install
 npm run gen:types
-npm run dev
+npm run dev -- --port 13088
 ```
 
-기본 진입점은 `/debug/geocode`다. `KRADDR_GEO_API_INTERNAL_URL`은 서버 사이드 프록시가 사용할 백엔드 주소이고, 브라우저는 `NEXT_PUBLIC_API_BASE_URL` 기본값인 `/api/proxy`만 호출한다. 지오코딩/역지오코딩 디버그 화면은 `/v2/geocode`, `/v2/reverse` REST API를 사용하며, 관리·정규화·EXPLAIN 화면은 아직 `/v1/admin/*` 운영 API를 사용한다.
+기본 진입점은 `/debug/geocode`이며 공식 로컬 UI 포트는 `13088`이다. `KRADDR_GEO_API_INTERNAL_URL`은 서버 사이드 프록시가 사용할 백엔드 주소이고, 브라우저는 `NEXT_PUBLIC_API_BASE_URL` 기본값인 `/api/proxy`만 호출한다. 지오코딩/역지오코딩 디버그 화면은 `/v2/geocode`, `/v2/reverse` REST API를 사용하며, 관리·정규화·EXPLAIN 화면은 아직 `/v1/admin/*` 운영 API를 사용한다.
 
 `NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다. 실행 중에는 `/api/runtime-config`가 `.env.local` 또는 컨테이너 환경변수의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽어 브라우저에 전달한다. `/admin/settings`에서 VWorld 인증키를 입력하면 브라우저 localStorage override로 저장되고, 기본값 버튼을 누르면 `.env` 기본값으로 되돌아간다.
 
@@ -27,7 +27,7 @@ npm run test
 npm run build
 ```
 
-브라우저 e2e는 Playwright로 수행한다. 사용자 지시에 따라 실제 실행은 Windows Node/브라우저 환경에서 한다. Docker UI를 `13088` 포트에 띄운 뒤 Windows 터미널에서 다음처럼 실행한다.
+브라우저 e2e는 Playwright로 수행하되 Windows Node/브라우저 환경에서만 실행한다. WSL에서는 `npm run test:e2e`나 `npx playwright test`를 실행하지 않는다. Docker UI 또는 로컬 dev server를 `13088` 포트에 띄운 뒤 Windows 터미널에서 다음처럼 실행한다.
 
 ```bat
 set PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088
@@ -47,13 +47,13 @@ docker run --rm \
   -e KRADDR_GEO_API_INTERNAL_URL=http://host.docker.internal:8000 \
   -e NEXT_PUBLIC_API_BASE_URL=/api/proxy \
   -e NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key \
-  -p 3000:3000 \
+  -p 13088:3000 \
   kraddr-geo-ui:debug-v2
 ```
 
 저장소 루트의 `scripts/frontend_check.sh`는 Windows `npm`이 PATH에 잡힌 경우 즉시 실패하고, Linux Node/npm에서 `gen:types`, lint, type-check, unit test, build를 순서대로 실행한다. 의존성을 새로 받는 검증이면 `scripts/frontend_check.sh --install`을 사용한다.
 
-Playwright와 실제 브라우저 렌더링 검증은 사용자 지시에 따라 Windows Node/브라우저 환경에서 수행한다. PR에는 Windows에서 실행한 명령과 브라우저를 함께 남긴다.
+Playwright와 실제 브라우저 렌더링 검증은 Windows Node/브라우저 환경에서만 수행한다. WSL headless Chromium은 공유 라이브러리 누락으로 반복 실패하므로 사용하지 않는다. PR에는 Windows에서 실행한 명령과 브라우저를 함께 남긴다.
 
 ## 범위
 

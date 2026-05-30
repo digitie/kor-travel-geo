@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-31 08:15 (PR #97~#102 리뷰 감사, C1~C10 가로 탭, 포트 공식화)
+
+**작업**: PR #97부터 최신 PR #102까지 상세 리뷰 표면을 확인하고, `/admin/consistency`의 C1~C10 case 선택 UX와 로컬 포트 정책을 정리했다.
+
+**반영**:
+- `gh pr view`와 GraphQL `reviewThreads`로 PR #97~#102를 확인했고 unresolved review thread는 전부 0건이었다. PR #98은 #97과 중복되어 close된 상태라 별도 반영 대상이 없었다. 상세 기록은 `docs/postmerge-review-fixups-pr97-pr102.md`에 남겼다.
+- `/admin/consistency`의 세로 case rail을 `role=tablist` 기반 가로 스크롤 탭으로 바꿨다. C1~C10은 표본 분석 영역 위에서 좌우 스크롤로 선택하며, 선택 case는 `aria-selected`와 `tabpanel`로 연결된다.
+- consistency unit/e2e mock을 C1~C10 전체로 확장하고, C10 탭 존재와 선택 탭 상태를 회귀 테스트로 고정했다.
+- 공식 로컬 포트를 PostgreSQL `15434`, FastAPI `8000`, UI `13088`로 문서화했다. `.env.example`, `docker-compose.yml`, README, `kraddr-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`, ADR-040을 갱신했다.
+- Playwright e2e는 Windows Node/브라우저에서만 실행한다고 문서화했다. WSL에서는 반복적으로 `libasound.so.2` 누락이 발생하므로 `npm run test:e2e`를 실행하지 않는다.
+
+**검증**:
+- `npm run lint` → 통과
+- `npm run type-check` → 통과
+- `npm run test -- consistency-panel` → `3 passed`
+- `npm run test` → `36 passed`
+- `npm run build` → 통과
+- `git diff --check` → 통과
+- 공식 UI 포트 `13088` dev server에서 `/admin/consistency` HTML에 `case-tab-list`가 포함됨을 확인했다.
+- WSL Playwright는 `libasound.so.2` 누락으로 실패했다. 이 경로는 더 이상 검증 루틴으로 쓰지 않는다.
+
 ## 2026-05-31 01:10 (에이전트별 MCP 설정 추가)
 
 **작업**: Claude Code, GPT Codex, Antigravity 에이전트의 로컬 설정 파일에 `playwright` 및 `sequential-thinking` MCP 서버를 추가했다.

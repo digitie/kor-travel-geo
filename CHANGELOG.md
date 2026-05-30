@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Changed
+- `/admin/consistency`의 C1~C10 case 선택을 세로 rail에서 가로 스크롤 탭으로 바꿨다. 탭은 `tablist/tab` 접근성 구조를 갖고, 표본 분석 영역 위에서 같은 흐름으로 case를 전환한다.
+- PC/WSL 개발 환경의 공식 로컬 포트를 DB `15434`, 백엔드 `8000`, UI `13088`로 고정하고 문서와 예시 설정을 갱신했다. Playwright e2e는 Windows Node/브라우저에서만 실행하도록 문서화했다.
 - `/v2/geocode`에 `include_geometry` 옵션을 추가했다. 옵션을 켜면 기존 후보 `point`는 유지하고 행정구역 polygon, 도로 line, 건물 polygon을 `geometry`/`bbox`로 함께 반환한다. 디버그 UI는 기본으로 이 옵션을 켜고, 응답 JSON을 입력 아래에 두며 지도를 더 크게 표시한다.
 - **(BREAKING)** Python 라이브러리 주소 조회 표면을 v2 candidate schema로 단일화했다. `AsyncAddressClient.geocode()`, `reverse()`, `search()`가 각각 `GeocodeV2Response`, `ReverseV2Response`, `SearchV2Response`를 반환하며, 공개 API에서 `geocode_v2()`, `reverse_v2()`, `search_v2()`, `reverse_geocode()`를 제거했다. REST `/v1/*`의 vworld 호환 응답은 내부 adapter로 유지한다.
 - 디버그 UI의 geocode/reverse 화면을 `/v2/geocode`, `/v2/reverse` POST 기반으로 전환했다. proxy는 `/v1/*`와 `/v2/*`를 모두 허용하며, Windows Playwright e2e 6개로 v2 요청 body와 입력 검증을 고정한다.

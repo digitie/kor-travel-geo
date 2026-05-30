@@ -267,26 +267,40 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
 
       <Panel title={reportQuery.data?.report_id ?? "Report"}>
         <div className="consistency-workbench">
-          <aside className="case-rail">
-            {(reportQuery.data?.cases ?? []).map((item) => (
-              <button
-                className={item.code === selectedCaseCode ? "case-button active" : "case-button"}
-                key={item.code}
-                onClick={() => {
-                  setSelectedCase(item.code);
-                  setFilters((current) => ({ ...current, page: 1 }));
-                }}
-                type="button"
-              >
-                <strong>{item.code}</strong>
-                <span>{item.name}</span>
-                <StatusBadge value={item.severity} />
-                <small>{item.count.toLocaleString()}건</small>
-              </button>
-            ))}
-          </aside>
+          <nav aria-label="정합성 케이스 선택" className="case-tabs">
+            <div aria-label="정합성 케이스" aria-orientation="horizontal" className="case-tab-list" role="tablist">
+              {(reportQuery.data?.cases ?? []).map((item) => {
+                const isSelected = item.code === selectedCaseCode;
+                return (
+                  <button
+                    aria-controls="consistency-case-panel"
+                    aria-selected={isSelected}
+                    className={isSelected ? "case-tab active" : "case-tab"}
+                    id={`case-tab-${item.code}`}
+                    key={item.code}
+                    onClick={() => {
+                      setSelectedCase(item.code);
+                      setFilters((current) => ({ ...current, page: 1 }));
+                    }}
+                    role="tab"
+                    type="button"
+                  >
+                    <strong>{item.code}</strong>
+                    <span>{item.name}</span>
+                    <StatusBadge value={item.severity} />
+                    <small>{item.count.toLocaleString()}건</small>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
 
-          <section className="analysis-pane">
+          <section
+            aria-labelledby={`case-tab-${selectedCaseCode}`}
+            className="analysis-pane"
+            id="consistency-case-panel"
+            role="tabpanel"
+          >
             <CriteriaPanel
               definition={selectedDefinition}
               caseCount={selectedCase?.count ?? 0}

@@ -1933,3 +1933,42 @@ ADR-038은 REST 표면을 `/v1/*`와 `/v2/*`로 분리하면서 Python 라이브
 
 - 기존 Python 사용자가 vworld 호환 `GeocodeResponse`/`ReverseResponse`를 직접 기대했다면 호환성 깨짐이다. 현재 master는 아직 1.0 안정 릴리스 전이므로 전환 비용을 감수한다.
 - 내부 v1 어댑터를 테스트하지 않으면 REST v1 회귀를 놓칠 수 있으므로 v1 라우터 테스트와 OpenAPI drift 검사를 계속 유지한다.
+
+
+---
+
+## ADR-040: PC/WSL 개발 환경의 로컬 포트를 고정한다
+
+- 상태: accepted
+- 날짜: 2026-05-31
+- 결정자: 사용자 요청, codex
+
+### 컨텍스트
+
+같은 PC에서 여러 Docker/Next.js 프로젝트가 동시에 떠 있다. PostgreSQL 기본 포트 `5432`와 Next.js 기본 포트 `3000`을 이 저장소의 외부 진입점으로 쓰면 기존 서비스와 충돌하고, 검증 로그마다 `15432`, `15434`, `3000`, `13088` 같은 값이 섞여 후속 재현성이 떨어진다.
+
+### 결정
+
+PC/WSL 개발 환경의 공식 host 포트를 다음으로 고정한다.
+
+1. PostgreSQL + PostGIS: host `15434`, container `5432`.
+2. FastAPI 백엔드: host `8000`.
+3. `kraddr-geo-ui`: host `13088`, Next.js 내부/container `3000`.
+
+`docker-compose.yml`의 기본 `KRADDR_GEO_DB_PORT`는 `15434`로 둔다. `3000`은 Next.js 내부 포트로만 설명하고, 브라우저/e2e 진입점은 `http://127.0.0.1:13088`로 문서화한다.
+
+### 근거
+
+- 현재 실제 T-027 최종 DB 컨테이너가 `15434:5432`로 떠 있고, UI e2e 기준 URL도 `13088`이다.
+- host `5432`와 `3000`은 다른 로컬 프로젝트가 자주 사용한다.
+- 포트를 문서와 예시에서 고정해야 DB/API/UI를 재시작하거나 PR 검증을 인계할 때 혼선을 줄일 수 있다.
+
+### 결과
+
+- `.env.example`, `docker-compose.yml`, README, `kraddr-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`가 같은 포트 표를 따른다.
+- 기존 로컬 `.env`나 compose override가 있으면 계속 우선한다.
+
+### 남은 위험
+
+- 과거 문서의 실측 로그에는 `15432` 같은 이전 포트가 남아 있다. 이는 당시 산출물 재현 정보를 보존하기 위한 기록이므로 일괄 변경하지 않는다.
+- 운영 배포 포트는 이 ADR 대상이 아니다. 운영은 reverse proxy/systemd/docker compose 운영 파일에서 별도 결정한다.
