@@ -146,9 +146,7 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
   const selectedCase = reportQuery.data?.cases.find((item) => item.code === selectedCaseCode);
   const selectedDefinition = definitionsByCode.get(selectedCaseCode);
   const samples = samplesQuery.data?.items ?? [];
-  const selectedSample = selectedSampleId
-    ? samples.find((sample) => sample.sample_id === selectedSampleId) ?? null
-    : null;
+  const selectedSample = samples.find((sample) => sample.sample_id === selectedSampleId) ?? null;
 
   const runMutation = useMutation({
     mutationFn: () => postJson<LoadJobStatus>("/admin/consistency/run", { scope: "full" }),
