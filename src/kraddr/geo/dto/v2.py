@@ -14,6 +14,7 @@ V2Source = Literal["local", "vworld", "juso", "cache"]
 V2MatchKind = Literal["road", "parcel", "postal", "keyword", "category", "region", "sppn"]
 V2FallbackMode = Literal["none", "api"]
 V2PointPrecision = Literal["exact", "interpolated", "centroid", "approximate"]
+V2GeometryKind = Literal["building", "region", "road"]
 
 
 class BBoxV2(FrozenModel):
@@ -65,6 +66,13 @@ class PlaceV2(FrozenModel):
     url: str | None = None
 
 
+class GeometryV2(FrozenModel):
+    kind: V2GeometryKind
+    crs: CRS = "EPSG:4326"
+    geojson: dict[str, Any]
+    source_table: str | None = None
+
+
 class CandidateV2(FrozenModel):
     confidence: float = Field(ge=0.0, le=1.0)
     match_kind: V2MatchKind
@@ -73,6 +81,7 @@ class CandidateV2(FrozenModel):
     point_precision: V2PointPrecision | None = None
     distance_m: float | None = Field(default=None, ge=0.0)
     bbox: BBoxV2 | None = None
+    geometry: GeometryV2 | None = None
     region: RegionV2 | None = None
     place: PlaceV2 | None = None
     source: V2Source = "local"
@@ -89,6 +98,7 @@ class GeocodeV2Input(FrozenModel):
     bbox: BBoxV2 | None = None
     limit: int = Field(default=10, ge=1, le=100)
     fallback: V2FallbackMode = "none"
+    include_geometry: bool = False
 
     @model_validator(mode="after")
     def require_query_surface(self) -> GeocodeV2Input:

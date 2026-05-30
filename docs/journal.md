@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-30 11:45 (T-067 v2 geocode point+geometry overlay)
+
+**작업**: `/v2/geocode`와 디버그 UI에서 기존 대표점(`point`)을 유지하면서 행정구역/도로/건물 도형을 함께 확인할 수 있도록 보강했다.
+
+**반영**:
+- `GeocodeV2Input.include_geometry`와 `CandidateV2.geometry`/`GeometryV2`를 추가했다. 기본값은 `false`이며, 디버그 UI는 기본으로 `true`를 보낸다.
+- 건물 주소는 기존 geocode 후보의 `point`를 그대로 유지하고 `tl_spbd_buld_polygon` polygon을 추가한다. `bd_mgt_sn` 직접 lookup이 실패하면 `rncode_full + bjd_cd + 건물번호` natural key로 도형을 찾는다.
+- 상세번호 없는 도로명 입력은 district fallback 전에 `tl_sprd_manage` 도로 line 후보를 먼저 반환한다.
+- 행정구역 후보는 `tl_scco_ctprvn/sig/emd/li` 도형을 후보에 붙인다.
+- `/debug/geocode`와 `/debug/reverse`는 응답 JSON을 입력 아래에 두고, 지도 패널을 크게 분리했다. `CoordinateMap`은 point marker와 GeoJSON overlay를 동시에 표시하며, viewport는 `bbox`와 `point`를 함께 포함한다.
+
+**실제 DB 확인**:
+- `성복동` → `match_kind=region`, point `(127.05932949615165, 37.319558336433374)`, `geometry=region/MultiPolygon`
+- `성복1로` → `match_kind=road`, point `(127.0610437873178, 37.32091740399021)`, `geometry=road/MultiLineString`
+- `성복1로 35` → 기존 point `(127.07430262108355, 37.31347098160811)` 유지, `geometry=building/MultiPolygon`
+
+**검증**:
+- `pytest tests/unit/test_v2_api.py -q` → `10 passed`
+- `ruff check ...` → 통과
+- `mypy --strict src/kraddr/geo/dto/v2.py src/kraddr/geo/core/protocols.py src/kraddr/geo/core/v2.py src/kraddr/geo/infra/geometry_repo.py src/kraddr/geo/client.py src/kraddr/geo/api/routers/v2.py` → 통과
+- `npm run gen:types`, `npm run lint`, `npm run type-check`, `npm run test` → 통과
+
 ## 2026-05-30 10:10 (T-066 Consistency 탭 진입 프리즈 완화)
 
 **작업**: `/admin/consistency` 진입 시 브라우저 탭이 멈추는 현상을 우선 확인하고, 초기 렌더에서 무거운 지도 컴포넌트가 자동 로드되지 않도록 수정했다.

@@ -1148,6 +1148,7 @@ export interface components {
             confidence: number;
             /** Distance M */
             distance_m?: number | null;
+            geometry?: components["schemas"]["GeometryV2"] | null;
             /**
              * Match Kind
              * @enum {string}
@@ -1632,6 +1633,11 @@ export interface components {
              * @enum {string}
              */
             fallback: "none" | "api";
+            /**
+             * Include Geometry
+             * @default false
+             */
+            include_geometry: boolean;
             /** Jibun Address */
             jibun_address?: string | null;
             /** Keyword */
@@ -1660,6 +1666,22 @@ export interface components {
             query_id?: string;
             region_hint_applied?: components["schemas"]["RegionHint"] | null;
             status: components["schemas"]["Status"];
+        };
+        /** GeometryV2 */
+        GeometryV2: {
+            /** @default EPSG:4326 */
+            crs: components["schemas"]["CRS"];
+            /** Geojson */
+            geojson: {
+                [key: string]: unknown;
+            };
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "building" | "region" | "road";
+            /** Source Table */
+            source_table?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {

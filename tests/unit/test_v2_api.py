@@ -14,9 +14,11 @@ from kraddr.geo.dto.common import Point, ServiceMeta
 from kraddr.geo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
 from kraddr.geo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
 from kraddr.geo.dto.v2 import (
+    BBoxV2,
     CandidateV2,
     GeocodeV2Input,
     GeocodeV2Response,
+    GeometryV2,
     RegionV2,
     ReverseV2Input,
     SearchV2Input,
@@ -75,11 +77,58 @@ async def test_async_client_geocode_wraps_internal_v1_geocode(
 
 
 @pytest.mark.asyncio
+async def test_async_client_geocode_can_add_geometry_without_replacing_point(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kraddr.geo.core.protocols import GeometryLookup
+    from kraddr.geo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        return _v1_geocode_response(GeocodeInput(address=address))
+
+    async def fake_building_geometry(self: GeometryRepository, **kwargs: Any) -> GeometryLookup:
+        assert kwargs["bd_mgt_sn"] == "1168010100108250000028924"
+        assert kwargs["rncode_full"] == "116803122001"
+        return GeometryLookup(
+            kind="building",
+            geometry=GeometryV2(
+                kind="building",
+                source_table="tl_spbd_buld_polygon",
+                geojson={
+                    "type": "MultiPolygon",
+                    "coordinates": [[[[127.0, 37.0], [127.1, 37.0], [127.1, 37.1], [127.0, 37.0]]]],
+                },
+            ),
+            bbox=BBoxV2(min_lon=127.0, min_lat=37.0, max_lon=127.1, max_lat=37.1),
+        )
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "building_geometry", fake_building_geometry)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(
+        query="서울특별시 강남구 테헤란로 152",
+        include_geometry=True,
+    )
+
+    candidate = response.candidates[0]
+    assert candidate.point == Point(x=127.036, y=37.501)
+    assert candidate.geometry is not None
+    assert candidate.geometry.kind == "building"
+    assert candidate.bbox is not None
+
+
+@pytest.mark.asyncio
 async def test_async_client_geocode_promotes_region_only_input_to_candidates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from kraddr.geo.infra.geometry_repo import GeometryRepository
+
     async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
         raise InvalidAddressError("address number could not be parsed")
+
+    async def fake_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        return []
 
     async def fake_search(self: AsyncAddressClient, **kwargs: Any) -> SearchV2Response:
         assert kwargs["query"] == "수지구"
@@ -100,6 +149,7 @@ async def test_async_client_geocode_promotes_region_only_input_to_candidates(
 
     monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
     monkeypatch.setattr(AsyncAddressClient, "search", fake_search)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", fake_road_geometries)
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
 
     response = await client.geocode(road_address="수지구")
@@ -111,10 +161,68 @@ async def test_async_client_geocode_promotes_region_only_input_to_candidates(
 
 
 @pytest.mark.asyncio
+async def test_async_client_geocode_promotes_road_name_only_to_line_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kraddr.geo.core.protocols import GeometryLookup
+    from kraddr.geo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        raise InvalidAddressError("address number could not be parsed")
+
+    async def fake_road_geometries(
+        self: GeometryRepository,
+        query: str,
+        **_: Any,
+    ) -> list[GeometryLookup]:
+        assert query == "성복1로"
+        return [
+            GeometryLookup(
+                kind="road",
+                title="경기도 용인시 수지구 성복1로",
+                road_name="성복1로",
+                rncode_full="414653205009",
+                sig_cd="41465",
+                sido="경기도",
+                sigungu="용인시 수지구",
+                point=Point(x=127.0743, y=37.3134),
+                score=1.0,
+                geometry=GeometryV2(
+                    kind="road",
+                    source_table="tl_sprd_manage",
+                    geojson={
+                        "type": "MultiLineString",
+                        "coordinates": [[[127.07, 37.31], [127.08, 37.32]]],
+                    },
+                ),
+                bbox=BBoxV2(min_lon=127.07, min_lat=37.31, max_lon=127.08, max_lat=37.32),
+            )
+        ]
+
+    async def fail_search(self: AsyncAddressClient, **_: Any) -> SearchV2Response:
+        raise AssertionError("road geometry candidates should be tried before district search")
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(AsyncAddressClient, "search", fail_search)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", fake_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(road_address="성복1로", include_geometry=True)
+
+    candidate = response.candidates[0]
+    assert candidate.point == Point(x=127.0743, y=37.3134)
+    assert candidate.geometry is not None
+    assert candidate.geometry.kind == "road"
+    assert candidate.address is not None
+    assert candidate.address.road_name == "성복1로"
+
+
+@pytest.mark.asyncio
 async def test_v2_geocode_route_uses_client_dependency() -> None:
     class FakeClient:
         async def geocode(self, **kwargs: Any) -> GeocodeV2Response:
             assert kwargs["bbox"] is not None
+            assert kwargs["include_geometry"] is True
             inp = GeocodeV2Input(query=kwargs["query"], bbox=kwargs["bbox"])
             return GeocodeV2Response(
                 status="OK",
@@ -142,6 +250,7 @@ async def test_v2_geocode_route_uses_client_dependency() -> None:
                     "max_lon": 127.1,
                     "max_lat": 37.6,
                 },
+                "include_geometry": True,
             },
         )
 

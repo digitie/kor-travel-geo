@@ -17,6 +17,7 @@
 | `bbox` | object | 없음 | `min_lon`, `min_lat`, `max_lon`, `max_lat`로 표현하는 EPSG:4326 비교 범위. 1차 구현은 입력과 응답 schema를 보존하고, 엄격한 공간 필터는 후속으로 확장한다. |
 | `limit` | integer | `10` | 최대 후보 수 |
 | `fallback` | `none`, `api` | `none` | 외부 API fallback 사용 여부 |
+| `include_geometry` | boolean | `false` | 기존 `point`를 유지하면서 후보 도형을 `geometry`/`bbox`로 함께 반환할지 여부 |
 
 `query`, `road_address`, `jibun_address`, `keyword` 중 하나는 반드시 필요하다.
 
@@ -36,6 +37,7 @@
       "point_precision": null,
       "distance_m": null,
       "bbox": null,
+      "geometry": null,
       "address": {
         "type": "road",
         "full": "서울특별시 강남구 테헤란로 152",
@@ -55,10 +57,13 @@
 - `distance_m`: reverse/nearby/keyword처럼 후보와 기준점 사이의 거리가 있는 경우 정식 필드로 노출한다. geocode 단일 주소 변환에서는 보통 `null`이다.
 - `point_precision`: Google `location_type` 패턴을 참고한 좌표 정밀도 필드다. `exact`, `interpolated`, `centroid`, `approximate` 중 하나이며, 현재 local geocode에서는 국가지점번호처럼 면 중심 성격이 분명한 경우 `approximate`만 채운다.
 - `confidence`: endpoint-local 점수다. geocode는 v1 매칭 신뢰도, reverse는 검색 반경 대비 거리 기반 점수, search는 검색 score를 뜻한다. 서로 다른 endpoint의 `confidence`를 그대로 비교하지 않는다.
-- `bbox`: Google-style viewport/bounds 표현을 참고한 후보 범위 필드다. 현재 로컬 geocode 변환에서는 없을 수 있다.
+- `bbox`: Google-style viewport/bounds 표현을 참고한 후보 범위 필드다. `include_geometry=true`일 때 후보 도형의 EPSG:4326 범위를 담는다.
+- `geometry`: `include_geometry=true`일 때만 채우는 GeoJSON geometry다. `kind`는 `building`, `region`, `road` 중 하나이고, `source_table`은 `tl_spbd_buld_polygon`, `tl_scco_*`, `tl_sprd_manage` 같은 로컬 도형 원천을 가리킨다.
 - `metadata`: 로컬 DB 또는 기존 v1 fallback에서 온 보조 필드다. 안정 공개 필드로 의존하기 전에는 문서화가 필요하다.
 
 상세번호 없이 행정구역까지만 입력한 경우에도 같은 endpoint가 후보를 반환한다. 예를 들어 `road_address="수지구"`는 내부적으로 `district` 검색 후보로 승격되며, `match_kind="region"`인 `용인시 수지구` 후보와 대표점 좌표를 반환한다. 대표점은 행정구역 polygon의 `ST_PointOnSurface`를 사용한다.
+
+`include_geometry=true`를 주면 `point`가 도형으로 대체되지 않는다. 응답은 항상 `point + geometry` 구조다. 예를 들어 `성복동`은 행정구역 대표점과 행정구역 `MultiPolygon`, `성복1로`는 도로 대표점과 도로 `MultiLineString`, `성복1로 35`는 기존 주소 대표점 또는 출입구점과 건물 `MultiPolygon`을 함께 반환한다.
 
 ## 예시
 
@@ -75,5 +80,6 @@ async with AsyncAddressClient() as client:
         fallback="api",
         sig_cd="11680",
         bbox={"min_lon": 127.0, "min_lat": 37.45, "max_lon": 127.08, "max_lat": 37.55},
+        include_geometry=True,
     )
 ```

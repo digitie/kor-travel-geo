@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- `/debug/geocode` 지도에 v2 `geometry` overlay를 추가했다. `include_geometry` 옵션이 켜진 geocode 응답에서 point marker와 행정구역 polygon, 도로 line, 건물 polygon을 함께 표시한다.
 - T-021~T-023/T-026: Next.js 기반 디버그·관리 UI 초안 추가.
 - T-020 연계: `openapi.json` 기반 타입 생성 스크립트 추가.
 - Playwright e2e 테스트를 추가해 `/debug/geocode`, `/debug/reverse`의 v2 REST 요청 body와 입력 검증을 브라우저에서 확인한다.
@@ -15,6 +16,7 @@
 - Vitest 단위 테스트: 시도 추론, load workflow reducer, consistency severity, schema name generation, API path helper.
 
 ### Changed
+- `/debug/geocode`와 `/debug/reverse`는 응답 JSON을 입력 패널 아래에 표시하고, 지도 패널을 더 크게 배치한다.
 - `/debug/geocode`와 `/debug/reverse`는 `/v2/geocode`, `/v2/reverse` POST API를 사용한다. proxy는 `/v1/*`와 `/v2/*`를 모두 허용하고 non-versioned path는 기존처럼 `/v1`로 보낸다.
 - `maplibre-vworld`를 upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 동기화한다. 최신 upstream redaction helper는 `redactVWorldUrl()`이며, UI 내부에서는 기존 import 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 재수출한다.
 - `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정하고, VWorld WMTS helper와 CSS를 upstream package에서 소비한다.

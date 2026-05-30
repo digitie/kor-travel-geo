@@ -44,6 +44,7 @@ test.describe("디버그 UI v2 REST 연동", () => {
     expect(requests[0]).toEqual({
       road_address: "서울특별시 강남구 테헤란로 152",
       fallback: "none",
+      include_geometry: true,
       limit: 10
     });
     expect(requests[0]).not.toHaveProperty("jibun_address");
@@ -68,6 +69,7 @@ test.describe("디버그 UI v2 REST 연동", () => {
     expect(requests[0]).toEqual({
       jibun_address: "서울특별시 강남구 역삼동 737",
       fallback: "api",
+      include_geometry: true,
       limit: 10
     });
     expect(requests[0]).not.toHaveProperty("road_address");
@@ -84,6 +86,28 @@ test.describe("디버그 UI v2 REST 연동", () => {
 
     await expect(page.getByText('"error"')).toBeVisible();
     expect(requests).toHaveLength(0);
+  });
+
+  test("지오코딩 도형 옵션을 끄면 v2 geocode에 include_geometry false를 보낸다", async ({
+    page
+  }) => {
+    const requests = await captureJsonPost(page, "/api/proxy/v2/geocode", {
+      status: "OK",
+      input: { road_address: "성복1로", include_geometry: false },
+      candidates: [{ source: "local", point: { x: 127.0743, y: 37.3134 } }]
+    });
+
+    await page.goto("/debug/geocode");
+    await page.locator("#address").fill("성복1로");
+    await page.locator("#include-geometry").uncheck();
+    await page.getByRole("button", { name: "실행" }).click();
+
+    await expect(page.getByText('"include_geometry"')).toBeVisible();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      road_address: "성복1로",
+      include_geometry: false
+    });
   });
 
   test("역지오코딩은 v2 reverse에 lon/lat와 확장 옵션을 보낸다", async ({ page }) => {

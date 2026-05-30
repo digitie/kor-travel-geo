@@ -2,6 +2,7 @@
 
 import maplibregl, {
   type ErrorEvent as MapLibreErrorEvent,
+  type LngLatBoundsLike,
   type Map as MapLibreMap,
   type MapMouseEvent,
   type Marker as MapLibreMarker
@@ -21,9 +22,25 @@ export type Coordinate = {
   y: number;
 };
 
+export type CoordinateBBox = {
+  min_lon: number;
+  min_lat: number;
+  max_lon: number;
+  max_lat: number;
+};
+
+export type MapGeometryOverlay = {
+  kind?: string | null;
+  geojson?: GeoJSON.Geometry | null;
+};
+
 const DEFAULT_CENTER = { x: 126.978, y: 37.5665 };
 const DEFAULT_ZOOM = 15;
 const TILE_ERROR_OVERLAY_THRESHOLD = 6;
+const OVERLAY_SOURCE_ID = "kraddr-geo-overlay";
+const OVERLAY_FILL_LAYER_ID = "kraddr-geo-overlay-fill";
+const OVERLAY_LINE_LAYER_ID = "kraddr-geo-overlay-line";
+const OVERLAY_POINT_LAYER_ID = "kraddr-geo-overlay-point";
 
 type MapResourceError = Error & {
   status?: number;
@@ -33,10 +50,14 @@ type MapResourceError = Error & {
 
 export function CoordinateMap({
   point,
+  bbox,
+  geometry,
   onClick,
   layerType = "Base"
 }: {
   point: Coordinate | null;
+  bbox?: CoordinateBBox | null;
+  geometry?: MapGeometryOverlay | null;
   onClick?: (point: Coordinate) => void;
   layerType?: VWorldLayerType;
 }) {
@@ -46,16 +67,29 @@ export function CoordinateMap({
     return <CoordinateFallback point={point} note={loading ? "VWorld API 키 확인 중" : "VWorld API 키 미설정"} />;
   }
 
-  return <LoadedCoordinateMap apiKey={apiKey} layerType={layerType} onClick={onClick} point={point} />;
+  return (
+    <LoadedCoordinateMap
+      apiKey={apiKey}
+      bbox={bbox}
+      geometry={geometry}
+      layerType={layerType}
+      onClick={onClick}
+      point={point}
+    />
+  );
 }
 
 function LoadedCoordinateMap({
   apiKey,
+  bbox,
+  geometry,
   layerType,
   point,
   onClick
 }: {
   apiKey: string;
+  bbox?: CoordinateBBox | null;
+  geometry?: MapGeometryOverlay | null;
   layerType: VWorldLayerType;
   point: Coordinate | null;
   onClick?: (point: Coordinate) => void;
@@ -136,20 +170,40 @@ function LoadedCoordinateMap({
 
     markerRef.current?.remove();
     markerRef.current = null;
+    removeGeometryOverlay(map);
 
-    if (!point) return;
+    if (geometry?.geojson) {
+      addGeometryOverlay(map, geometry);
+    }
 
-    markerRef.current = new maplibregl.Marker({ color: "#0f766e" })
-      .setLngLat([point.x, point.y])
-      .addTo(map);
-    map.flyTo({
-      animate: false,
-      center: [point.x, point.y],
-      duration: 0,
-      essential: false,
-      zoom: Math.max(map.getZoom(), DEFAULT_ZOOM)
-    });
-  }, [loaded, point]);
+    if (point) {
+      markerRef.current = new maplibregl.Marker({ color: "#0f766e" })
+        .setLngLat([point.x, point.y])
+        .addTo(map);
+    }
+
+    const bounds = boundsFromBBox(bbox, point) ?? boundsFromGeoJson(geometry?.geojson, point);
+    if (bounds) {
+      map.fitBounds(bounds, {
+        animate: false,
+        duration: 0,
+        essential: false,
+        maxZoom: 17,
+        padding: 36
+      });
+      return;
+    }
+
+    if (point) {
+      map.flyTo({
+        animate: false,
+        center: [point.x, point.y],
+        duration: 0,
+        essential: false,
+        zoom: Math.max(map.getZoom(), DEFAULT_ZOOM)
+      });
+    }
+  }, [bbox, geometry, loaded, point]);
 
   return (
     <div className="vworld-map-shell">
@@ -161,6 +215,122 @@ function LoadedCoordinateMap({
       ) : null}
     </div>
   );
+}
+
+function addGeometryOverlay(map: MapLibreMap, geometry: MapGeometryOverlay): void {
+  if (!geometry.geojson) return;
+  const feature: GeoJSON.Feature = {
+    type: "Feature",
+    properties: { kind: geometry.kind ?? "geometry" },
+    geometry: geometry.geojson
+  };
+  map.addSource(OVERLAY_SOURCE_ID, {
+    type: "geojson",
+    data: feature
+  });
+
+  const geometryType = geometry.geojson.type;
+  if (geometryType === "Polygon" || geometryType === "MultiPolygon") {
+    map.addLayer({
+      id: OVERLAY_FILL_LAYER_ID,
+      source: OVERLAY_SOURCE_ID,
+      type: "fill",
+      paint: {
+        "fill-color": "#14b8a6",
+        "fill-opacity": 0.22
+      }
+    });
+    map.addLayer({
+      id: OVERLAY_LINE_LAYER_ID,
+      source: OVERLAY_SOURCE_ID,
+      type: "line",
+      paint: {
+        "line-color": "#0f766e",
+        "line-width": 3
+      }
+    });
+    return;
+  }
+
+  if (geometryType === "LineString" || geometryType === "MultiLineString") {
+    map.addLayer({
+      id: OVERLAY_LINE_LAYER_ID,
+      source: OVERLAY_SOURCE_ID,
+      type: "line",
+      paint: {
+        "line-color": "#2563eb",
+        "line-width": 5,
+        "line-opacity": 0.86
+      }
+    });
+    return;
+  }
+
+  if (geometryType === "Point" || geometryType === "MultiPoint") {
+    map.addLayer({
+      id: OVERLAY_POINT_LAYER_ID,
+      source: OVERLAY_SOURCE_ID,
+      type: "circle",
+      paint: {
+        "circle-color": "#2563eb",
+        "circle-radius": 7,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2
+      }
+    });
+  }
+}
+
+function removeGeometryOverlay(map: MapLibreMap): void {
+  for (const layerId of [
+    OVERLAY_POINT_LAYER_ID,
+    OVERLAY_LINE_LAYER_ID,
+    OVERLAY_FILL_LAYER_ID
+  ]) {
+    if (map.getLayer(layerId)) {
+      map.removeLayer(layerId);
+    }
+  }
+  if (map.getSource(OVERLAY_SOURCE_ID)) {
+    map.removeSource(OVERLAY_SOURCE_ID);
+  }
+}
+
+function boundsFromBBox(
+  bbox: CoordinateBBox | null | undefined,
+  point?: Coordinate | null
+): LngLatBoundsLike | null {
+  if (!bbox) return null;
+  const expanded = expandBBoxWithPoint(bbox, point);
+  if (expanded.min_lon >= expanded.max_lon || expanded.min_lat >= expanded.max_lat) return null;
+  return [
+    [expanded.min_lon, expanded.min_lat],
+    [expanded.max_lon, expanded.max_lat]
+  ];
+}
+
+function boundsFromGeoJson(
+  geometry: GeoJSON.Geometry | null | undefined,
+  point?: Coordinate | null
+): LngLatBoundsLike | null {
+  const bbox = geometry && "bbox" in geometry ? geometry.bbox : undefined;
+  if (!bbox || bbox.length < 4) return null;
+  return boundsFromBBox({
+    min_lon: bbox[0],
+    min_lat: bbox[1],
+    max_lon: bbox[2],
+    max_lat: bbox[3]
+  }, point);
+}
+
+function expandBBoxWithPoint(bbox: CoordinateBBox, point?: Coordinate | null): CoordinateBBox {
+  if (!point) return bbox;
+  return {
+    min_lon: Math.min(bbox.min_lon, point.x),
+    min_lat: Math.min(bbox.min_lat, point.y),
+    max_lon: Math.max(bbox.max_lon, point.x),
+    max_lat: Math.max(bbox.max_lat, point.y)
+  };
 }
 
 function warnMapTileError(event: MapLibreErrorEvent): void {

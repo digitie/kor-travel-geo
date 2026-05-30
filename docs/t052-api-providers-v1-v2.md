@@ -91,6 +91,7 @@ class GeocodeV2Input(FrozenModel):
     bbox: tuple[float, float, float, float] | None = None  # (minx, miny, maxx, maxy) EPSG:4326
     limit: int = 10
     fallback: Literal["none", "api"] = "none"
+    include_geometry: bool = False  # point는 유지하고 geometry/bbox를 추가 반환
 
 class CandidateV2(FrozenModel):
     confidence: float                       # 0~1
@@ -102,6 +103,7 @@ class CandidateV2(FrozenModel):
     region: GeocodeV2Region | None = None    # 시도/시군구/법정동/행정동
     place: GeocodeV2Place | None = None      # 키워드/카테고리 매칭 시
     bbox: GeocodeV2BBox | None = None
+    geometry: GeocodeV2Geometry | None = None
     source: Literal["local","vworld","juso","cache"] = "local"
     metadata: dict[str, Any] = Field(default_factory=dict)
 

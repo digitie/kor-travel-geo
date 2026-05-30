@@ -34,7 +34,7 @@ set PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088
 npx playwright test --config playwright.config.ts --project chromium --workers 1
 ```
 
-현재 e2e는 `/debug/geocode`와 `/debug/reverse`가 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse`로 POST하는지, 도로명/지번/좌표/반경 입력이 v2 body로 변환되는지, 잘못된 입력에서 요청을 보내지 않는지를 검증한다.
+현재 e2e는 `/debug/geocode`와 `/debug/reverse`가 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse`로 POST하는지, 도로명/지번/좌표/반경 입력이 v2 body로 변환되는지, geocode 도형 옵션이 `include_geometry`로 전달되는지, 잘못된 입력에서 요청을 보내지 않는지를 검증한다.
 
 ## Docker 실행
 

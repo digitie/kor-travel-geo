@@ -855,6 +855,16 @@
             ],
             "title": "Distance M"
           },
+          "geometry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeometryV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "match_kind": {
             "enum": [
               "road",
@@ -2265,6 +2275,11 @@
             "title": "Fallback",
             "type": "string"
           },
+          "include_geometry": {
+            "default": false,
+            "title": "Include Geometry",
+            "type": "boolean"
+          },
           "jibun_address": {
             "anyOf": [
               {
@@ -2377,6 +2392,46 @@
           "input"
         ],
         "title": "GeocodeV2Response",
+        "type": "object"
+      },
+      "GeometryV2": {
+        "additionalProperties": false,
+        "properties": {
+          "crs": {
+            "$ref": "#/components/schemas/CRS",
+            "default": "EPSG:4326"
+          },
+          "geojson": {
+            "additionalProperties": true,
+            "title": "Geojson",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "building",
+              "region",
+              "road"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source_table": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Table"
+          }
+        },
+        "required": [
+          "kind",
+          "geojson"
+        ],
+        "title": "GeometryV2",
         "type": "object"
       },
       "HTTPValidationError": {

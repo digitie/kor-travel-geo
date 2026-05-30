@@ -125,10 +125,11 @@
 - ✅ 상위 주소 geocode 후보 — `/v2/geocode`에서 상세번호 없는 행정구역 입력은 `district` 검색 후보로 승격한다. `tl_scco_*` polygon의 `ST_PointOnSurface` 대표점을 쓰며, 실제 DB에서 `수지구` 첫 후보 `용인시 수지구(sig_cd=41465)`를 확인했다. 상세: `docs/t064-region-only-geocode.md`
 - ✅ T-065 내비게이션용DB `시군구용건물명` 검색 반영 — `match_build_*.txt` 20번째 컬럼을 `sigungu_buld_nm`으로 적재하고 `sigungu_buld_nm_nrm`을 `mv_geocode_target`/`mv_geocode_text_search`에 포함했다. 실제 Docker DB에서 NAVI 10,687,317행을 재적재했고, `엄마집`/`P-101동` + `sig_cd=26110` 검색이 `NOT_FOUND`에서 `OK`로 개선됨을 확인했다. 상세: `docs/t065-navi-building-name-search.md`
 - ✅ T-066 Consistency 탭 진입 프리즈 완화 — `/admin/consistency`가 sample 선택 전부터 첫 point 샘플로 MapLibre/VWorld 지도를 자동 로드하지 않도록 수정했다. sample을 명시적으로 선택하기 전에는 placeholder만 표시하고, 지도 컴포넌트는 선택 후에만 동적으로 로드한다. 상세: `docs/t066-consistency-tab-freeze.md`
+- ✅ T-067 v2 geocode point+geometry overlay — `/v2/geocode`에 `include_geometry` 옵션을 추가해 기존 대표점(`point`)을 유지하면서 행정구역/도로/건물 도형을 `geometry`/`bbox`로 함께 반환한다. `/debug/geocode`는 point marker와 GeoJSON overlay를 표시하고, geocode/reverse 화면은 응답을 입력 아래에 두며 지도 패널을 키웠다. 실제 Docker DB에서 `성복동`/`성복1로`/`성복1로 35`를 각각 region polygon/road line/building polygon으로 확인했다. 상세: `docs/t067-v2-geocode-geometry-overlay.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음은 T-067이다. 디버그 UI와 `/v2/geocode`에서 기존 대표점(point)을 유지하면서 옵션으로 영역/라인 geometry를 함께 반환·표시한다. 성복동은 행정구역 polygon, 성복1로는 도로 line, 성복1로 35는 건물 polygon을 표시하고, geocode/reverse 화면은 응답을 입력 아래에 두며 지도를 더 크게 조정한다.
+즉시 실행 가능한 대기 task는 없다. 남은 항목은 외부 조건이 필요한 T-063(N150/Odroid 실제 장비 실측)뿐이다. 새 task가 생기면 `docs/tasks.md`에 등록하고, 기존 PR 리뷰 audit 지시가 들어오면 해당 PR 범위를 먼저 확인한다.
 
 - 최신 T-027 실행 로그는 로컬 산출물 `artifacts/fullload/20260529_1643_final/` 아래에 있다. 이 경로는 git ignore 대상이다.
 - 최신 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,454건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603/202604`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
