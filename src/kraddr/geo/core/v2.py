@@ -25,6 +25,8 @@ from kraddr.geo.dto.v2 import (
     V2Source,
 )
 
+from .protocols import GeometryLookup
+
 
 def geocode_v2_from_v1(inp: GeocodeV2Input, response: GeocodeResponse) -> GeocodeV2Response:
     candidate: CandidateV2 | None = None
@@ -82,6 +84,39 @@ def geocode_v2_from_search(inp: GeocodeV2Input, response: SearchV2Response) -> G
     )
 
 
+def geocode_v2_from_geometry_lookups(
+    inp: GeocodeV2Input,
+    rows: list[GeometryLookup],
+) -> GeocodeV2Response:
+    candidates = tuple(_candidate_from_geometry_lookup(inp, row) for row in rows[: inp.limit])
+    return GeocodeV2Response(
+        status="OK" if candidates else "NOT_FOUND",
+        input=inp,
+        candidates=candidates,
+        region_hint_applied=inp.region_hint,
+    )
+
+
+def with_candidate_geometry(
+    candidate: CandidateV2,
+    geometry: GeometryLookup | None,
+    *,
+    include_geometry: bool,
+) -> CandidateV2:
+    if geometry is None:
+        return candidate
+    point_precision = candidate.point_precision
+    if point_precision is None and geometry.kind == "region":
+        point_precision = "centroid"
+    return candidate.model_copy(
+        update={
+            "bbox": geometry.bbox if include_geometry else candidate.bbox,
+            "geometry": geometry.geometry if include_geometry else None,
+            "point_precision": point_precision,
+        }
+    )
+
+
 def _geocode_match_kind(inp: GeocodeV2Input, response: GeocodeResponse) -> V2MatchKind:
     if response.x_extension and response.x_extension.national_point_number:
         return "sppn"
@@ -129,10 +164,60 @@ def _candidate_from_search_item(item: SearchResultItem) -> CandidateV2:
         match_kind=match_kind,
         address=address,
         point=item.point,
+        point_precision="centroid" if match_kind == "region" and item.point else None,
         region=_region_from_structure(item.structure),
         place=place,
         source=_source_from_v1(item.source),
         metadata={"score": item.score},
+    )
+
+
+def _candidate_from_geometry_lookup(inp: GeocodeV2Input, row: GeometryLookup) -> CandidateV2:
+    confidence = row.score if row.score is not None else 0.9
+    match_kind: V2MatchKind = "region" if row.kind == "region" else "road"
+    metadata = {
+        "score": row.score,
+        "geometry_kind": row.kind,
+        "geometry_source_table": row.geometry.source_table,
+        "rncode_full": row.rncode_full,
+        "bd_mgt_sn": row.bd_mgt_sn,
+    }
+    return CandidateV2(
+        confidence=max(0.0, min(1.0, confidence)),
+        match_kind=match_kind,
+        address=_address_from_geometry_lookup(row),
+        point=row.point,
+        point_precision="centroid" if row.point else None,
+        bbox=row.bbox if inp.include_geometry else None,
+        geometry=row.geometry if inp.include_geometry else None,
+        region=_region_from_geometry_lookup(row),
+        source="local",
+        metadata={key: value for key, value in metadata.items() if value is not None},
+    )
+
+
+def _address_from_geometry_lookup(row: GeometryLookup) -> AddressV2 | None:
+    if row.title is None:
+        return None
+    return AddressV2(
+        type="road" if row.kind in {"building", "road"} else None,
+        full=row.title,
+        road_address=row.title if row.kind in {"building", "road"} else None,
+        road_name=row.road_name,
+        road_name_code=row.rncode_full,
+        building_management_number=row.bd_mgt_sn,
+    )
+
+
+def _region_from_geometry_lookup(row: GeometryLookup) -> RegionV2 | None:
+    if not any((row.sig_cd, row.bjd_cd, row.sido, row.sigungu, row.eup_myeon_dong, row.li)):
+        return None
+    return RegionV2(
+        sig_cd=row.sig_cd,
+        bjd_cd=row.bjd_cd,
+        sido=row.sido,
+        sigungu=row.sigungu,
+        legal_dong=row.eup_myeon_dong,
     )
 
 
@@ -218,6 +303,7 @@ def _geocode_metadata(response: GeocodeResponse) -> dict[str, Any]:
         "zip_no": response.x_extension.zip_no,
         "zip_source": response.x_extension.zip_source,
         "buld_nm": response.x_extension.buld_nm,
+        "detail": response.refined.structure.detail if response.refined else None,
         "national_point_number": response.x_extension.national_point_number,
     }
 

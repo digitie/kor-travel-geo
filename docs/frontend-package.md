@@ -149,6 +149,8 @@ new QueryClient({
 
 VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnight`는 z19까지, `Hybrid`/`Satellite`는 z18까지만 요청한다. `maplibre-vworld`의 style source id는 `vworld-${layerType}` 형식이고 `Hybrid`는 `vworld-satellite`와 `vworld-Hybrid`를 함께 쓰므로, tile error source 판별은 `vworld` prefix 기준으로 한다. marker 위치 갱신은 지도 클릭 후 되튐을 줄이기 위해 `flyTo({ animate: false, duration: 0 })`로 즉시 이동한다.
 
+T-067부터 `CoordinateMap`은 v2 geocode 후보의 `geometry`도 overlay로 표시한다. `point` marker는 항상 유지하고, polygon은 fill+outline, road line은 line layer, point geometry는 circle layer로 추가한다. 지도 viewport는 후보 `bbox`만 보지 않고 `point`도 함께 포함한다. 주소 대표점이나 출입구점이 건물 polygon 바깥 도로 쪽에 있을 수 있기 때문이다.
+
 ### A3.6.1 `digitie/maplibre-vworld-js` 최신 소비와 책임 경계
 
 디버그 UI에서 VWorld/MapLibre 연동 문제가 발생하면 먼저 문제가 범용 지도 기능인지, 이 프로젝트의 주소 디버그/관리 UX인지 분류한다. 원인이 `digitie/maplibre-vworld-js`의 패키징, TypeScript 타입, CSS side-effect import, marker/cluster component, VWorld layer helper, Next.js 호환성처럼 다른 소비자도 재사용할 수 있는 범용 기능에 있으면 해당 저장소도 적극 수정 대상에 포함한다. 반대로 geocode/reverse 입력 연결, API 응답 좌표 표시, 정합성/성능/적재 overlay, 이 프로젝트 fallback 문구와 layout은 `kraddr-geo-ui`의 domain wrapper에서 구현한다.
@@ -193,8 +195,8 @@ Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우
 
 ## A4. 공통 컴포넌트
 
-- **CoordinateMap**: MapLibre GL JS와 VWorld WMTS raster style을 사용한다. `NEXT_PUBLIC_VWORLD_API_KEY`가 없거나 로딩 실패 시 좌표 프리뷰로 대체한다. 좌표 입력과 click callback은 모두 `(lon, lat)` 순서다.
-- **GeocodeDebugger**: `address`, `type`, `fallback`을 받아 `/v2/geocode`를 호출하고 JSON 응답과 지도/좌표 프리뷰를 함께 표시한다.
+- **CoordinateMap**: MapLibre GL JS와 VWorld WMTS raster style을 사용한다. `NEXT_PUBLIC_VWORLD_API_KEY`가 없거나 로딩 실패 시 좌표 프리뷰로 대체한다. 좌표 입력과 click callback은 모두 `(lon, lat)` 순서다. v2 후보의 `point` marker와 선택 `geometry` overlay를 함께 표시한다.
+- **GeocodeDebugger**: `address`, `type`, `fallback`, `include_geometry`를 받아 `/v2/geocode`를 호출하고 JSON 응답과 지도/좌표·도형 프리뷰를 함께 표시한다.
 - **TableStatsPanel**: `GET /v1/admin/tables` 결과를 native table로 보여준다. 수천 행 이상 필터·정렬이 필요해지면 TanStack Table로 승격한다.
 - **JsonBlock**: JSON 응답과 EXPLAIN plan을 monospace pre 영역으로 표시. 별도 코드 표시 라이브러리는 production dependency로 두지 않는다.
 - **ZipSourceBadge**: `ZipSource` enum별 색상/라벨 메타데이터로 시각화.

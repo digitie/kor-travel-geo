@@ -8,6 +8,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from kraddr.geo.dto.common import AddressType, Point, ZipSource
 from kraddr.geo.dto.region import RegionHint
+from kraddr.geo.dto.v2 import BBoxV2, GeometryV2, V2GeometryKind
 
 from .normalize import AddrParts
 
@@ -59,6 +60,25 @@ class SearchLookup:
     title: str
     address: str | None = None
     lookup: AddressLookup | None = None
+    score: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GeometryLookup:
+    kind: V2GeometryKind
+    geometry: GeometryV2
+    bbox: BBoxV2 | None = None
+    point: Point | None = None
+    title: str | None = None
+    sig_cd: str | None = None
+    bjd_cd: str | None = None
+    sido: str | None = None
+    sigungu: str | None = None
+    eup_myeon_dong: str | None = None
+    li: str | None = None
+    road_name: str | None = None
+    rncode_full: str | None = None
+    bd_mgt_sn: str | None = None
     score: float | None = None
 
 

@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Changed
+- `/v2/geocode`에 `include_geometry` 옵션을 추가했다. 옵션을 켜면 기존 후보 `point`는 유지하고 행정구역 polygon, 도로 line, 건물 polygon을 `geometry`/`bbox`로 함께 반환한다. 디버그 UI는 기본으로 이 옵션을 켜고, 응답 JSON을 입력 아래에 두며 지도를 더 크게 표시한다.
 - **(BREAKING)** Python 라이브러리 주소 조회 표면을 v2 candidate schema로 단일화했다. `AsyncAddressClient.geocode()`, `reverse()`, `search()`가 각각 `GeocodeV2Response`, `ReverseV2Response`, `SearchV2Response`를 반환하며, 공개 API에서 `geocode_v2()`, `reverse_v2()`, `search_v2()`, `reverse_geocode()`를 제거했다. REST `/v1/*`의 vworld 호환 응답은 내부 adapter로 유지한다.
 - 디버그 UI의 geocode/reverse 화면을 `/v2/geocode`, `/v2/reverse` POST 기반으로 전환했다. proxy는 `/v1/*`와 `/v2/*`를 모두 허용하며, Windows Playwright e2e 6개로 v2 요청 body와 입력 검증을 고정한다.
 - 디버그 UI가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 런타임 config로 읽고, `/admin/settings`에서 브라우저 저장값으로 수정·복원할 수 있게 했다.

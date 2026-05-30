@@ -15,10 +15,12 @@ from .core.poboxer import pobox as core_pobox
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
 from .core.v2 import (
+    geocode_v2_from_geometry_lookups,
     geocode_v2_from_search,
     geocode_v2_from_v1,
     reverse_v2_from_v1,
     search_v2_from_v1,
+    with_candidate_geometry,
 )
 from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
@@ -73,6 +75,7 @@ from .infra.batch import batch_children
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
+from .infra.geometry_repo import GeometryRepository
 from .infra.hotswap import inspect_restore_hot_swap_plan
 from .infra.pobox_repo import PoboxRepository
 from .infra.reverse_repo import ReverseRepository
@@ -84,6 +87,12 @@ from .infra.source_set import (
 from .infra.uploads import UploadSetCleanupResult, cleanup_upload_sets
 from .infra.zip_repo import ZipRepository
 from .settings import Settings, get_settings
+
+
+def _metadata_str(value: object | None) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 class AsyncAddressClient:
@@ -140,6 +149,7 @@ class AsyncAddressClient:
         bbox: BBoxV2 | None = None,
         limit: int = 10,
         fallback: Literal["none", "api"] = "none",
+        include_geometry: bool = False,
     ) -> GeocodeV2Response:
         inp = GeocodeV2Input(
             query=query,
@@ -151,6 +161,7 @@ class AsyncAddressClient:
             bbox=bbox,
             limit=limit,
             fallback=fallback,
+            include_geometry=include_geometry,
         )
         if keyword and not any((query, road_address, jibun_address)):
             search_response = await self.search(
@@ -161,7 +172,9 @@ class AsyncAddressClient:
                 bjd_cd=bjd_cd,
                 bbox=bbox,
             )
-            return geocode_v2_from_search(inp, search_response)
+            return await self._with_geocode_geometries(
+                geocode_v2_from_search(inp, search_response)
+            )
 
         address = road_address or jibun_address or query or keyword
         assert address is not None
@@ -174,16 +187,76 @@ class AsyncAddressClient:
                 bjd_cd=bjd_cd,
             )
         except InvalidAddressError:
-            search_response = await self.search(
-                query=address,
-                type="district",
-                size=limit,
-                sig_cd=sig_cd,
-                bjd_cd=bjd_cd,
-                bbox=bbox,
+            return await self._geocode_road_or_region_candidates(inp, address)
+        converted = geocode_v2_from_v1(inp, response)
+        if response.status == "OK":
+            return await self._with_geocode_geometries(converted)
+        fallback_response = await self._geocode_road_or_region_candidates(inp, address)
+        return fallback_response if fallback_response.status == "OK" else converted
+
+    async def _geocode_road_or_region_candidates(
+        self,
+        inp: GeocodeV2Input,
+        address: str,
+    ) -> GeocodeV2Response:
+        geometry_repo = GeometryRepository(self._engine())
+        road_rows = await geometry_repo.road_geometries(
+            address,
+            limit=inp.limit,
+            region_hint=inp.region_hint,
+        )
+        if road_rows:
+            return geocode_v2_from_geometry_lookups(inp, road_rows)
+        search_response = await self.search(
+            query=address,
+            type="district",
+            size=inp.limit,
+            sig_cd=inp.sig_cd,
+            bjd_cd=inp.bjd_cd,
+            bbox=inp.bbox,
+        )
+        return await self._with_geocode_geometries(geocode_v2_from_search(inp, search_response))
+
+    async def _with_geocode_geometries(
+        self,
+        response: GeocodeV2Response,
+    ) -> GeocodeV2Response:
+        if not response.input.include_geometry or not response.candidates:
+            return response
+        geometry_repo = GeometryRepository(self._engine())
+        enriched = []
+        for candidate in response.candidates:
+            if candidate.source != "local":
+                enriched.append(candidate)
+                continue
+            if candidate.match_kind == "region" and candidate.region is not None:
+                geometry = await geometry_repo.region_geometry(
+                    sig_cd=candidate.region.sig_cd,
+                    bjd_cd=candidate.region.bjd_cd,
+                )
+            elif candidate.match_kind in {"road", "parcel"}:
+                geometry = await geometry_repo.building_geometry(
+                    bd_mgt_sn=_metadata_str(candidate.metadata.get("bd_mgt_sn")),
+                    rncode_full=_metadata_str(
+                        candidate.metadata.get("rncode_full")
+                        or (candidate.address.road_name_code if candidate.address else None)
+                    ),
+                    bjd_cd=_metadata_str(
+                        candidate.metadata.get("bjd_cd")
+                        or (candidate.region.bjd_cd if candidate.region else None)
+                    ),
+                    detail=_metadata_str(candidate.metadata.get("detail")),
+                )
+            else:
+                geometry = None
+            enriched.append(
+                with_candidate_geometry(
+                    candidate,
+                    geometry,
+                    include_geometry=response.input.include_geometry,
+                )
             )
-            return geocode_v2_from_search(inp, search_response)
-        return geocode_v2_from_v1(inp, response)
+        return response.model_copy(update={"candidates": tuple(enriched)})
 
     async def _geocode_v1(
         self,

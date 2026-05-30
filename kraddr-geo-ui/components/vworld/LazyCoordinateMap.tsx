@@ -1,11 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { Coordinate } from "@/components/vworld/CoordinateMap";
+import type {
+  Coordinate,
+  CoordinateBBox,
+  MapGeometryOverlay
+} from "@/components/vworld/CoordinateMap";
 import type { VWorldLayerType } from "@/lib/vworld";
 
 export type CoordinateMapProps = {
   point: Coordinate | null;
+  bbox?: CoordinateBBox | null;
+  geometry?: MapGeometryOverlay | null;
   onClick?: (point: Coordinate) => void;
   layerType?: VWorldLayerType;
 };

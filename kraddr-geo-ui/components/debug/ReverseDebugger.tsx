@@ -41,31 +41,36 @@ export function ReverseDebugger() {
   }
 
   return (
-    <div className="grid two">
-      <Panel title="좌표 입력">
-        <form className="form-grid" onSubmit={submit}>
-          <div className="grid two">
-            <div className="field">
-              <label htmlFor="x">lon</label>
-              <input id="x" value={x} onChange={(e) => setX(e.target.value)} />
+    <div className="debug-map-layout">
+      <div className="debug-control-stack">
+        <Panel title="좌표 입력">
+          <form className="form-grid" onSubmit={submit}>
+            <div className="form-field-grid two">
+              <div className="field">
+                <label htmlFor="x">lon</label>
+                <input id="x" value={x} onChange={(e) => setX(e.target.value)} />
+              </div>
+              <div className="field">
+                <label htmlFor="y">lat</label>
+                <input id="y" value={y} onChange={(e) => setY(e.target.value)} />
+              </div>
             </div>
             <div className="field">
-              <label htmlFor="y">lat</label>
-              <input id="y" value={y} onChange={(e) => setY(e.target.value)} />
+              <label htmlFor="radius">radius_m</label>
+              <input id="radius" value={radius} onChange={(e) => setRadius(e.target.value)} />
             </div>
-          </div>
-          <div className="field">
-            <label htmlFor="radius">radius_m</label>
-            <input id="radius" value={radius} onChange={(e) => setRadius(e.target.value)} />
-          </div>
-          <button className="button" type="submit">
-            <MousePointer2 size={16} />
-            조회
-          </button>
-        </form>
-      </Panel>
-      <Panel title="역지오코딩 결과">
-        <div className="grid">
+            <button className="button" type="submit">
+              <MousePointer2 size={16} />
+              조회
+            </button>
+          </form>
+        </Panel>
+        <Panel title="응답">
+          <JsonBlock value={result ?? { status: "READY" }} />
+        </Panel>
+      </div>
+      <Panel title="지도">
+        <div className="debug-map">
           <CoordinateMap
             point={previewPoint(x, y)}
             onClick={(point) => {
@@ -73,7 +78,6 @@ export function ReverseDebugger() {
               setY(point.y.toFixed(6));
             }}
           />
-          <JsonBlock value={result ?? { status: "READY" }} />
         </div>
       </Panel>
     </div>

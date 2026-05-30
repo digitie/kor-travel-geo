@@ -33,6 +33,7 @@ async def geocode_v2(
         bbox=req.bbox,
         limit=req.limit,
         fallback=req.fallback,
+        include_geometry=req.include_geometry,
     )
 
 

@@ -9,6 +9,7 @@
 - `CandidateV2.distance_m`은 거리 기반 후보에서 정식 필드다. `metadata.distance_m`가 있더라도 클라이언트는 `distance_m`을 우선 사용한다.
 - `CandidateV2.confidence`는 endpoint-local 점수다. geocode는 주소 매칭 신뢰도, reverse는 `1 - distance_m / radius_m`, search는 검색 score를 의미하므로 endpoint 사이에서 단순 비교하지 않는다.
 - `CandidateV2.point_precision`은 `exact`, `interpolated`, `centroid`, `approximate` 중 하나다. 현재 1차 구현에서는 precision을 확실히 아는 경우만 채운다.
+- `/v2/geocode`의 `include_geometry=true`는 기존 `CandidateV2.point`를 도형으로 대체하지 않는다. 응답은 `point + geometry` 구조이며, `geometry.kind`는 `building`, `region`, `road` 중 하나다.
 - `sig_cd`는 2자리 시도 또는 5자리 시군구, `bjd_cd`는 8자리 prefix 또는 10자리 법정동 코드다.
 - 외부 API fallback은 명시적으로 `fallback="api"`를 지정할 때만 동작한다.
 
@@ -19,7 +20,7 @@
 | v1 geocode | `GET /v1/address/geocode` | `address`, `type`, `fallback`, `sig_cd`, `bjd_cd` | `status`, `refined`, `result.point`, `x_extension` |
 | v1 reverse | `GET /v1/address/reverse` | `x`, `y`, `type`, `radius_m`, `sig_cd`, `bjd_cd` | `result[]` |
 | v1 search | `GET /v1/address/search` | `query`, `type`, `page`, `size`, `sig_cd`, `bjd_cd` | `result[]`, `total` |
-| v2 geocode | `POST /v2/geocode` | `query` 또는 `road_address`/`jibun_address`/`keyword`, `bbox`, `fallback` | `candidates[]` |
+| v2 geocode | `POST /v2/geocode` | `query` 또는 `road_address`/`jibun_address`/`keyword`, `bbox`, `fallback`, `include_geometry` | `candidates[]`, 선택 `geometry` |
 | v2 reverse | `POST /v2/reverse` | `lon`, `lat`, `radius_m`, `include_zipcode` | `candidates[]` |
 | v2 search | `POST /v2/search` | `query`, `type`, `category_group_code`, `bbox` | `candidates[]`, `total` |
 
