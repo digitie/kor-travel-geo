@@ -749,6 +749,7 @@ async def load_juso_hangul(
 현재 구현 범위:
 
 - `match_build_*.txt` → `tl_navi_buld_centroid`: 원본 `bd_mgt_sn`은 들어 있지만 실제 2026년 파일 기준 25자리이고, 도로명주소 한글 정본의 `bd_mgt_sn`은 26자리라 직접 조인 키로 쓰지 않는다. centroid fallback은 `rncode_full`, 건물구분, 본번/부번, 법정동 읍면동 8자리(`left(bjd_cd, 8)`)로 대표 centroid를 고른다. 내비 파일의 법정동코드는 리 코드가 `00`인 경우가 많으므로 정본의 10자리 법정동과 완전 일치시키면 centroid fallback이 거의 붙지 않는다. 실제 서울 첫 행 기준 `23~24`가 centroid X/Y, `25~26`이 대표 출입구에 가까운 보조 X/Y다. MV fallback은 `23~24` centroid를 쓴다.
+- T-065 이후 `match_build_*.txt`의 20번째 컬럼(`시군구용건물명`)은 `sigungu_buld_nm`으로 보존한다. `sigungu_buld_nm_nrm`은 공백 제거 generated column이며, `mv_geocode_text_search`의 exact/broad 검색 후보에 포함된다. 이 값은 `buld_nm`을 대체하는 공식 주소 필드가 아니라, 지역 문맥의 별칭·동명·시설명을 찾기 위한 검색 보강 필드다.
 - `match_rs_entrc.txt` → `tl_navi_entrc`: 원본에는 `bd_mgt_sn`이 없고 `sig_cd`, entry no, `rncode_full`, 건물번호, 법정동코드, 진입점 코드, X/Y만 있다. `kind`는 `01→navi`, `02→vehicle`, `03→parcel`, 그 외 `aux`로 보관한다.
 - `match_jibun_*.txt`는 현재 MV/역지오코딩 1차 경로에는 사용하지 않는다. 지번 centroid 보강이 필요해지면 T-016 후속으로 별도 repo 경로에 붙인다.
 
@@ -763,7 +764,6 @@ KIND_MAP = {
 
 내비게이션용DB는 여러 파일로 구성(건물·부속·도로). 본 로더는 두 마스터에 분리 적재:
 
-사용자 지시에 따라 `match_build_*.txt`의 `시군구용건물명`은 후속 T-065에서 반드시 검색 데이터로 승격한다. 현재 로더는 centroid/진입점 좌표 중심으로 적재하므로, 후속에서는 실제 컬럼 위치를 재확인하고 `sigungu_buld_nm`/`sigungu_buld_nm_nrm`을 저장한 뒤 `mv_geocode_text_search` 또는 별도 helper MV의 후보 추출에 포함한다. 전후 recall/latency는 T-047 benchmark 방식으로 기록한다.
 - `tl_navi_buld_centroid` ← 건물 파일의 centroid 좌표
 - `tl_navi_entrc` ← 진입점 파일들에 `kind` 매핑
 

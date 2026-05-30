@@ -7,13 +7,14 @@
 
 ## 대기 (우선순위 순)
 
-- T-065 내비게이션용DB `시군구용건물명` 검색 반영 — `내비게이션용DB_전체분/match_build_*.txt`의 `시군구용건물명` 컬럼을 적재·정규화하고 `mv_geocode_text_search` 또는 별도 검색 helper MV에 포함한다. `수지구`, 건물 별칭, 시군구 문맥 건물명 입력에서 후보 recall이 개선되는지 T-047 방식으로 전후 latency/recall을 기록한다. 상세: `docs/t064-region-only-geocode.md`
+- 없음.
 
 ## 보류 (외부 조건)
 
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-065 내비게이션용DB `시군구용건물명` 검색 반영. `match_build_*.txt`의 20번째 컬럼을 `sigungu_buld_nm`으로 적재하고 `sigungu_buld_nm_nrm`을 `mv_geocode_target`/`mv_geocode_text_search` 검색 후보에 포함했다. 실제 Docker DB에서 NAVI 10,687,317행 재적재, helper MV 재생성, `엄마집`/`P-101동` + `sig_cd=26110` 전후 recall 개선과 latency를 기록했다. 상세: `docs/t065-navi-building-name-search.md` (2026-05-30)
 - [x] T-064 상위 주소 geocode 후보. `/v2/geocode`에서 상세번호가 없는 상위 주소 입력은 별도 endpoint 없이 `district` 검색 후보로 승격한다. `tl_scco_ctprvn/sig/emd/li` polygon의 `ST_PointOnSurface` 대표점을 사용하고, `수지구` 실제 DB smoke에서 첫 후보 `용인시 수지구(sig_cd=41465)`를 확인했다. 상세: `docs/t064-region-only-geocode.md` (2026-05-30)
 - [x] Python 라이브러리 API v2 단일화. `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답으로 승격하고, 공개 Python API에서 `*_v2` 접미사와 v1-style `reverse_geocode`를 제거했다. REST `/v1/*`는 내부 어댑터로 vworld 호환 응답을 유지한다. ADR-039와 API reference를 갱신했다. (2026-05-29)
 - [x] PR #69~#86 post-merge 리뷰 audit/fixup. PR #69부터 최신 PR #86까지 conversation/review/latestReview와 GraphQL review thread를 다시 확인했고, 대상 PR 모두 thread 0건이었다. PR #84 리뷰 후속으로 GeoIP gate를 admission control보다 먼저 실행하도록 middleware 순서를 바꾸고, `testclient` 특별 허용을 제거했으며, `X-Forwarded-For`의 `host:port`/`[IPv6]:port` 파싱을 보강했다. 상세: `docs/postmerge-review-fixups-pr69-pr86.md` (2026-05-29)

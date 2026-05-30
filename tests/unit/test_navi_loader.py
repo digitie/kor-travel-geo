@@ -27,6 +27,7 @@ def test_iter_navi_build_rows_skips_missing_centroid_coordinates(tmp_path: Path)
 
     valid = missing_centroid.copy()
     valid[10] = "1111010100101440003031292"
+    valid[19] = "시군구별칭"
     valid[23] = "953243.01328"
     valid[24] = "1954025.806161"
 
@@ -38,6 +39,7 @@ def test_iter_navi_build_rows_skips_missing_centroid_coordinates(tmp_path: Path)
 
     assert len(rows) == 1
     assert rows[0].bd_mgt_sn == "1111010100101440003031292"
+    assert rows[0].sigungu_buld_nm == "시군구별칭"
     assert rows[0].centroid_x == 953243.01328
     assert iter_navi_build_rows.__doc__ is not None
     assert "zero-sentinel" in iter_navi_build_rows.__doc__

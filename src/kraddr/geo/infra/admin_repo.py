@@ -441,6 +441,7 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
         """Record the dataset state exposed by a successful MV refresh."""
 
         async with self.engine.begin() as conn:
+            await conn.execute(text("SET LOCAL statement_timeout = 0"))
             report = (
                 await _latest_consistency_gate_for_batch(conn, load_batch_id)
                 if load_batch_id

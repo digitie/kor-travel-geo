@@ -200,6 +200,10 @@ CREATE TABLE tl_navi_buld_centroid (
   rncode_full     TEXT GENERATED ALWAYS AS (
     CASE WHEN sig_cd IS NULL OR rn_cd IS NULL THEN NULL ELSE sig_cd || rn_cd END
   ) STORED,
+  sigungu_buld_nm TEXT,
+  sigungu_buld_nm_nrm TEXT GENERATED ALWAYS AS (
+    regexp_replace(COALESCE(sigungu_buld_nm, ''), '\s+', '', 'g')
+  ) STORED,
   centroid_5179  geometry(Point, 5179) NOT NULL,
   source_file    TEXT,
   source_yyyymm  TEXT,
@@ -208,11 +212,14 @@ CREATE TABLE tl_navi_buld_centroid (
 CREATE INDEX idx_navi_centroid_geom ON tl_navi_buld_centroid USING GIST (centroid_5179);
 CREATE INDEX idx_navi_centroid_resolve
   ON tl_navi_buld_centroid (rncode_full, buld_se_cd, buld_mnnm, buld_slno, (left(bjd_cd, 8)));
+CREATE INDEX idx_navi_centroid_sigungu_buld_nm_trgm
+  ON tl_navi_buld_centroid USING GIN (sigungu_buld_nm_nrm gin_trgm_ops)
+  WHERE sigungu_buld_nm_nrm IS NOT NULL AND sigungu_buld_nm_nrm <> '';
 ```
 
 2026년 실제 내비게이션용DB의 `bd_mgt_sn`은 25자리이고 도로명주소 한글 정본의 `bd_mgt_sn`은 26자리라 직접 조인하지 않는다. 또한 내비 `bjd_cd`는 리 코드가 `00`인 경우가 많으므로 centroid fallback은 `rncode_full + 건물구분 + 본번/부번 + left(bjd_cd, 8)` 기준으로 대표 centroid를 선택한다.
 
-상위 주소/건물명 검색 품질을 높이려면 `내비게이션용DB_전체분`의 건물명 계열 컬럼도 serving 검색 보조 데이터로 보존해야 한다. 특히 사용자 지시에 따라 `시군구용건물명`은 후속 T-065에서 실제 파일 컬럼 위치와 값 분포를 재확인한 뒤 `sigungu_buld_nm` 및 공백 제거 정규화 컬럼으로 적재하고, `mv_geocode_text_search` 또는 별도 검색 helper MV에 포함한다. 이 작업은 새 외부 원천 추가가 아니라 이미 필수 적재 대상인 내비게이션용DB를 더 완전하게 활용하는 보강이다.
+T-065 이후 `match_build_*.txt`의 20번째 컬럼(`시군구용건물명`)도 `sigungu_buld_nm`으로 보존한다. 정규화 컬럼은 `sigungu_buld_nm_nrm`이며 공백 제거 규칙은 `rn_nrm`/`buld_nm_nrm`과 같다. 이 값은 공식 주소 응답의 건물명으로 덮어쓰지 않고, `mv_geocode_target`과 `mv_geocode_text_search`의 검색 후보로만 사용한다. 실제 202604 전국 원천 기준 non-empty row는 773,407건, distinct 값은 77,790개였다.
 
 ### `tl_navi_entrc` — 내비게이션용DB 진입점 (부속 출입구/차량 진입)
 
@@ -598,7 +605,7 @@ T-047은 전국 full-load 이후 지오코딩/역지오코딩/검색 쿼리 p95/
 | 후보 | 목적 | 핵심 컬럼 예시 | 주요 인덱스 후보 |
 |------|------|----------------|------------------|
 | `mv_geocode_exact_key` | 도로명/지번 exact lookup | `bd_mgt_sn`, `rncode_full`, `bjd_cd`, 건물번호, PNU, 표시 주소, 좌표 key | btree composite, `INCLUDE` 응답 컬럼 |
-| `mv_geocode_text_search` | fuzzy geocode/search | `bd_mgt_sn`, `sido_cd`, `sig_cd`, `bjd_cd`, `si_nm`, `sgg_nm`, `rn_nrm`, `buld_nm_nrm`, `buld_mnnm`, `pt_source` | `rn_nrm`/`buld_nm_nrm` `gin_trgm_ops`, region+건물본번 btree |
+| `mv_geocode_text_search` | fuzzy geocode/search | `bd_mgt_sn`, `sido_cd`, `sig_cd`, `bjd_cd`, `si_nm`, `sgg_nm`, `rn_nrm`, `buld_nm_nrm`, `sigungu_buld_nm_nrm`, `buld_mnnm`, `pt_source` | `rn_nrm`/`buld_nm_nrm`/`sigungu_buld_nm_nrm` `gin_trgm_ops`, region+건물본번 btree |
 | `mv_reverse_point_5179` | reverse nearest/radius | `bd_mgt_sn`, `address_type`, `pt_source`, `pt_5179`, `pt_4326`, 우선순위 | GiST `pt_5179`, btree filter |
 | `mv_zipcode_lookup` | zipcode lookup | `zip_no`, `sido`, `sig`, 도로명/지번 표시 최소 컬럼 | btree `zip_no`, `zip_no + sig_cd` |
 | `v_admin_boundary_4326` | 디버그 지도 표시 | 행정/기초구역 polygon 4326 변환 | 일반 view, 필요 시 materialized |

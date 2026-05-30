@@ -160,6 +160,10 @@ CREATE TABLE IF NOT EXISTS tl_navi_buld_centroid (
   buld_slno       INTEGER,
   zip_no          TEXT,
   buld_nm         TEXT,
+  sigungu_buld_nm TEXT,
+  sigungu_buld_nm_nrm TEXT GENERATED ALWAYS AS (
+    regexp_replace(COALESCE(sigungu_buld_nm, ''), '\s+', '', 'g')
+  ) STORED,
   buld_use        TEXT,
   adm_cd          TEXT,
   adm_kor_nm      TEXT,

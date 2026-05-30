@@ -31,6 +31,13 @@ CREATE INDEX IF NOT EXISTS idx_roadaddr_entrc_road
 
 CREATE INDEX IF NOT EXISTS idx_navi_centroid_geom
   ON tl_navi_buld_centroid USING GIST (centroid_5179);
+CREATE INDEX IF NOT EXISTS idx_navi_centroid_resolve
+  ON tl_navi_buld_centroid (
+    rncode_full, buld_se_cd, buld_mnnm, buld_slno, (left(bjd_cd, 8))
+  );
+CREATE INDEX IF NOT EXISTS idx_navi_centroid_sigungu_buld_nm_trgm
+  ON tl_navi_buld_centroid USING GIN (sigungu_buld_nm_nrm gin_trgm_ops)
+  WHERE sigungu_buld_nm_nrm IS NOT NULL AND sigungu_buld_nm_nrm <> '';
 CREATE INDEX IF NOT EXISTS idx_navi_entrc_geom
   ON tl_navi_entrc USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_navi_entrc_bd

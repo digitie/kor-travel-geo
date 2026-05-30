@@ -59,6 +59,7 @@ def test_search_repo_uses_exact_preflight_before_broad_trgm_search() -> None:
     assert "mv_geocode_text_search" not in exact_sql
     assert "rn_nrm = :query_nrm" in exact_sql
     assert "buld_nm_nrm = :query_nrm" in exact_sql
+    assert "sigungu_buld_nm_nrm = :query_nrm" in exact_sql
     assert "_SEARCH_EXACT_SQL" in source
     assert "exact_total > 0" in source
     assert source.index("_SEARCH_EXACT_SQL") < source.rindex("_SEARCH_SQL")
@@ -84,6 +85,7 @@ def test_text_search_queries_use_slim_mv_before_target_join() -> None:
     assert "JOIN mv_geocode_target t ON t.bd_mgt_sn = c.bd_mgt_sn" in fuzzy_sql
     assert "WITH query_input AS" in search_sql
     assert "FROM mv_geocode_text_search ts" in search_sql
+    assert "ts.sigungu_buld_nm_nrm % q.query_nrm" in search_sql
     assert "JOIN mv_geocode_target t ON t.bd_mgt_sn = s.bd_mgt_sn" in search_sql
 
 
@@ -95,11 +97,15 @@ def test_mv_sql_includes_search_indexes_and_slim_text_search_mv() -> None:
     assert "ON mv_geocode_target (rn_nrm, bd_mgt_sn)" in mv_sql
     assert "idx_mv_buld_nm_nrm_exact" in mv_sql
     assert "WHERE buld_nm_nrm IS NOT NULL" in mv_sql
+    assert "sigungu_buld_nm_nrm" in mv_sql
+    assert "idx_mv_sigungu_buld_nm_nrm_exact" in mv_sql
     assert "CREATE MATERIALIZED VIEW mv_geocode_text_search AS" in text_search_sql
     assert "FROM mv_geocode_target" in text_search_sql
     assert "left(bjd_cd, 5) AS sig_cd" in text_search_sql
+    assert "sigungu_buld_nm_nrm" in text_search_sql
     assert "idx_mv_text_search_rn_trgm" in text_search_sql
     assert "idx_mv_text_search_bjd_prefix_buld" in text_search_sql
+    assert "idx_mv_text_search_sigungu_buld_nm_trgm" in text_search_sql
     assert "idx_mv_text_search_rn_exact" not in text_search_sql
 
 
@@ -210,6 +216,14 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     assert "consistency report severity ERROR" in queue_source
     assert "log_tail" in queue_source
     assert "kind NOT IN" in queue_source
+
+
+def test_mv_refresh_release_metadata_uses_operational_timeout() -> None:
+    source = inspect.getsource(admin_repo.AdminRepository.record_mv_refresh_release)
+
+    assert "SET LOCAL statement_timeout = 0" in source
+    assert "_infer_current_source_set" in source
+    assert "_collect_row_counts_for_conn" in source
 
 
 def test_admin_repo_explain_is_select_only_and_uses_json_format() -> None:
