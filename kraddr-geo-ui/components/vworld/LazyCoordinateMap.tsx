@@ -25,6 +25,9 @@ const DynamicCoordinateMap = dynamic<CoordinateMapProps>(
 );
 
 export function LazyCoordinateMap(props: CoordinateMapProps) {
+  if (!props.point && !props.bbox && !props.geometry) {
+    return <CoordinateMapSkeleton />;
+  }
   return <DynamicCoordinateMap {...props} />;
 }
 
