@@ -35,6 +35,15 @@ T-066에서 "샘플 선택 전에는 지도를 마운트하지 않도록" 보강
 - Backups 탭의 "백업본 저장 폴더"는 allowlist가 있으면 dropdown으로 기존 폴더를 선택하게 하고, 없으면 직접 입력 폴백을 유지한다.
 - 임의 디스크 경로를 탐색하는 엔드포인트는 두지 않는다(허용 디렉터리만 노출).
 
+## e2e 회귀 스펙
+
+`tests/e2e/consistency.spec.ts`를 추가했다. consistency API를 `page.route`로 목킹해 DB 없이 UI 단독으로 실행하며 두 가지를 검증한다.
+
+1. `/admin/consistency` 진입 시 멈추지 않고(핵심 UI가 렌더되면 메인 스레드가 살아 있는 것), 표본 선택 전에는 지도 대신 "표본 선택 대기" 안내만 보인다.
+2. 표본(`#1`)을 선택하면 안내가 사라지고 지도 범례(`분류 C4`, `건물 도형 있음`)가 나타난다.
+
+이 환경에서는 네트워크 정책으로 Playwright Chromium 바이너리를 내려받지 못해(`browserType.launch: Executable doesn't exist`) 실제 브라우저 실행은 하지 못했다. 대신 `npx playwright test --list`로 스펙 수집을 확인하고, `next start`로 띄운 UI에서 `/admin/consistency`가 HTTP 200으로 서버 렌더되는 것을 확인했다. 실제 브라우저 실행은 Chromium을 받을 수 있는 환경(사용자 Windows Playwright 등)에서 수행한다.
+
 ## 검증
 
 - 프론트: `npm run lint`, `npm run type-check`, `npm run test`(34 passed), `npm run build` 통과.
