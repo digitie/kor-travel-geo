@@ -7,13 +7,14 @@
 
 ## 대기 (우선순위 순)
 
-- 없음.
+- T-067 디버그 UI point+geometry overlay 및 v2 geocode 도형 옵션 공식화 — `/v2/geocode`는 기존 대표점(point)을 유지하면서 옵션으로 행정구역/도로/건물 도형을 함께 반환한다. 성복동은 행정구역 polygon, 성복1로는 도로 line, 성복1로 35는 건물 polygon을 표시한다. geocode/reverse 화면은 응답을 주소 입력 아래에 두고 지도를 더 크게 조정한다.
 
 ## 보류 (외부 조건)
 
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-066 Consistency 탭 진입 프리즈 완화. `/admin/consistency` 진입 직후 첫 point sample을 자동 지도 로드에 사용하던 흐름을 끊고, 사용자가 sample을 선택하기 전에는 가벼운 placeholder만 렌더한다. `LazyCoordinateMap`은 sample 선택 후에만 로드되도록 `ConsistencyPanel`을 수정하고 unit test로 고정했다. 상세: `docs/t066-consistency-tab-freeze.md` (2026-05-30)
 - [x] T-065 내비게이션용DB `시군구용건물명` 검색 반영. `match_build_*.txt`의 20번째 컬럼을 `sigungu_buld_nm`으로 적재하고 `sigungu_buld_nm_nrm`을 `mv_geocode_target`/`mv_geocode_text_search` 검색 후보에 포함했다. 실제 Docker DB에서 NAVI 10,687,317행 재적재, helper MV 재생성, `엄마집`/`P-101동` + `sig_cd=26110` 전후 recall 개선과 latency를 기록했다. 상세: `docs/t065-navi-building-name-search.md` (2026-05-30)
 - [x] T-064 상위 주소 geocode 후보. `/v2/geocode`에서 상세번호가 없는 상위 주소 입력은 별도 endpoint 없이 `district` 검색 후보로 승격한다. `tl_scco_ctprvn/sig/emd/li` polygon의 `ST_PointOnSurface` 대표점을 사용하고, `수지구` 실제 DB smoke에서 첫 후보 `용인시 수지구(sig_cd=41465)`를 확인했다. 상세: `docs/t064-region-only-geocode.md` (2026-05-30)
 - [x] Python 라이브러리 API v2 단일화. `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답으로 승격하고, 공개 Python API에서 `*_v2` 접미사와 v1-style `reverse_geocode`를 제거했다. REST `/v1/*`는 내부 어댑터로 vworld 호환 응답을 유지한다. ADR-039와 API reference를 갱신했다. (2026-05-29)

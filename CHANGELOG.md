@@ -10,6 +10,7 @@
 - 디버그 UI가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 런타임 config로 읽고, `/admin/settings`에서 브라우저 저장값으로 수정·복원할 수 있게 했다.
 
 ### Fixed
+- Consistency 탭 진입 프리즈 완화: `/admin/consistency`가 sample 선택 전부터 첫 point 샘플로 MapLibre/VWorld 지도를 자동 로드하던 동작을 중지했다. 이제 sample을 명시적으로 선택하기 전에는 가벼운 placeholder만 렌더하고, 지도 컴포넌트는 선택 후에만 동적으로 로드한다.
 - T-065 내비게이션용DB `시군구용건물명` 검색 반영: `match_build_*.txt` 20번째 컬럼을 `sigungu_buld_nm`으로 적재하고 `sigungu_buld_nm_nrm`을 `mv_geocode_target`/`mv_geocode_text_search`에 포함했다. `/v2/search` exact preflight와 broad trigram fallback이 이 값을 함께 점수화하며, 실제 DB에서 `엄마집`, `P-101동` + `sig_cd=26110` 검색이 `NOT_FOUND`에서 후보 반환으로 개선됐다. shadow swap 후 `ANALYZE` transaction과 MV refresh release metadata 기록도 대형 DB statement timeout에 걸리지 않도록 보강했다.
 - 상위 주소 geocode 후보: `/v2/geocode`에서 상세번호가 없는 행정구역 입력은 별도 endpoint 없이 `district` 검색 후보로 승격한다. `tl_scco_*` polygon의 `ST_PointOnSurface` 대표점을 반환하며, `수지구` 입력은 `용인시 수지구` 후보를 우선 반환한다.
 - 외부 API fallback 오류 명시화: `fallback="api"`인데 백엔드 provider 키가 없으면 `E0503` 설정 오류로 `KRADDR_GEO_VWORLD_API_KEY`/`KRADDR_GEO_JUSO_API_KEY` 필요성을 반환한다. VWorld `INVALID_KEY`와 Juso KEY 오류는 `E0501` 외부 API 인증 오류로 반환해 단순 `NOT_FOUND`와 구분한다.
