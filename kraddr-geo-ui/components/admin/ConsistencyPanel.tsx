@@ -146,10 +146,9 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
   const selectedCase = reportQuery.data?.cases.find((item) => item.code === selectedCaseCode);
   const selectedDefinition = definitionsByCode.get(selectedCaseCode);
   const samples = samplesQuery.data?.items ?? [];
-  const selectedSample =
-    samples.find((sample) => sample.sample_id === selectedSampleId) ??
-    samples.find((sample) => sample.point) ??
-    null;
+  const selectedSample = selectedSampleId
+    ? samples.find((sample) => sample.sample_id === selectedSampleId) ?? null
+    : null;
 
   const runMutation = useMutation({
     mutationFn: () => postJson<LoadJobStatus>("/admin/consistency/run", { scope: "full" }),
@@ -560,14 +559,33 @@ function BulkBar({
 }
 
 function MapPreview({ sample }: { sample: ConsistencyCaseSample | null }) {
+  if (!sample) {
+    return (
+      <div className="map-preview">
+        <div className="map-box map-placeholder">
+          <div className="map-marker">
+            <strong>샘플 선택 대기</strong>
+            <span>테이블에서 sample을 선택하면 지도와 증거를 로드합니다</span>
+          </div>
+        </div>
+        <div className="map-legend">
+          <span>case</span>
+          <span>거리 없음</span>
+          <span>point</span>
+          <span>line 없음</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="map-preview">
-      <LazyCoordinateMap point={sample?.point ?? null} />
+      <LazyCoordinateMap point={sample.point ?? null} />
       <div className="map-legend">
-        <span>{sample?.case_code ?? "case"}</span>
-        <span>{sample?.distance_m ? `${sample.distance_m.toFixed(2)}m` : "거리 없음"}</span>
-        <span>{sample?.has_polygon ? "polygon" : "point"}</span>
-        <span>{sample?.has_line ? "line" : "line 없음"}</span>
+        <span>{sample.case_code}</span>
+        <span>{sample.distance_m ? `${sample.distance_m.toFixed(2)}m` : "거리 없음"}</span>
+        <span>{sample.has_polygon ? "polygon" : "point"}</span>
+        <span>{sample.has_line ? "line" : "line 없음"}</span>
       </div>
     </div>
   );
