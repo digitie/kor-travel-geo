@@ -7,7 +7,7 @@ import maplibregl, {
   type MapMouseEvent,
   type Marker as MapLibreMarker
 } from "maplibre-gl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import {
   getVWorldMaxZoom,
   getVWorldRasterStyle,
@@ -48,6 +48,23 @@ type MapResourceError = Error & {
   url?: string;
 };
 
+// Map load/error state in a single reducer so the init effect dispatches one
+// action per event instead of juggling several independent setState setters.
+type MapStatus = { loaded: boolean; error: string | null };
+type MapStatusAction = { type: "loaded" } | { type: "error"; message: string };
+const INITIAL_MAP_STATUS: MapStatus = { loaded: false, error: null };
+
+function mapStatusReducer(state: MapStatus, action: MapStatusAction): MapStatus {
+  switch (action.type) {
+    case "loaded":
+      return state.loaded ? state : { ...state, loaded: true };
+    case "error":
+      return state.error === action.message ? state : { ...state, error: action.message };
+    default:
+      return state;
+  }
+}
+
 export function CoordinateMap({
   point,
   bbox,
@@ -68,10 +85,13 @@ export function CoordinateMap({
   }
 
   return (
+    // Remount on apiKey/layerType change so map-init state (loaded/error) resets
+    // naturally via a fresh mount instead of being adjusted inside an effect.
     <LoadedCoordinateMap
       apiKey={apiKey}
       bbox={bbox}
       geometry={geometry}
+      key={`${apiKey}::${layerType}`}
       layerType={layerType}
       onClick={onClick}
       point={point}
@@ -100,8 +120,8 @@ function LoadedCoordinateMap({
   const onClickRef = useRef<typeof onClick>(onClick);
   const initialCenterRef = useRef(point ?? DEFAULT_CENTER);
   const transientTileErrorsRef = useRef(0);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [status, dispatchStatus] = useReducer(mapStatusReducer, INITIAL_MAP_STATUS);
+  const { loaded, error } = status;
 
   useEffect(() => {
     onClickRef.current = onClick;
@@ -110,9 +130,6 @@ function LoadedCoordinateMap({
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    setLoaded(false);
-    setError(null);
 
     const map = new maplibregl.Map({
       center: [initialCenterRef.current.x, initialCenterRef.current.y],
@@ -127,19 +144,19 @@ function LoadedCoordinateMap({
 
     const handleLoad = () => {
       transientTileErrorsRef.current = 0;
-      setLoaded(true);
+      dispatchStatus({ type: "loaded" });
     };
     const handleError = (event: MapLibreErrorEvent) => {
       if (isVWorldTileError(event)) {
         transientTileErrorsRef.current += 1;
         warnMapTileError(event);
         if (transientTileErrorsRef.current >= TILE_ERROR_OVERLAY_THRESHOLD) {
-          setError("지도 타일 로딩이 불안정합니다");
+          dispatchStatus({ type: "error", message: "지도 타일 로딩이 불안정합니다" });
         }
         return;
       }
 
-      setError("지도 로딩 실패");
+      dispatchStatus({ type: "error", message: "지도 로딩 실패" });
     };
     const handleClick = (event: MapMouseEvent) => {
       onClickRef.current?.({ x: event.lngLat.lng, y: event.lngLat.lat });
@@ -164,8 +181,6 @@ function LoadedCoordinateMap({
 
     return () => {
       if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
-      markerRef.current?.remove();
-      markerRef.current = null;
       resizeObserver.disconnect();
       map.off("click", handleClick);
       map.off("error", handleError);
@@ -179,8 +194,6 @@ function LoadedCoordinateMap({
     const map = mapRef.current;
     if (!map || !loaded) return;
 
-    markerRef.current?.remove();
-    markerRef.current = null;
     removeGeometryOverlay(map);
 
     if (geometry?.geojson) {
@@ -202,10 +215,7 @@ function LoadedCoordinateMap({
         maxZoom: 17,
         padding: 36
       });
-      return;
-    }
-
-    if (point) {
+    } else if (point) {
       map.flyTo({
         animate: false,
         center: [point.x, point.y],
@@ -214,6 +224,12 @@ function LoadedCoordinateMap({
         zoom: Math.max(map.getZoom(), DEFAULT_ZOOM)
       });
     }
+
+    // This effect owns the marker it creates: remove it on re-run/unmount.
+    return () => {
+      markerRef.current?.remove();
+      markerRef.current = null;
+    };
   }, [bbox, geometry, loaded, point]);
 
   return (
