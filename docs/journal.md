@@ -2,6 +2,15 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-31 01:10 (에이전트별 MCP 설정 추가)
+
+**작업**: Claude Code, GPT Codex, Antigravity 에이전트의 로컬 설정 파일에 `playwright` 및 `sequential-thinking` MCP 서버를 추가했다.
+
+**반영**:
+- `.codex/config.toml`에 `playwright` 및 `sequential-thinking` MCP 서버 구성을 TOML 형식으로 반영했다.
+- `claude.json`과 `antigravity.json`을 새로 생성하여 해당 MCP 구성을 JSON 형식으로 반영했다.
+- 생성/변경된 3가지 설정 파일을 git staging 영역에 등록했다.
+
 ## 2026-05-30 11:45 (T-067 v2 geocode point+geometry overlay)
 
 **작업**: `/v2/geocode`와 디버그 UI에서 기존 대표점(`point`)을 유지하면서 행정구역/도로/건물 도형을 함께 확인할 수 있도록 보강했다.

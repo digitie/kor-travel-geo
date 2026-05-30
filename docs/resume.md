@@ -126,6 +126,7 @@
 - ✅ T-065 내비게이션용DB `시군구용건물명` 검색 반영 — `match_build_*.txt` 20번째 컬럼을 `sigungu_buld_nm`으로 적재하고 `sigungu_buld_nm_nrm`을 `mv_geocode_target`/`mv_geocode_text_search`에 포함했다. 실제 Docker DB에서 NAVI 10,687,317행을 재적재했고, `엄마집`/`P-101동` + `sig_cd=26110` 검색이 `NOT_FOUND`에서 `OK`로 개선됨을 확인했다. 상세: `docs/t065-navi-building-name-search.md`
 - ✅ T-066 Consistency 탭 진입 프리즈 완화 — `/admin/consistency`가 sample 선택 전부터 첫 point 샘플로 MapLibre/VWorld 지도를 자동 로드하지 않도록 수정했다. sample을 명시적으로 선택하기 전에는 placeholder만 표시하고, 지도 컴포넌트는 선택 후에만 동적으로 로드한다. 상세: `docs/t066-consistency-tab-freeze.md`
 - ✅ T-067 v2 geocode point+geometry overlay — `/v2/geocode`에 `include_geometry` 옵션을 추가해 기존 대표점(`point`)을 유지하면서 행정구역/도로/건물 도형을 `geometry`/`bbox`로 함께 반환한다. `/debug/geocode`는 point marker와 GeoJSON overlay를 표시하고, geocode/reverse 화면은 응답을 입력 아래에 두며 지도 패널을 키웠다. 실제 Docker DB에서 `성복동`/`성복1로`/`성복1로 35`를 각각 region polygon/road line/building polygon으로 확인했다. 상세: `docs/t067-v2-geocode-geometry-overlay.md`
+- ✅ 에이전트별 MCP 설정 추가 — Claude Code (`claude.json`), GPT Codex (`.codex/config.toml`), Antigravity (`antigravity.json`) 설정 파일에 playwright 및 sequential-thinking MCP 구성을 추가하고 git에 등록했다.
 
 ## 다음 한 작업 (1시간 이내 분량)
 
