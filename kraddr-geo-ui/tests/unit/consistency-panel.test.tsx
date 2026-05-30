@@ -67,6 +67,16 @@ function mockConsistencyApi() {
           likely_causes: ["좌표 원천 이상치"],
           decision_guide: "지도 확인 후 승인 또는 거절",
           threshold: "50m 초과 WARN"
+        },
+        {
+          code: "C5",
+          name: "내비 centroid와 건물 polygon centroid 거리 이상치",
+          compares: "내비 centroid와 건물 polygon centroid",
+          abnormal_criteria: "두 centroid 거리가 임계값을 초과한다.",
+          evidence: ["내비 centroid", "건물 polygon"],
+          likely_causes: ["좌표 원천 이상치"],
+          decision_guide: "지도 확인 후 승인 또는 거절",
+          threshold: "WARN"
         }
       ];
     }
@@ -85,14 +95,21 @@ function mockConsistencyApi() {
             name: "출입구 좌표와 건물 polygon 거리 이상치",
             severity: "ERROR",
             count: 1
+          },
+          {
+            code: "C5",
+            name: "내비 centroid와 건물 polygon centroid 거리 이상치",
+            severity: "WARN",
+            count: 1
           }
         ]
       };
     }
-    if (path === "/admin/consistency/consistency_1/cases/C4/summary") {
+    const summaryMatch = path.match(/\/cases\/(C\d+)\/summary$/);
+    if (summaryMatch) {
       return {
         report_id: "consistency_1",
-        case_code: "C4",
+        case_code: summaryMatch[1],
         total: 1,
         by_severity: { ERROR: 1 },
         by_decision: { unreviewed: 1 },
@@ -100,18 +117,20 @@ function mockConsistencyApi() {
         distance: { max_m: 100 }
       };
     }
-    if (path.includes("/admin/consistency/consistency_1/cases/C4/samples")) {
+    const samplesMatch = path.match(/\/cases\/(C\d+)\/samples/);
+    if (samplesMatch) {
+      const caseCode = samplesMatch[1];
       return {
         report_id: "consistency_1",
-        case_code: "C4",
+        case_code: caseCode,
         total: 1,
         page: 1,
         page_size: 50,
         items: [
           {
-            sample_id: "sample-1",
+            sample_id: `sample-${caseCode}`,
             report_id: "consistency_1",
-            case_code: "C4",
+            case_code: caseCode,
             severity: "ERROR",
             sample_rank: 0,
             bd_mgt_sn: "41463114441215800016900000",
@@ -163,5 +182,25 @@ describe("ConsistencyPanel", () => {
 
     await waitFor(() => expect(screen.getByTestId("lazy-coordinate-map")).toBeInTheDocument());
     expect(mapMock.LazyCoordinateMap).toHaveBeenCalledTimes(1);
+  });
+
+  // C1~C10 case 이동 시 무한 re-render로 탭이 멈추던 회귀를 막는다.
+  // `samples`가 매 렌더마다 새 배열이면 useReactTable auto-reset이 매 렌더 setState를
+  // 호출해 무한 루프에 빠진다. 루프가 재발하면 이 테스트는 타임아웃으로 실패한다.
+  it("case를 전환해도 멈추지 않고 새 case 샘플을 렌더한다", async () => {
+    renderPanel();
+
+    await screen.findByText("consistency_1");
+    await screen.findByText("#1");
+
+    const otherCase = await screen.findByRole("button", { name: /C5/ });
+    fireEvent.click(otherCase);
+
+    // 전환된 case(C5)의 기준 패널이 갱신되면 메인 스레드가 살아 있는 것이다.
+    // (abnormal_criteria 문구는 CriteriaPanel에만 나타나고 선택된 case에 따라 바뀐다.)
+    await waitFor(() =>
+      expect(screen.getByText("두 centroid 거리가 임계값을 초과한다.")).toBeInTheDocument()
+    );
+    await screen.findByText("#1");
   });
 });
