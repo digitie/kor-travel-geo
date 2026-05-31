@@ -261,11 +261,11 @@ print(ds.GetLayer(0).GetFeatureCount())
 
 Windows 재설치, WSL 초기화, 새 PC 이전 뒤에는 본 문서의 패키지 설치 절차만으로는 충분하지 않다. Git branch/PR 상태, NTFS `data/`, `.env`, Codex 세션 handoff를 함께 복구해야 한다.
 
-자세한 절차는 `docs/windows-reinstall-recovery.md`를 따른다. 특히 PR #13/T-027은 재설치 직후 실제 Docker full-load를 실행하지 말고 `git diff --check`, `bash -n scripts/fullload_test.sh`, 필요 시 `PLAN_ONLY=1 bash scripts/fullload_test.sh` 순서까지만 확인한다.
+자세한 절차는 `docs/windows-reinstall-recovery.md`를 따른다. T-027 실 데이터 전체 적재는 이미 완료된 상태이므로, 재설치 후 빈 DB가 필요하면 적재 완료 DB 백업 복원(ADR-030/ADR-036) 또는 `scripts/fullload_test.sh` 재실행으로 정상 복구한다. 적재 전 `git diff --check`, `bash -n scripts/fullload_test.sh`, `PLAN_ONLY=1 bash scripts/fullload_test.sh`로 경로·기준월을 먼저 확인하면 좋다.
 
 ## 참고
 
 - `docs/geocoding-readiness.md` 0번 체크리스트 — readiness 점검 시 GDAL부터 본다.
 - `docs/decisions.md` ADR-005(GDAL Python binding), ADR-008(시스템 GDAL 버전 핀).
 - `docs/backend-package.md` §9.2 — `SidoLoader`에서 `gdal.VectorTranslate` 사용.
-- `docs/windows-reinstall-recovery.md` — 재설치·새 Codex 세션·PR #13 handoff 복구 절차.
+- `docs/windows-reinstall-recovery.md` — 재설치·새 세션 복구 절차(Git worktree, NTFS `data/`, `.env`, DB 백업/복원).

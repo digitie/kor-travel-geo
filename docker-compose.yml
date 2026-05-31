@@ -8,8 +8,8 @@ services:
     ports:
       - "${KRADDR_GEO_DB_PORT:-15434}:5432"
     volumes:
-      - ${KRADDR_PGDATA:-~/kraddr-geo-data/pgdata}:/var/lib/postgresql/data
-      - ${KRADDR_JUSO_DATA:-~/kraddr-geo-data/juso}:/data/juso:ro
+      - ${KRADDR_PGDATA:-./data/pgdata}:/var/lib/postgresql/data
+      - ${KRADDR_JUSO_DATA:-./data/juso}:/data/juso:ro
     shm_size: "512mb"
     command:
       - "postgres"
