@@ -38,13 +38,13 @@ npx playwright test --config playwright.config.ts --project chromium --workers 1
 
 ## Docker 실행
 
-WSL ext4 작업 디렉토리에서 다음처럼 UI 이미지를 빌드하고 실행한다. Linux Docker에서 백엔드를 호스트의 `localhost:8000`으로 띄운 경우 `host.docker.internal`을 host-gateway로 매핑한다.
+WSL ext4 작업 디렉토리에서 다음처럼 UI 이미지를 빌드하고 실행한다. Linux Docker에서 백엔드를 호스트의 `localhost:8888`으로 띄운 경우 `host.docker.internal`을 host-gateway로 매핑한다.
 
 ```bash
 docker build -t kraddr-geo-ui:debug-v2 ./kraddr-geo-ui
 docker run --rm \
   --add-host=host.docker.internal:host-gateway \
-  -e KRADDR_GEO_API_INTERNAL_URL=http://host.docker.internal:8000 \
+  -e KRADDR_GEO_API_INTERNAL_URL=http://host.docker.internal:8888 \
   -e NEXT_PUBLIC_API_BASE_URL=/api/proxy \
   -e NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key \
   -p 13088:3000 \

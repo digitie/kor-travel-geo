@@ -155,12 +155,12 @@ python scripts/benchmark_query_performance.py \
 REST e2e benchmark는 위 SQL benchmark의 `corpus.json`을 입력으로 쓴다. API 서버는 별도 터미널에서 같은 DB를 바라보도록 기동한다.
 
 ```bash
-uvicorn kraddr.geo.api.app:app --host 127.0.0.1 --port 8000
+uvicorn kraddr.geo.api.app:app --host 127.0.0.1 --port 8888
 ```
 
 ```bash
 python scripts/benchmark_api_latency.py \
-  --base-url http://127.0.0.1:8000 \
+  --base-url http://127.0.0.1:8888 \
   --corpus "$RUN_ROOT/$ENV_LABEL/sql/corpus.json" \
   --iterations 30 \
   --warmup 2 \

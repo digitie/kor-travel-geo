@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-31 11:40 (API 공식 포트 8888 전환)
+
+**작업**: 사용자 지시에 따라 PC/WSL 개발 환경의 FastAPI 공식 host 포트를 `8000`에서 `8888`로 조정했다.
+
+**반영**:
+- README, `docs/ports.md`, `docs/dev-environment.md`, ADR-040의 공식 API 포트를 `8888`로 갱신했다.
+- `KRADDR_GEO_API_INTERNAL_URL` 예시와 `kraddr-geo-ui` 프록시 기본 backend URL을 `http://localhost:8888`로 바꿨다.
+- API reference curl 예시와 REST latency benchmark 기본 `--base-url`도 `8888`로 맞췄다.
+
+**검증**:
+- `npm run type-check` → 통과
+- `npm run test` → `36 passed`
+- `npm run build` → 통과
+- `python -m ruff check scripts/benchmark_api_latency.py` → 통과
+- `git diff --check` → 통과
+- `curl http://127.0.0.1:8888/v1/healthz` → `{"status":"ok"}`
+- `curl http://127.0.0.1:13088/api/proxy/v1/healthz` → `{"status":"ok"}`
+
 ## 2026-05-31 08:15 (PR #97~#102 리뷰 감사, C1~C10 가로 탭, 포트 공식화)
 
 **작업**: PR #97부터 최신 PR #102까지 상세 리뷰 표면을 확인하고, `/admin/consistency`의 C1~C10 case 선택 UX와 로컬 포트 정책을 정리했다.

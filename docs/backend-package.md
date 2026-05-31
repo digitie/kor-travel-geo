@@ -1604,7 +1604,7 @@ WorkingDirectory=/opt/addr/app
 Environment=KRADDR_GEO_LOG_FORMAT=json
 EnvironmentFile=/etc/kraddr-geo/env
 ExecStart=/opt/addr/app/.venv/bin/uvicorn kraddr.geo.api.app:app \
-          --host 127.0.0.1 --port 8000 --workers 2 --proxy-headers
+          --host 127.0.0.1 --port 8888 --workers 2 --proxy-headers
 Restart=always
 RestartSec=3
 LimitNOFILE=65535

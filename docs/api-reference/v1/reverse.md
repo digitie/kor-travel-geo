@@ -24,7 +24,7 @@
 ## 예시
 
 ```bash
-curl -G "http://localhost:8000/v1/address/reverse" \
+curl -G "http://localhost:8888/v1/address/reverse" \
   --data-urlencode "x=127.036" \
   --data-urlencode "y=37.501" \
   --data-urlencode "type=both"

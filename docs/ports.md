@@ -5,7 +5,7 @@
 | 표면 | 공식 host 포트 | 내부 포트 | 비고 |
 |------|----------------|-----------|------|
 | PostgreSQL + PostGIS | `15434` | `5432` | Docker compose 기본 `KRADDR_GEO_DB_PORT`. DSN은 `postgresql+psycopg://addr:addr@localhost:15434/kraddr_geo` |
-| FastAPI 백엔드 | `8000` | `8000` | `uvicorn kraddr.geo.api.app:app --host 127.0.0.1 --port 8000` |
+| FastAPI 백엔드 | `8888` | `8888` | `uvicorn kraddr.geo.api.app:app --host 127.0.0.1 --port 8888` |
 | `kraddr-geo-ui` | `13088` | `3000` | 브라우저/e2e 기준 URL. Docker는 `-p 13088:3000`, 로컬 dev는 `npm run dev -- --port 13088` |
 
 `3000`은 Next.js 프로세스의 내부 기본값일 뿐, 이 저장소의 브라우저 진입점으로 문서화하지 않는다. Playwright 기본 `PLAYWRIGHT_BASE_URL`도 `http://127.0.0.1:13088`을 사용한다.
@@ -18,11 +18,11 @@ KRADDR_GEO_DB_PORT=15434 docker compose up -d db
 
 # 백엔드
 KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kraddr_geo \
-  uvicorn kraddr.geo.api.app:app --host 127.0.0.1 --port 8000
+  uvicorn kraddr.geo.api.app:app --host 127.0.0.1 --port 8888
 
 # UI
 cd kraddr-geo-ui
-KRADDR_GEO_API_INTERNAL_URL=http://localhost:8000 npm run dev -- --port 13088
+KRADDR_GEO_API_INTERNAL_URL=http://localhost:8888 npm run dev -- --port 13088
 ```
 
 Docker UI로 띄울 때는 백엔드를 host gateway로 연결한다.
@@ -30,7 +30,7 @@ Docker UI로 띄울 때는 백엔드를 host gateway로 연결한다.
 ```bash
 docker run --rm \
   --add-host=host.docker.internal:host-gateway \
-  -e KRADDR_GEO_API_INTERNAL_URL=http://host.docker.internal:8000 \
+  -e KRADDR_GEO_API_INTERNAL_URL=http://host.docker.internal:8888 \
   -e NEXT_PUBLIC_API_BASE_URL=/api/proxy \
   -p 13088:3000 \
   kraddr-geo-ui:debug-v2

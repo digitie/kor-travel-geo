@@ -193,7 +193,7 @@ KRADDR_GEO_EPOST_API_KEY=urlDecoded+ServiceKey+Value==
 ```bash
 # kraddr-geo-ui/.env.local
 NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key
-KRADDR_GEO_API_INTERNAL_URL=http://localhost:8000
+KRADDR_GEO_API_INTERNAL_URL=http://localhost:8888
 NEXT_PUBLIC_API_BASE_URL=/api/proxy
 ```
 
