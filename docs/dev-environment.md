@@ -72,7 +72,7 @@ git switch -c agent/codex-next origin/main
 
 이 상태에서 `git worktree prune`을 그대로 돌리면 **살아있는 worktree 등록까지 지워질 수 있으니** 바로 prune하지 않는다. 복구는 실제로 사용할 환경에서 `git worktree repair <worktree 경로>`를 실행해 포인터를 그 환경 기준으로 맞춘다(`.git`과 admin `gitdir` 양방향을 함께 고친다). 정리는 repair로 살아있는 worktree를 먼저 valid 상태로 만든 뒤 prune해, 폴더가 실제로 사라진 등록만 표적 제거한다.
 
-원칙: 한 머신에서는 worktree git 조작을 **하나의 환경으로 통일**하고, 환경을 바꿀 때만 `repair`로 재정렬한다.
+원칙(현재 정책): 각 worktree는 **자기 환경 전용**으로 운용한다. 에이전트 worktree는 한쪽 환경에서만 git을 다루고(예: 어떤 worktree는 Windows 네이티브 git, 다른 worktree는 WSL git), 같은 worktree를 두 환경에서 번갈아 조작하지 않는다. 특히 `git worktree prune`은 **그 worktree를 운용하는 환경에서만** 실행한다. 다른 환경에서 prune하면 정상 worktree가 그 환경 기준으로 `prunable`로 보여 등록이 삭제될 수 있다. 환경을 바꿔야 하면 먼저 `git worktree repair <worktree 경로>`로 포인터를 그 환경 기준으로 맞춘 뒤 사용한다.
 
 ### 로컬 secret/env 파일
 
