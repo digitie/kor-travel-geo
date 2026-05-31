@@ -3,6 +3,7 @@
 ## 상태
 
 - 상태: 2026-05-29 최종 클린 재적재 완료. 새 Docker compose project와 빈 `pgdata` 경로에서 전체 적재, optional direct 출입구/SPPN, daily delta, MV swap, C1~C10, smoke, data-quality export, DB size snapshot까지 확인했다.
+- 2026-06-01에는 사용자 지시에 따라 별도 Docker DB `kraddr-geo-t027-retune`(port `15435`)에서 T-027 전체 적재를 다시 수행하고, 20260401~20260506 daily ZIP 전체를 실제 데이터로 적용했다. 최종 `mv_geocode_target=6,418,735`, `mv_geocode_text_search=6,418,735`, `tl_sppn_makarea=24,204`이며 상세 비교는 `docs/t027-t047-sppn-retune-20260601.md`에 기록했다.
 - 대상 PR: T-027 최종 클린 적재 보강 PR
 - 실행 대상 데이터: `F:\dev\python-kraddr-geo\data\juso` (`/mnt/f/dev/python-kraddr-geo/data/juso`)
 - 원칙: Docker PostGIS에 새 볼륨을 만들고, 로컬 개발 DB나 기존 운영성 데이터는 건드리지 않는다.

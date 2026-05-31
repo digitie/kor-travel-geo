@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from scripts.benchmark_query_performance import (
+    QUERY_SPECS,
     BenchmarkCase,
     Measurement,
     _case_group_counts,
@@ -199,6 +200,11 @@ def test_search_fuzzy_case_uses_search_execution_path() -> None:
 
     assert "search_fuzzy" in benchmark.QUERY_SPECS
     assert benchmark._is_search_sql(case)
+
+
+def test_query_benchmark_tracks_sppn_geocode_and_reverse_paths() -> None:
+    assert QUERY_SPECS["sppn_geocode"].group == "Q11_SPPN"
+    assert QUERY_SPECS["sppn_reverse"].group == "Q11_SPPN"
 
 
 def test_pg_stat_delta_uses_queryid_and_sorts_by_total_exec_time() -> None:

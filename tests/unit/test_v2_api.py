@@ -11,8 +11,19 @@ from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.core.v2 import geocode_v2_from_v1, reverse_v2_from_v1
 from kraddr.geo.dto.address import AddressStructure, RefinedAddress
 from kraddr.geo.dto.common import Point, ServiceMeta
-from kraddr.geo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
-from kraddr.geo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
+from kraddr.geo.dto.geocode import (
+    GeocodeExtension,
+    GeocodeInput,
+    GeocodeResponse,
+    GeocodeResult,
+    SppnMakareaContext,
+)
+from kraddr.geo.dto.reverse import (
+    ReverseExtension,
+    ReverseInput,
+    ReverseResponse,
+    ReverseResultItem,
+)
 from kraddr.geo.dto.v2 import (
     BBoxV2,
     CandidateV2,
@@ -335,3 +346,34 @@ def test_reverse_v2_promotes_distance_and_uses_distance_confidence() -> None:
     assert converted.input is converted_input
     assert converted.candidates[0].distance_m == pytest.approx(50.0)
     assert converted.candidates[0].confidence == pytest.approx(0.75)
+
+
+def test_reverse_v2_promotes_sppn_extension_to_candidate() -> None:
+    inp = ReverseInput(point=Point(x=127.1, y=36.6), radius_m=200)
+    response = ReverseResponse(
+        service=ServiceMeta(name="kraddr-geo", operation="reverse_geocode"),
+        status="OK",
+        input=inp,
+        x_extension=ReverseExtension(
+            sppn_makarea=(
+                SppnMakareaContext(
+                    sig_cd="36110",
+                    makarea_id="17",
+                    makarea_nm="운주산",
+                    source_yyyymm="202605",
+                    area_m2=10124000.0,
+                ),
+            )
+        ),
+    )
+
+    converted = reverse_v2_from_v1(
+        inp=ReverseV2Input(lon=127.1, lat=36.6, radius_m=200),
+        response=response,
+    )
+
+    assert converted.status == "OK"
+    assert converted.candidates[0].match_kind == "sppn"
+    assert converted.candidates[0].region is not None
+    assert converted.candidates[0].region.sig_cd == "36110"
+    assert converted.candidates[0].metadata["makarea_nm"] == "운주산"
