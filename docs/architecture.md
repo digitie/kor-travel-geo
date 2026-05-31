@@ -235,17 +235,21 @@ T-050 5차부터 `ops.table_stats_snapshots`는 수동 capture API뿐 아니라 
 
 ## 개발 환경 (PC, WSL)
 
-PC 개발은 WSL의 ext4 위에서 진행한다. NTFS 마운트에서 직접 `git`/`pip`/`uvicorn`을 실행하지 않는다.
+PC 개발의 Git source of truth는 NTFS의 `F:\dev\python-kraddr-geo` 계열 checkout이다. 코드 편집, branch, commit, PR은 NTFS worktree에서 수행하고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(ADR-041).
 
 ```
-~/dev/python-kraddr-geo/                              ← 코드, 가상환경, 테스트 (ext4, source of truth)
-/mnt/<drive>/projects/python-kraddr-geo/              ← Windows에서도 보이는 카피본 (NTFS)
-/mnt/<drive>/projects/python-kraddr-geo/data/         ← 도로명주소 ZIP/SHP, postal TXT, 외부 dump (NTFS)
+/mnt/f/dev/python-kraddr-geo/                         ← NTFS main repo, main 동기화와 worktree 관리
+/mnt/f/dev/python-kraddr-geo-codex/                   ← ChatGPT Codex worktree
+/mnt/f/dev/python-kraddr-geo-claude/                  ← Claude Code worktree
+/mnt/f/dev/python-kraddr-geo-antigravity/             ← Google Antigravity 2.0 worktree
+~/dev/python-kraddr-geo-<agent>-test/                 ← WSL ext4 테스트 미러, commit/push 금지
+/mnt/f/dev/python-kraddr-geo/data/                    ← 도로명주소 ZIP/SHP, postal TXT, 외부 dump (NTFS)
 ```
 
-- 작업이 완료되면 ext4 → NTFS 프로젝트 디렉토리로 카피한다.
-- **데이터(`data/`)는 NTFS 측에만 둔다**. ext4 작업 디렉토리에는 심볼릭 링크(`ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`) 또는 절대경로로만 참조한다.
-- 통합/e2e 테스트, 전국 적재 검증, vworld 비교 등은 NTFS의 `data/`를 reference로 삼는다.
+- 테스트 전에는 NTFS worktree를 `rsync --delete`로 ext4 테스트 미러에 복사한다.
+- ext4 테스트 미러는 실행 산출물 전용이며 Git source of truth가 아니다.
+- **데이터(`data/`)는 NTFS main repo 아래에 둔다**. ext4 테스트 미러에는 심볼릭 링크 또는 절대경로로만 참조한다.
+- Playwright e2e는 Windows Node/브라우저에서만 실행한다.
 
 ## 적재 ↔ 서빙은 단일 스키마 + MV로 분리한다
 

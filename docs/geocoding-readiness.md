@@ -16,7 +16,7 @@
 
 ## 환경 readiness 체크리스트
 
-PC 개발은 WSL ext4에서 코드/가상환경/`git`을 운영하고, 데이터(`data/`)는 NTFS의 프로젝트 디렉토리(`/mnt/<drive>/projects/python-kraddr-geo/data/`) 아래에 둔다(AGENTS.md 참조). 아래 명령의 데이터 경로는 ext4 작업 디렉토리에서 NTFS의 `data/`를 가리키는 심볼릭 링크 또는 절대경로로 해석한다.
+PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/python-kraddr-geo-*`)이고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(AGENTS.md, ADR-041 참조). 데이터(`data/`)는 NTFS main repo(`/mnt/f/dev/python-kraddr-geo/data/`) 아래에 두며, 아래 명령의 데이터 경로는 ext4 테스트 미러에서 NTFS의 `data/`를 가리키는 심볼릭 링크 또는 절대경로로 해석한다.
 
 1. **시스템 GDAL 설치** — `sudo apt install libgdal-dev gdal-bin`. `gdal-config --version`으로 버전 확인 후 Python 바인딩 핀: `pip install "gdal==$(gdal-config --version)"`. 세부 절차는 `docs/dev-environment.md` 참조 (ADR-008).
 2. **PostgreSQL 16 + PostGIS 3.4** 설치 및 기동
@@ -28,7 +28,7 @@ PC 개발은 WSL ext4에서 코드/가상환경/`git`을 운영하고, 데이터
    ```
 4. `Settings.pg_dsn` 설정 (`postgresql+psycopg://...`)
 5. `alembic upgrade head`로 DDL 적용 (마스터 11개 + 보조 + 메타 + MV 정의)
-6. NTFS의 데이터 디렉토리를 ext4에서 참조: `ln -s /mnt/<drive>/projects/python-kraddr-geo/data data`
+6. NTFS의 데이터 디렉토리를 ext4 테스트 미러에서 참조: `ln -s /mnt/f/dev/python-kraddr-geo/data data`
 7. 17개 시도 원천 적재 (`kraddr-geo load all-sidos --juso ... --locsum ... --navi ... --shp-root ... --yyyymm 202605`)
 8. `kraddr-geo load pobox ./data/postal/202605/JUSO_사서함.txt`, `kraddr-geo load bulk ./data/postal/202605/도로명주소_zipcode.txt`
 9. `kraddr-geo refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`

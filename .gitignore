@@ -22,6 +22,7 @@ dist/
 .wsl-node/
 .codex_tmp/
 .codegraph/
+.claude/
 
 data/
 *.sqlite

@@ -22,16 +22,18 @@
 
 ### 개발 환경 (PC, WSL)
 
-- **코드/가상환경/`git`은 WSL의 ext4** 위에서 운영한다 (예: `~/dev/python-kraddr-geo/`). NTFS 마운트에서 직접 작업하지 않는다.
-- **데이터(`data/`)는 NTFS의 프로젝트 디렉토리 아래**(예: `/mnt/d/projects/python-kraddr-geo/data/`)에 둔다. ext4 작업 디렉토리에는 심볼릭 링크(`ln -s /mnt/d/projects/python-kraddr-geo/data data`) 또는 절대경로로 참조한다.
-- **테스트는 NTFS의 `data/`를 reference**로 삼는다. 단위 테스트는 소량 픽스처(ext4)로 충분하지만 통합/e2e 테스트, 전국 적재 검증, vworld 비교 등은 NTFS 데이터를 사용한다.
-- **작업이 완료되면 ext4 → NTFS로 카피**한다. Git의 source of truth는 ext4 쪽이다.
+- **Git source of truth는 NTFS** `/mnt/f/dev/python-kraddr-geo` 계열 checkout이다. 코드 편집, branch, commit, PR은 NTFS 에이전트 worktree에서 수행한다.
+- **테스트와 장기 실행은 WSL ext4 테스트 미러**에서 수행한다. NTFS worktree를 `rsync --delete`로 `~/dev/python-kraddr-geo-<agent>-test/`에 복사한 뒤 `pip`/`npm`/`pytest`/`uvicorn`을 실행한다. ext4 미러에서는 commit/push하지 않는다.
+- **데이터(`data/`)는 NTFS main repo 아래** `/mnt/f/dev/python-kraddr-geo/data/`를 기준으로 둔다. ext4 테스트 미러에서는 절대경로 또는 심볼릭 링크로 참조한다.
+- **로컬 secret/env 파일**(`.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
+- **Playwright e2e는 Windows Node/브라우저 전용**이다. WSL Playwright는 실행하지 않는다.
 
 ### 에이전트별 worktree / CodeGraph
 
-- ChatGPT Codex는 `~/dev/geo-codex`, Claude Code는 `~/dev/geo-claude`, Google Antigravity 2.0은 `~/dev/geo-antigravity` worktree를 고정으로 사용한다.
+- ChatGPT Codex는 `/mnt/f/dev/python-kraddr-geo-codex`, Claude Code는 `/mnt/f/dev/python-kraddr-geo-claude`, Google Antigravity 2.0은 `/mnt/f/dev/python-kraddr-geo-antigravity` worktree를 고정으로 사용한다.
+- `geo-codex`, `geo-claude`, `geo-antigravity` 이름은 더 이상 새 작업에 쓰지 않는다.
 - worktree는 에이전트별로 유지하고 작업마다 새 branch만 만든다. 새 작업 시작 예시는 `git fetch origin main && git switch -c agent/codex-next origin/main`이다.
-- CodeGraph는 worktree마다 최초 1회 `codegraph init -i`로 초기화한다. `.codegraph/`가 이미 있으면 `codegraph init`을 반복하지 말고 `codegraph sync`로 증분 갱신한다.
+- CodeGraph는 worktree마다 최초 1회 `codegraph init -i`로 초기화한다. `.codegraph/`가 이미 있으면 `codegraph init`을 반복하지 말고 `codegraph sync`로 증분 갱신한다. NTFS `/mnt`에서는 live watch가 비활성화될 수 있으므로 branch 전환·pull·merge 뒤 수동 `sync`가 필수다.
 - 현재 인덱스 상태는 `codegraph status`로 확인한다.
 - Codex MCP 설정은 프로젝트 루트 `.codex/config.toml`에 둔다. Codex Desktop을 재시작한 뒤 CodeGraph MCP 도구가 노출된다.
 - `kraddr-geo-ui`의 React 컴포넌트, 지도 wrapper, 공용 UI primitive를 수정하기 전에는 CodeGraph MCP의 `codegraph_explore`로 영향도를 먼저 평가한다. 확인 대상은 호출자, import 경로, 관련 테스트, `maplibre-vworld-js` 경계다.
@@ -40,14 +42,17 @@
 ## 2. 빠른 시작
 
 ```bash
-cd ~/dev/python-kraddr-geo                            # WSL ext4
+cd /mnt/f/dev/python-kraddr-geo-codex              # NTFS Codex worktree
+git fetch origin main && git switch -c agent/codex-next origin/main
+rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kraddr-geo-ui/.next --exclude data ./ ~/dev/python-kraddr-geo-codex-test/
+cd ~/dev/python-kraddr-geo-codex-test                 # WSL ext4 테스트 미러
 sudo apt install -y libgdal-dev gdal-bin              # loaders extra용 (ADR-008)
 uv venv && uv pip install -e ".[api,dev]"
 uv pip install "gdal==$(gdal-config --version)"        # 시스템 GDAL과 버전 매치
 uv pip install -e ".[loaders]"                         # 이제 안전하게 빌드
-cp .env.example .env && $EDITOR .env                  # KRADDR_GEO_PG_DSN 채우기
-ln -s /mnt/d/projects/python-kraddr-geo/data data     # NTFS data를 참조
-docker compose up -d postgres                         # postgis/postgis:16-3.4
+test -f .env || cp .env.example .env                  # KRADDR_GEO_PG_DSN 채우기
+test -e data || ln -s /mnt/f/dev/python-kraddr-geo/data data # NTFS data를 참조
+docker compose up -d db                         # postgis/postgis:16-3.4
 alembic upgrade head
 kraddr-geo load all-sidos \
   --juso "./data/juso/도로명주소 한글_전체분" \

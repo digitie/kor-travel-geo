@@ -2,12 +2,13 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-30 갱신, by codex)
+## 현재 진척도 (2026-05-31 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ `main` 브랜치를 문서·repo 설정만 남도록 정리
 - ✅ 신규 사양(`kraddr.geo` 패키지의 PostgreSQL+PostGIS 재구현 + `kraddr-geo-ui` 프론트엔드) 문서 골격을 `main`에 반영
 - ✅ 식별자 정정 및 WSL/NTFS 개발 정책, NTFS의 `data/` 정책을 모든 문서에 명시
+- ✅ NTFS main repo + 에이전트별 `python-kraddr-geo-*` worktree 정책 전환 — Git source of truth는 `/mnt/f/dev/python-kraddr-geo` 계열 NTFS checkout으로 두고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사해 수행한다. Codex/Claude/Antigravity NTFS worktree와 CodeGraph 인덱스를 생성했고 로컬 secret/env 파일을 복사했다. 상세: ADR-041, `docs/dev-environment.md`
 - ✅ `pyproject.toml` 신규 작성 — `name = "python-kraddr-geo"`, scripts `kraddr-geo = "kraddr.geo.cli.main:app"`
 - ✅ 기본 패키지 스캐폴드 작성 — `src/kraddr/geo/`, 계층별 빈 패키지, `AsyncAddressClient` 자리표시자, Typer CLI 진입점
 - ✅ `Settings` + `.env.example` 작성 — `KRADDR_GEO_` prefix, DB/API/외부 API/cache/log/loader 설정
@@ -80,7 +81,7 @@
 - ✅ PR #34~#47 리뷰 코멘트 audit/fixup — conversation/review/inline/thread 표면을 다시 확인했고 unresolved current thread 0개를 기록했다. `source_set` DTO/OpenAPI/TS 타입을 nested JSON 보존으로 보강하고, `ops.audit_events.job_id` FK를 `ON DELETE NO ACTION`으로 바꿨으며, `maplibre-vworld-js` 최신 `7947b2e` 동기화와 WSL frontend 검증 helper를 추가했다. 상세: `docs/postmerge-review-fixups-pr34-latest.md`
 - ✅ T-027 최종 실 데이터 클린 재적재 완료 — Docker PostGIS `localhost:15434`의 새 compose project/빈 pgdata에 실제 `data/juso` 원천과 `20260401_dailyjusukrdata.zip`을 처음부터 적재했다. 총 3,963초, `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`, active serving release `faa1f42b-f5b9-4ef0-af0b-1a422d938ed3`, smoke `OK`를 확인했다. C1~C10은 실제 원천 품질 이슈(C2/C4/C6/C7)로 `severity_max=ERROR`이며, data-quality CSV 8개와 DB size snapshot을 남겼다. 상세: `docs/t027-fullload-plan.md`
 - ✅ 최신 C1~C10 재검증 완료 — 2026-05-29 최종 재적재 후 C1~C10은 약 633초에 완료됐고 `severity_max=ERROR`다. C2 34,454건, C4 3,415건(`over_500m=16`), C6 803건, C7 6,817건은 기존 실제 데이터 품질 이슈로 유지된다. C10은 daily delta 반영으로 `tl_juso_text` 202603/202604 evidence를 함께 보고하며 `distinct_months=3` WARN이다.
-- ✅ T-051 에이전트별 고정 worktree와 CodeGraph 운용 문서화 — ChatGPT Codex `~/dev/geo-codex`, Claude Code `~/dev/geo-claude`, Google Antigravity 2.0 `~/dev/geo-antigravity`를 고정 worktree로 두고 작업마다 branch만 새로 따도록 ADR-034와 개발 문서를 추가했다. CodeGraph `v0.9.6`을 WSL에 설치하고 세 worktree 모두 `codegraph init -i && codegraph status`까지 실행했다. `.codegraph/`는 ignore한다.
+- ✅ T-051 에이전트별 고정 worktree와 CodeGraph 운용 문서화 — ChatGPT Codex `/mnt/f/dev/python-kraddr-geo-codex`, Claude Code `/mnt/f/dev/python-kraddr-geo-claude`, Google Antigravity 2.0 `/mnt/f/dev/python-kraddr-geo-antigravity`를 고정 worktree로 두고 작업마다 branch만 새로 따도록 ADR-041과 개발 문서를 갱신했다. CodeGraph `v0.9.6`을 WSL에 설치하고 세 worktree 모두 `codegraph init -i && codegraph status`까지 실행했다. `.codegraph/`는 ignore한다.
 - ✅ T-047 1차 query benchmark harness와 지번 exact 튜닝 — `scripts/benchmark_query_performance.py`와 단위 테스트를 추가하고, T-027 최종 클린 DB에서 smoke 및 small concurrency benchmark를 실행했다. `idx_mv_jibun_name_exact`를 추가해 Q2 지번 exact 단일 샘플 client latency를 2830.59ms → 5.58ms로 줄였고, index build time 56.03초/size 761MiB를 기록했다. 상세: `docs/t047-query-performance-tuning.md`
 - ✅ T-047 standard corpus와 pool 비교 — 1,100건 corpus로 동시성 1/4/16/64를 측정했다. 기본 pool에서 동시성 16까지는 모든 query군 p95가 목표 안에 들어왔고, 동시성 64 tail은 pool 대기와 DB 경합이 섞였다. `--pool-size 64 --max-overflow 0` 재측정에서는 Q2/Q8은 좋아졌지만 Q3/Q4는 악화되어 query split/text-search slim MV를 다음 후보로 남겼다. 상세: `docs/t047-query-performance-tuning.md`
 - ✅ T-047 Q4 search exact preflight 튜닝 — `rn_nrm`/`buld_nm_nrm` exact btree index와 저장소 2단계 search 경로를 추가했다. Q4 standard 100건은 모두 exact preflight로 처리됐고, `Q4-search-038` broad trigram plan execution은 42.39ms에서 exact 0.56ms로 줄었다. Q4 p95는 default pool c1/c4/c16에서 62.12/70.62/116.06ms → 12.23/22.39/52.27ms, pool64 c64에서 481.22ms → 295.85ms로 개선됐다. 상세: `docs/t047-query-performance-tuning.md`
@@ -146,17 +147,17 @@
 ## 작업 시작 전 확인할 것
 
 - [ ] `AGENTS.md`의 "식별자" 표와 "개발 환경 정책" 다시 읽기
-- [ ] 자기 에이전트 고정 worktree에서 작업 중인지 확인하고, 새 작업 branch를 만든 뒤 `codegraph sync` 실행
+- [ ] 자기 에이전트 NTFS 고정 worktree(`/mnt/f/dev/python-kraddr-geo-*`)에서 작업 중인지 확인하고, 새 작업 branch를 만든 뒤 `codegraph sync` 실행
 - [ ] `SKILL.md` §4 "DO NOT" 룰 다시 읽기
 - [ ] `docs/architecture.md`의 의존 방향 확인
 - [ ] `docs/decisions.md`의 ADR-001 ~ ADR-020 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마, ADR-019 Next.js 16 보안 하한선, ADR-020 VWorld MapLibre 지도)
 - [ ] 마지막 `docs/journal.md` 엔트리 읽기
 - [ ] Windows 재설치/새 Codex 세션에서 이어받는 경우 `docs/windows-reinstall-recovery.md` 읽기
-- [ ] NTFS의 `data/` 디렉토리가 준비되어 있고 ext4에서 심볼릭 링크 또는 절대경로로 접근 가능한지
+- [ ] 테스트 전 NTFS worktree를 WSL ext4 테스트 미러로 `rsync --delete` 복사했고, NTFS `data/`를 절대경로 또는 심볼릭 링크로 접근 가능한지
 
 ## 알려진 함정
 
-- **WSL/NTFS 분리**: ext4 작업 디렉토리에서 NTFS의 `data/`로 심볼릭 링크를 둘 때 권한/inotify 이슈 발생 가능. 절대경로 사용을 권장.
+- **NTFS/WSL 분리**: Git source of truth는 NTFS worktree이고 테스트 실행은 ext4 미러다. ext4 미러에서 수정·commit하지 말고, 필요한 변경은 NTFS worktree에 반영한다.
 - `pg_trgm.similarity_threshold`는 트랜잭션 단위로만 `SET LOCAL` — 전역 변경 금지 (SKILL.md §4-3)
 - 좌표 입력은 `(lon, lat)` 순서. `(lat, lon)`으로 받으면 한국 밖으로 가서 `InvalidCoordinateError` 발생
 - `ogr2ogr -append`와 `-overwrite`를 같이 쓰지 말 것 (GDAL Python binding으로 대체)
@@ -170,7 +171,7 @@
 - **실제 DB 적재 검증**: 로컬 PostGIS가 준비되어 있으면 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q`로 실제 `data/juso` 샘플 COPY와 MV 생성을 확인한다.
 - **프론트엔드 TypeScript 캐시**: `kraddr-geo-ui/tsconfig.tsbuildinfo`는 생성물이다. `.gitignore` 대상이며 PR에 포함하지 않는다.
 - **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
-- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정되어 있지만, T-044에서 `v0.1.0` commit `8559bf4...`의 `VWorldMap`, marker/layer primitive, tile error helper를 문서-only로 재확인했다. SHA/tag를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm으로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. `VWorldMap` 컴포넌트 대체는 범용 지도 primitive를 upstream API로 소비하고, key 미설정 fallback 문구, API 응답 overlay, transient overlay 임계치 같은 `kraddr-geo-ui` 특화 동작을 domain wrapper에 남기는 방식으로 진행한다.
+- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정되어 있지만, T-044에서 `v0.1.0` commit `8559bf4...`의 `VWorldMap`, marker/layer primitive, tile error helper를 문서-only로 재확인했다. SHA/tag를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm으로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. Playwright e2e는 예외적으로 Windows Node/브라우저에서만 실행한다. `VWorldMap` 컴포넌트 대체는 범용 지도 primitive를 upstream API로 소비하고, key 미설정 fallback 문구, API 응답 overlay, transient overlay 임계치 같은 `kraddr-geo-ui` 특화 동작을 domain wrapper에 남기는 방식으로 진행한다.
 - **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
 - **CodeGraph/Windows npm shim**: WSL에서 `codegraph`가 `/mnt/c/Users/.../npm/codegraph`를 가리키고 `node: not found`로 실패하면 Windows npm shim이 PATH에 앞선 것이다. WSL에서는 Linux installer 또는 Linux Node/npm 설치를 사용하고, worktree별 `.codegraph/`가 있으면 `codegraph sync`로 갱신한다.
 - **CodeGraph MCP 재시작 필요**: 프로젝트 루트 `.codex/config.toml`에 CodeGraph MCP 설정을 추가했지만 Codex Desktop 재시작 전에는 현재 세션 도구로 노출되지 않을 수 있다. 재시작 후 `codegraph_explore`가 보이면 컴포넌트 수정 전 영향도 확인에 우선 사용한다.

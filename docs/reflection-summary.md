@@ -72,8 +72,8 @@
 
 다음 항목은 첨부 사양서에 없었지만 별도 지시로 master에 명시되었다:
 
-- **개발 환경**: PC 개발은 WSL의 ext4 위에서 진행하고 작업 완료 시 NTFS의 프로젝트 디렉토리로 카피한다. `AGENTS.md`, `SKILL.md`, `docs/architecture.md`에 정책 섹션이 들어간다.
-- **데이터 위치**: 도로명주소 ZIP/SHP, postal TXT 등은 NTFS의 프로젝트 디렉토리 `data/` 아래에 둔다. ext4 작업 디렉토리에는 심볼릭 링크 또는 절대경로로 참조한다. 테스트도 NTFS 측 `data/`를 reference로 삼는다.
+- **개발 환경**: ADR-041 이후 PC 개발의 Git source of truth는 NTFS main repo와 에이전트별 worktree(`/mnt/f/dev/python-kraddr-geo*`)로 둔다. 테스트와 장기 실행은 해당 worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행한다. `AGENTS.md`, `SKILL.md`, `docs/architecture.md`, `docs/dev-environment.md`에 정책 섹션이 들어간다.
+- **데이터 위치**: 도로명주소 ZIP/SHP, postal TXT 등은 NTFS의 프로젝트 디렉토리 `data/` 아래에 둔다. ext4 테스트 미러에서는 심볼릭 링크 또는 절대경로로 참조한다.
 - **식별자 통일**: GitHub 저장소 = `python-kraddr-geo`, Python import = `kraddr.geo`, CLI = `kraddr-geo`, env prefix = `KRADDR_GEO_`, PostgreSQL DB = `kraddr_geo`, 프론트엔드 패키지 = `kraddr-geo-ui`. `AGENTS.md`/`SKILL.md`의 식별자 표에 기록되어 혼동을 막는다.
 
 ## 첨부 사양에서 다루지 않은 항목 (master에 남긴 결정)

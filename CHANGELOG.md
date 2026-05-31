@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Changed
+- PC/WSL 개발 정책을 NTFS main repo + 에이전트별 `python-kraddr-geo-*` worktree + WSL ext4 테스트 미러 방식으로 전환했다. `.claude/`는 로컬 secret 설정으로 ignore한다.
 - `/admin/consistency`의 C1~C10 case 선택을 세로 rail에서 가로 스크롤 탭으로 바꿨다. 탭은 `tablist/tab` 접근성 구조를 갖고, 표본 분석 영역 위에서 같은 흐름으로 case를 전환한다.
 - PC/WSL 개발 환경의 공식 로컬 포트를 DB `15434`, 백엔드 `8888`, UI `13088`로 고정하고 문서와 예시 설정을 갱신했다. Playwright e2e는 Windows Node/브라우저에서만 실행하도록 문서화했다.
 - `/v2/geocode`에 `include_geometry` 옵션을 추가했다. 옵션을 켜면 기존 후보 `point`는 유지하고 행정구역 polygon, 도로 line, 건물 polygon을 `geometry`/`bbox`로 함께 반환한다. 디버그 UI는 기본으로 이 옵션을 켜고, 응답 JSON을 입력 아래에 두며 지도를 더 크게 표시한다.
@@ -53,7 +54,7 @@
 - T-047 standard benchmark 후속: 1,100건 corpus(`cases_per_group=100`)로 동시성 1/4/16/64 DB client latency를 측정하고, `--pool-size`/`--max-overflow` benchmark 옵션을 추가해 동시성 64 tail에서 pool 대기와 DB contention을 분리해 기록했다. 기본 pool에서 동시성 16까지는 모든 query군이 ADR-031 1차 목표 안에 들어왔고, 동시성 64에서는 Q3/Q4 search/fuzzy가 다음 튜닝 후보로 남았다.
 - T-047 1차 query benchmark와 지번 exact 튜닝: `scripts/benchmark_query_performance.py`와 corpus/report artifact 형식을 추가하고, 전국 T-027 클린 DB에서 smoke 및 small concurrency benchmark를 실행했다. `idx_mv_jibun_name_exact`를 추가해 지번 exact(Q2) 단일 샘플 client latency를 2830.59ms에서 5.58ms로 줄였으며, index build time 56.03초와 size 761MiB를 문서화했다.
 - 사용자 RFC 반영 — T-052부터 T-059까지 신규 task 8건과 ADR-035~ADR-038을 문서화했다. 운영 안전성(T-056 `python-kraddr-base` Address 흡수 + 외부 라이브러리 삭제, T-058 restore hot-swap, T-059 cross-process advisory lock 표준화, T-054 한국 IP gate)을 먼저, 기능 보강(T-057 행정구역 hint 검색 가속, T-053 admin UI 통계/유지보수/관리/튜닝 + C1~C10 분석 UI/CSV, T-052 v1/v2 API 분리 + AI-friendly 문서) 다음, 운영 환경 비교(T-055 N150/Odroid)는 하드웨어 도착 후 진행한다. 자세한 design은 `docs/t052-api-providers-v1-v2.md`, `docs/t053-admin-ui-ops-statistics.md`, `docs/t054-korea-only-geoip.md`, `docs/t055-deployment-n150-odroid.md`, `docs/t056-kraddr-base-address-merge.md`, `docs/t057-region-hint-search.md`, `docs/t058-restore-hot-swap.md`, `docs/t059-concurrent-job-protection.md`를 본다.
-- T-051 에이전트별 고정 worktree와 CodeGraph 운용 문서화: ChatGPT Codex `geo-codex`, Claude Code `geo-claude`, Google Antigravity 2.0 `geo-antigravity` worktree를 고정하고 작업마다 branch만 새로 따도록 ADR-034, 개발 환경 문서, 에이전트 가이드를 보강했다. CodeGraph는 각 worktree에서 최초 `codegraph init -i`, 이후 `codegraph sync`로 유지하며 `.codegraph/`를 Git ignore 대상으로 추가했다.
+- T-051 에이전트별 고정 worktree와 CodeGraph 운용 문서화: 초기 `geo-*` worktree 정책을 ADR-034로 기록했다. 이 정책은 이후 ADR-041에서 NTFS `python-kraddr-geo-*` worktree 정책으로 대체됐다.
 - PR #34~#47 리뷰 코멘트 audit/fixup: PR #35의 `source_set` typed schema를 nested JSON 보존형으로 보강하고 OpenAPI/프론트엔드 타입을 갱신했다. PR #43의 `ops.audit_events.job_id` FK는 `ON DELETE NO ACTION`으로 변경해 감사 이벤트와 job 연결이 조용히 끊기지 않게 했다. PR #38/#42 후속으로 `maplibre-vworld-js` 최신 `7947b2e` 동기화와 WSL Linux Node frontend 검증 helper를 추가했다.
 - T-027 direct 출입구 same-month 보강: 기준월이 다른 `tl_roadaddr_entrc=202605`를 serving 1순위로 쓰면 C4/C6/C7이 증가해, MV와 정합성 serving CTE를 `tl_locsum_entrc` 우선 + same-month direct fallback으로 보정했다. C10은 row-level `source_yyyymm` 집계를 우선해 `distinct_months=3` WARN을 보고한다.
 - T-042 `TL_SPPN_MAKAREA` 국가지점번호 보조 데이터 적재/조회 구현: `tl_sppn_makarea` DDL/Alembic, GDAL Python binding loader, `kraddr-geo load sppn-makarea`, API job kind `sppn_makarea_load`, source set optional child, 국가지점번호 parser/formatter, geocode/reverse `x_extension.sppn_makarea`를 추가한다. Docker PostGIS에서 세종 `구역의 도형` 실제 ZIP 146행을 적재했고, `금이산` polygon 내부 점을 `다바 7363 4856`으로 formatter → geocode/reverse 조회까지 검증했다.
@@ -112,7 +113,7 @@
 ### Changed
 - **(BREAKING)** `kraddr.geo` 패키지의 저장 엔진을 SQLite + SpatiaLite에서 PostgreSQL + PostGIS로 전환한다. 패키지 이름은 그대로지만 내부 구현은 완전히 새로 작성한다. 이전 구현은 `v1` 브랜치에 보존되어 있다.
 - GitHub 저장소 이름을 `python-kraddr-geo`로 명시하고, CLI 명령은 `kraddr-geo`, 환경변수 prefix는 `KRADDR_GEO_`, PostgreSQL DB 이름은 `kraddr_geo`로 통일한다.
-- 개발 정책: PC 개발은 WSL의 ext4 위에서 진행하고 작업 완료 시 NTFS의 프로젝트 디렉토리로 카피한다. 데이터(`data/`)는 NTFS 프로젝트 디렉토리 아래에 두고 테스트도 이를 참조한다.
+- 개발 정책: 현재 PC 개발은 NTFS main repo/worktree를 Git source of truth로 두고, 테스트와 장기 실행은 WSL ext4 테스트 미러에서 수행한다. 데이터(`data/`)는 NTFS 프로젝트 디렉토리 아래에 두고 테스트도 이를 참조한다.
 - 기본 설정값을 백엔드 사양과 맞춘다: statement timeout 5초, reverse 기본 반경 200m, CORS 기본값 빈 목록, epost 우편번호 다운로드 OpenAPI endpoint.
 - 설정 싱글톤 테스트 helper를 `reset_settings()`와 `set_settings(settings)`로 분리한다.
 - base 예외명을 `KraddrGeoError`로 확정하고, `kraddr` parent package는 PEP 420 implicit namespace로 둔다.

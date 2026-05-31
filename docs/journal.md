@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-31 14:10 (NTFS main repo와 에이전트 worktree 전환)
+
+**작업**: 사용자 지시에 따라 Git source of truth를 NTFS main repo로 두고, 테스트는 WSL ext4 미러에서 수행하는 정책으로 전환했다.
+
+**반영**:
+- NTFS `/mnt/f/dev/python-kraddr-geo`를 main repo 기준으로 두고 `/mnt/f/dev/python-kraddr-geo-codex`, `/mnt/f/dev/python-kraddr-geo-claude`, `/mnt/f/dev/python-kraddr-geo-antigravity` worktree를 생성했다.
+- 각 worktree에 `.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json`, `backend/.env.local`, `web/.env.local`을 복사했다. secret 값은 출력하지 않았다.
+- `kraddr-geo-ui/.env.local`의 `KRADDR_GEO_API_INTERNAL_URL`은 공식 API 포트 `8888`에 맞춰 `http://localhost:8888`로 정리했다.
+- 세 worktree에서 `codegraph init -i`와 `codegraph status`를 실행했다. NTFS `/mnt` 경로에서는 CodeGraph live watch가 비활성화되므로 이후 branch 전환·pull·merge 뒤 수동 `codegraph sync`가 필요하다.
+- `.claude/`를 `.gitignore`에 추가하고, `AGENTS.md`, `SKILL.md`, README, 개발 환경/아키텍처/에이전트 가이드, ADR-041, resume, tasks를 갱신했다.
+
+**검증**:
+- `git worktree list`에서 `/mnt/f/dev/python-kraddr-geo-codex`, `/mnt/f/dev/python-kraddr-geo-claude`, `/mnt/f/dev/python-kraddr-geo-antigravity` 등록을 확인했다.
+- 세 NTFS worktree의 `git status --short --branch`가 각각 `agent/*-idle...origin/main` clean 상태임을 확인했다.
+- 세 NTFS worktree에서 `codegraph sync` → already up to date, `codegraph status` → 249 files, 4,042 nodes, 9,841 edges, `Index is up to date`를 확인했다.
+- `rg`로 현재 운영 문서의 예전 ext4 source-of-truth 문구를 점검했다. 남은 `geo-*`/ext4 중심 문구는 superseded ADR-034와 과거 journal/검증 로그로 확인했다.
+- `git diff --check` → 통과.
+
 ## 2026-05-31 11:40 (API 공식 포트 8888 전환)
 
 **작업**: 사용자 지시에 따라 PC/WSL 개발 환경의 FastAPI 공식 host 포트를 `8000`에서 `8888`로 조정했다.

@@ -23,31 +23,34 @@
 
 ## 개발 환경 정책 (PC, WSL)
 
-PC 개발은 **WSL ext4** 위에서 수행한다. NTFS 마운트에서 직접 `git`/`pip`/`uvicorn`을 실행하지 않는다 — 파일 권한, inotify, 심볼릭 링크, 대량 I/O 성능이 모두 저하된다.
+PC 개발의 Git source of truth는 NTFS의 `F:\dev\python-kraddr-geo` 계열 checkout이다(ADR-041). 단, Python/Node 의존성 설치, 테스트, 장기 실행 검증은 NTFS worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행한다.
 
-- **코드/가상환경**: ext4 (`~/dev/python-kraddr-geo/`)
-- **데이터(`data/`)**: NTFS의 프로젝트 디렉토리 아래에 둔다 (예: `/mnt/d/projects/python-kraddr-geo/data/`). 작업 디렉토리에는 심볼릭 링크만 두거나 절대경로로 참조한다.
-- **테스트**: 통합/e2e 테스트는 NTFS의 `data/`를 reference로 삼는다. 픽스처는 소량으로 ext4에 둘 수 있으나, 대용량 검증(전국 적재, 전수 round-trip)은 NTFS 경로 사용을 전제로 한다.
-- **카피 정책**: 작업이 완료되면 ext4 → NTFS의 프로젝트 디렉토리로 카피한다. Git은 ext4 쪽이 source of truth.
+- **메인 repo**: NTFS `/mnt/f/dev/python-kraddr-geo/` (`F:\dev\python-kraddr-geo`)
+- **에이전트 worktree**: NTFS `/mnt/f/dev/python-kraddr-geo-codex`, `/mnt/f/dev/python-kraddr-geo-claude`, `/mnt/f/dev/python-kraddr-geo-antigravity`
+- **테스트 미러**: WSL ext4 `~/dev/python-kraddr-geo-<agent>-test/` 같은 임시 복사본. `rsync --delete`로 갱신하고 여기서는 commit/push하지 않는다.
+- **데이터(`data/`)**: NTFS main repo의 `data/`를 기준으로 두고, ext4 테스트 미러에서는 절대경로 또는 필요한 경우 심볼릭 링크로 참조한다.
+- **카피 정책**: 작업 시작/검증 전 NTFS worktree → ext4 테스트 미러로 복사한다. 작업 완료 후 별도 ext4 → NTFS 역카피를 source-of-truth 절차로 쓰지 않는다.
+- **로컬 키**: `.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다.
+- **Playwright**: Windows Node/브라우저에서만 실행한다. WSL Playwright는 사용하지 않는다.
 
 ## 에이전트별 고정 worktree와 CodeGraph
 
-AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, WSL ext4의 `~/dev` 아래 고정 worktree를 유지한다(ADR-034).
+AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, NTFS의 `/mnt/f/dev` 아래 고정 worktree를 유지한다(ADR-041). `geo-*` 접두사는 더 이상 쓰지 않고 `python-kraddr-geo-*` 접두사로 통일한다.
 
-| 에이전트 | 고정 worktree |
-|----------|---------------|
-| ChatGPT Codex | `~/dev/geo-codex` |
-| Claude Code | `~/dev/geo-claude` |
-| Google Antigravity 2.0 | `~/dev/geo-antigravity` |
+| 에이전트 | 고정 worktree | idle branch |
+|----------|---------------|-------------|
+| ChatGPT Codex | `/mnt/f/dev/python-kraddr-geo-codex` | `agent/codex-idle` |
+| Claude Code | `/mnt/f/dev/python-kraddr-geo-claude` | `agent/claude-idle` |
+| Google Antigravity 2.0 | `/mnt/f/dev/python-kraddr-geo-antigravity` | `agent/antigravity-idle` |
 
 - worktree는 에이전트별로 1회만 생성하고, 작업마다 해당 worktree 안에서 새 branch만 만든다.
 - 예: `git fetch origin main && git switch -c agent/codex-next origin/main`
 - 같은 branch를 여러 worktree에서 checkout하지 않는다. branch 이름에는 `agent/<agent>-<task>`처럼 소유자를 넣는다.
-- CodeGraph는 worktree마다 1회 `codegraph init -i`로 초기화하고, 이후 branch 전환·pull·merge 뒤에는 재초기화하지 않고 `codegraph sync`로 유지한다.
+- CodeGraph는 worktree마다 1회 `codegraph init -i`로 초기화하고, 이후 branch 전환·pull·merge 뒤에는 재초기화하지 않고 `codegraph sync`로 유지한다. NTFS `/mnt` worktree에서는 live watch가 비활성화될 수 있으므로 수동 `sync`를 더 엄격히 지킨다.
 - 동기화 상태는 `codegraph status`로 확인한다. `codegraph init -i`는 최초 1회 인덱싱용이고, 평상시 상태 확인용 명령은 아니다.
 - 프로젝트 루트의 `.codex/config.toml`은 CodeGraph MCP stdio 서버를 등록한다. Codex Desktop 재시작 전에는 현재 세션 도구로 노출되지 않을 수 있으나, 설정 파일은 유지한다.
 - `kraddr-geo-ui` 컴포넌트 또는 공용 UI primitive를 수정하기 전에는 CodeGraph MCP의 `codegraph_explore` 도구로 영향 범위(호출자, 참조 파일, 테스트 표면)를 먼저 확인한다. MCP가 아직 노출되지 않은 과도기 세션에서는 그 사실을 작업 로그에 남기고 `codegraph sync`, `codegraph status`, `codegraph context`/`codegraph impact` CLI로 임시 확인한다.
-- `.codegraph/`는 로컬 인덱스이므로 Git에 커밋하지 않는다. `.gitignore`에 포함되어 있어야 한다.
+- `.codegraph/`와 `.claude/`는 로컬 상태/secret이므로 Git에 커밋하지 않는다. `.gitignore`에 포함되어 있어야 한다.
 
 작업 전에 반드시 다음을 읽는다:
 
