@@ -66,6 +66,14 @@ git switch -c agent/codex-next origin/main
 
 같은 branch를 두 worktree에서 동시에 checkout하지 말고, branch 이름에는 `agent/codex-*`, `agent/claude-*`, `agent/antigravity-*`처럼 소유자를 넣는다. NTFS main repo의 `main`에 미커밋 변경이 있으면 그대로 보존하고, 에이전트 작업은 별도 worktree에서 진행한다.
 
+#### Windows·WSL 혼용 시 worktree 포인터 주의
+
+각 worktree의 `.git` 파일과 `.git/worktrees/<name>/gitdir`에는 worktree를 **만든 환경 기준의 절대경로**가 기록된다. WSL에서 만들면 WSL 마운트 경로가, Windows 네이티브 git에서 만들면 드라이브 경로가 들어간다. 같은 폴더라도 두 환경의 절대경로 표기가 다르므로, 다른 환경의 git으로 같은 worktree를 다루면 `fatal: not a git repository`가 나고 `git worktree list`에는 `prunable`로 표시된다.
+
+이 상태에서 `git worktree prune`을 그대로 돌리면 **살아있는 worktree 등록까지 지워질 수 있으니** 바로 prune하지 않는다. 복구는 실제로 사용할 환경에서 `git worktree repair <worktree 경로>`를 실행해 포인터를 그 환경 기준으로 맞춘다(`.git`과 admin `gitdir` 양방향을 함께 고친다). 정리는 repair로 살아있는 worktree를 먼저 valid 상태로 만든 뒤 prune해, 폴더가 실제로 사라진 등록만 표적 제거한다.
+
+원칙: 한 머신에서는 worktree git 조작을 **하나의 환경으로 통일**하고, 환경을 바꿀 때만 `repair`로 재정렬한다.
+
 ### 로컬 secret/env 파일
 
 로컬 키와 환경 파일은 Git에 커밋하지 않는다. 새 NTFS worktree를 만들면 다음 파일들을 main repo 또는 기존 worktree에서 같은 상대 경로로 복사한다.
