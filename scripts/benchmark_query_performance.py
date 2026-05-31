@@ -29,7 +29,12 @@ from sqlalchemy.exc import DBAPIError, ProgrammingError
 
 from kraddr.geo.dto.region import EMPTY_REGION_PARAMS, RegionHint
 from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.infra.geocode_repo import _FUZZY_ROADS, _LOOKUP_JIBUN, _LOOKUP_ROAD
+from kraddr.geo.infra.geocode_repo import (
+    _FUZZY_ROADS,
+    _LOOKUP_JIBUN,
+    _LOOKUP_ROAD,
+    _SPPN_AREA_BY_POINT,
+)
 from kraddr.geo.infra.reverse_repo import _NEAREST_SQL, _SPPN_AREAS_SQL
 from kraddr.geo.infra.search_repo import _SEARCH_EXACT_SQL, _SEARCH_SQL, _normalize_search_query
 from kraddr.geo.infra.zip_repo import _ZIP_BY_ADDRESS, _ZIP_BY_POINT
@@ -190,6 +195,7 @@ QUERY_SPECS: dict[str, QuerySpec] = {
     "zipcode_point": QuerySpec("zipcode_point", "Q7_ZIPCODE", _ZIP_BY_POINT),
     "no_result_road": QuerySpec("no_result_road", "Q8_NO_RESULT", _LOOKUP_ROAD),
     "no_result_reverse": QuerySpec("no_result_reverse", "Q8_NO_RESULT", _NEAREST_SQL),
+    "sppn_geocode": QuerySpec("sppn_geocode", "Q11_SPPN", _SPPN_AREA_BY_POINT),
     "sppn_reverse": QuerySpec("sppn_reverse", "Q11_SPPN", _SPPN_AREAS_SQL),
 }
 
@@ -588,6 +594,20 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
         )
 
     for idx, row in enumerate(sppn_rows, start=1):
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q11-sppn-geocode-{idx:03d}",
+                group="Q11_SPPN",
+                sql_name="sppn_geocode",
+                params={
+                    "x": cast("float", row["x_5179"]),
+                    "y": cast("float", row["y_5179"]),
+                },
+                label=str(row["makarea_nm"] or row["makarea_id"]),
+                source="tl_sppn_makarea",
+                note="국가지점번호 geocode 보조 경로의 5179 point-in-polygon 조회",
+            )
+        )
         cases.append(
             BenchmarkCase(
                 case_id=f"Q11-sppn-reverse-{idx:03d}",
@@ -1165,6 +1185,8 @@ async def _sample_sppn_rows(
 ) -> list[Mapping[str, Any]]:
     sql = """
 SELECT sig_cd, makarea_id, makarea_nm,
+       ST_X(ST_PointOnSurface(geom)) AS x_5179,
+       ST_Y(ST_PointOnSurface(geom)) AS y_5179,
        ST_X(ST_Transform(ST_PointOnSurface(geom), 4326)) AS lon,
        ST_Y(ST_Transform(ST_PointOnSurface(geom), 4326)) AS lat
   FROM tl_sppn_makarea TABLESAMPLE SYSTEM (10) REPEATABLE (47)

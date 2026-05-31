@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-31 갱신, by codex)
+## 현재 진척도 (2026-06-01 갱신, by codex)
 
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ `main` 브랜치를 문서·repo 설정만 남도록 정리
@@ -122,6 +122,7 @@
 - ✅ Python 라이브러리 API v2 단일화 — `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답의 표준 Python API로 승격하고, `geocode_v2/reverse_v2/search_v2/reverse_geocode` 공개 메서드를 제거했다. REST `/v1/*`는 내부 어댑터로 vworld 호환 응답을 유지한다. ADR-039와 `docs/api-reference/`를 갱신했다.
 - ✅ 디버그 UI v2 REST 전환 — `/debug/geocode`와 `/debug/reverse`를 `/v2/geocode`, `/v2/reverse` POST body 기반으로 전환하고, proxy가 `/v1/*`와 `/v2/*`를 모두 허용하도록 보강했다. Docker image `kraddr-geo-ui:debug-v2` 실행과 Windows Playwright e2e 6개를 통과시켰다.
 - ✅ VWorld 인증키 런타임 설정 UI — `/api/runtime-config`가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽고, `/admin/settings`에서 브라우저 localStorage override로 저장·수정·기본값 복원을 지원한다.
+- ✅ T-073 T-027/T-047 국가지점번호 포함 재적재·튜닝 재측정 — 새 Docker DB `kraddr-geo-t027-retune`(port `15435`)에서 전체 적재와 20260401~20260506 daily 전체 적용을 재실행했다. 최종 `mv_geocode_target=6,418,735`, `mv_geocode_text_search=6,418,735`, `tl_sppn_makarea=24,204`이며, T-047 SQL benchmark는 2,000 case/18,000 measurement/error 0이었다. Q11 c64 p95는 `sppn_geocode=90.22ms`, `sppn_reverse=87.45ms`다. 상세: `docs/t027-t047-sppn-retune-20260601.md`
 - ✅ 단독 구 이름 도로명주소 조회 보정 — `수지구 성복1로 35`처럼 복합 시군구명(`용인시 수지구`)의 마지막 `구`만 입력한 경우 exact 도로명 조회 실패 뒤 제한적 suffix retry로 찾는다. 기본 조회는 `sgg_nm = :sgg`를 유지하고, fallback은 `rn_nrm`/건물번호 exact 후보 안에서 `right(sgg_nm, ...)`를 적용한다.
 - ✅ 외부 API fallback 인증키 오류 명시화 — `fallback="api"`에서 백엔드 provider 키가 없으면 `E0503`, VWorld/Juso 인증키 오류는 `E0501`로 반환한다. UI 지도 키 `NEXT_PUBLIC_VWORLD_API_KEY`는 fallback 키가 아니며, 백엔드는 `KRADDR_GEO_VWORLD_API_KEY` 또는 `KRADDR_GEO_JUSO_API_KEY`를 읽는다.
 - ✅ 상위 주소 geocode 후보 — `/v2/geocode`에서 상세번호 없는 행정구역 입력은 `district` 검색 후보로 승격한다. `tl_scco_*` polygon의 `ST_PointOnSurface` 대표점을 쓰며, 실제 DB에서 `수지구` 첫 후보 `용인시 수지구(sig_cd=41465)`를 확인했다. 상세: `docs/t064-region-only-geocode.md`
@@ -135,11 +136,11 @@
 
 즉시 실행 가능한 대기 task는 없다. 남은 항목은 외부 조건이 필요한 T-063(N150/Odroid 실제 장비 실측)뿐이다. 새 task가 생기면 `docs/tasks.md`에 등록하고, 기존 PR 리뷰 audit 지시가 들어오면 해당 PR 범위를 먼저 확인한다.
 
-- 최신 T-027 실행 로그는 로컬 산출물 `artifacts/fullload/20260529_1643_final/` 아래에 있다. 이 경로는 git ignore 대상이다.
-- 최신 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,454건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603/202604`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
+- 최신 T-027/T-047 재측정 로그는 로컬 산출물 `/home/digitie/dev/python-kraddr-geo-codex-test/artifacts/fullload/t027-t047-retune-20260531-232609/`와 `/home/digitie/dev/python-kraddr-geo-codex-test/artifacts/perf/t047-retune-standard-20260601-012814/` 아래에 있다. 이 경로는 git ignore 대상이다.
+- 최신 실제 DB 정합성은 `severity_max=ERROR`다. 전체 daily 적용 후 남은 주요 항목은 C2 29,410건(`missing_text=28,829`, `missing_resolve_key=581`), C4 12,189건(`over_500m=83`), C6 3,608건, C7 9,886건이다. C10은 `tl_juso_text=202603/202604/202605`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605` 기준월 혼합을 `WARN` 처리한다.
 - 최신 `maplibre-vworld-js` 기준 확인 결과는 `docs/frontend-package.md`와 ADR-020/ADR-032에 있다. 현재 `kraddr-geo-ui` dependency는 `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`이고, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA로 설치한다. upstream 코드는 이번 작업에서 직접 수정하지 않았다.
 - T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. 전국 T-027 DB의 `serving-ready` 백업 생성은 운영 보존 절차로 별도 실행한다.
-- T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
+- T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper, T-073 국가지점번호 geocode/reverse 재측정까지 완료했다. 최신 Q11 SQL path는 새 index 없이도 목표 범위 안이며, 다음 성능 후보는 Q4 `search_fuzzy`와 Q3 `fuzzy_geocode_wide`의 c64 tail이다.
 - PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
 - 디버그 UI의 실제 브라우저 회귀는 `kraddr-geo-ui` Docker image 또는 로컬 dev server를 공식 UI 포트 `13088`에 띄운 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test`로 실행한다. WSL에서는 Playwright를 실행하지 않는다. WSL headless Chromium은 `libasound.so.2` 같은 공유 라이브러리 누락으로 반복 실패하므로 `lint`/`type-check`/unit/build까지만 수행한다.

@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-01 02:40 (T-027/T-047 국가지점번호 포함 재적재와 튜닝 재측정)
+
+**작업**: 사용자 지시에 따라 새 Docker DB `kraddr-geo-t027-retune`(port `15435`)에서 T-027 전체 적재를 다시 수행하고, 국가지점번호(`tl_sppn_makarea`)를 포함한 T-047 SQL benchmark를 재측정했다. 기존 T-027 최종 DB(port `15434`)는 보존했다.
+
+**반영**:
+- `scripts/benchmark_query_performance.py`가 Q11 `sppn_geocode`와 `sppn_reverse`를 모두 측정하도록 보강했다.
+- `/v2/reverse` 변환 경로가 v1 `x_extension.sppn_makarea`를 `CandidateV2(match_kind="sppn")` 후보로 승격하도록 했다.
+- `scripts/fullload_test.sh` smoke를 최신 v2 Python client 계약(`candidates`, `reverse()`)에 맞췄다.
+- `docs/t027-t047-sppn-retune-20260601.md`에 full-load, 전체 daily 적용, 정합성 변화, benchmark 전후 차이, 데이터 보강 의견을 상세 기록했다.
+
+**검증**:
+- full-load: `tl_juso_text=6,416,642`, `tl_sppn_makarea=24,204`, `mv_geocode_target=6,416,642`까지 적재 완료. 초기 script는 구형 smoke 계약 때문에 exit 1이었지만 적재는 완료됐고, smoke script를 고친 뒤 수동 smoke를 통과했다.
+- daily: 20260402~20260506 daily ZIP 35개를 추가 적용했다. 실제 daily 데이터가 충분해 synthetic delta는 만들지 않았다. 최종 `mv_geocode_target=6,418,735`, `mv_geocode_text_search=6,418,735`.
+- consistency: 최종 report `consistency_770acd176f564141abadf95de0009773`, `severity_max=ERROR`. C1/C2/C3은 개선됐고 C4/C6/C7/C8은 기준월 혼합과 direct 출입구 변화 영향으로 증가했다.
+- T-047: `t047-retune-standard-20260601-012814`, 2,000 case, 18,000 measurement, error 0. Q11 c64 p95는 `sppn_geocode=90.22ms`, `sppn_reverse=87.45ms`.
+- unit smoke: `pytest tests/unit/test_query_performance_benchmark.py tests/unit/test_cli_contract.py tests/unit/test_v2_api.py tests/unit/test_sppn_core.py -q` → 37 passed.
+
 ## 2026-05-31 22:44 (VWorld 최신 wrapper 동기화와 PR #108 문서 기준 반영)
 
 **작업**: 사용자 지시에 따라 로컬 git secret 파일에서 VWorld 키 존재 여부만 확인하고, PR #108의 `docker-compose.yml` `./data/*` 기본 볼륨 기준이 현재 코드에 이미 반영되어 있음을 확인했다. `maplibre-vworld-js` upstream `main` 최신 commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`과 package version `0.1.2`를 확인한 뒤 `kraddr-geo-ui` dependency/lockfile을 갱신했다.

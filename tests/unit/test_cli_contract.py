@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
 from typer.testing import CliRunner
 
@@ -120,3 +121,12 @@ def test_data_quality_case_parser_rejects_empty_list() -> None:
         assert "at least one data quality case" in str(exc)
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("expected ValueError")
+
+
+def test_full_load_smoke_uses_v2_client_contract() -> None:
+    script = Path("scripts/fullload_test.sh").read_text(encoding="utf-8")
+
+    assert "r.candidates" in script
+    assert "await client.reverse(" in script
+    assert "reverse_geocode" not in script
+    assert "r.result" not in script
