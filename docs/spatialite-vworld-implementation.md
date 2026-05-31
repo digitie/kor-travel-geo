@@ -6,31 +6,42 @@
 
 ## 데이터 우선순위
 
-1. `tl_spbd_entrc` — 출입구 좌표 (지오코딩 1차)
-2. `tl_spbd_buld` — 건물 다각형 (출입구가 없을 때 centroid 대안)
-3. `tl_sprd_manage` / `tl_sprd_rw` — 도로명·도로 폴리라인 (역지오코딩 보조)
-4. `tl_kodis_bas` — 우편번호 polygon
-5. `tl_scco_*` — 시도·시군구·읍면동·리 행정 경계 (검증 및 fallback)
-6. 외부 API (vworld, juso) — `fallback="api"` 옵션 시 폴백
+지오코딩/역지오코딩의 1차 데이터는 텍스트 정본 위에 만든 서빙 MV다(ADR-007/ADR-012). 마스터 테이블을 직접 조회하지 않는다.
+
+1. `mv_geocode_target` — 텍스트 정본 `tl_juso_text`를 평면화한 서빙 MV (지오코딩/역지오코딩 1차). 대표 좌표(`pt_5179`/`pt_4326`)와 출처(`pt_source`)를 포함한다. 역지오코딩도 이 MV의 `pt_5179`로 nearest/radius를 수행한다.
+2. 대표 좌표 우선순위 — `tl_locsum_entrc`(위치정보요약DB 대표 출입구, 1순위) → 같은 기준월일 때만 `tl_roadaddr_entrc`(도로명주소 출입구, fallback) → `tl_navi_buld_centroid`(내비게이션용DB 건물 중심, centroid fallback). 이 우선순위는 `mv_geocode_target` 빌드 시 흡수된다.
+3. `mv_geocode_text_search` — fuzzy geocode/broad search 후보용 helper MV (T-061). `mv_geocode_target`에서 재생성하는 read-only 보조 객체.
+4. `tl_spbd_buld_polygon` — 건물 polygon. 정합성 검증(C2/C4/C5)용 도형 보조 전용이며 서빙 좌표원이 아니다.
+5. `tl_sprd_manage` / `tl_sprd_rw` — 도로명·도로 폴리라인/도로면 polygon (정합성 C8 도로 인접성 보조)
+6. `tl_kodis_bas` — 우편번호 polygon
+7. `tl_scco_*` — 시도·시군구·읍면동·리 행정 경계 (검증 및 fallback)
+8. 외부 API (vworld, juso) — `fallback="api"` 옵션 시 폴백
 
 ## 핵심 테이블
 
 자세한 컬럼·인덱스는 `docs/data-model.md` 참조.
 
-- `tl_spbd_buld(sig_cd, bul_man_no)` — 건물. 생성 컬럼 `bjd_cd`, `rncode_full`, `buld_nm_nrm`.
-- `tl_spbd_entrc(sig_cd, ent_man_no)` — 출입구 (POINT, 5179).
+- `tl_juso_text(bd_mgt_sn)` — 도로명주소 한글_전체분 텍스트 정본. 생성 컬럼 `rncode_full`, `rn_nrm`, `buld_nm_nrm`, `pnu`.
+- `tl_locsum_entrc(sig_cd, ent_man_no)` — 위치정보요약DB 대표 출입구 좌표 (POINT, 5179). 대표 좌표 1순위.
+- `tl_navi_buld_centroid(bd_mgt_sn)` — 내비게이션용DB 건물 중심 (POINT, 5179). centroid fallback.
+- `tl_spbd_buld_polygon(bd_mgt_sn)` — 건물 polygon (MULTIPOLYGON, 5179). 도형 보조 전용.
 - `tl_kodis_bas(bas_mgt_sn)` — 우편번호 polygon.
-- `mv_geocode_target` — 지오코딩이 사용하는 평면화 MV. 도로명/지번 매칭 인덱스를 모두 갖춤.
+- `mv_geocode_target` — 지오코딩/역지오코딩이 사용하는 평면화 서빙 MV. 도로명/지번 매칭 인덱스와 `pt_5179` GiST 인덱스를 모두 갖춤.
+- `mv_geocode_text_search` — fuzzy/broad search 후보용 helper MV (T-061).
 
 ## 인덱싱
 
 ```sql
-CREATE INDEX idx_buld_road_match  ON tl_spbd_buld (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
-CREATE INDEX idx_buld_jibun_match ON tl_spbd_buld (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
-CREATE INDEX idx_entrc_geom       ON tl_spbd_entrc USING GIST (geom);
-CREATE INDEX idx_kodis_bas_geom   ON tl_kodis_bas USING GIST (geom);
-CREATE INDEX idx_sprd_manage_rn_trgm
-  ON tl_sprd_manage USING GIN (rn_nrm gin_trgm_ops);
+-- 텍스트 정본 매칭 (geocode primary/secondary)
+CREATE INDEX idx_juso_text_road  ON tl_juso_text (rncode_full, buld_mnnm, buld_slno, buld_se_cd);
+CREATE INDEX idx_juso_text_jibun ON tl_juso_text (bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno);
+-- 대표 출입구 좌표 nearest/대표 선택
+CREATE INDEX idx_locsum_geom     ON tl_locsum_entrc USING GIST (geom);
+-- 서빙 MV nearest/radius (reverse 1차 경로)
+CREATE INDEX idx_mv_geom5179     ON mv_geocode_target USING GIST (pt_5179);
+CREATE INDEX idx_kodis_bas_geom  ON tl_kodis_bas USING GIST (geom);
+CREATE INDEX idx_juso_text_rn_trgm
+  ON tl_juso_text USING GIN (rn_nrm gin_trgm_ops);
 ```
 
 `pg_trgm.similarity_threshold`는 트랜잭션 단위로만 `SET LOCAL` (SKILL.md §4-3).
@@ -60,7 +71,7 @@ CREATE INDEX idx_sprd_manage_rn_trgm
 
 ## 적재 후 최적화
 
-`kraddr-geo refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`. 다음 PR 단위 또는 야간 cron으로 `kraddr-geo refresh vacuum`(`VACUUM (ANALYZE)`)와 (선택) `CLUSTER tl_spbd_buld USING idx_buld_road_match`를 실행한다. `maintenance_work_mem`은 트랜잭션 단위로만 상승(`SET LOCAL`).
+`kraddr-geo refresh mv`(`--swap` 옵션으로 shadow 빌드 후 RENAME swap)는 평시 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`(+ helper `mv_geocode_text_search` 동세대 갱신)을 수행한다. `VACUUM (ANALYZE)`는 별도 CLI 서브커맨드가 아니라 DB 측 수동 유지보수 단계이므로, 풀로드/대량 변동분 직후 야간 cron에서 `psql`로 직접 실행한다(예: `VACUUM (ANALYZE) tl_juso_text;`, `ANALYZE mv_geocode_target;`). `maintenance_work_mem`은 트랜잭션 단위로만 상승(`SET LOCAL`).
 
 ## 디버거에서 운영까지 동일 환경
 

@@ -1530,7 +1530,8 @@ kraddr-geo benchmark explain \
   --output artifacts/perf/plans/Q5_reverse_nearest_001.json
 
 # === 무결성 + 헬스 ===
-kraddr-geo validate all                       # 행 수·FK·MV·확장 설치 점검
+kraddr-geo validate consistency               # C1~C10 정합성(행 수·매핑·MV·기준월) 점검
+kraddr-geo validate data-quality-samples      # C2/C4/C6/C7 표본 CSV export
 kraddr-geo healthz
 ```
 

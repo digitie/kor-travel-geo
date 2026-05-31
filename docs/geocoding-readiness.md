@@ -1,6 +1,6 @@
 # 지오코딩 준비 상태
 
-`kraddr-geo`이 정상 동작하려면 PostgreSQL + PostGIS 환경, 마스터 + 보조 테이블 적재, MV refresh, ANALYZE까지 끝난 상태가 필요하다. 본 문서는 그 체크리스트와 알려진 빈틈을 정리한다.
+`kraddr-geo`이 정상 동작하려면 PostgreSQL + PostGIS 환경, 텍스트 정본 + 좌표 원천 + 보조 도형 적재, MV refresh, ANALYZE까지 끝난 상태가 필요하다. serving 정본은 텍스트(`tl_juso_text`)이고 SHP는 도형 보조다(ADR-007, ADR-012). 본 문서는 그 체크리스트와 알려진 빈틈을 정리한다.
 
 > 이전(v1) SpatiaLite 기반 readiness 기준은 `v1` 브랜치 문서에서 본다. `main`은 PostgreSQL + PostGIS 기준만 다룬다(ADR-001).
 
@@ -8,8 +8,12 @@
 
 | 자료 | 역할 |
 |------|------|
-| 도로명주소 전자지도 (시도별 SHP) | 11개 마스터의 원천 — 출입구 좌표가 지오코딩 1차 데이터 |
-| 기초구역 (`TL_KODIS_BAS`) | 우편번호 polygon. 역지오코딩의 zipcode lookup |
+| 도로명주소 한글_전체분 (텍스트) | `tl_juso_text` — 도로명/지번/행정/우편번호 정본. 지오코딩 1차 매핑 |
+| 위치정보요약DB (텍스트) | `tl_locsum_entrc` — 대표 출입구 좌표. serving 좌표 1순위 |
+| 도로명주소 출입구 정보 (텍스트) | `tl_roadaddr_entrc` — direct 출입구 좌표. same-month일 때만 fallback |
+| 내비게이션용DB (텍스트) | `tl_navi_buld_centroid`/`tl_navi_entrc` — 출입구 없는 건물의 centroid fallback / 진입점 |
+| 도로명주소 전자지도 (시도별 SHP, 도형 전용) | `tl_spbd_buld_polygon`, `tl_scco_*`, `tl_sprd_*` — 정합성 검증·polygon 응답용 도형 |
+| 기초구역 (`tl_kodis_bas`) | 우편번호 polygon. 역지오코딩의 zipcode lookup |
 | 사서함 (`postal_pobox`) | 우편번호 4단계 우선순위의 한 축 |
 | 다량배달처 (`postal_bulk_delivery`) | 같은 `bd_mgt_sn`에 별도 우편번호가 필요한 케이스 |
 | 외부 API (vworld, juso) | 폴백 (`fallback="api"`) 및 자동 다운로드(epost) |
@@ -27,18 +31,17 @@ PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/python-kraddr-geo-
    CREATE EXTENSION IF NOT EXISTS postgis;
    ```
 4. `Settings.pg_dsn` 설정 (`postgresql+psycopg://...`)
-5. `alembic upgrade head`로 DDL 적용 (마스터 11개 + 보조 + 메타 + MV 정의)
-6. NTFS의 데이터 디렉토리를 ext4 테스트 미러에서 참조: `ln -s /mnt/f/dev/python-kraddr-geo/data data`
-7. 17개 시도 원천 적재 (`kraddr-geo load all-sidos --juso ... --locsum ... --navi ... --shp-root ... --yyyymm 202605`)
-8. `kraddr-geo load pobox ./data/postal/202605/JUSO_사서함.txt`, `kraddr-geo load bulk ./data/postal/202605/도로명주소_zipcode.txt`
-9. `kraddr-geo refresh mv` → `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`
-10. `kraddr-geo refresh vacuum` → 통계 갱신 (`VACUUM (ANALYZE) tl_spbd_buld` 등)
-10. `kraddr-geo validate all` — 행 수, FK, MV 일관성 검사
+5. `kraddr-geo init-db`(또는 `alembic upgrade head`)로 스키마·확장·인덱스·빈 MV 적용 (텍스트 정본 + 좌표 원천 + 보조 도형 + 메타 + MV 정의)
+6. NTFS의 데이터 디렉토리를 ext4 테스트 미러에서 참조: `ln -s <main-repo>/data data`
+7. 17개 시도 원천 적재 (`kraddr-geo load all-sidos --juso ... --locsum ... --navi ... --shp-root ... --yyyymm 202605`). 텍스트 정본(`tl_juso_text`) + 좌표 원천(`tl_locsum_entrc`, `tl_navi_*`) + SHP 도형 보조를 한 배치로 적재한다.
+8. `kraddr-geo load pobox <pobox.txt>`, `kraddr-geo load bulk <bulk.txt>` (또는 `kraddr-geo load epost`로 다운로드+적재)
+9. `kraddr-geo refresh mv` → `mv_geocode_target`(및 `mv_geocode_text_search` helper) 갱신 + `ANALYZE`. 분기 풀로드는 `kraddr-geo refresh mv --swap`(shadow MV rename swap).
+10. `kraddr-geo validate consistency` — 텍스트 정본 ↔ SHP polygon 정합성(C1~C10) 검사. 필요 시 `kraddr-geo validate data-quality-samples`로 C2/C4/C6/C7 리뷰용 CSV 생성.
 
 ## 검증 시나리오
 
-- 17개 시도 전체 적재 후 `tl_spbd_buld` row count 비교 (시도별 합과 일치하는지)
-- `mv_geocode_target` 행 수 = 출입구 hit 가능 건물 수
+- 17개 시도 전체 적재 후 `tl_juso_text` row count 비교 (시도별 합과 일치하는지)
+- `mv_geocode_target` 행 수 = `tl_juso_text` 건물 수 (좌표 출처는 `pt_source`로 entrance/centroid 분포 확인)
 - 도로명·지번 매칭 쿼리에 `EXPLAIN(ANALYZE)`로 인덱스 사용 확인
 - 샘플 주소 100건에 대해 vworld 원응답과 `AsyncAddressClient.geocode` 결과 비교 (좌표 오차 < 10m 비율 측정)
 - 역지오코딩: 임의 (lon, lat) 1,000건을 입력해 `/v1/address/reverse`가 출입구 hit / 동 폴리곤 fallback / NOT_FOUND 비율을 측정
@@ -55,15 +58,17 @@ PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/python-kraddr-geo-
 ## Readiness 자동화 (`kraddr-geo validate`)
 
 ```bash
-kraddr-geo validate all
+kraddr-geo validate consistency
+kraddr-geo validate data-quality-samples --cases C2,C4,C6,C7
 ```
 
-본 명령은 다음을 한 번에 수행한다:
+`validate consistency`는 텍스트 정본과 SHP polygon을 교차 검증하는 C1~C10 케이스(ADR-016)를 실행한다. 대표적으로:
 
-- 마스터 11개 + 보조 2개 + MV 1개 존재 여부
-- 시도별 row count 분포가 정상 범위인지 (이상치 경고)
-- `tl_spbd_buld.bd_mgt_sn` unique 검사
-- `mv_geocode_target`의 `ent_pt_4326` null/한국 외 좌표 검출
-- `pg_trgm`, `unaccent`, `postgis` 확장 설치 여부
+- C1/C2: `tl_juso_text` ↔ `tl_spbd_buld_polygon` BD_MGT_SN 차집합 (텍스트/도형 누락)
+- C3: 출입구 0개 건물 비율 (`tl_locsum_entrc` 대표 출입구 + same-month direct 출입구 기준, centroid fallback 흡수)
+- C4: serving 출입구 좌표 ↔ 건물 polygon 거리
+- C6/C7: 좌표 ↔ 우편번호(`tl_kodis_bas`)/행정동(`tl_scco_emd`) polygon 포함·코드 일치
+- C9: `tl_juso_text.pnu` 19자리 형식 검증
+- C10: 테이블별 `source_yyyymm` 혼합 기준월 검사
 
-실패 항목이 있으면 종료 코드 1로 끝나고 `--json`으로 출력 가능 → CI/관리 UI에서 수집.
+결과는 `load_consistency_reports`에 구조화 JSON으로 저장되고 `model_dump_json()`으로 출력된다. `severity_max == "ERROR"`이면 배치/swap gate에서 차단된다. `validate data-quality-samples`는 C2/C4/C6/C7 리뷰용 CSV를 `artifacts/`에 생성한다(운영 gate 아님).

@@ -41,9 +41,9 @@
 - ✅ FastAPI admin 보강 — `/v1/admin/tables`, `/v1/admin/explain`, `/v1/admin/cache/metrics`, `/v1/admin/logs`, `/v1/admin/upload/sido-zip`, `/v1/admin/maintenance/refresh-mv`
 - ✅ PR #12 리뷰 보강 — 업로드 path traversal/크기 제한, 프록시 `/v1` 제한과 스트리밍 전달, React Query retry, EXPLAIN timeout, LoadConsole/Explain/Reverse/Consistency 에러 처리, CI `scripts` import 실패 수정
 - ✅ PR #15 리베이스/리뷰 보강 — PR #14 merge 이후 최신 `main` 위로 rebase하고, `maplibre-vworld`를 upstream main commit `a5b3c65`로 고정해 helper/CSS를 실제 package에서 소비한다. 이후 후속 PR에서는 upstream PR #9 commit `11321fe`로 동기화해 VWorld tile error/redaction helper까지 공유한다.
-- ✅ PR #13/T-027 계획 보강 — `data/juso` 전체 인벤토리, Docker full-load 실행 금지선, 기준월 분리(`JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`), `PLAN_ONLY=1` preflight, 미지원 자료 후속 태스크를 문서화
-- 🟡 Windows 재설치/새 Codex 세션 복구 문서화 — `docs/windows-reinstall-recovery.md`에 Git/PR handoff, `data/`·`.env` 백업, WSL 복구, Codex `resume`/`fork`/로컬 백업 명령을 정리하고 `CLAUDE.md`/`docs/dev-environment-recovery.md`의 실제 적재 금지선을 동기화
-- 🟡 PR #14/T-027 실제 전체 적재 실행 — WSL ext4 작업 사본 `~/kraddr-geo-data`와 Docker PostGIS(`localhost:15432`)에서 텍스트/NAVI/SHP/MV 적재를 수행
+- ✅ PR #13/T-027 계획 보강 — `data/juso` 전체 인벤토리, 기준월 분리(`JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`), `PLAN_ONLY=1` preflight, 미지원 자료 후속 태스크를 문서화
+- ✅ Windows 재설치/새 세션 복구 문서화 — `docs/windows-reinstall-recovery.md`에 Git/PR handoff, `data/`·`.env` 백업, WSL 복구, 적재 완료 DB 백업/복원(ADR-030/ADR-036) 절차를 정리했다. T-027 적재 완료 이후 "실제 적재 금지선" 프레이밍은 제거하고 복구를 정상 운영 절차로 갱신했다
+- ✅ PR #14/T-027 실제 전체 적재 실행 — Docker PostGIS에서 텍스트/NAVI/SHP/MV 적재를 수행했다(아래 최종 클린 재적재로 대체됨)
 - ✅ 실제 SHP 17개 시도 × 9개 레이어 재적재 완료 — 153 레이어, 3시간 10분 4초, `tl_spbd_buld_polygon` 10,687,732행, `tl_sprd_intrvl` 16,993,167행, `tl_sprd_rw` 1,482,679행
 - ✅ 실제 SHP natural key 스키마 검증 — `bjd_cd`/건물번호/geometry 전 건 채움, `rds_sig_cd`/`rncode_full` NULL 581건 확인
 - ✅ C4/C5 정합성 SQL 보강 — natural key 중복 polygon 다대다 거리 오염을 막기 위해 nearest polygon 1개만 평가하도록 수정

@@ -19,14 +19,13 @@ class ReverseInput(BaseModel):
 
 ## 흐름
 
-1. 입력 좌표를 EPSG:5179 WKT로 변환은 repo 내부에서 `ST_Transform`으로 처리. core는 좌표값만 넘긴다.
-2. `repo.nearest_entrance(point_5179_wkt=..., limit=1)` — `tl_spbd_entrc`의 GiST 인덱스로 최근접 출입구 1개.
-3. `near["dist_m"] <= inp.radius_m`이면 **출입구 hit** → 도로명/지번 둘 다 만들 수 있음.
-   - 우편번호: `near["zip_no"]`가 있으면 `(zip_no, "building_bsi_zon_no")`. 없고 `inp.zipcode`면 `repo.zip_at(...)`로 4단계 fallback.
-   - `inp.type ∈ {"both","road"}`이면 도로명 `ReverseItem` 생성 (`level5=road_nm`, `detail=본번-부번`, `x_extension.matched="entrance"`).
+1. 입력 좌표를 EPSG:5179로 변환하는 일은 repo 내부에서 `ST_Transform`으로 처리. core는 좌표값(`Point`)과 `crs`만 넘긴다.
+2. `repo.nearest(point, crs=..., address_type=..., radius_m=..., limit=...)` — serving MV `mv_geocode_target`의 `pt_5179` GiST 인덱스(`ST_DWithin` + `<->` KNN)로 반경 내 최근접 후보를 거리순으로 조회한다. MV의 좌표는 텍스트 정본(`tl_juso_text`)에 위치정보요약DB 대표 출입구(`tl_locsum_entrc`, same-month일 때만 `tl_roadaddr_entrc`)와 centroid fallback(`tl_navi_buld_centroid`)을 합친 것이며, 각 행의 `pt_source`가 `entrance`/`centroid`를 구분한다.
+3. 후보가 `radius_m` 이내이면 **hit** → `address_type`에 따라 도로명/지번 `ReverseItem`을 만든다.
+   - 우편번호: 행의 `zip_no`가 있으면 `(zip_no, "building_bsi_zon_no")`. 없고 `inp.zipcode`면 `zip_repo`/`repo.zip_at(...)`로 4단계 fallback.
+   - `inp.type ∈ {"both","road"}`이면 도로명 `ReverseItem` 생성 (`level5=road_nm`, `detail=본번-부번`, `x_extension.matched` = `pt_source`).
    - `inp.type ∈ {"both","parcel"}`이면 지번 `ReverseItem` 생성.
-4. 출입구 hit 실패 → **동 폴리곤 fallback**: `repo.emd_at(...)`로 `tl_scco_emd` polygon 안의 행을 찾아 지번만 구성.
-5. 모두 실패하면 `ReverseResponse(status="NOT_FOUND")`.
+4. 반경 내 후보가 없으면 빈 후보 → `ReverseResponse(status="NOT_FOUND")`. (국가지점번호가 필요한 경로는 `repo.sppn_areas(...)`로 `tl_sppn_makarea` polygon을 별도 조회한다.)
 
 ## 우편번호 lookup 4단계 우선순위
 
@@ -61,7 +60,7 @@ REST:
 GET /v1/address/reverse?point=127.028601,37.500344&crs=EPSG:4326&type=both&zipcode=true&radius_m=200
 ```
 
-응답은 vworld 호환 구조 (`service`, `status`, `input`, `result: list[ReverseItem]`). 각 item에 `x_extension`(`bd_mgt_sn`, `distance_m`, `matched ∈ {"entrance","polygon"}`, `zip_source`)가 들어간다.
+응답은 vworld 호환 구조 (`service`, `status`, `input`, `result: list[ReverseItem]`). 각 item에 `x_extension`(`bd_mgt_sn`, `distance_m`, `matched ∈ {"entrance","centroid"}` = MV의 `pt_source`, `zip_source`)가 들어간다.
 
 ## 디버깅 UI
 
@@ -71,5 +70,5 @@ GET /v1/address/reverse?point=127.028601,37.500344&crs=EPSG:4326&type=both&zipco
 
 - **좌표 순서**: 외부 인터페이스는 모두 `(lon, lat)`. `(lat, lon)`을 받으면 한국 범위 검증에서 즉시 실패하며, 범위에 우연히 들어맞으면 잘못된 위치를 반환한다(SKILL.md §4-5).
 - **`radius_m`이 너무 크면** 노이즈가 늘어 인접 건물이 hit될 수 있다. 기본 200m 권장.
-- **`type="road"` 단독 사용**: 출입구 hit 실패 시 동 폴리곤 fallback은 지번만 만들므로 빈 결과로 보일 수 있다.
+- **`type="road"` 단독 사용**: 반경 내 후보가 도로명을 만들 수 없으면(예: 도로명 키 결측) 빈 결과로 보일 수 있다. 도로명/지번 모두 필요하면 `type="both"`를 쓴다.
 - **외부 API 폴백 미적용**: 현재 사양에서 `/v1/address/reverse`는 로컬 결과만 반환한다. vworld의 역지오코딩 폴백이 필요해지면 새 ADR로 결정.

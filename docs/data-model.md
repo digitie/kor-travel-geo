@@ -12,7 +12,7 @@
 | SHP polygon/폴리라인 (9) | `tl_scco_ctprvn/sig/emd/li`, `tl_kodis_bas`, `tl_spbd_buld_polygon`, `tl_sprd_manage/intrvl/rw` | 행정구역·우편번호·건물 polygon, 도로 관리/구간/폴리라인 | 도로명주소 전자지도 SHP (월간) |
 | 우편번호 보조 (2) | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 | epost OpenAPI (분기, ADR-009) |
 | 메타/운영 | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `geo_cache`, `ops.*` | 적재 watermark·MVM 매핑·작업 큐(ADR-011)·정합성 리포트(ADR-016)·외부 API 캐시·운영 감사/스냅샷/릴리스/artifact(ADR-033) | |
-| 평면화 (1) | `mv_geocode_target` | 지오코딩 쿼리용 MV (ADR-007) | 위 1·2를 join |
+| 평면화 (2) | `mv_geocode_target`, `mv_geocode_text_search` | 지오코딩 쿼리용 대표 MV (ADR-007), Q3 fuzzy·Q4 broad search 후보용 helper MV (T-061) | 위 1·2를 join |
 
 ## 텍스트 1차 정본 (`loaders/text/`, ADR-012)
 
@@ -474,7 +474,7 @@ CREATE INDEX idx_mv_pt_source ON mv_geocode_target (pt_source);          -- entr
 | 상황 | 방법 |
 |------|------|
 | 평시 변동분 적재(`delta_loader` 후) | `kraddr-geo refresh mv` 또는 `refresh_mv(strategy='concurrent')` → `ANALYZE` |
-| 분기 풀로드(전국 11개 마스터 재적재 후) | shadow MV 빌드 → 짧은 트랜잭션에서 RENAME swap (아래) |
+| 분기 풀로드(전국 정본 재적재 — 텍스트 3종 + SHP 도형 보조 후) | shadow MV 빌드 → 짧은 트랜잭션에서 RENAME swap (아래) |
 
 ```sql
 -- shadow 빌드 (오프피크에 진행, 운영 조회는 mv_geocode_target에서 계속)
