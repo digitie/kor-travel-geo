@@ -1,55 +1,81 @@
-# 개발 환경 셋업 (WSL ext4 기준)
+# 개발 환경 셋업 (NTFS main + WSL ext4 테스트 미러)
 
-본 문서는 `python-kraddr-geo`(`kraddr.geo`)를 PC에서 개발할 때 필요한 시스템 의존성과 셋업 순서를 정리한다. WSL ext4에서 작업하고 NTFS의 `data/`를 참조한다는 정책(AGENTS.md, SKILL.md)을 전제로 한다.
+본 문서는 `python-kraddr-geo`(`kraddr.geo`)를 PC에서 개발할 때 필요한 시스템 의존성과 셋업 순서를 정리한다. 현재 정책은 NTFS의 Git checkout을 source of truth로 두고, 테스트와 장기 실행은 WSL ext4 테스트 미러에서 수행하는 방식이다(ADR-041).
 
-## 1. WSL 작업 디렉토리
+## 1. NTFS main repo와 WSL 테스트 미러
+
+Git source of truth는 NTFS main repo다. Windows에서도 같은 파일을 열어 볼 수 있고, Codex/Claude/Antigravity가 각자 고정 worktree를 가진다.
+
+```text
+/mnt/f/dev/python-kraddr-geo/                 # NTFS main repo, main 동기화와 worktree 관리
+/mnt/f/dev/python-kraddr-geo-codex/           # ChatGPT Codex worktree
+/mnt/f/dev/python-kraddr-geo-claude/          # Claude Code worktree
+/mnt/f/dev/python-kraddr-geo-antigravity/     # Google Antigravity 2.0 worktree
+~/dev/python-kraddr-geo-codex-test/           # WSL ext4 테스트 미러 예시
+```
+
+NTFS worktree에서 코드 편집, branch, commit, push, PR을 수행한다. `pip`, `uv`, `npm test`, `next build`, `uvicorn` 같은 의존성 설치·검증·장기 실행은 ext4 테스트 미러에서 수행한다. NTFS worktree에서 장기 실행 테스트를 직접 돌리면 대량 I/O, 파일 감시, 권한 처리에서 반복 문제가 생길 수 있다.
+
+테스트 미러 갱신 예시:
 
 ```bash
-mkdir -p ~/dev && cd ~/dev
-git clone <repo-url> python-kraddr-geo
-cd python-kraddr-geo
-
-# NTFS의 data/를 ext4 작업 디렉토리에서 참조
-ln -s /mnt/<drive>/projects/python-kraddr-geo/data data
+mkdir -p ~/dev/python-kraddr-geo-codex-test
+rsync -a --delete \
+  --exclude .git \
+  --exclude .codegraph \
+  --exclude .venv \
+  --exclude node_modules \
+  --exclude kraddr-geo-ui/.next \
+  --exclude data \
+  /mnt/f/dev/python-kraddr-geo-codex/ \
+  ~/dev/python-kraddr-geo-codex-test/
+cd ~/dev/python-kraddr-geo-codex-test
+test -e data || ln -s /mnt/f/dev/python-kraddr-geo/data data
 ```
+
+ext4 테스트 미러는 실행 산출물 전용이다. 여기서 발견한 수정 필요 사항은 NTFS worktree에 반영하고, commit/push도 NTFS worktree에서만 수행한다. 대용량 `data/`는 NTFS main repo의 `/mnt/f/dev/python-kraddr-geo/data/`를 기준으로 두며, 테스트 미러에서는 절대경로 또는 심볼릭 링크로 참조한다.
 
 ## 1.1 에이전트별 고정 Git worktree
 
-AI 에이전트가 동시에 또는 순차로 작업할 때는 같은 checkout에서 branch를 계속 갈아타지 않는다. 기준 clone(`~/dev/python-kraddr-geo`)은 `main` 동기화와 worktree 관리용으로 두고, 실제 작업은 에이전트별 고정 worktree에서 수행한다.
+AI 에이전트가 동시에 또는 순차로 작업할 때는 같은 checkout에서 branch를 계속 갈아타지 않는다. 기준 clone(`/mnt/f/dev/python-kraddr-geo`)은 `main` 동기화와 worktree 관리용으로 두고, 실제 작업은 에이전트별 고정 worktree에서 수행한다. `geo-*` 접두사는 더 이상 쓰지 않고 `python-kraddr-geo-*` 접두사로 통일한다.
 
-| 에이전트 | worktree 경로 | idle branch 예시 | 작업 branch 예시 |
-|----------|---------------|------------------|------------------|
-| ChatGPT Codex | `~/dev/geo-codex` | `agent/codex-worktree` | `agent/codex-t047-benchmark` |
-| Claude Code | `~/dev/geo-claude` | `agent/claude-worktree` | `agent/claude-review-fixup` |
-| Google Antigravity 2.0 | `~/dev/geo-antigravity` | `agent/antigravity-worktree` | `agent/antigravity-ui-sync` |
+| 에이전트 | worktree 경로 | idle branch | 작업 branch 예시 |
+|----------|---------------|-------------|------------------|
+| ChatGPT Codex | `/mnt/f/dev/python-kraddr-geo-codex` | `agent/codex-idle` | `agent/codex-t072-ntfs-worktrees` |
+| Claude Code | `/mnt/f/dev/python-kraddr-geo-claude` | `agent/claude-idle` | `agent/claude-review-fixup` |
+| Google Antigravity 2.0 | `/mnt/f/dev/python-kraddr-geo-antigravity` | `agent/antigravity-idle` | `agent/antigravity-ui-sync` |
 
 최초 1회 생성:
 
 ```bash
-cd ~/dev/python-kraddr-geo
+cd /mnt/f/dev/python-kraddr-geo
 git fetch origin main
-git worktree add ../geo-codex -b agent/codex-worktree origin/main
-git worktree add ../geo-claude -b agent/claude-worktree origin/main
-git worktree add ../geo-antigravity -b agent/antigravity-worktree origin/main
+git worktree add ../python-kraddr-geo-codex -b agent/codex-idle origin/main
+git worktree add ../python-kraddr-geo-claude -b agent/claude-idle origin/main
+git worktree add ../python-kraddr-geo-antigravity -b agent/antigravity-idle origin/main
 ```
 
 이미 worktree가 있으면 재생성하지 않는다. 새 작업은 해당 에이전트 worktree에서 작업 branch만 새로 딴다.
 
 ```bash
-cd ~/dev/geo-codex
+cd /mnt/f/dev/python-kraddr-geo-codex
 git status --short                 # 변경사항이 없어야 다음 작업을 시작
 git fetch origin main
 git switch -c agent/codex-next origin/main
 ```
 
-사용자가 로컬 `main`을 이미 fast-forward로 맞춘 상태라면 아래 축약형도 가능하다.
+같은 branch를 두 worktree에서 동시에 checkout하지 말고, branch 이름에는 `agent/codex-*`, `agent/claude-*`, `agent/antigravity-*`처럼 소유자를 넣는다. NTFS main repo의 `main`에 미커밋 변경이 있으면 그대로 보존하고, 에이전트 작업은 별도 worktree에서 진행한다.
 
-```bash
-git fetch
-git switch -c agent/codex-next main
-```
+### 로컬 secret/env 파일
 
-다만 여러 worktree에서 `main` 자체를 checkout하려 하면 Git이 막을 수 있으므로, 자동화와 AI 에이전트에는 `origin/main`을 시작점으로 쓰는 형태를 권장한다. 같은 branch를 두 worktree에서 동시에 checkout하지 말고, branch 이름에는 `agent/codex-*`, `agent/claude-*`, `agent/antigravity-*`처럼 소유자를 넣는다.
+로컬 키와 환경 파일은 Git에 커밋하지 않는다. 새 NTFS worktree를 만들면 다음 파일들을 main repo 또는 기존 worktree에서 같은 상대 경로로 복사한다.
+
+- `.env`
+- `kraddr-geo-ui/.env.local`
+- `.claude/settings.local.json`
+- 필요 시 `backend/.env.local`, `web/.env.local`
+
+`.env*`, `.claude/`, `.codegraph/`는 ignore 대상이어야 한다. API 로컬 포트는 `8888`이므로 `KRADDR_GEO_API_INTERNAL_URL` 예시는 `http://localhost:8888`로 맞춘다.
 
 ## 1.2 CodeGraph 인덱스
 
@@ -63,21 +89,22 @@ hash -r
 codegraph --version
 ```
 
-각 worktree에서 최초 1회만 초기화한다.
+각 NTFS worktree에서 최초 1회만 초기화한다.
 
 ```bash
-cd ~/dev/geo-codex
+cd /mnt/f/dev/python-kraddr-geo-codex
 codegraph init -i
+codegraph status
 ```
 
-이후 작업 시작, branch 전환, `git pull`, rebase, merge 뒤에는 재초기화하지 않고 증분 갱신만 수행한다.
+NTFS worktree는 WSL2 `/mnt` 경로라 recursive file watch가 비활성화될 수 있다. 따라서 작업 시작, branch 전환, `git pull`, rebase, merge 뒤에는 재초기화하지 않고 다음 명령을 수동으로 실행한다.
 
 ```bash
 codegraph sync
 codegraph status
 ```
 
-문서 기준으로 `codegraph init -i`는 `.codegraph/`를 만들고 즉시 전체 인덱스를 생성한다. `codegraph sync`는 바뀐 파일만 증분 반영한다. MCP watcher가 켜진 환경에서는 자동 동기화가 되더라도, 이 저장소에서는 branch 전환 직후 수동 `codegraph sync`를 실행해 에이전트가 낡은 인덱스를 보지 않게 한다.
+문서 기준으로 `codegraph init -i`는 `.codegraph/`를 만들고 즉시 전체 인덱스를 생성한다. `codegraph sync`는 바뀐 파일만 증분 반영한다. NTFS에서는 watcher에 기대지 말고, 에이전트가 낡은 인덱스를 보지 않도록 branch 전환 직후 수동 `codegraph sync`를 실행한다.
 
 ### 1.2.1 Codex MCP 등록
 
@@ -152,6 +179,8 @@ gdal-config --version    # 예: 3.8.4
 
 ## 3. Python 의존성
 
+아래 명령은 NTFS worktree가 아니라 WSL ext4 테스트 미러에서 실행한다.
+
 ```bash
 uv venv && source .venv/bin/activate
 
@@ -216,7 +245,7 @@ print(ds.GetLayer(0).GetFeatureCount())
 - **TMP가 Windows Temp를 가리키는 경우**: WSL에서 `TMP=/mnt/c/...`로 셸이 열리면 pytest capture가 `FileNotFoundError`로 실패한다. `TMPDIR=/tmp TMP=/tmp TEMP=/tmp pytest -q`로 Linux `/tmp`를 명시한다(docs/resume.md "알려진 함정").
 - **Playwright/UI 브라우저 테스트**: Playwright는 Windows Node/브라우저 환경에서만 실행한다. WSL에서는 `npm run test:e2e`, `npx playwright test`, screenshot, 실제 지도 상호작용 검증을 실행하지 않는다. WSL headless Chromium은 반복적으로 `libasound.so.2` 같은 공유 라이브러리 누락으로 실패하므로, WSL에서는 백엔드 검증과 Node `lint`/`type-check`/unit test/build까지만 수행하고 Windows에서 실행한 명령, 브라우저, screenshot 경로를 기록한다.
 - **프론트엔드 WSL 검증 표준화**: `scripts/frontend_check.sh`를 사용하면 Windows `npm`이 PATH에 잡힌 경우 즉시 실패하고 Linux Node/npm에서 `gen:types`, lint, type-check, unit test, build를 순서대로 실행한다. 의존성 재설치가 필요하면 `scripts/frontend_check.sh --install`을 사용한다.
-- **NTFS에서 직접 git/pip 실행**: 권한·inotify·심볼릭 링크 모두 손해. 코드/가상환경은 ext4에 두고 결과만 NTFS로 카피(AGENTS.md, SKILL.md §1).
+- **NTFS에서 직접 테스트/장기 실행**: Git source of truth는 NTFS worktree지만, `pip`/`npm test`/`uvicorn` 장기 실행은 ext4 테스트 미러에서 수행한다. NTFS worktree는 편집·branch·commit·PR의 기준으로 유지한다(AGENTS.md, SKILL.md §1).
 - **GDAL Python 바인딩 버전 미스매치**: `pip install gdal>=3.8`만으로는 시스템과 다른 wheel을 받아 import 시 `undefined symbol`. 위 §3의 핀 절차 필수.
 - **`libgdal-dev` 누락**: `gdal-config: command not found`. apt 설치만 하면 해결.
 
