@@ -5,6 +5,13 @@ import { expect, test, type Page } from "@playwright/test";
 // 실패하므로, 테스트가 끝까지 진행되는 것 자체가 "멈추지 않음"의 1차 신호다.
 
 const REPORT_ID = "consistency_1";
+const CASE_CODES = Array.from({ length: 10 }, (_, index) => `C${index + 1}`);
+const CASES = CASE_CODES.map((code, index) => ({
+  code,
+  name: code === "C4" ? "출입구 좌표와 건물 polygon 거리 이상치" : `${code} 정합성 케이스`,
+  severity: code === "C4" ? "ERROR" : "OK",
+  count: index + 1
+}));
 
 const SAMPLE_WITH_POINT = {
   sample_id: "sample-1",
@@ -62,18 +69,16 @@ function resolveConsistencyBody(pathname: string): unknown {
     ];
   }
   if (pathname.includes("/case-definitions")) {
-    return [
-      {
-        code: "C4",
-        name: "출입구 좌표와 건물 polygon 거리 이상치",
-        compares: "대표 출입구 좌표와 건물 polygon",
-        abnormal_criteria: "출입구와 nearest polygon 거리가 50m를 초과한다.",
-        evidence: ["출입구 점", "건물 polygon"],
-        likely_causes: ["좌표 원천 이상치"],
-        decision_guide: "지도 확인 후 승인 또는 거절",
-        threshold: "50m 초과 WARN"
-      }
-    ];
+    return CASES.map((item) => ({
+      code: item.code,
+      name: item.name,
+      compares: "대표 출입구 좌표와 건물 polygon",
+      abnormal_criteria: "출입구와 nearest polygon 거리가 50m를 초과한다.",
+      evidence: ["출입구 점", "건물 polygon"],
+      likely_causes: ["좌표 원천 이상치"],
+      decision_guide: "지도 확인 후 승인 또는 거절",
+      threshold: "50m 초과 WARN"
+    }));
   }
   if (pathname.includes("/summary")) {
     return {
@@ -105,14 +110,7 @@ function resolveConsistencyBody(pathname: string): unknown {
       started_at: "2026-05-30T00:00:00Z",
       finished_at: "2026-05-30T00:01:00Z",
       generated_by: "cli",
-      cases: [
-        {
-          code: "C4",
-          name: "출입구 좌표와 건물 polygon 거리 이상치",
-          severity: "ERROR",
-          count: 1
-        }
-      ]
+      cases: CASES
     };
   }
   return null;
@@ -131,6 +129,21 @@ test.describe("Consistency 분석 콘솔", () => {
 
     // 표본 선택 전에는 지도 대신 안내 박스만 보인다.
     await expect(page.getByText("표본 선택 대기")).toBeVisible();
+  });
+
+  test("C1~C10 선택을 가로 스크롤 탭으로 렌더한다", async ({ page }) => {
+    await mockConsistencyApi(page);
+
+    await page.goto("/admin/consistency");
+
+    const tabList = page.getByRole("tablist", { name: "정합성 케이스" });
+    await expect(tabList).toBeVisible();
+    await expect(page.getByRole("tab", { name: /C1/ })).toHaveCount(1);
+    await expect(page.getByRole("tab", { name: /C10/ })).toHaveCount(1);
+    await expect(page.getByRole("tab", { selected: true })).toContainText("C4");
+
+    const overflowX = await tabList.evaluate((node) => window.getComputedStyle(node).overflowX);
+    expect(overflowX).toBe("auto");
   });
 
   test("표본을 선택하면 지도 섹션과 범례가 나타난다", async ({ page }) => {

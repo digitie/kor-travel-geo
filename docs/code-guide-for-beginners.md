@@ -82,7 +82,7 @@ npm run lint
 npm run type-check
 npm run test
 npm run build
-npm run test:e2e   # playwright
+npm run test:e2e   # Windows Node/브라우저에서만 실행
 ```
 
 스키마 변경이 있다면 `python scripts/export_openapi.py` → `cd kraddr-geo-ui && npm run gen:types`로 frontend Zod/types를 재생성한다.
@@ -96,7 +96,7 @@ npm run test:e2e   # playwright
   ↓
 [코드] 변경 (한 PR / 한 commit 단위)
   ↓
-[검증] pytest / ruff / mypy / lint-imports / (UI) playwright
+[검증] pytest / ruff / mypy / lint-imports / (UI) Windows Playwright
   ↓
 [기록] docs/journal.md 엔트리 추가
   ↓

@@ -127,6 +127,7 @@
 - ✅ T-066 Consistency 탭 진입 프리즈 완화 — `/admin/consistency`가 sample 선택 전부터 첫 point 샘플로 MapLibre/VWorld 지도를 자동 로드하지 않도록 수정했다. sample을 명시적으로 선택하기 전에는 placeholder만 표시하고, 지도 컴포넌트는 선택 후에만 동적으로 로드한다. 상세: `docs/t066-consistency-tab-freeze.md`
 - ✅ T-067 v2 geocode point+geometry overlay — `/v2/geocode`에 `include_geometry` 옵션을 추가해 기존 대표점(`point`)을 유지하면서 행정구역/도로/건물 도형을 `geometry`/`bbox`로 함께 반환한다. `/debug/geocode`는 point marker와 GeoJSON overlay를 표시하고, geocode/reverse 화면은 응답을 입력 아래에 두며 지도 패널을 키웠다. 실제 Docker DB에서 `성복동`/`성복1로`/`성복1로 35`를 각각 region polygon/road line/building polygon으로 확인했다. 상세: `docs/t067-v2-geocode-geometry-overlay.md`
 - ✅ 에이전트별 MCP 설정 추가 — Claude Code (`claude.json`), GPT Codex (`.codex/config.toml`), Antigravity (`antigravity.json`) 설정 파일에 playwright 및 sequential-thinking MCP 구성을 추가하고 git에 등록했다.
+- ✅ PR #97~#102 리뷰 감사와 T-070 consistency 탭 UX/포트 공식화 — PR #97부터 #102까지 conversation/review/thread를 확인해 unresolved thread 0건을 기록했다. `/admin/consistency` C1~C10 선택을 가로 스크롤 탭으로 바꾸고, 로컬 공식 포트를 DB `15434`, API `8000`, UI `13088`로 고정했다. Playwright e2e는 Windows Node/브라우저 전용으로 문서화했다. 상세: `docs/postmerge-review-fixups-pr97-pr102.md`, `docs/ports.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 
@@ -139,7 +140,7 @@
 - T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
 - PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
-- 디버그 UI의 실제 브라우저 회귀는 `kraddr-geo-ui` Docker image를 띄운 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test`로 실행한다. WSL Playwright는 공유 라이브러리 차이로 보조 검증에만 쓴다.
+- 디버그 UI의 실제 브라우저 회귀는 `kraddr-geo-ui` Docker image 또는 로컬 dev server를 공식 UI 포트 `13088`에 띄운 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test`로 실행한다. WSL에서는 Playwright를 실행하지 않는다. WSL headless Chromium은 `libasound.so.2` 같은 공유 라이브러리 누락으로 반복 실패하므로 `lint`/`type-check`/unit/build까지만 수행한다.
 - VWorld 지도 키는 `kraddr-geo-ui/.env.local` 또는 Docker `NEXT_PUBLIC_VWORLD_API_KEY` runtime env에서 읽는다. 외부 주소 API fallback 키는 루트 `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`다. `/admin/settings`의 저장값은 브라우저 localStorage override이며 저장소에 커밋하지 않는다.
 
 ## 작업 시작 전 확인할 것

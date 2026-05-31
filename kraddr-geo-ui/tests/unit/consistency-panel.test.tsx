@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConsistencyPanel } from "@/components/admin/ConsistencyPanel";
 import { useConsistencyAnalysisStore } from "@/lib/stores/consistency-analysis-store";
@@ -13,6 +13,34 @@ const apiMocks = vi.hoisted(() => ({
 const mapMock = vi.hoisted(() => ({
   LazyCoordinateMap: vi.fn(() => <div data-testid="lazy-coordinate-map" />)
 }));
+
+const CASE_CODES = Array.from({ length: 10 }, (_, index) => `C${index + 1}`);
+const CASE_DEFINITIONS = CASE_CODES.map((code) => ({
+  code,
+  name:
+    code === "C4"
+      ? "출입구 좌표와 건물 polygon 거리 이상치"
+      : code === "C5"
+        ? "내비 centroid와 건물 polygon centroid 거리 이상치"
+        : `${code} 정합성 케이스`,
+  compares:
+    code === "C4"
+      ? "대표 출입구 좌표와 건물 polygon"
+      : code === "C5"
+        ? "내비 centroid와 건물 polygon centroid"
+        : "정합성 기준 원천 비교",
+  abnormal_criteria:
+    code === "C5"
+      ? "두 centroid 거리가 임계값을 초과한다."
+      : code === "C4"
+        ? "출입구와 nearest polygon 거리가 50m를 초과한다."
+        : `${code} 기준을 벗어난 표본이다.`,
+  evidence: ["출입구 점", "건물 polygon"],
+  likely_causes: ["좌표 원천 이상치"],
+  decision_guide: "지도 확인 후 승인 또는 거절",
+  threshold: "WARN"
+}));
+
 
 vi.mock("@/lib/api", () => ({
   API_BASE: "/api/proxy",
@@ -57,28 +85,7 @@ function mockConsistencyApi() {
       ];
     }
     if (path === "/admin/consistency/case-definitions") {
-      return [
-        {
-          code: "C4",
-          name: "출입구 좌표와 건물 polygon 거리 이상치",
-          compares: "대표 출입구 좌표와 건물 polygon",
-          abnormal_criteria: "출입구와 nearest polygon 거리가 50m를 초과한다.",
-          evidence: ["출입구 점", "건물 polygon"],
-          likely_causes: ["좌표 원천 이상치"],
-          decision_guide: "지도 확인 후 승인 또는 거절",
-          threshold: "50m 초과 WARN"
-        },
-        {
-          code: "C5",
-          name: "내비 centroid와 건물 polygon centroid 거리 이상치",
-          compares: "내비 centroid와 건물 polygon centroid",
-          abnormal_criteria: "두 centroid 거리가 임계값을 초과한다.",
-          evidence: ["내비 centroid", "건물 polygon"],
-          likely_causes: ["좌표 원천 이상치"],
-          decision_guide: "지도 확인 후 승인 또는 거절",
-          threshold: "WARN"
-        }
-      ];
+      return CASE_DEFINITIONS;
     }
     if (path === "/admin/consistency/consistency_1") {
       return {
@@ -89,20 +96,12 @@ function mockConsistencyApi() {
         started_at: "2026-05-30T00:00:00Z",
         finished_at: "2026-05-30T00:01:00Z",
         generated_by: "cli",
-        cases: [
-          {
-            code: "C4",
-            name: "출입구 좌표와 건물 polygon 거리 이상치",
-            severity: "ERROR",
-            count: 1
-          },
-          {
-            code: "C5",
-            name: "내비 centroid와 건물 polygon centroid 거리 이상치",
-            severity: "WARN",
-            count: 1
-          }
-        ]
+        cases: CASE_DEFINITIONS.map((item, index) => ({
+          code: item.code,
+          name: item.name,
+          severity: item.code === "C4" ? "ERROR" : item.code === "C5" ? "WARN" : "OK",
+          count: index + 1
+        }))
       };
     }
     const summaryMatch = path.match(/\/cases\/(C\d+)\/summary$/);
@@ -184,6 +183,22 @@ describe("ConsistencyPanel", () => {
     expect(mapMock.LazyCoordinateMap).toHaveBeenCalledTimes(1);
   });
 
+  it("C1~C10 case를 가로 스크롤 탭으로 렌더한다", async () => {
+    renderPanel();
+
+    await screen.findByText("consistency_1");
+    await screen.findByRole("tab", { name: /C4/ });
+
+    const tabList = screen.getByRole("tablist", { name: "정합성 케이스" });
+    const tabs = within(tabList).getAllByRole("tab");
+
+    expect(tabList).toHaveClass("case-tab-list");
+    expect(tabs).toHaveLength(10);
+    expect(tabs[0]).toHaveTextContent("C1");
+    expect(tabs[3]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[9]).toHaveTextContent("C10");
+  });
+
   // C1~C10 case 이동 시 무한 re-render로 탭이 멈추던 회귀를 막는다.
   // `samples`가 매 렌더마다 새 배열이면 useReactTable auto-reset이 매 렌더 setState를
   // 호출해 무한 루프에 빠진다. 루프가 재발하면 이 테스트는 타임아웃으로 실패한다.
@@ -193,7 +208,7 @@ describe("ConsistencyPanel", () => {
     await screen.findByText("consistency_1");
     await screen.findByText("#1");
 
-    const otherCase = await screen.findByRole("button", { name: /C5/ });
+    const otherCase = await screen.findByRole("tab", { name: /C5/ });
     fireEvent.click(otherCase);
 
     // 전환된 case(C5)의 기준 패널이 갱신되면 메인 스레드가 살아 있는 것이다.

@@ -126,6 +126,18 @@ codegraph status
 
 MCP가 아직 노출되지 않은 세션에서는 작업 로그에 "MCP 미노출로 CLI 대체"를 남기고, 임시로 `codegraph context <task>` 또는 `codegraph impact <symbol>`를 사용한다. 다음 Codex Desktop 재시작 뒤에는 `codegraph_explore`를 우선 사용한다.
 
+## 1.3 공식 로컬 포트
+
+이 저장소의 PC/WSL 개발 환경은 다음 host 포트를 공식값으로 사용한다. PostgreSQL 기본 포트 `5432`와 Next.js 기본 포트 `3000`은 다른 프로젝트와 충돌하기 쉬우므로 외부 진입점으로 고정하지 않는다.
+
+| 표면 | 공식 host 포트 | 내부 포트 | 비고 |
+|------|----------------|-----------|------|
+| PostgreSQL + PostGIS | `15434` | `5432` | `docker-compose.yml`의 기본 `KRADDR_GEO_DB_PORT` |
+| FastAPI 백엔드 | `8000` | `8000` | `uvicorn kraddr.geo.api.app:app --host 127.0.0.1 --port 8000` |
+| `kraddr-geo-ui` | `13088` | `3000` | Docker는 `-p 13088:3000`, local dev는 `npm run dev -- --port 13088` |
+
+상세 실행 예시는 `docs/ports.md`에 둔다.
+
 ## 2. 시스템 패키지 (Ubuntu/WSL)
 
 ```bash
@@ -202,7 +214,7 @@ print(ds.GetLayer(0).GetFeatureCount())
 ## 6. 알려진 함정
 
 - **TMP가 Windows Temp를 가리키는 경우**: WSL에서 `TMP=/mnt/c/...`로 셸이 열리면 pytest capture가 `FileNotFoundError`로 실패한다. `TMPDIR=/tmp TMP=/tmp TEMP=/tmp pytest -q`로 Linux `/tmp`를 명시한다(docs/resume.md "알려진 함정").
-- **Playwright/UI 브라우저 테스트**: 사용자 지시에 따라 Playwright는 Windows Node/브라우저 환경에서 실행한다. WSL에서는 백엔드, Node unit/type/build 검증까지만 수행하고, 실제 브라우저 렌더링·screenshot·지도 상호작용 검증은 Windows에서 명령과 screenshot 경로를 함께 기록한다.
+- **Playwright/UI 브라우저 테스트**: Playwright는 Windows Node/브라우저 환경에서만 실행한다. WSL에서는 `npm run test:e2e`, `npx playwright test`, screenshot, 실제 지도 상호작용 검증을 실행하지 않는다. WSL headless Chromium은 반복적으로 `libasound.so.2` 같은 공유 라이브러리 누락으로 실패하므로, WSL에서는 백엔드 검증과 Node `lint`/`type-check`/unit test/build까지만 수행하고 Windows에서 실행한 명령, 브라우저, screenshot 경로를 기록한다.
 - **프론트엔드 WSL 검증 표준화**: `scripts/frontend_check.sh`를 사용하면 Windows `npm`이 PATH에 잡힌 경우 즉시 실패하고 Linux Node/npm에서 `gen:types`, lint, type-check, unit test, build를 순서대로 실행한다. 의존성 재설치가 필요하면 `scripts/frontend_check.sh --install`을 사용한다.
 - **NTFS에서 직접 git/pip 실행**: 권한·inotify·심볼릭 링크 모두 손해. 코드/가상환경은 ext4에 두고 결과만 NTFS로 카피(AGENTS.md, SKILL.md §1).
 - **GDAL Python 바인딩 버전 미스매치**: `pip install gdal>=3.8`만으로는 시스템과 다른 wheel을 받아 import 시 `undefined symbol`. 위 §3의 핀 절차 필수.

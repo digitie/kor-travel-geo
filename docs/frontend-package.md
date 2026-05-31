@@ -187,7 +187,7 @@ T-044 경계화 포팅 원칙:
 
 Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우저 네트워크를 가로채 `/api/proxy/v2/geocode`와 `/api/proxy/v2/reverse` 요청을 확인한다. 이 방식은 실제 DB 결과에 의존하지 않고, UI가 v2 REST body를 잘못 만들거나 v1 endpoint로 되돌아가면 즉시 실패한다.
 
-실제 실행은 사용자 지시에 따라 Windows Node/브라우저 환경에서 수행한다. Docker UI를 띄운 뒤 Windows에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test --config playwright.config.ts --project chromium --workers 1`로 실행한다. WSL에서는 Linux Node/npm으로 lint/type/unit/build를 확인하고, Playwright는 보조 검증으로만 사용한다.
+실제 실행은 Windows Node/브라우저 환경에서만 수행한다. Docker UI 또는 로컬 dev server를 공식 포트 `13088`에 띄운 뒤 Windows에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test --config playwright.config.ts --project chromium --workers 1`로 실행한다. WSL에서는 Linux Node/npm으로 lint/type/unit/build까지만 확인하고, `npm run test:e2e`나 `npx playwright test`를 실행하지 않는다.
 
 ### A3.8 Provider 체인 (`app/providers.tsx`)
 
