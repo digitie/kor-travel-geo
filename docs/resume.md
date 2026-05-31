@@ -127,7 +127,7 @@
 - ✅ T-066 Consistency 탭 진입 프리즈 완화 — `/admin/consistency`가 sample 선택 전부터 첫 point 샘플로 MapLibre/VWorld 지도를 자동 로드하지 않도록 수정했다. sample을 명시적으로 선택하기 전에는 placeholder만 표시하고, 지도 컴포넌트는 선택 후에만 동적으로 로드한다. 상세: `docs/t066-consistency-tab-freeze.md`
 - ✅ T-067 v2 geocode point+geometry overlay — `/v2/geocode`에 `include_geometry` 옵션을 추가해 기존 대표점(`point`)을 유지하면서 행정구역/도로/건물 도형을 `geometry`/`bbox`로 함께 반환한다. `/debug/geocode`는 point marker와 GeoJSON overlay를 표시하고, geocode/reverse 화면은 응답을 입력 아래에 두며 지도 패널을 키웠다. 실제 Docker DB에서 `성복동`/`성복1로`/`성복1로 35`를 각각 region polygon/road line/building polygon으로 확인했다. 상세: `docs/t067-v2-geocode-geometry-overlay.md`
 - ✅ 에이전트별 MCP 설정 추가 — Claude Code (`claude.json`), GPT Codex (`.codex/config.toml`), Antigravity (`antigravity.json`) 설정 파일에 playwright 및 sequential-thinking MCP 구성을 추가하고 git에 등록했다.
-- ✅ PR #97~#102 리뷰 감사와 T-070 consistency 탭 UX/포트 공식화 — PR #97부터 #102까지 conversation/review/thread를 확인해 unresolved thread 0건을 기록했다. `/admin/consistency` C1~C10 선택을 가로 스크롤 탭으로 바꾸고, 로컬 공식 포트를 DB `15434`, API `8000`, UI `13088`로 고정했다. Playwright e2e는 Windows Node/브라우저 전용으로 문서화했다. 상세: `docs/postmerge-review-fixups-pr97-pr102.md`, `docs/ports.md`
+- ✅ PR #97~#102 리뷰 감사와 T-070 consistency 탭 UX/포트 공식화 — PR #97부터 #102까지 conversation/review/thread를 확인해 unresolved thread 0건을 기록했다. `/admin/consistency` C1~C10 선택을 가로 스크롤 탭으로 바꾸고, 로컬 공식 포트를 DB `15434`, API `8888`, UI `13088`로 고정했다. Playwright e2e는 Windows Node/브라우저 전용으로 문서화했다. 상세: `docs/postmerge-review-fixups-pr97-pr102.md`, `docs/ports.md`
 
 ## 다음 한 작업 (1시간 이내 분량)
 

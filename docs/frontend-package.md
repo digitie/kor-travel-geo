@@ -73,7 +73,7 @@ kraddr-geo-ui/
 ### 환경변수 (`.env.local.example`)
 
 ```
-KRADDR_GEO_API_INTERNAL_URL=http://localhost:8000           # 서버 사이드 전용
+KRADDR_GEO_API_INTERNAL_URL=http://localhost:8888           # 서버 사이드 전용
 NEXT_PUBLIC_API_BASE_URL=/api/proxy                      # 브라우저 노출
 NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key           # 브라우저 노출, VWorld 콘솔에서 도메인/IP 제한
 ```

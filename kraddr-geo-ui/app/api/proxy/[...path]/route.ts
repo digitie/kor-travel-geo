@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { buildProxyRequestInit, buildProxyTarget, forwardedProxyHeaders } from "@/lib/proxy";
 
-const INTERNAL_BASE = process.env.KRADDR_GEO_API_INTERNAL_URL ?? "http://localhost:8000";
+const INTERNAL_BASE = process.env.KRADDR_GEO_API_INTERNAL_URL ?? "http://localhost:8888";
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const params = await context.params;

@@ -22,7 +22,7 @@
 ## 예시
 
 ```bash
-curl -G "http://localhost:8000/v1/address/search" \
+curl -G "http://localhost:8888/v1/address/search" \
   --data-urlencode "query=테헤란로" \
   --data-urlencode "type=road" \
   --data-urlencode "sig_cd=11680"

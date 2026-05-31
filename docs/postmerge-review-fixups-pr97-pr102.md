@@ -20,7 +20,7 @@
 - `/admin/consistency`의 C1~C10 case 선택을 세로 rail에서 가로 스크롤 탭으로 변경했다.
 - 탭은 `role="tablist"`/`role="tab"` 구조와 `aria-selected`, `aria-controls`, `role="tabpanel"`를 갖는다.
 - unit/e2e mock을 C1~C10 전체 case로 확장해 탭 개수와 C10 접근성을 고정했다.
-- PC/WSL 개발 공식 포트를 DB `15434`, API `8000`, UI `13088`로 문서화하고 `docker-compose.yml`/`.env.example` 기본값을 맞췄다.
+- PC/WSL 개발 공식 포트를 DB `15434`, API `8888`, UI `13088`로 문서화하고 `docker-compose.yml`/`.env.example` 기본값을 맞췄다.
 - Playwright e2e는 Windows Node/브라우저에서만 실행한다고 문서화했다. WSL은 `libasound.so.2` 누락으로 반복 실패하므로 `lint`/`type-check`/unit/build까지만 수행한다.
 
 ## 검증
