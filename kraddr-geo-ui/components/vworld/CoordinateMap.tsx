@@ -1,18 +1,20 @@
 "use client";
 
-import maplibregl, {
-  type ErrorEvent as MapLibreErrorEvent,
-  type LngLatBoundsLike,
-  type Map as MapLibreMap,
-  type MapMouseEvent,
-  type Marker as MapLibreMarker
+import type {
+  ErrorEvent as MapLibreErrorEvent,
+  Map as MapLibreMap,
+  MapMouseEvent
 } from "maplibre-gl";
-import { useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   getVWorldMaxZoom,
-  getVWorldRasterStyle,
   isVWorldTileError,
-  redactVWorldTileUrl,
+  Marker,
+  redactVWorldUrl,
+  useMap,
+  useMapLoaded,
+  VWorldMap,
+  type VWorldMapFallbackInfo,
   type VWorldLayerType
 } from "@/lib/vworld";
 import { useVWorldApiKey } from "@/lib/vworld-key";
@@ -41,6 +43,7 @@ const OVERLAY_SOURCE_ID = "kraddr-geo-overlay";
 const OVERLAY_FILL_LAYER_ID = "kraddr-geo-overlay-fill";
 const OVERLAY_LINE_LAYER_ID = "kraddr-geo-overlay-line";
 const OVERLAY_POINT_LAYER_ID = "kraddr-geo-overlay-point";
+type MapBBox = [number, number, number, number];
 
 type MapResourceError = Error & {
   status?: number;
@@ -50,16 +53,16 @@ type MapResourceError = Error & {
 
 // Map load/error state in a single reducer so the init effect dispatches one
 // action per event instead of juggling several independent setState setters.
-type MapStatus = { loaded: boolean; error: string | null };
+type MapStatus = { error: string | null };
 type MapStatusAction = { type: "loaded" } | { type: "error"; message: string };
-const INITIAL_MAP_STATUS: MapStatus = { loaded: false, error: null };
+const INITIAL_MAP_STATUS: MapStatus = { error: null };
 
 function mapStatusReducer(state: MapStatus, action: MapStatusAction): MapStatus {
   switch (action.type) {
     case "loaded":
-      return state.loaded ? state : { ...state, loaded: true };
+      return state.error === null ? state : { error: null };
     case "error":
-      return state.error === action.message ? state : { ...state, error: action.message };
+      return state.error === action.message ? state : { error: action.message };
     default:
       return state;
   }
@@ -114,134 +117,87 @@ function LoadedCoordinateMap({
   point: Coordinate | null;
   onClick?: (point: Coordinate) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<MapLibreMap | null>(null);
-  const markerRef = useRef<MapLibreMarker | null>(null);
-  const onClickRef = useRef<typeof onClick>(onClick);
-  const initialCenterRef = useRef(point ?? DEFAULT_CENTER);
+  const [initialCenter] = useState(() => point ?? DEFAULT_CENTER);
   const transientTileErrorsRef = useRef(0);
   const [status, dispatchStatus] = useReducer(mapStatusReducer, INITIAL_MAP_STATUS);
-  const { loaded, error } = status;
+  const { error } = status;
+  const unsupportedTileFallback = useMemo(() => ({ label: "지원하지 않는 타일" }), []);
+  const mapBounds = useMemo(
+    () => boundsFromBBox(bbox, point) ?? boundsFromGeoJson(geometry?.geojson, point),
+    [bbox, geometry?.geojson, point]
+  );
+  const cameraTarget = useMemo(() => {
+    if (!point || mapBounds) return undefined;
+    return { center: [point.x, point.y] as [number, number], zoom: DEFAULT_ZOOM };
+  }, [mapBounds, point]);
+  const handleLoad = useCallback(() => {
+    transientTileErrorsRef.current = 0;
+    dispatchStatus({ type: "loaded" });
+  }, []);
+  const handleError = useCallback((event: MapLibreErrorEvent) => {
+    if (isVWorldTileError(event)) {
+      transientTileErrorsRef.current += 1;
+      warnMapTileError(event);
+      if (transientTileErrorsRef.current >= TILE_ERROR_OVERLAY_THRESHOLD) {
+        dispatchStatus({ type: "error", message: "지도 타일 로딩이 불안정합니다" });
+      }
+      return;
+    }
 
-  useEffect(() => {
-    onClickRef.current = onClick;
+    dispatchStatus({ type: "error", message: "지도 로딩 실패" });
+  }, []);
+  const handleClick = useCallback((event: MapMouseEvent) => {
+    onClick?.({ x: event.lngLat.lng, y: event.lngLat.lat });
   }, [onClick]);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+  return (
+    <div className="vworld-map-shell">
+      <VWorldMap
+        apiKey={apiKey}
+        bbox={mapBounds}
+        cameraTarget={cameraTarget}
+        cameraTransition="instant"
+        center={[initialCenter.x, initialCenter.y]}
+        className="vworld-map"
+        fallback={(info) => <VWorldMapFallback info={info} />}
+        geolocate={false}
+        layerType={layerType}
+        loadingSkeleton={<MapOverlay text="지도 로딩 중" />}
+        maxZoom={getVWorldMaxZoom(layerType)}
+        onClick={handleClick}
+        onError={handleError}
+        onLoad={handleLoad}
+        scale={false}
+        style={{ width: "100%", height: "100%" }}
+        unsupportedTileFallback={unsupportedTileFallback}
+        zoom={DEFAULT_ZOOM}
+      >
+        <GeometryOverlay geometry={geometry} />
+        {point ? <Marker color="#0f766e" lngLat={[point.x, point.y]} /> : null}
+      </VWorldMap>
+      {error ? <MapOverlay text={error} /> : null}
+    </div>
+  );
+}
 
-    const map = new maplibregl.Map({
-      center: [initialCenterRef.current.x, initialCenterRef.current.y],
-      container,
-      maxZoom: getVWorldMaxZoom(layerType),
-      minZoom: 6,
-      style: getVWorldRasterStyle(apiKey, layerType),
-      zoom: DEFAULT_ZOOM
-    });
-
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-
-    const handleLoad = () => {
-      transientTileErrorsRef.current = 0;
-      dispatchStatus({ type: "loaded" });
-    };
-    const handleError = (event: MapLibreErrorEvent) => {
-      if (isVWorldTileError(event)) {
-        transientTileErrorsRef.current += 1;
-        warnMapTileError(event);
-        if (transientTileErrorsRef.current >= TILE_ERROR_OVERLAY_THRESHOLD) {
-          dispatchStatus({ type: "error", message: "지도 타일 로딩이 불안정합니다" });
-        }
-        return;
-      }
-
-      dispatchStatus({ type: "error", message: "지도 로딩 실패" });
-    };
-    const handleClick = (event: MapMouseEvent) => {
-      onClickRef.current?.({ x: event.lngLat.lng, y: event.lngLat.lat });
-    };
-    // Coalesce resize callbacks into a single animation frame. Calling map.resize()
-    // synchronously inside the ResizeObserver callback can retrigger layout and produce
-    // a "ResizeObserver loop" that pins the main thread and freezes the tab.
-    let resizeFrame = 0;
-    const resizeObserver = new ResizeObserver(() => {
-      if (resizeFrame) return;
-      resizeFrame = window.requestAnimationFrame(() => {
-        resizeFrame = 0;
-        mapRef.current?.resize();
-      });
-    });
-
-    map.on("load", handleLoad);
-    map.on("error", handleError);
-    map.on("click", handleClick);
-    resizeObserver.observe(container);
-    mapRef.current = map;
-
-    return () => {
-      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
-      resizeObserver.disconnect();
-      map.off("click", handleClick);
-      map.off("error", handleError);
-      map.off("load", handleLoad);
-      map.remove();
-      mapRef.current = null;
-    };
-  }, [apiKey, layerType]);
+function GeometryOverlay({ geometry }: { geometry?: MapGeometryOverlay | null }) {
+  const map = useMap();
+  const loaded = useMapLoaded();
 
   useEffect(() => {
-    const map = mapRef.current;
     if (!map || !loaded) return;
 
     removeGeometryOverlay(map);
-
     if (geometry?.geojson) {
       addGeometryOverlay(map, geometry);
     }
 
-    if (point) {
-      markerRef.current = new maplibregl.Marker({ color: "#0f766e" })
-        .setLngLat([point.x, point.y])
-        .addTo(map);
-    }
-
-    const bounds = boundsFromBBox(bbox, point) ?? boundsFromGeoJson(geometry?.geojson, point);
-    if (bounds) {
-      map.fitBounds(bounds, {
-        animate: false,
-        duration: 0,
-        essential: false,
-        maxZoom: 17,
-        padding: 36
-      });
-    } else if (point) {
-      map.flyTo({
-        animate: false,
-        center: [point.x, point.y],
-        duration: 0,
-        essential: false,
-        zoom: Math.max(map.getZoom(), DEFAULT_ZOOM)
-      });
-    }
-
-    // This effect owns the marker it creates: remove it on re-run/unmount.
     return () => {
-      markerRef.current?.remove();
-      markerRef.current = null;
+      removeGeometryOverlay(map);
     };
-  }, [bbox, geometry, loaded, point]);
+  }, [geometry, loaded, map]);
 
-  return (
-    <div className="vworld-map-shell">
-      <div aria-label="VWorld MapLibre 지도" className="vworld-map" ref={containerRef} />
-      {!loaded || error ? (
-        <div className="vworld-map-overlay">
-          <span>{error ?? "지도 로딩 중"}</span>
-        </div>
-      ) : null}
-    </div>
-  );
+  return null;
 }
 
 function addGeometryOverlay(map: MapLibreMap, geometry: MapGeometryOverlay): void {
@@ -326,22 +282,24 @@ function removeGeometryOverlay(map: MapLibreMap): void {
 function boundsFromBBox(
   bbox: CoordinateBBox | null | undefined,
   point?: Coordinate | null
-): LngLatBoundsLike | null {
-  if (!bbox) return null;
+): MapBBox | undefined {
+  if (!bbox) return undefined;
   const expanded = expandBBoxWithPoint(bbox, point);
-  if (expanded.min_lon >= expanded.max_lon || expanded.min_lat >= expanded.max_lat) return null;
+  if (expanded.min_lon >= expanded.max_lon || expanded.min_lat >= expanded.max_lat) return undefined;
   return [
-    [expanded.min_lon, expanded.min_lat],
-    [expanded.max_lon, expanded.max_lat]
+    expanded.min_lon,
+    expanded.min_lat,
+    expanded.max_lon,
+    expanded.max_lat
   ];
 }
 
 function boundsFromGeoJson(
   geometry: GeoJSON.Geometry | null | undefined,
   point?: Coordinate | null
-): LngLatBoundsLike | null {
+): MapBBox | undefined {
   const bbox = geometry && "bbox" in geometry ? geometry.bbox : undefined;
-  if (!bbox || bbox.length < 4) return null;
+  if (!bbox || bbox.length < 4) return undefined;
   return boundsFromBBox({
     min_lon: bbox[0],
     min_lat: bbox[1],
@@ -368,8 +326,21 @@ function warnMapTileError(event: MapLibreErrorEvent): void {
     sourceId: "sourceId" in event ? event.sourceId : undefined,
     status: error.status,
     statusText: error.statusText,
-    url: redactVWorldTileUrl(error.url)
+    url: redactVWorldUrl(error.url)
   });
+}
+
+function VWorldMapFallback({ info }: { info: VWorldMapFallbackInfo }) {
+  const message = info.reason === "missing-api-key" ? "VWorld API 키 미설정" : "지도 로딩 실패";
+  return <MapOverlay text={message} />;
+}
+
+function MapOverlay({ text }: { text: string }) {
+  return (
+    <div className="vworld-map-overlay">
+      <span>{text}</span>
+    </div>
+  );
 }
 
 function CoordinateFallback({ point, note }: { point: Coordinate | null; note: string }) {

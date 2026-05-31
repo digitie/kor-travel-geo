@@ -2,6 +2,39 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-05-31 22:44 (VWorld 최신 wrapper 동기화와 PR #108 문서 기준 반영)
+
+**작업**: 사용자 지시에 따라 로컬 git secret 파일에서 VWorld 키 존재 여부만 확인하고, PR #108의 `docker-compose.yml` `./data/*` 기본 볼륨 기준이 현재 코드에 이미 반영되어 있음을 확인했다. `maplibre-vworld-js` upstream `main` 최신 commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`과 package version `0.1.2`를 확인한 뒤 `kraddr-geo-ui` dependency/lockfile을 갱신했다.
+
+**반영**:
+- `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`를 직접 `maplibregl.Map` lifecycle 소유 방식에서 upstream `VWorldMap`/`Marker`/`useMap`/`useMapLoaded`를 감싸는 domain wrapper로 전환했다.
+- `kraddr-geo-ui/lib/vworld.ts`의 `getVWorldRasterStyle`, `redactVWorldTileUrl` local alias를 제거하고 upstream 이름인 `getVWorldStyle()`, `redactVWorldUrl()`로 호출자를 옮겼다.
+- `README.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/external-apis.md`, `docs/frontend-package.md`, `docs/resume.md`, `kraddr-geo-ui/README.md`, `kraddr-geo-ui/CHANGELOG.md`에 최신 SHA, npm registry 미출시 상태, `VWorldMap` wrapper 전환을 반영했다.
+- CodeGraph MCP는 현재 세션 도구로 노출되지 않아 CLI `codegraph sync/status/impact`로 `CoordinateMap.tsx` 영향도를 확인했다.
+
+**검증**:
+- ext4 테스트 미러: `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q` → 통과.
+- Docker Node(ext4 mirror): `npm ci && npm run gen:types && npm run lint && npm run type-check && npm run test && npm run build` → 통과.
+- T-027 최종 DB pgdata(`/home/digitie/kraddr-geo-data/pgdata-final-20260529`)를 유지한 채 `kraddr-geo-t027-final` DB 컨테이너를 재기동했고, API를 `0.0.0.0:8888`로 다시 띄웠다.
+- 기존 UI 컨테이너를 내리고 `docker build --no-cache -t kraddr-geo-ui:vworld-pr108 ./kraddr-geo-ui`로 클린 빌드한 뒤 `kraddr-geo-ui-vworld-pr108`을 `13088` 포트에 재기동했다.
+- `/v1/healthz`, UI proxy `/api/proxy/v1/healthz`, `/debug/geocode`, `/api/runtime-config` VWorld key 주입, `/v2/geocode`, `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse` smoke를 확인했다.
+
+## 2026-05-31 19:35 (Windows Git 기준과 T-027 DB 재사용 고정)
+
+**작업**: 사용자 지시에 따라 WSL 테스트 미러에서 실행하더라도 Git metadata는 Windows Git과 Windows repo 경로를 기준으로 읽도록 정리했고, PostgreSQL 검증 DB는 새 클린 DB가 아니라 T-027 최종 적재 DB를 재사용하도록 복구했다.
+
+**반영**:
+- `scripts/benchmark_api_latency.py`, `scripts/benchmark_query_performance.py`, `scripts/capture_deployment_envelope.py`가 `KRADDR_GEO_GIT_REPO` 또는 ext4 미러 이름에서 `F:/dev/python-kraddr-geo-*` 경로를 만들고 Windows `git.exe`로 branch/commit을 수집하도록 바꿨다.
+- NTFS worktree의 `.git`/`gitdir` 포인터를 Windows Git 기준 `F:/dev/...`로 되돌렸다. WSL `git` 편의를 위해 `/mnt/f/...`로 바꾸지 않는 규칙을 문서화했다.
+- `AGENTS.md`, README, `SKILL.md`, `docs/dev-environment.md`, `docs/agent-guide.md`, `docs/resume.md`에 Windows Git 기준과 T-027 DB 재사용 원칙을 추가했다.
+- `kraddr-geo-codex-clean` DB 컨테이너를 내리고, T-027 최종 pgdata(`/home/digitie/kraddr-geo-data/pgdata-final-20260529`)를 쓰는 `kraddr-geo-t027-final` DB를 port `15434`로 다시 올렸다.
+
+**검증**:
+- Windows Git: `git.exe -C F:/dev/python-kraddr-geo-codex status --short --branch`가 `agent/codex-idle` worktree와 현재 변경 파일을 정상 표시했다.
+- ext4 미러에서 세 스크립트의 Git helper가 모두 `agent/codex-idle`을 반환했다.
+- T-027 DB row count: `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`.
+- `git.exe -C F:/dev/python-kraddr-geo-codex diff --check` → 통과.
+
 ## 2026-05-31 14:10 (NTFS main repo와 에이전트 worktree 전환)
 
 **작업**: 사용자 지시에 따라 Git source of truth를 NTFS main repo로 두고, 테스트는 WSL ext4 미러에서 수행하는 정책으로 전환했다.

@@ -16,6 +16,7 @@
 - Vitest 단위 테스트: 시도 추론, load workflow reducer, consistency severity, schema name generation, API path helper.
 
 ### Changed
+- `maplibre-vworld`를 upstream `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 동기화하고, `CoordinateMap`이 직접 MapLibre lifecycle을 소유하지 않도록 upstream `VWorldMap`/`Marker`/hook 기반 domain wrapper로 전환한다.
 - `/debug/geocode`와 `/debug/reverse`는 응답 JSON을 입력 패널 아래에 표시하고, 지도 패널을 더 크게 배치한다.
 - `/debug/geocode`와 `/debug/reverse`는 `/v2/geocode`, `/v2/reverse` POST API를 사용한다. proxy는 `/v1/*`와 `/v2/*`를 모두 허용하고 non-versioned path는 기존처럼 `/v1`로 보낸다.
 - `maplibre-vworld`를 upstream main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 동기화한다. 최신 upstream redaction helper는 `redactVWorldUrl()`이며, UI 내부에서는 기존 import 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 재수출한다.

@@ -35,6 +35,8 @@ Data:             /mnt/f/dev/python-kraddr-geo/data/
 - 코드 편집, Git branch/commit/PR, CodeGraph 인덱스는 각 NTFS worktree에서 수행한다.
 - 테스트 전에는 현재 NTFS worktree를 WSL ext4 테스트 미러로 복사한다. 예: `rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kraddr-geo-ui/.next --exclude data /mnt/f/dev/python-kraddr-geo-codex/ ~/dev/python-kraddr-geo-codex-test/`
 - ext4 테스트 미러는 실행 산출물 전용이다. 미러에서 commit/push하지 않고, 필요한 코드 변경은 NTFS worktree에 반영한다.
+- Git metadata는 Windows Git 기준으로 유지한다. WSL 미러에서 commit/branch를 기록하는 스크립트는 Windows `git.exe`와 `F:/dev/python-kraddr-geo-*` 경로를 사용하며, `.git` 포인터를 `/mnt/f/...`용으로 바꾸지 않는다.
+- PostgreSQL 검증은 기본적으로 지난 T-027 최종 적재 Docker DB(`kraddr-geo-t027-final`, host port `15434`, pgdata `~/kraddr-geo-data/pgdata-final-20260529`)를 재사용한다. 새 빈 DB 클린 검증은 명시 요청이 있을 때만 별도 pgdata로 수행한다.
 - 로컬 키와 환경 파일(`.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 NTFS worktree마다 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
 - Playwright e2e는 Windows Node/브라우저에서만 실행한다. WSL headless Chromium은 반복적으로 시스템 라이브러리 누락이 발생하므로 사용하지 않는다.
 - AI 에이전트 worktree 이름은 `geo-*` 접두사를 쓰지 않고 `python-kraddr-geo-*` 접두사로 통일한다(ADR-041).
@@ -222,7 +224,7 @@ asyncio.run(main())
 - 운영자는 도로명주소 안내시스템, 공공데이터포털, vworld의 최신 약관과 API 호출 한도를 직접 확인하고 관리해야 합니다.
 - 본 패키지는 주소 정규화 및 지오코딩을 돕는 '기술적 도구'에 불과하며, 토지·건축물·행정구역 경계의 법적 효력이나 공적 증명을 보장하지 않습니다. 법적 판단이 필요한 업무는 해당 기관의 공식 고시를 기준으로 검증하십시오.
 
-디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 최신 확인 SHA 또는 stable release를 package dependency로 소비합니다. T-044에서는 `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb` 기준으로 `VWorldMap`, marker/layer primitive, tile error helper를 문서-only로 재확인했으며 upstream 코드는 수정하지 않았습니다. VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 별도 upstream task/PR로 분리하고, 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI fallback처럼 이 저장소 특화 기능은 `kraddr-geo-ui`의 domain wrapper에서 구현합니다.
+디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 최신 확인 SHA 또는 stable release를 package dependency로 소비합니다. 2026-05-31 현재 npm registry에는 `maplibre-vworld` package가 없어 GitHub `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정합니다. `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 두고, VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 upstream에서 소비합니다. 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI fallback처럼 이 저장소 특화 기능은 `kraddr-geo-ui`에 남깁니다.
 
 ---
 

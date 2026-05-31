@@ -118,7 +118,7 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
 
 ### B4.1 새 세션의 첫 5분 (총 10분 안에 컨텍스트 확보)
 
-작업 디렉터리는 에이전트별 NTFS 고정 worktree를 우선한다. ChatGPT Codex는 `/mnt/f/dev/python-kraddr-geo-codex`, Claude Code는 `/mnt/f/dev/python-kraddr-geo-claude`, Google Antigravity 2.0은 `/mnt/f/dev/python-kraddr-geo-antigravity`를 사용한다. worktree가 없다면 `docs/dev-environment.md` §1.1 절차로 생성하고, `.codegraph/`가 없다면 해당 worktree에서 `codegraph init -i`를 최초 1회 실행한다. NTFS `/mnt` 경로에서는 CodeGraph live watch가 비활성화될 수 있으므로 새 작업 branch를 만든 직후 `codegraph sync`와 `codegraph status`로 인덱스를 맞춘다. 테스트와 장기 실행은 worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행하며, 미러에서는 commit/push하지 않는다.
+작업 디렉터리는 에이전트별 NTFS 고정 worktree를 우선한다. ChatGPT Codex는 `/mnt/f/dev/python-kraddr-geo-codex`, Claude Code는 `/mnt/f/dev/python-kraddr-geo-claude`, Google Antigravity 2.0은 `/mnt/f/dev/python-kraddr-geo-antigravity`를 사용한다. worktree가 없다면 `docs/dev-environment.md` §1.1 절차로 생성하고, `.codegraph/`가 없다면 해당 worktree에서 `codegraph init -i`를 최초 1회 실행한다. Git metadata는 Windows Git 기준(`F:/dev/...`)으로 유지하고, WSL `git` 편의를 위해 `.git`/`gitdir`을 `/mnt/f/...`로 고치지 않는다. NTFS `/mnt` 경로에서는 CodeGraph live watch가 비활성화될 수 있으므로 새 작업 branch를 만든 직후 `codegraph sync`와 `codegraph status`로 인덱스를 맞춘다. 테스트와 장기 실행은 worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행하며, 미러에서는 commit/push하지 않는다. PostgreSQL 검증은 명시 요청이 없으면 T-027 최종 DB(`kraddr-geo-t027-final`, port `15434`)를 재사용한다.
 
 | 순서 | 행동 | 시간 |
 |------|------|------|
