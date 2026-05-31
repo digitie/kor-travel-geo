@@ -258,8 +258,8 @@ def collect_envelope(
         schema_version=SCHEMA_VERSION,
         env_label=env_label,
         collected_at=collected_at,
-        git_commit=_git_value(("git", "rev-parse", "HEAD")),
-        git_branch=_git_value(("git", "branch", "--show-current")),
+        git_commit=_git_value("rev-parse", "HEAD"),
+        git_branch=_git_value("branch", "--show-current"),
         python_version=platform.python_version(),
         platform=platform.platform(),
         cpu_count=os.cpu_count(),
@@ -370,11 +370,58 @@ def main() -> None:
     print(output_dir)
 
 
-def _git_value(command: tuple[str, ...]) -> str | None:
-    result = run_command(CommandSpec(command[1], command))
+def _git_value(*args: str) -> str | None:
+    git_repo = _git_repo()
+    command = _git_command(git_repo, *args)
+    result = run_command(CommandSpec(args[0], command))
     if not result.available or result.returncode != 0:
         return None
     return result.stdout.strip() or None
+
+
+def _git_command(git_repo: str | None, *args: str) -> tuple[str, ...]:
+    if git_repo is None:
+        return ("git", *args)
+    if _is_windows_path(git_repo):
+        return (_windows_git_executable(), "-C", git_repo, *args)
+    return ("git", "-C", git_repo, *args)
+
+
+def _git_repo() -> str | None:
+    env_repo = os.environ.get("KRADDR_GEO_GIT_REPO")
+    if env_repo:
+        return _as_windows_path(env_repo)
+    cwd = Path.cwd()
+    if cwd.name.startswith("python-kraddr-geo-") and cwd.name.endswith("-test"):
+        return f"F:/dev/{cwd.name.removesuffix('-test')}"
+    if (Path("/mnt/f/dev/python-kraddr-geo-codex") / ".git").exists():
+        return "F:/dev/python-kraddr-geo-codex"
+    return None
+
+
+def _as_windows_path(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    if normalized.startswith("/mnt/") and len(normalized) > 6 and normalized[6] == "/":
+        drive = normalized[5].upper()
+        return f"{drive}:{normalized[6:]}"
+    return normalized
+
+
+def _is_windows_path(path: str) -> bool:
+    return len(path) >= 3 and path[1:3] == ":/"
+
+
+def _windows_git_executable() -> str:
+    env_git = os.environ.get("KRADDR_GEO_GIT_EXE")
+    if env_git:
+        return env_git
+    for candidate in (
+        "/mnt/c/Program Files/Git/cmd/git.exe",
+        "/mnt/c/Program Files/Git/bin/git.exe",
+    ):
+        if Path(candidate).exists():
+            return candidate
+    return shutil.which("git.exe") or "git.exe"
 
 
 def _decode_timeout_output(value: str | bytes | None) -> str:

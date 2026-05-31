@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   getVWorldMaxZoom,
-  getVWorldRasterStyle,
+  getVWorldStyle,
   getVWorldTileUrl,
   isVWorldTileError,
-  redactVWorldTileUrl
+  redactVWorldUrl
 } from "@/lib/vworld";
 
 describe("VWorld MapLibre style", () => {
@@ -25,7 +25,7 @@ describe("VWorld MapLibre style", () => {
   });
 
   it("MapLibre raster style은 VWorld 타일 source와 layer를 연결한다", () => {
-    const style = getVWorldRasterStyle("sample-key", "gray");
+    const style = getVWorldStyle("sample-key", "gray");
 
     expect(style.sources["vworld-gray"]).toMatchObject({
       attribution: "공간정보 오픈플랫폼 브이월드",
@@ -46,13 +46,13 @@ describe("VWorld MapLibre style", () => {
   it("항공사진 계열은 VWorld z18 한계에 맞춘다", () => {
     expect(getVWorldMaxZoom("Base")).toBe(19);
     expect(getVWorldMaxZoom("Satellite")).toBe(18);
-    expect(getVWorldRasterStyle("sample-key", "Hybrid").sources["vworld-Hybrid"]).toMatchObject({
+    expect(getVWorldStyle("sample-key", "Hybrid").sources["vworld-Hybrid"]).toMatchObject({
       maxzoom: 18
     });
   });
 
   it("Hybrid 레이어는 Satellite 배경 위에 Hybrid 오버레이를 쌓는다", () => {
-    const style = getVWorldRasterStyle("sample-key", "Hybrid");
+    const style = getVWorldStyle("sample-key", "Hybrid");
 
     expect(Object.keys(style.sources)).toEqual(["vworld-satellite", "vworld-Hybrid"]);
     expect(style.layers).toEqual([
@@ -84,7 +84,7 @@ describe("VWorld MapLibre style", () => {
   });
 
   it("VWorld tile URL의 API key를 upstream helper로 마스킹한다", () => {
-    const redacted = redactVWorldTileUrl(
+    const redacted = redactVWorldUrl(
       "https://api.vworld.kr/req/wmts/1.0.0/sample-key/Base/1/2/3.png"
     );
 

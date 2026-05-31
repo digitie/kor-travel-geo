@@ -61,9 +61,9 @@ async with httpx.AsyncClient(timeout=5.0) as cx:
 
 ### `digitie/maplibre-vworld-js`와의 관계
 
-디버그 UI는 `digitie/maplibre-vworld-js`를 실제 package dependency로 사용한다. dependency를 변경할 때마다 최신 `main` 또는 stable release를 확인하고, 검증된 최신 버전으로 고정한다. 현재 `kraddr-geo-ui`는 `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정하고, `zod ^4.4.3`을 직접 의존성으로 둔다. 2026-05-28 T-044 문서-only 재확인에서는 GitHub tag `v0.1.0` commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`를 기준으로 0.1.0 code/API를 확인했다. `v0.1.0`에는 `dist/`, package `exports`, `types`, `style.css`, `VWorldMap`, marker/layer primitive, click/error/camera props, tile error helper가 포함되어 있다. 다만 npm registry에는 아직 `maplibre-vworld@0.1.0`이 없어 이번 T-044에서는 dependency를 갱신하지 않았다. 최신 redaction helper 이름은 `redactVWorldUrl()`이며 redaction 표기는 `***`다. UI 내부에서는 기존 컴포넌트 import를 깨지 않기 위해 `redactVWorldTileUrl` alias로 재수출한다.
+디버그 UI는 `digitie/maplibre-vworld-js`를 실제 package dependency로 사용한다. dependency를 변경할 때마다 최신 `main` 또는 stable release를 확인하고, 검증된 최신 버전으로 고정한다. 현재 `kraddr-geo-ui`는 `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정하고, `zod ^4.4.3`을 직접 의존성으로 둔다. 2026-05-31 기준 upstream `main`의 package version은 `0.1.2`이며 `dist/`, package `exports`, `types`, `style.css`, `VWorldMap`, marker/layer primitive, click/error/camera props, tile error helper가 포함되어 있다. npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. 최신 redaction helper 이름은 `redactVWorldUrl()`이며 redaction 표기는 `***`다. UI 내부도 더 이상 `redactVWorldTileUrl` alias를 쓰지 않고 upstream 이름을 사용한다.
 
-다만 `VWorldMap` 컴포넌트 전체 대체는 단계적으로 진행한다. 현재 디버그 UI는 지도 표시 외에 click callback, key 미설정 fallback, transient tile error redaction/overlay, marker 즉시 이동, SSR-safe dynamic wrapper를 보장해야 한다. 범용 지도 primitive와 helper는 upstream API로 맞추되, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 fallback 문구와 임계치는 `kraddr-geo-ui` domain wrapper에 남긴다.
+`CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 전환했다. 현재 디버그 UI는 지도 표시 외에 click callback, key 미설정 fallback, transient tile error redaction/overlay, marker·camera 갱신, SSR-safe dynamic wrapper를 보장해야 한다. 범용 지도 primitive와 helper는 upstream API로 맞추되, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 fallback 문구와 임계치는 `kraddr-geo-ui` domain wrapper에 남긴다.
 
 문제 발생 시 원칙:
 

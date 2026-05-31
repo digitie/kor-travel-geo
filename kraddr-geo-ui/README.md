@@ -14,7 +14,7 @@ npm run dev -- --port 13088
 
 `NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 지도 컴포넌트는 같은 크기의 좌표 프리뷰로 대체된다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다. 실행 중에는 `/api/runtime-config`가 `.env.local` 또는 컨테이너 환경변수의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽어 브라우저에 전달한다. `/admin/settings`에서 VWorld 인증키를 입력하면 브라우저 localStorage override로 저장되고, 기본값 버튼을 누르면 `.env` 기본값으로 되돌아간다.
 
-지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 현재 확인 SHA인 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정한다. T-044에서는 `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb` 기준 public API를 문서-only로 재확인했지만, npm registry에 0.1.0 package가 없어 dependency는 아직 바꾸지 않았다. 최신 upstream redaction helper는 `redactVWorldUrl()`이고, UI 내부에서는 기존 컴포넌트 계약을 유지하기 위해 `redactVWorldTileUrl` alias로 사용한다.
+지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 현재 확인 SHA인 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정한다. 2026-05-31 기준 upstream `main`은 package version `0.1.2` 위의 문서 보강 commit까지 포함하며, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. `CoordinateMap`은 upstream `VWorldMap`, `Marker`, `useMap`, `useMapLoaded`, `redactVWorldUrl()`를 직접 소비하고, key 미설정 fallback 문구와 tile error overlay 임계치 같은 프로젝트 특화 UX만 감싼다.
 
 ## 검증
 
