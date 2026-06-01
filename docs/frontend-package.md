@@ -189,6 +189,14 @@ Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우
 
 실제 실행은 Windows Node/브라우저 환경에서만 수행한다. Docker UI 또는 로컬 dev server를 공식 포트 `13088`에 띄운 뒤 Windows에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test --config playwright.config.ts --project chromium --workers 1`로 실행한다. WSL에서는 Linux Node/npm으로 lint/type/unit/build까지만 확인하고, `npm run test:e2e`나 `npx playwright test`를 실행하지 않는다.
 
+### A3.7.1 React Doctor
+
+모든 프론트엔드 작업 뒤에는 `kraddr-geo-ui`에서 React Doctor를 실행한다. 경고가 나오면 해당 React/Next.js 코드를 수정하고 같은 명령을 다시 실행해 새 경고가 남지 않았음을 확인한다.
+
+```bash
+npx react-doctor@latest . --offline --verbose --json
+```
+
 ### A3.8 Provider 체인 (`app/providers.tsx`)
 
 `QueryClientProvider` → children. ThemeProvider, Toaster, ReactQueryDevtools는 실제 사용 요구가 생기면 추가한다.

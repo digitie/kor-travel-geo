@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-01 갱신, by codex)
 
+- ✅ `/admin` 기본 라우트와 React Doctor 후속 규칙 반영 — `kraddr-geo-ui/app/admin/page.tsx`를 추가해 `/admin` 진입을 `/debug/geocode`로 redirect하게 했고, 프론트엔드 작업 후 `react-doctor` 실행 → 경고 수정 → 재실행 규칙을 `AGENTS.md`, `SKILL.md`, `docs/frontend-package.md`, `kraddr-geo-ui` 문서에 반영했다. fresh ext4 mirror에서 React Doctor score 100/warning 0, frontend `gen:types`/lint/type/unit/build, `/admin` HTTP redirect를 확인했다.
 - ✅ React Doctor 정리 완료 + 반복 실패 패턴 문서화 — `VWorldKeyProvider`, `/admin/settings`, `/admin/consistency`, `/admin/load`, `/admin/ops`, `/admin/backups`, proxy route를 정리했고 `LoadConsole`/`BackupsPanel`/`ConsistencyPanel`을 controller + section 구조로 분해했다. 이어서 `CoordinateMap`, `GeocodeDebugger`, debug page metadata, `sido`/schema helper, `gen-types` script까지 정리해 `react-doctor` 결과를 score 100, warning 0으로 마무리했다. 작업 중 반복된 Git/명령 러너/NTFS 편집 실패는 `docs/agent-failure-patterns.md`에 원인과 우회 절차를 문서화했다.
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ `main` 브랜치를 문서·repo 설정만 남도록 정리
@@ -176,6 +177,7 @@
 - **실제 DB 적재 검증**: 로컬 PostGIS가 준비되어 있으면 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q`로 실제 `data/juso` 샘플 COPY와 MV 생성을 확인한다.
 - **프론트엔드 TypeScript 캐시**: `kraddr-geo-ui/tsconfig.tsbuildinfo`는 생성물이다. `.gitignore` 대상이며 PR에 포함하지 않는다.
 - **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
+- **React Doctor**: 모든 프론트엔드 작업 뒤에는 `kraddr-geo-ui`에서 `npx react-doctor@latest . --offline --verbose --json`을 실행한다. 경고가 나오면 수정하고 재실행해 새 경고가 남지 않은 상태로 마무리한다.
 - **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정되어 있고, `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook 기반 domain wrapper다. SHA/tag를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm 또는 Docker Node로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. Playwright e2e는 예외적으로 Windows Node/브라우저에서만 실행한다.
 - **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
 - **CodeGraph/Windows npm shim**: WSL에서 `codegraph`가 `/mnt/c/Users/.../npm/codegraph`를 가리키고 `node: not found`로 실패하면 Windows npm shim이 PATH에 앞선 것이다. WSL에서는 Linux installer 또는 Linux Node/npm 설치를 사용하고, worktree별 `.codegraph/`가 있으면 `codegraph sync`로 갱신한다.
@@ -188,3 +190,4 @@
 3. 변경된 결정이 있다면 `docs/decisions.md`에 ADR 추가
 4. 사용자 가시 변경이면 `CHANGELOG.md` 갱신
 5. 스키마 변경이면 `scripts/export_openapi.py` 재실행 → 프론트엔드 `gen:types`
+6. 프론트엔드 작업이면 React Doctor 실행 → 경고 수정 → 재실행
