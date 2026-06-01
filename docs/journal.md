@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-01 19:52 (`/admin` 기본 라우트와 React Doctor 후속 규칙)
+
+**작업**: `/admin/` 진입 시 404가 나오지 않도록 기본 admin 라우트를 추가하고, 모든 프론트엔드 작업 뒤 React Doctor를 실행해 경고를 수정·재실행하는 규칙을 문서화했다.
+
+**반영**:
+- `kraddr-geo-ui/app/admin/page.tsx`를 추가해 `/admin` 기본 진입을 `/debug/geocode`로 redirect한다.
+- `AGENTS.md`, `SKILL.md`, `docs/frontend-package.md`, `docs/resume.md`, `kraddr-geo-ui/README.md`, `kraddr-geo-ui/SKILL.md`에 React Doctor 실행·수정·재실행 규칙을 추가했다.
+- 루트 `CHANGELOG.md`와 `kraddr-geo-ui/CHANGELOG.md`에 사용자 가시 변경을 기록했다.
+
+**검증**:
+- fresh ext4 mirror `/home/digitie/dev/python-kraddr-geo-codex-test-admin-redirect`에서 `npx react-doctor@latest . --offline --verbose --json` → score 100, warning 0.
+- 같은 mirror에서 `scripts/frontend_check.sh` → `gen:types`, `lint`, `type-check`, unit test 37개, `next build` 통과.
+- `next start --port 13089` 후 `curl -i http://127.0.0.1:13089/admin` → `307 Temporary Redirect`, `location: /debug/geocode` 확인. `/admin/`은 Next.js canonical `308` 뒤 `/admin`으로 이동한다.
+
+**발견**:
+- 기존 공용 ext4 미러에는 root 소유 `node_modules/.vite`와 `.next` 생성물이 남아 있어 Vitest/Next build write가 막혔다. 검증은 새 mirror에서 `npm ci`부터 다시 실행해 통과시켰다.
+
 ## 2026-06-01 13:25 (반복 실패 패턴 원인 정리와 재발 방지 문서화)
 
 **작업**: 이번 세션에서 반복된 에이전트 작업 실패 패턴을 원인별로 정리하고, 다음 세션이 같은 함정을 다시 밟지 않도록 운영 문서를 보강했다.

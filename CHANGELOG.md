@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### Changed
+- 프론트엔드 작업 후 React Doctor 실행, 경고 수정, 재실행을 필수 문서 절차로 추가했다.
+- `/admin/` 기본 진입 시 404 대신 `/debug/geocode`로 이동하도록 했다.
 - PC/WSL 개발 정책을 NTFS main repo + 에이전트별 `python-kraddr-geo-*` worktree + WSL ext4 테스트 미러 방식으로 전환했다. `.claude/`는 로컬 secret 설정으로 ignore한다.
 - `/admin/consistency`의 C1~C10 case 선택을 세로 rail에서 가로 스크롤 탭으로 바꿨다. 탭은 `tablist/tab` 접근성 구조를 갖고, 표본 분석 영역 위에서 같은 흐름으로 case를 전환한다.
 - PC/WSL 개발 환경의 공식 로컬 포트를 DB `15434`, 백엔드 `8888`, UI `13088`로 고정하고 문서와 예시 설정을 갱신했다. Playwright e2e는 Windows Node/브라우저에서만 실행하도록 문서화했다.

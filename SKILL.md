@@ -131,6 +131,7 @@ src/kraddr/geo/
 
 - [ ] `pytest -q` 통과
 - [ ] `ruff check .` / `mypy` / `lint-imports` 통과
+- [ ] 프론트엔드 작업이면 `kraddr-geo-ui`에서 `npx react-doctor@latest . --offline --verbose --json` 실행 후 경고를 수정하고 재실행
 - [ ] `docs/journal.md`에 작업 항목 추가 (역시간순)
 - [ ] `docs/resume.md`의 진척도 갱신
 - [ ] 의사결정이 있었다면 `docs/decisions.md`에 ADR 추가

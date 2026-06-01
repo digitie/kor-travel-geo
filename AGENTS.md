@@ -103,6 +103,7 @@ Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `do
 
 - [ ] `pytest -q` 통과
 - [ ] `ruff check .` / `mypy --strict` / `lint-imports` 통과
+- [ ] 프론트엔드 작업이면 `kraddr-geo-ui`에서 `npx react-doctor@latest . --offline --verbose --json` 실행 후 경고를 수정하고 재실행
 - [ ] `docs/journal.md`에 작업 항목 추가 (역시간순)
 - [ ] `docs/resume.md`의 진척도 갱신
 - [ ] 의사결정이 있었다면 `docs/decisions.md`에 ADR 추가
@@ -120,4 +121,5 @@ lint-imports
 
 # 프론트엔드 (kraddr-geo-ui 부트스트랩 후)
 cd kraddr-geo-ui && npm run lint && npm run type-check && npm run test && npm run build
+cd kraddr-geo-ui && npx react-doctor@latest . --offline --verbose --json
 ```

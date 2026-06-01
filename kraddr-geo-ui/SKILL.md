@@ -13,4 +13,7 @@
 npm run type-check
 npm run test
 npm run build
+npx react-doctor@latest . --offline --verbose --json
 ```
+
+모든 프론트엔드 작업 뒤에는 React Doctor를 실행하고, 새 경고가 나오면 수정한 뒤 재실행한다.

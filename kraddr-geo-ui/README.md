@@ -25,7 +25,10 @@ npm run lint
 npm run type-check
 npm run test
 npm run build
+npx react-doctor@latest . --offline --verbose --json
 ```
+
+모든 프론트엔드 작업 뒤에는 React Doctor를 실행하고, 새 경고가 나오면 수정한 뒤 같은 명령을 다시 실행해 경고가 남지 않았음을 확인한다.
 
 브라우저 e2e는 Playwright로 수행하되 Windows Node/브라우저 환경에서만 실행한다. WSL에서는 `npm run test:e2e`나 `npx playwright test`를 실행하지 않는다. Docker UI 또는 로컬 dev server를 `13088` 포트에 띄운 뒤 Windows 터미널에서 다음처럼 실행한다.
 

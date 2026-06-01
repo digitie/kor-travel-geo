@@ -16,6 +16,8 @@
 - Vitest 단위 테스트: 시도 추론, load workflow reducer, consistency severity, schema name generation, API path helper.
 
 ### Changed
+- `/admin/` 기본 진입 시 404 대신 `/debug/geocode`로 이동하도록 했다.
+- 모든 프론트엔드 작업 뒤 React Doctor를 실행하고 경고를 수정한 뒤 재실행하는 검증 절차를 문서화했다.
 - `maplibre-vworld`를 upstream `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 동기화하고, `CoordinateMap`이 직접 MapLibre lifecycle을 소유하지 않도록 upstream `VWorldMap`/`Marker`/hook 기반 domain wrapper로 전환한다.
 - `/debug/geocode`와 `/debug/reverse`는 응답 JSON을 입력 패널 아래에 표시하고, 지도 패널을 더 크게 배치한다.
 - `/debug/geocode`와 `/debug/reverse`는 `/v2/geocode`, `/v2/reverse` POST API를 사용한다. proxy는 `/v1/*`와 `/v2/*`를 모두 허용하고 non-versioned path는 기존처럼 `/v1`로 보낸다.
