@@ -18,12 +18,25 @@ const SIDO_ALIASES: Record<string, string> = {
   제주: "jeju"
 };
 
+const REGEX_SPECIAL_CHARS = new Set(["\\", "^", "$", ".", "*", "+", "?", "(", ")", "[", "]", "{", "}", "|"]);
+const SIDO_MATCHERS = Object.entries(SIDO_ALIASES).map(([korean, code]) => ({
+  code,
+  pattern: new RegExp(`${escapeRegExp(korean)}|${escapeRegExp(code)}`, "i")
+}));
+
 export function guessSido(filename: string): string | null {
-  const lowered = filename.toLowerCase();
-  for (const [korean, code] of Object.entries(SIDO_ALIASES)) {
-    if (filename.includes(korean) || lowered.includes(code)) {
-      return code;
+  for (const matcher of SIDO_MATCHERS) {
+    if (matcher.pattern.test(filename)) {
+      return matcher.code;
     }
   }
   return null;
+}
+
+function escapeRegExp(value: string): string {
+  let escaped = "";
+  for (const char of value) {
+    escaped += REGEX_SPECIAL_CHARS.has(char) ? "\\" + char : char;
+  }
+  return escaped;
 }

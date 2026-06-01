@@ -43,6 +43,7 @@ const OVERLAY_SOURCE_ID = "kraddr-geo-overlay";
 const OVERLAY_FILL_LAYER_ID = "kraddr-geo-overlay-fill";
 const OVERLAY_LINE_LAYER_ID = "kraddr-geo-overlay-line";
 const OVERLAY_POINT_LAYER_ID = "kraddr-geo-overlay-point";
+const MAP_LOADING_SKELETON = <MapOverlay text="지도 로딩 중" />;
 type MapBBox = [number, number, number, number];
 
 type MapResourceError = Error & {
@@ -146,7 +147,7 @@ function LoadedCoordinateMap({
 
     dispatchStatus({ type: "error", message: "지도 로딩 실패" });
   }, []);
-  const handleClick = useCallback((event: MapMouseEvent) => {
+  const emitClickedCoordinate = useCallback((event: MapMouseEvent) => {
     onClick?.({ x: event.lngLat.lng, y: event.lngLat.lat });
   }, [onClick]);
 
@@ -159,12 +160,12 @@ function LoadedCoordinateMap({
         cameraTransition="instant"
         center={[initialCenter.x, initialCenter.y]}
         className="vworld-map"
-        fallback={(info) => <VWorldMapFallback info={info} />}
+        fallback={renderVWorldFallback}
         geolocate={false}
         layerType={layerType}
-        loadingSkeleton={<MapOverlay text="지도 로딩 중" />}
+        loadingSkeleton={MAP_LOADING_SKELETON}
         maxZoom={getVWorldMaxZoom(layerType)}
-        onClick={handleClick}
+        onClick={emitClickedCoordinate}
         onError={handleError}
         onLoad={handleLoad}
         scale={false}
@@ -328,6 +329,10 @@ function warnMapTileError(event: MapLibreErrorEvent): void {
     statusText: error.statusText,
     url: redactVWorldUrl(error.url)
   });
+}
+
+function renderVWorldFallback(info: VWorldMapFallbackInfo) {
+  return <VWorldMapFallback info={info} />;
 }
 
 function VWorldMapFallback({ info }: { info: VWorldMapFallbackInfo }) {

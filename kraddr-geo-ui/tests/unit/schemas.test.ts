@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { apiSchemaNames } from "@/lib/schemas.gen";
 import { explainFormSchema, geocodeFormSchema, reverseFormSchema } from "@/lib/schemas";
 
 describe("form schemas", () => {
@@ -21,5 +22,9 @@ describe("form schemas", () => {
     expect(() =>
       geocodeFormSchema.parse({ address: "테헤란로 152", fallback: "local_only" })
     ).toThrow();
+  });
+
+  it("생성된 schema 이름 목록은 GeocodeV2Input을 포함한다", () => {
+    expect(apiSchemaNames).toContain("GeocodeV2Input");
   });
 });

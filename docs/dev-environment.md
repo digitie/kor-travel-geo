@@ -96,6 +96,15 @@ git switch -c agent/codex-next origin/main
 
 원칙(현재 정책): 각 worktree는 **자기 환경 전용**으로 운용한다. 에이전트 worktree는 한쪽 환경에서만 git을 다루고(예: 어떤 worktree는 Windows 네이티브 git, 다른 worktree는 WSL git), 같은 worktree를 두 환경에서 번갈아 조작하지 않는다. 특히 `git worktree prune`은 **그 worktree를 운용하는 환경에서만** 실행한다. 다른 환경에서 prune하면 정상 worktree가 그 환경 기준으로 `prunable`로 보여 등록이 삭제될 수 있다. 환경을 바꿔야 하면 먼저 `git worktree repair <worktree 경로>`로 포인터를 그 환경 기준으로 맞춘 뒤 사용한다.
 
+### 1.1.1 반복되는 에이전트 실패 패턴
+
+실무에서 자주 재발한 환경/도구 계층 실패는 [`docs/agent-failure-patterns.md`](./agent-failure-patterns.md)에 정리한다. 핵심은 세 가지다.
+
+- NTFS worktree의 Git metadata는 Windows 경로를 가리키므로, `/mnt/f/...`에서 WSL `git`을 쓰지 않는다.
+- `exec_command`가 `CreateProcess ... os error 2`를 내면 heredoc, 복잡한 quoting, `workdir`, Windows exe 호출을 의심하고 명령을 단순화한다.
+- NTFS 파일을 inline script로 고칠 때는 `\n`, regex backslash, Windows path escape가 자주 깨지므로 수정 직후 해당 줄을 다시 읽어 확인한다.
+
+
 ### 로컬 secret/env 파일
 
 로컬 키와 환경 파일은 Git에 커밋하지 않는다. 새 NTFS worktree를 만들면 다음 파일들을 main repo 또는 기존 worktree에서 같은 상대 경로로 복사한다.

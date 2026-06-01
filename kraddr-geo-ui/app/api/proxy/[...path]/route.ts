@@ -10,6 +10,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     return new Response("Forbidden", { status: 403 });
   }
   const response = await fetch(target, {
+    cache: "no-store",
     ...buildProxyRequestInit(
       request.method,
       forwardedProxyHeaders(request.headers),

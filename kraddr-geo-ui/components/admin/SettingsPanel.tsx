@@ -1,7 +1,7 @@
 "use client";
 
 import { KeyRound, RotateCcw, Save } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { useVWorldApiKey } from "@/lib/vworld-key";
 
@@ -14,56 +14,21 @@ const sourceLabels = {
 
 export function SettingsPanel() {
   const { apiKey, envApiKey, loading, resetApiKey, saveApiKey, source } = useVWorldApiKey();
-  const [value, setValue] = useState(apiKey);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    setValue(apiKey);
-  }, [apiKey]);
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    saveApiKey(value);
-    setSaved(true);
-  }
 
   return (
     <div className="grid two">
       <Panel title="VWorld 인증키">
-        <form className="form-grid" onSubmit={submit}>
-          <div className="field">
-            <label htmlFor="vworld-api-key">NEXT_PUBLIC_VWORLD_API_KEY</label>
-            <input
-              autoComplete="off"
-              id="vworld-api-key"
-              placeholder="VWorld WMTS 인증키"
-              value={value}
-              onChange={(event) => {
-                setSaved(false);
-                setValue(event.target.value);
-              }}
-            />
+        {loading ? (
+          <div className="form-grid">
+            <p className="form-note">설정을 불러오는 중입니다.</p>
           </div>
-          <div className="button-row">
-            <button className="button" disabled={loading} type="submit">
-              <Save size={16} />
-              저장
-            </button>
-            <button
-              className="button button-secondary"
-              disabled={loading}
-              type="button"
-              onClick={() => {
-                resetApiKey();
-                setSaved(true);
-              }}
-            >
-              <RotateCcw size={16} />
-              기본값
-            </button>
-          </div>
-          {saved ? <p className="form-note">지도 설정을 저장했습니다.</p> : null}
-        </form>
+        ) : (
+          <VWorldKeyForm
+            apiKey={apiKey}
+            resetApiKey={resetApiKey}
+            saveApiKey={saveApiKey}
+          />
+        )}
       </Panel>
       <Panel title="현재 적용 상태">
         <div className="settings-status">
@@ -85,5 +50,64 @@ export function SettingsPanel() {
         </div>
       </Panel>
     </div>
+  );
+}
+
+function VWorldKeyForm({
+  apiKey,
+  resetApiKey,
+  saveApiKey
+}: {
+  apiKey: string;
+  resetApiKey: () => void;
+  saveApiKey: (value: string) => void;
+}) {
+  const [draftValue, setDraftValue] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const value = draftValue ?? apiKey;
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const nextValue = draftValue ?? apiKey;
+    saveApiKey(nextValue);
+    setDraftValue(null);
+    setSaved(true);
+  }
+
+  return (
+    <form className="form-grid" onSubmit={submit}>
+      <div className="field">
+        <label htmlFor="vworld-api-key">NEXT_PUBLIC_VWORLD_API_KEY</label>
+        <input
+          autoComplete="off"
+          id="vworld-api-key"
+          placeholder="VWorld WMTS 인증키"
+          value={value}
+          onChange={(event) => {
+            setSaved(false);
+            setDraftValue(event.target.value);
+          }}
+        />
+      </div>
+      <div className="button-row">
+        <button className="button" type="submit">
+          <Save size={16} />
+          저장
+        </button>
+        <button
+          className="button button-secondary"
+          type="button"
+          onClick={() => {
+            resetApiKey();
+            setDraftValue(null);
+            setSaved(true);
+          }}
+        >
+          <RotateCcw size={16} />
+          기본값
+        </button>
+      </div>
+      {saved ? <p className="form-note">지도 설정을 저장했습니다.</p> : null}
+    </form>
   );
 }
