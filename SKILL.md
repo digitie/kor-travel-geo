@@ -29,6 +29,7 @@
 - **데이터(`data/`)는 NTFS main repo 아래** `/mnt/f/dev/python-kraddr-geo/data/`를 기준으로 둔다. ext4 테스트 미러에서는 절대경로 또는 심볼릭 링크로 참조한다.
 - **로컬 secret/env 파일**(`.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
 - **Playwright e2e는 Windows Node/브라우저 전용**이다. WSL Playwright는 실행하지 않는다.
+- **반복되는 작업 실패 패턴은 먼저 `docs/agent-failure-patterns.md`를 본다.** 특히 NTFS worktree에서는 WSL `git`을 쓰지 않고, `exec_command`의 `CreateProcess ... os error 2`는 저장소 버그가 아니라 런처/quoting 문제로 먼저 분류한다.
 
 ### 에이전트별 worktree / CodeGraph
 

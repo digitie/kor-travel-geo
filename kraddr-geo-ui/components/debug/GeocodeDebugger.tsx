@@ -1,7 +1,7 @@
 "use client";
 
 import { LocateFixed } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useReducer } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import type {
   Coordinate,
@@ -17,22 +17,45 @@ import type { components } from "@/types/api.gen";
 type GeocodeV2Input = components["schemas"]["GeocodeV2Input"];
 type GeocodeV2Response = components["schemas"]["GeocodeV2Response"];
 
+type GeocodeDebuggerState = {
+  address: string;
+  type: string;
+  fallback: string;
+  includeGeometry: boolean;
+  result: unknown;
+  loading: boolean;
+};
+
+type GeocodeDebuggerAction = {
+  patch: Partial<GeocodeDebuggerState>;
+  type: "merge";
+};
+
+const initialGeocodeDebuggerState: GeocodeDebuggerState = {
+  address: "서울특별시 강남구 테헤란로 152",
+  type: "road",
+  fallback: "none",
+  includeGeometry: true,
+  result: null,
+  loading: false
+};
+
 export function GeocodeDebugger() {
-  const [address, setAddress] = useState("서울특별시 강남구 테헤란로 152");
-  const [type, setType] = useState("road");
-  const [fallback, setFallback] = useState("none");
-  const [includeGeometry, setIncludeGeometry] = useState(true);
-  const [result, setResult] = useState<unknown>(null);
-  const [loading, setLoading] = useState(false);
+  const [state, dispatch] = useReducer(geocodeDebuggerReducer, initialGeocodeDebuggerState);
+  const { address, type, fallback, includeGeometry, result, loading } = state;
+
+  function mergeState(patch: Partial<GeocodeDebuggerState>) {
+    dispatch({ type: "merge", patch });
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     const parsed = geocodeFormSchema.safeParse({ address, type, fallback });
     if (!parsed.success) {
-      setResult({ error: parsed.error.issues[0]?.message ?? "주소 입력을 확인하세요" });
+      mergeState({ result: { error: parsed.error.issues[0]?.message ?? "주소 입력을 확인하세요" } });
       return;
     }
-    setLoading(true);
+    mergeState({ loading: true });
     try {
       const body: GeocodeV2Input =
         parsed.data.type === "parcel"
@@ -48,11 +71,11 @@ export function GeocodeDebugger() {
               include_geometry: includeGeometry,
               limit: 10
             };
-      setResult(await postJson<GeocodeV2Response>("/v2/geocode", body));
+      mergeState({ result: await postJson<GeocodeV2Response>("/v2/geocode", body) });
     } catch (error) {
-      setResult({ error: error instanceof Error ? error.message : String(error) });
+      mergeState({ result: { error: error instanceof Error ? error.message : String(error) } });
     } finally {
-      setLoading(false);
+      mergeState({ loading: false });
     }
   }
 
@@ -63,12 +86,20 @@ export function GeocodeDebugger() {
           <form className="form-grid" onSubmit={submit}>
             <div className="field">
               <label htmlFor="address">address</label>
-              <input id="address" value={address} onChange={(e) => setAddress(e.target.value)} />
+              <input
+                id="address"
+                value={address}
+                onChange={(e) => mergeState({ address: e.target.value })}
+              />
             </div>
             <div className="form-field-grid two">
               <div className="field">
                 <label htmlFor="type">type</label>
-                <select id="type" value={type} onChange={(e) => setType(e.target.value)}>
+                <select
+                  id="type"
+                  value={type}
+                  onChange={(e) => mergeState({ type: e.target.value })}
+                >
                   <option value="road">road</option>
                   <option value="parcel">parcel</option>
                 </select>
@@ -78,7 +109,7 @@ export function GeocodeDebugger() {
                 <select
                   id="fallback"
                   value={fallback}
-                  onChange={(e) => setFallback(e.target.value)}
+                  onChange={(e) => mergeState({ fallback: e.target.value })}
                 >
                   <option value="none">none</option>
                   <option value="api">api</option>
@@ -89,7 +120,7 @@ export function GeocodeDebugger() {
               <input
                 checked={includeGeometry}
                 id="include-geometry"
-                onChange={(e) => setIncludeGeometry(e.target.checked)}
+                onChange={(e) => mergeState({ includeGeometry: e.target.checked })}
                 type="checkbox"
               />
               <span>include_geometry</span>
@@ -115,6 +146,13 @@ export function GeocodeDebugger() {
       </Panel>
     </div>
   );
+}
+
+function geocodeDebuggerReducer(
+  state: GeocodeDebuggerState,
+  action: GeocodeDebuggerAction
+): GeocodeDebuggerState {
+  return { ...state, ...action.patch };
 }
 
 function firstCandidate(result: unknown): unknown {

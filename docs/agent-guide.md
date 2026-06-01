@@ -131,6 +131,8 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
 
 컴포넌트 작업(`kraddr-geo-ui/components/**`, App Router client component, 지도 wrapper, 공용 UI primitive)은 수정 전에 CodeGraph MCP의 `codegraph_explore`로 영향도를 먼저 확인한다. 확인 결과에는 호출자, 관련 테스트, props/type 공유 지점, `maplibre-vworld-js`와의 책임 경계를 포함한다. Codex Desktop 재시작 전처럼 MCP 도구가 아직 노출되지 않은 세션에서는 `codegraph sync`, `codegraph status`, `codegraph context <task>` 또는 `codegraph impact <symbol>` 결과로 임시 확인하고, 그 사유를 PR 설명이나 `docs/journal.md`에 남긴다.
 
+반복적으로 재현되는 작업 실패 패턴(예: NTFS worktree에서 WSL `git` 실패, `exec_command`의 `CreateProcess ... os error 2`, NTFS 경로에서 `apply_patch` 실패, inline rewrite의 escape 손상)은 [`docs/agent-failure-patterns.md`](./agent-failure-patterns.md)에 별도로 정리한다. 새 세션에서 같은 증상이 보이면 프로젝트 버그로 보기 전에 이 문서를 먼저 확인한다.
+
 ### B4.2 작업 사이클
 
 ```

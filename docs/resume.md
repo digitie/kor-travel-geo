@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-01 갱신, by codex)
 
+- ✅ React Doctor 정리 완료 + 반복 실패 패턴 문서화 — `VWorldKeyProvider`, `/admin/settings`, `/admin/consistency`, `/admin/load`, `/admin/ops`, `/admin/backups`, proxy route를 정리했고 `LoadConsole`/`BackupsPanel`/`ConsistencyPanel`을 controller + section 구조로 분해했다. 이어서 `CoordinateMap`, `GeocodeDebugger`, debug page metadata, `sido`/schema helper, `gen-types` script까지 정리해 `react-doctor` 결과를 score 100, warning 0으로 마무리했다. 작업 중 반복된 Git/명령 러너/NTFS 편집 실패는 `docs/agent-failure-patterns.md`에 원인과 우회 절차를 문서화했다.
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ `main` 브랜치를 문서·repo 설정만 남도록 정리
 - ✅ 신규 사양(`kraddr.geo` 패키지의 PostgreSQL+PostGIS 재구현 + `kraddr-geo-ui` 프론트엔드) 문서 골격을 `main`에 반영

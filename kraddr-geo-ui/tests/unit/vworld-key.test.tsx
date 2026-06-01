@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsPanel } from "@/components/admin/SettingsPanel";
@@ -21,11 +22,21 @@ function renderSettings(envKey = "env-key") {
     }))
   );
 
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false
+      }
+    }
+  });
+
   render(
-    <VWorldKeyProvider>
-      <SettingsPanel />
-      <KeyProbe />
-    </VWorldKeyProvider>
+    <QueryClientProvider client={queryClient}>
+      <VWorldKeyProvider>
+        <SettingsPanel />
+        <KeyProbe />
+      </VWorldKeyProvider>
+    </QueryClientProvider>
   );
 }
 

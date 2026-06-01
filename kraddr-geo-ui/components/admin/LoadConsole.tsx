@@ -16,8 +16,7 @@ import {
   FormEvent,
   useMemo,
   useReducer,
-  useRef,
-  useState
+  useRef
 } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
@@ -52,6 +51,25 @@ type LocalUploadFile = {
   error?: string;
 };
 
+type LoadConsoleUiState = {
+  activeJobId: string | null;
+  confirmation: string;
+  discovery: SourceSetDiscovery | null;
+  dropActive: boolean;
+  files: LocalUploadFile[];
+  jobs: LoadJobStatus[];
+  lastResult: unknown;
+  plan: SourceSetPlan | null;
+  uploadSet: UploadSetStatus | null;
+};
+
+type LoadConsoleUiAction =
+  | { type: "merge"; patch: Partial<LoadConsoleUiState> }
+  | { type: "patch_file"; key: string; patch: Partial<LocalUploadFile> }
+  | { type: "mark_non_uploaded"; nextState: LocalUploadFile["state"] }
+  | { type: "reset" }
+  | { type: "select_files"; files: LocalUploadFile[] };
+
 const sourceOrder: SourceKind[] = [
   "juso",
   "parcel_link",
@@ -76,56 +94,150 @@ const sourceLabels: Record<SourceKind, string> = {
   bulk: "다량배달처"
 };
 
+const initialLoadConsoleUiState: LoadConsoleUiState = {
+  activeJobId: null,
+  confirmation: "",
+  discovery: null,
+  dropActive: false,
+  files: [],
+  jobs: [],
+  lastResult: null,
+  plan: null,
+  uploadSet: null
+};
+
 export function LoadConsole() {
+  const controller = useLoadConsoleController();
+  const {
+    activeJob,
+    canCreatePlan,
+    expectedConfirmation,
+    loadPercent,
+    selectedBytes,
+    state,
+    uiState,
+    uploadPercent,
+    cancelActiveJob,
+    cancelUpload,
+    createPlan,
+    onDragOver,
+    onDrop,
+    onFileInput,
+    refreshJobs,
+    refreshMv,
+    resetAll,
+    setConfirmation,
+    setDiscovery,
+    setDropActive,
+    submitPlan,
+    uploadSelectedFiles
+  } = controller;
+
+  return (
+    <div className="grid two">
+      <SourceSetUploadPanel
+        dropActive={uiState.dropActive}
+        files={uiState.files}
+        onDragLeave={() => setDropActive(false)}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        onFileInput={onFileInput}
+        onReset={resetAll}
+        onSubmit={uploadSelectedFiles}
+        onUploadCancel={cancelUpload}
+        selectedBytes={selectedBytes}
+        state={state}
+        uploadPercent={uploadPercent}
+        uploadSet={uiState.uploadSet}
+      />
+      <SourceSetReviewPanel
+        canCreatePlan={canCreatePlan}
+        confirmation={uiState.confirmation}
+        discovery={uiState.discovery}
+        onConfirmationChange={setConfirmation}
+        onCreatePlan={createPlan}
+        onRefreshJobs={refreshJobs}
+        onSubmitPlan={submitPlan}
+        plan={uiState.plan}
+        state={state}
+      />
+      <UploadFilesPanel files={uiState.files} />
+      <LoadJobsPanel
+        activeJob={activeJob}
+        jobs={uiState.jobs}
+        loadPercent={loadPercent}
+        onCancelActiveJob={cancelActiveJob}
+        onRefreshMv={refreshMv}
+      />
+      <Panel title="Source Set JSON">
+        <JsonBlock value={uiState.plan ?? uiState.discovery ?? uiState.uploadSet ?? { status: "READY" }} />
+      </Panel>
+      <Panel title="Last Response">
+        <JsonBlock value={uiState.lastResult ?? { status: "READY" }} />
+      </Panel>
+      <MixedYyyymmDialog
+        canCreatePlan={canCreatePlan}
+        confirmation={uiState.confirmation}
+        discovery={uiState.discovery}
+        expectedConfirmation={expectedConfirmation}
+        onClose={() => setDiscovery(null)}
+        onConfirmationChange={setConfirmation}
+        onConfirm={createPlan}
+        plan={uiState.plan}
+      />
+    </div>
+  );
+}
+
+function useLoadConsoleController() {
   const [state, dispatch] = useReducer(loadWorkflowReducer, "idle");
-  const [files, setFiles] = useState<LocalUploadFile[]>([]);
-  const [uploadSet, setUploadSet] = useState<UploadSetStatus | null>(null);
-  const [discovery, setDiscovery] = useState<SourceSetDiscovery | null>(null);
-  const [plan, setPlan] = useState<SourceSetPlan | null>(null);
-  const [confirmation, setConfirmation] = useState("");
-  const [dropActive, setDropActive] = useState(false);
-  const [jobs, setJobs] = useState<LoadJobStatus[]>([]);
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [lastResult, setLastResult] = useState<unknown>(null);
-  const activeUpload = useRef<XMLHttpRequest | null>(null);
+  const [uiState, dispatchUi] = useReducer(loadConsoleUiReducer, initialLoadConsoleUiState);
   const uploadCancelRequested = useRef(false);
+  const activeUploads = useRef<Map<string, XMLHttpRequest> | null>(null);
+  if (activeUploads.current === null) {
+    activeUploads.current = new Map();
+  }
+  const uploadRequests = activeUploads.current;
 
   const selectedBytes = useMemo(
-    () => files.reduce((total, item) => total + item.file.size, 0),
-    [files]
+    () => uiState.files.reduce((total, item) => total + item.file.size, 0),
+    [uiState.files]
   );
   const uploadedBytes = useMemo(
-    () => files.reduce((total, item) => total + item.uploadedBytes, 0),
-    [files]
+    () => uiState.files.reduce((total, item) => total + item.uploadedBytes, 0),
+    [uiState.files]
   );
   const uploadPercent = percent(uploadedBytes, selectedBytes);
-  const activeJob =
-    jobs.find((job) => job.job_id === activeJobId) ??
-    jobs.find((job) => ["queued", "running"].includes(job.state));
+  const activeJob = useMemo(
+    () =>
+      uiState.jobs.find((job) => job.job_id === uiState.activeJobId) ??
+      uiState.jobs.find((job) => ["queued", "running"].includes(job.state)),
+    [uiState.activeJobId, uiState.jobs]
+  );
   const loadPercent = activeJob ? Math.round(activeJob.progress * 100) : 0;
-  const expectedConfirmation = confirmationTokenFor(discovery?.yyyymm_by_kind ?? {});
+  const expectedConfirmation = confirmationTokenFor(uiState.discovery?.yyyymm_by_kind ?? {}) ?? "";
   const canCreatePlan =
-    discovery !== null &&
-    discovery.missing_required.length === 0 &&
-    (!discovery.mixed_yyyymm || confirmation === expectedConfirmation);
+    uiState.discovery !== null &&
+    uiState.discovery.missing_required.length === 0 &&
+    (!uiState.discovery.mixed_yyyymm || uiState.confirmation === expectedConfirmation);
+
+  function mergeUi(patch: Partial<LoadConsoleUiState>) {
+    dispatchUi({ type: "merge", patch });
+  }
+
+  function patchFileState(key: string, patch: Partial<LocalUploadFile>) {
+    dispatchUi({ type: "patch_file", key, patch });
+  }
 
   function selectFiles(fileList: FileList | File[]) {
-    const nextFiles = Array.from(fileList).map((file, index) => {
-      const relativePath = file.webkitRelativePath || file.name;
-      return {
-        key: `${relativePath}:${file.size}:${file.lastModified}:${index}`,
-        file,
-        relativePath,
-        uploadedBytes: 0,
-        state: "pending" as const
-      };
-    });
-    setFiles(nextFiles);
-    setUploadSet(null);
-    setDiscovery(null);
-    setPlan(null);
-    setConfirmation("");
-    setLastResult({ selected_files: nextFiles.length });
+    const files = Array.from(fileList).map((file, index) => ({
+      file,
+      key: `${file.webkitRelativePath || file.name}:${file.size}:${file.lastModified}:${index}`,
+      relativePath: file.webkitRelativePath || file.name,
+      state: "pending" as const,
+      uploadedBytes: 0
+    }));
+    dispatchUi({ type: "select_files", files });
     dispatch({ type: "reset" });
   }
 
@@ -134,6 +246,10 @@ export function LoadConsole() {
       selectFiles(event.target.files);
       event.target.value = "";
     }
+  }
+
+  function setDropActive(dropActive: boolean) {
+    mergeUi({ dropActive });
   }
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
@@ -147,10 +263,18 @@ export function LoadConsole() {
     selectFiles(event.dataTransfer.files);
   }
 
+  function setConfirmation(confirmation: string) {
+    mergeUi({ confirmation });
+  }
+
+  function setDiscovery(discovery: SourceSetDiscovery | null) {
+    mergeUi({ discovery });
+  }
+
   async function uploadSelectedFiles(event: FormEvent) {
     event.preventDefault();
-    if (files.length === 0) {
-      setLastResult({ error: "선택된 파일이 없습니다." });
+    if (uiState.files.length === 0) {
+      mergeUi({ lastResult: { error: "선택된 파일이 없습니다." } });
       return;
     }
     dispatch({ type: "upload_start" });
@@ -159,145 +283,152 @@ export function LoadConsole() {
       const created = await postJson<UploadSetStatus>("/admin/uploads", {
         purpose: "full_load_source_set"
       });
-      setUploadSet(created);
-      for (const item of files) {
-        const uploaded = await uploadOneFile(created.upload_set_id, item);
-        setFiles((current) =>
-          current.map((file) =>
-            file.key === item.key
-              ? {
-                  ...file,
-                  uploadedBytes: uploaded.uploaded_bytes,
-                  state: "uploaded",
-                  result: uploaded
-                }
-              : file
-          )
+      mergeUi({ uploadSet: created });
+      const uploadResults = await Promise.allSettled(
+        uiState.files.map((item) => uploadOneFile(created.upload_set_id, item))
+      );
+      const failures = uploadResults.filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (failures.length > 0) {
+        throw new Error(
+          failures
+            .map((result) =>
+              result.reason instanceof Error ? result.reason.message : String(result.reason)
+            )
+            .join("\n")
         );
       }
-      const status = await requestJson<UploadSetStatus>(
-        `/admin/uploads/${created.upload_set_id}`
-      );
-      setUploadSet(status);
+      const status = await requestJson<UploadSetStatus>(`/admin/uploads/${created.upload_set_id}`);
       const discovered = await postJson<SourceSetDiscovery>("/admin/load-sources/discover", {
         upload_set_id: created.upload_set_id,
         include_optional: true
       });
-      setDiscovery(discovered);
-      setLastResult(discovered);
+      mergeUi({ discovery: discovered, lastResult: discovered, uploadSet: status });
       dispatch({ type: "upload_done" });
     } catch (error) {
-      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      mergeUi({ lastResult: { error: error instanceof Error ? error.message : String(error) } });
       dispatch({ type: uploadCancelRequested.current ? "cancel" : "fail" });
     } finally {
-      activeUpload.current = null;
+      uploadRequests.clear();
     }
   }
 
-  function uploadOneFile(
-    uploadSetId: string,
-    item: LocalUploadFile
-  ): Promise<UploadFileStatus> {
+  function uploadOneFile(uploadSetId: string, item: LocalUploadFile): Promise<UploadFileStatus> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      activeUpload.current = xhr;
       const params = new URLSearchParams({
         filename: item.file.name,
         relative_path: item.relativePath
       });
+      uploadRequests.set(item.key, xhr);
+      patchFileState(item.key, { error: undefined, state: "uploading", uploadedBytes: 0 });
+
+      const finish = () => {
+        uploadRequests.delete(item.key);
+      };
+
       xhr.open(
         "PUT",
         `${API_BASE}${backendPath(`/admin/uploads/${uploadSetId}/files?${params}`)}`
       );
-      xhr.upload.onprogress = (event) => {
-        const uploaded = event.lengthComputable ? event.loaded : item.file.size;
-        setFiles((current) =>
-          current.map((file) =>
-            file.key === item.key
-              ? { ...file, state: "uploading", uploadedBytes: uploaded }
-              : file
-          )
-        );
+      xhr.upload.onprogress = (progressEvent) => {
+        const uploaded = progressEvent.lengthComputable ? progressEvent.loaded : item.file.size;
+        patchFileState(item.key, { state: "uploading", uploadedBytes: uploaded });
       };
       xhr.onload = () => {
+        finish();
         if (xhr.status < 200 || xhr.status >= 300) {
-          reject(new Error(xhr.responseText || `${xhr.status} ${xhr.statusText}`));
+          const message = xhr.responseText || `${xhr.status} ${xhr.statusText}`;
+          patchFileState(item.key, { error: message, state: "failed" });
+          reject(new Error(message));
           return;
         }
-        resolve(JSON.parse(xhr.responseText) as UploadFileStatus);
+        const result = JSON.parse(xhr.responseText) as UploadFileStatus;
+        patchFileState(item.key, {
+          result,
+          state: "uploaded",
+          uploadedBytes: result.uploaded_bytes
+        });
+        resolve(result);
       };
-      xhr.onerror = () => reject(new Error("업로드 요청이 실패했습니다."));
-      xhr.onabort = () => reject(new Error("업로드가 취소되었습니다."));
+      xhr.onerror = () => {
+        finish();
+        const message = "업로드 요청이 실패했습니다.";
+        patchFileState(item.key, { error: message, state: "failed" });
+        reject(new Error(message));
+      };
+      xhr.onabort = () => {
+        finish();
+        patchFileState(item.key, { error: "업로드가 취소되었습니다.", state: "cancelled" });
+        reject(new Error("업로드가 취소되었습니다."));
+      };
       xhr.send(item.file);
     });
   }
 
   async function cancelUpload() {
     uploadCancelRequested.current = true;
-    activeUpload.current?.abort();
-    if (uploadSet) {
+    for (const xhr of uploadRequests.values()) {
+      xhr.abort();
+    }
+    if (uiState.uploadSet) {
       const cancelled = await postJson<UploadSetStatus>(
-        `/admin/uploads/${uploadSet.upload_set_id}/cancel`,
+        `/admin/uploads/${uiState.uploadSet.upload_set_id}/cancel`,
         {}
       );
-      setUploadSet(cancelled);
+      mergeUi({ uploadSet: cancelled });
     }
-    setFiles((current) =>
-      current.map((file) =>
-        file.state === "uploaded" ? file : { ...file, state: "cancelled" }
-      )
-    );
+    dispatchUi({ type: "mark_non_uploaded", nextState: "cancelled" });
     dispatch({ type: "cancel" });
   }
 
   async function createPlan() {
-    if (!discovery || !uploadSet || !canCreatePlan) return;
+    if (!uiState.discovery || !uiState.uploadSet || !canCreatePlan) return;
     const versions = Object.fromEntries(
-      Object.entries(discovery.yyyymm_by_kind).filter(([, value]) => Boolean(value))
+      Object.entries(uiState.discovery.yyyymm_by_kind).filter(([, value]) => Boolean(value))
     );
     try {
       const result = await postJson<SourceSetPlan>("/admin/load-sources/plan", {
-        upload_set_id: uploadSet.upload_set_id,
-        versions,
+        acknowledged_by: "ui",
+        allow_mixed_yyyymm: uiState.discovery.mixed_yyyymm,
+        confirmation_token: uiState.discovery.mixed_yyyymm ? uiState.confirmation : null,
         include_optional: true,
-        allow_mixed_yyyymm: discovery.mixed_yyyymm,
-        confirmation_token: discovery.mixed_yyyymm ? confirmation : null,
-        acknowledged_by: "ui"
+        upload_set_id: uiState.uploadSet.upload_set_id,
+        versions
       });
-      setPlan(result);
-      setLastResult(result);
+      mergeUi({ lastResult: result, plan: result });
       dispatch({ type: "plan_ready" });
     } catch (error) {
-      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      mergeUi({ lastResult: { error: error instanceof Error ? error.message : String(error) } });
       dispatch({ type: "fail" });
     }
   }
 
   async function submitPlan() {
-    if (!plan) return;
+    if (!uiState.plan) return;
     dispatch({ type: "process_start" });
     try {
       const result = await postJson<LoadJobStatus>("/admin/loads", {
         kind: "full_load_batch",
-        payload: plan.batch_payload
+        payload: uiState.plan.batch_payload
       });
-      setActiveJobId(result.job_id);
-      setLastResult(result);
+      mergeUi({ activeJobId: result.job_id, lastResult: result });
       await refreshJobs();
     } catch (error) {
-      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      mergeUi({ lastResult: { error: error instanceof Error ? error.message : String(error) } });
       dispatch({ type: "fail" });
     }
   }
 
   async function refreshJobs() {
-    const result = await requestJson<LoadJobStatus[]>("/admin/loads?limit=20");
-    setJobs(result);
+    const jobs = await requestJson<LoadJobStatus[]>("/admin/loads?limit=20");
+    mergeUi({ jobs });
     if (
-      activeJobId &&
-      result.some(
+      uiState.activeJobId &&
+      jobs.some(
         (job) =>
-          job.job_id === activeJobId &&
+          job.job_id === uiState.activeJobId &&
           ["done", "failed", "cancelled"].includes(job.state)
       )
     ) {
@@ -309,237 +440,334 @@ export function LoadConsole() {
     const jobId = activeJob?.job_id;
     if (!jobId) return;
     const result = await postJson<LoadJobStatus>(`/admin/loads/${jobId}/cancel`, {});
-    setLastResult(result);
+    mergeUi({ lastResult: result });
     await refreshJobs();
     dispatch({ type: "cancel" });
   }
 
   async function refreshMv() {
-    setLastResult(await postJson("/admin/maintenance/refresh-mv?strategy=concurrent", {}));
+    const result = await postJson("/admin/maintenance/refresh-mv?strategy=concurrent", {});
+    mergeUi({ lastResult: result });
     await refreshJobs();
   }
 
   function resetAll() {
-    activeUpload.current?.abort();
+    for (const xhr of uploadRequests.values()) {
+      xhr.abort();
+    }
     uploadCancelRequested.current = false;
-    setFiles([]);
-    setUploadSet(null);
-    setDiscovery(null);
-    setPlan(null);
-    setConfirmation("");
-    setActiveJobId(null);
-    setLastResult(null);
+    dispatchUi({ type: "reset" });
     dispatch({ type: "reset" });
   }
 
+  return {
+    activeJob,
+    canCreatePlan,
+    expectedConfirmation,
+    loadPercent,
+    selectedBytes,
+    state,
+    uiState,
+    uploadPercent,
+    cancelActiveJob,
+    cancelUpload,
+    createPlan,
+    onDragOver,
+    onDrop,
+    onFileInput,
+    refreshJobs,
+    refreshMv,
+    resetAll,
+    setConfirmation,
+    setDiscovery,
+    setDropActive,
+    submitPlan,
+    uploadSelectedFiles
+  };
+}
+
+function SourceSetUploadPanel({
+  dropActive,
+  files,
+  onDragLeave,
+  onDragOver,
+  onDrop,
+  onFileInput,
+  onReset,
+  onSubmit,
+  onUploadCancel,
+  selectedBytes,
+  state,
+  uploadPercent,
+  uploadSet
+}: {
+  dropActive: boolean;
+  files: LocalUploadFile[];
+  onDragLeave: () => void;
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+  onFileInput: (event: ChangeEvent<HTMLInputElement>) => void;
+  onReset: () => void;
+  onSubmit: (event: FormEvent) => void;
+  onUploadCancel: () => Promise<void>;
+  selectedBytes: number;
+  state: string;
+  uploadPercent: number;
+  uploadSet: UploadSetStatus | null;
+}) {
   return (
-    <div className="grid two">
-      <Panel
-        title="Source Set Upload"
-        actions={<span className="status ok">{state}</span>}
-      >
-        <form className="form-grid" onSubmit={uploadSelectedFiles}>
-          <div
-            className={`drop-zone${dropActive ? " active" : ""}`}
-            onDragLeave={() => setDropActive(false)}
-            onDragOver={onDragOver}
-            onDrop={onDrop}
-          >
-            <UploadCloud size={26} />
-            <strong>파일 선택 또는 드롭</strong>
-            <span>{files.length} files · {formatBytes(selectedBytes)}</span>
-            <label className="button secondary">
-              <FileUp size={16} />
-              파일 선택
-              <input hidden multiple onChange={onFileInput} type="file" />
-            </label>
-          </div>
-          <ProgressLine label="업로드" percentValue={uploadPercent} />
-          <div className="button-row">
-            <button
-              className="button"
-              disabled={files.length === 0 || state === "uploading"}
-              type="submit"
-            >
-              <UploadCloud size={16} />
-              업로드
-            </button>
-            <button
-              className="button secondary"
-              disabled={state !== "uploading" && !uploadSet}
-              onClick={cancelUpload}
-              type="button"
-            >
-              <Ban size={16} />
-              업로드 취소
-            </button>
-            <button className="button secondary" onClick={resetAll} type="button">
-              <RotateCcw size={16} />
-              초기화
-            </button>
-          </div>
-        </form>
-      </Panel>
-
-      <Panel
-        title="Source Set Review"
-        actions={
-          discovery?.mixed_yyyymm ? (
-            <span className="status warn">mixed</span>
-          ) : (
-            <span className="status ok">{discovery ? "ready" : "idle"}</span>
-          )
-        }
-      >
-        <div className="form-grid">
-          <SourceSummary discovery={discovery} />
-          {discovery?.mixed_yyyymm ? (
-            <div className="confirm-box">
-              <label htmlFor="source-set-confirm">확인 문구</label>
-              <input
-                id="source-set-confirm"
-                onChange={(event) => setConfirmation(event.target.value)}
-                value={confirmation}
-              />
-            </div>
-          ) : null}
-          <div className="button-row">
-            <button
-              className="button"
-              disabled={!canCreatePlan || plan !== null}
-              onClick={createPlan}
-              type="button"
-            >
-              <CheckCircle2 size={16} />
-              계획 확정
-            </button>
-            <button
-              className="button"
-              disabled={plan === null || state === "processing"}
-              onClick={submitPlan}
-              type="button"
-            >
-              <Send size={16} />
-              적재 시작
-            </button>
-            <button className="button secondary" onClick={refreshJobs} type="button">
-              <RefreshCw size={16} />
-              새로고침
-            </button>
-          </div>
+    <Panel title="Source Set Upload" actions={<span className="status ok">{state}</span>}>
+      <form className="form-grid" onSubmit={onSubmit}>
+        <div
+          className={`drop-zone${dropActive ? " active" : ""}`}
+          onDragLeave={onDragLeave}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+        >
+          <UploadCloud size={26} />
+          <strong>파일 선택 또는 드롭</strong>
+          <span>
+            {files.length} files · {formatBytes(selectedBytes)}
+          </span>
+          <label className="button secondary">
+            <FileUp size={16} />
+            파일 선택
+            <input hidden multiple onChange={onFileInput} type="file" />
+          </label>
         </div>
-      </Panel>
+        <ProgressLine label="업로드" percentValue={uploadPercent} />
+        <div className="button-row">
+          <button className="button" disabled={files.length === 0 || state === "uploading"} type="submit">
+            <UploadCloud size={16} />
+            업로드
+          </button>
+          <button
+            className="button secondary"
+            disabled={state !== "uploading" && !uploadSet}
+            onClick={() => void onUploadCancel()}
+            type="button"
+          >
+            <Ban size={16} />
+            업로드 취소
+          </button>
+          <button className="button secondary" onClick={onReset} type="button">
+            <RotateCcw size={16} />
+            초기화
+          </button>
+        </div>
+      </form>
+    </Panel>
+  );
+}
 
-      <Panel title="Upload Files">
+function SourceSetReviewPanel({
+  canCreatePlan,
+  confirmation,
+  discovery,
+  onConfirmationChange,
+  onCreatePlan,
+  onRefreshJobs,
+  onSubmitPlan,
+  plan,
+  state
+}: {
+  canCreatePlan: boolean;
+  confirmation: string;
+  discovery: SourceSetDiscovery | null;
+  onConfirmationChange: (confirmation: string) => void;
+  onCreatePlan: () => Promise<void>;
+  onRefreshJobs: () => Promise<void>;
+  onSubmitPlan: () => Promise<void>;
+  plan: SourceSetPlan | null;
+  state: string;
+}) {
+  return (
+    <Panel
+      title="Source Set Review"
+      actions={
+        discovery?.mixed_yyyymm ? (
+          <span className="status warn">mixed</span>
+        ) : (
+          <span className="status ok">{discovery ? "ready" : "idle"}</span>
+        )
+      }
+    >
+      <div className="form-grid">
+        <SourceSummary discovery={discovery} />
+        {discovery?.mixed_yyyymm ? (
+          <div className="confirm-box">
+            <label htmlFor="source-set-confirm">확인 문구</label>
+            <input
+              id="source-set-confirm"
+              onChange={(event) => onConfirmationChange(event.target.value)}
+              value={confirmation}
+            />
+          </div>
+        ) : null}
+        <div className="button-row">
+          <button
+            className="button"
+            disabled={!canCreatePlan || plan !== null}
+            onClick={() => void onCreatePlan()}
+            type="button"
+          >
+            <CheckCircle2 size={16} />
+            계획 확정
+          </button>
+          <button
+            className="button"
+            disabled={plan === null || state === "processing"}
+            onClick={() => void onSubmitPlan()}
+            type="button"
+          >
+            <Send size={16} />
+            적재 시작
+          </button>
+          <button className="button secondary" onClick={() => void onRefreshJobs()} type="button">
+            <RefreshCw size={16} />
+            새로고침
+          </button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function UploadFilesPanel({ files }: { files: LocalUploadFile[] }) {
+  return (
+    <Panel title="Upload Files">
+      <table className="table compact">
+        <thead>
+          <tr>
+            <th>file</th>
+            <th>state</th>
+            <th>progress</th>
+            <th>source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {files.map((file) => (
+            <tr key={file.key}>
+              <td className="path-cell">{file.relativePath}</td>
+              <td>
+                <StatusBadge value={file.state} />
+              </td>
+              <td>{percent(file.uploadedBytes, file.file.size)}%</td>
+              <td>{file.result?.source_kind ?? "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Panel>
+  );
+}
+
+function LoadJobsPanel({
+  activeJob,
+  jobs,
+  loadPercent,
+  onCancelActiveJob,
+  onRefreshMv
+}: {
+  activeJob: LoadJobStatus | undefined;
+  jobs: LoadJobStatus[];
+  loadPercent: number;
+  onCancelActiveJob: () => Promise<void>;
+  onRefreshMv: () => Promise<void>;
+}) {
+  return (
+    <Panel title="Jobs">
+      <div className="form-grid">
+        <ProgressLine label="적재" percentValue={loadPercent} />
+        <div className="button-row">
+          <button
+            className="button secondary"
+            disabled={!activeJob}
+            onClick={() => void onCancelActiveJob()}
+            type="button"
+          >
+            <Ban size={16} />
+            적재 취소
+          </button>
+          <button className="button secondary" onClick={() => void onRefreshMv()} type="button">
+            <Play size={16} />
+            MV refresh
+          </button>
+        </div>
         <table className="table compact">
           <thead>
             <tr>
-              <th>file</th>
+              <th>kind</th>
               <th>state</th>
               <th>progress</th>
-              <th>source</th>
+              <th>stage</th>
             </tr>
           </thead>
           <tbody>
-            {files.map((file) => (
-              <tr key={file.key}>
-                <td className="path-cell">{file.relativePath}</td>
+            {jobs.map((job) => (
+              <tr key={job.job_id}>
+                <td>{job.kind}</td>
                 <td>
-                  <StatusBadge value={file.state} />
+                  <StatusBadge value={job.state} />
                 </td>
-                <td>{percent(file.uploadedBytes, file.file.size)}%</td>
-                <td>{file.result?.source_kind ?? "-"}</td>
+                <td>{Math.round(job.progress * 100)}%</td>
+                <td>{job.current_stage ?? "-"}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </Panel>
+      </div>
+    </Panel>
+  );
+}
 
-      <Panel title="Jobs">
-        <div className="form-grid">
-          <ProgressLine label="적재" percentValue={loadPercent} />
-          <div className="button-row">
-            <button
-              className="button secondary"
-              disabled={!activeJob}
-              onClick={cancelActiveJob}
-              type="button"
-            >
-              <Ban size={16} />
-              적재 취소
-            </button>
-            <button className="button secondary" onClick={refreshMv} type="button">
-              <Play size={16} />
-              MV refresh
-            </button>
-          </div>
-          <table className="table compact">
-            <thead>
-              <tr>
-                <th>kind</th>
-                <th>state</th>
-                <th>progress</th>
-                <th>stage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((job) => (
-                <tr key={job.job_id}>
-                  <td>{job.kind}</td>
-                  <td>
-                    <StatusBadge value={job.state} />
-                  </td>
-                  <td>{Math.round(job.progress * 100)}%</td>
-                  <td>{job.current_stage ?? "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+function MixedYyyymmDialog({
+  canCreatePlan,
+  confirmation,
+  discovery,
+  expectedConfirmation,
+  onClose,
+  onConfirmationChange,
+  onConfirm,
+  plan
+}: {
+  canCreatePlan: boolean;
+  confirmation: string;
+  discovery: SourceSetDiscovery | null;
+  expectedConfirmation: string;
+  onClose: () => void;
+  onConfirmationChange: (confirmation: string) => void;
+  onConfirm: () => Promise<void>;
+  plan: SourceSetPlan | null;
+}) {
+  if (!discovery?.mixed_yyyymm || plan) {
+    return null;
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <dialog aria-labelledby="source-set-confirm-title" className="modal" open>
+        <h2 id="source-set-confirm-title">기준월 확인</h2>
+        <SourceSummary discovery={discovery} />
+        <div className="confirm-box">
+          <label htmlFor="source-set-confirm-modal">{expectedConfirmation}</label>
+          <input
+            id="source-set-confirm-modal"
+            onChange={(event) => onConfirmationChange(event.target.value)}
+            value={confirmation}
+          />
         </div>
-      </Panel>
-
-      <Panel title="Source Set JSON">
-        <JsonBlock value={plan ?? discovery ?? uploadSet ?? { status: "READY" }} />
-      </Panel>
-      <Panel title="Last Response">
-        <JsonBlock value={lastResult ?? { status: "READY" }} />
-      </Panel>
-
-      {discovery?.mixed_yyyymm && !plan ? (
-        <div className="modal-backdrop" role="presentation">
-          <div aria-modal="true" className="modal" role="dialog">
-            <h2>기준월 확인</h2>
-            <SourceSummary discovery={discovery} />
-            <div className="confirm-box">
-              <label htmlFor="source-set-confirm-modal">{expectedConfirmation}</label>
-              <input
-                id="source-set-confirm-modal"
-                onChange={(event) => setConfirmation(event.target.value)}
-                value={confirmation}
-              />
-            </div>
-            <div className="button-row">
-              <button
-                className="button"
-                disabled={!canCreatePlan}
-                onClick={createPlan}
-                type="button"
-              >
-                <CheckCircle2 size={16} />
-                확인
-              </button>
-              <button
-                className="button secondary"
-                onClick={() => setDiscovery(null)}
-                type="button"
-              >
-                <Ban size={16} />
-                닫기
-              </button>
-            </div>
-          </div>
+        <div className="button-row">
+          <button className="button" disabled={!canCreatePlan} onClick={() => void onConfirm()} type="button">
+            <CheckCircle2 size={16} />
+            확인
+          </button>
+          <button className="button secondary" onClick={onClose} type="button">
+            <Ban size={16} />
+            닫기
+          </button>
         </div>
-      ) : null}
+      </dialog>
     </div>
   );
 }
@@ -594,4 +822,36 @@ function SourceSummary({ discovery }: { discovery: SourceSetDiscovery | null }) 
       </tbody>
     </table>
   );
+}
+
+function loadConsoleUiReducer(
+  state: LoadConsoleUiState,
+  action: LoadConsoleUiAction
+): LoadConsoleUiState {
+  switch (action.type) {
+    case "merge":
+      return { ...state, ...action.patch };
+    case "patch_file":
+      return {
+        ...state,
+        files: state.files.map((file) =>
+          file.key === action.key ? { ...file, ...action.patch } : file
+        )
+      };
+    case "mark_non_uploaded":
+      return {
+        ...state,
+        files: state.files.map((file) =>
+          file.state === "uploaded" ? file : { ...file, state: action.nextState }
+        )
+      };
+    case "reset":
+      return initialLoadConsoleUiState;
+    case "select_files":
+      return {
+        ...initialLoadConsoleUiState,
+        files: action.files,
+        lastResult: { selected_files: action.files.length }
+      };
+  }
 }

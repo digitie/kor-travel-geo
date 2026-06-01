@@ -2,6 +2,66 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-01 13:25 (반복 실패 패턴 원인 정리와 재발 방지 문서화)
+
+**작업**: 이번 세션에서 반복된 에이전트 작업 실패 패턴을 원인별로 정리하고, 다음 세션이 같은 함정을 다시 밟지 않도록 운영 문서를 보강했다.
+
+**반영**:
+- `docs/agent-failure-patterns.md`를 추가해 NTFS worktree의 WSL `git` 실패, `exec_command`의 `CreateProcess ... os error 2`, NTFS 경로에서 `apply_patch` 실패, inline rewrite escape 손상을 각각 증상/원인/재발 방지/표준 대응으로 정리했다.
+- `docs/agent-guide.md`, `docs/dev-environment.md`, `SKILL.md`에 새 문서 링크와 핵심 우회 원칙을 추가했다.
+- `docs/resume.md`와 `CHANGELOG.md`에 이번 문서화 상태를 반영했다.
+
+**발견**:
+- NTFS worktree의 Git metadata는 정책상 Windows 경로를 유지하므로 WSL `git` 실패는 버그가 아니라 설계 결과다. 같은 증상이 보이면 즉시 Windows `git.exe -C F:/...`로 전환하는 것이 정답이다.
+- `CreateProcess ... os error 2`는 저장소 파일 문제보다 Codex 명령 런처의 quoting/heredoc/workdir 처리 한계일 가능성이 높았다. 단순 명령(`sed`, `rg`, `cd ... && npm run ...`)은 안정적으로 재현됐다.
+- NTFS 파일을 inline script로 편집할 때 `\n`, regex backslash, Windows path가 쉽게 손상돼, fallback edit 뒤 재열기와 lint/type-check가 필수다.
+
+**다음**:
+- 같은 패턴이 다시 보이면 먼저 `docs/agent-failure-patterns.md` 절차를 적용하고, 새 변종이면 이 문서에 추가한다.
+
+## 2026-06-01 12:50 (React Doctor 잔여 경고 0건 마무리)
+
+**작업**: admin 구조 분해 이후 남아 있던 debug/common React Doctor 경고를 모두 정리했다.
+
+**반영**:
+- `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`에서 prop JSX를 static fallback/skeleton으로 고정하고 click handler 이름을 구체화했다.
+- `kraddr-geo-ui/components/debug/GeocodeDebugger.tsx`는 `useReducer`로 state를 묶고, `NormalizeDebugger`는 `normalizeFormSchema`를 실제 입력 검증에 연결했다.
+- `kraddr-geo-ui/app/page.tsx`, `app/debug/*/page.tsx`에 page metadata를 추가했다.
+- `kraddr-geo-ui/lib/sido.ts`는 regex matcher + escape helper로 정리했고, `lib/schemas.ts`, `lib/consistency.ts`, `tests/unit/schemas.test.ts`를 정리해 dead-code 경고를 줄였다.
+- `kraddr-geo-ui/scripts/gen-types.mjs`는 `openapi-typescript` CLI 경로 호출 대신 Node API import 방식으로 정리했다.
+
+**검증**:
+- fresh ext4 mirror `/home/digitie/dev/python-kraddr-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 다시 통과했다.
+- `npx react-doctor@latest . --offline --verbose --json` 재실행 결과 score `96 → 100`, warning `15 → 0`이 됐다.
+
+## 2026-06-01 10:55 (React Doctor admin 구조 분해 마무리)
+
+**작업**: 남아 있던 admin React Doctor 구조 경고를 마저 정리하고, ext4 테스트 미러에서 전체 frontend 검증을 다시 수행했다.
+
+**반영**:
+- `kraddr-geo-ui/components/admin/LoadConsole.tsx`를 workflow/controller + upload/review/jobs/dialog 섹션으로 분리하고 UI state를 `useReducer`로 묶었다.
+- `kraddr-geo-ui/components/admin/BackupsPanel.tsx`를 controller hook과 backup/restore/jobs/artifacts 패널로 나눠 giant component 경고를 제거했다.
+- `kraddr-geo-ui/components/admin/ConsistencyPanel.tsx`를 query/controller hook과 reports/workbench/layout 섹션으로 분리해 admin 쪽 마지막 `no-giant-component` 경고를 제거했다.
+
+**검증**:
+- fresh ext4 mirror `/home/digitie/dev/python-kraddr-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 다시 통과했다.
+- `npx react-doctor@latest . --offline --verbose --json` 재실행 결과 score `95 → 96`, warning `19 → 15`로 감소했고 admin 관련 경고는 0건이 됐다. 남은 항목은 debug page metadata, `CoordinateMap`, `GeocodeDebugger`, dead-code 계열이다.
+
+## 2026-06-01 08:45 (React Doctor 기반 admin UI 정리)
+
+**작업**: `react-doctor`를 다시 실행하고 admin UI 경고 중 동작/구조상 바로 고칠 수 있는 항목을 수정했다.
+
+**반영**:
+- `kraddr-geo-ui/lib/vworld-key.tsx`를 TanStack Query 기반 runtime-config 로딩으로 바꿔 `fetch` in `useEffect`를 제거했다.
+- `/admin/settings`는 prop 동기화 effect와 derived `useState`를 없애고 브라우저 override 입력 흐름을 draft 값으로 재구성했다.
+- `/admin/consistency`는 invalid case 보정을 effect/setState 대신 렌더 시점 파생 선택으로 바꾸고, stale sample selection이 bulk action에 남지 않도록 정리했다.
+- `/admin/load`는 병렬 업로드 + multi-XHR cancel, semantic `<dialog>`, lazy ref init, proxy `cache: "no-store"`로 정리했다.
+- `/admin/ops`, `/admin/backups`는 관련 state를 묶어 `useState` 남용 경고를 줄였고, `tests/unit/vworld-key.test.tsx`는 QueryClientProvider fixture를 추가했다.
+
+**검증**:
+- fresh ext4 mirror `/home/digitie/dev/python-kraddr-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 통과했다.
+- `npx react-doctor@latest . --offline --verbose --json` 재실행 결과 score `90 → 95`, warning `59 → 19`로 감소했다. 남은 항목은 주로 giant component, debug page metadata, dead-code 계열 경고다.
+
 ## 2026-06-01 02:40 (T-027/T-047 국가지점번호 포함 재적재와 튜닝 재측정)
 
 **작업**: 사용자 지시에 따라 새 Docker DB `kraddr-geo-t027-retune`(port `15435`)에서 T-027 전체 적재를 다시 수행하고, 국가지점번호(`tl_sppn_makarea`)를 포함한 T-047 SQL benchmark를 재측정했다. 기존 T-027 최종 DB(port `15434`)는 보존했다.

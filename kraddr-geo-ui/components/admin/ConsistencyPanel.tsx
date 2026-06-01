@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-table";
 import { Check, Clock, Download, Play, RefreshCw, RotateCw, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LazyCoordinateMap } from "@/components/vworld/LazyCoordinateMap";
@@ -66,8 +66,14 @@ const PAGE_SIZE = 50;
 // React into an infinite re-render loop that pins the main thread and freezes the tab
 // (notably when switching cases C1~C10, whose refetch leaves the data briefly undefined).
 const EMPTY_SAMPLES: ConsistencyCaseSample[] = [];
+const EMPTY_CASES: ConsistencyReport["cases"] = [];
 
 export function ConsistencyPanel({ initialReportId = null }: { initialReportId?: string | null }) {
+  const controller = useConsistencyPanelController(initialReportId);
+  return <ConsistencyPanelLayout controller={controller} />;
+}
+
+function useConsistencyPanelController(initialReportId: string | null) {
   const queryClient = useQueryClient();
   // `null` = no explicit user pick yet; the effective id falls back to the
   // `initialReportId` prop and then the first report (derived below).
@@ -99,8 +105,6 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
     queryKey: ["consistency-case-definitions"],
     queryFn: () => requestJson<ConsistencyCaseDefinition[]>("/admin/consistency/case-definitions")
   });
-  // Effective selection: the user's explicit pick, otherwise the initial prop,
-  // otherwise the first report. Derived during render (no effect + setState).
   const effectiveReportId =
     selectedReportId ?? initialReportId ?? reportsQuery.data?.[0]?.report_id ?? null;
 
@@ -109,12 +113,19 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
     queryFn: () => requestJson<ConsistencyReport>(`/admin/consistency/${effectiveReportId}`),
     enabled: effectiveReportId !== null
   });
+  const reportCases = useMemo(() => reportQuery.data?.cases ?? EMPTY_CASES, [reportQuery.data?.cases]);
+  const effectiveSelectedCaseCode = useMemo(() => {
+    if (reportCases.some((item) => item.code === selectedCaseCode)) {
+      return selectedCaseCode;
+    }
+    return reportCases[0]?.code ?? null;
+  }, [reportCases, selectedCaseCode]);
   const samplesPath = useMemo(
     () =>
-      effectiveReportId
+      effectiveReportId && effectiveSelectedCaseCode
         ? consistencySamplesPath({
             reportId: effectiveReportId,
-            caseCode: selectedCaseCode,
+            caseCode: effectiveSelectedCaseCode,
             severity: filters.severity || undefined,
             decision: filters.decision || undefined,
             sigCd: filters.sigCd || undefined,
@@ -124,7 +135,7 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
             pageSize: PAGE_SIZE
           })
         : null,
-    [filters, selectedCaseCode, effectiveReportId]
+    [effectiveReportId, effectiveSelectedCaseCode, filters]
   );
   const samplesQuery = useQuery({
     queryKey: ["consistency-samples", samplesPath],
@@ -132,32 +143,33 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
     enabled: samplesPath !== null
   });
   const summaryQuery = useQuery({
-    queryKey: ["consistency-summary", effectiveReportId, selectedCaseCode],
+    queryKey: ["consistency-summary", effectiveReportId, effectiveSelectedCaseCode],
     queryFn: () =>
       requestJson<ConsistencyCaseSummary>(
-        `/admin/consistency/${effectiveReportId}/cases/${selectedCaseCode}/summary`
+        `/admin/consistency/${effectiveReportId}/cases/${effectiveSelectedCaseCode}/summary`
       ),
-    enabled: effectiveReportId !== null
+    enabled: effectiveReportId !== null && effectiveSelectedCaseCode !== null
   });
-
-  useEffect(() => {
-    const cases = reportQuery.data?.cases ?? [];
-    if (cases.length > 0 && !cases.some((item) => item.code === selectedCaseCode)) {
-      setSelectedCase(cases[0].code);
-    }
-  }, [reportQuery.data, selectedCaseCode, setSelectedCase]);
 
   const definitionsByCode = useMemo(() => {
     return new Map((definitionsQuery.data ?? []).map((item) => [item.code, item]));
   }, [definitionsQuery.data]);
 
-  const selectedCase = reportQuery.data?.cases.find((item) => item.code === selectedCaseCode);
-  const selectedDefinition = definitionsByCode.get(selectedCaseCode);
-  const samples = useMemo(
-    () => samplesQuery.data?.items ?? EMPTY_SAMPLES,
-    [samplesQuery.data]
+  const selectedCase = reportCases.find((item) => item.code === effectiveSelectedCaseCode);
+  const selectedDefinition =
+    effectiveSelectedCaseCode !== null ? definitionsByCode.get(effectiveSelectedCaseCode) : undefined;
+  const samples = useMemo(() => samplesQuery.data?.items ?? EMPTY_SAMPLES, [samplesQuery.data]);
+  const sampleIds = useMemo(() => new Set(samples.map((sample) => sample.sample_id)), [samples]);
+  const effectiveSelectedSampleId =
+    selectedSampleId !== null && sampleIds.has(selectedSampleId) ? selectedSampleId : null;
+  const effectiveSelectedSampleIds = useMemo(
+    () => selectedSampleIds.filter((sampleId) => sampleIds.has(sampleId)),
+    [sampleIds, selectedSampleIds]
   );
-  const selectedSample = samples.find((sample) => sample.sample_id === selectedSampleId) ?? null;
+  const selectedSample =
+    effectiveSelectedSampleId !== null
+      ? samples.find((sample) => sample.sample_id === effectiveSelectedSampleId) ?? null
+      : null;
 
   const runMutation = useMutation({
     mutationFn: () => postJson<LoadJobStatus>("/admin/consistency/run", { scope: "full" }),
@@ -168,12 +180,13 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
   });
 
   const decisionMutation = useMutation({
-    mutationFn: (form: DecisionForm) => submitDecision(form, {
-      reportId: effectiveReportId,
-      caseCode: selectedCaseCode,
-      sampleId: selectedSampleId,
-      sampleIds: selectedSampleIds
-    }),
+    mutationFn: (form: DecisionForm) =>
+      submitDecision(form, {
+        reportId: effectiveReportId,
+        caseCode: effectiveSelectedCaseCode,
+        sampleId: effectiveSelectedSampleId,
+        sampleIds: effectiveSelectedSampleIds
+      }),
     onSuccess: () => {
       setDecisionForm(null);
       clearSelection();
@@ -184,22 +197,25 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
   });
 
   const recheckMutation = useMutation({
-    mutationFn: () =>
-      postJson<ConsistencySampleRecheckResponse>(
-        `/admin/consistency/${effectiveReportId}/cases/${selectedCaseCode}/samples/${selectedSampleId}/recheck`,
+    mutationFn: () => {
+      if (!effectiveReportId || !effectiveSelectedCaseCode || !effectiveSelectedSampleId) {
+        throw new Error("sample is not selected");
+      }
+      return postJson<ConsistencySampleRecheckResponse>(
+        `/admin/consistency/${effectiveReportId}/cases/${effectiveSelectedCaseCode}/samples/${effectiveSelectedSampleId}/recheck`,
         {}
-      ),
+      );
+    },
     onSuccess: (data) => {
       setLastRun(data);
-      // Re-checking a sample can change its decision/metrics — refresh the views.
       void queryClient.invalidateQueries({ queryKey: ["consistency-samples"] });
       void queryClient.invalidateQueries({ queryKey: ["consistency-summary"] });
     }
   });
 
   const columns = useSampleColumns({
-    selectedSampleIds,
-    selectedSampleId,
+    selectedSampleIds: effectiveSelectedSampleIds,
+    selectedSampleId: effectiveSelectedSampleId,
     onToggle: toggleSample,
     onSelect: setSelectedSample
   });
@@ -212,11 +228,11 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
   });
 
   const csvHref =
-    effectiveReportId !== null
+    effectiveReportId !== null && effectiveSelectedCaseCode !== null
       ? `${API_BASE}${backendPath(
           consistencySamplesPath({
             reportId: effectiveReportId,
-            caseCode: selectedCaseCode,
+            caseCode: effectiveSelectedCaseCode,
             severity: filters.severity || undefined,
             decision: filters.decision || undefined,
             sigCd: filters.sigCd || undefined,
@@ -229,169 +245,252 @@ export function ConsistencyPanel({ initialReportId = null }: { initialReportId?:
         )}`
       : "#";
 
+  return {
+    clearSelection,
+    csvHref,
+    decisionForm,
+    decisionPending: decisionMutation.isPending,
+    effectiveReportId,
+    effectiveSelectedCaseCode,
+    effectiveSelectedSampleIds,
+    filters,
+    lastRun,
+    onCloseDecision: () => setDecisionForm(null),
+    onDecisionChange: (form: DecisionForm) => setDecisionForm(form),
+    onDecisionSubmit: () => {
+      if (decisionForm) {
+        decisionMutation.mutate(decisionForm);
+      }
+    },
+    onFiltersChange: (nextFilters: SampleFilters) => setFilters(nextFilters),
+    onPage: (page: number) => setFilters((current) => ({ ...current, page })),
+    onRefreshReports: () => reportsQuery.refetch(),
+    onRecheck: () => recheckMutation.mutate(),
+    onRun: () => runMutation.mutate(),
+    onSelectCase: (caseCode: string) => {
+      setSelectedCase(caseCode);
+      setFilters((current) => ({ ...current, page: 1 }));
+    },
+    onSelectReport: (reportId: string) => setSelectedReportId(reportId),
+    reportCases,
+    reports: reportsQuery.data ?? [],
+    reportTitle: reportQuery.data?.report_id ?? "Report",
+    recheckDisabled:
+      effectiveSelectedSampleId === null ||
+      effectiveSelectedCaseCode === null ||
+      recheckMutation.isPending,
+    sampleCountForDecision:
+      decisionForm?.target === "bulk" ? effectiveSelectedSampleIds.length : 1,
+    selectedCase,
+    selectedDefinition,
+    selectedSample,
+    summary: summaryQuery.data,
+    table,
+    totalSamples: samplesQuery.data?.total ?? 0
+  };
+}
+
+type ConsistencyPanelController = ReturnType<typeof useConsistencyPanelController>;
+
+function ConsistencyPanelLayout({ controller }: { controller: ConsistencyPanelController }) {
   return (
     <div className="consistency-shell">
-      <Panel
-        title="Reports"
-        actions={
-          <div className="button-row">
-            <button
-              className="icon-button"
-              onClick={() => void reportsQuery.refetch()}
-              title="새로고침"
-              type="button"
-            >
-              <RefreshCw size={16} />
-            </button>
-            <button className="button" onClick={() => runMutation.mutate()} type="button">
-              <Play size={16} />
-              재검증
-            </button>
-          </div>
-        }
-      >
-        <div className="report-list">
-          {(reportsQuery.data ?? []).map((report) => (
-            <Link
-              className={report.report_id === effectiveReportId ? "report-row active" : "report-row"}
-              href={`/admin/consistency/${report.report_id}`}
-              key={report.report_id}
-              onClick={() => setSelectedReportId(report.report_id)}
-            >
-              <span>{report.report_id}</span>
-              <StatusBadge value={report.severity_max} />
-            </Link>
-          ))}
-        </div>
-      </Panel>
-
-      <Panel title={reportQuery.data?.report_id ?? "Report"}>
-        <div className="consistency-workbench">
-          <nav aria-label="정합성 케이스 선택" className="case-tabs">
-            <div aria-label="정합성 케이스" aria-orientation="horizontal" className="case-tab-list" role="tablist">
-              {(reportQuery.data?.cases ?? []).map((item) => {
-                const isSelected = item.code === selectedCaseCode;
-                return (
-                  <button
-                    aria-controls="consistency-case-panel"
-                    aria-selected={isSelected}
-                    className={isSelected ? "case-tab active" : "case-tab"}
-                    id={`case-tab-${item.code}`}
-                    key={item.code}
-                    onClick={() => {
-                      setSelectedCase(item.code);
-                      setFilters((current) => ({ ...current, page: 1 }));
-                    }}
-                    role="tab"
-                    type="button"
-                  >
-                    <strong>{item.code}</strong>
-                    <span>{item.name}</span>
-                    <StatusBadge value={item.severity} />
-                    <small>{item.count.toLocaleString()}건</small>
-                  </button>
-                );
-              })}
-            </div>
-          </nav>
-
-          <section
-            aria-labelledby={`case-tab-${selectedCaseCode}`}
-            className="analysis-pane"
-            id="consistency-case-panel"
-            role="tabpanel"
-          >
-            <CriteriaPanel
-              definition={selectedDefinition}
-              caseCount={selectedCase?.count ?? 0}
-              summary={summaryQuery.data}
-            />
-            <FilterToolbar filters={filters} onChange={setFilters} />
-            {selectedSampleIds.length > 0 ? (
-              <BulkBar
-                count={selectedSampleIds.length}
-                onClear={clearSelection}
-                onOpen={(state) => setDecisionForm(openDecisionForm("bulk", state))}
-              />
-            ) : null}
-            <div className="comparison-grid">
-              <div className="table-pane">
-                <table className="table compact consistency-table">
-                  <thead>
-                    {table.getHeaderGroups().map((headerGroup) => (
-                      <tr key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                          <th key={header.id}>
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(header.column.columnDef.header, header.getContext())}
-                          </th>
-                        ))}
-                      </tr>
-                    ))}
-                  </thead>
-                  <tbody>
-                    {table.getRowModel().rows.map((row) => (
-                      <tr
-                        className={row.original.sample_id === selectedSampleId ? "active-row" : ""}
-                        key={row.id}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <td key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <Pager
-                  page={filters.page}
-                  pageSize={PAGE_SIZE}
-                  total={samplesQuery.data?.total ?? 0}
-                  onPage={(page) => setFilters((current) => ({ ...current, page }))}
-                />
-              </div>
-
-              <div className="detail-pane">
-                <DecisionPanel
-                  onAction={(state) => setDecisionForm(openDecisionForm("single", state))}
-                  onRecheck={() => recheckMutation.mutate()}
-                  recheckDisabled={!selectedSampleId || recheckMutation.isPending}
-                  sample={selectedSample}
-                />
-                <a className="button secondary" href={csvHref}>
-                  <Download size={16} />
-                  CSV 내려받기
-                </a>
-              </div>
-            </div>
-
-            <section className="map-section">
-              <h3 className="map-section-title">선택한 표본 위치</h3>
-              <MapPreview sample={selectedSample} />
-            </section>
-          </section>
-        </div>
-      </Panel>
-
-      {decisionForm ? (
+      <ReportsPanelSection controller={controller} />
+      <ReportWorkbenchPanel controller={controller} />
+      {controller.decisionForm ? (
         <DecisionModal
-          form={decisionForm}
-          pending={decisionMutation.isPending}
-          sampleCount={decisionForm.target === "bulk" ? selectedSampleIds.length : 1}
-          onClose={() => setDecisionForm(null)}
-          onChange={setDecisionForm}
-          onSubmit={() => decisionMutation.mutate(decisionForm)}
+          form={controller.decisionForm}
+          pending={controller.decisionPending}
+          sampleCount={controller.sampleCountForDecision}
+          onClose={controller.onCloseDecision}
+          onChange={controller.onDecisionChange}
+          onSubmit={controller.onDecisionSubmit}
         />
       ) : null}
-
-      {lastRun ? (
-        <Panel title="Last Action">
-          <pre className="json-box">{JSON.stringify(lastRun, null, 2)}</pre>
-        </Panel>
-      ) : null}
+      {controller.lastRun ? <LastActionPanel lastRun={controller.lastRun} /> : null}
     </div>
+  );
+}
+
+function ReportsPanelSection({ controller }: { controller: ConsistencyPanelController }) {
+  return (
+    <Panel
+      title="Reports"
+      actions={
+        <div className="button-row">
+          <button
+            className="icon-button"
+            onClick={() => void controller.onRefreshReports()}
+            title="새로고침"
+            type="button"
+          >
+            <RefreshCw size={16} />
+          </button>
+          <button className="button" onClick={controller.onRun} type="button">
+            <Play size={16} />
+            재검증
+          </button>
+        </div>
+      }
+    >
+      <div className="report-list">
+        {controller.reports.map((report) => (
+          <Link
+            className={report.report_id === controller.effectiveReportId ? "report-row active" : "report-row"}
+            href={`/admin/consistency/${report.report_id}`}
+            key={report.report_id}
+            onClick={() => controller.onSelectReport(report.report_id)}
+          >
+            <span>{report.report_id}</span>
+            <StatusBadge value={report.severity_max} />
+          </Link>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ReportWorkbenchPanel({ controller }: { controller: ConsistencyPanelController }) {
+  return (
+    <Panel title={controller.reportTitle}>
+      <div className="consistency-workbench">
+        <CaseTabs
+          cases={controller.reportCases}
+          onSelectCase={controller.onSelectCase}
+          selectedCaseCode={controller.effectiveSelectedCaseCode}
+        />
+        <ConsistencyAnalysisSection controller={controller} />
+      </div>
+    </Panel>
+  );
+}
+
+function CaseTabs({
+  cases,
+  onSelectCase,
+  selectedCaseCode
+}: {
+  cases: ConsistencyReport["cases"];
+  onSelectCase: (caseCode: string) => void;
+  selectedCaseCode: string | null;
+}) {
+  return (
+    <nav aria-label="정합성 케이스 선택" className="case-tabs">
+      <div aria-label="정합성 케이스" aria-orientation="horizontal" className="case-tab-list" role="tablist">
+        {cases.map((item) => {
+          const isSelected = item.code === selectedCaseCode;
+          return (
+            <button
+              aria-controls="consistency-case-panel"
+              aria-selected={isSelected}
+              className={isSelected ? "case-tab active" : "case-tab"}
+              id={`case-tab-${item.code}`}
+              key={item.code}
+              onClick={() => onSelectCase(item.code)}
+              role="tab"
+              type="button"
+            >
+              <strong>{item.code}</strong>
+              <span>{item.name}</span>
+              <StatusBadge value={item.severity} />
+              <small>{item.count.toLocaleString()}건</small>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+function ConsistencyAnalysisSection({ controller }: { controller: ConsistencyPanelController }) {
+  return (
+    <section
+      aria-labelledby={`case-tab-${controller.effectiveSelectedCaseCode ?? "none"}`}
+      className="analysis-pane"
+      id="consistency-case-panel"
+      role="tabpanel"
+    >
+      <CriteriaPanel
+        caseCount={controller.selectedCase?.count ?? 0}
+        definition={controller.selectedDefinition}
+        summary={controller.summary}
+      />
+      <FilterToolbar filters={controller.filters} onChange={controller.onFiltersChange} />
+      {controller.effectiveSelectedSampleIds.length > 0 ? (
+        <BulkBar
+          count={controller.effectiveSelectedSampleIds.length}
+          onClear={controller.clearSelection}
+          onOpen={(state) => controller.onDecisionChange(openDecisionForm("bulk", state))}
+        />
+      ) : null}
+      <div className="comparison-grid">
+        <div className="table-pane">
+          <table className="table compact consistency-table">
+            <thead>
+              {controller.table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody>
+              {controller.table.getRowModel().rows.map((row) => (
+                <tr
+                  className={row.original.sample_id === (controller.selectedSample?.sample_id ?? null) ? "active-row" : ""}
+                  key={row.id}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Pager
+            onPage={controller.onPage}
+            page={controller.filters.page}
+            pageSize={PAGE_SIZE}
+            total={controller.totalSamples}
+          />
+        </div>
+
+        <div className="detail-pane">
+          <DecisionPanel
+            onAction={(state) => controller.onDecisionChange(openDecisionForm("single", state))}
+            onRecheck={controller.onRecheck}
+            recheckDisabled={controller.recheckDisabled}
+            sample={controller.selectedSample}
+          />
+          <a className="button secondary" href={controller.csvHref}>
+            <Download size={16} />
+            CSV 내려받기
+          </a>
+        </div>
+      </div>
+
+      <section className="map-section">
+        <h3 className="map-section-title">선택한 표본 위치</h3>
+        <MapPreview sample={controller.selectedSample} />
+      </section>
+    </section>
+  );
+}
+
+function LastActionPanel({
+  lastRun
+}: {
+  lastRun: LoadJobStatus | ConsistencySampleRecheckResponse;
+}) {
+  return (
+    <Panel title="Last Action">
+      <pre className="json-box">{JSON.stringify(lastRun, null, 2)}</pre>
+    </Panel>
   );
 }
 
@@ -785,12 +884,13 @@ async function submitDecision(
   form: DecisionForm,
   target: {
     reportId: string | null;
-    caseCode: string;
+    caseCode: string | null;
     sampleId: string | null;
     sampleIds: string[];
   }
 ) {
   if (!target.reportId) throw new Error("report is not selected");
+  if (!target.caseCode) throw new Error("case is not selected");
   const base = `/admin/consistency/${target.reportId}/cases/${target.caseCode}/samples`;
   const payload: ConsistencySampleDecisionRequest = {
     decision_state: form.state,
