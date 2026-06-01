@@ -6,7 +6,7 @@ from typing import Any
 
 from kraddr.geo.dto.address import AddressStructure
 from kraddr.geo.dto.common import AddressType, Point, ResultSource
-from kraddr.geo.dto.geocode import GeocodeResponse
+from kraddr.geo.dto.geocode import GeocodeResponse, SppnMakareaContext
 from kraddr.geo.dto.reverse import ReverseResponse, ReverseResultItem
 from kraddr.geo.dto.search import SearchResponse, SearchResultItem
 from kraddr.geo.dto.v2 import (
@@ -57,10 +57,16 @@ def geocode_v2_from_v1(inp: GeocodeV2Input, response: GeocodeResponse) -> Geocod
 
 
 def reverse_v2_from_v1(inp: ReverseV2Input, response: ReverseResponse) -> ReverseV2Response:
+    candidates = [*(_candidate_from_reverse_item(inp, item) for item in response.result)]
+    if response.x_extension is not None:
+        candidates.extend(
+            _candidate_from_sppn_area(inp, area)
+            for area in response.x_extension.sppn_makarea
+        )
     return ReverseV2Response(
         status=response.status,
         input=inp,
-        candidates=tuple(_candidate_from_reverse_item(inp, item) for item in response.result),
+        candidates=tuple(candidates),
         region_hint_applied=inp.region_hint,
     )
 
@@ -142,6 +148,29 @@ def _candidate_from_reverse_item(inp: ReverseV2Input, item: ReverseResultItem) -
         region=_region_from_structure(item.structure),
         source=_source_from_v1(item.source),
         metadata={"distance_m": item.distance_m, "zip_source": item.zip_source},
+    )
+
+
+def _candidate_from_sppn_area(inp: ReverseV2Input, area: SppnMakareaContext) -> CandidateV2:
+    metadata = {
+        "sig_cd": area.sig_cd,
+        "makarea_id": area.makarea_id,
+        "makarea_nm": area.makarea_nm,
+        "ntfc_yn": area.ntfc_yn,
+        "ntfc_de": area.ntfc_de,
+        "mvm_res_cd": area.mvm_res_cd,
+        "source_file": area.source_file,
+        "source_yyyymm": area.source_yyyymm,
+        "area_m2": area.area_m2,
+    }
+    return CandidateV2(
+        confidence=1.0,
+        match_kind="sppn",
+        point=Point(x=inp.lon, y=inp.lat),
+        point_precision="approximate",
+        region=RegionV2(sig_cd=area.sig_cd),
+        source="local",
+        metadata={key: value for key, value in metadata.items() if value is not None},
     )
 
 

@@ -85,14 +85,16 @@ source scripts/agent_env.sh
 
 검증 명령은 `source scripts/agent_env.sh`를 먼저 했다면 `TMPDIR=...` 접두를 매번 붙일 필요가 없다. 스니펫을 안 썼다면 각 명령 앞에 `TMPDIR=/tmp TMP=/tmp TEMP=/tmp`를 직접 붙인다.
 
-## 4. git worktree 환경 정책 (포인터 깨짐 방지)
+## 4. git worktree 환경 정책 (Windows Git metadata 기준)
 
-worktree의 `.git` 포인터에는 **만든 환경의 절대경로**가 박힌다(WSL은 `/mnt/...`, Windows 네이티브 git은 드라이브 경로). 같은 폴더라도 두 환경의 표기가 달라, 다른 환경 git으로 다루면 `fatal: not a git repository`가 나고 `prunable`로 보인다.
+worktree의 `.git` 포인터에는 **만든 환경의 절대경로**가 박힌다(WSL은 `/mnt/...`, Windows 네이티브 git은 `F:/...`). 둘이 섞이면 다른 환경 git이 `fatal: not a git repository`를 내고 `git worktree list`에서 `prunable`로 보인다. 이를 막기 위해 **모든 worktree의 Git metadata는 Windows Git 기준(`F:/dev/...`)으로 통일**한다(`docs/dev-environment.md` §1).
 
-- **각 worktree는 자기 환경 전용**으로만 git 조작한다(현재: Codex/Antigravity=WSL, Claude=Windows 네이티브). 상세: `docs/dev-environment.md` §1.1.
-- ⚠️ `git worktree prune`은 **그 worktree를 운용하는 환경에서만** 실행한다. 다른 환경에서 돌리면 정상 worktree 등록이 삭제될 수 있다.
-- 환경을 바꿔야 하면 먼저 `git worktree repair <worktree 경로>`로 포인터를 그 환경 기준으로 맞춘다.
+- worktree의 `.git`/`gitdir`은 `F:/dev/...`를 가리킨다. **WSL 편의를 위해 `/mnt/f/...`로 고치지 않는다.**
+- WSL에서 worktree에 git 작업(status·branch·commit)이 필요하면 Windows `git.exe`를 쓴다. 예: `"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/python-kraddr-geo-<agent> status -sb`.
+- 포인터가 `/mnt/f`로 틀어져 git이 깨지면 Windows에서 `git -C F:/dev/python-kraddr-geo worktree repair F:/dev/python-kraddr-geo-<agent>` 한 번으로 복구한다.
+- ⚠️ `git worktree prune`은 **Windows에서만** 실행한다. WSL에서 돌리면 `F:/` 기준의 정상 worktree가 `prunable`로 보여 등록이 삭제될 수 있다.
 - 커밋되는 문서/코드에는 절대경로를 넣지 않는다(사용자명·머신 구조 노출). 상대경로나 `<placeholder>`를 쓴다.
+- 자주 재발하는 환경/도구 실패 패턴(WSL `git`이 NTFS worktree에서 실패, `exec_command`의 `CreateProcess ... os error 2`, inline rewrite의 escape 손상 등)은 `docs/agent-failure-patterns.md`에 정리돼 있다. 같은 증상이면 프로젝트 버그로 보기 전에 먼저 확인한다.
 
 ## 5. 공식 로컬 포트 (ADR-040)
 

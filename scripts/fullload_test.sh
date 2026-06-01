@@ -370,19 +370,20 @@ from kraddr.geo.client import AsyncAddressClient
 async def main():
     async with AsyncAddressClient() as client:
         # geocode
-        r = await client.geocode('서울특별시 종로구 자하문로 94')
-        point = r.result.point if r.result else None
-        print(f'geocode: status={r.status}, point={point}')
-        assert r.status == 'OK', f'geocode failed: {r}'
+        r = await client.geocode(query='서울특별시 종로구 자하문로 94')
+        first = r.candidates[0] if r.candidates else None
+        point = first.point if first else None
+        print(f'geocode: status={r.status}, candidates={len(r.candidates)}, point={point}')
+        assert r.status == 'OK' and point is not None, f'geocode failed: {r}'
 
         # reverse
-        if point:
-            rev = await client.reverse_geocode(point.x, point.y)
-            print(f'reverse: status={rev.status}, count={len(rev.result)}')
+        rev = await client.reverse(point.x, point.y)
+        print(f'reverse: status={rev.status}, count={len(rev.candidates)}')
 
         # search
         s = await client.search('자하문로')
-        print(f'search: status={s.status}, total={s.total}, first={s.result[0].address if s.result else None}')
+        search_first = s.candidates[0].address.full if s.candidates and s.candidates[0].address else None
+        print(f'search: status={s.status}, total={s.total}, first={search_first}')
 
         # zipcode
         z = await client.zipcode(address='서울특별시 종로구 자하문로 94')

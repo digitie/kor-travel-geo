@@ -24,9 +24,12 @@
 
 - **Git source of truth는 NTFS** `/mnt/f/dev/python-kraddr-geo` 계열 checkout이다. 코드 편집, branch, commit, PR은 NTFS 에이전트 worktree에서 수행한다.
 - **테스트와 장기 실행은 WSL ext4 테스트 미러**에서 수행한다. NTFS worktree를 `rsync --delete`로 `~/dev/python-kraddr-geo-<agent>-test/`에 복사한 뒤 `pip`/`npm`/`pytest`/`uvicorn`을 실행한다. ext4 미러에서는 commit/push하지 않는다.
+- **Git 명령은 Windows Git 기준**이다. NTFS worktree의 `.git`/`gitdir`은 `F:/dev/...`를 가리키게 두고, WSL 미러에서 Git commit/branch를 수집하는 스크립트는 Windows `git.exe`와 `F:/dev/python-kraddr-geo-*` 경로를 사용한다. WSL `git` 편의를 위해 포인터를 `/mnt/f/...`로 바꾸지 않는다.
+- **DB 검증은 T-027 최종 DB 재사용이 기본**이다. `kraddr-geo-t027-final` Docker project와 `/home/digitie/kraddr-geo-data/pgdata-final-20260529` pgdata를 host port `15434`로 다시 올려 사용한다. 클린 DB는 명시 요청 때만 새 pgdata로 만든다.
 - **데이터(`data/`)는 NTFS main repo 아래** `/mnt/f/dev/python-kraddr-geo/data/`를 기준으로 둔다. ext4 테스트 미러에서는 절대경로 또는 심볼릭 링크로 참조한다.
 - **로컬 secret/env 파일**(`.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
 - **Playwright e2e는 Windows Node/브라우저 전용**이다. WSL Playwright는 실행하지 않는다.
+- **반복되는 작업 실패 패턴은 먼저 `docs/agent-failure-patterns.md`를 본다.** 특히 NTFS worktree에서는 WSL `git`을 쓰지 않고, `exec_command`의 `CreateProcess ... os error 2`는 저장소 버그가 아니라 런처/quoting 문제로 먼저 분류한다.
 
 ### 에이전트별 worktree / CodeGraph
 

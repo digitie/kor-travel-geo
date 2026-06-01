@@ -6,6 +6,31 @@
 
 2026-05-27 1차 구현 PR에서는 benchmark harness와 deterministic corpus 저장 형식을 추가하고, T-027 최종 클린 적재 DB에서 발견한 지번 exact lookup 병목을 `idx_mv_jibun_name_exact` 인덱스로 1차 튜닝했다. 더 큰 `standard`/`stress` corpus, 동시성 64, REST API 전체 latency, T-057 region hint 비교는 후속 PR에서 이어간다.
 
+## 2026-06-01 국가지점번호 포함 재측정
+
+T-027 전체 적재를 새 Docker DB `kraddr-geo-t027-retune`에서 다시 수행한 뒤, 전체 daily ZIP을 실제 데이터로 적용한 최종 DB에서 T-047 SQL benchmark를 재실행했다. 상세 수치와 full-load/정합성 비교는 `docs/t027-t047-sppn-retune-20260601.md`에 분리해 기록한다.
+
+이번 갱신의 핵심은 국가지점번호 Q11 coverage 보강이다.
+
+| 항목 | 전 | 후 |
+|------|----|----|
+| benchmark Q11 | `sppn_reverse`만 측정 | `sppn_geocode`, `sppn_reverse`를 모두 측정 |
+| v2 reverse 응답 | `x_extension.sppn_makarea`가 candidate로 승격되지 않음 | `CandidateV2(match_kind="sppn")` 후보로 승격 |
+| full-load smoke | 예전 client 계약(`r.result`, `reverse_geocode`) 사용 | 최신 v2 client 계약(`candidates`, `reverse`) 사용 |
+
+최종 run `t047-retune-standard-20260601-012814`는 2,000 case, 18,000 measurement, error 0이었다. `tl_sppn_makarea=24,204`, `mv_geocode_target=6,418,735` 상태에서 Q11 결과는 다음과 같다.
+
+| query | conc | p50 | p95 | p95 checkout | p95 execute | p99 |
+|-------|-----:|----:|----:|-------------:|------------:|----:|
+| `sppn_geocode` | 1 | 3.19ms | 5.68ms | 0.78ms | 4.59ms | 11.90ms |
+| `sppn_geocode` | 16 | 18.43ms | 22.62ms | 4.59ms | 16.37ms | 25.11ms |
+| `sppn_geocode` | 64 | 75.91ms | 90.22ms | 16.61ms | 65.39ms | 97.82ms |
+| `sppn_reverse` | 1 | 3.23ms | 4.98ms | 0.80ms | 3.93ms | 10.04ms |
+| `sppn_reverse` | 16 | 18.36ms | 22.70ms | 4.51ms | 16.50ms | 25.43ms |
+| `sppn_reverse` | 64 | 75.55ms | 87.45ms | 16.69ms | 61.52ms | 96.67ms |
+
+`pg_stat_statements` 기준 Q11 mean execution은 geocode `0.496ms`, reverse `0.432ms`였다. 따라서 이번 PR에서는 Q11용 새 index나 helper MV를 추가하지 않는다. 다음 튜닝 후보는 여전히 Q4 `search_fuzzy`와 Q3 `fuzzy_geocode_wide`의 동시성 64 tail이다.
+
 ## 2026-05-27 1차 구현 결과
 
 ### 추가한 도구

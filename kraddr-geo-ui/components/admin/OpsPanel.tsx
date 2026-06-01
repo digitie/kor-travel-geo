@@ -1,7 +1,7 @@
 "use client";
 
 import { Play, RefreshCw, ShieldCheck } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -26,19 +26,48 @@ const maintenanceKinds = [
   "exclusive"
 ] as const;
 
-export function OpsPanel() {
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
-  const [snapshots, setSnapshots] = useState<DatasetSnapshot[]>([]);
-  const [releases, setReleases] = useState<ServingRelease[]>([]);
-  const [artifacts, setArtifacts] = useState<OpsArtifact[]>([]);
-  const [windows, setWindows] = useState<MaintenanceWindow[]>([]);
-  const [stats, setStats] = useState<TableStatsSnapshot[]>([]);
-  const [kind, setKind] = useState<(typeof maintenanceKinds)[number]>("full_load");
-  const [reason, setReason] = useState("운영 점검");
-  const [confirmation, setConfirmation] = useState("CONFIRM");
-  const [lastResult, setLastResult] = useState<unknown>({ status: "READY" });
+type MaintenanceWindowKind = (typeof maintenanceKinds)[number];
+type OpsDataState = {
+  artifacts: OpsArtifact[];
+  auditEvents: AuditEvent[];
+  lastResult: unknown;
+  releases: ServingRelease[];
+  snapshots: DatasetSnapshot[];
+  stats: TableStatsSnapshot[];
+  windows: MaintenanceWindow[];
+};
+type MaintenanceWindowFormState = {
+  confirmation: string;
+  kind: MaintenanceWindowKind;
+  reason: string;
+};
 
-  async function loadAll() {
+const initialOpsDataState: OpsDataState = {
+  artifacts: [],
+  auditEvents: [],
+  lastResult: { status: "READY" },
+  releases: [],
+  snapshots: [],
+  stats: [],
+  windows: []
+};
+const initialWindowFormState: MaintenanceWindowFormState = {
+  confirmation: "CONFIRM",
+  kind: "full_load",
+  reason: "운영 점검"
+};
+
+export function OpsPanel() {
+  const [opsData, setOpsData] = useState<OpsDataState>(initialOpsDataState);
+  const [windowForm, setWindowForm] = useState<MaintenanceWindowFormState>(initialWindowFormState);
+  const { artifacts, auditEvents, lastResult, releases, snapshots, stats, windows } = opsData;
+  const { confirmation, kind, reason } = windowForm;
+
+  function setLastResult(value: unknown) {
+    setOpsData((current) => ({ ...current, lastResult: value }));
+  }
+
+  const loadAll = useCallback(async () => {
     try {
       const [nextAudit, nextSnapshots, nextReleases, nextArtifacts, nextWindows, nextStats] =
         await Promise.all([
@@ -49,24 +78,30 @@ export function OpsPanel() {
           requestJson<MaintenanceWindow[]>("/admin/ops/maintenance-windows?limit=10"),
           requestJson<TableStatsSnapshot[]>("/admin/ops/table-stats?limit=10")
         ]);
-      setAuditEvents(nextAudit);
-      setSnapshots(nextSnapshots);
-      setReleases(nextReleases);
-      setArtifacts(nextArtifacts);
-      setWindows(nextWindows);
-      setStats(nextStats);
+      setOpsData((current) => ({
+        ...current,
+        artifacts: nextArtifacts,
+        auditEvents: nextAudit,
+        releases: nextReleases,
+        snapshots: nextSnapshots,
+        stats: nextStats,
+        windows: nextWindows
+      }));
     } catch (error) {
-      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      setOpsData((current) => ({
+        ...current,
+        lastResult: { error: error instanceof Error ? error.message : String(error) }
+      }));
     }
-  }
+  }, []);
 
   async function createWindow(event: FormEvent) {
     event.preventDefault();
     try {
       const result = await postJson<MaintenanceWindow>("/admin/ops/maintenance-windows", {
+        confirmation,
         kind,
-        reason,
-        confirmation
+        reason
       });
       setLastResult(result);
       await loadAll();
@@ -87,7 +122,7 @@ export function OpsPanel() {
 
   useEffect(() => {
     void loadAll();
-  }, []);
+  }, [loadAll]);
 
   return (
     <div className="grid two">
@@ -154,7 +189,12 @@ export function OpsPanel() {
             <select
               id="ops-kind"
               value={kind}
-              onChange={(event) => setKind(event.target.value as typeof kind)}
+              onChange={(event) =>
+                setWindowForm((current) => ({
+                  ...current,
+                  kind: event.target.value as MaintenanceWindowKind
+                }))
+              }
             >
               {maintenanceKinds.map((item) => (
                 <option key={item} value={item}>
@@ -165,14 +205,25 @@ export function OpsPanel() {
           </div>
           <div className="field">
             <label htmlFor="ops-reason">reason</label>
-            <input id="ops-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+            <input
+              id="ops-reason"
+              value={reason}
+              onChange={(event) =>
+                setWindowForm((current) => ({ ...current, reason: event.target.value }))
+              }
+            />
           </div>
           <div className="field">
             <label htmlFor="ops-confirmation">confirmation</label>
             <input
               id="ops-confirmation"
               value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
+              onChange={(event) =>
+                setWindowForm((current) => ({
+                  ...current,
+                  confirmation: event.target.value
+                }))
+              }
             />
           </div>
           <button className="button" type="submit">

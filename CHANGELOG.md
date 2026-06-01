@@ -8,12 +8,15 @@
 - PC/WSL 개발 정책을 NTFS main repo + 에이전트별 `python-kraddr-geo-*` worktree + WSL ext4 테스트 미러 방식으로 전환했다. `.claude/`는 로컬 secret 설정으로 ignore한다.
 - `/admin/consistency`의 C1~C10 case 선택을 세로 rail에서 가로 스크롤 탭으로 바꿨다. 탭은 `tablist/tab` 접근성 구조를 갖고, 표본 분석 영역 위에서 같은 흐름으로 case를 전환한다.
 - PC/WSL 개발 환경의 공식 로컬 포트를 DB `15434`, 백엔드 `8888`, UI `13088`로 고정하고 문서와 예시 설정을 갱신했다. Playwright e2e는 Windows Node/브라우저에서만 실행하도록 문서화했다.
+- 반복되는 에이전트 실패 패턴(Git metadata 포인터, `exec_command` 런처, NTFS inline edit escape 손상)을 `docs/agent-failure-patterns.md`로 분리 문서화하고, `docs/agent-guide.md`/`docs/dev-environment.md`/`SKILL.md`에서 바로 참조하도록 연결했다.
 - `/v2/geocode`에 `include_geometry` 옵션을 추가했다. 옵션을 켜면 기존 후보 `point`는 유지하고 행정구역 polygon, 도로 line, 건물 polygon을 `geometry`/`bbox`로 함께 반환한다. 디버그 UI는 기본으로 이 옵션을 켜고, 응답 JSON을 입력 아래에 두며 지도를 더 크게 표시한다.
 - **(BREAKING)** Python 라이브러리 주소 조회 표면을 v2 candidate schema로 단일화했다. `AsyncAddressClient.geocode()`, `reverse()`, `search()`가 각각 `GeocodeV2Response`, `ReverseV2Response`, `SearchV2Response`를 반환하며, 공개 API에서 `geocode_v2()`, `reverse_v2()`, `search_v2()`, `reverse_geocode()`를 제거했다. REST `/v1/*`의 vworld 호환 응답은 내부 adapter로 유지한다.
 - 디버그 UI의 geocode/reverse 화면을 `/v2/geocode`, `/v2/reverse` POST 기반으로 전환했다. proxy는 `/v1/*`와 `/v2/*`를 모두 허용하며, Windows Playwright e2e 6개로 v2 요청 body와 입력 검증을 고정한다.
 - 디버그 UI가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 런타임 config로 읽고, `/admin/settings`에서 브라우저 저장값으로 수정·복원할 수 있게 했다.
 
 ### Fixed
+- React Doctor 정리 완료: `VWorldKeyProvider`를 TanStack Query 기반 runtime config 로딩으로 바꾸고, `/admin/settings`의 derived state, `/admin/consistency`의 effect 기반 선택 보정, `/admin/load`의 업로드 workflow state, `/admin/ops`/`/admin/backups`의 분산 state, proxy route의 cache 미지정을 정리했다. 이어서 `LoadConsole`/`BackupsPanel`/`ConsistencyPanel`, `CoordinateMap`, `GeocodeDebugger`, debug page metadata, `sido`/schema helper, `gen-types` script까지 다듬었고, fresh ext4 mirror 검증(`lint`, `type-check`, `test`, `build`)과 `react-doctor` 재실행 결과 score는 100, warning은 0이 됐다.
+- T-027/T-047 국가지점번호 포함 재적재·튜닝 재측정: 새 Docker DB에서 전체 적재와 20260401~20260506 daily 전체 적용을 재실행했고, 최종 `mv_geocode_target=6,418,735`, `tl_sppn_makarea=24,204`, T-047 SQL benchmark 2,000 case/18,000 measurement/error 0을 기록했다. benchmark는 `sppn_geocode`와 `sppn_reverse`를 모두 측정하며, `/v2/reverse`는 `x_extension.sppn_makarea`를 `match_kind="sppn"` 후보로 승격한다. `scripts/fullload_test.sh` smoke도 최신 v2 client 계약으로 고쳤다.
 - Consistency 탭 진입 프리즈 완화: `/admin/consistency`가 sample 선택 전부터 첫 point 샘플로 MapLibre/VWorld 지도를 자동 로드하던 동작을 중지했다. 이제 sample을 명시적으로 선택하기 전에는 가벼운 placeholder만 렌더하고, 지도 컴포넌트는 선택 후에만 동적으로 로드한다.
 - T-065 내비게이션용DB `시군구용건물명` 검색 반영: `match_build_*.txt` 20번째 컬럼을 `sigungu_buld_nm`으로 적재하고 `sigungu_buld_nm_nrm`을 `mv_geocode_target`/`mv_geocode_text_search`에 포함했다. `/v2/search` exact preflight와 broad trigram fallback이 이 값을 함께 점수화하며, 실제 DB에서 `엄마집`, `P-101동` + `sig_cd=26110` 검색이 `NOT_FOUND`에서 후보 반환으로 개선됐다. shadow swap 후 `ANALYZE` transaction과 MV refresh release metadata 기록도 대형 DB statement timeout에 걸리지 않도록 보강했다.
 - 상위 주소 geocode 후보: `/v2/geocode`에서 상세번호가 없는 행정구역 입력은 별도 endpoint 없이 `district` 검색 후보로 승격한다. `tl_scco_*` polygon의 `ST_PointOnSurface` 대표점을 반환하며, `수지구` 입력은 `용인시 수지구` 후보를 우선 반환한다.

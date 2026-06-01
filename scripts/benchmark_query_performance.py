@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import platform
+import shutil
 import statistics
 import subprocess
 import time
@@ -28,7 +29,12 @@ from sqlalchemy.exc import DBAPIError, ProgrammingError
 
 from kraddr.geo.dto.region import EMPTY_REGION_PARAMS, RegionHint
 from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.infra.geocode_repo import _FUZZY_ROADS, _LOOKUP_JIBUN, _LOOKUP_ROAD
+from kraddr.geo.infra.geocode_repo import (
+    _FUZZY_ROADS,
+    _LOOKUP_JIBUN,
+    _LOOKUP_ROAD,
+    _SPPN_AREA_BY_POINT,
+)
 from kraddr.geo.infra.reverse_repo import _NEAREST_SQL, _SPPN_AREAS_SQL
 from kraddr.geo.infra.search_repo import _SEARCH_EXACT_SQL, _SEARCH_SQL, _normalize_search_query
 from kraddr.geo.infra.zip_repo import _ZIP_BY_ADDRESS, _ZIP_BY_POINT
@@ -189,6 +195,7 @@ QUERY_SPECS: dict[str, QuerySpec] = {
     "zipcode_point": QuerySpec("zipcode_point", "Q7_ZIPCODE", _ZIP_BY_POINT),
     "no_result_road": QuerySpec("no_result_road", "Q8_NO_RESULT", _LOOKUP_ROAD),
     "no_result_reverse": QuerySpec("no_result_reverse", "Q8_NO_RESULT", _NEAREST_SQL),
+    "sppn_geocode": QuerySpec("sppn_geocode", "Q11_SPPN", _SPPN_AREA_BY_POINT),
     "sppn_reverse": QuerySpec("sppn_reverse", "Q11_SPPN", _SPPN_AREAS_SQL),
 }
 
@@ -587,6 +594,20 @@ async def build_corpus(engine: AsyncEngine, *, cases_per_group: int) -> tuple[Be
         )
 
     for idx, row in enumerate(sppn_rows, start=1):
+        cases.append(
+            BenchmarkCase(
+                case_id=f"Q11-sppn-geocode-{idx:03d}",
+                group="Q11_SPPN",
+                sql_name="sppn_geocode",
+                params={
+                    "x": cast("float", row["x_5179"]),
+                    "y": cast("float", row["y_5179"]),
+                },
+                label=str(row["makarea_nm"] or row["makarea_id"]),
+                source="tl_sppn_makarea",
+                note="국가지점번호 geocode 보조 경로의 5179 point-in-polygon 조회",
+            )
+        )
         cases.append(
             BenchmarkCase(
                 case_id=f"Q11-sppn-reverse-{idx:03d}",
@@ -1164,6 +1185,8 @@ async def _sample_sppn_rows(
 ) -> list[Mapping[str, Any]]:
     sql = """
 SELECT sig_cd, makarea_id, makarea_nm,
+       ST_X(ST_PointOnSurface(geom)) AS x_5179,
+       ST_Y(ST_PointOnSurface(geom)) AS y_5179,
        ST_X(ST_Transform(ST_PointOnSurface(geom), 4326)) AS lon,
        ST_Y(ST_Transform(ST_PointOnSurface(geom), 4326)) AS lat
   FROM tl_sppn_makarea TABLESAMPLE SYSTEM (10) REPEATABLE (47)
@@ -1337,9 +1360,11 @@ def _redact_error(exc: BaseException) -> str:
 
 
 def _git_output(*args: str) -> str | None:
+    git_repo = _git_repo()
+    command = _git_command(git_repo, *args)
     try:
         result = subprocess.run(
-            ("git", *args),
+            command,
             check=True,
             capture_output=True,
             text=True,
@@ -1347,6 +1372,51 @@ def _git_output(*args: str) -> str | None:
     except (OSError, subprocess.CalledProcessError):
         return None
     return result.stdout.strip() or None
+
+
+def _git_command(git_repo: str | None, *args: str) -> tuple[str, ...]:
+    if git_repo is None:
+        return ("git", *args)
+    if _is_windows_path(git_repo):
+        return (_windows_git_executable(), "-C", git_repo, *args)
+    return ("git", "-C", git_repo, *args)
+
+
+def _git_repo() -> str | None:
+    env_repo = os.environ.get("KRADDR_GEO_GIT_REPO")
+    if env_repo:
+        return _as_windows_path(env_repo)
+    cwd = Path.cwd()
+    if cwd.name.startswith("python-kraddr-geo-") and cwd.name.endswith("-test"):
+        return f"F:/dev/{cwd.name.removesuffix('-test')}"
+    if (Path("/mnt/f/dev/python-kraddr-geo-codex") / ".git").exists():
+        return "F:/dev/python-kraddr-geo-codex"
+    return None
+
+
+def _as_windows_path(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    if normalized.startswith("/mnt/") and len(normalized) > 6 and normalized[6] == "/":
+        drive = normalized[5].upper()
+        return f"{drive}:{normalized[6:]}"
+    return normalized
+
+
+def _is_windows_path(path: str) -> bool:
+    return len(path) >= 3 and path[1:3] == ":/"
+
+
+def _windows_git_executable() -> str:
+    env_git = os.environ.get("KRADDR_GEO_GIT_EXE")
+    if env_git:
+        return env_git
+    for candidate in (
+        "/mnt/c/Program Files/Git/cmd/git.exe",
+        "/mnt/c/Program Files/Git/bin/git.exe",
+    ):
+        if Path(candidate).exists():
+            return candidate
+    return shutil.which("git.exe") or "git.exe"
 
 
 def _run_id() -> str:

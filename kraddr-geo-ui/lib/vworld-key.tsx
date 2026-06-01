@@ -1,10 +1,16 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, useCallback, useContext, useMemo } from "react";
 
 const STORAGE_KEY = "kraddr.geo.vworldApiKey";
+const RUNTIME_KEY_QUERY_KEY = ["runtime-config", "vworld-api-key"] as const;
 
 type VWorldKeySource = "env" | "browser" | "empty" | "loading";
+type RuntimeKeyRecord = {
+  browserKey: string;
+  envApiKey: string;
+};
 
 type VWorldKeyState = {
   apiKey: string;
@@ -26,42 +32,44 @@ const fallbackState: VWorldKeyState = {
 
 const VWorldKeyContext = createContext<VWorldKeyState>(fallbackState);
 
+async function loadRuntimeKey(): Promise<RuntimeKeyRecord> {
+  let envApiKey = "";
+
+  try {
+    const response = await fetch("/api/runtime-config", { cache: "no-store" });
+    const payload = (await response.json()) as { vworldApiKey?: unknown };
+    envApiKey = typeof payload.vworldApiKey === "string" ? payload.vworldApiKey.trim() : "";
+  } catch {
+    envApiKey = "";
+  }
+
+  const browserKey =
+    typeof window === "undefined" ? "" : window.localStorage.getItem(STORAGE_KEY)?.trim() ?? "";
+
+  return { browserKey, envApiKey };
+}
+
 export function VWorldKeyProvider({ children }: { children: React.ReactNode }) {
-  const [apiKey, setApiKey] = useState("");
-  const [envApiKey, setEnvApiKey] = useState("");
-  const [source, setSource] = useState<VWorldKeySource>("loading");
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const runtimeKeyQuery = useQuery({
+    queryKey: RUNTIME_KEY_QUERY_KEY,
+    queryFn: loadRuntimeKey,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false
+  });
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadRuntimeKey() {
-      try {
-        const response = await fetch("/api/runtime-config", { cache: "no-store" });
-        const payload = (await response.json()) as { vworldApiKey?: unknown };
-        const envKey = typeof payload.vworldApiKey === "string" ? payload.vworldApiKey.trim() : "";
-        const browserKey = window.localStorage.getItem(STORAGE_KEY)?.trim() ?? "";
-        if (!active) return;
-
-        setEnvApiKey(envKey);
-        setApiKey(browserKey || envKey);
-        setSource(browserKey ? "browser" : envKey ? "env" : "empty");
-      } catch {
-        const browserKey = window.localStorage.getItem(STORAGE_KEY)?.trim() ?? "";
-        if (!active) return;
-
-        setApiKey(browserKey);
-        setSource(browserKey ? "browser" : "empty");
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-
-    void loadRuntimeKey();
-    return () => {
-      active = false;
-    };
-  }, []);
+  const envApiKey = runtimeKeyQuery.data?.envApiKey ?? "";
+  const browserKey = runtimeKeyQuery.data?.browserKey ?? "";
+  const apiKey = browserKey || envApiKey;
+  const loading = runtimeKeyQuery.isLoading;
+  const source: VWorldKeySource = loading
+    ? "loading"
+    : browserKey
+      ? "browser"
+      : envApiKey
+        ? "env"
+        : "empty";
 
   const saveApiKey = useCallback((value: string) => {
     const trimmed = value.trim();
@@ -70,15 +78,19 @@ export function VWorldKeyProvider({ children }: { children: React.ReactNode }) {
     } else {
       window.localStorage.removeItem(STORAGE_KEY);
     }
-    setApiKey(trimmed || envApiKey);
-    setSource(trimmed ? "browser" : envApiKey ? "env" : "empty");
-  }, [envApiKey]);
+    queryClient.setQueryData<RuntimeKeyRecord>(RUNTIME_KEY_QUERY_KEY, (current) => ({
+      browserKey: trimmed,
+      envApiKey: current?.envApiKey ?? envApiKey
+    }));
+  }, [envApiKey, queryClient]);
 
   const resetApiKey = useCallback(() => {
     window.localStorage.removeItem(STORAGE_KEY);
-    setApiKey(envApiKey);
-    setSource(envApiKey ? "env" : "empty");
-  }, [envApiKey]);
+    queryClient.setQueryData<RuntimeKeyRecord>(RUNTIME_KEY_QUERY_KEY, (current) => ({
+      browserKey: "",
+      envApiKey: current?.envApiKey ?? envApiKey
+    }));
+  }, [envApiKey, queryClient]);
 
   const value = useMemo(
     () => ({ apiKey, envApiKey, loading, resetApiKey, saveApiKey, source }),

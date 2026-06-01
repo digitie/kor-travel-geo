@@ -711,10 +711,10 @@ PR #12까지의 `kraddr-geo-ui`는 Kakao Maps SDK를 기준으로 좌표 지도 
 `kraddr-geo-ui`의 디버그 지도는 Kakao Maps SDK가 아니라 VWorld WMTS + MapLibre GL JS를 사용한다.
 
 - 브라우저 환경변수는 `NEXT_PUBLIC_VWORLD_API_KEY`다. 실제 키는 `.env.local`에만 두고 저장소에는 커밋하지 않는다.
-- 지도 타일 URL, style 생성 규칙, CSS import는 `digitie/maplibre-vworld-js`의 package API를 사용한다. `kraddr-geo-ui/lib/vworld.ts`는 로컬 구현을 갖지 않고 `maplibre-vworld`의 `getVWorldTileUrl()`, `getVWorldStyle()`, `getVWorldMaxZoom()`, `isVWorldTileError()`, `redactVWorldUrl()`, `VWorldLayerType`를 재수출한다. 단, 내부 컴포넌트 import 안정성을 위해 `redactVWorldUrl as redactVWorldTileUrl` alias를 둔다.
-- `maplibre-vworld` package는 CI에서 SSH key 없이 설치할 수 있도록 검증된 최신 `main` SHA 또는 최신 stable release로 고정한다. 현재 확인된 최신 SHA는 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`이다. upstream이 npm registry release 또는 stable tag를 제공하면 lockfile drift와 검증 결과를 확인한 뒤 dependency spec을 바꾼다.
+- 지도 타일 URL, style 생성 규칙, CSS import는 `digitie/maplibre-vworld-js`의 package API를 사용한다. `kraddr-geo-ui/lib/vworld.ts`는 로컬 구현을 갖지 않고 `maplibre-vworld`의 `getVWorldTileUrl()`, `getVWorldStyle()`, `getVWorldMaxZoom()`, `isVWorldTileError()`, `redactVWorldUrl()`, `VWorldMap`, `Marker`, map hook, `VWorldLayerType`를 재수출한다.
+- `maplibre-vworld` package는 CI에서 SSH key 없이 설치할 수 있도록 검증된 최신 `main` SHA 또는 최신 stable release로 고정한다. 현재 확인된 최신 SHA는 `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`이다. 2026-05-31 현재 npm registry에는 아직 `maplibre-vworld` package가 없으므로 GitHub SHA를 유지한다. upstream이 npm registry release 또는 stable tag를 제공하면 lockfile drift와 검증 결과를 확인한 뒤 dependency spec을 바꾼다.
 - `maplibre-vworld/style.css`를 전역 CSS에서 import해 MapLibre GL 기본 CSS와 upstream package CSS를 한 경로에서 가져온다.
-- `VWorldMap` 컴포넌트 전체 대체는 단계적으로 검토한다. 현재 `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`는 디버그 화면 전용 동작, 즉 지도 클릭 시 `(lon, lat)` callback, key 미설정 fallback, transient overlay 임계치, marker 즉시 이동, SSR 차단 wrapper를 직접 보장한다. VWorld tile 오류 분류와 URL redaction은 `maplibre-vworld`의 `isVWorldTileError()`/`redactVWorldUrl()` helper를 사용한다.
+- `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper다. 디버그 화면 전용 동작, 즉 지도 클릭 시 `(lon, lat)` callback, key 미설정 fallback, transient overlay 임계치, API 응답 geometry overlay, SSR 차단 wrapper는 이 저장소에서 보장한다. VWorld tile 오류 분류와 URL redaction은 `maplibre-vworld`의 `isVWorldTileError()`/`redactVWorldUrl()` helper를 사용한다.
 - `digitie/maplibre-vworld-js`에서 패키징, 타입, CSS import, Next.js 호환성, VWorld layer/marker/cluster 공통 문제가 발견되면 이 저장소 전용 workaround에 그치지 않고 upstream도 적극 수정한다. 단, geocode/reverse 디버그 입력, API 응답 overlay, 정합성/성능/적재 상태 표시처럼 `kraddr-geo-ui`에만 의미가 있는 특화 기능은 이 저장소의 domain wrapper에서 구현한다.
 
 ### 근거
@@ -737,12 +737,12 @@ PR #12까지의 `kraddr-geo-ui`는 Kakao Maps SDK를 기준으로 좌표 지도 
 
 ### 결과
 
-- `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`가 지도 렌더링과 click/marker 동작을 담당한다.
+- `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`는 upstream `VWorldMap`/`Marker`/hook을 감싸며 click/marker/geometry/fallback/error UX를 담당한다.
 - `kraddr-geo-ui/components/vworld/LazyCoordinateMap.tsx`가 Next.js dynamic import, SSR 차단, skeleton UI를 담당한다.
 - `kraddr-geo-ui/lib/vworld.ts`는 upstream package의 VWorld helper 재수출 지점이다.
-- `maplibre-vworld` GitHub 의존성은 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 갱신했다. React 18 소비자와 upstream zod v4 peer dependency를 맞추기 위해 `kraddr-geo-ui`도 `zod ^4.4.3`을 직접 의존성으로 둔다.
+- `maplibre-vworld` GitHub 의존성은 `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 갱신했다. React 18 소비자와 upstream zod v4 peer dependency를 맞추기 위해 `kraddr-geo-ui`도 `zod ^4.4.3`을 직접 의존성으로 둔다.
 - 프론트엔드 문서와 외부 API 문서는 Kakao Maps가 아니라 VWorld WMTS 기준으로 갱신한다.
-- 후속 PR에서는 `CoordinateMap`의 디버그 UI 전용 동작을 `maplibre-vworld-js`의 재사용 가능한 props/hook/test로 옮길 수 있는지 검토한다. 이때 바로 컴포넌트 전체를 교체하지 않고 click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식을 항목별로 맞춘다.
+- 후속 PR에서는 API 응답 geometry overlay를 upstream `PolygonArea`/`RouteLine` primitive로 더 줄일 수 있는지 검토한다. 다만 geocode/reverse 입력 연결과 운영 콘솔 문구·임계치는 계속 이 저장소 domain wrapper에 둔다.
 
 ---
 
@@ -1033,7 +1033,7 @@ ADR-020과 ADR-028은 VWorld WMTS + MapLibre GL JS 전환 과정에서 `digitie/
 
 ### 결정
 
-`kraddr-geo-ui`는 `maplibre-vworld-js`를 항상 최신 확인 버전으로 소비한다. 현재 `kraddr-geo-ui/package.json`과 lockfile은 upstream commit `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`을 사용한다. 2026-05-28 T-044 문서-only 재확인에서는 `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`를 기준으로 package/API를 재확인했다. `v0.1.0`은 현재 UI 고정 SHA보다 26 commits ahead지만, 이번 T-044 범위에서는 dependency 갱신과 upstream 코드 수정을 하지 않는다.
+`kraddr-geo-ui`는 `maplibre-vworld-js`를 항상 최신 확인 버전으로 소비한다. 현재 `kraddr-geo-ui/package.json`과 lockfile은 upstream `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`을 사용한다. 2026-05-31 기준 package version은 `0.1.2`이고, `v0.1.2` 이후 `main` 차이는 문서 보강 commit 2개다. npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다.
 
 책임 경계는 다음과 같다.
 
@@ -1064,8 +1064,8 @@ ADR-020과 ADR-028은 VWorld WMTS + MapLibre GL JS 전환 과정에서 `digitie/
 
 ### 결과
 
-- 현재 `kraddr-geo-ui`는 `maplibre-vworld`를 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 유지한다.
-- T-044의 2026-05-28 결과는 "0.1.0 public API 기준 문서-only 재확인"이다. "모든 지도 관련 기능을 upstream으로 이동"이 아니라 "범용 지도 primitive는 upstream API로 소비하고, `kraddr-geo-ui` 특화 UX는 이 저장소에서 명확히 경계화"로 재정의한다.
+- 현재 `kraddr-geo-ui`는 `maplibre-vworld`를 `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 유지한다.
+- `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 전환했다. "모든 지도 관련 기능을 upstream으로 이동"이 아니라 "범용 지도 primitive는 upstream API로 소비하고, `kraddr-geo-ui` 특화 UX는 이 저장소에서 명확히 경계화"로 재정의한다.
 - 이후 maplibre-vworld 관련 작업은 최신성 확인, 책임 경계, 양쪽 저장소 검증 결과를 함께 남긴다.
 
 ---

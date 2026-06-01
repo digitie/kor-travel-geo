@@ -2,8 +2,9 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-05-31 갱신, by codex)
+## 현재 진척도 (2026-06-01 갱신, by codex)
 
+- ✅ React Doctor 정리 완료 + 반복 실패 패턴 문서화 — `VWorldKeyProvider`, `/admin/settings`, `/admin/consistency`, `/admin/load`, `/admin/ops`, `/admin/backups`, proxy route를 정리했고 `LoadConsole`/`BackupsPanel`/`ConsistencyPanel`을 controller + section 구조로 분해했다. 이어서 `CoordinateMap`, `GeocodeDebugger`, debug page metadata, `sido`/schema helper, `gen-types` script까지 정리해 `react-doctor` 결과를 score 100, warning 0으로 마무리했다. 작업 중 반복된 Git/명령 러너/NTFS 편집 실패는 `docs/agent-failure-patterns.md`에 원인과 우회 절차를 문서화했다.
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
 - ✅ `main` 브랜치를 문서·repo 설정만 남도록 정리
 - ✅ 신규 사양(`kraddr.geo` 패키지의 PostgreSQL+PostGIS 재구현 + `kraddr-geo-ui` 프론트엔드) 문서 골격을 `main`에 반영
@@ -71,6 +72,7 @@
 - ✅ T-041 상세주소 동 도형/구역 추가 레이어 검토 — 세종/경남 실제 `건물군 내 상세주소 동 도형`이 전자지도 `TL_SPBD_BULD`의 부분집합임을 확인했다. `구역의 도형`의 기존 행정/기초구역 5개 레이어는 전자지도와 key 기준 완전 중복이다. `TL_SCCO_GEMD`는 별도 overlay/분석 후보로 남기고, `TL_SPPN_MAKAREA`는 ADR-027에서 국가지점번호 보조 geocode/reverse 데이터 후보로 승격했다. 상세: `docs/t041-detail-zone-shape-layers.md`
 - ✅ T-037 geometry 포함 SHP 대형 레이어 적재 튜닝 — `TL_SPBD_BULD`를 projection staging table + 운영 테이블 insert-select 경로로 분기했다. 세종 단일 레이어는 기존 append 38.36초에서 18.59초로 줄었고, 경기도 1,649,975행 단일 레이어는 40분 17.15초에 성공했다. 세종 SHP 9개 레이어 public CLI 적재도 Docker DB에서 확인했다. 상세: `docs/t037-shp-geometry-tuning.md`
 - ✅ T-048 `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의 — upstream `main` 최신 commit `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`을 확인하고 `kraddr-geo-ui` dependency/lockfile을 갱신했다. ADR-032를 추가해 범용 VWorld/MapLibre 기능은 upstream, 지오코딩/역지오코딩/관리 UI 특화 기능은 이 저장소 domain wrapper에서 구현하는 원칙을 확정했다.
+- ✅ VWorld 최신 wrapper 전환 — upstream `maplibre-vworld-js` `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`을 확인하고 `kraddr-geo-ui` dependency/lockfile을 갱신했다. `CoordinateMap`은 직접 `maplibregl.Map` lifecycle을 소유하지 않고 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 전환했다. npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다.
 - ✅ T-049 운영 메타데이터·감사·릴리스 스키마 구현 — `ops` 스키마 6개 테이블, append-only audit trigger, active release partial unique index, redacted audit payload/hash helper, `/v1/admin/ops/*` API, `/admin/ops` UI, table stats snapshot capture, typed maintenance confirmation hash를 추가했다. 상세: `docs/t049-ops-metadata-schema.md`
 - ✅ T-045 원천 자료 기준월 선택과 대용량 업로드/적재 UX 구현 — source set 탐지/계획 DTO와 helper, JSON manifest 기반 upload set 저장소, `/v1/admin/uploads/*` 및 `/v1/admin/load-sources/*`, `AsyncAddressClient` 메서드, `kraddr-geo load full-set`, `/admin/load` 다중 파일/DND 업로드·기준월 확인 modal·업로드/적재 진행률·취소 UX를 추가했다. 혼합 기준월은 정확한 확인 문구가 있어야 plan을 만들 수 있고, batch payload는 명시 `children`과 source set 감사 필드를 남긴다. 상세: `docs/t045-source-set-load-ux.md`
 - ✅ T-046 적재 완료 DB 백업/복원 및 UI 구현 — `pg_dump -Fd --jobs` directory dump + `tar.zst` archive, `ops.artifacts` metadata, `/v1/admin/backups`, `/v1/admin/restores`, `/v1/admin/jobs/{job_id}/events`, `kraddr-geo backup/restore`, `/admin/backups` UI를 추가했다. 대구광역시 부분 DB 실제 적재 후 83MiB archive 백업, 새 DB 복원, row count 일치, geocode/reverse smoke `OK`를 확인했다. 상세: `docs/t046-db-backup-restore.md`
@@ -121,6 +123,7 @@
 - ✅ Python 라이브러리 API v2 단일화 — `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답의 표준 Python API로 승격하고, `geocode_v2/reverse_v2/search_v2/reverse_geocode` 공개 메서드를 제거했다. REST `/v1/*`는 내부 어댑터로 vworld 호환 응답을 유지한다. ADR-039와 `docs/api-reference/`를 갱신했다.
 - ✅ 디버그 UI v2 REST 전환 — `/debug/geocode`와 `/debug/reverse`를 `/v2/geocode`, `/v2/reverse` POST body 기반으로 전환하고, proxy가 `/v1/*`와 `/v2/*`를 모두 허용하도록 보강했다. Docker image `kraddr-geo-ui:debug-v2` 실행과 Windows Playwright e2e 6개를 통과시켰다.
 - ✅ VWorld 인증키 런타임 설정 UI — `/api/runtime-config`가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 읽고, `/admin/settings`에서 브라우저 localStorage override로 저장·수정·기본값 복원을 지원한다.
+- ✅ T-073 T-027/T-047 국가지점번호 포함 재적재·튜닝 재측정 — 새 Docker DB `kraddr-geo-t027-retune`(port `15435`)에서 전체 적재와 20260401~20260506 daily 전체 적용을 재실행했다. 최종 `mv_geocode_target=6,418,735`, `mv_geocode_text_search=6,418,735`, `tl_sppn_makarea=24,204`이며, T-047 SQL benchmark는 2,000 case/18,000 measurement/error 0이었다. Q11 c64 p95는 `sppn_geocode=90.22ms`, `sppn_reverse=87.45ms`다. 상세: `docs/t027-t047-sppn-retune-20260601.md`
 - ✅ 단독 구 이름 도로명주소 조회 보정 — `수지구 성복1로 35`처럼 복합 시군구명(`용인시 수지구`)의 마지막 `구`만 입력한 경우 exact 도로명 조회 실패 뒤 제한적 suffix retry로 찾는다. 기본 조회는 `sgg_nm = :sgg`를 유지하고, fallback은 `rn_nrm`/건물번호 exact 후보 안에서 `right(sgg_nm, ...)`를 적용한다.
 - ✅ 외부 API fallback 인증키 오류 명시화 — `fallback="api"`에서 백엔드 provider 키가 없으면 `E0503`, VWorld/Juso 인증키 오류는 `E0501`로 반환한다. UI 지도 키 `NEXT_PUBLIC_VWORLD_API_KEY`는 fallback 키가 아니며, 백엔드는 `KRADDR_GEO_VWORLD_API_KEY` 또는 `KRADDR_GEO_JUSO_API_KEY`를 읽는다.
 - ✅ 상위 주소 geocode 후보 — `/v2/geocode`에서 상세번호 없는 행정구역 입력은 `district` 검색 후보로 승격한다. `tl_scco_*` polygon의 `ST_PointOnSurface` 대표점을 쓰며, 실제 DB에서 `수지구` 첫 후보 `용인시 수지구(sig_cd=41465)`를 확인했다. 상세: `docs/t064-region-only-geocode.md`
@@ -134,11 +137,11 @@
 
 즉시 실행 가능한 대기 task는 없다. 남은 항목은 외부 조건이 필요한 T-063(N150/Odroid 실제 장비 실측)뿐이다. 새 task가 생기면 `docs/tasks.md`에 등록하고, 기존 PR 리뷰 audit 지시가 들어오면 해당 PR 범위를 먼저 확인한다.
 
-- 최신 T-027 실행 로그는 로컬 산출물 `artifacts/fullload/20260529_1643_final/` 아래에 있다. 이 경로는 git ignore 대상이다.
-- 최신 실제 DB 정합성은 `severity_max=ERROR`다. 남은 주요 항목은 C2 34,454건, C4 500m 초과 16건, C6 803건, C7 6,817건이다. C10은 `tl_juso_text=202603/202604`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605`를 row-level evidence로 보고 `WARN` 처리한다.
-- `maplibre-vworld-js` 0.1.0 기준 확인 결과는 `docs/t044-maplibre-vworld-010-review.md`에 있다. `v0.1.0` tag commit은 `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`이고, 현재 `kraddr-geo-ui` dependency는 아직 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`에 고정되어 있다. npm registry에는 아직 `maplibre-vworld@0.1.0`이 없으므로 실제 dependency 갱신은 별도 PR에서 GitHub tag/commit 기준으로 검증해야 한다. upstream 코드는 T-044에서 직접 수정하지 않는다.
+- 최신 T-027/T-047 재측정 로그는 로컬 산출물 `/home/digitie/dev/python-kraddr-geo-codex-test/artifacts/fullload/t027-t047-retune-20260531-232609/`와 `/home/digitie/dev/python-kraddr-geo-codex-test/artifacts/perf/t047-retune-standard-20260601-012814/` 아래에 있다. 이 경로는 git ignore 대상이다.
+- 최신 실제 DB 정합성은 `severity_max=ERROR`다. 전체 daily 적용 후 남은 주요 항목은 C2 29,410건(`missing_text=28,829`, `missing_resolve_key=581`), C4 12,189건(`over_500m=83`), C6 3,608건, C7 9,886건이다. C10은 `tl_juso_text=202603/202604/202605`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605` 기준월 혼합을 `WARN` 처리한다.
+- 최신 `maplibre-vworld-js` 기준 확인 결과는 `docs/frontend-package.md`와 ADR-020/ADR-032에 있다. 현재 `kraddr-geo-ui` dependency는 `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`이고, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA로 설치한다. upstream 코드는 이번 작업에서 직접 수정하지 않았다.
 - T-046 백업/복원은 1차 구현과 대구 부분 DB 실제 backup → restore 검증을 완료했다. 전국 T-027 DB의 `serving-ready` 백업 생성은 운영 보존 절차로 별도 실행한다.
-- T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper까지 완료했다. c64 tail은 여전히 checkout 대기 영향이 커서 `/admin/performance`와 운영 hardening에서 checkout/execute 분리 표시를 이어간다.
+- T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper, T-073 국가지점번호 geocode/reverse 재측정까지 완료했다. 최신 Q11 SQL path는 새 index 없이도 목표 범위 안이며, 다음 성능 후보는 Q4 `search_fuzzy`와 Q3 `fuzzy_geocode_wide`의 c64 tail이다.
 - PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
 - 디버그 UI의 실제 브라우저 회귀는 `kraddr-geo-ui` Docker image 또는 로컬 dev server를 공식 UI 포트 `13088`에 띄운 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test`로 실행한다. WSL에서는 Playwright를 실행하지 않는다. WSL headless Chromium은 `libasound.so.2` 같은 공유 라이브러리 누락으로 반복 실패하므로 `lint`/`type-check`/unit/build까지만 수행한다.
@@ -158,6 +161,8 @@
 ## 알려진 함정
 
 - **NTFS/WSL 분리**: Git source of truth는 NTFS worktree이고 테스트 실행은 ext4 미러다. ext4 미러에서 수정·commit하지 말고, 필요한 변경은 NTFS worktree에 반영한다.
+- **Git은 Windows Git 기준**: NTFS worktree의 `.git`/`gitdir` 포인터는 `F:/dev/...`를 유지한다. WSL에서 commit/branch metadata가 필요하면 Windows `git.exe`와 `KRADDR_GEO_GIT_REPO=F:/dev/python-kraddr-geo-codex`를 사용하고, WSL `git`을 위해 포인터를 `/mnt/f/...`로 바꾸지 않는다.
+- **PostgreSQL DB 재사용 기본값**: 검증 DB는 기본적으로 T-027 최종 적재 DB(`kraddr-geo-t027-final`, `/home/digitie/kraddr-geo-data/pgdata-final-20260529`, port `15434`)를 다시 올려 사용한다. 새 빈 Docker DB는 사용자가 클린 검증을 명시할 때만 만든다.
 - `pg_trgm.similarity_threshold`는 트랜잭션 단위로만 `SET LOCAL` — 전역 변경 금지 (SKILL.md §4-3)
 - 좌표 입력은 `(lon, lat)` 순서. `(lat, lon)`으로 받으면 한국 밖으로 가서 `InvalidCoordinateError` 발생
 - `ogr2ogr -append`와 `-overwrite`를 같이 쓰지 말 것 (GDAL Python binding으로 대체)
@@ -171,7 +176,7 @@
 - **실제 DB 적재 검증**: 로컬 PostGIS가 준비되어 있으면 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q`로 실제 `data/juso` 샘플 COPY와 MV 생성을 확인한다.
 - **프론트엔드 TypeScript 캐시**: `kraddr-geo-ui/tsconfig.tsbuildinfo`는 생성물이다. `.gitignore` 대상이며 PR에 포함하지 않는다.
 - **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
-- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 고정되어 있지만, T-044에서 `v0.1.0` commit `8559bf4...`의 `VWorldMap`, marker/layer primitive, tile error helper를 문서-only로 재확인했다. SHA/tag를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm으로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. Playwright e2e는 예외적으로 Windows Node/브라우저에서만 실행한다. `VWorldMap` 컴포넌트 대체는 범용 지도 primitive를 upstream API로 소비하고, key 미설정 fallback 문구, API 응답 overlay, transient overlay 임계치 같은 `kraddr-geo-ui` 특화 동작을 domain wrapper에 남기는 방식으로 진행한다.
+- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정되어 있고, `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook 기반 domain wrapper다. SHA/tag를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm 또는 Docker Node로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. Playwright e2e는 예외적으로 Windows Node/브라우저에서만 실행한다.
 - **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
 - **CodeGraph/Windows npm shim**: WSL에서 `codegraph`가 `/mnt/c/Users/.../npm/codegraph`를 가리키고 `node: not found`로 실패하면 Windows npm shim이 PATH에 앞선 것이다. WSL에서는 Linux installer 또는 Linux Node/npm 설치를 사용하고, worktree별 `.codegraph/`가 있으면 `codegraph sync`로 갱신한다.
 - **CodeGraph MCP 재시작 필요**: 프로젝트 루트 `.codex/config.toml`에 CodeGraph MCP 설정을 추가했지만 Codex Desktop 재시작 전에는 현재 세션 도구로 노출되지 않을 수 있다. 재시작 후 `codegraph_explore`가 보이면 컴포넌트 수정 전 영향도 확인에 우선 사용한다.

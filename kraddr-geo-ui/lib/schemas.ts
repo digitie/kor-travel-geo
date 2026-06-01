@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-export const addressTypeSchema = z.enum(["road", "parcel"]);
-export const fallbackSchema = z.enum(["none", "api"]);
+const addressTypeSchema = z.enum(["road", "parcel"]);
+const fallbackSchema = z.enum(["none", "api"]);
 
 export const geocodeFormSchema = z.object({
   address: z.string().min(1).max(200),

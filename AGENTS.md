@@ -30,6 +30,8 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\python-kraddr-geo` 계열 ch
 - **테스트 미러**: WSL ext4 `~/dev/python-kraddr-geo-<agent>-test/` 같은 임시 복사본. `rsync --delete`로 갱신하고 여기서는 commit/push하지 않는다.
 - **데이터(`data/`)**: NTFS main repo의 `data/`를 기준으로 두고, ext4 테스트 미러에서는 절대경로 또는 필요한 경우 심볼릭 링크로 참조한다.
 - **카피 정책**: 작업 시작/검증 전 NTFS worktree → ext4 테스트 미러로 복사한다. 작업 완료 후 별도 ext4 → NTFS 역카피를 source-of-truth 절차로 쓰지 않는다.
+- **Git 실행 기준**: NTFS worktree의 Git metadata는 Windows Git 기준(`F:\...`)을 유지한다. WSL 테스트 미러에서 실행하는 벤치마크·운영 스크립트가 Git commit/branch를 기록해야 하면 Windows `git.exe`와 `F:/dev/python-kraddr-geo-*` 경로를 사용한다. WSL `git`이 읽히도록 `.git`/`gitdir` 포인터를 `/mnt/f/...`로 바꾸지 않는다.
+- **PostgreSQL 검증 DB**: 별도 요청이 없으면 지난 T-027 최종 적재 Docker DB(`kraddr-geo-t027-final`, `KRADDR_PGDATA=/home/digitie/kraddr-geo-data/pgdata-final-20260529`, host port `15434`)를 재사용한다. 빈 DB 클린 적재/클린 스키마 검증은 사용자가 명시적으로 요구할 때만 새 pgdata로 수행한다.
 - **로컬 키**: `.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다.
 - **Playwright**: Windows Node/브라우저에서만 실행한다. WSL Playwright는 사용하지 않는다.
 
