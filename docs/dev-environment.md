@@ -2,6 +2,8 @@
 
 본 문서는 `python-kraddr-geo`(`kraddr.geo`)를 PC에서 개발할 때 필요한 시스템 의존성과 셋업 순서를 정리한다. 현재 정책은 NTFS의 Git checkout을 source of truth로 두고, 테스트와 장기 실행은 WSL ext4 테스트 미러에서 수행하는 방식이다(ADR-041).
 
+> **바로 따라할 런북은 `docs/agent-workflow.md`.** 이 문서는 시스템 패키지·rsync exclude 전체·CodeGraph·함정의 *reference*이고, 새 에이전트가 "어떤 순서로 무엇을 치면 동작하는 개발 루프가 되는가"는 런북이 단계별로 답한다. 미러 셸에서 `source scripts/agent_env.sh` 한 줄로 TMP·venv·Node PATH 함정을 한 번에 없앤다.
+
 ## 1. NTFS main repo와 WSL 테스트 미러
 
 Git source of truth는 NTFS main repo다. Windows에서도 같은 파일을 열어 볼 수 있고, Codex/Claude/Antigravity가 각자 고정 worktree를 가진다.
