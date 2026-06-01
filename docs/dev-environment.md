@@ -2,6 +2,8 @@
 
 본 문서는 `python-kraddr-geo`(`kraddr.geo`)를 PC에서 개발할 때 필요한 시스템 의존성과 셋업 순서를 정리한다. 현재 정책은 NTFS의 Git checkout을 source of truth로 두고, 테스트와 장기 실행은 WSL ext4 테스트 미러에서 수행하는 방식이다(ADR-041).
 
+> **바로 따라할 런북은 `docs/agent-workflow.md`.** 이 문서는 시스템 패키지·rsync exclude 전체·CodeGraph·함정의 *reference*이고, 새 에이전트가 "어떤 순서로 무엇을 치면 동작하는 개발 루프가 되는가"는 런북이 단계별로 답한다. 미러 셸에서 `source scripts/agent_env.sh` 한 줄로 TMP·venv·Node PATH 함정을 한 번에 없앤다.
+
 ## 1. NTFS main repo와 WSL 테스트 미러
 
 Git source of truth는 NTFS main repo다. Windows에서도 같은 파일을 열어 볼 수 있고, Codex/Claude/Antigravity가 각자 고정 worktree를 가진다.
@@ -94,7 +96,7 @@ git switch -c agent/codex-next origin/main
 
 이 상태에서 `git worktree prune`을 그대로 돌리면 **살아있는 worktree 등록까지 지워질 수 있으니** 바로 prune하지 않는다. 복구는 실제로 사용할 환경에서 `git worktree repair <worktree 경로>`를 실행해 포인터를 그 환경 기준으로 맞춘다(`.git`과 admin `gitdir` 양방향을 함께 고친다). 정리는 repair로 살아있는 worktree를 먼저 valid 상태로 만든 뒤 prune해, 폴더가 실제로 사라진 등록만 표적 제거한다.
 
-원칙(현재 정책): 각 worktree는 **자기 환경 전용**으로 운용한다. 에이전트 worktree는 한쪽 환경에서만 git을 다루고(예: 어떤 worktree는 Windows 네이티브 git, 다른 worktree는 WSL git), 같은 worktree를 두 환경에서 번갈아 조작하지 않는다. 특히 `git worktree prune`은 **그 worktree를 운용하는 환경에서만** 실행한다. 다른 환경에서 prune하면 정상 worktree가 그 환경 기준으로 `prunable`로 보여 등록이 삭제될 수 있다. 환경을 바꿔야 하면 먼저 `git worktree repair <worktree 경로>`로 포인터를 그 환경 기준으로 맞춘 뒤 사용한다.
+원칙(현재 정책): **모든 worktree의 Git metadata는 Windows Git 기준(`F:/dev/...`)으로 통일**한다(§1 참조). WSL에서 worktree에 git 작업이 필요하면 `.git`/`gitdir`을 `/mnt/f`로 고치지 말고 Windows `git.exe`를 쓴다(`"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/python-kraddr-geo-<agent> ...`). `git worktree prune`은 **Windows에서만** 실행한다 — WSL에서 돌리면 `F:/` 기준의 정상 worktree가 `prunable`로 보여 등록이 삭제될 수 있다. 포인터가 `/mnt/f`로 틀어져 git이 깨졌으면 Windows에서 `git worktree repair <worktree 경로>`로 복구한다.
 
 ### 1.1.1 반복되는 에이전트 실패 패턴
 
