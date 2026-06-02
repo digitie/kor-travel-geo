@@ -138,6 +138,9 @@ function LoadedCoordinateMap({
   }, []);
   const handleError = useCallback((event: MapLibreErrorEvent) => {
     if (isVWorldTileError(event)) {
+      if (isAbortedTileError(event)) {
+        return;
+      }
       transientTileErrorsRef.current += 1;
       warnMapTileError(event);
       const overlayMessage = tileErrorOverlayMessage(
@@ -334,6 +337,19 @@ function warnMapTileError(event: MapLibreErrorEvent): void {
     statusText: error.statusText,
     url: redactVWorldUrl(error.url)
   });
+}
+
+function isAbortedTileError(event: MapLibreErrorEvent): boolean {
+  const error = event.error as MapResourceError;
+  const message = error.message.toLowerCase();
+  const statusText = (error.statusText ?? "").toLowerCase();
+  return (
+    message.includes("aborted") ||
+    message.includes("aborterror") ||
+    message.includes("cancelled") ||
+    statusText.includes("aborted") ||
+    statusText.includes("cancelled")
+  );
 }
 
 function tileErrorOverlayMessage(

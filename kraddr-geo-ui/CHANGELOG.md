@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Playwright e2e에 좌측 메뉴 반복 이동 회귀 테스트를 추가했다. 메뉴 15개를 4회 순회하며 Next 기본 전역 오류 화면, page error, 비정상 request failure, `_rsc` client routing 요청 부재를 확인한다.
 - `/debug/geocode`에 반경 행정구역 디버거를 추가했다. POI 좌표, 반경 km, 행정구역 레벨을 React Hook Form/Zod로 검증하고, TanStack Query mutation으로 `/v2/regions/within-radius`를 호출하며, Zustand로 마지막 초안과 결과를 보존한다.
 - shadcn/ui source components(`Button`, `Card`, `Checkbox`, `Field`, `Input`)와 `components.json`을 추가해 신규 디버그 폼을 구성한다.
 - Playwright e2e에 실제 Python API `.env` VWorld 키를 사용해 MapLibre canvas와 VWorld WMTS 타일 응답을 확인하는 지도 로딩 테스트를 추가했다.
@@ -19,6 +20,7 @@
 - Vitest 단위 테스트: 시도 추론, load workflow reducer, consistency severity, schema name generation, API path helper.
 
 ### Changed
+- 좌측 메뉴와 Consistency report 목록은 `DocumentNavLink`를 사용한다. `next/link`는 유지하되 `prefetch={false}`와 document navigation으로 이동해 내부 운영 UI에서 Next App Router client transition/RSC fetch 실패 화면을 피한다.
 - `/api/runtime-config`는 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다.
 - 프론트엔드 실행과 정적 검증은 WSL ext4 미러의 Linux Node/npm에서 수행하고, Playwright 실행과 브라우저만 Windows에서 수행하도록 문서화했다.
 - `/admin/` 기본 진입 시 404 대신 `/debug/geocode`로 이동하도록 했다.
@@ -32,3 +34,7 @@
 - upstream zod v4 peer dependency에 맞춰 `zod ^4.4.3`을 직접 의존성으로 둔다.
 - VWorld tile transient error는 즉시 fatal overlay로 고정하지 않고 redacted warning과 누적 임계치로 처리한다.
 - VWorld `Hybrid`/`Satellite`는 z18, `Base`/`gray`/`midnight`는 z19 maxZoom을 적용한다.
+
+### Fixed
+- Chrome/Firefox에서 좌측 메뉴 이동 중 Next 기본 전역 오류 화면(`This page couldn’t load`, `Reload to try again, or go back.`)으로 떨어질 수 있던 문제를 수정했다.
+- VWorld 타일 요청이 페이지 이동 중 정상 취소될 때(`ERR_ABORTED`, `NS_BINDING_ABORTED`) 지도 타일 불안정 overlay와 warning 카운트에 반영하지 않도록 했다.
