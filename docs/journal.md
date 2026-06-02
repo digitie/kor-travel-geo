@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-02 23:20 (PR #114~#115 리뷰 감사와 실제 DB 테스트 보강)
+
+**작업**: PR #114부터 최신 PR #115까지 conversation comment, review body, inline review thread를 모두 확인하고, 사용자 지시에 맞춰 PR #114 기능의 실제 PostgreSQL 회귀 테스트를 추가했다.
+
+**반영**:
+- `docs/postmerge-review-fixups-pr114-pr115.md`에 PR별 리뷰 표면 확인 결과를 기록했다. 두 PR 모두 conversation comment 0건, review body 0건, review thread 0건이었다.
+- `tests/integration/test_optional_real_postgres_regions.py`를 추가했다. `KRADDR_GEO_TEST_PG_DSN`이 설정된 실제 DB에서 `tl_scco_emd`의 `ST_PointOnSurface` 좌표를 사용해 `AsyncAddressClient.regions_within_radius()`가 `sido`/`sigungu`/`emd` contains 후보를 반환하는지 검증한다.
+- `docs/resume.md`, `docs/tasks.md`에 이번 감사와 테스트 보강 상태를 반영했다.
+
+**검증**:
+- ext4 테스트 미러에서 `python -m pytest tests/integration/test_optional_real_postgres_regions.py -q` → `1 skipped`.
+- `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kraddr_geo`로 T-027 최종 DB 대상 새 테스트 실행 → `1 passed`.
+- `python -m ruff check .`, `python -m mypy src/kraddr/geo`, `lint-imports`, `python -m pytest -q` → 통과(`294 passed, 9 skipped`).
+
+**발견**:
+- PR #114와 PR #115는 GitHub의 세 리뷰 표면 모두에 남은 코멘트가 없었다.
+
 ## 2026-06-02 22:05 (세션 실행 실수 복기와 재발 방지 런북 보강)
 
 **작업**: 이번 세션에서 반복된 CLI 접근, npm 서버 파라미터, WSL/Windows 실행 분리, 환경 설정, 서버 정리 실수를 복기해 문서화했다. 같은 명령을 여러 번 반복하지 않도록 실패 유형별 전환 규칙을 추가했다.

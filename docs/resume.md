@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-02 갱신, by codex)
 
+- ✅ PR #114~#115 리뷰 감사와 실제 DB 테스트 보강 — GitHub conversation comment, review body, inline review thread를 모두 확인했고 두 PR 모두 코멘트 0건이었다. PR #114 기능은 `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 실제 PostgreSQL 테스트를 추가해 `AsyncAddressClient.regions_within_radius()`가 실제 `tl_scco_*` 행정구역 도형에서 `sido`/`sigungu`/`emd` contains 후보를 반환하는지 검증한다. 상세: `docs/postmerge-review-fixups-pr114-pr115.md`
 - ✅ 이번 세션 실행 실수 복기 문서화 — `docs/agent-failure-patterns.md`와 `docs/agent-workflow.md`에 `gh --repo` 사용, npm script 인자 `--` 전달, WSL Linux Node 초기화, WSL UI 서버 + Windows Playwright 실행, server PID 종료, CodeGraph sync/status 순서, generated `next-env.d.ts` 복구, 같은 실패 명령 반복 금지 규칙을 추가했다.
 - ✅ POI 반경 행정구역 v2 API와 디버그 UI 구현 — `POST /v2/regions/within-radius`와 `AsyncAddressClient.regions_within_radius()`를 추가해 POI `(lon, lat)` 기준 반경 `radius_km` 안의 `sido`/`sigungu`/`emd`를 반환한다. `contains`는 중심점을 포함하는 행정구역, `overlaps`는 반경에 걸친 인접 행정구역이다. `/debug/geocode`에는 React Hook Form/Zod/TanStack Query/Zustand/shadcn/ui 기반 디버거를 추가했다.
 - ✅ VWorld 키와 프론트엔드 검증 정책 갱신 — `/api/runtime-config`가 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용하고, 없으면 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 프론트엔드 실행·lint·type-check·unit·build·React Doctor는 WSL ext4 미러에서 Linux Node/npm으로 수행하고, e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행한다. 실제 지도 e2e는 WSL production `next start --hostname 0.0.0.0` 서버에 Windows Playwright를 붙여 MapLibre canvas와 VWorld WMTS 타일 응답을 확인했다.
