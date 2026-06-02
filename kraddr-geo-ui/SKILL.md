@@ -9,6 +9,8 @@
 
 ## 검증
 
+프론트엔드 실행과 정적 검증은 WSL ext4 테스트 미러의 Linux Node/npm에서 수행한다. Playwright e2e와 실제 브라우저 검증은 Windows Node/브라우저에서만 수행하고, Windows Playwright를 WSL UI 서버에 붙인다.
+
 ```bash
 npm run type-check
 npm run test

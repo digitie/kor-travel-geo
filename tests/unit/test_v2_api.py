@@ -30,7 +30,10 @@ from kraddr.geo.dto.v2 import (
     GeocodeV2Input,
     GeocodeV2Response,
     GeometryV2,
+    RegionsWithinRadiusInput,
+    RegionsWithinRadiusResponse,
     RegionV2,
+    RegionWithinRadiusItem,
     ReverseV2Input,
     SearchV2Input,
     SearchV2Response,
@@ -272,13 +275,117 @@ async def test_v2_geocode_route_uses_client_dependency() -> None:
     assert body["candidates"][0]["match_kind"] == "road"
 
 
+@pytest.mark.asyncio
+async def test_async_client_regions_within_radius_wraps_geometry_repo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kraddr.geo.infra.geometry_repo import GeometryRepository
+
+    async def fake_regions_within_radius(
+        self: GeometryRepository,
+        **kwargs: Any,
+    ) -> dict[str, tuple[RegionWithinRadiusItem, ...]]:
+        assert kwargs == {
+            "lon": 126.978,
+            "lat": 37.5665,
+            "radius_km": 3.0,
+            "levels": ("sigungu", "emd"),
+        }
+        return {
+            "sigungu": (
+                RegionWithinRadiusItem(
+                    code="11110",
+                    name="종로구",
+                    relation="contains",
+                ),
+                RegionWithinRadiusItem(
+                    code="11140",
+                    name="중구",
+                    relation="overlaps",
+                ),
+            ),
+            "emd": (
+                RegionWithinRadiusItem(
+                    code="11110119",
+                    name="세종로",
+                    relation="contains",
+                ),
+            ),
+        }
+
+    monkeypatch.setattr(GeometryRepository, "regions_within_radius", fake_regions_within_radius)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.regions_within_radius(
+        lon=126.978,
+        lat=37.5665,
+        radius_km=3.0,
+        levels=("sigungu", "emd"),
+    )
+
+    assert response.center.lon == pytest.approx(126.978)
+    assert response.radius_km == pytest.approx(3.0)
+    assert [item.code for item in response.sigungu] == ["11110", "11140"]
+    assert response.sigungu[0].relation == "contains"
+    assert response.emd[0].code == "11110119"
+    assert response.sido == ()
+
+
+@pytest.mark.asyncio
+async def test_v2_regions_within_radius_route_uses_client_dependency() -> None:
+    class FakeClient:
+        async def regions_within_radius(self, **kwargs: Any) -> RegionsWithinRadiusResponse:
+            assert kwargs == {
+                "lon": 126.978,
+                "lat": 37.5665,
+                "radius_km": 3.0,
+                "levels": ("sigungu",),
+            }
+            return RegionsWithinRadiusResponse(
+                center={"lon": kwargs["lon"], "lat": kwargs["lat"]},
+                radius_km=kwargs["radius_km"],
+                sigungu=(
+                    RegionWithinRadiusItem(
+                        code="11110",
+                        name="종로구",
+                        relation="contains",
+                    ),
+                ),
+            )
+
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: FakeClient()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
+        response = await http_client.post(
+            "/v2/regions/within-radius",
+            json={
+                "lon": 126.978,
+                "lat": 37.5665,
+                "radius_km": 3.0,
+                "levels": ["sigungu", "sigungu"],
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["center"] == {"lon": 126.978, "lat": 37.5665}
+    assert body["radius_km"] == pytest.approx(3.0)
+    assert body["sigungu"] == [
+        {"code": "11110", "name": "종로구", "relation": "contains"}
+    ]
+    assert body["emd"] == []
+
+
 def test_async_client_has_unsuffixed_v2_python_api() -> None:
     assert hasattr(AsyncAddressClient, "geocode")
     assert hasattr(AsyncAddressClient, "reverse")
     assert hasattr(AsyncAddressClient, "search")
+    assert hasattr(AsyncAddressClient, "regions_within_radius")
     assert not hasattr(AsyncAddressClient, "geocode_v2")
     assert not hasattr(AsyncAddressClient, "reverse_v2")
     assert not hasattr(AsyncAddressClient, "search_v2")
+    assert not hasattr(AsyncAddressClient, "regions_within_radius_v2")
     assert not hasattr(AsyncAddressClient, "reverse_geocode")
 
 
@@ -301,6 +408,26 @@ def test_v2_input_preserves_bbox() -> None:
     assert geocode.bbox.min_lon == pytest.approx(127.0)
     assert search.bbox is not None
     assert search.bbox.max_lat == pytest.approx(37.6)
+
+
+def test_regions_within_radius_input_defaults_and_dedupes_levels() -> None:
+    defaulted = RegionsWithinRadiusInput(lon=126.978, lat=37.5665)
+    explicit = RegionsWithinRadiusInput(
+        lon=126.978,
+        lat=37.5665,
+        radius_km=5.0,
+        levels=["sigungu", "emd", "sigungu"],
+    )
+
+    assert defaulted.radius_km == pytest.approx(3.0)
+    assert defaulted.levels == ("sigungu", "emd")
+    assert explicit.levels == ("sigungu", "emd")
+    assert explicit.center.lon == pytest.approx(126.978)
+
+
+def test_regions_within_radius_input_rejects_empty_levels() -> None:
+    with pytest.raises(ValueError, match="levels must include"):
+        RegionsWithinRadiusInput(lon=126.978, lat=37.5665, levels=[])
 
 
 def test_geocode_v2_maps_external_provider_sources() -> None:

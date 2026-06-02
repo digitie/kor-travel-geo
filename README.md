@@ -112,7 +112,7 @@ npm run dev -- --port 13088   # http://localhost:13088
 ```
 
 > [!TIP]
-> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 좌표 프리뷰로 대체됩니다. 백엔드 API 요청은 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
+> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽어 전달합니다. MapLibre 렌더링은 `maplibre-vworld` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
 
 ---
 
@@ -209,7 +209,7 @@ asyncio.run(main())
 | **juso 검색** | `KRADDR_GEO_JUSO_API_KEY` | 도로명/지번 검색 폴백 |
 | **juso 좌표** | `KRADDR_GEO_JUSO_COORD_API_KEY` | 좌표 변환 폴백 (미설정 시 검색 키 재사용) |
 | **epost** | `KRADDR_GEO_EPOST_API_KEY` | 사서함·다량배달처 우편번호 자동 다운로드 |
-| **VWorld WMTS** | `NEXT_PUBLIC_VWORLD_API_KEY` | 디버그 UI(`kraddr-geo-ui`) 지도 렌더링용 |
+| **VWorld WMTS** | `KRADDR_GEO_VWORLD_API_KEY`, `NEXT_PUBLIC_VWORLD_API_KEY` | 디버그 UI(`kraddr-geo-ui`) 지도 렌더링용. Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용하고, 없으면 UI 전용 키를 사용 |
 
 ---
 
@@ -224,7 +224,7 @@ asyncio.run(main())
 - 운영자는 도로명주소 안내시스템, 공공데이터포털, vworld의 최신 약관과 API 호출 한도를 직접 확인하고 관리해야 합니다.
 - 본 패키지는 주소 정규화 및 지오코딩을 돕는 '기술적 도구'에 불과하며, 토지·건축물·행정구역 경계의 법적 효력이나 공적 증명을 보장하지 않습니다. 법적 판단이 필요한 업무는 해당 기관의 공식 고시를 기준으로 검증하십시오.
 
-디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 최신 확인 SHA 또는 stable release를 package dependency로 소비합니다. 2026-05-31 현재 npm registry에는 `maplibre-vworld` package가 없어 GitHub `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정합니다. `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 두고, VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 upstream에서 소비합니다. 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI fallback처럼 이 저장소 특화 기능은 `kraddr-geo-ui`에 남깁니다.
+디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kraddr-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 최신 확인 SHA 또는 stable release를 package dependency로 소비합니다. 2026-05-31 현재 npm registry에는 `maplibre-vworld` package가 없어 GitHub `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정합니다. `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 두고, VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 upstream에서 소비합니다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않습니다. 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI 전용 UX처럼 이 저장소 특화 기능은 `kraddr-geo-ui`에 남깁니다.
 
 ---
 

@@ -2,8 +2,10 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-01 갱신, by codex)
+## 현재 진척도 (2026-06-02 갱신, by codex)
 
+- ✅ POI 반경 행정구역 v2 API와 디버그 UI 구현 — `POST /v2/regions/within-radius`와 `AsyncAddressClient.regions_within_radius()`를 추가해 POI `(lon, lat)` 기준 반경 `radius_km` 안의 `sido`/`sigungu`/`emd`를 반환한다. `contains`는 중심점을 포함하는 행정구역, `overlaps`는 반경에 걸친 인접 행정구역이다. `/debug/geocode`에는 React Hook Form/Zod/TanStack Query/Zustand/shadcn/ui 기반 디버거를 추가했다.
+- ✅ VWorld 키와 프론트엔드 검증 정책 갱신 — `/api/runtime-config`가 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용하고, 없으면 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 프론트엔드 실행·lint·type-check·unit·build·React Doctor는 WSL ext4 미러에서 Linux Node/npm으로 수행하고, e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행한다. 실제 지도 e2e는 WSL production `next start --hostname 0.0.0.0` 서버에 Windows Playwright를 붙여 MapLibre canvas와 VWorld WMTS 타일 응답을 확인했다.
 - ✅ `/admin` 기본 라우트와 React Doctor 후속 규칙 반영 — `kraddr-geo-ui/app/admin/page.tsx`를 추가해 `/admin` 진입을 `/debug/geocode`로 redirect하게 했고, 프론트엔드 작업 후 `react-doctor` 실행 → 경고 수정 → 재실행 규칙을 `AGENTS.md`, `SKILL.md`, `docs/frontend-package.md`, `kraddr-geo-ui` 문서에 반영했다. fresh ext4 mirror에서 React Doctor score 100/warning 0, frontend `gen:types`/lint/type/unit/build, `/admin` HTTP redirect를 확인했다.
 - ✅ React Doctor 정리 완료 + 반복 실패 패턴 문서화 — `VWorldKeyProvider`, `/admin/settings`, `/admin/consistency`, `/admin/load`, `/admin/ops`, `/admin/backups`, proxy route를 정리했고 `LoadConsole`/`BackupsPanel`/`ConsistencyPanel`을 controller + section 구조로 분해했다. 이어서 `CoordinateMap`, `GeocodeDebugger`, debug page metadata, `sido`/schema helper, `gen-types` script까지 정리해 `react-doctor` 결과를 score 100, warning 0으로 마무리했다. 작업 중 반복된 Git/명령 러너/NTFS 편집 실패는 `docs/agent-failure-patterns.md`에 원인과 우회 절차를 문서화했다.
 - ✅ 이전 SpatiaLite 기반 `kraddr.geo` 구현을 `v1` 브랜치로 이관
@@ -145,8 +147,8 @@
 - T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper, T-073 국가지점번호 geocode/reverse 재측정까지 완료했다. 최신 Q11 SQL path는 새 index 없이도 목표 범위 안이며, 다음 성능 후보는 Q4 `search_fuzzy`와 Q3 `fuzzy_geocode_wide`의 c64 tail이다.
 - PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
-- 디버그 UI의 실제 브라우저 회귀는 `kraddr-geo-ui` Docker image 또는 로컬 dev server를 공식 UI 포트 `13088`에 띄운 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test`로 실행한다. WSL에서는 Playwright를 실행하지 않는다. WSL headless Chromium은 `libasound.so.2` 같은 공유 라이브러리 누락으로 반복 실패하므로 `lint`/`type-check`/unit/build까지만 수행한다.
-- VWorld 지도 키는 `kraddr-geo-ui/.env.local` 또는 Docker `NEXT_PUBLIC_VWORLD_API_KEY` runtime env에서 읽는다. 외부 주소 API fallback 키는 루트 `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`다. `/admin/settings`의 저장값은 브라우저 localStorage override이며 저장소에 커밋하지 않는다.
+- 디버그 UI의 실제 브라우저 회귀는 UI 서버를 WSL ext4 미러에서 실행한 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://<WSL_IP>:13088 npx playwright test`로 실행한다. Playwright 실행과 브라우저만 Windows에서 사용하고, WSL에서는 Playwright를 실행하지 않는다. WSL headless Chromium은 `libasound.so.2` 같은 공유 라이브러리 누락으로 반복 실패하므로 `lint`/`type-check`/unit/build/React Doctor까지만 수행한다.
+- VWorld 지도 키는 `/api/runtime-config`가 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽는다. 이 값이 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. `/admin/settings`의 저장값은 브라우저 localStorage override이며 저장소에 커밋하지 않는다.
 
 ## 작업 시작 전 확인할 것
 
@@ -178,7 +180,7 @@
 - **프론트엔드 TypeScript 캐시**: `kraddr-geo-ui/tsconfig.tsbuildinfo`는 생성물이다. `.gitignore` 대상이며 PR에 포함하지 않는다.
 - **Next.js 16 Route Handler context**: `app/api/proxy/[...path]/route.ts`의 `params`는 Promise다. Next.js 14 예시처럼 동기 객체로 받으면 type-check가 실패한다.
 - **React Doctor**: 모든 프론트엔드 작업 뒤에는 `kraddr-geo-ui`에서 `npx react-doctor@latest . --offline --verbose --json`을 실행한다. 경고가 나오면 수정하고 재실행해 새 경고가 남지 않은 상태로 마무리한다.
-- **VWorld debug map**: 실제 키는 `NEXT_PUBLIC_VWORLD_API_KEY`로 로컬 `.env.local`에만 둔다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정되어 있고, `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook 기반 domain wrapper다. SHA/tag를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm 또는 Docker Node로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. Playwright e2e는 예외적으로 Windows Node/브라우저에서만 실행한다.
+- **VWorld debug map**: runtime config는 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용한다. `maplibre-vworld`는 현재 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정되어 있고, `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook 기반 domain wrapper다. SHA/tag를 바꾸면 먼저 최신 `main` 또는 stable release를 확인하고 Linux Node/npm 또는 Docker Node로 `npm ci`/`lint`/`type-check`/`test`/Next.js build를 다시 확인한다. Windows `npm`은 WSL ext4 경로에서 UNC cleanup 오류를 낼 수 있으므로 사용하지 않는다. Playwright e2e는 Windows Node/브라우저에서만 실행하되, UI 서버는 WSL에서 실행한다.
 - **PR 리뷰 확인 루틴**: PR 리뷰를 반영할 때는 `gh pr view <번호> --json comments,reviews,latestReviews`와 GitHub review thread fetch 스크립트를 함께 확인한다. conversation comment와 formal review body가 따로 존재할 수 있으므로, 제목이 비슷하더라도 마지막 코멘트까지 읽고 merge condition을 문서/코드 체크리스트로 옮긴다.
 - **CodeGraph/Windows npm shim**: WSL에서 `codegraph`가 `/mnt/c/Users/.../npm/codegraph`를 가리키고 `node: not found`로 실패하면 Windows npm shim이 PATH에 앞선 것이다. WSL에서는 Linux installer 또는 Linux Node/npm 설치를 사용하고, worktree별 `.codegraph/`가 있으면 `codegraph sync`로 갱신한다.
 - **CodeGraph MCP 재시작 필요**: 프로젝트 루트 `.codex/config.toml`에 CodeGraph MCP 설정을 추가했지만 Codex Desktop 재시작 전에는 현재 세션 도구로 노출되지 않을 수 있다. 재시작 후 `codegraph_explore`가 보이면 컴포넌트 수정 전 영향도 확인에 우선 사용한다.

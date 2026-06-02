@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-02 21:10 (`/v2/regions/within-radius`와 VWorld 지도 실키 검증)
+
+**작업**: `krtourmap` ADR-045 방향에 맞춰 POI 좌표 기준 반경 `n km` 안에 포함되는 시도·시군구·읍면동을 반환하는 v2 API와 Python client 함수를 추가하고, admin/debug UI에서 해당 함수를 직접 디버깅할 수 있게 했다. VWorld 지도 키는 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽도록 바꿨고, 확보한 키로 실제 MapLibre/VWorld WMTS 로딩을 검증했다.
+
+**반영**:
+- `RegionsWithinRadiusInput`/`Response` DTO, `AsyncAddressClient.regions_within_radius()`, `POST /v2/regions/within-radius`, PostGIS raw SQL repository 함수를 추가했다.
+- SQL은 입력 POI를 EPSG:5179로 한 번만 변환하고, `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`의 원본 geometry에 `ST_DWithin`/`ST_Covers`를 적용해 index 사용 방향을 유지했다.
+- `/debug/geocode`에 `RegionsWithinRadiusDebugger`를 추가했다. 폼은 React Hook Form/Zod, 요청은 TanStack Query mutation, 마지막 초안/결과는 Zustand store, UI primitive는 shadcn/ui source component로 구성했다.
+- `kraddr-geo-ui` runtime config가 프로세스 환경 또는 저장소 루트 `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 먼저 읽고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용하도록 했다.
+- `openapi.json`, frontend generated type/schema, v2 API reference, frontend/backend 문서, CHANGELOG, resume를 갱신했다. 프론트엔드 실행은 WSL Linux Node/npm, Playwright 실행과 브라우저는 Windows로 분리한다는 정책도 문서에 보강했다.
+- MapLibre 자체는 `maplibre-vworld` package 경계를 유지하고, 별도 지도 fallback 구현을 만들지 않는다고 문서 경계를 정리했다.
+
+**검증**:
+- Backend ext4 mirror: `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `TMPDIR=/tmp TMP=/tmp TEMP=/tmp pytest -q` → `294 passed, 8 skipped`.
+- Frontend ext4 mirror: `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
+- React Doctor: `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
+- Windows Playwright: WSL production UI 서버(`next start --hostname 0.0.0.0 --port 13090`)를 대상으로 `PLAYWRIGHT_BASE_URL=http://<WSL_IP>:13090 npx playwright test --config playwright.config.ts --project chromium --workers 1` → `14 passed`.
+- 실제 지도 테스트: `vworld-map.spec.ts`가 runtime config에서 Python `.env` VWorld 키가 비어 있지 않음을 확인하고, `/debug/geocode`의 MapLibre canvas와 `https://api.vworld.kr/req/wmts/1.0.0/` 타일 응답을 확인했다. 키 값 자체는 로그에 남기지 않았다.
+
+**발견**:
+- Windows `cmd.exe`에서 WSL 서버 대상 e2e를 실행할 때는 `cmd.exe /V:ON /C "set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:<PORT>&& npx playwright test ..."` 형태가 안정적이었다.
+- CodeGraph MCP 도구는 현재 세션에 노출되지 않아 CLI `codegraph sync/status/impact`로 UI 영향 범위를 임시 확인했다.
+
 ## 2026-06-01 19:52 (`/admin` 기본 라우트와 React Doctor 후속 규칙)
 
 **작업**: `/admin/` 진입 시 404가 나오지 않도록 기본 admin 라우트를 추가하고, 모든 프론트엔드 작업 뒤 React Doctor를 실행해 경고를 수정·재실행하는 규칙을 문서화했다.

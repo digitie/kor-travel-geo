@@ -13,6 +13,7 @@ from kraddr.geo.exceptions import InvalidInputError
 from kraddr.geo.infra import (
     admin_repo,
     geocode_repo,
+    geometry_repo,
     pobox_repo,
     reverse_repo,
     search_repo,
@@ -74,6 +75,22 @@ def test_search_repo_supports_district_candidates_from_admin_polygons() -> None:
     assert "ST_PointOnSurface" in sql
     assert "map_region_search" in source
     assert 'search_type == "district"' in source
+
+
+def test_regions_within_radius_sql_keeps_region_geometry_indexable() -> None:
+    sql = "\n".join(str(query) for query in geometry_repo._REGIONS_WITHIN_RADIUS_SQL.values())
+
+    assert "ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179)" in sql
+    assert "FROM tl_scco_ctprvn" in sql
+    assert "FROM tl_scco_sig" in sql
+    assert "FROM tl_scco_emd" in sql
+    assert "ST_DWithin(c.geom, target.geom, :radius_m)" in sql
+    assert "ST_DWithin(s.geom, target.geom, :radius_m)" in sql
+    assert "ST_DWithin(e.geom, target.geom, :radius_m)" in sql
+    assert "ST_Covers(c.geom, target.geom)" in sql
+    assert "ST_Transform(c.geom" not in sql
+    assert "ST_Transform(s.geom" not in sql
+    assert "ST_Transform(e.geom" not in sql
 
 
 def test_text_search_queries_use_slim_mv_before_target_join() -> None:

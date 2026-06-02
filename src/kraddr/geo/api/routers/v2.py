@@ -9,6 +9,8 @@ from kraddr.geo.client import AsyncAddressClient
 from kraddr.geo.dto.v2 import (
     GeocodeV2Input,
     GeocodeV2Response,
+    RegionsWithinRadiusInput,
+    RegionsWithinRadiusResponse,
     ReverseV2Input,
     ReverseV2Response,
     SearchV2Input,
@@ -68,4 +70,21 @@ async def search_v2(
         sig_cd=req.sig_cd,
         bjd_cd=req.bjd_cd,
         bbox=req.bbox,
+    )
+
+
+@router.post(
+    "/regions/within-radius",
+    response_model=RegionsWithinRadiusResponse,
+    response_model_exclude_none=True,
+)
+async def regions_within_radius_v2(
+    req: RegionsWithinRadiusInput,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RegionsWithinRadiusResponse:
+    return await client.regions_within_radius(
+        lon=req.lon,
+        lat=req.lat,
+        radius_km=req.radius_km,
+        levels=req.levels,
     )

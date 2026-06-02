@@ -13,7 +13,7 @@
 ## 현재 구현 범위
 
 - v1 지오코딩 fallback은 기존처럼 `vworld`, `juso` 순서로만 시도한다. 키가 없는 provider는 건너뛴다.
-- v2는 `POST /v2/geocode`, `POST /v2/reverse`, `POST /v2/search`를 제공한다.
+- v2는 `POST /v2/geocode`, `POST /v2/reverse`, `POST /v2/search`, `POST /v2/regions/within-radius`를 제공한다.
 - v2 응답의 `source`는 `local`, `vworld`, `juso`, `cache` 중 하나다.
 - v2는 Kakao/Naver/Google/VWorld API를 직접 wrapping하지 않는다. 각 API의 후보 목록, 주소 구성요소, bbox/viewport, 장소 검색 스타일을 참고한 자체 schema다.
 - `CandidateV2.distance_m`은 정식 거리 필드이고, `confidence`는 endpoint-local 점수다. reverse는 `1 - distance_m / radius_m`, search는 검색 score, geocode는 주소 매칭 신뢰도를 뜻한다.
@@ -27,6 +27,7 @@
 - [v2 geocode](v2/geocode.md)
 - [v2 reverse](v2/reverse.md)
 - [v2 search](v2/search.md)
+- [v2 regions within radius](v2/regions-within-radius.md)
 - [AsyncAddressClient](library/async-address-client.md)
 - [오류 코드](library/error-codes.md)
 - [API 키](operators/api-keys.md)

@@ -891,6 +891,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/regions/within-radius": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regions Within Radius V2 */
+        post: operations["regions_within_radius_v2_v2_regions_within_radius_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/reverse": {
         parameters: {
             query?: never;
@@ -2045,6 +2062,72 @@ export interface components {
             sig_cd?: string | null;
             /** Sigungu */
             sigungu?: string | null;
+        };
+        /**
+         * RegionWithinRadiusCenter
+         * @description Query center in external `(lon, lat)` order.
+         */
+        RegionWithinRadiusCenter: {
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+        };
+        /**
+         * RegionWithinRadiusItem
+         * @description Administrative region intersecting a POI radius.
+         */
+        RegionWithinRadiusItem: {
+            /** Code */
+            code: string;
+            /** Name */
+            name?: string | null;
+            /**
+             * Relation
+             * @enum {string}
+             */
+            relation: "contains" | "overlaps";
+        };
+        /** RegionsWithinRadiusInput */
+        RegionsWithinRadiusInput: {
+            /** Lat */
+            lat: number;
+            /**
+             * Levels
+             * @default [
+             *       "sigungu",
+             *       "emd"
+             *     ]
+             */
+            levels: ("sido" | "sigungu" | "emd")[];
+            /** Lon */
+            lon: number;
+            /**
+             * Radius Km
+             * @default 3
+             */
+            radius_km: number;
+        };
+        /** RegionsWithinRadiusResponse */
+        RegionsWithinRadiusResponse: {
+            center: components["schemas"]["RegionWithinRadiusCenter"];
+            /**
+             * Emd
+             * @default []
+             */
+            emd: components["schemas"]["RegionWithinRadiusItem"][];
+            /** Radius Km */
+            radius_km: number;
+            /**
+             * Sido
+             * @default []
+             */
+            sido: components["schemas"]["RegionWithinRadiusItem"][];
+            /**
+             * Sigungu
+             * @default []
+             */
+            sigungu: components["schemas"]["RegionWithinRadiusItem"][];
         };
         /** RestoreCreateRequest */
         RestoreCreateRequest: {
@@ -4595,6 +4678,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeocodeV2Response"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regions_within_radius_v2_v2_regions_within_radius_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegionsWithinRadiusInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionsWithinRadiusResponse"];
                 };
             };
             /** @description Validation Error */

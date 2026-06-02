@@ -7,7 +7,7 @@
 | 서비스 | 발급처 | 용도 | 환경변수 | 키 노출 위치 |
 |--------|--------|------|----------|--------------|
 | vworld OpenAPI | vworld.kr | 지오코딩 폴백, 통합 검색 | `KRADDR_GEO_VWORLD_API_KEY` | 서버측 |
-| vworld WMTS | vworld.kr | 프론트엔드 디버그 지도(MapLibre) | `NEXT_PUBLIC_VWORLD_API_KEY` | 브라우저 (도메인/IP 제한이 보안) |
+| vworld WMTS | vworld.kr | 프론트엔드 디버그 지도(MapLibre) | `KRADDR_GEO_VWORLD_API_KEY`, `NEXT_PUBLIC_VWORLD_API_KEY` | 브라우저 (도메인/IP 제한이 보안) |
 | juso 검색 | business.juso.go.kr | 도로명/지번 주소 검색 폴백 | `KRADDR_GEO_JUSO_API_KEY` | 서버측 |
 | juso 좌표 | business.juso.go.kr (별도 신청 가능) | 주소 → 좌표 변환 폴백 | `KRADDR_GEO_JUSO_COORD_API_KEY` (없으면 검색 키 재사용) | 서버측 |
 | epost 우편번호 다운로드 (데이터셋 `15000302`) | data.go.kr (공공데이터포털) | 사서함·다량배달처 ZIP 분기 1회 적재(ADR-009) | `KRADDR_GEO_EPOST_API_KEY` | 서버측 (로더 cron) |
@@ -47,31 +47,31 @@ async with httpx.AsyncClient(timeout=5.0) as cx:
 
 ## vworld WMTS + MapLibre (프론트엔드)
 
-`kraddr-geo-ui`의 지도는 Kakao Maps SDK가 아니라 MapLibre GL JS + VWorld WMTS를 사용한다. 지도 타일은 브라우저에서 직접 호출되므로 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 이 값은 공개 키이며 저장소 문서·예시에는 실제 키를 쓰지 않는다. UI는 `/api/runtime-config`에서 서버 런타임 env를 읽고, `/admin/settings`에서 브라우저 localStorage override를 저장·수정할 수 있다.
+`kraddr-geo-ui`의 지도는 Kakao Maps SDK가 아니라 MapLibre GL JS + VWorld WMTS를 사용한다. 지도 타일은 브라우저에서 직접 호출되므로 `/api/runtime-config`가 반환한 키가 브라우저에 노출된다. runtime config는 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용하고, 이 값이 없을 때 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 저장소 문서·예시에는 실제 키를 쓰지 않는다. UI는 `/admin/settings`에서 브라우저 localStorage override를 저장·수정할 수 있다.
 
 - **발급처**: 서버측 vworld OpenAPI 키와 동일하게 https://www.vworld.kr/dev/v4api.do
-- **권장 분리**: 서버측 폴백 키(`KRADDR_GEO_VWORLD_API_KEY`)와 프론트엔드 WMTS 키(`NEXT_PUBLIC_VWORLD_API_KEY`)를 분리한다. 로컬 개발용 키에는 `localhost:13088`, `127.0.0.1:13088`(UI 공식 포트, ADR-040)만 등록하고 운영 키에는 내부망 도메인만 등록한다.
+- **키 소스**: 로컬 개발에서는 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 UI 지도에도 재사용한다. 운영에서 백엔드 fallback 키와 브라우저 WMTS 키를 분리해야 하면 `KRADDR_GEO_VWORLD_API_KEY`를 서버 프로세스 환경에서 빼고 `NEXT_PUBLIC_VWORLD_API_KEY`만 제공한다. 로컬 개발용 키에는 `localhost:13088`, `127.0.0.1:13088`, WSL e2e에 쓰는 내부 IP와 포트 조합을 등록한다.
 - **사용 레이어**: 기본은 `Base`. 필요하면 `gray`, `midnight`, `Hybrid`, `Satellite`를 `CoordinateMap.layerType`으로 선택한다.
 - **타일 URL 규칙**: `https://api.vworld.kr/req/wmts/1.0.0/{key}/{layer}/{z}/{y}/{x}.{ext}`. `Base`/`gray`/`midnight`/`Hybrid`는 `png`, `Satellite`는 `jpeg`. UI option 이름 `gray`는 VWorld WMTS 요청에서는 `white` layer로 변환한다.
 - **zoom 한계**: `Base`/`gray`/`midnight`는 z19까지, `Hybrid`/`Satellite`는 z18까지만 요청한다. 상한을 넘긴 tile 404는 운영 장애로 보지 않고 MapLibre 컴포넌트에서 transient error로 다룬다.
 - **attribution**: MapLibre raster source의 attribution은 `공간정보 오픈플랫폼 브이월드`로 표기한다. 운영자는 VWorld 최신 이용약관에서 요구 표기가 바뀌었는지 배포 전 확인한다.
-- **소스 코드 위치**: `kraddr-geo-ui/lib/vworld.ts`는 `maplibre-vworld` helper를 재수출하고, `components/vworld/LazyCoordinateMap.tsx`가 Next.js dynamic import, `components/vworld/CoordinateMap.tsx`가 click/marker/fallback/error 처리를 담당한다.
+- **소스 코드 위치**: `kraddr-geo-ui/lib/vworld.ts`는 `maplibre-vworld` helper를 재수출하고, `components/vworld/LazyCoordinateMap.tsx`가 Next.js dynamic import, `components/vworld/CoordinateMap.tsx`가 click/marker/key-missing 안내/error 처리를 담당한다.
 - **CSP 주의**: 현재 UI는 CSP를 강제하지 않지만, 향후 도입하면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 반드시 포함한다.
-- **키 제한·회전**: `NEXT_PUBLIC_VWORLD_API_KEY`는 타일 URL path에 노출된다. 도메인/referrer 제한이 WMTS에 실제 적용되는지 VWorld 콘솔과 운영 환경에서 확인하고, 의심 노출 또는 제한 미적용이 확인되면 키를 회수·재발급한다.
+- **키 제한·회전**: runtime config가 반환한 VWorld 키는 타일 URL path에 노출된다. 도메인/referrer 제한이 WMTS에 실제 적용되는지 VWorld 콘솔과 운영 환경에서 확인하고, 의심 노출 또는 제한 미적용이 확인되면 키를 회수·재발급한다.
 
 ### `digitie/maplibre-vworld-js`와의 관계
 
 디버그 UI는 `digitie/maplibre-vworld-js`를 실제 package dependency로 사용한다. dependency를 변경할 때마다 최신 `main` 또는 stable release를 확인하고, 검증된 최신 버전으로 고정한다. 현재 `kraddr-geo-ui`는 `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정하고, `zod ^4.4.3`을 직접 의존성으로 둔다. 2026-05-31 기준 upstream `main`의 package version은 `0.1.2`이며 `dist/`, package `exports`, `types`, `style.css`, `VWorldMap`, marker/layer primitive, click/error/camera props, tile error helper가 포함되어 있다. npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. 최신 redaction helper 이름은 `redactVWorldUrl()`이며 redaction 표기는 `***`다. UI 내부도 더 이상 `redactVWorldTileUrl` alias를 쓰지 않고 upstream 이름을 사용한다.
 
-`CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 전환했다. 현재 디버그 UI는 지도 표시 외에 click callback, key 미설정 fallback, transient tile error redaction/overlay, marker·camera 갱신, SSR-safe dynamic wrapper를 보장해야 한다. 범용 지도 primitive와 helper는 upstream API로 맞추되, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 fallback 문구와 임계치는 `kraddr-geo-ui` domain wrapper에 남긴다.
+`CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 전환했다. 현재 디버그 UI는 지도 표시 외에 click callback, key 미설정 안내, transient tile error redaction/overlay, marker·camera 갱신, SSR-safe dynamic wrapper를 보장해야 한다. 범용 지도 primitive와 helper는 upstream API로 맞추되, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 안내 문구와 임계치는 `kraddr-geo-ui` domain wrapper에 남긴다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다.
 
 문제 발생 시 원칙:
 
 - `maplibre-vworld-js`의 `exports`, `files`, `dist`, type declaration 누락으로 생기는 build 실패는 별도 upstream task/PR로 분리한다.
 - VWorld layer helper, MapLibre marker/click/cluster, CSS import, React/Next.js 타입 호환성처럼 재사용 가능한 문제는 `kraddr-geo-ui` 전용 workaround에 묻지 않는다. 단, T-044 0.1.0 재확인 범위에서는 upstream 코드를 직접 수정하지 않고 문서에만 보완점을 남긴다.
-- 주소 지오코딩 디버그 화면과 운영 콘솔에만 필요한 상태 연결, overlay, fallback 문구, 임계치는 이 저장소에서 구현한다.
+- 주소 지오코딩 디버그 화면과 운영 콘솔에만 필요한 상태 연결, overlay, 안내 문구, 임계치는 이 저장소에서 구현한다.
 - `kraddr-geo-ui`에서 upstream SHA를 바꿀 때는 `npm ci` 직후 `lint`, `type-check`, `test`, `build`를 모두 확인한다.
-- 후속 PR에서는 click callback, marker 제어, tile error hook, fallback surface, SSR-safe 사용 방식 중 범용화 가능한 부분을 `maplibre-vworld-js`에 맞추고, 프로젝트 특화 부분은 wrapper 경계로 남긴다.
+- 후속 PR에서는 click callback, marker 제어, tile error hook, key-missing surface, SSR-safe 사용 방식 중 범용화 가능한 부분을 `maplibre-vworld-js`에 맞추고, 프로젝트 특화 부분은 wrapper 경계로 남긴다.
 
 ## juso (도로명주소 안내시스템)
 
@@ -192,9 +192,10 @@ KRADDR_GEO_EPOST_API_KEY=urlDecoded+ServiceKey+Value==
 
 ```bash
 # kraddr-geo-ui/.env.local
-NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key
 KRADDR_GEO_API_INTERNAL_URL=http://localhost:8888
 NEXT_PUBLIC_API_BASE_URL=/api/proxy
+# 선택 fallback. 기본은 저장소 루트 .env의 KRADDR_GEO_VWORLD_API_KEY
+NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key
 ```
 
 ## 외부 API 호출 정책 (재시도·차단·로깅)

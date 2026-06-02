@@ -138,8 +138,8 @@ test.describe("Consistency 분석 콘솔", () => {
 
     const tabList = page.getByRole("tablist", { name: "정합성 케이스" });
     await expect(tabList).toBeVisible();
-    await expect(page.getByRole("tab", { name: /C1/ })).toHaveCount(1);
-    await expect(page.getByRole("tab", { name: /C10/ })).toHaveCount(1);
+    await expect(page.getByRole("tab", { name: /^C1\b/ })).toHaveCount(1);
+    await expect(page.getByRole("tab", { name: /^C10\b/ })).toHaveCount(1);
     await expect(page.getByRole("tab", { selected: true })).toContainText("C4");
 
     const overflowX = await tabList.evaluate((node) => window.getComputedStyle(node).overflowX);

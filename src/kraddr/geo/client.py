@@ -63,6 +63,10 @@ from .dto.v2 import (
     BBoxV2,
     GeocodeV2Input,
     GeocodeV2Response,
+    RegionsWithinRadiusInput,
+    RegionsWithinRadiusResponse,
+    RegionWithinRadiusItem,
+    RegionWithinRadiusLevel,
     ReverseV2Input,
     ReverseV2Response,
     SearchV2Input,
@@ -395,6 +399,35 @@ class AsyncAddressClient:
             bjd_cd=bjd_cd,
         )
         return search_v2_from_v1(inp, response)
+
+    async def regions_within_radius(
+        self,
+        *,
+        lon: float,
+        lat: float,
+        radius_km: float = 3.0,
+        levels: tuple[RegionWithinRadiusLevel, ...] = ("sigungu", "emd"),
+    ) -> RegionsWithinRadiusResponse:
+        inp = RegionsWithinRadiusInput(
+            lon=lon,
+            lat=lat,
+            radius_km=radius_km,
+            levels=levels,
+        )
+        regions = await GeometryRepository(self._engine()).regions_within_radius(
+            lon=inp.lon,
+            lat=inp.lat,
+            radius_km=inp.radius_km,
+            levels=inp.levels,
+        )
+        empty: tuple[RegionWithinRadiusItem, ...] = ()
+        return RegionsWithinRadiusResponse(
+            center=inp.center,
+            radius_km=inp.radius_km,
+            sido=regions.get("sido", empty),
+            sigungu=regions.get("sigungu", empty),
+            emd=regions.get("emd", empty),
+        )
 
     async def _search_v1(
         self,

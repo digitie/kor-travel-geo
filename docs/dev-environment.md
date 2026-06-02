@@ -284,7 +284,8 @@ print(ds.GetLayer(0).GetFeatureCount())
 ## 6. 알려진 함정
 
 - **TMP가 Windows Temp를 가리키는 경우**: WSL에서 `TMP=/mnt/c/...`로 셸이 열리면 pytest capture가 `FileNotFoundError`로 실패한다. `TMPDIR=/tmp TMP=/tmp TEMP=/tmp pytest -q`로 Linux `/tmp`를 명시한다(docs/resume.md "알려진 함정").
-- **Playwright/UI 브라우저 테스트**: Playwright는 Windows Node/브라우저 환경에서만 실행한다. WSL에서는 `npm run test:e2e`, `npx playwright test`, screenshot, 실제 지도 상호작용 검증을 실행하지 않는다. WSL headless Chromium은 반복적으로 `libasound.so.2` 같은 공유 라이브러리 누락으로 실패하므로, WSL에서는 백엔드 검증과 Node `lint`/`type-check`/unit test/build까지만 수행하고 Windows에서 실행한 명령, 브라우저, screenshot 경로를 기록한다.
+- **프론트엔드 실행 위치**: `kraddr-geo-ui`의 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL ext4 테스트 미러의 Linux Node/npm에서 실행한다. UI 서버도 WSL에서 `--hostname 0.0.0.0`으로 띄운다.
+- **Playwright/UI 브라우저 테스트**: Playwright 실행과 브라우저는 Windows Node/브라우저 환경에서만 수행한다. WSL에서는 `npm run test:e2e`, `npx playwright test`, screenshot, 실제 지도 상호작용 검증을 실행하지 않는다. WSL headless Chromium은 반복적으로 `libasound.so.2` 같은 공유 라이브러리 누락으로 실패하므로, Windows Playwright에서 WSL UI 서버의 IP/포트를 `PLAYWRIGHT_BASE_URL`로 지정하고 실행한 명령, 브라우저, screenshot 경로를 기록한다.
 - **프론트엔드 WSL 검증 표준화**: `scripts/frontend_check.sh`를 사용하면 Windows `npm`이 PATH에 잡힌 경우 즉시 실패하고 Linux Node/npm에서 `gen:types`, lint, type-check, unit test, build를 순서대로 실행한다. 의존성 재설치가 필요하면 `scripts/frontend_check.sh --install`을 사용한다.
 - **NTFS에서 직접 테스트/장기 실행**: Git source of truth는 NTFS worktree지만, `pip`/`npm test`/`uvicorn` 장기 실행은 ext4 테스트 미러에서 수행한다. NTFS worktree는 편집·branch·commit·PR의 기준으로 유지한다(AGENTS.md, SKILL.md §1).
 - **GDAL Python 바인딩 버전 미스매치**: `pip install gdal>=3.8`만으로는 시스템과 다른 wheel을 받아 import 시 `undefined symbol`. 위 §3의 핀 절차 필수.
