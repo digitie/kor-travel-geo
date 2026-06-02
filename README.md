@@ -98,7 +98,11 @@ kraddr-geo load roadaddr-entrances "./data/juso/도로명주소 출입구 정보
 kraddr-geo refresh mv --swap
 
 # 서비스 기동
-uvicorn kraddr.geo.api.app:app --reload --port 8888
+uvicorn kraddr.geo.api.app:app --reload --port 9001
+
+# Docker API/UI 빌드 및 실행 (GDAL 버전 매칭 포함)
+scripts/docker_app.sh build
+scripts/docker_app.sh up
 ```
 
 ### 2. 프론트엔드 설정 (Next.js)
@@ -108,18 +112,18 @@ cd kraddr-geo-ui
 cp .env.local.example .env.local && $EDITOR .env.local   # NEXT_PUBLIC_VWORLD_API_KEY 설정
 npm ci
 npm run gen:types        # 백엔드 openapi.json → TypeScript 타입 생성
-npm run dev -- --port 13088   # http://localhost:13088
+npm run dev -- --port 9002   # http://localhost:9002
 ```
 
 > [!TIP]
-> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽어 전달합니다. MapLibre 렌더링은 `maplibre-vworld` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
+> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽어 전달합니다. Docker 실행은 `scripts/docker_app.sh`를 사용하며, 이 스크립트가 `.env`/`.env.local`의 VWorld 키를 컨테이너 환경변수로 주입합니다. MapLibre 렌더링은 `maplibre-vworld` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
 
 ---
 
 ## 🧭 진입점
 
 - **Python 라이브러리**: `from kraddr.geo import AsyncAddressClient` — asyncio 컨텍스트 매니저
-- **REST API**: `uvicorn kraddr.geo.api.app:app` — Swagger UI (`http://localhost:8888/v1/docs`)
+- **REST API**: `uvicorn kraddr.geo.api.app:app` — Swagger UI (`http://localhost:9001/v1/docs`)
 - **CLI**: `kraddr-geo --help` — `load`, `refresh`, `validate`, `healthz` 등
 - **디버그/관리 UI**: `kraddr-geo-ui` — 내부망 전용 디버깅 (ADR-013)
 

@@ -5,11 +5,14 @@
 ## [Unreleased]
 
 ### Added
+- `scripts/docker_app.sh`와 `docker/api.Dockerfile`을 추가했다. API 이미지는 Debian trixie의 `gdal-config` 버전에 맞춰 Python GDAL binding을 설치하고, UI/API 컨테이너 실행 시 `.env`/`.env.local`의 VWorld 키를 런타임 환경변수로 주입한다. 같은 스크립트로 `kraddr-geo` CLI 적재 명령도 Docker loader runner에서 실행할 수 있다.
 - `POST /v2/regions/within-radius`와 `AsyncAddressClient.regions_within_radius()`를 추가했다. POI `(lon, lat)` 기준 반경 `radius_km` 안에 들어오는 `sido`/`sigungu`/`emd`를 반환하며, `relation="contains"`와 `relation="overlaps"`로 중심점 포함 행정구역과 반경 인접 행정구역을 구분한다.
 - `/debug/geocode`에 반경 행정구역 디버거를 추가했다. React Hook Form, Zod, TanStack Query, Zustand, shadcn/ui 컴포넌트 기반으로 `/v2/regions/within-radius` 요청 body와 응답을 확인한다.
 - Windows Playwright e2e에 실제 Python API `.env` VWorld 키로 MapLibre canvas와 VWorld WMTS 타일 응답을 확인하는 지도 로딩 테스트를 추가했다.
 
 ### Changed
+- Docker 실행 기본값을 host network 대신 bridge network + host port mapping으로 정리하고, 공식 로컬 포트를 API `9001`, UI `9002`로 고정했다. `scripts/docker_app.sh up` 계열은 해당 host 포트를 점유한 기존 컨테이너나 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다.
+- VWorld 지도 타일 오류 UX를 조정했다. fallback 타일로 복구 가능한 일시 오류나 이미 로드된 지도에서 발생한 일부 타일 오류는 즉시 실패 overlay로 고정하지 않고, 인증키/도메인 오류만 명확한 메시지로 표시한다.
 - `kraddr-geo-ui`의 VWorld runtime config는 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용하고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다.
 - 프론트엔드 실행·lint·type-check·unit·build·React Doctor는 WSL ext4 미러에서 Linux Node/npm으로 수행하고, e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행하도록 문서화했다.
 - 반복되는 에이전트 실행 실수를 줄이기 위해 `gh --repo` 사용, npm script 인자 `--` 전달, WSL Linux Node 초기화, WSL UI 서버 + Windows Playwright 실행, server PID 종료, CodeGraph sync/status 순서, generated `next-env.d.ts` 복구, 같은 실패 명령 반복 금지 규칙을 문서화했다.
@@ -25,6 +28,7 @@
 - 디버그 UI가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 런타임 config로 읽고, `/admin/settings`에서 브라우저 저장값으로 수정·복원할 수 있게 했다.
 
 ### Fixed
+- Firefox에서 VWorld 지도가 빈 캔버스로 보이던 문제를 수정했다. `maplibre-vworld`의 `unsupportedTileFallback`이 타일 URL을 `vworld://...` custom protocol로 바꾸면 Firefox가 CORS `not http`로 차단하므로, 이 저장소 wrapper에서는 fallback prop을 전달하지 않고 HTTPS WMTS를 직접 사용한다.
 - React Doctor 정리 완료: `VWorldKeyProvider`를 TanStack Query 기반 runtime config 로딩으로 바꾸고, `/admin/settings`의 derived state, `/admin/consistency`의 effect 기반 선택 보정, `/admin/load`의 업로드 workflow state, `/admin/ops`/`/admin/backups`의 분산 state, proxy route의 cache 미지정을 정리했다. 이어서 `LoadConsole`/`BackupsPanel`/`ConsistencyPanel`, `CoordinateMap`, `GeocodeDebugger`, debug page metadata, `sido`/schema helper, `gen-types` script까지 다듬었고, fresh ext4 mirror 검증(`lint`, `type-check`, `test`, `build`)과 `react-doctor` 재실행 결과 score는 100, warning은 0이 됐다.
 - T-027/T-047 국가지점번호 포함 재적재·튜닝 재측정: 새 Docker DB에서 전체 적재와 20260401~20260506 daily 전체 적용을 재실행했고, 최종 `mv_geocode_target=6,418,735`, `tl_sppn_makarea=24,204`, T-047 SQL benchmark 2,000 case/18,000 measurement/error 0을 기록했다. benchmark는 `sppn_geocode`와 `sppn_reverse`를 모두 측정하며, `/v2/reverse`는 `x_extension.sppn_makarea`를 `match_kind="sppn"` 후보로 승격한다. `scripts/fullload_test.sh` smoke도 최신 v2 client 계약으로 고쳤다.
 - Consistency 탭 진입 프리즈 완화: `/admin/consistency`가 sample 선택 전부터 첫 point 샘플로 MapLibre/VWorld 지도를 자동 로드하던 동작을 중지했다. 이제 sample을 명시적으로 선택하기 전에는 가벼운 placeholder만 렌더하고, 지도 컴포넌트는 선택 후에만 동적으로 로드한다.

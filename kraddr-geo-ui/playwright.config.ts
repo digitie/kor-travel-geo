@@ -1,6 +1,17 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:13088";
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:9002";
+const allProjects = [
+  {
+    name: "chromium",
+    use: { ...devices["Desktop Chrome"] }
+  },
+  {
+    name: "firefox",
+    use: { ...devices["Desktop Firefox"] }
+  }
+];
+const selectedBrowser = process.env.PLAYWRIGHT_BROWSER;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -11,10 +22,7 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry"
   },
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] }
-    }
-  ]
+  projects: selectedBrowser
+    ? allProjects.filter((project) => project.name === selectedBrowser)
+    : [allProjects[0]]
 });

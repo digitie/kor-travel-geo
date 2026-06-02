@@ -48,6 +48,22 @@ describe("runtime config", () => {
     expect(resolveVWorldApiKey({}, uiDir)).toBe("python-dotenv-key");
   });
 
+  it("UI .env.local의 VWorld API 키를 읽는다", () => {
+    const root = mkdtempSync(join(tmpdir(), "kraddr-geo-ui-runtime-"));
+    tempDirs.push(root);
+    const uiDir = join(root, "kraddr-geo-ui");
+    mkdirSync(uiDir);
+    writeFileSync(
+      join(uiDir, ".env.local"),
+      [
+        "KRADDR_GEO_API_INTERNAL_URL=http://localhost:9001",
+        "NEXT_PUBLIC_VWORLD_API_KEY=ui-dotenv-local-key"
+      ].join("\n")
+    );
+
+    expect(resolveVWorldApiKey({}, uiDir)).toBe("ui-dotenv-local-key");
+  });
+
   it("dotenv 값의 주석과 따옴표를 처리한다", () => {
     expect(parseDotenvValue('KRADDR_GEO_VWORLD_API_KEY="quoted-key"', "KRADDR_GEO_VWORLD_API_KEY")).toBe(
       "quoted-key"

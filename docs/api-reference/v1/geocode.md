@@ -28,7 +28,7 @@
 ## 예시
 
 ```bash
-curl -G "http://localhost:8888/v1/address/geocode" \
+curl -G "http://localhost:9001/v1/address/geocode" \
   --data-urlencode "address=서울특별시 강남구 테헤란로 152" \
   --data-urlencode "type=road" \
   --data-urlencode "fallback=api"

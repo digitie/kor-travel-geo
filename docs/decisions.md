@@ -34,7 +34,7 @@
 
 ## ADR-001: PostgreSQL + PostGIS를 1차 저장소로 채택한다
 
-- 상태: accepted
+- 상태: superseded by ADR-042
 - 날짜: 2026-05-22
 - 결정자: human
 
@@ -2029,3 +2029,39 @@ NTFS에서 장기 테스트와 의존성 설치를 직접 실행하면 inotify, 
 - NTFS main repo에 기존 미커밋 변경이 있으면 main fast-forward 전에 사용자 소유 변경을 먼저 정리해야 한다. 에이전트는 이를 임의로 되돌리지 않는다.
 - ext4 테스트 미러에서 수정한 파일을 NTFS worktree로 되돌려 쓰면 source-of-truth가 흐려진다. 필요한 수정은 NTFS worktree에서 다시 적용한다.
 - CodeGraph live watch가 `/mnt`에서 꺼질 수 있으므로 `codegraph sync` 누락 시 인덱스가 낡을 수 있다.
+
+
+---
+
+## ADR-042: 로컬 API/UI 포트를 9001/9002로 고정하고 Docker 스크립트가 점유자를 정리한다
+
+- 상태: accepted
+- 날짜: 2026-06-02
+- 결정자: 사용자 요청, codex
+
+### 컨텍스트
+
+ADR-040은 API `8888`, UI `13088`을 공식 로컬 포트로 정했지만, 사용자는 이후 이 저장소의 로컬 실행 포트를 더 짧고 일관된 API `9001`, UI `9002`로 고정하라고 지시했다. 또한 Docker를 올릴 때 해당 포트가 이미 점유되어 있으면 기존 점유자를 종료하고 최신 컨테이너를 다시 올려야 한다.
+
+### 결정
+
+1. PostgreSQL + PostGIS host 포트는 계속 `15434`를 기본으로 둔다.
+2. FastAPI 백엔드 host/container 포트는 `9001`을 기본으로 둔다.
+3. `kraddr-geo-ui` host/container 포트는 `9002`를 기본으로 둔다.
+4. `scripts/docker_app.sh up`/`up-api`/`up-ui`는 같은 이름의 기존 컨테이너를 제거한 뒤, 대상 host 포트를 publish 중인 Docker 컨테이너와 listen 프로세스를 종료하고 새 컨테이너를 올린다.
+5. VWorld 로컬 도메인 등록과 Playwright 기본 `PLAYWRIGHT_BASE_URL`은 UI `9002` 기준으로 문서화한다.
+
+### 근거
+
+- API와 UI 포트를 `9001`/`9002`로 붙여 두면 디버그 중 현재 표면을 더 빠르게 구분할 수 있다.
+- Docker 실행 스크립트가 포트 점유자를 정리하면 “최신 코드로 다시 올림”이 실제로 최신 컨테이너 기동까지 이어진다.
+- UI 컨테이너 내부 포트도 `9002`로 맞추면 `3000`을 Next.js 일반 기본값으로 오해하는 일을 줄일 수 있다.
+
+### 결과
+
+- `docker/api.Dockerfile`, `kraddr-geo-ui/Dockerfile`, `scripts/docker_app.sh`, Playwright 설정, UI proxy 기본값, README와 현재 운영 문서가 `9001`/`9002`를 따른다.
+- 과거 작업 로그와 PR 회고 문서의 이전 포트 값은 당시 재현 정보이므로 일괄 변경하지 않는다.
+
+### 남은 위험
+
+- `scripts/docker_app.sh`의 포트 정리 동작은 로컬 개발 편의용이다. 운영 서버에서는 reverse proxy/systemd/compose 정책이 우선이며, 무인 운영 환경에서 임의 프로세스 종료가 적절한지 별도로 판단해야 한다.

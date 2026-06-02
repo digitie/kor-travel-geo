@@ -68,7 +68,7 @@
 ## 예시
 
 ```bash
-curl -X POST "http://localhost:8888/v2/geocode" \
+curl -X POST "http://localhost:9001/v2/geocode" \
   -H "Content-Type: application/json" \
   -d '{"query":"서울특별시 강남구 테헤란로 152","fallback":"api","sig_cd":"11680"}'
 ```

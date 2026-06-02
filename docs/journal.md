@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-02 21:49 (Docker 실행 스크립트, 9001/9002 포트 원칙, Firefox VWorld 지도 보정)
+
+**작업**: API/UI Docker 이미지를 GDAL 버전 매칭 상태로 빌드·실행하는 표준 스크립트를 추가하고, 로컬 API/UI 포트 원칙을 `9001`/`9002`로 갱신했다. Firefox에서 VWorld 지도가 보이지 않는 원인을 확인해 `vworld://` custom protocol fallback을 쓰지 않도록 보정했다.
+
+**반영**:
+- `docker/api.Dockerfile`과 `kraddr-geo-ui/Dockerfile`을 추가·갱신해 API는 `9001`, UI는 `9002`로 실행한다. API image build 중 `gdal-config --version`과 Python `gdal` wheel 버전을 맞추고 불일치 시 실패한다.
+- `scripts/docker_app.sh`를 추가해 `build-api`/`build-ui`/`build`/`up-api`/`up-ui`/`up`/`down`/`status`/`logs`/`cli`/`load`/`load-full-set`을 제공한다. 기본 실행은 Docker bridge network이며, `.env`/`kraddr-geo-ui/.env.local`의 VWorld 키를 컨테이너 환경변수로 주입하되 키 값은 출력하지 않는다.
+- `scripts/docker_app.sh up` 계열은 API `9001`, UI `9002` host 포트를 점유한 기존 Docker 컨테이너와 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다.
+- Firefox에서 `maplibre-vworld`의 `unsupportedTileFallback`이 타일 URL을 `vworld://...`로 바꾸면 CORS `not http`로 차단되는 것을 확인했다. `CoordinateMap`은 해당 fallback prop을 전달하지 않고 HTTPS WMTS를 직접 사용한다.
+- `vworld-map.spec.ts`는 Firefox에서 `/debug/geocode` 반복 진입, runtime VWorld 키, 실제 WMTS tile fetch, MapLibre canvas, 지도 스크린샷 색상 다양성, `vworld://`/CORS 콘솔 오류 부재를 검증한다.
+- README, `kraddr-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`, `docs/agent-workflow.md`, `docs/frontend-package.md`, `docs/external-apis.md`, `docs/decisions.md`, `docs/resume.md`, API reference 예시를 새 포트 원칙으로 갱신했다.
+
+**검증**:
+- ext4 테스트 미러에서 `bash -n scripts/docker_app.sh`, `scripts/docker_app.sh --help`, `kraddr-geo-ui` `npm run type-check`, `npm run lint`, `npm run test`, `npm run build`를 통과했다. unit test는 11 files / 42 tests 통과다.
+- React Doctor `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
+- `scripts/docker_app.sh build`로 API/UI 이미지를 빌드했고, API build/runtime에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
+- `scripts/docker_app.sh up`으로 API `http://127.0.0.1:9001`, UI `http://127.0.0.1:9002`를 올렸다. `/v1/healthz`, `/debug/geocode`, `/api/runtime-config`가 200을 반환했고 VWorld 키는 길이만 확인했다.
+- `/debug/geocode` 20회 반복 HTTP load에서 `This page couldn`와 `지도 타일 로딩이 불안정합니다` 문자열이 나오지 않았다.
+- UI proxy `POST /api/proxy/v2/geocode` 실제 DB smoke가 `status=OK`, 후보 1건을 반환했다.
+- Windows Firefox Playwright: `PLAYWRIGHT_BASE_URL=http://localhost:9002`, `PLAYWRIGHT_BROWSER=firefox`, `tests/e2e/vworld-map.spec.ts` → 2 passed.
+- Python `ruff`는 ext4 미러에 Python dev venv가 없어 실행하지 못했다. 이번 Python 변경(`scripts/benchmark_api_latency.py`)은 기본 URL 문자열 변경이며 `python3 -m compileall -q scripts/benchmark_api_latency.py`는 통과했다.
+
 ## 2026-06-02 23:20 (PR #114~#115 리뷰 감사와 실제 DB 테스트 보강)
 
 **작업**: PR #114부터 최신 PR #115까지 conversation comment, review body, inline review thread를 모두 확인하고, 사용자 지시에 맞춰 PR #114 기능의 실제 PostgreSQL 회귀 테스트를 추가했다.
