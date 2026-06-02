@@ -31,6 +31,8 @@
 - 디버그 UI가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 런타임 config로 읽고, `/admin/settings`에서 브라우저 저장값으로 수정·복원할 수 있게 했다.
 
 ### Fixed
+- admin UI 좌측 메뉴 이동 중 Chrome/Firefox에서 Next 기본 전역 오류 화면(`This page couldn’t load`, `Reload to try again, or go back.`)으로 떨어질 수 있던 문제를 수정했다. 좌측 메뉴와 Consistency report 목록은 `next/link` prefetch를 끄고 document navigation으로 이동해 client routing/RSC fetch 실패 화면을 피한다.
+- VWorld 타일 요청이 페이지 이동 중 정상 취소될 때(`ERR_ABORTED`, `NS_BINDING_ABORTED`) 지도 타일 불안정 overlay와 warning 카운트에 반영하지 않도록 했다.
 - Firefox에서 VWorld 지도가 빈 캔버스로 보이던 문제를 수정했다. `maplibre-vworld`의 `unsupportedTileFallback`이 타일 URL을 `vworld://...` custom protocol로 바꾸면 Firefox가 CORS `not http`로 차단하므로, 이 저장소 wrapper에서는 fallback prop을 전달하지 않고 HTTPS WMTS를 직접 사용한다.
 - React Doctor 정리 완료: `VWorldKeyProvider`를 TanStack Query 기반 runtime config 로딩으로 바꾸고, `/admin/settings`의 derived state, `/admin/consistency`의 effect 기반 선택 보정, `/admin/load`의 업로드 workflow state, `/admin/ops`/`/admin/backups`의 분산 state, proxy route의 cache 미지정을 정리했다. 이어서 `LoadConsole`/`BackupsPanel`/`ConsistencyPanel`, `CoordinateMap`, `GeocodeDebugger`, debug page metadata, `sido`/schema helper, `gen-types` script까지 다듬었고, fresh ext4 mirror 검증(`lint`, `type-check`, `test`, `build`)과 `react-doctor` 재실행 결과 score는 100, warning은 0이 됐다.
 - T-027/T-047 국가지점번호 포함 재적재·튜닝 재측정: 새 Docker DB에서 전체 적재와 20260401~20260506 daily 전체 적용을 재실행했고, 최종 `mv_geocode_target=6,418,735`, `tl_sppn_makarea=24,204`, T-047 SQL benchmark 2,000 case/18,000 measurement/error 0을 기록했다. benchmark는 `sppn_geocode`와 `sppn_reverse`를 모두 측정하며, `/v2/reverse`는 `x_extension.sppn_makarea`를 `match_kind="sppn"` 후보로 승격한다. `scripts/fullload_test.sh` smoke도 최신 v2 client 계약으로 고쳤다.

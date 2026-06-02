@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-03 01:30 (admin UI 메뉴 이동 Next 전역 오류 화면 보정)
+
+**작업**: 좌측 메뉴를 클릭하다가 Chrome/Firefox 모두에서 Next 기본 전역 오류 화면(`This page couldn’t load`, `Reload to try again, or go back.`)으로 떨어지는 현상을 재현·보정했다.
+
+**반영**:
+- 좌측 메뉴와 Consistency report 목록의 internal link를 `DocumentNavLink`로 교체했다. `next/link`는 유지하되 `prefetch={false}`와 명시적 document navigation을 사용해 Next App Router client transition/RSC fetch 실패 화면으로 새지 않게 했다.
+- 긴 좌측 메뉴가 데스크톱에서 viewport 아래로 밀리는 문제를 막기 위해 sidebar에 `100dvh` 높이와 내부 스크롤을 적용했다.
+- VWorld 타일 요청이 페이지 이동 중 브라우저에 의해 취소될 때(`ERR_ABORTED`, `NS_BINDING_ABORTED`) 지도 불안정 overlay 카운트와 warning 로그에 반영하지 않도록 했다.
+- 좌측 메뉴 반복 이동 e2e를 추가했다. 이 테스트는 메뉴 15개를 4회 순회하며 Next 전역 오류 문구, page error, 비정상 request failure, `_rsc` client routing 요청 부재를 확인한다.
+
+**검증**:
+- `scripts/docker_app.sh build-ui && scripts/docker_app.sh up-ui`로 UI image를 다시 빌드하고 `http://127.0.0.1:9002` 컨테이너를 교체했다.
+- Windows Playwright Chromium/Firefox: `tests/e2e/navigation.spec.ts` → 각 1 passed.
+- Windows Playwright Chromium/Firefox: `tests/e2e/vworld-map.spec.ts` → 각 2 passed.
+- ext4 테스트 미러 Linux Node에서 `npm run lint`, `npm run type-check`, `npm run test`를 통과했다. unit test는 11 files / 42 tests 통과다.
+- React Doctor `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
+
+**발견**:
+- 해당 문구는 앱 코드가 아니라 Next 16 기본 `global-error` 화면에서 나온다. 메뉴 전환 중 발생하는 client routing/RSC fetch 실패 화면을 피하려면 내부 운영 UI에서는 안정적인 document navigation이 더 적합하다.
+
 ## 2026-06-02 23:58 (`/v2/regions/within-radius` DB 튜닝)
 
 **작업**: 행정구역 반경조회가 큰 polygon을 레벨별로 직접 훑으며 tail latency가 커지는 문제를 줄이기 위해 `region_radius_parts` serving accelerator를 추가했다.

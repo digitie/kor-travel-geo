@@ -8,8 +8,8 @@ import {
   type ColumnDef
 } from "@tanstack/react-table";
 import { Check, Clock, Download, Play, RefreshCw, RotateCw, X } from "lucide-react";
-import Link from "next/link";
 import { useMemo, useState } from "react";
+import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LazyCoordinateMap } from "@/components/vworld/LazyCoordinateMap";
@@ -335,15 +335,14 @@ function ReportsPanelSection({ controller }: { controller: ConsistencyPanelContr
     >
       <div className="report-list">
         {controller.reports.map((report) => (
-          <Link
+          <DocumentNavLink
             className={report.report_id === controller.effectiveReportId ? "report-row active" : "report-row"}
             href={`/admin/consistency/${report.report_id}`}
             key={report.report_id}
-            onClick={() => controller.onSelectReport(report.report_id)}
           >
             <span>{report.report_id}</span>
             <StatusBadge value={report.severity_max} />
-          </Link>
+          </DocumentNavLink>
         ))}
       </div>
     </Panel>

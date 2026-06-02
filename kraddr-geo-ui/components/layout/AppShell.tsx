@@ -15,7 +15,7 @@ import {
   ShieldCheck,
   TerminalSquare
 } from "lucide-react";
-import Link from "next/link";
+import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 
 const debugLinks = [
   { href: "/debug/geocode", label: "Geocode", icon: Search },
@@ -47,18 +47,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <NavGroup title="Admin" links={adminLinks} />
         <div className="nav-group">
           <p className="nav-title">Runtime</p>
-          <Link className="nav-link" href="/admin/cache">
+          <DocumentNavLink className="nav-link" href="/admin/cache">
             <Activity size={17} />
             Metrics
-          </Link>
-          <Link className="nav-link" href="/admin/load">
+          </DocumentNavLink>
+          <DocumentNavLink className="nav-link" href="/admin/load">
             <RotateCcw size={17} />
             MV refresh
-          </Link>
-          <Link className="nav-link" href="/admin/tables">
+          </DocumentNavLink>
+          <DocumentNavLink className="nav-link" href="/admin/tables">
             <Server size={17} />
             PostGIS
-          </Link>
+          </DocumentNavLink>
         </div>
       </aside>
       <main className="content">{children}</main>
@@ -79,10 +79,10 @@ function NavGroup({
       {links.map((link) => {
         const Icon = link.icon;
         return (
-          <Link className="nav-link" href={link.href} key={link.href}>
+          <DocumentNavLink className="nav-link" href={link.href} key={link.href}>
             <Icon size={17} />
             {link.label}
-          </Link>
+          </DocumentNavLink>
         );
       })}
     </nav>
