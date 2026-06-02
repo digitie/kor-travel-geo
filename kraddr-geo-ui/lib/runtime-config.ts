@@ -12,21 +12,23 @@ export function resolveVWorldApiKey(
 ): string {
   return (
     normalizeEnvValue(env[PYTHON_VWORLD_KEY]) ||
-    readPythonDotenvVWorldKey(cwd) ||
-    normalizeEnvValue(env[UI_VWORLD_KEY])
+    readDotenvVWorldKey(PYTHON_VWORLD_KEY, cwd) ||
+    normalizeEnvValue(env[UI_VWORLD_KEY]) ||
+    readDotenvVWorldKey(UI_VWORLD_KEY, cwd)
   );
 }
 
-function readPythonDotenvVWorldKey(cwd?: string): string {
+function readDotenvVWorldKey(key: string, cwd?: string): string {
   const candidates = cwd
-    ? [join(cwd, "..", ".env"), join(cwd, ".env")]
+    ? [join(cwd, "..", ".env"), join(cwd, ".env"), join(cwd, ".env.local")]
     : [
         join(/*turbopackIgnore: true*/ process.cwd(), "..", ".env"),
-        join(/*turbopackIgnore: true*/ process.cwd(), ".env")
+        join(/*turbopackIgnore: true*/ process.cwd(), ".env"),
+        join(/*turbopackIgnore: true*/ process.cwd(), ".env.local")
       ];
   for (const path of candidates) {
     if (!existsSync(path)) continue;
-    const value = parseDotenvValue(readFileSync(path, "utf8"), PYTHON_VWORLD_KEY);
+    const value = parseDotenvValue(readFileSync(path, "utf8"), key);
     if (value) return value;
   }
   return "";

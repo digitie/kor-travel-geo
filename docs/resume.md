@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-02 갱신, by codex)
 
+- ✅ Docker 실행 스크립트와 로컬 포트 원칙 갱신 — API/UI Docker 이미지는 `scripts/docker_app.sh build`, 실행은 `scripts/docker_app.sh up`으로 통일한다. 기본 host/container 포트는 API `9001`, UI `9002`이며, 스크립트는 해당 host 포트를 점유한 기존 컨테이너나 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다. VWorld 키는 `.env`/`kraddr-geo-ui/.env.local`에서 읽어 컨테이너 환경변수로 주입하되 값은 출력하지 않는다.
 - ✅ PR #114~#115 리뷰 감사와 실제 DB 테스트 보강 — GitHub conversation comment, review body, inline review thread를 모두 확인했고 두 PR 모두 코멘트 0건이었다. PR #114 기능은 `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 실제 PostgreSQL 테스트를 추가해 `AsyncAddressClient.regions_within_radius()`가 실제 `tl_scco_*` 행정구역 도형에서 `sido`/`sigungu`/`emd` contains 후보를 반환하는지 검증한다. 상세: `docs/postmerge-review-fixups-pr114-pr115.md`
 - ✅ 이번 세션 실행 실수 복기 문서화 — `docs/agent-failure-patterns.md`와 `docs/agent-workflow.md`에 `gh --repo` 사용, npm script 인자 `--` 전달, WSL Linux Node 초기화, WSL UI 서버 + Windows Playwright 실행, server PID 종료, CodeGraph sync/status 순서, generated `next-env.d.ts` 복구, 같은 실패 명령 반복 금지 규칙을 추가했다.
 - ✅ POI 반경 행정구역 v2 API와 디버그 UI 구현 — `POST /v2/regions/within-radius`와 `AsyncAddressClient.regions_within_radius()`를 추가해 POI `(lon, lat)` 기준 반경 `radius_km` 안의 `sido`/`sigungu`/`emd`를 반환한다. `contains`는 중심점을 포함하는 행정구역, `overlaps`는 반경에 걸친 인접 행정구역이다. `/debug/geocode`에는 React Hook Form/Zod/TanStack Query/Zustand/shadcn/ui 기반 디버거를 추가했다.
@@ -149,7 +150,7 @@
 - T-047 쿼리 성능 튜닝은 지번 exact/Q4 search exact preflight, 관측성, stress, REST e2e, REST pool/admission 반복 측정, `tar.zst` archive 측정, T-057 region hint 비교, T-061 slim text-search helper, T-073 국가지점번호 geocode/reverse 재측정까지 완료했다. 최신 Q11 SQL path는 새 index 없이도 목표 범위 안이며, 다음 성능 후보는 Q4 `search_fuzzy`와 Q3 `fuzzy_geocode_wide`의 c64 tail이다.
 - PR #69~#86 리뷰 후속에서 남긴 보류 항목은 v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock이다.
 - T-055 N150/Odroid 비교는 runbook과 envelope 캡처 준비만 완료했다. 실제 장비가 생기면 T-063에서 `scripts/capture_deployment_envelope.py`, `scripts/fullload_test.sh`, `scripts/benchmark_query_performance.py`, `scripts/benchmark_api_latency.py`, `scripts/benchmark_mv_refresh.py`를 같은 SHA/데이터 snapshot으로 실행한다.
-- 디버그 UI의 실제 브라우저 회귀는 UI 서버를 WSL ext4 미러에서 실행한 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://<WSL_IP>:13088 npx playwright test`로 실행한다. Playwright 실행과 브라우저만 Windows에서 사용하고, WSL에서는 Playwright를 실행하지 않는다. WSL headless Chromium은 `libasound.so.2` 같은 공유 라이브러리 누락으로 반복 실패하므로 `lint`/`type-check`/unit/build/React Doctor까지만 수행한다.
+- 디버그 UI의 실제 브라우저 회귀는 UI 서버를 WSL ext4 미러 또는 Docker에서 실행한 뒤 Windows 환경에서 `PLAYWRIGHT_BASE_URL=http://<WSL_IP>:9002 npx playwright test` 또는 `PLAYWRIGHT_BASE_URL=http://localhost:9002`로 실행한다. Playwright 실행과 브라우저만 Windows에서 사용하고, WSL에서는 Playwright를 실행하지 않는다. WSL headless Chromium은 `libasound.so.2` 같은 공유 라이브러리 누락으로 반복 실패하므로 `lint`/`type-check`/unit/build/React Doctor까지만 수행한다.
 - VWorld 지도 키는 `/api/runtime-config`가 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽는다. 이 값이 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. `/admin/settings`의 저장값은 브라우저 localStorage override이며 저장소에 커밋하지 않는다.
 
 ## 작업 시작 전 확인할 것

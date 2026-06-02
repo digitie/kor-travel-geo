@@ -38,7 +38,7 @@ export type MapGeometryOverlay = {
 
 const DEFAULT_CENTER = { x: 126.978, y: 37.5665 };
 const DEFAULT_ZOOM = 15;
-const TILE_ERROR_OVERLAY_THRESHOLD = 6;
+const TILE_ERROR_OVERLAY_THRESHOLD = 12;
 const OVERLAY_SOURCE_ID = "kraddr-geo-overlay";
 const OVERLAY_FILL_LAYER_ID = "kraddr-geo-overlay-fill";
 const OVERLAY_LINE_LAYER_ID = "kraddr-geo-overlay-line";
@@ -47,7 +47,7 @@ const MAP_LOADING_SKELETON = <MapOverlay text="지도 로딩 중" />;
 type MapBBox = [number, number, number, number];
 
 type MapResourceError = Error & {
-  status?: number;
+  status?: number | string;
   statusText?: string;
   url?: string;
 };
@@ -120,9 +120,9 @@ function LoadedCoordinateMap({
 }) {
   const [initialCenter] = useState(() => point ?? DEFAULT_CENTER);
   const transientTileErrorsRef = useRef(0);
+  const loadedOnceRef = useRef(false);
   const [status, dispatchStatus] = useReducer(mapStatusReducer, INITIAL_MAP_STATUS);
   const { error } = status;
-  const unsupportedTileFallback = useMemo(() => ({ label: "지원하지 않는 타일" }), []);
   const mapBounds = useMemo(
     () => boundsFromBBox(bbox, point) ?? boundsFromGeoJson(geometry?.geojson, point),
     [bbox, geometry?.geojson, point]
@@ -132,6 +132,7 @@ function LoadedCoordinateMap({
     return { center: [point.x, point.y] as [number, number], zoom: DEFAULT_ZOOM };
   }, [mapBounds, point]);
   const handleLoad = useCallback(() => {
+    loadedOnceRef.current = true;
     transientTileErrorsRef.current = 0;
     dispatchStatus({ type: "loaded" });
   }, []);
@@ -139,8 +140,13 @@ function LoadedCoordinateMap({
     if (isVWorldTileError(event)) {
       transientTileErrorsRef.current += 1;
       warnMapTileError(event);
-      if (transientTileErrorsRef.current >= TILE_ERROR_OVERLAY_THRESHOLD) {
-        dispatchStatus({ type: "error", message: "지도 타일 로딩이 불안정합니다" });
+      const overlayMessage = tileErrorOverlayMessage(
+        event,
+        transientTileErrorsRef.current,
+        loadedOnceRef.current
+      );
+      if (overlayMessage) {
+        dispatchStatus({ type: "error", message: overlayMessage });
       }
       return;
     }
@@ -170,7 +176,6 @@ function LoadedCoordinateMap({
         onLoad={handleLoad}
         scale={false}
         style={{ width: "100%", height: "100%" }}
-        unsupportedTileFallback={unsupportedTileFallback}
         zoom={DEFAULT_ZOOM}
       >
         <GeometryOverlay geometry={geometry} />
@@ -325,10 +330,45 @@ function warnMapTileError(event: MapLibreErrorEvent): void {
   console.warn("VWorld tile load warning", {
     message: error.message,
     sourceId: "sourceId" in event ? event.sourceId : undefined,
-    status: error.status,
+    status: tileErrorStatus(event),
     statusText: error.statusText,
     url: redactVWorldUrl(error.url)
   });
+}
+
+function tileErrorOverlayMessage(
+  event: MapLibreErrorEvent,
+  errorCount: number,
+  loadedOnce: boolean
+): string | null {
+  const status = tileErrorStatus(event);
+
+  if (status === 401 || status === 403) {
+    return "VWorld 인증키 또는 도메인 설정을 확인하세요";
+  }
+
+  if (status === 404 || loadedOnce) {
+    return null;
+  }
+
+  if (errorCount >= TILE_ERROR_OVERLAY_THRESHOLD) {
+    return "지도 타일 로딩이 지연되고 있습니다";
+  }
+
+  return null;
+}
+
+function tileErrorStatus(event: MapLibreErrorEvent): number | null {
+  const error = event.error as MapResourceError;
+  if (typeof error.status === "number" && Number.isFinite(error.status)) {
+    return error.status;
+  }
+  if (typeof error.status === "string") {
+    const parsed = Number.parseInt(error.status, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const matched = error.message.match(/HTTP error\s+(\d+)/i);
+  return matched ? Number.parseInt(matched[1], 10) : null;
 }
 
 function renderVWorldFallback(info: VWorldMapFallbackInfo) {

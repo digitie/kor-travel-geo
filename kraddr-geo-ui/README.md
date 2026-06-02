@@ -7,10 +7,10 @@
 ```bash
 npm install
 npm run gen:types
-npm run dev -- --port 13088
+npm run dev -- --port 9002
 ```
 
-기본 진입점은 `/debug/geocode`이며 공식 로컬 UI 포트는 `13088`이다. `KRADDR_GEO_API_INTERNAL_URL`은 서버 사이드 프록시가 사용할 백엔드 주소이고, 브라우저는 `NEXT_PUBLIC_API_BASE_URL` 기본값인 `/api/proxy`만 호출한다. 지오코딩/역지오코딩 디버그 화면은 `/v2/geocode`, `/v2/reverse` REST API를 사용하며, 관리·정규화·EXPLAIN 화면은 아직 `/v1/admin/*` 운영 API를 사용한다.
+기본 진입점은 `/debug/geocode`이며 공식 로컬 UI 포트는 `9002`이다. `KRADDR_GEO_API_INTERNAL_URL`은 서버 사이드 프록시가 사용할 백엔드 주소이고, 브라우저는 `NEXT_PUBLIC_API_BASE_URL` 기본값인 `/api/proxy`만 호출한다. 지오코딩/역지오코딩 디버그 화면은 `/v2/geocode`, `/v2/reverse` REST API를 사용하며, 관리·정규화·EXPLAIN 화면은 아직 `/v1/admin/*` 운영 API를 사용한다.
 
 VWorld 키가 없으면 지도 대신 같은 크기의 좌표 프리뷰 UI를 보여 준다. MapLibre를 대체하는 별도 fallback 지도는 두지 않는다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다. 실행 중에는 `/api/runtime-config`가 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽어 브라우저에 전달한다. 이 값이 없으면 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. `/admin/settings`에서 VWorld 인증키를 입력하면 브라우저 localStorage override로 저장되고, 기본값 버튼을 누르면 `.env` 기본값으로 되돌아간다.
 
@@ -30,10 +30,10 @@ npx react-doctor@latest . --offline --verbose --json
 
 모든 프론트엔드 작업 뒤에는 React Doctor를 실행하고, 새 경고가 나오면 수정한 뒤 같은 명령을 다시 실행해 경고가 남지 않았음을 확인한다.
 
-브라우저 e2e는 Playwright로 수행하되 Windows Node/브라우저 환경에서만 실행한다. WSL에서는 `npm run test:e2e`나 `npx playwright test`를 실행하지 않는다. UI 서버는 WSL에서 실행한다. WSL 서버에 Windows Playwright를 붙일 때는 `next dev --hostname 0.0.0.0 --port 13088` 또는 `next start --hostname 0.0.0.0 --port 13088`로 띄우고, Windows 터미널에서 WSL IP를 `PLAYWRIGHT_BASE_URL`로 지정한다.
+브라우저 e2e는 Playwright로 수행하되 Windows Node/브라우저 환경에서만 실행한다. WSL에서는 `npm run test:e2e`나 `npx playwright test`를 실행하지 않는다. UI 서버는 WSL에서 실행한다. WSL 서버에 Windows Playwright를 붙일 때는 `next dev --hostname 0.0.0.0 --port 9002` 또는 `next start --hostname 0.0.0.0 --port 9002`로 띄우고, Windows 터미널에서 WSL IP를 `PLAYWRIGHT_BASE_URL`로 지정한다.
 
 ```bat
-set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:13088
+set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:9002
 npx playwright test --config playwright.config.ts --project chromium --workers 1
 ```
 
@@ -41,22 +41,26 @@ npx playwright test --config playwright.config.ts --project chromium --workers 1
 
 ## Docker 실행
 
-WSL ext4 작업 디렉토리에서 다음처럼 UI 이미지를 빌드하고 실행한다. Linux Docker에서 백엔드를 호스트의 `localhost:8888`으로 띄운 경우 `host.docker.internal`을 host-gateway로 매핑한다.
+저장소 루트의 `scripts/docker_app.sh`를 사용한다. 이 스크립트는 API/UI 이미지를 빌드하고, 컨테이너 실행 시 `.env` 또는 `kraddr-geo-ui/.env.local`에서 VWorld 키를 읽어 `KRADDR_GEO_VWORLD_API_KEY`/`NEXT_PUBLIC_VWORLD_API_KEY` 환경변수로 주입한다. 키 값은 출력하지 않는다.
 
 ```bash
-docker build -t kraddr-geo-ui:debug-v2 ./kraddr-geo-ui
-docker run --rm \
-  --add-host=host.docker.internal:host-gateway \
-  -e KRADDR_GEO_API_INTERNAL_URL=http://host.docker.internal:8888 \
-  -e NEXT_PUBLIC_API_BASE_URL=/api/proxy \
-  -e KRADDR_GEO_VWORLD_API_KEY=your_vworld_api_key \
-  -p 13088:3000 \
-  kraddr-geo-ui:debug-v2
+scripts/docker_app.sh build-ui
+scripts/docker_app.sh up-ui
 ```
+
+API까지 함께 띄우려면 `scripts/docker_app.sh build` 뒤 `scripts/docker_app.sh up`을 사용한다. 기본 실행은 Docker bridge network와 host port mapping을 사용하므로 브라우저 진입점은 `http://127.0.0.1:9002/debug/geocode`다. 스크립트는 API `9001`, UI `9002` host 포트를 점유한 기존 컨테이너나 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다.
 
 저장소 루트의 `scripts/frontend_check.sh`는 Windows `npm`이 PATH에 잡힌 경우 즉시 실패하고, Linux Node/npm에서 `gen:types`, lint, type-check, unit test, build를 순서대로 실행한다. 의존성을 새로 받는 검증이면 `scripts/frontend_check.sh --install`을 사용한다.
 
 Playwright와 실제 브라우저 렌더링 검증은 Windows Node/브라우저 환경에서만 수행한다. WSL headless Chromium은 공유 라이브러리 누락으로 반복 실패하므로 사용하지 않는다. PR에는 Windows에서 실행한 명령과 브라우저를 함께 남긴다.
+
+Firefox 기준으로 지도 로딩을 재현할 때는 Windows 터미널에서 `PLAYWRIGHT_BROWSER=firefox`를 지정한다.
+
+```bat
+set PLAYWRIGHT_BASE_URL=http://localhost:9002
+set PLAYWRIGHT_BROWSER=firefox
+npx playwright test --config playwright.config.ts --grep "VWorld 지도" --workers 1
+```
 
 ## 범위
 
