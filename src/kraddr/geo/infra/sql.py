@@ -232,6 +232,18 @@ CREATE TABLE IF NOT EXISTS tl_scco_li (
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS region_radius_parts (
+  level           TEXT NOT NULL CHECK (level IN ('sido','sigungu','emd')),
+  code            TEXT NOT NULL,
+  name            TEXT,
+  parent_sido_cd  TEXT,
+  parent_sig_cd   TEXT,
+  part_no         INTEGER NOT NULL,
+  geom            geometry(Geometry, 5179) NOT NULL,
+  refreshed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (level, code, part_no)
+);
+
 CREATE TABLE IF NOT EXISTS tl_kodis_bas (
   bas_mgt_sn      TEXT PRIMARY KEY,
   bas_id          TEXT,
@@ -676,6 +688,12 @@ CREATE INDEX IF NOT EXISTS idx_scco_ctprvn_geom ON tl_scco_ctprvn USING GIST (ge
 CREATE INDEX IF NOT EXISTS idx_scco_sig_geom ON tl_scco_sig USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_scco_emd_geom ON tl_scco_emd USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_scco_li_geom ON tl_scco_li USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_geom
+  ON region_radius_parts USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_level_parent_sido
+  ON region_radius_parts (level, parent_sido_cd);
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_level_parent_sig
+  ON region_radius_parts (level, parent_sig_cd);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_geom ON tl_kodis_bas USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_id ON tl_kodis_bas (bas_id);
 CREATE INDEX IF NOT EXISTS idx_sppn_makarea_geom ON tl_sppn_makarea USING GIST (geom);
@@ -736,6 +754,84 @@ CREATE INDEX IF NOT EXISTS idx_ops_maintenance_windows_active
   WHERE state IN ('scheduled','active','ending');
 CREATE INDEX IF NOT EXISTS idx_ops_table_stats_snapshots_captured
   ON ops.table_stats_snapshots (captured_at DESC, schema_name, object_name);
+"""
+
+REGION_RADIUS_PARTS_REFRESH_SQL = """
+SET search_path = public, x_extension;
+
+CREATE TABLE IF NOT EXISTS region_radius_parts (
+  level           TEXT NOT NULL CHECK (level IN ('sido','sigungu','emd')),
+  code            TEXT NOT NULL,
+  name            TEXT,
+  parent_sido_cd  TEXT,
+  parent_sig_cd   TEXT,
+  part_no         INTEGER NOT NULL,
+  geom            geometry(Geometry, 5179) NOT NULL,
+  refreshed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (level, code, part_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_geom
+  ON region_radius_parts USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_level_parent_sido
+  ON region_radius_parts (level, parent_sido_cd);
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_level_parent_sig
+  ON region_radius_parts (level, parent_sig_cd);
+
+TRUNCATE TABLE region_radius_parts;
+
+WITH source_regions AS (
+  SELECT 'sido'::text AS level,
+         c.ctprvn_cd AS code,
+         c.ctp_kor_nm AS name,
+         c.ctprvn_cd AS parent_sido_cd,
+         NULL::text AS parent_sig_cd,
+         c.geom
+    FROM tl_scco_ctprvn c
+   WHERE c.geom IS NOT NULL
+     AND NOT ST_IsEmpty(c.geom)
+  UNION ALL
+  SELECT 'sigungu'::text AS level,
+         s.sig_cd AS code,
+         s.sig_kor_nm AS name,
+         left(s.sig_cd, 2) AS parent_sido_cd,
+         s.sig_cd AS parent_sig_cd,
+         s.geom
+    FROM tl_scco_sig s
+   WHERE s.geom IS NOT NULL
+     AND NOT ST_IsEmpty(s.geom)
+  UNION ALL
+  SELECT 'emd'::text AS level,
+         e.emd_cd AS code,
+         e.emd_kor_nm AS name,
+         left(e.emd_cd, 2) AS parent_sido_cd,
+         left(e.emd_cd, 5) AS parent_sig_cd,
+         e.geom
+    FROM tl_scco_emd e
+   WHERE e.geom IS NOT NULL
+     AND NOT ST_IsEmpty(e.geom)
+),
+subdivided AS (
+  SELECT s.level,
+         s.code,
+         s.name,
+         s.parent_sido_cd,
+         s.parent_sig_cd,
+         row_number() OVER (
+           PARTITION BY s.level, s.code
+           ORDER BY ST_Area(part.geom) DESC
+         )::integer AS part_no,
+         part.geom
+    FROM source_regions s
+    CROSS JOIN LATERAL ST_Subdivide(s.geom, 256) AS part(geom)
+)
+INSERT INTO region_radius_parts (
+  level, code, name, parent_sido_cd, parent_sig_cd, part_no, geom
+)
+SELECT level, code, name, parent_sido_cd, parent_sig_cd, part_no, geom
+  FROM subdivided;
+
+ANALYZE region_radius_parts;
 """
 
 MV_SQL = """

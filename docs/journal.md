@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-02 23:58 (`/v2/regions/within-radius` DB 튜닝)
+
+**작업**: 행정구역 반경조회가 큰 polygon을 레벨별로 직접 훑으며 tail latency가 커지는 문제를 줄이기 위해 `region_radius_parts` serving accelerator를 추가했다.
+
+**반영**:
+- `region_radius_parts` 테이블과 Alembic `0015_t075_region_radius_parts` migration을 추가했다. `tl_scco_ctprvn/sig/emd`를 `ST_Subdivide(geom, 256)`으로 쪼개고 `level`, `code`, parent code, `part_no`, `geom`을 보관한다.
+- `GeometryRepository.regions_within_radius()`는 레벨별 3회 query loop 대신 단일 SQL을 실행한다. 입력점은 한 번만 EPSG:5179로 변환하고, 후보 검색은 `region_radius_parts.geom` GiST index + `ST_DWithin`을 사용한다.
+- `contains` 관계는 accelerator 조각이 아니라 원본 `tl_scco_ctprvn/sig/emd`의 `ST_Covers`로 코드 기준 계산한다.
+- 시군구 후보는 반경 안의 시도 parent code로, 읍면동 후보는 반경 안의 시군구 parent code로 좁힌다.
+- `load shp`, `load shp-all`, `load all-sidos`, `refresh mv` 경로가 accelerator를 다시 채우도록 했다.
+- ADR-043, `docs/data-model.md`, v2 API reference, CHANGELOG, resume, task tracker를 갱신했다.
+
+**검증**:
+- ext4 테스트 미러에서 `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`를 통과했다. pytest는 `297 passed, 7 skipped`다.
+- Docker API image build에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
+- 실제 T-027 최종 DB는 Alembic table이 없던 운영 적재 DB라 `alembic stamp 0014_t065_navi_name_search` 후 `alembic upgrade head`로 `0015`만 적용했다.
+- 실제 DB accelerator row count는 `sido=10,607`, `sigungu=14,686`, `emd=29,023`이고 GiST/parent index 3개와 PK를 확인했다.
+- `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kraddr_geo pytest tests/integration/test_optional_real_postgres_regions.py -q` → `1 passed`. 이 테스트는 accelerator 결과와 원본 `tl_scco_*` 직접 `ST_DWithin` 결과를 비교한다.
+- `scripts/docker_app.sh up`으로 API `9001`, UI `9002`를 새 이미지로 다시 올렸다. `/v1/healthz`, `/debug/geocode`, `/api/runtime-config`가 200을 반환했고 VWorld 키는 길이만 확인했다.
+- REST benchmark 40회 반복:
+  - `seoul_3km`: p50 `13.10ms → 13.68ms`, p95 `22.00ms → 20.89ms`, count 동일(`sido=1`, `sigungu=6`, `emd=190`).
+  - `seoul_20km`: p50 `39.09ms → 22.80ms`, p95 `122.05ms → 28.61ms`, count 동일(`sido=3`, `sigungu=49`, `emd=645`).
+  - `busan_10km`: p50 `38.75ms → 12.28ms`, p95 `45.80ms → 14.89ms`, count 동일(`sido=2`, `sigungu=17`, `emd=138`).
+
+**발견**:
+- 기존 T-027 최종 DB는 schema objects는 최신이지만 `alembic_version` table이 없었다. 운영 적재 DB에 migration을 적용할 때는 기존 schema level을 확인한 뒤 stamp 후 upgrade해야 한다.
+
 ## 2026-06-02 21:49 (Docker 실행 스크립트, 9001/9002 포트 원칙, Firefox VWorld 지도 보정)
 
 **작업**: API/UI Docker 이미지를 GDAL 버전 매칭 상태로 빌드·실행하는 표준 스크립트를 추가하고, 로컬 API/UI 포트 원칙을 `9001`/`9002`로 갱신했다. Firefox에서 VWorld 지도가 보이지 않는 원인을 확인해 `vworld://` custom protocol fallback을 쓰지 않도록 보정했다.

@@ -5,12 +5,15 @@
 ## [Unreleased]
 
 ### Added
+- `/v2/regions/within-radius` 가속용 `region_radius_parts` serving table과 Alembic migration을 추가했다. 시도·시군구·읍면동 polygon을 `ST_Subdivide`로 쪼개 GiST 인덱스를 걸고, 실제 조회는 단일 SQL/단일 좌표 변환으로 수행한다.
 - `scripts/docker_app.sh`와 `docker/api.Dockerfile`을 추가했다. API 이미지는 Debian trixie의 `gdal-config` 버전에 맞춰 Python GDAL binding을 설치하고, UI/API 컨테이너 실행 시 `.env`/`.env.local`의 VWorld 키를 런타임 환경변수로 주입한다. 같은 스크립트로 `kraddr-geo` CLI 적재 명령도 Docker loader runner에서 실행할 수 있다.
 - `POST /v2/regions/within-radius`와 `AsyncAddressClient.regions_within_radius()`를 추가했다. POI `(lon, lat)` 기준 반경 `radius_km` 안에 들어오는 `sido`/`sigungu`/`emd`를 반환하며, `relation="contains"`와 `relation="overlaps"`로 중심점 포함 행정구역과 반경 인접 행정구역을 구분한다.
 - `/debug/geocode`에 반경 행정구역 디버거를 추가했다. React Hook Form, Zod, TanStack Query, Zustand, shadcn/ui 컴포넌트 기반으로 `/v2/regions/within-radius` 요청 body와 응답을 확인한다.
 - Windows Playwright e2e에 실제 Python API `.env` VWorld 키로 MapLibre canvas와 VWorld WMTS 타일 응답을 확인하는 지도 로딩 테스트를 추가했다.
 
 ### Changed
+- `GeometryRepository.regions_within_radius()`는 레벨별 3회 쿼리 대신 `region_radius_parts` 기반 단일 쿼리를 사용한다. `contains` 판정은 원본 `tl_scco_*` polygon의 `ST_Covers`로 유지하고, 시도 → 시군구 → 읍면동 parent code 필터로 후보 폭을 줄인다.
+- `load shp`, `load shp-all`, `load all-sidos`, `refresh mv` 경로가 행정구역 반경조회 accelerator를 다시 채우도록 했다.
 - Docker 실행 기본값을 host network 대신 bridge network + host port mapping으로 정리하고, 공식 로컬 포트를 API `9001`, UI `9002`로 고정했다. `scripts/docker_app.sh up` 계열은 해당 host 포트를 점유한 기존 컨테이너나 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다.
 - VWorld 지도 타일 오류 UX를 조정했다. fallback 타일로 복구 가능한 일시 오류나 이미 로드된 지도에서 발생한 일부 타일 오류는 즉시 실패 overlay로 고정하지 않고, 인증키/도메인 오류만 명확한 메시지로 표시한다.
 - `kraddr-geo-ui`의 VWorld runtime config는 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용하고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다.

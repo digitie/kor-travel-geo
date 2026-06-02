@@ -227,6 +227,18 @@ CREATE TABLE IF NOT EXISTS tl_scco_li (
   loaded_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS region_radius_parts (
+  level           TEXT NOT NULL CHECK (level IN ('sido','sigungu','emd')),
+  code            TEXT NOT NULL,
+  name            TEXT,
+  parent_sido_cd  TEXT,
+  parent_sig_cd   TEXT,
+  part_no         INTEGER NOT NULL,
+  geom            geometry(Geometry, 5179) NOT NULL,
+  refreshed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (level, code, part_no)
+);
+
 CREATE TABLE IF NOT EXISTS tl_kodis_bas (
   bas_mgt_sn      TEXT PRIMARY KEY,
   bas_id          TEXT,

@@ -78,16 +78,28 @@ def test_search_repo_supports_district_candidates_from_admin_polygons() -> None:
 
 
 def test_regions_within_radius_sql_keeps_region_geometry_indexable() -> None:
-    sql = "\n".join(str(query) for query in geometry_repo._REGIONS_WITHIN_RADIUS_SQL.values())
+    sql = str(geometry_repo._REGIONS_WITHIN_RADIUS_SQL)
+    refresh_sql = infra_sql.REGION_RADIUS_PARTS_REFRESH_SQL
 
-    assert "ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179)" in sql
+    assert sql.count("ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179)") == 1
+    assert "FROM region_radius_parts p" in sql
+    assert "JOIN sido_candidates sido ON sido.code = p.parent_sido_cd" in sql
+    assert "JOIN sigungu_candidates sigungu ON sigungu.code = p.parent_sig_cd" in sql
+    assert "ST_DWithin(p.geom, target.geom, :radius_m)" in sql
     assert "FROM tl_scco_ctprvn" in sql
     assert "FROM tl_scco_sig" in sql
     assert "FROM tl_scco_emd" in sql
-    assert "ST_DWithin(c.geom, target.geom, :radius_m)" in sql
-    assert "ST_DWithin(s.geom, target.geom, :radius_m)" in sql
-    assert "ST_DWithin(e.geom, target.geom, :radius_m)" in sql
     assert "ST_Covers(c.geom, target.geom)" in sql
+    assert "ST_Covers(s.geom, target.geom)" in sql
+    assert "ST_Covers(e.geom, target.geom)" in sql
+    assert "ST_Subdivide(s.geom, 256)" in refresh_sql
+    assert "left(s.sig_cd, 2) AS parent_sido_cd" in refresh_sql
+    assert "left(e.emd_cd, 5) AS parent_sig_cd" in refresh_sql
+    assert "idx_region_radius_parts_geom" in infra_sql.INDEX_SQL
+    assert "ST_DWithin(c.geom, target.geom, :radius_m)" not in sql
+    assert "ST_DWithin(s.geom, target.geom, :radius_m)" not in sql
+    assert "ST_DWithin(e.geom, target.geom, :radius_m)" not in sql
+    assert "ST_Transform(p.geom" not in sql
     assert "ST_Transform(c.geom" not in sql
     assert "ST_Transform(s.geom" not in sql
     assert "ST_Transform(e.geom" not in sql

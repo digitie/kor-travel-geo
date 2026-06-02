@@ -9,7 +9,13 @@ from typing import Any, Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from kraddr.geo.infra.sql import MV_SQL, POSTLOAD_SQL, TEXT_SEARCH_MV_SQL, iter_sql_statements
+from kraddr.geo.infra.sql import (
+    MV_SQL,
+    POSTLOAD_SQL,
+    REGION_RADIUS_PARTS_REFRESH_SQL,
+    TEXT_SEARCH_MV_SQL,
+    iter_sql_statements,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +54,7 @@ async def refresh_mv(
         await rebuild_mv_next(engine)
         await rebuild_text_search_mv_next(engine)
         await shadow_swap_mv(engine)
+        await refresh_region_radius_parts(engine)
         return
     statement = "REFRESH MATERIALIZED VIEW"
     if concurrently:
@@ -68,6 +75,15 @@ async def refresh_mv(
             await conn.execute(text(text_search_statement))
         await conn.execute(text("ANALYZE mv_geocode_target"))
         await conn.execute(text("ANALYZE mv_geocode_text_search"))
+    await refresh_region_radius_parts(engine)
+
+
+async def refresh_region_radius_parts(engine: AsyncEngine) -> None:
+    """Rebuild subdivided administrative-region geometry for radius lookup."""
+    async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
+            await conn.execute(text(sql))
 
 
 async def rebuild_mv(engine: AsyncEngine) -> None:

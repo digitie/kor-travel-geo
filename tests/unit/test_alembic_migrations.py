@@ -111,3 +111,15 @@ def test_t065_navi_name_search_migration_rebuilds_search_helper() -> None:
     assert "DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search" in migration
     assert "SET LOCAL statement_timeout = 0" in migration
     assert "TEXT_SEARCH_MV_SQL" in migration
+
+
+def test_t075_region_radius_parts_migration_builds_accelerator() -> None:
+    migration = Path("alembic/versions/0015_t075_region_radius_parts.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "revision = \"0015_t075_region_radius_parts\"" in migration
+    assert "down_revision = \"0014_t065_navi_name_search\"" in migration
+    assert "REGION_RADIUS_PARTS_REFRESH_SQL" in migration
+    assert "SET LOCAL statement_timeout = 0" in migration
+    assert "DROP TABLE IF EXISTS region_radius_parts" in migration

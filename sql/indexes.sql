@@ -49,6 +49,12 @@ CREATE INDEX IF NOT EXISTS idx_scco_ctprvn_geom ON tl_scco_ctprvn USING GIST (ge
 CREATE INDEX IF NOT EXISTS idx_scco_sig_geom ON tl_scco_sig USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_scco_emd_geom ON tl_scco_emd USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_scco_li_geom ON tl_scco_li USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_geom
+  ON region_radius_parts USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_level_parent_sido
+  ON region_radius_parts (level, parent_sido_cd);
+CREATE INDEX IF NOT EXISTS idx_region_radius_parts_level_parent_sig
+  ON region_radius_parts (level, parent_sig_cd);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_geom ON tl_kodis_bas USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_kodis_bas_id ON tl_kodis_bas (bas_id);
 CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_geom ON tl_spbd_buld_polygon USING GIST (geom);

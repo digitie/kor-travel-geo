@@ -34,7 +34,11 @@ from kraddr.geo.infra.metrics import (
 from kraddr.geo.loaders.bulk_loader import load_bulk_delivery
 from kraddr.geo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kraddr.geo.loaders.pobox_loader import load_pobox
-from kraddr.geo.loaders.postload import refresh_mv, resolve_text_geometry_links
+from kraddr.geo.loaders.postload import (
+    refresh_mv,
+    refresh_region_radius_parts,
+    resolve_text_geometry_links,
+)
 from kraddr.geo.loaders.shp.polygons_loader import load_shp_polygons
 from kraddr.geo.loaders.sppn_makarea_loader import load_sppn_makarea
 from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
@@ -372,6 +376,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             source_yyyymm=_payload_str(payload, "source_yyyymm"),
             cancel_event=cancel_event,
         )
+        await refresh_region_radius_parts(engine)
         await progress(progress=1.0, stage="shp_polygons_load", message=f"{count} layers loaded")
 
     async def sppn_makarea(
