@@ -10,6 +10,12 @@
 | `CreateProcess ... os error 2` 가 셸 진입 전 발생 | `exec_command` 런처가 복잡한 quoting, heredoc, `workdir`, Windows exe 실행 패턴을 안정적으로 못 띄움 | 명령을 단순화하고 `cd ... &&` + 단일 바이너리 패턴으로 재시도 |
 | `apply_patch`가 `/mnt/f/...` 파일을 못 찾음 | 현재 세션의 patch helper가 NTFS mount 경로를 일관되게 해석하지 못함 | 작은 범위 치환 명령으로 대체하고 즉시 파일 재확인 |
 | `"\n"`, regex backslash가 코드 안에서 깨짐 | inline shell/Python 멀티라인 편집에서 escape가 여러 번 해석됨 | bulk rewrite 대신 line-oriented edit + `sed` 재확인 + lint/type-check 즉시 실행 |
+| `gh pr view`가 `.../mnt/f/.../F:/...` 경로 오류를 냄 | WSL `gh`가 현재 worktree의 Windows Git metadata를 로컬 git으로 읽으려 함 | `gh ... --repo digitie/python-kraddr-geo`로 repo를 명시해 로컬 git 조회를 우회 |
+| WSL에서 `node: command not found` | 기본 PATH에 Linux Node가 없고 Windows npm/node shim만 보이거나 아무 Node도 없음 | `source ~/.nvm/nvm.sh` 또는 `source scripts/agent_env.sh` 후 실행 |
+| `npm run start --hostname ...`가 인자를 못 받음 | npm script 인자는 `--` 뒤에만 하위 명령으로 전달됨 | `npm run start -- --hostname 0.0.0.0 --port 13088` |
+| Windows Playwright가 WSL 서버 URL을 못 받음 | WSL에서 `cmd.exe`로 넘기는 env var quoting이 Windows cmd 규칙과 어긋남 | `cmd.exe /V:ON /C "cd /d F:\...\kraddr-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:<PORT>&& npx playwright test ..."` |
+| `codegraph status`가 sync 직후에도 pending을 보임 | `codegraph sync`가 끝나기 전에 status를 병렬로 실행함 | sync 종료를 기다린 뒤 status 실행. `impact`는 file path가 아니라 symbol 이름을 전달 |
+| `next-env.d.ts`가 `.next/dev/types/routes.d.ts`로 바뀜 | Next dev/build가 자동 생성 reference를 로컬 실행 모드에 맞게 고침 | 커밋 전 tracked 기준으로 되돌린다. generated reference 변경은 작업 범위가 아니다 |
 
 ## 2. 패턴 A — NTFS worktree에서 WSL `git` 실패
 
@@ -122,3 +128,120 @@ JSON 문자열 → bash → Python 문자열 → TypeScript 문자열처럼 **es
 - `workdir`가 되는지 먼저 실험하지 않는다. 이미 `cd ... &&`가 안정적이면 그 패턴을 유지한다.
 - multiline inline rewrite 뒤에는 반드시 같은 파일을 다시 열어 escape 손상을 확인한다.
 - 테스트 미러에서 검증이 통과해도, source-of-truth 수정은 항상 NTFS worktree에 반영했는지 다시 확인한다.
+
+## 8. 반복 시도 제한 규칙
+
+같은 실패 명령을 같은 형태로 여러 번 반복하지 않는다. 한 번 실패하면 원인을 먼저 분류하고, 두 번째 실행은 다른 접근 방식이어야 한다.
+
+| 실패 유형 | 같은 방식 재시도 한도 | 바로 바꿀 방식 |
+|-----------|----------------------|----------------|
+| WSL `git`가 NTFS worktree에서 실패 | 0회 | Windows `git.exe -C F:/...` |
+| `gh`가 로컬 git repository 오류를 냄 | 0회 | `gh ... --repo digitie/python-kraddr-geo` |
+| bare `node`/`npm`이 WSL에서 없음 | 0회 | `source ~/.nvm/nvm.sh` 또는 `source scripts/agent_env.sh` |
+| npm script가 server option을 못 받음 | 0회 | `npm run <script> -- --hostname ... --port ...` |
+| Windows Playwright env var가 안 먹음 | 1회 | 검증된 `cmd.exe /V:ON /C "set VAR=value&& ..."` 형태 |
+| long-running server가 Ctrl-C로 안 꺼짐 | 0회 | `ss -ltnp | rg ':<PORT>'`로 PID 확인 후 `kill <PID>` |
+| CodeGraph가 pending으로 보임 | 0회 | sync 종료 대기 후 status 재실행 |
+| generated file이 실행 모드 때문에 바뀜 | 0회 | tracked 기준으로 복구하고 커밋 제외 |
+
+## 9. 이번 세션 복기 — CLI·서버·환경 표준
+
+### GitHub CLI
+
+WSL shell에서 `gh`를 쓰더라도 현재 디렉터리의 `.git`은 Windows 경로를 가리킨다. 따라서 `gh pr view 114`처럼 repo를 생략하면 `gh`가 로컬 git을 읽다가 다음과 같은 오류를 낼 수 있다.
+
+```text
+failed to run git: fatal: not a git repository: /mnt/f/.../F:/dev/...
+```
+
+표준 명령은 repo를 명시하는 형태다.
+
+```bash
+gh pr view <PR_NUMBER> --repo digitie/python-kraddr-geo --json number,state,mergeable,statusCheckRollup
+gh pr merge <PR_NUMBER> --repo digitie/python-kraddr-geo --merge --delete-branch
+```
+
+Git 자체는 계속 Windows `git.exe`를 쓴다. `gh`는 PR/Actions API 조회에만 쓰고, local branch/status/commit/push는 Windows `git.exe` 기준으로 유지한다.
+
+### npm server parameter 전달
+
+npm script에 전달할 Next.js 옵션은 반드시 `--` 뒤에 둔다. 아래가 표준이다.
+
+```bash
+cd <wsl-test-mirror>/kraddr-geo-ui
+source ~/.nvm/nvm.sh
+npm run dev -- --hostname 0.0.0.0 --port 13088
+npm run start -- --hostname 0.0.0.0 --port 13088
+```
+
+다음 형태는 쓰지 않는다.
+
+```bash
+npm run start --hostname 0.0.0.0 --port 13088
+npm run dev --hostname 0.0.0.0 --port 13088
+```
+
+Windows Playwright가 붙어야 하는 UI 서버는 WSL에서 `--hostname 0.0.0.0`으로 띄운다. 실제 지도 로딩 e2e는 HMR origin 차단 변수를 줄이기 위해 `npm run build` 후 production `next start` 서버를 우선 사용한다.
+
+### Windows Playwright 실행
+
+Playwright와 실제 브라우저는 Windows에서만 실행한다. WSL에서는 UI 서버만 띄운다.
+
+```bash
+# WSL: IP 확인
+hostname -I | awk '{print $1}'
+
+# Windows Playwright를 WSL shell에서 호출할 때 검증된 형태
+cmd.exe /V:ON /C "cd /d F:\dev\python-kraddr-geo-codex\kraddr-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:13088&& npx playwright test --config playwright.config.ts --project chromium --workers 1"
+```
+
+`set PLAYWRIGHT_BASE_URL=...&&` 뒤에 공백을 넣지 않는다. 공백은 값 끝에 포함될 수 있다. WSL에서 Windows `cmd.exe`를 호출할 때 env var 전달이 흔들리면 이 형태로 고정한다.
+
+### Linux Node/npm 환경
+
+WSL 기본 shell에서 bare `node`가 없을 수 있다. Node가 필요한 명령은 다음 중 하나를 먼저 실행한다.
+
+```bash
+source ~/.nvm/nvm.sh
+# 또는 테스트 미러 루트에서
+source scripts/agent_env.sh
+```
+
+runtime config 확인처럼 간단한 one-off Node 명령도 bare `node -e ...`로 시작하지 않는다.
+
+```bash
+source ~/.nvm/nvm.sh
+node -e "fetch('http://127.0.0.1:13088/api/runtime-config').then(r=>r.json()).then(j=>console.log(Boolean(j.vworldApiKey), String(j.vworldApiKey || '').length))"
+```
+
+VWorld 키는 절대 출력하지 않는다. 문서와 로그에는 `nonempty`, `length`처럼 존재 여부만 남긴다.
+
+### 서버 종료
+
+장기 실행 `exec_command` session의 stdin이 닫히면 `Ctrl-C`를 보낼 수 없다. `pkill -f`도 Next.js process name이 `next-server`로 바뀌어 실패할 수 있다. 포트 기준으로 PID를 확인하고 종료한다.
+
+```bash
+ss -ltnp | rg ':13088'
+kill <PID>
+ss -ltnp | rg ':13088' || true
+```
+
+작업 종료 전에는 사용한 dev/prod UI 서버가 남아 있지 않은지 확인한다.
+
+### CodeGraph
+
+`codegraph sync`와 `codegraph status`를 병렬로 실행하면 status가 sync 전 상태를 보고 `Pending Changes`를 표시할 수 있다. 순서는 고정한다.
+
+```bash
+codegraph sync
+codegraph status
+codegraph impact RegionsWithinRadiusDebugger
+```
+
+`codegraph impact` 인자는 file path가 아니라 symbol 이름이다. 새 컴포넌트 파일 전체 영향도를 보고 싶으면 대표 export symbol 이름을 사용한다.
+
+### generated/stat noise 정리
+
+Next.js 실행 뒤 `kraddr-geo-ui/next-env.d.ts`가 `.next/types/routes.d.ts`에서 `.next/dev/types/routes.d.ts`로 바뀔 수 있다. 이 파일은 자동 생성 reference이므로 기능 변경으로 보지 않고 tracked 기준으로 되돌린다.
+
+내용 diff 없이 Windows Git status에만 남는 파일은 먼저 `git.exe diff --raw -- <file>`과 `git.exe diff -- <file>`로 실제 변경 여부를 확인한다. 실제 diff가 없으면 index stat만 맞추고 커밋에 넣지 않는다.
