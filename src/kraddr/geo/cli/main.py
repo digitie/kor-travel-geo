@@ -39,7 +39,11 @@ from kraddr.geo.loaders.epost_downloader import (
     extract_epost_zip,
 )
 from kraddr.geo.loaders.pobox_loader import load_pobox
-from kraddr.geo.loaders.postload import refresh_mv, resolve_text_geometry_links
+from kraddr.geo.loaders.postload import (
+    refresh_mv,
+    refresh_region_radius_parts,
+    resolve_text_geometry_links,
+)
 from kraddr.geo.loaders.shp.polygons_loader import load_shp_polygons
 from kraddr.geo.loaders.sppn_makarea_loader import load_sppn_makarea
 from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
@@ -395,15 +399,21 @@ def load_shp_command(
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client._engine() is not None
-            count = await _run_with_cli_lock(
-                client._engine(),
-                _path_lock(_shp_namespace(mode), path),
-                lambda: load_shp_polygons(
+
+            async def operation() -> int:
+                count = await load_shp_polygons(
                     client._engine(),
                     path,
                     mode=mode,
                     source_yyyymm=yyyymm,
-                ),
+                )
+                await refresh_region_radius_parts(client._engine())
+                return count
+
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(_shp_namespace(mode), path),
+                operation,
             )
             typer.echo(f"loaded SHP layers: {count}")
 
@@ -420,6 +430,7 @@ def load_shp_all_command(
         total = 0
         async with AsyncAddressClient() as client:
             assert client._engine() is not None
+
             async def operation() -> None:
                 nonlocal total
                 items = _shp_all_work_items(root, mode)
@@ -433,6 +444,7 @@ def load_shp_all_command(
                     )
                     total += count
                     typer.echo(f"{sido_dir.name}: {count} layers")
+                await refresh_region_radius_parts(client._engine())
 
             await _run_with_cli_lock(
                 client._engine(),
@@ -617,6 +629,7 @@ def load_all_sidos_command(
                             analyze=index == len(sido_dirs) - 1,
                         )
                     typer.echo(f"loaded SHP layers total: {shp_total}")
+                    await refresh_region_radius_parts(client._engine())
                 if pobox_path is not None:
                     count = await load_pobox(client._engine(), pobox_path)
                     typer.echo(f"loaded postal_pobox rows: {count}")

@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-02 갱신, by codex)
 
+- ✅ `/v2/regions/within-radius` DB 튜닝 — 행정구역 반경조회는 `region_radius_parts` serving accelerator를 사용한다. `tl_scco_ctprvn/sig/emd` polygon을 `ST_Subdivide`로 쪼개 GiST 인덱스를 걸고, API는 하나의 SQL에서 입력점을 한 번만 EPSG:5179로 변환한다. `contains` 판정은 원본 polygon의 `ST_Covers`로 유지하며, 시도 → 시군구 → 읍면동 parent code 필터로 후보 폭을 줄인다. `alembic upgrade head`, `load shp`, `load shp-all`, `load all-sidos`, `refresh mv` 경로가 accelerator를 다시 채운다.
 - ✅ Docker 실행 스크립트와 로컬 포트 원칙 갱신 — API/UI Docker 이미지는 `scripts/docker_app.sh build`, 실행은 `scripts/docker_app.sh up`으로 통일한다. 기본 host/container 포트는 API `9001`, UI `9002`이며, 스크립트는 해당 host 포트를 점유한 기존 컨테이너나 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다. VWorld 키는 `.env`/`kraddr-geo-ui/.env.local`에서 읽어 컨테이너 환경변수로 주입하되 값은 출력하지 않는다.
 - ✅ PR #114~#115 리뷰 감사와 실제 DB 테스트 보강 — GitHub conversation comment, review body, inline review thread를 모두 확인했고 두 PR 모두 코멘트 0건이었다. PR #114 기능은 `KRADDR_GEO_TEST_PG_DSN` 기반 선택형 실제 PostgreSQL 테스트를 추가해 `AsyncAddressClient.regions_within_radius()`가 실제 `tl_scco_*` 행정구역 도형에서 `sido`/`sigungu`/`emd` contains 후보를 반환하는지 검증한다. 상세: `docs/postmerge-review-fixups-pr114-pr115.md`
 - ✅ 이번 세션 실행 실수 복기 문서화 — `docs/agent-failure-patterns.md`와 `docs/agent-workflow.md`에 `gh --repo` 사용, npm script 인자 `--` 전달, WSL Linux Node 초기화, WSL UI 서버 + Windows Playwright 실행, server PID 종료, CodeGraph sync/status 순서, generated `next-env.d.ts` 복구, 같은 실패 명령 반복 금지 규칙을 추가했다.

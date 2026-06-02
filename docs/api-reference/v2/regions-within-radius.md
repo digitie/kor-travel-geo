@@ -4,7 +4,7 @@
 
 `POST /v2/regions/within-radius`는 POI 좌표를 기준으로 반경 `n km` 안에 포함되는 행정구역을 반환한다. `krtourmap` ADR-045의 POI 주변 행정구역 판별 흐름에 맞춰, 하나의 점이 속한 행정구역뿐 아니라 반경 원과 겹치는 인접 시군구·읍면동도 함께 확인하는 용도다.
 
-외부 인터페이스 좌표 순서는 항상 `(lon, lat)`이며, 입력 좌표계는 EPSG:4326이다. 내부 SQL은 입력 점을 한 번만 EPSG:5179로 변환한 뒤 PostGIS 공간 인덱스를 탈 수 있게 행정구역 원본 geometry를 그대로 `ST_DWithin`에 사용한다.
+외부 인터페이스 좌표 순서는 항상 `(lon, lat)`이며, 입력 좌표계는 EPSG:4326이다. 내부 SQL은 입력 점을 한 번만 EPSG:5179로 변환한다. 반경 후보는 `region_radius_parts`의 `ST_Subdivide` 조각과 GiST 인덱스로 찾고, `contains` 판정은 원본 `tl_scco_ctprvn`/`tl_scco_sig`/`tl_scco_emd` geometry에서 코드 기준으로 계산한다.
 
 ## 입력
 
@@ -69,7 +69,8 @@ curl -X POST "http://localhost:9001/v2/regions/within-radius" \
 
 ## 검증 기준
 
-- SQL은 `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`를 사용한다.
+- SQL은 후보 검색에 `region_radius_parts`를 사용하고, 중심점 포함 판정에 `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`를 사용한다.
 - 입력점은 한 번만 `ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179)`로 변환한다.
-- 행정구역 geometry에는 `ST_Transform`을 걸지 않는다. 그래야 기존 geometry index를 사용할 수 있다.
+- 행정구역 geometry에는 `ST_Transform`을 걸지 않는다. 그래야 geometry index를 사용할 수 있다.
 - 거리 필터는 meter 단위 `radius_km * 1000`으로 적용한다.
+- `region_radius_parts`는 `alembic upgrade head`, `load shp`, `load shp-all`, `load all-sidos`, `refresh mv` 경로에서 다시 채운다.

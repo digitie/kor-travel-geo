@@ -186,77 +186,95 @@ SELECT 'region'::text AS kind,
 """
 )
 
-_REGIONS_WITHIN_RADIUS_CTPRVN_SQL = text(
+_REGIONS_WITHIN_RADIUS_SQL = text(
     """
 WITH target AS (
   SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179) AS geom
 ),
-matched AS (
-  SELECT c.ctprvn_cd AS code,
-         c.ctp_kor_nm AS name,
-         CASE
-           WHEN ST_Covers(c.geom, target.geom) THEN 'contains'
-           ELSE 'overlaps'
-         END AS relation
+contains AS (
+  SELECT 'sido'::text AS level,
+         c.ctprvn_cd AS code
     FROM tl_scco_ctprvn c
     CROSS JOIN target
-   WHERE ST_DWithin(c.geom, target.geom, :radius_m)
-)
-SELECT code, name, relation
-  FROM matched
- ORDER BY CASE relation WHEN 'contains' THEN 0 ELSE 1 END, code
-"""
-)
-
-_REGIONS_WITHIN_RADIUS_SIG_SQL = text(
-    """
-WITH target AS (
-  SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179) AS geom
-),
-matched AS (
-  SELECT s.sig_cd AS code,
-         s.sig_kor_nm AS name,
-         CASE
-           WHEN ST_Covers(s.geom, target.geom) THEN 'contains'
-           ELSE 'overlaps'
-         END AS relation
+   WHERE ST_Covers(c.geom, target.geom)
+  UNION ALL
+  SELECT 'sigungu'::text AS level,
+         s.sig_cd AS code
     FROM tl_scco_sig s
     CROSS JOIN target
-   WHERE ST_DWithin(s.geom, target.geom, :radius_m)
-)
-SELECT code, name, relation
-  FROM matched
- ORDER BY CASE relation WHEN 'contains' THEN 0 ELSE 1 END, code
-"""
-)
-
-_REGIONS_WITHIN_RADIUS_EMD_SQL = text(
-    """
-WITH target AS (
-  SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179) AS geom
-),
-matched AS (
-  SELECT e.emd_cd AS code,
-         e.emd_kor_nm AS name,
-         CASE
-           WHEN ST_Covers(e.geom, target.geom) THEN 'contains'
-           ELSE 'overlaps'
-         END AS relation
+   WHERE ST_Covers(s.geom, target.geom)
+  UNION ALL
+  SELECT 'emd'::text AS level,
+         e.emd_cd AS code
     FROM tl_scco_emd e
     CROSS JOIN target
-   WHERE ST_DWithin(e.geom, target.geom, :radius_m)
+   WHERE ST_Covers(e.geom, target.geom)
+),
+sido_candidates AS (
+  SELECT 'sido'::text AS level,
+         p.code,
+         p.name,
+         CASE WHEN bool_or(c.code IS NOT NULL) THEN 'contains' ELSE 'overlaps' END AS relation
+    FROM region_radius_parts p
+    CROSS JOIN target
+    LEFT JOIN contains c ON c.level = p.level AND c.code = p.code
+   WHERE p.level = 'sido'
+     AND (
+       CAST(:include_sido AS boolean)
+       OR CAST(:include_sigungu AS boolean)
+       OR CAST(:include_emd AS boolean)
+     )
+     AND ST_DWithin(p.geom, target.geom, :radius_m)
+   GROUP BY p.code, p.name
+),
+sigungu_candidates AS (
+  SELECT 'sigungu'::text AS level,
+         p.code,
+         p.name,
+         CASE WHEN bool_or(c.code IS NOT NULL) THEN 'contains' ELSE 'overlaps' END AS relation
+    FROM region_radius_parts p
+    CROSS JOIN target
+    JOIN sido_candidates sido ON sido.code = p.parent_sido_cd
+    LEFT JOIN contains c ON c.level = p.level AND c.code = p.code
+   WHERE p.level = 'sigungu'
+     AND (CAST(:include_sigungu AS boolean) OR CAST(:include_emd AS boolean))
+     AND ST_DWithin(p.geom, target.geom, :radius_m)
+   GROUP BY p.code, p.name
+),
+emd_candidates AS (
+  SELECT 'emd'::text AS level,
+         p.code,
+         p.name,
+         CASE WHEN bool_or(c.code IS NOT NULL) THEN 'contains' ELSE 'overlaps' END AS relation
+    FROM region_radius_parts p
+    CROSS JOIN target
+    JOIN sigungu_candidates sigungu ON sigungu.code = p.parent_sig_cd
+    LEFT JOIN contains c ON c.level = p.level AND c.code = p.code
+   WHERE p.level = 'emd'
+     AND CAST(:include_emd AS boolean)
+     AND ST_DWithin(p.geom, target.geom, :radius_m)
+   GROUP BY p.code, p.name
+),
+selected AS (
+  SELECT level, code, name, relation
+    FROM sido_candidates
+   WHERE CAST(:include_sido AS boolean)
+  UNION ALL
+  SELECT level, code, name, relation
+    FROM sigungu_candidates
+   WHERE CAST(:include_sigungu AS boolean)
+  UNION ALL
+  SELECT level, code, name, relation
+    FROM emd_candidates
+   WHERE CAST(:include_emd AS boolean)
 )
-SELECT code, name, relation
-  FROM matched
- ORDER BY CASE relation WHEN 'contains' THEN 0 ELSE 1 END, code
+SELECT level, code, name, relation
+  FROM selected
+ ORDER BY CASE level WHEN 'sido' THEN 0 WHEN 'sigungu' THEN 1 ELSE 2 END,
+          CASE relation WHEN 'contains' THEN 0 ELSE 1 END,
+          code
 """
 )
-
-_REGIONS_WITHIN_RADIUS_SQL: dict[RegionWithinRadiusLevel, TextClause] = {
-    "sido": _REGIONS_WITHIN_RADIUS_CTPRVN_SQL,
-    "sigungu": _REGIONS_WITHIN_RADIUS_SIG_SQL,
-    "emd": _REGIONS_WITHIN_RADIUS_EMD_SQL,
-}
 
 
 class GeometryRepository:
@@ -340,14 +358,22 @@ class GeometryRepository:
             "lon": lon,
             "lat": lat,
             "radius_m": radius_km * 1000.0,
+            "include_sido": "sido" in levels,
+            "include_sigungu": "sigungu" in levels,
+            "include_emd": "emd" in levels,
         }
-        result: dict[RegionWithinRadiusLevel, tuple[RegionWithinRadiusItem, ...]] = {}
         async with self.engine.connect() as conn:
-            for level in levels:
-                rows = (
-                    await conn.execute(_REGIONS_WITHIN_RADIUS_SQL[level], params)
-                ).mappings().all()
-                result[level] = tuple(_map_region_within_radius(dict(row)) for row in rows)
+            rows = (await conn.execute(_REGIONS_WITHIN_RADIUS_SQL, params)).mappings().all()
+        grouped: dict[RegionWithinRadiusLevel, list[RegionWithinRadiusItem]] = {
+            level: [] for level in levels
+        }
+        for row in rows:
+            level = cast("RegionWithinRadiusLevel", str(row["level"]))
+            if level in grouped:
+                grouped[level].append(_map_region_within_radius(dict(row)))
+        result: dict[RegionWithinRadiusLevel, tuple[RegionWithinRadiusItem, ...]] = {
+            level: tuple(items) for level, items in grouped.items()
+        }
         return result
 
 
