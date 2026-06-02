@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-02 22:05 (세션 실행 실수 복기와 재발 방지 런북 보강)
+
+**작업**: 이번 세션에서 반복된 CLI 접근, npm 서버 파라미터, WSL/Windows 실행 분리, 환경 설정, 서버 정리 실수를 복기해 문서화했다. 같은 명령을 여러 번 반복하지 않도록 실패 유형별 전환 규칙을 추가했다.
+
+**반영**:
+- `docs/agent-failure-patterns.md`에 `gh --repo` 사용, WSL Linux Node 초기화, npm script 인자 `--` 전달, Windows Playwright env var 전달, CodeGraph sync/status 순서, generated `next-env.d.ts` 복구, long-running server PID 종료, 반복 시도 제한 규칙을 추가했다.
+- `docs/agent-workflow.md`에 WSL production UI 서버 실행, Windows Playwright 접속, VWorld runtime config 확인, 서버 종료, GitHub CLI, CodeGraph 표준 명령을 붙여넣기 가능한 형태로 추가했다.
+- `docs/dev-environment.md`, `docs/resume.md`, `CHANGELOG.md`에 같은 운영 기준을 요약 반영했다.
+
+**검증**:
+- 문서-only 변경이다. `git.exe diff --check`로 whitespace를 확인한다.
+
+**발견**:
+- `gh`는 GitHub API 도구지만 로컬 repository context를 생략하면 WSL에서 Windows Git metadata를 읽으려 한다. PR 조회·머지에는 `--repo digitie/python-kraddr-geo`를 붙이는 것이 안정적이다.
+- Next.js 서버 인자는 npm script 구분자 `--` 뒤에 둬야 하며, 실제 지도 e2e는 WSL `next start --hostname 0.0.0.0` 서버에 Windows Playwright를 붙이는 방식이 가장 재현성이 높았다.
+
 ## 2026-06-02 21:10 (`/v2/regions/within-radius`와 VWorld 지도 실키 검증)
 
 **작업**: `krtourmap` ADR-045 방향에 맞춰 POI 좌표 기준 반경 `n km` 안에 포함되는 시도·시군구·읍면동을 반환하는 v2 API와 Python client 함수를 추가하고, admin/debug UI에서 해당 함수를 직접 디버깅할 수 있게 했다. VWorld 지도 키는 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽도록 바꿨고, 확보한 키로 실제 MapLibre/VWorld WMTS 로딩을 검증했다.

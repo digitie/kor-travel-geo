@@ -12,6 +12,7 @@
 ### Changed
 - `kraddr-geo-ui`의 VWorld runtime config는 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용하고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다.
 - 프론트엔드 실행·lint·type-check·unit·build·React Doctor는 WSL ext4 미러에서 Linux Node/npm으로 수행하고, e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행하도록 문서화했다.
+- 반복되는 에이전트 실행 실수를 줄이기 위해 `gh --repo` 사용, npm script 인자 `--` 전달, WSL Linux Node 초기화, WSL UI 서버 + Windows Playwright 실행, server PID 종료, CodeGraph sync/status 순서, generated `next-env.d.ts` 복구, 같은 실패 명령 반복 금지 규칙을 문서화했다.
 - 프론트엔드 작업 후 React Doctor 실행, 경고 수정, 재실행을 필수 문서 절차로 추가했다.
 - `/admin/` 기본 진입 시 404 대신 `/debug/geocode`로 이동하도록 했다.
 - PC/WSL 개발 정책을 NTFS main repo + 에이전트별 `python-kraddr-geo-*` worktree + WSL ext4 테스트 미러 방식으로 전환했다. `.claude/`는 로컬 secret 설정으로 ignore한다.
