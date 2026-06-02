@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from kraddr.geo.dto.common import CRS, AddressType, FrozenModel, Page, Point, Status
 from kraddr.geo.dto.region import RegionHint
@@ -15,6 +16,8 @@ V2MatchKind = Literal["road", "parcel", "postal", "keyword", "category", "region
 V2FallbackMode = Literal["none", "api"]
 V2PointPrecision = Literal["exact", "interpolated", "centroid", "approximate"]
 V2GeometryKind = Literal["building", "region", "road"]
+RegionWithinRadiusLevel = Literal["sido", "sigungu", "emd"]
+RegionWithinRadiusRelation = Literal["contains", "overlaps"]
 
 
 class BBoxV2(FrozenModel):
@@ -169,3 +172,57 @@ class SearchV2Response(FrozenModel):
     candidates: tuple[CandidateV2, ...] = ()
     total: int = Field(default=0, ge=0)
     region_hint_applied: RegionHint | None = None
+
+
+class RegionWithinRadiusCenter(FrozenModel):
+    """Query center in external `(lon, lat)` order."""
+
+    lon: float = Field(ge=-180.0, le=180.0)
+    lat: float = Field(ge=-90.0, le=90.0)
+
+
+class RegionWithinRadiusItem(FrozenModel):
+    """Administrative region intersecting a POI radius."""
+
+    code: str = Field(min_length=2, max_length=8)
+    name: str | None = None
+    relation: RegionWithinRadiusRelation
+
+
+class RegionsWithinRadiusInput(FrozenModel):
+    lon: float = Field(ge=-180.0, le=180.0)
+    lat: float = Field(ge=-90.0, le=90.0)
+    radius_km: float = Field(default=3.0, gt=0.0, le=500.0)
+    levels: tuple[RegionWithinRadiusLevel, ...] = ("sigungu", "emd")
+
+    @field_validator("levels", mode="before")
+    @classmethod
+    def dedupe_levels(cls, value: object) -> object:
+        if value is None:
+            return ("sigungu", "emd")
+        if isinstance(value, str):
+            values: Sequence[object] = (value,)
+        elif isinstance(value, Sequence):
+            values = value
+        else:
+            return value
+        return tuple(dict.fromkeys(values))
+
+    @model_validator(mode="after")
+    def require_levels(self) -> RegionsWithinRadiusInput:
+        if not self.levels:
+            msg = "levels must include at least one of sido, sigungu, or emd"
+            raise ValueError(msg)
+        return self
+
+    @property
+    def center(self) -> RegionWithinRadiusCenter:
+        return RegionWithinRadiusCenter(lon=self.lon, lat=self.lat)
+
+
+class RegionsWithinRadiusResponse(FrozenModel):
+    center: RegionWithinRadiusCenter
+    radius_km: float = Field(gt=0.0, le=500.0)
+    sido: tuple[RegionWithinRadiusItem, ...] = ()
+    sigungu: tuple[RegionWithinRadiusItem, ...] = ()
+    emd: tuple[RegionWithinRadiusItem, ...] = ()

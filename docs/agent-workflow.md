@@ -23,7 +23,8 @@
 WSL PATH에 `/mnt/c/Users/.../AppData/Roaming/npm`이 먼저 잡히면 `node: not found`나 UNC 경로 경고가 나고, 프론트 검증이 통째로 실패/스킵된다.
 - 프론트 검증은 **반드시 `scripts/frontend_check.sh`로** 실행한다. 이 스크립트는 `npm`이 `/mnt/*`·`*.exe`·`*.cmd`면 즉시 `exit 2`로 막아 "Windows npm으로 잘못 돌리는" 사고를 차단한다.
 - 그 전에 **Linux Node를 PATH 앞에** 둔다(nvm 또는 로컬 Linux Node 설치). 예: `export PATH=<linux-node-bin>:$PATH`.
-- Playwright·실제 브라우저 렌더링·스크린샷은 **Windows Node/브라우저에서만** 한다. WSL headless Chromium은 `libasound.so.2` 등 공유 라이브러리 누락으로 반복 실패한다.
+- `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 **WSL ext4 미러의 Linux Node/npm**에서 한다.
+- Playwright·실제 브라우저 렌더링·스크린샷은 **Windows Node/브라우저에서만** 한다. WSL headless Chromium은 `libasound.so.2` 등 공유 라이브러리 누락으로 반복 실패한다. Windows Playwright는 WSL UI 서버(`--hostname 0.0.0.0`)의 IP/포트를 `PLAYWRIGHT_BASE_URL`로 받아 접속한다.
 
 ### (B) TMP/TEMP가 Windows Temp를 가리킨다
 WSL 셸의 기본 `TMP`/`TEMP`가 `/mnt/c/...`이면 pytest capture가 테스트 시작 전에 `FileNotFoundError`로 죽는다.
@@ -77,7 +78,7 @@ source scripts/agent_env.sh
             pytest -q · ruff check . · mypy src/kraddr/geo scripts/export_openapi.py · lint-imports
   openapi:  python scripts/export_openapi.py --check --output openapi.json
   frontend: scripts/frontend_check.sh        # Linux Node 강제, gen:types→lint→type-check→test→build
-  browser:  Playwright/스크린샷은 Windows에서만, 명령·경로를 journal에 기록
+  browser:  Playwright/스크린샷은 Windows에서만, WSL UI 서버를 대상으로 실행하고 명령·경로를 journal에 기록
         │
         ▼
 기록                         ── journal.md(append) + resume.md 갱신 (NTFS worktree)

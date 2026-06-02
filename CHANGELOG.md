@@ -4,7 +4,14 @@
 
 ## [Unreleased]
 
+### Added
+- `POST /v2/regions/within-radius`와 `AsyncAddressClient.regions_within_radius()`를 추가했다. POI `(lon, lat)` 기준 반경 `radius_km` 안에 들어오는 `sido`/`sigungu`/`emd`를 반환하며, `relation="contains"`와 `relation="overlaps"`로 중심점 포함 행정구역과 반경 인접 행정구역을 구분한다.
+- `/debug/geocode`에 반경 행정구역 디버거를 추가했다. React Hook Form, Zod, TanStack Query, Zustand, shadcn/ui 컴포넌트 기반으로 `/v2/regions/within-radius` 요청 body와 응답을 확인한다.
+- Windows Playwright e2e에 실제 Python API `.env` VWorld 키로 MapLibre canvas와 VWorld WMTS 타일 응답을 확인하는 지도 로딩 테스트를 추가했다.
+
 ### Changed
+- `kraddr-geo-ui`의 VWorld runtime config는 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 사용하고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다.
+- 프론트엔드 실행·lint·type-check·unit·build·React Doctor는 WSL ext4 미러에서 Linux Node/npm으로 수행하고, e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행하도록 문서화했다.
 - 프론트엔드 작업 후 React Doctor 실행, 경고 수정, 재실행을 필수 문서 절차로 추가했다.
 - `/admin/` 기본 진입 시 404 대신 `/debug/geocode`로 이동하도록 했다.
 - PC/WSL 개발 정책을 NTFS main repo + 에이전트별 `python-kraddr-geo-*` worktree + WSL ext4 테스트 미러 방식으로 전환했다. `.claude/`는 로컬 secret 설정으로 ignore한다.

@@ -14,7 +14,14 @@ from sqlalchemy.sql.elements import TextClause
 from kraddr.geo.core.protocols import GeometryLookup
 from kraddr.geo.dto.common import Point
 from kraddr.geo.dto.region import RegionHint, region_params
-from kraddr.geo.dto.v2 import BBoxV2, GeometryV2, V2GeometryKind
+from kraddr.geo.dto.v2 import (
+    BBoxV2,
+    GeometryV2,
+    RegionWithinRadiusItem,
+    RegionWithinRadiusLevel,
+    RegionWithinRadiusRelation,
+    V2GeometryKind,
+)
 
 _BUILDING_DETAIL_RE = re.compile(r"^(?P<underground>지하\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?$")
 
@@ -179,6 +186,78 @@ SELECT 'region'::text AS kind,
 """
 )
 
+_REGIONS_WITHIN_RADIUS_CTPRVN_SQL = text(
+    """
+WITH target AS (
+  SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179) AS geom
+),
+matched AS (
+  SELECT c.ctprvn_cd AS code,
+         c.ctp_kor_nm AS name,
+         CASE
+           WHEN ST_Covers(c.geom, target.geom) THEN 'contains'
+           ELSE 'overlaps'
+         END AS relation
+    FROM tl_scco_ctprvn c
+    CROSS JOIN target
+   WHERE ST_DWithin(c.geom, target.geom, :radius_m)
+)
+SELECT code, name, relation
+  FROM matched
+ ORDER BY CASE relation WHEN 'contains' THEN 0 ELSE 1 END, code
+"""
+)
+
+_REGIONS_WITHIN_RADIUS_SIG_SQL = text(
+    """
+WITH target AS (
+  SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179) AS geom
+),
+matched AS (
+  SELECT s.sig_cd AS code,
+         s.sig_kor_nm AS name,
+         CASE
+           WHEN ST_Covers(s.geom, target.geom) THEN 'contains'
+           ELSE 'overlaps'
+         END AS relation
+    FROM tl_scco_sig s
+    CROSS JOIN target
+   WHERE ST_DWithin(s.geom, target.geom, :radius_m)
+)
+SELECT code, name, relation
+  FROM matched
+ ORDER BY CASE relation WHEN 'contains' THEN 0 ELSE 1 END, code
+"""
+)
+
+_REGIONS_WITHIN_RADIUS_EMD_SQL = text(
+    """
+WITH target AS (
+  SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 5179) AS geom
+),
+matched AS (
+  SELECT e.emd_cd AS code,
+         e.emd_kor_nm AS name,
+         CASE
+           WHEN ST_Covers(e.geom, target.geom) THEN 'contains'
+           ELSE 'overlaps'
+         END AS relation
+    FROM tl_scco_emd e
+    CROSS JOIN target
+   WHERE ST_DWithin(e.geom, target.geom, :radius_m)
+)
+SELECT code, name, relation
+  FROM matched
+ ORDER BY CASE relation WHEN 'contains' THEN 0 ELSE 1 END, code
+"""
+)
+
+_REGIONS_WITHIN_RADIUS_SQL: dict[RegionWithinRadiusLevel, TextClause] = {
+    "sido": _REGIONS_WITHIN_RADIUS_CTPRVN_SQL,
+    "sigungu": _REGIONS_WITHIN_RADIUS_SIG_SQL,
+    "emd": _REGIONS_WITHIN_RADIUS_EMD_SQL,
+}
+
 
 class GeometryRepository:
     def __init__(self, engine: AsyncEngine) -> None:
@@ -249,6 +328,28 @@ class GeometryRepository:
             for row in rows
         ]
 
+    async def regions_within_radius(
+        self,
+        *,
+        lon: float,
+        lat: float,
+        radius_km: float,
+        levels: tuple[RegionWithinRadiusLevel, ...],
+    ) -> dict[RegionWithinRadiusLevel, tuple[RegionWithinRadiusItem, ...]]:
+        params = {
+            "lon": lon,
+            "lat": lat,
+            "radius_m": radius_km * 1000.0,
+        }
+        result: dict[RegionWithinRadiusLevel, tuple[RegionWithinRadiusItem, ...]] = {}
+        async with self.engine.connect() as conn:
+            for level in levels:
+                rows = (
+                    await conn.execute(_REGIONS_WITHIN_RADIUS_SQL[level], params)
+                ).mappings().all()
+                result[level] = tuple(_map_region_within_radius(dict(row)) for row in rows)
+        return result
+
 
 def _parse_building_detail(detail: str | None) -> tuple[int, int, str | None] | None:
     if detail is None:
@@ -316,6 +417,14 @@ def _map_geometry_lookup(
         rncode_full=_as_str(row.get("rncode_full")),
         bd_mgt_sn=_as_str(row.get("bd_mgt_sn")),
         score=float(row["score"]) if row.get("score") is not None else None,
+    )
+
+
+def _map_region_within_radius(row: Mapping[str, Any]) -> RegionWithinRadiusItem:
+    return RegionWithinRadiusItem(
+        code=str(row["code"]),
+        name=_as_str(row.get("name")),
+        relation=cast("RegionWithinRadiusRelation", str(row["relation"])),
     )
 
 

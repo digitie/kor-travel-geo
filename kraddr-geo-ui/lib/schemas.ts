@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const addressTypeSchema = z.enum(["road", "parcel"]);
 const fallbackSchema = z.enum(["none", "api"]);
+const regionWithinRadiusLevelSchema = z.enum(["sido", "sigungu", "emd"]);
 
 export const geocodeFormSchema = z.object({
   address: z.string().min(1).max(200),
@@ -13,6 +14,13 @@ export const reverseFormSchema = z.object({
   x: z.coerce.number().min(123).max(132),
   y: z.coerce.number().min(32).max(39),
   radius_m: z.coerce.number().int().min(1).max(2000).default(200)
+});
+
+export const regionsWithinRadiusFormSchema = z.object({
+  lon: z.coerce.number().min(123).max(132),
+  lat: z.coerce.number().min(32).max(39),
+  radius_km: z.coerce.number().positive().max(500).default(3),
+  levels: z.array(regionWithinRadiusLevelSchema).min(1)
 });
 
 export const normalizeFormSchema = z.object({

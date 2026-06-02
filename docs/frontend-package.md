@@ -18,10 +18,11 @@
 | 영역 | 선택 |
 |------|------|
 | 프레임워크 | Next.js 16 (App Router) + TypeScript strict |
-| UI | Tailwind 기반 자체 primitives (`Panel`, `PageHeader`, `JsonBlock`, `StatusBadge`), shadcn/ui 도입은 후속 |
-| 폼 | controlled form + Zod helper |
+| UI | Tailwind 기반 자체 primitives + shadcn/ui source components |
+| 폼 | React Hook Form + Zod helper |
 | 지도 | MapLibre GL JS + VWorld WMTS + `maplibre-vworld` helper |
-| 테이블 | PR #12는 native table, TanStack Table v8은 대량 필터/정렬 후속 |
+| 테이블 | TanStack Table v8 |
+| 상태 | Zustand는 디버그 UI의 초안/결과처럼 브라우저 화면 상태가 재사용될 때 사용 |
 | 데이터 패칭 | TanStack Query v5 |
 | 타입 동기 | openapi-typescript + 수동 Zod mirror |
 | 코드 표시 | 자체 `JsonBlock` 컴포넌트 |
@@ -58,7 +59,7 @@ kraddr-geo-ui/
 ├── components/
 │   ├── layout/                    # AppShell
 │   ├── ui/                        # Panel, PageHeader, JsonBlock, StatusBadge
-│   ├── vworld/                    # CoordinateMap (MapLibre + VWorld WMTS + fallback preview)
+│   ├── vworld/                    # CoordinateMap (MapLibre + VWorld WMTS + key-missing preview)
 │   ├── debug/                     # Geocode/Reverse/Normalize/Explain debugger
 │   └── admin/                     # Load/Table/Cache/Logs/Consistency panel
 ├── lib/
@@ -75,12 +76,12 @@ kraddr-geo-ui/
 ```
 KRADDR_GEO_API_INTERNAL_URL=http://localhost:8888           # 서버 사이드 전용
 NEXT_PUBLIC_API_BASE_URL=/api/proxy                      # 브라우저 노출
-NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key           # 브라우저 노출, VWorld 콘솔에서 도메인/IP 제한
+NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key           # 선택 fallback. 기본은 Python API .env의 KRADDR_GEO_VWORLD_API_KEY
 ```
 
 `KRADDR_GEO_API_INTERNAL_URL`은 `NEXT_PUBLIC_` 접두사가 없어 서버 사이드에서만 접근 가능. 인증/시크릿은 두지 않는다(ADR-013).
 
-`NEXT_PUBLIC_VWORLD_API_KEY` 발급은 `docs/external-apis.md` VWorld 프론트엔드 지도 항목 참조. 저장소에는 실제 값을 커밋하지 않고, VWorld 콘솔에서 로컬/스테이징/운영 도메인을 각각 제한한다. UI는 이 값을 빌드 타임 상수로 직접 박지 않고 `/api/runtime-config`에서 런타임에 읽는다. `/admin/settings`는 `.env` 기본값을 보여 주고, 사용자가 저장한 값은 브라우저 localStorage override로 적용한다. 기본값 버튼은 override를 지우고 `.env` 값으로 되돌린다.
+VWorld 키는 빌드 타임 상수로 직접 박지 않고 `/api/runtime-config`에서 런타임에 읽는다. 우선순위는 Python API의 `KRADDR_GEO_VWORLD_API_KEY` 환경변수, 저장소 루트 `.env`의 `KRADDR_GEO_VWORLD_API_KEY`, 마지막으로 UI 전용 `NEXT_PUBLIC_VWORLD_API_KEY`다. 저장소에는 실제 값을 커밋하지 않고, VWorld 콘솔에서 로컬/스테이징/운영 도메인을 각각 제한한다. `/admin/settings`는 `.env` 기본값을 보여 주고, 사용자가 저장한 값은 브라우저 localStorage override로 적용한다. 기본값 버튼은 override를 지우고 `.env` 값으로 되돌린다.
 
 ## A3. 공통 기반
 
@@ -141,11 +142,11 @@ new QueryClient({
 
 upstream `maplibre-vworld`의 `VWorldMap`/`Marker`/hook을 감싸 VWorld WMTS raster style을 렌더링한다. 지도 URL, style 생성, 레이어별 maxZoom, CSS import는 `digitie/maplibre-vworld-js` package API를 사용한다. `kraddr-geo-ui/lib/vworld.ts`는 `maplibre-vworld`의 `getVWorldTileUrl()`, `getVWorldStyle()`, `getVWorldMaxZoom()`, `isVWorldTileError()`, `redactVWorldUrl()`, `VWorldMap`, `Marker`, map hook, `VWorldLayerType`를 재수출하는 얇은 경계다.
 
-`CoordinateMap.tsx`는 MapLibre lifecycle을 직접 소유하지 않고 upstream `VWorldMap`에 위임한다. 이 저장소에서는 click callback의 `{ x, y }` 변환, key 미설정 fallback 문구, tile error overlay 임계치, API 응답 geometry overlay만 domain wrapper로 담당한다. 상위 화면은 `components/vworld/LazyCoordinateMap.tsx`를 import한다. 이 wrapper는 `next/dynamic(..., { ssr: false })`로 MapLibre 번들을 클라이언트 런타임에만 불러오며, 로딩 중에는 같은 높이의 skeleton을 보여 준다. `maplibre-gl`은 브라우저 전역 객체와 WebGL에 의존하므로, 디버그 페이지에서 정적 import를 직접 늘리지 않는다.
+`CoordinateMap.tsx`는 MapLibre lifecycle을 직접 소유하지 않고 upstream `VWorldMap`에 위임한다. 이 저장소에서는 click callback의 `{ x, y }` 변환, key 미설정 안내, tile error overlay 임계치, API 응답 geometry overlay만 domain wrapper로 담당한다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다. 상위 화면은 `components/vworld/LazyCoordinateMap.tsx`를 import한다. 이 wrapper는 `next/dynamic(..., { ssr: false })`로 MapLibre 번들을 클라이언트 런타임에만 불러오며, 로딩 중에는 같은 높이의 skeleton을 보여 준다. `maplibre-gl`은 브라우저 전역 객체와 WebGL에 의존하므로, 디버그 페이지에서 정적 import를 직접 늘리지 않는다.
 
 `maplibre-vworld`는 최신 `main` 또는 stable release를 확인한 뒤 검증된 버전으로 고정한다. 현재 UI dependency는 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`이다. 2026-05-31 기준 upstream `main`은 package version `0.1.2` 위의 문서 보강 commit까지 포함하며, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. 최신 helper 이름은 `redactVWorldUrl()`이고, UI 내부 호출자도 upstream 이름으로 옮겼다. CI에서 SSH key 없이 설치되어야 하므로 lockfile의 `resolved`도 `git+https`를 유지한다. 패키지 SHA/tag를 바꿀 때는 WSL ext4 미러에서 Linux Node/npm 또는 Docker Node로 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 실행해 소비자 build가 유지되는지 먼저 확인한다.
 
-지도 키는 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 키가 없으면 같은 크기의 좌표 프리뷰로 대체한다. MapLibre/VWorld tile error는 upstream `isVWorldTileError()`와 `redactVWorldUrl()`로 일시적 네트워크 실패와 치명 오류를 구분한다. tile fetch 실패는 redacted URL로 `console.warn`만 남기고, 누적 임계치 이상이거나 style/WebGL 계열 오류일 때만 overlay를 보여 준다. 이 fallback 덕분에 CI, 내부망 테스트, VWorld 도메인 등록 전 개발 환경에서 화면이 비어 보이지 않는다.
+지도 키는 `/api/runtime-config`가 반환한 VWorld 키를 사용한다. 기본값은 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`이며, UI 전용 `NEXT_PUBLIC_VWORLD_API_KEY`는 Python 키가 없을 때만 fallback이다. 키가 없으면 지도 대신 같은 크기의 좌표 프리뷰 UI를 보여 주지만, MapLibre/VWorld 타일 렌더링을 대체하는 별도 fallback 지도는 만들지 않는다. MapLibre/VWorld tile error는 upstream `isVWorldTileError()`와 `redactVWorldUrl()`로 일시적 네트워크 실패와 치명 오류를 구분한다. tile fetch 실패는 redacted URL로 `console.warn`만 남기고, 누적 임계치 이상이거나 style/WebGL 계열 오류일 때만 overlay를 보여 준다.
 
 VWorld raster layer는 레이어별 zoom 한계를 둔다. `Base`/`gray`/`midnight`는 z19까지, `Hybrid`/`Satellite`는 z18까지만 요청한다. `maplibre-vworld`의 style source id는 `vworld-${layerType}` 형식이고 `Hybrid`는 `vworld-satellite`와 `vworld-Hybrid`를 함께 쓰므로, tile error source 판별은 `vworld` prefix 기준으로 한다. marker와 카메라는 upstream `Marker`, `bbox`, `cameraTarget`, `cameraTransition="instant"` 조합으로 갱신한다.
 
@@ -153,12 +154,12 @@ T-067부터 `CoordinateMap`은 v2 geocode 후보의 `geometry`도 overlay로 표
 
 ### A3.6.1 `digitie/maplibre-vworld-js` 최신 소비와 책임 경계
 
-디버그 UI에서 VWorld/MapLibre 연동 문제가 발생하면 먼저 문제가 범용 지도 기능인지, 이 프로젝트의 주소 디버그/관리 UX인지 분류한다. 원인이 `digitie/maplibre-vworld-js`의 패키징, TypeScript 타입, CSS side-effect import, marker/cluster component, VWorld layer helper, Next.js 호환성처럼 다른 소비자도 재사용할 수 있는 범용 기능에 있으면 해당 저장소도 적극 수정 대상에 포함한다. 반대로 geocode/reverse 입력 연결, API 응답 좌표 표시, 정합성/성능/적재 overlay, 이 프로젝트 fallback 문구와 layout은 `kraddr-geo-ui`의 domain wrapper에서 구현한다.
+디버그 UI에서 VWorld/MapLibre 연동 문제가 발생하면 먼저 문제가 범용 지도 기능인지, 이 프로젝트의 주소 디버그/관리 UX인지 분류한다. 원인이 `digitie/maplibre-vworld-js`의 패키징, TypeScript 타입, CSS side-effect import, marker/cluster component, VWorld layer helper, Next.js 호환성처럼 다른 소비자도 재사용할 수 있는 범용 기능에 있으면 해당 저장소도 적극 수정 대상에 포함한다. 반대로 geocode/reverse 입력 연결, API 응답 좌표 표시, 정합성/성능/적재 overlay, 이 프로젝트 안내 문구와 layout은 `kraddr-geo-ui`의 domain wrapper에서 구현한다.
 
 현재 `kraddr-geo-ui`는 upstream helper와 CSS를 실제 package dependency로 소비하며, `CoordinateMap` 내부 지도 컨테이너도 upstream `VWorldMap`으로 대체했다. VWorld tile 오류 분류와 URL redaction은 upstream `isVWorldTileError()`/`redactVWorldUrl()` helper로 맞춘다. 디버그 화면은 범용 지도 표시 외에 다음 동작을 보장해야 한다.
 
 - 지도 클릭 시 `(lon, lat)` 순서의 `{ x, y }` 값을 reverse/geocode 디버그 입력으로 전달한다.
-- `NEXT_PUBLIC_VWORLD_API_KEY`가 없으면 WebGL 지도를 만들지 않고 같은 크기의 좌표 preview fallback을 렌더링한다.
+- VWorld 키가 없으면 WebGL 지도를 만들지 않고 같은 크기의 좌표 preview UI를 렌더링한다. MapLibre를 대체하는 별도 fallback 지도는 두지 않는다.
 - VWorld tile 404/408/429/5xx와 네트워크 실패는 upstream helper로 분류한 뒤 즉시 치명 오류로 고정하지 않고 redacted warning과 누적 임계치로 처리한다.
 - marker 갱신 시 애니메이션 되튐을 피하고, SSR 단계에서는 `next/dynamic(..., { ssr: false })`와 skeleton만 노출한다.
 
@@ -166,28 +167,28 @@ T-067부터 `CoordinateMap`은 v2 geocode 후보의 `geometry`도 overlay로 표
 
 T-044 경계화 포팅 원칙:
 
-- 최신 public API를 기준으로 click callback, marker 제어, `flyToOptions`, tile error hook/redaction, key 미설정 fallback, SSR-safe 사용법을 먼저 소비할 수 있는지 확인한다.
+- 최신 public API를 기준으로 click callback, marker 제어, `flyToOptions`, tile error hook/redaction, key 미설정 안내, SSR-safe 사용법을 먼저 소비할 수 있는지 확인한다.
 - 해당 기능이 범용 기능인데 upstream에 없으면 이 저장소에서 장기 우회하지 않고, 별도 upstream task/PR로 분리한다.
 - 이 프로젝트의 지오코딩/역지오코딩/관리 UI에만 의미가 있는 기능은 upstream에 넣지 않고 `kraddr-geo-ui` wrapper에서 구현한다.
 - upstream 수정이 필요한 경우 별도 PR 또는 검증 가능한 commit으로 남긴 뒤, 후속 소비자 PR에서 `kraddr-geo-ui/package.json`의 `maplibre-vworld` SHA/tag와 lockfile을 갱신한다.
 - upstream과 소비자 양쪽에서 test/build를 돌리고, PR 본문과 `docs/journal.md`에 upstream PR/commit, 검증 명령, 남은 차이를 기록한다.
-- 포팅 후에도 `NEXT_PUBLIC_VWORLD_API_KEY` 미설정 fallback, `(lon, lat)` 좌표 순서, redacted logging, transient overlay 임계치, Next.js dynamic import skeleton은 유지해야 한다.
+- 포팅 후에도 VWorld 키 미설정 안내, `(lon, lat)` 좌표 순서, redacted logging, transient overlay 임계치, Next.js dynamic import skeleton은 유지해야 한다.
 
 리뷰 기준:
 
 - **패키징 문제**: GitHub 또는 npm install 후 `dist/`/`exports`/`types`가 없어서 소비자 build가 실패하면 `maplibre-vworld-js`의 배포 산출물 생성 또는 `files`/`exports` 구성을 고친다.
 - **타입 문제**: React 18/19, MapLibre GL JS, Vite/Next.js에서 타입 오류가 나면 upstream 타입 선언과 테스트를 보강한다.
 - **기능 문제**: VWorld `Base`/`gray`/`midnight`/`Hybrid`/`Satellite` layer, marker, click, clustering, attribution 중 공통 컴포넌트화할 수 있는 문제는 upstream에 반영한다.
-- **프로젝트 특화 기능**: geocode/reverse form 상태, API 응답 overlay, 정합성/성능/적재 결과 표시, 이 프로젝트 fallback 문구와 임계치는 `kraddr-geo-ui`가 책임진다.
+- **프로젝트 특화 기능**: geocode/reverse form 상태, API 응답 overlay, 정합성/성능/적재 결과 표시, 이 프로젝트 안내 문구와 임계치는 `kraddr-geo-ui`가 책임진다.
 - **의존성 선언 상태**: `maplibre-vworld`는 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 선언되어 있다. npm registry release가 나오면 lockfile drift와 소비자 build를 확인한 뒤 전환한다.
 - **컴포넌트 대체 조건**: `CoordinateMap.tsx`의 기본 지도 lifecycle은 upstream `VWorldMap`/`Marker`/hook을 사용한다. 후속으로 geometry overlay도 upstream primitive로 줄일 수 있는지 검토한다.
 - **보안·운영 조건**: 브라우저 노출 키는 VWorld 콘솔에서 origin/referrer 제한이 실제 WMTS에도 적용되는지 운영자가 확인한다. 향후 CSP를 켜면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 포함한다.
 
 ### A3.7 Playwright e2e
 
-Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우저 네트워크를 가로채 `/api/proxy/v2/geocode`와 `/api/proxy/v2/reverse` 요청을 확인한다. 이 방식은 실제 DB 결과에 의존하지 않고, UI가 v2 REST body를 잘못 만들거나 v1 endpoint로 되돌아가면 즉시 실패한다.
+Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우저 네트워크를 가로채 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse`, `/api/proxy/v2/regions/within-radius` 요청을 확인한다. 이 방식은 실제 DB 결과에 의존하지 않고, UI가 v2 REST body를 잘못 만들거나 v1 endpoint로 되돌아가면 즉시 실패한다. `vworld-map.spec.ts`는 runtime config를 mock하지 않고 Python API `.env`에서 확보한 VWorld 키로 MapLibre canvas와 VWorld WMTS 타일 응답을 확인한다.
 
-실제 실행은 Windows Node/브라우저 환경에서만 수행한다. Docker UI 또는 로컬 dev server를 공식 포트 `13088`에 띄운 뒤 Windows에서 `PLAYWRIGHT_BASE_URL=http://127.0.0.1:13088 npx playwright test --config playwright.config.ts --project chromium --workers 1`로 실행한다. WSL에서는 Linux Node/npm으로 lint/type/unit/build까지만 확인하고, `npm run test:e2e`나 `npx playwright test`를 실행하지 않는다.
+프론트엔드 실행과 build/test는 WSL ext4 미러에서 Linux Node/npm으로 수행한다. Windows `npm`을 WSL 경로에서 실행하지 않는다. e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행한다. WSL에서 UI 서버를 띄워 Windows Playwright를 붙일 때는 `next dev --hostname 0.0.0.0 --port 13088` 또는 production build 후 `next start --hostname 0.0.0.0 --port 13088`로 바인딩하고, Windows에서는 WSL IP를 `PLAYWRIGHT_BASE_URL`로 지정한다. 실제 지도 로딩 e2e는 HMR origin 차단을 피하고 사용자 실행에 가깝게 production `next start` 서버에서 실행한다.
 
 ### A3.7.1 React Doctor
 
@@ -203,8 +204,9 @@ npx react-doctor@latest . --offline --verbose --json
 
 ## A4. 공통 컴포넌트
 
-- **CoordinateMap**: MapLibre GL JS와 VWorld WMTS raster style을 사용한다. `NEXT_PUBLIC_VWORLD_API_KEY`가 없거나 로딩 실패 시 좌표 프리뷰로 대체한다. 좌표 입력과 click callback은 모두 `(lon, lat)` 순서다. v2 후보의 `point` marker와 선택 `geometry` overlay를 함께 표시한다.
+- **CoordinateMap**: MapLibre GL JS와 VWorld WMTS raster style을 사용한다. VWorld 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 주고, MapLibre를 대체하는 별도 fallback 지도는 두지 않는다. 좌표 입력과 click callback은 모두 `(lon, lat)` 순서다. v2 후보의 `point` marker와 선택 `geometry` overlay를 함께 표시한다.
 - **GeocodeDebugger**: `address`, `type`, `fallback`, `include_geometry`를 받아 `/v2/geocode`를 호출하고 JSON 응답과 지도/좌표·도형 프리뷰를 함께 표시한다.
+- **RegionsWithinRadiusDebugger**: POI `(lon, lat)`와 `radius_km`, `levels`를 React Hook Form/Zod로 검증하고 `/v2/regions/within-radius`를 호출한다. 초안과 마지막 결과는 Zustand store에 저장하고, 요청은 TanStack Query mutation으로 실행한다. shadcn/ui `Card`, `Field`, `Input`, `Checkbox`, `Button`으로 구성한다.
 - **TableStatsPanel**: `GET /v1/admin/tables` 결과를 native table로 보여준다. 수천 행 이상 필터·정렬이 필요해지면 TanStack Table로 승격한다.
 - **JsonBlock**: JSON 응답과 EXPLAIN plan을 monospace pre 영역으로 표시. 별도 코드 표시 라이브러리는 production dependency로 두지 않는다.
 - **ZipSourceBadge**: `ZipSource` enum별 색상/라벨 메타데이터로 시각화.

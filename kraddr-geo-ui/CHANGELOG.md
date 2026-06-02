@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- `/debug/geocode`에 반경 행정구역 디버거를 추가했다. POI 좌표, 반경 km, 행정구역 레벨을 React Hook Form/Zod로 검증하고, TanStack Query mutation으로 `/v2/regions/within-radius`를 호출하며, Zustand로 마지막 초안과 결과를 보존한다.
+- shadcn/ui source components(`Button`, `Card`, `Checkbox`, `Field`, `Input`)와 `components.json`을 추가해 신규 디버그 폼을 구성한다.
+- Playwright e2e에 실제 Python API `.env` VWorld 키를 사용해 MapLibre canvas와 VWorld WMTS 타일 응답을 확인하는 지도 로딩 테스트를 추가했다.
 - `/debug/geocode` 지도에 v2 `geometry` overlay를 추가했다. `include_geometry` 옵션이 켜진 geocode 응답에서 point marker와 행정구역 polygon, 도로 line, 건물 polygon을 함께 표시한다.
 - T-021~T-023/T-026: Next.js 기반 디버그·관리 UI 초안 추가.
 - T-020 연계: `openapi.json` 기반 타입 생성 스크립트 추가.
@@ -16,6 +19,8 @@
 - Vitest 단위 테스트: 시도 추론, load workflow reducer, consistency severity, schema name generation, API path helper.
 
 ### Changed
+- `/api/runtime-config`는 Python API `.env` 또는 프로세스 환경의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다.
+- 프론트엔드 실행과 정적 검증은 WSL ext4 미러의 Linux Node/npm에서 수행하고, Playwright 실행과 브라우저만 Windows에서 수행하도록 문서화했다.
 - `/admin/` 기본 진입 시 404 대신 `/debug/geocode`로 이동하도록 했다.
 - 모든 프론트엔드 작업 뒤 React Doctor를 실행하고 경고를 수정한 뒤 재실행하는 검증 절차를 문서화했다.
 - `maplibre-vworld`를 upstream `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 동기화하고, `CoordinateMap`이 직접 MapLibre lifecycle을 소유하지 않도록 upstream `VWorldMap`/`Marker`/hook 기반 domain wrapper로 전환한다.

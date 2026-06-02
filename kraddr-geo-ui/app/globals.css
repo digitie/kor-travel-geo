@@ -951,3 +951,34 @@ textarea {
     min-height: 360px;
   }
 }
+
+@layer base {
+  :root {
+    --ui-background: #ffffff;
+    --ui-foreground: #172033;
+    --ui-card: #ffffff;
+    --ui-card-foreground: #172033;
+    --ui-popover: #ffffff;
+    --ui-popover-foreground: #172033;
+    --ui-primary: #0f766e;
+    --ui-primary-foreground: #ffffff;
+    --ui-secondary: #eef4f4;
+    --ui-secondary-foreground: #172033;
+    --ui-muted: #f3f6fa;
+    --ui-muted-foreground: #667085;
+    --ui-accent: #e8eef6;
+    --ui-accent-foreground: #172033;
+    --ui-destructive: #b42318;
+    --ui-border: #d8dee8;
+    --ui-input: #d8dee8;
+    --ui-ring: #0f766e;
+    --radius: 0.625rem;
+  }
+  * {
+    border-color: var(--ui-border);
+    outline-color: color-mix(in srgb, var(--ui-ring) 50%, transparent);
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}

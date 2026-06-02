@@ -4,10 +4,19 @@ type JsonRecord = Record<string, unknown>;
 
 async function captureJsonPost(
   page: Page,
-  path: "/api/proxy/v2/geocode" | "/api/proxy/v2/reverse",
+  path:
+    | "/api/proxy/v2/geocode"
+    | "/api/proxy/v2/reverse"
+    | "/api/proxy/v2/regions/within-radius",
   response: JsonRecord
 ) {
   const requests: JsonRecord[] = [];
+  await page.route("**/api/runtime-config", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ vworldApiKey: "" })
+    });
+  });
   await page.route(`**${path}`, async (route) => {
     const request = route.request();
     expect(request.method()).toBe("POST");
@@ -107,6 +116,28 @@ test.describe("디버그 UI v2 REST 연동", () => {
     expect(requests[0]).toMatchObject({
       road_address: "성복1로",
       include_geometry: false
+    });
+  });
+
+  test("반경 행정구역은 v2 regions within-radius에 좌표와 레벨을 보낸다", async ({ page }) => {
+    const requests = await captureJsonPost(page, "/api/proxy/v2/regions/within-radius", {
+      center: { lon: 126.978, lat: 37.5665 },
+      radius_km: 3,
+      sigungu: [{ code: "11110", name: "종로구", relation: "contains" }],
+      emd: [{ code: "11110119", name: "세종로", relation: "contains" }]
+    });
+
+    await page.goto("/debug/geocode");
+    await page.getByRole("button", { name: "반경 조회" }).click();
+
+    await expect(page.getByText('"sigungu"')).toBeVisible();
+    await expect(page.getByText('"11110"')).toBeVisible();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toEqual({
+      lon: 126.978,
+      lat: 37.5665,
+      radius_km: 3,
+      levels: ["sigungu", "emd"]
     });
   });
 

@@ -15,14 +15,20 @@
     "gen:types": "node scripts/gen-types.mjs"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.90.10",
     "@tanstack/react-table": "^8.21.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
     "maplibre-gl": "^5.24.0",
     "maplibre-vworld": "git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41",
     "next": "^16.2.6",
+    "radix-ui": "^1.4.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hook-form": "^7.77.0",
+    "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

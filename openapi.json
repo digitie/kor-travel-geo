@@ -3650,6 +3650,157 @@
         "title": "RegionV2",
         "type": "object"
       },
+      "RegionWithinRadiusCenter": {
+        "additionalProperties": false,
+        "description": "Query center in external `(lon, lat)` order.",
+        "properties": {
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lon",
+          "lat"
+        ],
+        "title": "RegionWithinRadiusCenter",
+        "type": "object"
+      },
+      "RegionWithinRadiusItem": {
+        "additionalProperties": false,
+        "description": "Administrative region intersecting a POI radius.",
+        "properties": {
+          "code": {
+            "maxLength": 8,
+            "minLength": 2,
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "relation": {
+            "enum": [
+              "contains",
+              "overlaps"
+            ],
+            "title": "Relation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "relation"
+        ],
+        "title": "RegionWithinRadiusItem",
+        "type": "object"
+      },
+      "RegionsWithinRadiusInput": {
+        "additionalProperties": false,
+        "properties": {
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "levels": {
+            "default": [
+              "sigungu",
+              "emd"
+            ],
+            "items": {
+              "enum": [
+                "sido",
+                "sigungu",
+                "emd"
+              ],
+              "type": "string"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "type": "number"
+          },
+          "radius_km": {
+            "default": 3.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 500.0,
+            "title": "Radius Km",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lon",
+          "lat"
+        ],
+        "title": "RegionsWithinRadiusInput",
+        "type": "object"
+      },
+      "RegionsWithinRadiusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "center": {
+            "$ref": "#/components/schemas/RegionWithinRadiusCenter"
+          },
+          "emd": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RegionWithinRadiusItem"
+            },
+            "title": "Emd",
+            "type": "array"
+          },
+          "radius_km": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 500.0,
+            "title": "Radius Km",
+            "type": "number"
+          },
+          "sido": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RegionWithinRadiusItem"
+            },
+            "title": "Sido",
+            "type": "array"
+          },
+          "sigungu": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RegionWithinRadiusItem"
+            },
+            "title": "Sigungu",
+            "type": "array"
+          }
+        },
+        "required": [
+          "center",
+          "radius_km"
+        ],
+        "title": "RegionsWithinRadiusResponse",
+        "type": "object"
+      },
       "RestoreCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -9232,6 +9383,47 @@
           }
         },
         "summary": "Geocode V2",
+        "tags": [
+          "v2"
+        ]
+      }
+    },
+    "/v2/regions/within-radius": {
+      "post": {
+        "operationId": "regions_within_radius_v2_v2_regions_within_radius_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegionsWithinRadiusInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegionsWithinRadiusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Regions Within Radius V2",
         "tags": [
           "v2"
         ]
