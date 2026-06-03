@@ -165,7 +165,7 @@ PR 리뷰를 반영할 때는 GitHub의 "Conversation comment", "Review body", "
    ```
 2. thread-aware 스크립트로 세 표면을 한 번에 저장한다.
    ```bash
-   python3 /mnt/c/Users/digit/.codex/plugins/cache/openai-curated/github/0d4f5414/skills/gh-address-comments/scripts/fetch_comments.py > /tmp/pr-comments.json
+   python3 /mnt/c/Users/<user>/.codex/plugins/cache/openai-curated/github/0d4f5414/skills/gh-address-comments/scripts/fetch_comments.py > /tmp/pr-comments.json
    ```
 3. `conversation_comments`, `reviews[].body`, `review_threads[]`를 모두 읽는다. 리뷰 본문 첫 줄, 예를 들어 `# PR #14 리뷰 — T-027 actual full-load execution fixes` 같은 제목도 별도 항목으로 체크한다.
 4. 항목을 `High`, `Medium`, `Low`, `Optional`, `설명만 필요`로 분류하고, 반영 여부를 `docs/journal.md` 또는 PR 코멘트에 남긴다.

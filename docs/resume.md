@@ -2,8 +2,9 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-02 갱신, by codex)
+## 현재 진척도 (2026-06-03 갱신, by antigravity)
 
+- ✅ README.md GFM 스타일 개선 및 개인정보 마스킹 — README.md의 현재 상태 Note를 리스트화하여 가독성을 높였고, 개발 가이드 문서 내에서 노출되던 특정 로컬 사용자명(digit) 경로를 일반적인 플레이스홀더(<user>)로 교체했습니다. 저장소 내 tripmate 등 특정 외부 프로젝트명의 사용 여부를 조사해 존재하지 않음을 확인했습니다.
 - ✅ admin UI 메뉴 이동 오류 보정 — 좌측 메뉴와 Consistency report 목록은 `DocumentNavLink`를 사용한다. `next/link`는 유지하되 `prefetch={false}`와 document navigation으로 Next App Router client transition/RSC fetch 실패 화면(`This page couldn’t load`, `Reload to try again, or go back.`)으로 새지 않게 했다. sidebar는 `100dvh` 내부 스크롤을 갖고, VWorld 타일의 정상 취소(`ERR_ABORTED`, `NS_BINDING_ABORTED`)는 지도 불안정 overlay 카운트에서 제외한다. Docker UI `9002`에서 Chromium/Firefox 메뉴 e2e와 VWorld 지도 e2e를 통과했다.
 - ✅ `/v2/regions/within-radius` DB 튜닝 — 행정구역 반경조회는 `region_radius_parts` serving accelerator를 사용한다. `tl_scco_ctprvn/sig/emd` polygon을 `ST_Subdivide`로 쪼개 GiST 인덱스를 걸고, API는 하나의 SQL에서 입력점을 한 번만 EPSG:5179로 변환한다. `contains` 판정은 원본 polygon의 `ST_Covers`로 유지하며, 시도 → 시군구 → 읍면동 parent code 필터로 후보 폭을 줄인다. `alembic upgrade head`, `load shp`, `load shp-all`, `load all-sidos`, `refresh mv` 경로가 accelerator를 다시 채운다.
 - ✅ Docker 실행 스크립트와 로컬 포트 원칙 갱신 — API/UI Docker 이미지는 `scripts/docker_app.sh build`, 실행은 `scripts/docker_app.sh up`으로 통일한다. 기본 host/container 포트는 API `9001`, UI `9002`이며, 스크립트는 해당 host 포트를 점유한 기존 컨테이너나 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다. VWorld 키는 `.env`/`kraddr-geo-ui/.env.local`에서 읽어 컨테이너 환경변수로 주입하되 값은 출력하지 않는다.
