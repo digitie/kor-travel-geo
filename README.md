@@ -1,4 +1,4 @@
-﻿# 🗺️ python-kraddr-geo
+# 🗺️ python-kraddr-geo
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
@@ -8,7 +8,31 @@
 **도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 한국 주소 지오코딩 라이브러리·REST API**입니다. vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 지원합니다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kraddr-geo-ui`](docs/frontend-package.md)로 운영합니다.
 
 > [!NOTE]
-> **현재 상태**: `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다. T-005~T-042 구현·실데이터 검증 기록, T-049 운영 메타데이터 1차 구현, T-045 source set 기준월 선택과 대용량 업로드/적재 UX, T-046 DB 백업/복원 UI와 대구 부분 DB 실제 backup/restore 검증이 반영되어 있습니다. T-027 최종 클린 재적재에서는 실제 전국 `data/juso`와 `20260401_dailyjusukrdata.zip`을 빈 Docker PostGIS DB에 처음부터 적재해 `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`, smoke `OK`를 확인했습니다. T-047 주요 benchmark와 T-057 region hint 1차 실측, T-061 slim text-search helper, T-044 `maplibre-vworld-js` 0.1.0 기준 문서-only 재확인, T-056 `python-kraddr-base` Address 코드 helper 독립 구현 정리, T-052 v1/v2 API 분리와 AI-friendly API reference, T-053 C1~C10 분석/수동 판정 UI, T-054 한국 IP GeoIP gate, T-055 N150/Odroid 실측 준비, T-064 상위 주소 geocode 후보, T-065 내비게이션용DB `시군구용건물명` 검색 반영까지 완료했습니다. 이전 SpatiaLite 기반 구현(같은 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).
+> **현재 상태**
+>
+> `main` 브랜치는 PostgreSQL + PostGIS 기반 재구현의 백엔드·REST·CLI와 `kraddr-geo-ui` 디버그/관리 UI를 포함합니다.
+>
+> **주요 구현 항목**:
+> - **T-005 ~ T-042**: PostgreSQL + PostGIS 기반의 지오코딩 엔진 및 실데이터 검증
+> - **T-044**: `maplibre-vworld-js` 0.1.0 기준 문서-only 재확인
+> - **T-045**: Source set 기준월 선택 및 대용량 업로드/적재 UX 개선
+> - **T-046**: DB 백업/복원 UI 구현 및 대구 지역 부분 DB 실제 backup/restore 검증 완료
+> - **T-047**: 주요 benchmark 수행 및 튜닝
+> - **T-049**: 운영 메타데이터 1차 구현
+> - **T-052**: v1/v2 API 분리 및 AI-friendly API reference 제공
+> - **T-053**: C1 ~ C10 분석 및 수동 판정 UI
+> - **T-054**: 한국 IP 대상 GeoIP gate 적용
+> - **T-055**: N150/Odroid 환경 실측 준비
+> - **T-056**: `python-kraddr-base` Address 코드 helper 독립 구현 및 정리
+> - **T-057**: Region hint 1차 실측
+> - **T-061**: Slim text-search helper 도입
+> - **T-064**: 상위 주소 geocode 후보 반환 구현
+> - **T-065**: 내비게이션용 DB 기반 `시군구용건물명` 검색 반영
+>
+> **최종 재적재 결과 (T-027)**:
+> - 빈 Docker PostGIS DB에 전국 `data/juso` 및 `20260401_dailyjusukrdata.zip`을 클린 적재하여 `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204` 생성 확인 및 smoke 테스트 통과.
+>
+> *이전 SpatiaLite 기반 구현(동일 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).*
 
 ---
 
