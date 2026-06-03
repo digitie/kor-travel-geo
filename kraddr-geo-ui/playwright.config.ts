@@ -24,5 +24,5 @@ export default defineConfig({
   },
   projects: selectedBrowser
     ? allProjects.filter((project) => project.name === selectedBrowser)
-    : [allProjects[0]]
+    : allProjects
 });

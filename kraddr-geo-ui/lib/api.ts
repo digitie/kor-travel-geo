@@ -73,6 +73,8 @@ export type SourceKind =
   | "pobox"
   | "bulk";
 
+export type UploadStorageKind = "local" | "rustfs";
+
 export type SourceCandidate = {
   kind: SourceKind;
   path: string;
@@ -121,6 +123,10 @@ export type UploadFileStatus = {
   relative_path?: string | null;
   path: string;
   state: "pending" | "uploading" | "uploaded" | "cancelled" | "failed";
+  storage_kind: UploadStorageKind;
+  storage_uri?: string | null;
+  object_key?: string | null;
+  object_etag?: string | null;
   size_bytes: number;
   uploaded_bytes: number;
   sha256?: string | null;
@@ -136,12 +142,60 @@ export type UploadSetStatus = {
   purpose: string;
   state: "created" | "uploading" | "uploaded" | "cancelled" | "failed";
   root_path: string;
+  storage_kind: UploadStorageKind;
+  storage_uri?: string | null;
+  storage_prefix?: string | null;
+  materialized_path?: string | null;
   files: UploadFileStatus[];
   total_bytes: number;
   uploaded_bytes: number;
   created_at: string;
   updated_at: string;
   error_message?: string | null;
+};
+
+export type RustfsSecretStatus = {
+  configured: boolean;
+  hint?: string | null;
+};
+
+export type RustfsStorageConfig = {
+  enabled: boolean;
+  endpoint_url: string;
+  bucket: string;
+  prefix: string;
+  region: string;
+  force_path_style: boolean;
+  retention_days: number;
+  access_key: RustfsSecretStatus;
+  secret_key: RustfsSecretStatus;
+};
+
+export type RustfsStorageConfigPatch = Partial<{
+  enabled: boolean;
+  endpoint_url: string;
+  bucket: string;
+  prefix: string;
+  region: string;
+  force_path_style: boolean;
+  retention_days: number;
+  access_key: string;
+  secret_key: string;
+}>;
+
+export type RustfsConnectionCheck = {
+  ok: boolean;
+  endpoint_url: string;
+  bucket: string;
+  prefix: string;
+  message?: string | null;
+};
+
+export type RustfsSyncLocalResult = {
+  upload_set: UploadSetStatus;
+  uploaded_files: number;
+  uploaded_bytes: number;
+  skipped_files: number;
 };
 
 export type TableStat = {

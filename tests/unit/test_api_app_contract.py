@@ -30,6 +30,10 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/admin/uploads/{upload_set_id}" in paths
     assert "/v1/admin/uploads/{upload_set_id}/files" in paths
     assert "/v1/admin/uploads/{upload_set_id}/cancel" in paths
+    assert "/v1/admin/storage/rustfs/config" in paths
+    assert "/v1/admin/storage/rustfs/check" in paths
+    assert "/v1/admin/storage/rustfs/import-prefix" in paths
+    assert "/v1/admin/storage/rustfs/sync-local" in paths
     assert "/v1/admin/load-sources/discover" in paths
     assert "/v1/admin/load-sources/plan" in paths
     assert "/v1/admin/backups" in paths

@@ -195,6 +195,7 @@ ignore_imports = ["kraddr.geo.api.routers.admin -> kraddr.geo.loaders"]
 | 로더 | `loader_data_dir`, `loader_batch_size`, `loader_temp_schema` | |
 | 운영 table stats | `ops_table_stats_capture_interval_minutes`, `ops_table_stats_capture_limit`, `ops_table_stats_capture_on_startup` | API lifespan의 `ops.table_stats_snapshots` opt-in 주기 capture. 기본 interval 0은 비활성 |
 | 백업/복원 | `backup_allowed_dirs`, `backup_temp_dir`, `backup_default_jobs`, `backup_artifact_ttl_days`, `backup_callback_allowed_hosts`, `backup_callback_secret`, `backup_callback_max_attempts`, `backup_callback_backoff_ms` | T-046/T-050. 서버 측 allowlist 경로에만 `.tar.zst` artifact 저장, callback은 HMAC 서명과 retry/backoff 적용 |
+| RustFS 업로드 저장소 | `rustfs_enabled`, `rustfs_endpoint_url`, `rustfs_bucket`, `rustfs_region`, `rustfs_prefix`, `rustfs_access_key`, `rustfs_secret_key`, `rustfs_config_path`, `rustfs_materialize_dir`, `rustfs_retention_days`, `rustfs_local_import_roots` | T-076/ADR-044. upload set을 S3 호환 RustFS에 저장하고, 기존 로컬 파일 sync/prefix import/materialized cache를 제공한다. 기본 endpoint는 host `http://127.0.0.1:9003`, Docker 내부 `http://kraddr-geo-rustfs:9003` |
 | 성능 벤치마크 | `perf_artifact_dir`, `perf_default_iterations`, `perf_default_concurrency`, `perf_query_timeout_ms` | T-047. 전국 DB query benchmark 산출물과 기본 반복 횟수 |
 
 `get_settings()`는 lazy 싱글톤. 테스트에서는 `reset_settings()`로 싱글톤을 비우고, 명시 주입이 필요할 때만 `set_settings(settings)`를 사용한다.
@@ -396,6 +397,7 @@ reverse / search 라우터도 `sig_cd`/`bjd_cd`를 같은 의미로 받는다. z
 - `POST /v1/admin/maintenance/analyze?table=...` — 테이블명 화이트리스트 검증(`isalnum`)
 - `POST /v1/admin/upload/sido-zip?filename=...&sido=...` — 시도 ZIP raw body 스트리밍 업로드(SHA256 해시 반환). `filename`과 `sido`는 path token으로 정규화하고 `loader_data_dir/uploads` 밖으로 resolve되면 거절한다. `api_max_upload_bytes` 초과 시 partial file을 삭제하고 실패한다.
 - `POST /v1/admin/uploads`, `PUT /v1/admin/uploads/{upload_set_id}/files`, `GET /v1/admin/uploads/{upload_set_id}`, `POST /v1/admin/uploads/{upload_set_id}/cancel` — T-045 대용량 다중 파일 업로드 세션. 모든 파일 저장과 checksum 확인이 끝난 뒤 source set 분석으로 넘어간다.
+- `GET/PATCH /v1/admin/storage/rustfs/config`, `POST /v1/admin/storage/rustfs/check`, `POST /v1/admin/storage/rustfs/import-prefix`, `POST /v1/admin/storage/rustfs/sync-local` — T-076 RustFS 업로드 저장소 설정·연결 확인·기존 object 목록 import·로컬 파일 sync. secret 원문은 조회 응답에 노출하지 않는다.
 - `POST /v1/admin/load-sources/discover` — 디렉터리 또는 upload set을 읽어 원천 후보, 기준월, 필수 원천 누락, 기준월 불일치 여부를 반환한다.
 - `POST /v1/admin/load-sources/plan` — 사용자가 선택한 원천별 기준월/경로와 혼합 기준월 확인 정보를 검증해 `SourceSetPlan`을 만든다.
 - `POST /v1/admin/loads` — 업로드된 시도 또는 full-load batch payload를 작업 큐에 직렬 등록
@@ -1046,11 +1048,11 @@ async with engine.begin() as conn:
 프론트엔드 워크플로는 T-045부터 4단계로 본다.
 
 1. **업로드 세션 생성**: UI가 `POST /v1/admin/uploads`로 `upload_set_id`를 만든다. 같은 화면에서 고른 다중 파일과 drag and drop 파일은 한 upload set에 묶인다.
-2. **파일 저장**: 각 파일을 `PUT /v1/admin/uploads/{upload_set_id}/files?filename=...&relative_path=...`로 raw stream 업로드한다. 서버는 `*.part`로 쓰고, byte count와 SHA256을 계산한 뒤 완료 시 atomic rename한다. 업로드는 `api_max_upload_bytes`(기본 2GiB)를 넘을 수 없고, `filename`/`relative_path` 정규화 후에도 `loader_data_dir/uploads` 밖으로 resolve되면 거절한다.
+2. **파일 저장**: 각 파일을 `PUT /v1/admin/uploads/{upload_set_id}/files?filename=...&relative_path=...`로 raw stream 업로드한다. `storage_kind="local"`이면 서버는 `*.part`로 쓰고, byte count와 SHA256을 계산한 뒤 완료 시 atomic rename한다. `storage_kind="rustfs"`이면 같은 검증 후 RustFS object로 put하고 manifest에는 `rustfs://<bucket>/<prefix>/...`, object key, etag를 기록한다. 업로드는 `api_max_upload_bytes`(기본 2GiB)를 넘을 수 없고, `filename`/`relative_path` 정규화 후에도 upload set 경계 밖으로 resolve되면 거절한다.
 3. **source set 분석/확인**: 모든 파일 저장이 끝나면 `POST /v1/admin/load-sources/discover`가 upload set 또는 서버 디렉터리를 읽어 원천 후보와 기준월을 반환한다. 기준월이 섞여 있으면 UI/CLI가 사용자 확인을 받은 뒤 `POST /v1/admin/load-sources/plan`으로 `SourceSetPlan`을 만든다.
 4. **처리**: 확정된 `SourceSetPlan.batch_payload`만 `POST /v1/admin/loads`에 `kind="full_load_batch"`로 등록한다. 큐가 직렬 처리한다. 진행률은 `/v1/admin/loads` 또는 compatibility alias `/v1/admin/jobs`로 폴링한다.
 
-기존 `POST /v1/admin/upload/sido-zip?filename=...&sido=...`는 단일 시도 ZIP 업로드 호환 경로로 유지할 수 있지만, `/admin/load`의 대용량 full-load UX는 upload set API를 우선 사용한다. 업로드 디렉토리는 `settings.loader_data_dir/uploads/`. `upload_set_id = "{timestamp}_{short_hash}"`로 충돌을 방지하고, 완료되지 않은 partial file과 30일 이상 된 upload set은 `kraddr-geo uploads cleanup` cron이 정리한다.
+기존 `POST /v1/admin/upload/sido-zip?filename=...&sido=...`는 단일 시도 ZIP 업로드 호환 경로로 유지할 수 있지만, `/admin/load`의 대용량 full-load UX는 upload set API를 우선 사용한다. 로컬 업로드 디렉토리는 `settings.loader_data_dir/uploads/`이고 RustFS upload set은 `rustfs_prefix/uploads/<upload_set_id>/files/` 아래 object를 사용한다. `upload_set_id = "{timestamp}_{short_hash}"`로 충돌을 방지하고, 완료되지 않은 partial file과 TTL이 지난 로컬 upload set은 `kraddr-geo uploads cleanup` cron이 정리한다. RustFS 보존기간은 기본 무기한(`rustfs_retention_days=0`)이다.
 
 T-050 1차 hardening 이후 cleanup은 `load_jobs.state IN ('queued','running')` payload에서 `upload_set_id` 또는 upload set 경로를 찾으면 해당 디렉터리를 삭제하지 않는다. 기본 TTL은 `KRADDR_GEO_UPLOAD_SET_TTL_DAYS=30`, active grace는 `KRADDR_GEO_UPLOAD_SET_ACTIVE_GRACE_MINUTES=360`이다. 운영자는 먼저 `kraddr-geo uploads cleanup --dry-run`으로 삭제 후보를 확인한 뒤 실제 cleanup을 실행한다.
 

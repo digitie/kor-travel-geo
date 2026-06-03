@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Added
+- RustFS(S3 호환) 업로드 저장소 옵션을 추가했다. `/v1/admin/uploads`는 `storage_kind="local" | "rustfs"`를 받을 수 있고, RustFS upload set은 `rustfs://<bucket>/<prefix>/...` URI와 materialized cache를 통해 기존 source set 탐지/계획 경로를 재사용한다.
+- `/v1/admin/storage/rustfs/config`, `/check`, `/import-prefix`, `/sync-local` API를 추가했다. admin UI `/admin/settings`에서 RustFS 사용 여부, endpoint, bucket, prefix, region, access/secret key, retention을 설정하고, `/admin/load`에서 업로드 저장소 선택, RustFS prefix import, 로컬 기존 파일 RustFS 동기화를 실행할 수 있다.
+- `scripts/docker_app.sh`가 RustFS 컨테이너를 함께 관리한다. 기본 포트는 S3 API `9003`, console `9004`이며, API 컨테이너는 Docker network alias `kraddr-geo-rustfs`로 접속한다.
+- RustFS 운영 설계와 다중 프로젝트(`python-kraddr-geo`, `python-krtour-map`, `tripmate`) 공유 prefix 정책을 `docs/t076-rustfs-upload-storage.md`와 ADR-044에 문서화했다.
 - `/v2/regions/within-radius` 가속용 `region_radius_parts` serving table과 Alembic migration을 추가했다. 시도·시군구·읍면동 polygon을 `ST_Subdivide`로 쪼개 GiST 인덱스를 걸고, 실제 조회는 단일 SQL/단일 좌표 변환으로 수행한다.
 - `scripts/docker_app.sh`와 `docker/api.Dockerfile`을 추가했다. API 이미지는 Debian trixie의 `gdal-config` 버전에 맞춰 Python GDAL binding을 설치하고, UI/API 컨테이너 실행 시 `.env`/`.env.local`의 VWorld 키를 런타임 환경변수로 주입한다. 같은 스크립트로 `kraddr-geo` CLI 적재 명령도 Docker loader runner에서 실행할 수 있다.
 - `POST /v2/regions/within-radius`와 `AsyncAddressClient.regions_within_radius()`를 추가했다. POI `(lon, lat)` 기준 반경 `radius_km` 안에 들어오는 `sido`/`sigungu`/`emd`를 반환하며, `relation="contains"`와 `relation="overlaps"`로 중심점 포함 행정구역과 반경 인접 행정구역을 구분한다.
@@ -12,6 +16,8 @@
 - Windows Playwright e2e에 실제 Python API `.env` VWorld 키로 MapLibre canvas와 VWorld WMTS 타일 응답을 확인하는 지도 로딩 테스트를 추가했다.
 
 ### Changed
+- Docker 실행 기본 포트를 API `9001`, UI `9002`, RustFS S3 `9003`, RustFS console `9004`로 고정했다. `9003`을 publish하는 non-managed RustFS가 있으면 기본 스크립트는 제거하고 `kraddr-geo-rustfs`를 올리며, 점유자가 Docker Compose 서비스이면 제거 전에 해당 service를 `stop`한다. 기존 RustFS를 임시 재사용하려면 `KRADDR_GEO_RUSTFS_REUSE_EXISTING=1`을 명시한다.
+- Playwright e2e 기본 project를 Chrome 기준 `chromium`과 Firefox 기준 `firefox` 모두로 확장했다. PR 완료 전 두 브라우저를 모두 실행하는 정책을 문서화하고, Firefox에서 긴 메뉴 반복 회귀 테스트가 기본 30초 제한에 걸리지 않도록 테스트 timeout을 조정했다.
 - `GeometryRepository.regions_within_radius()`는 레벨별 3회 쿼리 대신 `region_radius_parts` 기반 단일 쿼리를 사용한다. `contains` 판정은 원본 `tl_scco_*` polygon의 `ST_Covers`로 유지하고, 시도 → 시군구 → 읍면동 parent code 필터로 후보 폭을 줄인다.
 - `load shp`, `load shp-all`, `load all-sidos`, `refresh mv` 경로가 행정구역 반경조회 accelerator를 다시 채우도록 했다.
 - Docker 실행 기본값을 host network 대신 bridge network + host port mapping으로 정리하고, 공식 로컬 포트를 API `9001`, UI `9002`로 고정했다. `scripts/docker_app.sh up` 계열은 해당 host 포트를 점유한 기존 컨테이너나 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다.

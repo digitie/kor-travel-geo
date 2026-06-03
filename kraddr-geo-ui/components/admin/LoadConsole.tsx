@@ -14,6 +14,7 @@ import {
   ChangeEvent,
   DragEvent,
   FormEvent,
+  useEffect,
   useMemo,
   useReducer,
   useRef
@@ -24,11 +25,14 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   API_BASE,
   LoadJobStatus,
+  RustfsStorageConfig,
+  RustfsSyncLocalResult,
   SourceCandidate,
   SourceKind,
   SourceSetDiscovery,
   SourceSetPlan,
   UploadFileStatus,
+  UploadStorageKind,
   UploadSetStatus,
   backendPath,
   postJson,
@@ -58,8 +62,15 @@ type LoadConsoleUiState = {
   dropActive: boolean;
   files: LocalUploadFile[];
   jobs: LoadJobStatus[];
+  localSyncPath: string;
+  localSyncPrefix: string;
   lastResult: unknown;
   plan: SourceSetPlan | null;
+  rustfsBusy: boolean;
+  rustfsConfig: RustfsStorageConfig | null;
+  rustfsMessage: string | null;
+  rustfsPrefix: string;
+  storageKind: UploadStorageKind;
   uploadSet: UploadSetStatus | null;
 };
 
@@ -101,8 +112,15 @@ const initialLoadConsoleUiState: LoadConsoleUiState = {
   dropActive: false,
   files: [],
   jobs: [],
+  localSyncPath: "/data",
+  localSyncPrefix: "",
   lastResult: null,
   plan: null,
+  rustfsBusy: false,
+  rustfsConfig: null,
+  rustfsMessage: null,
+  rustfsPrefix: "python-kraddr-geo/uploads",
+  storageKind: "local",
   uploadSet: null
 };
 
@@ -126,9 +144,15 @@ export function LoadConsole() {
     refreshJobs,
     refreshMv,
     resetAll,
+    importRustfsPrefix,
+    setLocalSyncPath,
+    setLocalSyncPrefix,
     setConfirmation,
     setDiscovery,
     setDropActive,
+    setRustfsPrefix,
+    setStorageKind,
+    syncLocalToRustfs,
     submitPlan,
     uploadSelectedFiles
   } = controller;
@@ -147,8 +171,24 @@ export function LoadConsole() {
         onUploadCancel={cancelUpload}
         selectedBytes={selectedBytes}
         state={state}
+        storageKind={uiState.storageKind}
+        rustfsConfig={uiState.rustfsConfig}
+        onStorageKindChange={setStorageKind}
         uploadPercent={uploadPercent}
         uploadSet={uiState.uploadSet}
+      />
+      <RustfsSourcePanel
+        config={uiState.rustfsConfig}
+        busy={uiState.rustfsBusy}
+        localSyncPath={uiState.localSyncPath}
+        localSyncPrefix={uiState.localSyncPrefix}
+        message={uiState.rustfsMessage}
+        onImportPrefix={importRustfsPrefix}
+        onLocalSyncPathChange={setLocalSyncPath}
+        onLocalSyncPrefixChange={setLocalSyncPrefix}
+        onPrefixChange={setRustfsPrefix}
+        onSyncLocal={syncLocalToRustfs}
+        prefix={uiState.rustfsPrefix}
       />
       <SourceSetReviewPanel
         canCreatePlan={canCreatePlan}
@@ -229,6 +269,25 @@ function useLoadConsoleController() {
     dispatchUi({ type: "patch_file", key, patch });
   }
 
+  useEffect(() => {
+    async function loadRustfsConfig() {
+      try {
+        const config = await requestJson<RustfsStorageConfig>("/admin/storage/rustfs/config");
+        mergeUi({
+          rustfsConfig: config,
+          rustfsPrefix: `${config.prefix}/uploads`,
+          storageKind: config.enabled ? "rustfs" : "local"
+        });
+      } catch (error) {
+        mergeUi({
+          rustfsMessage: error instanceof Error ? error.message : String(error),
+          storageKind: "local"
+        });
+      }
+    }
+    void loadRustfsConfig();
+  }, []);
+
   function selectFiles(fileList: FileList | File[]) {
     const files = Array.from(fileList).map((file, index) => ({
       file,
@@ -271,6 +330,22 @@ function useLoadConsoleController() {
     mergeUi({ discovery });
   }
 
+  function setStorageKind(storageKind: UploadStorageKind) {
+    mergeUi({ storageKind });
+  }
+
+  function setRustfsPrefix(rustfsPrefix: string) {
+    mergeUi({ rustfsPrefix });
+  }
+
+  function setLocalSyncPath(localSyncPath: string) {
+    mergeUi({ localSyncPath });
+  }
+
+  function setLocalSyncPrefix(localSyncPrefix: string) {
+    mergeUi({ localSyncPrefix });
+  }
+
   async function uploadSelectedFiles(event: FormEvent) {
     event.preventDefault();
     if (uiState.files.length === 0) {
@@ -281,7 +356,8 @@ function useLoadConsoleController() {
     uploadCancelRequested.current = false;
     try {
       const created = await postJson<UploadSetStatus>("/admin/uploads", {
-        purpose: "full_load_source_set"
+        purpose: "full_load_source_set",
+        storage_kind: uiState.storageKind
       });
       mergeUi({ uploadSet: created });
       const uploadResults = await Promise.allSettled(
@@ -311,6 +387,71 @@ function useLoadConsoleController() {
       dispatch({ type: uploadCancelRequested.current ? "cancel" : "fail" });
     } finally {
       uploadRequests.clear();
+    }
+  }
+
+  async function discoverUploadSet(uploadSet: UploadSetStatus) {
+    const discovered = await postJson<SourceSetDiscovery>("/admin/load-sources/discover", {
+      upload_set_id: uploadSet.upload_set_id,
+      include_optional: true
+    });
+    mergeUi({ discovery: discovered, lastResult: discovered, uploadSet });
+    dispatch({ type: "upload_done" });
+  }
+
+  async function importRustfsPrefix(event: FormEvent) {
+    event.preventDefault();
+    if (!uiState.rustfsPrefix.trim()) {
+      mergeUi({ rustfsMessage: "RustFS prefix를 입력하세요." });
+      return;
+    }
+    dispatch({ type: "upload_start" });
+    mergeUi({ rustfsBusy: true, rustfsMessage: null });
+    try {
+      const uploadSet = await postJson<UploadSetStatus>("/admin/storage/rustfs/import-prefix", {
+        prefix: uiState.rustfsPrefix.trim(),
+        purpose: "full_load_source_set"
+      });
+      await discoverUploadSet(uploadSet);
+      mergeUi({ rustfsMessage: "RustFS prefix를 source set으로 가져왔습니다." });
+    } catch (error) {
+      mergeUi({
+        lastResult: { error: error instanceof Error ? error.message : String(error) },
+        rustfsMessage: error instanceof Error ? error.message : String(error)
+      });
+      dispatch({ type: "fail" });
+    } finally {
+      mergeUi({ rustfsBusy: false });
+    }
+  }
+
+  async function syncLocalToRustfs(event: FormEvent) {
+    event.preventDefault();
+    if (!uiState.localSyncPath.trim()) {
+      mergeUi({ rustfsMessage: "로컬 경로를 입력하세요." });
+      return;
+    }
+    dispatch({ type: "upload_start" });
+    mergeUi({ rustfsBusy: true, rustfsMessage: null });
+    try {
+      const result = await postJson<RustfsSyncLocalResult>("/admin/storage/rustfs/sync-local", {
+        root_path: uiState.localSyncPath.trim(),
+        prefix: uiState.localSyncPrefix.trim() || null,
+        purpose: "full_load_source_set"
+      });
+      await discoverUploadSet(result.upload_set);
+      mergeUi({
+        lastResult: result,
+        rustfsMessage: `${result.uploaded_files}개 파일을 RustFS로 업로드했습니다.`
+      });
+    } catch (error) {
+      mergeUi({
+        lastResult: { error: error instanceof Error ? error.message : String(error) },
+        rustfsMessage: error instanceof Error ? error.message : String(error)
+      });
+      dispatch({ type: "fail" });
+    } finally {
+      mergeUi({ rustfsBusy: false });
     }
   }
 
@@ -475,12 +616,18 @@ function useLoadConsoleController() {
     onDragOver,
     onDrop,
     onFileInput,
+    importRustfsPrefix,
     refreshJobs,
     refreshMv,
     resetAll,
+    setLocalSyncPath,
+    setLocalSyncPrefix,
     setConfirmation,
     setDiscovery,
     setDropActive,
+    setRustfsPrefix,
+    setStorageKind,
+    syncLocalToRustfs,
     submitPlan,
     uploadSelectedFiles
   };
@@ -496,8 +643,11 @@ function SourceSetUploadPanel({
   onReset,
   onSubmit,
   onUploadCancel,
+  onStorageKindChange,
+  rustfsConfig,
   selectedBytes,
   state,
+  storageKind,
   uploadPercent,
   uploadSet
 }: {
@@ -510,14 +660,36 @@ function SourceSetUploadPanel({
   onReset: () => void;
   onSubmit: (event: FormEvent) => void;
   onUploadCancel: () => Promise<void>;
+  onStorageKindChange: (storageKind: UploadStorageKind) => void;
+  rustfsConfig: RustfsStorageConfig | null;
   selectedBytes: number;
   state: string;
+  storageKind: UploadStorageKind;
   uploadPercent: number;
   uploadSet: UploadSetStatus | null;
 }) {
+  const rustfsEnabled = rustfsConfig?.enabled === true;
   return (
     <Panel title="Source Set Upload" actions={<span className="status ok">{state}</span>}>
       <form className="form-grid" onSubmit={onSubmit}>
+        <div className="field">
+          <label htmlFor="upload-storage-kind">저장소</label>
+          <select
+            id="upload-storage-kind"
+            onChange={(event) => onStorageKindChange(event.target.value as UploadStorageKind)}
+            value={storageKind}
+          >
+            <option value="local">로컬 디렉터리</option>
+            <option disabled={!rustfsEnabled} value="rustfs">
+              RustFS
+            </option>
+          </select>
+          <p className="form-note">
+            {rustfsEnabled
+              ? `${rustfsConfig.bucket}/${rustfsConfig.prefix}`
+              : "RustFS는 /admin/settings에서 먼저 켭니다."}
+          </p>
+        </div>
         <div
           className={`drop-zone${dropActive ? " active" : ""}`}
           onDragLeave={onDragLeave}
@@ -556,6 +728,89 @@ function SourceSetUploadPanel({
           </button>
         </div>
       </form>
+    </Panel>
+  );
+}
+
+function RustfsSourcePanel({
+  busy,
+  config,
+  localSyncPath,
+  localSyncPrefix,
+  message,
+  onImportPrefix,
+  onLocalSyncPathChange,
+  onLocalSyncPrefixChange,
+  onPrefixChange,
+  onSyncLocal,
+  prefix
+}: {
+  busy: boolean;
+  config: RustfsStorageConfig | null;
+  localSyncPath: string;
+  localSyncPrefix: string;
+  message: string | null;
+  onImportPrefix: (event: FormEvent) => Promise<void>;
+  onLocalSyncPathChange: (value: string) => void;
+  onLocalSyncPrefixChange: (value: string) => void;
+  onPrefixChange: (value: string) => void;
+  onSyncLocal: (event: FormEvent) => Promise<void>;
+  prefix: string;
+}) {
+  const disabled = busy || config?.enabled !== true;
+  return (
+    <Panel
+      title="RustFS Source"
+      actions={<span className={`status ${config?.enabled ? "ok" : "warn"}`}>{config?.enabled ? "enabled" : "off"}</span>}
+    >
+      <div className="form-grid">
+        <form className="form-grid" onSubmit={onImportPrefix}>
+          <div className="field">
+            <label htmlFor="rustfs-prefix">RustFS prefix 가져오기</label>
+            <input
+              id="rustfs-prefix"
+              onChange={(event) => onPrefixChange(event.target.value)}
+              placeholder="python-kraddr-geo/uploads/upload_..."
+              value={prefix}
+            />
+          </div>
+          <div className="button-row">
+            <button className="button secondary" disabled={disabled} type="submit">
+              <RefreshCw size={16} />
+              Prefix 가져오기
+            </button>
+          </div>
+        </form>
+        <form className="form-grid" onSubmit={onSyncLocal}>
+          <div className="form-field-grid two">
+            <div className="field">
+              <label htmlFor="rustfs-local-root">로컬 경로</label>
+              <input
+                id="rustfs-local-root"
+                onChange={(event) => onLocalSyncPathChange(event.target.value)}
+                placeholder="/data"
+                value={localSyncPath}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="rustfs-local-prefix">저장 prefix</label>
+              <input
+                id="rustfs-local-prefix"
+                onChange={(event) => onLocalSyncPrefixChange(event.target.value)}
+                placeholder={config ? `${config.prefix}/imports/...` : "python-kraddr-geo/imports/..."}
+                value={localSyncPrefix}
+              />
+            </div>
+          </div>
+          <div className="button-row">
+            <button className="button secondary" disabled={disabled} type="submit">
+              <FileUp size={16} />
+              로컬 파일 올리기
+            </button>
+          </div>
+        </form>
+        {message ? <p className="form-note">{message}</p> : null}
+      </div>
     </Panel>
   );
 }

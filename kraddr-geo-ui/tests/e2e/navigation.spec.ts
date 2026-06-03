@@ -20,6 +20,8 @@ const navLinks = [
 
 test.describe("좌측 메뉴 이동", () => {
   test("메뉴를 반복 클릭해도 Next.js 로드 실패 화면으로 떨어지지 않는다", async ({ page }) => {
+    test.setTimeout(90_000);
+
     const pageErrors: string[] = [];
     const failedRequests: string[] = [];
     const rscRequests: string[] = [];

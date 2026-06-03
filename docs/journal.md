@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-03 09:16 (RustFS 업로드 저장소와 Docker 포트 표준)
+
+**작업**: 업로드 파일을 로컬 디렉터리 대신 RustFS(S3 호환)에 저장할 수 있는 옵션을 추가하고, Docker 실행 시 RustFS S3 API `9003`, console `9004`를 프로젝트 공식 포트로 관리하도록 했다.
+
+**반영**:
+- `rustfs://<bucket>/<prefix>/...` URI와 `storage_kind="local" | "rustfs"`를 upload set manifest/DTO/API에 추가했다.
+- `/v1/admin/storage/rustfs/config`, `/check`, `/import-prefix`, `/sync-local` API를 추가했다. secret은 설정 조회 응답에 원문으로 노출하지 않는다.
+- `/admin/settings`에서 RustFS 사용 여부, endpoint, bucket, prefix, region, access/secret key, retention을 설정하고 연결 확인을 실행할 수 있게 했다.
+- `/admin/load`에서 업로드 저장소를 선택하고, RustFS prefix import와 기존 로컬 파일 RustFS sync를 실행할 수 있게 했다.
+- `scripts/docker_app.sh`가 RustFS 컨테이너를 함께 관리한다. 기본 포트는 API `9001`, UI `9002`, RustFS S3 `9003`, console `9004`다. `9003`을 점유한 non-managed RustFS가 Docker Compose 서비스이면 해당 service를 먼저 stop한 뒤 `kraddr-geo-rustfs`를 올린다.
+- RustFS 운영 책임, `python-kraddr-geo`/`python-krtour-map`/`tripmate` prefix 분리, 무기한 보존 기본값, Chrome/Firefox Playwright e2e 원칙을 문서화했다.
+
+**검증**:
+- ext4 테스트 미러에서 backend `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`를 통과했다. pytest는 `303 passed, 7 skipped`다.
+- ext4 테스트 미러에서 frontend `scripts/frontend_check.sh --install`을 통과했다. `gen:types`, lint, type-check, Vitest 42개, build가 모두 성공했다.
+- React Doctor `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
+- `scripts/docker_app.sh build`로 API/UI image를 다시 빌드했고, API build에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
+- `scripts/docker_app.sh up`으로 API `9001`, UI `9002`, RustFS `9003`/`9004`를 올렸다. `/v1/healthz`, `/debug/geocode`, `/api/runtime-config`, `/v1/admin/storage/rustfs/check`가 정상 응답했다.
+- 실제 Docker API + RustFS live test에서 `/data/juso/도로명주소 전자지도/서울특별시/11000/TL_SCCO_LI.shp`와 `/data/juso/202604_사서함주소DB_전체분.zip`을 RustFS로 sync하고 prefix import를 확인했다. 직접 `PUT /v1/admin/uploads/{id}/files` RustFS 업로드도 `state=uploaded`로 확인했다.
+- Windows Playwright Docker UI `http://localhost:9002`: Chromium 전체 e2e 16 passed, Firefox 전체 e2e 16 passed. 메뉴 반복 이동 테스트는 `This page couldn`, `Reload to try again`, `_rsc` client routing 요청 부재를 확인하고, VWorld 지도 테스트는 실제 WMTS 타일과 MapLibre canvas를 확인한다.
+
+**발견**:
+- 같은 호스트에서 TripMate RustFS Compose service가 `9003`/`9004`를 다시 점유할 수 있었다. 단순 `docker rm -f`만으로는 재생성 경합이 생기므로 Compose label을 읽어 해당 service를 먼저 stop하는 경로를 스크립트에 넣었다.
+- RustFS는 여러 프로젝트가 공유할 수 있지만, 이 저장소의 로컬 개발 표준에서는 `scripts/docker_app.sh`가 기본 관리 주체다. 다른 프로젝트가 기존 RustFS를 임시 재사용해야 하면 `KRADDR_GEO_RUSTFS_REUSE_EXISTING=1`을 명시한다.
+
 ## 2026-06-03 09:15 (antigravity-readme-cleanup)
 
 **작업**: README.md의 가독성과 레이아웃을 GFM 스타일에 맞추어 정돈하였고, docs/agent-guide.md에 포함된 절대경로에서 특정 로컬 사용자명(digit)을 제거하여 개인정보를 마스킹했습니다. 또한 tripmate 등의 특정 프로젝트명 언급 여부를 조사하여 해당 명칭이 저장소에 없음을 확인했습니다.

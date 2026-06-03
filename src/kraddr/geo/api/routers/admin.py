@@ -52,6 +52,12 @@ from kraddr.geo.dto.admin import (
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
     RollbackPlan,
+    RustfsConnectionCheck,
+    RustfsImportPrefixRequest,
+    RustfsStorageConfig,
+    RustfsStorageConfigPatch,
+    RustfsSyncLocalRequest,
+    RustfsSyncLocalResult,
     ServingRelease,
     SourceSetDiscovery,
     SourceSetDiscoveryRequest,
@@ -71,6 +77,13 @@ from kraddr.geo.infra.backup import (
     resolve_existing_archive_path,
     validate_download_token,
 )
+from kraddr.geo.infra.rustfs import (
+    RustfsClient,
+    describe_rustfs_config,
+    load_rustfs_config,
+    require_enabled_rustfs,
+    save_rustfs_config,
+)
 from kraddr.geo.infra.source_set import (
     build_full_load_source_set_plan,
     discover_load_sources,
@@ -79,7 +92,10 @@ from kraddr.geo.infra.uploads import (
     cancel_upload_set,
     create_upload_set,
     get_upload_set,
+    import_rustfs_prefix_as_upload_set,
+    materialize_upload_set,
     store_upload_file,
+    sync_local_to_rustfs,
     upload_set_root,
 )
 from kraddr.geo.settings import Settings, get_settings
@@ -181,7 +197,18 @@ async def upload_sido_zip(
     response_model_exclude_none=True,
 )
 async def create_upload_session(req: UploadSetCreateRequest) -> UploadSetStatus:
-    return await create_upload_set(get_settings().loader_data_dir, req)
+    settings = get_settings()
+    rustfs_config = load_rustfs_config(settings)
+    storage_kind = req.storage_kind or ("rustfs" if rustfs_config.enabled else "local")
+    if storage_kind == "rustfs":
+        rustfs_config = require_enabled_rustfs(settings)
+        await RustfsClient(rustfs_config).ensure_bucket()
+    return await create_upload_set(
+        settings.loader_data_dir,
+        req,
+        storage_kind=storage_kind,
+        rustfs_config=rustfs_config if storage_kind == "rustfs" else None,
+    )
 
 
 @router.get(
@@ -205,6 +232,12 @@ async def put_upload_file(
     relative_path: str | None = None,
 ) -> UploadFileStatus:
     settings = get_settings()
+    status = await get_upload_set(settings.loader_data_dir, upload_set_id)
+    rustfs_config = None
+    rustfs_client = None
+    if status.storage_kind == "rustfs":
+        rustfs_config = require_enabled_rustfs(settings)
+        rustfs_client = RustfsClient(rustfs_config)
     return await store_upload_file(
         settings.loader_data_dir,
         upload_set_id,
@@ -212,6 +245,8 @@ async def put_upload_file(
         relative_path=relative_path,
         chunks=request.stream(),
         max_bytes=settings.api_max_upload_bytes,
+        rustfs_client=rustfs_client,
+        rustfs_config=rustfs_config,
     )
 
 
@@ -224,13 +259,78 @@ async def cancel_upload_session(upload_set_id: str) -> UploadSetStatus:
     return await cancel_upload_set(get_settings().loader_data_dir, upload_set_id)
 
 
+@router.get(
+    "/storage/rustfs/config",
+    response_model=RustfsStorageConfig,
+    response_model_exclude_none=True,
+)
+async def rustfs_storage_config() -> RustfsStorageConfig:
+    return describe_rustfs_config(load_rustfs_config(get_settings()))
+
+
+@router.patch(
+    "/storage/rustfs/config",
+    response_model=RustfsStorageConfig,
+    response_model_exclude_none=True,
+)
+async def patch_rustfs_storage_config(req: RustfsStorageConfigPatch) -> RustfsStorageConfig:
+    return save_rustfs_config(get_settings(), req)
+
+
+@router.post(
+    "/storage/rustfs/check",
+    response_model=RustfsConnectionCheck,
+    response_model_exclude_none=True,
+)
+async def check_rustfs_storage() -> RustfsConnectionCheck:
+    settings = get_settings()
+    config = require_enabled_rustfs(settings)
+    return await RustfsClient(config).check()
+
+
+@router.post(
+    "/storage/rustfs/import-prefix",
+    response_model=UploadSetStatus,
+    response_model_exclude_none=True,
+)
+async def import_rustfs_prefix(req: RustfsImportPrefixRequest) -> UploadSetStatus:
+    settings = get_settings()
+    config = require_enabled_rustfs(settings)
+    client = RustfsClient(config)
+    return await import_rustfs_prefix_as_upload_set(
+        settings.loader_data_dir,
+        req,
+        rustfs_client=client,
+        rustfs_config=config,
+    )
+
+
+@router.post(
+    "/storage/rustfs/sync-local",
+    response_model=RustfsSyncLocalResult,
+    response_model_exclude_none=True,
+)
+async def sync_local_to_rustfs_storage(req: RustfsSyncLocalRequest) -> RustfsSyncLocalResult:
+    settings = get_settings()
+    config = require_enabled_rustfs(settings)
+    client = RustfsClient(config)
+    await client.ensure_bucket()
+    return await sync_local_to_rustfs(
+        settings.loader_data_dir,
+        req,
+        rustfs_client=client,
+        rustfs_config=config,
+        allowed_roots=settings.rustfs_local_import_roots,
+    )
+
+
 @router.post(
     "/load-sources/discover",
     response_model=SourceSetDiscovery,
     response_model_exclude_none=True,
 )
 async def discover_load_source_set(req: SourceSetDiscoveryRequest) -> SourceSetDiscovery:
-    root_path = _source_root_from_request(req.root_path, req.upload_set_id)
+    root_path = await _source_root_from_request(req.root_path, req.upload_set_id)
     assert root_path is not None
     return discover_load_sources(root_path, include_optional=req.include_optional)
 
@@ -241,7 +341,7 @@ async def discover_load_source_set(req: SourceSetDiscoveryRequest) -> SourceSetD
     response_model_exclude_none=True,
 )
 async def plan_load_source_set(req: SourceSetPlanRequest) -> SourceSetPlan:
-    root_path = _source_root_from_request(req.root_path, req.upload_set_id, required=False)
+    root_path = await _source_root_from_request(req.root_path, req.upload_set_id, required=False)
     return build_full_load_source_set_plan(
         root_path=root_path,
         versions=req.versions,
@@ -996,14 +1096,23 @@ def _is_relative_to(path: Path, base: Path) -> bool:
     return True
 
 
-def _source_root_from_request(
+async def _source_root_from_request(
     root_path: str | None,
     upload_set_id: str | None,
     *,
     required: bool = True,
 ) -> Path | None:
     if upload_set_id:
-        return upload_set_root(get_settings().loader_data_dir, upload_set_id)
+        settings = get_settings()
+        status = await get_upload_set(settings.loader_data_dir, upload_set_id)
+        if status.storage_kind == "rustfs":
+            config = require_enabled_rustfs(settings)
+            return await materialize_upload_set(
+                settings.loader_data_dir,
+                upload_set_id,
+                rustfs_client=RustfsClient(config),
+            )
+        return upload_set_root(settings.loader_data_dir, upload_set_id)
     if root_path:
         return Path(root_path)
     if required:
