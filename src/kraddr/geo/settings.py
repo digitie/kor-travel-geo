@@ -80,6 +80,18 @@ class Settings(BaseSettings):
     loader_temp_schema: str = "staging"
     upload_set_ttl_days: int = Field(default=30, ge=1)
     upload_set_active_grace_minutes: int = Field(default=360, ge=1)
+    rustfs_enabled: bool = False
+    rustfs_endpoint_url: str = "http://127.0.0.1:9003"
+    rustfs_bucket: str = "kraddr-geo"
+    rustfs_region: str = "us-east-1"
+    rustfs_prefix: str = "python-kraddr-geo"
+    rustfs_force_path_style: bool = True
+    rustfs_access_key: SecretStr | None = None
+    rustfs_secret_key: SecretStr | None = None
+    rustfs_config_path: Path = Path("data/rustfs/config.json")
+    rustfs_materialize_dir: Path = Path("data/rustfs/materialized")
+    rustfs_retention_days: int = Field(default=0, ge=0)
+    rustfs_local_import_roots: Annotated[tuple[Path, ...], NoDecode] = (Path("data"),)
     ops_table_stats_capture_interval_minutes: int = Field(default=0, ge=0)
     ops_table_stats_capture_limit: int = Field(default=500, ge=1, le=2_000)
     ops_table_stats_capture_on_startup: bool = False
@@ -117,6 +129,17 @@ class Settings(BaseSettings):
     @field_validator("backup_allowed_dirs", mode="before")
     @classmethod
     def normalize_backup_allowed_dirs(cls, value: object) -> tuple[Path, ...]:
+        if isinstance(value, str):
+            return tuple(Path(part.strip()) for part in value.split(",") if part.strip())
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(Path(part) for part in value)
+        return (Path(str(value)),)
+
+    @field_validator("rustfs_local_import_roots", mode="before")
+    @classmethod
+    def normalize_rustfs_local_import_roots(cls, value: object) -> tuple[Path, ...]:
         if isinstance(value, str):
             return tuple(Path(part.strip()) for part in value.split(",") if part.strip())
         if value is None:

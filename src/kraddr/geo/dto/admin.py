@@ -62,6 +62,7 @@ SourceKind = Literal[
 SourceConfidence = Literal["high", "medium", "low"]
 UploadSetState = Literal["created", "uploading", "uploaded", "cancelled", "failed"]
 UploadFileState = Literal["pending", "uploading", "uploaded", "cancelled", "failed"]
+UploadStorageKind = Literal["local", "rustfs"]
 BackupFormat = Literal["directory_tar_zstd"]
 BackupProfile = Literal["serving-ready", "lean-serving", "forensic"]
 RestoreMode = Literal["new_database", "replace_current"]
@@ -196,6 +197,7 @@ class SourceSetPlan(FrozenModel):
 
 class UploadSetCreateRequest(FrozenModel):
     purpose: Literal["full_load_source_set"] = "full_load_source_set"
+    storage_kind: UploadStorageKind | None = None
 
 
 class UploadFileStatus(FrozenModel):
@@ -205,6 +207,10 @@ class UploadFileStatus(FrozenModel):
     relative_path: str | None = None
     path: str
     state: UploadFileState
+    storage_kind: UploadStorageKind = "local"
+    storage_uri: str | None = None
+    object_key: str | None = None
+    object_etag: str | None = None
     size_bytes: int = Field(default=0, ge=0)
     uploaded_bytes: int = Field(default=0, ge=0)
     sha256: str | None = Field(default=None, min_length=64, max_length=64)
@@ -220,12 +226,71 @@ class UploadSetStatus(FrozenModel):
     purpose: str
     state: UploadSetState
     root_path: str
+    storage_kind: UploadStorageKind = "local"
+    storage_uri: str | None = None
+    storage_prefix: str | None = None
+    materialized_path: str | None = None
     files: tuple[UploadFileStatus, ...] = ()
     total_bytes: int = Field(default=0, ge=0)
     uploaded_bytes: int = Field(default=0, ge=0)
     created_at: datetime
     updated_at: datetime
     error_message: str | None = None
+
+
+class RustfsSecretStatus(FrozenModel):
+    configured: bool = False
+    hint: str | None = None
+
+
+class RustfsStorageConfig(FrozenModel):
+    enabled: bool = False
+    endpoint_url: str
+    bucket: str
+    prefix: str
+    region: str = "us-east-1"
+    force_path_style: bool = True
+    retention_days: int = Field(default=0, ge=0)
+    access_key: RustfsSecretStatus = Field(default_factory=RustfsSecretStatus)
+    secret_key: RustfsSecretStatus = Field(default_factory=RustfsSecretStatus)
+
+
+class RustfsStorageConfigPatch(FrozenModel):
+    enabled: bool | None = None
+    endpoint_url: str | None = Field(default=None, min_length=1)
+    bucket: str | None = Field(default=None, min_length=1, max_length=63)
+    prefix: str | None = Field(default=None, min_length=1)
+    region: str | None = Field(default=None, min_length=1)
+    force_path_style: bool | None = None
+    retention_days: int | None = Field(default=None, ge=0)
+    access_key: str | None = Field(default=None, min_length=1)
+    secret_key: str | None = Field(default=None, min_length=1)
+
+
+class RustfsConnectionCheck(FrozenModel):
+    ok: bool
+    endpoint_url: str
+    bucket: str
+    prefix: str
+    message: str | None = None
+
+
+class RustfsImportPrefixRequest(FrozenModel):
+    prefix: str = Field(min_length=1)
+    purpose: Literal["full_load_source_set"] = "full_load_source_set"
+
+
+class RustfsSyncLocalRequest(FrozenModel):
+    root_path: str = Field(min_length=1)
+    prefix: str | None = Field(default=None, min_length=1)
+    purpose: Literal["full_load_source_set"] = "full_load_source_set"
+
+
+class RustfsSyncLocalResult(FrozenModel):
+    upload_set: UploadSetStatus
+    uploaded_files: int = Field(ge=0)
+    uploaded_bytes: int = Field(ge=0)
+    skipped_files: int = Field(default=0, ge=0)
 
 
 class NormalizeRequest(FrozenModel):

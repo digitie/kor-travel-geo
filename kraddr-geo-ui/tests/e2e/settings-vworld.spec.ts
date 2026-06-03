@@ -17,7 +17,11 @@ test.describe("VWorld 설정 UI", () => {
     await expect(page.getByText(".env 기본값").first()).toBeVisible();
 
     await page.getByLabel("NEXT_PUBLIC_VWORLD_API_KEY").fill("browser-key");
-    await page.getByRole("button", { name: "저장" }).click();
+    await page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "VWorld 인증키" }) })
+      .getByRole("button", { name: "저장" })
+      .click();
 
     await expect(page.getByText("지도 설정을 저장했습니다.")).toBeVisible();
     await expect(page.getByText("브라우저 저장값")).toBeVisible();

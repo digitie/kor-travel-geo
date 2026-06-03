@@ -28,6 +28,7 @@
 > - **T-061**: Slim text-search helper 도입
 > - **T-064**: 상위 주소 geocode 후보 반환 구현
 > - **T-065**: 내비게이션용 DB 기반 `시군구용건물명` 검색 반영
+> - **T-076**: Upload set의 로컬 파일시스템/RustFS(S3 호환) 저장소 선택, RustFS S3 API `9003` 및 console `9004` Docker 운영 표준
 >
 > **최종 재적재 결과 (T-027)**:
 > - 빈 Docker PostGIS DB에 전국 `data/juso` 및 `20260401_dailyjusukrdata.zip`을 클린 적재하여 `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204` 생성 확인 및 smoke 테스트 통과.
@@ -124,7 +125,7 @@ kraddr-geo refresh mv --swap
 # 서비스 기동
 uvicorn kraddr.geo.api.app:app --reload --port 9001
 
-# Docker API/UI 빌드 및 실행 (GDAL 버전 매칭 포함)
+# Docker API/UI/RustFS 빌드 및 실행 (GDAL 버전 매칭 포함)
 scripts/docker_app.sh build
 scripts/docker_app.sh up
 ```
@@ -140,7 +141,7 @@ npm run dev -- --port 9002   # http://localhost:9002
 ```
 
 > [!TIP]
-> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽어 전달합니다. Docker 실행은 `scripts/docker_app.sh`를 사용하며, 이 스크립트가 `.env`/`.env.local`의 VWorld 키를 컨테이너 환경변수로 주입합니다. MapLibre 렌더링은 `maplibre-vworld` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
+> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽어 전달합니다. Docker 실행은 `scripts/docker_app.sh`를 사용하며, 이 스크립트가 `.env`/`.env.local`의 VWorld 키를 컨테이너 환경변수로 주입합니다. `scripts/docker_app.sh up`은 API `9001`, UI `9002`, RustFS S3 `9003`, RustFS console `9004`를 고정 포트로 올립니다. MapLibre 렌더링은 `maplibre-vworld` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
 
 ---
 

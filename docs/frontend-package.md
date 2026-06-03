@@ -188,7 +188,7 @@ T-044 경계화 포팅 원칙:
 
 Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우저 네트워크를 가로채 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse`, `/api/proxy/v2/regions/within-radius` 요청을 확인한다. 이 방식은 실제 DB 결과에 의존하지 않고, UI가 v2 REST body를 잘못 만들거나 v1 endpoint로 되돌아가면 즉시 실패한다. `vworld-map.spec.ts`는 runtime config를 mock하지 않고 Python API `.env`에서 확보한 VWorld 키로 MapLibre canvas와 VWorld WMTS 타일 응답을 확인한다.
 
-프론트엔드 실행과 build/test는 WSL ext4 미러에서 Linux Node/npm으로 수행한다. Windows `npm`을 WSL 경로에서 실행하지 않는다. e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행한다. WSL에서 UI 서버를 띄워 Windows Playwright를 붙일 때는 `next dev --hostname 0.0.0.0 --port 9002` 또는 production build 후 `next start --hostname 0.0.0.0 --port 9002`로 바인딩하고, Windows에서는 WSL IP를 `PLAYWRIGHT_BASE_URL`로 지정한다. 실제 지도 로딩 e2e는 HMR origin 차단을 피하고 사용자 실행에 가깝게 production `next start` 서버에서 실행한다.
+프론트엔드 실행과 build/test는 WSL ext4 미러에서 Linux Node/npm으로 수행한다. Windows `npm`을 WSL 경로에서 실행하지 않는다. e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행한다. WSL에서 UI 서버를 띄워 Windows Playwright를 붙일 때는 `next dev --hostname 0.0.0.0 --port 9002` 또는 production build 후 `next start --hostname 0.0.0.0 --port 9002`로 바인딩하고, Windows에서는 WSL IP를 `PLAYWRIGHT_BASE_URL`로 지정한다. PR 완료 전 e2e는 Chrome 기준 `chromium` project와 Firefox 기준 `firefox` project를 모두 실행한다. 실제 지도 로딩 e2e는 HMR origin 차단을 피하고 사용자 실행에 가깝게 production `next start` 서버에서 실행한다.
 
 ### A3.7.1 React Doctor
 
@@ -229,13 +229,13 @@ npx react-doctor@latest . --offline --verbose --json
 | 경로 | 기능 | 주요 API |
 |------|------|----------|
 | `/admin/tables` | 테이블 통계 (행/디스크/인덱스/마지막 VACUUM) | `GET /v1/admin/tables` |
-| `/admin/load` | 다중 파일 업로드, source set 기준월 확인, 적재 작업 제출과 진행상황 모니터링 | `POST/PUT /v1/admin/uploads*`, `POST /v1/admin/load-sources/*`, `POST /v1/admin/loads`, `POST /v1/admin/maintenance/refresh-mv`, `GET /v1/admin/loads` |
+| `/admin/load` | 다중 파일 업로드, local/RustFS 저장소 선택, RustFS prefix import/local sync, source set 기준월 확인, 적재 작업 제출과 진행상황 모니터링 | `POST/PUT /v1/admin/uploads*`, `POST /v1/admin/storage/rustfs/*`, `POST /v1/admin/load-sources/*`, `POST /v1/admin/loads`, `POST /v1/admin/maintenance/refresh-mv`, `GET /v1/admin/loads` |
 | `/admin/cache` | 캐시 hit rate 시계열, 비우기 | `GET /v1/admin/cache/metrics` |
 | `/admin/logs` | `load_jobs.log_tail` 최근 라인 조회 | `GET /v1/admin/logs` |
 | `/admin/consistency` | C1~C10 정합성 리포트 조회·재검증 | `GET/POST /v1/admin/consistency*` |
 | `/admin/backups` | DB 백업/복원 작업, 진행률, callback 상태, artifact 다운로드 | `POST/GET /v1/admin/backups`, `POST /v1/admin/restores`, `GET /v1/admin/jobs/{id}/events` |
 | `/admin/performance` | 전국 DB query benchmark 결과, p95/p99 threshold, slow plan 조회 | `POST/GET /v1/admin/performance/benchmarks*` |
-| `/admin/settings` | VWorld 인증키 확인·브라우저 override 저장·기본값 복원 | `GET /api/runtime-config` |
+| `/admin/settings` | VWorld 인증키 확인·브라우저 override 저장·기본값 복원, RustFS 업로드 저장소 설정·연결 확인 | `GET /api/runtime-config`, `GET/PATCH /v1/admin/storage/rustfs/config`, `POST /v1/admin/storage/rustfs/check` |
 
 `/admin/postal`과 WebSocket log stream은 문서상 장기 후보였지만 PR #12 구현 범위에는 넣지 않았다. 후속 PR에서 별도 백엔드 표면을 먼저 확정한 뒤 추가한다.
 
@@ -250,7 +250,8 @@ idle → uploading → source_review → plan_ready → processing → finished
 원칙: "파일 업로드와 입력 처리는 각각 다 끝나면 다음 단계로". 파일이 서버에 모두 저장되고 source set 분석이 끝나기 전에는 적재 시작 버튼을 활성화하지 않는다. 업로드 중에는 처리 시작 버튼을 비활성화하고, 처리 중에는 새 파일 추가 영역을 닫는다.
 
 - 파일 선택: `<input type="file" multiple>`과 drag and drop을 모두 지원한다. 디렉터리 drag가 가능한 브라우저에서는 `webkitRelativePath` 또는 동등한 relative path를 보존해 ZIP 묶음과 SHP sidecar 파일을 같은 upload set으로 보낸다.
-- 업로드: T-045 구현은 upload set API를 사용한다. `POST /v1/admin/uploads`로 세션을 만들고, 각 파일은 `PUT /v1/admin/uploads/{upload_set_id}/files`에 raw stream으로 보낸다. 대용량 ZIP 업로드 진행률을 안정적으로 표시하기 위해 `XMLHttpRequest.upload.onprogress` 또는 동등한 업로드 progress wrapper를 사용한다. Next.js Route Handler는 파일 본문을 `arrayBuffer()`로 전체 버퍼링하지 않고 백엔드로 스트리밍한다.
+- 업로드: T-045 구현은 upload set API를 사용한다. T-076부터 `POST /v1/admin/uploads`는 `storage_kind="local" | "rustfs"`를 받을 수 있다. 각 파일은 `PUT /v1/admin/uploads/{upload_set_id}/files`에 raw stream으로 보낸다. 대용량 ZIP 업로드 진행률을 안정적으로 표시하기 위해 `XMLHttpRequest.upload.onprogress` 또는 동등한 업로드 progress wrapper를 사용한다. Next.js Route Handler는 파일 본문을 `arrayBuffer()`로 전체 버퍼링하지 않고 백엔드로 스트리밍한다.
+- RustFS 원천 재사용: RustFS가 활성화된 경우 `/admin/load`는 기존 object prefix를 upload set으로 가져오는 `import-prefix`와, allowlist 하위 로컬 파일/디렉터리를 RustFS로 올리는 `sync-local` 입력을 제공한다. import된 upload set은 백엔드가 `materialized` cache로 내려받은 뒤 기존 source set discovery/plan 경로를 그대로 사용한다.
 - 업로드 진행률: 파일별 `uploaded_bytes / total_bytes`와 전체 `sum(uploaded_bytes) / sum(total_bytes)`를 표시한다. 사용자가 전체 취소를 누르면 진행 중 요청을 abort한 뒤 서버 upload set cancel을 호출한다. 파일별 재시도 버튼은 후속 개선으로 남긴다.
 - source review: 모든 파일 저장이 완료되면 `POST /v1/admin/load-sources/discover`를 호출해 원천 후보, 기준월, 필수 원천 누락, 추천 source set을 표로 보여 준다.
 - 기준월 mismatch 팝업: `mixed_yyyymm=true`이면 적재 시작 전에 modal을 띄운다. modal은 `juso`, `parcel_link`, `locsum`, `navi`, `shp`, `roadaddr_entrance`, `sppn_makarea`의 기준월과 경로를 보여 주고, C10 정합성 리포트에 혼합 기준월이 남는다는 점을 설명한다. 사용자가 계속 진행을 선택하면 서버가 요구하는 confirmation token 또는 문구를 `POST /v1/admin/load-sources/plan`에 함께 보낸다.

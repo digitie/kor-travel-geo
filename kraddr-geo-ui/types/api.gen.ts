@@ -755,6 +755,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/storage/rustfs/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Rustfs Storage */
+        post: operations["check_rustfs_storage_v1_admin_storage_rustfs_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/storage/rustfs/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rustfs Storage Config */
+        get: operations["rustfs_storage_config_v1_admin_storage_rustfs_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Rustfs Storage Config */
+        patch: operations["patch_rustfs_storage_config_v1_admin_storage_rustfs_config_patch"];
+        trace?: never;
+    };
+    "/v1/admin/storage/rustfs/import-prefix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Rustfs Prefix */
+        post: operations["import_rustfs_prefix_v1_admin_storage_rustfs_import_prefix_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/storage/rustfs/sync-local": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Local To Rustfs Storage */
+        post: operations["sync_local_to_rustfs_storage_v1_admin_storage_rustfs_sync_local_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/tables": {
         parameters: {
             query?: never;
@@ -2345,6 +2414,118 @@ export interface components {
             /** Typed Confirmation */
             typed_confirmation: string;
         };
+        /** RustfsConnectionCheck */
+        RustfsConnectionCheck: {
+            /** Bucket */
+            bucket: string;
+            /** Endpoint Url */
+            endpoint_url: string;
+            /** Message */
+            message?: string | null;
+            /** Ok */
+            ok: boolean;
+            /** Prefix */
+            prefix: string;
+        };
+        /** RustfsImportPrefixRequest */
+        RustfsImportPrefixRequest: {
+            /** Prefix */
+            prefix: string;
+            /**
+             * Purpose
+             * @default full_load_source_set
+             * @constant
+             */
+            purpose: "full_load_source_set";
+        };
+        /** RustfsSecretStatus */
+        RustfsSecretStatus: {
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /** Hint */
+            hint?: string | null;
+        };
+        /** RustfsStorageConfig */
+        RustfsStorageConfig: {
+            access_key?: components["schemas"]["RustfsSecretStatus"];
+            /** Bucket */
+            bucket: string;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Endpoint Url */
+            endpoint_url: string;
+            /**
+             * Force Path Style
+             * @default true
+             */
+            force_path_style: boolean;
+            /** Prefix */
+            prefix: string;
+            /**
+             * Region
+             * @default us-east-1
+             */
+            region: string;
+            /**
+             * Retention Days
+             * @default 0
+             */
+            retention_days: number;
+            secret_key?: components["schemas"]["RustfsSecretStatus"];
+        };
+        /** RustfsStorageConfigPatch */
+        RustfsStorageConfigPatch: {
+            /** Access Key */
+            access_key?: string | null;
+            /** Bucket */
+            bucket?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Endpoint Url */
+            endpoint_url?: string | null;
+            /** Force Path Style */
+            force_path_style?: boolean | null;
+            /** Prefix */
+            prefix?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Retention Days */
+            retention_days?: number | null;
+            /** Secret Key */
+            secret_key?: string | null;
+        };
+        /** RustfsSyncLocalRequest */
+        RustfsSyncLocalRequest: {
+            /** Prefix */
+            prefix?: string | null;
+            /**
+             * Purpose
+             * @default full_load_source_set
+             * @constant
+             */
+            purpose: "full_load_source_set";
+            /** Root Path */
+            root_path: string;
+        };
+        /** RustfsSyncLocalResult */
+        RustfsSyncLocalResult: {
+            /**
+             * Skipped Files
+             * @default 0
+             */
+            skipped_files: number;
+            upload_set: components["schemas"]["UploadSetStatus"];
+            /** Uploaded Bytes */
+            uploaded_bytes: number;
+            /** Uploaded Files */
+            uploaded_files: number;
+        };
         /** SearchInput */
         SearchInput: {
             bbox?: components["schemas"]["BBox"] | null;
@@ -2763,6 +2944,10 @@ export interface components {
             filename: string;
             /** Inferred Yyyymm */
             inferred_yyyymm?: string | null;
+            /** Object Etag */
+            object_etag?: string | null;
+            /** Object Key */
+            object_key?: string | null;
             /** Path */
             path: string;
             /** Relative Path */
@@ -2781,6 +2966,14 @@ export interface components {
              * @enum {string}
              */
             state: "pending" | "uploading" | "uploaded" | "cancelled" | "failed";
+            /**
+             * Storage Kind
+             * @default local
+             * @enum {string}
+             */
+            storage_kind: "local" | "rustfs";
+            /** Storage Uri */
+            storage_uri?: string | null;
             /**
              * Updated At
              * Format: date-time
@@ -2802,6 +2995,8 @@ export interface components {
              * @constant
              */
             purpose: "full_load_source_set";
+            /** Storage Kind */
+            storage_kind?: ("local" | "rustfs") | null;
         };
         /** UploadSetStatus */
         UploadSetStatus: {
@@ -2817,6 +3012,8 @@ export interface components {
              * @default []
              */
             files: components["schemas"]["UploadFileStatus"][];
+            /** Materialized Path */
+            materialized_path?: string | null;
             /** Purpose */
             purpose: string;
             /** Root Path */
@@ -2826,6 +3023,16 @@ export interface components {
              * @enum {string}
              */
             state: "created" | "uploading" | "uploaded" | "cancelled" | "failed";
+            /**
+             * Storage Kind
+             * @default local
+             * @enum {string}
+             */
+            storage_kind: "local" | "rustfs";
+            /** Storage Prefix */
+            storage_prefix?: string | null;
+            /** Storage Uri */
+            storage_uri?: string | null;
             /**
              * Total Bytes
              * @default 0
@@ -4431,6 +4638,145 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RestoreHotSwapPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_rustfs_storage_v1_admin_storage_rustfs_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RustfsConnectionCheck"];
+                };
+            };
+        };
+    };
+    rustfs_storage_config_v1_admin_storage_rustfs_config_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RustfsStorageConfig"];
+                };
+            };
+        };
+    };
+    patch_rustfs_storage_config_v1_admin_storage_rustfs_config_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RustfsStorageConfigPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RustfsStorageConfig"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_rustfs_prefix_v1_admin_storage_rustfs_import_prefix_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RustfsImportPrefixRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSetStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sync_local_to_rustfs_storage_v1_admin_storage_rustfs_sync_local_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RustfsSyncLocalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RustfsSyncLocalResult"];
                 };
             };
             /** @description Validation Error */

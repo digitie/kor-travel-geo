@@ -4350,6 +4350,319 @@
         "title": "RollbackPlan",
         "type": "object"
       },
+      "RustfsConnectionCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "endpoint_url": {
+            "title": "Endpoint Url",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "endpoint_url",
+          "bucket",
+          "prefix"
+        ],
+        "title": "RustfsConnectionCheck",
+        "type": "object"
+      },
+      "RustfsImportPrefixRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "prefix": {
+            "minLength": 1,
+            "title": "Prefix",
+            "type": "string"
+          },
+          "purpose": {
+            "const": "full_load_source_set",
+            "default": "full_load_source_set",
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prefix"
+        ],
+        "title": "RustfsImportPrefixRequest",
+        "type": "object"
+      },
+      "RustfsSecretStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          }
+        },
+        "title": "RustfsSecretStatus",
+        "type": "object"
+      },
+      "RustfsStorageConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "access_key": {
+            "$ref": "#/components/schemas/RustfsSecretStatus"
+          },
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "endpoint_url": {
+            "title": "Endpoint Url",
+            "type": "string"
+          },
+          "force_path_style": {
+            "default": true,
+            "title": "Force Path Style",
+            "type": "boolean"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "region": {
+            "default": "us-east-1",
+            "title": "Region",
+            "type": "string"
+          },
+          "retention_days": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "secret_key": {
+            "$ref": "#/components/schemas/RustfsSecretStatus"
+          }
+        },
+        "required": [
+          "endpoint_url",
+          "bucket",
+          "prefix"
+        ],
+        "title": "RustfsStorageConfig",
+        "type": "object"
+      },
+      "RustfsStorageConfigPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "access_key": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Key"
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "maxLength": 63,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "endpoint_url": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint Url"
+          },
+          "force_path_style": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Force Path Style"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "secret_key": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secret Key"
+          }
+        },
+        "title": "RustfsStorageConfigPatch",
+        "type": "object"
+      },
+      "RustfsSyncLocalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "prefix": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix"
+          },
+          "purpose": {
+            "const": "full_load_source_set",
+            "default": "full_load_source_set",
+            "title": "Purpose",
+            "type": "string"
+          },
+          "root_path": {
+            "minLength": 1,
+            "title": "Root Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root_path"
+        ],
+        "title": "RustfsSyncLocalRequest",
+        "type": "object"
+      },
+      "RustfsSyncLocalResult": {
+        "additionalProperties": false,
+        "properties": {
+          "skipped_files": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Skipped Files",
+            "type": "integer"
+          },
+          "upload_set": {
+            "$ref": "#/components/schemas/UploadSetStatus"
+          },
+          "uploaded_bytes": {
+            "minimum": 0.0,
+            "title": "Uploaded Bytes",
+            "type": "integer"
+          },
+          "uploaded_files": {
+            "minimum": 0.0,
+            "title": "Uploaded Files",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "upload_set",
+          "uploaded_files",
+          "uploaded_bytes"
+        ],
+        "title": "RustfsSyncLocalResult",
+        "type": "object"
+      },
       "SearchInput": {
         "additionalProperties": false,
         "properties": {
@@ -5623,6 +5936,28 @@
             ],
             "title": "Inferred Yyyymm"
           },
+          "object_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Etag"
+          },
+          "object_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Key"
+          },
           "path": {
             "title": "Path",
             "type": "string"
@@ -5690,6 +6025,26 @@
             "title": "State",
             "type": "string"
           },
+          "storage_kind": {
+            "default": "local",
+            "enum": [
+              "local",
+              "rustfs"
+            ],
+            "title": "Storage Kind",
+            "type": "string"
+          },
+          "storage_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Uri"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -5726,6 +6081,21 @@
             "default": "full_load_source_set",
             "title": "Purpose",
             "type": "string"
+          },
+          "storage_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "local",
+                  "rustfs"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Kind"
           }
         },
         "title": "UploadSetCreateRequest",
@@ -5758,6 +6128,17 @@
             "title": "Files",
             "type": "array"
           },
+          "materialized_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialized Path"
+          },
           "purpose": {
             "title": "Purpose",
             "type": "string"
@@ -5776,6 +6157,37 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "storage_kind": {
+            "default": "local",
+            "enum": [
+              "local",
+              "rustfs"
+            ],
+            "title": "Storage Kind",
+            "type": "string"
+          },
+          "storage_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Prefix"
+          },
+          "storage_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Uri"
           },
           "total_bytes": {
             "default": 0,
@@ -9015,6 +9427,169 @@
           }
         },
         "summary": "Restore Hot Swap Plan",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/storage/rustfs/check": {
+      "post": {
+        "operationId": "check_rustfs_storage_v1_admin_storage_rustfs_check_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RustfsConnectionCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Check Rustfs Storage",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/storage/rustfs/config": {
+      "get": {
+        "operationId": "rustfs_storage_config_v1_admin_storage_rustfs_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RustfsStorageConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rustfs Storage Config",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_rustfs_storage_config_v1_admin_storage_rustfs_config_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RustfsStorageConfigPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RustfsStorageConfig"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Rustfs Storage Config",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/storage/rustfs/import-prefix": {
+      "post": {
+        "operationId": "import_rustfs_prefix_v1_admin_storage_rustfs_import_prefix_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RustfsImportPrefixRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSetStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Rustfs Prefix",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/storage/rustfs/sync-local": {
+      "post": {
+        "operationId": "sync_local_to_rustfs_storage_v1_admin_storage_rustfs_sync_local_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RustfsSyncLocalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RustfsSyncLocalResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Local To Rustfs Storage",
         "tags": [
           "admin"
         ]
