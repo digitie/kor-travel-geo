@@ -29,7 +29,7 @@
 ## 예시
 
 ```bash
-curl -X POST "http://localhost:9001/v2/reverse" \
+curl -X POST "http://localhost:12201/v2/reverse" \
   -H "Content-Type: application/json" \
   -d '{"lon":127.036,"lat":37.501,"radius_m":200}'
 ```

@@ -249,7 +249,7 @@ function RustfsConfigForm({
           <input
             id="rustfs-endpoint"
             onChange={(event) => patch({ endpointUrl: event.target.value })}
-            placeholder="http://127.0.0.1:9003"
+            placeholder="http://127.0.0.1:12101"
             value={draft.endpointUrl}
           />
         </div>

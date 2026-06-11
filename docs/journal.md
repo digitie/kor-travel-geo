@@ -2,30 +2,89 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
-## 2026-06-03 09:16 (RustFS 업로드 저장소와 Docker 포트 표준)
+## 2026-06-12 09:20 (로컬 고정 포트 재정의와 Docker 재기동)
 
-**작업**: 업로드 파일을 로컬 디렉터리 대신 RustFS(S3 호환)에 저장할 수 있는 옵션을 추가하고, Docker 실행 시 RustFS S3 API `9003`, console `9004`를 프로젝트 공식 포트로 관리하도록 했다.
+**작업**: 사용자 지시에 따라 PostgreSQL `5432`, RustFS API `12101`, 이 저장소 API `12201`, Web UI `12205`를 현재 고정 포트로 정리했다.
+
+**반영**:
+- `scripts/docker_app.sh`의 API/UI host/container 기본 포트를 `12201`/`12205`로 변경했다.
+- API/UI Dockerfile의 내부 `PORT`/`EXPOSE`를 각각 `12201`/`12205`로 변경했다.
+- `.env.example`, UI proxy 기본값, Playwright 기본 base URL, API reference, README, 현재 운영 문서를 새 포트 기준으로 갱신했다.
+- `/admin/settings` RustFS endpoint placeholder를 `http://127.0.0.1:12101`로 변경했다.
+- ADR-046을 추가하고 ADR-042의 `9001`/`9002` 결정은 superseded 처리했다.
+
+**검증**:
+- `bash -n scripts/docker_app.sh && bash -n scripts/fullload_test.sh`
+- `scripts/docker_app.sh build` — API image build와 UI `next build`/TypeScript 통과
+- `scripts/docker_app.sh up` — API `12201`, UI `12205`로 재생성
+- Docker port/status: PostgreSQL `5432` healthy, RustFS API `12101` healthy, API `12201`, UI `12205`, API/UI restart policy `unless-stopped`
+- `GET http://127.0.0.1:12201/v1/healthz` → `ok`
+- `POST http://127.0.0.1:12201/v2/geocode` `"서울특별시 종로구 인사동"` → `OK`, 후보 10건
+- `POST http://127.0.0.1:12201/v2/reverse` 인사동 좌표(`126.986`, `37.574`, 반경 200m) → `OK`, 후보 10건
+- `GET http://127.0.0.1:12205/debug/geocode` → HTTP 200
+- `GET http://127.0.0.1:12205/api/runtime-config` → VWorld key non-empty
+- `npm run test -- tests/unit/runtime-config.test.ts` → 5 passed
+- API image 안에서 `python -m pytest tests/unit/test_settings.py -q` → 5 passed
+- API image 안에서 `python -m ruff check alembic/versions/0013_t061_text_search_mv.py scripts/benchmark_api_latency.py src/kraddr/geo/settings.py` → pass
+
+## 2026-06-12 07:45 (WSL 재설치 후 주소 DB 복원과 API/UI 재시작 정책)
+
+**작업**: WSL 재설치 뒤 빈 `kraddr_geo` DB로 API만 기동되어 다른 에이전트의 reverse/geocode 보강이 모두 결측 처리될 위험을 해소했다.
+
+**반영**:
+- `/mnt/f/dev/python-kraddr-geo/artifacts/perf/t047-operational-impact-20260528/pgdump-dir.tar.zst` 백업을 임시 DB `kraddr_geo_restore_t047_20260612`에 복원했다.
+- 복원 DB를 Alembic head(`0015_t075_region_radius_parts`)까지 올린 뒤 smoke test를 통과시켜 현재 `kraddr_geo`로 승격했다. 기존 빈 DB는 `kraddr_geo_empty_20260612_073529` 이름으로 보존했다.
+- `scripts/docker_app.sh`의 API/UI 컨테이너에 기본 Docker restart policy `unless-stopped`를 적용했다. 필요하면 `KRADDR_GEO_DOCKER_RESTART_POLICY=no`로 끌 수 있다.
+- `alembic/versions/0013_t061_text_search_mv.py`가 최신 `TEXT_SEARCH_MV_SQL` 상수를 참조해 과거 revision 복원 DB에서 깨지던 문제를 고쳤다. `0013`은 T-061 당시의 MV 정의를 자체 보관하고, `0014`가 T-065 컬럼 추가 후 최신 MV를 재생성한다.
+
+**검증**:
+- `bash -n scripts/docker_app.sh`
+- `scripts/docker_app.sh build-api`
+- 복원 DB에서 `alembic upgrade head` 통과
+- DB row count: `tl_juso_text=6,416,637`, `mv_geocode_target=6,416,637`, `mv_geocode_text_search=6,416,637`, `region_radius_parts=54,316`
+- API 컨테이너 `restart=unless-stopped`, UI 컨테이너 `restart=unless-stopped`
+- `GET /v1/healthz` → `{"status":"ok"}`
+- `POST /v2/reverse` 인사동 좌표(`126.986,37.574`, 반경 200m) → `OK`, 후보 반환
+- `POST /v2/geocode` `"서울특별시 종로구 인사동"` → `OK`, 후보 반환
+
+**참고**:
+- 이번 복원은 최신 full-load가 아니라 T-047 시점 백업을 최신 schema로 올린 운영 복구다. T-073 이후 최신 daily/국가지점번호 재측정 DB가 필요하면 별도 최신 백업 또는 full-load를 다시 적용한다.
+
+## 2026-06-10 21:45 (PostgreSQL/RustFS 구동 책임 제거)
+
+**작업**: 사용자 지시에 따라 이 저장소에서 PostgreSQL/PostGIS와 RustFS의 직접 구동·정지·재시작 책임을 제거했다. 이제 이 프로젝트는 이미 동작 중인 DB와 bucket에 접속해 사용하며, 필요한 접속 정보는 `.env`, 환경변수, 또는 admin UI 설정 파일에 저장한다.
+
+**반영**:
+- `docker-compose.yml`을 삭제했다.
+- `scripts/docker_app.sh`에서 RustFS 구동/정지/로그 명령을 제거하고, API/UI 컨테이너에 `KRADDR_GEO_PG_DSN`, `KRADDR_GEO_RUSTFS_*` 접속 설정을 주입하는 역할만 남겼다.
+- README, AGENTS, SKILL, 개발 환경/포트/복구/작업 재개 문서를 "이미 동작 중인 DB와 bucket 접속 설정" 기준으로 갱신했다.
+- ADR-045를 추가하고 ADR-044의 RustFS 구동 책임 내용을 superseded 처리했다.
+
+**검증**:
+- `bash -n scripts/docker_app.sh`
+- `scripts/docker_app.sh help`
+
+## 2026-06-03 09:16 (RustFS 업로드 저장소와 접속 설정 표준)
+
+**작업**: 업로드 파일을 로컬 디렉터리 대신 RustFS(S3 호환)에 저장할 수 있는 옵션을 추가했다. 당시 포함됐던 RustFS 직접 구동 책임은 2026-06-10 ADR-045로 폐기됐고, 현재 기준은 이미 동작 중인 bucket 접속 설정만 저장하는 것이다.
 
 **반영**:
 - `rustfs://<bucket>/<prefix>/...` URI와 `storage_kind="local" | "rustfs"`를 upload set manifest/DTO/API에 추가했다.
 - `/v1/admin/storage/rustfs/config`, `/check`, `/import-prefix`, `/sync-local` API를 추가했다. secret은 설정 조회 응답에 원문으로 노출하지 않는다.
 - `/admin/settings`에서 RustFS 사용 여부, endpoint, bucket, prefix, region, access/secret key, retention을 설정하고 연결 확인을 실행할 수 있게 했다.
 - `/admin/load`에서 업로드 저장소를 선택하고, RustFS prefix import와 기존 로컬 파일 RustFS sync를 실행할 수 있게 했다.
-- `scripts/docker_app.sh`가 RustFS 컨테이너를 함께 관리한다. 기본 포트는 API `9001`, UI `9002`, RustFS S3 `9003`, console `9004`다. `9003`을 점유한 non-managed RustFS가 Docker Compose 서비스이면 해당 service를 먼저 stop한 뒤 `kraddr-geo-rustfs`를 올린다.
-- RustFS 운영 책임, `python-kraddr-geo`/`python-krtour-map`/`tripmate` prefix 분리, 무기한 보존 기본값, Chrome/Firefox Playwright e2e 원칙을 문서화했다.
+- `python-kraddr-geo`/`python-krtour-map`/`tripmate` prefix 분리, 무기한 보존 기본값, Chrome/Firefox Playwright e2e 원칙을 문서화했다.
 
 **검증**:
 - ext4 테스트 미러에서 backend `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`를 통과했다. pytest는 `303 passed, 7 skipped`다.
 - ext4 테스트 미러에서 frontend `scripts/frontend_check.sh --install`을 통과했다. `gen:types`, lint, type-check, Vitest 42개, build가 모두 성공했다.
 - React Doctor `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
 - `scripts/docker_app.sh build`로 API/UI image를 다시 빌드했고, API build에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
-- `scripts/docker_app.sh up`으로 API `9001`, UI `9002`, RustFS `9003`/`9004`를 올렸다. `/v1/healthz`, `/debug/geocode`, `/api/runtime-config`, `/v1/admin/storage/rustfs/check`가 정상 응답했다.
-- 실제 Docker API + RustFS live test에서 `/data/juso/도로명주소 전자지도/서울특별시/11000/TL_SCCO_LI.shp`와 `/data/juso/202604_사서함주소DB_전체분.zip`을 RustFS로 sync하고 prefix import를 확인했다. 직접 `PUT /v1/admin/uploads/{id}/files` RustFS 업로드도 `state=uploaded`로 확인했다.
+- 실제 API + RustFS 접속 테스트에서 `/data/juso/도로명주소 전자지도/서울특별시/11000/TL_SCCO_LI.shp`와 `/data/juso/202604_사서함주소DB_전체분.zip`을 RustFS로 sync하고 prefix import를 확인했다. 직접 `PUT /v1/admin/uploads/{id}/files` RustFS 업로드도 `state=uploaded`로 확인했다.
 - Windows Playwright Docker UI `http://localhost:9002`: Chromium 전체 e2e 16 passed, Firefox 전체 e2e 16 passed. 메뉴 반복 이동 테스트는 `This page couldn`, `Reload to try again`, `_rsc` client routing 요청 부재를 확인하고, VWorld 지도 테스트는 실제 WMTS 타일과 MapLibre canvas를 확인한다.
 
 **발견**:
-- 같은 호스트에서 TripMate RustFS Compose service가 `9003`/`9004`를 다시 점유할 수 있었다. 단순 `docker rm -f`만으로는 재생성 경합이 생기므로 Compose label을 읽어 해당 service를 먼저 stop하는 경로를 스크립트에 넣었다.
-- RustFS는 여러 프로젝트가 공유할 수 있지만, 이 저장소의 로컬 개발 표준에서는 `scripts/docker_app.sh`가 기본 관리 주체다. 다른 프로젝트가 기존 RustFS를 임시 재사용해야 하면 `KRADDR_GEO_RUSTFS_REUSE_EXISTING=1`을 명시한다.
+- RustFS는 여러 프로젝트가 공유할 수 있으므로 이 저장소는 구동 책임을 갖지 않고 bucket/prefix 접속 설정만 유지하는 편이 안전하다.
 
 ## 2026-06-03 09:15 (antigravity-readme-cleanup)
 
@@ -262,7 +321,7 @@
 
 ## 2026-05-31 22:44 (VWorld 최신 wrapper 동기화와 PR #108 문서 기준 반영)
 
-**작업**: 사용자 지시에 따라 로컬 git secret 파일에서 VWorld 키 존재 여부만 확인하고, PR #108의 `docker-compose.yml` `./data/*` 기본 볼륨 기준이 현재 코드에 이미 반영되어 있음을 확인했다. `maplibre-vworld-js` upstream `main` 최신 commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`과 package version `0.1.2`를 확인한 뒤 `kraddr-geo-ui` dependency/lockfile을 갱신했다.
+**작업**: 사용자 지시에 따라 로컬 git secret 파일에서 VWorld 키 존재 여부만 확인하고, PR #108의 당시 인프라 설정 파일 `./data/*` 기본 볼륨 기준이 현재 코드에 이미 반영되어 있음을 확인했다. `maplibre-vworld-js` upstream `main` 최신 commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`과 package version `0.1.2`를 확인한 뒤 `kraddr-geo-ui` dependency/lockfile을 갱신했다.
 
 **반영**:
 - `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`를 직접 `maplibregl.Map` lifecycle 소유 방식에서 upstream `VWorldMap`/`Marker`/`useMap`/`useMapLoaded`를 감싸는 domain wrapper로 전환했다.
@@ -337,7 +396,7 @@
 - `gh pr view`와 GraphQL `reviewThreads`로 PR #97~#102를 확인했고 unresolved review thread는 전부 0건이었다. PR #98은 #97과 중복되어 close된 상태라 별도 반영 대상이 없었다. 상세 기록은 `docs/postmerge-review-fixups-pr97-pr102.md`에 남겼다.
 - `/admin/consistency`의 세로 case rail을 `role=tablist` 기반 가로 스크롤 탭으로 바꿨다. C1~C10은 표본 분석 영역 위에서 좌우 스크롤로 선택하며, 선택 case는 `aria-selected`와 `tabpanel`로 연결된다.
 - consistency unit/e2e mock을 C1~C10 전체로 확장하고, C10 탭 존재와 선택 탭 상태를 회귀 테스트로 고정했다.
-- 공식 로컬 포트를 PostgreSQL `15434`, FastAPI `8000`, UI `13088`로 문서화했다. `.env.example`, `docker-compose.yml`, README, `kraddr-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`, ADR-040을 갱신했다.
+- 공식 로컬 포트를 PostgreSQL `15434`, FastAPI `8000`, UI `13088`로 문서화했다. `.env.example`, 당시 인프라 설정 파일, README, `kraddr-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`, ADR-040을 갱신했다.
 - Playwright e2e는 Windows Node/브라우저에서만 실행한다고 문서화했다. WSL에서는 반복적으로 `libasound.so.2` 누락이 발생하므로 `npm run test:e2e`를 실행하지 않는다.
 
 **검증**:
@@ -1224,7 +1283,7 @@
 - `scripts/benchmark_query_performance.py`의 artifact schema를 2로 올리고, measurement에 `checkout_ms`와 `execute_ms`를 추가했다.
 - summary에는 `p95_checkout_ms`와 `p95_execute_ms`를 추가해 동시성 tail에서 connection pool 대기와 SQL 실행 시간을 분리해 볼 수 있게 했다.
 - `pg-stat-statements-before.json`, `pg-stat-statements-after.json`, `pg-stat-statements-delta.json` artifact를 추가하고, `--reset-pg-stat-statements`, `--pg-stat-limit` 옵션을 넣었다.
-- `docker-compose.yml`, fresh schema SQL, Alembic `0011_t047_pg_stat_statements`에 `pg_stat_statements` preload/extension 경로를 추가했다.
+- 당시 인프라 설정 파일, fresh schema SQL, Alembic `0011_t047_pg_stat_statements`에 `pg_stat_statements` preload/extension 경로를 추가했다.
 
 **검증**:
 - T-027 클린 DB(`localhost:15432`, `mv_geocode_target=6,416,637`, `tl_sppn_makarea=24,204`)에서 `cases_per_group=1`, `iterations=1`, `warmup=0`, `concurrency=1` smoke benchmark를 실행했다.
@@ -1359,7 +1418,7 @@
 **검증된 것**:
 - `codegraph sync && codegraph status` 실행 결과 `Index is up to date`를 확인했다. sync 당시에는 새 Python 파일 2개가 인덱스에 반영됐다.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp PYTHONPATH=... /home/digitie/dev/python-kraddr-geo/.venv/bin/python -m pytest tests/unit/test_query_performance_benchmark.py -q` 실행 결과 6건 통과.
-- `ps` 확인 시 benchmark/pytest/ruff/gh/docker compose 장기 실행 프로세스는 없었다.
+- `ps` 확인 시 benchmark/pytest/ruff/gh/당시 인프라 명령 장기 실행 프로세스는 없었다.
 
 **아직 끝나지 않은 것**:
 - `scripts/benchmark_query_performance.py`와 테스트는 ruff를 한 차례 보정했지만, 마지막 상태에서 전체 `ruff`, `mypy`, 실제 Docker DB smoke benchmark를 아직 다시 실행하지 않았다.
@@ -2378,7 +2437,7 @@
 - T-027 기본 compose/스크립트가 `localhost:5432`를 그대로 사용하면 기존 DB에 DDL/적재를 실행할 위험이 있다.
 
 **보강 상세**:
-- `docker-compose.yml`의 외부 포트를 `${KRADDR_GEO_DB_PORT:-5432}:5432`로 파라미터화했다.
+- 당시 인프라 설정 파일의 외부 포트를 `${KRADDR_GEO_DB_PORT:-5432}:5432`로 파라미터화했다.
 - `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 `KRADDR_GEO_DB_PORT`를 반영한 DSN을 만든다.
 - `docs/t027-fullload-plan.md`, `docs/dev-environment-recovery.md`, `CLAUDE.md`에 `KRADDR_GEO_DB_PORT=15432` 사용 예와 포트 충돌 주의사항을 추가했다.
 

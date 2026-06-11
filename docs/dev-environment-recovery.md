@@ -2,7 +2,7 @@
 
 Windows 재설치/새 PC에서 이 프로젝트를 이어서 작업하기 위한 빠른 순서다. 세션 handoff, Git/PR 기준, Codex `resume`/`fork`를 포함한 상세 절차는 `docs/windows-reinstall-recovery.md`를 우선한다.
 
-재설치 후 DB를 복구하려면 백업에서 restore하거나(ADR-030/036) `scripts/fullload_test.sh`로 다시 적재한다. 전체 적재(T-027)는 이미 완료된 일반 작업이므로 별도 승인 없이 진행할 수 있다.
+재설치 후 DB를 복구하려면 백업에서 restore하거나(ADR-030/036) `scripts/fullload_test.sh`로 다시 적재한다. 단, 이 저장소는 PostgreSQL/PostGIS와 RustFS를 직접 구동하지 않으므로 먼저 이미 동작 중인 DB와 bucket 접속 정보를 확보한다.
 
 ## 1. WSL2 설치
 
@@ -19,10 +19,24 @@ sudo apt-get update && sudo apt-get install -y \
   p7zip-full
 ```
 
-## 3. Docker Desktop 설치
+## 3. 인프라 접속 정보 확인
 
-Windows에서 Docker Desktop 설치 후 Settings → Resources → WSL Integration에서 Ubuntu 활성화.
-또는 WSL 내에서 직접 Docker CE 설치.
+PostgreSQL/PostGIS와 RustFS는 이 저장소 밖에서 이미 동작 중이어야 한다. 이 프로젝트에는 접속 설정만 저장한다.
+
+```bash
+cp .env.example .env
+$EDITOR .env
+```
+
+필수 확인 값:
+
+- `KRADDR_GEO_PG_DSN`
+- `KRADDR_GEO_RUSTFS_ENABLED`
+- `KRADDR_GEO_RUSTFS_ENDPOINT_URL`
+- `KRADDR_GEO_RUSTFS_BUCKET`
+- `KRADDR_GEO_RUSTFS_PREFIX`
+- `KRADDR_GEO_RUSTFS_ACCESS_KEY`
+- `KRADDR_GEO_RUSTFS_SECRET_KEY`
 
 ## 4. 레포 클론 + Python 환경
 
@@ -57,42 +71,22 @@ bash scripts/fullload_test.sh --copy-data
 ### PostgreSQL 데이터 복구
 
 DB 복구는 백업에서 restore하거나(ADR-030/036) 전체 적재를 다시 수행한다.
-Docker 컨테이너를 삭제(`docker compose down`)해도 named volume의 DB 데이터는 유지된다.
-단, `docker compose down -v`는 named volume까지 삭제하므로 이 경우 restore 또는 재적재가 필요하다.
 재적재 소요 시간은 40분~1.5시간이며, 백업이 있으면 restore가 더 빠른 복구 방법이다.
 
-## 6. Docker PostGIS 기동
-
-```bash
-cd python-kraddr-geo
-
-# 기동 (격리된 스택이 필요하면 -p <name>을 추가)
-docker compose up -d
-
-# 상태 확인
-docker compose ps
-```
-
-기존 DB 데이터가 남아 있으면 이전 상태로 바로 올라온다.
-호스트 PostgreSQL 포트(ADR-040)는 기본 15434다(컨테이너 내부 5432). `docker-compose.yml`은 `KRADDR_GEO_DB_PORT`(기본 15434)를 사용하며, `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없으면 이 포트 값으로 DSN을 만든다.
+## 6. DB 연결과 schema migration
 
 기존 DB를 재사용하는 경우 먼저 schema migration을 적용한다.
 
 ```bash
-docker compose up -d
-export KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kraddr_geo
+export KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo
 alembic upgrade head
 ```
 
 `0002_t027_shp_schema_fixups`는 SHP 보조 테이블의 natural key 컬럼과 geometry 타입을 보정한다. `tl_spbd_buld_polygon.bjd_cd`/`rncode_full` generated column 재생성은 기존 row 수에 따라 시간이 걸릴 수 있다. 구 스키마로 `tl_sprd_rw`에 `MULTILINESTRING` 데이터가 들어 있으면 `MULTIPOLYGON`으로 cast할 수 없으므로 migration은 해당 테이블에 non-polygon row가 있는 경우 `tl_sprd_rw`를 먼저 비운 뒤 타입을 바꾼다. 이미 구 스키마로 SHP를 적재했다면 migration 후 `kraddr-geo load shp-all ... --mode full`로 SHP 9개 테이블을 다시 적재한다.
 
-DB를 새로 적재하려면(기존 DB를 버려도 되는 경우) volume을 비우고 다시 적재한다.
+DB를 새로 적재하려면 `KRADDR_GEO_PG_DSN`이 새로 준비된 빈 DB를 가리키게 한 뒤 적재한다.
 
 ```bash
-# 기존 DB 초기화
-docker compose down -v
-docker compose up -d
-
 # 전체 적재 + 검증
 bash scripts/fullload_test.sh
 ```
@@ -123,11 +117,10 @@ cp .env.example .env
 ## 체크리스트
 
 - [ ] WSL2 + Ubuntu 설치
-- [ ] Docker Desktop 또는 Docker CE 설치
 - [ ] `git clone` + venv + pip install
 - [ ] GDAL 설치 확인 (`gdalinfo --version`)
-- [ ] 백업에서 DB restore (ADR-030/036) 또는 아래 적재 단계 진행
+- [ ] 이미 동작 중인 PostgreSQL/PostGIS와 RustFS bucket 접속 정보 확인
+- [ ] 백업에서 DB restore (ADR-030/036) 또는 적재 단계 진행
 - [ ] `bash scripts/fullload_test.sh --copy-data` (레포 `data/` → 테스트 미러)
-- [ ] `docker compose up -d`
 - [ ] `bash scripts/fullload_test.sh` (적재 + 검증)
 - [ ] `.env` 시크릿 복원
