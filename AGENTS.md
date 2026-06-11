@@ -31,7 +31,7 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\python-kraddr-geo` 계열 ch
 - **데이터(`data/`)**: NTFS main repo의 `data/`를 기준으로 두고, ext4 테스트 미러에서는 절대경로 또는 필요한 경우 심볼릭 링크로 참조한다.
 - **카피 정책**: 작업 시작/검증 전 NTFS worktree → ext4 테스트 미러로 복사한다. 작업 완료 후 별도 ext4 → NTFS 역카피를 source-of-truth 절차로 쓰지 않는다.
 - **Git 실행 기준**: NTFS worktree의 Git metadata는 Windows Git 기준(`F:\...`)을 유지한다. WSL 테스트 미러에서 실행하는 벤치마크·운영 스크립트가 Git commit/branch를 기록해야 하면 Windows `git.exe`와 `F:/dev/python-kraddr-geo-*` 경로를 사용한다. WSL `git`이 읽히도록 `.git`/`gitdir` 포인터를 `/mnt/f/...`로 바꾸지 않는다.
-- **PostgreSQL 검증 DB**: 별도 요청이 없으면 지난 T-027 최종 적재 Docker DB(`kraddr-geo-t027-final`, `KRADDR_PGDATA=/home/digitie/kraddr-geo-data/pgdata-final-20260529`, host port `15434`)를 재사용한다. 빈 DB 클린 적재/클린 스키마 검증은 사용자가 명시적으로 요구할 때만 새 pgdata로 수행한다.
+- **PostgreSQL/RustFS 접속**: 이 저장소는 PostgreSQL/PostGIS와 RustFS를 직접 구동·정지·재시작하지 않는다. 이미 동작 중인 DB와 bucket에 `KRADDR_GEO_PG_DSN`, `KRADDR_GEO_RUSTFS_*` 설정으로 접속해 사용한다.
 - **로컬 키**: `.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다.
 - **프론트엔드 실행**: `kraddr-geo-ui`의 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL ext4 테스트 미러의 Linux Node/npm에서 실행한다.
 - **Playwright**: e2e 실행과 브라우저는 Windows Node/브라우저에서만 수행한다. WSL에서는 Playwright를 실행하지 않고, Windows Playwright를 WSL UI 서버(`--hostname 0.0.0.0`)에 붙인다.
@@ -89,6 +89,7 @@ Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `do
 8. **외부 API 키 평문 커밋 금지** — 모두 `SecretStr`. `.env`는 권한 600 또는 systemd `EnvironmentFile`/vault.
 9. **`ogr2ogr` subprocess 호출 금지** — GDAL Python binding 사용. CP949 디코딩 명시 (ADR-005).
 10. **프론트엔드 패키지에 DB 드라이버 추가 금지** — `kraddr-geo-ui`는 REST API만 호출.
+11. **PostgreSQL/RustFS 직접 구동 금지** — 이 저장소에 DB/RustFS Docker 구동·정지·재시작 절차나 스크립트를 추가하지 않는다. 필요한 것은 접속 설정뿐이다.
 
 ## 제공자 API 사용 원칙
 

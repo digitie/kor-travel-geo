@@ -4,7 +4,7 @@
 # Workflow:
 #   1. Copy data from NTFS to WSL ext4 (avoids cross-filesystem I/O penalty)
 #   2. Decompress archives on ext4
-#   3. Load into Docker PostGIS (bind-mounted host directories)
+#   3. Load into the PostgreSQL/PostGIS pointed to by KRADDR_GEO_PG_DSN
 #
 # Usage:
 #   # First time — copy NTFS data to ext4:
@@ -17,7 +17,7 @@
 #   PLAN_ONLY=1 bash scripts/fullload_test.sh
 #
 # Prerequisites:
-#   - docker compose -p kraddr-geo-t027 up -d  (PostGIS on localhost:5432)
+#   - A reachable PostgreSQL/PostGIS database
 #   - pip install -e ".[api,loaders,dev]"
 #   - GDAL system libraries installed (gdal-bin libgdal-dev)
 

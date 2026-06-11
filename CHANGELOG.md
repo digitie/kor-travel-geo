@@ -7,8 +7,7 @@
 ### Added
 - RustFS(S3 호환) 업로드 저장소 옵션을 추가했다. `/v1/admin/uploads`는 `storage_kind="local" | "rustfs"`를 받을 수 있고, RustFS upload set은 `rustfs://<bucket>/<prefix>/...` URI와 materialized cache를 통해 기존 source set 탐지/계획 경로를 재사용한다.
 - `/v1/admin/storage/rustfs/config`, `/check`, `/import-prefix`, `/sync-local` API를 추가했다. admin UI `/admin/settings`에서 RustFS 사용 여부, endpoint, bucket, prefix, region, access/secret key, retention을 설정하고, `/admin/load`에서 업로드 저장소 선택, RustFS prefix import, 로컬 기존 파일 RustFS 동기화를 실행할 수 있다.
-- `scripts/docker_app.sh`가 RustFS 컨테이너를 함께 관리한다. 기본 포트는 S3 API `9003`, console `9004`이며, API 컨테이너는 Docker network alias `kraddr-geo-rustfs`로 접속한다.
-- RustFS 운영 설계와 다중 프로젝트(`python-kraddr-geo`, `python-krtour-map`, `tripmate`) 공유 prefix 정책을 `docs/t076-rustfs-upload-storage.md`와 ADR-044에 문서화했다.
+- RustFS 접속 설정과 다중 프로젝트(`python-kraddr-geo`, `python-krtour-map`, `tripmate`) 공유 prefix 정책을 `docs/t076-rustfs-upload-storage.md`와 ADR-044/ADR-045에 문서화했다.
 - `/v2/regions/within-radius` 가속용 `region_radius_parts` serving table과 Alembic migration을 추가했다. 시도·시군구·읍면동 polygon을 `ST_Subdivide`로 쪼개 GiST 인덱스를 걸고, 실제 조회는 단일 SQL/단일 좌표 변환으로 수행한다.
 - `scripts/docker_app.sh`와 `docker/api.Dockerfile`을 추가했다. API 이미지는 Debian trixie의 `gdal-config` 버전에 맞춰 Python GDAL binding을 설치하고, UI/API 컨테이너 실행 시 `.env`/`.env.local`의 VWorld 키를 런타임 환경변수로 주입한다. 같은 스크립트로 `kraddr-geo` CLI 적재 명령도 Docker loader runner에서 실행할 수 있다.
 - `POST /v2/regions/within-radius`와 `AsyncAddressClient.regions_within_radius()`를 추가했다. POI `(lon, lat)` 기준 반경 `radius_km` 안에 들어오는 `sido`/`sigungu`/`emd`를 반환하며, `relation="contains"`와 `relation="overlaps"`로 중심점 포함 행정구역과 반경 인접 행정구역을 구분한다.
@@ -16,7 +15,8 @@
 - Windows Playwright e2e에 실제 Python API `.env` VWorld 키로 MapLibre canvas와 VWorld WMTS 타일 응답을 확인하는 지도 로딩 테스트를 추가했다.
 
 ### Changed
-- Docker 실행 기본 포트를 API `9001`, UI `9002`, RustFS S3 `9003`, RustFS console `9004`로 고정했다. `9003`을 publish하는 non-managed RustFS가 있으면 기본 스크립트는 제거하고 `kraddr-geo-rustfs`를 올리며, 점유자가 Docker Compose 서비스이면 제거 전에 해당 service를 `stop`한다. 기존 RustFS를 임시 재사용하려면 `KRADDR_GEO_RUSTFS_REUSE_EXISTING=1`을 명시한다.
+- 공식 로컬 접속 포트를 PostgreSQL `5432`, RustFS API `12101`, API `12201`, UI `12205`로 재고정했다. Docker 실행 기본값, UI proxy, Playwright 기본 URL, `.env.example`, README와 현재 운영 문서를 새 포트 기준으로 맞췄다.
+- PostgreSQL/PostGIS와 RustFS 구동 생명주기를 이 저장소에서 제거했다. `docker-compose.yml`을 삭제했고, `scripts/docker_app.sh`는 API/UI 컨테이너 실행과 `KRADDR_GEO_PG_DSN`, `KRADDR_GEO_RUSTFS_*` 접속 설정 주입만 담당한다.
 - Playwright e2e 기본 project를 Chrome 기준 `chromium`과 Firefox 기준 `firefox` 모두로 확장했다. PR 완료 전 두 브라우저를 모두 실행하는 정책을 문서화하고, Firefox에서 긴 메뉴 반복 회귀 테스트가 기본 30초 제한에 걸리지 않도록 테스트 timeout을 조정했다.
 - `GeometryRepository.regions_within_radius()`는 레벨별 3회 쿼리 대신 `region_radius_parts` 기반 단일 쿼리를 사용한다. `contains` 판정은 원본 `tl_scco_*` polygon의 `ST_Covers`로 유지하고, 시도 → 시군구 → 읍면동 parent code 필터로 후보 폭을 줄인다.
 - `load shp`, `load shp-all`, `load all-sidos`, `refresh mv` 경로가 행정구역 반경조회 accelerator를 다시 채우도록 했다.
@@ -127,7 +127,7 @@
 - T-027 실제 MV 검증에서 발견한 내비 centroid fallback 누락을 수정한다. 내비게이션용DB 건물 중심점의 `bd_mgt_sn`은 실제 파일 기준 25자리이고 정본 `tl_juso_text.bd_mgt_sn`은 26자리라 직접 조인되지 않는다. MV는 `rncode_full + 건물구분 + 본번/부번 + left(bjd_cd, 8)` 기준 대표 centroid를 선택한다.
 - T-027 반복 MV swap을 보강한다. shadow MV의 `idx_mv_next_*` 인덱스명이 운영 MV에 남으면 다음 rebuild에서 PostgreSQL 전역 인덱스 이름 충돌이 나므로, swap 전후에 운영 인덱스명(`idx_mv_*`)으로 정규화한다. 기존 MV가 있는 swap에서는 old MV를 먼저 drop한 뒤 next 인덱스를 rename해 새 운영 MV 인덱스가 사라지지 않게 한다.
 - T-027 실제 정합성 검증에서 발견한 SHP 건물 polygon 직접 조인 오류를 수정한다. `TL_SPBD_BULD.BD_MGT_SN`도 실제 파일 기준 25자리라 정본 26자리 `bd_mgt_sn`과 직접 조인하지 않고, polygon 테이블에 최소 natural key를 함께 적재해 C1/C2/C4/C5를 `rncode_full + 건물번호 + bjd_cd` 기준으로 검증한다. C8은 `rds_man_no`가 없는 `TL_SPRD_RW` 대신 `TL_SPRD_MANAGE` LineString geometry를 사용한다.
-- T-027 실제 데이터로드 실행 중 발견한 로컬 PostgreSQL 포트 충돌 위험을 줄인다. `docker-compose.yml`은 `KRADDR_GEO_DB_PORT`로 외부 포트를 바꿀 수 있고, `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 이 포트를 반영해 DSN을 만든다.
+- T-027 실제 데이터로드 실행 중 발견한 로컬 PostgreSQL 포트 충돌 위험을 줄인다. `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 `KRADDR_GEO_DB_PORT`를 반영해 DSN을 만든다.
 - PR #12 리뷰 반영: `/v1/admin/upload/sido-zip`의 `sido` path traversal 가능성을 제거하고, `KRADDR_GEO_API_MAX_UPLOAD_BYTES` 초과 시 partial file을 삭제한 뒤 `InvalidInputError(E0100)`로 거절한다.
 - PR #12 리뷰 반영: `kraddr-geo-ui` 프록시는 `/v1/` 하위 경로만 허용하고 `authorization`/`cookie` 등 불필요한 헤더 전달을 차단한다. 업로드 본문은 `arrayBuffer()`로 전체 버퍼링하지 않고 `ReadableStream` + `duplex: "half"`로 백엔드에 전달한다.
 - PR #12 리뷰 반영: `requestJson()`은 `ApiError.status`를 보존하고 React Query retry는 4xx를 재시도하지 않는다.

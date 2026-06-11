@@ -28,10 +28,10 @@
 > - **T-061**: Slim text-search helper 도입
 > - **T-064**: 상위 주소 geocode 후보 반환 구현
 > - **T-065**: 내비게이션용 DB 기반 `시군구용건물명` 검색 반영
-> - **T-076**: Upload set의 로컬 파일시스템/RustFS(S3 호환) 저장소 선택, RustFS S3 API `9003` 및 console `9004` Docker 운영 표준
+> - **T-076**: Upload set의 로컬 파일시스템/RustFS(S3 호환) 저장소 선택 및 bucket 접속 설정
 >
 > **최종 재적재 결과 (T-027)**:
-> - 빈 Docker PostGIS DB에 전국 `data/juso` 및 `20260401_dailyjusukrdata.zip`을 클린 적재하여 `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204` 생성 확인 및 smoke 테스트 통과.
+> - 빈 PostGIS DB에 전국 `data/juso` 및 `20260401_dailyjusukrdata.zip`을 클린 적재하여 `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204` 생성 확인 및 smoke 테스트 통과.
 >
 > *이전 SpatiaLite 기반 구현(동일 `kraddr.geo` 패키지)은 `v1` 브랜치에 보존되어 있습니다(ADR-001).*
 
@@ -61,7 +61,7 @@ Data:             /mnt/f/dev/python-kraddr-geo/data/
 - 테스트 전에는 현재 NTFS worktree를 WSL ext4 테스트 미러로 복사한다. 예: `rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kraddr-geo-ui/.next --exclude data /mnt/f/dev/python-kraddr-geo-codex/ ~/dev/python-kraddr-geo-codex-test/`
 - ext4 테스트 미러는 실행 산출물 전용이다. 미러에서 commit/push하지 않고, 필요한 코드 변경은 NTFS worktree에 반영한다.
 - Git metadata는 Windows Git 기준으로 유지한다. WSL 미러에서 commit/branch를 기록하는 스크립트는 Windows `git.exe`와 `F:/dev/python-kraddr-geo-*` 경로를 사용하며, `.git` 포인터를 `/mnt/f/...`용으로 바꾸지 않는다.
-- PostgreSQL 검증은 기본적으로 지난 T-027 최종 적재 Docker DB(`kraddr-geo-t027-final`, host port `15434`, pgdata `~/kraddr-geo-data/pgdata-final-20260529`)를 재사용한다. 새 빈 DB 클린 검증은 명시 요청이 있을 때만 별도 pgdata로 수행한다.
+- PostgreSQL 검증은 이 프로젝트가 직접 DB를 띄우지 않고, `KRADDR_GEO_PG_DSN`이 가리키는 이미 동작 중인 PostgreSQL/PostGIS에 접속해 수행한다. RustFS도 `KRADDR_GEO_RUSTFS_*` 접속 설정으로 이미 준비된 bucket을 사용한다.
 - 로컬 키와 환경 파일(`.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 NTFS worktree마다 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
 - Playwright e2e는 Windows Node/브라우저에서만 실행한다. WSL headless Chromium은 반복적으로 시스템 라이브러리 누락이 발생하므로 사용하지 않는다.
 - AI 에이전트 worktree 이름은 `geo-*` 접두사를 쓰지 않고 `python-kraddr-geo-*` 접두사로 통일한다(ADR-041).
@@ -95,10 +95,10 @@ test -e data || ln -s /mnt/f/dev/python-kraddr-geo/data data
 
 # 의존성 설치
 uv venv && uv pip install -e ".[api,loaders,dev]"
-test -f .env || cp .env.example .env       # KRADDR_GEO_PG_DSN 채우기
+test -f .env || cp .env.example .env       # KRADDR_GEO_PG_DSN, KRADDR_GEO_RUSTFS_* 채우기
 
-# PostgreSQL + PostGIS 구동 (Docker 권장)
-docker compose up -d db                    # postgis/postgis:16-3.5, host port 15434
+# PostgreSQL/PostGIS와 RustFS는 이 프로젝트에서 직접 구동하지 않는다.
+# 이미 동작 중인 DB와 bucket 접속 정보를 .env에 저장해 사용한다.
 
 # 스키마 적용
 kraddr-geo init-db
@@ -123,9 +123,9 @@ kraddr-geo load roadaddr-entrances "./data/juso/도로명주소 출입구 정보
 kraddr-geo refresh mv --swap
 
 # 서비스 기동
-uvicorn kraddr.geo.api.app:app --reload --port 9001
+uvicorn kraddr.geo.api.app:app --reload --port 12201
 
-# Docker API/UI/RustFS 빌드 및 실행 (GDAL 버전 매칭 포함)
+# Docker API/UI 빌드 및 실행 (GDAL 버전 매칭 포함)
 scripts/docker_app.sh build
 scripts/docker_app.sh up
 ```
@@ -137,18 +137,18 @@ cd kraddr-geo-ui
 cp .env.local.example .env.local && $EDITOR .env.local   # NEXT_PUBLIC_VWORLD_API_KEY 설정
 npm ci
 npm run gen:types        # 백엔드 openapi.json → TypeScript 타입 생성
-npm run dev -- --port 9002   # http://localhost:9002
+npm run dev -- --port 12205   # http://localhost:12205
 ```
 
 > [!TIP]
-> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽어 전달합니다. Docker 실행은 `scripts/docker_app.sh`를 사용하며, 이 스크립트가 `.env`/`.env.local`의 VWorld 키를 컨테이너 환경변수로 주입합니다. `scripts/docker_app.sh up`은 API `9001`, UI `9002`, RustFS S3 `9003`, RustFS console `9004`를 고정 포트로 올립니다. MapLibre 렌더링은 `maplibre-vworld` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
+> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽어 전달합니다. Docker 실행은 `scripts/docker_app.sh`를 사용하며, 이 스크립트는 API/UI 컨테이너에 `.env`/`.env.local`의 VWorld 키와 DB/RustFS 접속 설정을 주입합니다. PostgreSQL/PostGIS와 RustFS bucket은 이미 동작 중인 외부 인프라로 간주하고 이 프로젝트에서 직접 정지/재시작하지 않습니다. MapLibre 렌더링은 `maplibre-vworld` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KRADDR_GEO_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
 
 ---
 
 ## 🧭 진입점
 
 - **Python 라이브러리**: `from kraddr.geo import AsyncAddressClient` — asyncio 컨텍스트 매니저
-- **REST API**: `uvicorn kraddr.geo.api.app:app` — Swagger UI (`http://localhost:9001/v1/docs`)
+- **REST API**: `uvicorn kraddr.geo.api.app:app` — Swagger UI (`http://localhost:12201/v1/docs`)
 - **CLI**: `kraddr-geo --help` — `load`, `refresh`, `validate`, `healthz` 등
 - **디버그/관리 UI**: `kraddr-geo-ui` — 내부망 전용 디버깅 (ADR-013)
 

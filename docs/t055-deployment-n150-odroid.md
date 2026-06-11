@@ -58,7 +58,7 @@ T-055의 이번 PR 범위는 **실측 준비**다. 실제 N150/Odroid 장비가 
 
 - 같은 git commit SHA (T-055 시점 main).
 - 같은 `data/juso` snapshot (NTFS 또는 NAS에서 동기화).
-- 1차 기준은 현재 `docker-compose.yml`과 같은 Docker PostGIS 16+3.5로 고정. PostgreSQL 17 비교는 별도 trial로 분리.
+- 1차 기준은 현재 접속 대상과 같은 PostGIS 16+3.5로 고정. PostgreSQL 17 비교는 별도 trial로 분리.
 - `/usr/bin/time -v` 출력 + dstat/iostat 1초 간격 sample.
 
 ### 2. Serving latency (T-047 corpus 활용)
@@ -198,11 +198,11 @@ python scripts/benchmark_mv_refresh.py \
 
 모든 값은 측정으로 검증해 docs에 인용. PostgreSQL Tuning Guide + `pgtune` 결과를 시작점으로.
 
-현재 저장소의 `docker-compose.yml` 기준 이미지는 `postgis/postgis:16-3.5`다. T-055 실측의 1차 비교는 이 이미지를 고정하고, PostgreSQL 17 비교는 별도 trial로만 둔다. 서로 다른 major version 결과를 같은 표의 직접 비교 기준으로 쓰지 않는다.
+T-055 실측의 1차 비교는 PostGIS 16+3.5 계열을 고정하고, PostgreSQL 17 비교는 별도 trial로만 둔다. 서로 다른 major version 결과를 같은 표의 직접 비교 기준으로 쓰지 않는다.
 
-## Docker 운영 결정
+## 인프라 운영 결정
 
-두 환경 모두 single-host. Docker Compose로 PostGIS를 실행하되:
+두 환경 모두 single-host로 두되, PostgreSQL/PostGIS 구동 생명주기는 이 저장소 밖에서 관리한다.
 
 - `data/` 디렉터리는 host bind mount(별도 NVMe 파티션 권장).
 - PostgreSQL `unix_socket_directories` host 노출 가능성 검토(애플리케이션 UDS 사용 시 latency 절감).

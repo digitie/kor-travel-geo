@@ -25,7 +25,7 @@
 - **Git source of truth는 NTFS** `/mnt/f/dev/python-kraddr-geo` 계열 checkout이다. 코드 편집, branch, commit, PR은 NTFS 에이전트 worktree에서 수행한다.
 - **테스트와 장기 실행은 WSL ext4 테스트 미러**에서 수행한다. NTFS worktree를 `rsync --delete`로 `~/dev/python-kraddr-geo-<agent>-test/`에 복사한 뒤 `pip`/`npm`/`pytest`/`uvicorn`을 실행한다. ext4 미러에서는 commit/push하지 않는다.
 - **Git 명령은 Windows Git 기준**이다. NTFS worktree의 `.git`/`gitdir`은 `F:/dev/...`를 가리키게 두고, WSL 미러에서 Git commit/branch를 수집하는 스크립트는 Windows `git.exe`와 `F:/dev/python-kraddr-geo-*` 경로를 사용한다. WSL `git` 편의를 위해 포인터를 `/mnt/f/...`로 바꾸지 않는다.
-- **DB 검증은 T-027 최종 DB 재사용이 기본**이다. `kraddr-geo-t027-final` Docker project와 `/home/digitie/kraddr-geo-data/pgdata-final-20260529` pgdata를 host port `15434`로 다시 올려 사용한다. 클린 DB는 명시 요청 때만 새 pgdata로 만든다.
+- **DB/RustFS 검증은 접속 설정 기준**이다. 이 저장소는 PostgreSQL/PostGIS와 RustFS를 직접 구동하지 않는다. 이미 동작 중인 DB와 bucket에 `KRADDR_GEO_PG_DSN`, `KRADDR_GEO_RUSTFS_*` 설정으로 접속해 사용한다.
 - **데이터(`data/`)는 NTFS main repo 아래** `/mnt/f/dev/python-kraddr-geo/data/`를 기준으로 둔다. ext4 테스트 미러에서는 절대경로 또는 심볼릭 링크로 참조한다.
 - **로컬 secret/env 파일**(`.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
 - **프론트엔드 실행은 WSL ext4 테스트 미러의 Linux Node/npm 기준**이다. `kraddr-geo-ui` 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL에서 실행한다.
@@ -54,9 +54,9 @@ sudo apt install -y libgdal-dev gdal-bin              # loaders extra용 (ADR-00
 uv venv && uv pip install -e ".[api,dev]"
 uv pip install "gdal==$(gdal-config --version)"        # 시스템 GDAL과 버전 매치
 uv pip install -e ".[loaders]"                         # 이제 안전하게 빌드
-test -f .env || cp .env.example .env                  # KRADDR_GEO_PG_DSN 채우기
+test -f .env || cp .env.example .env                  # KRADDR_GEO_PG_DSN, KRADDR_GEO_RUSTFS_* 채우기
 test -e data || ln -s /mnt/f/dev/python-kraddr-geo/data data # NTFS data를 참조
-docker compose up -d db                         # postgis/postgis:16-3.4
+# PostgreSQL/PostGIS와 RustFS는 이미 동작 중인 외부 인프라에 접속한다.
 alembic upgrade head
 kraddr-geo load all-sidos \
   --juso "./data/juso/도로명주소 한글_전체분" \
@@ -102,6 +102,7 @@ src/kraddr/geo/
 11. **공간 쿼리 술어에서 좌표 형변환 금지**: 입력 좌표는 CTE/파라미터로 **한 번만** `ST_Transform`해서 상수로 굳히고, 술어는 `ST_DWithin(t.pt_5179, p.geom, :radius_m)`처럼 컬럼은 그대로 둔다. `ST_Transform(t.pt_5179, 4326)`이 술어에 들어가면 GiST 인덱스를 못 타고 매 행 변환이 돌아간다. **반경 검색은 `pt_5179`(meter)** 기준으로 한다 — `pt_4326`은 응답 직렬화 전용. MV의 `pt_source` 컬럼이 좌표 출처(entrance vs centroid)를 노출하므로 라우터는 centroid 결과의 `confidence`를 낮춰 반환(ADR-007, ADR-012, `docs/data-model.md` "공간 쿼리 가이드").
 12. **SQLAlchemy bulk `insert().values(rows)` 파라미터 폭주 금지**: PostgreSQL 프로토콜은 한 쿼리당 최대 65,535개 파라미터. row × column이 ~30,000 이상이면 `psycopg.copy_*` 또는 `gdal.VectorTranslate(... PG_USE_COPY=YES)`로 전환한다(ADR-005). 안전 마진은 한도의 절반(30k) 권장.
 13. **작업 큐 상태를 in-memory만 신뢰 금지**: 적재 작업은 `load_jobs` 테이블로 영속화한다(ADR-011). lifespan startup에서 `state IN ('queued','running')` 잔존 행을 `failed`로 마크하고, 실행 직렬성은 advisory lock 또는 `SELECT ... FOR UPDATE SKIP LOCKED`로 DB 수준에서 보강.
+14. **PostgreSQL/RustFS Docker 생명주기 직접 관리 금지**: 이 저장소는 이미 동작 중인 DB와 bucket에 접속만 한다. 구동·정지·재시작 절차는 이 저장소의 문서나 스크립트에 두지 않는다.
 
 ## 5. 자주 묻는 작업
 

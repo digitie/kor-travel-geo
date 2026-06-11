@@ -56,7 +56,7 @@ describe("runtime config", () => {
     writeFileSync(
       join(uiDir, ".env.local"),
       [
-        "KRADDR_GEO_API_INTERNAL_URL=http://localhost:9001",
+        "KRADDR_GEO_API_INTERNAL_URL=http://localhost:12201",
         "NEXT_PUBLIC_VWORLD_API_KEY=ui-dotenv-local-key"
       ].join("\n")
     );
