@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import inspect
+import logging
+from typing import Any
 
-from kraddr.geo.api import app as app_module
-from kraddr.geo.api.app import create_app
+import httpx
+import pytest
+from fastapi import FastAPI
+
+from kortravelgeo.api import app as app_module
+from kortravelgeo.api.app import _install_performance_monitoring, create_app
+from kortravelgeo.settings import Settings
 
 
 def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
@@ -74,3 +81,35 @@ def test_api_queue_registers_sppn_makarea_loader() -> None:
     assert '"sppn_makarea_load"' in source
     assert "AdvisoryLockNamespace.LOAD_SPPN_MAKAREA" in source
     assert "sppn_makarea" in source
+
+
+@pytest.mark.asyncio
+async def test_performance_logging_uses_route_template_without_query(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app = FastAPI()
+
+    @app.get("/items/{item_id}")
+    async def item(item_id: str) -> dict[str, Any]:
+        return {"item_id": item_id}
+
+    _install_performance_monitoring(
+        app,
+        Settings(api_performance_logging_enabled=True),
+    )
+
+    caplog.set_level(logging.INFO, logger="kortravelgeo.api.performance")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/items/123?address=서울특별시 종로구 인사동")
+
+    assert response.status_code == 200
+    records = [
+        record for record in caplog.records if record.name == "kortravelgeo.api.performance"
+    ]
+    assert records
+    record = records[-1]
+    assert record.__dict__["route"] == "/items/{item_id}"
+    assert record.__dict__["status_code"] == 200
+    assert "address" not in record.getMessage()
+    assert "서울특별시" not in record.getMessage()

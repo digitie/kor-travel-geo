@@ -4,7 +4,7 @@
 
 사용자 지시: 현재 작업 완료 후 `maplibre-vworld-js`를 0.1.0 기준으로 코드 재확인하고, `maplibre-vworld-js` 코드를 직접 수정하지 말고 이 저장소 문서에만 보완할 점을 T-044로 업데이트한다.
 
-따라서 이번 T-044 범위는 **문서-only**다. `digitie/maplibre-vworld-js` 저장소와 `kraddr-geo-ui` 코드는 수정하지 않는다. 실제 UI wrapper 전환이나 dependency 갱신이 필요하면 별도 후속 PR에서 진행한다.
+따라서 이번 T-044 범위는 **문서-only**다. `digitie/maplibre-vworld-js` 저장소와 `kor-travel-geo-ui` 코드는 수정하지 않는다. 실제 UI wrapper 전환이나 dependency 갱신이 필요하면 별도 후속 PR에서 진행한다.
 
 ## 확인 기준
 
@@ -49,9 +49,9 @@
 - `Marker`는 `lngLat`, `color`, `selected`, `highlighted`, `ariaLabel`, `onClick`, `onDragEnd` 등 기본 marker lifecycle을 component로 감싼다.
 - `PolygonArea`는 GeoJSON Polygon/MultiPolygon을 style swap 뒤에도 재등록하므로 `TL_SPPN_MAKAREA`나 정합성 sample polygon overlay 후속에 쓸 수 있다.
 
-## 현재 `kraddr-geo-ui`와 차이
+## 현재 `kor-travel-geo-ui`와 차이
 
-현재 `kraddr-geo-ui`는 이미 다음을 upstream package에서 소비한다.
+현재 `kor-travel-geo-ui`는 이미 다음을 upstream package에서 소비한다.
 
 - `maplibre-vworld/style.css`
 - `getVWorldStyle()`를 `getVWorldRasterStyle` alias로 재수출
@@ -74,8 +74,8 @@
 
 1. T-044는 0.1.0 code/API 기준 재확인과 문서 보강으로 완료한다.
 2. 이번 PR에서는 `maplibre-vworld-js` 코드를 직접 수정하지 않는다.
-3. 이번 PR에서는 `kraddr-geo-ui` dependency를 0.1.0 tag로 올리지 않는다. npm registry에 stable package가 아직 없으므로, 실제 갱신이 필요하면 `git+https://github.com/digitie/maplibre-vworld-js.git#v0.1.0` 또는 tag commit SHA `8559bf4...`를 별도 PR에서 검증한다.
-4. 실제 `CoordinateMap` 전환은 별도 구현 PR에서 진행한다. 그 PR의 검증 조건은 `kraddr-geo-ui`의 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`다.
+3. 이번 PR에서는 `kor-travel-geo-ui` dependency를 0.1.0 tag로 올리지 않는다. npm registry에 stable package가 아직 없으므로, 실제 갱신이 필요하면 `git+https://github.com/digitie/maplibre-vworld-js.git#v0.1.0` 또는 tag commit SHA `8559bf4...`를 별도 PR에서 검증한다.
+4. 실제 `CoordinateMap` 전환은 별도 구현 PR에서 진행한다. 그 PR의 검증 조건은 `kor-travel-geo-ui`의 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`다.
 5. 후속 구현에서 upstream 범용 기능이 부족하다고 판단되면, 이번 T-044 안에서 수정하지 않고 별도 upstream task/PR로 분리한다.
 
 ## 후속 구현 메모
@@ -91,9 +91,9 @@
 
 ## 검증
 
-- `/home/digitie/dev/python-kraddr-geo/.venv/bin/ruff check .` → 통과.
-- `PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/python-kraddr-geo/.venv/bin/mypy src/kraddr/geo` → 통과.
-- `PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/python-kraddr-geo/.venv/bin/lint-imports` → Layered architecture kept.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/python-kraddr-geo/.venv/bin/python -m pytest -q` → 216 passed, 6 skipped, 3 warnings.
+- `/home/digitie/dev/kor-travel-geo/.venv/bin/ruff check .` → 통과.
+- `PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/kor-travel-geo/.venv/bin/mypy src/kortravelgeo` → 통과.
+- `PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/kor-travel-geo/.venv/bin/lint-imports` → Layered architecture kept.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/kor-travel-geo/.venv/bin/python -m pytest -q` → 216 passed, 6 skipped, 3 warnings.
 - `git diff --check` → 통과.
 - `codegraph sync` → 통과.

@@ -9,7 +9,7 @@
 
 ## 목적
 
-`python-kraddr-geo`는 행안부 도로명주소·우편번호·내비게이션DB·전자지도 데이터를 사용한다. 이 자료는 한국 사용 전제로 약관이 작성됐고, vworld/kakao/naver fallback도 한국 IP 기준 한도/약관이 있다. 따라서 본 라이브러리의 REST API 표면은 **외부(공용) IP에서 호출될 때 대한민국 국가로 식별되는 IP만 허용**해야 한다.
+`kor-travel-geo`는 행안부 도로명주소·우편번호·내비게이션DB·전자지도 데이터를 사용한다. 이 자료는 한국 사용 전제로 약관이 작성됐고, vworld/kakao/naver fallback도 한국 IP 기준 한도/약관이 있다. 따라서 본 라이브러리의 REST API 표면은 **외부(공용) IP에서 호출될 때 대한민국 국가로 식별되는 IP만 허용**해야 한다.
 
 내부망/사설 IP에서의 호출은 그대로 허용한다. ADR-013(사내 내부망 전용)과 일관.
 
@@ -22,7 +22,7 @@
 | `/v1/admin/*` (관리 표면) | 적용(강력) | 내부망 가정. 외부 KR IP라도 admin은 별도 allowlist 권장 |
 | `/v1/healthz`, `/metrics` | 미적용 | LB/uptime probe 호환 |
 | `/v1/openapi.json`, `/v1/docs` | 적용 | 외부 KR만 허용 |
-| `kraddr-geo` CLI | 미적용 | local execution |
+| `kor-travel-geo` CLI | 미적용 | local execution |
 | `AsyncAddressClient` (라이브러리 직접 호출) | 미적용 | local execution |
 
 ## IP 분류 기준
@@ -46,7 +46,7 @@
 
 ### Option A — FastAPI middleware (권장)
 
-`src/kraddr/geo/api/middleware/geoip_gate.py` 신규.
+`src/kortravelgeo/api/middleware/geoip_gate.py` 신규.
 
 ```python
 class KoreaOnlyMiddleware:
@@ -75,7 +75,7 @@ class KoreaOnlyMiddleware:
 ```
 
 - 장점: 코드 안에 정책 명확, audit_event 기록 가능, `/v1/healthz`/`/metrics` 같은 오픈 path 단일 위치에서 통제.
-- 단점: middleware에서 GeoIP DB 메모리 사용. `KRADDR_GEO_GEOIP_DB_PATH` 미설정 시 fallback 정책 필요.
+- 단점: middleware에서 GeoIP DB 메모리 사용. `KTG_GEOIP_DB_PATH` 미설정 시 fallback 정책 필요.
 
 ### Option B — nginx/reverse proxy layer
 
@@ -86,7 +86,7 @@ class KoreaOnlyMiddleware:
 
 ### 결정
 
-**Option A를 기본으로 한다.** nginx 등 reverse proxy가 있으면 추가 layer로 운영 가능하지만, 라이브러리 사용자가 `uvicorn kraddr.geo.api.app:app`만 실행해도 KR 외 차단이 작동해야 한다.
+**Option A를 기본으로 한다.** nginx 등 reverse proxy가 있으면 추가 layer로 운영 가능하지만, 라이브러리 사용자가 `uvicorn kortravelgeo.api.app:app`만 실행해도 KR 외 차단이 작동해야 한다.
 
 ## GeoIP DB
 
@@ -94,7 +94,7 @@ class KoreaOnlyMiddleware:
 
 MaxMind GeoLite2 Country DB(무료) 또는 IP2Location LITE.
 
-- `KRADDR_GEO_GEOIP_DB_PATH`: 로컬 `.mmdb` 파일 경로. 기본 `data/geoip/GeoLite2-Country.mmdb`.
+- `KTG_GEOIP_DB_PATH`: 로컬 `.mmdb` 파일 경로. 기본 `data/geoip/GeoLite2-Country.mmdb`.
 - 갱신: 운영자가 월 1회 cron으로 download. 본 라이브러리는 자동 download 안 함(라이선스 키 required, 운영자 책임).
 - DB 부재 시 정책:
   - `geoip_gate_mode = "strict"`: 모든 외부 IP deny (보수적, 기본값).
@@ -173,8 +173,8 @@ IP 원문 평문 저장 금지(ADR-033). hash만 저장.
 
 ## CLI/도구
 
-- `kraddr-geo geoip check <ip>`: 디버그용. 주어진 IP가 어떤 분류로 평가되는지 JSON으로 출력.
-- `kraddr-geo geoip stats`: 최근 deny 통계는 후속이다. 1차에서는 `/v1/admin/ops/audit-events?action=geoip.denied`로 확인한다.
+- `ktgctl geoip check <ip>`: 디버그용. 주어진 IP가 어떤 분류로 평가되는지 JSON으로 출력.
+- `ktgctl geoip stats`: 최근 deny 통계는 후속이다. 1차에서는 `/v1/admin/ops/audit-events?action=geoip.denied`로 확인한다.
 
 ## 검증
 
@@ -182,15 +182,15 @@ IP 원문 평문 저장 금지(ADR-033). hash만 저장.
 - middleware 통합 테스트: FastAPI `TestClient` + mock GeoIP reader로 `/v1/address/*` 403, `/v1/healthz` open을 확인한다.
 - trusted proxy 테스트: trusted peer일 때만 `X-Forwarded-For`에서 마지막 untrusted client를 선택한다.
 - middleware 순서 테스트: admission semaphore가 이미 차 있어도 non-KR 요청은 `429`가 아니라 GeoIP `403`으로 먼저 차단되는지 확인한다.
-- CLI smoke: `kraddr-geo geoip check 8.8.8.8` → strict + DB 부재에서 `geoip_db_unavailable` deny.
+- CLI smoke: `ktgctl geoip check 8.8.8.8` → strict + DB 부재에서 `geoip_db_unavailable` deny.
 - targeted gate:
-  - `ruff check src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py tests/unit/test_geoip_gate.py tests/unit/test_settings.py`
+  - `ruff check src/kortravelgeo/infra/geoip.py src/kortravelgeo/api/middleware/geoip_gate.py src/kortravelgeo/api/app.py src/kortravelgeo/cli/main.py src/kortravelgeo/settings.py tests/unit/test_geoip_gate.py tests/unit/test_settings.py`
   - `pytest tests/unit/test_geoip_gate.py tests/unit/test_settings.py tests/unit/test_api_app_contract.py -q` → `14 passed`
-  - `mypy --no-incremental src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py`
+  - `mypy --no-incremental src/kortravelgeo/infra/geoip.py src/kortravelgeo/api/middleware/geoip_gate.py src/kortravelgeo/api/app.py src/kortravelgeo/cli/main.py src/kortravelgeo/settings.py`
 - full backend gate:
   - `ruff check .`
   - `pytest -q` → `268 passed, 8 skipped`
-  - `mypy --no-incremental src/kraddr/geo`
+  - `mypy --no-incremental src/kortravelgeo`
   - `lint-imports`
 - 실제 MaxMind DB 기반 KR/US 샘플 lookup과 `ops.audit_events` DB row 생성은 운영 DB/GeoIP DB가 준비된 환경의 후속 통합 테스트로 둔다.
 

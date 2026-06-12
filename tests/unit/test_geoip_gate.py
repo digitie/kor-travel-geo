@@ -8,10 +8,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from kraddr.geo.api.app import _install_admission_control
-from kraddr.geo.api.middleware.geoip_gate import install_geoip_gate
-from kraddr.geo.infra.geoip import classify_ip, client_ip_from_forwarded, is_open_path
-from kraddr.geo.settings import Settings
+from kortravelgeo.api.app import _install_admission_control
+from kortravelgeo.api.middleware.geoip_gate import install_geoip_gate
+from kortravelgeo.infra.geoip import classify_ip, client_ip_from_forwarded, is_open_path
+from kortravelgeo.settings import Settings
 
 
 class FakeReader:

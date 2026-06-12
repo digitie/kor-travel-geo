@@ -1,6 +1,6 @@
 # API Reference
 
-이 디렉터리는 사람이 읽는 설명과 AI agent가 빠르게 표면을 파악하는 요약을 함께 둔다. 기계가 직접 읽을 정식 스키마는 저장소 루트의 `openapi.json`이며, 백엔드 변경 뒤에는 `scripts/export_openapi.py`와 `kraddr-geo-ui`의 `npm run gen:types`를 함께 실행한다.
+이 디렉터리는 사람이 읽는 설명과 AI agent가 빠르게 표면을 파악하는 요약을 함께 둔다. 기계가 직접 읽을 정식 스키마는 저장소 루트의 `openapi.json`이며, 백엔드 변경 뒤에는 `scripts/export_openapi.py`와 `kor-travel-geo-ui`의 `npm run gen:types`를 함께 실행한다.
 
 ## 표면 구분
 

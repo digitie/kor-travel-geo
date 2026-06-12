@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from kraddr.geo.loaders.text.roadaddr_entrance_loader import (
+from kortravelgeo.loaders.text.roadaddr_entrance_loader import (
     discover_roadaddr_entrance_sources,
     iter_roadaddr_entrance_rows,
 )
 
 DATA_ROOT = Path("data/juso")
 ALT_DATA_ROOTS = (
-    Path("/mnt/f/dev/python-kraddr-geo/data/juso"),
-    Path("/home/digitie/kraddr-geo-data/juso"),
+    Path("/mnt/f/dev/kor-travel-geo/data/juso"),
+    Path("/home/digitie/kor-travel-geo-data/juso"),
 )
 
 

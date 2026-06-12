@@ -8,15 +8,15 @@
 
 2026-05-27 구현 기준:
 
-- `sql/ddl/001_schema.sql`와 `src/kraddr/geo/infra/sql.py`에 `ops` 스키마와 6개 테이블을 추가했다.
+- `sql/ddl/001_schema.sql`와 `src/kortravelgeo/infra/sql.py`에 `ops` 스키마와 6개 테이블을 추가했다.
 - 기존 DB upgrade용 Alembic migration은 `alembic/versions/0006_t049_ops_metadata_schema.py`다.
 - `ops.audit_events`는 `BEFORE UPDATE OR DELETE` trigger로 append-only를 강제한다.
 - `ops.serving_releases`는 `idx_ops_serving_releases_one_active` partial unique index로 `state='active'` row를 한 건만 허용한다.
-- `kraddr.geo.core.redaction`은 audit payload를 저장하기 전에 API key, DSN, password, token, callback secret, 주소 원문을 제거하거나 hash marker로 치환한다.
+- `kortravelgeo.core.redaction`은 audit payload를 저장하기 전에 API key, DSN, password, token, callback secret, 주소 원문을 제거하거나 hash marker로 치환한다.
 - `AsyncAddressClient`와 `/v1/admin/ops/*` API는 audit event, dataset snapshot, serving release, artifact, maintenance window, table stats snapshot 조회를 제공한다.
 - `/v1/admin/ops/maintenance-windows`는 typed confirmation을 hash로 저장하고, `/end`는 같은 confirmation hash가 맞는 active/scheduled/ending window만 종료한다.
 - `/v1/admin/ops/table-stats/capture`는 `pg_class`, `pg_namespace`, `pg_stat_user_tables`를 읽어 table/MV/index size와 추정 row count를 `ops.table_stats_snapshots`에 저장한다.
-- `kraddr-geo-ui`에는 `/admin/ops` 화면을 추가했다. release, snapshot, artifact, audit event, maintenance window, table stats snapshot을 한 화면에서 조회하고 maintenance window 생성과 table stats capture를 실행할 수 있다.
+- `kor-travel-geo-ui`에는 `/admin/ops` 화면을 추가했다. release, snapshot, artifact, audit event, maintenance window, table stats snapshot을 한 화면에서 조회하고 maintenance window 생성과 table stats capture를 실행할 수 있다.
 - 테스트는 redaction, DTO validation, DDL/index/trigger 문자열, Alembic migration, API route contract, repository source contract를 포함한다.
 
 T-050 4차 이후 연결된 지점:
@@ -27,7 +27,7 @@ T-050 4차 이후 연결된 지점:
 
 T-050 5차 이후 연결된 지점:
 
-- `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`가 1 이상이면 API lifespan에서 `ops.table_stats_snapshots` 주기 capture task를 시작한다.
+- `KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`가 1 이상이면 API lifespan에서 `ops.table_stats_snapshots` 주기 capture task를 시작한다.
 - 수동/주기 capture에서 `snapshot_id`를 생략하면 현재 active serving release의 `snapshot_id`에 자동 연결한다.
 - active release가 없거나 명시 연결이 아닌 경우도 `stats.snapshot_link`에 연결 방식을 남겨 trend 해석 기준을 보존한다.
 - 여러 API worker가 같은 주기로 capture를 실행해도 `pg_try_advisory_xact_lock(0x4B4700A0)`으로 동시 실행을 한 번만 통과시켜 중복 row를 줄인다.
@@ -238,7 +238,7 @@ append-only 운영 감사 이벤트다. 주소 검색 요청 전체를 저장하
 
 - 전국 full-load, MV swap, backup, restore, performance benchmark 전후에 capture한다.
 - `exact_rows`는 대형 테이블에서 비용이 크므로 모든 run에서 강제하지 않는다. `estimated_rows`와 표본/핵심 테이블 exact count를 섞는다.
-- API 내장 scheduler는 기본 비활성이다. `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`를 1 이상으로 설정하면 분 단위 주기로 capture하며, `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_ON_STARTUP=true`일 때만 서버 시작 직후 1회를 추가 수행한다.
+- API 내장 scheduler는 기본 비활성이다. `KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`를 1 이상으로 설정하면 분 단위 주기로 capture하며, `KTG_OPS_TABLE_STATS_CAPTURE_ON_STARTUP=true`일 때만 서버 시작 직후 1회를 추가 수행한다.
 - `snapshot_id` 미지정 capture는 현재 active serving release의 `snapshot_id`에 연결하고, 연결 방식은 `stats.snapshot_link`에 기록한다.
 
 ## API와 UI 범위

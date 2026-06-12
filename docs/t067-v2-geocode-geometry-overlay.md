@@ -74,7 +74,7 @@
 
 ## 실제 DB 확인
 
-Docker PostGIS `kraddr-geo-t027-final-db-1` (`127.0.0.1:15434`, `kraddr_geo`)에서 `AsyncAddressClient.geocode(..., include_geometry=True)`로 확인했다.
+Docker PostGIS `kor-travel-geo-t027-final-db-1` (`127.0.0.1:15434`, `kor_travel_geo`)에서 `AsyncAddressClient.geocode(..., include_geometry=True)`로 확인했다.
 
 | 입력 | 상태 | 첫 후보 | point | geometry |
 |------|------|---------|-------|----------|
@@ -88,7 +88,7 @@ Docker PostGIS `kraddr-geo-t027-final-db-1` (`127.0.0.1:15434`, `kraddr_geo`)에
 
 - `pytest tests/unit/test_v2_api.py -q` → `10 passed`
 - `ruff check ...` → 통과
-- `mypy --strict src/kraddr/geo/dto/v2.py src/kraddr/geo/core/protocols.py src/kraddr/geo/core/v2.py src/kraddr/geo/infra/geometry_repo.py src/kraddr/geo/client.py src/kraddr/geo/api/routers/v2.py` → 통과
+- `mypy --strict src/kortravelgeo/dto/v2.py src/kortravelgeo/core/protocols.py src/kortravelgeo/core/v2.py src/kortravelgeo/infra/geometry_repo.py src/kortravelgeo/client.py src/kortravelgeo/api/routers/v2.py` → 통과
 - `npm run gen:types` → OpenAPI/TypeScript 타입 갱신
 - `npm run lint` → 통과
 - `npm run type-check` → 통과

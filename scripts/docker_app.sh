@@ -2,23 +2,23 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-UI_DIR="$ROOT_DIR/kraddr-geo-ui"
+UI_DIR="$ROOT_DIR/kor-travel-geo-ui"
 
-API_IMAGE="${KRADDR_GEO_API_IMAGE:-kraddr-geo-api:latest-main-gdal}"
-UI_IMAGE="${KRADDR_GEO_UI_IMAGE:-kraddr-geo-ui:latest-main}"
-API_CONTAINER="${KRADDR_GEO_API_CONTAINER:-kraddr-geo-api-latest}"
-UI_CONTAINER="${KRADDR_GEO_UI_CONTAINER:-kraddr-geo-ui-latest}"
-RESTART_POLICY="${KRADDR_GEO_DOCKER_RESTART_POLICY:-unless-stopped}"
-NETWORK_MODE="${KRADDR_GEO_DOCKER_NETWORK_MODE:-bridge}"
-NETWORK_NAME="${KRADDR_GEO_DOCKER_NETWORK:-kraddr-geo-net}"
-HOST_GATEWAY="${KRADDR_GEO_DOCKER_HOST_GATEWAY:-host.docker.internal}"
+API_IMAGE="${KTG_API_IMAGE:-kor-travel-geo-api:latest-main-gdal}"
+UI_IMAGE="${KTG_UI_IMAGE:-kor-travel-geo-ui:latest-main}"
+API_CONTAINER="${KTG_API_CONTAINER:-kor-travel-geo-api-latest}"
+UI_CONTAINER="${KTG_UI_CONTAINER:-kor-travel-geo-ui-latest}"
+RESTART_POLICY="${KTG_DOCKER_RESTART_POLICY:-unless-stopped}"
+NETWORK_MODE="${KTG_DOCKER_NETWORK_MODE:-bridge}"
+NETWORK_NAME="${KTG_DOCKER_NETWORK:-kor-travel-geo-net}"
+HOST_GATEWAY="${KTG_DOCKER_HOST_GATEWAY:-host.docker.internal}"
 
-API_HOST_PORT="${KRADDR_GEO_API_PORT:-12201}"
-API_CONTAINER_PORT="${KRADDR_GEO_API_CONTAINER_PORT:-12201}"
-UI_HOST_PORT="${KRADDR_GEO_UI_PORT:-12205}"
-UI_CONTAINER_PORT="${KRADDR_GEO_UI_CONTAINER_PORT:-12205}"
-DB_PORT="${KRADDR_GEO_DB_PORT:-5432}"
-DATA_DIR="${KRADDR_GEO_DOCKER_DATA_DIR:-${DATA_DIR:-/mnt/f/dev/python-kraddr-geo/data}}"
+API_HOST_PORT="${KTG_API_PORT:-12201}"
+API_CONTAINER_PORT="${KTG_API_CONTAINER_PORT:-12201}"
+UI_HOST_PORT="${KTG_UI_PORT:-12205}"
+UI_CONTAINER_PORT="${KTG_UI_CONTAINER_PORT:-12205}"
+DB_PORT="${KTG_DB_PORT:-5432}"
+DATA_DIR="${KTG_DOCKER_DATA_DIR:-${DATA_DIR:-/mnt/f/dev/kor-travel-geo/data}}"
 
 if [[ "$NETWORK_MODE" == "host" ]]; then
   DEFAULT_PG_HOST="127.0.0.1"
@@ -26,18 +26,18 @@ if [[ "$NETWORK_MODE" == "host" ]]; then
   DEFAULT_RUSTFS_ENDPOINT="http://127.0.0.1:12101"
 else
   DEFAULT_PG_HOST="$HOST_GATEWAY"
-  DEFAULT_UI_API_URL="http://kraddr-geo-api:${API_CONTAINER_PORT}"
+  DEFAULT_UI_API_URL="http://kor-travel-geo-api:${API_CONTAINER_PORT}"
   DEFAULT_RUSTFS_ENDPOINT="http://${HOST_GATEWAY}:12101"
 fi
 
-DEFAULT_PG_DSN="postgresql+psycopg://addr:addr@${DEFAULT_PG_HOST}:${DB_PORT}/kraddr_geo"
-PG_DSN="${KRADDR_GEO_DOCKER_PG_DSN:-${KRADDR_GEO_PG_DSN:-$DEFAULT_PG_DSN}}"
-UI_API_INTERNAL_URL="${KRADDR_GEO_API_INTERNAL_URL:-$DEFAULT_UI_API_URL}"
-RUSTFS_ENABLED="${KRADDR_GEO_RUSTFS_ENABLED:-0}"
-RUSTFS_ENDPOINT_URL="${KRADDR_GEO_RUSTFS_ENDPOINT_URL:-$DEFAULT_RUSTFS_ENDPOINT}"
-RUSTFS_BUCKET="${KRADDR_GEO_RUSTFS_BUCKET:-kraddr-geo}"
-RUSTFS_PREFIX="${KRADDR_GEO_RUSTFS_PREFIX:-python-kraddr-geo}"
-RUSTFS_REGION="${KRADDR_GEO_RUSTFS_REGION:-us-east-1}"
+DEFAULT_PG_DSN="postgresql+psycopg://addr:addr@${DEFAULT_PG_HOST}:${DB_PORT}/kor_travel_geo"
+PG_DSN="${KTG_DOCKER_PG_DSN:-${KTG_PG_DSN:-$DEFAULT_PG_DSN}}"
+UI_API_INTERNAL_URL="${KTG_API_INTERNAL_URL:-$DEFAULT_UI_API_URL}"
+RUSTFS_ENABLED="${KTG_RUSTFS_ENABLED:-0}"
+RUSTFS_ENDPOINT_URL="${KTG_RUSTFS_ENDPOINT_URL:-$DEFAULT_RUSTFS_ENDPOINT}"
+RUSTFS_BUCKET="${KTG_RUSTFS_BUCKET:-kor-travel-geo}"
+RUSTFS_PREFIX="${KTG_RUSTFS_PREFIX:-kor-travel-geo}"
+RUSTFS_REGION="${KTG_RUSTFS_REGION:-us-east-1}"
 
 usage() {
   cat <<'EOF'
@@ -52,24 +52,24 @@ Usage:
   scripts/docker_app.sh status
   scripts/docker_app.sh logs [api|ui]
   scripts/docker_app.sh cli <command> [args...]
-  scripts/docker_app.sh load <kraddr-geo load args...>
-  scripts/docker_app.sh load-full-set [extra kraddr-geo load full-set args...]
+  scripts/docker_app.sh load <ktgctl load args...>
+  scripts/docker_app.sh load-full-set [extra ktgctl load full-set args...]
 
-This script only starts kraddr-geo API/UI containers.
+This script only starts kor-travel-geo API/UI containers.
 PostgreSQL and RustFS must already be running somewhere reachable. Store their
 connection settings in this project via .env or process environment variables.
 
 Important env:
-  KRADDR_GEO_DOCKER_PG_DSN=postgresql+psycopg://addr:addr@host.docker.internal:5432/kraddr_geo
-  KRADDR_GEO_RUSTFS_ENABLED=1
-  KRADDR_GEO_RUSTFS_ENDPOINT_URL=http://host.docker.internal:12101
-  KRADDR_GEO_RUSTFS_BUCKET=kraddr-geo
-  KRADDR_GEO_RUSTFS_PREFIX=python-kraddr-geo
-  KRADDR_GEO_RUSTFS_ACCESS_KEY=<access key>
-  KRADDR_GEO_RUSTFS_SECRET_KEY=<secret key>
-  KRADDR_GEO_DOCKER_DATA_DIR=/mnt/f/dev/python-kraddr-geo/data
-  KRADDR_GEO_DOCKER_RESTART_POLICY=unless-stopped   # set to "no" to disable
-  KRADDR_GEO_VWORLD_API_KEY=<runtime key>
+  KTG_DOCKER_PG_DSN=postgresql+psycopg://addr:addr@host.docker.internal:5432/kor_travel_geo
+  KTG_RUSTFS_ENABLED=1
+  KTG_RUSTFS_ENDPOINT_URL=http://host.docker.internal:12101
+  KTG_RUSTFS_BUCKET=kor-travel-geo
+  KTG_RUSTFS_PREFIX=kor-travel-geo
+  KTG_RUSTFS_ACCESS_KEY=<access key>
+  KTG_RUSTFS_SECRET_KEY=<secret key>
+  KTG_DOCKER_DATA_DIR=/mnt/f/dev/kor-travel-geo/data
+  KTG_DOCKER_RESTART_POLICY=unless-stopped   # set to "no" to disable
+  KTG_VWORLD_API_KEY=<runtime key>
 EOF
 }
 
@@ -107,11 +107,11 @@ dotenv_get() {
 }
 
 resolve_vworld_key() {
-  if [[ -n "${KRADDR_GEO_VWORLD_API_KEY:-}" ]]; then
-    printf '%s' "$KRADDR_GEO_VWORLD_API_KEY"
+  if [[ -n "${KTG_VWORLD_API_KEY:-}" ]]; then
+    printf '%s' "$KTG_VWORLD_API_KEY"
     return 0
   fi
-  if dotenv_get KRADDR_GEO_VWORLD_API_KEY; then
+  if dotenv_get KTG_VWORLD_API_KEY; then
     return 0
   fi
   if [[ -n "${NEXT_PUBLIC_VWORLD_API_KEY:-}" ]]; then
@@ -198,38 +198,38 @@ run_api() {
 
   local vworld_key rustfs_access_key rustfs_secret_key
   vworld_key="$(resolve_vworld_key)"
-  rustfs_access_key="$(resolve_env_or_dotenv KRADDR_GEO_RUSTFS_ACCESS_KEY "")"
-  rustfs_secret_key="$(resolve_env_or_dotenv KRADDR_GEO_RUSTFS_SECRET_KEY "")"
+  rustfs_access_key="$(resolve_env_or_dotenv KTG_RUSTFS_ACCESS_KEY "")"
+  rustfs_secret_key="$(resolve_env_or_dotenv KTG_RUSTFS_SECRET_KEY "")"
 
   local args=(run -d --name "$API_CONTAINER" --restart "$RESTART_POLICY")
   if [[ "$NETWORK_MODE" == "host" ]]; then
     args+=(--network host)
   else
-    args+=(--network "$NETWORK_NAME" --network-alias kraddr-geo-api --add-host "${HOST_GATEWAY}:host-gateway")
+    args+=(--network "$NETWORK_NAME" --network-alias kor-travel-geo-api --add-host "${HOST_GATEWAY}:host-gateway")
     args+=(-p "${API_HOST_PORT}:${API_CONTAINER_PORT}")
   fi
   args+=(
     -v "${DATA_DIR}:/data:ro"
     -e "PORT=${API_CONTAINER_PORT}"
-    -e "KRADDR_GEO_API_HOST=0.0.0.0"
-    -e "KRADDR_GEO_PG_DSN=${PG_DSN}"
-    -e "KRADDR_GEO_GEOIP_GATE_MODE=${KRADDR_GEO_GEOIP_GATE_MODE:-off}"
-    -e "KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES=${KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES:-0}"
-    -e "KRADDR_GEO_RUSTFS_ENABLED=${RUSTFS_ENABLED}"
-    -e "KRADDR_GEO_RUSTFS_ENDPOINT_URL=${RUSTFS_ENDPOINT_URL}"
-    -e "KRADDR_GEO_RUSTFS_BUCKET=${RUSTFS_BUCKET}"
-    -e "KRADDR_GEO_RUSTFS_PREFIX=${RUSTFS_PREFIX}"
-    -e "KRADDR_GEO_RUSTFS_REGION=${RUSTFS_REGION}"
-    -e "KRADDR_GEO_RUSTFS_LOCAL_IMPORT_ROOTS=/data"
+    -e "KTG_API_HOST=0.0.0.0"
+    -e "KTG_PG_DSN=${PG_DSN}"
+    -e "KTG_GEOIP_GATE_MODE=${KTG_GEOIP_GATE_MODE:-off}"
+    -e "KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES=${KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES:-0}"
+    -e "KTG_RUSTFS_ENABLED=${RUSTFS_ENABLED}"
+    -e "KTG_RUSTFS_ENDPOINT_URL=${RUSTFS_ENDPOINT_URL}"
+    -e "KTG_RUSTFS_BUCKET=${RUSTFS_BUCKET}"
+    -e "KTG_RUSTFS_PREFIX=${RUSTFS_PREFIX}"
+    -e "KTG_RUSTFS_REGION=${RUSTFS_REGION}"
+    -e "KTG_RUSTFS_LOCAL_IMPORT_ROOTS=/data"
   )
   if [[ -n "$rustfs_access_key" ]]; then
-    args+=(-e "KRADDR_GEO_RUSTFS_ACCESS_KEY=${rustfs_access_key}")
+    args+=(-e "KTG_RUSTFS_ACCESS_KEY=${rustfs_access_key}")
   fi
   if [[ -n "$rustfs_secret_key" ]]; then
-    args+=(-e "KRADDR_GEO_RUSTFS_SECRET_KEY=${rustfs_secret_key}")
+    args+=(-e "KTG_RUSTFS_SECRET_KEY=${rustfs_secret_key}")
   fi
   if [[ -n "$vworld_key" ]]; then
-    args+=(-e "KRADDR_GEO_VWORLD_API_KEY=${vworld_key}")
+    args+=(-e "KTG_VWORLD_API_KEY=${vworld_key}")
   fi
   args+=("$API_IMAGE")
 
@@ -256,12 +256,12 @@ run_ui() {
   args+=(
     -e "PORT=${UI_CONTAINER_PORT}"
     -e "HOSTNAME=0.0.0.0"
-    -e "KRADDR_GEO_API_INTERNAL_URL=${UI_API_INTERNAL_URL}"
+    -e "KTG_API_INTERNAL_URL=${UI_API_INTERNAL_URL}"
     -e "NEXT_PUBLIC_API_BASE_URL=/api/proxy"
   )
   if [[ -n "$vworld_key" ]]; then
     args+=(
-      -e "KRADDR_GEO_VWORLD_API_KEY=${vworld_key}"
+      -e "KTG_VWORLD_API_KEY=${vworld_key}"
       -e "NEXT_PUBLIC_VWORLD_API_KEY=${vworld_key}"
     )
   else
@@ -283,7 +283,7 @@ down() {
 status() {
   require_docker
   docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' \
-    | sed -n '1p;/kraddr-geo-api-latest/p;/kraddr-geo-ui-latest/p'
+    | sed -n '1p;/kor-travel-geo-api-latest/p;/kor-travel-geo-ui-latest/p'
 }
 
 logs() {
@@ -300,8 +300,8 @@ run_cli() {
   ensure_network
   local vworld_key rustfs_access_key rustfs_secret_key
   vworld_key="$(resolve_vworld_key)"
-  rustfs_access_key="$(resolve_env_or_dotenv KRADDR_GEO_RUSTFS_ACCESS_KEY "")"
-  rustfs_secret_key="$(resolve_env_or_dotenv KRADDR_GEO_RUSTFS_SECRET_KEY "")"
+  rustfs_access_key="$(resolve_env_or_dotenv KTG_RUSTFS_ACCESS_KEY "")"
+  rustfs_secret_key="$(resolve_env_or_dotenv KTG_RUSTFS_SECRET_KEY "")"
 
   local args=(run --rm)
   if [[ "$NETWORK_MODE" == "host" ]]; then
@@ -311,31 +311,31 @@ run_cli() {
   fi
   args+=(
     -v "${DATA_DIR}:/data:ro"
-    -e "KRADDR_GEO_PG_DSN=${PG_DSN}"
-    -e "KRADDR_GEO_LOADER_DATA_DIR=/data"
-    -e "KRADDR_GEO_GEOIP_GATE_MODE=${KRADDR_GEO_GEOIP_GATE_MODE:-off}"
-    -e "KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES=${KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES:-0}"
-    -e "KRADDR_GEO_RUSTFS_ENABLED=${RUSTFS_ENABLED}"
-    -e "KRADDR_GEO_RUSTFS_ENDPOINT_URL=${RUSTFS_ENDPOINT_URL}"
-    -e "KRADDR_GEO_RUSTFS_BUCKET=${RUSTFS_BUCKET}"
-    -e "KRADDR_GEO_RUSTFS_PREFIX=${RUSTFS_PREFIX}"
-    -e "KRADDR_GEO_RUSTFS_REGION=${RUSTFS_REGION}"
+    -e "KTG_PG_DSN=${PG_DSN}"
+    -e "KTG_LOADER_DATA_DIR=/data"
+    -e "KTG_GEOIP_GATE_MODE=${KTG_GEOIP_GATE_MODE:-off}"
+    -e "KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES=${KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES:-0}"
+    -e "KTG_RUSTFS_ENABLED=${RUSTFS_ENABLED}"
+    -e "KTG_RUSTFS_ENDPOINT_URL=${RUSTFS_ENDPOINT_URL}"
+    -e "KTG_RUSTFS_BUCKET=${RUSTFS_BUCKET}"
+    -e "KTG_RUSTFS_PREFIX=${RUSTFS_PREFIX}"
+    -e "KTG_RUSTFS_REGION=${RUSTFS_REGION}"
   )
   if [[ -n "$rustfs_access_key" ]]; then
-    args+=(-e "KRADDR_GEO_RUSTFS_ACCESS_KEY=${rustfs_access_key}")
+    args+=(-e "KTG_RUSTFS_ACCESS_KEY=${rustfs_access_key}")
   fi
   if [[ -n "$rustfs_secret_key" ]]; then
-    args+=(-e "KRADDR_GEO_RUSTFS_SECRET_KEY=${rustfs_secret_key}")
+    args+=(-e "KTG_RUSTFS_SECRET_KEY=${rustfs_secret_key}")
   fi
   if [[ -n "$vworld_key" ]]; then
-    args+=(-e "KRADDR_GEO_VWORLD_API_KEY=${vworld_key}")
+    args+=(-e "KTG_VWORLD_API_KEY=${vworld_key}")
   fi
   args+=("$API_IMAGE" "$@")
   docker "${args[@]}"
 }
 
 load_full_set() {
-  local args=(kraddr-geo load full-set /data)
+  local args=(ktgctl load full-set /data)
   [[ -z "${JUSO_YYYYMM:-}" ]] || args+=(--juso-yyyymm "$JUSO_YYYYMM")
   [[ -z "${PARCEL_LINK_YYYYMM:-}" ]] || args+=(--parcel-link-yyyymm "$PARCEL_LINK_YYYYMM")
   [[ -z "${LOCSUM_YYYYMM:-}" ]] || args+=(--locsum-yyyymm "$LOCSUM_YYYYMM")
@@ -365,7 +365,7 @@ main() {
     status) status ;;
     logs) logs "$@" ;;
     cli) [[ $# -gt 0 ]] || { echo "cli requires a command" >&2; exit 2; }; run_cli "$@" ;;
-    load) run_cli kraddr-geo load "$@" ;;
+    load) run_cli ktgctl load "$@" ;;
     load-full-set) load_full_set "$@" ;;
     help|-h|--help) usage ;;
     *) echo "unknown command: $command" >&2; usage; exit 2 ;;

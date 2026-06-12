@@ -113,7 +113,7 @@ class ApiBenchmarkReport:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Benchmark kraddr-geo REST API latency.")
+    parser = argparse.ArgumentParser(description="Benchmark kor-travel-geo REST API latency.")
     parser.add_argument("--base-url", default="http://127.0.0.1:12201")
     parser.add_argument("--corpus", type=Path, required=True)
     parser.add_argument("--run-id", help="Stable run id. Defaults to timestamp.")
@@ -673,14 +673,14 @@ def _git_command(git_repo: str | None, *args: str) -> tuple[str, ...]:
 
 
 def _git_repo() -> str | None:
-    env_repo = os.environ.get("KRADDR_GEO_GIT_REPO")
+    env_repo = os.environ.get("KTG_GIT_REPO")
     if env_repo:
         return _as_windows_path(env_repo)
     cwd = Path.cwd()
-    if cwd.name.startswith("python-kraddr-geo-") and cwd.name.endswith("-test"):
+    if cwd.name.startswith("kor-travel-geo-") and cwd.name.endswith("-test"):
         return f"F:/dev/{cwd.name.removesuffix('-test')}"
-    if (Path("/mnt/f/dev/python-kraddr-geo-codex") / ".git").exists():
-        return "F:/dev/python-kraddr-geo-codex"
+    if (Path("/mnt/f/dev/kor-travel-geo-codex") / ".git").exists():
+        return "F:/dev/kor-travel-geo-codex"
     return None
 
 
@@ -697,7 +697,7 @@ def _is_windows_path(path: str) -> bool:
 
 
 def _windows_git_executable() -> str:
-    env_git = os.environ.get("KRADDR_GEO_GIT_EXE")
+    env_git = os.environ.get("KTG_GIT_EXE")
     if env_git:
         return env_git
     for candidate in (

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from kraddr.geo.core.address import (
+from kortravelgeo.core.address import (
     AddressCodeSet,
     LegalDongCode,
     RoadNameAddressCode,

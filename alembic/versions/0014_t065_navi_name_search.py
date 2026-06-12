@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from alembic import op
 
-from kraddr.geo.infra.sql import MV_SQL, TEXT_SEARCH_MV_SQL, iter_sql_statements
+from kortravelgeo.infra.sql import MV_SQL, TEXT_SEARCH_MV_SQL, iter_sql_statements
 
 revision = "0014_t065_navi_name_search"
 down_revision = "0013_t061_text_search_mv"

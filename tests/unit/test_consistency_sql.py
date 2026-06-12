@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from kraddr.geo.loaders.consistency import CASE_SQL
+from kortravelgeo.loaders.consistency import CASE_SQL
 
 
 def test_building_polygon_cases_use_natural_key_not_management_number() -> None:

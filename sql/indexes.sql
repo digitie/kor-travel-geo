@@ -1,4 +1,4 @@
--- Generated mirror of src/kraddr/geo/infra/sql.py for review/DBA use.
+-- Generated mirror of src/kortravelgeo/infra/sql.py for review/DBA use.
 
 SET search_path = public, x_extension;
 

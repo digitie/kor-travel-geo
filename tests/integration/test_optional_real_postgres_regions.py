@@ -6,21 +6,21 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import text
 
-from kraddr.geo import AsyncAddressClient
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.settings import Settings
+from kortravelgeo import AsyncAddressClient
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.settings import Settings
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from kraddr.geo.dto.v2 import RegionWithinRadiusItem
+    from kortravelgeo.dto.v2 import RegionWithinRadiusItem
 
 
 @pytest.mark.asyncio
 async def test_real_postgres_regions_within_radius_contains_actual_admin_regions() -> None:
-    dsn = os.getenv("KRADDR_GEO_TEST_PG_DSN")
+    dsn = os.getenv("KTG_TEST_PG_DSN")
     if not dsn:
-        pytest.skip("set KRADDR_GEO_TEST_PG_DSN to run actual PostgreSQL region radius lookup")
+        pytest.skip("set KTG_TEST_PG_DSN to run actual PostgreSQL region radius lookup")
 
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:

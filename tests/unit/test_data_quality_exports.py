@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from kraddr.geo.infra.sql import iter_sql_statements
-from kraddr.geo.loaders.data_quality import (
+from kortravelgeo.infra.sql import iter_sql_statements
+from kortravelgeo.loaders.data_quality import (
     CASE_PREPARE_SQL,
     DATA_QUALITY_CASES,
     EXPORT_SPECS,
@@ -74,11 +74,11 @@ def test_c4_exports_use_nearest_polygon_and_distance_buckets() -> None:
     samples_sql = _spec("c4_distance_samples.csv")
     buckets_sql = _spec("c4_distance_buckets.csv")
 
-    assert "CREATE TEMP TABLE _kraddr_dq_c4_distances" in prepare_sql
+    assert "CREATE TEMP TABLE _ktg_dq_c4_distances" in prepare_sql
     assert "JOIN LATERAL" in prepare_sql
     assert "ORDER BY e.geom <-> p.geom" in prepare_sql
     assert "ST_Distance(e.geom, nearest.geom)" in prepare_sql
-    assert "CREATE INDEX _kraddr_dq_c4_distances_dist_idx" in prepare_sql
+    assert "CREATE INDEX _ktg_dq_c4_distances_dist_idx" in prepare_sql
     assert "ST_Transform" not in prepare_sql
     assert "polygon_source_file" in samples_sql
     assert "entrance_source_file" in samples_sql
@@ -86,8 +86,8 @@ def test_c4_exports_use_nearest_polygon_and_distance_buckets() -> None:
     assert "ST_Transform(entrance_geom, 4326)" in samples_sql
     assert "delta_lon" in samples_sql
     assert "delta_lat" in samples_sql
-    assert "FROM _kraddr_dq_c4_distances" in samples_sql
-    assert "FROM _kraddr_dq_c4_distances" in buckets_sql
+    assert "FROM _ktg_dq_c4_distances" in samples_sql
+    assert "FROM _ktg_dq_c4_distances" in buckets_sql
     assert "JOIN LATERAL" not in samples_sql + buckets_sql
     assert "WHEN dist_m > 500 THEN '500+'" in samples_sql
     assert "WHEN dist_m > 100 THEN '100-500'" in samples_sql
@@ -104,19 +104,19 @@ def test_c6_c7_exports_keep_st_covers_and_region_summaries() -> None:
     c7_samples = _spec("c7_samples.csv")
     c7_summary = _spec("c7_region_summary.csv")
 
-    assert "CREATE TEMP TABLE _kraddr_dq_c6_violations" in c6_prepare
-    assert "CREATE TEMP TABLE _kraddr_dq_c7_violations" in c7_prepare
+    assert "CREATE TEMP TABLE _ktg_dq_c6_violations" in c6_prepare
+    assert "CREATE TEMP TABLE _ktg_dq_c7_violations" in c7_prepare
     assert "NOT ST_Covers(bas_geom, geom)" in c6_prepare
     assert "NOT ST_Covers(emd_geom, geom)" in c7_prepare
     assert "missing_zip_polygon" in c6_prepare
     assert "outside_zip_polygon" in c6_prepare
-    assert "FROM _kraddr_dq_c6_violations" in c6_samples
-    assert "FROM _kraddr_dq_c6_violations" in c6_summary
+    assert "FROM _ktg_dq_c6_violations" in c6_samples
+    assert "FROM _ktg_dq_c6_violations" in c6_summary
     assert "zip_no AS region_key" in c6_prepare
     assert "missing_emd_polygon" in c7_prepare
     assert "outside_emd_polygon" in c7_prepare
-    assert "FROM _kraddr_dq_c7_violations" in c7_samples
-    assert "FROM _kraddr_dq_c7_violations" in c7_summary
+    assert "FROM _ktg_dq_c7_violations" in c7_samples
+    assert "FROM _ktg_dq_c7_violations" in c7_summary
     assert "emd_cd AS region_key" in c7_prepare
     combined_sql = c6_prepare + c7_prepare + c6_samples + c6_summary + c7_samples + c7_summary
     assert "ST_Contains" not in combined_sql
@@ -147,8 +147,8 @@ def test_write_csv_serializes_nulls_booleans_and_ignores_extra_keys(tmp_path: Pa
 def test_iter_sql_statements_splits_prepare_batches() -> None:
     statements = iter_sql_statements(CASE_PREPARE_SQL["C4"])
 
-    assert statements[0] == "DROP TABLE IF EXISTS _kraddr_dq_c4_distances"
-    assert statements[-1] == "ANALYZE _kraddr_dq_c4_distances"
+    assert statements[0] == "DROP TABLE IF EXISTS _ktg_dq_c4_distances"
+    assert statements[-1] == "ANALYZE _ktg_dq_c4_distances"
     assert len(statements) == 4
 
 

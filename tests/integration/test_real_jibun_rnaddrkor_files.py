@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from kraddr.geo.infra.pnu import build_pnu
-from kraddr.geo.loaders.text.parcel_link_loader import (
+from kortravelgeo.infra.pnu import build_pnu
+from kortravelgeo.loaders.text.parcel_link_loader import (
     discover_daily_lnbr_sources,
     discover_jibun_rnaddrkor_files,
     iter_daily_lnbr_rows,
@@ -14,8 +14,8 @@ from kraddr.geo.loaders.text.parcel_link_loader import (
 
 DATA_ROOT = Path("data/juso")
 ALT_DATA_ROOTS = (
-    Path("/mnt/f/dev/python-kraddr-geo/data/juso"),
-    Path("/home/digitie/kraddr-geo-data/juso"),
+    Path("/mnt/f/dev/kor-travel-geo/data/juso"),
+    Path("/home/digitie/kor-travel-geo-data/juso"),
 )
 
 

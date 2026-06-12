@@ -29,11 +29,11 @@
 
 ## 검증
 
-- `ruff check src/kraddr/geo/infra/backup.py src/kraddr/geo/api/app.py tests/unit/test_ops_metadata.py`
+- `ruff check src/kortravelgeo/infra/backup.py src/kortravelgeo/api/app.py tests/unit/test_ops_metadata.py`
 - `pytest tests/unit/test_ops_metadata.py tests/unit/test_backup_restore.py -q`
-- `mypy --no-incremental src/kraddr/geo/infra/backup.py src/kraddr/geo/api/app.py`
+- `mypy --no-incremental src/kortravelgeo/infra/backup.py src/kortravelgeo/api/app.py`
 
 - `ruff check .`
 - `pytest -q` → `261 passed, 8 skipped`
-- `mypy --no-incremental src/kraddr/geo`
+- `mypy --no-incremental src/kortravelgeo`
 - `lint-imports`

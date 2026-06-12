@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from kraddr.geo.dto.admin import OpsArtifact, RestoreCreateRequest
-from kraddr.geo.exceptions import InvalidInputError
-from kraddr.geo.infra import backup as backup_module
-from kraddr.geo.infra.backup import (
+from kortravelgeo.dto.admin import OpsArtifact, RestoreCreateRequest
+from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra import backup as backup_module
+from kortravelgeo.infra.backup import (
     SizeProgressProbe,
     SizeProgressSample,
     backup_download_token,
@@ -32,7 +32,7 @@ from kraddr.geo.infra.backup import (
     write_checksums,
     write_json,
 )
-from kraddr.geo.settings import Settings
+from kortravelgeo.settings import Settings
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -86,7 +86,7 @@ def test_callback_url_must_use_allowed_host() -> None:
 
 def test_pg_dump_command_uses_directory_format_and_redacts_password(tmp_path: Path) -> None:
     cmd = build_pg_dump_command(
-        "postgresql+psycopg://addr:secret@localhost:5432/kraddr_geo",
+        "postgresql+psycopg://addr:secret@localhost:5432/kor_travel_geo",
         tmp_path / "dump",
         profile="lean-serving",
         jobs=4,
@@ -100,12 +100,12 @@ def test_pg_dump_command_uses_directory_format_and_redacts_password(tmp_path: Pa
     assert "secret" not in " ".join(cmd.argv)
     assert "secret" not in " ".join(cmd.safe_argv)
     assert cmd.env == {"PGPASSWORD": "secret"}
-    assert "postgresql://addr@localhost:5432/kraddr_geo" in " ".join(cmd.safe_argv)
+    assert "postgresql://addr@localhost:5432/kor_travel_geo" in " ".join(cmd.safe_argv)
 
 
 def test_pg_restore_and_tar_commands_are_parallel_archive_oriented(tmp_path: Path) -> None:
     restore = build_pg_restore_command(
-        "postgresql+psycopg://addr:secret@localhost:5432/kraddr_geo_restore",
+        "postgresql+psycopg://addr:secret@localhost:5432/kor_travel_geo_restore",
         tmp_path / "dump",
         jobs=8,
     )
@@ -144,63 +144,63 @@ async def test_manifest_and_internal_checksums_round_trip(tmp_path: Path) -> Non
 
 
 def test_restore_target_dsn_is_built_from_current_settings() -> None:
-    settings = Settings(pg_dsn="postgresql://addr:secret@localhost:5432/kraddr_geo")
-    req = RestoreCreateRequest(target_database="kraddr_geo_restore")
+    settings = Settings(pg_dsn="postgresql://addr:secret@localhost:5432/kor_travel_geo")
+    req = RestoreCreateRequest(target_database="kor_travel_geo_restore")
 
     target = resolve_restore_target_dsn(req, settings)
 
-    assert target == "postgresql+psycopg://addr:secret@localhost:5432/kraddr_geo_restore"
+    assert target == "postgresql+psycopg://addr:secret@localhost:5432/kor_travel_geo_restore"
 
 
 def test_replace_current_restore_requires_exact_target_and_confirmation() -> None:
-    settings = Settings(pg_dsn="postgresql://addr:secret@localhost:5432/kraddr_geo")
+    settings = Settings(pg_dsn="postgresql://addr:secret@localhost:5432/kor_travel_geo")
     req = RestoreCreateRequest(
-        target_database="kraddr_geo",
+        target_database="kor_travel_geo",
         mode="replace_current",
-        confirmation="RESTORE kraddr_geo",
+        confirmation="RESTORE kor_travel_geo",
     )
 
     confirmation = validate_replace_current_restore_request(
         req,
         settings=settings,
-        target_database="kraddr_geo",
+        target_database="kor_travel_geo",
     )
 
-    assert confirmation == "RESTORE kraddr_geo"
+    assert confirmation == "RESTORE kor_travel_geo"
 
-    wrong_target = req.model_copy(update={"target_database": "kraddr_geo_restore"})
+    wrong_target = req.model_copy(update={"target_database": "kor_travel_geo_restore"})
     with pytest.raises(InvalidInputError, match="must match the current database"):
         validate_replace_current_restore_request(
             wrong_target,
             settings=settings,
-            target_database="kraddr_geo_restore",
+            target_database="kor_travel_geo_restore",
         )
 
     dsn_target = req.model_copy(
         update={
             "target_database": None,
-            "target_dsn": "postgresql+psycopg://addr:secret@otherhost:5432/kraddr_geo",
+            "target_dsn": "postgresql+psycopg://addr:secret@otherhost:5432/kor_travel_geo",
         }
     )
     with pytest.raises(InvalidInputError, match="requires target_database"):
         validate_replace_current_restore_request(
             dsn_target,
             settings=settings,
-            target_database="kraddr_geo",
+            target_database="kor_travel_geo",
         )
 
     wrong_confirmation = req.model_copy(update={"confirmation": "RESTORE other"})
-    with pytest.raises(InvalidInputError, match="requires confirmation: RESTORE kraddr_geo"):
+    with pytest.raises(InvalidInputError, match="requires confirmation: RESTORE kor_travel_geo"):
         validate_replace_current_restore_request(
             wrong_confirmation,
             settings=settings,
-            target_database="kraddr_geo",
+            target_database="kor_travel_geo",
         )
 
 
 def test_download_token_is_deterministic_and_validates() -> None:
     settings = Settings(
-        pg_dsn="postgresql://addr:secret@localhost:5432/kraddr_geo",
+        pg_dsn="postgresql://addr:secret@localhost:5432/kor_travel_geo",
         backup_download_token_secret="test-secret",
     )
     artifact = OpsArtifact(
@@ -300,9 +300,9 @@ def test_callback_payload_is_signed_with_timestamp_and_callback_id() -> None:
     )
 
     assert b"callback-secret" not in body
-    assert headers["x-kraddr-geo-event"] == "db_backup.done"
-    assert headers["x-kraddr-geo-callback-id"] == "cb_test"
-    assert headers["x-kraddr-geo-signature"] == "sha256=" + callback_signature(
+    assert headers["x-kor-travel-geo-event"] == "db_backup.done"
+    assert headers["x-kor-travel-geo-callback-id"] == "cb_test"
+    assert headers["x-kor-travel-geo-signature"] == "sha256=" + callback_signature(
         settings,
         callback_id="cb_test",
         timestamp="2026-05-28T00:00:00+00:00",
@@ -365,7 +365,9 @@ async def test_callback_delivery_retries_with_fresh_callback_ids(
     assert result.state == "delivered"
     assert result.attempts == 2
     assert len(calls) == 2
-    assert calls[0][2]["x-kraddr-geo-callback-id"] != calls[1][2]["x-kraddr-geo-callback-id"]
+    first_callback_id = calls[0][2]["x-kor-travel-geo-callback-id"]
+    second_callback_id = calls[1][2]["x-kor-travel-geo-callback-id"]
+    assert first_callback_id != second_callback_id
     assert all(call[0] == "http://localhost:9000/hooks/backup" for call in calls)
 
 

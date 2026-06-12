@@ -44,7 +44,7 @@ await client.reverse(127.0, 37.5, sig_cd="11")
 
 hint가 들어온 geocode 요청에서 로컬 DB가 `NOT_FOUND`이면 외부 fallback은 호출하지 않는다. 현재 vworld/juso fallback은 이 hint를 보존하지 못하므로, hint 밖의 결과를 돌려주는 편보다 명시 `NOT_FOUND`가 더 안전하다.
 
-응답 DTO와 OpenAPI 응답 schema는 바꾸지 않았다. schema 변경은 query parameter 추가뿐이며, `openapi.json`과 `kraddr-geo-ui/types/api.gen.ts`를 재생성했다.
+응답 DTO와 OpenAPI 응답 schema는 바꾸지 않았다. schema 변경은 query parameter 추가뿐이며, `openapi.json`과 `kor-travel-geo-ui/types/api.gen.ts`를 재생성했다.
 
 ## 구현 세부
 

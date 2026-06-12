@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from kraddr.geo.loaders.juso_map import MASTER_LAYER_NAMES, discover_sido_dataset
+from kortravelgeo.loaders.juso_map import MASTER_LAYER_NAMES, discover_sido_dataset
 
 JUSO_MAP_ROOT = Path("data/juso/도로명주소 전자지도")
 REQUIRED_BULD_FIELDS = {

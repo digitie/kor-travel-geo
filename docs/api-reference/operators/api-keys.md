@@ -4,10 +4,10 @@
 
 | Provider | 환경변수 | 사용 위치 |
 |----------|----------|-----------|
-| vworld | `KRADDR_GEO_VWORLD_API_KEY` | v1/v2 geocode fallback |
-| juso 검색 | `KRADDR_GEO_JUSO_API_KEY` | v1/v2 geocode fallback |
-| juso 좌표 | `KRADDR_GEO_JUSO_COORD_API_KEY` | juso 검색 결과 좌표 변환 |
-| epost | `KRADDR_GEO_EPOST_API_KEY` | 우편번호 ZIP 다운로드 |
+| vworld | `KTG_VWORLD_API_KEY` | v1/v2 geocode fallback |
+| juso 검색 | `KTG_JUSO_API_KEY` | v1/v2 geocode fallback |
+| juso 좌표 | `KTG_JUSO_COORD_API_KEY` | juso 검색 결과 좌표 변환 |
+| epost | `KTG_EPOST_API_KEY` | 우편번호 ZIP 다운로드 |
 
 ## Provider 문서
 

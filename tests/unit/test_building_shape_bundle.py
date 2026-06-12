@@ -4,8 +4,8 @@ import struct
 
 import pytest
 
-from kraddr.geo.exceptions import LoaderError
-from kraddr.geo.loaders.building_shape_bundle import _key_set_from_buffer
+from kortravelgeo.exceptions import LoaderError
+from kortravelgeo.loaders.building_shape_bundle import _key_set_from_buffer
 
 
 def test_dbf_key_set_skips_deleted_records_and_counts_duplicates() -> None:

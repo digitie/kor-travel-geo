@@ -1,4 +1,4 @@
-"""Alembic environment for kraddr.geo."""
+"""Alembic environment for kortravelgeo."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from kraddr.geo.settings import get_settings
+from kortravelgeo.settings import get_settings
 
 config = context.config
 

@@ -18,5 +18,5 @@ artifacts
 htmlcov
 node_modules
 
-kraddr-geo-ui
-!kraddr-geo-ui/.env.local.example
+kor-travel-geo-ui
+!kor-travel-geo-ui/.env.local.example

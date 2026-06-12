@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from kraddr.geo.dto.admin import (
+from kortravelgeo.dto.admin import (
     BackupCreateRequest,
     CacheMetrics,
     ExplainRequest,
@@ -9,10 +9,10 @@ from kraddr.geo.dto.admin import (
     RestoreCreateRequest,
     UploadSidoZipResponse,
 )
-from kraddr.geo.dto.common import Point, ServiceMeta
-from kraddr.geo.dto.pobox import PoboxInput, PoboxResponse, PoboxResultItem
-from kraddr.geo.dto.search import BBox, SearchInput
-from kraddr.geo.dto.zipcode import ZipcodeInput, ZipcodeResponse, ZipcodeResultItem
+from kortravelgeo.dto.common import Point, ServiceMeta
+from kortravelgeo.dto.pobox import PoboxInput, PoboxResponse, PoboxResultItem
+from kortravelgeo.dto.search import BBox, SearchInput
+from kortravelgeo.dto.zipcode import ZipcodeInput, ZipcodeResponse, ZipcodeResultItem
 
 
 def test_search_input_page_and_bbox_validation() -> None:
@@ -40,7 +40,7 @@ def test_zipcode_input_requires_exactly_one_lookup_key() -> None:
 
 def test_zipcode_response_serializes_zip_source() -> None:
     response = ZipcodeResponse(
-        service=ServiceMeta(name="kraddr-geo", operation="zipcode"),
+        service=ServiceMeta(name="kor-travel-geo", operation="zipcode"),
         status="OK",
         input=ZipcodeInput(address="서울특별시 강남구 테헤란로 152"),
         result=(ZipcodeResultItem(zip_no="06236", source="building_bsi_zon_no"),),
@@ -51,7 +51,7 @@ def test_zipcode_response_serializes_zip_source() -> None:
 
 def test_pobox_defaults_and_response() -> None:
     response = PoboxResponse(
-        service=ServiceMeta(name="kraddr-geo", operation="pobox"),
+        service=ServiceMeta(name="kor-travel-geo", operation="pobox"),
         status="OK",
         input=PoboxInput(query="서울", kind="ALL"),
         result=(PoboxResultItem(zip_no="03000", pobox_kind="PO", pobox_name="서울사서함"),),
@@ -79,7 +79,7 @@ def test_admin_debug_dtos_are_bounded() -> None:
     assert CacheMetrics(enabled=True, entries=0, hits=0, expired=0).enabled is True
     assert BackupCreateRequest().format == "directory_tar_zstd"
     assert BackupCreateRequest(jobs=8, compression_level=5).profile == "serving-ready"
-    assert RestoreCreateRequest(target_database="kraddr_geo_restore").mode == "new_database"
+    assert RestoreCreateRequest(target_database="kor_travel_geo_restore").mode == "new_database"
     assert (
         UploadSidoZipResponse(
             upload_id="u1",

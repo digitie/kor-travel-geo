@@ -13,7 +13,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from kraddr.geo.api.app import create_app  # noqa: E402
+from kortravelgeo.api.app import create_app  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:

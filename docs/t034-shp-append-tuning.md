@@ -35,7 +35,7 @@ INSERT INTO "tl_sprd_intrvl" (...) VALUES (...)
 
 | 파일 | 내용 |
 |------|------|
-| `src/kraddr/geo/loaders/shp/polygons_loader.py` | `TL_SPRD_INTRVL` 전용 DBF parser + `COPY` 적재 경로 추가, row dataclass 기반 COPY projection, CP949/truncated record 오류 문맥 보강 |
+| `src/kortravelgeo/loaders/shp/polygons_loader.py` | `TL_SPRD_INTRVL` 전용 DBF parser + `COPY` 적재 경로 추가, row dataclass 기반 COPY projection, CP949/truncated record 오류 문맥 보강 |
 | `tests/unit/test_shp_loader_gdal.py` | synthetic DBF 기반 projection 테스트, 직접 COPY 경로 라우팅, deleted record skip, decode/truncated 오류 테스트 추가 |
 
 DB 스키마 변경은 없다. `tl_sprd_intrvl`의 기존 컬럼과 PK `(sig_cd, rds_man_no, bsi_int_sn)`를 그대로 사용한다.
@@ -53,8 +53,8 @@ T-036 후속 리뷰 반영으로 COPY 컬럼과 row tuple shape는 `RoadInterval
 | 메모리 | 29GiB total, 실행 시 available 약 27GiB |
 | ext4 여유 공간 | `/dev/sdd` 1007G 중 758G available |
 | NTFS 데이터 공간 | `/mnt/f` 932G 중 267G available |
-| Docker DB | `kraddr-geo-t027-db-1`, `postgis/postgis:16-3.5`, host port `15432` |
-| 실제 데이터 | `/home/digitie/kraddr-geo-data/juso/도로명주소 전자지도` |
+| Docker DB | `kor-travel-geo-t027-db-1`, `postgis/postgis:16-3.5`, host port `15432` |
+| 실제 데이터 | `/home/digitie/kor-travel-geo-data/juso/도로명주소 전자지도` |
 
 ## 실제 DBF 구조 확인
 
@@ -72,21 +72,21 @@ T-036 후속 리뷰 반영으로 COPY 컬럼과 row tuple shape는 `RoadInterval
 튜닝 전 세종 단일 레이어 기준선은 코드 변경 전 `main` 경로에서 같은 방식으로 측정했다.
 
 ```bash
-DB=kraddr_geo_t034_before
+DB=kor_travel_geo_t034_before
 PGPASSWORD=addr dropdb -h localhost -p 15432 -U addr --if-exists "$DB"
 PGPASSWORD=addr createdb -h localhost -p 15432 -U addr "$DB"
-KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/$DB" \
-  TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/kraddr-geo init-db
+KTG_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/$DB" \
+  TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/ktgctl init-db
 
 /usr/bin/time -v env \
-  KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/$DB" \
+  KTG_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/$DB" \
   TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
   .venv/bin/python - <<'PY'
 from pathlib import Path
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.loaders.shp.polygons_loader import build_shp_load_plan, _load_plans_sync
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.loaders.shp.polygons_loader import build_shp_load_plan, _load_plans_sync
 
-path = Path("/home/digitie/kraddr-geo-data/juso/도로명주소 전자지도/세종특별자치시")
+path = Path("/home/digitie/kor-travel-geo-data/juso/도로명주소 전자지도/세종특별자치시")
 plans = tuple(p for p in build_shp_load_plan(path, source_yyyymm="202604") if p.source_layer == "TL_SPRD_INTRVL")
 engine = make_async_engine()
 try:
@@ -100,10 +100,10 @@ PY
 튜닝 후 세종과 경기도 단일 레이어도 같은 내부 호출로 측정했다. 세종 9개 레이어 전체 검증은 public CLI를 사용했다.
 
 ```bash
-KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t034_sejong" \
+KTG_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t034_sejong" \
   TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
-  .venv/bin/kraddr-geo load shp \
-  "/home/digitie/kraddr-geo-data/juso/도로명주소 전자지도/세종특별자치시" \
+  .venv/bin/ktgctl load shp \
+  "/home/digitie/kor-travel-geo-data/juso/도로명주소 전자지도/세종특별자치시" \
   --mode full --yyyymm 202604
 ```
 
@@ -149,7 +149,7 @@ KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t03
 
 ### 세종특별자치시 SHP 9개 레이어 전체
 
-`kraddr-geo load shp ... --mode full --yyyymm 202604` 실행 결과:
+`ktgctl load shp ... --mode full --yyyymm 202604` 실행 결과:
 
 | 항목 | 값 |
 |------|----|
@@ -186,15 +186,15 @@ KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t03
 
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py -q
-TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kortravelgeo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py
 ```
 
 추가로 실제 Docker PostGIS에서 다음을 확인했다.
 
-- `kraddr_geo_t034_before`: 세종 `TL_SPRD_INTRVL` 기존 경로 100,009행, 36.12초.
-- `kraddr_geo_t034_after`: 세종 `TL_SPRD_INTRVL` 새 경로 100,009행, 1.59초.
-- `kraddr_geo_t034_after`: 경기도 `TL_SPRD_INTRVL` 새 경로 2,677,715행, 15.88초.
-- `kraddr_geo_t034_sejong`: 세종 9개 SHP 레이어 전체 적재 성공, 31.69초.
+- `kor_travel_geo_t034_before`: 세종 `TL_SPRD_INTRVL` 기존 경로 100,009행, 36.12초.
+- `kor_travel_geo_t034_after`: 세종 `TL_SPRD_INTRVL` 새 경로 100,009행, 1.59초.
+- `kor_travel_geo_t034_after`: 경기도 `TL_SPRD_INTRVL` 새 경로 2,677,715행, 15.88초.
+- `kor_travel_geo_t034_sejong`: 세종 9개 SHP 레이어 전체 적재 성공, 31.69초.
 
 ## 후속 작업
 

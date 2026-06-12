@@ -1,6 +1,6 @@
 # 역지오코딩
 
-`kraddr-geo`의 역지오코딩은 `core.reverse_geocoder.reverse_geocode()`와 `infra.reverse_repo.ReverseRepository`가 담당한다. 라이브러리 진입점은 후보 목록 응답을 반환하는 `AsyncAddressClient.reverse(lon, lat, ...)`이며 REST v1 엔드포인트는 `GET /v1/address/reverse`다.
+`kor-travel-geo`의 역지오코딩은 `core.reverse_geocoder.reverse_geocode()`와 `infra.reverse_repo.ReverseRepository`가 담당한다. 라이브러리 진입점은 후보 목록 응답을 반환하는 `AsyncAddressClient.reverse(lon, lat, ...)`이며 REST v1 엔드포인트는 `GET /v1/address/reverse`다.
 
 > 이전(v1) SpatiaLite 기반 `SpatialiteAddressStore.get_address()`는 `v1` 브랜치에 보존되어 있다. `main`은 PostgreSQL + PostGIS / `AsyncAddressClient` 기준만 다룬다(ADR-001, ADR-002).
 
@@ -42,7 +42,7 @@ class ReverseInput(BaseModel):
 
 ```python
 import asyncio
-from kraddr.geo import AsyncAddressClient
+from kortravelgeo import AsyncAddressClient
 
 async def main():
     async with AsyncAddressClient() as client:
@@ -64,7 +64,7 @@ GET /v1/address/reverse?point=127.028601,37.500344&crs=EPSG:4326&type=both&zipco
 
 ## 디버깅 UI
 
-`kraddr-geo-ui`의 `/debug/reverse` 페이지에서 VWorld/MapLibre 지도를 클릭하면 `(lon, lat)` 입력값이 갱신된다. 운영자가 조회 버튼을 누르면 `/v1/address/reverse` 응답을 JSON 뷰어로 확인한다. EXPLAIN으로 인덱스 사용을 확인하려면 `/debug/explain`에서 raw SQL을 붙여 실행한다. 지도 wrapper에서 공통 VWorld/MapLibre 문제가 발견되면 `digitie/maplibre-vworld-js`도 수정 대상에 포함하고, reverse geocode 입력/결과 표시처럼 이 프로젝트 특화 동작은 `kraddr-geo-ui`에 둔다.
+`kor-travel-geo-ui`의 `/debug/reverse` 페이지에서 VWorld/MapLibre 지도를 클릭하면 `(lon, lat)` 입력값이 갱신된다. 운영자가 조회 버튼을 누르면 `/v1/address/reverse` 응답을 JSON 뷰어로 확인한다. EXPLAIN으로 인덱스 사용을 확인하려면 `/debug/explain`에서 raw SQL을 붙여 실행한다. 지도 wrapper에서 공통 VWorld/MapLibre 문제가 발견되면 `digitie/maplibre-vworld-js`도 수정 대상에 포함하고, reverse geocode 입력/결과 표시처럼 이 프로젝트 특화 동작은 `kor-travel-geo-ui`에 둔다.
 
 ## 알려진 함정
 

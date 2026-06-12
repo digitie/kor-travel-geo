@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from kraddr.geo.dto.common import CRS, Page, Point, ServiceMeta, ZipSource
+from kortravelgeo.dto.common import CRS, Page, Point, ServiceMeta, ZipSource
 
 
 class _CrsModel(BaseModel):
@@ -35,4 +35,4 @@ def test_page_bounds() -> None:
 
 def test_enum_serializes_to_wire_value() -> None:
     assert ZipSource.BUILDING_BSI_ZON_NO.value == "building_bsi_zon_no"
-    assert ServiceMeta(name="kraddr-geo", operation="geocode").version == "2.0"
+    assert ServiceMeta(name="kor-travel-geo", operation="geocode").version == "2.0"

@@ -21,7 +21,7 @@ fi
 
 # 함정 2: 프론트 검증용 Linux Node가 Windows shim보다 앞서게 한다.
 # nvm이 있으면 우선 사용하고, 없으면 경고만 한다(frontend_check.sh도 /mnt npm이면 hard-fail).
-if [ -z "${KRADDR_SKIP_NVM:-}" ] && [ -s "$HOME/.nvm/nvm.sh" ]; then
+if [ -z "${KTG_SKIP_NVM:-}" ] && [ -s "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck disable=SC1091
   . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 || true
   nvm use --silent default >/dev/null 2>&1 || true

@@ -4,9 +4,9 @@ import inspect
 
 import pytest
 
-from kraddr.geo.api import app as api_app
-from kraddr.geo.cli import main as cli_main
-from kraddr.geo.infra.concurrency import (
+from kortravelgeo.api import app as api_app
+from kortravelgeo.cli import main as cli_main
+from kortravelgeo.infra.concurrency import (
     AdvisoryLockKey,
     AdvisoryLockNamespace,
     ConcurrentExecutionError,

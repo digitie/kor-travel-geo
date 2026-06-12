@@ -12,26 +12,26 @@ T-046에서는 코드 구현, 단위 테스트, 관리 UI, OpenAPI 타입 동기
 
 | 영역 | 파일 | 내용 |
 |------|------|------|
-| DTO | `src/kraddr/geo/dto/admin.py` | `BackupCreateRequest`, `RestoreCreateRequest`, `BackupArtifact`, `db_backup`/`db_restore` job kind 추가 |
-| 설정 | `src/kraddr/geo/settings.py` | `backup_allowed_dirs`, `backup_temp_dir`, `backup_default_jobs`, `backup_default_compression_level`, `backup_artifact_ttl_days`, `backup_callback_allowed_hosts`, `backup_callback_secret`, `backup_callback_max_attempts`, `backup_callback_backoff_ms`, `backup_download_token_secret` 추가 |
-| 실행 로직 | `src/kraddr/geo/infra/backup.py` | path allowlist 검증, `pg_dump -Fd`, `tar.zst`, checksum, manifest, `pg_restore -Fd`, target DB empty check, HMAC callback retry, download token |
-| metadata | `src/kraddr/geo/infra/admin_repo.py` | `ops.artifacts` insert/get/update/delete helper 추가 |
-| job queue | `src/kraddr/geo/api/_jobs.py`, `src/kraddr/geo/api/app.py` | handler payload에 `_job_id` 주입, `db_backup`/`db_restore` handler 등록, full-load batch successor 계산에서 control kind로 분리 |
-| REST API | `src/kraddr/geo/api/routers/admin.py` | `/v1/admin/backups`, `/v1/admin/backups/{artifact_id}`, `/download`, `/delete`, `/v1/admin/restores`, `/v1/admin/jobs/{job_id}/events` 추가 |
-| CLI | `src/kraddr/geo/cli/main.py` | `kraddr-geo backup create/list/show/delete`, `kraddr-geo restore create` 추가 |
-| UI | `kraddr-geo-ui/app/admin/backups/page.tsx`, `components/admin/BackupsPanel.tsx` | 백업 생성, 복원 등록, job 진행률/취소, artifact 목록, 다운로드/삭제 UI |
-| 타입 | `openapi.json`, `kraddr-geo-ui/types/api.gen.ts`, `kraddr-geo-ui/lib/schemas.gen.ts` | OpenAPI와 프론트엔드 생성 타입 갱신 |
+| DTO | `src/kortravelgeo/dto/admin.py` | `BackupCreateRequest`, `RestoreCreateRequest`, `BackupArtifact`, `db_backup`/`db_restore` job kind 추가 |
+| 설정 | `src/kortravelgeo/settings.py` | `backup_allowed_dirs`, `backup_temp_dir`, `backup_default_jobs`, `backup_default_compression_level`, `backup_artifact_ttl_days`, `backup_callback_allowed_hosts`, `backup_callback_secret`, `backup_callback_max_attempts`, `backup_callback_backoff_ms`, `backup_download_token_secret` 추가 |
+| 실행 로직 | `src/kortravelgeo/infra/backup.py` | path allowlist 검증, `pg_dump -Fd`, `tar.zst`, checksum, manifest, `pg_restore -Fd`, target DB empty check, HMAC callback retry, download token |
+| metadata | `src/kortravelgeo/infra/admin_repo.py` | `ops.artifacts` insert/get/update/delete helper 추가 |
+| job queue | `src/kortravelgeo/api/_jobs.py`, `src/kortravelgeo/api/app.py` | handler payload에 `_job_id` 주입, `db_backup`/`db_restore` handler 등록, full-load batch successor 계산에서 control kind로 분리 |
+| REST API | `src/kortravelgeo/api/routers/admin.py` | `/v1/admin/backups`, `/v1/admin/backups/{artifact_id}`, `/download`, `/delete`, `/v1/admin/restores`, `/v1/admin/jobs/{job_id}/events` 추가 |
+| CLI | `src/kortravelgeo/cli/main.py` | `ktgctl backup create/list/show/delete`, `ktgctl restore create` 추가 |
+| UI | `kor-travel-geo-ui/app/admin/backups/page.tsx`, `components/admin/BackupsPanel.tsx` | 백업 생성, 복원 등록, job 진행률/취소, artifact 목록, 다운로드/삭제 UI |
+| 타입 | `openapi.json`, `kor-travel-geo-ui/types/api.gen.ts`, `kor-travel-geo-ui/lib/schemas.gen.ts` | OpenAPI와 프론트엔드 생성 타입 갱신 |
 
 현재 구현의 기본 동작은 다음과 같다.
 
-1. `POST /v1/admin/backups` 또는 `kraddr-geo backup create`가 `db_backup` job을 등록/실행한다.
-2. 백업 대상 디렉터리는 `KRADDR_GEO_BACKUP_ALLOWED_DIRS` 하위 resolve path만 허용한다. 상대 경로는 첫 allowlist root 기준으로 해석한다.
+1. `POST /v1/admin/backups` 또는 `ktgctl backup create`가 `db_backup` job을 등록/실행한다.
+2. 백업 대상 디렉터리는 `KTG_BACKUP_ALLOWED_DIRS` 하위 resolve path만 허용한다. 상대 경로는 첫 allowlist root 기준으로 해석한다.
 3. `pg_dump --format=directory --jobs=N` 결과를 임시 디렉터리에 만든다.
 4. `manifest.json`, `checksums.sha256`, job log를 만들고 `tar --use-compress-program=zstd -T0 -<level>`로 `.tar.zst.part` 파일을 생성한다.
 5. archive SHA256과 크기를 계산한 뒤 `.part` 파일을 최종 `.tar.zst` 경로로 rename한다.
 6. archive SHA256과 크기를 `ops.artifacts(artifact_type='db_backup')`에 저장한다.
 7. 완료 artifact는 HMAC 기반 download token이 붙은 `download_url`을 API 응답에 포함한다.
-8. `POST /v1/admin/restores` 또는 `kraddr-geo restore create`는 artifact 또는 archive path를 받아 새 빈 DB에 `pg_restore --format=directory --jobs=N`로 복원한다.
+8. `POST /v1/admin/restores` 또는 `ktgctl restore create`는 artifact 또는 archive path를 받아 새 빈 DB에 `pg_restore --format=directory --jobs=N`로 복원한다.
 9. 기본 복원 모드 `new_database`는 현재 DB와 같은 target DB를 거절하고, target DB가 비어 있지 않으면 실패한다.
 10. 복원 후 `ANALYZE`와 smoke test를 수행한다. `run_consistency=true`는 현재 target DB 연결 구조상 별도 후속 실행이 필요하므로 job log에 명시한다.
 11. 백업/복원 job은 기존 `load_jobs` 상태 전이, 진행률, `log_tail`, 취소, startup recovery 규칙을 공유한다.
@@ -102,7 +102,7 @@ T-047 전국 DB 실측에서는 `pg_dump -Fd` 산출물의 대형 table data가 
 압축 파일명 예:
 
 ```text
-kraddr_geo_backup_20260526T153000Z_pg16_postgis34_daegu.tar.zst
+kor_travel_geo_backup_20260526T153000Z_pg16_postgis34_daegu.tar.zst
 ```
 
 아카이브 내부:
@@ -126,7 +126,7 @@ logs/
   "app_version": "0.1.0",
   "git_commit": "unknown-or-sha",
   "database": {
-    "name": "kraddr_geo",
+    "name": "kor_travel_geo",
     "postgres_version": "16.x",
     "postgis_version": "3.4.x",
     "alembic_revision": "head",
@@ -221,7 +221,7 @@ logs/
 11. 선택적으로 `validate consistency --scope full` 또는 축소 scope를 실행한다.
 12. 성공하면 UI에 "복원 완료"와 target DB 정보를 보여 준다.
 
-운영 DB를 직접 덮어쓰는 `--replace-current`는 기본 금지다. 필요한 경우 maintenance mode, 모든 app connection 종료, typed confirmation, 백업 선행 생성, rollback plan을 요구한다. 일반 운영 경로는 "새 DB 복원 → 검증 → `KRADDR_GEO_PG_DSN` 전환 → 앱 재시작"이다.
+운영 DB를 직접 덮어쓰는 `--replace-current`는 기본 금지다. 필요한 경우 maintenance mode, 모든 app connection 종료, typed confirmation, 백업 선행 생성, rollback plan을 요구한다. 일반 운영 경로는 "새 DB 복원 → 검증 → `KTG_PG_DSN` 전환 → 앱 재시작"이다.
 
 복원 진행률 phase:
 
@@ -244,11 +244,11 @@ logs/
 설정 예:
 
 ```text
-KRADDR_GEO_BACKUP_ALLOWED_DIRS=/mnt/f/backups/kraddr-geo,/mnt/d/backups/kraddr-geo
-KRADDR_GEO_BACKUP_TEMP_DIR=/tmp/kraddr-geo-backup
-KRADDR_GEO_BACKUP_DEFAULT_JOBS=4
-KRADDR_GEO_BACKUP_ARTIFACT_TTL_DAYS=30
-KRADDR_GEO_BACKUP_CALLBACK_ALLOWED_HOSTS=localhost,127.0.0.1,internal.example
+KTG_BACKUP_ALLOWED_DIRS=/mnt/f/backups/kor-travel-geo,/mnt/d/backups/kor-travel-geo
+KTG_BACKUP_TEMP_DIR=/tmp/kor-travel-geo-backup
+KTG_BACKUP_DEFAULT_JOBS=4
+KTG_BACKUP_ARTIFACT_TTL_DAYS=30
+KTG_BACKUP_CALLBACK_ALLOWED_HOSTS=localhost,127.0.0.1,internal.example
 ```
 
 보안 규칙:
@@ -267,7 +267,7 @@ KRADDR_GEO_BACKUP_CALLBACK_ALLOWED_HOSTS=localhost,127.0.0.1,internal.example
 ```text
 POST /v1/admin/backups
   body: {
-    "destination_dir": "/mnt/f/backups/kraddr-geo",
+    "destination_dir": "/mnt/f/backups/kor-travel-geo",
     "profile": "serving-ready",
     "format": "directory_tar_zstd",
     "jobs": 4,
@@ -295,7 +295,7 @@ POST /v1/admin/backups/{artifact_id}/delete
 POST /v1/admin/restores
   body: {
     "artifact_id": "backup_...",
-    "target_database": "kraddr_geo_restore_20260526",
+    "target_database": "kor_travel_geo_restore_20260526",
     "mode": "new_database",
     "jobs": 4,
     "run_smoke_test": true,
@@ -337,13 +337,13 @@ callback header:
 
 ```text
 content-type: application/json
-x-kraddr-geo-event: db_backup.done
-x-kraddr-geo-callback-id: cb_...
-x-kraddr-geo-timestamp: 2026-05-26T15:40:00+00:00
-x-kraddr-geo-signature: sha256=<hmac-sha256-hex>
+x-kor-travel-geo-event: db_backup.done
+x-kor-travel-geo-callback-id: cb_...
+x-kor-travel-geo-timestamp: 2026-05-26T15:40:00+00:00
+x-kor-travel-geo-signature: sha256=<hmac-sha256-hex>
 ```
 
-T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, `failed`)에서 최대 `KRADDR_GEO_BACKUP_CALLBACK_MAX_ATTEMPTS`회 시도한다. 기본값은 3회이며 retry 간격은 `KRADDR_GEO_BACKUP_CALLBACK_BACKOFF_MS`를 기준으로 exponential backoff를 적용한다. 서명은 `timestamp + "." + callback_id + "." + body` byte sequence에 HMAC-SHA256을 적용한다. 수신자는 timestamp window와 `callback_id` de-duplication으로 replay를 거절할 수 있다. retry 중복은 별도 문제이므로, attempt 1 처리 후 응답이 유실되어 attempt 2가 새 `callback_id`로 도착하는 경우에는 수신자가 `(artifact_id, event)`를 stable idempotency key로 사용해 중복 업무 처리를 막아야 한다. 외부 수신자가 서명을 검증하려면 `KRADDR_GEO_BACKUP_CALLBACK_SECRET`을 설정한다. 미설정 fallback 서명은 서버 내부 secret에서 파생되어 외부 수신자가 재현할 수 없다. callback 실패는 백업 파일 또는 복원 로그 artifact의 성공 여부를 뒤집지 않고, `ops.artifacts.callback_state`와 `manifest.callback_delivery`에 최종 delivery 상태, attempt 수, callback ID 목록, 마지막 오류를 따로 기록한다.
+T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, `failed`)에서 최대 `KTG_BACKUP_CALLBACK_MAX_ATTEMPTS`회 시도한다. 기본값은 3회이며 retry 간격은 `KTG_BACKUP_CALLBACK_BACKOFF_MS`를 기준으로 exponential backoff를 적용한다. 서명은 `timestamp + "." + callback_id + "." + body` byte sequence에 HMAC-SHA256을 적용한다. 수신자는 timestamp window와 `callback_id` de-duplication으로 replay를 거절할 수 있다. retry 중복은 별도 문제이므로, attempt 1 처리 후 응답이 유실되어 attempt 2가 새 `callback_id`로 도착하는 경우에는 수신자가 `(artifact_id, event)`를 stable idempotency key로 사용해 중복 업무 처리를 막아야 한다. 외부 수신자가 서명을 검증하려면 `KTG_BACKUP_CALLBACK_SECRET`을 설정한다. 미설정 fallback 서명은 서버 내부 secret에서 파생되어 외부 수신자가 재현할 수 없다. callback 실패는 백업 파일 또는 복원 로그 artifact의 성공 여부를 뒤집지 않고, `ops.artifacts.callback_state`와 `manifest.callback_delivery`에 최종 delivery 상태, attempt 수, callback ID 목록, 마지막 오류를 따로 기록한다.
 
 ## UI 설계
 
@@ -398,7 +398,7 @@ T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, 
 ### 사전 조건
 
 - Docker PostgreSQL/PostGIS가 떠 있다.
-- 빈 DB `kraddr_geo_t046_daegu`를 만든다.
+- 빈 DB `kor_travel_geo_t046_daegu`를 만든다.
 - `data/juso`에 다음 원천이 있다.
   - `202603_도로명주소 한글_전체분/rnaddrkor_daegu.txt`
   - `202603_도로명주소 한글_전체분/jibun_rnaddrkor_daegu.txt`
@@ -432,7 +432,7 @@ T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, 
 
 ### 복원 검증
 
-1. 빈 DB `kraddr_geo_t046_daegu_restore`를 만든다.
+1. 빈 DB `kor_travel_geo_t046_daegu_restore`를 만든다.
 2. archive를 restore job으로 복원한다.
 3. restore progress가 `preflight → extract → restore → analyze → validate → finalize`를 지나 `done`이 되는지 확인한다.
 4. 원본 DB와 복원 DB의 핵심 row count를 비교한다.
@@ -445,11 +445,11 @@ T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, 
 
 | 항목 | 값 |
 |------|----|
-| 작업 디렉터리 | `/home/digitie/dev/python-kraddr-geo` |
-| Docker DB | `kraddr-geo-t027-db-1`, `localhost:15432` |
-| source DB | `kraddr_geo_t046_daegu` |
-| restore DB | `kraddr_geo_t046_daegu_restore` |
-| 백업 디렉터리 | `/tmp/kraddr-t046/backups` |
+| 작업 디렉터리 | `/home/digitie/dev/kor-travel-geo` |
+| Docker DB | `kor-travel-geo-t027-db-1`, `localhost:15432` |
+| source DB | `kor_travel_geo_t046_daegu` |
+| restore DB | `kor_travel_geo_t046_daegu_restore` |
+| 백업 디렉터리 | `/tmp/kortravel-t046/backups` |
 | zstd | sudo 설치 없이 `apt download zstd` 후 `/tmp/codex-zstd/usr/bin/zstd`를 PATH에 추가 |
 | 검증 시작/종료 | 2026-05-27 09:07:16 KST ~ 2026-05-27 09:27:19 KST |
 
@@ -468,7 +468,7 @@ T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, 
 
 | 항목 | 결과 |
 |------|------|
-| 백업 파일 | `/tmp/kraddr-t046/backups/t046_daegu_backup.tar.zst` |
+| 백업 파일 | `/tmp/kortravel-t046/backups/t046_daegu_backup.tar.zst` |
 | 파일 크기 | 86,752,398 bytes, 약 83 MiB |
 | archive SHA256 | `3718e98d25226215606d6324ce19422756fe900721abc22c060583322329cb57` |
 | `db_backup` artifact 상태 | `available` |
@@ -480,7 +480,7 @@ T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, 
 
 검증 중 발견해 코드에 반영한 문제:
 
-- `KRADDR_GEO_BACKUP_ALLOWED_DIRS=/tmp/a,/tmp/b`처럼 문서에 적은 CSV 환경변수가 pydantic-settings의 complex JSON decoding 단계에서 실패했다. `Settings.backup_allowed_dirs`와 `backup_callback_allowed_hosts`에 `NoDecode`를 적용해 CSV validator가 실제 env 값에도 동작하도록 수정했다.
+- `KTG_BACKUP_ALLOWED_DIRS=/tmp/a,/tmp/b`처럼 문서에 적은 CSV 환경변수가 pydantic-settings의 complex JSON decoding 단계에서 실패했다. `Settings.backup_allowed_dirs`와 `backup_callback_allowed_hosts`에 `NoDecode`를 적용해 CSV validator가 실제 env 값에도 동작하도록 수정했다.
 - SHP 로더는 `.../대구광역시/27000`이 아니라 `.../대구광역시`처럼 시도 루트를 받아 내부 SIG 코드 디렉터리를 찾아야 한다. 검증 명령과 문서에 이 경로 기준을 명시했다.
 
 ### 실패/예외 시나리오

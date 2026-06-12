@@ -27,18 +27,18 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from sqlalchemy import TextClause, text
 from sqlalchemy.exc import DBAPIError, ProgrammingError
 
-from kraddr.geo.dto.region import EMPTY_REGION_PARAMS, RegionHint
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.infra.geocode_repo import (
+from kortravelgeo.dto.region import EMPTY_REGION_PARAMS, RegionHint
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.infra.geocode_repo import (
     _FUZZY_ROADS,
     _LOOKUP_JIBUN,
     _LOOKUP_ROAD,
     _SPPN_AREA_BY_POINT,
 )
-from kraddr.geo.infra.reverse_repo import _NEAREST_SQL, _SPPN_AREAS_SQL
-from kraddr.geo.infra.search_repo import _SEARCH_EXACT_SQL, _SEARCH_SQL, _normalize_search_query
-from kraddr.geo.infra.zip_repo import _ZIP_BY_ADDRESS, _ZIP_BY_POINT
-from kraddr.geo.settings import Settings, get_settings
+from kortravelgeo.infra.reverse_repo import _NEAREST_SQL, _SPPN_AREAS_SQL
+from kortravelgeo.infra.search_repo import _SEARCH_EXACT_SQL, _SEARCH_SQL, _normalize_search_query
+from kortravelgeo.infra.zip_repo import _ZIP_BY_ADDRESS, _ZIP_BY_POINT
+from kortravelgeo.settings import Settings, get_settings
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence
@@ -206,7 +206,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--pg-dsn",
-        help="PostgreSQL DSN. Defaults to KRADDR_GEO_PG_DSN/settings.",
+        help="PostgreSQL DSN. Defaults to KTG_PG_DSN/settings.",
     )
     parser.add_argument(
         "--output-dir",
@@ -1383,14 +1383,14 @@ def _git_command(git_repo: str | None, *args: str) -> tuple[str, ...]:
 
 
 def _git_repo() -> str | None:
-    env_repo = os.environ.get("KRADDR_GEO_GIT_REPO")
+    env_repo = os.environ.get("KTG_GIT_REPO")
     if env_repo:
         return _as_windows_path(env_repo)
     cwd = Path.cwd()
-    if cwd.name.startswith("python-kraddr-geo-") and cwd.name.endswith("-test"):
+    if cwd.name.startswith("kor-travel-geo-") and cwd.name.endswith("-test"):
         return f"F:/dev/{cwd.name.removesuffix('-test')}"
-    if (Path("/mnt/f/dev/python-kraddr-geo-codex") / ".git").exists():
-        return "F:/dev/python-kraddr-geo-codex"
+    if (Path("/mnt/f/dev/kor-travel-geo-codex") / ".git").exists():
+        return "F:/dev/kor-travel-geo-codex"
     return None
 
 
@@ -1407,7 +1407,7 @@ def _is_windows_path(path: str) -> bool:
 
 
 def _windows_git_executable() -> str:
-    env_git = os.environ.get("KRADDR_GEO_GIT_EXE")
+    env_git = os.environ.get("KTG_GIT_EXE")
     if env_git:
         return env_git
     for candidate in (

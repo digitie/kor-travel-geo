@@ -6,21 +6,21 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from kraddr.geo.core.geocoder import geocode
-from kraddr.geo.core.sppn import format_national_point_number_from_5179
-from kraddr.geo.dto.common import Point
-from kraddr.geo.dto.geocode import GeocodeInput
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.infra.geocode_repo import GeocodeRepository
-from kraddr.geo.infra.reverse_repo import ReverseRepository
-from kraddr.geo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL, iter_sql_statements
-from kraddr.geo.loaders.postload import resolve_text_geometry_links
-from kraddr.geo.loaders.sppn_makarea_loader import load_sppn_makarea
-from kraddr.geo.loaders.text.daily_juso_loader import load_daily_juso_delta
-from kraddr.geo.loaders.text.juso_hangul_loader import load_juso_hangul
-from kraddr.geo.loaders.text.locsum_loader import load_locsum
-from kraddr.geo.loaders.text.navi_loader import load_navi
-from kraddr.geo.loaders.text.parcel_link_loader import (
+from kortravelgeo.core.geocoder import geocode
+from kortravelgeo.core.sppn import format_national_point_number_from_5179
+from kortravelgeo.dto.common import Point
+from kortravelgeo.dto.geocode import GeocodeInput
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.infra.geocode_repo import GeocodeRepository
+from kortravelgeo.infra.reverse_repo import ReverseRepository
+from kortravelgeo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL, iter_sql_statements
+from kortravelgeo.loaders.postload import resolve_text_geometry_links
+from kortravelgeo.loaders.sppn_makarea_loader import load_sppn_makarea
+from kortravelgeo.loaders.text.daily_juso_loader import load_daily_juso_delta
+from kortravelgeo.loaders.text.juso_hangul_loader import load_juso_hangul
+from kortravelgeo.loaders.text.locsum_loader import load_locsum
+from kortravelgeo.loaders.text.navi_loader import load_navi
+from kortravelgeo.loaders.text.parcel_link_loader import (
     JusoParcelLinkRow,
     discover_daily_lnbr_sources,
     discover_jibun_rnaddrkor_files,
@@ -29,26 +29,26 @@ from kraddr.geo.loaders.text.parcel_link_loader import (
     load_daily_parcel_link_delta,
     load_juso_parcel_link_snapshot,
 )
-from kraddr.geo.loaders.text.roadaddr_entrance_loader import (
+from kortravelgeo.loaders.text.roadaddr_entrance_loader import (
     RoadAddrEntranceRow,
     discover_roadaddr_entrance_sources,
     iter_roadaddr_entrance_rows,
     load_roadaddr_entrances,
 )
-from kraddr.geo.settings import Settings
+from kortravelgeo.settings import Settings
 
 DATA_ROOTS = (
     Path("data/juso"),
-    Path("/mnt/f/dev/python-kraddr-geo/data/juso"),
-    Path("/home/digitie/kraddr-geo-data/juso"),
+    Path("/mnt/f/dev/kor-travel-geo/data/juso"),
+    Path("/home/digitie/kor-travel-geo-data/juso"),
 )
 
 
 @pytest.mark.asyncio
 async def test_real_postgres_can_load_sppn_makarea_and_lookup_when_dsn_is_set() -> None:
-    dsn = os.getenv("KRADDR_GEO_TEST_PG_DSN")
+    dsn = os.getenv("KTG_TEST_PG_DSN")
     if not dsn:
-        pytest.skip("set KRADDR_GEO_TEST_PG_DSN to run actual PostgreSQL SPPN load")
+        pytest.skip("set KTG_TEST_PG_DSN to run actual PostgreSQL SPPN load")
 
     data_root = _data_root()
     if data_root is None:
@@ -143,9 +143,9 @@ SELECT row_count, source_yyyymm, source_set ->> 'kind' AS kind
 
 @pytest.mark.asyncio
 async def test_real_postgres_can_load_actual_juso_samples_when_dsn_is_set() -> None:
-    dsn = os.getenv("KRADDR_GEO_TEST_PG_DSN")
+    dsn = os.getenv("KTG_TEST_PG_DSN")
     if not dsn:
-        pytest.skip("set KRADDR_GEO_TEST_PG_DSN to run actual PostgreSQL COPY load")
+        pytest.skip("set KTG_TEST_PG_DSN to run actual PostgreSQL COPY load")
 
     data_root = _data_root()
     if data_root is None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from kraddr.geo.dto.region import RegionHint, region_params
+from kortravelgeo.dto.region import RegionHint, region_params
 
 
 def test_region_hint_accepts_sido_sigungu_and_bjd_prefixes() -> None:

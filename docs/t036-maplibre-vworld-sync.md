@@ -2,7 +2,7 @@
 
 ## 목적
 
-`kraddr-geo-ui`가 소비하는 `maplibre-vworld` GitHub dependency를 `digitie/maplibre-vworld-js`의 최신 `main` 커밋으로 올리고, 디버그 UI가 기존 click/error overlay 계약을 유지한 채 최신 package API를 사용할 수 있는지 검증한다.
+`kor-travel-geo-ui`가 소비하는 `maplibre-vworld` GitHub dependency를 `digitie/maplibre-vworld-js`의 최신 `main` 커밋으로 올리고, 디버그 UI가 기존 click/error overlay 계약을 유지한 채 최신 package API를 사용할 수 있는지 검증한다.
 
 이번 작업은 지도 컴포넌트 전체를 upstream `VWorldMap`으로 대체하는 작업이 아니었다. 현재 디버그 UI는 reverse/geocode 화면 전용으로 다음 동작을 직접 보장한다.
 
@@ -14,7 +14,7 @@
 
 따라서 T-036의 범위는 dependency SHA 갱신, helper API 변경 반영, 소비자 build/test 검증, 문서화로 제한한다.
 
-T-044에서는 이 보류분을 0.1.0 기준 문서-only로 재확인한다. 목표는 `CoordinateMap.tsx`의 직접 MapLibre lifecycle 소유를 줄이고, 후속 구현 PR에서 upstream `maplibre-vworld-js`의 `VWorldMap` 또는 동등한 Hook/component를 감싸는 domain wrapper로 만드는 것이다. 부족한 범용 upstream 기능이 있으면 T-044 안에서 직접 수정하지 않고 별도 upstream task/PR로 분리한다. 단, geocode/reverse 입력 연결, 정합성/성능/적재 overlay, key 미설정 fallback 문구와 layout처럼 이 프로젝트에만 의미가 있는 기능은 `kraddr-geo-ui` wrapper에서 구현한다.
+T-044에서는 이 보류분을 0.1.0 기준 문서-only로 재확인한다. 목표는 `CoordinateMap.tsx`의 직접 MapLibre lifecycle 소유를 줄이고, 후속 구현 PR에서 upstream `maplibre-vworld-js`의 `VWorldMap` 또는 동등한 Hook/component를 감싸는 domain wrapper로 만드는 것이다. 부족한 범용 upstream 기능이 있으면 T-044 안에서 직접 수정하지 않고 별도 upstream task/PR로 분리한다. 단, geocode/reverse 입력 연결, 정합성/성능/적재 overlay, key 미설정 fallback 문구와 layout처럼 이 프로젝트에만 의미가 있는 기능은 `kor-travel-geo-ui` wrapper에서 구현한다.
 
 2026-05-27 후속 PR #34~#47 리뷰 audit/fixup에서 최신 upstream `main`은 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`로 다시 확인되었다. 현재 dependency는 이 SHA로 갱신됐으며, 최신성 확인과 책임 경계는 ADR-032를 따른다. 2026-05-28 T-044 문서-only 재확인에서는 `v0.1.0` tag commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`를 기준으로 public API를 확인했고, dependency와 upstream 코드는 수정하지 않았다.
 
@@ -34,7 +34,7 @@ T-044에서는 이 보류분을 0.1.0 기준 문서-only로 재확인한다. 목
 
 최신 upstream은 tile URL redaction helper 이름을 `redactVWorldTileUrl()`에서 `redactVWorldUrl()`로 바꿨다. 또한 redaction 표기가 `[redacted]`에서 `***`로 바뀌었다.
 
-`kraddr-geo-ui` 내부 컴포넌트는 아직 `redactVWorldTileUrl` 이름을 사용한다. 이 이름은 UI 내부 경계의 안정성을 위한 local alias이며, 실제 구현은 upstream `redactVWorldUrl()`을 그대로 소비한다.
+`kor-travel-geo-ui` 내부 컴포넌트는 아직 `redactVWorldTileUrl` 이름을 사용한다. 이 이름은 UI 내부 경계의 안정성을 위한 local alias이며, 실제 구현은 upstream `redactVWorldUrl()`을 그대로 소비한다.
 
 ```ts
 export {
@@ -51,10 +51,10 @@ export {
 
 ## 반영 파일
 
-- `kraddr-geo-ui/package.json`: T-036 당시 `maplibre-vworld` dependency를 `git+https://github.com/digitie/maplibre-vworld-js.git#c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다.
-- `kraddr-geo-ui/package-lock.json`: root dependency와 `node_modules/maplibre-vworld.resolved`를 같은 HTTPS SHA로 맞춘다. CI에서 SSH key 없이 설치되어야 하므로 `git+https`를 유지한다.
-- `kraddr-geo-ui/lib/vworld.ts`: `redactVWorldUrl as redactVWorldTileUrl` alias를 둔다.
-- `kraddr-geo-ui/tests/unit/vworld.test.ts`: 최신 upstream redaction 표기 `***`를 검증한다.
+- `kor-travel-geo-ui/package.json`: T-036 당시 `maplibre-vworld` dependency를 `git+https://github.com/digitie/maplibre-vworld-js.git#c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다.
+- `kor-travel-geo-ui/package-lock.json`: root dependency와 `node_modules/maplibre-vworld.resolved`를 같은 HTTPS SHA로 맞춘다. CI에서 SSH key 없이 설치되어야 하므로 `git+https`를 유지한다.
+- `kor-travel-geo-ui/lib/vworld.ts`: `redactVWorldUrl as redactVWorldTileUrl` alias를 둔다.
+- `kor-travel-geo-ui/tests/unit/vworld.test.ts`: 최신 upstream redaction 표기 `***`를 검증한다.
 
 ## 검증 환경
 
@@ -79,7 +79,7 @@ T-036 직후의 PR #22~#20 리뷰 후속은 PR #24로 처리했다. T-044는 0.1
 후속 구현 조건:
 
 - `maplibre-vworld-js` 0.1.0의 click callback, marker 제어, `flyToOptions`, tile error hook/redaction, SSR-safe 사용법 같은 범용 public API를 우선 소비한다.
-- `kraddr-geo-ui`가 geocode/reverse/debug/admin 화면 특화 상태, key 미설정 fallback 문구, API 응답 overlay, transient overlay 임계치를 domain wrapper에서 제공한다.
+- `kor-travel-geo-ui`가 geocode/reverse/debug/admin 화면 특화 상태, key 미설정 fallback 문구, API 응답 overlay, transient overlay 임계치를 domain wrapper에서 제공한다.
 - 필요한 기능이 upstream에 없으면 별도 `digitie/maplibre-vworld-js` task/PR로 분리하고, merge 또는 검증된 commit SHA를 후속 소비자 PR에서 사용한다.
 - `CoordinateMap.tsx`는 직접 MapLibre primitive lifecycle을 소유하지 않고 upstream component/hook을 감싸는 얇은 wrapper가 된다.
-- `kraddr-geo-ui`의 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 다시 수행한다.
+- `kor-travel-geo-ui`의 `npm ci`, `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 다시 수행한다.

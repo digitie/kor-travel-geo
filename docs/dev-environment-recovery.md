@@ -30,20 +30,20 @@ $EDITOR .env
 
 필수 확인 값:
 
-- `KRADDR_GEO_PG_DSN`
-- `KRADDR_GEO_RUSTFS_ENABLED`
-- `KRADDR_GEO_RUSTFS_ENDPOINT_URL`
-- `KRADDR_GEO_RUSTFS_BUCKET`
-- `KRADDR_GEO_RUSTFS_PREFIX`
-- `KRADDR_GEO_RUSTFS_ACCESS_KEY`
-- `KRADDR_GEO_RUSTFS_SECRET_KEY`
+- `KTG_PG_DSN`
+- `KTG_RUSTFS_ENABLED`
+- `KTG_RUSTFS_ENDPOINT_URL`
+- `KTG_RUSTFS_BUCKET`
+- `KTG_RUSTFS_PREFIX`
+- `KTG_RUSTFS_ACCESS_KEY`
+- `KTG_RUSTFS_SECRET_KEY`
 
 ## 4. 레포 클론 + Python 환경
 
 ```bash
 cd ~
-git clone https://github.com/digitie/python-kraddr-geo.git
-cd python-kraddr-geo
+git clone https://github.com/digitie/kor-travel-geo.git
+cd kor-travel-geo
 
 python3.12 -m venv .venv
 source .venv/bin/activate
@@ -78,13 +78,13 @@ DB 복구는 백업에서 restore하거나(ADR-030/036) 전체 적재를 다시 
 기존 DB를 재사용하는 경우 먼저 schema migration을 적용한다.
 
 ```bash
-export KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo
+export KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo
 alembic upgrade head
 ```
 
-`0002_t027_shp_schema_fixups`는 SHP 보조 테이블의 natural key 컬럼과 geometry 타입을 보정한다. `tl_spbd_buld_polygon.bjd_cd`/`rncode_full` generated column 재생성은 기존 row 수에 따라 시간이 걸릴 수 있다. 구 스키마로 `tl_sprd_rw`에 `MULTILINESTRING` 데이터가 들어 있으면 `MULTIPOLYGON`으로 cast할 수 없으므로 migration은 해당 테이블에 non-polygon row가 있는 경우 `tl_sprd_rw`를 먼저 비운 뒤 타입을 바꾼다. 이미 구 스키마로 SHP를 적재했다면 migration 후 `kraddr-geo load shp-all ... --mode full`로 SHP 9개 테이블을 다시 적재한다.
+`0002_t027_shp_schema_fixups`는 SHP 보조 테이블의 natural key 컬럼과 geometry 타입을 보정한다. `tl_spbd_buld_polygon.bjd_cd`/`rncode_full` generated column 재생성은 기존 row 수에 따라 시간이 걸릴 수 있다. 구 스키마로 `tl_sprd_rw`에 `MULTILINESTRING` 데이터가 들어 있으면 `MULTIPOLYGON`으로 cast할 수 없으므로 migration은 해당 테이블에 non-polygon row가 있는 경우 `tl_sprd_rw`를 먼저 비운 뒤 타입을 바꾼다. 이미 구 스키마로 SHP를 적재했다면 migration 후 `ktgctl load shp-all ... --mode full`로 SHP 9개 테이블을 다시 적재한다.
 
-DB를 새로 적재하려면 `KRADDR_GEO_PG_DSN`이 새로 준비된 빈 DB를 가리키게 한 뒤 적재한다.
+DB를 새로 적재하려면 `KTG_PG_DSN`이 새로 준비된 빈 DB를 가리키게 한 뒤 적재한다.
 
 ```bash
 # 전체 적재 + 검증

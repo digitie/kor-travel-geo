@@ -21,15 +21,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.infra.sql import iter_sql_statements
-from kraddr.geo.loaders.postload import (
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.infra.sql import iter_sql_statements
+from kortravelgeo.loaders.postload import (
     build_mv_next_sql,
     build_text_search_mv_next_sql,
     normalize_mv_index_names,
     rename_mv_next_indexes_for_conn,
 )
-from kraddr.geo.settings import get_settings
+from kortravelgeo.settings import get_settings
 
 Strategy = Literal["concurrent", "swap"]
 PhaseRunner = Callable[[AsyncEngine], Awaitable[None]]

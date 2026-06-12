@@ -8,7 +8,7 @@
 
 ## 목적
 
-`python-kraddr-geo`는 WSL2 개발 환경에서 동작하지만, 운영 배포는 작은 폼팩터 박스(N150 또는 Odroid)에서 single-host로 돌리는 시나리오를 검토 중이다. 본 task는 두 운영 환경의 envelope과 성능 측정 계획을 미리 문서화하고, 하드웨어 도착 후 실측을 수행한다.
+`kor-travel-geo`는 WSL2 개발 환경에서 동작하지만, 운영 배포는 작은 폼팩터 박스(N150 또는 Odroid)에서 single-host로 돌리는 시나리오를 검토 중이다. 본 task는 두 운영 환경의 envelope과 성능 측정 계획을 미리 문서화하고, 하드웨어 도착 후 실측을 수행한다.
 
 T-055의 이번 PR 범위는 **실측 준비**다. 실제 N150/Odroid 장비가 없으면 full-load/serving 수치를 직접 만들 수 없으므로, 같은 git SHA와 같은 데이터 snapshot에서 반복 가능한 runbook, 시스템 envelope 캡처 스크립트, 산출물 구조를 먼저 고정한다. 장비 도착 뒤의 실측 실행은 후속 `T-063 N150/Odroid 실측 실행`으로 분리한다.
 
@@ -32,7 +32,7 @@ T-055의 이번 PR 범위는 **실측 준비**다. 실제 N150/Odroid 장비가 
 - `fio`와 `sysbench`는 장비에 부하를 줄 수 있으므로 기본 실행에서는 **명령 계획만 기록**한다. 실제 probe는 `--run-probes`를 명시한 경우에만 실행한다.
 - `fio` 기본 probe는 8 KiB random read, `iodepth=32`, `numjobs=4`, `runtime=30s`, `size=1G`, `direct=1`이다. 장비별 NVMe 성능 차이를 보기 위한 시작점이며, 운영 디스크에서 실행하기 전 여유 공간과 마모 정책을 확인한다.
 - `sysbench` 기본 probe는 CPU 4 thread 30초, memory 4 thread 30초다.
-- `scripts/fullload_test.sh`는 native Linux에서도 `DATA_DIR`, `EXT4_DATA`, `KRADDR_GEO_DB_PORT`, `KRADDR_GEO_PG_DSN` override로 그대로 사용할 수 있음을 runbook에 고정했다.
+- `scripts/fullload_test.sh`는 native Linux에서도 `DATA_DIR`, `EXT4_DATA`, `KTG_DB_PORT`, `KTG_PG_DSN` override로 그대로 사용할 수 있음을 runbook에 고정했다.
 
 ## 측정 envelope
 
@@ -97,7 +97,7 @@ T-055의 이번 PR 범위는 **실측 준비**다. 실제 N150/Odroid 장비가 
 ```bash
 RUN_ROOT=artifacts/perf/n150-vs-odroid-$(date +%Y%m%d)
 ENV_LABEL=n150
-DATA_DIR=/data/kraddr-geo-data
+DATA_DIR=/data/kor-travel-geo-data
 mkdir -p "$RUN_ROOT/$ENV_LABEL"
 ```
 
@@ -125,8 +125,8 @@ full-load는 먼저 `PLAN_ONLY=1`로 경로와 도구만 확인한다.
 ```bash
 PLAN_ONLY=1 \
 DATA_DIR="$DATA_DIR" \
-KRADDR_GEO_DB_PORT=5432 \
-KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kraddr_geo \
+KTG_DB_PORT=5432 \
+KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo \
 bash scripts/fullload_test.sh
 ```
 
@@ -155,7 +155,7 @@ python scripts/benchmark_query_performance.py \
 REST e2e benchmark는 위 SQL benchmark의 `corpus.json`을 입력으로 쓴다. API 서버는 별도 터미널에서 같은 DB를 바라보도록 기동한다.
 
 ```bash
-uvicorn kraddr.geo.api.app:app --host 127.0.0.1 --port 8888
+uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 8888
 ```
 
 ```bash
@@ -252,10 +252,10 @@ T-055 실측의 1차 비교는 PostGIS 16+3.5 계열을 고정하고, PostgreSQL
 
 - `ruff check scripts/capture_deployment_envelope.py tests/unit/test_capture_deployment_envelope.py`
 - `pytest tests/unit/test_capture_deployment_envelope.py -q` → `5 passed`
-- `python scripts/capture_deployment_envelope.py --env-label wsl-smoke --data-dir data --output-dir /tmp/kraddr-t055-envelope-smoke`
+- `python scripts/capture_deployment_envelope.py --env-label wsl-smoke --data-dir data --output-dir /tmp/kortravel-t055-envelope-smoke`
 - `ruff check .`
 - `pytest -q` → `273 passed, 8 skipped`
-- `mypy --no-incremental src/kraddr/geo`
+- `mypy --no-incremental src/kortravelgeo`
 - `lint-imports`
 
 ## 남은 위험

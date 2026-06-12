@@ -8,9 +8,9 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
-from kraddr.geo.settings import Settings
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
+from kortravelgeo.settings import Settings
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -19,10 +19,10 @@ if TYPE_CHECKING:
 
 @pytest.mark.asyncio
 async def test_real_postgres_ops_constraints_when_dsn_is_set() -> None:
-    dsn = os.getenv("KRADDR_GEO_TEST_PG_DSN")
+    dsn = os.getenv("KTG_TEST_PG_DSN")
     if not dsn:
         pytest.skip(
-            "set KRADDR_GEO_TEST_PG_DSN to a disposable PostGIS-enabled test database"
+            "set KTG_TEST_PG_DSN to a disposable PostGIS-enabled test database"
         )
 
     engine = make_async_engine(Settings(pg_dsn=dsn))
@@ -64,8 +64,8 @@ SELECT name
 
     if database_name is None or not _looks_like_disposable_test_database(str(database_name)):
         pytest.skip(
-            "KRADDR_GEO_TEST_PG_DSN must point to a disposable test database "
-            "whose name includes 'test' or starts with 'kraddr_geo_t'; "
+            "KTG_TEST_PG_DSN must point to a disposable test database "
+            "whose name includes 'test' or starts with 'kor_travel_geo_t'; "
             f"got {database_name!r}"
         )
     if missing_extensions:
@@ -77,7 +77,7 @@ def _looks_like_disposable_test_database(database_name: str) -> bool:
     normalized = database_name.lower()
     return (
         "test" in normalized
-        or normalized.startswith("kraddr_geo_t")
+        or normalized.startswith("kor_travel_geo_t")
         or normalized.startswith("tmp_")
     )
 

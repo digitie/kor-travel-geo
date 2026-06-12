@@ -31,7 +31,7 @@
 - `juso`: 기존 v1 `fallback="api"`가 juso에서 온 경우.
 - `cache`: 캐시된 결과.
 
-Kakao/Naver/Google은 live provider로 호출하지 않는다. v2는 이들 API의 좋은 schema 스타일을 참고한 `kraddr-geo` 자체 API다. 향후 live adapter를 추가하면 source enum 확장은 별도 task/ADR에서 약관, 캐시, quota, 출처 표기 정책과 함께 결정한다.
+Kakao/Naver/Google은 live provider로 호출하지 않는다. v2는 이들 API의 좋은 schema 스타일을 참고한 `kor-travel-geo` 자체 API다. 향후 live adapter를 추가하면 source enum 확장은 별도 task/ADR에서 약관, 캐시, quota, 출처 표기 정책과 함께 결정한다.
 
 ## 선택 기준
 
