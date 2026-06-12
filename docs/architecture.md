@@ -1,12 +1,12 @@
 # 아키텍처
 
-본 문서는 `kraddr-geo` 백엔드와 `kraddr-geo-ui` 프론트엔드가 함께 구성하는 한 시스템의 큰 구조를 다룬다. 결정의 역사는 `decisions.md`(ADR)에서 별도로 관리한다.
+본 문서는 `kor-travel-geo` 백엔드와 `kor-travel-geo-ui` 프론트엔드가 함께 구성하는 한 시스템의 큰 구조를 다룬다. 결정의 역사는 `decisions.md`(ADR)에서 별도로 관리한다.
 
 ## 두 패키지, 한 시스템
 
 ```
 ┌──────────────────────────┐      HTTP (내부망)      ┌──────────────────────────┐
-│  kraddr-geo-ui              │ ──────────────────────▶ │  kraddr-geo (FastAPI)       │
+│  kor-travel-geo-ui              │ ──────────────────────▶ │  kor-travel-geo (FastAPI)       │
 │  Next.js 16 + Tailwind   │                         │  /v1/* + /v2/*           │
 │  - /debug/*              │                         │  ─────────────────────── │
 │  - /admin/*              │ ◀────────────────────── │  AsyncAddressClient      │
@@ -23,23 +23,23 @@
 - 한 코어(`core/`) 위에 두 인터페이스(Python 라이브러리, REST API)를 노출한다. 두 인터페이스는 같은 함수를 호출하므로 동작이 갈리지 않는다.
 - 프론트엔드는 자체 DB 연결을 갖지 않는다. 모든 DB 접근은 `AsyncAddressClient.engine` 하나의 SQLAlchemy 2 async engine을 통과한다 — 디버거에서 본 EXPLAIN 결과가 운영 쿼리와 같은 환경에서 평가된다.
 
-## 백엔드 계층 (`kraddr-geo`)
+## 백엔드 계층 (`kor-travel-geo`)
 
 | 계층 | 위치 | 의존 대상 | 의존하지 않는 것 |
 |------|------|-----------|------------------|
-| dto | `src/kraddr/geo/dto/` | pydantic v2 | DB, FastAPI, 파일시스템 |
-| core | `src/kraddr/geo/core/` | dto, 표준 라이브러리, Protocol | SQLAlchemy, FastAPI, 파일시스템 |
-| infra | `src/kraddr/geo/infra/` | core/Protocol, SQLAlchemy 2 async, GeoAlchemy 2, psycopg async | FastAPI |
-| loaders | `src/kraddr/geo/loaders/` | infra(엔진만), GeoPandas, GDAL Python binding | core, api |
-| client | `src/kraddr/geo/client.py` | core, infra, dto | api, cli, loaders |
-| api | `src/kraddr/geo/api/` | client, dto, FastAPI | loaders (admin 라우터만 예외) |
-| cli | `src/kraddr/geo/cli/` | client, loaders, typer | api |
+| dto | `src/kortravelgeo/dto/` | pydantic v2 | DB, FastAPI, 파일시스템 |
+| core | `src/kortravelgeo/core/` | dto, 표준 라이브러리, Protocol | SQLAlchemy, FastAPI, 파일시스템 |
+| infra | `src/kortravelgeo/infra/` | core/Protocol, SQLAlchemy 2 async, GeoAlchemy 2, psycopg async | FastAPI |
+| loaders | `src/kortravelgeo/loaders/` | infra(엔진만), GeoPandas, GDAL Python binding | core, api |
+| client | `src/kortravelgeo/client.py` | core, infra, dto | api, cli, loaders |
+| api | `src/kortravelgeo/api/` | client, dto, FastAPI | loaders (admin 라우터만 예외) |
+| cli | `src/kortravelgeo/cli/` | client, loaders, typer | api |
 
 의존 방향은 **dto → core → infra → client → api/cli** 한 방향이다. `import-linter`가 `pyproject.toml`의 `[tool.importlinter]` 계약으로 강제한다. 단 하나의 예외(`api.routers.admin → loaders`)는 적재 트리거를 admin 라우터가 직접 호출하기 때문이며 ADR에 명시한다.
 
 T-056 이후 `core/address/`는 시군구/법정동/도로명관리번호/도로명주소관리번호 같은 순수 주소 코드 helper만 맡는다. 도로명/지번 문자열 parser는 `core/normalize.py`에 남기고, 외부 Juso fallback adapter는 `infra`에서 이 helper를 호출해 provider 파라미터를 정규화한다.
 
-## 프론트엔드 계층 (`kraddr-geo-ui`)
+## 프론트엔드 계층 (`kor-travel-geo-ui`)
 
 | 영역 | 선택 | 이유 |
 |------|------|------|
@@ -53,9 +53,9 @@ T-056 이후 `core/address/`는 시군구/법정동/도로명관리번호/도로
 
 자세한 디렉토리 구조, 컴포넌트 설계, 페이지별 화면은 `docs/frontend-package.md`를 본다.
 
-VWorld 지도 연동은 `kraddr-geo-ui` 로컬 코드만의 책임으로 보지 않는다. `maplibre-vworld` package는 항상 최신 `main` 또는 stable release를 확인한 뒤 검증된 SHA로 소비한다. 2026-05-31 현재 `kraddr-geo-ui`는 `digitie/maplibre-vworld-js` `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`을 사용하며, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 별도 upstream task/PR로 분리한다. 반대로 geocode/reverse 디버그 입력, 정합성/성능/적재 overlay, key 미설정 안내처럼 이 프로젝트에만 의미가 있는 기능은 `kraddr-geo-ui` domain wrapper에서 구현한다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다.
+VWorld 지도 연동은 `kor-travel-geo-ui` 로컬 코드만의 책임으로 보지 않는다. `maplibre-vworld` package는 항상 최신 `main` 또는 stable release를 확인한 뒤 검증된 SHA로 소비한다. 2026-05-31 현재 `kor-travel-geo-ui`는 `digitie/maplibre-vworld-js` `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`을 사용하며, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 별도 upstream task/PR로 분리한다. 반대로 geocode/reverse 디버그 입력, 정합성/성능/적재 overlay, key 미설정 안내처럼 이 프로젝트에만 의미가 있는 기능은 `kor-travel-geo-ui` domain wrapper에서 구현한다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다.
 
-`kraddr-geo-ui/components/vworld/CoordinateMap.tsx`는 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper다. click callback, marker 제어, tile error redaction, SSR-safe 사용법 같은 범용 기능은 upstream public API를 소비한다. key 미설정 안내와 layout, API 응답 overlay, 운영 콘솔 상태 연결은 이 저장소에 남긴다.
+`kor-travel-geo-ui/components/vworld/CoordinateMap.tsx`는 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper다. click callback, marker 제어, tile error redaction, SSR-safe 사용법 같은 범용 기능은 upstream public API를 소비한다. key 미설정 안내와 layout, API 응답 overlay, 운영 콘솔 상태 연결은 이 저장소에 남긴다.
 
 ## 데이터 흐름 — 지오코딩
 
@@ -187,7 +187,7 @@ Next.js /admin/backups
 
 plain SQL/DDL dump는 대용량 운영 기본값으로 사용하지 않는다. `pg_dump -Fd`와 `pg_restore -Fd`가 병렬성을 제공하고, `tar.zst` 단일 artifact는 UI 다운로드와 외부 보관에 적합하기 때문이다. 복원은 기본적으로 새 빈 DB에만 수행하고, 현재 운영 DB를 직접 덮어쓰는 경로는 maintenance mode와 명시 확인을 요구하는 별도 위험 경로로 둔다.
 
-T-046 구현 검증은 전국 full-load를 다시 실행하지 않고 대구광역시 부분 적재 DB로 수행한다. 백업 원본 DB는 `kraddr_geo_t046_daegu`, 복원 target은 `kraddr_geo_t046_daegu_restore`로 분리하고, `mv_geocode_target` row count와 대구 geocode/reverse smoke test가 복원 후에도 유지되는지 확인한다.
+T-046 구현 검증은 전국 full-load를 다시 실행하지 않고 대구광역시 부분 적재 DB로 수행한다. 백업 원본 DB는 `kor_travel_geo_t046_daegu`, 복원 target은 `kor_travel_geo_t046_daegu_restore`로 분리하고, `mv_geocode_target` row count와 대구 geocode/reverse smoke test가 복원 후에도 유지되는지 확인한다.
 
 ## 데이터 흐름 — 운영 메타데이터와 릴리스 추적 (ADR-033, T-049)
 
@@ -220,7 +220,7 @@ T-050 5차부터 `ops.table_stats_snapshots`는 수동 capture API뿐 아니라 
 
 ```
 운영자/스케줄러
-  ├─ CLI: kraddr-geo load daily-juso data/juso/daily/20260401_dailyjusukrdata.zip
+  ├─ CLI: ktgctl load daily-juso data/juso/daily/20260401_dailyjusukrdata.zip
   └─ API: POST /v1/admin/loads kind=daily_juso_delta
                                                                     │
                                                                     ▼
@@ -239,15 +239,15 @@ T-050 5차부터 `ops.table_stats_snapshots`는 수동 capture API뿐 아니라 
 
 ## 개발 환경 (PC, WSL)
 
-PC 개발의 Git source of truth는 NTFS의 `F:\dev\python-kraddr-geo` 계열 checkout이다. 코드 편집, branch, commit, PR은 NTFS worktree에서 수행하고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(ADR-041).
+PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 checkout이다. 코드 편집, branch, commit, PR은 NTFS worktree에서 수행하고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(ADR-041).
 
 ```
-/mnt/f/dev/python-kraddr-geo/                         ← NTFS main repo, main 동기화와 worktree 관리
-/mnt/f/dev/python-kraddr-geo-codex/                   ← ChatGPT Codex worktree
-/mnt/f/dev/python-kraddr-geo-claude/                  ← Claude Code worktree
-/mnt/f/dev/python-kraddr-geo-antigravity/             ← Google Antigravity 2.0 worktree
-~/dev/python-kraddr-geo-<agent>-test/                 ← WSL ext4 테스트 미러, commit/push 금지
-/mnt/f/dev/python-kraddr-geo/data/                    ← 도로명주소 ZIP/SHP, postal TXT, 외부 dump (NTFS)
+/mnt/f/dev/kor-travel-geo/                         ← NTFS main repo, main 동기화와 worktree 관리
+/mnt/f/dev/kor-travel-geo-codex/                   ← ChatGPT Codex worktree
+/mnt/f/dev/kor-travel-geo-claude/                  ← Claude Code worktree
+/mnt/f/dev/kor-travel-geo-antigravity/             ← Google Antigravity 2.0 worktree
+~/dev/kor-travel-geo-<agent>-test/                 ← WSL ext4 테스트 미러, commit/push 금지
+/mnt/f/dev/kor-travel-geo/data/                    ← 도로명주소 ZIP/SHP, postal TXT, 외부 dump (NTFS)
 ```
 
 - 테스트 전에는 NTFS worktree를 `rsync --delete`로 ext4 테스트 미러에 복사한다.

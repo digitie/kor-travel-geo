@@ -6,11 +6,11 @@
 - 대상 브랜치: `codex/t052-api-v2-providers`
 - 관련 ADR: ADR-038
 - 사용자 RFC: 2026-05-27 — "vworld API 외 vworld API, kakao API, naver API를 확인하여 geo의 기능에 맞는 함수 및 API 제공 (vworld 호환 API는 v1, 새로운 API는 v2). 그리고 상세 문서화 진행 (사람/AI agent가 활용할 수 있도록)."
-- 사용자 재확인: 2026-05-28 — v2는 Kakao/Naver/Google/VWorld를 직접 호출하는 wrapper가 아니라, 각 API 스타일의 장점을 참고해 `kraddr-geo` 자체 API를 새로 만드는 것이다.
+- 사용자 재확인: 2026-05-28 — v2는 Kakao/Naver/Google/VWorld를 직접 호출하는 wrapper가 아니라, 각 API 스타일의 장점을 참고해 `kor-travel-geo` 자체 API를 새로 만드는 것이다.
 
 ## 목적
 
-`python-kraddr-geo`는 vworld OpenAPI 응답 형식을 호환하는 것이 핵심 정체성(ADR-007/-012)이다. 다만 신규 API는 vworld 응답 key 명명에 갇히지 않고, Kakao Local API의 검색/카테고리 표현, Naver Geocoding의 주소 구성요소 표현, Google Geocoding/Places 계열의 후보 목록·viewport·place 표현, VWorld의 공공 좌표/주소 호환성에서 장점을 취한 자체 schema로 제공한다. 본 task는 다음을 분리해 정리한다.
+`kor-travel-geo`는 vworld OpenAPI 응답 형식을 호환하는 것이 핵심 정체성(ADR-007/-012)이다. 다만 신규 API는 vworld 응답 key 명명에 갇히지 않고, Kakao Local API의 검색/카테고리 표현, Naver Geocoding의 주소 구성요소 표현, Google Geocoding/Places 계열의 후보 목록·viewport·place 표현, VWorld의 공공 좌표/주소 호환성에서 장점을 취한 자체 schema로 제공한다. 본 task는 다음을 분리해 정리한다.
 
 1. 외부 API 스타일의 기능 차이를 매핑하고, 본 라이브러리가 자체 데이터로 노출해야 할 함수/표면을 결정한다.
 2. 기존 vworld 호환 응답 표면을 **API v1**(`/v1/*`)로 동결한다. SDK 사용자가 기존 응답 형식을 유지할 수 있게 한다.
@@ -21,16 +21,16 @@ T-052 1차 PR은 v1 표면을 유지하면서 v2 DTO/router/client와 AI-friendl
 
 ## 1차 구현 결과
 
-- `src/kraddr/geo/dto/v2.py`: `GeocodeV2Input/Response`, `ReverseV2Input/Response`, `SearchV2Input/Response`, `CandidateV2`, `AddressV2`, `RegionV2`, `PlaceV2`를 추가했다. PR #69 리뷰 후속으로 `distance_m`과 `point_precision`도 v2 candidate의 정식 필드로 올렸다.
-- `src/kraddr/geo/api/routers/v2.py`: `POST /v2/geocode`, `POST /v2/reverse`, `POST /v2/search`를 추가했다.
+- `src/kortravelgeo/dto/v2.py`: `GeocodeV2Input/Response`, `ReverseV2Input/Response`, `SearchV2Input/Response`, `CandidateV2`, `AddressV2`, `RegionV2`, `PlaceV2`를 추가했다. PR #69 리뷰 후속으로 `distance_m`과 `point_precision`도 v2 candidate의 정식 필드로 올렸다.
+- `src/kortravelgeo/api/routers/v2.py`: `POST /v2/geocode`, `POST /v2/reverse`, `POST /v2/search`를 추가했다.
 - `AsyncAddressClient`: Python 공개 API는 후보 목록 응답을 기본으로 하며 `geocode()`, `reverse()`, `search()` 이름만 노출한다. REST v1 호환 응답은 `/v1/*`와 내부 어댑터에 남긴다.
 - `core/v2.py`: v1 응답을 v2 candidate schema로 변환한다. 기존 fallback 출처인 `api_vworld`, `api_juso`는 v2에서 각각 `vworld`, `juso`로 정규화한다.
 - `docs/api-reference/`: 사람과 AI agent가 함께 읽을 API reference와 LLM 요약을 추가했다.
-- `openapi.json`과 `kraddr-geo-ui` 생성 타입은 v2 schema를 포함하도록 갱신한다.
+- `openapi.json`과 `kor-travel-geo-ui` 생성 타입은 v2 schema를 포함하도록 갱신한다.
 
 ## 외부 API 스타일 매핑
 
-| 기능/스타일 | VWorld 장점 | Kakao 장점 | Naver 장점 | Google 장점 | kraddr-geo v2 결정 |
+| 기능/스타일 | VWorld 장점 | Kakao 장점 | Naver 장점 | Google 장점 | kor-travel-geo v2 결정 |
 |-----------|------------|------------|------------|------------|---------------------|
 | 주소 → 좌표 | 공공 주소 호환성 | road/jibun 분리와 키워드 검색 흐름 | 주소 구성요소 표현 | 후보 목록, geometry, viewport | `GeocodeV2Response.candidates[]`로 통합 |
 | 좌표 → 주소 | 좌표계/공공 reverse 흐름 | 주소와 행정구역 reverse 분리 | road/jibun reverse 구성 | `address_components`, `formatted_address` | `ReverseV2Response.candidates[]`에 address/region 동시 표현 |
@@ -41,8 +41,8 @@ T-052 1차 PR은 v1 표면을 유지하면서 v2 DTO/router/client와 AI-friendl
 
 매핑 원칙:
 
-- kraddr-geo v2는 자체 PostGIS 데이터로 응답한다. Kakao/Naver/Google/VWorld API를 단순 전달하거나 wrapper로 노출하지 않는다.
-- vworld와의 응답 호환은 v1에서만 보장한다. v2는 외부 API들의 좋은 표현 방식을 참고하되 `kraddr-geo` 자체 schema를 갖는다.
+- kor-travel-geo v2는 자체 PostGIS 데이터로 응답한다. Kakao/Naver/Google/VWorld API를 단순 전달하거나 wrapper로 노출하지 않는다.
+- vworld와의 응답 호환은 v1에서만 보장한다. v2는 외부 API들의 좋은 표현 방식을 참고하되 `kor-travel-geo` 자체 schema를 갖는다.
 - `category_group_code`는 Kakao 코드를 그대로 고정하는 필드가 아니라, 향후 이 프로젝트의 장소/관리 UI 분류 hint를 담을 확장 지점이다.
 
 ## v1 (기존, vworld 호환) 표면 동결
@@ -54,7 +54,7 @@ T-052 1차 PR은 v1 표면을 유지하면서 v2 DTO/router/client와 AI-friendl
 - 라이브러리: `AsyncAddressClient.geocode()`, `.reverse()`, `.search()`, `.zipcode()`, `.pobox()`. 주소 조회 3종은 v2 candidate schema만 반환한다.
 - OpenAPI: `openapi.json`의 `/v1/*` paths.
 
-이 동결은 `kraddr-geo-ui`(디버그/관리 UI), 외부 vworld-호환 SDK 사용자, 운영 cron 스크립트를 깨지 않기 위한 것이다.
+이 동결은 `kor-travel-geo-ui`(디버그/관리 UI), 외부 vworld-호환 SDK 사용자, 운영 cron 스크립트를 깨지 않기 위한 것이다.
 
 ## v2 (신규 통합) 표면 design
 
@@ -188,18 +188,18 @@ docs/api-reference/
 
 - `docs/api-reference/llm-summary.md`: 전체 표면을 LLM이 한 화면에서 파악할 수 있는 압축 요약(엔드포인트/파라미터/응답 핵심만).
 - 저장소 루트 `openapi.json`: 기계가 직접 import 가능한 표면.
-- 각 함수의 docstring을 `numpy` 스타일로 통일하고 예시 포함. `kraddr.geo` import 시 docstring으로 충분히 학습 가능.
+- 각 함수의 docstring을 `numpy` 스타일로 통일하고 예시 포함. `kortravelgeo` import 시 docstring으로 충분히 학습 가능.
 
 ## 구현 순서
 
 1. 완료: `docs/api-reference/` skeleton 생성 + `llm-summary.md`.
 2. 완료: T-056 `core.address` helper를 기준으로 juso 좌표 API 필수 코드 정규화를 재사용.
 3. 완료: v1 표면 동결 — 현재 응답 형식을 `api-reference/v1/*.md`로 캡처.
-4. 완료: v2 DTO 초안 (`src/kraddr/geo/dto/v2.py`).
-5. 완료: v2 router skeleton (`src/kraddr/geo/api/routers/v2.py`) — 응답은 local 우선, 후보 목록.
+4. 완료: v2 DTO 초안 (`src/kortravelgeo/dto/v2.py`).
+5. 완료: v2 router skeleton (`src/kortravelgeo/api/routers/v2.py`) — 응답은 local 우선, 후보 목록.
 6. 완료: `AsyncAddressClient.geocode/reverse/search`를 후보 목록 응답으로 제공하고, Python 공개 API에서 `_v2` 접미사를 제거.
 7. 완료: 새 외부 provider adapter는 추가하지 않는 것으로 확정. v2는 local/vworld/juso/cache source만 표현한다.
-8. 완료: OpenAPI export에 `/v2/*` 포함, `kraddr-geo-ui`도 `types/api.gen.ts` 자동 갱신.
+8. 완료: OpenAPI export에 `/v2/*` 포함, `kor-travel-geo-ui`도 `types/api.gen.ts` 자동 갱신.
 9. 완료: `docs/api-reference/v2/*.md` 1차 작성.
 
 ## 검증 기준

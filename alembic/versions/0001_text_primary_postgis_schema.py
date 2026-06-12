@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from alembic import op
 
-from kraddr.geo.infra.sql import INDEX_SQL, MV_SQL, POSTLOAD_SQL, SCHEMA_SQL, iter_sql_statements
+from kortravelgeo.infra.sql import INDEX_SQL, MV_SQL, POSTLOAD_SQL, SCHEMA_SQL, iter_sql_statements
 
 revision = "0001_text_primary_postgis"
 down_revision = None

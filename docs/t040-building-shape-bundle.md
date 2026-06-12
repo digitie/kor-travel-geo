@@ -22,7 +22,7 @@
 
 따라서 T-040의 산출물은 다음으로 제한한다.
 
-- 순수 Python 비교 helper: `src/kraddr/geo/loaders/building_shape_bundle.py`
+- 순수 Python 비교 helper: `src/kortravelgeo/loaders/building_shape_bundle.py`
 - 재현 스크립트: `scripts/compare_building_shape_bundle.py`
 - 실제 세종 빠른 overlap 테스트와 경남 선택형 slow 테스트
 - ADR-025와 본 문서의 후속 loader 설계 원칙
@@ -97,22 +97,22 @@ SIG_CD, ENT_MAN_NO
 
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_building_shape_bundle.py \
-  --bundle-zip "/mnt/f/dev/python-kraddr-geo/data/juso/도로명주소 건물 도형/건물도형_전체분_세종특별자치시.zip" \
-  --electronic-map-sido "/mnt/f/dev/python-kraddr-geo/data/juso/도로명주소 전자지도/세종특별자치시"
+  --bundle-zip "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 건물 도형/건물도형_전체분_세종특별자치시.zip" \
+  --electronic-map-sido "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/세종특별자치시"
 ```
 
 경남 full key 비교는 NTFS의 `TL_SPBD_BULD.dbf` 126만 행을 스캔하므로 일반 테스트에서는 제외한다. 캐시 상태에 따라 수십 초에서 2분 안팎이 걸릴 수 있으며, 이번 PR의 선택형 pytest 재실행은 18.48초였다.
 
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_building_shape_bundle.py \
-  --bundle-zip "/mnt/f/dev/python-kraddr-geo/data/juso/도로명주소 건물 도형/건물도형_전체분_경상남도.zip" \
-  --electronic-map-sido "/mnt/f/dev/python-kraddr-geo/data/juso/도로명주소 전자지도/경상남도"
+  --bundle-zip "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 건물 도형/건물도형_전체분_경상남도.zip" \
+  --electronic-map-sido "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/경상남도"
 ```
 
 선택형 pytest:
 
 ```bash
-TMPDIR=/tmp TMP=/tmp TEMP=/tmp KRADDR_GEO_SLOW_REAL_DATA=1 \
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp KTG_SLOW_REAL_DATA=1 \
   .venv/bin/python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_building_shape_bundle_gyeongnam_key_overlap_slow -q
 ```
 
@@ -136,5 +136,5 @@ TMPDIR=/tmp TMP=/tmp TEMP=/tmp KRADDR_GEO_SLOW_REAL_DATA=1 \
 ## T-040 검증
 
 - `python -m pytest tests/unit/test_building_shape_bundle.py tests/integration/test_real_extra_shape_sources.py -q` → 7 passed, 1 skipped.
-- `KRADDR_GEO_SLOW_REAL_DATA=1 python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_building_shape_bundle_gyeongnam_key_overlap_slow -q` → 1 passed in 18.48s.
+- `KTG_SLOW_REAL_DATA=1 python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_building_shape_bundle_gyeongnam_key_overlap_slow -q` → 1 passed in 18.48s.
 - `scripts/compare_building_shape_bundle.py`로 세종/경남 실제 파일을 직접 비교했다.

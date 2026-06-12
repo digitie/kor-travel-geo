@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from kraddr.geo.exceptions import InvalidInputError
-from kraddr.geo.infra.batch import BATCH_SOURCE_KINDS, batch_children
+from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.batch import BATCH_SOURCE_KINDS, batch_children
 
 
 def _payloads() -> dict[str, dict[str, str]]:

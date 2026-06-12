@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from alembic import op
 
-from kraddr.geo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
+from kortravelgeo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
 
 revision = "0006_t049_ops_metadata_schema"
 down_revision = "0005_t039_roadaddr_entrc"

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from kraddr.geo.core.geocoder import geocode
-from kraddr.geo.core.normalize import parse_address
-from kraddr.geo.core.protocols import AddressLookup, FakeGeocodeRepo
-from kraddr.geo.dto.common import Point
-from kraddr.geo.dto.geocode import GeocodeInput
-from kraddr.geo.dto.region import RegionHint
+from kortravelgeo.core.geocoder import geocode
+from kortravelgeo.core.normalize import parse_address
+from kortravelgeo.core.protocols import AddressLookup, FakeGeocodeRepo
+from kortravelgeo.dto.common import Point
+from kortravelgeo.dto.geocode import GeocodeInput
+from kortravelgeo.dto.region import RegionHint
 
 
 def _lookup(*, confidence: float = 1.0, pt_source: str = "entrance") -> AddressLookup:

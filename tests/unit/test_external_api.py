@@ -4,10 +4,10 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
-from kraddr.geo.dto.geocode import GeocodeInput
-from kraddr.geo.exceptions import ConfigError, ExternalApiError
-from kraddr.geo.infra.external_api import ExternalGeocodeClient
-from kraddr.geo.settings import Settings
+from kortravelgeo.dto.geocode import GeocodeInput
+from kortravelgeo.exceptions import ConfigError, ExternalApiError
+from kortravelgeo.infra.external_api import ExternalGeocodeClient
+from kortravelgeo.settings import Settings
 
 
 @pytest.mark.asyncio
@@ -138,7 +138,7 @@ async def test_external_geocode_client_reports_missing_provider_keys() -> None:
         await client.geocode(GeocodeInput(address="없는 주소"))
 
     assert exc_info.value.code == "E0503"
-    assert "KRADDR_GEO_VWORLD_API_KEY" in (exc_info.value.hint or "")
+    assert "KTG_VWORLD_API_KEY" in (exc_info.value.hint or "")
     assert "NEXT_PUBLIC_VWORLD_API_KEY" in (exc_info.value.hint or "")
 
 

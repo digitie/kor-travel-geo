@@ -1,6 +1,6 @@
 # 지오코딩 준비 상태
 
-`kraddr-geo`이 정상 동작하려면 PostgreSQL + PostGIS 환경, 텍스트 정본 + 좌표 원천 + 보조 도형 적재, MV refresh, ANALYZE까지 끝난 상태가 필요하다. serving 정본은 텍스트(`tl_juso_text`)이고 SHP는 도형 보조다(ADR-007, ADR-012). 본 문서는 그 체크리스트와 알려진 빈틈을 정리한다.
+`kor-travel-geo`이 정상 동작하려면 PostgreSQL + PostGIS 환경, 텍스트 정본 + 좌표 원천 + 보조 도형 적재, MV refresh, ANALYZE까지 끝난 상태가 필요하다. serving 정본은 텍스트(`tl_juso_text`)이고 SHP는 도형 보조다(ADR-007, ADR-012). 본 문서는 그 체크리스트와 알려진 빈틈을 정리한다.
 
 > 이전(v1) SpatiaLite 기반 readiness 기준은 `v1` 브랜치 문서에서 본다. `main`은 PostgreSQL + PostGIS 기준만 다룬다(ADR-001).
 
@@ -20,7 +20,7 @@
 
 ## 환경 readiness 체크리스트
 
-PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/python-kraddr-geo-*`)이고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(AGENTS.md, ADR-041 참조). 데이터(`data/`)는 NTFS main repo(`/mnt/f/dev/python-kraddr-geo/data/`) 아래에 두며, 아래 명령의 데이터 경로는 ext4 테스트 미러에서 NTFS의 `data/`를 가리키는 심볼릭 링크 또는 절대경로로 해석한다.
+PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/kor-travel-geo-*`)이고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(AGENTS.md, ADR-041 참조). 데이터(`data/`)는 NTFS main repo(`/mnt/f/dev/kor-travel-geo/data/`) 아래에 두며, 아래 명령의 데이터 경로는 ext4 테스트 미러에서 NTFS의 `data/`를 가리키는 심볼릭 링크 또는 절대경로로 해석한다.
 
 1. **시스템 GDAL 설치** — `sudo apt install libgdal-dev gdal-bin`. `gdal-config --version`으로 버전 확인 후 Python 바인딩 핀: `pip install "gdal==$(gdal-config --version)"`. 세부 절차는 `docs/dev-environment.md` 참조 (ADR-008).
 2. **PostgreSQL 16 + PostGIS 3.4** 설치 및 기동
@@ -31,12 +31,12 @@ PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/python-kraddr-geo-
    CREATE EXTENSION IF NOT EXISTS postgis;
    ```
 4. `Settings.pg_dsn` 설정 (`postgresql+psycopg://...`)
-5. `kraddr-geo init-db`(또는 `alembic upgrade head`)로 스키마·확장·인덱스·빈 MV 적용 (텍스트 정본 + 좌표 원천 + 보조 도형 + 메타 + MV 정의)
+5. `ktgctl init-db`(또는 `alembic upgrade head`)로 스키마·확장·인덱스·빈 MV 적용 (텍스트 정본 + 좌표 원천 + 보조 도형 + 메타 + MV 정의)
 6. NTFS의 데이터 디렉토리를 ext4 테스트 미러에서 참조: `ln -s <main-repo>/data data`
-7. 17개 시도 원천 적재 (`kraddr-geo load all-sidos --juso ... --locsum ... --navi ... --shp-root ... --yyyymm 202605`). 텍스트 정본(`tl_juso_text`) + 좌표 원천(`tl_locsum_entrc`, `tl_navi_*`) + SHP 도형 보조를 한 배치로 적재한다.
-8. `kraddr-geo load pobox <pobox.txt>`, `kraddr-geo load bulk <bulk.txt>` (또는 `kraddr-geo load epost`로 다운로드+적재)
-9. `kraddr-geo refresh mv` → `mv_geocode_target`(및 `mv_geocode_text_search` helper) 갱신 + `ANALYZE`. 분기 풀로드는 `kraddr-geo refresh mv --swap`(shadow MV rename swap).
-10. `kraddr-geo validate consistency` — 텍스트 정본 ↔ SHP polygon 정합성(C1~C10) 검사. 필요 시 `kraddr-geo validate data-quality-samples`로 C2/C4/C6/C7 리뷰용 CSV 생성.
+7. 17개 시도 원천 적재 (`ktgctl load all-sidos --juso ... --locsum ... --navi ... --shp-root ... --yyyymm 202605`). 텍스트 정본(`tl_juso_text`) + 좌표 원천(`tl_locsum_entrc`, `tl_navi_*`) + SHP 도형 보조를 한 배치로 적재한다.
+8. `ktgctl load pobox <pobox.txt>`, `ktgctl load bulk <bulk.txt>` (또는 `ktgctl load epost`로 다운로드+적재)
+9. `ktgctl refresh mv` → `mv_geocode_target`(및 `mv_geocode_text_search` helper) 갱신 + `ANALYZE`. 분기 풀로드는 `ktgctl refresh mv --swap`(shadow MV rename swap).
+10. `ktgctl validate consistency` — 텍스트 정본 ↔ SHP polygon 정합성(C1~C10) 검사. 필요 시 `ktgctl validate data-quality-samples`로 C2/C4/C6/C7 리뷰용 CSV 생성.
 
 ## 검증 시나리오
 
@@ -55,11 +55,11 @@ PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/python-kraddr-geo-
 - **fuzzy 매칭 임계값**: `pg_trgm.similarity_threshold = 0.42`로 검증되어 있다. 0.3 미만은 noisy, 0.5 이상은 reject 과다. 데이터셋 갱신 시 재검증 권장.
 - **좌표계 혼동**: 외부 인터페이스는 `(lon, lat)` 고정. 내부 PostGIS도 `ST_MakePoint(lon, lat)` 순서(SKILL.md §4-5).
 
-## Readiness 자동화 (`kraddr-geo validate`)
+## Readiness 자동화 (`ktgctl validate`)
 
 ```bash
-kraddr-geo validate consistency
-kraddr-geo validate data-quality-samples --cases C2,C4,C6,C7
+ktgctl validate consistency
+ktgctl validate data-quality-samples --cases C2,C4,C6,C7
 ```
 
 `validate consistency`는 텍스트 정본과 SHP polygon을 교차 검증하는 C1~C10 케이스(ADR-016)를 실행한다. 대표적으로:

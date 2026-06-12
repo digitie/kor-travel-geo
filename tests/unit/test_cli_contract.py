@@ -5,7 +5,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from kraddr.geo.cli.main import (
+from kortravelgeo.cli.main import (
     _data_quality_cases,
     _shp_all_work_items,
     _shp_mode_for_index,

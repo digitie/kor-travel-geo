@@ -1,9 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
-from kraddr.geo.dto.address import AddressStructure, RefinedAddress
-from kraddr.geo.dto.common import Point, ServiceMeta, ZipSource
-from kraddr.geo.dto.geocode import (
+from kortravelgeo.dto.address import AddressStructure, RefinedAddress
+from kortravelgeo.dto.common import Point, ServiceMeta, ZipSource
+from kortravelgeo.dto.geocode import (
     GeocodeExtension,
     GeocodeInput,
     GeocodeResponse,
@@ -26,7 +26,7 @@ def test_geocode_extension_bounds_confidence() -> None:
 
 def test_geocode_response_wire_shape() -> None:
     response = GeocodeResponse(
-        service=ServiceMeta(name="kraddr-geo", operation="geocode"),
+        service=ServiceMeta(name="kor-travel-geo", operation="geocode"),
         status="OK",
         input=GeocodeInput(address="서울특별시 강남구 테헤란로 152"),
         refined=RefinedAddress(

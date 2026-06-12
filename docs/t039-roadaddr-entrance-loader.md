@@ -109,12 +109,12 @@ CREATE TABLE tl_roadaddr_entrc (
 
 ## 로더
 
-파일: `src/kraddr/geo/loaders/text/roadaddr_entrance_loader.py`
+파일: `src/kortravelgeo/loaders/text/roadaddr_entrance_loader.py`
 
 CLI:
 
 ```bash
-kraddr-geo load roadaddr-entrances "data/juso/도로명주소 출입구 정보" --yyyymm 202605
+ktgctl load roadaddr-entrances "data/juso/도로명주소 출입구 정보" --yyyymm 202605
 ```
 
 동작:
@@ -127,7 +127,7 @@ kraddr-geo load roadaddr-entrances "data/juso/도로명주소 출입구 정보" 
 6. 기본값으로 `tl_roadaddr_entrc`를 `TRUNCATE`한 뒤 `bd_mgt_sn` 기준 UPSERT한다.
 7. `load_manifest(table_name='tl_roadaddr_entrc')`에 `source_yyyymm`, checksum, `source_set.kind='roadaddr_entrance_full'`을 기록한다.
 
-적재 직후 조회 표면에 반영하려면 `kraddr-geo refresh mv --swap`을 실행한다. 기존 DB가 T-039 이전 MV 정의를 갖고 있으면 `REFRESH MATERIALIZED VIEW CONCURRENTLY`만으로는 direct 출입구 fallback 규칙이 생기지 않는다. shadow swap은 현재 코드의 `MV_SQL`로 새 MV를 빌드하므로 T-039/T-027 정의 전환까지 함께 처리한다.
+적재 직후 조회 표면에 반영하려면 `ktgctl refresh mv --swap`을 실행한다. 기존 DB가 T-039 이전 MV 정의를 갖고 있으면 `REFRESH MATERIALIZED VIEW CONCURRENTLY`만으로는 direct 출입구 fallback 규칙이 생기지 않는다. shadow swap은 현재 코드의 `MV_SQL`로 새 MV를 빌드하므로 T-039/T-027 정의 전환까지 함께 처리한다.
 
 API job kind:
 
@@ -160,7 +160,7 @@ API job kind:
 | `locsum`만 임시 비교 | 3,415 | 16 | 803 | 6,817 |
 | same-month gate 적용 후 | 3,415 | 16 | 803 | 6,817 |
 
-따라서 direct 출입구는 "있으면 무조건 더 정확한 좌표"로 보지 않는다. 같은 기준월 세트가 확보되기 전에는 분석용 테이블로 유지하고, serving 좌표는 기존 locsum/navi 경로를 사용한다. 같은 기준월의 `rnaddrkor_*`와 `RNENTDATA_*`를 확보한 뒤 direct 출입구를 다시 승격하려면 `kraddr-geo refresh mv --swap`과 C3/C4/C6/C7/C8 재검증 결과를 PR 또는 운영 로그에 남긴다.
+따라서 direct 출입구는 "있으면 무조건 더 정확한 좌표"로 보지 않는다. 같은 기준월 세트가 확보되기 전에는 분석용 테이블로 유지하고, serving 좌표는 기존 locsum/navi 경로를 사용한다. 같은 기준월의 `rnaddrkor_*`와 `RNENTDATA_*`를 확보한 뒤 direct 출입구를 다시 승격하려면 `ktgctl refresh mv --swap`과 C3/C4/C6/C7/C8 재검증 결과를 PR 또는 운영 로그에 남긴다.
 
 ## 검증
 
@@ -178,9 +178,9 @@ API job kind:
 선택형 Docker PostgreSQL 검증:
 
 ```bash
-dropdb -h localhost -p 15432 -U addr --if-exists kraddr_geo_t039
-createdb -h localhost -p 15432 -U addr kraddr_geo_t039
-KRADDR_GEO_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t039' \
+dropdb -h localhost -p 15432 -U addr --if-exists kor_travel_geo_t039
+createdb -h localhost -p 15432 -U addr kor_travel_geo_t039
+KTG_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t039' \
   .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q
 ```
 

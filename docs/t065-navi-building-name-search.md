@@ -4,7 +4,7 @@
 
 - 상태: 구현 및 실제 DB 검증 완료
 - 대상 브랜치: `codex/t065-navi-building-name`
-- 기준 DB: Docker PostGIS `kraddr_geo` (`localhost:15434`)
+- 기준 DB: Docker PostGIS `kor_travel_geo` (`localhost:15434`)
 - 기준 원천: `202604_내비게이션용DB_전체분`
 
 ## 목표
@@ -74,9 +74,9 @@ T-061 당시 helper MV는 약 `2,426MiB`였다. T-065 후 실제 helper는 row c
 실제 Docker DB에서 다음 순서로 검증했다.
 
 1. `tl_navi_buld_centroid`에 새 컬럼과 원천 테이블 GIN 인덱스를 적용했다.
-2. `kraddr-geo load navi /home/digitie/kraddr-geo-data/juso/202604_내비게이션용DB_전체분 --yyyymm 202604`
+2. `ktgctl load navi /home/digitie/kor-travel-geo-data/juso/202604_내비게이션용DB_전체분 --yyyymm 202604`
 3. 결과: `tl_navi_buld_centroid=10,687,317`, `tl_navi_entrc=12,830`, 소요 `457초`
-4. `kraddr-geo refresh mv --swap`으로 target/helper MV를 새 컬럼 포함 상태로 재생성했다.
+4. `ktgctl refresh mv --swap`으로 target/helper MV를 새 컬럼 포함 상태로 재생성했다.
 5. 후속 `ANALYZE`는 timeout 보강 전 실행에서 실패했으나 shadow swap 자체는 완료됐고, `SET statement_timeout=0` 수동 `ANALYZE`는 `12초`에 완료됐다. 코드에는 동일 timeout 보강을 반영했다.
 6. timeout 보강 후 release metadata 기록 경로만 직접 재검증했고, active release `7b3455b6-e682-4d16-92f7-65fcad33e219`가 생성됐다.
 
@@ -94,4 +94,4 @@ T-061 당시 helper MV는 약 `2,426MiB`였다. T-065 후 실제 helper는 row c
 ## 후속
 
 - `시군구용건물명`은 동명·상가명·별칭 성격이 섞여 있다. 현재는 검색 후보 recall을 높이는 용도로만 사용하고, API 응답의 공식 건물명은 여전히 도로명주소 한글 정본의 `buld_nm`을 사용한다.
-- 다음 대형 refresh 검증에서는 `shadow_swap_mv()`와 `record_mv_refresh_release()`의 `statement_timeout=0` 보강 이후 `kraddr-geo refresh mv --swap` 전체가 exit code 0으로 끝나는지 다시 확인한다.
+- 다음 대형 refresh 검증에서는 `shadow_swap_mv()`와 `record_mv_refresh_release()`의 `statement_timeout=0` 보강 이후 `ktgctl refresh mv --swap` 전체가 exit code 0으로 끝나는지 다시 확인한다.

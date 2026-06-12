@@ -6,9 +6,9 @@
 - 대상 브랜치: `codex/t028-daily-delta-loader`
 - 대상 데이터: `data/juso/daily/*.zip`
 - 주요 코드:
-  - `src/kraddr/geo/loaders/text/daily_juso_loader.py`
-  - `src/kraddr/geo/cli/main.py`
-  - `src/kraddr/geo/api/app.py`
+  - `src/kortravelgeo/loaders/text/daily_juso_loader.py`
+  - `src/kortravelgeo/cli/main.py`
+  - `src/kortravelgeo/api/app.py`
   - `tests/unit/test_daily_juso_loader.py`
   - `tests/integration/test_real_juso_text_loaders.py`
 
@@ -20,7 +20,7 @@ T-027 전체 적재 계획에서 `data/juso/daily/*.zip`는 full-load 범위 밖
 
 ## 실제 파일 구조 확인
 
-로컬 실제 데이터는 `F:\dev\python-kraddr-geo\data\juso\daily` (`/mnt/f/dev/python-kraddr-geo/data/juso/daily`) 아래에 있다. 확인한 ZIP 예시는 다음과 같다.
+로컬 실제 데이터는 `F:\dev\kor-travel-geo\data\juso\daily` (`/mnt/f/dev/kor-travel-geo/data/juso/daily`) 아래에 있다. 확인한 ZIP 예시는 다음과 같다.
 
 | ZIP | member | 크기 | 비고 |
 |-----|--------|------|------|
@@ -108,7 +108,7 @@ ORDER BY bd_mgt_sn, mvmn_de DESC NULLS LAST, source_file DESC, staging_seq DESC
 - `LNBR` member는 건물관리번호와 지번의 보조 관계를 별도로 제공하므로, 향후 `jibun_rnaddrkor_*`와 함께 1:N 관계 테이블을 설계해야 한다.
 - 이 결정은 T-029에서 `jibun_rnaddrkor_*` 활용 여부와 함께 ADR-022로 확정했다. 후속 구현은 `tl_juso_parcel_link` 1:N 테이블로 분리한다.
 
-단, 파일을 완전히 무시하지는 않는다. 이 로더는 `LNBR` member를 발견해 행 수를 세고, `DailyJusoLoadResult.unsupported_lnbr_rows` 및 `load_manifest.source_set.unsupported_lnbr_rows`에 기록한다. T-038 이후 실제 LNBR 반영은 같은 ZIP을 `kraddr-geo load daily-parcel-links ...` 또는 API job kind `juso_parcel_link_delta`로 실행해 `tl_juso_parcel_link`에 적용한다. 이렇게 분리하면 MST와 LNBR 실패/재시도 단위를 따로 볼 수 있다.
+단, 파일을 완전히 무시하지는 않는다. 이 로더는 `LNBR` member를 발견해 행 수를 세고, `DailyJusoLoadResult.unsupported_lnbr_rows` 및 `load_manifest.source_set.unsupported_lnbr_rows`에 기록한다. T-038 이후 실제 LNBR 반영은 같은 ZIP을 `ktgctl load daily-parcel-links ...` 또는 API job kind `juso_parcel_link_delta`로 실행해 `tl_juso_parcel_link`에 적용한다. 이렇게 분리하면 MST와 LNBR 실패/재시도 단위를 따로 볼 수 있다.
 
 ## `No Data` 처리
 
@@ -121,13 +121,13 @@ ORDER BY bd_mgt_sn, mvmn_de DESC NULLS LAST, source_file DESC, staging_seq DESC
 ## CLI
 
 ```bash
-kraddr-geo load daily-juso ./data/juso/daily/20260401_dailyjusukrdata.zip
+ktgctl load daily-juso ./data/juso/daily/20260401_dailyjusukrdata.zip
 
 # 여러 ZIP을 디렉터리 단위로 한 번에 적용
-kraddr-geo load daily-juso ./data/juso/daily
+ktgctl load daily-juso ./data/juso/daily
 
 # 테스트/검증용으로 파일당 앞 N행만 적용
-kraddr-geo load daily-juso ./data/juso/daily/20260401_dailyjusukrdata.zip --limit-per-file 3
+ktgctl load daily-juso ./data/juso/daily/20260401_dailyjusukrdata.zip --limit-per-file 3
 ```
 
 `--limit-per-file`은 parser/load smoke test 전용이다. production 호출에서 일부 행만 적재하는 실수를 막기 위해 CLI는 이 옵션을 사용하면 stderr에 경고를 출력한다.
@@ -146,7 +146,7 @@ loaded daily tl_juso_text delta: processed=422, upserted=242, deleted=180, lnbr_
 {
   "kind": "daily_juso_delta",
   "payload": {
-    "path": "/mnt/f/dev/python-kraddr-geo/data/juso/daily/20260401_dailyjusukrdata.zip"
+    "path": "/mnt/f/dev/kor-travel-geo/data/juso/daily/20260401_dailyjusukrdata.zip"
   }
 }
 ```
@@ -173,7 +173,7 @@ loaded daily tl_juso_text delta: processed=422, upserted=242, deleted=180, lnbr_
 
 `load_manifest.row_count`와 `source_set.unsupported_lnbr_rows`는 이번 실행 결과를 기록한다. 여러 날짜의 누적 미지원 LNBR 합계를 별도로 보려면 T-038 이후 `juso_parcel_link_delta` 실행 결과와 job history를 함께 확인한다.
 
-daily delta 적용 직후에는 운영 MV가 자동 refresh되지 않는다. `mv_geocode_target` 재계산은 수백만 행 규모의 I/O를 만들 수 있으므로, 운영자는 daily 적용 묶음이 끝난 뒤 `kraddr-geo refresh mv --swap` 또는 `mv_refresh` job을 별도 점검 창에서 실행한다.
+daily delta 적용 직후에는 운영 MV가 자동 refresh되지 않는다. `mv_geocode_target` 재계산은 수백만 행 규모의 I/O를 만들 수 있으므로, 운영자는 daily 적용 묶음이 끝난 뒤 `ktgctl refresh mv --swap` 또는 `mv_refresh` job을 별도 점검 창에서 실행한다.
 
 ## 검증
 
@@ -190,11 +190,11 @@ daily delta 적용 직후에는 운영 MV가 자동 refresh되지 않는다. `mv
   - 코드 분포 `31=185`, `34=57`, `63=180`
   - `20260404_dailyjusukrdata.zip` MST/LNBR `No Data` skip
 - 선택형 실제 PostgreSQL 검증
-  - `KRADDR_GEO_TEST_PG_DSN`이 있으면 DDL 적용 뒤 실제 full sample + daily sample 3행을 같은 DB에 적재한다.
-  - 이번 PR에서는 Docker PostGIS `localhost:15432`에 전용 DB `kraddr_geo_t028`을 새로 만들고 `tests/integration/test_optional_real_postgres_load.py`를 실행했다. 결과는 1 passed, 2.66초였다.
+  - `KTG_TEST_PG_DSN`이 있으면 DDL 적용 뒤 실제 full sample + daily sample 3행을 같은 DB에 적재한다.
+  - 이번 PR에서는 Docker PostGIS `localhost:15432`에 전용 DB `kor_travel_geo_t028`을 새로 만들고 `tests/integration/test_optional_real_postgres_load.py`를 실행했다. 결과는 1 passed, 2.66초였다.
 - 전체 회귀
   - `pytest -q`: 122 passed / 3 skipped.
-  - `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check`: 통과.
+  - `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check`: 통과.
   - frontend `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`: 통과.
 
 ## 남은 작업

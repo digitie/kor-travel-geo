@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from kraddr.geo.core.geocoder import geocode
-from kraddr.geo.core.protocols import SppnAreaLookup
-from kraddr.geo.core.reverse_geocoder import reverse_geocode
-from kraddr.geo.core.sppn import (
+from kortravelgeo.core.geocoder import geocode
+from kortravelgeo.core.protocols import SppnAreaLookup
+from kortravelgeo.core.reverse_geocoder import reverse_geocode
+from kortravelgeo.core.sppn import (
     format_national_point_number_from_5179,
     parse_national_point_number,
 )
-from kraddr.geo.dto.common import Point
-from kraddr.geo.dto.geocode import GeocodeInput
-from kraddr.geo.dto.reverse import ReverseInput
+from kortravelgeo.dto.common import Point
+from kortravelgeo.dto.geocode import GeocodeInput
+from kortravelgeo.dto.reverse import ReverseInput
 
 
 def test_parse_national_point_number_returns_epsg5179_cell_center() -> None:

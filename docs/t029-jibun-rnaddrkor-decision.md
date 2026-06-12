@@ -49,7 +49,7 @@ daily `TH_SGCO_RNADR_LNBR.TXT`는 같은 14컬럼 구조를 쓰되 index 13에 `
 
 ## 실제 cardinality 계측
 
-로컬 실제 데이터 `/mnt/f/dev/python-kraddr-geo/data/juso/202603_도로명주소 한글_전체분` 기준:
+로컬 실제 데이터 `/mnt/f/dev/kor-travel-geo/data/juso/202603_도로명주소 한글_전체분` 기준:
 
 | 범위 | 행 수 | distinct `bd_mgt_sn` | 2개 이상 보조 지번을 가진 건물 | 한 건물 최대 보조 지번 수 |
 |------|-------|----------------------|--------------------------------|---------------------------|
@@ -135,7 +135,7 @@ T-038에서 테이블과 로더를 추가하더라도 즉시 `mv_geocode_target`
   - 실제 daily `20260401_dailyjusukrdata.zip`의 `LNBR` member가 같은 구조 + `MVM_RES_CD`를 갖는지 확인한다.
 - 전체 회귀:
   - `pytest -q`: 124 passed / 3 skipped.
-  - `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check`: 통과.
+  - `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check`: 통과.
 
 ## 다음 작업
 

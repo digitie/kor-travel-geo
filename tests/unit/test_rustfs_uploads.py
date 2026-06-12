@@ -5,26 +5,26 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr
 
-from kraddr.geo.dto.admin import (
+from kortravelgeo.dto.admin import (
     RustfsImportPrefixRequest,
     RustfsStorageConfigPatch,
     RustfsSyncLocalRequest,
     UploadSetCreateRequest,
 )
-from kraddr.geo.exceptions import InvalidInputError
-from kraddr.geo.infra.rustfs import (
+from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.rustfs import (
     EffectiveRustfsConfig,
     RustfsObject,
     describe_rustfs_config,
     load_rustfs_config,
     save_rustfs_config,
 )
-from kraddr.geo.infra.uploads import (
+from kortravelgeo.infra.uploads import (
     create_upload_set,
     import_rustfs_prefix_as_upload_set,
     sync_local_to_rustfs,
 )
-from kraddr.geo.settings import Settings
+from kortravelgeo.settings import Settings
 
 
 def test_rustfs_config_patch_redacts_and_keeps_existing_secret(tmp_path: Path) -> None:
@@ -39,15 +39,15 @@ def test_rustfs_config_patch_redacts_and_keeps_existing_secret(tmp_path: Path) -
         settings,
         RustfsStorageConfigPatch(
             enabled=True,
-            bucket="kraddr-geo",
-            prefix="../python-kraddr-geo//uploads",
+            bucket="kor-travel-geo",
+            prefix="../kor-travel-geo//uploads",
             access_key="saved-access",
             secret_key="saved-secret",
         ),
     )
 
     assert first.enabled is True
-    assert first.prefix == "python-kraddr-geo/uploads"
+    assert first.prefix == "kor-travel-geo/uploads"
     assert first.access_key.configured is True
     assert first.access_key.hint == "cess"
     assert first.secret_key.hint == "cret"
@@ -74,8 +74,8 @@ async def test_create_rustfs_upload_set_uses_rustfs_uri(tmp_path: Path) -> None:
     )
 
     assert status.storage_kind == "rustfs"
-    assert status.root_path.startswith("rustfs://kraddr-geo/python-kraddr-geo/uploads/")
-    assert status.storage_prefix == f"python-kraddr-geo/uploads/{status.upload_set_id}"
+    assert status.root_path.startswith("rustfs://kor-travel-geo/kor-travel-geo/uploads/")
+    assert status.storage_prefix == f"kor-travel-geo/uploads/{status.upload_set_id}"
     assert Path(status.materialized_path or "").name == "materialized"
     assert not (tmp_path / "uploads" / status.upload_set_id / "files").exists()
 
@@ -108,7 +108,7 @@ async def test_sync_local_to_rustfs_uploads_allowed_tree(tmp_path: Path) -> None
         tmp_path,
         RustfsSyncLocalRequest(
             root_path=str(data_root),
-            prefix="python-kraddr-geo/imports/test",
+            prefix="kor-travel-geo/imports/test",
         ),
         rustfs_client=client,
         rustfs_config=_config(),
@@ -120,10 +120,10 @@ async def test_sync_local_to_rustfs_uploads_allowed_tree(tmp_path: Path) -> None
     assert result.upload_set.storage_kind == "rustfs"
     assert result.upload_set.files[0].source_kind == "navi"
     assert result.upload_set.files[0].object_key == (
-        "python-kraddr-geo/imports/test/202604_내비게이션용DB_전체분/navi.txt"
+        "kor-travel-geo/imports/test/202604_내비게이션용DB_전체분/navi.txt"
     )
     assert client.uploaded_keys == (
-        "python-kraddr-geo/imports/test/202604_내비게이션용DB_전체분/navi.txt",
+        "kor-travel-geo/imports/test/202604_내비게이션용DB_전체분/navi.txt",
     )
 
 
@@ -151,7 +151,7 @@ async def test_import_rustfs_prefix_restores_upload_set_files(tmp_path: Path) ->
     client = _FakeRustfsClient(
         objects=(
             RustfsObject(
-                key="python-kraddr-geo/uploads/upload_1/files/202604_도로명주소 한글_전체분.zip",
+                key="kor-travel-geo/uploads/upload_1/files/202604_도로명주소 한글_전체분.zip",
                 size=10,
                 etag="abc",
             ),
@@ -160,13 +160,13 @@ async def test_import_rustfs_prefix_restores_upload_set_files(tmp_path: Path) ->
 
     status = await import_rustfs_prefix_as_upload_set(
         tmp_path,
-        RustfsImportPrefixRequest(prefix="python-kraddr-geo/uploads/upload_1"),
+        RustfsImportPrefixRequest(prefix="kor-travel-geo/uploads/upload_1"),
         rustfs_client=client,
         rustfs_config=_config(),
     )
 
     assert status.storage_kind == "rustfs"
-    assert status.storage_uri == "rustfs://kraddr-geo/python-kraddr-geo/uploads/upload_1"
+    assert status.storage_uri == "rustfs://kor-travel-geo/kor-travel-geo/uploads/upload_1"
     assert status.files[0].relative_path == "202604_도로명주소 한글_전체분.zip"
     assert status.files[0].object_etag == "abc"
     assert status.files[0].source_kind == "juso"
@@ -203,8 +203,8 @@ def _config(
     return EffectiveRustfsConfig(
         enabled=True,
         endpoint_url="http://127.0.0.1:9003",
-        bucket="kraddr-geo",
-        prefix="python-kraddr-geo",
+        bucket="kor-travel-geo",
+        prefix="kor-travel-geo",
         region="us-east-1",
         force_path_style=True,
         retention_days=0,

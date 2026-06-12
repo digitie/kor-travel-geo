@@ -10,7 +10,7 @@ T-042는 T-041/ADR-027에서 문서화한 `TL_SPPN_MAKAREA`를 실제 운영 스
 |------|-----------|
 | 스키마 | `tl_sppn_makarea` DDL, GiST 공간 인덱스, `sig_cd` btree 인덱스, Alembic `0007_t042_sppn_makarea` |
 | loader | `TL_SPPN_MAKAREA.shp` 또는 `구역의 도형` ZIP/디렉터리 탐지, GDAL Python binding 기반 staging 적재, `MultiPolygon 5179` 정규화, `SIG_CD + MAKAREA_ID` upsert |
-| CLI/API job | `kraddr-geo load sppn-makarea`, API queue kind `sppn_makarea_load`, source set optional child 연결 |
+| CLI/API job | `ktgctl load sppn-makarea`, API queue kind `sppn_makarea_load`, source set optional child 연결 |
 | core | 국가지점번호 문자열 parser, EPSG:5179 좌표 → 국가지점번호 formatter, geocode/reverse extension 조립 |
 | infra repo | `GeocodeRepository.lookup_sppn_area()`, `ReverseRepository.sppn_areas()` raw SQL |
 | DTO | `SppnMakareaContext`, `GeocodeExtension.national_point_number`, `GeocodeExtension.sppn_makarea`, `ReverseExtension.sppn_makarea` |
@@ -28,7 +28,7 @@ T-042는 T-041/ADR-027에서 문서화한 `TL_SPPN_MAKAREA`를 실제 운영 스
 세종 실제 파일:
 
 ```text
-/mnt/f/dev/python-kraddr-geo/data/juso/구역의 도형/구역의도형_전체분_세종특별자치시.zip
+/mnt/f/dev/kor-travel-geo/data/juso/구역의 도형/구역의도형_전체분_세종특별자치시.zip
 ```
 
 ZIP 내부 layer:
@@ -162,7 +162,7 @@ dstSRS=EPSG:5179
 geometryType=PROMOTE_TO_MULTI
 ```
 
-loader는 `_staging_sppn_makarea`라는 고정 staging table을 사용하므로, 같은 DB에서 동시에 두 개의 `TL_SPPN_MAKAREA` 적재가 실행되면 서로 stage를 지울 수 있다. 이를 막기 위해 `pg_try_advisory_lock(hashtext('kraddr.geo.loaders.sppn_makarea_loader.stage'))`를 적재 전체 구간에 걸고, lock을 얻지 못하면 fail-fast한다. API batch queue는 기본적으로 직렬이지만, CLI를 직접 여러 개 실행하는 운영자 실수를 방어하기 위한 장치다.
+loader는 `_staging_sppn_makarea`라는 고정 staging table을 사용하므로, 같은 DB에서 동시에 두 개의 `TL_SPPN_MAKAREA` 적재가 실행되면 서로 stage를 지울 수 있다. 이를 막기 위해 `pg_try_advisory_lock(hashtext('kortravelgeo.loaders.sppn_makarea_loader.stage'))`를 적재 전체 구간에 걸고, lock을 얻지 못하면 fail-fast한다. API batch queue는 기본적으로 직렬이지만, CLI를 직접 여러 개 실행하는 운영자 실수를 방어하기 위한 장치다.
 
 적재가 끝나면 `load_manifest.table_name='tl_sppn_makarea'`를 갱신한다. `row_count`, `source_yyyymm`, `source_set.kind='sppn_makarea'`, `source_files`를 남겨 C10 기준월 정합성과 최종 full-load 실행 로그에서 optional source를 함께 추적할 수 있게 한다.
 
@@ -236,24 +236,24 @@ reverse geocode는 도로명/지번 후보가 없어도 `sppn_makarea`가 있으
 | PostgreSQL/PostGIS image | `postgis/postgis:16-3.5` |
 | PostgreSQL server | 16.9 |
 | PostgreSQL config | `shared_buffers=512MB`, `work_mem=64MB`, `maintenance_work_mem=256MB` |
-| 테스트 DB | `kraddr_geo_t042_sppn` |
+| 테스트 DB | `kor_travel_geo_t042_sppn` |
 | 원천 ZIP 크기 | 2.3MiB |
 
 실행 순서:
 
-1. `kraddr_geo_t042_sppn` DB를 새로 만들었다.
+1. `kor_travel_geo_t042_sppn` DB를 새로 만들었다.
 2. `SCHEMA_SQL`과 `INDEX_SQL`을 적용했다.
-3. `kraddr-geo load sppn-makarea`로 세종 `구역의 도형` ZIP을 적재했다.
+3. `ktgctl load sppn-makarea`로 세종 `구역의 도형` ZIP을 적재했다.
 4. `MV_SQL`로 빈 `mv_geocode_target`을 만들어 reverse core smoke가 주소 후보 없음 상태에서도 실패하지 않는지 확인했다.
 5. `tl_sppn_makarea`에서 `ST_PointOnSurface(geom)` 샘플을 뽑아 국가지점번호 formatter → geocode → reverse 보조 조회 순서로 검증했다.
 
 적재 명령:
 
 ```bash
-KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t042_sppn \
+KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t042_sppn \
   TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
-  .venv/bin/kraddr-geo load sppn-makarea \
-  "/mnt/f/dev/python-kraddr-geo/data/juso/구역의 도형/구역의도형_전체분_세종특별자치시.zip" \
+  .venv/bin/ktgctl load sppn-makarea \
+  "/mnt/f/dev/kor-travel-geo/data/juso/구역의 도형/구역의도형_전체분_세종특별자치시.zip" \
   --yyyymm 202605
 ```
 
@@ -291,7 +291,7 @@ all_multipolygon=true
 optional integration test:
 
 ```bash
-KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t042_sppn \
+KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t042_sppn \
   TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
   .venv/bin/python -m pytest \
   tests/integration/test_optional_real_postgres_load.py::test_real_postgres_can_load_sppn_makarea_and_lookup_when_dsn_is_set \

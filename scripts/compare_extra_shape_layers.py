@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from kraddr.geo.loaders.extra_shape_layers import (
+from kortravelgeo.loaders.extra_shape_layers import (
     compare_detail_dong_shape_bundle,
     compare_zone_shape_bundle,
 )

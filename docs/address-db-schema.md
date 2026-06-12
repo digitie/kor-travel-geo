@@ -1,6 +1,6 @@
 # 주소 DB 스키마 (요약)
 
-`kraddr-geo`의 1차 저장소는 PostgreSQL + PostGIS다. 본 문서는 상위 요약만 두고, 컬럼·인덱스·MV·메타 테이블 전체 정의는 `docs/data-model.md`에 둔다.
+`kor-travel-geo`의 1차 저장소는 PostgreSQL + PostGIS다. 본 문서는 상위 요약만 두고, 컬럼·인덱스·MV·메타 테이블 전체 정의는 `docs/data-model.md`에 둔다.
 
 > 이전(v1) SQLite + SpatiaLite 기반 스키마(`juso_address_points`, `juso_boundary_polygons`, `juso_spatial_metadata`)는 `v1` 브랜치에 보존되어 있다. `main`은 더 이상 그 스키마를 유지보수하지 않는다(ADR-001).
 
@@ -54,10 +54,10 @@
 
 지오코딩 serving용 단일 머티리얼라이즈드 뷰. **텍스트 정본**(`tl_juso_text`)에 **대표 출입구 좌표**(`tl_locsum_entrc`, 같은 기준월일 때만 `tl_roadaddr_entrc` direct 출입구 fallback)와 **centroid fallback**(`tl_navi_buld_centroid`)을 합쳐 단일 lookup으로 응답한다. `pt_source` 컬럼(`entrance`/`centroid`)이 응답 좌표의 출처를 노출한다(ADR-003/ADR-012 호환). 라우터는 `centroid` 결과에 `confidence`를 낮춰 반환한다.
 
-`mv_geocode_text_search`는 `mv_geocode_target`에서 재생성하는 read-only fuzzy 검색 helper MV(T-061)다. MV 갱신은 두 객체를 함께 다루는 orchestration 경로(`kraddr-geo refresh mv`)만 사용한다.
+`mv_geocode_text_search`는 `mv_geocode_target`에서 재생성하는 read-only fuzzy 검색 helper MV(T-061)다. MV 갱신은 두 객체를 함께 다루는 orchestration 경로(`ktgctl refresh mv`)만 사용한다.
 
 전체 DDL과 추가 인덱스, swap 갱신 전략은 `docs/data-model.md`를 본다.
 
 ## Alembic / DDL
 
-테이블·인덱스·MV 정의는 `src/kraddr/geo/infra/sql.py`(`SCHEMA_SQL`/`INDEX_SQL`/`MV_SQL`)와 `alembic/versions/`에서 관리한다. `kraddr-geo init-db`가 스키마·확장·인덱스·빈 MV를 생성한다. 보조/메타/MV 모두 idempotent — 운영 중 재실행도 안전하도록 `IF NOT EXISTS` 또는 `DROP ... IF EXISTS` 명시.
+테이블·인덱스·MV 정의는 `src/kortravelgeo/infra/sql.py`(`SCHEMA_SQL`/`INDEX_SQL`/`MV_SQL`)와 `alembic/versions/`에서 관리한다. `ktgctl init-db`가 스키마·확장·인덱스·빈 MV를 생성한다. 보조/메타/MV 모두 idempotent — 운영 중 재실행도 안전하도록 `IF NOT EXISTS` 또는 `DROP ... IF EXISTS` 명시.

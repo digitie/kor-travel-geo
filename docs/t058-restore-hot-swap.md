@@ -24,9 +24,9 @@
 
 운영 시나리오:
 
-1. T-046으로 백업한 archive를 새 DB(`kraddr_geo_restore_<timestamp>`)에 복원했다.
+1. T-046으로 백업한 archive를 새 DB(`kor_travel_geo_restore_<timestamp>`)에 복원했다.
 2. 복원 후 smoke/consistency/performance gate가 통과했다.
-3. 이제 운영 serving DB(`kraddr_geo`)를 복원본으로 즉시 교체하고 싶다.
+3. 이제 운영 serving DB(`kor_travel_geo`)를 복원본으로 즉시 교체하고 싶다.
 
 이 과정에서 다음을 보장해야 한다:
 
@@ -43,14 +43,14 @@
 -- 1. 모든 connection을 새 DB로 이동(또는 끊기)
 SELECT pg_terminate_backend(pid)
   FROM pg_stat_activity
- WHERE datname IN ('kraddr_geo', 'kraddr_geo_restore_<ts>')
+ WHERE datname IN ('kor_travel_geo', 'kor_travel_geo_restore_<ts>')
    AND pid <> pg_backend_pid();
 
 -- 2. 운영 DB → 백업 alias로 rename
-ALTER DATABASE kraddr_geo RENAME TO kraddr_geo_previous_<ts>;
+ALTER DATABASE kor_travel_geo RENAME TO kor_travel_geo_previous_<ts>;
 
 -- 3. 복원본 → 운영 DB 이름으로 rename
-ALTER DATABASE kraddr_geo_restore_<ts> RENAME TO kraddr_geo;
+ALTER DATABASE kor_travel_geo_restore_<ts> RENAME TO kor_travel_geo;
 ```
 
 - 장점:
@@ -96,7 +96,7 @@ ADR-030 amend로 본 결정을 반영한다(ADR-036에서 신규 결정 + ADR-03
 ### 사전 조건
 
 - `ops.maintenance_windows`에 `kind='restore'`, `state='active'`, `confirmation_hash` 검증 완료.
-- 복원본 DB가 같은 cluster 안에 존재(`kraddr_geo_restore_<ts>`).
+- 복원본 DB가 같은 cluster 안에 존재(`kor_travel_geo_restore_<ts>`).
 - 복원본 DB에서 smoke test + consistency check 통과(`load_consistency_reports.severity_max` ≠ `ERROR`).
 - 복원본 DB에서 `mv_geocode_target` 존재 + ANALYZE 완료.
 
@@ -105,7 +105,7 @@ ADR-030 amend로 본 결정을 반영한다(ADR-036에서 신규 결정 + ADR-03
 ```python
 async def hot_swap_database(
     *,
-    current_db: str = "kraddr_geo",
+    current_db: str = "kor_travel_geo",
     restore_db: str,
     previous_alias: str | None = None,
     audit_actor: str,
@@ -163,7 +163,7 @@ async def hot_swap_database(
 
 ### maintenance connection
 
-rename은 `current_db`와 `restore_db` 둘 다 sessions이 없어야 가능. 따라서 maintenance용 별도 DB(`postgres` 기본 DB 또는 `kraddr_geo_admin`)에 연결한 connection에서 ALTER 실행. 같은 cluster의 다른 DB에 연결한 superuser session이 rename 수행.
+rename은 `current_db`와 `restore_db` 둘 다 sessions이 없어야 가능. 따라서 maintenance용 별도 DB(`postgres` 기본 DB 또는 `kor_travel_geo_admin`)에 연결한 connection에서 ALTER 실행. 같은 cluster의 다른 DB에 연결한 superuser session이 rename 수행.
 
 ### rollback
 
@@ -172,10 +172,10 @@ async def rollback_hot_swap(release_id: UUID) -> HotSwapResult:
     release = await get_serving_release(release_id)
     if release.release_kind != "restore":
         raise InvalidRollbackError(...)
-    previous_alias = release.notes_parsed.previous_alias  # e.g. kraddr_geo_previous_20260527
+    previous_alias = release.notes_parsed.previous_alias  # e.g. kor_travel_geo_previous_20260527
     current_db = release.notes_parsed.from  # restored DB가 현재 운영 alias로 이동했음
 
-    # current_db (e.g. kraddr_geo) was renamed-to restore alias before
+    # current_db (e.g. kor_travel_geo) was renamed-to restore alias before
     # restore was renamed to current_db
     # rollback = swap them back
 
@@ -197,7 +197,7 @@ async def rollback_hot_swap(release_id: UUID) -> HotSwapResult:
 ```text
 POST /v1/admin/restores/hot-swap-plan
 {
-  "restore_database": "kraddr_geo_restore_20260529",
+  "restore_database": "kor_travel_geo_restore_20260529",
   "previous_alias_retention_days": 7,
   "maintenance_database": "postgres"
 }
@@ -205,7 +205,7 @@ POST /v1/admin/restores/hot-swap-plan
 
 응답은 다음을 포함한다.
 
-- `current_database`: 현재 `KRADDR_GEO_PG_DSN`의 DB 이름
+- `current_database`: 현재 `KTG_PG_DSN`의 DB 이름
 - `restore_database`: rename 대상 복원본 DB
 - `previous_alias`: 현재 DB를 보존할 alias
 - `maintenance_database`: `ALTER DATABASE ... RENAME`을 실행할 maintenance 연결 DB (기본 `postgres`, managed/hardened cluster는 다른 DB 지정 가능)
@@ -226,8 +226,8 @@ POST /v1/admin/restores/hot-swap-plan
 ### CLI
 
 ```bash
-kraddr-geo serving hot-swap-plan \
-  --restore-db kraddr_geo_restore_20260527_123456 \
+ktgctl serving hot-swap-plan \
+  --restore-db kor_travel_geo_restore_20260527_123456 \
   --previous-alias-retention-days 7 \
   --maintenance-db postgres
 ```

@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from kraddr.geo.exceptions import LoaderError
-from kraddr.geo.loaders import sppn_makarea_loader
+from kortravelgeo.exceptions import LoaderError
+from kortravelgeo.loaders import sppn_makarea_loader
 
 if TYPE_CHECKING:
     from pathlib import Path

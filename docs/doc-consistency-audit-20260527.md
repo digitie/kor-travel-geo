@@ -10,7 +10,7 @@
 - 핵심 설계 문서: `docs/architecture.md`, `docs/backend-package.md`, `docs/frontend-package.md`, `docs/data-model.md`, `docs/decisions.md`
 - 재개·작업 문서: `docs/tasks.md`, `docs/resume.md`, `docs/journal.md`, `CHANGELOG.md`
 - 보조 안내 문서: `docs/code-guide-for-beginners.md`, `docs/agent-guide.md`, `docs/geocoding-readiness.md`, `docs/reverse-geocoding.md`, `docs/address-db-schema.md`, `docs/spatialite-vworld-implementation.md`
-- 실제 CLI 표면: `src/kraddr/geo/cli/main.py`의 `load all-sidos`, `refresh mv`, `validate` 명령 시그니처
+- 실제 CLI 표면: `src/kortravelgeo/cli/main.py`의 `load all-sidos`, `refresh mv`, `validate` 명령 시그니처
 
 ## 발견 및 반영
 
@@ -18,9 +18,9 @@
 |------|------|------|
 | 브랜치 명칭 | 현재 기본 브랜치는 `main`인데 여러 현재형 문서가 `master`를 기준으로 설명했다. | 현재형 설명은 `main`으로 수정했다. `master table`처럼 DB 도메인 용어이거나 과거 작업 일지에 남은 기록은 그대로 두었다. |
 | README 현재 상태 | T-005~T-026까지만 포함한다고 적혀 있어 T-027~T-049 문서/검증 흐름이 빠져 있었다. | T-005~T-041 구현·실데이터 검증, T-042~T-049 후속 계획이 문서화된 상태로 갱신했다. |
-| README/SKILL quick start | `kraddr-geo load all-sidos ./data/jusoMap/202605 --mode full --pg-conn ...` 예시는 현재 Typer 명령 시그니처와 맞지 않는다. | 실제 CLI 옵션인 `--juso`, `--jibun`, `--locsum`, `--navi`, `--shp-root`, `--yyyymm` 예시로 바꿨다. |
-| UI 패키지 설명 | `SKILL.md`가 “이 저장소는 백엔드만 다룬다”고 설명해, 같은 저장소의 `kraddr-geo-ui`와 충돌했다. | `kraddr-geo-ui`는 같은 저장소에서 관리하는 별도 Node.js 패키지이며 REST API만 호출한다는 설명으로 정리했다. |
-| ADR 목록 | README 핵심 ADR 표에 ADR-032가 빠져 있었다. | `maplibre-vworld-js` 최신 소비와 `kraddr-geo` 특화 기능 경계 원칙을 ADR-032로 추가했다. |
+| README/SKILL quick start | `ktgctl load all-sidos ./data/jusoMap/202605 --mode full --pg-conn ...` 예시는 현재 Typer 명령 시그니처와 맞지 않는다. | 실제 CLI 옵션인 `--juso`, `--jibun`, `--locsum`, `--navi`, `--shp-root`, `--yyyymm` 예시로 바꿨다. |
+| UI 패키지 설명 | `SKILL.md`가 “이 저장소는 백엔드만 다룬다”고 설명해, 같은 저장소의 `kor-travel-geo-ui`와 충돌했다. | `kor-travel-geo-ui`는 같은 저장소에서 관리하는 별도 Node.js 패키지이며 REST API만 호출한다는 설명으로 정리했다. |
+| ADR 목록 | README 핵심 ADR 표에 ADR-032가 빠져 있었다. | `maplibre-vworld-js` 최신 소비와 `kor-travel-geo` 특화 기능 경계 원칙을 ADR-032로 추가했다. |
 | 백업 artifact 명칭 | ADR-033 이후 T-046 백업 metadata는 `ops.artifacts`로 수렴하는데 일부 흐름도와 후속 항목이 `db_backup_artifacts`를 기본처럼 설명했다. | 신규 구현 기본값은 `ops.artifacts`이며 전용 `db_backup_artifacts`는 compatibility/migration 대상임을 반영했다. |
 | 운영 UI/API 표면 | T-049는 `/v1/admin/ops/*`와 `/admin/ops`를 요구하지만, 백엔드/프론트엔드 사양의 주요 화면·엔드포인트 목록에는 빠져 있었다. | `docs/backend-package.md`에 `ops` 엔드포인트 후보를, `docs/frontend-package.md`에 `/admin/ops` 후보 화면과 테스트 항목을 추가했다. |
 | task 순서 | T-044 지도 UI 경계화가 T-042/T-027/T-047보다 앞에 있어, 데이터·운영 gate가 늦어질 수 있었다. | T-049 → T-045 → T-046 → T-042 → T-027 → T-047 → T-044 순서로 재정렬했다. T-043 리뷰 audit은 사용자 지시상 가장 앞에 유지했다. |

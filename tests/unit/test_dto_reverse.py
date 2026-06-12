@@ -1,9 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
-from kraddr.geo.dto.address import AddressStructure
-from kraddr.geo.dto.common import Point, ServiceMeta
-from kraddr.geo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
+from kortravelgeo.dto.address import AddressStructure
+from kortravelgeo.dto.common import Point, ServiceMeta
+from kortravelgeo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
 
 
 def test_reverse_input_defaults() -> None:
@@ -21,7 +21,7 @@ def test_reverse_input_rejects_lat_lon_swap() -> None:
 
 def test_reverse_response_item_wire_shape() -> None:
     response = ReverseResponse(
-        service=ServiceMeta(name="kraddr-geo", operation="reverse"),
+        service=ServiceMeta(name="kor-travel-geo", operation="reverse"),
         status="OK",
         input=ReverseInput(point=Point(x=127.0286, y=37.5003)),
         result=(

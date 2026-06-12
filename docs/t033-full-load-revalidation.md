@@ -26,10 +26,10 @@ T-034는 본 문서의 SHP 기준선, 특히 `TL_SPRD_INTRVL`과 `TL_SPBD_BULD` 
 | 메모리 | 29GiB total, 실행 전 available 약 27GiB |
 | ext4 여유 공간 | `/dev/sdd` 1007G 중 791G available |
 | NTFS 데이터 공간 | `/mnt/f` 932G 중 267G available |
-| Docker DB | `kraddr-geo-t027-db-1`, `postgis/postgis:16-3.5`, host port `15432` |
-| 테스트 DB | `kraddr_geo_t033` |
-| ext4 데이터 경로 | `/home/digitie/kraddr-geo-data` |
-| 원본 NTFS 데이터 경로 | `/mnt/f/dev/python-kraddr-geo/data/juso` |
+| Docker DB | `kor-travel-geo-t027-db-1`, `postgis/postgis:16-3.5`, host port `15432` |
+| 테스트 DB | `kor_travel_geo_t033` |
+| ext4 데이터 경로 | `/home/digitie/kor-travel-geo-data` |
+| 원본 NTFS 데이터 경로 | `/mnt/f/dev/kor-travel-geo/data/juso` |
 | 로그 경로 | `artifacts/t033-full-load-20260525_224643/` (git ignore) |
 
 ## 입력 데이터
@@ -46,17 +46,17 @@ T-034는 본 문서의 SHP 기준선, 특히 `TL_SPRD_INTRVL`과 `TL_SPBD_BULD` 
 ## 실행 명령
 
 ```bash
-PGPASSWORD=addr createdb -h localhost -p 15432 -U addr kraddr_geo_t033
+PGPASSWORD=addr createdb -h localhost -p 15432 -U addr kor_travel_geo_t033
 
 ARTIFACT_DIR=artifacts/t033-full-load-20260525_224643
-PATH=/home/digitie/dev/python-kraddr-geo/.venv/bin:$PATH \
-DATA_DIR=/home/digitie/kraddr-geo-data \
+PATH=/home/digitie/dev/kor-travel-geo/.venv/bin:$PATH \
+DATA_DIR=/home/digitie/kor-travel-geo-data \
 JUSO_YYYYMM=202603 \
 LOCSUM_YYYYMM=202604 \
 NAVI_YYYYMM=202604 \
-KRADDR_GEO_DB_PORT=15432 \
-KRADDR_GEO_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t033 \
-KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS=1800000 \
+KTG_DB_PORT=15432 \
+KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t033 \
+KTG_PG_STATEMENT_TIMEOUT_MS=1800000 \
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
   /usr/bin/time -v bash scripts/fullload_test.sh 2>&1 | tee "$ARTIFACT_DIR/fullload.log"
 ```
@@ -103,7 +103,7 @@ SHP 3시간 37분 32초는 `fullload.log`의 Phase 3 시작/종료 timestamp 차
 | `tl_sprd_rw` | 1,482,679 |
 | `tl_spbd_buld_polygon` | 10,687,732 |
 
-최종 DB 크기는 `pg_database_size('kraddr_geo_t033')` 기준 약 **26GB**였다. `postal_pobox`, `postal_bulk_delivery`는 로컬 ext4 mirror에 epost 파일이 없어 이번 실행에서 적재하지 않았다.
+최종 DB 크기는 `pg_database_size('kor_travel_geo_t033')` 기준 약 **26GB**였다. `postal_pobox`, `postal_bulk_delivery`는 로컬 ext4 mirror에 epost 파일이 없어 이번 실행에서 적재하지 않았다.
 
 ## 링크 해소율
 
@@ -116,7 +116,7 @@ SHP 3시간 37분 32초는 `fullload.log`의 Phase 3 시작/종료 timestamp 차
 
 ## 정합성 결과
 
-`kraddr-geo validate consistency --scope full` 결과 `severity_max=ERROR`였다. 이는 현재 실제 원천 조합에서 기대하던 잔여 데이터 품질 이슈이며, full-load 자체 실패로 보지 않는다.
+`ktgctl validate consistency --scope full` 결과 `severity_max=ERROR`였다. 이는 현재 실제 원천 조합에서 기대하던 잔여 데이터 품질 이슈이며, full-load 자체 실패로 보지 않는다.
 
 | Case | Severity | Count | 주요 metric |
 |------|----------|------:|-------------|
@@ -135,7 +135,7 @@ C10은 현재 row-level `source_yyyymm` 컬럼을 전수 비교하지 않고, `l
 
 ## Data-quality export
 
-전국 DB에서 `kraddr-geo validate data-quality-samples --cases C2,C4,C6,C7 --limit 20`을 별도로 실행해 CSV 8개를 생성했다.
+전국 DB에서 `ktgctl validate data-quality-samples --cases C2,C4,C6,C7 --limit 20`을 별도로 실행해 CSV 8개를 생성했다.
 
 | 파일 | 핵심 결과 |
 |------|-----------|

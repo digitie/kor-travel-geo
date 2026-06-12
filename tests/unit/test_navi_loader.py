@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from kraddr.geo.loaders.text.common import TextSource
-from kraddr.geo.loaders.text.navi_loader import iter_navi_build_rows, iter_navi_entrance_rows
+from kortravelgeo.loaders.text.common import TextSource
+from kortravelgeo.loaders.text.navi_loader import iter_navi_build_rows, iter_navi_entrance_rows
 
 if TYPE_CHECKING:
     from pathlib import Path

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-UI_DIR="$ROOT_DIR/kraddr-geo-ui"
+UI_DIR="$ROOT_DIR/kor-travel-geo-ui"
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm not found. Install Linux Node/npm in WSL before running frontend checks." >&2

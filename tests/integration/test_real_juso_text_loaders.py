@@ -4,18 +4,18 @@ from pathlib import Path
 
 import pytest
 
-from kraddr.geo.loaders.shp.polygons_loader import POLYGON_LAYER_NAMES, build_shp_load_plan
-from kraddr.geo.loaders.text.daily_juso_loader import (
+from kortravelgeo.loaders.shp.polygons_loader import POLYGON_LAYER_NAMES, build_shp_load_plan
+from kortravelgeo.loaders.text.daily_juso_loader import (
     discover_daily_juso_sources,
     is_no_data_source,
     iter_daily_juso_rows,
 )
-from kraddr.geo.loaders.text.juso_hangul_loader import (
+from kortravelgeo.loaders.text.juso_hangul_loader import (
     discover_juso_hangul_files,
     iter_juso_rows,
 )
-from kraddr.geo.loaders.text.locsum_loader import discover_locsum_files, iter_locsum_rows
-from kraddr.geo.loaders.text.navi_loader import (
+from kortravelgeo.loaders.text.locsum_loader import discover_locsum_files, iter_locsum_rows
+from kortravelgeo.loaders.text.navi_loader import (
     discover_navi_build_files,
     discover_navi_entrance_files,
     iter_navi_build_rows,
@@ -24,8 +24,8 @@ from kraddr.geo.loaders.text.navi_loader import (
 
 DATA_ROOT = Path("data/juso")
 ALT_DATA_ROOTS = (
-    Path("/mnt/f/dev/python-kraddr-geo/data/juso"),
-    Path("/home/digitie/kraddr-geo-data/juso"),
+    Path("/mnt/f/dev/kor-travel-geo/data/juso"),
+    Path("/home/digitie/kor-travel-geo-data/juso"),
 )
 
 

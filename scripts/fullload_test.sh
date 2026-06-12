@@ -4,7 +4,7 @@
 # Workflow:
 #   1. Copy data from NTFS to WSL ext4 (avoids cross-filesystem I/O penalty)
 #   2. Decompress archives on ext4
-#   3. Load into the PostgreSQL/PostGIS pointed to by KRADDR_GEO_PG_DSN
+#   3. Load into the PostgreSQL/PostGIS pointed to by KTG_PG_DSN
 #
 # Usage:
 #   # First time — copy NTFS data to ext4:
@@ -24,11 +24,11 @@
 set -euo pipefail
 
 # --- Paths ---
-NTFS_DATA="${NTFS_DATA:-/mnt/f/dev/python-kraddr-geo/data}"
-EXT4_DATA="${EXT4_DATA:-$HOME/kraddr-geo-data}"
+NTFS_DATA="${NTFS_DATA:-/mnt/f/dev/kor-travel-geo/data}"
+EXT4_DATA="${EXT4_DATA:-$HOME/kor-travel-geo-data}"
 DATA_DIR="${DATA_DIR:-$EXT4_DATA}"
-DB_PORT="${KRADDR_GEO_DB_PORT:-5432}"
-PG_DSN="${KRADDR_GEO_PG_DSN:-postgresql+psycopg://addr:addr@localhost:${DB_PORT}/kraddr_geo}"
+DB_PORT="${KTG_DB_PORT:-5432}"
+PG_DSN="${KTG_PG_DSN:-postgresql+psycopg://addr:addr@localhost:${DB_PORT}/kor_travel_geo}"
 JUSO_YYYYMM="${JUSO_YYYYMM:-${YYYYMM:-202603}}"
 LOCSUM_YYYYMM="${LOCSUM_YYYYMM:-${YYYYMM:-202604}}"
 NAVI_YYYYMM="${NAVI_YYYYMM:-${YYYYMM:-202604}}"
@@ -40,12 +40,12 @@ DAILY_YYYYMM="${DAILY_YYYYMM:-}"
 PLAN_ONLY="${PLAN_ONLY:-0}"
 COPY_DATA="${COPY_DATA:-0}"
 PYTHON_BIN="${PYTHON:-python}"
-KRADDR_GEO_BIN="${KRADDR_GEO_BIN:-kraddr-geo}"
+KTG_BIN="${KTG_BIN:-ktgctl}"
 
-export KRADDR_GEO_PG_DSN="$PG_DSN"
-export KRADDR_GEO_LOADER_DATA_DIR="$DATA_DIR"
-export KRADDR_GEO_LOADER_BATCH_SIZE="${BATCH_SIZE:-10000}"
-export KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS="${KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS:-1800000}"
+export KTG_PG_DSN="$PG_DSN"
+export KTG_LOADER_DATA_DIR="$DATA_DIR"
+export KTG_LOADER_BATCH_SIZE="${BATCH_SIZE:-10000}"
+export KTG_PG_STATEMENT_TIMEOUT_MS="${KTG_PG_STATEMENT_TIMEOUT_MS:-1800000}"
 
 log() {
   printf '\n[%s] %s\n' "$(date -Is)" "$*"
@@ -176,7 +176,7 @@ echo "  SPPN_MAKAREA_YYYYMM=$SPPN_MAKAREA_YYYYMM"
 echo "  DAILY_JUSO_ZIP=${DAILY_JUSO_ZIP:-'(not set; daily delta skipped)'}"
 echo "  DAILY_YYYYMM=${DAILY_YYYYMM:-'(infer from delta file)'}"
 echo "  PG_DSN=$PG_DSN"
-echo "  KRADDR_GEO_DB_PORT=$DB_PORT (used only when KRADDR_GEO_PG_DSN is unset)"
+echo "  KTG_DB_PORT=$DB_PORT (used only when KTG_PG_DSN is unset)"
 if [ -d "$ROADADDR_ENTRANCE_DIR" ]; then
   echo "  ROADADDR_ENTRANCE_DIR=$ROADADDR_ENTRANCE_DIR"
 else
@@ -199,9 +199,9 @@ fi
 
 TOTAL_START=$(date +%s)
 
-log "=== Phase 1: DDL — kraddr-geo init-db ==="
+log "=== Phase 1: DDL — ktgctl init-db ==="
 PHASE_START=$(date +%s)
-run "$KRADDR_GEO_BIN" init-db
+run "$KTG_BIN" init-db
 DDL_ELAPSED=$(( $(date +%s) - PHASE_START ))
 echo "DDL/init-db completed in ${DDL_ELAPSED}s"
 
@@ -210,25 +210,25 @@ TEXT_START=$(date +%s)
 
 echo "--- 2a: juso_hangul ---"
 PHASE_START=$(date +%s)
-run "$KRADDR_GEO_BIN" load juso "$JUSO_TEXT_DIR" --yyyymm "$JUSO_YYYYMM"
+run "$KTG_BIN" load juso "$JUSO_TEXT_DIR" --yyyymm "$JUSO_YYYYMM"
 JUSO_ELAPSED=$(( $(date +%s) - PHASE_START ))
 echo "juso_hangul completed in ${JUSO_ELAPSED}s"
 
 echo "--- 2b: parcel links ---"
 PHASE_START=$(date +%s)
-run "$KRADDR_GEO_BIN" load parcel-links "$JUSO_TEXT_DIR" --yyyymm "$JUSO_YYYYMM"
+run "$KTG_BIN" load parcel-links "$JUSO_TEXT_DIR" --yyyymm "$JUSO_YYYYMM"
 PARCEL_LINK_ELAPSED=$(( $(date +%s) - PHASE_START ))
 echo "parcel_links completed in ${PARCEL_LINK_ELAPSED}s"
 
 echo "--- 2c: locsum ---"
 PHASE_START=$(date +%s)
-run "$KRADDR_GEO_BIN" load locsum "$LOCSUM_ZIP" --yyyymm "$LOCSUM_YYYYMM"
+run "$KTG_BIN" load locsum "$LOCSUM_ZIP" --yyyymm "$LOCSUM_YYYYMM"
 LOCSUM_ELAPSED=$(( $(date +%s) - PHASE_START ))
 echo "locsum completed in ${LOCSUM_ELAPSED}s"
 
 echo "--- 2d: navi ---"
 PHASE_START=$(date +%s)
-run "$KRADDR_GEO_BIN" load navi "$NAVI_DIR" --yyyymm "$NAVI_YYYYMM"
+run "$KTG_BIN" load navi "$NAVI_DIR" --yyyymm "$NAVI_YYYYMM"
 NAVI_ELAPSED=$(( $(date +%s) - PHASE_START ))
 echo "navi completed in ${NAVI_ELAPSED}s"
 
@@ -238,7 +238,7 @@ echo "Text loaders completed in ${TEXT_ELAPSED}s (juso=${JUSO_ELAPSED}s, parcel_
 log "=== Phase 3: SHP polygons (optional) ==="
 PHASE_START=$(date +%s)
 if [ -d "$SHP_ROOT" ]; then
-  run "$KRADDR_GEO_BIN" load shp-all "$SHP_ROOT" --mode full --yyyymm "$SHP_YYYYMM"
+  run "$KTG_BIN" load shp-all "$SHP_ROOT" --mode full --yyyymm "$SHP_YYYYMM"
 else
   echo "SKIP: SHP data not found at $SHP_ROOT"
 fi
@@ -248,7 +248,7 @@ echo "SHP phase completed in ${SHP_ELAPSED}s"
 log "=== Phase 3b: Optional direct entrance + SPPN makarea ==="
 PHASE_START=$(date +%s)
 if [ -d "$ROADADDR_ENTRANCE_DIR" ]; then
-  run "$KRADDR_GEO_BIN" load roadaddr-entrances "$ROADADDR_ENTRANCE_DIR" --yyyymm "$ROADADDR_ENTRANCE_YYYYMM"
+  run "$KTG_BIN" load roadaddr-entrances "$ROADADDR_ENTRANCE_DIR" --yyyymm "$ROADADDR_ENTRANCE_YYYYMM"
 else
   echo "SKIP: roadaddr entrance data not found at $ROADADDR_ENTRANCE_DIR"
 fi
@@ -257,7 +257,7 @@ echo "roadaddr entrance phase completed in ${ROADADDR_ENTRANCE_ELAPSED}s"
 
 PHASE_START=$(date +%s)
 if [ -d "$SPPN_MAKAREA_DIR" ]; then
-  run "$KRADDR_GEO_BIN" load sppn-makarea "$SPPN_MAKAREA_DIR" --yyyymm "$SPPN_MAKAREA_YYYYMM"
+  run "$KTG_BIN" load sppn-makarea "$SPPN_MAKAREA_DIR" --yyyymm "$SPPN_MAKAREA_YYYYMM"
 else
   echo "SKIP: SPPN makarea data not found at $SPPN_MAKAREA_DIR"
 fi
@@ -271,8 +271,8 @@ if [ -n "$DAILY_JUSO_ZIP" ]; then
   if [ -n "$DAILY_YYYYMM" ]; then
     DAILY_ARGS+=("--yyyymm" "$DAILY_YYYYMM")
   fi
-  run "$KRADDR_GEO_BIN" load daily-juso "${DAILY_ARGS[@]}"
-  run "$KRADDR_GEO_BIN" load daily-parcel-links "${DAILY_ARGS[@]}"
+  run "$KTG_BIN" load daily-juso "${DAILY_ARGS[@]}"
+  run "$KTG_BIN" load daily-parcel-links "${DAILY_ARGS[@]}"
 else
   echo "SKIP: DAILY_JUSO_ZIP is not set"
 fi
@@ -282,14 +282,14 @@ echo "daily delta phase completed in ${DAILY_ELAPSED}s"
 log "=== Phase 4: Pobox + Bulk (optional) ==="
 POBOX="$DATA_DIR/epost/zipcode_full.zip"
 if [ -f "$POBOX" ]; then
-  run "$KRADDR_GEO_BIN" load pobox "$POBOX"
+  run "$KTG_BIN" load pobox "$POBOX"
 else
   echo "SKIP: pobox data not found at $POBOX"
 fi
 
 BULK="$DATA_DIR/epost/bulk_delivery.csv"
 if [ -f "$BULK" ]; then
-  run "$KRADDR_GEO_BIN" load bulk "$BULK"
+  run "$KTG_BIN" load bulk "$BULK"
 else
   echo "SKIP: bulk data not found at $BULK"
 fi
@@ -299,8 +299,8 @@ PHASE_START=$(date +%s)
 "$PYTHON_BIN" - <<'PY'
 import asyncio
 
-from kraddr.geo.client import AsyncAddressClient
-from kraddr.geo.loaders.postload import resolve_text_geometry_links
+from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.loaders.postload import resolve_text_geometry_links
 
 
 async def main() -> None:
@@ -316,7 +316,7 @@ LINK_ELAPSED=$(( $(date +%s) - PHASE_START ))
 echo "geometry link resolution completed in ${LINK_ELAPSED}s"
 
 PHASE_START=$(date +%s)
-run "$KRADDR_GEO_BIN" refresh mv --swap
+run "$KTG_BIN" refresh mv --swap
 MV_ELAPSED=$(( $(date +%s) - PHASE_START ))
 echo "MV swap refresh completed in ${MV_ELAPSED}s"
 
@@ -324,8 +324,8 @@ log "=== Phase 6: Row counts ==="
 "$PYTHON_BIN" - <<'PY'
 import asyncio
 from sqlalchemy import text
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.settings import get_settings
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.settings import get_settings
 
 TABLES = [
     'tl_juso_text',
@@ -360,12 +360,12 @@ asyncio.run(main())
 PY
 
 log "=== Phase 7: Consistency check (C1-C10) ==="
-run "$KRADDR_GEO_BIN" validate consistency --scope full
+run "$KTG_BIN" validate consistency --scope full
 
 log "=== Phase 8: Smoke test — geocode + reverse ==="
 "$PYTHON_BIN" - <<'PY'
 import asyncio
-from kraddr.geo.client import AsyncAddressClient
+from kortravelgeo.client import AsyncAddressClient
 
 async def main():
     async with AsyncAddressClient() as client:

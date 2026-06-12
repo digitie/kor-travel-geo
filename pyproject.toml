@@ -3,7 +3,7 @@ requires = ["setuptools>=75", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "python-kraddr-geo"
+name = "kor-travel-geo"
 version = "0.1.0"
 description = "Korean address geocoding library and REST API backed by PostgreSQL/PostGIS."
 readme = "README.md"
@@ -68,18 +68,18 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/digitie/python-kraddr-geo"
-Issues = "https://github.com/digitie/python-kraddr-geo/issues"
+Repository = "https://github.com/digitie/kor-travel-geo"
+Issues = "https://github.com/digitie/kor-travel-geo/issues"
 
 [project.scripts]
-kraddr-geo = "kraddr.geo.cli.main:app"
+ktgctl = "kortravelgeo.cli.main:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 namespaces = true
 
 [tool.setuptools.package-data]
-"kraddr.geo" = ["py.typed"]
+"kortravelgeo" = ["py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -102,21 +102,21 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TCH", "RUF", "A
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/**/*.py" = ["E501", "I001"]
-"src/kraddr/geo/api/**/*.py" = ["A002", "B008", "TC001", "TC002", "TC003"]
-"src/kraddr/geo/cli/main.py" = ["B008", "TC003"]
-"src/kraddr/geo/client.py" = ["A002", "TC001", "TC002", "TC003"]
-"src/kraddr/geo/core/*.py" = ["TC001", "TC002", "TC003"]
-"src/kraddr/geo/dto/address.py" = ["N815"]
-"src/kraddr/geo/dto/admin.py" = ["TC003"]
-"src/kraddr/geo/dto/geocode.py" = ["A003", "TC001"]
-"src/kraddr/geo/dto/reverse.py" = ["A003", "TC001"]
-"src/kraddr/geo/dto/search.py" = ["A003", "TC001"]
-"src/kraddr/geo/infra/*.py" = ["TC001", "TC002", "TC003"]
-"src/kraddr/geo/loaders/**/*.py" = ["TC001", "TC002", "TC003"]
+"src/kortravelgeo/api/**/*.py" = ["A002", "B008", "TC001", "TC002", "TC003"]
+"src/kortravelgeo/cli/main.py" = ["B008", "TC003"]
+"src/kortravelgeo/client.py" = ["A002", "TC001", "TC002", "TC003"]
+"src/kortravelgeo/core/*.py" = ["TC001", "TC002", "TC003"]
+"src/kortravelgeo/dto/address.py" = ["N815"]
+"src/kortravelgeo/dto/admin.py" = ["TC003"]
+"src/kortravelgeo/dto/geocode.py" = ["A003", "TC001"]
+"src/kortravelgeo/dto/reverse.py" = ["A003", "TC001"]
+"src/kortravelgeo/dto/search.py" = ["A003", "TC001"]
+"src/kortravelgeo/infra/*.py" = ["TC001", "TC002", "TC003"]
+"src/kortravelgeo/loaders/**/*.py" = ["TC001", "TC002", "TC003"]
 "tests/**/*.py" = ["ASYNC240"]
 
 [tool.importlinter]
-root_package = "kraddr"
+root_package = "kortravelgeo"
 
 [[tool.importlinter.contracts]]
 name = "Layered architecture"
@@ -130,6 +130,6 @@ layers = [
   "core",
   "dto",
 ]
-containers = ["kraddr.geo"]
-ignore_imports = ["kraddr.geo.api.routers.admin -> kraddr.geo.loaders"]
+containers = ["kortravelgeo"]
+ignore_imports = ["kortravelgeo.api.routers.admin -> kortravelgeo.loaders"]
 unmatched_ignore_imports_alerting = "none"

@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-13 06:20 (T-077 `kor-travel-geo` 식별자 전환 구현)
+
+**작업**: 사용자 확정값에 맞춰 프로젝트 식별자를 `kor-travel-geo` 계열로 통일했다. Python import root는 `kortravelgeo`, 권장 alias는 `import kortravelgeo as ktg`, CLI는 `ktgctl`, 환경변수 prefix는 `KTG_*`, PostgreSQL 기본 DB명은 `kor_travel_geo`, RustFS bucket/prefix 기본값은 `kor-travel-geo`다.
+
+**반영**:
+- backend package를 `src/kortravelgeo/`로 옮기고 전체 import, import-linter, mypy, Alembic, OpenAPI export, Docker/uvicorn entrypoint를 갱신했다.
+- `pyproject.toml` 배포명은 `kor-travel-geo`, console script는 `ktgctl`로 고정했다.
+- `kortravelgeo.__init__`에서 `AsyncAddressClient`, 주요 v2 DTO, `Point`, `ZipSource`, `RegionHint`를 공개해 `import kortravelgeo as ktg` 사용을 고정했다.
+- 환경변수는 `KTG_*`로 통일하고 `.env.example`, Settings, Docker 실행 스크립트, UI proxy/runtime config, 문서 예시를 갱신했다.
+- PostgreSQL 서비스 DB를 `kor_travel_geo`로 rename하고, Docker API/UI를 새 기본 DB명과 RustFS `kor-travel-geo` 기본값으로 재기동했다.
+- API request duration Prometheus histogram과 `KTG_API_PERFORMANCE_LOGGING_ENABLED` opt-in 성능 로그를 추가했다. 로그는 route template/method/status/elapsed_ms만 기록하고 query string과 주소 입력값은 남기지 않는다.
+- `kor-travel-geo-ui` package로 UI 경로를 옮기고 누락된 `scripts/`, `tests/`, `types/` 파일을 복구했다. React Doctor 지적에 따라 Query 결과 객체 전체 구독을 제거하고 `vitest`를 `4.1.8` 계열로 갱신했다.
+- `docs/t077-kor-travel-geo-rename.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`, ADR-047을 갱신했다.
+
+**검증**:
+- 이전 이름 계열 내용 검색 2회 → 0건
+- 이전 이름 계열 파일/디렉터리명 검색 2회 → 0건
+- 잘못된 CLI 실행 예시 검색 2회 → 0건
+- WSL ext4 mirror: `python -m pytest -q` → 289 passed, 25 skipped
+- WSL ext4 mirror: `python -m ruff check .` → pass
+- WSL ext4 mirror: `python -m mypy src/kortravelgeo` → pass
+- WSL ext4 mirror: `lint-imports` → Layered architecture kept
+- WSL ext4 mirror UI: `npm run gen:types`, `lint`, `type-check`, `test`, `build` → pass
+- WSL ext4 mirror UI: `npx react-doctor@latest . --offline --verbose --json` → score 100, diagnostics 0
+- Docker: `scripts/docker_app.sh build && scripts/docker_app.sh up` → API `12201`, UI `12205`
+- Smoke: `GET /v1/healthz` → `ok`; `/v2/geocode` 인사동 → `OK` 후보 10건; `/v2/reverse` 인사동 좌표 → `OK` 후보 10건; UI runtime VWorld key non-empty; API/UI restart policy `unless-stopped`
+
 ## 2026-06-12 09:55 (T-077 배포명·임포트명 전환 Task 문서화)
 
 **작업**: 사용자 지시에 따라 Python 배포명 `kor-travel-geo`, import root `kortravelgeo`, 권장 alias `import kortravelgeo as ktg` 전환을 후속 Task로 정리했다.
@@ -9,7 +36,7 @@
 **반영**:
 - `docs/tasks.md`의 대기 항목에 T-077을 추가했다.
 - `docs/t077-kor-travel-geo-rename.md`를 추가해 목표 식별자, 범위, 범위 밖, 호환성 원칙, 구현 체크리스트, 검증 기준, 남은 결정을 정리했다.
-- 현재 코드와 실행 문서는 아직 `python-kraddr-geo`/`kraddr.geo` 기준으로 유지한다. 실제 rename은 후속 구현 PR에서 원자적으로 처리한다.
+- 현재 코드와 실행 문서는 아직 `kor-travel-geo`/`kortravelgeo` 기준으로 유지한다. 실제 rename은 후속 구현 PR에서 원자적으로 처리한다.
 
 **검증**:
 - 문서-only 변경으로 `git diff --check`를 실행한다.
@@ -37,16 +64,16 @@
 - `GET http://127.0.0.1:12205/api/runtime-config` → VWorld key non-empty
 - `npm run test -- tests/unit/runtime-config.test.ts` → 5 passed
 - API image 안에서 `python -m pytest tests/unit/test_settings.py -q` → 5 passed
-- API image 안에서 `python -m ruff check alembic/versions/0013_t061_text_search_mv.py scripts/benchmark_api_latency.py src/kraddr/geo/settings.py` → pass
+- API image 안에서 `python -m ruff check alembic/versions/0013_t061_text_search_mv.py scripts/benchmark_api_latency.py src/kortravelgeo/settings.py` → pass
 
 ## 2026-06-12 07:45 (WSL 재설치 후 주소 DB 복원과 API/UI 재시작 정책)
 
-**작업**: WSL 재설치 뒤 빈 `kraddr_geo` DB로 API만 기동되어 다른 에이전트의 reverse/geocode 보강이 모두 결측 처리될 위험을 해소했다.
+**작업**: WSL 재설치 뒤 빈 `kor_travel_geo` DB로 API만 기동되어 다른 에이전트의 reverse/geocode 보강이 모두 결측 처리될 위험을 해소했다.
 
 **반영**:
-- `/mnt/f/dev/python-kraddr-geo/artifacts/perf/t047-operational-impact-20260528/pgdump-dir.tar.zst` 백업을 임시 DB `kraddr_geo_restore_t047_20260612`에 복원했다.
-- 복원 DB를 Alembic head(`0015_t075_region_radius_parts`)까지 올린 뒤 smoke test를 통과시켜 현재 `kraddr_geo`로 승격했다. 기존 빈 DB는 `kraddr_geo_empty_20260612_073529` 이름으로 보존했다.
-- `scripts/docker_app.sh`의 API/UI 컨테이너에 기본 Docker restart policy `unless-stopped`를 적용했다. 필요하면 `KRADDR_GEO_DOCKER_RESTART_POLICY=no`로 끌 수 있다.
+- `/mnt/f/dev/kor-travel-geo/artifacts/perf/t047-operational-impact-20260528/pgdump-dir.tar.zst` 백업을 임시 DB `kor_travel_geo_restore_t047_20260612`에 복원했다.
+- 복원 DB를 Alembic head(`0015_t075_region_radius_parts`)까지 올린 뒤 smoke test를 통과시켜 현재 `kor_travel_geo`로 승격했다. 기존 빈 DB는 `kor_travel_geo_empty_20260612_073529` 이름으로 보존했다.
+- `scripts/docker_app.sh`의 API/UI 컨테이너에 기본 Docker restart policy `unless-stopped`를 적용했다. 필요하면 `KTG_DOCKER_RESTART_POLICY=no`로 끌 수 있다.
 - `alembic/versions/0013_t061_text_search_mv.py`가 최신 `TEXT_SEARCH_MV_SQL` 상수를 참조해 과거 revision 복원 DB에서 깨지던 문제를 고쳤다. `0013`은 T-061 당시의 MV 정의를 자체 보관하고, `0014`가 T-065 컬럼 추가 후 최신 MV를 재생성한다.
 
 **검증**:
@@ -68,7 +95,7 @@
 
 **반영**:
 - `docker-compose.yml`을 삭제했다.
-- `scripts/docker_app.sh`에서 RustFS 구동/정지/로그 명령을 제거하고, API/UI 컨테이너에 `KRADDR_GEO_PG_DSN`, `KRADDR_GEO_RUSTFS_*` 접속 설정을 주입하는 역할만 남겼다.
+- `scripts/docker_app.sh`에서 RustFS 구동/정지/로그 명령을 제거하고, API/UI 컨테이너에 `KTG_PG_DSN`, `KTG_RUSTFS_*` 접속 설정을 주입하는 역할만 남겼다.
 - README, AGENTS, SKILL, 개발 환경/포트/복구/작업 재개 문서를 "이미 동작 중인 DB와 bucket 접속 설정" 기준으로 갱신했다.
 - ADR-045를 추가하고 ADR-044의 RustFS 구동 책임 내용을 superseded 처리했다.
 
@@ -85,10 +112,10 @@
 - `/v1/admin/storage/rustfs/config`, `/check`, `/import-prefix`, `/sync-local` API를 추가했다. secret은 설정 조회 응답에 원문으로 노출하지 않는다.
 - `/admin/settings`에서 RustFS 사용 여부, endpoint, bucket, prefix, region, access/secret key, retention을 설정하고 연결 확인을 실행할 수 있게 했다.
 - `/admin/load`에서 업로드 저장소를 선택하고, RustFS prefix import와 기존 로컬 파일 RustFS sync를 실행할 수 있게 했다.
-- `python-kraddr-geo`/`python-krtour-map`/`tripmate` prefix 분리, 무기한 보존 기본값, Chrome/Firefox Playwright e2e 원칙을 문서화했다.
+- `kor-travel-geo`/`python-krtour-map`/`tripmate` prefix 분리, 무기한 보존 기본값, Chrome/Firefox Playwright e2e 원칙을 문서화했다.
 
 **검증**:
-- ext4 테스트 미러에서 backend `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`를 통과했다. pytest는 `303 passed, 7 skipped`다.
+- ext4 테스트 미러에서 backend `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `pytest -q`를 통과했다. pytest는 `303 passed, 7 skipped`다.
 - ext4 테스트 미러에서 frontend `scripts/frontend_check.sh --install`을 통과했다. `gen:types`, lint, type-check, Vitest 42개, build가 모두 성공했다.
 - React Doctor `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
 - `scripts/docker_app.sh build`로 API/UI image를 다시 빌드했고, API build에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
@@ -145,11 +172,11 @@
 - ADR-043, `docs/data-model.md`, v2 API reference, CHANGELOG, resume, task tracker를 갱신했다.
 
 **검증**:
-- ext4 테스트 미러에서 `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`를 통과했다. pytest는 `297 passed, 7 skipped`다.
+- ext4 테스트 미러에서 `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `pytest -q`를 통과했다. pytest는 `297 passed, 7 skipped`다.
 - Docker API image build에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
 - 실제 T-027 최종 DB는 Alembic table이 없던 운영 적재 DB라 `alembic stamp 0014_t065_navi_name_search` 후 `alembic upgrade head`로 `0015`만 적용했다.
 - 실제 DB accelerator row count는 `sido=10,607`, `sigungu=14,686`, `emd=29,023`이고 GiST/parent index 3개와 PK를 확인했다.
-- `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kraddr_geo pytest tests/integration/test_optional_real_postgres_regions.py -q` → `1 passed`. 이 테스트는 accelerator 결과와 원본 `tl_scco_*` 직접 `ST_DWithin` 결과를 비교한다.
+- `KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo pytest tests/integration/test_optional_real_postgres_regions.py -q` → `1 passed`. 이 테스트는 accelerator 결과와 원본 `tl_scco_*` 직접 `ST_DWithin` 결과를 비교한다.
 - `scripts/docker_app.sh up`으로 API `9001`, UI `9002`를 새 이미지로 다시 올렸다. `/v1/healthz`, `/debug/geocode`, `/api/runtime-config`가 200을 반환했고 VWorld 키는 길이만 확인했다.
 - REST benchmark 40회 반복:
   - `seoul_3km`: p50 `13.10ms → 13.68ms`, p95 `22.00ms → 20.89ms`, count 동일(`sido=1`, `sigungu=6`, `emd=190`).
@@ -164,15 +191,15 @@
 **작업**: API/UI Docker 이미지를 GDAL 버전 매칭 상태로 빌드·실행하는 표준 스크립트를 추가하고, 로컬 API/UI 포트 원칙을 `9001`/`9002`로 갱신했다. Firefox에서 VWorld 지도가 보이지 않는 원인을 확인해 `vworld://` custom protocol fallback을 쓰지 않도록 보정했다.
 
 **반영**:
-- `docker/api.Dockerfile`과 `kraddr-geo-ui/Dockerfile`을 추가·갱신해 API는 `9001`, UI는 `9002`로 실행한다. API image build 중 `gdal-config --version`과 Python `gdal` wheel 버전을 맞추고 불일치 시 실패한다.
-- `scripts/docker_app.sh`를 추가해 `build-api`/`build-ui`/`build`/`up-api`/`up-ui`/`up`/`down`/`status`/`logs`/`cli`/`load`/`load-full-set`을 제공한다. 기본 실행은 Docker bridge network이며, `.env`/`kraddr-geo-ui/.env.local`의 VWorld 키를 컨테이너 환경변수로 주입하되 키 값은 출력하지 않는다.
+- `docker/api.Dockerfile`과 `kor-travel-geo-ui/Dockerfile`을 추가·갱신해 API는 `9001`, UI는 `9002`로 실행한다. API image build 중 `gdal-config --version`과 Python `gdal` wheel 버전을 맞추고 불일치 시 실패한다.
+- `scripts/docker_app.sh`를 추가해 `build-api`/`build-ui`/`build`/`up-api`/`up-ui`/`up`/`down`/`status`/`logs`/`cli`/`load`/`load-full-set`을 제공한다. 기본 실행은 Docker bridge network이며, `.env`/`kor-travel-geo-ui/.env.local`의 VWorld 키를 컨테이너 환경변수로 주입하되 키 값은 출력하지 않는다.
 - `scripts/docker_app.sh up` 계열은 API `9001`, UI `9002` host 포트를 점유한 기존 Docker 컨테이너와 listen 프로세스를 종료한 뒤 새 컨테이너를 올린다.
 - Firefox에서 `maplibre-vworld`의 `unsupportedTileFallback`이 타일 URL을 `vworld://...`로 바꾸면 CORS `not http`로 차단되는 것을 확인했다. `CoordinateMap`은 해당 fallback prop을 전달하지 않고 HTTPS WMTS를 직접 사용한다.
 - `vworld-map.spec.ts`는 Firefox에서 `/debug/geocode` 반복 진입, runtime VWorld 키, 실제 WMTS tile fetch, MapLibre canvas, 지도 스크린샷 색상 다양성, `vworld://`/CORS 콘솔 오류 부재를 검증한다.
-- README, `kraddr-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`, `docs/agent-workflow.md`, `docs/frontend-package.md`, `docs/external-apis.md`, `docs/decisions.md`, `docs/resume.md`, API reference 예시를 새 포트 원칙으로 갱신했다.
+- README, `kor-travel-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`, `docs/agent-workflow.md`, `docs/frontend-package.md`, `docs/external-apis.md`, `docs/decisions.md`, `docs/resume.md`, API reference 예시를 새 포트 원칙으로 갱신했다.
 
 **검증**:
-- ext4 테스트 미러에서 `bash -n scripts/docker_app.sh`, `scripts/docker_app.sh --help`, `kraddr-geo-ui` `npm run type-check`, `npm run lint`, `npm run test`, `npm run build`를 통과했다. unit test는 11 files / 42 tests 통과다.
+- ext4 테스트 미러에서 `bash -n scripts/docker_app.sh`, `scripts/docker_app.sh --help`, `kor-travel-geo-ui` `npm run type-check`, `npm run lint`, `npm run test`, `npm run build`를 통과했다. unit test는 11 files / 42 tests 통과다.
 - React Doctor `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
 - `scripts/docker_app.sh build`로 API/UI 이미지를 빌드했고, API build/runtime에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
 - `scripts/docker_app.sh up`으로 API `http://127.0.0.1:9001`, UI `http://127.0.0.1:9002`를 올렸다. `/v1/healthz`, `/debug/geocode`, `/api/runtime-config`가 200을 반환했고 VWorld 키는 길이만 확인했다.
@@ -187,13 +214,13 @@
 
 **반영**:
 - `docs/postmerge-review-fixups-pr114-pr115.md`에 PR별 리뷰 표면 확인 결과를 기록했다. 두 PR 모두 conversation comment 0건, review body 0건, review thread 0건이었다.
-- `tests/integration/test_optional_real_postgres_regions.py`를 추가했다. `KRADDR_GEO_TEST_PG_DSN`이 설정된 실제 DB에서 `tl_scco_emd`의 `ST_PointOnSurface` 좌표를 사용해 `AsyncAddressClient.regions_within_radius()`가 `sido`/`sigungu`/`emd` contains 후보를 반환하는지 검증한다.
+- `tests/integration/test_optional_real_postgres_regions.py`를 추가했다. `KTG_TEST_PG_DSN`이 설정된 실제 DB에서 `tl_scco_emd`의 `ST_PointOnSurface` 좌표를 사용해 `AsyncAddressClient.regions_within_radius()`가 `sido`/`sigungu`/`emd` contains 후보를 반환하는지 검증한다.
 - `docs/resume.md`, `docs/tasks.md`에 이번 감사와 테스트 보강 상태를 반영했다.
 
 **검증**:
 - ext4 테스트 미러에서 `python -m pytest tests/integration/test_optional_real_postgres_regions.py -q` → `1 skipped`.
-- `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kraddr_geo`로 T-027 최종 DB 대상 새 테스트 실행 → `1 passed`.
-- `python -m ruff check .`, `python -m mypy src/kraddr/geo`, `lint-imports`, `python -m pytest -q` → 통과(`294 passed, 9 skipped`).
+- `KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo`로 T-027 최종 DB 대상 새 테스트 실행 → `1 passed`.
+- `python -m ruff check .`, `python -m mypy src/kortravelgeo`, `lint-imports`, `python -m pytest -q` → 통과(`294 passed, 9 skipped`).
 
 **발견**:
 - PR #114와 PR #115는 GitHub의 세 리뷰 표면 모두에 남은 코멘트가 없었다.
@@ -211,23 +238,23 @@
 - 문서-only 변경이다. `git.exe diff --check`로 whitespace를 확인한다.
 
 **발견**:
-- `gh`는 GitHub API 도구지만 로컬 repository context를 생략하면 WSL에서 Windows Git metadata를 읽으려 한다. PR 조회·머지에는 `--repo digitie/python-kraddr-geo`를 붙이는 것이 안정적이다.
+- `gh`는 GitHub API 도구지만 로컬 repository context를 생략하면 WSL에서 Windows Git metadata를 읽으려 한다. PR 조회·머지에는 `--repo digitie/kor-travel-geo`를 붙이는 것이 안정적이다.
 - Next.js 서버 인자는 npm script 구분자 `--` 뒤에 둬야 하며, 실제 지도 e2e는 WSL `next start --hostname 0.0.0.0` 서버에 Windows Playwright를 붙이는 방식이 가장 재현성이 높았다.
 
 ## 2026-06-02 21:10 (`/v2/regions/within-radius`와 VWorld 지도 실키 검증)
 
-**작업**: `krtourmap` ADR-045 방향에 맞춰 POI 좌표 기준 반경 `n km` 안에 포함되는 시도·시군구·읍면동을 반환하는 v2 API와 Python client 함수를 추가하고, admin/debug UI에서 해당 함수를 직접 디버깅할 수 있게 했다. VWorld 지도 키는 Python API `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 우선 읽도록 바꿨고, 확보한 키로 실제 MapLibre/VWorld WMTS 로딩을 검증했다.
+**작업**: `krtourmap` ADR-045 방향에 맞춰 POI 좌표 기준 반경 `n km` 안에 포함되는 시도·시군구·읍면동을 반환하는 v2 API와 Python client 함수를 추가하고, admin/debug UI에서 해당 함수를 직접 디버깅할 수 있게 했다. VWorld 지도 키는 Python API `.env`의 `KTG_VWORLD_API_KEY`를 우선 읽도록 바꿨고, 확보한 키로 실제 MapLibre/VWorld WMTS 로딩을 검증했다.
 
 **반영**:
 - `RegionsWithinRadiusInput`/`Response` DTO, `AsyncAddressClient.regions_within_radius()`, `POST /v2/regions/within-radius`, PostGIS raw SQL repository 함수를 추가했다.
 - SQL은 입력 POI를 EPSG:5179로 한 번만 변환하고, `tl_scco_ctprvn`, `tl_scco_sig`, `tl_scco_emd`의 원본 geometry에 `ST_DWithin`/`ST_Covers`를 적용해 index 사용 방향을 유지했다.
 - `/debug/geocode`에 `RegionsWithinRadiusDebugger`를 추가했다. 폼은 React Hook Form/Zod, 요청은 TanStack Query mutation, 마지막 초안/결과는 Zustand store, UI primitive는 shadcn/ui source component로 구성했다.
-- `kraddr-geo-ui` runtime config가 프로세스 환경 또는 저장소 루트 `.env`의 `KRADDR_GEO_VWORLD_API_KEY`를 먼저 읽고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용하도록 했다.
+- `kor-travel-geo-ui` runtime config가 프로세스 환경 또는 저장소 루트 `.env`의 `KTG_VWORLD_API_KEY`를 먼저 읽고, 없을 때만 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용하도록 했다.
 - `openapi.json`, frontend generated type/schema, v2 API reference, frontend/backend 문서, CHANGELOG, resume를 갱신했다. 프론트엔드 실행은 WSL Linux Node/npm, Playwright 실행과 브라우저는 Windows로 분리한다는 정책도 문서에 보강했다.
 - MapLibre 자체는 `maplibre-vworld` package 경계를 유지하고, 별도 지도 fallback 구현을 만들지 않는다고 문서 경계를 정리했다.
 
 **검증**:
-- Backend ext4 mirror: `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `TMPDIR=/tmp TMP=/tmp TEMP=/tmp pytest -q` → `294 passed, 8 skipped`.
+- Backend ext4 mirror: `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `TMPDIR=/tmp TMP=/tmp TEMP=/tmp pytest -q` → `294 passed, 8 skipped`.
 - Frontend ext4 mirror: `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
 - React Doctor: `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
 - Windows Playwright: WSL production UI 서버(`next start --hostname 0.0.0.0 --port 13090`)를 대상으로 `PLAYWRIGHT_BASE_URL=http://<WSL_IP>:13090 npx playwright test --config playwright.config.ts --project chromium --workers 1` → `14 passed`.
@@ -242,12 +269,12 @@
 **작업**: `/admin/` 진입 시 404가 나오지 않도록 기본 admin 라우트를 추가하고, 모든 프론트엔드 작업 뒤 React Doctor를 실행해 경고를 수정·재실행하는 규칙을 문서화했다.
 
 **반영**:
-- `kraddr-geo-ui/app/admin/page.tsx`를 추가해 `/admin` 기본 진입을 `/debug/geocode`로 redirect한다.
-- `AGENTS.md`, `SKILL.md`, `docs/frontend-package.md`, `docs/resume.md`, `kraddr-geo-ui/README.md`, `kraddr-geo-ui/SKILL.md`에 React Doctor 실행·수정·재실행 규칙을 추가했다.
-- 루트 `CHANGELOG.md`와 `kraddr-geo-ui/CHANGELOG.md`에 사용자 가시 변경을 기록했다.
+- `kor-travel-geo-ui/app/admin/page.tsx`를 추가해 `/admin` 기본 진입을 `/debug/geocode`로 redirect한다.
+- `AGENTS.md`, `SKILL.md`, `docs/frontend-package.md`, `docs/resume.md`, `kor-travel-geo-ui/README.md`, `kor-travel-geo-ui/SKILL.md`에 React Doctor 실행·수정·재실행 규칙을 추가했다.
+- 루트 `CHANGELOG.md`와 `kor-travel-geo-ui/CHANGELOG.md`에 사용자 가시 변경을 기록했다.
 
 **검증**:
-- fresh ext4 mirror `/home/digitie/dev/python-kraddr-geo-codex-test-admin-redirect`에서 `npx react-doctor@latest . --offline --verbose --json` → score 100, warning 0.
+- fresh ext4 mirror `/home/digitie/dev/kor-travel-geo-codex-test-admin-redirect`에서 `npx react-doctor@latest . --offline --verbose --json` → score 100, warning 0.
 - 같은 mirror에서 `scripts/frontend_check.sh` → `gen:types`, `lint`, `type-check`, unit test 37개, `next build` 통과.
 - `next start --port 13089` 후 `curl -i http://127.0.0.1:13089/admin` → `307 Temporary Redirect`, `location: /debug/geocode` 확인. `/admin/`은 Next.js canonical `308` 뒤 `/admin`으로 이동한다.
 
@@ -276,14 +303,14 @@
 **작업**: admin 구조 분해 이후 남아 있던 debug/common React Doctor 경고를 모두 정리했다.
 
 **반영**:
-- `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`에서 prop JSX를 static fallback/skeleton으로 고정하고 click handler 이름을 구체화했다.
-- `kraddr-geo-ui/components/debug/GeocodeDebugger.tsx`는 `useReducer`로 state를 묶고, `NormalizeDebugger`는 `normalizeFormSchema`를 실제 입력 검증에 연결했다.
-- `kraddr-geo-ui/app/page.tsx`, `app/debug/*/page.tsx`에 page metadata를 추가했다.
-- `kraddr-geo-ui/lib/sido.ts`는 regex matcher + escape helper로 정리했고, `lib/schemas.ts`, `lib/consistency.ts`, `tests/unit/schemas.test.ts`를 정리해 dead-code 경고를 줄였다.
-- `kraddr-geo-ui/scripts/gen-types.mjs`는 `openapi-typescript` CLI 경로 호출 대신 Node API import 방식으로 정리했다.
+- `kor-travel-geo-ui/components/vworld/CoordinateMap.tsx`에서 prop JSX를 static fallback/skeleton으로 고정하고 click handler 이름을 구체화했다.
+- `kor-travel-geo-ui/components/debug/GeocodeDebugger.tsx`는 `useReducer`로 state를 묶고, `NormalizeDebugger`는 `normalizeFormSchema`를 실제 입력 검증에 연결했다.
+- `kor-travel-geo-ui/app/page.tsx`, `app/debug/*/page.tsx`에 page metadata를 추가했다.
+- `kor-travel-geo-ui/lib/sido.ts`는 regex matcher + escape helper로 정리했고, `lib/schemas.ts`, `lib/consistency.ts`, `tests/unit/schemas.test.ts`를 정리해 dead-code 경고를 줄였다.
+- `kor-travel-geo-ui/scripts/gen-types.mjs`는 `openapi-typescript` CLI 경로 호출 대신 Node API import 방식으로 정리했다.
 
 **검증**:
-- fresh ext4 mirror `/home/digitie/dev/python-kraddr-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 다시 통과했다.
+- fresh ext4 mirror `/home/digitie/dev/kor-travel-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 다시 통과했다.
 - `npx react-doctor@latest . --offline --verbose --json` 재실행 결과 score `96 → 100`, warning `15 → 0`이 됐다.
 
 ## 2026-06-01 10:55 (React Doctor admin 구조 분해 마무리)
@@ -291,12 +318,12 @@
 **작업**: 남아 있던 admin React Doctor 구조 경고를 마저 정리하고, ext4 테스트 미러에서 전체 frontend 검증을 다시 수행했다.
 
 **반영**:
-- `kraddr-geo-ui/components/admin/LoadConsole.tsx`를 workflow/controller + upload/review/jobs/dialog 섹션으로 분리하고 UI state를 `useReducer`로 묶었다.
-- `kraddr-geo-ui/components/admin/BackupsPanel.tsx`를 controller hook과 backup/restore/jobs/artifacts 패널로 나눠 giant component 경고를 제거했다.
-- `kraddr-geo-ui/components/admin/ConsistencyPanel.tsx`를 query/controller hook과 reports/workbench/layout 섹션으로 분리해 admin 쪽 마지막 `no-giant-component` 경고를 제거했다.
+- `kor-travel-geo-ui/components/admin/LoadConsole.tsx`를 workflow/controller + upload/review/jobs/dialog 섹션으로 분리하고 UI state를 `useReducer`로 묶었다.
+- `kor-travel-geo-ui/components/admin/BackupsPanel.tsx`를 controller hook과 backup/restore/jobs/artifacts 패널로 나눠 giant component 경고를 제거했다.
+- `kor-travel-geo-ui/components/admin/ConsistencyPanel.tsx`를 query/controller hook과 reports/workbench/layout 섹션으로 분리해 admin 쪽 마지막 `no-giant-component` 경고를 제거했다.
 
 **검증**:
-- fresh ext4 mirror `/home/digitie/dev/python-kraddr-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 다시 통과했다.
+- fresh ext4 mirror `/home/digitie/dev/kor-travel-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 다시 통과했다.
 - `npx react-doctor@latest . --offline --verbose --json` 재실행 결과 score `95 → 96`, warning `19 → 15`로 감소했고 admin 관련 경고는 0건이 됐다. 남은 항목은 debug page metadata, `CoordinateMap`, `GeocodeDebugger`, dead-code 계열이다.
 
 ## 2026-06-01 08:45 (React Doctor 기반 admin UI 정리)
@@ -304,19 +331,19 @@
 **작업**: `react-doctor`를 다시 실행하고 admin UI 경고 중 동작/구조상 바로 고칠 수 있는 항목을 수정했다.
 
 **반영**:
-- `kraddr-geo-ui/lib/vworld-key.tsx`를 TanStack Query 기반 runtime-config 로딩으로 바꿔 `fetch` in `useEffect`를 제거했다.
+- `kor-travel-geo-ui/lib/vworld-key.tsx`를 TanStack Query 기반 runtime-config 로딩으로 바꿔 `fetch` in `useEffect`를 제거했다.
 - `/admin/settings`는 prop 동기화 effect와 derived `useState`를 없애고 브라우저 override 입력 흐름을 draft 값으로 재구성했다.
 - `/admin/consistency`는 invalid case 보정을 effect/setState 대신 렌더 시점 파생 선택으로 바꾸고, stale sample selection이 bulk action에 남지 않도록 정리했다.
 - `/admin/load`는 병렬 업로드 + multi-XHR cancel, semantic `<dialog>`, lazy ref init, proxy `cache: "no-store"`로 정리했다.
 - `/admin/ops`, `/admin/backups`는 관련 state를 묶어 `useState` 남용 경고를 줄였고, `tests/unit/vworld-key.test.tsx`는 QueryClientProvider fixture를 추가했다.
 
 **검증**:
-- fresh ext4 mirror `/home/digitie/dev/python-kraddr-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 통과했다.
+- fresh ext4 mirror `/home/digitie/dev/kor-travel-geo-codex-test-reactdoctor`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`를 통과했다.
 - `npx react-doctor@latest . --offline --verbose --json` 재실행 결과 score `90 → 95`, warning `59 → 19`로 감소했다. 남은 항목은 주로 giant component, debug page metadata, dead-code 계열 경고다.
 
 ## 2026-06-01 02:40 (T-027/T-047 국가지점번호 포함 재적재와 튜닝 재측정)
 
-**작업**: 사용자 지시에 따라 새 Docker DB `kraddr-geo-t027-retune`(port `15435`)에서 T-027 전체 적재를 다시 수행하고, 국가지점번호(`tl_sppn_makarea`)를 포함한 T-047 SQL benchmark를 재측정했다. 기존 T-027 최종 DB(port `15434`)는 보존했다.
+**작업**: 사용자 지시에 따라 새 Docker DB `kor-travel-geo-t027-retune`(port `15435`)에서 T-027 전체 적재를 다시 수행하고, 국가지점번호(`tl_sppn_makarea`)를 포함한 T-047 SQL benchmark를 재측정했다. 기존 T-027 최종 DB(port `15434`)는 보존했다.
 
 **반영**:
 - `scripts/benchmark_query_performance.py`가 Q11 `sppn_geocode`와 `sppn_reverse`를 모두 측정하도록 보강했다.
@@ -333,19 +360,19 @@
 
 ## 2026-05-31 22:44 (VWorld 최신 wrapper 동기화와 PR #108 문서 기준 반영)
 
-**작업**: 사용자 지시에 따라 로컬 git secret 파일에서 VWorld 키 존재 여부만 확인하고, PR #108의 당시 인프라 설정 파일 `./data/*` 기본 볼륨 기준이 현재 코드에 이미 반영되어 있음을 확인했다. `maplibre-vworld-js` upstream `main` 최신 commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`과 package version `0.1.2`를 확인한 뒤 `kraddr-geo-ui` dependency/lockfile을 갱신했다.
+**작업**: 사용자 지시에 따라 로컬 git secret 파일에서 VWorld 키 존재 여부만 확인하고, PR #108의 당시 인프라 설정 파일 `./data/*` 기본 볼륨 기준이 현재 코드에 이미 반영되어 있음을 확인했다. `maplibre-vworld-js` upstream `main` 최신 commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`과 package version `0.1.2`를 확인한 뒤 `kor-travel-geo-ui` dependency/lockfile을 갱신했다.
 
 **반영**:
-- `kraddr-geo-ui/components/vworld/CoordinateMap.tsx`를 직접 `maplibregl.Map` lifecycle 소유 방식에서 upstream `VWorldMap`/`Marker`/`useMap`/`useMapLoaded`를 감싸는 domain wrapper로 전환했다.
-- `kraddr-geo-ui/lib/vworld.ts`의 `getVWorldRasterStyle`, `redactVWorldTileUrl` local alias를 제거하고 upstream 이름인 `getVWorldStyle()`, `redactVWorldUrl()`로 호출자를 옮겼다.
-- `README.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/external-apis.md`, `docs/frontend-package.md`, `docs/resume.md`, `kraddr-geo-ui/README.md`, `kraddr-geo-ui/CHANGELOG.md`에 최신 SHA, npm registry 미출시 상태, `VWorldMap` wrapper 전환을 반영했다.
+- `kor-travel-geo-ui/components/vworld/CoordinateMap.tsx`를 직접 `maplibregl.Map` lifecycle 소유 방식에서 upstream `VWorldMap`/`Marker`/`useMap`/`useMapLoaded`를 감싸는 domain wrapper로 전환했다.
+- `kor-travel-geo-ui/lib/vworld.ts`의 `getVWorldRasterStyle`, `redactVWorldTileUrl` local alias를 제거하고 upstream 이름인 `getVWorldStyle()`, `redactVWorldUrl()`로 호출자를 옮겼다.
+- `README.md`, `docs/architecture.md`, `docs/decisions.md`, `docs/external-apis.md`, `docs/frontend-package.md`, `docs/resume.md`, `kor-travel-geo-ui/README.md`, `kor-travel-geo-ui/CHANGELOG.md`에 최신 SHA, npm registry 미출시 상태, `VWorldMap` wrapper 전환을 반영했다.
 - CodeGraph MCP는 현재 세션 도구로 노출되지 않아 CLI `codegraph sync/status/impact`로 `CoordinateMap.tsx` 영향도를 확인했다.
 
 **검증**:
-- ext4 테스트 미러: `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q` → 통과.
+- ext4 테스트 미러: `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `pytest -q` → 통과.
 - Docker Node(ext4 mirror): `npm ci && npm run gen:types && npm run lint && npm run type-check && npm run test && npm run build` → 통과.
-- T-027 최종 DB pgdata(`/home/digitie/kraddr-geo-data/pgdata-final-20260529`)를 유지한 채 `kraddr-geo-t027-final` DB 컨테이너를 재기동했고, API를 `0.0.0.0:8888`로 다시 띄웠다.
-- 기존 UI 컨테이너를 내리고 `docker build --no-cache -t kraddr-geo-ui:vworld-pr108 ./kraddr-geo-ui`로 클린 빌드한 뒤 `kraddr-geo-ui-vworld-pr108`을 `13088` 포트에 재기동했다.
+- T-027 최종 DB pgdata(`/home/digitie/kor-travel-geo-data/pgdata-final-20260529`)를 유지한 채 `kor-travel-geo-t027-final` DB 컨테이너를 재기동했고, API를 `0.0.0.0:8888`로 다시 띄웠다.
+- 기존 UI 컨테이너를 내리고 `docker build --no-cache -t kor-travel-geo-ui:vworld-pr108 ./kor-travel-geo-ui`로 클린 빌드한 뒤 `kor-travel-geo-ui-vworld-pr108`을 `13088` 포트에 재기동했다.
 - `/v1/healthz`, UI proxy `/api/proxy/v1/healthz`, `/debug/geocode`, `/api/runtime-config` VWorld key 주입, `/v2/geocode`, `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse` smoke를 확인했다.
 
 ## 2026-05-31 19:35 (Windows Git 기준과 T-027 DB 재사용 고정)
@@ -353,30 +380,30 @@
 **작업**: 사용자 지시에 따라 WSL 테스트 미러에서 실행하더라도 Git metadata는 Windows Git과 Windows repo 경로를 기준으로 읽도록 정리했고, PostgreSQL 검증 DB는 새 클린 DB가 아니라 T-027 최종 적재 DB를 재사용하도록 복구했다.
 
 **반영**:
-- `scripts/benchmark_api_latency.py`, `scripts/benchmark_query_performance.py`, `scripts/capture_deployment_envelope.py`가 `KRADDR_GEO_GIT_REPO` 또는 ext4 미러 이름에서 `F:/dev/python-kraddr-geo-*` 경로를 만들고 Windows `git.exe`로 branch/commit을 수집하도록 바꿨다.
+- `scripts/benchmark_api_latency.py`, `scripts/benchmark_query_performance.py`, `scripts/capture_deployment_envelope.py`가 `KTG_GIT_REPO` 또는 ext4 미러 이름에서 `F:/dev/kor-travel-geo-*` 경로를 만들고 Windows `git.exe`로 branch/commit을 수집하도록 바꿨다.
 - NTFS worktree의 `.git`/`gitdir` 포인터를 Windows Git 기준 `F:/dev/...`로 되돌렸다. WSL `git` 편의를 위해 `/mnt/f/...`로 바꾸지 않는 규칙을 문서화했다.
 - `AGENTS.md`, README, `SKILL.md`, `docs/dev-environment.md`, `docs/agent-guide.md`, `docs/resume.md`에 Windows Git 기준과 T-027 DB 재사용 원칙을 추가했다.
-- `kraddr-geo-codex-clean` DB 컨테이너를 내리고, T-027 최종 pgdata(`/home/digitie/kraddr-geo-data/pgdata-final-20260529`)를 쓰는 `kraddr-geo-t027-final` DB를 port `15434`로 다시 올렸다.
+- `kor-travel-geo-codex-clean` DB 컨테이너를 내리고, T-027 최종 pgdata(`/home/digitie/kor-travel-geo-data/pgdata-final-20260529`)를 쓰는 `kor-travel-geo-t027-final` DB를 port `15434`로 다시 올렸다.
 
 **검증**:
-- Windows Git: `git.exe -C F:/dev/python-kraddr-geo-codex status --short --branch`가 `agent/codex-idle` worktree와 현재 변경 파일을 정상 표시했다.
+- Windows Git: `git.exe -C F:/dev/kor-travel-geo-codex status --short --branch`가 `agent/codex-idle` worktree와 현재 변경 파일을 정상 표시했다.
 - ext4 미러에서 세 스크립트의 Git helper가 모두 `agent/codex-idle`을 반환했다.
 - T-027 DB row count: `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`.
-- `git.exe -C F:/dev/python-kraddr-geo-codex diff --check` → 통과.
+- `git.exe -C F:/dev/kor-travel-geo-codex diff --check` → 통과.
 
 ## 2026-05-31 14:10 (NTFS main repo와 에이전트 worktree 전환)
 
 **작업**: 사용자 지시에 따라 Git source of truth를 NTFS main repo로 두고, 테스트는 WSL ext4 미러에서 수행하는 정책으로 전환했다.
 
 **반영**:
-- NTFS `/mnt/f/dev/python-kraddr-geo`를 main repo 기준으로 두고 `/mnt/f/dev/python-kraddr-geo-codex`, `/mnt/f/dev/python-kraddr-geo-claude`, `/mnt/f/dev/python-kraddr-geo-antigravity` worktree를 생성했다.
-- 각 worktree에 `.env`, `kraddr-geo-ui/.env.local`, `.claude/settings.local.json`, `backend/.env.local`, `web/.env.local`을 복사했다. secret 값은 출력하지 않았다.
-- `kraddr-geo-ui/.env.local`의 `KRADDR_GEO_API_INTERNAL_URL`은 공식 API 포트 `8888`에 맞춰 `http://localhost:8888`로 정리했다.
+- NTFS `/mnt/f/dev/kor-travel-geo`를 main repo 기준으로 두고 `/mnt/f/dev/kor-travel-geo-codex`, `/mnt/f/dev/kor-travel-geo-claude`, `/mnt/f/dev/kor-travel-geo-antigravity` worktree를 생성했다.
+- 각 worktree에 `.env`, `kor-travel-geo-ui/.env.local`, `.claude/settings.local.json`, `backend/.env.local`, `web/.env.local`을 복사했다. secret 값은 출력하지 않았다.
+- `kor-travel-geo-ui/.env.local`의 `KTG_API_INTERNAL_URL`은 공식 API 포트 `8888`에 맞춰 `http://localhost:8888`로 정리했다.
 - 세 worktree에서 `codegraph init -i`와 `codegraph status`를 실행했다. NTFS `/mnt` 경로에서는 CodeGraph live watch가 비활성화되므로 이후 branch 전환·pull·merge 뒤 수동 `codegraph sync`가 필요하다.
 - `.claude/`를 `.gitignore`에 추가하고, `AGENTS.md`, `SKILL.md`, README, 개발 환경/아키텍처/에이전트 가이드, ADR-041, resume, tasks를 갱신했다.
 
 **검증**:
-- `git worktree list`에서 `/mnt/f/dev/python-kraddr-geo-codex`, `/mnt/f/dev/python-kraddr-geo-claude`, `/mnt/f/dev/python-kraddr-geo-antigravity` 등록을 확인했다.
+- `git worktree list`에서 `/mnt/f/dev/kor-travel-geo-codex`, `/mnt/f/dev/kor-travel-geo-claude`, `/mnt/f/dev/kor-travel-geo-antigravity` 등록을 확인했다.
 - 세 NTFS worktree의 `git status --short --branch`가 각각 `agent/*-idle...origin/main` clean 상태임을 확인했다.
 - 세 NTFS worktree에서 `codegraph sync` → already up to date, `codegraph status` → 249 files, 4,042 nodes, 9,841 edges, `Index is up to date`를 확인했다.
 - `rg`로 현재 운영 문서의 예전 ext4 source-of-truth 문구를 점검했다. 남은 `geo-*`/ext4 중심 문구는 superseded ADR-034와 과거 journal/검증 로그로 확인했다.
@@ -388,7 +415,7 @@
 
 **반영**:
 - README, `docs/ports.md`, `docs/dev-environment.md`, ADR-040의 공식 API 포트를 `8888`로 갱신했다.
-- `KRADDR_GEO_API_INTERNAL_URL` 예시와 `kraddr-geo-ui` 프록시 기본 backend URL을 `http://localhost:8888`로 바꿨다.
+- `KTG_API_INTERNAL_URL` 예시와 `kor-travel-geo-ui` 프록시 기본 backend URL을 `http://localhost:8888`로 바꿨다.
 - API reference curl 예시와 REST latency benchmark 기본 `--base-url`도 `8888`로 맞췄다.
 
 **검증**:
@@ -408,7 +435,7 @@
 - `gh pr view`와 GraphQL `reviewThreads`로 PR #97~#102를 확인했고 unresolved review thread는 전부 0건이었다. PR #98은 #97과 중복되어 close된 상태라 별도 반영 대상이 없었다. 상세 기록은 `docs/postmerge-review-fixups-pr97-pr102.md`에 남겼다.
 - `/admin/consistency`의 세로 case rail을 `role=tablist` 기반 가로 스크롤 탭으로 바꿨다. C1~C10은 표본 분석 영역 위에서 좌우 스크롤로 선택하며, 선택 case는 `aria-selected`와 `tabpanel`로 연결된다.
 - consistency unit/e2e mock을 C1~C10 전체로 확장하고, C10 탭 존재와 선택 탭 상태를 회귀 테스트로 고정했다.
-- 공식 로컬 포트를 PostgreSQL `15434`, FastAPI `8000`, UI `13088`로 문서화했다. `.env.example`, 당시 인프라 설정 파일, README, `kraddr-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`, ADR-040을 갱신했다.
+- 공식 로컬 포트를 PostgreSQL `15434`, FastAPI `8000`, UI `13088`로 문서화했다. `.env.example`, 당시 인프라 설정 파일, README, `kor-travel-geo-ui/README.md`, `docs/ports.md`, `docs/dev-environment.md`, ADR-040을 갱신했다.
 - Playwright e2e는 Windows Node/브라우저에서만 실행한다고 문서화했다. WSL에서는 반복적으로 `libasound.so.2` 누락이 발생하므로 `npm run test:e2e`를 실행하지 않는다.
 
 **검증**:
@@ -449,7 +476,7 @@
 **검증**:
 - `pytest tests/unit/test_v2_api.py -q` → `10 passed`
 - `ruff check ...` → 통과
-- `mypy --strict src/kraddr/geo/dto/v2.py src/kraddr/geo/core/protocols.py src/kraddr/geo/core/v2.py src/kraddr/geo/infra/geometry_repo.py src/kraddr/geo/client.py src/kraddr/geo/api/routers/v2.py` → 통과
+- `mypy --strict src/kortravelgeo/dto/v2.py src/kortravelgeo/core/protocols.py src/kortravelgeo/core/v2.py src/kortravelgeo/infra/geometry_repo.py src/kortravelgeo/client.py src/kortravelgeo/api/routers/v2.py` → 통과
 - `npm run gen:types`, `npm run lint`, `npm run type-check`, `npm run test` → 통과
 
 ## 2026-05-30 10:10 (T-066 Consistency 탭 진입 프리즈 완화)
@@ -511,13 +538,13 @@
 **작업**: `fallback="api"` 요청에서 외부 API fallback이 실패할 때 인증키/설정 문제와 단순 미검색이 구분되도록 보강했다.
 
 **반영**:
-- 백엔드 fallback은 `KRADDR_GEO_VWORLD_API_KEY` 또는 `KRADDR_GEO_JUSO_API_KEY`를 사용한다. UI 지도용 `NEXT_PUBLIC_VWORLD_API_KEY`만 있으면 fallback 키로 보지 않는다.
+- 백엔드 fallback은 `KTG_VWORLD_API_KEY` 또는 `KTG_JUSO_API_KEY`를 사용한다. UI 지도용 `NEXT_PUBLIC_VWORLD_API_KEY`만 있으면 fallback 키로 보지 않는다.
 - `fallback="api"`인데 provider 키가 하나도 없으면 `E0503` 설정 오류와 함께 필요한 환경변수 hint를 반환한다.
 - VWorld `INVALID_KEY`, Juso `E0001`/KEY 오류는 `E0501` 외부 API 인증 오류로 명시해 반환한다.
-- 로컬 `.env`에는 사용자 제공 VWorld 키를 `KRADDR_GEO_VWORLD_API_KEY`로 추가하고 권한을 `600`으로 조정했다. `.env`는 gitignore 대상이라 커밋하지 않는다.
+- 로컬 `.env`에는 사용자 제공 VWorld 키를 `KTG_VWORLD_API_KEY`로 추가하고 권한을 `600`으로 조정했다. `.env`는 gitignore 대상이라 커밋하지 않는다.
 
 **검증**:
-- 키 없음 상태 `/v2/geocode fallback=api` → HTTP 500, `E0503`, `KRADDR_GEO_VWORLD_API_KEY` hint 확인
+- 키 없음 상태 `/v2/geocode fallback=api` → HTTP 500, `E0503`, `KTG_VWORLD_API_KEY` hint 확인
 - 잘못된 VWorld 키 상태 `/v2/geocode fallback=api` → HTTP 502, `E0501`, `VWorld API authentication failed`, `INVALID_KEY` hint 확인
 - 사용자 제공 키로 `ExternalGeocodeClient` live VWorld geocode `OK`
 - `pytest tests/unit/test_external_api.py -q` → `6 passed`
@@ -534,7 +561,7 @@
 **검증**:
 - `수지구 성복1로 35`, `용인시 수지구 성복1로 35`, `경기도 용인시 수지구 성복1로 35`, `성복1로 35` 모두 실제 Docker DB에서 `OK` 확인
 - fallback query `EXPLAIN (ANALYZE, BUFFERS)` → `idx_mv_rn_nrm_exact` index scan, execution time 약 0.49ms
-- `ruff check src/kraddr/geo/infra/geocode_repo.py tests/unit/test_infra_repo_sql.py`
+- `ruff check src/kortravelgeo/infra/geocode_repo.py tests/unit/test_infra_repo_sql.py`
 - `pytest tests/unit/test_infra_repo_sql.py tests/unit/test_core_geocoder.py -q` → `23 passed`
 
 ## 2026-05-30 00:15 (VWorld 인증키 런타임 설정 UI)
@@ -552,7 +579,7 @@
 - `npm run type-check`
 - `npm run test` → `33 passed`
 - `npm run build`
-- `docker build -t kraddr-geo-ui:debug-v2 ./kraddr-geo-ui`
+- `docker build -t kor-travel-geo-ui:debug-v2 ./kor-travel-geo-ui`
 - Docker UI `/api/runtime-config` → 사용자 제공 VWorld 키 반환 확인
 - Docker UI `/api/proxy/v2/geocode` smoke `OK`
 - Windows Playwright: `8 passed`
@@ -565,7 +592,7 @@
 - `/debug/geocode`는 `/v2/geocode`에 `road_address` 또는 `jibun_address`, `fallback`, `limit`을 POST한다.
 - `/debug/reverse`는 `/v2/reverse`에 `lon`, `lat`, `crs`, `include_region`, `include_zipcode`, `radius_m`을 POST한다.
 - 프론트엔드 proxy와 `backendPath()`가 `/v1/*`와 `/v2/*`를 모두 보존하되, non-versioned path는 기존처럼 `/v1`로 보낸다.
-- `kraddr-geo-ui` Dockerfile을 추가하고, Docker 이미지 실행 runbook을 README에 보강했다.
+- `kor-travel-geo-ui` Dockerfile을 추가하고, Docker 이미지 실행 runbook을 README에 보강했다.
 - Playwright e2e 6개를 추가해 도로명/지번 geocode body, 빈 주소 차단, reverse 기본 body, reverse 입력 변경, 범위 밖 좌표 차단을 검증한다.
 
 **검증**:
@@ -574,7 +601,7 @@
 - `npm run test` → `30 passed`
 - Windows Playwright: `6 passed`
 - `npm run build`
-- `docker build -t kraddr-geo-ui:debug-v2 ./kraddr-geo-ui`
+- `docker build -t kor-travel-geo-ui:debug-v2 ./kor-travel-geo-ui`
 - Docker UI `http://127.0.0.1:13088`에서 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse` POST smoke `OK`
 
 **후속**:
@@ -609,9 +636,9 @@
 - `docs/postmerge-review-fixups-pr69-pr86.md`와 `docs/t054-korea-only-geoip.md`에 반영/보류 항목을 정리했다.
 
 **검증**:
-- `ruff check src/kraddr/geo/api/app.py src/kraddr/geo/infra/geoip.py tests/unit/test_geoip_gate.py`
+- `ruff check src/kortravelgeo/api/app.py src/kortravelgeo/infra/geoip.py tests/unit/test_geoip_gate.py`
 - `pytest tests/unit/test_geoip_gate.py tests/unit/test_api_admission_control.py tests/unit/test_api_app_contract.py -q` → `14 passed`
-- `mypy --no-incremental src/kraddr/geo/api/app.py src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py`
+- `mypy --no-incremental src/kortravelgeo/api/app.py src/kortravelgeo/infra/geoip.py src/kortravelgeo/api/middleware/geoip_gate.py`
 
 **후속**:
 - v2 `distance_m`/confidence/precision, C1~C10 전수 export, callback receiver 예제, release ledger repair, table 단위 shared lock은 후속 후보로 유지한다.
@@ -622,7 +649,7 @@
 
 **반영**:
 - `scripts/fullload_test.sh`에 선택 `DAILY_JUSO_ZIP`/`DAILY_YYYYMM` phase를 추가해 full snapshot 뒤 실제 daily MST/LNBR delta를 함께 검증할 수 있게 했다.
-- 새 compose project `kraddr-geo-t027-final`, port `15434`, 전용 `pgdata-final-20260529`로 기존 DB와 분리해 클린 로드를 실행했다.
+- 새 compose project `kor-travel-geo-t027-final`, port `15434`, 전용 `pgdata-final-20260529`로 기존 DB와 분리해 클린 로드를 실행했다.
 - 전체 3,963초, `mv_geocode_target=6,416,642`, `mv_geocode_text_search=6,416,642`, `tl_sppn_makarea=24,204`, active serving release `faa1f42b-f5b9-4ef0-af0b-1a422d938ed3`를 확인했다.
 - `20260401_dailyjusukrdata.zip`은 `daily-juso` 422건 처리/upsert 242/delete 180, `daily-parcel-links` 204건 처리/upsert 74/delete 82로 적용됐다.
 - C1~C10은 `severity_max=ERROR`이며 C2/C4/C6/C7은 기존 실제 원천 품질 이슈로 남았다. C2/C4/C6/C7 data-quality CSV 8개와 DB size snapshot을 남겼다.
@@ -630,9 +657,9 @@
 **검증**:
 - `PLAN_ONLY=1` preflight 통과
 - `bash scripts/fullload_test.sh` → exit status 0, wall clock 1:06:02
-- `kraddr-geo validate consistency --scope full` → `consistency_163e89acfb4a41e0a8c19599c2faa678`
+- `ktgctl validate consistency --scope full` → `consistency_163e89acfb4a41e0a8c19599c2faa678`
 - smoke: geocode/reverse/search/zipcode `OK`
-- `kraddr-geo validate data-quality-samples --cases C2,C4,C6,C7 --limit 20` → CSV 8개 생성
+- `ktgctl validate data-quality-samples --cases C2,C4,C6,C7 --limit 20` → CSV 8개 생성
 
 **후속**:
 - 즉시 실행 가능한 대기 task는 없다.
@@ -651,10 +678,10 @@
 **검증**:
 - `ruff check scripts/capture_deployment_envelope.py tests/unit/test_capture_deployment_envelope.py`
 - `pytest tests/unit/test_capture_deployment_envelope.py -q` → `5 passed`
-- `python scripts/capture_deployment_envelope.py --env-label wsl-smoke --data-dir data --output-dir /tmp/kraddr-t055-envelope-smoke`
+- `python scripts/capture_deployment_envelope.py --env-label wsl-smoke --data-dir data --output-dir /tmp/kortravel-t055-envelope-smoke`
 - `ruff check .`
 - `pytest -q` → `273 passed, 8 skipped`
-- `mypy --no-incremental src/kraddr/geo`
+- `mypy --no-incremental src/kortravelgeo`
 - `lint-imports`
 
 **후속**:
@@ -670,14 +697,14 @@
 - FastAPI middleware가 `/v1/healthz`, `/metrics`를 제외한 REST 표면에서 내부/loopback은 허용하고 공용 IP는 country `KR`만 허용한다.
 - strict/permissive/off mode, allow/deny CIDR, trusted proxy, audit 설정을 `Settings`와 `.env.example`에 추가했다.
 - deny 응답은 `E0403/403`이며, `geoip.denied` audit event에는 IP 원문을 payload에 넣지 않고 `AdminRepository`의 hash 경로를 사용한다.
-- `kraddr-geo geoip check <ip>` 진단 명령과 단위/middleware 테스트를 추가했다.
+- `ktgctl geoip check <ip>` 진단 명령과 단위/middleware 테스트를 추가했다.
 
 **검증**:
-- `ruff check src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py tests/unit/test_geoip_gate.py tests/unit/test_settings.py`
+- `ruff check src/kortravelgeo/infra/geoip.py src/kortravelgeo/api/middleware/geoip_gate.py src/kortravelgeo/api/app.py src/kortravelgeo/cli/main.py src/kortravelgeo/settings.py tests/unit/test_geoip_gate.py tests/unit/test_settings.py`
 - `pytest tests/unit/test_geoip_gate.py tests/unit/test_settings.py tests/unit/test_api_app_contract.py -q` → `14 passed`
-- `mypy --no-incremental src/kraddr/geo/infra/geoip.py src/kraddr/geo/api/middleware/geoip_gate.py src/kraddr/geo/api/app.py src/kraddr/geo/cli/main.py src/kraddr/geo/settings.py`
-- CLI smoke: `kraddr-geo geoip check 8.8.8.8` → `geoip_db_unavailable` deny
-- `ruff check .`, `pytest -q` → `268 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+- `mypy --no-incremental src/kortravelgeo/infra/geoip.py src/kortravelgeo/api/middleware/geoip_gate.py src/kortravelgeo/api/app.py src/kortravelgeo/cli/main.py src/kortravelgeo/settings.py`
+- CLI smoke: `ktgctl geoip check 8.8.8.8` → `geoip_db_unavailable` deny
+- `ruff check .`, `pytest -q` → `268 passed, 8 skipped`, `mypy --no-incremental src/kortravelgeo`, `lint-imports`
 
 **후속**:
 - 이 PR merge 후 T-055 N150/Odroid 실측 준비로 이어간다.
@@ -693,10 +720,10 @@
 - 상세 리뷰별 반영/보류 표는 `docs/postmerge-review-fixups-pr69-pr82.md`에 정리했다.
 
 **검증**:
-- `ruff check src/kraddr/geo/infra/backup.py src/kraddr/geo/api/app.py tests/unit/test_ops_metadata.py`
+- `ruff check src/kortravelgeo/infra/backup.py src/kortravelgeo/api/app.py tests/unit/test_ops_metadata.py`
 - `pytest tests/unit/test_ops_metadata.py tests/unit/test_backup_restore.py -q` → `22 passed`
-- `mypy --no-incremental src/kraddr/geo/infra/backup.py src/kraddr/geo/api/app.py`
-- `ruff check .`, `pytest -q` → `261 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+- `mypy --no-incremental src/kortravelgeo/infra/backup.py src/kortravelgeo/api/app.py`
+- `ruff check .`, `pytest -q` → `261 passed, 8 skipped`, `mypy --no-incremental src/kortravelgeo`, `lint-imports`
 
 **후속**:
 - 이 PR merge 후 T-054 한국 IP 외부 접근 차단으로 이어간다.
@@ -706,7 +733,7 @@
 **작업**: PostgreSQL advisory lock 기반 cross-process 실행 보호를 CLI와 API job handler에 표준 적용했다.
 
 **반영**:
-- `src/kraddr/geo/infra/concurrency.py`를 추가해 `AdvisoryLockNamespace`, `AdvisoryLockKey`, `ConcurrentExecutionError(E0409/409)`, `cross_process_lock()`을 제공한다.
+- `src/kortravelgeo/infra/concurrency.py`를 추가해 `AdvisoryLockNamespace`, `AdvisoryLockKey`, `ConcurrentExecutionError(E0409/409)`, `cross_process_lock()`을 제공한다.
 - 주요 CLI 운영 명령(`init-db`, `load *`, `refresh mv`, `validate consistency`, `uploads cleanup`, `backup create`, `restore create`)이 명령별/path별/target별 lock key를 잡고 중복 실행 시 exit code 2로 fail-fast한다.
 - FastAPI `JobQueue` 기본 handler도 같은 lock key를 잡도록 등록해 CLI와 API job이 같은 자원을 동시에 만지는 것을 막는다.
 - PR #82 리뷰 후속으로 미사용 `wait` 경로와 혼동 가능한 `OPS_TABLE_STATS` enum 멤버를 제거하고, API queue의 lock 충돌은 `lock_conflict` progress event 후 `failed`로 닫는다고 문서화했다.
@@ -714,11 +741,11 @@
 - CLI 단독 실행을 `load_jobs` row로 노출하는 운영 가시화는 후속으로 남겼다.
 
 **검증**:
-- `ruff check src/kraddr/geo/infra/concurrency.py src/kraddr/geo/cli/main.py src/kraddr/geo/api/app.py tests/unit/test_concurrency.py tests/unit/test_api_app_contract.py`
+- `ruff check src/kortravelgeo/infra/concurrency.py src/kortravelgeo/cli/main.py src/kortravelgeo/api/app.py tests/unit/test_concurrency.py tests/unit/test_api_app_contract.py`
 - `pytest tests/unit/test_api_app_contract.py tests/unit/test_concurrency.py -q` → `6 passed`
 - `pytest tests/unit/test_concurrency.py tests/unit/test_client_submit_load_batch.py tests/unit/test_backup_restore.py -q` → `23 passed`
 - Docker PostgreSQL smoke: 같은 `MV_REFRESH` key의 두 번째 connection이 `E0409/409`로 차단됨
-- `ruff check .`, `pytest -q` → `261 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+- `ruff check .`, `pytest -q` → `261 passed, 8 skipped`, `mypy --no-incremental src/kortravelgeo`, `lint-imports`
 
 **후속**:
 - 이 PR merge 후 T-054 한국 IP 외부 접근 차단으로 이어간다.
@@ -735,10 +762,10 @@
 - PR #79와 #80은 머지 전 반영된 리뷰 후속이 main에 포함됐음을 재확인했다.
 
 **검증**:
-- `ruff check src/kraddr/geo/infra/admin_repo.py src/kraddr/geo/client.py src/kraddr/geo/infra/backup.py tests/unit/test_ops_metadata.py`
+- `ruff check src/kortravelgeo/infra/admin_repo.py src/kortravelgeo/client.py src/kortravelgeo/infra/backup.py tests/unit/test_ops_metadata.py`
 - `pytest tests/unit/test_ops_metadata.py tests/unit/test_backup_restore.py -q` → `22 passed`
-- `mypy --no-incremental src/kraddr/geo/infra/admin_repo.py src/kraddr/geo/client.py src/kraddr/geo/infra/backup.py`
-- `ruff check .`, `pytest -q` → `257 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
+- `mypy --no-incremental src/kortravelgeo/infra/admin_repo.py src/kortravelgeo/client.py src/kortravelgeo/infra/backup.py`
+- `ruff check .`, `pytest -q` → `257 passed, 8 skipped`, `mypy --no-incremental src/kortravelgeo`, `lint-imports`
 
 **후속**:
 - 이 PR merge 후 T-059 CLI/Job 동시 실행 보호 표준화로 이어간다.
@@ -754,13 +781,13 @@
 - managed/hardened cluster에서 `postgres` DB 접속이 제한될 수 있으므로 `maintenance_database`를 API/CLI 요청으로 지정할 수 있게 했다.
 
 **검증**:
-- `scripts/export_openapi.py`, `kraddr-geo-ui npm run gen:types`
-- `ruff check src/kraddr/geo/dto/admin.py src/kraddr/geo/infra/hotswap.py src/kraddr/geo/client.py src/kraddr/geo/api/routers/admin.py src/kraddr/geo/cli/main.py tests/unit/test_restore_hotswap.py`
+- `scripts/export_openapi.py`, `kor-travel-geo-ui npm run gen:types`
+- `ruff check src/kortravelgeo/dto/admin.py src/kortravelgeo/infra/hotswap.py src/kortravelgeo/client.py src/kortravelgeo/api/routers/admin.py src/kortravelgeo/cli/main.py tests/unit/test_restore_hotswap.py`
 - `pytest tests/unit/test_restore_hotswap.py tests/unit/test_dto_search_zipcode_pobox_admin.py tests/unit/test_openapi_export.py -q` → `13 passed`
-- `mypy --no-incremental src/kraddr/geo/infra/hotswap.py src/kraddr/geo/dto/admin.py src/kraddr/geo/client.py src/kraddr/geo/api/routers/admin.py src/kraddr/geo/cli/main.py`
-- CLI smoke: `kraddr-geo serving hot-swap-plan --restore-db kraddr_geo_restore_missing --maintenance-db postgres`
-- `ruff check .`, `pytest -q` → `257 passed, 8 skipped`, `mypy --no-incremental src/kraddr/geo`, `lint-imports`
-- `kraddr-geo-ui` Linux npm gate: `lint`, `type-check`, `test`, `build`
+- `mypy --no-incremental src/kortravelgeo/infra/hotswap.py src/kortravelgeo/dto/admin.py src/kortravelgeo/client.py src/kortravelgeo/api/routers/admin.py src/kortravelgeo/cli/main.py`
+- CLI smoke: `ktgctl serving hot-swap-plan --restore-db kor_travel_geo_restore_missing --maintenance-db postgres`
+- `ruff check .`, `pytest -q` → `257 passed, 8 skipped`, `mypy --no-incremental src/kortravelgeo`, `lint-imports`
+- `kor-travel-geo-ui` Linux npm gate: `lint`, `type-check`, `test`, `build`
 
 **후속**:
 - PR #80 CI 완료 후 5분 대기, 리뷰 재확인, merge를 진행한다.
@@ -773,8 +800,8 @@
 - `RestoreHotSwapPlanRequest`/`RestoreHotSwapPlan` DTO를 추가했다.
 - `infra/hotswap.py`에서 current DB, restore DB, previous alias, maintenance DB, typed confirmation, rollback confirmation, blocker, SQL/steps를 산출한다.
 - `/v1/admin/restores/hot-swap-plan` API와 `AsyncAddressClient.restore_hot_swap_plan()`을 추가했다.
-- `kraddr-geo serving hot-swap-plan` CLI를 추가했다.
-- OpenAPI와 `kraddr-geo-ui` 생성 타입을 갱신했다.
+- `ktgctl serving hot-swap-plan` CLI를 추가했다.
+- OpenAPI와 `kor-travel-geo-ui` 생성 타입을 갱신했다.
 - 실제 `ALTER DATABASE ... RENAME` 실행은 ops metadata 위치와 worker별 engine refresh/rollback round-trip 검증이 더 필요해 후속 실행 표면으로 분리하고, T-058 문서에 명시했다.
 
 **검증 예정**:
@@ -789,7 +816,7 @@
 
 **반영**:
 - `tests/integration/test_optional_real_postgres_ops_constraints.py`를 추가했다.
-- `KRADDR_GEO_TEST_PG_DSN`이 없으면 skip하고, 설정되면 `SCHEMA_SQL`/`INDEX_SQL`을 실제 DB에 적용한 뒤 운영 메타데이터 제약을 검증한다.
+- `KTG_TEST_PG_DSN`이 없으면 skip하고, 설정되면 `SCHEMA_SQL`/`INDEX_SQL`을 실제 DB에 적용한 뒤 운영 메타데이터 제약을 검증한다.
 - `ops.audit_events.job_id` FK가 감사 이벤트가 붙은 `load_jobs` 삭제를 막는지 확인한다.
 - `ops.audit_events` append-only trigger가 `UPDATE`와 `DELETE`를 모두 막는지 확인한다.
 - `ops.serving_releases` active partial unique index가 active release 1건만 허용하고 pending release는 허용하는지 확인한다.
@@ -800,7 +827,7 @@
 **검증**:
 - `ruff check tests/integration/test_optional_real_postgres_ops_constraints.py`
 - DSN 미설정: `pytest tests/integration/test_optional_real_postgres_ops_constraints.py -q` → `1 skipped`
-- 실제 Docker PostgreSQL 별도 DB `kraddr_geo_t050_ops_constraints`: `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t050_ops_constraints pytest tests/integration/test_optional_real_postgres_ops_constraints.py -q` → `1 passed`
+- 실제 Docker PostgreSQL 별도 DB `kor_travel_geo_t050_ops_constraints`: `KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t050_ops_constraints pytest tests/integration/test_optional_real_postgres_ops_constraints.py -q` → `1 passed`
 - 테스트 완료 후 별도 DB를 삭제했다.
 
 **후속**:
@@ -827,7 +854,7 @@
 **작업**: T-050 남은 항목 중 `ops.table_stats_snapshots` 주기 capture를 구현했다.
 
 **반영**:
-- `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`, `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_LIMIT`, `KRADDR_GEO_OPS_TABLE_STATS_CAPTURE_ON_STARTUP` 설정을 추가했다.
+- `KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES`, `KTG_OPS_TABLE_STATS_CAPTURE_LIMIT`, `KTG_OPS_TABLE_STATS_CAPTURE_ON_STARTUP` 설정을 추가했다.
 - FastAPI lifespan에서 interval이 1 이상일 때만 background task를 띄워 `AdminRepository.capture_table_stats_snapshots()`를 주기 실행한다.
 - 여러 API worker의 동시 capture 중복을 줄이기 위해 `pg_try_advisory_xact_lock(0x4B4700A0)`을 capture transaction 앞에 추가했다.
 - 수동/주기 capture에서 `snapshot_id`를 생략하면 현재 active serving release의 `snapshot_id`에 자동 연결한다.
@@ -845,7 +872,7 @@
 **작업**: 사용자 지시에 따라 PR #69부터 최신 PR #75까지 conversation/review/latestReview/reviewThreads를 재확인하고, formal review에서 바로 반영 가능한 항목을 코드와 문서로 보강했다.
 
 **반영**:
-- `kraddr-geo-ui/package-lock.json`의 `maplibre-vworld` resolved URL을 `git+https`로 맞췄다.
+- `kor-travel-geo-ui/package-lock.json`의 `maplibre-vworld` resolved URL을 `git+https`로 맞췄다.
 - `AsyncAddressClient.list_consistency_case_samples()`가 표본 결과가 있을 때는 report 존재 확인 쿼리를 추가 실행하지 않도록 줄였다.
 - `SizeProgressProbe`가 directory size sample을 interval 안에서 캐시해 backup/restore hot path의 반복 `rglob/stat` 부하를 줄였다.
 - `mv_refresh`의 load-batch ERROR gate를 swap 이전으로 옮기고, release hook의 post-swap gate raise와 `mv_geocode_target` 중복 count를 제거했다.
@@ -871,8 +898,8 @@
 - 사용자 최신 지시에 따라 이 PR merge 후 다음 작업은 PR #69부터 최신 PR까지 review audit/fixup을 먼저 진행한다.
 
 **검증**:
-- 대상 `ruff check src/kraddr/geo/infra/admin_repo.py src/kraddr/geo/api/app.py src/kraddr/geo/infra/backup.py src/kraddr/geo/cli/main.py tests/unit/test_ops_metadata.py`
-- 대상 `mypy --no-incremental src/kraddr/geo/infra/admin_repo.py src/kraddr/geo/api/app.py src/kraddr/geo/infra/backup.py src/kraddr/geo/cli/main.py`
+- 대상 `ruff check src/kortravelgeo/infra/admin_repo.py src/kortravelgeo/api/app.py src/kortravelgeo/infra/backup.py src/kortravelgeo/cli/main.py tests/unit/test_ops_metadata.py`
+- 대상 `mypy --no-incremental src/kortravelgeo/infra/admin_repo.py src/kortravelgeo/api/app.py src/kortravelgeo/infra/backup.py src/kortravelgeo/cli/main.py`
 - 대상 `pytest tests/unit/test_backup_restore.py tests/unit/test_ops_metadata.py tests/unit/test_infra_repo_sql.py -q`
 - `lint-imports`
 
@@ -893,9 +920,9 @@
 - `docs/t050-ops-hardening.md`, `docs/t046-db-backup-restore.md`, resume/tasks/CHANGELOG를 갱신했다.
 
 **검증**:
-- 대상 `ruff check src/kraddr/geo/infra/backup.py tests/unit/test_backup_restore.py`
+- 대상 `ruff check src/kortravelgeo/infra/backup.py tests/unit/test_backup_restore.py`
 - 대상 `pytest tests/unit/test_backup_restore.py -q`
-- 대상 `mypy --no-incremental src/kraddr/geo/infra/backup.py`
+- 대상 `mypy --no-incremental src/kortravelgeo/infra/backup.py`
 
 **후속**:
 - PR merge 후 T-050 4차로 full-load/MV/restore 완료 hook의 `ops.dataset_snapshots`/`ops.serving_releases` 자동 생성을 진행한다.
@@ -905,9 +932,9 @@
 **작업**: T-046 backup/restore callback을 1회 단순 전송에서 HMAC 서명, retry/backoff, replay 판별 가능한 전송 계약으로 보강했다.
 
 **반영**:
-- `KRADDR_GEO_BACKUP_CALLBACK_MAX_ATTEMPTS`, `KRADDR_GEO_BACKUP_CALLBACK_BACKOFF_MS`, `KRADDR_GEO_BACKUP_CALLBACK_SECRET` 설정을 추가했다.
+- `KTG_BACKUP_CALLBACK_MAX_ATTEMPTS`, `KTG_BACKUP_CALLBACK_BACKOFF_MS`, `KTG_BACKUP_CALLBACK_SECRET` 설정을 추가했다.
 - callback payload는 `callback_id`, `timestamp`, `attempt`, `max_attempts`를 포함하고, compact JSON byte를 기준으로 HMAC-SHA256 서명한다.
-- header는 `x-kraddr-geo-event`, `x-kraddr-geo-callback-id`, `x-kraddr-geo-timestamp`, `x-kraddr-geo-signature`를 보낸다.
+- header는 `x-kor-travel-geo-event`, `x-kor-travel-geo-callback-id`, `x-kor-travel-geo-timestamp`, `x-kor-travel-geo-signature`를 보낸다.
 - 각 retry attempt마다 새 `callback_id`를 발급하고, delivery 결과를 `ops.artifacts.callback_state`와 `manifest.callback_delivery`에 기록한다.
 - callback 실패는 backup/restore artifact 자체의 성공/실패를 뒤집지 않는다.
 - `docs/t050-ops-hardening.md`와 `docs/t046-db-backup-restore.md`에 실제 payload/header/운영 기록 방식을 갱신했다.
@@ -915,7 +942,7 @@
 **검증**:
 - 대상 `ruff check`
 - 대상 `pytest tests/unit/test_backup_restore.py tests/unit/test_settings.py -q`
-- 대상 `mypy --no-incremental src/kraddr/geo/infra/backup.py src/kraddr/geo/settings.py`
+- 대상 `mypy --no-incremental src/kortravelgeo/infra/backup.py src/kortravelgeo/settings.py`
 
 **후속**:
 - PR merge 후 T-050 3차로 backup/restore file/archive size 기반 sub-progress를 진행한다.
@@ -925,11 +952,11 @@
 **작업**: T-050을 여러 PR로 나누기로 하고, 첫 단위로 upload set cleanup TTL과 실행 중 job 참조 보호를 구현했다.
 
 **반영**:
-- `kraddr.geo.infra.uploads.cleanup_upload_sets()`를 추가했다. `loader_data_dir/uploads/upload_*`를 스캔하고 TTL이 지난 upload set을 삭제한다.
+- `kortravelgeo.infra.uploads.cleanup_upload_sets()`를 추가했다. `loader_data_dir/uploads/upload_*`를 스캔하고 TTL이 지난 upload set을 삭제한다.
 - `load_jobs.state IN ('queued','running')` payload에서 `upload_set_id` 또는 upload set 경로가 발견되면 삭제하지 않는다.
 - manifest가 깨졌거나 없는 `upload_*` 디렉터리는 orphan으로 보되 TTL과 active grace가 모두 지난 경우에만 삭제한다.
-- `AsyncAddressClient.cleanup_upload_sets()`와 `kraddr-geo uploads cleanup` CLI를 추가했다.
-- 기본 설정 `KRADDR_GEO_UPLOAD_SET_TTL_DAYS=30`, `KRADDR_GEO_UPLOAD_SET_ACTIVE_GRACE_MINUTES=360`을 추가했다.
+- `AsyncAddressClient.cleanup_upload_sets()`와 `ktgctl uploads cleanup` CLI를 추가했다.
+- 기본 설정 `KTG_UPLOAD_SET_TTL_DAYS=30`, `KTG_UPLOAD_SET_ACTIVE_GRACE_MINUTES=360`을 추가했다.
 - `docs/t050-ops-hardening.md`에 T-050 전체 분할 순서와 1차 cleanup 운영 규칙을 정리했다.
 
 **검증 예정**:
@@ -972,12 +999,12 @@
 - `ops.consistency_case_samples` DDL/Alembic을 추가하고 `run_all_cases()`가 report JSONB 요약과 sample row를 함께 저장하도록 바꿨다. 기존 report는 sample 조회 시 lazy backfill한다.
 - `/v1/admin/consistency/case-definitions`, sample list/summary, 단건·bulk decision, recheck, CSV export API와 `AsyncAddressClient` 메서드를 추가했다.
 - `/admin/consistency/[report_id]` 상세 화면을 추가하고 TanStack Query, TanStack Table, Zustand, `maplibre-vworld-js` wrapper 기반 지도 preview를 연결했다.
-- OpenAPI와 `kraddr-geo-ui` 생성 타입을 갱신했고, Zustand/query helper 테스트를 추가했다.
+- OpenAPI와 `kor-travel-geo-ui` 생성 타입을 갱신했고, Zustand/query helper 테스트를 추가했다.
 
 **검증**:
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `pytest -q`
 - `scripts/export_openapi.py --check --output openapi.json`
-- `kraddr-geo-ui`: `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`
+- `kor-travel-geo-ui`: `npm run lint`, `npm run type-check`, `npm run test`, `npm run build`
 
 **후속**:
 - T-053 PR merge 후 사용자 최신 지시에 따라 T-061 Q3 fuzzy slim text-search 구조를 먼저 진행한다.
@@ -1000,10 +1027,10 @@
 **작업**: vworld 호환 v1 표면을 유지하면서 신규 v2 candidate schema와 API reference를 추가했다.
 
 **반영**:
-- 사용자 재확인에 따라 v2는 Kakao/Naver/Google/VWorld 직접 wrapper가 아니라 각 API 스타일의 장점을 참고한 `kraddr-geo` 자체 API로 정리했다.
-- `src/kraddr/geo/dto/v2.py`, `core/v2.py`, `api/routers/v2.py`를 추가하고 `/v2/geocode`, `/v2/reverse`, `/v2/search`를 연결했다.
+- 사용자 재확인에 따라 v2는 Kakao/Naver/Google/VWorld 직접 wrapper가 아니라 각 API 스타일의 장점을 참고한 `kor-travel-geo` 자체 API로 정리했다.
+- `src/kortravelgeo/dto/v2.py`, `core/v2.py`, `api/routers/v2.py`를 추가하고 `/v2/geocode`, `/v2/reverse`, `/v2/search`를 연결했다.
 - `AsyncAddressClient.geocode_v2()`, `reverse_v2()`, `search_v2()`를 추가했다.
-- `docs/api-reference/`와 LLM 요약 문서를 추가했고, `openapi.json` 및 `kraddr-geo-ui` 생성 타입을 갱신했다.
+- `docs/api-reference/`와 LLM 요약 문서를 추가했고, `openapi.json` 및 `kor-travel-geo-ui` 생성 타입을 갱신했다.
 - v1 외부 fallback은 기존 ADR-019의 vworld/juso만 유지하고, Kakao/Naver/Google 호출과 새 API key는 추가하지 않았다.
 
 **후속**:
@@ -1022,19 +1049,19 @@
 **후속**:
 - 이 선행 정리 PR을 머지한 뒤 T-052 v1/v2 API/provider 작업을 시작한다.
 
-## 2026-05-28 19:20 (T-056 `python-kraddr-base` Address 코드 helper 정리)
+## 2026-05-28 19:20 (T-056 `python-legacy-address-base` Address 코드 helper 정리)
 
-**작업**: `~/dev/python-kraddr-base`의 실제 Address 표면을 확인하고, 본 저장소에서 필요한 주소 코드 helper를 clean-room으로 구현했다.
+**작업**: `~/dev/python-legacy-address-base`의 실제 Address 표면을 확인하고, 본 저장소에서 필요한 주소 코드 helper를 clean-room으로 구현했다.
 
 **확인**:
-- `/home/digitie/dev/python-kraddr-base`는 Git checkout이 아니었다. `.git`이 없어 `git rev-parse HEAD`는 실패했다.
+- `/home/digitie/dev/python-legacy-address-base`는 Git checkout이 아니었다. `.git`이 없어 `git rev-parse HEAD`는 실패했다.
 - package license는 `GPL-3.0-or-later`였고, 본 저장소는 MIT이므로 원본 코드를 복사하지 않았다.
-- 실제 Address 표면은 예상했던 `kraddr.base.address.*` package가 아니라 `src/kraddr/base/addresses.py` 단일 파일이었다.
+- 실제 Address 표면은 예상했던 `legacy.address_base.address.*` package가 아니라 `src/legacy/address-base/addresses.py` 단일 파일이었다.
 
 **반영**:
-- `src/kraddr/geo/core/address/codes.py`에 `SigunguCode`, `LegalDongCode`, `RoadNameCode`, `RoadNameAddressCode`, `AddressCodeSet`과 mapping/정규화 helper를 추가했다.
+- `src/kortravelgeo/core/address/codes.py`에 `SigunguCode`, `LegalDongCode`, `RoadNameCode`, `RoadNameAddressCode`, `AddressCodeSet`과 mapping/정규화 helper를 추가했다.
 - Juso fallback 좌표 API 호출은 `AddressCodeSet`으로 `admCd`, `rnMgtSn`, `udrtYn`, `buldMnnm`, `buldSlno`를 정규화한 뒤 요청한다.
-- `docs/t056-kraddr-base-address-merge.md`, ADR-035, 백엔드/아키텍처 문서, resume/tasks/CHANGELOG를 갱신했다.
+- `docs/t056-legacy-address-base-address-merge.md`, ADR-035, 백엔드/아키텍처 문서, resume/tasks/CHANGELOG를 갱신했다.
 
 **후속**:
 - 사용자 최신 지시에 따라 T-056 이후에는 T-052/T-053 선행 정리 → T-052 → T-053 순서로 진행한다.
@@ -1049,7 +1076,7 @@
 - GitHub tag `v0.1.0`은 commit `8559bf4f8d5a32011a51669552bb7e1aedd42cfb`이고, commit message는 `chore: release v0.1.0`이다.
 - GitHub release는 없었고, npm registry에서도 `maplibre-vworld@0.1.0`과 `maplibre-vworld-js@0.1.0`은 `E404`였다.
 - package name/version은 `maplibre-vworld`/`0.1.0`이며, `dist/`, `exports`, `types`, `style.css`, `VWorldMap`, marker/layer primitive, VWorld helper가 포함되어 있었다.
-- 현재 `kraddr-geo-ui` dependency는 여전히 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`에 고정되어 있고, 이번 작업에서는 dependency를 갱신하지 않았다.
+- 현재 `kor-travel-geo-ui` dependency는 여전히 `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`에 고정되어 있고, 이번 작업에서는 dependency를 갱신하지 않았다.
 
 **결론**:
 - T-044는 0.1.0 기준 문서-only 재확인으로 완료한다.
@@ -1065,7 +1092,7 @@
 - `docs/resume.md`
 
 **검증**:
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`, `git diff --check`, `codegraph sync`를 통과했다.
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `pytest -q`, `git diff --check`, `codegraph sync`를 통과했다.
 - 전체 pytest 결과는 216 passed, 6 skipped, 3 warnings다.
 
 ## 2026-05-28 17:42 (T-062 PR #53~#64 리뷰 audit/fixup)
@@ -1079,15 +1106,15 @@
 **직접 반영**:
 - PR #53: search exact preflight의 Python/SQL 정규화 규칙을 문서화하고, shadow MV index 문서 오타를 수정했다. exact preflight가 없는 broad trigram fallback을 계속 측정하도록 `search_fuzzy` benchmark case와 REST 변환 case를 추가했다.
 - PR #55: `pg_stat_statements` 조회/reset을 `x_extension` schema-qualified SQL로 고정했다.
-- PR #59: reverse 좌표 bounds validation을 `PydanticCustomError("kraddr_geo.coordinate_bounds", ...)` 기반 structured mapping으로 바꿔 문자열 전체 매칭 의존을 제거했다.
+- PR #59: reverse 좌표 bounds validation을 `PydanticCustomError("kor_travel_geo.coordinate_bounds", ...)` 기반 structured mapping으로 바꿔 문자열 전체 매칭 의존을 제거했다.
 - PR #62: REST admission repeat 문서에 c64 tail 중심 비교 이유를 추가했다.
 - PR #63: `tar.zst` SHA256 checksum 시간을 측정하고, backup envelope와 `tar.zst`의 의미를 단일 artifact 포장/checksum 단순화 중심으로 보강했다.
 
 **후속**:
-- 다음 작업은 사용자 추가 지시에 따라 T-044를 `maplibre-vworld-js` 0.1.0 기준으로 다시 확인하는 문서-only PR이다. upstream 코드는 직접 수정하지 않고 `python-kraddr-geo` 문서에 보완점을 남긴다.
+- 다음 작업은 사용자 추가 지시에 따라 T-044를 `maplibre-vworld-js` 0.1.0 기준으로 다시 확인하는 문서-only PR이다. upstream 코드는 직접 수정하지 않고 `kor-travel-geo` 문서에 보완점을 남긴다.
 
 **검증**:
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `pytest -q`, `git diff --check`, `codegraph sync`를 통과했다.
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `pytest -q`, `git diff --check`, `codegraph sync`를 통과했다.
 - 전체 pytest 결과는 216 passed, 6 skipped, 3 warnings다.
 
 ## 2026-05-28 16:20 (T-057 행정구역 hint 기반 검색 가속)
@@ -1163,8 +1190,8 @@
 **작업**: REST API c64 tail을 줄이기 위해 `/v1/address/*` 전용 optional admission control을 추가하고, worker/pool/admission 조합을 exploratory benchmark로 비교했다.
 
 **반영 상세**:
-- `KRADDR_GEO_API_MAX_CONCURRENCY`가 설정된 경우에만 주소 API 요청을 process-local semaphore로 제한한다. 기본값은 unset이라 기존 동작은 유지된다.
-- `KRADDR_GEO_API_ADMISSION_TIMEOUT_MS`는 semaphore 대기 timeout이다. timeout 시 HTTP 429 + `E0200`을 반환한다.
+- `KTG_API_MAX_CONCURRENCY`가 설정된 경우에만 주소 API 요청을 process-local semaphore로 제한한다. 기본값은 unset이라 기존 동작은 유지된다.
+- `KTG_API_ADMISSION_TIMEOUT_MS`는 semaphore 대기 timeout이다. timeout 시 HTTP 429 + `E0200`을 반환한다.
 - health/admin/metrics 경로는 admission control 대상에서 제외했다.
 
 **측정**:
@@ -1192,7 +1219,7 @@
 - artifact: `artifacts/perf/t047-rest-e2e-pool64-20260528`.
 - 비교 기준: `artifacts/perf/t047-rest-e2e-standard-20260528-r2`.
 - corpus SHA: `ef460f8fbddaddfc4a0318009beeac3b9ff093f55b7d14a45aec163eb40e798f`.
-- uvicorn 단일 process, `KRADDR_GEO_PG_POOL_SIZE=64`, `KRADDR_GEO_PG_MAX_OVERFLOW=0`.
+- uvicorn 단일 process, `KTG_PG_POOL_SIZE=64`, `KTG_PG_MAX_OVERFLOW=0`.
 - REST case 1,000건, measurement 8,000건, error 0.
 
 **결론**:
@@ -1247,7 +1274,7 @@
 **측정**:
 - DB: Docker PostGIS `localhost:15432`, `mv_geocode_target=6,416,637`.
 - 첫 shadow `swap`은 기본 statement timeout 5초에 걸려 실패했다. `mv_geocode_target_next`/`mv_geocode_target_old` 잔여 객체는 없었고 live MV row count는 유지됐다.
-- `KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS=1800000`으로 재실행한 결과, `CONCURRENTLY` refresh는 133.28초, shadow `swap`은 352.85초였다.
+- `KTG_PG_STATEMENT_TIMEOUT_MS=1800000`으로 재실행한 결과, `CONCURRENTLY` refresh는 133.28초, shadow `swap`은 352.85초였다.
 - T-035 기준선 대비 `CONCURRENTLY`는 +21.64초, shadow `swap`은 +215.70초다.
 - shadow `swap` 중 exact index 3개 build phase 합계는 180.35초였다. live rename/drop/index rename 구간은 0.03초 수준으로 lock window는 여전히 짧았다.
 - DB 전체는 31.90GiB, `mv_geocode_target` total은 4.78GiB, MV index total은 2.93GiB, exact index 3개 합계는 1.43GiB였다.
@@ -1267,7 +1294,7 @@
 **작업**: T-047 관측성 보강이 머지된 뒤, 실제 Docker DB에 `pg_stat_statements`를 활성화하고 저장 corpus로 반복 benchmark를 수행했다.
 
 **DB 조치**:
-- `kraddr-geo-t027-db-1` 컨테이너를 `shared_preload_libraries=pg_stat_statements` 설정으로 재생성했다. bind mount `/home/digitie/kraddr-geo-data/pgdata`는 유지했다.
+- `kor-travel-geo-t027-db-1` 컨테이너를 `shared_preload_libraries=pg_stat_statements` 설정으로 재생성했다. bind mount `/home/digitie/kor-travel-geo-data/pgdata`는 유지했다.
 - 기존 DB는 Alembic version table이 없어 `alembic upgrade head`가 0001부터 시작했고, 33자 revision ID `0005_t039_roadaddr_entrance_table`가 기본 `varchar(32)`에 걸리는 문제가 드러났다.
 - revision ID를 `0005_t039_roadaddr_entrc`로 줄이고, 모든 revision/down_revision 길이 32자 이하 테스트를 추가했다.
 - 이 실측 DB는 이미 스키마 객체가 존재하는 수동 full-load DB라 `pg_stat_statements` extension을 직접 만든 뒤 `alembic stamp head`로 현재 상태를 기록했다.
@@ -1328,8 +1355,8 @@
 **작업**: Q4 통합 search의 broad trigram 병목을 줄이기 위해 exact preflight 경로와 전용 btree index를 추가했다.
 
 **반영 상세**:
-- `src/kraddr/geo/infra/search_repo.py`: search repository가 공백 제거 query로 `rn_nrm`/`buld_nm_nrm` exact preflight를 먼저 실행하고, exact 결과가 있으면 그 결과 집합만 반환한다. exact 결과가 없을 때만 기존 broad trigram search로 fallback한다.
-- `src/kraddr/geo/infra/sql.py`, `alembic/versions/0010_t047_search_exact_indexes.py`: `idx_mv_rn_nrm_exact`, `idx_mv_buld_nm_nrm_exact`를 추가했다.
+- `src/kortravelgeo/infra/search_repo.py`: search repository가 공백 제거 query로 `rn_nrm`/`buld_nm_nrm` exact preflight를 먼저 실행하고, exact 결과가 있으면 그 결과 집합만 반환한다. exact 결과가 없을 때만 기존 broad trigram search로 fallback한다.
+- `src/kortravelgeo/infra/sql.py`, `alembic/versions/0010_t047_search_exact_indexes.py`: `idx_mv_rn_nrm_exact`, `idx_mv_buld_nm_nrm_exact`를 추가했다.
 - `scripts/benchmark_query_performance.py`: Q4 search benchmark가 raw `_SEARCH_SQL`만 직접 실행하지 않고 운영 repository와 같은 exact preflight를 재현하도록 수정했다.
 - `tests/unit/test_infra_repo_sql.py`, `tests/unit/test_query_performance_benchmark.py`: SQL/index 계약과 benchmark search preflight 파라미터를 고정했다.
 
@@ -1393,12 +1420,12 @@
 
 ## 2026-05-27 (사용자 RFC 반영 — T-052~T-059 백로그 + ADR-035~ADR-038)
 
-**작업**: 사용자 RFC(restore hot-swap, vworld/kakao/naver multi-provider + v1/v2 API + AI-friendly 문서, Web UI 통계/유지보수/관리/튜닝 + C1~C10 분석 UI/CSV, CLI 동시 실행 보호, 한국 IP만 허용, N150/Odroid 환경 검토, `python-kraddr-base` Address 부분 병합 + 외부 라이브러리 삭제, 행정구역 hint 검색 가속)를 task 8건과 ADR 4건으로 문서화했다. 코드는 작성하지 않았다.
+**작업**: 사용자 RFC(restore hot-swap, vworld/kakao/naver multi-provider + v1/v2 API + AI-friendly 문서, Web UI 통계/유지보수/관리/튜닝 + C1~C10 분석 UI/CSV, CLI 동시 실행 보호, 한국 IP만 허용, N150/Odroid 환경 검토, `python-legacy-address-base` Address 부분 병합 + 외부 라이브러리 삭제, 행정구역 hint 검색 가속)를 task 8건과 ADR 4건으로 문서화했다. 코드는 작성하지 않았다.
 
 **반영 상세**:
 - `docs/tasks.md`에 T-052~T-059 신규 항목 추가 + 우선순위 재정렬. 운영 안전성(T-056, T-058, T-059, T-054)을 먼저, 기능 보강(T-057, T-053, T-052) 다음, 운영 환경 비교(T-055)는 하드웨어 도착 후.
-- `docs/decisions.md`에 ADR-035(`python-kraddr-base` Address 흡수 + 외부 라이브러리 삭제), ADR-036(restore hot-swap `ALTER DATABASE RENAME` 기반), ADR-037(외부 IP 한국만 허용), ADR-038(API v1/v2 분리 + 외부 provider 흡수 + AI-friendly 문서)을 추가했다.
-- 각 task별 design doc 8건 신규: `docs/t052-api-providers-v1-v2.md`, `docs/t053-admin-ui-ops-statistics.md`, `docs/t054-korea-only-geoip.md`, `docs/t055-deployment-n150-odroid.md`, `docs/t056-kraddr-base-address-merge.md`, `docs/t057-region-hint-search.md`, `docs/t058-restore-hot-swap.md`, `docs/t059-concurrent-job-protection.md`.
+- `docs/decisions.md`에 ADR-035(`python-legacy-address-base` Address 흡수 + 외부 라이브러리 삭제), ADR-036(restore hot-swap `ALTER DATABASE RENAME` 기반), ADR-037(외부 IP 한국만 허용), ADR-038(API v1/v2 분리 + 외부 provider 흡수 + AI-friendly 문서)을 추가했다.
+- 각 task별 design doc 8건 신규: `docs/t052-api-providers-v1-v2.md`, `docs/t053-admin-ui-ops-statistics.md`, `docs/t054-korea-only-geoip.md`, `docs/t055-deployment-n150-odroid.md`, `docs/t056-legacy-address-base-address-merge.md`, `docs/t057-region-hint-search.md`, `docs/t058-restore-hot-swap.md`, `docs/t059-concurrent-job-protection.md`.
 - 각 design doc은 "상태/목적/현황/결정/구현 sketch/검증/남은 위험/관련 ADR-Task" 구조로 작성해 사람과 AI agent 모두가 cold start로 진입할 수 있게 했다.
 - `CHANGELOG.md`/`docs/resume.md`에 같은 내용을 동기화했다.
 
@@ -1410,7 +1437,7 @@
 
 **검증**:
 - `git diff --check` 통과 예정(문서 전용).
-- `pytest -q`, `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`는 본 PR이 코드 변경이 없으므로 회귀 차원에서 baseline만 통과 확인.
+- `pytest -q`, `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`는 본 PR이 코드 변경이 없으므로 회귀 차원에서 baseline만 통과 확인.
 
 ## 2026-05-27 (T-047 중단 기록 — CodeGraph MCP 설정과 벤치마크 harness 초안)
 
@@ -1429,7 +1456,7 @@
 
 **검증된 것**:
 - `codegraph sync && codegraph status` 실행 결과 `Index is up to date`를 확인했다. sync 당시에는 새 Python 파일 2개가 인덱스에 반영됐다.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp PYTHONPATH=... /home/digitie/dev/python-kraddr-geo/.venv/bin/python -m pytest tests/unit/test_query_performance_benchmark.py -q` 실행 결과 6건 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp PYTHONPATH=... /home/digitie/dev/kor-travel-geo/.venv/bin/python -m pytest tests/unit/test_query_performance_benchmark.py -q` 실행 결과 6건 통과.
 - `ps` 확인 시 benchmark/pytest/ruff/gh/당시 인프라 명령 장기 실행 프로세스는 없었다.
 
 **아직 끝나지 않은 것**:
@@ -1458,7 +1485,7 @@
 - CodeGraph 원문 문서에서 `codegraph init -i`가 `.codegraph/` 생성과 즉시 인덱싱을 수행하고, 기존 인덱스는 `codegraph sync`로 증분 갱신한다는 점을 확인했다.
 - 최초 확인 시 로컬 WSL PATH에는 Windows npm shim(`/mnt/c/Users/digit/AppData/Roaming/npm/codegraph`)이 먼저 잡히며 `node: not found`로 실패했다. CodeGraph Linux installer로 `v0.9.6`을 `~/.codegraph`/`~/.local/bin`에 설치한 뒤 `codegraph --version`이 정상 동작함을 확인했다.
 - `~/dev/geo-codex`, `~/dev/geo-claude`, `~/dev/geo-antigravity` worktree를 생성했다. 각 worktree에서 `codegraph init -i && codegraph status`를 실행했고, 201 files, 2,796 nodes, 6,251 edges, DB size 5.58 MB, `node:sqlite`/WAL, `Index is up to date` 상태를 확인했다.
-- `git diff --check`, `.venv/bin/ruff check .`, `.venv/bin/mypy src/kraddr/geo`, `.venv/bin/lint-imports`, `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q`를 실행했다. 결과는 `191 passed, 6 skipped`다.
+- `git diff --check`, `.venv/bin/ruff check .`, `.venv/bin/mypy src/kortravelgeo`, `.venv/bin/lint-imports`, `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q`를 실행했다. 결과는 `191 passed, 6 skipped`다.
 
 **후속**:
 - 이후 모든 새 작업은 해당 에이전트 고정 worktree에서 branch만 새로 따고, branch 전환 뒤 `codegraph sync`로 인덱스를 맞춘다.
@@ -1469,9 +1496,9 @@
 
 **반영 상세**:
 - `docs/postmerge-review-fixups-pr34-latest.md`를 추가해 PR별 코멘트, 이번 반영, 후속 이관 항목, 재사용할 GraphQL query template을 기록했다.
-- PR #35 M3 반영: `LoadJobStatus.source_set`, `ConsistencyReport.source_set`, 내부 row protocol, `run_all_cases(source_set=...)` 타입을 `dict[str, Any]`로 넓혀 `SourceSetPlan`의 nested JSON을 보존한다. `openapi.json`, `kraddr-geo-ui/types/api.gen.ts`, `kraddr-geo-ui/lib/api.ts`도 함께 갱신했다.
+- PR #35 M3 반영: `LoadJobStatus.source_set`, `ConsistencyReport.source_set`, 내부 row protocol, `run_all_cases(source_set=...)` 타입을 `dict[str, Any]`로 넓혀 `SourceSetPlan`의 nested JSON을 보존한다. `openapi.json`, `kor-travel-geo-ui/types/api.gen.ts`, `kor-travel-geo-ui/lib/api.ts`도 함께 갱신했다.
 - PR #43 M5 반영: `ops.audit_events.job_id` FK를 `ON DELETE SET NULL`에서 `ON DELETE NO ACTION`으로 변경했다. fresh DDL과 Alembic `0008_pr34_review_followups`를 추가해 감사 이벤트와 job 연결이 조용히 끊기지 않게 했다.
-- PR #38/PR #42 후속 반영: `maplibre-vworld-js` upstream `main` 최신 SHA `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`를 확인해 `kraddr-geo-ui` dependency/lockfile과 문서를 갱신하고, Windows `npm` 오사용을 막는 `scripts/frontend_check.sh`를 추가했다.
+- PR #38/PR #42 후속 반영: `maplibre-vworld-js` upstream `main` 최신 SHA `7947b2e170ddb36ab28a7a9034dd4dbf8f18370b`를 확인해 `kor-travel-geo-ui` dependency/lockfile과 문서를 갱신하고, Windows `npm` 오사용을 막는 `scripts/frontend_check.sh`를 추가했다.
 
 **검증 계획**:
 - 백엔드: `pytest`, `ruff`, `mypy`, `lint-imports`, OpenAPI drift check.
@@ -1511,7 +1538,7 @@
 **반영 상세**:
 - `tl_sppn_makarea` DDL과 Alembic `0007_t042_sppn_makarea`를 추가했다. 원천 `Polygon`은 운영 `MultiPolygon 5179`로 정규화한다.
 - `load_sppn_makarea()`를 추가했다. `구역의 도형` ZIP, 디렉터리, 추출된 SHP 입력을 탐지하고 GDAL Python binding으로 staging table에 적재한 뒤 `SIG_CD + MAKAREA_ID` 기준으로 upsert한다.
-- `kraddr-geo load sppn-makarea`, API queue kind `sppn_makarea_load`, source set optional `sppn_makarea` child를 연결했다.
+- `ktgctl load sppn-makarea`, API queue kind `sppn_makarea_load`, source set optional `sppn_makarea` child를 연결했다.
 - `core.sppn`에 국가지점번호 parser와 EPSG:5179 좌표 formatter를 추가했다.
 - geocode는 국가지점번호 문자열을 좌표로 변환한 뒤 `ST_Covers(tl_sppn_makarea.geom, point)`로 검증하고, `x_extension.national_point_number`와 `x_extension.sppn_makarea`를 반환한다.
 - reverse geocode는 도로명/지번 후보가 없어도 polygon 포함 여부가 있으면 `status="OK"`와 `x_extension.sppn_makarea`를 반환한다.
@@ -1519,7 +1546,7 @@
 
 **검증**:
 - Targeted unit/contract pytest 48건을 통과했다.
-- Docker PostGIS `kraddr_geo_t042_sppn`에 세종 `구역의 도형/구역의도형_전체분_세종특별자치시.zip`을 실제 적재했다. 결과는 146행, 146 distinct key, source_yyyymm `202605`, 전체 valid MultiPolygon이었다.
+- Docker PostGIS `kor_travel_geo_t042_sppn`에 세종 `구역의 도형/구역의도형_전체분_세종특별자치시.zip`을 실제 적재했다. 결과는 146행, 146 distinct key, source_yyyymm `202605`, 전체 valid MultiPolygon이었다.
 - timed load는 `elapsed_s=1.35`, `max_rss_kb=131092`였다.
 - `금이산` polygon 내부 `ST_PointOnSurface()`를 formatter로 `다바 7363 4856`으로 변환했고, geocode/reverse 보조 조회가 모두 `makarea_id=29`, `makarea_nm=금이산`을 반환했다.
 - optional integration test `test_real_postgres_can_load_sppn_makarea_and_lookup_when_dsn_is_set`를 실제 DB DSN으로 실행해 통과했다.
@@ -1535,18 +1562,18 @@
 
 **반영 상세**:
 - `db_backup`, `db_restore` job kind와 `BackupCreateRequest`, `RestoreCreateRequest`, `BackupArtifact` DTO를 추가했다.
-- `KRADDR_GEO_BACKUP_ALLOWED_DIRS`, 임시 디렉터리, 병렬 jobs, 압축 level, TTL, callback allowlist, download token secret 설정을 추가했다.
+- `KTG_BACKUP_ALLOWED_DIRS`, 임시 디렉터리, 병렬 jobs, 압축 level, TTL, callback allowlist, download token secret 설정을 추가했다.
 - `infra.backup`에서 allowlist/symlink escape 검증, `pg_dump -Fd --jobs`, `.part` 기반 `tar.zst` archive, manifest/checksum, `pg_restore -Fd --jobs`, target DB empty/current DB guard, callback, HMAC download token을 구현했다.
 - `pg_dump`/`pg_restore` password는 argv에 넣지 않고 `PGPASSWORD` 환경변수로 넘기도록 해 process argument와 log 노출을 줄였다.
 - `ops.artifacts` helper를 확장해 `db_backup` artifact metadata를 저장하고, backup/restore 작업을 기존 영속 `load_jobs` 큐에 연결했다.
-- `/v1/admin/backups`, `/v1/admin/restores`, `/v1/admin/jobs/{job_id}/events`, `kraddr-geo backup/restore`, `/admin/backups` UI를 추가했다.
-- OpenAPI와 `kraddr-geo-ui` 생성 타입/schema를 갱신했다.
+- `/v1/admin/backups`, `/v1/admin/restores`, `/v1/admin/jobs/{job_id}/events`, `ktgctl backup/restore`, `/admin/backups` UI를 추가했다.
+- OpenAPI와 `kor-travel-geo-ui` 생성 타입/schema를 갱신했다.
 
 **검증**:
 - Backend targeted pytest 32건, `ruff`, `mypy`를 통과했다.
 - Frontend `eslint`, `tsc --noEmit`, `vitest`, `next build`를 통과했다.
 - Playwright 검증은 사용자 지시에 따라 Windows Node에서 수행했다. `/admin/backups` 화면에서 백업 시작, 복원 시작, 다운로드 링크 노출을 API mock으로 확인했고 screenshot은 `C:\Users\digit\AppData\Local\Temp\t046-admin-backups-windows.png`에 저장했다.
-- Docker PostGIS에서 대구광역시 부분 원천을 실제 적재한 뒤 `/tmp/kraddr-t046/backups/t046_daegu_backup.tar.zst` 백업과 새 DB 복원을 수행했다. 원본/복원 row count는 `tl_juso_text=228,875`, `tl_juso_parcel_link=26,594`, `tl_locsum_entrc=228,610`, `tl_navi_buld_centroid=291,281`, `mv_geocode_target=228,875`로 일치했고, `대구광역시 중구 공평로 88` geocode/reverse smoke test가 모두 `OK`였다.
+- Docker PostGIS에서 대구광역시 부분 원천을 실제 적재한 뒤 `/tmp/kortravel-t046/backups/t046_daegu_backup.tar.zst` 백업과 새 DB 복원을 수행했다. 원본/복원 row count는 `tl_juso_text=228,875`, `tl_juso_parcel_link=26,594`, `tl_locsum_entrc=228,610`, `tl_navi_buld_centroid=291,281`, `mv_geocode_target=228,875`로 일치했고, `대구광역시 중구 공평로 88` geocode/reverse smoke test가 모두 `OK`였다.
 
 **후속**:
 - callback retry/backoff, restore 취소 시 target DB drop/quarantine 정책, 디스크 여유 공간 사전 추정, PostgreSQL/PostGIS major mismatch hard-fail은 hardening task로 남긴다.
@@ -1562,12 +1589,12 @@
 - `infra.source_set`에서 원천 후보를 자동 탐지하고, source kind별 기준월과 명시 `children` batch payload를 만드는 helper를 추가했다.
 - `infra.uploads`에서 upload set을 JSON manifest로 영속화하고, raw stream 파일 저장, `*.part` atomic rename, sha256, 기준월/source kind 추론, 크기 제한 실패 상태, 취소를 구현했다.
 - `/v1/admin/uploads/*`와 `/v1/admin/load-sources/*`를 추가하고, `/v1/admin/loads kind=full_load_batch`가 명시 child job 목록을 받도록 UI/라이브러리/CLI를 연결했다.
-- `kraddr-geo load full-set`은 자동 발견 후 기준월이 섞이면 정확한 확인 문구 없이는 plan을 만들지 않는다.
+- `ktgctl load full-set`은 자동 발견 후 기준월이 섞이면 정확한 확인 문구 없이는 plan을 만들지 않는다.
 - `/admin/load`는 다중 파일 선택과 DND, XHR upload progress, upload set cancel, source set review, 기준월 mismatch modal, 적재 진행률과 root job cancel을 제공한다.
 
 **검증**:
 - `tests/unit/test_source_set_plan.py`에서 source 탐지, optional 제외, 같은 기준월 plan, 혼합 기준월 확인, upload 저장/취소, 크기 제한 실패를 검증했다.
-- `kraddr-geo-ui/tests/unit/load-workflow.test.ts`에서 상태 전이, 확인 token 생성, 진행률 계산을 검증했다.
+- `kor-travel-geo-ui/tests/unit/load-workflow.test.ts`에서 상태 전이, 확인 token 생성, 진행률 계산을 검증했다.
 - 중간 검증으로 backend targeted pytest, backend ruff/mypy, frontend lint/type-check/load-workflow test를 통과했다. 최종 PR 검증에서는 전체 backend/frontend gate와 OpenAPI drift 검사를 다시 수행한다.
 
 **후속**:
@@ -1580,17 +1607,17 @@
 **작업**: ADR-033의 `ops` 운영 메타데이터 설계를 실제 DDL, Alembic migration, DTO/API/client, 관리 UI, 테스트로 구현했다.
 
 **반영 상세**:
-- `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`를 `sql/ddl/001_schema.sql`과 `src/kraddr/geo/infra/sql.py`에 추가하고, 기존 DB upgrade용 Alembic `0006_t049_ops_metadata_schema.py`를 작성했다.
+- `ops.audit_events`, `ops.dataset_snapshots`, `ops.serving_releases`, `ops.artifacts`, `ops.maintenance_windows`, `ops.table_stats_snapshots`를 `sql/ddl/001_schema.sql`과 `src/kortravelgeo/infra/sql.py`에 추가하고, 기존 DB upgrade용 Alembic `0006_t049_ops_metadata_schema.py`를 작성했다.
 - `ops.audit_events`는 append-only trigger로 UPDATE/DELETE를 막고, `ops.serving_releases`는 `state='active'` partial unique index로 active release 한 건만 허용한다.
-- `kraddr.geo.core.redaction`을 추가해 API key, DSN, password, token, callback secret, 주소 원문을 audit payload에 평문 저장하지 않도록 했다.
+- `kortravelgeo.core.redaction`을 추가해 API key, DSN, password, token, callback secret, 주소 원문을 audit payload에 평문 저장하지 않도록 했다.
 - `AdminRepository`, `AsyncAddressClient`, `/v1/admin/ops/*` API를 추가했다. audit event/snapshot/release/artifact/maintenance/table stats 조회, rollback plan, maintenance window 생성/종료, table stats snapshot capture를 제공한다.
-- `kraddr-geo-ui`에 `/admin/ops` 화면을 추가했다. release, snapshot, artifact, audit event, maintenance window, table stats snapshot을 조회하고 maintenance window 생성과 stats capture를 실행할 수 있다.
+- `kor-travel-geo-ui`에 `/admin/ops` 화면을 추가했다. release, snapshot, artifact, audit event, maintenance window, table stats snapshot을 조회하고 maintenance window 생성과 stats capture를 실행할 수 있다.
 - OpenAPI와 frontend generated type/schema 목록을 갱신했다.
 
 **검증**:
 - `.venv/bin/python -m pytest -q` → 155 passed, 5 skipped.
 - `.venv/bin/python -m ruff check .` 통과.
-- `.venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py` 통과.
+- `.venv/bin/python -m mypy src/kortravelgeo scripts/export_openapi.py` 통과.
 - `.venv/bin/lint-imports` 통과.
 - `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run lint` 통과.
 - `PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH npm run type-check` 통과.
@@ -1609,8 +1636,8 @@
 
 **반영 상세**:
 - GraphQL `pullRequest.comments`, `reviews`, `reviewThreads`와 REST review comment API를 함께 조회했다. 대상 PR 전체에서 unresolved review thread는 0개였다.
-- `kraddr-geo-ui/lib/vworld.ts`의 `redactVWorldTileUrl` alias 수명 주석과 redaction test의 API key 누설 방지 assert를 추가했다.
-- `kraddr-geo-ui/README.md`에 WSL ext4에서는 Linux Node/npm을 사용하라는 검증 경고를 추가했다.
+- `kor-travel-geo-ui/lib/vworld.ts`의 `redactVWorldTileUrl` alias 수명 주석과 redaction test의 API key 누설 방지 assert를 추가했다.
+- `kor-travel-geo-ui/README.md`에 WSL ext4에서는 Linux Node/npm을 사용하라는 검증 경고를 추가했다.
 - `docs/t035-mv-refresh-benchmark.md`에 session/wait event metadata 해석 가이드를 보강했다.
 - `docs/t028-daily-juso-delta.md`에 신규 `MVM_RES_CD` 대응 절차, dedup 정렬 전제, `No Data` sentinel, checksum, queue 직렬화, daily 후 MV refresh 정책을 추가했다.
 - CLI의 `--limit-per-file` 옵션 사용 시 stderr 경고를 출력하도록 했다.
@@ -1622,7 +1649,7 @@
 - `git diff --check` 통과.
 - `.venv/bin/python -m pytest -q` → 150 passed, 5 skipped.
 - `.venv/bin/python -m ruff check .` 통과.
-- `.venv/bin/python -m mypy src/kraddr/geo` 통과.
+- `.venv/bin/python -m mypy src/kortravelgeo` 통과.
 - `.venv/bin/lint-imports` 통과.
 - 프론트엔드 로컬 검증은 Linux Node가 없고 Windows `npm`만 잡혀 UNC 경로 오류가 나므로 실행하지 않았다. GitHub Actions frontend job에서 확인한다.
 
@@ -1633,7 +1660,7 @@
 **반영 상세**:
 - README/SKILL의 현재 상태와 quick start를 갱신했다. `load all-sidos` 예시는 실제 CLI 옵션(`--juso`, `--jibun`, `--locsum`, `--navi`, `--shp-root`, `--yyyymm`) 기준으로 바꿨다.
 - 현재형 문서의 브랜치 표현을 `master`에서 `main`으로 바로잡았다. 단, `master table` 같은 DB 도메인 용어와 과거 작업 일지의 역사적 표현은 유지했다.
-- `SKILL.md`의 “백엔드만 다룬다” 설명을 같은 저장소 안의 별도 Node.js 패키지 `kraddr-geo-ui`를 함께 관리한다는 설명으로 정리했다.
+- `SKILL.md`의 “백엔드만 다룬다” 설명을 같은 저장소 안의 별도 Node.js 패키지 `kor-travel-geo-ui`를 함께 관리한다는 설명으로 정리했다.
 - T-046 백업 artifact metadata는 신규 구현에서 `ops.artifacts`로 수렴한다는 ADR-033 방향을 `docs/architecture.md`, `docs/t046-db-backup-restore.md`, `docs/decisions.md`에 맞췄다.
 - `docs/tasks.md`와 `docs/resume.md`의 후속 순서를 T-043 → T-049 → T-045 → T-046 → T-042 → T-027 → T-047 → T-044로 재정렬했다. 데이터·운영 gate를 먼저 안정화한 뒤 지도 UI 경계화를 진행하는 순서다.
 - 점검표와 남겨 둔 범위는 `docs/doc-consistency-audit-20260527.md`에 기록했다.
@@ -1668,18 +1695,18 @@
 
 ## 2026-05-27 (T-048 — `maplibre-vworld-js` 최신 동기화와 책임 경계 재정의)
 
-**작업**: 사용자 지시에 따라 `maplibre-vworld-js` 사용 시 항상 최신 버전을 확인하고, 이 라이브러리의 특화 기능은 upstream `vworld.js`가 아니라 `kraddr-geo-ui` 쪽에서 구현한다는 원칙을 문서와 dependency에 반영했다.
+**작업**: 사용자 지시에 따라 `maplibre-vworld-js` 사용 시 항상 최신 버전을 확인하고, 이 라이브러리의 특화 기능은 upstream `vworld.js`가 아니라 `kor-travel-geo-ui` 쪽에서 구현한다는 원칙을 문서와 dependency에 반영했다.
 
 **반영 상세**:
 - `git ls-remote https://github.com/digitie/maplibre-vworld-js.git refs/heads/main`으로 upstream `main` 최신 commit `1a28b1099ab6c9c03e892e469974aee8c07deda1`을 확인했다.
-- `kraddr-geo-ui/package.json`과 `package-lock.json`의 `maplibre-vworld` dependency를 최신 확인 SHA로 갱신했다. CI에서 SSH key 없이 설치되도록 dependency와 lockfile `resolved`는 `git+https` 형식을 유지한다.
-- ADR-032를 추가했다. VWorld layer/style, marker/popup/cluster primitive, tile error redaction, package export/type/CSS처럼 범용 기능은 `digitie/maplibre-vworld-js`에서 보강하고, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 fallback UX는 `kraddr-geo-ui` domain wrapper에서 구현한다.
+- `kor-travel-geo-ui/package.json`과 `package-lock.json`의 `maplibre-vworld` dependency를 최신 확인 SHA로 갱신했다. CI에서 SSH key 없이 설치되도록 dependency와 lockfile `resolved`는 `git+https` 형식을 유지한다.
+- ADR-032를 추가했다. VWorld layer/style, marker/popup/cluster primitive, tile error redaction, package export/type/CSS처럼 범용 기능은 `digitie/maplibre-vworld-js`에서 보강하고, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 fallback UX는 `kor-travel-geo-ui` domain wrapper에서 구현한다.
 - `README.md`, `docs/architecture.md`, `docs/frontend-package.md`, `docs/external-apis.md`, `docs/tasks.md`, `docs/resume.md`, `docs/t036-maplibre-vworld-sync.md`, `CHANGELOG.md`를 같은 방향으로 갱신했다.
 
 **결정**:
 - `maplibre-vworld` dependency를 건드리는 PR은 최신 `main` 또는 stable release 확인 결과를 남긴다.
 - upstream에 보낼 것은 범용 VWorld/MapLibre 기능이며, 주소 지오코딩 디버그/관리 UI에만 의미가 있는 기능은 이 저장소에서 구현한다.
-- SHA 갱신 후에는 `kraddr-geo-ui`에서 `npm ci`, lint, type-check, test, build를 재검증한다.
+- SHA 갱신 후에는 `kor-travel-geo-ui`에서 `npm ci`, lint, type-check, test, build를 재검증한다.
 
 ## 2026-05-26 (T-047 등록 — 전국 적재 후 쿼리 성능 벤치마크와 튜닝 설계)
 
@@ -1707,7 +1734,7 @@
 **결정**:
 - `db_backup`과 `db_restore`는 백그라운드 job으로 실행하고, 상태 조회·취소·SSE는 중립 `/v1/admin/jobs/*` 표면을 우선 사용한다.
 - 백업 파일은 브라우저 로컬 경로가 아니라 서버 allowlist 하위 경로에 저장한다. UI 다운로드 링크는 완료 artifact를 로컬로 받기 위한 부가 경로다.
-- 구현 검증은 전국 full-load가 아니라 대구광역시 부분 적재 DB `kraddr_geo_t046_daegu` → `kraddr_geo_t046_daegu_restore` backup/restore로 먼저 수행한다.
+- 구현 검증은 전국 full-load가 아니라 대구광역시 부분 적재 DB `kor_travel_geo_t046_daegu` → `kor_travel_geo_t046_daegu_restore` backup/restore로 먼저 수행한다.
 
 ## 2026-05-26 (T-045 등록 — source set 기준월 선택과 업로드/적재 UX)
 
@@ -1729,12 +1756,12 @@
 
 **반영 상세**:
 - `docs/tasks.md`에 T-044를 추가했다. 범위는 `CoordinateMap.tsx`의 직접 MapLibre wiring을 upstream `VWorldMap` 또는 동등한 Hook/component로 대체하는 것이다.
-- ADR-028을 추가했다. 부족한 click callback, marker 제어, `flyToOptions`, tile error hook/redaction, key 미설정 fallback, SSR-safe 사용법, 타입/패키징 문제는 `python-kraddr-geo`에서 우회하지 않고 `digitie/maplibre-vworld-js`를 직접 수정한다.
+- ADR-028을 추가했다. 부족한 click callback, marker 제어, `flyToOptions`, tile error hook/redaction, key 미설정 fallback, SSR-safe 사용법, 타입/패키징 문제는 `kor-travel-geo`에서 우회하지 않고 `digitie/maplibre-vworld-js`를 직접 수정한다.
 - `docs/frontend-package.md`, `docs/architecture.md`, `docs/t036-maplibre-vworld-sync.md`, `docs/resume.md`, `CHANGELOG.md`를 같은 방향으로 갱신했다.
 
 **결정**:
-- T-044는 두 저장소 작업으로 본다. 필요한 upstream 보강은 `maplibre-vworld-js` PR/commit으로 남기고, 그 검증된 SHA를 `kraddr-geo-ui` dependency로 소비한다.
-- 완료 조건에는 upstream test/build와 `kraddr-geo-ui`의 `npm ci`, lint, type-check, test, build 검증을 포함한다.
+- T-044는 두 저장소 작업으로 본다. 필요한 upstream 보강은 `maplibre-vworld-js` PR/commit으로 남기고, 그 검증된 SHA를 `kor-travel-geo-ui` dependency로 소비한다.
+- 완료 조건에는 upstream test/build와 `kor-travel-geo-ui`의 `npm ci`, lint, type-check, test, build 검증을 포함한다.
 
 ## 2026-05-26 (T-043 등록 — PR #23~#33 리뷰 audit/fixup)
 
@@ -1772,7 +1799,7 @@
 **작업**: PR #31 merge 이후 `codex/t037-shp-geometry-tuning` 브랜치에서 `TL_SPBD_BULD` 직접 GDAL append 병목을 projection staging table 경로로 보강했다.
 
 **반영 상세**:
-- `src/kraddr/geo/loaders/shp/polygons_loader.py`에서 `TL_SPBD_BULD`만 `_kraddr_stage_spbd_buld_polygon` staging table로 분기한다.
+- `src/kortravelgeo/loaders/shp/polygons_loader.py`에서 `TL_SPBD_BULD`만 `_ktg_stage_spbd_buld_polygon` staging table로 분기한다.
 - staging 생성은 `accessMode="overwrite"`, `PG_USE_COPY=YES`, `SHAPE_ENCODING=CP949`, 기존 `plan.sql_statement` projection을 함께 사용한다.
 - 운영 테이블 insert는 `SET LOCAL search_path = public, x_extension` 후 `INSERT ... SELECT`로 수행하고, `ST_Multi(geom)::geometry(MultiPolygon, 5179)`와 문자열 trim/NULL 정규화, 건물번호 integer cast를 명시했다.
 - staging table은 시작 전과 종료 `finally`에서 모두 drop한다.
@@ -1782,12 +1809,12 @@
 - 세종 단일 `TL_SPBD_BULD`: 기존 append 38.36초 → projection staging 18.59초, 55,819행, source 추적 컬럼 전량 채움, staging table 없음.
 - 경기도 raw staging은 원본 DBF 전체 속성을 복사해 22분 58.46초 동안 끝나지 않아 `pg_terminate_backend()`로 중단했다. 중단 지점은 GDAL feature 617,214 부근이었다.
 - 경기도 projection staging: 1,649,975행, 40분 17.15초, source 추적 컬럼 전량 채움, staging table 없음.
-- 세종 public CLI `kraddr-geo load shp ... --mode full --yyyymm 202604`: 9개 레이어 적재 성공, 1분 19.54초, `tl_spbd_buld_polygon=55,819`, `tl_sprd_intrvl=100,009`, `tl_sprd_rw=7,429`.
+- 세종 public CLI `ktgctl load shp ... --mode full --yyyymm 202604`: 9개 레이어 적재 성공, 1분 19.54초, `tl_spbd_buld_polygon=55,819`, `tl_sprd_intrvl=100,009`, `tl_sprd_rw=7,429`.
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py -q` → 17 passed.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py` → 통과.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo/loaders/shp/polygons_loader.py` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kortravelgeo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kortravelgeo/loaders/shp/polygons_loader.py` → 통과.
 
 **다음 작업**: 전체 검증 후 PR을 열어 약 20분 리뷰 대기한다. 리뷰가 없거나 반영이 끝나면 main에 merge하고 T-027 최종 실 데이터 클린 적재 검증으로 진행한다.
 
@@ -1796,9 +1823,9 @@
 **작업**: PR #30 merge 이후 `codex/t041-extra-shape-layer-review` 브랜치에서 `건물군 내 상세주소 동 도형`과 `구역의 도형`을 실제 세종/경남 파일로 전자지도와 비교했다.
 
 **반영 상세**:
-- `src/kraddr/geo/loaders/shape_dbf.py`를 추가해 DBF/SHP layer summary와 key set overlap helper를 공용화했다.
+- `src/kortravelgeo/loaders/shape_dbf.py`를 추가해 DBF/SHP layer summary와 key set overlap helper를 공용화했다.
 - T-040 `building_shape_bundle.py`는 공용 helper를 사용하도록 정리했다.
-- `src/kraddr/geo/loaders/extra_shape_layers.py`와 `scripts/compare_extra_shape_layers.py`를 추가했다.
+- `src/kortravelgeo/loaders/extra_shape_layers.py`와 `scripts/compare_extra_shape_layers.py`를 추가했다.
 - ADR-026을 추가했다. 상세주소 동 도형과 구역 추가 레이어는 기본 `full_load_batch`/`mv_geocode_target`에 섞지 않고, 필요 시 별도 overlay/분석 테이블로 둔다.
 
 **실제 파일 검증**:
@@ -1809,10 +1836,10 @@
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_building_shape_bundle.py tests/unit/test_extra_shape_layers.py tests/integration/test_real_extra_shape_sources.py -q` → 11 passed, 2 skipped.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp KRADDR_GEO_SLOW_REAL_DATA=1 .venv/bin/python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_detail_and_zone_gyeongnam_key_overlap_slow -q` → 1 passed in 16.74s.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp KTG_SLOW_REAL_DATA=1 .venv/bin/python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_detail_and_zone_gyeongnam_key_overlap_slow -q` → 1 passed in 16.74s.
 - `scripts/compare_extra_shape_layers.py`로 세종 실제 파일 JSON 출력을 확인했다.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 148 passed, 5 skipped.
-- `ruff check .`, `mypy src/kraddr/geo scripts/compare_extra_shape_layers.py scripts/compare_building_shape_bundle.py`, `lint-imports`, `git diff --check` → 통과.
+- `ruff check .`, `mypy src/kortravelgeo scripts/compare_extra_shape_layers.py scripts/compare_building_shape_bundle.py`, `lint-imports`, `git diff --check` → 통과.
 
 **다음 작업**: 전체 검증 후 PR을 열어 약 20분 리뷰 대기한다. 리뷰가 없으면 main에 merge하고 T-037 geometry 포함 SHP 대형 레이어 적재 튜닝으로 진행한다.
 
@@ -1821,10 +1848,10 @@
 **작업**: PR #29 merge 이후 `codex/t040-building-shape-bundle` 브랜치에서 `도로명주소 건물 도형` bundle과 기존 전자지도 건물/출입구 레이어의 natural key overlap을 실제 파일로 비교했다.
 
 **반영 상세**:
-- `src/kraddr/geo/loaders/building_shape_bundle.py`를 추가했다. ZIP 내부 `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`와 전자지도 `TL_SPBD_BULD`, `TL_SPBD_ENTRC`의 DBF key set을 순수 Python으로 비교한다.
+- `src/kortravelgeo/loaders/building_shape_bundle.py`를 추가했다. ZIP 내부 `TL_SGCO_RNADR_MST`, `TL_SPBD_ENTRC`, `TL_SPOT_CNTC`와 전자지도 `TL_SPBD_BULD`, `TL_SPBD_ENTRC`의 DBF key set을 순수 Python으로 비교한다.
 - `scripts/compare_building_shape_bundle.py`를 추가해 세종/경남 비교 결과를 JSON으로 재현할 수 있게 했다.
 - ADR-025를 추가했다. `도로명주소 건물 도형`은 단순 중복이 아니지만 현행 `tl_spbd_buld_polygon`/serving MV에는 섞지 않고, 후속 loader가 필요하면 `tl_roadaddr_buld_polygon`, `tl_roadaddr_buld_entrc`, `tl_roadaddr_spot_cntc` 같은 별도 테이블로 둔다.
-- 세종 실제 비교는 기본 integration test로 넣고, 경남 full key scan은 `KRADDR_GEO_SLOW_REAL_DATA=1` 선택 테스트로 분리했다.
+- 세종 실제 비교는 기본 integration test로 넣고, 경남 full key scan은 `KTG_SLOW_REAL_DATA=1` 선택 테스트로 분리했다.
 
 **실제 파일 검증**:
 - 세종 address polygon key: bundle 27,792 distinct, 전자지도 `TL_SPBD_BULD` 55,819 distinct, 교집합 15,339, bundle only 12,453, 전자지도 only 40,480.
@@ -1834,9 +1861,9 @@
 
 **검증**:
 - `python -m pytest tests/unit/test_building_shape_bundle.py tests/integration/test_real_extra_shape_sources.py -q` → 7 passed, 1 skipped.
-- `KRADDR_GEO_SLOW_REAL_DATA=1 python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_building_shape_bundle_gyeongnam_key_overlap_slow -q` → 1 passed in 18.48s.
+- `KTG_SLOW_REAL_DATA=1 python -m pytest tests/integration/test_real_extra_shape_sources.py::test_actual_building_shape_bundle_gyeongnam_key_overlap_slow -q` → 1 passed in 18.48s.
 - `python -m pytest -q` → 144 passed, 4 skipped.
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `git diff --check` → 통과.
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` → 통과.
 
 ## 2026-05-26 (T-039 — PR 전 검증 보강)
 
@@ -1845,13 +1872,13 @@
 **반영 상세**:
 - 기본 DDL 문자열(`sql/ddl/001_schema.sql`, `infra/sql.py`)에서 `tl_roadaddr_entrc.ent_man_no`를 Alembic 0005와 동일하게 nullable로 맞췄다. 반대로 기존 `tl_locsum_entrc.ent_man_no`는 `sig_cd + ent_man_no` PK이므로 `NOT NULL`을 유지한다.
 - `tests/unit/test_consistency_sql.py`는 T-039의 `serving_entrc` CTE와 `source_kind` sample을 검증하도록 갱신했다.
-- `docs/backend-package.md`, `docs/t039-roadaddr-entrance-loader.md`, `README.md`에 T-039 이전 MV가 있는 DB에서는 direct 출입구 적재 뒤 `kraddr-geo refresh mv --swap`을 권장한다고 명시했다.
+- `docs/backend-package.md`, `docs/t039-roadaddr-entrance-loader.md`, `README.md`에 T-039 이전 MV가 있는 DB에서는 direct 출입구 적재 뒤 `ktgctl refresh mv --swap`을 권장한다고 명시했다.
 
 **검증**:
 - `python -m pytest -q` → 141 passed, 3 skipped.
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check --output openapi.json`, `git diff --check` → 통과.
-- Docker PostGIS `localhost:15432`의 새 `kraddr_geo_t039` DB에서 `tests/integration/test_optional_real_postgres_load.py` → 1 passed in 2.86s.
-- `kraddr-geo-ui`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `scripts/export_openapi.py --check --output openapi.json`, `git diff --check` → 통과.
+- Docker PostGIS `localhost:15432`의 새 `kor_travel_geo_t039` DB에서 `tests/integration/test_optional_real_postgres_load.py` → 1 passed in 2.86s.
+- `kor-travel-geo-ui`에서 `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
 
 ## 2026-05-26 (T-039 — `도로명주소 출입구 정보` direct entrance loader)
 
@@ -1859,8 +1886,8 @@
 
 **반영 상세**:
 - `tl_roadaddr_entrc` 테이블과 Alembic `0005_t039_roadaddr_entrance_table`을 추가했다. 실제 파일에서 `ent_man_no`가 비는 행이 있어 PK는 `bd_mgt_sn` 단독으로 두고, `ent_man_no`는 nullable 원천 보존 필드로 둔다.
-- `src/kraddr/geo/loaders/text/roadaddr_entrance_loader.py`를 추가했다. 디렉터리 입력 시 17개 ZIP 내부의 `RNENTDATA_*.txt` member를 직접 발견하고, 좌표 결측/`0/0` sentinel row는 skip한다.
-- CLI `kraddr-geo load roadaddr-entrances`와 API job kind `roadaddr_entrance_load`를 추가했다.
+- `src/kortravelgeo/loaders/text/roadaddr_entrance_loader.py`를 추가했다. 디렉터리 입력 시 17개 ZIP 내부의 `RNENTDATA_*.txt` member를 직접 발견하고, 좌표 결측/`0/0` sentinel row는 skip한다.
+- CLI `ktgctl load roadaddr-entrances`와 API job kind `roadaddr_entrance_load`를 추가했다.
 - `mv_geocode_target` 대표 좌표 선택 순서를 `tl_roadaddr_entrc` → `tl_locsum_entrc` → `tl_navi_buld_centroid`로 바꿨다. 응답 호환성을 위해 direct entrance도 기존 `pt_source='entrance'`로 둔다.
 - C3/C4/C6/C7/C8 정합성 SQL은 `tl_roadaddr_entrc`와 `tl_locsum_entrc`를 합친 대표 출입구 CTE를 사용하게 했고, C10 기준월 비교에 `tl_roadaddr_entrc`를 포함했다.
 
@@ -1868,9 +1895,9 @@
 - 전국 17개 ZIP을 직접 읽어 총 6,418,169행, 모든 행 19컬럼, `ent_source_cd='RM'`, `ent_detail_cd='01'`을 확인했다.
 - 세종 ZIP은 원천 27,868행, distinct `bd_mgt_sn` 27,868, 빈 `ent_man_no` 9건, 유효 좌표 적재 대상 27,779행이었다.
 - 경남 ZIP은 원천 657,845행, distinct `bd_mgt_sn` 657,845, 빈 `ent_man_no` 100건이었다.
-- Docker PostGIS `localhost:15432`에 `kraddr_geo_t039` DB를 만들고 선택형 실제 적재 테스트를 실행했다. 결과는 `1 passed in 2.74s`이며 세종 RNENTDATA 3행이 `tl_roadaddr_entrc`와 `load_manifest`에 반영됐고, MV의 `pt_5179`가 direct entrance 좌표를 사용함을 확인했다.
+- Docker PostGIS `localhost:15432`에 `kor_travel_geo_t039` DB를 만들고 선택형 실제 적재 테스트를 실행했다. 결과는 `1 passed in 2.74s`이며 세종 RNENTDATA 3행이 `tl_roadaddr_entrc`와 `load_manifest`에 반영됐고, MV의 `pt_5179`가 direct entrance 좌표를 사용함을 확인했다.
 - 대상 테스트 `tests/unit/test_roadaddr_entrance_loader.py`, `tests/integration/test_real_roadaddr_entrance_files.py`, schema/batch/CLI 계약 테스트 → 29 passed.
-- 대상 `ruff check`와 `mypy src/kraddr/geo` → 통과.
+- 대상 `ruff check`와 `mypy src/kortravelgeo` → 통과.
 
 **다음 작업**: 전체 검증과 frontend/OpenAPI drift 확인 후 PR을 열어 20분 리뷰 대기한다.
 
@@ -1880,18 +1907,18 @@
 
 **반영 상세**:
 - `tl_juso_parcel_link` 테이블, 인덱스 3종, Alembic `0004_t038_parcel_link_table`을 추가했다. `bd_mgt_sn`은 `tl_juso_text` FK + `ON DELETE CASCADE`, PK는 `(bd_mgt_sn, pnu)`다.
-- `src/kraddr/geo/loaders/text/parcel_link_loader.py`를 추가했다. `jibun_rnaddrkor_*` full snapshot은 기본 `TRUNCATE` 후 UPSERT하고, daily `LNBR`은 `MVM_RES_CD` mapping에 따라 UPSERT/DELETE한다.
-- CLI `kraddr-geo load parcel-links`, `kraddr-geo load daily-parcel-links`를 추가했다.
+- `src/kortravelgeo/loaders/text/parcel_link_loader.py`를 추가했다. `jibun_rnaddrkor_*` full snapshot은 기본 `TRUNCATE` 후 UPSERT하고, daily `LNBR`은 `MVM_RES_CD` mapping에 따라 UPSERT/DELETE한다.
+- CLI `ktgctl load parcel-links`, `ktgctl load daily-parcel-links`를 추가했다.
 - API job kind `juso_parcel_link_load`, `juso_parcel_link_delta`를 추가했고, `full_load_batch` 기본 child 순서에 `juso_text_load` 직후 `juso_parcel_link_load`를 넣었다.
-- `kraddr-geo-ui` `/admin/load` 기본 payload에도 `juso_parcel_link_load`를 추가했다.
+- `kor-travel-geo-ui` `/admin/load` 기본 payload에도 `juso_parcel_link_load`를 추가했다.
 - `daily_juso_delta`는 MST 전용으로 유지하고, 같은 ZIP의 LNBR은 `juso_parcel_link_delta`로 별도 적용한다.
 
 **실제 파일/DB 검증**:
 - 실제 `jibun_rnaddrkor_seoul.txt`를 새 iterator로 파싱해 PNU `1111012000101500000`, `1114010300100680000`을 확인했다.
 - 실제 `20260401_dailyjusukrdata.zip`의 LNBR 204행을 새 iterator로 파싱하고 첫 행 PNU `4148025326100310007`, `mvmn_de=20260402`, `MVM_RES_CD=31`을 확인했다.
-- Docker PostGIS `localhost:15432`에 `kraddr_geo_t038` DB를 만들고 선택형 실제 적재 테스트를 실행했다. 결과는 `1 passed in 2.81s`이며 snapshot 2행, daily LNBR 5행이 `tl_juso_parcel_link`와 `load_manifest`에 반영됐다.
+- Docker PostGIS `localhost:15432`에 `kor_travel_geo_t038` DB를 만들고 선택형 실제 적재 테스트를 실행했다. 결과는 `1 passed in 2.81s`이며 snapshot 2행, daily LNBR 5행이 `tl_juso_parcel_link`와 `load_manifest`에 반영됐다.
 - 전체 `pytest -q` → 133 passed / 3 skipped.
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
 - frontend `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
 
 **다음 작업**: PR을 열어 20분 리뷰 대기한다. 리뷰 코멘트가 있으면 최대한 반영하고, 없으면 main에 merge한 뒤 T-039로 진행한다.
@@ -1916,7 +1943,7 @@
 **검증 진행**:
 - `pytest tests/integration/test_real_extra_shape_sources.py -q` → 4 passed.
 - `pytest -q` → 128 passed / 3 skipped.
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
 
 **다음 작업**: 전체 검증 후 PR을 열어 20분 리뷰 대기한다.
 
@@ -1940,7 +1967,7 @@
 **검증 진행**:
 - `pytest tests/integration/test_real_jibun_rnaddrkor_files.py -q` → 2 passed.
 - 전체 `pytest -q` → 124 passed / 3 skipped.
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
 
 **다음 작업**: 전체 검증 후 PR을 열어 20분 리뷰 대기한다.
 
@@ -1949,27 +1976,27 @@
 **작업**: PR #24 merge 이후 `codex/t028-daily-delta-loader` 브랜치에서 `data/juso/daily/*.zip` 일변동 ZIP 로더를 구현했다.
 
 **반영 상세**:
-- `src/kraddr/geo/loaders/text/daily_juso_loader.py`를 추가했다. `AlterD.JUSUKR.*.TH_SGCO_RNADR_MST.TXT`를 읽어 `tl_juso_text`에 UPSERT/DELETE로 반영한다.
+- `src/kortravelgeo/loaders/text/daily_juso_loader.py`를 추가했다. `AlterD.JUSUKR.*.TH_SGCO_RNADR_MST.TXT`를 읽어 `tl_juso_text`에 UPSERT/DELETE로 반영한다.
 - `MVM_RES_CD`는 `Settings.mvm_res_code_actions`를 사용한다. 기본값은 `31/33=insert`, `34/35/36=update`, `63/64=delete`이며, 알 수 없는 코드는 `LoaderError`로 중단한다.
 - 한 batch 안의 동일 `bd_mgt_sn`은 `mvmn_de DESC`, `source_file DESC`, `staging_seq DESC` 기준 최신 1건만 master에 반영한다.
 - `TH_SGCO_RNADR_LNBR.TXT`는 현재 master table에 쓰지 않고 `unsupported_lnbr_rows`로 집계해 `load_manifest.source_set`에 남긴다. T-029에서 `jibun_rnaddrkor_*`와 함께 1:N 지번 관계 테이블 여부를 결정한다.
 - member 내용이 `No Data`인 경우 컬럼 수 오류로 보지 않고 skip하며 `skipped_no_data_sources`에 기록한다.
-- CLI `kraddr-geo load daily-juso`와 API job kind `daily_juso_delta`를 추가했고, `openapi.json` 및 `kraddr-geo-ui/types/api.gen.ts`를 갱신했다.
+- CLI `ktgctl load daily-juso`와 API job kind `daily_juso_delta`를 추가했고, `openapi.json` 및 `kor-travel-geo-ui/types/api.gen.ts`를 갱신했다.
 - ADR-021과 `docs/t028-daily-juso-delta.md`를 추가해 MST/LNBR 분리, manifest watermark, 실제 파일 검증 수치를 문서화했다.
 
 **실제 파일 확인**:
-- `/mnt/f/dev/python-kraddr-geo/data/juso/daily/20260401_dailyjusukrdata.zip`의 MST member는 422행이며 코드 분포는 `31=185`, `34=57`, `63=180`이었다.
+- `/mnt/f/dev/kor-travel-geo/data/juso/daily/20260401_dailyjusukrdata.zip`의 MST member는 422행이며 코드 분포는 `31=185`, `34=57`, `63=180`이었다.
 - 같은 ZIP의 LNBR member는 204행이며 이번 구현에서는 manifest에 미지원 행 수로만 기록한다.
-- `/mnt/f/dev/python-kraddr-geo/data/juso/daily/20260404_dailyjusukrdata.zip`은 MST/LNBR 모두 `No Data`였다.
+- `/mnt/f/dev/kor-travel-geo/data/juso/daily/20260404_dailyjusukrdata.zip`은 MST/LNBR 모두 `No Data`였다.
 
 **검증 진행**:
 - `pytest tests/unit/test_daily_juso_loader.py tests/integration/test_real_juso_text_loaders.py::test_actual_daily_juso_zip_loads_mst_rows_and_skips_no_data_members tests/unit/test_cli_contract.py -q` → 11 passed.
 - `pytest tests/integration/test_real_juso_text_loaders.py -q` → 실제 NTFS `data/juso` fallback으로 5 passed.
-- Docker PostGIS `localhost:15432`에 전용 DB `kraddr_geo_t028`을 생성하고 `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t028 pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 이 검증은 daily sample 3행 적용 뒤 `load_manifest.last_mvmn_de=20260402`, `row_count=3`, `unsupported_lnbr_rows=204`까지 확인한다.
+- Docker PostGIS `localhost:15432`에 전용 DB `kor_travel_geo_t028`을 생성하고 `KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t028 pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 이 검증은 daily sample 3행 적용 뒤 `load_manifest.last_mvmn_de=20260402`, `row_count=3`, `unsupported_lnbr_rows=204`까지 확인한다.
 - 대상 `ruff check`와 대상 `mypy` → 통과.
 - `scripts/export_openapi.py`와 frontend `npm run gen:types` 실행.
 - 전체 `pytest -q` → 122 passed / 3 skipped.
-- `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
+- `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `scripts/export_openapi.py --check`, `git diff --check` → 통과.
 - frontend `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` → 통과.
 
 **다음 작업**: 전체 검증과 실제 PostgreSQL sample daily load를 실행한 뒤 PR을 열어 리뷰 대기한다.
@@ -2001,18 +2028,18 @@
 - `pytest tests/unit/test_shp_loader_gdal.py -q` → 16 passed.
 - 대상 `ruff check` → 통과.
 - 전체 `pytest -q` → 113 passed / 7 skipped.
-- `ruff check .`, `mypy src/kraddr/geo scripts/benchmark_mv_refresh.py`, `lint-imports`, `bash -n scripts/fullload_test.sh`, `git diff --check` → 통과.
+- `ruff check .`, `mypy src/kortravelgeo scripts/benchmark_mv_refresh.py`, `lint-imports`, `bash -n scripts/fullload_test.sh`, `git diff --check` → 통과.
 
 **다음 작업**: PR을 열어 20분 리뷰 대기 후, 코멘트가 있으면 반영하고 없으면 main에 merge한다.
 
 ## 2026-05-26 (T-036 — `maplibre-vworld-js` main 동기화)
 
-**작업**: PR #22 merge 이후 `codex/t036-maplibre-vworld-sync` 브랜치에서 `kraddr-geo-ui`의 `maplibre-vworld` dependency를 `digitie/maplibre-vworld-js` 최신 main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다.
+**작업**: PR #22 merge 이후 `codex/t036-maplibre-vworld-sync` 브랜치에서 `kor-travel-geo-ui`의 `maplibre-vworld` dependency를 `digitie/maplibre-vworld-js` 최신 main commit `c91c9f304669ce3f5fc4915f21186b23731d5816`로 갱신했다.
 
 **반영 상세**:
-- `kraddr-geo-ui/package.json`과 lockfile의 `maplibre-vworld` GitHub SHA를 `11321fe8b8f4da849ee5c24ba18a27206a55e26e`에서 `c91c9f304669ce3f5fc4915f21186b23731d5816`로 올렸다. CI에서 SSH key 없이 설치되어야 하므로 dependency와 `resolved`는 모두 `git+https`를 유지한다.
+- `kor-travel-geo-ui/package.json`과 lockfile의 `maplibre-vworld` GitHub SHA를 `11321fe8b8f4da849ee5c24ba18a27206a55e26e`에서 `c91c9f304669ce3f5fc4915f21186b23731d5816`로 올렸다. CI에서 SSH key 없이 설치되어야 하므로 dependency와 `resolved`는 모두 `git+https`를 유지한다.
 - 최신 upstream은 `redactVWorldTileUrl()`가 아니라 `redactVWorldUrl()`를 export하고, redaction 표기는 `[redacted]` 대신 `***`를 사용한다.
-- `kraddr-geo-ui/lib/vworld.ts`는 `redactVWorldUrl as redactVWorldTileUrl` alias를 둬 기존 `CoordinateMap` import 계약을 유지한다.
+- `kor-travel-geo-ui/lib/vworld.ts`는 `redactVWorldUrl as redactVWorldTileUrl` alias를 둬 기존 `CoordinateMap` import 계약을 유지한다.
 - VWorld helper 테스트는 최신 upstream redaction 표기 `***`를 검증하도록 갱신했다.
 - `docs/t036-maplibre-vworld-sync.md`에 upstream 확인 SHA, API 변경, WSL Linux Node 검증 명령, 남은 작업 순서를 기록했다.
 
@@ -2027,10 +2054,10 @@
 
 ## 2026-05-26 (T-035 — MV refresh/swap 벤치마크)
 
-**작업**: PR #21 merge 이후 `codex/t035-mv-refresh-benchmark` 브랜치에서 `mv_geocode_target` 갱신 전략을 실제 전국 DB `kraddr_geo_t033`에서 비교했다. 재현 가능한 계측을 위해 `scripts/benchmark_mv_refresh.py`를 추가하고, `CONCURRENTLY`와 shadow swap의 phase별 시간, temp file/byte 증가, index 크기를 JSON으로 남겼다.
+**작업**: PR #21 merge 이후 `codex/t035-mv-refresh-benchmark` 브랜치에서 `mv_geocode_target` 갱신 전략을 실제 전국 DB `kor_travel_geo_t033`에서 비교했다. 재현 가능한 계측을 위해 `scripts/benchmark_mv_refresh.py`를 추가하고, `CONCURRENTLY`와 shadow swap의 phase별 시간, temp file/byte 증가, index 크기를 JSON으로 남겼다.
 
 **실행 환경**:
-- Docker PostGIS: `kraddr-geo-t027-db-1`, `localhost:15432`, DB `kraddr_geo_t033`.
+- Docker PostGIS: `kor-travel-geo-t027-db-1`, `localhost:15432`, DB `kor_travel_geo_t033`.
 - 데이터 상태: T-033 전국 full-load 결과, `mv_geocode_target=6,416,637`, DB size 약 26GB.
 - 시스템: WSL2 Linux `6.6.87.2-microsoft-standard-WSL2`, 16 logical cores, RAM 29GiB, 실행 시 available 약 27GiB.
 - artifact: `artifacts/t035-mv-refresh-20260526_045339/` (git ignore).
@@ -2048,8 +2075,8 @@
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_mv_refresh_benchmark.py tests/unit/test_postload_mv.py -q` → 8 passed.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check scripts/benchmark_mv_refresh.py tests/unit/test_mv_refresh_benchmark.py tests/unit/test_postload_mv.py src/kraddr/geo/loaders/postload.py` → 통과.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy scripts/benchmark_mv_refresh.py src/kraddr/geo/loaders/postload.py` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check scripts/benchmark_mv_refresh.py tests/unit/test_mv_refresh_benchmark.py tests/unit/test_postload_mv.py src/kortravelgeo/loaders/postload.py` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy scripts/benchmark_mv_refresh.py src/kortravelgeo/loaders/postload.py` → 통과.
 
 **다음 작업**: PR을 열어 20분 리뷰 대기 후 코멘트가 없거나 반영 완료되면 main에 merge한다. 이후 T-036에서 `maplibre-vworld-js` upstream main과 UI dependency를 동기화한다.
 
@@ -2058,8 +2085,8 @@
 **작업**: PR #20 merge 이후 `codex/t034-shp-append-tuning` 브랜치에서 T-033의 최우선 병목이었던 `TL_SPRD_INTRVL` 적재 경로를 보강했다. geometry가 없는 DBF 속성 레이어는 GDAL `VectorTranslate` append를 우회해 직접 DBF scan + `psycopg COPY`로 적재하도록 분기했다.
 
 **실행 환경**:
-- Docker PostGIS: `kraddr-geo-t027-db-1`, `localhost:15432`.
-- 데이터: ext4 mirror `/home/digitie/kraddr-geo-data/juso/도로명주소 전자지도`.
+- Docker PostGIS: `kor-travel-geo-t027-db-1`, `localhost:15432`.
+- 데이터: ext4 mirror `/home/digitie/kor-travel-geo-data/juso/도로명주소 전자지도`.
 - 시스템: WSL2 Linux `6.6.87.2-microsoft-standard-WSL2`, 16 logical cores, RAM 29GiB, 실행 시 available 약 27GiB.
 - 디스크: ext4 `/dev/sdd` 1007G 중 758G available, NTFS `/mnt/f` 932G 중 267G available.
 
@@ -2076,18 +2103,18 @@
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py -q` → 12 passed.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py` → 통과.
-- 실제 Docker DB `kraddr_geo_t034_before`, `kraddr_geo_t034_after`, `kraddr_geo_t034_sejong`에서 기준선/개선 후/9개 레이어 전체 적재를 확인했다.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kortravelgeo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py` → 통과.
+- 실제 Docker DB `kor_travel_geo_t034_before`, `kor_travel_geo_t034_after`, `kor_travel_geo_t034_sejong`에서 기준선/개선 후/9개 레이어 전체 적재를 확인했다.
 
 **다음 작업**: PR을 열어 20분 리뷰 대기 후 코멘트가 없거나 반영 완료되면 main에 merge한다. 이후 T-035에서 MV refresh/swap benchmark를 진행한다. `TL_SPBD_BULD` GDAL append 병목은 도형 포함 대형 레이어라 이번 PR에서는 유지하고, 별도 튜닝 후보로 남긴다.
 
 ## 2026-05-26 (T-033 — 전국 full-load 성능 재검증)
 
-**작업**: PR #19 merge 이후 `codex/t033-full-load-revalidation` 브랜치에서 빈 Docker DB `kraddr_geo_t033`를 만들고 실제 전국 `data/juso` full-load를 다시 실행했다. 사용자 지시에 따라 로그와 시스템 상태를 상세히 남기고, T-034/T-035 튜닝 전 기준선으로 문서화했다.
+**작업**: PR #19 merge 이후 `codex/t033-full-load-revalidation` 브랜치에서 빈 Docker DB `kor_travel_geo_t033`를 만들고 실제 전국 `data/juso` full-load를 다시 실행했다. 사용자 지시에 따라 로그와 시스템 상태를 상세히 남기고, T-034/T-035 튜닝 전 기준선으로 문서화했다.
 
 **실행 환경**:
-- Docker PostGIS: `kraddr-geo-t027-db-1`, `localhost:15432`, DB `kraddr_geo_t033`.
-- 데이터: ext4 mirror `/home/digitie/kraddr-geo-data`, 원본 `/mnt/f/dev/python-kraddr-geo/data/juso`.
+- Docker PostGIS: `kor-travel-geo-t027-db-1`, `localhost:15432`, DB `kor_travel_geo_t033`.
+- 데이터: ext4 mirror `/home/digitie/kor-travel-geo-data`, 원본 `/mnt/f/dev/kor-travel-geo/data/juso`.
 - 로그: `artifacts/t033-full-load-20260525_224643/` (git ignore).
 
 **결과**:
@@ -2119,11 +2146,11 @@
 - `docs/tasks.md`에 T-033(전국 full-load 재검증), T-034(SHP GDAL append 병목 튜닝), T-035(MV refresh/swap 벤치마크)를 추가했다.
 - Alembic `0003_t032_performance_indexes.py`에는 대용량 운영 DB에서 일반 `CREATE INDEX`를 점검 창에 적용해야 한다는 주석을 남겼다.
 
-**검증**: 리뷰 반영 뒤 대상 단위 테스트 41개 통과, 전체 `pytest -q` 104 passed / 7 skipped, `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `git diff --check` 모두 통과했다.
+**검증**: 리뷰 반영 뒤 대상 단위 테스트 41개 통과, 전체 `pytest -q` 104 passed / 7 skipped, `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 모두 통과했다.
 
 ## 2026-05-25 (T-032 — 세종·경남 축소 검증 1회)
 
-**작업**: 사용자 지시에 따라 반복 횟수를 1회로 낮추고, 세종특별시·경상남도 축소 데이터만 실제 Docker DB(`kraddr_geo_t032`)에 적재했다. 전국 full test와 반복 trial은 수행하지 않았다.
+**작업**: 사용자 지시에 따라 반복 횟수를 1회로 낮추고, 세종특별시·경상남도 축소 데이터만 실제 Docker DB(`kor_travel_geo_t032`)에 적재했다. 전국 full test와 반복 trial은 수행하지 않았다.
 
 **결과**:
 - `load all-sidos --no-refresh --allow-consistency-error`는 SHP 18개 layer 적재까지 완료했으나 `resolve_text_geometry_links()` 첫 UPDATE가 기본 5초 `statement_timeout`에 걸려 실패했다. 경과 2시간 1분 13초, 최대 RSS 163,672KB.
@@ -2134,30 +2161,30 @@
 
 **관찰**: 두 시도 축소 검증에서도 `TL_SPRD_INTRVL` 1,960,217행, `TL_SPBD_BULD` 1,324,177행 append가 전체 시간을 지배했다. GDAL `PG_USE_COPY=YES` 설정에도 `pg_stat_activity`에서는 일부 구간이 INSERT 형태로 관측되어, 후속 PR에서 GDAL COPY 강제 여부와 `TL_SPRD_INTRVL` 전용 loader를 다시 검토한다.
 
-**검증**: 대상 단위 테스트 38개, 전체 `pytest -q` 101 passed / 7 skipped, `ruff check .`, `mypy src/kraddr/geo`, `lint-imports`, `git diff --check` 모두 통과했다.
+**검증**: 대상 단위 테스트 38개, 전체 `pytest -q` 101 passed / 7 skipped, `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 모두 통과했다.
 
 ## 2026-05-25 (T-032 — 성능 튜닝 범위 축소)
 
 **작업**: PR #18 merge 이후 T-032를 시작했다. 사용자 지시에 따라 성능 튜닝 반복 기준은 기존 "10회 이상"에서 "세종특별시·경상남도 축소 데이터 1회 검증"으로 낮췄다. 전체 전국 full test와 반복 trial은 후속 안정화 단계로 미룬다.
 
 **구현 방향**:
-- C4 data-quality export는 nearest polygon 거리 계산을 `_kraddr_dq_c4_distances` 임시 테이블로 한 번 만들고, sample CSV와 bucket CSV가 같은 결과를 재사용하도록 바꾼다.
+- C4 data-quality export는 nearest polygon 거리 계산을 `_ktg_dq_c4_distances` 임시 테이블로 한 번 만들고, sample CSV와 bucket CSV가 같은 결과를 재사용하도록 바꾼다.
 - C6/C7 data-quality export는 polygon mismatch 결과를 case별 임시 violation 테이블로 한 번 만들고, sample CSV와 region summary CSV가 같은 결과를 재사용하도록 바꾼다.
 - C4/C6/C7 정합성 SQL은 PostgreSQL planner가 고비용 CTE를 중복 평가하지 않도록 `MATERIALIZED` CTE를 명시한다.
 - `load shp-all` 및 `load all-sidos --shp-root`는 여러 시도 SHP를 연속 적재할 때 각 시도마다 통계를 갱신하지 않고 마지막 시도 뒤 1회만 `ANALYZE`한다.
 
-**검증 계획**: `kraddr_geo_t032` Docker DB에서 세종특별자치시·경상남도 데이터 1회만 적재/검증한다. 현재 실행 중이며, 완료 결과와 경과 시간은 이 항목 또는 후속 항목에 이어 적는다.
+**검증 계획**: `kor_travel_geo_t032` Docker DB에서 세종특별자치시·경상남도 데이터 1회만 적재/검증한다. 현재 실행 중이며, 완료 결과와 경과 시간은 이 항목 또는 후속 항목에 이어 적는다.
 
 ## 2026-05-25 (PR #18 rebase — VWorld debug helper sync)
 
 **작업**: 사용자 지시에 따라 T-032 성능 튜닝 전에 PR #18을 먼저 처리했다. PR #17이 main에 merge되어 `CHANGELOG.md`, `docs/journal.md`, `docs/resume.md`에서 충돌이 발생했으며, PR #17 데이터 품질 기록과 PR #18 VWorld sync 기록을 모두 보존하는 방식으로 rebase했다.
 
 **검증**:
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과. high 기준 취약점 없음, moderate 7건은 기존 Next/PostCSS 및 Vitest/Vite 경로 잔여.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 22 tests 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과. high 기준 취약점 없음, moderate 7건은 기존 Next/PostCSS 및 Vitest/Vite 경로 잔여.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 22 tests 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
 - `git diff --check` → 통과.
 
 **다음 작업**: PR #18을 푸시하고 PR 본문/코멘트를 갱신한다. PR #18 안정화 후 별도 T-032 성능 튜닝 PR을 시작한다.
@@ -2167,16 +2194,16 @@
 **작업**: PR #16 merge 확인 후 PR #17을 최신 `main` 위로 rebase했다. 충돌은 `docs/journal.md`, `docs/resume.md`에서만 발생했고, T-031 기록과 PR #15/VWorld 기록을 모두 보존하는 방식으로 해결했다.
 
 **구현 상세**:
-- `src/kraddr/geo/loaders/data_quality.py`를 추가했다. C2/C4/C6/C7 후속 분석용 CSV 8종(`c2_samples`, `c2_missing_key_summary`, `c4_distance_samples`, `c4_distance_buckets`, `c6/c7 samples`, `c6/c7 region_summary`)을 같은 SQL로 재현할 수 있다.
-- `kraddr-geo validate data-quality-samples` CLI를 추가했다. `--cases C2,C4,C6,C7`, `--limit`, `--output-dir`로 산출 범위를 제어한다.
+- `src/kortravelgeo/loaders/data_quality.py`를 추가했다. C2/C4/C6/C7 후속 분석용 CSV 8종(`c2_samples`, `c2_missing_key_summary`, `c4_distance_samples`, `c4_distance_buckets`, `c6/c7 samples`, `c6/c7 region_summary`)을 같은 SQL로 재현할 수 있다.
+- `ktgctl validate data-quality-samples` CLI를 추가했다. `--cases C2,C4,C6,C7`, `--limit`, `--output-dir`로 산출 범위를 제어한다.
 - SHP 보조 로더가 GDAL `SQLStatement` projection에 `source_file=<시도>/<시군구코드>/<레이어>.shp`와 `source_yyyymm`을 넣도록 보강했다. 기존 T-027 DB는 재적재 전이라 polygon `source_file`이 NULL이지만, 이후 재적재분부터 원천 파일 역추적이 가능하다.
 - C4 sample CSV에는 출입구 좌표, 가장 가까운 polygon 대표점 좌표, `delta_lon`, `delta_lat`를 함께 넣어 500m+ 이상치의 좌표계/원천 오류 패턴을 빠르게 볼 수 있게 했다.
 
 **실제 검증**:
-- Docker DB: `kraddr-geo-t027-db-1`, `localhost:15432`.
-- `kraddr-geo validate data-quality-samples --cases C2,C4,C6,C7 --limit 5` → CSV 8개 생성, 2분 52.45초, 최대 RSS 79,956KB.
-- `kraddr-geo validate data-quality-samples --cases C4 --limit 20` → C4 CSV 2개 생성, 2분 22.90초, 최대 RSS 80,008KB.
-- `delta_lon`/`delta_lat` 컬럼 추가 후 `kraddr-geo validate data-quality-samples --cases C4 --limit 3` → 2분 18.48초, 최대 RSS 80,124KB. 상위 3건의 `delta_lon`은 각각 약 `1.9998~1.9999`도였다.
+- Docker DB: `kor-travel-geo-t027-db-1`, `localhost:15432`.
+- `ktgctl validate data-quality-samples --cases C2,C4,C6,C7 --limit 5` → CSV 8개 생성, 2분 52.45초, 최대 RSS 79,956KB.
+- `ktgctl validate data-quality-samples --cases C4 --limit 20` → C4 CSV 2개 생성, 2분 22.90초, 최대 RSS 80,008KB.
+- `delta_lon`/`delta_lat` 컬럼 추가 후 `ktgctl validate data-quality-samples --cases C4 --limit 3` → 2분 18.48초, 최대 RSS 80,124KB. 상위 3건의 `delta_lon`은 각각 약 `1.9998~1.9999`도였다.
 - C2 `missing_resolve_key` 581건은 모두 `rds_sig_cd` 결측으로 확인했다. 기존 DB는 PR #17 이전 적재분이라 SHP `source_file`도 NULL이다.
 - C4 bucket은 `0~50=2,887,827`, `50~100=2,847`, `100~500=552`, `500+=16`이었다. 500m+ 상위 7건은 출입구 경도만 polygon보다 약 `+2.0`도 동쪽으로 튄 패턴이라, 다음 지도 overlay와 원천 row 확인 대상으로 분리한다.
 - C6 상위 region은 `54002=49`, `48700=23`, `54004=15`; C7 상위 region은 `48121103=216`, `28260101=167`, `41273104=165`였다.
@@ -2200,45 +2227,45 @@
 
 ## 2026-05-25 (후속 PR — VWorld debug 동작 upstream sync)
 
-**작업**: `maplibre-vworld-js` PR #9를 먼저 열어 `VWorldMap`의 click/error/flyTo hook과 VWorld tile error/redaction helper를 추가했다. 이어 `kraddr-geo-ui` 후속 브랜치에서 upstream commit `11321fe`로 dependency를 동기화하고, 디버그 UI의 tile error 분류와 URL redaction을 upstream helper로 교체했다.
+**작업**: `maplibre-vworld-js` PR #9를 먼저 열어 `VWorldMap`의 click/error/flyTo hook과 VWorld tile error/redaction helper를 추가했다. 이어 `kor-travel-geo-ui` 후속 브랜치에서 upstream commit `11321fe`로 dependency를 동기화하고, 디버그 UI의 tile error 분류와 URL redaction을 upstream helper로 교체했다.
 
 **구현 상세**:
 - `maplibre-vworld` dependency를 `git+https://github.com/digitie/maplibre-vworld-js.git#11321fe`로 갱신했다. lockfile의 `resolved`도 SSH가 아니라 HTTPS를 유지한다.
-- `kraddr-geo-ui/lib/vworld.ts`에서 `isVWorldTileError()`와 `redactVWorldTileUrl()`를 재수출한다.
+- `kor-travel-geo-ui/lib/vworld.ts`에서 `isVWorldTileError()`와 `redactVWorldTileUrl()`를 재수출한다.
 - `components/vworld/CoordinateMap.tsx`는 로컬 `isTransientTileError()`/`redactVWorldTileUrl()` 중복 구현을 제거하고 upstream helper를 사용한다. key 미설정 fallback, overlay 임계치, marker 즉시 이동, SSR dynamic wrapper는 기존 UI 계약대로 유지한다.
 - VWorld helper 단위 테스트에 tile error 분류와 key redaction 검증을 추가했다.
 
 **검증**:
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 22 tests 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm audit --audit-level=high` → high 기준 통과. 잔여 advisory는 Next/PostCSS와 Vitest/Vite 경로의 moderate 7건이다.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 22 tests 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm audit --audit-level=high` → high 기준 통과. 잔여 advisory는 Next/PostCSS와 Vitest/Vite 경로의 moderate 7건이다.
 - `git diff --check` → 통과.
 
 ## 2026-05-25 (PR #15 리베이스 — maplibre-vworld package 소비)
 
-**작업**: PR #14가 main에 merge된 뒤 `codex/maplibre-vworld-ui`를 최신 `main` 위로 rebase했다. 이후 upstream `digitie/maplibre-vworld-js` main commit `a5b3c65`를 확인하고, `kraddr-geo-ui`가 VWorld helper/CSS를 실제 `maplibre-vworld` package에서 소비하도록 갱신했다.
+**작업**: PR #14가 main에 merge된 뒤 `codex/maplibre-vworld-ui`를 최신 `main` 위로 rebase했다. 이후 upstream `digitie/maplibre-vworld-js` main commit `a5b3c65`를 확인하고, `kor-travel-geo-ui`가 VWorld helper/CSS를 실제 `maplibre-vworld` package에서 소비하도록 갱신했다.
 
 **구현 상세**:
 - `maplibre-vworld` dependency를 `git+https://github.com/digitie/maplibre-vworld-js.git#a5b3c65`로 고정했다. CI에서 SSH key 없이 설치되어야 하므로 package-lock의 `resolved`도 `git+https`로 유지했다.
-- `kraddr-geo-ui/lib/vworld.ts`는 로컬 구현을 제거하고 `getVWorldTileUrl()`, `getVWorldStyle()`, `getVWorldMaxZoom()`, `VWorldLayerType`를 upstream package에서 재수출한다.
+- `kor-travel-geo-ui/lib/vworld.ts`는 로컬 구현을 제거하고 `getVWorldTileUrl()`, `getVWorldStyle()`, `getVWorldMaxZoom()`, `VWorldLayerType`를 upstream package에서 재수출한다.
 - 전역 CSS는 `maplibre-vworld/style.css`를 import한다. 이 package export가 MapLibre GL 기본 CSS와 package CSS를 함께 제공한다.
 - upstream style source id가 `vworld-${layerType}`이고 `Hybrid`는 `vworld-satellite`와 `vworld-Hybrid`를 함께 쓰므로, tile error source 판별을 `vworld` prefix 기준으로 바꿨다.
 - Vitest/jsdom에서 upstream bundle이 `maplibre-gl` worker URL과 React `require()` 경로를 건드리는 문제를 테스트 setup shim으로 보정했다. 이 현상은 후속 `maplibre-vworld-js` 정합화 PR에서 upstream 테스트/번들 개선 후보로 추적한다.
 
 **문서화**:
 - ADR-020, `docs/frontend-package.md`, `docs/external-apis.md`, `docs/architecture.md`, README, changelog, `docs/resume.md`를 최신 package 소비 상태로 갱신했다.
-- `VWorldMap` 컴포넌트 전체 대체는 이번 PR에 넣지 않고 후속 PR로 분리했다. 후속 PR은 click callback, marker 제어, tile error hook/redaction, key 미설정 fallback, SSR-safe wrapper를 `kraddr-geo-ui`와 `maplibre-vworld-js` 사이에서 맞추는 작업이다.
+- `VWorldMap` 컴포넌트 전체 대체는 이번 PR에 넣지 않고 후속 PR로 분리했다. 후속 PR은 click callback, marker 제어, tile error hook/redaction, key 미설정 fallback, SSR-safe wrapper를 `kor-travel-geo-ui`와 `maplibre-vworld-js` 사이에서 맞추는 작업이다.
 
 **검증**:
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 20 tests 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
-- `cd kraddr-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm audit --audit-level=high` → high 기준 통과. 잔여 advisory는 Next/PostCSS와 Vitest/Vite 경로의 moderate 7건이다.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm ci --ignore-scripts` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run lint` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run type-check` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run test` → 7 files / 20 tests 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm run build` → 통과.
+- `cd kor-travel-geo-ui && PATH=/tmp/node-v20.19.5-linux-x64/bin:$PATH npm audit --audit-level=high` → high 기준 통과. 잔여 advisory는 Next/PostCSS와 Vitest/Vite 경로의 moderate 7건이다.
 - `git diff --check` → 통과.
 
 ## 2026-05-25 (PR #15 리뷰 보강 — VWorld MapLibre 안정화)
@@ -2246,7 +2273,7 @@
 **작업**: PR #15 리뷰의 merge condition을 반영했다. 디버그 UI는 VWorld WMTS + MapLibre GL JS 방향을 유지하되, upstream package가 안정화되기 전까지 `maplibre-vworld` GitHub 의존성을 UI 패키지 graph에 올리지 않는 정책으로 정리했다.
 
 **구현 상세**:
-- `maplibre-vworld` 미사용 GitHub 의존성을 `kraddr-geo-ui/package.json`과 lockfile에서 제거했다. upstream 보강은 별도 PR로 진행하고, 안정 태그 또는 SHA에서 install/build가 검증된 뒤 다시 도입한다.
+- `maplibre-vworld` 미사용 GitHub 의존성을 `kor-travel-geo-ui/package.json`과 lockfile에서 제거했다. upstream 보강은 별도 PR로 진행하고, 안정 태그 또는 SHA에서 install/build가 검증된 뒤 다시 도입한다.
 - `components/vworld/LazyCoordinateMap.tsx`를 추가해 `CoordinateMap`을 `next/dynamic(..., { ssr: false })`로 지연 로딩한다. `/debug/geocode`, `/debug/reverse`는 이 wrapper만 import한다.
 - `CoordinateMap.tsx`에서 VWorld tile fetch 오류를 transient로 분리했다. tile URL은 key가 드러나지 않도록 redaction한 뒤 경고 로그만 남기고, 누적 임계치 이상이거나 tile 외 오류일 때만 overlay를 표시한다.
 - `lib/vworld.ts`에 레이어별 `maxZoom`을 추가했다. `Base`/`gray`/`midnight`는 z19, `Hybrid`/`Satellite`는 z18로 제한한다. attribution 표기도 `공간정보 오픈플랫폼 브이월드`로 보정했다.
@@ -2257,17 +2284,17 @@
 - PR 리뷰를 놓치지 않도록 `docs/resume.md`의 알려진 함정에 conversation comment와 formal review를 모두 확인하는 루틴을 추가했다.
 
 **검증**:
-- `cd kraddr-geo-ui && npm run lint` → 통과.
-- `cd kraddr-geo-ui && npm run type-check` → 통과.
-- `cd kraddr-geo-ui && npm run test` → 7 files / 18 tests 통과. `CoordinateMap` fallback과 dynamic loading skeleton 테스트를 포함한다.
-- `cd kraddr-geo-ui && npm ci --ignore-scripts` → 통과. `maplibre-vworld` GitHub dependency 없이 cold install을 확인했다.
-- `cd kraddr-geo-ui && npm run build` → 통과. `/debug/geocode`, `/debug/reverse`가 static route로 생성되고 지도 bundle은 dynamic import 경로로 분리된다.
-- `cd kraddr-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과. Next.js/Vitest 경로의 moderate advisory는 잔여다.
-- `cd kraddr-geo-ui && npm run dev -- --hostname 127.0.0.1 --port 3001` 후 `HEAD /debug/reverse` → 200 OK. 서버 렌더 단계에서는 skeleton이 표시되고 지도 bundle은 클라이언트 chunk로 분리됨을 HTML에서 확인했다.
+- `cd kor-travel-geo-ui && npm run lint` → 통과.
+- `cd kor-travel-geo-ui && npm run type-check` → 통과.
+- `cd kor-travel-geo-ui && npm run test` → 7 files / 18 tests 통과. `CoordinateMap` fallback과 dynamic loading skeleton 테스트를 포함한다.
+- `cd kor-travel-geo-ui && npm ci --ignore-scripts` → 통과. `maplibre-vworld` GitHub dependency 없이 cold install을 확인했다.
+- `cd kor-travel-geo-ui && npm run build` → 통과. `/debug/geocode`, `/debug/reverse`가 static route로 생성되고 지도 bundle은 dynamic import 경로로 분리된다.
+- `cd kor-travel-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과. Next.js/Vitest 경로의 moderate advisory는 잔여다.
+- `cd kor-travel-geo-ui && npm run dev -- --hostname 127.0.0.1 --port 3001` 후 `HEAD /debug/reverse` → 200 OK. 서버 렌더 단계에서는 skeleton이 표시되고 지도 bundle은 클라이언트 chunk로 분리됨을 HTML에서 확인했다.
 
 ## 2026-05-25 (디버그 UI 지도 VWorld/MapLibre 전환)
 
-**작업**: 사용자 지시에 따라 `kraddr-geo-ui`의 디버그 지도 방향을 Kakao Maps SDK에서 VWorld WMTS + MapLibre GL JS로 전환했다. 실제 VWorld API key는 저장소에 기록하지 않고, `.env.local`의 `NEXT_PUBLIC_VWORLD_API_KEY`로만 주입하는 정책을 유지했다.
+**작업**: 사용자 지시에 따라 `kor-travel-geo-ui`의 디버그 지도 방향을 Kakao Maps SDK에서 VWorld WMTS + MapLibre GL JS로 전환했다. 실제 VWorld API key는 저장소에 기록하지 않고, `.env.local`의 `NEXT_PUBLIC_VWORLD_API_KEY`로만 주입하는 정책을 유지했다.
 
 **구현 상세**:
 - `react-kakao-maps-sdk` 의존성을 제거하고, 직접 사용하는 `maplibre-gl`을 명시 의존성으로 추가했다.
@@ -2280,11 +2307,11 @@
 - `docs/frontend-package.md`, `docs/external-apis.md`, `docs/architecture.md`, `README.md`, `docs/resume.md` 등에 VWorld 지도 환경변수와 upstream 보강 원칙을 반영했다.
 
 **검증**:
-- `cd kraddr-geo-ui && npm run lint` → 통과.
-- `cd kraddr-geo-ui && npm run type-check` → 통과.
-- `cd kraddr-geo-ui && npm run test` → 6 files / 15 tests 통과. VWorld WMTS helper 단위 테스트를 포함한다.
-- `cd kraddr-geo-ui && npm ci --ignore-scripts && npm run build` → 통과. HTTPS Git dependency lockfile 재현성을 확인했다.
-- `cd kraddr-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과. Next.js/Vitest 경로의 moderate advisory는 잔여.
+- `cd kor-travel-geo-ui && npm run lint` → 통과.
+- `cd kor-travel-geo-ui && npm run type-check` → 통과.
+- `cd kor-travel-geo-ui && npm run test` → 6 files / 15 tests 통과. VWorld WMTS helper 단위 테스트를 포함한다.
+- `cd kor-travel-geo-ui && npm ci --ignore-scripts && npm run build` → 통과. HTTPS Git dependency lockfile 재현성을 확인했다.
+- `cd kor-travel-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과. Next.js/Vitest 경로의 moderate advisory는 잔여.
 - `NEXT_PUBLIC_VWORLD_API_KEY=<local only> npm run dev -- --hostname 127.0.0.1 --port 3001` 후 `HEAD /debug/reverse` → 200 OK.
 
 ## 2026-05-25 (PR #14 추가 리뷰 반영 — L1~L6, C2/C4/C6/C7 재검토)
@@ -2303,7 +2330,7 @@
 - 대상 단위 테스트 20개 → 통과.
 - `pytest -q` → 84 passed, 7 skipped.
 - `ruff check .` → 통과.
-- `mypy src/kraddr/geo` → 통과.
+- `mypy src/kortravelgeo` → 통과.
 - `lint-imports` → Layered architecture kept.
 - `bash -n scripts/fullload_test.sh` → 통과.
 - 실제 T-027 Docker DB(`localhost:15432`)에서 C2/C4/C6/C7만 선택 재검증했다. 경과 3분 53.82초, 최대 RSS 80,076KB, `severity_max=ERROR`.
@@ -2324,18 +2351,18 @@
 - M1: stale 운영 MV index가 남아 있어 새 `idx_mv_next_*`를 drop하는 복구 경로에서 `warnings.warn`을 남기도록 했다.
 - M2: SHP full reset은 `TRUNCATE` 직전 대상 테이블별 approximate row count snapshot을 출력한다. 문서에는 full mode 중단 시 9개 SHP 테이블이 비거나 일부만 적재된 상태일 수 있음을 명시했다.
 - M3/L7: 내비 loader의 `limit`은 좌표 결측 skip 이후 yield row 기준임을 docstring으로 명시하고, C4 SQL에는 `resolve_text_geometry_links()` 선행 의존성을 주석으로 남겼다.
-- Optional: Docker 포트 환경변수를 저장소 prefix 규칙에 맞춰 `KRADDR_DB_PORT`에서 `KRADDR_GEO_DB_PORT`로 변경했다.
+- Optional: Docker 포트 환경변수를 저장소 prefix 규칙에 맞춰 `KTG_DB_PORT`에서 `KTG_DB_PORT`로 변경했다.
 - 반복 방지: `docs/agent-guide.md`에 PR 리뷰 확인 프로토콜을 추가했다. 앞으로 PR 리뷰 반영 시 conversation comments뿐 아니라 `reviews[].body`와 `review_threads[]`를 반드시 확인한다.
 
 **검증**:
 - `pytest tests/unit/test_alembic_migrations.py tests/unit/test_infra_engine_pnu_sql.py tests/unit/test_shp_loader_gdal.py tests/unit/test_postload_mv.py tests/unit/test_navi_loader.py tests/unit/test_consistency_sql.py -q` → 17 passed.
 - `ruff check .` → 통과.
-- `mypy src/kraddr/geo` → 통과.
+- `mypy src/kortravelgeo` → 통과.
 - `lint-imports` → Layered architecture kept.
 - `bash -n scripts/fullload_test.sh` → 통과.
-- `PATH="$PWD/.venv/bin:$PATH" DATA_DIR=/home/digitie/kraddr-geo-data KRADDR_GEO_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` → 통과. 출력 DSN은 `localhost:15432`.
+- `PATH="$PWD/.venv/bin:$PATH" DATA_DIR=/home/digitie/kor-travel-geo-data KTG_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` → 통과. 출력 DSN은 `localhost:15432`.
 - `pytest -q` → 80 passed, 7 skipped.
-- 임시 DB `kraddr_geo_pr14_review`에서 `alembic upgrade head` → 0001, 0002 적용 성공. `LI_CD=''` 샘플 insert 시 generated `bjd_cd=1111010100`, `rncode_full=111103100012` 확인.
+- 임시 DB `kor_travel_geo_pr14_review`에서 `alembic upgrade head` → 0001, 0002 적용 성공. `LI_CD=''` 샘플 insert 시 generated `bjd_cd=1111010100`, `rncode_full=111103100012` 확인.
 - 실제 T-027 DB 영향 조회: `empty_li=0`, `empty_rn=0`, `empty_rds_sig=0`, `bjd_8=0`, `bjd_10=10,687,732`.
 
 ## 2026-05-25 (PR #14/T-027 — 실제 전국 SHP 재적재와 정합성 재검증)
@@ -2345,7 +2372,7 @@
 **실행 로그**:
 - 상세 로그: `artifacts/fullload/20260524_173115/execution-log.md` (git ignore 산출물)
 - 환경: WSL2 Ubuntu 24.04, AMD Ryzen 7 7840HS 16 vCPU, 메모리 29GiB, Docker 29.5.2, Python 3.12.3, GDAL 3.8.4
-- DB: `kraddr-geo-t027-db-1`, `localhost:15432`, `kraddr_geo`
+- DB: `kor-travel-geo-t027-db-1`, `localhost:15432`, `kor_travel_geo`
 - SHP 재적재 경과: 3시간 10분 4초, exit status 0, 최대 RSS 187,100KB
 - 종료 직후 DB 크기: 24GB
 - 디스크 여유: ext4 약 796GB, C: 약 682GB, F: 약 264GB
@@ -2391,11 +2418,11 @@
   - C10 OK: 0건
 
 **검증**:
-- `ruff check src/kraddr/geo/loaders/consistency.py tests/unit/test_consistency_sql.py` 통과.
+- `ruff check src/kortravelgeo/loaders/consistency.py tests/unit/test_consistency_sql.py` 통과.
 - `pytest tests/unit/test_consistency_sql.py -q`는 pytest capture 임시파일 `FileNotFoundError`로 테스트 실행 전 실패.
 - `pytest -s tests/unit/test_consistency_sql.py -q` → 2 passed.
 - SHP 9개 테이블 `ANALYZE` → 4.14초, 성공.
-- `ruff check src/kraddr/geo/infra/geocode_repo.py src/kraddr/geo/infra/zip_repo.py src/kraddr/geo/infra/pobox_repo.py tests/unit/test_infra_repo_sql.py` 통과.
+- `ruff check src/kortravelgeo/infra/geocode_repo.py src/kortravelgeo/infra/zip_repo.py src/kortravelgeo/infra/pobox_repo.py tests/unit/test_infra_repo_sql.py` 통과.
 - `pytest -s tests/unit/test_infra_repo_sql.py tests/unit/test_consistency_sql.py -q` → 12 passed.
 - smoke test: `서울특별시 종로구 필운대로 93` geocode OK, reverse OK(10건), search 3건, zipcode OK(3건).
 
@@ -2420,15 +2447,15 @@
 - `tl_sprd_rw.geom`은 실제 SHP 헤더에 맞춰 `MULTIPOLYGON 5179`로 조정하고 문서도 도로면 polygon 기준으로 갱신했다.
 - `init-db`는 schema/index/MV statement를 별도 트랜잭션으로 실행해 MV 경고가 schema DDL을 롤백하지 않게 했다. 경고가 있으면 개수를 출력한다.
 - `refresh mv --swap`은 복구 중 기존 `mv_geocode_target`이 없어도 `mv_geocode_target_next`를 바로 운영 이름으로 승격한다. swap 후 `ANALYZE mv_geocode_target`도 수행한다.
-- `scripts/fullload_test.sh`는 기본 `KRADDR_GEO_PG_STATEMENT_TIMEOUT_MS`를 30분으로 높인다. 대량 링크 해소와 shadow MV 빌드가 운영 기본값 5초에 막히지 않도록 하기 위함이다.
+- `scripts/fullload_test.sh`는 기본 `KTG_PG_STATEMENT_TIMEOUT_MS`를 30분으로 높인다. 대량 링크 해소와 shadow MV 빌드가 운영 기본값 5초에 막히지 않도록 하기 위함이다.
 - 실제 MV 빌드 후 `pt_source='centroid'`가 0건인 것을 확인했다. 원인은 내비게이션용DB의 `bd_mgt_sn`이 25자리이고 정본 `tl_juso_text.bd_mgt_sn`은 26자리라 직접 조인이 불가능한 점이었다. 또한 내비 `bjd_cd`는 리 코드가 `00`인 경우가 많아 10자리 법정동 완전 일치도 부적합했다. MV fallback을 `rncode_full + 건물구분 + 본번/부번 + left(bjd_cd, 8)` 대표 centroid 조인으로 변경했다.
 - 두 번째 MV swap에서 `idx_mv_next_geocode_target_next_pk`가 이미 존재한다는 충돌을 확인했다. 첫 swap 때 shadow MV 인덱스명이 운영 MV에 그대로 남았기 때문이다. swap 전후에 `idx_mv_next_*` 이름을 운영명 `idx_mv_*`로 정규화하도록 보강했다. 이어 실제 재시도에서 old MV의 운영명 인덱스가 아직 있는 상태로 next 인덱스를 rename하려 하면 next 인덱스가 drop되는 것을 확인해, old MV를 먼저 drop한 뒤 next 인덱스를 rename하도록 순서를 조정했다.
 - 실제 C1~C10 정합성 검증에서 C1/C2가 전량 불일치했다. `TL_SPBD_BULD.BD_MGT_SN`도 25자리이고 정본은 26자리라 건물 polygon도 직접 `bd_mgt_sn` 조인이 불가능했다. `tl_spbd_buld_polygon`에 `RDS_SIG_CD`, `RN_CD`, `BULD_SE_CD`, `BULD_MNNM`, `BULD_SLNO`, `SIG_CD`, `EMD_CD`, `LI_CD`를 함께 적재하고 C1/C2/C4/C5를 natural key 기준으로 바꿨다. C8은 `TL_SPRD_RW`에 `rds_man_no`가 없어 전량 WARN이 나므로, `TL_SPRD_MANAGE` LineString geometry를 적재해 도로 인접성 검증에 사용하도록 바꿨다.
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py -q` → 6 passed.
-- `.venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py src/kraddr/geo/cli/main.py tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py` → 통과.
-- 실패로 오염된 SHP 보조 테이블 9개만 drop 후 `KRADDR_GEO_PG_DSN=...15432 .venv/bin/kraddr-geo init-db` 재실행. MV 생성은 timeout 경고가 났지만 SHP 테이블 스키마는 `MULTIPOLYGON 5179`로 복구됨을 확인했다.
+- `.venv/bin/python -m ruff check src/kortravelgeo/loaders/shp/polygons_loader.py src/kortravelgeo/cli/main.py tests/unit/test_shp_loader_gdal.py tests/unit/test_cli_contract.py` → 통과.
+- 실패로 오염된 SHP 보조 테이블 9개만 drop 후 `KTG_PG_DSN=...15432 .venv/bin/ktgctl init-db` 재실행. MV 생성은 timeout 경고가 났지만 SHP 테이블 스키마는 `MULTIPOLYGON 5179`로 복구됨을 확인했다.
 - `세종특별자치시` 실제 SHP 9개 레이어 적재 성공: 59.09초, 최대 RSS 약 128MiB, `tl_spbd_buld_polygon` 55,819행, `tl_sprd_intrvl` 100,009행 등 9개 테이블 row count 확인.
 - 전국 SHP 153개 레이어 적재 성공: 3시간 1분 34초, 최대 RSS 약 181MiB. 정확한 row count는 `tl_spbd_buld_polygon` 10,687,732행, `tl_sprd_intrvl` 16,993,167행, `tl_sprd_rw` 1,482,679행 등으로 확인했다.
 
@@ -2436,29 +2463,29 @@
 
 ## 2026-05-24 (PR #14/T-027 — 실제 데이터로드 실행 중 포트 충돌 방지)
 
-**작업**: PR #13이 main에 머지된 뒤 `codex/t027-fullload-execution` 브랜치에서 실제 데이터로드를 시작했다. WSL ext4 클론(`~/dev/python-kraddr-geo`)에서 Python/GDAL 환경을 만들고, `F:\dev\python-kraddr-geo\data` 원본을 `~/kraddr-geo-data` 작업 사본으로 복사했다.
+**작업**: PR #13이 main에 머지된 뒤 `codex/t027-fullload-execution` 브랜치에서 실제 데이터로드를 시작했다. WSL ext4 클론(`~/dev/kor-travel-geo`)에서 Python/GDAL 환경을 만들고, `F:\dev\kor-travel-geo\data` 원본을 `~/kor-travel-geo-data` 작업 사본으로 복사했다.
 
 **실행 로그**:
 - 상세 실행 로그는 로컬 산출물 `artifacts/fullload/20260524_173115/execution-log.md`에 기록한다.
 - 환경: WSL2 Ubuntu 24.04, AMD Ryzen 7 7840HS 16 vCPU, 메모리 29GiB, Docker 29.5.2, Docker Compose v5.1.4, Python 3.12.3, GDAL 3.8.4.
 - `--copy-data` 시작 `2026-05-24T17:31:15+09:00`, 종료 `2026-05-24T18:35:47+09:00`, 경과 약 1시간 4분 32초.
-- 복사 결과: `~/kraddr-geo-data/juso` 약 25GB, 파일 683개. `epost`는 현재 원본 파일이 없어 빈 디렉터리다.
+- 복사 결과: `~/kor-travel-geo-data/juso` 약 25GB, 파일 683개. `epost`는 현재 원본 파일이 없어 빈 디렉터리다.
 
 **발견한 문제**:
 - 로컬 5432 포트가 기존 `airflow-postgres-1` 컨테이너에서 이미 사용 중이었다.
 - T-027 기본 compose/스크립트가 `localhost:5432`를 그대로 사용하면 기존 DB에 DDL/적재를 실행할 위험이 있다.
 
 **보강 상세**:
-- 당시 인프라 설정 파일의 외부 포트를 `${KRADDR_GEO_DB_PORT:-5432}:5432`로 파라미터화했다.
-- `scripts/fullload_test.sh`는 `KRADDR_GEO_PG_DSN`이 없을 때 `KRADDR_GEO_DB_PORT`를 반영한 DSN을 만든다.
-- `docs/t027-fullload-plan.md`, `docs/dev-environment-recovery.md`, `CLAUDE.md`에 `KRADDR_GEO_DB_PORT=15432` 사용 예와 포트 충돌 주의사항을 추가했다.
+- 당시 인프라 설정 파일의 외부 포트를 `${KTG_DB_PORT:-5432}:5432`로 파라미터화했다.
+- `scripts/fullload_test.sh`는 `KTG_PG_DSN`이 없을 때 `KTG_DB_PORT`를 반영한 DSN을 만든다.
+- `docs/t027-fullload-plan.md`, `docs/dev-environment-recovery.md`, `CLAUDE.md`에 `KTG_DB_PORT=15432` 사용 예와 포트 충돌 주의사항을 추가했다.
 
 **검증**:
 - `bash -n scripts/fullload_test.sh` 통과.
-- `DATA_DIR=/home/digitie/kraddr-geo-data KRADDR_GEO_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` 통과. 출력 DSN이 `localhost:15432`로 바뀌는 것을 확인했다.
+- `DATA_DIR=/home/digitie/kor-travel-geo-data KTG_DB_PORT=15432 PLAN_ONLY=1 bash scripts/fullload_test.sh` 통과. 출력 DSN이 `localhost:15432`로 바뀌는 것을 확인했다.
 - `git diff --check` 통과.
 
-**다음 작업**: PR 생성 후 `KRADDR_GEO_DB_PORT=15432`로 Docker PostGIS를 기동하고 실제 적재를 계속 진행한다. 이후 발견되는 문제는 같은 PR에 누적한다.
+**다음 작업**: PR 생성 후 `KTG_DB_PORT=15432`로 Docker PostGIS를 기동하고 실제 적재를 계속 진행한다. 이후 발견되는 문제는 같은 PR에 누적한다.
 
 ## 2026-05-24 (PR #13/T-027 — Windows 재설치·Codex 세션 복구 문서화)
 
@@ -2474,7 +2501,7 @@
 
 ## 2026-05-24 (PR #13/T-027 — Docker full-load 계획 보강)
 
-**작업**: 사용자 지시에 따라 실제 Docker 전체 적재 실행은 중단하고, `F:\dev\python-kraddr-geo\data\juso` 전체를 대상으로 한 계획/문서/스크립트 preflight 보강만 진행했다. 로컬 파일 시스템은 목록과 용량만 확인했고 DB 적재·Docker 실행은 하지 않았다.
+**작업**: 사용자 지시에 따라 실제 Docker 전체 적재 실행은 중단하고, `F:\dev\kor-travel-geo\data\juso` 전체를 대상으로 한 계획/문서/스크립트 preflight 보강만 진행했다. 로컬 파일 시스템은 목록과 용량만 확인했고 DB 적재·Docker 실행은 하지 않았다.
 
 **확인한 데이터 인벤토리**:
 - `data/juso` 전체는 약 28GB다.
@@ -2483,7 +2510,7 @@
 
 **보강 상세**:
 - `docs/t027-fullload-plan.md`를 실행 전 리뷰 가능한 계획서로 재작성했다. 실행 금지선, Docker project/volume 안전장치, 기준월 분리, phase별 중단·재개, 산출물 경로, 미지원 자료 후속 태스크를 명시했다.
-- `scripts/fullload_test.sh`는 실행 산출물로 남기되 `PLAN_ONLY=1` preflight를 추가했다. 단일 `YYYYMM` 대신 `JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`을 분리하고, CLI 호출은 `kraddr-geo` console script로 맞췄다.
+- `scripts/fullload_test.sh`는 실행 산출물로 남기되 `PLAN_ONLY=1` preflight를 추가했다. 단일 `YYYYMM` 대신 `JUSO_YYYYMM`/`LOCSUM_YYYYMM`/`NAVI_YYYYMM`을 분리하고, CLI 호출은 `kor-travel-geo` console script로 맞췄다.
 - 초안 스크립트의 DDL inline SQL 실행을 `alembic upgrade head`로 바꾸고, 별도 적재 명령 뒤 누락될 수 있는 `resolve_text_geometry_links()`를 명시적으로 수행하도록 정리했다. MV 갱신은 full-load에 맞게 `refresh mv --swap`을 기본으로 둔다.
 - smoke test는 실제 DTO 구조(`GeocodeResponse.result.point`, `ReverseResponse.result`, `SearchResponse.result`, `ZipcodeResponse.result`)에 맞게 보정했다.
 
@@ -2503,19 +2530,19 @@
 - H2: `ApiError`를 추가해 HTTP status를 보존하고, React Query retry가 4xx를 재시도하지 않게 했다.
 - H3: `/v1/admin/explain`은 실행 전 `set_config('statement_timeout', ..., true)`를 호출한다. 기본 timeout은 `api_explain_timeout_ms=3000`.
 - M1~M3/L2/L3: `LoadConsole`, `ReverseDebugger`, `ConsistencyPanel` 에러 처리를 보강하고 빈 jobs 배열 finished 전이를 막았다.
-- M4: Prometheus gauge 이름을 `kraddr_geo_cache_hits_total`에서 `kraddr_geo_cache_hits`로 변경했다.
+- M4: Prometheus gauge 이름을 `kor_travel_geo_cache_hits_total`에서 `kor_travel_geo_cache_hits`로 변경했다.
 - M5: `ExplainDebugger`가 `explainFormSchema`를 사용해 SELECT/WITH와 세미콜론 금지를 클라이언트에서도 검증한다.
 - CI: `scripts/__init__.py`를 추가하고 pytest `pythonpath`에 repository root를 명시해 GitHub Actions의 pytest 수집 환경에서도 `scripts.export_openapi` import가 안정적으로 동작하게 했다.
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .` → 통과
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kortravelgeo scripts/export_openapi.py` → 통과
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports` → Layered architecture kept
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/export_openapi.py --check --output openapi.json` → drift 없음
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 70 passed, 1 skipped
-- 임시 DB `kraddr_geo_codex_pr12_review`에서 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q` → 실제 `data/juso` 샘플 COPY + MV 생성 1 passed
-- `cd kraddr-geo-ui && npm run lint && npm run type-check && npm run test && npm run build` → 통과, Vitest 12 passed
-- `cd kraddr-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과, moderate advisory만 잔여
+- 임시 DB `kor_travel_geo_codex_pr12_review`에서 `KTG_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q` → 실제 `data/juso` 샘플 COPY + MV 생성 1 passed
+- `cd kor-travel-geo-ui && npm run lint && npm run type-check && npm run test && npm run build` → 통과, Vitest 12 passed
+- `cd kor-travel-geo-ui && npm audit --omit=dev --audit-level=high && npm audit --audit-level=high` → high 기준 통과, moderate advisory만 잔여
 
 **다음 작업**: PR #12 CI 재확인과 리뷰어 코멘트 답변.
 
@@ -2524,7 +2551,7 @@
 **작업**: PR #11을 main에 머지한 뒤, PR #11 후속 의견을 PR #12로 이관했다. PR #12 범위는 T-018~T-020이 main에 이미 포함된 상태에서 T-021~T-026을 실제 코드와 테스트로 마무리하는 것이다.
 
 **구현 상세**:
-- T-021: `kraddr-geo-ui` 패키지를 추가했다. Next.js 16(App Router), React 18, Tailwind, TanStack Query, `react-kakao-maps-sdk`, OpenAPI 타입 생성 스크립트(`npm run gen:types`)를 포함한다.
+- T-021: `kor-travel-geo-ui` 패키지를 추가했다. Next.js 16(App Router), React 18, Tailwind, TanStack Query, `react-kakao-maps-sdk`, OpenAPI 타입 생성 스크립트(`npm run gen:types`)를 포함한다.
 - T-022: `/debug/geocode`, `/debug/reverse`, `/debug/normalize`, `/debug/explain` 페이지를 구현했다. 모든 요청은 `/api/proxy/[...path]` Route Handler를 통해 백엔드 `/v1/*`로 전달한다. Kakao JS key가 없으면 지도는 좌표 프리뷰로 fallback한다.
 - T-023: `/admin/load`, `/admin/tables`, `/admin/cache`, `/admin/logs` 페이지를 구현했다. full-load batch payload 등록, raw ZIP 업로드, MV refresh enqueue, 테이블 통계, 캐시 메트릭, `load_jobs.log_tail` 조회를 확인할 수 있다.
 - T-024: 루트 `.pre-commit-config.yaml`과 `.github/workflows/ci.yml`을 추가했다. backend lint/type/import/test와 frontend type generation drift/lint/type/test/build를 분리된 job으로 검증한다.
@@ -2539,13 +2566,13 @@
 
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .`
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py`
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kortravelgeo scripts/export_openapi.py`
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports`
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/export_openapi.py --check --output openapi.json`
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q`
-- `KRADDR_GEO_TEST_PG_DSN=... .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` — 실제 `data/juso` 샘플 COPY와 MV 생성 검증
-- `cd kraddr-geo-ui && npm ci && npm run gen:types && npm run lint && npm run type-check && npm run test && npm run build`
-- `cd kraddr-geo-ui && npm audit --omit=dev --audit-level=high`
+- `KTG_TEST_PG_DSN=... .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` — 실제 `data/juso` 샘플 COPY와 MV 생성 검증
+- `cd kor-travel-geo-ui && npm ci && npm run gen:types && npm run lint && npm run type-check && npm run test && npm run build`
+- `cd kor-travel-geo-ui && npm audit --omit=dev --audit-level=high`
 
 **다음 작업**: PR #12 리뷰 대기. 후속 후보는 `/admin/load` 업로드 진행률(XHR progress), `/admin/logs` streaming tail, `/debug/reverse` 지도 클릭 즉시 조회 UX다.
 
@@ -2563,10 +2590,10 @@
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_infra_batch.py tests/unit/test_client_submit_load_batch.py -q` → 14 passed.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 65 passed, 1 skipped.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .` → 통과.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py` → 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kortravelgeo scripts/export_openapi.py` → 통과.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports` → Layered architecture kept.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/export_openapi.py --check --output openapi.json` → drift 없음.
-- 임시 DB `kraddr_geo_codex_pr11_followup`에서 `KRADDR_GEO_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q` 실행 → 실제 `data/juso` 샘플 COPY + MV 생성 1 passed.
+- 임시 DB `kor_travel_geo_codex_pr11_followup`에서 `KTG_TEST_PG_DSN=... pytest tests/integration/test_optional_real_postgres_load.py -q` 실행 → 실제 `data/juso` 샘플 COPY + MV 생성 1 passed.
 
 **다음 작업**: PR #11에 후속 의견과 검증 결과를 남긴 뒤, 리뷰어가 원하면 payload schema를 OpenAPI DTO 수준에서 더 좁히는 작업을 별도 PR로 분리한다.
 
@@ -2575,7 +2602,7 @@
 **작업**: PR #11 리뷰에서 발견된 라이브러리/REST 비대칭 이슈를 해결했다. `AsyncAddressClient.submit_load("full_load_batch", ...)`가 `AdminRepository.insert_load_job`을 직접 호출하던 경로를 `insert_load_batch`로 라우팅하여, 라이브러리 사용자도 REST `/v1/admin/loads`와 동일하게 root + 5종 child + DAG가 즉시 적재되도록 한다.
 
 **구현 상세**:
-- `src/kraddr/geo/infra/batch.py` 신규 모듈에 `BATCH_SOURCE_KINDS`와 `batch_children()`을 이동했다. `api/_jobs.py`의 동명 private 헬퍼는 제거하고 새 모듈을 import한다.
+- `src/kortravelgeo/infra/batch.py` 신규 모듈에 `BATCH_SOURCE_KINDS`와 `batch_children()`을 이동했다. `api/_jobs.py`의 동명 private 헬퍼는 제거하고 새 모듈을 import한다.
 - `AsyncAddressClient.submit_load`는 `kind == "full_load_batch"`일 때 `batch_children(payload)`로 child 구성을 결정해 `AdminRepository.insert_load_batch`를 호출한다. 비-batch kind는 종전대로 `insert_load_job`을 사용한다.
 - `infra/batch.py`는 `core/dto` 의존 없는 순수 모듈이라 client / api / loaders 어느 레이어에서도 import 가능. import-linter "Layered architecture" 컨트랙트 유지.
 
@@ -2583,17 +2610,17 @@
 - `tests/unit/test_infra_batch.py` 신규 — default kind 순서, `payloads` 매핑 키, 명시 `children` 우선, 잘못된 entry drop을 검증.
 - `tests/unit/test_client_submit_load_batch.py` 신규 — `AsyncMock`으로 `insert_load_batch` / `insert_load_job` 호출 분기를 검증.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp python -m pytest tests/unit/ -q` → 51 passed.
-- `python -m ruff check`, `mypy --strict src/kraddr/geo/api/_jobs.py src/kraddr/geo/infra/batch.py src/kraddr/geo/client.py`, `lint-imports` 모두 통과.
+- `python -m ruff check`, `mypy --strict src/kortravelgeo/api/_jobs.py src/kortravelgeo/infra/batch.py src/kortravelgeo/client.py`, `lint-imports` 모두 통과.
 - `python scripts/export_openapi.py --check` → drift 없음 (DTO 변경 없음).
 
-**다음 작업**: T-021 프론트엔드 패키지 `kraddr-geo-ui` 부트스트랩.
+**다음 작업**: T-021 프론트엔드 패키지 `kor-travel-geo-ui` 부트스트랩.
 
 ## 2026-05-23 (codex, T-018~T-020 구현 + 신규 PR 준비)
 
 **작업**: PR #10 리뷰 fixup 위에서 T-018~T-020을 추가 구현하고, 사용자 요청대로 P1/P2 리뷰 반영 사항과 T-005~T-020 완료 범위를 하나의 신규 PR로 등록할 준비를 진행했다.
 
 **구현 상세**:
-- T-018: CLI 운영 명령을 확장했다. `kraddr-geo load all-sidos`는 juso/locsum/navi 필수 경로와 선택 SHP/epost 보조 경로를 받아 직접 적재 → 링크 해소 → C1~C10 정합성 검증 → optional MV refresh까지 묶는다. `load shp`, `load shp-all`, `load pobox`, `load bulk`, `load epost --kind=full`, `refresh mv --swap`, `validate consistency --cases/--scope`도 추가했다.
+- T-018: CLI 운영 명령을 확장했다. `ktgctl load all-sidos`는 juso/locsum/navi 필수 경로와 선택 SHP/epost 보조 경로를 받아 직접 적재 → 링크 해소 → C1~C10 정합성 검증 → optional MV refresh까지 묶는다. `load shp`, `load shp-all`, `load pobox`, `load bulk`, `load epost --kind=full`, `refresh mv --swap`, `validate consistency --cases/--scope`도 추가했다.
 - T-019: `infra/external_api.py`를 추가했다. `AsyncAddressClient.geocode(..., fallback="api")`는 로컬 DB 결과가 `NOT_FOUND`일 때만 외부 폴백을 호출한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 API + 좌표 API다. 외부 응답은 기존 `GeocodeResponse`로 변환하며 공급자 출처는 `x_extension.source`에만 둔다.
 - T-020: `scripts/export_openapi.py`를 추가해 `create_app().openapi()`를 `openapi.json`으로 내보낸다. `--check` 모드는 committed schema와 생성 결과가 다르면 실패한다. `.github/workflows/openapi.yml`은 PR마다 `.[api]` extra 설치 후 drift 검사를 실행한다.
 
@@ -2604,10 +2631,10 @@
 - `docs/external-apis.md`에 구현 위치, 호출 순서, 응답 매핑 정책을 보강했다.
 
 **검증**:
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 51 passed, 1 skipped. skipped 1건은 `KRADDR_GEO_TEST_PG_DSN` 미설정 시 건너뛰는 선택형 실제 PostgreSQL COPY 테스트다.
-- `KRADDR_GEO_TEST_PG_DSN='postgresql+psycopg://postgres:postgres@localhost:5432/kraddr_geo_codex_t020_verify' .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 검증 후 `kraddr_geo_codex_t020_verify` DB는 삭제했다.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 51 passed, 1 skipped. skipped 1건은 `KTG_TEST_PG_DSN` 미설정 시 건너뛰는 선택형 실제 PostgreSQL COPY 테스트다.
+- `KTG_TEST_PG_DSN='postgresql+psycopg://postgres:postgres@localhost:5432/kor_travel_geo_codex_t020_verify' .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 검증 후 `kor_travel_geo_codex_t020_verify` DB는 삭제했다.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .` → 통과
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo scripts/export_openapi.py` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kortravelgeo scripts/export_openapi.py` → 통과
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports` → Layered architecture kept
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/export_openapi.py --check --output openapi.json` → 통과
 
@@ -2626,10 +2653,10 @@
 - ADR-017(batch DAG)과 ADR-018(`x_extension` 스키마 격리)을 `docs/decisions.md`에 추가했다.
 
 **검증**:
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 47 passed, 1 skipped. skipped 1건은 `KRADDR_GEO_TEST_PG_DSN`이 없을 때만 건너뛰는 선택형 실제 PostgreSQL COPY 테스트다.
-- `KRADDR_GEO_TEST_PG_DSN='postgresql+psycopg://postgres:postgres@localhost:5432/kraddr_geo_codex_pr10_fix' .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 검증 후 `kraddr_geo_codex_pr10_fix` DB는 삭제했다.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 47 passed, 1 skipped. skipped 1건은 `KTG_TEST_PG_DSN`이 없을 때만 건너뛰는 선택형 실제 PostgreSQL COPY 테스트다.
+- `KTG_TEST_PG_DSN='postgresql+psycopg://postgres:postgres@localhost:5432/kor_travel_geo_codex_pr10_fix' .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed. 검증 후 `kor_travel_geo_codex_pr10_fix` DB는 삭제했다.
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check .` → 통과
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo` → 통과
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kortravelgeo` → 통과
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/lint-imports` → Layered architecture kept
 
 **다음**: PR #10에 반영 요약과 검증 결과를 코멘트로 남긴다.
@@ -2640,11 +2667,11 @@
 
 **변경 파일(주요)**:
 - 신규: `alembic.ini`, `alembic/env.py`, `alembic/versions/0001_text_primary_postgis_schema.py`
-- 신규: `src/kraddr/geo/infra/engine.py`, `infra/sql.py`, `infra/pnu.py`, `infra/geocode_repo.py`, `infra/reverse_repo.py`, `infra/search_repo.py`, `infra/zip_repo.py`, `infra/pobox_repo.py`, `infra/admin_repo.py`
-- 신규: `src/kraddr/geo/core/protocols.py`, `core/normalize.py`, `core/geocoder.py`, `core/reverse_geocoder.py`, `core/searcher.py`, `core/zipcoder.py`, `core/poboxer.py`, `core/responses.py`
-- 갱신: `src/kraddr/geo/client.py`, `src/kraddr/geo/__init__.py`, `src/kraddr/geo/dto/admin.py`, `src/kraddr/geo/cli/main.py`
-- 신규: `src/kraddr/geo/api/app.py`, `api/_jobs.py`, `api/deps.py`, `api/responses.py`, `api/routers/*`
-- 신규: `src/kraddr/geo/loaders/text/juso_hangul_loader.py`, `locsum_loader.py`, `navi_loader.py`, `loaders/shp/polygons_loader.py`, `shp/delta_loader.py`, `loaders/postload.py`, `loaders/consistency.py`, `loaders/pobox_loader.py`, `loaders/bulk_loader.py`, `loaders/manifest.py`
+- 신규: `src/kortravelgeo/infra/engine.py`, `infra/sql.py`, `infra/pnu.py`, `infra/geocode_repo.py`, `infra/reverse_repo.py`, `infra/search_repo.py`, `infra/zip_repo.py`, `infra/pobox_repo.py`, `infra/admin_repo.py`
+- 신규: `src/kortravelgeo/core/protocols.py`, `core/normalize.py`, `core/geocoder.py`, `core/reverse_geocoder.py`, `core/searcher.py`, `core/zipcoder.py`, `core/poboxer.py`, `core/responses.py`
+- 갱신: `src/kortravelgeo/client.py`, `src/kortravelgeo/__init__.py`, `src/kortravelgeo/dto/admin.py`, `src/kortravelgeo/cli/main.py`
+- 신규: `src/kortravelgeo/api/app.py`, `api/_jobs.py`, `api/deps.py`, `api/responses.py`, `api/routers/*`
+- 신규: `src/kortravelgeo/loaders/text/juso_hangul_loader.py`, `locsum_loader.py`, `navi_loader.py`, `loaders/shp/polygons_loader.py`, `shp/delta_loader.py`, `loaders/postload.py`, `loaders/consistency.py`, `loaders/pobox_loader.py`, `loaders/bulk_loader.py`, `loaders/manifest.py`
 - 신규 테스트: `tests/unit/test_infra_engine_pnu_sql.py`, `test_core_geocoder.py`, `test_infra_repo_sql.py`, `test_api_app_contract.py`, `tests/integration/test_real_juso_text_loaders.py`, `test_optional_real_postgres_load.py`
 - 갱신 문서: `docs/tasks.md`, `docs/resume.md`, `docs/data-model.md`, `docs/backend-package.md`, `CHANGELOG.md`
 
@@ -2663,13 +2690,13 @@
 - `data/juso/202604_위치정보요약DB_전체분.zip`의 `entrc_seoul.txt` ZIP member를 직접 스트리밍해 `sig_cd`, `ent_man_no`, `rncode_full`, `ent_se_cd`, EPSG:5179 X/Y를 검증했다.
 - `data/juso/202604_내비게이션용DB_전체분/match_build_seoul.txt`와 `match_rs_entrc.txt`를 읽어 centroid/진입점 좌표와 kind 매핑을 검증했다.
 - `data/juso/도로명주소 전자지도/강원특별자치도`의 SHP/DBF 파일로 ADR-012 보조 9개 레이어 load plan을 검증했다.
-- 로컬 PostgreSQL(PostGIS)에서 `kraddr_geo_codex_t017` 테스트 DB를 생성해 DDL 적용 → 실제 파일 샘플 COPY 적재 → `resolve_text_geometry_links()` → `mv_geocode_target` 생성까지 통과 확인 후 DB를 삭제했다.
+- 로컬 PostgreSQL(PostGIS)에서 `kor_travel_geo_codex_t017` 테스트 DB를 생성해 DDL 적용 → 실제 파일 샘플 COPY 적재 → `resolve_text_geometry_links()` → `mv_geocode_target` 생성까지 통과 확인 후 DB를 삭제했다.
 
 **검증**:
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 43 passed, 1 skipped. skipped 1건은 `KRADDR_GEO_TEST_PG_DSN`이 없을 때만 건너뛰는 선택형 실제 PostgreSQL COPY 테스트다.
-- `KRADDR_GEO_TEST_PG_DSN='postgresql+psycopg://postgres:postgres@localhost:5432/kraddr_geo_codex_t017' .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 43 passed, 1 skipped. skipped 1건은 `KTG_TEST_PG_DSN`이 없을 때만 건너뛰는 선택형 실제 PostgreSQL COPY 테스트다.
+- `KTG_TEST_PG_DSN='postgresql+psycopg://postgres:postgres@localhost:5432/kor_travel_geo_codex_t017' .venv/bin/python -m pytest tests/integration/test_optional_real_postgres_load.py -q` → 1 passed.
 - `.venv/bin/python -m ruff check .` → 통과
-- `.venv/bin/python -m mypy src/kraddr/geo` → 통과
+- `.venv/bin/python -m mypy src/kortravelgeo` → 통과
 - `.venv/bin/lint-imports` → Layered architecture kept
 
 **다음**:
@@ -2686,7 +2713,7 @@
 - `docs/decisions.md` — ADR-005에 partial supersede 표시 / ADR-007 복원(위치정보요약DB ent_se_cd 기반) / ADR-012 신규 / ADR-016 신규
 - `docs/data-model.md` — 마스터 14개 구조로 전면 재작성. 텍스트 1차 4종(`tl_juso_text`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_navi_entrc`)과 SHP polygon 7종으로 분리. 텍스트 파일 포맷·컬럼 매핑 명시. MV 정의를 텍스트 정본 + 대표 출입구 + centroid fallback + `pt_source` 컬럼으로 재정의. 정합성 케이스 C1~C10 분류표와 `load_consistency_reports` 테이블 추가.
 - `docs/backend-package.md` §9 — `loaders/text/`, `loaders/shp/`, `loaders/consistency.py` 분리. `juso_hangul_loader.py` 구현 예시(stdlib csv + `psycopg.copy()`, 인코딩 감지, 진행률 callback). `tl_spbd_buld_polygon` 분리 적재 전략. §9.8(진행도 API), §9.9(정합성 API), §9.10(로그/리포트 정책) 신규.
-- `docs/backend-package.md` §10 CLI — `kraddr-geo load juso/locsum/navi/shp`, `kraddr-geo validate consistency`, `kraddr-geo jobs list/status/cancel` 추가.
+- `docs/backend-package.md` §10 CLI — `ktgctl load juso/locsum/navi/shp`, `ktgctl validate consistency`, `ktgctl jobs list/status/cancel` 추가.
 - `docs/tasks.md` — T-006(18개 테이블), T-007(MV 재정의), T-011(`AsyncAddressClient` 진행도 API), T-013을 T-013a~d로 분할. T-026(정합성 검증) 신규.
 - `docs/resume.md` — ADR 확인 목록 갱신 (~ADR-016).
 - `CHANGELOG.md` — 정책 전환 기록.
@@ -2735,11 +2762,11 @@
 **작업**: T-004 DTO 6종 구현 및 `data/juso/도로명주소 전자지도` 실제 파일 읽기 테스트 추가
 
 **변경 파일**:
-- 신규: `src/kraddr/geo/dto/geocode.py`, `src/kraddr/geo/dto/reverse.py`, `src/kraddr/geo/dto/search.py`, `src/kraddr/geo/dto/zipcode.py`, `src/kraddr/geo/dto/pobox.py`, `src/kraddr/geo/dto/admin.py`
-- 신규: `src/kraddr/geo/loaders/juso_map.py`
+- 신규: `src/kortravelgeo/dto/geocode.py`, `src/kortravelgeo/dto/reverse.py`, `src/kortravelgeo/dto/search.py`, `src/kortravelgeo/dto/zipcode.py`, `src/kortravelgeo/dto/pobox.py`, `src/kortravelgeo/dto/admin.py`
+- 신규: `src/kortravelgeo/loaders/juso_map.py`
 - 신규: `tests/unit/test_dto_geocode.py`, `tests/unit/test_dto_reverse.py`, `tests/unit/test_dto_search_zipcode_pobox_admin.py`
 - 신규: `tests/integration/test_juso_map_files.py`
-- 갱신: `src/kraddr/geo/dto/__init__.py`, `pyproject.toml`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`
+- 갱신: `src/kortravelgeo/dto/__init__.py`, `pyproject.toml`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`
 
 **결정**:
 - DTO는 `docs/backend-package.md` §4의 wire contract를 우선해 pydantic v2 frozen model로 작성했다.
@@ -2750,7 +2777,7 @@
 **검증**:
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 28 passed. 실제 파일 경로 `data/juso/도로명주소 전자지도/강원특별자치도/51000/*.shp|*.dbf|*.shx`를 열어 검사함.
 - `.venv/bin/python -m ruff check .` → 통과
-- `.venv/bin/python -m mypy src/kraddr/geo` → 통과
+- `.venv/bin/python -m mypy src/kortravelgeo` → 통과
 - `.venv/bin/lint-imports` → Layered architecture kept
 
 **다음**: T-005 — `infra/engine.py` async engine factory + 통합 테스트 준비.
@@ -2765,7 +2792,7 @@
 - `docs/decisions.md` — ADR-009 추가 (epost 15000302, `downloadKnd=1` 분기 1회 전체 적재. 실시간 lookup 15056971 미도입).
 - `docs/external-apis.md` — epost 절 보강: 데이터셋 ID 15000302, `downloadKnd` 4종 표, 분기 1회 전체 적재 흐름, 미도입 API(15056971) 명시. 한눈에 표에도 데이터셋 ID + ADR 인용.
 - `docs/data-model.md` — `postal_pobox`/`postal_bulk_delivery` 위에 epost 15000302 ZIP 적재 출처와 ADR-009 인용.
-- `.env.example` — `KRADDR_GEO_EPOST_API_KEY` 위 주석에 데이터셋 ID + ADR-009 표기.
+- `.env.example` — `KTG_EPOST_API_KEY` 위 주석에 데이터셋 ID + ADR-009 표기.
 - `CHANGELOG.md` — `### Added`에 ADR-009 요약.
 
 **결정**:
@@ -2775,7 +2802,7 @@
 - 본 실행 환경(원격 컨테이너)은 `openapi.epost.go.kr` 외부망이 차단되어 직접 호출은 못 했다. 데이터셋 ID와 `downloadKnd` 4종 정의는 공공데이터포털 검색 결과로 확정. 사용자 WSL 환경에서 키 재발급 후 `curl ... -G --data-urlencode "downloadKnd=1"`로 응답을 마지막 점검 권장.
 - 사용자가 채팅에 노출한 서비스 키는 즉시 재발급(또는 활용중지) 권장. 본 PR/문서/`.env.example`에 평문 커밋 없음.
 
-**다음**: T-017(`pobox_loader.py`, `bulk_loader.py`) 구현 시 본 ADR을 reference로 적용. CLI에 `kraddr-geo load epost --kind=full` 같은 entry를 두고 운영은 systemd timer로 분기 트리거.
+**다음**: T-017(`pobox_loader.py`, `bulk_loader.py`) 구현 시 본 ADR을 reference로 적용. CLI에 `ktgctl load epost --kind=full` 같은 entry를 두고 운영은 systemd timer로 분기 트리거.
 
 ---
 
@@ -2805,7 +2832,7 @@
 **작업**: PR 리뷰 반영 — 설정 싱글톤 helper 역할 분리
 
 **변경 파일**:
-- 갱신: `src/kraddr/geo/settings.py`, `tests/unit/test_settings.py`, `docs/backend-package.md`
+- 갱신: `src/kortravelgeo/settings.py`, `tests/unit/test_settings.py`, `docs/backend-package.md`
 
 **결정**:
 - `reset_settings()`는 인자 없이 싱글톤을 비우는 역할만 맡는다.
@@ -2820,18 +2847,18 @@
 **작업**: PR 리뷰 항목 5~10 반영 — DTO 필수성, validator 범위, CLI exit, ruff ignore, 예외명, namespace package 정리
 
 **변경 파일**:
-- 갱신: `src/kraddr/geo/dto/address.py`, `src/kraddr/geo/cli/main.py`, `src/kraddr/geo/exceptions.py`, `pyproject.toml`
+- 갱신: `src/kortravelgeo/dto/address.py`, `src/kortravelgeo/cli/main.py`, `src/kortravelgeo/exceptions.py`, `pyproject.toml`
 - 갱신: `tests/unit/test_dto_address.py`, `tests/unit/test_exceptions.py`
 - 갱신: `docs/backend-package.md`, `docs/decisions.md`
-- 삭제: `src/kraddr/__init__.py`
+- 삭제: `src/kortravel/__init__.py`
 
 **결정**:
 - `RefinedAddress.structure`는 사양대로 필수 `AddressStructure`로 둔다.
 - 빈 문자열 → `None` 변환 validator는 optional address fields에만 적용하고, `level0`은 빈 문자열을 명시적으로 거부한다.
 - `typer.Exit`는 인스턴스(`raise typer.Exit()`)로 raise한다.
 - `N815` ruff ignore는 vworld 호환 필드가 있는 `dto/address.py`에만 한정한다.
-- base 예외명은 `KraddrGeoError`로 확정한다(ADR-014).
-- `kraddr` parent는 PEP 420 implicit namespace package로 둔다(ADR-015).
+- base 예외명은 `KorTravelGeoError`로 확정한다(ADR-014).
+- `kortravel` parent는 PEP 420 implicit namespace package로 둔다(ADR-015).
 
 **다음**: 기존 다음 작업 유지 — T-004 나머지 DTO 작성.
 
@@ -2842,7 +2869,7 @@
 **작업**: PR 리뷰 반영 — 설정 기본값을 사양과 맞추고 README에 법적·데이터 사용 한계 추가
 
 **변경 파일**:
-- 갱신: `src/kraddr/geo/settings.py`, `.env.example`, `tests/unit/test_settings.py`, `README.md`
+- 갱신: `src/kortravelgeo/settings.py`, `.env.example`, `tests/unit/test_settings.py`, `README.md`
 
 **결정**:
 - `epost_download_url` 기본값은 브라우저 다운로드 페이지가 아니라 공공데이터포털 OpenAPI endpoint(`http://openapi.epost.go.kr/postal/downloadAreaCodeService/downloadAreaCodeService/getAreaCodeInfo`)로 둔다.
@@ -2861,14 +2888,14 @@
 
 **변경 파일**:
 - 신규: `pyproject.toml`, `.env.example`
-- 신규: `src/kraddr/__init__.py`, `src/kraddr/geo/__init__.py`, `src/kraddr/geo/version.py`, `src/kraddr/geo/py.typed`
-- 신규: `src/kraddr/geo/settings.py`, `src/kraddr/geo/exceptions.py`, `src/kraddr/geo/client.py`, `src/kraddr/geo/cli/main.py`
-- 신규: `src/kraddr/geo/dto/common.py`, `src/kraddr/geo/dto/address.py`
+- 신규: `src/kortravel/__init__.py`, `src/kortravelgeo/__init__.py`, `src/kortravelgeo/version.py`, `src/kortravelgeo/py.typed`
+- 신규: `src/kortravelgeo/settings.py`, `src/kortravelgeo/exceptions.py`, `src/kortravelgeo/client.py`, `src/kortravelgeo/cli/main.py`
+- 신규: `src/kortravelgeo/dto/common.py`, `src/kortravelgeo/dto/address.py`
 - 신규: `tests/unit/test_settings.py`, `tests/unit/test_dto_common.py`, `tests/unit/test_dto_address.py`
 - 갱신: `CHANGELOG.md`, `docs/tasks.md`, `docs/resume.md`
 
 **결정**:
-- import-linter는 도구 제약상 `root_package = "kraddr"`와 `containers = ["kraddr.geo"]` 조합으로 설정한다. 이는 문서의 `kraddr.geo` 계층 계약과 같은 의미이며 실제 도구 실행이 통과하는 형태다.
+- import-linter는 도구 제약상 `root_package = "kortravel"`와 `containers = ["kortravelgeo"]` 조합으로 설정한다. 이는 문서의 `kortravelgeo` 계층 계약과 같은 의미이며 실제 도구 실행이 통과하는 형태다.
 - `AsyncAddressClient`와 CLI는 이번 범위에서 import/install 검증을 위한 자리표시자로만 둔다. 실제 지오코딩 기능은 T-010/T-011에서 구현한다.
 - 사용자가 지정한 SHP 기준 경로 `data/juso/도로명주소 전자지도`를 확인했다. 강원도 샘플의 11개 DBF 필드는 문서의 마스터 레이어(`TL_SPBD_BULD`, `TL_SPBD_ENTRC`, `TL_SPRD_MANAGE` 등)와 맞는다.
 
@@ -2877,7 +2904,7 @@
 - `pip install -e ".[api,dev]"` 통과
 - `TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest -q` → 10 passed
 - `.venv/bin/python -m ruff check .` → 통과
-- `.venv/bin/python -m mypy src/kraddr/geo` → 통과
+- `.venv/bin/python -m mypy src/kortravelgeo` → 통과
 - `.venv/bin/lint-imports` → Layered architecture kept
 
 **참고**:
@@ -2896,19 +2923,19 @@
 - 갱신: `README.md`, `AGENTS.md`, `SKILL.md`, `CHANGELOG.md`, `docs/architecture.md`, `docs/backend-package.md`, `docs/code-guide-for-beginners.md`, `docs/geocoding-readiness.md`, `docs/reflection-summary.md` 외 일괄 치환 대상 전부
 
 **결정**:
-- 식별자 통일: GitHub 저장소 = `python-kraddr-geo`, Python import = `kraddr.geo`, CLI = `kraddr-geo`, env prefix = `KRADDR_GEO_`, PostgreSQL DB = `kraddr_geo`, 프론트엔드 패키지 = `kraddr-geo-ui`
+- 식별자 통일: GitHub 저장소 = `kor-travel-geo`, Python import = `kortravelgeo`, CLI = `kor-travel-geo`, env prefix = `KTG_`, PostgreSQL DB = `kor_travel_geo`, 프론트엔드 패키지 = `kor-travel-geo-ui`
 - PC 개발은 WSL ext4 위에서, 작업 완료 시 NTFS로 카피. 데이터(`data/`)는 NTFS 측에만 두고 ext4 작업 디렉토리는 심볼릭 링크/절대경로로 참조
 - 테스트(특히 통합/e2e/전국 검증)는 NTFS의 `data/`를 reference로 삼는다
 
 **참고**: 이번 변경은 코드를 새로 만들기 전 사양 단계에서의 명확화이며, ADR은 추가하지 않음(향후 결정이 뒤집힐 때 ADR로 별도 기록).
 
-**다음**: T-001 (`pyproject.toml` 신규 작성). pyproject.toml의 `name = "python-kraddr-geo"`, scripts `kraddr-geo = "kraddr.geo.cli.main:app"`, importlinter `root_package = "kraddr.geo"`로 시작.
+**다음**: T-001 (`pyproject.toml` 신규 작성). pyproject.toml의 `name = "kor-travel-geo"`, scripts `kor-travel-geo = "kortravelgeo.cli.main:app"`, importlinter `root_package = "kortravelgeo"`로 시작.
 
 ---
 
 ## 2026-05-22 (human)
 
-**작업**: 신규 사양(`kraddr.geo` 패키지의 PostgreSQL+PostGIS 재구현 + `kraddr-geo-ui` 프론트엔드)을 master 문서에 반영
+**작업**: 신규 사양(`kortravelgeo` 패키지의 PostgreSQL+PostGIS 재구현 + `kor-travel-geo-ui` 프론트엔드)을 master 문서에 반영
 
 **변경 파일**:
 - 신규: `SKILL.md`, `CHANGELOG.md`
@@ -2922,7 +2949,7 @@
 - 라이브러리 API는 async-only (ADR-002)
 - 로더는 GDAL Python binding 사용, `ogr2ogr` subprocess 폐기 (ADR-005)
 
-**참고**: 첨부받은 두 docx 사양서가 우선이며, 기존 SpatiaLite 문서와 충돌하는 부분은 모두 PostgreSQL + PostGIS / `kraddr-geo` 기준으로 갱신함.
+**참고**: 첨부받은 두 docx 사양서가 우선이며, 기존 SpatiaLite 문서와 충돌하는 부분은 모두 PostgreSQL + PostGIS / `kor-travel-geo` 기준으로 갱신함.
 
 **다음**: T-001 (`pyproject.toml` 신규 작성).
 
@@ -2930,7 +2957,7 @@
 
 ## 2026-05-22 (human, 이전)
 
-**작업**: 기존 SpatiaLite 기반 구현(`kraddr.geo`)을 `v1` 브랜치로 이관하고 master를 문서·repo 설정만 남도록 정리
+**작업**: 기존 SpatiaLite 기반 구현(`kortravelgeo`)을 `v1` 브랜치로 이관하고 master를 문서·repo 설정만 남도록 정리
 
 **변경 파일**: 삭제 — `alembic/`, `alembic.ini`, `debug-ui/`, `pyproject.toml`, `src/`, `tests/`
 

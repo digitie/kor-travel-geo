@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from kraddr.geo.exceptions import LoaderError
-from kraddr.geo.loaders.text.parcel_link_loader import (
+from kortravelgeo.exceptions import LoaderError
+from kortravelgeo.loaders.text.parcel_link_loader import (
     discover_daily_lnbr_sources,
     discover_jibun_rnaddrkor_files,
     iter_daily_lnbr_rows,

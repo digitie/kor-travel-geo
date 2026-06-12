@@ -1,4 +1,4 @@
--- Generated mirror of src/kraddr/geo/infra/sql.py for review/DBA use.
+-- Generated mirror of src/kortravelgeo/infra/sql.py for review/DBA use.
 
 CREATE SCHEMA IF NOT EXISTS x_extension;
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA x_extension;

@@ -5,26 +5,26 @@ from typing import Any
 import httpx
 import pytest
 
-from kraddr.geo.api.app import create_app
-from kraddr.geo.api.deps import get_client
-from kraddr.geo.client import AsyncAddressClient
-from kraddr.geo.core.v2 import geocode_v2_from_v1, reverse_v2_from_v1
-from kraddr.geo.dto.address import AddressStructure, RefinedAddress
-from kraddr.geo.dto.common import Point, ServiceMeta
-from kraddr.geo.dto.geocode import (
+from kortravelgeo.api.app import create_app
+from kortravelgeo.api.deps import get_client
+from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.core.v2 import geocode_v2_from_v1, reverse_v2_from_v1
+from kortravelgeo.dto.address import AddressStructure, RefinedAddress
+from kortravelgeo.dto.common import Point, ServiceMeta
+from kortravelgeo.dto.geocode import (
     GeocodeExtension,
     GeocodeInput,
     GeocodeResponse,
     GeocodeResult,
     SppnMakareaContext,
 )
-from kraddr.geo.dto.reverse import (
+from kortravelgeo.dto.reverse import (
     ReverseExtension,
     ReverseInput,
     ReverseResponse,
     ReverseResultItem,
 )
-from kraddr.geo.dto.v2 import (
+from kortravelgeo.dto.v2 import (
     BBoxV2,
     CandidateV2,
     GeocodeV2Input,
@@ -38,12 +38,12 @@ from kraddr.geo.dto.v2 import (
     SearchV2Input,
     SearchV2Response,
 )
-from kraddr.geo.exceptions import InvalidAddressError
+from kortravelgeo.exceptions import InvalidAddressError
 
 
 def _v1_geocode_response(inp: GeocodeInput) -> GeocodeResponse:
     return GeocodeResponse(
-        service=ServiceMeta(name="kraddr-geo", operation="geocode"),
+        service=ServiceMeta(name="kor-travel-geo", operation="geocode"),
         status="OK",
         input=inp,
         refined=RefinedAddress(
@@ -94,8 +94,8 @@ async def test_async_client_geocode_wraps_internal_v1_geocode(
 async def test_async_client_geocode_can_add_geometry_without_replacing_point(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from kraddr.geo.core.protocols import GeometryLookup
-    from kraddr.geo.infra.geometry_repo import GeometryRepository
+    from kortravelgeo.core.protocols import GeometryLookup
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
 
     async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
         return _v1_geocode_response(GeocodeInput(address=address))
@@ -136,7 +136,7 @@ async def test_async_client_geocode_can_add_geometry_without_replacing_point(
 async def test_async_client_geocode_promotes_region_only_input_to_candidates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from kraddr.geo.infra.geometry_repo import GeometryRepository
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
 
     async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
         raise InvalidAddressError("address number could not be parsed")
@@ -178,8 +178,8 @@ async def test_async_client_geocode_promotes_region_only_input_to_candidates(
 async def test_async_client_geocode_promotes_road_name_only_to_line_geometry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from kraddr.geo.core.protocols import GeometryLookup
-    from kraddr.geo.infra.geometry_repo import GeometryRepository
+    from kortravelgeo.core.protocols import GeometryLookup
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
 
     async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
         raise InvalidAddressError("address number could not be parsed")
@@ -279,7 +279,7 @@ async def test_v2_geocode_route_uses_client_dependency() -> None:
 async def test_async_client_regions_within_radius_wraps_geometry_repo(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from kraddr.geo.infra.geometry_repo import GeometryRepository
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
 
     async def fake_regions_within_radius(
         self: GeometryRepository,
@@ -449,7 +449,7 @@ def test_geocode_v2_maps_external_provider_sources() -> None:
 def test_reverse_v2_promotes_distance_and_uses_distance_confidence() -> None:
     inp = ReverseInput(point=Point(x=127.036, y=37.501), radius_m=200)
     response = ReverseResponse(
-        service=ServiceMeta(name="kraddr-geo", operation="reverse_geocode"),
+        service=ServiceMeta(name="kor-travel-geo", operation="reverse_geocode"),
         status="OK",
         input=inp,
         result=(
@@ -478,7 +478,7 @@ def test_reverse_v2_promotes_distance_and_uses_distance_confidence() -> None:
 def test_reverse_v2_promotes_sppn_extension_to_candidate() -> None:
     inp = ReverseInput(point=Point(x=127.1, y=36.6), radius_m=200)
     response = ReverseResponse(
-        service=ServiceMeta(name="kraddr-geo", operation="reverse_geocode"),
+        service=ServiceMeta(name="kor-travel-geo", operation="reverse_geocode"),
         status="OK",
         input=inp,
         x_extension=ReverseExtension(

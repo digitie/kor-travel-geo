@@ -4,15 +4,15 @@ import inspect
 import json
 from datetime import UTC, datetime
 
-from kraddr.geo.core.redaction import REDACTED, canonical_payload_hash, redact_audit_payload
-from kraddr.geo.dto.admin import (
+from kortravelgeo.core.redaction import REDACTED, canonical_payload_hash, redact_audit_payload
+from kortravelgeo.dto.admin import (
     AuditEvent,
     MaintenanceWindowCreate,
     OpsArtifact,
     TableStatsSnapshot,
 )
-from kraddr.geo.infra import admin_repo
-from kraddr.geo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
+from kortravelgeo.infra import admin_repo
+from kortravelgeo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
 
 
 def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> None:
@@ -47,7 +47,7 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
 def test_audit_redaction_never_keeps_secrets_dsn_tokens_or_raw_address() -> None:
     payload = {
         "api_key": "secret-key",
-        "pg_dsn": "postgresql://user:password@localhost/kraddr_geo",
+        "pg_dsn": "postgresql://user:password@localhost/kor_travel_geo",
         "download_token": "token-value",
         "address": "서울특별시 강남구 테헤란로 152",
         "nested": {"query": "부산광역시 해운대구 우동", "callback_secret": "hook"},
@@ -84,7 +84,7 @@ def test_ops_dtos_validate_core_contracts() -> None:
     maintenance = MaintenanceWindowCreate(
         kind="restore",
         reason="복원 dry-run 검증",
-        confirmation="RESTORE kraddr_geo",
+        confirmation="RESTORE kor_travel_geo",
     )
     assert maintenance.blocks == {}
 
@@ -145,8 +145,8 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
 
 
 def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
-    from kraddr.geo.api import app
-    from kraddr.geo.infra import backup
+    from kortravelgeo.api import app
+    from kortravelgeo.infra import backup
 
     app_source = inspect.getsource(app._register_default_handlers)
     restore_source = inspect.getsource(backup.run_restore_job)
@@ -169,7 +169,7 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
 
 
 def test_table_stats_scheduler_is_opt_in_and_uses_settings() -> None:
-    from kraddr.geo.api import app
+    from kortravelgeo.api import app
 
     module_source = inspect.getsource(app)
     scheduler_source = inspect.getsource(app._start_table_stats_capture_scheduler)

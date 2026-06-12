@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 
-from kraddr.geo.loaders.text import locsum_loader
+from kortravelgeo.loaders.text import locsum_loader
 
 
 def test_locsum_upsert_deduplicates_staging_rows_before_on_conflict() -> None:

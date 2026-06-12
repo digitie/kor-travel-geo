@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from alembic import op
 
-from kraddr.geo.infra.sql import iter_sql_statements
+from kortravelgeo.infra.sql import iter_sql_statements
 
 revision = "0013_t061_text_search_mv"
 down_revision = "0012_t053_consistency_samples"

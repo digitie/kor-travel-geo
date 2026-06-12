@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from kraddr.geo.exceptions import LoaderError
-from kraddr.geo.loaders.text.daily_juso_loader import (
+from kortravelgeo.exceptions import LoaderError
+from kortravelgeo.loaders.text.daily_juso_loader import (
     discover_daily_juso_sources,
     infer_daily_mvmn_de,
     is_no_data_source,

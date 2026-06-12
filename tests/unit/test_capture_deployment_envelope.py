@@ -31,7 +31,7 @@ def test_default_output_dir_uses_safe_label_and_date() -> None:
 
 
 def test_run_command_marks_missing_executable() -> None:
-    result = run_command(CommandSpec("missing", ("kraddr-geo-missing-command",)))
+    result = run_command(CommandSpec("missing", ("kor-travel-geo-missing-command",)))
 
     assert result.available is False
     assert result.returncode is None

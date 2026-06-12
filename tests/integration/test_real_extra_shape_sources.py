@@ -8,16 +8,16 @@ from pathlib import Path
 
 import pytest
 
-from kraddr.geo.loaders.building_shape_bundle import compare_building_shape_bundle
-from kraddr.geo.loaders.extra_shape_layers import (
+from kortravelgeo.loaders.building_shape_bundle import compare_building_shape_bundle
+from kortravelgeo.loaders.extra_shape_layers import (
     compare_detail_dong_shape_bundle,
     compare_zone_shape_bundle,
 )
 
 DATA_ROOT = Path("data/juso")
 ALT_DATA_ROOTS = (
-    Path("/mnt/f/dev/python-kraddr-geo/data/juso"),
-    Path("/home/digitie/kraddr-geo-data/juso"),
+    Path("/mnt/f/dev/kor-travel-geo/data/juso"),
+    Path("/home/digitie/kor-travel-geo-data/juso"),
 )
 
 SHAPE_TYPES = {
@@ -141,8 +141,8 @@ def test_actual_building_shape_bundle_sejong_key_overlap_is_not_simple_duplicate
 
 
 @pytest.mark.skipif(
-    getenv("KRADDR_GEO_SLOW_REAL_DATA") != "1",
-    reason="set KRADDR_GEO_SLOW_REAL_DATA=1 to scan the large Gyeongnam DBFs",
+    getenv("KTG_SLOW_REAL_DATA") != "1",
+    reason="set KTG_SLOW_REAL_DATA=1 to scan the large Gyeongnam DBFs",
 )
 def test_actual_building_shape_bundle_gyeongnam_key_overlap_slow() -> None:
     comparison = compare_building_shape_bundle(
@@ -163,8 +163,8 @@ def test_actual_building_shape_bundle_gyeongnam_key_overlap_slow() -> None:
 
 
 @pytest.mark.skipif(
-    getenv("KRADDR_GEO_SLOW_REAL_DATA") != "1",
-    reason="set KRADDR_GEO_SLOW_REAL_DATA=1 to scan the large Gyeongnam detail/zone DBFs",
+    getenv("KTG_SLOW_REAL_DATA") != "1",
+    reason="set KTG_SLOW_REAL_DATA=1 to scan the large Gyeongnam detail/zone DBFs",
 )
 def test_actual_detail_and_zone_gyeongnam_key_overlap_slow() -> None:
     detail = compare_detail_dong_shape_bundle(

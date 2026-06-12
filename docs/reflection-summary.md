@@ -17,17 +17,17 @@
 
 | 영역 | 이전 (v1) | 신규 (master, 첨부 사양 + 사용자 추가 명시) |
 |------|-----------|---------------------------------------------|
-| GitHub 저장소 이름 | `python-kraddr-geo` | 동일 (`python-kraddr-geo`) |
-| Python 패키지 | `kraddr.geo` | 동일 (`kraddr.geo`) |
-| 백엔드 CLI / env / DB | `kraddr.geo` 라이브러리 직접 사용 | CLI `kraddr-geo`, env `KRADDR_GEO_*`, DB `kraddr_geo` |
-| 프론트엔드 | monorepo `debug-ui/` | 별도 Node.js 패키지 `kraddr-geo-ui` |
+| GitHub 저장소 이름 | `kor-travel-geo` | 동일 (`kor-travel-geo`) |
+| Python 패키지 | `kortravelgeo` | 동일 (`kortravelgeo`) |
+| 백엔드 CLI / env / DB | `kortravelgeo` 라이브러리 직접 사용 | CLI `kor-travel-geo`, env `KTG_*`, DB `kor_travel_geo` |
+| 프론트엔드 | monorepo `debug-ui/` | 별도 Node.js 패키지 `kor-travel-geo-ui` |
 | 저장소 | SQLite + SpatiaLite | PostgreSQL 16 + PostGIS 3.4 |
 | 라이브러리 진입점 | 동기 `SpatialiteAddressStore` (+ async 보조) | async-only `AsyncAddressClient` (ADR-002) |
 | 응답 구조 | 자체 DTO | vworld 호환 + `x_extension` (ADR-003) |
 | ORM | SQLAlchemy + 일반 model | SQLAlchemy 2 async + raw SQL repository (ADR-004) |
 | 로더 | `ogr2ogr` subprocess | GDAL Python binding(in-process), CP949 명시, 진행률 callback (ADR-005) |
 | 증분 적재 | 매니페스트 부분 지원 | `MVM_RES_CD` 기반 INSERT/UPDATE/DELETE 머지 |
-| UI | monorepo `debug-ui/` (FastAPI + Next.js) | 별도 Node.js 패키지 `kraddr-geo-ui` (Next.js 16 + Tailwind + MapLibre GL JS + VWorld WMTS) |
+| UI | monorepo `debug-ui/` (FastAPI + Next.js) | 별도 Node.js 패키지 `kor-travel-geo-ui` (Next.js 16 + Tailwind + MapLibre GL JS + VWorld WMTS) |
 | UI 인증 | 단순 노출 | 내부망 전용, 애플리케이션 인증 없음 (ADR-013) |
 | 적재 워크플로 | 단일 폼 | 2단계(업로드 완료 → 일괄 처리), `Semaphore(1)` 직렬 큐 (ADR-006) |
 
@@ -55,10 +55,10 @@
 | 파일 | 갱신 요지 |
 |------|----------|
 | `AGENTS.md` | 새 패키지/계층/DO NOT 룰 반영, 신규 문서로의 진입점 추가 |
-| `README.md` | `kraddr-geo` 빠른 시작, 진입점, 디렉토리 한 줄 설명, ADR 요약, 문서 지도 |
+| `README.md` | `kor-travel-geo` 빠른 시작, 진입점, 디렉토리 한 줄 설명, ADR 요약, 문서 지도 |
 | `docs/address-db-schema.md` | PostgreSQL + PostGIS 11개 마스터 + 보조 + MV 요약. 세부는 data-model로 위임 |
 | `docs/code-guide-for-beginners.md` | 새 디렉토리(`dto/core/infra/client/api/cli`), 프론트엔드 별도 패키지, 작업 사이클 |
-| `docs/geocoding-readiness.md` | PostgreSQL/PostGIS readiness 체크리스트, GDAL/CP949 함정, `kraddr-geo validate` |
+| `docs/geocoding-readiness.md` | PostgreSQL/PostGIS readiness 체크리스트, GDAL/CP949 함정, `ktgctl validate` |
 | `docs/reverse-geocoding.md` | `AsyncAddressClient.reverse`, ReverseRepo Protocol, 출입구 hit + 동 polygon fallback, ZipSource 4단계 |
 | `docs/spatialite-vworld-implementation.md` | 파일명만 유지, 내용은 PostgreSQL + PostGIS / vworld 호환 구현으로 전환 (ADR-001 참조) |
 
@@ -72,9 +72,9 @@
 
 다음 항목은 첨부 사양서에 없었지만 별도 지시로 master에 명시되었다:
 
-- **개발 환경**: ADR-041 이후 PC 개발의 Git source of truth는 NTFS main repo와 에이전트별 worktree(`/mnt/f/dev/python-kraddr-geo*`)로 둔다. 테스트와 장기 실행은 해당 worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행한다. `AGENTS.md`, `SKILL.md`, `docs/architecture.md`, `docs/dev-environment.md`에 정책 섹션이 들어간다.
+- **개발 환경**: ADR-041 이후 PC 개발의 Git source of truth는 NTFS main repo와 에이전트별 worktree(`/mnt/f/dev/kor-travel-geo*`)로 둔다. 테스트와 장기 실행은 해당 worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행한다. `AGENTS.md`, `SKILL.md`, `docs/architecture.md`, `docs/dev-environment.md`에 정책 섹션이 들어간다.
 - **데이터 위치**: 도로명주소 ZIP/SHP, postal TXT 등은 NTFS의 프로젝트 디렉토리 `data/` 아래에 둔다. ext4 테스트 미러에서는 심볼릭 링크 또는 절대경로로 참조한다.
-- **식별자 통일**: GitHub 저장소 = `python-kraddr-geo`, Python import = `kraddr.geo`, CLI = `kraddr-geo`, env prefix = `KRADDR_GEO_`, PostgreSQL DB = `kraddr_geo`, 프론트엔드 패키지 = `kraddr-geo-ui`. `AGENTS.md`/`SKILL.md`의 식별자 표에 기록되어 혼동을 막는다.
+- **식별자 통일**: GitHub 저장소 = `kor-travel-geo`, Python import = `kortravelgeo`, CLI = `kor-travel-geo`, env prefix = `KTG_`, PostgreSQL DB = `kor_travel_geo`, 프론트엔드 패키지 = `kor-travel-geo-ui`. `AGENTS.md`/`SKILL.md`의 식별자 표에 기록되어 혼동을 막는다.
 
 ## 첨부 사양에서 다루지 않은 항목 (master에 남긴 결정)
 

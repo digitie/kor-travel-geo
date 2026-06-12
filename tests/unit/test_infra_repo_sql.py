@@ -5,12 +5,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from kraddr.geo.api import _jobs
-from kraddr.geo.core.consistency_definitions import CASE_DEFINITIONS
-from kraddr.geo.core.normalize import AddrParts
-from kraddr.geo.dto.admin import ConsistencyCase, ConsistencyReport
-from kraddr.geo.exceptions import InvalidInputError
-from kraddr.geo.infra import (
+from kortravelgeo.api import _jobs
+from kortravelgeo.core.consistency_definitions import CASE_DEFINITIONS
+from kortravelgeo.core.normalize import AddrParts
+from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
+from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra import (
     admin_repo,
     geocode_repo,
     geometry_repo,
@@ -19,8 +19,8 @@ from kraddr.geo.infra import (
     search_repo,
     zip_repo,
 )
-from kraddr.geo.infra import sql as infra_sql
-from kraddr.geo.loaders.consistency import CASE_SQL, DEFAULT_CASES
+from kortravelgeo.infra import sql as infra_sql
+from kortravelgeo.loaders.consistency import CASE_SQL, DEFAULT_CASES
 
 
 def test_reverse_sql_transforms_input_once_and_keeps_indexed_column_raw() -> None:
@@ -278,7 +278,7 @@ def test_admin_repo_exposes_table_cache_log_metric_queries() -> None:
 
 
 def test_admin_upload_helpers_prevent_path_escape(tmp_path) -> None:
-    from kraddr.geo.api.routers import admin
+    from kortravelgeo.api.routers import admin
 
     assert admin._safe_filename("../../서울.zip") == "서울.zip"
     assert "/" not in admin._safe_path_token("../../../etc/cron.d")

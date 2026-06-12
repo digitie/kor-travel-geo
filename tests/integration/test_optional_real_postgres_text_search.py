@@ -6,9 +6,9 @@ from typing import Any
 import pytest
 from sqlalchemy import text
 
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.infra.geocode_repo import _FUZZY_ROADS
-from kraddr.geo.settings import Settings
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.infra.geocode_repo import _FUZZY_ROADS
+from kortravelgeo.settings import Settings
 
 _LEGACY_FUZZY_ROADS = text(
     """
@@ -33,9 +33,9 @@ SELECT bd_mgt_sn,
 
 @pytest.mark.asyncio
 async def test_real_postgres_text_search_mv_matches_legacy_fuzzy_order() -> None:
-    dsn = os.getenv("KRADDR_GEO_TEST_PG_DSN")
+    dsn = os.getenv("KTG_TEST_PG_DSN")
     if not dsn:
-        pytest.skip("set KRADDR_GEO_TEST_PG_DSN to run actual PostgreSQL text-search parity")
+        pytest.skip("set KTG_TEST_PG_DSN to run actual PostgreSQL text-search parity")
 
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:

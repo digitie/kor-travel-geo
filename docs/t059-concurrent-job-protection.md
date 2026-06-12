@@ -8,7 +8,7 @@
 
 ## 1차 구현 요약
 
-- `src/kraddr/geo/infra/concurrency.py`를 추가해 `AdvisoryLockNamespace`, `AdvisoryLockKey`, `ConcurrentExecutionError(E0409/HTTP 409)`, `cross_process_lock()`을 표준 helper로 둔다.
+- `src/kortravelgeo/infra/concurrency.py`를 추가해 `AdvisoryLockNamespace`, `AdvisoryLockKey`, `ConcurrentExecutionError(E0409/HTTP 409)`, `cross_process_lock()`을 표준 helper로 둔다.
 - CLI 직접 실행 경로는 같은 helper를 사용해 중복 실행 시 exit code 2로 fail-fast한다.
 - FastAPI `JobQueue` handler 등록도 같은 lock key를 공유하므로 CLI와 API job이 같은 자원을 동시에 만지면 두 번째 작업이 `E0409`로 실패한다.
 - 실제 Docker PostgreSQL에서 같은 `MV_REFRESH` key를 두 connection으로 잡아 두 번째 lock이 `E0409/409`로 막히는 smoke를 확인했다.
@@ -33,17 +33,17 @@
 
 | 경로 | 위험 | 우선순위 |
 |------|------|----------|
-| `kraddr-geo init-db` 중복 실행 | DDL 중복 → 부분 실패 가능 | 중 |
-| `kraddr-geo load all-sidos` 중복 실행 | 같은 batch가 두 process에서 동시 시작 | 높음 |
-| `kraddr-geo load full-set` 중복 실행 | source set discover + plan + submit이 두 process | 높음 |
-| `kraddr-geo load juso/locsum/navi/...` 단일 source 중복 실행 | 같은 table 동시 적재 → PK 충돌 가능 | 높음 |
-| `kraddr-geo load daily-juso` 중복 실행 | 같은 ZIP을 두 번 → manifest 충돌 | 중 |
-| `kraddr-geo refresh mv [--swap]` 중복 실행 | MV swap window 충돌 | 높음 |
-| `kraddr-geo backup create` 중복 실행 | 같은 destination에 동시 dump | 높음 |
-| `kraddr-geo restore create` 중복 실행 | 같은 target DB에 동시 복원 | 높음 |
-| `kraddr-geo validate consistency` 중복 실행 | 같은 scope의 report가 두 개 동시 생성 | 낮음 |
-| `kraddr-geo benchmark queries` 중복 실행 | DB 부하 ↑, 결과 신뢰성 ↓ | 낮음 |
-| `kraddr-geo uploads cleanup` 중복 실행 | stale upload set 삭제 race | 중 |
+| `ktgctl init-db` 중복 실행 | DDL 중복 → 부분 실패 가능 | 중 |
+| `ktgctl load all-sidos` 중복 실행 | 같은 batch가 두 process에서 동시 시작 | 높음 |
+| `ktgctl load full-set` 중복 실행 | source set discover + plan + submit이 두 process | 높음 |
+| `ktgctl load juso/locsum/navi/...` 단일 source 중복 실행 | 같은 table 동시 적재 → PK 충돌 가능 | 높음 |
+| `ktgctl load daily-juso` 중복 실행 | 같은 ZIP을 두 번 → manifest 충돌 | 중 |
+| `ktgctl refresh mv [--swap]` 중복 실행 | MV swap window 충돌 | 높음 |
+| `ktgctl backup create` 중복 실행 | 같은 destination에 동시 dump | 높음 |
+| `ktgctl restore create` 중복 실행 | 같은 target DB에 동시 복원 | 높음 |
+| `ktgctl validate consistency` 중복 실행 | 같은 scope의 report가 두 개 동시 생성 | 낮음 |
+| `ktgctl benchmark queries` 중복 실행 | DB 부하 ↑, 결과 신뢰성 ↓ | 낮음 |
+| `ktgctl uploads cleanup` 중복 실행 | stale upload set 삭제 race | 중 |
 
 `load_jobs` 영속 큐가 일부를 직렬화하지만, CLI는 큐를 거치지 않고 직접 loader를 호출하는 경우도 있어 cross-process 보호가 필요하다.
 
@@ -249,14 +249,14 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 - `wait` 모드는 1차에서 사용하지 않아 제거했다. 모든 호출부는 fail-fast이며, 큐 worker를 오래 막지 않는다.
 - smoke(WSL Docker PostGIS): 같은 `MV_REFRESH` key를 두 connection에서 획득 시도 → 두 번째 `ConcurrentExecutionError(E0409/409)`.
 - targeted gate:
-  - `ruff check src/kraddr/geo/infra/concurrency.py src/kraddr/geo/cli/main.py src/kraddr/geo/api/app.py tests/unit/test_concurrency.py tests/unit/test_api_app_contract.py`
+  - `ruff check src/kortravelgeo/infra/concurrency.py src/kortravelgeo/cli/main.py src/kortravelgeo/api/app.py tests/unit/test_concurrency.py tests/unit/test_api_app_contract.py`
   - `pytest tests/unit/test_api_app_contract.py tests/unit/test_concurrency.py -q` → `6 passed`
   - `pytest tests/unit/test_concurrency.py tests/unit/test_client_submit_load_batch.py tests/unit/test_backup_restore.py -q` → `23 passed`
-  - `mypy --no-incremental src/kraddr/geo/infra/concurrency.py src/kraddr/geo/cli/main.py src/kraddr/geo/api/app.py`
+  - `mypy --no-incremental src/kortravelgeo/infra/concurrency.py src/kortravelgeo/cli/main.py src/kortravelgeo/api/app.py`
 - full backend gate:
   - `ruff check .`
   - `pytest -q` → `261 passed, 8 skipped`
-  - `mypy --no-incremental src/kraddr/geo`
+  - `mypy --no-incremental src/kortravelgeo`
   - `lint-imports`
 - 후속 통합 테스트 후보:
   - 두 CLI shell에서 같은 `load juso` 동시 실행 → 두 번째 fail-fast.
@@ -266,7 +266,7 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 
 ## 운영 가이드
 
-- 운영자가 "왜 fail-fast?" 보면 `kraddr-geo jobs running` 또는 `/admin/load`에서 진행 중 작업 확인 후 결정.
+- 운영자가 "왜 fail-fast?" 보면 `ktgctl jobs running` 또는 `/admin/load`에서 진행 중 작업 확인 후 결정.
 - API queue handler에서 lock 충돌이 나면 해당 job은 `failed`가 된다. 일반 loader 실패와 구분할 수 있게 `log_tail`에 `current_stage='lock_conflict'`, `message='E0409: ...'` progress event를 먼저 남긴다. 자동 재큐/재시도는 이번 1차 범위 밖이다.
 - advisory lock은 connection이 살아 있는 동안만 유지. process kill -9 시 connection 종료 → lock 자동 해제.
 - 단, connection이 LB/network 단절로 살아 있는 것처럼 보이고 실제로는 idle인 경우 lock이 stale될 수 있음. PostgreSQL `tcp_keepalives_*` 설정으로 detect.

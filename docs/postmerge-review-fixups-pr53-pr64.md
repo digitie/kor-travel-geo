@@ -47,7 +47,7 @@
 
 ### PR #59
 
-- reverse 좌표 bounds 오류를 `PydanticCustomError("kraddr_geo.coordinate_bounds", ...)`로 바꿨다.
+- reverse 좌표 bounds 오류를 `PydanticCustomError("kor_travel_geo.coordinate_bounds", ...)`로 바꿨다.
 - API exception handler는 더 이상 `str(exc)` 전체 문자열 매칭으로 좌표 오류를 판별하지 않고, `exc.errors()`의 structured `type`을 확인한다.
 - 일반 Pydantic validation error는 계속 HTTP 400 `E0100`, 좌표 bounds는 HTTP 400 `E0102`로 매핑되는 테스트를 추가했다.
 
@@ -77,9 +77,9 @@
 
 ## 검증
 
-- `/home/digitie/dev/python-kraddr-geo/.venv/bin/ruff check .` → 통과.
-- `PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/python-kraddr-geo/.venv/bin/mypy src/kraddr/geo` → 통과.
-- `PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/python-kraddr-geo/.venv/bin/lint-imports` → Layered architecture kept.
-- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/python-kraddr-geo/.venv/bin/python -m pytest -q` → 216 passed, 6 skipped, 3 warnings.
+- `/home/digitie/dev/kor-travel-geo/.venv/bin/ruff check .` → 통과.
+- `PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/kor-travel-geo/.venv/bin/mypy src/kortravelgeo` → 통과.
+- `PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/kor-travel-geo/.venv/bin/lint-imports` → Layered architecture kept.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp PYTHONPATH=/home/digitie/dev/geo-codex/src:/home/digitie/dev/geo-codex /home/digitie/dev/kor-travel-geo/.venv/bin/python -m pytest -q` → 216 passed, 6 skipped, 3 warnings.
 - `git diff --check` → 통과.
 - `codegraph sync` → 통과.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 
-from kraddr.geo.loaders import postload
+from kortravelgeo.loaders import postload
 
 
 def test_resolve_text_geometry_links_uses_postload_timeout() -> None:

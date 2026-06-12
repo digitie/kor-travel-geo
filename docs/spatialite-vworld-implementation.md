@@ -2,7 +2,7 @@
 
 > **이름 보존 안내**: 본 파일은 이전(v1) `SpatiaLite + vworld 호환` 구현 계획 문서의 자리를 그대로 잇는다. `main`에서는 PostgreSQL + PostGIS로 전환했으므로 본문도 새 사양에 맞춰 갱신했다. 이전 SpatiaLite 기반 계획은 `v1` 브랜치에서 동일 파일명으로 확인할 수 있다(ADR-001).
 
-본 문서는 `kraddr-geo`이 vworld OpenAPI와 동일한 응답 구조를 유지하면서 1차 데이터를 PostgreSQL + PostGIS에서 직접 처리하는 방식을 정리한다.
+본 문서는 `kor-travel-geo`이 vworld OpenAPI와 동일한 응답 구조를 유지하면서 1차 데이터를 PostgreSQL + PostGIS에서 직접 처리하는 방식을 정리한다.
 
 ## 데이터 우선순위
 
@@ -71,7 +71,7 @@ CREATE INDEX idx_juso_text_rn_trgm
 
 ## 적재 후 최적화
 
-`kraddr-geo refresh mv`(`--swap` 옵션으로 shadow 빌드 후 RENAME swap)는 평시 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`(+ helper `mv_geocode_text_search` 동세대 갱신)을 수행한다. `VACUUM (ANALYZE)`는 별도 CLI 서브커맨드가 아니라 DB 측 수동 유지보수 단계이므로, 풀로드/대량 변동분 직후 야간 cron에서 `psql`로 직접 실행한다(예: `VACUUM (ANALYZE) tl_juso_text;`, `ANALYZE mv_geocode_target;`). `maintenance_work_mem`은 트랜잭션 단위로만 상승(`SET LOCAL`).
+`ktgctl refresh mv`(`--swap` 옵션으로 shadow 빌드 후 RENAME swap)는 평시 `REFRESH MATERIALIZED VIEW CONCURRENTLY mv_geocode_target`(+ helper `mv_geocode_text_search` 동세대 갱신)을 수행한다. `VACUUM (ANALYZE)`는 별도 CLI 서브커맨드가 아니라 DB 측 수동 유지보수 단계이므로, 풀로드/대량 변동분 직후 야간 cron에서 `psql`로 직접 실행한다(예: `VACUUM (ANALYZE) tl_juso_text;`, `ANALYZE mv_geocode_target;`). `maintenance_work_mem`은 트랜잭션 단위로만 상승(`SET LOCAL`).
 
 ## 디버거에서 운영까지 동일 환경
 

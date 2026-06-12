@@ -118,7 +118,7 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
 
 ### B4.1 새 세션의 첫 5분 (총 10분 안에 컨텍스트 확보)
 
-작업 디렉터리는 에이전트별 NTFS 고정 worktree를 우선한다. ChatGPT Codex는 `/mnt/f/dev/python-kraddr-geo-codex`, Claude Code는 `/mnt/f/dev/python-kraddr-geo-claude`, Google Antigravity 2.0은 `/mnt/f/dev/python-kraddr-geo-antigravity`를 사용한다. worktree가 없다면 `docs/dev-environment.md` §1.1 절차로 생성하고, `.codegraph/`가 없다면 해당 worktree에서 `codegraph init -i`를 최초 1회 실행한다. Git metadata는 Windows Git 기준(`F:/dev/...`)으로 유지하고, WSL `git` 편의를 위해 `.git`/`gitdir`을 `/mnt/f/...`로 고치지 않는다. NTFS `/mnt` 경로에서는 CodeGraph live watch가 비활성화될 수 있으므로 새 작업 branch를 만든 직후 `codegraph sync`와 `codegraph status`로 인덱스를 맞춘다. 테스트와 장기 실행은 worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행하며, 미러에서는 commit/push하지 않는다. PostgreSQL/RustFS 검증은 이 저장소가 직접 구동하지 않고 `KRADDR_GEO_PG_DSN`, `KRADDR_GEO_RUSTFS_*`가 가리키는 이미 동작 중인 DB와 bucket을 사용한다. 미러 셋업·검증 루프·반복 함정(Windows npm shim, Windows Temp) 해결을 단계별로 따라하려면 `docs/agent-workflow.md` 런북을 보고, 미러 셸에서는 `source scripts/agent_env.sh`를 먼저 실행한다.
+작업 디렉터리는 에이전트별 NTFS 고정 worktree를 우선한다. ChatGPT Codex는 `/mnt/f/dev/kor-travel-geo-codex`, Claude Code는 `/mnt/f/dev/kor-travel-geo-claude`, Google Antigravity 2.0은 `/mnt/f/dev/kor-travel-geo-antigravity`를 사용한다. worktree가 없다면 `docs/dev-environment.md` §1.1 절차로 생성하고, `.codegraph/`가 없다면 해당 worktree에서 `codegraph init -i`를 최초 1회 실행한다. Git metadata는 Windows Git 기준(`F:/dev/...`)으로 유지하고, WSL `git` 편의를 위해 `.git`/`gitdir`을 `/mnt/f/...`로 고치지 않는다. NTFS `/mnt` 경로에서는 CodeGraph live watch가 비활성화될 수 있으므로 새 작업 branch를 만든 직후 `codegraph sync`와 `codegraph status`로 인덱스를 맞춘다. 테스트와 장기 실행은 worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행하며, 미러에서는 commit/push하지 않는다. PostgreSQL/RustFS 검증은 이 저장소가 직접 구동하지 않고 `KTG_PG_DSN`, `KTG_RUSTFS_*`가 가리키는 이미 동작 중인 DB와 bucket을 사용한다. 미러 셋업·검증 루프·반복 함정(Windows npm shim, Windows Temp) 해결을 단계별로 따라하려면 `docs/agent-workflow.md` 런북을 보고, 미러 셸에서는 `source scripts/agent_env.sh`를 먼저 실행한다.
 
 | 순서 | 행동 | 시간 |
 |------|------|------|
@@ -129,7 +129,7 @@ README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
 | 5 | `docs/journal.md` 최근 3 엔트리 | 2분 |
 | 6 | `docs/tasks.md`에서 resume이 가리키는 항목 확인 | 1분 |
 
-컴포넌트 작업(`kraddr-geo-ui/components/**`, App Router client component, 지도 wrapper, 공용 UI primitive)은 수정 전에 CodeGraph MCP의 `codegraph_explore`로 영향도를 먼저 확인한다. 확인 결과에는 호출자, 관련 테스트, props/type 공유 지점, `maplibre-vworld-js`와의 책임 경계를 포함한다. Codex Desktop 재시작 전처럼 MCP 도구가 아직 노출되지 않은 세션에서는 `codegraph sync`, `codegraph status`, `codegraph context <task>` 또는 `codegraph impact <symbol>` 결과로 임시 확인하고, 그 사유를 PR 설명이나 `docs/journal.md`에 남긴다.
+컴포넌트 작업(`kor-travel-geo-ui/components/**`, App Router client component, 지도 wrapper, 공용 UI primitive)은 수정 전에 CodeGraph MCP의 `codegraph_explore`로 영향도를 먼저 확인한다. 확인 결과에는 호출자, 관련 테스트, props/type 공유 지점, `maplibre-vworld-js`와의 책임 경계를 포함한다. Codex Desktop 재시작 전처럼 MCP 도구가 아직 노출되지 않은 세션에서는 `codegraph sync`, `codegraph status`, `codegraph context <task>` 또는 `codegraph impact <symbol>` 결과로 임시 확인하고, 그 사유를 PR 설명이나 `docs/journal.md`에 남긴다.
 
 반복적으로 재현되는 작업 실패 패턴(예: NTFS worktree에서 WSL `git` 실패, `exec_command`의 `CreateProcess ... os error 2`, NTFS 경로에서 `apply_patch` 실패, inline rewrite의 escape 손상)은 [`docs/agent-failure-patterns.md`](./agent-failure-patterns.md)에 별도로 정리한다. 새 세션에서 같은 증상이 보이면 프로젝트 버그로 보기 전에 이 문서를 먼저 확인한다.
 

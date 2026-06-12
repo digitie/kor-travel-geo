@@ -1,7 +1,7 @@
 # T-068 Consistency UI 프리즈 재발 수정과 가독성 개선
 
 - 상태: 완료
-- 관련 UI: `kraddr-geo-ui` `/admin/consistency`, `/admin/tables`, `/admin/backups`
+- 관련 UI: `kor-travel-geo-ui` `/admin/consistency`, `/admin/tables`, `/admin/backups`
 
 ## 배경
 

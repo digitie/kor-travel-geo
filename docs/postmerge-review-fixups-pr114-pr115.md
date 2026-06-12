@@ -13,8 +13,8 @@
 
 ## 확인 방법
 
-- `gh pr view <번호> --repo digitie/python-kraddr-geo --json comments,reviews,latestReviews,statusCheckRollup`
-- `gh-address-comments`의 `fetch_comments.py`를 `digitie/python-kraddr-geo`와 PR 번호로 직접 호출해 `conversation_comments`, `reviews`, `review_threads`를 모두 확인했다.
+- `gh pr view <번호> --repo digitie/kor-travel-geo --json comments,reviews,latestReviews,statusCheckRollup`
+- `gh-address-comments`의 `fetch_comments.py`를 `digitie/kor-travel-geo`와 PR 번호로 직접 호출해 `conversation_comments`, `reviews`, `review_threads`를 모두 확인했다.
 
 ## 반영
 
@@ -22,13 +22,13 @@
 
 - `tests/integration/test_optional_real_postgres_regions.py`
 
-새 테스트는 `KRADDR_GEO_TEST_PG_DSN`이 설정된 실제 DB에서 `tl_scco_emd` 도형의 `ST_PointOnSurface` 좌표를 뽑고, `AsyncAddressClient.regions_within_radius()`가 `sido`/`sigungu`/`emd` contains 후보를 반환하는지 검증한다. 쓰기 작업은 하지 않는다.
+새 테스트는 `KTG_TEST_PG_DSN`이 설정된 실제 DB에서 `tl_scco_emd` 도형의 `ST_PointOnSurface` 좌표를 뽑고, `AsyncAddressClient.regions_within_radius()`가 `sido`/`sigungu`/`emd` contains 후보를 반환하는지 검증한다. 쓰기 작업은 하지 않는다.
 
 ## 검증
 
 - ext4 테스트 미러, DSN 미설정: `python -m pytest tests/integration/test_optional_real_postgres_regions.py -q` → `1 skipped`
-- ext4 테스트 미러, T-027 최종 DB: `KRADDR_GEO_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kraddr_geo python -m pytest tests/integration/test_optional_real_postgres_regions.py -q` → `1 passed`
+- ext4 테스트 미러, T-027 최종 DB: `KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo python -m pytest tests/integration/test_optional_real_postgres_regions.py -q` → `1 passed`
 - ext4 테스트 미러: `python -m ruff check .` → 통과
-- ext4 테스트 미러: `python -m mypy src/kraddr/geo` → 통과
+- ext4 테스트 미러: `python -m mypy src/kortravelgeo` → 통과
 - ext4 테스트 미러: `lint-imports` → 통과
 - ext4 테스트 미러: `python -m pytest -q` → `294 passed, 9 skipped`

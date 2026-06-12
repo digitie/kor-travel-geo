@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from kraddr.geo.loaders.text.common import TextSource, detect_encoding, iter_pipe_rows
+from kortravelgeo.loaders.text.common import TextSource, detect_encoding, iter_pipe_rows
 
 
 def test_detect_encoding_prefers_cp949_but_falls_back_to_utf8(tmp_path) -> None:

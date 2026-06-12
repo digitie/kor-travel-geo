@@ -6,8 +6,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from kraddr.geo.api.app import _install_admission_control
-from kraddr.geo.settings import Settings
+from kortravelgeo.api.app import _install_admission_control
+from kortravelgeo.settings import Settings
 
 
 @pytest.mark.asyncio

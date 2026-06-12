@@ -8,7 +8,7 @@ repos:
     rev: v1.13.0
     hooks:
       - id: mypy
-        args: ["src/kraddr/geo", "scripts/export_openapi.py"]
+        args: ["src/kortravelgeo", "scripts/export_openapi.py"]
         additional_dependencies:
           - pydantic>=2.9
           - pydantic-settings>=2.5

@@ -18,7 +18,7 @@ T-037에서는 운영 테이블에 직접 append하지 않고 임시 staging tab
 
 `TL_SPBD_BULD`만 staging table 경로로 분기한다.
 
-- GDAL은 `public._kraddr_stage_spbd_buld_polygon` 임시성 테이블을 `accessMode="overwrite"`로 만든다.
+- GDAL은 `public._ktg_stage_spbd_buld_polygon` 임시성 테이블을 `accessMode="overwrite"`로 만든다.
 - staging 생성에도 기존 `plan.sql_statement`를 사용해 필요한 컬럼만 projection한다.
 - GDAL 설정은 기존과 같이 `PG_USE_COPY=YES`, `SHAPE_ENCODING=CP949`를 유지한다.
 - staging table에는 spatial index를 만들지 않는다.
@@ -33,7 +33,7 @@ T-037에서는 운영 테이블에 직접 append하지 않고 임시 staging tab
 
 | 파일 | 내용 |
 |------|------|
-| `src/kraddr/geo/loaders/shp/polygons_loader.py` | `TL_SPBD_BULD` 전용 staging COPY 경로 추가, stage drop finally 보장, projection staging 적용 |
+| `src/kortravelgeo/loaders/shp/polygons_loader.py` | `TL_SPBD_BULD` 전용 staging COPY 경로 추가, stage drop finally 보장, projection staging 적용 |
 | `tests/unit/test_shp_loader_gdal.py` | `TL_SPBD_BULD`가 generic append가 아니라 staging 경로를 타는지, `PG_USE_COPY`/projection/search_path/geometry cast 계약을 source-level로 고정 |
 
 DB 스키마 변경은 없다. 외부 호출 표면(`load_shp_polygons`, CLI `load shp`, `load shp-all`, admin job)은 그대로다.
@@ -50,37 +50,37 @@ DB 스키마 변경은 없다. 외부 호출 표면(`load_shp_polygons`, CLI `lo
 | 메모리 | 29GiB total, 실행 전 available 약 27GiB |
 | ext4 여유 공간 | `/dev/sdd` 1007G 중 759G available |
 | NTFS 데이터 공간 | `/mnt/f` 932G 중 267G available |
-| Docker DB | `kraddr-geo-t027-db-1`, `postgis/postgis:16-3.5`, host port `15432` |
+| Docker DB | `kor-travel-geo-t027-db-1`, `postgis/postgis:16-3.5`, host port `15432` |
 | PostgreSQL | 16.9 |
 | GDAL | 3.8.4 |
-| 실제 데이터 | `/mnt/f/dev/python-kraddr-geo/data/juso/도로명주소 전자지도` |
+| 실제 데이터 | `/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도` |
 
 ## 측정 명령
 
-세종/경기도 단일 `TL_SPBD_BULD` 측정은 같은 전용 DB `kraddr_geo_t037`에서 수행했다.
+세종/경기도 단일 `TL_SPBD_BULD` 측정은 같은 전용 DB `kor_travel_geo_t037`에서 수행했다.
 
 ```bash
-DB=kraddr_geo_t037
+DB=kor_travel_geo_t037
 PGPASSWORD=addr dropdb -h localhost -p 15432 -U addr --if-exists "$DB"
 PGPASSWORD=addr createdb -h localhost -p 15432 -U addr "$DB"
-KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/$DB" \
-  TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/kraddr-geo init-db
+KTG_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/$DB" \
+  TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/ktgctl init-db
 ```
 
 단일 레이어 측정은 내부 load plan에서 `TL_SPBD_BULD`만 골라 수행했다.
 
 ```bash
 /usr/bin/time -v env \
-  KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t037" \
+  KTG_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t037" \
   TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
   .venv/bin/python - <<'PY'
 import asyncio
 from pathlib import Path
 
-from kraddr.geo.infra.engine import make_async_engine
-from kraddr.geo.loaders.shp.polygons_loader import build_shp_load_plan, _load_plans_sync
+from kortravelgeo.infra.engine import make_async_engine
+from kortravelgeo.loaders.shp.polygons_loader import build_shp_load_plan, _load_plans_sync
 
-path = Path("/mnt/f/dev/python-kraddr-geo/data/juso/도로명주소 전자지도/세종특별자치시")
+path = Path("/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/세종특별자치시")
 plans = tuple(
     plan for plan in build_shp_load_plan(path, source_yyyymm="202604")
     if plan.source_layer == "TL_SPBD_BULD"
@@ -93,13 +93,13 @@ finally:
 PY
 ```
 
-세종 public CLI 검증은 별도 DB `kraddr_geo_t037_cli`에서 수행했다.
+세종 public CLI 검증은 별도 DB `kor_travel_geo_t037_cli`에서 수행했다.
 
 ```bash
-KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t037_cli" \
+KTG_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t037_cli" \
   TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
-  .venv/bin/kraddr-geo load shp \
-  "/mnt/f/dev/python-kraddr-geo/data/juso/도로명주소 전자지도/세종특별자치시" \
+  .venv/bin/ktgctl load shp \
+  "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/세종특별자치시" \
   --mode full --yyyymm 202604
 ```
 
@@ -124,7 +124,7 @@ KRADDR_GEO_PG_DSN="postgresql+psycopg://addr:addr@localhost:15432/kraddr_geo_t03
 | raw staging, 전체 DBF 속성 복사 | 617,214 feature 부근에서 중단 | 22분 58.46초 | 137,584KB | `pg_terminate_backend()`로 중단 |
 | projection staging, 필요한 컬럼만 복사 | 1,649,975 | 40분 17.15초 | 137,468KB | 성공 |
 
-raw staging 실험은 staging table에 원본 DBF의 모든 속성 컬럼을 COPY하는 경로였다. `pg_stat_activity`에서는 `COPY "_kraddr_stage_spbd_buld_polygon" (...) FROM STDIN` 상태로, PostgreSQL은 `ClientRead`에서 GDAL 입력을 기다리고 있었다. 22분 58.46초 경과 시점에도 끝나지 않아 테스트 DB의 backend를 `pg_terminate_backend()`로 끊었고, 이 중단 덕분에 projection staging 필요성이 분명해졌다.
+raw staging 실험은 staging table에 원본 DBF의 모든 속성 컬럼을 COPY하는 경로였다. `pg_stat_activity`에서는 `COPY "_ktg_stage_spbd_buld_polygon" (...) FROM STDIN` 상태로, PostgreSQL은 `ClientRead`에서 GDAL 입력을 기다리고 있었다. 22분 58.46초 경과 시점에도 끝나지 않아 테스트 DB의 backend를 `pg_terminate_backend()`로 끊었고, 이 중단 덕분에 projection staging 필요성이 분명해졌다.
 
 projection staging은 같은 실제 경기도 파일을 끝까지 적재했다. 종료 후 검증 결과:
 
@@ -147,7 +147,7 @@ FROM tl_spbd_buld_polygon;
 
 ### 세종특별자치시 public CLI 9개 레이어
 
-`kraddr-geo load shp ... --mode full --yyyymm 202604`로 전체 9개 SHP 보조 레이어를 적재했다.
+`ktgctl load shp ... --mode full --yyyymm 202604`로 전체 9개 SHP 보조 레이어를 적재했다.
 
 | 항목 | 값 |
 |------|---:|
@@ -170,7 +170,7 @@ FROM tl_spbd_buld_polygon;
 - projection을 staging에 적용해 불필요한 DBF 속성 컬럼 전송을 막는다.
 - 운영 테이블 insert-select 구간에서 trimming, NULL normalization, geometry type cast를 명시적으로 관리한다.
 - 실패/취소 시 staging table을 남기지 않는다.
-- `TL_SPBD_BULD` staging 경로는 `pg_try_advisory_lock(hashtext('kraddr_geo:tl_spbd_buld_polygon_stage'))`로 같은 DB 안 동시 실행을 fail-fast한다. 두 터미널에서 CLI를 동시에 실행해도 고정 staging table을 서로 덮어쓰지 않는다.
+- `TL_SPBD_BULD` staging 경로는 `pg_try_advisory_lock(hashtext('kor_travel_geo:tl_spbd_buld_polygon_stage'))`로 같은 DB 안 동시 실행을 fail-fast한다. 두 터미널에서 CLI를 동시에 실행해도 고정 staging table을 서로 덮어쓰지 않는다.
 - staging row count와 운영 insert row count를 비교해 `bd_mgt_sn` 공백 또는 `geom IS NULL`로 skip된 행을 stdout에 남긴다.
 
 다만 대형 geometry 파일에서는 여전히 GDAL SHP decode + COPY stream 자체가 길다. 경기도 1,649,975 polygon은 단일 레이어만 40분 17초가 걸렸다. 전국 전체 시간은 T-027 최종 클린 로드에서 다시 확인해야 하며, 경기도급 대형 시도의 추가 개선은 별도 PR 후보로 남긴다.
@@ -186,15 +186,15 @@ FROM tl_spbd_buld_polygon;
 
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_shp_loader_gdal.py -q
-TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py
-TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo/loaders/shp/polygons_loader.py
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kortravelgeo/loaders/shp/polygons_loader.py tests/unit/test_shp_loader_gdal.py
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kortravelgeo/loaders/shp/polygons_loader.py
 ```
 
 실제 Docker PostGIS 검증:
 
-- `kraddr_geo_t037`: 세종 단일 `TL_SPBD_BULD` projection staging 55,819행, 18.59초.
-- `kraddr_geo_t037`: 경기도 단일 `TL_SPBD_BULD` projection staging 1,649,975행, 40분 17.15초.
-- `kraddr_geo_t037_cli`: 세종 SHP 9개 레이어 public CLI 적재 성공, 1분 19.54초.
+- `kor_travel_geo_t037`: 세종 단일 `TL_SPBD_BULD` projection staging 55,819행, 18.59초.
+- `kor_travel_geo_t037`: 경기도 단일 `TL_SPBD_BULD` projection staging 1,649,975행, 40분 17.15초.
+- `kor_travel_geo_t037_cli`: 세종 SHP 9개 레이어 public CLI 적재 성공, 1분 19.54초.
 
 ## 후속 작업
 

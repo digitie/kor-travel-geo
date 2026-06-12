@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from kraddr.geo.exceptions import LoaderError
-from kraddr.geo.loaders.text.roadaddr_entrance_loader import (
+from kortravelgeo.exceptions import LoaderError
+from kortravelgeo.loaders.text.roadaddr_entrance_loader import (
     discover_roadaddr_entrance_sources,
     iter_roadaddr_entrance_rows,
 )

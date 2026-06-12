@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from alembic import op
 
-from kraddr.geo.infra.sql import REGION_RADIUS_PARTS_REFRESH_SQL, iter_sql_statements
+from kortravelgeo.infra.sql import REGION_RADIUS_PARTS_REFRESH_SQL, iter_sql_statements
 
 revision = "0015_t075_region_radius_parts"
 down_revision = "0014_t065_navi_name_search"

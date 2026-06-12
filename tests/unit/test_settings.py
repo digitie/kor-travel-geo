@@ -1,15 +1,15 @@
 import pytest
 
-from kraddr.geo.settings import Settings, get_settings, reset_settings, set_settings
+from kortravelgeo.settings import Settings, get_settings, reset_settings, set_settings
 
 
 def test_settings_normalize_postgresql_dsn(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_settings()
-    monkeypatch.setenv("KRADDR_GEO_PG_DSN", "postgresql://u:p@localhost:5432/kraddr_geo")
+    monkeypatch.setenv("KTG_PG_DSN", "postgresql://u:p@localhost:5432/kor_travel_geo")
 
     settings = get_settings()
 
-    assert settings.pg_dsn == "postgresql+psycopg://u:p@localhost:5432/kraddr_geo"
+    assert settings.pg_dsn == "postgresql+psycopg://u:p@localhost:5432/kor_travel_geo"
     reset_settings()
 
 
@@ -40,6 +40,8 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.api_explain_timeout_ms == 3_000
     assert settings.api_max_concurrency is None
     assert settings.api_admission_timeout_ms == 30_000
+    assert settings.api_performance_logging_enabled is False
+    assert settings.api_slow_request_ms == 500
     assert settings.upload_set_ttl_days == 30
     assert settings.upload_set_active_grace_minutes == 360
     assert settings.ops_table_stats_capture_interval_minutes == 0

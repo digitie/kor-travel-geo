@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field, model_validator
 from pydantic_core import PydanticCustomError
 
-from kraddr.geo.api.responses import register_exception_handlers
+from kortravelgeo.api.responses import register_exception_handlers
 
 
 class _CoordinateModel(BaseModel):
@@ -14,7 +14,7 @@ class _CoordinateModel(BaseModel):
     @model_validator(mode="after")
     def reject_outside_korea(self) -> _CoordinateModel:
         msg = "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
-        raise PydanticCustomError("kraddr_geo.coordinate_bounds", msg)
+        raise PydanticCustomError("kor_travel_geo.coordinate_bounds", msg)
 
 
 def test_pydantic_validation_error_maps_to_invalid_coordinate_response() -> None:

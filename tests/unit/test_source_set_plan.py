@@ -5,15 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from kraddr.geo.dto.admin import UploadSetCreateRequest
-from kraddr.geo.exceptions import InvalidInputError
-from kraddr.geo.infra.source_set import (
+from kortravelgeo.dto.admin import UploadSetCreateRequest
+from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.source_set import (
     build_full_load_source_set_plan,
     confirmation_token_for,
     discover_load_sources,
     infer_yyyymm,
 )
-from kraddr.geo.infra.uploads import (
+from kortravelgeo.infra.uploads import (
     cancel_upload_set,
     cleanup_upload_sets,
     create_upload_set,

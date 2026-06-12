@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from kraddr.geo.infra.engine import _connect_options, make_async_engine
-from kraddr.geo.infra.pnu import build_pnu, pnu_land_type_from_mntn_yn
-from kraddr.geo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL, iter_sql_statements
-from kraddr.geo.settings import Settings
+from kortravelgeo.infra.engine import _connect_options, make_async_engine
+from kortravelgeo.infra.pnu import build_pnu, pnu_land_type_from_mntn_yn
+from kortravelgeo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL, iter_sql_statements
+from kortravelgeo.settings import Settings
 
 
 def test_engine_uses_settings_dsn_and_x_extension_search_path() -> None:
     settings = Settings(
-        pg_dsn="postgresql://u:p@localhost:5432/kraddr_geo",
+        pg_dsn="postgresql://u:p@localhost:5432/kor_travel_geo",
         pg_statement_timeout_ms=4321,
     )
 

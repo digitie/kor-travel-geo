@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from kraddr.geo.client import AsyncAddressClient
-from kraddr.geo.exceptions import InvalidInputError
-from kraddr.geo.infra.admin_repo import LoadJobRow
+from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.admin_repo import LoadJobRow
 
 
 def _fake_row(kind: str) -> LoadJobRow:
@@ -44,10 +44,10 @@ async def test_submit_load_full_load_batch_dispatches_batch_path(
     insert_batch = AsyncMock(return_value=_fake_row("full_load_batch"))
     insert_job = AsyncMock(return_value=_fake_row("juso_text_load"))
     monkeypatch.setattr(
-        "kraddr.geo.client.AdminRepository.insert_load_batch", insert_batch
+        "kortravelgeo.client.AdminRepository.insert_load_batch", insert_batch
     )
     monkeypatch.setattr(
-        "kraddr.geo.client.AdminRepository.insert_load_job", insert_job
+        "kortravelgeo.client.AdminRepository.insert_load_job", insert_job
     )
 
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
@@ -82,10 +82,10 @@ async def test_submit_load_full_load_batch_rejects_incomplete_payloads(
     insert_batch = AsyncMock(return_value=_fake_row("full_load_batch"))
     insert_job = AsyncMock(return_value=_fake_row("juso_text_load"))
     monkeypatch.setattr(
-        "kraddr.geo.client.AdminRepository.insert_load_batch", insert_batch
+        "kortravelgeo.client.AdminRepository.insert_load_batch", insert_batch
     )
     monkeypatch.setattr(
-        "kraddr.geo.client.AdminRepository.insert_load_job", insert_job
+        "kortravelgeo.client.AdminRepository.insert_load_job", insert_job
     )
 
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
@@ -106,10 +106,10 @@ async def test_submit_load_non_batch_uses_insert_load_job(
     insert_batch = AsyncMock(return_value=_fake_row("full_load_batch"))
     insert_job = AsyncMock(return_value=_fake_row("juso_text_load"))
     monkeypatch.setattr(
-        "kraddr.geo.client.AdminRepository.insert_load_batch", insert_batch
+        "kortravelgeo.client.AdminRepository.insert_load_batch", insert_batch
     )
     monkeypatch.setattr(
-        "kraddr.geo.client.AdminRepository.insert_load_job", insert_job
+        "kortravelgeo.client.AdminRepository.insert_load_job", insert_job
     )
 
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]

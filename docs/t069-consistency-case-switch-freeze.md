@@ -2,7 +2,7 @@
 
 - 상태: 완료
 - 날짜: 2026-05-31
-- 관련 UI: `kraddr-geo-ui` `/admin/consistency`
+- 관련 UI: `kor-travel-geo-ui` `/admin/consistency`
 
 ## 증상
 

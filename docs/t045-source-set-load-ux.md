@@ -6,15 +6,15 @@
 - 구현 브랜치: `codex/t045-source-set-load-ux`
 - 기준 ADR: ADR-029
 - 주요 파일:
-  - 백엔드 DTO: `src/kraddr/geo/dto/admin.py`
-  - source set 탐지/계획: `src/kraddr/geo/infra/source_set.py`
-  - upload set 저장소: `src/kraddr/geo/infra/uploads.py`
-  - REST: `src/kraddr/geo/api/routers/admin.py`
-  - 라이브러리: `src/kraddr/geo/client.py`
-  - CLI: `src/kraddr/geo/cli/main.py`
-  - UI: `kraddr-geo-ui/components/admin/LoadConsole.tsx`
-  - UI 상태 helper: `kraddr-geo-ui/lib/load-workflow.ts`
-  - 테스트: `tests/unit/test_source_set_plan.py`, `kraddr-geo-ui/tests/unit/load-workflow.test.ts`
+  - 백엔드 DTO: `src/kortravelgeo/dto/admin.py`
+  - source set 탐지/계획: `src/kortravelgeo/infra/source_set.py`
+  - upload set 저장소: `src/kortravelgeo/infra/uploads.py`
+  - REST: `src/kortravelgeo/api/routers/admin.py`
+  - 라이브러리: `src/kortravelgeo/client.py`
+  - CLI: `src/kortravelgeo/cli/main.py`
+  - UI: `kor-travel-geo-ui/components/admin/LoadConsole.tsx`
+  - UI 상태 helper: `kor-travel-geo-ui/lib/load-workflow.ts`
+  - 테스트: `tests/unit/test_source_set_plan.py`, `kor-travel-geo-ui/tests/unit/load-workflow.test.ts`
 
 ## 배경
 
@@ -203,7 +203,7 @@ async def submit_full_load_source_set(
 ### 자동 발견 모드
 
 ```bash
-kraddr-geo load full-set ./data/juso
+ktgctl load full-set ./data/juso
 ```
 
 동작:
@@ -234,7 +234,7 @@ kraddr-geo load full-set ./data/juso
 ### 명시 기준월 모드
 
 ```bash
-kraddr-geo load full-set ./data/juso \
+ktgctl load full-set ./data/juso \
   --juso-yyyymm 202603 \
   --parcel-link-yyyymm 202603 \
   --locsum-yyyymm 202604 \
@@ -376,17 +376,17 @@ C10은 더 이상 단순히 "모든 source_yyyymm이 같은가"만 보지 않는
 | REST route 노출 | `tests/unit/test_api_app_contract.py::test_create_app_exposes_expected_routes_without_starting_lifespan` |
 | CLI full-set 노출/확인 문구 | `tests/unit/test_cli_contract.py::test_cli_exposes_t018_operational_commands`, `tests/unit/test_cli_contract.py::test_full_set_command_requires_specific_mixed_confirmation` |
 | batch DAG successor | `tests/unit/test_infra_repo_sql.py::test_job_queue_batch_successors_wait_for_all_source_children` |
-| UI 상태 전이/token/progress | `kraddr-geo-ui/tests/unit/load-workflow.test.ts` |
+| UI 상태 전이/token/progress | `kor-travel-geo-ui/tests/unit/load-workflow.test.ts` |
 
 검증 명령:
 
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m pytest tests/unit/test_source_set_plan.py tests/unit/test_api_app_contract.py tests/unit/test_client_submit_load_batch.py tests/unit/test_infra_repo_sql.py -q
-TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kraddr/geo tests/unit/test_source_set_plan.py tests/unit/test_api_app_contract.py tests/unit/test_client_submit_load_batch.py tests/unit/test_infra_repo_sql.py
-TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kraddr/geo
-cd kraddr-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run lint
-cd kraddr-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run type-check
-cd kraddr-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run test -- load-workflow
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m ruff check src/kortravelgeo tests/unit/test_source_set_plan.py tests/unit/test_api_app_contract.py tests/unit/test_client_submit_load_batch.py tests/unit/test_infra_repo_sql.py
+TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python -m mypy src/kortravelgeo
+cd kor-travel-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run lint
+cd kor-travel-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run type-check
+cd kor-travel-geo-ui && env "PATH=/home/digitie/.cache/parking-radar-node-v22.15.0/bin:$PATH" npm run test -- load-workflow
 ```
 
 ## 남은 후속 범위

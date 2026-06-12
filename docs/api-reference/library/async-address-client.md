@@ -30,4 +30,4 @@ async with AsyncAddressClient() as client:
 
 ## 설정
 
-`settings`를 직접 주입하거나 `.env`의 `KRADDR_GEO_*` 값을 사용한다. 외부 API 키는 `SecretStr`로 다루며 로그에 평문으로 남기지 않는다.
+`settings`를 직접 주입하거나 `.env`의 `KTG_*` 값을 사용한다. 외부 API 키는 `SecretStr`로 다루며 로그에 평문으로 남기지 않는다.

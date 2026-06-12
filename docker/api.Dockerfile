@@ -2,7 +2,7 @@ FROM python:3.12-trixie
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    KRADDR_GEO_API_HOST=0.0.0.0 \
+    KTG_API_HOST=0.0.0.0 \
     PORT=12201
 
 WORKDIR /app
@@ -37,4 +37,4 @@ PY
 
 EXPOSE 12201
 
-CMD ["sh", "-c", "uvicorn kraddr.geo.api.app:app --host ${KRADDR_GEO_API_HOST:-0.0.0.0} --port ${PORT:-12201}"]
+CMD ["sh", "-c", "uvicorn kortravelgeo.api.app:app --host ${KTG_API_HOST:-0.0.0.0} --port ${PORT:-12201}"]

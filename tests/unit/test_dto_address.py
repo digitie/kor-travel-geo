@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from kraddr.geo.dto.address import AddressStructure, RefinedAddress
+from kortravelgeo.dto.address import AddressStructure, RefinedAddress
 
 
 def test_address_structure_preserves_vworld_field_names() -> None:

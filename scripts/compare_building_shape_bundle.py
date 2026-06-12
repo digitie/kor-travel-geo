@@ -8,7 +8,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from kraddr.geo.loaders.building_shape_bundle import compare_building_shape_bundle
+from kortravelgeo.loaders.building_shape_bundle import compare_building_shape_bundle
 
 
 def main() -> None:
