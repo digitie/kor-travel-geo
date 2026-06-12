@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-13 00:00 (T-226 이관과 범위 확장)
+
+**작업**: 사용자 지시에 따라 배포명·임포트명 전환 작업을 T-226으로 이관하고 범위를 확장했다.
+
+**반영**:
+- `docs/t226-kor-travel-geo-rename.md`를 추가하고 T-226을 현재 기준 문서로 삼았다.
+- 기존 `docs/t077-kor-travel-geo-rename.md`는 T-226 이관 안내 문서로 축소했다.
+- GitHub 저장소 이름 변경을 T-226 범위에 포함했다. 목표 저장소 이름은 `kor-travel-geo`다.
+- 성능 측정과 구조화 로깅 기능 추가를 T-226 범위, 구현 체크리스트, 검증 기준에 반영했다.
+- `docs/tasks.md`와 `docs/resume.md`의 요약을 T-226 기준으로 갱신했다.
+
+**검증**:
+- 문서-only 변경으로 `git diff --check`를 실행한다.
+
 ## 2026-06-12 09:55 (T-077 배포명·임포트명 전환 Task 문서화)
 
 **작업**: 사용자 지시에 따라 Python 배포명 `kor-travel-geo`, import root `kortravelgeo`, 권장 alias `import kortravelgeo as ktg` 전환을 후속 Task로 정리했다.
