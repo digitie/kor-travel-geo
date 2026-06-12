@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-12 갱신, by codex)
 
+- T-077 배포명·임포트명 전환 대기 등록 — 후속 구현에서 Python 배포명은 `kor-travel-geo`, import root는 `kortravelgeo`, 권장 사용 예시는 `import kortravelgeo as ktg`로 바꾼다. 실제 코드 rename은 아직 하지 않았고, `docs/t077-kor-travel-geo-rename.md`에 범위와 검증 기준을 정리했다. CLI 명령, 환경변수 prefix, DB 이름, GitHub 저장소명, Web UI 패키지명은 구현 전 별도 확인이 필요하다.
 - ✅ 로컬 고정 포트 재정의 — 현재 공식 접속 포트는 PostgreSQL `5432`, RustFS API `12101`, FastAPI `12201`, Web UI `12205`다. `scripts/docker_app.sh`, API/UI Dockerfile, `.env.example`, UI proxy, Playwright 기본 URL, README와 현재 운영 문서를 이 기준으로 갱신했고, ADR-046에 결정 기록을 추가했다. 과거 작업 로그의 `9001`/`9002`/`15434`는 당시 재현 정보로 남긴다.
 - ✅ WSL 재설치 후 주소 DB 복원 — 빈 `kraddr_geo` 때문에 reverse/geocode가 `NOT_FOUND`/500으로 보이던 상태를 해소했다. T-047 백업 `pgdump-dir.tar.zst`를 임시 DB에 복원하고 Alembic head까지 올린 뒤 현재 `kraddr_geo`로 승격했다. 현재 row count는 `tl_juso_text=6,416,637`, `mv_geocode_target=6,416,637`, `mv_geocode_text_search=6,416,637`, `region_radius_parts=54,316`이다. 기존 빈 DB는 `kraddr_geo_empty_20260612_073529`로 보존했다. 인사동 좌표 reverse와 `"서울특별시 종로구 인사동"` geocode가 모두 `OK` 후보를 반환한다. API/UI Docker 컨테이너는 `unless-stopped` 재시작 정책으로 재생성했다.
 - ✅ Alembic T-061 migration 안정화 — `0013_t061_text_search_mv`가 최신 `TEXT_SEARCH_MV_SQL` 상수를 참조해 T-047 복원 DB에서 `sigungu_buld_nm_nrm` 미존재 오류를 내던 문제를 수정했다. `0013`은 당시 MV 정의를 자체 보관하고, `0014`가 T-065 컬럼 추가 후 최신 MV를 재생성한다.

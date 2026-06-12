@@ -7,7 +7,7 @@
 
 ## 대기 (우선순위 순)
 
-- 없음.
+- T-077 Python 배포명·임포트명 전환 — 배포명은 `kor-travel-geo`, Python import root는 `kortravelgeo`로 변경한다. 권장 사용 예시는 `import kortravelgeo as ktg`이며, 이를 위해 package root가 `AsyncAddressClient` 등 공개 API를 직접 노출해야 한다. 현 `python-kraddr-geo`/`kraddr.geo` 식별자는 구현 PR 전까지 현재값으로 유지하고, 실제 전환은 코드 이동, packaging, import-linter, Docker/uvicorn entrypoint, 문서/예시, wheel/sdist 설치 검증을 한 PR에서 원자적으로 처리한다. 상세: `docs/t077-kor-travel-geo-rename.md`
 
 ## 보류 (외부 조건)
 
