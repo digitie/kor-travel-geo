@@ -2,6 +2,18 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-12 09:55 (T-077 배포명·임포트명 전환 Task 문서화)
+
+**작업**: 사용자 지시에 따라 Python 배포명 `kor-travel-geo`, import root `kortravelgeo`, 권장 alias `import kortravelgeo as ktg` 전환을 후속 Task로 정리했다.
+
+**반영**:
+- `docs/tasks.md`의 대기 항목에 T-077을 추가했다.
+- `docs/t077-kor-travel-geo-rename.md`를 추가해 목표 식별자, 범위, 범위 밖, 호환성 원칙, 구현 체크리스트, 검증 기준, 남은 결정을 정리했다.
+- 현재 코드와 실행 문서는 아직 `python-kraddr-geo`/`kraddr.geo` 기준으로 유지한다. 실제 rename은 후속 구현 PR에서 원자적으로 처리한다.
+
+**검증**:
+- 문서-only 변경으로 `git diff --check`를 실행한다.
+
 ## 2026-06-12 09:20 (로컬 고정 포트 재정의와 Docker 재기동)
 
 **작업**: 사용자 지시에 따라 PostgreSQL `5432`, RustFS API `12101`, 이 저장소 API `12201`, Web UI `12205`를 현재 고정 포트로 정리했다.
