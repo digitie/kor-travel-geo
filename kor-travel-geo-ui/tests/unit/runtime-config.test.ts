@@ -56,7 +56,7 @@ describe("runtime config", () => {
     writeFileSync(
       join(uiDir, ".env.local"),
       [
-        "KTG_API_INTERNAL_URL=http://localhost:12201",
+        "KTG_API_INTERNAL_URL=http://localhost:12501",
         "NEXT_PUBLIC_VWORLD_API_KEY=ui-dotenv-local-key"
       ].join("\n")
     );

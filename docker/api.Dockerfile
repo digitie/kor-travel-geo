@@ -3,7 +3,7 @@ FROM python:3.12-trixie
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     KTG_API_HOST=0.0.0.0 \
-    PORT=12201
+    PORT=12501
 
 WORKDIR /app
 
@@ -35,6 +35,6 @@ if lib_version not in python_version:
     raise SystemExit(f"GDAL version mismatch: lib={lib_version}, python={python_version}")
 PY
 
-EXPOSE 12201
+EXPOSE 12501
 
-CMD ["sh", "-c", "uvicorn kortravelgeo.api.app:app --host ${KTG_API_HOST:-0.0.0.0} --port ${PORT:-12201}"]
+CMD ["sh", "-c", "uvicorn kortravelgeo.api.app:app --host ${KTG_API_HOST:-0.0.0.0} --port ${PORT:-12501}"]

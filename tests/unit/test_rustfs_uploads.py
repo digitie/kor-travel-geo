@@ -30,7 +30,7 @@ from kortravelgeo.settings import Settings
 def test_rustfs_config_patch_redacts_and_keeps_existing_secret(tmp_path: Path) -> None:
     settings = Settings(
         rustfs_config_path=tmp_path / "rustfs-config.json",
-        rustfs_endpoint_url="http://127.0.0.1:9003",
+        rustfs_endpoint_url="http://127.0.0.1:12101",
         rustfs_access_key=SecretStr("env-access"),
         rustfs_secret_key=SecretStr("env-secret"),
     )
@@ -54,11 +54,11 @@ def test_rustfs_config_patch_redacts_and_keeps_existing_secret(tmp_path: Path) -
 
     second = save_rustfs_config(
         settings,
-        RustfsStorageConfigPatch(endpoint_url="http://rustfs.local:9003"),
+        RustfsStorageConfigPatch(endpoint_url="http://rustfs.local:12101"),
     )
     loaded = load_rustfs_config(settings)
 
-    assert second.endpoint_url == "http://rustfs.local:9003"
+    assert second.endpoint_url == "http://rustfs.local:12101"
     assert loaded.access_key == "saved-access"
     assert loaded.secret_key == "saved-secret"
 
@@ -202,7 +202,7 @@ def _config(
 ) -> EffectiveRustfsConfig:
     return EffectiveRustfsConfig(
         enabled=True,
-        endpoint_url="http://127.0.0.1:9003",
+        endpoint_url="http://127.0.0.1:12101",
         bucket="kor-travel-geo",
         prefix="kor-travel-geo",
         region="us-east-1",

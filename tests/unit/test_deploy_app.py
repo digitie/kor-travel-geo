@@ -22,6 +22,10 @@ def test_deploy_app_plan_defaults_use_dual_platforms() -> None:
     assert plan.options.platforms == DEFAULT_PLATFORMS
     assert plan.options.api_image == "ghcr.io/digitie/kor-travel-geo-api:abc123"
     assert plan.options.ui_image == "ghcr.io/digitie/kor-travel-geo-ui:abc123"
+    assert plan.options.api_host_port == 12501
+    assert plan.options.api_container_port == 12501
+    assert plan.options.ui_host_port == 12505
+    assert plan.options.ui_container_port == 12505
     assert [node.label for node in plan.nodes] == ["n150", "odroid"]
     assert plan.nodes[0].platform == "linux/amd64"
     assert plan.nodes[1].platform == "linux/arm64"
@@ -76,7 +80,7 @@ def test_remote_script_uses_env_file_without_expanding_secret_values() -> None:
     assert "-v /srv/kor-travel-geo/data:/data:ro" in script
     assert "KTG_PG_DSN=" not in script
     assert "KTG_RUSTFS_SECRET_KEY=" not in script
-    assert "curl -fsS http://127.0.0.1:12201/v1/healthz" in script
+    assert "curl -fsS http://127.0.0.1:12501/v1/healthz" in script
 
 
 def test_markdown_renders_build_and_deploy_commands() -> None:

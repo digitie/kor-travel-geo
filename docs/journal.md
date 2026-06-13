@@ -2,6 +2,35 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-13 (로컬·Docker API/UI 포트 1250x 통일)
+
+**작업**: 사용자 지시에 따라 로컬 단독 실행 포트를 Docker 실행·`kor-travel-docker-manager` scrape target과 같은 `12501`/`12505`로 맞췄다.
+
+**반영**:
+- FastAPI 기본 실행 포트와 API Dockerfile `PORT`/`EXPOSE`를 `12501`로 변경했다.
+- `kor-travel-geo-ui` 기본 실행 포트, UI Dockerfile `PORT`/`EXPOSE`, Playwright 기본 `baseURL`, UI proxy 기본 `KTG_API_INTERNAL_URL`을 `12505`/`12501` 기준으로 변경했다.
+- `scripts/docker_app.sh`, `scripts/deploy_app.py`, `scripts/benchmark_api_latency.py`의 기본 포트를 `12501`/`12505`로 변경했다.
+- `docs/ports.md`, `docs/dev-environment.md`, README, UI README, API reference, `docs/resume.md`를 현재 실행 기준으로 갱신하고 ADR-048을 추가했다. ADR-046은 superseded로 남겼다.
+- 주변 서비스 포트도 `kor-travel-docker-manager`의 `docs/ports.md`, `AGENTS.md`, `docker-compose.yml`을 기준으로 맞췄다. PostgreSQL `5432`, RustFS API/console `12101`/`12105`, Grafana/cAdvisor/Prometheus `12205`/`12301`/`12401`, concierge `12601`/`12602`/`12605`, map `12701`/`12702`/`12705`, Pinvi `12801`/`12805`, manager `12901`/`12905`를 `docs/ports.md`에 정리했다.
+- RustFS 관련 테스트 fixture의 예시 endpoint도 이전 `9003`에서 manager 기준 `12101`로 변경했다.
+
+**검증**:
+- Windows/NTFS: `python -m pytest tests/unit/test_deploy_app.py tests/unit/test_rustfs_uploads.py -q` → `orjson` 미설치로 `test_rustfs_uploads.py` 수집 실패. WSL ext4 미러 가상환경 검증을 기준으로 삼았다.
+- Windows/NTFS: `python -m ruff check scripts/deploy_app.py scripts/benchmark_api_latency.py tests/unit/test_deploy_app.py` → pass
+- Windows/NTFS: `git diff --check` → pass
+- WSL ext4 mirror: `.venv/bin/python -m pytest -q` → 298 passed, 25 skipped
+- WSL ext4 mirror: `.venv/bin/python -m ruff check .` → pass
+- WSL ext4 mirror: `.venv/bin/python -m mypy src/kortravelgeo` → pass
+- WSL ext4 mirror: `.venv/bin/lint-imports` → Layered architecture kept
+- WSL ext4 mirror: `.venv/bin/python -m pytest tests/unit/test_deploy_app.py tests/unit/test_rustfs_uploads.py -q` → 13 passed
+- WSL ext4 mirror: `.venv/bin/python -m ruff check scripts/deploy_app.py scripts/benchmark_api_latency.py tests/unit/test_deploy_app.py` → pass
+- WSL ext4 mirror `kor-travel-geo-ui`: `npm run lint`, `npm run test`, `npm run build` → pass
+- WSL ext4 mirror `kor-travel-geo-ui`: `npx react-doctor@latest . --offline --verbose --json` → score 100, warning 0
+- 실제 서버: API `http://127.0.0.1:12501/v1/healthz` → `{"status":"ok"}`
+- 실제 서버: UI `http://127.0.0.1:12505/debug/geocode` → HTTP 200
+- 실제 서버: UI proxy `http://127.0.0.1:12505/api/proxy/v1/healthz` → `{"status":"ok"}`
+- CodeGraph: `codegraph sync`, `codegraph status` → `disk I/O error`로 실패
+
 ## 2026-06-13 (T-108 운영 배포 자동화)
 
 **작업**: 사용자 지시에 따라 `pinvi`의 T-108을 이 저장소 작업 항목으로 가져오고, API/UI 운영 배포 자동화 표면을 구현했다.

@@ -271,7 +271,7 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 - 구조화 로그: `structlog` JSON. PR #12의 `/admin/logs`는 우선 `load_jobs.log_tail` 최근 라인을 조회하며, WebSocket tail은 후속 후보로 둔다.
 - 메트릭: `prometheus-client`. API `/metrics`에서 외부 API 호출 카운터, cache entries/hits/expired, 적재 작업 kind/state gauge, 적재 job/stage duration histogram, v1/v2 API 요청 total/duration/slow/in-flight, SQLAlchemy DB pool gauge, SQL query operation/fingerprint/status별 duration histogram을 노출한다. query fingerprint는 원문 주소와 literal을 label로 노출하지 않기 위한 저카디널리티 식별자다.
 - `kor-travel-geo-ui`는 `/api/metrics`에서 Next.js route handler duration, backend proxy upstream duration, Web Vitals를 노출한다.
-- Prometheus는 애플리케이션이 직접 연결하지 않고 외부 scraper가 가져가는 pull 구조다. `kor-travel-docker-manager` 기준 Prometheus host 포트는 `12401`, Grafana는 `12205`, cAdvisor는 `12301`이며 scrape target은 compose 내부 `kor-travel-geo-api:12501/metrics`, `kor-travel-geo-ui:12505/api/metrics`다.
+- Prometheus는 애플리케이션이 직접 연결하지 않고 외부 scraper가 가져가는 pull 구조다. `kor-travel-docker-manager` 기준 관측 host 포트는 Grafana `12205`, cAdvisor `12301`, Prometheus `12401`이며 scrape target은 compose 내부 `kor-travel-geo-api:12501/metrics`, `kor-travel-geo-ui:12505/api/metrics`다. 같은 manager 기준으로 PostgreSQL은 `5432`, RustFS API/console은 `12101`/`12105`를 사용한다.
 - 트레이싱: (선택) OpenTelemetry. 도입은 ADR로 별도 결정.
 
 ## 참고

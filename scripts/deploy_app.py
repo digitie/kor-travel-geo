@@ -109,10 +109,10 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--restart-policy", default="unless-stopped")
     parser.add_argument("--remote-env-file", default="/etc/kor-travel-geo/app.env")
     parser.add_argument("--remote-data-dir", default="/data/kor-travel-geo")
-    parser.add_argument("--api-host-port", type=int, default=12201)
-    parser.add_argument("--api-container-port", type=int, default=12201)
-    parser.add_argument("--ui-host-port", type=int, default=12205)
-    parser.add_argument("--ui-container-port", type=int, default=12205)
+    parser.add_argument("--api-host-port", type=int, default=12501)
+    parser.add_argument("--api-container-port", type=int, default=12501)
+    parser.add_argument("--ui-host-port", type=int, default=12505)
+    parser.add_argument("--ui-container-port", type=int, default=12505)
     parser.add_argument(
         "--platform",
         action="append",

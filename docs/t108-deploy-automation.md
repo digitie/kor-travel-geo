@@ -11,7 +11,7 @@
 
 위 `(ADR-023)`은 `pinvi` 저장소의 ADR 번호다. 이 저장소의 ADR-023은 다른 주제이므로,
 `kor-travel-geo`에서는 ADR-041(개발 worktree), ADR-045(DB/RustFS 외부 인프라),
-ADR-046(로컬 포트), ADR-047(프로젝트 식별자)을 적용 기준으로 삼는다.
+ADR-048(로컬·Docker API/UI 포트), ADR-047(프로젝트 식별자)을 적용 기준으로 삼는다.
 
 2026-06-13 사용자 추가 지시에 따라 **streaming replication은 이 작업에서 하지 않는다**.
 

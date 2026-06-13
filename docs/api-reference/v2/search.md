@@ -30,7 +30,7 @@
 ## 예시
 
 ```bash
-curl -X POST "http://localhost:12201/v2/search" \
+curl -X POST "http://localhost:12501/v2/search" \
   -H "Content-Type: application/json" \
   -d '{"query":"테헤란로","type":"road","sig_cd":"11680","size":20}'
 ```

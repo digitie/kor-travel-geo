@@ -94,14 +94,14 @@ source scripts/agent_env.sh
 # WSL ext4 미러, kor-travel-geo-ui 안에서
 source ~/.nvm/nvm.sh
 npm run build
-npm run start -- --hostname 0.0.0.0 --port 12205
+npm run start -- --hostname 0.0.0.0 --port 12505
 ```
 
 다음 형태는 인자가 npm script로 전달되지 않으므로 쓰지 않는다.
 
 ```bash
-npm run start --hostname 0.0.0.0 --port 12205
-npm run dev --hostname 0.0.0.0 --port 12205
+npm run start --hostname 0.0.0.0 --port 12505
+npm run dev --hostname 0.0.0.0 --port 12505
 ```
 
 Windows Playwright는 WSL UI 서버에 붙인다. WSL IP는 매번 확인한다. PR 완료 전 e2e는 Chrome 기준 `chromium` project와 Firefox 기준 `firefox` project를 모두 실행한다.
@@ -111,23 +111,23 @@ Windows Playwright는 WSL UI 서버에 붙인다. WSL IP는 매번 확인한다.
 hostname -I | awk '{print $1}'
 
 # WSL shell에서 Windows Playwright를 호출하는 검증된 형태
-cmd.exe /V:ON /C "cd /d F:\dev\kor-travel-geo-codex\kor-travel-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:12205&& npx playwright test --config playwright.config.ts --project chromium --workers 1"
-cmd.exe /V:ON /C "cd /d F:\dev\kor-travel-geo-codex\kor-travel-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:12205&& npx playwright test --config playwright.config.ts --project firefox --workers 1"
+cmd.exe /V:ON /C "cd /d F:\dev\kor-travel-geo-codex\kor-travel-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:12505&& npx playwright test --config playwright.config.ts --project chromium --workers 1"
+cmd.exe /V:ON /C "cd /d F:\dev\kor-travel-geo-codex\kor-travel-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:12505&& npx playwright test --config playwright.config.ts --project firefox --workers 1"
 ```
 
 실제 VWorld 지도 로딩 e2e는 dev HMR origin 차단을 피하기 위해 production `next start` 서버에서 실행한다. VWorld 키는 Python API `.env`의 `KTG_VWORLD_API_KEY`를 우선 사용하며, 로그에는 키 값을 남기지 않고 존재 여부와 길이만 확인한다.
 
 ```bash
 source ~/.nvm/nvm.sh
-node -e "fetch('http://127.0.0.1:12205/api/runtime-config').then(r=>r.json()).then(j=>console.log('vworld_key_nonempty=' + Boolean(j.vworldApiKey) + ', length=' + String(j.vworldApiKey || '').length))"
+node -e "fetch('http://127.0.0.1:12505/api/runtime-config').then(r=>r.json()).then(j=>console.log('vworld_key_nonempty=' + Boolean(j.vworldApiKey) + ', length=' + String(j.vworldApiKey || '').length))"
 ```
 
 서버 종료는 session stdin에 기대지 않는다. 포트에서 PID를 찾아 죽인다.
 
 ```bash
-ss -ltnp | rg ':12205'
+ss -ltnp | rg ':12505'
 kill <PID>
-ss -ltnp | rg ':12205' || true
+ss -ltnp | rg ':12505' || true
 ```
 
 ### 3.2 GitHub CLI 표준 명령
@@ -173,8 +173,10 @@ worktree의 `.git` 포인터에는 **만든 환경의 절대경로**가 박힌�
 |------|------|------|
 | `KTG_PG_DSN` | `postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo` | 이미 동작 중인 DB |
 | `KTG_RUSTFS_ENDPOINT_URL` | `http://127.0.0.1:12101` | 이미 동작 중인 bucket endpoint |
-| FastAPI 백엔드 | `12201` | `uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12201` |
-| `kor-travel-geo-ui` | `12205` | `npm run dev -- --port 12205`, Playwright base URL도 12205 |
+| RustFS console | `http://127.0.0.1:12105` | `kor-travel-docker-manager` 기준 운영 콘솔 |
+| Grafana / cAdvisor / Prometheus | `12205` / `12301` / `12401` | manager 기준 관측 스택 |
+| FastAPI 백엔드 | `12501` | `uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12501` |
+| `kor-travel-geo-ui` | `12505` | `npm run dev -- --port 12505`, Playwright base URL도 12505 |
 
 ## 6. 붙여넣기용 체크리스트
 

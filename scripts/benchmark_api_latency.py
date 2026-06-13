@@ -114,7 +114,7 @@ class ApiBenchmarkReport:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Benchmark kor-travel-geo REST API latency.")
-    parser.add_argument("--base-url", default="http://127.0.0.1:12201")
+    parser.add_argument("--base-url", default="http://127.0.0.1:12501")
     parser.add_argument("--corpus", type=Path, required=True)
     parser.add_argument("--run-id", help="Stable run id. Defaults to timestamp.")
     parser.add_argument(
