@@ -2,6 +2,56 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (미사용 원천 데이터 정확도 개선 검토)
+
+**작업**: `F:\dev\kor-travel-geo\data\juso` 현재 배치에서 기본 full-load가 쓰지 않거나 선택/조건부로만 쓰는 원천을 대상으로, 직접 정확도 개선 가능성·검증용 가치·도입 위험을 문서화했다.
+
+**반영**:
+- `docs/source-data-accuracy-review.md`를 추가했다.
+- 국가지점번호 도형/중심점은 현 10m 국가지점번호 parser보다 더 정밀한 좌표 원천은 아니지만, 100m 이하 prefix 검증·formatter regression·grid overlay에는 가치가 있음을 정리했다.
+- `도로명주소 건물 도형`은 출입구 point/연결선 검증과 후보 scoring 개선에는 가치가 있지만 `TL_SPBD_BULD` 대체재가 아니므로 별도 analysis table부터 시작해야 한다고 정리했다.
+- `건물군 내 상세주소 동 도형`과 `상세주소DB`는 일반 주소 geocode가 아니라 상세주소 기능/검증 후보로 분리했다.
+- `주소DB`, `건물DB`, `민원행정기관전자지도`, 과거 snapshot, 전자지도 내부 미사용 layer, 내비 `match_jibun_*`의 활용 가능성과 검증용 가치를 함께 정리했다.
+
+**검증**:
+- PowerShell/Python ZIP·DBF header 스캔과 WSL `7z` 조회로 파일 구조, record count, 중심점 분포를 확인했다.
+
+## 2026-06-14 (원본 디렉터리 사용/미사용 구분)
+
+**작업**: `F:\dev\kor-travel-geo\data\juso` 현재 배치 기준으로 full-load 사용, 선택/조건부 사용, 기본 서빙 load 미사용 파일을 구분해 백업/리스토어 원천 인벤토리에 추가했다.
+
+**반영**:
+- `202605_도로명주소 한글_전체분.zip`, `202604_위치정보요약DB_전체분.zip`, `202604_내비게이션용DB_전체분.7z`, `도로명주소 전자지도\202604\<시도>.zip`을 기본 full-load 사용 원천으로 정리했다.
+- `도로명주소 출입구 정보\202604\<시도>.zip`과 `구역의도형\202603\<시도>.zip`을 선택/조건부 사용 원천으로 분리했다.
+- 상세주소DB, 주소DB, 건물DB, 도로명주소 건물 도형, 건물군 내 상세주소 동 도형, 국가지점번호 grid/중심점, 민원행정기관전자지도는 현행 기본 서빙 load에서 쓰지 않는 원천으로 명시했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
+## 2026-06-14 (로컬 원본 파일 재스캔과 전자지도 ZIP 확인)
+
+**작업**: `F:\dev\kor-travel-geo\data\juso`에 추가 정리된 원본 파일을 다시 스캔해, full-load 필수 원천과 선택 원천의 압축파일 기준 위치와 기준년월 추출 가능성을 갱신했다.
+
+**반영**:
+- `도로명주소 전자지도\202604\<시도>.zip` 17개 안에 serving 대상 9개 SHP layer의 `.shp/.shx/.dbf` sidecar가 모두 있음을 확인하고 문서화했다.
+- `TL_SPRD_MANAGE`, `TL_SPRD_INTRVL`, `TL_SPRD_RW`, `TL_SPBD_BULD`의 원본이 `도로명주소 전자지도\202604\<시도>.zip`임을 명시했다.
+- `도로명주소 출입구 정보\202604`의 내부 파일은 `RNENTDATA_2605_*`라서 내부 파일명 기준월은 `202605`임을 주의사항으로 남겼다.
+
+**검증**:
+- PowerShell/.NET ZIP 리더와 WSL `7z` 목록 조회로 압축파일 내부 member 수를 확인했다.
+
+## 2026-06-14 (백업/리스토어 원천 데이터 인벤토리 문서화)
+
+**작업**: 백업/리스토어 로직 고도화를 위해 현재 로더가 사용하는 파일 원천, 외부 API 소스, 파생 MV/accelerator, manifest 권장 필드를 별도 문서로 정리했다.
+
+**반영**:
+- `docs/backup-restore-source-inventory.md`를 추가했다.
+- full-load 필수 source kind(`juso`, `parcel_link`, `locsum`, `navi`, `shp`)와 선택 source kind(`roadaddr_entrance`, `sppn_makarea`, `pobox`, `bulk`)의 파일 패턴과 적재 테이블을 정리했다.
+- VWorld/Juso는 조회 폴백, epost는 오프라인 ZIP 원천 생성 API, RustFS는 source provider가 아니라 upload set 저장소라는 경계를 명시했다.
+
+**검증**:
+- 문서-only 변경. 별도 테스트는 실행하지 않았다.
+
 ## 2026-06-13 (로컬·Docker API/UI 포트 1250x 통일)
 
 **작업**: 사용자 지시에 따라 로컬 단독 실행 포트를 Docker 실행·`kor-travel-docker-manager` scrape target과 같은 `12501`/`12505`로 맞췄다.
