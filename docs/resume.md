@@ -2,8 +2,12 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-13 갱신, by codex)
+## 현재 진척도 (2026-06-14 갱신, by codex)
 
+- ✅ 미사용 원천 데이터 정확도 개선 검토 — `docs/source-data-accuracy-review.md`에 국가지점번호 도형/중심점, 도로명주소 건물 도형, 건물군 내 상세주소 동 도형, 상세주소DB, 주소DB, 건물DB, 민원행정기관전자지도, 과거 snapshot의 직접 활용 가능성과 검증용 가치를 정리했다. 결론은 `도로명주소 출입구 정보`와 건물 도형 bundle의 출입구/연결선이 좌표 정확도 개선 후보이고, 국가지점번호 도형/중심점은 10m 좌표 개선보다 parser/formatter 검증과 grid overlay에 적합하다는 것이다.
+- ✅ 원본 디렉터리 사용/미사용 구분 — `F:\dev\kor-travel-geo\data\juso` 현재 배치 기준으로 기본 full-load 사용(`도로명주소 한글`, 위치정보요약DB, 내비게이션용DB, 도로명주소 전자지도), 선택/조건부 사용(`도로명주소 출입구 정보`, `구역의도형`의 `TL_SPPN_MAKAREA`), 현행 기본 서빙 load 미사용 원천(상세주소DB, 주소DB, 건물DB, 별도 도형/중심점 묶음)을 `docs/backup-restore-source-inventory.md`에 정리했다.
+- ✅ 로컬 원본 파일 재스캔 — `F:\dev\kor-travel-geo\data\juso` 기준으로 정리된 압축 원본을 다시 확인했다. `도로명주소 전자지도\202604\<시도>.zip` 17개에는 serving 대상 9개 SHP layer가 모두 있고, `TL_SPRD_MANAGE`/`TL_SPRD_INTRVL`/`TL_SPRD_RW`/`TL_SPBD_BULD`는 이 묶음에서 온다. `도로명주소 출입구 정보\202604`는 내부 `RNENTDATA_2605_*` 때문에 경로 기준월과 내부 기준월이 다르므로 manifest에는 내부 기준월을 우선 기록해야 한다.
+- ✅ 백업/리스토어 원천 데이터 인벤토리 — 백업/리스토어 manifest 설계를 위해 `docs/backup-restore-source-inventory.md`에 full-load 필수/선택 파일 원천, 일변동 ZIP, VWorld/Juso/epost API 경계, RustFS upload set 저장소 역할, 파생 MV/accelerator와 권장 manifest 필드를 정리했다.
 - ✅ T-108 운영 배포 자동화 — `pinvi`의 T-108 원문을 `docs/tasks.md`에 가져와 등록하되, 사용자 추가 지시에 따라 streaming replication은 제외했다. 이 저장소에서는 PostgreSQL/RustFS 생명주기 직접 관리 금지 원칙을 유지하면서 `scripts/deploy_app.py`로 API/UI `linux/amd64`·`linux/arm64` buildx 빌드/push 계획, N150·Odroid SSH 배포, 원격 `--env-file` 기반 secret 주입, API/UI smoke check를 제공한다. 상세: `docs/t108-deploy-automation.md`.
 - ✅ Prometheus 성능 모니터링 보강 — API `/metrics`가 외부 API/cache/load job gauge, v1/v2 API request total/duration/slow/in-flight, SQLAlchemy pool size/checked-in/checked-out/overflow, DB query operation/fingerprint/status별 duration, load job 전체/stage별 duration을 노출한다. `kor-travel-geo-ui` `/api/metrics`는 Next.js route handler, backend proxy upstream, Web Vitals metric을 노출한다. Prometheus는 앱이 능동 연결하지 않고 scraper가 가져가는 pull 구조로 유지한다. `kor-travel-docker-manager` 기준 관측 host 포트는 Grafana `12205`, cAdvisor `12301`, Prometheus `12401`이며 scrape target은 compose 내부 `kor-travel-geo-api:12501/metrics`, `kor-travel-geo-ui:12505/api/metrics`다.
 - ✅ T-077 `kor-travel-geo` 식별자 전환 — Python 배포명과 GitHub URL 참조는 `kor-travel-geo`, import root는 `kortravelgeo`, 권장 alias는 `import kortravelgeo as ktg`, CLI는 `ktgctl`, 환경변수 prefix는 `KTG_*`, PostgreSQL 기본 DB명은 `kor_travel_geo`, RustFS bucket/prefix 기본값은 `kor-travel-geo`, UI package는 `kor-travel-geo-ui`다. package 경로, Docker/uvicorn entrypoint, OpenAPI/UI types, 문서, `.env.example`, Docker 실행 스크립트를 전환했고 API request duration metric과 opt-in 성능 로그를 추가했다. 이전 이름 계열 내용/경로/CLI 예시 전수조사는 2회 모두 0건이다.
