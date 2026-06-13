@@ -14,6 +14,12 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-108 — 운영 배포 자동화 (Sprint 6) — **Odroid M1S + N150 16GB 양쪽**
+  (`pinvi` 원문에서 가져왔으며, 사용자 추가 지시에 따라 streaming replication은 제외).
+  `pinvi`의 T-108 원문을 가져와 등록했고, 이 저장소에서는 DB/RustFS 생명주기
+  직접 관리 금지 원칙을 지키며 API/UI 멀티플랫폼 이미지 buildx 계획·빌드·SSH 배포
+  자동화를 `scripts/deploy_app.py`로 구현했다. 상세: `docs/t108-deploy-automation.md`.
+  (2026-06-13)
 - [x] T-077 `kor-travel-geo` 식별자 전환. Python 배포명과 GitHub URL 참조는 `kor-travel-geo`, import root는 `kortravelgeo`, 권장 alias는 `import kortravelgeo as ktg`, CLI는 `ktgctl`, 환경변수 prefix는 `KTG_*`, PostgreSQL 기본 DB명은 `kor_travel_geo`, RustFS bucket/prefix 기본값은 `kor-travel-geo`, UI package는 `kor-travel-geo-ui`로 통일했다. API 요청 성능 metric/logging을 추가하고, 이전 이름 계열 전수조사 2회와 Python/UI/Docker smoke 검증을 완료했다. 상세: `docs/t077-kor-travel-geo-rename.md`, ADR-047. (2026-06-13)
 - [x] T-076 RustFS 업로드 저장소 접속 설정. upload set 저장소를 `local`/`rustfs`로 선택할 수 있게 하고, RustFS 설정·연결 확인·prefix import·기존 로컬 파일 sync API와 admin UI를 추가했다. 이 프로젝트는 RustFS를 직접 구동하지 않고 이미 동작 중인 bucket의 접속 설정만 사용한다. Windows Playwright Chromium/Firefox e2e를 통과했다. 상세: `docs/t076-rustfs-upload-storage.md`, ADR-044/ADR-045. (2026-06-03, 2026-06-10 갱신)
 - [x] T-075 `/v2/regions/within-radius` DB 튜닝. `region_radius_parts` serving accelerator를 추가해 시도·시군구·읍면동 polygon을 `ST_Subdivide`로 쪼개고, 단일 SQL/단일 좌표 변환/parent code 필터로 반경 후보를 조회한다. 실제 T-027 DB에서 accelerator row count와 원본 `tl_scco_*` 직접 조회 결과 일치 테스트를 확인했고, `seoul_20km` p95는 122.05ms → 28.61ms, `busan_10km` p95는 45.80ms → 14.89ms로 줄었다. ADR-043. (2026-06-02)
