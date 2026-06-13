@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-13 (T-108 운영 배포 자동화)
+
+**작업**: 사용자 지시에 따라 `pinvi`의 T-108을 이 저장소 작업 항목으로 가져오고, API/UI 운영 배포 자동화 표면을 구현했다.
+
+**반영**:
+- `docs/tasks.md` 완료 섹션에 T-108을 등록하고, `docs/t108-deploy-automation.md`에 `pinvi` 원문을 보존했다.
+- `scripts/deploy_app.py`를 추가했다. `plan`은 build/deploy 계획 JSON·Markdown을 만들고, `build`는 API/UI `docker buildx build` 멀티플랫폼 명령을 실행하며, `deploy`는 N150/Odroid 같은 원격 노드에 SSH로 API/UI 컨테이너를 배포한다.
+- 원격 배포는 노드의 `--env-file`을 사용해 `KTG_PG_DSN`, `KTG_RUSTFS_*`, `KTG_VWORLD_API_KEY`를 주입하며 secret 값을 명령행에 펼치지 않는다.
+- PostgreSQL/RustFS 생명주기는 이 저장소에서 관리하지 않으며, 사용자 추가 지시에 따라 streaming replication은 이번 범위에서 제외했다.
+- `docs/t108-deploy-automation.md`, `docs/resume.md`, `CHANGELOG.md`를 갱신했다.
+
+**검증**:
+- Windows/NTFS: `python -m pytest tests/unit/test_deploy_app.py -q` → 6 passed
+- Windows/NTFS: `python -m ruff check scripts/deploy_app.py tests/unit/test_deploy_app.py` → pass
+- Windows/NTFS: `python scripts/deploy_app.py plan --tag test --output-dir .tmp\t108-plan` → plan 생성 확인
+- Windows/NTFS: `git diff --check` → pass
+- WSL ext4 mirror: `python -m pytest -q` → 298 passed, 25 skipped
+- WSL ext4 mirror: `python -m ruff check .` → pass
+- WSL ext4 mirror: `python -m mypy src/kortravelgeo` → pass
+- WSL ext4 mirror: `lint-imports` → Layered architecture kept
+- WSL ext4 mirror: `python scripts/deploy_app.py plan --tag test --output-dir /tmp/ktg-t108-plan` → JSON/Markdown 생성 확인
+
 ## 2026-06-13 (Prometheus 상세 계측 범위 확장)
 
 **작업**: 사용자 요청에 맞춰 API, Next.js admin UI, provider/load batch job 단계, DB query별 성능 측정을 추가했다.

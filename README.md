@@ -128,6 +128,9 @@ uvicorn kortravelgeo.api.app:app --reload --port 12201
 # Docker API/UI 빌드 및 실행 (GDAL 버전 매칭 포함)
 scripts/docker_app.sh build
 scripts/docker_app.sh up
+
+# 운영 노드(N150/Odroid) 배포 계획 생성
+python scripts/deploy_app.py plan --tag "$(git rev-parse --short HEAD)" --output-dir artifacts/deploy/t108
 ```
 
 ### 2. 프론트엔드 설정 (Next.js)

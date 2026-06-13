@@ -12,6 +12,11 @@
 
 T-055의 이번 PR 범위는 **실측 준비**다. 실제 N150/Odroid 장비가 없으면 full-load/serving 수치를 직접 만들 수 없으므로, 같은 git SHA와 같은 데이터 snapshot에서 반복 가능한 runbook, 시스템 envelope 캡처 스크립트, 산출물 구조를 먼저 고정한다. 장비 도착 뒤의 실측 실행은 후속 `T-063 N150/Odroid 실측 실행`으로 분리한다.
 
+T-108에서는 이 실측 준비와 별도로 API/UI 운영 배포 자동화를 추가했다. 멀티플랫폼
+이미지 build/push와 N150/Odroid SSH 배포 계획은 `docs/t108-deploy-automation.md`와
+`scripts/deploy_app.py`를 기준으로 한다. T-063은 여전히 실제 하드웨어에서 성능 수치를
+측정하는 작업이다.
+
 ### 후보 환경
 
 | 항목 | N150 박스 | Odroid (H4 Plus 가정) |
