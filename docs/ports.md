@@ -18,6 +18,18 @@
 | FastAPI 백엔드 | `12201` | `uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12201` |
 | `kor-travel-geo-ui` | `12205` | `npm run dev -- --port 12205`, Playwright 기본 `PLAYWRIGHT_BASE_URL` |
 
+로컬 단독 UI와 `kor-travel-docker-manager`의 Grafana는 둘 다 host `12205`를 사용한다. 같은 PC에서 동시에 띄워야 하면 한쪽 포트를 명시적으로 바꾼다.
+
+`kor-travel-docker-manager`가 띄우는 관측 스택은 별도 애플리케이션이므로 이 저장소에서 직접 구동하지 않는다. 다만 Prometheus scrape 대상은 이 저장소의 API `/metrics`와 `kor-travel-geo-ui`의 `/api/metrics`다.
+
+| 표면 | host 포트 | compose 내부 대상 | 비고 |
+|------|-----------|-------------------|------|
+| Prometheus | `12401` | `prometheus:9090` | `http://127.0.0.1:12401` |
+| Grafana | `12205` | `grafana:3000` | Prometheus datasource 자동 등록 |
+| cAdvisor | `12301` | `cadvisor:8080` | Docker 컨테이너 리소스 exporter |
+| `kor-travel-geo` API metrics | `12501` | `kor-travel-geo-api:12501/metrics` | Docker manager compose 기준 scrape target |
+| `kor-travel-geo-ui` metrics | `12505` | `kor-travel-geo-ui:12505/api/metrics` | Docker manager compose 기준 scrape target |
+
 ```bash
 KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo \
 KTG_RUSTFS_ENABLED=true \

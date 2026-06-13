@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any, Protocol
 
 from sqlalchemy import bindparam, text
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.batch import batch_children
+from kortravelgeo.infra.metrics import record_load_job_duration, record_load_job_stage_duration
 
 
 class ProgressCallback(Protocol):
@@ -29,6 +31,7 @@ JobHandler = Callable[[dict[str, Any], asyncio.Event, ProgressCallback], Awaitab
 ADVISORY_SLOT_LOAD_QUEUE = 470017
 _CONTROL_KINDS = {"full_load_batch", "consistency_check", "mv_refresh", "db_backup", "db_restore"}
 _CONTROL_KIND_SQL = ", ".join(f"'{kind}'" for kind in sorted(_CONTROL_KINDS))
+_FINAL_STAGES = {"done", "failed", "cancelled"}
 
 
 class JobQueue:
@@ -38,6 +41,7 @@ class JobQueue:
         self._handlers: dict[str, JobHandler] = {}
         self._cancel_events: dict[str, asyncio.Event] = {}
         self._tasks: set[asyncio.Task[None]] = set()
+        self._stage_timers: dict[str, tuple[str, str, float]] = {}
 
     def register(self, kind: str, handler: JobHandler) -> None:
         self._handlers[kind] = handler
@@ -123,27 +127,43 @@ UPDATE load_jobs
                 if row is None:
                     return
                 job_id, kind, payload = row
+                job_started_at = perf_counter()
+                final_state = "failed"
                 handler = self._handlers.get(kind)
                 if handler is None:
                     await self._fail(job_id, f"no handler registered for load kind: {kind}")
+                    record_load_job_duration(
+                        kind=kind,
+                        state="failed",
+                        elapsed_s=perf_counter() - job_started_at,
+                    )
                     continue
                 payload_with_job = dict(payload)
                 payload_with_job.setdefault("_job_id", job_id)
                 cancel_event = asyncio.Event()
                 self._cancel_events[job_id] = cancel_event
-                progress = self._progress_callback(job_id)
+                progress = self._progress_callback(job_id, kind)
                 try:
                     await progress(progress=0.01, stage="running", message="job started")
                     await handler(payload_with_job, cancel_event, progress)
                 except asyncio.CancelledError:
+                    final_state = "cancelled"
                     await self._cancelled(job_id)
                 except Exception as exc:
+                    final_state = "failed"
                     await self._fail(job_id, str(exc))
                 else:
+                    final_state = "done"
                     await self._done(job_id)
                     await self._enqueue_batch_successors(job_id)
                 finally:
                     self._cancel_events.pop(job_id, None)
+                    self._finish_stage(job_id, outcome=final_state)
+                    record_load_job_duration(
+                        kind=kind,
+                        state=final_state,
+                        elapsed_s=perf_counter() - job_started_at,
+                    )
 
     async def _claim_one(self) -> tuple[str, str, dict[str, Any]] | None:
         async with self.engine.begin() as conn:
@@ -240,16 +260,49 @@ UPDATE load_jobs
         await self._record_progress(job_id, stage="failed", message=message)
         await self._mark_batch_failed(job_id, message)
 
-    def _progress_callback(self, job_id: str) -> ProgressCallback:
+    def _progress_callback(self, job_id: str, kind: str) -> ProgressCallback:
         async def report(
             *,
             progress: float | None = None,
             stage: str | None = None,
             message: str | None = None,
         ) -> None:
+            if stage is not None:
+                self._record_stage_transition(job_id, kind=kind, stage=stage)
             await self._record_progress(job_id, progress=progress, stage=stage, message=message)
 
         return report
+
+    def _record_stage_transition(self, job_id: str, *, kind: str, stage: str) -> None:
+        now = perf_counter()
+        current = self._stage_timers.get(job_id)
+        if current is not None:
+            current_kind, current_stage, started_at = current
+            if current_stage == stage:
+                return
+            outcome = stage if stage in {"failed", "cancelled"} else "completed"
+            record_load_job_stage_duration(
+                kind=current_kind,
+                stage=current_stage,
+                outcome=outcome,
+                elapsed_s=now - started_at,
+            )
+        if stage in _FINAL_STAGES:
+            self._stage_timers.pop(job_id, None)
+            return
+        self._stage_timers[job_id] = (kind, stage, now)
+
+    def _finish_stage(self, job_id: str, *, outcome: str) -> None:
+        current = self._stage_timers.pop(job_id, None)
+        if current is None:
+            return
+        kind, stage, started_at = current
+        record_load_job_stage_duration(
+            kind=kind,
+            stage=stage,
+            outcome=outcome,
+            elapsed_s=perf_counter() - started_at,
+        )
 
     async def _record_progress(
         self,

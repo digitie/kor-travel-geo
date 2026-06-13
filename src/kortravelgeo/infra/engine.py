@@ -9,6 +9,7 @@ import orjson
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import AsyncAdaptedQueuePool
 
+from kortravelgeo.infra.metrics import install_db_query_metrics
 from kortravelgeo.settings import Settings, get_settings
 
 
@@ -46,7 +47,7 @@ def make_async_engine(
     if connect_args:
         merged_connect_args.update(connect_args)
 
-    return create_async_engine(
+    engine = create_async_engine(
         resolved.pg_dsn,
         pool_size=resolved.pg_pool_size,
         max_overflow=resolved.pg_max_overflow,
@@ -57,4 +58,6 @@ def make_async_engine(
         json_serializer=_json_serializer,
         json_deserializer=orjson.loads,
     )
-
+    if resolved.pg_query_metrics_enabled:
+        install_db_query_metrics(engine)
+    return engine
