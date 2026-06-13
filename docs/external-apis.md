@@ -50,7 +50,7 @@ async with httpx.AsyncClient(timeout=5.0) as cx:
 `kor-travel-geo-ui`의 지도는 Kakao Maps SDK가 아니라 MapLibre GL JS + VWorld WMTS를 사용한다. 지도 타일은 브라우저에서 직접 호출되므로 `/api/runtime-config`가 반환한 키가 브라우저에 노출된다. runtime config는 Python API `.env`의 `KTG_VWORLD_API_KEY`를 우선 사용하고, 이 값이 없을 때 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. 저장소 문서·예시에는 실제 키를 쓰지 않는다. UI는 `/admin/settings`에서 브라우저 localStorage override를 저장·수정할 수 있다.
 
 - **발급처**: 서버측 vworld OpenAPI 키와 동일하게 https://www.vworld.kr/dev/v4api.do
-- **키 소스**: 로컬 개발에서는 Python API `.env`의 `KTG_VWORLD_API_KEY`를 UI 지도에도 재사용한다. 운영에서 백엔드 fallback 키와 브라우저 WMTS 키를 분리해야 하면 `KTG_VWORLD_API_KEY`를 서버 프로세스 환경에서 빼고 `NEXT_PUBLIC_VWORLD_API_KEY`만 제공한다. 로컬 개발용 키에는 `localhost:12205`, `127.0.0.1:12205`, WSL e2e에 쓰는 내부 IP와 포트 조합을 등록한다.
+- **키 소스**: 로컬 개발에서는 Python API `.env`의 `KTG_VWORLD_API_KEY`를 UI 지도에도 재사용한다. 운영에서 백엔드 fallback 키와 브라우저 WMTS 키를 분리해야 하면 `KTG_VWORLD_API_KEY`를 서버 프로세스 환경에서 빼고 `NEXT_PUBLIC_VWORLD_API_KEY`만 제공한다. 로컬 개발용 키에는 `localhost:12505`, `127.0.0.1:12505`, WSL e2e에 쓰는 내부 IP와 포트 조합을 등록한다.
 - **사용 레이어**: 기본은 `Base`. 필요하면 `gray`, `midnight`, `Hybrid`, `Satellite`를 `CoordinateMap.layerType`으로 선택한다.
 - **타일 URL 규칙**: `https://api.vworld.kr/req/wmts/1.0.0/{key}/{layer}/{z}/{y}/{x}.{ext}`. `Base`/`gray`/`midnight`/`Hybrid`는 `png`, `Satellite`는 `jpeg`. UI option 이름 `gray`는 VWorld WMTS 요청에서는 `white` layer로 변환한다.
 - **zoom 한계**: `Base`/`gray`/`midnight`는 z19까지, `Hybrid`/`Satellite`는 z18까지만 요청한다. 상한을 넘긴 tile 404는 운영 장애로 보지 않고 MapLibre 컴포넌트에서 transient error로 다룬다.
@@ -192,7 +192,7 @@ KTG_EPOST_API_KEY=urlDecoded+ServiceKey+Value==
 
 ```bash
 # kor-travel-geo-ui/.env.local
-KTG_API_INTERNAL_URL=http://localhost:12201
+KTG_API_INTERNAL_URL=http://localhost:12501
 NEXT_PUBLIC_API_BASE_URL=/api/proxy
 # 선택 fallback. 기본은 저장소 루트 .env의 KTG_VWORLD_API_KEY
 NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key

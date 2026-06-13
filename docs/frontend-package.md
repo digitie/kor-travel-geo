@@ -74,7 +74,7 @@ kor-travel-geo-ui/
 ### 환경변수 (`.env.local.example`)
 
 ```
-KTG_API_INTERNAL_URL=http://localhost:12201           # 서버 사이드 전용
+KTG_API_INTERNAL_URL=http://localhost:12501           # 서버 사이드 전용
 NEXT_PUBLIC_API_BASE_URL=/api/proxy                      # 브라우저 노출
 NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key           # 선택 fallback. 기본은 Python API .env의 KTG_VWORLD_API_KEY
 ```
@@ -188,7 +188,7 @@ T-044 경계화 포팅 원칙:
 
 Playwright e2e는 `tests/e2e/`에 둔다. 현재 `debug-v2.spec.ts`는 브라우저 네트워크를 가로채 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse`, `/api/proxy/v2/regions/within-radius` 요청을 확인한다. 이 방식은 실제 DB 결과에 의존하지 않고, UI가 v2 REST body를 잘못 만들거나 v1 endpoint로 되돌아가면 즉시 실패한다. `vworld-map.spec.ts`는 runtime config를 mock하지 않고 Python API `.env`에서 확보한 VWorld 키로 MapLibre canvas와 VWorld WMTS 타일 응답을 확인한다.
 
-프론트엔드 실행과 build/test는 WSL ext4 미러에서 Linux Node/npm으로 수행한다. Windows `npm`을 WSL 경로에서 실행하지 않는다. e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행한다. WSL에서 UI 서버를 띄워 Windows Playwright를 붙일 때는 `next dev --hostname 0.0.0.0 --port 12205` 또는 production build 후 `next start --hostname 0.0.0.0 --port 12205`로 바인딩하고, Windows에서는 WSL IP를 `PLAYWRIGHT_BASE_URL`로 지정한다. PR 완료 전 e2e는 Chrome 기준 `chromium` project와 Firefox 기준 `firefox` project를 모두 실행한다. 실제 지도 로딩 e2e는 HMR origin 차단을 피하고 사용자 실행에 가깝게 production `next start` 서버에서 실행한다.
+프론트엔드 실행과 build/test는 WSL ext4 미러에서 Linux Node/npm으로 수행한다. Windows `npm`을 WSL 경로에서 실행하지 않는다. e2e 검증을 위한 Playwright 실행과 브라우저만 Windows에서 수행한다. WSL에서 UI 서버를 띄워 Windows Playwright를 붙일 때는 `next dev --hostname 0.0.0.0 --port 12505` 또는 production build 후 `next start --hostname 0.0.0.0 --port 12505`로 바인딩하고, Windows에서는 WSL IP를 `PLAYWRIGHT_BASE_URL`로 지정한다. PR 완료 전 e2e는 Chrome 기준 `chromium` project와 Firefox 기준 `firefox` project를 모두 실행한다. 실제 지도 로딩 e2e는 HMR origin 차단을 피하고 사용자 실행에 가깝게 production `next start` 서버에서 실행한다.
 
 ### A3.7.1 React Doctor
 

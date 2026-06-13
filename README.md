@@ -123,7 +123,7 @@ ktgctl load roadaddr-entrances "./data/juso/도로명주소 출입구 정보" --
 ktgctl refresh mv --swap
 
 # 서비스 기동
-uvicorn kortravelgeo.api.app:app --reload --port 12201
+uvicorn kortravelgeo.api.app:app --reload --port 12501
 
 # Docker API/UI 빌드 및 실행 (GDAL 버전 매칭 포함)
 scripts/docker_app.sh build
@@ -140,7 +140,7 @@ cd kor-travel-geo-ui
 cp .env.local.example .env.local && $EDITOR .env.local   # NEXT_PUBLIC_VWORLD_API_KEY 설정
 npm ci
 npm run gen:types        # 백엔드 openapi.json → TypeScript 타입 생성
-npm run dev -- --port 12205   # http://localhost:12205
+npm run dev -- --port 12505   # http://localhost:12505
 ```
 
 > [!TIP]
@@ -151,9 +151,9 @@ npm run dev -- --port 12205   # http://localhost:12205
 ## 🧭 진입점
 
 - **Python 라이브러리**: `from kortravelgeo import AsyncAddressClient` — asyncio 컨텍스트 매니저
-- **REST API**: `uvicorn kortravelgeo.api.app:app` — Swagger UI (`http://localhost:12201/v1/docs`)
-- **Prometheus API metrics**: `http://localhost:12201/metrics` — v1/v2 API 요청 성능, DB pool/query, cache, load job/stage 메트릭
-- **Prometheus UI metrics**: `http://localhost:12205/api/metrics` — Next.js route handler, backend proxy upstream, Web Vitals 메트릭
+- **REST API**: `uvicorn kortravelgeo.api.app:app` — Swagger UI (`http://localhost:12501/v1/docs`)
+- **Prometheus API metrics**: `http://localhost:12501/metrics` — v1/v2 API 요청 성능, DB pool/query, cache, load job/stage 메트릭
+- **Prometheus UI metrics**: `http://localhost:12505/api/metrics` — Next.js route handler, backend proxy upstream, Web Vitals 메트릭
 - **CLI**: `ktgctl --help` — `load`, `refresh`, `validate`, `healthz` 등
 - **디버그/관리 UI**: `kor-travel-geo-ui` — 내부망 전용 디버깅 (ADR-013)
 

@@ -6,7 +6,7 @@ import {
 } from "@/lib/metrics";
 import { buildProxyRequestInit, buildProxyTarget, forwardedProxyHeaders } from "@/lib/proxy";
 
-const INTERNAL_BASE = process.env.KTG_API_INTERNAL_URL ?? "http://localhost:12201";
+const INTERNAL_BASE = process.env.KTG_API_INTERNAL_URL ?? "http://localhost:12501";
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const startedAt = performance.now();

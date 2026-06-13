@@ -62,7 +62,7 @@ async with AsyncAddressClient() as client:
 ## 예시
 
 ```bash
-curl -X POST "http://localhost:12201/v2/regions/within-radius" \
+curl -X POST "http://localhost:12501/v2/regions/within-radius" \
   -H "Content-Type: application/json" \
   -d '{"lon":126.978,"lat":37.5665,"radius_km":3,"levels":["sigungu","emd"]}'
 ```
