@@ -7,7 +7,7 @@
 
 ## 대기 (우선순위 순)
 
-- 없음.
+- T-109 백업 원천 파일 업로드·매칭·검증 관리 고도화 — 카테고리별 명시 업로드, 사용자가 확정하는 기준년월, 업로드 원천 파일 DB registry, RustFS object 정합성 검증/복구, source match set, optional 검증 자료와 C11+ 검증 케이스를 구현한다. 일변동/incremental 업로드는 범위에서 제외한다. 설계 문서: `docs/t109-backup-source-upload-management.md`
 
 ## 보류 (외부 조건)
 

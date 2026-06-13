@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (백업 원천 파일 업로드·매칭·검증 관리 고도화 설계)
+
+**작업**: 백업/리스토어 고도화의 원천 파일 관리 흐름을 구현 전에 문서화했다. 사용자 요구사항에 따라 파일 업로드는 category별 명시 slot으로 나누고, 기준년월은 사용자가 직접 확정하며, 정상 업로드 파일 metadata는 DB registry에서 관리하고, RustFS object와 DB row의 정합성 검증/복구를 admin UI에서 처리하는 방향으로 설계했다.
+
+**반영**:
+- `docs/t109-backup-source-upload-management.md`를 추가했다.
+- `docs/tasks.md`에 T-109 구현 대기 항목을 등록했다.
+- `docs/resume.md`에 문서화 완료와 구현 대기 상태를 추가했다.
+- `docs/backup-restore-source-inventory.md`에서 T-109 설계 문서를 참조하게 했다.
+
+**핵심 결정/주의**:
+- 사용자 요청의 기본 category 목록은 맞지만, `도로명주소 한글_전체분`은 내부적으로 `juso`와 `parcel_link` 두 source kind를 만들고, `도로명주소 출입구 정보`와 `구역의도형`은 현행 코드에서는 optional이므로 `serving_minimal`과 `serving_recommended` profile을 분리하도록 제안했다.
+- `건물군 내 상세주소 동 도형`, `도로명주소 건물 도형`, `국가지점번호 도형/중심점`, `민원행정기관전자지도`는 match set의 optional 검증/보강 자료로 관리하고 C11+ 검증 케이스를 추가하는 방향으로 정리했다.
+- incremental 업데이트 파일 업로드는 T-109 범위에서 명시적으로 제외했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (미사용 원천 데이터 정확도 개선 검토)
 
 **작업**: `F:\dev\kor-travel-geo\data\juso` 현재 배치에서 기본 full-load가 쓰지 않거나 선택/조건부로만 쓰는 원천을 대상으로, 직접 정확도 개선 가능성·검증용 가치·도입 위험을 문서화했다.

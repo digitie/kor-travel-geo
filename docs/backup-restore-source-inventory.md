@@ -9,6 +9,8 @@
 - 현재 연결 DB 관찰일: 2026-06-14
 - PostgreSQL/RustFS 생명주기는 이 저장소가 직접 관리하지 않고, 접속 설정만 사용한다.
 
+이 문서는 "현재 어떤 원천 파일과 API가 DB 상태를 만드는가"를 정리한다. 업로드 UX, 정상 업로드 파일 DB registry, RustFS object 정합성 검증, 사용자가 직접 조합하는 source match set, optional 검증 자료 관리는 `docs/t109-backup-source-upload-management.md`에서 후속 구현 설계로 다룬다.
+
 ## Full-load 필수 파일 원천
 
 `SourceSetPlan`의 필수 source kind는 `juso`, `parcel_link`, `locsum`, `navi`, `shp` 다섯 가지다.
