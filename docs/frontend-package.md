@@ -322,7 +322,17 @@ T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/loa
 
 테스트는 현재 backend redaction/route contract와 frontend lint/type/build로 시작한다. 후속 UI 고도화 시 secret redaction 표시, active release 한 건 강조, artifact type filter, audit event pagination, maintenance window 만료 상태를 추가한다.
 
-## A7. DB 일관성 — 단일 엔진
+## A7. 관찰가능성
+
+`kor-travel-geo-ui`는 Next.js 서버 프로세스에서 `/api/metrics`를 노출한다. Prometheus는 앱이 능동 연결하지 않는 pull 방식으로 이 endpoint를 scrape한다.
+
+- route handler request total/duration: `/api/runtime-config`, `/api/proxy/[...path]`, `/api/metrics`, `/api/metrics/web-vitals`
+- backend proxy upstream duration: `/v1/*`, `/v2/*` 백엔드 fetch를 method, backend route, status code 기준으로 집계
+- Web Vitals: 브라우저에서 `useReportWebVitals`로 수집한 metric name, route, rating, value를 `/api/metrics/web-vitals`로 전송
+
+동적 id나 긴 token은 metric label cardinality를 낮추기 위해 `:id`로 정규화한다. query string, 주소 원문, API key는 metric label에 넣지 않는다.
+
+## A8. DB 일관성 — 단일 엔진
 
 프론트엔드는 자체 DB connection을 갖지 않는다. `/debug/*`(지오코딩/역지오코딩/정규화/EXPLAIN)와 `/admin/*`(테이블 통계/적재/MV refresh) 모두 백엔드 REST API를 호출하고, 백엔드는 `AsyncAddressClient.engine` 한 개의 SQLAlchemy 2 async engine으로 응답한다.
 
@@ -332,7 +342,7 @@ T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/loa
 
 `kor-travel-geo-ui`의 `package.json`에 `pg`/`prisma` 같은 DB 의존성이 들어오는 순간 ADR 위반이며 PR을 거절한다.
 
-## A8. 외부 노출 정책 변경 시
+## A9. 외부 노출 정책 변경 시
 
 내부망 가정이 깨질 때는 다음 순서를 따른다 — 코드 변경 없이 운영 변경으로 처리:
 

@@ -149,6 +149,8 @@ npm run dev -- --port 12205   # http://localhost:12205
 
 - **Python 라이브러리**: `from kortravelgeo import AsyncAddressClient` — asyncio 컨텍스트 매니저
 - **REST API**: `uvicorn kortravelgeo.api.app:app` — Swagger UI (`http://localhost:12201/v1/docs`)
+- **Prometheus API metrics**: `http://localhost:12201/metrics` — v1/v2 API 요청 성능, DB pool/query, cache, load job/stage 메트릭
+- **Prometheus UI metrics**: `http://localhost:12205/api/metrics` — Next.js route handler, backend proxy upstream, Web Vitals 메트릭
 - **CLI**: `ktgctl --help` — `load`, `refresh`, `validate`, `healthz` 등
 - **디버그/관리 UI**: `kor-travel-geo-ui` — 내부망 전용 디버깅 (ADR-013)
 

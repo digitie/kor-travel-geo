@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- Prometheus 성능 모니터링을 보강했다. API `/metrics`는 기존 요청 duration histogram에 더해 API request total, slow request total, in-progress request gauge, SQLAlchemy DB pool size/checked-in/checked-out/overflow gauge, DB query operation/fingerprint/status별 duration, load job 전체/stage별 duration을 노출한다. `kor-travel-geo-ui`는 `/api/metrics`에서 Next.js route handler, backend proxy upstream, Web Vitals metric을 노출한다. `kor-travel-docker-manager` scrape 대상은 `kor-travel-geo-api:12501/metrics`, `kor-travel-geo-ui:12505/api/metrics`다.
 - API 요청 성능 측정을 추가했다. `/metrics`는 `kor_travel_geo_api_request_duration_seconds` histogram을 노출하고, `KTG_API_PERFORMANCE_LOGGING_ENABLED=true`일 때 route template, method, status, elapsed_ms 기반 성능 로그를 남긴다. query string과 주소 입력값은 로그 메시지에 기록하지 않는다.
 - RustFS(S3 호환) 업로드 저장소 옵션을 추가했다. `/v1/admin/uploads`는 `storage_kind="local" | "rustfs"`를 받을 수 있고, RustFS upload set은 `rustfs://<bucket>/<prefix>/...` URI와 materialized cache를 통해 기존 source set 탐지/계획 경로를 재사용한다.
 - `/v1/admin/storage/rustfs/config`, `/check`, `/import-prefix`, `/sync-local` API를 추가했다. admin UI `/admin/settings`에서 RustFS 사용 여부, endpoint, bucket, prefix, region, access/secret key, retention을 설정하고, `/admin/load`에서 업로드 저장소 선택, RustFS prefix import, 로컬 기존 파일 RustFS 동기화를 실행할 수 있다.

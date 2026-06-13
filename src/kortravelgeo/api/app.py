@@ -30,7 +30,10 @@ from kortravelgeo.infra.concurrency import (
 from kortravelgeo.infra.metrics import (
     PROMETHEUS_CONTENT_TYPE,
     record_api_request,
+    record_api_request_finished,
+    record_api_request_started,
     refresh_admin_metrics,
+    refresh_db_pool_metrics,
     render_prometheus,
 )
 from kortravelgeo.loaders.bulk_loader import load_bulk_delivery
@@ -111,7 +114,9 @@ def create_app() -> FastAPI:
         client = cast("AsyncAddressClient", request.app.state.client)
         cache = await client.cache_metrics()
         load_jobs = await client.load_job_metric_counts()
+        assert client.engine is not None
         refresh_admin_metrics(cache=cache, load_jobs=load_jobs)
+        refresh_db_pool_metrics(client.engine)
         return Response(render_prometheus(), media_type=PROMETHEUS_CONTENT_TYPE)
 
     return app
@@ -124,7 +129,9 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         started = perf_counter()
+        method = request.method
         status_code = 500
+        record_api_request_started(method=method)
         try:
             response = await call_next(request)
             status_code = response.status_code
@@ -134,16 +141,18 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
             elapsed_ms = elapsed_s * 1_000
             route = _route_template(request)
             record_api_request(
-                method=request.method,
+                method=method,
                 route=route,
                 status_code=status_code,
                 elapsed_s=elapsed_s,
+                slow_threshold_ms=settings.api_slow_request_ms,
             )
+            record_api_request_finished(method=method)
             if settings.api_performance_logging_enabled:
                 _PERFORMANCE_LOGGER.info(
                     "api_request",
                     extra={
-                        "method": request.method,
+                        "method": method,
                         "route": route,
                         "status_code": status_code,
                         "elapsed_ms": round(elapsed_ms, 3),

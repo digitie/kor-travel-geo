@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     pg_max_overflow: int = Field(default=5, ge=0)
     pg_statement_timeout_ms: int = Field(default=5_000, ge=1)
     pg_pool_recycle_s: int = Field(default=3_600, ge=1)
+    pg_query_metrics_enabled: bool = True
 
     api_title: str = "kor-travel-geo"
     api_cors_origins: tuple[str, ...] = Field(default_factory=tuple)

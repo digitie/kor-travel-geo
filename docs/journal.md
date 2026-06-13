@@ -2,6 +2,40 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-13 (Prometheus 상세 계측 범위 확장)
+
+**작업**: 사용자 요청에 맞춰 API, Next.js admin UI, provider/load batch job 단계, DB query별 성능 측정을 추가했다.
+
+**반영**:
+- SQLAlchemy event hook 기반 DB query counter/duration histogram을 추가하고, query 원문 대신 operation과 fingerprint를 label로 사용한다.
+- load job 전체 duration과 stage별 duration histogram을 추가했다.
+- `kor-travel-geo-ui`에 `/api/metrics` Prometheus endpoint, `/api/metrics/web-vitals` 수집 endpoint, Web Vitals reporter, Next.js route handler/proxy upstream duration 계측을 추가했다.
+- `kor-travel-docker-manager` Prometheus scrape target을 `kor-travel-geo-api:12501/metrics`, `kor-travel-geo-ui:12505/api/metrics` 기준으로 맞췄다.
+
+**검증**:
+- WSL ext4 mirror: `.venv/bin/python -m pytest -q` → 292 passed, 25 skipped
+- WSL ext4 mirror: `.venv/bin/python -m ruff check .` → pass
+- WSL ext4 mirror: `.venv/bin/python -m mypy src/kortravelgeo` → pass
+- WSL ext4 mirror: `.venv/bin/lint-imports` → Layered architecture kept
+- WSL ext4 mirror `kor-travel-geo-ui`: `npm run lint`, `npm run type-check`, `npm run test`, `npm run build` 통과
+- WSL ext4 mirror `kor-travel-geo-ui`: `npx react-doctor@latest . --offline --verbose --json` → score 100, warning 0
+
+## 2026-06-13 (Prometheus 성능 모니터링 보강)
+
+**작업**: `kor-travel-docker-manager`의 관측 스택 포트 정책을 확인해 `kor-travel-geo` API `/metrics`의 성능 메트릭을 보강했다. Prometheus는 앱이 능동 연결하지 않고 외부 scraper가 `/metrics`를 가져가는 pull 구조로 유지한다. Docker manager 기준 Prometheus/Grafana/cAdvisor host 포트는 `12401`/`12205`/`12301`이고, compose 내부 API scrape target은 `kor-travel-geo-api:12501/metrics`다.
+
+**반영**:
+- `kor_travel_geo_api_requests_total`, `kor_travel_geo_api_slow_requests_total`, `kor_travel_geo_api_requests_in_progress`를 추가했다.
+- SQLAlchemy pool 상태 gauge `kor_travel_geo_pg_pool_size`, `kor_travel_geo_pg_pool_checked_in`, `kor_travel_geo_pg_pool_checked_out`, `kor_travel_geo_pg_pool_overflow`를 추가했다.
+- `/metrics` 요청 시 cache/load job gauge와 함께 DB pool gauge를 갱신한다.
+- `README.md`, `.env.example`, `docs/architecture.md`, `docs/ports.md`, `CHANGELOG.md`에 Prometheus/Grafana 포트와 pull 방식 scrape target을 문서화했다.
+
+**검증**:
+- WSL ext4 mirror: `python -m pytest -q` → 290 passed, 25 skipped
+- WSL ext4 mirror: `python -m ruff check .` → pass
+- WSL ext4 mirror: `python -m mypy src/kortravelgeo` → pass
+- WSL ext4 mirror: `lint-imports` → Layered architecture kept
+
 ## 2026-06-13 06:20 (T-077 `kor-travel-geo` 식별자 전환 구현)
 
 **작업**: 사용자 확정값에 맞춰 프로젝트 식별자를 `kor-travel-geo` 계열로 통일했다. Python import root는 `kortravelgeo`, 권장 alias는 `import kortravelgeo as ktg`, CLI는 `ktgctl`, 환경변수 prefix는 `KTG_*`, PostgreSQL 기본 DB명은 `kor_travel_geo`, RustFS bucket/prefix 기본값은 `kor-travel-geo`다.

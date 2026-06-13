@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AppShell } from "@/components/layout/AppShell";
+import { WebVitalsReporter } from "@/components/metrics/WebVitalsReporter";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
@@ -13,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ko">
       <body>
         <Providers>
+          <WebVitalsReporter />
           <AppShell>{children}</AppShell>
         </Providers>
       </body>
