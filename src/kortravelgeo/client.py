@@ -61,11 +61,15 @@ from .dto.reverse import ReverseResponse, ReverseType
 from .dto.search import SearchResponse, SearchType
 from .dto.source import (
     GroupValidationResult,
+    ReconcileResolveResponse,
     RegisterResponse,
+    SourceCapacityUsage,
     SourceFileCategoryInfo,
     SourceGroupRestoreResponse,
     SourceGroupSoftDeleteResponse,
     SourceJanitorRunResponse,
+    SourceReconcileItem,
+    SourceReconcileRun,
     UploadSessionCreateRequest,
     UploadSessionPartStatus,
     UploadSessionStatus,
@@ -877,6 +881,115 @@ class AsyncAddressClient:
             session_limit=self.settings.source_janitor_session_limit,
         )
         return SourceJanitorRunResponse(**summary.as_payload())
+
+    # --- RustFS reconciliation (T-204) ------------------------------------
+
+    async def run_source_reconcile(
+        self,
+        *,
+        prefix: str | None = None,
+        mode: str = "quick",
+        actor: str | None,
+    ) -> SourceReconcileRun:
+        """Run one RustFS ⟷ DB reconciliation pass (T-204, doc lines ~638-726).
+
+        Scans the configured RustFS source prefix against ``ops.source_files``,
+        emitting a ``source_storage_reconcile_items`` row for each issue_type.
+        """
+        from .infra.rustfs import RustfsClient, require_enabled_rustfs
+        from .infra.source_reconcile import get_reconcile_run, run_source_reconcile
+
+        config = require_enabled_rustfs(self.settings)
+        rustfs = RustfsClient(config)
+        scan_prefix = prefix or config.prefix
+        result = await run_source_reconcile(
+            self._engine(),
+            rustfs=rustfs,
+            prefix=scan_prefix,
+            mode=mode,
+            actor=actor,
+            rolling_deep_days=self.settings.source_reconcile_rolling_deep_days,
+            object_limit=self.settings.source_reconcile_object_limit,
+        )
+        return await get_reconcile_run(
+            self._engine(), result.source_storage_reconcile_run_id
+        )
+
+    async def get_source_reconcile_run(self, run_id: str) -> SourceReconcileRun:
+        from .infra.source_reconcile import get_reconcile_run
+
+        return await get_reconcile_run(self._engine(), run_id)
+
+    async def list_source_reconcile_runs(
+        self, *, limit: int = 50
+    ) -> tuple[SourceReconcileRun, ...]:
+        from .infra.source_reconcile import list_reconcile_runs
+
+        return await list_reconcile_runs(self._engine(), limit=limit)
+
+    async def list_source_reconcile_items(
+        self,
+        run_id: str,
+        *,
+        issue_type: str | None = None,
+        state: str | None = None,
+        limit: int = 500,
+    ) -> tuple[SourceReconcileItem, ...]:
+        from .infra.source_reconcile import list_reconcile_items
+
+        return await list_reconcile_items(
+            self._engine(),
+            run_id,
+            issue_type=issue_type,
+            state=state,
+            limit=limit,
+        )
+
+    async def resolve_source_reconcile_item(
+        self,
+        item_id: str,
+        *,
+        action: str,
+        actor: str | None,
+        category: str | None = None,
+        user_yyyymm: str | None = None,
+        registration_deadline_at: datetime | None = None,
+        typed_confirmation: str | None = None,
+    ) -> ReconcileResolveResponse:
+        """Resolve one reconciliation item (T-204, doc lines ~1458-1479).
+
+        Runs the read-after-write recheck + active-정본 deletion guard, then the
+        action; audits and may re-propagate via ``recompute_group_aggregates``.
+        """
+        from .infra.rustfs import RustfsClient, load_rustfs_config
+        from .infra.source_reconcile import resolve_reconcile_item
+
+        config = load_rustfs_config(self.settings)
+        rustfs = (
+            RustfsClient(config)
+            if config.enabled and config.credentials_configured
+            else None
+        )
+        return await resolve_reconcile_item(
+            self._engine(),
+            item_id,
+            action=action,  # type: ignore[arg-type]
+            actor=actor,
+            rustfs=rustfs,
+            category=category,
+            user_yyyymm=user_yyyymm,
+            registration_deadline_at=registration_deadline_at,
+            typed_confirmation=typed_confirmation,
+        )
+
+    async def source_storage_capacity(self) -> SourceCapacityUsage:
+        """Per-category storage capacity usage (T-204, doc line ~2107)."""
+        from .infra.source_reconcile import compute_source_capacity
+
+        return await compute_source_capacity(
+            self._engine(),
+            capacity_limit_bytes=self.settings.source_storage_capacity_limit_bytes,
+        )
 
     async def list_dataset_snapshots(
         self,

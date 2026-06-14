@@ -3670,6 +3670,217 @@
         "title": "Point",
         "type": "object"
       },
+      "ReconcileResolveRequest": {
+        "additionalProperties": false,
+        "description": "``POST .../reconcile/items/{id}/resolve`` body (doc lines ~1458-1469).\n\n``import_object`` requires ``category`` + ``user_yyyymm``;\n``extend_registration_deadline`` requires ``registration_deadline_at``;\n``update_hash_after_verify`` requires a non-empty ``typed_confirmation``.",
+        "properties": {
+          "action": {
+            "enum": [
+              "mark_db_missing",
+              "soft_delete_db_row",
+              "restore_soft_deleted",
+              "import_object",
+              "delete_object",
+              "extend_registration_deadline",
+              "retry_delete_object",
+              "update_hash_after_verify"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "roadname_hangul_full",
+                  "locsum_full",
+                  "navi_full",
+                  "electronic_map_full",
+                  "roadaddr_entrance_full",
+                  "zone_shape_full",
+                  "roadaddr_building_shape_bundle",
+                  "detail_dong_shape_bundle",
+                  "detail_address_db_full",
+                  "national_point_grid_shape",
+                  "national_point_grid_center",
+                  "civil_service_institution_map",
+                  "address_db_full",
+                  "building_db_full",
+                  "epost_pobox_full",
+                  "epost_bulk_full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "registration_deadline_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Deadline At"
+          },
+          "typed_confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typed Confirmation"
+          },
+          "user_yyyymm": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Yyyymm"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "ReconcileResolveRequest",
+        "type": "object"
+      },
+      "ReconcileResolveResponse": {
+        "additionalProperties": false,
+        "description": "Resolve outcome after the read-after-write recheck (doc line ~1479).",
+        "properties": {
+          "action": {
+            "enum": [
+              "mark_db_missing",
+              "soft_delete_db_row",
+              "restore_soft_deleted",
+              "import_object",
+              "delete_object",
+              "extend_registration_deadline",
+              "retry_delete_object",
+              "update_hash_after_verify"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "affected_match_set_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Match Set Ids",
+            "type": "array"
+          },
+          "issue_type": {
+            "enum": [
+              "db_missing_object",
+              "object_missing_db",
+              "pending_registration",
+              "registration_expired",
+              "source_file_unavailable",
+              "source_file_group_incomplete",
+              "size_mismatch",
+              "hash_mismatch",
+              "etag_mismatch",
+              "duplicate_object",
+              "orphaned_multipart",
+              "delete_failed"
+            ],
+            "title": "Issue Type",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "source_file_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Group Id"
+          },
+          "source_storage_reconcile_item_id": {
+            "title": "Source Storage Reconcile Item Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "resolved",
+              "ignored"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_storage_reconcile_item_id",
+          "issue_type",
+          "action",
+          "state",
+          "outcome"
+        ],
+        "title": "ReconcileResolveResponse",
+        "type": "object"
+      },
+      "ReconcileRunRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/source-files/reconcile`` body.\n\n``prefix=None`` scans the configured RustFS source prefix. ``mode='deep'``\nstreams every object body for a SHA-256 rehash; ``quick`` skips rehash for\nobjects unchanged since their ``last_verified_*`` (force-deeping ones past the\nrolling-deep window).",
+        "properties": {
+          "mode": {
+            "default": "quick",
+            "enum": [
+              "quick",
+              "deep"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix"
+          }
+        },
+        "title": "ReconcileRunRequest",
+        "type": "object"
+      },
       "RefinedAddress": {
         "additionalProperties": false,
         "properties": {
@@ -5510,6 +5721,108 @@
         "title": "SlotReplaceResponse",
         "type": "object"
       },
+      "SourceCapacityUsage": {
+        "additionalProperties": false,
+        "description": "``GET /v1/admin/source-files/capacity`` response (doc lines ~2107-2108).\n\nComputation + surfacing only: the retention/cleanup policy is T-212.",
+        "properties": {
+          "capacity_limit_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capacity Limit Bytes"
+          },
+          "categories": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceCategoryCapacity"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "over_threshold": {
+            "default": false,
+            "title": "Over Threshold",
+            "type": "boolean"
+          },
+          "quarantined_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Quarantined Bytes",
+            "type": "integer"
+          },
+          "soft_deleted_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Soft Deleted Bytes",
+            "type": "integer"
+          },
+          "total_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Bytes",
+            "type": "integer"
+          },
+          "total_object_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Object Count",
+            "type": "integer"
+          },
+          "unregistered_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Unregistered Bytes",
+            "type": "integer"
+          }
+        },
+        "title": "SourceCapacityUsage",
+        "type": "object"
+      },
+      "SourceCategoryCapacity": {
+        "additionalProperties": false,
+        "description": "Per-category object-count / byte usage (doc line ~2107).",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "object_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Object Count",
+            "type": "integer"
+          },
+          "quarantined_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Quarantined Bytes",
+            "type": "integer"
+          },
+          "soft_deleted_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Soft Deleted Bytes",
+            "type": "integer"
+          },
+          "total_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category"
+        ],
+        "title": "SourceCategoryCapacity",
+        "type": "object"
+      },
       "SourceFileCategoryCatalog": {
         "additionalProperties": false,
         "description": "Response wrapper for the static upload-category catalog.",
@@ -5954,6 +6267,333 @@
           }
         },
         "title": "SourceJanitorRunResponse",
+        "type": "object"
+      },
+      "SourceReconcileItem": {
+        "additionalProperties": false,
+        "description": "One ``ops.source_storage_reconcile_items`` row (doc lines ~662-704).",
+        "properties": {
+          "db_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db Etag"
+          },
+          "db_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db Sha256"
+          },
+          "db_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Db Size Bytes"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "issue_type": {
+            "enum": [
+              "db_missing_object",
+              "object_missing_db",
+              "pending_registration",
+              "registration_expired",
+              "source_file_unavailable",
+              "source_file_group_incomplete",
+              "size_mismatch",
+              "hash_mismatch",
+              "etag_mismatch",
+              "duplicate_object",
+              "orphaned_multipart",
+              "delete_failed"
+            ],
+            "title": "Issue Type",
+            "type": "string"
+          },
+          "object_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Etag"
+          },
+          "object_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Key"
+          },
+          "object_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Sha256"
+          },
+          "object_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Size Bytes"
+          },
+          "resolution_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Action"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "source_file_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Group Id"
+          },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          },
+          "source_storage_reconcile_item_id": {
+            "title": "Source Storage Reconcile Item Id",
+            "type": "string"
+          },
+          "source_storage_reconcile_run_id": {
+            "title": "Source Storage Reconcile Run Id",
+            "type": "string"
+          },
+          "state": {
+            "default": "open",
+            "enum": [
+              "open",
+              "resolved",
+              "ignored"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_storage_reconcile_item_id",
+          "source_storage_reconcile_run_id",
+          "issue_type",
+          "severity"
+        ],
+        "title": "SourceReconcileItem",
+        "type": "object"
+      },
+      "SourceReconcileItemPage": {
+        "additionalProperties": false,
+        "description": "List response for a run's items.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceReconcileItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "SourceReconcileItemPage",
+        "type": "object"
+      },
+      "SourceReconcileRun": {
+        "additionalProperties": false,
+        "description": "One ``ops.source_storage_reconcile_runs`` row (doc lines ~638-659).",
+        "properties": {
+          "cursor": {
+            "additionalProperties": true,
+            "title": "Cursor",
+            "type": "object"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "log_tail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Tail"
+          },
+          "mismatch_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Mismatch Count",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "quick",
+              "deep"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "rehashed_objects": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Rehashed Objects",
+            "type": "integer"
+          },
+          "resolved_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Resolved Count",
+            "type": "integer"
+          },
+          "scanned_db_files": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Scanned Db Files",
+            "type": "integer"
+          },
+          "scanned_objects": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Scanned Objects",
+            "type": "integer"
+          },
+          "skipped_rehash_objects": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Skipped Rehash Objects",
+            "type": "integer"
+          },
+          "source_storage_reconcile_run_id": {
+            "title": "Source Storage Reconcile Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "source_storage_reconcile_run_id",
+          "prefix",
+          "mode",
+          "state",
+          "started_at"
+        ],
+        "title": "SourceReconcileRun",
         "type": "object"
       },
       "SppnMakareaContext": {
@@ -10334,6 +10974,28 @@
         ]
       }
     },
+    "/v1/admin/source-files/capacity": {
+      "get": {
+        "description": "Per-category storage capacity usage (doc line ~2107).\n\nComputation + surfacing only; the retention/cleanup POLICY is T-212.",
+        "operationId": "source_files_capacity_v1_admin_source_files_capacity_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceCapacityUsage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Source Files Capacity",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/source-files/janitor/run": {
       "post": {
         "description": "Run one upload-session janitor pass on demand (doc lines ~519-525).\n\nAborts unfinished multipart uploads past ``expires_at`` (RustFS objects that\nfinished storing are never auto-deleted) and transitions stored-but-\nunregistered sessions past the registration deadline to\n``registration_expired``. Skips if the ``SOURCE_JANITOR`` lock is held.",
@@ -10351,6 +11013,279 @@
           }
         },
         "summary": "Run Source Upload Janitor",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/reconcile": {
+      "get": {
+        "description": "List recent reconciliation runs (newest first).",
+        "operationId": "list_source_reconcile_runs_v1_admin_source_files_reconcile_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceReconcileRun"
+                  },
+                  "title": "Response List Source Reconcile Runs V1 Admin Source Files Reconcile Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Source Reconcile Runs",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Run one RustFS ⟷ DB reconciliation pass (doc lines ~638-726).\n\nLists RustFS objects under the prefix, classifies each against\n``ops.source_files`` (quick skips rehash for unchanged objects, force-deeping\npast the rolling-deep window; deep rehashes every body), and records an issue\nitem per discrepancy. En-masse loss propagates referenced groups to\n``missing`` (active match sets → ``integrity_alert``, ``validated`` → ``invalid``).",
+        "operationId": "run_source_reconcile_v1_admin_source_files_reconcile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceReconcileRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Source Reconcile",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/reconcile/items/{source_storage_reconcile_item_id}/resolve": {
+      "post": {
+        "description": "Resolve one reconciliation item (doc lines ~1458-1479).\n\nMost resolves require ``source_file_manager``; destructive resolves\n(``delete_object`` / ``retry_delete_object``) additionally require the\n``destructive_admin`` role. A read-after-write recheck rejects stale items and\nthe active-정본 deletion guard refuses deleting an object an active match set\nreferences.",
+        "operationId": "resolve_source_reconcile_item_v1_admin_source_files_reconcile_items__source_storage_reconcile_item_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_storage_reconcile_item_id",
+            "required": true,
+            "schema": {
+              "title": "Source Storage Reconcile Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileResolveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Source Reconcile Item",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/reconcile/{source_storage_reconcile_run_id}": {
+      "get": {
+        "description": "Get one reconciliation run by id.",
+        "operationId": "get_source_reconcile_run_v1_admin_source_files_reconcile__source_storage_reconcile_run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_storage_reconcile_run_id",
+            "required": true,
+            "schema": {
+              "title": "Source Storage Reconcile Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceReconcileRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Source Reconcile Run",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/reconcile/{source_storage_reconcile_run_id}/items": {
+      "get": {
+        "description": "List a run's issue items (filter by issue_type / state).",
+        "operationId": "list_source_reconcile_items_v1_admin_source_files_reconcile__source_storage_reconcile_run_id__items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_storage_reconcile_run_id",
+            "required": true,
+            "schema": {
+              "title": "Source Storage Reconcile Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "issue_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Issue Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceReconcileItemPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Source Reconcile Items",
         "tags": [
           "admin"
         ]

@@ -487,6 +487,159 @@ class SourceJanitorRunResponse(FrozenModel):
     skipped_locked: bool = False
 
 
+# --- RustFS reconciliation (T-204) ----------------------------------------
+# DB/RustFS consistency scan + resolve. Tables: ``ops.source_storage_reconcile_runs``
+# / ``ops.source_storage_reconcile_items`` (doc lines ~638-726, ~1449-1479).
+
+ReconcileMode = Literal["quick", "deep"]
+ReconcileIssueType = Literal[
+    "db_missing_object",
+    "object_missing_db",
+    "pending_registration",
+    "registration_expired",
+    "source_file_unavailable",
+    "source_file_group_incomplete",
+    "size_mismatch",
+    "hash_mismatch",
+    "etag_mismatch",
+    "duplicate_object",
+    "orphaned_multipart",
+    "delete_failed",
+]
+ReconcileItemState = Literal["open", "resolved", "ignored"]
+ReconcileRunState = Literal["running", "completed", "failed"]
+ReconcileSeverity = Literal["info", "warning", "error"]
+ReconcileResolveAction = Literal[
+    "mark_db_missing",
+    "soft_delete_db_row",
+    "restore_soft_deleted",
+    "import_object",
+    "delete_object",
+    "extend_registration_deadline",
+    "retry_delete_object",
+    "update_hash_after_verify",
+]
+
+
+class ReconcileRunRequest(FrozenModel):
+    """``POST /v1/admin/source-files/reconcile`` body.
+
+    ``prefix=None`` scans the configured RustFS source prefix. ``mode='deep'``
+    streams every object body for a SHA-256 rehash; ``quick`` skips rehash for
+    objects unchanged since their ``last_verified_*`` (force-deeping ones past the
+    rolling-deep window).
+    """
+
+    prefix: str | None = None
+    mode: ReconcileMode = "quick"
+
+
+class SourceReconcileRun(FrozenModel):
+    """One ``ops.source_storage_reconcile_runs`` row (doc lines ~638-659)."""
+
+    source_storage_reconcile_run_id: str
+    prefix: str
+    mode: ReconcileMode
+    state: ReconcileRunState
+    started_at: datetime
+    finished_at: datetime | None = None
+    scanned_objects: int = Field(default=0, ge=0)
+    scanned_db_files: int = Field(default=0, ge=0)
+    rehashed_objects: int = Field(default=0, ge=0)
+    skipped_rehash_objects: int = Field(default=0, ge=0)
+    mismatch_count: int = Field(default=0, ge=0)
+    resolved_count: int = Field(default=0, ge=0)
+    cursor: dict[str, Any] = Field(default_factory=dict)
+    log_tail: str | None = None
+    summary: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceReconcileItem(FrozenModel):
+    """One ``ops.source_storage_reconcile_items`` row (doc lines ~662-704)."""
+
+    source_storage_reconcile_item_id: str
+    source_storage_reconcile_run_id: str
+    issue_type: ReconcileIssueType
+    source_file_group_id: str | None = None
+    source_file_id: str | None = None
+    object_key: str | None = None
+    db_sha256: str | None = None
+    object_sha256: str | None = None
+    db_size_bytes: int | None = None
+    object_size_bytes: int | None = None
+    db_etag: str | None = None
+    object_etag: str | None = None
+    severity: ReconcileSeverity
+    state: ReconcileItemState = "open"
+    resolution_action: str | None = None
+    resolved_by: str | None = None
+    resolved_at: datetime | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceReconcileItemPage(FrozenModel):
+    """List response for a run's items."""
+
+    items: tuple[SourceReconcileItem, ...] = ()
+
+
+class ReconcileResolveRequest(FrozenModel):
+    """``POST .../reconcile/items/{id}/resolve`` body (doc lines ~1458-1469).
+
+    ``import_object`` requires ``category`` + ``user_yyyymm``;
+    ``extend_registration_deadline`` requires ``registration_deadline_at``;
+    ``update_hash_after_verify`` requires a non-empty ``typed_confirmation``.
+    """
+
+    action: ReconcileResolveAction
+    category: SourceFileCategory | None = None
+    user_yyyymm: str | None = Field(default=None, pattern=r"^\d{6}$")
+    registration_deadline_at: datetime | None = None
+    typed_confirmation: str | None = None
+
+
+class ReconcileResolveResponse(FrozenModel):
+    """Resolve outcome after the read-after-write recheck (doc line ~1479)."""
+
+    source_storage_reconcile_item_id: str
+    issue_type: ReconcileIssueType
+    action: ReconcileResolveAction
+    state: ReconcileItemState
+    outcome: str
+    source_file_group_id: str | None = None
+    affected_match_set_ids: tuple[str, ...] = ()
+    message: str | None = None
+
+
+# --- Capacity preflight (T-204; retention POLICY is T-212) ------------------
+
+
+class SourceCategoryCapacity(FrozenModel):
+    """Per-category object-count / byte usage (doc line ~2107)."""
+
+    category: str
+    object_count: int = Field(default=0, ge=0)
+    total_bytes: int = Field(default=0, ge=0)
+    quarantined_bytes: int = Field(default=0, ge=0)
+    soft_deleted_bytes: int = Field(default=0, ge=0)
+
+
+class SourceCapacityUsage(FrozenModel):
+    """``GET /v1/admin/source-files/capacity`` response (doc lines ~2107-2108).
+
+    Computation + surfacing only: the retention/cleanup policy is T-212.
+    """
+
+    categories: tuple[SourceCategoryCapacity, ...] = ()
+    total_object_count: int = Field(default=0, ge=0)
+    total_bytes: int = Field(default=0, ge=0)
+    quarantined_bytes: int = Field(default=0, ge=0)
+    soft_deleted_bytes: int = Field(default=0, ge=0)
+    unregistered_bytes: int = Field(default=0, ge=0)
+    capacity_limit_bytes: int | None = Field(default=None, ge=0)
+    over_threshold: bool = False
+
+
 class SourceMatchSet(FrozenModel):
     """Top-level combination of source groups used for rebuild or validation."""
 
