@@ -133,6 +133,14 @@ const RECONCILE_ITEMS = {
       issue_type: "hash_mismatch",
       severity: "error",
       state: "open"
+    },
+    {
+      source_storage_reconcile_item_id: "ri_2",
+      source_storage_reconcile_run_id: "rec_1",
+      issue_type: "object_missing_db",
+      severity: "warning",
+      state: "open",
+      object_key: "source/electronic_map_full/orphan-36.zip"
     }
   ]
 };
@@ -302,13 +310,15 @@ describe("SourceFilesPanel", () => {
     const summary = (await screen.findByText("용량 / 이슈 요약")).closest(
       ".panel"
     ) as HTMLElement;
-    // 30일 증가량 (512 B) + 미등록(1024 B = 1.0 KB) + 미해결 이슈(open 1건, error 1건)
+    // 30일 증가량 (512 B) + 미등록(1024 B = 1.0 KB) + 미해결 이슈(open 2건, error 1건)
     expect(await within(summary).findByText("최근 30일 증가")).toBeInTheDocument();
     expect(within(summary).getByText("512 B")).toBeInTheDocument();
     expect(within(summary).getByText("1.0 KB")).toBeInTheDocument();
     const openDt = within(summary).getByText("미해결 이슈");
     const openDd = openDt.parentElement?.querySelector("dd");
-    await waitFor(() => expect(openDd).toHaveTextContent("1"));
+    await waitFor(() => expect(openDd).toHaveTextContent("2"));
+    const errorDt = within(summary).getByText("오류(error) 이슈");
+    expect(errorDt.parentElement?.querySelector("dd")).toHaveTextContent("1");
   });
 
   it("RustFS 정합성 탭에 실행/이슈/용량을 표시한다", async () => {
@@ -318,6 +328,39 @@ describe("SourceFilesPanel", () => {
     expect(await screen.findByText("해시 불일치")).toBeInTheDocument();
     // capacity panel
     expect(await screen.findByText("용량 (capacity)")).toBeInTheDocument();
+  });
+
+  it("정리 대상을 선택해 typed-confirmation 일괄 영구 삭제(T-212)를 호출한다", async () => {
+    renderPanel("reconcile");
+    await screen.findByText("정합성 실행 (RustFS ⟷ DB)");
+
+    // 정리 대상(object_missing_db) 행의 선택 체크박스
+    const rowCheckbox = await screen.findByLabelText(/정리 대상 선택:/);
+    fireEvent.click(rowCheckbox);
+
+    // 일괄 삭제 버튼 → 다이얼로그
+    fireEvent.click(screen.getByRole("button", { name: /선택 항목 영구 삭제/ }));
+    const dialog = await screen.findByRole("dialog", { name: "원천 객체 영구 삭제" });
+    const execButton = within(dialog).getByRole("button", { name: /영구 삭제 실행/ });
+
+    // 확인 문구 입력 전에는 비활성
+    expect(execButton).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("hard-delete 확인 문구"), {
+      target: { value: "HARD-DELETE-SOURCES" }
+    });
+    expect(execButton).not.toBeDisabled();
+
+    fireEvent.click(execButton);
+    await waitFor(() =>
+      expect(apiMocks.postJson).toHaveBeenCalledWith(
+        "/admin/source-files/bulk-hard-delete",
+        expect.objectContaining({
+          object_keys: ["source/electronic_map_full/orphan-36.zip"],
+          typed_confirmation: "HARD-DELETE-SOURCES",
+          manifest_ack: false
+        })
+      )
+    );
   });
 
   it("현재 구성 탭에서 active match set이 없으면 알수없음을 표시한다", async () => {

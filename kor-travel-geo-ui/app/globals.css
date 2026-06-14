@@ -411,6 +411,27 @@ textarea {
   margin: 0;
 }
 
+.key-list {
+  background: var(--surface-muted, #f8fafc);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+}
+
+.key-list li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .json-box {
   background: #101828;
   border-radius: 8px;

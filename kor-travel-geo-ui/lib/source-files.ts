@@ -42,6 +42,10 @@ export type ReconcileResolveAction = ReconcileResolveRequest["action"];
 export type SourceCapacityUsage = components["schemas"]["SourceCapacityUsage"];
 export type SourceCategoryCapacity = components["schemas"]["SourceCategoryCapacity"];
 
+export type SourceBulkHardDeleteRequest = components["schemas"]["SourceBulkHardDeleteRequest"];
+export type SourceBulkHardDeleteResponse = components["schemas"]["SourceBulkHardDeleteResponse"];
+export type SourceHardDeleteOutcome = components["schemas"]["SourceHardDeleteOutcome"];
+
 export type ConsistencyReportSummary = components["schemas"]["ConsistencyReportSummary"];
 export type ConsistencyReport = components["schemas"]["ConsistencyReport"];
 export type ConsistencyCaseDefinition = components["schemas"]["ConsistencyCaseDefinition"];
@@ -83,6 +87,31 @@ export const reconcileIssueLabels: Record<ReconcileIssueType, string> = {
   orphaned_multipart: "고아 multipart",
   delete_failed: "삭제 실패"
 };
+
+/**
+ * Fixed typed-confirmation phrase for the manual bulk hard-delete (T-212, ADR-052).
+ * The operator must type this exactly; the backend requires `destructive_admin`
+ * plus this phrase for `POST /v1/admin/source-files/bulk-hard-delete`.
+ */
+export const HARD_DELETE_CONFIRMATION = "HARD-DELETE-SOURCES";
+
+/**
+ * Reconcile issue types whose objects are cleanup-eligible ("정리 대상") for the
+ * manual bulk hard-delete: unregistered stored objects. soft_deleted/quarantined
+ * files are eligible too but surface in the 목록 tab, not as reconcile issues.
+ * The backend re-validates eligibility and reports `skipped_ineligible` regardless,
+ * so this only gates which rows offer a selection checkbox.
+ */
+export const BULK_HARD_DELETE_ELIGIBLE_ISSUE_TYPES: ReadonlySet<ReconcileIssueType> =
+  new Set<ReconcileIssueType>(["object_missing_db", "registration_expired"]);
+
+export function isBulkHardDeleteEligible(item: SourceReconcileItem): boolean {
+  return (
+    item.state === "open" &&
+    Boolean(item.object_key) &&
+    BULK_HARD_DELETE_ELIGIBLE_ISSUE_TYPES.has(item.issue_type)
+  );
+}
 
 // epost categories use the manual server-fetch flow (T-207), not browser upload.
 export const epostCategories: ReadonlySet<SourceCategory> = new Set<SourceCategory>([
@@ -157,6 +186,7 @@ export const sourceFilesPaths = {
   },
   reconcileItemResolve: (itemId: string) =>
     `/admin/source-files/reconcile/items/${itemId}/resolve`,
+  bulkHardDelete: () => "/admin/source-files/bulk-hard-delete",
   consistency: () => "/admin/consistency",
   consistencyReport: (id: string) => `/admin/consistency/${id}`,
   consistencyCaseDefinitions: () => "/admin/consistency/case-definitions",

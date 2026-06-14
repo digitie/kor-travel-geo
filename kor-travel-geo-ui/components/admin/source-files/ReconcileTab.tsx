@@ -1,16 +1,20 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { Play, RefreshCw, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { postJson, requestJson } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import {
+  HARD_DELETE_CONFIRMATION,
+  isBulkHardDeleteEligible,
   reconcileIssueLabels,
   sourceFilesPaths,
   type ReconcileResolveAction,
+  type SourceBulkHardDeleteRequest,
+  type SourceBulkHardDeleteResponse,
   type SourceCapacityUsage,
   type SourceReconcileItem,
   type SourceReconcileItemPage,
@@ -35,6 +39,8 @@ export function ReconcileTab() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [mode, setMode] = useState<"quick" | "deep">("quick");
   const [lastResult, setLastResult] = useState<unknown>(null);
+  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set());
+  const [hardDeleteOpen, setHardDeleteOpen] = useState(false);
 
   const { data: runs = EMPTY_RUNS, refetch: refetchRuns } = useQuery({
     queryKey: ["reconcile-runs"],
@@ -74,6 +80,47 @@ export function ReconcileTab() {
     },
     onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
   });
+
+  // 정리 대상(미등록 stored object) — 수동 일괄 영구 삭제 (T-212, ADR-052).
+  const cleanupTargets = useMemo(() => items.filter(isBulkHardDeleteEligible), [items]);
+  const selectedTargets = useMemo(
+    () => cleanupTargets.filter((item) => selectedKeys.has(item.object_key as string)),
+    [cleanupTargets, selectedKeys]
+  );
+
+  // 다른 실행을 선택하면 선택 상태를 초기화한다(stale object_key 방지).
+  useEffect(() => {
+    setSelectedKeys(new Set());
+    setHardDeleteOpen(false);
+  }, [effectiveRunId]);
+
+  const bulkHardDelete = useMutation({
+    mutationFn: (body: SourceBulkHardDeleteRequest) =>
+      postJson<SourceBulkHardDeleteResponse>(sourceFilesPaths.bulkHardDelete(), body),
+    onSuccess: (data) => {
+      setLastResult(data);
+      setSelectedKeys(new Set());
+      setHardDeleteOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["reconcile-items"] });
+      void queryClient.invalidateQueries({ queryKey: ["source-capacity"] });
+    },
+    onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
+  });
+
+  function toggleKey(objectKey: string): void {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(objectKey)) next.delete(objectKey);
+      else next.add(objectKey);
+      return next;
+    });
+  }
+
+  function toggleAllTargets(checked: boolean): void {
+    setSelectedKeys(
+      checked ? new Set(cleanupTargets.map((item) => item.object_key as string)) : new Set()
+    );
+  }
 
   return (
     <div className="source-stack">
@@ -143,13 +190,46 @@ export function ReconcileTab() {
         </table>
       </Panel>
 
-      <Panel title="이슈 항목">
+      <Panel
+        title="이슈 항목"
+        actions={
+          cleanupTargets.length > 0 ? (
+            <div className="toolbar-inline">
+              <span className="form-note">
+                정리 대상 {cleanupTargets.length}건 · 선택 {selectedTargets.length}건
+              </span>
+              <button
+                className="button danger"
+                disabled={selectedTargets.length === 0 || bulkHardDelete.isPending}
+                onClick={() => setHardDeleteOpen(true)}
+                type="button"
+              >
+                <Trash2 size={16} />
+                선택 항목 영구 삭제
+              </button>
+            </div>
+          ) : null
+        }
+      >
         {items.length === 0 ? (
           <p className="form-note">선택한 실행에 미해결 이슈가 없습니다.</p>
         ) : (
           <table className="table compact">
             <thead>
               <tr>
+                <th>
+                  {cleanupTargets.length > 0 ? (
+                    <input
+                      aria-label="정리 대상 전체 선택"
+                      checked={
+                        selectedTargets.length > 0 &&
+                        selectedTargets.length === cleanupTargets.length
+                      }
+                      onChange={(event) => toggleAllTargets(event.target.checked)}
+                      type="checkbox"
+                    />
+                  ) : null}
+                </th>
                 <th>이슈 유형</th>
                 <th>심각도</th>
                 <th>상태</th>
@@ -158,42 +238,56 @@ export function ReconcileTab() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.source_storage_reconcile_item_id}>
-                  <td title={item.issue_type}>{reconcileIssueLabels[item.issue_type]}</td>
-                  <td>
-                    <StatusBadge value={item.severity} />
-                  </td>
-                  <td>{item.state}</td>
-                  <td title={item.object_key ?? ""}>
-                    {item.object_key ? `${item.object_key.slice(0, 24)}…` : "-"}
-                  </td>
-                  <td>
-                    {item.state === "open" ? (
-                      <div className="button-row">
-                        {SIMPLE_RESOLVE_ACTIONS.map((action) => (
-                          <button
-                            className="button secondary"
-                            disabled={resolveItem.isPending}
-                            key={action}
-                            onClick={() =>
-                              resolveItem.mutate({
-                                itemId: item.source_storage_reconcile_item_id,
-                                action
-                              })
-                            }
-                            type="button"
-                          >
-                            {action}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="form-note">{item.resolution_action ?? "-"}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {items.map((item) => {
+                const eligible = isBulkHardDeleteEligible(item);
+                const objectKey = item.object_key ?? "";
+                return (
+                  <tr key={item.source_storage_reconcile_item_id}>
+                    <td>
+                      {eligible ? (
+                        <input
+                          aria-label={`정리 대상 선택: ${objectKey}`}
+                          checked={selectedKeys.has(objectKey)}
+                          onChange={() => toggleKey(objectKey)}
+                          type="checkbox"
+                        />
+                      ) : null}
+                    </td>
+                    <td title={item.issue_type}>{reconcileIssueLabels[item.issue_type]}</td>
+                    <td>
+                      <StatusBadge value={item.severity} />
+                    </td>
+                    <td>{item.state}</td>
+                    <td title={objectKey}>
+                      {item.object_key ? `${item.object_key.slice(0, 24)}…` : "-"}
+                    </td>
+                    <td>
+                      {item.state === "open" ? (
+                        <div className="button-row">
+                          {SIMPLE_RESOLVE_ACTIONS.map((action) => (
+                            <button
+                              className="button secondary"
+                              disabled={resolveItem.isPending}
+                              key={action}
+                              onClick={() =>
+                                resolveItem.mutate({
+                                  itemId: item.source_storage_reconcile_item_id,
+                                  action
+                                })
+                              }
+                              type="button"
+                            >
+                              {action}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="form-note">{item.resolution_action ?? "-"}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -208,6 +302,99 @@ export function ReconcileTab() {
           <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
         </Panel>
       ) : null}
+
+      {hardDeleteOpen ? (
+        <BulkHardDeleteDialog
+          objectKeys={selectedTargets.map((item) => item.object_key as string)}
+          onCancel={() => setHardDeleteOpen(false)}
+          onConfirm={(body) => bulkHardDelete.mutate(body)}
+          pending={bulkHardDelete.isPending}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function BulkHardDeleteDialog({
+  objectKeys,
+  onCancel,
+  onConfirm,
+  pending
+}: {
+  objectKeys: string[];
+  onCancel: () => void;
+  onConfirm: (body: SourceBulkHardDeleteRequest) => void;
+  pending: boolean;
+}) {
+  const [confirmation, setConfirmation] = useState("");
+  const [manifestAck, setManifestAck] = useState(false);
+  const [reason, setReason] = useState("");
+  const confirmationOk = confirmation === HARD_DELETE_CONFIRMATION;
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" role="dialog" aria-modal="true" aria-label="원천 객체 영구 삭제">
+        <h2>정리 대상 {objectKeys.length}건 영구 삭제</h2>
+        <p className="form-note warn">
+          선택한 미등록 stored object를 RustFS에서 영구(hard) 삭제합니다. 되돌릴 수 없습니다.
+          활성 정본이 참조하는 객체는 백엔드 가드로 자동 제외(skip)됩니다.
+        </p>
+        <ul className="key-list">
+          {objectKeys.slice(0, 8).map((key) => (
+            <li key={key} title={key}>
+              {key}
+            </li>
+          ))}
+          {objectKeys.length > 8 ? (
+            <li className="form-note">… 외 {objectKeys.length - 8}건</li>
+          ) : null}
+        </ul>
+        <label className="checkbox-row">
+          <input
+            checked={manifestAck}
+            onChange={(event) => setManifestAck(event.target.checked)}
+            type="checkbox"
+          />
+          완료된 db_backup manifest 없이 진행함을 확인 (manifest_ack)
+        </label>
+        <label className="field">
+          <span>사유 (reason)</span>
+          <input onChange={(event) => setReason(event.target.value)} value={reason} />
+        </label>
+        <div className="confirm-box">
+          <label>확인 문구 입력: {HARD_DELETE_CONFIRMATION}</label>
+          <input
+            aria-label="hard-delete 확인 문구"
+            onChange={(event) => setConfirmation(event.target.value)}
+            placeholder={HARD_DELETE_CONFIRMATION}
+            value={confirmation}
+          />
+          {!confirmationOk ? (
+            <p className="form-note warn">확인 문구가 일치해야 합니다.</p>
+          ) : null}
+        </div>
+        <div className="button-row">
+          <button
+            className="button danger"
+            disabled={!confirmationOk || objectKeys.length === 0 || pending}
+            onClick={() =>
+              onConfirm({
+                object_keys: objectKeys,
+                typed_confirmation: confirmation,
+                manifest_ack: manifestAck,
+                reason: reason || null
+              })
+            }
+            type="button"
+          >
+            <Trash2 size={16} />
+            영구 삭제 실행
+          </button>
+          <button className="button secondary" disabled={pending} onClick={onCancel} type="button">
+            취소
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
