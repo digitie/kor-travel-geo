@@ -683,7 +683,8 @@ CREATE TABLE IF NOT EXISTS ops.source_file_groups (
 
 CREATE TABLE IF NOT EXISTS ops.source_files (
   source_file_id        UUID PRIMARY KEY,
-  source_file_group_id  UUID NOT NULL REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
+  source_file_group_id  UUID NOT NULL
+    REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
   original_filename     TEXT NOT NULL,
   part_kind             TEXT NOT NULL DEFAULT 'single',
   part_key              TEXT NOT NULL DEFAULT 'archive',
@@ -761,7 +762,8 @@ CREATE TABLE IF NOT EXISTS ops.source_file_members (
 
 CREATE TABLE IF NOT EXISTS ops.source_file_validations (
   source_file_validation_id UUID PRIMARY KEY,
-  source_file_group_id UUID NOT NULL REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
+  source_file_group_id UUID NOT NULL
+    REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
   source_file_id      UUID REFERENCES ops.source_files(source_file_id) ON DELETE RESTRICT,
   scope               TEXT NOT NULL CHECK (scope IN ('group', 'file')),
   validator_version   TEXT NOT NULL,
@@ -808,7 +810,8 @@ CREATE TABLE IF NOT EXISTS ops.source_upload_sessions (
 );
 
 CREATE TABLE IF NOT EXISTS ops.source_upload_session_parts (
-  source_upload_session_id TEXT NOT NULL REFERENCES ops.source_upload_sessions(source_upload_session_id) ON DELETE CASCADE,
+  source_upload_session_id TEXT NOT NULL
+    REFERENCES ops.source_upload_sessions(source_upload_session_id) ON DELETE CASCADE,
   part_key                 TEXT NOT NULL,
   multipart_upload_id      TEXT,
   part_number              INTEGER NOT NULL CHECK (part_number >= 1),
@@ -841,23 +844,38 @@ CREATE TABLE IF NOT EXISTS ops.source_match_sets (
   integrity_alert_at       TIMESTAMPTZ,
   integrity_alert_detail   JSONB NOT NULL DEFAULT '{}'::jsonb,
   CONSTRAINT chk_ops_source_match_sets_state
-    CHECK (state IN ('draft', 'validated', 'active', 'retired', 'invalid', 'revalidatable', 'restored_from_backup')),
+    CHECK (state IN (
+      'draft', 'validated', 'active', 'retired',
+      'invalid', 'revalidatable', 'restored_from_backup'
+    )),
   CONSTRAINT chk_ops_source_match_sets_source_set_hash
     CHECK (
       (state = 'draft' AND source_set_hash IS NULL)
-      OR (state = 'restored_from_backup' AND (source_set_hash IS NULL OR char_length(source_set_hash) = 64))
-      OR (state NOT IN ('draft', 'restored_from_backup') AND source_set_hash IS NOT NULL AND char_length(source_set_hash) = 64)
+      OR (
+        state = 'restored_from_backup'
+        AND (source_set_hash IS NULL OR char_length(source_set_hash) = 64)
+      )
+      OR (
+        state NOT IN ('draft', 'restored_from_backup')
+        AND source_set_hash IS NOT NULL
+        AND char_length(source_set_hash) = 64
+      )
     )
 );
 
-ALTER TABLE ops.dataset_snapshots ADD CONSTRAINT fk_ops_dataset_snapshots_source_match_set FOREIGN KEY (source_match_set_id) REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE SET NULL;
+ALTER TABLE ops.dataset_snapshots
+  ADD CONSTRAINT fk_ops_dataset_snapshots_source_match_set
+  FOREIGN KEY (source_match_set_id)
+  REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS ops.source_match_set_items (
   source_match_set_item_id UUID PRIMARY KEY,
-  source_match_set_id      UUID NOT NULL REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE CASCADE,
+  source_match_set_id      UUID NOT NULL
+    REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE CASCADE,
   category                 TEXT NOT NULL,
   role                     TEXT NOT NULL,
-  source_file_group_id     UUID REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
+  source_file_group_id     UUID
+    REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
   required                 BOOLEAN NOT NULL DEFAULT false,
   omitted                  BOOLEAN NOT NULL DEFAULT false,
   omitted_reason           TEXT,
@@ -866,7 +884,10 @@ CREATE TABLE IF NOT EXISTS ops.source_match_set_items (
   load_order               INTEGER,
   metadata                 JSONB NOT NULL DEFAULT '{}'::jsonb,
   CONSTRAINT chk_ops_source_match_set_items_role
-    CHECK (role IN ('build_required', 'build_recommended', 'validation_optional', 'enrichment_candidate')),
+    CHECK (role IN (
+      'build_required', 'build_recommended',
+      'validation_optional', 'enrichment_candidate'
+    )),
   CONSTRAINT chk_ops_source_match_set_items_omitted
     CHECK (
     (omitted = false AND source_file_group_id IS NOT NULL)
@@ -895,9 +916,12 @@ CREATE TABLE IF NOT EXISTS ops.source_storage_reconcile_runs (
 
 CREATE TABLE IF NOT EXISTS ops.source_storage_reconcile_items (
   source_storage_reconcile_item_id UUID PRIMARY KEY,
-  source_storage_reconcile_run_id UUID NOT NULL REFERENCES ops.source_storage_reconcile_runs(source_storage_reconcile_run_id) ON DELETE CASCADE,
+  source_storage_reconcile_run_id UUID NOT NULL
+    REFERENCES ops.source_storage_reconcile_runs(source_storage_reconcile_run_id)
+    ON DELETE CASCADE,
   issue_type          TEXT NOT NULL,
-  source_file_group_id UUID REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE SET NULL,
+  source_file_group_id UUID
+    REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE SET NULL,
   source_file_id      UUID REFERENCES ops.source_files(source_file_id) ON DELETE SET NULL,
   object_key          TEXT,
   db_sha256           TEXT,
@@ -935,7 +959,8 @@ CREATE TABLE IF NOT EXISTS ops.consistency_case_definitions (
 );
 
 CREATE TABLE IF NOT EXISTS ops.consistency_case_inputs (
-  consistency_case_code TEXT NOT NULL REFERENCES ops.consistency_case_definitions(consistency_case_code) ON DELETE RESTRICT,
+  consistency_case_code TEXT NOT NULL
+    REFERENCES ops.consistency_case_definitions(consistency_case_code) ON DELETE RESTRICT,
   category              TEXT NOT NULL,
   required              BOOLEAN NOT NULL DEFAULT true,
   PRIMARY KEY (consistency_case_code, category)

@@ -6,8 +6,6 @@ These mirror the ``ops.source_file_groups`` / ``ops.source_files`` /
 They are read-only API DTOs with no behavior.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 from typing import Any, Literal
 
