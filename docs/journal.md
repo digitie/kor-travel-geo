@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 시나리오 누락 집중 리뷰 반영)
+
+**작업**: PR #131의 최신 conversation comment `IC_kwDOSW_crs8AAAABGCujRg`를 확인했다. review thread는 여전히 0건이고, 새 코멘트는 head `281bc82` 기준 end-to-end 운영 시나리오 누락 집중 리뷰였다.
+
+**반영**:
+- `docs/t109-backup-source-upload-management.md`에 진행 중 upload session 목록/재개 API와 UI "재개 가능한 업로드"를 추가했다.
+- RustFS object가 registry 등록 대기 중인 정상 상태를 `pending_registration`으로 분리하고, `registration_deadline_at` 전에는 deletion 후보가 아니라고 명시했다.
+- match set state에 `revalidatable`을 추가하고, `activate` atomic swap, active match set invalid의 의미(serving 장애가 아니라 재구성 가능성 결손), invalid 복구 전이를 문서화했다.
+- `rebuild-db`에 전역 advisory lock, stale running job 실패 마감, staging 재초기화, consistency ERROR 승격 차단, `forced_promotion=true` 강제 승격 감사 규칙을 추가했다.
+- 백업 복원 후 `restored_from_backup` match set은 manifest item별 `missing` stub group/file을 생성하고, source object availability 확인 전에는 rebuild 입력으로 활성화하지 않는 lifecycle을 추가했다.
+- ADR-049, `docs/tasks.md`, `docs/resume.md`, 테스트 계획을 새 시나리오 계약에 맞춰 갱신했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (PR #131 추가 코멘트 재확인 — T-109 시나리오 누락 검토)
 
 **작업**: PR #131의 최신 conversation comment와 review thread 상태를 다시 확인했다. unresolved review thread는 없고, 원격 head `281bc82`의 rebuild 적재 전 무결성 게이트 반영이 최신 추가 코멘트의 핵심이었다. 이 반영을 기준으로 T-109 설계에서 운영 시나리오 누락이 있는지 다시 검토했다.
