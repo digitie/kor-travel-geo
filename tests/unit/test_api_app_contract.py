@@ -15,9 +15,11 @@ from kortravelgeo.settings import Settings
 
 def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     app = create_app()
-    # Newer FastAPI adds non-APIRoute entries (e.g. _IncludedRouter markers) to
-    # app.routes that have no `.path`; only collect routes that expose one.
-    paths = {route.path for route in app.routes if hasattr(route, "path")}
+    # Use the OpenAPI schema as the source of truth for registered API paths.
+    # Newer FastAPI nests included routers as `_IncludedRouter` entries in
+    # app.routes (no flat `.path`), so iterating app.routes is version-fragile;
+    # the generated schema resolves all included routes consistently.
+    paths = set(app.openapi()["paths"].keys())
 
     assert "/v1/address/geocode" in paths
     assert "/v1/address/reverse" in paths
