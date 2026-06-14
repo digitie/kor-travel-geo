@@ -38,6 +38,7 @@ class AdvisoryLockNamespace(IntEnum):
     HOT_SWAP = 0x4B47_0072
     CONSISTENCY_RUN = 0x4B47_0080
     BENCHMARK_QUERY = 0x4B47_0090
+    SOURCE_JANITOR = 0x4B47_00A0
 
 
 @dataclass(frozen=True, slots=True)

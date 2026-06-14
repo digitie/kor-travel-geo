@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     ops_table_stats_capture_interval_minutes: int = Field(default=0, ge=0)
     ops_table_stats_capture_limit: int = Field(default=500, ge=1, le=2_000)
     ops_table_stats_capture_on_startup: bool = False
+    # T-203c source upload-session janitor (doc 1차 기본값, lines ~519-525).
+    source_upload_session_ttl_days: int = Field(default=7, ge=1)
+    source_registration_deadline_days: int = Field(default=30, ge=1)
+    source_janitor_interval_minutes: int = Field(default=0, ge=0)
+    source_janitor_on_startup: bool = False
+    source_janitor_session_limit: int = Field(default=500, ge=1, le=5_000)
     mvm_res_code_actions: dict[str, LoadCodeAction] = Field(
         default_factory=_default_mvm_res_code_actions
     )

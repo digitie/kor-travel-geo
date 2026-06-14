@@ -63,6 +63,7 @@ backup_app = typer.Typer(help="Create and inspect DB backup artifacts.")
 restore_app = typer.Typer(help="Restore DB backup artifacts.")
 serving_app = typer.Typer(help="Plan serving database release operations.")
 geoip_app = typer.Typer(help="Inspect Korea-only GeoIP gate decisions.")
+janitor_app = typer.Typer(help="Run the source upload-session janitor.")
 app.add_typer(load_app, name="load")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(validate_app, name="validate")
@@ -71,6 +72,7 @@ app.add_typer(backup_app, name="backup")
 app.add_typer(restore_app, name="restore")
 app.add_typer(serving_app, name="serving")
 app.add_typer(geoip_app, name="geoip")
+app.add_typer(janitor_app, name="janitor")
 
 
 async def _run_with_cli_lock[T](
@@ -138,6 +140,25 @@ def geoip_check(ip: str) -> None:
             sort_keys=True,
         )
     )
+
+
+@janitor_app.command("run")
+def janitor_run() -> None:
+    """Run one upload-session janitor pass (T-203c, doc lines ~519-525).
+
+    Aborts unfinished multipart uploads past ``expires_at`` and marks those
+    sessions expired/cancelled; transitions stored-but-unregistered sessions past
+    the registration deadline to ``registration_expired``. RustFS objects that
+    finished storing are never auto-deleted. The pass runs under the
+    ``SOURCE_JANITOR`` advisory lock and skips if another holds it.
+    """
+
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            summary = await client.run_source_upload_janitor()
+            typer.echo(summary.model_dump_json())
+
+    asyncio.run(run())
 
 
 @app.command("init-db")

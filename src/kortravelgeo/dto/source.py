@@ -186,6 +186,9 @@ SourceUploadSessionState = Literal[
     "failed_register",
     "cancelled",
     "expired",
+    # janitor (T-203c): stored-but-unregistered object past the registration
+    # deadline; user must re-register, extend the deadline, or discard.
+    "registration_expired",
 ]
 
 #: Terminal states: a session here cannot be resumed and no longer blocks a new
@@ -195,6 +198,7 @@ TERMINAL_UPLOAD_SESSION_STATES: frozenset[str] = frozenset(
         "available",
         "cancelled",
         "expired",
+        "registration_expired",
         "failed_upload",
         "failed_extract",
         "failed_hash",
@@ -423,6 +427,64 @@ class GroupValidationResult(FrozenModel):
     coverage: dict[str, str] = Field(default_factory=dict)
     reasons: tuple[str, ...] = ()
     validator_version: str
+
+
+# --- Soft-delete / restore (T-203c) ---------------------------------------
+# Shapes for ``POST .../source-file-groups/{id}/soft-delete`` and ``/restore``
+# (doc "파일 목록/다운로드/삭제" lines ~1438-1445).
+
+
+class SourceGroupSoftDeleteRequest(FrozenModel):
+    """``POST .../source-file-groups/{id}/soft-delete`` body."""
+
+    reason: str | None = None
+
+
+class SourceGroupSoftDeleteResponse(FrozenModel):
+    """``soft-delete`` result: the group + its children are now ``soft_deleted``."""
+
+    source_file_group_id: str
+    state: SourceGroupState
+    deleted_at: datetime | None = None
+    affected_file_count: int = Field(default=0, ge=0)
+    affected_match_set_ids: tuple[str, ...] = ()
+
+
+class SourceGroupRestoreFile(FrozenModel):
+    """Per-child restore outcome (object verified vs missing/quarantined)."""
+
+    source_file_id: str
+    part_key: str
+    state: SourceFileState
+    reasons: tuple[str, ...] = ()
+
+
+class SourceGroupRestoreResponse(FrozenModel):
+    """``restore`` result: the canonical recovery path (not re-upload).
+
+    Children land in ``available`` (object present + structure ok), ``missing``
+    (object absent), or ``quarantined`` (hash/size mismatch). The group state is
+    recomputed and propagated to referencing match sets.
+    """
+
+    source_file_group_id: str
+    category: SourceFileCategory
+    state: SourceGroupState
+    validation_state: SourceValidationState
+    files: tuple[SourceGroupRestoreFile, ...] = ()
+    affected_match_set_ids: tuple[str, ...] = ()
+
+
+class SourceJanitorRunResponse(FrozenModel):
+    """``run_source_upload_janitor`` summary (CLI + admin)."""
+
+    processed_sessions: int = Field(default=0, ge=0)
+    expired_sessions: int = Field(default=0, ge=0)
+    cancelled_sessions: int = Field(default=0, ge=0)
+    registration_expired: int = Field(default=0, ge=0)
+    aborts_succeeded: int = Field(default=0, ge=0)
+    aborts_failed: int = Field(default=0, ge=0)
+    skipped_locked: bool = False
 
 
 class SourceMatchSet(FrozenModel):

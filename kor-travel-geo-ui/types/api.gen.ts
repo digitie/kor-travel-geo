@@ -745,6 +745,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-file-groups/{source_file_group_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Source File Group
+         * @description Restore a soft-deleted group via RustFS head + hash (doc line ~1442).
+         *
+         *     Verifies each soft-deleted child's RustFS object, transitions
+         *     ``soft_deleted`` → ``validating``/``available`` (present + consistent),
+         *     ``missing`` (absent), or ``quarantined`` (hash/size mismatch), clears
+         *     ``deleted_at``, and recomputes (re-propagating to referencing match sets).
+         */
+        post: operations["restore_source_file_group_v1_admin_source_file_groups__source_file_group_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-file-groups/{source_file_group_id}/soft-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Soft Delete Source File Group
+         * @description Soft-delete a group + its children (doc line ~1441).
+         *
+         *     Sets ``state='soft_deleted'`` / ``deleted_at=now()``; RustFS objects are kept.
+         *     A group an ACTIVE match set still references is blocked (409) — retire the
+         *     match set first. ``recompute_group_aggregates`` re-propagates to referencing
+         *     match sets (``validated`` → ``invalid`` etc.).
+         */
+        post: operations["soft_delete_source_file_group_v1_admin_source_file_groups__source_file_group_id__soft_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/source-file-groups/{source_file_group_id}/validate": {
         parameters: {
             query?: never;
@@ -762,6 +812,31 @@ export interface paths {
          *     pure decision logic and the recompute it drives are exercised in unit tests.
          */
         post: operations["validate_source_file_group_v1_admin_source_file_groups__source_file_group_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-files/janitor/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Source Upload Janitor
+         * @description Run one upload-session janitor pass on demand (doc lines ~519-525).
+         *
+         *     Aborts unfinished multipart uploads past ``expires_at`` (RustFS objects that
+         *     finished storing are never auto-deleted) and transitions stored-but-
+         *     unregistered sessions past the registration deadline to
+         *     ``registration_expired``. Skips if the ``SOURCE_JANITOR`` lock is held.
+         */
+        post: operations["run_source_upload_janitor_v1_admin_source_files_janitor_run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2979,7 +3054,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "created" | "uploading" | "uploaded_to_temp" | "storing_to_rustfs" | "verifying_rustfs_object" | "extracting" | "validating_structure" | "hashing" | "duplicate_check" | "awaiting_registration" | "registered" | "available" | "failed_upload" | "failed_extract" | "failed_structure" | "failed_hash" | "failed_rustfs_put" | "failed_rustfs_verify" | "failed_storage_state" | "failed_register" | "cancelled" | "expired";
+            state: "created" | "uploading" | "uploaded_to_temp" | "storing_to_rustfs" | "verifying_rustfs_object" | "extracting" | "validating_structure" | "hashing" | "duplicate_check" | "awaiting_registration" | "registered" | "available" | "failed_upload" | "failed_extract" | "failed_structure" | "failed_hash" | "failed_rustfs_put" | "failed_rustfs_verify" | "failed_storage_state" | "failed_register" | "cancelled" | "expired" | "registration_expired";
             /** Upload Session Id */
             upload_session_id: string;
         };
@@ -3074,6 +3149,137 @@ export interface components {
             state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
             /** Storage Uri */
             storage_uri: string;
+        };
+        /**
+         * SourceGroupRestoreFile
+         * @description Per-child restore outcome (object verified vs missing/quarantined).
+         */
+        SourceGroupRestoreFile: {
+            /** Part Key */
+            part_key: string;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+            /** Source File Id */
+            source_file_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+        };
+        /**
+         * SourceGroupRestoreResponse
+         * @description ``restore`` result: the canonical recovery path (not re-upload).
+         *
+         *     Children land in ``available`` (object present + structure ok), ``missing``
+         *     (object absent), or ``quarantined`` (hash/size mismatch). The group state is
+         *     recomputed and propagated to referencing match sets.
+         */
+        SourceGroupRestoreResponse: {
+            /**
+             * Affected Match Set Ids
+             * @default []
+             */
+            affected_match_set_ids: string[];
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /**
+             * Files
+             * @default []
+             */
+            files: components["schemas"]["SourceGroupRestoreFile"][];
+            /** Source File Group Id */
+            source_file_group_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+            /**
+             * Validation State
+             * @enum {string}
+             */
+            validation_state: "unknown" | "not_started" | "running" | "passed" | "warning" | "failed" | "skipped";
+        };
+        /**
+         * SourceGroupSoftDeleteRequest
+         * @description ``POST .../source-file-groups/{id}/soft-delete`` body.
+         */
+        SourceGroupSoftDeleteRequest: {
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * SourceGroupSoftDeleteResponse
+         * @description ``soft-delete`` result: the group + its children are now ``soft_deleted``.
+         */
+        SourceGroupSoftDeleteResponse: {
+            /**
+             * Affected File Count
+             * @default 0
+             */
+            affected_file_count: number;
+            /**
+             * Affected Match Set Ids
+             * @default []
+             */
+            affected_match_set_ids: string[];
+            /** Deleted At */
+            deleted_at?: string | null;
+            /** Source File Group Id */
+            source_file_group_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+        };
+        /**
+         * SourceJanitorRunResponse
+         * @description ``run_source_upload_janitor`` summary (CLI + admin).
+         */
+        SourceJanitorRunResponse: {
+            /**
+             * Aborts Failed
+             * @default 0
+             */
+            aborts_failed: number;
+            /**
+             * Aborts Succeeded
+             * @default 0
+             */
+            aborts_succeeded: number;
+            /**
+             * Cancelled Sessions
+             * @default 0
+             */
+            cancelled_sessions: number;
+            /**
+             * Expired Sessions
+             * @default 0
+             */
+            expired_sessions: number;
+            /**
+             * Processed Sessions
+             * @default 0
+             */
+            processed_sessions: number;
+            /**
+             * Registration Expired
+             * @default 0
+             */
+            registration_expired: number;
+            /**
+             * Skipped Locked
+             * @default false
+             */
+            skipped_locked: boolean;
         };
         /** SppnMakareaContext */
         SppnMakareaContext: {
@@ -3369,7 +3575,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "created" | "uploading" | "uploaded_to_temp" | "storing_to_rustfs" | "verifying_rustfs_object" | "extracting" | "validating_structure" | "hashing" | "duplicate_check" | "awaiting_registration" | "registered" | "available" | "failed_upload" | "failed_extract" | "failed_structure" | "failed_hash" | "failed_rustfs_put" | "failed_rustfs_verify" | "failed_storage_state" | "failed_register" | "cancelled" | "expired";
+            state: "created" | "uploading" | "uploaded_to_temp" | "storing_to_rustfs" | "verifying_rustfs_object" | "extracting" | "validating_structure" | "hashing" | "duplicate_check" | "awaiting_registration" | "registered" | "available" | "failed_upload" | "failed_extract" | "failed_structure" | "failed_hash" | "failed_rustfs_put" | "failed_rustfs_verify" | "failed_storage_state" | "failed_register" | "cancelled" | "expired" | "registration_expired";
             /**
              * Storage Kind
              * @default rustfs
@@ -5004,6 +5210,72 @@ export interface operations {
             };
         };
     };
+    restore_source_file_group_v1_admin_source_file_groups__source_file_group_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_file_group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceGroupRestoreResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    soft_delete_source_file_group_v1_admin_source_file_groups__source_file_group_id__soft_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_file_group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceGroupSoftDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceGroupSoftDeleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     validate_source_file_group_v1_admin_source_file_groups__source_file_group_id__validate_post: {
         parameters: {
             query?: never;
@@ -5031,6 +5303,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_source_upload_janitor_v1_admin_source_files_janitor_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceJanitorRunResponse"];
                 };
             };
         };
