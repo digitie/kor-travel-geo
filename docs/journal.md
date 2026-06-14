@@ -2,6 +2,18 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-109 후속 작업 분해 — T-110~/T-200~ 등록 + ADR-050 + T-105/T-106)
+
+**작업**: PR #131 문서·코드를 다시 정독한 결과로 후속 구현 task를 잘게 나눠 `docs/tasks.md`에 등록하고 ADR-050으로 순서·번호 체계를 고정했다. 4영역(v1 vworld 호환 / v2 audit / T-109 적재·백업 구현 / 원천 보강) 병렬 정독 + 누락 critic을 거쳐 작성했다.
+
+**반영**:
+- 작업 순서 = ① 데이터 원천 보강·검증(**T-110~T-120**) → ② 데이터 적재/백업 구현·검증(**T-200~T-210**) → (최하위) **T-105 v2 재audit** · **T-106 v1 vworld 100% 호환**. T-105/T-106은 ID는 낮지만 순위 최하위. T-109(이 PR)는 ②의 설계 문서이며 구현을 T-200대로 분할.
+- phase ① prototype은 ops registry 없이 로컬 디스크 경로로 독립 수행(역의존 금지), C11~C17은 phase ①에서 prototype·phase ②(T-206)에서 DB case registry 정식화. 보강 자료 serving 편입(T-119)은 별도 ADR 게이트(T-118) 승인 후에만.
+- critic이 짚은 누락(prototype↔registry seed bridge, pobox/bulk 공유 검증 모듈, v1 NOT_FOUND status spike, fresh init-db drift 게이트)을 해당 task에 흡수.
+- `docs/tasks.md` 대기 섹션 재구성 + `docs/decisions.md` ADR-050 추가 + `docs/resume.md` 갱신.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인. (PR까지만 진행 — 구현 착수는 안 함.)
+
 ## 2026-06-14 (PR #131 신규 코멘트 반영 — M-A 옵션2 / L-A / L-B)
 
 **작업**: PR #131 코멘트(issuecomment-4700672694)의 M-A(사용자 지시: 옵션 2)·L-A·L-B를 `docs/t109-backup-source-upload-management.md`·`docs/decisions.md`에 반영했다.
