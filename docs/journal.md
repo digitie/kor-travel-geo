@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 추가 코멘트 재확인 — T-109 시나리오 누락 검토)
+
+**작업**: PR #131의 최신 conversation comment와 review thread 상태를 다시 확인했다. unresolved review thread는 없고, 원격 head `281bc82`의 rebuild 적재 전 무결성 게이트 반영이 최신 추가 코멘트의 핵심이었다. 이 반영을 기준으로 T-109 설계에서 운영 시나리오 누락이 있는지 다시 검토했다.
+
+**반영**:
+- `docs/t109-backup-source-upload-management.md`에 "운영 시나리오 커버리지 점검" 표를 추가했다. 업로드 세션 생성, multipart 중단/재개, registry insert 실패, multi-part 누락, RustFS 직접 변경, match set 활성화, rebuild, run-validation, 백업/복원, current source `알수없음`, admin role gate, active 참조 hard-delete 차단까지 구현자가 놓치기 쉬운 분기를 한 표에 묶었다.
+- `run-validation`도 optional 자료가 존재하면 materialize 직후와 validator 실행 직전 registry hash/size를 대조하고, mismatch는 `skipped`가 아니라 `failed/source_integrity_mismatch`로 기록하도록 명시했다.
+- 백업 복원 후 reconstructed match set은 read-only이며, RustFS source archive 존재와 hash를 확인하기 전까지 rebuild 입력으로 바로 활성화할 수 없다고 보강했다.
+- ADR-049에 `rebuild-db`/`run-validation` 사용 직전 무결성 게이트를 확정 결정으로 추가했다.
+- `docs/tasks.md`와 `docs/resume.md`에 이번 시나리오 커버리지 검토 결과를 반영했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (PR #131 잔여 finding 반영 — rebuild 적재 전 무결성 게이트)
 
 **작업**: PR #131 head `94188b0` 검토 결과 직전 forward-looking 리뷰(H1~H5, M1~M7, L1~L6)는 거의 모두 반영돼 있었고, 한 가지 남은 finding을 보강했다.

@@ -2336,6 +2336,7 @@ T-109 구현은 다음 확정안을 따른다.
 7. 시도별 다중 파일 category는 `ops.source_file_groups`를 만들고, match set은 group을 참조한다. child file 분할은 `sido_code` 하드코딩이 아니라 `part_kind`/`part_key`로 일반화한다.
 8. 업로드 전략은 multipart/resumable을 정식 경로로 둔다. upload session과 part 진행 상태는 DB에 영속화한다.
 9. RustFS 정합성 검증은 `quick`/`deep` 모드로 나눈다. 정기 scan은 size/etag가 직전 검증과 같으면 재해시를 생략하고, 변경 감지 object나 사용자가 실행한 `deep` scan은 object 전체를 streaming 재해시해 SHA-256 mismatch를 즉시 확정한다.
+10. `rebuild-db`와 `run-validation`은 RustFS object를 materialize한 뒤 loader 또는 validator가 사용하기 직전에 registry의 `sha256`/`size_bytes`/`group_sha256`와 다시 대조한다. 불일치나 누락이 있으면 rebuild는 child job을 만들지 않고 중단하며, validation은 해당 입력을 `skipped`가 아니라 `failed`로 기록한다.
 
 ### 근거
 
@@ -2344,6 +2345,7 @@ T-109 구현은 다음 확정안을 따른다.
 - 기준년월은 파일명 추정이나 현재 날짜 fallback으로 자동 결정하면 안 된다. 사용자가 직접 입력·제출한 `user_yyyymm`만 저장과 match set의 정본이 된다.
 - RustFS object 저장은 DB transaction과 원자적으로 묶을 수 없다. 먼저 저장하고, 검증과 사용자 승인 뒤 registry insert를 재시도 가능하게 만드는 흐름이 운영 UX와 잘 맞는다.
 - 손상 의심 object는 hash mismatch를 지연 확정하지 말고 전체 재해시로 즉시 판단해야 한다. 다만 정기 scan이 매번 전국 object를 다시 읽으면 운영 I/O 비용이 선형으로 커지므로, 변경 감지와 `deep` scan을 분리한다.
+- 업로드/register와 rebuild/run-validation은 며칠 또는 몇 주 간격으로 분리될 수 있다. 그 사이 사용자가 RustFS에 직접 접근해 object를 교체·삭제할 수 있으므로, 정기 reconciliation에만 의존하지 않고 실제 사용 직전 흐름이 독립적으로 무결성을 보장해야 한다.
 
 ### 결과(긍정)
 
@@ -2353,12 +2355,14 @@ T-109 구현은 다음 확정안을 따른다.
 - 대용량·불안정 네트워크에서도 multipart upload 진행률과 재개가 가능하다.
 - 기존 `ops`와 신규 source registry의 ID 네이밍이 맞춰진다.
 - 정기 RustFS scan은 `quick`, 손상 의심 또는 수동 검증은 `deep`으로 분리되어 운영 I/O 비용을 통제할 수 있다.
+- RustFS object가 register 이후 변조돼도 rebuild와 사후 validation이 자체적으로 중단되어 손상 archive가 적재·검증 입력으로 조용히 사용되지 않는다.
 
 ### 결과(부정)
 
 - 기존 admin API/DTO/OpenAPI의 `snapshot_id`, `release_id`, `event_id` 계열 이름이 바뀌므로 migration과 문서 갱신 범위가 커진다.
 - role gate, multipart upload, DB case registry, quick/deep reconciliation은 최소 구현보다 작업량이 많다.
 - deep 재해시는 object 수와 크기가 늘면 정합성 scan 시간이 길어질 수 있다.
+- rebuild와 validation도 materialize 시점에 streaming hash를 계산해야 하므로, 해당 job의 I/O와 구현 복잡도가 약간 증가한다.
 
 ### 후속
 
