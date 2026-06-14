@@ -18,6 +18,7 @@ from kortravelgeo.loaders.augment_harness import (
     discover_sido_source_groups,
     iter_shape_features_from_buffers,
     iter_shp_geometries_from_bytes,
+    key_overlap_sql,
     keyed_covers_sql,
     keyed_distance_sql,
     staging_copy_sql,
@@ -178,6 +179,18 @@ def test_staging_sql_and_measurement_sql_contracts() -> None:
     assert "ST_Covers" in covers_sql
     assert "coverage_ratio" in covers_sql
     assert "ST_Contains" not in covers_sql
+
+    overlap_sql = key_overlap_sql(
+        "_left",
+        "_right",
+        (JoinKey("sig_cd", "sig_cd"), JoinKey("ent_man_no", "ent_man_no")),
+    )
+
+    assert "left_source" in overlap_sql
+    assert "right_source" in overlap_sql
+    assert 'USING ("k0", "k1")' in overlap_sql
+    assert '"ent_man_no" IS NOT NULL' in overlap_sql
+    assert "left_only_count" in overlap_sql
 
 
 def test_staging_sql_rejects_unsafe_identifiers() -> None:

@@ -36,7 +36,6 @@
 
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
-- T-111 C11 출입구 원천 간 거리 검증 prototype — 건물 도형 bundle `TL_SPBD_ENTRC`를 staging 적재해 기존 출입구 원천(`tl_locsum_entrc`, `tl_roadaddr_entrc`, 전자지도 `TL_SPBD_ENTRC`)과 거리 분포(p50/p95/max)·key overlap 측정. `building_shape_bundle.py` ENTRANCE_KEY_FIELDS 재사용, 측정만(좌표 승격 금지). (의존: T-110)
 - T-112 C12 건물 도형 connection line 검증 prototype — `TL_SPOT_CNTC`(연결선)와 전자지도 도로 layer 인접성, dangling connection 검출. polyline reader 필요. (의존: T-110)
 - T-113 C13 상세주소 동 containment 검증 prototype — `detail_dong_shape_bundle`(동 polygon/동 출입구) + `상세주소DB`(adrdc_* TXT) containment(`ST_Covers`)·key overlap. `extra_shape_layers.py` 재사용 + 상세주소DB parser. (의존: T-110)
 - T-114 C14 국가지점번호 grid/center 검증 harness — 도형(1천만 polygon)·중심점(1천만 TXT)을 **상시 적재 없이 streaming**으로 `core/sppn.py` parser/formatter 및 prefix 중심점 일치·grid coverage 검증. "10m 좌표 개선 아님" 확인. (의존: T-110)
@@ -79,6 +78,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-111 C11 출입구 원천 간 거리 검증 prototype. 건물 도형 bundle `TL_SPBD_ENTRC`와 전자지도 `TL_SPBD_ENTRC`는 `ENTRANCE_KEY_FIELDS` full key로, `tl_locsum_entrc`/`tl_roadaddr_entrc`는 운영 테이블 제약상 `sig_cd + ent_man_no` weak key로 key overlap 및 `ST_Distance` 분포를 측정한다. `AugmentReport` payload를 제공하되 serving 좌표 승격은 하지 않는다. 상세: `docs/t111-c11-entrance-sources.md` (2026-06-14)
 - [x] T-110 보강 검증 공통 harness. `src/kortravelgeo/loaders/augment_harness.py`에 시도 17개 group 순회 driver, `AugmentReport`, SHP `Point`/`PolyLine`/`Polygon` body parser, DBF row alignment, ZIP layer feature iterator, staging table 생성/COPY helper, key join 기반 `ST_Distance`/`ST_Covers` 측정 helper를 추가했다. PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형 테스트로 분리했다. 상세: `docs/t110-augment-harness.md` (2026-06-14)
 - [x] T-108 — 운영 배포 자동화 (Sprint 6) — **Odroid M1S + N150 16GB 양쪽**
   (`pinvi` 원문에서 가져왔으며, 사용자 추가 지시에 따라 streaming replication은 제외).
