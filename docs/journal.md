@@ -2,6 +2,271 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 — 각 phase 끝에 라이브 적재·벤치·튜닝·최종검증 task 추가)
+
+**작업**: 사용자 요청으로 phase ①·②의 마지막에 "전국 라이브데이터 실행/로딩 → 성능평가·벤치 → 튜닝·최종 검증 평가"를 task로 추가했다. 기존 T-118(prototype go/no-go)·T-210(fixture 통합·기능 검증)과 중복되지 않도록, 새 task는 fixture가 아닌 **전국 production 규모 실데이터** 실행과 벤치·튜닝·최종 acceptance로 범위를 구분했다.
+
+**추가**:
+- phase ①: T-121(전국 라이브데이터 보강 실행) → T-122(보강 성능평가·벤치) → T-123(튜닝·최종 검증 평가, T-118 go/no-go 최종 확정).
+- phase ②: T-213(전국 라이브데이터 로딩 — T-109 신규 파이프라인으로 full load, T-027 행수와 동치 확인) → T-214(성능평가·벤치, T-047/T-035 harness) → T-215(튜닝·최종 검증 평가 — geocode/reverse 정확도·v1/v2 회귀·C1~C17 정합성, N150/Odroid 실측은 T-063 연계, T-109 전체 acceptance).
+- ADR-050 #8 범위를 `T-200~T-215`로, resume.md를 `T-110~T-123`/`T-200~T-215`로 동기화.
+
+**검증**: 문서/백로그-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (PR #131 Task 재점검 — T-212 추가)
+
+**작업**: PR #131 최신 conversation/review/thread를 다시 읽고(`review_threads` 0건), `docs/tasks.md`의 T-110~T-120 / T-200~T-211 / T-105·T-106을 PR 리뷰 항목과 교차 점검했다. `f3c4c93`에서 잔여 L 4건과 T-211 관측성은 이미 반영되어 있었지만, 리뷰 초반부터 반복된 RustFS 무기한 보존·용량 정책은 T-211 metric만으로는 닫히지 않는 별도 운영 정책/관리 표면으로 판단했다.
+
+**반영**:
+- 신규 **T-212**를 추가했다. scope는 RustFS 원천 archive 보존·정리 정책 ADR + 관리 표면이다.
+- 기본 원칙은 등록 완료 원천 archive 자동 삭제 금지, 사용자 수동 admin UI 삭제, destructive_admin typed confirmation, audit/metric/UI 경고 유지로 고정했다.
+- capacity threshold, archive tier, `soft_deleted`/`quarantined` retention, 미등록 stored object SLA, bulk hard-delete/restore, 삭제 전 manifest/export 확인을 T-212 산출물로 묶었다.
+- ADR-050과 resume의 phase ② 범위를 `T-200~T-212`로 동기화했다.
+
+**검증**: 문서/백로그-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (PR #131 L 폴리시 + Task 완전성 보강)
+
+**작업**: (1) head `4142570` 재리뷰의 잔여 L 4건을 닫고, (2) T-110~T-120 / T-200~T-211 / T-105·T-106 백로그를 4축(phase② 설계 커버리지·phase①/ADR·cross-cutting glue·의존성/시퀀싱) 멀티에이전트 + 적대 검증으로 점검해 확정 gap을 task에 반영했다. 설계 자체는 머지 가능 상태이고, 이번 변경은 전부 문서/백로그 정합이다.
+
+**L 폴리시(4)**:
+- `recompute_group_aggregates` 계약표 입력 예시에 `child_soft_delete`/`child_hard_delete` 트리거를 추가해 인접 prose 호출자 목록과 일치시켰다.
+- upload-session 목록 API 재개 상태 예시에 `failed_storage_state`를 넣어 slot 재업로드 복구 흐름을 목록에서 찾을 수 있게 했다.
+- T-204에 RustFS bucket 전체 손실/prefix 대량 손상 시 전수 `source_file_unavailable`+active `integrity_alert`/비-active `validated` `invalid` 전파를 명시했다.
+- `validator_version_change` 재검증 트리거를 T-203(recompute) / T-206(run-validation)에 명시했다.
+
+**Task 보강(확정 gap, 적대 검증 통과)**:
+- T-200: full-prefix rename은 breaking change이므로 `CHANGELOG.md`(BREAKING)+migration-guide(전체 ID 매핑표·admin route 변경·재생성 안내)를 산출물로 포함.
+- T-201: `/v1/admin/uploads` 폐기로 깨지는 공개 `AsyncAddressClient` upload-set 메서드와 `ktgctl load full-set` CLI 제거를 Python 라이브러리(ADR-039)·CLI breaking change로 명시.
+- T-202: 신규 source 관리 액션의 audit `event_type` 집합 정의 + `actor_type` CHECK가 `system:<job_kind>`를 수용하는지 확인.
+- T-203: upload-session SSE events endpoint(`source_upload.progress`·polling fallback)를 명시.
+- T-209: 의존을 `T-201~T-208`로 확장하고 "epost 받기" 버튼+fetch SSE 상태(T-207), 현재 구성 탭 복원 파생 표시(T-208)를 scope에 추가.
+- T-210: 의존을 `T-205·T-206·T-207·T-208·T-209`로 보정하고 백엔드 fixture 27 + 백엔드 openapi.json/api.gen.ts drift, 장비 비종속 성능(T-063 분리)으로 경계 명확화.
+- **신규 T-211**(source registry 관측성): upload/reconcile/janitor/저장소 용량 prometheus metric + admin UI 용량 카드(의존: T-203·T-204·T-209).
+- T-106: wire 100% 채택 시 `x_extension.*` 비표준 필드 처리 정책을 RFC에 포함.
+- T-118: 미사용 전자지도 layer `TL_SPBD_EQB` 검증 대상화 여부 판정 포함.
+
+**적대 검증으로 기각(보강 안 함)**: legacy DB backfill(ADR-049 #18로 read-only fallback이 의도된 동작), 신규 ktgctl source 명령(설계가 API+UI로만 routing), phase① 문서 정합 단일 owner(표준 워크플로가 소유), T-208↔T-206 의존(도메인 불일치).
+
+**검증**: 문서/백로그-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (PR #131 리뷰 재반영 — 누락 시나리오 정밀화)
+
+**작업**: PR #131 최신 리뷰에서 지적된 운영 시나리오 누락을 `docs/t109-backup-source-upload-management.md`·ADR-049·`docs/tasks.md`·`docs/resume.md`에 재반영했다. 문서 방향은 호환성/최소수정보다 확장성·완성도·일관성·성능을 우선하고, 외부 인터페이스 변경은 구현 task에서 OpenAPI/문서/프론트 타입 동기화까지 포함하도록 고정했다.
+
+**반영**:
+- RustFS multipart DB/storage 불일치 경로를 `failed_storage_state`로 명시하고, resume 시 RustFS `ListParts` 또는 호환 API로 multipart upload id 존재를 먼저 확인하도록 했다.
+- janitor는 PostgreSQL advisory lock 기반 admin service/CLI periodic job으로 두고, 미완 multipart abort와 session 만료 전이만 자동 처리하며 저장 완료 object는 자동 삭제하지 않는 경계로 고정했다.
+- active match set의 `integrity_alert` 해제는 `POST /validate` active validate-in-place로만 확정하고, rollback은 source match set one-active invariant 안에서 current retire + target active restore + quick reconcile 재계산을 수행하도록 정리했다.
+- `forced_promotion=true`는 consistency ERROR 승격 차단만 우회하며, source archive integrity gate·unavailable group·selected match set `integrity_alert=true`는 우회할 수 없다고 명시했다.
+- epost 수동 server-fetch의 fetch 실패, ZIP 구조 불일치, 기준월 mismatch를 별도 session/report 상태로 드러내고 핵심 rebuild와 분리했다.
+- `restored_from_backup` stub의 `manifest.group_sha256`은 신뢰값이 아니라 비교 대상이며, storage SHA-256/size와 group hash를 재계산하고 구조 validator가 통과한 뒤에만 `available`로 전이하게 했다.
+- 통합 fixture 시나리오를 27개로 확장하고 T-210 범위를 맞췄다.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (PR #131 최종 정합성 sweep — 최적안 반영)
+
+**작업**: head ab38693에 대해 정합성 sweep(상태머신 + t109↔ADR-049/050↔tasks.md 교차)을 한 번 더 돌려, 확정된 7건(0 기각) 중 doc-정합 항목을 각각 최적안으로 반영했다. 직전 M-A 옵션2 전파 이후 단일 출처(recompute 계약·ADR·테스트)에 restored_from_backup 복구 경로가 일부 누락돼 있던 것을 통일했다.
+
+**반영**:
+- recompute_group_aggregates 상향 전파 계약(L345)에 `restored_from_backup → revalidatable`(선-hash 산출)과 **이 전이의 소유자(=recompute, restore 같은 transaction)**를 명시. 요약(L1932)·구현 순서 4단계(L1929)도 동일하게 보강.
+- 통합 테스트 #23(L2057)을 정본 시퀀스(group/file `missing→validating→available`, match set `restored_from_backup→revalidatable→validate→validated`, 선-hash)로 정정.
+- ADR-049 결정12를 "invalid는 비-active 중 `validated`만(pre-hash 제외), revalidatable은 invalid·restored_from_backup(선-hash 후)"로 본문/결정14와 정합화.
+- tasks.md T-204 `issue_type` 개수 11→**12**, 약식 `group_incomplete`→`source_file_group_incomplete`로 정본 표와 일치.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인. H/블로커 0건, 잔여는 운영 hardening(구현 PR 이관)뿐.
+
+## 2026-06-14 (PR #131 코멘트 반영 — M-A 옵션2 전파 / M-B / L-A 마무리)
+
+**작업**: PR #131 코멘트(issuecomment, head b85e0d5 리뷰)의 M-A/M-B/L-A를 `docs/t109-backup-source-upload-management.md`·`docs/tasks.md`에 반영했다. M-A 옵션 2(restored_from_backup→revalidatable 진입 전 hash 선산출)를 택했으면서 일부 문구가 "비-active=invalid"로 일반화돼 남아 있던 것을 전 문서에 통일했다.
+
+**반영**:
+- **M-A 전파**: `state='invalid'` 전이를 "비-active **중 `validated`만**, `draft`/`restored_from_backup` 같은 pre-hash 상태는 유지"로 모든 산문·커버리지 표·테스트·구현순서·tasks.md T-205까지 통일(L343/345/788/1516/1548/1580/1931/2042/2045 + tasks L33). pre-hash(NULL hash) 상태가 hash NOT NULL을 요구하는 invalid로 가서 CHECK 충돌 나던 문제 제거.
+- **M-B**: `source_set_hash` 일반 lifecycle 문단(validate에서 산출)에 "단, `restored_from_backup`은 revalidatable 진입 전 canonical hash 선산출(옵션 2), validate에서 재검산·확정" 예외를 명시.
+- **L-A**: 커버리지 표 'active match set 활성화' 행의 "active 0건 창"을 본문과 같이 "외부 관찰 가능한 active gap/unique 위반 없음(내부 순간 상태 무관)"으로 통일.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (T-109 후속 작업 분해 — T-110~/T-200~ 등록 + ADR-050 + T-105/T-106)
+
+**작업**: PR #131 문서·코드를 다시 정독한 결과로 후속 구현 task를 잘게 나눠 `docs/tasks.md`에 등록하고 ADR-050으로 순서·번호 체계를 고정했다. 4영역(v1 vworld 호환 / v2 audit / T-109 적재·백업 구현 / 원천 보강) 병렬 정독 + 누락 critic을 거쳐 작성했다.
+
+**반영**:
+- 작업 순서 = ① 데이터 원천 보강·검증(**T-110~T-120**) → ② 데이터 적재/백업 구현·검증(**T-200~T-210**) → (최하위) **T-105 v2 재audit** · **T-106 v1 vworld 100% 호환**. T-105/T-106은 ID는 낮지만 순위 최하위. T-109(이 PR)는 ②의 설계 문서이며 구현을 T-200대로 분할.
+- phase ① prototype은 ops registry 없이 로컬 디스크 경로로 독립 수행(역의존 금지), C11~C17은 phase ①에서 prototype·phase ②(T-206)에서 DB case registry 정식화. 보강 자료 serving 편입(T-119)은 별도 ADR 게이트(T-118) 승인 후에만.
+- critic이 짚은 누락(prototype↔registry seed bridge, pobox/bulk 공유 검증 모듈, v1 NOT_FOUND status spike, fresh init-db drift 게이트)을 해당 task에 흡수.
+- `docs/tasks.md` 대기 섹션 재구성 + `docs/decisions.md` ADR-050 추가 + `docs/resume.md` 갱신.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인. (PR까지만 진행 — 구현 착수는 안 함.)
+
+## 2026-06-14 (PR #131 신규 코멘트 반영 — M-A 옵션2 / L-A / L-B)
+
+**작업**: PR #131 코멘트(issuecomment-4700672694)의 M-A(사용자 지시: 옵션 2)·L-A·L-B를 `docs/t109-backup-source-upload-management.md`·`docs/decisions.md`에 반영했다.
+
+**반영**:
+- **M-A (옵션 2)**: `restored_from_backup → revalidatable` 전이가 `source_set_hash` CHECK(`revalidatable`은 hash NOT NULL 요구)와 충돌하던 문제를, **revalidatable 진입 전 canonical hash 산출을 선행 조건**으로 두어 해소했다. revalidatable 정의/전이 규칙/복원 절차 step 9/커버리지 표/ADR-049 결정 14를 모두 "hash 산출 후 전이"로 통일. 더불어 NULL-hash pre-hash 상태(`draft`/`restored_from_backup`)는 hash를 요구하는 `invalid`로 가지 않도록 invalid 전이 대상을 `validated`로 한정(같은 CHECK 충돌 제거). DDL CHECK 자체는 변경 불필요(NULL 허용은 draft/restored_from_backup뿐, 옵션 2와 정합).
+- **L-A**: activate atomic swap 문구를 "advisory lock + 단일 transaction, retire→activate 순서, **외부 관찰 가능한 active gap/unique 위반** 금지(transaction 내부 순간 상태는 무관)"로 완화.
+- **L-B**: `duplicate_object` 보호 문구의 모호한 "integrity_alert=false active source"를 "active match set이 참조하는 object(integrity_alert 무관) + draft/validated 참조 정본"으로 명확화.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (PR #131 재리뷰 M 3건 문서 정합 반영)
+
+**작업**: head 189729e 재리뷰에서 남은 Medium 3건(전부 문서 정합)을 `docs/t109-backup-source-upload-management.md`·`docs/decisions.md`에 반영했다. H/블로커는 없었고 직전 잔여는 거의 다 닫힌 상태였다.
+
+**반영**:
+- **M-A**: `restored_from_backup → revalidatable → validated` 전이를 match set 상태 전이 규칙 본문에 정식 추가하고, `revalidatable` 정의를 "`invalid` 또는 `restored_from_backup`에서 복구"로 확장했다(정본 규칙 vs restore 절차/ADR 불일치 해소).
+- **M-B**: ADR-049 결정 14와 커버리지 표의 압축 화살표(`validating→passed/warning→available→revalidatable→validated`)가 group state·validation_state·match set state 3개 머신을 한 체인에 섞던 것을 group/file 머신과 match set 머신 2단계로 분리 표기했다.
+- **M-C**: `last_deep_verified_at` 컬럼만 있고 정기 강제 deep 정책이 없던 것을, "경과 object는 quick에서도 강제 deep(또는 rolling deep)"으로 명문화했다(same-size/etag 변조 안전망). reconcile 절·커버리지 표에 반영.
+
+**남김**: Low 잔여(group/file state 전이 그래프, 용량 임계 1차 동작, transient 재시도, validator_version 하향 전파, env case_def seed drift, portable match-set export, forced_promotion batch terminal state 등)는 운영 hardening이라 T-200대 구현 PR/후속 ADR로 이관 권장.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (PR #131 잔여 운영 시나리오 재반영)
+
+**작업**: PR #131 conversation comment를 다시 확인했다. 최신 신규 코멘트는 `IC_kwDOSW_crs8AAAABGCx8WQ`, `IC_kwDOSW_crs8AAAABGCyhBA`, `IC_kwDOSW_crs8AAAABGCzORQ`였고, review thread는 0건이었다. 원격의 `d9ae209`, `999fac3`를 fast-forward로 받은 뒤 잔여 M/L 시나리오를 문서에 추가 반영했다.
+
+**반영**:
+- ADR-049의 옛 표현(active match set이 object 결손 시 `invalid`)을 `state='active'` 유지 + `integrity_alert=true`로 정정했다.
+- `soft_deleted` source group/file을 `restore` action으로 되살리는 절차와 RustFS head/hash 검증, `validating -> available` 전이를 추가했다.
+- upload session 중복 생성 `409`, register 전 완료 slot `replace`, `expires_at`/`registration_deadline_at` 기본 정책, `registration_expired` issue, janitor 동작을 추가했다.
+- restore hot-swap 직후 source quick reconcile과 `restored_from_backup` stub의 `unknown -> validating -> available -> revalidatable -> validated` 순서를 명시했다.
+- `recompute_group_aggregates()`가 하향 invalid/alert 전파뿐 아니라 복구 시 `revalidatable`/alert 해제 후보 전파도 담당하도록 구현 지침과 테스트 계획을 갱신했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
+## 2026-06-14 (T-109 시나리오 재검 H1 정정 — active match set integrity_alert 분리)
+
+**작업**: 시나리오 재검에서 발견된 H1 자기모순(active match set이 `invalid`로 전환된다는 규칙 ↔ one-active 슬롯 유지가 양립 불가; one-active index가 `WHERE state='active'`라 state를 invalid로 바꾸면 슬롯이 빔)을 `docs/t109-backup-source-upload-management.md`에 정정했다.
+
+**반영**:
+- `ops.source_match_sets`에 `integrity_alert BOOLEAN`/`integrity_alert_at`/`integrity_alert_detail`을 추가해 원천 무결성 결손을 `state`와 분리했다.
+- 상태 전이 규칙을 active/비-active로 분기: **active**는 결손 시 `state='active'` 유지 + `integrity_alert=true`(슬롯·serving 유지, 재구성만 불가), **비-active**(draft/validated/restored_from_backup)만 `state='invalid'`. 복구 시 active는 validate 성공으로 `integrity_alert=false`, 비-active는 `invalid→revalidatable→validate→validated`.
+- 이 구분이 reconcile/rebuild 게이트/run-validation 등 group이 missing/quarantined가 되는 모든 경로에 동일 적용됨을 명문화. group 집계 규칙·state 표·커버리지 표·구현 순서·테스트(backend/통합)도 일관되게 갱신.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (T-109 추가 결정 2건 — 자동탐지 제거 / epost 수동 server-fetch)
+
+**작업**: 사용자 결정 2건을 `docs/t109-backup-source-upload-management.md`에 반영했다.
+
+**반영**:
+- **자동탐지(`guess_source_kind`) 제거**: "충돌 지점 #1"을 "호환 유지" migration에서 **자동탐지 기능 제거 + 명시 category 업로드 단일화**로 변경했다. source kind는 추정하지 않고 사용자가 고른 category에서 결정론적으로 전개한다. 기존 `/v1/admin/uploads` upload set 흐름은 폐기하고 `/v1/admin/source-files/upload-sessions`로 단일화(admin breaking change, OpenAPI/DTO/CLI/changelog 명시). 요구사항 매트릭스 #1도 갱신했다. 서비스 전이라 호환 alias를 쌓지 않는다.
+- **epost 우편번호 자료 수동 server-fetch**: `epost_pobox_full`/`epost_bulk_full`을 "epost 받기" 클릭 → 서버측 다운로드 → RustFS register → `pobox_load`/`bulk_load`로 DB 반영 → 우편번호 검증, 의 별도 수동 흐름으로 정리했다("epost 우편번호 자료" 절 신설). 우편번호는 보조 자료라 `source_match_set` 핵심 rebuild에는 넣지 않고 독립 적재한다. 이 server-fetch는 "자동 다운로드 제외"의 명시적 예외(사용자 클릭 트리거 전용, 자동·스케줄 없음)임을 범위 절에 명시했다.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
+## 2026-06-14 (PR #131 시나리오 누락 집중 리뷰 반영)
+
+**작업**: PR #131의 최신 conversation comment `IC_kwDOSW_crs8AAAABGCujRg`를 확인했다. review thread는 여전히 0건이고, 새 코멘트는 head `281bc82` 기준 end-to-end 운영 시나리오 누락 집중 리뷰였다.
+
+**반영**:
+- `docs/t109-backup-source-upload-management.md`에 진행 중 upload session 목록/재개 API와 UI "재개 가능한 업로드"를 추가했다.
+- RustFS object가 registry 등록 대기 중인 정상 상태를 `pending_registration`으로 분리하고, `registration_deadline_at` 전에는 deletion 후보가 아니라고 명시했다.
+- match set state에 `revalidatable`을 추가하고, `activate` atomic swap, active match set invalid의 의미(serving 장애가 아니라 재구성 가능성 결손), invalid 복구 전이를 문서화했다.
+- `rebuild-db`에 전역 advisory lock, stale running job 실패 마감, staging 재초기화, consistency ERROR 승격 차단, `forced_promotion=true` 강제 승격 감사 규칙을 추가했다.
+- 백업 복원 후 `restored_from_backup` match set은 manifest item별 `missing` stub group/file을 생성하고, source object availability 확인 전에는 rebuild 입력으로 활성화하지 않는 lifecycle을 추가했다.
+- ADR-049, `docs/tasks.md`, `docs/resume.md`, 테스트 계획을 새 시나리오 계약에 맞춰 갱신했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
+## 2026-06-14 (PR #131 추가 코멘트 재확인 — T-109 시나리오 누락 검토)
+
+**작업**: PR #131의 최신 conversation comment와 review thread 상태를 다시 확인했다. unresolved review thread는 없고, 원격 head `281bc82`의 rebuild 적재 전 무결성 게이트 반영이 최신 추가 코멘트의 핵심이었다. 이 반영을 기준으로 T-109 설계에서 운영 시나리오 누락이 있는지 다시 검토했다.
+
+**반영**:
+- `docs/t109-backup-source-upload-management.md`에 "운영 시나리오 커버리지 점검" 표를 추가했다. 업로드 세션 생성, multipart 중단/재개, registry insert 실패, multi-part 누락, RustFS 직접 변경, match set 활성화, rebuild, run-validation, 백업/복원, current source `알수없음`, admin role gate, active 참조 hard-delete 차단까지 구현자가 놓치기 쉬운 분기를 한 표에 묶었다.
+- `run-validation`도 optional 자료가 존재하면 materialize 직후와 validator 실행 직전 registry hash/size를 대조하고, mismatch는 `skipped`가 아니라 `failed/source_integrity_mismatch`로 기록하도록 명시했다.
+- 백업 복원 후 reconstructed match set은 read-only이며, RustFS source archive 존재와 hash를 확인하기 전까지 rebuild 입력으로 바로 활성화할 수 없다고 보강했다.
+- ADR-049에 `rebuild-db`/`run-validation` 사용 직전 무결성 게이트를 확정 결정으로 추가했다.
+- `docs/tasks.md`와 `docs/resume.md`에 이번 시나리오 커버리지 검토 결과를 반영했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
+## 2026-06-14 (PR #131 잔여 finding 반영 — rebuild 적재 전 무결성 게이트)
+
+**작업**: PR #131 head `94188b0` 검토 결과 직전 forward-looking 리뷰(H1~H5, M1~M7, L1~L6)는 거의 모두 반영돼 있었고, 한 가지 남은 finding을 보강했다.
+
+**반영**:
+- `docs/t109-backup-source-upload-management.md`의 `rebuild-db` 처리 흐름에 **적재 전 무결성 게이트**(3단계)를 추가했다. 업로드(`register`)와 rebuild 사이 시간차 동안 RustFS object가 교체·손상될 수 있으므로, 다운로드한 archive의 SHA-256/size를 registry `ops.source_files.sha256`/`group_sha256`와 적재 직전 재대조하고, 불일치 시 rebuild 중단 + `quarantined`/`invalid` 전환한다. reconciliation 정기 full 재해시와 별개로 rebuild가 자체 보장한다.
+- 같은 원칙을 `run-validation`에도 적용(불일치 시 검증 입력을 `skipped`가 아니라 `failed`로 기록)하도록 명시했다.
+- 통합 테스트 목록에 "object 교체 후 rebuild → 무결성 게이트가 mismatch를 잡아 적재 중단" 케이스를 추가했다.
+
+**배경**: 업로드/매칭/적재 3단계가 비연속(업로드만 하고 나중에 적재)인 운영 모델에서, 적재 직전 무결성 재대조가 없으면 시간차 동안 변조된 object가 그대로 적재될 수 있다는 리뷰 지적을 반영한 것이다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
+## 2026-06-14 (PR #131 추가 리뷰 반영 — T-109 구현 지침 보강)
+
+**작업**: PR #131 head `3e223a4` 기준 추가 리뷰 코멘트의 H1~H5, M1~M7, L1~L8을 `docs/t109-backup-source-upload-management.md`에 반영했다.
+
+**반영**:
+- fresh `ktgctl init-db`가 Alembic head와 drift 나지 않도록 `infra/sql.py` `SCHEMA_SQL`/`INDEX_SQL`, `sql/ddl/001_schema.sql`, Alembic을 함께 갱신하라는 구현 지침과 테스트를 추가했다.
+- C11+ case registry schema를 기존 `ConsistencyCaseDefinition` DTO에서 seed 가능한 컬럼으로 재정렬하고 `ops.consistency_case_inputs` link table을 추가했다.
+- `user_yyyymm`은 group 단일 정본으로 두고 child/item 중복 기준월을 제거했다.
+- `sido_file_set` 고정 모델을 `multi_part` + `part_kind`/`part_key`로 일반화했다.
+- upload session/part 진행 상태를 `ops.source_upload_sessions`/`ops.source_upload_session_parts`로 영속화하고 orphaned multipart reconciliation을 추가했다.
+- admin role gate의 신원 source를 trusted proxy header 기반 `RequestContext`로 구체화했다.
+- RustFS reconciliation은 정기 `quick` scan과 손상 의심/수동 `deep` scan으로 나누고, register 단계의 중복 본문 재읽기를 줄이도록 정리했다.
+- rebuild-db 흐름은 download/materialize 병렬·파이프라인과 DB COPY 직렬 유지로 구분했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
+## 2026-06-14 (ADR-049 — T-109 구현 방향 확정)
+
+**작업**: 사용자 결정에 따라 T-109의 미결정 선택지를 확정하고 문서에 반영했다. 호환성·최소수정보다 확장성, 완성도, 일관성, 성능을 우선하는 방향으로 고정했다.
+
+**반영**:
+- `docs/decisions.md`에 ADR-049를 추가했다.
+- C11+ case metadata는 DB registry 기반 동적 catalog로 확정했다.
+- match set과 운영 snapshot 연결은 `ops.dataset_snapshots.source_match_set_id` FK로 확정했다.
+- source file 검증 상태는 `state`와 `validation_state` 분리로 확정했다.
+- upload/register 흐름은 storage-first로 확정하되, upload session 생성 시 `user_yyyymm`은 반드시 사용자가 직접 입력·확정한 값으로 받는다. UI는 추정값 또는 현재 날짜 기준 `YYYYMM`을 입력 필드의 사전 입력값으로만 제안하고, 값이 없으면 백엔드가 세션 생성을 거부한다.
+- admin role gate, full-prefix `ops` ID rename, `ops.source_file_groups`, multipart/resumable upload, RustFS full object rehash를 구현 기준으로 확정했다.
+- `docs/t109-backup-source-upload-management.md`, `docs/tasks.md`, `docs/resume.md`를 ADR-049 기준으로 갱신했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
+## 2026-06-14 (PR #131 리뷰 반영 — T-109 source group 모델 보강)
+
+**작업**: PR #131 리뷰 코멘트의 M1~M12와 L1~L11을 `docs/t109-backup-source-upload-management.md`에 반영했다. SHP 3종(`electronic_map_full`, `roadaddr_entrance_full`, `zone_shape_full`)은 묶음 ZIP이 아니라 시도별 개별 ZIP 17개를 하나의 group으로 관리하는 모델로 확정했다.
+
+**반영**:
+- `ops.source_file_groups`를 match set 참조 단위로 추가하고, `sido_file_set` category는 group 하나 아래 child `ops.source_files` 17행을 보존하도록 정리했다.
+- 전자지도 구조 검증은 11개 layer 필수, serving load는 현행 9개 layer로 분리했다.
+- C11+ case CHECK 완화, RustFS client 확장, upload session 상태 매핑, SSE event schema, destructive admin action 권한/감사, 운영 용량 관리, 백업 manifest group 구조를 문서에 추가했다.
+- 권고안 선택지가 있는 항목은 장단점 표로 남기고, 최종 결정이 필요한 항목을 후속 ADR 후보로 분리했다.
+- `docs/tasks.md`와 `docs/resume.md`의 T-109 대기/재개 설명도 `source_file_group` 모델 기준으로 갱신했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
+## 2026-06-14 (백업 원천 파일 업로드·매칭·검증 관리 고도화 설계)
+
+**작업**: 백업/리스토어 고도화의 원천 파일 관리 흐름을 구현 전에 문서화했다. 사용자 요구사항에 따라 파일 업로드는 category별 명시 slot으로 나누고, 기준년월은 사용자가 직접 확정하며, 정상 업로드 파일 metadata는 DB registry에서 관리하고, RustFS object와 DB row의 정합성 검증/복구를 admin UI에서 처리하는 방향으로 설계했다.
+
+**반영**:
+- `docs/t109-backup-source-upload-management.md`를 추가했다.
+- `docs/tasks.md`에 T-109 구현 대기 항목을 등록했다.
+- `docs/resume.md`에 문서화 완료와 구현 대기 상태를 추가했다.
+- `docs/backup-restore-source-inventory.md`에서 T-109 설계 문서를 참조하게 했다.
+
+**핵심 결정/주의**:
+- 사용자 요청의 기본 category 목록은 맞지만, `도로명주소 한글_전체분`은 내부적으로 `juso`와 `parcel_link` 두 source kind를 만들고, `도로명주소 출입구 정보`와 `구역의도형`은 현행 코드에서는 optional이므로 `serving_minimal`과 `serving_recommended` profile을 분리하도록 제안했다.
+- `건물군 내 상세주소 동 도형`, `도로명주소 건물 도형`, `국가지점번호 도형/중심점`, `민원행정기관전자지도`는 match set의 optional 검증/보강 자료로 관리하고 C11+ 검증 케이스를 추가하는 방향으로 정리했다.
+- incremental 업데이트 파일 업로드는 T-109 범위에서 명시적으로 제외했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (미사용 원천 데이터 정확도 개선 검토)
 
 **작업**: `F:\dev\kor-travel-geo\data\juso` 현재 배치에서 기본 full-load가 쓰지 않거나 선택/조건부로만 쓰는 원천을 대상으로, 직접 정확도 개선 가능성·검증용 가치·도입 위험을 문서화했다.
