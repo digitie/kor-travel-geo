@@ -6315,6 +6315,12 @@
             "title": "Categories",
             "type": "array"
           },
+          "growth_30d_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Growth 30D Bytes",
+            "type": "integer"
+          },
           "over_threshold": {
             "default": false,
             "title": "Over Threshold",

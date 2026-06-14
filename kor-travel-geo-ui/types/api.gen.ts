@@ -3869,6 +3869,11 @@ export interface components {
              */
             categories: components["schemas"]["SourceCategoryCapacity"][];
             /**
+             * Growth 30D Bytes
+             * @default 0
+             */
+            growth_30d_bytes: number;
+            /**
              * Over Threshold
              * @default false
              */

@@ -5,9 +5,19 @@ from __future__ import annotations
 import hashlib
 import re
 from time import perf_counter
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
+from kortravelgeo.core.source_reconcile import (
+    CapacityUsage,
+    CategoryCapacity,
+    build_source_registry_metric_facts,
+)
 from kortravelgeo.dto.admin import CacheMetrics
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from kortravelgeo.dto.source import SourceCapacityUsage
 
 _prometheus_client: Any
 try:  # pragma: no cover - exercised in environments with api extra installed.
@@ -168,6 +178,51 @@ DB_QUERY_DURATION = _histogram(
     ("operation", "query_fingerprint", "status"),
     (0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
+# --- source-registry observability gauges (T-211) --------------------------
+# T-203c janitor (3 counters) and T-204 reconcile (3 counters) metrics already
+# exist above; T-211 adds the upload-session state gauge and the storage
+# capacity gauges (doc line ~2107) — per-category object count / bytes, the
+# 30-day growth, and the quarantined / soft_deleted / unregistered byte
+# breakdown — fed from ``compute_source_capacity`` on each /metrics scrape.
+SOURCE_UPLOAD_SESSIONS = _gauge(
+    "kor_travel_geo_source_upload_sessions",
+    "Upload sessions by lifecycle state.",
+    ("state",),
+)
+SOURCE_STORAGE_OBJECTS = _gauge(
+    "kor_travel_geo_source_storage_objects",
+    "Live source-registry objects by category.",
+    ("category",),
+)
+SOURCE_STORAGE_BYTES = _gauge(
+    "kor_travel_geo_source_storage_bytes",
+    "Live source-registry bytes by category.",
+    ("category",),
+)
+SOURCE_STORAGE_TOTAL_OBJECTS = _gauge(
+    "kor_travel_geo_source_storage_total_objects",
+    "Total live source-registry objects across all categories.",
+)
+SOURCE_STORAGE_TOTAL_BYTES = _gauge(
+    "kor_travel_geo_source_storage_total_bytes",
+    "Total live source-registry bytes across all categories.",
+)
+SOURCE_STORAGE_QUARANTINED_BYTES = _gauge(
+    "kor_travel_geo_source_storage_quarantined_bytes",
+    "Source-registry bytes in quarantined files.",
+)
+SOURCE_STORAGE_SOFT_DELETED_BYTES = _gauge(
+    "kor_travel_geo_source_storage_soft_deleted_bytes",
+    "Source-registry bytes in soft-deleted files.",
+)
+SOURCE_STORAGE_UNREGISTERED_BYTES = _gauge(
+    "kor_travel_geo_source_storage_unregistered_bytes",
+    "Stored-but-unregistered object bytes the latest reconcile run found.",
+)
+SOURCE_STORAGE_GROWTH_30D_BYTES = _gauge(
+    "kor_travel_geo_source_storage_growth_30d_bytes",
+    "Source-registry bytes uploaded within the last 30 days.",
+)
 
 _QUERY_START_ATTR: Final[str] = "_ktg_query_started_at"
 _SQL_COMMENT_RE: Final[re.Pattern[str]] = re.compile(r"/\*.*?\*/|--[^\n\r]*", re.DOTALL)
@@ -285,6 +340,65 @@ def refresh_admin_metrics(
     CACHE_EXPIRED.set(cache.expired)
     for kind, state, count in load_jobs:
         LOAD_JOBS.labels(kind=kind, state=state).set(count)
+
+
+def refresh_source_registry_metrics(
+    *,
+    capacity: SourceCapacityUsage,
+    session_state_counts: Mapping[str, int] | None = None,
+) -> None:
+    """Set the source-registry observability gauges from a capacity snapshot (T-211).
+
+    Reuses :func:`compute_source_capacity`'s DTO (per-category counts/bytes, the
+    quarantined / soft_deleted / unregistered breakdown, and the 30-day growth)
+    plus an upload-session ``GROUP BY state`` count, wired into the same
+    ``/metrics`` scrape path as :func:`refresh_admin_metrics`. The projection is
+    pure (``build_source_registry_metric_facts``) so it is unit-tested DB-free.
+    """
+    facts = build_source_registry_metric_facts(
+        _capacity_usage_from_dto(capacity),
+        session_state_counts=session_state_counts,
+    )
+    for category, count in facts.category_objects:
+        SOURCE_STORAGE_OBJECTS.labels(category=category).set(count)
+    for category, byte_count in facts.category_bytes:
+        SOURCE_STORAGE_BYTES.labels(category=category).set(byte_count)
+    SOURCE_STORAGE_TOTAL_OBJECTS.set(facts.total_objects)
+    SOURCE_STORAGE_TOTAL_BYTES.set(facts.total_bytes)
+    SOURCE_STORAGE_QUARANTINED_BYTES.set(facts.quarantined_bytes)
+    SOURCE_STORAGE_SOFT_DELETED_BYTES.set(facts.soft_deleted_bytes)
+    SOURCE_STORAGE_UNREGISTERED_BYTES.set(facts.unregistered_bytes)
+    SOURCE_STORAGE_GROWTH_30D_BYTES.set(facts.growth_30d_bytes)
+    for state, count in facts.session_states:
+        SOURCE_UPLOAD_SESSIONS.labels(state=state).set(count)
+
+
+def _capacity_usage_from_dto(capacity: SourceCapacityUsage) -> CapacityUsage:
+    """Map the API capacity DTO back to the core dataclass for the pure builder.
+
+    ``core`` cannot import ``dto`` (downward layer hop), so this infra-layer
+    adapter bridges the identical-field DTO into :class:`CapacityUsage`.
+    """
+    return CapacityUsage(
+        categories=tuple(
+            CategoryCapacity(
+                category=c.category,
+                object_count=c.object_count,
+                total_bytes=c.total_bytes,
+                quarantined_bytes=c.quarantined_bytes,
+                soft_deleted_bytes=c.soft_deleted_bytes,
+            )
+            for c in capacity.categories
+        ),
+        total_object_count=capacity.total_object_count,
+        total_bytes=capacity.total_bytes,
+        quarantined_bytes=capacity.quarantined_bytes,
+        soft_deleted_bytes=capacity.soft_deleted_bytes,
+        unregistered_bytes=capacity.unregistered_bytes,
+        growth_30d_bytes=capacity.growth_30d_bytes,
+        capacity_limit_bytes=capacity.capacity_limit_bytes,
+        over_threshold=capacity.over_threshold,
+    )
 
 
 def refresh_db_pool_metrics(engine: Any) -> None:

@@ -143,7 +143,8 @@ const CAPACITY = {
   over_threshold: false,
   quarantined_bytes: 0,
   soft_deleted_bytes: 0,
-  unregistered_bytes: 0,
+  unregistered_bytes: 1024,
+  growth_30d_bytes: 512,
   capacity_limit_bytes: null,
   categories: [
     {
@@ -294,6 +295,20 @@ describe("SourceFilesPanel", () => {
     expect(
       await screen.findByLabelText("rebuild 강제 승급 확인 문구")
     ).toBeInTheDocument();
+  });
+
+  it("목록 탭 상단에 용량/이슈 요약 카드를 렌더한다", async () => {
+    renderPanel("list");
+    const summary = (await screen.findByText("용량 / 이슈 요약")).closest(
+      ".panel"
+    ) as HTMLElement;
+    // 30일 증가량 (512 B) + 미등록(1024 B = 1.0 KB) + 미해결 이슈(open 1건, error 1건)
+    expect(await within(summary).findByText("최근 30일 증가")).toBeInTheDocument();
+    expect(within(summary).getByText("512 B")).toBeInTheDocument();
+    expect(within(summary).getByText("1.0 KB")).toBeInTheDocument();
+    const openDt = within(summary).getByText("미해결 이슈");
+    const openDd = openDt.parentElement?.querySelector("dd");
+    await waitFor(() => expect(openDd).toHaveTextContent("1"));
   });
 
   it("RustFS 정합성 탭에 실행/이슈/용량을 표시한다", async () => {

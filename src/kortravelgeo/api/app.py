@@ -34,6 +34,7 @@ from kortravelgeo.infra.metrics import (
     record_api_request_started,
     refresh_admin_metrics,
     refresh_db_pool_metrics,
+    refresh_source_registry_metrics,
     render_prometheus,
 )
 from kortravelgeo.loaders.bulk_loader import load_bulk_delivery
@@ -120,6 +121,11 @@ def create_app() -> FastAPI:
         assert client.engine is not None
         refresh_admin_metrics(cache=cache, load_jobs=load_jobs)
         refresh_db_pool_metrics(client.engine)
+        capacity = await client.source_storage_capacity()
+        session_state_counts = await client.source_upload_session_state_counts()
+        refresh_source_registry_metrics(
+            capacity=capacity, session_state_counts=session_state_counts
+        )
         return Response(render_prometheus(), media_type=PROMETHEUS_CONTENT_TYPE)
 
     return app

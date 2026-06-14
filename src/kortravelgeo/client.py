@@ -1003,6 +1003,10 @@ class AsyncAddressClient:
             capacity_limit_bytes=self.settings.source_storage_capacity_limit_bytes,
         )
 
+    async def source_upload_session_state_counts(self) -> dict[str, int]:
+        """Upload sessions by lifecycle state for the /metrics feed (T-211)."""
+        return await SourceUploadSessionRepository(self._engine()).state_counts()
+
     # --- Source match sets (T-205a) ---------------------------------------
 
     async def list_source_match_sets(

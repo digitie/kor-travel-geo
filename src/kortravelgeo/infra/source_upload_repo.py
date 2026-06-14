@@ -394,6 +394,27 @@ UPDATE ops.source_upload_sessions
             )
         return len(deleted)
 
+    async def state_counts(self) -> dict[str, int]:
+        """Upload sessions grouped by lifecycle ``state`` (T-211 metric feed).
+
+        One aggregate ``GROUP BY state`` over ``ops.source_upload_sessions`` for
+        the ``kor_travel_geo_source_upload_sessions`` gauge.
+        """
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        """
+SELECT state, count(*)::bigint AS count
+  FROM ops.source_upload_sessions
+ GROUP BY state
+ ORDER BY state
+"""
+                    )
+                )
+            ).mappings().all()
+        return {str(row["state"]): int(row["count"]) for row in rows}
+
     async def slot_parts(
         self,
         session_id: str,
