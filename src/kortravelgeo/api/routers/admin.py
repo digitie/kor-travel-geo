@@ -14,10 +14,16 @@ from pathlib import Path
 from typing import Literal, TypedDict
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, ORJSONResponse, StreamingResponse
 
 from kortravelgeo.api._jobs import JobQueue
 from kortravelgeo.api.deps import get_client, get_job_queue
+from kortravelgeo.api.security import (
+    ROLE_SOURCE_FILE_MANAGER,
+    ROLE_SOURCE_FILE_VIEWER,
+    RequestContext,
+    require_role,
+)
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.normalize import parse_address
 from kortravelgeo.core.source_categories import CATEGORY_CATALOG
@@ -65,8 +71,19 @@ from kortravelgeo.dto.admin import (
     UploadSetStatus,
     UploadSidoZipResponse,
 )
-from kortravelgeo.dto.source import SourceFileCategoryCatalog, SourceFileCategoryInfo
-from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.dto.source import (
+    MultipartCompleteRequest,
+    MultipartInitiateResponse,
+    SlotReplaceResponse,
+    SourceFileCategoryCatalog,
+    SourceFileCategoryInfo,
+    SourceUploadProgressEvent,
+    UploadPartResponse,
+    UploadSessionConflict,
+    UploadSessionCreateRequest,
+    UploadSessionStatus,
+)
+from kortravelgeo.exceptions import InvalidInputError, NotFoundError
 from kortravelgeo.infra.backup import (
     BACKUP_ARTIFACT_TYPE,
     backup_download_url,
@@ -75,11 +92,14 @@ from kortravelgeo.infra.backup import (
 )
 from kortravelgeo.infra.rustfs import (
     RustfsClient,
+    RustfsUploadedPart,
     describe_rustfs_config,
+    join_object_key,
     load_rustfs_config,
     require_enabled_rustfs,
     save_rustfs_config,
 )
+from kortravelgeo.infra.source_upload_repo import should_fail_storage_state
 from kortravelgeo.infra.uploads import (
     import_rustfs_prefix_as_upload_set,
     sync_local_to_rustfs,
@@ -203,6 +223,407 @@ async def source_file_categories() -> SourceFileCategoryCatalog:
             for category in CATEGORY_CATALOG
         )
     )
+
+
+# --- Source upload sessions (T-203a) --------------------------------------
+# Lifecycle + storage-client slice of T-109. Mutating endpoints require
+# source_file_manager; reads require source_file_viewer (doc "Admin 권한 모델").
+# DEFERRED to T-203b/c: register, recompute_group_aggregates, archive structure
+# validator, janitor, soft-delete/restore.
+
+_SOURCE_MANAGER = Depends(require_role(ROLE_SOURCE_FILE_MANAGER))
+_SOURCE_VIEWER = Depends(require_role(ROLE_SOURCE_FILE_VIEWER, ROLE_SOURCE_FILE_MANAGER))
+
+
+@router.post(
+    "/source-files/upload-sessions",
+    response_model=UploadSessionStatus,
+    response_model_exclude_none=True,
+)
+async def create_upload_session(
+    req: UploadSessionCreateRequest,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> UploadSessionStatus | ORJSONResponse:
+    """Create a session; ``409`` + resume payload when one already exists.
+
+    ``user_yyyymm`` is server-mandatory (validated by the DTO). A non-terminal
+    session for the same ``category+user_yyyymm`` returns ``409`` so the UI
+    resumes it instead of creating a duplicate group + orphan object.
+    """
+    settings = get_settings()
+    bucket: str | None = None
+    prefix: str | None = None
+    if req.storage_kind == "rustfs":
+        config = require_enabled_rustfs(settings)
+        bucket = config.bucket
+        prefix = config.prefix
+    result = await client.create_upload_session(
+        req, bucket=bucket, prefix=prefix, created_by=ctx.actor
+    )
+    if result.conflict:
+        existing = result.session
+        conflict = UploadSessionConflict(
+            message=(
+                f"{existing.category}/{existing.user_yyyymm}에 진행 중인 "
+                f"업로드 세션이 이미 있습니다"
+            ),
+            upload_session_id=existing.upload_session_id,
+            state=existing.state,
+            category=existing.category,
+            user_yyyymm=existing.user_yyyymm,
+            uploaded_file_count=existing.uploaded_file_count,
+            expected_file_count=existing.expected_file_count,
+            resumable_actions=("resume_upload", "cancel_session"),
+            existing_session=existing,
+        )
+        await client.record_audit_event(
+            action="source_upload.session_conflict",
+            actor_type="ui",
+            actor_id=ctx.actor,
+            outcome="conflict",
+            payload={"category": req.category, "user_yyyymm": req.user_yyyymm},
+            resource_type="source_upload_session",
+            resource_id=existing.upload_session_id,
+            **_audit_request(request),
+        )
+        return ORJSONResponse(
+            conflict.model_dump(mode="json", exclude_none=True),
+            status_code=409,
+        )
+    await client.record_audit_event(
+        action="source_upload.session_create",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="created",
+        payload={"category": req.category, "user_yyyymm": req.user_yyyymm},
+        resource_type="source_upload_session",
+        resource_id=result.session.upload_session_id,
+        **_audit_request(request),
+    )
+    return result.session
+
+
+@router.get(
+    "/source-files/upload-sessions",
+    response_model=list[UploadSessionStatus],
+    response_model_exclude_none=True,
+)
+async def list_upload_sessions(
+    state: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    user_yyyymm: str | None = Query(default=None, pattern=r"^\d{6}$"),
+    created_by: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[UploadSessionStatus]:
+    """Resume entry point: filter resumable in-progress / recoverable sessions."""
+    return await client.list_upload_sessions(
+        state=state,
+        category=category,
+        user_yyyymm=user_yyyymm,
+        created_by=created_by,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/source-files/upload-sessions/{upload_session_id}",
+    response_model=UploadSessionStatus,
+    response_model_exclude_none=True,
+)
+async def get_upload_session(
+    upload_session_id: str,
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> UploadSessionStatus:
+    return await client.get_upload_session(upload_session_id)
+
+
+@router.post(
+    "/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart",
+    response_model=MultipartInitiateResponse,
+    response_model_exclude_none=True,
+)
+async def initiate_multipart_upload(
+    upload_session_id: str,
+    slot_id: str,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> MultipartInitiateResponse:
+    """Initiate a resumable multipart upload for one slot."""
+    settings = get_settings()
+    session = await client.get_upload_session(upload_session_id)
+    _ensure_known_slot(session, slot_id)
+    config = require_enabled_rustfs(settings)
+    rustfs = RustfsClient(config)
+    object_key = _slot_object_key(config.prefix, session, slot_id)
+    upload_id = await rustfs.create_multipart_upload(
+        object_key,
+        metadata={
+            "ktg-upload-session-id": session.upload_session_id,
+            "ktg-source-file-group-id": session.source_file_group_id,
+            "ktg-category": session.category,
+            "ktg-upload-user-yyyymm": session.user_yyyymm,
+            "ktg-part-key": slot_id,
+        },
+    )
+    await client.record_upload_session_part(
+        session.upload_session_id,
+        part_key=slot_id,
+        part_number=1,
+        multipart_upload_id=upload_id,
+        received_bytes=0,
+    )
+    await client.update_upload_session_state(session.upload_session_id, state="uploading")
+    await client.record_audit_event(
+        action="source_upload.multipart_initiate",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="started",
+        payload={"slot": slot_id, "multipart_upload_id": upload_id},
+        resource_type="source_upload_session",
+        resource_id=session.upload_session_id,
+        **_audit_request(request),
+    )
+    return MultipartInitiateResponse(
+        upload_session_id=session.upload_session_id,
+        slot=slot_id,
+        part_key=slot_id,
+        multipart_upload_id=upload_id,
+        object_key=object_key,
+        part_size_bytes=session.part_size_bytes,
+    )
+
+
+@router.put(
+    "/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart/{part_number}",
+    response_model=UploadPartResponse,
+    response_model_exclude_none=True,
+)
+async def upload_multipart_part(
+    upload_session_id: str,
+    slot_id: str,
+    part_number: int,
+    request: Request,
+    multipart_upload_id: str = Query(min_length=1),
+    _ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> UploadPartResponse:
+    """Upload one part; records part etag/sha256/received_bytes for resume."""
+    if part_number < 1:
+        msg = "part_number must be >= 1"
+        raise InvalidInputError(msg)
+    settings = get_settings()
+    session = await client.get_upload_session(upload_session_id)
+    _ensure_known_slot(session, slot_id)
+    body = await _read_upload_body(request, settings.api_max_upload_bytes)
+    config = require_enabled_rustfs(settings)
+    rustfs = RustfsClient(config)
+    object_key = _slot_object_key(config.prefix, session, slot_id)
+    part = await rustfs.upload_part(
+        object_key,
+        upload_id=multipart_upload_id,
+        part_number=part_number,
+        body=body,
+    )
+    part_sha256 = hashlib.sha256(body).hexdigest()
+    recorded = await client.record_upload_session_part(
+        session.upload_session_id,
+        part_key=slot_id,
+        part_number=part_number,
+        multipart_upload_id=multipart_upload_id,
+        part_etag=part.etag,
+        part_sha256=part_sha256,
+        received_bytes=len(body),
+    )
+    return UploadPartResponse(
+        upload_session_id=session.upload_session_id,
+        slot=slot_id,
+        part_key=slot_id,
+        part_number=part_number,
+        received_bytes=recorded.received_bytes,
+        part_etag=part.etag,
+        part_sha256=part_sha256,
+    )
+
+
+@router.post(
+    "/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart/complete",
+    response_model=UploadSessionStatus,
+    response_model_exclude_none=True,
+)
+async def complete_multipart_upload(
+    upload_session_id: str,
+    slot_id: str,
+    req: MultipartCompleteRequest,
+    request: Request,
+    multipart_upload_id: str = Query(min_length=1),
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> UploadSessionStatus:
+    """Complete the slot upload after verifying the multipart still exists.
+
+    On resume the RustFS multipart upload must still hold every recorded part;
+    if ``ListParts`` 404s or a recorded part is missing, the session transitions
+    to ``failed_storage_state`` and the slot must be re-uploaded (doc 1294/1308).
+    """
+    settings = get_settings()
+    session = await client.get_upload_session(upload_session_id)
+    _ensure_known_slot(session, slot_id)
+    config = require_enabled_rustfs(settings)
+    rustfs = RustfsClient(config)
+    object_key = _slot_object_key(config.prefix, session, slot_id)
+    parts = await client.upload_session_slot_parts(
+        session.upload_session_id, part_key=slot_id
+    )
+    recorded_numbers = frozenset(
+        p.part_number for p in parts if p.part_etag is not None
+    )
+    try:
+        listed = await rustfs.list_parts(object_key, upload_id=multipart_upload_id)
+        listed_numbers: frozenset[int] | None = frozenset(p.part_number for p in listed)
+    except NotFoundError:
+        listed_numbers = None
+    if should_fail_storage_state(
+        recorded_part_numbers=recorded_numbers,
+        listed_part_numbers=listed_numbers,
+    ):
+        failed = await client.update_upload_session_state(
+            session.upload_session_id,
+            state="failed_storage_state",
+            error_message="RustFS multipart 상태가 기록과 일치하지 않습니다 (slot 재업로드 필요)",
+        )
+        await client.record_audit_event(
+            action="source_upload.failed_storage_state",
+            actor_type="ui",
+            actor_id=ctx.actor,
+            outcome="failed",
+            payload={"slot": slot_id, "multipart_upload_id": multipart_upload_id},
+            resource_type="source_upload_session",
+            resource_id=session.upload_session_id,
+            **_audit_request(request),
+        )
+        return failed
+    complete_parts = tuple(
+        RustfsUploadedPart(part_number=p.part_number, etag=p.part_etag)
+        for p in sorted(parts, key=lambda x: x.part_number)
+        if p.part_etag is not None
+    )
+    if req.part_etags:
+        complete_parts = tuple(
+            RustfsUploadedPart(part_number=number, etag=etag)
+            for number, etag in sorted(req.part_etags)
+        )
+    await rustfs.complete_multipart_upload(
+        object_key, upload_id=multipart_upload_id, parts=complete_parts
+    )
+    await client.record_upload_session_part(
+        session.upload_session_id,
+        part_key=slot_id,
+        part_number=complete_parts[-1].part_number,
+        multipart_upload_id=multipart_upload_id,
+        part_etag=complete_parts[-1].etag,
+        received_bytes=sum(p.received_bytes for p in parts),
+        completed=True,
+    )
+    return await client.get_upload_session(session.upload_session_id)
+
+
+@router.delete(
+    "/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart",
+    response_model=UploadSessionStatus,
+    response_model_exclude_none=True,
+)
+async def abort_multipart_upload(
+    upload_session_id: str,
+    slot_id: str,
+    multipart_upload_id: str = Query(min_length=1),
+    _ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> UploadSessionStatus:
+    """Abort the slot's multipart upload and clear its recorded parts."""
+    settings = get_settings()
+    session = await client.get_upload_session(upload_session_id)
+    _ensure_known_slot(session, slot_id)
+    config = require_enabled_rustfs(settings)
+    rustfs = RustfsClient(config)
+    object_key = _slot_object_key(config.prefix, session, slot_id)
+    with suppress(InvalidInputError):
+        await rustfs.abort_multipart_upload(object_key, upload_id=multipart_upload_id)
+    return await client.replace_upload_session_slot(session.upload_session_id, part_key=slot_id)
+
+
+@router.post(
+    "/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/replace",
+    response_model=SlotReplaceResponse,
+    response_model_exclude_none=True,
+)
+async def replace_upload_slot(
+    upload_session_id: str,
+    slot_id: str,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SlotReplaceResponse:
+    """Replace a completed slot before register: invalidate prior hash/validation.
+
+    Clears the slot's recorded parts (so its etag/hash/structure results no
+    longer apply) and reopens it for a fresh upload (doc line 1314).
+    """
+    session = await client.replace_upload_session_slot(upload_session_id, part_key=slot_id)
+    await client.record_audit_event(
+        action="source_upload.slot_replace",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="invalidated",
+        payload={"slot": slot_id},
+        resource_type="source_upload_session",
+        resource_id=session.upload_session_id,
+        **_audit_request(request),
+    )
+    return SlotReplaceResponse(
+        upload_session_id=session.upload_session_id,
+        slot=slot_id,
+        part_key=slot_id,
+        invalidated=True,
+        state=session.state,
+    )
+
+
+@router.get(
+    "/source-files/upload-sessions/{upload_session_id}/events",
+    response_model=None,
+)
+async def upload_session_events(
+    upload_session_id: str,
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> StreamingResponse:
+    """SSE ``source_upload.progress`` stream (mirrors ``/jobs/{id}/events``).
+
+    Emits a ``source_upload.progress`` event whenever the session payload
+    changes and stops at a terminal state; clients fall back to polling
+    ``GET .../upload-sessions/{id}`` if the stream drops.
+    """
+
+    async def event_stream() -> AsyncIterator[str]:
+        last_payload: str | None = None
+        while True:
+            session = await client.get_upload_session(upload_session_id)
+            event = _progress_event(session)
+            payload = event.model_dump_json(exclude_none=True)
+            if payload != last_payload:
+                yield f"event: source_upload.progress\ndata: {payload}\n\n"
+                last_payload = payload
+            if session.state in _UPLOAD_TERMINAL_STATES:
+                break
+            await asyncio.sleep(2)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.get(
@@ -1020,3 +1441,77 @@ def _audit_request(request: Request) -> _AuditRequest:
         "request_id": request.headers.get("x-request-id"),
         "trace_id": request.headers.get("traceparent"),
     }
+
+
+# --- Source upload-session helpers (T-203a) -------------------------------
+
+#: Terminal session states for the SSE loop (mirrors jobs events' done set).
+_UPLOAD_TERMINAL_STATES = frozenset(
+    {
+        "available",
+        "quarantined",
+        "cancelled",
+        "expired",
+        "failed_upload",
+        "failed_extract",
+        "failed_structure",
+        "failed_hash",
+        "failed_rustfs_put",
+        "failed_rustfs_verify",
+        "failed_storage_state",
+        "failed_register",
+    }
+)
+
+
+def _ensure_known_slot(session: UploadSessionStatus, slot_id: str) -> None:
+    if slot_id not in {slot.slot for slot in session.file_slots}:
+        msg = f"unknown upload slot '{slot_id}' for category {session.category}"
+        raise NotFoundError(msg)
+
+
+def _slot_object_key(prefix: str, session: UploadSessionStatus, slot_id: str) -> str:
+    """Session-scoped staging key for a slot upload.
+
+    Follows the t109 RustFS layout prefix (``source-files/<category>/<yyyymm>/
+    <group_id>/...``). ``register`` (T-203b) assigns the final ``source_file_id``
+    segment; the live upload keys by ``upload_session_id`` so a session can be
+    aborted/replaced without touching a registered object.
+    """
+    return join_object_key(
+        prefix,
+        "source-files",
+        session.category,
+        session.user_yyyymm,
+        session.source_file_group_id,
+        session.upload_session_id,
+        _safe_path_token(slot_id),
+        "archive",
+    )
+
+
+async def _read_upload_body(request: Request, max_bytes: int) -> bytes:
+    buffer = bytearray()
+    async for chunk in request.stream():
+        if not chunk:
+            continue
+        buffer.extend(chunk)
+        if len(buffer) > max_bytes:
+            msg = f"upload part exceeds {max_bytes} bytes limit"
+            raise InvalidInputError(msg)
+    return bytes(buffer)
+
+
+def _progress_event(session: UploadSessionStatus) -> SourceUploadProgressEvent:
+    total = session.expected_file_count or 1
+    progress = min(session.uploaded_file_count / total, 1.0)
+    received = sum(slot.received_bytes for slot in session.file_slots)
+    return SourceUploadProgressEvent(
+        upload_session_id=session.upload_session_id,
+        state=session.state,
+        stage=f"upload:{session.category}",
+        progress=progress,
+        uploaded_bytes=received,
+        total_bytes=received,
+        message=session.error_message,
+    )
