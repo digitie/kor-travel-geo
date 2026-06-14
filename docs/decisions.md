@@ -2331,11 +2331,11 @@ T-109 구현은 다음 확정안을 따른다.
 2. match set과 운영 dataset 연결은 `ops.dataset_snapshots.source_match_set_id` FK로 한다.
 3. source file 검증 상태는 `state`와 `validation_state`를 분리한다.
 4. upload/register 흐름은 storage-first다. 업로드 세션 생성 시 `user_yyyymm`은 필수이며 사용자가 직접 입력·확정한다. UI는 추정값 또는 현재 날짜 기준 `YYYYMM`을 입력 필드의 사전 입력값으로만 제안한다. `user_yyyymm`이 없으면 백엔드는 파일명이나 현재 날짜로 보완하지 않고 upload session 생성을 거부한다. RustFS 저장과 검증 뒤 사용자가 registry 등록을 승인한다.
-5. admin 권한은 role gate를 필수로 두고, typed confirmation은 추가 안전장치로만 사용한다.
+5. admin 권한은 role gate를 필수로 두고, typed confirmation은 추가 안전장치로만 사용한다. 최소 신원 source는 trusted reverse proxy 또는 Next.js admin proxy가 주입하는 `X-KTG-Actor`/`X-KTG-Roles` 헤더다.
 6. `ops` 내부 ID는 full-prefix로 통일한다. 기존 `snapshot_id`, `release_id`, `event_id` 등은 구현 단계에서 `dataset_snapshot_id`, `serving_release_id`, `audit_event_id`처럼 rename한다.
-7. 시도별 다중 파일 category는 `ops.source_file_groups`를 만들고, match set은 group을 참조한다.
-8. 업로드 전략은 multipart/resumable을 정식 경로로 둔다.
-9. RustFS 정합성 검증은 object 전체를 재해시해 SHA-256 mismatch를 즉시 확정한다.
+7. 시도별 다중 파일 category는 `ops.source_file_groups`를 만들고, match set은 group을 참조한다. child file 분할은 `sido_code` 하드코딩이 아니라 `part_kind`/`part_key`로 일반화한다.
+8. 업로드 전략은 multipart/resumable을 정식 경로로 둔다. upload session과 part 진행 상태는 DB에 영속화한다.
+9. RustFS 정합성 검증은 `quick`/`deep` 모드로 나눈다. 정기 scan은 size/etag가 직전 검증과 같으면 재해시를 생략하고, 변경 감지 object나 사용자가 실행한 `deep` scan은 object 전체를 streaming 재해시해 SHA-256 mismatch를 즉시 확정한다.
 
 ### 근거
 
@@ -2343,7 +2343,7 @@ T-109 구현은 다음 확정안을 따른다.
 - SHP 3종은 제공 단위가 시도별 ZIP 17개라서 개별 file이 아니라 group을 match set 단위로 삼아야 한다.
 - 기준년월은 파일명 추정이나 현재 날짜 fallback으로 자동 결정하면 안 된다. 사용자가 직접 입력·제출한 `user_yyyymm`만 저장과 match set의 정본이 된다.
 - RustFS object 저장은 DB transaction과 원자적으로 묶을 수 없다. 먼저 저장하고, 검증과 사용자 승인 뒤 registry insert를 재시도 가능하게 만드는 흐름이 운영 UX와 잘 맞는다.
-- 업데이트 주기와 부하가 낮다면 hash mismatch를 지연 확정하는 것보다 전체 재해시로 손상 여부를 즉시 알려주는 편이 운영 판단에 유리하다.
+- 손상 의심 object는 hash mismatch를 지연 확정하지 말고 전체 재해시로 즉시 판단해야 한다. 다만 정기 scan이 매번 전국 object를 다시 읽으면 운영 I/O 비용이 선형으로 커지므로, 변경 감지와 `deep` scan을 분리한다.
 
 ### 결과(긍정)
 
@@ -2352,15 +2352,16 @@ T-109 구현은 다음 확정안을 따른다.
 - source match set과 active serving release의 연결이 FK로 추적된다.
 - 대용량·불안정 네트워크에서도 multipart upload 진행률과 재개가 가능하다.
 - 기존 `ops`와 신규 source registry의 ID 네이밍이 맞춰진다.
+- 정기 RustFS scan은 `quick`, 손상 의심 또는 수동 검증은 `deep`으로 분리되어 운영 I/O 비용을 통제할 수 있다.
 
 ### 결과(부정)
 
 - 기존 admin API/DTO/OpenAPI의 `snapshot_id`, `release_id`, `event_id` 계열 이름이 바뀌므로 migration과 문서 갱신 범위가 커진다.
-- role gate, multipart upload, DB case registry, full object rehash는 최소 구현보다 작업량이 많다.
-- 전체 재해시는 object 수와 크기가 늘면 정합성 scan 시간이 길어질 수 있다.
+- role gate, multipart upload, DB case registry, quick/deep reconciliation은 최소 구현보다 작업량이 많다.
+- deep 재해시는 object 수와 크기가 늘면 정합성 scan 시간이 길어질 수 있다.
 
 ### 후속
 
-- (open) T-109 구현 PR은 full-prefix rename migration, OpenAPI export, TypeScript type 재생성, admin UI route/parameter 변경 문서를 함께 포함한다.
+- (open) T-109 구현 PR은 full-prefix rename migration, `infra/sql.py`/`sql/ddl/001_schema.sql` fresh init-db DDL 갱신, OpenAPI export, TypeScript type 재생성, admin UI route/parameter 변경 문서를 함께 포함한다.
 - (open) RustFS 용량 관리 정책은 별도 ADR로 정한다. 기본은 무기한 보존이지만 archive tier, soft-deleted object retention, 미등록 stored object cleanup SLA가 필요하다.
 - (open) 보강 자료가 실제 serving 좌표 ranking에 편입되는 조건은 C11+ 검증 결과와 feature flag 기준을 보고 별도 ADR로 정한다.

@@ -48,7 +48,7 @@ PR #131 상세 리뷰의 M1~M12, L1~L11을 구현 전에 모두 설계에 반영
 | PK 네이밍 | full-prefix ID로 통일 | T-109 신규 테이블은 `source_file_id` 같은 full-prefix를 사용한다. 기존 `ops` 테이블도 구현 단계에서 `dataset_snapshot_id`, `serving_release_id`, `audit_event_id`처럼 full-prefix로 rename하는 migration/API 변경을 포함한다. |
 | 시도별 다중 파일 category 모델 | `ops.source_file_groups` 신설 | match set은 group을 참조하고, 시도별 ZIP 17개는 child `ops.source_files` 17행으로 보존한다. |
 | 업로드 전략 | multipart/resumable upload | 1차 구현부터 multipart/resumable을 정식 경로로 둔다. 단일 PUT은 테스트 fixture 또는 내부 fallback으로만 제한한다. |
-| RustFS hash 검증 | reconciliation 때 object 전체 즉시 재해시 | 업데이트 주기와 부하가 낮다는 전제에서 size/etag만으로 끝내지 않고 SHA-256을 다시 계산해 mismatch를 즉시 확정한다. |
+| RustFS hash 검증 | quick/deep reconciliation | 정기 scan은 size/etag가 직전 검증과 같으면 본문 재해시를 생략하고, 변경 감지 object 또는 사용자가 실행한 deep scan은 object 전체를 streaming 재해시해 mismatch를 즉시 확정한다. |
 
 ### PR #131 finding 반영 위치
 
@@ -57,7 +57,7 @@ PR #131 상세 리뷰의 M1~M12, L1~L11을 구현 전에 모두 설계에 반영
 | M1 | `electronic_map_full` 구조 검증을 11개 layer 필수로 고정하고 serving load 9개 layer와 분리 |
 | M2 | C11+ 추가 전 `ops.consistency_case_samples.case_code` CHECK 완화 migration을 필수 단계로 추가 |
 | M3 | `ops.dataset_snapshots.source_match_set_id` FK를 정본으로 명시 |
-| M4 | `RustfsClient`의 `head_object`, `delete_object`, metadata 포함 `put_file`, multipart upload, 전체 재해시 helper 필요를 구현 범위에 추가 |
+| M4 | `RustfsClient`의 `head_object`, `delete_object`, metadata 포함 `put_file`, multipart upload, 조건부 deep rehash helper 필요를 구현 범위에 추가 |
 | M5 | `building_shape_bundle.py`, `extra_shape_layers.py`와 기존 비교 script 재사용을 보강 자료 단계에 명시 |
 | M6 | `state`/`validation_state` 선택지, enum, 모순 방지 CHECK/trigger 필요를 명시 |
 | M7 | upload session state와 registry state 매핑표를 추가 |
@@ -65,7 +65,7 @@ PR #131 상세 리뷰의 M1~M12, L1~L11을 구현 전에 모두 설계에 반영
 | M9 | destructive admin action의 typed confirmation, 감사 actor, role gate 선택지를 추가 |
 | M10 | `effective_yyyymm`, `yyyymm_by_category`, `mixed_yyyymm` 산출 규칙을 추가 |
 | M11 | PK 네이밍 선택지와 잘못된 심볼 경로 표기를 정정 |
-| M12 | `source_file_groups`와 `sido_file_set` 모델을 추가하고 match set 참조 단위를 group으로 변경 |
+| M12 | `source_file_groups`와 `multi_part` 모델을 추가하고 match set 참조 단위를 group으로 변경 |
 | L1 | SHP 3종은 시도별 개별 ZIP 업로드로 확정해 2GiB 장애 요인을 해소하되, 업로드 경로는 1차 구현부터 multipart/resumable로 고정 |
 | L2 | `TL_SPRD_INTRVL`은 DBF-only 검증 profile로 분리 |
 | L3 | role 집합을 `build_required`, `build_recommended`, `validation_optional`, `enrichment_candidate` 4종으로 고정 |
@@ -77,6 +77,32 @@ PR #131 상세 리뷰의 M1~M12, L1~L11을 구현 전에 모두 설계에 반영
 | L9 | category당 단일 참조는 file이 아니라 group 단위 `UNIQUE (source_match_set_id, category)`로 정리 |
 | L10 | epost `pobox`/`bulk` source kind와 `roadname_hangul_full`의 `juso`/`parcel_link` 전개를 명시 |
 | L11 | `CASE_DEFINITIONS`, `REQUIRED_SOURCE_KINDS`, `build_full_load_source_set_plan`, `/v1/admin` 표기를 정정 |
+
+### PR #131 추가 리뷰 반영 위치
+
+head `3e223a4` 기준 추가 리뷰의 H/M/L 항목은 다음처럼 문서에 반영한다.
+
+| finding | 반영 위치 |
+|---------|-----------|
+| H1 | 1단계 구현 순서와 테스트 계획에 `infra/sql.py` `SCHEMA_SQL`/`INDEX_SQL`, `sql/ddl/001_schema.sql`, Alembic 동시 갱신과 fresh init-db drift 테스트 추가 |
+| H2 | `ops.consistency_case_definitions`를 기존 `ConsistencyCaseDefinition` DTO와 seed 가능한 컬럼으로 재정렬하고 `ops.consistency_case_inputs` link table 추가 |
+| H3 | `Admin 권한 모델` 절에 trusted proxy header 기반 `RequestContext`, `require_role`, audit actor/role 규칙 추가 |
+| H4 | DB 재구성 흐름에 download/materialize 병렬·파이프라인과 DB COPY 직렬 유지 규칙 추가 |
+| H5 | snapshot 연결을 `ops.dataset_snapshots.source_match_set_id` FK 정본으로 고정하고 `source_set` JSONB와 `serving_releases` 직접 연결 표현 제거 |
+| M1 | `recompute_group_aggregates(source_file_group_id)` 단일 service와 호출 지점 명시 |
+| M2 | reconciliation `quick`/`deep` mode, `last_verified_*`, 조건부 재해시, deep cursor 추가 |
+| M3 | register 단계에서 upload streaming SHA-256 재사용, `group_sha256` metadata 기반 계산, 불필요한 본문 재읽기 금지 |
+| M4 | `user_yyyymm`을 group 단일 정본으로 축소하고 child/item 중복 저장 제거 |
+| M5 | `source_set_hash`를 draft에서는 NULL 허용, validated 이상에서만 64자 필수로 변경 |
+| M6 | `ops.source_upload_sessions`/`ops.source_upload_session_parts`와 `orphaned_multipart` reconciliation 추가 |
+| M7 | reconciliation item, object key, part 기반 dedup, incomplete group index 추가 |
+| L1 | 시도별 고정 모델을 `multi_part` + `part_kind`/`part_key` 모델로 일반화 |
+| L2 | RustFS object key를 `<category>/<user_yyyymm>/<group>/<file>/<part_key>` prefix로 변경 |
+| L3/L4 | source registry FK는 `RESTRICT`, snapshot match set FK는 `SET NULL` + app guard로 정리 |
+| L5 | case 입력 category를 `ops.consistency_case_inputs` link table로 검증 |
+| L6 | 신규 CHECK는 `char_length()`와 명시 constraint 이름을 사용 |
+| L7 | SHP/DBF header 검증은 필요한 byte만 부분 read하도록 명시 |
+| L8 | multi-part 부분 재업로드 lifecycle과 미등록 object import 단계화 추가 |
 
 ## 요구사항 반영 매트릭스
 
@@ -136,7 +162,7 @@ category는 파일 개수 관점에서 두 종류다.
 | group_kind | 의미 | 해당 category |
 |------------|------|---------------|
 | `single_file` | 하나의 archive가 하나의 registry group을 이룸 | `roadname_hangul_full`, `locsum_full`, `navi_full`, `detail_address_db_full`, `national_point_grid_shape`, `national_point_grid_center`, `civil_service_institution_map`, `address_db_full`, `building_db_full`, `epost_pobox_full`, `epost_bulk_full` |
-| `sido_file_set` | 시도별 개별 ZIP 17개가 하나의 registry group을 이룸 | `electronic_map_full`, `roadaddr_entrance_full`, `zone_shape_full`, `roadaddr_building_shape_bundle`, `detail_dong_shape_bundle` |
+| `multi_part` + `part_kind='sido'` | 시도별 개별 ZIP 17개가 하나의 registry group을 이룸 | `electronic_map_full`, `roadaddr_entrance_full`, `zone_shape_full`, `roadaddr_building_shape_bundle`, `detail_dong_shape_bundle` |
 
 | category | 사용자 표시명 | 역할 | 현재 권장 |
 |----------|---------------|------|-----------|
@@ -223,26 +249,28 @@ T-109 구현은 아직 서비스 단계가 아니라는 전제에서 기존 `ops
 
 `ops.artifacts.artifact_id`, `load_jobs.job_id`, `load_consistency_reports.report_id`는 이미 의미가 충분히 명확하고 `ops` 외부 public job/report 계약과 연결되어 있으므로 별도 ADR 없이는 바꾸지 않는다. 위 rename은 admin 전용 외부 인터페이스에도 영향을 준다. 구현 PR은 OpenAPI, Python DTO, TypeScript type, CLI 출력, admin route path parameter 이름, migration guide를 함께 갱신해야 한다.
 
+DDL 예시는 가독성을 위해 일부 inline CHECK를 남길 수 있지만, 실제 Alembic/`SCHEMA_SQL` 구현에서는 모든 CHECK/UNIQUE/FK에 명시 constraint/index 이름을 붙인다. 기존 스키마의 `char_length()` 관례를 따라 hash 길이 검증도 `length()`가 아니라 `char_length()`를 사용한다.
+
 ### `ops.source_file_groups`
 
-match set이 직접 참조하는 원천 단위다. `single_file` category는 group 하나에 file 하나가 들어가고, `sido_file_set` category는 group 하나에 시도별 file 17개가 들어간다.
+match set이 직접 참조하는 원천 단위다. `single_file` category는 group 하나에 file 하나가 들어가고, `multi_part` category는 group 하나에 여러 part file이 들어간다. 전자지도/출입구/구역의도형의 시도별 17개 ZIP은 `part_kind='sido'`, `part_key=<시도코드>`인 multi-part group의 한 사례다. 향후 국가지점번호 grid layer, 권역별 분할, 월별 보강 자료가 생겨도 같은 모델을 재사용한다.
 
 ```sql
 CREATE TABLE ops.source_file_groups (
   source_file_group_id  UUID PRIMARY KEY,
   category              TEXT NOT NULL,
-  group_kind            TEXT NOT NULL CHECK (group_kind IN ('single_file', 'sido_file_set')),
+  group_kind            TEXT NOT NULL,
   display_name          TEXT NOT NULL,
   state                 TEXT NOT NULL,
   validation_state      TEXT NOT NULL,
-  user_yyyymm           TEXT NOT NULL CHECK (user_yyyymm ~ '^\d{6}$'),
-  inferred_yyyymm       TEXT CHECK (inferred_yyyymm IS NULL OR inferred_yyyymm ~ '^\d{6}$'),
+  user_yyyymm           TEXT NOT NULL,
+  inferred_yyyymm       TEXT,
   inferred_yyyymm_basis TEXT,
   yyyymm_mismatch       BOOLEAN NOT NULL DEFAULT false,
   expected_file_count   INTEGER NOT NULL DEFAULT 1 CHECK (expected_file_count >= 1),
   actual_file_count     INTEGER NOT NULL DEFAULT 0 CHECK (actual_file_count >= 0),
   coverage              JSONB NOT NULL DEFAULT '{}'::jsonb,
-  group_sha256          TEXT CHECK (group_sha256 IS NULL OR length(group_sha256) = 64),
+  group_sha256          TEXT,
   uploaded_by           TEXT,
   uploaded_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -250,7 +278,15 @@ CREATE TABLE ops.source_file_groups (
   deleted_at            TIMESTAMPTZ,
   metadata              JSONB NOT NULL DEFAULT '{}'::jsonb,
   validation_summary    JSONB NOT NULL DEFAULT '{}'::jsonb,
-  CHECK (state IN (
+  CONSTRAINT chk_ops_source_file_groups_group_kind
+    CHECK (group_kind IN ('single_file', 'multi_part')),
+  CONSTRAINT chk_ops_source_file_groups_user_yyyymm
+    CHECK (user_yyyymm ~ '^\d{6}$'),
+  CONSTRAINT chk_ops_source_file_groups_inferred_yyyymm
+    CHECK (inferred_yyyymm IS NULL OR inferred_yyyymm ~ '^\d{6}$'),
+  CONSTRAINT chk_ops_source_file_groups_group_sha256
+    CHECK (group_sha256 IS NULL OR char_length(group_sha256) = 64),
+  CONSTRAINT chk_ops_source_file_groups_state CHECK (state IN (
     'validating',
     'available',
     'quarantined',
@@ -259,7 +295,7 @@ CREATE TABLE ops.source_file_groups (
     'hard_deleted',
     'delete_failed'
   )),
-  CHECK (validation_state IN (
+  CONSTRAINT chk_ops_source_file_groups_validation_state CHECK (validation_state IN (
     'not_started',
     'running',
     'passed',
@@ -270,7 +306,9 @@ CREATE TABLE ops.source_file_groups (
 );
 ```
 
-`group_sha256`는 child file들의 `(sido_code, sha256, size_bytes)` 또는 single file의 `(sha256, size_bytes)`를 canonical JSON으로 정렬 직렬화한 뒤 계산한 SHA-256이다. `sido_file_set`의 coverage에는 17개 시도 코드별 `present/missing/failed` 상태를 저장한다.
+`user_yyyymm`은 group 단일 정본이다. child file이나 match set item에는 사용자가 입력한 기준년월을 중복 저장하지 않는다. 필요하면 조회 DTO에서 group 값을 투영한다.
+
+`group_sha256`는 child file들의 `(part_kind, part_key, sha256, size_bytes)` 또는 single file의 `(sha256, size_bytes)`를 canonical JSON으로 정렬 직렬화한 뒤 계산한 SHA-256이다. 본문 archive를 다시 읽지 않는다. `part_kind='sido'` group의 coverage에는 17개 시도 코드별 `present/missing/failed` 상태를 저장한다.
 
 권장 index:
 
@@ -281,32 +319,35 @@ CREATE INDEX idx_ops_source_file_groups_category_yyyymm
 
 CREATE INDEX idx_ops_source_file_groups_state
   ON ops.source_file_groups (state, updated_at DESC);
+
+CREATE INDEX idx_ops_source_file_groups_incomplete
+  ON ops.source_file_groups (category, updated_at DESC)
+  WHERE actual_file_count < expected_file_count;
 ```
 
 group `state`는 child file 상태를 집계한 운영 상태다. `available`은 모든 required child file이 `available`이고 group validation이 `passed` 또는 `warning`일 때만 허용한다. child 중 하나라도 `missing`, `quarantined`, `delete_failed`가 되면 group도 같은 계열 상태로 전환하고, 이를 참조하는 draft/active match set은 `invalid` 후보로 표시한다.
 
+group 파생값(`state`, `validation_state`, `actual_file_count`, `coverage`, `group_sha256`)은 `recompute_group_aggregates(source_file_group_id)` service 한 곳에서만 계산한다. `register`, reconciliation resolve, child soft/hard-delete, `revalidate`는 같은 DB transaction 안에서 이 service를 호출해야 한다. 이 service는 raw SQL repository에 두고, JobQueue 단일 worker 가정에 기대지 않는다.
+
 ### `ops.source_files`
 
-실제 업로드된 압축 원본 파일의 정본 registry다. 파일 하나는 반드시 하나의 group에 속한다. `single_file` group은 child file이 1개이고, `sido_file_set` group은 child file이 17개다. 같은 archive를 여러 match set에서 재사용하려면 match set은 file이 아니라 group을 참조한다.
+실제 업로드된 압축 원본 파일의 정본 registry다. 파일 하나는 반드시 하나의 group에 속한다. `single_file` group은 child file이 1개이고, `multi_part` group은 child file이 여러 개다. 같은 archive를 여러 match set에서 재사용하려면 match set은 file이 아니라 group을 참조한다.
 
 ```sql
 CREATE TABLE ops.source_files (
   source_file_id        UUID PRIMARY KEY,
-  source_file_group_id  UUID NOT NULL REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE CASCADE,
+  source_file_group_id  UUID NOT NULL REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
   original_filename     TEXT NOT NULL,
-  sido_code             TEXT,
-  sido_name             TEXT,
+  part_kind             TEXT NOT NULL DEFAULT 'single',
+  part_key              TEXT NOT NULL DEFAULT 'archive',
+  part_label            TEXT,
   file_role             TEXT,
   content_type          TEXT,
   compression_format    TEXT NOT NULL,
   state                 TEXT NOT NULL,
   validation_state      TEXT NOT NULL,
-  user_yyyymm           TEXT NOT NULL CHECK (user_yyyymm ~ '^\d{6}$'),
-  inferred_yyyymm       TEXT CHECK (inferred_yyyymm IS NULL OR inferred_yyyymm ~ '^\d{6}$'),
-  inferred_yyyymm_basis TEXT,
-  yyyymm_mismatch       BOOLEAN NOT NULL DEFAULT false,
   size_bytes            BIGINT NOT NULL CHECK (size_bytes >= 0),
-  sha256                TEXT NOT NULL CHECK (length(sha256) = 64),
+  sha256                TEXT NOT NULL,
   duplicate_of_file_id  UUID REFERENCES ops.source_files(source_file_id) ON DELETE SET NULL,
   storage_kind          TEXT NOT NULL,
   storage_uri           TEXT NOT NULL,
@@ -314,6 +355,10 @@ CREATE TABLE ops.source_files (
   object_key            TEXT,
   object_etag           TEXT,
   object_version_id     TEXT,
+  last_verified_etag    TEXT,
+  last_verified_size_bytes BIGINT,
+  last_verified_at      TIMESTAMPTZ,
+  last_deep_verified_at TIMESTAMPTZ,
   rustfs_endpoint_hash  TEXT,
   uploaded_by           TEXT,
   uploaded_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -321,7 +366,13 @@ CREATE TABLE ops.source_files (
   deleted_at            TIMESTAMPTZ,
   metadata              JSONB NOT NULL DEFAULT '{}'::jsonb,
   validation_summary    JSONB NOT NULL DEFAULT '{}'::jsonb,
-  CHECK (state IN (
+  CONSTRAINT chk_ops_source_files_part_kind
+    CHECK (part_kind IN ('single', 'sido', 'grid_layer', 'custom')),
+  CONSTRAINT chk_ops_source_files_sha256
+    CHECK (char_length(sha256) = 64),
+  CONSTRAINT chk_ops_source_files_last_verified_size
+    CHECK (last_verified_size_bytes IS NULL OR last_verified_size_bytes >= 0),
+  CONSTRAINT chk_ops_source_files_state CHECK (state IN (
     'validating',
     'available',
     'quarantined',
@@ -330,7 +381,7 @@ CREATE TABLE ops.source_files (
     'hard_deleted',
     'delete_failed'
   )),
-  CHECK (validation_state IN (
+  CONSTRAINT chk_ops_source_files_validation_state CHECK (validation_state IN (
     'not_started',
     'running',
     'passed',
@@ -342,6 +393,8 @@ CREATE TABLE ops.source_files (
 ```
 
 위 DDL은 `state`와 `validation_state`를 분리하는 확정 설계다. source registry row는 `register` 단계에서 생성되므로 upload 진행 상태는 upload session이 관리하고, `ops.source_file_groups`/`ops.source_files`에는 저장 완료 이후 상태만 남긴다. `state='available'`일 때 `validation_state IN ('passed','warning')`만 허용하는 CHECK 또는 trigger를 추가해 모순 상태를 막아야 한다.
+
+`source_files`에는 `user_yyyymm`을 두지 않는다. child 기준월이 필요하면 `source_file_group_id`로 group을 조인한다. `part_kind='sido'`일 때 `part_key`는 시도 코드이고 `part_label`은 시도명이다. 이전 문서의 `sido_code`는 이 `part_key`의 특수 사례로만 해석한다.
 
 권장 state:
 
@@ -369,12 +422,11 @@ CREATE TABLE ops.source_files (
 권장 index:
 
 ```sql
-CREATE INDEX idx_ops_source_files_group_yyyymm
-  ON ops.source_files (source_file_group_id, user_yyyymm, uploaded_at DESC)
-  WHERE state = 'available';
+CREATE INDEX idx_ops_source_files_group_part
+  ON ops.source_files (source_file_group_id, part_kind, part_key);
 
 CREATE INDEX idx_ops_source_files_sha256
-  ON ops.source_files (sha256, size_bytes);
+  ON ops.source_files (sha256, size_bytes, part_kind, part_key);
 
 CREATE UNIQUE INDEX idx_ops_source_files_object_key
   ON ops.source_files (bucket, object_key)
@@ -383,13 +435,60 @@ CREATE UNIQUE INDEX idx_ops_source_files_object_key
 
 `sha256 + size_bytes`는 중복 탐지용이지 무조건 unique로 두지 않는다. 같은 파일을 다른 category로 잘못 올린 사례를 UI가 보여줘야 하므로 DB constraint보다 duplicate detection warning이 안전하다.
 
-`sido_file_set` category에서는 `(source_file_group_id, sido_code)`가 중복되면 안 된다.
+multi-part category에서는 `(source_file_group_id, part_key)`가 중복되면 안 된다.
 
 ```sql
-CREATE UNIQUE INDEX idx_ops_source_files_group_sido
-  ON ops.source_files (source_file_group_id, sido_code)
-  WHERE sido_code IS NOT NULL AND state <> 'hard_deleted';
+CREATE UNIQUE INDEX idx_ops_source_files_group_part_unique
+  ON ops.source_files (source_file_group_id, part_key)
+  WHERE state <> 'hard_deleted';
 ```
+
+### `ops.source_upload_sessions`
+
+multipart upload 진행 상태를 영속화한다. upload session은 storage-first 흐름의 작업 단위이며, registry row는 `register` 전까지 생성하지 않는다. 서버 재시작, 브라우저 중단, 네트워크 재시도 후에도 part 목록과 RustFS multipart upload id를 복구할 수 있어야 한다.
+
+```sql
+CREATE TABLE ops.source_upload_sessions (
+  source_upload_session_id TEXT PRIMARY KEY,
+  source_file_group_id     UUID NOT NULL,
+  category                 TEXT NOT NULL,
+  group_kind               TEXT NOT NULL,
+  user_yyyymm              TEXT NOT NULL,
+  display_name             TEXT NOT NULL,
+  state                    TEXT NOT NULL,
+  expected_file_count      INTEGER NOT NULL CHECK (expected_file_count >= 1),
+  uploaded_file_count      INTEGER NOT NULL DEFAULT 0 CHECK (uploaded_file_count >= 0),
+  upload_strategy          TEXT NOT NULL CHECK (upload_strategy IN ('multipart')),
+  storage_kind             TEXT NOT NULL,
+  bucket                   TEXT,
+  prefix                   TEXT,
+  created_by               TEXT,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at               TIMESTAMPTZ,
+  completed_at             TIMESTAMPTZ,
+  registered_at            TIMESTAMPTZ,
+  error_message            TEXT,
+  metadata                 JSONB NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT chk_ops_source_upload_sessions_user_yyyymm
+    CHECK (user_yyyymm ~ '^\d{6}$')
+);
+
+CREATE TABLE ops.source_upload_session_parts (
+  source_upload_session_id TEXT NOT NULL REFERENCES ops.source_upload_sessions(source_upload_session_id) ON DELETE CASCADE,
+  part_key                 TEXT NOT NULL,
+  multipart_upload_id      TEXT,
+  part_number              INTEGER NOT NULL CHECK (part_number >= 1),
+  part_etag                TEXT,
+  part_sha256              TEXT CHECK (part_sha256 IS NULL OR char_length(part_sha256) = 64),
+  received_bytes           BIGINT NOT NULL DEFAULT 0 CHECK (received_bytes >= 0),
+  completed_at             TIMESTAMPTZ,
+  metadata                 JSONB NOT NULL DEFAULT '{}'::jsonb,
+  PRIMARY KEY (source_upload_session_id, part_key, part_number)
+);
+```
+
+미완 multipart upload는 저장소 용량을 소비한다. reconciliation은 RustFS `ListMultipartUploads` 또는 호환 API를 사용할 수 있으면 `issue_type='orphaned_multipart'`로 노출하고, `expires_at`이 지난 session의 multipart upload는 abort 후보로 표시한다.
 
 ### `ops.source_file_members`
 
@@ -398,11 +497,12 @@ CREATE UNIQUE INDEX idx_ops_source_files_group_sido
 ```sql
 CREATE TABLE ops.source_file_members (
   source_file_member_id UUID PRIMARY KEY,
-  source_file_id     UUID NOT NULL REFERENCES ops.source_files(source_file_id) ON DELETE CASCADE,
+  source_file_id     UUID NOT NULL REFERENCES ops.source_files(source_file_id) ON DELETE RESTRICT,
   member_path        TEXT NOT NULL,
   member_kind        TEXT NOT NULL,
-  sido_code          TEXT,
-  sido_name          TEXT,
+  part_kind          TEXT,
+  part_key           TEXT,
+  part_label         TEXT,
   layer_name         TEXT,
   geometry_type      TEXT,
   record_count       BIGINT,
@@ -430,8 +530,8 @@ CREATE TABLE ops.source_file_members (
 ```sql
 CREATE TABLE ops.source_file_validations (
   source_file_validation_id UUID PRIMARY KEY,
-  source_file_group_id UUID NOT NULL REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE CASCADE,
-  source_file_id      UUID REFERENCES ops.source_files(source_file_id) ON DELETE CASCADE,
+  source_file_group_id UUID NOT NULL REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
+  source_file_id      UUID REFERENCES ops.source_files(source_file_id) ON DELETE RESTRICT,
   scope               TEXT NOT NULL CHECK (scope IN ('group', 'file')),
   validator_version   TEXT NOT NULL,
   state               TEXT NOT NULL,
@@ -459,17 +559,27 @@ CREATE TABLE ops.consistency_case_definitions (
   consistency_case_code TEXT PRIMARY KEY CHECK (consistency_case_code ~ '^C\d+$'),
   display_order         INTEGER NOT NULL,
   name                  TEXT NOT NULL,
-  description           TEXT NOT NULL,
-  default_severity      TEXT NOT NULL,
+  compares              TEXT NOT NULL,
+  abnormal_criteria     TEXT NOT NULL,
+  evidence              JSONB NOT NULL DEFAULT '[]'::jsonb,
+  likely_causes         JSONB NOT NULL DEFAULT '[]'::jsonb,
+  decision_guide        TEXT NOT NULL,
+  threshold             TEXT,
+  default_severity      TEXT,
   state                 TEXT NOT NULL CHECK (state IN ('enabled', 'disabled', 'retired')),
-  input_source_kinds    JSONB NOT NULL DEFAULT '[]'::jsonb,
-  input_categories      JSONB NOT NULL DEFAULT '[]'::jsonb,
   skip_policy           JSONB NOT NULL DEFAULT '{}'::jsonb,
   sample_schema         JSONB NOT NULL DEFAULT '{}'::jsonb,
   introduced_by         TEXT,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   metadata              JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE ops.consistency_case_inputs (
+  consistency_case_code TEXT NOT NULL REFERENCES ops.consistency_case_definitions(consistency_case_code) ON DELETE RESTRICT,
+  category              TEXT NOT NULL,
+  required              BOOLEAN NOT NULL DEFAULT true,
+  PRIMARY KEY (consistency_case_code, category)
 );
 ```
 
@@ -484,6 +594,9 @@ CREATE UNIQUE INDEX idx_ops_consistency_case_definitions_display_order
 운영 규칙:
 
 - migration은 기존 C1~C10을 seed하고, C11+는 T-109 validation 확장 구현에서 추가한다.
+- seed source는 `kortravelgeo.core.consistency_definitions.CASE_DEFINITIONS`와 `kortravelgeo.dto.admin.ConsistencyCaseDefinition`이다. 컬럼 매핑은 `code -> consistency_case_code`, `name -> name`, `compares -> compares`, `abnormal_criteria -> abnormal_criteria`, `evidence -> evidence`, `likely_causes -> likely_causes`, `decision_guide -> decision_guide`, `threshold -> threshold`다.
+- `default_severity`는 C11+부터 명시 입력을 권장한다. C1~C10은 기존 `threshold`/case runner의 severity 산출 규칙을 유지할 수 있도록 NULL을 허용한다.
+- `ops.consistency_case_inputs`는 category 이름이 catalog에 없는 경우 seed 또는 migration 단계에서 실패시킨다. category 이름 변경/retire 시 C11+ 입력 참조가 조용히 깨지지 않게 하기 위한 최소 검증이다.
 - case code는 재사용하지 않는다. 더 이상 쓰지 않는 case는 row 삭제가 아니라 `state='retired'`로 전환한다.
 - API는 `GET /v1/admin/consistency/case-definitions`를 제공하고, UI는 C1~C10을 하드코딩하지 않는다.
 - `ops.consistency_case_samples.case_code`는 기존 TEXT 값을 유지하되, FK를 추가할 수 있으면 `ops.consistency_case_definitions(consistency_case_code)`를 참조한다. 기존 report가 registry seed보다 먼저 존재하는 복원 DB에서는 FK 추가 전에 seed를 먼저 수행한다.
@@ -496,11 +609,15 @@ RustFS와 DB registry의 일관성 검증 실행 단위다.
 CREATE TABLE ops.source_storage_reconcile_runs (
   source_storage_reconcile_run_id UUID PRIMARY KEY,
   prefix              TEXT NOT NULL,
+  mode                TEXT NOT NULL DEFAULT 'quick' CHECK (mode IN ('quick', 'deep')),
   state               TEXT NOT NULL,
   started_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   finished_at         TIMESTAMPTZ,
   scanned_objects     BIGINT NOT NULL DEFAULT 0,
   scanned_db_files    BIGINT NOT NULL DEFAULT 0,
+  rehashed_objects    BIGINT NOT NULL DEFAULT 0,
+  skipped_rehash_objects BIGINT NOT NULL DEFAULT 0,
+  cursor              JSONB NOT NULL DEFAULT '{}'::jsonb,
   mismatch_count      BIGINT NOT NULL DEFAULT 0,
   resolved_count      BIGINT NOT NULL DEFAULT 0,
   log_tail            TEXT,
@@ -545,8 +662,29 @@ CREATE TABLE ops.source_storage_reconcile_items (
 | `hash_mismatch` | SHA-256이 다름 | 손상 가능성으로 기본 사용 금지. 사용자가 재해시 후 `update_hash_after_verify` 또는 삭제 |
 | `etag_mismatch` | ETag만 다름 | multipart/metadata 차이 가능. size/hash가 같으면 정보성으로 resolve 가능 |
 | `duplicate_object` | 같은 sha256/size object가 여러 key에 있음 | 하나를 유지하고 나머지는 soft delete 후보로 표시 |
+| `orphaned_multipart` | RustFS에 완료되지 않은 multipart upload가 남아 있음 | 만료된 upload session이면 abort, 아직 진행 중이면 보류 |
 
 `hash_mismatch`에서 "hash 일치화"는 단순히 DB 값을 object 값으로 덮어쓰는 버튼이 아니다. 서버가 object를 다시 읽어 SHA-256을 계산하고, 사용자가 "현재 object를 새 정본으로 인정"한다는 확인을 해야만 `ops.source_files.sha256`을 갱신한다. 그 전까지는 해당 파일을 match set에 사용할 수 없게 한다.
+
+reconciliation mode:
+
+| mode | 동작 |
+|------|------|
+| `quick` | object list/head를 수행한다. `size`, `etag`가 `source_files.last_verified_size_bytes`, `last_verified_etag`와 같으면 본문 재해시를 생략한다. 변경되었거나 이전 검증 기록이 없으면 해당 object만 deep rehash한다. |
+| `deep` | 대상 prefix 또는 선택된 object 범위를 전부 streaming rehash한다. 중단/재개를 위해 `cursor`에 마지막 object key와 집계 상태를 저장한다. |
+
+ADR-049의 "object 전체 재해시로 hash mismatch를 즉시 확정" 원칙은 `deep` 또는 변경 감지 object에 적용한다. 정기 scan 기본값은 `quick`으로 두어 매 회 전국 수~십 GiB를 다시 읽는 운영 비용을 피한다.
+
+권장 index:
+
+```sql
+CREATE INDEX idx_ops_source_storage_reconcile_items_run_state
+  ON ops.source_storage_reconcile_items (source_storage_reconcile_run_id, state);
+
+CREATE INDEX idx_ops_source_storage_reconcile_items_object_key
+  ON ops.source_storage_reconcile_items (object_key)
+  WHERE object_key IS NOT NULL;
+```
 
 ### `ops.source_match_sets`
 
@@ -559,7 +697,7 @@ CREATE TABLE ops.source_match_sets (
   description              TEXT,
   profile                  TEXT NOT NULL,
   state                    TEXT NOT NULL,
-  source_set_hash          TEXT NOT NULL CHECK (length(source_set_hash) = 64),
+  source_set_hash          TEXT,
   mixed_yyyymm             BOOLEAN NOT NULL DEFAULT false,
   yyyymm_by_category       JSONB NOT NULL DEFAULT '{}'::jsonb,
   omitted_optional         JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -570,11 +708,17 @@ CREATE TABLE ops.source_match_sets (
   last_load_job_id         TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
   last_consistency_report_id TEXT REFERENCES load_consistency_reports(report_id) ON DELETE SET NULL,
   metadata                 JSONB NOT NULL DEFAULT '{}'::jsonb,
-  CHECK (state IN ('draft', 'validated', 'active', 'retired', 'invalid', 'restored_from_backup'))
+  CONSTRAINT chk_ops_source_match_sets_state
+    CHECK (state IN ('draft', 'validated', 'active', 'retired', 'invalid', 'restored_from_backup')),
+  CONSTRAINT chk_ops_source_match_sets_source_set_hash
+    CHECK (
+      (state = 'draft' AND source_set_hash IS NULL)
+      OR (state <> 'draft' AND source_set_hash IS NOT NULL AND char_length(source_set_hash) = 64)
+    )
 );
 ```
 
-`source_set_hash`는 match set item을 category, `source_file_group_id`, `source_file_group.group_sha256`, `effective_yyyymm`, `omitted`, `omitted_reason` 순서로 canonical JSON 직렬화한 뒤 SHA-256 hex로 계산한다. item이 추가/삭제/변경되면 `validate` 단계에서 항상 재계산하고, `activate` 직전 다시 한 번 재계산해 stale hash를 막는다.
+`source_set_hash`는 match set item을 category, `source_file_group_id`, `source_file_group.group_sha256`, `effective_yyyymm`, `omitted`, `omitted_reason` 순서로 canonical JSON 직렬화한 뒤 SHA-256 hex로 계산한다. `draft` 상태에서는 item이 아직 비어 있거나 빠질 수 있으므로 NULL을 허용한다. 참조 group이 모두 `available`이고 `group_sha256 IS NOT NULL`일 때만 `validate`에서 hash를 산출한다. item이 추가/삭제/변경되면 `validate` 단계에서 항상 재계산하고, `activate` 직전 다시 한 번 재계산해 stale hash를 막는다.
 
 active match set은 한 건만 허용한다.
 
@@ -591,12 +735,14 @@ active serving release와 match set 연결은 `ops.dataset_snapshots.source_matc
 ```sql
 ALTER TABLE ops.dataset_snapshots
   ADD COLUMN source_match_set_id UUID
-  REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE RESTRICT;
+  REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE SET NULL;
 
 CREATE INDEX idx_ops_dataset_snapshots_source_match_set_id
   ON ops.dataset_snapshots (source_match_set_id)
   WHERE source_match_set_id IS NOT NULL;
 ```
+
+`ON DELETE SET NULL`은 FK 때문에 오래된 snapshot lineage가 물리 정리를 영구 차단하지 않게 하는 안전장치다. T-109의 실제 운영 정책은 `ops` registry row를 물리 삭제하지 않는 것이며, match set 삭제/retire는 application guard와 audit event로 통제한다.
 
 권장 state:
 
@@ -619,17 +765,18 @@ CREATE TABLE ops.source_match_set_items (
   source_match_set_id      UUID NOT NULL REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE CASCADE,
   category                 TEXT NOT NULL,
   role                     TEXT NOT NULL,
-  source_file_group_id     UUID REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE NO ACTION,
+  source_file_group_id     UUID REFERENCES ops.source_file_groups(source_file_group_id) ON DELETE RESTRICT,
   required                 BOOLEAN NOT NULL DEFAULT false,
   omitted                  BOOLEAN NOT NULL DEFAULT false,
   omitted_reason           TEXT,
-  user_yyyymm              TEXT,
   effective_yyyymm         TEXT,
   validation_enabled       BOOLEAN NOT NULL DEFAULT true,
   load_order               INTEGER,
   metadata                 JSONB NOT NULL DEFAULT '{}'::jsonb,
-  CHECK (role IN ('build_required', 'build_recommended', 'validation_optional', 'enrichment_candidate')),
-  CHECK (
+  CONSTRAINT chk_ops_source_match_set_items_role
+    CHECK (role IN ('build_required', 'build_recommended', 'validation_optional', 'enrichment_candidate')),
+  CONSTRAINT chk_ops_source_match_set_items_omitted
+    CHECK (
     (omitted = false AND source_file_group_id IS NOT NULL)
     OR (omitted = true AND source_file_group_id IS NULL)
   ),
@@ -637,12 +784,12 @@ CREATE TABLE ops.source_match_set_items (
 );
 ```
 
-`source_file_group_id` FK는 물리 삭제 방어가 아니라 참조 무결성 방어다. T-109의 삭제 정책은 row를 지우지 않고 `ops.source_file_groups.state`와 `ops.source_files.state`를 바꾸는 방식이므로, active/draft match set이 참조 중인 group/file의 `hard_deleted` 전환은 application guard와 audit event로 막는다. `UNIQUE (source_match_set_id, category)`는 category당 하나의 registry group만 허용한다. 시도별 ZIP 17개처럼 여러 파일로 구성되는 자료도 하나의 `source_file_group_id` 아래 `ops.source_files` 17행으로 보존하고, match set은 그 group 하나를 참조한다.
+`source_file_group_id` FK는 참조 무결성 방어다. T-109의 삭제 정책은 row를 지우지 않고 `ops.source_file_groups.state`와 `ops.source_files.state`를 바꾸는 방식이므로, active/draft match set이 참조 중인 group/file의 `hard_deleted` 전환은 application guard와 audit event로 막는다. `UNIQUE (source_match_set_id, category)`는 category당 하나의 registry group만 허용한다. 시도별 ZIP 17개처럼 여러 파일로 구성되는 자료도 하나의 `source_file_group_id` 아래 `ops.source_files` 17행으로 보존하고, match set은 그 group 하나를 참조한다.
 
 `effective_yyyymm` 산출 규칙:
 
 1. 기본값은 `ops.source_file_groups.user_yyyymm`이다.
-2. archive 내부 member 기준월이 더 신뢰 가능한 category는 `metadata.effective_yyyymm_basis='member_filename'`으로 기록하고, 그래도 최종값은 사용자가 확정한 `user_yyyymm`을 우선한다.
+2. archive 내부 member 기준월이 더 신뢰 가능한 category는 `metadata.effective_yyyymm_basis='member_filename'`으로 기록할 수 있다. 그래도 저장 정본은 사용자가 확정한 group `user_yyyymm`이고, `effective_yyyymm`은 serving/검증 판단용 파생값이다.
 3. `inferred_yyyymm`과 `user_yyyymm`이 다르면 `yyyymm_mismatch=true`와 warning을 남긴다. 서버가 조용히 자동 수정하지 않는다.
 4. `roadaddr_entrance_full`처럼 상위 디렉터리와 내부 member 기준월이 다를 수 있는 category는 `inferred_yyyymm_basis`를 반드시 기록한다.
 5. `ops.source_match_sets.yyyymm_by_category`와 `mixed_yyyymm`은 item validate/activate 때 item들의 `effective_yyyymm`에서 재계산한다.
@@ -765,6 +912,7 @@ loader 매핑:
 - DBF header field presence
 - layer별 검증 profile 확인. `TL_SPRD_INTRVL`은 geometry가 없는 DBF-only road interval layer이므로 geometry sample 검증을 적용하지 않고 DBF field/record 검증만 수행한다.
 - geometry layer는 geometry type이 기대값과 맞는지 sample 확인
+- SHP/DBF header 검증은 필요한 header byte만 부분 read한다. `Path.read_bytes()[:100]`처럼 전체 수백 MB 파일을 읽은 뒤 앞부분만 쓰는 방식은 17개 시도와 11개 layer에서 GB 단위 불필요 I/O를 만든다.
 
 loader 매핑:
 
@@ -837,7 +985,7 @@ loader 매핑:
 
 ## 업로드 상태 머신
 
-category upload session은 다음 state를 가진다. `single_file`은 archive 하나, `sido_file_set`은 같은 session 안의 시도별 archive 17개를 대상으로 한다.
+category upload session은 다음 state를 가진다. `single_file`은 archive 하나, `multi_part`는 같은 session 안의 part archive 여러 개를 대상으로 한다. 시도별 자료는 `part_kind='sido'`와 17개 `part_key`를 사용한다.
 
 ```text
 created
@@ -904,17 +1052,17 @@ cancelled
 
 ## RustFS 저장 규칙
 
-storage-first 흐름에서 원본 archive object key는 category와 upload session을 포함한다. `user_yyyymm`은 업로드 세션 생성 시 필수지만, object key의 정본 식별자에는 넣지 않는다. 기준년월의 정본은 DB registry의 `user_yyyymm`이다.
+storage-first 흐름에서 원본 archive object key는 category와 사용자가 입력한 기준년월을 prefix에 포함한다. 무기한 보존 object가 upload session UUID 아래 흩어지면 기준년월/연도별 scan, archive tier 이동, 용량 집계가 비효율적이기 때문이다. 정본 식별자는 DB registry의 `source_file_group_id`/`source_file_id`이고, `source_upload_session_id`는 metadata로만 남긴다.
 
 ```text
-<prefix>/source-files/<category>/sessions/<upload_session_id>/<source_file_group_id>/<source_file_id>/<original_filename>
+<prefix>/source-files/<category>/<user_yyyymm>/<source_file_group_id>/<source_file_id>/<part_key>/<original_filename>
 ```
 
 예:
 
 ```text
-kor-travel-geo/source-files/roadname_hangul_full/sessions/source_upload_.../group-3f.../file-7a.../202605_도로명주소 한글_전체분.zip
-kor-travel-geo/source-files/electronic_map_full/sessions/source_upload_.../group-8b.../file-11.../서울특별시.zip
+kor-travel-geo/source-files/roadname_hangul_full/202605/group-3f.../file-7a.../archive/202605_도로명주소 한글_전체분.zip
+kor-travel-geo/source-files/electronic_map_full/202604/group-8b.../file-11.../11/서울특별시.zip
 ```
 
 object metadata:
@@ -923,13 +1071,15 @@ object metadata:
 |----------|----|
 | `x-amz-meta-ktg-source-file-group-id` | `source_file_group_id` |
 | `x-amz-meta-ktg-source-file-id` | `source_file_id` |
+| `x-amz-meta-ktg-upload-session-id` | `source_upload_session_id` |
 | `x-amz-meta-ktg-category` | category |
-| `x-amz-meta-ktg-sido-code` | 시도별 ZIP이면 `sido_code` |
+| `x-amz-meta-ktg-part-kind` | `single`, `sido`, `grid_layer`, `custom` |
+| `x-amz-meta-ktg-part-key` | `archive`, 시도 코드, grid layer 이름 등 |
 | `x-amz-meta-ktg-upload-user-yyyymm` | 업로드 세션 생성 시 사용자가 입력한 기준년월 |
 | `x-amz-meta-ktg-sha256` | archive SHA-256 |
 | `x-amz-meta-ktg-size-bytes` | archive size |
 
-RustFS가 metadata를 안정적으로 보존하지 못하거나 S3 호환 차이가 있으면 DB 값을 우선한다. reconciliation은 object metadata가 없을 때도 object key, size, etag만으로 미등록 object 후보를 표시하고, 사용자가 category/기준년월을 확인해 import하도록 한다. object metadata의 `upload-user-yyyymm`은 세션 생성 시 사용자가 입력한 값이며, 최종 등록 후 기준년월의 정본은 `ops.source_file_groups.user_yyyymm`과 `ops.source_files.user_yyyymm`이다.
+RustFS가 metadata를 안정적으로 보존하지 못하거나 S3 호환 차이가 있으면 DB 값을 우선한다. reconciliation은 object metadata가 없을 때도 object key의 `<category>/<user_yyyymm>/<group>/<file>/<part_key>` 구조, size, etag만으로 미등록 object 후보를 표시하고, 사용자가 category/기준년월을 확인해 import하도록 한다. object metadata의 `upload-user-yyyymm`은 세션 생성 시 사용자가 입력한 값이며, 최종 등록 후 기준년월의 정본은 `ops.source_file_groups.user_yyyymm`이다.
 
 현행 `RustfsClient`는 `put_file`, `download_file`, `list_objects` 중심이므로 T-109 구현 전에 다음 메서드를 추가한다.
 
@@ -939,9 +1089,33 @@ RustFS가 metadata를 안정적으로 보존하지 못하거나 S3 호환 차이
 | `delete_object(key)` | hard-delete, reconciliation 미등록 object 삭제 | active match set 참조 여부와 typed confirmation을 먼저 확인한다. |
 | `put_file(key, path, sha256=..., metadata=...)` | `x-amz-meta-ktg-*` metadata 저장 | RustFS/S3 호환 차이로 metadata가 사라질 수 있으므로 DB가 정본이다. |
 | `create_multipart_upload`, `upload_part`, `complete_multipart_upload`, `abort_multipart_upload` | 재시작 가능한 대용량 업로드 | part checksum/etag를 upload session에 저장해 중단 후 재개한다. |
-| `rehash_object(key)` | reconciliation과 register 전 SHA-256 재계산 | ETag를 hash로 쓰지 않고 object 본문을 읽어 계산한다. |
+| `list_multipart_uploads(prefix)` | 미완 multipart upload reconciliation | RustFS/S3 호환성에 따라 지원 여부를 feature flag로 노출한다. |
+| `rehash_object(key)` | deep reconciliation과 변경 감지 object SHA-256 재계산 | ETag를 hash로 쓰지 않고 object 본문을 streaming으로 읽어 계산한다. |
 
-reconciliation 기본 scan은 object list/head로 key, size, etag, metadata를 확인한 뒤 object 본문을 다시 읽어 SHA-256을 재계산한다. 업데이트 주기와 운영 부하가 낮다는 전제에서 I/O 비용보다 손상 여부를 즉시 확정하는 쪽을 우선한다. `hash_mismatch`가 확인되면 해당 file/group은 match set 선택 대상에서 제외하고, 사용자가 재업로드·삭제·typed confirmation 기반 hash 갱신 중 하나를 선택한다.
+reconciliation 기본 scan은 `quick` 모드로 object list/head를 수행하고, 직전 검증의 size/etag와 달라진 object 또는 검증 이력이 없는 object만 본문을 다시 읽어 SHA-256을 재계산한다. 사용자가 `deep` 모드를 실행하거나 손상 의심 항목을 resolve할 때는 대상 object 전체를 streaming rehash해 `hash_mismatch`를 즉시 확정한다. `hash_mismatch`가 확인되면 해당 file/group은 match set 선택 대상에서 제외하고, 사용자가 재업로드·삭제·typed confirmation 기반 hash 갱신 중 하나를 선택한다.
+
+## Admin 권한 모델
+
+ADR-049의 admin role gate는 구현 필수다. 현재 admin 라우터에는 애플리케이션 인증 레이어가 없으므로 T-109 구현에서 최소 신원 source를 함께 추가한다.
+
+확정 방식:
+
+1. 신원 source는 trusted reverse proxy 또는 Next.js admin proxy가 주입하는 `X-KTG-Actor`, `X-KTG-Roles` 헤더다.
+2. 백엔드는 `KTG_ADMIN_TRUSTED_PROXY_CIDRS` 또는 기존 trusted proxy 설정에 포함된 remote address에서 온 요청만 이 헤더를 신뢰한다. 직접 들어온 외부 요청이 같은 헤더를 보내면 무시하거나 403으로 거부한다.
+3. FastAPI dependency `require_role(min_role)`은 `RequestContext(actor, roles, request_id)`를 만들고, destructive/rebuild/activate/hash-update API에 부착한다.
+4. 내부 job이나 scheduler가 실행하는 작업은 actor를 `system:<job_kind>`로 기록하고, role은 `system`으로 둔다.
+5. `ops.audit_events`에는 actor, roles, request id, 대상 resource id, typed confirmation hash, outcome을 남긴다.
+
+권장 role:
+
+| role | 허용 범위 |
+|------|-----------|
+| `source_file_viewer` | source file/group/match set 조회, 다운로드 |
+| `source_file_manager` | upload session 생성, multipart upload, register, soft-delete, revalidate |
+| `rebuild_operator` | match set activate, rebuild-db, validation run |
+| `destructive_admin` | hard-delete, RustFS object delete, `update_hash_after_verify`, orphaned multipart abort |
+
+typed confirmation은 `destructive_admin` 권한을 대체하지 않는다. 권한이 있는 사용자가 위험 작업을 실행할 때 추가로 요구하는 확인 절차다.
 
 ## API 설계
 
@@ -1015,14 +1189,14 @@ POST /v1/admin/source-files/upload-sessions
 
 `user_yyyymm`은 업로드 세션 생성 시 필수다. UI는 파일명/내부 member에서 `YYYYMM` 또는 `YYMM`을 추정할 수 있으면 그 값을 입력 필드의 사전 입력값으로 넣고, 추정할 수 없으면 현재 날짜 기준 `YYYYMM`을 사전 입력값으로 넣는다. 이 값은 자동 확정값이 아니라 사용자가 확인할 제안안이다. 어떤 경우에도 request에는 사용자가 직접 확인·입력한 값만 들어간다. `user_yyyymm`이 없으면 upload session 생성과 RustFS 저장을 모두 거부하며, 백엔드는 누락값을 파일명이나 현재 날짜로 보완하지 않는다.
 
-`sido_file_set` category의 응답은 `file_slots`에 시도 코드 17개를 내려준다. 사용자는 각 slot에 해당 시도 ZIP을 하나씩 올리고, session validate는 17개가 모두 채워졌는지 coverage를 먼저 확인한다.
+`multi_part` category의 응답은 `file_slots`에 part 목록을 내려준다. 시도별 자료는 시도 코드 17개를 `part_key`로 내려주며, 사용자는 각 slot에 해당 시도 ZIP을 하나씩 올린다. session validate는 모든 required part가 채워졌는지 coverage를 먼저 확인한다.
 
 ```json
 {
   "upload_session_id": "source_upload_...",
   "source_file_group_id": "uuid",
   "category": "electronic_map_full",
-  "group_kind": "sido_file_set",
+  "group_kind": "multi_part",
   "expected_file_count": 17,
   "user_yyyymm": "202604",
   "state": "created",
@@ -1031,8 +1205,8 @@ POST /v1/admin/source-files/upload-sessions
   "part_size_bytes": 67108864,
   "registration_state": "not_registered",
   "file_slots": [
-    { "sido_code": "11", "sido_name": "서울특별시", "required": true, "uploaded": false },
-    { "sido_code": "41", "sido_name": "경기도", "required": true, "uploaded": false }
+    { "part_kind": "sido", "part_key": "11", "part_label": "서울특별시", "required": true, "uploaded": false },
+    { "part_kind": "sido", "part_key": "41", "part_label": "경기도", "required": true, "uploaded": false }
   ]
 }
 ```
@@ -1048,9 +1222,15 @@ POST   /v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id
 DELETE /v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart
 ```
 
-`single_file`은 `slot_id='archive'` 하나만 채우고, `sido_file_set`은 `slot_id` 또는 `sido_code`로 17개 slot을 채운다. 서버가 파일명에서 시도명을 추론할 수 있더라도 최종 slot 배정은 사용자가 선택한 category와 slot이 우선한다. 각 part 업로드 응답은 part number, received bytes, part etag/checksum을 반환하고, complete 단계에서 전체 SHA-256 계산과 RustFS object head 검증을 실행한다.
+`single_file`은 `slot_id='archive'` 하나만 채우고, `multi_part`는 `part_key`로 각 slot을 채운다. 서버가 파일명에서 시도명이나 part 이름을 추론할 수 있더라도 최종 slot 배정은 사용자가 선택한 category와 slot이 우선한다. 각 part 업로드 응답은 part number, received bytes, part etag/checksum을 반환하고, complete 단계에서 전체 SHA-256 계산과 RustFS object head 검증을 실행한다.
 
 브라우저는 `XMLHttpRequest.upload.onprogress` 또는 동등한 wrapper를 써서 byte percent를 표시한다. 서버도 `uploaded_bytes`, `total_bytes`를 기록하지만 브라우저 progress가 1차 표시 기준이다.
+
+multi-part lifecycle:
+
+- `register` 전에는 실패한 part만 abort 후 재업로드할 수 있다.
+- `register` 후에는 group 전체 재등록을 기본 복구 경로로 둔다. 단, `multi_part` group의 일부 part만 파일이 손상되거나 누락된 운영 복구 케이스를 위해 `replace_part` API를 후속 구현 후보로 남기되, replace가 끝나면 같은 transaction에서 `recompute_group_aggregates()`와 참조 match set invalidation을 실행해야 한다.
+- 이미 `available`인 group에 part를 추가해 expected coverage를 바꾸는 경로는 금지한다. coverage 구조가 바뀌면 새 group을 만들어 새 match set에서 선택한다.
 
 ### 검증 시작/상태 조회
 
@@ -1125,10 +1305,10 @@ POST /v1/admin/source-files/upload-sessions/{upload_session_id}/register
 `register`는 다음을 원자적으로 처리해야 한다. 여기서 "원자적"은 사용자에게 보이는 registry 상태가 일관되게 전환된다는 뜻이며, RustFS와 PostgreSQL 사이의 실제 분산 트랜잭션을 뜻하지 않는다.
 
 1. group의 모든 required file slot 업로드 여부 확인
-2. 각 archive SHA-256 계산 완료 확인
-3. file 단위 duplicate detection과 group 단위 `group_sha256` 계산
+2. upload streaming 단계에서 계산해 session에 저장한 각 archive SHA-256, size, part etag/checksum 존재 여부 확인
+3. file 단위 duplicate detection과 group 단위 `group_sha256` 계산. `group_sha256`은 child `(part_kind, part_key, sha256, size_bytes)` metadata로만 계산하고 archive 본문을 다시 읽지 않는다.
 4. 사용자가 입력한 `user_yyyymm`과 inferred yyyymm mismatch 확인. mismatch가 있으면 `yyyymm_mismatch_ack=true`가 필요하다.
-5. RustFS head/get 검증. `head_object`로 size/etag/metadata를 먼저 확인하고, hash 검증 정책에 따라 object를 다시 읽어 SHA-256을 재계산한다.
+5. RustFS head 검증. `head_object`로 size/etag/metadata를 확인하고, head 값이 upload session 기록과 다르거나 검증 이력이 없을 때만 object를 다시 읽어 SHA-256을 재계산한다.
 6. `ops.source_file_groups` insert/update
 7. `ops.source_files` insert
 8. `ops.source_file_members` insert
@@ -1138,7 +1318,7 @@ RustFS 저장은 `register` 전에 이미 완료되어 있어야 한다. DB inse
 
 동시성 규칙:
 
-- 같은 `category + user_yyyymm + group_sha256` register는 PostgreSQL advisory lock으로 직렬화한다. file 단위 중복은 child `sha256 + size_bytes + sido_code`로 warning을 만든다.
+- 같은 `category + user_yyyymm + group_sha256` register는 PostgreSQL advisory lock으로 직렬화한다. file 단위 중복은 child `sha256 + size_bytes + part_kind + part_key`로 warning을 만든다.
 - 같은 `bucket + object_key`는 unique index와 object head preflight로 중복 put을 막는다.
 - `ops.source_match_sets.state='active'`는 partial unique index로 한 건만 허용한다.
 - 미등록 stored object는 reconciliation 대상이며, 운영 SLA는 "다음 정기 reconciliation 또는 수동 scan에서 import/delete 후보로 노출"로 둔다.
@@ -1151,7 +1331,7 @@ GET  /v1/admin/source-file-groups/{source_file_group_id}
 POST /v1/admin/source-file-groups/{source_file_group_id}/soft-delete
 POST /v1/admin/source-file-groups/{source_file_group_id}/hard-delete
 POST /v1/admin/source-file-groups/{source_file_group_id}/revalidate
-GET  /v1/admin/source-files?source_file_group_id=&sido_code=&state=
+GET  /v1/admin/source-files?source_file_group_id=&part_kind=&part_key=&state=
 GET  /v1/admin/source-files/{source_file_id}
 GET  /v1/admin/source-files/{source_file_id}/download
 POST /v1/admin/source-files/{source_file_id}/soft-delete
@@ -1164,7 +1344,7 @@ POST /v1/admin/source-files/{source_file_id}/revalidate
 - 목록에서 row를 바로 삭제하지 않는다.
 - group `soft-delete`는 match set에서 새로 선택되지 않게 하되 감사 row와 RustFS object를 보존한다. child file도 함께 `soft_deleted`로 전환한다.
 - group `hard-delete`는 typed confirmation을 요구하고 child RustFS object 삭제를 모두 시도한다. 일부 삭제 실패 시 group은 `quarantined`, 실패 child file은 `delete_failed` 또는 `quarantined`로 남긴다.
-- file 단위 삭제는 `sido_file_set`의 일부 시도 파일만 보정해야 하는 운영 복구용이다. 일반 UI는 group 단위 삭제를 기본으로 한다.
+- file 단위 삭제는 `multi_part`의 일부 part 파일만 보정해야 하는 운영 복구용이다. 일반 UI는 group 단위 삭제를 기본으로 한다.
 - 이미 active release/match set이 참조하는 group은 hard delete를 막고, 먼저 match set을 retire하도록 요구한다.
 
 hard-delete, `update_hash_after_verify`, `delete_object`, match set `activate`, `rebuild-db`는 파괴적이거나 고권한 작업이다. T-109 구현은 admin role gate를 필수로 도입해 read-only viewer, source-file manager, rebuild operator, destructive admin 권한을 분리한다. typed confirmation은 role gate를 대체하지 않고, destructive admin 권한이 있는 사용자가 위험 작업을 실행할 때 추가로 요구하는 안전장치다. `ops.audit_events`에는 actor, role, request id, 대상 resource id, typed confirmation hash, outcome을 남긴다.
@@ -1187,6 +1367,13 @@ resolve action 예:
 { "action": "delete_object" }
 { "action": "update_hash_after_verify", "typed_confirmation": "현재 RustFS object를 정본으로 인정" }
 ```
+
+미등록 object import는 다음 단계로 수행한다.
+
+1. `list_objects(prefix)`로 key/size/etag 후보를 수집한다.
+2. DB에 없는 key에 대해서만 `head_object`를 호출해 metadata를 읽는다.
+3. metadata가 없거나 불완전하면 object key의 `<category>/<user_yyyymm>/<group>/<file>/<part_key>` 구조를 파싱해 후보값을 채운다.
+4. 사용자가 category, `user_yyyymm`, part 정보를 확인한 뒤 registry import 또는 object delete를 선택한다.
 
 ## Match set API 설계
 
@@ -1227,7 +1414,7 @@ POST /v1/admin/source-match-sets/{source_match_set_id}/retire
 - 참조 group이 `available`이 아니면 실패.
 - `roadaddr_entrance_full.user_yyyymm`이 `roadname_hangul_full.user_yyyymm`과 다르면 "direct 출입구 좌표 승격 제한" warning.
 - `zone_shape_full` 기준월이 다른 것은 허용하되 C10 note에 남긴다.
-- 같은 category는 match set 안에서 group 하나만 참조한다. `sido_file_set` category의 여러 archive는 group 내부 child file로 표현하고, item을 여러 개 만들지 않는다.
+- 같은 category는 match set 안에서 group 하나만 참조한다. 시도별 17개 archive 같은 multi-part 자료는 group 내부 child file로 표현하고, item을 여러 개 만들지 않는다.
 
 ### DB 재구성
 
@@ -1240,13 +1427,14 @@ POST /v1/admin/source-match-sets/{source_match_set_id}/rebuild-db
 처리 흐름:
 
 1. match set validate
-2. 선택된 RustFS archive를 temp/materialized 작업 디렉터리로 다운로드
-3. category별 압축 해제
-4. 기존 loader가 기대하는 path로 materialize
+2. 선택된 RustFS archive를 temp/materialized 작업 디렉터리로 다운로드. download는 `download_concurrency` 기본 3, 저사양 장비에서는 1로 조정 가능하게 한다.
+3. 다운로드가 끝난 part부터 즉시 압축 해제하는 producer/consumer 파이프라인을 사용한다. `materialize_concurrency` 기본 2~3, DB COPY 단계와는 분리한다.
+4. 기존 loader가 기대하는 path로 materialize한다. peak disk는 "N개 동시 download/extract 분량 + loader input"을 넘지 않도록, extract 완료 뒤 임시 archive를 삭제할 수 있는 category는 즉시 제거한다.
 5. `full_load_batch` children 생성
 6. root payload에 `source_match_set_id`, category별 `source_file_group_id`, child `source_file_id` 목록, `user_yyyymm`, `group_sha256`, `storage_uri`를 남김
-7. load 완료 후 consistency check와 MV refresh
-8. `ops.dataset_snapshots.source_set`과 `ops.serving_releases`에 match set 연결
+7. DB 적재/COPY와 MV refresh는 기존 JobQueue 직렬 실행 규칙을 유지한다. 다운로드·해제 병렬화가 DB write 병렬화로 번지면 안 된다.
+8. load 완료 후 consistency check와 MV refresh
+9. `ops.dataset_snapshots.source_match_set_id` FK를 정본으로 기록한다. `ops.dataset_snapshots.source_set` JSONB에는 동일 내용을 read-only snapshot으로 남길 수 있지만 정본으로 쓰지 않는다. `ops.serving_releases`는 `dataset_snapshot_id`를 통해 snapshot을 경유해 match set을 조회하며 직접 match set 컬럼을 갖지 않는다.
 
 ### 기존 DB에 검증 자료 추가 후 검증
 
@@ -1350,14 +1538,14 @@ admin UI 상단 또는 `/admin/source-files/current`에 다음을 표시한다.
 | category별 파일 group | label, `user_yyyymm`, group_kind, file count, 대표 filename, group hash 앞 12자, state |
 | optional 검증 자료 | 포함/생략, 마지막 validation 결과 |
 
-`ops.serving_releases` 또는 `ops.dataset_snapshots`에서 match set 연결을 찾을 수 없으면 다음처럼 표시한다.
+현재 구성 조회 순서는 `ops.serving_releases.dataset_snapshot_id` → `ops.dataset_snapshots.source_match_set_id` → `ops.source_match_sets`다. 이 FK 경로에서 match set 연결을 찾을 수 없으면 다음처럼 표시한다.
 
 ```text
 현재 DB를 만든 원천 매칭 정보: 알수없음
 사유: 이 DB는 T-109 source match set 도입 전에 생성되었거나, 백업 복원 과정에서 match set metadata가 없습니다.
 ```
 
-이 경우에도 기존 `load_manifest`, `load_jobs.payload.source_set`, `load_consistency_reports.source_set`에서 추정 가능한 정보는 "추정" 배지로 표시한다. 추정값은 match set 정본으로 저장하지 않는다.
+이 경우에도 기존 `load_manifest`, `load_jobs.payload.source_set`, `load_consistency_reports.source_set`, `ops.dataset_snapshots.source_set` JSONB에서 추정 가능한 정보는 "추정" 배지로 표시한다. 추정값은 match set 정본으로 저장하지 않는다.
 
 ## 검증 케이스 확장
 
@@ -1404,7 +1592,7 @@ ALTER TABLE ops.consistency_case_samples
       "group_sha256": "...",
       "user_yyyymm": "202604",
       "files": [
-        { "source_file_id": "...", "sido_code": "11", "sha256": "..." }
+        { "source_file_id": "...", "part_kind": "sido", "part_key": "11", "sha256": "..." }
       ]
     }
   }
@@ -1533,7 +1721,8 @@ DB 백업 artifact manifest에는 기존 `source_set` 외에 T-109 정보를 추
 - category catalog 상수 추가
 - `SourceFileCategory`, `SourceFileGroup`, `SourceFile`, `SourceMatchSet` DTO 추가
 - Alembic migration으로 `ops.source_*` 테이블 추가
-- `ops.source_file_groups`, `ops.source_match_set_items.source_file_group_id`, `ops.dataset_snapshots.source_match_set_id`, `ops.consistency_case_definitions`, `ops.consistency_case_samples.case_code` CHECK 완화 포함
+- Alembic만 갱신하지 않는다. fresh `ktgctl init-db`의 정본 DDL인 `src/kortravelgeo/infra/sql.py` `SCHEMA_SQL`/`INDEX_SQL`과 사본 DDL `sql/ddl/001_schema.sql`을 같은 PR에서 함께 갱신한다.
+- `ops.source_file_groups`, `ops.source_upload_sessions`, `ops.source_match_set_items.source_file_group_id`, `ops.dataset_snapshots.source_match_set_id`, `ops.consistency_case_definitions`, `ops.consistency_case_inputs`, `ops.consistency_case_samples.case_code` CHECK 완화 포함
 - 기존 `ops` ID full-prefix rename migration과 admin API/DTO/OpenAPI 변경 포함
 - 기존 `UploadSetStatus`는 유지
 - `docs/data-model.md`와 `docs/address-db-schema.md` 갱신
@@ -1541,8 +1730,8 @@ DB 백업 artifact manifest에는 기존 `source_set` 외에 T-109 정보를 추
 ### 2단계: 백엔드 registry와 upload session
 
 - category별 upload session API
-- `single_file`/`sido_file_set` group_kind별 upload slot 처리
-- admin role gate와 typed confirmation helper
+- `single_file`/`multi_part` group_kind별 upload slot 처리
+- proxy header 기반 `RequestContext`, `require_role(min_role)` admin role gate, typed confirmation helper
 - temp archive 저장
 - archive hash/size 계산
 - ZIP/7z/SHP 구조 validator
@@ -1598,22 +1787,29 @@ DB 백업 artifact manifest에는 기존 `source_set` 외에 T-109 정보를 추
 | navi 7z materialization marks extract_required | 7z 처리 계약 고정 |
 | upload session creation requires user_yyyymm | 기준년월 없이는 저장 불가 |
 | source file group stores group_sha256 and child file metadata after register | DB metadata 정본 |
-| sido_file_set requires 17 sido slots before register | SHP 3종 multi-file 모델 고정 |
+| multi_part sido group requires 17 part slots before register | SHP 3종 multi-file 모델 고정 |
 | electronic map requires 11 master layers but loads 9 serving layers | M1 결정 고정 |
 | TL_SPRD_INTRVL uses DBF-only validation profile | L2 회귀 방지 |
 | multipart upload resumes and aborts cleanly | multipart/resumable 업로드 결정 고정 |
+| upload session parts survive API restart | multipart 진행 상태 DB 영속화 |
 | register can be retried after DB insert failure | storage-first 복구 경로 |
-| admin role gate blocks destructive actions | 권한 모델 B 결정 고정 |
+| register reuses upload SHA and avoids duplicate archive reads | register 성능 회귀 방지 |
+| recompute_group_aggregates updates group after child state change | group 파생값 단일 계산 지점 |
+| admin role gate reads trusted RequestContext | proxy header 기반 권한 모델 고정 |
+| admin role gate blocks destructive actions | 파괴적 액션 보호 |
 | duplicate sha256 creates warning not hard error | 중복 탐지와 허용 분리 |
 | soft delete blocks new match set group selection | 삭제 정책 |
 | hard delete blocks active match set group reference | active 데이터 보호 |
 | reconciliation detects db_missing_object | RustFS 직접 삭제 |
 | reconciliation detects object_missing_db | RustFS 직접 추가 |
-| reconciliation detects hash_mismatch through full object rehash | 손상 탐지 즉시 확정 |
+| reconciliation quick skips unchanged etag/size and deep rehashes changed object | 손상 탐지와 운영 I/O 비용 통제 |
+| reconciliation detects orphaned_multipart | 미완 multipart 용량 누수 방지 |
 | match set requires build_required files | DB 구성 필수 자료 |
 | match set references one group per category | M12/L9 모델 고정 |
 | match set records omitted optional validation | 검증 자료 생략 플래그 |
 | case definitions are loaded from DB registry | C11+ 동적 case catalog |
+| fresh init-db schema matches Alembic head for ops source registry | `infra/sql.py`와 Alembic drift 방지 |
+| fresh init-db allows C11 consistency sample insert | `case_code` CHECK 완화 회귀 방지 |
 | rebuild bridge emits existing full_load_batch children | 기존 loader 재사용 |
 
 ### 프론트엔드 단위 테스트
@@ -1636,12 +1832,14 @@ DB 백업 artifact manifest에는 기존 `source_set` 외에 T-109 정보를 추
 
 1. `roadname_hangul_full` fixture ZIP 업로드 → group/file registry 등록
 2. `locsum_full` fixture ZIP 업로드 → group/file registry 등록
-3. 축소된 `sido_file_set` fixture로 electronic map group 생성 → slot coverage 검증
+3. 축소된 `multi_part` fixture로 electronic map group 생성 → slot coverage 검증
 4. RustFS fake client로 object metadata 확인
 5. object 삭제 simulation → reconciliation `db_missing_object`
 6. RustFS 미등록 object simulation → reconciliation `object_missing_db`
-7. match set 생성 → validation success
-8. optional validation omitted → report skip flag
+7. 미완 multipart simulation → reconciliation `orphaned_multipart`
+8. child missing 처리 → `recompute_group_aggregates` → 참조 match set `invalid`
+9. match set 생성 → validation success
+10. optional validation omitted → report skip flag
 
 실제 자료 선택형 테스트는 `KTG_SLOW_REAL_DATA=1`일 때만 실행한다.
 
@@ -1651,9 +1849,10 @@ DB 백업 artifact manifest에는 기존 `source_set` 외에 T-109 정보를 추
 - 자동 삭제는 1차 구현 범위의 기본 동작으로 두지 않는다. 다만 용량 임계치 초과 시 오래된 `soft_deleted`/`quarantined` object를 archive tier로 옮길지, typed confirmation 기반 bulk hard-delete를 허용할지, 별도 cleanup 배치를 둘지는 후속 ADR에서 결정한다.
 - 미등록 stored object는 무기한 보존 대상이 아니다. reconciliation에서 발견되면 생성 시각, 예상 category, size를 표시하고 수동 import/delete 후보로 노출한다.
 - object 삭제는 UI에서 typed confirmation을 요구한다.
+- `ops.source_*` registry row는 감사·재구성 근거이므로 기본 운영에서 물리 DELETE하지 않는다. 삭제는 `state` 전환으로 표현하고, FK는 `RESTRICT`/application guard와 audit event로 보호한다.
 - DB registry가 있어도 RustFS object가 없으면 DB 재구성은 불가능하다.
 - 백업 archive만으로는 원천 파일 RustFS object가 복원되지 않는다. 백업 manifest는 source file metadata를 담고, RustFS 원천 archive 보존은 별도 저장소 정책이다.
-- `source_file_group_id`와 `source_file_id`는 한 환경 안의 registry id다. 다른 환경으로 object를 옮기면 `group_sha256` 또는 `sha256 + size + category + user_yyyymm + sido_code`로 import matching해야 한다.
+- `source_file_group_id`와 `source_file_id`는 한 환경 안의 registry id다. 다른 환경으로 object를 옮기면 `group_sha256` 또는 `sha256 + size + category + user_yyyymm + part_kind + part_key`로 import matching해야 한다.
 - `user_yyyymm`은 사용자가 확정한 값이므로 파일명 추론과 달라도 감사 로그에 남긴다. 이를 조용히 자동 수정하지 않는다.
 - optional 검증 자료가 없어서 skip된 케이스는 성공이 아니라 `skipped`다. UI와 report에서 명확히 구분한다.
 
@@ -1666,7 +1865,7 @@ T-109 구현 방향의 핵심 선택지는 ADR-049로 확정한다. 구현 PR은
 1. 원천 파일 registry는 `ops.source_file_groups`와 `ops.source_files` 별도 테이블로 두고 `ops.artifacts`와 분리한다.
 2. `roadaddr_entrance_full`과 `zone_shape_full`은 `serving_recommended` 기본값으로 두되, `serving_minimal`에서는 생략 가능하게 한다.
 3. optional 검증 자료 생략은 match set item의 `omitted=true`와 consistency report `validation_inputs.skipped`로 기록한다.
-4. RustFS hash mismatch 탐지는 reconciliation에서 object 전체를 재해시해 즉시 확정한다. DB hash 갱신은 재해시 결과와 사용자 typed confirmation이 있을 때만 허용한다.
+4. RustFS hash mismatch 탐지는 `quick`/`deep` reconciliation으로 처리한다. 변경 감지 object나 `deep` scan 대상은 object 전체를 streaming 재해시해 즉시 확정한다. DB hash 갱신은 재해시 결과와 사용자 typed confirmation이 있을 때만 허용한다.
 5. incremental update upload는 T-109 범위에서 제외한다.
 
 아직 별도 운영 ADR이 필요한 항목:

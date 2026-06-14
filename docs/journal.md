@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 추가 리뷰 반영 — T-109 구현 지침 보강)
+
+**작업**: PR #131 head `3e223a4` 기준 추가 리뷰 코멘트의 H1~H5, M1~M7, L1~L8을 `docs/t109-backup-source-upload-management.md`에 반영했다.
+
+**반영**:
+- fresh `ktgctl init-db`가 Alembic head와 drift 나지 않도록 `infra/sql.py` `SCHEMA_SQL`/`INDEX_SQL`, `sql/ddl/001_schema.sql`, Alembic을 함께 갱신하라는 구현 지침과 테스트를 추가했다.
+- C11+ case registry schema를 기존 `ConsistencyCaseDefinition` DTO에서 seed 가능한 컬럼으로 재정렬하고 `ops.consistency_case_inputs` link table을 추가했다.
+- `user_yyyymm`은 group 단일 정본으로 두고 child/item 중복 기준월을 제거했다.
+- `sido_file_set` 고정 모델을 `multi_part` + `part_kind`/`part_key`로 일반화했다.
+- upload session/part 진행 상태를 `ops.source_upload_sessions`/`ops.source_upload_session_parts`로 영속화하고 orphaned multipart reconciliation을 추가했다.
+- admin role gate의 신원 source를 trusted proxy header 기반 `RequestContext`로 구체화했다.
+- RustFS reconciliation은 정기 `quick` scan과 손상 의심/수동 `deep` scan으로 나누고, register 단계의 중복 본문 재읽기를 줄이도록 정리했다.
+- rebuild-db 흐름은 download/materialize 병렬·파이프라인과 DB COPY 직렬 유지로 구분했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (ADR-049 — T-109 구현 방향 확정)
 
 **작업**: 사용자 결정에 따라 T-109의 미결정 선택지를 확정하고 문서에 반영했다. 호환성·최소수정보다 확장성, 완성도, 일관성, 성능을 우선하는 방향으로 고정했다.
