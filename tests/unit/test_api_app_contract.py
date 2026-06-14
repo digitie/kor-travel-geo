@@ -15,7 +15,9 @@ from kortravelgeo.settings import Settings
 
 def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     app = create_app()
-    paths = {route.path for route in app.routes}
+    # Newer FastAPI adds non-APIRoute entries (e.g. _IncludedRouter markers) to
+    # app.routes that have no `.path`; only collect routes that expose one.
+    paths = {route.path for route in app.routes if hasattr(route, "path")}
 
     assert "/v1/address/geocode" in paths
     assert "/v1/address/reverse" in paths
