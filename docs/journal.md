@@ -2,6 +2,17 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 코멘트 반영 — M-A 옵션2 전파 / M-B / L-A 마무리)
+
+**작업**: PR #131 코멘트(issuecomment, head b85e0d5 리뷰)의 M-A/M-B/L-A를 `docs/t109-backup-source-upload-management.md`·`docs/tasks.md`에 반영했다. M-A 옵션 2(restored_from_backup→revalidatable 진입 전 hash 선산출)를 택했으면서 일부 문구가 "비-active=invalid"로 일반화돼 남아 있던 것을 전 문서에 통일했다.
+
+**반영**:
+- **M-A 전파**: `state='invalid'` 전이를 "비-active **중 `validated`만**, `draft`/`restored_from_backup` 같은 pre-hash 상태는 유지"로 모든 산문·커버리지 표·테스트·구현순서·tasks.md T-205까지 통일(L343/345/788/1516/1548/1580/1931/2042/2045 + tasks L33). pre-hash(NULL hash) 상태가 hash NOT NULL을 요구하는 invalid로 가서 CHECK 충돌 나던 문제 제거.
+- **M-B**: `source_set_hash` 일반 lifecycle 문단(validate에서 산출)에 "단, `restored_from_backup`은 revalidatable 진입 전 canonical hash 선산출(옵션 2), validate에서 재검산·확정" 예외를 명시.
+- **L-A**: 커버리지 표 'active match set 활성화' 행의 "active 0건 창"을 본문과 같이 "외부 관찰 가능한 active gap/unique 위반 없음(내부 순간 상태 무관)"으로 통일.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
 ## 2026-06-14 (T-109 후속 작업 분해 — T-110~/T-200~ 등록 + ADR-050 + T-105/T-106)
 
 **작업**: PR #131 문서·코드를 다시 정독한 결과로 후속 구현 task를 잘게 나눠 `docs/tasks.md`에 등록하고 ADR-050으로 순서·번호 체계를 고정했다. 4영역(v1 vworld 호환 / v2 audit / T-109 적재·백업 구현 / 원천 보강) 병렬 정독 + 누락 critic을 거쳐 작성했다.
