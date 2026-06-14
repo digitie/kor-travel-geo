@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-115 C15 민원행정기관 POI 거리 검증 prototype)
+
+**작업**: `민원행정기관전자지도`를 주소 정본이 아닌 POI 검증 원천으로 다루는 C15 prototype을 구현했다. SHP point와 `도로명주소`를 기존 geocoder exact road lookup 계약으로 얻은 대표점과 비교해 거리 분포와 이상치 sample을 산출한다. 기관명/기관 좌표는 일반 주소 후보나 vworld 호환 응답에 섞지 않는다.
+
+**반영**:
+- `src/kortravelgeo/loaders/shape_dbf.py`와 `augment_harness.py`에 DBF field name encoding 선택 인자를 추가했다. 기본값은 `ascii`로 유지하고 C15에서만 `cp949` 한글 field name을 사용한다.
+- `src/kortravelgeo/loaders/c15_civil_service_poi.py`를 추가했다. ZIP member 파일명이 mojibake로 보일 수 있어 layer name 대신 단일 `.shp`/`.dbf` suffix를 찾는다.
+- C15 staging table `_ktg_c15_civil_service_poi`에 기관 context, 원천 point, 파싱된 도로명주소 key를 COPY한다.
+- `civil_service_poi_geocode_distance_sql()`은 `mv_geocode_target`을 batch exact road lookup 조건으로 join하고 `ST_Distance` p50/p95/max, geocode missing, geocode point missing, parse failed, outlier sample을 집계한다.
+- `tests/unit/test_c15_civil_service_poi.py`와 `tests/integration/test_optional_real_postgres_c15_civil_service_poi.py`를 추가했다. 실제 PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형이다.
+- `docs/t115-civil-service-poi.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**검증**: WSL ext4 테스트 미러에서 `pytest -q` → 424 passed, 28 skipped, 24 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과. 실제 ZIP parser smoke로 `민원행정기관전자지도_240124.zip` 앞 3행을 읽어 `청운중학교`/`창의문로` 파싱을 확인했다. PostGIS 거리 smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형으로 추가했다.
+
 ## 2026-06-14 (T-114 C14 국가지점번호 grid/center 검증 harness)
 
 **작업**: `국가지점번호 도형` SHP/DBF와 `국가지점번호 중심점` TXT를 상시 적재 없이 검증하는 C14 harness를 구현했다. 목적은 `core/sppn.py` parser/formatter 회귀, prefix 중심점 일치, resolution별 grid coverage 확인이며, 10m 좌표 정확도 개선 원천으로 승격하지 않는다.

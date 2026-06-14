@@ -158,7 +158,11 @@ def key_set_from_buffer(data: bytes | mmap.mmap, key_fields: tuple[str, ...]) ->
     )
 
 
-def parse_dbf_header(data: bytes | mmap.mmap) -> DbfLayout:
+def parse_dbf_header(
+    data: bytes | mmap.mmap,
+    *,
+    field_name_encoding: str = "ascii",
+) -> DbfLayout:
     if len(data) < 32:
         msg = "invalid DBF header length"
         raise LoaderError(msg)
@@ -177,7 +181,7 @@ def parse_dbf_header(data: bytes | mmap.mmap) -> DbfLayout:
         if len(descriptor) < 32:
             break
         raw_name = descriptor[:11].split(b"\x00", 1)[0]
-        name = raw_name.decode("ascii")
+        name = raw_name.decode(field_name_encoding)
         length = descriptor[16]
         fields.append(DbfFieldLayout(name=name, offset=record_offset, length=length))
         record_offset += length
