@@ -215,6 +215,9 @@ def init_db() -> None:
                         warnings += 1
                         typer.echo(f"  mv warning (may already exist): {exc}")
 
+                # Seed the consistency case registry (C1~C17) — idempotent upsert.
+                await client.seed_consistency_registry()
+
             await _run_with_cli_lock(
                 client._engine(),
                 _global_lock(AdvisoryLockNamespace.INIT_DB),
@@ -224,7 +227,23 @@ def init_db() -> None:
         if warnings:
             typer.echo(f"init-db: schema created with {warnings} warning(s).")
         else:
-            typer.echo("init-db: schema, indexes, and MV created.")
+            typer.echo("init-db: schema, indexes, MV, and consistency registry created.")
+
+    asyncio.run(run())
+
+
+@app.command("seed-consistency-registry")
+def seed_consistency_registry() -> None:
+    """Idempotently upsert the C1~C17 consistency case registry seed (T-206)."""
+
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _global_lock(AdvisoryLockNamespace.INIT_DB),
+                client.seed_consistency_registry,
+            )
+        typer.echo(f"seed-consistency-registry: {count} case definition(s) upserted.")
 
     asyncio.run(run())
 

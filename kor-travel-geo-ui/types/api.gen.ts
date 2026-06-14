@@ -1302,6 +1302,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-match-sets/{source_match_set_id}/run-validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Source Match Set Validation
+         * @description Run the registry C11~C17 validation cases against an existing DB (T-206).
+         *
+         *     Does NOT rebuild the serving DB or create a snapshot/release (doc
+         *     ~1564-1578). For each registry case's inputs: an input absent from the match
+         *     set is ``skipped``; a present input whose RustFS archive fails the 사용 직전
+         *     무결성 게이트 is ``failed`` (``source_integrity_mismatch``) and its group is
+         *     quarantined + propagated (active → ``integrity_alert``, non-active
+         *     ``validated`` → ``invalid``); a ``validator_version`` change reverts a prior
+         *     ``passed`` group to ``not_started`` and marks referencing match sets needing
+         *     re-validation. Requires the ``source_file_manager`` role.
+         *
+         *     Only the C11~C17 registry cases are run-validatable (their metric reuses the
+         *     phase-① prototype ``.metrics()`` via ``loaders/consistency_run_validation.py``
+         *     — the regression bridge). A request for any non-augment case is rejected.
+         */
+        post: operations["run_source_match_set_validation_v1_admin_source_match_sets__source_match_set_id__run_validation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/source-match-sets/{source_match_set_id}/validate": {
         parameters: {
             query?: never;
@@ -1851,7 +1884,14 @@ export interface components {
             /** Threshold */
             threshold?: string | null;
         };
-        /** ConsistencyCaseDefinition */
+        /**
+         * ConsistencyCaseDefinition
+         * @description A consistency case from the ``ops.consistency_case_definitions`` registry.
+         *
+         *     ``code`` is ``consistency_case_code``. The first eight fields are the
+         *     original C1~C10 contract (kept for the existing UI tab); the rest are the
+         *     T-206 registry columns the dynamic case tab (T-209) renders for C11~C17.
+         */
         ConsistencyCaseDefinition: {
             /** Abnormal Criteria */
             abnormal_criteria: string;
@@ -1861,20 +1901,65 @@ export interface components {
             compares: string;
             /** Decision Guide */
             decision_guide: string;
+            /** Default Severity */
+            default_severity?: ("OK" | "INFO" | "WARN" | "ERROR") | null;
+            /** Display Order */
+            display_order?: number | null;
             /**
              * Evidence
              * @default []
              */
             evidence: string[];
             /**
+             * Inputs
+             * @default []
+             */
+            inputs: components["schemas"]["ConsistencyCaseInput"][];
+            /** Introduced By */
+            introduced_by?: string | null;
+            /**
              * Likely Causes
              * @default []
              */
             likely_causes: string[];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
             /** Name */
             name: string;
+            /** Sample Schema */
+            sample_schema?: {
+                [key: string]: unknown;
+            };
+            /** Skip Policy */
+            skip_policy?: {
+                [key: string]: unknown;
+            };
+            /**
+             * State
+             * @default enabled
+             * @enum {string}
+             */
+            state: "enabled" | "disabled" | "retired";
             /** Threshold */
             threshold?: string | null;
+        };
+        /**
+         * ConsistencyCaseInput
+         * @description One registry input (``ops.consistency_case_inputs``).
+         *
+         *     ``required=False`` encodes an optional/conditional input (e.g. C11's
+         *     ``roadaddr_entrance_full``, only a full comparison when its 기준월 matches).
+         */
+        ConsistencyCaseInput: {
+            /** Category */
+            category: string;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
         };
         /** ConsistencyCaseSample */
         ConsistencyCaseSample: {
@@ -1973,6 +2058,34 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * ConsistencyCaseValidationResult
+         * @description One registry case's run-validation outcome.
+         */
+        ConsistencyCaseValidationResult: {
+            /** Case Code */
+            case_code: string;
+            /** Failed */
+            failed: boolean;
+            /**
+             * Inputs
+             * @default []
+             */
+            inputs: components["schemas"]["ConsistencyValidationInput"][];
+            /** Metric */
+            metric?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Quarantine Group Ids
+             * @default []
+             */
+            quarantine_group_ids: string[];
+            /** Runnable */
+            runnable: boolean;
+            /** Skipped */
+            skipped: boolean;
+        };
         /** ConsistencyReport */
         ConsistencyReport: {
             /**
@@ -2054,6 +2167,72 @@ export interface components {
             /** Sido */
             sido?: string | null;
         };
+        /**
+         * ConsistencyRunValidationRequest
+         * @description ``POST /v1/admin/source-match-sets/{id}/run-validation`` body (doc ~1564).
+         *
+         *     Runs the registry C11~C17 validation cases against an existing DB (no
+         *     rebuild). ``cases`` limits which registry cases run (default: all enabled
+         *     augment cases). The optional inputs are materialized + integrity-gated; an
+         *     absent input is ``skipped``, a corrupt/mismatched archive is ``failed``.
+         */
+        ConsistencyRunValidationRequest: {
+            /** Cases */
+            cases?: string[] | null;
+        };
+        /**
+         * ConsistencyRunValidationResponse
+         * @description ``run-validation`` result (doc ~1564-1578).
+         *
+         *     No new DB / snapshot / release is created. ``validator_version`` is the
+         *     validator that ran; ``revalidated_case_codes`` are cases whose prior
+         *     ``passed`` was reverted to ``not_started`` because the validator changed
+         *     (doc ~1620). ``affected_match_set_ids`` are sets marked needing
+         *     re-validation by the integrity-failure or validator-change propagation.
+         */
+        ConsistencyRunValidationResponse: {
+            /**
+             * Affected Match Set Ids
+             * @default []
+             */
+            affected_match_set_ids: string[];
+            /**
+             * Cases
+             * @default []
+             */
+            cases: components["schemas"]["ConsistencyCaseValidationResult"][];
+            /** Dataset Snapshot Id */
+            dataset_snapshot_id?: string | null;
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
+            /**
+             * Quarantined Group Ids
+             * @default []
+             */
+            quarantined_group_ids: string[];
+            /**
+             * Revalidated Case Codes
+             * @default []
+             */
+            revalidated_case_codes: string[];
+            /**
+             * Runnable Count
+             * @default 0
+             */
+            runnable_count: number;
+            /**
+             * Skipped Count
+             * @default 0
+             */
+            skipped_count: number;
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /** Validator Version */
+            validator_version: string;
+        };
         /** ConsistencySampleDecisionRequest */
         ConsistencySampleDecisionRequest: {
             /**
@@ -2113,6 +2292,28 @@ export interface components {
              * @default false
              */
             stale: boolean;
+        };
+        /**
+         * ConsistencyValidationInput
+         * @description Per-input run-validation outcome (``validation_inputs.<category>``).
+         */
+        ConsistencyValidationInput: {
+            /** Category */
+            category: string;
+            /** Failure Reason */
+            failure_reason?: string | null;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /** Source File Group Id */
+            source_file_group_id?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "passed" | "warning" | "skipped" | "failed" | "not_started" | "validating";
         };
         /** DatasetSnapshot */
         DatasetSnapshot: {
@@ -7042,6 +7243,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceMatchSetRetireResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_source_match_set_validation_v1_admin_source_match_sets__source_match_set_id__run_validation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_match_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsistencyRunValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsistencyRunValidationResponse"];
                 };
             };
             /** @description Validation Error */

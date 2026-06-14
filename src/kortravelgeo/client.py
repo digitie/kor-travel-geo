@@ -36,6 +36,7 @@ from .dto.admin import (
     ConsistencyCaseSummary,
     ConsistencyReport,
     ConsistencyReportSummary,
+    ConsistencyRunValidationResponse,
     ConsistencySampleDecisionRequest,
     ConsistencySamplePage,
     ConsistencySampleRecheckResponse,
@@ -1495,7 +1496,155 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         ]
 
     async def consistency_case_definitions(self) -> tuple[ConsistencyCaseDefinition, ...]:
-        return CASE_DEFINITIONS
+        """Return the C1~C17 registry rows (T-206).
+
+        Reads ``ops.consistency_case_definitions`` so the response is the full
+        dynamic registry the UI case tab (T-209) renders. Falls back to the
+        in-code C1~C10 ``CASE_DEFINITIONS`` only when the registry is empty (not
+        yet seeded), so a fresh/un-migrated DB still serves the core cases.
+        """
+        from .infra.consistency_registry_service import ConsistencyRegistryService
+
+        rows = await ConsistencyRegistryService(self._engine()).list_case_definitions()
+        return rows or CASE_DEFINITIONS
+
+    async def seed_consistency_registry(self) -> int:
+        """Idempotently upsert the C1~C17 consistency case registry seed (T-206)."""
+        from .infra.consistency_registry_service import ConsistencyRegistryService
+
+        return await ConsistencyRegistryService(self._engine()).seed_registry()
+
+    async def run_consistency_validation(
+        self,
+        source_match_set_id: str,
+        *,
+        actor: str | None,
+        cases: tuple[str, ...] | None = None,
+    ) -> ConsistencyRunValidationResponse:
+        """Run registry C11~C17 validation against an existing DB (T-206, doc ~1564).
+
+        No rebuild/snapshot/release. Each present input's archive is re-verified
+        with the 사용 직전 무결성 게이트 (RustFS, when configured); an absent input
+        is ``skipped``, a corrupt/mismatched archive is ``failed`` + the group is
+        quarantined; a ``validator_version`` change reverts a prior ``passed`` to
+        ``not_started`` and marks referencing match sets needing re-validation.
+        """
+        from .infra.consistency_run_validation_service import (
+            ConsistencyRunValidationService,
+        )
+
+        service = ConsistencyRunValidationService(self._engine())
+        verifier = await self._build_run_validation_verifier()
+        return await service.run_validation(
+            source_match_set_id,
+            actor=actor,
+            cases=cases,
+            integrity_verifier=verifier,
+        )
+
+    async def _build_run_validation_verifier(self) -> Any | None:
+        """An ``(group_id, category) -> GroupArchiveCheck`` RustFS verifier or None.
+
+        Reuses the same per-group RustFS re-verification the rebuild integrity
+        gate uses. Returns ``None`` when RustFS is not enabled, in which case
+        present inputs are treated as integrity-ok (the absent→skipped and
+        runnable decision paths still run).
+        """
+        try:
+            from .infra.rustfs import RustfsClient, require_enabled_rustfs
+
+            config = require_enabled_rustfs(self.settings)
+        except Exception:
+            return None
+        rustfs = RustfsClient(config)
+
+        async def verify(group_id: str, category: str) -> Any:
+            return await self._group_archive_check(rustfs, group_id, category)
+
+        return verify
+
+    async def _group_archive_check(
+        self, rustfs: Any, group_id: str, category: str
+    ) -> Any:
+        """Re-verify one group's RustFS archive → ``GroupArchiveCheck`` (doc ~1544)."""
+        from sqlalchemy import text
+
+        from .core.source_match_propagation import ChildFileFacts, compute_group_sha256
+        from .core.source_rebuild import GroupArchiveCheck
+
+        engine = self._engine()
+        async with engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        """
+SELECT part_kind, part_key, state, sha256, size_bytes, object_key
+  FROM ops.source_files
+ WHERE source_file_group_id = :gid
+   AND state NOT IN ('hard_deleted','soft_deleted')
+ ORDER BY part_key
+"""
+                    ),
+                    {"gid": group_id},
+                )
+            ).mappings().all()
+            group_state = await conn.scalar(
+                text(
+                    "SELECT state FROM ops.source_file_groups "
+                    "WHERE source_file_group_id = :gid"
+                ),
+                {"gid": group_id},
+            )
+            registry_group_sha = await conn.scalar(
+                text(
+                    "SELECT group_sha256 FROM ops.source_file_groups "
+                    "WHERE source_file_group_id = :gid"
+                ),
+                {"gid": group_id},
+            )
+
+        all_present = True
+        sha256_ok = True
+        size_ok = True
+        observed: list[ChildFileFacts] = []
+        for row in rows:
+            object_key = row["object_key"]
+            if not object_key:
+                all_present = False
+                continue
+            try:
+                head = await rustfs.head_object(object_key)
+            except Exception:
+                all_present = False
+                continue
+            observed_size = head.size or 0
+            if observed_size != int(row["size_bytes"]):
+                size_ok = False
+            observed_sha = head.metadata.get("ktg-sha256")
+            if observed_sha is None:
+                observed_sha = await rustfs.compute_sha256(object_key)
+            if observed_sha != row["sha256"]:
+                sha256_ok = False
+            observed.append(
+                ChildFileFacts(
+                    part_kind=str(row["part_kind"]),
+                    part_key=str(row["part_key"]),
+                    state=str(row["state"]),
+                    sha256=str(observed_sha),
+                    size_bytes=int(observed_size),
+                )
+            )
+        recomputed_group_sha = compute_group_sha256(tuple(observed))
+        group_sha_ok = registry_group_sha is None or recomputed_group_sha == registry_group_sha
+        return GroupArchiveCheck(
+            source_file_group_id=group_id,
+            category=category,
+            group_state=str(group_state) if group_state else "missing",
+            all_objects_present=all_present and bool(rows),
+            sha256_ok=sha256_ok,
+            size_ok=size_ok,
+            group_sha256_ok=group_sha_ok,
+        )
 
     async def list_consistency_case_samples(
         self,

@@ -1164,6 +1164,7 @@
       },
       "ConsistencyCaseDefinition": {
         "additionalProperties": false,
+        "description": "A consistency case from the ``ops.consistency_case_definitions`` registry.\n\n``code`` is ``consistency_case_code``. The first eight fields are the\noriginal C1~C10 contract (kept for the existing UI tab); the rest are the\nT-206 registry columns the dynamic case tab (T-209) renders for C11~C17.",
         "properties": {
           "abnormal_criteria": {
             "title": "Abnormal Criteria",
@@ -1181,6 +1182,34 @@
             "title": "Decision Guide",
             "type": "string"
           },
+          "default_severity": {
+            "anyOf": [
+              {
+                "enum": [
+                  "OK",
+                  "INFO",
+                  "WARN",
+                  "ERROR"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Severity"
+          },
+          "display_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Order"
+          },
           "evidence": {
             "default": [],
             "items": {
@@ -1188,6 +1217,25 @@
             },
             "title": "Evidence",
             "type": "array"
+          },
+          "inputs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConsistencyCaseInput"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "introduced_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Introduced By"
           },
           "likely_causes": {
             "default": [],
@@ -1197,8 +1245,33 @@
             "title": "Likely Causes",
             "type": "array"
           },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "sample_schema": {
+            "additionalProperties": true,
+            "title": "Sample Schema",
+            "type": "object"
+          },
+          "skip_policy": {
+            "additionalProperties": true,
+            "title": "Skip Policy",
+            "type": "object"
+          },
+          "state": {
+            "default": "enabled",
+            "enum": [
+              "enabled",
+              "disabled",
+              "retired"
+            ],
+            "title": "State",
             "type": "string"
           },
           "threshold": {
@@ -1221,6 +1294,26 @@
           "decision_guide"
         ],
         "title": "ConsistencyCaseDefinition",
+        "type": "object"
+      },
+      "ConsistencyCaseInput": {
+        "additionalProperties": false,
+        "description": "One registry input (``ops.consistency_case_inputs``).\n\n``required=False`` encodes an optional/conditional input (e.g. C11's\n``roadaddr_entrance_full``, only a full comparison when its 기준월 matches).",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category"
+        ],
+        "title": "ConsistencyCaseInput",
         "type": "object"
       },
       "ConsistencyCaseSample": {
@@ -1491,6 +1584,64 @@
         "title": "ConsistencyCaseSummary",
         "type": "object"
       },
+      "ConsistencyCaseValidationResult": {
+        "additionalProperties": false,
+        "description": "One registry case's run-validation outcome.",
+        "properties": {
+          "case_code": {
+            "title": "Case Code",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "boolean"
+          },
+          "inputs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConsistencyValidationInput"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "metric": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metric"
+          },
+          "quarantine_group_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Quarantine Group Ids",
+            "type": "array"
+          },
+          "runnable": {
+            "title": "Runnable",
+            "type": "boolean"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "case_code",
+          "runnable",
+          "skipped",
+          "failed"
+        ],
+        "title": "ConsistencyCaseValidationResult",
+        "type": "object"
+      },
       "ConsistencyReport": {
         "additionalProperties": false,
         "properties": {
@@ -1676,6 +1827,109 @@
         "title": "ConsistencyRunRequest",
         "type": "object"
       },
+      "ConsistencyRunValidationRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/source-match-sets/{id}/run-validation`` body (doc ~1564).\n\nRuns the registry C11~C17 validation cases against an existing DB (no\nrebuild). ``cases`` limits which registry cases run (default: all enabled\naugment cases). The optional inputs are materialized + integrity-gated; an\nabsent input is ``skipped``, a corrupt/mismatched archive is ``failed``.",
+        "properties": {
+          "cases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cases"
+          }
+        },
+        "title": "ConsistencyRunValidationRequest",
+        "type": "object"
+      },
+      "ConsistencyRunValidationResponse": {
+        "additionalProperties": false,
+        "description": "``run-validation`` result (doc ~1564-1578).\n\nNo new DB / snapshot / release is created. ``validator_version`` is the\nvalidator that ran; ``revalidated_case_codes`` are cases whose prior\n``passed`` was reverted to ``not_started`` because the validator changed\n(doc ~1620). ``affected_match_set_ids`` are sets marked needing\nre-validation by the integrity-failure or validator-change propagation.",
+        "properties": {
+          "affected_match_set_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Match Set Ids",
+            "type": "array"
+          },
+          "cases": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConsistencyCaseValidationResult"
+            },
+            "title": "Cases",
+            "type": "array"
+          },
+          "dataset_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Snapshot Id"
+          },
+          "failed_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "quarantined_group_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Quarantined Group Ids",
+            "type": "array"
+          },
+          "revalidated_case_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Revalidated Case Codes",
+            "type": "array"
+          },
+          "runnable_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Runnable Count",
+            "type": "integer"
+          },
+          "skipped_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Skipped Count",
+            "type": "integer"
+          },
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "validator_version": {
+            "title": "Validator Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_match_set_id",
+          "validator_version"
+        ],
+        "title": "ConsistencyRunValidationResponse",
+        "type": "object"
+      },
       "ConsistencySampleDecisionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1837,6 +2091,61 @@
           "exists_in_current_mv"
         ],
         "title": "ConsistencySampleRecheckResponse",
+        "type": "object"
+      },
+      "ConsistencyValidationInput": {
+        "additionalProperties": false,
+        "description": "Per-input run-validation outcome (``validation_inputs.<category>``).",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "source_file_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Group Id"
+          },
+          "state": {
+            "enum": [
+              "passed",
+              "warning",
+              "skipped",
+              "failed",
+              "not_started",
+              "validating"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "state"
+        ],
+        "title": "ConsistencyValidationInput",
         "type": "object"
       },
       "DatasetSnapshot": {
@@ -13063,6 +13372,59 @@
           }
         },
         "summary": "Retire Source Match Set",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-match-sets/{source_match_set_id}/run-validation": {
+      "post": {
+        "description": "Run the registry C11~C17 validation cases against an existing DB (T-206).\n\nDoes NOT rebuild the serving DB or create a snapshot/release (doc\n~1564-1578). For each registry case's inputs: an input absent from the match\nset is ``skipped``; a present input whose RustFS archive fails the 사용 직전\n무결성 게이트 is ``failed`` (``source_integrity_mismatch``) and its group is\nquarantined + propagated (active → ``integrity_alert``, non-active\n``validated`` → ``invalid``); a ``validator_version`` change reverts a prior\n``passed`` group to ``not_started`` and marks referencing match sets needing\nre-validation. Requires the ``source_file_manager`` role.\n\nOnly the C11~C17 registry cases are run-validatable (their metric reuses the\nphase-① prototype ``.metrics()`` via ``loaders/consistency_run_validation.py``\n— the regression bridge). A request for any non-augment case is rejected.",
+        "operationId": "run_source_match_set_validation_v1_admin_source_match_sets__source_match_set_id__run_validation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_match_set_id",
+            "required": true,
+            "schema": {
+              "title": "Source Match Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsistencyRunValidationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsistencyRunValidationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Source Match Set Validation",
         "tags": [
           "admin"
         ]
