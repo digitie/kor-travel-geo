@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-123 phase ① 튜닝·최종 검증 acceptance를 추가했다. `augment_harness`의 staging key index/`ANALYZE` helper를 C11/C12/C16 prototype에 적용하고, WSL 테스트 미러 `artifacts/perf/t123-phase1-tuned-live/`에서 warm-cache 전국 재측정을 완료했다(총 3090.891초, 실패 0건). C11은 bundle ↔ 전자지도 full key 거리 p95/max 0.0m로 조건부 serving 후보를 유지하지만, 기존 대표점 impact와 C3/C4/C6/C7 회귀가 아직 없어 ADR-051은 proposed로 유지하고 T-119는 보류한다. 상세: `docs/t123-phase1-acceptance.md`.
 - T-122 phase ① 보강 성능평가·벤치 script를 추가했다. `scripts/benchmark_phase1_augment_performance.py`가 T-121 runner를 재사용하면서 materialization 준비 단계와 C11~C17 case 실행 단계를 분리해 wall-time, runner process RSS, `/proc/self/io` I/O delta를 JSON/Markdown artifact로 기록한다. 실제 full run artifact는 WSL 테스트 미러 `artifacts/perf/t122-phase1-live/`에 남겼고, 총 3961.937초, preparation 848.988초/16.0GiB local write, C11 1284.931초, C12 peak RSS 2.2GiB를 확인했다.
 - T-121 phase ① 전국 라이브데이터 보강 실행 runner를 추가했다. `scripts/run_phase1_augment_reports.py`가 C11~C17 prototype을 실제 `data/juso` 전국 원천으로 실행하고, case별 `AugmentReport`, `source_yyyymm`, summary JSON/Markdown을 산출한다. 실제 full run artifact는 WSL 테스트 미러 `artifacts/augment/t121-live/`에 남겼고, C11 bundle ↔ 전자지도 full key 거리 p95/max 0.0m를 확인했다.
 - T-120 epost 우편번호 수동 적재 검증을 추가했다. `ktgctl load pobox`, `ktgctl load bulk`, `ktgctl load epost`는 COPY 전 행수·필수 컬럼·우편번호 형식·사서함 종류·정수 필드·중복 key sanity 요약을 출력하고, 같은 검증 모듈을 API job `pobox_load`/`bulk_load`와 T-207 server-fetch 흐름에서 재사용할 수 있다.

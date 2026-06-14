@@ -14,6 +14,8 @@ from kortravelgeo.loaders.augment_harness import (
     SidoPathPattern,
     SidoSourceGroup,
     StagingColumn,
+    StagingKeyIndexSpec,
+    analyze_table_sql,
     build_augment_report,
     discover_sido_source_groups,
     iter_shape_features_from_buffers,
@@ -23,6 +25,7 @@ from kortravelgeo.loaders.augment_harness import (
     keyed_distance_sql,
     staging_copy_sql,
     staging_create_sql,
+    staging_key_index_sql,
 )
 
 if TYPE_CHECKING:
@@ -191,6 +194,32 @@ def test_staging_sql_and_measurement_sql_contracts() -> None:
     assert 'USING ("k0", "k1")' in overlap_sql
     assert '"ent_man_no" IS NOT NULL' in overlap_sql
     assert "left_only_count" in overlap_sql
+
+
+def test_staging_key_index_sql_is_partial_and_analyzable() -> None:
+    sql = staging_key_index_sql(
+        StagingKeyIndexSpec(
+            table_name="_ktg_aug_points",
+            index_name="_idx_ktg_aug_points_key",
+            columns=("sig_cd", "ent_man_no"),
+        )
+    )
+
+    assert sql == (
+        'CREATE INDEX "_idx_ktg_aug_points_key" '
+        'ON "_ktg_aug_points" ("sig_cd", "ent_man_no") '
+        'WHERE "sig_cd" IS NOT NULL AND "ent_man_no" IS NOT NULL'
+    )
+    assert analyze_table_sql("_ktg_aug_points") == 'ANALYZE "_ktg_aug_points"'
+
+    with pytest.raises(LoaderError, match="at least one column"):
+        staging_key_index_sql(
+            StagingKeyIndexSpec(
+                table_name="_ktg_aug_points",
+                index_name="_idx_empty",
+                columns=(),
+            )
+        )
 
 
 def test_staging_sql_rejects_unsafe_identifiers() -> None:

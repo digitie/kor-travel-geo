@@ -36,8 +36,7 @@
 
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
-- T-119 (ADR 게이트 통과 시) serving 좌표 편입 — 출입구 후보 scoring — T-118 ADR 승인 시에만 진행. 출입구(C11)를 `mv_geocode_target` 대표 좌표 scoring에 feature flag로 편입, pt_source 확장, 재적재·정확도 재측정. vworld 호환 필드 유지(자체 정보는 x_extension/v2). ADR-049 게이트·ADR-007 의미 변경 주의. (의존: T-118 + ADR)
-- T-123 phase ① 튜닝·최종 검증 평가 — 벤치 기반 튜닝(streaming chunk·staging 인덱스·배치 크기) 후 재측정하고, 전국 결과로 T-118 go/no-go(source별 serving 편입 후보 / 검증 전용)를 최종 확정해 phase ① acceptance 문서를 남긴다. (의존: T-122)
+- 없음. T-119는 ADR-051 accepted와 사용자 승인 전까지 보류한다.
 
 ### ② 데이터 적재/백업 기능 구현 및 검증 (T-200~, phase 2 — T-109 설계 구현)
 
@@ -65,9 +64,11 @@
 
 ## 보류 (외부 조건)
 
+- T-119 serving 좌표 편입 — 출입구 후보 scoring. T-123에서 C11은 조건부 serving 후보로 유지했지만 ADR-051을 accepted로 전환하지 않았다. 기존 `mv_geocode_target` 대표점 대비 impact harness, C3/C4/C6/C7 회귀, feature flag rollback 설계가 추가되고 ADR-051 accepted + 사용자 승인이 있을 때만 진행한다. 출입구(C11)를 `mv_geocode_target` 대표 좌표 scoring에 feature flag로 편입하고, vworld 호환 필드는 유지하며 자체 정보는 `x_extension`/v2로 둔다. (의존: T-118 + ADR-051 accepted + 사용자 승인)
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-123 phase ① 튜닝·최종 검증 평가. `augment_harness`에 staging key index/`ANALYZE` helper를 추가하고 C11/C12/C16 prototype에 적용했다. T-122 cold materialization 기준선과 T-123 warm-cache 재측정을 분리했고, WSL ext4 테스트 미러 `artifacts/perf/t123-phase1-tuned-live/`에서 C11~C17 전체를 3090.891초에 실패 0건으로 완료했다. C11은 bundle ↔ 전자지도 full key 6,405,305건 거리 p95/max 0.0m로 조건부 serving 후보를 유지하지만, 기존 대표점 대비 impact와 C3/C4/C6/C7 회귀가 아직 없어 ADR-051은 proposed로 유지하고 T-119는 보류한다. C12~C17은 검증 전용으로 최종 확정했다. 상세: `docs/t123-phase1-acceptance.md` (2026-06-14)
 - [x] T-122 phase ① 보강 성능평가·벤치. `scripts/benchmark_phase1_augment_performance.py`를 추가해 T-121 runner를 재사용하면서 preparation(materialization)과 C11~C17 case별 wall-time, runner process RSS, `/proc/self/io` I/O delta를 artifact로 기록했다. 전국 실행은 WSL ext4 테스트 미러 `artifacts/perf/t122-phase1-live/`에서 3961.937초에 완료됐고, preparation은 848.988초/16.0GiB local write, C11은 1284.931초, C12 peak RSS는 2.2GiB였다. 상세: `docs/t122-phase1-augment-benchmark.md` (2026-06-14)
 - [x] T-121 phase ① 전국 라이브데이터 보강 실행. T-111~T-117 prototype을 `F:\dev\kor-travel-geo\data\juso` 전국 실 원천으로 실행해 C11~C17 `AugmentReport`와 `source_yyyymm`을 산출했다. C11 full key bundle ↔ 전자지도 거리는 p95/max 0.0m이고, C12~C17은 전국 key overlap·coverage·거리 metric을 artifact로 남겼다. C13 실제 상세주소 동 도형의 `MULTIPOLYGON`과 C15 staging SQL type은 prototype 보정으로 반영했다. 상세: `docs/t121-phase1-live-augment.md` (2026-06-14)
 - [x] T-120 epost 우편번호 수동 적재·검증(pobox/bulk, CLI). 사서함·다량배달처 텍스트 파일 검증 모듈을 `epost_validation`으로 분리해 T-207 server-fetch 흐름에서 재사용할 수 있게 했다. `ktgctl load pobox`, `load bulk`, `load epost`는 적재 전 행수·필수 컬럼·우편번호 형식·사서함 종류·정수 필드·중복 key sanity 요약을 출력하고 실패 시 COPY를 실행하지 않는다. `download_epost_zip()`은 직접 ZIP 응답과 `fileLocplc` XML 응답을 모두 처리한다. 상세: `docs/t120-epost-postal-validation.md` (2026-06-14)

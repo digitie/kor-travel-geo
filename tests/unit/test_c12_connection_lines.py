@@ -17,6 +17,7 @@ from kortravelgeo.loaders.c12_connection_lines import (
     C12ConnectionComparison,
     RoadAdjacencyMeasurement,
     build_c12_connection_report,
+    c12_staging_index_specs,
     connection_staging_spec,
     discover_c12_connection_source_groups,
     road_adjacency_sql,
@@ -51,6 +52,14 @@ def test_c12_staging_specs_keep_connection_and_road_key_contracts() -> None:
         ("rds_sig_cd", "sig_cd"),
         ("rds_man_no", "rds_man_no"),
     )
+    indexes = c12_staging_index_specs(
+        connection_table="_connection",
+        road_table="_road",
+    )
+    assert [(idx.table_name, idx.columns) for idx in indexes] == [
+        ("_connection", ("rds_sig_cd", "rds_man_no")),
+        ("_road", ("sig_cd", "rds_man_no")),
+    ]
     assert CONNECTION_ENTRANCE_REF_FIELDS == ("SIG_CD", "ENT_MAN_NO")
 
 

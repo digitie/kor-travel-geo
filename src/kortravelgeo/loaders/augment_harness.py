@@ -167,6 +167,16 @@ class ShapeStagingSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class StagingKeyIndexSpec:
+    """One post-COPY btree index for phase-1 validation staging tables."""
+
+    table_name: str
+    index_name: str
+    columns: tuple[str, ...]
+    where_not_null: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class JoinKey:
     left: str
     right: str
@@ -444,10 +454,46 @@ def staging_copy_sql(spec: ShapeStagingSpec) -> str:
     return f"COPY {_quote_ident_path(spec.table_name)} ({quoted}) FROM STDIN"
 
 
+def staging_key_index_sql(spec: StagingKeyIndexSpec) -> str:
+    if not spec.columns:
+        msg = "staging key index requires at least one column"
+        raise LoaderError(msg)
+    columns = tuple(_quote_ident(column) for column in spec.columns)
+    where = ""
+    if spec.where_not_null:
+        where = " WHERE " + " AND ".join(
+            f"{_quote_ident(column)} IS NOT NULL" for column in spec.columns
+        )
+    return (
+        f"CREATE INDEX {_quote_ident(spec.index_name)} "
+        f"ON {_quote_ident_path(spec.table_name)} ({', '.join(columns)}){where}"
+    )
+
+
+def analyze_table_sql(table_name: str) -> str:
+    return f"ANALYZE {_quote_ident_path(table_name)}"
+
+
 async def recreate_shape_staging_table(engine: AsyncEngine, spec: ShapeStagingSpec) -> None:
     async with engine.begin() as conn:
         await conn.execute(text(f"DROP TABLE IF EXISTS {_quote_ident_path(spec.table_name)}"))
         await conn.execute(text(staging_create_sql(spec)))
+
+
+async def create_staging_key_indexes(
+    engine: AsyncEngine,
+    specs: Sequence[StagingKeyIndexSpec],
+    *,
+    analyze: bool = True,
+) -> None:
+    if not specs:
+        return
+    async with engine.begin() as conn:
+        for spec in specs:
+            await conn.execute(text(staging_key_index_sql(spec)))
+        if analyze:
+            for table_name in dict.fromkeys(spec.table_name for spec in specs):
+                await conn.execute(text(analyze_table_sql(table_name)))
 
 
 async def copy_shape_features_to_staging(

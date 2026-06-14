@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-123 phase ① 튜닝·최종 검증 평가)
+
+**작업**: T-122 benchmark를 기준으로 phase ① C11~C17 prototype의 staging 튜닝을 적용하고, warm-cache 전국 재측정과 최종 source별 go/no-go를 남겼다.
+
+**반영**:
+- `augment_harness`에 `StagingKeyIndexSpec`, staging key index SQL, `ANALYZE` helper를 추가했다.
+- C11/C12/C16 staging table에 반복 조인 key btree index와 `ANALYZE`를 적용했다.
+- T-122 `materialized/` cache를 hardlink로 재사용해 cold materialization 비용과 warm-cache case 실행 비용을 분리했다.
+- C12는 같은 세션에서 no-index A/B(`artifacts/perf/t123-c12-noindex-live/`)를 실행했고, index 포함이 더 빨라 최종 코드에 유지했다.
+- `docs/t123-phase1-acceptance.md`를 추가하고 `docs/tasks.md`, `docs/resume.md`, `docs/decisions.md`, `CHANGELOG.md`를 갱신했다.
+
+**실행 결과**: WSL ext4 테스트 미러 `artifacts/perf/t123-phase1-tuned-live/`에서 C11~C17 전체를 3090.891초에 완료했고 실패 0건이었다. T-122 대비 preparation은 848.988초에서 0.059초로 분리됐고, C11은 1284.931초에서 1244.657초로 줄었다. C11 bundle ↔ 전자지도 full key는 intersection 6,405,305건, left overlap 0.992367, right overlap 0.999943, 거리 p95/max 0.0m다. C12~C17은 모두 validation-only로 확정했다.
+
+**결정**: C11은 조건부 serving 후보로 유지하지만 ADR-051은 accepted로 전환하지 않는다. 기존 `mv_geocode_target` 대표점 대비 impact, C3/C4/C6/C7 회귀, feature flag rollback 검증이 아직 없으므로 T-119는 보류한다.
+
+**검증**: WSL ext4 테스트 미러에서 focused unit test 26건, 관련 파일 `ruff check`, 관련 loader `mypy`를 통과했다. 전체 검증은 PR 전 최종 단계에서 다시 수행한다.
+
 ## 2026-06-14 (T-122 phase ① 보강 성능평가·벤치)
 
 **작업**: T-121 전국 실행 runner를 재사용해 C11~C17 보강 검증 harness의 wall-time, runner process RSS, process I/O를 case별로 측정하는 T-122 benchmark script를 추가했다. 원천 materialization 비용은 `preparation` phase로 분리해 case 실행시간과 섞이지 않게 했다.
