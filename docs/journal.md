@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-114 C14 국가지점번호 grid/center 검증 harness)
+
+**작업**: `국가지점번호 도형` SHP/DBF와 `국가지점번호 중심점` TXT를 상시 적재 없이 검증하는 C14 harness를 구현했다. 목적은 `core/sppn.py` parser/formatter 회귀, prefix 중심점 일치, resolution별 grid coverage 확인이며, 10m 좌표 정확도 개선 원천으로 승격하지 않는다.
+
+**반영**:
+- `src/kortravelgeo/loaders/c14_national_point_grid.py`를 추가했다.
+- 100km/10km/1km/100m grid prefix를 EPSG:5179 bbox/center로 해석하는 `parse_grid_code()`와 formatter parent prefix 검증 helper를 추가했다.
+- `TL_SPPN_GRID_100M` 1천만 polygon도 ZIP member 전체를 inflate하지 않도록 C14 전용 SHP/DBF record streaming iterator를 추가했다.
+- 중심점 TXT(`prefix|x_5179|y_5179`) parser와 center 좌표 mismatch, formatter parent mismatch, resolution별 row count coverage metric을 추가했다.
+- `C14NationalPointGridComparison.metrics()`에 `serving_promotion=False`와 제한 실행 여부를 나타내는 `coverage_count_basis`를 고정했다.
+- `tests/unit/test_c14_national_point_grid.py`와 `tests/integration/test_optional_real_c14_national_point_grid.py`를 추가했다. 실제 ZIP smoke는 `KTG_SLOW_REAL_DATA=1` 선택형이다.
+- `docs/t114-national-point-grid.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**검증**: WSL ext4 테스트 미러에서 `pytest -q` → 374 passed, 27 skipped, 19 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports` 통과. `KTG_SLOW_REAL_DATA=1 pytest tests/integration/test_optional_real_c14_national_point_grid.py -q` → 1 passed.
+
 ## 2026-06-14 (T-113 C13 상세주소 동 containment 검증 prototype)
 
 **작업**: `건물군 내 상세주소 동 도형` bundle의 상세주소 동 polygon/동 출입구 point와 `상세주소DB_전체분` `adrdc_*.txt`를 연결하는 C13 prototype을 구현했다. TXT에는 좌표가 없으므로 `ST_Covers` containment는 `TL_SGCO_RNADR_DONG` polygon이 같은 `SIG_CD + BUL_MAN_NO`의 `TL_SPBD_ENTRC_DONG` point를 덮는지 측정하고, 상세주소DB는 key overlap과 address-matched coverage context로만 쓴다.
