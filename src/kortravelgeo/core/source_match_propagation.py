@@ -38,8 +38,13 @@ MatchSetState = Literal[
 ]
 
 #: A group is "bad" (down-propagation trigger) when an active match set can no
-#: longer be rebuilt from it. doc line 343: missing/quarantined/delete_failed.
-_BAD_GROUP_STATES: frozenset[str] = frozenset({"missing", "quarantined", "delete_failed"})
+#: longer be rebuilt from it. doc line 343: missing/quarantined/delete_failed,
+#: plus soft_deleted (a soft-deleted group is no longer rebuildable, so a
+#: ``validated`` set referencing it must go ``invalid`` and an active set —
+#: already guarded against soft-delete — would integrity-alert).
+_BAD_GROUP_STATES: frozenset[str] = frozenset(
+    {"missing", "quarantined", "delete_failed", "soft_deleted"}
+)
 
 
 @dataclass(frozen=True)
@@ -133,24 +138,35 @@ def recompute_group_derived(
 
     ``state`` is an aggregate of child states (doc line 342-343):
 
+    * every child soft-deleted → group is ``soft_deleted`` (soft-delete folds up,
+      it does not silently revert to ``validating``);
     * any child bad (missing/quarantined/delete_failed) → group takes the worst
       of those (missing < quarantined < delete_failed by severity here);
     * else if a required part is absent → ``missing``;
     * else ``available`` only when structure validation passed/warning;
     * a child still ``validating`` keeps the group ``validating``.
+
+    A deleted child (soft_deleted/hard_deleted) is NOT a present part: both are
+    excluded from ``present_keys`` so coverage and the missing check match the
+    ``actual_file_count`` (which already excludes both).
     """
-    present_keys = {c.part_key for c in children if c.state not in {"hard_deleted"}}
+    deleted_states = {"hard_deleted", "soft_deleted"}
+    present_keys = {c.part_key for c in children if c.state not in deleted_states}
     coverage: dict[str, str] = dict(structure_coverage or {})
     for key in expected_part_keys:
         coverage.setdefault(key, "present" if key in present_keys else "missing")
 
-    actual = sum(1 for c in children if c.state not in {"hard_deleted", "soft_deleted"})
+    actual = sum(1 for c in children if c.state not in deleted_states)
     group_sha256 = compute_group_sha256(children)
 
     # Worst child state wins for the down-propagation trigger.
     child_states = {c.state for c in children}
     state: GroupState
-    if "delete_failed" in child_states:
+    if children and all(c.state in deleted_states for c in children):
+        # A fully soft/hard-deleted group folds to soft_deleted rather than
+        # bouncing back to validating once recompute runs after the delete.
+        state = "soft_deleted"
+    elif "delete_failed" in child_states:
         state = "delete_failed"
     elif "quarantined" in child_states:
         state = "quarantined"

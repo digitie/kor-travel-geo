@@ -87,6 +87,7 @@ from kortravelgeo.infra.metrics import (
     record_source_reconcile_run,
 )
 from kortravelgeo.infra.rustfs import RustfsClient
+from kortravelgeo.infra.source_audit import insert_source_audit_event
 from kortravelgeo.infra.source_group_service import recompute_group_aggregates
 
 _LOGGER = logging.getLogger(__name__)
@@ -1448,24 +1449,12 @@ async def _audit_reconcile(
     outcome: str,
     payload: dict[str, Any],
 ) -> None:
-    await conn.execute(
-        _json_text(
-            """
-INSERT INTO ops.audit_events
-  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
-   outcome, payload_redacted)
-VALUES
-  (:event_id, 'ui', :actor_id, :action, 'source_storage_reconcile', :resource_id,
-   :outcome, :payload)
-""",
-            "payload",
-        ),
-        {
-            "event_id": str(uuid4()),
-            "actor_id": actor,
-            "action": action,
-            "resource_id": resource_id,
-            "outcome": outcome,
-            "payload": payload,
-        },
+    await insert_source_audit_event(
+        conn,
+        action=action,
+        outcome=outcome,
+        actor_id=actor,
+        resource_type="source_storage_reconcile",
+        resource_id=resource_id,
+        payload=payload,
     )
