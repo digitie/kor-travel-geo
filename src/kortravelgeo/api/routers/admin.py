@@ -83,6 +83,8 @@ from kortravelgeo.dto.source import (
     ReconcileRunRequest,
     RegisterRequest,
     RegisterResponse,
+    ServingReleaseRollbackRequest,
+    ServingReleaseRollbackResponse,
     SlotReplaceResponse,
     SourceCapacityUsage,
     SourceFileCategoryCatalog,
@@ -97,6 +99,8 @@ from kortravelgeo.dto.source import (
     SourceMatchSetDetail,
     SourceMatchSetRetireResponse,
     SourceMatchSetValidateResponse,
+    SourceRebuildDbRequest,
+    SourceRebuildDbResponse,
     SourceReconcileItemPage,
     SourceReconcileRun,
     SourceUploadProgressEvent,
@@ -112,6 +116,7 @@ from kortravelgeo.infra.backup import (
     resolve_existing_archive_path,
     validate_download_token,
 )
+from kortravelgeo.infra.concurrency import cross_process_lock
 from kortravelgeo.infra.rustfs import (
     RustfsClient,
     RustfsUploadedPart,
@@ -122,6 +127,7 @@ from kortravelgeo.infra.rustfs import (
     save_rustfs_config,
 )
 from kortravelgeo.infra.source_group_service import RegisterContext
+from kortravelgeo.infra.source_rebuild_service import SourceRebuildService
 from kortravelgeo.infra.source_upload_repo import should_fail_storage_state
 from kortravelgeo.infra.uploads import (
     import_rustfs_prefix_as_upload_set,
@@ -1036,9 +1042,11 @@ async def source_files_capacity(
 # --- Source match sets (T-205a) -------------------------------------------
 # CRUD + validate/activate/retire over ops.source_match_sets. create/validate/
 # retire require source_file_manager; activate requires rebuild_operator (doc
-# "Admin 권한 모델" role table); reads require source_file_viewer. DEFERRED to
-# T-205b: rebuild-db loader bridge, rollback swap, dataset_snapshots FK write,
-# consistency ERROR gate / forced_promotion.
+# "Admin 권한 모델" role table); reads require source_file_viewer. T-205b adds
+# rebuild-db (rebuild_operator) bridging to the full_load_batch loader DAG with
+# the source_rebuild_db lock + integrity gate + consistency-ERROR/forced_promotion
+# gate (dataset_snapshots.source_match_set_id FK), and the rollback match-set swap
+# (destructive_admin) below the rollback-plan endpoint.
 
 _REBUILD_OPERATOR = Depends(require_role(ROLE_REBUILD_OPERATOR))
 
@@ -1198,6 +1206,88 @@ async def retire_source_match_set(
         **_audit_request(request),
     )
     return result
+
+
+def _rebuild_typed_confirmation(source_match_set_id: str) -> str:
+    return f"REBUILD-PROMOTE {source_match_set_id}"
+
+
+@router.post(
+    "/source-match-sets/{source_match_set_id}/rebuild-db",
+    response_model=SourceRebuildDbResponse,
+    response_model_exclude_none=True,
+)
+async def rebuild_source_match_set_db(
+    source_match_set_id: str,
+    req: SourceRebuildDbRequest,
+    request: Request,
+    ctx: RequestContext = _REBUILD_OPERATOR,
+    client: AsyncAddressClient = Depends(get_client),
+    queue: JobQueue = Depends(get_job_queue),
+) -> SourceRebuildDbResponse:
+    """Rebuild the serving DB from a match set (doc "DB 재구성", ~1532-1562).
+
+    Bridges to the EXISTING ``full_load_batch`` loader DAG: assembles the batch
+    payload from the match set's build groups and enqueues it under the
+    ``source_rebuild_db`` global advisory lock (409 if another rebuild is
+    enqueuing/running). Before any child loader is enqueued the pre-load
+    source-archive integrity gate re-verifies each group's RustFS objects'
+    ``sha256``/``size``/presence + ``group_sha256`` against the registry; a
+    mismatch quarantines the failing groups, propagates (active →
+    ``integrity_alert``, non-active ``validated`` → ``invalid``), and fails
+    without creating any child job.
+
+    ``force_promotion`` (the ERROR-bypass) additionally requires the
+    ``destructive_admin`` role and a ``typed_confirmation`` of
+    ``REBUILD-PROMOTE {id}``. It bypasses ONLY the later consistency ERROR
+    promotion block — never the integrity gate above, an unavailable group, or a
+    match set ``integrity_alert`` (doc ~1559, ADR-049 #13).
+    """
+    if req.force_promotion:
+        if not ctx.has_any_role(frozenset({ROLE_DESTRUCTIVE_ADMIN})):
+            raise ForbiddenError(
+                "force_promotion requires the destructive_admin role",
+                hint=f"requires role: {ROLE_DESTRUCTIVE_ADMIN}",
+            )
+        if req.typed_confirmation != _rebuild_typed_confirmation(source_match_set_id):
+            raise InvalidInputError(
+                "force_promotion requires typed_confirmation "
+                f"'{_rebuild_typed_confirmation(source_match_set_id)}'"
+            )
+
+    # The source_rebuild_db lock serializes the prepare+enqueue critical section
+    # vs other rebuilds (409 on conflict); the integrity gate + stale-job sweep
+    # run inside it. The actual COPY/MV steps are serialized by the JobQueue.
+    async with cross_process_lock(client._engine(), SourceRebuildService.rebuild_lock_key()):
+        response, batch_payload = await client.prepare_source_match_set_rebuild(
+            source_match_set_id,
+            actor=ctx.actor,
+            force_promotion=req.force_promotion,
+            typed_confirmation=req.typed_confirmation,
+            reason=req.reason,
+        )
+        if batch_payload is None:
+            await client.record_audit_event(
+                action="source.rebuild_db",
+                actor_type="ui",
+                actor_id=ctx.actor,
+                outcome="integrity_gate_failed",
+                payload={"failed_group_ids": list(response.failed_group_ids)},
+                resource_type="source_match_set",
+                resource_id=source_match_set_id,
+                **_audit_request(request),
+            )
+            return response
+        job_id = await queue.enqueue_batch(batch_payload)
+        await client.record_rebuild_enqueued(
+            source_match_set_id,
+            actor=ctx.actor,
+            job_id=job_id,
+            load_batch_id=job_id,
+            forced_promotion=req.force_promotion,
+            reason=req.reason,
+        )
+    return response.model_copy(update={"job_id": job_id, "load_batch_id": job_id})
 
 
 @router.get(
@@ -1822,6 +1912,53 @@ async def rollback_plan(
         **_audit_request(request),
     )
     return plan
+
+
+@router.post(
+    "/ops/releases/{release_id}/rollback",
+    response_model=ServingReleaseRollbackResponse,
+    response_model_exclude_none=True,
+)
+async def rollback_serving_release(
+    release_id: str,
+    req: ServingReleaseRollbackRequest,
+    request: Request,
+    ctx: RequestContext = _DESTRUCTIVE_ADMIN,
+    client: AsyncAddressClient = Depends(get_client),
+) -> ServingReleaseRollbackResponse:
+    """Roll a serving release back, swapping the source match set (doc #18, ~818).
+
+    Requires ``destructive_admin`` + a ``typed_confirmation`` of
+    ``ROLLBACK {release_id}`` (the rollback-plan token). When the target snapshot
+    carries a ``source_match_set_id`` the match set is swapped atomically under
+    the match-activate lock (current active → ``retired``, target → ``active``),
+    with the target's ``integrity_alert`` recomputed from a pre-rollback source
+    quick reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` — no
+    auto-promotion (ADR-049 #18).
+    """
+    if req.typed_confirmation != f"ROLLBACK {release_id}":
+        raise InvalidInputError(
+            f"rollback requires typed_confirmation 'ROLLBACK {release_id}'"
+        )
+    result = await client.rollback_serving_release(
+        release_id, actor=ctx.actor, reason=req.reason
+    )
+    await client.record_audit_event(
+        action="serving_release.rollback",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.mode,
+        payload={
+            "mode": result.mode,
+            "activated_match_set_id": result.activated_match_set_id,
+            "retired_match_set_id": result.retired_match_set_id,
+            "target_integrity_alert": result.target_integrity_alert,
+        },
+        resource_type="serving_release",
+        resource_id=release_id,
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.get(

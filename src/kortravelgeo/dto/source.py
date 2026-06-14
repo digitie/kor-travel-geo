@@ -777,3 +777,76 @@ class SourceMatchSetRetireResponse(FrozenModel):
     source_match_set_id: str
     state: SourceMatchSetState
     was_active: bool = False
+
+
+# --- rebuild-db + rollback (T-205b) ----------------------------------------
+# Shapes for ``POST .../{id}/rebuild-db`` and ``POST /ops/releases/{id}/rollback``.
+# Follow ``docs/t109-backup-source-upload-management.md`` "DB 재구성"
+# (lines ~1532-1562) and the rollback rows (~818/1530/1631), ADR-049 #13/#18.
+
+
+class SourceRebuildDbRequest(FrozenModel):
+    """``POST /v1/admin/source-match-sets/{id}/rebuild-db`` body (doc ~1532).
+
+    A rebuild assembles a ``full_load_batch`` payload from the match set's groups
+    and bridges it to the existing loader DAG. ``force_promotion`` is the
+    exception path for a known source-quality consistency ERROR: it requires the
+    ``destructive_admin`` role AND a ``typed_confirmation`` of
+    ``REBUILD-PROMOTE {source_match_set_id}``. It bypasses ONLY the consistency
+    ERROR promotion block — never the source-archive integrity gate, an
+    unavailable group, or a match set ``integrity_alert`` (doc ~1559, ADR-049 #13).
+    """
+
+    force_promotion: bool = False
+    typed_confirmation: str | None = None
+    reason: str | None = None
+    download_concurrency: int = Field(default=3, ge=1, le=8)
+    materialize_concurrency: int = Field(default=2, ge=1, le=8)
+
+
+class SourceRebuildDbResponse(FrozenModel):
+    """``rebuild-db`` enqueue result.
+
+    The rebuild runs asynchronously in a ``full_load_batch`` job under the
+    ``source_rebuild_db`` advisory lock; ``job_id``/``load_batch_id`` track it.
+    The integrity gate runs before any child loader is enqueued; on a gate
+    failure ``enqueued=false`` and ``failed_group_ids`` name the quarantined
+    groups. ``forced_promotion`` echoes whether the ERROR-bypass path was armed.
+    """
+
+    source_match_set_id: str
+    enqueued: bool
+    job_id: str | None = None
+    load_batch_id: str | None = None
+    forced_promotion: bool = False
+    integrity_gate_ok: bool = True
+    failed_group_ids: tuple[str, ...] = ()
+    stale_jobs_closed: tuple[str, ...] = ()
+    affected_match_set_ids: tuple[str, ...] = ()
+    message: str | None = None
+
+
+class ServingReleaseRollbackRequest(FrozenModel):
+    """``POST /v1/admin/ops/releases/{release_id}/rollback`` body (doc ~818/1530).
+
+    ``typed_confirmation`` must equal the rollback-plan token
+    (``ROLLBACK {release_id}``). When the target snapshot carries a
+    ``source_match_set_id`` the match set is swapped atomically (current active →
+    ``retired``, target → ``active``) under the match-activate lock, with the
+    target's ``integrity_alert`` recomputed from a pre-rollback source quick
+    reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` (ADR-049 #18).
+    """
+
+    typed_confirmation: str
+    reason: str | None = None
+
+
+class ServingReleaseRollbackResponse(FrozenModel):
+    """``rollback`` result — the serving + match-set swap outcome."""
+
+    release_id: str
+    mode: Literal["match_set_swap", "legacy_estimate"]
+    activated_match_set_id: str | None = None
+    retired_match_set_id: str | None = None
+    target_integrity_alert: bool = False
+    message: str | None = None
