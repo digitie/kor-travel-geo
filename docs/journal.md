@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-111 C11 출입구 원천 간 거리 검증 prototype)
+
+**작업**: 건물 도형 bundle `TL_SPBD_ENTRC`를 staging에 올려 기존 출입구 원천과 key overlap 및 거리 분포를 측정하는 C11 prototype을 구현했다. 이번 작업은 measurement-only이며 serving 좌표 ranking이나 API 응답은 변경하지 않는다.
+
+**반영**:
+- `src/kortravelgeo/loaders/augment_harness.py`에 staging/운영 테이블 간 key overlap 측정 helper(`KeyOverlapMeasurement`, `key_overlap_sql`, `measure_key_overlap`)를 추가했다.
+- `src/kortravelgeo/loaders/c11_entrance_sources.py`를 추가했다. bundle/electronic `TL_SPBD_ENTRC`를 staging 적재하고 `ST_Distance` p50/p95/max와 key overlap을 산출한다.
+- bundle ↔ 전자지도는 `ENTRANCE_KEY_FIELDS` full key(`SIG_CD`, `BUL_MAN_NO`, `ENT_MAN_NO`, `EQB_MAN_SN`)로 비교한다.
+- bundle ↔ `tl_locsum_entrc` / `tl_roadaddr_entrc`는 운영 테이블이 `BUL_MAN_NO`/`EQB_MAN_SN`을 보존하지 않으므로 `sig_cd + ent_man_no` weak key로 측정하고, 결과에 `key_contract`/`note`를 남긴다.
+- `tests/unit/test_c11_entrance_sources.py`와 `tests/integration/test_optional_real_postgres_c11_entrance_sources.py`를 추가했다. 실제 PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형이다.
+- `docs/t111-c11-entrance-sources.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**검증**: WSL ext4 테스트 미러에서 `pytest -q` → 329 passed, 24 skipped, 14 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과.
+
 ## 2026-06-14 (T-110 보강 검증 공통 harness)
 
 **작업**: Codex 담당 phase ① 첫 작업인 T-110을 구현했다. 특정 보강 원천의 결론을 넣지 않고, T-111~T-117 prototype이 공유할 시도별 순회·SHP geometry·staging·PostGIS 측정 기반만 추가했다.

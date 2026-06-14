@@ -182,6 +182,25 @@ class DistanceMeasurement:
 
 
 @dataclass(frozen=True, slots=True)
+class KeyOverlapMeasurement:
+    left_rows: int
+    right_rows: int
+    left_distinct: int
+    right_distinct: int
+    intersection_count: int
+    left_only_count: int
+    right_only_count: int
+
+    @property
+    def left_duplicate_count(self) -> int:
+        return self.left_rows - self.left_distinct
+
+    @property
+    def right_duplicate_count(self) -> int:
+        return self.right_rows - self.right_distinct
+
+
+@dataclass(frozen=True, slots=True)
 class CoversMeasurement:
     samples: int
     covered: int
@@ -530,6 +549,56 @@ FROM stats
 """
 
 
+def key_overlap_sql(
+    left_table: str,
+    right_table: str,
+    key_pairs: Sequence[JoinKey],
+) -> str:
+    _validate_key_pairs(key_pairs)
+    left_select = _key_alias_columns("l", tuple(pair.left for pair in key_pairs))
+    right_select = _key_alias_columns("r", tuple(pair.right for pair in key_pairs))
+    left_where = _nonnull_key_condition("l", tuple(pair.left for pair in key_pairs))
+    right_where = _nonnull_key_condition("r", tuple(pair.right for pair in key_pairs))
+    using_columns = ", ".join(_quote_ident(f"k{index}") for index in range(len(key_pairs)))
+    return f"""
+WITH left_source AS (
+  SELECT {left_select}
+    FROM {_quote_ident_path(left_table)} l
+   WHERE {left_where}
+),
+right_source AS (
+  SELECT {right_select}
+    FROM {_quote_ident_path(right_table)} r
+   WHERE {right_where}
+),
+left_keys AS (
+  SELECT DISTINCT * FROM left_source
+),
+right_keys AS (
+  SELECT DISTINCT * FROM right_source
+),
+intersection_keys AS (
+  SELECT left_keys.*
+    FROM left_keys
+    JOIN right_keys USING ({using_columns})
+)
+SELECT
+  (SELECT count(*)::bigint FROM left_source) AS left_rows,
+  (SELECT count(*)::bigint FROM right_source) AS right_rows,
+  (SELECT count(*)::bigint FROM left_keys) AS left_distinct,
+  (SELECT count(*)::bigint FROM right_keys) AS right_distinct,
+  (SELECT count(*)::bigint FROM intersection_keys) AS intersection_count,
+  (
+    (SELECT count(*)::bigint FROM left_keys)
+    - (SELECT count(*)::bigint FROM intersection_keys)
+  ) AS left_only_count,
+  (
+    (SELECT count(*)::bigint FROM right_keys)
+    - (SELECT count(*)::bigint FROM intersection_keys)
+  ) AS right_only_count
+"""
+
+
 def keyed_covers_sql(
     covering_table: str,
     covered_table: str,
@@ -605,6 +674,26 @@ async def measure_keyed_distance(
         p95_m=_optional_float(row["p95_m"]),
         max_m=_optional_float(row["max_m"]),
         sample=_jsonb_sample(row["sample"]),
+    )
+
+
+async def measure_key_overlap(
+    engine: AsyncEngine,
+    left_table: str,
+    right_table: str,
+    key_pairs: Sequence[JoinKey],
+) -> KeyOverlapMeasurement:
+    sql = key_overlap_sql(left_table, right_table, key_pairs)
+    async with engine.connect() as conn:
+        row = (await conn.execute(text(sql))).mappings().one()
+    return KeyOverlapMeasurement(
+        left_rows=int(row["left_rows"] or 0),
+        right_rows=int(row["right_rows"] or 0),
+        left_distinct=int(row["left_distinct"] or 0),
+        right_distinct=int(row["right_distinct"] or 0),
+        intersection_count=int(row["intersection_count"] or 0),
+        left_only_count=int(row["left_only_count"] or 0),
+        right_only_count=int(row["right_only_count"] or 0),
     )
 
 
@@ -877,13 +966,28 @@ def _alchemy_to_libpq(engine: AsyncEngine) -> str:
 
 
 def _join_condition(left_alias: str, right_alias: str, key_pairs: Sequence[JoinKey]) -> str:
-    if not key_pairs:
-        msg = "at least one join key is required"
-        raise LoaderError(msg)
+    _validate_key_pairs(key_pairs)
     return " AND ".join(
         f"{left_alias}.{_quote_ident(pair.left)} = {right_alias}.{_quote_ident(pair.right)}"
         for pair in key_pairs
     )
+
+
+def _validate_key_pairs(key_pairs: Sequence[JoinKey]) -> None:
+    if not key_pairs:
+        msg = "at least one join key is required"
+        raise LoaderError(msg)
+
+
+def _key_alias_columns(alias: str, columns: Sequence[str]) -> str:
+    return ", ".join(
+        f"{alias}.{_quote_ident(column)}::text AS {_quote_ident(f'k{index}')}"
+        for index, column in enumerate(columns)
+    )
+
+
+def _nonnull_key_condition(alias: str, columns: Sequence[str]) -> str:
+    return " AND ".join(f"{alias}.{_quote_ident(column)} IS NOT NULL" for column in columns)
 
 
 def _sample_key_columns(alias: str, prefix: str, columns: Sequence[str]) -> str:
