@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-116 C16 주소DB/건물DB row·key drift 검증 prototype)
+
+**작업**: `주소DB_전체분`과 `건물DB_전체분`을 serving 정본이 아니라 row/key drift 검증 원천으로 다루는 C16 prototype을 구현했다. 좌표 적재 없이 text key만 staging하고, `tl_juso_text`, `tl_juso_parcel_link`, `tl_spbd_buld_polygon`과 distinct key overlap 및 left/right-only sample을 비교한다.
+
+**반영**:
+- `src/kortravelgeo/loaders/c16_address_building_drift.py`를 추가했다.
+- 주소DB ZIP member 이름이 mojibake로 보이는 문제를 `cp437` bytes → `cp949` 복원으로 처리했다.
+- `주소_*.txt`, `부가정보_*.txt`, `지번_*.txt`, `build_*.txt`, `jibun_*.txt`에서 비교에 필요한 key만 streaming parser로 추출한다.
+- PNU는 기존 `infra.pnu.build_pnu()`를 사용한다.
+- staging table `_ktg_c16_*`에 COPY한 뒤 `tl_juso_text`/`tl_juso_parcel_link`/`tl_spbd_buld_polygon`과 `bd_mgt_sn`, `bd_mgt_sn+pnu`, 건물 natural key, `pnu+road key`를 비교한다.
+- `key_drift_sample_sql()`은 `EXCEPT` 기반 `left_only`/`right_only` sample을 산출한다.
+- `C16AddressBuildingDriftComparison.metrics()`에 `coordinate_load=False`, `serving_promotion=False`를 고정했다.
+- `tests/unit/test_c16_address_building_drift.py`와 `tests/integration/test_optional_real_postgres_c16_address_building_drift.py`를 추가했다. 실제 PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형이다.
+- `docs/t116-address-building-drift.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**검증**: WSL ext4 테스트 미러에서 `pytest -q` → 432 passed, 29 skipped, 24 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과. 실제 ZIP parser smoke로 `202605_주소DB_전체분.zip`/`202605_건물DB_전체분.zip` 각각 17개 시도 member와 road-code member를 확인하고 앞 1행 key parsing을 확인했다.
+
 ## 2026-06-14 (T-115 C15 민원행정기관 POI 거리 검증 prototype)
 
 **작업**: `민원행정기관전자지도`를 주소 정본이 아닌 POI 검증 원천으로 다루는 C15 prototype을 구현했다. SHP point와 `도로명주소`를 기존 geocoder exact road lookup 계약으로 얻은 대표점과 비교해 거리 분포와 이상치 sample을 산출한다. 기관명/기관 좌표는 일반 주소 후보나 vworld 호환 응답에 섞지 않는다.
