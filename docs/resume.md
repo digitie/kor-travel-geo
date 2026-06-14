@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-14 갱신, by codex)
 
+- ✅ T-118 phase 1 go/no-go 종합 + serving 편입 ADR 게이트 문서 — T-111~T-117 결과를 종합해 C11만 조건부 serving 좌표 후보로 남기고, C12~C17은 phase ② registry/운영 검증 전용으로 판정했다. C11도 바로 편입하지 않고 T-121 전국 metric, C3/C4/C6/C7 악화 없음, 기준월 gate, feature flag 기본 off, v1 호환 노출 정책을 모두 만족하고 ADR-051이 accepted로 전환된 뒤에만 T-119로 진행한다. 전자지도 잔여 layer `TL_SPBD_EQB`는 구조 검증 필수 evidence지만 C11~C17 어느 prototype에도 독립 귀속되지 않은 상태라 serving 후보가 아니며, 필요하면 후속 C18 또는 C13 확장으로 분리한다. 상세: `docs/t118-phase1-go-no-go.md`, ADR-051(proposed).
 - ✅ T-117 C17 내비 지번 member coverage 검증 prototype — `src/kortravelgeo/loaders/c17_navi_jibun_coverage.py`를 추가해 `navi_full` 내부 optional member `match_jibun_*.txt`를 검증 전용 staging table `_ktg_c17_navi_jibun`에 key만 COPY한다. `match_jibun_*`는 독립 category가 아니라 `navi_full.match_jibun` member flag로 다루며, member가 없으면 report를 `skipped`로 남긴다. 비교는 `tl_juso_parcel_link`를 대상으로 `bd_mgt_sn + pnu`와 `pnu + rncode_full + buld_se_cd + buld_mnnm + buld_slno` coverage를 산출한다. `.7z`는 직접 subprocess로 풀지 않고 register/materialization 단계에서 해제된 디렉터리를 입력으로 받는 계약을 유지한다. 좌표 적재 없이 `coordinate_load=False`, `serving_promotion=False` 계약을 고정했다. 상세: `docs/t117-navi-jibun-coverage.md`.
 - ✅ T-116 C16 주소DB/건물DB row·key drift 검증 prototype — `src/kortravelgeo/loaders/c16_address_building_drift.py`를 추가해 `주소DB_전체분`/`건물DB_전체분` ZIP text member를 streaming으로 읽고 검증 전용 staging table에 key만 COPY한다. 주소DB ZIP의 mojibake member 이름은 `cp437` bytes → `cp949`로 복원해 `주소_*.txt`, `부가정보_*.txt`, `지번_*.txt`, `개선_도로명코드_전체분.txt`를 찾는다. 비교는 `tl_juso_text` `bd_mgt_sn`, `tl_juso_parcel_link` `bd_mgt_sn+pnu`/`pnu+road key`, `tl_spbd_buld_polygon`/`tl_juso_text` natural key 대상으로 distinct key overlap과 `EXCEPT` 기반 left/right-only sample을 산출한다. 좌표 적재 없이 `coordinate_load=False`, `serving_promotion=False` 계약을 고정했다. 상세: `docs/t116-address-building-drift.md`.
 - ✅ T-115 C15 민원행정기관 POI 거리 검증 prototype — `src/kortravelgeo/loaders/c15_civil_service_poi.py`를 추가해 `민원행정기관전자지도` ZIP의 CP949 한글 DBF field name과 SHP point를 읽는다. `도로명주소`는 기존 `parse_address()`로 해석해 staging하고, `mv_geocode_target`의 exact road geocoder 계약을 batch SQL로 재현해 POI 좌표와 geocoder 대표점의 `ST_Distance` p50/p95/max, geocode missing, geocode point missing, parse failed, outlier sample을 산출한다. ZIP member 파일명이 mojibake로 보이는 경우를 고려해 단일 SHP/DBF suffix 탐색을 사용하며, 기관명/기관 좌표는 주소 정본이나 일반 후보에 혼입하지 않고 `serving_promotion=False` 계약을 고정했다. 상세: `docs/t115-civil-service-poi.md`.
@@ -165,7 +166,9 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 즉시 실행 작업은 **T-118 phase 1 go/no-go 종합 + serving 편입 ADR 게이트 문서**다. T-111~T-117 결과를 종합해 source별 "검증 전용 / serving 편입 후보" 판정을 내리고, C11~C17 확정 사양을 phase ②(T-206) 입력으로 정리한다. 코드 변경 없는 문서 작업이며, 전자지도 미사용 layer `TL_SPBD_EQB`를 어느 prototype에도 귀속하지 않은 잔여로 보고 검증 대상화 여부 판정에 포함한다.
+다음 즉시 실행 작업은 **T-120 epost 우편번호 수동 적재·검증(pobox/bulk, CLI)** 다. 디스크에 없는 유일 원천인 epost 우편번호 ZIP을 기존 `epost_downloader` 수동 fetch 경로로 받아 `pobox_load`/`bulk_load`를 실행하고, 행수·필수 컬럼·형식·중복 sanity 검증 모듈을 추가한다. 이 검증 로직은 phase ② T-207의 server-fetch/RustFS register 흐름과 공유할 수 있어야 한다.
+
+T-119는 ADR-051(proposed)이 accepted로 전환되고 사용자가 명시 승인할 때까지 진행하지 않는다. T-121은 T-118 산출물을 입력으로 사용할 수 있지만, T-120은 T-207 선행 조건이라 2차 합류 전 먼저 끝내는 것이 좋다.
 
 - 최신 T-027/T-047 재측정 로그는 로컬 산출물 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/fullload/t027-t047-retune-20260531-232609/`와 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/perf/t047-retune-standard-20260601-012814/` 아래에 있다. 이 경로는 git ignore 대상이다.
 - 최신 실제 DB 정합성은 `severity_max=ERROR`다. 전체 daily 적용 후 남은 주요 항목은 C2 29,410건(`missing_text=28,829`, `missing_resolve_key=581`), C4 12,189건(`over_500m=83`), C6 3,608건, C7 9,886건이다. C10은 `tl_juso_text=202603/202604/202605`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605` 기준월 혼합을 `WARN` 처리한다.
