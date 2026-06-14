@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 잔여 finding 반영 — rebuild 적재 전 무결성 게이트)
+
+**작업**: PR #131 head `94188b0` 검토 결과 직전 forward-looking 리뷰(H1~H5, M1~M7, L1~L6)는 거의 모두 반영돼 있었고, 한 가지 남은 finding을 보강했다.
+
+**반영**:
+- `docs/t109-backup-source-upload-management.md`의 `rebuild-db` 처리 흐름에 **적재 전 무결성 게이트**(3단계)를 추가했다. 업로드(`register`)와 rebuild 사이 시간차 동안 RustFS object가 교체·손상될 수 있으므로, 다운로드한 archive의 SHA-256/size를 registry `ops.source_files.sha256`/`group_sha256`와 적재 직전 재대조하고, 불일치 시 rebuild 중단 + `quarantined`/`invalid` 전환한다. reconciliation 정기 full 재해시와 별개로 rebuild가 자체 보장한다.
+- 같은 원칙을 `run-validation`에도 적용(불일치 시 검증 입력을 `skipped`가 아니라 `failed`로 기록)하도록 명시했다.
+- 통합 테스트 목록에 "object 교체 후 rebuild → 무결성 게이트가 mismatch를 잡아 적재 중단" 케이스를 추가했다.
+
+**배경**: 업로드/매칭/적재 3단계가 비연속(업로드만 하고 나중에 적재)인 운영 모델에서, 적재 직전 무결성 재대조가 없으면 시간차 동안 변조된 object가 그대로 적재될 수 있다는 리뷰 지적을 반영한 것이다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (PR #131 추가 리뷰 반영 — T-109 구현 지침 보강)
 
 **작업**: PR #131 head `3e223a4` 기준 추가 리뷰 코멘트의 H1~H5, M1~M7, L1~L8을 `docs/t109-backup-source-upload-management.md`에 반영했다.

@@ -1426,15 +1426,18 @@ POST /v1/admin/source-match-sets/{source_match_set_id}/rebuild-db
 
 처리 흐름:
 
-1. match set validate
+1. match set validate (참조 group이 모두 `available`이고 `group_sha256 IS NOT NULL`인 DB 상태 확인)
 2. 선택된 RustFS archive를 temp/materialized 작업 디렉터리로 다운로드. download는 `download_concurrency` 기본 3, 저사양 장비에서는 1로 조정 가능하게 한다.
-3. 다운로드가 끝난 part부터 즉시 압축 해제하는 producer/consumer 파이프라인을 사용한다. `materialize_concurrency` 기본 2~3, DB COPY 단계와는 분리한다.
-4. 기존 loader가 기대하는 path로 materialize한다. peak disk는 "N개 동시 download/extract 분량 + loader input"을 넘지 않도록, extract 완료 뒤 임시 archive를 삭제할 수 있는 category는 즉시 제거한다.
-5. `full_load_batch` children 생성
-6. root payload에 `source_match_set_id`, category별 `source_file_group_id`, child `source_file_id` 목록, `user_yyyymm`, `group_sha256`, `storage_uri`를 남김
-7. DB 적재/COPY와 MV refresh는 기존 JobQueue 직렬 실행 규칙을 유지한다. 다운로드·해제 병렬화가 DB write 병렬화로 번지면 안 된다.
-8. load 완료 후 consistency check와 MV refresh
-9. `ops.dataset_snapshots.source_match_set_id` FK를 정본으로 기록한다. `ops.dataset_snapshots.source_set` JSONB에는 동일 내용을 read-only snapshot으로 남길 수 있지만 정본으로 쓰지 않는다. `ops.serving_releases`는 `dataset_snapshot_id`를 통해 snapshot을 경유해 match set을 조회하며 직접 match set 컬럼을 갖지 않는다.
+3. **적재 전 무결성 게이트.** 다운로드한 각 part archive의 SHA-256/size를 registry의 child `ops.source_files.sha256`/`size_bytes`와, group 전체를 `group_sha256`와 대조한다. 업로드(`register`)와 rebuild 사이에는 시간차(며칠~몇 주)가 있어 그동안 RustFS object가 사용자/외부에 의해 교체·손상·삭제될 수 있으므로, reconciliation의 정기 full 재해시와 **별개로** rebuild가 적재 직전에 자체 재대조해야 한다. 비용을 줄이기 위해 다운로드 streaming 중에 SHA-256을 계산해 별도 재읽기 없이 대조한다. 하나라도 불일치/누락이면 rebuild를 **중단**하고, 해당 file/group을 `quarantined`로 전환한 뒤 `recompute_group_aggregates()`로 group과 참조 match set을 `invalid`로 만들고 사용자를 reconciliation으로 유도한다(부분 적재된 상태는 만들지 않는다).
+4. 다운로드·무결성 검증이 끝난 part부터 즉시 압축 해제하는 producer/consumer 파이프라인을 사용한다. `materialize_concurrency` 기본 2~3, DB COPY 단계와는 분리한다.
+5. 기존 loader가 기대하는 path로 materialize한다. peak disk는 "N개 동시 download/extract 분량 + loader input"을 넘지 않도록, extract 완료 뒤 임시 archive를 삭제할 수 있는 category는 즉시 제거한다.
+6. `full_load_batch` children 생성
+7. root payload에 `source_match_set_id`, category별 `source_file_group_id`, child `source_file_id` 목록, `user_yyyymm`, `group_sha256`, `storage_uri`를 남김
+8. DB 적재/COPY와 MV refresh는 기존 JobQueue 직렬 실행 규칙을 유지한다. 다운로드·해제 병렬화가 DB write 병렬화로 번지면 안 된다.
+9. load 완료 후 consistency check와 MV refresh
+10. `ops.dataset_snapshots.source_match_set_id` FK를 정본으로 기록한다. `ops.dataset_snapshots.source_set` JSONB에는 동일 내용을 read-only snapshot으로 남길 수 있지만 정본으로 쓰지 않는다. `ops.serving_releases`는 `dataset_snapshot_id`를 통해 snapshot을 경유해 match set을 조회하며 직접 match set 컬럼을 갖지 않는다.
+
+> 같은 무결성 원칙은 RustFS에서 archive를 받아 적재·검증에 쓰는 모든 흐름에 적용한다. 아래 `run-validation`도 optional 검증 자료를 materialize하기 전에 동일하게 registry hash와 대조하고, 불일치 시 해당 검증 입력을 `skipped`가 아니라 `failed`로 기록한다.
 
 ### 기존 DB에 검증 자료 추가 후 검증
 
@@ -1840,6 +1843,7 @@ DB 백업 artifact manifest에는 기존 `source_set` 외에 T-109 정보를 추
 8. child missing 처리 → `recompute_group_aggregates` → 참조 match set `invalid`
 9. match set 생성 → validation success
 10. optional validation omitted → report skip flag
+11. rebuild-db: registry hash와 일치하는 archive면 적재 진행 / RustFS object를 사용 후 다른 내용으로 교체한 뒤 rebuild → 적재 전 무결성 게이트가 mismatch를 잡아 적재 중단 + group `quarantined`/match set `invalid`
 
 실제 자료 선택형 테스트는 `KTG_SLOW_REAL_DATA=1`일 때만 실행한다.
 
