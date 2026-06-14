@@ -31,6 +31,12 @@ from kortravelgeo.loaders.epost_downloader import (
     download_epost_zip,
     extract_epost_zip,
 )
+from kortravelgeo.loaders.epost_validation import (
+    ensure_postal_validation_passed,
+    format_postal_validation_summary,
+    validate_bulk_file,
+    validate_pobox_file,
+)
 from kortravelgeo.loaders.pobox_loader import load_pobox
 from kortravelgeo.loaders.postload import (
     refresh_mv,
@@ -98,6 +104,20 @@ def _path_lock(namespace: AdvisoryLockNamespace, path: Path) -> AdvisoryLockKey:
 
 def _value_lock(namespace: AdvisoryLockNamespace, value: object) -> AdvisoryLockKey:
     return AdvisoryLockKey.for_resource(namespace, value)
+
+
+async def _load_pobox_with_cli_validation(engine: AsyncEngine, path: Path) -> int:
+    summary = validate_pobox_file(path)
+    typer.echo(format_postal_validation_summary(summary))
+    ensure_postal_validation_passed(summary)
+    return await load_pobox(engine, path, validate=False)
+
+
+async def _load_bulk_with_cli_validation(engine: AsyncEngine, path: Path) -> int:
+    summary = validate_bulk_file(path)
+    typer.echo(format_postal_validation_summary(summary))
+    ensure_postal_validation_passed(summary)
+    return await load_bulk_delivery(engine, path, validate=False)
 
 
 def _shp_namespace(mode: str) -> AdvisoryLockNamespace:
@@ -498,7 +518,7 @@ def load_pobox_command(path: Path) -> None:
             count = await _run_with_cli_lock(
                 client._engine(),
                 _path_lock(AdvisoryLockNamespace.LOAD_POBOX, path),
-                lambda: load_pobox(client._engine(), path),
+                lambda: _load_pobox_with_cli_validation(client._engine(), path),
             )
             typer.echo(f"loaded postal_pobox rows: {count}")
 
@@ -513,7 +533,7 @@ def load_bulk_command(path: Path) -> None:
             count = await _run_with_cli_lock(
                 client._engine(),
                 _path_lock(AdvisoryLockNamespace.LOAD_BULK, path),
-                lambda: load_bulk_delivery(client._engine(), path),
+                lambda: _load_bulk_with_cli_validation(client._engine(), path),
             )
             typer.echo(f"loaded postal_bulk_delivery rows: {count}")
 
@@ -556,10 +576,10 @@ def load_epost_command(
                     typer.echo(f"extracted epost ZIP: {resolved}")
                 pobox_file, bulk_file = discover_epost_files(resolved)
                 if pobox_file is not None:
-                    count = await load_pobox(client._engine(), pobox_file)
+                    count = await _load_pobox_with_cli_validation(client._engine(), pobox_file)
                     typer.echo(f"loaded postal_pobox rows: {count}")
                 if bulk_file is not None:
-                    count = await load_bulk_delivery(client._engine(), bulk_file)
+                    count = await _load_bulk_with_cli_validation(client._engine(), bulk_file)
                     typer.echo(f"loaded postal_bulk_delivery rows: {count}")
                 if pobox_file is None and bulk_file is None:
                     typer.echo("no pobox/bulk text files found in epost dataset", err=True)
@@ -641,12 +661,12 @@ def load_all_sidos_command(
                     typer.echo(f"loaded SHP layers total: {shp_total}")
                     await refresh_region_radius_parts(client._engine())
                 if pobox_path is not None:
-                    count = await load_pobox(client._engine(), pobox_path)
+                    count = await _load_pobox_with_cli_validation(client._engine(), pobox_path)
                     typer.echo(f"loaded postal_pobox rows: {count}")
                 if bulk_path is not None:
                     typer.echo(
                         f"loaded postal_bulk_delivery rows: "
-                        f"{await load_bulk_delivery(client._engine(), bulk_path)}"
+                        f"{await _load_bulk_with_cli_validation(client._engine(), bulk_path)}"
                     )
                 await resolve_text_geometry_links(client._engine())
                 report = await run_all_cases(client._engine(), generated_by="cli")

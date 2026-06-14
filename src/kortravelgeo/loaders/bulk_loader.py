@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import csv
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +10,16 @@ from pathlib import Path
 import psycopg
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.loaders.epost_validation import (
+    BD_MGT_SN_ALIASES,
+    BULK_NAME_ALIASES,
+    DETAIL_ALIASES,
+    ZIP_NO_ALIASES,
+    ensure_postal_validation_passed,
+    epost_row_value,
+    iter_epost_dict_rows,
+    validate_bulk_file,
+)
 from kortravelgeo.loaders.text.juso_hangul_loader import _alchemy_to_libpq
 
 ProgressCallback = Callable[[float], None]
@@ -25,28 +34,29 @@ class BulkDeliveryRow:
 
 
 def iter_bulk_rows(path: Path | str) -> Iterator[BulkDeliveryRow]:
-    with Path(path).open("r", encoding="utf-8-sig", newline="") as file:
-        reader = csv.DictReader(file, delimiter="|")
-        for row in reader:
-            zip_no = row.get("zip_no") or row.get("우편번호")
-            name = row.get("bulk_name") or row.get("다량배달처명") or row.get("기관명")
-            if not zip_no or not name:
-                continue
-            yield BulkDeliveryRow(
-                zip_no=zip_no,
-                bulk_name=name,
-                bd_mgt_sn=row.get("bd_mgt_sn") or row.get("건물관리번호"),
-                detail=row.get("detail") or row.get("상세주소"),
-            )
+    for row in iter_epost_dict_rows(path):
+        zip_no = epost_row_value(row, ZIP_NO_ALIASES)
+        name = epost_row_value(row, BULK_NAME_ALIASES)
+        if not zip_no or not name:
+            continue
+        yield BulkDeliveryRow(
+            zip_no=zip_no,
+            bulk_name=name,
+            bd_mgt_sn=epost_row_value(row, BD_MGT_SN_ALIASES),
+            detail=epost_row_value(row, DETAIL_ALIASES),
+        )
 
 
 async def load_bulk_delivery(
     engine: AsyncEngine,
     path: Path | str,
     *,
+    validate: bool = True,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
+    if validate:
+        ensure_postal_validation_passed(validate_bulk_file(path))
     return await copy_bulk_rows(
         engine,
         iter_bulk_rows(path),
@@ -81,4 +91,3 @@ FROM STDIN
     if on_progress:
         on_progress(1.0)
     return count
-

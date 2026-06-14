@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-120 epost 우편번호 수동 적재 검증을 추가했다. `ktgctl load pobox`, `ktgctl load bulk`, `ktgctl load epost`는 COPY 전 행수·필수 컬럼·우편번호 형식·사서함 종류·정수 필드·중복 key sanity 요약을 출력하고, 같은 검증 모듈을 API job `pobox_load`/`bulk_load`와 T-207 server-fetch 흐름에서 재사용할 수 있다.
 - T-201 source file category catalog API를 추가했다. `GET /v1/admin/source-file-categories`가 `core.source_categories.CATEGORY_CATALOG`(6 build + optional/enrichment + epost 카테고리)를 반환하고, `AsyncAddressClient.list_source_file_categories()`로 조회한다. category별 group_kind/default_role/expected member/optional을 노출한다.
 - T-108 운영 배포 자동화를 추가했다. `pinvi`의 T-108 원문을 기준으로 등록하되 사용자 추가 지시에 따라 streaming replication은 제외했고, `scripts/deploy_app.py`로 API/UI `linux/amd64`·`linux/arm64` buildx 빌드/push 계획, N150/Odroid SSH 배포, 원격 `--env-file` 기반 설정 주입, API/UI smoke check를 제공한다. 이 저장소는 계속 PostgreSQL/RustFS 생명주기를 직접 관리하지 않는다.
 - Prometheus 성능 모니터링을 보강했다. API `/metrics`는 기존 요청 duration histogram에 더해 API request total, slow request total, in-progress request gauge, SQLAlchemy DB pool size/checked-in/checked-out/overflow gauge, DB query operation/fingerprint/status별 duration, load job 전체/stage별 duration을 노출한다. `kor-travel-geo-ui`는 `/api/metrics`에서 Next.js route handler, backend proxy upstream, Web Vitals metric을 노출한다. `kor-travel-docker-manager` scrape 대상은 `kor-travel-geo-api:12501/metrics`, `kor-travel-geo-ui:12505/api/metrics`다.
@@ -45,6 +46,7 @@
 - **(BREAKING)** 자동 탐지 중심 upload-set 표면을 제거했다(충돌#1, T-201). `guess_source_kind()` 자동 source 종류 추정, `/v1/admin/uploads*`·`/v1/admin/load-sources*` admin 엔드포인트, `AsyncAddressClient.discover_load_sources()`/`build_full_load_source_set_plan()`/`submit_full_load_source_set()`/`cleanup_upload_sets()`, `ktgctl load full-set`·`ktgctl uploads cleanup` CLI를 삭제했다. 명시 category 기반 업로드(T-203~)와 `rebuild-db`(T-205)가 대체한다. `UploadSetStatus` DTO와 full-load 로더는 유지한다. UI `/admin/load` 콘솔은 T-209 재구성 전까지 stub이다.
 
 ### Fixed
+- epost 다운로드가 직접 ZIP 본문뿐 아니라 `fileLocplc` XML 응답도 처리하도록 보강했다. 공공데이터포털 `15000302` 응답에서 ZIP URL을 받은 뒤 같은 수동 적재 경로로 저장한다.
 - admin UI 좌측 메뉴 이동 중 Chrome/Firefox에서 Next 기본 전역 오류 화면(`This page couldn’t load`, `Reload to try again, or go back.`)으로 떨어질 수 있던 문제를 수정했다. 좌측 메뉴와 Consistency report 목록은 `next/link` prefetch를 끄고 document navigation으로 이동해 client routing/RSC fetch 실패 화면을 피한다.
 - VWorld 타일 요청이 페이지 이동 중 정상 취소될 때(`ERR_ABORTED`, `NS_BINDING_ABORTED`) 지도 타일 불안정 overlay와 warning 카운트에 반영하지 않도록 했다.
 - Firefox에서 VWorld 지도가 빈 캔버스로 보이던 문제를 수정했다. `maplibre-vworld`의 `unsupportedTileFallback`이 타일 URL을 `vworld://...` custom protocol로 바꾸면 Firefox가 CORS `not http`로 차단하므로, 이 저장소 wrapper에서는 fallback prop을 전달하지 않고 HTTPS WMTS를 직접 사용한다.

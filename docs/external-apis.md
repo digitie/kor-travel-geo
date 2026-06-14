@@ -116,7 +116,7 @@ async with httpx.AsyncClient() as cx:
 - **발급처**: https://www.data.go.kr (공공데이터포털) → 활용신청 → 즉시 승인 → "개발계정 상세보기"에서 일반 인증키(Encoding/Decoding 2종).
 - **인증키 형식**: Encoding된 키와 URL-Decoded 키가 함께 제공. `httpx`의 `params` 인자로 넘기면 Decoded 키를 쓰는 게 안전(httpx가 URL 인코딩 처리).
 - **쿼터**: 개발계정 10,000회/일. 갱신 호출은 분기당 4종 × 1회 정도라 충분.
-- **응답**: 우편번호 ZIP 파일의 다운로드 URL을 담은 XML(`fileLocplc` 노드). 매칭 결과를 직접 주지 않으므로 ZIP을 받아 로컬 DB에 적재한 뒤 매칭한다(ADR-009).
+- **응답**: 우편번호 ZIP 파일의 다운로드 URL을 담은 XML(`fileLocplc` 노드)이 기본 형태다. 일부 환경에서는 직접 ZIP 본문이 올 수 있으므로 로더는 두 형태를 모두 허용한다. 매칭 결과를 직접 주지 않으므로 ZIP을 받아 로컬 DB에 적재한 뒤 매칭한다(ADR-009).
 
 ### `downloadKnd` 4종
 
@@ -167,10 +167,14 @@ XML 응답에서 fileLocplc(ZIP URL) 추출
   ↓
 ZIP 스트리밍 다운로드 → 인코딩 표준화(EUC-KR/UTF-8)
   ↓
+행수·필수 컬럼·우편번호 형식·중복 sanity 검증
+  ↓
 postal_pobox / postal_bulk_delivery TRUNCATE → INSERT
   ↓
 docs/reverse-geocoding.md §우편번호 lookup 4단계 우선순위에서 사용
 ```
+
+수동 CLI 경로는 `ktgctl load epost --source <zip-or-dir>`, `ktgctl load pobox <file>`, `ktgctl load bulk <file>`이다. 세 경로 모두 `epost_validation` 검증 요약을 출력하고 실패한 파일은 COPY하지 않는다. 자세한 검증 규칙은 `docs/t120-epost-postal-validation.md`를 참조한다.
 
 ### 도입하지 않는 API
 
