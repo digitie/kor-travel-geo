@@ -36,7 +36,6 @@
 
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
-- T-117 C17 내비 지번 member coverage 검증 prototype — navi archive 내부 `match_jibun_*`를 `tl_juso_parcel_link`와 PNU/link coverage 비교. 독립 category 아닌 `navi_full` member(L7). (의존: T-110)
 - T-118 phase 1 go/no-go 종합 + serving 편입 ADR 게이트 문서 — T-111~T-117 결과를 종합해 source별 "검증 전용 / serving 편입 후보" 판정, C11~C17 확정 사양(=phase ② 입력), serving 좌표 ranking 편입 조건(임계값·feature flag·pt_source 확장)을 별도 ADR 초안으로. 전자지도 미사용 layer `TL_SPBD_EQB`(건물군/동 polygon)를 어느 prototype에도 귀속하지 않은 잔여로 보고 검증 대상화 여부 판정에 포함. 모든 report에 `source_yyyymm` 병기(기준월 시차 노이즈 구분). 코드 변경 없음. (의존: T-111~T-117)
 - T-119 (ADR 게이트 통과 시) serving 좌표 편입 — 출입구 후보 scoring — T-118 ADR 승인 시에만 진행. 출입구(C11)를 `mv_geocode_target` 대표 좌표 scoring에 feature flag로 편입, pt_source 확장, 재적재·정확도 재측정. vworld 호환 필드 유지(자체 정보는 x_extension/v2). ADR-049 게이트·ADR-007 의미 변경 주의. (의존: T-118 + ADR)
 - T-120 epost 우편번호 수동 적재·검증(pobox/bulk, CLI) — 디스크에 없는 유일 원천. 수동 fetch(기존 `epost_downloader`) → `pobox_load`/`bulk_load` 적재(핵심 rebuild와 독립, MV swap 무관) → 우편번호 검증(행수·필수 컬럼·형식/중복 sanity). 검증 로직은 T-207과 공유 모듈로 둔다. (의존: —)
@@ -73,6 +72,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-117 C17 내비 지번 member coverage 검증 prototype. `navi_full` 내부 optional member인 `match_jibun_*.txt`를 독립 category로 만들지 않고 staging table에 key만 COPY해 `tl_juso_parcel_link`와 `bd_mgt_sn+pnu`, `pnu+road key` coverage를 비교한다. member가 없으면 실패가 아니라 `skipped`로 기록하고, 7z는 register/materialization 단계에서 해제된 디렉터리를 입력으로 받는 계약을 유지한다. 좌표 적재 없이 `coordinate_load=False`, `serving_promotion=False`를 고정했다. 상세: `docs/t117-navi-jibun-coverage.md` (2026-06-14)
 - [x] T-116 C16 주소DB/건물DB row·key drift 검증 prototype. `주소DB_전체분`/`건물DB_전체분` ZIP text member를 streaming으로 읽어 검증 전용 staging table에 key만 COPY하고, `tl_juso_text`/`tl_juso_parcel_link`/`tl_spbd_buld_polygon`과 distinct key overlap 및 `EXCEPT` 기반 left/right-only sample을 산출한다. 주소DB ZIP의 mojibake member 이름은 `cp437`→`cp949`로 복원하고, 좌표 적재 없이 `coordinate_load=False`, `serving_promotion=False`를 고정했다. 상세: `docs/t116-address-building-drift.md` (2026-06-14)
 - [x] T-115 C15 민원행정기관 POI 거리 검증 prototype. `민원행정기관전자지도`의 CP949 한글 DBF field name과 SHP point를 읽어 staging하고, `도로명주소`를 기존 parser로 해석한 뒤 `mv_geocode_target` exact road geocoder 계약과 batch join해 POI 좌표와 geocoder 대표점 거리 p50/p95/max, geocode missing, parse failed, outlier sample을 산출한다. 주소 정본/일반 후보에는 혼입하지 않고 `serving_promotion=False`를 고정했다. 상세: `docs/t115-civil-service-poi.md` (2026-06-14)
 - [x] T-114 C14 국가지점번호 grid/center 검증 harness. `국가지점번호 도형` 100km/10km/1km/100m SHP/DBF와 `국가지점번호 중심점` TXT를 상시 적재 없이 streaming 검증하는 모듈을 추가했다. Grid prefix에서 EPSG:5179 bbox/center를 계산하고, SHP bbox·중심점 좌표·`core/sppn.py` formatter parent prefix·resolution별 row coverage를 검증한다. `TL_SPPN_GRID_100M` 1천만 polygon은 ZIP member 전체를 inflate하지 않는 전용 iterator로 sampling/full stream 모두 가능하게 했고, 10m 좌표 개선 원천이 아니라 parser/formatter 회귀와 overlay 후보 검증 전용(`serving_promotion=False`)으로 고정했다. 상세: `docs/t114-national-point-grid.md` (2026-06-14)

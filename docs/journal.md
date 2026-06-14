@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-117 C17 내비 지번 member coverage 검증 prototype)
+
+**작업**: `navi_full` archive 내부 optional member인 `match_jibun_*.txt`를 독립 category가 아니라 `navi_full.match_jibun` 검증 member로 다루는 C17 prototype을 구현했다. `tl_juso_parcel_link`와의 PNU/link coverage를 측정하고 좌표 적재나 serving 후보 승격은 하지 않는다.
+
+**반영**:
+- `src/kortravelgeo/loaders/c17_navi_jibun_coverage.py`를 추가했다.
+- `match_jibun_*.txt` CP949 pipe text에서 `bjd_cd`, `mntn_yn`, 지번 본/부번, `rncode_full`, 건물번호, `bd_mgt_sn`을 streaming parser로 추출한다.
+- PNU는 기존 `infra.pnu.build_pnu()`로 조립한다.
+- staging table `_ktg_c17_navi_jibun`에 COPY한 뒤 `tl_juso_parcel_link`와 `bd_mgt_sn+pnu`, `pnu+rncode_full+buld_se_cd+buld_mnnm+buld_slno` key coverage를 비교한다.
+- `match_jibun_*` member가 없으면 실패가 아니라 `skipped` report로 기록한다.
+- 7z는 C17 모듈이 직접 subprocess로 풀지 않고, T-109/T-203 materialization 단계에서 풀린 디렉터리를 입력으로 받는 계약을 유지했다.
+- `tests/unit/test_c17_navi_jibun_coverage.py`와 `tests/integration/test_optional_real_postgres_c17_navi_jibun_coverage.py`를 추가했다. 실제 PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형이며, `.7z`만 있으면 WSL `7z`로 `match_jibun_sejong.txt` 한 member만 임시 materialize한다.
+- `docs/t117-navi-jibun-coverage.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**검증**: WSL ext4 테스트 미러에서 `pytest -q` → 465 passed, 30 skipped, 24 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과. 실제 `202604_내비게이션용DB_전체분.7z`에서 `match_jibun_sejong.txt` 한 member를 임시 materialize해 앞 3행 parser smoke를 확인했다.
+
 ## 2026-06-14 (T-116 C16 주소DB/건물DB row·key drift 검증 prototype)
 
 **작업**: `주소DB_전체분`과 `건물DB_전체분`을 serving 정본이 아니라 row/key drift 검증 원천으로 다루는 C16 prototype을 구현했다. 좌표 적재 없이 text key만 staging하고, `tl_juso_text`, `tl_juso_parcel_link`, `tl_spbd_buld_polygon`과 distinct key overlap 및 left/right-only sample을 비교한다.
