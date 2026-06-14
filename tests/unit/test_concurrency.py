@@ -99,7 +99,6 @@ def test_cli_and_api_register_cross_process_lock_helpers() -> None:
         "MV_REFRESH",
         "BACKUP_CREATE",
         "RESTORE_CREATE",
-        "UPLOADS_CLEANUP",
     ):
         assert name in cli_source
 

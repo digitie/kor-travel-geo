@@ -430,40 +430,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/load-sources/discover": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Discover Load Source Set */
-        post: operations["discover_load_source_set_v1_admin_load_sources_discover_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/load-sources/plan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Plan Load Source Set */
-        post: operations["plan_load_source_set_v1_admin_load_sources_plan_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/loads": {
         parameters: {
             query?: never;
@@ -755,6 +721,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-file-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Source File Categories
+         * @description Static catalog of source upload categories (T-200/T-201).
+         *
+         *     Replaces the removed auto-detection upload-SET flow: the UI uses this to draw
+         *     explicit per-category upload slots. ``role``/``default_role`` are UI defaults;
+         *     the authoritative role lives on ``ops.source_match_set_items``.
+         */
+        get: operations["source_file_categories_v1_admin_source_file_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/storage/rustfs/check": {
         parameters: {
             query?: never;
@@ -852,74 +842,6 @@ export interface paths {
         put?: never;
         /** Upload Sido Zip */
         post: operations["upload_sido_zip_v1_admin_upload_sido_zip_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/uploads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Upload Session */
-        post: operations["create_upload_session_v1_admin_uploads_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/uploads/{upload_set_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Upload Session Status */
-        get: operations["upload_session_status_v1_admin_uploads__upload_set_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/uploads/{upload_set_id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel Upload Session */
-        post: operations["cancel_upload_session_v1_admin_uploads__upload_set_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/uploads/{upload_set_id}/files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Put Upload File */
-        put: operations["put_upload_file_v1_admin_uploads__upload_set_id__files_put"];
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2693,164 +2615,59 @@ export interface components {
              */
             state: "pending" | "active" | "superseded" | "rolled_back" | "failed";
         };
-        /** SourceCandidate */
-        SourceCandidate: {
-            /** Byte Size */
-            byte_size?: number | null;
+        /**
+         * SourceFileCategoryCatalog
+         * @description Response wrapper for the static upload-category catalog.
+         */
+        SourceFileCategoryCatalog: {
             /**
-             * Confidence
+             * Categories
+             * @default []
+             */
+            categories: components["schemas"]["SourceFileCategoryInfo"][];
+        };
+        /**
+         * SourceFileCategoryInfo
+         * @description One entry in the static upload-category catalog (T-201).
+         *
+         *     Serialized form of ``core.source_categories.SourceCategory`` for the
+         *     ``GET /v1/admin/source-file-categories`` endpoint. ``role``/``default_role``
+         *     are UI defaults; the authoritative role lives on
+         *     ``ops.source_match_set_items.role``.
+         */
+        SourceFileCategoryInfo: {
+            /**
+             * Category
              * @enum {string}
              */
-            confidence: "high" | "medium" | "low";
-            /** File Count */
-            file_count?: number | null;
-            /** Inferred Yyyymm */
-            inferred_yyyymm?: string | null;
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
             /**
-             * Kind
+             * Default Role
              * @enum {string}
              */
-            kind: "juso" | "parcel_link" | "locsum" | "navi" | "shp" | "roadaddr_entrance" | "sppn_makarea" | "pobox" | "bulk";
-            /** Note */
-            note?: string | null;
-            /** Path */
-            path: string;
-            /** Sha256 */
-            sha256?: string | null;
-            /** Sido Count */
-            sido_count?: number | null;
-        };
-        /** SourceSetDiscovery */
-        SourceSetDiscovery: {
+            default_role: "build_required" | "build_recommended" | "validation_optional" | "enrichment_candidate";
             /**
-             * Candidates
+             * Expected Member Kinds
              * @default []
              */
-            candidates: components["schemas"]["SourceCandidate"][];
+            expected_member_kinds: string[];
             /**
-             * Missing Required
-             * @default []
-             */
-            missing_required: string[];
-            /**
-             * Mixed Yyyymm
-             * @default false
-             */
-            mixed_yyyymm: boolean;
-            /** Recommended */
-            recommended?: {
-                [key: string]: components["schemas"]["SourceCandidate"];
-            };
-            /** Root Path */
-            root_path: string;
-            /** Warning */
-            warning?: string | null;
-            /** Yyyymm By Kind */
-            yyyymm_by_kind?: {
-                [key: string]: string | null;
-            };
-        };
-        /** SourceSetDiscoveryRequest */
-        SourceSetDiscoveryRequest: {
-            /**
-             * Include Optional
-             * @default true
-             */
-            include_optional: boolean;
-            /** Root Path */
-            root_path?: string | null;
-            /** Upload Set Id */
-            upload_set_id?: string | null;
-        };
-        /** SourceSetPlan */
-        SourceSetPlan: {
-            /** Acknowledged At */
-            acknowledged_at?: string | null;
-            /** Acknowledged By */
-            acknowledged_by?: ("cli" | "api" | "ui") | null;
-            /** Batch Payload */
-            batch_payload?: {
-                [key: string]: unknown;
-            };
-            /** Candidate Paths */
-            candidate_paths?: {
-                [key: string]: string;
-            };
-            /** Candidate Sha256 */
-            candidate_sha256?: {
-                [key: string]: string | null;
-            };
-            /**
-             * Candidates
-             * @default []
-             */
-            candidates: components["schemas"]["SourceCandidate"][];
-            /** Confirmation Token Hash */
-            confirmation_token_hash?: string | null;
-            /** Expected Confirmation Token */
-            expected_confirmation_token?: string | null;
-            /**
-             * Missing Required
-             * @default []
-             */
-            missing_required: string[];
-            /**
-             * Mixed Yyyymm
-             * @default false
-             */
-            mixed_yyyymm: boolean;
-            /**
-             * Mixed Yyyymm Acknowledged
-             * @default false
-             */
-            mixed_yyyymm_acknowledged: boolean;
-            /** Root Path */
-            root_path?: string | null;
-            /** Selected */
-            selected?: {
-                [key: string]: components["schemas"]["SourceCandidate"];
-            };
-            /** Source Set Id */
-            source_set_id: string;
-            /** Warning */
-            warning?: string | null;
-            /** Yyyymm By Kind */
-            yyyymm_by_kind?: {
-                [key: string]: string | null;
-            };
-        };
-        /** SourceSetPlanRequest */
-        SourceSetPlanRequest: {
-            /**
-             * Acknowledged By
-             * @default api
+             * Group Kind
              * @enum {string}
              */
-            acknowledged_by: "cli" | "api" | "ui";
+            group_kind: "single_file" | "multi_part";
+            /** Label */
+            label: string;
             /**
-             * Allow Mixed Yyyymm
+             * Optional
              * @default false
              */
-            allow_mixed_yyyymm: boolean;
-            /** Confirmation Token */
-            confirmation_token?: string | null;
-            /** Explicit Paths */
-            explicit_paths?: {
-                [key: string]: string;
-            };
+            optional: boolean;
             /**
-             * Include Optional
-             * @default true
+             * Role
+             * @enum {string}
              */
-            include_optional: boolean;
-            /** Root Path */
-            root_path?: string | null;
-            /** Upload Set Id */
-            upload_set_id?: string | null;
-            /** Versions */
-            versions?: {
-                [key: string]: string;
-            };
+            role: "build_required" | "build_recommended" | "validation_optional" | "enrichment_candidate";
         };
         /** SppnMakareaContext */
         SppnMakareaContext: {
@@ -2986,17 +2803,6 @@ export interface components {
              * @default 0
              */
             uploaded_bytes: number;
-        };
-        /** UploadSetCreateRequest */
-        UploadSetCreateRequest: {
-            /**
-             * Purpose
-             * @default full_load_source_set
-             * @constant
-             */
-            purpose: "full_load_source_set";
-            /** Storage Kind */
-            storage_kind?: ("local" | "rustfs") | null;
         };
         /** UploadSetStatus */
         UploadSetStatus: {
@@ -3971,72 +3777,6 @@ export interface operations {
             };
         };
     };
-    discover_load_source_set_v1_admin_load_sources_discover_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SourceSetDiscoveryRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SourceSetDiscovery"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    plan_load_source_set_v1_admin_load_sources_plan_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SourceSetPlanRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SourceSetPlan"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_loads_v1_admin_loads_get: {
         parameters: {
             query?: {
@@ -4651,6 +4391,26 @@ export interface operations {
             };
         };
     };
+    source_file_categories_v1_admin_source_file_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceFileCategoryCatalog"];
+                };
+            };
+        };
+    };
     check_rustfs_storage_v1_admin_storage_rustfs_check_post: {
         parameters: {
             query?: never;
@@ -4840,135 +4600,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadSidoZipResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_upload_session_v1_admin_uploads_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UploadSetCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadSetStatus"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    upload_session_status_v1_admin_uploads__upload_set_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                upload_set_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadSetStatus"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cancel_upload_session_v1_admin_uploads__upload_set_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                upload_set_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadSetStatus"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    put_upload_file_v1_admin_uploads__upload_set_id__files_put: {
-        parameters: {
-            query: {
-                filename: string;
-                relative_path?: string | null;
-            };
-            header?: never;
-            path: {
-                upload_set_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadFileStatus"];
                 };
             };
             /** @description Validation Error */

@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-201 source file category catalog API를 추가했다. `GET /v1/admin/source-file-categories`가 `core.source_categories.CATEGORY_CATALOG`(6 build + optional/enrichment + epost 카테고리)를 반환하고, `AsyncAddressClient.list_source_file_categories()`로 조회한다. category별 group_kind/default_role/expected member/optional을 노출한다.
 - T-108 운영 배포 자동화를 추가했다. `pinvi`의 T-108 원문을 기준으로 등록하되 사용자 추가 지시에 따라 streaming replication은 제외했고, `scripts/deploy_app.py`로 API/UI `linux/amd64`·`linux/arm64` buildx 빌드/push 계획, N150/Odroid SSH 배포, 원격 `--env-file` 기반 설정 주입, API/UI smoke check를 제공한다. 이 저장소는 계속 PostgreSQL/RustFS 생명주기를 직접 관리하지 않는다.
 - Prometheus 성능 모니터링을 보강했다. API `/metrics`는 기존 요청 duration histogram에 더해 API request total, slow request total, in-progress request gauge, SQLAlchemy DB pool size/checked-in/checked-out/overflow gauge, DB query operation/fingerprint/status별 duration, load job 전체/stage별 duration을 노출한다. `kor-travel-geo-ui`는 `/api/metrics`에서 Next.js route handler, backend proxy upstream, Web Vitals metric을 노출한다. `kor-travel-docker-manager` scrape 대상은 `kor-travel-geo-api:12501/metrics`, `kor-travel-geo-ui:12505/api/metrics`다.
 - API 요청 성능 측정을 추가했다. `/metrics`는 `kor_travel_geo_api_request_duration_seconds` histogram을 노출하고, `KTG_API_PERFORMANCE_LOGGING_ENABLED=true`일 때 route template, method, status, elapsed_ms 기반 성능 로그를 남긴다. query string과 주소 입력값은 로그 메시지에 기록하지 않는다.
@@ -39,6 +40,9 @@
 - **(BREAKING)** Python 라이브러리 주소 조회 표면을 v2 candidate schema로 단일화했다. `AsyncAddressClient.geocode()`, `reverse()`, `search()`가 각각 `GeocodeV2Response`, `ReverseV2Response`, `SearchV2Response`를 반환하며, 공개 API에서 `geocode_v2()`, `reverse_v2()`, `search_v2()`, `reverse_geocode()`를 제거했다. REST `/v1/*`의 vworld 호환 응답은 내부 adapter로 유지한다.
 - 디버그 UI의 geocode/reverse 화면을 `/v2/geocode`, `/v2/reverse` POST 기반으로 전환했다. proxy는 `/v1/*`와 `/v2/*`를 모두 허용하며, Windows Playwright e2e 6개로 v2 요청 body와 입력 검증을 고정한다.
 - 디버그 UI가 `.env`의 `NEXT_PUBLIC_VWORLD_API_KEY`를 런타임 config로 읽고, `/admin/settings`에서 브라우저 저장값으로 수정·복원할 수 있게 했다.
+
+### Removed
+- **(BREAKING)** 자동 탐지 중심 upload-set 표면을 제거했다(충돌#1, T-201). `guess_source_kind()` 자동 source 종류 추정, `/v1/admin/uploads*`·`/v1/admin/load-sources*` admin 엔드포인트, `AsyncAddressClient.discover_load_sources()`/`build_full_load_source_set_plan()`/`submit_full_load_source_set()`/`cleanup_upload_sets()`, `ktgctl load full-set`·`ktgctl uploads cleanup` CLI를 삭제했다. 명시 category 기반 업로드(T-203~)와 `rebuild-db`(T-205)가 대체한다. `UploadSetStatus` DTO와 full-load 로더는 유지한다. UI `/admin/load` 콘솔은 T-209 재구성 전까지 stub이다.
 
 ### Fixed
 - admin UI 좌측 메뉴 이동 중 Chrome/Firefox에서 Next 기본 전역 오류 화면(`This page couldn’t load`, `Reload to try again, or go back.`)으로 떨어질 수 있던 문제를 수정했다. 좌측 메뉴와 Consistency report 목록은 `next/link` prefetch를 끄고 document navigation으로 이동해 client routing/RSC fetch 실패 화면을 피한다.

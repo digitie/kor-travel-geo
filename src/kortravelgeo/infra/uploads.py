@@ -32,7 +32,7 @@ from kortravelgeo.infra.rustfs import (
     rustfs_uri,
     sha256_file,
 )
-from kortravelgeo.infra.source_set import guess_source_kind, infer_yyyymm
+from kortravelgeo.infra.source_set import infer_yyyymm
 
 _MANIFEST = "upload-set.json"
 _UPLOAD_SET_ID_RE = re.compile(r"upload_\d{8}T\d{6}Z_[0-9a-f]{12}")
@@ -323,7 +323,6 @@ async def store_upload_file(
             "uploaded_bytes": size,
             "sha256": digest.hexdigest(),
             "inferred_yyyymm": infer_yyyymm(Path(safe_relative)),
-            "source_kind": guess_source_kind(Path(safe_relative)),
             "updated_at": datetime.now(UTC),
         }
     )
@@ -409,7 +408,6 @@ async def _store_upload_file_rustfs(
             "sha256": content_sha256,
             "object_etag": etag,
             "inferred_yyyymm": infer_yyyymm(Path(safe_relative)),
-            "source_kind": guess_source_kind(Path(safe_relative)),
             "updated_at": datetime.now(UTC),
         }
     )
@@ -560,7 +558,6 @@ async def sync_local_to_rustfs(
                 uploaded_bytes=size,
                 sha256=digest,
                 inferred_yyyymm=infer_yyyymm(Path(relative)),
-                source_kind=guess_source_kind(Path(relative)),
                 created_at=now,
                 updated_at=now,
             )
@@ -629,7 +626,6 @@ def _rustfs_object_to_file_status(
         size_bytes=obj.size,
         uploaded_bytes=obj.size,
         inferred_yyyymm=infer_yyyymm(Path(relative)),
-        source_kind=guess_source_kind(Path(relative)),
         created_at=now,
         updated_at=now,
     )

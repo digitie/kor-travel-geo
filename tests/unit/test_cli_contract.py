@@ -13,7 +13,6 @@ from kortravelgeo.cli.main import (
     load_all_sidos_command,
     load_daily_juso_command,
     load_daily_parcel_links_command,
-    load_full_set_command,
     load_parcel_links_command,
     load_roadaddr_entrances_command,
     load_shp_all_command,
@@ -30,7 +29,6 @@ def test_cli_exposes_t018_operational_commands() -> None:
         ["load", "daily-juso", "--help"],
         ["load", "parcel-links", "--help"],
         ["load", "daily-parcel-links", "--help"],
-        ["load", "full-set", "--help"],
         ["load", "roadaddr-entrances", "--help"],
         ["load", "shp-all", "--help"],
         ["load", "sppn-makarea", "--help"],
@@ -103,15 +101,6 @@ def test_data_quality_case_parser_deduplicates_and_rejects_unknown() -> None:
         assert "unsupported data quality case(s): C99" in str(exc)
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("expected ValueError")
-
-
-def test_full_set_command_requires_specific_mixed_confirmation() -> None:
-    source = inspect.getsource(load_full_set_command)
-
-    assert "--allow-mixed-yyyymm" in source
-    assert "--confirm-source-set" in source
-    assert "confirmation_token_for(yyyymm_preview)" in source
-    assert "not sys.stdin.isatty()" in source
 
 
 def test_data_quality_case_parser_rejects_empty_list() -> None:

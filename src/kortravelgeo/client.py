@@ -14,6 +14,7 @@ from .core.geocoder import geocode as core_geocode
 from .core.poboxer import pobox as core_pobox
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
+from .core.source_categories import CATEGORY_CATALOG
 from .core.v2 import (
     geocode_v2_from_geometry_lookups,
     geocode_v2_from_search,
@@ -49,8 +50,6 @@ from .dto.admin import (
     RestoreHotSwapPlanRequest,
     RollbackPlan,
     ServingRelease,
-    SourceSetDiscovery,
-    SourceSetPlan,
     TableStat,
     TableStatsSnapshot,
 )
@@ -59,6 +58,7 @@ from .dto.pobox import PoboxInput, PoboxKind, PoboxResponse
 from .dto.region import RegionHint
 from .dto.reverse import ReverseResponse, ReverseType
 from .dto.search import SearchResponse, SearchType
+from .dto.source import SourceFileCategoryInfo
 from .dto.v2 import (
     BBoxV2,
     GeocodeV2Input,
@@ -84,11 +84,6 @@ from .infra.hotswap import inspect_restore_hot_swap_plan
 from .infra.pobox_repo import PoboxRepository
 from .infra.reverse_repo import ReverseRepository
 from .infra.search_repo import SearchRepository
-from .infra.source_set import (
-    build_full_load_source_set_plan,
-    discover_load_sources,
-)
-from .infra.uploads import UploadSetCleanupResult, cleanup_upload_sets
 from .infra.zip_repo import ZipRepository
 from .settings import Settings, get_settings
 
@@ -718,60 +713,25 @@ class AsyncAddressClient:
             skip_if_locked=skip_if_locked,
         )
 
-    async def cleanup_upload_sets(
-        self,
-        *,
-        ttl_days: int | None = None,
-        active_grace_minutes: int | None = None,
-        dry_run: bool = False,
-    ) -> UploadSetCleanupResult:
-        repo = AdminRepository(self._engine())
-        active_refs = await repo.active_upload_set_ids()
-        return cleanup_upload_sets(
-            self.settings.loader_data_dir,
-            ttl_days=ttl_days or self.settings.upload_set_ttl_days,
-            active_grace_minutes=(
-                active_grace_minutes or self.settings.upload_set_active_grace_minutes
-            ),
-            active_upload_set_ids=active_refs,
-            dry_run=dry_run,
+    def list_source_file_categories(self) -> tuple[SourceFileCategoryInfo, ...]:
+        """Return the static upload-category catalog (T-201).
+
+        Synchronous in spirit (static data) but kept ``async`` is unnecessary;
+        callers can use the value directly. Mirrors the
+        ``GET /v1/admin/source-file-categories`` endpoint payload.
+        """
+        return tuple(
+            SourceFileCategoryInfo(
+                category=category.code,
+                label=category.display_name,
+                group_kind=category.group_kind,
+                default_role=category.default_role,
+                role=category.default_role,
+                expected_member_kinds=category.expected_member_kinds,
+                optional=category.optional,
+            )
+            for category in CATEGORY_CATALOG
         )
-
-    async def discover_load_sources(
-        self,
-        root_path: str,
-        *,
-        include_optional: bool = True,
-    ) -> SourceSetDiscovery:
-        from pathlib import Path
-
-        return discover_load_sources(Path(root_path), include_optional=include_optional)
-
-    async def build_full_load_source_set_plan(
-        self,
-        *,
-        root_path: str | None = None,
-        versions: dict[str, str] | None = None,
-        explicit_paths: dict[str, str] | None = None,
-        include_optional: bool = True,
-        allow_mixed_yyyymm: bool = False,
-        confirmation_token: str | None = None,
-        acknowledged_by: str = "api",
-    ) -> SourceSetPlan:
-        from pathlib import Path
-
-        return build_full_load_source_set_plan(
-            root_path=Path(root_path) if root_path else None,
-            versions=versions,
-            explicit_paths=explicit_paths,
-            include_optional=include_optional,
-            allow_mixed_yyyymm=allow_mixed_yyyymm,
-            confirmation_token=confirmation_token,
-            acknowledged_by=acknowledged_by,
-        )
-
-    async def submit_full_load_source_set(self, plan: SourceSetPlan) -> LoadJobStatus:
-        return await self.submit_load("full_load_batch", plan.batch_payload)
 
     async def submit_load(self, kind: str, payload: dict[str, Any]) -> LoadJobStatus:
         repo = AdminRepository(self._engine())

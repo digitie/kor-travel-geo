@@ -75,46 +75,9 @@ export type SourceKind =
 
 export type UploadStorageKind = "local" | "rustfs";
 
-export type SourceCandidate = {
-  kind: SourceKind;
-  path: string;
-  inferred_yyyymm?: string | null;
-  sido_count?: number | null;
-  file_count?: number | null;
-  byte_size?: number | null;
-  sha256?: string | null;
-  confidence: "high" | "medium" | "low";
-  note?: string | null;
-};
-
-export type SourceSetDiscovery = {
-  root_path: string;
-  candidates: SourceCandidate[];
-  recommended: Partial<Record<SourceKind, SourceCandidate>>;
-  missing_required: string[];
-  mixed_yyyymm: boolean;
-  yyyymm_by_kind: Partial<Record<SourceKind, string | null>>;
-  warning?: string | null;
-};
-
-export type SourceSetPlan = {
-  source_set_id: string;
-  root_path?: string | null;
-  candidates: SourceCandidate[];
-  selected: Partial<Record<SourceKind, SourceCandidate>>;
-  missing_required: string[];
-  yyyymm_by_kind: Partial<Record<SourceKind, string | null>>;
-  mixed_yyyymm: boolean;
-  mixed_yyyymm_acknowledged: boolean;
-  acknowledged_by?: "cli" | "api" | "ui" | null;
-  acknowledged_at?: string | null;
-  confirmation_token_hash?: string | null;
-  expected_confirmation_token?: string | null;
-  candidate_paths: Record<string, string>;
-  candidate_sha256: Record<string, string | null>;
-  batch_payload: Record<string, unknown>;
-  warning?: string | null;
-};
+// SourceCandidate / SourceSetDiscovery / SourceSetPlan types were removed in
+// T-201 along with the legacy auto-detection upload-SET surface. Explicit
+// category selection lives in the T-209 /admin/source-files UI.
 
 export type UploadFileStatus = {
   upload_set_id: string;
