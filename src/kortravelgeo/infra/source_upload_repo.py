@@ -457,6 +457,52 @@ UPDATE ops.source_upload_sessions
         return tuple(_part_status(dict(row)) for row in rows)
 
 
+@dataclass(frozen=True)
+class SourceGroupChild:
+    """A child ``ops.source_files`` row joined to its group (revalidate input)."""
+
+    source_file_id: str
+    part_key: str
+    object_key: str | None
+    original_filename: str
+    category: str
+    group_kind: str
+
+
+async def source_group_children(
+    engine: AsyncEngine, source_file_group_id: str
+) -> tuple[SourceGroupChild, ...]:
+    """Child files of a group with category/group_kind for the validator."""
+    async with engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+SELECT f.source_file_id, f.part_key, f.object_key, f.original_filename,
+       g.category, g.group_kind
+  FROM ops.source_files f
+  JOIN ops.source_file_groups g
+    ON g.source_file_group_id = f.source_file_group_id
+ WHERE f.source_file_group_id = :gid AND f.state <> 'hard_deleted'
+ ORDER BY f.part_key
+"""
+                ),
+                {"gid": source_file_group_id},
+            )
+        ).mappings().all()
+    return tuple(
+        SourceGroupChild(
+            source_file_id=str(r["source_file_id"]),
+            part_key=str(r["part_key"]),
+            object_key=r["object_key"],
+            original_filename=str(r["original_filename"]),
+            category=str(r["category"]),
+            group_kind=str(r["group_kind"]),
+        )
+        for r in rows
+    )
+
+
 # --- row → DTO mappers -----------------------------------------------------
 
 

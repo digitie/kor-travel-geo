@@ -745,6 +745,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-file-groups/{source_file_group_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Source File Group
+         * @description Re-run the archive structure validator over a registered group (doc ~1318).
+         *
+         *     Materializing archive internals needs GDAL/zip and is gated for live use; the
+         *     pure decision logic and the recompute it drives are exercised in unit tests.
+         */
+        post: operations["validate_source_file_group_v1_admin_source_file_groups__source_file_group_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/source-files/upload-sessions": {
         parameters: {
             query?: never;
@@ -899,6 +922,31 @@ export interface paths {
          *     longer apply) and reopens it for a fresh upload (doc line 1314).
          */
         post: operations["replace_upload_slot_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__replace_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Upload Session
+         * @description Register a completed upload session into the source registry (doc ~1347).
+         *
+         *     Head-verifies each completed slot object (size/etag), builds the structure
+         *     decision from slot coverage, and creates the group + child files in one DB
+         *     transaction. Storage-first: a DB failure leaves the objects in place and the
+         *     same session can ``register`` again (``failed_register``).
+         */
+        post: operations["register_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__register_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1881,6 +1929,43 @@ export interface components {
             /** Source Table */
             source_table?: string | null;
         };
+        /**
+         * GroupValidationResult
+         * @description ``POST .../source-file-groups/{id}/validate`` response.
+         *
+         *     The structure-validation outcome that recompute folds into the group's
+         *     ``validation_state`` and ``coverage`` (doc "source_file_validations").
+         */
+        GroupValidationResult: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /** Coverage */
+            coverage?: {
+                [key: string]: string;
+            };
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+            /** Source File Group Id */
+            source_file_group_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+            /**
+             * Validation State
+             * @enum {string}
+             */
+            validation_state: "unknown" | "not_started" | "running" | "passed" | "warning" | "failed" | "skipped";
+            /** Validator Version */
+            validator_version: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2312,6 +2397,71 @@ export interface components {
              * @default []
              */
             sigungu: components["schemas"]["RegionWithinRadiusItem"][];
+        };
+        /**
+         * RegisterRequest
+         * @description ``POST .../upload-sessions/{id}/register`` body (doc lines ~1355-1364).
+         *
+         *     ``confirm_user_yyyymm`` must equal the session ``user_yyyymm`` (the server
+         *     never reinterprets it as a month edit). When the inferred month differs,
+         *     ``yyyymm_mismatch_ack=true`` is required.
+         */
+        RegisterRequest: {
+            /** Confirm User Yyyymm */
+            confirm_user_yyyymm: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Registration Note */
+            registration_note?: string | null;
+            /**
+             * Yyyymm Mismatch Ack
+             * @default false
+             */
+            yyyymm_mismatch_ack: boolean;
+        };
+        /**
+         * RegisterResponse
+         * @description ``register`` success body (doc lines ~1368-1385).
+         */
+        RegisterResponse: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /** Duplicate Of Group Id */
+            duplicate_of_group_id?: string | null;
+            /**
+             * Duplicate Warning
+             * @default false
+             */
+            duplicate_warning: boolean;
+            /**
+             * Files
+             * @default []
+             */
+            files: components["schemas"]["SourceFileRegistered"][];
+            /**
+             * Group Kind
+             * @enum {string}
+             */
+            group_kind: "single_file" | "multi_part";
+            /** Group Sha256 */
+            group_sha256?: string | null;
+            /** Source File Group Id */
+            source_file_group_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+            /** User Yyyymm */
+            user_yyyymm: string;
+            /**
+             * Validation State
+             * @enum {string}
+             */
+            validation_state: "unknown" | "not_started" | "running" | "passed" | "warning" | "failed" | "skipped";
         };
         /** RestoreCreateRequest */
         RestoreCreateRequest: {
@@ -2886,6 +3036,44 @@ export interface components {
              * @enum {string}
              */
             role: "build_required" | "build_recommended" | "validation_optional" | "enrichment_candidate";
+        };
+        /**
+         * SourceFileRegistered
+         * @description One ``ops.source_files`` row created by register (doc lines ~1376-1384).
+         */
+        SourceFileRegistered: {
+            /** Bucket */
+            bucket?: string | null;
+            /** Duplicate Of File Id */
+            duplicate_of_file_id?: string | null;
+            /** Object Key */
+            object_key?: string | null;
+            /** Original Filename */
+            original_filename: string;
+            /**
+             * Part Key
+             * @default archive
+             */
+            part_key: string;
+            /**
+             * Part Kind
+             * @default single
+             * @enum {string}
+             */
+            part_kind: "single" | "sido" | "grid_layer" | "custom";
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Source File Id */
+            source_file_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+            /** Storage Uri */
+            storage_uri: string;
         };
         /** SppnMakareaContext */
         SppnMakareaContext: {
@@ -4816,6 +5004,37 @@ export interface operations {
             };
         };
     };
+    validate_source_file_group_v1_admin_source_file_groups__source_file_group_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_file_group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupValidationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_upload_sessions_v1_admin_source_files_upload_sessions_get: {
         parameters: {
             query?: {
@@ -5104,6 +5323,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SlotReplaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterResponse"];
                 };
             };
             /** @description Validation Error */

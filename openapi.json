@@ -2461,6 +2461,92 @@
         "title": "GeometryV2",
         "type": "object"
       },
+      "GroupValidationResult": {
+        "additionalProperties": false,
+        "description": "``POST .../source-file-groups/{id}/validate`` response.\n\nThe structure-validation outcome that recompute folds into the group's\n``validation_state`` and ``coverage`` (doc \"source_file_validations\").",
+        "properties": {
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "coverage": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Coverage",
+            "type": "object"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "source_file_group_id": {
+            "title": "Source File Group Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "validating",
+              "available",
+              "quarantined",
+              "missing",
+              "soft_deleted",
+              "hard_deleted",
+              "delete_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "validation_state": {
+            "enum": [
+              "unknown",
+              "not_started",
+              "running",
+              "passed",
+              "warning",
+              "failed",
+              "skipped"
+            ],
+            "title": "Validation State",
+            "type": "string"
+          },
+          "validator_version": {
+            "title": "Validator Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_group_id",
+          "category",
+          "validation_state",
+          "state",
+          "validator_version"
+        ],
+        "title": "GroupValidationResult",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3867,6 +3953,167 @@
           "radius_km"
         ],
         "title": "RegionsWithinRadiusResponse",
+        "type": "object"
+      },
+      "RegisterRequest": {
+        "additionalProperties": false,
+        "description": "``POST .../upload-sessions/{id}/register`` body (doc lines ~1355-1364).\n\n``confirm_user_yyyymm`` must equal the session ``user_yyyymm`` (the server\nnever reinterprets it as a month edit). When the inferred month differs,\n``yyyymm_mismatch_ack=true`` is required.",
+        "properties": {
+          "confirm_user_yyyymm": {
+            "pattern": "^\\d{6}$",
+            "title": "Confirm User Yyyymm",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "registration_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Note"
+          },
+          "yyyymm_mismatch_ack": {
+            "default": false,
+            "title": "Yyyymm Mismatch Ack",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "confirm_user_yyyymm"
+        ],
+        "title": "RegisterRequest",
+        "type": "object"
+      },
+      "RegisterResponse": {
+        "additionalProperties": false,
+        "description": "``register`` success body (doc lines ~1368-1385).",
+        "properties": {
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "duplicate_of_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of Group Id"
+          },
+          "duplicate_warning": {
+            "default": false,
+            "title": "Duplicate Warning",
+            "type": "boolean"
+          },
+          "files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceFileRegistered"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "group_kind": {
+            "enum": [
+              "single_file",
+              "multi_part"
+            ],
+            "title": "Group Kind",
+            "type": "string"
+          },
+          "group_sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Sha256"
+          },
+          "source_file_group_id": {
+            "title": "Source File Group Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "validating",
+              "available",
+              "quarantined",
+              "missing",
+              "soft_deleted",
+              "hard_deleted",
+              "delete_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "user_yyyymm": {
+            "pattern": "^\\d{6}$",
+            "title": "User Yyyymm",
+            "type": "string"
+          },
+          "validation_state": {
+            "enum": [
+              "unknown",
+              "not_started",
+              "running",
+              "passed",
+              "warning",
+              "failed",
+              "skipped"
+            ],
+            "title": "Validation State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_group_id",
+          "category",
+          "group_kind",
+          "state",
+          "validation_state",
+          "user_yyyymm"
+        ],
+        "title": "RegisterResponse",
         "type": "object"
       },
       "RestoreCreateRequest": {
@@ -5358,6 +5605,107 @@
           "role"
         ],
         "title": "SourceFileCategoryInfo",
+        "type": "object"
+      },
+      "SourceFileRegistered": {
+        "additionalProperties": false,
+        "description": "One ``ops.source_files`` row created by register (doc lines ~1376-1384).",
+        "properties": {
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          },
+          "duplicate_of_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Of File Id"
+          },
+          "object_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Key"
+          },
+          "original_filename": {
+            "title": "Original Filename",
+            "type": "string"
+          },
+          "part_key": {
+            "default": "archive",
+            "title": "Part Key",
+            "type": "string"
+          },
+          "part_kind": {
+            "default": "single",
+            "enum": [
+              "single",
+              "sido",
+              "grid_layer",
+              "custom"
+            ],
+            "title": "Part Kind",
+            "type": "string"
+          },
+          "sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "source_file_id": {
+            "title": "Source File Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "validating",
+              "available",
+              "quarantined",
+              "missing",
+              "soft_deleted",
+              "hard_deleted",
+              "delete_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "storage_uri": {
+            "title": "Storage Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_id",
+          "original_filename",
+          "sha256",
+          "size_bytes",
+          "storage_uri",
+          "state"
+        ],
+        "title": "SourceFileRegistered",
         "type": "object"
       },
       "SppnMakareaContext": {
@@ -9598,6 +9946,49 @@
         ]
       }
     },
+    "/v1/admin/source-file-groups/{source_file_group_id}/validate": {
+      "post": {
+        "description": "Re-run the archive structure validator over a registered group (doc ~1318).\n\nMaterializing archive internals needs GDAL/zip and is gated for live use; the\npure decision logic and the recompute it drives are exercised in unit tests.",
+        "operationId": "validate_source_file_group_v1_admin_source_file_groups__source_file_group_id__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_file_group_id",
+            "required": true,
+            "schema": {
+              "title": "Source File Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupValidationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Source File Group",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/source-files/upload-sessions": {
       "get": {
         "description": "Resume entry point: filter resumable in-progress / recoverable sessions.",
@@ -10138,6 +10529,59 @@
           }
         },
         "summary": "Replace Upload Slot",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/register": {
+      "post": {
+        "description": "Register a completed upload session into the source registry (doc ~1347).\n\nHead-verifies each completed slot object (size/etag), builds the structure\ndecision from slot coverage, and creates the group + child files in one DB\ntransaction. Storage-first: a DB failure leaves the objects in place and the\nsame session can ``register`` again (``failed_register``).",
+        "operationId": "register_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__register_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Upload Session",
         "tags": [
           "admin"
         ]
