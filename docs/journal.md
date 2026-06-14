@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (ADR-049 — T-109 구현 방향 확정)
+
+**작업**: 사용자 결정에 따라 T-109의 미결정 선택지를 확정하고 문서에 반영했다. 호환성·최소수정보다 확장성, 완성도, 일관성, 성능을 우선하는 방향으로 고정했다.
+
+**반영**:
+- `docs/decisions.md`에 ADR-049를 추가했다.
+- C11+ case metadata는 DB registry 기반 동적 catalog로 확정했다.
+- match set과 운영 snapshot 연결은 `ops.dataset_snapshots.source_match_set_id` FK로 확정했다.
+- source file 검증 상태는 `state`와 `validation_state` 분리로 확정했다.
+- upload/register 흐름은 storage-first로 확정하되, upload session 생성 시 `user_yyyymm`은 반드시 사용자가 직접 입력·확정한 값으로 받는다. UI는 추정값 또는 현재 날짜 기준 `YYYYMM`을 입력 필드의 사전 입력값으로만 제안하고, 값이 없으면 백엔드가 세션 생성을 거부한다.
+- admin role gate, full-prefix `ops` ID rename, `ops.source_file_groups`, multipart/resumable upload, RustFS full object rehash를 구현 기준으로 확정했다.
+- `docs/t109-backup-source-upload-management.md`, `docs/tasks.md`, `docs/resume.md`를 ADR-049 기준으로 갱신했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (PR #131 리뷰 반영 — T-109 source group 모델 보강)
 
 **작업**: PR #131 리뷰 코멘트의 M1~M12와 L1~L11을 `docs/t109-backup-source-upload-management.md`에 반영했다. SHP 3종(`electronic_map_full`, `roadaddr_entrance_full`, `zone_shape_full`)은 묶음 ZIP이 아니라 시도별 개별 ZIP 17개를 하나의 group으로 관리하는 모델로 확정했다.

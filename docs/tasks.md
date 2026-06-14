@@ -7,7 +7,7 @@
 
 ## 대기 (우선순위 순)
 
-- T-109 백업 원천 파일 업로드·매칭·검증 관리 고도화 — 카테고리별 명시 업로드, 사용자가 확정하는 기준년월, 업로드 원천 파일 DB registry, RustFS object 정합성 검증/복구, source match set, optional 검증 자료와 C11+ 검증 케이스를 구현한다. PR #131 리뷰 반영 기준으로 SHP 3종은 시도별 개별 ZIP 17개를 하나의 `source_file_group`으로 관리하고 match set은 group을 참조한다. 일변동/incremental 업로드는 범위에서 제외한다. 설계 문서: `docs/t109-backup-source-upload-management.md`
+- T-109 백업 원천 파일 업로드·매칭·검증 관리 고도화 — 카테고리별 명시 업로드, 사용자가 확정하는 기준년월, 업로드 원천 파일 DB registry, RustFS object 정합성 검증/복구, source match set, optional 검증 자료와 C11+ 검증 케이스를 구현한다. ADR-049 기준으로 SHP 3종은 시도별 개별 ZIP 17개를 하나의 `source_file_group`으로 관리하고 match set은 group을 참조한다. 업로드 세션 생성 시 `user_yyyymm`은 필수이고 사용자가 직접 입력·확정한다. UI의 추정값 또는 현재 `YYYYMM`은 사전 입력 제안값일 뿐이며, 값이 없으면 백엔드는 세션 생성을 거부한다. multipart/resumable upload, admin role gate, DB case registry, full-prefix `ops` ID rename, full object rehash를 포함한다. 일변동/incremental 업로드는 범위에서 제외한다. 설계 문서: `docs/t109-backup-source-upload-management.md`
 
 ## 보류 (외부 조건)
 

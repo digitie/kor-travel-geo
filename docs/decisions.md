@@ -2310,3 +2310,57 @@ RustFS는 S3 호환 object storage다. 이후 ADR-045에서 이 저장소가 Rus
 ### 후속
 
 - (open) 외부 인프라 관리 프로젝트의 구체 명령은 이 저장소에 복제하지 않고, 필요하면 링크 또는 저장소명 수준으로만 안내한다.
+
+---
+
+## ADR-049: T-109 원천 파일 업로드·매칭·검증은 확장성 우선 설계로 구현한다
+
+- 상태: accepted
+- 날짜: 2026-06-14
+- 결정자: 사용자 요청, codex
+
+### 컨텍스트
+
+T-109는 백업/리스토어 고도화를 위해 원천 파일 업로드, RustFS 저장, DB registry, source match set, optional 검증 자료, C11+ 검증 케이스를 새로 설계한다. PR #131 리뷰에서 M1~M12와 L1~L11이 확인됐고, 사용자는 아직 서비스 단계가 아니므로 호환성·최소 수정 비용보다 확장성, 완성도, 일관성, 성능을 우선하라고 결정했다. 단, admin/API/CLI/DTO처럼 외부에서 호출할 수 있는 인터페이스 변경은 문서와 OpenAPI에 명확히 남겨야 한다.
+
+### 결정
+
+T-109 구현은 다음 확정안을 따른다.
+
+1. C11+ case metadata는 DB registry 기반 동적 catalog를 정본으로 둔다.
+2. match set과 운영 dataset 연결은 `ops.dataset_snapshots.source_match_set_id` FK로 한다.
+3. source file 검증 상태는 `state`와 `validation_state`를 분리한다.
+4. upload/register 흐름은 storage-first다. 업로드 세션 생성 시 `user_yyyymm`은 필수이며 사용자가 직접 입력·확정한다. UI는 추정값 또는 현재 날짜 기준 `YYYYMM`을 입력 필드의 사전 입력값으로만 제안한다. `user_yyyymm`이 없으면 백엔드는 파일명이나 현재 날짜로 보완하지 않고 upload session 생성을 거부한다. RustFS 저장과 검증 뒤 사용자가 registry 등록을 승인한다.
+5. admin 권한은 role gate를 필수로 두고, typed confirmation은 추가 안전장치로만 사용한다.
+6. `ops` 내부 ID는 full-prefix로 통일한다. 기존 `snapshot_id`, `release_id`, `event_id` 등은 구현 단계에서 `dataset_snapshot_id`, `serving_release_id`, `audit_event_id`처럼 rename한다.
+7. 시도별 다중 파일 category는 `ops.source_file_groups`를 만들고, match set은 group을 참조한다.
+8. 업로드 전략은 multipart/resumable을 정식 경로로 둔다.
+9. RustFS 정합성 검증은 object 전체를 재해시해 SHA-256 mismatch를 즉시 확정한다.
+
+### 근거
+
+- 아직 운영 서비스 안정화 전이므로, 사후 호환 alias를 쌓는 것보다 schema/API/DTO를 일관되게 정리하는 비용이 낮다.
+- SHP 3종은 제공 단위가 시도별 ZIP 17개라서 개별 file이 아니라 group을 match set 단위로 삼아야 한다.
+- 기준년월은 파일명 추정이나 현재 날짜 fallback으로 자동 결정하면 안 된다. 사용자가 직접 입력·제출한 `user_yyyymm`만 저장과 match set의 정본이 된다.
+- RustFS object 저장은 DB transaction과 원자적으로 묶을 수 없다. 먼저 저장하고, 검증과 사용자 승인 뒤 registry insert를 재시도 가능하게 만드는 흐름이 운영 UX와 잘 맞는다.
+- 업데이트 주기와 부하가 낮다면 hash mismatch를 지연 확정하는 것보다 전체 재해시로 손상 여부를 즉시 알려주는 편이 운영 판단에 유리하다.
+
+### 결과(긍정)
+
+- T-109 구현자가 선택지를 다시 해석하지 않고 같은 방향으로 schema/API/UI를 만들 수 있다.
+- admin UI는 C11+ 추가 시 하드코딩 없이 case registry를 렌더링할 수 있다.
+- source match set과 active serving release의 연결이 FK로 추적된다.
+- 대용량·불안정 네트워크에서도 multipart upload 진행률과 재개가 가능하다.
+- 기존 `ops`와 신규 source registry의 ID 네이밍이 맞춰진다.
+
+### 결과(부정)
+
+- 기존 admin API/DTO/OpenAPI의 `snapshot_id`, `release_id`, `event_id` 계열 이름이 바뀌므로 migration과 문서 갱신 범위가 커진다.
+- role gate, multipart upload, DB case registry, full object rehash는 최소 구현보다 작업량이 많다.
+- 전체 재해시는 object 수와 크기가 늘면 정합성 scan 시간이 길어질 수 있다.
+
+### 후속
+
+- (open) T-109 구현 PR은 full-prefix rename migration, OpenAPI export, TypeScript type 재생성, admin UI route/parameter 변경 문서를 함께 포함한다.
+- (open) RustFS 용량 관리 정책은 별도 ADR로 정한다. 기본은 무기한 보존이지만 archive tier, soft-deleted object retention, 미등록 stored object cleanup SLA가 필요하다.
+- (open) 보강 자료가 실제 serving 좌표 ranking에 편입되는 조건은 C11+ 검증 결과와 feature flag 기준을 보고 별도 ADR로 정한다.
