@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 리뷰 반영 — T-109 source group 모델 보강)
+
+**작업**: PR #131 리뷰 코멘트의 M1~M12와 L1~L11을 `docs/t109-backup-source-upload-management.md`에 반영했다. SHP 3종(`electronic_map_full`, `roadaddr_entrance_full`, `zone_shape_full`)은 묶음 ZIP이 아니라 시도별 개별 ZIP 17개를 하나의 group으로 관리하는 모델로 확정했다.
+
+**반영**:
+- `ops.source_file_groups`를 match set 참조 단위로 추가하고, `sido_file_set` category는 group 하나 아래 child `ops.source_files` 17행을 보존하도록 정리했다.
+- 전자지도 구조 검증은 11개 layer 필수, serving load는 현행 9개 layer로 분리했다.
+- C11+ case CHECK 완화, RustFS client 확장, upload session 상태 매핑, SSE event schema, destructive admin action 권한/감사, 운영 용량 관리, 백업 manifest group 구조를 문서에 추가했다.
+- 권고안 선택지가 있는 항목은 장단점 표로 남기고, 최종 결정이 필요한 항목을 후속 ADR 후보로 분리했다.
+- `docs/tasks.md`와 `docs/resume.md`의 T-109 대기/재개 설명도 `source_file_group` 모델 기준으로 갱신했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (백업 원천 파일 업로드·매칭·검증 관리 고도화 설계)
 
 **작업**: 백업/리스토어 고도화의 원천 파일 관리 흐름을 구현 전에 문서화했다. 사용자 요구사항에 따라 파일 업로드는 category별 명시 slot으로 나누고, 기준년월은 사용자가 직접 확정하며, 정상 업로드 파일 metadata는 DB registry에서 관리하고, RustFS object와 DB row의 정합성 검증/복구를 admin UI에서 처리하는 방향으로 설계했다.
