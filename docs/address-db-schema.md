@@ -16,7 +16,10 @@
 | 보조 매핑 | `tl_sppn_makarea`, `tl_juso_parcel_link` | 국가지점번호 polygon, 건물↔지번 1:N 링크 |
 | 우편번호 보조 | `postal_pobox`, `postal_bulk_delivery` | 사서함·다량배달처 (epost) |
 | 메타/운영 | `load_manifest`, `load_codes`, `load_jobs`, `load_consistency_reports`, `geo_cache`, `ops.*` | 적재 watermark, MVM 매핑, 작업 큐, 정합성 리포트, 외부 API 캐시, 운영 감사/스냅샷/릴리스/artifact |
+| 원천 registry (운영) | `ops.source_file_groups`, `ops.source_files`, `ops.source_file_members`, `ops.source_file_validations`, `ops.source_upload_sessions`, `ops.source_upload_session_parts`, `ops.source_match_sets`, `ops.source_match_set_items`, `ops.source_storage_reconcile_runs`, `ops.source_storage_reconcile_items`, `ops.consistency_case_definitions`, `ops.consistency_case_inputs` | 업로드 원천 archive registry, 사용자 조합 source match set, RustFS↔DB 정합성 검증, DB 기반 정합성 case 정의 (T-200/T-109) |
 | 평면화 (serving) | `mv_geocode_target`, `mv_geocode_text_search` | 지오코딩 serving MV + fuzzy 검색 helper MV |
+
+`ops.source_*` 원천 registry는 업로드 archive(`single_file`/`multi_part`), match set, RustFS 정합성, 정합성 case 정의를 관리하며 `ops.artifacts`(산출물)와 분리된다. match set은 file이 아니라 group을 참조하고, active match set은 한 건만(`idx_ops_source_match_sets_one_active`) 허용한다. `ops.dataset_snapshots`는 nullable `source_match_set_id` FK로 release의 원천 조합을 연결한다. 컬럼·CHECK 전체 정의는 `docs/data-model.md`와 `docs/t109-backup-source-upload-management.md`를 본다.
 
 ## 좌표계
 
