@@ -376,7 +376,25 @@ class ConsistencyReport(ConsistencyReportSummary):
     cases: tuple[ConsistencyCase, ...] = ()
 
 
+class ConsistencyCaseInput(FrozenModel):
+    """One registry input (``ops.consistency_case_inputs``).
+
+    ``required=False`` encodes an optional/conditional input (e.g. C11's
+    ``roadaddr_entrance_full``, only a full comparison when its 기준월 matches).
+    """
+
+    category: str
+    required: bool = True
+
+
 class ConsistencyCaseDefinition(FrozenModel):
+    """A consistency case from the ``ops.consistency_case_definitions`` registry.
+
+    ``code`` is ``consistency_case_code``. The first eight fields are the
+    original C1~C10 contract (kept for the existing UI tab); the rest are the
+    T-206 registry columns the dynamic case tab (T-209) renders for C11~C17.
+    """
+
     code: str
     name: str
     compares: str
@@ -385,6 +403,80 @@ class ConsistencyCaseDefinition(FrozenModel):
     likely_causes: tuple[str, ...] = ()
     decision_guide: str
     threshold: str | None = None
+    display_order: int | None = None
+    default_severity: ConsistencySeverity | None = None
+    state: Literal["enabled", "disabled", "retired"] = "enabled"
+    inputs: tuple[ConsistencyCaseInput, ...] = ()
+    skip_policy: dict[str, Any] = Field(default_factory=dict)
+    sample_schema: dict[str, Any] = Field(default_factory=dict)
+    introduced_by: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+ConsistencyInputState = Literal[
+    "passed",
+    "warning",
+    "skipped",
+    "failed",
+    "not_started",
+    "validating",
+]
+
+
+class ConsistencyRunValidationRequest(FrozenModel):
+    """``POST /v1/admin/source-match-sets/{id}/run-validation`` body (doc ~1564).
+
+    Runs the registry C11~C17 validation cases against an existing DB (no
+    rebuild). ``cases`` limits which registry cases run (default: all enabled
+    augment cases). The optional inputs are materialized + integrity-gated; an
+    absent input is ``skipped``, a corrupt/mismatched archive is ``failed``.
+    """
+
+    cases: tuple[str, ...] | None = None
+
+
+class ConsistencyValidationInput(FrozenModel):
+    """Per-input run-validation outcome (``validation_inputs.<category>``)."""
+
+    category: str
+    state: ConsistencyInputState
+    required: bool = True
+    failure_reason: str | None = None
+    source_file_group_id: str | None = None
+
+
+class ConsistencyCaseValidationResult(FrozenModel):
+    """One registry case's run-validation outcome."""
+
+    case_code: str
+    runnable: bool
+    skipped: bool
+    failed: bool
+    inputs: tuple[ConsistencyValidationInput, ...] = ()
+    quarantine_group_ids: tuple[str, ...] = ()
+    metric: dict[str, Any] | None = None
+
+
+class ConsistencyRunValidationResponse(FrozenModel):
+    """``run-validation`` result (doc ~1564-1578).
+
+    No new DB / snapshot / release is created. ``validator_version`` is the
+    validator that ran; ``revalidated_case_codes`` are cases whose prior
+    ``passed`` was reverted to ``not_started`` because the validator changed
+    (doc ~1620). ``affected_match_set_ids`` are sets marked needing
+    re-validation by the integrity-failure or validator-change propagation.
+    """
+
+    source_match_set_id: str
+    validator_version: str
+    dataset_snapshot_id: str | None = None
+    cases: tuple[ConsistencyCaseValidationResult, ...] = ()
+    revalidated_case_codes: tuple[str, ...] = ()
+    quarantined_group_ids: tuple[str, ...] = ()
+    affected_match_set_ids: tuple[str, ...] = ()
+    skipped_count: int = Field(default=0, ge=0)
+    failed_count: int = Field(default=0, ge=0)
+    runnable_count: int = Field(default=0, ge=0)
 
 
 class ConsistencySamplePoint(FrozenModel):

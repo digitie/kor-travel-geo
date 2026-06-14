@@ -44,6 +44,8 @@ from kortravelgeo.dto.admin import (
     ConsistencyReport,
     ConsistencyReportSummary,
     ConsistencyRunRequest,
+    ConsistencyRunValidationRequest,
+    ConsistencyRunValidationResponse,
     ConsistencySampleDecisionRequest,
     ConsistencySamplePage,
     ConsistencySampleRecheckResponse,
@@ -132,6 +134,10 @@ from kortravelgeo.infra.source_upload_repo import should_fail_storage_state
 from kortravelgeo.infra.uploads import (
     import_rustfs_prefix_as_upload_set,
     sync_local_to_rustfs,
+)
+from kortravelgeo.loaders.consistency_run_validation import (
+    AUGMENT_CASE_CODES,
+    is_augment_case,
 )
 from kortravelgeo.settings import Settings, get_settings
 
@@ -1288,6 +1294,65 @@ async def rebuild_source_match_set_db(
             reason=req.reason,
         )
     return response.model_copy(update={"job_id": job_id, "load_batch_id": job_id})
+
+
+@router.post(
+    "/source-match-sets/{source_match_set_id}/run-validation",
+    response_model=ConsistencyRunValidationResponse,
+    response_model_exclude_none=True,
+)
+async def run_source_match_set_validation(
+    source_match_set_id: str,
+    req: ConsistencyRunValidationRequest,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> ConsistencyRunValidationResponse:
+    """Run the registry C11~C17 validation cases against an existing DB (T-206).
+
+    Does NOT rebuild the serving DB or create a snapshot/release (doc
+    ~1564-1578). For each registry case's inputs: an input absent from the match
+    set is ``skipped``; a present input whose RustFS archive fails the 사용 직전
+    무결성 게이트 is ``failed`` (``source_integrity_mismatch``) and its group is
+    quarantined + propagated (active → ``integrity_alert``, non-active
+    ``validated`` → ``invalid``); a ``validator_version`` change reverts a prior
+    ``passed`` group to ``not_started`` and marks referencing match sets needing
+    re-validation. Requires the ``source_file_manager`` role.
+
+    Only the C11~C17 registry cases are run-validatable (their metric reuses the
+    phase-① prototype ``.metrics()`` via ``loaders/consistency_run_validation.py``
+    — the regression bridge). A request for any non-augment case is rejected.
+    """
+    if req.cases is not None:
+        invalid = tuple(c for c in req.cases if not is_augment_case(c))
+        if invalid:
+            raise InvalidInputError(
+                "run-validation only supports the augment cases "
+                f"{', '.join(AUGMENT_CASE_CODES)}; got unsupported: "
+                f"{', '.join(invalid)}"
+            )
+    result = await client.run_consistency_validation(
+        source_match_set_id,
+        actor=ctx.actor,
+        cases=req.cases,
+    )
+    await client.record_audit_event(
+        action="consistency.run_validation",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="failed" if result.failed_count else "succeeded",
+        payload={
+            "cases": list(req.cases) if req.cases else None,
+            "skipped": result.skipped_count,
+            "failed": result.failed_count,
+            "runnable": result.runnable_count,
+            "revalidated": list(result.revalidated_case_codes),
+        },
+        resource_type="source_match_set",
+        resource_id=source_match_set_id,
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.get(
