@@ -6,6 +6,12 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from kortravelgeo.core.source_layers import (
+    DETAIL_DONG_ENTRANCE_LAYER as DETAIL_DONG_ENTRANCE_LAYER,
+)
+from kortravelgeo.core.source_layers import (
+    DETAIL_DONG_POLYGON_LAYER as DETAIL_DONG_POLYGON_LAYER,
+)
 from kortravelgeo.exceptions import LoaderError
 from kortravelgeo.loaders.shape_dbf import (
     KeyOverlap,
@@ -18,8 +24,9 @@ from kortravelgeo.loaders.shape_dbf import (
     zip_layer_summary,
 )
 
-DETAIL_DONG_POLYGON_LAYER = "TL_SGCO_RNADR_DONG"
-DETAIL_DONG_ENTRANCE_LAYER = "TL_SPBD_ENTRC_DONG"
+# DETAIL_DONG_POLYGON_LAYER and DETAIL_DONG_ENTRANCE_LAYER are re-exported from
+# kortravelgeo.core.source_layers (single source of truth) so
+# core.source_validation can reference them without importing this loader.
 ELECTRONIC_BUILDING_LAYER = "TL_SPBD_BULD"
 
 DETAIL_DONG_BUILDING_KEY_FIELDS: tuple[str, ...] = ("BD_MGT_SN", "EQB_MAN_SN")

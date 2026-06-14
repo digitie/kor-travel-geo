@@ -27,6 +27,7 @@ from kortravelgeo.api.security import (
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.normalize import parse_address
 from kortravelgeo.core.source_categories import CATEGORY_CATALOG
+from kortravelgeo.core.source_validation import GroupValidation
 from kortravelgeo.dto.admin import (
     AuditEvent,
     BackupAllowedDirs,
@@ -72,8 +73,11 @@ from kortravelgeo.dto.admin import (
     UploadSidoZipResponse,
 )
 from kortravelgeo.dto.source import (
+    GroupValidationResult,
     MultipartCompleteRequest,
     MultipartInitiateResponse,
+    RegisterRequest,
+    RegisterResponse,
     SlotReplaceResponse,
     SourceFileCategoryCatalog,
     SourceFileCategoryInfo,
@@ -99,6 +103,7 @@ from kortravelgeo.infra.rustfs import (
     require_enabled_rustfs,
     save_rustfs_config,
 )
+from kortravelgeo.infra.source_group_service import RegisterContext
 from kortravelgeo.infra.source_upload_repo import should_fail_storage_state
 from kortravelgeo.infra.uploads import (
     import_rustfs_prefix_as_upload_set,
@@ -624,6 +629,137 @@ async def upload_session_events(
             await asyncio.sleep(2)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# --- Registry register + validate (T-203b) --------------------------------
+# DEFERRED to T-203c: janitor (expires/registration_deadline), soft-delete/restore.
+
+
+@router.post(
+    "/source-files/upload-sessions/{upload_session_id}/register",
+    response_model=RegisterResponse,
+    response_model_exclude_none=True,
+)
+async def register_upload_session(
+    upload_session_id: str,
+    req: RegisterRequest,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RegisterResponse:
+    """Register a completed upload session into the source registry (doc ~1347).
+
+    Head-verifies each completed slot object (size/etag), builds the structure
+    decision from slot coverage, and creates the group + child files in one DB
+    transaction. Storage-first: a DB failure leaves the objects in place and the
+    same session can ``register`` again (``failed_register``).
+    """
+    session = await client.get_upload_session(upload_session_id)
+    if req.confirm_user_yyyymm != session.user_yyyymm:
+        msg = "confirm_user_yyyymm이 세션 user_yyyymm과 다릅니다 (기준년월 수정 아님)"
+        raise InvalidInputError(msg)
+    settings = get_settings()
+    config = require_enabled_rustfs(settings) if session.storage_kind == "rustfs" else None
+    rustfs = RustfsClient(config) if config is not None else None
+
+    contexts: list[RegisterContext] = []
+    completed_keys: list[str] = []
+    for slot in session.file_slots:
+        parts = await client.upload_session_slot_parts(
+            session.upload_session_id, part_key=slot.part_key
+        )
+        completed = [p for p in parts if p.completed_at is not None]
+        if not completed:
+            if slot.required:
+                msg = f"필수 slot 미완료: {slot.part_key}"
+                raise InvalidInputError(msg)
+            continue
+        object_key = _slot_object_key(config.prefix if config else "", session, slot.slot)
+        sha256 = next((p.part_sha256 for p in completed if p.part_sha256), None)
+        size_bytes = sum(p.received_bytes for p in completed)
+        object_etag = next((p.part_etag for p in completed if p.part_etag), None)
+        if rustfs is not None:
+            head = await rustfs.head_object(object_key)
+            object_etag = head.etag or object_etag
+            if head.size:
+                size_bytes = head.size
+            if sha256 is None:
+                # No streamed hash recorded → compute once from the object body.
+                sha256 = head.metadata.get("ktg-sha256") or await rustfs.compute_sha256(object_key)
+        if sha256 is None:
+            msg = f"slot {slot.part_key}의 SHA-256을 확인할 수 없습니다"
+            raise InvalidInputError(msg)
+        completed_keys.append(slot.part_key)
+        contexts.append(
+            RegisterContext(
+                part_key=slot.part_key,
+                part_kind=slot.part_kind,
+                part_label=slot.part_label,
+                original_filename=f"{slot.part_label or slot.part_key}",
+                sha256=sha256,
+                size_bytes=size_bytes,
+                object_key=object_key,
+                object_etag=object_etag,
+                compression_format="zip",
+            )
+        )
+
+    structure_validation = _coverage_structure_validation(
+        category=session.category,
+        group_kind=session.group_kind,
+        present_part_keys=tuple(completed_keys),
+    )
+    try:
+        response = await client.register_source_group(
+            session_id=session.upload_session_id,
+            contexts=tuple(contexts),
+            structure_validation=structure_validation,
+            storage_kind=session.storage_kind,
+            bucket=config.bucket if config else None,
+            actor=ctx.actor,
+            yyyymm_mismatch_ack=req.yyyymm_mismatch_ack,
+            display_name=req.display_name,
+        )
+    except Exception:
+        await client.update_upload_session_state(
+            session.upload_session_id,
+            state="failed_register",
+            error_message="registry 등록 실패 (재시도 가능)",
+        )
+        raise
+    return response
+
+
+@router.post(
+    "/source-file-groups/{source_file_group_id}/validate",
+    response_model=GroupValidationResult,
+    response_model_exclude_none=True,
+)
+async def validate_source_file_group(
+    source_file_group_id: str,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> GroupValidationResult:
+    """Re-run the archive structure validator over a registered group (doc ~1318).
+
+    Materializing archive internals needs GDAL/zip and is gated for live use; the
+    pure decision logic and the recompute it drives are exercised in unit tests.
+    """
+    result = await client.revalidate_source_file_group(
+        source_file_group_id, actor=ctx.actor
+    )
+    await client.record_audit_event(
+        action="source.group_validate",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.validation_state,
+        payload={"category": result.category},
+        resource_type="source_file_group",
+        resource_id=source_file_group_id,
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.get(
@@ -1500,6 +1636,34 @@ async def _read_upload_body(request: Request, max_bytes: int) -> bytes:
             msg = f"upload part exceeds {max_bytes} bytes limit"
             raise InvalidInputError(msg)
     return bytes(buffer)
+
+
+def _coverage_structure_validation(
+    *,
+    category: str,
+    group_kind: str,
+    present_part_keys: tuple[str, ...],
+) -> GroupValidation:
+    """Coverage-level structure decision used at register time (T-203b).
+
+    Register works storage-first and does not materialize archive internals, so
+    it decides on slot *coverage* (which expected parts arrived). The dedicated
+    ``POST /source-file-groups/{id}/validate`` re-runs the full member-level
+    validator over materialized archives. Both share the pure decision logic in
+    ``core.source_validation``.
+    """
+    from kortravelgeo.core.source_validation import (
+        GroupManifest,
+        PartManifest,
+        validate_group_manifest,
+    )
+
+    manifest = GroupManifest(
+        category=category,
+        group_kind=group_kind,  # type: ignore[arg-type]
+        parts=tuple(PartManifest(part_key=key) for key in present_part_keys),
+    )
+    return validate_group_manifest(manifest)
 
 
 def _progress_event(session: UploadSessionStatus) -> SourceUploadProgressEvent:

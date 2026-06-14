@@ -1,0 +1,62 @@
+"""T-203b: GDAL-free member-manifest extraction adapter + end-to-end validate.
+
+Builds a real ZIP / directory on disk and checks ``scan_part_manifest`` collapses
+SHP sidecars into one layer member, then drives the pure validator through it.
+"""
+
+from __future__ import annotations
+
+import zipfile
+from typing import TYPE_CHECKING
+
+from kortravelgeo.core.source_validation import validate_group_manifest
+from kortravelgeo.infra.source_member_scan import (
+    scan_group_manifest,
+    scan_part_manifest,
+)
+from kortravelgeo.loaders.juso_map import MASTER_LAYER_NAMES
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _write_electronic_map_zip(path: Path) -> None:
+    with zipfile.ZipFile(path, "w") as zf:
+        for layer in MASTER_LAYER_NAMES:
+            for ext in (".shp", ".shx", ".dbf", ".prj"):
+                zf.writestr(f"11000/{layer}{ext}", b"x")
+
+
+def test_scan_collapses_shp_sidecars_into_one_layer(tmp_path: Path) -> None:
+    archive = tmp_path / "seoul.zip"
+    _write_electronic_map_zip(archive)
+    part = scan_part_manifest(archive, part_key="11")
+    layers = part.layer_names()
+    assert layers == set(MASTER_LAYER_NAMES)
+    a_layer = next(m for m in part.members if m.layer_name == "TL_SPBD_BULD")
+    assert {".shp", ".shx", ".dbf", ".prj"} <= a_layer.suffixes
+
+
+def test_scan_dir_input_lists_files(tmp_path: Path) -> None:
+    root = tmp_path / "extracted"
+    (root / "sub").mkdir(parents=True)
+    (root / "sub" / "rnaddrkor_11.txt").write_text("x", encoding="utf-8")
+    part = scan_part_manifest(root, part_key="archive")
+    assert any(m.member_path.endswith("rnaddrkor_11.txt") for m in part.members)
+
+
+def test_scan_group_then_validate_passes(tmp_path: Path) -> None:
+    parts: dict[str, Path] = {}
+    for code in ("11", "26"):
+        archive = tmp_path / f"{code}.zip"
+        _write_electronic_map_zip(archive)
+        parts[code] = archive
+    manifest = scan_group_manifest(
+        category="electronic_map_full", group_kind="multi_part", parts=parts
+    )
+    # only 2 of 17 sido parts present → coverage failure, but the present parts
+    # themselves pass their 11-layer structure check.
+    result = validate_group_manifest(manifest)
+    assert result.coverage["11"] == "present"
+    assert result.coverage["41"] == "missing"
+    assert result.outcome == "failed"  # missing sido coverage

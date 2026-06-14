@@ -358,6 +358,73 @@ class SourceUploadProgressEvent(FrozenModel):
     log_tail: str | None = None
 
 
+# --- Registry register / validate (T-203b) --------------------------------
+# Shapes for ``POST .../upload-sessions/{id}/register`` and
+# ``POST .../source-file-groups/{id}/validate`` (doc "Registry 등록 승인" ~1347
+# and "카테고리별 기대 구조" ~868).
+
+
+class RegisterRequest(FrozenModel):
+    """``POST .../upload-sessions/{id}/register`` body (doc lines ~1355-1364).
+
+    ``confirm_user_yyyymm`` must equal the session ``user_yyyymm`` (the server
+    never reinterprets it as a month edit). When the inferred month differs,
+    ``yyyymm_mismatch_ack=true`` is required.
+    """
+
+    confirm_user_yyyymm: str = Field(pattern=r"^\d{6}$")
+    display_name: str | None = None
+    yyyymm_mismatch_ack: bool = False
+    registration_note: str | None = None
+
+
+class SourceFileRegistered(FrozenModel):
+    """One ``ops.source_files`` row created by register (doc lines ~1376-1384)."""
+
+    source_file_id: str
+    original_filename: str
+    part_kind: SourceFilePartKind = "single"
+    part_key: str = "archive"
+    sha256: str = Field(min_length=64, max_length=64)
+    size_bytes: int = Field(ge=0)
+    storage_uri: str
+    object_key: str | None = None
+    bucket: str | None = None
+    state: SourceFileState
+    duplicate_of_file_id: str | None = None
+
+
+class RegisterResponse(FrozenModel):
+    """``register`` success body (doc lines ~1368-1385)."""
+
+    source_file_group_id: str
+    category: SourceFileCategory
+    group_kind: SourceGroupKind
+    state: SourceGroupState
+    validation_state: SourceValidationState
+    user_yyyymm: str = Field(pattern=r"^\d{6}$")
+    group_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    files: tuple[SourceFileRegistered, ...] = ()
+    duplicate_warning: bool = False
+    duplicate_of_group_id: str | None = None
+
+
+class GroupValidationResult(FrozenModel):
+    """``POST .../source-file-groups/{id}/validate`` response.
+
+    The structure-validation outcome that recompute folds into the group's
+    ``validation_state`` and ``coverage`` (doc "source_file_validations").
+    """
+
+    source_file_group_id: str
+    category: SourceFileCategory
+    validation_state: SourceValidationState
+    state: SourceGroupState
+    coverage: dict[str, str] = Field(default_factory=dict)
+    reasons: tuple[str, ...] = ()
+    validator_version: str
+
+
 class SourceMatchSet(FrozenModel):
     """Top-level combination of source groups used for rebuild or validation."""
 

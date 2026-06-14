@@ -6,6 +6,15 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from kortravelgeo.core.source_layers import (
+    ADDRESS_BUNDLE_LAYER as ADDRESS_BUNDLE_LAYER,
+)
+from kortravelgeo.core.source_layers import (
+    BUNDLE_CONNECTION_LAYER as BUNDLE_CONNECTION_LAYER,
+)
+from kortravelgeo.core.source_layers import (
+    BUNDLE_ENTRANCE_LAYER as BUNDLE_ENTRANCE_LAYER,
+)
 from kortravelgeo.loaders.juso_map import discover_sido_dataset
 from kortravelgeo.loaders.shape_dbf import (
     DbfKeySet,
@@ -20,9 +29,9 @@ from kortravelgeo.loaders.shape_dbf import (
     zip_layer_summary,
 )
 
-ADDRESS_BUNDLE_LAYER = "TL_SGCO_RNADR_MST"
-BUNDLE_ENTRANCE_LAYER = "TL_SPBD_ENTRC"
-BUNDLE_CONNECTION_LAYER = "TL_SPOT_CNTC"
+# ADDRESS_BUNDLE_LAYER, BUNDLE_ENTRANCE_LAYER and BUNDLE_CONNECTION_LAYER are
+# re-exported from kortravelgeo.core.source_layers (single source of truth) so
+# core.source_validation can reference them without importing this loader.
 ELECTRONIC_BUILDING_LAYER = "TL_SPBD_BULD"
 ELECTRONIC_ENTRANCE_LAYER = "TL_SPBD_ENTRC"
 

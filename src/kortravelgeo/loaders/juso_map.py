@@ -6,21 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from struct import unpack
 
-from kortravelgeo.exceptions import LoaderError
-
-MASTER_LAYER_NAMES: tuple[str, ...] = (
-    "TL_SCCO_CTPRVN",
-    "TL_SCCO_SIG",
-    "TL_SCCO_EMD",
-    "TL_SCCO_LI",
-    "TL_KODIS_BAS",
-    "TL_SPRD_MANAGE",
-    "TL_SPRD_INTRVL",
-    "TL_SPRD_RW",
-    "TL_SPBD_EQB",
-    "TL_SPBD_BULD",
-    "TL_SPBD_ENTRC",
+# MASTER_LAYER_NAMES is re-exported from kortravelgeo.core.source_layers (single
+# source of truth) so core.source_validation can reference it without importing
+# this loader. The redundant alias marks it as an explicit re-export for mypy so
+# existing ``loaders.juso_map.MASTER_LAYER_NAMES`` references keep working.
+from kortravelgeo.core.source_layers import (
+    MASTER_LAYER_NAMES as MASTER_LAYER_NAMES,
 )
+from kortravelgeo.exceptions import LoaderError
 
 
 @dataclass(frozen=True)

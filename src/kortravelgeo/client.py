@@ -15,6 +15,7 @@ from .core.poboxer import pobox as core_pobox
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
 from .core.source_categories import CATEGORY_CATALOG
+from .core.source_validation import GroupValidation
 from .core.v2 import (
     geocode_v2_from_geometry_lookups,
     geocode_v2_from_search,
@@ -59,6 +60,8 @@ from .dto.region import RegionHint
 from .dto.reverse import ReverseResponse, ReverseType
 from .dto.search import SearchResponse, SearchType
 from .dto.source import (
+    GroupValidationResult,
+    RegisterResponse,
     SourceFileCategoryInfo,
     UploadSessionCreateRequest,
     UploadSessionPartStatus,
@@ -89,6 +92,10 @@ from .infra.hotswap import inspect_restore_hot_swap_plan
 from .infra.pobox_repo import PoboxRepository
 from .infra.reverse_repo import ReverseRepository
 from .infra.search_repo import SearchRepository
+from .infra.source_group_service import (
+    RegisterContext,
+    SourceGroupRegistrar,
+)
 from .infra.source_upload_repo import (
     SessionCreateResult,
     SourceUploadSessionRepository,
@@ -689,6 +696,77 @@ class AsyncAddressClient:
     ) -> tuple[UploadSessionPartStatus, ...]:
         return await SourceUploadSessionRepository(self._engine()).slot_parts(
             session_id, part_key=part_key
+        )
+
+    async def register_source_group(
+        self,
+        *,
+        session_id: str,
+        contexts: tuple[RegisterContext, ...],
+        structure_validation: GroupValidation,
+        storage_kind: str,
+        bucket: str | None,
+        actor: str | None,
+        yyyymm_mismatch_ack: bool,
+        display_name: str | None = None,
+    ) -> RegisterResponse:
+        """Register a completed upload session into the source registry (T-203b)."""
+        return await SourceGroupRegistrar(self._engine()).register(
+            session_id=session_id,
+            contexts=contexts,
+            structure_validation=structure_validation,
+            storage_kind=storage_kind,
+            bucket=bucket,
+            actor=actor,
+            yyyymm_mismatch_ack=yyyymm_mismatch_ack,
+            display_name=display_name,
+        )
+
+    async def revalidate_source_file_group(
+        self,
+        source_file_group_id: str,
+        *,
+        actor: str | None,
+    ) -> GroupValidationResult:
+        """Re-run the archive structure validator over a registered group.
+
+        Materializes each child archive from RustFS to a temp dir, scans member
+        manifests (GDAL-free zip/dir listing), decides pass/warning/failed, then
+        persists the decision + recompute in one transaction.
+        """
+        import tempfile
+        from pathlib import Path
+
+        from .exceptions import NotFoundError
+        from .infra.rustfs import RustfsClient, require_enabled_rustfs
+        from .infra.source_group_service import revalidate_group
+        from .infra.source_member_scan import scan_group_manifest
+        from .infra.source_upload_repo import source_group_children
+
+        children = await source_group_children(self._engine(), source_file_group_id)
+        if not children:
+            raise NotFoundError(f"source file group not found: {source_file_group_id}")
+        category = children[0].category
+        group_kind = children[0].group_kind
+        config = require_enabled_rustfs(self.settings)
+        rustfs = RustfsClient(config)
+        decision: GroupValidation
+        with tempfile.TemporaryDirectory(prefix="ktg-revalidate-") as tmp:
+            parts: dict[str, Path] = {}
+            for child in children:
+                if not child.object_key:
+                    continue
+                dest = Path(tmp) / child.part_key / child.original_filename
+                await rustfs.download_file(child.object_key, dest)
+                parts[child.part_key] = dest
+            from .core.source_validation import validate_group_manifest
+
+            manifest = scan_group_manifest(
+                category=category, group_kind=group_kind, parts=parts
+            )
+            decision = validate_group_manifest(manifest)
+        return await revalidate_group(
+            self._engine(), source_file_group_id, decision=decision, actor=actor
         )
 
     async def list_dataset_snapshots(
