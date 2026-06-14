@@ -342,7 +342,7 @@ CREATE INDEX idx_ops_source_file_groups_incomplete
 
 group `state`는 child file 상태를 집계한 운영 상태다. `available`은 모든 required child file이 `available`이고 group validation이 `passed` 또는 `warning`일 때만 허용한다. child 중 하나라도 `missing`, `quarantined`, `delete_failed`가 되면 group도 같은 계열 상태로 전환하고, 이를 참조하는 비-active `validated` match set은 `invalid`로, active match set은 `state='active'` 유지 + `integrity_alert=true`로 표시한다(`draft`/`restored_from_backup` 같은 pre-hash 상태는 hash를 요구하는 `invalid`로 가지 않고 유지 — 아래 match set 상태 전이 규칙).
 
-group 파생값(`state`, `validation_state`, `actual_file_count`, `coverage`, `group_sha256`)과 참조 match set 전파는 `recompute_group_aggregates(source_file_group_id)` service 한 곳에서만 계산한다. `register`, reconciliation resolve, child soft/hard-delete, `restore`, `revalidate`, validator version 변경에 따른 재검증은 같은 DB transaction 안에서 이 service를 호출해야 한다. 이 service는 하향 전파(group bad -> 비-active `validated`는 `invalid`, active는 `integrity_alert=true`; `draft`/`restored_from_backup` pre-hash 상태는 유지)와 상향 전파(group recovered -> `invalid`를 `revalidatable`로 표시, active는 다음 `validate`에서 `integrity_alert=false` 후보 표시)를 모두 담당한다. raw SQL repository에 두고, JobQueue 단일 worker 가정에 기대지 않는다.
+group 파생값(`state`, `validation_state`, `actual_file_count`, `coverage`, `group_sha256`)과 참조 match set 전파는 `recompute_group_aggregates(source_file_group_id)` service 한 곳에서만 계산한다. `register`, reconciliation resolve, child soft/hard-delete, `restore`, `revalidate`, validator version 변경에 따른 재검증은 같은 DB transaction 안에서 이 service를 호출해야 한다. 이 service는 하향 전파(group bad -> 비-active `validated`는 `invalid`, active는 `integrity_alert=true`; `draft`/`restored_from_backup` pre-hash 상태는 유지)와 상향 전파(group recovered -> 비-active `invalid`는 `revalidatable`로 표시; `restored_from_backup`은 모든 참조 group이 `available`가 되면 canonical `source_set_hash`를 먼저 산출한 뒤 `revalidatable`로 전이[M-A 옵션2, 상세는 match set 상태 전이 규칙·`restored_from_backup` 생성 절차]; active는 다음 `validate`에서 `integrity_alert=false` 후보 표시)를 모두 담당한다. restore 직후 object 재연결로 모든 참조 group이 `available`가 되는 같은 transaction에서 이 service가 위 match set 전파(선-hash 산출 포함)를 소유·실행한다. raw SQL repository에 두고, JobQueue 단일 worker 가정에 기대지 않는다.
 
 ### `ops.source_files`
 
@@ -1926,10 +1926,10 @@ restore entrypoint별 source 검증:
 - match set CRUD
 - profile required/recommended/optional validation
 - omission flag
-- activate atomic swap, `invalid -> revalidatable -> validated/active` 복구 전이
+- activate atomic swap, `invalid`·`restored_from_backup` -> `revalidatable` -> `validated` 복구 전이(`restored_from_backup`은 `revalidatable` 진입 전 canonical `source_set_hash` 선산출; active 승격은 별도 `activate` atomic swap이며 `revalidatable`에서 직접 불가)
 - active/current display
 - active match set 무결성 결손을 `integrity_alert`(state='active' 유지)로 표시(serving 장애 아님), 비-active `validated`는 `invalid`로 전환(`draft`/`restored_from_backup` pre-hash는 유지)
-- `recompute_group_aggregates()`의 양방향 전파: 결손 시 invalid/alert, 복구 시 revalidatable/alert 해제 후보
+- `recompute_group_aggregates()`의 양방향 전파: 결손 시 (비-active validated)`invalid` / (active)`integrity_alert`(`draft`·`restored_from_backup` pre-hash 유지), 복구 시 (`invalid`·`restored_from_backup`)→`revalidatable`(`restored_from_backup`은 선-hash 산출) / active `integrity_alert` 해제 후보
 - 기존 full load batch payload 조립 bridge
 - rebuild 전역 advisory lock, stale running job 마감, consistency ERROR 승격 gate
 - rollback atomic source display 전이와 forced promotion audit 범위
@@ -2054,7 +2054,7 @@ restore entrypoint별 source 검증:
 20. `soft_deleted` group restore → RustFS head/hash 검증 후 `validating -> available` 또는 `missing/quarantined`
 21. registration deadline 경과 object → `registration_expired` issue로 표시되고 자동 삭제되지 않음
 22. restore hot-swap 직후 quick reconcile → source object 결손이면 active serving 유지 + 재구성 불가 경고
-23. `restored_from_backup` stub 재연결 → `unknown` 상태로 available 불가, validate 후 `validated`
+23. `restored_from_backup` stub 재연결 → group/file은 `unknown` 상태로 available 불가(`missing` → `validating` → `available`), 모든 필수 group이 `available`이면 canonical `source_set_hash` 선산출 후 match set `restored_from_backup` → `revalidatable` → `validate` → `validated`
 
 실제 자료 선택형 테스트는 `KTG_SLOW_REAL_DATA=1`일 때만 실행한다.
 

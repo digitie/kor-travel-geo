@@ -2,6 +2,18 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 최종 정합성 sweep — 최적안 반영)
+
+**작업**: head ab38693에 대해 정합성 sweep(상태머신 + t109↔ADR-049/050↔tasks.md 교차)을 한 번 더 돌려, 확정된 7건(0 기각) 중 doc-정합 항목을 각각 최적안으로 반영했다. 직전 M-A 옵션2 전파 이후 단일 출처(recompute 계약·ADR·테스트)에 restored_from_backup 복구 경로가 일부 누락돼 있던 것을 통일했다.
+
+**반영**:
+- recompute_group_aggregates 상향 전파 계약(L345)에 `restored_from_backup → revalidatable`(선-hash 산출)과 **이 전이의 소유자(=recompute, restore 같은 transaction)**를 명시. 요약(L1932)·구현 순서 4단계(L1929)도 동일하게 보강.
+- 통합 테스트 #23(L2057)을 정본 시퀀스(group/file `missing→validating→available`, match set `restored_from_backup→revalidatable→validate→validated`, 선-hash)로 정정.
+- ADR-049 결정12를 "invalid는 비-active 중 `validated`만(pre-hash 제외), revalidatable은 invalid·restored_from_backup(선-hash 후)"로 본문/결정14와 정합화.
+- tasks.md T-204 `issue_type` 개수 11→**12**, 약식 `group_incomplete`→`source_file_group_incomplete`로 정본 표와 일치.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인. H/블로커 0건, 잔여는 운영 hardening(구현 PR 이관)뿐.
+
 ## 2026-06-14 (PR #131 코멘트 반영 — M-A 옵션2 전파 / M-B / L-A 마무리)
 
 **작업**: PR #131 코멘트(issuecomment, head b85e0d5 리뷰)의 M-A/M-B/L-A를 `docs/t109-backup-source-upload-management.md`·`docs/tasks.md`에 반영했다. M-A 옵션 2(restored_from_backup→revalidatable 진입 전 hash 선산출)를 택했으면서 일부 문구가 "비-active=invalid"로 일반화돼 남아 있던 것을 전 문서에 통일했다.
