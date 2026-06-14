@@ -2,6 +2,16 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-109 추가 결정 2건 — 자동탐지 제거 / epost 수동 server-fetch)
+
+**작업**: 사용자 결정 2건을 `docs/t109-backup-source-upload-management.md`에 반영했다.
+
+**반영**:
+- **자동탐지(`guess_source_kind`) 제거**: "충돌 지점 #1"을 "호환 유지" migration에서 **자동탐지 기능 제거 + 명시 category 업로드 단일화**로 변경했다. source kind는 추정하지 않고 사용자가 고른 category에서 결정론적으로 전개한다. 기존 `/v1/admin/uploads` upload set 흐름은 폐기하고 `/v1/admin/source-files/upload-sessions`로 단일화(admin breaking change, OpenAPI/DTO/CLI/changelog 명시). 요구사항 매트릭스 #1도 갱신했다. 서비스 전이라 호환 alias를 쌓지 않는다.
+- **epost 우편번호 자료 수동 server-fetch**: `epost_pobox_full`/`epost_bulk_full`을 "epost 받기" 클릭 → 서버측 다운로드 → RustFS register → `pobox_load`/`bulk_load`로 DB 반영 → 우편번호 검증, 의 별도 수동 흐름으로 정리했다("epost 우편번호 자료" 절 신설). 우편번호는 보조 자료라 `source_match_set` 핵심 rebuild에는 넣지 않고 독립 적재한다. 이 server-fetch는 "자동 다운로드 제외"의 명시적 예외(사용자 클릭 트리거 전용, 자동·스케줄 없음)임을 범위 절에 명시했다.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
 ## 2026-06-14 (PR #131 시나리오 누락 집중 리뷰 반영)
 
 **작업**: PR #131의 최신 conversation comment `IC_kwDOSW_crs8AAAABGCujRg`를 확인했다. review thread는 여전히 0건이고, 새 코멘트는 head `281bc82` 기준 end-to-end 운영 시나리오 누락 집중 리뷰였다.
