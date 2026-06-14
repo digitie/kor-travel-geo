@@ -9,6 +9,21 @@
 
 > **작업 순서·번호 체계(ADR-050)**: ① 데이터 원천 보강·검증(**T-110~**) → ② 데이터 적재/백업 기능 구현·검증(**T-200~**) → (최하위 우선순위) v2 재audit(**T-105**) · v1 vworld 100% 호환(**T-106**). 원천 보강은 T-110부터 1씩, 적재/백업은 T-200부터 1씩 올리고, 중간에 추가되는 작업은 각각 T-1xx / T-2xx 번호로 채운다. T-105/T-106은 ID는 낮지만 우선순위는 **최하위**다. **T-109(이 PR #131)는 ②의 설계 문서이며, 구현은 아래 T-200대로 분할한다.** phase ① prototype은 `ops.source_*` registry 없이 로컬 디스크 경로로 독립 수행하고(역의존 금지), phase ②가 그 결과(C11~C17·go/no-go)를 DB case registry로 정식화한다. 단위별 상세 scope·의존성·근거는 ADR-050과 `docs/t109-backup-source-upload-management.md`의 구현 순서 절에 있다.
 
+### 두 에이전트 병행 권장 순서
+
+두 에이전트가 동시에 진행할 때는 **Agent A = 데이터 원천 보강·검증 owner**, **Agent B = source registry/upload/reconcile/match-set 기반 owner**로 나눈다. Agent B는 `T-206`을 `T-118` 확정 전에는 착수하지 않는다.
+
+1. 1차 병행
+   - Agent A: `T-110` → `T-111` → `T-112` → `T-113` → `T-114` → `T-115` → `T-116` → `T-117` → `T-118`
+   - Agent B: `T-200` → `T-202` → `T-201` → `T-203` → `T-204` → `T-205`
+2. 2차 합류
+   - Agent A: `T-206`의 C11~C17 registry seed·metric mapping 지원 → `T-121` → `T-122` → `T-123`
+   - Agent B: `T-206` backend registry/API/run-validation 뼈대 → `T-207` → `T-208` → `T-209`
+3. 최종 검증·운영 보강
+   - Agent A+B: `T-210`
+   - Agent B 중심: `T-211` → `T-212` → `T-213` → `T-214` → `T-215`
+   - Agent A: `T-119`는 `T-118` ADR 승인 시에만 별도 진행하고, 승인되지 않으면 검증 전용 결론을 유지한다.
+
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
 - T-110 보강 검증 공통 harness — 시도 17개 group 순회 driver + SHP point/polyline geometry reader(현 `shape_dbf.py`는 DBF만 읽고 SHP body 미파싱) + staging COPY helper + PostGIS `ST_Distance`/`ST_Covers` 측정 + 공통 `AugmentReport`(used/skipped/failed+sample+metric). PostGIS 의존 테스트는 WSL ext4 미러 DB(15434)에서만 도는 `KTG_SLOW_REAL_DATA` 게이트로 CI 분리. 기존 `building_shape_bundle.py`/`extra_shape_layers.py` 재사용, 중복 구현 금지. (의존: —)
