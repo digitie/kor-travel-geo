@@ -37,6 +37,8 @@
 
 TXT 자체에는 좌표가 없다. 따라서 C13의 `ST_Covers` containment는 상세주소 동 polygon이 같은 `SIG_CD + BUL_MAN_NO`를 가진 상세주소 동 출입구 point를 덮는지 측정한다. 상세주소DB는 containment 대상 geometry가 아니라, polygon 집합이 상세주소 행과 얼마나 연결되는지 판단하는 key context로 사용한다.
 
+동/층/호 일련번호와 건물 본번/부번은 파서 단계에서 unsigned integer text로 검증하고 leading zero는 DB `bigint`/`integer` join에 맞춰 canonical decimal text로 정규화한다. 숫자가 아닌 값은 `COPY`까지 흘리지 않고 `member:line` 문맥을 가진 `LoaderError`로 실패시킨다. `road_name_no`는 상세주소 DB의 `road_name_cd`에서 앞 5자리 시군구 코드를 제외한 도로명 일련번호로 파생한다.
+
 ## 구현
 
 추가 모듈:

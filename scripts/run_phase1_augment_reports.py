@@ -209,6 +209,8 @@ async def run_phase1_reports(
         materialize_navi_7z=materialize_navi_7z,
     )
     case_runs: list[CaseRun] = []
+    # C11~C17 staging table names are fixed by design; keep this loop sequential.
+    # A future parallel runner must suffix staging tables with a run/case id.
     for case_id in cases:
         print(f"[{case_id}] 시작", flush=True)
         case_started = time.perf_counter()
@@ -505,16 +507,19 @@ async def run_phase1_case(
         )
         finally:
             await drop_c16_address_building_staging_tables(engine)
-    try:
-        return await build_c17_navi_jibun_coverage_report(
-            engine,
-            source_plan.c17_navi_path,
-            source_yyyymm=source_plan.source_yyyymm(case_id),
-            sample_limit=sample_limit,
-            limit_per_member=c17_limit_per_member,
-        )
-    finally:
-        await drop_c17_navi_jibun_staging_tables(engine)
+    if case_id == "C17":
+        try:
+            return await build_c17_navi_jibun_coverage_report(
+                engine,
+                source_plan.c17_navi_path,
+                source_yyyymm=source_plan.source_yyyymm(case_id),
+                sample_limit=sample_limit,
+                limit_per_member=c17_limit_per_member,
+            )
+        finally:
+            await drop_c17_navi_jibun_staging_tables(engine)
+    msg = f"unsupported phase-1 augment case: {case_id}"
+    raise ValueError(msg)
 
 
 def materialize_electronic_map_zips(

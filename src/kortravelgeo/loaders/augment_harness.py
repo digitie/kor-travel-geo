@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Literal
+from typing import IO, Literal
 
 import psycopg
 from sqlalchemy import text
@@ -319,7 +319,37 @@ def build_augment_report(
 
 def iter_shp_geometries(path: Path | str) -> Iterator[ShapeGeometry]:
     shp_path = Path(path)
-    yield from iter_shp_geometries_from_bytes(shp_path.read_bytes(), source_name=str(shp_path))
+    with shp_path.open("rb") as file:
+        yield from iter_shp_geometries_from_stream(file, source_name=str(shp_path))
+
+
+def iter_shp_geometries_from_stream(
+    file: IO[bytes],
+    *,
+    source_name: str = "<stream>",
+) -> Iterator[ShapeGeometry]:
+    header = _read_exact(file, 100, source_name=source_name, detail="SHP header")
+    file_code = struct.unpack(">i", header[0:4])[0]
+    if file_code != 9994:
+        msg = f"invalid SHP file code for {source_name}: {file_code}"
+        raise LoaderError(msg)
+
+    while True:
+        record_header = file.read(8)
+        if not record_header:
+            return
+        if len(record_header) != 8:
+            msg = f"truncated SHP record header in {source_name}"
+            raise LoaderError(msg)
+        record_number, content_words = struct.unpack(">2i", record_header)
+        content_length = content_words * 2
+        content = _read_exact(
+            file,
+            content_length,
+            source_name=source_name,
+            detail=f"SHP record {record_number}",
+        )
+        yield _parse_shape_record(record_number, content, source_name=source_name)
 
 
 def iter_shp_geometries_from_bytes(
@@ -361,14 +391,65 @@ def iter_shape_features(
 ) -> Iterator[ShapeFeature]:
     shp = Path(shp_path)
     dbf = Path(dbf_path)
-    yield from iter_shape_features_from_buffers(
-        shp.read_bytes(),
-        dbf.read_bytes(),
-        fields=fields,
-        encoding=encoding,
+    with shp.open("rb") as shp_file, dbf.open("rb") as dbf_file:
+        yield from iter_shape_features_from_streams(
+            shp_file,
+            dbf_file,
+            fields=fields,
+            encoding=encoding,
+            field_name_encoding=field_name_encoding,
+            source_name=str(shp),
+        )
+
+
+def iter_shape_features_from_streams(
+    shp_file: IO[bytes],
+    dbf_file: IO[bytes],
+    *,
+    fields: Sequence[str] | None = None,
+    encoding: str = "cp949",
+    field_name_encoding: str = "ascii",
+    source_name: str = "<stream>",
+) -> Iterator[ShapeFeature]:
+    layout = _read_dbf_layout(
+        dbf_file,
+        source_name=source_name,
         field_name_encoding=field_name_encoding,
-        source_name=str(shp),
     )
+    selected = tuple(fields) if fields is not None else tuple(field.name for field in layout.fields)
+    offsets = _dbf_offsets(layout, selected)
+    geometries = iter_shp_geometries_from_stream(shp_file, source_name=source_name)
+    seen_records = 0
+    for index, geometry in enumerate(geometries):
+        if index >= layout.row_count:
+            msg = f"SHP has more records than DBF in {source_name}"
+            raise LoaderError(msg)
+        record = _read_exact(
+            dbf_file,
+            layout.record_length,
+            source_name=source_name,
+            detail=f"DBF record {index + 1}",
+        )
+        seen_records += 1
+        if record[:1] == b"*":
+            continue
+        yield ShapeFeature(
+            record_number=geometry.record_number,
+            attributes={
+                field: _decode_dbf_value(
+                    record[offset : offset + length],
+                    encoding=encoding,
+                    source_name=source_name,
+                    field_name=field,
+                    record_number=geometry.record_number,
+                )
+                for field, (offset, length) in offsets.items()
+            },
+            geometry=geometry,
+        )
+    if seen_records != layout.row_count:
+        msg = f"DBF has more records than SHP in {source_name}"
+        raise LoaderError(msg)
 
 
 def iter_zip_shape_features(
@@ -381,16 +462,17 @@ def iter_zip_shape_features(
 ) -> Iterator[ShapeFeature]:
     archive = Path(zip_path)
     with zipfile.ZipFile(archive) as zip_file:
-        shp_data = zip_file.read(zip_member(zip_file, layer_name, ".shp"))
-        dbf_data = zip_file.read(zip_member(zip_file, layer_name, ".dbf"))
-    yield from iter_shape_features_from_buffers(
-        shp_data,
-        dbf_data,
-        fields=fields,
-        encoding=encoding,
-        field_name_encoding=field_name_encoding,
-        source_name=f"{archive}:{layer_name}",
-    )
+        shp_member = zip_member(zip_file, layer_name, ".shp")
+        dbf_member = zip_member(zip_file, layer_name, ".dbf")
+        with zip_file.open(shp_member) as shp_file, zip_file.open(dbf_member) as dbf_file:
+            yield from iter_shape_features_from_streams(
+                shp_file,
+                dbf_file,
+                fields=fields,
+                encoding=encoding,
+                field_name_encoding=field_name_encoding,
+                source_name=f"{archive}:{layer_name}",
+            )
 
 
 def iter_shape_features_from_buffers(
@@ -981,6 +1063,27 @@ def _dbf_offsets(
     return {field: by_name[field] for field in fields}
 
 
+def _read_dbf_layout(
+    file: IO[bytes],
+    *,
+    source_name: str,
+    field_name_encoding: str = "ascii",
+) -> DbfLayout:
+    header = _read_exact(file, 32, source_name=source_name, detail="DBF header")
+    header_length = struct.unpack("<H", header[8:10])[0]
+    if header_length < 32:
+        msg = f"invalid DBF header length in {source_name}: {header_length}"
+        raise LoaderError(msg)
+    if header_length > 32:
+        header += _read_exact(
+            file,
+            header_length - 32,
+            source_name=source_name,
+            detail="DBF field descriptors",
+        )
+    return parse_dbf_header(header, field_name_encoding=field_name_encoding)
+
+
 def _dbf_record(
     data: bytes,
     layout: DbfLayout,
@@ -994,6 +1097,20 @@ def _dbf_record(
         msg = f"truncated DBF record {index + 1} in {source_name}"
         raise LoaderError(msg)
     return record
+
+
+def _read_exact(
+    file: IO[bytes],
+    size: int,
+    *,
+    source_name: str,
+    detail: str,
+) -> bytes:
+    data = file.read(size)
+    if len(data) != size:
+        msg = f"truncated {detail} in {source_name}"
+        raise LoaderError(msg)
+    return data
 
 
 def _decode_dbf_value(

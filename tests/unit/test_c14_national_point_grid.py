@@ -18,6 +18,7 @@ from kortravelgeo.loaders.c14_national_point_grid import (
     GridCoverageItem,
     GridCoverageValidation,
     GridLayerValidation,
+    _zip_grid_layer_row_count,
     build_c14_national_point_grid_report,
     iter_center_rows,
     iter_grid_zip_shape_features,
@@ -120,6 +121,27 @@ def test_iter_grid_zip_shape_features_streams_bbox_and_key(tmp_path: Path) -> No
     assert features[0].geometry.bbox == (778900.0, 1566800.0, 779000.0, 1566900.0)
     assert validation.invalid_code_count == 0
     assert validation.bbox_mismatch_count == 0
+
+
+def test_grid_layer_row_count_excludes_deleted_dbf_records(tmp_path: Path) -> None:
+    archive = tmp_path / "grid.zip"
+    with zipfile.ZipFile(archive, "w") as zip_file:
+        zip_file.writestr(
+            "TL_SPPN_GRID_100M.dbf",
+            _dbf_bytes(
+                fields=(("SPO_100M", 10),),
+                records=(
+                    (False, ("가다789668",)),
+                    (True, ("가다790668",)),
+                    (False, ("가다789669",)),
+                ),
+            ),
+        )
+
+    with zipfile.ZipFile(archive) as zip_file:
+        row_count = _zip_grid_layer_row_count(zip_file, GRID_LAYER_SPECS[3])
+
+    assert row_count == 2
 
 
 def test_center_rows_parser_and_validation_reads_zip(tmp_path: Path) -> None:

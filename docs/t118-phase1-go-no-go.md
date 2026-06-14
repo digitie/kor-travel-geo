@@ -98,7 +98,7 @@ T-119로 가려면 다음이 필요하다.
 | case_code | 이름 | default severity | required inputs | skipped 조건 | 주요 metric |
 |-----------|------|------------------|-----------------|--------------|-------------|
 | C11 | 출입구 원천 간 거리 검증 | `WARN` | `roadaddr_building_shape_bundle`, `electronic_map_full`, `locsum_full` | bundle 또는 비교 대상이 없으면 해당 pair skip | key overlap, distance p50/p95/max, weak/full key 구분 |
-| C12 | 건물 도형 connection line 검증 | `WARN` | `roadaddr_building_shape_bundle`, `electronic_map_full` | bundle 없으면 skip | road key overlap, line distance, dangling ratio |
+| C12 | 건물 도형 connection line 검증 | `WARN` | `roadaddr_building_shape_bundle`, `electronic_map_full` | bundle 없으면 skip | road key overlap, line distance, road geometry missing, dangling ratio |
 | C13 | 상세주소 동 containment 검증 | `WARN` | `detail_dong_shape_bundle`, `detail_address_db_full` | 둘 중 하나 없으면 skip | key overlap, `ST_Covers` coverage, address-matched coverage |
 | C14 | 국가지점번호 grid/center 검증 | `WARN` | `national_point_grid_shape`, `national_point_grid_center` | 둘 다 없으면 skip | invalid code, bbox/center mismatch, formatter parent mismatch, coverage |
 | C15 | 민원행정기관 POI 주소 거리 검증 | `WARN` | `civil_service_institution_map`, active geocoder result | 원천 없으면 skip | parse/geocode missing, distance p50/p95/max, outlier sample |

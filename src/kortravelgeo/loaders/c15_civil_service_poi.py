@@ -23,7 +23,7 @@ from kortravelgeo.loaders.augment_harness import (
     ShapeStagingSpec,
     StagingColumn,
     copy_shape_features_to_staging,
-    iter_shape_features_from_buffers,
+    iter_shape_features_from_streams,
     recreate_shape_staging_table,
 )
 
@@ -170,27 +170,25 @@ def iter_civil_service_poi_features(
     with zipfile.ZipFile(archive) as zip_file:
         shp_member = _single_zip_member(zip_file, ".shp")
         dbf_member = _single_zip_member(zip_file, ".dbf")
-        shp_data = zip_file.read(shp_member)
-        dbf_data = zip_file.read(dbf_member)
-
-    features = iter_shape_features_from_buffers(
-        shp_data,
-        dbf_data,
-        fields=CIVIL_SERVICE_POI_SOURCE_FIELDS,
-        encoding="cp949",
-        field_name_encoding="cp949",
-        source_name=f"{archive}:{dbf_member}",
-    )
-    for index, feature in enumerate(features):
-        if row_limit is not None and index >= row_limit:
-            break
-        if feature.geometry.shape_kind != "Point":
-            msg = (
-                "civil_service_institution_map must contain Point geometry, "
-                f"got {feature.geometry.shape_kind} at record {feature.record_number}"
+        with zip_file.open(shp_member) as shp_file, zip_file.open(dbf_member) as dbf_file:
+            features = iter_shape_features_from_streams(
+                shp_file,
+                dbf_file,
+                fields=CIVIL_SERVICE_POI_SOURCE_FIELDS,
+                encoding="cp949",
+                field_name_encoding="cp949",
+                source_name=f"{archive}:{dbf_member}",
             )
-            raise LoaderError(msg)
-        yield _feature_for_staging(feature)
+            for index, feature in enumerate(features):
+                if row_limit is not None and index >= row_limit:
+                    break
+                if feature.geometry.shape_kind != "Point":
+                    msg = (
+                        "civil_service_institution_map must contain Point geometry, "
+                        f"got {feature.geometry.shape_kind} at record {feature.record_number}"
+                    )
+                    raise LoaderError(msg)
+                yield _feature_for_staging(feature)
 
 
 async def compare_c15_civil_service_poi_distance(
@@ -569,7 +567,11 @@ def _feature_for_staging(feature: ShapeFeature) -> ShapeFeature:
 
 
 def _single_zip_member(zip_file: zipfile.ZipFile, suffix: str) -> str:
-    candidates = [name for name in zip_file.namelist() if name.lower().endswith(suffix)]
+    candidates = [
+        name
+        for name in zip_file.namelist()
+        if Path(name).suffix.lower() == suffix
+    ]
     if len(candidates) != 1:
         msg = f"expected one {suffix} member, found {len(candidates)}"
         raise LoaderError(msg)

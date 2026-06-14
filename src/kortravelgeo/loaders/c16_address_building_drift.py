@@ -22,6 +22,9 @@ from kortravelgeo.loaders.augment_harness import (
     JoinKey,
     KeyOverlapMeasurement,
     StagingKeyIndexSpec,
+    _jsonb_sample,
+    _quote_ident,
+    _quote_ident_path,
     create_staging_key_indexes,
     measure_key_overlap,
 )
@@ -36,7 +39,6 @@ C16_ADDRESS_DB_JIBUN_TABLE = "_ktg_c16_address_db_jibun"
 C16_BUILDING_DB_BUILD_TABLE = "_ktg_c16_building_db_build"
 C16_BUILDING_DB_JIBUN_TABLE = "_ktg_c16_building_db_jibun"
 
-_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SQL_TYPE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\s*\([^;]*\))?$")
 
 
@@ -1193,16 +1195,6 @@ def _table_key_overlap_metrics(value: KeyOverlapMeasurement) -> dict[str, int]:
     }
 
 
-def _jsonb_sample(value: object) -> tuple[Mapping[str, object], ...]:
-    if not isinstance(value, list):
-        return ()
-    rows: list[Mapping[str, object]] = []
-    for item in value:
-        if isinstance(item, dict):
-            rows.append(item)
-    return tuple(rows)
-
-
 def _alchemy_to_libpq(engine: AsyncEngine) -> str:
     return engine.url.set(drivername="postgresql").render_as_string(hide_password=False)
 
@@ -1223,17 +1215,6 @@ def _key_alias_columns_as(alias: str, columns: Sequence[tuple[str, str]]) -> str
 
 def _nonnull_key_condition(alias: str, columns: Sequence[str]) -> str:
     return " AND ".join(f"{alias}.{_quote_ident(column)} IS NOT NULL" for column in columns)
-
-
-def _quote_ident_path(value: str) -> str:
-    return ".".join(_quote_ident(part) for part in value.split("."))
-
-
-def _quote_ident(value: str) -> str:
-    if not _IDENT_RE.fullmatch(value):
-        msg = f"invalid SQL identifier: {value!r}"
-        raise LoaderError(msg)
-    return f'"{value}"'
 
 
 def _sql_type(value: str) -> str:

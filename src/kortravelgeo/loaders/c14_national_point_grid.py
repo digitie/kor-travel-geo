@@ -691,8 +691,18 @@ def iter_grid_zip_shape_features(
 def _zip_grid_layer_row_count(zip_file: zipfile.ZipFile, spec: GridLayerSpec) -> int:
     with zip_file.open(zip_member(zip_file, spec.layer_name, ".dbf")) as dbf_file:
         layout = _read_dbf_layout(dbf_file, source_name=f"{spec.layer_name}.dbf")
-    _dbf_offsets(layout, (spec.key_field,))
-    return layout.row_count
+        _dbf_offsets(layout, (spec.key_field,))
+        row_count = 0
+        for index in range(layout.row_count):
+            record = _read_exact(
+                dbf_file,
+                layout.record_length,
+                source_name=f"{spec.layer_name}.dbf",
+                detail=f"record {index + 1}",
+            )
+            if record[:1] != b"*":
+                row_count += 1
+    return row_count
 
 
 def _read_shp_header(file: IO[bytes], *, source_name: str) -> None:

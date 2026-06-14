@@ -71,6 +71,8 @@ def test_road_adjacency_sql_counts_key_missing_and_distance_dangling() -> None:
     assert "c.rds_man_no = r.rds_man_no" in sql
     assert "ST_Distance(c.geom, r.geom)" in sql
     assert "road_key_missing" in sql
+    assert "road_geometry_missing" in sql
+    assert "distance_m IS NULL" in sql
     assert "dangling_ratio" in sql
     assert ":tolerance_m" in sql
 
@@ -111,6 +113,7 @@ def test_c12_connection_metrics_include_no_serving_promotion_and_samples() -> No
             total_connections=3,
             road_key_matched=2,
             road_key_missing=1,
+            road_geometry_missing=0,
             within_tolerance=1,
             over_tolerance=1,
             dangling=2,
@@ -133,6 +136,7 @@ def test_c12_connection_metrics_include_no_serving_promotion_and_samples() -> No
         "total_connections": 3,
         "road_key_matched": 2,
         "road_key_missing": 1,
+        "road_geometry_missing": 0,
         "within_tolerance": 1,
         "over_tolerance": 1,
         "dangling": 2,

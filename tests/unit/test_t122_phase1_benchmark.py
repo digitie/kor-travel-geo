@@ -54,6 +54,9 @@ def test_t122_parser_accepts_case_and_sampling_options() -> None:
     assert args.git_repo.as_posix() == "F:/dev/kor-travel-geo-codex"
     assert args.allow_without_slow_real_data is False
 
+    opt_in_args = parser.parse_args(["--allow-without-slow-real-data"])
+    assert opt_in_args.allow_without_slow_real_data is True
+
 
 def test_proc_parsers_and_delta_helpers() -> None:
     rss, hwm = parse_proc_status(
@@ -84,6 +87,7 @@ cancelled_write_bytes: 0
 
     assert rss == 1024 * 1024
     assert hwm == 2048 * 1024
+    assert parse_proc_status("VmRSS:\t 1 MB\n") == (None, None)
     assert diff_proc_io(io_started, io_finished)["rchar"] == 256
     assert diff_proc_io(io_started, io_finished)["wchar"] == 512
     assert diff_proc_io(io_started, io_finished)["read_bytes"] == 8192

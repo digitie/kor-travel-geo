@@ -28,6 +28,10 @@ T-111은 `도로명주소 건물 도형` bundle의 `TL_SPBD_ENTRC` point를 Post
 
 `weak_sig_ent_key` 결과는 동일 시군구 안에서 `ent_man_no`가 충분히 안정적이라는 가정 위의 측정이다. 따라서 C11 report는 이 비교쌍을 full key 판정과 같은 의미로 해석하지 않도록 `key_contract`와 `note`에 제약을 남긴다.
 
+`dbf_exact_key_overlap`은 두 SHP/DBF 원천의 full key set을 파일 단에서 직접 비교한 값이다. 반면 `comparisons.*.key_overlap`은 PostGIS staging table 또는 운영 테이블과의 join key 계약을 따른다. 따라서 같은 "overlap"이어도 대상 테이블과 key 강도가 다르면 숫자를 직접 등치하지 않는다.
+
+T-121/T-123 전국 실행에서는 bundle `TL_SPBD_ENTRC`와 전자지도 `TL_SPBD_ENTRC`의 full key 비교가 실제 17개 시도 경로에서 검증됐다. 운영 `tl_locsum_entrc`/`tl_roadaddr_entrc` 비교는 여전히 weak key이므로, ADR-051도 weak key만으로는 serving 승격 근거로 쓰지 않는다고 고정한다.
+
 ## metric 형태
 
 `C11EntranceComparison.metrics()`는 다음 정보를 포함한다.

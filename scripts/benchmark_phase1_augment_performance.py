@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 BENCHMARK_SCHEMA_VERSION = 1
+# Keep this order stable because benchmark JSON and Markdown emit deltas in this sequence.
 PROC_IO_FIELDS = (
     "rchar",
     "wchar",
@@ -53,6 +54,7 @@ PROC_IO_FIELDS = (
     "write_bytes",
     "cancelled_write_bytes",
 )
+SAMPLER_STOP_TIMEOUT_S = 5.0
 PhaseId = Literal["preparation", "C11", "C12", "C13", "C14", "C15", "C16", "C17"]
 
 
@@ -212,7 +214,7 @@ async def run_phase1_augment_benchmark(
     ensure_output_dir(output_dir)
     selected_sidos = tuple(sido_names or SIDO_NAMES)
 
-    print("[preparation] 시작", flush=True)
+    print("[preparation] 벤치 시작", flush=True)
     prep_started = time.perf_counter()
     with ResourceSampler(sample_interval_s) as prep_sampler:
         source_plan = build_source_plan(
@@ -228,7 +230,7 @@ async def run_phase1_augment_benchmark(
         resource=prep_sampler.usage(),
         sources_by_case={case_id: source_plan.case_sources(case_id) for case_id in cases},
     )
-    print("[preparation] 완료", flush=True)
+    print("[preparation] 벤치 완료", flush=True)
 
     report_dir = output_dir / "reports"
     case_runs: list[CaseBenchmark] = []
@@ -320,7 +322,8 @@ class ResourceSampler:
     ) -> None:
         self._stop.set()
         if self._thread is not None:
-            self._thread.join(timeout=max(1.0, self._interval_s * 2))
+            # The sampler is daemon-backed, but give slow filesystems/runtimes room to stop cleanly.
+            self._thread.join(timeout=max(SAMPLER_STOP_TIMEOUT_S, self._interval_s * 4))
         self._finished = read_resource_snapshot()
         self._observe(self._finished)
 
@@ -400,7 +403,7 @@ def parse_kb_value(value: str) -> int | None:
         return None
     unit = parts[1] if len(parts) > 1 else "kB"
     if unit != "kB":
-        return amount
+        return None
     return amount * 1024
 
 
@@ -469,12 +472,8 @@ def benchmark_markdown(summary: BenchmarkSummary) -> str:
         f"- total_seconds: `{summary.total_seconds}`",
         f"- measurement_scope: `{summary.measurement_scope}`",
         "",
-        "| phase | task | used | failed | seconds | peak RSS | rchar | "
-        "read bytes | wchar | write bytes | artifact |",
-        "|-------|------|-----:|-------:|--------:|---------:|------:|"
-        "-----------:|------:|------------:|----------|",
     ]
-    lines.append(
+    rows = [
         benchmark_row(
             phase="preparation",
             task="source-plan",
@@ -484,10 +483,10 @@ def benchmark_markdown(summary: BenchmarkSummary) -> str:
             resource=summary.preparation.resource,
             artifact=None,
         )
-    )
+    ]
     for case in summary.cases:
         report_summary = case.report_summary
-        lines.append(
+        rows.append(
             benchmark_row(
                 phase=case.phase_id,
                 task=case.task_id,
@@ -498,6 +497,37 @@ def benchmark_markdown(summary: BenchmarkSummary) -> str:
                 artifact=case.output_path,
             )
         )
+    lines.extend(
+        markdown_table(
+            headers=(
+                "phase",
+                "task",
+                "used",
+                "failed",
+                "seconds",
+                "peak RSS",
+                "rchar",
+                "read bytes",
+                "wchar",
+                "write bytes",
+                "artifact",
+            ),
+            alignments=(
+                "-------",
+                "------",
+                "-----:",
+                "-------:",
+                "--------:",
+                "---------:",
+                "------:",
+                "-----------:",
+                "------:",
+                "------------:",
+                "----------",
+            ),
+            rows=rows,
+        )
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -511,16 +541,44 @@ def benchmark_row(
     seconds: float,
     resource: ResourceUsage,
     artifact: str | None,
-) -> str:
+) -> tuple[str, ...]:
     io_delta = resource.proc_io_delta
     return (
-        "| "
-        f"{phase} | {task} | {md_count(used)} | {md_count(failed)} | {seconds:.3f} | "
-        f"{human_bytes(resource.rss_peak_bytes)} | {human_bytes(io_delta.get('rchar'))} | "
-        f"{human_bytes(io_delta.get('read_bytes'))} | {human_bytes(io_delta.get('wchar'))} | "
-        f"{human_bytes(io_delta.get('write_bytes'))} | "
-        f"{'n/a' if artifact is None else f'`{artifact}`'} |"
+        phase,
+        task,
+        md_count(used),
+        md_count(failed),
+        f"{seconds:.3f}",
+        human_bytes(resource.rss_peak_bytes),
+        human_bytes(io_delta.get("rchar")),
+        human_bytes(io_delta.get("read_bytes")),
+        human_bytes(io_delta.get("wchar")),
+        human_bytes(io_delta.get("write_bytes")),
+        "n/a" if artifact is None else f"`{artifact}`",
     )
+
+
+def markdown_table(
+    *,
+    headers: Sequence[str],
+    alignments: Sequence[str],
+    rows: Iterable[Sequence[str]],
+) -> list[str]:
+    if len(headers) != len(alignments):
+        msg = "markdown table headers and alignments must have the same length"
+        raise ValueError(msg)
+    lines = [markdown_row(headers), markdown_row(alignments, escape=False)]
+    for row in rows:
+        if len(row) != len(headers):
+            msg = "markdown table row has unexpected column count"
+            raise ValueError(msg)
+        lines.append(markdown_row(row))
+    return lines
+
+
+def markdown_row(cells: Sequence[str], *, escape: bool = True) -> str:
+    rendered = [cell.replace("|", r"\|") if escape else cell for cell in cells]
+    return "| " + " | ".join(rendered) + " |"
 
 
 def human_bytes(value: int | None) -> str:
