@@ -67,7 +67,7 @@ def test_detail_dong_staging_specs_and_join_keys() -> None:
     polygon = detail_dong_polygon_staging_spec("_ktg_test_polygon")
     entrance = detail_dong_entrance_staging_spec("_ktg_test_entrc")
 
-    assert polygon.geometry_type == "Polygon"
+    assert polygon.geometry_type == "Geometry"
     assert entrance.geometry_type == "Point"
     assert tuple(column.source_field for column in polygon.columns) == (
         "ADR_MNG_NO",

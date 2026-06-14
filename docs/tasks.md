@@ -37,7 +37,6 @@
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
 - T-119 (ADR 게이트 통과 시) serving 좌표 편입 — 출입구 후보 scoring — T-118 ADR 승인 시에만 진행. 출입구(C11)를 `mv_geocode_target` 대표 좌표 scoring에 feature flag로 편입, pt_source 확장, 재적재·정확도 재측정. vworld 호환 필드 유지(자체 정보는 x_extension/v2). ADR-049 게이트·ADR-007 의미 변경 주의. (의존: T-118 + ADR)
-- T-121 phase ① 전국 라이브데이터 보강 실행 — T-111~T-117 prototype과 (T-119 통과 시) 출입구 좌표 scoring을 fixture가 아니라 `F:\dev\kor-travel-geo\data\juso` 전국 실 원천으로 full 실행한다(streaming 1천만 polygon/centroid 포함). C11~C17 `AugmentReport`를 전국 metric(거리 p50/p95/max·key overlap·coverage)으로 산출하고 모든 report에 `source_yyyymm`을 병기한다(기준월 시차 노이즈 구분). (의존: T-118; T-119 통과 시 그 산출물 포함)
 - T-122 phase ① 보강 성능평가·벤치 — 보강 harness(SHP geometry reader·staging COPY·PostGIS `ST_Distance`/`ST_Covers`·streaming 검증)의 전국 실행 wall-time·RSS·I/O를 case별로 벤치하고 artifact로 기록한다(T-047 benchmark harness 패턴 재사용, `KTG_SLOW_REAL_DATA` 게이트). (의존: T-121)
 - T-123 phase ① 튜닝·최종 검증 평가 — 벤치 기반 튜닝(streaming chunk·staging 인덱스·배치 크기) 후 재측정하고, 전국 결과로 T-118 go/no-go(source별 serving 편입 후보 / 검증 전용)를 최종 확정해 phase ① acceptance 문서를 남긴다. (의존: T-122)
 
@@ -70,6 +69,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-121 phase ① 전국 라이브데이터 보강 실행. T-111~T-117 prototype을 `F:\dev\kor-travel-geo\data\juso` 전국 실 원천으로 실행해 C11~C17 `AugmentReport`와 `source_yyyymm`을 산출했다. C11 full key bundle ↔ 전자지도 거리는 p95/max 0.0m이고, C12~C17은 전국 key overlap·coverage·거리 metric을 artifact로 남겼다. C13 실제 상세주소 동 도형의 `MULTIPOLYGON`과 C15 staging SQL type은 prototype 보정으로 반영했다. 상세: `docs/t121-phase1-live-augment.md` (2026-06-14)
 - [x] T-120 epost 우편번호 수동 적재·검증(pobox/bulk, CLI). 사서함·다량배달처 텍스트 파일 검증 모듈을 `epost_validation`으로 분리해 T-207 server-fetch 흐름에서 재사용할 수 있게 했다. `ktgctl load pobox`, `load bulk`, `load epost`는 적재 전 행수·필수 컬럼·우편번호 형식·사서함 종류·정수 필드·중복 key sanity 요약을 출력하고 실패 시 COPY를 실행하지 않는다. `download_epost_zip()`은 직접 ZIP 응답과 `fileLocplc` XML 응답을 모두 처리한다. 상세: `docs/t120-epost-postal-validation.md` (2026-06-14)
 - [x] T-118 phase 1 go/no-go 종합 + serving 편입 ADR 게이트 문서. T-111~T-117을 source별로 "검증 전용 / 조건부 serving 후보"로 판정했고, C11만 ADR 승인·전국 metric·feature flag·기준월 gate를 전제로 한 조건부 후보로 남겼다. C12~C17은 phase ② registry/운영 검증 전용으로 정리했다. 전자지도 잔여 layer `TL_SPBD_EQB`는 구조 검증 필수 evidence이지만 serving 후보가 아니며, 필요하면 후속 C18 또는 C13 확장으로 분리한다고 결정했다. ADR-051은 proposed 초안으로 추가했고 T-119는 사용자 승인 전까지 보류한다. 상세: `docs/t118-phase1-go-no-go.md` (2026-06-14)
 - [x] T-117 C17 내비 지번 member coverage 검증 prototype. `navi_full` 내부 optional member인 `match_jibun_*.txt`를 독립 category로 만들지 않고 staging table에 key만 COPY해 `tl_juso_parcel_link`와 `bd_mgt_sn+pnu`, `pnu+road key` coverage를 비교한다. member가 없으면 실패가 아니라 `skipped`로 기록하고, 7z는 register/materialization 단계에서 해제된 디렉터리를 입력으로 받는 계약을 유지한다. 좌표 적재 없이 `coordinate_load=False`, `serving_promotion=False`를 고정했다. 상세: `docs/t117-navi-jibun-coverage.md` (2026-06-14)

@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-14 갱신, by codex)
 
+- ✅ T-121 phase ① 전국 라이브데이터 보강 실행 — `scripts/run_phase1_augment_reports.py`를 추가해 C11~C17 prototype을 `F:\dev\kor-travel-geo\data\juso` 전국 실 원천으로 순차 실행하고, case별 `AugmentReport` JSON과 `summary.json`/`summary.md`를 남긴다. 전체 실행은 WSL ext4 테스트 미러 `artifacts/augment/t121-live/`에서 4305.836초 동안 완료됐고, C11~C13은 17개 시도 모두 `used=17`, C14~C17은 전국 단일 묶음 `used=1`로 실패 0건이었다. C11 bundle ↔ 전자지도 full key는 6,405,305건 intersection과 거리 p95/max 0.0m를 기록했다. C13은 실제 `TL_SGCO_RNADR_DONG`의 `MULTIPOLYGON`을 수용하도록 staging geometry type을 `Geometry`로 넓혔고, C15는 staging SQL type을 `float8`로 고정했다. C16/C17 `bd_mgt_sn` 직접 비교 0% 교집합은 T-123에서 key 계약/파서 차이를 재검토한다. 상세: `docs/t121-phase1-live-augment.md`.
 - ✅ T-120 epost 우편번호 수동 적재·검증(pobox/bulk, CLI) — `src/kortravelgeo/loaders/epost_validation.py`를 추가해 사서함·다량배달처 텍스트 파일의 행수, 필수 컬럼·값, 5자리 우편번호 형식, `PO`/`PG` 사서함 종류, 사서함 번호 정수, 중복 key sanity를 공통 검증한다. `ktgctl load pobox`, `ktgctl load bulk`, `ktgctl load epost`는 검증 요약을 출력한 뒤 통과한 파일만 COPY하며, API job `pobox_load`/`bulk_load`도 같은 로더 진입점에서 검증을 수행한다. epost downloader는 직접 ZIP 응답과 `fileLocplc` XML 응답을 모두 처리한다. 실제 epost 원천은 로컬 `data/`에 없어 synthetic fixture로 CP949/UTF-8 BOM, 한글/영문 alias, 오류·중복 케이스를 고정했다. 상세: `docs/t120-epost-postal-validation.md`.
 - ✅ T-118 phase 1 go/no-go 종합 + serving 편입 ADR 게이트 문서 — T-111~T-117 결과를 종합해 C11만 조건부 serving 좌표 후보로 남기고, C12~C17은 phase ② registry/운영 검증 전용으로 판정했다. C11도 바로 편입하지 않고 T-121 전국 metric, C3/C4/C6/C7 악화 없음, 기준월 gate, feature flag 기본 off, v1 호환 노출 정책을 모두 만족하고 ADR-051이 accepted로 전환된 뒤에만 T-119로 진행한다. 전자지도 잔여 layer `TL_SPBD_EQB`는 구조 검증 필수 evidence지만 C11~C17 어느 prototype에도 독립 귀속되지 않은 상태라 serving 후보가 아니며, 필요하면 후속 C18 또는 C13 확장으로 분리한다. 상세: `docs/t118-phase1-go-no-go.md`, ADR-051(proposed).
 - ✅ T-117 C17 내비 지번 member coverage 검증 prototype — `src/kortravelgeo/loaders/c17_navi_jibun_coverage.py`를 추가해 `navi_full` 내부 optional member `match_jibun_*.txt`를 검증 전용 staging table `_ktg_c17_navi_jibun`에 key만 COPY한다. `match_jibun_*`는 독립 category가 아니라 `navi_full.match_jibun` member flag로 다루며, member가 없으면 report를 `skipped`로 남긴다. 비교는 `tl_juso_parcel_link`를 대상으로 `bd_mgt_sn + pnu`와 `pnu + rncode_full + buld_se_cd + buld_mnnm + buld_slno` coverage를 산출한다. `.7z`는 직접 subprocess로 풀지 않고 register/materialization 단계에서 해제된 디렉터리를 입력으로 받는 계약을 유지한다. 좌표 적재 없이 `coordinate_load=False`, `serving_promotion=False` 계약을 고정했다. 상세: `docs/t117-navi-jibun-coverage.md`.
@@ -167,9 +168,9 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 즉시 실행 작업은 **T-121 phase ① 전국 라이브데이터 보강 실행**이다. T-111~T-117 prototype을 fixture가 아니라 `F:\dev\kor-travel-geo\data\juso` 전국 실 원천으로 실행해 C11~C17 `AugmentReport`를 source별 전국 metric(거리 p50/p95/max, key overlap, coverage, `source_yyyymm`)으로 산출한다. T-119는 ADR-051(proposed)이 accepted로 전환되고 사용자가 명시 승인할 때까지 포함하지 않는다.
+다음 즉시 실행 작업은 **T-122 phase ① 보강 성능평가·벤치**다. T-121에서 전국 실 원천 C11~C17 실행은 끝났으므로, 같은 harness의 SHP geometry reader, staging COPY, PostGIS `ST_Distance`/`ST_Covers`, streaming text/grid 검증 wall-time·RSS·I/O를 case별로 측정하고 artifact로 기록한다. T-047 benchmark harness 패턴을 재사용하되, T-121 artifact `artifacts/augment/t121-live/`와 원천 materialization 비용을 분리해 기록한다.
 
-T-121은 장기 실데이터 실행이므로 작업 시작 전 최신 Claude PR과 자기 PR 코멘트 확인, `origin/main` 동기화, WSL ext4 테스트 미러 갱신, 실제 원천 경로 확인을 먼저 수행한다.
+T-122도 새 task이므로 작업 시작 전 최신 Claude PR과 자기 PR 코멘트 확인, `origin/main` 동기화, WSL ext4 테스트 미러 갱신, 실제 원천 경로 확인을 먼저 수행한다.
 
 - 최신 T-027/T-047 재측정 로그는 로컬 산출물 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/fullload/t027-t047-retune-20260531-232609/`와 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/perf/t047-retune-standard-20260601-012814/` 아래에 있다. 이 경로는 git ignore 대상이다.
 - 최신 실제 DB 정합성은 `severity_max=ERROR`다. 전체 daily 적용 후 남은 주요 항목은 C2 29,410건(`missing_text=28,829`, `missing_resolve_key=581`), C4 12,189건(`over_500m=83`), C6 3,608건, C7 9,886건이다. C10은 `tl_juso_text=202603/202604/202605`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605` 기준월 혼합을 `WARN` 처리한다.
