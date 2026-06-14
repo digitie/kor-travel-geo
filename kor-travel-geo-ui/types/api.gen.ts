@@ -1146,6 +1146,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-match-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Source Match Sets
+         * @description List source match sets (doc "ops.source_match_sets").
+         */
+        get: operations["list_source_match_sets_v1_admin_source_match_sets_get"];
+        put?: never;
+        /**
+         * Create Source Match Set
+         * @description Create a ``draft`` match set + its items (doc lines ~820-857).
+         *
+         *     Item role/omitted/UNIQUE-category invariants are enforced before insert; the
+         *     canonical ``source_set_hash`` stays NULL for a draft (computed at validate).
+         */
+        post: operations["create_source_match_set_v1_admin_source_match_sets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-match-sets/{source_match_set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Source Match Set
+         * @description Get one source match set + its items.
+         */
+        get: operations["get_source_match_set_v1_admin_source_match_sets__source_match_set_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-match-sets/{source_match_set_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate Source Match Set
+         * @description Atomic-swap activate a ``validated`` match set (doc line ~807).
+         *
+         *     Under the ``SOURCE_MATCH_ACTIVATE`` advisory lock in ONE transaction: re-check
+         *     the canonical hash (stale-hash guard), retire the current active, then set the
+         *     target ``active`` — no externally-observable active gap. Requires
+         *     ``rebuild_operator``.
+         */
+        post: operations["activate_source_match_set_v1_admin_source_match_sets__source_match_set_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-match-sets/{source_match_set_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire Source Match Set
+         * @description Retire a source match set (doc line ~808).
+         */
+        post: operations["retire_source_match_set_v1_admin_source_match_sets__source_match_set_id__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-match-sets/{source_match_set_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Source Match Set
+         * @description Run the match set ``validate`` state-split (doc lines ~806/813-815).
+         *
+         *     ``draft``→``validated`` (compute fresh hash), ``revalidatable``→``validated``
+         *     (re-check pre-computed hash), ``active``+``integrity_alert``→ validate-in-place
+         *     (clear alert, stay active). ``retired``/``invalid``/``restored_from_backup`` are
+         *     rejected (must recover to ``revalidatable`` first).
+         */
+        post: operations["validate_source_match_set_v1_admin_source_match_sets__source_match_set_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/storage/rustfs/check": {
         parameters: {
             query?: never;
@@ -3547,6 +3664,284 @@ export interface components {
              * @default false
              */
             skipped_locked: boolean;
+        };
+        /**
+         * SourceMatchSet
+         * @description Top-level combination of source groups used for rebuild or validation.
+         */
+        SourceMatchSet: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /** Description */
+            description?: string | null;
+            /**
+             * Integrity Alert
+             * @default false
+             */
+            integrity_alert: boolean;
+            /** Integrity Alert At */
+            integrity_alert_at?: string | null;
+            /** Integrity Alert Detail */
+            integrity_alert_detail?: {
+                [key: string]: unknown;
+            };
+            /** Last Consistency Report Id */
+            last_consistency_report_id?: string | null;
+            /** Last Load Job Id */
+            last_load_job_id?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Mixed Yyyymm
+             * @default false
+             */
+            mixed_yyyymm: boolean;
+            /** Name */
+            name: string;
+            /** Omitted Optional */
+            omitted_optional?: {
+                [key: string]: unknown;
+            };
+            /** Profile */
+            profile: string;
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /** Source Set Hash */
+            source_set_hash?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "draft" | "validated" | "active" | "retired" | "invalid" | "revalidatable" | "restored_from_backup";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Validated At */
+            validated_at?: string | null;
+            /** Yyyymm By Category */
+            yyyymm_by_category?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * SourceMatchSetActivateResponse
+         * @description ``POST .../{id}/activate`` result — the atomic-swap outcome (doc ~807).
+         *
+         *     ``retired_match_set_id`` is the previously-active set retired in the same
+         *     transaction (``None`` when none was active). No externally-observable active
+         *     gap: retire-current + activate-target run under one advisory lock in one tx.
+         */
+        SourceMatchSetActivateResponse: {
+            /** Retired Match Set Id */
+            retired_match_set_id?: string | null;
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /** Source Set Hash */
+            source_set_hash: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "draft" | "validated" | "active" | "retired" | "invalid" | "revalidatable" | "restored_from_backup";
+        };
+        /**
+         * SourceMatchSetCreateRequest
+         * @description ``POST /v1/admin/source-match-sets`` body — creates a ``draft`` set.
+         *
+         *     ``source_set_hash`` is NULL for a draft (computed at ``validate``). The items'
+         *     referenced groups need not all be ``available`` yet at create time; coverage is
+         *     enforced at ``validate`` (doc lines ~757/764).
+         */
+        SourceMatchSetCreateRequest: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["SourceMatchSetItemRequest"][];
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /**
+             * Profile
+             * @default serving_recommended
+             * @enum {string}
+             */
+            profile: "serving_minimal" | "serving_recommended" | "custom";
+        };
+        /**
+         * SourceMatchSetDetail
+         * @description A match set plus its items (get / create / lifecycle response).
+         */
+        SourceMatchSetDetail: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["SourceMatchSetItem"][];
+            match_set: components["schemas"]["SourceMatchSet"];
+        };
+        /**
+         * SourceMatchSetItem
+         * @description One ``ops.source_match_set_items`` row (read model).
+         */
+        SourceMatchSetItem: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /** Effective Yyyymm */
+            effective_yyyymm?: string | null;
+            /** Load Order */
+            load_order?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Omitted
+             * @default false
+             */
+            omitted: boolean;
+            /** Omitted Reason */
+            omitted_reason?: string | null;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "build_required" | "build_recommended" | "validation_optional" | "enrichment_candidate";
+            /** Source File Group Id */
+            source_file_group_id?: string | null;
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /** Source Match Set Item Id */
+            source_match_set_item_id: string;
+            /**
+             * Validation Enabled
+             * @default true
+             */
+            validation_enabled: boolean;
+        };
+        /**
+         * SourceMatchSetItemRequest
+         * @description One requested ``ops.source_match_set_items`` row (create body element).
+         *
+         *     Invariants (enforced by the DTO + ``core.source_match_set.validate_item_invariants``
+         *     + DB CHECK): ``omitted=false`` ⇒ ``source_file_group_id`` set; ``omitted=true``
+         *     ⇒ ``source_file_group_id`` null; at most one item per ``category``.
+         */
+        SourceMatchSetItemRequest: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /** Effective Yyyymm */
+            effective_yyyymm?: string | null;
+            /** Load Order */
+            load_order?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Omitted
+             * @default false
+             */
+            omitted: boolean;
+            /** Omitted Reason */
+            omitted_reason?: string | null;
+            /**
+             * Required
+             * @default false
+             */
+            required: boolean;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "build_required" | "build_recommended" | "validation_optional" | "enrichment_candidate";
+            /** Source File Group Id */
+            source_file_group_id?: string | null;
+            /**
+             * Validation Enabled
+             * @default true
+             */
+            validation_enabled: boolean;
+        };
+        /**
+         * SourceMatchSetRetireResponse
+         * @description ``POST .../{id}/retire`` result.
+         */
+        SourceMatchSetRetireResponse: {
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "draft" | "validated" | "active" | "retired" | "invalid" | "revalidatable" | "restored_from_backup";
+            /**
+             * Was Active
+             * @default false
+             */
+            was_active: boolean;
+        };
+        /**
+         * SourceMatchSetValidateResponse
+         * @description ``POST .../{id}/validate`` result (the state-split outcome, doc ~806/813-815).
+         *
+         *     ``action`` is which branch ran (``validate_draft`` / ``revalidate`` /
+         *     ``validate_in_place`` / ``reject``); ``ok`` is whether coverage/hash passed.
+         *     For ``validate_in_place`` success ``state`` stays ``active`` and
+         *     ``integrity_alert`` is cleared.
+         */
+        SourceMatchSetValidateResponse: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "validate_draft" | "revalidate" | "validate_in_place" | "reject";
+            /**
+             * Integrity Alert
+             * @default false
+             */
+            integrity_alert: boolean;
+            /** Ok */
+            ok: boolean;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /** Source Set Hash */
+            source_set_hash?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "draft" | "validated" | "active" | "retired" | "invalid" | "revalidatable" | "restored_from_backup";
         };
         /**
          * SourceReconcileItem
@@ -6234,6 +6629,195 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegisterResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_source_match_sets_v1_admin_source_match_sets_get: {
+        parameters: {
+            query?: {
+                state?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceMatchSet"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_source_match_set_v1_admin_source_match_sets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceMatchSetCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceMatchSetDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_source_match_set_v1_admin_source_match_sets__source_match_set_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_match_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceMatchSetDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_source_match_set_v1_admin_source_match_sets__source_match_set_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_match_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceMatchSetActivateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_source_match_set_v1_admin_source_match_sets__source_match_set_id__retire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_match_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceMatchSetRetireResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_source_match_set_v1_admin_source_match_sets__source_match_set_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_match_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceMatchSetValidateResponse"];
                 };
             };
             /** @description Validation Error */

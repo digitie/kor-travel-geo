@@ -20,6 +20,7 @@ from kortravelgeo.api._jobs import JobQueue
 from kortravelgeo.api.deps import get_client, get_job_queue
 from kortravelgeo.api.security import (
     ROLE_DESTRUCTIVE_ADMIN,
+    ROLE_REBUILD_OPERATOR,
     ROLE_SOURCE_FILE_MANAGER,
     ROLE_SOURCE_FILE_VIEWER,
     RequestContext,
@@ -90,6 +91,12 @@ from kortravelgeo.dto.source import (
     SourceGroupSoftDeleteRequest,
     SourceGroupSoftDeleteResponse,
     SourceJanitorRunResponse,
+    SourceMatchSet,
+    SourceMatchSetActivateResponse,
+    SourceMatchSetCreateRequest,
+    SourceMatchSetDetail,
+    SourceMatchSetRetireResponse,
+    SourceMatchSetValidateResponse,
     SourceReconcileItemPage,
     SourceReconcileRun,
     SourceUploadProgressEvent,
@@ -1024,6 +1031,173 @@ async def source_files_capacity(
     Computation + surfacing only; the retention/cleanup POLICY is T-212.
     """
     return await client.source_storage_capacity()
+
+
+# --- Source match sets (T-205a) -------------------------------------------
+# CRUD + validate/activate/retire over ops.source_match_sets. create/validate/
+# retire require source_file_manager; activate requires rebuild_operator (doc
+# "Admin 권한 모델" role table); reads require source_file_viewer. DEFERRED to
+# T-205b: rebuild-db loader bridge, rollback swap, dataset_snapshots FK write,
+# consistency ERROR gate / forced_promotion.
+
+_REBUILD_OPERATOR = Depends(require_role(ROLE_REBUILD_OPERATOR))
+
+
+@router.get(
+    "/source-match-sets",
+    response_model=list[SourceMatchSet],
+    response_model_exclude_none=True,
+)
+async def list_source_match_sets(
+    state: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[SourceMatchSet]:
+    """List source match sets (doc "ops.source_match_sets")."""
+    return list(await client.list_source_match_sets(state=state, limit=limit))
+
+
+@router.get(
+    "/source-match-sets/{source_match_set_id}",
+    response_model=SourceMatchSetDetail,
+    response_model_exclude_none=True,
+)
+async def get_source_match_set(
+    source_match_set_id: str,
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceMatchSetDetail:
+    """Get one source match set + its items."""
+    return await client.get_source_match_set(source_match_set_id)
+
+
+@router.post(
+    "/source-match-sets",
+    response_model=SourceMatchSetDetail,
+    response_model_exclude_none=True,
+)
+async def create_source_match_set(
+    req: SourceMatchSetCreateRequest,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceMatchSetDetail:
+    """Create a ``draft`` match set + its items (doc lines ~820-857).
+
+    Item role/omitted/UNIQUE-category invariants are enforced before insert; the
+    canonical ``source_set_hash`` stays NULL for a draft (computed at validate).
+    """
+    result = await client.create_source_match_set(req, actor=ctx.actor)
+    await client.record_audit_event(
+        action="source_match_set.create",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.match_set.state,
+        payload={"name": req.name, "profile": req.profile,
+                 "item_count": len(req.items)},
+        resource_type="source_match_set",
+        resource_id=result.match_set.source_match_set_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.post(
+    "/source-match-sets/{source_match_set_id}/validate",
+    response_model=SourceMatchSetValidateResponse,
+    response_model_exclude_none=True,
+)
+async def validate_source_match_set(
+    source_match_set_id: str,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceMatchSetValidateResponse:
+    """Run the match set ``validate`` state-split (doc lines ~806/813-815).
+
+    ``draft``→``validated`` (compute fresh hash), ``revalidatable``→``validated``
+    (re-check pre-computed hash), ``active``+``integrity_alert``→ validate-in-place
+    (clear alert, stay active). ``retired``/``invalid``/``restored_from_backup`` are
+    rejected (must recover to ``revalidatable`` first).
+    """
+    result = await client.validate_source_match_set(
+        source_match_set_id, actor=ctx.actor
+    )
+    await client.record_audit_event(
+        action="source_match_set.validate",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=f"{result.action}:{'ok' if result.ok else 'fail'}",
+        payload={"action": result.action, "ok": result.ok,
+                 "reasons": list(result.reasons)},
+        resource_type="source_match_set",
+        resource_id=source_match_set_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.post(
+    "/source-match-sets/{source_match_set_id}/activate",
+    response_model=SourceMatchSetActivateResponse,
+    response_model_exclude_none=True,
+)
+async def activate_source_match_set(
+    source_match_set_id: str,
+    request: Request,
+    ctx: RequestContext = _REBUILD_OPERATOR,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceMatchSetActivateResponse:
+    """Atomic-swap activate a ``validated`` match set (doc line ~807).
+
+    Under the ``SOURCE_MATCH_ACTIVATE`` advisory lock in ONE transaction: re-check
+    the canonical hash (stale-hash guard), retire the current active, then set the
+    target ``active`` — no externally-observable active gap. Requires
+    ``rebuild_operator``.
+    """
+    result = await client.activate_source_match_set(
+        source_match_set_id, actor=ctx.actor
+    )
+    await client.record_audit_event(
+        action="source_match_set.activate",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.state,
+        payload={"retired_match_set_id": result.retired_match_set_id},
+        resource_type="source_match_set",
+        resource_id=source_match_set_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.post(
+    "/source-match-sets/{source_match_set_id}/retire",
+    response_model=SourceMatchSetRetireResponse,
+    response_model_exclude_none=True,
+)
+async def retire_source_match_set(
+    source_match_set_id: str,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceMatchSetRetireResponse:
+    """Retire a source match set (doc line ~808)."""
+    result = await client.retire_source_match_set(
+        source_match_set_id, actor=ctx.actor
+    )
+    await client.record_audit_event(
+        action="source_match_set.retire",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.state,
+        payload={"was_active": result.was_active},
+        resource_type="source_match_set",
+        resource_id=source_match_set_id,
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.get(

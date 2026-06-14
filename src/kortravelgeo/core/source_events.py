@@ -15,7 +15,10 @@ from __future__ import annotations
 # management actions. Naming follows the existing dot-separated convention
 # (e.g. "serving_release.activate", "consistency.sample.decision", "geoip.denied").
 SOURCE_UPLOAD_REGISTER = "source_upload.register"
+SOURCE_MATCH_SET_CREATE = "source_match_set.create"
+SOURCE_MATCH_SET_VALIDATE = "source_match_set.validate"
 SOURCE_MATCH_SET_ACTIVATE = "source_match_set.activate"
+SOURCE_MATCH_SET_RETIRE = "source_match_set.retire"
 SOURCE_REBUILD_DB = "source.rebuild_db"
 SOURCE_FORCED_PROMOTION = "source.forced_promotion"
 SOURCE_HARD_DELETE = "source.hard_delete"
@@ -29,7 +32,10 @@ SOURCE_RECONCILE_RESOLVE = "source.reconcile_resolve"
 SOURCE_AUDIT_EVENT_TYPES: frozenset[str] = frozenset(
     {
         SOURCE_UPLOAD_REGISTER,
+        SOURCE_MATCH_SET_CREATE,
+        SOURCE_MATCH_SET_VALIDATE,
         SOURCE_MATCH_SET_ACTIVATE,
+        SOURCE_MATCH_SET_RETIRE,
         SOURCE_REBUILD_DB,
         SOURCE_FORCED_PROMOTION,
         SOURCE_HARD_DELETE,

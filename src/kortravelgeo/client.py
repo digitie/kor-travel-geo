@@ -68,6 +68,12 @@ from .dto.source import (
     SourceGroupRestoreResponse,
     SourceGroupSoftDeleteResponse,
     SourceJanitorRunResponse,
+    SourceMatchSet,
+    SourceMatchSetActivateResponse,
+    SourceMatchSetCreateRequest,
+    SourceMatchSetDetail,
+    SourceMatchSetRetireResponse,
+    SourceMatchSetValidateResponse,
     SourceReconcileItem,
     SourceReconcileRun,
     UploadSessionCreateRequest,
@@ -989,6 +995,68 @@ class AsyncAddressClient:
         return await compute_source_capacity(
             self._engine(),
             capacity_limit_bytes=self.settings.source_storage_capacity_limit_bytes,
+        )
+
+    # --- Source match sets (T-205a) ---------------------------------------
+
+    async def list_source_match_sets(
+        self, *, state: str | None = None, limit: int = 100
+    ) -> tuple[SourceMatchSet, ...]:
+        """List source match sets (T-205a)."""
+        from .infra.source_match_set_service import SourceMatchSetRepository
+
+        return await SourceMatchSetRepository(self._engine()).list_match_sets(
+            state=state, limit=limit
+        )
+
+    async def get_source_match_set(
+        self, source_match_set_id: str
+    ) -> SourceMatchSetDetail:
+        """Get one source match set + its items (T-205a)."""
+        from .infra.source_match_set_service import SourceMatchSetRepository
+
+        return await SourceMatchSetRepository(self._engine()).get_match_set(
+            source_match_set_id
+        )
+
+    async def create_source_match_set(
+        self, req: SourceMatchSetCreateRequest, *, actor: str | None
+    ) -> SourceMatchSetDetail:
+        """Create a ``draft`` source match set + its items (T-205a)."""
+        from .infra.source_match_set_service import SourceMatchSetRepository
+
+        return await SourceMatchSetRepository(self._engine()).create_match_set(
+            req, actor=actor
+        )
+
+    async def validate_source_match_set(
+        self, source_match_set_id: str, *, actor: str | None
+    ) -> SourceMatchSetValidateResponse:
+        """Run the match set ``validate`` state-split (T-205a, doc ~806/813-815)."""
+        from .infra.source_match_set_service import SourceMatchSetRepository
+
+        return await SourceMatchSetRepository(self._engine()).validate_match_set(
+            source_match_set_id, actor=actor
+        )
+
+    async def activate_source_match_set(
+        self, source_match_set_id: str, *, actor: str | None
+    ) -> SourceMatchSetActivateResponse:
+        """Atomic-swap activate a ``validated`` match set (T-205a, doc ~807)."""
+        from .infra.source_match_set_service import SourceMatchSetRepository
+
+        return await SourceMatchSetRepository(self._engine()).activate_match_set(
+            source_match_set_id, actor=actor
+        )
+
+    async def retire_source_match_set(
+        self, source_match_set_id: str, *, actor: str | None
+    ) -> SourceMatchSetRetireResponse:
+        """Retire a source match set (T-205a, doc ~808)."""
+        from .infra.source_match_set_service import SourceMatchSetRepository
+
+        return await SourceMatchSetRepository(self._engine()).retire_match_set(
+            source_match_set_id, actor=actor
         )
 
     async def list_dataset_snapshots(
