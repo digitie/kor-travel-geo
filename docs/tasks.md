@@ -11,17 +11,19 @@
 
 ### 두 에이전트 병행 권장 순서
 
-두 에이전트가 동시에 진행할 때는 **Agent A = 데이터 원천 보강·검증 owner**, **Agent B = source registry/upload/reconcile/match-set 기반 owner**로 나눈다. Agent B는 `T-206`을 `T-118` 확정 전에는 착수하지 않는다.
+두 에이전트가 동시에 진행할 때는 **Agent A = 데이터 원천 보강·검증 owner**, **Agent B = source registry/upload/reconcile/match-set 기반 owner**로 나눈다. Agent B는 `T-206`을 `T-118` 확정 전에는 착수하지 않는다. `T-200`은 B 전 체인과 A의 `T-206` seed까지의 단일 root이므로 가장 먼저 머지해 모두의 대기를 푼다.
 
 1. 1차 병행
-   - Agent A: `T-110` → `T-111` → `T-112` → `T-113` → `T-114` → `T-115` → `T-116` → `T-117` → `T-118`
-   - Agent B: `T-200` → `T-202` → `T-201` → `T-203` → `T-204` → `T-205`
-2. 2차 합류
-   - Agent A: `T-206`의 C11~C17 registry seed·metric mapping 지원 → `T-121` → `T-122` → `T-123`
-   - Agent B: `T-206` backend registry/API/run-validation 뼈대 → `T-207` → `T-208` → `T-209`
+   - Agent A: `T-110` → `T-111` → `T-112` → `T-113` → `T-114` → `T-115` → `T-116` → `T-117` → `T-118`. 의존 없는 `T-120`(epost 우편번호 수동 적재·검증; `T-207`과 **공유 검증 모듈**)도 이 구간에 병행한다 — `T-207`이 `T-120`에 의존하므로 2차 전에 끝나 있어야 한다.
+   - Agent B: `T-200` → (`T-201` ∥ `T-202`; 둘 다 `T-200`만 의존) → `T-203`(`T-201`·`T-202` 모두 필요) → `T-204` → `T-205`
+2. 2차 합류 (`T-118` 확정 후)
+   - Agent A: `T-206`의 C11~C17 registry seed·metric mapping(B 뼈대 머지 후) → `T-207` 주도(epost 적재/검증 로직; upload/RustFS 플럼빙은 B 제공)
+   - Agent B: `T-206` backend registry/API/run-validation 뼈대 → `T-208` → `T-209`. `T-207`·`T-208`은 `T-206`에 의존하지 않으므로 `T-206`과 병렬 진행 가능하다.
 3. 최종 검증·운영 보강
    - Agent A+B: `T-210`
-   - Agent B 중심: `T-211` → `T-212` → `T-213` → `T-214` → `T-215`
+   - Agent B: `T-211` → `T-212`
+   - Agent A: `T-121` → `T-122` → `T-123` (phase ① 전국 라이브·벤치·최종 검증; `T-211`·`T-212`와 병렬)
+   - Agent A+B: `T-213` → `T-214` → `T-215` (phase ② 전국 라이브 로딩·벤치·최종 검증; B 주도 + A 정확도/정합성 검증)
    - Agent A: `T-119`는 `T-118` ADR 승인 시에만 별도 진행하고, 승인되지 않으면 검증 전용 결론을 유지한다.
 
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
