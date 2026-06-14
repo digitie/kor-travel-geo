@@ -5,6 +5,7 @@ import {
   Braces,
   Database,
   FileText,
+  FolderUp,
   GitBranch,
   ListChecks,
   MapPinned,
@@ -25,6 +26,7 @@ const debugLinks = [
 ];
 
 const adminLinks = [
+  { href: "/admin/source-files", label: "Source Files", icon: FolderUp },
   { href: "/admin/load", label: "Load", icon: GitBranch },
   { href: "/admin/backups", label: "Backups", icon: Archive },
   { href: "/admin/tables", label: "Tables", icon: Database },
