@@ -785,6 +785,27 @@ CREATE SCHEMA IF NOT EXISTS ops;
 | `ops.maintenance_windows` | destructive restore, schema migration, full reset, exclusive MV swap 차단/허용 상태 | `load_jobs`, `ops.audit_events` |
 | `ops.table_stats_snapshots` | table/MV/index row count, size, bloat, analyze 상태 추세. T-050 5차부터 수동 capture와 API opt-in 주기 capture가 모두 현재 active serving release snapshot에 자동 연결된다. | `ops.dataset_snapshots`, T-047 benchmark |
 
+### `ops.source_*` 원천 파일 registry / match set (T-200, T-109)
+
+업로드한 압축 원천 archive의 정본 registry, 사용자가 조합하는 source match set, RustFS↔DB 정합성 검증, DB 기반 정합성 case 정의를 관리한다. `ops.artifacts`(산출물)와 분리되며, match set은 file이 아니라 group을 참조한다. DDL은 `src/kortravelgeo/infra/sql.py`(`SCHEMA_SQL`/`INDEX_SQL`)와 `alembic/versions/0016_t200_source_registry.py`, 설계 근거는 `docs/t109-backup-source-upload-management.md`.
+
+| 테이블 | 역할 | 핵심 연결 |
+|--------|------|-----------|
+| `ops.source_file_groups` | match set이 직접 참조하는 원천 단위. `single_file`/`multi_part`(시도별 17개 ZIP 등). `state`/`validation_state` 분리, `available`은 검증 `passed`/`warning`만 허용 | `ops.source_files`, `ops.source_match_set_items` |
+| `ops.source_files` | 업로드된 압축 원본 파일 정본. 파일 1건은 group 1건에 속함. SHA-256/size/object key 기록 | `ops.source_file_groups` |
+| `ops.source_file_members` | archive 내부 member/layer 검증 결과(시도별 ZIP, SHP sidecar, TXT, DBF) | `ops.source_files` |
+| `ops.source_file_validations` | group/file scope 검증 실행 이력(validator 버전별 재검증) | `ops.source_file_groups`, `ops.source_files` |
+| `ops.source_upload_sessions` | multipart upload 진행 상태 영속화. registry row는 `register` 전까지 미생성 | `ops.source_file_groups` |
+| `ops.source_upload_session_parts` | upload session의 part별 multipart upload id/etag/진행 바이트 | `ops.source_upload_sessions` |
+| `ops.source_match_sets` | DB 재구성/검증에 쓸 파일 조합 상위 객체. active 1건만 허용(partial unique index). `integrity_alert`로 무결성 결손을 `state`와 분리 표시 | `ops.dataset_snapshots.source_match_set_id`, `load_jobs`, `load_consistency_reports` |
+| `ops.source_match_set_items` | match set의 category별 group 선택 또는 생략 기록. category당 1 group(`UNIQUE`) | `ops.source_match_sets`, `ops.source_file_groups` |
+| `ops.source_storage_reconcile_runs` | RustFS↔DB registry 정합성 검증 실행 단위(quick/deep) | `ops.source_storage_reconcile_items` |
+| `ops.source_storage_reconcile_items` | 개별 불일치 항목(`db_missing_object`, `hash_mismatch` 등) | `ops.source_storage_reconcile_runs`, `ops.source_file_groups`, `ops.source_files` |
+| `ops.consistency_case_definitions` | C1~C10/C11+ case metadata 정본. `consistency_case_code ~ '^C\d+$'` | `ops.consistency_case_inputs`, `ops.consistency_case_samples` |
+| `ops.consistency_case_inputs` | case별 입력 category 매핑(required 여부) | `ops.consistency_case_definitions` |
+
+`ops.dataset_snapshots`에 nullable `source_match_set_id` FK(`ON DELETE SET NULL`)를 추가해 release가 어떤 원천 조합으로 만들어졌는지 정본으로 연결한다. legacy/복원 데이터는 `source_set` JSONB의 match set snapshot을 read-only fallback으로만 본다. `ops.consistency_case_samples.case_code` CHECK는 C1~C10 전용에서 `'^C\d+$'`로 완화돼 C11+ case를 허용한다(T-200 migration).
+
 `ops.audit_events.payload_redacted`와 `ops.artifacts.manifest`에는 API key, DSN password, callback secret, download token을 평문 저장하지 않는다. 주소 원문도 감사 목적에 꼭 필요하지 않으면 hash 또는 마스킹 값만 저장한다.
 
 `ops.audit_events.job_id` FK는 `ON DELETE NO ACTION`이다. 감사 이벤트가 연결된 `load_jobs` row를 삭제하면 운영 의사결정과 실행 이력의 연결이 끊기므로, DB가 삭제를 막고 별도 retention/archive 정책을 요구해야 한다.
