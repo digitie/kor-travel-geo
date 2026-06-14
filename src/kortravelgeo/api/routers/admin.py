@@ -85,12 +85,16 @@ from kortravelgeo.dto.source import (
     ReconcileRunRequest,
     RegisterRequest,
     RegisterResponse,
+    RestoredFromBackupCreateRequest,
+    RestoredFromBackupCreateResponse,
+    RestoreSourceVerificationResult,
     ServingReleaseRollbackRequest,
     ServingReleaseRollbackResponse,
     SlotReplaceResponse,
     SourceCapacityUsage,
     SourceFileCategoryCatalog,
     SourceFileCategoryInfo,
+    SourceGroupRelinkResponse,
     SourceGroupRestoreResponse,
     SourceGroupSoftDeleteRequest,
     SourceGroupSoftDeleteResponse,
@@ -865,6 +869,48 @@ async def restore_source_file_group(
 
 
 @router.post(
+    "/source-file-groups/{source_file_group_id}/relink",
+    response_model=SourceGroupRelinkResponse,
+    response_model_exclude_none=True,
+)
+async def relink_restored_source_file_group(
+    source_file_group_id: str,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceGroupRelinkResponse:
+    """Relink a ``restored_from_backup`` stub group's RustFS objects (T-208, doc steps 7-9).
+
+    Reattaches each ``missing`` stub child by head-verifying + streaming-rehashing
+    its RustFS object against the MANIFEST sha256/size (the trust boundary): a
+    consistent object → ``validating`` (then ``available`` once all are
+    consistent), absent → ``missing``, mismatch → ``quarantined``. The group
+    recomputes ``group_sha256`` and, when every referenced group is ``available``,
+    the match set precomputes its canonical ``source_set_hash`` and transitions
+    ``restored_from_backup → revalidatable`` (M-A option 2). Requires
+    ``source_file_manager``; direct active promotion is forbidden (separate
+    ``activate`` after ``validate``).
+    """
+    result = await client.relink_restored_source_group(
+        source_file_group_id, actor=ctx.actor
+    )
+    await client.record_audit_event(
+        action="source.restored_from_backup_relink",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.state,
+        payload={
+            "category": result.category,
+            "affected_match_set_ids": list(result.affected_match_set_ids),
+        },
+        resource_type="source_file_group",
+        resource_id=source_file_group_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.post(
     "/source-files/janitor/run",
     response_model=SourceJanitorRunResponse,
     response_model_exclude_none=True,
@@ -1112,6 +1158,46 @@ async def create_source_match_set(
                  "item_count": len(req.items)},
         resource_type="source_match_set",
         resource_id=result.match_set.source_match_set_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.post(
+    "/source-match-sets/restored-from-backup",
+    response_model=RestoredFromBackupCreateResponse,
+    response_model_exclude_none=True,
+)
+async def create_restored_from_backup_match_set(
+    req: RestoredFromBackupCreateRequest,
+    request: Request,
+    ctx: RequestContext = _DESTRUCTIVE_ADMIN,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RestoredFromBackupCreateResponse:
+    """Reconstruct a ``restored_from_backup`` match set from a backup manifest (T-208).
+
+    Reads the ``db_backup`` artifact's manifest ``source_match_set`` block and
+    creates stub groups/files (``missing``/``unknown``, the manifest
+    ``group_sha256`` preserved as UNTRUSTED metadata) + items + a match set at
+    ``state='restored_from_backup'`` in one transaction (doc steps 1-6). Rebuild
+    stays disabled until every referenced group is relinked to ``available``.
+    Restore-from-backup is sensitive → requires ``destructive_admin``.
+    """
+    result = await client.create_restored_from_backup(
+        req.artifact_id, actor=ctx.actor
+    )
+    await client.record_audit_event(
+        action="source.restored_from_backup_create",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.state,
+        payload={
+            "artifact_id": req.artifact_id,
+            "created_group_count": len(result.created_group_ids),
+            "created_file_count": result.created_file_count,
+        },
+        resource_type="source_match_set",
+        resource_id=result.source_match_set_id,
         **_audit_request(request),
     )
     return result
@@ -1629,6 +1715,48 @@ async def restore_hot_swap_plan(
         **_audit_request(request),
     )
     return plan
+
+
+@router.post(
+    "/restores/hot-swap-source-verify",
+    response_model=RestoreSourceVerificationResult,
+    response_model_exclude_none=True,
+)
+async def restore_hot_swap_source_verify(
+    request: Request,
+    ctx: RequestContext = _DESTRUCTIVE_ADMIN,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RestoreSourceVerificationResult:
+    """Run the ADR-036 rename hot-swap source verification (T-208, doc ~1896-1902).
+
+    The second restore entrypoint in the source-verification matrix: invoked right
+    after the operator completes the ALTER DATABASE rename + smoke test. Resolves
+    the (now swapped-in) active snapshot's ``source_match_set_id`` and runs ONE
+    source quick reconcile against RustFS object availability. If source objects
+    are missing, serving stays up but a "재구성 불가" warning is surfaced. A legacy
+    snapshot (no FK) only flags the legacy estimate. (The pg_restore manifest
+    entrypoint runs the same verification automatically at restore finalize.)
+    Restore is sensitive → requires ``destructive_admin``.
+    """
+    result = await client.verify_restore_source_hot_swap(actor=ctx.actor)
+    await client.record_audit_event(
+        action="source.restore_source_verify",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=(
+            "reconstruct_unavailable" if result.reconstruct_unavailable else "verified"
+        ),
+        payload={
+            "entrypoint": result.entrypoint,
+            "active_source_match_set_id": result.active_source_match_set_id,
+            "mismatch_count": result.mismatch_count,
+            "reconstruct_unavailable": result.reconstruct_unavailable,
+        },
+        resource_type="database",
+        resource_id=result.active_source_match_set_id or "current",
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.get("/jobs", response_model=list[LoadJobStatus], response_model_exclude_none=True)

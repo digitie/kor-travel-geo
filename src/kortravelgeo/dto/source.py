@@ -850,3 +850,87 @@ class ServingReleaseRollbackResponse(FrozenModel):
     retired_match_set_id: str | None = None
     target_integrity_alert: bool = False
     message: str | None = None
+
+
+# --- restored_from_backup + relink (T-208) ---------------------------------
+# Shapes for ``POST .../restored-from-backup`` (reconstruct a read-only match set
+# from a backup manifest's source_match_set block) and ``POST
+# .../source-file-groups/{id}/relink`` (reattach a stub group's RustFS objects).
+# Follow ``docs/t109-backup-source-upload-management.md`` "백업/복원 manifest 확장"
+# (lines ~1848-1914), ADR-049 backup/restore rows.
+
+
+class RestoredFromBackupCreateRequest(FrozenModel):
+    """``POST /v1/admin/source-match-sets/restored-from-backup`` body (doc step 1-2).
+
+    Reconstruct a read-only ``restored_from_backup`` match set from a backup
+    ``db_backup`` artifact's manifest ``source_match_set`` block. The created match
+    set's groups/files are ``missing``/``unknown`` stubs (objects not verified);
+    the manifest ``group_sha256`` is preserved as UNTRUSTED metadata. Rebuild stays
+    disabled until every referenced group is relinked to ``available``.
+    """
+
+    artifact_id: str
+
+
+class RestoredFromBackupCreateResponse(FrozenModel):
+    """``restored-from-backup`` result — the reconstructed stub match set."""
+
+    source_match_set_id: str
+    state: SourceMatchSetState
+    profile: str
+    source_set_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    created_group_ids: tuple[str, ...] = ()
+    created_file_count: int = Field(default=0, ge=0)
+    omitted_categories: tuple[str, ...] = ()
+    rebuild_enabled: bool = False
+    message: str | None = None
+
+
+class SourceGroupRelinkFile(FrozenModel):
+    """Per-child relink outcome (object present + manifest-hash consistent?)."""
+
+    source_file_id: str
+    part_key: str
+    state: SourceFileState
+    reasons: tuple[str, ...] = ()
+
+
+class SourceGroupRelinkResponse(FrozenModel):
+    """``POST .../source-file-groups/{id}/relink`` result (doc steps 7-9).
+
+    Reattaches a ``restored_from_backup`` stub group's RustFS objects: each child
+    ``missing → validating`` (present + manifest-hash/size consistent → streaming
+    rehash recorded), ``missing`` (absent), or ``quarantined`` (mismatch); the
+    group then recomputes ``group_sha256`` and, when all referenced groups are
+    ``available``, the match set precomputes its canonical ``source_set_hash`` and
+    transitions ``restored_from_backup → revalidatable`` (M-A option 2).
+    """
+
+    source_file_group_id: str
+    category: SourceFileCategory
+    state: SourceGroupState
+    validation_state: SourceValidationState
+    group_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    files: tuple[SourceGroupRelinkFile, ...] = ()
+    affected_match_set_ids: tuple[str, ...] = ()
+
+
+class RestoreSourceVerificationResult(FrozenModel):
+    """Result of the post-restore source quick reconcile (doc ~1896-1902).
+
+    Surfaced after a ``pg_restore`` manifest restore or an ADR-036 rename
+    hot-swap. ``run_quick_reconcile`` is False (and ``legacy_estimate_only`` True)
+    when the active snapshot has no ``source_match_set_id`` FK. When the reconcile
+    finds missing source objects, serving stays up but ``reconstruct_unavailable``
+    is True and a "재구성 불가" warning is surfaced.
+    """
+
+    entrypoint: Literal["pg_restore", "rename_hot_swap"]
+    run_quick_reconcile: bool
+    legacy_estimate_only: bool = False
+    active_source_match_set_id: str | None = None
+    reconcile_run_id: str | None = None
+    mismatch_count: int = Field(default=0, ge=0)
+    reconstruct_unavailable: bool = False
+    message: str | None = None

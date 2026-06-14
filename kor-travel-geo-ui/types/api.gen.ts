@@ -749,6 +749,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/restores/hot-swap-source-verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Hot Swap Source Verify
+         * @description Run the ADR-036 rename hot-swap source verification (T-208, doc ~1896-1902).
+         *
+         *     The second restore entrypoint in the source-verification matrix: invoked right
+         *     after the operator completes the ALTER DATABASE rename + smoke test. Resolves
+         *     the (now swapped-in) active snapshot's ``source_match_set_id`` and runs ONE
+         *     source quick reconcile against RustFS object availability. If source objects
+         *     are missing, serving stays up but a "재구성 불가" warning is surfaced. A legacy
+         *     snapshot (no FK) only flags the legacy estimate. (The pg_restore manifest
+         *     entrypoint runs the same verification automatically at restore finalize.)
+         *     Restore is sensitive → requires ``destructive_admin``.
+         */
+        post: operations["restore_hot_swap_source_verify_v1_admin_restores_hot_swap_source_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/source-file-categories": {
         parameters: {
             query?: never;
@@ -767,6 +796,36 @@ export interface paths {
         get: operations["source_file_categories_v1_admin_source_file_categories_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-file-groups/{source_file_group_id}/relink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Relink Restored Source File Group
+         * @description Relink a ``restored_from_backup`` stub group's RustFS objects (T-208, doc steps 7-9).
+         *
+         *     Reattaches each ``missing`` stub child by head-verifying + streaming-rehashing
+         *     its RustFS object against the MANIFEST sha256/size (the trust boundary): a
+         *     consistent object → ``validating`` (then ``available`` once all are
+         *     consistent), absent → ``missing``, mismatch → ``quarantined``. The group
+         *     recomputes ``group_sha256`` and, when every referenced group is ``available``,
+         *     the match set precomputes its canonical ``source_set_hash`` and transitions
+         *     ``restored_from_backup → revalidatable`` (M-A option 2). Requires
+         *     ``source_file_manager``; direct active promotion is forbidden (separate
+         *     ``activate`` after ``validate``).
+         */
+        post: operations["relink_restored_source_file_group_v1_admin_source_file_groups__source_file_group_id__relink_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1195,6 +1254,33 @@ export interface paths {
          *     canonical ``source_set_hash`` stays NULL for a draft (computed at validate).
          */
         post: operations["create_source_match_set_v1_admin_source_match_sets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-match-sets/restored-from-backup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Restored From Backup Match Set
+         * @description Reconstruct a ``restored_from_backup`` match set from a backup manifest (T-208).
+         *
+         *     Reads the ``db_backup`` artifact's manifest ``source_match_set`` block and
+         *     creates stub groups/files (``missing``/``unknown``, the manifest
+         *     ``group_sha256`` preserved as UNTRUSTED metadata) + items + a match set at
+         *     ``state='restored_from_backup'`` in one transaction (doc steps 1-6). Rebuild
+         *     stays disabled until every referenced group is relinked to ``available``.
+         *     Restore-from-backup is sensitive → requires ``destructive_admin``.
+         */
+        post: operations["create_restored_from_backup_match_set_v1_admin_source_match_sets_restored_from_backup_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3206,6 +3292,99 @@ export interface components {
             /** Restore Database */
             restore_database: string;
         };
+        /**
+         * RestoreSourceVerificationResult
+         * @description Result of the post-restore source quick reconcile (doc ~1896-1902).
+         *
+         *     Surfaced after a ``pg_restore`` manifest restore or an ADR-036 rename
+         *     hot-swap. ``run_quick_reconcile`` is False (and ``legacy_estimate_only`` True)
+         *     when the active snapshot has no ``source_match_set_id`` FK. When the reconcile
+         *     finds missing source objects, serving stays up but ``reconstruct_unavailable``
+         *     is True and a "재구성 불가" warning is surfaced.
+         */
+        RestoreSourceVerificationResult: {
+            /** Active Source Match Set Id */
+            active_source_match_set_id?: string | null;
+            /**
+             * Entrypoint
+             * @enum {string}
+             */
+            entrypoint: "pg_restore" | "rename_hot_swap";
+            /**
+             * Legacy Estimate Only
+             * @default false
+             */
+            legacy_estimate_only: boolean;
+            /** Message */
+            message?: string | null;
+            /**
+             * Mismatch Count
+             * @default 0
+             */
+            mismatch_count: number;
+            /** Reconcile Run Id */
+            reconcile_run_id?: string | null;
+            /**
+             * Reconstruct Unavailable
+             * @default false
+             */
+            reconstruct_unavailable: boolean;
+            /** Run Quick Reconcile */
+            run_quick_reconcile: boolean;
+        };
+        /**
+         * RestoredFromBackupCreateRequest
+         * @description ``POST /v1/admin/source-match-sets/restored-from-backup`` body (doc step 1-2).
+         *
+         *     Reconstruct a read-only ``restored_from_backup`` match set from a backup
+         *     ``db_backup`` artifact's manifest ``source_match_set`` block. The created match
+         *     set's groups/files are ``missing``/``unknown`` stubs (objects not verified);
+         *     the manifest ``group_sha256`` is preserved as UNTRUSTED metadata. Rebuild stays
+         *     disabled until every referenced group is relinked to ``available``.
+         */
+        RestoredFromBackupCreateRequest: {
+            /** Artifact Id */
+            artifact_id: string;
+        };
+        /**
+         * RestoredFromBackupCreateResponse
+         * @description ``restored-from-backup`` result — the reconstructed stub match set.
+         */
+        RestoredFromBackupCreateResponse: {
+            /**
+             * Created File Count
+             * @default 0
+             */
+            created_file_count: number;
+            /**
+             * Created Group Ids
+             * @default []
+             */
+            created_group_ids: string[];
+            /** Message */
+            message?: string | null;
+            /**
+             * Omitted Categories
+             * @default []
+             */
+            omitted_categories: string[];
+            /** Profile */
+            profile: string;
+            /**
+             * Rebuild Enabled
+             * @default false
+             */
+            rebuild_enabled: boolean;
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /** Source Set Hash */
+            source_set_hash?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "draft" | "validated" | "active" | "retired" | "invalid" | "revalidatable" | "restored_from_backup";
+        };
         /** @enum {string} */
         ResultSource: "local" | "api_juso" | "api_vworld" | "cache";
         /** ReverseExtension */
@@ -3839,6 +4018,68 @@ export interface components {
             state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
             /** Storage Uri */
             storage_uri: string;
+        };
+        /**
+         * SourceGroupRelinkFile
+         * @description Per-child relink outcome (object present + manifest-hash consistent?).
+         */
+        SourceGroupRelinkFile: {
+            /** Part Key */
+            part_key: string;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+            /** Source File Id */
+            source_file_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+        };
+        /**
+         * SourceGroupRelinkResponse
+         * @description ``POST .../source-file-groups/{id}/relink`` result (doc steps 7-9).
+         *
+         *     Reattaches a ``restored_from_backup`` stub group's RustFS objects: each child
+         *     ``missing → validating`` (present + manifest-hash/size consistent → streaming
+         *     rehash recorded), ``missing`` (absent), or ``quarantined`` (mismatch); the
+         *     group then recomputes ``group_sha256`` and, when all referenced groups are
+         *     ``available``, the match set precomputes its canonical ``source_set_hash`` and
+         *     transitions ``restored_from_backup → revalidatable`` (M-A option 2).
+         */
+        SourceGroupRelinkResponse: {
+            /**
+             * Affected Match Set Ids
+             * @default []
+             */
+            affected_match_set_ids: string[];
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /**
+             * Files
+             * @default []
+             */
+            files: components["schemas"]["SourceGroupRelinkFile"][];
+            /** Group Sha256 */
+            group_sha256?: string | null;
+            /** Source File Group Id */
+            source_file_group_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+            /**
+             * Validation State
+             * @enum {string}
+             */
+            validation_state: "unknown" | "not_started" | "running" | "passed" | "warning" | "failed" | "skipped";
         };
         /**
          * SourceGroupRestoreFile
@@ -6405,6 +6646,26 @@ export interface operations {
             };
         };
     };
+    restore_hot_swap_source_verify_v1_admin_restores_hot_swap_source_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreSourceVerificationResult"];
+                };
+            };
+        };
+    };
     source_file_categories_v1_admin_source_file_categories_get: {
         parameters: {
             query?: never;
@@ -6421,6 +6682,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceFileCategoryCatalog"];
+                };
+            };
+        };
+    };
+    relink_restored_source_file_group_v1_admin_source_file_groups__source_file_group_id__relink_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_file_group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceGroupRelinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -7115,6 +7407,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceMatchSetDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_restored_from_backup_match_set_v1_admin_source_match_sets_restored_from_backup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoredFromBackupCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoredFromBackupCreateResponse"];
                 };
             };
             /** @description Validation Error */

@@ -4866,6 +4866,179 @@
         "title": "RestoreHotSwapPlanRequest",
         "type": "object"
       },
+      "RestoreSourceVerificationResult": {
+        "additionalProperties": false,
+        "description": "Result of the post-restore source quick reconcile (doc ~1896-1902).\n\nSurfaced after a ``pg_restore`` manifest restore or an ADR-036 rename\nhot-swap. ``run_quick_reconcile`` is False (and ``legacy_estimate_only`` True)\nwhen the active snapshot has no ``source_match_set_id`` FK. When the reconcile\nfinds missing source objects, serving stays up but ``reconstruct_unavailable``\nis True and a \"재구성 불가\" warning is surfaced.",
+        "properties": {
+          "active_source_match_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Source Match Set Id"
+          },
+          "entrypoint": {
+            "enum": [
+              "pg_restore",
+              "rename_hot_swap"
+            ],
+            "title": "Entrypoint",
+            "type": "string"
+          },
+          "legacy_estimate_only": {
+            "default": false,
+            "title": "Legacy Estimate Only",
+            "type": "boolean"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "mismatch_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Mismatch Count",
+            "type": "integer"
+          },
+          "reconcile_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconcile Run Id"
+          },
+          "reconstruct_unavailable": {
+            "default": false,
+            "title": "Reconstruct Unavailable",
+            "type": "boolean"
+          },
+          "run_quick_reconcile": {
+            "title": "Run Quick Reconcile",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "entrypoint",
+          "run_quick_reconcile"
+        ],
+        "title": "RestoreSourceVerificationResult",
+        "type": "object"
+      },
+      "RestoredFromBackupCreateRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/source-match-sets/restored-from-backup`` body (doc step 1-2).\n\nReconstruct a read-only ``restored_from_backup`` match set from a backup\n``db_backup`` artifact's manifest ``source_match_set`` block. The created match\nset's groups/files are ``missing``/``unknown`` stubs (objects not verified);\nthe manifest ``group_sha256`` is preserved as UNTRUSTED metadata. Rebuild stays\ndisabled until every referenced group is relinked to ``available``.",
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id"
+        ],
+        "title": "RestoredFromBackupCreateRequest",
+        "type": "object"
+      },
+      "RestoredFromBackupCreateResponse": {
+        "additionalProperties": false,
+        "description": "``restored-from-backup`` result — the reconstructed stub match set.",
+        "properties": {
+          "created_file_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Created File Count",
+            "type": "integer"
+          },
+          "created_group_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Created Group Ids",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "omitted_categories": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Omitted Categories",
+            "type": "array"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "rebuild_enabled": {
+            "default": false,
+            "title": "Rebuild Enabled",
+            "type": "boolean"
+          },
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "source_set_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Set Hash"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "validated",
+              "active",
+              "retired",
+              "invalid",
+              "revalidatable",
+              "restored_from_backup"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_match_set_id",
+          "state",
+          "profile"
+        ],
+        "title": "RestoredFromBackupCreateResponse",
+        "type": "object"
+      },
       "ResultSource": {
         "enum": [
           "local",
@@ -6417,6 +6590,143 @@
           "state"
         ],
         "title": "SourceFileRegistered",
+        "type": "object"
+      },
+      "SourceGroupRelinkFile": {
+        "additionalProperties": false,
+        "description": "Per-child relink outcome (object present + manifest-hash consistent?).",
+        "properties": {
+          "part_key": {
+            "title": "Part Key",
+            "type": "string"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "source_file_id": {
+            "title": "Source File Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "validating",
+              "available",
+              "quarantined",
+              "missing",
+              "soft_deleted",
+              "hard_deleted",
+              "delete_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_id",
+          "part_key",
+          "state"
+        ],
+        "title": "SourceGroupRelinkFile",
+        "type": "object"
+      },
+      "SourceGroupRelinkResponse": {
+        "additionalProperties": false,
+        "description": "``POST .../source-file-groups/{id}/relink`` result (doc steps 7-9).\n\nReattaches a ``restored_from_backup`` stub group's RustFS objects: each child\n``missing → validating`` (present + manifest-hash/size consistent → streaming\nrehash recorded), ``missing`` (absent), or ``quarantined`` (mismatch); the\ngroup then recomputes ``group_sha256`` and, when all referenced groups are\n``available``, the match set precomputes its canonical ``source_set_hash`` and\ntransitions ``restored_from_backup → revalidatable`` (M-A option 2).",
+        "properties": {
+          "affected_match_set_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Match Set Ids",
+            "type": "array"
+          },
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceGroupRelinkFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "group_sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Sha256"
+          },
+          "source_file_group_id": {
+            "title": "Source File Group Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "validating",
+              "available",
+              "quarantined",
+              "missing",
+              "soft_deleted",
+              "hard_deleted",
+              "delete_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "validation_state": {
+            "enum": [
+              "unknown",
+              "not_started",
+              "running",
+              "passed",
+              "warning",
+              "failed",
+              "skipped"
+            ],
+            "title": "Validation State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_group_id",
+          "category",
+          "state",
+          "validation_state"
+        ],
+        "title": "SourceGroupRelinkResponse",
         "type": "object"
       },
       "SourceGroupRestoreFile": {
@@ -12013,6 +12323,28 @@
         ]
       }
     },
+    "/v1/admin/restores/hot-swap-source-verify": {
+      "post": {
+        "description": "Run the ADR-036 rename hot-swap source verification (T-208, doc ~1896-1902).\n\nThe second restore entrypoint in the source-verification matrix: invoked right\nafter the operator completes the ALTER DATABASE rename + smoke test. Resolves\nthe (now swapped-in) active snapshot's ``source_match_set_id`` and runs ONE\nsource quick reconcile against RustFS object availability. If source objects\nare missing, serving stays up but a \"재구성 불가\" warning is surfaced. A legacy\nsnapshot (no FK) only flags the legacy estimate. (The pg_restore manifest\nentrypoint runs the same verification automatically at restore finalize.)\nRestore is sensitive → requires ``destructive_admin``.",
+        "operationId": "restore_hot_swap_source_verify_v1_admin_restores_hot_swap_source_verify_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreSourceVerificationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Restore Hot Swap Source Verify",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/source-file-categories": {
       "get": {
         "description": "Static catalog of source upload categories (T-200/T-201).\n\nReplaces the removed auto-detection upload-SET flow: the UI uses this to draw\nexplicit per-category upload slots. ``role``/``default_role`` are UI defaults;\nthe authoritative role lives on ``ops.source_match_set_items``.",
@@ -12030,6 +12362,49 @@
           }
         },
         "summary": "Source File Categories",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-file-groups/{source_file_group_id}/relink": {
+      "post": {
+        "description": "Relink a ``restored_from_backup`` stub group's RustFS objects (T-208, doc steps 7-9).\n\nReattaches each ``missing`` stub child by head-verifying + streaming-rehashing\nits RustFS object against the MANIFEST sha256/size (the trust boundary): a\nconsistent object → ``validating`` (then ``available`` once all are\nconsistent), absent → ``missing``, mismatch → ``quarantined``. The group\nrecomputes ``group_sha256`` and, when every referenced group is ``available``,\nthe match set precomputes its canonical ``source_set_hash`` and transitions\n``restored_from_backup → revalidatable`` (M-A option 2). Requires\n``source_file_manager``; direct active promotion is forbidden (separate\n``activate`` after ``validate``).",
+        "operationId": "relink_restored_source_file_group_v1_admin_source_file_groups__source_file_group_id__relink_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_file_group_id",
+            "required": true,
+            "schema": {
+              "title": "Source File Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceGroupRelinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Relink Restored Source File Group",
         "tags": [
           "admin"
         ]
@@ -13190,6 +13565,48 @@
           }
         },
         "summary": "Create Source Match Set",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-match-sets/restored-from-backup": {
+      "post": {
+        "description": "Reconstruct a ``restored_from_backup`` match set from a backup manifest (T-208).\n\nReads the ``db_backup`` artifact's manifest ``source_match_set`` block and\ncreates stub groups/files (``missing``/``unknown``, the manifest\n``group_sha256`` preserved as UNTRUSTED metadata) + items + a match set at\n``state='restored_from_backup'`` in one transaction (doc steps 1-6). Rebuild\nstays disabled until every referenced group is relinked to ``available``.\nRestore-from-backup is sensitive → requires ``destructive_admin``.",
+        "operationId": "create_restored_from_backup_match_set_v1_admin_source_match_sets_restored_from_backup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoredFromBackupCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoredFromBackupCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Restored From Backup Match Set",
         "tags": [
           "admin"
         ]

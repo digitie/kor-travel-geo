@@ -27,6 +27,10 @@ SOURCE_JANITOR = "source.janitor"
 # T-204 RustFS reconciliation.
 SOURCE_RECONCILE_RUN = "source.reconcile_run"
 SOURCE_RECONCILE_RESOLVE = "source.reconcile_resolve"
+# T-208 backup/restore source reconstruction.
+SOURCE_RESTORED_FROM_BACKUP_CREATE = "source.restored_from_backup_create"
+SOURCE_RESTORED_FROM_BACKUP_RELINK = "source.restored_from_backup_relink"
+SOURCE_RESTORE_SOURCE_VERIFY = "source.restore_source_verify"
 
 #: All source-management audit event types introduced for T-109 / T-203+.
 SOURCE_AUDIT_EVENT_TYPES: frozenset[str] = frozenset(
@@ -43,5 +47,8 @@ SOURCE_AUDIT_EVENT_TYPES: frozenset[str] = frozenset(
         SOURCE_JANITOR,
         SOURCE_RECONCILE_RUN,
         SOURCE_RECONCILE_RESOLVE,
+        SOURCE_RESTORED_FROM_BACKUP_CREATE,
+        SOURCE_RESTORED_FROM_BACKUP_RELINK,
+        SOURCE_RESTORE_SOURCE_VERIFY,
     }
 )
