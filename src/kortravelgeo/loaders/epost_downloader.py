@@ -5,6 +5,7 @@ from __future__ import annotations
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
+from xml.etree import ElementTree
 
 import anyio
 import httpx
@@ -28,7 +29,7 @@ async def download_epost_zip(
     await anyio.Path(root).mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     zip_path = root / f"epost_downloadKnd_{download_kind}_{timestamp}.zip"
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
         response = await client.get(
             settings.epost_download_url,
             params={
@@ -37,11 +38,28 @@ async def download_epost_zip(
             },
         )
         response.raise_for_status()
+        if not response.content.startswith(b"PK"):
+            zip_url = _extract_epost_zip_url(response)
+            if zip_url is not None:
+                response = await client.get(str(response.url.join(zip_url)))
+                response.raise_for_status()
     if not response.content.startswith(b"PK"):
         msg = "epost download did not return a ZIP payload"
         raise LoaderError(msg)
     await anyio.Path(zip_path).write_bytes(response.content)
     return zip_path
+
+
+def _extract_epost_zip_url(response: httpx.Response) -> str | None:
+    try:
+        root = ElementTree.fromstring(response.text)
+    except ElementTree.ParseError:
+        return None
+    for element in root.iter():
+        tag = element.tag.rsplit("}", maxsplit=1)[-1]
+        if tag == "fileLocplc" and element.text and element.text.strip():
+            return element.text.strip()
+    return None
 
 
 def extract_epost_zip(zip_path: Path | str, output_dir: Path | str | None = None) -> Path:

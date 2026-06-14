@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-120 epost 우편번호 수동 적재·검증)
+
+**작업**: epost 사서함·다량배달처 파일을 DB COPY 전에 검증하는 공통 모듈을 추가했다. T-207 server-fetch/RustFS register 흐름에서 같은 검증을 재사용할 수 있도록 파일 검증과 CLI 출력, 로더 hard gate를 분리했다.
+
+**반영**:
+- `src/kortravelgeo/loaders/epost_validation.py`를 추가했다. `utf-8-sig`/`cp949` 인코딩, 한글/영문 컬럼 alias, 행수, 필수 컬럼·값, 5자리 우편번호, `PO`/`PG` 사서함 종류, 사서함 번호 정수, 중복 key sanity를 검증한다.
+- `pobox_loader.py`와 `bulk_loader.py`가 검증을 통과한 파일만 COPY하도록 했다. `copy_*_rows()`는 기존 row iterable 경로를 유지하고, 파일 기반 `load_*()` 진입점에서만 검증한다.
+- `ktgctl load pobox`, `ktgctl load bulk`, `ktgctl load epost`, 선택 `load all-sidos --pobox/--bulk` 경로가 검증 요약을 출력한 뒤 적재한다.
+- `download_epost_zip()`은 공공데이터포털 응답이 직접 ZIP이거나 `fileLocplc` XML인 경우를 모두 처리한다.
+- GitHub Actions fresh dependency에서 최신 FastAPI가 lifespan 시작 전 `app.routes`를 flatten하지 않아도 route 계약 테스트가 `app.openapi()["paths"]`로 전체 path를 확인하도록 `tests/unit/test_api_app_contract.py`를 보강했다.
+- `docs/t120-epost-postal-validation.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`, `docs/external-apis.md`를 갱신했다.
+
+**검증**: NTFS worktree에서 `pytest tests/unit/test_epost_validation.py tests/unit/test_epost_downloader.py tests/unit/test_cli_contract.py -q` → 16 passed. WSL ext4 테스트 미러에서 `pytest -q` → 513 passed, 30 skipped, 24 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과.
+
 ## 2026-06-14 (T-118 phase 1 go/no-go 종합 + serving 편입 ADR 게이트)
 
 **작업**: T-111~T-117 보강 검증 prototype 결과를 종합해 C11~C17의 phase ② registry 입력과 serving 편입 gate를 문서화했다. C11 출입구 계열만 조건부 serving 후보로 남기고, C12~C17은 검증 전용으로 판정했다.
