@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, RotateCcw, Trash2, Link2, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
+import { CapacitySummaryCard } from "@/components/admin/source-files/CapacitySummaryCard";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { postJson, requestJson } from "@/lib/api";
@@ -78,6 +79,8 @@ export function ListTab() {
 
   return (
     <div className="source-stack">
+      <CapacitySummaryCard />
+
       <Panel
         title="원천 파일 그룹"
         actions={

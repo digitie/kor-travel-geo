@@ -636,6 +636,7 @@ class SourceCapacityUsage(FrozenModel):
     quarantined_bytes: int = Field(default=0, ge=0)
     soft_deleted_bytes: int = Field(default=0, ge=0)
     unregistered_bytes: int = Field(default=0, ge=0)
+    growth_30d_bytes: int = Field(default=0, ge=0)
     capacity_limit_bytes: int | None = Field(default=None, ge=0)
     over_threshold: bool = False
 

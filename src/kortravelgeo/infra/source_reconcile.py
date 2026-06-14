@@ -929,6 +929,16 @@ SELECT COALESCE(sum(object_size_bytes), 0)
 """
             )
         )
+        growth_30d = await conn.scalar(
+            text(
+                """
+SELECT COALESCE(sum(size_bytes), 0)
+  FROM ops.source_files
+ WHERE state NOT IN ('hard_deleted')
+   AND uploaded_at >= now() - interval '30 days'
+"""
+            )
+        )
 
     categories = tuple(
         CategoryCapacity(
@@ -943,6 +953,7 @@ SELECT COALESCE(sum(object_size_bytes), 0)
     usage: CapacityUsage = compute_capacity_usage(
         categories,
         unregistered_bytes=int(unregistered or 0),
+        growth_30d_bytes=int(growth_30d or 0),
         capacity_limit_bytes=capacity_limit_bytes,
         threshold_ratio=threshold_ratio,
     )
@@ -966,6 +977,7 @@ def _capacity_dto(usage: CapacityUsage) -> SourceCapacityUsage:
         quarantined_bytes=usage.quarantined_bytes,
         soft_deleted_bytes=usage.soft_deleted_bytes,
         unregistered_bytes=usage.unregistered_bytes,
+        growth_30d_bytes=usage.growth_30d_bytes,
         capacity_limit_bytes=usage.capacity_limit_bytes,
         over_threshold=usage.over_threshold,
     )

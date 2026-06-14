@@ -19,6 +19,7 @@ Everything follows ``docs/t109-backup-source-upload-management.md``:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Literal
@@ -582,6 +583,7 @@ class CapacityUsage:
     quarantined_bytes: int
     soft_deleted_bytes: int
     unregistered_bytes: int = 0
+    growth_30d_bytes: int = 0
     capacity_limit_bytes: int | None = None
     over_threshold: bool = False
 
@@ -590,16 +592,17 @@ def compute_capacity_usage(
     categories: tuple[CategoryCapacity, ...],
     *,
     unregistered_bytes: int = 0,
+    growth_30d_bytes: int = 0,
     capacity_limit_bytes: int | None = None,
     threshold_ratio: float = 1.0,
 ) -> CapacityUsage:
     """Aggregate per-category usage into a capacity report (doc line ~2107).
 
     Sums object counts and bytes across categories and adds any unregistered
-    (stored-but-not-in-registry) bytes. When ``capacity_limit_bytes`` is given,
-    ``over_threshold`` is set once total (registry + unregistered) bytes exceed
-    ``threshold_ratio`` of the limit, so callers can surface a preflight warning
-    before an upload/register.
+    (stored-but-not-in-registry) bytes plus the rolling 30-day byte growth.
+    When ``capacity_limit_bytes`` is given, ``over_threshold`` is set once total
+    (registry + unregistered) bytes exceed ``threshold_ratio`` of the limit, so
+    callers can surface a preflight warning before an upload/register.
     """
     total_objects = sum(c.object_count for c in categories)
     total_bytes = sum(c.total_bytes for c in categories)
@@ -618,6 +621,66 @@ def compute_capacity_usage(
         quarantined_bytes=quarantined,
         soft_deleted_bytes=soft_deleted,
         unregistered_bytes=max(0, unregistered_bytes),
+        growth_30d_bytes=max(0, growth_30d_bytes),
         capacity_limit_bytes=capacity_limit_bytes,
         over_threshold=bool(over),
+    )
+
+
+# --- observability: source-registry metric facts (T-211) --------------------
+
+
+@dataclass(frozen=True)
+class SourceRegistryMetricFacts:
+    """Flat, prometheus-ready snapshot of the source registry (doc line ~2107).
+
+    Pure projection of :class:`CapacityUsage` + upload-session state counts into
+    the label/value pairs the ``/metrics`` feed sets. Kept DB-free so the
+    metric-feed contract is unit-tested without a DB:
+
+    * ``category_objects`` / ``category_bytes`` — per-category gauges;
+    * ``total_*`` — bucket-wide byte breakdown (registry, quarantined,
+      soft_deleted, unregistered, 30-day growth);
+    * ``session_states`` — open upload sessions by lifecycle state.
+    """
+
+    category_objects: tuple[tuple[str, int], ...]
+    category_bytes: tuple[tuple[str, int], ...]
+    total_objects: int
+    total_bytes: int
+    quarantined_bytes: int
+    soft_deleted_bytes: int
+    unregistered_bytes: int
+    growth_30d_bytes: int
+    session_states: tuple[tuple[str, int], ...]
+
+
+def build_source_registry_metric_facts(
+    capacity: CapacityUsage,
+    *,
+    session_state_counts: Mapping[str, int] | None = None,
+) -> SourceRegistryMetricFacts:
+    """Project capacity usage + session-state counts into metric facts (T-211).
+
+    ``session_state_counts`` maps an upload-session ``state`` to the number of
+    sessions currently in it (DB ``GROUP BY state`` aggregate). Negative counts
+    are clamped to 0 and ordering is made deterministic for stable scrapes.
+    """
+    counts = session_state_counts or {}
+    return SourceRegistryMetricFacts(
+        category_objects=tuple(
+            (c.category, max(0, c.object_count)) for c in capacity.categories
+        ),
+        category_bytes=tuple(
+            (c.category, max(0, c.total_bytes)) for c in capacity.categories
+        ),
+        total_objects=max(0, capacity.total_object_count),
+        total_bytes=max(0, capacity.total_bytes),
+        quarantined_bytes=max(0, capacity.quarantined_bytes),
+        soft_deleted_bytes=max(0, capacity.soft_deleted_bytes),
+        unregistered_bytes=max(0, capacity.unregistered_bytes),
+        growth_30d_bytes=max(0, capacity.growth_30d_bytes),
+        session_states=tuple(
+            (state, max(0, int(count))) for state, count in sorted(counts.items())
+        ),
     )
