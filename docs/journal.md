@@ -11,6 +11,7 @@
 - `pobox_loader.py`와 `bulk_loader.py`가 검증을 통과한 파일만 COPY하도록 했다. `copy_*_rows()`는 기존 row iterable 경로를 유지하고, 파일 기반 `load_*()` 진입점에서만 검증한다.
 - `ktgctl load pobox`, `ktgctl load bulk`, `ktgctl load epost`, 선택 `load all-sidos --pobox/--bulk` 경로가 검증 요약을 출력한 뒤 적재한다.
 - `download_epost_zip()`은 공공데이터포털 응답이 직접 ZIP이거나 `fileLocplc` XML인 경우를 모두 처리한다.
+- GitHub Actions fresh dependency에서 최신 FastAPI가 lifespan 시작 전 `app.routes`를 flatten하지 않아도 route 계약 테스트가 `app.openapi()["paths"]`로 전체 path를 확인하도록 `tests/unit/test_api_app_contract.py`를 보강했다.
 - `docs/t120-epost-postal-validation.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`, `docs/external-apis.md`를 갱신했다.
 
 **검증**: NTFS worktree에서 `pytest tests/unit/test_epost_validation.py tests/unit/test_epost_downloader.py tests/unit/test_cli_contract.py -q` → 16 passed. WSL ext4 테스트 미러에서 `pytest -q` → 513 passed, 30 skipped, 24 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과.

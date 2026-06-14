@@ -15,7 +15,12 @@ from kortravelgeo.settings import Settings
 
 def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     app = create_app()
-    paths = {route.path for route in app.routes}
+    paths = set(app.openapi()["paths"])
+    paths.update(
+        path
+        for route in app.routes
+        if isinstance((path := getattr(route, "path", None)), str)
+    )
 
     assert "/v1/address/geocode" in paths
     assert "/v1/address/reverse" in paths
