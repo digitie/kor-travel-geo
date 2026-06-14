@@ -662,3 +662,118 @@ class SourceMatchSet(FrozenModel):
     integrity_alert: bool = False
     integrity_alert_at: datetime | None = None
     integrity_alert_detail: dict[str, Any] = Field(default_factory=dict)
+
+
+# --- Match set CRUD / validate / activate / retire (T-205a) ----------------
+# Shapes for ``POST /v1/admin/source-match-sets`` and the
+# ``{id}/validate|activate|retire`` lifecycle endpoints. State-transition rules
+# follow ``docs/t109-backup-source-upload-management.md`` "ops.source_match_sets"
+# (lines ~804-818) and "ops.source_match_set_items" (lines ~820-857).
+
+#: Build/validation profile the match set targets (doc "load profile", ~150-157).
+SourceMatchSetProfile = Literal["serving_minimal", "serving_recommended", "custom"]
+
+
+class SourceMatchSetItemRequest(FrozenModel):
+    """One requested ``ops.source_match_set_items`` row (create body element).
+
+    Invariants (enforced by the DTO + ``core.source_match_set.validate_item_invariants``
+    + DB CHECK): ``omitted=false`` ⇒ ``source_file_group_id`` set; ``omitted=true``
+    ⇒ ``source_file_group_id`` null; at most one item per ``category``.
+    """
+
+    category: SourceFileCategory
+    role: SourceMatchSetItemRole
+    source_file_group_id: str | None = None
+    required: bool = False
+    omitted: bool = False
+    omitted_reason: str | None = None
+    effective_yyyymm: str | None = Field(default=None, pattern=r"^\d{6}$")
+    validation_enabled: bool = True
+    load_order: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceMatchSetCreateRequest(FrozenModel):
+    """``POST /v1/admin/source-match-sets`` body — creates a ``draft`` set.
+
+    ``source_set_hash`` is NULL for a draft (computed at ``validate``). The items'
+    referenced groups need not all be ``available`` yet at create time; coverage is
+    enforced at ``validate`` (doc lines ~757/764).
+    """
+
+    name: str = Field(min_length=1)
+    description: str | None = None
+    profile: SourceMatchSetProfile = "serving_recommended"
+    items: tuple[SourceMatchSetItemRequest, ...] = ()
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceMatchSetItem(FrozenModel):
+    """One ``ops.source_match_set_items`` row (read model)."""
+
+    source_match_set_item_id: str
+    source_match_set_id: str
+    category: SourceFileCategory
+    role: SourceMatchSetItemRole
+    source_file_group_id: str | None = None
+    required: bool = False
+    omitted: bool = False
+    omitted_reason: str | None = None
+    effective_yyyymm: str | None = Field(default=None, pattern=r"^\d{6}$")
+    validation_enabled: bool = True
+    load_order: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceMatchSetDetail(FrozenModel):
+    """A match set plus its items (get / create / lifecycle response)."""
+
+    match_set: SourceMatchSet
+    items: tuple[SourceMatchSetItem, ...] = ()
+
+
+class SourceMatchSetPage(FrozenModel):
+    """List response (match sets without their items)."""
+
+    match_sets: tuple[SourceMatchSet, ...] = ()
+
+
+class SourceMatchSetValidateResponse(FrozenModel):
+    """``POST .../{id}/validate`` result (the state-split outcome, doc ~806/813-815).
+
+    ``action`` is which branch ran (``validate_draft`` / ``revalidate`` /
+    ``validate_in_place`` / ``reject``); ``ok`` is whether coverage/hash passed.
+    For ``validate_in_place`` success ``state`` stays ``active`` and
+    ``integrity_alert`` is cleared.
+    """
+
+    source_match_set_id: str
+    action: Literal["validate_draft", "revalidate", "validate_in_place", "reject"]
+    ok: bool
+    state: SourceMatchSetState
+    source_set_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    integrity_alert: bool = False
+    reasons: tuple[str, ...] = ()
+
+
+class SourceMatchSetActivateResponse(FrozenModel):
+    """``POST .../{id}/activate`` result — the atomic-swap outcome (doc ~807).
+
+    ``retired_match_set_id`` is the previously-active set retired in the same
+    transaction (``None`` when none was active). No externally-observable active
+    gap: retire-current + activate-target run under one advisory lock in one tx.
+    """
+
+    source_match_set_id: str
+    state: SourceMatchSetState
+    retired_match_set_id: str | None = None
+    source_set_hash: str = Field(min_length=64, max_length=64)
+
+
+class SourceMatchSetRetireResponse(FrozenModel):
+    """``POST .../{id}/retire`` result."""
+
+    source_match_set_id: str
+    state: SourceMatchSetState
+    was_active: bool = False

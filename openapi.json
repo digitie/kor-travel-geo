@@ -6269,6 +6269,620 @@
         "title": "SourceJanitorRunResponse",
         "type": "object"
       },
+      "SourceMatchSet": {
+        "additionalProperties": false,
+        "description": "Top-level combination of source groups used for rebuild or validation.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "integrity_alert": {
+            "default": false,
+            "title": "Integrity Alert",
+            "type": "boolean"
+          },
+          "integrity_alert_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Integrity Alert At"
+          },
+          "integrity_alert_detail": {
+            "additionalProperties": true,
+            "title": "Integrity Alert Detail",
+            "type": "object"
+          },
+          "last_consistency_report_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Consistency Report Id"
+          },
+          "last_load_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Load Job Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "mixed_yyyymm": {
+            "default": false,
+            "title": "Mixed Yyyymm",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "omitted_optional": {
+            "additionalProperties": true,
+            "title": "Omitted Optional",
+            "type": "object"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "source_set_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Set Hash"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "validated",
+              "active",
+              "retired",
+              "invalid",
+              "revalidatable",
+              "restored_from_backup"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "validated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validated At"
+          },
+          "yyyymm_by_category": {
+            "additionalProperties": true,
+            "title": "Yyyymm By Category",
+            "type": "object"
+          }
+        },
+        "required": [
+          "source_match_set_id",
+          "name",
+          "profile",
+          "state",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SourceMatchSet",
+        "type": "object"
+      },
+      "SourceMatchSetActivateResponse": {
+        "additionalProperties": false,
+        "description": "``POST .../{id}/activate`` result — the atomic-swap outcome (doc ~807).\n\n``retired_match_set_id`` is the previously-active set retired in the same\ntransaction (``None`` when none was active). No externally-observable active\ngap: retire-current + activate-target run under one advisory lock in one tx.",
+        "properties": {
+          "retired_match_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Match Set Id"
+          },
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "source_set_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Source Set Hash",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "validated",
+              "active",
+              "retired",
+              "invalid",
+              "revalidatable",
+              "restored_from_backup"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_match_set_id",
+          "state",
+          "source_set_hash"
+        ],
+        "title": "SourceMatchSetActivateResponse",
+        "type": "object"
+      },
+      "SourceMatchSetCreateRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/source-match-sets`` body — creates a ``draft`` set.\n\n``source_set_hash`` is NULL for a draft (computed at ``validate``). The items'\nreferenced groups need not all be ``available`` yet at create time; coverage is\nenforced at ``validate`` (doc lines ~757/764).",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceMatchSetItemRequest"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "profile": {
+            "default": "serving_recommended",
+            "enum": [
+              "serving_minimal",
+              "serving_recommended",
+              "custom"
+            ],
+            "title": "Profile",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SourceMatchSetCreateRequest",
+        "type": "object"
+      },
+      "SourceMatchSetDetail": {
+        "additionalProperties": false,
+        "description": "A match set plus its items (get / create / lifecycle response).",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceMatchSetItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "match_set": {
+            "$ref": "#/components/schemas/SourceMatchSet"
+          }
+        },
+        "required": [
+          "match_set"
+        ],
+        "title": "SourceMatchSetDetail",
+        "type": "object"
+      },
+      "SourceMatchSetItem": {
+        "additionalProperties": false,
+        "description": "One ``ops.source_match_set_items`` row (read model).",
+        "properties": {
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "effective_yyyymm": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Yyyymm"
+          },
+          "load_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Order"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "omitted": {
+            "default": false,
+            "title": "Omitted",
+            "type": "boolean"
+          },
+          "omitted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omitted Reason"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "build_required",
+              "build_recommended",
+              "validation_optional",
+              "enrichment_candidate"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source_file_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Group Id"
+          },
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "source_match_set_item_id": {
+            "title": "Source Match Set Item Id",
+            "type": "string"
+          },
+          "validation_enabled": {
+            "default": true,
+            "title": "Validation Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_match_set_item_id",
+          "source_match_set_id",
+          "category",
+          "role"
+        ],
+        "title": "SourceMatchSetItem",
+        "type": "object"
+      },
+      "SourceMatchSetItemRequest": {
+        "additionalProperties": false,
+        "description": "One requested ``ops.source_match_set_items`` row (create body element).\n\nInvariants (enforced by the DTO + ``core.source_match_set.validate_item_invariants``\n+ DB CHECK): ``omitted=false`` ⇒ ``source_file_group_id`` set; ``omitted=true``\n⇒ ``source_file_group_id`` null; at most one item per ``category``.",
+        "properties": {
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "effective_yyyymm": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Yyyymm"
+          },
+          "load_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Order"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "omitted": {
+            "default": false,
+            "title": "Omitted",
+            "type": "boolean"
+          },
+          "omitted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omitted Reason"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "build_required",
+              "build_recommended",
+              "validation_optional",
+              "enrichment_candidate"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source_file_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Group Id"
+          },
+          "validation_enabled": {
+            "default": true,
+            "title": "Validation Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "role"
+        ],
+        "title": "SourceMatchSetItemRequest",
+        "type": "object"
+      },
+      "SourceMatchSetRetireResponse": {
+        "additionalProperties": false,
+        "description": "``POST .../{id}/retire`` result.",
+        "properties": {
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "validated",
+              "active",
+              "retired",
+              "invalid",
+              "revalidatable",
+              "restored_from_backup"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "was_active": {
+            "default": false,
+            "title": "Was Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_match_set_id",
+          "state"
+        ],
+        "title": "SourceMatchSetRetireResponse",
+        "type": "object"
+      },
+      "SourceMatchSetValidateResponse": {
+        "additionalProperties": false,
+        "description": "``POST .../{id}/validate`` result (the state-split outcome, doc ~806/813-815).\n\n``action`` is which branch ran (``validate_draft`` / ``revalidate`` /\n``validate_in_place`` / ``reject``); ``ok`` is whether coverage/hash passed.\nFor ``validate_in_place`` success ``state`` stays ``active`` and\n``integrity_alert`` is cleared.",
+        "properties": {
+          "action": {
+            "enum": [
+              "validate_draft",
+              "revalidate",
+              "validate_in_place",
+              "reject"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "integrity_alert": {
+            "default": false,
+            "title": "Integrity Alert",
+            "type": "boolean"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "source_set_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Set Hash"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "validated",
+              "active",
+              "retired",
+              "invalid",
+              "revalidatable",
+              "restored_from_backup"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_match_set_id",
+          "action",
+          "ok",
+          "state"
+        ],
+        "title": "SourceMatchSetValidateResponse",
+        "type": "object"
+      },
       "SourceReconcileItem": {
         "additionalProperties": false,
         "description": "One ``ops.source_storage_reconcile_items`` row (doc lines ~662-704).",
@@ -11884,6 +12498,284 @@
           }
         },
         "summary": "Register Upload Session",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-match-sets": {
+      "get": {
+        "description": "List source match sets (doc \"ops.source_match_sets\").",
+        "operationId": "list_source_match_sets_v1_admin_source_match_sets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceMatchSet"
+                  },
+                  "title": "Response List Source Match Sets V1 Admin Source Match Sets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Source Match Sets",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Create a ``draft`` match set + its items (doc lines ~820-857).\n\nItem role/omitted/UNIQUE-category invariants are enforced before insert; the\ncanonical ``source_set_hash`` stays NULL for a draft (computed at validate).",
+        "operationId": "create_source_match_set_v1_admin_source_match_sets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceMatchSetCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceMatchSetDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Source Match Set",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-match-sets/{source_match_set_id}": {
+      "get": {
+        "description": "Get one source match set + its items.",
+        "operationId": "get_source_match_set_v1_admin_source_match_sets__source_match_set_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_match_set_id",
+            "required": true,
+            "schema": {
+              "title": "Source Match Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceMatchSetDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Source Match Set",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-match-sets/{source_match_set_id}/activate": {
+      "post": {
+        "description": "Atomic-swap activate a ``validated`` match set (doc line ~807).\n\nUnder the ``SOURCE_MATCH_ACTIVATE`` advisory lock in ONE transaction: re-check\nthe canonical hash (stale-hash guard), retire the current active, then set the\ntarget ``active`` — no externally-observable active gap. Requires\n``rebuild_operator``.",
+        "operationId": "activate_source_match_set_v1_admin_source_match_sets__source_match_set_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_match_set_id",
+            "required": true,
+            "schema": {
+              "title": "Source Match Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceMatchSetActivateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Source Match Set",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-match-sets/{source_match_set_id}/retire": {
+      "post": {
+        "description": "Retire a source match set (doc line ~808).",
+        "operationId": "retire_source_match_set_v1_admin_source_match_sets__source_match_set_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_match_set_id",
+            "required": true,
+            "schema": {
+              "title": "Source Match Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceMatchSetRetireResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Source Match Set",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-match-sets/{source_match_set_id}/validate": {
+      "post": {
+        "description": "Run the match set ``validate`` state-split (doc lines ~806/813-815).\n\n``draft``→``validated`` (compute fresh hash), ``revalidatable``→``validated``\n(re-check pre-computed hash), ``active``+``integrity_alert``→ validate-in-place\n(clear alert, stay active). ``retired``/``invalid``/``restored_from_backup`` are\nrejected (must recover to ``revalidatable`` first).",
+        "operationId": "validate_source_match_set_v1_admin_source_match_sets__source_match_set_id__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_match_set_id",
+            "required": true,
+            "schema": {
+              "title": "Source Match Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceMatchSetValidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Source Match Set",
         "tags": [
           "admin"
         ]
