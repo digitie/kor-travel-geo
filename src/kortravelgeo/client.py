@@ -58,7 +58,12 @@ from .dto.pobox import PoboxInput, PoboxKind, PoboxResponse
 from .dto.region import RegionHint
 from .dto.reverse import ReverseResponse, ReverseType
 from .dto.search import SearchResponse, SearchType
-from .dto.source import SourceFileCategoryInfo
+from .dto.source import (
+    SourceFileCategoryInfo,
+    UploadSessionCreateRequest,
+    UploadSessionPartStatus,
+    UploadSessionStatus,
+)
 from .dto.v2 import (
     BBoxV2,
     GeocodeV2Input,
@@ -84,6 +89,10 @@ from .infra.hotswap import inspect_restore_hot_swap_plan
 from .infra.pobox_repo import PoboxRepository
 from .infra.reverse_repo import ReverseRepository
 from .infra.search_repo import SearchRepository
+from .infra.source_upload_repo import (
+    SessionCreateResult,
+    SourceUploadSessionRepository,
+)
 from .infra.zip_repo import ZipRepository
 from .settings import Settings, get_settings
 
@@ -574,6 +583,112 @@ class AsyncAddressClient:
             limit=limit,
             action=action,
             outcome=outcome,
+        )
+
+    # --- Source upload sessions (T-203a) ----------------------------------
+
+    async def create_upload_session(
+        self,
+        req: UploadSessionCreateRequest,
+        *,
+        bucket: str | None = None,
+        prefix: str | None = None,
+        created_by: str | None = None,
+    ) -> SessionCreateResult:
+        """Create a session, or return the existing non-terminal one (conflict).
+
+        The caller (admin router) maps ``result.conflict`` to a ``409`` body.
+        """
+        return await SourceUploadSessionRepository(self._engine()).create_session(
+            req,
+            bucket=bucket,
+            prefix=prefix,
+            created_by=created_by,
+        )
+
+    async def get_upload_session(self, session_id: str) -> UploadSessionStatus:
+        session = await SourceUploadSessionRepository(self._engine()).get_session(session_id)
+        if session is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"upload session not found: {session_id}")
+        return session
+
+    async def list_upload_sessions(
+        self,
+        *,
+        state: str | None = None,
+        category: str | None = None,
+        user_yyyymm: str | None = None,
+        created_by: str | None = None,
+        limit: int = 50,
+    ) -> list[UploadSessionStatus]:
+        return await SourceUploadSessionRepository(self._engine()).list_sessions(
+            state=state,
+            category=category,
+            user_yyyymm=user_yyyymm,
+            created_by=created_by,
+            limit=limit,
+        )
+
+    async def update_upload_session_state(
+        self,
+        session_id: str,
+        *,
+        state: str,
+        error_message: str | None = None,
+    ) -> UploadSessionStatus:
+        session = await SourceUploadSessionRepository(self._engine()).update_state(
+            session_id, state=state, error_message=error_message
+        )
+        if session is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"upload session not found: {session_id}")
+        return session
+
+    async def replace_upload_session_slot(
+        self,
+        session_id: str,
+        *,
+        part_key: str,
+    ) -> UploadSessionStatus:
+        await SourceUploadSessionRepository(self._engine()).replace_slot(
+            session_id, part_key=part_key
+        )
+        return await self.get_upload_session(session_id)
+
+    async def record_upload_session_part(
+        self,
+        session_id: str,
+        *,
+        part_key: str,
+        part_number: int,
+        multipart_upload_id: str | None = None,
+        part_etag: str | None = None,
+        part_sha256: str | None = None,
+        received_bytes: int = 0,
+        completed: bool = False,
+    ) -> UploadSessionPartStatus:
+        return await SourceUploadSessionRepository(self._engine()).record_part(
+            session_id,
+            part_key=part_key,
+            part_number=part_number,
+            multipart_upload_id=multipart_upload_id,
+            part_etag=part_etag,
+            part_sha256=part_sha256,
+            received_bytes=received_bytes,
+            completed=completed,
+        )
+
+    async def upload_session_slot_parts(
+        self,
+        session_id: str,
+        *,
+        part_key: str,
+    ) -> tuple[UploadSessionPartStatus, ...]:
+        return await SourceUploadSessionRepository(self._engine()).slot_parts(
+            session_id, part_key=part_key
         )
 
     async def list_dataset_snapshots(

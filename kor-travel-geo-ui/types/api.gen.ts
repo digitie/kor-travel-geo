@@ -745,6 +745,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-files/upload-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Upload Sessions
+         * @description Resume entry point: filter resumable in-progress / recoverable sessions.
+         */
+        get: operations["list_upload_sessions_v1_admin_source_files_upload_sessions_get"];
+        put?: never;
+        /**
+         * Create Upload Session
+         * @description Create a session; ``409`` + resume payload when one already exists.
+         *
+         *     ``user_yyyymm`` is server-mandatory (validated by the DTO). A non-terminal
+         *     session for the same ``category+user_yyyymm`` returns ``409`` so the UI
+         *     resumes it instead of creating a duplicate group + orphan object.
+         */
+        post: operations["create_upload_session_v1_admin_source_files_upload_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Upload Session */
+        get: operations["get_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Upload Session Events
+         * @description SSE ``source_upload.progress`` stream (mirrors ``/jobs/{id}/events``).
+         *
+         *     Emits a ``source_upload.progress`` event whenever the session payload
+         *     changes and stops at a terminal state; clients fall back to polling
+         *     ``GET .../upload-sessions/{id}`` if the stream drops.
+         */
+        get: operations["upload_session_events_v1_admin_source_files_upload_sessions__upload_session_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Initiate Multipart Upload
+         * @description Initiate a resumable multipart upload for one slot.
+         */
+        post: operations["initiate_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_post"];
+        /**
+         * Abort Multipart Upload
+         * @description Abort the slot's multipart upload and clear its recorded parts.
+         */
+        delete: operations["abort_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Multipart Upload
+         * @description Complete the slot upload after verifying the multipart still exists.
+         *
+         *     On resume the RustFS multipart upload must still hold every recorded part;
+         *     if ``ListParts`` 404s or a recorded part is missing, the session transitions
+         *     to ``failed_storage_state`` and the slot must be re-uploaded (doc 1294/1308).
+         */
+        post: operations["complete_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart/{part_number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload Multipart Part
+         * @description Upload one part; records part etag/sha256/received_bytes for resume.
+         */
+        put: operations["upload_multipart_part_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart__part_number__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace Upload Slot
+         * @description Replace a completed slot before register: invalidate prior hash/validation.
+         *
+         *     Clears the slot's recorded parts (so its etag/hash/structure results no
+         *     longer apply) and reopens it for a fresh upload (doc line 1314).
+         */
+        post: operations["replace_upload_slot_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__replace_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/storage/rustfs/check": {
         parameters: {
             query?: never;
@@ -1856,6 +2016,39 @@ export interface components {
             /** Confirmation */
             confirmation: string;
         };
+        /**
+         * MultipartCompleteRequest
+         * @description ``POST .../files/{slot}/multipart/complete`` body.
+         */
+        MultipartCompleteRequest: {
+            /**
+             * Part Etags
+             * @description optional (part_number, etag) pairs; falls back to recorded parts
+             * @default []
+             */
+            part_etags: [
+                number,
+                string
+            ][];
+        };
+        /**
+         * MultipartInitiateResponse
+         * @description ``POST .../files/{slot}/multipart`` response.
+         */
+        MultipartInitiateResponse: {
+            /** Multipart Upload Id */
+            multipart_upload_id: string;
+            /** Object Key */
+            object_key: string;
+            /** Part Key */
+            part_key: string;
+            /** Part Size Bytes */
+            part_size_bytes: number;
+            /** Slot */
+            slot: string;
+            /** Upload Session Id */
+            upload_session_id: string;
+        };
         /** NormalizeRequest */
         NormalizeRequest: {
             /** Address */
@@ -2616,6 +2809,31 @@ export interface components {
             state: "pending" | "active" | "superseded" | "rolled_back" | "failed";
         };
         /**
+         * SlotReplaceResponse
+         * @description ``POST .../files/{slot}/replace`` response.
+         *
+         *     Replace invalidates the slot's prior validation + hash results and reopens
+         *     it for a fresh upload (doc line 1314).
+         */
+        SlotReplaceResponse: {
+            /**
+             * Invalidated
+             * @default true
+             */
+            invalidated: boolean;
+            /** Part Key */
+            part_key: string;
+            /** Slot */
+            slot: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "created" | "uploading" | "uploaded_to_temp" | "storing_to_rustfs" | "verifying_rustfs_object" | "extracting" | "validating_structure" | "hashing" | "duplicate_check" | "awaiting_registration" | "registered" | "available" | "failed_upload" | "failed_extract" | "failed_structure" | "failed_hash" | "failed_rustfs_put" | "failed_rustfs_verify" | "failed_storage_state" | "failed_register" | "cancelled" | "expired";
+            /** Upload Session Id */
+            upload_session_id: string;
+        };
+        /**
          * SourceFileCategoryCatalog
          * @description Response wrapper for the static upload-category catalog.
          */
@@ -2803,6 +3021,193 @@ export interface components {
              * @default 0
              */
             uploaded_bytes: number;
+        };
+        /**
+         * UploadPartResponse
+         * @description ``PUT .../files/{slot}/multipart/{part_number}`` response.
+         */
+        UploadPartResponse: {
+            /** Part Etag */
+            part_etag: string;
+            /** Part Key */
+            part_key: string;
+            /** Part Number */
+            part_number: number;
+            /** Part Sha256 */
+            part_sha256?: string | null;
+            /** Received Bytes */
+            received_bytes: number;
+            /** Slot */
+            slot: string;
+            /** Upload Session Id */
+            upload_session_id: string;
+        };
+        /**
+         * UploadSessionCreateRequest
+         * @description ``POST /v1/admin/source-files/upload-sessions`` body.
+         *
+         *     ``user_yyyymm`` is server-mandatory (``^\d{6}$``): the backend never fills a
+         *     missing month from the filename or the current date (doc line 1259).
+         */
+        UploadSessionCreateRequest: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /** Display Name */
+            display_name: string;
+            /**
+             * Storage Kind
+             * @default rustfs
+             * @enum {string}
+             */
+            storage_kind: "rustfs" | "local";
+            /**
+             * Upload Strategy
+             * @default multipart
+             * @constant
+             */
+            upload_strategy: "multipart";
+            /** User Yyyymm */
+            user_yyyymm: string;
+        };
+        /**
+         * UploadSessionFileSlot
+         * @description One upload slot: ``archive`` for single_file, a sido for multi_part.
+         */
+        UploadSessionFileSlot: {
+            /** Multipart Upload Id */
+            multipart_upload_id?: string | null;
+            /** Object Etag */
+            object_etag?: string | null;
+            /** Object Key */
+            object_key?: string | null;
+            /**
+             * Part Key
+             * @default archive
+             */
+            part_key: string;
+            /**
+             * Part Kind
+             * @default single
+             * @enum {string}
+             */
+            part_kind: "single" | "sido" | "grid_layer" | "custom";
+            /** Part Label */
+            part_label?: string | null;
+            /**
+             * Received Bytes
+             * @default 0
+             */
+            received_bytes: number;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Slot */
+            slot: string;
+            /**
+             * Uploaded
+             * @default false
+             */
+            uploaded: boolean;
+        };
+        /**
+         * UploadSessionStatus
+         * @description Session create / list / get response (resumable entry point).
+         */
+        UploadSessionStatus: {
+            /** Bucket */
+            bucket?: string | null;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Error Message */
+            error_message?: string | null;
+            /** Expected File Count */
+            expected_file_count: number;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * File Slots
+             * @default []
+             */
+            file_slots: components["schemas"]["UploadSessionFileSlot"][];
+            /**
+             * Group Kind
+             * @enum {string}
+             */
+            group_kind: "single_file" | "multi_part";
+            /** Max Bytes */
+            max_bytes: number;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Part Size Bytes */
+            part_size_bytes: number;
+            /** Prefix */
+            prefix?: string | null;
+            /** Registered At */
+            registered_at?: string | null;
+            /** Registration Deadline At */
+            registration_deadline_at?: string | null;
+            /**
+             * Registration State
+             * @default not_registered
+             * @enum {string}
+             */
+            registration_state: "not_registered" | "registered" | "quarantined";
+            /** Source File Group Id */
+            source_file_group_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "created" | "uploading" | "uploaded_to_temp" | "storing_to_rustfs" | "verifying_rustfs_object" | "extracting" | "validating_structure" | "hashing" | "duplicate_check" | "awaiting_registration" | "registered" | "available" | "failed_upload" | "failed_extract" | "failed_structure" | "failed_hash" | "failed_rustfs_put" | "failed_rustfs_verify" | "failed_storage_state" | "failed_register" | "cancelled" | "expired";
+            /**
+             * Storage Kind
+             * @default rustfs
+             * @enum {string}
+             */
+            storage_kind: "rustfs" | "local";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Upload Session Id */
+            upload_session_id: string;
+            /**
+             * Upload Strategy
+             * @default multipart
+             * @constant
+             */
+            upload_strategy: "multipart";
+            /**
+             * Uploaded File Count
+             * @default 0
+             */
+            uploaded_file_count: number;
+            /** User Yyyymm */
+            user_yyyymm: string;
         };
         /** UploadSetStatus */
         UploadSetStatus: {
@@ -4407,6 +4812,307 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceFileCategoryCatalog"];
+                };
+            };
+        };
+    };
+    list_upload_sessions_v1_admin_source_files_upload_sessions_get: {
+        parameters: {
+            query?: {
+                state?: string | null;
+                category?: string | null;
+                user_yyyymm?: string | null;
+                created_by?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSessionStatus"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_upload_session_v1_admin_source_files_upload_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadSessionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSessionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSessionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_session_events_v1_admin_source_files_upload_sessions__upload_session_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    initiate_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_session_id: string;
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultipartInitiateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    abort_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_delete: {
+        parameters: {
+            query: {
+                multipart_upload_id: string;
+            };
+            header?: never;
+            path: {
+                upload_session_id: string;
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSessionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_complete_post: {
+        parameters: {
+            query: {
+                multipart_upload_id: string;
+            };
+            header?: never;
+            path: {
+                upload_session_id: string;
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipartCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSessionStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_multipart_part_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart__part_number__put: {
+        parameters: {
+            query: {
+                multipart_upload_id: string;
+            };
+            header?: never;
+            path: {
+                upload_session_id: string;
+                slot_id: string;
+                part_number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadPartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_upload_slot_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__replace_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_session_id: string;
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlotReplaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

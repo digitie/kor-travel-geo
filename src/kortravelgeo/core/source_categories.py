@@ -172,3 +172,31 @@ CATEGORY_CATALOG: tuple[SourceCategory, ...] = (
 )
 
 category_by_code: dict[str, SourceCategory] = {c.code: c for c in CATEGORY_CATALOG}
+
+
+# 17 시도 코드/명칭 (행정구역 시도 2자리 코드). ``multi_part`` 시도별 자료의
+# upload session ``file_slots`` (``part_kind='sido'``)를 그릴 때 사용한다.
+SIDO_PARTS: tuple[tuple[str, str], ...] = (
+    ("11", "서울특별시"),
+    ("26", "부산광역시"),
+    ("27", "대구광역시"),
+    ("28", "인천광역시"),
+    ("29", "광주광역시"),
+    ("30", "대전광역시"),
+    ("31", "울산광역시"),
+    ("36", "세종특별자치시"),
+    ("41", "경기도"),
+    ("43", "충청북도"),
+    ("44", "충청남도"),
+    ("46", "전라남도"),
+    ("47", "경상북도"),
+    ("48", "경상남도"),
+    ("50", "제주특별자치도"),
+    ("51", "강원특별자치도"),
+    ("52", "전북특별자치도"),
+)
+
+#: Number of file slots an upload session for ``category`` must collect.
+#: ``single_file`` is always 1; ``multi_part`` categories are sido-partitioned.
+def expected_file_count(category: SourceCategory) -> int:
+    return 1 if category.group_kind == "single_file" else len(SIDO_PARTS)

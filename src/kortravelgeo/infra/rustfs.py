@@ -5,9 +5,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -23,12 +23,23 @@ from kortravelgeo.dto.admin import (
     RustfsStorageConfig,
     RustfsStorageConfigPatch,
 )
-from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.exceptions import InvalidInputError, NotFoundError
 from kortravelgeo.settings import Settings
 
 _EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 _SERVICE = "s3"
 _AWS4_REQUEST = "aws4_request"
+_UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD"
+
+#: Async transport hook. Given a fully signed request it returns an
+#: :class:`httpx.Response`. The default (:func:`_httpx_send`) issues a real
+#: HTTP call; tests inject a fake to exercise the multipart logic without a
+#: live RustFS bucket (ADR-044/045: this project connects to an existing
+#: bucket, it does not run RustFS, so live calls cannot be unit-tested).
+RustfsSender = Callable[
+    [str, str, dict[str, str], "bytes | AsyncIterator[bytes] | None"],
+    Awaitable[httpx.Response],
+]
 
 
 @dataclass(frozen=True)
@@ -65,10 +76,44 @@ class RustfsObject:
     last_modified: str | None = None
 
 
+@dataclass(frozen=True)
+class RustfsObjectHead:
+    """``head_object`` result: size/etag/version + ``x-amz-meta-*`` metadata."""
+
+    key: str
+    size: int
+    etag: str | None = None
+    version_id: str | None = None
+    last_modified: str | None = None
+    metadata: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RustfsUploadedPart:
+    """One ``upload_part`` result, recorded on the upload session for resume."""
+
+    part_number: int
+    etag: str
+
+
+@dataclass(frozen=True)
+class RustfsListedPart:
+    """One entry from ``ListParts`` on an in-progress multipart upload."""
+
+    part_number: int
+    etag: str | None = None
+    size: int | None = None
+
+
 class RustfsClient:
     """Small SigV4 S3 client for RustFS basic object operations."""
 
-    def __init__(self, config: EffectiveRustfsConfig) -> None:
+    def __init__(
+        self,
+        config: EffectiveRustfsConfig,
+        *,
+        sender: RustfsSender | None = None,
+    ) -> None:
         if not config.force_path_style:
             msg = "RustFS path-style endpoint만 지원합니다"
             raise InvalidInputError(msg)
@@ -84,6 +129,7 @@ class RustfsClient:
         ):
             msg = f"invalid RustFS endpoint_url: {config.endpoint_url}"
             raise InvalidInputError(msg)
+        self._sender: RustfsSender = sender or _httpx_send
 
     async def ensure_bucket(self) -> None:
         head = await self._request(
@@ -193,6 +239,205 @@ class RustfsClient:
             if continuation is None:
                 return tuple(objects)
 
+    async def head_object(self, key: str) -> RustfsObjectHead:
+        """HEAD an object: size/etag/version + ``x-amz-meta-*`` metadata.
+
+        Per the t109 doc, SHA-256 is never assumed equal to the ETag; callers
+        compare ``head`` values to the upload-session record and only re-read the
+        body (:meth:`rehash`) when they differ.
+        """
+        response = await self._request(
+            "HEAD",
+            bucket=self._config.bucket,
+            key=key,
+            expected_status=(200,),
+        )
+        metadata = {
+            name[len("x-amz-meta-") :]: value
+            for name, value in response.headers.items()
+            if name.lower().startswith("x-amz-meta-")
+        }
+        size_header = response.headers.get("content-length")
+        return RustfsObjectHead(
+            key=key,
+            size=int(size_header) if size_header is not None else 0,
+            etag=_strip_etag(response.headers.get("etag")),
+            version_id=response.headers.get("x-amz-version-id"),
+            last_modified=response.headers.get("last-modified"),
+            metadata=metadata,
+        )
+
+    async def delete_object(self, key: str) -> None:
+        """Hard-delete an object (reconciliation / abort cleanup)."""
+        await self._request(
+            "DELETE",
+            bucket=self._config.bucket,
+            key=key,
+            expected_status=(200, 202, 204, 404),
+        )
+
+    async def create_multipart_upload(
+        self,
+        key: str,
+        *,
+        metadata: dict[str, str] | None = None,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        """Initiate a multipart upload and return its ``UploadId``."""
+        headers = {"content-type": content_type}
+        for name, value in (metadata or {}).items():
+            headers[f"x-amz-meta-{name}"] = value
+        response = await self._request(
+            "POST",
+            bucket=self._config.bucket,
+            key=key,
+            query={"uploads": ""},
+            headers=headers,
+            expected_status=(200,),
+        )
+        upload_id = _xml_text(ElementTree.fromstring(response.text), "UploadId")
+        if not upload_id:
+            msg = "RustFS create_multipart_upload returned no UploadId"
+            raise InvalidInputError(msg)
+        return upload_id
+
+    async def upload_part(
+        self,
+        key: str,
+        *,
+        upload_id: str,
+        part_number: int,
+        body: bytes,
+    ) -> RustfsUploadedPart:
+        """Upload one part; return its part number and ETag for completion."""
+        if part_number < 1:
+            msg = "part_number must be >= 1"
+            raise InvalidInputError(msg)
+        payload_hash = hashlib.sha256(body).hexdigest()
+        response = await self._request(
+            "PUT",
+            bucket=self._config.bucket,
+            key=key,
+            query={"partNumber": str(part_number), "uploadId": upload_id},
+            headers={
+                "content-length": str(len(body)),
+                "x-amz-content-sha256": payload_hash,
+            },
+            content=body,
+            payload_hash=payload_hash,
+            expected_status=(200,),
+        )
+        etag = _strip_etag(response.headers.get("etag"))
+        if not etag:
+            msg = "RustFS upload_part returned no ETag"
+            raise InvalidInputError(msg)
+        return RustfsUploadedPart(part_number=part_number, etag=etag)
+
+    async def complete_multipart_upload(
+        self,
+        key: str,
+        *,
+        upload_id: str,
+        parts: tuple[RustfsUploadedPart, ...],
+    ) -> str | None:
+        """Complete the upload; return the final object ETag if reported."""
+        if not parts:
+            msg = "complete_multipart_upload requires at least one part"
+            raise InvalidInputError(msg)
+        body = _complete_multipart_body(parts)
+        payload_hash = hashlib.sha256(body).hexdigest()
+        response = await self._request(
+            "POST",
+            bucket=self._config.bucket,
+            key=key,
+            query={"uploadId": upload_id},
+            headers={
+                "content-length": str(len(body)),
+                "content-type": "application/xml",
+                "x-amz-content-sha256": payload_hash,
+            },
+            content=body,
+            payload_hash=payload_hash,
+            expected_status=(200,),
+        )
+        # S3 may return a 200 wrapping an <Error>; surface it instead of success.
+        code = _extract_s3_error_code(response.text)
+        if code:
+            raise InvalidInputError(f"RustFS complete_multipart_upload failed: {code}")
+        return _strip_etag(_xml_text(ElementTree.fromstring(response.text), "ETag"))
+
+    async def abort_multipart_upload(self, key: str, *, upload_id: str) -> None:
+        """Abort an in-progress multipart upload, discarding uploaded parts."""
+        await self._request(
+            "DELETE",
+            bucket=self._config.bucket,
+            key=key,
+            query={"uploadId": upload_id},
+            expected_status=(200, 204, 404),
+        )
+
+    async def list_parts(
+        self,
+        key: str,
+        *,
+        upload_id: str,
+    ) -> tuple[RustfsListedPart, ...]:
+        """ListParts for a multipart upload.
+
+        Raises :class:`NotFoundError` (HTTP 404 ``NoSuchUpload``) when the
+        upload id no longer exists, which the session resume path translates to
+        the ``failed_storage_state`` transition.
+        """
+        parts: list[RustfsListedPart] = []
+        marker: str | None = None
+        while True:
+            query = {"uploadId": upload_id}
+            if marker:
+                query["part-number-marker"] = marker
+            response = await self._request(
+                "GET",
+                bucket=self._config.bucket,
+                key=key,
+                query=query,
+                expected_status=(200, 404),
+            )
+            if response.status_code == 404:
+                raise NotFoundError(f"multipart upload not found: {upload_id}")
+            batch, marker = _parse_list_parts_response(response.text)
+            parts.extend(batch)
+            if marker is None:
+                return tuple(parts)
+
+    async def rehash(self, key: str) -> str:
+        """Stream the object body and return its SHA-256 (no ETag shortcut)."""
+        url, headers = self._signed_request(
+            "GET",
+            bucket=self._config.bucket,
+            key=key,
+            payload_hash=_EMPTY_SHA256,
+        )
+        digest = hashlib.sha256()
+        timeout = httpx.Timeout(60.0, connect=10.0, read=None, write=None, pool=10.0)
+        async with (
+            httpx.AsyncClient(timeout=timeout) as client,
+            client.stream("GET", url, headers=headers) as response,
+        ):
+            if response.status_code != 200:
+                text = await response.aread()
+                raise InvalidInputError(
+                    _rustfs_error_message_from_text(
+                        response.status_code, text.decode("utf-8", "replace")
+                    )
+                )
+            async for chunk in response.aiter_bytes():
+                if chunk:
+                    digest.update(chunk)
+        return digest.hexdigest()
+
+    async def compute_sha256(self, key: str) -> str:
+        """Alias for :meth:`rehash` (t109 doc name ``rehash_object``)."""
+        return await self.rehash(key)
+
     async def _request(
         self,
         method: str,
@@ -213,9 +458,7 @@ class RustfsClient:
             headers=headers,
             payload_hash=payload_hash,
         )
-        timeout = httpx.Timeout(60.0, connect=10.0, read=None, write=None, pool=10.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.request(method, url, headers=signed_headers, content=content)
+        response = await self._sender(method, url, signed_headers, content)
         if response.status_code not in expected_status:
             raise InvalidInputError(_rustfs_error_message(response))
         return response
@@ -397,6 +640,59 @@ async def _read_file_chunks(path: Path) -> AsyncIterator[bytes]:
             if not chunk:
                 break
             yield chunk
+
+
+async def _httpx_send(
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    content: bytes | AsyncIterator[bytes] | None,
+) -> httpx.Response:
+    """Default :data:`RustfsSender`: issue a real signed HTTP request."""
+    timeout = httpx.Timeout(60.0, connect=10.0, read=None, write=None, pool=10.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.request(method, url, headers=headers, content=content)
+
+
+def _complete_multipart_body(parts: tuple[RustfsUploadedPart, ...]) -> bytes:
+    ordered = sorted(parts, key=lambda part: part.part_number)
+    rows = "".join(
+        f"<Part><PartNumber>{part.part_number}</PartNumber>"
+        f"<ETag>{_quote_etag(part.etag)}</ETag></Part>"
+        for part in ordered
+    )
+    return (
+        f'<?xml version="1.0" encoding="UTF-8"?>'
+        f'<CompleteMultipartUpload xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'
+        f"{rows}</CompleteMultipartUpload>"
+    ).encode()
+
+
+def _quote_etag(value: str) -> str:
+    stripped = value.strip()
+    if stripped.startswith('"') and stripped.endswith('"'):
+        return stripped
+    return f'"{stripped}"'
+
+
+def _parse_list_parts_response(payload: str) -> tuple[tuple[RustfsListedPart, ...], str | None]:
+    root = ElementTree.fromstring(payload)
+    parts: list[RustfsListedPart] = []
+    for item in root.findall(".//{*}Part"):
+        number_text = _xml_text(item, "PartNumber")
+        if number_text is None:
+            continue
+        size_text = _xml_text(item, "Size")
+        parts.append(
+            RustfsListedPart(
+                part_number=int(number_text),
+                etag=_strip_etag(_xml_text(item, "ETag")),
+                size=int(size_text) if size_text is not None else None,
+            )
+        )
+    truncated = (_xml_text(root, "IsTruncated") or "").lower() == "true"
+    marker = _xml_text(root, "NextPartNumberMarker") if truncated else None
+    return tuple(parts), marker
 
 
 def canonical_query_string(query: dict[str, str]) -> str:

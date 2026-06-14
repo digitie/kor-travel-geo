@@ -2979,6 +2979,74 @@
         "title": "MaintenanceWindowEnd",
         "type": "object"
       },
+      "MultipartCompleteRequest": {
+        "additionalProperties": false,
+        "description": "``POST .../files/{slot}/multipart/complete`` body.",
+        "properties": {
+          "part_etags": {
+            "default": [],
+            "description": "optional (part_number, etag) pairs; falls back to recorded parts",
+            "items": {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Part Etags",
+            "type": "array"
+          }
+        },
+        "title": "MultipartCompleteRequest",
+        "type": "object"
+      },
+      "MultipartInitiateResponse": {
+        "additionalProperties": false,
+        "description": "``POST .../files/{slot}/multipart`` response.",
+        "properties": {
+          "multipart_upload_id": {
+            "title": "Multipart Upload Id",
+            "type": "string"
+          },
+          "object_key": {
+            "title": "Object Key",
+            "type": "string"
+          },
+          "part_key": {
+            "title": "Part Key",
+            "type": "string"
+          },
+          "part_size_bytes": {
+            "minimum": 1.0,
+            "title": "Part Size Bytes",
+            "type": "integer"
+          },
+          "slot": {
+            "title": "Slot",
+            "type": "string"
+          },
+          "upload_session_id": {
+            "title": "Upload Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_session_id",
+          "slot",
+          "part_key",
+          "multipart_upload_id",
+          "object_key",
+          "part_size_bytes"
+        ],
+        "title": "MultipartInitiateResponse",
+        "type": "object"
+      },
       "NormalizeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5135,6 +5203,65 @@
         "title": "ServingRelease",
         "type": "object"
       },
+      "SlotReplaceResponse": {
+        "additionalProperties": false,
+        "description": "``POST .../files/{slot}/replace`` response.\n\nReplace invalidates the slot's prior validation + hash results and reopens\nit for a fresh upload (doc line 1314).",
+        "properties": {
+          "invalidated": {
+            "default": true,
+            "title": "Invalidated",
+            "type": "boolean"
+          },
+          "part_key": {
+            "title": "Part Key",
+            "type": "string"
+          },
+          "slot": {
+            "title": "Slot",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "created",
+              "uploading",
+              "uploaded_to_temp",
+              "storing_to_rustfs",
+              "verifying_rustfs_object",
+              "extracting",
+              "validating_structure",
+              "hashing",
+              "duplicate_check",
+              "awaiting_registration",
+              "registered",
+              "available",
+              "failed_upload",
+              "failed_extract",
+              "failed_structure",
+              "failed_hash",
+              "failed_rustfs_put",
+              "failed_rustfs_verify",
+              "failed_storage_state",
+              "failed_register",
+              "cancelled",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "upload_session_id": {
+            "title": "Upload Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_session_id",
+          "slot",
+          "part_key",
+          "state"
+        ],
+        "title": "SlotReplaceResponse",
+        "type": "object"
+      },
       "SourceFileCategoryCatalog": {
         "additionalProperties": false,
         "description": "Response wrapper for the static upload-category catalog.",
@@ -5721,6 +5848,483 @@
           "updated_at"
         ],
         "title": "UploadFileStatus",
+        "type": "object"
+      },
+      "UploadPartResponse": {
+        "additionalProperties": false,
+        "description": "``PUT .../files/{slot}/multipart/{part_number}`` response.",
+        "properties": {
+          "part_etag": {
+            "title": "Part Etag",
+            "type": "string"
+          },
+          "part_key": {
+            "title": "Part Key",
+            "type": "string"
+          },
+          "part_number": {
+            "minimum": 1.0,
+            "title": "Part Number",
+            "type": "integer"
+          },
+          "part_sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Sha256"
+          },
+          "received_bytes": {
+            "minimum": 0.0,
+            "title": "Received Bytes",
+            "type": "integer"
+          },
+          "slot": {
+            "title": "Slot",
+            "type": "string"
+          },
+          "upload_session_id": {
+            "title": "Upload Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_session_id",
+          "slot",
+          "part_key",
+          "part_number",
+          "received_bytes",
+          "part_etag"
+        ],
+        "title": "UploadPartResponse",
+        "type": "object"
+      },
+      "UploadSessionCreateRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/source-files/upload-sessions`` body.\n\n``user_yyyymm`` is server-mandatory (``^\\d{6}$``): the backend never fills a\nmissing month from the filename or the current date (doc line 1259).",
+        "properties": {
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "display_name": {
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "storage_kind": {
+            "default": "rustfs",
+            "enum": [
+              "rustfs",
+              "local"
+            ],
+            "title": "Storage Kind",
+            "type": "string"
+          },
+          "upload_strategy": {
+            "const": "multipart",
+            "default": "multipart",
+            "title": "Upload Strategy",
+            "type": "string"
+          },
+          "user_yyyymm": {
+            "pattern": "^\\d{6}$",
+            "title": "User Yyyymm",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "user_yyyymm",
+          "display_name"
+        ],
+        "title": "UploadSessionCreateRequest",
+        "type": "object"
+      },
+      "UploadSessionFileSlot": {
+        "additionalProperties": false,
+        "description": "One upload slot: ``archive`` for single_file, a sido for multi_part.",
+        "properties": {
+          "multipart_upload_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multipart Upload Id"
+          },
+          "object_etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Etag"
+          },
+          "object_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Key"
+          },
+          "part_key": {
+            "default": "archive",
+            "title": "Part Key",
+            "type": "string"
+          },
+          "part_kind": {
+            "default": "single",
+            "enum": [
+              "single",
+              "sido",
+              "grid_layer",
+              "custom"
+            ],
+            "title": "Part Kind",
+            "type": "string"
+          },
+          "part_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part Label"
+          },
+          "received_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Received Bytes",
+            "type": "integer"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "slot": {
+            "title": "Slot",
+            "type": "string"
+          },
+          "uploaded": {
+            "default": false,
+            "title": "Uploaded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slot"
+        ],
+        "title": "UploadSessionFileSlot",
+        "type": "object"
+      },
+      "UploadSessionStatus": {
+        "additionalProperties": false,
+        "description": "Session create / list / get response (resumable entry point).",
+        "properties": {
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          },
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "expected_file_count": {
+            "minimum": 1.0,
+            "title": "Expected File Count",
+            "type": "integer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "file_slots": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UploadSessionFileSlot"
+            },
+            "title": "File Slots",
+            "type": "array"
+          },
+          "group_kind": {
+            "enum": [
+              "single_file",
+              "multi_part"
+            ],
+            "title": "Group Kind",
+            "type": "string"
+          },
+          "max_bytes": {
+            "minimum": 1.0,
+            "title": "Max Bytes",
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "part_size_bytes": {
+            "minimum": 1.0,
+            "title": "Part Size Bytes",
+            "type": "integer"
+          },
+          "prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefix"
+          },
+          "registered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered At"
+          },
+          "registration_deadline_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Deadline At"
+          },
+          "registration_state": {
+            "default": "not_registered",
+            "enum": [
+              "not_registered",
+              "registered",
+              "quarantined"
+            ],
+            "title": "Registration State",
+            "type": "string"
+          },
+          "source_file_group_id": {
+            "title": "Source File Group Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "created",
+              "uploading",
+              "uploaded_to_temp",
+              "storing_to_rustfs",
+              "verifying_rustfs_object",
+              "extracting",
+              "validating_structure",
+              "hashing",
+              "duplicate_check",
+              "awaiting_registration",
+              "registered",
+              "available",
+              "failed_upload",
+              "failed_extract",
+              "failed_structure",
+              "failed_hash",
+              "failed_rustfs_put",
+              "failed_rustfs_verify",
+              "failed_storage_state",
+              "failed_register",
+              "cancelled",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "storage_kind": {
+            "default": "rustfs",
+            "enum": [
+              "rustfs",
+              "local"
+            ],
+            "title": "Storage Kind",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "upload_session_id": {
+            "title": "Upload Session Id",
+            "type": "string"
+          },
+          "upload_strategy": {
+            "const": "multipart",
+            "default": "multipart",
+            "title": "Upload Strategy",
+            "type": "string"
+          },
+          "uploaded_file_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Uploaded File Count",
+            "type": "integer"
+          },
+          "user_yyyymm": {
+            "pattern": "^\\d{6}$",
+            "title": "User Yyyymm",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_session_id",
+          "source_file_group_id",
+          "category",
+          "group_kind",
+          "user_yyyymm",
+          "display_name",
+          "state",
+          "expected_file_count",
+          "max_bytes",
+          "part_size_bytes",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UploadSessionStatus",
         "type": "object"
       },
       "UploadSetStatus": {
@@ -8989,6 +9593,551 @@
           }
         },
         "summary": "Source File Categories",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions": {
+      "get": {
+        "description": "Resume entry point: filter resumable in-progress / recoverable sessions.",
+        "operationId": "list_upload_sessions_v1_admin_source_files_upload_sessions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_yyyymm",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^\\d{6}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Yyyymm"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Created By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UploadSessionStatus"
+                  },
+                  "title": "Response List Upload Sessions V1 Admin Source Files Upload Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Upload Sessions",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Create a session; ``409`` + resume payload when one already exists.\n\n``user_yyyymm`` is server-mandatory (validated by the DTO). A non-terminal\nsession for the same ``category+user_yyyymm`` returns ``409`` so the UI\nresumes it instead of creating a duplicate group + orphan object.",
+        "operationId": "create_upload_session_v1_admin_source_files_upload_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadSessionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSessionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Upload Session",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}": {
+      "get": {
+        "operationId": "get_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSessionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Upload Session",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/events": {
+      "get": {
+        "description": "SSE ``source_upload.progress`` stream (mirrors ``/jobs/{id}/events``).\n\nEmits a ``source_upload.progress`` event whenever the session payload\nchanges and stops at a terminal state; clients fall back to polling\n``GET .../upload-sessions/{id}`` if the stream drops.",
+        "operationId": "upload_session_events_v1_admin_source_files_upload_sessions__upload_session_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Session Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart": {
+      "delete": {
+        "description": "Abort the slot's multipart upload and clear its recorded parts.",
+        "operationId": "abort_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "multipart_upload_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Multipart Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSessionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Abort Multipart Upload",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Initiate a resumable multipart upload for one slot.",
+        "operationId": "initiate_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultipartInitiateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Initiate Multipart Upload",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart/complete": {
+      "post": {
+        "description": "Complete the slot upload after verifying the multipart still exists.\n\nOn resume the RustFS multipart upload must still hold every recorded part;\nif ``ListParts`` 404s or a recorded part is missing, the session transitions\nto ``failed_storage_state`` and the slot must be re-uploaded (doc 1294/1308).",
+        "operationId": "complete_multipart_upload_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart_complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "multipart_upload_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Multipart Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultipartCompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSessionStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Multipart Upload",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/multipart/{part_number}": {
+      "put": {
+        "description": "Upload one part; records part etag/sha256/received_bytes for resume.",
+        "operationId": "upload_multipart_part_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__multipart__part_number__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_number",
+            "required": true,
+            "schema": {
+              "title": "Part Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "multipart_upload_id",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Multipart Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPartResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Multipart Part",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/files/{slot_id}/replace": {
+      "post": {
+        "description": "Replace a completed slot before register: invalidate prior hash/validation.\n\nClears the slot's recorded parts (so its etag/hash/structure results no\nlonger apply) and reopens it for a fresh upload (doc line 1314).",
+        "operationId": "replace_upload_slot_v1_admin_source_files_upload_sessions__upload_session_id__files__slot_id__replace_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "slot_id",
+            "required": true,
+            "schema": {
+              "title": "Slot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SlotReplaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Upload Slot",
         "tags": [
           "admin"
         ]

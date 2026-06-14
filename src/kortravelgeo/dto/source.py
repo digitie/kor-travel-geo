@@ -155,6 +155,209 @@ class SourceFile(FrozenModel):
     validation_summary: dict[str, Any] = Field(default_factory=dict)
 
 
+# --- Upload session lifecycle (T-203a) ------------------------------------
+# State machine + endpoint shapes follow the t109 doc "업로드 상태 머신"
+# (lines ~1052-1115) and "API 설계" upload-session sections (~1220-1345).
+
+#: Non-terminal session states the duplicate-session (409) check guards
+#: against and that the resume entry point can continue.
+SourceUploadSessionState = Literal[
+    # progress states
+    "created",
+    "uploading",
+    "uploaded_to_temp",
+    "storing_to_rustfs",
+    "verifying_rustfs_object",
+    "extracting",
+    "validating_structure",
+    "hashing",
+    "duplicate_check",
+    "awaiting_registration",
+    "registered",
+    "available",
+    # failure states
+    "failed_upload",
+    "failed_extract",
+    "failed_structure",
+    "failed_hash",
+    "failed_rustfs_put",
+    "failed_rustfs_verify",
+    "failed_storage_state",
+    "failed_register",
+    "cancelled",
+    "expired",
+]
+
+#: Terminal states: a session here cannot be resumed and no longer blocks a new
+#: session for the same ``(category, user_yyyymm)``.
+TERMINAL_UPLOAD_SESSION_STATES: frozenset[str] = frozenset(
+    {
+        "available",
+        "cancelled",
+        "expired",
+        "failed_upload",
+        "failed_extract",
+        "failed_hash",
+    }
+)
+
+SourceUploadStrategy = Literal["multipart"]
+SourceUploadStorageKind = Literal["rustfs", "local"]
+
+
+class UploadSessionCreateRequest(FrozenModel):
+    """``POST /v1/admin/source-files/upload-sessions`` body.
+
+    ``user_yyyymm`` is server-mandatory (``^\\d{6}$``): the backend never fills a
+    missing month from the filename or the current date (doc line 1259).
+    """
+
+    category: SourceFileCategory
+    user_yyyymm: str = Field(pattern=r"^\d{6}$")
+    display_name: str = Field(min_length=1)
+    storage_kind: SourceUploadStorageKind = "rustfs"
+    upload_strategy: SourceUploadStrategy = "multipart"
+
+
+class UploadSessionFileSlot(FrozenModel):
+    """One upload slot: ``archive`` for single_file, a sido for multi_part."""
+
+    slot: str
+    part_kind: SourceFilePartKind = "single"
+    part_key: str = "archive"
+    part_label: str | None = None
+    required: bool = True
+    uploaded: bool = False
+    multipart_upload_id: str | None = None
+    received_bytes: int = Field(default=0, ge=0)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    object_etag: str | None = None
+    object_key: str | None = None
+
+
+class UploadSessionPartStatus(FrozenModel):
+    """One ``ops.source_upload_session_parts`` row (resume bookkeeping)."""
+
+    part_key: str
+    part_number: int = Field(ge=1)
+    multipart_upload_id: str | None = None
+    part_etag: str | None = None
+    part_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    received_bytes: int = Field(default=0, ge=0)
+    completed_at: datetime | None = None
+
+
+class UploadSessionStatus(FrozenModel):
+    """Session create / list / get response (resumable entry point)."""
+
+    upload_session_id: str
+    source_file_group_id: str
+    category: SourceFileCategory
+    group_kind: SourceGroupKind
+    user_yyyymm: str = Field(pattern=r"^\d{6}$")
+    display_name: str
+    state: SourceUploadSessionState
+    upload_strategy: SourceUploadStrategy = "multipart"
+    storage_kind: SourceUploadStorageKind = "rustfs"
+    expected_file_count: int = Field(ge=1)
+    uploaded_file_count: int = Field(default=0, ge=0)
+    max_bytes: int = Field(ge=1)
+    part_size_bytes: int = Field(ge=1)
+    registration_state: Literal["not_registered", "registered", "quarantined"] = "not_registered"
+    bucket: str | None = None
+    prefix: str | None = None
+    file_slots: tuple[UploadSessionFileSlot, ...] = ()
+    created_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime | None = None
+    registration_deadline_at: datetime | None = None
+    completed_at: datetime | None = None
+    registered_at: datetime | None = None
+    error_message: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class UploadSessionConflict(FrozenModel):
+    """``409`` body when a non-terminal session already exists for the slot.
+
+    Carries enough to let the UI resume the existing session instead of
+    silently creating a duplicate group + orphan object (doc line 1261).
+    """
+
+    error: Literal["upload_session_conflict"] = "upload_session_conflict"
+    message: str
+    upload_session_id: str
+    state: SourceUploadSessionState
+    category: SourceFileCategory
+    user_yyyymm: str = Field(pattern=r"^\d{6}$")
+    uploaded_file_count: int = Field(default=0, ge=0)
+    expected_file_count: int = Field(ge=1)
+    resumable_actions: tuple[str, ...] = ()
+    existing_session: UploadSessionStatus
+
+
+class MultipartInitiateResponse(FrozenModel):
+    """``POST .../files/{slot}/multipart`` response."""
+
+    upload_session_id: str
+    slot: str
+    part_key: str
+    multipart_upload_id: str
+    object_key: str
+    part_size_bytes: int = Field(ge=1)
+
+
+class UploadPartResponse(FrozenModel):
+    """``PUT .../files/{slot}/multipart/{part_number}`` response."""
+
+    upload_session_id: str
+    slot: str
+    part_key: str
+    part_number: int = Field(ge=1)
+    received_bytes: int = Field(ge=0)
+    part_etag: str
+    part_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+
+
+class MultipartCompleteRequest(FrozenModel):
+    """``POST .../files/{slot}/multipart/complete`` body."""
+
+    part_etags: tuple[tuple[int, str], ...] = Field(
+        default=(),
+        description="optional (part_number, etag) pairs; falls back to recorded parts",
+    )
+
+
+class SlotReplaceResponse(FrozenModel):
+    """``POST .../files/{slot}/replace`` response.
+
+    Replace invalidates the slot's prior validation + hash results and reopens
+    it for a fresh upload (doc line 1314).
+    """
+
+    upload_session_id: str
+    slot: str
+    part_key: str
+    invalidated: bool = True
+    state: SourceUploadSessionState
+
+
+class SourceUploadProgressEvent(FrozenModel):
+    """SSE ``source_upload.progress`` event payload (doc lines 1330-1342)."""
+
+    event: Literal["source_upload.progress"] = "source_upload.progress"
+    upload_session_id: str
+    state: SourceUploadSessionState
+    stage: str | None = None
+    progress: float | None = Field(default=None, ge=0.0, le=1.0)
+    current_item: str | None = None
+    uploaded_bytes: int = Field(default=0, ge=0)
+    total_bytes: int = Field(default=0, ge=0)
+    message: str | None = None
+    log_tail: str | None = None
+
+
 class SourceMatchSet(FrozenModel):
     """Top-level combination of source groups used for rebuild or validation."""
 
