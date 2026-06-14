@@ -5490,7 +5490,8 @@
               "failed_storage_state",
               "failed_register",
               "cancelled",
-              "expired"
+              "expired",
+              "registration_expired"
             ],
             "title": "State",
             "type": "string"
@@ -5706,6 +5707,253 @@
           "state"
         ],
         "title": "SourceFileRegistered",
+        "type": "object"
+      },
+      "SourceGroupRestoreFile": {
+        "additionalProperties": false,
+        "description": "Per-child restore outcome (object verified vs missing/quarantined).",
+        "properties": {
+          "part_key": {
+            "title": "Part Key",
+            "type": "string"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "source_file_id": {
+            "title": "Source File Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "validating",
+              "available",
+              "quarantined",
+              "missing",
+              "soft_deleted",
+              "hard_deleted",
+              "delete_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_id",
+          "part_key",
+          "state"
+        ],
+        "title": "SourceGroupRestoreFile",
+        "type": "object"
+      },
+      "SourceGroupRestoreResponse": {
+        "additionalProperties": false,
+        "description": "``restore`` result: the canonical recovery path (not re-upload).\n\nChildren land in ``available`` (object present + structure ok), ``missing``\n(object absent), or ``quarantined`` (hash/size mismatch). The group state is\nrecomputed and propagated to referencing match sets.",
+        "properties": {
+          "affected_match_set_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Match Set Ids",
+            "type": "array"
+          },
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceGroupRestoreFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "source_file_group_id": {
+            "title": "Source File Group Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "validating",
+              "available",
+              "quarantined",
+              "missing",
+              "soft_deleted",
+              "hard_deleted",
+              "delete_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "validation_state": {
+            "enum": [
+              "unknown",
+              "not_started",
+              "running",
+              "passed",
+              "warning",
+              "failed",
+              "skipped"
+            ],
+            "title": "Validation State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_group_id",
+          "category",
+          "state",
+          "validation_state"
+        ],
+        "title": "SourceGroupRestoreResponse",
+        "type": "object"
+      },
+      "SourceGroupSoftDeleteRequest": {
+        "additionalProperties": false,
+        "description": "``POST .../source-file-groups/{id}/soft-delete`` body.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "SourceGroupSoftDeleteRequest",
+        "type": "object"
+      },
+      "SourceGroupSoftDeleteResponse": {
+        "additionalProperties": false,
+        "description": "``soft-delete`` result: the group + its children are now ``soft_deleted``.",
+        "properties": {
+          "affected_file_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Affected File Count",
+            "type": "integer"
+          },
+          "affected_match_set_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Match Set Ids",
+            "type": "array"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "source_file_group_id": {
+            "title": "Source File Group Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "validating",
+              "available",
+              "quarantined",
+              "missing",
+              "soft_deleted",
+              "hard_deleted",
+              "delete_failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_group_id",
+          "state"
+        ],
+        "title": "SourceGroupSoftDeleteResponse",
+        "type": "object"
+      },
+      "SourceJanitorRunResponse": {
+        "additionalProperties": false,
+        "description": "``run_source_upload_janitor`` summary (CLI + admin).",
+        "properties": {
+          "aborts_failed": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Aborts Failed",
+            "type": "integer"
+          },
+          "aborts_succeeded": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Aborts Succeeded",
+            "type": "integer"
+          },
+          "cancelled_sessions": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Cancelled Sessions",
+            "type": "integer"
+          },
+          "expired_sessions": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expired Sessions",
+            "type": "integer"
+          },
+          "processed_sessions": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Processed Sessions",
+            "type": "integer"
+          },
+          "registration_expired": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Registration Expired",
+            "type": "integer"
+          },
+          "skipped_locked": {
+            "default": false,
+            "title": "Skipped Locked",
+            "type": "boolean"
+          }
+        },
+        "title": "SourceJanitorRunResponse",
         "type": "object"
       },
       "SppnMakareaContext": {
@@ -6617,7 +6865,8 @@
               "failed_storage_state",
               "failed_register",
               "cancelled",
-              "expired"
+              "expired",
+              "registration_expired"
             ],
             "title": "State",
             "type": "string"
@@ -9946,6 +10195,102 @@
         ]
       }
     },
+    "/v1/admin/source-file-groups/{source_file_group_id}/restore": {
+      "post": {
+        "description": "Restore a soft-deleted group via RustFS head + hash (doc line ~1442).\n\nVerifies each soft-deleted child's RustFS object, transitions\n``soft_deleted`` → ``validating``/``available`` (present + consistent),\n``missing`` (absent), or ``quarantined`` (hash/size mismatch), clears\n``deleted_at``, and recomputes (re-propagating to referencing match sets).",
+        "operationId": "restore_source_file_group_v1_admin_source_file_groups__source_file_group_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_file_group_id",
+            "required": true,
+            "schema": {
+              "title": "Source File Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceGroupRestoreResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Source File Group",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-file-groups/{source_file_group_id}/soft-delete": {
+      "post": {
+        "description": "Soft-delete a group + its children (doc line ~1441).\n\nSets ``state='soft_deleted'`` / ``deleted_at=now()``; RustFS objects are kept.\nA group an ACTIVE match set still references is blocked (409) — retire the\nmatch set first. ``recompute_group_aggregates`` re-propagates to referencing\nmatch sets (``validated`` → ``invalid`` etc.).",
+        "operationId": "soft_delete_source_file_group_v1_admin_source_file_groups__source_file_group_id__soft_delete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_file_group_id",
+            "required": true,
+            "schema": {
+              "title": "Source File Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceGroupSoftDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceGroupSoftDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Soft Delete Source File Group",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/source-file-groups/{source_file_group_id}/validate": {
       "post": {
         "description": "Re-run the archive structure validator over a registered group (doc ~1318).\n\nMaterializing archive internals needs GDAL/zip and is gated for live use; the\npure decision logic and the recompute it drives are exercised in unit tests.",
@@ -9984,6 +10329,28 @@
           }
         },
         "summary": "Validate Source File Group",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/janitor/run": {
+      "post": {
+        "description": "Run one upload-session janitor pass on demand (doc lines ~519-525).\n\nAborts unfinished multipart uploads past ``expires_at`` (RustFS objects that\nfinished storing are never auto-deleted) and transitions stored-but-\nunregistered sessions past the registration deadline to\n``registration_expired``. Skips if the ``SOURCE_JANITOR`` lock is held.",
+        "operationId": "run_source_upload_janitor_v1_admin_source_files_janitor_run_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceJanitorRunResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Run Source Upload Janitor",
         "tags": [
           "admin"
         ]

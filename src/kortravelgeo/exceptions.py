@@ -52,6 +52,13 @@ class NotFoundError(KorTravelGeoError):
     http_status = 404
 
 
+class ConflictError(KorTravelGeoError):
+    """Request conflicts with current resource state (e.g. active reference)."""
+
+    code = "E0409"
+    http_status = 409
+
+
 class DatabaseError(KorTravelGeoError):
     code = "E0500"
     http_status = 503

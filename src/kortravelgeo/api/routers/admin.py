@@ -81,6 +81,10 @@ from kortravelgeo.dto.source import (
     SlotReplaceResponse,
     SourceFileCategoryCatalog,
     SourceFileCategoryInfo,
+    SourceGroupRestoreResponse,
+    SourceGroupSoftDeleteRequest,
+    SourceGroupSoftDeleteResponse,
+    SourceJanitorRunResponse,
     SourceUploadProgressEvent,
     UploadPartResponse,
     UploadSessionConflict,
@@ -760,6 +764,97 @@ async def validate_source_file_group(
         **_audit_request(request),
     )
     return result
+
+
+# --- Soft-delete / restore + janitor (T-203c) -----------------------------
+# soft-delete/restore require source_file_manager; the group + its children are
+# soft-deleted (RustFS objects preserved). restore is the canonical recovery path.
+
+
+@router.post(
+    "/source-file-groups/{source_file_group_id}/soft-delete",
+    response_model=SourceGroupSoftDeleteResponse,
+    response_model_exclude_none=True,
+)
+async def soft_delete_source_file_group(
+    source_file_group_id: str,
+    req: SourceGroupSoftDeleteRequest,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceGroupSoftDeleteResponse:
+    """Soft-delete a group + its children (doc line ~1441).
+
+    Sets ``state='soft_deleted'`` / ``deleted_at=now()``; RustFS objects are kept.
+    A group an ACTIVE match set still references is blocked (409) — retire the
+    match set first. ``recompute_group_aggregates`` re-propagates to referencing
+    match sets (``validated`` → ``invalid`` etc.).
+    """
+    result = await client.soft_delete_source_file_group(
+        source_file_group_id, actor=ctx.actor, reason=req.reason
+    )
+    await client.record_audit_event(
+        action="source.soft_delete",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.state,
+        payload={"affected_file_count": result.affected_file_count},
+        resource_type="source_file_group",
+        resource_id=source_file_group_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.post(
+    "/source-file-groups/{source_file_group_id}/restore",
+    response_model=SourceGroupRestoreResponse,
+    response_model_exclude_none=True,
+)
+async def restore_source_file_group(
+    source_file_group_id: str,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceGroupRestoreResponse:
+    """Restore a soft-deleted group via RustFS head + hash (doc line ~1442).
+
+    Verifies each soft-deleted child's RustFS object, transitions
+    ``soft_deleted`` → ``validating``/``available`` (present + consistent),
+    ``missing`` (absent), or ``quarantined`` (hash/size mismatch), clears
+    ``deleted_at``, and recomputes (re-propagating to referencing match sets).
+    """
+    result = await client.restore_source_file_group(source_file_group_id, actor=ctx.actor)
+    await client.record_audit_event(
+        action="source.restore",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.state,
+        payload={"category": result.category},
+        resource_type="source_file_group",
+        resource_id=source_file_group_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.post(
+    "/source-files/janitor/run",
+    response_model=SourceJanitorRunResponse,
+    response_model_exclude_none=True,
+)
+async def run_source_upload_janitor(
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceJanitorRunResponse:
+    """Run one upload-session janitor pass on demand (doc lines ~519-525).
+
+    Aborts unfinished multipart uploads past ``expires_at`` (RustFS objects that
+    finished storing are never auto-deleted) and transitions stored-but-
+    unregistered sessions past the registration deadline to
+    ``registration_expired``. Skips if the ``SOURCE_JANITOR`` lock is held.
+    """
+    return await client.run_source_upload_janitor()
 
 
 @router.get(
@@ -1588,6 +1683,7 @@ _UPLOAD_TERMINAL_STATES = frozenset(
         "quarantined",
         "cancelled",
         "expired",
+        "registration_expired",
         "failed_upload",
         "failed_extract",
         "failed_structure",

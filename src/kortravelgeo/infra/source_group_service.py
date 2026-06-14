@@ -30,6 +30,11 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from kortravelgeo.core.source_janitor import (
+    RestoreObjectCheck,
+    decide_restore_transition,
+    decide_soft_delete,
+)
 from kortravelgeo.core.source_match_propagation import (
     ChildFileFacts,
     MatchSetFacts,
@@ -46,8 +51,11 @@ from kortravelgeo.dto.source import (
     GroupValidationResult,
     RegisterResponse,
     SourceFileRegistered,
+    SourceGroupRestoreFile,
+    SourceGroupRestoreResponse,
+    SourceGroupSoftDeleteResponse,
 )
-from kortravelgeo.exceptions import InvalidInputError, NotFoundError
+from kortravelgeo.exceptions import ConflictError, InvalidInputError, NotFoundError
 from kortravelgeo.infra.rustfs import rustfs_uri
 
 # Audit actor_type for register (matches admin_repo "ui"/"system" convention).
@@ -996,4 +1004,288 @@ def build_group_validation(
         coverage=decision.coverage,
         reasons=decision.reasons,
         validator_version=VALIDATOR_VERSION,
+    )
+
+
+# --- soft-delete / restore (T-203c) ---------------------------------------
+
+
+async def _active_match_set_ids(conn: AsyncConnection, group_id: str) -> tuple[str, ...]:
+    """Active match sets that reference ``group_id`` (the delete guard)."""
+    rows = (
+        await conn.execute(
+            text(
+                """
+SELECT DISTINCT ms.source_match_set_id
+  FROM ops.source_match_sets ms
+  JOIN ops.source_match_set_items it
+    ON it.source_match_set_id = ms.source_match_set_id
+ WHERE it.source_file_group_id = :gid AND ms.state = 'active'
+"""
+            ),
+            {"gid": group_id},
+        )
+    ).all()
+    return tuple(str(r[0]) for r in rows)
+
+
+async def soft_delete_group(
+    engine: AsyncEngine,
+    source_file_group_id: str,
+    *,
+    actor: str | None,
+    reason: str | None = None,
+) -> SourceGroupSoftDeleteResponse:
+    """Soft-delete a group + its children (doc line ~1441).
+
+    Sets ``state='soft_deleted'`` and ``deleted_at=now()`` on the group and every
+    non-deleted child; RustFS objects are preserved. A group referenced by an
+    ACTIVE match set is blocked (application guard mirroring the FK
+    ``ON DELETE RESTRICT``); recompute then re-propagates to referencing match
+    sets so a ``validated`` set referencing it goes ``invalid``, etc.
+    """
+    async with engine.begin() as conn:
+        group_row = (
+            await conn.execute(
+                text(
+                    """
+SELECT state FROM ops.source_file_groups
+ WHERE source_file_group_id = :gid FOR UPDATE
+"""
+                ),
+                {"gid": source_file_group_id},
+            )
+        ).mappings().first()
+        if group_row is None:
+            raise NotFoundError(f"source file group not found: {source_file_group_id}")
+
+        active_ids = await _active_match_set_ids(conn, source_file_group_id)
+        guard = decide_soft_delete(
+            current_state=str(group_row["state"]), active_match_set_ids=active_ids
+        )
+        if not guard.allowed:
+            raise ConflictError(
+                guard.reason,
+                hint="active match set을 먼저 retire한 뒤 다시 시도하세요"
+                if guard.blocking_match_set_ids
+                else None,
+            )
+
+        children = (
+            await conn.execute(
+                text(
+                    """
+UPDATE ops.source_files
+   SET state = 'soft_deleted', deleted_at = now()
+ WHERE source_file_group_id = :gid
+   AND state NOT IN ('hard_deleted', 'soft_deleted')
+RETURNING source_file_id
+"""
+                ),
+                {"gid": source_file_group_id},
+            )
+        ).all()
+        await conn.execute(
+            text(
+                """
+UPDATE ops.source_file_groups
+   SET state = 'soft_deleted', deleted_at = now(), updated_at = now()
+ WHERE source_file_group_id = :gid
+"""
+            ),
+            {"gid": source_file_group_id},
+        )
+
+        recompute = await recompute_group_aggregates(
+            conn, source_file_group_id, trigger="soft_delete"
+        )
+        await _audit_source_action(
+            conn,
+            action="source.soft_delete",
+            group_id=source_file_group_id,
+            actor=actor,
+            outcome="soft_deleted",
+            payload={"reason": reason, "affected_file_count": len(children)},
+        )
+
+    return SourceGroupSoftDeleteResponse(
+        source_file_group_id=source_file_group_id,
+        state=recompute.state,
+        deleted_at=None,
+        affected_file_count=len(children),
+        affected_match_set_ids=recompute.affected_match_set_ids,
+    )
+
+
+@dataclass(frozen=True)
+class RestoreChildVerification:
+    """A head-verified child object the caller passes to :func:`restore_group`."""
+
+    source_file_id: str
+    part_key: str
+    object_present: bool
+    observed_sha256: str | None = None
+    observed_size: int | None = None
+
+
+async def restore_group(
+    engine: AsyncEngine,
+    source_file_group_id: str,
+    *,
+    verifications: tuple[RestoreChildVerification, ...],
+    actor: str | None,
+) -> SourceGroupRestoreResponse:
+    """Restore a ``soft_deleted`` group (doc line ~1442) — the canonical recovery.
+
+    The caller (client layer) has already run RustFS ``head_object`` (+ hash) per
+    child and passes the observations in ``verifications``. Each child transitions
+    ``soft_deleted`` → ``validating``/``available`` (object present + consistent),
+    ``missing`` (absent), or ``quarantined`` (hash/size mismatch); ``deleted_at``
+    is cleared, then ``recompute_group_aggregates`` re-propagates to referencing
+    match sets (``revalidatable`` / integrity-alert recovery candidate).
+    """
+    by_file = {v.source_file_id: v for v in verifications}
+    async with engine.begin() as conn:
+        group_row = (
+            await conn.execute(
+                text(
+                    """
+SELECT category, group_kind, state FROM ops.source_file_groups
+ WHERE source_file_group_id = :gid FOR UPDATE
+"""
+                ),
+                {"gid": source_file_group_id},
+            )
+        ).mappings().first()
+        if group_row is None:
+            raise NotFoundError(f"source file group not found: {source_file_group_id}")
+        if str(group_row["state"]) != "soft_deleted":
+            raise InvalidInputError(
+                "restore는 soft_deleted 상태의 group만 대상으로 합니다 "
+                f"(현재 state={group_row['state']})"
+            )
+
+        child_rows = (
+            await conn.execute(
+                text(
+                    """
+SELECT source_file_id, part_key, sha256, size_bytes
+  FROM ops.source_files
+ WHERE source_file_group_id = :gid AND state = 'soft_deleted'
+"""
+                ),
+                {"gid": source_file_group_id},
+            )
+        ).mappings().all()
+
+        results: list[SourceGroupRestoreFile] = []
+        for row in child_rows:
+            fid = str(row["source_file_id"])
+            verification = by_file.get(fid)
+            check = (
+                RestoreObjectCheck(
+                    object_present=verification.object_present,
+                    observed_sha256=verification.observed_sha256,
+                    observed_size=verification.observed_size,
+                )
+                if verification is not None
+                else RestoreObjectCheck(object_present=False)
+            )
+            decision = decide_restore_transition(
+                expected_sha256=str(row["sha256"]),
+                expected_size=int(row["size_bytes"]),
+                check=check,
+            )
+            await conn.execute(
+                text(
+                    """
+UPDATE ops.source_files
+   SET state = :state, validation_state = :vstate, deleted_at = NULL,
+       validated_at = CASE WHEN :vstate IN ('passed','warning') THEN now()
+                           ELSE validated_at END
+ WHERE source_file_id = :fid
+"""
+                ),
+                {
+                    "fid": fid,
+                    "state": decision.new_state,
+                    "vstate": decision.validation_state,
+                },
+            )
+            results.append(
+                SourceGroupRestoreFile(
+                    source_file_id=fid,
+                    part_key=str(row["part_key"]),
+                    state=decision.new_state,
+                    reasons=decision.reasons,
+                )
+            )
+
+        # Clear the group's deleted_at; recompute folds child states back into the
+        # group state and re-propagates to referencing match sets.
+        await conn.execute(
+            text(
+                """
+UPDATE ops.source_file_groups
+   SET deleted_at = NULL, updated_at = now()
+ WHERE source_file_group_id = :gid
+"""
+            ),
+            {"gid": source_file_group_id},
+        )
+        recompute = await recompute_group_aggregates(
+            conn, source_file_group_id, trigger="restore"
+        )
+        await _audit_source_action(
+            conn,
+            action="source.restore",
+            group_id=source_file_group_id,
+            actor=actor,
+            outcome=recompute.state,
+            payload={
+                "files": [
+                    {"source_file_id": r.source_file_id, "state": r.state} for r in results
+                ]
+            },
+        )
+
+    return SourceGroupRestoreResponse(
+        source_file_group_id=source_file_group_id,
+        category=str(group_row["category"]),
+        state=recompute.state,
+        validation_state=recompute.validation_state,
+        files=tuple(results),
+        affected_match_set_ids=recompute.affected_match_set_ids,
+    )
+
+
+async def _audit_source_action(
+    conn: AsyncConnection,
+    *,
+    action: str,
+    group_id: str,
+    actor: str | None,
+    outcome: str,
+    payload: dict[str, Any],
+) -> None:
+    await conn.execute(
+        _json_text(
+            """
+INSERT INTO ops.audit_events
+  (event_id, actor_type, actor_id, action, resource_type, resource_id,
+   outcome, payload_redacted)
+VALUES
+  (:event_id, 'ui', :actor_id, :action, 'source_file_group', :resource_id,
+   :outcome, :payload)
+""",
+            "payload",
+        ),
+        {
+            "event_id": str(uuid4()),
+            "actor_id": actor,
+            "action": action,
+            "resource_id": group_id,
+            "outcome": outcome,
+            "payload": payload,
+        },
     )

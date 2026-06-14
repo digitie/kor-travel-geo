@@ -63,6 +63,9 @@ from .dto.source import (
     GroupValidationResult,
     RegisterResponse,
     SourceFileCategoryInfo,
+    SourceGroupRestoreResponse,
+    SourceGroupSoftDeleteResponse,
+    SourceJanitorRunResponse,
     UploadSessionCreateRequest,
     UploadSessionPartStatus,
     UploadSessionStatus,
@@ -768,6 +771,112 @@ class AsyncAddressClient:
         return await revalidate_group(
             self._engine(), source_file_group_id, decision=decision, actor=actor
         )
+
+    async def soft_delete_source_file_group(
+        self,
+        source_file_group_id: str,
+        *,
+        actor: str | None,
+        reason: str | None = None,
+    ) -> SourceGroupSoftDeleteResponse:
+        """Soft-delete a group + its children (T-203c, doc line ~1441)."""
+        from .infra.source_group_service import soft_delete_group
+
+        return await soft_delete_group(
+            self._engine(), source_file_group_id, actor=actor, reason=reason
+        )
+
+    async def restore_source_file_group(
+        self,
+        source_file_group_id: str,
+        *,
+        actor: str | None,
+    ) -> SourceGroupRestoreResponse:
+        """Restore a soft-deleted group via RustFS head + hash (T-203c, doc ~1442).
+
+        Head-verifies each soft-deleted child's RustFS object (size/etag, then a
+        full SHA-256 when needed) and feeds the observations to the pure restore
+        transition decision in ``infra.source_group_service.restore_group``.
+        """
+        from .exceptions import NotFoundError
+        from .infra.rustfs import RustfsClient, require_enabled_rustfs
+        from .infra.source_group_service import (
+            RestoreChildVerification,
+            restore_group,
+        )
+        from .infra.source_upload_repo import source_group_children
+
+        children = await source_group_children(self._engine(), source_file_group_id)
+        if not children:
+            raise NotFoundError(f"source file group not found: {source_file_group_id}")
+        config = require_enabled_rustfs(self.settings)
+        rustfs = RustfsClient(config)
+        verifications: list[RestoreChildVerification] = []
+        for child in children:
+            if not child.object_key:
+                verifications.append(
+                    RestoreChildVerification(
+                        source_file_id=child.source_file_id,
+                        part_key=child.part_key,
+                        object_present=False,
+                    )
+                )
+                continue
+            try:
+                head = await rustfs.head_object(child.object_key)
+            except Exception:  # absent / unreadable object → missing transition
+                verifications.append(
+                    RestoreChildVerification(
+                        source_file_id=child.source_file_id,
+                        part_key=child.part_key,
+                        object_present=False,
+                    )
+                )
+                continue
+            observed_sha256 = head.metadata.get("ktg-sha256")
+            if observed_sha256 is None:
+                observed_sha256 = await rustfs.compute_sha256(child.object_key)
+            verifications.append(
+                RestoreChildVerification(
+                    source_file_id=child.source_file_id,
+                    part_key=child.part_key,
+                    object_present=True,
+                    observed_sha256=observed_sha256,
+                    observed_size=head.size or None,
+                )
+            )
+        return await restore_group(
+            self._engine(),
+            source_file_group_id,
+            verifications=tuple(verifications),
+            actor=actor,
+        )
+
+    async def run_source_upload_janitor(self) -> SourceJanitorRunResponse:
+        """Run one upload-session janitor pass (T-203c, doc lines ~519-525).
+
+        Aborts unfinished multipart uploads past ``expires_at`` and marks those
+        sessions expired/cancelled; transitions stored-but-unregistered objects
+        past the registration deadline to ``registration_expired``. Runs under the
+        ``SOURCE_JANITOR`` advisory lock and skips the pass if another holds it.
+        """
+        from .infra.rustfs import RustfsClient, load_rustfs_config
+        from .infra.source_janitor import run_source_upload_janitor
+
+        config = load_rustfs_config(self.settings)
+        rustfs = (
+            RustfsClient(config)
+            if config.enabled and config.credentials_configured
+            else None
+        )
+        summary = await run_source_upload_janitor(
+            self._engine(),
+            rustfs=rustfs,
+            ttl_days=self.settings.source_upload_session_ttl_days,
+            deadline_days=self.settings.source_registration_deadline_days,
+            session_limit=self.settings.source_janitor_session_limit,
+        )
+        return SourceJanitorRunResponse(**summary.as_payload())
 
     async def list_dataset_snapshots(
         self,

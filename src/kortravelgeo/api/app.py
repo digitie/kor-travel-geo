@@ -76,13 +76,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await queue.recover_startup()
     table_stats_task = _start_table_stats_capture_scheduler(client.engine, get_settings())
     app.state.table_stats_capture_task = table_stats_task
+    janitor_task = _start_source_janitor_scheduler(client, get_settings())
+    app.state.source_janitor_task = janitor_task
     try:
         yield
     finally:
-        if table_stats_task is not None:
-            table_stats_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await table_stats_task
+        for task in (table_stats_task, janitor_task):
+            if task is not None:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
         await client.__aexit__(None, None, None)
 
 
@@ -236,6 +239,42 @@ async def _capture_table_stats_once(engine: AsyncEngine, settings: Settings) -> 
         "captured ops.table_stats_snapshots",
         extra={"row_count": len(rows), "limit": settings.ops_table_stats_capture_limit},
     )
+
+
+def _start_source_janitor_scheduler(
+    client: AsyncAddressClient,
+    settings: Settings,
+) -> asyncio.Task[None] | None:
+    """Opt-in upload-session janitor scheduler (T-203c).
+
+    Mirrors the T-050 table-stats scheduler: default interval ``0`` is disabled.
+    The janitor itself takes the ``SOURCE_JANITOR`` advisory lock, so multiple
+    API processes scheduling it concurrently still run at most one pass.
+    """
+    if settings.source_janitor_interval_minutes <= 0:
+        return None
+    return asyncio.create_task(_run_source_janitor_scheduler(client, settings))
+
+
+async def _run_source_janitor_scheduler(
+    client: AsyncAddressClient,
+    settings: Settings,
+) -> None:
+    interval_s = settings.source_janitor_interval_minutes * 60
+    if settings.source_janitor_on_startup:
+        await _run_source_janitor_once(client)
+    while True:
+        await asyncio.sleep(interval_s)
+        await _run_source_janitor_once(client)
+
+
+async def _run_source_janitor_once(client: AsyncAddressClient) -> None:
+    try:
+        summary = await client.run_source_upload_janitor()
+    except Exception:
+        _LOGGER.exception("source upload janitor pass failed")
+        return
+    _LOGGER.info("source upload janitor scheduler pass", extra=summary.model_dump())
 
 
 def _locked_job_handler(

@@ -132,6 +132,21 @@ DB_QUERIES = _counter(
     "SQL queries executed by this API process by operation, fingerprint, and status.",
     ("operation", "query_fingerprint", "status"),
 )
+SOURCE_JANITOR_RUNS = _counter(
+    "kor_travel_geo_source_janitor_runs_total",
+    "Upload-session janitor passes by outcome (ran or skipped on lock conflict).",
+    ("outcome",),
+)
+SOURCE_JANITOR_SESSIONS = _counter(
+    "kor_travel_geo_source_janitor_sessions_total",
+    "Upload sessions processed by the janitor by transition action.",
+    ("action",),
+)
+SOURCE_JANITOR_ABORTS = _counter(
+    "kor_travel_geo_source_janitor_multipart_aborts_total",
+    "Multipart upload abort attempts by the janitor by outcome.",
+    ("outcome",),
+)
 DB_QUERY_DURATION = _histogram(
     "kor_travel_geo_db_query_duration_seconds",
     "SQL query duration by operation, fingerprint, and status.",
@@ -213,6 +228,21 @@ def record_db_query(*, statement: str, elapsed_s: float, status: str) -> None:
         query_fingerprint=fingerprint,
         status=status,
     ).observe(max(0.0, elapsed_s))
+
+
+def record_source_janitor_run(*, outcome: str) -> None:
+    """Count one janitor pass: ``ran`` or ``skipped_locked``."""
+    SOURCE_JANITOR_RUNS.labels(outcome=outcome).inc()
+
+
+def record_source_janitor_session(*, action: str) -> None:
+    """Count one session the janitor acted on by transition action."""
+    SOURCE_JANITOR_SESSIONS.labels(action=action).inc()
+
+
+def record_source_janitor_abort(*, outcome: str) -> None:
+    """Count one multipart abort attempt: ``succeeded`` or ``failed``."""
+    SOURCE_JANITOR_ABORTS.labels(outcome=outcome).inc()
 
 
 def refresh_admin_metrics(
