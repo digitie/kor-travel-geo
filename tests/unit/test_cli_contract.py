@@ -7,13 +7,18 @@ from typer.testing import CliRunner
 
 from kortravelgeo.cli.main import (
     _data_quality_cases,
+    _load_bulk_with_cli_validation,
+    _load_pobox_with_cli_validation,
     _shp_all_work_items,
     _shp_mode_for_index,
     app,
     load_all_sidos_command,
+    load_bulk_command,
     load_daily_juso_command,
     load_daily_parcel_links_command,
+    load_epost_command,
     load_parcel_links_command,
+    load_pobox_command,
     load_roadaddr_entrances_command,
     load_shp_all_command,
     load_sppn_makarea_command,
@@ -79,6 +84,15 @@ def test_sppn_makarea_cli_load_exposes_source_yyyymm_and_mode() -> None:
     assert "--yyyymm" in source
     assert "--mode" in source
     assert 'typer.echo(f"loaded tl_sppn_makarea rows: {count}")' in source
+
+
+def test_epost_cli_loads_through_shared_validation_helpers() -> None:
+    assert "validate_pobox_file(path)" in inspect.getsource(_load_pobox_with_cli_validation)
+    assert "validate_bulk_file(path)" in inspect.getsource(_load_bulk_with_cli_validation)
+    assert "_load_pobox_with_cli_validation" in inspect.getsource(load_pobox_command)
+    assert "_load_bulk_with_cli_validation" in inspect.getsource(load_bulk_command)
+    assert "_load_pobox_with_cli_validation" in inspect.getsource(load_epost_command)
+    assert "_load_bulk_with_cli_validation" in inspect.getsource(load_epost_command)
 
 
 def test_limit_per_file_commands_warn_test_only() -> None:

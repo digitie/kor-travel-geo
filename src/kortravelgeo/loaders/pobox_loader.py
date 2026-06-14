@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import csv
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +10,20 @@ from pathlib import Path
 import psycopg
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.exceptions import LoaderError
+from kortravelgeo.loaders.epost_validation import (
+    BD_MGT_SN_ALIASES,
+    POBOX_KIND_ALIASES,
+    POBOX_NAME_ALIASES,
+    POBOX_NO_MN_ALIASES,
+    POBOX_NO_SL_ALIASES,
+    ZIP_NO_ALIASES,
+    ensure_postal_validation_passed,
+    epost_row_value,
+    iter_epost_dict_rows,
+    normalize_pobox_kind,
+    validate_pobox_file,
+)
 from kortravelgeo.loaders.text.juso_hangul_loader import _alchemy_to_libpq
 
 ProgressCallback = Callable[[float], None]
@@ -32,35 +45,41 @@ class PoboxRow:
 
 
 def iter_pobox_rows(path: Path | str) -> Iterator[PoboxRow]:
-    with Path(path).open("r", encoding="utf-8-sig", newline="") as file:
-        reader = csv.DictReader(file, delimiter="|")
-        for index, row in enumerate(reader, start=1):
-            zip_no = row.get("zip_no") or row.get("우편번호")
-            if not zip_no:
-                continue
-            bd_mgt_sn = row.get("bd_mgt_sn") or row.get("건물관리번호") or f"pobox:{index}"
-            yield PoboxRow(
-                bd_mgt_sn=bd_mgt_sn,
-                zip_no=zip_no,
-                rn_code=row.get("rn_code") or row.get("도로명코드"),
-                pobox_kind=(row.get("pobox_kind") or row.get("구분") or "PO"),
-                pobox_name=row.get("pobox_name") or row.get("사서함명"),
-                pobox_no_mn=_to_int(row.get("pobox_no_mn") or row.get("사서함본번")),
-                pobox_no_sl=_to_int(row.get("pobox_no_sl") or row.get("사서함부번")),
-                si_nm=row.get("si_nm") or row.get("시도"),
-                sgg_nm=row.get("sgg_nm") or row.get("시군구"),
-                emd_nm=row.get("emd_nm") or row.get("읍면동"),
-                bjd_cd=row.get("bjd_cd") or row.get("법정동코드"),
-            )
+    for index, row in enumerate(iter_epost_dict_rows(path), start=1):
+        zip_no = epost_row_value(row, ZIP_NO_ALIASES)
+        if not zip_no:
+            continue
+        raw_kind = epost_row_value(row, POBOX_KIND_ALIASES)
+        pobox_kind = normalize_pobox_kind(raw_kind)
+        if pobox_kind is None:
+            msg = f"invalid pobox_kind in epost pobox file: {raw_kind}"
+            raise LoaderError(msg)
+        bd_mgt_sn = epost_row_value(row, BD_MGT_SN_ALIASES) or f"pobox:{index}"
+        yield PoboxRow(
+            bd_mgt_sn=bd_mgt_sn,
+            zip_no=zip_no,
+            rn_code=epost_row_value(row, ("rn_code", "도로명코드")),
+            pobox_kind=pobox_kind,
+            pobox_name=epost_row_value(row, POBOX_NAME_ALIASES),
+            pobox_no_mn=_to_int(epost_row_value(row, POBOX_NO_MN_ALIASES)),
+            pobox_no_sl=_to_int(epost_row_value(row, POBOX_NO_SL_ALIASES)),
+            si_nm=epost_row_value(row, ("si_nm", "시도")),
+            sgg_nm=epost_row_value(row, ("sgg_nm", "시군구")),
+            emd_nm=epost_row_value(row, ("emd_nm", "읍면동")),
+            bjd_cd=epost_row_value(row, ("bjd_cd", "법정동코드")),
+        )
 
 
 async def load_pobox(
     engine: AsyncEngine,
     path: Path | str,
     *,
+    validate: bool = True,
     on_progress: ProgressCallback | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> int:
+    if validate:
+        ensure_postal_validation_passed(validate_pobox_file(path))
     return await copy_pobox_rows(
         engine,
         iter_pobox_rows(path),
@@ -115,4 +134,3 @@ FROM STDIN
 
 def _to_int(value: str | None) -> int | None:
     return int(value) if value else None
-
