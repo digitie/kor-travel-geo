@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 리뷰 재반영 — 누락 시나리오 정밀화)
+
+**작업**: PR #131 최신 리뷰에서 지적된 운영 시나리오 누락을 `docs/t109-backup-source-upload-management.md`·ADR-049·`docs/tasks.md`·`docs/resume.md`에 재반영했다. 문서 방향은 호환성/최소수정보다 확장성·완성도·일관성·성능을 우선하고, 외부 인터페이스 변경은 구현 task에서 OpenAPI/문서/프론트 타입 동기화까지 포함하도록 고정했다.
+
+**반영**:
+- RustFS multipart DB/storage 불일치 경로를 `failed_storage_state`로 명시하고, resume 시 RustFS `ListParts` 또는 호환 API로 multipart upload id 존재를 먼저 확인하도록 했다.
+- janitor는 PostgreSQL advisory lock 기반 admin service/CLI periodic job으로 두고, 미완 multipart abort와 session 만료 전이만 자동 처리하며 저장 완료 object는 자동 삭제하지 않는 경계로 고정했다.
+- active match set의 `integrity_alert` 해제는 `POST /validate` active validate-in-place로만 확정하고, rollback은 source match set one-active invariant 안에서 current retire + target active restore + quick reconcile 재계산을 수행하도록 정리했다.
+- `forced_promotion=true`는 consistency ERROR 승격 차단만 우회하며, source archive integrity gate·unavailable group·selected match set `integrity_alert=true`는 우회할 수 없다고 명시했다.
+- epost 수동 server-fetch의 fetch 실패, ZIP 구조 불일치, 기준월 mismatch를 별도 session/report 상태로 드러내고 핵심 rebuild와 분리했다.
+- `restored_from_backup` stub의 `manifest.group_sha256`은 신뢰값이 아니라 비교 대상이며, storage SHA-256/size와 group hash를 재계산하고 구조 validator가 통과한 뒤에만 `available`로 전이하게 했다.
+- 통합 fixture 시나리오를 27개로 확장하고 T-210 범위를 맞췄다.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
 ## 2026-06-14 (PR #131 최종 정합성 sweep — 최적안 반영)
 
 **작업**: head ab38693에 대해 정합성 sweep(상태머신 + t109↔ADR-049/050↔tasks.md 교차)을 한 번 더 돌려, 확정된 7건(0 기각) 중 doc-정합 항목을 각각 최적안으로 반영했다. 직전 M-A 옵션2 전파 이후 단일 출처(recompute 계약·ADR·테스트)에 restored_from_backup 복구 경로가 일부 누락돼 있던 것을 통일했다.
