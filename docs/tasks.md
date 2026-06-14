@@ -36,7 +36,6 @@
 
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
-- T-113 C13 상세주소 동 containment 검증 prototype — `detail_dong_shape_bundle`(동 polygon/동 출입구) + `상세주소DB`(adrdc_* TXT) containment(`ST_Covers`)·key overlap. `extra_shape_layers.py` 재사용 + 상세주소DB parser. (의존: T-110)
 - T-114 C14 국가지점번호 grid/center 검증 harness — 도형(1천만 polygon)·중심점(1천만 TXT)을 **상시 적재 없이 streaming**으로 `core/sppn.py` parser/formatter 및 prefix 중심점 일치·grid coverage 검증. "10m 좌표 개선 아님" 확인. (의존: T-110)
 - T-115 C15 민원행정기관 POI 거리 검증 prototype — 민원행정기관전자지도(SHP point + 도로명주소)를 geocoder 결과 좌표와 거리 비교, 이상치 sample. 주소 정본/일반 후보에 미혼입. (의존: T-110)
 - T-116 C16 주소DB/건물DB row·key drift 검증 prototype — 주소DB/건물DB를 streaming으로 읽어 serving 정본(`tl_juso_text`/`tl_juso_parcel_link`/`tl_spbd_buld_polygon`)과 row count·natural key drift(EXCEPT/staging) 비교. 좌표 적재 없음. (의존: T-110)
@@ -77,6 +76,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-113 C13 상세주소 동 containment 검증 prototype. `TL_SGCO_RNADR_DONG` polygon, `TL_SPBD_ENTRC_DONG` point, `상세주소DB` `adrdc_*.txt`를 staging/streaming 검증에 연결했다. TXT에는 좌표가 없으므로 `ST_Covers`는 `SIG_CD + BUL_MAN_NO`로 join한 동 출입구 point containment를 측정하고, 상세주소DB는 `BD_MGT_SN`/도로명주소 연계키 overlap과 address-matched coverage context로 사용한다. 측정 전용이며 serving SQL은 변경하지 않는다. 상세: `docs/t113-detail-dong-containment.md` (2026-06-14)
 - [x] T-112 C12 건물 도형 connection line 검증 prototype. `TL_SPOT_CNTC` connection line을 staging 적재하고 전자지도 `TL_SPRD_MANAGE` 도로 관리선과 `RDS_SIG_CD + RDS_MAN_NO` key overlap, line-to-line 거리 분포, road key 결손 또는 tolerance 초과 dangling connection을 측정한다. 측정 전용이며 운영 C8/serving SQL은 변경하지 않는다. 상세: `docs/t112-c12-connection-lines.md` (2026-06-14)
 - [x] T-111 C11 출입구 원천 간 거리 검증 prototype. 건물 도형 bundle `TL_SPBD_ENTRC`와 전자지도 `TL_SPBD_ENTRC`는 `ENTRANCE_KEY_FIELDS` full key로, `tl_locsum_entrc`/`tl_roadaddr_entrc`는 운영 테이블 제약상 `sig_cd + ent_man_no` weak key로 key overlap 및 `ST_Distance` 분포를 측정한다. `AugmentReport` payload를 제공하되 serving 좌표 승격은 하지 않는다. 상세: `docs/t111-c11-entrance-sources.md` (2026-06-14)
 - [x] T-110 보강 검증 공통 harness. `src/kortravelgeo/loaders/augment_harness.py`에 시도 17개 group 순회 driver, `AugmentReport`, SHP `Point`/`PolyLine`/`Polygon` body parser, DBF row alignment, ZIP layer feature iterator, staging table 생성/COPY helper, key join 기반 `ST_Distance`/`ST_Covers` 측정 helper를 추가했다. PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형 테스트로 분리했다. 상세: `docs/t110-augment-harness.md` (2026-06-14)

@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-113 C13 상세주소 동 containment 검증 prototype)
+
+**작업**: `건물군 내 상세주소 동 도형` bundle의 상세주소 동 polygon/동 출입구 point와 `상세주소DB_전체분` `adrdc_*.txt`를 연결하는 C13 prototype을 구현했다. TXT에는 좌표가 없으므로 `ST_Covers` containment는 `TL_SGCO_RNADR_DONG` polygon이 같은 `SIG_CD + BUL_MAN_NO`의 `TL_SPBD_ENTRC_DONG` point를 덮는지 측정하고, 상세주소DB는 key overlap과 address-matched coverage context로만 쓴다.
+
+**반영**:
+- `src/kortravelgeo/loaders/c13_detail_dong.py`를 추가했다.
+- `상세주소DB 활용가이드` 기준 16컬럼 MS949 pipe parser를 추가하고 시도별 `adrdc_*.txt` member 매핑을 고정했다.
+- `BD_MGT_SN` ↔ `building_management_no`, 도로명주소 연계키(`SIG_CD`, `RN_CD`, `BULD_SE_CD`, `BULD_MNNM`, `BULD_SLNO`) ↔ TXT 도로명주소 key, 동 출입구 `SIG_CD + BUL_MAN_NO` ↔ polygon `SIG_CD + BUL_MAN_NO` overlap을 측정한다.
+- polygon/entrance `ST_Covers` coverage와 상세주소DB key가 match된 pair의 coverage를 별도 metric으로 남긴다.
+- `tests/unit/test_c13_detail_dong.py`와 `tests/integration/test_optional_real_postgres_c13_detail_dong.py`를 추가했다. 실제 PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형이다.
+- `docs/t113-detail-dong-containment.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**검증**: WSL ext4 테스트 미러에서 `pytest -q` → 365 passed, 26 skipped, 19 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과.
+
 ## 2026-06-14 (T-112 C12 건물 도형 connection line 검증 prototype)
 
 **작업**: `도로명주소 건물 도형` bundle의 `TL_SPOT_CNTC` polyline을 전자지도 `TL_SPRD_MANAGE` 도로 관리선과 비교하는 C12 prototype을 구현했다. 이번 작업은 measurement-only이며 운영 C8 SQL, serving 좌표, API 응답은 변경하지 않는다.
