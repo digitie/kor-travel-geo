@@ -2,6 +2,17 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-109 시나리오 재검 H1 정정 — active match set integrity_alert 분리)
+
+**작업**: 시나리오 재검에서 발견된 H1 자기모순(active match set이 `invalid`로 전환된다는 규칙 ↔ one-active 슬롯 유지가 양립 불가; one-active index가 `WHERE state='active'`라 state를 invalid로 바꾸면 슬롯이 빔)을 `docs/t109-backup-source-upload-management.md`에 정정했다.
+
+**반영**:
+- `ops.source_match_sets`에 `integrity_alert BOOLEAN`/`integrity_alert_at`/`integrity_alert_detail`을 추가해 원천 무결성 결손을 `state`와 분리했다.
+- 상태 전이 규칙을 active/비-active로 분기: **active**는 결손 시 `state='active'` 유지 + `integrity_alert=true`(슬롯·serving 유지, 재구성만 불가), **비-active**(draft/validated/restored_from_backup)만 `state='invalid'`. 복구 시 active는 validate 성공으로 `integrity_alert=false`, 비-active는 `invalid→revalidatable→validate→validated`.
+- 이 구분이 reconcile/rebuild 게이트/run-validation 등 group이 missing/quarantined가 되는 모든 경로에 동일 적용됨을 명문화. group 집계 규칙·state 표·커버리지 표·구현 순서·테스트(backend/통합)도 일관되게 갱신.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
 ## 2026-06-14 (T-109 추가 결정 2건 — 자동탐지 제거 / epost 수동 server-fetch)
 
 **작업**: 사용자 결정 2건을 `docs/t109-backup-source-upload-management.md`에 반영했다.
