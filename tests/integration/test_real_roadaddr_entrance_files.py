@@ -17,7 +17,7 @@ ALT_DATA_ROOTS = (
 
 
 def test_actual_roadaddr_entrance_sejong_zip_loads_direct_rows() -> None:
-    root = _require(DATA_ROOT / "도로명주소 출입구 정보")
+    root = _roadaddr_entrance_source_dir()
     archive = root / "도로명주소출입구_전체분_세종특별자치시.zip"
     sources = discover_roadaddr_entrance_sources(archive)
     rows = list(iter_roadaddr_entrance_rows(sources[0], source_yyyymm=None))
@@ -39,7 +39,7 @@ def test_actual_roadaddr_entrance_sejong_zip_loads_direct_rows() -> None:
 
 
 def test_actual_roadaddr_entrance_directory_discovers_all_sido_zip_members() -> None:
-    root = _require(DATA_ROOT / "도로명주소 출입구 정보")
+    root = _roadaddr_entrance_source_dir()
     sources = discover_roadaddr_entrance_sources(root)
 
     assert len(sources) == 17
@@ -48,6 +48,17 @@ def test_actual_roadaddr_entrance_directory_discovers_all_sido_zip_members() -> 
         "RNENTDATA_2605_36110.txt",
         "RNENTDATA_2605_48000.txt",
     }
+
+
+def _roadaddr_entrance_source_dir() -> Path:
+    root = _require(DATA_ROOT / "도로명주소 출입구 정보")
+    if tuple(root.glob("도로명주소출입구_전체분_*.zip")):
+        return root
+    yyyymm_dirs = sorted(path for path in root.iterdir() if path.is_dir() and path.name.isdigit())
+    for candidate in reversed(yyyymm_dirs):
+        if tuple(candidate.glob("도로명주소출입구_전체분_*.zip")):
+            return candidate
+    return root
 
 
 def _require(path: Path) -> Path:

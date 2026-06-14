@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-110 보강 검증 공통 harness)
+
+**작업**: Codex 담당 phase ① 첫 작업인 T-110을 구현했다. 특정 보강 원천의 결론을 넣지 않고, T-111~T-117 prototype이 공유할 시도별 순회·SHP geometry·staging·PostGIS 측정 기반만 추가했다.
+
+**반영**:
+- `src/kortravelgeo/loaders/augment_harness.py` 신규 추가.
+- 17개 시도 `SidoSourceGroup` discovery, `AugmentReport`/`AugmentGroupResult`/`AugmentGroupPayload` 집계 모델을 추가했다.
+- SHP body parser가 `Point`, `PolyLine`, `Polygon` record를 읽고 DBF row와 맞춘 `ShapeFeature` iterator를 제공한다. ZIP 내부 layer도 직접 읽을 수 있다.
+- PostGIS staging table 생성 SQL, `COPY FROM STDIN` helper, key join 기반 `ST_Distance`/`ST_Covers` 측정 helper를 추가했다.
+- `tests/unit/test_augment_harness.py`로 synthetic SHP/DBF parser, 시도 group discovery, report 집계, SQL 계약을 검증한다.
+- `tests/integration/test_optional_real_postgres_augment_harness.py`는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN`이 있을 때만 실제 PostGIS COPY/측정을 smoke 검증한다.
+- 전체 테스트를 위해 `tests/integration/test_real_roadaddr_entrance_files.py`가 현재 원천 배치인 `도로명주소 출입구 정보/<YYYYMM>/*.zip`도 찾도록 보정했다.
+- `docs/t110-augment-harness.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**검증**: WSL ext4 테스트 미러에서 `pytest -q` → 325 passed, 23 skipped, 14 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과. Windows CodeGraph `sync`/`status`도 up-to-date 확인.
+
 ## 2026-06-14 (PR #131 — 각 phase 끝에 라이브 적재·벤치·튜닝·최종검증 task 추가)
 
 **작업**: 사용자 요청으로 phase ①·②의 마지막에 "전국 라이브데이터 실행/로딩 → 성능평가·벤치 → 튜닝·최종 검증 평가"를 task로 추가했다. 기존 T-118(prototype go/no-go)·T-210(fixture 통합·기능 검증)과 중복되지 않도록, 새 task는 fixture가 아닌 **전국 production 규모 실데이터** 실행과 벤치·튜닝·최종 acceptance로 범위를 구분했다.
