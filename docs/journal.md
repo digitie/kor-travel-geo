@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-112 C12 건물 도형 connection line 검증 prototype)
+
+**작업**: `도로명주소 건물 도형` bundle의 `TL_SPOT_CNTC` polyline을 전자지도 `TL_SPRD_MANAGE` 도로 관리선과 비교하는 C12 prototype을 구현했다. 이번 작업은 measurement-only이며 운영 C8 SQL, serving 좌표, API 응답은 변경하지 않는다.
+
+**반영**:
+- `src/kortravelgeo/loaders/c12_connection_lines.py`를 추가했다.
+- bundle `TL_SPOT_CNTC`와 전자지도 `TL_SPRD_MANAGE`를 staging 적재하고, `RDS_SIG_CD + RDS_MAN_NO` ↔ `SIG_CD + RDS_MAN_NO` key overlap을 측정한다.
+- key가 match된 connection/road line 간 `ST_Distance` p50/p95/max를 산출한다.
+- road key가 없거나, key가 있어도 line 간 최단거리가 tolerance(기본 1m)를 넘는 connection을 dangling으로 집계하고 sample을 남긴다.
+- T-040의 connection ↔ bundle entrance 참조 overlap도 C12 payload에 포함한다.
+- `tests/unit/test_c12_connection_lines.py`와 `tests/integration/test_optional_real_postgres_c12_connection_lines.py`를 추가했다. 실제 PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형이다.
+- `docs/t112-c12-connection-lines.md`, `docs/tasks.md`, `docs/resume.md`를 갱신했다.
+
+**검증**: WSL ext4 테스트 미러에서 `pytest -q` → 359 passed, 25 skipped, 19 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, `git diff --check` 통과.
+
 ## 2026-06-14 (T-111 C11 출입구 원천 간 거리 검증 prototype)
 
 **작업**: 건물 도형 bundle `TL_SPBD_ENTRC`를 staging에 올려 기존 출입구 원천과 key overlap 및 거리 분포를 측정하는 C11 prototype을 구현했다. 이번 작업은 measurement-only이며 serving 좌표 ranking이나 API 응답은 변경하지 않는다.
