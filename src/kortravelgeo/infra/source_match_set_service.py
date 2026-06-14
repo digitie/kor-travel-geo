@@ -63,6 +63,7 @@ from kortravelgeo.dto.source import (
 )
 from kortravelgeo.exceptions import ConflictError, InvalidInputError, NotFoundError
 from kortravelgeo.infra.concurrency import AdvisoryLockKey, AdvisoryLockNamespace
+from kortravelgeo.infra.source_audit import insert_source_audit_event
 
 #: Categories each profile requires to be present (or explicitly omitted) at
 #: validate (doc "load profile" table, lines ~150-157). ``serving_minimal`` is the
@@ -734,24 +735,12 @@ SELECT it.category, it.source_file_group_id, it.effective_yyyymm, it.omitted,
         payload: dict[str, Any],
     ) -> None:
         now = datetime.now(UTC).isoformat()
-        await conn.execute(
-            _json_text(
-                """
-INSERT INTO ops.audit_events
-  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
-   outcome, payload_redacted)
-VALUES
-  (:event_id, 'ui', :actor_id, :action, 'source_match_set', :resource_id,
-   :outcome, :payload)
-""",
-                "payload",
-            ),
-            {
-                "event_id": str(uuid4()),
-                "actor_id": actor,
-                "action": action,
-                "resource_id": resource_id,
-                "outcome": outcome,
-                "payload": {**payload, "at": now},
-            },
+        await insert_source_audit_event(
+            conn,
+            action=action,
+            outcome=outcome,
+            actor_id=actor,
+            resource_type="source_match_set",
+            resource_id=resource_id,
+            payload={**payload, "at": now},
         )

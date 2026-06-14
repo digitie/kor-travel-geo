@@ -45,6 +45,7 @@ from kortravelgeo.infra.metrics import (
     record_source_janitor_session,
 )
 from kortravelgeo.infra.rustfs import RustfsClient
+from kortravelgeo.infra.source_audit import insert_source_audit_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -223,30 +224,15 @@ UPDATE ops.source_upload_sessions
 
 
 async def _audit_janitor(engine: AsyncEngine, summary: JanitorRunSummary) -> None:
-    from uuid import uuid4
-
-    from sqlalchemy import bindparam
-    from sqlalchemy.dialects.postgresql import JSONB
-
-    stmt = text(
-        """
-INSERT INTO ops.audit_events
-  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
-   outcome, payload_redacted)
-VALUES
-  (:event_id, 'system', 'system:source_janitor', :action, 'source_upload_session',
-   NULL, :outcome, :payload)
-"""
-    ).bindparams(bindparam("payload", type_=JSONB))
     async with engine.begin() as conn:
-        await conn.execute(
-            stmt,
-            {
-                "event_id": str(uuid4()),
-                "action": SOURCE_JANITOR,
-                "outcome": "completed",
-                "payload": summary.as_payload(),
-            },
+        await insert_source_audit_event(
+            conn,
+            action=SOURCE_JANITOR,
+            outcome="completed",
+            actor_type="system",
+            actor_id="system:source_janitor",
+            resource_type="source_upload_session",
+            payload=summary.as_payload(),
         )
 
 

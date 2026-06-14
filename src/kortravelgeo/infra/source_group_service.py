@@ -57,6 +57,7 @@ from kortravelgeo.dto.source import (
 )
 from kortravelgeo.exceptions import ConflictError, InvalidInputError, NotFoundError
 from kortravelgeo.infra.rustfs import rustfs_uri
+from kortravelgeo.infra.source_audit import insert_source_audit_event
 
 # Audit actor_type for register (matches admin_repo "ui"/"system" convention).
 _REGISTER_LOCK_NAMESPACE = 0x4B47_0204
@@ -859,31 +860,17 @@ VALUES
     ) -> None:
         from kortravelgeo.core.source_events import SOURCE_UPLOAD_REGISTER
 
-        await conn.execute(
-            _json_text(
-                """
-INSERT INTO ops.audit_events
-  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
-   outcome, payload_redacted)
-VALUES
-  (:audit_event_id, :actor_type, :actor_id, :action, :resource_type, :resource_id,
-   :outcome, :payload)
-""",
-                "payload",
-            ),
-            {
-                "audit_event_id": str(uuid4()),
-                "actor_type": "ui",
-                "actor_id": actor,
-                "action": SOURCE_UPLOAD_REGISTER,
-                "resource_type": "source_file_group",
-                "resource_id": group_id,
-                "outcome": outcome,
-                "payload": {
-                    "category": category,
-                    "user_yyyymm": user_yyyymm,
-                    "duplicate_warning": duplicate,
-                },
+        await insert_source_audit_event(
+            conn,
+            action=SOURCE_UPLOAD_REGISTER,
+            outcome=outcome,
+            actor_id=actor,
+            resource_type="source_file_group",
+            resource_id=group_id,
+            payload={
+                "category": category,
+                "user_yyyymm": user_yyyymm,
+                "duplicate_warning": duplicate,
             },
         )
 
@@ -1268,24 +1255,12 @@ async def _audit_source_action(
     outcome: str,
     payload: dict[str, Any],
 ) -> None:
-    await conn.execute(
-        _json_text(
-            """
-INSERT INTO ops.audit_events
-  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
-   outcome, payload_redacted)
-VALUES
-  (:audit_event_id, 'ui', :actor_id, :action, 'source_file_group', :resource_id,
-   :outcome, :payload)
-""",
-            "payload",
-        ),
-        {
-            "audit_event_id": str(uuid4()),
-            "actor_id": actor,
-            "action": action,
-            "resource_id": group_id,
-            "outcome": outcome,
-            "payload": payload,
-        },
+    await insert_source_audit_event(
+        conn,
+        action=action,
+        outcome=outcome,
+        actor_id=actor,
+        resource_type="source_file_group",
+        resource_id=group_id,
+        payload=payload,
     )

@@ -62,6 +62,7 @@ from kortravelgeo.dto.source import (
 )
 from kortravelgeo.exceptions import InvalidInputError, NotFoundError
 from kortravelgeo.infra.rustfs import RustfsClient
+from kortravelgeo.infra.source_audit import insert_source_audit_event
 from kortravelgeo.infra.source_group_service import recompute_group_aggregates
 
 
@@ -778,25 +779,12 @@ async def _audit(
     resource_type: str = "source_match_set",
 ) -> None:
     now = datetime.now(UTC).isoformat()
-    await conn.execute(
-        _json_text(
-            """
-INSERT INTO ops.audit_events
-  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
-   outcome, payload_redacted)
-VALUES
-  (:event_id, 'ui', :actor_id, :action, :resource_type, :resource_id,
-   :outcome, :payload)
-""",
-            "payload",
-        ),
-        {
-            "event_id": str(uuid4()),
-            "actor_id": actor,
-            "action": action,
-            "resource_type": resource_type,
-            "resource_id": resource_id,
-            "outcome": outcome,
-            "payload": {**payload, "at": now},
-        },
+    await insert_source_audit_event(
+        conn,
+        action=action,
+        outcome=outcome,
+        actor_id=actor,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        payload={**payload, "at": now},
     )
