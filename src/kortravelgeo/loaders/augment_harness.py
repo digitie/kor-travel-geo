@@ -347,6 +347,7 @@ def iter_shape_features(
     *,
     fields: Sequence[str] | None = None,
     encoding: str = "cp949",
+    field_name_encoding: str = "ascii",
 ) -> Iterator[ShapeFeature]:
     shp = Path(shp_path)
     dbf = Path(dbf_path)
@@ -355,6 +356,7 @@ def iter_shape_features(
         dbf.read_bytes(),
         fields=fields,
         encoding=encoding,
+        field_name_encoding=field_name_encoding,
         source_name=str(shp),
     )
 
@@ -365,6 +367,7 @@ def iter_zip_shape_features(
     *,
     fields: Sequence[str] | None = None,
     encoding: str = "cp949",
+    field_name_encoding: str = "ascii",
 ) -> Iterator[ShapeFeature]:
     archive = Path(zip_path)
     with zipfile.ZipFile(archive) as zip_file:
@@ -375,6 +378,7 @@ def iter_zip_shape_features(
         dbf_data,
         fields=fields,
         encoding=encoding,
+        field_name_encoding=field_name_encoding,
         source_name=f"{archive}:{layer_name}",
     )
 
@@ -385,9 +389,10 @@ def iter_shape_features_from_buffers(
     *,
     fields: Sequence[str] | None = None,
     encoding: str = "cp949",
+    field_name_encoding: str = "ascii",
     source_name: str = "<buffer>",
 ) -> Iterator[ShapeFeature]:
-    layout = parse_dbf_header(dbf_data)
+    layout = parse_dbf_header(dbf_data, field_name_encoding=field_name_encoding)
     selected = tuple(fields) if fields is not None else tuple(field.name for field in layout.fields)
     offsets = _dbf_offsets(layout, selected)
     geometries = iter_shp_geometries_from_bytes(shp_data, source_name=source_name)

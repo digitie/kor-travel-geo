@@ -36,7 +36,6 @@
 
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
-- T-115 C15 민원행정기관 POI 거리 검증 prototype — 민원행정기관전자지도(SHP point + 도로명주소)를 geocoder 결과 좌표와 거리 비교, 이상치 sample. 주소 정본/일반 후보에 미혼입. (의존: T-110)
 - T-116 C16 주소DB/건물DB row·key drift 검증 prototype — 주소DB/건물DB를 streaming으로 읽어 serving 정본(`tl_juso_text`/`tl_juso_parcel_link`/`tl_spbd_buld_polygon`)과 row count·natural key drift(EXCEPT/staging) 비교. 좌표 적재 없음. (의존: T-110)
 - T-117 C17 내비 지번 member coverage 검증 prototype — navi archive 내부 `match_jibun_*`를 `tl_juso_parcel_link`와 PNU/link coverage 비교. 독립 category 아닌 `navi_full` member(L7). (의존: T-110)
 - T-118 phase 1 go/no-go 종합 + serving 편입 ADR 게이트 문서 — T-111~T-117 결과를 종합해 source별 "검증 전용 / serving 편입 후보" 판정, C11~C17 확정 사양(=phase ② 입력), serving 좌표 ranking 편입 조건(임계값·feature flag·pt_source 확장)을 별도 ADR 초안으로. 전자지도 미사용 layer `TL_SPBD_EQB`(건물군/동 polygon)를 어느 prototype에도 귀속하지 않은 잔여로 보고 검증 대상화 여부 판정에 포함. 모든 report에 `source_yyyymm` 병기(기준월 시차 노이즈 구분). 코드 변경 없음. (의존: T-111~T-117)
@@ -75,6 +74,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-115 C15 민원행정기관 POI 거리 검증 prototype. `민원행정기관전자지도`의 CP949 한글 DBF field name과 SHP point를 읽어 staging하고, `도로명주소`를 기존 parser로 해석한 뒤 `mv_geocode_target` exact road geocoder 계약과 batch join해 POI 좌표와 geocoder 대표점 거리 p50/p95/max, geocode missing, parse failed, outlier sample을 산출한다. 주소 정본/일반 후보에는 혼입하지 않고 `serving_promotion=False`를 고정했다. 상세: `docs/t115-civil-service-poi.md` (2026-06-14)
 - [x] T-114 C14 국가지점번호 grid/center 검증 harness. `국가지점번호 도형` 100km/10km/1km/100m SHP/DBF와 `국가지점번호 중심점` TXT를 상시 적재 없이 streaming 검증하는 모듈을 추가했다. Grid prefix에서 EPSG:5179 bbox/center를 계산하고, SHP bbox·중심점 좌표·`core/sppn.py` formatter parent prefix·resolution별 row coverage를 검증한다. `TL_SPPN_GRID_100M` 1천만 polygon은 ZIP member 전체를 inflate하지 않는 전용 iterator로 sampling/full stream 모두 가능하게 했고, 10m 좌표 개선 원천이 아니라 parser/formatter 회귀와 overlay 후보 검증 전용(`serving_promotion=False`)으로 고정했다. 상세: `docs/t114-national-point-grid.md` (2026-06-14)
 - [x] T-113 C13 상세주소 동 containment 검증 prototype. `TL_SGCO_RNADR_DONG` polygon, `TL_SPBD_ENTRC_DONG` point, `상세주소DB` `adrdc_*.txt`를 staging/streaming 검증에 연결했다. TXT에는 좌표가 없으므로 `ST_Covers`는 `SIG_CD + BUL_MAN_NO`로 join한 동 출입구 point containment를 측정하고, 상세주소DB는 `BD_MGT_SN`/도로명주소 연계키 overlap과 address-matched coverage context로 사용한다. 측정 전용이며 serving SQL은 변경하지 않는다. 상세: `docs/t113-detail-dong-containment.md` (2026-06-14)
 - [x] T-112 C12 건물 도형 connection line 검증 prototype. `TL_SPOT_CNTC` connection line을 staging 적재하고 전자지도 `TL_SPRD_MANAGE` 도로 관리선과 `RDS_SIG_CD + RDS_MAN_NO` key overlap, line-to-line 거리 분포, road key 결손 또는 tolerance 초과 dangling connection을 측정한다. 측정 전용이며 운영 C8/serving SQL은 변경하지 않는다. 상세: `docs/t112-c12-connection-lines.md` (2026-06-14)
