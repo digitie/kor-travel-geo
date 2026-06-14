@@ -58,6 +58,7 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/admin/maintenance/refresh-mv" in paths
     assert "/v1/admin/consistency/run" in paths
     assert "/v1/admin/consistency/case-definitions" in paths
+    assert "/v1/admin/source-match-sets/{source_match_set_id}/run-validation" in paths
     assert "/v1/admin/consistency/{report_id}/cases/{case_code}/samples" in paths
     assert "/v1/admin/consistency/{report_id}/cases/{case_code}/summary" in paths
     assert (
