@@ -1,9 +1,9 @@
-# T-213 (small) — 세종 live END-TO-END validation of the T-109 source pipeline
+# T-213 (소형) — 세종 실데이터 전 구간(end-to-end) 검증 (T-109 소스 파이프라인)
 
-**Status:** 통과 (PASS). LIVE PostGIS + REAL 세종 데이터 + REAL GDAL 로더로 신규 소스 파이프라인 전 구간 검증 완료.
-**Date:** 2026-06-15
-**Branch:** `agent/claude-t213-sejong-live` (no commit/push)
-**Runbook:** `scripts/run_sejong_live_pipeline.py` (멱등, DSN/ZIP 파라미터, 자체 정리)
+**상태:** 통과 — 실 가동 PostGIS + 실 세종 데이터 + 실 GDAL 로더로 신규 소스 파이프라인 전 구간 검증 완료.
+**날짜:** 2026-06-15
+**브랜치:** `agent/claude-t213-sejong-live` → PR #165 머지(`3fb4ea5`)
+**실행 스크립트:** `scripts/run_sejong_live_pipeline.py` (멱등, DSN/ZIP 파라미터, 자체 정리, 파괴적 작업 가드)
 
 이 작업은 신규(T-109) 소스 업로드/매치셋/리빌드 파이프라인이 **실제 세종특별자치시 전자지도
 SHP 아카이브**를 등록→검증→활성화→리빌드 브리지→**실제 로더 적재**까지 끝까지 굴러가는지를
@@ -21,16 +21,22 @@ full serving 프로파일은 본 검증의 범위가 아니다(아래 "전국 ca
 | 실 데이터 | `/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/202604/세종특별자치시.zip` (26,926,379 bytes) |
 | 기준월 | `202604` (electronic_map = `NAVI_YYYYMM`/`LOCSUM_YYYYMM` 기준월) |
 
-실행:
+실행 (스크래치 DB 전용 — 파괴적):
 
 ```bash
 cd /mnt/f/dev/kor-travel-geo-claude
 KTG_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo' \
-    ~/ktgvenv/bin/python scripts/run_sejong_live_pipeline.py            # 멱등, 끝에 자체 정리
-# 검사용으로 행을 남기려면:  ... scripts/run_sejong_live_pipeline.py --keep
+    ~/ktgvenv/bin/python scripts/run_sejong_live_pipeline.py \
+    --allow-destructive --confirm 'TRUNCATE-SEJONG-RUNBOOK kor_travel_geo'   # 멱등, 끝에 자체 정리
+# 검사용으로 행을 남기려면 뒤에 --keep 추가.
 ```
 
-## 실제로 굴린 end-to-end 경로
+> 런북은 serving SHP 테이블을 TRUNCATE하고 활성 match set을 retire하므로, `--allow-destructive`
+> 와 `--confirm 'TRUNCATE-SEJONG-RUNBOOK <current_database()>'`(DB 이름 일치) 없이는 실행을 거부한다.
+> 기본 DSN은 없다(`KTG_TEST_PG_DSN` 또는 `--dsn` 필수). 실행 직전 활성 match set을 기록하고 정리
+> 단계에서 복구하므로 기존 활성 구성을 원래대로 되돌린다(`--keep` 시는 제외).
+
+## 실제로 굴린 전 구간 경로
 
 순서대로 **infra 서비스 레이어를 직접(in-process) 호출**한다(uvicorn/SSE 불필요).
 
@@ -61,7 +67,7 @@ KTG_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo' 
    조립. electronic_map_full → `_CATEGORY_TO_LOAD_KIND` → child `{"kind":"shp_polygons_load",
    "payload":{path, source_yyyymm, source_file_group_id, group_sha256, storage_uris, …}}`,
    root payload에 `source_match_set_id`/`source_set`/`staging_dir` 포함.
-5. **REAL 로더 적재** — 조립된 child가 가리키는 staging dir
+5. **실 로더 적재** — 조립된 child가 가리키는 staging dir
    (`rebuild_staging/<msid>/electronic_map_full/세종특별자치시/36000/TL_*.shp`)로 ZIP을 풀고,
    `shp_polygons_load` 핸들러(`api/app.py`의 `shp`)가 호출하는 **바로 그 로더**
    `loaders.shp.polygons_loader.load_shp_polygons(engine, <시도 dir>, mode="full",
@@ -72,7 +78,7 @@ KTG_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo' 
    (geometry type / SRID 포함), `ops.dataset_snapshots`에 `source_match_set_id` 정본 FK 기록 후
    링크 검증.
 
-## REAL 결과 수치
+## 실제 결과 수치
 
 ```
 [2] register: group state=available  validation_state=warning  structure outcome=warning
@@ -145,7 +151,7 @@ dataset_snapshot 정본 FK 기록+검증.
    존재하는 단일 시도에만 적용해 구성한다(outcome=`warning`). 검증 로직 자체는 진짜이고,
    다만 일부러 1개 시도만 적재하므로 17-시도 커버리지 게이트를 우회한 것이다.
 
-## 전국(full-national) caveat — 이게 T-213 proper
+## 전국 검증 범위 — T-213 proper(후속)
 
 - 단일 시도로는 `serving_minimal` 프로파일을 만족할 수 없다(전국 juso/locsum/navi TXT +
   electronic_map 6개 build 카테고리 + 17-시도 커버리지 필요). 그래서 본 검증은 `custom`

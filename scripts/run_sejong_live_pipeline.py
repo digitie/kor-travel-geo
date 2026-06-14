@@ -15,12 +15,23 @@ Run (WSL ext4 test mirror)::
 
     cd /mnt/f/dev/kor-travel-geo-claude
     KTG_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo' \\
-        ~/ktgvenv/bin/python scripts/run_sejong_live_pipeline.py
+        ~/ktgvenv/bin/python scripts/run_sejong_live_pipeline.py \\
+        --allow-destructive --confirm 'TRUNCATE-SEJONG-RUNBOOK kor_travel_geo'
+
+**Destructive — scratch DB only.** This runbook TRUNCATEs the serving SHP tables
+and retires the active match set. It refuses to run unless BOTH
+``--allow-destructive`` is given AND ``--confirm`` exactly matches
+``TRUNCATE-SEJONG-RUNBOOK <current_database()>`` (the embedded DB name forces the
+operator to read the live DB name first). There is **no default DSN** — set
+``KTG_TEST_PG_DSN`` or pass ``--dsn`` — so it can never accidentally point at a
+non-scratch DB.
 
 The script is **idempotent**: on every run it first removes the registry rows it
 owns (matched by the runbook's unique markers) and TRUNCATEs the serving SHP
 tables it loads, so it can be re-run repeatedly. ``ops.audit_events`` is
-append-only and is intentionally left untouched.
+append-only and is intentionally left untouched. The match set its activate step
+displaces is recorded up front and restored on cleanup, so a run leaves any
+pre-existing active match set as it found it (except under ``--keep``).
 
 Caveats (the full-national gap → proper T-213):
   * A single 시도 cannot satisfy ``serving_minimal`` (national juso/locsum/navi +
@@ -89,7 +100,9 @@ if TYPE_CHECKING:
 
 # --- runbook constants -----------------------------------------------------
 
-DEFAULT_DSN = "postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo"
+#: Typed-confirmation prefix for the destructive guard; the full token must be
+#: ``f"{DESTRUCTIVE_CONFIRM_PREFIX} {current_database()}"`` (scratch-DB check).
+DESTRUCTIVE_CONFIRM_PREFIX = "TRUNCATE-SEJONG-RUNBOOK"
 DEFAULT_ZIP = (
     "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/202604/세종특별자치시.zip"
 )
@@ -128,6 +141,52 @@ def _archive_size(path: Path) -> int:
     return path.stat().st_size
 
 
+def _expected_confirm_token(db: str) -> str:
+    return f"{DESTRUCTIVE_CONFIRM_PREFIX} {db}"
+
+
+def _assert_destructive_allowed(
+    db: str, *, allow_destructive: bool, confirm: str | None
+) -> None:
+    """Refuse to run unless explicitly allowed against a confirmed scratch DB.
+
+    This runbook TRUNCATEs the serving SHP tables and retires the active match
+    set, so it must never run against a non-scratch DB by accident. Both an
+    ``--allow-destructive`` opt-in and a ``--confirm`` token that exactly equals
+    ``TRUNCATE-SEJONG-RUNBOOK <current_database()>`` are required — the embedded DB
+    name forces the operator to read the live DB name before confirming.
+    """
+    expected = _expected_confirm_token(db)
+    if not allow_destructive:
+        raise SystemExit(
+            f"refusing to run: live DB is {db!r}. This runbook TRUNCATEs serving "
+            "tables and retires the active match set. Re-run with --allow-destructive "
+            f"--confirm {expected!r} only against a scratch DB."
+        )
+    if confirm != expected:
+        raise SystemExit(
+            f"confirmation mismatch: --confirm must be exactly {expected!r} "
+            f"(got {confirm!r}). Verify you are pointed at a scratch DB, not prod."
+        )
+
+
+async def _current_active_match_set(engine: AsyncEngine) -> str | None:
+    """Return the id of the active match set the runbook's activate would displace.
+
+    Excludes the runbook's own match set (by name) so a re-run after a crash that
+    left the runbook set active does not record itself as the thing to restore.
+    """
+    async with engine.connect() as conn:
+        row = await conn.scalar(
+            text(
+                "SELECT source_match_set_id FROM ops.source_match_sets "
+                "WHERE state = 'active' AND name <> :name LIMIT 1"
+            ),
+            {"name": MATCH_SET_NAME},
+        )
+    return str(row) if row else None
+
+
 # --- schema -----------------------------------------------------------------
 
 
@@ -162,11 +221,17 @@ async def apply_schema(engine: AsyncEngine) -> None:
 # --- idempotent cleanup -----------------------------------------------------
 
 
-async def cleanup(engine: AsyncEngine) -> None:
+async def cleanup(engine: AsyncEngine, *, restore_active_id: str | None = None) -> None:
     """Remove rows the runbook owns + TRUNCATE the serving SHP tables.
 
     Scoped by RUN_MARKER (match-set name, group display_name); audit_events is
     append-only and intentionally NOT touched.
+
+    When ``restore_active_id`` is given, the match set the runbook's activate step
+    retired is re-activated AFTER the runbook's own match set is deleted (which
+    frees the one-active partial-unique slot). This is a direct-SQL slot restore —
+    the runbook returns the borrowed active slot to the set it found there; it is
+    deliberately NOT the full ``retired→revalidatable→validated→active`` API path.
     """
     async with engine.begin() as conn:
         # Match sets owned by the runbook (items first — FK).
@@ -253,6 +318,20 @@ async def cleanup(engine: AsyncEngine) -> None:
         # Serving SHP tables (the polygons loader full-load TRUNCATEs these too).
         for table in SERVING_TABLES:
             await conn.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
+
+        # Restore the active match set the runbook's activate retired. The runbook
+        # set was just deleted above, so the one-active slot is free.
+        if restore_active_id is not None:
+            restored = await conn.execute(
+                text(
+                    "UPDATE ops.source_match_sets SET state = 'active', "
+                    "updated_at = now() WHERE source_match_set_id = :id "
+                    "AND state = 'retired'"
+                ),
+                {"id": restore_active_id},
+            )
+            if restored.rowcount:
+                print(f"    restored prior active match set {restore_active_id}")
 
 
 def _remove_staging(staging_dir: str | None) -> None:
@@ -568,21 +647,38 @@ async def verify_snapshot_fk(engine: AsyncEngine, snapshot_id: str, msid: str) -
 # --- orchestration ----------------------------------------------------------
 
 
-async def run(dsn: str, zip_path: Path, *, keep: bool) -> int:
+async def run(
+    dsn: str,
+    zip_path: Path,
+    *,
+    keep: bool,
+    allow_destructive: bool,
+    confirm: str | None,
+) -> int:
     archive_size = _archive_size(zip_path)
 
     engine = make_async_engine(Settings(pg_dsn=dsn))
     overall_start = time.monotonic()
+    prior_active_id: str | None = None
+    retired_prior = False
+    cleaned = False
     try:
         async with engine.connect() as conn:
             db = await conn.scalar(text("SELECT current_database()"))
             postgis = await conn.scalar(text("SELECT postgis_lib_version()"))
+        # Destructive guard — refuse unless allowed + confirmed against this DB.
+        _assert_destructive_allowed(
+            str(db), allow_destructive=allow_destructive, confirm=confirm
+        )
         print(f"[0] live DB = {db!r}  PostGIS = {postgis}")
         print(f"    archive = {zip_path}  ({archive_size:,} bytes)")
 
         print("[1] apply schema (idempotent) + cleanup prior runbook rows")
         await apply_schema(engine)
         await cleanup(engine)
+        prior_active_id = await _current_active_match_set(engine)
+        if prior_active_id:
+            print(f"    prior active match set = {prior_active_id} (restored on cleanup)")
 
         print("[2] register Sejong electronic_map via the new pipeline")
         reg_start = time.monotonic()
@@ -596,6 +692,8 @@ async def run(dsn: str, zip_path: Path, *, keep: bool) -> int:
 
         print("[3] match-set (custom profile): create → validate → activate")
         msid = await build_match_set(engine, group_id)
+        # activate retired any prior active set; flag it for restore on exit.
+        retired_prior = prior_active_id is not None
         print(f"    source_match_set_id={msid}")
 
         print("[4] rebuild bridge → assemble full_load_batch → REAL polygons loader")
@@ -644,10 +742,23 @@ async def run(dsn: str, zip_path: Path, *, keep: bool) -> int:
 
         if not keep:
             print("[8] cleanup (--keep to retain rows + staging for inspection)")
-            await cleanup(engine)
+            await cleanup(engine, restore_active_id=prior_active_id)
+            cleaned = True
             _remove_staging(bridge["staging_dir"])
+        elif prior_active_id:
+            print(
+                "    NOTE: --keep leaves the runbook match set active; prior active "
+                f"{prior_active_id} stays retired until you restore it."
+            )
         return 0
     finally:
+        # Failure after activate (and not --keep): still restore the prior active
+        # so a crashed run never leaves a non-scratch slot retired.
+        if retired_prior and not keep and not cleaned:
+            try:
+                await cleanup(engine, restore_active_id=prior_active_id)
+            except Exception as exc:  # best-effort restore; surface but don't mask
+                print(f"    WARNING: prior-active restore failed: {exc}")
         await engine.dispose()
 
 
@@ -655,8 +766,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--dsn",
-        default=os.getenv("KTG_TEST_PG_DSN", DEFAULT_DSN),
-        help="async SQLAlchemy DSN for the live PostGIS DB",
+        default=os.getenv("KTG_TEST_PG_DSN"),
+        help="async SQLAlchemy DSN for the live PostGIS scratch DB "
+        "(or set KTG_TEST_PG_DSN). No default — this runbook is destructive.",
     )
     parser.add_argument(
         "--zip",
@@ -668,8 +780,35 @@ def main() -> None:
         action="store_true",
         help="keep the registry rows + serving data after a successful run",
     )
+    parser.add_argument(
+        "--allow-destructive",
+        action="store_true",
+        help="acknowledge the runbook TRUNCATEs serving tables + retires the "
+        "active match set (required)",
+    )
+    parser.add_argument(
+        "--confirm",
+        default=None,
+        help="typed confirmation 'TRUNCATE-SEJONG-RUNBOOK <db>' that must match the "
+        "live current_database() (required)",
+    )
     args = parser.parse_args()
-    raise SystemExit(asyncio.run(run(args.dsn, Path(args.zip), keep=args.keep)))
+    if not args.dsn:
+        parser.error(
+            "no DSN: pass --dsn or set KTG_TEST_PG_DSN (no default — this runbook "
+            "TRUNCATEs serving tables and must target a scratch DB explicitly)"
+        )
+    raise SystemExit(
+        asyncio.run(
+            run(
+                args.dsn,
+                Path(args.zip),
+                keep=args.keep,
+                allow_destructive=args.allow_destructive,
+                confirm=args.confirm,
+            )
+        )
+    )
 
 
 if __name__ == "__main__":
