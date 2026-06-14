@@ -11,7 +11,15 @@
 
 ### 두 에이전트 병행 권장 순서
 
-두 에이전트가 동시에 진행할 때는 **Agent A = 데이터 원천 보강·검증 owner**, **Agent B = source registry/upload/reconcile/match-set 기반 owner**로 나눈다. Agent B는 `T-206`을 `T-118` 확정 전에는 착수하지 않는다. `T-200`은 B 전 체인과 A의 `T-206` seed까지의 단일 root이므로 가장 먼저 머지해 모두의 대기를 푼다.
+두 에이전트가 동시에 진행할 때는 **Agent A = Codex(데이터 원천 보강·검증 owner)**, **Agent B = Claude Code(source registry/upload/reconcile/match-set 기반 owner)** 로 나눈다. Agent B는 `T-206`을 `T-118` 확정 전에는 착수하지 않는다. `T-200`은 B 전 체인과 A의 `T-206` seed까지의 단일 root이므로 가장 먼저 머지해 모두의 대기를 푼다.
+
+병행 운영 원칙:
+
+- 작업 중에는 주기적으로 `origin/main`과 현재 작업 branch의 최신 상태를 확인하고, 장기 작업은 중간에 rebase 또는 fast-forward로 충돌을 작게 유지한다.
+- 하나의 Task가 끝나면 다른 Agent가 올린 PR이 있는지 확인하고, 머지 여부와 무관하게 상세 리뷰 후 PR 코멘트를 남긴다.
+- 자신이 작업한 PR에 다른 Agent가 코멘트를 달면 다음 Task를 시작하기 전에 해당 코멘트 반영 또는 답변부터 처리한다.
+- Git 작업은 Windows Git과 NTFS worktree에서 수행하고, 그 외 의존성 설치·테스트·장기 실행 검증은 WSL ext4 테스트 미러에서 수행한다.
+- 작업 중 반복적으로 문제가 되는 패턴은 `docs/agent-failure-patterns.md` 또는 관련 workflow 문서에 기록해 같은 실패가 반복되지 않게 한다.
 
 1. 1차 병행
    - Agent A: `T-110` → `T-111` → `T-112` → `T-113` → `T-114` → `T-115` → `T-116` → `T-117` → `T-118`. 의존 없는 `T-120`(epost 우편번호 수동 적재·검증; `T-207`과 **공유 검증 모듈**)도 이 구간에 병행한다 — `T-207`이 `T-120`에 의존하므로 2차 전에 끝나 있어야 한다.
