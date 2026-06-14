@@ -2,6 +2,19 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-118 phase 1 go/no-go 종합 + serving 편입 ADR 게이트)
+
+**작업**: T-111~T-117 보강 검증 prototype 결과를 종합해 C11~C17의 phase ② registry 입력과 serving 편입 gate를 문서화했다. C11 출입구 계열만 조건부 serving 후보로 남기고, C12~C17은 검증 전용으로 판정했다.
+
+**반영**:
+- `docs/t118-phase1-go-no-go.md`를 추가했다.
+- C11~C17 source별 판정, `source_yyyymm` evidence 요구, T-206 registry seed 입력, skip 조건, 주요 metric을 정리했다.
+- 전자지도 잔여 layer `TL_SPBD_EQB`는 구조 검증 필수 evidence지만 C11~C17 어느 prototype에도 독립 귀속되지 않았으므로 serving 후보가 아니며, 필요하면 C18 또는 C13 확장으로 분리한다고 정리했다.
+- `docs/decisions.md`에 ADR-051(proposed)을 추가했다. C11 serving 편입은 전국 metric, 기준월 gate, C3/C4/C6/C7 악화 없음, feature flag 기본 off, v1 호환 노출 정책을 통과하고 ADR이 accepted로 전환된 뒤에만 진행한다.
+- `docs/tasks.md`, `docs/resume.md`를 갱신하고 다음 작업을 T-120으로 넘겼다. T-119는 사용자 승인 전까지 보류한다.
+
+**검증**: `git diff --check` 통과. WSL ext4 테스트 미러에서 `pytest -q` → 465 passed, 30 skipped, 24 warnings. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports` 통과.
+
 ## 2026-06-14 (T-117 C17 내비 지번 member coverage 검증 prototype)
 
 **작업**: `navi_full` archive 내부 optional member인 `match_jibun_*.txt`를 독립 category가 아니라 `navi_full.match_jibun` 검증 member로 다루는 C17 prototype을 구현했다. `tl_juso_parcel_link`와의 PNU/link coverage를 측정하고 좌표 적재나 serving 후보 승격은 하지 않는다.
