@@ -543,16 +543,27 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await resolve_text_geometry_links(engine)
         repo = AdminRepository(engine)
         load_batch_id = _payload_str(payload, "load_batch_id")
-        await repo.ensure_load_batch_release_gate(load_batch_id)
+        # rebuild-db forced_promotion (T-205b) accepts a known source-quality
+        # consistency ERROR — and ONLY that gate. The source-archive integrity
+        # gate already ran before any child loader was enqueued.
+        forced_promotion = _payload_bool(payload, "forced_promotion", default=False)
+        if not forced_promotion:
+            await repo.ensure_load_batch_release_gate(load_batch_id)
         await refresh_mv(
             engine,
             concurrently=strategy != "swap",
             strategy="swap" if strategy == "swap" else "concurrent",
         )
+        forced_metadata = payload.get("forced_promotion_metadata")
         snapshot, release = await repo.record_mv_refresh_release(
             job_id=_payload_str(payload, "_job_id"),
             load_batch_id=load_batch_id,
             strategy=strategy,
+            source_match_set_id=_payload_str(payload, "source_match_set_id"),
+            forced_promotion=forced_promotion,
+            forced_promotion_metadata=(
+                forced_metadata if isinstance(forced_metadata, dict) else None
+            ),
         )
         await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")
         await progress(

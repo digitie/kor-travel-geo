@@ -437,8 +437,16 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
         load_batch_id: str | None = None,
         strategy: str | None = None,
         notes: str | None = None,
+        source_match_set_id: str | None = None,
+        forced_promotion: bool = False,
+        forced_promotion_metadata: Mapping[str, Any] | None = None,
     ) -> tuple[DatasetSnapshot, ServingRelease]:
-        """Record the dataset state exposed by a successful MV refresh."""
+        """Record the dataset state exposed by a successful MV refresh.
+
+        When ``source_match_set_id`` is provided (rebuild-db path, T-205b) it is
+        written as the 정본 ``ops.dataset_snapshots.source_match_set_id`` FK and
+        any ``forced_promotion`` provenance is recorded as read-only snapshot
+        metadata (doc step 10, ~1551 / line ~1559)."""
 
         async with self.engine.begin() as conn:
             await conn.execute(text("SET LOCAL statement_timeout = 0"))
@@ -471,6 +479,12 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                 f"mv_refresh strategy={strategy or 'unknown'}"
                 + (f"; load_batch_id={load_batch_id}" if load_batch_id else "")
             )
+            snapshot_metadata: dict[str, Any] | None = None
+            if forced_promotion:
+                snapshot_metadata = {
+                    "forced_promotion": True,
+                    **dict(forced_promotion_metadata or {}),
+                }
             row_counts = await _collect_row_counts_for_conn(conn)
             mv_hash = await _mv_hash_for_conn(conn, row_counts.get("mv_geocode_target"))
             return await _insert_dataset_snapshot_and_release(
@@ -486,6 +500,8 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                 activated_by_job_id=job_id,
                 mv_hash=mv_hash,
                 notes=release_notes,
+                source_match_set_id=source_match_set_id,
+                snapshot_metadata=snapshot_metadata,
             )
 
     async def ensure_load_batch_release_gate(self, load_batch_id: str | None) -> None:
@@ -1922,6 +1938,8 @@ async def _insert_dataset_snapshot_and_release(
     postgis_version: str | None = None,
     mv_hash: str | None = None,
     notes: str | None = None,
+    source_match_set_id: str | None = None,
+    snapshot_metadata: Mapping[str, Any] | None = None,
 ) -> tuple[DatasetSnapshot, ServingRelease]:
     runtime = await _runtime_versions_for_conn(conn)
     previous = (
@@ -1961,13 +1979,13 @@ UPDATE ops.serving_releases
 INSERT INTO ops.dataset_snapshots
   (snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
    git_commit, alembic_revision, postgres_version, postgis_version,
-   row_counts, consistency_report_id, backup_artifact_id, created_by_job_id,
-   validated_at)
+   row_counts, consistency_report_id, backup_artifact_id, source_match_set_id,
+   created_by_job_id, validated_at)
 VALUES
   (:snapshot_id, :state, :parent_snapshot_id, :source_set, :source_set_hash,
    :git_commit, :alembic_revision, :postgres_version, :postgis_version,
-   :row_counts, :consistency_report_id, :backup_artifact_id, :created_by_job_id,
-   CASE WHEN :validated THEN now() ELSE NULL END)
+   :row_counts, :consistency_report_id, :backup_artifact_id, :source_match_set_id,
+   :created_by_job_id, CASE WHEN :validated THEN now() ELSE NULL END)
 RETURNING snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
           git_commit, alembic_revision, postgres_version, postgis_version,
           row_counts, table_stats_artifact_id, consistency_report_id,
@@ -1981,7 +1999,7 @@ RETURNING snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
                 "snapshot_id": snapshot_id,
                 "state": snapshot_state,
                 "parent_snapshot_id": parent_snapshot_id,
-                "source_set": dict(source_set),
+                "source_set": _snapshot_source_set(source_set, snapshot_metadata),
                 "source_set_hash": canonical_payload_hash(source_set),
                 "git_commit": git_commit or runtime["git_commit"],
                 "alembic_revision": alembic_revision or runtime["alembic_revision"],
@@ -1990,6 +2008,7 @@ RETURNING snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
                 "row_counts": dict(row_counts),
                 "consistency_report_id": consistency_report_id,
                 "backup_artifact_id": backup_artifact_id,
+                "source_match_set_id": source_match_set_id,
                 "created_by_job_id": created_by_job_id,
                 "validated": snapshot_state in {"validated", "released"},
             },
@@ -2408,6 +2427,20 @@ def _default_maintenance_blocks(kind: str) -> dict[str, Any]:
     if kind == "read_only":
         return {"jobs": ["full_load_batch", "mv_refresh", "db_restore"], "writes": ["admin"]}
     return {}
+
+
+def _snapshot_source_set(
+    source_set: Mapping[str, Any],
+    snapshot_metadata: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge read-only snapshot metadata (e.g. ``forced_promotion``) into the
+    ``source_set`` JSONB. The ``source_set_hash`` is computed from the original
+    ``source_set`` (not this merged copy) so provenance metadata never perturbs
+    the canonical hash. The ``source_match_set_id`` FK column stays the 정본."""
+    merged = dict(source_set)
+    if snapshot_metadata:
+        merged["rebuild_metadata"] = dict(snapshot_metadata)
+    return merged
 
 
 def _json_dict(value: Any) -> dict[str, Any]:

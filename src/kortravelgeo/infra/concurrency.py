@@ -40,6 +40,7 @@ class AdvisoryLockNamespace(IntEnum):
     BENCHMARK_QUERY = 0x4B47_0090
     SOURCE_JANITOR = 0x4B47_00A0
     SOURCE_MATCH_ACTIVATE = 0x4B47_00A1
+    SOURCE_REBUILD_DB = 0x4B47_00A2
 
 
 @dataclass(frozen=True, slots=True)

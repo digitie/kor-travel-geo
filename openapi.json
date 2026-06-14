@@ -5661,6 +5661,94 @@
         "title": "ServingRelease",
         "type": "object"
       },
+      "ServingReleaseRollbackRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/ops/releases/{release_id}/rollback`` body (doc ~818/1530).\n\n``typed_confirmation`` must equal the rollback-plan token\n(``ROLLBACK {release_id}``). When the target snapshot carries a\n``source_match_set_id`` the match set is swapped atomically (current active →\n``retired``, target → ``active``) under the match-activate lock, with the\ntarget's ``integrity_alert`` recomputed from a pre-rollback source quick\nreconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` (ADR-049 #18).",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "typed_confirmation": {
+            "title": "Typed Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "typed_confirmation"
+        ],
+        "title": "ServingReleaseRollbackRequest",
+        "type": "object"
+      },
+      "ServingReleaseRollbackResponse": {
+        "additionalProperties": false,
+        "description": "``rollback`` result — the serving + match-set swap outcome.",
+        "properties": {
+          "activated_match_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activated Match Set Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "mode": {
+            "enum": [
+              "match_set_swap",
+              "legacy_estimate"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "release_id": {
+            "title": "Release Id",
+            "type": "string"
+          },
+          "retired_match_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired Match Set Id"
+          },
+          "target_integrity_alert": {
+            "default": false,
+            "title": "Target Integrity Alert",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "release_id",
+          "mode"
+        ],
+        "title": "ServingReleaseRollbackResponse",
+        "type": "object"
+      },
       "SlotReplaceResponse": {
         "additionalProperties": false,
         "description": "``POST .../files/{slot}/replace`` response.\n\nReplace invalidates the slot's prior validation + hash results and reopens\nit for a fresh upload (doc line 1314).",
@@ -6881,6 +6969,142 @@
           "state"
         ],
         "title": "SourceMatchSetValidateResponse",
+        "type": "object"
+      },
+      "SourceRebuildDbRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/source-match-sets/{id}/rebuild-db`` body (doc ~1532).\n\nA rebuild assembles a ``full_load_batch`` payload from the match set's groups\nand bridges it to the existing loader DAG. ``force_promotion`` is the\nexception path for a known source-quality consistency ERROR: it requires the\n``destructive_admin`` role AND a ``typed_confirmation`` of\n``REBUILD-PROMOTE {source_match_set_id}``. It bypasses ONLY the consistency\nERROR promotion block — never the source-archive integrity gate, an\nunavailable group, or a match set ``integrity_alert`` (doc ~1559, ADR-049 #13).",
+        "properties": {
+          "download_concurrency": {
+            "default": 3,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Download Concurrency",
+            "type": "integer"
+          },
+          "force_promotion": {
+            "default": false,
+            "title": "Force Promotion",
+            "type": "boolean"
+          },
+          "materialize_concurrency": {
+            "default": 2,
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Materialize Concurrency",
+            "type": "integer"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "typed_confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typed Confirmation"
+          }
+        },
+        "title": "SourceRebuildDbRequest",
+        "type": "object"
+      },
+      "SourceRebuildDbResponse": {
+        "additionalProperties": false,
+        "description": "``rebuild-db`` enqueue result.\n\nThe rebuild runs asynchronously in a ``full_load_batch`` job under the\n``source_rebuild_db`` advisory lock; ``job_id``/``load_batch_id`` track it.\nThe integrity gate runs before any child loader is enqueued; on a gate\nfailure ``enqueued=false`` and ``failed_group_ids`` name the quarantined\ngroups. ``forced_promotion`` echoes whether the ERROR-bypass path was armed.",
+        "properties": {
+          "affected_match_set_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Match Set Ids",
+            "type": "array"
+          },
+          "enqueued": {
+            "title": "Enqueued",
+            "type": "boolean"
+          },
+          "failed_group_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Group Ids",
+            "type": "array"
+          },
+          "forced_promotion": {
+            "default": false,
+            "title": "Forced Promotion",
+            "type": "boolean"
+          },
+          "integrity_gate_ok": {
+            "default": true,
+            "title": "Integrity Gate Ok",
+            "type": "boolean"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "load_batch_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Batch Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "stale_jobs_closed": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Jobs Closed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_match_set_id",
+          "enqueued"
+        ],
+        "title": "SourceRebuildDbResponse",
         "type": "object"
       },
       "SourceReconcileItem": {
@@ -11108,6 +11332,59 @@
         ]
       }
     },
+    "/v1/admin/ops/releases/{release_id}/rollback": {
+      "post": {
+        "description": "Roll a serving release back, swapping the source match set (doc #18, ~818).\n\nRequires ``destructive_admin`` + a ``typed_confirmation`` of\n``ROLLBACK {release_id}`` (the rollback-plan token). When the target snapshot\ncarries a ``source_match_set_id`` the match set is swapped atomically under\nthe match-activate lock (current active → ``retired``, target → ``active``),\nwith the target's ``integrity_alert`` recomputed from a pre-rollback source\nquick reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` — no\nauto-promotion (ADR-049 #18).",
+        "operationId": "rollback_serving_release_v1_admin_ops_releases__release_id__rollback_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "release_id",
+            "required": true,
+            "schema": {
+              "title": "Release Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServingReleaseRollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServingReleaseRollbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rollback Serving Release",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/ops/releases/{release_id}/rollback-plan": {
       "post": {
         "operationId": "rollback_plan_v1_admin_ops_releases__release_id__rollback_plan_post",
@@ -12690,6 +12967,59 @@
           }
         },
         "summary": "Activate Source Match Set",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-match-sets/{source_match_set_id}/rebuild-db": {
+      "post": {
+        "description": "Rebuild the serving DB from a match set (doc \"DB 재구성\", ~1532-1562).\n\nBridges to the EXISTING ``full_load_batch`` loader DAG: assembles the batch\npayload from the match set's build groups and enqueues it under the\n``source_rebuild_db`` global advisory lock (409 if another rebuild is\nenqueuing/running). Before any child loader is enqueued the pre-load\nsource-archive integrity gate re-verifies each group's RustFS objects'\n``sha256``/``size``/presence + ``group_sha256`` against the registry; a\nmismatch quarantines the failing groups, propagates (active →\n``integrity_alert``, non-active ``validated`` → ``invalid``), and fails\nwithout creating any child job.\n\n``force_promotion`` (the ERROR-bypass) additionally requires the\n``destructive_admin`` role and a ``typed_confirmation`` of\n``REBUILD-PROMOTE {id}``. It bypasses ONLY the later consistency ERROR\npromotion block — never the integrity gate above, an unavailable group, or a\nmatch set ``integrity_alert`` (doc ~1559, ADR-049 #13).",
+        "operationId": "rebuild_source_match_set_db_v1_admin_source_match_sets__source_match_set_id__rebuild_db_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_match_set_id",
+            "required": true,
+            "schema": {
+              "title": "Source Match Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceRebuildDbRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRebuildDbResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rebuild Source Match Set Db",
         "tags": [
           "admin"
         ]

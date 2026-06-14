@@ -63,6 +63,7 @@ from .dto.source import (
     GroupValidationResult,
     ReconcileResolveResponse,
     RegisterResponse,
+    ServingReleaseRollbackResponse,
     SourceCapacityUsage,
     SourceFileCategoryInfo,
     SourceGroupRestoreResponse,
@@ -74,6 +75,7 @@ from .dto.source import (
     SourceMatchSetDetail,
     SourceMatchSetRetireResponse,
     SourceMatchSetValidateResponse,
+    SourceRebuildDbResponse,
     SourceReconcileItem,
     SourceReconcileRun,
     UploadSessionCreateRequest,
@@ -1057,6 +1059,219 @@ class AsyncAddressClient:
 
         return await SourceMatchSetRepository(self._engine()).retire_match_set(
             source_match_set_id, actor=actor
+        )
+
+    async def prepare_source_match_set_rebuild(
+        self,
+        source_match_set_id: str,
+        *,
+        actor: str | None,
+        force_promotion: bool,
+        typed_confirmation: str | None,
+        reason: str | None,
+    ) -> tuple[SourceRebuildDbResponse, dict[str, Any] | None]:
+        """Run the rebuild-db precondition + pre-load integrity gate (T-205b).
+
+        Returns ``(response, batch_payload)``. When ``batch_payload`` is not
+        ``None`` the caller (endpoint) must enqueue it as a ``full_load_batch``
+        under the ``source_rebuild_db`` advisory lock; the existing loader DAG
+        then runs consistency → mv_refresh → snapshot(FK)/release. When the
+        integrity gate fails ``batch_payload`` is ``None``, the failing groups
+        have been quarantined + propagated, and ``response.enqueued=False``.
+
+        ``force_promotion`` only arms the consistency-ERROR bypass (recorded on
+        the batch root for the mv_refresh stage); it never bypasses the integrity
+        gate run here (doc ~1559, ADR-049 #13).
+        """
+        from .infra.rustfs import RustfsClient, require_enabled_rustfs
+        from .infra.source_rebuild_service import SourceRebuildService
+
+        service = SourceRebuildService(self._engine())
+        plan, stale = await service.prepare_rebuild(source_match_set_id)
+
+        config = require_enabled_rustfs(self.settings)
+        rustfs = RustfsClient(config)
+        checks = await self._rebuild_integrity_checks(rustfs, plan)
+        gate = service.integrity_gate(checks)
+        if not gate.ok:
+            affected = await service.quarantine_failed_groups(
+                source_match_set_id,
+                gate.failed_group_ids,
+                actor=actor,
+                reason="; ".join(gate.reasons),
+            )
+            return (
+                SourceRebuildDbResponse(
+                    source_match_set_id=source_match_set_id,
+                    enqueued=False,
+                    forced_promotion=False,
+                    integrity_gate_ok=False,
+                    failed_group_ids=gate.failed_group_ids,
+                    stale_jobs_closed=stale.stale_job_ids,
+                    affected_match_set_ids=affected,
+                    message="pre-load integrity gate failed; groups quarantined",
+                ),
+                None,
+            )
+
+        batch_payload = dict(plan.batch_payload)
+        if force_promotion:
+            batch_payload["forced_promotion"] = True
+            batch_payload["forced_promotion_actor"] = actor
+            batch_payload["forced_promotion_reason"] = reason
+        response = SourceRebuildDbResponse(
+            source_match_set_id=source_match_set_id,
+            enqueued=True,
+            forced_promotion=force_promotion,
+            integrity_gate_ok=True,
+            stale_jobs_closed=stale.stale_job_ids,
+            message="rebuild integrity gate passed; full_load_batch ready",
+        )
+        return response, batch_payload
+
+    async def _rebuild_integrity_checks(
+        self, rustfs: Any, plan: Any
+    ) -> tuple[Any, ...]:
+        """Materialize + re-verify each build group's archives (doc ~1544).
+
+        Streams each child object's SHA-256 (head + ``compute_sha256``) and
+        compares against the registry ``ops.source_files`` row + the group's
+        ``group_sha256``. Returns the per-group :class:`GroupArchiveCheck` facts
+        the pure gate decides on.
+        """
+        from sqlalchemy import text
+
+        from .core.source_match_propagation import (
+            ChildFileFacts,
+            compute_group_sha256,
+        )
+        from .core.source_rebuild import GroupArchiveCheck
+
+        checks: list[GroupArchiveCheck] = []
+        engine = self._engine()
+        for ref in plan.groups:
+            async with engine.connect() as conn:
+                rows = (
+                    await conn.execute(
+                        text(
+                            """
+SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_key
+  FROM ops.source_files
+ WHERE source_file_group_id = :gid
+   AND state NOT IN ('hard_deleted','soft_deleted')
+ ORDER BY part_key
+"""
+                        ),
+                        {"gid": ref.source_file_group_id},
+                    )
+                ).mappings().all()
+                group_state = await conn.scalar(
+                    text(
+                        "SELECT state FROM ops.source_file_groups "
+                        "WHERE source_file_group_id = :gid"
+                    ),
+                    {"gid": ref.source_file_group_id},
+                )
+
+            all_present = True
+            sha256_ok = True
+            size_ok = True
+            observed: list[ChildFileFacts] = []
+            for row in rows:
+                object_key = row["object_key"]
+                if not object_key:
+                    all_present = False
+                    continue
+                try:
+                    head = await rustfs.head_object(object_key)
+                except Exception:
+                    all_present = False
+                    continue
+                observed_size = head.size or 0
+                if observed_size != int(row["size_bytes"]):
+                    size_ok = False
+                observed_sha = head.metadata.get("ktg-sha256")
+                if observed_sha is None:
+                    observed_sha = await rustfs.compute_sha256(object_key)
+                if observed_sha != row["sha256"]:
+                    sha256_ok = False
+                observed.append(
+                    ChildFileFacts(
+                        part_kind=str(row["part_kind"]),
+                        part_key=str(row["part_key"]),
+                        state=str(row["state"]),
+                        sha256=str(observed_sha),
+                        size_bytes=int(observed_size),
+                    )
+                )
+            recomputed_group_sha = compute_group_sha256(tuple(observed))
+            group_sha_ok = (
+                ref.group_sha256 is None
+                or recomputed_group_sha == ref.group_sha256
+            )
+            checks.append(
+                GroupArchiveCheck(
+                    source_file_group_id=ref.source_file_group_id,
+                    category=ref.category,
+                    group_state=str(group_state) if group_state else "missing",
+                    all_objects_present=all_present and bool(rows),
+                    sha256_ok=sha256_ok,
+                    size_ok=size_ok,
+                    group_sha256_ok=group_sha_ok,
+                )
+            )
+        return tuple(checks)
+
+    async def record_rebuild_enqueued(
+        self,
+        source_match_set_id: str,
+        *,
+        actor: str | None,
+        job_id: str | None,
+        load_batch_id: str | None,
+        forced_promotion: bool,
+        reason: str | None,
+    ) -> None:
+        """Audit a successfully-enqueued rebuild + forced_promotion (T-205b)."""
+        from .infra.source_rebuild_service import SourceRebuildService
+
+        await SourceRebuildService(self._engine()).record_rebuild_audit(
+            source_match_set_id,
+            actor=actor,
+            outcome="enqueued",
+            job_id=job_id,
+            load_batch_id=load_batch_id,
+            forced_promotion=forced_promotion,
+            reason=reason,
+        )
+
+    async def rollback_serving_release(
+        self,
+        release_id: str,
+        *,
+        actor: str | None,
+        reason: str | None,
+    ) -> ServingReleaseRollbackResponse:
+        """Atomic source-match-set swap on serving rollback (T-205b, doc #18).
+
+        Resolves the target snapshot's ``source_match_set_id``; when present,
+        retires the current active match set and restores the target to
+        ``active`` under the match-activate lock in one transaction, recomputing
+        the target's ``integrity_alert`` from a pre-rollback source quick
+        reconcile. Legacy snapshots (no FK) make no match-set change.
+        """
+        from .infra.source_rebuild_service import SourceRebuildService
+
+        decision, integrity_alert = await SourceRebuildService(
+            self._engine()
+        ).rollback_swap(release_id, actor=actor, reason=reason)
+        return ServingReleaseRollbackResponse(
+            release_id=release_id,
+            mode=decision.mode,
+            activated_match_set_id=decision.activate_match_set_id,
+            retired_match_set_id=decision.retire_match_set_id,
+            target_integrity_alert=integrity_alert,
+            message="; ".join(decision.reasons) or None,
         )
 
     async def list_dataset_snapshots(

@@ -417,23 +417,45 @@ SELECT count(*)
                 ),
                 {"batch_id": batch_id},
             )
+            # rebuild-db (T-205b) provenance on the batch root: source_match_set_id
+            # is the 정본 FK to write; forced_promotion arms the consistency-ERROR
+            # bypass (ONLY the ERROR gate — the source integrity gate already ran
+            # before any child was enqueued).
+            root_payload = await conn.scalar(
+                text("SELECT payload FROM load_jobs WHERE job_id = :batch_id"),
+                {"batch_id": batch_id},
+            )
         if exists:
             return
+        root = root_payload if isinstance(root_payload, dict) else {}
+        source_match_set_id = root.get("source_match_set_id")
+        forced_promotion = bool(root.get("forced_promotion"))
         if severity is None:
             await self._mark_batch_failed(
                 batch_id,
                 "consistency report missing; mv_refresh blocked",
             )
             return
-        if severity == "ERROR":
+        if severity == "ERROR" and not forced_promotion:
             await self._mark_batch_failed(
                 batch_id,
                 "consistency report severity ERROR; mv_refresh blocked",
             )
             return
+        mv_payload: dict[str, Any] = {"strategy": "swap", "load_batch_id": batch_id}
+        if isinstance(source_match_set_id, str) and source_match_set_id:
+            mv_payload["source_match_set_id"] = source_match_set_id
+        if forced_promotion:
+            mv_payload["forced_promotion"] = True
+            mv_payload["forced_promotion_metadata"] = {
+                k: root.get(k)
+                for k in ("forced_promotion_actor", "forced_promotion_reason")
+                if root.get(k) is not None
+            }
+            mv_payload["forced_promotion_metadata"]["consistency_severity"] = severity
         await self.enqueue(
             "mv_refresh",
-            {"strategy": "swap", "load_batch_id": batch_id},
+            mv_payload,
             load_batch_id=batch_id,
             parent_job_id=parent_job_id,
         )

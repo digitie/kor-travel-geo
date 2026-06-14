@@ -619,6 +619,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/ops/releases/{release_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rollback Serving Release
+         * @description Roll a serving release back, swapping the source match set (doc #18, ~818).
+         *
+         *     Requires ``destructive_admin`` + a ``typed_confirmation`` of
+         *     ``ROLLBACK {release_id}`` (the rollback-plan token). When the target snapshot
+         *     carries a ``source_match_set_id`` the match set is swapped atomically under
+         *     the match-activate lock (current active → ``retired``, target → ``active``),
+         *     with the target's ``integrity_alert`` recomputed from a pre-rollback source
+         *     quick reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` — no
+         *     auto-promotion (ADR-049 #18).
+         */
+        post: operations["rollback_serving_release_v1_admin_ops_releases__release_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/ops/releases/{release_id}/rollback-plan": {
         parameters: {
             query?: never;
@@ -1212,6 +1240,42 @@ export interface paths {
          *     ``rebuild_operator``.
          */
         post: operations["activate_source_match_set_v1_admin_source_match_sets__source_match_set_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/source-match-sets/{source_match_set_id}/rebuild-db": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rebuild Source Match Set Db
+         * @description Rebuild the serving DB from a match set (doc "DB 재구성", ~1532-1562).
+         *
+         *     Bridges to the EXISTING ``full_load_batch`` loader DAG: assembles the batch
+         *     payload from the match set's build groups and enqueues it under the
+         *     ``source_rebuild_db`` global advisory lock (409 if another rebuild is
+         *     enqueuing/running). Before any child loader is enqueued the pre-load
+         *     source-archive integrity gate re-verifies each group's RustFS objects'
+         *     ``sha256``/``size``/presence + ``group_sha256`` against the registry; a
+         *     mismatch quarantines the failing groups, propagates (active →
+         *     ``integrity_alert``, non-active ``validated`` → ``invalid``), and fails
+         *     without creating any child job.
+         *
+         *     ``force_promotion`` (the ERROR-bypass) additionally requires the
+         *     ``destructive_admin`` role and a ``typed_confirmation`` of
+         *     ``REBUILD-PROMOTE {id}``. It bypasses ONLY the later consistency ERROR
+         *     promotion block — never the integrity gate above, an unavailable group, or a
+         *     match set ``integrity_alert`` (doc ~1559, ADR-049 #13).
+         */
+        post: operations["rebuild_source_match_set_db_v1_admin_source_match_sets__source_match_set_id__rebuild_db_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3345,6 +3409,47 @@ export interface components {
             state: "pending" | "active" | "superseded" | "rolled_back" | "failed";
         };
         /**
+         * ServingReleaseRollbackRequest
+         * @description ``POST /v1/admin/ops/releases/{release_id}/rollback`` body (doc ~818/1530).
+         *
+         *     ``typed_confirmation`` must equal the rollback-plan token
+         *     (``ROLLBACK {release_id}``). When the target snapshot carries a
+         *     ``source_match_set_id`` the match set is swapped atomically (current active →
+         *     ``retired``, target → ``active``) under the match-activate lock, with the
+         *     target's ``integrity_alert`` recomputed from a pre-rollback source quick
+         *     reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` (ADR-049 #18).
+         */
+        ServingReleaseRollbackRequest: {
+            /** Reason */
+            reason?: string | null;
+            /** Typed Confirmation */
+            typed_confirmation: string;
+        };
+        /**
+         * ServingReleaseRollbackResponse
+         * @description ``rollback`` result — the serving + match-set swap outcome.
+         */
+        ServingReleaseRollbackResponse: {
+            /** Activated Match Set Id */
+            activated_match_set_id?: string | null;
+            /** Message */
+            message?: string | null;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "match_set_swap" | "legacy_estimate";
+            /** Release Id */
+            release_id: string;
+            /** Retired Match Set Id */
+            retired_match_set_id?: string | null;
+            /**
+             * Target Integrity Alert
+             * @default false
+             */
+            target_integrity_alert: boolean;
+        };
+        /**
          * SlotReplaceResponse
          * @description ``POST .../files/{slot}/replace`` response.
          *
@@ -3942,6 +4047,86 @@ export interface components {
              * @enum {string}
              */
             state: "draft" | "validated" | "active" | "retired" | "invalid" | "revalidatable" | "restored_from_backup";
+        };
+        /**
+         * SourceRebuildDbRequest
+         * @description ``POST /v1/admin/source-match-sets/{id}/rebuild-db`` body (doc ~1532).
+         *
+         *     A rebuild assembles a ``full_load_batch`` payload from the match set's groups
+         *     and bridges it to the existing loader DAG. ``force_promotion`` is the
+         *     exception path for a known source-quality consistency ERROR: it requires the
+         *     ``destructive_admin`` role AND a ``typed_confirmation`` of
+         *     ``REBUILD-PROMOTE {source_match_set_id}``. It bypasses ONLY the consistency
+         *     ERROR promotion block — never the source-archive integrity gate, an
+         *     unavailable group, or a match set ``integrity_alert`` (doc ~1559, ADR-049 #13).
+         */
+        SourceRebuildDbRequest: {
+            /**
+             * Download Concurrency
+             * @default 3
+             */
+            download_concurrency: number;
+            /**
+             * Force Promotion
+             * @default false
+             */
+            force_promotion: boolean;
+            /**
+             * Materialize Concurrency
+             * @default 2
+             */
+            materialize_concurrency: number;
+            /** Reason */
+            reason?: string | null;
+            /** Typed Confirmation */
+            typed_confirmation?: string | null;
+        };
+        /**
+         * SourceRebuildDbResponse
+         * @description ``rebuild-db`` enqueue result.
+         *
+         *     The rebuild runs asynchronously in a ``full_load_batch`` job under the
+         *     ``source_rebuild_db`` advisory lock; ``job_id``/``load_batch_id`` track it.
+         *     The integrity gate runs before any child loader is enqueued; on a gate
+         *     failure ``enqueued=false`` and ``failed_group_ids`` name the quarantined
+         *     groups. ``forced_promotion`` echoes whether the ERROR-bypass path was armed.
+         */
+        SourceRebuildDbResponse: {
+            /**
+             * Affected Match Set Ids
+             * @default []
+             */
+            affected_match_set_ids: string[];
+            /** Enqueued */
+            enqueued: boolean;
+            /**
+             * Failed Group Ids
+             * @default []
+             */
+            failed_group_ids: string[];
+            /**
+             * Forced Promotion
+             * @default false
+             */
+            forced_promotion: boolean;
+            /**
+             * Integrity Gate Ok
+             * @default true
+             */
+            integrity_gate_ok: boolean;
+            /** Job Id */
+            job_id?: string | null;
+            /** Load Batch Id */
+            load_batch_id?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /**
+             * Stale Jobs Closed
+             * @default []
+             */
+            stale_jobs_closed: string[];
         };
         /**
          * SourceReconcileItem
@@ -5791,6 +5976,41 @@ export interface operations {
             };
         };
     };
+    rollback_serving_release_v1_admin_ops_releases__release_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ServingReleaseRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServingReleaseRollbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rollback_plan_v1_admin_ops_releases__release_id__rollback_plan_post: {
         parameters: {
             query?: never;
@@ -6756,6 +6976,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceMatchSetActivateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rebuild_source_match_set_db_v1_admin_source_match_sets__source_match_set_id__rebuild_db_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_match_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceRebuildDbRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceRebuildDbResponse"];
                 };
             };
             /** @description Validation Error */
