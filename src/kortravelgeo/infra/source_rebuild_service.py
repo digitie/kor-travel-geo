@@ -472,7 +472,7 @@ UPDATE ops.source_file_groups
 
     async def rollback_swap(
         self,
-        release_id: str,
+        serving_release_id: str,
         *,
         actor: str | None,
         reason: str | None,
@@ -496,17 +496,17 @@ UPDATE ops.source_file_groups
                 await conn.execute(
                     text(
                         """
-SELECT r.release_id, r.snapshot_id, r.state, s.source_match_set_id
+SELECT r.serving_release_id, r.dataset_snapshot_id, r.state, s.source_match_set_id
   FROM ops.serving_releases r
-  JOIN ops.dataset_snapshots s ON s.snapshot_id = r.snapshot_id
- WHERE r.release_id = :rid
+  JOIN ops.dataset_snapshots s ON s.dataset_snapshot_id = r.dataset_snapshot_id
+ WHERE r.serving_release_id = :rid
 """
                     ),
-                    {"rid": release_id},
+                    {"rid": serving_release_id},
                 )
             ).mappings().first()
             if release is None:
-                raise NotFoundError(f"serving release not found: {release_id}")
+                raise NotFoundError(f"serving release not found: {serving_release_id}")
 
             current_active = (
                 await conn.execute(
@@ -518,8 +518,8 @@ SELECT r.release_id, r.snapshot_id, r.state, s.source_match_set_id
             ).first()
             decision = decide_rollback_target(
                 RollbackTargetFacts(
-                    release_id=str(release["release_id"]),
-                    snapshot_id=str(release["snapshot_id"]),
+                    release_id=str(release["serving_release_id"]),
+                    snapshot_id=str(release["dataset_snapshot_id"]),
                     release_state=str(release["state"]),
                     target_source_match_set_id=(
                         str(release["source_match_set_id"])
@@ -543,7 +543,7 @@ SELECT r.release_id, r.snapshot_id, r.state, s.source_match_set_id
                 conn,
                 action="serving_release.rollback",
                 actor=actor,
-                resource_id=release_id,
+                resource_id=serving_release_id,
                 outcome=decision.mode,
                 resource_type="serving_release",
                 payload={
@@ -664,16 +664,16 @@ SELECT bool_and(g.state = 'available') AS all_available, count(*) AS n
             _json_text(
                 """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, actor_id, action, resource_type, resource_id,
+  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
    job_id, outcome, payload_redacted)
 VALUES
-  (:event_id, 'ui', :actor_id, :action, :resource_type, :resource_id,
+  (:audit_event_id, 'ui', :actor_id, :action, :resource_type, :resource_id,
    :job_id, :outcome, :payload)
 """,
                 "payload",
             ),
             {
-                "event_id": str(uuid4()),
+                "audit_event_id": str(uuid4()),
                 "actor_id": actor,
                 "action": action,
                 "resource_type": resource_type,

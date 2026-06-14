@@ -56,7 +56,7 @@ SELECT job_id, kind, state, load_batch_id, parent_job_id,
 """
 
 _AUDIT_SELECT = """
-SELECT event_id, occurred_at, actor_type, actor_id, client_ip_hash,
+SELECT audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
        user_agent_hash, request_id, trace_id, action, resource_type,
        resource_id, job_id, outcome, error_code, payload_redacted,
        payload_hash
@@ -64,7 +64,7 @@ SELECT event_id, occurred_at, actor_type, actor_id, client_ip_hash,
 """
 
 _SNAPSHOT_SELECT = """
-SELECT snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
+SELECT dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, source_set_hash,
        git_commit, alembic_revision, postgres_version, postgis_version,
        row_counts, table_stats_artifact_id, consistency_report_id,
        performance_artifact_id, backup_artifact_id, created_by_job_id,
@@ -73,8 +73,8 @@ SELECT snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
 """
 
 _RELEASE_SELECT = """
-SELECT release_id, snapshot_id, state, release_kind, previous_release_id,
-       rollback_target_release_id, mv_name, mv_hash, consistency_gate,
+SELECT serving_release_id, dataset_snapshot_id, state, release_kind, previous_serving_release_id,
+       rollback_target_serving_release_id, mv_name, mv_hash, consistency_gate,
        performance_gate, activated_by_job_id, activated_at, notes, created_at
   FROM ops.serving_releases
 """
@@ -82,20 +82,20 @@ SELECT release_id, snapshot_id, state, release_kind, previous_release_id,
 _ARTIFACT_SELECT = """
 SELECT artifact_id, artifact_type, state, storage_kind, storage_uri,
        display_name, media_type, compression, size_bytes, sha256,
-       retention_class, expires_at, job_id, snapshot_id, release_id,
+       retention_class, expires_at, job_id, dataset_snapshot_id, serving_release_id,
        manifest, callback_url, callback_state, created_at, finished_at
   FROM ops.artifacts
 """
 
 _MAINTENANCE_SELECT = """
-SELECT window_id, kind, state, starts_at, ends_at, actual_started_at,
+SELECT maintenance_window_id, kind, state, starts_at, ends_at, actual_started_at,
        actual_ended_at, reason, requested_by, approved_by, blocks,
        created_by_job_id, closed_by_job_id, created_at
   FROM ops.maintenance_windows
 """
 
 _TABLE_STATS_SNAPSHOT_SELECT = """
-SELECT stats_id, snapshot_id, captured_at, schema_name, object_name,
+SELECT table_stats_snapshot_id, dataset_snapshot_id, captured_at, schema_name, object_name,
        object_kind, estimated_rows, exact_rows, total_bytes, table_bytes,
        index_bytes, toast_bytes, dead_tuples, last_vacuum, last_analyze, stats
   FROM ops.table_stats_snapshots
@@ -332,14 +332,14 @@ SELECT job_id, kind, state, log_tail
                     _json_text(
                         """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, actor_id, client_ip_hash, user_agent_hash,
+  (audit_event_id, actor_type, actor_id, client_ip_hash, user_agent_hash,
    request_id, trace_id, action, resource_type, resource_id, job_id,
    outcome, error_code, payload_redacted, payload_hash)
 VALUES
-  (:event_id, :actor_type, :actor_id, :client_ip_hash, :user_agent_hash,
+  (:audit_event_id, :actor_type, :actor_id, :client_ip_hash, :user_agent_hash,
    :request_id, :trace_id, :action, :resource_type, :resource_id, :job_id,
    :outcome, :error_code, :payload_redacted, :payload_hash)
-RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
+RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
           user_agent_hash, request_id, trace_id, action, resource_type,
           resource_id, job_id, outcome, error_code, payload_redacted,
           payload_hash
@@ -347,7 +347,7 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                         "payload_redacted",
                     ),
                     {
-                        "event_id": str(uuid4()),
+                        "audit_event_id": str(uuid4()),
                         "actor_type": actor_type,
                         "actor_id": actor_id,
                         "client_ip_hash": hash_identifier(client_ip) if client_ip else None,
@@ -546,12 +546,12 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                 ),
             )
 
-    async def rollback_plan(self, release_id: str) -> RollbackPlan | None:
+    async def rollback_plan(self, serving_release_id: str) -> RollbackPlan | None:
         async with self.engine.connect() as conn:
             row = (
                 await conn.execute(
-                    text(_RELEASE_SELECT + " WHERE release_id = :release_id"),
-                    {"release_id": release_id},
+                    text(_RELEASE_SELECT + " WHERE serving_release_id = :serving_release_id"),
+                    {"serving_release_id": serving_release_id},
                 )
             ).mappings().first()
         if row is None:
@@ -561,9 +561,9 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
         if release.state == "failed":
             blockers = ("failed release는 rollback 기준으로 사용할 수 없다",)
         return RollbackPlan(
-            release_id=release.release_id,
-            snapshot_id=release.snapshot_id,
-            typed_confirmation=f"ROLLBACK {release.release_id}",
+            serving_release_id=release.serving_release_id,
+            dataset_snapshot_id=release.dataset_snapshot_id,
+            typed_confirmation=f"ROLLBACK {release.serving_release_id}",
             blockers=blockers,
             steps=(
                 "active maintenance window 확인",
@@ -625,8 +625,8 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
         retention_class: str | None = None,
         expires_at: datetime | None = None,
         job_id: str | None = None,
-        snapshot_id: str | None = None,
-        release_id: str | None = None,
+        dataset_snapshot_id: str | None = None,
+        serving_release_id: str | None = None,
         manifest: dict[str, Any] | None = None,
         download_token_hash: str | None = None,
         callback_url: str | None = None,
@@ -640,16 +640,16 @@ RETURNING event_id, occurred_at, actor_type, actor_id, client_ip_hash,
 INSERT INTO ops.artifacts
   (artifact_id, artifact_type, state, storage_kind, storage_uri, display_name,
    media_type, compression, size_bytes, sha256, retention_class, expires_at,
-   job_id, snapshot_id, release_id, manifest, download_token_hash,
+   job_id, dataset_snapshot_id, serving_release_id, manifest, download_token_hash,
    callback_url, callback_state)
 VALUES
   (:artifact_id, :artifact_type, :state, :storage_kind, :storage_uri, :display_name,
    :media_type, :compression, :size_bytes, :sha256, :retention_class, :expires_at,
-   :job_id, :snapshot_id, :release_id, :manifest, :download_token_hash,
+   :job_id, :dataset_snapshot_id, :serving_release_id, :manifest, :download_token_hash,
    :callback_url, :callback_state)
 RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
           display_name, media_type, compression, size_bytes, sha256,
-          retention_class, expires_at, job_id, snapshot_id, release_id,
+          retention_class, expires_at, job_id, dataset_snapshot_id, serving_release_id,
           manifest, callback_url, callback_state, created_at, finished_at
 """,
                         "manifest",
@@ -668,8 +668,8 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
                         "retention_class": retention_class,
                         "expires_at": expires_at,
                         "job_id": job_id,
-                        "snapshot_id": snapshot_id,
-                        "release_id": release_id,
+                        "dataset_snapshot_id": dataset_snapshot_id,
+                        "serving_release_id": serving_release_id,
                         "manifest": manifest or {},
                         "download_token_hash": download_token_hash,
                         "callback_url": callback_url,
@@ -689,8 +689,8 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
         size_bytes: int | None = None,
         sha256: str | None = None,
         manifest: dict[str, Any] | None = None,
-        snapshot_id: str | None = None,
-        release_id: str | None = None,
+        dataset_snapshot_id: str | None = None,
+        serving_release_id: str | None = None,
         callback_state: str | None = None,
         finished: bool = False,
     ) -> OpsArtifact | None:
@@ -714,12 +714,12 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
         if manifest is not None:
             assignments.append("manifest = :manifest")
             params["manifest"] = manifest
-        if snapshot_id is not None:
-            assignments.append("snapshot_id = :snapshot_id")
-            params["snapshot_id"] = snapshot_id
-        if release_id is not None:
-            assignments.append("release_id = :release_id")
-            params["release_id"] = release_id
+        if dataset_snapshot_id is not None:
+            assignments.append("dataset_snapshot_id = :dataset_snapshot_id")
+            params["dataset_snapshot_id"] = dataset_snapshot_id
+        if serving_release_id is not None:
+            assignments.append("serving_release_id = :serving_release_id")
+            params["serving_release_id"] = serving_release_id
         if callback_state is not None:
             assignments.append("callback_state = :callback_state")
             params["callback_state"] = callback_state
@@ -734,7 +734,7 @@ UPDATE ops.artifacts
  WHERE artifact_id = :artifact_id
 RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
           display_name, media_type, compression, size_bytes, sha256,
-          retention_class, expires_at, job_id, snapshot_id, release_id,
+          retention_class, expires_at, job_id, dataset_snapshot_id, serving_release_id,
           manifest, callback_url, callback_state, created_at, finished_at
 """
         )
@@ -778,21 +778,21 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
                     _json_text(
                         """
 INSERT INTO ops.maintenance_windows
-  (window_id, kind, state, starts_at, ends_at, actual_started_at,
+  (maintenance_window_id, kind, state, starts_at, ends_at, actual_started_at,
    reason, requested_by, approved_by, confirmation_hash, blocks,
    created_by_job_id)
 VALUES
-  (:window_id, :kind, :state, COALESCE(:starts_at, now()), :ends_at, now(),
+  (:maintenance_window_id, :kind, :state, COALESCE(:starts_at, now()), :ends_at, now(),
    :reason, :requested_by, :approved_by, :confirmation_hash, :blocks,
    :created_by_job_id)
-RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
+RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started_at,
           actual_ended_at, reason, requested_by, approved_by, blocks,
           created_by_job_id, closed_by_job_id, created_at
 """,
                         "blocks",
                     ),
                     {
-                        "window_id": str(uuid4()),
+                        "maintenance_window_id": str(uuid4()),
                         "kind": req.kind,
                         "state": state,
                         "starts_at": req.starts_at,
@@ -811,7 +811,7 @@ RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
     async def end_maintenance_window(
         self,
         *,
-        window_id: str,
+        maintenance_window_id: str,
         confirmation: str,
         closed_by_job_id: str | None = None,
     ) -> MaintenanceWindow | None:
@@ -824,16 +824,16 @@ UPDATE ops.maintenance_windows
    SET state = 'ended',
        actual_ended_at = now(),
        closed_by_job_id = :closed_by_job_id
- WHERE window_id = :window_id
+ WHERE maintenance_window_id = :maintenance_window_id
    AND state IN ('scheduled','active','ending')
    AND confirmation_hash = :confirmation_hash
-RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
+RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started_at,
           actual_ended_at, reason, requested_by, approved_by, blocks,
           created_by_job_id, closed_by_job_id, created_at
 """
                     ),
                     {
-                        "window_id": window_id,
+                        "maintenance_window_id": maintenance_window_id,
                         "confirmation_hash": hash_confirmation(confirmation),
                         "closed_by_job_id": closed_by_job_id,
                     },
@@ -877,12 +877,16 @@ RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
         self,
         *,
         limit: int = 200,
-        snapshot_id: str | None = None,
+        dataset_snapshot_id: str | None = None,
     ) -> list[TableStatsSnapshot]:
-        where = " WHERE snapshot_id = :snapshot_id" if snapshot_id is not None else ""
+        where = (
+            " WHERE dataset_snapshot_id = :dataset_snapshot_id"
+            if dataset_snapshot_id is not None
+            else ""
+        )
         params: dict[str, Any] = {"limit": limit}
-        if snapshot_id is not None:
-            params["snapshot_id"] = snapshot_id
+        if dataset_snapshot_id is not None:
+            params["dataset_snapshot_id"] = dataset_snapshot_id
         async with self.engine.connect() as conn:
             rows = (
                 await conn.execute(
@@ -899,7 +903,7 @@ RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
     async def capture_table_stats_snapshots(
         self,
         *,
-        snapshot_id: str | None = None,
+        dataset_snapshot_id: str | None = None,
         limit: int = 500,
         skip_if_locked: bool = True,
     ) -> list[TableStatsSnapshot]:
@@ -917,7 +921,7 @@ RETURNING window_id, kind, state, starts_at, ends_at, actual_started_at,
                         http_status=409,
                     )
                 return []
-            resolved_snapshot_id = snapshot_id
+            resolved_snapshot_id = dataset_snapshot_id
             snapshot_link = "explicit"
             if resolved_snapshot_id is None:
                 resolved_snapshot_id = await _active_release_snapshot_id_for_conn(conn)
@@ -979,8 +983,8 @@ SELECT n.nspname AS schema_name,
             ).mappings().all()
             records = [
                 {
-                    "stats_id": str(uuid4()),
-                    "snapshot_id": resolved_snapshot_id,
+                    "table_stats_snapshot_id": str(uuid4()),
+                    "dataset_snapshot_id": resolved_snapshot_id,
                     "captured_at": captured_at,
                     "schema_name": row["schema_name"],
                     "object_name": row["object_name"],
@@ -1006,11 +1010,13 @@ SELECT n.nspname AS schema_name,
                     _json_text(
                         """
 INSERT INTO ops.table_stats_snapshots
-  (stats_id, snapshot_id, captured_at, schema_name, object_name, object_kind,
+  (table_stats_snapshot_id, dataset_snapshot_id, captured_at, schema_name,
+   object_name, object_kind,
    estimated_rows, exact_rows, total_bytes, table_bytes, index_bytes,
    toast_bytes, dead_tuples, last_vacuum, last_analyze, stats)
 VALUES
-  (:stats_id, :snapshot_id, :captured_at, :schema_name, :object_name, :object_kind,
+  (:table_stats_snapshot_id, :dataset_snapshot_id, :captured_at, :schema_name,
+   :object_name, :object_kind,
    :estimated_rows, :exact_rows, :total_bytes, :table_bytes, :index_bytes,
    :toast_bytes, :dead_tuples, :last_vacuum, :last_analyze, :stats)
 """,
@@ -1759,18 +1765,18 @@ async def _insert_consistency_decision_audit(
         _json_text(
             """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, actor_id, client_ip_hash, user_agent_hash,
+  (audit_event_id, actor_type, actor_id, client_ip_hash, user_agent_hash,
    request_id, trace_id, action, resource_type, resource_id, outcome,
    payload_redacted, payload_hash)
 VALUES
-  (:event_id, :actor_type, :actor_id, :client_ip_hash, :user_agent_hash,
+  (:audit_event_id, :actor_type, :actor_id, :client_ip_hash, :user_agent_hash,
    :request_id, :trace_id, :action, :resource_type, :resource_id, 'succeeded',
    :payload_redacted, :payload_hash)
 """,
             "payload_redacted",
         ),
         {
-            "event_id": str(uuid4()),
+            "audit_event_id": str(uuid4()),
             "actor_type": actor_type,
             "actor_id": actor_id,
             "client_ip_hash": hash_identifier(client_ip) if client_ip else None,
@@ -1946,7 +1952,7 @@ async def _insert_dataset_snapshot_and_release(
         await conn.execute(
             text(
                 """
-SELECT release_id, snapshot_id
+SELECT serving_release_id, dataset_snapshot_id
   FROM ops.serving_releases
  WHERE state = 'active'
  ORDER BY activated_at DESC NULLS LAST, created_at DESC
@@ -1956,8 +1962,8 @@ SELECT release_id, snapshot_id
             )
         )
     ).mappings().first()
-    parent_snapshot_id = _optional_str(previous["snapshot_id"]) if previous else None
-    previous_release_id = _optional_str(previous["release_id"]) if previous else None
+    parent_snapshot_id = _optional_str(previous["dataset_snapshot_id"]) if previous else None
+    previous_release_id = _optional_str(previous["serving_release_id"]) if previous else None
 
     if release_state == "active":
         await conn.execute(
@@ -1977,16 +1983,16 @@ UPDATE ops.serving_releases
             _json_text(
                 """
 INSERT INTO ops.dataset_snapshots
-  (snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
+  (dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, source_set_hash,
    git_commit, alembic_revision, postgres_version, postgis_version,
    row_counts, consistency_report_id, backup_artifact_id, source_match_set_id,
    created_by_job_id, validated_at)
 VALUES
-  (:snapshot_id, :state, :parent_snapshot_id, :source_set, :source_set_hash,
+  (:dataset_snapshot_id, :state, :parent_dataset_snapshot_id, :source_set, :source_set_hash,
    :git_commit, :alembic_revision, :postgres_version, :postgis_version,
    :row_counts, :consistency_report_id, :backup_artifact_id, :source_match_set_id,
    :created_by_job_id, CASE WHEN :validated THEN now() ELSE NULL END)
-RETURNING snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
+RETURNING dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, source_set_hash,
           git_commit, alembic_revision, postgres_version, postgis_version,
           row_counts, table_stats_artifact_id, consistency_report_id,
           performance_artifact_id, backup_artifact_id, created_by_job_id,
@@ -1996,9 +2002,9 @@ RETURNING snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
                 "row_counts",
             ),
             {
-                "snapshot_id": snapshot_id,
+                "dataset_snapshot_id": snapshot_id,
                 "state": snapshot_state,
-                "parent_snapshot_id": parent_snapshot_id,
+                "parent_dataset_snapshot_id": parent_snapshot_id,
                 "source_set": _snapshot_source_set(source_set, snapshot_metadata),
                 "source_set_hash": canonical_payload_hash(source_set),
                 "git_commit": git_commit or runtime["git_commit"],
@@ -2020,26 +2026,26 @@ RETURNING snapshot_id, state, parent_snapshot_id, source_set, source_set_hash,
             _json_text(
                 """
 INSERT INTO ops.serving_releases
-  (release_id, snapshot_id, state, release_kind, previous_release_id,
+  (serving_release_id, dataset_snapshot_id, state, release_kind, previous_serving_release_id,
    mv_name, mv_hash, consistency_gate, performance_gate, activated_by_job_id,
    activated_at, notes)
 VALUES
-  (:release_id, :snapshot_id, :state, :release_kind, :previous_release_id,
+  (:serving_release_id, :dataset_snapshot_id, :state, :release_kind, :previous_serving_release_id,
    'mv_geocode_target', :mv_hash, :consistency_gate, :performance_gate,
    :activated_by_job_id, CASE WHEN :active THEN now() ELSE NULL END, :notes)
-RETURNING release_id, snapshot_id, state, release_kind, previous_release_id,
-          rollback_target_release_id, mv_name, mv_hash, consistency_gate,
+RETURNING serving_release_id, dataset_snapshot_id, state, release_kind, previous_serving_release_id,
+          rollback_target_serving_release_id, mv_name, mv_hash, consistency_gate,
           performance_gate, activated_by_job_id, activated_at, notes, created_at
 """,
                 "consistency_gate",
                 "performance_gate",
             ),
             {
-                "release_id": release_id,
-                "snapshot_id": snapshot_id,
+                "serving_release_id": release_id,
+                "dataset_snapshot_id": snapshot_id,
                 "state": release_state,
                 "release_kind": release_kind,
-                "previous_release_id": previous_release_id,
+                "previous_serving_release_id": previous_release_id,
                 "mv_hash": mv_hash if mv_hash is not None else (
                     await _mv_hash_for_conn(conn) if release_state == "active" else None
                 ),
@@ -2080,7 +2086,7 @@ async def _active_release_snapshot_id_for_conn(conn: Any) -> str | None:
     value = await conn.scalar(
         text(
             """
-SELECT snapshot_id::text
+SELECT dataset_snapshot_id::text
   FROM ops.serving_releases
  WHERE state = 'active'
  ORDER BY activated_at DESC NULLS LAST, created_at DESC
@@ -2107,16 +2113,16 @@ async def _insert_ops_audit_event(
         _json_text(
             """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, action, resource_type, resource_id, job_id,
+  (audit_event_id, actor_type, action, resource_type, resource_id, job_id,
    outcome, payload_redacted, payload_hash)
 VALUES
-  (:event_id, :actor_type, :action, :resource_type, :resource_id, :job_id,
+  (:audit_event_id, :actor_type, :action, :resource_type, :resource_id, :job_id,
    :outcome, :payload_redacted, :payload_hash)
 """,
             "payload_redacted",
         ),
         {
-            "event_id": str(uuid4()),
+            "audit_event_id": str(uuid4()),
             "actor_type": actor_type,
             "action": action,
             "resource_type": resource_type,
@@ -2292,7 +2298,7 @@ def _point_changed(row: Mapping[str, Any], current: Mapping[str, Any] | None) ->
 
 def _audit_event(row: Mapping[str, Any]) -> AuditEvent:
     return AuditEvent(
-        event_id=str(row["event_id"]),
+        audit_event_id=str(row["audit_event_id"]),
         occurred_at=row["occurred_at"],
         actor_type=row["actor_type"],
         actor_id=row.get("actor_id"),
@@ -2313,9 +2319,9 @@ def _audit_event(row: Mapping[str, Any]) -> AuditEvent:
 
 def _dataset_snapshot(row: Mapping[str, Any]) -> DatasetSnapshot:
     return DatasetSnapshot(
-        snapshot_id=str(row["snapshot_id"]),
+        dataset_snapshot_id=str(row["dataset_snapshot_id"]),
         state=row["state"],
-        parent_snapshot_id=_optional_str(row.get("parent_snapshot_id")),
+        parent_dataset_snapshot_id=_optional_str(row.get("parent_dataset_snapshot_id")),
         source_set=_json_dict(row.get("source_set")),
         source_set_hash=str(row["source_set_hash"]),
         git_commit=row.get("git_commit"),
@@ -2335,12 +2341,14 @@ def _dataset_snapshot(row: Mapping[str, Any]) -> DatasetSnapshot:
 
 def _serving_release(row: Mapping[str, Any]) -> ServingRelease:
     return ServingRelease(
-        release_id=str(row["release_id"]),
-        snapshot_id=str(row["snapshot_id"]),
+        serving_release_id=str(row["serving_release_id"]),
+        dataset_snapshot_id=str(row["dataset_snapshot_id"]),
         state=row["state"],
         release_kind=row["release_kind"],
-        previous_release_id=_optional_str(row.get("previous_release_id")),
-        rollback_target_release_id=_optional_str(row.get("rollback_target_release_id")),
+        previous_serving_release_id=_optional_str(row.get("previous_serving_release_id")),
+        rollback_target_serving_release_id=_optional_str(
+            row.get("rollback_target_serving_release_id")
+        ),
         mv_name=str(row.get("mv_name") or "mv_geocode_target"),
         mv_hash=row.get("mv_hash"),
         consistency_gate=_json_dict(row.get("consistency_gate")),
@@ -2367,8 +2375,8 @@ def _ops_artifact(row: Mapping[str, Any]) -> OpsArtifact:
         retention_class=row.get("retention_class"),
         expires_at=row.get("expires_at"),
         job_id=row.get("job_id"),
-        snapshot_id=_optional_str(row.get("snapshot_id")),
-        release_id=_optional_str(row.get("release_id")),
+        dataset_snapshot_id=_optional_str(row.get("dataset_snapshot_id")),
+        serving_release_id=_optional_str(row.get("serving_release_id")),
         manifest=_json_dict(row.get("manifest")),
         callback_url=row.get("callback_url"),
         callback_state=row.get("callback_state"),
@@ -2379,7 +2387,7 @@ def _ops_artifact(row: Mapping[str, Any]) -> OpsArtifact:
 
 def _maintenance_window(row: Mapping[str, Any]) -> MaintenanceWindow:
     return MaintenanceWindow(
-        window_id=str(row["window_id"]),
+        maintenance_window_id=str(row["maintenance_window_id"]),
         kind=row["kind"],
         state=row["state"],
         starts_at=row.get("starts_at"),
@@ -2398,8 +2406,8 @@ def _maintenance_window(row: Mapping[str, Any]) -> MaintenanceWindow:
 
 def _table_stats_snapshot(row: Mapping[str, Any]) -> TableStatsSnapshot:
     return TableStatsSnapshot(
-        stats_id=str(row["stats_id"]),
-        snapshot_id=_optional_str(row.get("snapshot_id")),
+        table_stats_snapshot_id=str(row["table_stats_snapshot_id"]),
+        dataset_snapshot_id=_optional_str(row.get("dataset_snapshot_id")),
         captured_at=row["captured_at"],
         schema_name=str(row["schema_name"]),
         object_name=str(row["object_name"]),

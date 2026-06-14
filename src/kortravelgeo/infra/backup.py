@@ -365,7 +365,7 @@ async def run_restore_job(
                 "source_artifact_id": source_artifact.artifact_id if source_artifact else None,
             },
             resource_type="maintenance_window",
-            resource_id=window.window_id,
+            resource_id=window.maintenance_window_id,
             job_id=_payload_job_id(payload),
         )
     else:
@@ -495,12 +495,12 @@ async def run_restore_job(
         )
         relinked_restore_artifact = await repo.update_artifact(
             restore_artifact.artifact_id,
-            snapshot_id=snapshot.snapshot_id,
-            release_id=release.release_id,
+            dataset_snapshot_id=snapshot.dataset_snapshot_id,
+            serving_release_id=release.serving_release_id,
             manifest={
                 **restore_manifest,
-                "snapshot_id": snapshot.snapshot_id,
-                "release_id": release.release_id,
+                "dataset_snapshot_id": snapshot.dataset_snapshot_id,
+                "serving_release_id": release.serving_release_id,
                 "release_state": release.state,
             },
         )
@@ -526,8 +526,8 @@ async def run_restore_job(
                 restore_artifact.artifact_id,
                 manifest={
                     **restore_manifest,
-                    "snapshot_id": snapshot.snapshot_id,
-                    "release_id": release.release_id,
+                    "dataset_snapshot_id": snapshot.dataset_snapshot_id,
+                    "serving_release_id": release.serving_release_id,
                     "release_state": release.state,
                 },
             )

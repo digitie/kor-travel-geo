@@ -263,6 +263,10 @@
             "title": "Actor Type",
             "type": "string"
           },
+          "audit_event_id": {
+            "title": "Audit Event Id",
+            "type": "string"
+          },
           "client_ip_hash": {
             "anyOf": [
               {
@@ -284,10 +288,6 @@
               }
             ],
             "title": "Error Code"
-          },
-          "event_id": {
-            "title": "Event Id",
-            "type": "string"
           },
           "job_id": {
             "anyOf": [
@@ -384,7 +384,7 @@
           }
         },
         "required": [
-          "event_id",
+          "audit_event_id",
           "occurred_at",
           "actor_type",
           "action",
@@ -529,6 +529,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "dataset_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Snapshot Id"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -602,17 +613,6 @@
             ],
             "title": "Media Type"
           },
-          "release_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Release Id"
-          },
           "retention_class": {
             "anyOf": [
               {
@@ -623,6 +623,17 @@
               }
             ],
             "title": "Retention Class"
+          },
+          "serving_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Release Id"
           },
           "sha256": {
             "anyOf": [
@@ -648,17 +659,6 @@
               }
             ],
             "title": "Size Bytes"
-          },
-          "snapshot_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Snapshot Id"
           },
           "state": {
             "enum": [
@@ -2200,6 +2200,10 @@
             ],
             "title": "Created By Job Id"
           },
+          "dataset_snapshot_id": {
+            "title": "Dataset Snapshot Id",
+            "type": "string"
+          },
           "git_commit": {
             "anyOf": [
               {
@@ -2211,7 +2215,7 @@
             ],
             "title": "Git Commit"
           },
-          "parent_snapshot_id": {
+          "parent_dataset_snapshot_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -2220,7 +2224,7 @@
                 "type": "null"
               }
             ],
-            "title": "Parent Snapshot Id"
+            "title": "Parent Dataset Snapshot Id"
           },
           "performance_artifact_id": {
             "anyOf": [
@@ -2261,10 +2265,6 @@
             },
             "title": "Row Counts",
             "type": "object"
-          },
-          "snapshot_id": {
-            "title": "Snapshot Id",
-            "type": "string"
           },
           "source_set": {
             "additionalProperties": true,
@@ -2313,7 +2313,7 @@
           }
         },
         "required": [
-          "snapshot_id",
+          "dataset_snapshot_id",
           "state",
           "source_set_hash",
           "created_at"
@@ -3195,6 +3195,10 @@
             "title": "Kind",
             "type": "string"
           },
+          "maintenance_window_id": {
+            "title": "Maintenance Window Id",
+            "type": "string"
+          },
           "reason": {
             "title": "Reason",
             "type": "string"
@@ -3233,14 +3237,10 @@
             ],
             "title": "State",
             "type": "string"
-          },
-          "window_id": {
-            "title": "Window Id",
-            "type": "string"
           }
         },
         "required": [
-          "window_id",
+          "maintenance_window_id",
           "kind",
           "state",
           "reason",
@@ -3534,6 +3534,17 @@
             "title": "Created At",
             "type": "string"
           },
+          "dataset_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Snapshot Id"
+          },
           "display_name": {
             "anyOf": [
               {
@@ -3596,17 +3607,6 @@
             ],
             "title": "Media Type"
           },
-          "release_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Release Id"
-          },
           "retention_class": {
             "anyOf": [
               {
@@ -3617,6 +3617,17 @@
               }
             ],
             "title": "Retention Class"
+          },
+          "serving_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Release Id"
           },
           "sha256": {
             "anyOf": [
@@ -3642,17 +3653,6 @@
               }
             ],
             "title": "Size Bytes"
-          },
-          "snapshot_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Snapshot Id"
           },
           "state": {
             "enum": [
@@ -5324,8 +5324,8 @@
             "title": "Blockers",
             "type": "array"
           },
-          "release_id": {
-            "title": "Release Id",
+          "dataset_snapshot_id": {
+            "title": "Dataset Snapshot Id",
             "type": "string"
           },
           "requires_maintenance_window": {
@@ -5333,8 +5333,8 @@
             "title": "Requires Maintenance Window",
             "type": "boolean"
           },
-          "snapshot_id": {
-            "title": "Snapshot Id",
+          "serving_release_id": {
+            "title": "Serving Release Id",
             "type": "string"
           },
           "steps": {
@@ -5351,8 +5351,8 @@
           }
         },
         "required": [
-          "release_id",
-          "snapshot_id",
+          "serving_release_id",
+          "dataset_snapshot_id",
           "typed_confirmation"
         ],
         "title": "RollbackPlan",
@@ -6048,6 +6048,10 @@
             "title": "Created At",
             "type": "string"
           },
+          "dataset_snapshot_id": {
+            "title": "Dataset Snapshot Id",
+            "type": "string"
+          },
           "mv_hash": {
             "anyOf": [
               {
@@ -6080,7 +6084,7 @@
             "title": "Performance Gate",
             "type": "object"
           },
-          "previous_release_id": {
+          "previous_serving_release_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -6089,11 +6093,7 @@
                 "type": "null"
               }
             ],
-            "title": "Previous Release Id"
-          },
-          "release_id": {
-            "title": "Release Id",
-            "type": "string"
+            "title": "Previous Serving Release Id"
           },
           "release_kind": {
             "enum": [
@@ -6106,7 +6106,7 @@
             "title": "Release Kind",
             "type": "string"
           },
-          "rollback_target_release_id": {
+          "rollback_target_serving_release_id": {
             "anyOf": [
               {
                 "type": "string"
@@ -6115,10 +6115,10 @@
                 "type": "null"
               }
             ],
-            "title": "Rollback Target Release Id"
+            "title": "Rollback Target Serving Release Id"
           },
-          "snapshot_id": {
-            "title": "Snapshot Id",
+          "serving_release_id": {
+            "title": "Serving Release Id",
             "type": "string"
           },
           "state": {
@@ -6134,8 +6134,8 @@
           }
         },
         "required": [
-          "release_id",
-          "snapshot_id",
+          "serving_release_id",
+          "dataset_snapshot_id",
           "state",
           "release_kind",
           "created_at"
@@ -6145,7 +6145,7 @@
       },
       "ServingReleaseRollbackRequest": {
         "additionalProperties": false,
-        "description": "``POST /v1/admin/ops/releases/{release_id}/rollback`` body (doc ~818/1530).\n\n``typed_confirmation`` must equal the rollback-plan token\n(``ROLLBACK {release_id}``). When the target snapshot carries a\n``source_match_set_id`` the match set is swapped atomically (current active →\n``retired``, target → ``active``) under the match-activate lock, with the\ntarget's ``integrity_alert`` recomputed from a pre-rollback source quick\nreconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` (ADR-049 #18).",
+        "description": "``POST /v1/admin/ops/releases/{serving_release_id}/rollback`` body (doc ~818/1530).\n\n``typed_confirmation`` must equal the rollback-plan token\n(``ROLLBACK {serving_release_id}``). When the target snapshot carries a\n``source_match_set_id`` the match set is swapped atomically (current active →\n``retired``, target → ``active``) under the match-activate lock, with the\ntarget's ``integrity_alert`` recomputed from a pre-rollback source quick\nreconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` (ADR-049 #18).",
         "properties": {
           "reason": {
             "anyOf": [
@@ -6203,10 +6203,6 @@
             "title": "Mode",
             "type": "string"
           },
-          "release_id": {
-            "title": "Release Id",
-            "type": "string"
-          },
           "retired_match_set_id": {
             "anyOf": [
               {
@@ -6218,6 +6214,10 @@
             ],
             "title": "Retired Match Set Id"
           },
+          "serving_release_id": {
+            "title": "Serving Release Id",
+            "type": "string"
+          },
           "target_integrity_alert": {
             "default": false,
             "title": "Target Integrity Alert",
@@ -6225,7 +6225,7 @@
           }
         },
         "required": [
-          "release_id",
+          "serving_release_id",
           "mode"
         ],
         "title": "ServingReleaseRollbackResponse",
@@ -8393,6 +8393,17 @@
             "title": "Captured At",
             "type": "string"
           },
+          "dataset_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Snapshot Id"
+          },
           "dead_tuples": {
             "anyOf": [
               {
@@ -8484,25 +8495,10 @@
             "title": "Schema Name",
             "type": "string"
           },
-          "snapshot_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Snapshot Id"
-          },
           "stats": {
             "additionalProperties": true,
             "title": "Stats",
             "type": "object"
-          },
-          "stats_id": {
-            "title": "Stats Id",
-            "type": "string"
           },
           "table_bytes": {
             "anyOf": [
@@ -8515,6 +8511,10 @@
               }
             ],
             "title": "Table Bytes"
+          },
+          "table_stats_snapshot_id": {
+            "title": "Table Stats Snapshot Id",
+            "type": "string"
           },
           "toast_bytes": {
             "anyOf": [
@@ -8542,7 +8542,7 @@
           }
         },
         "required": [
-          "stats_id",
+          "table_stats_snapshot_id",
           "captured_at",
           "schema_name",
           "object_name",
@@ -12018,16 +12018,16 @@
         ]
       }
     },
-    "/v1/admin/ops/maintenance-windows/{window_id}/end": {
+    "/v1/admin/ops/maintenance-windows/{maintenance_window_id}/end": {
       "post": {
-        "operationId": "end_ops_maintenance_window_v1_admin_ops_maintenance_windows__window_id__end_post",
+        "operationId": "end_ops_maintenance_window_v1_admin_ops_maintenance_windows__maintenance_window_id__end_post",
         "parameters": [
           {
             "in": "path",
-            "name": "window_id",
+            "name": "maintenance_window_id",
             "required": true,
             "schema": {
-              "title": "Window Id",
+              "title": "Maintenance Window Id",
               "type": "string"
             }
           }
@@ -12135,17 +12135,17 @@
         ]
       }
     },
-    "/v1/admin/ops/releases/{release_id}/rollback": {
+    "/v1/admin/ops/releases/{serving_release_id}/rollback": {
       "post": {
-        "description": "Roll a serving release back, swapping the source match set (doc #18, ~818).\n\nRequires ``destructive_admin`` + a ``typed_confirmation`` of\n``ROLLBACK {release_id}`` (the rollback-plan token). When the target snapshot\ncarries a ``source_match_set_id`` the match set is swapped atomically under\nthe match-activate lock (current active → ``retired``, target → ``active``),\nwith the target's ``integrity_alert`` recomputed from a pre-rollback source\nquick reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` — no\nauto-promotion (ADR-049 #18).",
-        "operationId": "rollback_serving_release_v1_admin_ops_releases__release_id__rollback_post",
+        "description": "Roll a serving release back, swapping the source match set (doc #18, ~818).\n\nRequires ``destructive_admin`` + a ``typed_confirmation`` of\n``ROLLBACK {serving_release_id}`` (the rollback-plan token). When the target snapshot\ncarries a ``source_match_set_id`` the match set is swapped atomically under\nthe match-activate lock (current active → ``retired``, target → ``active``),\nwith the target's ``integrity_alert`` recomputed from a pre-rollback source\nquick reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` — no\nauto-promotion (ADR-049 #18).",
+        "operationId": "rollback_serving_release_v1_admin_ops_releases__serving_release_id__rollback_post",
         "parameters": [
           {
             "in": "path",
-            "name": "release_id",
+            "name": "serving_release_id",
             "required": true,
             "schema": {
-              "title": "Release Id",
+              "title": "Serving Release Id",
               "type": "string"
             }
           }
@@ -12188,16 +12188,16 @@
         ]
       }
     },
-    "/v1/admin/ops/releases/{release_id}/rollback-plan": {
+    "/v1/admin/ops/releases/{serving_release_id}/rollback-plan": {
       "post": {
-        "operationId": "rollback_plan_v1_admin_ops_releases__release_id__rollback_plan_post",
+        "operationId": "rollback_plan_v1_admin_ops_releases__serving_release_id__rollback_plan_post",
         "parameters": [
           {
             "in": "path",
-            "name": "release_id",
+            "name": "serving_release_id",
             "required": true,
             "schema": {
-              "title": "Release Id",
+              "title": "Serving Release Id",
               "type": "string"
             }
           }
@@ -12313,7 +12313,7 @@
           },
           {
             "in": "query",
-            "name": "snapshot_id",
+            "name": "dataset_snapshot_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -12324,7 +12324,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Snapshot Id"
+              "title": "Dataset Snapshot Id"
             }
           }
         ],
@@ -12366,7 +12366,7 @@
         "parameters": [
           {
             "in": "query",
-            "name": "snapshot_id",
+            "name": "dataset_snapshot_id",
             "required": false,
             "schema": {
               "anyOf": [
@@ -12377,7 +12377,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Snapshot Id"
+              "title": "Dataset Snapshot Id"
             }
           },
           {

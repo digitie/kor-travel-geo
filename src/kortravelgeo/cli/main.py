@@ -730,14 +730,14 @@ def refresh_materialized_view(
                     strategy="swap" if swap else "concurrent",
                     notes="CLI refresh mv",
                 )
-                return release.release_id
+                return release.serving_release_id
 
-            release_id = await _run_with_cli_lock(
+            serving_release_id = await _run_with_cli_lock(
                 client._engine(),
                 _global_lock(AdvisoryLockNamespace.MV_REFRESH),
                 operation,
             )
-            typer.echo(f"refreshed mv_geocode_target; release={release_id}")
+            typer.echo(f"refreshed mv_geocode_target; release={serving_release_id}")
 
     asyncio.run(run())
 

@@ -231,7 +231,7 @@ async def _audit_janitor(engine: AsyncEngine, summary: JanitorRunSummary) -> Non
     stmt = text(
         """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, actor_id, action, resource_type, resource_id,
+  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
    outcome, payload_redacted)
 VALUES
   (:event_id, 'system', 'system:source_janitor', :action, 'source_upload_session',

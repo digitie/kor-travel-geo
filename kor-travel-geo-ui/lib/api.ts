@@ -294,7 +294,7 @@ export type ConsistencySampleRecheckResponse = {
 };
 
 export type AuditEvent = {
-  event_id: string;
+  audit_event_id: string;
   occurred_at: string;
   actor_type: "system" | "cli" | "api" | "ui" | "scheduler";
   action: string;
@@ -306,7 +306,7 @@ export type AuditEvent = {
 };
 
 export type DatasetSnapshot = {
-  snapshot_id: string;
+  dataset_snapshot_id: string;
   state: "building" | "validated" | "rejected" | "released" | "retired";
   source_set: Record<string, unknown>;
   source_set_hash: string;
@@ -318,8 +318,8 @@ export type DatasetSnapshot = {
 };
 
 export type ServingRelease = {
-  release_id: string;
-  snapshot_id: string;
+  serving_release_id: string;
+  dataset_snapshot_id: string;
   state: "pending" | "active" | "superseded" | "rolled_back" | "failed";
   release_kind: "full_load" | "daily_delta" | "restore" | "manual_rebuild" | "rollback";
   mv_name: string;
@@ -342,8 +342,8 @@ export type OpsArtifact = {
   retention_class?: string | null;
   expires_at?: string | null;
   job_id?: string | null;
-  snapshot_id?: string | null;
-  release_id?: string | null;
+  dataset_snapshot_id?: string | null;
+  serving_release_id?: string | null;
   manifest?: Record<string, unknown>;
   callback_url?: string | null;
   callback_state?: string | null;
@@ -362,7 +362,7 @@ export type BackupAllowedDirs = {
 };
 
 export type MaintenanceWindow = {
-  window_id: string;
+  maintenance_window_id: string;
   kind: "full_load" | "restore" | "schema_migration" | "mv_refresh" | "read_only" | "exclusive";
   state: "scheduled" | "active" | "ending" | "ended" | "cancelled" | "failed";
   starts_at?: string | null;
@@ -377,8 +377,8 @@ export type MaintenanceWindow = {
 };
 
 export type TableStatsSnapshot = {
-  stats_id: string;
-  snapshot_id?: string | null;
+  table_stats_snapshot_id: string;
+  dataset_snapshot_id?: string | null;
   captured_at: string;
   schema_name: string;
   object_name: string;

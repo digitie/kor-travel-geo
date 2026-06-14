@@ -2139,34 +2139,34 @@ async def list_ops_releases(
 
 
 @router.post(
-    "/ops/releases/{release_id}/rollback-plan",
+    "/ops/releases/{serving_release_id}/rollback-plan",
     response_model=RollbackPlan,
     response_model_exclude_none=True,
 )
 async def rollback_plan(
-    release_id: str,
+    serving_release_id: str,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
 ) -> RollbackPlan:
-    plan = await client.rollback_plan(release_id)
+    plan = await client.rollback_plan(serving_release_id)
     await client.record_audit_event(
         action="serving_release.rollback_plan",
         outcome="succeeded",
-        payload={"release_id": release_id},
+        payload={"serving_release_id": serving_release_id},
         resource_type="serving_release",
-        resource_id=release_id,
+        resource_id=serving_release_id,
         **_audit_request(request),
     )
     return plan
 
 
 @router.post(
-    "/ops/releases/{release_id}/rollback",
+    "/ops/releases/{serving_release_id}/rollback",
     response_model=ServingReleaseRollbackResponse,
     response_model_exclude_none=True,
 )
 async def rollback_serving_release(
-    release_id: str,
+    serving_release_id: str,
     req: ServingReleaseRollbackRequest,
     request: Request,
     ctx: RequestContext = _DESTRUCTIVE_ADMIN,
@@ -2175,19 +2175,19 @@ async def rollback_serving_release(
     """Roll a serving release back, swapping the source match set (doc #18, ~818).
 
     Requires ``destructive_admin`` + a ``typed_confirmation`` of
-    ``ROLLBACK {release_id}`` (the rollback-plan token). When the target snapshot
+    ``ROLLBACK {serving_release_id}`` (the rollback-plan token). When the target snapshot
     carries a ``source_match_set_id`` the match set is swapped atomically under
     the match-activate lock (current active → ``retired``, target → ``active``),
     with the target's ``integrity_alert`` recomputed from a pre-rollback source
     quick reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` — no
     auto-promotion (ADR-049 #18).
     """
-    if req.typed_confirmation != f"ROLLBACK {release_id}":
+    if req.typed_confirmation != f"ROLLBACK {serving_release_id}":
         raise InvalidInputError(
-            f"rollback requires typed_confirmation 'ROLLBACK {release_id}'"
+            f"rollback requires typed_confirmation 'ROLLBACK {serving_release_id}'"
         )
     result = await client.rollback_serving_release(
-        release_id, actor=ctx.actor, reason=req.reason
+        serving_release_id, actor=ctx.actor, reason=req.reason
     )
     await client.record_audit_event(
         action="serving_release.rollback",
@@ -2201,7 +2201,7 @@ async def rollback_serving_release(
             "target_integrity_alert": result.target_integrity_alert,
         },
         resource_type="serving_release",
-        resource_id=release_id,
+        resource_id=serving_release_id,
         **_audit_request(request),
     )
     return result
@@ -2247,16 +2247,16 @@ async def create_ops_maintenance_window(
 
 
 @router.post(
-    "/ops/maintenance-windows/{window_id}/end",
+    "/ops/maintenance-windows/{maintenance_window_id}/end",
     response_model=MaintenanceWindow,
     response_model_exclude_none=True,
 )
 async def end_ops_maintenance_window(
-    window_id: str,
+    maintenance_window_id: str,
     req: MaintenanceWindowEnd,
     client: AsyncAddressClient = Depends(get_client),
 ) -> MaintenanceWindow:
-    return await client.end_maintenance_window(window_id, req)
+    return await client.end_maintenance_window(maintenance_window_id, req)
 
 
 @router.get(
@@ -2266,10 +2266,12 @@ async def end_ops_maintenance_window(
 )
 async def list_ops_table_stats(
     limit: int = Query(default=200, ge=1, le=1000),
-    snapshot_id: str | None = None,
+    dataset_snapshot_id: str | None = None,
     client: AsyncAddressClient = Depends(get_client),
 ) -> list[TableStatsSnapshot]:
-    return await client.list_table_stats_snapshots(limit=limit, snapshot_id=snapshot_id)
+    return await client.list_table_stats_snapshots(
+        limit=limit, dataset_snapshot_id=dataset_snapshot_id
+    )
 
 
 @router.post(
@@ -2278,11 +2280,13 @@ async def list_ops_table_stats(
     response_model_exclude_none=True,
 )
 async def capture_ops_table_stats(
-    snapshot_id: str | None = None,
+    dataset_snapshot_id: str | None = None,
     limit: int = Query(default=500, ge=1, le=2000),
     client: AsyncAddressClient = Depends(get_client),
 ) -> list[TableStatsSnapshot]:
-    return await client.capture_table_stats_snapshots(snapshot_id=snapshot_id, limit=limit)
+    return await client.capture_table_stats_snapshots(
+        dataset_snapshot_id=dataset_snapshot_id, limit=limit
+    )
 
 
 def _backup_artifact_response(artifact: OpsArtifact, *, settings: Settings) -> BackupArtifact:

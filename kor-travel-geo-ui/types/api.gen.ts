@@ -585,7 +585,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/ops/maintenance-windows/{window_id}/end": {
+    "/v1/admin/ops/maintenance-windows/{maintenance_window_id}/end": {
         parameters: {
             query?: never;
             header?: never;
@@ -595,7 +595,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** End Ops Maintenance Window */
-        post: operations["end_ops_maintenance_window_v1_admin_ops_maintenance_windows__window_id__end_post"];
+        post: operations["end_ops_maintenance_window_v1_admin_ops_maintenance_windows__maintenance_window_id__end_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -619,7 +619,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/ops/releases/{release_id}/rollback": {
+    "/v1/admin/ops/releases/{serving_release_id}/rollback": {
         parameters: {
             query?: never;
             header?: never;
@@ -633,21 +633,21 @@ export interface paths {
          * @description Roll a serving release back, swapping the source match set (doc #18, ~818).
          *
          *     Requires ``destructive_admin`` + a ``typed_confirmation`` of
-         *     ``ROLLBACK {release_id}`` (the rollback-plan token). When the target snapshot
+         *     ``ROLLBACK {serving_release_id}`` (the rollback-plan token). When the target snapshot
          *     carries a ``source_match_set_id`` the match set is swapped atomically under
          *     the match-activate lock (current active → ``retired``, target → ``active``),
          *     with the target's ``integrity_alert`` recomputed from a pre-rollback source
          *     quick reconcile. Legacy snapshots (no FK) stay ``알수없음/추정`` — no
          *     auto-promotion (ADR-049 #18).
          */
-        post: operations["rollback_serving_release_v1_admin_ops_releases__release_id__rollback_post"];
+        post: operations["rollback_serving_release_v1_admin_ops_releases__serving_release_id__rollback_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/ops/releases/{release_id}/rollback-plan": {
+    "/v1/admin/ops/releases/{serving_release_id}/rollback-plan": {
         parameters: {
             query?: never;
             header?: never;
@@ -657,7 +657,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Rollback Plan */
-        post: operations["rollback_plan_v1_admin_ops_releases__release_id__rollback_plan_post"];
+        post: operations["rollback_plan_v1_admin_ops_releases__serving_release_id__rollback_plan_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1737,12 +1737,12 @@ export interface components {
              * @enum {string}
              */
             actor_type: "system" | "cli" | "api" | "ui" | "scheduler";
+            /** Audit Event Id */
+            audit_event_id: string;
             /** Client Ip Hash */
             client_ip_hash?: string | null;
             /** Error Code */
             error_code?: string | null;
-            /** Event Id */
-            event_id: string;
             /** Job Id */
             job_id?: string | null;
             /**
@@ -1827,6 +1827,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Dataset Snapshot Id */
+            dataset_snapshot_id?: string | null;
             /** Display Name */
             display_name?: string | null;
             /** Download Url */
@@ -1843,16 +1845,14 @@ export interface components {
             };
             /** Media Type */
             media_type?: string | null;
-            /** Release Id */
-            release_id?: string | null;
             /** Retention Class */
             retention_class?: string | null;
+            /** Serving Release Id */
+            serving_release_id?: string | null;
             /** Sha256 */
             sha256?: string | null;
             /** Size Bytes */
             size_bytes?: number | null;
-            /** Snapshot Id */
-            snapshot_id?: string | null;
             /**
              * State
              * @enum {string}
@@ -2448,10 +2448,12 @@ export interface components {
             created_at: string;
             /** Created By Job Id */
             created_by_job_id?: string | null;
+            /** Dataset Snapshot Id */
+            dataset_snapshot_id: string;
             /** Git Commit */
             git_commit?: string | null;
-            /** Parent Snapshot Id */
-            parent_snapshot_id?: string | null;
+            /** Parent Dataset Snapshot Id */
+            parent_dataset_snapshot_id?: string | null;
             /** Performance Artifact Id */
             performance_artifact_id?: string | null;
             /** Postgis Version */
@@ -2462,8 +2464,6 @@ export interface components {
             row_counts?: {
                 [key: string]: number;
             };
-            /** Snapshot Id */
-            snapshot_id: string;
             /** Source Set */
             source_set?: {
                 [key: string]: unknown;
@@ -2747,6 +2747,8 @@ export interface components {
              * @enum {string}
              */
             kind: "full_load" | "restore" | "schema_migration" | "mv_refresh" | "read_only" | "exclusive";
+            /** Maintenance Window Id */
+            maintenance_window_id: string;
             /** Reason */
             reason: string;
             /** Requested By */
@@ -2758,8 +2760,6 @@ export interface components {
              * @enum {string}
              */
             state: "scheduled" | "active" | "ending" | "ended" | "cancelled" | "failed";
-            /** Window Id */
-            window_id: string;
         };
         /** MaintenanceWindowCreate */
         MaintenanceWindowCreate: {
@@ -2861,6 +2861,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Dataset Snapshot Id */
+            dataset_snapshot_id?: string | null;
             /** Display Name */
             display_name?: string | null;
             /** Expires At */
@@ -2875,16 +2877,14 @@ export interface components {
             };
             /** Media Type */
             media_type?: string | null;
-            /** Release Id */
-            release_id?: string | null;
             /** Retention Class */
             retention_class?: string | null;
+            /** Serving Release Id */
+            serving_release_id?: string | null;
             /** Sha256 */
             sha256?: string | null;
             /** Size Bytes */
             size_bytes?: number | null;
-            /** Snapshot Id */
-            snapshot_id?: string | null;
             /**
              * State
              * @enum {string}
@@ -3524,15 +3524,15 @@ export interface components {
              * @default []
              */
             blockers: string[];
-            /** Release Id */
-            release_id: string;
+            /** Dataset Snapshot Id */
+            dataset_snapshot_id: string;
             /**
              * Requires Maintenance Window
              * @default true
              */
             requires_maintenance_window: boolean;
-            /** Snapshot Id */
-            snapshot_id: string;
+            /** Serving Release Id */
+            serving_release_id: string;
             /**
              * Steps
              * @default []
@@ -3788,6 +3788,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Dataset Snapshot Id */
+            dataset_snapshot_id: string;
             /** Mv Hash */
             mv_hash?: string | null;
             /**
@@ -3801,19 +3803,17 @@ export interface components {
             performance_gate?: {
                 [key: string]: unknown;
             };
-            /** Previous Release Id */
-            previous_release_id?: string | null;
-            /** Release Id */
-            release_id: string;
+            /** Previous Serving Release Id */
+            previous_serving_release_id?: string | null;
             /**
              * Release Kind
              * @enum {string}
              */
             release_kind: "full_load" | "daily_delta" | "restore" | "manual_rebuild" | "rollback";
-            /** Rollback Target Release Id */
-            rollback_target_release_id?: string | null;
-            /** Snapshot Id */
-            snapshot_id: string;
+            /** Rollback Target Serving Release Id */
+            rollback_target_serving_release_id?: string | null;
+            /** Serving Release Id */
+            serving_release_id: string;
             /**
              * State
              * @enum {string}
@@ -3822,10 +3822,10 @@ export interface components {
         };
         /**
          * ServingReleaseRollbackRequest
-         * @description ``POST /v1/admin/ops/releases/{release_id}/rollback`` body (doc ~818/1530).
+         * @description ``POST /v1/admin/ops/releases/{serving_release_id}/rollback`` body (doc ~818/1530).
          *
          *     ``typed_confirmation`` must equal the rollback-plan token
-         *     (``ROLLBACK {release_id}``). When the target snapshot carries a
+         *     (``ROLLBACK {serving_release_id}``). When the target snapshot carries a
          *     ``source_match_set_id`` the match set is swapped atomically (current active →
          *     ``retired``, target → ``active``) under the match-activate lock, with the
          *     target's ``integrity_alert`` recomputed from a pre-rollback source quick
@@ -3851,10 +3851,10 @@ export interface components {
              * @enum {string}
              */
             mode: "match_set_swap" | "legacy_estimate";
-            /** Release Id */
-            release_id: string;
             /** Retired Match Set Id */
             retired_match_set_id?: string | null;
+            /** Serving Release Id */
+            serving_release_id: string;
             /**
              * Target Integrity Alert
              * @default false
@@ -4891,6 +4891,8 @@ export interface components {
              * Format: date-time
              */
             captured_at: string;
+            /** Dataset Snapshot Id */
+            dataset_snapshot_id?: string | null;
             /** Dead Tuples */
             dead_tuples?: number | null;
             /** Estimated Rows */
@@ -4912,16 +4914,14 @@ export interface components {
             object_name: string;
             /** Schema Name */
             schema_name: string;
-            /** Snapshot Id */
-            snapshot_id?: string | null;
             /** Stats */
             stats?: {
                 [key: string]: unknown;
             };
-            /** Stats Id */
-            stats_id: string;
             /** Table Bytes */
             table_bytes?: number | null;
+            /** Table Stats Snapshot Id */
+            table_stats_snapshot_id: string;
             /** Toast Bytes */
             toast_bytes?: number | null;
             /** Total Bytes */
@@ -6499,12 +6499,12 @@ export interface operations {
             };
         };
     };
-    end_ops_maintenance_window_v1_admin_ops_maintenance_windows__window_id__end_post: {
+    end_ops_maintenance_window_v1_admin_ops_maintenance_windows__maintenance_window_id__end_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                window_id: string;
+                maintenance_window_id: string;
             };
             cookie?: never;
         };
@@ -6566,12 +6566,12 @@ export interface operations {
             };
         };
     };
-    rollback_serving_release_v1_admin_ops_releases__release_id__rollback_post: {
+    rollback_serving_release_v1_admin_ops_releases__serving_release_id__rollback_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                release_id: string;
+                serving_release_id: string;
             };
             cookie?: never;
         };
@@ -6601,12 +6601,12 @@ export interface operations {
             };
         };
     };
-    rollback_plan_v1_admin_ops_releases__release_id__rollback_plan_post: {
+    rollback_plan_v1_admin_ops_releases__serving_release_id__rollback_plan_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                release_id: string;
+                serving_release_id: string;
             };
             cookie?: never;
         };
@@ -6668,7 +6668,7 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
-                snapshot_id?: string | null;
+                dataset_snapshot_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -6699,7 +6699,7 @@ export interface operations {
     capture_ops_table_stats_v1_admin_ops_table_stats_capture_post: {
         parameters: {
             query?: {
-                snapshot_id?: string | null;
+                dataset_snapshot_id?: string | null;
                 limit?: number;
             };
             header?: never;

@@ -1452,7 +1452,7 @@ async def _audit_reconcile(
         _json_text(
             """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, actor_id, action, resource_type, resource_id,
+  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
    outcome, payload_redacted)
 VALUES
   (:event_id, 'ui', :actor_id, :action, 'source_storage_reconcile', :resource_id,

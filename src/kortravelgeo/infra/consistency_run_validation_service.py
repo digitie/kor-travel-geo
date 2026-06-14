@@ -167,7 +167,7 @@ class ConsistencyRunValidationService:
             value = await conn.scalar(
                 text(
                     """
-SELECT snapshot_id
+SELECT dataset_snapshot_id
   FROM ops.dataset_snapshots
  WHERE source_match_set_id = :id
  ORDER BY created_at DESC

@@ -72,7 +72,7 @@ def test_ops_dtos_validate_core_contracts() -> None:
     now = datetime.now(UTC)
 
     event = AuditEvent(
-        event_id="event-1",
+        audit_event_id="event-1",
         occurred_at=now,
         actor_type="api",
         action="load.submit",
@@ -99,7 +99,7 @@ def test_ops_dtos_validate_core_contracts() -> None:
     assert artifact.manifest == {}
 
     stats = TableStatsSnapshot(
-        stats_id="stats-1",
+        table_stats_snapshot_id="stats-1",
         captured_at=now,
         schema_name="public",
         object_name="tl_juso_text",
@@ -165,7 +165,7 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
     assert "confirmation_hash" in restore_source
     assert "replace_current target_database must match" in backup_source
     assert "release_state" in restore_source
-    assert "snapshot_id" in restore_source
+    assert "dataset_snapshot_id" in restore_source
 
 
 def test_table_stats_scheduler_is_opt_in_and_uses_settings() -> None:

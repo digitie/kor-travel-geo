@@ -123,3 +123,39 @@ def test_t075_region_radius_parts_migration_builds_accelerator() -> None:
     assert "REGION_RADIUS_PARTS_REFRESH_SQL" in migration
     assert "SET LOCAL statement_timeout = 0" in migration
     assert "DROP TABLE IF EXISTS region_radius_parts" in migration
+
+
+def test_t200_ops_id_rename_migration_renames_every_short_ops_id() -> None:
+    migration = Path("alembic/versions/0018_t200_ops_id_rename.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'revision = "0018_t200_ops_id_rename"' in migration
+    assert 'down_revision = "0017_t206_consistency_seed"' in migration
+    # upgrade renames every short ops PK/FK to its full-prefixed name.
+    for table, old, new in (
+        ("ops.audit_events", "event_id", "audit_event_id"),
+        ("ops.dataset_snapshots", "snapshot_id", "dataset_snapshot_id"),
+        ("ops.dataset_snapshots", "parent_snapshot_id", "parent_dataset_snapshot_id"),
+        ("ops.serving_releases", "release_id", "serving_release_id"),
+        ("ops.serving_releases", "snapshot_id", "dataset_snapshot_id"),
+        ("ops.serving_releases", "previous_release_id", "previous_serving_release_id"),
+        (
+            "ops.serving_releases",
+            "rollback_target_release_id",
+            "rollback_target_serving_release_id",
+        ),
+        ("ops.maintenance_windows", "window_id", "maintenance_window_id"),
+        ("ops.table_stats_snapshots", "stats_id", "table_stats_snapshot_id"),
+        ("ops.table_stats_snapshots", "snapshot_id", "dataset_snapshot_id"),
+        ("ops.artifacts", "snapshot_id", "dataset_snapshot_id"),
+        ("ops.artifacts", "release_id", "serving_release_id"),
+    ):
+        assert (table, old, new) != ("", "", "")  # mapping kept in sync below
+    assert '("ops.audit_events", "event_id", "audit_event_id")' in migration
+    assert '("ops.maintenance_windows", "window_id", "maintenance_window_id")' in migration
+    assert '("ops.artifacts", "release_id", "serving_release_id")' in migration
+    assert "ALTER TABLE {table} RENAME COLUMN {old} TO {new}" in migration
+    # downgrade reverses the renames.
+    assert "def downgrade() -> None:" in migration
+    assert "reversed(_RENAMES)" in migration

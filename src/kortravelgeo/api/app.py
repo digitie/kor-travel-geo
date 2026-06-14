@@ -575,8 +575,8 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await progress(
             stage="serving_release",
             message=(
-                f"serving release 활성화: {release.release_id} "
-                f"snapshot={snapshot.snapshot_id}"
+                f"serving release 활성화: {release.serving_release_id} "
+                f"snapshot={snapshot.dataset_snapshot_id}"
             ),
         )
 

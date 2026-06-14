@@ -146,8 +146,8 @@ export function OpsPanel() {
           </thead>
           <tbody>
             {releases.map((release) => (
-              <tr key={release.release_id}>
-                <td>{release.release_id}</td>
+              <tr key={release.serving_release_id}>
+                <td>{release.serving_release_id}</td>
                 <td>
                   <StatusBadge value={release.state} />
                 </td>
@@ -170,8 +170,8 @@ export function OpsPanel() {
           </thead>
           <tbody>
             {snapshots.map((snapshot) => (
-              <tr key={snapshot.snapshot_id}>
-                <td>{snapshot.snapshot_id}</td>
+              <tr key={snapshot.dataset_snapshot_id}>
+                <td>{snapshot.dataset_snapshot_id}</td>
                 <td>
                   <StatusBadge value={snapshot.state} />
                 </td>
@@ -241,7 +241,7 @@ export function OpsPanel() {
           </thead>
           <tbody>
             {windows.map((window) => (
-              <tr key={window.window_id}>
+              <tr key={window.maintenance_window_id}>
                 <td>{window.kind}</td>
                 <td>
                   <StatusBadge value={window.state} />
@@ -273,7 +273,7 @@ export function OpsPanel() {
           </thead>
           <tbody>
             {stats.map((row) => (
-              <tr key={row.stats_id}>
+              <tr key={row.table_stats_snapshot_id}>
                 <td>
                   {row.schema_name}.{row.object_name}
                 </td>
@@ -320,7 +320,7 @@ export function OpsPanel() {
           </thead>
           <tbody>
             {auditEvents.map((event) => (
-              <tr key={event.event_id}>
+              <tr key={event.audit_event_id}>
                 <td>{event.occurred_at}</td>
                 <td>{event.action}</td>
                 <td>

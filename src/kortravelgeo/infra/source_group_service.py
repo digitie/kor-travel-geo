@@ -863,16 +863,16 @@ VALUES
             _json_text(
                 """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, actor_id, action, resource_type, resource_id,
+  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
    outcome, payload_redacted)
 VALUES
-  (:event_id, :actor_type, :actor_id, :action, :resource_type, :resource_id,
+  (:audit_event_id, :actor_type, :actor_id, :action, :resource_type, :resource_id,
    :outcome, :payload)
 """,
                 "payload",
             ),
             {
-                "event_id": str(uuid4()),
+                "audit_event_id": str(uuid4()),
                 "actor_type": "ui",
                 "actor_id": actor,
                 "action": SOURCE_UPLOAD_REGISTER,
@@ -1272,16 +1272,16 @@ async def _audit_source_action(
         _json_text(
             """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, actor_id, action, resource_type, resource_id,
+  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
    outcome, payload_redacted)
 VALUES
-  (:event_id, 'ui', :actor_id, :action, 'source_file_group', :resource_id,
+  (:audit_event_id, 'ui', :actor_id, :action, 'source_file_group', :resource_id,
    :outcome, :payload)
 """,
             "payload",
         ),
         {
-            "event_id": str(uuid4()),
+            "audit_event_id": str(uuid4()),
             "actor_id": actor,
             "action": action,
             "resource_id": group_id,

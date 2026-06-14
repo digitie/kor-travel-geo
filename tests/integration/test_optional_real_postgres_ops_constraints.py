@@ -106,7 +106,7 @@ VALUES (:job_id, 'ops_integration_test', '{}'::jsonb, 'done', 1.0)
         text(
             """
 INSERT INTO ops.audit_events (
-  event_id, actor_type, action, job_id, outcome, payload_redacted, payload_hash
+  audit_event_id, actor_type, action, job_id, outcome, payload_redacted, payload_hash
 ) VALUES (
   :event_id, 'system', 'ops.integration_test', :job_id, 'succeeded',
   '{"secret":"[REDACTED]"}'::jsonb, :payload_hash
@@ -127,14 +127,14 @@ INSERT INTO ops.audit_events (
             """
 UPDATE ops.audit_events
    SET action = 'ops.integration_test.updated'
- WHERE event_id = :event_id
+ WHERE audit_event_id = :event_id
 """
         ),
         {"event_id": event_id},
     )
     await _expect_dbapi_error(
         conn,
-        text("DELETE FROM ops.audit_events WHERE event_id = :event_id"),
+        text("DELETE FROM ops.audit_events WHERE audit_event_id = :event_id"),
         {"event_id": event_id},
     )
 
@@ -178,7 +178,7 @@ async def _assert_table_stats_snapshot_fk(conn: AsyncConnection) -> None:
         text(
             """
 INSERT INTO ops.table_stats_snapshots (
-  stats_id, snapshot_id, schema_name, object_name, object_kind
+  table_stats_snapshot_id, dataset_snapshot_id, schema_name, object_name, object_kind
 ) VALUES (
   :stats_id, :snapshot_id, 'public', 'mv_geocode_target', 'materialized_view'
 )
@@ -192,7 +192,7 @@ INSERT INTO ops.table_stats_snapshots (
         text(
             """
 INSERT INTO ops.table_stats_snapshots (
-  stats_id, snapshot_id, schema_name, object_name, object_kind,
+  table_stats_snapshot_id, dataset_snapshot_id, schema_name, object_name, object_kind,
   estimated_rows, total_bytes, stats
 ) VALUES (
   :stats_id, :snapshot_id, 'public', 'mv_geocode_target', 'materialized_view',
@@ -203,7 +203,10 @@ INSERT INTO ops.table_stats_snapshots (
         {"stats_id": stats_id, "snapshot_id": snapshot_id},
     )
     saved = await conn.scalar(
-        text("SELECT count(*) FROM ops.table_stats_snapshots WHERE stats_id = :stats_id"),
+        text(
+            "SELECT count(*) FROM ops.table_stats_snapshots "
+            "WHERE table_stats_snapshot_id = :stats_id"
+        ),
         {"stats_id": stats_id},
     )
     assert saved == 1
@@ -214,7 +217,7 @@ async def _insert_dataset_snapshot(conn: AsyncConnection, snapshot_id: UUID) -> 
         text(
             """
 INSERT INTO ops.dataset_snapshots (
-  snapshot_id, state, source_set, source_set_hash, row_counts
+  dataset_snapshot_id, state, source_set, source_set_hash, row_counts
 ) VALUES (
   :snapshot_id, 'released', '{"kind":"ops_integration_test"}'::jsonb,
   :source_set_hash, jsonb_build_object('mv_geocode_target', 0)
@@ -246,7 +249,7 @@ def _serving_release_insert_sql() -> TextClause:
     return text(
         """
 INSERT INTO ops.serving_releases (
-  release_id, snapshot_id, state, release_kind, mv_name, activated_at
+  serving_release_id, dataset_snapshot_id, state, release_kind, mv_name, activated_at
 ) VALUES (
   :release_id, :snapshot_id, :state, 'manual_rebuild', 'mv_geocode_target', now()
 )

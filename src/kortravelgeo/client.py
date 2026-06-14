@@ -1297,7 +1297,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
 
     async def rollback_serving_release(
         self,
-        release_id: str,
+        serving_release_id: str,
         *,
         actor: str | None,
         reason: str | None,
@@ -1314,9 +1314,9 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
 
         decision, integrity_alert = await SourceRebuildService(
             self._engine()
-        ).rollback_swap(release_id, actor=actor, reason=reason)
+        ).rollback_swap(serving_release_id, actor=actor, reason=reason)
         return ServingReleaseRollbackResponse(
-            release_id=release_id,
+            serving_release_id=serving_release_id,
             mode=decision.mode,
             activated_match_set_id=decision.activate_match_set_id,
             retired_match_set_id=decision.retire_match_set_id,
@@ -1471,12 +1471,12 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             state=state,
         )
 
-    async def rollback_plan(self, release_id: str) -> RollbackPlan:
-        plan = await AdminRepository(self._engine()).rollback_plan(release_id)
+    async def rollback_plan(self, serving_release_id: str) -> RollbackPlan:
+        plan = await AdminRepository(self._engine()).rollback_plan(serving_release_id)
         if plan is None:
             from .exceptions import NotFoundError
 
-            raise NotFoundError(f"serving release not found: {release_id}")
+            raise NotFoundError(f"serving release not found: {serving_release_id}")
         return plan
 
     async def list_artifacts(
@@ -1535,30 +1535,32 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             outcome="started",
             payload=req.model_dump(exclude={"confirmation"}),
             resource_type="maintenance_window",
-            resource_id=window.window_id,
+            resource_id=window.maintenance_window_id,
         )
         return window
 
     async def end_maintenance_window(
         self,
-        window_id: str,
+        maintenance_window_id: str,
         req: MaintenanceWindowEnd,
     ) -> MaintenanceWindow:
         window = await AdminRepository(self._engine()).end_maintenance_window(
-            window_id=window_id,
+            maintenance_window_id=maintenance_window_id,
             confirmation=req.confirmation,
             closed_by_job_id=req.closed_by_job_id,
         )
         if window is None:
             from .exceptions import NotFoundError
 
-            raise NotFoundError(f"active maintenance window not found: {window_id}")
+            raise NotFoundError(
+                f"active maintenance window not found: {maintenance_window_id}"
+            )
         await self.record_audit_event(
             action="maintenance_window.end",
             outcome="succeeded",
             payload=req.model_dump(exclude={"confirmation"}),
             resource_type="maintenance_window",
-            resource_id=window.window_id,
+            resource_id=window.maintenance_window_id,
         )
         return window
 
@@ -1566,22 +1568,22 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         self,
         *,
         limit: int = 200,
-        snapshot_id: str | None = None,
+        dataset_snapshot_id: str | None = None,
     ) -> list[TableStatsSnapshot]:
         return await AdminRepository(self._engine()).list_table_stats_snapshots(
             limit=limit,
-            snapshot_id=snapshot_id,
+            dataset_snapshot_id=dataset_snapshot_id,
         )
 
     async def capture_table_stats_snapshots(
         self,
         *,
-        snapshot_id: str | None = None,
+        dataset_snapshot_id: str | None = None,
         limit: int = 500,
         skip_if_locked: bool = False,
     ) -> list[TableStatsSnapshot]:
         return await AdminRepository(self._engine()).capture_table_stats_snapshots(
-            snapshot_id=snapshot_id,
+            dataset_snapshot_id=dataset_snapshot_id,
             limit=limit,
             skip_if_locked=skip_if_locked,
         )

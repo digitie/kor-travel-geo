@@ -283,3 +283,31 @@ UI는 `/admin/ops` 또는 기존 `/admin/backups`, `/admin/load`, `/admin/consis
 - snapshot row count와 실제 핵심 테이블 count가 smoke 검증에서 일치해야 한다.
 - artifact checksum mismatch는 download/restore를 차단해야 한다.
 - UI와 API는 인증이 없는 내부망 전제를 유지하되, actor field가 미래 인증 도입을 막지 않아야 한다.
+
+## T-200 full-prefix ID rename (마이그레이션 가이드)
+
+T-200 후속 breaking change로 `ops` 스키마의 짧은 PK/FK 컬럼을 full-prefix 이름으로 일괄 rename했다. 위의 신규 테이블 절(82~242행)에 적힌 컬럼 이름은 rename 이전 이름이며, 아래 매핑이 정본이다. 이미 full-prefix이거나 공개 계약인 ID(`artifact_id`, `job_id`/`created_by_job_id`/`activated_by_job_id`/`closed_by_job_id`, `report_id`/`consistency_report_id`, `sample_id`, `source_match_set_id` 등)는 rename 대상이 아니다.
+
+| 테이블 | old 컬럼 | new 컬럼 | 종류 |
+|--------|----------|----------|------|
+| `ops.audit_events` | `event_id` | `audit_event_id` | PK |
+| `ops.dataset_snapshots` | `snapshot_id` | `dataset_snapshot_id` | PK |
+| `ops.dataset_snapshots` | `parent_snapshot_id` | `parent_dataset_snapshot_id` | self FK |
+| `ops.serving_releases` | `release_id` | `serving_release_id` | PK |
+| `ops.serving_releases` | `snapshot_id` | `dataset_snapshot_id` | FK → dataset_snapshots |
+| `ops.serving_releases` | `previous_release_id` | `previous_serving_release_id` | self FK |
+| `ops.serving_releases` | `rollback_target_release_id` | `rollback_target_serving_release_id` | self FK |
+| `ops.maintenance_windows` | `window_id` | `maintenance_window_id` | PK |
+| `ops.table_stats_snapshots` | `stats_id` | `table_stats_snapshot_id` | PK |
+| `ops.table_stats_snapshots` | `snapshot_id` | `dataset_snapshot_id` | FK → dataset_snapshots |
+| `ops.artifacts` | `snapshot_id` | `dataset_snapshot_id` | FK → dataset_snapshots |
+| `ops.artifacts` | `release_id` | `serving_release_id` | FK → serving_releases |
+
+영향 범위:
+
+- DDL 3원본을 함께 갱신했다: `src/kortravelgeo/infra/sql.py`(`SCHEMA_SQL`/`INDEX_SQL`), `sql/ddl/001_schema.sql`(fresh init-db 사본), Alembic `alembic/versions/0018_t200_ops_id_rename.py`(기존 DB upgrade). PostgreSQL은 `ALTER TABLE ... RENAME COLUMN` 시 PK/FK·self-FK 제약을 컬럼에 그대로 유지하므로 constraint/index 재생성은 필요 없다. downgrade는 역방향 rename이다.
+- admin API 응답 필드(breaking): `AuditEvent.audit_event_id`, `DatasetSnapshot.dataset_snapshot_id`/`parent_dataset_snapshot_id`, `ServingRelease.serving_release_id`/`dataset_snapshot_id`/`previous_serving_release_id`/`rollback_target_serving_release_id`, `RollbackPlan.serving_release_id`/`dataset_snapshot_id`, `OpsArtifact.dataset_snapshot_id`/`serving_release_id`, `MaintenanceWindow.maintenance_window_id`, `TableStatsSnapshot.table_stats_snapshot_id`/`dataset_snapshot_id`, `ServingReleaseRollbackResponse.serving_release_id`.
+- route path param(breaking): `POST /v1/admin/ops/releases/{serving_release_id}/rollback-plan`, `POST /v1/admin/ops/releases/{serving_release_id}/rollback`, `POST /v1/admin/ops/maintenance-windows/{maintenance_window_id}/end`. `GET|POST /v1/admin/ops/table-stats[/capture]` 의 filter query param도 `snapshot_id` → `dataset_snapshot_id`.
+- `openapi.json` 재생성, `kor-travel-geo-ui`의 `types/api.gen.ts`/`lib/schemas.gen.ts` 재생성(`npm run gen:types`) + 손수 작성한 `lib/api.ts` 타입과 `OpsPanel`/`CurrentConfigTab` 컴포넌트 갱신.
+- rollback typed_confirmation 토큰은 `ROLLBACK {serving_release_id}`로 표기만 바뀐다(값은 동일한 release id).
+- audit payload·artifact manifest 등 자유 형식 JSONB blob의 키도 가능한 곳은 새 이름을 따른다(예: restore artifact manifest의 `dataset_snapshot_id`/`serving_release_id`).
