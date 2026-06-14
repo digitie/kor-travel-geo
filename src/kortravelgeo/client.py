@@ -67,6 +67,7 @@ from .dto.source import (
     RestoredFromBackupCreateResponse,
     RestoreSourceVerificationResult,
     ServingReleaseRollbackResponse,
+    SourceBulkHardDeleteResponse,
     SourceCapacityUsage,
     SourceFileCategoryInfo,
     SourceGroupRelinkResponse,
@@ -995,12 +996,53 @@ class AsyncAddressClient:
         )
 
     async def source_storage_capacity(self) -> SourceCapacityUsage:
-        """Per-category storage capacity usage (T-204, doc line ~2107)."""
+        """Per-category storage capacity usage (T-204, doc line ~2107).
+
+        Includes the T-212 (ADR-052) retention recommendation: an advisory
+        cleanup signal (over-threshold + reclaimable soft_deleted/quarantined/
+        unregistered bytes + eligible object count). Never auto-deletes.
+        """
         from .infra.source_reconcile import compute_source_capacity
 
         return await compute_source_capacity(
             self._engine(),
             capacity_limit_bytes=self.settings.source_storage_capacity_limit_bytes,
+        )
+
+    async def bulk_hard_delete_source_objects(
+        self,
+        *,
+        object_keys: tuple[str, ...],
+        typed_confirmation: str,
+        manifest_ack: bool = False,
+        actor: str | None,
+        reason: str | None = None,
+    ) -> SourceBulkHardDeleteResponse:
+        """Manually bulk hard-delete eligible source objects (T-212, ADR-052).
+
+        ``destructive_admin`` + typed confirmation. NEVER deletes an active-정본
+        (the T-204 active-match-set guard is reused) or a live registered archive;
+        only ``soft_deleted``/``quarantined`` files and unregistered stored objects
+        are eligible. A completed ``db_backup`` manifest/export must exist OR
+        ``manifest_ack=true`` must be passed (pre-delete safety gate).
+        """
+        from .infra.rustfs import RustfsClient, load_rustfs_config
+        from .infra.source_reconcile import bulk_hard_delete_sources
+
+        config = load_rustfs_config(self.settings)
+        rustfs = (
+            RustfsClient(config)
+            if config.enabled and config.credentials_configured
+            else None
+        )
+        return await bulk_hard_delete_sources(
+            self._engine(),
+            object_keys=object_keys,
+            typed_confirmation=typed_confirmation,
+            manifest_ack=manifest_ack,
+            actor=actor,
+            reason=reason,
+            rustfs=rustfs,
         )
 
     async def source_upload_session_state_counts(self) -> dict[str, int]:

@@ -172,6 +172,11 @@ SOURCE_RECONCILE_RESOLVES = _counter(
     "Reconciliation resolve attempts by action and outcome.",
     ("action", "outcome"),
 )
+SOURCE_HARD_DELETES = _counter(
+    "kor_travel_geo_source_hard_deletes_total",
+    "Manual bulk source-object hard-delete outcomes (T-212/ADR-052).",
+    ("outcome",),
+)
 DB_QUERY_DURATION = _histogram(
     "kor_travel_geo_db_query_duration_seconds",
     "SQL query duration by operation, fingerprint, and status.",
@@ -328,6 +333,11 @@ def record_source_reconcile_item(*, issue_type: str, severity: str) -> None:
 def record_source_reconcile_resolve(*, action: str, outcome: str) -> None:
     """Count one reconciliation resolve attempt by action and outcome."""
     SOURCE_RECONCILE_RESOLVES.labels(action=action, outcome=outcome).inc()
+
+
+def record_source_hard_delete(*, outcome: str) -> None:
+    """Count one manual bulk source-object hard-delete outcome (T-212)."""
+    SOURCE_HARD_DELETES.labels(outcome=outcome).inc()
 
 
 def refresh_admin_metrics(

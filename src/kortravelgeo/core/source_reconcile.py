@@ -475,6 +475,186 @@ def resolve_action_is_destructive(action: str) -> bool:
     return action in DESTRUCTIVE_RESOLVE_ACTIONS
 
 
+# --- bulk hard-delete / restore eligibility (T-212) ------------------------
+#
+# The retention policy (ADR-052) forbids AUTO-deleting any registered archive;
+# the ONLY admin-driven hard-delete path is this manual ``destructive_admin``
+# bulk action. These pure helpers decide *which* objects are eligible — never the
+# active-정본 — so the eligibility rule is unit-tested without a DB or RustFS.
+
+#: Registry states an object must be in to be a manual bulk-hard-delete
+#: candidate: ``soft_deleted`` / ``quarantined`` registry rows, plus an
+#: unregistered stored object surfaced by reconcile as ``object_missing_db`` /
+#: ``registration_expired``. ``delete_failed`` rows are retried, not (re)deleted
+#: here. A live ``available``/``validating``/``missing`` archive is NEVER eligible
+#: — registered archives are not auto-deletable (ADR-052).
+HARD_DELETE_ELIGIBLE_STATES: frozenset[str] = frozenset(
+    {"soft_deleted", "quarantined"}
+)
+
+#: reconcile issue_types whose unregistered stored object the bulk action may
+#: hard-delete (object has no live registry row → import-or-delete SLA).
+HARD_DELETE_ELIGIBLE_UNREGISTERED: frozenset[str] = frozenset(
+    {"object_missing_db", "registration_expired"}
+)
+
+#: The canonical typed-confirmation token for the bulk hard-delete action,
+#: mirroring T-205b ``REBUILD-PROMOTE {id}`` / T-208 ``ROLLBACK {id}``.
+HARD_DELETE_CONFIRMATION = "HARD-DELETE-SOURCES"
+
+
+def bulk_hard_delete_confirmation() -> str:
+    """The exact ``typed_confirmation`` the bulk hard-delete endpoint requires."""
+    return HARD_DELETE_CONFIRMATION
+
+
+@dataclass(frozen=True)
+class HardDeleteCandidateFact:
+    """One object the operator proposed for the manual bulk hard-delete.
+
+    ``state`` is the registry state (``soft_deleted``/``quarantined``/…) for a
+    registered file, or ``None`` for an unregistered stored object surfaced only
+    by reconcile (then ``issue_type`` carries the classification).
+    ``active_referenced`` is the active-정본 guard input (T-204
+    :func:`guard_object_deletion`): true when an *active* match set's group still
+    points at this object key — such an object is NEVER eligible.
+    """
+
+    object_key: str
+    source_file_id: str | None = None
+    state: str | None = None
+    issue_type: str | None = None
+    active_referenced: bool = False
+
+
+@dataclass(frozen=True)
+class HardDeleteEligibility:
+    """Whether one candidate may be hard-deleted, and why (pure verdict)."""
+
+    object_key: str
+    source_file_id: str | None
+    eligible: bool
+    reason: str
+
+
+def assess_hard_delete_candidate(fact: HardDeleteCandidateFact) -> HardDeleteEligibility:
+    """Decide whether one object may be manually hard-deleted (ADR-052).
+
+    Order (block-first):
+
+    1. active-정본 (an active match set group references it) → never eligible
+       (reuses the T-204 deletion-guard rule);
+    2. a registered file in ``soft_deleted``/``quarantined`` → eligible;
+    3. an unregistered stored object classified ``object_missing_db`` /
+       ``registration_expired`` → eligible (import-or-delete SLA, manual);
+    4. anything else (a live ``available``/``validating``/``missing`` archive,
+       or an unclassified object) → NOT eligible.
+    """
+    if fact.active_referenced:
+        return HardDeleteEligibility(
+            object_key=fact.object_key,
+            source_file_id=fact.source_file_id,
+            eligible=False,
+            reason="active match set이 참조하는 정본 object는 삭제할 수 없습니다",
+        )
+    if fact.state in HARD_DELETE_ELIGIBLE_STATES:
+        return HardDeleteEligibility(
+            object_key=fact.object_key,
+            source_file_id=fact.source_file_id,
+            eligible=True,
+            reason=f"{fact.state} 등록 파일은 수동 hard-delete 대상입니다",
+        )
+    if fact.state is None and fact.issue_type in HARD_DELETE_ELIGIBLE_UNREGISTERED:
+        return HardDeleteEligibility(
+            object_key=fact.object_key,
+            source_file_id=fact.source_file_id,
+            eligible=True,
+            reason=f"미등록 stored object({fact.issue_type})는 수동 정리 대상입니다",
+        )
+    if fact.state is not None:
+        return HardDeleteEligibility(
+            object_key=fact.object_key,
+            source_file_id=fact.source_file_id,
+            eligible=False,
+            reason=(
+                f"등록 완료 archive(state={fact.state})는 자동/일괄 삭제하지 않습니다 "
+                "(먼저 soft-delete 하세요)"
+            ),
+        )
+    return HardDeleteEligibility(
+        object_key=fact.object_key,
+        source_file_id=fact.source_file_id,
+        eligible=False,
+        reason="hard-delete 대상 상태가 아닙니다",
+    )
+
+
+@dataclass(frozen=True)
+class BulkHardDeletePlan:
+    """The partitioned plan a bulk hard-delete request resolves to (pure)."""
+
+    eligible: tuple[HardDeleteEligibility, ...]
+    skipped: tuple[HardDeleteEligibility, ...]
+
+    @property
+    def eligible_count(self) -> int:
+        return len(self.eligible)
+
+    @property
+    def skipped_count(self) -> int:
+        return len(self.skipped)
+
+
+def plan_bulk_hard_delete(
+    facts: tuple[HardDeleteCandidateFact, ...],
+) -> BulkHardDeletePlan:
+    """Partition candidates into eligible / skipped for the bulk action (ADR-052).
+
+    Deterministic order (eligible/skipped each sorted by ``object_key``) so the
+    audit payload and response are stable.
+    """
+    eligible: list[HardDeleteEligibility] = []
+    skipped: list[HardDeleteEligibility] = []
+    for fact in facts:
+        verdict = assess_hard_delete_candidate(fact)
+        (eligible if verdict.eligible else skipped).append(verdict)
+    eligible.sort(key=lambda e: e.object_key)
+    skipped.sort(key=lambda e: e.object_key)
+    return BulkHardDeletePlan(eligible=tuple(eligible), skipped=tuple(skipped))
+
+
+@dataclass(frozen=True)
+class PreDeleteSafety:
+    """Whether the pre-delete manifest/export safety gate is satisfied (ADR-052).
+
+    Before any bulk hard-delete the operator must either have a completed backup
+    (``db_backup`` manifest/export exists) covering the archives, or explicitly
+    acknowledge proceeding without one (``manifest_ack=True``).
+    """
+
+    allowed: bool
+    reason: str = ""
+
+
+def check_pre_delete_safety(
+    *, backup_manifest_present: bool, manifest_ack: bool
+) -> PreDeleteSafety:
+    """Pre-delete verification gate (ADR-052): manifest exists OR explicit ack.
+
+    A bulk hard-delete is refused when there is no completed backup manifest/export
+    AND the operator did not pass ``manifest_ack=true`` to proceed anyway.
+    """
+    if backup_manifest_present or manifest_ack:
+        return PreDeleteSafety(allowed=True)
+    return PreDeleteSafety(
+        allowed=False,
+        reason=(
+            "삭제 전 검증용 backup manifest/export가 없습니다 "
+            "(manifest_ack=true로 명시 승인하거나 먼저 백업을 만드세요)"
+        ),
+    )
+
+
 @dataclass(frozen=True)
 class ResolveGuard:
     """Whether a resolve action may proceed against an object/issue."""
@@ -586,6 +766,59 @@ class CapacityUsage:
     growth_30d_bytes: int = 0
     capacity_limit_bytes: int | None = None
     over_threshold: bool = False
+
+
+@dataclass(frozen=True)
+class RetentionRecommendation:
+    """Retention guidance surfaced from capacity usage (ADR-052; NOT auto-delete).
+
+    The policy never auto-deletes registered archives; this only *surfaces* a
+    recommendation when over the capacity threshold, pointing at the bytes the
+    operator could manually reclaim (``soft_deleted`` + ``quarantined`` +
+    unregistered) without touching live archives.
+    """
+
+    over_threshold: bool
+    reclaimable_bytes: int
+    eligible_object_count: int
+    guidance: str
+
+
+def build_retention_recommendation(
+    usage: CapacityUsage,
+    *,
+    eligible_object_count: int = 0,
+) -> RetentionRecommendation:
+    """Derive a retention recommendation from capacity usage (ADR-052).
+
+    ``reclaimable_bytes`` is what manual cleanup could free without deleting any
+    live (registered, non-deleted) archive: soft-deleted + quarantined + the
+    unregistered stored bytes. The ``guidance`` string is advisory only — the
+    retention policy forbids auto-delete, so this never triggers a deletion.
+    """
+    reclaimable = (
+        max(0, usage.soft_deleted_bytes)
+        + max(0, usage.quarantined_bytes)
+        + max(0, usage.unregistered_bytes)
+    )
+    if usage.over_threshold:
+        guidance = (
+            "용량 임계값 초과 — 등록 완료 archive는 자동 삭제하지 않습니다. "
+            "soft_deleted/quarantined/미등록 object를 수동 검토 후 정리하세요."
+        )
+    elif reclaimable > 0:
+        guidance = (
+            "정리 가능한 soft_deleted/quarantined/미등록 object가 있습니다 "
+            "(자동 삭제 안 함; 수동 검토 권장)."
+        )
+    else:
+        guidance = "정리 권장 대상 없음."
+    return RetentionRecommendation(
+        over_threshold=usage.over_threshold,
+        reclaimable_bytes=reclaimable,
+        eligible_object_count=max(0, eligible_object_count),
+        guidance=guidance,
+    )
 
 
 def compute_capacity_usage(
