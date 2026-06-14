@@ -27,3 +27,5 @@ dist/
 data/
 *.sqlite
 *.sqlite3
+
+rebuild_staging/
