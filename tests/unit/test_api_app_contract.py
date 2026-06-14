@@ -13,13 +13,31 @@ from kortravelgeo.api.app import _install_performance_monitoring, create_app
 from kortravelgeo.settings import Settings
 
 
+def _all_registered_paths(app: FastAPI) -> set[str]:
+    """Collect every registered path, robust across FastAPI versions.
+
+    Newer FastAPI nests included routers as ``_IncludedRouter`` entries in
+    ``app.routes`` (no flat ``.path``), so a plain iteration misses API routes.
+    We recurse ``app.routes`` (captures infra routes like ``/metrics``/``/docs``)
+    and union the OpenAPI schema paths (canonical for included API routes).
+    """
+    paths: set[str] = set()
+
+    def _walk(routes: Any) -> None:
+        for route in routes:
+            path = getattr(route, "path", None)
+            if isinstance(path, str):
+                paths.add(path)
+            _walk(getattr(route, "routes", []) or [])
+
+    _walk(app.routes)
+    paths |= set(app.openapi()["paths"].keys())
+    return paths
+
+
 def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     app = create_app()
-    # Use the OpenAPI schema as the source of truth for registered API paths.
-    # Newer FastAPI nests included routers as `_IncludedRouter` entries in
-    # app.routes (no flat `.path`), so iterating app.routes is version-fragile;
-    # the generated schema resolves all included routes consistently.
-    paths = set(app.openapi()["paths"].keys())
+    paths = _all_registered_paths(app)
 
     assert "/v1/address/geocode" in paths
     assert "/v1/address/reverse" in paths
