@@ -2,6 +2,19 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 재리뷰 M 3건 문서 정합 반영)
+
+**작업**: head 189729e 재리뷰에서 남은 Medium 3건(전부 문서 정합)을 `docs/t109-backup-source-upload-management.md`·`docs/decisions.md`에 반영했다. H/블로커는 없었고 직전 잔여는 거의 다 닫힌 상태였다.
+
+**반영**:
+- **M-A**: `restored_from_backup → revalidatable → validated` 전이를 match set 상태 전이 규칙 본문에 정식 추가하고, `revalidatable` 정의를 "`invalid` 또는 `restored_from_backup`에서 복구"로 확장했다(정본 규칙 vs restore 절차/ADR 불일치 해소).
+- **M-B**: ADR-049 결정 14와 커버리지 표의 압축 화살표(`validating→passed/warning→available→revalidatable→validated`)가 group state·validation_state·match set state 3개 머신을 한 체인에 섞던 것을 group/file 머신과 match set 머신 2단계로 분리 표기했다.
+- **M-C**: `last_deep_verified_at` 컬럼만 있고 정기 강제 deep 정책이 없던 것을, "경과 object는 quick에서도 강제 deep(또는 rolling deep)"으로 명문화했다(same-size/etag 변조 안전망). reconcile 절·커버리지 표에 반영.
+
+**남김**: Low 잔여(group/file state 전이 그래프, 용량 임계 1차 동작, transient 재시도, validator_version 하향 전파, env case_def seed drift, portable match-set export, forced_promotion batch terminal state 등)는 운영 hardening이라 T-200대 구현 PR/후속 ADR로 이관 권장.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
 ## 2026-06-14 (PR #131 잔여 운영 시나리오 재반영)
 
 **작업**: PR #131 conversation comment를 다시 확인했다. 최신 신규 코멘트는 `IC_kwDOSW_crs8AAAABGCx8WQ`, `IC_kwDOSW_crs8AAAABGCyhBA`, `IC_kwDOSW_crs8AAAABGCzORQ`였고, review thread는 0건이었다. 원격의 `d9ae209`, `999fac3`를 fast-forward로 받은 뒤 잔여 M/L 시나리오를 문서에 추가 반영했다.
