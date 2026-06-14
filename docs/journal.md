@@ -2,6 +2,18 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 Task 재점검 — T-212 추가)
+
+**작업**: PR #131 최신 conversation/review/thread를 다시 읽고(`review_threads` 0건), `docs/tasks.md`의 T-110~T-120 / T-200~T-211 / T-105·T-106을 PR 리뷰 항목과 교차 점검했다. `f3c4c93`에서 잔여 L 4건과 T-211 관측성은 이미 반영되어 있었지만, 리뷰 초반부터 반복된 RustFS 무기한 보존·용량 정책은 T-211 metric만으로는 닫히지 않는 별도 운영 정책/관리 표면으로 판단했다.
+
+**반영**:
+- 신규 **T-212**를 추가했다. scope는 RustFS 원천 archive 보존·정리 정책 ADR + 관리 표면이다.
+- 기본 원칙은 등록 완료 원천 archive 자동 삭제 금지, 사용자 수동 admin UI 삭제, destructive_admin typed confirmation, audit/metric/UI 경고 유지로 고정했다.
+- capacity threshold, archive tier, `soft_deleted`/`quarantined` retention, 미등록 stored object SLA, bulk hard-delete/restore, 삭제 전 manifest/export 확인을 T-212 산출물로 묶었다.
+- ADR-050과 resume의 phase ② 범위를 `T-200~T-212`로 동기화했다.
+
+**검증**: 문서/백로그-only 변경. `git diff --check`로 공백 오류 확인.
+
 ## 2026-06-14 (PR #131 L 폴리시 + Task 완전성 보강)
 
 **작업**: (1) head `4142570` 재리뷰의 잔여 L 4건을 닫고, (2) T-110~T-120 / T-200~T-211 / T-105·T-106 백로그를 4축(phase② 설계 커버리지·phase①/ADR·cross-cutting glue·의존성/시퀀싱) 멀티에이전트 + 적대 검증으로 점검해 확정 gap을 task에 반영했다. 설계 자체는 머지 가능 상태이고, 이번 변경은 전부 문서/백로그 정합이다.
