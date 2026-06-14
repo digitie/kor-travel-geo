@@ -13,6 +13,12 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.core.source_layers import (
+    POLYGON_LAYER_NAMES as POLYGON_LAYER_NAMES,
+)
+from kortravelgeo.core.source_layers import (
+    ROAD_INTERVAL_LAYER_NAME as ROAD_INTERVAL_LAYER_NAME,
+)
 from kortravelgeo.exceptions import LoaderError
 from kortravelgeo.loaders.juso_map import (
     DbfHeader,
@@ -23,17 +29,9 @@ from kortravelgeo.loaders.juso_map import (
 
 ProgressCallback = Callable[[float], None]
 
-POLYGON_LAYER_NAMES: tuple[str, ...] = (
-    "TL_SCCO_CTPRVN",
-    "TL_SCCO_SIG",
-    "TL_SCCO_EMD",
-    "TL_SCCO_LI",
-    "TL_KODIS_BAS",
-    "TL_SPRD_MANAGE",
-    "TL_SPRD_INTRVL",
-    "TL_SPRD_RW",
-    "TL_SPBD_BULD",
-)
+# POLYGON_LAYER_NAMES and ROAD_INTERVAL_LAYER_NAME are re-exported from
+# kortravelgeo.core.source_layers (single source of truth) so that
+# core.source_validation can reference them without importing this loader.
 
 TARGET_TABLES: dict[str, str] = {
     "TL_SCCO_CTPRVN": "tl_scco_ctprvn",
@@ -47,7 +45,6 @@ TARGET_TABLES: dict[str, str] = {
     "TL_SPBD_BULD": "tl_spbd_buld_polygon",
 }
 
-ROAD_INTERVAL_LAYER_NAME = "TL_SPRD_INTRVL"
 BUILDING_POLYGON_LAYER_NAME = "TL_SPBD_BULD"
 BUILDING_POLYGON_STAGE_TABLE = "_ktg_stage_spbd_buld_polygon"
 BUILDING_POLYGON_STAGE_LOCK_KEY = "kor_travel_geo:tl_spbd_buld_polygon_stage"

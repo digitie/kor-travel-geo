@@ -25,21 +25,19 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from kortravelgeo.core.source_categories import SIDO_PARTS, category_by_code
-from kortravelgeo.loaders.building_shape_bundle import (
+from kortravelgeo.core.source_layers import (
     ADDRESS_BUNDLE_LAYER,
     BUNDLE_CONNECTION_LAYER,
     BUNDLE_ENTRANCE_LAYER,
-)
-from kortravelgeo.loaders.extra_shape_layers import (
     DETAIL_DONG_ENTRANCE_LAYER,
     DETAIL_DONG_POLYGON_LAYER,
-)
-from kortravelgeo.loaders.juso_map import MASTER_LAYER_NAMES
-from kortravelgeo.loaders.shp.polygons_loader import (
+    MASTER_LAYER_NAMES,
     POLYGON_LAYER_NAMES,
     ROAD_INTERVAL_LAYER_NAME,
 )
-from kortravelgeo.loaders.sppn_makarea_loader import LAYER_NAME as ZONE_MAKAREA_LAYER
+from kortravelgeo.core.source_layers import (
+    ZONE_MAKAREA_LAYER_NAME as ZONE_MAKAREA_LAYER,
+)
 
 #: Bumped whenever the decision logic / profile expectations change so that
 #: previously ``passed`` validations can be re-run (doc "validator_version").

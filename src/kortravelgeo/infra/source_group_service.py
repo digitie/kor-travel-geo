@@ -849,7 +849,7 @@ VALUES
         outcome: str,
         duplicate: bool,
     ) -> None:
-        from kortravelgeo.api.security import SOURCE_UPLOAD_REGISTER
+        from kortravelgeo.core.source_events import SOURCE_UPLOAD_REGISTER
 
         await conn.execute(
             _json_text(

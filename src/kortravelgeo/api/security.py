@@ -22,9 +22,46 @@ from typing import Annotated, Any
 
 from fastapi import Depends, Request
 
+from kortravelgeo.core.source_events import (
+    SOURCE_AUDIT_EVENT_TYPES,
+    SOURCE_FORCED_PROMOTION,
+    SOURCE_HARD_DELETE,
+    SOURCE_JANITOR,
+    SOURCE_MATCH_SET_ACTIVATE,
+    SOURCE_REBUILD_DB,
+    SOURCE_UPDATE_HASH_AFTER_VERIFY,
+    SOURCE_UPLOAD_REGISTER,
+)
 from kortravelgeo.exceptions import ForbiddenError
 from kortravelgeo.infra.geoip import _in_networks, _parse_ip
 from kortravelgeo.settings import Settings, get_settings
+
+#: Re-exported for backward compatibility: the source-management audit
+#: event_type / action constants now live in ``core.source_events`` (so lower
+#: layers can use them without importing ``api``), but importing them from
+#: ``api.security`` must keep working.
+__all__ = [
+    "ACTOR_HEADER",
+    "KNOWN_ADMIN_ROLES",
+    "ROLES_HEADER",
+    "ROLE_DESTRUCTIVE_ADMIN",
+    "ROLE_REBUILD_OPERATOR",
+    "ROLE_SOURCE_FILE_MANAGER",
+    "ROLE_SOURCE_FILE_VIEWER",
+    "ROLE_SYSTEM",
+    "SOURCE_AUDIT_EVENT_TYPES",
+    "SOURCE_FORCED_PROMOTION",
+    "SOURCE_HARD_DELETE",
+    "SOURCE_JANITOR",
+    "SOURCE_MATCH_SET_ACTIVATE",
+    "SOURCE_REBUILD_DB",
+    "SOURCE_UPDATE_HASH_AFTER_VERIFY",
+    "SOURCE_UPLOAD_REGISTER",
+    "RequestContext",
+    "get_request_context",
+    "require_role",
+    "resolve_request_context",
+]
 
 # --- Roles -----------------------------------------------------------------
 # Verbatim from docs/t109-backup-source-upload-management.md "Admin 권한 모델"
@@ -52,32 +89,6 @@ KNOWN_ADMIN_ROLES: frozenset[str] = frozenset(
 
 ACTOR_HEADER = "x-ktg-actor"
 ROLES_HEADER = "x-ktg-roles"
-
-
-# --- Audit event_type / action constants -----------------------------------
-# Audit `action` (== event_type) value set for the upcoming T-203+ source
-# management actions. Naming follows the existing dot-separated convention
-# (e.g. "serving_release.activate", "consistency.sample.decision", "geoip.denied").
-SOURCE_UPLOAD_REGISTER = "source_upload.register"
-SOURCE_MATCH_SET_ACTIVATE = "source_match_set.activate"
-SOURCE_REBUILD_DB = "source.rebuild_db"
-SOURCE_FORCED_PROMOTION = "source.forced_promotion"
-SOURCE_HARD_DELETE = "source.hard_delete"
-SOURCE_UPDATE_HASH_AFTER_VERIFY = "source.update_hash_after_verify"
-SOURCE_JANITOR = "source.janitor"
-
-#: All source-management audit event types introduced for T-109 / T-203+.
-SOURCE_AUDIT_EVENT_TYPES: frozenset[str] = frozenset(
-    {
-        SOURCE_UPLOAD_REGISTER,
-        SOURCE_MATCH_SET_ACTIVATE,
-        SOURCE_REBUILD_DB,
-        SOURCE_FORCED_PROMOTION,
-        SOURCE_HARD_DELETE,
-        SOURCE_UPDATE_HASH_AFTER_VERIFY,
-        SOURCE_JANITOR,
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)

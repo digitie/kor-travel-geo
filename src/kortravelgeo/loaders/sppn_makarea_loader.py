@@ -15,11 +15,15 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.core.source_layers import ZONE_MAKAREA_LAYER_NAME
 from kortravelgeo.exceptions import LoaderError
 
 ProgressCallback = Callable[[float], None]
 
-LAYER_NAME = "TL_SPPN_MAKAREA"
+#: Re-exported from kortravelgeo.core.source_layers (single source of truth) so
+#: core.source_validation can reference the zone makarea layer name without
+#: importing this loader. Kept as ``LAYER_NAME`` for existing references.
+LAYER_NAME = ZONE_MAKAREA_LAYER_NAME
 TARGET_TABLE = "tl_sppn_makarea"
 STAGE_TABLE = "_staging_sppn_makarea"
 STAGE_LOCK_KEY = "kortravelgeo.loaders.sppn_makarea_loader.stage"
