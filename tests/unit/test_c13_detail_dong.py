@@ -63,6 +63,21 @@ def test_detail_address_parser_rejects_bad_column_count(tmp_path: Path) -> None:
         tuple(iter_detail_address_rows(archive, member_name="adrdc_sejong.txt"))
 
 
+def test_detail_address_parser_rejects_non_numeric_integer_fields(tmp_path: Path) -> None:
+    archive = tmp_path / "detail-address.zip"
+    with zipfile.ZipFile(archive, "w") as zip_file:
+        zip_file.writestr(
+            "adrdc_sejong.txt",
+            (
+                "36110|not-number|48613|193391|0||1|101||0|"
+                "3611034038102860001000001|3611034038|361103000098|0|00042|00000\n"
+            ).encode("cp949"),
+        )
+
+    with pytest.raises(LoaderError, match=r"adrdc_sejong\.txt:1 dong_serial_no"):
+        tuple(iter_detail_address_rows(archive, member_name="adrdc_sejong.txt"))
+
+
 def test_detail_dong_staging_specs_and_join_keys() -> None:
     polygon = detail_dong_polygon_staging_spec("_ktg_test_polygon")
     entrance = detail_dong_entrance_staging_spec("_ktg_test_entrc")

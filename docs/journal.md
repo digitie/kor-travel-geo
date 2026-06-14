@@ -2,6 +2,36 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-124 T-110~T-123 리뷰 후속 검증 완료)
+
+**검증**: WSL ext4 테스트 미러 `~/dev/kor-travel-geo-codex-test`에서 focused unit 56건, `ruff check .`, `mypy src/kortravelgeo scripts/benchmark_phase1_augment_performance.py scripts/run_phase1_augment_reports.py`, `lint-imports`, 전체 `pytest -q`를 통과했다. 전체 테스트 결과는 651 passed, 47 skipped, 24 warnings다. NTFS worktree에서 `git diff --check`를 통과했고, `codegraph sync`는 already up to date였다.
+
+## 2026-06-15 (T-124 T-110~T-123 Claude 리뷰 재조사 후속 반영)
+
+**작업**: 사용자 추가 지시에 따라 PR #137(T-110), #138(T-111), #140(T-112), #141(T-113), #143(T-114), #144(T-115), #146(T-116), #147(T-117), #148(T-118), #150(T-120), #155(T-121), #160(T-122), #161(T-123)의 Claude review comment를 다시 조사했다. 대상 PR 모두 GraphQL review thread 0건이었고, 남은 내용은 상위 감사 코멘트였다.
+
+**반영**:
+- T-110/T-115: 공통 SHP/DBF 파일·ZIP iterator와 C15 민원행정기관 POI reader를 stream 경로로 바꾸고, `.shp.xml` metadata sidecar가 SHP 후보가 되지 않게 했다.
+- T-112: C12 road adjacency에 `road_geometry_missing`을 추가해 road key match와 road geometry 결손을 분리했다.
+- T-113: 상세주소DB 숫자 필드를 parser 단계에서 검증하고, 비숫자는 `member:line` 문맥의 `LoaderError`로 실패하게 했다.
+- T-114: C14 coverage용 row count가 DBF deleted record를 제외하도록 보정했다.
+- T-110~T-118 문서에 `measure_key_overlap()`, full key/weak key 차이, C12 tolerance와 geometry 결손, C13 숫자 정규화, C14 row count, C17 sample SQL 해석 경계를 보강했다.
+
+**검증**: 진행 중. WSL ext4 테스트 미러에 동기화한 뒤 focused unit, `ruff`, `mypy`, `lint-imports`, 전체 `pytest -q`를 다시 실행한다.
+
+## 2026-06-15 (T-124 T-120~T-123 Claude 리뷰 후속 반영)
+
+**작업**: PR #150(T-120), #155(T-121), #160(T-122), #161(T-123)의 Claude post-merge review와 inline review thread를 재확인하고 비차단 코멘트를 코드/문서에 반영했다. 네 PR 모두 unresolved inline thread 0건, blocking issue 0건이었다.
+
+**반영**:
+- T-120: `epost_validation`의 `empty_file` issue가 정상 디코딩 후 0행일 때만 붙는 흐름임을 주석으로 명시했다.
+- T-121: C17 실행 분기를 명시하고, 현재 runner가 고정 staging table 이름을 쓰는 순차 실행 전제임을 주석화했다.
+- T-122: `ResourceSampler` 종료 timeout을 보수화하고, `/proc/self/status` RSS 단위가 `kB`가 아니면 값을 버리도록 엄격화했다. benchmark Markdown 표는 컬럼 수 검증 helper로 생성하고, preparation 로그와 opt-in parser 테스트를 보강했다.
+- T-123: C12/C16의 `_quote_ident_path`, `_quote_ident`, `_optional_float`, `_jsonb_sample` 중복 구현을 `augment_harness` import 재사용으로 줄였다.
+- `docs/tasks.md`와 `docs/resume.md`에 T-124 완료 항목을 추가했다.
+
+**검증**: WSL ext4 테스트 미러에서 focused unit 26건, `ruff check .`, `mypy src/kortravelgeo scripts/benchmark_phase1_augment_performance.py scripts/run_phase1_augment_reports.py`, `lint-imports`, 전체 `pytest -q`를 통과했다. 전체 테스트 결과는 649 passed, 47 skipped, 24 warnings다.
+
 ## 2026-06-14 (T-123 phase ① 튜닝·최종 검증 평가)
 
 **작업**: T-122 benchmark를 기준으로 phase ① C11~C17 prototype의 staging 튜닝을 적용하고, warm-cache 전국 재측정과 최종 source별 go/no-go를 남겼다.

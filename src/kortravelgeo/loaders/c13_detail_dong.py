@@ -123,6 +123,7 @@ ENTRANCE_BUILDING_REF_JOIN_KEYS: tuple[JoinKey, ...] = (
 )
 
 _IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_UNSIGNED_INT_RE = re.compile(r"^[0-9]+$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,15 +159,24 @@ class DetailAddressRow:
         if len(columns) != 16:
             msg = f"{source_member}:{line_number} expected 16 columns, got {len(columns)}"
             raise LoaderError(msg)
+
+        def int_field(index: int, field_name: str) -> str | None:
+            return _normalize_int_text(
+                columns[index],
+                field_name=field_name,
+                source_member=source_member,
+                line_number=line_number,
+            )
+
         road_name_cd = _blank_to_none(columns[12])
         return cls(
             source_member=source_member,
             line_number=line_number,
             sig_cd=_blank_to_none(columns[0]),
-            dong_serial_no=_normalize_int_text(columns[1]),
-            floor_serial_no=_normalize_int_text(columns[2]),
-            unit_serial_no=_normalize_int_text(columns[3]),
-            unit_suffix_serial_no=_normalize_int_text(columns[4]),
+            dong_serial_no=int_field(1, "dong_serial_no"),
+            floor_serial_no=int_field(2, "floor_serial_no"),
+            unit_serial_no=int_field(3, "unit_serial_no"),
+            unit_suffix_serial_no=int_field(4, "unit_suffix_serial_no"),
             dong_name=_blank_to_none(columns[5]),
             floor_name=_blank_to_none(columns[6]),
             unit_name=_blank_to_none(columns[7]),
@@ -177,8 +187,8 @@ class DetailAddressRow:
             road_name_cd=road_name_cd,
             road_name_no=_road_name_no(road_name_cd),
             road_underground_yn=_blank_to_none(columns[13]),
-            building_main_no=_normalize_int_text(columns[14]),
-            building_sub_no=_normalize_int_text(columns[15]),
+            building_main_no=int_field(14, "building_main_no"),
+            building_sub_no=int_field(15, "building_sub_no"),
         )
 
     def copy_row(self) -> tuple[object, ...]:
@@ -730,19 +740,26 @@ def _blank_to_none(value: str) -> str | None:
     return stripped or None
 
 
-def _normalize_int_text(value: str) -> str | None:
+def _normalize_int_text(
+    value: str,
+    *,
+    field_name: str,
+    source_member: str,
+    line_number: int,
+) -> str | None:
     stripped = value.strip()
     if not stripped:
         return None
-    try:
-        return str(int(stripped))
-    except ValueError:
-        return stripped
+    if not _UNSIGNED_INT_RE.fullmatch(stripped):
+        msg = f"{source_member}:{line_number} {field_name} must be unsigned integer text"
+        raise LoaderError(msg)
+    return str(int(stripped))
 
 
 def _road_name_no(road_name_cd: str | None) -> str | None:
     if road_name_cd is None:
         return None
+    # 상세주소 DB의 도로명코드는 5자리 시군구 코드 뒤에 도로명 일련번호가 붙는다.
     if len(road_name_cd) <= 5:
         return road_name_cd
     return road_name_cd[5:]

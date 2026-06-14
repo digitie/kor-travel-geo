@@ -6,7 +6,7 @@
 
 실데이터 파일은 `data/juso/민원행정기관전자지도_240124.zip`이다.
 
-ZIP 안에는 한 개의 SHP/DBF/SHX/PRJ 세트가 있으며, 일부 ZIP 도구에서는 파일명이 CP949 원문 대신 mojibake로 보일 수 있다. C15 loader는 member 이름에 의존하지 않고 suffix로 단일 SHP/DBF를 찾는다.
+ZIP 안에는 한 개의 SHP/DBF/SHX/PRJ 세트가 있으며, 일부 ZIP 도구에서는 파일명이 CP949 원문 대신 mojibake로 보일 수 있다. C15 loader는 member 이름에 의존하지 않고 확장자 기준으로 단일 SHP/DBF를 찾는다. `.shp.xml` 같은 metadata sidecar는 SHP 후보로 보지 않는다.
 
 DBF 필드는 CP949 한글 field name이다.
 
@@ -27,7 +27,7 @@ SHP geometry는 EPSG:5179 계열 point로 읽는다.
 
 새 모듈은 `src/kortravelgeo/loaders/c15_civil_service_poi.py`이다.
 
-1. ZIP 안의 단일 `.shp`/`.dbf`를 읽는다.
+1. ZIP 안의 단일 `.shp`/`.dbf`를 stream으로 읽는다.
 2. DBF field name을 `cp949`로 decoding한다.
 3. `도로명주소`를 기존 `parse_address()`로 파싱한다.
 4. staging table `_ktg_c15_civil_service_poi`에 POI point, 기관 context, 파싱된 도로명주소 key를 COPY한다.

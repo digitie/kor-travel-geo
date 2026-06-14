@@ -48,6 +48,8 @@ PNU는 기존 `infra.pnu.build_pnu()`를 사용해 `bjd_cd + mntn_yn + lnbr_mnnm
 
 payload에는 `coordinate_load=False`, `serving_promotion=False`를 고정한다.
 
+left/right-only sample SQL은 양쪽 key를 `text`로 맞춘 뒤 `EXCEPT`로 뽑는다. 현재 C17 계약에서는 PNU·도로명코드·건물관리번호는 text이고 건물 본번/부번은 양쪽 모두 정수 계약이라 leading zero 의미 차이가 없다. 후속 registry에서 text key와 numeric key를 섞는 새 비교를 추가하면 sample SQL만 보지 말고 `key_contract`에 canonicalization 규칙을 먼저 명시해야 한다.
+
 ## 검증
 
 - `tests/unit/test_c17_navi_jibun_coverage.py`: synthetic CP949 text/ZIP, parser, SQL, metric, skip 계약.

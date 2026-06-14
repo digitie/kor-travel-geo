@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -11,7 +10,6 @@ from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from kortravelgeo.exceptions import LoaderError
 from kortravelgeo.loaders.augment_harness import (
     AugmentGroupPayload,
     AugmentGroupResult,
@@ -24,6 +22,9 @@ from kortravelgeo.loaders.augment_harness import (
     SidoSourceGroup,
     StagingColumn,
     StagingKeyIndexSpec,
+    _jsonb_sample,
+    _optional_float,
+    _quote_ident_path,
     copy_shape_file_to_staging,
     copy_zip_shape_layer_to_staging,
     create_staging_key_indexes,
@@ -62,14 +63,12 @@ CONNECTION_ROAD_JOIN_KEYS: tuple[JoinKey, ...] = (
     JoinKey("rds_man_no", "rds_man_no"),
 )
 
-_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-
-
 @dataclass(frozen=True, slots=True)
 class RoadAdjacencyMeasurement:
     total_connections: int
     road_key_matched: int
     road_key_missing: int
+    road_geometry_missing: int
     within_tolerance: int
     over_tolerance: int
     dangling: int
@@ -362,6 +361,7 @@ async def measure_road_adjacency(
         total_connections=int(row["total_connections"] or 0),
         road_key_matched=int(row["road_key_matched"] or 0),
         road_key_missing=int(row["road_key_missing"] or 0),
+        road_geometry_missing=int(row["road_geometry_missing"] or 0),
         within_tolerance=int(row["within_tolerance"] or 0),
         over_tolerance=int(row["over_tolerance"] or 0),
         dangling=int(row["dangling"] or 0),
@@ -399,6 +399,9 @@ stats AS (
     count(*) FILTER (WHERE road_key_matched)::bigint AS road_key_matched,
     count(*) FILTER (WHERE NOT road_key_matched)::bigint AS road_key_missing,
     count(*) FILTER (
+      WHERE road_key_matched AND distance_m IS NULL
+    )::bigint AS road_geometry_missing,
+    count(*) FILTER (
       WHERE road_key_matched AND distance_m <= :tolerance_m
     )::bigint AS within_tolerance,
     count(*) FILTER (
@@ -406,19 +409,22 @@ stats AS (
     )::bigint AS over_tolerance,
     count(*) FILTER (
       WHERE NOT road_key_matched
+         OR (road_key_matched AND distance_m IS NULL)
          OR (road_key_matched AND distance_m > :tolerance_m)
     )::bigint AS dangling,
     percentile_cont(0.5) WITHIN GROUP (ORDER BY distance_m)
-      FILTER (WHERE road_key_matched)::float8 AS p50_m,
+      FILTER (WHERE road_key_matched AND distance_m IS NOT NULL)::float8 AS p50_m,
     percentile_cont(0.95) WITHIN GROUP (ORDER BY distance_m)
-      FILTER (WHERE road_key_matched)::float8 AS p95_m,
-    max(distance_m) FILTER (WHERE road_key_matched)::float8 AS max_m
+      FILTER (WHERE road_key_matched AND distance_m IS NOT NULL)::float8 AS p95_m,
+    max(distance_m)
+      FILTER (WHERE road_key_matched AND distance_m IS NOT NULL)::float8 AS max_m
   FROM joined
 ),
 sample AS (
   SELECT *
     FROM joined
    WHERE NOT road_key_matched
+      OR (road_key_matched AND distance_m IS NULL)
       OR (road_key_matched AND distance_m > :tolerance_m)
    ORDER BY road_key_matched ASC, distance_m DESC NULLS FIRST
    LIMIT :sample_limit
@@ -427,6 +433,7 @@ SELECT
   stats.total_connections,
   stats.road_key_matched,
   stats.road_key_missing,
+  stats.road_geometry_missing,
   stats.within_tolerance,
   stats.over_tolerance,
   stats.dangling,
@@ -466,6 +473,7 @@ def _road_adjacency_metrics(value: RoadAdjacencyMeasurement) -> dict[str, object
         "total_connections": value.total_connections,
         "road_key_matched": value.road_key_matched,
         "road_key_missing": value.road_key_missing,
+        "road_geometry_missing": value.road_geometry_missing,
         "within_tolerance": value.within_tolerance,
         "over_tolerance": value.over_tolerance,
         "dangling": value.dangling,
@@ -502,33 +510,3 @@ def _dbf_key_overlap_metrics(value: KeyOverlap) -> dict[str, int]:
         "left_only_count": value.left_only_count,
         "right_only_count": value.right_only_count,
     }
-
-
-def _optional_float(value: object) -> float | None:
-    if value is None:
-        return None
-    if not isinstance(value, (int, float, str)):
-        msg = f"expected numeric value, got {type(value).__name__}"
-        raise LoaderError(msg)
-    return float(value)
-
-
-def _jsonb_sample(value: object) -> tuple[Mapping[str, object], ...]:
-    if not isinstance(value, list):
-        return ()
-    rows: list[Mapping[str, object]] = []
-    for item in value:
-        if isinstance(item, dict):
-            rows.append(item)
-    return tuple(rows)
-
-
-def _quote_ident_path(value: str) -> str:
-    return ".".join(_quote_ident(part) for part in value.split("."))
-
-
-def _quote_ident(value: str) -> str:
-    if not _IDENT_RE.fullmatch(value):
-        msg = f"invalid SQL identifier: {value!r}"
-        raise LoaderError(msg)
-    return f'"{value}"'

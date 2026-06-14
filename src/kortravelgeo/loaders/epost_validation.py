@@ -363,6 +363,8 @@ def _summary(
         )
         else "passed"
     )
+    # Encoding failures return earlier as unsupported_encoding; empty_file means a readable
+    # epost text file with a header or blank body but no data rows.
     if row_count == 0 and issue_count == 0:
         issues.append(
             PostalValidationIssue(

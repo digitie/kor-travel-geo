@@ -51,6 +51,8 @@ def test_iter_civil_service_poi_features_reads_korean_dbf_fields(tmp_path: Path)
             ),
         ),
     )
+    with zipfile.ZipFile(archive, "a") as zip_file:
+        zip_file.writestr("민원행정기관_202401.shp.xml", b"<metadata />")
 
     features = tuple(iter_civil_service_poi_features(archive))
 
