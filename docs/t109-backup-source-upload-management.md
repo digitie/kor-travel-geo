@@ -348,7 +348,7 @@ group 파생값(`state`, `validation_state`, `actual_file_count`, `coverage`, `g
 
 | 항목 | 계약 |
 |------|------|
-| 입력 | `source_file_group_id`, 실행 actor, 호출 원인(`register`, `reconcile_resolve`, `restore`, `revalidate`, `validator_version_change` 등) |
+| 입력 | `source_file_group_id`, 실행 actor, 호출 원인(`register`, `reconcile_resolve`, `child_soft_delete`/`child_hard_delete`, `restore`, `revalidate`, `validator_version_change` 등; 위 prose의 필수 호출자 목록과 동일) |
 | 출력 | 같은 transaction 안에서 group 파생값, child coverage, 참조 match set state/`integrity_alert` 후보, audit metadata를 갱신한다 |
 | 하지 않는 일 | active match set의 `integrity_alert=false` 확정, match set `activate`, rebuild enqueue는 하지 않는다 |
 | active 복구 | 모든 group이 회복되면 active match set에 `integrity_alert_detail.recovered=true` 같은 해제 후보만 표시하고, 실제 해제는 `POST /validate`의 active validate-in-place가 수행한다 |
@@ -1291,7 +1291,7 @@ GET /v1/admin/source-files/upload-sessions?state=&category=&user_yyyymm=&created
 GET /v1/admin/source-files/upload-sessions/{upload_session_id}
 ```
 
-목록 API는 진행 중 세션을 다시 찾는 공식 진입점이다. 사용자가 브라우저를 닫거나 다음날 이어 올리는 시나리오를 위해 `created`, `uploading`, `uploaded_to_temp`, `storing_to_rustfs`, `awaiting_registration`, `failed_register` 같은 terminal 전 상태를 필터링할 수 있어야 한다. 응답은 session별 uploaded slot 수, 남은 required part, `multipart_upload_id`, `registration_deadline_at`, 마지막 오류, 재개 가능한 action을 포함한다.
+목록 API는 진행 중 세션을 다시 찾는 공식 진입점이다. 사용자가 브라우저를 닫거나 다음날 이어 올리는 시나리오를 위해 `created`, `uploading`, `uploaded_to_temp`, `storing_to_rustfs`, `awaiting_registration`, 그리고 `failed_register`/`failed_storage_state` 같은 재개·재업로드로 복구 가능한 실패 상태를 필터링할 수 있어야 한다. 응답은 session별 uploaded slot 수, 남은 required part, `multipart_upload_id`, `registration_deadline_at`, 마지막 오류, 재개 가능한 action을 포함한다.
 
 Admin UI는 `/admin/source-files` 첫 화면에 "재개 가능한 업로드" 목록을 노출한다. 사용자가 `upload_session_id`를 따로 기록하지 않아도 같은 category/기준년월 세션을 찾아 이어 올릴 수 있어야 한다.
 

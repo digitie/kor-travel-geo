@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 L 폴리시 + Task 완전성 보강)
+
+**작업**: (1) head `4142570` 재리뷰의 잔여 L 4건을 닫고, (2) T-110~T-120 / T-200~T-211 / T-105·T-106 백로그를 4축(phase② 설계 커버리지·phase①/ADR·cross-cutting glue·의존성/시퀀싱) 멀티에이전트 + 적대 검증으로 점검해 확정 gap을 task에 반영했다. 설계 자체는 머지 가능 상태이고, 이번 변경은 전부 문서/백로그 정합이다.
+
+**L 폴리시(4)**:
+- `recompute_group_aggregates` 계약표 입력 예시에 `child_soft_delete`/`child_hard_delete` 트리거를 추가해 인접 prose 호출자 목록과 일치시켰다.
+- upload-session 목록 API 재개 상태 예시에 `failed_storage_state`를 넣어 slot 재업로드 복구 흐름을 목록에서 찾을 수 있게 했다.
+- T-204에 RustFS bucket 전체 손실/prefix 대량 손상 시 전수 `source_file_unavailable`+active `integrity_alert`/비-active `validated` `invalid` 전파를 명시했다.
+- `validator_version_change` 재검증 트리거를 T-203(recompute) / T-206(run-validation)에 명시했다.
+
+**Task 보강(확정 gap, 적대 검증 통과)**:
+- T-200: full-prefix rename은 breaking change이므로 `CHANGELOG.md`(BREAKING)+migration-guide(전체 ID 매핑표·admin route 변경·재생성 안내)를 산출물로 포함.
+- T-201: `/v1/admin/uploads` 폐기로 깨지는 공개 `AsyncAddressClient` upload-set 메서드와 `ktgctl load full-set` CLI 제거를 Python 라이브러리(ADR-039)·CLI breaking change로 명시.
+- T-202: 신규 source 관리 액션의 audit `event_type` 집합 정의 + `actor_type` CHECK가 `system:<job_kind>`를 수용하는지 확인.
+- T-203: upload-session SSE events endpoint(`source_upload.progress`·polling fallback)를 명시.
+- T-209: 의존을 `T-201~T-208`로 확장하고 "epost 받기" 버튼+fetch SSE 상태(T-207), 현재 구성 탭 복원 파생 표시(T-208)를 scope에 추가.
+- T-210: 의존을 `T-205·T-206·T-207·T-208·T-209`로 보정하고 백엔드 fixture 27 + 백엔드 openapi.json/api.gen.ts drift, 장비 비종속 성능(T-063 분리)으로 경계 명확화.
+- **신규 T-211**(source registry 관측성): upload/reconcile/janitor/저장소 용량 prometheus metric + admin UI 용량 카드(의존: T-203·T-204·T-209).
+- T-106: wire 100% 채택 시 `x_extension.*` 비표준 필드 처리 정책을 RFC에 포함.
+- T-118: 미사용 전자지도 layer `TL_SPBD_EQB` 검증 대상화 여부 판정 포함.
+
+**적대 검증으로 기각(보강 안 함)**: legacy DB backfill(ADR-049 #18로 read-only fallback이 의도된 동작), 신규 ktgctl source 명령(설계가 API+UI로만 routing), phase① 문서 정합 단일 owner(표준 워크플로가 소유), T-208↔T-206 의존(도메인 불일치).
+
+**검증**: 문서/백로그-only 변경. `git diff --check`로 공백 오류 확인.
+
 ## 2026-06-14 (PR #131 리뷰 재반영 — 누락 시나리오 정밀화)
 
 **작업**: PR #131 최신 리뷰에서 지적된 운영 시나리오 누락을 `docs/t109-backup-source-upload-management.md`·ADR-049·`docs/tasks.md`·`docs/resume.md`에 재반영했다. 문서 방향은 호환성/최소수정보다 확장성·완성도·일관성·성능을 우선하고, 외부 인터페이스 변경은 구현 task에서 OpenAPI/문서/프론트 타입 동기화까지 포함하도록 고정했다.
