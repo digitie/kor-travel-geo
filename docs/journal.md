@@ -2,6 +2,17 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 신규 코멘트 반영 — M-A 옵션2 / L-A / L-B)
+
+**작업**: PR #131 코멘트(issuecomment-4700672694)의 M-A(사용자 지시: 옵션 2)·L-A·L-B를 `docs/t109-backup-source-upload-management.md`·`docs/decisions.md`에 반영했다.
+
+**반영**:
+- **M-A (옵션 2)**: `restored_from_backup → revalidatable` 전이가 `source_set_hash` CHECK(`revalidatable`은 hash NOT NULL 요구)와 충돌하던 문제를, **revalidatable 진입 전 canonical hash 산출을 선행 조건**으로 두어 해소했다. revalidatable 정의/전이 규칙/복원 절차 step 9/커버리지 표/ADR-049 결정 14를 모두 "hash 산출 후 전이"로 통일. 더불어 NULL-hash pre-hash 상태(`draft`/`restored_from_backup`)는 hash를 요구하는 `invalid`로 가지 않도록 invalid 전이 대상을 `validated`로 한정(같은 CHECK 충돌 제거). DDL CHECK 자체는 변경 불필요(NULL 허용은 draft/restored_from_backup뿐, 옵션 2와 정합).
+- **L-A**: activate atomic swap 문구를 "advisory lock + 단일 transaction, retire→activate 순서, **외부 관찰 가능한 active gap/unique 위반** 금지(transaction 내부 순간 상태는 무관)"로 완화.
+- **L-B**: `duplicate_object` 보호 문구의 모호한 "integrity_alert=false active source"를 "active match set이 참조하는 object(integrity_alert 무관) + draft/validated 참조 정본"으로 명확화.
+
+**검증**: 문서-only 변경. `git diff --check`로 공백 오류 확인.
+
 ## 2026-06-14 (PR #131 재리뷰 M 3건 문서 정합 반영)
 
 **작업**: head 189729e 재리뷰에서 남은 Medium 3건(전부 문서 정합)을 `docs/t109-backup-source-upload-management.md`·`docs/decisions.md`에 반영했다. H/블로커는 없었고 직전 잔여는 거의 다 닫힌 상태였다.
