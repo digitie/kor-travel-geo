@@ -283,7 +283,7 @@ def detail_dong_polygon_staging_spec(table_name: str) -> ShapeStagingSpec:
             StagingColumn("buld_slno", sql_type="bigint", source_field="BULD_SLNO"),
             StagingColumn("eqb_man_sn", sql_type="bigint", source_field="EQB_MAN_SN"),
         ),
-        geometry_type="Polygon",
+        geometry_type="Geometry",
     )
 
 

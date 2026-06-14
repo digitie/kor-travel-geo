@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-121 phase ① 전국 라이브데이터 보강 실행 runner를 추가했다. `scripts/run_phase1_augment_reports.py`가 C11~C17 prototype을 실제 `data/juso` 전국 원천으로 실행하고, case별 `AugmentReport`, `source_yyyymm`, summary JSON/Markdown을 산출한다. 실제 full run artifact는 WSL 테스트 미러 `artifacts/augment/t121-live/`에 남겼고, C11 bundle ↔ 전자지도 full key 거리 p95/max 0.0m를 확인했다.
 - T-120 epost 우편번호 수동 적재 검증을 추가했다. `ktgctl load pobox`, `ktgctl load bulk`, `ktgctl load epost`는 COPY 전 행수·필수 컬럼·우편번호 형식·사서함 종류·정수 필드·중복 key sanity 요약을 출력하고, 같은 검증 모듈을 API job `pobox_load`/`bulk_load`와 T-207 server-fetch 흐름에서 재사용할 수 있다.
 - T-201 source file category catalog API를 추가했다. `GET /v1/admin/source-file-categories`가 `core.source_categories.CATEGORY_CATALOG`(6 build + optional/enrichment + epost 카테고리)를 반환하고, `AsyncAddressClient.list_source_file_categories()`로 조회한다. category별 group_kind/default_role/expected member/optional을 노출한다.
 - T-108 운영 배포 자동화를 추가했다. `pinvi`의 T-108 원문을 기준으로 등록하되 사용자 추가 지시에 따라 streaming replication은 제외했고, `scripts/deploy_app.py`로 API/UI `linux/amd64`·`linux/arm64` buildx 빌드/push 계획, N150/Odroid SSH 배포, 원격 `--env-file` 기반 설정 주입, API/UI smoke check를 제공한다. 이 저장소는 계속 PostgreSQL/RustFS 생명주기를 직접 관리하지 않는다.

@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-121 phase ① 전국 라이브데이터 보강 실행)
+
+**작업**: T-111~T-117 prototype을 fixture가 아니라 `F:\dev\kor-travel-geo\data\juso` 전국 실 원천으로 실행하는 T-121 runner를 추가하고, C11~C17 `AugmentReport`와 `source_yyyymm`을 산출했다. ADR-051은 아직 `proposed` 상태이므로 T-119 serving 좌표 scoring은 포함하지 않았다.
+
+**반영**:
+- `scripts/run_phase1_augment_reports.py`를 추가했다. C11~C17 case 선택, 시도 선택, sample limit, C14~C17 smoke limit, 전자지도 ZIP materialization, C17 `match_jibun_*.txt` 7z materialization, PostgreSQL statement timeout, Windows Git metadata 기록을 지원한다.
+- `tests/unit/test_t121_phase1_runner.py`로 parser, source plan, 전자지도 materialization, summary JSON/Markdown 계약을 고정했다.
+- 실제 `TL_SGCO_RNADR_DONG`에 `MULTIPOLYGON`이 포함되어 있어 C13 polygon staging geometry type을 `Geometry`로 넓혔다.
+- C15 staging SQL type validator 계약에 맞춰 `source_x_5179`/`source_y_5179`를 `float8`로 고정했다.
+- `docs/t121-phase1-live-augment.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`를 갱신했다.
+
+**실행 결과**: WSL ext4 테스트 미러 `artifacts/augment/t121-live/`에서 전체 4305.836초에 완료됐다. C11~C13은 17개 시도 모두 `used=17`, C14~C17은 전국 단일 묶음 `used=1`, 실패 0건이다. C11 bundle ↔ 전자지도 full key는 intersection 6,405,305건, left overlap 0.992367, 거리 p95/max 0.0m다. C12 road key overlap은 0.999850이고 dangling connection ratio는 0.005790이다. C13 출입구 point containment는 0.964754, C14 formatter parent mismatch는 0건, C15 geocode match ratio는 0.976742다. C16/C17 `bd_mgt_sn` 직접 비교 0% 교집합은 T-123에서 key 계약/파서 차이를 재검토한다.
+
+**검증**: NTFS worktree와 WSL ext4 테스트 미러에서 `pytest tests/unit/test_t121_phase1_runner.py tests/unit/test_c13_detail_dong.py tests/unit/test_c15_civil_service_poi.py -q` 및 관련 파일 `ruff check` 통과. WSL smoke로 세종/제한 실행 C11~C17 전체가 실패 0건임을 확인한 뒤 전국 full run을 완료했다. 최신 `origin/main` rebase 후 최종 WSL 검증은 `pytest -q` → 620 passed, 30 skipped, 24 warnings, `ruff check .`, `mypy src/kortravelgeo`, `lint-imports` 통과다.
+
 ## 2026-06-14 (T-120 epost 우편번호 수동 적재·검증)
 
 **작업**: epost 사서함·다량배달처 파일을 DB COPY 전에 검증하는 공통 모듈을 추가했다. T-207 server-fetch/RustFS register 흐름에서 같은 검증을 재사용할 수 있도록 파일 검증과 CLI 출력, 로더 hard gate를 분리했다.
