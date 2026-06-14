@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-14 갱신, by codex)
 
+- ✅ T-112 C12 건물 도형 connection line 검증 prototype — `src/kortravelgeo/loaders/c12_connection_lines.py`를 추가해 `도로명주소 건물 도형` bundle `TL_SPOT_CNTC` polyline과 전자지도 `TL_SPRD_MANAGE` 도로 관리선을 staging 적재한다. `RDS_SIG_CD + RDS_MAN_NO` key overlap, line-to-line `ST_Distance` 분포, road key 결손 또는 tolerance 초과 dangling connection을 측정한다. T-040 connection ↔ bundle entrance 참조 overlap도 payload에 함께 남기며, `serving_promotion=False` 계약을 고정했다. 상세: `docs/t112-c12-connection-lines.md`.
 - ✅ T-111 C11 출입구 원천 간 거리 검증 prototype — `src/kortravelgeo/loaders/c11_entrance_sources.py`를 추가해 건물 도형 bundle `TL_SPBD_ENTRC`와 전자지도 `TL_SPBD_ENTRC`를 staging 적재하고 key overlap 및 `ST_Distance` 거리 분포를 측정한다. bundle ↔ 전자지도는 `ENTRANCE_KEY_FIELDS` full key를 쓰고, `tl_locsum_entrc`/`tl_roadaddr_entrc` 비교는 운영 테이블이 `BUL_MAN_NO`/`EQB_MAN_SN`을 보존하지 않아 `sig_cd + ent_man_no` weak key로만 측정한다. 모든 metric은 `AugmentReport` payload로 감쌀 수 있으며 `serving_promotion=False` 계약을 고정했다. 상세: `docs/t111-c11-entrance-sources.md`.
 - ✅ T-110 보강 검증 공통 harness — `src/kortravelgeo/loaders/augment_harness.py`에 17개 시도 group 순회 driver, `AugmentReport`, SHP `Point`/`PolyLine`/`Polygon` body parser, DBF row alignment, ZIP layer feature iterator, staging table 생성/COPY helper, key join 기반 `ST_Distance`/`ST_Covers` 측정 helper를 추가했다. 단위 테스트는 synthetic SHP/DBF로 parser/report/SQL 계약을 고정하고, 실제 PostGIS smoke는 `KTG_SLOW_REAL_DATA=1` + `KTG_TEST_PG_DSN` 선택형 테스트로 분리했다. 상세: `docs/t110-augment-harness.md`.
 - ✅ T-109 후속 작업 분해 + ADR-050 — 후속 구현을 ① 데이터 원천 보강·검증(**T-110~T-123**) → ② 데이터 적재/백업 구현·검증(**T-200~T-215**) 순서로 잘게 나눠 `docs/tasks.md`에 등록하고, 순서·번호 체계·v1/v2 audit(**T-105** v2 일관성 재audit, **T-106** v1 vworld 100% 호환; 둘 다 우선순위 최하위)을 ADR-050으로 고정했다. T-109(PR #131)는 ②의 설계 문서이며 구현은 T-200대로 분할한다. phase ① prototype은 `ops` registry 없이 로컬 디스크로 독립 수행하고 C11~C17은 phase ②(T-206)에서 DB case registry로 정식화한다. PR 리뷰 재점검 후 운영 용량 관리 후속을 T-212로 추가했고, 각 phase 끝에 전국 라이브데이터 실행/로딩 → 성능평가·벤치 → 튜닝·최종 검증 평가를 phase ① T-121~T-123, phase ② T-213~T-215로 추가했다. 후속 구현은 T-110부터 시작했다.
@@ -159,7 +160,7 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-다음 즉시 실행 작업은 **T-112 C12 건물 도형 connection line 검증 prototype**이다. T-110 `augment_harness`의 polyline reader/staging을 사용해 `도로명주소 건물 도형` bundle의 `TL_SPOT_CNTC` 연결선을 staging하고, 전자지도 도로 layer 인접성과 dangling connection을 측정한다. 좌표 승격이나 serving 변경은 하지 않는다.
+다음 즉시 실행 작업은 **T-113 C13 상세주소 동 containment 검증 prototype**이다. `detail_dong_shape_bundle`의 동 polygon/동 출입구와 `상세주소DB` `adrdc_*` TXT를 연결해 `ST_Covers` containment와 key overlap을 측정한다. `extra_shape_layers.py`의 상세주소 동 도형 비교 helper와 T-110 `augment_harness`를 재사용하고, 좌표 승격이나 serving 변경은 하지 않는다.
 
 - 최신 T-027/T-047 재측정 로그는 로컬 산출물 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/fullload/t027-t047-retune-20260531-232609/`와 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/perf/t047-retune-standard-20260601-012814/` 아래에 있다. 이 경로는 git ignore 대상이다.
 - 최신 실제 DB 정합성은 `severity_max=ERROR`다. 전체 daily 적용 후 남은 주요 항목은 C2 29,410건(`missing_text=28,829`, `missing_resolve_key=581`), C4 12,189건(`over_500m=83`), C6 3,608건, C7 9,886건이다. C10은 `tl_juso_text=202603/202604/202605`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605` 기준월 혼합을 `WARN` 처리한다.
