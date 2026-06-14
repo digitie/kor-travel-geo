@@ -624,10 +624,27 @@ class SourceCategoryCapacity(FrozenModel):
     soft_deleted_bytes: int = Field(default=0, ge=0)
 
 
+class SourceRetentionRecommendation(FrozenModel):
+    """Retention guidance surfaced with capacity (T-212, ADR-052; not auto-delete).
+
+    Advisory only: the retention policy never auto-deletes registered archives.
+    ``reclaimable_bytes`` is the soft_deleted + quarantined + unregistered bytes a
+    ``destructive_admin`` could manually clean up, and ``eligible_object_count``
+    is how many objects the bulk hard-delete action would currently accept.
+    """
+
+    over_threshold: bool = False
+    reclaimable_bytes: int = Field(default=0, ge=0)
+    eligible_object_count: int = Field(default=0, ge=0)
+    guidance: str = ""
+
+
 class SourceCapacityUsage(FrozenModel):
     """``GET /v1/admin/source-files/capacity`` response (doc lines ~2107-2108).
 
-    Computation + surfacing only: the retention/cleanup policy is T-212.
+    Computation + surfacing only: the retention/cleanup POLICY is T-212 (ADR-052),
+    which forbids auto-deleting registered archives. ``retention`` carries the
+    advisory cleanup recommendation derived from this usage.
     """
 
     categories: tuple[SourceCategoryCapacity, ...] = ()
@@ -639,6 +656,49 @@ class SourceCapacityUsage(FrozenModel):
     growth_30d_bytes: int = Field(default=0, ge=0)
     capacity_limit_bytes: int | None = Field(default=None, ge=0)
     over_threshold: bool = False
+    retention: SourceRetentionRecommendation | None = None
+
+
+# --- Bulk hard-delete / restore (T-212, ADR-052) ---------------------------
+
+
+class SourceBulkHardDeleteRequest(FrozenModel):
+    """``POST /v1/admin/source-files/bulk-hard-delete`` body (T-212, ADR-052).
+
+    ``destructive_admin`` only. ``typed_confirmation`` must equal
+    ``HARD-DELETE-SOURCES``. Targets are addressed by ``object_keys`` (the bulk
+    selection from the reconcile / source-files admin list). NEVER deletes an
+    active-정본 object (the T-204 active-match-set guard is reused). A completed
+    backup ``db_backup`` manifest/export must exist OR ``manifest_ack=true`` must
+    be passed to acknowledge proceeding without one (pre-delete safety gate).
+    """
+
+    object_keys: tuple[str, ...] = Field(min_length=1, max_length=1000)
+    typed_confirmation: str
+    manifest_ack: bool = False
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class SourceHardDeleteOutcome(FrozenModel):
+    """Per-object result of the bulk hard-delete (T-212)."""
+
+    object_key: str
+    source_file_id: str | None = None
+    outcome: Literal[
+        "hard_deleted", "delete_failed", "skipped_ineligible", "skipped_not_found"
+    ]
+    reason: str | None = None
+
+
+class SourceBulkHardDeleteResponse(FrozenModel):
+    """``POST .../bulk-hard-delete`` response (T-212, ADR-052)."""
+
+    requested_count: int = Field(default=0, ge=0)
+    hard_deleted_count: int = Field(default=0, ge=0)
+    delete_failed_count: int = Field(default=0, ge=0)
+    skipped_count: int = Field(default=0, ge=0)
+    results: tuple[SourceHardDeleteOutcome, ...] = ()
+    affected_match_set_ids: tuple[str, ...] = ()
 
 
 class SourceMatchSet(FrozenModel):

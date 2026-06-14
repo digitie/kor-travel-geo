@@ -91,6 +91,8 @@ from kortravelgeo.dto.source import (
     ServingReleaseRollbackRequest,
     ServingReleaseRollbackResponse,
     SlotReplaceResponse,
+    SourceBulkHardDeleteRequest,
+    SourceBulkHardDeleteResponse,
     SourceCapacityUsage,
     SourceFileCategoryCatalog,
     SourceFileCategoryInfo,
@@ -1086,9 +1088,60 @@ async def source_files_capacity(
 ) -> SourceCapacityUsage:
     """Per-category storage capacity usage (doc line ~2107).
 
-    Computation + surfacing only; the retention/cleanup POLICY is T-212.
+    Computation + surfacing. Includes the T-212 (ADR-052) retention
+    recommendation (over-threshold + reclaimable / eligible-for-cleanup signal);
+    the policy never auto-deletes registered archives.
     """
     return await client.source_storage_capacity()
+
+
+@router.post(
+    "/source-files/bulk-hard-delete",
+    response_model=SourceBulkHardDeleteResponse,
+    response_model_exclude_none=True,
+)
+async def bulk_hard_delete_source_files(
+    req: SourceBulkHardDeleteRequest,
+    request: Request,
+    ctx: RequestContext = _DESTRUCTIVE_ADMIN,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceBulkHardDeleteResponse:
+    """Manually bulk hard-delete eligible source objects (T-212, ADR-052).
+
+    The ONLY admin-driven hard-delete path — registered archives are NEVER
+    auto-deleted. Requires ``destructive_admin`` and a ``typed_confirmation`` of
+    ``HARD-DELETE-SOURCES``. Only ``soft_deleted``/``quarantined`` files and
+    unregistered stored objects (``object_missing_db``/``registration_expired``)
+    are eligible; the reused T-204 active-정본 guard makes an object an active
+    match set references never eligible. A completed ``db_backup`` manifest/export
+    must exist OR ``manifest_ack=true`` must be passed (pre-delete safety gate).
+    Each deletion is audited; the owning group is recomputed so referencing match
+    sets follow.
+    """
+    result = await client.bulk_hard_delete_source_objects(
+        object_keys=req.object_keys,
+        typed_confirmation=req.typed_confirmation,
+        manifest_ack=req.manifest_ack,
+        actor=ctx.actor,
+        reason=req.reason,
+    )
+    await client.record_audit_event(
+        action="source.hard_delete",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="bulk_hard_delete",
+        payload={
+            "requested": result.requested_count,
+            "hard_deleted": result.hard_deleted_count,
+            "delete_failed": result.delete_failed_count,
+            "skipped": result.skipped_count,
+            "manifest_ack": req.manifest_ack,
+        },
+        resource_type="source_storage",
+        resource_id="bulk-hard-delete",
+        **_audit_request(request),
+    )
+    return result
 
 
 # --- Source match sets (T-205a) -------------------------------------------

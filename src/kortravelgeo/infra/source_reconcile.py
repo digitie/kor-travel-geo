@@ -34,14 +34,17 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from kortravelgeo.core.source_events import (
+    SOURCE_HARD_DELETE,
     SOURCE_RECONCILE_RESOLVE,
     SOURCE_RECONCILE_RUN,
 )
 from kortravelgeo.core.source_reconcile import (
+    BulkHardDeletePlan,
     CapacityUsage,
     CategoryCapacity,
     DbFileFact,
     DuplicateObjectFact,
+    HardDeleteCandidateFact,
     IssueDecision,
     ObjectHeadFact,
     ReconcileIssueType,
@@ -49,6 +52,9 @@ from kortravelgeo.core.source_reconcile import (
     ResolveAction,
     ResolveGuard,
     assess_bucket_loss,
+    build_retention_recommendation,
+    bulk_hard_delete_confirmation,
+    check_pre_delete_safety,
     classify_db_file,
     classify_unregistered_object,
     compute_capacity_usage,
@@ -57,6 +63,7 @@ from kortravelgeo.core.source_reconcile import (
     guard_object_deletion,
     issue_severity,
     mass_loss_issue_type,
+    plan_bulk_hard_delete,
     resolve_still_applies,
 )
 from kortravelgeo.core.source_reconcile import (
@@ -64,13 +71,17 @@ from kortravelgeo.core.source_reconcile import (
 )
 from kortravelgeo.dto.source import (
     ReconcileResolveResponse,
+    SourceBulkHardDeleteResponse,
     SourceCapacityUsage,
     SourceCategoryCapacity,
+    SourceHardDeleteOutcome,
     SourceReconcileItem,
     SourceReconcileRun,
+    SourceRetentionRecommendation,
 )
 from kortravelgeo.exceptions import ConflictError, InvalidInputError, NotFoundError
 from kortravelgeo.infra.metrics import (
+    record_source_hard_delete,
     record_source_reconcile_item,
     record_source_reconcile_resolve,
     record_source_reconcile_run,
@@ -939,6 +950,29 @@ SELECT COALESCE(sum(size_bytes), 0)
 """
             )
         )
+        # Objects a destructive_admin could currently bulk-hard-delete: registered
+        # soft_deleted/quarantined files + unregistered stored objects surfaced by
+        # the latest reconcile (ADR-052; advisory count only, never auto-deleted).
+        eligible_files = await conn.scalar(
+            text(
+                """
+SELECT count(*) FROM ops.source_files
+ WHERE state IN ('soft_deleted', 'quarantined')
+"""
+            )
+        )
+        eligible_unregistered = await conn.scalar(
+            text(
+                """
+SELECT count(DISTINCT object_key)
+  FROM ops.source_storage_reconcile_items
+ WHERE issue_type IN ('object_missing_db', 'registration_expired')
+   AND state = 'open' AND object_key IS NOT NULL
+"""
+            )
+        )
+
+    eligible_object_count = int(eligible_files or 0) + int(eligible_unregistered or 0)
 
     categories = tuple(
         CategoryCapacity(
@@ -957,10 +991,15 @@ SELECT COALESCE(sum(size_bytes), 0)
         capacity_limit_bytes=capacity_limit_bytes,
         threshold_ratio=threshold_ratio,
     )
-    return _capacity_dto(usage)
+    return _capacity_dto(usage, eligible_object_count=eligible_object_count)
 
 
-def _capacity_dto(usage: CapacityUsage) -> SourceCapacityUsage:
+def _capacity_dto(
+    usage: CapacityUsage, *, eligible_object_count: int = 0
+) -> SourceCapacityUsage:
+    recommendation = build_retention_recommendation(
+        usage, eligible_object_count=eligible_object_count
+    )
     return SourceCapacityUsage(
         categories=tuple(
             SourceCategoryCapacity(
@@ -980,7 +1019,307 @@ def _capacity_dto(usage: CapacityUsage) -> SourceCapacityUsage:
         growth_30d_bytes=usage.growth_30d_bytes,
         capacity_limit_bytes=usage.capacity_limit_bytes,
         over_threshold=usage.over_threshold,
+        retention=SourceRetentionRecommendation(
+            over_threshold=recommendation.over_threshold,
+            reclaimable_bytes=recommendation.reclaimable_bytes,
+            eligible_object_count=recommendation.eligible_object_count,
+            guidance=recommendation.guidance,
+        ),
     )
+
+
+# --- bulk hard-delete / restore (T-212, ADR-052) ---------------------------
+
+
+async def _active_referenced_object_keys(conn: AsyncConnection) -> frozenset[str]:
+    """Object keys reachable from any ACTIVE match set's groups (the 정본 guard).
+
+    Reuses the same join as the T-204 per-item deletion guard, but returns the
+    whole active-정본 key set so the bulk action can partition many candidates in
+    one query. Such objects are NEVER eligible for hard-delete (ADR-052).
+    """
+    rows = (
+        await conn.execute(
+            text(
+                """
+SELECT DISTINCT f.object_key
+  FROM ops.source_match_sets ms
+  JOIN ops.source_match_set_items it
+    ON it.source_match_set_id = ms.source_match_set_id
+  JOIN ops.source_files f
+    ON f.source_file_group_id = it.source_file_group_id
+ WHERE ms.state = 'active' AND f.object_key IS NOT NULL
+   AND f.state <> 'hard_deleted'
+"""
+            )
+        )
+    ).all()
+    return frozenset(str(r[0]) for r in rows)
+
+
+async def _backup_manifest_present(conn: AsyncConnection) -> bool:
+    """Whether a completed ``db_backup`` manifest/export exists (pre-delete gate).
+
+    A single completed backup artifact is enough evidence for the pre-delete
+    safety gate (ADR-052); without one the caller must pass ``manifest_ack``.
+    """
+    row = (
+        await conn.execute(
+            text(
+                """
+SELECT 1 FROM ops.artifacts
+ WHERE artifact_type = 'db_backup' AND state = 'completed'
+ LIMIT 1
+"""
+            )
+        )
+    ).first()
+    return row is not None
+
+
+async def bulk_hard_delete_sources(
+    engine: AsyncEngine,
+    *,
+    object_keys: tuple[str, ...],
+    typed_confirmation: str,
+    manifest_ack: bool,
+    actor: str | None,
+    reason: str | None = None,
+    rustfs: RustfsClient | None = None,
+) -> SourceBulkHardDeleteResponse:
+    """Manually bulk hard-delete eligible source objects (T-212, ADR-052).
+
+    The ONLY admin-driven hard-delete path (registered archives are never
+    auto-deleted). Steps:
+
+    1. require the exact typed confirmation (``HARD-DELETE-SOURCES``);
+    2. pre-delete safety gate: a completed ``db_backup`` manifest/export must
+       exist OR ``manifest_ack=true`` (explicit acknowledgement);
+    3. load each candidate's registry state + active-정본 flag, then
+       :func:`plan_bulk_hard_delete` partitions eligible / skipped — the
+       active-정본 guard (reused from T-204) makes a live-referenced object
+       never eligible, and a live ``available``/``validating``/``missing`` archive
+       is skipped (registered archives are not bulk-deletable);
+    4. for each eligible object: delete the RustFS object, set the registry row
+       ``hard_deleted`` (or ``delete_failed`` on RustFS error), audit, and
+       recompute the owning group so referencing match sets follow.
+    """
+    if typed_confirmation != bulk_hard_delete_confirmation():
+        raise InvalidInputError(
+            "bulk hard-delete에는 "
+            f"typed_confirmation '{bulk_hard_delete_confirmation()}'이 필요합니다"
+        )
+
+    requested = tuple(dict.fromkeys(object_keys))  # de-dupe, keep order
+    results: list[SourceHardDeleteOutcome] = []
+    affected: set[str] = set()
+    deleted = failed = skipped = 0
+
+    async with engine.begin() as conn:
+        safety = check_pre_delete_safety(
+            backup_manifest_present=await _backup_manifest_present(conn),
+            manifest_ack=manifest_ack,
+        )
+        if not safety.allowed:
+            raise ConflictError(safety.reason)
+
+        active_keys = await _active_referenced_object_keys(conn)
+        candidates = await _load_hard_delete_candidates(conn, requested, active_keys)
+        plan: BulkHardDeletePlan = plan_bulk_hard_delete(candidates)
+
+        eligible_keys = {e.object_key for e in plan.eligible}
+        # Anything requested but not found in the registry / reconcile facts.
+        known_keys = {c.object_key for c in candidates}
+        for key in requested:
+            if key not in known_keys:
+                skipped += 1
+                results.append(
+                    SourceHardDeleteOutcome(
+                        object_key=key,
+                        outcome="skipped_not_found",
+                        reason="등록/미등록 어느 facts에도 없는 object_key",
+                    )
+                )
+
+        for verdict in plan.skipped:
+            skipped += 1
+            results.append(
+                SourceHardDeleteOutcome(
+                    object_key=verdict.object_key,
+                    source_file_id=verdict.source_file_id,
+                    outcome="skipped_ineligible",
+                    reason=verdict.reason,
+                )
+            )
+
+        by_key = {c.object_key: c for c in candidates}
+        for verdict in plan.eligible:
+            if verdict.object_key not in eligible_keys:  # defensive
+                continue
+            cand = by_key[verdict.object_key]
+            rustfs_error: str | None = None
+            if rustfs is not None:
+                try:
+                    await rustfs.delete_object(verdict.object_key)
+                except Exception as exc:  # storage failure → delete_failed
+                    rustfs_error = str(exc)
+                    _LOGGER.warning(
+                        "bulk hard-delete RustFS delete failed",
+                        extra={"key": verdict.object_key},
+                    )
+            new_state = "delete_failed" if rustfs_error else "hard_deleted"
+            group_id = await _hard_delete_finalize(
+                conn,
+                source_file_id=cand.source_file_id,
+                state=new_state,
+            )
+            if group_id:
+                r = await recompute_group_aggregates(
+                    conn, group_id, trigger="bulk_hard_delete"
+                )
+                affected.update(r.affected_match_set_ids)
+            if rustfs_error:
+                failed += 1
+                results.append(
+                    SourceHardDeleteOutcome(
+                        object_key=verdict.object_key,
+                        source_file_id=cand.source_file_id,
+                        outcome="delete_failed",
+                        reason=rustfs_error,
+                    )
+                )
+            else:
+                deleted += 1
+                results.append(
+                    SourceHardDeleteOutcome(
+                        object_key=verdict.object_key,
+                        source_file_id=cand.source_file_id,
+                        outcome="hard_deleted",
+                    )
+                )
+            await _audit_reconcile(
+                conn,
+                action=SOURCE_HARD_DELETE,
+                resource_id=cand.source_file_id or verdict.object_key,
+                actor=actor,
+                outcome=new_state,
+                payload={
+                    "object_key": verdict.object_key,
+                    "source_file_id": cand.source_file_id,
+                    "manifest_ack": manifest_ack,
+                    "reason": reason,
+                },
+            )
+
+    for _ in range(deleted):
+        record_source_hard_delete(outcome="hard_deleted")
+    for _ in range(failed):
+        record_source_hard_delete(outcome="delete_failed")
+    for _ in range(skipped):
+        record_source_hard_delete(outcome="skipped")
+
+    return SourceBulkHardDeleteResponse(
+        requested_count=len(requested),
+        hard_deleted_count=deleted,
+        delete_failed_count=failed,
+        skipped_count=skipped,
+        results=tuple(results),
+        affected_match_set_ids=tuple(sorted(affected)),
+    )
+
+
+async def _load_hard_delete_candidates(
+    conn: AsyncConnection,
+    object_keys: tuple[str, ...],
+    active_keys: frozenset[str],
+) -> tuple[HardDeleteCandidateFact, ...]:
+    """Build candidate facts for the requested keys (registered + unregistered).
+
+    A key resolves to its live (non-hard_deleted) ``ops.source_files`` row when
+    one exists; otherwise to the latest open reconcile item that classified it as
+    an unregistered stored object. ``active_referenced`` is the reused T-204
+    active-정본 guard input.
+    """
+    if not object_keys:
+        return ()
+    keys = list(object_keys)
+    file_rows = (
+        await conn.execute(
+            text(
+                """
+SELECT object_key, source_file_id, state
+  FROM ops.source_files
+ WHERE object_key = ANY(:keys) AND state <> 'hard_deleted'
+"""
+            ).bindparams(bindparam("keys", expanding=True)),
+            {"keys": keys},
+        )
+    ).mappings().all()
+    by_key: dict[str, HardDeleteCandidateFact] = {}
+    for r in file_rows:
+        key = str(r["object_key"])
+        by_key[key] = HardDeleteCandidateFact(
+            object_key=key,
+            source_file_id=str(r["source_file_id"]),
+            state=str(r["state"]),
+            active_referenced=key in active_keys,
+        )
+    # Keys with no live registry row: classify from the latest open reconcile item.
+    missing = [k for k in keys if k not in by_key]
+    if missing:
+        unreg_rows = (
+            await conn.execute(
+                text(
+                    """
+SELECT DISTINCT ON (object_key) object_key, issue_type
+  FROM ops.source_storage_reconcile_items
+ WHERE object_key = ANY(:keys) AND state = 'open'
+   AND issue_type IN ('object_missing_db', 'registration_expired')
+ ORDER BY object_key, created_at DESC
+"""
+                ).bindparams(bindparam("keys", expanding=True)),
+                {"keys": missing},
+            )
+        ).mappings().all()
+        for r in unreg_rows:
+            key = str(r["object_key"])
+            by_key[key] = HardDeleteCandidateFact(
+                object_key=key,
+                source_file_id=None,
+                state=None,
+                issue_type=str(r["issue_type"]),
+                active_referenced=key in active_keys,
+            )
+    return tuple(by_key[k] for k in keys if k in by_key)
+
+
+async def _hard_delete_finalize(
+    conn: AsyncConnection,
+    *,
+    source_file_id: str | None,
+    state: str,
+) -> str | None:
+    """Set a registry row to hard_deleted/delete_failed; return its group id.
+
+    Unregistered objects (no ``source_file_id``) have no registry row to update,
+    so the RustFS object is removed and nothing further is recomputed.
+    """
+    if not source_file_id:
+        return None
+    row = (
+        await conn.execute(
+            text(
+                """
+UPDATE ops.source_files
+   SET state = :state, deleted_at = now()
+ WHERE source_file_id = :fid AND state <> 'hard_deleted'
+RETURNING source_file_group_id
+"""
+            ),
+            {"fid": source_file_id, "state": state},
+        )
+    ).first()
+    return str(row[0]) if row else None
 
 
 # --- read helpers + audit ---------------------------------------------------

@@ -6291,9 +6291,99 @@
         "title": "SlotReplaceResponse",
         "type": "object"
       },
+      "SourceBulkHardDeleteRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/source-files/bulk-hard-delete`` body (T-212, ADR-052).\n\n``destructive_admin`` only. ``typed_confirmation`` must equal\n``HARD-DELETE-SOURCES``. Targets are addressed by ``object_keys`` (the bulk\nselection from the reconcile / source-files admin list). NEVER deletes an\nactive-정본 object (the T-204 active-match-set guard is reused). A completed\nbackup ``db_backup`` manifest/export must exist OR ``manifest_ack=true`` must\nbe passed to acknowledge proceeding without one (pre-delete safety gate).",
+        "properties": {
+          "manifest_ack": {
+            "default": false,
+            "title": "Manifest Ack",
+            "type": "boolean"
+          },
+          "object_keys": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Object Keys",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "typed_confirmation": {
+            "title": "Typed Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "object_keys",
+          "typed_confirmation"
+        ],
+        "title": "SourceBulkHardDeleteRequest",
+        "type": "object"
+      },
+      "SourceBulkHardDeleteResponse": {
+        "additionalProperties": false,
+        "description": "``POST .../bulk-hard-delete`` response (T-212, ADR-052).",
+        "properties": {
+          "affected_match_set_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Affected Match Set Ids",
+            "type": "array"
+          },
+          "delete_failed_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Delete Failed Count",
+            "type": "integer"
+          },
+          "hard_deleted_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Hard Deleted Count",
+            "type": "integer"
+          },
+          "requested_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Requested Count",
+            "type": "integer"
+          },
+          "results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceHardDeleteOutcome"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "skipped_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Skipped Count",
+            "type": "integer"
+          }
+        },
+        "title": "SourceBulkHardDeleteResponse",
+        "type": "object"
+      },
       "SourceCapacityUsage": {
         "additionalProperties": false,
-        "description": "``GET /v1/admin/source-files/capacity`` response (doc lines ~2107-2108).\n\nComputation + surfacing only: the retention/cleanup policy is T-212.",
+        "description": "``GET /v1/admin/source-files/capacity`` response (doc lines ~2107-2108).\n\nComputation + surfacing only: the retention/cleanup POLICY is T-212 (ADR-052),\nwhich forbids auto-deleting registered archives. ``retention`` carries the\nadvisory cleanup recommendation derived from this usage.",
         "properties": {
           "capacity_limit_bytes": {
             "anyOf": [
@@ -6331,6 +6421,16 @@
             "minimum": 0.0,
             "title": "Quarantined Bytes",
             "type": "integer"
+          },
+          "retention": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceRetentionRecommendation"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "soft_deleted_bytes": {
             "default": 0,
@@ -6931,6 +7031,54 @@
           "state"
         ],
         "title": "SourceGroupSoftDeleteResponse",
+        "type": "object"
+      },
+      "SourceHardDeleteOutcome": {
+        "additionalProperties": false,
+        "description": "Per-object result of the bulk hard-delete (T-212).",
+        "properties": {
+          "object_key": {
+            "title": "Object Key",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "hard_deleted",
+              "delete_failed",
+              "skipped_ineligible",
+              "skipped_not_found"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          }
+        },
+        "required": [
+          "object_key",
+          "outcome"
+        ],
+        "title": "SourceHardDeleteOutcome",
         "type": "object"
       },
       "SourceJanitorRunResponse": {
@@ -8057,6 +8205,36 @@
           "started_at"
         ],
         "title": "SourceReconcileRun",
+        "type": "object"
+      },
+      "SourceRetentionRecommendation": {
+        "additionalProperties": false,
+        "description": "Retention guidance surfaced with capacity (T-212, ADR-052; not auto-delete).\n\nAdvisory only: the retention policy never auto-deletes registered archives.\n``reclaimable_bytes`` is the soft_deleted + quarantined + unregistered bytes a\n``destructive_admin`` could manually clean up, and ``eligible_object_count``\nis how many objects the bulk hard-delete action would currently accept.",
+        "properties": {
+          "eligible_object_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Eligible Object Count",
+            "type": "integer"
+          },
+          "guidance": {
+            "default": "",
+            "title": "Guidance",
+            "type": "string"
+          },
+          "over_threshold": {
+            "default": false,
+            "title": "Over Threshold",
+            "type": "boolean"
+          },
+          "reclaimable_bytes": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Reclaimable Bytes",
+            "type": "integer"
+          }
+        },
+        "title": "SourceRetentionRecommendation",
         "type": "object"
       },
       "SppnMakareaContext": {
@@ -12555,9 +12733,51 @@
         ]
       }
     },
+    "/v1/admin/source-files/bulk-hard-delete": {
+      "post": {
+        "description": "Manually bulk hard-delete eligible source objects (T-212, ADR-052).\n\nThe ONLY admin-driven hard-delete path — registered archives are NEVER\nauto-deleted. Requires ``destructive_admin`` and a ``typed_confirmation`` of\n``HARD-DELETE-SOURCES``. Only ``soft_deleted``/``quarantined`` files and\nunregistered stored objects (``object_missing_db``/``registration_expired``)\nare eligible; the reused T-204 active-정본 guard makes an object an active\nmatch set references never eligible. A completed ``db_backup`` manifest/export\nmust exist OR ``manifest_ack=true`` must be passed (pre-delete safety gate).\nEach deletion is audited; the owning group is recomputed so referencing match\nsets follow.",
+        "operationId": "bulk_hard_delete_source_files_v1_admin_source_files_bulk_hard_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceBulkHardDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceBulkHardDeleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Hard Delete Source Files",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/source-files/capacity": {
       "get": {
-        "description": "Per-category storage capacity usage (doc line ~2107).\n\nComputation + surfacing only; the retention/cleanup POLICY is T-212.",
+        "description": "Per-category storage capacity usage (doc line ~2107).\n\nComputation + surfacing. Includes the T-212 (ADR-052) retention\nrecommendation (over-threshold + reclaimable / eligible-for-cleanup signal);\nthe policy never auto-deletes registered archives.",
         "operationId": "source_files_capacity_v1_admin_source_files_capacity_get",
         "responses": {
           "200": {

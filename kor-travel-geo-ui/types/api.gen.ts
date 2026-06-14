@@ -905,6 +905,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-files/bulk-hard-delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Hard Delete Source Files
+         * @description Manually bulk hard-delete eligible source objects (T-212, ADR-052).
+         *
+         *     The ONLY admin-driven hard-delete path — registered archives are NEVER
+         *     auto-deleted. Requires ``destructive_admin`` and a ``typed_confirmation`` of
+         *     ``HARD-DELETE-SOURCES``. Only ``soft_deleted``/``quarantined`` files and
+         *     unregistered stored objects (``object_missing_db``/``registration_expired``)
+         *     are eligible; the reused T-204 active-정본 guard makes an object an active
+         *     match set references never eligible. A completed ``db_backup`` manifest/export
+         *     must exist OR ``manifest_ack=true`` must be passed (pre-delete safety gate).
+         *     Each deletion is audited; the owning group is recomputed so referencing match
+         *     sets follow.
+         */
+        post: operations["bulk_hard_delete_source_files_v1_admin_source_files_bulk_hard_delete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/source-files/capacity": {
         parameters: {
             query?: never;
@@ -916,7 +946,9 @@ export interface paths {
          * Source Files Capacity
          * @description Per-category storage capacity usage (doc line ~2107).
          *
-         *     Computation + surfacing only; the retention/cleanup POLICY is T-212.
+         *     Computation + surfacing. Includes the T-212 (ADR-052) retention
+         *     recommendation (over-threshold + reclaimable / eligible-for-cleanup signal);
+         *     the policy never auto-deletes registered archives.
          */
         get: operations["source_files_capacity_v1_admin_source_files_capacity_get"];
         put?: never;
@@ -3855,10 +3887,72 @@ export interface components {
             upload_session_id: string;
         };
         /**
+         * SourceBulkHardDeleteRequest
+         * @description ``POST /v1/admin/source-files/bulk-hard-delete`` body (T-212, ADR-052).
+         *
+         *     ``destructive_admin`` only. ``typed_confirmation`` must equal
+         *     ``HARD-DELETE-SOURCES``. Targets are addressed by ``object_keys`` (the bulk
+         *     selection from the reconcile / source-files admin list). NEVER deletes an
+         *     active-정본 object (the T-204 active-match-set guard is reused). A completed
+         *     backup ``db_backup`` manifest/export must exist OR ``manifest_ack=true`` must
+         *     be passed to acknowledge proceeding without one (pre-delete safety gate).
+         */
+        SourceBulkHardDeleteRequest: {
+            /**
+             * Manifest Ack
+             * @default false
+             */
+            manifest_ack: boolean;
+            /** Object Keys */
+            object_keys: string[];
+            /** Reason */
+            reason?: string | null;
+            /** Typed Confirmation */
+            typed_confirmation: string;
+        };
+        /**
+         * SourceBulkHardDeleteResponse
+         * @description ``POST .../bulk-hard-delete`` response (T-212, ADR-052).
+         */
+        SourceBulkHardDeleteResponse: {
+            /**
+             * Affected Match Set Ids
+             * @default []
+             */
+            affected_match_set_ids: string[];
+            /**
+             * Delete Failed Count
+             * @default 0
+             */
+            delete_failed_count: number;
+            /**
+             * Hard Deleted Count
+             * @default 0
+             */
+            hard_deleted_count: number;
+            /**
+             * Requested Count
+             * @default 0
+             */
+            requested_count: number;
+            /**
+             * Results
+             * @default []
+             */
+            results: components["schemas"]["SourceHardDeleteOutcome"][];
+            /**
+             * Skipped Count
+             * @default 0
+             */
+            skipped_count: number;
+        };
+        /**
          * SourceCapacityUsage
          * @description ``GET /v1/admin/source-files/capacity`` response (doc lines ~2107-2108).
          *
-         *     Computation + surfacing only: the retention/cleanup policy is T-212.
+         *     Computation + surfacing only: the retention/cleanup POLICY is T-212 (ADR-052),
+         *     which forbids auto-deleting registered archives. ``retention`` carries the
+         *     advisory cleanup recommendation derived from this usage.
          */
         SourceCapacityUsage: {
             /** Capacity Limit Bytes */
@@ -3883,6 +3977,7 @@ export interface components {
              * @default 0
              */
             quarantined_bytes: number;
+            retention?: components["schemas"]["SourceRetentionRecommendation"] | null;
             /**
              * Soft Deleted Bytes
              * @default 0
@@ -4175,6 +4270,23 @@ export interface components {
              * @enum {string}
              */
             state: "validating" | "available" | "quarantined" | "missing" | "soft_deleted" | "hard_deleted" | "delete_failed";
+        };
+        /**
+         * SourceHardDeleteOutcome
+         * @description Per-object result of the bulk hard-delete (T-212).
+         */
+        SourceHardDeleteOutcome: {
+            /** Object Key */
+            object_key: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "hard_deleted" | "delete_failed" | "skipped_ineligible" | "skipped_not_found";
+            /** Reason */
+            reason?: string | null;
+            /** Source File Id */
+            source_file_id?: string | null;
         };
         /**
          * SourceJanitorRunResponse
@@ -4706,6 +4818,37 @@ export interface components {
             summary?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * SourceRetentionRecommendation
+         * @description Retention guidance surfaced with capacity (T-212, ADR-052; not auto-delete).
+         *
+         *     Advisory only: the retention policy never auto-deletes registered archives.
+         *     ``reclaimable_bytes`` is the soft_deleted + quarantined + unregistered bytes a
+         *     ``destructive_admin`` could manually clean up, and ``eligible_object_count``
+         *     is how many objects the bulk hard-delete action would currently accept.
+         */
+        SourceRetentionRecommendation: {
+            /**
+             * Eligible Object Count
+             * @default 0
+             */
+            eligible_object_count: number;
+            /**
+             * Guidance
+             * @default
+             */
+            guidance: string;
+            /**
+             * Over Threshold
+             * @default false
+             */
+            over_threshold: boolean;
+            /**
+             * Reclaimable Bytes
+             * @default 0
+             */
+            reclaimable_bytes: number;
         };
         /** SppnMakareaContext */
         SppnMakareaContext: {
@@ -6806,6 +6949,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GroupValidationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_hard_delete_source_files_v1_admin_source_files_bulk_hard_delete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceBulkHardDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceBulkHardDeleteResponse"];
                 };
             };
             /** @description Validation Error */
