@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (T-122 phase ① 보강 성능평가·벤치)
+
+**작업**: T-121 전국 실행 runner를 재사용해 C11~C17 보강 검증 harness의 wall-time, runner process RSS, process I/O를 case별로 측정하는 T-122 benchmark script를 추가했다. 원천 materialization 비용은 `preparation` phase로 분리해 case 실행시간과 섞이지 않게 했다.
+
+**반영**:
+- `scripts/benchmark_phase1_augment_performance.py`를 추가했다. C11~C17 case 선택, 시도 선택, smoke limit, 전자지도 ZIP materialization, C17 7z materialization, PostgreSQL statement timeout, RSS sampling interval, Windows Git metadata 기록을 지원한다.
+- `scripts/run_phase1_augment_reports.py`의 case 실행 함수를 `run_phase1_case()`로 공개 재사용 지점화했다.
+- `tests/unit/test_t122_phase1_benchmark.py`로 parser, `/proc` parser, I/O delta, human byte formatter, benchmark JSON/Markdown 출력 계약을 고정했다.
+- `docs/t122-phase1-augment-benchmark.md`, `docs/tasks.md`, `docs/resume.md`, `CHANGELOG.md`를 갱신했다.
+
+**실행 결과**: WSL ext4 테스트 미러 `artifacts/perf/t122-phase1-live/`에서 전체 3961.937초에 완료됐다. `preparation`은 848.988초, materialized cache 약 17GiB, local write 16.0GiB를 기록했다. C11~C17은 모두 실패 0건이며, case별 wall-time은 C11 1284.931초, C12 270.358초, C13 307.343초, C14 378.739초, C15 17.534초, C16 624.866초, C17 229.178초다. Peak RSS는 C12가 2.2GiB로 가장 높았다. 측정 범위는 runner process `/proc/self/status`와 `/proc/self/io`이며 PostgreSQL server I/O는 제외된다.
+
+**검증**: NTFS worktree와 WSL ext4 테스트 미러에서 `pytest tests/unit/test_t122_phase1_benchmark.py tests/unit/test_t121_phase1_runner.py -q`, 관련 파일 `ruff check`, `mypy scripts/benchmark_phase1_augment_performance.py scripts/run_phase1_augment_reports.py`를 통과했다. WSL smoke로 C14 제한 실행 artifact 생성을 확인한 뒤 전국 full run을 완료했다.
+
 ## 2026-06-14 (T-121 phase ① 전국 라이브데이터 보강 실행)
 
 **작업**: T-111~T-117 prototype을 fixture가 아니라 `F:\dev\kor-travel-geo\data\juso` 전국 실 원천으로 실행하는 T-121 runner를 추가하고, C11~C17 `AugmentReport`와 `source_yyyymm`을 산출했다. ADR-051은 아직 `proposed` 상태이므로 T-119 serving 좌표 scoring은 포함하지 않았다.

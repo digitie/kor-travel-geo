@@ -212,7 +212,7 @@ async def run_phase1_reports(
     for case_id in cases:
         print(f"[{case_id}] 시작", flush=True)
         case_started = time.perf_counter()
-        report = await _run_case(
+        report = await run_phase1_case(
             case_id,
             engine=engine,
             source_plan=source_plan,
@@ -411,7 +411,7 @@ class SourcePlan:
         )
 
 
-async def _run_case(
+async def run_phase1_case(
     case_id: CaseId,
     *,
     engine: AsyncEngine,
