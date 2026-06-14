@@ -506,6 +506,31 @@ async def run_restore_job(
         )
         if relinked_restore_artifact is not None:
             restore_artifact = relinked_restore_artifact
+        await progress(
+            progress=0.99,
+            stage="finalize",
+            message="복원 후 source quick reconcile (재구성 가능성 검증)",
+        )
+        source_verification = await run_restore_source_verification(
+            settings,
+            target_dsn=target_dsn,
+            entrypoint="pg_restore",
+            actor=f"system:{_payload_job_id(payload) or 'db_restore'}",
+        )
+        if source_verification is not None:
+            restore_manifest = {
+                **restore_manifest,
+                "source_verification": source_verification,
+            }
+            await repo.update_artifact(
+                restore_artifact.artifact_id,
+                manifest={
+                    **restore_manifest,
+                    "snapshot_id": snapshot.snapshot_id,
+                    "release_id": release.release_id,
+                    "release_state": release.state,
+                },
+            )
         callback_result = await deliver_callback(
             restore_artifact,
             settings=settings,
@@ -540,6 +565,50 @@ async def run_restore_job(
         raise
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+async def run_restore_source_verification(
+    settings: Settings,
+    *,
+    target_dsn: str,
+    entrypoint: str,
+    actor: str | None,
+) -> dict[str, Any] | None:
+    """Run the post-restore source verification matrix (T-208, doc ~1896-1902).
+
+    Shared by BOTH restore entrypoints — the ``pg_restore`` manifest restore (this
+    module) and the ADR-036 rename hot-swap (CLI/serving path). Opens an engine on
+    the restored target DB, resolves its active snapshot's ``source_match_set_id``,
+    and runs ONE source ``quick`` reconcile against RustFS object availability. A
+    legacy snapshot (no FK) skips the reconcile. RustFS being disabled makes this a
+    no-op (verification only runs when storage is reachable). Returns the
+    verification result as a dict for the restore manifest, or ``None``.
+    """
+    from kortravelgeo.infra.rustfs import RustfsClient, load_rustfs_config
+    from kortravelgeo.infra.source_restore_service import verify_restore_source
+
+    engine = create_async_engine(normalize_sqlalchemy_dsn(target_dsn))
+    try:
+        config = load_rustfs_config(settings)
+        rustfs = (
+            RustfsClient(config)
+            if config.enabled and config.credentials_configured
+            else None
+        )
+        try:
+            result = await verify_restore_source(
+                engine,
+                entrypoint=entrypoint,  # type: ignore[arg-type]
+                rustfs=rustfs,
+                actor=actor,
+                rolling_deep_days=settings.source_reconcile_rolling_deep_days,
+                object_limit=settings.source_reconcile_object_limit,
+            )
+        except Exception:  # source verification must never fail the restore itself
+            return None
+    finally:
+        await engine.dispose()
+    return result.model_dump()
 
 
 def default_backup_filename(*, compression_level: int) -> str:
@@ -848,9 +917,25 @@ SELECT current_database() AS name,
             "retention_days": req.retention_days or settings.backup_artifact_ttl_days,
         },
         "source_set": await infer_source_set(engine),
+        "source_match_set": await _infer_source_match_set_block(engine),
         "row_counts": row_counts,
         "checksums": {},
 }
+
+
+async def _infer_source_match_set_block(engine: AsyncEngine) -> dict[str, Any] | None:
+    """Active match set manifest block (T-208, doc ~1848-1886), or ``None``.
+
+    Records "what source archives reconstruct this DB" — the active match set's
+    id/name/profile/``source_set_hash``/``yyyymm_by_category`` + per-category group
+    with per-file ``sha256``/``size_bytes``/``object_key``/``storage_uri`` +
+    ``omitted_optional`` — WITHOUT copying the archives. ``None`` when there is no
+    active match set (a legacy / fresh DB).
+    """
+    from kortravelgeo.infra.source_restore_service import read_active_match_set_block
+
+    block = await read_active_match_set_block(engine)
+    return block.as_manifest() if block is not None else None
 
 
 def _excluded_table_data(req: BackupCreateRequest) -> list[str]:

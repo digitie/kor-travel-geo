@@ -64,9 +64,12 @@ from .dto.source import (
     GroupValidationResult,
     ReconcileResolveResponse,
     RegisterResponse,
+    RestoredFromBackupCreateResponse,
+    RestoreSourceVerificationResult,
     ServingReleaseRollbackResponse,
     SourceCapacityUsage,
     SourceFileCategoryInfo,
+    SourceGroupRelinkResponse,
     SourceGroupRestoreResponse,
     SourceGroupSoftDeleteResponse,
     SourceJanitorRunResponse,
@@ -1273,6 +1276,131 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             retired_match_set_id=decision.retire_match_set_id,
             target_integrity_alert=integrity_alert,
             message="; ".join(decision.reasons) or None,
+        )
+
+    # --- restored_from_backup + relink (T-208) ----------------------------
+
+    async def create_restored_from_backup(
+        self, artifact_id: str, *, actor: str | None
+    ) -> RestoredFromBackupCreateResponse:
+        """Reconstruct a ``restored_from_backup`` match set from a backup manifest.
+
+        Reads the ``db_backup`` artifact's manifest ``source_match_set`` block and
+        creates stub groups/files (``missing``/``unknown``) + items + the match set
+        at ``state='restored_from_backup'`` in one transaction (T-208, doc steps
+        1-6). Rebuild stays disabled until relink completes.
+        """
+        from .exceptions import InvalidInputError
+        from .infra.backup import BACKUP_ARTIFACT_TYPE
+        from .infra.source_restore_service import (
+            create_restored_from_backup,
+            parse_manifest_source_match_set,
+        )
+
+        artifact = await self.get_artifact(artifact_id)
+        if artifact.artifact_type != BACKUP_ARTIFACT_TYPE:
+            raise InvalidInputError(f"artifact is not a db_backup: {artifact_id}")
+        block_json = artifact.manifest.get("source_match_set")
+        if not isinstance(block_json, dict):
+            raise InvalidInputError(
+                "backup manifest has no source_match_set block to reconstruct from"
+            )
+        block = parse_manifest_source_match_set(block_json)
+        return await create_restored_from_backup(
+            self._engine(), block, actor=actor
+        )
+
+    async def relink_restored_source_group(
+        self, source_file_group_id: str, *, actor: str | None
+    ) -> SourceGroupRelinkResponse:
+        """Relink a ``restored_from_backup`` stub group's RustFS objects (T-208).
+
+        Head-verifies + streaming-rehashes each stub child against the manifest
+        sha256/size (the trust boundary) and feeds the observations to the pure
+        relink transition; ``recompute_group_aggregates`` then recomputes
+        ``group_sha256`` and drives ``restored_from_backup → revalidatable`` once
+        every referenced group is ``available`` (M-A option 2, doc steps 7-9).
+        """
+        from .exceptions import NotFoundError
+        from .infra.rustfs import RustfsClient, require_enabled_rustfs
+        from .infra.source_restore_service import (
+            RelinkChildVerification,
+            relink_restored_group,
+        )
+        from .infra.source_upload_repo import source_group_children
+
+        children = await source_group_children(self._engine(), source_file_group_id)
+        if not children:
+            raise NotFoundError(f"source file group not found: {source_file_group_id}")
+        config = require_enabled_rustfs(self.settings)
+        rustfs = RustfsClient(config)
+        verifications: list[RelinkChildVerification] = []
+        for child in children:
+            if not child.object_key:
+                verifications.append(
+                    RelinkChildVerification(
+                        source_file_id=child.source_file_id,
+                        part_key=child.part_key,
+                        object_present=False,
+                    )
+                )
+                continue
+            try:
+                head = await rustfs.head_object(child.object_key)
+            except Exception:  # absent / unreadable object → missing transition
+                verifications.append(
+                    RelinkChildVerification(
+                        source_file_id=child.source_file_id,
+                        part_key=child.part_key,
+                        object_present=False,
+                    )
+                )
+                continue
+            # Always streaming-rehash on relink: the manifest hash is the trust
+            # boundary and the ETag is never assumed equal to the SHA-256.
+            observed_sha256 = await rustfs.compute_sha256(child.object_key)
+            verifications.append(
+                RelinkChildVerification(
+                    source_file_id=child.source_file_id,
+                    part_key=child.part_key,
+                    object_present=True,
+                    observed_sha256=observed_sha256,
+                    observed_size=head.size or None,
+                )
+            )
+        return await relink_restored_group(
+            self._engine(),
+            source_file_group_id,
+            verifications=tuple(verifications),
+            actor=actor,
+        )
+
+    async def verify_restore_source_hot_swap(
+        self, *, actor: str | None
+    ) -> RestoreSourceVerificationResult:
+        """Run the ADR-036 rename hot-swap source verification (T-208, doc ~1901).
+
+        Invoked after the operator completes the rename/smoke: resolves the (now
+        swapped-in) active snapshot's ``source_match_set_id`` and runs ONE source
+        quick reconcile against RustFS, surfacing a "재구성 불가" warning if source
+        objects are missing. Legacy snapshots (no FK) only flag the estimate.
+        """
+        from .infra.rustfs import RustfsClient, load_rustfs_config
+        from .infra.source_restore_service import verify_restore_source
+
+        config = load_rustfs_config(self.settings)
+        rustfs = (
+            RustfsClient(config)
+            if config.enabled and config.credentials_configured
+            else None
+        )
+        return await verify_restore_source(
+            self._engine(),
+            entrypoint="rename_hot_swap",
+            rustfs=rustfs,
+            actor=actor,
+            rolling_deep_days=self.settings.source_reconcile_rolling_deep_days,
+            object_limit=self.settings.source_reconcile_object_limit,
         )
 
     async def list_dataset_snapshots(
