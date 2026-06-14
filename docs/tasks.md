@@ -9,6 +9,31 @@
 
 > **작업 순서·번호 체계(ADR-050)**: ① 데이터 원천 보강·검증(**T-110~**) → ② 데이터 적재/백업 기능 구현·검증(**T-200~**) → (최하위 우선순위) v2 재audit(**T-105**) · v1 vworld 100% 호환(**T-106**). 원천 보강은 T-110부터 1씩, 적재/백업은 T-200부터 1씩 올리고, 중간에 추가되는 작업은 각각 T-1xx / T-2xx 번호로 채운다. T-105/T-106은 ID는 낮지만 우선순위는 **최하위**다. **T-109(이 PR #131)는 ②의 설계 문서이며, 구현은 아래 T-200대로 분할한다.** phase ① prototype은 `ops.source_*` registry 없이 로컬 디스크 경로로 독립 수행하고(역의존 금지), phase ②가 그 결과(C11~C17·go/no-go)를 DB case registry로 정식화한다. 단위별 상세 scope·의존성·근거는 ADR-050과 `docs/t109-backup-source-upload-management.md`의 구현 순서 절에 있다.
 
+### 두 에이전트 병행 권장 순서
+
+두 에이전트가 동시에 진행할 때는 **Agent A = Codex(데이터 원천 보강·검증 owner)**, **Agent B = Claude Code(source registry/upload/reconcile/match-set 기반 owner)** 로 나눈다. Agent B는 `T-206`을 `T-118` 확정 전에는 착수하지 않는다. `T-200`은 B 전 체인과 A의 `T-206` seed까지의 단일 root이므로 가장 먼저 머지해 모두의 대기를 푼다.
+
+병행 운영 원칙:
+
+- 작업 중에는 주기적으로 `origin/main`과 현재 작업 branch의 최신 상태를 확인하고, 장기 작업은 중간에 rebase 또는 fast-forward로 충돌을 작게 유지한다.
+- 하나의 Task가 끝나면 다른 Agent가 올린 PR이 있는지 확인하고, 머지 여부와 무관하게 상세 리뷰 후 PR 코멘트를 남긴다.
+- 자신이 작업한 PR에 다른 Agent가 코멘트를 달면 다음 Task를 시작하기 전에 해당 코멘트 반영 또는 답변부터 처리한다.
+- Git 작업은 Windows Git과 NTFS worktree에서 수행하고, 그 외 의존성 설치·테스트·장기 실행 검증은 WSL ext4 테스트 미러에서 수행한다.
+- 작업 중 반복적으로 문제가 되는 패턴은 `docs/agent-failure-patterns.md` 또는 관련 workflow 문서에 기록해 같은 실패가 반복되지 않게 한다.
+
+1. 1차 병행
+   - Agent A: `T-110` → `T-111` → `T-112` → `T-113` → `T-114` → `T-115` → `T-116` → `T-117` → `T-118`. 의존 없는 `T-120`(epost 우편번호 수동 적재·검증; `T-207`과 **공유 검증 모듈**)도 이 구간에 병행한다 — `T-207`이 `T-120`에 의존하므로 2차 전에 끝나 있어야 한다.
+   - Agent B: `T-200` → (`T-201` ∥ `T-202`; 둘 다 `T-200`만 의존) → `T-203`(`T-201`·`T-202` 모두 필요) → `T-204` → `T-205`
+2. 2차 합류 (`T-118` 확정 후)
+   - Agent A: `T-206`의 C11~C17 registry seed·metric mapping(B 뼈대 머지 후) → `T-207` 주도(epost 적재/검증 로직; upload/RustFS 플럼빙은 B 제공)
+   - Agent B: `T-206` backend registry/API/run-validation 뼈대 → `T-208` → `T-209`. `T-207`·`T-208`은 `T-206`에 의존하지 않으므로 `T-206`과 병렬 진행 가능하다.
+3. 최종 검증·운영 보강
+   - Agent A+B: `T-210`
+   - Agent B: `T-211` → `T-212`
+   - Agent A: `T-121` → `T-122` → `T-123` (phase ① 전국 라이브·벤치·최종 검증; `T-211`·`T-212`와 병렬)
+   - Agent A+B: `T-213` → `T-214` → `T-215` (phase ② 전국 라이브 로딩·벤치·최종 검증; B 주도 + A 정확도/정합성 검증)
+   - Agent A: `T-119`는 `T-118` ADR 승인 시에만 별도 진행하고, 승인되지 않으면 검증 전용 결론을 유지한다.
+
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
 - T-110 보강 검증 공통 harness — 시도 17개 group 순회 driver + SHP point/polyline geometry reader(현 `shape_dbf.py`는 DBF만 읽고 SHP body 미파싱) + staging COPY helper + PostGIS `ST_Distance`/`ST_Covers` 측정 + 공통 `AugmentReport`(used/skipped/failed+sample+metric). PostGIS 의존 테스트는 WSL ext4 미러 DB(15434)에서만 도는 `KTG_SLOW_REAL_DATA` 게이트로 CI 분리. 기존 `building_shape_bundle.py`/`extra_shape_layers.py` 재사용, 중복 구현 금지. (의존: —)
