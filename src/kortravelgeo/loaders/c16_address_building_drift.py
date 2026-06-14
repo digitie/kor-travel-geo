@@ -21,6 +21,8 @@ from kortravelgeo.loaders.augment_harness import (
     AugmentReport,
     JoinKey,
     KeyOverlapMeasurement,
+    StagingKeyIndexSpec,
+    create_staging_key_indexes,
     measure_key_overlap,
 )
 from kortravelgeo.loaders.text.common import TextSource, as_int, iter_pipe_rows, required
@@ -654,6 +656,43 @@ def building_db_jibun_staging_spec(
     )
 
 
+def c16_staging_index_specs(
+    *,
+    address_table: str = C16_ADDRESS_DB_ADDRESS_TABLE,
+    extra_table: str = C16_ADDRESS_DB_EXTRA_TABLE,
+    address_jibun_table: str = C16_ADDRESS_DB_JIBUN_TABLE,
+    building_table: str = C16_BUILDING_DB_BUILD_TABLE,
+    building_jibun_table: str = C16_BUILDING_DB_JIBUN_TABLE,
+) -> tuple[StagingKeyIndexSpec, ...]:
+    return (
+        StagingKeyIndexSpec(
+            table_name=address_table,
+            index_name="_idx_ktg_c16_address_bd",
+            columns=("bd_mgt_sn",),
+        ),
+        StagingKeyIndexSpec(
+            table_name=extra_table,
+            index_name="_idx_ktg_c16_extra_bd",
+            columns=("bd_mgt_sn",),
+        ),
+        StagingKeyIndexSpec(
+            table_name=address_jibun_table,
+            index_name="_idx_ktg_c16_address_jibun_bd_pnu",
+            columns=("bd_mgt_sn", "pnu"),
+        ),
+        StagingKeyIndexSpec(
+            table_name=building_table,
+            index_name="_idx_ktg_c16_building_natural",
+            columns=tuple(key.left for key in _BUILDING_NATURAL_KEYS),
+        ),
+        StagingKeyIndexSpec(
+            table_name=building_jibun_table,
+            index_name="_idx_ktg_c16_building_jibun_pnu_road",
+            columns=("pnu", "rncode_full", "buld_se_cd", "buld_mnnm", "buld_slno"),
+        ),
+    )
+
+
 async def compare_c16_address_building_drift(
     engine: AsyncEngine,
     address_db_zip: Path | str,
@@ -745,6 +784,16 @@ async def compare_c16_address_building_drift(
                     limit_per_member=limit_per_member,
                 )
             ),
+        ),
+    )
+    await create_staging_key_indexes(
+        engine,
+        c16_staging_index_specs(
+            address_table=address_table,
+            extra_table=extra_table,
+            address_jibun_table=address_jibun_table,
+            building_table=building_table,
+            building_jibun_table=building_jibun_table,
         ),
     )
     comparisons = (

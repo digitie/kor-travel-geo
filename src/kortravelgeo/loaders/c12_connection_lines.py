@@ -23,8 +23,10 @@ from kortravelgeo.loaders.augment_harness import (
     SidoPathPattern,
     SidoSourceGroup,
     StagingColumn,
+    StagingKeyIndexSpec,
     copy_shape_file_to_staging,
     copy_zip_shape_layer_to_staging,
+    create_staging_key_indexes,
     discover_sido_source_groups,
     measure_key_overlap,
     measure_keyed_distance,
@@ -158,6 +160,25 @@ def road_manage_staging_spec(table_name: str) -> ShapeStagingSpec:
     )
 
 
+def c12_staging_index_specs(
+    *,
+    connection_table: str = C12_CONNECTION_TABLE,
+    road_table: str = C12_ROAD_MANAGE_TABLE,
+) -> tuple[StagingKeyIndexSpec, ...]:
+    return (
+        StagingKeyIndexSpec(
+            table_name=connection_table,
+            index_name="_idx_ktg_c12_connection_road_key",
+            columns=tuple(key.left for key in CONNECTION_ROAD_JOIN_KEYS),
+        ),
+        StagingKeyIndexSpec(
+            table_name=road_table,
+            index_name="_idx_ktg_c12_road_manage_key",
+            columns=tuple(key.right for key in CONNECTION_ROAD_JOIN_KEYS),
+        ),
+    )
+
+
 def discover_c12_connection_source_groups(
     *,
     bundle_root: Path | str,
@@ -215,6 +236,13 @@ async def compare_c12_connection_lines(
         road_layer.shp_path,
         road_layer.dbf_path,
         fields=ROAD_MANAGE_SOURCE_FIELDS,
+    )
+    await create_staging_key_indexes(
+        engine,
+        c12_staging_index_specs(
+            connection_table=connection_table,
+            road_table=road_table,
+        ),
     )
 
     road_key_overlap = await measure_key_overlap(

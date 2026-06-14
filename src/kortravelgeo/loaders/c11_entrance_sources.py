@@ -21,8 +21,10 @@ from kortravelgeo.loaders.augment_harness import (
     SidoPathPattern,
     SidoSourceGroup,
     StagingColumn,
+    StagingKeyIndexSpec,
     copy_shape_file_to_staging,
     copy_zip_shape_layer_to_staging,
+    create_staging_key_indexes,
     discover_sido_source_groups,
     measure_key_overlap,
     measure_keyed_distance,
@@ -136,6 +138,30 @@ def entrance_staging_spec(table_name: str) -> ShapeStagingSpec:
     )
 
 
+def c11_staging_index_specs(
+    *,
+    bundle_table: str = C11_BUNDLE_ENTRANCE_TABLE,
+    electronic_table: str = C11_ELECTRONIC_ENTRANCE_TABLE,
+) -> tuple[StagingKeyIndexSpec, ...]:
+    return (
+        StagingKeyIndexSpec(
+            table_name=bundle_table,
+            index_name="_idx_ktg_c11_bundle_full_key",
+            columns=tuple(key.left for key in FULL_ENTRANCE_JOIN_KEYS),
+        ),
+        StagingKeyIndexSpec(
+            table_name=bundle_table,
+            index_name="_idx_ktg_c11_bundle_weak_sig_ent",
+            columns=tuple(key.left for key in WEAK_SIG_ENT_JOIN_KEYS),
+        ),
+        StagingKeyIndexSpec(
+            table_name=electronic_table,
+            index_name="_idx_ktg_c11_electronic_full_key",
+            columns=tuple(key.right for key in FULL_ENTRANCE_JOIN_KEYS),
+        ),
+    )
+
+
 def discover_c11_entrance_source_groups(
     *,
     bundle_root: Path | str,
@@ -194,6 +220,13 @@ async def compare_c11_entrance_sources(
         electronic_entrance.shp_path,
         electronic_entrance.dbf_path,
         fields=ENTRANCE_KEY_FIELDS,
+    )
+    await create_staging_key_indexes(
+        engine,
+        c11_staging_index_specs(
+            bundle_table=bundle_table,
+            electronic_table=electronic_table,
+        ),
     )
 
     pairs = (

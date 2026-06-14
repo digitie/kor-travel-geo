@@ -12,6 +12,7 @@ from kortravelgeo.loaders.c16_address_building_drift import (
     C16KeyDriftComparison,
     C16StagingRows,
     build_c16_address_building_drift_report,
+    c16_staging_index_specs,
     discover_address_db_members,
     discover_building_db_members,
     iter_address_db_address_rows,
@@ -136,6 +137,30 @@ def test_key_drift_sample_sql_uses_except_without_serving_writes() -> None:
     assert "right_only" in sql
     assert "INSERT INTO" not in sql
     assert "CREATE MATERIALIZED VIEW" not in sql
+
+
+def test_c16_staging_index_specs_cover_reused_join_keys() -> None:
+    specs = c16_staging_index_specs(
+        address_table="_address",
+        extra_table="_extra",
+        address_jibun_table="_address_jibun",
+        building_table="_building",
+        building_jibun_table="_building_jibun",
+    )
+
+    assert [(spec.table_name, spec.columns) for spec in specs] == [
+        ("_address", ("bd_mgt_sn",)),
+        ("_extra", ("bd_mgt_sn",)),
+        ("_address_jibun", ("bd_mgt_sn", "pnu")),
+        (
+            "_building",
+            ("rncode_full", "buld_se_cd", "buld_mnnm", "buld_slno", "bjd_cd"),
+        ),
+        (
+            "_building_jibun",
+            ("pnu", "rncode_full", "buld_se_cd", "buld_mnnm", "buld_slno"),
+        ),
+    ]
 
 
 def test_c16_metrics_keep_address_and_building_db_validation_only() -> None:

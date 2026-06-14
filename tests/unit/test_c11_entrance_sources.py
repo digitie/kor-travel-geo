@@ -16,6 +16,7 @@ from kortravelgeo.loaders.c11_entrance_sources import (
     C11EntranceComparison,
     C11PairComparison,
     build_c11_entrance_report,
+    c11_staging_index_specs,
     discover_c11_entrance_source_groups,
     entrance_staging_spec,
 )
@@ -53,6 +54,15 @@ def test_c11_entrance_staging_spec_reuses_bundle_entrance_key_fields() -> None:
         ("sig_cd", "sig_cd"),
         ("ent_man_no", "ent_man_no"),
     )
+    indexes = c11_staging_index_specs(
+        bundle_table="_bundle",
+        electronic_table="_electronic",
+    )
+    assert [(idx.table_name, idx.columns) for idx in indexes] == [
+        ("_bundle", ("sig_cd", "bul_man_no", "ent_man_no", "eqb_man_sn")),
+        ("_bundle", ("sig_cd", "ent_man_no")),
+        ("_electronic", ("sig_cd", "bul_man_no", "ent_man_no", "eqb_man_sn")),
+    ]
 
 
 def test_c11_entrance_metrics_keep_full_and_weak_key_contracts() -> None:
