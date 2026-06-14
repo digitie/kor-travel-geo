@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     geoip_trusted_proxies: Annotated[tuple[IPv4Network | IPv6Network, ...], NoDecode] = ()
     geoip_audit_denials: bool = True
 
+    # T-202: admin role gate trusts X-KTG-Actor / X-KTG-Roles headers only from
+    # these reverse-proxy / admin-proxy remote addresses. Empty falls back to
+    # geoip_trusted_proxies so a single trusted-proxy config can drive both gates.
+    admin_trusted_proxy_cidrs: Annotated[
+        tuple[IPv4Network | IPv6Network, ...], NoDecode
+    ] = ()
+
     juso_api_key: SecretStr | None = None
     juso_search_url: str = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
     juso_coord_url: str = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
@@ -166,6 +173,7 @@ class Settings(BaseSettings):
         "geoip_allow_cidrs",
         "geoip_deny_cidrs",
         "geoip_trusted_proxies",
+        "admin_trusted_proxy_cidrs",
         mode="before",
     )
     @classmethod

@@ -37,6 +37,11 @@ class InvalidCoordinateError(InvalidInputError):
     code = "E0102"
 
 
+class ForbiddenError(KorTravelGeoError):
+    code = "E0403"
+    http_status = 403
+
+
 class RateLimitError(KorTravelGeoError):
     code = "E0200"
     http_status = 429
