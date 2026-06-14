@@ -33,16 +33,18 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/admin/cache/metrics" in paths
     assert "/v1/admin/logs" in paths
     assert "/v1/admin/upload/sido-zip" in paths
-    assert "/v1/admin/uploads" in paths
-    assert "/v1/admin/uploads/{upload_set_id}" in paths
-    assert "/v1/admin/uploads/{upload_set_id}/files" in paths
-    assert "/v1/admin/uploads/{upload_set_id}/cancel" in paths
+    assert "/v1/admin/source-file-categories" in paths
     assert "/v1/admin/storage/rustfs/config" in paths
     assert "/v1/admin/storage/rustfs/check" in paths
     assert "/v1/admin/storage/rustfs/import-prefix" in paths
     assert "/v1/admin/storage/rustfs/sync-local" in paths
-    assert "/v1/admin/load-sources/discover" in paths
-    assert "/v1/admin/load-sources/plan" in paths
+    # T-201 removed the legacy auto-detection upload-SET + load-source surface.
+    assert "/v1/admin/uploads" not in paths
+    assert "/v1/admin/uploads/{upload_set_id}" not in paths
+    assert "/v1/admin/uploads/{upload_set_id}/files" not in paths
+    assert "/v1/admin/uploads/{upload_set_id}/cancel" not in paths
+    assert "/v1/admin/load-sources/discover" not in paths
+    assert "/v1/admin/load-sources/plan" not in paths
     assert "/v1/admin/backups" in paths
     assert "/v1/admin/backups/{artifact_id}" in paths
     assert "/v1/admin/backups/{artifact_id}/download" in paths

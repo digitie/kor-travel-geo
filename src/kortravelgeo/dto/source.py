@@ -69,6 +69,30 @@ SourceMatchSetItemRole = Literal[
 ]
 
 
+class SourceFileCategoryInfo(FrozenModel):
+    """One entry in the static upload-category catalog (T-201).
+
+    Serialized form of ``core.source_categories.SourceCategory`` for the
+    ``GET /v1/admin/source-file-categories`` endpoint. ``role``/``default_role``
+    are UI defaults; the authoritative role lives on
+    ``ops.source_match_set_items.role``.
+    """
+
+    category: SourceFileCategory
+    label: str
+    group_kind: SourceGroupKind
+    default_role: SourceMatchSetItemRole
+    role: SourceMatchSetItemRole
+    expected_member_kinds: tuple[str, ...] = ()
+    optional: bool = False
+
+
+class SourceFileCategoryCatalog(FrozenModel):
+    """Response wrapper for the static upload-category catalog."""
+
+    categories: tuple[SourceFileCategoryInfo, ...] = ()
+
+
 class SourceFileGroup(FrozenModel):
     """Registry unit referenced directly by a match set."""
 

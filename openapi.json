@@ -5135,452 +5135,102 @@
         "title": "ServingRelease",
         "type": "object"
       },
-      "SourceCandidate": {
+      "SourceFileCategoryCatalog": {
         "additionalProperties": false,
+        "description": "Response wrapper for the static upload-category catalog.",
         "properties": {
-          "byte_size": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Byte Size"
-          },
-          "confidence": {
+          "categories": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceFileCategoryInfo"
+            },
+            "title": "Categories",
+            "type": "array"
+          }
+        },
+        "title": "SourceFileCategoryCatalog",
+        "type": "object"
+      },
+      "SourceFileCategoryInfo": {
+        "additionalProperties": false,
+        "description": "One entry in the static upload-category catalog (T-201).\n\nSerialized form of ``core.source_categories.SourceCategory`` for the\n``GET /v1/admin/source-file-categories`` endpoint. ``role``/``default_role``\nare UI defaults; the authoritative role lives on\n``ops.source_match_set_items.role``.",
+        "properties": {
+          "category": {
             "enum": [
-              "high",
-              "medium",
-              "low"
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
             ],
-            "title": "Confidence",
+            "title": "Category",
             "type": "string"
           },
-          "file_count": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "File Count"
-          },
-          "inferred_yyyymm": {
-            "anyOf": [
-              {
-                "pattern": "^\\d{6}$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Inferred Yyyymm"
-          },
-          "kind": {
+          "default_role": {
             "enum": [
-              "juso",
-              "parcel_link",
-              "locsum",
-              "navi",
-              "shp",
-              "roadaddr_entrance",
-              "sppn_makarea",
-              "pobox",
-              "bulk"
+              "build_required",
+              "build_recommended",
+              "validation_optional",
+              "enrichment_candidate"
             ],
-            "title": "Kind",
+            "title": "Default Role",
             "type": "string"
           },
-          "note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
+          "expected_member_kinds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Member Kinds",
+            "type": "array"
           },
-          "path": {
-            "title": "Path",
+          "group_kind": {
+            "enum": [
+              "single_file",
+              "multi_part"
+            ],
+            "title": "Group Kind",
             "type": "string"
           },
-          "sha256": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sha256"
+          "label": {
+            "title": "Label",
+            "type": "string"
           },
-          "sido_count": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+          "optional": {
+            "default": false,
+            "title": "Optional",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "build_required",
+              "build_recommended",
+              "validation_optional",
+              "enrichment_candidate"
             ],
-            "title": "Sido Count"
+            "title": "Role",
+            "type": "string"
           }
         },
         "required": [
-          "kind",
-          "path",
-          "confidence"
+          "category",
+          "label",
+          "group_kind",
+          "default_role",
+          "role"
         ],
-        "title": "SourceCandidate",
-        "type": "object"
-      },
-      "SourceSetDiscovery": {
-        "additionalProperties": false,
-        "properties": {
-          "candidates": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/SourceCandidate"
-            },
-            "title": "Candidates",
-            "type": "array"
-          },
-          "missing_required": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Missing Required",
-            "type": "array"
-          },
-          "mixed_yyyymm": {
-            "default": false,
-            "title": "Mixed Yyyymm",
-            "type": "boolean"
-          },
-          "recommended": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/SourceCandidate"
-            },
-            "title": "Recommended",
-            "type": "object"
-          },
-          "root_path": {
-            "title": "Root Path",
-            "type": "string"
-          },
-          "warning": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Warning"
-          },
-          "yyyymm_by_kind": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Yyyymm By Kind",
-            "type": "object"
-          }
-        },
-        "required": [
-          "root_path"
-        ],
-        "title": "SourceSetDiscovery",
-        "type": "object"
-      },
-      "SourceSetDiscoveryRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "include_optional": {
-            "default": true,
-            "title": "Include Optional",
-            "type": "boolean"
-          },
-          "root_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Path"
-          },
-          "upload_set_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Upload Set Id"
-          }
-        },
-        "title": "SourceSetDiscoveryRequest",
-        "type": "object"
-      },
-      "SourceSetPlan": {
-        "additionalProperties": false,
-        "properties": {
-          "acknowledged_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Acknowledged At"
-          },
-          "acknowledged_by": {
-            "anyOf": [
-              {
-                "enum": [
-                  "cli",
-                  "api",
-                  "ui"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Acknowledged By"
-          },
-          "batch_payload": {
-            "additionalProperties": true,
-            "title": "Batch Payload",
-            "type": "object"
-          },
-          "candidate_paths": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "title": "Candidate Paths",
-            "type": "object"
-          },
-          "candidate_sha256": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Candidate Sha256",
-            "type": "object"
-          },
-          "candidates": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/SourceCandidate"
-            },
-            "title": "Candidates",
-            "type": "array"
-          },
-          "confirmation_token_hash": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 64,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confirmation Token Hash"
-          },
-          "expected_confirmation_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expected Confirmation Token"
-          },
-          "missing_required": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Missing Required",
-            "type": "array"
-          },
-          "mixed_yyyymm": {
-            "default": false,
-            "title": "Mixed Yyyymm",
-            "type": "boolean"
-          },
-          "mixed_yyyymm_acknowledged": {
-            "default": false,
-            "title": "Mixed Yyyymm Acknowledged",
-            "type": "boolean"
-          },
-          "root_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Path"
-          },
-          "selected": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/SourceCandidate"
-            },
-            "title": "Selected",
-            "type": "object"
-          },
-          "source_set_id": {
-            "title": "Source Set Id",
-            "type": "string"
-          },
-          "warning": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Warning"
-          },
-          "yyyymm_by_kind": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Yyyymm By Kind",
-            "type": "object"
-          }
-        },
-        "required": [
-          "source_set_id"
-        ],
-        "title": "SourceSetPlan",
-        "type": "object"
-      },
-      "SourceSetPlanRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "acknowledged_by": {
-            "default": "api",
-            "enum": [
-              "cli",
-              "api",
-              "ui"
-            ],
-            "title": "Acknowledged By",
-            "type": "string"
-          },
-          "allow_mixed_yyyymm": {
-            "default": false,
-            "title": "Allow Mixed Yyyymm",
-            "type": "boolean"
-          },
-          "confirmation_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confirmation Token"
-          },
-          "explicit_paths": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "title": "Explicit Paths",
-            "type": "object"
-          },
-          "include_optional": {
-            "default": true,
-            "title": "Include Optional",
-            "type": "boolean"
-          },
-          "root_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Root Path"
-          },
-          "upload_set_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Upload Set Id"
-          },
-          "versions": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "title": "Versions",
-            "type": "object"
-          }
-        },
-        "title": "SourceSetPlanRequest",
+        "title": "SourceFileCategoryInfo",
         "type": "object"
       },
       "SppnMakareaContext": {
@@ -6071,34 +5721,6 @@
           "updated_at"
         ],
         "title": "UploadFileStatus",
-        "type": "object"
-      },
-      "UploadSetCreateRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "purpose": {
-            "const": "full_load_source_set",
-            "default": "full_load_source_set",
-            "title": "Purpose",
-            "type": "string"
-          },
-          "storage_kind": {
-            "anyOf": [
-              {
-                "enum": [
-                  "local",
-                  "rustfs"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Storage Kind"
-          }
-        },
-        "title": "UploadSetCreateRequest",
         "type": "object"
       },
       "UploadSetStatus": {
@@ -8309,88 +7931,6 @@
         ]
       }
     },
-    "/v1/admin/load-sources/discover": {
-      "post": {
-        "operationId": "discover_load_source_set_v1_admin_load_sources_discover_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SourceSetDiscoveryRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SourceSetDiscovery"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Discover Load Source Set",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/load-sources/plan": {
-      "post": {
-        "operationId": "plan_load_source_set_v1_admin_load_sources_plan_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SourceSetPlanRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SourceSetPlan"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Plan Load Source Set",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
     "/v1/admin/loads": {
       "get": {
         "operationId": "list_loads_v1_admin_loads_get",
@@ -9432,6 +8972,28 @@
         ]
       }
     },
+    "/v1/admin/source-file-categories": {
+      "get": {
+        "description": "Static catalog of source upload categories (T-200/T-201).\n\nReplaces the removed auto-detection upload-SET flow: the UI uses this to draw\nexplicit per-category upload slots. ``role``/``default_role`` are UI defaults;\nthe authoritative role lives on ``ops.source_match_set_items``.",
+        "operationId": "source_file_categories_v1_admin_source_file_categories_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceFileCategoryCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Source File Categories",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/storage/rustfs/check": {
       "post": {
         "operationId": "check_rustfs_storage_v1_admin_storage_rustfs_check_post",
@@ -9699,199 +9261,6 @@
           }
         },
         "summary": "Upload Sido Zip",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/uploads": {
-      "post": {
-        "operationId": "create_upload_session_v1_admin_uploads_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UploadSetCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadSetStatus"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Upload Session",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/uploads/{upload_set_id}": {
-      "get": {
-        "operationId": "upload_session_status_v1_admin_uploads__upload_set_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upload_set_id",
-            "required": true,
-            "schema": {
-              "title": "Upload Set Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadSetStatus"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Upload Session Status",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/uploads/{upload_set_id}/cancel": {
-      "post": {
-        "operationId": "cancel_upload_session_v1_admin_uploads__upload_set_id__cancel_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upload_set_id",
-            "required": true,
-            "schema": {
-              "title": "Upload Set Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadSetStatus"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Cancel Upload Session",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/uploads/{upload_set_id}/files": {
-      "put": {
-        "operationId": "put_upload_file_v1_admin_uploads__upload_set_id__files_put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "upload_set_id",
-            "required": true,
-            "schema": {
-              "title": "Upload Set Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "filename",
-            "required": true,
-            "schema": {
-              "minLength": 1,
-              "title": "Filename",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "relative_path",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Relative Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadFileStatus"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Put Upload File",
         "tags": [
           "admin"
         ]

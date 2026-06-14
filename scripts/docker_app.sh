@@ -53,7 +53,6 @@ Usage:
   scripts/docker_app.sh logs [api|ui]
   scripts/docker_app.sh cli <command> [args...]
   scripts/docker_app.sh load <ktgctl load args...>
-  scripts/docker_app.sh load-full-set [extra ktgctl load full-set args...]
 
 This script only starts kor-travel-geo API/UI containers.
 PostgreSQL and RustFS must already be running somewhere reachable. Store their
@@ -334,21 +333,6 @@ run_cli() {
   docker "${args[@]}"
 }
 
-load_full_set() {
-  local args=(ktgctl load full-set /data)
-  [[ -z "${JUSO_YYYYMM:-}" ]] || args+=(--juso-yyyymm "$JUSO_YYYYMM")
-  [[ -z "${PARCEL_LINK_YYYYMM:-}" ]] || args+=(--parcel-link-yyyymm "$PARCEL_LINK_YYYYMM")
-  [[ -z "${LOCSUM_YYYYMM:-}" ]] || args+=(--locsum-yyyymm "$LOCSUM_YYYYMM")
-  [[ -z "${NAVI_YYYYMM:-}" ]] || args+=(--navi-yyyymm "$NAVI_YYYYMM")
-  [[ -z "${SHP_YYYYMM:-}" ]] || args+=(--shp-yyyymm "$SHP_YYYYMM")
-  [[ -z "${ROADADDR_ENTRANCE_YYYYMM:-}" ]] || args+=(--roadaddr-entrance-yyyymm "$ROADADDR_ENTRANCE_YYYYMM")
-  [[ "${ALLOW_MIXED_YYYYMM:-0}" != "1" ]] || args+=(--allow-mixed-yyyymm)
-  [[ -z "${CONFIRM_SOURCE_SET:-}" ]] || args+=(--confirm-source-set "$CONFIRM_SOURCE_SET")
-  [[ "${PLAN_ONLY:-0}" != "1" ]] || args+=(--plan-only)
-  args+=("$@")
-  run_cli "${args[@]}"
-}
-
 main() {
   local command="${1:-}"
   [[ -n "$command" ]] || { usage; exit 2; }
@@ -366,7 +350,6 @@ main() {
     logs) logs "$@" ;;
     cli) [[ $# -gt 0 ]] || { echo "cli requires a command" >&2; exit 2; }; run_cli "$@" ;;
     load) run_cli ktgctl load "$@" ;;
-    load-full-set) load_full_set "$@" ;;
     help|-h|--help) usage ;;
     *) echo "unknown command: $command" >&2; usage; exit 2 ;;
   esac

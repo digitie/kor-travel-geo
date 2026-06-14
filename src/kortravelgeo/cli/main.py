@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -12,7 +11,6 @@ from typing import TYPE_CHECKING
 import typer
 
 from kortravelgeo.client import AsyncAddressClient
-from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.backup import run_backup_job, run_restore_job
 from kortravelgeo.infra.concurrency import (
@@ -22,11 +20,6 @@ from kortravelgeo.infra.concurrency import (
     cross_process_lock,
 )
 from kortravelgeo.infra.geoip import build_geoip_reader, classify_ip
-from kortravelgeo.infra.source_set import (
-    build_full_load_source_set_plan,
-    confirmation_token_for,
-    discover_load_sources,
-)
 from kortravelgeo.loaders.bulk_loader import load_bulk_delivery
 from kortravelgeo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kortravelgeo.loaders.data_quality import (
@@ -61,14 +54,11 @@ from kortravelgeo.version import __version__
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
-    from kortravelgeo.dto.admin import SourceSetDiscovery
-
 app = typer.Typer(help="ktgctl command line tools.")
 load_app = typer.Typer(help="Load data sources.")
 refresh_app = typer.Typer(help="Run post-load refresh operations.")
 validate_app = typer.Typer(help="Validate loaded data.")
 jobs_app = typer.Typer(help="Inspect persistent load jobs.")
-uploads_app = typer.Typer(help="Maintain filesystem upload sets.")
 backup_app = typer.Typer(help="Create and inspect DB backup artifacts.")
 restore_app = typer.Typer(help="Restore DB backup artifacts.")
 serving_app = typer.Typer(help="Plan serving database release operations.")
@@ -77,7 +67,6 @@ app.add_typer(load_app, name="load")
 app.add_typer(refresh_app, name="refresh")
 app.add_typer(validate_app, name="validate")
 app.add_typer(jobs_app, name="jobs")
-app.add_typer(uploads_app, name="uploads")
 app.add_typer(backup_app, name="backup")
 app.add_typer(restore_app, name="restore")
 app.add_typer(serving_app, name="serving")
@@ -663,73 +652,6 @@ def load_all_sidos_command(
     asyncio.run(run())
 
 
-@load_app.command("full-set")
-def load_full_set_command(
-    root_path: Path,
-    juso_yyyymm: str | None = typer.Option(None, "--juso-yyyymm"),
-    parcel_link_yyyymm: str | None = typer.Option(None, "--parcel-link-yyyymm"),
-    locsum_yyyymm: str | None = typer.Option(None, "--locsum-yyyymm"),
-    navi_yyyymm: str | None = typer.Option(None, "--navi-yyyymm"),
-    shp_yyyymm: str | None = typer.Option(None, "--shp-yyyymm"),
-    roadaddr_entrance_yyyymm: str | None = typer.Option(None, "--roadaddr-entrance-yyyymm"),
-    allow_mixed_yyyymm: bool = typer.Option(False, "--allow-mixed-yyyymm"),
-    confirm_source_set: str | None = typer.Option(None, "--confirm-source-set"),
-    submit: bool = typer.Option(True, "--submit/--plan-only"),
-) -> None:
-    """Discover source files, confirm mixed yyyymm, and submit a full-load batch plan."""
-
-    async def run() -> None:
-        versions = {
-            key: value
-            for key, value in {
-                "juso": juso_yyyymm,
-                "parcel_link": parcel_link_yyyymm,
-                "locsum": locsum_yyyymm,
-                "navi": navi_yyyymm,
-                "shp": shp_yyyymm,
-                "roadaddr_entrance": roadaddr_entrance_yyyymm,
-            }.items()
-            if value is not None
-        }
-        discovery = discover_load_sources(root_path)
-        _echo_source_discovery(discovery)
-        confirmation = confirm_source_set
-        yyyymm_preview = {**discovery.yyyymm_by_kind, **versions}
-        preview_mixed = len({value for value in yyyymm_preview.values() if value}) > 1
-        if allow_mixed_yyyymm and preview_mixed and confirmation is None:
-            expected = confirmation_token_for(yyyymm_preview)
-            if not sys.stdin.isatty():
-                typer.echo(f"mixed source set requires --confirm-source-set: {expected}", err=True)
-                raise typer.Exit(2)
-            typer.echo("원천 자료 기준월이 서로 다릅니다.")
-            typer.echo(f"의도적으로 혼합 적재를 진행하려면 다음 문구를 입력하십시오: {expected}")
-            confirmation = typer.prompt("확인 문구")
-        try:
-            plan = build_full_load_source_set_plan(
-                root_path=root_path,
-                versions=versions,
-                allow_mixed_yyyymm=allow_mixed_yyyymm,
-                confirmation_token=confirmation,
-                acknowledged_by="cli",
-            )
-        except InvalidInputError as exc:
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(2) from exc
-        typer.echo(plan.model_dump_json())
-        if not submit:
-            return
-        async with AsyncAddressClient() as client:
-            assert client._engine() is not None
-            job = await _run_with_cli_lock(
-                client._engine(),
-                _path_lock(AdvisoryLockNamespace.LOAD_FULL_SET, root_path),
-                lambda: client.submit_full_load_source_set(plan),
-            )
-        typer.echo(f"submitted full_load_batch job: {job.job_id}")
-
-    asyncio.run(run())
-
-
 @refresh_app.command("mv")
 def refresh_materialized_view(
     concurrently: bool = typer.Option(True, "--concurrently/--no-concurrently"),
@@ -842,35 +764,6 @@ def cancel_job(job_id: str) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
             typer.echo((await client.cancel_load(job_id)).model_dump_json())
-
-    asyncio.run(run())
-
-
-@uploads_app.command("cleanup")
-def cleanup_uploads(
-    ttl_days: int | None = typer.Option(None, "--ttl-days", min=1),
-    active_grace_minutes: int | None = typer.Option(
-        None,
-        "--active-grace-minutes",
-        min=1,
-    ),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    """Delete stale upload sets while preserving queued/running job references."""
-
-    async def run() -> None:
-        async with AsyncAddressClient() as client:
-            assert client._engine() is not None
-            result = await _run_with_cli_lock(
-                client._engine(),
-                _global_lock(AdvisoryLockNamespace.UPLOADS_CLEANUP),
-                lambda: client.cleanup_upload_sets(
-                    ttl_days=ttl_days,
-                    active_grace_minutes=active_grace_minutes,
-                    dry_run=dry_run,
-                ),
-            )
-        typer.echo(json.dumps(result.to_dict(), ensure_ascii=False, indent=2, sort_keys=True))
 
     asyncio.run(run())
 
@@ -1020,14 +913,6 @@ def serving_hot_swap_plan(
             typer.echo((await client.restore_hot_swap_plan(req)).model_dump_json())
 
     asyncio.run(run())
-
-
-def _echo_source_discovery(discovery: SourceSetDiscovery) -> None:
-    for candidate in discovery.candidates:
-        typer.echo(
-            f"{candidate.kind}\t{candidate.inferred_yyyymm or '-'}\t"
-            f"{candidate.confidence}\t{candidate.path}"
-        )
 
 
 def _sido_dirs(root: Path) -> tuple[Path, ...]:

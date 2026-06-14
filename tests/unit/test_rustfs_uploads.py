@@ -118,7 +118,9 @@ async def test_sync_local_to_rustfs_uploads_allowed_tree(tmp_path: Path) -> None
     assert result.uploaded_files == 1
     assert result.uploaded_bytes == 5
     assert result.upload_set.storage_kind == "rustfs"
-    assert result.upload_set.files[0].source_kind == "navi"
+    # T-201 removed source-kind auto-detection; yyyymm inference is still kept.
+    assert result.upload_set.files[0].source_kind is None
+    assert result.upload_set.files[0].inferred_yyyymm == "202604"
     assert result.upload_set.files[0].object_key == (
         "kor-travel-geo/imports/test/202604_내비게이션용DB_전체분/navi.txt"
     )
@@ -169,7 +171,9 @@ async def test_import_rustfs_prefix_restores_upload_set_files(tmp_path: Path) ->
     assert status.storage_uri == "rustfs://kor-travel-geo/kor-travel-geo/uploads/upload_1"
     assert status.files[0].relative_path == "202604_도로명주소 한글_전체분.zip"
     assert status.files[0].object_etag == "abc"
-    assert status.files[0].source_kind == "juso"
+    # T-201 removed source-kind auto-detection; yyyymm inference is still kept.
+    assert status.files[0].source_kind is None
+    assert status.files[0].inferred_yyyymm == "202604"
 
 
 def test_describe_rustfs_config_does_not_expose_secret_values() -> None:

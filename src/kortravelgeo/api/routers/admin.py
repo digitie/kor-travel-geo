@@ -20,6 +20,7 @@ from kortravelgeo.api._jobs import JobQueue
 from kortravelgeo.api.deps import get_client, get_job_queue
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.normalize import parse_address
+from kortravelgeo.core.source_categories import CATEGORY_CATALOG
 from kortravelgeo.dto.admin import (
     AuditEvent,
     BackupAllowedDirs,
@@ -59,17 +60,12 @@ from kortravelgeo.dto.admin import (
     RustfsSyncLocalRequest,
     RustfsSyncLocalResult,
     ServingRelease,
-    SourceSetDiscovery,
-    SourceSetDiscoveryRequest,
-    SourceSetPlan,
-    SourceSetPlanRequest,
     TableStat,
     TableStatsSnapshot,
-    UploadFileStatus,
-    UploadSetCreateRequest,
     UploadSetStatus,
     UploadSidoZipResponse,
 )
+from kortravelgeo.dto.source import SourceFileCategoryCatalog, SourceFileCategoryInfo
 from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.backup import (
     BACKUP_ARTIFACT_TYPE,
@@ -84,19 +80,9 @@ from kortravelgeo.infra.rustfs import (
     require_enabled_rustfs,
     save_rustfs_config,
 )
-from kortravelgeo.infra.source_set import (
-    build_full_load_source_set_plan,
-    discover_load_sources,
-)
 from kortravelgeo.infra.uploads import (
-    cancel_upload_set,
-    create_upload_set,
-    get_upload_set,
     import_rustfs_prefix_as_upload_set,
-    materialize_upload_set,
-    store_upload_file,
     sync_local_to_rustfs,
-    upload_set_root,
 )
 from kortravelgeo.settings import Settings, get_settings
 
@@ -191,72 +177,32 @@ async def upload_sido_zip(
     )
 
 
-@router.post(
-    "/uploads",
-    response_model=UploadSetStatus,
-    response_model_exclude_none=True,
-)
-async def create_upload_session(req: UploadSetCreateRequest) -> UploadSetStatus:
-    settings = get_settings()
-    rustfs_config = load_rustfs_config(settings)
-    storage_kind = req.storage_kind or ("rustfs" if rustfs_config.enabled else "local")
-    if storage_kind == "rustfs":
-        rustfs_config = require_enabled_rustfs(settings)
-        await RustfsClient(rustfs_config).ensure_bucket()
-    return await create_upload_set(
-        settings.loader_data_dir,
-        req,
-        storage_kind=storage_kind,
-        rustfs_config=rustfs_config if storage_kind == "rustfs" else None,
-    )
-
-
 @router.get(
-    "/uploads/{upload_set_id}",
-    response_model=UploadSetStatus,
+    "/source-file-categories",
+    response_model=SourceFileCategoryCatalog,
     response_model_exclude_none=True,
 )
-async def upload_session_status(upload_set_id: str) -> UploadSetStatus:
-    return await get_upload_set(get_settings().loader_data_dir, upload_set_id)
+async def source_file_categories() -> SourceFileCategoryCatalog:
+    """Static catalog of source upload categories (T-200/T-201).
 
-
-@router.put(
-    "/uploads/{upload_set_id}/files",
-    response_model=UploadFileStatus,
-    response_model_exclude_none=True,
-)
-async def put_upload_file(
-    upload_set_id: str,
-    request: Request,
-    filename: str = Query(min_length=1),
-    relative_path: str | None = None,
-) -> UploadFileStatus:
-    settings = get_settings()
-    status = await get_upload_set(settings.loader_data_dir, upload_set_id)
-    rustfs_config = None
-    rustfs_client = None
-    if status.storage_kind == "rustfs":
-        rustfs_config = require_enabled_rustfs(settings)
-        rustfs_client = RustfsClient(rustfs_config)
-    return await store_upload_file(
-        settings.loader_data_dir,
-        upload_set_id,
-        filename=filename,
-        relative_path=relative_path,
-        chunks=request.stream(),
-        max_bytes=settings.api_max_upload_bytes,
-        rustfs_client=rustfs_client,
-        rustfs_config=rustfs_config,
+    Replaces the removed auto-detection upload-SET flow: the UI uses this to draw
+    explicit per-category upload slots. ``role``/``default_role`` are UI defaults;
+    the authoritative role lives on ``ops.source_match_set_items``.
+    """
+    return SourceFileCategoryCatalog(
+        categories=tuple(
+            SourceFileCategoryInfo(
+                category=category.code,
+                label=category.display_name,
+                group_kind=category.group_kind,
+                default_role=category.default_role,
+                role=category.default_role,
+                expected_member_kinds=category.expected_member_kinds,
+                optional=category.optional,
+            )
+            for category in CATEGORY_CATALOG
+        )
     )
-
-
-@router.post(
-    "/uploads/{upload_set_id}/cancel",
-    response_model=UploadSetStatus,
-    response_model_exclude_none=True,
-)
-async def cancel_upload_session(upload_set_id: str) -> UploadSetStatus:
-    return await cancel_upload_set(get_settings().loader_data_dir, upload_set_id)
 
 
 @router.get(
@@ -321,35 +267,6 @@ async def sync_local_to_rustfs_storage(req: RustfsSyncLocalRequest) -> RustfsSyn
         rustfs_client=client,
         rustfs_config=config,
         allowed_roots=settings.rustfs_local_import_roots,
-    )
-
-
-@router.post(
-    "/load-sources/discover",
-    response_model=SourceSetDiscovery,
-    response_model_exclude_none=True,
-)
-async def discover_load_source_set(req: SourceSetDiscoveryRequest) -> SourceSetDiscovery:
-    root_path = await _source_root_from_request(req.root_path, req.upload_set_id)
-    assert root_path is not None
-    return discover_load_sources(root_path, include_optional=req.include_optional)
-
-
-@router.post(
-    "/load-sources/plan",
-    response_model=SourceSetPlan,
-    response_model_exclude_none=True,
-)
-async def plan_load_source_set(req: SourceSetPlanRequest) -> SourceSetPlan:
-    root_path = await _source_root_from_request(req.root_path, req.upload_set_id, required=False)
-    return build_full_load_source_set_plan(
-        root_path=root_path,
-        versions=req.versions,
-        explicit_paths=req.explicit_paths,
-        include_optional=req.include_optional,
-        allow_mixed_yyyymm=req.allow_mixed_yyyymm,
-        confirmation_token=req.confirmation_token,
-        acknowledged_by=req.acknowledged_by,
     )
 
 
@@ -1094,31 +1011,6 @@ def _is_relative_to(path: Path, base: Path) -> bool:
     except ValueError:
         return False
     return True
-
-
-async def _source_root_from_request(
-    root_path: str | None,
-    upload_set_id: str | None,
-    *,
-    required: bool = True,
-) -> Path | None:
-    if upload_set_id:
-        settings = get_settings()
-        status = await get_upload_set(settings.loader_data_dir, upload_set_id)
-        if status.storage_kind == "rustfs":
-            config = require_enabled_rustfs(settings)
-            return await materialize_upload_set(
-                settings.loader_data_dir,
-                upload_set_id,
-                rustfs_client=RustfsClient(config),
-            )
-        return upload_set_root(settings.loader_data_dir, upload_set_id)
-    if root_path:
-        return Path(root_path)
-    if required:
-        msg = "root_path or upload_set_id is required"
-        raise InvalidInputError(msg)
-    return None
 
 
 def _audit_request(request: Request) -> _AuditRequest:
