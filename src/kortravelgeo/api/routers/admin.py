@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, ORJSONResponse, StreamingResponse
 from kortravelgeo.api._jobs import JobQueue
 from kortravelgeo.api.deps import get_client, get_job_queue
 from kortravelgeo.api.security import (
+    ROLE_DESTRUCTIVE_ADMIN,
     ROLE_SOURCE_FILE_MANAGER,
     ROLE_SOURCE_FILE_VIEWER,
     RequestContext,
@@ -76,22 +77,28 @@ from kortravelgeo.dto.source import (
     GroupValidationResult,
     MultipartCompleteRequest,
     MultipartInitiateResponse,
+    ReconcileResolveRequest,
+    ReconcileResolveResponse,
+    ReconcileRunRequest,
     RegisterRequest,
     RegisterResponse,
     SlotReplaceResponse,
+    SourceCapacityUsage,
     SourceFileCategoryCatalog,
     SourceFileCategoryInfo,
     SourceGroupRestoreResponse,
     SourceGroupSoftDeleteRequest,
     SourceGroupSoftDeleteResponse,
     SourceJanitorRunResponse,
+    SourceReconcileItemPage,
+    SourceReconcileRun,
     SourceUploadProgressEvent,
     UploadPartResponse,
     UploadSessionConflict,
     UploadSessionCreateRequest,
     UploadSessionStatus,
 )
-from kortravelgeo.exceptions import InvalidInputError, NotFoundError
+from kortravelgeo.exceptions import ForbiddenError, InvalidInputError, NotFoundError
 from kortravelgeo.infra.backup import (
     BACKUP_ARTIFACT_TYPE,
     backup_download_url,
@@ -855,6 +862,168 @@ async def run_source_upload_janitor(
     ``registration_expired``. Skips if the ``SOURCE_JANITOR`` lock is held.
     """
     return await client.run_source_upload_janitor()
+
+
+# --- RustFS reconciliation (T-204) ----------------------------------------
+# DB/RustFS consistency scan + resolve (doc lines ~638-726, ~1449-1479). run +
+# non-destructive resolve = source_file_manager; reads = source_file_viewer;
+# destructive resolves (delete_object / retry_delete_object) additionally require
+# destructive_admin (doc lines ~1446-1447, ~1154).
+
+_DESTRUCTIVE_ADMIN = Depends(require_role(ROLE_DESTRUCTIVE_ADMIN))
+_DESTRUCTIVE_RESOLVE_ACTIONS = frozenset({"delete_object", "retry_delete_object"})
+
+
+@router.post(
+    "/source-files/reconcile",
+    response_model=SourceReconcileRun,
+    response_model_exclude_none=True,
+)
+async def run_source_reconcile(
+    req: ReconcileRunRequest,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceReconcileRun:
+    """Run one RustFS ⟷ DB reconciliation pass (doc lines ~638-726).
+
+    Lists RustFS objects under the prefix, classifies each against
+    ``ops.source_files`` (quick skips rehash for unchanged objects, force-deeping
+    past the rolling-deep window; deep rehashes every body), and records an issue
+    item per discrepancy. En-masse loss propagates referenced groups to
+    ``missing`` (active match sets → ``integrity_alert``, ``validated`` → ``invalid``).
+    """
+    result = await client.run_source_reconcile(
+        prefix=req.prefix, mode=req.mode, actor=ctx.actor
+    )
+    await client.record_audit_event(
+        action="source.reconcile_run",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.state,
+        payload={"prefix": result.prefix, "mode": result.mode,
+                 "mismatch_count": result.mismatch_count},
+        resource_type="source_storage_reconcile",
+        resource_id=result.source_storage_reconcile_run_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.get(
+    "/source-files/reconcile",
+    response_model=list[SourceReconcileRun],
+    response_model_exclude_none=True,
+)
+async def list_source_reconcile_runs(
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+    limit: int = Query(default=50, ge=1, le=500),
+) -> list[SourceReconcileRun]:
+    """List recent reconciliation runs (newest first)."""
+    return list(await client.list_source_reconcile_runs(limit=limit))
+
+
+@router.get(
+    "/source-files/reconcile/{source_storage_reconcile_run_id}",
+    response_model=SourceReconcileRun,
+    response_model_exclude_none=True,
+)
+async def get_source_reconcile_run(
+    source_storage_reconcile_run_id: str,
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceReconcileRun:
+    """Get one reconciliation run by id."""
+    return await client.get_source_reconcile_run(source_storage_reconcile_run_id)
+
+
+@router.get(
+    "/source-files/reconcile/{source_storage_reconcile_run_id}/items",
+    response_model=SourceReconcileItemPage,
+    response_model_exclude_none=True,
+)
+async def list_source_reconcile_items(
+    source_storage_reconcile_run_id: str,
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+    issue_type: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    limit: int = Query(default=500, ge=1, le=5000),
+) -> SourceReconcileItemPage:
+    """List a run's issue items (filter by issue_type / state)."""
+    items = await client.list_source_reconcile_items(
+        source_storage_reconcile_run_id,
+        issue_type=issue_type,
+        state=state,
+        limit=limit,
+    )
+    return SourceReconcileItemPage(items=items)
+
+
+@router.post(
+    "/source-files/reconcile/items/{source_storage_reconcile_item_id}/resolve",
+    response_model=ReconcileResolveResponse,
+    response_model_exclude_none=True,
+)
+async def resolve_source_reconcile_item(
+    source_storage_reconcile_item_id: str,
+    req: ReconcileResolveRequest,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> ReconcileResolveResponse:
+    """Resolve one reconciliation item (doc lines ~1458-1479).
+
+    Most resolves require ``source_file_manager``; destructive resolves
+    (``delete_object`` / ``retry_delete_object``) additionally require the
+    ``destructive_admin`` role. A read-after-write recheck rejects stale items and
+    the active-정본 deletion guard refuses deleting an object an active match set
+    references.
+    """
+    if req.action in _DESTRUCTIVE_RESOLVE_ACTIONS and not ctx.has_any_role(
+        frozenset({ROLE_DESTRUCTIVE_ADMIN})
+    ):
+        raise ForbiddenError(
+            "destructive resolve requires the destructive_admin role",
+            hint=f"requires role: {ROLE_DESTRUCTIVE_ADMIN}",
+        )
+    result = await client.resolve_source_reconcile_item(
+        source_storage_reconcile_item_id,
+        action=req.action,
+        actor=ctx.actor,
+        category=req.category,
+        user_yyyymm=req.user_yyyymm,
+        registration_deadline_at=req.registration_deadline_at,
+        typed_confirmation=req.typed_confirmation,
+    )
+    await client.record_audit_event(
+        action="source.reconcile_resolve",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome=result.outcome,
+        payload={"issue_type": result.issue_type, "action": req.action},
+        resource_type="source_storage_reconcile_item",
+        resource_id=source_storage_reconcile_item_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.get(
+    "/source-files/capacity",
+    response_model=SourceCapacityUsage,
+    response_model_exclude_none=True,
+)
+async def source_files_capacity(
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> SourceCapacityUsage:
+    """Per-category storage capacity usage (doc line ~2107).
+
+    Computation + surfacing only; the retention/cleanup POLICY is T-212.
+    """
+    return await client.source_storage_capacity()
 
 
 @router.get(

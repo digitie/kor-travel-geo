@@ -111,6 +111,13 @@ class Settings(BaseSettings):
     source_janitor_interval_minutes: int = Field(default=0, ge=0)
     source_janitor_on_startup: bool = False
     source_janitor_session_limit: int = Field(default=500, ge=1, le=5_000)
+    # T-204 RustFS reconciliation. Rolling-deep window (force a deep rehash of an
+    # otherwise-unchanged object whose last deep verify is older than this) and a
+    # soft storage-capacity limit used only for the preflight warning (the
+    # retention POLICY itself is T-212).
+    source_reconcile_rolling_deep_days: int = Field(default=30, ge=1)
+    source_reconcile_object_limit: int = Field(default=50_000, ge=1, le=1_000_000)
+    source_storage_capacity_limit_bytes: int | None = Field(default=None, ge=0)
     mvm_res_code_actions: dict[str, LoadCodeAction] = Field(
         default_factory=_default_mvm_res_code_actions
     )

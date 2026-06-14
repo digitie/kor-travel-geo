@@ -21,6 +21,9 @@ SOURCE_FORCED_PROMOTION = "source.forced_promotion"
 SOURCE_HARD_DELETE = "source.hard_delete"
 SOURCE_UPDATE_HASH_AFTER_VERIFY = "source.update_hash_after_verify"
 SOURCE_JANITOR = "source.janitor"
+# T-204 RustFS reconciliation.
+SOURCE_RECONCILE_RUN = "source.reconcile_run"
+SOURCE_RECONCILE_RESOLVE = "source.reconcile_resolve"
 
 #: All source-management audit event types introduced for T-109 / T-203+.
 SOURCE_AUDIT_EVENT_TYPES: frozenset[str] = frozenset(
@@ -32,5 +35,7 @@ SOURCE_AUDIT_EVENT_TYPES: frozenset[str] = frozenset(
         SOURCE_HARD_DELETE,
         SOURCE_UPDATE_HASH_AFTER_VERIFY,
         SOURCE_JANITOR,
+        SOURCE_RECONCILE_RUN,
+        SOURCE_RECONCILE_RESOLVE,
     }
 )

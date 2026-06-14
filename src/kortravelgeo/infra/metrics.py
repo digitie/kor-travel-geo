@@ -147,6 +147,21 @@ SOURCE_JANITOR_ABORTS = _counter(
     "Multipart upload abort attempts by the janitor by outcome.",
     ("outcome",),
 )
+SOURCE_RECONCILE_RUNS = _counter(
+    "kor_travel_geo_source_reconcile_runs_total",
+    "RustFS reconciliation passes by mode and outcome.",
+    ("mode", "outcome"),
+)
+SOURCE_RECONCILE_ITEMS = _counter(
+    "kor_travel_geo_source_reconcile_items_total",
+    "Reconciliation issue items emitted by issue_type and severity.",
+    ("issue_type", "severity"),
+)
+SOURCE_RECONCILE_RESOLVES = _counter(
+    "kor_travel_geo_source_reconcile_resolves_total",
+    "Reconciliation resolve attempts by action and outcome.",
+    ("action", "outcome"),
+)
 DB_QUERY_DURATION = _histogram(
     "kor_travel_geo_db_query_duration_seconds",
     "SQL query duration by operation, fingerprint, and status.",
@@ -243,6 +258,21 @@ def record_source_janitor_session(*, action: str) -> None:
 def record_source_janitor_abort(*, outcome: str) -> None:
     """Count one multipart abort attempt: ``succeeded`` or ``failed``."""
     SOURCE_JANITOR_ABORTS.labels(outcome=outcome).inc()
+
+
+def record_source_reconcile_run(*, mode: str, outcome: str) -> None:
+    """Count one reconciliation pass by mode (quick/deep) and outcome."""
+    SOURCE_RECONCILE_RUNS.labels(mode=mode, outcome=outcome).inc()
+
+
+def record_source_reconcile_item(*, issue_type: str, severity: str) -> None:
+    """Count one reconciliation issue item by issue_type and severity."""
+    SOURCE_RECONCILE_ITEMS.labels(issue_type=issue_type, severity=severity).inc()
+
+
+def record_source_reconcile_resolve(*, action: str, outcome: str) -> None:
+    """Count one reconciliation resolve attempt by action and outcome."""
+    SOURCE_RECONCILE_RESOLVES.labels(action=action, outcome=outcome).inc()
 
 
 def refresh_admin_metrics(
