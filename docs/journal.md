@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-14 (PR #131 잔여 운영 시나리오 재반영)
+
+**작업**: PR #131 conversation comment를 다시 확인했다. 최신 신규 코멘트는 `IC_kwDOSW_crs8AAAABGCx8WQ`, `IC_kwDOSW_crs8AAAABGCyhBA`, `IC_kwDOSW_crs8AAAABGCzORQ`였고, review thread는 0건이었다. 원격의 `d9ae209`, `999fac3`를 fast-forward로 받은 뒤 잔여 M/L 시나리오를 문서에 추가 반영했다.
+
+**반영**:
+- ADR-049의 옛 표현(active match set이 object 결손 시 `invalid`)을 `state='active'` 유지 + `integrity_alert=true`로 정정했다.
+- `soft_deleted` source group/file을 `restore` action으로 되살리는 절차와 RustFS head/hash 검증, `validating -> available` 전이를 추가했다.
+- upload session 중복 생성 `409`, register 전 완료 slot `replace`, `expires_at`/`registration_deadline_at` 기본 정책, `registration_expired` issue, janitor 동작을 추가했다.
+- restore hot-swap 직후 source quick reconcile과 `restored_from_backup` stub의 `unknown -> validating -> available -> revalidatable -> validated` 순서를 명시했다.
+- `recompute_group_aggregates()`가 하향 invalid/alert 전파뿐 아니라 복구 시 `revalidatable`/alert 해제 후보 전파도 담당하도록 구현 지침과 테스트 계획을 갱신했다.
+
+**검증**:
+- 문서-only 변경. `git diff --check`로 공백 오류를 확인한다.
+
 ## 2026-06-14 (T-109 시나리오 재검 H1 정정 — active match set integrity_alert 분리)
 
 **작업**: 시나리오 재검에서 발견된 H1 자기모순(active match set이 `invalid`로 전환된다는 규칙 ↔ one-active 슬롯 유지가 양립 불가; one-active index가 `WHERE state='active'`라 state를 invalid로 바꾸면 슬롯이 빔)을 `docs/t109-backup-source-upload-management.md`에 정정했다.
