@@ -888,10 +888,10 @@ class SourceRebuildDbResponse(FrozenModel):
 
 
 class ServingReleaseRollbackRequest(FrozenModel):
-    """``POST /v1/admin/ops/releases/{release_id}/rollback`` body (doc ~818/1530).
+    """``POST /v1/admin/ops/releases/{serving_release_id}/rollback`` body (doc ~818/1530).
 
     ``typed_confirmation`` must equal the rollback-plan token
-    (``ROLLBACK {release_id}``). When the target snapshot carries a
+    (``ROLLBACK {serving_release_id}``). When the target snapshot carries a
     ``source_match_set_id`` the match set is swapped atomically (current active →
     ``retired``, target → ``active``) under the match-activate lock, with the
     target's ``integrity_alert`` recomputed from a pre-rollback source quick
@@ -905,7 +905,7 @@ class ServingReleaseRollbackRequest(FrozenModel):
 class ServingReleaseRollbackResponse(FrozenModel):
     """``rollback`` result — the serving + match-set swap outcome."""
 
-    release_id: str
+    serving_release_id: str
     mode: Literal["match_set_swap", "legacy_estimate"]
     activated_match_set_id: str | None = None
     retired_match_set_id: str | None = None

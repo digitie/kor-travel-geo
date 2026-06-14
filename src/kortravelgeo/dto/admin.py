@@ -559,7 +559,7 @@ class ConsistencySampleRecheckResponse(FrozenModel):
 
 
 class AuditEvent(FrozenModel):
-    event_id: str
+    audit_event_id: str
     occurred_at: datetime
     actor_type: OpsActorType
     actor_id: str | None = None
@@ -578,9 +578,9 @@ class AuditEvent(FrozenModel):
 
 
 class DatasetSnapshot(FrozenModel):
-    snapshot_id: str
+    dataset_snapshot_id: str
     state: DatasetSnapshotState
-    parent_snapshot_id: str | None = None
+    parent_dataset_snapshot_id: str | None = None
     source_set: dict[str, Any] = Field(default_factory=dict)
     source_set_hash: str = Field(min_length=64, max_length=64)
     git_commit: str | None = None
@@ -598,12 +598,12 @@ class DatasetSnapshot(FrozenModel):
 
 
 class ServingRelease(FrozenModel):
-    release_id: str
-    snapshot_id: str
+    serving_release_id: str
+    dataset_snapshot_id: str
     state: ServingReleaseState
     release_kind: ServingReleaseKind
-    previous_release_id: str | None = None
-    rollback_target_release_id: str | None = None
+    previous_serving_release_id: str | None = None
+    rollback_target_serving_release_id: str | None = None
     mv_name: str = "mv_geocode_target"
     mv_hash: str | None = None
     consistency_gate: dict[str, Any] = Field(default_factory=dict)
@@ -615,8 +615,8 @@ class ServingRelease(FrozenModel):
 
 
 class RollbackPlan(FrozenModel):
-    release_id: str
-    snapshot_id: str
+    serving_release_id: str
+    dataset_snapshot_id: str
     requires_maintenance_window: bool = True
     typed_confirmation: str
     blockers: tuple[str, ...] = ()
@@ -637,8 +637,8 @@ class OpsArtifact(FrozenModel):
     retention_class: str | None = None
     expires_at: datetime | None = None
     job_id: str | None = None
-    snapshot_id: str | None = None
-    release_id: str | None = None
+    dataset_snapshot_id: str | None = None
+    serving_release_id: str | None = None
     manifest: dict[str, Any] = Field(default_factory=dict)
     callback_url: str | None = None
     callback_state: str | None = None
@@ -668,7 +668,7 @@ class MaintenanceWindowEnd(FrozenModel):
 
 
 class MaintenanceWindow(FrozenModel):
-    window_id: str
+    maintenance_window_id: str
     kind: MaintenanceWindowKind
     state: MaintenanceWindowState
     starts_at: datetime | None = None
@@ -685,8 +685,8 @@ class MaintenanceWindow(FrozenModel):
 
 
 class TableStatsSnapshot(FrozenModel):
-    stats_id: str
-    snapshot_id: str | None = None
+    table_stats_snapshot_id: str
+    dataset_snapshot_id: str | None = None
     captured_at: datetime
     schema_name: str
     object_name: str

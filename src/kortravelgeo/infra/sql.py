@@ -436,7 +436,7 @@ CREATE TABLE IF NOT EXISTS geo_cache (
 CREATE SCHEMA IF NOT EXISTS ops;
 
 CREATE TABLE IF NOT EXISTS ops.audit_events (
-  event_id          UUID PRIMARY KEY,
+  audit_event_id    UUID PRIMARY KEY,
   occurred_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   actor_type        TEXT NOT NULL CHECK (actor_type IN ('system','cli','api','ui','scheduler')),
   actor_id          TEXT,
@@ -502,11 +502,12 @@ CREATE TABLE IF NOT EXISTS ops.consistency_case_samples (
 );
 
 CREATE TABLE IF NOT EXISTS ops.dataset_snapshots (
-  snapshot_id                 UUID PRIMARY KEY,
+  dataset_snapshot_id         UUID PRIMARY KEY,
   state                       TEXT NOT NULL CHECK (
                               state IN ('building','validated','rejected','released','retired')
                             ),
-  parent_snapshot_id          UUID REFERENCES ops.dataset_snapshots(snapshot_id) ON DELETE SET NULL,
+  parent_dataset_snapshot_id  UUID REFERENCES ops.dataset_snapshots(dataset_snapshot_id)
+                              ON DELETE SET NULL,
   source_set                  JSONB NOT NULL DEFAULT '{}'::jsonb,
   source_set_hash             TEXT NOT NULL CHECK (char_length(source_set_hash) = 64),
   git_commit                  TEXT,
@@ -526,8 +527,8 @@ CREATE TABLE IF NOT EXISTS ops.dataset_snapshots (
 );
 
 CREATE TABLE IF NOT EXISTS ops.serving_releases (
-  release_id                  UUID PRIMARY KEY,
-  snapshot_id                 UUID NOT NULL REFERENCES ops.dataset_snapshots(snapshot_id)
+  serving_release_id          UUID PRIMARY KEY,
+  dataset_snapshot_id         UUID NOT NULL REFERENCES ops.dataset_snapshots(dataset_snapshot_id)
                               ON DELETE RESTRICT,
   state                       TEXT NOT NULL CHECK (
                               state IN ('pending','active','superseded','rolled_back','failed')
@@ -537,8 +538,11 @@ CREATE TABLE IF NOT EXISTS ops.serving_releases (
                                 'full_load','daily_delta','restore','manual_rebuild','rollback'
                               )
                             ),
-  previous_release_id         UUID REFERENCES ops.serving_releases(release_id) ON DELETE SET NULL,
-  rollback_target_release_id  UUID REFERENCES ops.serving_releases(release_id) ON DELETE SET NULL,
+  previous_serving_release_id UUID REFERENCES ops.serving_releases(serving_release_id)
+                              ON DELETE SET NULL,
+  rollback_target_serving_release_id
+                              UUID REFERENCES ops.serving_releases(serving_release_id)
+                              ON DELETE SET NULL,
   mv_name                     TEXT NOT NULL DEFAULT 'mv_geocode_target',
   mv_hash                     TEXT,
   consistency_gate            JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -571,8 +575,10 @@ CREATE TABLE IF NOT EXISTS ops.artifacts (
   retention_class             TEXT,
   expires_at                  TIMESTAMPTZ,
   job_id                      TEXT REFERENCES load_jobs(job_id) ON DELETE SET NULL,
-  snapshot_id                 UUID REFERENCES ops.dataset_snapshots(snapshot_id) ON DELETE SET NULL,
-  release_id                  UUID REFERENCES ops.serving_releases(release_id) ON DELETE SET NULL,
+  dataset_snapshot_id         UUID REFERENCES ops.dataset_snapshots(dataset_snapshot_id)
+                              ON DELETE SET NULL,
+  serving_release_id          UUID REFERENCES ops.serving_releases(serving_release_id)
+                              ON DELETE SET NULL,
   manifest                    JSONB NOT NULL DEFAULT '{}'::jsonb,
   download_token_hash         TEXT,
   callback_url                TEXT,
@@ -582,7 +588,7 @@ CREATE TABLE IF NOT EXISTS ops.artifacts (
 );
 
 CREATE TABLE IF NOT EXISTS ops.maintenance_windows (
-  window_id                   UUID PRIMARY KEY,
+  maintenance_window_id       UUID PRIMARY KEY,
   kind                        TEXT NOT NULL CHECK (
                               kind IN (
                                 'full_load','restore','schema_migration',
@@ -607,8 +613,9 @@ CREATE TABLE IF NOT EXISTS ops.maintenance_windows (
 );
 
 CREATE TABLE IF NOT EXISTS ops.table_stats_snapshots (
-  stats_id                    UUID PRIMARY KEY,
-  snapshot_id                 UUID REFERENCES ops.dataset_snapshots(snapshot_id) ON DELETE SET NULL,
+  table_stats_snapshot_id     UUID PRIMARY KEY,
+  dataset_snapshot_id         UUID REFERENCES ops.dataset_snapshots(dataset_snapshot_id)
+                              ON DELETE SET NULL,
   captured_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
   schema_name                 TEXT NOT NULL,
   object_name                 TEXT NOT NULL,

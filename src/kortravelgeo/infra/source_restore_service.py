@@ -612,7 +612,7 @@ async def _active_source_match_set_id_conn(conn: AsyncConnection) -> str | None:
             """
 SELECT s.source_match_set_id::text
   FROM ops.serving_releases r
-  JOIN ops.dataset_snapshots s ON s.snapshot_id = r.snapshot_id
+  JOIN ops.dataset_snapshots s ON s.dataset_snapshot_id = r.dataset_snapshot_id
  WHERE r.state = 'active' AND s.source_match_set_id IS NOT NULL
  ORDER BY r.activated_at DESC NULLS LAST, r.created_at DESC
  LIMIT 1
@@ -782,7 +782,7 @@ async def _audit(
         _json_text(
             """
 INSERT INTO ops.audit_events
-  (event_id, actor_type, actor_id, action, resource_type, resource_id,
+  (audit_event_id, actor_type, actor_id, action, resource_type, resource_id,
    outcome, payload_redacted)
 VALUES
   (:event_id, 'ui', :actor_id, :action, :resource_type, :resource_id,

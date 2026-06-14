@@ -44,7 +44,9 @@ export function CurrentConfigTab() {
   // 현재 구성 조회 순서: serving_releases → dataset_snapshots.source_match_set_id → source_match_sets
   // FK 경로에서 match set을 찾지 못하면 "알수없음", JSONB 추정 정보가 있으면 "추정" 배지.
   const activeSnapshot = activeRelease
-    ? snapshots.find((snapshot) => snapshot.snapshot_id === activeRelease.snapshot_id) ?? null
+    ? snapshots.find(
+        (snapshot) => snapshot.dataset_snapshot_id === activeRelease.dataset_snapshot_id,
+      ) ?? null
     : null;
   const estimated = !active && Boolean(activeSnapshot?.source_set);
 
@@ -56,7 +58,7 @@ export function CurrentConfigTab() {
             <div>
               <dt>active release</dt>
               <dd>
-                {activeRelease.release_id} · {activeRelease.activated_at ?? "-"}
+                {activeRelease.serving_release_id} · {activeRelease.activated_at ?? "-"}
               </dd>
             </div>
             <div>
@@ -65,7 +67,7 @@ export function CurrentConfigTab() {
             </div>
             <div>
               <dt>dataset snapshot</dt>
-              <dd>{activeRelease.snapshot_id}</dd>
+              <dd>{activeRelease.dataset_snapshot_id}</dd>
             </div>
             <div>
               <dt>정합성</dt>
