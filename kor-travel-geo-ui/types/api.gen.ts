@@ -879,6 +879,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/restores/hot-swap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Hot Swap Execute
+         * @description Execute the ADR-036 rename hot-swap (T-241; ADR-036/T-058 plan → execution).
+         *
+         *     Renames `current↔restore` in two `ALTER DATABASE RENAME` steps under the `HOT_SWAP`
+         *     advisory lock, only with an active `restore` maintenance window + exact typed
+         *     confirmation, then refreshes the engine pool, runs a post-swap smoke test, and
+         *     **auto-rolls-back on smoke failure**. A concurrent second hot-swap fails fast (409).
+         *     Records started/succeeded/failed/rolled_back audits + an active `serving_releases`
+         *     row with `previous_release_id` lineage. Live serving DB swap → requires
+         *     `destructive_admin`. Integration-tested in T-246.
+         */
+        post: operations["restore_hot_swap_execute_v1_admin_restores_hot_swap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/restores/hot-swap-plan": {
         parameters: {
             query?: never;
@@ -3696,6 +3724,42 @@ export interface components {
              */
             warnings: string[];
         };
+        /**
+         * RestoreHotSwapExecuteRequest
+         * @description T-241 request to actually execute the ADR-036 rename hot-swap.
+         *
+         *     Requires an active ``ops.maintenance_windows(kind='restore')`` whose confirmation
+         *     equals ``typed_confirmation`` (= ``HOT_SWAP <current> FROM <restore>``). The swap runs
+         *     under the ``HOT_SWAP`` advisory lock; a concurrent second call fails fast (409).
+         */
+        RestoreHotSwapExecuteRequest: {
+            /**
+             * Allow Version Mismatch
+             * @default false
+             */
+            allow_version_mismatch: boolean;
+            /**
+             * Maintenance Database
+             * @default postgres
+             */
+            maintenance_database: string;
+            /** Previous Alias */
+            previous_alias?: string | null;
+            /**
+             * Previous Alias Retention Days
+             * @default 7
+             */
+            previous_alias_retention_days: number;
+            /** Restore Database */
+            restore_database: string;
+            /**
+             * Run Smoke Test
+             * @default true
+             */
+            run_smoke_test: boolean;
+            /** Typed Confirmation */
+            typed_confirmation: string;
+        };
         /** RestoreHotSwapPlan */
         RestoreHotSwapPlan: {
             /**
@@ -3749,6 +3813,35 @@ export interface components {
             previous_alias_retention_days: number;
             /** Restore Database */
             restore_database: string;
+        };
+        /**
+         * RestoreHotSwapResult
+         * @description T-241 result of a hot-swap execution attempt.
+         */
+        RestoreHotSwapResult: {
+            /** Current Database */
+            current_database: string;
+            /** Message */
+            message?: string | null;
+            /** Previous Alias */
+            previous_alias: string;
+            /** Previous Release Id */
+            previous_release_id?: string | null;
+            /** Restore Database */
+            restore_database: string;
+            /** Rollback Confirmation */
+            rollback_confirmation?: string | null;
+            /**
+             * Rolled Back
+             * @default false
+             */
+            rolled_back: boolean;
+            /** Serving Release Id */
+            serving_release_id?: string | null;
+            /** Smoke Ok */
+            smoke_ok?: boolean | null;
+            /** Swapped */
+            swapped: boolean;
         };
         /**
          * RestoreSourceVerificationResult
@@ -7430,6 +7523,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RestoreDryRunResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_hot_swap_execute_v1_admin_restores_hot_swap_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreHotSwapExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreHotSwapResult"];
                 };
             };
             /** @description Validation Error */

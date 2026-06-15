@@ -5362,6 +5362,67 @@
         "title": "RestoreDryRunResult",
         "type": "object"
       },
+      "RestoreHotSwapExecuteRequest": {
+        "additionalProperties": false,
+        "description": "T-241 request to actually execute the ADR-036 rename hot-swap.\n\nRequires an active ``ops.maintenance_windows(kind='restore')`` whose confirmation\nequals ``typed_confirmation`` (= ``HOT_SWAP <current> FROM <restore>``). The swap runs\nunder the ``HOT_SWAP`` advisory lock; a concurrent second call fails fast (409).",
+        "properties": {
+          "allow_version_mismatch": {
+            "default": false,
+            "title": "Allow Version Mismatch",
+            "type": "boolean"
+          },
+          "maintenance_database": {
+            "default": "postgres",
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Maintenance Database",
+            "type": "string"
+          },
+          "previous_alias": {
+            "anyOf": [
+              {
+                "maxLength": 63,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Alias"
+          },
+          "previous_alias_retention_days": {
+            "default": 7,
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Previous Alias Retention Days",
+            "type": "integer"
+          },
+          "restore_database": {
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Restore Database",
+            "type": "string"
+          },
+          "run_smoke_test": {
+            "default": true,
+            "title": "Run Smoke Test",
+            "type": "boolean"
+          },
+          "typed_confirmation": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Typed Confirmation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "restore_database",
+          "typed_confirmation"
+        ],
+        "title": "RestoreHotSwapExecuteRequest",
+        "type": "object"
+      },
       "RestoreHotSwapPlan": {
         "additionalProperties": false,
         "properties": {
@@ -5477,6 +5538,96 @@
           "restore_database"
         ],
         "title": "RestoreHotSwapPlanRequest",
+        "type": "object"
+      },
+      "RestoreHotSwapResult": {
+        "additionalProperties": false,
+        "description": "T-241 result of a hot-swap execution attempt.",
+        "properties": {
+          "current_database": {
+            "title": "Current Database",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "previous_alias": {
+            "title": "Previous Alias",
+            "type": "string"
+          },
+          "previous_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Release Id"
+          },
+          "restore_database": {
+            "title": "Restore Database",
+            "type": "string"
+          },
+          "rollback_confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rollback Confirmation"
+          },
+          "rolled_back": {
+            "default": false,
+            "title": "Rolled Back",
+            "type": "boolean"
+          },
+          "serving_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Release Id"
+          },
+          "smoke_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smoke Ok"
+          },
+          "swapped": {
+            "title": "Swapped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "swapped",
+          "current_database",
+          "restore_database",
+          "previous_alias"
+        ],
+        "title": "RestoreHotSwapResult",
         "type": "object"
       },
       "RestoreSourceVerificationResult": {
@@ -13497,6 +13648,48 @@
           }
         },
         "summary": "Restore Dry Run",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/restores/hot-swap": {
+      "post": {
+        "description": "Execute the ADR-036 rename hot-swap (T-241; ADR-036/T-058 plan → execution).\n\nRenames `current↔restore` in two `ALTER DATABASE RENAME` steps under the `HOT_SWAP`\nadvisory lock, only with an active `restore` maintenance window + exact typed\nconfirmation, then refreshes the engine pool, runs a post-swap smoke test, and\n**auto-rolls-back on smoke failure**. A concurrent second hot-swap fails fast (409).\nRecords started/succeeded/failed/rolled_back audits + an active `serving_releases`\nrow with `previous_release_id` lineage. Live serving DB swap → requires\n`destructive_admin`. Integration-tested in T-246.",
+        "operationId": "restore_hot_swap_execute_v1_admin_restores_hot_swap_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreHotSwapExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreHotSwapResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Hot Swap Execute",
         "tags": [
           "admin"
         ]
