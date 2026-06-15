@@ -148,7 +148,7 @@ async def run_source_reconcile(
     run_id = str(uuid4())
     issue_counts: dict[str, int] = {}
 
-    listed = await rustfs.list_objects(prefix)
+    listed = await rustfs.list_objects(prefix, limit=object_limit)
     objects_by_key = {obj.key: obj for obj in listed}
 
     async with engine.begin() as conn:
@@ -624,6 +624,12 @@ SELECT issue_type, source_file_group_id, source_file_id, object_key,
             return _resolve_response(
                 item_id, item, action, "ignored", still.reason, affected
             )
+        if action == "import_object":
+            if not category or not user_yyyymm:
+                raise InvalidInputError("import_object에는 category와 user_yyyymm이 필요합니다")
+            outcome = "blocked:registration_flow_required"
+            record_source_reconcile_resolve(action=action, outcome="blocked")
+            return _resolve_response(item_id, item, action, "ignored", outcome, affected)
 
         outcome, affected = await _apply_resolve_action(
             conn,
@@ -758,15 +764,17 @@ UPDATE ops.source_upload_sessions
     if action == "import_object":
         if not category or not user_yyyymm:
             raise InvalidInputError("import_object에는 category와 user_yyyymm이 필요합니다")
-        # The full structure-validation + registry insert is the register flow
-        # (T-203b); here we record the import intent. The caller (client layer)
-        # re-runs head/sha256/structure before a real registry insert.
-        return "import_requested", affected
+        raise InvalidInputError(
+            "import_object resolve는 registry 등록을 수행하지 않습니다. "
+            "upload/register flow로 object를 등록하세요"
+        )
 
     if action == "delete_object":
         guard = await _deletion_guard(conn, object_key)
         if not guard.allowed:
             return f"blocked:{guard.reason}", tuple(guard.blocking_match_set_ids)
+        if object_key and object_present and rustfs is None:
+            return "blocked:rustfs_unavailable", affected
         if object_key and rustfs is not None and object_present:
             await rustfs.delete_object(object_key)
         if file_id:

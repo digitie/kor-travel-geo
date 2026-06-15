@@ -2660,18 +2660,13 @@ def _coverage_structure_validation(
     validator over materialized archives. Both share the pure decision logic in
     ``core.source_validation``.
     """
-    from kortravelgeo.core.source_validation import (
-        GroupManifest,
-        PartManifest,
-        validate_group_manifest,
-    )
+    from kortravelgeo.core.source_validation import validate_group_coverage
 
-    manifest = GroupManifest(
+    return validate_group_coverage(
         category=category,
-        group_kind=group_kind,  # type: ignore[arg-type]
-        parts=tuple(PartManifest(part_key=key) for key in present_part_keys),
+        group_kind=group_kind,
+        present_part_keys=present_part_keys,
     )
-    return validate_group_manifest(manifest)
 
 
 def _progress_event(session: UploadSessionStatus) -> SourceUploadProgressEvent:

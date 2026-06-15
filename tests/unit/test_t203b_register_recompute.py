@@ -31,10 +31,12 @@ from kortravelgeo.core.source_match_propagation import (
 from kortravelgeo.core.source_validation import (
     ELECTRONIC_MAP_SERVING_LAYERS,
     ELECTRONIC_MAP_STRUCTURE_LAYERS,
+    SIDO_PART_KEYS,
     VALIDATOR_VERSION,
     GroupManifest,
     ManifestMember,
     PartManifest,
+    validate_group_coverage,
     validate_group_manifest,
 )
 from kortravelgeo.dto.source import (
@@ -294,6 +296,27 @@ def test_electronic_map_missing_sido_part_fails_coverage() -> None:
     assert result.outcome == "failed"
     dropped = _sido_pairs()[-1][0]
     assert result.coverage[dropped] == "missing"
+
+
+def test_register_coverage_only_does_not_require_archive_members() -> None:
+    result = validate_group_coverage(
+        category="electronic_map_full",
+        group_kind="multi_part",
+        present_part_keys=SIDO_PART_KEYS,
+    )
+    assert result.outcome == "passed"
+    assert all(v == "present" for v in result.coverage.values())
+    assert not result.reasons
+
+
+def test_register_coverage_only_fails_missing_required_slot() -> None:
+    result = validate_group_coverage(
+        category="electronic_map_full",
+        group_kind="multi_part",
+        present_part_keys=SIDO_PART_KEYS[:-1],
+    )
+    assert result.outcome == "failed"
+    assert result.coverage[SIDO_PART_KEYS[-1]] == "missing"
 
 
 def test_dbf_only_road_interval_layer_skips_geometry_sidecars() -> None:

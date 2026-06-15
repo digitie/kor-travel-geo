@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, unquote, urlsplit
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -727,6 +728,32 @@ async def test_s06_reconcile_object_missing_db(
     assert result.issue_counts.get("object_missing_db", 0) >= 1
 
 
+async def test_s06b_reconcile_object_limit_blocks_oversized_scan(
+    db: AsyncEngine, store: FakeS3Store, rustfs: FakeRustfsClient
+) -> None:
+    """object_limit aborts an oversized RustFS scan before a reconcile run row is written."""
+    from kortravelgeo.exceptions import InvalidInputError
+
+    store.put("ktg/uploads/ghost/a", b"a")
+    store.put("ktg/uploads/ghost/b", b"b")
+
+    with pytest.raises(InvalidInputError, match="scan limit exceeded"):
+        await run_source_reconcile(
+            db,
+            rustfs=rustfs,
+            prefix="ktg",
+            mode="quick",
+            actor="tester",
+            rolling_deep_days=30,
+            object_limit=1,
+        )
+    async with db.connect() as conn:
+        run_count = await conn.scalar(
+            text("SELECT count(*) FROM ops.source_storage_reconcile_runs")
+        )
+    assert run_count == 0
+
+
 # ===========================================================================
 # Scenario 7: orphaned multipart (no completed object) -> still object_missing_db
 #   (run_source_reconcile classifies stored objects; an in-progress multipart has
@@ -1192,6 +1219,111 @@ async def test_s05b_reconcile_resolve_and_stale_guard(
     assert resolved_count == 0
 
 
+async def test_s06c_import_object_resolve_does_not_close_item(
+    db: AsyncEngine, store: FakeS3Store, rustfs: FakeRustfsClient
+) -> None:
+    """import_object is only an intent; real registry insertion belongs to register flow."""
+    store.put("ktg/uploads/ghost/archive", b"orphan-bytes")
+    run = await run_source_reconcile(
+        db, rustfs=rustfs, prefix="ktg", mode="quick", actor="tester", rolling_deep_days=30
+    )
+    async with db.connect() as conn:
+        item_id = await conn.scalar(
+            text(
+                "SELECT source_storage_reconcile_item_id "
+                "FROM ops.source_storage_reconcile_items "
+                "WHERE source_storage_reconcile_run_id = :rid AND issue_type = 'object_missing_db' "
+                "LIMIT 1"
+            ),
+            {"rid": run.source_storage_reconcile_run_id},
+        )
+    assert item_id is not None
+
+    resp = await resolve_reconcile_item(
+        db,
+        str(item_id),
+        action="import_object",
+        actor="tester",
+        rustfs=rustfs,
+        category="locsum_full",
+        user_yyyymm="202604",
+    )
+    assert resp.state == "ignored"
+    assert resp.outcome == "blocked:registration_flow_required"
+    async with db.connect() as conn:
+        item_state = await conn.scalar(
+            text(
+                "SELECT state FROM ops.source_storage_reconcile_items "
+                "WHERE source_storage_reconcile_item_id = :id"
+            ),
+            {"id": str(item_id)},
+        )
+    assert item_state == "open"
+
+
+async def test_s06d_delete_object_without_rustfs_does_not_hard_delete_db(
+    db: AsyncEngine, store: FakeS3Store, rustfs: FakeRustfsClient
+) -> None:
+    """A storage-backed delete must not mark DB hard_deleted when RustFS is unavailable."""
+    _, group_id = await _register_single_file_group(db, store, category="locsum_full")
+    async with db.connect() as conn:
+        object_key = await conn.scalar(
+            text("SELECT object_key FROM ops.source_files WHERE source_file_group_id = :gid"),
+            {"gid": group_id},
+        )
+    run = await run_source_reconcile(
+        db, rustfs=rustfs, prefix="ktg", mode="quick", actor="tester", rolling_deep_days=30
+    )
+    async with db.connect() as conn:
+        item_id = await conn.scalar(
+            text(
+                "SELECT source_storage_reconcile_item_id "
+                "FROM ops.source_storage_reconcile_items "
+                "WHERE source_storage_reconcile_run_id = :rid AND issue_type = 'duplicate_object' "
+                "LIMIT 1"
+            ),
+            {"rid": run.source_storage_reconcile_run_id},
+        )
+    if item_id is None:
+        fallback_item_id = str(uuid4())
+        async with db.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+INSERT INTO ops.source_storage_reconcile_items
+  (source_storage_reconcile_item_id, source_storage_reconcile_run_id, issue_type,
+   source_file_group_id, source_file_id, object_key, severity, state)
+SELECT :iid, :rid, 'duplicate_object', f.source_file_group_id, f.source_file_id,
+       f.object_key, 'warning', 'open'
+  FROM ops.source_files f
+ WHERE f.source_file_group_id = :gid
+"""
+                ),
+                {
+                    "iid": fallback_item_id,
+                    "rid": run.source_storage_reconcile_run_id,
+                    "gid": group_id,
+                },
+            )
+        item_id = fallback_item_id
+    assert item_id is not None
+    resp = await resolve_reconcile_item(
+        db,
+        str(item_id),
+        action="delete_object",
+        actor="tester",
+        rustfs=None,
+    )
+    assert resp.state == "ignored"
+    assert resp.outcome == "blocked:rustfs_unavailable"
+    async with db.connect() as conn:
+        file_state = await conn.scalar(
+            text("SELECT state FROM ops.source_files WHERE object_key = :key"),
+            {"key": str(object_key)},
+        )
+    assert file_state != "hard_deleted"
+
+
 # ===========================================================================
 # Scenario 13: run-validation source-integrity mismatch (revalidate not silently skipped)
 # ===========================================================================
@@ -1218,6 +1350,12 @@ async def test_s13_revalidate_failed_marks_invalid_not_skipped(
     assert result.validation_state == "failed"
     assert result.validation_state != "skipped"
     assert result.state != "available"
+    async with db.connect() as conn:
+        child_state = await conn.scalar(
+            text("SELECT state FROM ops.source_files WHERE source_file_group_id = :gid"),
+            {"gid": group_id},
+        )
+    assert child_state == "quarantined"
 
 
 # ===========================================================================

@@ -929,13 +929,6 @@ VALUES
                 },
             },
         )
-        recompute = await recompute_group_aggregates(
-            conn,
-            source_file_group_id,
-            trigger=trigger,
-            structure_validation_state=decision.outcome,
-            structure_coverage=decision.coverage,
-        )
         # Keep child states consistent with the group decision.
         if decision.outcome in {"passed", "warning"}:
             await conn.execute(
@@ -954,11 +947,18 @@ UPDATE ops.source_files
                     """
 UPDATE ops.source_files
    SET state = 'quarantined', validation_state = 'failed'
- WHERE source_file_group_id = :gid AND state = 'validating'
+ WHERE source_file_group_id = :gid AND state IN ('available','validating')
 """
                 ),
                 {"gid": source_file_group_id},
             )
+        recompute = await recompute_group_aggregates(
+            conn,
+            source_file_group_id,
+            trigger=trigger,
+            structure_validation_state=decision.outcome,
+            structure_coverage=decision.coverage,
+        )
     return GroupValidationResult(
         source_file_group_id=source_file_group_id,
         category=str(group_row["category"]),

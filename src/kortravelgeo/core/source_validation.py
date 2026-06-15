@@ -351,6 +351,44 @@ def validate_group_manifest(manifest: GroupManifest) -> GroupValidation:
     )
 
 
+def validate_group_coverage(
+    *,
+    category: str,
+    group_kind: str,
+    present_part_keys: tuple[str, ...],
+) -> GroupValidation:
+    """Coverage-only register-time decision.
+
+    Upload registration has not materialized archive members yet, so it can only
+    decide whether the expected upload slots arrived. Full SHP/TXT member checks
+    stay in :func:`validate_group_manifest`.
+    """
+    expected_keys = _expected_part_keys(group_kind)
+    present = frozenset(present_part_keys)
+    coverage = {key: "present" if key in present else "missing" for key in expected_keys}
+    missing_keys = sorted(k for k, v in coverage.items() if v == "missing")
+    reasons: list[str] = []
+    outcome: ValidationOutcome = "passed"
+    if missing_keys:
+        label = "시도 part" if group_kind == "multi_part" else "archive"
+        reasons.append(f"{label} 누락: " + ", ".join(missing_keys))
+        outcome = "failed"
+    if category_by_code.get(category) is None:
+        reasons.append(f"알 수 없는 category: {category}")
+        outcome = _worsen(outcome, "warning")
+    return GroupValidation(
+        category=category,
+        outcome=outcome,
+        parts=tuple(
+            PartValidation(part_key=key, outcome="passed")
+            for key in expected_keys
+            if key in present
+        ),
+        coverage=coverage,
+        reasons=tuple(reasons),
+    )
+
+
 _OUTCOME_RANK: dict[ValidationOutcome, int] = {"passed": 0, "warning": 1, "failed": 2}
 
 
