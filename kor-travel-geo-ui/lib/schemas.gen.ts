@@ -31,6 +31,8 @@ export const apiSchemaNames = [
   "ConsistencySampleRecheckResponse",
   "ConsistencyValidationInput",
   "DatasetSnapshot",
+  "EpostServerFetchRequest",
+  "EpostServerFetchResponse",
   "ExplainRequest",
   "ExplainResponse",
   "GeocodeExtension",

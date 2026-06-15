@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (PR #173 backend CI 계층 위반 수정)
+
+**수정**: GitHub Actions backend check가 `kortravelgeo.infra.epost_server_fetch -> kortravelgeo.loaders` import로 계층 규칙을 위반해 실패했다. T-207 server-fetch 서비스는 epost downloader/validation loader를 직접 재사용해야 하므로 파일을 `kortravelgeo.loaders.epost_server_fetch`로 이동하고 admin router import와 unit test monkeypatch 경로를 갱신했다.
+
+## 2026-06-15 (T-207/PR #172 최종 검증)
+
+**검증**: WSL ext4 테스트 미러 `~/dev/kor-travel-geo-codex-test`에서 전체 backend `pytest -q` 657 passed, 47 skipped, 24 warnings를 통과했다. `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`도 통과했다.
+
+**검증**: `kor-travel-geo-ui`에서 `npm run lint`, `npm run type-check`, `npm run test` 14 files/63 tests, `npm run build`를 통과했다. `npx react-doctor@latest . --offline --verbose --json`은 `ok=true`이고, T-207 변경으로 생긴 query invalidation/lazy state/unused export/native dialog 경고는 정리했다. 잔여 9개 warning은 기존 `lib/multipart-upload.ts`, `CurrentConfigTab.tsx`, `MatchSetsTab.tsx`, `ReconcileTab.tsx`의 접근성·구조 개선 항목이다.
+
+## 2026-06-15 (T-207 epost server-fetch 완료)
+
+**작업**: PR #172 리뷰 코멘트를 먼저 반영했다. `scripts/run_t213_live_pipeline.py`는 기본 DSN fallback을 제거하고 `--allow-destructive`와 기존 active match set 복구 경로를 추가했으며, 운영 promotion은 `--promote-active-match-set`으로 명시하게 했다. batch consistency/timeout/MV sample 관련 테스트는 문자열 source 검사 대신 fake handler/connection 기반 동작 검증으로 바꿨고, `discover_sido_datasets()`는 malformed 시도 폴더명을 오류 메시지에 포함한다.
+
+**작업**: T-207로 `/v1/admin/source-files/epost-fetch`와 `infra.epost_server_fetch`를 추가했다. 서버는 epost ZIP을 내려받아 사서함/다량배달처 텍스트를 선택하고, T-120 검증 모듈로 검증한 뒤 RustFS source registry에 `single_file`로 등록하고 `pobox_load`/`bulk_load` job을 enqueue한다. `/admin/source-files` 업로드 탭의 `epost 받기` 버튼도 실제 endpoint에 연결했다.
+
+**검증**: focused backend unit/ruff는 통과했다. 전체 backend/frontend 검증은 이어서 실행한다.
+
 ## 2026-06-15 (T-213 phase ② 전국 라이브데이터 로딩 완료)
 
 **작업**: `scripts/run_t213_live_pipeline.py`를 추가해 전국 실 원천 6종을 RustFS source registry에 등록하고, `serving_recommended` source match set을 validate/activate한 뒤 rebuild-db source load를 실행했다. destructive 실행은 `--execute`와 `--typed-confirmation "RUN-T213-LIVE <database>"`를 요구하고, force promotion은 별도 사유를 요구하도록 했다.

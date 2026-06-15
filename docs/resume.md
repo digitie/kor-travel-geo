@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-15 갱신, by codex)
 
+- ✅ T-207 epost 수동 server-fetch 완료 — `/v1/admin/source-files/epost-fetch`를 추가해 `epost_pobox_full`/`epost_bulk_full`을 서버에서 수동 fetch한다. 서버는 epost ZIP을 내려받아 사서함 또는 다량배달처 텍스트 파일을 찾고, T-120 검증 모듈로 검증한 뒤 RustFS `single_file` source registry에 등록하고 `pobox_load`/`bulk_load` job을 enqueue한다. `/admin/source-files` 업로드 탭의 `epost 받기` 버튼은 이 endpoint에 연결됐고, 실패는 upload session의 `failed_upload`/`failed_extract`/`failed_structure`/`failed_rustfs_put`/`failed_register` 상태와 warning payload로 남긴다. 핵심 rebuild 편입과 자동/스케줄 다운로드는 범위 밖이다. 상세: `docs/t207-epost-server-fetch.md`.
 - ✅ T-213 phase ② 전국 라이브데이터 로딩 완료 — `scripts/run_t213_live_pipeline.py`로 전국 실 원천 6종을 RustFS source registry에 등록하고 `serving_recommended` source match set `6eb2b07b-f34f-460a-91ab-a5847a1e979e`를 활성화했다. source load 6개 job은 모두 성공했고, post-load recovery로 consistency report `consistency_7238f3fb50e347ccb8b3c6808402e656`와 `mv_refresh`를 완료해 active serving release `96e60a10-695c-4a45-ad26-91422eb2f855` / dataset snapshot `856537e1-c8f2-44c9-8b8a-c51d0b99c494`를 생성했다. 최종 row count는 `mv_geocode_target=6,419,795`, `mv_geocode_text_search=6,419,795`, `tl_sppn_makarea=24,204`다. 초기 batch root는 consistency timeout과 MV 생성 전 sample 보강 이슈로 `failed` 이력을 남기지만, 최신 active release와 snapshot FK는 정상이다. 상세: `docs/t213-phase2-live-loading.md`.
 - ✅ T-125 C11 serving 편입 승인 전 사전 검증 task 추가 — T-119를 바로 구현하지 않고, 기존 `mv_geocode_target` 대표점 대비 impact, C3/C4/C6/C7 회귀, T-047/T-214 계열 성능 회귀, feature flag rollback, v1/v2 노출 정책을 먼저 검증하는 선행 gate로 `docs/tasks.md`에 등록했다. T-119는 T-125 완료 + ADR-051 accepted + 사용자 승인 전까지 계속 보류한다.
 - ✅ T-213(부분) 세종 live end-to-end 검증 PR #165 머지 확인 및 post-merge 리뷰 — Claude Code의 `scripts/run_sejong_live_pipeline.py`와 `docs/t213-sejong-live-validation.md`가 머지됐고, PR #165의 conversation/review/thread는 0건이었다. Codex는 post-merge 상세 리뷰 코멘트로 runbook의 destructive DB 동작 안전장치와 Markdown 한글 문서 정책 정리를 후속으로 남겼다.
@@ -174,7 +175,7 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-현재 Codex 소유 phase ① 작업(T-120~T-124)은 모두 완료됐다. T-125는 T-119 승인 전 선행 gate로 백로그에 추가했고, T-119는 T-125 완료, ADR-051 accepted, 사용자 승인 전까지 보류한다. T-213 proper는 active serving release까지 완료했으므로 다음 작업은 T-214 phase ② 성능평가·벤치다.
+현재 Codex 소유 phase ① 작업(T-120~T-124)과 T-207은 완료됐다. T-125는 T-119 승인 전 선행 gate로 백로그에 추가했고, T-119는 T-125 완료, ADR-051 accepted, 사용자 승인 전까지 보류한다. T-213 proper는 active serving release까지 완료했으므로 다음 작업은 T-214 phase ② 성능평가·벤치다.
 
 T-214는 T-213 산출물 `artifacts/t213-live-proper-20260614T225300Z/t213-live-recovery-summary.json`, active serving release `96e60a10-695c-4a45-ad26-91422eb2f855`, dataset snapshot `856537e1-c8f2-44c9-8b8a-c51d0b99c494`, source match set `6eb2b07b-f34f-460a-91ab-a5847a1e979e`를 기준으로 시작한다. 초기 T-213 batch root는 실패 이력을 남겼지만 source load 6개와 최신 consistency/MV recovery는 성공했으므로, 벤치 기준 DB는 현재 active release를 사용한다.
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -249,25 +251,140 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     assert "kind NOT IN" in queue_source
 
 
-def test_batch_consistency_error_reaches_promotion_gate() -> None:
-    source = inspect.getsource(api_app._register_default_handlers)
+@pytest.mark.asyncio
+async def test_batch_consistency_error_reaches_promotion_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class QueueCapture:
+        def __init__(self) -> None:
+            self.handlers: dict[str, Any] = {}
 
-    assert 'load_batch_id = _payload_str(payload, "load_batch_id")' in source
-    assert 'if report.severity_max == "ERROR" and not load_batch_id:' in source
-    assert "batch promotion gate" in source
+        def register(self, kind: str, handler: Any) -> None:
+            self.handlers[kind] = handler
+
+    class NoopLock:
+        async def __aenter__(self) -> None:
+            return None
+
+        async def __aexit__(self, *_args: object) -> bool:
+            return False
+
+    async def fake_run_all_cases(
+        _engine: object,
+        *,
+        scope: str,
+        cases: tuple[str, ...],
+        generated_by: str,
+        source_set: dict[str, Any],
+        on_progress: Any,
+    ) -> ConsistencyReport:
+        del cases
+        if on_progress is not None:
+            await on_progress(1.0, "C1")
+        now = datetime.now(UTC)
+        return ConsistencyReport(
+            report_id="consistency_error",
+            scope=scope,
+            severity_max="ERROR",
+            source_set=source_set,
+            started_at=now,
+            finished_at=now,
+            cases=(),
+            generated_by=generated_by,  # type: ignore[arg-type]
+        )
+
+    monkeypatch.setattr(api_app, "run_all_cases", fake_run_all_cases)
+    monkeypatch.setattr(api_app, "cross_process_lock", lambda *_args, **_kwargs: NoopLock())
+    queue = QueueCapture()
+    api_app._register_default_handlers(queue, object())  # type: ignore[arg-type]
+    handler = queue.handlers["consistency_check"]
+    progress_events: list[dict[str, Any]] = []
+
+    async def record_progress(**kwargs: Any) -> None:
+        progress_events.append(kwargs)
+
+    await handler({"load_batch_id": "batch-1"}, asyncio.Event(), record_progress)
+
+    assert any(
+        "batch promotion gate" in str(event.get("message")) for event in progress_events
+    )
+
+    with pytest.raises(RuntimeError, match="consistency report failed"):
+        await handler({}, asyncio.Event(), record_progress)
 
 
-def test_consistency_cases_disable_statement_timeout_per_case() -> None:
-    source = inspect.getsource(consistency.run_case)
+@pytest.mark.asyncio
+async def test_consistency_cases_disable_statement_timeout_per_case() -> None:
+    class Result:
+        def mappings(self) -> Result:
+            return self
 
-    assert "SET LOCAL statement_timeout = 0" in source
+        def one(self) -> dict[str, Any]:
+            return {"count": 0, "total": 1, "metric": {}, "sample": []}
+
+    class Conn:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+
+        async def execute(self, statement: object, *_args: object, **_kwargs: object) -> Result:
+            self.statements.append(str(statement))
+            return Result()
+
+    class Begin:
+        def __init__(self, conn: Conn) -> None:
+            self.conn = conn
+
+        async def __aenter__(self) -> Conn:
+            return self.conn
+
+        async def __aexit__(self, *_args: object) -> bool:
+            return False
+
+    class Engine:
+        def __init__(self) -> None:
+            self.conn = Conn()
+
+        def begin(self) -> Begin:
+            return Begin(self.conn)
+
+    engine = Engine()
+    case = await consistency.run_case(engine, "C1")  # type: ignore[arg-type]
+
+    assert engine.conn.statements[0] == "SET LOCAL statement_timeout = 0"
+    assert case.code == "C1"
+    assert case.severity == "OK"
 
 
-def test_consistency_sample_point_hydration_tolerates_missing_mv() -> None:
-    source = inspect.getsource(admin_repo._hydrate_consistency_sample_points)
+@pytest.mark.asyncio
+async def test_consistency_sample_point_hydration_tolerates_missing_mv() -> None:
+    class Conn:
+        def __init__(self, scalar_result: object) -> None:
+            self.scalar_result = scalar_result
+            self.scalar_statements: list[str] = []
+            self.execute_calls: list[tuple[str, dict[str, Any] | None]] = []
 
-    assert "to_regclass('mv_geocode_target')" in source
-    assert "if exists is None:" in source
+        async def scalar(self, statement: object) -> object:
+            self.scalar_statements.append(str(statement))
+            return self.scalar_result
+
+        async def execute(
+            self,
+            statement: object,
+            params: dict[str, Any] | None = None,
+        ) -> None:
+            self.execute_calls.append((str(statement), params))
+
+    missing_conn = Conn(None)
+    await admin_repo._hydrate_consistency_sample_points(missing_conn, "report-1")
+
+    assert missing_conn.scalar_statements == ["SELECT to_regclass('mv_geocode_target')"]
+    assert missing_conn.execute_calls == []
+
+    present_conn = Conn("mv_geocode_target")
+    await admin_repo._hydrate_consistency_sample_points(present_conn, "report-1")
+
+    assert len(present_conn.execute_calls) == 1
+    assert present_conn.execute_calls[0][1] == {"report_id": "report-1"}
 
 
 def test_mv_refresh_release_metadata_uses_operational_timeout() -> None:

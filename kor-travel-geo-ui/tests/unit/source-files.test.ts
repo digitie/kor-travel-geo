@@ -41,6 +41,8 @@ describe("source-files helpers", () => {
     expect(isResumableSession(session("registered"))).toBe(false);
     expect(isResumableSession(session("cancelled"))).toBe(false);
     expect(isResumableSession(session("registration_expired"))).toBe(false);
+    expect(isResumableSession(session("failed_structure"))).toBe(false);
+    expect(isResumableSession(session("failed_register"))).toBe(true);
   });
 
   it("failed_* 상태를 실패로 분류한다", () => {
@@ -88,5 +90,6 @@ describe("source-files helpers", () => {
     expect(sourceFilesPaths.reconcileItems("r1", { state: "open" })).toBe(
       "/admin/source-files/reconcile/r1/items?state=open"
     );
+    expect(sourceFilesPaths.epostFetch()).toBe("/admin/source-files/epost-fetch");
   });
 });

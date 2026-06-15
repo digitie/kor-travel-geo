@@ -53,7 +53,6 @@ RunProfile = Literal["serving_minimal", "serving_recommended"]
 
 RUN_MARKER = "t213-live-proper"
 ACTOR = RUN_MARKER
-DEFAULT_DSN = "postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo"
 ROW_COUNT_TABLES = (
     "tl_juso_text",
     "tl_locsum_entrc",
@@ -102,8 +101,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dsn",
-        default=os.getenv("KTG_TEST_PG_DSN") or os.getenv("KTG_PG_DSN") or DEFAULT_DSN,
-        help="대상 PostgreSQL DSN.",
+        default=os.getenv("KTG_TEST_PG_DSN") or os.getenv("KTG_PG_DSN"),
+        help="대상 PostgreSQL DSN. 기본 fallback은 없다.",
     )
     parser.add_argument(
         "--output-dir",
@@ -122,6 +121,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="실제 RustFS 등록, DB load, MV swap을 수행한다. 생략하면 plan만 출력한다.",
     )
     parser.add_argument(
+        "--allow-destructive",
+        action="store_true",
+        help="runbook이 active match set, load table, MV swap을 바꾸는 것을 명시적으로 허용한다.",
+    )
+    parser.add_argument(
         "--typed-confirmation",
         help="execute에 필요한 확인 문구. 형식: RUN-T213-LIVE <database>",
     )
@@ -138,6 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-existing-jobs",
         action="store_true",
         help="실행 전 queued/running load_jobs 존재를 허용한다.",
+    )
+    parser.add_argument(
+        "--promote-active-match-set",
+        action="store_true",
+        help=(
+            "성공 후 새 T-213 match set을 active로 남긴다. 생략하면 기존 active match set을 "
+            "복구해 검증 실행이 운영 serving 구성을 영구 대체하지 않게 한다."
+        ),
     )
     parser.add_argument(
         "--timeout-minutes",
@@ -311,6 +323,44 @@ SELECT job_id, kind, state, current_stage
     if rows:
         payload = json.dumps([dict(row) for row in rows], ensure_ascii=False, default=str)
         raise ConflictError(f"queued/running load_jobs가 남아 있습니다: {payload}")
+
+
+async def current_active_match_set(engine: AsyncEngine) -> str | None:
+    async with engine.connect() as conn:
+        row = await conn.scalar(
+            text(
+                "SELECT source_match_set_id FROM ops.source_match_sets "
+                "WHERE state = 'active' LIMIT 1"
+            )
+        )
+    return str(row) if row else None
+
+
+async def restore_active_match_set(
+    engine: AsyncEngine,
+    *,
+    prior_active_id: str | None,
+    activated_match_set_id: str | None,
+) -> None:
+    if prior_active_id is None or activated_match_set_id is None:
+        return
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "UPDATE ops.source_match_sets SET state = 'retired', updated_at = now() "
+                "WHERE source_match_set_id = :id AND state = 'active'"
+            ),
+            {"id": activated_match_set_id},
+        )
+        restored = await conn.execute(
+            text(
+                "UPDATE ops.source_match_sets SET state = 'active', updated_at = now() "
+                "WHERE source_match_set_id = :id AND state = 'retired'"
+            ),
+            {"id": prior_active_id},
+        )
+    if restored.rowcount:
+        print(f"[match-set] restored prior active match set {prior_active_id}")
 
 
 async def register_sources(
@@ -722,8 +772,16 @@ async def run(args: argparse.Namespace) -> int:
     settings = Settings(pg_dsn=args.dsn)
     engine = make_async_engine(settings)
     client = AsyncAddressClient(settings=settings, engine=engine)
+    prior_active_id: str | None = None
+    activated_match_set_id: str | None = None
+    active_restored = False
     try:
         db_name = await database_name(engine)
+        if not args.allow_destructive:
+            raise SystemExit(
+                "T-213 live runbook은 active match set과 serving DB를 바꾸므로 "
+                "--allow-destructive가 필요합니다"
+            )
         expected_confirmation = f"RUN-T213-LIVE {db_name}"
         if args.typed_confirmation != expected_confirmation:
             raise SystemExit(
@@ -736,6 +794,12 @@ async def run(args: argparse.Namespace) -> int:
         await client.seed_consistency_registry()
         if not args.allow_existing_jobs:
             await assert_no_active_jobs(engine)
+        prior_active_id = await current_active_match_set(engine)
+        if prior_active_id is not None:
+            print(
+                "[match-set] prior active match set "
+                f"{prior_active_id} will be restored unless --promote-active-match-set is set"
+            )
 
         registered = await register_sources(
             engine=engine,
@@ -750,6 +814,7 @@ async def run(args: argparse.Namespace) -> int:
             profile=profile,
             run_id=run_id,
         )
+        activated_match_set_id = msid
         response, batch_payload = await client.prepare_source_match_set_rebuild(
             msid,
             actor=ACTOR,
@@ -789,6 +854,7 @@ async def run(args: argparse.Namespace) -> int:
             "source_match_set_id": msid,
             "load_batch_id": job_id,
             "force_promotion": bool(args.force_promotion),
+            "promote_active_match_set": bool(args.promote_active_match_set),
             "output_dir": str(output_dir),
             "registered_groups": [
                 {
@@ -811,13 +877,37 @@ async def run(args: argparse.Namespace) -> int:
                 ensure_ascii=False,
             )
         )
+        if not args.promote_active_match_set:
+            await restore_active_match_set(
+                engine,
+                prior_active_id=prior_active_id,
+                activated_match_set_id=activated_match_set_id,
+            )
+            active_restored = True
         return 0
     finally:
+        if (
+            activated_match_set_id is not None
+            and prior_active_id is not None
+            and not args.promote_active_match_set
+            and not active_restored
+        ):
+            try:
+                await restore_active_match_set(
+                    engine,
+                    prior_active_id=prior_active_id,
+                    activated_match_set_id=activated_match_set_id,
+                )
+            except Exception as exc:
+                print(f"[match-set] WARNING: prior active restore failed: {exc}")
         await engine.dispose()
 
 
 def main() -> None:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.execute and not args.dsn:
+        parser.error("no DSN: pass --dsn or set KTG_TEST_PG_DSN/KTG_PG_DSN")
     raise SystemExit(asyncio.run(run(args)))
 
 

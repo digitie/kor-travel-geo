@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- `/admin/source-files` 업로드 탭의 epost 카드에서 `epost 받기` 버튼을 활성화했다. 버튼은 `/v1/admin/source-files/epost-fetch`를 호출해 사서함/다량배달처 server-fetch 등록과 `pobox_load`/`bulk_load` enqueue 결과를 표시한다.
 - Playwright e2e에 좌측 메뉴 반복 이동 회귀 테스트를 추가했다. 메뉴 15개를 4회 순회하며 Next 기본 전역 오류 화면, page error, 비정상 request failure, `_rsc` client routing 요청 부재를 확인한다.
 - `/debug/geocode`에 반경 행정구역 디버거를 추가했다. POI 좌표, 반경 km, 행정구역 레벨을 React Hook Form/Zod로 검증하고, TanStack Query mutation으로 `/v2/regions/within-radius`를 호출하며, Zustand로 마지막 초안과 결과를 보존한다.
 - shadcn/ui source components(`Button`, `Card`, `Checkbox`, `Field`, `Input`)와 `components.json`을 추가해 신규 디버그 폼을 구성한다.
