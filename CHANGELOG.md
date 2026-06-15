@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-213 phase ② 전국 라이브데이터 로딩 runner를 추가했다. `scripts/run_t213_live_pipeline.py`가 전국 실 원천 6종을 RustFS source registry에 등록하고, source match set validate/activate 후 rebuild-db source load와 serving MV swap을 실행한다. 실제 실행은 `--execute`와 `RUN-T213-LIVE <database>` typed confirmation을 요구한다. WSL 테스트 미러 live run에서 active serving release `96e60a10-695c-4a45-ad26-91422eb2f855`, `mv_geocode_target=6,419,795`, `mv_geocode_text_search=6,419,795`, `tl_sppn_makarea=24,204`를 확인했다. 상세: `docs/t213-phase2-live-loading.md`.
 - T-123 phase ① 튜닝·최종 검증 acceptance를 추가했다. `augment_harness`의 staging key index/`ANALYZE` helper를 C11/C12/C16 prototype에 적용하고, WSL 테스트 미러 `artifacts/perf/t123-phase1-tuned-live/`에서 warm-cache 전국 재측정을 완료했다(총 3090.891초, 실패 0건). C11은 bundle ↔ 전자지도 full key 거리 p95/max 0.0m로 조건부 serving 후보를 유지하지만, 기존 대표점 impact와 C3/C4/C6/C7 회귀가 아직 없어 ADR-051은 proposed로 유지하고 T-119는 보류한다. 상세: `docs/t123-phase1-acceptance.md`.
 - T-122 phase ① 보강 성능평가·벤치 script를 추가했다. `scripts/benchmark_phase1_augment_performance.py`가 T-121 runner를 재사용하면서 materialization 준비 단계와 C11~C17 case 실행 단계를 분리해 wall-time, runner process RSS, `/proc/self/io` I/O delta를 JSON/Markdown artifact로 기록한다. 실제 full run artifact는 WSL 테스트 미러 `artifacts/perf/t122-phase1-live/`에 남겼고, 총 3961.937초, preparation 848.988초/16.0GiB local write, C11 1284.931초, C12 peak RSS 2.2GiB를 확인했다.
 - T-121 phase ① 전국 라이브데이터 보강 실행 runner를 추가했다. `scripts/run_phase1_augment_reports.py`가 C11~C17 prototype을 실제 `data/juso` 전국 원천으로 실행하고, case별 `AugmentReport`, `source_yyyymm`, summary JSON/Markdown을 산출한다. 실제 full run artifact는 WSL 테스트 미러 `artifacts/augment/t121-live/`에 남겼고, C11 bundle ↔ 전자지도 full key 거리 p95/max 0.0m를 확인했다.
@@ -50,6 +51,8 @@
 - **(BREAKING)** 자동 탐지 중심 upload-set 표면을 제거했다(충돌#1, T-201). `guess_source_kind()` 자동 source 종류 추정, `/v1/admin/uploads*`·`/v1/admin/load-sources*` admin 엔드포인트, `AsyncAddressClient.discover_load_sources()`/`build_full_load_source_set_plan()`/`submit_full_load_source_set()`/`cleanup_upload_sets()`, `ktgctl load full-set`·`ktgctl uploads cleanup` CLI를 삭제했다. 명시 category 기반 업로드(T-203~)와 `rebuild-db`(T-205)가 대체한다. `UploadSetStatus` DTO와 full-load 로더는 유지한다. UI `/admin/load` 콘솔은 T-209 재구성 전까지 stub이다.
 
 ### Fixed
+- T-213 live run에서 드러난 post-load 회귀를 보강했다. 전국 consistency case는 case별 트랜잭션에서 `SET LOCAL statement_timeout = 0`을 적용하고, fresh rebuild DB에서 `mv_geocode_target`이 아직 없으면 consistency sample point 보강을 건너뛴다. batch consistency `ERROR`는 `load_batch_id`가 있을 때 handler가 즉시 실패시키지 않고 forced-promotion gate로 넘긴다.
+- source registry 재실행 안정성을 보강했다. upload session `registered` 상태를 terminal state로 취급해 같은 `(category, user_yyyymm)`의 새 세션을 허용하고, rebuild staging의 `electronic_map_full` parent directory 아래 여러 시도 directory를 SHP loader가 탐색할 수 있게 했다.
 - epost 다운로드가 직접 ZIP 본문뿐 아니라 `fileLocplc` XML 응답도 처리하도록 보강했다. 공공데이터포털 `15000302` 응답에서 ZIP URL을 받은 뒤 같은 수동 적재 경로로 저장한다.
 - admin UI 좌측 메뉴 이동 중 Chrome/Firefox에서 Next 기본 전역 오류 화면(`This page couldn’t load`, `Reload to try again, or go back.`)으로 떨어질 수 있던 문제를 수정했다. 좌측 메뉴와 Consistency report 목록은 `next/link` prefetch를 끄고 document navigation으로 이동해 client routing/RSC fetch 실패 화면을 피한다.
 - VWorld 타일 요청이 페이지 이동 중 정상 취소될 때(`ERR_ABORTED`, `NS_BINDING_ABORTED`) 지도 타일 불안정 overlay와 warning 카운트에 반영하지 않도록 했다.

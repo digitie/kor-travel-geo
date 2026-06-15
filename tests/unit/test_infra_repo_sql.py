@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import pytest
 
 from kortravelgeo.api import _jobs
+from kortravelgeo.api import app as api_app
 from kortravelgeo.core.consistency_definitions import CASE_DEFINITIONS
 from kortravelgeo.core.normalize import AddrParts
 from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
@@ -20,6 +21,7 @@ from kortravelgeo.infra import (
     zip_repo,
 )
 from kortravelgeo.infra import sql as infra_sql
+from kortravelgeo.loaders import consistency
 from kortravelgeo.loaders.consistency import CASE_SQL, DEFAULT_CASES
 
 
@@ -245,6 +247,27 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     assert "consistency report severity ERROR" in queue_source
     assert "log_tail" in queue_source
     assert "kind NOT IN" in queue_source
+
+
+def test_batch_consistency_error_reaches_promotion_gate() -> None:
+    source = inspect.getsource(api_app._register_default_handlers)
+
+    assert 'load_batch_id = _payload_str(payload, "load_batch_id")' in source
+    assert 'if report.severity_max == "ERROR" and not load_batch_id:' in source
+    assert "batch promotion gate" in source
+
+
+def test_consistency_cases_disable_statement_timeout_per_case() -> None:
+    source = inspect.getsource(consistency.run_case)
+
+    assert "SET LOCAL statement_timeout = 0" in source
+
+
+def test_consistency_sample_point_hydration_tolerates_missing_mv() -> None:
+    source = inspect.getsource(admin_repo._hydrate_consistency_sample_points)
+
+    assert "to_regclass('mv_geocode_target')" in source
+    assert "if exists is None:" in source
 
 
 def test_mv_refresh_release_metadata_uses_operational_timeout() -> None:

@@ -23,7 +23,7 @@ from kortravelgeo.exceptions import LoaderError
 from kortravelgeo.loaders.juso_map import (
     DbfHeader,
     JusoLayerFiles,
-    discover_sido_dataset,
+    discover_sido_datasets,
     read_dbf_header,
 )
 
@@ -112,27 +112,27 @@ def build_shp_load_plan(
     *,
     source_yyyymm: str | None = None,
 ) -> tuple[ShpLoadPlan, ...]:
-    dataset = discover_sido_dataset(path)
     plans: list[ShpLoadPlan] = []
-    for layer_name in POLYGON_LAYER_NAMES:
-        layer = dataset.layer(layer_name)
-        source_file = _source_file_label(dataset.sido_name, dataset.sig_code, layer)
-        plans.append(
-            ShpLoadPlan(
-                source_layer=layer.name,
-                target_table=TARGET_TABLES[layer.name],
-                shp_path=layer.shp_path,
-                dbf_path=layer.dbf_path,
-                source_file=source_file,
-                source_yyyymm=source_yyyymm,
-                sql_statement=_sql_statement(
-                    layer,
+    for dataset in discover_sido_datasets(path):
+        for layer_name in POLYGON_LAYER_NAMES:
+            layer = dataset.layer(layer_name)
+            source_file = _source_file_label(dataset.sido_name, dataset.sig_code, layer)
+            plans.append(
+                ShpLoadPlan(
+                    source_layer=layer.name,
+                    target_table=TARGET_TABLES[layer.name],
+                    shp_path=layer.shp_path,
+                    dbf_path=layer.dbf_path,
                     source_file=source_file,
                     source_yyyymm=source_yyyymm,
-                ),
-                geometry_type=_geometry_type(layer),
+                    sql_statement=_sql_statement(
+                        layer,
+                        source_file=source_file,
+                        source_yyyymm=source_yyyymm,
+                    ),
+                    geometry_type=_geometry_type(layer),
+                )
             )
-        )
     return tuple(plans)
 
 

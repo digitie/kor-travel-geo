@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-213 phase ② 전국 라이브데이터 로딩 완료)
+
+**작업**: `scripts/run_t213_live_pipeline.py`를 추가해 전국 실 원천 6종을 RustFS source registry에 등록하고, `serving_recommended` source match set을 validate/activate한 뒤 rebuild-db source load를 실행했다. destructive 실행은 `--execute`와 `--typed-confirmation "RUN-T213-LIVE <database>"`를 요구하고, force promotion은 별도 사유를 요구하도록 했다.
+
+**실행 결과**: source match set `6eb2b07b-f34f-460a-91ab-a5847a1e979e` 기준 source load 6개 job은 모두 성공했다. 최종 active serving release는 `96e60a10-695c-4a45-ad26-91422eb2f855`, dataset snapshot은 `856537e1-c8f2-44c9-8b8a-c51d0b99c494`다. row count는 `mv_geocode_target=6,419,795`, `mv_geocode_text_search=6,419,795`, `tl_sppn_makarea=24,204`다. smoke로 `경기도 용인시 수지구 성복1로 35` geocode가 `OK` 후보를 반환했다.
+
+**복구 및 보강**: 초기 batch root는 consistency case가 기본 5초 `statement_timeout`에 걸리고, fresh rebuild DB에서 `mv_geocode_target` 생성 전 sample point 보강이 실행되며 실패 이력을 남겼다. 이를 보강해 consistency case별 `SET LOCAL statement_timeout = 0`, MV 존재 시에만 sample point 보강, batch consistency ERROR의 promotion gate 위임, `registered` upload session terminal state, 전자지도 multi-sido staging parent 탐색을 추가했다. 패치 후 post-load recovery로 consistency report `consistency_7238f3fb50e347ccb8b3c6808402e656`와 `mv_refresh` job `job_9d3adfe221214bf3aceb69563a86812e`를 완료했다. 상세: `docs/t213-phase2-live-loading.md`.
+
+**검증**: WSL ext4 테스트 미러에서 관련 ruff/focused unit을 통과했고, T-213 live run artifact는 `artifacts/t213-live-proper-20260614T225300Z/t213-live-recovery-summary.json`에 남겼다. 최종 전체 검증은 문서 갱신 뒤 다시 실행한다.
+
+## 2026-06-15 (T-213 proper 선행 전환)
+
+**작업**: 사용자가 “T-213을 먼저 해야 하면 그거부터 진행”이라고 지시해, T-214 성능평가·벤치 착수 전에 T-213 proper를 먼저 닫는 흐름으로 전환했다. PR #165는 세종 단일 slice 검증이므로, Codex 브랜치는 `agent/codex-t213-proper` 기준으로 전국 신규 파이프라인 적재 실행 경로와 안전장치를 먼저 확인한다.
+
+**상태**: T-125는 T-119 승인 전 선행 gate로 유지하고, T-119는 T-125 완료 + ADR-051 accepted + 사용자 승인 전까지 계속 보류한다. T-214는 T-213 proper 산출물과 active serving release 확인 뒤 재개한다.
+
+## 2026-06-15 (T-125 추가 및 T-214 착수)
+
+**작업**: 사용자 지시에 따라 T-119를 바로 구현하지 않고, C11 출입구 후보의 serving 편입 승인 전 사전 검증 task를 T-125로 추가했다. T-125는 기존 `mv_geocode_target` 대표점 대비 impact, C3/C4/C6/C7 회귀, 성능 회귀, feature flag rollback, v1/v2 노출 정책을 ADR-051 accepted 전환 전 증거로 요구한다.
+
+**상태**: PR #165(T-213 부분 세종 live end-to-end 검증)는 머지됐고, Codex가 post-merge 상세 리뷰 코멘트로 runbook destructive DB 동작 안전장치와 Markdown 한글 문서 정책 정리를 후속으로 남겼다. 현재 Codex 브랜치는 `agent/codex-t214-benchmarks`이며, 다음은 T-214 성능평가·벤치 실행 가능 범위를 확인한다.
+
 ## 2026-06-15 (T-124 T-110~T-123 리뷰 후속 검증 완료)
 
 **검증**: WSL ext4 테스트 미러 `~/dev/kor-travel-geo-codex-test`에서 focused unit 56건, `ruff check .`, `mypy src/kortravelgeo scripts/benchmark_phase1_augment_performance.py scripts/run_phase1_augment_reports.py`, `lint-imports`, 전체 `pytest -q`를 통과했다. 전체 테스트 결과는 651 passed, 47 skipped, 24 warnings다. NTFS worktree에서 `git diff --check`를 통과했고, `codegraph sync`는 already up to date였다.

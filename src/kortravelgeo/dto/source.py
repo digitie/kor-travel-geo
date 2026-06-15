@@ -195,6 +195,7 @@ SourceUploadSessionState = Literal[
 #: session for the same ``(category, user_yyyymm)``.
 TERMINAL_UPLOAD_SESSION_STATES: frozenset[str] = frozenset(
     {
+        "registered",
         "available",
         "cancelled",
         "expired",

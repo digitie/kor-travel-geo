@@ -107,6 +107,28 @@ def test_shp_load_plan_embeds_source_trace_metadata(tmp_path: Path) -> None:
     assert "'202604' AS source_yyyymm" in building.sql_statement
 
 
+def test_shp_load_plan_accepts_rebuild_staging_parent_with_multiple_sidos(
+    tmp_path: Path,
+) -> None:
+    for sido_name, sig_cd in (("Busan", "26000"), ("Seoul", "11000")):
+        sig_dir = tmp_path / sido_name / sig_cd
+        sig_dir.mkdir(parents=True)
+        for layer_name in MASTER_LAYER_NAMES:
+            for suffix in (".shp", ".shx", ".dbf"):
+                (sig_dir / f"{layer_name}{suffix}").touch()
+
+    plans = polygons_loader.build_shp_load_plan(tmp_path, source_yyyymm="202604")
+    building_sources = tuple(
+        plan.source_file for plan in plans if plan.source_layer == "TL_SPBD_BULD"
+    )
+
+    assert len(plans) == len(polygons_loader.POLYGON_LAYER_NAMES) * 2
+    assert building_sources == (
+        "Busan/26000/TL_SPBD_BULD.shp",
+        "Seoul/11000/TL_SPBD_BULD.shp",
+    )
+
+
 def test_shp_sql_literal_escapes_quotes_and_allows_null_month() -> None:
     assert polygons_loader._sql_literal("a'b") == "'a''b'"
     assert polygons_loader._metadata_projection(

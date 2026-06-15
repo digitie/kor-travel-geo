@@ -94,6 +94,34 @@ def discover_sido_dataset(path: Path | str) -> JusoSidoDataset:
     )
 
 
+def discover_sido_datasets(path: Path | str) -> tuple[JusoSidoDataset, ...]:
+    """Discover one or more 시도 electronic-map datasets under ``path``.
+
+    ``path`` may point directly at one 시도 directory (the legacy behavior) or
+    at a parent directory containing several 시도 directories. The latter is the
+    shape produced by source-registry rebuild staging for ``electronic_map_full``.
+    """
+
+    root = Path(path)
+    try:
+        return (discover_sido_dataset(root),)
+    except LoaderError as exc:
+        direct_error = exc
+
+    if not root.exists() or not root.is_dir():
+        raise direct_error
+
+    datasets: list[JusoSidoDataset] = []
+    for child in sorted(p for p in root.iterdir() if p.is_dir()):
+        has_sig_dir = any(p.is_dir() and p.name.isdigit() for p in child.iterdir())
+        if not has_sig_dir:
+            continue
+        datasets.append(discover_sido_dataset(child))
+    if datasets:
+        return tuple(datasets)
+    raise direct_error
+
+
 def read_shp_header(path: Path | str) -> ShpHeader:
     shp_path = Path(path)
     data = shp_path.read_bytes()[:100]
