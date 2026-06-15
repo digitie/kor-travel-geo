@@ -17,7 +17,7 @@
 
 - **모든 Task는 PR 후 머지한다.** main 직접 commit 금지. 작업은 `agent/<a|b>-<...>` branch에서 하고 CI(backend/frontend/openapi) green 확인 후 squash 머지한다.
 - **Task 착수 전(필수 선행):** closed 여부와 무관하게 이전 PR들(특히 다른 Agent가 올린 것과 자신이 올린 것)을 다시 확인해 **다른 Agent의 신규 리뷰 코멘트가 달렸는지** 본다. 있으면 그 리뷰를 **먼저 반영(또는 답변)한 뒤** 새 Task를 시작한다.
-- **Task 머지 후(필수 후행 ①) — 자기 PR 리뷰 대기 루프:** 자신의 Task PR을 머지한 다음에는, **그 PR에 다른 Agent의 상세 리뷰 코멘트가 달릴 때까지 대기**한다. 리뷰가 달리면 그 내용을 반영해 **다시 PR → 머지**한다. (리뷰가 블로킹/비블로킹이든 반영 또는 명시적 답변으로 종결한다.)
+- **Task 머지 후(필수 후행 ①) — 자기 PR 리뷰 대기 루프:** 자신의 Task PR을 머지한 다음에는, **그 PR에 다른 Agent의 상세 리뷰 코멘트가 달릴 때까지 대기**한다. 리뷰가 달리면 그 내용을 반영해 **다시 PR → 머지**한다(블로킹/비블로킹 무관 반영 또는 명시적 답변으로 종결). **교착 방지 안전판**: ⓐ 대기 중에도 먼저 "필수 후행 ②"(상대 PR 리뷰)를 수행한다. ⓑ 상대 리뷰가 **24시간(또는 사용자 지시)** 안에 없으면 사용자에게 unblock을 요청하고 다음 Task로 진행할 수 있다. ⓒ 두 Agent가 서로 자기 PR 리뷰만 기다리는 교착이면 사용자에게 unblock을 요청한다. ⓓ 사후 리뷰에 반영할 게 없으면 표준 코멘트로 종결한다 — 예: "사후 리뷰 완료 — 블로킹 0 / 반영 불필요(L n건은 후속)".
 - **Task 머지 후(필수 후행 ②) — 상대 PR 리뷰:** 다음 Task로 넘어가기 전, closed 여부와 무관하게 다른 Agent가 올린 PR을 확인해 **상세 리뷰 코멘트**(H/M/L 분류 + 잘된 점 + 머지조건/후속 권장)를 남긴다.
 - **작업 중 작업량이 늘어나면** 즉흥 확장하지 말고 **GitHub 이슈를 먼저 만들어** 범위를 적고 → 작업 → PR → 머지한다(이슈 → 작업 → PR → 머지).
 - 작업 중에는 주기적으로 `origin/main`과 현재 작업 branch의 최신 상태를 확인하고, 장기 작업은 중간에 rebase 또는 fast-forward로 충돌을 작게 유지한다.
@@ -36,7 +36,7 @@
    - Agent A: `T-121` → `T-122` → `T-123` (phase ① 전국 라이브·벤치·최종 검증; `T-211`·`T-212`와 병렬)
    - Agent A(Codex): `T-214` 완료. T-213 전용 baseline `kor_travel_geo_t213_20260615_r3` / `kor-travel-geo/t213/20260615-rerun3` / `F:\dev\geodata\t213-baseline\20260615-rerun3\`를 preflight로 확인하고 benchmark artifact를 `F:\dev\geodata\t214-benchmark\20260615-r3\`에 보존했다.
    - Agent A+B: `T-215` 완료. T-215에서 분리한 REST c64 tail과 C11~C17 optional source run-validation은 T-216/T-126 live acceptance로 완료했다.
-   - Agent A: `T-119`는 T-125 후속 검증(`T-129`~`T-137`)과 ADR-051 승인 시에만 별도 진행하고, 승인되지 않으면 검증 전용 결론을 유지한다.
+   - Agent A: `T-119`는 T-125 후속 검증(`T-129`~`T-134`·`T-137`)·Admin UI 반영(`T-220`/`T-221`)과 ADR-051 승인 시에만 별도 진행하고, 승인되지 않으면 검증 전용 결론을 유지한다.
    - Agent A+B: `T-138`에서 적재 후 read-mostly serving 경로를 benchmark/index/MV/API 계약까지 포함해 튜닝한다. 그래도 목표 속도에 못 미치면 `T-139`에서 별도 변경 DB를 만들어 현 DB와 구조 변경안을 비교한다.
 4. 신규 안정화·성능·Admin UI·백업 병행 (**번호 규칙: T-1xx = 성능/기능/geocoder/안정성, T-2xx = Admin UI + 데이터 적재/백업/복원**)
    - Agent A(Codex): `T-129` → `T-130` → `T-131` → `T-132` → `T-133` → `T-134` → `T-137`로 C11 후속 gate를 닫는다. 이와 병렬로 `T-138`·`T-140`~`T-146`과 신규 성능/안정성/관측성 `T-154`~`T-164`, geocoder/reverse 정확도 `T-165`~`T-176`을 진행해 정확도·성능·고부하 안정성을 끌어올린다. `T-139`는 T-138/T-146 이후 목표 미달일 때만 별도 변경 DB 실험으로 착수한다. (T-166~T-168 국가지점번호 forward 게이트 분리·reverse 코드 방출은 `docs/v2-cleanslate-optional-data-accuracy.md` 권고를 코드화하는 저비용·고확실 항목이라 우선 배치 가능.)
@@ -94,7 +94,7 @@
 
 ### 최종 안정화 acceptance (A+B)
 
-- T-153 geocoder/Admin UI/백업 최종 안정화 acceptance — Agent A 성능·정확도 트랙(T-138·T-140~T-146·T-154~T-176)과 Agent B Admin UI·백업/복원 트랙(T-220~T-263)을 하나의 최종 gate로 묶는다. 산출물은 golden corpus 통과율, C1~C17 상태, SQL/REST p95/p99/error budget, soak 안정성, API 계약 변경 목록, Admin UI Playwright 결과, 백업/복원 round-trip·restore-drill 결과, React Doctor, OpenAPI/typegen drift, 운영 runbook 갱신 여부를 한 문서에 정리한다. gate 미달 항목은 release blocker와 후속 Task로 분리한다. (Agent A+B, 의존: T-140~T-176, T-220~T-263)
+- T-153 geocoder/Admin UI/백업 최종 안정화 acceptance (**번호 규칙 예외**: T-1xx·T-2xx 두 트랙을 묶는 통합 capstone이라 어느 한 범위에도 속하지 않는 의도된 예외 ID다 — 새 acceptance task는 트랙별로 T-1xx/T-2xx에 만든다) — Agent A 성능·정확도 트랙(T-138·T-140~T-146·T-154~T-176)과 Agent B Admin UI·백업/복원 트랙(T-220~T-263)을 하나의 최종 gate로 묶는다. 산출물은 golden corpus 통과율, C1~C17 상태, SQL/REST p95/p99/error budget, soak 안정성, API 계약 변경 목록, Admin UI Playwright 결과, 백업/복원 round-trip·restore-drill 결과, React Doctor, OpenAPI/typegen drift, 운영 runbook 갱신 여부를 한 문서에 정리한다. gate 미달 항목은 release blocker와 후속 Task로 분리한다. (Agent A+B, 의존: T-140~T-176, T-220~T-263)
 - T-127 optional source 구조 validator 강화 — T-216에서 `warning`으로 통과한 optional 검증 원천의 상세 profile을 보강한다. 대상은 `detail_address_db_full`, `national_point_grid_shape`, `national_point_grid_center`, `civil_service_institution_map`, `address_db_full`, `building_db_full` 등 single-file optional category이며, archive member naming/필수 파일/sidecar/기준월 sanity를 category별로 검증해 `warning`과 `failed`의 의미를 더 좁힌다. C11~C17 run-validation 수용 결과는 유지하고, 새 validator는 별도 fixture와 실제 원천 smoke로 고정한다. (의존: T-216)
 
 ### ② 데이터 적재/백업/복원 + Admin UI (T-200~ · T-2xx · phase 2 — T-109 설계 구현)
