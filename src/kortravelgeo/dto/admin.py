@@ -65,6 +65,9 @@ UploadFileState = Literal["pending", "uploading", "uploaded", "cancelled", "fail
 UploadStorageKind = Literal["local", "rustfs"]
 BackupFormat = Literal["directory_tar_zstd"]
 BackupProfile = Literal["serving-ready", "lean-serving", "forensic"]
+# T-229/T-230/T-239: retention policy class on a backup artifact. ``pinned`` is never
+# expired by the janitor; ``scheduled`` marks cron-driven backups (respects keep_min).
+BackupRetentionClass = Literal["default", "scheduled", "pinned"]
 RestoreMode = Literal["new_database", "replace_current"]
 
 
@@ -99,6 +102,9 @@ class BackupCreateRequest(FrozenModel):
     callback_url: str | None = None
     display_name: str | None = Field(default=None, min_length=1, max_length=200)
     retention_days: int | None = Field(default=None, ge=1, le=3650)
+    # T-239: tag the artifact's retention class at create time. ``scheduled`` is set
+    # by the cron run-due trigger; ``pinned`` opts a backup out of janitor expiry.
+    retention_class: BackupRetentionClass = "default"
     include_materialized_views: bool = True
 
 
@@ -753,6 +759,39 @@ class BackupRetentionResult(FrozenModel):
     failed_count: int = 0
     expired_artifact_ids: tuple[str, ...] = ()
     failed_artifact_ids: tuple[str, ...] = ()
+
+
+class ScheduledBackupStatus(FrozenModel):
+    """T-239 scheduled-backup due-check status (read-only).
+
+    ``due`` reflects the decision at ``now``: ``True`` iff scheduling is enabled, no
+    scheduled backup is in progress, and ``interval_hours`` has elapsed since the last
+    scheduled run (or none has ever run).
+    """
+
+    enabled: bool
+    interval_hours: float
+    keep_min: int
+    retention_class: BackupRetentionClass = "scheduled"
+    due: bool
+    reason: Literal["disabled", "in_progress", "due_initial", "due", "not_due"]
+    in_progress: bool = False
+    last_scheduled_at: datetime | None = None
+    next_due_at: datetime | None = None
+
+
+class ScheduledBackupRunResult(FrozenModel):
+    """T-239 result of one idempotent ``run-due`` trigger.
+
+    ``enqueued`` is ``True`` only when this call actually queued a backup job.
+    ``skipped_locked`` means another concurrent trigger held the schedule lock, so this
+    call did nothing (still a successful 200 for an external cron).
+    """
+
+    enqueued: bool
+    job_id: str | None = None
+    skipped_locked: bool = False
+    status: ScheduledBackupStatus
 
 
 class MaintenanceWindowCreate(FrozenModel):

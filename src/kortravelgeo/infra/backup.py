@@ -168,6 +168,10 @@ async def run_backup_job(
         display_name=archive_path.name,
         media_type=BACKUP_MEDIA_TYPE,
         compression="zstd",
+        # T-239: tag the retention class at insert time so a scheduled backup is
+        # identifiable while still in ``creating`` state (before finalize). This lets
+        # the due-check find an in-flight scheduled run and avoid double-enqueue.
+        retention_class=req.retention_class,
         job_id=job_id,
         manifest={
             "artifact_schema_version": 1,
@@ -323,7 +327,8 @@ async def run_backup_job(
             manifest=manifest,
             # T-229: record TTL so the retention janitor (T-230) and ops.artifacts
             # `expired` count have a basis. expires_at is anchored at finalize time.
-            retention_class=DEFAULT_BACKUP_RETENTION_CLASS,
+            # T-239: keep the request's retention_class (``scheduled``/``pinned``/default).
+            retention_class=req.retention_class or DEFAULT_BACKUP_RETENTION_CLASS,
             expires_at=artifact_expires_at(settings, req.retention_days),
             finished=True,
         )

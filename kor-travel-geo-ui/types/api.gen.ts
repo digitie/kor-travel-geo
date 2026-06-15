@@ -149,6 +149,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/backups/scheduled/run-due": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Due Scheduled Backup
+         * @description Idempotent scheduled-backup trigger for an external cron (T-239).
+         *
+         *     Enqueues exactly one ``retention_class='scheduled'`` backup, and only if scheduling
+         *     is enabled and ``interval_hours`` has elapsed since the last scheduled run (no-op
+         *     otherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``
+         *     advisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that
+         *     cannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).
+         */
+        post: operations["run_due_scheduled_backup_v1_admin_backups_scheduled_run_due_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/backups/scheduled/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scheduled Backup Status
+         * @description Report whether a scheduled backup is due now, last run, and next due (T-239).
+         *
+         *     Read-only — does not enqueue anything. ``enabled`` reflects
+         *     ``KTG_BACKUP_SCHEDULE_ENABLED``; ``next_due_at`` is ``last_scheduled_at + interval``.
+         */
+        get: operations["scheduled_backup_status_v1_admin_backups_scheduled_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/backups/{artifact_id}": {
         parameters: {
             query?: never;
@@ -2047,6 +2096,12 @@ export interface components {
              * @enum {string}
              */
             profile: "serving-ready" | "lean-serving" | "forensic";
+            /**
+             * Retention Class
+             * @default default
+             * @enum {string}
+             */
+            retention_class: "default" | "scheduled" | "pinned";
             /** Retention Days */
             retention_days?: number | null;
         };
@@ -4029,6 +4084,64 @@ export interface components {
             /** Uploaded Files */
             uploaded_files: number;
         };
+        /**
+         * ScheduledBackupRunResult
+         * @description T-239 result of one idempotent ``run-due`` trigger.
+         *
+         *     ``enqueued`` is ``True`` only when this call actually queued a backup job.
+         *     ``skipped_locked`` means another concurrent trigger held the schedule lock, so this
+         *     call did nothing (still a successful 200 for an external cron).
+         */
+        ScheduledBackupRunResult: {
+            /** Enqueued */
+            enqueued: boolean;
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Skipped Locked
+             * @default false
+             */
+            skipped_locked: boolean;
+            status: components["schemas"]["ScheduledBackupStatus"];
+        };
+        /**
+         * ScheduledBackupStatus
+         * @description T-239 scheduled-backup due-check status (read-only).
+         *
+         *     ``due`` reflects the decision at ``now``: ``True`` iff scheduling is enabled, no
+         *     scheduled backup is in progress, and ``interval_hours`` has elapsed since the last
+         *     scheduled run (or none has ever run).
+         */
+        ScheduledBackupStatus: {
+            /** Due */
+            due: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * In Progress
+             * @default false
+             */
+            in_progress: boolean;
+            /** Interval Hours */
+            interval_hours: number;
+            /** Keep Min */
+            keep_min: number;
+            /** Last Scheduled At */
+            last_scheduled_at?: string | null;
+            /** Next Due At */
+            next_due_at?: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "disabled" | "in_progress" | "due_initial" | "due" | "not_due";
+            /**
+             * Retention Class
+             * @default scheduled
+             * @enum {string}
+             */
+            retention_class: "default" | "scheduled" | "pinned";
+        };
         /** SearchInput */
         SearchInput: {
             bbox?: components["schemas"]["BBox"] | null;
@@ -5991,6 +6104,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_due_scheduled_backup_v1_admin_backups_scheduled_run_due_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledBackupRunResult"];
+                };
+            };
+        };
+    };
+    scheduled_backup_status_v1_admin_backups_scheduled_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduledBackupStatus"];
                 };
             };
         };

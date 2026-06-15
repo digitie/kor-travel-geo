@@ -99,6 +99,8 @@ export const apiSchemaNames = [
   "RustfsStorageConfigPatch",
   "RustfsSyncLocalRequest",
   "RustfsSyncLocalResult",
+  "ScheduledBackupRunResult",
+  "ScheduledBackupStatus",
   "SearchInput",
   "SearchResponse",
   "SearchResultItem",

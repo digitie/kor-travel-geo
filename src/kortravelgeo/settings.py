@@ -133,6 +133,10 @@ class Settings(BaseSettings):
     backup_require_free_space_check: bool = True
     # T-230: retention janitor keeps at least this many newest backups even if expired.
     backup_retention_keep_min: int = Field(default=3, ge=0)
+    # T-239: opt-in scheduled backup. An external cron hits POST /backups/scheduled/run-due;
+    # a new backup is enqueued only once interval_hours has passed since the last scheduled run.
+    backup_schedule_enabled: bool = False
+    backup_schedule_interval_hours: float = Field(default=24.0, gt=0.0, le=8760.0)
     # T-234: restore hard-fails on PG major / PostGIS major.minor mismatch unless set.
     restore_allow_version_mismatch: bool = False
     # T-235: cleanup of a partially-filled new_database target on cancel/fail.
