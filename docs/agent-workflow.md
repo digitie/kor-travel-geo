@@ -12,7 +12,7 @@
 | **WSL ext4 테스트 미러** | 실행 산출물 전용 사본 | 의존성 설치, pytest, ruff/mypy, frontend 검증, 장기 실행 | commit, push, PR (여기 변경은 worktree로 되가져온다) |
 
 - 에이전트별 worktree는 **고정 이름**이다(ADR-041): Codex=`kor-travel-geo-codex`, Claude=`kor-travel-geo-claude`, Antigravity=`kor-travel-geo-antigravity`. idle branch는 `agent/<agent>-idle`.
-- **폐기된 옛 방식**(문서에서 보이면 무시): `geo-*` worktree 접두사, `~/kor-travel-geo-data` ext4 데이터 레이아웃, 단일 `~/dev/kor-travel-geo` ext4 클론. 대용량 `data/`는 NTFS main repo의 `data/`가 기준이고, 미러는 거기에 symlink로 참조한다.
+- **폐기된 옛 방식**(문서에서 보이면 무시): `geo-*` worktree 접두사, `~/kor-travel-geo-data` ext4 데이터 레이아웃, 단일 `~/dev/kor-travel-geo` ext4 클론. 대용량 Juso 원천은 NTFS 공용 루트 `F:\dev\geodata\juso`가 기준이고, 미러는 `data -> /mnt/f/dev/geodata` symlink로 참조한다.
 - **NTFS worktree에서 직접 무거운 테스트/설치를 돌리지 않는다.** `/mnt` NTFS는 대량 I/O·파일워치·임시파일 처리에서 반복 문제를 낸다. 그래서 미러가 따로 있다.
 
 ## 1. 먼저 없애야 할 두 함정 (이게 매번 발목을 잡는다)
@@ -49,13 +49,14 @@ NTFS worktree 기준으로 ext4 미러를 rsync하고, 대용량 `data/`는 syml
 mkdir -p <wsl-test-mirror>
 rsync -a --delete \
   --exclude .git --exclude .codegraph --exclude .venv \
-  --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data \
+  --exclude node_modules --exclude kor-travel-geo-ui/.next \
+  --exclude data --exclude artifacts \
   <ntfs-worktree>/ <wsl-test-mirror>/
 
 cd <wsl-test-mirror>
 
-# 2) 대용량 data/는 NTFS main repo의 data/를 symlink로 참조 (복사하지 않는다)
-test -e data || ln -s <ntfs-main-repo>/data data
+# 2) 대용량 data/는 NTFS 공용 geodata를 symlink로 참조 (복사하지 않는다)
+test -e data || ln -s /mnt/f/dev/geodata data
 
 # 3) Python 환경 (최초 1회). GDAL 핀 절차는 dev-environment.md §3.
 uv venv && . .venv/bin/activate
@@ -64,6 +65,8 @@ uv pip install -e ".[api,dev]"        # loaders가 필요하면 dev-environment.
 # 4) 셸 환경 보정 (매 셸)
 source scripts/agent_env.sh
 ```
+
+T-213처럼 후속 benchmark의 기준 입력이 되는 live run 산출물은 WSL 미러의 `artifacts/`를 유일한 보관소로 두지 않는다. 미러는 `rsync --delete`로 갱신되므로 `artifacts/`가 사라질 수 있다. T-213 기준 데이터는 `docs/t213-data-preservation.md`에 따라 전용 PostgreSQL DB, 전용 RustFS prefix, NTFS `F:\dev\geodata\t213-baseline\<run-id>\` artifact 사본으로 보존한다.
 
 > 미러에서 발견한 수정 필요 사항은 **NTFS worktree에 반영**하고, commit/push도 NTFS worktree에서만 한다. 미러는 버려도 되는 실행 사본이다.
 

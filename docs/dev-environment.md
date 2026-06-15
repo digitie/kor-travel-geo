@@ -39,14 +39,15 @@ rsync -a --delete \
   --exclude .venv \
   --exclude node_modules \
   --exclude kor-travel-geo-ui/.next \
+  --exclude artifacts \
   --exclude data \
   /mnt/f/dev/kor-travel-geo-codex/ \
   ~/dev/kor-travel-geo-codex-test/
 cd ~/dev/kor-travel-geo-codex-test
-test -e data || ln -s /mnt/f/dev/kor-travel-geo/data data
+test -e data || ln -s /mnt/f/dev/geodata data
 ```
 
-ext4 테스트 미러는 실행 산출물 전용이다. 여기서 발견한 수정 필요 사항은 NTFS worktree에 반영하고, commit/push도 NTFS worktree에서만 수행한다. 대용량 `data/`는 NTFS main repo의 `/mnt/f/dev/kor-travel-geo/data/`를 기준으로 두며, 테스트 미러에서는 절대경로 또는 심볼릭 링크로 참조한다.
+ext4 테스트 미러는 실행 산출물 전용이다. 여기서 발견한 수정 필요 사항은 NTFS worktree에 반영하고, commit/push도 NTFS worktree에서만 수행한다. 대용량 Juso 원천은 NTFS 공용 루트 `/mnt/f/dev/geodata/juso`를 기준으로 두며, 테스트 미러에서는 `data -> /mnt/f/dev/geodata` 심볼릭 링크를 통해 기존 `data/juso` 상대경로를 유지한다. T-213처럼 후속 benchmark의 기준 입력이 되는 live run 산출물은 미러 `artifacts/`를 유일한 사본으로 두지 않고, `docs/t213-data-preservation.md`에 따라 전용 DB/RustFS prefix와 NTFS `F:\dev\geodata\t213-baseline\<run-id>\`에 보존한다.
 
 PostgreSQL 검증은 이 저장소가 직접 DB를 띄우지 않고, `KTG_PG_DSN`이 가리키는 이미 동작 중인 PostgreSQL/PostGIS에 접속해 수행한다. RustFS도 `KTG_RUSTFS_*` 설정으로 이미 준비된 bucket에 접속한다. 이 저장소에는 DB/RustFS Docker 구동·정지·재시작 절차를 두지 않는다.
 

@@ -54,11 +54,12 @@ NTFS worktree:    /mnt/f/dev/kor-travel-geo-codex/
 NTFS worktree:    /mnt/f/dev/kor-travel-geo-claude/
 NTFS worktree:    /mnt/f/dev/kor-travel-geo-antigravity/
 WSL test mirror:  ~/dev/kor-travel-geo-<agent>-test/   ← rsync 대상, git 작업 금지
-Data:             /mnt/f/dev/kor-travel-geo/data/
+Data:             /mnt/f/dev/geodata/juso/
 ```
 
 - 코드 편집, Git branch/commit/PR, CodeGraph 인덱스는 각 NTFS worktree에서 수행한다.
-- 테스트 전에는 현재 NTFS worktree를 WSL ext4 테스트 미러로 복사한다. 예: `rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data /mnt/f/dev/kor-travel-geo-codex/ ~/dev/kor-travel-geo-codex-test/`
+- 테스트 전에는 현재 NTFS worktree를 WSL ext4 테스트 미러로 복사한다. 예: `rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data --exclude artifacts /mnt/f/dev/kor-travel-geo-codex/ ~/dev/kor-travel-geo-codex-test/`
+- 대용량 Juso 원천은 공용 경로 `F:\dev\geodata\juso`에 둔다. 테스트 미러에서는 `data -> /mnt/f/dev/geodata` symlink를 두어 기존 `data/juso` 상대경로를 유지한다. 현재 쓰지 않는 원천은 `F:\dev\geodata\juso\unused\` 아래에 보존한다.
 - ext4 테스트 미러는 실행 산출물 전용이다. 미러에서 commit/push하지 않고, 필요한 코드 변경은 NTFS worktree에 반영한다.
 - Git metadata는 Windows Git 기준으로 유지한다. WSL 미러에서 commit/branch를 기록하는 스크립트는 Windows `git.exe`와 `F:/dev/kor-travel-geo-*` 경로를 사용하며, `.git` 포인터를 `/mnt/f/...`용으로 바꾸지 않는다.
 - PostgreSQL 검증은 이 프로젝트가 직접 DB를 띄우지 않고, `KTG_PG_DSN`이 가리키는 이미 동작 중인 PostgreSQL/PostGIS에 접속해 수행한다. RustFS도 `KTG_RUSTFS_*` 접속 설정으로 이미 준비된 bucket을 사용한다.
@@ -88,10 +89,10 @@ cd /mnt/f/dev/kor-travel-geo-codex
 
 # 테스트/적재 검증은 ext4 미러에서 실행
 mkdir -p ~/dev/kor-travel-geo-codex-test
-rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data \
+rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data --exclude artifacts \
   /mnt/f/dev/kor-travel-geo-codex/ ~/dev/kor-travel-geo-codex-test/
 cd ~/dev/kor-travel-geo-codex-test
-test -e data || ln -s /mnt/f/dev/kor-travel-geo/data data
+test -e data || ln -s /mnt/f/dev/geodata data
 
 # 의존성 설치
 uv venv && uv pip install -e ".[api,loaders,dev]"

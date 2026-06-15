@@ -26,7 +26,7 @@
 - **테스트와 장기 실행은 WSL ext4 테스트 미러**에서 수행한다. NTFS worktree를 `rsync --delete`로 `~/dev/kor-travel-geo-<agent>-test/`에 복사한 뒤 `pip`/`npm`/`pytest`/`uvicorn`을 실행한다. ext4 미러에서는 commit/push하지 않는다.
 - **Git 명령은 Windows Git 기준**이다. NTFS worktree의 `.git`/`gitdir`은 `F:/dev/...`를 가리키게 두고, WSL 미러에서 Git commit/branch를 수집하는 스크립트는 Windows `git.exe`와 `F:/dev/kor-travel-geo-*` 경로를 사용한다. WSL `git` 편의를 위해 포인터를 `/mnt/f/...`로 바꾸지 않는다.
 - **DB/RustFS 검증은 접속 설정 기준**이다. 이 저장소는 PostgreSQL/PostGIS와 RustFS를 직접 구동하지 않는다. 이미 동작 중인 DB와 bucket에 `KTG_PG_DSN`, `KTG_RUSTFS_*` 설정으로 접속해 사용한다.
-- **데이터(`data/`)는 NTFS main repo 아래** `/mnt/f/dev/kor-travel-geo/data/`를 기준으로 둔다. ext4 테스트 미러에서는 절대경로 또는 심볼릭 링크로 참조한다.
+- **대용량 Juso 원천은 NTFS 공용 루트** `/mnt/f/dev/geodata/juso`(`F:\dev\geodata\juso`)를 기준으로 둔다. ext4 테스트 미러에서는 `data -> /mnt/f/dev/geodata` 심볼릭 링크로 참조해 기존 `data/juso` 상대경로를 유지한다. 현재 쓰지 않는 원천은 `F:\dev\geodata\juso\unused\`에 보존한다.
 - **로컬 secret/env 파일**(`.env`, `kor-travel-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
 - **프론트엔드 실행은 WSL ext4 테스트 미러의 Linux Node/npm 기준**이다. `kor-travel-geo-ui` 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL에서 실행한다.
 - **Playwright e2e는 Windows Node/브라우저 전용**이다. WSL Playwright는 실행하지 않고, Windows Playwright를 WSL UI 서버(`--hostname 0.0.0.0`)에 붙인다.
@@ -48,14 +48,14 @@
 ```bash
 cd /mnt/f/dev/kor-travel-geo-codex              # NTFS Codex worktree
 git fetch origin main && git switch -c agent/codex-next origin/main
-rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data ./ ~/dev/kor-travel-geo-codex-test/
+rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data --exclude artifacts ./ ~/dev/kor-travel-geo-codex-test/
 cd ~/dev/kor-travel-geo-codex-test                 # WSL ext4 테스트 미러
 sudo apt install -y libgdal-dev gdal-bin              # loaders extra용 (ADR-008)
 uv venv && uv pip install -e ".[api,dev]"
 uv pip install "gdal==$(gdal-config --version)"        # 시스템 GDAL과 버전 매치
 uv pip install -e ".[loaders]"                         # 이제 안전하게 빌드
 test -f .env || cp .env.example .env                  # KTG_PG_DSN, KTG_RUSTFS_* 채우기
-test -e data || ln -s /mnt/f/dev/kor-travel-geo/data data # NTFS data를 참조
+test -e data || ln -s /mnt/f/dev/geodata data # NTFS 공용 geodata를 참조
 # PostgreSQL/PostGIS와 RustFS는 이미 동작 중인 외부 인프라에 접속한다.
 alembic upgrade head
 ktgctl load all-sidos \

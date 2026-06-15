@@ -48,7 +48,7 @@ groups = discover_sido_source_groups(
     (
         SidoPathPattern(
             "building_bundle",
-            Path("data/juso/도로명주소 건물 도형"),
+            Path("data/juso/unused/도로명주소 건물 도형"),
             "*{sido}*.zip",
         ),
     )

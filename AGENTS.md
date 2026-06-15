@@ -28,7 +28,7 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 - **메인 repo**: NTFS `/mnt/f/dev/kor-travel-geo/` (`F:\dev\kor-travel-geo`)
 - **에이전트 worktree**: NTFS `/mnt/f/dev/kor-travel-geo-codex`, `/mnt/f/dev/kor-travel-geo-claude`, `/mnt/f/dev/kor-travel-geo-antigravity`
 - **테스트 미러**: WSL ext4 `~/dev/kor-travel-geo-<agent>-test/` 같은 임시 복사본. `rsync --delete`로 갱신하고 여기서는 commit/push하지 않는다.
-- **데이터(`data/`)**: NTFS main repo의 `data/`를 기준으로 두고, ext4 테스트 미러에서는 절대경로 또는 필요한 경우 심볼릭 링크로 참조한다.
+- **데이터(`data/`)**: 대용량 Juso 원천은 NTFS 공용 루트 `F:\dev\geodata\juso`(`/mnt/f/dev/geodata/juso`)를 기준으로 둔다. ext4 테스트 미러에서는 `data -> /mnt/f/dev/geodata` 심볼릭 링크를 두면 기존 `data/juso` 상대경로가 같은 원천을 본다. 현재 쓰지 않는 원천은 `F:\dev\geodata\juso\unused\`에 보존한다.
 - **카피 정책**: 작업 시작/검증 전 NTFS worktree → ext4 테스트 미러로 복사한다. 작업 완료 후 별도 ext4 → NTFS 역카피를 source-of-truth 절차로 쓰지 않는다.
 - **Git 실행 기준**: NTFS worktree의 Git metadata는 Windows Git 기준(`F:\...`)을 유지한다. WSL 테스트 미러에서 실행하는 벤치마크·운영 스크립트가 Git commit/branch를 기록해야 하면 Windows `git.exe`와 `F:/dev/kor-travel-geo-*` 경로를 사용한다. WSL `git`이 읽히도록 `.git`/`gitdir` 포인터를 `/mnt/f/...`로 바꾸지 않는다.
 - **PostgreSQL/RustFS 접속**: 이 저장소는 PostgreSQL/PostGIS와 RustFS를 직접 구동·정지·재시작하지 않는다. 이미 동작 중인 DB와 bucket에 `KTG_PG_DSN`, `KTG_RUSTFS_*` 설정으로 접속해 사용한다.
@@ -63,7 +63,7 @@ AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, NTFS의 `/mnt/f/d
 4. `docs/resume.md` — 현재 진척도와 "다음 한 작업"
 5. `docs/decisions.md` — 관련 ADR
 
-Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `docs/windows-reinstall-recovery.md`도 함께 읽는다. T-027 실 데이터 전체 적재는 이미 완료됐으므로 별도 금지선이 없다. 빈 DB가 필요하면 백업 복원(ADR-030/ADR-036) 또는 `scripts/fullload_test.sh` 재실행으로 처리하고, 기준월 분리와 산출물 경로는 `docs/t027-fullload-plan.md`를 참고한다.
+Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `docs/windows-reinstall-recovery.md`도 함께 읽는다. T-027 실 데이터 전체 적재는 이미 완료됐으므로 별도 금지선이 없다. 빈 DB가 필요하면 백업 복원(ADR-030/ADR-036) 또는 `scripts/fullload_test.sh` 재실행으로 처리한다. T-213/T-214 기준 원천과 산출물 경로는 `docs/t213-data-preservation.md`를 우선 참고하고, 과거 T-027 기준월 분리와 산출물 경로는 `docs/t027-fullload-plan.md`를 참고한다.
 
 ## 지시 우선순위
 

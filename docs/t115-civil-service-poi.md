@@ -4,7 +4,7 @@
 
 ## 원천
 
-실데이터 파일은 `data/juso/민원행정기관전자지도_240124.zip`이다.
+실데이터 파일은 현재 미사용 원천 보존 경로인 `data/juso/unused/민원행정기관전자지도_240124.zip`이다.
 
 ZIP 안에는 한 개의 SHP/DBF/SHX/PRJ 세트가 있으며, 일부 ZIP 도구에서는 파일명이 CP949 원문 대신 mojibake로 보일 수 있다. C15 loader는 member 이름에 의존하지 않고 확장자 기준으로 단일 SHP/DBF를 찾는다. `.shp.xml` 같은 metadata sidecar는 SHP 후보로 보지 않는다.
 
