@@ -902,6 +902,18 @@ def delete_backup(artifact_id: str) -> None:
     asyncio.run(run())
 
 
+@backup_app.command("copy")
+def copy_backup(artifact_id: str, target_dir: str) -> None:
+    """Copy a backup to another allowlisted dir with sha256 re-check (T-236)."""
+
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            result = await client.copy_backup(artifact_id, target_dir=target_dir)
+            typer.echo(result.model_dump_json())
+
+    asyncio.run(run())
+
+
 @backup_app.command("verify")
 def verify_backup(
     artifact_id: str,

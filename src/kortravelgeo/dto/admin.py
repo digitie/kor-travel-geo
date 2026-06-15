@@ -701,6 +701,22 @@ class RestoreDryRunResult(FrozenModel):
     row_counts: dict[str, int] | None = None
 
 
+class BackupCopyRequest(FrozenModel):
+    """T-236 off-host backup copy request."""
+
+    target_dir: str = Field(min_length=1)
+
+
+class BackupCopyResult(FrozenModel):
+    """T-236 result of copying a backup archive to another allowlisted directory."""
+
+    artifact_id: str
+    source_path: str
+    destination_path: str
+    sha256: str
+    verified: bool
+
+
 class BackupVerifyRequest(FrozenModel):
     """T-231 on-demand backup integrity check request."""
 

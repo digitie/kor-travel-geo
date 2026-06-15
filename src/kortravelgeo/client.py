@@ -27,6 +27,7 @@ from .core.v2 import (
 from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
     AuditEvent,
+    BackupCopyResult,
     BackupRetentionResult,
     BackupVerifyResult,
     CacheMetrics,
@@ -941,6 +942,17 @@ class AsyncAddressClient:
             msg = f"artifact is not a db_backup: {artifact_id}"
             raise InvalidInputError(msg)
         return await verify_backup_artifact(artifact, self.settings, mode=mode)
+
+    async def copy_backup(self, artifact_id: str, *, target_dir: str) -> BackupCopyResult:
+        """Copy a stored backup to another allowlisted dir with sha256 re-check (T-236)."""
+        from .exceptions import InvalidInputError
+        from .infra.backup import BACKUP_ARTIFACT_TYPE, copy_backup_artifact
+
+        artifact = await self.get_artifact(artifact_id)
+        if artifact.artifact_type != BACKUP_ARTIFACT_TYPE:
+            msg = f"artifact is not a db_backup: {artifact_id}"
+            raise InvalidInputError(msg)
+        return await copy_backup_artifact(artifact, self.settings, target_dir=target_dir)
 
     async def restore_dry_run(self, req: RestoreCreateRequest) -> RestoreDryRunResult:
         """Preflight a restore without running pg_restore (T-232).

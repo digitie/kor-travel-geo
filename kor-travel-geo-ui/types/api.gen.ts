@@ -166,6 +166,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/backups/{artifact_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Backup
+         * @description Copy a stored backup to another allowlisted directory (T-236).
+         *
+         *     Streams the archive to ``target_dir`` (under ``backup_copy_targets`` / backup roots),
+         *     re-hashes the copy and verifies it matches the source (mismatch → removed + error).
+         *     A 3-2-1 guard so a single disk failure doesn't lose the backup. Filesystem only.
+         */
+        post: operations["copy_backup_v1_admin_backups__artifact_id__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/backups/{artifact_id}/delete": {
         parameters: {
             query?: never;
@@ -1961,6 +1985,30 @@ export interface components {
             storage_kind: "local_file" | "s3" | "gcs" | "none";
             /** Storage Uri */
             storage_uri?: string | null;
+        };
+        /**
+         * BackupCopyRequest
+         * @description T-236 off-host backup copy request.
+         */
+        BackupCopyRequest: {
+            /** Target Dir */
+            target_dir: string;
+        };
+        /**
+         * BackupCopyResult
+         * @description T-236 result of copying a backup archive to another allowlisted directory.
+         */
+        BackupCopyResult: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Destination Path */
+            destination_path: string;
+            /** Sha256 */
+            sha256: string;
+            /** Source Path */
+            source_path: string;
+            /** Verified */
+            verified: boolean;
         };
         /** BackupCreateRequest */
         BackupCreateRequest: {
@@ -5956,6 +6004,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackupArtifact"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_backup_v1_admin_backups__artifact_id__copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupCopyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupCopyResult"];
                 };
             };
             /** @description Validation Error */

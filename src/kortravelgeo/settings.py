@@ -122,6 +122,8 @@ class Settings(BaseSettings):
         default_factory=_default_mvm_res_code_actions
     )
     backup_allowed_dirs: Annotated[tuple[Path, ...], NoDecode] = (Path("data/backups"),)
+    # T-236: extra allowlist for off-host backup copies (empty → reuse backup_allowed_dirs).
+    backup_copy_targets: Annotated[tuple[Path, ...], NoDecode] = ()
     backup_temp_dir: Path = Path("/tmp/kor-travel-geo-backup")
     backup_default_jobs: int = Field(default=4, ge=1, le=64)
     backup_default_compression_level: int = Field(default=3, ge=1, le=19)
@@ -159,7 +161,7 @@ class Settings(BaseSettings):
     def normalize_log_level(cls, value: object) -> str:
         return str(value).upper()
 
-    @field_validator("backup_allowed_dirs", mode="before")
+    @field_validator("backup_allowed_dirs", "backup_copy_targets", mode="before")
     @classmethod
     def normalize_backup_allowed_dirs(cls, value: object) -> tuple[Path, ...]:
         if isinstance(value, str):
