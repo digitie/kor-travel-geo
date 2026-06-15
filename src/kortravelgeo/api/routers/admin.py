@@ -1721,14 +1721,20 @@ async def list_backups(
     client: AsyncAddressClient = Depends(get_client),
 ) -> list[BackupArtifact]:
     settings = get_settings()
+    # T-240 follow-up (Codex review): push the expiry cutoff into the query so LIMIT
+    # applies to the already-filtered set. A Python filter after LIMIT would miss
+    # soon-expiring backups that sit beyond the newest N.
+    expires_before = (
+        datetime.now(UTC) + timedelta(days=expiring_within_days)
+        if expiring_within_days is not None
+        else None
+    )
     artifacts = await client.list_artifacts(
         limit=limit,
         artifact_type=BACKUP_ARTIFACT_TYPE,
         state=state,
+        expires_before=expires_before,
     )
-    if expiring_within_days is not None:
-        cutoff = datetime.now(UTC) + timedelta(days=expiring_within_days)
-        artifacts = [a for a in artifacts if a.expires_at is not None and a.expires_at <= cutoff]
     return [_backup_artifact_response(artifact, settings=settings) for artifact in artifacts]
 
 

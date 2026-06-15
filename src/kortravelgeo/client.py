@@ -1567,11 +1567,13 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         limit: int = 50,
         artifact_type: str | None = None,
         state: str | None = None,
+        expires_before: datetime | None = None,
     ) -> list[OpsArtifact]:
         return await AdminRepository(self._engine()).list_artifacts(
             limit=limit,
             artifact_type=artifact_type,
             state=state,
+            expires_before=expires_before,
         )
 
     async def get_artifact(self, artifact_id: str) -> OpsArtifact:
