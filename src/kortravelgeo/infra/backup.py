@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from kortravelgeo.core.redaction import hash_confirmation
 from kortravelgeo.dto.admin import (
     BackupCreateRequest,
+    BackupVerifyResult,
     OpsArtifact,
     RestoreCreateRequest,
 )
@@ -1265,6 +1266,116 @@ async def verify_archive_checksum(archive_path: Path, artifact: OpsArtifact | No
     if actual != artifact.sha256:
         msg = f"backup archive sha256 mismatch: {artifact.artifact_id}"
         raise InvalidInputError(msg)
+
+
+async def _noop_progress(
+    *,
+    progress: float | None = None,
+    stage: str | None = None,
+    message: str | None = None,
+) -> None:
+    _ = (progress, stage, message)
+
+
+async def verify_backup_artifact(
+    artifact: OpsArtifact,
+    settings: Settings,
+    *,
+    mode: str = "quick",
+) -> BackupVerifyResult:
+    """Non-destructive integrity check of a stored backup (T-231).
+
+    ``quick`` = recompute the archive sha256 and compare to the recorded value.
+    ``deep`` = also extract to a temp dir, verify the internal ``checksums.sha256``
+    and that ``manifest.json`` parses with required fields. Corruption is returned
+    as a structured ``ok=False`` result (with ``errors``), never raised.
+    """
+    event = asyncio.Event()
+    errors: list[str] = []
+    archive_sha256: str | None = None
+    archive_matches: bool | None = None
+    internal_ok: bool | None = None
+    manifest_ok: bool | None = None
+    row_counts: dict[str, int] | None = None
+
+    def _build() -> BackupVerifyResult:
+        return BackupVerifyResult(
+            artifact_id=artifact.artifact_id,
+            mode="deep" if mode == "deep" else "quick",
+            ok=not errors,
+            archive_sha256=archive_sha256,
+            archive_sha256_matches=archive_matches,
+            internal_checksums_ok=internal_ok,
+            manifest_ok=manifest_ok,
+            row_counts=row_counts,
+            errors=tuple(errors),
+        )
+
+    if not artifact.storage_uri:
+        errors.append("backup artifact has no storage_uri")
+        return _build()
+    try:
+        archive_path = resolve_existing_archive_path(artifact.storage_uri, settings)
+    except (FileNotFoundError, InvalidInputError) as exc:
+        errors.append(f"archive unavailable: {exc}")
+        return _build()
+
+    archive_sha256 = await sha256_file(archive_path, cancel_event=event)
+    if artifact.sha256 is not None:
+        archive_matches = archive_sha256 == artifact.sha256
+        if not archive_matches:
+            errors.append("archive sha256 mismatch")
+
+    if mode == "deep":
+        work_dir = (
+            settings.backup_temp_dir / f"verify_{artifact.artifact_id}_{uuid4().hex}"
+        ).resolve()
+        extract_dir = work_dir / "extract"
+        log_path = work_dir / "verify.ndjson"
+        try:
+            work_dir.mkdir(parents=True)
+            extract_dir.mkdir()
+            await run_process_with_progress(
+                build_tar_extract_command(archive_path, extract_dir),
+                cancel_event=event,
+                progress=_noop_progress,
+                stage="verify",
+                bounds=(0.0, 1.0),
+                log_path=log_path,
+            )
+            try:
+                await verify_internal_checksums(extract_dir, cancel_event=event)
+                internal_ok = True
+            except InvalidInputError as exc:
+                internal_ok = False
+                errors.append(str(exc))
+            manifest_path = extract_dir / "manifest.json"
+            if not manifest_path.is_file():
+                manifest_ok = False
+                errors.append("manifest.json missing")
+            else:
+                try:
+                    manifest = read_json(manifest_path)
+                    missing = [k for k in ("database", "backup", "row_counts") if k not in manifest]
+                    manifest_ok = not missing
+                    raw_counts = manifest.get("row_counts")
+                    if isinstance(raw_counts, dict):
+                        row_counts = {
+                            str(k): int(v)
+                            for k, v in raw_counts.items()
+                            if isinstance(v, (int, float))
+                        }
+                    if missing:
+                        errors.append(f"manifest missing fields: {', '.join(missing)}")
+                except Exception as exc:
+                    manifest_ok = False
+                    errors.append(f"manifest parse failed: {exc}")
+        except Exception as exc:
+            errors.append(f"archive extract failed: {exc}")
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    return _build()
 
 
 def _iter_checksum_files(root: Path) -> tuple[Path, ...]:

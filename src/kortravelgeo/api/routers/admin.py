@@ -37,6 +37,8 @@ from kortravelgeo.dto.admin import (
     BackupCreateRequest,
     BackupRetentionResult,
     BackupRetentionRunRequest,
+    BackupVerifyRequest,
+    BackupVerifyResult,
     CacheMetrics,
     ConsistencyBulkDecisionRequest,
     ConsistencyBulkDecisionResponse,
@@ -1782,6 +1784,36 @@ async def delete_backup(
         **_audit_request(request),
     )
     return _backup_artifact_response(deleted, settings=settings)
+
+
+@router.post(
+    "/backups/{artifact_id}/verify",
+    response_model=BackupVerifyResult,
+    response_model_exclude_none=True,
+)
+async def verify_backup(
+    artifact_id: str,
+    req: BackupVerifyRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> BackupVerifyResult:
+    """Non-destructively verify a stored backup (T-231).
+
+    ``quick`` recomputes the archive sha256; ``deep`` also extracts and checks the
+    internal ``checksums.sha256`` and ``manifest.json``. Corruption is reported as
+    ``ok=False`` with ``errors`` rather than an exception, so an operator can probe
+    bit rot without attempting a restore.
+    """
+    result = await client.verify_backup(artifact_id, mode=req.mode)
+    await client.record_audit_event(
+        action="db_backup.verify",
+        outcome="succeeded" if result.ok else "failed",
+        payload={"mode": req.mode, "ok": result.ok, "errors": list(result.errors)},
+        resource_type="artifact",
+        resource_id=artifact_id,
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.post(

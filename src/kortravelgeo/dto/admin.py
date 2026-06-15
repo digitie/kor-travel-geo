@@ -657,6 +657,26 @@ class BackupRetentionRunRequest(FrozenModel):
     keep_min_count: int | None = Field(default=None, ge=0)
 
 
+class BackupVerifyRequest(FrozenModel):
+    """T-231 on-demand backup integrity check request."""
+
+    mode: Literal["quick", "deep"] = "quick"
+
+
+class BackupVerifyResult(FrozenModel):
+    """T-231 non-destructive backup integrity result (corruption → ok=False)."""
+
+    artifact_id: str
+    mode: Literal["quick", "deep"]
+    ok: bool
+    archive_sha256: str | None = None
+    archive_sha256_matches: bool | None = None
+    internal_checksums_ok: bool | None = None
+    manifest_ok: bool | None = None
+    row_counts: dict[str, int] | None = None
+    errors: tuple[str, ...] = ()
+
+
 class BackupRetentionResult(FrozenModel):
     """T-230 result of one backup retention janitor pass."""
 
