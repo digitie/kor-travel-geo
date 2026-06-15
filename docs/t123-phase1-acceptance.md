@@ -59,7 +59,7 @@ C16/C17의 `bd_mgt_sn` 직접 교집합 0건은 즉시 serving 금지 근거다.
 
 - **C11 출입구 source만 조건부 serving 후보로 유지한다.**
 - 다만 ADR-051은 T-123에서 `accepted`로 전환하지 않는다.
-- 이유는 C11 bundle ↔ 전자지도 full-key 품질은 충분하지만, `mv_geocode_target` 기존 대표점 대비 p95/p99/outlier 영향, C3/C4/C6/C7 악화 여부, feature flag rollback 경로가 아직 같은 harness에서 검증되지 않았기 때문이다.
+- 이유는 C11 bundle ↔ 전자지도 full-key 품질은 충분하지만, `mv_geocode_target` 기존 대표점 대비 p95/p99/outlier 영향, C3/C4/C6/C7 악화 여부, T-047/T-214 계열 성능 회귀, feature flag rollback 경로, v1/v2 노출 정책이 아직 같은 gate에서 검증되지 않았기 때문이다. 후속 gate는 `docs/t125-c11-serving-preflight.md`에 고정한다.
 - T-119는 ADR-051 accepted와 사용자 승인 전까지 진행하지 않는다.
 
 ### 검증 전용

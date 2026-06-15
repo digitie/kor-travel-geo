@@ -2,6 +2,12 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-125 C11 serving 사전 검증 문서 보강)
+
+**작업**: T-119 착수 전 빠뜨리면 안 되는 증거를 `docs/t125-c11-serving-preflight.md`에 별도 gate로 고정했다. 기존 `mv_geocode_target` 대표점 대비 impact, C3/C4/C6/C7 회귀, T-047/T-214 계열 성능 회귀, feature flag rollback, v1/v2 노출 정책을 필수 산출물로 분리하고, 하나라도 없으면 ADR-051 accepted 전환과 T-119 착수를 금지한다고 명시했다.
+
+**반영**: `docs/tasks.md`, `docs/resume.md`, `docs/decisions.md` ADR-051, `docs/t118-phase1-go-no-go.md`, `docs/t123-phase1-acceptance.md`, `CHANGELOG.md`가 새 T-125 gate 문서를 참조한다.
+
 ## 2026-06-15 (PR #173 backend CI 계층 위반 수정)
 
 **수정**: GitHub Actions backend check가 `kortravelgeo.infra.epost_server_fetch -> kortravelgeo.loaders` import로 계층 규칙을 위반해 실패했다. T-207 server-fetch 서비스는 epost downloader/validation loader를 직접 재사용해야 하므로 파일을 `kortravelgeo.loaders.epost_server_fetch`로 이동하고 admin router import와 unit test monkeypatch 경로를 갱신했다.

@@ -2484,11 +2484,24 @@ T-123 전국 재측정에서 C11 bundle `TL_SPBD_ENTRC`와 전자지도 `TL_SPBD
 
 따라서 T-123 acceptance는 C11을 "조건부 serving 후보"로 유지하되, T-119 구현 승인은 보류한다고 결론 내렸다. C12~C17은 검증 전용으로 최종 확정한다.
 
+### T-125 사전 검증 gate
+
+T-119 착수 전에는 `docs/t125-c11-serving-preflight.md`의 체크리스트를 모두 채워야 한다. 특히 다음 5개 증거가 하나라도 없으면 본 ADR을 `accepted`로 전환하지 않는다.
+
+1. 기존 `mv_geocode_target` 대표점 대비 C11 후보 impact: 거리 p50/p95/p99/max, 100m 초과 outlier, sample CSV/GeoJSON.
+2. C3/C4/C6/C7 회귀: 같은 case definition 기준 baseline/candidate severity와 ERROR/WARN count delta.
+3. 성능 회귀: T-047/T-214 계열 SQL/REST p95, timeout/error count, 주요 query plan 차이.
+4. feature flag rollback: 기본 off, flag on/off MV 생성 차이, `flag off + mv_refresh` 또는 동등한 rollback 리허설.
+5. v1/v2 노출 정책: v1 `pt_source` 호환 유지, 세부 출처는 `x_extension` 또는 v2 전용 필드, OpenAPI/UI type 영향 검토.
+
+이 gate가 모두 통과해도 T-119는 자동 착수하지 않는다. ADR-051 `accepted` 전환 PR과 사용자 명시 승인을 별도로 받아야 한다.
+
 ### 후속
 
 - (done) T-121/T-123 전국 C11~C17 실행에서 본 ADR 임계값을 일부 평가했다.
 - (done) T-123 최종 검증에서 ADR-051은 accepted로 전환하지 않는다. C11은 조건부 serving 후보로 유지하고 C12~C17은 검증 전용으로 둔다.
-- (open) T-119는 기존 대표점 대비 impact harness, C3/C4/C6/C7 회귀, feature flag rollback 설계가 추가되고 ADR-051 accepted + 사용자 승인 뒤에만 진행한다.
+- (open) T-125는 기존 대표점 대비 impact harness, C3/C4/C6/C7 회귀, 성능 회귀, feature flag rollback, v1/v2 노출 정책을 artifact로 채운다.
+- (open) T-119는 T-125 통과, ADR-051 accepted, 사용자 승인 뒤에만 진행한다.
 
 ---
 
