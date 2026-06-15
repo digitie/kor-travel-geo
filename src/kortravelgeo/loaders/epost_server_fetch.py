@@ -113,7 +113,11 @@ async def fetch_epost_source_file(
         )
         failure_state = "failed_extract"
         await upload_repo.update_state(session.upload_session_id, state="extracting")
-        extracted_dir = extract_epost_zip(zip_path, run_dir / "extract")
+        extracted_dir = extract_epost_zip(
+            zip_path,
+            run_dir / "extract",
+            max_total_bytes=settings.api_max_upload_bytes,
+        )
         failure_state = "failed_structure"
         selected = _select_epost_file(extracted_dir, postal_kind)
 

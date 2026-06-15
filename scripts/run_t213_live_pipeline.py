@@ -342,6 +342,14 @@ async def restore_active_match_set(
     prior_active_id: str | None,
     activated_match_set_id: str | None,
 ) -> None:
+    """Restore the prior active match-set *pointer* (scratch-DB slot restore).
+
+    NOTE: this only flips ``ops.source_match_sets.active`` back; it does NOT undo
+    the ``mv_refresh strategy='swap'`` that already promoted this run's data into
+    the serving MVs, nor retire the new ``serving_release``. So the serving data
+    stays displaced even in default (non --promote) mode — run only against a
+    scratch DB (see this script's docstring and docs/t213-phase2-live-loading.md).
+    """
     if prior_active_id is None or activated_match_set_id is None:
         return
     async with engine.begin() as conn:
@@ -361,6 +369,11 @@ async def restore_active_match_set(
         )
     if restored.rowcount:
         print(f"[match-set] restored prior active match set {prior_active_id}")
+    else:
+        print(
+            f"[match-set] WARNING: prior active match set {prior_active_id} was not "
+            "in 'retired' state; restore is a no-op (it may have changed concurrently)"
+        )
 
 
 async def register_sources(
