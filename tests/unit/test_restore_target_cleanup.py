@@ -8,7 +8,15 @@ connection is integration-tested in T-245.
 
 from __future__ import annotations
 
-from kortravelgeo.infra.backup import restore_target_cleanup_action
+import pytest
+
+from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.backup import (
+    quarantine_restore_database_name,
+    quote_database_identifier,
+    restore_target_cleanup_action,
+    validate_database_identifier,
+)
 
 
 def test_replace_current_is_never_cleaned() -> None:
@@ -62,3 +70,22 @@ def test_keep_and_unknown_policy_do_nothing() -> None:
         )
         is None
     )
+
+
+def test_restore_database_identifier_rejects_quotes() -> None:
+    with pytest.raises(InvalidInputError, match="target_database must match"):
+        validate_database_identifier('restore"db', "target_database")
+
+
+def test_quote_database_identifier_only_quotes_valid_names() -> None:
+    assert quote_database_identifier("kor_travel_geo_restore") == '"kor_travel_geo_restore"'
+
+
+def test_quarantine_name_stays_within_postgres_identifier_limit() -> None:
+    name = quarantine_restore_database_name(
+        "a" * 63,
+        "20260616T123456Z",
+    )
+
+    assert len(name) == 63
+    assert name.endswith("_quarantine_20260616T123456Z")

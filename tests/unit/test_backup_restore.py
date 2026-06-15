@@ -152,6 +152,78 @@ def test_restore_target_dsn_is_built_from_current_settings() -> None:
     assert target == "postgresql+psycopg://addr:secret@localhost:5432/kor_travel_geo_restore"
 
 
+def test_restore_target_database_rejects_unsafe_identifier() -> None:
+    settings = Settings(pg_dsn="postgresql://addr:secret@localhost:5432/kor_travel_geo")
+    req = RestoreCreateRequest(target_database='kor_travel_geo"restore')
+
+    with pytest.raises(InvalidInputError, match="target_database must match"):
+        resolve_restore_target_dsn(req, settings)
+
+
+@pytest.mark.asyncio
+async def test_restore_dry_run_target_check_failure_is_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(pg_dsn="postgresql://addr:secret@localhost:5432/kor_travel_geo")
+    req = RestoreCreateRequest(
+        archive_path="missing.tar.zst",
+        target_database="kor_travel_geo_restore",
+    )
+
+    async def fail_empty_check(_target_dsn: str) -> None:
+        raise RuntimeError("connection refused")
+
+    async def fail_archive(*_args: object, **_kwargs: object) -> None:
+        raise backup_module.NotFoundError("missing archive")
+
+    monkeypatch.setattr(backup_module, "ensure_target_database_empty", fail_empty_check)
+    monkeypatch.setattr(backup_module, "resolve_restore_archive", fail_archive)
+
+    result = await backup_module.run_restore_dry_run(object(), settings, req)  # type: ignore[arg-type]
+
+    assert result.can_restore is False
+    assert any(
+        "target not restorable" in blocker and "connection refused" in blocker
+        for blocker in result.blockers
+    )
+
+
+@pytest.mark.asyncio
+async def test_query_cluster_versions_uses_target_dsn_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created: list[str] = []
+    disposed: list[str] = []
+
+    class FakeEngine:
+        def __init__(self, dsn: str) -> None:
+            self.dsn = dsn
+
+        async def dispose(self) -> None:
+            disposed.append(self.dsn)
+
+    def fake_create_async_engine(dsn: str) -> FakeEngine:
+        created.append(dsn)
+        return FakeEngine(dsn)
+
+    async def fake_query(engine: FakeEngine) -> tuple[str, str]:
+        return engine.dsn, "3.5.2"
+
+    monkeypatch.setattr(backup_module, "create_async_engine", fake_create_async_engine)
+    monkeypatch.setattr(backup_module, "_query_cluster_versions", fake_query)
+
+    pg_version, postgis_version = await backup_module._query_cluster_versions_for_dsn(
+        "postgresql://addr:secret@remote:5432/kor_travel_geo_restore"
+    )
+
+    assert created == [
+        "postgresql+psycopg://addr:secret@remote:5432/kor_travel_geo_restore"
+    ]
+    assert disposed == created
+    assert pg_version == created[0]
+    assert postgis_version == "3.5.2"
+
+
 def test_replace_current_restore_requires_exact_target_and_confirmation() -> None:
     settings = Settings(pg_dsn="postgresql://addr:secret@localhost:5432/kor_travel_geo")
     req = RestoreCreateRequest(

@@ -41,6 +41,8 @@ from kortravelgeo.version import __version__
 
 BACKUP_ARTIFACT_TYPE = "db_backup"
 RESTORE_LOG_ARTIFACT_TYPE = "db_restore_log"
+_DATABASE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+_MAX_DATABASE_IDENTIFIER_LENGTH = 63
 #: Default retention class for a finalized backup (T-229). The retention janitor
 #: (T-230) treats anything other than ``pinned`` as eligible once ``expires_at`` passes.
 DEFAULT_BACKUP_RETENTION_CLASS = "default"
@@ -383,6 +385,7 @@ async def run_restore_job(
     if target_database is None:
         msg = "restore target database name could not be resolved"
         raise InvalidInputError(msg)
+    target_database = validate_database_identifier(target_database, "target_database")
     job_owns_target = False  # T-235: True only after we verify the target was empty
     if req.mode == "replace_current":
         confirmation = validate_replace_current_restore_request(
@@ -477,13 +480,15 @@ async def run_restore_job(
             raise InvalidInputError(msg)
 
         # T-234: hard-fail on PostgreSQL major / PostGIS major.minor mismatch unless
-        # explicitly overridden. new_database targets share the current cluster, so the
-        # current engine's cluster version is the restore target's version.
+        # explicitly overridden. Query the actual target DSN so external target_dsn
+        # restores are checked against their own cluster, not the app's current DB.
         manifest_db = manifest.get("database") or {}
         allow_version_mismatch = (
             req.allow_version_mismatch or settings.restore_allow_version_mismatch
         )
-        target_pg_version, target_gis_version = await _query_cluster_versions(engine)
+        target_pg_version, target_gis_version = await _query_cluster_versions_for_dsn(
+            target_dsn
+        )
         version_block = restore_version_mismatch_blocker(
             manifest_postgres_version=manifest_db.get("postgres_version"),
             manifest_postgis_version=manifest_db.get("postgis_version"),
@@ -1037,14 +1042,39 @@ def database_name_from_dsn(dsn: str) -> str | None:
         return None
 
 
+def validate_database_identifier(value: str, field_name: str = "database") -> str:
+    """Validate the project-supported PostgreSQL database identifier shape."""
+    if not _DATABASE_IDENTIFIER_RE.fullmatch(value):
+        msg = f"{field_name} must match {_DATABASE_IDENTIFIER_RE.pattern}"
+        raise InvalidInputError(msg)
+    return value
+
+
+def quote_database_identifier(value: str) -> str:
+    return f'"{validate_database_identifier(value)}"'
+
+
+def quarantine_restore_database_name(target_database: str, timestamp: str) -> str:
+    suffix = f"_quarantine_{timestamp}"
+    max_prefix_length = _MAX_DATABASE_IDENTIFIER_LENGTH - len(suffix)
+    if max_prefix_length < 1:
+        msg = "quarantine timestamp suffix is too long"
+        raise InvalidInputError(msg)
+    base = validate_database_identifier(target_database, "target_database")[
+        :max_prefix_length
+    ]
+    return validate_database_identifier(f"{base}{suffix}", "quarantine_database")
+
+
 def resolve_restore_target_dsn(req: RestoreCreateRequest, settings: Settings) -> str:
     if req.target_dsn:
         return normalize_sqlalchemy_dsn(req.target_dsn)
     if not req.target_database:
         msg = "restore requires target_database or target_dsn"
         raise InvalidInputError(msg)
+    target_database = validate_database_identifier(req.target_database, "target_database")
     current = make_url(settings.pg_dsn)
-    return current.set(database=req.target_database).render_as_string(hide_password=False)
+    return current.set(database=target_database).render_as_string(hide_password=False)
 
 
 def validate_replace_current_restore_request(
@@ -1749,6 +1779,7 @@ async def cleanup_orphan_restore_target(
     if not target_db:
         msg = "cannot clean restore target: DSN has no database"
         raise InvalidInputError(msg)
+    target_db = validate_database_identifier(target_db, "target_database")
     maintenance_engine = create_async_engine(
         str(url.set(database="postgres")), isolation_level="AUTOCOMMIT"
     )
@@ -1762,11 +1793,17 @@ async def cleanup_orphan_restore_target(
                 {"db": target_db},
             )
             if action == "drop":
-                await conn.execute(text(f'DROP DATABASE IF EXISTS "{target_db}"'))
+                await conn.execute(
+                    text(f"DROP DATABASE IF EXISTS {quote_database_identifier(target_db)}")
+                )
                 return target_db
-            quarantine_name = f"{target_db}_quarantine_{timestamp}"
+            quarantine_name = quarantine_restore_database_name(target_db, timestamp)
             await conn.execute(
-                text(f'ALTER DATABASE "{target_db}" RENAME TO "{quarantine_name}"')
+                text(
+                    "ALTER DATABASE "
+                    f"{quote_database_identifier(target_db)} "
+                    f"RENAME TO {quote_database_identifier(quarantine_name)}"
+                )
             )
             return quarantine_name
     finally:
@@ -1810,6 +1847,14 @@ async def _query_cluster_versions(engine: AsyncEngine) -> tuple[str | None, str 
     return row["pg"], row["gis"]
 
 
+async def _query_cluster_versions_for_dsn(target_dsn: str) -> tuple[str | None, str | None]:
+    target_engine = create_async_engine(normalize_sqlalchemy_dsn(target_dsn))
+    try:
+        return await _query_cluster_versions(target_engine)
+    finally:
+        await target_engine.dispose()
+
+
 async def run_restore_dry_run(
     engine: AsyncEngine,
     settings: Settings,
@@ -1836,6 +1881,8 @@ async def run_restore_dry_run(
     target_dsn = resolve_restore_target_dsn(req, settings)
     target_database = database_name_from_dsn(target_dsn)
     current_database = database_name_from_dsn(settings.pg_dsn)
+    if target_database is not None:
+        target_database = validate_database_identifier(target_database, "target_database")
 
     if req.mode == "replace_current":
         if target_database != current_database:
@@ -1848,7 +1895,7 @@ async def run_restore_dry_run(
         except InvalidInputError as exc:
             blockers.append(f"target not restorable: {exc}")
         except Exception as exc:
-            warnings.append(f"target emptiness check skipped: {exc}")
+            blockers.append(f"target not restorable: {exc}")
 
     try:
         archive_path, source_artifact = await resolve_restore_archive(req, repo, settings)
@@ -1924,9 +1971,9 @@ async def run_restore_dry_run(
         shutil.rmtree(work_dir, ignore_errors=True)
 
     try:
-        target_pg, target_gis = await _query_cluster_versions(engine)
+        target_pg, target_gis = await _query_cluster_versions_for_dsn(target_dsn)
     except Exception as exc:
-        warnings.append(f"target version query skipped: {exc}")
+        blockers.append(f"target version query failed: {exc}")
     version_notes = check_restore_version_compatibility(
         manifest_postgres_version=backup_pg,
         manifest_postgis_version=backup_gis,
