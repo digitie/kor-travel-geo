@@ -217,7 +217,9 @@ class RustfsClient:
                         await fh.write(chunk)
         part.replace(destination)
 
-    async def list_objects(self, prefix: str) -> tuple[RustfsObject, ...]:
+    async def list_objects(
+        self, prefix: str, *, limit: int | None = None
+    ) -> tuple[RustfsObject, ...]:
         normalized_prefix = normalize_object_prefix(prefix)
         objects: list[RustfsObject] = []
         continuation: str | None = None
@@ -236,6 +238,9 @@ class RustfsClient:
             )
             batch, continuation = _parse_list_objects_response(response.text)
             objects.extend(batch)
+            if limit is not None and len(objects) > limit:
+                msg = f"RustFS object scan limit exceeded: {len(objects)} > {limit}"
+                raise InvalidInputError(msg)
             if continuation is None:
                 return tuple(objects)
 

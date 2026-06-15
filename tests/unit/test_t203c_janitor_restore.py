@@ -323,3 +323,20 @@ async def test_janitor_runs_when_lock_free(monkeypatch: pytest.MonkeyPatch) -> N
     )
     assert summary.skipped_locked is False
     assert summary.processed_sessions == 0
+
+
+def test_janitor_staging_object_key_matches_upload_layout() -> None:
+    from kortravelgeo.infra.source_janitor import _staging_object_key
+
+    key = _staging_object_key(
+        prefix="ktg",
+        category="locsum_full",
+        user_yyyymm="202605",
+        source_file_group_id="group-1",
+        session_id="source_upload_abc",
+        part_key="../archive",
+    )
+    assert (
+        key
+        == "ktg/source-files/locsum_full/202605/group-1/source_upload_abc/archive/archive"
+    )

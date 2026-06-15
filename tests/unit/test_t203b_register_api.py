@@ -77,6 +77,7 @@ class _FakeClient:
     def __init__(self) -> None:
         self.registered = False
         self.audit_calls: list[str] = []
+        self.last_structure: GroupValidation | None = None
 
     async def get_upload_session(self, _sid: str) -> UploadSessionStatus:
         return _session()
@@ -96,6 +97,7 @@ class _FakeClient:
     async def register_source_group(self, **kwargs):  # type: ignore[no-untyped-def]
         self.registered = True
         structure: GroupValidation = kwargs["structure_validation"]
+        self.last_structure = structure
         return RegisterResponse(
             source_file_group_id="group-1",
             category="roadname_hangul_full",
@@ -182,6 +184,8 @@ async def test_register_happy_path_returns_group() -> None:
     assert body["state"] == "available"
     assert body["files"][0]["sha256"] == "a" * 64
     assert client.registered is True
+    assert client.last_structure is not None
+    assert client.last_structure.outcome == "passed"
 
 
 @pytest.mark.asyncio

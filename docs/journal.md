@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (PR #142/#145/#149 리뷰 후속 반영)
+
+**작업**: 전체 PR review thread 스캔에서 남아 있던 source registry 계열 unresolved thread 7건을 코드로 반영했다. register coverage 검증을 full member 검증에서 분리하고, `revalidate_group`의 child state 갱신 순서를 바로잡았으며, janitor multipart abort key를 실제 upload endpoint layout과 맞췄다.
+
+**수정**: `source_reconcile`은 RustFS object scan limit을 실제 `list_objects`에 적용하고, `import_object` resolve가 registry 등록 없이 item을 닫지 않도록 차단한다. `delete_object`는 object가 살아 있는데 RustFS client가 없으면 DB row를 `hard_deleted`로 바꾸지 않고 `blocked:rustfs_unavailable`을 반환한다.
+
+**문서/검증**: 상세 매핑은 `docs/postmerge-review-fixups-pr142-pr149.md`에 기록했다. Windows 단위 테스트 94개, 변경 파일 ruff, 변경 source mypy는 통과했다. T-210 통합 테스트는 현재 Windows 환경에서 DB-gated 케이스 대부분이 skip되고 실행 가능한 3개만 통과했으므로 WSL ext4 미러에서 추가 확인한다.
+
 ## 2026-06-16 (T-131 C11 guarded policy simulation)
 
 **작업**: `scripts/run_t131_c11_guarded_policy_simulation.py`를 추가해 C11 후보를 blanket 승격하지 않는 guarded policy 7개를 오프라인으로 비교했다. T-129/T-130 후보 테이블을 재사용하고 `_ktg_t131_c11_policy_features` feature table에서 C4/C6/C7, baseline 결측, movement budget을 집계했다.

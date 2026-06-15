@@ -21,6 +21,8 @@ exercise the decision flow against fakes; the lock acquisition is mockable too.
 from __future__ import annotations
 
 import logging
+import re
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -44,10 +46,11 @@ from kortravelgeo.infra.metrics import (
     record_source_janitor_run,
     record_source_janitor_session,
 )
-from kortravelgeo.infra.rustfs import RustfsClient
+from kortravelgeo.infra.rustfs import RustfsClient, join_object_key
 from kortravelgeo.infra.source_audit import insert_source_audit_event
 
 _LOGGER = logging.getLogger(__name__)
+_SAFE_TOKEN_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
 async def _load_session_facts(
@@ -65,7 +68,8 @@ async def _load_session_facts(
                 text(
                     """
 SELECT source_upload_session_id, state, created_at, expires_at,
-       registration_deadline_at, registered_at, expected_file_count
+       registration_deadline_at, registered_at, expected_file_count,
+       source_file_group_id, category, user_yyyymm, prefix
   FROM ops.source_upload_sessions
  WHERE state NOT IN (
          'available', 'cancelled', 'expired', 'registered',
@@ -114,7 +118,14 @@ SELECT part_key, multipart_upload_id, completed_at
                     open_multiparts.append(
                         JanitorMultipartFact(
                             part_key=part_key,
-                            object_key=_staging_object_key(sid, part_key),
+                            object_key=_staging_object_key(
+                                prefix=row["prefix"],
+                                category=str(row["category"]),
+                                user_yyyymm=str(row["user_yyyymm"]),
+                                source_file_group_id=str(row["source_file_group_id"]),
+                                session_id=sid,
+                                part_key=part_key,
+                            ),
                             multipart_upload_id=str(upload_id),
                         )
                     )
@@ -137,17 +148,33 @@ SELECT part_key, multipart_upload_id, completed_at
     return tuple(facts)
 
 
-def _staging_object_key(session_id: str, part_key: str) -> str:
-    """Placeholder staging key recorded on the part (abort uses upload_id).
+def _staging_object_key(
+    *,
+    prefix: str | None,
+    category: str,
+    user_yyyymm: str,
+    source_file_group_id: str,
+    session_id: str,
+    part_key: str,
+) -> str:
+    """Return the exact session-scoped RustFS key used by the upload endpoint."""
+    return join_object_key(
+        prefix or "",
+        "source-files",
+        category,
+        user_yyyymm,
+        source_file_group_id,
+        session_id,
+        _safe_path_token(part_key),
+        "archive",
+    )
 
-    The S3 ``AbortMultipartUpload`` API keys by object key + uploadId. The live
-    upload path stores the slot object under a session-scoped key; the janitor
-    only needs *a* key paired with the upload id, and RustFS treats abort as
-    idempotent (404 tolerated), so a best-effort key derived from the session is
-    sufficient. The session metadata is the source of truth in production; this
-    keeps the janitor self-contained for the abort call.
-    """
-    return f"{session_id}/{part_key}"
+
+def _safe_path_token(value: str) -> str:
+    name = Path(value).name.replace("\\", "_").replace("/", "_")
+    name = name.replace("..", "_")
+    name = _SAFE_TOKEN_RE.sub("_", name).strip("._")
+    return name or "upload"
 
 
 async def _apply_session_decision(

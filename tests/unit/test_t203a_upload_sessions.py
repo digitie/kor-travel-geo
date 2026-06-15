@@ -408,6 +408,25 @@ async def test_list_parts_raises_not_found_when_upload_gone() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_objects_enforces_scan_limit() -> None:
+    transport = _FakeTransport()
+    transport.enqueue(
+        _xml_response(
+            200,
+            "<ListBucketResult>"
+            "<Contents><Key>ktg/a</Key><Size>1</Size><ETag>\"e1\"</ETag></Contents>"
+            "<Contents><Key>ktg/b</Key><Size>1</Size><ETag>\"e2\"</ETag></Contents>"
+            "<IsTruncated>false</IsTruncated>"
+            "</ListBucketResult>",
+        )
+    )
+    client = RustfsClient(_config(), sender=transport)
+
+    with pytest.raises(InvalidInputError, match="scan limit exceeded"):
+        await client.list_objects("ktg", limit=1)
+
+
+@pytest.mark.asyncio
 async def test_abort_multipart_upload_tolerates_404() -> None:
     transport = _FakeTransport()
     transport.enqueue(_xml_response(404, "<Error><Code>NoSuchUpload</Code></Error>"))
