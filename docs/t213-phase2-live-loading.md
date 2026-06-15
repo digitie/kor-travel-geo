@@ -23,7 +23,9 @@ T-213은 전국 실 원천 archive를 T-109 계열 source registry 경로로 등
 - `--force-promotion` 사용 시 `--force-promotion-reason`
 - 실행 전 queued/running `load_jobs` 차단
 
-runbook은 실행 직전 기존 active source match set을 기록한다. 기본 동작은 성공/실패와 관계없이 새 T-213 match set이 displace한 기존 active를 복구하는 검증 실행이다. 실제 운영 serving 구성을 새 T-213 산출물로 유지하려면 `--promote-active-match-set`을 명시한다. 이 플래그 없이도 serving release/snapshot FK는 생성되지만, active source match set slot은 실행 전 상태로 되돌아간다.
+runbook은 실행 직전 기존 active source match set을 기록한다. 기본 동작은 성공/실패와 관계없이 새 T-213 match set이 displace한 기존 active match set **포인터**를 복구하는 검증 실행이다. 실제 운영 serving 구성을 새 T-213 산출물로 유지하려면 `--promote-active-match-set`을 명시한다.
+
+> **주의 — default 모드도 serving 데이터는 displace한다.** `--promote-active-match-set` 없이도 이 runbook은 `mv_refresh strategy='swap'`로 serving MV(`mv_geocode_target`/`mv_geocode_text_search`)를 새 T-213 데이터로 **물리적으로 교체**하고 새 active `serving_release`/snapshot FK를 생성한다. default 복구는 `ops.source_match_sets.active` **포인터만** 되돌리며 MV swap이나 serving_release는 원복하지 않는다(되돌리면 match-set 포인터와 serving 데이터가 불일치). 따라서 이 runbook은 **scratch DB에서만** 실행한다(필수 `--dsn`/`KTG_TEST_PG_DSN` + `--allow-destructive` + `RUN-T213-LIVE <db>` typed confirmation 가드가 사고성 prod 실행을 막는다).
 
 기본 profile은 `serving_recommended`이며 다음 source category를 등록한다.
 

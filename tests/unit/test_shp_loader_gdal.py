@@ -129,6 +129,36 @@ def test_shp_load_plan_accepts_rebuild_staging_parent_with_multiple_sidos(
     )
 
 
+def _make_sido_dir(parent: Path, sido_name: str, sig_cd: str) -> None:
+    sig_dir = parent / sido_name / sig_cd
+    sig_dir.mkdir(parents=True)
+    for layer_name in MASTER_LAYER_NAMES:
+        for suffix in (".shp", ".shx", ".dbf"):
+            (sig_dir / f"{layer_name}{suffix}").touch()
+
+
+def test_discover_sido_datasets_returns_all_well_formed_children(tmp_path: Path) -> None:
+    from kortravelgeo.loaders.juso_map import discover_sido_datasets
+
+    _make_sido_dir(tmp_path, "Busan", "26000")
+    _make_sido_dir(tmp_path, "Seoul", "11000")
+
+    datasets = discover_sido_datasets(tmp_path)
+    assert {d.sig_code for d in datasets} == {"26000", "11000"}
+
+
+def test_discover_sido_datasets_aggregates_child_failures(tmp_path: Path) -> None:
+    from kortravelgeo.loaders.juso_map import discover_sido_datasets
+
+    _make_sido_dir(tmp_path, "Busan", "26000")
+    # Malformed child: a numeric SIG subdir but no layer files -> discovery fails.
+    (tmp_path / "Broken" / "99999").mkdir(parents=True)
+
+    with pytest.raises(LoaderError, match="failed to discover one or more sido datasets") as exc:
+        discover_sido_datasets(tmp_path)
+    assert "Broken" in str(exc.value)
+
+
 def test_shp_sql_literal_escapes_quotes_and_allows_null_month() -> None:
     assert polygons_loader._sql_literal("a'b") == "'a''b'"
     assert polygons_loader._metadata_projection(
