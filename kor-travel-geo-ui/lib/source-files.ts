@@ -66,6 +66,66 @@ export const sourceRoleLabels: Record<SourceRole, string> = {
   enrichment_candidate: "보강 후보"
 };
 
+/** Safe label for a match-set item role (falls back to the raw value). */
+export function sourceRoleLabel(role: string): string {
+  return (sourceRoleLabels as Record<string, string>)[role] ?? role;
+}
+
+// --- Serving-usage classification (T-220 audit / T-221, ADR-054) -------------
+// Distinct from `role`: tells the operator how a source relates to ACTIVE serving
+// coordinates, so a validation-only / no-go optional source is never rendered as
+// "활용 중". `role`/`default_role` are build/match-set hints only.
+
+export type SourceServingUsage = SourceFileCategoryInfo["serving_usage"];
+
+export const servingUsageLabels: Record<SourceServingUsage, string> = {
+  serving_core: "활용 중(서빙)",
+  validation_only: "검증 전용",
+  typed_feature_candidate: "상세주소 기능 후보",
+  separate_feature_candidate: "별도 기능 후보(서빙 미반영)",
+  promotion_blocked_no_go: "승격 보류(no-go)"
+};
+
+/** Badge colour per serving-usage: green only for active serving core. */
+export const servingUsageTones: Record<SourceServingUsage, "ok" | "warn" | "error"> = {
+  serving_core: "ok",
+  validation_only: "warn",
+  typed_feature_candidate: "warn",
+  separate_feature_candidate: "warn",
+  promotion_blocked_no_go: "error"
+};
+
+const servingUsageGenericNotes: Record<SourceServingUsage, string> = {
+  serving_core: "현재 active serving 좌표/텍스트 정본으로 사용 중.",
+  validation_only: "검증·overlay 전용 — active serving 좌표 원천이 아님.",
+  typed_feature_candidate:
+    "상세주소 typed feature 후보 — 호별 좌표 없음, 일반 주소 대표 좌표 원천 아님.",
+  separate_feature_candidate:
+    "별도 기능(POI/우편) 후보 — active serving 좌표에 반영되지 않음.",
+  promotion_blocked_no_go: "대표좌표 승격을 평가했으나 보류(no-go) — 검증·분석용으로만 유지."
+};
+
+// Per-category ADR-054 boundary notes (override the generic serving-usage note).
+const servingUsageCategoryNotes: Partial<Record<SourceCategory, string>> = {
+  roadaddr_building_shape_bundle:
+    "C11 출입구 후보: T-125 검증 결과 no-go(대표점 대비 p95 22.8m·100m 초과 14,433건·C4/C6/C7 악화)로 대표좌표 승격 보류.",
+  national_point_grid_shape:
+    "국가지점번호 serving 좌표는 core.sppn 10m 계산값 — 이 grid 파일은 검증·overlay 전용(좌표 원천 아님).",
+  national_point_grid_center:
+    "국가지점번호 serving 좌표는 core.sppn 10m 계산값 — 이 중심점 파일은 검증 전용(좌표 원천 아님).",
+  civil_service_institution_map:
+    "POI 원천 — 주소 대표 좌표를 대체하지 않음(별도 장소 검색 후보).",
+  address_db_full: "C16 key/row drift 검증 전용 — 좌표·정본 대체 금지.",
+  building_db_full: "C16 key/row drift 검증 전용 — 좌표·정본 대체 금지.",
+  zone_shape_full:
+    "TL_SPPN_MAKAREA는 국가지점번호 표기 의무지역 context — 좌표 원천 아님."
+};
+
+/** ADR-054 explanatory note for a category (per-category override → generic). */
+export function servingUsageNote(category: SourceCategory, usage: SourceServingUsage): string {
+  return servingUsageCategoryNotes[category] ?? servingUsageGenericNotes[usage];
+}
+
 export const matchSetStateLabels: Record<SourceMatchSetState, string> = {
   draft: "초안",
   validated: "검증 완료",

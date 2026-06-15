@@ -7,12 +7,20 @@ The legacy auto-detection upload-SET / load-source surface was removed; the new
 
 from __future__ import annotations
 
+import typing
+
 import httpx
 import pytest
 
 from kortravelgeo.api.app import create_app
 from kortravelgeo.client import AsyncAddressClient
-from kortravelgeo.core.source_categories import CATEGORY_CATALOG
+from kortravelgeo.core.source_categories import (
+    CATEGORY_CATALOG,
+    SERVING_USAGE_BY_CODE,
+    SourceServingUsage,
+    serving_usage_for,
+)
+from kortravelgeo.dto.source import SourceServingUsage as DtoSourceServingUsage
 
 
 async def _get_categories(headers: dict[str, str] | None = None) -> httpx.Response:
@@ -47,6 +55,26 @@ async def test_source_file_categories_endpoint_returns_full_catalog() -> None:
     assert optional["optional"] is True
     assert optional["default_role"] == "validation_optional"
 
+    # T-221: serving_usage (ADR-054) distinguishes serving vs validation-only vs no-go.
+    assert first["serving_usage"] == "serving_core"
+    assert by_code["roadaddr_building_shape_bundle"]["serving_usage"] == "promotion_blocked_no_go"
+    assert by_code["national_point_grid_shape"]["serving_usage"] == "validation_only"
+    assert by_code["civil_service_institution_map"]["serving_usage"] == "separate_feature_candidate"
+    assert by_code["detail_address_db_full"]["serving_usage"] == "typed_feature_candidate"
+
+
+def test_serving_usage_covers_every_category_and_matches_dto_literal() -> None:
+    # Every catalog code has an explicit ADR-054 serving_usage (no silent default).
+    codes = {c.code for c in CATEGORY_CATALOG}
+    assert set(SERVING_USAGE_BY_CODE) == codes
+    # core and dto SourceServingUsage Literals are kept in sync (dto cannot import core).
+    core_values = set(typing.get_args(SourceServingUsage))
+    dto_values = set(typing.get_args(DtoSourceServingUsage))
+    assert core_values == dto_values
+    assert set(SERVING_USAGE_BY_CODE.values()) <= core_values
+    # unknown code falls back to validation_only (never implies active serving).
+    assert serving_usage_for("does_not_exist") == "validation_only"
+
 
 @pytest.mark.asyncio
 async def test_source_file_categories_endpoint_is_ungated_like_other_admin_endpoints() -> None:
@@ -67,5 +95,6 @@ def test_client_list_source_file_categories_matches_catalog() -> None:
         assert info.group_kind == category.group_kind
         assert info.default_role == category.default_role
         assert info.role == category.default_role
+        assert info.serving_usage == serving_usage_for(category.code)
         assert info.optional == category.optional
         assert info.expected_member_kinds == category.expected_member_kinds

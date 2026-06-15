@@ -10,6 +10,7 @@ import {
   matchSetStateLabels,
   rebuildPromoteConfirmation,
   sourceFilesPaths,
+  sourceRoleLabel,
   type SourceMatchSet,
   type SourceMatchSetDetail
 } from "@/lib/source-files";
@@ -174,7 +175,7 @@ function MatchSetDetail({
           {detail.items.map((item) => (
             <tr key={item.source_match_set_item_id}>
               <td>{item.category}</td>
-              <td>{item.role}</td>
+              <td>{sourceRoleLabel(item.role)}</td>
               <td>{item.omitted ? "생략" : "포함"}</td>
               <td>{item.effective_yyyymm ?? "-"}</td>
               <td>{item.source_file_group_id ? `${item.source_file_group_id.slice(0, 12)}…` : "-"}</td>

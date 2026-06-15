@@ -6684,7 +6684,7 @@
       },
       "SourceFileCategoryInfo": {
         "additionalProperties": false,
-        "description": "One entry in the static upload-category catalog (T-201).\n\nSerialized form of ``core.source_categories.SourceCategory`` for the\n``GET /v1/admin/source-file-categories`` endpoint. ``role``/``default_role``\nare UI defaults; the authoritative role lives on\n``ops.source_match_set_items.role``.",
+        "description": "One entry in the static upload-category catalog (T-201).\n\nSerialized form of ``core.source_categories.SourceCategory`` for the\n``GET /v1/admin/source-file-categories`` endpoint. ``role``/``default_role``\nare UI defaults; the authoritative role lives on\n``ops.source_match_set_items.role``. ``serving_usage`` (T-221) is the ADR-054\nclassification the UI uses to avoid rendering validation-only / no-go optional\nsources as if they were active serving inputs.",
         "properties": {
           "category": {
             "enum": [
@@ -6752,6 +6752,17 @@
             ],
             "title": "Role",
             "type": "string"
+          },
+          "serving_usage": {
+            "enum": [
+              "serving_core",
+              "validation_only",
+              "typed_feature_candidate",
+              "separate_feature_candidate",
+              "promotion_blocked_no_go"
+            ],
+            "title": "Serving Usage",
+            "type": "string"
           }
         },
         "required": [
@@ -6759,7 +6770,8 @@
           "label",
           "group_kind",
           "default_role",
-          "role"
+          "role",
+          "serving_usage"
         ],
         "title": "SourceFileCategoryInfo",
         "type": "object"

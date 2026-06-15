@@ -6,9 +6,14 @@ import {
   isValidYyyymm,
   rebuildPromoteConfirmation,
   reconcileIssueLabels,
+  servingUsageLabels,
+  servingUsageNote,
+  servingUsageTones,
   shortHash,
   sourceFilesPaths,
+  sourceRoleLabel,
   suggestYyyymm,
+  type SourceServingUsage,
   type UploadSessionStatus
 } from "@/lib/source-files";
 
@@ -33,6 +38,47 @@ function session(state: UploadSessionStatus["state"]): UploadSessionStatus {
     upload_strategy: "multipart"
   } as unknown as UploadSessionStatus;
 }
+
+describe("serving-usage classification (T-221, ADR-054)", () => {
+  const usages: SourceServingUsage[] = [
+    "serving_core",
+    "validation_only",
+    "typed_feature_candidate",
+    "separate_feature_candidate",
+    "promotion_blocked_no_go"
+  ];
+
+  it("모든 serving_usage 값에 라벨과 톤이 있다", () => {
+    for (const u of usages) {
+      expect(servingUsageLabels[u]).toBeTruthy();
+      expect(["ok", "warn", "error"]).toContain(servingUsageTones[u]);
+    }
+  });
+
+  it("active serving core만 녹색(ok), no-go는 error 톤이다", () => {
+    expect(servingUsageTones.serving_core).toBe("ok");
+    expect(servingUsageTones.promotion_blocked_no_go).toBe("error");
+    // validation/검증·별도 기능 후보는 녹색이 아니어야 한다(오해 방지).
+    expect(servingUsageTones.validation_only).not.toBe("ok");
+    expect(servingUsageTones.separate_feature_candidate).not.toBe("ok");
+  });
+
+  it("C11 카드 note는 T-125 no-go를, 국가지점번호는 계산값을 명시한다", () => {
+    expect(servingUsageNote("roadaddr_building_shape_bundle", "promotion_blocked_no_go")).toContain(
+      "no-go"
+    );
+    expect(servingUsageNote("national_point_grid_shape", "validation_only")).toContain("core.sppn");
+    expect(servingUsageNote("civil_service_institution_map", "separate_feature_candidate")).toContain(
+      "대체하지 않음"
+    );
+  });
+
+  it("match-set item role을 한국어 라벨로 바꾸고 미지값은 원문 유지한다", () => {
+    expect(sourceRoleLabel("validation_optional")).toBe("검증 선택");
+    expect(sourceRoleLabel("build_required")).toBe("필수 구성");
+    expect(sourceRoleLabel("omitted")).toBe("omitted");
+  });
+});
 
 describe("source-files helpers", () => {
   it("non-terminal 세션만 재개 가능으로 판정한다", () => {

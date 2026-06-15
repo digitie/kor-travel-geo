@@ -1057,6 +1057,13 @@ textarea {
   font-size: 12px;
 }
 
+.source-card-serving-note {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #475569;
+}
+
 .source-card-meta {
   display: grid;
   gap: 6px;
