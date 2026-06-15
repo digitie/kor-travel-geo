@@ -28,7 +28,7 @@ T-042는 T-041/ADR-027에서 문서화한 `TL_SPPN_MAKAREA`를 실제 운영 스
 세종 실제 파일:
 
 ```text
-/mnt/f/dev/geodata/juso/unused/구역의 도형/구역의도형_전체분_세종특별자치시.zip
+/mnt/f/dev/geodata/juso/구역의 도형/구역의도형_전체분_세종특별자치시.zip
 ```
 
 ZIP 내부 layer:
@@ -253,7 +253,7 @@ reverse geocode는 도로명/지번 후보가 없어도 `sppn_makarea`가 있으
 KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:15432/kor_travel_geo_t042_sppn \
   TMPDIR=/tmp TMP=/tmp TEMP=/tmp \
   .venv/bin/ktgctl load sppn-makarea \
-  "/mnt/f/dev/geodata/juso/unused/구역의 도형/구역의도형_전체분_세종특별자치시.zip" \
+  "/mnt/f/dev/geodata/juso/구역의 도형/구역의도형_전체분_세종특별자치시.zip" \
   --yyyymm 202605
 ```
 

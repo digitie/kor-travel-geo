@@ -98,7 +98,7 @@ SIG_CD, ENT_MAN_NO
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_building_shape_bundle.py \
   --bundle-zip "/mnt/f/dev/geodata/juso/unused/도로명주소 건물 도형/건물도형_전체분_세종특별자치시.zip" \
-  --electronic-map-sido "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/세종특별자치시"
+  --electronic-map-sido "/mnt/f/dev/geodata/juso/도로명주소 전자지도/세종특별자치시"
 ```
 
 경남 full key 비교는 NTFS의 `TL_SPBD_BULD.dbf` 126만 행을 스캔하므로 일반 테스트에서는 제외한다. 캐시 상태에 따라 수십 초에서 2분 안팎이 걸릴 수 있으며, 이번 PR의 선택형 pytest 재실행은 18.48초였다.
@@ -106,7 +106,7 @@ TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_building_shape_b
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_building_shape_bundle.py \
   --bundle-zip "/mnt/f/dev/geodata/juso/unused/도로명주소 건물 도형/건물도형_전체분_경상남도.zip" \
-  --electronic-map-sido "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/경상남도"
+  --electronic-map-sido "/mnt/f/dev/geodata/juso/도로명주소 전자지도/경상남도"
 ```
 
 선택형 pytest:

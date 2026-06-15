@@ -30,7 +30,7 @@ T-213 전국 라이브데이터 로딩 결과는 T-214/T-215의 기준 입력이
 아래는 형식 예시다. 실제 secret은 로컬 파일에만 둔다.
 
 ```bash
-KTG_PG_DSN=postgresql+psycopg://<user>:<password>@<host>:5432/kor_travel_geo_t213
+KTG_PG_DSN=postgresql+psycopg://<user>:<password>@localhost:15434/kor_travel_geo_t213_<YYYYMMDD>[_rN]
 KTG_RUSTFS_ENABLED=true
 KTG_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101
 KTG_RUSTFS_BUCKET=kor-travel-geo
