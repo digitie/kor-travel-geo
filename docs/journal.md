@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-215 phase ② 튜닝·최종 검증 평가 완료)
+
+**작업**: T-213 r3 전용 baseline(`kor_travel_geo_t213_20260615_r3`, serving release `54e17e80-312e-46da-a58f-d8b10be37c85`)에서 T-215 preflight, C1~C10 재실행, C11~C17 run-validation, v1/v2 geocode/search/reverse/zipcode smoke, SQL/REST c64 재측정을 수행했다. 검증 artifact는 `F:\dev\geodata\t215-acceptance\20260615-r1\`에 남겼다.
+
+**결과**: Preflight는 DB/release/snapshot/source match set/row count가 모두 일치했다. v1/v2 smoke는 `경기도 용인시 수지구 성복1로 35` 기준으로 geocode/search/reverse/zipcode 모두 HTTP 200/`OK`였다. C1~C10 새 report는 `consistency_87ce6c3f2d574cfca39976a5a8f74f3d`, `severity_max=ERROR`다. C2 32,496건, C4 `over_500m=16`, C6 803건, C7 6,815건은 known data-quality 상태로 남았고, C10은 `tl_juso_text=202605`와 나머지 `202604` 혼합 WARN이다.
+
+**주의**: C11~C17 run-validation은 현 T-213 r3 `serving_recommended` match set에 보강 검증 원천이 없어 7건 모두 `skipped`였고 실패/quarantine은 0건이었다. SQL c64 재측정은 error 0건, worst p95 `Q4_SEARCH/search_fuzzy=308.617ms`였지만, REST c64 sample은 pool `20/64`에서도 error 0건, worst p95 `Q3_FUZZY_GEOCODE/geocode_fuzzy_hint=3631.900ms`로 T-214보다 크게 악화됐다. REST c64 tail과 C11~C17 optional source run-validation은 T-126 후속으로 분리했다. 상세: `docs/t215-phase2-final-acceptance.md`.
+
 ## 2026-06-15 (T-214 phase ② 성능평가·벤치 완료)
 
 **작업**: T-213 r3 전용 baseline(`kor_travel_geo_t213_20260615_r3`, RustFS `kor-travel-geo/t213/20260615-rerun3`, serving release `54e17e80-312e-46da-a58f-d8b10be37c85`)을 preflight로 확인한 뒤 T-214 benchmark를 실행했다. T-213 r3 full-load/rebuild-db 로그를 기준 load 벤치로 사용했고, T-047 SQL/REST 하네스, T-035 MV refresh/swap 하네스, source registry deep rehash/multipart synthetic 하네스, 실제 RustFS quick/deep reconcile을 실행했다.
