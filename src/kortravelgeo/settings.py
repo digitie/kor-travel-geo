@@ -129,6 +129,8 @@ class Settings(BaseSettings):
     # T-228: disk-space fail-fast preflight before a backup dump starts.
     backup_space_safety_factor: float = Field(default=1.3, ge=1.0)
     backup_require_free_space_check: bool = True
+    # T-230: retention janitor keeps at least this many newest backups even if expired.
+    backup_retention_keep_min: int = Field(default=3, ge=0)
     backup_callback_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
         "localhost",
         "127.0.0.1",

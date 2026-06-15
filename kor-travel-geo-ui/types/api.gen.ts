@@ -124,6 +124,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/backups/janitor/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Backup Retention Janitor
+         * @description Expire backups whose TTL passed, keeping ``pinned`` and the newest N (T-230).
+         *
+         *     Archives are regenerable, so this removes the ``.tar.zst`` file and marks the
+         *     artifact ``expired``. Idempotent and serialized by the ``BACKUP_JANITOR``
+         *     advisory lock (concurrent calls return ``skipped_locked``). ``dry_run`` reports
+         *     targets without touching files.
+         */
+        post: operations["run_backup_retention_janitor_v1_admin_backups_janitor_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/backups/{artifact_id}": {
         parameters: {
             query?: never;
@@ -1919,6 +1944,64 @@ export interface components {
             profile: "serving-ready" | "lean-serving" | "forensic";
             /** Retention Days */
             retention_days?: number | null;
+        };
+        /**
+         * BackupRetentionResult
+         * @description T-230 result of one backup retention janitor pass.
+         */
+        BackupRetentionResult: {
+            /** Dry Run */
+            dry_run: boolean;
+            /**
+             * Expired Artifact Ids
+             * @default []
+             */
+            expired_artifact_ids: string[];
+            /**
+             * Expired Count
+             * @default 0
+             */
+            expired_count: number;
+            /**
+             * Failed Artifact Ids
+             * @default []
+             */
+            failed_artifact_ids: string[];
+            /**
+             * Failed Count
+             * @default 0
+             */
+            failed_count: number;
+            /** Keep Min Count */
+            keep_min_count: number;
+            /**
+             * Protected Count
+             * @default 0
+             */
+            protected_count: number;
+            /**
+             * Scanned
+             * @default 0
+             */
+            scanned: number;
+            /**
+             * Skipped Locked
+             * @default false
+             */
+            skipped_locked: boolean;
+        };
+        /**
+         * BackupRetentionRunRequest
+         * @description T-230 backup retention janitor request.
+         */
+        BackupRetentionRunRequest: {
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /** Keep Min Count */
+            keep_min_count?: number | null;
         };
         /** @description Coordinate reference system normalized as EPSG:XXXX */
         CRS: string;
@@ -5672,6 +5755,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackupAllowedDirs"];
+                };
+            };
+        };
+    };
+    run_backup_retention_janitor_v1_admin_backups_janitor_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupRetentionRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupRetentionResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

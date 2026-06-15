@@ -41,6 +41,7 @@ class AdvisoryLockNamespace(IntEnum):
     SOURCE_JANITOR = 0x4B47_00A0
     SOURCE_MATCH_ACTIVATE = 0x4B47_00A1
     SOURCE_REBUILD_DB = 0x4B47_00A2
+    BACKUP_JANITOR = 0x4B47_00A3
 
 
 @dataclass(frozen=True, slots=True)
