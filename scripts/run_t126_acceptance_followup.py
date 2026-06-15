@@ -364,7 +364,10 @@ async def register_optional_sources(
             )
         )
         if validation.outcome == "failed":
-            raise RuntimeError(f"{spec.category} 구조 검증 실패: {validation.reasons}")
+            raise RuntimeError(
+                f"{spec.category} 구조 검증 실패: "
+                f"{_validation_failure_reasons(validation)}"
+            )
         create = await upload_repo.create_session(
             UploadSessionCreateRequest(
                 category=spec.category,
@@ -461,6 +464,15 @@ async def register_optional_sources(
         encoding="utf-8",
     )
     return tuple(registered)
+
+
+def _validation_failure_reasons(validation: GroupValidation) -> tuple[str, ...]:
+    reasons = list(validation.reasons)
+    for part in validation.parts:
+        reasons.extend(f"{part.part_key}: {reason}" for reason in part.reasons)
+    if not reasons:
+        reasons.append(f"outcome={validation.outcome}")
+    return tuple(reasons)
 
 
 def _compression_format(path: Path) -> str:

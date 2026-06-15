@@ -16,6 +16,15 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
+from kortravelgeo.core.source_layers import (
+    ADDRESS_BUNDLE_LAYER,
+    BUNDLE_CONNECTION_LAYER,
+    BUNDLE_ENTRANCE_LAYER,
+    DETAIL_DONG_ENTRANCE_LAYER,
+    DETAIL_DONG_POLYGON_LAYER,
+    MASTER_LAYER_NAMES,
+    ZONE_MAKAREA_LAYER_NAME,
+)
 from kortravelgeo.core.source_validation import (
     GroupManifest,
     ManifestMember,
@@ -23,6 +32,21 @@ from kortravelgeo.core.source_validation import (
 )
 
 _SHP_SUFFIXES = {".shp", ".shx", ".dbf", ".prj"}
+_KNOWN_LAYER_NAMES = tuple(
+    sorted(
+        {
+            *MASTER_LAYER_NAMES,
+            ZONE_MAKAREA_LAYER_NAME,
+            ADDRESS_BUNDLE_LAYER,
+            BUNDLE_ENTRANCE_LAYER,
+            BUNDLE_CONNECTION_LAYER,
+            DETAIL_DONG_POLYGON_LAYER,
+            DETAIL_DONG_ENTRANCE_LAYER,
+        },
+        key=len,
+        reverse=True,
+    )
+)
 
 
 def _member_names(archive: Path) -> list[str]:
@@ -56,7 +80,7 @@ def scan_part_manifest(archive: Path, *, part_key: str) -> PartManifest:
         stem, _, ext = base.rpartition(".")
         suffix = f".{ext.lower()}" if ext else ""
         if suffix in _SHP_SUFFIXES and stem:
-            layers.setdefault(stem.upper(), set()).add(suffix)
+            layers.setdefault(_canonical_layer_name(stem), set()).add(suffix)
         else:
             files.append(ManifestMember(member_path=name, member_kind="file"))
     members = [
@@ -70,6 +94,17 @@ def scan_part_manifest(archive: Path, *, part_key: str) -> PartManifest:
     ]
     members.extend(files)
     return PartManifest(part_key=part_key, members=tuple(members))
+
+
+def _canonical_layer_name(stem: str) -> str:
+    upper = stem.upper()
+    if upper in _KNOWN_LAYER_NAMES:
+        return upper
+    dotted = f".{upper}."
+    for layer in _KNOWN_LAYER_NAMES:
+        if f".{layer}." in dotted:
+            return layer
+    return upper
 
 
 def scan_group_manifest(
