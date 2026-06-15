@@ -133,6 +133,9 @@ class Settings(BaseSettings):
     backup_retention_keep_min: int = Field(default=3, ge=0)
     # T-234: restore hard-fails on PG major / PostGIS major.minor mismatch unless set.
     restore_allow_version_mismatch: bool = False
+    # T-235: cleanup of a partially-filled new_database target on cancel/fail.
+    # quarantine (rename) | drop | keep. replace_current is never auto-cleaned.
+    restore_failed_target_cleanup: str = "quarantine"
     backup_callback_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
         "localhost",
         "127.0.0.1",
