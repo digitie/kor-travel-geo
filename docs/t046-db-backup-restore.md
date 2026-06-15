@@ -499,7 +499,7 @@ T-050 2차 이후 callback은 현재 구현된 terminal delivery 경로(`done`, 
 
 T-046 1차 구현에서 아직 완전 자동화하지 않은 실패/예외 항목:
 
-- 디스크 여유 공간 사전 추정은 아직 명시적으로 계산하지 않는다. `pg_dump`/`tar` 실패는 job 실패와 artifact `failed` 상태로 남긴다.
+- ~~디스크 여유 공간 사전 추정은 아직 명시적으로 계산하지 않는다.~~ **T-228에서 구현됨**: `run_backup_job`이 dump 시작 전(디렉터리 생성 전) `pg_database_size × backup_space_safety_factor(기본 1.3)`로 temp(dump)·destination(archive) 여유 공간을 `estimate_backup_space_requirement`로 추정하고, 부족하면 `InvalidInputError`로 fail-fast한다(temp·destination 동일 파일시스템이면 합산). `KTG_BACKUP_REQUIRE_FREE_SPACE_CHECK=false`로 우회. `pg_dump`/`tar` 실패는 여전히 job 실패와 artifact `failed` 상태로 남긴다.
 - callback retry/backoff와 attempt 기록은 T-050 2차에서 구현했다. 수신자 측 replay 저장소는 이 저장소가 관리하지 않으므로, 운영자가 callback endpoint에서 timestamp window와 callback ID de-duplication을 적용해야 한다. retry 중복 처리는 `(artifact_id, event)` 멱등 key를 별도로 둔다.
 - 복원 중 취소된 target DB 자동 drop은 아직 구현하지 않았다. 운영 안전을 위해 target DB는 새 빈 DB로 제한하고, 취소/실패 후 정리는 운영자가 명시적으로 수행한다.
 - PostgreSQL/PostGIS major mismatch는 manifest에 기록하지만 restore preflight에서 hard fail로 막지는 않는다.

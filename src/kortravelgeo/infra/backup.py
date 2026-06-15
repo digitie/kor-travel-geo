@@ -175,6 +175,34 @@ async def run_backup_job(
         await progress(progress=0.02, stage="preflight", message="backup preflight 시작")
         _preflight_backup_tools()
         _ensure_not_cancelled(cancel_event)
+        if settings.backup_require_free_space_check:
+            db_size_bytes = await _query_database_size_bytes(engine)
+            estimate = estimate_backup_space_requirement(
+                db_size_bytes=db_size_bytes,
+                settings=settings,
+                temp_dir=settings.backup_temp_dir,
+                destination_dir=destination_dir,
+            )
+            await progress(
+                progress=0.03,
+                stage="preflight",
+                message=(
+                    f"disk preflight: db={format_bytes(db_size_bytes)} "
+                    f"필요(temp/dest)={format_bytes(estimate.required_temp_bytes)}/"
+                    f"{format_bytes(estimate.required_dest_bytes)} "
+                    f"여유(temp/dest)={format_bytes(estimate.free_temp_bytes)}/"
+                    f"{format_bytes(estimate.free_dest_bytes)} same_fs={estimate.same_filesystem}"
+                ),
+            )
+            if not estimate.ok:
+                msg = (
+                    "insufficient disk space for backup "
+                    f"(db={db_size_bytes}B x factor {settings.backup_space_safety_factor}; "
+                    f"free temp={estimate.free_temp_bytes}B dest={estimate.free_dest_bytes}B; "
+                    f"same_fs={estimate.same_filesystem}). "
+                    "Set KTG_BACKUP_REQUIRE_FREE_SPACE_CHECK=false to override."
+                )
+                raise InvalidInputError(msg)
         destination_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(destination_dir, 0o700)
         work_dir.mkdir(parents=True, exist_ok=True)
@@ -1493,6 +1521,79 @@ def _preflight_backup_tools() -> None:
     if missing:
         msg = f"backup tools missing: {', '.join(missing)}"
         raise InvalidInputError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class BackupSpaceEstimate:
+    """Disk-space sufficiency estimate for a backup (T-228).
+
+    Conservative: dump (temp) and archive (destination) are each estimated at
+    ``database_size_bytes x backup_space_safety_factor``. When temp and destination
+    share a filesystem, both coexist during ``tar`` so their requirements are summed.
+    """
+
+    db_size_bytes: int
+    required_temp_bytes: int
+    required_dest_bytes: int
+    free_temp_bytes: int
+    free_dest_bytes: int
+    same_filesystem: bool
+    ok: bool
+
+
+def _existing_ancestor(path: Path) -> Path:
+    """Nearest existing ancestor of ``path`` (so ``disk_usage`` works pre-mkdir)."""
+    candidate = path.expanduser().resolve(strict=False)
+    while not candidate.exists() and candidate != candidate.parent:
+        candidate = candidate.parent
+    return candidate
+
+
+def _same_filesystem(a: Path, b: Path) -> bool:
+    try:
+        return a.stat().st_dev == b.stat().st_dev
+    except OSError:
+        return a == b
+
+
+def estimate_backup_space_requirement(
+    *,
+    db_size_bytes: int,
+    settings: Settings,
+    temp_dir: Path,
+    destination_dir: Path,
+) -> BackupSpaceEstimate:
+    factor = settings.backup_space_safety_factor
+    required_temp = int(db_size_bytes * factor)
+    required_dest = int(db_size_bytes * factor)
+    temp_anchor = _existing_ancestor(temp_dir)
+    dest_anchor = _existing_ancestor(destination_dir)
+    free_temp = shutil.disk_usage(temp_anchor).free
+    free_dest = shutil.disk_usage(dest_anchor).free
+    same_fs = _same_filesystem(temp_anchor, dest_anchor)
+    if same_fs:
+        ok = free_temp >= required_temp + required_dest
+    else:
+        ok = free_temp >= required_temp and free_dest >= required_dest
+    return BackupSpaceEstimate(
+        db_size_bytes=db_size_bytes,
+        required_temp_bytes=required_temp,
+        required_dest_bytes=required_dest,
+        free_temp_bytes=free_temp,
+        free_dest_bytes=free_dest,
+        same_filesystem=same_fs,
+        ok=ok,
+    )
+
+
+async def _query_database_size_bytes(engine: AsyncEngine) -> int:
+    async with engine.connect() as conn:
+        value = (
+            await conn.execute(
+                text("SELECT pg_database_size(current_database())::bigint AS size")
+            )
+        ).scalar_one()
+    return int(value or 0)
 
 
 def _preflight_restore_tools() -> None:
