@@ -77,6 +77,7 @@ from kortravelgeo.dto.admin import (
     UploadSidoZipResponse,
 )
 from kortravelgeo.dto.source import (
+    TERMINAL_UPLOAD_SESSION_STATES,
     EpostServerFetchRequest,
     EpostServerFetchResponse,
     GroupValidationResult,
@@ -2464,24 +2465,11 @@ def _audit_request(request: Request) -> _AuditRequest:
 # --- Source upload-session helpers (T-203a) -------------------------------
 
 #: Terminal session states for the SSE loop (mirrors jobs events' done set).
-_UPLOAD_TERMINAL_STATES = frozenset(
-    {
-        "registered",
-        "available",
-        "quarantined",
-        "cancelled",
-        "expired",
-        "registration_expired",
-        "failed_upload",
-        "failed_extract",
-        "failed_structure",
-        "failed_hash",
-        "failed_rustfs_put",
-        "failed_rustfs_verify",
-        "failed_storage_state",
-        "failed_register",
-    }
-)
+# SSE stream-end states reuse the canonical terminal set (single source of truth).
+# Crucially this EXCLUDES ``failed_register`` (retryable in the same session — see
+# register_upload_session) and the non-session state ``quarantined``, so the live
+# stream does not end on a state the client treats as still in-progress (#176 review).
+_UPLOAD_TERMINAL_STATES = TERMINAL_UPLOAD_SESSION_STATES
 
 
 def _ensure_known_slot(session: UploadSessionStatus, slot_id: str) -> None:
