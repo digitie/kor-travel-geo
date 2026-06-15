@@ -281,6 +281,7 @@ asyncio.run(main())
 * [`docs/data-model.md`](docs/data-model.md) — PostgreSQL DB 스키마 Reference
 * [`docs/backend-package.md`](docs/backend-package.md) — `kortravelgeo` 백엔드 사양서
 * [`docs/frontend-package.md`](docs/frontend-package.md) — `kor-travel-geo-ui` 프론트엔드 사양서
+* [`docs/optional-source-usage-decision.md`](docs/optional-source-usage-decision.md) — optional 원천 사용·미사용 최종 판정
 * [`docs/agent-guide.md`](docs/agent-guide.md) — AI 에이전트 작업 가이드
 * [`docs/external-apis.md`](docs/external-apis.md) — 외부 API 연동 가이드
 * [`docs/tasks.md`](docs/tasks.md) / [`docs/resume.md`](docs/resume.md) / [`docs/journal.md`](docs/journal.md) — 백로그 및 작업 일지

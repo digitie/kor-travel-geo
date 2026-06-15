@@ -2,6 +2,8 @@
 
 T-125는 C11 출입구 후보를 `mv_geocode_target` 대표 좌표 ranking에 편입해도 되는지 판단하기 위한 **승인 전 검증 gate**다. 이 문서는 T-119 구현 계획서가 아니며, 아래 증거가 모두 채워지기 전에는 ADR-051을 `accepted`로 전환하거나 T-119를 구현하지 않는다.
 
+2026-06-15 실행 결과 T-125 gate는 **blocked / no-go**다. C11 후보는 C3 결측을 크게 줄이지만 기존 대표점 대비 p95/p99/outlier 임계값을 넘고 C4/C6/C7 ERROR가 증가했다. 상세 수치와 artifact 위치는 `docs/t125-c11-serving-preflight-result.md`에 둔다.
+
 ## 범위
 
 - 대상: C11 출입구 계열 후보 중 `mv_geocode_target` 대표 좌표를 바꿀 수 있는 source.
