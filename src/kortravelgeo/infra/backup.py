@@ -526,11 +526,29 @@ async def run_restore_job(
                 stage="validate",
                 message="복원 후 consistency는 별도 target API 연결에서 수행해야 함",
             )
+        reconcile_block: dict[str, Any] | None = None
+        if req.run_row_count_check:
+            # T-233: catch a silent partial restore by comparing manifest row counts /
+            # MV / sppn against the restored DB. Local import avoids an import cycle.
+            from kortravelgeo.infra.restore_reconcile import compare_restore_against_manifest
+
+            await progress(
+                progress=0.93, stage="validate", message="복원 후 row count reconcile 시작"
+            )
+            reconcile = await compare_restore_against_manifest(manifest, target_dsn)
+            reconcile_block = reconcile.model_dump()
+            if not reconcile.ok:
+                await progress(
+                    progress=0.94,
+                    stage="validate",
+                    message=f"row count reconcile 경고: {'; '.join(reconcile.warnings)}",
+                )
         restore_manifest = {
             "source_artifact_id": source_artifact.artifact_id if source_artifact else None,
             "archive_path": str(archive_path),
             "target_database": target_database,
             "source_manifest": manifest,
+            "row_count_verification": reconcile_block,
         }
         updated_restore_artifact = await repo.update_artifact(
             restore_artifact.artifact_id,
