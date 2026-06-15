@@ -11,7 +11,18 @@ from kortravelgeo.infra.backup import (
     _postgis_major_minor,
     _postgres_major,
     check_restore_version_compatibility,
+    restore_version_mismatch_blocker,
 )
+
+
+def _blocker(pg_src: str | None, pg_tgt: str | None, *, allow: bool) -> str | None:
+    return restore_version_mismatch_blocker(
+        manifest_postgres_version=pg_src,
+        manifest_postgis_version="3.5.2",
+        target_postgres_version=pg_tgt,
+        target_postgis_version="3.5.2",
+        allow_mismatch=allow,
+    )
 
 
 def _notes(pg_src: str | None, pg_tgt: str | None, gis_src: str | None, gis_tgt: str | None):
@@ -64,3 +75,18 @@ def test_version_parsers() -> None:
     assert _postgis_major_minor("3.5.2") == "3.5"
     assert _postgis_major_minor("3.4") == "3.4"
     assert _postgis_major_minor(None) is None
+
+
+def test_guard_blocks_major_mismatch_when_not_allowed() -> None:
+    reason = _blocker("16.3", "17.0", allow=False)
+    assert reason is not None
+    assert "PostgreSQL major mismatch" in reason
+
+
+def test_guard_allows_override() -> None:
+    assert _blocker("16.3", "17.0", allow=True) is None
+
+
+def test_guard_passes_matching_versions() -> None:
+    assert _blocker("16.3", "16.4", allow=False) is None  # minor diff allowed
+    assert _blocker("16.3", "16.3", allow=False) is None

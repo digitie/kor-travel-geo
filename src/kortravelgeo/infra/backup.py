@@ -470,6 +470,29 @@ async def run_restore_job(
             msg = f"restore archive does not contain dump directory: {archive_path}"
             raise InvalidInputError(msg)
 
+        # T-234: hard-fail on PostgreSQL major / PostGIS major.minor mismatch unless
+        # explicitly overridden. new_database targets share the current cluster, so the
+        # current engine's cluster version is the restore target's version.
+        manifest_db = manifest.get("database") or {}
+        allow_version_mismatch = (
+            req.allow_version_mismatch or settings.restore_allow_version_mismatch
+        )
+        target_pg_version, target_gis_version = await _query_cluster_versions(engine)
+        version_block = restore_version_mismatch_blocker(
+            manifest_postgres_version=manifest_db.get("postgres_version"),
+            manifest_postgis_version=manifest_db.get("postgis_version"),
+            target_postgres_version=target_pg_version,
+            target_postgis_version=target_gis_version,
+            allow_mismatch=allow_version_mismatch,
+        )
+        if version_block is not None:
+            msg = (
+                f"restore blocked by version mismatch: {version_block}. "
+                "Set allow_version_mismatch=true "
+                "(or KTG_RESTORE_ALLOW_VERSION_MISMATCH=true) to override."
+            )
+            raise InvalidInputError(msg)
+
         restore_cmd = build_pg_restore_command(
             target_dsn,
             dump_dir,
@@ -1419,6 +1442,30 @@ def check_restore_version_compatibility(
     return notes
 
 
+def restore_version_mismatch_blocker(
+    *,
+    manifest_postgres_version: str | None,
+    manifest_postgis_version: str | None,
+    target_postgres_version: str | None,
+    target_postgis_version: str | None,
+    allow_mismatch: bool,
+) -> str | None:
+    """Block message if a restore should hard-fail on version mismatch, else ``None``.
+
+    T-234: a major PostgreSQL / major.minor PostGIS difference blocks the restore
+    unless ``allow_mismatch`` is set. Reuses :func:`check_restore_version_compatibility`.
+    """
+    notes = check_restore_version_compatibility(
+        manifest_postgres_version=manifest_postgres_version,
+        manifest_postgis_version=manifest_postgis_version,
+        target_postgres_version=target_postgres_version,
+        target_postgis_version=target_postgis_version,
+    )
+    if notes and not allow_mismatch:
+        return "; ".join(notes)
+    return None
+
+
 async def _query_cluster_versions(engine: AsyncEngine) -> tuple[str | None, str | None]:
     async with engine.connect() as conn:
         row = (
@@ -1549,14 +1596,18 @@ async def run_restore_dry_run(
         target_pg, target_gis = await _query_cluster_versions(engine)
     except Exception as exc:
         warnings.append(f"target version query skipped: {exc}")
-    warnings.extend(
-        check_restore_version_compatibility(
-            manifest_postgres_version=backup_pg,
-            manifest_postgis_version=backup_gis,
-            target_postgres_version=target_pg,
-            target_postgis_version=target_gis,
-        )
+    version_notes = check_restore_version_compatibility(
+        manifest_postgres_version=backup_pg,
+        manifest_postgis_version=backup_gis,
+        target_postgres_version=target_pg,
+        target_postgis_version=target_gis,
     )
+    if version_notes:
+        # mirror the actual guard (T-234): a mismatch blocks unless override is set.
+        if req.allow_version_mismatch or settings.restore_allow_version_mismatch:
+            warnings.extend(version_notes)
+        else:
+            blockers.extend(version_notes)
 
     return RestoreDryRunResult(
         can_restore=not blockers,

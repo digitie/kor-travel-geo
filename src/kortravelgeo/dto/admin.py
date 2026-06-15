@@ -112,6 +112,7 @@ class RestoreCreateRequest(FrozenModel):
     run_analyze: bool = True
     run_smoke_test: bool = True
     run_consistency: bool = False
+    allow_version_mismatch: bool = False
     callback_url: str | None = None
     confirmation: str | None = Field(default=None, max_length=200)
 
