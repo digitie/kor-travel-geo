@@ -3528,6 +3528,11 @@ export interface components {
              */
             run_consistency: boolean;
             /**
+             * Run Row Count Check
+             * @default true
+             */
+            run_row_count_check: boolean;
+            /**
              * Run Smoke Test
              * @default true
              */

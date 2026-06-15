@@ -112,6 +112,7 @@ class RestoreCreateRequest(FrozenModel):
     run_analyze: bool = True
     run_smoke_test: bool = True
     run_consistency: bool = False
+    run_row_count_check: bool = True
     allow_version_mismatch: bool = False
     callback_url: str | None = None
     confirmation: str | None = Field(default=None, max_length=200)
@@ -656,6 +657,30 @@ class BackupRetentionRunRequest(FrozenModel):
 
     dry_run: bool = False
     keep_min_count: int | None = Field(default=None, ge=0)
+
+
+class RestoreRowCountDiff(FrozenModel):
+    """T-233 per-object row-count comparison (manifest vs restored DB)."""
+
+    object: str
+    expected: int | None = None
+    actual: int
+    match: bool
+
+
+class RestoreReconcileResult(FrozenModel):
+    """T-233 post-restore data reconcile (manifest vs restored DB)."""
+
+    ok: bool
+    target_database: str | None = None
+    row_count_diffs: tuple[RestoreRowCountDiff, ...] = ()
+    mv_geocode_target_rows: int | None = None
+    mv_geocode_text_search_rows: int | None = None
+    mv_nonempty_ok: bool | None = None
+    sppn_rows: int | None = None
+    pt_source_distribution: dict[str, int] | None = None
+    source_set_yyyymm: dict[str, str | None] | None = None
+    warnings: tuple[str, ...] = ()
 
 
 class RestoreDryRunResult(FrozenModel):

@@ -5078,6 +5078,11 @@
             "title": "Run Consistency",
             "type": "boolean"
           },
+          "run_row_count_check": {
+            "default": true,
+            "title": "Run Row Count Check",
+            "type": "boolean"
+          },
           "run_smoke_test": {
             "default": true,
             "title": "Run Smoke Test",
