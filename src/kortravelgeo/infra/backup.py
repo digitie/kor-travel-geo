@@ -11,6 +11,7 @@ import re
 import secrets
 import shutil
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -381,6 +382,7 @@ async def run_restore_job(
     if target_database is None:
         msg = "restore target database name could not be resolved"
         raise InvalidInputError(msg)
+    job_owns_target = False  # T-235: True only after we verify the target was empty
     if req.mode == "replace_current":
         confirmation = validate_replace_current_restore_request(
             req,
@@ -412,6 +414,9 @@ async def run_restore_job(
             msg = "restore target_database must differ from the current database"
             raise InvalidInputError(msg)
         await ensure_target_database_empty(target_dsn)
+        # The target was empty when we started, so this job owns whatever it fills —
+        # safe to drop/quarantine on cancel/fail (T-235).
+        job_owns_target = True
 
     artifact_id = str(uuid4())
     work_dir = (settings.backup_temp_dir / f"restore_{artifact_id}").resolve()
@@ -625,6 +630,14 @@ async def run_restore_job(
             manifest={"error": "cancelled"},
             finished=True,
         )
+        await _cleanup_restore_target_on_failure(
+            repo,
+            settings,
+            mode=req.mode,
+            target_dsn=target_dsn,
+            job_owns_target=job_owns_target,
+            job_id=_payload_job_id(payload),
+        )
         raise
     except Exception as exc:
         failed = await repo.update_artifact(
@@ -641,9 +654,64 @@ async def run_restore_job(
             )
             if callback_result is not None:
                 await record_callback_delivery(repo, failed, callback_result)
+        await _cleanup_restore_target_on_failure(
+            repo,
+            settings,
+            mode=req.mode,
+            target_dsn=target_dsn,
+            job_owns_target=job_owns_target,
+            job_id=_payload_job_id(payload),
+        )
         raise
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+async def _cleanup_restore_target_on_failure(
+    repo: AdminRepository,
+    settings: Settings,
+    *,
+    mode: str,
+    target_dsn: str,
+    job_owns_target: bool,
+    job_id: str | None,
+) -> None:
+    """Best-effort drop/quarantine of a job-owned target on restore failure (T-235).
+
+    Never raises (must not mask the original restore error) and never touches a
+    ``replace_current`` target.
+    """
+    action = restore_target_cleanup_action(
+        mode=mode,
+        policy=settings.restore_failed_target_cleanup,
+        job_owns_target=job_owns_target,
+    )
+    if action is None:
+        return
+    try:
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        result_name = await cleanup_orphan_restore_target(
+            target_dsn, action=action, timestamp=timestamp
+        )
+        await repo.record_audit_event(
+            action="db_restore.target_cleanup",
+            actor_type="system",
+            outcome="succeeded",
+            payload={"action": action, "result": result_name},
+            resource_type="load_job",
+            job_id=job_id,
+        )
+    except Exception:
+        # cleanup is best-effort; never mask the original restore error.
+        with suppress(Exception):
+            await repo.record_audit_event(
+                action="db_restore.target_cleanup",
+                actor_type="system",
+                outcome="failed",
+                payload={"action": action},
+                resource_type="load_job",
+                job_id=job_id,
+            )
 
 
 async def run_restore_source_verification(
@@ -1458,6 +1526,65 @@ def check_restore_version_compatibility(
     if src_gis is not None and tgt_gis is not None and src_gis != tgt_gis:
         notes.append(f"PostGIS major.minor mismatch: backup {src_gis} vs target {tgt_gis}")
     return notes
+
+
+def restore_target_cleanup_action(
+    *,
+    mode: str,
+    policy: str,
+    job_owns_target: bool,
+) -> str | None:
+    """Whether/how to clean a partially-filled restore target on cancel/fail (T-235).
+
+    ``replace_current`` (the live serving DB) is **never** auto-cleaned. Otherwise only
+    a target this job filled (verified empty at start → ``job_owns_target``) is eligible;
+    ``policy`` selects ``drop`` | ``quarantine`` (rename) | ``keep`` (returns ``None``).
+    """
+    if mode == "replace_current" or not job_owns_target:
+        return None
+    if policy in ("drop", "quarantine"):
+        return policy
+    return None
+
+
+async def cleanup_orphan_restore_target(
+    target_dsn: str,
+    *,
+    action: str,
+    timestamp: str,
+) -> str:
+    """Drop or quarantine (rename) a restore target via a maintenance connection (T-235).
+
+    Returns the dropped name (``drop``) or the new quarantine name (``quarantine``).
+    Runs in AUTOCOMMIT because DROP/ALTER DATABASE cannot run in a transaction.
+    """
+    url = make_url(target_dsn)
+    target_db = url.database
+    if not target_db:
+        msg = "cannot clean restore target: DSN has no database"
+        raise InvalidInputError(msg)
+    maintenance_engine = create_async_engine(
+        str(url.set(database="postgres")), isolation_level="AUTOCOMMIT"
+    )
+    try:
+        async with maintenance_engine.connect() as conn:
+            await conn.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = :db AND pid <> pg_backend_pid()"
+                ),
+                {"db": target_db},
+            )
+            if action == "drop":
+                await conn.execute(text(f'DROP DATABASE IF EXISTS "{target_db}"'))
+                return target_db
+            quarantine_name = f"{target_db}_quarantine_{timestamp}"
+            await conn.execute(
+                text(f'ALTER DATABASE "{target_db}" RENAME TO "{quarantine_name}"')
+            )
+            return quarantine_name
+    finally:
+        await maintenance_engine.dispose()
 
 
 def restore_version_mismatch_blocker(
