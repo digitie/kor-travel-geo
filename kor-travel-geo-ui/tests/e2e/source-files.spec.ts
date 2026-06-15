@@ -110,7 +110,7 @@ const CAPACITY = {
   ]
 };
 
-const CASE_DEFINITIONS = Array.from({ length: 12 }, (_, index) => ({
+const CASE_DEFINITIONS = Array.from({ length: 17 }, (_, index) => ({
   code: `C${index + 1}`,
   name: `${index + 1}번 케이스`,
   compares: "원천 비교",
@@ -160,6 +160,22 @@ async function mockSourceFilesApi(page: Page): Promise<void> {
     if (pathname.endsWith("/events")) {
       // upload-session SSE: end the stream immediately so the hook closes (no reconnect).
       await route.fulfill({ contentType: "text/event-stream", body: "" });
+      return;
+    }
+    if (pathname.endsWith("/bulk-hard-delete")) {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          requested_count: 1,
+          hard_deleted_count: 1,
+          delete_failed_count: 0,
+          skipped_count: 0,
+          results: [
+            { object_key: "source/electronic_map_full/orphan-36.zip", outcome: "hard_deleted" }
+          ],
+          affected_match_set_ids: []
+        })
+      });
       return;
     }
     const body = resolveAdminBody(pathname);
@@ -212,11 +228,32 @@ test.describe("원천 파일 관리 /admin/source-files", () => {
     await expect(page.getByText("용량 (capacity)")).toBeVisible();
   });
 
-  test("검증 케이스 탭: registry에서 C1~C12를 동적으로 렌더한다", async ({ page }) => {
+  test("검증 케이스 탭: registry에서 C1~C17를 동적으로 렌더한다", async ({ page }) => {
     await mockSourceFilesApi(page);
     await page.goto("/admin/source-files");
     await page.getByRole("tab", { name: "검증 케이스" }).click();
 
-    await expect(page.getByRole("tab", { name: /C12/ })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /C17/ })).toBeVisible();
+  });
+
+  test("RustFS 정합성 탭: 정리 대상 선택→typed confirmation→일괄 영구 삭제", async ({ page }) => {
+    await mockSourceFilesApi(page);
+    await page.goto("/admin/source-files");
+    await page.getByRole("tab", { name: "RustFS 정합성" }).click();
+
+    await page.getByLabel(/정리 대상 선택:/).check();
+    await page.getByRole("button", { name: /선택 항목 영구 삭제/ }).click();
+
+    const dialog = page.getByRole("dialog", { name: "원천 객체 영구 삭제" });
+    await expect(dialog).toBeVisible();
+    const exec = dialog.getByRole("button", { name: /영구 삭제 실행/ });
+    await expect(exec).toBeDisabled();
+    await dialog.getByLabel("hard-delete 확인 문구").fill("HARD-DELETE-SOURCES");
+    await expect(exec).toBeEnabled();
+    await exec.click();
+
+    // 구조화된 결과 요약(raw JSON 아님)
+    const result = page.locator(".panel", { hasText: "최근 결과" });
+    await expect(result.getByText("영구 삭제")).toBeVisible();
   });
 });
