@@ -9,6 +9,7 @@ import { ApiError, postJson, requestJson } from "@/lib/api";
 import { uploadSlotFile, type SlotUploadProgress } from "@/lib/multipart-upload";
 import { useUploadSessionEvents } from "@/lib/use-upload-session-events";
 import {
+  activeServingCategorySet,
   isEpostCategory,
   isResumableSession,
   isValidYyyymm,
@@ -21,6 +22,8 @@ import {
   type EpostServerFetchResponse,
   type SourceFileCategoryCatalog,
   type SourceFileCategoryInfo,
+  type SourceMatchSet,
+  type SourceMatchSetDetail,
   type UploadSessionStatus
 } from "@/lib/source-files";
 
@@ -57,6 +60,23 @@ export function UploadTab() {
       return all.filter(isResumableSession);
     }
   });
+
+  // Active match set → which categories are actually in serving now (T-224).
+  const { data: matchSets = [] } = useQuery({
+    queryKey: ["source-match-sets"],
+    queryFn: () => requestJson<SourceMatchSet[]>(sourceFilesPaths.matchSets())
+  });
+  const activeSet = matchSets.find((set) => set.state === "active");
+  const { data: activeDetail } = useQuery({
+    queryKey: ["source-match-set", activeSet?.source_match_set_id],
+    queryFn: () =>
+      requestJson<SourceMatchSetDetail>(sourceFilesPaths.matchSet(activeSet!.source_match_set_id)),
+    enabled: Boolean(activeSet?.source_match_set_id)
+  });
+  const activeServing = useMemo(
+    () => activeServingCategorySet(activeDetail?.items ?? []),
+    [activeDetail]
+  );
 
   function onSlotProgress(next: SlotUploadProgress) {
     setProgress((current) => ({ ...current, [next.slot]: next }));
@@ -184,6 +204,8 @@ export function UploadTab() {
             <CategoryCard
               category={category}
               isActive={activeCategory === category.category}
+              hasActiveSet={Boolean(activeSet)}
+              isActiveServing={activeServing.has(category.category)}
               key={category.category}
               onSelect={() =>
                 setActiveCategory(activeCategory === category.category ? null : category.category)
@@ -247,6 +269,8 @@ function CategoryCard({
   fetchingEpost,
   epostError,
   isActive,
+  hasActiveSet,
+  isActiveServing,
   onEpostFetch,
   onSelect,
   onUpload,
@@ -257,6 +281,10 @@ function CategoryCard({
   fetchingEpost: boolean;
   epostError: string | null;
   isActive: boolean;
+  /** Whether an active serving match set exists (else membership is unknown). */
+  hasActiveSet: boolean;
+  /** Whether this category is a non-omitted item of the active match set. */
+  isActiveServing: boolean;
   onEpostFetch: (userYyyymm: string) => void;
   onSelect: () => void;
   onUpload: (userYyyymm: string, file: File) => void;
@@ -276,13 +304,29 @@ function CategoryCard({
           <strong>{category.label}</strong>
           <span>{category.category}</span>
         </button>
-        <StatusBadge
-          value={servingUsageLabels[category.serving_usage]}
-          tone={servingUsageTones[category.serving_usage]}
-        />
+        <div className="source-card-badges">
+          <StatusBadge
+            value={servingUsageLabels[category.serving_usage]}
+            tone={servingUsageTones[category.serving_usage]}
+          />
+          {hasActiveSet ? (
+            <StatusBadge
+              value={isActiveServing ? "현재 서빙 포함" : "현재 서빙 미포함"}
+              tone={isActiveServing ? "ok" : "warn"}
+            />
+          ) : null}
+        </div>
       </header>
       <p className="source-card-serving-note">
         {servingUsageNote(category.category, category.serving_usage)}
+        {hasActiveSet && !isActiveServing ? (
+          <>
+            {" "}
+            <span className="source-card-serving-emphasis">
+              등록해도 활성 매칭 세트에 포함·활성화되기 전에는 서빙에 반영되지 않습니다(등록됨 ≠ 활용 중).
+            </span>
+          </>
+        ) : null}
       </p>
       <dl className="source-card-meta">
         <div>

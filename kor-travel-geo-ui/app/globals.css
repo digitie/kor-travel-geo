@@ -1057,11 +1057,22 @@ textarea {
   font-size: 12px;
 }
 
+.source-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .source-card-serving-note {
   margin: 0 0 10px;
   font-size: 0.8rem;
   line-height: 1.4;
   color: #475569;
+}
+
+.source-card-serving-emphasis {
+  color: #b45309;
+  font-weight: 600;
 }
 
 .source-card-meta {

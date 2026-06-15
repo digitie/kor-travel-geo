@@ -126,6 +126,15 @@ export function servingUsageNote(category: SourceCategory, usage: SourceServingU
   return servingUsageCategoryNotes[category] ?? servingUsageGenericNotes[usage];
 }
 
+/**
+ * Category codes the (active) match set actually contributes to serving = its
+ * non-omitted items (T-224). Lets the upload UX show whether an uploaded source is
+ * "현재 서빙 포함" vs merely "등록됨", so "등록됨" is never read as "활용 중".
+ */
+export function activeServingCategorySet(items: readonly SourceMatchSetItem[]): Set<string> {
+  return new Set(items.filter((item) => !item.omitted).map((item) => item.category));
+}
+
 export const matchSetStateLabels: Record<SourceMatchSetState, string> = {
   draft: "초안",
   validated: "검증 완료",
