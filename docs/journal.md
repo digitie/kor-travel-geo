@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-132 C11 guarded 후보 검증 harness)
+
+**작업**: `scripts/run_t132_c11_guarded_policy_validation.py`를 추가해 T-131의 `centroid_c4_50_c6_c7_move_500` 정책을 threshold flag 기반으로 반복 검증할 수 있게 했다. 정책 mode, sample CSV/GeoJSON export, 결정적 `summary.json` schema, `coord_source_detail="c11_bundle_guarded"` sample column, 작업 테이블 cleanup 검증을 포함한다.
+
+**결과**: T-213 r3 DB에서 T-131 feature table과 T-125 candidate table을 재사용해 live 검증을 실행했다. 정책은 후보 3,482,270건을 사용해 C3 결측을 같은 수만큼 채우고 candidate C4/C6/C7 오류 0건, p99 이동 64.981m, max 495.345m, 500m 초과 0건을 재현했다. 100m 초과 이동 10,099건 warning이 남아 active serving promotion은 계속 금지한다.
+
+**산출물/검증**: Artifact는 `F:\dev\geodata\t132-c11-guarded-policy-validation\20260616-r1\`, 상세는 `docs/t132-c11-guarded-policy-validation.md`에 기록했다. 실행 후 `_ktg_t125_*`와 `_ktg_t131_c11_policy_features` 작업 테이블 cleanup `passed=true`를 확인했다. Windows와 WSL ext4 미러에서 focused pytest/ruff/mypy가 통과했다.
+
 ## 2026-06-16 (PR #210~#217 사후 리뷰 후속 반영)
 
 **작업**: Claude Code의 최근 병합 PR #205/#206/#208/#210/#211/#213/#214/#215/#217에 사후 리뷰 코멘트를 남기고, M급 결함 중 복원 preflight/cleanup에 직접 영향을 주는 항목을 fixup으로 반영했다.
