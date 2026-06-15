@@ -10,6 +10,7 @@ const CATALOG = {
       label: "도로명주소 한글 전체분",
       role: "build_required",
       default_role: "build_required",
+      serving_usage: "serving_core",
       group_kind: "single_file",
       optional: false,
       expected_member_kinds: ["juso"]
@@ -19,6 +20,7 @@ const CATALOG = {
       label: "epost 사서함",
       role: "enrichment_candidate",
       default_role: "enrichment_candidate",
+      serving_usage: "separate_feature_candidate",
       group_kind: "single_file",
       optional: true,
       expected_member_kinds: []
@@ -208,12 +210,46 @@ test.describe("원천 파일 관리 /admin/source-files", () => {
     await expect(epostCard.getByRole("button", { name: "epost 받기" })).toBeEnabled();
   });
 
+  test("업로드 탭: serving_usage 분류와 현재 서빙 포함/미포함을 구분 표시한다 (T-221/T-224)", async ({
+    page
+  }) => {
+    await mockSourceFilesApi(page);
+    await page.goto("/admin/source-files");
+
+    // serving core(좌표 정본) → '활용 중(서빙)' + 활성 세트에 포함되어 '현재 서빙 포함'.
+    const roadCard = page.locator(".source-card", { hasText: "도로명주소 한글 전체분" });
+    await expect(roadCard.getByText("활용 중(서빙)")).toBeVisible();
+    await expect(roadCard.getByText("현재 서빙 포함")).toBeVisible();
+
+    // 별도 기능 후보(epost) → serving augmentation처럼 보이지 않고 '현재 서빙 미포함'.
+    const epostCard = page.locator(".source-card", { hasText: "epost 사서함" });
+    await expect(epostCard.getByText("별도 기능 후보(서빙 미반영)")).toBeVisible();
+    await expect(epostCard.getByText("현재 서빙 미포함")).toBeVisible();
+    await expect(epostCard.getByText(/등록됨 ≠ 활용 중/)).toBeVisible();
+  });
+
+  test("탭 교차 흐름: 모든 기능 탭을 오가도 선택 상태와 콘텐츠가 유지된다 (smoke)", async ({
+    page
+  }) => {
+    await mockSourceFilesApi(page);
+    await page.goto("/admin/source-files");
+    await expect(page.getByText("도로명주소 한글 전체분")).toBeVisible();
+
+    for (const name of ["목록", "매칭 세트", "RustFS 정합성", "현재 구성", "검증 케이스", "업로드"]) {
+      await page.getByRole("tab", { name }).click();
+      await expect(page.getByRole("tab", { name, selected: true })).toBeVisible();
+    }
+    // 마지막 업로드 탭으로 돌아왔을 때 카테고리 카드가 다시 보인다.
+    await expect(page.getByText("도로명주소 한글 전체분")).toBeVisible();
+  });
+
   test("매칭 세트 탭: 활성 세트와 무결성 경보를 표시한다", async ({ page }) => {
     await mockSourceFilesApi(page);
     await page.goto("/admin/source-files");
     await page.getByRole("tab", { name: "매칭 세트" }).click();
 
-    await expect(page.getByText("활성 세트")).toBeVisible();
+    // 세트명은 목록 span + 상세 패널 제목 두 곳에 나타나므로 first()로 한정한다.
+    await expect(page.getByText("활성 세트").first()).toBeVisible();
     await expect(page.getByText(/무결성 경보/).first()).toBeVisible();
   });
 
