@@ -2,7 +2,7 @@
 
 ## 요약
 
-`GET /v1/address/geocode`는 vworld 호환 응답을 유지하는 주소 → 좌표 API다.
+`GET /v1/address/geocode`는 vworld `getCoord`와 같은 HTTP envelope를 유지하는 주소 → 좌표 API다.
 
 ## 입력
 
@@ -19,11 +19,20 @@
 
 ## 출력
 
-- `status`: `OK`, `NOT_FOUND`, `ERROR`
-- `refined`: vworld 호환 정제 주소 구조
-- `result.point`: `x=lon`, `y=lat`
-- `x_extension.source`: `local`, `api_vworld`, `api_juso`, `cache`
-- `x_extension.bd_mgt_sn`, `rncode_full`, `bjd_cd`, `zip_no`: 로컬 또는 provider에서 얻은 보강 필드
+HTTP 응답 최상위는 항상 `response`다.
+
+- `response.service.name`: `address`
+- `response.service.operation`: `getCoord`
+- `response.status`: `OK`, `NOT_FOUND`, `ERROR`
+- `response.input.type`: `ROAD` 또는 `PARCEL`
+- `response.refined`: vworld 호환 정제 주소 구조. `refine=false` 또는 `simple=true`이면 생략된다.
+- `response.result.point`: `x=lon`, `y=lat`
+- `response.x_extension.source`: `local`, `api_vworld`, `api_juso`, `cache`
+- `response.x_extension.bd_mgt_sn`, `rncode_full`, `bjd_cd`, `zip_no`: 로컬 또는 provider에서 얻은 보강 필드
+
+`simple=true`이면 vworld와 같이 `response.input`과 `response.refined`를 생략한다. `x_extension`은 vworld 원응답에는 없는 자체 확장이므로 ADR-003/ADR-053에 따라 한 키 아래에만 유지한다.
+
+에러는 `response.status="ERROR"`와 `response.error.level/code/text`로 반환한다. 요청 검증 에러의 대표 code는 `PARAM_REQUIRED`, `INVALID_TYPE`, `INVALID_RANGE`다.
 
 ## 예시
 

@@ -37,5 +37,6 @@ def test_reverse_response_item_wire_shape() -> None:
 
     dumped = response.model_dump(mode="json", exclude_none=True)
 
-    assert dumped["result"][0]["type"] == "road"
+    assert dumped["input"]["type"] == "BOTH"
+    assert dumped["result"][0]["type"] == "ROAD"
     assert dumped["result"][0]["zipcode"] == "06236"

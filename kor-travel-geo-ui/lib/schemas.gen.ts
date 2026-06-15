@@ -142,6 +142,8 @@ export const apiSchemaNames = [
   "UploadSessionStatus",
   "UploadSetStatus",
   "UploadSidoZipResponse",
+  "VWorldGeocodeEnvelope",
+  "VWorldReverseEnvelope",
   "ValidationError",
   "ZipSource",
   "ZipcodeInput",

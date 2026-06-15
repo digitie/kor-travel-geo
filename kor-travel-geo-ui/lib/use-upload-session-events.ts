@@ -31,8 +31,17 @@ export function useUploadSessionEvents(
   } = {}
 ): SourceUploadProgressEvent | null {
   const { enabled = true, onTerminal, eventSourceFactory } = options;
-  const [event, setEvent] = useState<SourceUploadProgressEvent | null>(null);
+  const [eventState, setEventState] = useState<{
+    enabled: boolean;
+    event: SourceUploadProgressEvent | null;
+    sessionId: string | null;
+  }>({ enabled, event: null, sessionId });
   const onTerminalRef = useRef(onTerminal);
+  const stateIsStale = eventState.sessionId !== sessionId || eventState.enabled !== enabled;
+
+  if (stateIsStale) {
+    setEventState({ enabled, event: null, sessionId });
+  }
 
   useEffect(() => {
     onTerminalRef.current = onTerminal;
@@ -49,7 +58,6 @@ export function useUploadSessionEvents(
       return;
     }
 
-    setEvent(null);
     const url = `${API_BASE}${backendPath(sourceFilesPaths.uploadSessionEvents(sessionId))}`;
     const source = factory(url);
 
@@ -60,7 +68,7 @@ export function useUploadSessionEvents(
       } catch {
         return; // ignore malformed frames
       }
-      setEvent(parsed);
+      setEventState({ enabled, event: parsed, sessionId });
       if (isTerminalUploadState(parsed.state)) {
         source.close();
         onTerminalRef.current?.();
@@ -79,5 +87,5 @@ export function useUploadSessionEvents(
     };
   }, [sessionId, enabled, eventSourceFactory]);
 
-  return event;
+  return stateIsStale || !enabled ? null : eventState.event;
 }

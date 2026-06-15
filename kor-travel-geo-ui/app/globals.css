@@ -367,7 +367,8 @@ textarea {
   padding: 12px;
 }
 
-.confirm-box label {
+.confirm-box label,
+.confirm-title {
   color: var(--warn);
   font-size: 13px;
   font-weight: 800;

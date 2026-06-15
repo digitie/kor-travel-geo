@@ -84,9 +84,9 @@ export function CurrentConfigTab() {
           <ActiveMatchSetView detail={detail} matchSet={active} />
         ) : estimated ? (
           <div className="confirm-box">
-            <label>
+            <div className="confirm-title">
               <StatusBadge value="추정" /> match set 정본 없음
-            </label>
+            </div>
             <p className="form-note">
               FK 경로(serving_releases → dataset_snapshots.source_match_set_id)에서 match set 연결을
               찾지 못했습니다. snapshot의 source_set JSONB에서 추정한 정보입니다 (정본으로 저장하지 않음).
@@ -97,7 +97,7 @@ export function CurrentConfigTab() {
           </div>
         ) : (
           <div className="confirm-box">
-            <label>현재 DB를 만든 원천 매칭 정보: 알수없음</label>
+            <div className="confirm-title">현재 DB를 만든 원천 매칭 정보: 알수없음</div>
             <p className="form-note">
               이 DB는 T-109 source match set 도입 전에 생성되었거나, 백업 복원 과정에서 match set
               metadata가 없습니다.
@@ -109,9 +109,9 @@ export function CurrentConfigTab() {
       {restored ? (
         <Panel title="백업 복원 매칭 세트 (restored_from_backup)">
           <div className="confirm-box" role="alert">
-            <label>
+            <div className="confirm-title">
               <AlertTriangle size={14} /> {restored.name}
-            </label>
+            </div>
             <p className="form-note">
               백업 manifest에서 복원된 stub 매칭 세트입니다. 모든 참조 그룹이 relink되어 `available`이
               되기 전까지 rebuild는 비활성입니다. group_sha256는 UNTRUSTED metadata입니다.
