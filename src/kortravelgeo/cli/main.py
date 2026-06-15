@@ -902,6 +902,26 @@ def delete_backup(artifact_id: str) -> None:
     asyncio.run(run())
 
 
+@backup_app.command("verify")
+def verify_backup(
+    artifact_id: str,
+    deep: bool = typer.Option(False, "--deep", help="내부 checksum·manifest까지 깊은 검증."),
+) -> None:
+    """Non-destructively verify a backup's integrity (T-231).
+
+    quick = archive sha256; --deep also extracts + checks internal checksums and
+    manifest. Corruption is reported as ``ok=false`` (exit 0); the JSON result lists
+    errors so this is safe to run on a schedule without attempting a restore.
+    """
+
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            result = await client.verify_backup(artifact_id, mode="deep" if deep else "quick")
+            typer.echo(result.model_dump_json())
+
+    asyncio.run(run())
+
+
 @backup_app.command("janitor")
 def backup_janitor(
     dry_run: bool = typer.Option(False, "--dry-run", help="대상만 보고(파일 미변경)."),

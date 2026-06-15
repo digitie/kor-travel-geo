@@ -28,6 +28,7 @@ from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
     AuditEvent,
     BackupRetentionResult,
+    BackupVerifyResult,
     CacheMetrics,
     ConsistencyBulkDecisionRequest,
     ConsistencyBulkDecisionResponse,
@@ -920,6 +921,24 @@ class AsyncAddressClient:
             keep_min_count=keep_min_count,
             actor_id=actor_id,
         )
+
+    async def verify_backup(
+        self, artifact_id: str, *, mode: str = "quick"
+    ) -> BackupVerifyResult:
+        """Non-destructively verify a stored backup's integrity (T-231).
+
+        ``quick`` = archive sha256 vs recorded; ``deep`` also extracts and checks the
+        internal ``checksums.sha256`` and ``manifest.json``. Corruption is returned as
+        ``ok=False`` (not raised).
+        """
+        from .exceptions import InvalidInputError
+        from .infra.backup import BACKUP_ARTIFACT_TYPE, verify_backup_artifact
+
+        artifact = await self.get_artifact(artifact_id)
+        if artifact.artifact_type != BACKUP_ARTIFACT_TYPE:
+            msg = f"artifact is not a db_backup: {artifact_id}"
+            raise InvalidInputError(msg)
+        return await verify_backup_artifact(artifact, self.settings, mode=mode)
 
     # --- RustFS reconciliation (T-204) ------------------------------------
 

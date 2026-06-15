@@ -891,6 +891,118 @@
         "title": "BackupRetentionRunRequest",
         "type": "object"
       },
+      "BackupVerifyRequest": {
+        "additionalProperties": false,
+        "description": "T-231 on-demand backup integrity check request.",
+        "properties": {
+          "mode": {
+            "default": "quick",
+            "enum": [
+              "quick",
+              "deep"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "title": "BackupVerifyRequest",
+        "type": "object"
+      },
+      "BackupVerifyResult": {
+        "additionalProperties": false,
+        "description": "T-231 non-destructive backup integrity result (corruption → ok=False).",
+        "properties": {
+          "archive_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Sha256"
+          },
+          "archive_sha256_matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Sha256 Matches"
+          },
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "errors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "internal_checksums_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Checksums Ok"
+          },
+          "manifest_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Ok"
+          },
+          "mode": {
+            "enum": [
+              "quick",
+              "deep"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "row_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Counts"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "mode",
+          "ok"
+        ],
+        "title": "BackupVerifyResult",
+        "type": "object"
+      },
       "CRS": {
         "description": "Coordinate reference system normalized as EPSG:XXXX",
         "type": "string"
@@ -10774,6 +10886,59 @@
           }
         },
         "summary": "Download Backup",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/backups/{artifact_id}/verify": {
+      "post": {
+        "description": "Non-destructively verify a stored backup (T-231).\n\n``quick`` recomputes the archive sha256; ``deep`` also extracts and checks the\ninternal ``checksums.sha256`` and ``manifest.json``. Corruption is reported as\n``ok=False`` with ``errors`` rather than an exception, so an operator can probe\nbit rot without attempting a restore.",
+        "operationId": "verify_backup_v1_admin_backups__artifact_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupVerifyResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Backup",
         "tags": [
           "admin"
         ]

@@ -200,6 +200,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/backups/{artifact_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Backup
+         * @description Non-destructively verify a stored backup (T-231).
+         *
+         *     ``quick`` recomputes the archive sha256; ``deep`` also extracts and checks the
+         *     internal ``checksums.sha256`` and ``manifest.json``. Corruption is reported as
+         *     ``ok=False`` with ``errors`` rather than an exception, so an operator can probe
+         *     bit rot without attempting a restore.
+         */
+        post: operations["verify_backup_v1_admin_backups__artifact_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/cache/metrics": {
         parameters: {
             query?: never;
@@ -2002,6 +2027,50 @@ export interface components {
             dry_run: boolean;
             /** Keep Min Count */
             keep_min_count?: number | null;
+        };
+        /**
+         * BackupVerifyRequest
+         * @description T-231 on-demand backup integrity check request.
+         */
+        BackupVerifyRequest: {
+            /**
+             * Mode
+             * @default quick
+             * @enum {string}
+             */
+            mode: "quick" | "deep";
+        };
+        /**
+         * BackupVerifyResult
+         * @description T-231 non-destructive backup integrity result (corruption → ok=False).
+         */
+        BackupVerifyResult: {
+            /** Archive Sha256 */
+            archive_sha256?: string | null;
+            /** Archive Sha256 Matches */
+            archive_sha256_matches?: boolean | null;
+            /** Artifact Id */
+            artifact_id: string;
+            /**
+             * Errors
+             * @default []
+             */
+            errors: string[];
+            /** Internal Checksums Ok */
+            internal_checksums_ok?: boolean | null;
+            /** Manifest Ok */
+            manifest_ok?: boolean | null;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "quick" | "deep";
+            /** Ok */
+            ok: boolean;
+            /** Row Counts */
+            row_counts?: {
+                [key: string]: number;
+            } | null;
         };
         /** @description Coordinate reference system normalized as EPSG:XXXX */
         CRS: string;
@@ -5874,6 +5943,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_backup_v1_admin_backups__artifact_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artifact_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackupVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupVerifyResult"];
                 };
             };
             /** @description Validation Error */
