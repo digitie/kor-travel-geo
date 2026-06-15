@@ -8,6 +8,7 @@ from scripts.benchmark_api_latency import (
     _parcel_address,
     _road_address,
     build_api_cases,
+    parse_server_profile,
     summarize,
 )
 
@@ -153,3 +154,11 @@ def test_summarize_api_measurements_ignores_warmup() -> None:
     assert summary.errors == 0
     assert summary.p50_ms == 15.0
     assert summary.avg_response_bytes == 150.0
+
+
+def test_parse_server_profile_records_key_value_pairs() -> None:
+    assert parse_server_profile(("workers=4", "pool=20/64", "query_metrics=false")) == {
+        "pool": "20/64",
+        "query_metrics": "false",
+        "workers": "4",
+    }

@@ -75,6 +75,8 @@ class CaseInputDecision:
     state: InputValidationState
     required: bool = True
     failure_reason: str | None = None
+    #: Group id backing this input, if present in the source match set.
+    source_file_group_id: str | None = None
     #: Group id to quarantine + recompute (only set for an integrity ``failed``).
     quarantine_group_id: str | None = None
 
@@ -97,10 +99,14 @@ def decide_input_state(facts: CaseInputFacts) -> CaseInputDecision:
             state="failed",
             required=facts.required,
             failure_reason=INTEGRITY_FAILURE_REASON,
+            source_file_group_id=facts.source_file_group_id,
             quarantine_group_id=facts.source_file_group_id,
         )
     return CaseInputDecision(
-        category=facts.category, state="not_started", required=facts.required
+        category=facts.category,
+        state="not_started",
+        required=facts.required,
+        source_file_group_id=facts.source_file_group_id,
     )
 
 

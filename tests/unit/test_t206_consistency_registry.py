@@ -8,8 +8,9 @@ Covers the high-value, DB-free surfaces of T-206:
 * **run-validation decision logic** (pure) — integrity fail → ``failed`` (not
   ``skipped``), absent required → ``skipped``, absent optional → ``skipped``,
   ok → runnable; validator_version change → ``not_started``;
-* **prototype == run-validation metric** — the run-validation metric binding for
-  a C11/C17 case computes the SAME metric as the phase-① prototype ``.metrics()``.
+* **prototype == registry metric** — the C11~C17 metric binding computes the
+  SAME metric as the phase-① prototype ``.metrics()``. The API run-validation
+  endpoint only performs source-archive presence/integrity gating.
 """
 
 from __future__ import annotations
@@ -99,11 +100,12 @@ def test_c11_conditional_input_is_encoded() -> None:
     assert "roadaddr_entrance_full" in c11.metadata["conditional_inputs"]
 
 
-def test_c17_match_jibun_is_a_member_category() -> None:
+def test_c17_uses_navi_group_with_match_jibun_member_flag() -> None:
     c17 = REGISTRY_SEED_BY_CODE["C17"]
     categories = {i.category for i in c17.inputs}
-    assert "navi_full.match_jibun" in categories
+    assert categories == {"navi_full"}
     assert c17.skip_policy["member_flag"] == "navi_full.match_jibun"
+    assert c17.skip_policy["requires_active_table"] == "tl_juso_parcel_link"
 
 
 def test_c11_to_c17_default_severity_is_warn() -> None:
@@ -157,9 +159,16 @@ def test_integrity_failure_is_failed_not_skipped() -> None:
 
 def test_present_and_ok_input_is_not_started() -> None:
     decision = decide_input_state(
-        CaseInputFacts(category="locsum_full", required=True, present=True, integrity_ok=True)
+        CaseInputFacts(
+            category="locsum_full",
+            required=True,
+            present=True,
+            integrity_ok=True,
+            source_file_group_id="g-locsum",
+        )
     )
     assert decision.state == "not_started"
+    assert decision.source_file_group_id == "g-locsum"
 
 
 def test_case_runnable_when_all_required_present_and_ok() -> None:
@@ -245,7 +254,7 @@ def test_non_trusted_prior_state_not_reverted_on_version_change() -> None:
     assert decision.needs_revalidation is False
 
 
-# --- prototype == run-validation metric (regression bridge) ----------------
+# --- prototype == registry metric (regression bridge) ----------------------
 
 
 def _synthetic_overlap() -> KeyOverlapMeasurement:
@@ -317,9 +326,9 @@ def _synthetic_c17() -> C17NaviJibunCoverageComparison:
     )
 
 
-def test_c11_run_validation_metric_equals_prototype_metric() -> None:
+def test_c11_registry_metric_equals_prototype_metric() -> None:
     comparison = _synthetic_c11()
-    # The run-validation binding for C11 is the C11 prototype comparison class,
+    # The registry metric binding for C11 is the C11 prototype comparison class,
     # and computing its metric through the bridge equals the prototype .metrics().
     assert prototype_comparison_class("C11") is C11EntranceComparison
     assert prototype_metric(comparison) == comparison.metrics()
@@ -331,7 +340,7 @@ def test_c11_run_validation_metric_equals_prototype_metric() -> None:
     assert metric["serving_promotion"] is False
 
 
-def test_c17_run_validation_metric_equals_prototype_metric() -> None:
+def test_c17_registry_metric_equals_prototype_metric() -> None:
     comparison = _synthetic_c17()
     assert prototype_comparison_class("C17") is C17NaviJibunCoverageComparison
     assert prototype_metric(comparison) == comparison.metrics()
