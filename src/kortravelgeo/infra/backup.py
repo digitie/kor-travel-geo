@@ -1112,6 +1112,14 @@ SELECT current_database() AS name,
             )
         ).mappings().one()
         row_counts = await collect_row_counts(conn)
+        active_serving = await build_active_serving_summary(conn)
+    # T-237: record reproducibility context — the active match set, its RustFS object
+    # inventory verification, and the active serving release/snapshot. Best-effort: a
+    # backup must always succeed, so these degrade to skipped on any failure.
+    match_set_block = await _infer_source_match_set_block(engine)
+    source_inventory_verification = await build_source_inventory_verification(
+        settings, match_set_block
+    )
     return {
         "artifact_schema_version": 1,
         "artifact_id": artifact_id,
@@ -1135,10 +1143,117 @@ SELECT current_database() AS name,
             "retention_days": req.retention_days or settings.backup_artifact_ttl_days,
         },
         "source_set": await infer_source_set(engine),
-        "source_match_set": await _infer_source_match_set_block(engine),
+        "source_match_set": match_set_block,
+        "source_inventory_verification": source_inventory_verification,
+        "active_serving": active_serving,
         "row_counts": row_counts,
         "checksums": {},
 }
+
+
+def _iter_match_set_files(block: object) -> list[dict[str, Any]]:
+    """Collect every per-file dict (has object_key + size_bytes) from a match-set block."""
+    files: list[dict[str, Any]] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            if "object_key" in node and "size_bytes" in node:
+                files.append(node)
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(block)
+    return files
+
+
+def summarize_source_inventory(
+    files: list[dict[str, Any]],
+    present_sizes: Mapping[str, int],
+) -> dict[str, Any]:
+    """Inventory-verification summary (T-237). ``present_sizes`` maps an existing
+    object_key to its storage size; absent keys are missing. Pure (no I/O)."""
+    total = present = missing = size_mismatch = 0
+    items: list[dict[str, Any]] = []
+    for file in files:
+        total += 1
+        key = file.get("object_key")
+        expected = file.get("size_bytes")
+        if not isinstance(key, str) or key not in present_sizes:
+            missing += 1
+            items.append({"object_key": key, "status": "missing"})
+            continue
+        present += 1
+        if isinstance(expected, int) and present_sizes[key] != expected:
+            size_mismatch += 1
+            items.append({"object_key": key, "status": "size_mismatch"})
+        else:
+            items.append({"object_key": key, "status": "ok"})
+    return {
+        "total": total,
+        "present": present,
+        "missing": missing,
+        "size_mismatch": size_mismatch,
+        "ok": missing == 0 and size_mismatch == 0,
+        "secret_included": False,
+        "items": items,
+    }
+
+
+async def build_source_inventory_verification(
+    settings: Settings,
+    match_set_block: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """HEAD each active match-set object and summarize presence/size (T-237).
+
+    Skipped (never an error) when there is no active match set or RustFS is
+    unavailable, so the backup still completes. Secrets are never recorded.
+    """
+    if match_set_block is None:
+        return {"skipped": True, "reason": "no_active_match_set"}
+    from kortravelgeo.infra.rustfs import RustfsClient, load_rustfs_config
+
+    config = load_rustfs_config(settings)
+    if not (config.enabled and config.credentials_configured):
+        return {"skipped": True, "reason": "rustfs_unavailable"}
+    files = _iter_match_set_files(match_set_block)
+    client = RustfsClient(config)
+    present_sizes: dict[str, int] = {}
+    for file in files:
+        key = file.get("object_key")
+        if not isinstance(key, str):
+            continue
+        with suppress(Exception):
+            head = await client.head_object(key)
+            present_sizes[key] = head.size
+    return summarize_source_inventory(files, present_sizes)
+
+
+async def build_active_serving_summary(conn: Any) -> dict[str, Any] | None:
+    """Active serving release/snapshot/match-set ids at backup time (T-237), or None."""
+    with suppress(Exception):
+        row = (
+            await conn.execute(
+                text(
+                    "SELECT r.serving_release_id::text AS release, "
+                    "r.dataset_snapshot_id::text AS snapshot, "
+                    "s.source_match_set_id::text AS match_set "
+                    "FROM ops.serving_releases r "
+                    "LEFT JOIN ops.dataset_snapshots s "
+                    "ON s.dataset_snapshot_id = r.dataset_snapshot_id "
+                    "WHERE r.state = 'active' ORDER BY r.created_at DESC LIMIT 1"
+                )
+            )
+        ).mappings().first()
+        if row is not None:
+            return {
+                "serving_release_id": row["release"],
+                "dataset_snapshot_id": row["snapshot"],
+                "source_match_set_id": row["match_set"],
+            }
+    return None
 
 
 async def _infer_source_match_set_block(engine: AsyncEngine) -> dict[str, Any] | None:
