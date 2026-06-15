@@ -247,7 +247,7 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 /mnt/f/dev/kor-travel-geo-claude/                  ← Claude Code worktree
 /mnt/f/dev/kor-travel-geo-antigravity/             ← Google Antigravity 2.0 worktree
 ~/dev/kor-travel-geo-<agent>-test/                 ← WSL ext4 테스트 미러, commit/push 금지
-/mnt/f/dev/kor-travel-geo/data/                    ← 도로명주소 ZIP/SHP, postal TXT, 외부 dump (NTFS)
+/mnt/f/dev/geodata/juso/                           ← 도로명주소 ZIP/SHP 공용 원천 (NTFS, unused/ 보존 포함)
 ```
 
 - 테스트 전에는 NTFS worktree를 `rsync --delete`로 ext4 테스트 미러에 복사한다.

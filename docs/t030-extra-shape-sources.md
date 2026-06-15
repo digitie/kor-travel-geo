@@ -5,9 +5,9 @@
 - 상태: 결정 완료
 - 대상 브랜치: `codex/t030-extra-shape-sources`
 - 대상 데이터:
-  - `data/juso/건물군 내 상세주소 동 도형/*.zip`
+  - `data/juso/unused/건물군 내 상세주소 동 도형/*.zip`
   - `data/juso/구역의 도형/*.zip`
-  - `data/juso/도로명주소 건물 도형/*.zip`
+  - `data/juso/unused/도로명주소 건물 도형/*.zip`
   - `data/juso/도로명주소 출입구 정보/*.zip`
 - 관련 ADR: ADR-023
 

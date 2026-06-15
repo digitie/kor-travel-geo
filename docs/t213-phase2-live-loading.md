@@ -12,6 +12,8 @@ T-213은 전국 실 원천 archive를 T-109 계열 source registry 경로로 등
 - 실행 산출물: `artifacts/t213-live-proper-20260614T225300Z/`
 - recovery 요약: `artifacts/t213-live-proper-20260614T225300Z/t213-live-recovery-summary.json`
 
+> 2026-06-15 이후 기준: 위 최초 실행은 당시의 실행 기록으로 남긴다. T-214/T-215에서 재사용할 T-213 기준 데이터는 기본 개발 DB가 아니라 `docs/t213-data-preservation.md`의 전용 PostgreSQL DB, 전용 RustFS prefix, NTFS `F:\dev\geodata\t213-baseline\<run-id>\` artifact 조합으로 보존한다. 기본 `kor_travel_geo`가 T-213 row count와 active release를 갖지 않으면 T-214 입력으로 쓰지 않는다. 입력 원천은 공용 루트 `F:\dev\geodata\juso`이며, 현재 쓰지 않는 파일은 `F:\dev\geodata\juso\unused\`에 둔다.
+
 ## 추가한 실행기
 
 `scripts/run_t213_live_pipeline.py`를 추가했다. 기본은 plan-only이며, 실제 실행은 다음 조건을 요구한다.
@@ -36,7 +38,7 @@ runbook은 실행 직전 기존 active source match set을 기록한다. 기본 
 | `navi_full` | `202604` | `202604_내비게이션용DB_전체분.7z` |
 | `electronic_map_full` | `202604` | 도로명주소 전자지도 시도별 ZIP 17개 |
 | `roadaddr_entrance_full` | `202604` | 도로명주소 출입구 정보 시도별 ZIP 17개 |
-| `zone_shape_full` | `202603` | 구역의도형 시도별 ZIP 17개 |
+| `zone_shape_full` | `202604` | 구역의도형 시도별 ZIP 17개. 파일명에는 기준년월이 없어 사용자 지시에 따라 등록/매칭 기준년월은 `202604`로 갈음한다. 물리 원천 경로는 현재 보유 파일 위치인 `구역의도형/202603`을 사용한다. |
 
 전자지도 rebuild staging은 source registry materialization 특성상 `electronic_map_full/<시도명>/<SIG_CD>/...` 형태의 parent directory가 된다. 이를 수용하도록 `discover_sido_datasets()`와 SHP load plan을 보강했다.
 
@@ -101,6 +103,45 @@ active serving release는 다음으로 생성됐다.
 4. 전국 consistency case가 기본 5초 `statement_timeout`에 걸렸다. case별 트랜잭션에서 `SET LOCAL statement_timeout = 0`을 적용했다.
 5. fresh rebuild DB에서는 consistency report 저장 시 아직 `mv_geocode_target`이 없을 수 있다. sample point 보강은 MV가 존재할 때만 실행하도록 바꿨다.
 
-## 주의
+## 기준 데이터 보존
 
 초기 batch root `batch_e00d8fa30a964b549090a602fd6a8fe3`는 위 4번과 5번 때문에 `state=failed` 이력을 남긴다. source load 6개는 모두 성공했고, 패치 후 post-load recovery로 consistency report와 `mv_refresh`를 완료해 active serving release는 정상 생성됐다. T-214는 active release와 `t213-live-recovery-summary.json`을 기준 입력으로 사용한다.
+
+T-214 재현성을 위해 이후 T-213 기준 DB는 기본 개발 DB `kor_travel_geo`와 분리한다. 표준 보존 정책은 `docs/t213-data-preservation.md`를 따른다. 기준년월이 파일명/manifest에 없는 자료는 `202604`로 갈음한다. 핵심은 다음과 같다.
+
+- PostgreSQL: `kor_travel_geo_t213` 또는 run별 `kor_travel_geo_t213_<YYYYMMDD>` 전용 DB.
+- RustFS: 같은 bucket을 쓰더라도 `kor-travel-geo/t213/<run-id>` 전용 prefix.
+- Artifact: WSL 테스트 미러의 `artifacts/`가 아니라 NTFS `F:\dev\geodata\t213-baseline\<run-id>\`에 기준 사본 보존.
+- T-214 preflight: DB 이름, source registry full-prefix schema, active serving release id, `mv_geocode_target`/`mv_geocode_text_search` row count가 summary와 일치해야 benchmark 입력으로 인정한다.
+
+## 2026-06-15 전용 baseline 재실행
+
+T-214 착수 preflight에서 기본 개발 DB `kor_travel_geo`가 T-213 기준 상태가 아님을 확인해, 전용 DB와 RustFS prefix로 T-213을 재실행했다.
+
+| 항목 | 값 |
+| --- | --- |
+| run id | `20260615-rerun3` |
+| DB | `kor_travel_geo_t213_20260615_r3` |
+| RustFS prefix | `kor-travel-geo/t213/20260615-rerun3` |
+| artifact 사본 | `F:\dev\geodata\t213-baseline\20260615-rerun3\` |
+| source match set | `a0c2d514-a91d-44c4-bdb6-0bc4771ae61a` |
+| active serving release | `54e17e80-312e-46da-a58f-d8b10be37c85` |
+| dataset snapshot | `1b354560-52bc-4ec6-8760-55fed63d9e98` |
+| load batch | `batch_ee0c66494eac490ba927e0a689dfd29a` |
+| consistency report | `consistency_d3aa7ef74e374bb1babe2bb280c89475` |
+
+최종 row count는 다음과 같다.
+
+| table | row count |
+| --- | ---: |
+| `tl_juso_text` | 6,419,795 |
+| `tl_locsum_entrc` | 6,405,091 |
+| `tl_navi_buld_centroid` | 10,687,317 |
+| `tl_navi_entrc` | 12,830 |
+| `tl_spbd_buld_polygon` | 10,687,732 |
+| `tl_roadaddr_entrc` | 6,404,697 |
+| `tl_sppn_makarea` | 24,204 |
+| `mv_geocode_target` | 6,419,795 |
+| `mv_geocode_text_search` | 6,419,795 |
+
+`경기도 용인시 수지구 성복1로 35` smoke geocode는 `OK` 후보 1건을 반환했다. 기준년월이 파일명/manifest에 없는 `zone_shape_full`은 사용자 지시에 따라 `202604`로 등록했으며, 물리 파일은 `F:\dev\geodata\juso\구역의도형\202603\`을 사용했다.

@@ -150,10 +150,10 @@ git pull --ff-only
 
 ```bash
 mkdir -p ~/dev/kor-travel-geo-codex-test
-rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data \
+rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data --exclude artifacts \
   /mnt/f/dev/kor-travel-geo-codex/ ~/dev/kor-travel-geo-codex-test/
 cd ~/dev/kor-travel-geo-codex-test
-test -e data || ln -s /mnt/f/dev/kor-travel-geo/data data
+test -e data || ln -s /mnt/f/dev/geodata data
 
 uv venv
 source .venv/bin/activate
@@ -184,23 +184,23 @@ python -c "from osgeo import ogr; ogr.UseExceptions(); print('ok')"
 
 ### 3.5 데이터 경로 복구
 
-NTFS에 백업해 둔 `data/juso`를 NTFS main repo의 `data/` 아래로 복원한다.
+NTFS에 백업해 둔 Juso 원천은 공용 데이터 루트 `F:\dev\geodata\juso`로 복원한다. 현재 쓰지 않는 파일은 삭제하지 않고 `F:\dev\geodata\juso\unused\` 아래에 둔다.
 
 ```bash
-ls -la <NTFS main repo>/data/juso
+ls -la /mnt/f/dev/geodata/juso
 ```
 
 ext4 테스트 미러에서 `data`를 심볼릭 링크로 둘 수 있다.
 
 ```bash
 cd <테스트 미러>
-test -e data || ln -s <NTFS main repo>/data data
+test -e data || ln -s /mnt/f/dev/geodata data
 ```
 
 링크를 만들지 않는다면 `scripts/fullload_test.sh` 실행 시 `DATA_ROOT`를 절대경로로 넘긴다.
 
 ```bash
-DATA_ROOT=<NTFS main repo>/data/juso bash scripts/fullload_test.sh
+DATA_ROOT=/mnt/f/dev/geodata/juso bash scripts/fullload_test.sh
 ```
 
 ## 4. 재설치 후 DB 복구 (선택)

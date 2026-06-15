@@ -28,7 +28,7 @@
 
 ## 현재 로컬 원본 배치
 
-2026-06-14 재확인 기준 로컬 원본 기준 경로는 `F:\dev\kor-travel-geo\data\juso`다. 압축파일 원본 기준으로 필요한 핵심 묶음은 다음과 같이 들어 있다.
+2026-06-15 이후 로컬 원본 기준 경로는 공용 데이터 루트 `F:\dev\geodata\juso`다. T-213/T-214가 직접 쓰는 활성 원천만 루트에 남기고, 현재 쓰지 않는 파일은 `F:\dev\geodata\juso\unused\` 아래 같은 상대 경로로 보존한다. 압축파일 원본 기준으로 필요한 핵심 묶음은 다음과 같이 들어 있다.
 
 | source kind | 현재 원본 경로 | 확인 내용 | 기준년월 추출 |
 |-------------|----------------|-----------|---------------|
@@ -46,7 +46,7 @@
 
 ## 현재 디렉터리 기준 사용/미사용 구분
 
-`F:\dev\kor-travel-geo\data\juso` 현재 배치에서, 현행 서빙 DB를 재구성할 때 쓰는 파일과 쓰지 않는 파일은 다음처럼 구분한다.
+`F:\dev\geodata\juso` 현재 배치에서, 현행 서빙 DB를 재구성할 때 쓰는 파일과 쓰지 않는 파일은 다음처럼 구분한다. 아래 "현재 기본 서빙 load에서 쓰지 않음" 항목은 루트가 아니라 `unused\` 아래에 보존한다.
 
 정확도 개선 또는 검증용 활용 가능성은 `docs/source-data-accuracy-review.md`에 더 자세히 정리한다.
 
@@ -122,7 +122,7 @@
 | source kind | 원천 파일/패턴 | 적재 테이블 | 복원/서빙 주의점 |
 |-------------|----------------|-------------|------------------|
 | `roadaddr_entrance` | `도로명주소 출입구 정보/RNENTDATA_*.txt` 또는 ZIP 내부 | `tl_roadaddr_entrc` | direct `bd_mgt_sn + EPSG:5179` 출입구. `source_yyyymm`이 `tl_juso_text.source_yyyymm` 집합과 같을 때만 MV fallback 후보 |
-| `sppn_makarea` | `구역의 도형` ZIP/SHP 내부 `TL_SPPN_MAKAREA.{shp,shx,dbf}` | `tl_sppn_makarea` | 국가지점번호 geocode/reverse 보조 |
+| `sppn_makarea` | `구역의도형\202603\<시도>.zip` 내부 `TL_SPPN_MAKAREA.{shp,shx,dbf}` | `tl_sppn_makarea` | 국가지점번호 geocode/reverse 보조. 기준년월 미표기 원천은 T-213/T-214에서 `202604`로 갈음 |
 | `pobox` | epost ZIP 추출본 중 `사서함` 또는 `pobox` 파일명 | `postal_pobox` | 현재 운영 DB에는 0행일 수 있음 |
 | `bulk` | epost ZIP 추출본 중 `다량`, `대량`, `bulk`, `delivery` 파일명 | `postal_bulk_delivery` | 현재 운영 DB에는 0행일 수 있음 |
 

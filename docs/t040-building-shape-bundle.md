@@ -5,8 +5,8 @@
 - 상태: 구현/결정 완료
 - 대상 브랜치: `codex/t040-building-shape-bundle`
 - 대상 원천:
-  - `data/juso/도로명주소 건물 도형/건물도형_전체분_세종특별자치시.zip`
-  - `data/juso/도로명주소 건물 도형/건물도형_전체분_경상남도.zip`
+  - `data/juso/unused/도로명주소 건물 도형/건물도형_전체분_세종특별자치시.zip`
+  - `data/juso/unused/도로명주소 건물 도형/건물도형_전체분_경상남도.zip`
   - 비교 기준: `data/juso/도로명주소 전자지도/{세종특별자치시,경상남도}/.../TL_SPBD_BULD.*`, `TL_SPBD_ENTRC.*`
 - 관련 ADR: ADR-023, ADR-025
 
@@ -97,7 +97,7 @@ SIG_CD, ENT_MAN_NO
 
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_building_shape_bundle.py \
-  --bundle-zip "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 건물 도형/건물도형_전체분_세종특별자치시.zip" \
+  --bundle-zip "/mnt/f/dev/geodata/juso/unused/도로명주소 건물 도형/건물도형_전체분_세종특별자치시.zip" \
   --electronic-map-sido "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/세종특별자치시"
 ```
 
@@ -105,7 +105,7 @@ TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_building_shape_b
 
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_building_shape_bundle.py \
-  --bundle-zip "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 건물 도형/건물도형_전체분_경상남도.zip" \
+  --bundle-zip "/mnt/f/dev/geodata/juso/unused/도로명주소 건물 도형/건물도형_전체분_경상남도.zip" \
   --electronic-map-sido "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/경상남도"
 ```
 

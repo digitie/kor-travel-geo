@@ -53,11 +53,18 @@ RunProfile = Literal["serving_minimal", "serving_recommended"]
 
 RUN_MARKER = "t213-live-proper"
 ACTOR = RUN_MARKER
+# 기준년월을 파일명/manifest에서 직접 읽을 수 없는 보조 원천은 사용자 지시에 따라
+# T-213/T-214 baseline에서 202604로 갈음한다.
+UNKNOWN_YYYYMM_FALLBACK = "202604"
+UNKNOWN_YYYYMM_POLICY_NOTE = (
+    "파일명/manifest에서 기준년월을 직접 읽을 수 없는 자료는 "
+    "202604로 갈음한다."
+)
 ROW_COUNT_TABLES = (
     "tl_juso_text",
     "tl_locsum_entrc",
-    "tl_navi_building",
-    "tl_navi_entrance",
+    "tl_navi_buld_centroid",
+    "tl_navi_entrc",
     "tl_spbd_buld_polygon",
     "tl_roadaddr_entrc",
     "tl_sppn_makarea",
@@ -97,7 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--data-root",
         type=Path,
         default=Path(os.getenv("KTG_JUSO_DATA_ROOT", _default_data_root())),
-        help="도로명주소 실 원천 root. 기본값은 KTG_JUSO_DATA_ROOT 또는 로컬 data/juso.",
+        help="도로명주소 실 원천 root. 기본값은 KTG_JUSO_DATA_ROOT 또는 /mnt/f/dev/geodata/juso.",
     )
     parser.add_argument(
         "--dsn",
@@ -168,6 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _default_data_root() -> str:
     candidates = (
+        Path("/mnt/f/dev/geodata/juso"),
         Path("data/juso"),
         Path("/mnt/f/dev/kor-travel-geo/data/juso"),
         Path("/home/digitie/kor-travel-geo-data/juso"),
@@ -220,7 +228,7 @@ def build_source_specs(data_root: Path, profile: RunProfile) -> tuple[SourceSpec
                 _multipart_spec(
                     root,
                     category="zone_shape_full",
-                    yyyymm="202603",
+                    yyyymm=UNKNOWN_YYYYMM_FALLBACK,
                     directory=root / "구역의도형" / "202603",
                     filename=lambda sido_name: f"구역의도형_전체분_{sido_name}.zip",
                 ),
@@ -739,6 +747,35 @@ SELECT job_id, kind, state, current_stage, progress, error_message,
     return [dict(row) for row in rows]
 
 
+async def collect_active_serving_release(engine: AsyncEngine) -> dict[str, Any] | None:
+    async with engine.connect() as conn:
+        exists = await conn.scalar(text("SELECT to_regclass('ops.serving_releases')"))
+        if exists is None:
+            return None
+        row = (
+            await conn.execute(
+                text(
+                    """
+SELECT sr.serving_release_id::text AS serving_release_id,
+       sr.dataset_snapshot_id::text AS dataset_snapshot_id,
+       ds.source_match_set_id::text AS source_match_set_id,
+       sr.activated_by_job_id,
+       ds.consistency_report_id,
+       sr.activated_at,
+       sr.created_at
+  FROM ops.serving_releases sr
+  JOIN ops.dataset_snapshots ds
+    ON ds.dataset_snapshot_id = sr.dataset_snapshot_id
+ WHERE sr.state = 'active'
+ ORDER BY COALESCE(sr.activated_at, sr.created_at) DESC
+ LIMIT 1
+"""
+                )
+            )
+        ).mappings().first()
+    return dict(row) if row is not None else None
+
+
 def write_summary(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -750,6 +787,10 @@ def write_summary(path: Path, payload: dict[str, Any]) -> None:
 def plan_payload(specs: Sequence[SourceSpec], profile: RunProfile) -> dict[str, Any]:
     return {
         "profile": profile,
+        "yyyymm_policy": {
+            "unknown_yyyymm_fallback": UNKNOWN_YYYYMM_FALLBACK,
+            "notes": UNKNOWN_YYYYMM_POLICY_NOTE,
+        },
         "categories": [
             {
                 "category": spec.category,
@@ -856,11 +897,17 @@ async def run(args: argparse.Namespace) -> int:
         )
         row_counts = await collect_row_counts(engine)
         job_rows = await collect_job_rows(engine, job_id)
+        active_release = await collect_active_serving_release(engine)
+        rustfs_config = require_enabled_rustfs(settings)
         summary = {
             "schema_version": 1,
             "run_id": run_id,
             "runbook": RUN_MARKER,
             "profile": profile,
+            "yyyymm_policy": {
+                "unknown_yyyymm_fallback": UNKNOWN_YYYYMM_FALLBACK,
+                "notes": UNKNOWN_YYYYMM_POLICY_NOTE,
+            },
             "started_at": run_started.isoformat(),
             "finished_at": datetime.now(UTC).isoformat(),
             "database": db_name,
@@ -869,6 +916,13 @@ async def run(args: argparse.Namespace) -> int:
             "force_promotion": bool(args.force_promotion),
             "promote_active_match_set": bool(args.promote_active_match_set),
             "output_dir": str(output_dir),
+            "rustfs": {
+                "endpoint_url": rustfs_config.endpoint_url,
+                "bucket": rustfs_config.bucket,
+                "prefix": rustfs_config.prefix,
+                "materialize_dir": str(settings.rustfs_materialize_dir),
+            },
+            "active_serving_release": active_release,
             "registered_groups": [
                 {
                     "category": item.spec.category,
@@ -884,6 +938,7 @@ async def run(args: argparse.Namespace) -> int:
             "jobs": job_rows,
         }
         write_summary(output_dir / "t213-live-summary.json", summary)
+        write_summary(output_dir / "t213-live-recovery-summary.json", summary)
         print(
             json.dumps(
                 {"row_counts": row_counts, "summary": str(output_dir)},

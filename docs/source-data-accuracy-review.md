@@ -1,6 +1,6 @@
 # 미사용 원천 데이터 정확도 개선 검토
 
-이 문서는 `F:\dev\kor-travel-geo\data\juso` 현재 배치에서 기본 full-load가 직접 쓰지 않거나, 선택/조건부로만 쓰는 원천을 검토한다. 목적은 새 원천을 무작정 serving table에 섞는 것이 아니라, **정확도 개선에 직접 쓸 수 있는지**, **검증/품질관리에는 쓸 수 있는지**, **별도 loader나 테이블 계약이 필요한지**를 다른 에이전트가 바로 판단할 수 있게 남기는 것이다.
+이 문서는 `F:\dev\geodata\juso\unused`에 보존한, 기본 full-load가 직접 쓰지 않거나 선택/조건부로만 쓰는 원천을 검토한다. 목적은 새 원천을 무작정 serving table에 섞는 것이 아니라, **정확도 개선에 직접 쓸 수 있는지**, **검증/품질관리에는 쓸 수 있는지**, **별도 loader나 테이블 계약이 필요한지**를 다른 에이전트가 바로 판단할 수 있게 남기는 것이다.
 
 ## 결론 요약
 
@@ -62,7 +62,7 @@
 경로:
 
 ```text
-F:\dev\kor-travel-geo\data\juso\국가지점번호 도형\202405\국가지점번호도형_5월분.zip
+F:\dev\geodata\juso\unused\국가지점번호 도형\202405\국가지점번호도형_5월분.zip
 ```
 
 ZIP member:
@@ -104,7 +104,7 @@ ZIP member:
 경로:
 
 ```text
-F:\dev\kor-travel-geo\data\juso\국가지점번호 중심점\202405\국가지점번호중심점_5월분.zip
+F:\dev\geodata\juso\unused\국가지점번호 중심점\202405\국가지점번호중심점_5월분.zip
 ```
 
 ZIP member:
@@ -155,7 +155,7 @@ SPPN_20240508.TXT
 경로:
 
 ```text
-F:\dev\kor-travel-geo\data\juso\도로명주소 건물 도형\202604\<시도>.zip
+F:\dev\geodata\juso\unused\도로명주소 건물 도형\202604\<시도>.zip
 ```
 
 전국 합산 DBF record:
@@ -213,7 +213,7 @@ F:\dev\kor-travel-geo\data\juso\도로명주소 건물 도형\202604\<시도>.zi
 경로:
 
 ```text
-F:\dev\kor-travel-geo\data\juso\건물군 내 상세주소 동 도형\202604\<시도>.zip
+F:\dev\geodata\juso\unused\건물군 내 상세주소 동 도형\202604\<시도>.zip
 ```
 
 전국 합산 DBF record:
@@ -259,7 +259,7 @@ T-041 문서 이력에서는 세종/경남 기준 `TL_SGCO_RNADR_DONG`이 전자
 경로:
 
 ```text
-F:\dev\kor-travel-geo\data\juso\202605_상세주소DB_전체분.zip
+F:\dev\geodata\juso\unused\202605_상세주소DB_전체분.zip
 ```
 
 확인값:
@@ -297,7 +297,7 @@ F:\dev\kor-travel-geo\data\juso\202605_상세주소DB_전체분.zip
 최신 경로:
 
 ```text
-F:\dev\kor-travel-geo\data\juso\202605_주소DB_전체분.zip
+F:\dev\geodata\juso\unused\202605_주소DB_전체분.zip
 ```
 
 전국 행 수:
@@ -343,7 +343,7 @@ F:\dev\kor-travel-geo\data\juso\202605_주소DB_전체분.zip
 경로:
 
 ```text
-F:\dev\kor-travel-geo\data\juso\202605_건물DB_전체분.zip
+F:\dev\geodata\juso\unused\202605_건물DB_전체분.zip
 ```
 
 전국 행 수:
@@ -445,7 +445,7 @@ road_code_total.txt: 11110|2005001|세종대로|Sejong-daero|00|서울특별시|
 경로:
 
 ```text
-F:\dev\kor-travel-geo\data\juso\민원행정기관전자지도_240124.zip
+F:\dev\geodata\juso\unused\민원행정기관전자지도_240124.zip
 ```
 
 구성:

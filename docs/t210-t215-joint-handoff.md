@@ -56,12 +56,14 @@ phase ①(원천 보강·검증 T-110~T-123)은 Agent A가 완료. 두 phase의 
 |------|-----------|-----------|-----------|
 | **T-210** | ✅ 대부분 완료 — 장비 비종속 fixture perf(#177)·drift 0 검증·#27 epost(T-207 fake 위임)·통합 18 시나리오(#162). 잔여인 rebuild-db 실 SHP/text 로더 전국 적재 통합은 T-213/#172로 충족. `KTG_SLOW_REAL_DATA` 실데이터 회귀만 선택 잔여 | GDAL(`[loaders]`), 전국 `data/juso` | (선택) A: 실데이터 회귀 |
 | **T-213** | ✅ 완료 — 전국 라이브 로딩 #172(Agent A), 소형 세종 검증 #165/#166. row count·snapshot FK는 #172 결과 참조 | (완료) | (완료) |
-| **T-214** | full load/MV/multipart/deep-rehash/쿼리 벤치(T-047/T-035 harness) | T-213 적재 DB(#172) | A(Codex) 주도 |
+| **T-214** | ✅ 완료 — full load/MV/multipart/deep-rehash/쿼리 벤치(T-047/T-035 harness), artifact `F:\dev\geodata\t214-benchmark\20260615-r3\` | T-213 전용 baseline DB/RustFS/artifact(`#172` 결과를 r3 전용 공간에 재실행) | A(Codex) |
 | **T-215** | 튜닝 재측정, geocode/reverse 정확도·v1(vworld)/v2 회귀·C1~C17 정합성 최종 확인, N150/Odroid 실측(T-063 연계), T-109 전체 acceptance | T-214 + 실장비(T-063 보류) | A+B |
 
 ## 4. 권장 첫 공동 스텝 + 검증 환경
 
 - **검증 환경(ADR-041, 사용자 지시)**: 실행은 WSL, git·Playwright만 Windows. WSL venv `~/ktgvenv`(`pip install -e "/mnt/f/dev/kor-travel-geo-claude[api,dev]"`; 로더 실행 시 `[loaders]`+시스템 GDAL 추가 필요). 라이브 DB는 WSL Docker `postgis/postgis:16-3.5` `-p 15434:5432`(DSN `postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo`). DB-backed 테스트는 `KTG_TEST_PG_DSN` 설정 시 실행, 미설정 시 skip(CI 무영향).
-- **권장 순서**: (1) GDAL 포함 WSL 로더 환경 구성 → (2) **소규모(예: 세종 1개 시도) 실데이터로 신규 파이프라인 end-to-end(업로드→register→match set→rebuild-db→serving) 검증** → (3) 전국 라이브 로딩(T-213) → (4) 벤치(T-214) → (5) 튜닝·acceptance(T-215). N150/Odroid 실측(T-215의 일부)은 하드웨어(T-063) 준비 시.
+- **권장 순서**: (1) GDAL 포함 WSL 로더 환경 구성 → (2) **소규모(예: 세종 1개 시도) 실데이터로 신규 파이프라인 end-to-end(업로드→register→match set→rebuild-db→serving) 검증** → (3) 전국 라이브 로딩(T-213) → (4) T-213 기준 데이터 보존(`docs/t213-data-preservation.md`) → (5) 벤치(T-214, 완료) → (6) 튜닝·acceptance(T-215). N150/Odroid 실측(T-215의 일부)은 하드웨어(T-063) 준비 시.
 
-이 핸드오프 기준으로 Agent A(로더/실데이터)와 Agent B(신규 파이프라인, 완료)가 T-213~T-215를 공동 진행하면 된다.
+T-214/T-215는 기본 개발 DB `kor_travel_geo`를 암묵적으로 쓰지 않는다. T-213 기준 데이터는 전용 PostgreSQL DB, 전용 RustFS prefix, NTFS `F:\dev\geodata\t213-baseline\<run-id>\` artifact 조합으로 보존해야 하며, preflight에서 active serving release와 row count가 summary와 일치하지 않으면 T-213을 전용 공간에 재실행한 뒤 진행한다. 현재 T-214/T-215 기준 baseline은 `kor_travel_geo_t213_20260615_r3`, RustFS `kor-travel-geo/t213/20260615-rerun3`, T-213 artifact `F:\dev\geodata\t213-baseline\20260615-rerun3\`, T-214 artifact `F:\dev\geodata\t214-benchmark\20260615-r3\`, serving release `54e17e80-312e-46da-a58f-d8b10be37c85`다. T-214 결과는 SQL/REST error 0, SQL c64 worst p95 `Q4_SEARCH/search_fuzzy=245.895ms`, REST c64 worst p95 `Q4_SEARCH/search_fuzzy=534.031ms`, MV `concurrent=126.414s` / `swap-rerun=340.128s`, RustFS reconcile prefix orphan warning 2건이다. 상세는 `docs/t214-phase2-performance-benchmark.md`를 본다. T-213 입력 원천은 `F:\dev\geodata\juso`를 기준으로 두고, 사용하지 않는 원천은 `juso\unused\` 아래에 보존한다.
+
+이 핸드오프 기준으로 Agent A(로더/실데이터)와 Agent B(신규 파이프라인, 완료)는 T-215를 공동 진행하면 된다.

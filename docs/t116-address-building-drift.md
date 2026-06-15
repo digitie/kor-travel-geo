@@ -6,8 +6,8 @@
 
 실데이터 파일:
 
-- `data/juso/202605_주소DB_전체분.zip`
-- `data/juso/202605_건물DB_전체분.zip`
+- `data/juso/unused/202605_주소DB_전체분.zip`
+- `data/juso/unused/202605_건물DB_전체분.zip`
 
 `주소DB_전체분.zip`의 member 이름은 CP949 원문이 ZIP filename flag 없이 들어 있어 Python `zipfile`에서 mojibake로 보일 수 있다. C16 loader는 member 이름을 `cp437` bytes로 되돌린 뒤 `cp949`로 복원해 `주소_*.txt`, `부가정보_*.txt`, `지번_*.txt`, `개선_도로명코드_전체분.txt`를 찾는다.
 

@@ -20,7 +20,7 @@
 
 ## 환경 readiness 체크리스트
 
-PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/kor-travel-geo-*`)이고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(AGENTS.md, ADR-041 참조). 데이터(`data/`)는 NTFS main repo(`/mnt/f/dev/kor-travel-geo/data/`) 아래에 두며, 아래 명령의 데이터 경로는 ext4 테스트 미러에서 NTFS의 `data/`를 가리키는 심볼릭 링크 또는 절대경로로 해석한다.
+PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/kor-travel-geo-*`)이고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(AGENTS.md, ADR-041 참조). 대용량 Juso 원천은 NTFS 공용 루트(`/mnt/f/dev/geodata/juso`) 아래에 두며, 아래 명령의 데이터 경로는 ext4 테스트 미러에서 `data -> /mnt/f/dev/geodata` 심볼릭 링크 또는 절대경로로 해석한다.
 
 1. **시스템 GDAL 설치** — `sudo apt install libgdal-dev gdal-bin`. `gdal-config --version`으로 버전 확인 후 Python 바인딩 핀: `pip install "gdal==$(gdal-config --version)"`. 세부 절차는 `docs/dev-environment.md` 참조 (ADR-008).
 2. **PostgreSQL 16 + PostGIS 3.4** 설치 및 기동
@@ -32,7 +32,7 @@ PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/kor-travel-geo-*`)
    ```
 4. `Settings.pg_dsn` 설정 (`postgresql+psycopg://...`)
 5. `ktgctl init-db`(또는 `alembic upgrade head`)로 스키마·확장·인덱스·빈 MV 적용 (텍스트 정본 + 좌표 원천 + 보조 도형 + 메타 + MV 정의)
-6. NTFS의 데이터 디렉토리를 ext4 테스트 미러에서 참조: `ln -s <main-repo>/data data`
+6. NTFS의 공용 데이터 디렉토리를 ext4 테스트 미러에서 참조: `ln -s /mnt/f/dev/geodata data`
 7. 17개 시도 원천 적재 (`ktgctl load all-sidos --juso ... --locsum ... --navi ... --shp-root ... --yyyymm 202605`). 텍스트 정본(`tl_juso_text`) + 좌표 원천(`tl_locsum_entrc`, `tl_navi_*`) + SHP 도형 보조를 한 배치로 적재한다.
 8. `ktgctl load pobox <pobox.txt>`, `ktgctl load bulk <bulk.txt>` (또는 `ktgctl load epost`로 다운로드+적재)
 9. `ktgctl refresh mv` → `mv_geocode_target`(및 `mv_geocode_text_search` helper) 갱신 + `ANALYZE`. 분기 풀로드는 `ktgctl refresh mv --swap`(shadow MV rename swap).

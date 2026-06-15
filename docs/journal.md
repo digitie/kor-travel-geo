@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-214 phase ② 성능평가·벤치 완료)
+
+**작업**: T-213 r3 전용 baseline(`kor_travel_geo_t213_20260615_r3`, RustFS `kor-travel-geo/t213/20260615-rerun3`, serving release `54e17e80-312e-46da-a58f-d8b10be37c85`)을 preflight로 확인한 뒤 T-214 benchmark를 실행했다. T-213 r3 full-load/rebuild-db 로그를 기준 load 벤치로 사용했고, T-047 SQL/REST 하네스, T-035 MV refresh/swap 하네스, source registry deep rehash/multipart synthetic 하네스, 실제 RustFS quick/deep reconcile을 실행했다.
+
+**결과**: artifact는 WSL mirror에서 생성한 뒤 `F:\dev\geodata\t214-benchmark\20260615-r3\`로 복사했다. SQL benchmark는 오류 0건이며 c64 worst p95가 `Q4_SEARCH/search_fuzzy=245.895ms`다. REST sample benchmark도 오류 0건이며 c64 worst p95가 `Q4_SEARCH/search_fuzzy=534.031ms`다. MV는 `concurrent=126.414s`, `swap-rerun=340.128s`로 측정했고 row count는 `mv_geocode_target=6,419,795`, `mv_geocode_text_search=6,419,795`를 유지했다.
+
+**주의**: 첫 `swap` 측정은 실제 swap 이후 `ANALYZE mv_geocode_target` 단계에서 DB statement timeout에 걸렸다. relation과 row count를 확인한 뒤 `ANALYZE`를 수동 보정했고, statement timeout을 늘려 `swap-rerun.json`으로 최종 측정했다. 실제 RustFS quick/deep reconcile은 등록 DB file missing 없이 prefix orphan object warning 2건(`object_missing_db`)만 남겼다. 상세 결과는 `docs/t214-phase2-performance-benchmark.md`에 정리했다.
+
+## 2026-06-15 (T-214 baseline 재구성 및 Juso 원천 정리)
+
+**작업**: `F:\dev\python-kraddr-geo\data\juso`와 `F:\dev\python-kraddr-geo\data\juso-incoming-20260614`의 Juso 원천을 `F:\dev\geodata\juso`로 복사한 뒤, T-213/T-214가 직접 쓰는 6개 원천만 루트에 남겼다. 현재 쓰지 않는 파일과 과거 snapshot, 검증 전용 묶음은 삭제하지 않고 `F:\dev\geodata\juso\unused\` 아래 같은 상대 경로로 이동했고, 이동 로그는 `unused\move-log.csv`에 남겼다.
+
+**작업**: `scripts/run_t213_live_pipeline.py`의 기본 데이터 루트를 `/mnt/f/dev/geodata/juso`로 우선 탐색하게 바꾸고, 기준년월이 없는 원천은 `202604`로 갈음하는 정책을 plan/summary에 기록하게 했다. NAVI row count table 이름도 실제 테이블명(`tl_navi_buld_centroid`, `tl_navi_entrc`)으로 보정했다. README, SKILL, AGENTS, 개발환경/워크플로/복구 문서, T-213/T-214 handoff 문서에는 공용 `geodata` 원천과 `unused` 보존 규칙, T-213 baseline 보존 정책을 반영했다.
+
+**실행 결과**: T-214 기준 baseline을 전용 DB `kor_travel_geo_t213_20260615_r3`와 RustFS prefix `kor-travel-geo/t213/20260615-rerun3`에 재실행했다. source match set은 `a0c2d514-a91d-44c4-bdb6-0bc4771ae61a`, active serving release는 `54e17e80-312e-46da-a58f-d8b10be37c85`, dataset snapshot은 `1b354560-52bc-4ec6-8760-55fed63d9e98`, load batch는 `batch_ee0c66494eac490ba927e0a689dfd29a`다.
+
+**검증**: source load 6개, consistency check, MV refresh가 모두 `done`이다. row count는 `tl_juso_text=6,419,795`, `tl_locsum_entrc=6,405,091`, `tl_navi_buld_centroid=10,687,317`, `tl_navi_entrc=12,830`, `tl_spbd_buld_polygon=10,687,732`, `tl_roadaddr_entrc=6,404,697`, `tl_sppn_makarea=24,204`, `mv_geocode_target=6,419,795`, `mv_geocode_text_search=6,419,795`다. `경기도 용인시 수지구 성복1로 35` smoke geocode는 `OK` 후보 1건을 반환했다. summary와 run log는 `F:\dev\geodata\t213-baseline\20260615-rerun3\`에 복사했다.
+
 ## 2026-06-15 (T-125 C11 serving 사전 검증 문서 보강)
 
 **작업**: T-119 착수 전 빠뜨리면 안 되는 증거를 `docs/t125-c11-serving-preflight.md`에 별도 gate로 고정했다. 기존 `mv_geocode_target` 대표점 대비 impact, C3/C4/C6/C7 회귀, T-047/T-214 계열 성능 회귀, feature flag rollback, v1/v2 노출 정책을 필수 산출물로 분리하고, 하나라도 없으면 ADR-051 accepted 전환과 T-119 착수를 금지한다고 명시했다.
