@@ -689,6 +689,8 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
         size_bytes: int | None = None,
         sha256: str | None = None,
         manifest: dict[str, Any] | None = None,
+        retention_class: str | None = None,
+        expires_at: datetime | None = None,
         dataset_snapshot_id: str | None = None,
         serving_release_id: str | None = None,
         callback_state: str | None = None,
@@ -714,6 +716,12 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
         if manifest is not None:
             assignments.append("manifest = :manifest")
             params["manifest"] = manifest
+        if retention_class is not None:
+            assignments.append("retention_class = :retention_class")
+            params["retention_class"] = retention_class
+        if expires_at is not None:
+            assignments.append("expires_at = :expires_at")
+            params["expires_at"] = expires_at
         if dataset_snapshot_id is not None:
             assignments.append("dataset_snapshot_id = :dataset_snapshot_id")
             params["dataset_snapshot_id"] = dataset_snapshot_id
