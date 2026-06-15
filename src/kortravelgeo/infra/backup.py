@@ -36,6 +36,9 @@ from kortravelgeo.version import __version__
 
 BACKUP_ARTIFACT_TYPE = "db_backup"
 RESTORE_LOG_ARTIFACT_TYPE = "db_restore_log"
+#: Default retention class for a finalized backup (T-229). The retention janitor
+#: (T-230) treats anything other than ``pinned`` as eligible once ``expires_at`` passes.
+DEFAULT_BACKUP_RETENTION_CLASS = "default"
 BACKUP_MEDIA_TYPE = "application/x-tar"
 DEFAULT_BACKUP_DISPLAY_PREFIX = "kor_travel_geo_backup"
 ROW_COUNT_OBJECTS = (
@@ -311,6 +314,10 @@ async def run_backup_job(
             size_bytes=size_bytes,
             sha256=archive_sha256,
             manifest=manifest,
+            # T-229: record TTL so the retention janitor (T-230) and ops.artifacts
+            # `expired` count have a basis. expires_at is anchored at finalize time.
+            retention_class=DEFAULT_BACKUP_RETENTION_CLASS,
+            expires_at=artifact_expires_at(settings, req.retention_days),
             finished=True,
         )
         if updated_artifact is None:
