@@ -52,6 +52,7 @@ from .dto.admin import (
     MaintenanceWindowEnd,
     OpsArtifact,
     RestoreCreateRequest,
+    RestoreDrillResult,
     RestoreDryRunResult,
     RestoreHotSwapExecuteRequest,
     RestoreHotSwapPlan,
@@ -966,6 +967,32 @@ class AsyncAddressClient:
         from .infra.backup import run_restore_dry_run
 
         return await run_restore_dry_run(self._engine(), self.settings, req)
+
+    async def run_restore_drill(
+        self,
+        *,
+        timestamp: str,
+        artifact_id: str | None = None,
+        archive_path: str | None = None,
+        base_database: str | None = None,
+        jobs: int | None = None,
+    ) -> RestoreDrillResult:
+        """Restore a backup into a throwaway DB, reconcile+smoke, then drop it (T-242).
+
+        Proves restorability without touching the serving DB; returns a PASS/FAIL result.
+        ``timestamp`` names the throwaway DB deterministically.
+        """
+        from .infra.restore_drill import run_restore_drill
+
+        return await run_restore_drill(
+            self._engine(),
+            self.settings,
+            timestamp=timestamp,
+            artifact_id=artifact_id,
+            archive_path=archive_path,
+            base_database=base_database,
+            jobs=jobs,
+        )
 
     async def scheduled_backup_status(
         self, *, now: datetime | None = None
