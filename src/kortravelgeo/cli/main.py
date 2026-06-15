@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -59,6 +60,8 @@ from kortravelgeo.version import __version__
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+    from kortravelgeo.dto.admin import RestoreDrillResult
 
 app = typer.Typer(help="ktgctl command line tools.")
 load_app = typer.Typer(help="Load data sources.")
@@ -955,6 +958,47 @@ def backup_janitor(
             typer.echo(result.model_dump_json())
 
     asyncio.run(run())
+
+
+@backup_app.command("restore-drill")
+def backup_restore_drill(
+    artifact_id: str | None = typer.Option(None, "--artifact-id"),
+    archive_path: Path | None = typer.Option(None, "--archive-path"),
+    base_database: str | None = typer.Option(
+        None, "--base-db", help="throwaway DB 이름 base (기본: 현재 serving DB)."
+    ),
+    jobs: int | None = typer.Option(None, "--jobs", min=1, max=64),
+    output: Path | None = typer.Option(None, "--output", help="결과 artifact JSON 경로."),
+) -> None:
+    """Restore a backup into a throwaway DB, reconcile+smoke, then drop it (T-242).
+
+    Proves a backup is restorable WITHOUT touching the serving DB (new_database into
+    ``<base>_restoretest_<ts>``, always dropped afterward). Prints a PASS/FAIL result
+    artifact and **exits non-zero on FAIL** so cron/CI can alert.
+    """
+    if artifact_id is None and archive_path is None:
+        typer.echo("error: --artifact-id 또는 --archive-path 중 하나가 필요합니다", err=True)
+        raise typer.Exit(2)
+
+    async def run() -> RestoreDrillResult:
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        async with AsyncAddressClient() as client:
+            return await client.run_restore_drill(
+                timestamp=timestamp,
+                artifact_id=artifact_id,
+                archive_path=str(archive_path) if archive_path else None,
+                base_database=base_database,
+                jobs=jobs,
+            )
+
+    result = asyncio.run(run())
+    payload = result.model_dump_json(indent=2)
+    typer.echo(payload)
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(payload, encoding="utf-8")
+    if result.status == "FAIL":
+        raise typer.Exit(1)
 
 
 @restore_app.command("create")

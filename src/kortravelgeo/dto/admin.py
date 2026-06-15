@@ -743,6 +743,26 @@ class RestoreDryRunResult(FrozenModel):
     row_counts: dict[str, int] | None = None
 
 
+class RestoreDrillResult(FrozenModel):
+    """T-242 restore-drill outcome (restore into a throwaway DB → reconcile/smoke → drop).
+
+    ``status`` is ``FAIL`` if the restore raised, reconcile mismatched, or smoke failed.
+    ``cleanup_ok`` reports whether the throwaway DB was dropped (always attempted).
+    """
+
+    status: Literal["PASS", "FAIL"]
+    temp_database: str
+    duration_seconds: float
+    restored: bool
+    cleanup_ok: bool
+    reconcile_ok: bool | None = None
+    smoke_ok: bool | None = None
+    archive_size_bytes: int | None = None
+    source_artifact_id: str | None = None
+    reconcile: RestoreReconcileResult | None = None
+    errors: tuple[str, ...] = ()
+
+
 class BackupCopyRequest(FrozenModel):
     """T-236 off-host backup copy request."""
 
