@@ -3496,6 +3496,11 @@ export interface components {
         };
         /** RestoreCreateRequest */
         RestoreCreateRequest: {
+            /**
+             * Allow Version Mismatch
+             * @default false
+             */
+            allow_version_mismatch: boolean;
             /** Archive Path */
             archive_path?: string | null;
             /** Artifact Id */

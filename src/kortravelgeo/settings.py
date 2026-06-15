@@ -131,6 +131,8 @@ class Settings(BaseSettings):
     backup_require_free_space_check: bool = True
     # T-230: retention janitor keeps at least this many newest backups even if expired.
     backup_retention_keep_min: int = Field(default=3, ge=0)
+    # T-234: restore hard-fails on PG major / PostGIS major.minor mismatch unless set.
+    restore_allow_version_mismatch: bool = False
     backup_callback_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
         "localhost",
         "127.0.0.1",
