@@ -580,6 +580,7 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
         limit: int = 50,
         artifact_type: str | None = None,
         state: str | None = None,
+        expires_before: datetime | None = None,
     ) -> list[OpsArtifact]:
         clauses = []
         params: dict[str, Any] = {"limit": limit}
@@ -589,6 +590,11 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
         if state is not None:
             clauses.append("state = :state")
             params["state"] = state
+        if expires_before is not None:
+            # NULL expires_at is excluded by ``<=``; the filter applies inside SQL so the
+            # LIMIT acts on the already-filtered set (T-240 follow-up: not after LIMIT).
+            clauses.append("expires_at IS NOT NULL AND expires_at <= :expires_before")
+            params["expires_before"] = expires_before
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self.engine.connect() as conn:
             rows = (
