@@ -2,6 +2,12 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-213 기준 DB 접속 경로 문서화)
+
+**작업**: 다른 에이전트가 T-214/T-215 기준 데이터를 바로 사용할 수 있도록 `docs/t213-data-preservation.md`에 현재 T-213 r3 baseline 접속 정보를 보강했다. PostgreSQL host/port는 `localhost:5432`, DB는 `kor_travel_geo_t213_20260615_r3`, DSN은 `KTG_PG_DSN` template로 기록하고, RustFS endpoint/prefix, 원천 루트, T-213/T-214/T-215 artifact 루트, WSL/bash와 PowerShell 환경변수 예시를 함께 정리했다.
+
+**주의**: PostgreSQL 기준 DB는 raw `pgdata` 파일 경로가 아니라 `KTG_PG_DSN`으로 접근하는 논리 DB로 문서화했다. DB 계정과 password는 로컬 secret이므로 문서에 쓰지 않는다.
+
 ## 2026-06-15 (T-215 phase ② 튜닝·최종 검증 평가 완료)
 
 **작업**: T-213 r3 전용 baseline(`kor_travel_geo_t213_20260615_r3`, serving release `54e17e80-312e-46da-a58f-d8b10be37c85`)에서 T-215 preflight, C1~C10 재실행, C11~C17 run-validation, v1/v2 geocode/search/reverse/zipcode smoke, SQL/REST c64 재측정을 수행했다. 검증 artifact는 `F:\dev\geodata\t215-acceptance\20260615-r1\`에 남겼다.

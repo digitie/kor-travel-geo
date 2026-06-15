@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-213 기준 DB 접속 경로를 문서화했다. `docs/t213-data-preservation.md`에 현재 baseline의 PostgreSQL host/port, DB 이름, `KTG_PG_DSN` template, RustFS endpoint/prefix, 원천·artifact 경로, WSL/PowerShell 환경변수 예시를 추가해 다른 에이전트가 기본 개발 DB와 혼동하지 않게 했다.
 - T-125 C11 serving 편입 승인 전 사전 검증 체크리스트를 추가했다. `docs/t125-c11-serving-preflight.md`는 기존 `mv_geocode_target` 대표점 대비 impact, C3/C4/C6/C7 회귀, T-047/T-214 계열 성능 회귀, feature flag rollback, v1/v2 노출 정책을 필수 산출물로 고정하고, 하나라도 빠지면 ADR-051 accepted 전환과 T-119 착수를 금지한다.
 - T-207 epost 수동 server-fetch를 추가했다. `POST /v1/admin/source-files/epost-fetch`가 epost ZIP을 서버에서 내려받아 사서함/다량배달처 텍스트 파일을 T-120 검증 모듈로 검증하고, RustFS source registry `single_file`로 등록한 뒤 `pobox_load`/`bulk_load` job을 enqueue한다. `/admin/source-files` 업로드 탭의 `epost 받기` 버튼도 실제 endpoint에 연결했다. 상세: `docs/t207-epost-server-fetch.md`.
 - T-213 phase ② 전국 라이브데이터 로딩 runner를 추가했다. `scripts/run_t213_live_pipeline.py`가 전국 실 원천 6종을 RustFS source registry에 등록하고, source match set validate/activate 후 rebuild-db source load와 serving MV swap을 실행한다. 실제 실행은 `--execute`와 `RUN-T213-LIVE <database>` typed confirmation을 요구한다. WSL 테스트 미러 live run에서 active serving release `96e60a10-695c-4a45-ad26-91422eb2f855`, `mv_geocode_target=6,419,795`, `mv_geocode_text_search=6,419,795`, `tl_sppn_makarea=24,204`를 확인했다. 상세: `docs/t213-phase2-live-loading.md`.
