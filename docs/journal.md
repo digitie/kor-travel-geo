@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (PR #210~#217 사후 리뷰 후속 반영)
+
+**작업**: Claude Code의 최근 병합 PR #205/#206/#208/#210/#211/#213/#214/#215/#217에 사후 리뷰 코멘트를 남기고, M급 결함 중 복원 preflight/cleanup에 직접 영향을 주는 항목을 fixup으로 반영했다.
+
+**수정**: restore dry-run과 실제 restore version guard가 현재 앱 DB가 아니라 실제 `target_dsn` 클러스터의 PostgreSQL/PostGIS 버전을 조회한다. dry-run의 target DB 접속/존재 확인 실패와 target version query 실패는 warning이 아니라 blocker로 처리한다. 실패 cleanup은 target DB 이름을 런타임 검증한 뒤 quote하고, quarantine 이름은 PostgreSQL 63자 제한 안에 들어오도록 잘라 생성한다. 전체 Windows 단위 테스트 중 함께 드러난 `TL_SPPN_MAKAREA` ZIP member prefix의 OS별 separator 회귀도 `PurePosixPath`로 고쳤다.
+
+**문서/검증**: 상세는 `docs/postmerge-review-fixups-pr210-pr217.md`에 기록했다. Windows `pytest -q`는 758 passed/53 skipped로 통과했고, WSL ext4 mirror에서는 `pytest -q` 761 passed/50 skipped, `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`가 모두 통과했다.
+
 ## 2026-06-16 (PR #142/#145/#149 리뷰 후속 반영)
 
 **작업**: 전체 PR review thread 스캔에서 남아 있던 source registry 계열 unresolved thread 7건을 코드로 반영했다. register coverage 검증을 full member 검증에서 분리하고, `revalidate_group`의 child state 갱신 순서를 바로잡았으며, janitor multipart abort key를 실제 upload endpoint layout과 맞췄다.

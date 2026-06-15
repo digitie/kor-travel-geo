@@ -8,7 +8,7 @@ import tempfile
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from sqlalchemy import create_engine, text
@@ -97,7 +97,7 @@ def _zip_source(zip_path: Path) -> SppnMakareaSource:
         msg = f"expected one {LAYER_NAME}.shp in {zip_path}, found {len(shp_members)}"
         raise LoaderError(msg)
     shp_member = shp_members[0]
-    prefix = str(Path(shp_member).with_suffix(""))
+    prefix = str(PurePosixPath(shp_member).with_suffix(""))
     return SppnMakareaSource(
         source_file=f"{zip_path.name}:{shp_member}",
         zip_path=zip_path,
