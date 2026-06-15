@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-131 C11 guarded policy simulation)
+
+**작업**: `scripts/run_t131_c11_guarded_policy_simulation.py`를 추가해 C11 후보를 blanket 승격하지 않는 guarded policy 7개를 오프라인으로 비교했다. T-129/T-130 후보 테이블을 재사용하고 `_ktg_t131_c11_policy_features` feature table에서 C4/C6/C7, baseline 결측, movement budget을 집계했다.
+
+**결과**: blanket C11은 candidate C4/C6/C7 오류가 68/3,635/9,896이라 계속 no-go다. `centroid_c4_50_c6_c7_move_500`은 C3 결측 3,482,270건을 채우면서 candidate C4/C6/C7 오류 0건, p99 이동 64.981m, max 495.345m, 500m 초과 0건으로 가장 보수적인 반복 검증 후보가 됐다. 다만 100m 초과 이동이 10,099건 남아 active serving promotion은 여전히 금지한다.
+
+**산출물**: `F:\dev\geodata\t131-c11-guarded-policy-simulation\20260616-r1\`에 `summary.json`, `policy_summary.csv`, 재현 SQL을 보존했다. 상세는 `docs/t131-c11-guarded-policy-simulation.md`에 정리했다. T-132에서 재사용할 수 있도록 `_ktg_t125_*`와 `_ktg_t131_*` 작업 테이블은 남겨 두었다.
+
 ## 2026-06-16 (T-130 C11 C4/C6/C7 회귀 원인 분석)
 
 **작업**: `scripts/run_t130_c11_regression_root_cause.py`를 추가해 T-125에서 악화된 C4/C6/C7을 row-level로 분석했다. T-129에서 남긴 `_ktg_t125_*` 후보 테이블을 재사용하고, baseline serving 출입구와 C11 후보점의 건물·우편번호·행정구역 polygon 오류를 같은 row에서 비교했다.
