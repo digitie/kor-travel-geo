@@ -411,6 +411,28 @@ textarea {
   margin: 0;
 }
 
+.retention-alert {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+}
+
+.retention-alert-head {
+  align-items: center;
+  color: var(--danger, #b91c1c);
+  display: flex;
+  font-size: 14px;
+  gap: 6px;
+}
+
+.retention-alert p {
+  margin: 0;
+}
+
 .key-list {
   background: var(--surface-muted, #f8fafc);
   border: 1px solid var(--line);

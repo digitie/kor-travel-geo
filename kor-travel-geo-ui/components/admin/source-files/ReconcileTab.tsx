@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
+import { RetentionWarning } from "@/components/admin/source-files/RetentionWarning";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { postJson, requestJson } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
@@ -16,6 +17,7 @@ import {
   type SourceBulkHardDeleteRequest,
   type SourceBulkHardDeleteResponse,
   type SourceCapacityUsage,
+  type SourceHardDeleteOutcome,
   type SourceReconcileItem,
   type SourceReconcileItemPage,
   type SourceReconcileRun
@@ -299,7 +301,11 @@ export function ReconcileTab() {
 
       {lastResult ? (
         <Panel title="최근 결과">
-          <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
+          {isBulkDeleteResult(lastResult) ? (
+            <BulkDeleteResultSummary result={lastResult} />
+          ) : (
+            <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
+          )}
         </Panel>
       ) : null}
 
@@ -405,6 +411,7 @@ function CapacityPanel({ capacity }: { capacity?: SourceCapacityUsage }) {
   }
   return (
     <>
+      <RetentionWarning retention={capacity.retention} />
       <dl className="criteria-grid">
         <div>
           <dt>전체 용량</dt>
@@ -444,5 +451,59 @@ function CapacityPanel({ capacity }: { capacity?: SourceCapacityUsage }) {
         </tbody>
       </table>
     </>
+  );
+}
+
+function isBulkDeleteResult(value: unknown): value is SourceBulkHardDeleteResponse {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "hard_deleted_count" in value &&
+    "requested_count" in value
+  );
+}
+
+function BulkDeleteResultSummary({ result }: { result: SourceBulkHardDeleteResponse }) {
+  const failed = (result.results ?? []).filter(
+    (r: SourceHardDeleteOutcome) => r.outcome === "delete_failed"
+  );
+  return (
+    <div className="source-stack">
+      <dl className="criteria-grid">
+        <div>
+          <dt>요청</dt>
+          <dd>{result.requested_count.toLocaleString()}건</dd>
+        </div>
+        <div>
+          <dt>영구 삭제</dt>
+          <dd>{result.hard_deleted_count.toLocaleString()}건</dd>
+        </div>
+        <div>
+          <dt>삭제 실패</dt>
+          <dd>{result.delete_failed_count.toLocaleString()}건</dd>
+        </div>
+        <div>
+          <dt>건너뜀(skip)</dt>
+          <dd>{result.skipped_count.toLocaleString()}건</dd>
+        </div>
+      </dl>
+      {result.affected_match_set_ids && result.affected_match_set_ids.length > 0 ? (
+        <p className="form-note">
+          영향받은 match set: {result.affected_match_set_ids.join(", ")}
+        </p>
+      ) : null}
+      {failed.length > 0 ? (
+        <>
+          <p className="form-note warn">삭제 실패 객체 (후속 확인 필요):</p>
+          <ul className="key-list">
+            {failed.map((r: SourceHardDeleteOutcome) => (
+              <li key={r.object_key} title={r.reason ?? ""}>
+                {r.object_key}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Panel } from "@/components/ui/Panel";
+import { RetentionWarning } from "@/components/admin/source-files/RetentionWarning";
 import { requestJson } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import {
@@ -48,6 +49,8 @@ export function CapacitySummaryCard() {
       {!capacity ? (
         <p className="form-note">용량 정보를 불러오는 중…</p>
       ) : (
+        <>
+        <RetentionWarning retention={capacity.retention} />
         <dl className="criteria-grid">
           <div>
             <dt>객체 수</dt>
@@ -86,6 +89,7 @@ export function CapacitySummaryCard() {
             <dd>{openIssues.error.toLocaleString()}</dd>
           </div>
         </dl>
+        </>
       )}
     </Panel>
   );
