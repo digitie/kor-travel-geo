@@ -77,6 +77,8 @@ from kortravelgeo.dto.admin import (
     UploadSidoZipResponse,
 )
 from kortravelgeo.dto.source import (
+    EpostServerFetchRequest,
+    EpostServerFetchResponse,
     GroupValidationResult,
     MultipartCompleteRequest,
     MultipartInitiateResponse,
@@ -144,6 +146,9 @@ from kortravelgeo.infra.uploads import (
 from kortravelgeo.loaders.consistency_run_validation import (
     AUGMENT_CASE_CODES,
     is_augment_case,
+)
+from kortravelgeo.loaders.epost_server_fetch import (
+    fetch_epost_source_file as run_epost_server_fetch,
 )
 from kortravelgeo.settings import Settings, get_settings
 
@@ -381,6 +386,58 @@ async def get_upload_session(
     client: AsyncAddressClient = Depends(get_client),
 ) -> UploadSessionStatus:
     return await client.get_upload_session(upload_session_id)
+
+
+@router.post(
+    "/source-files/epost-fetch",
+    response_model=EpostServerFetchResponse,
+    response_model_exclude_none=True,
+)
+async def fetch_epost_source(
+    req: EpostServerFetchRequest,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+    queue: JobQueue = Depends(get_job_queue),
+) -> EpostServerFetchResponse:
+    """Manual epost server-fetch → RustFS register → postal load enqueue (T-207)."""
+    result = await run_epost_server_fetch(
+        engine=client._engine(),
+        settings=get_settings(),
+        req=req,
+        actor=ctx.actor,
+    )
+    load_job_id: str | None = None
+    if req.enqueue_load:
+        load_job_id = await queue.enqueue(result.load_job_kind, result.load_payload)
+    await client.record_audit_event(
+        action="source.epost_server_fetch",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="registered",
+        payload={
+            "category": req.category,
+            "user_yyyymm": req.user_yyyymm,
+            "load_job_kind": result.load_job_kind,
+            "load_job_id": load_job_id,
+            "warnings": list(result.warnings),
+        },
+        resource_type="source_upload_session",
+        resource_id=result.upload_session.upload_session_id,
+        job_id=load_job_id,
+        **_audit_request(request),
+    )
+    return EpostServerFetchResponse(
+        category=req.category,
+        upload_session=result.upload_session,
+        registration=result.register,
+        load_job_id=load_job_id,
+        load_job_kind=result.load_job_kind if req.enqueue_load else None,
+        selected_filename=result.selected_filename,
+        selected_path=str(result.selected_path),
+        validation=result.load_payload["validation"],
+        warnings=result.warnings,
+    )
 
 
 @router.post(
@@ -2409,6 +2466,7 @@ def _audit_request(request: Request) -> _AuditRequest:
 #: Terminal session states for the SSE loop (mirrors jobs events' done set).
 _UPLOAD_TERMINAL_STATES = frozenset(
     {
+        "registered",
         "available",
         "quarantined",
         "cancelled",

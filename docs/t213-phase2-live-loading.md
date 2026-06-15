@@ -17,9 +17,13 @@ T-213은 전국 실 원천 archive를 T-109 계열 source registry 경로로 등
 `scripts/run_t213_live_pipeline.py`를 추가했다. 기본은 plan-only이며, 실제 실행은 다음 조건을 요구한다.
 
 - `--execute`
+- `--dsn` 또는 `KTG_TEST_PG_DSN`/`KTG_PG_DSN` (기본 DSN fallback 없음)
+- `--allow-destructive`
 - `--typed-confirmation "RUN-T213-LIVE <database>"`
 - `--force-promotion` 사용 시 `--force-promotion-reason`
 - 실행 전 queued/running `load_jobs` 차단
+
+runbook은 실행 직전 기존 active source match set을 기록한다. 기본 동작은 성공/실패와 관계없이 새 T-213 match set이 displace한 기존 active를 복구하는 검증 실행이다. 실제 운영 serving 구성을 새 T-213 산출물로 유지하려면 `--promote-active-match-set`을 명시한다. 이 플래그 없이도 serving release/snapshot FK는 생성되지만, active source match set slot은 실행 전 상태로 되돌아간다.
 
 기본 profile은 `serving_recommended`이며 다음 source category를 등록한다.
 
@@ -61,6 +65,8 @@ source match set은 `6eb2b07b-f34f-460a-91ab-a5847a1e979e`로 활성화했다. s
 | `mv_geocode_target` | 6,419,795 |
 | `mv_geocode_text_search` | 6,419,795 |
 
+T-027 최종 실 데이터 클린 재적재의 `mv_geocode_target=6,416,642`와 비교하면 T-213은 3,153행 많다(+0.05%). T-213은 source registry 경로로 `roadname_hangul_full=202605`, `locsum/navi/electronic_map/roadaddr_entrance=202604`, `zone_shape=202603` 조합을 사용했고, T-027은 당시 클린 재적재 fixture와 기준월 조합을 사용했다. 차이는 loader 동작 차이로 단정하지 않고 원천 기준월·배포 파일 차이로 관리하며, T-214/T-215에서는 현재 active release row count를 기준값으로 삼는다.
+
 active serving release는 다음으로 생성됐다.
 
 | 항목 | 값 |
@@ -75,7 +81,7 @@ active serving release는 다음으로 생성됐다.
 
 ## 정합성 결과
 
-최신 consistency report는 `severity_max=ERROR`다. 이는 T-027 계열과 같은 source-quality gate 성격이며, 이번 T-213에서는 `forced_promotion` 사유를 남기고 serving release를 생성했다.
+최신 consistency report는 `severity_max=ERROR`다. 이는 T-027 계열과 같은 source-quality gate 성격이며, production 경로에서는 수동 DB recovery가 아니라 `--force-promotion --force-promotion-reason "<사유>"`로 `forced_promotion` provenance를 남긴 뒤 serving release를 생성한다. 이 우회는 consistency ERROR promotion gate에만 적용되고, source archive integrity gate나 unavailable group은 우회하지 않는다.
 
 주요 non-OK case:
 

@@ -6,7 +6,9 @@ These mirror the ``ops.source_file_groups`` / ``ops.source_files`` /
 They are read-only API DTOs with no behavior.
 """
 
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime  # noqa: TC003
 from typing import Any, Literal
 
 from pydantic import Field
@@ -202,7 +204,11 @@ TERMINAL_UPLOAD_SESSION_STATES: frozenset[str] = frozenset(
         "registration_expired",
         "failed_upload",
         "failed_extract",
+        "failed_structure",
         "failed_hash",
+        "failed_rustfs_put",
+        "failed_rustfs_verify",
+        "failed_storage_state",
     }
 )
 
@@ -361,6 +367,44 @@ class SourceUploadProgressEvent(FrozenModel):
     total_bytes: int = Field(default=0, ge=0)
     message: str | None = None
     log_tail: str | None = None
+
+
+EpostServerFetchCategory = Literal["epost_pobox_full", "epost_bulk_full"]
+EpostDownloadKind = Literal["1", "4"]
+EpostLoadJobKind = Literal["pobox_load", "bulk_load"]
+
+
+class EpostServerFetchRequest(FrozenModel):
+    """``POST /v1/admin/source-files/epost-fetch`` body (T-207).
+
+    Manual operator-triggered server fetch. The server downloads the epost ZIP
+    from configured OpenAPI settings, extracts the requested postal auxiliary
+    text file, validates it with the T-120 validator, registers it as a
+    ``single_file`` source archive in RustFS, then optionally enqueues the
+    corresponding loader job. It is not a scheduled downloader and it does not
+    participate in core ``rebuild-db`` source match sets.
+    """
+
+    category: EpostServerFetchCategory
+    user_yyyymm: str = Field(pattern=r"^\d{6}$")
+    download_kind: EpostDownloadKind | None = None
+    display_name: str | None = Field(default=None, min_length=1)
+    yyyymm_mismatch_ack: bool = False
+    enqueue_load: bool = True
+
+
+class EpostServerFetchResponse(FrozenModel):
+    """Result of one manual epost server-fetch/register/load enqueue run."""
+
+    category: EpostServerFetchCategory
+    upload_session: UploadSessionStatus
+    registration: RegisterResponse | None = None
+    load_job_id: str | None = None
+    load_job_kind: EpostLoadJobKind | None = None
+    selected_filename: str | None = None
+    selected_path: str | None = None
+    validation: dict[str, Any] = Field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
 
 
 # --- Registry register / validate (T-203b) --------------------------------

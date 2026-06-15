@@ -2321,6 +2321,162 @@
         "title": "DatasetSnapshot",
         "type": "object"
       },
+      "EpostServerFetchRequest": {
+        "additionalProperties": false,
+        "description": "``POST /v1/admin/source-files/epost-fetch`` body (T-207).\n\nManual operator-triggered server fetch. The server downloads the epost ZIP\nfrom configured OpenAPI settings, extracts the requested postal auxiliary\ntext file, validates it with the T-120 validator, registers it as a\n``single_file`` source archive in RustFS, then optionally enqueues the\ncorresponding loader job. It is not a scheduled downloader and it does not\nparticipate in core ``rebuild-db`` source match sets.",
+        "properties": {
+          "category": {
+            "enum": [
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "download_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "1",
+                  "4"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Kind"
+          },
+          "enqueue_load": {
+            "default": true,
+            "title": "Enqueue Load",
+            "type": "boolean"
+          },
+          "user_yyyymm": {
+            "pattern": "^\\d{6}$",
+            "title": "User Yyyymm",
+            "type": "string"
+          },
+          "yyyymm_mismatch_ack": {
+            "default": false,
+            "title": "Yyyymm Mismatch Ack",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "user_yyyymm"
+        ],
+        "title": "EpostServerFetchRequest",
+        "type": "object"
+      },
+      "EpostServerFetchResponse": {
+        "additionalProperties": false,
+        "description": "Result of one manual epost server-fetch/register/load enqueue run.",
+        "properties": {
+          "category": {
+            "enum": [
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "load_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Job Id"
+          },
+          "load_job_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pobox_load",
+                  "bulk_load"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Load Job Kind"
+          },
+          "registration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegisterResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Filename"
+          },
+          "selected_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Path"
+          },
+          "upload_session": {
+            "$ref": "#/components/schemas/UploadSessionStatus"
+          },
+          "validation": {
+            "additionalProperties": true,
+            "title": "Validation",
+            "type": "object"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "category",
+          "upload_session"
+        ],
+        "title": "EpostServerFetchResponse",
+        "type": "object"
+      },
       "ExplainRequest": {
         "additionalProperties": false,
         "properties": {
@@ -12792,6 +12948,48 @@
           }
         },
         "summary": "Source Files Capacity",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/epost-fetch": {
+      "post": {
+        "description": "Manual epost server-fetch → RustFS register → postal load enqueue (T-207).",
+        "operationId": "fetch_epost_source_v1_admin_source_files_epost_fetch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EpostServerFetchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EpostServerFetchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch Epost Source",
         "tags": [
           "admin"
         ]

@@ -15,6 +15,8 @@ export type UploadSessionState = UploadSessionStatus["state"];
 export type MultipartInitiateResponse = components["schemas"]["MultipartInitiateResponse"];
 export type MultipartCompleteRequest = components["schemas"]["MultipartCompleteRequest"];
 export type UploadPartResponse = components["schemas"]["UploadPartResponse"];
+export type EpostServerFetchRequest = components["schemas"]["EpostServerFetchRequest"];
+export type EpostServerFetchResponse = components["schemas"]["EpostServerFetchResponse"];
 
 export type SourceMatchSet = components["schemas"]["SourceMatchSet"];
 export type SourceMatchSetDetail = components["schemas"]["SourceMatchSetDetail"];
@@ -104,7 +106,7 @@ export const HARD_DELETE_CONFIRMATION = "HARD-DELETE-SOURCES";
  * The backend re-validates eligibility and reports `skipped_ineligible` regardless,
  * so this only gates which rows offer a selection checkbox.
  */
-export const BULK_HARD_DELETE_ELIGIBLE_ISSUE_TYPES: ReadonlySet<ReconcileIssueType> =
+const BULK_HARD_DELETE_ELIGIBLE_ISSUE_TYPES: ReadonlySet<ReconcileIssueType> =
   new Set<ReconcileIssueType>(["object_missing_db", "registration_expired"]);
 
 export function isBulkHardDeleteEligible(item: SourceReconcileItem): boolean {
@@ -116,7 +118,7 @@ export function isBulkHardDeleteEligible(item: SourceReconcileItem): boolean {
 }
 
 // epost categories use the manual server-fetch flow (T-207), not browser upload.
-export const epostCategories: ReadonlySet<SourceCategory> = new Set<SourceCategory>([
+const epostCategories: ReadonlySet<SourceCategory> = new Set<SourceCategory>([
   "epost_pobox_full",
   "epost_bulk_full"
 ]);
@@ -131,7 +133,14 @@ const TERMINAL_UPLOAD_STATES: ReadonlySet<UploadSessionState> = new Set<UploadSe
   "available",
   "cancelled",
   "expired",
-  "registration_expired"
+  "registration_expired",
+  "failed_upload",
+  "failed_extract",
+  "failed_structure",
+  "failed_hash",
+  "failed_rustfs_put",
+  "failed_rustfs_verify",
+  "failed_storage_state"
 ]);
 
 export function isResumableSession(session: UploadSessionStatus): boolean {
@@ -163,6 +172,7 @@ export const sourceFilesPaths = {
   },
   uploadSession: (id: string) => `/admin/source-files/upload-sessions/${id}`,
   registerSession: (id: string) => `/admin/source-files/upload-sessions/${id}/register`,
+  epostFetch: () => "/admin/source-files/epost-fetch",
   matchSets: (state?: string) =>
     `/admin/source-match-sets${state ? `?state=${encodeURIComponent(state)}` : ""}`,
   matchSet: (id: string) => `/admin/source-match-sets/${id}`,

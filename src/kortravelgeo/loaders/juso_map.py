@@ -112,11 +112,19 @@ def discover_sido_datasets(path: Path | str) -> tuple[JusoSidoDataset, ...]:
         raise direct_error
 
     datasets: list[JusoSidoDataset] = []
+    failures: list[str] = []
     for child in sorted(p for p in root.iterdir() if p.is_dir()):
         has_sig_dir = any(p.is_dir() and p.name.isdigit() for p in child.iterdir())
         if not has_sig_dir:
             continue
-        datasets.append(discover_sido_dataset(child))
+        try:
+            datasets.append(discover_sido_dataset(child))
+        except LoaderError as exc:
+            failures.append(f"{child.name}: {exc}")
+    if failures:
+        joined = "; ".join(failures)
+        msg = f"failed to discover one or more sido datasets under {root}: {joined}"
+        raise LoaderError(msg)
     if datasets:
         return tuple(datasets)
     raise direct_error

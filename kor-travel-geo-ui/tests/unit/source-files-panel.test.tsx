@@ -253,9 +253,49 @@ describe("SourceFilesPanel", () => {
   it("업로드 탭에 카테고리 카드와 재개 가능한 세션을 표시한다", async () => {
     renderPanel("upload");
     await screen.findByText("도로명주소 한글 전체분");
-    // epost 카드는 server-fetch(받기) 버튼을 비활성으로 렌더한다 (T-207 대기).
-    const epostButton = await screen.findByRole("button", { name: /받기 \(T-207 대기\)/ });
-    expect(epostButton).toBeDisabled();
+    apiMocks.postJson.mockImplementation(async (path: string) => {
+      if (path === "/admin/source-files/epost-fetch")
+        return {
+          category: "epost_pobox_full",
+          upload_session: {
+            ...RESUMABLE_SESSION,
+            upload_session_id: "source_upload_epost",
+            category: "epost_pobox_full",
+            state: "registered",
+            registered_at: "2026-06-15T00:00:00Z"
+          },
+          registration: {
+            source_file_group_id: "group_epost",
+            category: "epost_pobox_full",
+            group_kind: "single_file",
+            state: "available",
+            validation_state: "passed",
+            user_yyyymm: "202606"
+          },
+          load_job_id: "job_epost",
+          load_job_kind: "pobox_load",
+          validation: { row_count: 1 },
+          warnings: []
+        };
+      return { ok: true };
+    });
+    const epostCard = screen.getByText("epost 사서함").closest(".source-card") as HTMLElement;
+    const epostInput = within(epostCard).getByLabelText("기준년월 (user_yyyymm)");
+    fireEvent.change(epostInput, { target: { value: "202606" } });
+    const epostButton = within(epostCard).getByRole("button", { name: "epost 받기" });
+    expect(epostButton).not.toBeDisabled();
+    fireEvent.click(epostButton);
+    await waitFor(() =>
+      expect(apiMocks.postJson).toHaveBeenCalledWith(
+        "/admin/source-files/epost-fetch",
+        expect.objectContaining({
+          category: "epost_pobox_full",
+          user_yyyymm: "202606",
+          enqueue_load: true
+        })
+      )
+    );
+    expect(await screen.findByText(/job_epost/)).toBeInTheDocument();
     // 재개 가능한 업로드 목록
     expect(await screen.findByText("재개 가능한 업로드")).toBeInTheDocument();
   });

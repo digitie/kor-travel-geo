@@ -4,8 +4,9 @@ Exercises the merged T-200~T-212 source-registry services end-to-end against a
 real PostGIS database (``KTG_TEST_PG_DSN``-gated, skips cleanly when unset) and an
 in-memory S3-compatible fake object store, covering the backend-testable subset of
 the 27 "통합 시나리오" in ``docs/t109-backup-source-upload-management.md`` (lines
-~2079-2101). Pure-UI scenarios and epost (#27 depends on T-207, not merged) are
-skipped with explicit reasons.
+~2079-2101). Pure-UI scenarios and epost (#27 is covered by T-207 unit/API fake
+tests rather than this external-fetch integration slice) are skipped with
+explicit reasons.
 
 Pattern mirrors ``test_optional_real_postgres_ops_constraints.py``: a
 ``KTG_TEST_PG_DSN`` gate, ``make_async_engine(Settings(pg_dsn=dsn))``, a
@@ -1225,7 +1226,10 @@ async def test_s13_revalidate_failed_marks_invalid_not_skipped(
 
 
 @pytest.mark.skip(
-    reason="#27 epost fetch depends on T-207 (epost server-fetch flow), NOT merged"
+    reason=(
+        "#27 epost fetch is covered by T-207 unit/API tests with fake network/RustFS; "
+        "this DB+fake-store slice does not call the external epost OpenAPI"
+    )
 )
 def test_s27_epost_fetch_skipped() -> None:  # pragma: no cover
     ...

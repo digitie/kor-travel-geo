@@ -397,8 +397,10 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
+  color: inherit;
   display: grid;
   gap: 14px;
+  margin: 0;
   max-height: min(760px, calc(100vh - 36px));
   max-width: 880px;
   overflow: auto;

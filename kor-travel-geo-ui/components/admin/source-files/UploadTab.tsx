@@ -14,6 +14,7 @@ import {
   sourceFilesPaths,
   sourceRoleLabels,
   suggestYyyymm,
+  type EpostServerFetchResponse,
   type SourceFileCategoryCatalog,
   type SourceFileCategoryInfo,
   type UploadSessionStatus
@@ -65,6 +66,9 @@ export function UploadTab() {
         storage_kind: "rustfs",
         upload_strategy: "multipart"
       }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
+    },
     onError: (error, variables) => {
       if (error instanceof ApiError && error.status === 409) {
         setConflict({
@@ -76,6 +80,31 @@ export function UploadTab() {
       } else {
         setLastResult({ error: error instanceof Error ? error.message : String(error) });
       }
+    }
+  });
+
+  const epostFetch = useMutation({
+    mutationFn: (request: { category: SourceFileCategoryInfo["category"]; userYyyymm: string }) =>
+      postJson<EpostServerFetchResponse>(sourceFilesPaths.epostFetch(), {
+        category: request.category,
+        user_yyyymm: request.userYyyymm,
+        enqueue_load: true
+      }),
+    onSuccess: (result) => {
+      setLastResult({
+        category: result.category,
+        upload_session_id: result.upload_session.upload_session_id,
+        source_file_group_id: result.registration?.source_file_group_id,
+        load_job_id: result.load_job_id,
+        load_job_kind: result.load_job_kind,
+        warnings: result.warnings,
+        validation: result.validation
+      });
+      void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
+    },
+    onError: (error) => {
+      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     }
   });
 
@@ -151,8 +180,15 @@ export function UploadTab() {
               onSelect={() =>
                 setActiveCategory(activeCategory === category.category ? null : category.category)
               }
+              onEpostFetch={(yyyymm) =>
+                void epostFetch.mutate({
+                  category: category.category,
+                  userYyyymm: yyyymm
+                })
+              }
               onUpload={(yyyymm, file) => void startUpload(category, yyyymm, file)}
               progress={progress}
+              fetchingEpost={epostFetch.isPending}
               uploading={createSession.isPending}
             />
           ))}
@@ -190,20 +226,24 @@ export function UploadTab() {
 
 function CategoryCard({
   category,
+  fetchingEpost,
   isActive,
+  onEpostFetch,
   onSelect,
   onUpload,
   progress,
   uploading
 }: {
   category: SourceFileCategoryInfo;
+  fetchingEpost: boolean;
   isActive: boolean;
+  onEpostFetch: (userYyyymm: string) => void;
   onSelect: () => void;
   onUpload: (userYyyymm: string, file: File) => void;
   progress: Record<string, SlotUploadProgress>;
   uploading: boolean;
 }) {
-  const [userYyyymm, setUserYyyymm] = useState(suggestYyyymm());
+  const [userYyyymm, setUserYyyymm] = useState(() => suggestYyyymm());
   const [file, setFile] = useState<File | null>(null);
   const epost = isEpostCategory(category.category);
   const slotProgress = useMemo(() => Object.values(progress), [progress]);
@@ -236,7 +276,13 @@ function CategoryCard({
       </dl>
 
       {epost ? (
-        <EpostFetchButton category={category} />
+        <EpostFetchControls
+          fetching={fetchingEpost}
+          onFetch={() => onEpostFetch(userYyyymm)}
+          onYyyymmChange={setUserYyyymm}
+          userYyyymm={userYyyymm}
+          yyyymmValid={yyyymmValid}
+        />
       ) : (
         <div className="source-card-upload">
           <label className="field">
@@ -307,30 +353,41 @@ function SlotProgressBar({ progress }: { progress: SlotUploadProgress }) {
   );
 }
 
-/**
- * epost server-fetch (T-207, Agent A) is NOT merged yet. The button is rendered
- * (per doc lines ~188-190) but disabled with a clearly-marked TODO so the PR does
- * not block on T-207. When the endpoint lands, wire it to the documented
- * user-triggered server-fetch flow.
- */
-function EpostFetchButton({ category }: { category: SourceFileCategoryInfo }) {
+function EpostFetchControls({
+  fetching,
+  onFetch,
+  onYyyymmChange,
+  userYyyymm,
+  yyyymmValid
+}: {
+  fetching: boolean;
+  onFetch: () => void;
+  onYyyymmChange: (value: string) => void;
+  userYyyymm: string;
+  yyyymmValid: boolean;
+}) {
   return (
     <div className="source-card-upload">
-      <p className="form-note">
-        epost 우편번호 자료는 브라우저 업로드 대신 서버 fetch(server-fetch)로 받습니다.
-      </p>
+      <label className="field">
+        <span>기준년월 (user_yyyymm)</span>
+        <input
+          maxLength={6}
+          onChange={(event) => onYyyymmChange(event.target.value.replace(/[^\d]/g, ""))}
+          placeholder="예: 202606"
+          value={userYyyymm}
+        />
+      </label>
+      {!yyyymmValid ? <p className="form-note warn">YYYYMM 6자리를 입력하세요.</p> : null}
       <button
         className="button secondary"
-        disabled
-        title="T-207 epost server-fetch 백엔드 병합 대기 중"
+        disabled={!yyyymmValid || fetching}
+        onClick={onFetch}
+        title="epost 서버 fetch"
         type="button"
       >
         <Download size={16} />
-        받기 (T-207 대기)
+        {fetching ? "받는 중" : "epost 받기"}
       </button>
-      <p className="form-note warn">
-        TODO(T-207): {category.category} server-fetch 엔드포인트가 병합되면 활성화합니다.
-      </p>
     </div>
   );
 }
@@ -381,7 +438,7 @@ function DuplicateSessionDialog({
 }) {
   return (
     <div className="modal-backdrop">
-      <div className="modal" role="dialog" aria-modal="true" aria-label="중복 업로드 세션">
+      <dialog className="modal" open aria-label="중복 업로드 세션">
         <h2>이미 진행 중인 업로드 세션이 있습니다</h2>
         <p className="form-note">
           {conflict.category} · {conflict.userYyyymm} 조합의 비종료 세션이 이미 존재합니다 (409).
@@ -417,7 +474,7 @@ function DuplicateSessionDialog({
             닫기
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

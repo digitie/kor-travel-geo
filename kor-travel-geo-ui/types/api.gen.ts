@@ -959,6 +959,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-files/epost-fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch Epost Source
+         * @description Manual epost server-fetch → RustFS register → postal load enqueue (T-207).
+         */
+        post: operations["fetch_epost_source_v1_admin_source_files_epost_fetch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/source-files/janitor/run": {
         parameters: {
             query?: never;
@@ -2479,6 +2499,70 @@ export interface components {
             table_stats_artifact_id?: string | null;
             /** Validated At */
             validated_at?: string | null;
+        };
+        /**
+         * EpostServerFetchRequest
+         * @description ``POST /v1/admin/source-files/epost-fetch`` body (T-207).
+         *
+         *     Manual operator-triggered server fetch. The server downloads the epost ZIP
+         *     from configured OpenAPI settings, extracts the requested postal auxiliary
+         *     text file, validates it with the T-120 validator, registers it as a
+         *     ``single_file`` source archive in RustFS, then optionally enqueues the
+         *     corresponding loader job. It is not a scheduled downloader and it does not
+         *     participate in core ``rebuild-db`` source match sets.
+         */
+        EpostServerFetchRequest: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "epost_pobox_full" | "epost_bulk_full";
+            /** Display Name */
+            display_name?: string | null;
+            /** Download Kind */
+            download_kind?: ("1" | "4") | null;
+            /**
+             * Enqueue Load
+             * @default true
+             */
+            enqueue_load: boolean;
+            /** User Yyyymm */
+            user_yyyymm: string;
+            /**
+             * Yyyymm Mismatch Ack
+             * @default false
+             */
+            yyyymm_mismatch_ack: boolean;
+        };
+        /**
+         * EpostServerFetchResponse
+         * @description Result of one manual epost server-fetch/register/load enqueue run.
+         */
+        EpostServerFetchResponse: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "epost_pobox_full" | "epost_bulk_full";
+            /** Load Job Id */
+            load_job_id?: string | null;
+            /** Load Job Kind */
+            load_job_kind?: ("pobox_load" | "bulk_load") | null;
+            registration?: components["schemas"]["RegisterResponse"] | null;
+            /** Selected Filename */
+            selected_filename?: string | null;
+            /** Selected Path */
+            selected_path?: string | null;
+            upload_session: components["schemas"]["UploadSessionStatus"];
+            /** Validation */
+            validation?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
         };
         /** ExplainRequest */
         ExplainRequest: {
@@ -7011,6 +7095,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceCapacityUsage"];
+                };
+            };
+        };
+    };
+    fetch_epost_source_v1_admin_source_files_epost_fetch_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EpostServerFetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpostServerFetchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

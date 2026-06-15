@@ -79,7 +79,16 @@ def test_terminal_states_block_dedup_but_progress_states_do_not() -> None:
     for state in ("created", "uploading", "awaiting_registration", "failed_register"):
         assert not is_terminal_state(state)
     # Terminal states no longer block a new session for the same slot.
-    for state in ("registered", "available", "cancelled", "expired", "failed_upload"):
+    for state in (
+        "registered",
+        "available",
+        "cancelled",
+        "expired",
+        "failed_upload",
+        "failed_structure",
+        "failed_rustfs_put",
+        "failed_storage_state",
+    ):
         assert is_terminal_state(state)
         assert state in TERMINAL_UPLOAD_SESSION_STATES
 
