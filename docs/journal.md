@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (고성능 geocoder와 Admin UI 안정화 task 보강)
+
+**작업**: 사용자 지시에 따라 T-140~T-153을 추가했다. Agent A(Codex)는 geocoder/reverse-geocoder golden corpus, 고부하 SQL/REST benchmark matrix, reverse 공간조회 최적화, geocode/search query plan 안정화, 성능 우선 API 계약 재설계, backpressure/fail-fast, post-load read-optimized maintenance를 맡는다. Agent B(Claude Code)는 성능·검증 artifact Admin UI 노출, source-files Playwright e2e matrix, 파일 적재 UX, deterministic fixture harness, 운영 편의 기능, 접근성·회복성 e2e를 맡는다.
+
+**결정**: 아직 배포 단계가 아니므로 호환성 유지와 코드 수정 최소화보다 성능·안정성을 우선한다. API 계약 변경, MV 적극 활용, 인덱스/통계/maintenance 조정, 더 과격한 DB 구조 변경은 모두 후보가 될 수 있다. 단, DB 구조 변경은 T-139의 별도 변경 DB 비교 workflow를 거쳐 현 DB와 같은 corpus로 검증한 뒤 실제 migration Task를 다시 분리한다.
+
+## 2026-06-15 (read-heavy 성능 최적화 task 추가)
+
+**작업**: 적재 후 write가 사실상 없고 read가 대부분이라는 운영 전제를 반영해 T-138/T-139를 `docs/tasks.md`에 추가했다. T-138은 현재 구조 안에서 benchmark, index, MV, 통계, query plan, API 계약을 조정하는 속도 튜닝 작업이고, T-139는 T-138으로 충분히 빠르지 않을 때 별도 변경 DB를 만들어 현 DB와 구조 변경안을 비교하는 후속 작업이다.
+
+**결정**: 아직 배포 전이므로 성능 작업에서는 호환성 유지와 코드 수정 최소화보다 성능·안정성을 우선한다. API 계약 변경이 payload, query path, precomputed response, geometry 제공 방식, pagination 정책을 더 빠르고 안정적으로 만든다면 후보로 포함한다. 계약을 바꾸면 OpenAPI/typegen/UI/문서/회귀 테스트와 migration note를 같은 흐름에서 갱신한다. DB 구조 변경은 즉시 현재 DB에 섞지 않고, 변경 DB와 현 DB를 같은 원천, 같은 commit, 같은 benchmark corpus로 비교한 뒤 최적안을 문서화한다. 실제 migration은 T-139 결론 뒤 별도 후속 Task로 다시 쪼갠다.
+
+## 2026-06-15 (T-125 후속 Action task 분할)
+
+**작업**: T-125 `blocked / no-go` 결과를 바로 T-119 구현으로 넘기지 않고, 후속 검증과 UI 반영을 T-129~T-137로 세분화해 `docs/tasks.md`에 등록했다. outlier 원인 태깅, C4/C6/C7 회귀 분석, guarded policy simulation, 검증 harness 확장, shadow serving 성능·rollback, v1/v2 노출 계약, Admin UI 정합성 감사, T-125 적재·승격 보류 상태 UI 반영, 최종 gate/ADR-051 재판정으로 나눴다.
+
+**결정**: 실제 파일이 RustFS/source registry에 등록됐다는 사실과 active serving 좌표로 활용 중이라는 사실을 UI에서 분리해야 한다. `T-135`는 실제 활용 파일과 Admin UI 표시의 정합성 감사로, `T-136`은 T-125/T-216 이후의 등록·검증·승격 보류 상태를 Admin UI에 반영하는 구현 작업으로 둔다. T-119는 T-129~T-137, ADR-051 accepted, 사용자 승인 전까지 계속 보류한다.
+
 ## 2026-06-15 (T-128 optional 원천 최종 사용 판정)
 
 **작업**: PR #193/#194의 Claude Code clean-slate v2 분석을 확인했다. 두 PR 모두 GitHub conversation comment, review, review thread가 0건이라 별도 comment 반영은 없었고, PR 문서 본문 의견을 T-125 C11 no-go 결과와 합쳐 최종 판정으로 정리했다.
