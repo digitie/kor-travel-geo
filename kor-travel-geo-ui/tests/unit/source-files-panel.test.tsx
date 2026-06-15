@@ -363,6 +363,65 @@ describe("SourceFilesPanel", () => {
     );
   });
 
+  it("capacity가 한도 초과면 retention 경고(T-212 UI 경고)를 노출한다", async () => {
+    apiMocks.requestJson.mockImplementation(async (path: string) => {
+      if (path.startsWith("/admin/source-files/reconcile/") && path.includes("/items"))
+        return RECONCILE_ITEMS;
+      if (path.startsWith("/admin/source-files/reconcile")) return RECONCILE_RUNS;
+      if (path === "/admin/source-files/capacity")
+        return {
+          ...CAPACITY,
+          over_threshold: true,
+          retention: {
+            over_threshold: true,
+            reclaimable_bytes: 4096,
+            eligible_object_count: 3,
+            guidance: "정리 대상 객체를 일괄 hard-delete 하세요"
+          }
+        };
+      return [];
+    });
+    renderPanel("reconcile");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("저장소 용량 한도 초과");
+    expect(screen.getByText("정리 대상 객체를 일괄 hard-delete 하세요")).toBeInTheDocument();
+    expect(within(alert).getByText("4.0 KB")).toBeInTheDocument();
+  });
+
+  it("일괄 삭제 결과를 구조화 요약으로 표시한다", async () => {
+    apiMocks.postJson.mockImplementation(async (path: string) => {
+      if (path === "/admin/source-files/bulk-hard-delete")
+        return {
+          requested_count: 1,
+          hard_deleted_count: 1,
+          delete_failed_count: 0,
+          skipped_count: 0,
+          results: [
+            {
+              object_key: "source/electronic_map_full/orphan-36.zip",
+              outcome: "hard_deleted"
+            }
+          ],
+          affected_match_set_ids: []
+        };
+      return { ok: true };
+    });
+    renderPanel("reconcile");
+    await screen.findByText("정합성 실행 (RustFS ⟷ DB)");
+    fireEvent.click(await screen.findByLabelText(/정리 대상 선택:/));
+    fireEvent.click(screen.getByRole("button", { name: /선택 항목 영구 삭제/ }));
+    const dialog = await screen.findByRole("dialog", { name: "원천 객체 영구 삭제" });
+    fireEvent.change(within(dialog).getByLabelText("hard-delete 확인 문구"), {
+      target: { value: "HARD-DELETE-SOURCES" }
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: /영구 삭제 실행/ }));
+    const summary = (await screen.findByText("최근 결과")).closest(".panel") as HTMLElement;
+    const deletedDt = within(summary).getByText("영구 삭제");
+    expect(deletedDt.parentElement?.querySelector("dd")).toHaveTextContent("1");
+    // raw JSON dump 대신 구조화 요약을 쓴다
+    expect(within(summary).queryByText(/requested_count/)).not.toBeInTheDocument();
+  });
+
   it("현재 구성 탭에서 active match set이 없으면 알수없음을 표시한다", async () => {
     apiMocks.requestJson.mockImplementation(async (path: string) => {
       if (path.startsWith("/admin/source-match-sets")) return [];

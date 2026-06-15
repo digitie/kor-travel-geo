@@ -41,6 +41,8 @@ export type ReconcileResolveAction = ReconcileResolveRequest["action"];
 
 export type SourceCapacityUsage = components["schemas"]["SourceCapacityUsage"];
 export type SourceCategoryCapacity = components["schemas"]["SourceCategoryCapacity"];
+export type SourceRetentionRecommendation =
+  components["schemas"]["SourceRetentionRecommendation"];
 
 export type SourceBulkHardDeleteRequest = components["schemas"]["SourceBulkHardDeleteRequest"];
 export type SourceBulkHardDeleteResponse = components["schemas"]["SourceBulkHardDeleteResponse"];
