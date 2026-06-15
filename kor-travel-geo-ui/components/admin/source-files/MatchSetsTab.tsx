@@ -129,7 +129,7 @@ function MatchSetDetail({
     >
       {set.integrity_alert ? (
         <div className="confirm-box" role="alert">
-          <label>무결성 경보 (integrity_alert)</label>
+          <div className="confirm-title">무결성 경보 (integrity_alert)</div>
           <p className="form-note">
             {set.integrity_alert_at ? `발생: ${set.integrity_alert_at}` : "활성 세트의 원천 무결성에 문제가 감지되었습니다."}
           </p>

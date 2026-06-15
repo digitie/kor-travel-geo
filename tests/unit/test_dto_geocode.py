@@ -45,5 +45,6 @@ def test_geocode_response_wire_shape() -> None:
     dumped = response.model_dump(mode="json", exclude_none=True)
 
     assert dumped["status"] == "OK"
+    assert dumped["input"]["type"] == "ROAD"
     assert dumped["result"]["point"] == {"x": 127.0286, "y": 37.5003}
     assert dumped["x_extension"]["zip_source"] == "building_bsi_zon_no"

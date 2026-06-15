@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_serializer
 
 from .address import RefinedAddress
 from .common import (
@@ -19,6 +19,7 @@ from .common import (
 )
 
 FallbackMode = Literal["off", "local_only", "api"]
+VWorldAddressType = Literal["ROAD", "PARCEL"]
 
 
 class GeocodeInput(FrozenModel):
@@ -28,6 +29,10 @@ class GeocodeInput(FrozenModel):
     refine: bool = True
     simple: bool = False
     fallback: FallbackMode = "local_only"
+
+    @field_serializer("type", return_type=VWorldAddressType)
+    def serialize_type(self, value: AddressType) -> VWorldAddressType:
+        return "ROAD" if value == "road" else "PARCEL"
 
 
 class GeocodeResult(FrozenModel):

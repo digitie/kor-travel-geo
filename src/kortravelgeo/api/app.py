@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from kortravelgeo.api import _jobs
 from kortravelgeo.api.middleware.geoip_gate import install_geoip_gate
 from kortravelgeo.api.responses import error_payload, register_exception_handlers
+from kortravelgeo.api.vworld import vworld_operation_for_path
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.exceptions import RateLimitError
 from kortravelgeo.infra.admin_repo import AdminRepository
@@ -201,7 +202,11 @@ def _install_admission_control(app: FastAPI, settings: Settings) -> None:
                     "requests complete"
                 ),
             )
-            return ORJSONResponse(error_payload(error), status_code=error.http_status)
+            operation = vworld_operation_for_path(request.url.path)
+            return ORJSONResponse(
+                error_payload(error, operation=operation),
+                status_code=error.http_status,
+            )
 
         try:
             return await call_next(request)

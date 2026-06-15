@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_serializer, model_validator
 from pydantic_core import PydanticCustomError
 
 from .address import AddressStructure
@@ -21,6 +21,8 @@ from .common import (
 from .geocode import SppnMakareaContext
 
 ReverseType = Literal["both", "road", "parcel"]
+VWorldAddressType = Literal["ROAD", "PARCEL"]
+VWorldReverseType = Literal["BOTH", "ROAD", "PARCEL"]
 
 
 class ReverseInput(FrozenModel):
@@ -29,6 +31,13 @@ class ReverseInput(FrozenModel):
     type: ReverseType = "both"
     zipcode: bool = True
     radius_m: int = Field(default=200, ge=1, le=2_000)
+    simple: bool = False
+
+    @field_serializer("type", return_type=VWorldReverseType)
+    def serialize_type(self, value: ReverseType) -> VWorldReverseType:
+        if value == "both":
+            return "BOTH"
+        return "ROAD" if value == "road" else "PARCEL"
 
     @model_validator(mode="after")
     def validate_korea_lon_lat(self) -> ReverseInput:
@@ -47,6 +56,10 @@ class ReverseResultItem(FrozenModel):
     zip_source: ZipSource | None = None
     source: ResultSource = "local"
     distance_m: float | None = Field(default=None, ge=0.0)
+
+    @field_serializer("type", return_type=VWorldAddressType)
+    def serialize_type(self, value: AddressType) -> VWorldAddressType:
+        return "ROAD" if value == "road" else "PARCEL"
 
 
 class ReverseExtension(FrozenModel):

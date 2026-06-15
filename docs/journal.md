@@ -2,6 +2,16 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-106 v1 VWorld geocode/reverse 호환 반영)
+
+**결정**: ADR-053으로 T-106의 호환 수준을 REST v1 geocode/reverse의 VWorld HTTP envelope/key/대소문자 호환으로 확정했다. byte-for-byte VWorld 원응답 동일성은 목표로 두지 않고, 로컬 보강 정보는 기존 ADR-003 원칙대로 `x_extension`에 유지한다.
+
+**수정**: `/v1/address/geocode`와 `/v1/address/reverse` 정상 응답을 `{"response": ...}`로 감싸고, HTTP 직렬화에서 `service.name=address`, `operation=getCoord/getAddress`, 응답 `type` 대문자를 내도록 했다. geocode `simple`/`refine` 생략 규칙과 reverse `simple` 파라미터를 반영했다. v1 geocode/reverse 요청 검증·도메인 에러는 VWorld식 `response.error.level/code/text`로 분기한다.
+
+**검증**: DB 없이 dependency override 기반 v1 HTTP 회귀 테스트를 추가해 envelope, 대문자 type, `simple`, 요청 검증 error object를 고정했다. `openapi.json`, `kor-travel-geo-ui/types/api.gen.ts`, `kor-travel-geo-ui/lib/schemas.gen.ts`를 재생성했다.
+
+**프론트엔드 진단**: React Doctor 재실행 중 기존 source-files UI의 label 접근성 진단과 upload session SSE hook의 prop-change state sync error가 발견되어 함께 정리했다. 최종 React Doctor는 error 0, warning 7(source-files 구조 리팩터 제안) 상태로 통과했다.
+
 ## 2026-06-15 (PR #187 리뷰 후속 반영)
 
 **작업**: 머지된 PR #187의 post-merge 리뷰 코멘트를 확인했다. formal review thread는 없고 top-level 상세 리뷰 1건이었으며, blocking은 없었다. Low 후속 2건 중 `_canonical_layer_name`의 dot-delimited 가정은 코드로 반영하고, optional single-file category 상세 validator 부족은 T-127 백로그로 분리했다.

@@ -2655,8 +2655,11 @@
             "type": "boolean"
           },
           "type": {
-            "$ref": "#/components/schemas/AddressType",
-            "default": "road"
+            "enum": [
+              "ROAD",
+              "PARCEL"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -5236,12 +5239,16 @@
             "title": "Radius M",
             "type": "integer"
           },
+          "simple": {
+            "default": false,
+            "title": "Simple",
+            "type": "boolean"
+          },
           "type": {
-            "default": "both",
             "enum": [
-              "both",
-              "road",
-              "parcel"
+              "BOTH",
+              "ROAD",
+              "PARCEL"
             ],
             "title": "Type",
             "type": "string"
@@ -5334,7 +5341,11 @@
             "type": "string"
           },
           "type": {
-            "$ref": "#/components/schemas/AddressType"
+            "enum": [
+              "ROAD",
+              "PARCEL"
+            ],
+            "type": "string"
           },
           "zip_source": {
             "anyOf": [
@@ -9519,6 +9530,32 @@
         "title": "UploadSidoZipResponse",
         "type": "object"
       },
+      "VWorldGeocodeEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/GeocodeResponse"
+          }
+        },
+        "required": [
+          "response"
+        ],
+        "title": "VWorldGeocodeEnvelope",
+        "type": "object"
+      },
+      "VWorldReverseEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ReverseResponse"
+          }
+        },
+        "required": [
+          "response"
+        ],
+        "title": "VWorldReverseEnvelope",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -9820,7 +9857,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GeocodeResponse"
+                  "$ref": "#/components/schemas/VWorldGeocodeEnvelope"
                 }
               }
             },
@@ -10025,6 +10062,16 @@
           },
           {
             "in": "query",
+            "name": "simple",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Simple",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "radius_m",
             "required": false,
             "schema": {
@@ -10081,7 +10128,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReverseResponse"
+                  "$ref": "#/components/schemas/VWorldReverseEnvelope"
                 }
               }
             },

@@ -346,6 +346,7 @@ class AsyncAddressClient:
         crs: str = "EPSG:4326",
         type: ReverseType = "both",
         zipcode: bool = True,
+        simple: bool = False,
         radius_m: int | None = None,
         sig_cd: str | None = None,
         bjd_cd: str | None = None,
@@ -358,6 +359,7 @@ class AsyncAddressClient:
             crs=crs,
             type=type,
             zipcode=zipcode,
+            simple=simple,
             radius_m=radius_m or self.settings.api_default_radius_m,
         )
         return await core_reverse_geocode(

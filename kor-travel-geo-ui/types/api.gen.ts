@@ -2629,8 +2629,8 @@ export interface components {
              * @default false
              */
             simple: boolean;
-            /** @default road */
-            type: components["schemas"]["AddressType"];
+            /** @enum {string} */
+            type?: "ROAD" | "PARCEL";
         };
         /** GeocodeResponse */
         GeocodeResponse: {
@@ -3524,11 +3524,15 @@ export interface components {
              */
             radius_m: number;
             /**
+             * Simple
+             * @default false
+             */
+            simple: boolean;
+            /**
              * Type
-             * @default both
              * @enum {string}
              */
-            type: "both" | "road" | "parcel";
+            type?: "BOTH" | "ROAD" | "PARCEL";
             /**
              * Zipcode
              * @default true
@@ -3557,7 +3561,8 @@ export interface components {
             structure: components["schemas"]["AddressStructure"];
             /** Text */
             text: string;
-            type: components["schemas"]["AddressType"];
+            /** @enum {string} */
+            type: "ROAD" | "PARCEL";
             zip_source?: components["schemas"]["ZipSource"] | null;
             /** Zipcode */
             zipcode?: string | null;
@@ -5324,6 +5329,14 @@ export interface components {
             /** Upload Id */
             upload_id: string;
         };
+        /** VWorldGeocodeEnvelope */
+        VWorldGeocodeEnvelope: {
+            response: components["schemas"]["GeocodeResponse"];
+        };
+        /** VWorldReverseEnvelope */
+        VWorldReverseEnvelope: {
+            response: components["schemas"]["ReverseResponse"];
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -5411,7 +5424,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GeocodeResponse"];
+                    "application/json": components["schemas"]["VWorldGeocodeEnvelope"];
                 };
             };
             /** @description Validation Error */
@@ -5469,6 +5482,7 @@ export interface operations {
                 crs?: string;
                 type?: "both" | "road" | "parcel";
                 zipcode?: boolean;
+                simple?: boolean;
                 radius_m?: number | null;
                 sig_cd?: string | null;
                 bjd_cd?: string | null;
@@ -5485,7 +5499,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReverseResponse"];
+                    "application/json": components["schemas"]["VWorldReverseEnvelope"];
                 };
             };
             /** @description Validation Error */
