@@ -34,6 +34,8 @@ from kortravelgeo.dto.admin import (
     AuditEvent,
     BackupAllowedDirs,
     BackupArtifact,
+    BackupCopyRequest,
+    BackupCopyResult,
     BackupCreateRequest,
     BackupRetentionResult,
     BackupRetentionRunRequest,
@@ -1785,6 +1787,35 @@ async def delete_backup(
         **_audit_request(request),
     )
     return _backup_artifact_response(deleted, settings=settings)
+
+
+@router.post(
+    "/backups/{artifact_id}/copy",
+    response_model=BackupCopyResult,
+    response_model_exclude_none=True,
+)
+async def copy_backup(
+    artifact_id: str,
+    req: BackupCopyRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> BackupCopyResult:
+    """Copy a stored backup to another allowlisted directory (T-236).
+
+    Streams the archive to ``target_dir`` (under ``backup_copy_targets`` / backup roots),
+    re-hashes the copy and verifies it matches the source (mismatch → removed + error).
+    A 3-2-1 guard so a single disk failure doesn't lose the backup. Filesystem only.
+    """
+    result = await client.copy_backup(artifact_id, target_dir=req.target_dir)
+    await client.record_audit_event(
+        action="db_backup.copy",
+        outcome="succeeded",
+        payload={"destination": result.destination_path, "verified": result.verified},
+        resource_type="artifact",
+        resource_id=artifact_id,
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.post(

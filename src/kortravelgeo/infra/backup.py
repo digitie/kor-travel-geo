@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from kortravelgeo.core.redaction import hash_confirmation
 from kortravelgeo.dto.admin import (
+    BackupCopyResult,
     BackupCreateRequest,
     BackupVerifyResult,
     OpsArtifact,
@@ -795,6 +796,76 @@ def resolve_existing_archive_path(path: str, settings: Settings) -> Path:
 
 def allowed_backup_roots(settings: Settings) -> tuple[Path, ...]:
     return tuple(path.expanduser().resolve(strict=False) for path in settings.backup_allowed_dirs)
+
+
+def allowed_backup_copy_roots(settings: Settings) -> tuple[Path, ...]:
+    """Allowed roots for off-host backup copies (T-236; falls back to backup roots)."""
+    if settings.backup_copy_targets:
+        return tuple(
+            path.expanduser().resolve(strict=False) for path in settings.backup_copy_targets
+        )
+    return allowed_backup_roots(settings)
+
+
+def resolve_backup_copy_target(target_dir: str, settings: Settings) -> Path:
+    roots = allowed_backup_copy_roots(settings)
+    if not roots:
+        msg = "no allowed backup copy targets configured"
+        raise InvalidInputError(msg)
+    resolved = Path(target_dir).expanduser().resolve(strict=False)
+    if not any(_is_relative_to(resolved, root) for root in roots):
+        joined = ", ".join(str(root) for root in roots)
+        msg = f"backup copy target escapes allowed roots: {resolved}; allowed={joined}"
+        raise InvalidInputError(msg)
+    return resolved
+
+
+async def copy_backup_artifact(
+    artifact: OpsArtifact,
+    settings: Settings,
+    *,
+    target_dir: str,
+) -> BackupCopyResult:
+    """Copy a stored backup archive to another allowlisted dir with sha256 re-check (T-236).
+
+    Streams the file (no full in-memory load), re-hashes the copy and compares it to the
+    source; on mismatch the partial copy is removed and an error raised. Filesystem only
+    (RustFS/S3 are out of scope). The 3-2-1 guard against a single disk failure.
+    """
+    if not artifact.storage_uri:
+        msg = "backup artifact has no storage_uri"
+        raise InvalidInputError(msg)
+    source = resolve_existing_archive_path(artifact.storage_uri, settings)
+    dest_dir = resolve_backup_copy_target(target_dir, settings)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(dest_dir, 0o700)
+    dest = safe_artifact_path(dest_dir, artifact.display_name or source.name)
+    if dest.resolve(strict=False) == source.resolve(strict=False):
+        msg = "backup copy target resolves to the source archive"
+        raise InvalidInputError(msg)
+    if dest.exists():
+        msg = f"backup copy target already exists: {dest}"
+        raise InvalidInputError(msg)
+    event = asyncio.Event()
+    source_sha256 = await sha256_file(source, cancel_event=event)
+    try:
+        await asyncio.to_thread(shutil.copyfile, source, dest)
+        os.chmod(dest, 0o600)
+        dest_sha256 = await sha256_file(dest, cancel_event=event)
+        if dest_sha256 != source_sha256:
+            msg = f"backup copy sha256 mismatch: {dest}"
+            raise InvalidInputError(msg)
+    except BaseException:
+        with suppress(FileNotFoundError):
+            dest.unlink()
+        raise
+    return BackupCopyResult(
+        artifact_id=artifact.artifact_id,
+        source_path=str(source),
+        destination_path=str(dest),
+        sha256=dest_sha256,
+        verified=True,
+    )
 
 
 def safe_artifact_path(destination_dir: Path, display_name: str) -> Path:

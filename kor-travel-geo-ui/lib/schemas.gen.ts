@@ -8,6 +8,8 @@ export const apiSchemaNames = [
   "BBoxV2",
   "BackupAllowedDirs",
   "BackupArtifact",
+  "BackupCopyRequest",
+  "BackupCopyResult",
   "BackupCreateRequest",
   "BackupRetentionResult",
   "BackupRetentionRunRequest",

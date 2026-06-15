@@ -703,6 +703,57 @@
         "title": "BackupArtifact",
         "type": "object"
       },
+      "BackupCopyRequest": {
+        "additionalProperties": false,
+        "description": "T-236 off-host backup copy request.",
+        "properties": {
+          "target_dir": {
+            "minLength": 1,
+            "title": "Target Dir",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_dir"
+        ],
+        "title": "BackupCopyRequest",
+        "type": "object"
+      },
+      "BackupCopyResult": {
+        "additionalProperties": false,
+        "description": "T-236 result of copying a backup archive to another allowlisted directory.",
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "destination_path": {
+            "title": "Destination Path",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "source_path": {
+            "title": "Source Path",
+            "type": "string"
+          },
+          "verified": {
+            "title": "Verified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "source_path",
+          "destination_path",
+          "sha256",
+          "verified"
+        ],
+        "title": "BackupCopyResult",
+        "type": "object"
+      },
       "BackupCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10945,6 +10996,59 @@
           }
         },
         "summary": "Get Backup",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/backups/{artifact_id}/copy": {
+      "post": {
+        "description": "Copy a stored backup to another allowlisted directory (T-236).\n\nStreams the archive to ``target_dir`` (under ``backup_copy_targets`` / backup roots),\nre-hashes the copy and verifies it matches the source (mismatch → removed + error).\nA 3-2-1 guard so a single disk failure doesn't lose the backup. Filesystem only.",
+        "operationId": "copy_backup_v1_admin_backups__artifact_id__copy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupCopyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupCopyResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Copy Backup",
         "tags": [
           "admin"
         ]
