@@ -99,6 +99,24 @@ T-119가 재검토된다면 최소 조건은 다음이다.
 - rollback은 `flag off + mv_refresh` 또는 동등한 hot-swap으로 리허설.
 - v1 `pt_source` 값은 기존 `entrance`/`centroid`를 유지하고, 세부 출처는 `x_extension.coord_source_detail` 또는 v2 전용 필드로만 노출.
 
+## 후속 Action Task
+
+T-125 결과에 따른 후속 작업은 `docs/tasks.md`의 T-129~T-137로 분리했다.
+
+| Task | 목적 |
+|------|------|
+| T-129 | 100m 초과 outlier 14,433건을 원인별로 태깅한다. |
+| T-130 | C4/C6/C7 회귀 샘플의 polygon/key/좌표 원인을 분석한다. |
+| T-131 | blanket 승격 대신 guarded candidate policy를 설계하고 오프라인 simulation한다. |
+| T-132 | T-125 preflight harness를 policy 반복 검증용으로 확장한다. |
+| T-133 | shadow serving path에서 성능 회귀와 rollback을 리허설한다. |
+| T-134 | v1/v2 좌표 출처 노출 계약을 확정한다. |
+| T-135 | 실제 활용 파일과 Admin UI 표시가 일치하는지 감사한다. |
+| T-136 | T-125 이후 적재·검증·승격 보류 상태를 Admin UI에 반영한다. |
+| T-137 | 후속 산출물을 종합해 ADR-051과 T-119 진행 여부를 재판정한다. |
+
+별도 read-heavy 성능 최적화는 T-138, additive 튜닝으로 부족할 때의 DB 구조 변경 실험 DB 비교는 T-139에서 진행한다. 배포 전 안정화·고성능 geocoder/Admin UI 보강은 T-140~T-153 병행 트랙에서 다룬다.
+
 ## 검증
 
 ```bash

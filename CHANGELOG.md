@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Added
+- T-140~T-153 안정화·고성능·Admin UI 보강 Task를 추가했다. geocoder/reverse-geocoder golden corpus, 고부하 benchmark matrix, reverse 공간조회 최적화, query plan 안정화, 성능 우선 API 계약 재설계, backpressure/fail-fast, post-load read-optimized maintenance, Admin UI artifact 노출, source-files Playwright e2e matrix, 적재 UX, fixture harness, 운영 편의·접근성·회복성 e2e, 최종 acceptance gate를 Agent A/B 병렬 작업으로 정리했다.
+- T-138/T-139 read-heavy 성능 최적화 Task를 추가했다. 적재 후 write가 거의 없고 read가 대부분인 운영 전제를 바탕으로 현재 구조의 index/MV/statistics/query plan/API 계약 튜닝을 먼저 수행하고, 충분히 빠르지 않으면 별도 변경 DB를 만들어 현 DB와 구조 변경안을 같은 corpus로 비교한 뒤 최적안을 문서화한다.
+- T-125 후속 Action을 T-129~T-137로 세분화했다. C11 outlier/회귀 원인 분석, guarded policy simulation, shadow 성능·rollback, v1/v2 노출 계약, 실제 활용 파일과 Admin UI 정합성 감사, T-125 적재·승격 보류 상태 Admin UI 반영, 최종 gate/ADR-051 재판정을 별도 Task로 등록했다.
 - optional 원천 사용·미사용 최종 판정 문서를 추가했다. `docs/optional-source-usage-decision.md`와 ADR-054는 PR #193/#194의 clean-slate v2 분석과 T-125 no-go를 합쳐 국가지점번호 좌표 활용, C11 출입구 blanket 승격 보류, 상세주소 typed feature 후보, 주소DB/건물DB/민원행정기관/grid·center 검증 전용 원칙을 확정한다.
 - T-126 phase ② 수용 후속 runner와 REST benchmark 관측 옵션을 추가했다. `scripts/run_t126_acceptance_followup.py`는 C11~C17 optional 검증 원천을 RustFS/source registry에 등록하고 별도 `custom` source match set으로 run-validation을 실행할 수 있게 하며, `scripts/benchmark_api_latency.py`는 `--server-profile KEY=VALUE`와 `--capture-prometheus`로 REST c64 artifact에 서버 실행 조건과 `/metrics` 전후 snapshot을 남긴다. 상세: `docs/t126-phase2-acceptance-followup.md`.
 - T-213 기준 DB 접속 경로를 문서화했다. `docs/t213-data-preservation.md`에 현재 baseline의 PostgreSQL host/port, DB 이름, `KTG_PG_DSN` template, RustFS endpoint/prefix, 원천·artifact 경로, WSL/PowerShell 환경변수 예시를 추가해 다른 에이전트가 기본 개발 DB와 혼동하지 않게 했다.
