@@ -7,8 +7,8 @@
 - 대상 원천:
   - `data/juso/unused/건물군 내 상세주소 동 도형/건물군내동도형_전체분_세종특별자치시.zip`
   - `data/juso/unused/건물군 내 상세주소 동 도형/건물군내동도형_전체분_경상남도.zip`
-  - `data/juso/unused/구역의 도형/구역의도형_전체분_세종특별자치시.zip`
-  - `data/juso/unused/구역의 도형/구역의도형_전체분_경상남도.zip`
+  - `data/juso/구역의 도형/구역의도형_전체분_세종특별자치시.zip`
+  - `data/juso/구역의 도형/구역의도형_전체분_경상남도.zip`
   - 비교 기준: `data/juso/도로명주소 전자지도/{세종특별자치시,경상남도}`
 - 관련 ADR: ADR-023, ADR-026
 
@@ -277,7 +277,7 @@ T-042에서 1~3번은 구현했다. 남은 UI overlay는 T-044의 `maplibre-vwor
 ## 참고 근거
 
 - 행정안전부 설명자료: `https://www.mois.go.kr/frt/bbs/type001/commonSelectBoardArticle.do?bbsId=BBSMSTR_000000000009&nttId=66987`
-- 로컬 실제 파일: `data/juso/unused/구역의 도형/*/TL_SPPN_MAKAREA.*`
+- 로컬 실제 파일: `data/juso/구역의 도형/*/TL_SPPN_MAKAREA.*`
 
 ## 재현 명령
 
@@ -286,8 +286,8 @@ T-042에서 1~3번은 구현했다. 남은 UI overlay는 T-044의 `maplibre-vwor
 ```bash
 TMPDIR=/tmp TMP=/tmp TEMP=/tmp .venv/bin/python scripts/compare_extra_shape_layers.py \
   --detail-dong-zip "/mnt/f/dev/geodata/juso/unused/건물군 내 상세주소 동 도형/건물군내동도형_전체분_세종특별자치시.zip" \
-  --zone-zip "/mnt/f/dev/geodata/juso/unused/구역의 도형/구역의도형_전체분_세종특별자치시.zip" \
-  --electronic-map-sido "/mnt/f/dev/kor-travel-geo/data/juso/도로명주소 전자지도/세종특별자치시"
+  --zone-zip "/mnt/f/dev/geodata/juso/구역의 도형/구역의도형_전체분_세종특별자치시.zip" \
+  --electronic-map-sido "/mnt/f/dev/geodata/juso/도로명주소 전자지도/세종특별자치시"
 ```
 
 경남 선택형 비교:

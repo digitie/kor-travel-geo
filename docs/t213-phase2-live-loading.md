@@ -69,7 +69,7 @@ source match set은 `6eb2b07b-f34f-460a-91ab-a5847a1e979e`로 활성화했다. s
 | `mv_geocode_target` | 6,419,795 |
 | `mv_geocode_text_search` | 6,419,795 |
 
-T-027 최종 실 데이터 클린 재적재의 `mv_geocode_target=6,416,642`와 비교하면 T-213은 3,153행 많다(+0.05%). T-213은 source registry 경로로 `roadname_hangul_full=202605`, `locsum/navi/electronic_map/roadaddr_entrance=202604`, `zone_shape=202603` 조합을 사용했고, T-027은 당시 클린 재적재 fixture와 기준월 조합을 사용했다. 차이는 loader 동작 차이로 단정하지 않고 원천 기준월·배포 파일 차이로 관리하며, T-214/T-215에서는 현재 active release row count를 기준값으로 삼는다.
+T-027 최종 실 데이터 클린 재적재의 `mv_geocode_target=6,416,642`와 비교하면 T-213은 3,153행 많다(+0.05%). T-213은 source registry 경로로 `roadname_hangul_full=202605`, `locsum/navi/electronic_map/roadaddr_entrance=202604`, `zone_shape=202603` 조합을 사용했고(초기 run; 이후 사용자 지시로 zone_shape의 register/match 기준월은 202604로 갈음 — 위 표 및 r3 재실행 섹션 참조), T-027은 당시 클린 재적재 fixture와 기준월 조합을 사용했다. 차이는 loader 동작 차이로 단정하지 않고 원천 기준월·배포 파일 차이로 관리하며, T-214/T-215에서는 현재 active release row count를 기준값으로 삼는다.
 
 active serving release는 다음으로 생성됐다.
 
