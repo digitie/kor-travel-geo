@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activeServingCategorySet,
   isEpostCategory,
   isFailedSessionState,
   isResumableSession,
@@ -77,6 +78,19 @@ describe("serving-usage classification (T-221, ADR-054)", () => {
     expect(sourceRoleLabel("validation_optional")).toBe("검증 선택");
     expect(sourceRoleLabel("build_required")).toBe("필수 구성");
     expect(sourceRoleLabel("omitted")).toBe("omitted");
+  });
+
+  it("active serving 카테고리 집합은 omitted 항목을 제외한다", () => {
+    const items = [
+      { category: "roadname_hangul_full", omitted: false },
+      { category: "navi_full", omitted: false },
+      { category: "national_point_grid_shape", omitted: true }
+    ] as unknown as Parameters<typeof activeServingCategorySet>[0];
+    const set = activeServingCategorySet(items);
+    expect(set.has("roadname_hangul_full")).toBe(true);
+    expect(set.has("navi_full")).toBe(true);
+    expect(set.has("national_point_grid_shape")).toBe(false);
+    expect(activeServingCategorySet([]).size).toBe(0);
   });
 });
 

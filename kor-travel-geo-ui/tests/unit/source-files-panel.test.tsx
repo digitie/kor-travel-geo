@@ -255,6 +255,16 @@ describe("SourceFilesPanel", () => {
   it("업로드 탭에 카테고리 카드와 재개 가능한 세션을 표시한다", async () => {
     renderPanel("upload");
     await screen.findByText("도로명주소 한글 전체분");
+    // T-224: 활성 매칭 세트 기준 '현재 서빙 포함/미포함'을 카드에 표시한다.
+    await screen.findByText("현재 서빙 포함");
+    const roadServingCard = screen
+      .getByText("도로명주소 한글 전체분")
+      .closest(".source-card") as HTMLElement;
+    expect(within(roadServingCard).getByText("현재 서빙 포함")).toBeInTheDocument();
+    const epostServingCard = screen
+      .getByText("epost 사서함")
+      .closest(".source-card") as HTMLElement;
+    expect(within(epostServingCard).getByText("현재 서빙 미포함")).toBeInTheDocument();
     apiMocks.postJson.mockImplementation(async (path: string) => {
       if (path === "/admin/source-files/epost-fetch")
         return {
