@@ -147,9 +147,31 @@ export function isResumableSession(session: UploadSessionStatus): boolean {
   return !TERMINAL_UPLOAD_STATES.has(session.state);
 }
 
+export function isTerminalUploadState(state: UploadSessionState): boolean {
+  return TERMINAL_UPLOAD_STATES.has(state);
+}
+
 export function isFailedSessionState(state: UploadSessionState): boolean {
   return state.startsWith("failed_");
 }
+
+/**
+ * SSE `source_upload.progress` event payload (mirrors backend
+ * `SourceUploadProgressEvent`). The events endpoint is a StreamingResponse with
+ * no OpenAPI schema, so this is the hand-maintained client contract.
+ */
+export type SourceUploadProgressEvent = {
+  event: "source_upload.progress";
+  upload_session_id: string;
+  state: UploadSessionState;
+  stage?: string | null;
+  progress?: number | null;
+  current_item?: string | null;
+  uploaded_bytes?: number;
+  total_bytes?: number;
+  message?: string | null;
+  log_tail?: string | null;
+};
 
 export function shortHash(hash?: string | null, length = 12): string {
   if (!hash) return "-";
@@ -171,6 +193,8 @@ export const sourceFilesPaths = {
     return `/admin/source-files/upload-sessions${search ? `?${search}` : ""}`;
   },
   uploadSession: (id: string) => `/admin/source-files/upload-sessions/${id}`,
+  uploadSessionEvents: (id: string) =>
+    `/admin/source-files/upload-sessions/${id}/events`,
   registerSession: (id: string) => `/admin/source-files/upload-sessions/${id}/register`,
   epostFetch: () => "/admin/source-files/epost-fetch",
   matchSets: (state?: string) =>

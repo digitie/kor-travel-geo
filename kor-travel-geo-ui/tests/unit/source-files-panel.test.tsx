@@ -300,6 +300,23 @@ describe("SourceFilesPanel", () => {
     expect(await screen.findByText("재개 가능한 업로드")).toBeInTheDocument();
   });
 
+  it("epost 서버 fetch 실패 시 카드에 인라인 에러를 표시한다", async () => {
+    renderPanel("upload");
+    const epostCard = (await screen.findByText("epost 사서함")).closest(
+      ".source-card"
+    ) as HTMLElement;
+    apiMocks.postJson.mockImplementationOnce(async () => {
+      throw new FakeApiError(502, JSON.stringify({ detail: "epost 서버 응답 없음" }));
+    });
+    fireEvent.change(within(epostCard).getByLabelText("기준년월 (user_yyyymm)"), {
+      target: { value: "202606" }
+    });
+    fireEvent.click(within(epostCard).getByRole("button", { name: "epost 받기" }));
+    expect(
+      await within(epostCard).findByText(/epost 서버 fetch 실패: epost 서버 응답 없음/)
+    ).toBeInTheDocument();
+  });
+
   it("업로드 409 응답 시 중복 세션 다이얼로그를 띄운다", async () => {
     renderPanel("upload");
     await screen.findByText("도로명주소 한글 전체분");
