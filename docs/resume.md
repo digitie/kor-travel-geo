@@ -2,8 +2,9 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-15 갱신, by codex)
+## 현재 진척도 (2026-06-16 갱신, by codex)
 
+- ✅ T-129 C11 100m 초과 outlier 원인 태깅 완료 — T-213 r3 DB와 T-125 후보 테이블 기준으로 14,433건 전체를 자동 태깅했다. primary tag는 `candidate_coordinate_error=13,000`, `current_representative_error=899`, `source_month_drift_possible=287`, `key_mismatch=210`, `crs_or_source_coordinate_error=33`, `manual_review=4`다. 후보 202604와 텍스트 202605 기준월 차이는 모든 row의 secondary tag로 남기되 단독 원인으로 보지 않았다. Artifact는 `F:\dev\geodata\t129-c11-outlier-triage\20260616-r1\`, 상세는 `docs/t129-c11-outlier-triage.md`. T-130 재사용을 위해 T-213 r3 DB의 `_ktg_t125_*` 작업 테이블은 남겨 두었다.
 - ✅ T-140~T-153 안정화·고성능·Admin UI 보강 Task 등록 — 아직 배포 전이므로 호환성·코드수정 최소화보다 성능·안정성을 우선한다는 기준으로 작업을 확장했다. Agent A(Codex)는 golden corpus, 고부하 benchmark matrix, reverse 공간조회 최적화, geocode/search query plan 안정화, v2/API 계약 재설계, backpressure/fail-fast, post-load read-optimized maintenance를 맡는다. Agent B(Claude Code)는 benchmark/validation artifact Admin UI 노출, source-files Playwright e2e matrix, 적재 UX, fixture harness, 운영 편의 기능, 접근성·성능·회복성 e2e를 맡는다. T-153은 두 트랙을 하나의 최종 acceptance gate로 묶는다.
 - ✅ T-138/T-139 read-heavy 성능 최적화 후속 등록 — 적재 후 write가 사실상 없고 read가 대부분이라는 전제를 반영해, T-138은 benchmark/index/MV/statistics/API 계약 변경까지 포함해 geocode/reverse/search/zipcode/admin 조회 tail을 줄이는 작업으로 추가했다. 아직 배포 전이므로 호환성 유지와 코드 수정 최소화보다 성능·안정성을 우선한다. 속도가 충분하지 않으면 T-139에서 별도 변경 DB를 만들고 현 DB와 같은 원천·같은 corpus로 DB 구조 변경안을 비교한 뒤 최적안을 문서화한다. 실제 구조 migration은 T-139 결론 뒤 별도 Task로 다시 분리한다.
 - ✅ T-125 후속 Action을 T-129~T-137로 분할 등록 — T-125 no-go 이후 바로 T-119로 가지 않고, outlier 원인 태깅(T-129), C4/C6/C7 회귀 분석(T-130), guarded policy simulation(T-131), 반복 검증 harness(T-132), shadow 성능·rollback(T-133), v1/v2 노출 계약(T-134), 실제 활용 파일과 Admin UI 정합성 감사(T-220, 과거 T-135), T-125 적재·승격 보류 상태 UI 반영(T-221, 과거 T-136), 최종 gate/ADR-051 재판정(T-137)으로 쪼갰다. (Admin UI 두 건은 PR #197에서 사용자 번호 규칙 Admin UI=T-2xx에 맞춰 T-220/T-221로 이동됨.) T-119는 이 후속 체인과 ADR-051 accepted, 사용자 승인 전까지 계속 보류한다.
@@ -186,9 +187,9 @@
 
 ## 다음 한 작업 (1시간 이내 분량)
 
-현재 Codex 소유 phase ① 작업(T-120~T-124), T-207, T-213, T-214, T-215, T-216/T-126 live acceptance, T-125 preflight, T-128 optional 원천 최종 판정은 완료됐다. T-125 결과는 `blocked / no-go`이므로 T-119는 T-129~T-137 후속 체인, ADR-051 accepted, 사용자 승인 전까지 보류한다.
+현재 Codex 소유 phase ① 작업(T-120~T-124), T-207, T-213, T-214, T-215, T-216/T-126 live acceptance, T-125 preflight, T-128 optional 원천 최종 판정, T-129 outlier 태깅은 완료됐다. T-125 결과는 `blocked / no-go`이므로 T-119는 T-130~T-137 후속 체인, ADR-051 accepted, 사용자 승인 전까지 보류한다.
 
-다음 작업 후보는 T-129 C11 100m 초과 outlier 원인 태깅, T-220 실제 활용 파일과 Admin UI 정합성 감사(과거 T-135), T-221 T-125 적재 변경점 Admin UI 반영(과거 T-136), T-138/T-140/T-141 read-heavy serving 성능·정확도 benchmark, T-223 Admin UI source-files Playwright e2e(과거 T-148), 또는 T-127 optional source 구조 validator 강화다. N150/Odroid 실측은 실제 장비가 준비될 때 T-063으로 연결한다.
+다음 작업 후보는 T-130 C11 C4/C6/C7 회귀 원인 분석, T-131 guarded candidate policy simulation, T-132 guarded 후보 검증 harness 확장, T-138/T-140/T-141 read-heavy serving 성능·정확도 benchmark, 또는 T-127 optional source 구조 validator 강화다. Admin UI 정합 감사/반영은 T-220/T-221로 Agent B 트랙에 있다. N150/Odroid 실측은 실제 장비가 준비될 때 T-063으로 연결한다.
 
 - 최신 T-027/T-047 재측정 로그는 로컬 산출물 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/fullload/t027-t047-retune-20260531-232609/`와 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/perf/t047-retune-standard-20260601-012814/` 아래에 있다. 이 경로는 git ignore 대상이다.
 - 최신 실제 DB 정합성은 `severity_max=ERROR`다. 전체 daily 적용 후 남은 주요 항목은 C2 29,410건(`missing_text=28,829`, `missing_resolve_key=581`), C4 12,189건(`over_500m=83`), C6 3,608건, C7 9,886건이다. C10은 `tl_juso_text=202603/202604/202605`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605` 기준월 혼합을 `WARN` 처리한다.

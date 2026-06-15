@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-129 C11 outlier 원인 태깅)
+
+**작업**: `scripts/run_t129_c11_outlier_triage.py`를 추가해 T-125의 C11 후보 100m 초과 outlier 14,433건 전체를 자동 태깅했다. 기존 T-125 staging/candidate 생성 함수를 재사용하고, row별 건물·우편번호·행정구역 containment, 경도 약 2도 shift, 다중 후보, natural-key polygon 미매칭, 기준월 차이를 CSV/GeoJSON/summary로 export한다.
+
+**결과**: primary tag는 `candidate_coordinate_error=13,000`, `current_representative_error=899`, `source_month_drift_possible=287`, `key_mismatch=210`, `crs_or_source_coordinate_error=33`, `manual_review=4`다. 전체 outlier는 후보 202604와 텍스트 202605 기준월 차이를 secondary tag로 갖지만, 단독 원인으로 보지 않고 공간/key 신호가 약한 경우에만 primary로 승격했다.
+
+**산출물**: `F:\dev\geodata\t129-c11-outlier-triage\20260616-r1\`에 `summary.json`, `outlier_tags.csv`, `outlier_tags.geojson`, `representative_samples.sql`을 보존했다. 상세는 `docs/t129-c11-outlier-triage.md`에 정리했다. T-130에서 재사용할 수 있도록 T-213 r3 DB의 `_ktg_t125_*` 작업 테이블은 남겨 두었다.
+
 ## 2026-06-15 (고성능 geocoder와 Admin UI 안정화 task 보강)
 
 **작업**: 사용자 지시에 따라 T-140~T-153을 추가했다. Agent A(Codex)는 geocoder/reverse-geocoder golden corpus, 고부하 SQL/REST benchmark matrix, reverse 공간조회 최적화, geocode/search query plan 안정화, 성능 우선 API 계약 재설계, backpressure/fail-fast, post-load read-optimized maintenance를 맡는다. Agent B(Claude Code)는 성능·검증 artifact Admin UI 노출, source-files Playwright e2e matrix, 파일 적재 UX, deterministic fixture harness, 운영 편의 기능, 접근성·회복성 e2e를 맡는다.
