@@ -349,14 +349,17 @@ _C11_TO_C17_ROWS: tuple[CaseRegistryRow, ...] = (
         state="enabled",
         inputs=(
             # match_jibun is an optional member inside navi_full, not its own
-            # category; encode it as the member-flagged category navi_full.match_jibun.
-            CaseInputSpec("navi_full.match_jibun", required=True),
-            CaseInputSpec("tl_juso_parcel_link", required=True),
+            # match-set category. tl_juso_parcel_link is an active serving DB
+            # table, not an uploaded source archive, so run-validation gates only
+            # the navi_full archive here. The validator/report layer still treats
+            # the specific member as "navi_full.match_jibun".
+            CaseInputSpec("navi_full", required=True),
         ),
         skip_policy={
             "rule": "match_jibun_* member 없으면 skipped",
-            "skipped_when_absent": ["navi_full.match_jibun", "tl_juso_parcel_link"],
+            "skipped_when_absent": ["navi_full"],
             "member_flag": "navi_full.match_jibun",
+            "requires_active_table": "tl_juso_parcel_link",
         },
         sample_schema={
             "primary_metric": "bd_mgt_sn+pnu, pnu+road key coverage",

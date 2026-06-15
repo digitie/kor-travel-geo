@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-126 phase ② 수용 후속 runner와 REST benchmark 관측 옵션을 추가했다. `scripts/run_t126_acceptance_followup.py`는 C11~C17 optional 검증 원천을 RustFS/source registry에 등록하고 별도 `custom` source match set으로 run-validation을 실행할 수 있게 하며, `scripts/benchmark_api_latency.py`는 `--server-profile KEY=VALUE`와 `--capture-prometheus`로 REST c64 artifact에 서버 실행 조건과 `/metrics` 전후 snapshot을 남긴다. 상세: `docs/t126-phase2-acceptance-followup.md`.
 - T-213 기준 DB 접속 경로를 문서화했다. `docs/t213-data-preservation.md`에 현재 baseline의 PostgreSQL host/port, DB 이름, `KTG_PG_DSN` template, RustFS endpoint/prefix, 원천·artifact 경로, WSL/PowerShell 환경변수 예시를 추가해 다른 에이전트가 기본 개발 DB와 혼동하지 않게 했다.
 - T-125 C11 serving 편입 승인 전 사전 검증 체크리스트를 추가했다. `docs/t125-c11-serving-preflight.md`는 기존 `mv_geocode_target` 대표점 대비 impact, C3/C4/C6/C7 회귀, T-047/T-214 계열 성능 회귀, feature flag rollback, v1/v2 노출 정책을 필수 산출물로 고정하고, 하나라도 빠지면 ADR-051 accepted 전환과 T-119 착수를 금지한다.
 - T-207 epost 수동 server-fetch를 추가했다. `POST /v1/admin/source-files/epost-fetch`가 epost ZIP을 서버에서 내려받아 사서함/다량배달처 텍스트 파일을 T-120 검증 모듈로 검증하고, RustFS source registry `single_file`로 등록한 뒤 `pobox_load`/`bulk_load` job을 enqueue한다. `/admin/source-files` 업로드 탭의 `epost 받기` 버튼도 실제 endpoint에 연결했다. 상세: `docs/t207-epost-server-fetch.md`.
@@ -54,6 +55,7 @@
 - **(BREAKING)** 자동 탐지 중심 upload-set 표면을 제거했다(충돌#1, T-201). `guess_source_kind()` 자동 source 종류 추정, `/v1/admin/uploads*`·`/v1/admin/load-sources*` admin 엔드포인트, `AsyncAddressClient.discover_load_sources()`/`build_full_load_source_set_plan()`/`submit_full_load_source_set()`/`cleanup_upload_sets()`, `ktgctl load full-set`·`ktgctl uploads cleanup` CLI를 삭제했다. 명시 category 기반 업로드(T-203~)와 `rebuild-db`(T-205)가 대체한다. `UploadSetStatus` DTO와 full-load 로더는 유지한다. UI `/admin/load` 콘솔은 T-209 재구성 전까지 stub이다.
 
 ### Fixed
+- T-126 run-validation 후속 보정을 반영했다. C17은 `navi_full.match_jibun`을 독립 source category로 요구하지 않고 `navi_full` archive의 member flag로 다루며, `tl_juso_parcel_link`는 active serving table 조건으로만 문서화한다. 또한 run-validation 정상 입력도 `validation_inputs.*.source_file_group_id`를 응답에 보존한다.
 - T-213 live runner hardening을 보강했다. 기본 DSN fallback을 제거하고 `--allow-destructive`를 추가했으며, 실행 전 active source match set을 기록해 기본적으로 복구한다. 새 match set을 운영 active로 유지하려면 `--promote-active-match-set`을 명시해야 한다.
 - T-213 live run에서 드러난 post-load 회귀를 보강했다. 전국 consistency case는 case별 트랜잭션에서 `SET LOCAL statement_timeout = 0`을 적용하고, fresh rebuild DB에서 `mv_geocode_target`이 아직 없으면 consistency sample point 보강을 건너뛴다. batch consistency `ERROR`는 `load_batch_id`가 있을 때 handler가 즉시 실패시키지 않고 forced-promotion gate로 넘긴다.
 - source registry 재실행 안정성을 보강했다. upload session `registered` 상태를 terminal state로 취급해 같은 `(category, user_yyyymm)`의 새 세션을 허용하고, rebuild staging의 `electronic_map_full` parent directory 아래 여러 시도 directory를 SHP loader가 탐색할 수 있게 했다.

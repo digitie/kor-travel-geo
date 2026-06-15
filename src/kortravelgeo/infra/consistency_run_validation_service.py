@@ -355,7 +355,7 @@ def _to_result_dto(decision: CaseRunDecision) -> ConsistencyCaseValidationResult
                 state=d.state,
                 required=d.required,
                 failure_reason=d.failure_reason,
-                source_file_group_id=d.quarantine_group_id,
+                source_file_group_id=d.source_file_group_id,
             )
             for d in decision.inputs
         ),

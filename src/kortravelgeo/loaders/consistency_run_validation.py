@@ -1,12 +1,15 @@
-"""C11~C17 run-validation prototype-metric binding (T-206 regression bridge).
+"""C11~C17 prototype-metric binding (T-206 regression bridge).
 
-The T-118 contract is "prototype metric == run-validation metric": run-validation
-for C11~C17 MUST reuse the SAME metric computation as the phase-① prototypes, not
-a reimplementation (``docs/t118-phase1-go-no-go.md`` line ~108). Each prototype
-exposes a pure ``.metrics()`` method on its comparison dataclass
-(``loaders/c1X_*.py``); this module is the single registry that binds each
-registry ``case_code`` to its prototype's comparison class so the orchestrator
-(and the regression test) call exactly that method.
+The T-118 contract is "prototype metric == registry metric": any C11~C17
+validator that emits metrics MUST reuse the SAME metric computation as the
+phase-① prototypes, not a reimplementation
+(``docs/t118-phase1-go-no-go.md`` line ~108). Each prototype exposes a pure
+``.metrics()`` method on its comparison dataclass (``loaders/c1X_*.py``); this
+module is the single registry that binds each registry ``case_code`` to its
+prototype's comparison class so the metric executor (and regression tests) call
+exactly that method. The admin ``run-validation`` endpoint currently performs
+only the source-archive presence/integrity gate and reports runnable/skipped/
+failed state; it does not execute these heavy metric validators inline.
 
 **Layer note.** ``infra ↛ loaders`` is forbidden by the import-linter layered
 contract (loaders sits ABOVE infra). Run-validation needs the prototype metric
@@ -41,7 +44,7 @@ class HasMetrics(Protocol):
 
 
 #: Registry ``case_code`` → its phase-① prototype comparison class. The class's
-#: ``.metrics()`` is the canonical metric; run-validation calls it directly.
+#: ``.metrics()`` is the canonical metric for any C11~C17 metric executor.
 PROTOTYPE_COMPARISON_BY_CASE: dict[str, type[HasMetrics]] = {
     "C11": C11EntranceComparison,
     "C12": C12ConnectionComparison,
@@ -58,10 +61,10 @@ AUGMENT_CASE_CODES: tuple[str, ...] = tuple(PROTOTYPE_COMPARISON_BY_CASE)
 def prototype_metric(comparison: HasMetrics) -> dict[str, object]:
     """Compute the canonical prototype metric for a comparison.
 
-    This is the SINGLE function run-validation uses to turn a prototype
-    comparison into its metric dict; the regression test asserts that the
-    run-validation metric for a synthetic case equals
-    ``comparison.metrics()`` so the two can never diverge.
+    This is the SINGLE function C11~C17 metric execution uses to turn a
+    prototype comparison into its metric dict; the regression test asserts that
+    the registry metric for a synthetic case equals ``comparison.metrics()`` so
+    the two can never diverge.
     """
     return comparison.metrics()
 

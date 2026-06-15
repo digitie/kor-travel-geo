@@ -2,6 +2,18 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-126 phase ② 수용 후속 준비)
+
+**작업**: T-215에서 남긴 C11~C17 optional source run-validation과 REST c64 tail 후속을 진행했다. `scripts/run_t126_acceptance_followup.py`를 추가해 `F:\dev\geodata\juso\unused\`의 optional 검증 원천 8개 category/40개 archive를 source registry에 등록하고, 기존 active source match set에 optional group을 더한 `custom` match set으로 `run_consistency_validation()`을 실행할 수 있게 했다. rebuild/promote는 하지 않는다.
+
+**수정**: C17 registry 입력을 독립 category처럼 보이던 `navi_full.match_jibun`에서 실제 업로드 category `navi_full` + `member_flag="navi_full.match_jibun"`로 정정했다. `tl_juso_parcel_link`는 source archive가 아니라 active serving DB table이므로 `requires_active_table` metadata로 남겼다. run-validation 정상 입력도 `source_file_group_id`를 응답에 보존하도록 고쳤고, API run-validation은 현재 presence/integrity gate만 실행한다는 범위를 주석/문서로 명확히 했다.
+
+**성능 하네스**: `scripts/benchmark_api_latency.py` artifact schema를 `2`로 올리고 `--server-profile KEY=VALUE`, `--capture-prometheus`를 추가했다. REST c64 수용 기준은 T-214 기준 `REST c64 worst p95=534.031ms`, error 0으로 다시 고정했다.
+
+**검증**: WSL ext4 미러에서 focused unit `24 passed`, changed-file ruff 통과, `mypy src/kortravelgeo scripts/benchmark_api_latency.py scripts/run_t126_acceptance_followup.py` 통과, `lint-imports` 통과를 확인했다. plan 모드도 optional source 8개 category/40개 archive를 확인했다.
+
+**주의**: 현재 세션에는 `KTG_RUSTFS_*`와 `data/rustfs/config.json`이 없고, API 서버 포트 `12501`/`12514`/`12518`도 응답하지 않아 RustFS verifier 포함 live run-validation과 REST c64 live benchmark는 실행하지 않았다. 남은 실행 절차는 `docs/t126-phase2-acceptance-followup.md`에 정리했다.
+
 ## 2026-06-15 (T-213 기준 DB 접속 경로 문서화)
 
 **작업**: 다른 에이전트가 T-214/T-215 기준 데이터를 바로 사용할 수 있도록 `docs/t213-data-preservation.md`에 현재 T-213 r3 baseline 접속 정보를 보강했다. PostgreSQL host/port는 `localhost:5432`, DB는 `kor_travel_geo_t213_20260615_r3`, DSN은 `KTG_PG_DSN` template로 기록하고, RustFS endpoint/prefix, 원천 루트, T-213/T-214/T-215 artifact 루트, WSL/bash와 PowerShell 환경변수 예시를 함께 정리했다.

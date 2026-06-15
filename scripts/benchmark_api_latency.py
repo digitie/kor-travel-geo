@@ -18,13 +18,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
+import anyio
 import httpx
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 
-API_BENCHMARK_SCHEMA_VERSION = 1
+API_BENCHMARK_SCHEMA_VERSION = 2
 
 type ParamValue = str | int | float | bool | None
 type Params = dict[str, ParamValue]
@@ -98,6 +99,7 @@ class ApiEnvironment:
     corpus_path: str
     corpus_sha256: str
     case_count: int
+    server_profile: dict[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +149,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limit converted cases per SQL/API group for a quick e2e sample.",
     )
     parser.add_argument("--timeout-s", type=float, default=10.0)
+    parser.add_argument(
+        "--server-profile",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help=(
+            "서버 실행 조건을 artifact에 기록한다. 예: "
+            "--server-profile workers=4 --server-profile pool=20/64"
+        ),
+    )
+    parser.add_argument(
+        "--capture-prometheus",
+        action="store_true",
+        help="/metrics 응답을 benchmark 전후 raw text로 저장한다.",
+    )
     return parser
 
 
@@ -276,6 +293,12 @@ async def run_benchmark(
     )
 
 
+async def capture_prometheus_snapshot(client: httpx.AsyncClient, output_path: Path) -> None:
+    response = await client.get("/metrics")
+    response.raise_for_status()
+    await anyio.Path(output_path).write_bytes(response.content)
+
+
 def write_summary_markdown(report: ApiBenchmarkReport, output_path: Path) -> None:
     lines = [
         f"# T-047 REST API benchmark: {report.run_id}",
@@ -291,14 +314,22 @@ def write_summary_markdown(report: ApiBenchmarkReport, output_path: Path) -> Non
         f"- Corpus: `{report.environment.corpus_path}`",
         f"- Corpus SHA-256: `{report.environment.corpus_sha256}`",
         f"- REST case count: `{report.environment.case_count}`",
-        "",
-        "## Latency summary",
-        "",
-        "| group | api | conc | samples | errors | p50 ms | p90 ms | p95 ms | "
-        "p99 ms | max ms | avg bytes |",
-        "|-------|-----|-----:|--------:|-------:|-------:|-------:|-------:|"
-        "-------:|-------:|----------:|",
     ]
+    if report.environment.server_profile:
+        lines.extend(["", "## 서버 프로필", ""])
+        for key, value in sorted(report.environment.server_profile.items()):
+            lines.append(f"- `{key}`: `{value}`")
+    lines.extend(
+        [
+            "",
+            "## Latency summary",
+            "",
+            "| group | api | conc | samples | errors | p50 ms | p90 ms | p95 ms | "
+            "p99 ms | max ms | avg bytes |",
+            "|-------|-----|-----:|--------:|-------:|-------:|-------:|-------:|"
+            "-------:|-------:|----------:|",
+        ]
+    )
     for row in report.summaries:
         lines.append(
             "| "
@@ -649,6 +680,19 @@ def _hash_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def parse_server_profile(items: Sequence[str] | None) -> dict[str, str]:
+    if not items:
+        return {}
+    profile: dict[str, str] = {}
+    for item in items:
+        key, sep, value = item.partition("=")
+        if not sep or not key.strip():
+            msg = f"--server-profile must be KEY=VALUE: {item!r}"
+            raise ValueError(msg)
+        profile[key.strip()] = value.strip()
+    return profile
+
+
 def _git_output(*args: str) -> str | None:
     git_repo = _git_repo()
     command = _git_command(git_repo, *args)
@@ -734,6 +778,7 @@ async def _amain(args: argparse.Namespace) -> None:
         corpus_path=str(args.corpus),
         corpus_sha256=_hash_file(args.corpus),
         case_count=len(api_cases),
+        server_profile=parse_server_profile(args.server_profile),
     )
     (output_dir / "api-cases.json").write_text(
         json.dumps([asdict(case) for case in api_cases], ensure_ascii=False, indent=2),
@@ -743,6 +788,8 @@ async def _amain(args: argparse.Namespace) -> None:
         base_url=environment.base_url,
         timeout=httpx.Timeout(args.timeout_s),
     ) as client:
+        if args.capture_prometheus:
+            await capture_prometheus_snapshot(client, output_dir / "prometheus-before.txt")
         report = await run_benchmark(
             client,
             api_cases,
@@ -752,6 +799,8 @@ async def _amain(args: argparse.Namespace) -> None:
             iterations=args.iterations,
             warmup=args.warmup,
         )
+        if args.capture_prometheus:
+            await capture_prometheus_snapshot(client, output_dir / "prometheus-after.txt")
     (output_dir / "benchmark.json").write_text(
         json.dumps(asdict(report), ensure_ascii=False, indent=2),
         encoding="utf-8",
