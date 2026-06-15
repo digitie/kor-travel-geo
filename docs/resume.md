@@ -4,6 +4,7 @@
 
 ## 현재 진척도 (2026-06-15 갱신, by codex)
 
+- ✅ PR #187 리뷰 후속 반영 — post-merge 상세 리뷰에서 blocking은 없었고 Low 2건을 처리했다. `source_member_scan`의 layer token 추출은 dot 전용에서 token boundary 기반으로 넓혀 underscore/hyphen/space 구분 파일명도 인식한다. 구분자 없이 완전히 붙은 vendor 파일명은 구조 검증 실패로 드러나게 full-stem fallback을 유지한다. optional single-file category 상세 validator 강화는 T-127 백로그로 분리했다.
 - ✅ T-216/T-126 phase ② live acceptance 완료 — RustFS endpoint/bucket 접근을 확인한 뒤 T-213 기준 DB `kor_travel_geo_t213_20260615_r3`에서 C11~C17 optional source 8개 category/40개 archive를 source registry에 등록했다. base source match set `a0c2d514-a91d-44c4-bdb6-0bc4771ae61a`에 optional group을 더한 custom source match set은 `0c7d7ee7-75bf-4a1e-ae0b-015485e73656`이고, run-validation은 `runnable=7`, `skipped=0`, `failed=0`이다. REST c64 동일 표본 425 case 재측정은 error 0, worst p95 `Q4_SEARCH/search_hint=415.022ms`로 T-214 기준 `534.031ms` 이하라 수용했다. 공급자 원본 SHP 파일명 token에서 layer명을 추출하도록 `source_member_scan`도 보강했다. Artifact는 `F:\dev\geodata\t216-acceptance\20260615-r2\`, 상세는 `docs/t216-live-acceptance.md`.
 - ✅ T-213 기준 DB 접속 경로 문서화 — 다른 에이전트가 T-214/T-215 baseline을 바로 사용할 수 있도록 `docs/t213-data-preservation.md`에 현재 PostgreSQL host/port(`localhost:5432`), DB(`kor_travel_geo_t213_20260615_r3`), `KTG_PG_DSN` template, RustFS endpoint/prefix, NTFS 원천·artifact 경로, WSL/PowerShell `.env.t213` 설정 예시를 추가했다. PostgreSQL은 raw `pgdata` 파일 경로가 아니라 `KTG_PG_DSN`으로 접근하는 논리 DB임을 명시했다.
 - ✅ T-215 phase ② 튜닝·최종 검증 평가 완료 — T-213 r3 전용 baseline(`kor_travel_geo_t213_20260615_r3`, active serving release `54e17e80-312e-46da-a58f-d8b10be37c85`)에서 preflight, C1~C10 재실행, C11~C17 run-validation, v1/v2 geocode/search/reverse/zipcode smoke, SQL/REST c64 재측정을 수행했다. Preflight와 v1/v2 smoke는 통과했다. C1~C10은 known data-quality 상태로 `severity_max=ERROR`이고, C10은 `tl_juso_text=202605`와 나머지 `202604` 혼합 WARN이다. C11~C17은 현 serving match set에 보강 원천이 없어 7건 모두 `skipped`다. SQL c64 error는 0건, worst p95는 `Q4_SEARCH/search_fuzzy=308.617ms`다. REST c64 sample은 error 0건이지만 pool `20/64`에서도 worst p95가 `Q3_FUZZY_GEOCODE/geocode_fuzzy_hint=3631.900ms`로 T-214보다 크게 악화됐다. Artifact는 `F:\dev\geodata\t215-acceptance\20260615-r1\`, 상세는 `docs/t215-phase2-final-acceptance.md`. 이 잔여 live acceptance는 T-216에서 닫았다.
@@ -181,7 +182,7 @@
 
 현재 Codex 소유 phase ① 작업(T-120~T-124), T-207, T-213, T-214, T-215, T-216/T-126 live acceptance는 완료됐다. T-125는 T-119 승인 전 선행 gate로 백로그에 추가했고, 상세 체크리스트는 `docs/t125-c11-serving-preflight.md`에 있다. T-119는 T-125 완료, ADR-051 accepted, 사용자 승인 전까지 보류한다.
 
-다음 작업 후보는 T-125 C11 serving 편입 승인 전 사전 검증 또는 T-210 잔여 통합/실데이터 검증이다. N150/Odroid 실측은 실제 장비가 준비될 때 T-063으로 연결한다.
+다음 작업 후보는 T-125 C11 serving 편입 승인 전 사전 검증, T-127 optional source 구조 validator 강화, 또는 T-210 잔여 통합/실데이터 검증이다. N150/Odroid 실측은 실제 장비가 준비될 때 T-063으로 연결한다.
 
 - 최신 T-027/T-047 재측정 로그는 로컬 산출물 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/fullload/t027-t047-retune-20260531-232609/`와 `/home/digitie/dev/kor-travel-geo-codex-test/artifacts/perf/t047-retune-standard-20260601-012814/` 아래에 있다. 이 경로는 git ignore 대상이다.
 - 최신 실제 DB 정합성은 `severity_max=ERROR`다. 전체 daily 적용 후 남은 주요 항목은 C2 29,410건(`missing_text=28,829`, `missing_resolve_key=581`), C4 12,189건(`over_500m=83`), C6 3,608건, C7 9,886건이다. C10은 `tl_juso_text=202603/202604/202605`, `tl_locsum_entrc`/`tl_navi_*`/`tl_spbd_buld_polygon=202604`, `tl_roadaddr_entrc`/`tl_sppn_makarea=202605` 기준월 혼합을 `WARN` 처리한다.

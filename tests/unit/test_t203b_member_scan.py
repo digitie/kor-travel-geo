@@ -47,6 +47,11 @@ def test_scan_extracts_layer_name_from_supplier_filename(tmp_path: Path) -> None
         ):
             for ext in (".shp", ".shx", ".dbf"):
                 zf.writestr(f"Total.JUSURB.20260501.{layer}.11000{ext}", b"x")
+        for ext in (".shp", ".shx", ".dbf"):
+            zf.writestr(
+                f"Total_JUSUED_20260501_TL_SPBD_ENTRC_DONG_11000{ext}",
+                b"x",
+            )
 
     part = scan_part_manifest(archive, part_key="11")
 
@@ -55,6 +60,7 @@ def test_scan_extracts_layer_name_from_supplier_filename(tmp_path: Path) -> None
         "TL_SPBD_ENTRC",
         "TL_SPBD_ENTRC_DONG",
     } <= part.layer_names()
+    assert all(not layer.startswith("TOTAL") for layer in part.layer_names())
 
 
 def test_scan_dir_input_lists_files(tmp_path: Path) -> None:

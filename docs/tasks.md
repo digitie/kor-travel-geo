@@ -38,6 +38,7 @@
 ### ① 데이터 원천 보강 및 테스트 검증 (T-110~, phase 1)
 
 - T-125 C11 serving 편입 승인 전 사전 검증 — T-119 구현 착수 전에 C11 출입구 후보를 serving ranking에 넣어도 되는지 증거를 채운다. 기존 `mv_geocode_target` 대표점 대비 거리 impact(p50/p95/p99/max, 100m 초과 outlier, sample), 기준월 gate, full key/weak key namespace 위험, C3/C4/C6/C7 정합성 ERROR 회귀, T-047/T-214 계열 SQL/REST p95 성능 회귀, feature flag off/on과 rollback(`flag off + mv_refresh`) 절차, v1 호환 노출 정책(`pt_source` 유지와 세부 출처 `x_extension`/v2)을 artifact와 문서로 남긴다. 결과가 ADR-051 gate를 만족할 때만 ADR-051 accepted 전환 제안과 사용자 승인 요청으로 이어지고, 만족하지 않으면 C11은 검증 전용 후보로 유지한다. 필수 산출물과 T-119 착수 금지선은 `docs/t125-c11-serving-preflight.md`를 따른다. (의존: T-123, T-214/T-215 결과 참조 가능; T-119의 선행 gate)
+- T-127 optional source 구조 validator 강화 — T-216에서 `warning`으로 통과한 optional 검증 원천의 상세 profile을 보강한다. 대상은 `detail_address_db_full`, `national_point_grid_shape`, `national_point_grid_center`, `civil_service_institution_map`, `address_db_full`, `building_db_full` 등 single-file optional category이며, archive member naming/필수 파일/sidecar/기준월 sanity를 category별로 검증해 `warning`과 `failed`의 의미를 더 좁힌다. C11~C17 run-validation 수용 결과는 유지하고, 새 validator는 별도 fixture와 실제 원천 smoke로 고정한다. (의존: T-216)
 
 ### ② 데이터 적재/백업 기능 구현 및 검증 (T-200~, phase 2 — T-109 설계 구현)
 

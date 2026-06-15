@@ -55,6 +55,7 @@
 - **(BREAKING)** 자동 탐지 중심 upload-set 표면을 제거했다(충돌#1, T-201). `guess_source_kind()` 자동 source 종류 추정, `/v1/admin/uploads*`·`/v1/admin/load-sources*` admin 엔드포인트, `AsyncAddressClient.discover_load_sources()`/`build_full_load_source_set_plan()`/`submit_full_load_source_set()`/`cleanup_upload_sets()`, `ktgctl load full-set`·`ktgctl uploads cleanup` CLI를 삭제했다. 명시 category 기반 업로드(T-203~)와 `rebuild-db`(T-205)가 대체한다. `UploadSetStatus` DTO와 full-load 로더는 유지한다. UI `/admin/load` 콘솔은 T-209 재구성 전까지 stub이다.
 
 ### Fixed
+- PR #187 리뷰 후속으로 source member scan의 공급자 파일명 layer token 추출을 보강했다. dot 구분뿐 아니라 underscore/hyphen/space 같은 token boundary에서도 canonical SHP layer명을 찾고, 구분자 없는 결합 파일명은 구조 검증 실패로 드러나도록 full-stem fallback을 유지한다.
 - T-216/T-126 live acceptance에서 드러난 source member scan 문제를 수정했다. 공급자 원본 SHP 파일명 `Total.JUSURB.20260501.TL_...11000.shp`처럼 layer명 앞뒤에 배포 prefix/date/sig code가 붙어도 canonical layer명으로 인식한다. C11~C17 optional source 등록과 REST c64 live benchmark도 완료했으며, 상세 결과는 `docs/t216-live-acceptance.md`에 기록했다.
 - T-126 run-validation 후속 보정을 반영했다. C17은 `navi_full.match_jibun`을 독립 source category로 요구하지 않고 `navi_full` archive의 member flag로 다루며, `tl_juso_parcel_link`는 active serving table 조건으로만 문서화한다. 또한 run-validation 정상 입력도 `validation_inputs.*.source_file_group_id`를 응답에 보존한다.
 - T-213 live runner hardening을 보강했다. 기본 DSN fallback을 제거하고 `--allow-destructive`를 추가했으며, 실행 전 active source match set을 기록해 기본적으로 복구한다. 새 match set을 운영 active로 유지하려면 `--promote-active-match-set`을 명시해야 한다.

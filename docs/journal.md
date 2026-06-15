@@ -2,6 +2,12 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (PR #187 리뷰 후속 반영)
+
+**작업**: 머지된 PR #187의 post-merge 리뷰 코멘트를 확인했다. formal review thread는 없고 top-level 상세 리뷰 1건이었으며, blocking은 없었다. Low 후속 2건 중 `_canonical_layer_name`의 dot-delimited 가정은 코드로 반영하고, optional single-file category 상세 validator 부족은 T-127 백로그로 분리했다.
+
+**수정**: `source_member_scan`의 layer token 추출을 dot 전용에서 token boundary 기반으로 넓혀 underscore/hyphen/space 같은 구분자도 허용했다. 구분자 없이 완전히 붙은 vendor 파일명은 계속 full-stem fallback으로 남겨 구조 검증이 missing layer로 실패하게 한다. 공급자 파일명 테스트에 underscore 구분 케이스와 full-stem 오인 방지 assertion을 추가했다.
+
 ## 2026-06-15 (T-216/T-126 live acceptance 완료)
 
 **작업**: 사용자가 RustFS를 올린 뒤 T-126 잔여 live acceptance를 실행했다. 기본 `.env`의 `kor_travel_geo`는 T-213 기준 DB가 아니어서, 실행 wrapper에서 DB 이름만 `kor_travel_geo_t213_20260615_r3`로 명시 치환했다. RustFS endpoint `http://127.0.0.1:12101`, bucket `kor-travel-geo` 접근을 확인하고 prefix `kor-travel-geo/t216/20260615-r2`를 사용했다.

@@ -69,8 +69,9 @@ def scan_part_manifest(archive: Path, *, part_key: str) -> PartManifest:
 
     SHP layers are collapsed to one :class:`ManifestMember` per layer name with
     the union of its sidecar suffixes; everything else becomes a plain file
-    member. Layer name = the stem of a ``.shp/.shx/.dbf/.prj`` member, uppercased
-    to match the loader layer constants.
+    member. Supplier archives often wrap the canonical layer name in a filename
+    prefix/date/sido code, so the scanner extracts known layer tokens from the
+    stem before falling back to the full uppercased stem.
     """
     names = _member_names(archive)
     layers: dict[str, set[str]] = {}
@@ -100,11 +101,31 @@ def _canonical_layer_name(stem: str) -> str:
     upper = stem.upper()
     if upper in _KNOWN_LAYER_NAMES:
         return upper
-    dotted = f".{upper}."
     for layer in _KNOWN_LAYER_NAMES:
-        if f".{layer}." in dotted:
-            return layer
+        start = 0
+        while True:
+            index = upper.find(layer, start)
+            if index < 0:
+                break
+            end = index + len(layer)
+            if _has_layer_token_boundary(upper, index, end):
+                return layer
+            start = index + 1
     return upper
+
+
+def _has_layer_token_boundary(text: str, start: int, end: int) -> bool:
+    """Return true when a known layer is separated from vendor affixes.
+
+    Current real archives use dot-delimited names, and this also accepts
+    underscore/hyphen/space-style separators. Fully concatenated vendor names
+    intentionally fall back to the full stem so structure validation fails
+    visibly instead of guessing a false layer match.
+    """
+
+    before_ok = start == 0 or not text[start - 1].isalnum()
+    after_ok = end == len(text) or not text[end].isalnum()
+    return before_ok and after_ok
 
 
 def scan_group_manifest(
