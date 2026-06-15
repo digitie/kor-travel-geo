@@ -50,6 +50,8 @@ from .dto.admin import (
     MaintenanceWindowCreate,
     MaintenanceWindowEnd,
     OpsArtifact,
+    RestoreCreateRequest,
+    RestoreDryRunResult,
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
     RollbackPlan,
@@ -939,6 +941,16 @@ class AsyncAddressClient:
             msg = f"artifact is not a db_backup: {artifact_id}"
             raise InvalidInputError(msg)
         return await verify_backup_artifact(artifact, self.settings, mode=mode)
+
+    async def restore_dry_run(self, req: RestoreCreateRequest) -> RestoreDryRunResult:
+        """Preflight a restore without running pg_restore (T-232).
+
+        Returns ``can_restore`` + ``blockers`` + ``warnings`` after checking archive
+        integrity, target restorability, and version compatibility. Non-mutating.
+        """
+        from .infra.backup import run_restore_dry_run
+
+        return await run_restore_dry_run(self._engine(), self.settings, req)
 
     # --- RustFS reconciliation (T-204) ------------------------------------
 

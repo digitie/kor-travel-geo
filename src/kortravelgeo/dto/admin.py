@@ -657,6 +657,24 @@ class BackupRetentionRunRequest(FrozenModel):
     keep_min_count: int | None = Field(default=None, ge=0)
 
 
+class RestoreDryRunResult(FrozenModel):
+    """T-232 restore dry-run: preflight checks without running pg_restore."""
+
+    can_restore: bool
+    mode: RestoreMode
+    target_database: str | None = None
+    blockers: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    archive_sha256_ok: bool | None = None
+    internal_checksums_ok: bool | None = None
+    manifest_ok: bool | None = None
+    backup_postgres_version: str | None = None
+    backup_postgis_version: str | None = None
+    target_postgres_version: str | None = None
+    target_postgis_version: str | None = None
+    row_counts: dict[str, int] | None = None
+
+
 class BackupVerifyRequest(FrozenModel):
     """T-231 on-demand backup integrity check request."""
 
