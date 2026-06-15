@@ -9,6 +9,8 @@ export const apiSchemaNames = [
   "BackupAllowedDirs",
   "BackupArtifact",
   "BackupCreateRequest",
+  "BackupRetentionResult",
+  "BackupRetentionRunRequest",
   "CRS",
   "CacheMetrics",
   "CandidateV2",

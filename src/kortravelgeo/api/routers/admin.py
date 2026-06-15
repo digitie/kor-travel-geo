@@ -35,6 +35,8 @@ from kortravelgeo.dto.admin import (
     BackupAllowedDirs,
     BackupArtifact,
     BackupCreateRequest,
+    BackupRetentionResult,
+    BackupRetentionRunRequest,
     CacheMetrics,
     ConsistencyBulkDecisionRequest,
     ConsistencyBulkDecisionResponse,
@@ -1780,6 +1782,42 @@ async def delete_backup(
         **_audit_request(request),
     )
     return _backup_artifact_response(deleted, settings=settings)
+
+
+@router.post(
+    "/backups/janitor/run",
+    response_model=BackupRetentionResult,
+    response_model_exclude_none=True,
+)
+async def run_backup_retention_janitor(
+    req: BackupRetentionRunRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> BackupRetentionResult:
+    """Expire backups whose TTL passed, keeping ``pinned`` and the newest N (T-230).
+
+    Archives are regenerable, so this removes the ``.tar.zst`` file and marks the
+    artifact ``expired``. Idempotent and serialized by the ``BACKUP_JANITOR``
+    advisory lock (concurrent calls return ``skipped_locked``). ``dry_run`` reports
+    targets without touching files.
+    """
+    result = await client.run_backup_retention_janitor(
+        dry_run=req.dry_run,
+        keep_min_count=req.keep_min_count,
+    )
+    await client.record_audit_event(
+        action="db_backup.retention_janitor",
+        outcome="succeeded",
+        payload={
+            "dry_run": result.dry_run,
+            "expired_count": result.expired_count,
+            "failed_count": result.failed_count,
+            "skipped_locked": result.skipped_locked,
+        },
+        resource_type="artifact",
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.post("/restores", response_model=LoadJobStatus, response_model_exclude_none=True)

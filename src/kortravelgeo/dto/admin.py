@@ -650,6 +650,27 @@ class BackupArtifact(OpsArtifact):
     download_url: str | None = None
 
 
+class BackupRetentionRunRequest(FrozenModel):
+    """T-230 backup retention janitor request."""
+
+    dry_run: bool = False
+    keep_min_count: int | None = Field(default=None, ge=0)
+
+
+class BackupRetentionResult(FrozenModel):
+    """T-230 result of one backup retention janitor pass."""
+
+    dry_run: bool
+    keep_min_count: int
+    skipped_locked: bool = False
+    scanned: int = 0
+    protected_count: int = 0
+    expired_count: int = 0
+    failed_count: int = 0
+    expired_artifact_ids: tuple[str, ...] = ()
+    failed_artifact_ids: tuple[str, ...] = ()
+
+
 class MaintenanceWindowCreate(FrozenModel):
     kind: MaintenanceWindowKind
     reason: str = Field(min_length=1, max_length=1000)

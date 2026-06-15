@@ -805,6 +805,92 @@
         "title": "BackupCreateRequest",
         "type": "object"
       },
+      "BackupRetentionResult": {
+        "additionalProperties": false,
+        "description": "T-230 result of one backup retention janitor pass.",
+        "properties": {
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "expired_artifact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Expired Artifact Ids",
+            "type": "array"
+          },
+          "expired_count": {
+            "default": 0,
+            "title": "Expired Count",
+            "type": "integer"
+          },
+          "failed_artifact_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Failed Artifact Ids",
+            "type": "array"
+          },
+          "failed_count": {
+            "default": 0,
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "keep_min_count": {
+            "title": "Keep Min Count",
+            "type": "integer"
+          },
+          "protected_count": {
+            "default": 0,
+            "title": "Protected Count",
+            "type": "integer"
+          },
+          "scanned": {
+            "default": 0,
+            "title": "Scanned",
+            "type": "integer"
+          },
+          "skipped_locked": {
+            "default": false,
+            "title": "Skipped Locked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dry_run",
+          "keep_min_count"
+        ],
+        "title": "BackupRetentionResult",
+        "type": "object"
+      },
+      "BackupRetentionRunRequest": {
+        "additionalProperties": false,
+        "description": "T-230 backup retention janitor request.",
+        "properties": {
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "keep_min_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Min Count"
+          }
+        },
+        "title": "BackupRetentionRunRequest",
+        "type": "object"
+      },
       "CRS": {
         "description": "Coordinate reference system normalized as EPSG:XXXX",
         "type": "string"
@@ -10511,6 +10597,48 @@
           }
         },
         "summary": "Backup Allowed Dirs",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/backups/janitor/run": {
+      "post": {
+        "description": "Expire backups whose TTL passed, keeping ``pinned`` and the newest N (T-230).\n\nArchives are regenerable, so this removes the ``.tar.zst`` file and marks the\nartifact ``expired``. Idempotent and serialized by the ``BACKUP_JANITOR``\nadvisory lock (concurrent calls return ``skipped_locked``). ``dry_run`` reports\ntargets without touching files.",
+        "operationId": "run_backup_retention_janitor_v1_admin_backups_janitor_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackupRetentionRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupRetentionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Backup Retention Janitor",
         "tags": [
           "admin"
         ]

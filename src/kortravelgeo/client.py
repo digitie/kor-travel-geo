@@ -27,6 +27,7 @@ from .core.v2 import (
 from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
     AuditEvent,
+    BackupRetentionResult,
     CacheMetrics,
     ConsistencyBulkDecisionRequest,
     ConsistencyBulkDecisionResponse,
@@ -896,6 +897,29 @@ class AsyncAddressClient:
             session_limit=self.settings.source_janitor_session_limit,
         )
         return SourceJanitorRunResponse(**summary.as_payload())
+
+    async def run_backup_retention_janitor(
+        self,
+        *,
+        dry_run: bool = False,
+        keep_min_count: int | None = None,
+        actor_id: str = "system:backup_janitor",
+    ) -> BackupRetentionResult:
+        """Run one backup retention janitor pass (T-230).
+
+        Expires backup archives whose ``expires_at`` has passed, except ``pinned``
+        ones and the newest ``keep_min_count`` (``backup_retention_keep_min`` default).
+        Runs under the ``BACKUP_JANITOR`` advisory lock; skips if another holds it.
+        """
+        from .infra.backup_janitor import run_backup_retention_janitor
+
+        return await run_backup_retention_janitor(
+            self._engine(),
+            self.settings,
+            dry_run=dry_run,
+            keep_min_count=keep_min_count,
+            actor_id=actor_id,
+        )
 
     # --- RustFS reconciliation (T-204) ------------------------------------
 

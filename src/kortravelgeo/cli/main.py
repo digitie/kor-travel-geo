@@ -902,6 +902,29 @@ def delete_backup(artifact_id: str) -> None:
     asyncio.run(run())
 
 
+@backup_app.command("janitor")
+def backup_janitor(
+    dry_run: bool = typer.Option(False, "--dry-run", help="대상만 보고(파일 미변경)."),
+    keep_min: int | None = typer.Option(
+        None, "--keep-min", min=0, help="만료여도 보존할 최신 백업 수(미지정 시 설정값)."
+    ),
+) -> None:
+    """Expire backups past their TTL (T-230), keeping pinned and the newest N.
+
+    Removes the archive file and marks the artifact ``expired``. Serialized by the
+    ``BACKUP_JANITOR`` advisory lock; exits 0 even when another pass holds the lock.
+    """
+
+    async def run() -> None:
+        async with AsyncAddressClient() as client:
+            result = await client.run_backup_retention_janitor(
+                dry_run=dry_run, keep_min_count=keep_min
+            )
+            typer.echo(result.model_dump_json())
+
+    asyncio.run(run())
+
+
 @restore_app.command("create")
 def create_restore(
     artifact_id: str | None = typer.Option(None, "--artifact-id"),
