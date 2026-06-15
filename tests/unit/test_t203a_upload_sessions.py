@@ -93,6 +93,17 @@ def test_terminal_states_block_dedup_but_progress_states_do_not() -> None:
         assert state in TERMINAL_UPLOAD_SESSION_STATES
 
 
+def test_sse_terminal_states_match_canonical_set_and_exclude_retryable() -> None:
+    # #176 review: the upload-session SSE stream-end set must equal the canonical
+    # terminal set so the live stream does not end on states the client treats as
+    # still in-progress. failed_register is retryable; quarantined is not a session state.
+    from kortravelgeo.api.routers.admin import _UPLOAD_TERMINAL_STATES
+
+    assert _UPLOAD_TERMINAL_STATES == TERMINAL_UPLOAD_SESSION_STATES
+    assert "failed_register" not in _UPLOAD_TERMINAL_STATES
+    assert "quarantined" not in _UPLOAD_TERMINAL_STATES
+
+
 def _session(**overrides: object) -> UploadSessionStatus:
     now = datetime(2026, 6, 14, tzinfo=UTC)
     base: dict[str, object] = {

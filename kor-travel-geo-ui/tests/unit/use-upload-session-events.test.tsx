@@ -70,6 +70,25 @@ describe("useUploadSessionEvents", () => {
     expect(onTerminal).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the stream open on failed_register (retryable, non-terminal)", () => {
+    // #176 review: failed_register is retryable in the same session, so the
+    // client must NOT close/onTerminal on it (matches the backend SSE which no
+    // longer treats failed_register as a stream-end state).
+    let created: FakeEventSource | null = null;
+    const factory = (url: string) => {
+      created = new FakeEventSource(url);
+      return created as unknown as EventSource;
+    };
+    const onTerminal = vi.fn();
+    const { result } = renderHook(() =>
+      useUploadSessionEvents("sess1", { eventSourceFactory: factory, onTerminal })
+    );
+    act(() => created!.emit("source_upload.progress", progress("failed_register")));
+    expect(result.current?.state).toBe("failed_register");
+    expect(created!.closed).toBe(false);
+    expect(onTerminal).not.toHaveBeenCalled();
+  });
+
   it("ignores malformed frames", () => {
     let created: FakeEventSource | null = null;
     const factory = (url: string) => {
