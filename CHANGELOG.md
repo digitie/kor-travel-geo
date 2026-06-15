@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- optional 원천 사용·미사용 최종 판정 문서를 추가했다. `docs/optional-source-usage-decision.md`와 ADR-054는 PR #193/#194의 clean-slate v2 분석과 T-125 no-go를 합쳐 국가지점번호 좌표 활용, C11 출입구 blanket 승격 보류, 상세주소 typed feature 후보, 주소DB/건물DB/민원행정기관/grid·center 검증 전용 원칙을 확정한다.
 - T-126 phase ② 수용 후속 runner와 REST benchmark 관측 옵션을 추가했다. `scripts/run_t126_acceptance_followup.py`는 C11~C17 optional 검증 원천을 RustFS/source registry에 등록하고 별도 `custom` source match set으로 run-validation을 실행할 수 있게 하며, `scripts/benchmark_api_latency.py`는 `--server-profile KEY=VALUE`와 `--capture-prometheus`로 REST c64 artifact에 서버 실행 조건과 `/metrics` 전후 snapshot을 남긴다. 상세: `docs/t126-phase2-acceptance-followup.md`.
 - T-213 기준 DB 접속 경로를 문서화했다. `docs/t213-data-preservation.md`에 현재 baseline의 PostgreSQL host/port, DB 이름, `KTG_PG_DSN` template, RustFS endpoint/prefix, 원천·artifact 경로, WSL/PowerShell 환경변수 예시를 추가해 다른 에이전트가 기본 개발 DB와 혼동하지 않게 했다.
 - T-125 C11 serving 편입 승인 전 사전 검증 체크리스트를 추가했다. `docs/t125-c11-serving-preflight.md`는 기존 `mv_geocode_target` 대표점 대비 impact, C3/C4/C6/C7 회귀, T-047/T-214 계열 성능 회귀, feature flag rollback, v1/v2 노출 정책을 필수 산출물로 고정하고, 하나라도 빠지면 ADR-051 accepted 전환과 T-119 착수를 금지한다.

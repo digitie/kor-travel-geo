@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-128 optional 원천 최종 사용 판정)
+
+**작업**: PR #193/#194의 Claude Code clean-slate v2 분석을 확인했다. 두 PR 모두 GitHub conversation comment, review, review thread가 0건이라 별도 comment 반영은 없었고, PR 문서 본문 의견을 T-125 C11 no-go 결과와 합쳐 최종 판정으로 정리했다.
+
+**결정**: `docs/optional-source-usage-decision.md`를 새 source-of-truth로 추가했다. 국가지점번호 좌표는 `core.sppn` 계산값으로 활용하고, `TL_SPPN_MAKAREA`는 zone context로 유지한다. `도로명주소 건물 도형`의 C11 출입구점은 T-125에서 p95/p99/outlier와 C4/C6/C7 회귀가 확인됐으므로 현행 대표 좌표 ranking에 blanket 승격하지 않는다. `상세주소DB`와 `건물군 내 상세주소 동 도형`은 상세주소 typed feature 후보로 두되 호별 좌표처럼 표시하지 않는다. `주소DB`, `건물DB`, `민원행정기관전자지도`, 국가지점번호 grid/center는 기본 주소 좌표 원천이 아니라 검증·별도 기능 후보로 둔다.
+
+**문서**: ADR-054를 accepted로 추가하고, `docs/source-data-accuracy-review.md`와 `docs/backup-restore-source-inventory.md`는 최종 판정 문서를 우선 참조하도록 갱신했다.
+
+## 2026-06-15 (T-125 C11 serving 사전 검증 완료)
+
+**작업**: `scripts/run_t125_c11_serving_preflight.py`를 추가해 T-213 r3 DB에서 C11 `roadaddr_building_shape_bundle` 후보를 staging으로 만들고 기존 `mv_geocode_target` 대표점과 비교했다. `TL_SGCO_RNADR_MST`에는 `BD_MGT_SN`이 없으므로 26자리 `ADR_MNG_NO`를 후보 `bd_mgt_sn`으로 사용했고, C4는 전자지도 polygon의 직접 `bd_mgt_sn`이 아니라 natural key로 비교했다.
+
+**결과**: T-125 gate는 `blocked / no-go`다. 후보 coverage는 matched 6,404,009건, current-only 15,786건, candidate-only 2,156건이다. 거리 impact는 p95 `22.801m`, p99 `54.283m`, 100m 초과 14,433건이며, C3 결측은 3,513,854건에서 15,786건으로 줄었지만 C4 over500 16→68, C6 ERROR 803→3,635, C7 ERROR 6,815→9,896으로 악화됐다.
+
+**후속**: ADR-051은 `proposed` 유지, T-119는 계속 보류한다. Artifact는 `F:\dev\geodata\t125-c11-serving-preflight\20260615-r2\`, 상세는 `docs/t125-c11-serving-preflight-result.md`에 남겼다. 검증 완료 후 `_ktg_t125_*` 작업 테이블은 모두 삭제했다.
+
 ## 2026-06-15 (T-106 v1 VWorld geocode/reverse 호환 반영)
 
 **결정**: ADR-053으로 T-106의 호환 수준을 REST v1 geocode/reverse의 VWorld HTTP envelope/key/대소문자 호환으로 확정했다. byte-for-byte VWorld 원응답 동일성은 목표로 두지 않고, 로컬 보강 정보는 기존 ADR-003 원칙대로 `x_extension`에 유지한다.

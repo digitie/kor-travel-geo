@@ -48,7 +48,7 @@
 
 `F:\dev\geodata\juso` 현재 배치에서, 현행 서빙 DB를 재구성할 때 쓰는 파일과 쓰지 않는 파일은 다음처럼 구분한다. 아래 "현재 기본 서빙 load에서 쓰지 않음" 항목은 루트가 아니라 `unused\` 아래에 보존한다.
 
-정확도 개선 또는 검증용 활용 가능성은 `docs/source-data-accuracy-review.md`에 더 자세히 정리한다.
+정확도 개선 또는 검증용 활용 가능성의 최종 판정은 `docs/optional-source-usage-decision.md`를 우선하고, 배경 검토는 `docs/source-data-accuracy-review.md`에 정리한다.
 
 ### 기본 full-load 사용
 
