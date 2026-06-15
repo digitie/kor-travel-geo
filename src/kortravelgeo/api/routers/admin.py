@@ -9,9 +9,9 @@ import io
 import re
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, ORJSONResponse, StreamingResponse
@@ -1709,6 +1709,7 @@ async def backup_allowed_dirs() -> BackupAllowedDirs:
 async def list_backups(
     limit: int = Query(default=50, ge=1, le=500),
     state: str | None = None,
+    expiring_within_days: int | None = Query(default=None, ge=0),
     client: AsyncAddressClient = Depends(get_client),
 ) -> list[BackupArtifact]:
     settings = get_settings()
@@ -1717,6 +1718,9 @@ async def list_backups(
         artifact_type=BACKUP_ARTIFACT_TYPE,
         state=state,
     )
+    if expiring_within_days is not None:
+        cutoff = datetime.now(UTC) + timedelta(days=expiring_within_days)
+        artifacts = [a for a in artifacts if a.expires_at is not None and a.expires_at <= cutoff]
     return [_backup_artifact_response(artifact, settings=settings) for artifact in artifacts]
 
 
@@ -2483,11 +2487,33 @@ async def capture_ops_table_stats(
     )
 
 
+def backup_catalog_summary(manifest: dict[str, Any] | None) -> dict[str, Any]:
+    """Manifest-derived catalog fields for the backup list (T-240). Pure; defensive."""
+    data = manifest or {}
+    source_set = data.get("source_set")
+    yyyymm = source_set.get("yyyymm_by_kind") if isinstance(source_set, dict) else None
+    mixed = source_set.get("mixed_yyyymm") if isinstance(source_set, dict) else None
+    inventory = data.get("source_inventory_verification")
+    inventory_ok: bool | None = None
+    if isinstance(inventory, dict) and not inventory.get("skipped"):
+        ok = inventory.get("ok")
+        inventory_ok = ok if isinstance(ok, bool) else None
+    return {
+        "source_set_yyyymm": yyyymm if isinstance(yyyymm, dict) else None,
+        "source_set_mixed": mixed if isinstance(mixed, bool) else None,
+        "source_inventory_ok": inventory_ok,
+    }
+
+
 def _backup_artifact_response(artifact: OpsArtifact, *, settings: Settings) -> BackupArtifact:
     download_url = None
     if artifact.state == "available" and artifact.sha256:
         download_url = backup_download_url(artifact, settings)
-    return BackupArtifact(**artifact.model_dump(), download_url=download_url)
+    return BackupArtifact(
+        **artifact.model_dump(),
+        download_url=download_url,
+        **backup_catalog_summary(artifact.manifest),
+    )
 
 
 def _samples_csv_response(page: ConsistencySamplePage) -> StreamingResponse:

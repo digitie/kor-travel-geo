@@ -1973,6 +1973,14 @@ export interface components {
             sha256?: string | null;
             /** Size Bytes */
             size_bytes?: number | null;
+            /** Source Inventory Ok */
+            source_inventory_ok?: boolean | null;
+            /** Source Set Mixed */
+            source_set_mixed?: boolean | null;
+            /** Source Set Yyyymm */
+            source_set_yyyymm?: {
+                [key: string]: string | null;
+            } | null;
             /**
              * State
              * @enum {string}
@@ -5873,6 +5881,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 state?: string | null;
+                expiring_within_days?: number | null;
             };
             header?: never;
             path?: never;
