@@ -2,6 +2,18 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-15 (T-216/T-126 live acceptance 완료)
+
+**작업**: 사용자가 RustFS를 올린 뒤 T-126 잔여 live acceptance를 실행했다. 기본 `.env`의 `kor_travel_geo`는 T-213 기준 DB가 아니어서, 실행 wrapper에서 DB 이름만 `kor_travel_geo_t213_20260615_r3`로 명시 치환했다. RustFS endpoint `http://127.0.0.1:12101`, bucket `kor-travel-geo` 접근을 확인하고 prefix `kor-travel-geo/t216/20260615-r2`를 사용했다.
+
+**수정**: 실제 optional shape bundle ZIP의 SHP 파일명이 `Total.JUSURB.20260501.TL_...11000.shp` 형태라 기존 `source_member_scan`이 전체 stem을 layer명으로 잡아 구조 검증이 실패했다. scanner가 알려진 layer명을 파일명 내부 token에서 추출하도록 보강했고, `TL_SPBD_ENTRC_DONG`이 `TL_SPBD_ENTRC`로 접히지 않도록 긴 layer명 우선 매칭을 적용했다. runner의 구조 검증 실패 메시지도 part별 이유를 포함하게 했다.
+
+**결과**: `scripts/run_t126_acceptance_followup.py --execute`로 optional source 8개 category/40개 archive를 source registry에 등록했다. base source match set은 `a0c2d514-a91d-44c4-bdb6-0bc4771ae61a`, custom source match set은 `0c7d7ee7-75bf-4a1e-ae0b-015485e73656`이다. C11~C17 run-validation은 `runnable=7`, `skipped=0`, `failed=0`, quarantine 0건이다.
+
+**REST**: 기존 `12501` API는 admin ops 조회가 500이라 수용검증 서버로 쓰지 않았다. WSL 미러에서 T-213 DSN, pool `20/64`, GeoIP gate off, uvicorn worker 1/uvloop 조건으로 임시 API를 `127.0.0.1:12518`에 띄우고 benchmark 후 종료했다. 동일 표본 425 REST case 결과는 error 0, worst c64 p95 `Q4_SEARCH/search_hint=415.022ms`로 T-214 기준 `534.031ms` 이하라 수용했다. `--max-cases-per-sql`을 빠뜨린 1800 case exploratory run은 수용 판정에서 제외하고 artifact만 보존한다.
+
+**검증**: WSL ext4 미러에서 `pytest tests/unit/test_t203b_member_scan.py -q` 4 passed, 전체 `pytest -q` 674 passed/47 skipped, ruff 통과, mypy 통과, import-linter `Layered architecture KEPT`를 확인했다. Artifact는 `F:\dev\geodata\t216-acceptance\20260615-r2\`, 상세는 `docs/t216-live-acceptance.md`.
+
 ## 2026-06-15 (T-126 phase ② 수용 후속 준비)
 
 **작업**: T-215에서 남긴 C11~C17 optional source run-validation과 REST c64 tail 후속을 진행했다. `scripts/run_t126_acceptance_followup.py`를 추가해 `F:\dev\geodata\juso\unused\`의 optional 검증 원천 8개 category/40개 archive를 source registry에 등록하고, 기존 active source match set에 optional group을 더한 `custom` match set으로 `run_consistency_validation()`을 실행할 수 있게 했다. rebuild/promote는 하지 않는다.

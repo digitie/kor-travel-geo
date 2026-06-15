@@ -105,18 +105,19 @@ python scripts/benchmark_api_latency.py \
 
 Python 3.14 재측정, uvicorn worker 수, DB pool/admission 조합은 같은 corpus hash와 case count로만 비교한다. `/metrics` snapshot은 API request duration, DB pool gauge, DB query duration이 REST c64 tail과 같이 움직이는지 확인하는 보조 증거다.
 
-## 현재 실행 한계
+## T-216 live acceptance 결과
 
-이번 세션의 `.env`, 프로세스 환경, `data/rustfs/config.json`에는 RustFS 접속 설정이 없었다. 또한 `http://127.0.0.1:12501`, `:12514`, `:12518`의 API health endpoint가 모두 응답하지 않아 REST live benchmark도 실행하지 않았다.
+이 문서를 처음 작성한 세션에서는 RustFS 접속 설정과 T-213 기준 API 서버가 없어 live 실행을 보류했다. 이후 T-216에서 RustFS endpoint/bucket 접근을 확인하고, T-213 기준 DB `kor_travel_geo_t213_20260615_r3`에 붙인 임시 API로 남은 live acceptance를 실행했다.
 
-따라서 이번 T-126 반영은 다음을 완료한 상태다.
+결과 요약은 다음과 같다.
 
-- C11~C17 optional source run-validation을 재현 가능한 runner와 plan artifact로 준비
-- C17 source category 모델 오류와 run-validation 응답 group id 누락 수정
-- REST benchmark artifact에 서버 프로필과 Prometheus snapshot을 남길 수 있게 보강
-- REST 수용 기준을 T-214 c64 worst p95 `534.031ms` 기준으로 재정의
+- C11~C17 optional source 8개 category/40개 archive를 RustFS/source registry에 등록
+- base source match set `a0c2d514-a91d-44c4-bdb6-0bc4771ae61a`에 optional group을 더한 custom source match set `0c7d7ee7-75bf-4a1e-ae0b-015485e73656` 생성
+- run-validation `runnable=7`, `skipped=0`, `failed=0`
+- REST c64 동일 표본 425 case, error 0, worst p95 `Q4_SEARCH/search_hint=415.022ms`
+- T-214 기준 worst p95 `534.031ms` 이하이므로 REST c64 수용
 
-남은 live acceptance는 `KTG_RUSTFS_*`와 API 서버가 준비된 세션에서 위 명령으로 실행한다.
+상세 artifact와 실행 메모는 `docs/t216-live-acceptance.md`에 둔다.
 
 ## 검증
 

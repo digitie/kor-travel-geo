@@ -37,6 +37,26 @@ def test_scan_collapses_shp_sidecars_into_one_layer(tmp_path: Path) -> None:
     assert {".shp", ".shx", ".dbf", ".prj"} <= a_layer.suffixes
 
 
+def test_scan_extracts_layer_name_from_supplier_filename(tmp_path: Path) -> None:
+    archive = tmp_path / "shape-bundle.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for layer in (
+            "TL_SGCO_RNADR_MST",
+            "TL_SPBD_ENTRC",
+            "TL_SPBD_ENTRC_DONG",
+        ):
+            for ext in (".shp", ".shx", ".dbf"):
+                zf.writestr(f"Total.JUSURB.20260501.{layer}.11000{ext}", b"x")
+
+    part = scan_part_manifest(archive, part_key="11")
+
+    assert {
+        "TL_SGCO_RNADR_MST",
+        "TL_SPBD_ENTRC",
+        "TL_SPBD_ENTRC_DONG",
+    } <= part.layer_names()
+
+
 def test_scan_dir_input_lists_files(tmp_path: Path) -> None:
     root = tmp_path / "extracted"
     (root / "sub").mkdir(parents=True)
