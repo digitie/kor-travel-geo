@@ -126,6 +126,9 @@ class Settings(BaseSettings):
     backup_default_jobs: int = Field(default=4, ge=1, le=64)
     backup_default_compression_level: int = Field(default=3, ge=1, le=19)
     backup_artifact_ttl_days: int = Field(default=30, ge=1)
+    # T-228: disk-space fail-fast preflight before a backup dump starts.
+    backup_space_safety_factor: float = Field(default=1.3, ge=1.0)
+    backup_require_free_space_check: bool = True
     backup_callback_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
         "localhost",
         "127.0.0.1",
