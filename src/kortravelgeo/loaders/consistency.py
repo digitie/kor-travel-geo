@@ -600,7 +600,8 @@ DEFAULT_CASES = tuple(CASE_SQL.keys())
 
 async def run_case(engine: AsyncEngine, code: str) -> ConsistencyCase:
     spec = CASE_SQL[code]
-    async with engine.connect() as conn:
+    async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL statement_timeout = 0"))
         row = (await conn.execute(text(spec.sql))).mappings().one()
     count = int(row["count"] or 0)
     total = int(row["total"] or 0)

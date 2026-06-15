@@ -535,9 +535,15 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             stage="consistency_check",
             message=f"{report.report_id} severity={report.severity_max}",
         )
-        if report.severity_max == "ERROR":
+        load_batch_id = _payload_str(payload, "load_batch_id")
+        if report.severity_max == "ERROR" and not load_batch_id:
             msg = f"consistency report failed: {report.report_id}"
             raise RuntimeError(msg)
+        if report.severity_max == "ERROR":
+            await progress(
+                stage="consistency_check",
+                message="consistency ERROR 기록됨; batch promotion gate에서 처리",
+            )
 
     async def mv_refresh(
         payload: dict[str, Any],

@@ -1730,6 +1730,9 @@ ON CONFLICT (sample_id) DO NOTHING
 
 
 async def _hydrate_consistency_sample_points(conn: Any, report_id: str) -> None:
+    exists = await conn.scalar(text("SELECT to_regclass('mv_geocode_target')"))
+    if exists is None:
+        return
     await conn.execute(
         text(
             """
