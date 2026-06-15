@@ -4136,7 +4136,9 @@ export interface components {
          *     Serialized form of ``core.source_categories.SourceCategory`` for the
          *     ``GET /v1/admin/source-file-categories`` endpoint. ``role``/``default_role``
          *     are UI defaults; the authoritative role lives on
-         *     ``ops.source_match_set_items.role``.
+         *     ``ops.source_match_set_items.role``. ``serving_usage`` (T-221) is the ADR-054
+         *     classification the UI uses to avoid rendering validation-only / no-go optional
+         *     sources as if they were active serving inputs.
          */
         SourceFileCategoryInfo: {
             /**
@@ -4171,6 +4173,11 @@ export interface components {
              * @enum {string}
              */
             role: "build_required" | "build_recommended" | "validation_optional" | "enrichment_candidate";
+            /**
+             * Serving Usage
+             * @enum {string}
+             */
+            serving_usage: "serving_core" | "validation_only" | "typed_feature_candidate" | "separate_feature_candidate" | "promotion_blocked_no_go";
         };
         /**
          * SourceFileRegistered

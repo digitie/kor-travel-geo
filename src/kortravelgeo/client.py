@@ -14,7 +14,7 @@ from .core.geocoder import geocode as core_geocode
 from .core.poboxer import pobox as core_pobox
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
-from .core.source_categories import CATEGORY_CATALOG
+from .core.source_categories import CATEGORY_CATALOG, serving_usage_for
 from .core.source_validation import GroupValidation
 from .core.v2 import (
     geocode_v2_from_geometry_lookups,
@@ -1604,6 +1604,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
                 group_kind=category.group_kind,
                 default_role=category.default_role,
                 role=category.default_role,
+                serving_usage=serving_usage_for(category.code),
                 expected_member_kinds=category.expected_member_kinds,
                 optional=category.optional,
             )

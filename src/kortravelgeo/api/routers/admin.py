@@ -28,7 +28,7 @@ from kortravelgeo.api.security import (
 )
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.normalize import parse_address
-from kortravelgeo.core.source_categories import CATEGORY_CATALOG
+from kortravelgeo.core.source_categories import CATEGORY_CATALOG, serving_usage_for
 from kortravelgeo.core.source_validation import GroupValidation
 from kortravelgeo.dto.admin import (
     AuditEvent,
@@ -264,6 +264,7 @@ async def source_file_categories() -> SourceFileCategoryCatalog:
                 group_kind=category.group_kind,
                 default_role=category.default_role,
                 role=category.default_role,
+                serving_usage=serving_usage_for(category.code),
                 expected_member_kinds=category.expected_member_kinds,
                 optional=category.optional,
             )

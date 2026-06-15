@@ -12,6 +12,9 @@ import {
   isEpostCategory,
   isResumableSession,
   isValidYyyymm,
+  servingUsageLabels,
+  servingUsageNote,
+  servingUsageTones,
   sourceFilesPaths,
   sourceRoleLabels,
   suggestYyyymm,
@@ -273,9 +276,19 @@ function CategoryCard({
           <strong>{category.label}</strong>
           <span>{category.category}</span>
         </button>
-        <StatusBadge value={sourceRoleLabels[category.role]} />
+        <StatusBadge
+          value={servingUsageLabels[category.serving_usage]}
+          tone={servingUsageTones[category.serving_usage]}
+        />
       </header>
+      <p className="source-card-serving-note">
+        {servingUsageNote(category.category, category.serving_usage)}
+      </p>
       <dl className="source-card-meta">
+        <div>
+          <dt>구성 역할</dt>
+          <dd>{sourceRoleLabels[category.role]}</dd>
+        </div>
         <div>
           <dt>그룹 종류</dt>
           <dd>{category.group_kind}</dd>

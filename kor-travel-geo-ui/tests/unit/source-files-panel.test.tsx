@@ -37,6 +37,7 @@ const CATEGORY_CATALOG = {
       label: "도로명주소 한글 전체분",
       role: "build_required",
       default_role: "build_required",
+      serving_usage: "serving_core",
       group_kind: "single_file",
       optional: false,
       expected_member_kinds: ["juso"]
@@ -46,6 +47,7 @@ const CATEGORY_CATALOG = {
       label: "epost 사서함",
       role: "enrichment_candidate",
       default_role: "enrichment_candidate",
+      serving_usage: "separate_feature_candidate",
       group_kind: "single_file",
       optional: true,
       expected_member_kinds: []

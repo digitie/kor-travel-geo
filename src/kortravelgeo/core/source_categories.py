@@ -20,6 +20,17 @@ SourceDefaultRole = Literal[
     "validation_optional",
     "enrichment_candidate",
 ]
+#: ADR-054 serving-usage classification (T-220 audit / T-221). Distinct from
+#: ``default_role`` (a build/match-set hint): this says how the source relates to
+#: ACTIVE serving coordinates, so the /admin/source-files UI never renders a
+#: validation-only / no-go optional source as if it were "활용 중".
+SourceServingUsage = Literal[
+    "serving_core",  # active serving 좌표/텍스트 정본 (T-213 r3 core 6종)
+    "validation_only",  # 검증·overlay 전용, serving 좌표 원천 아님
+    "typed_feature_candidate",  # 상세주소 typed feature 후보 (호별 좌표 없음)
+    "separate_feature_candidate",  # 별도 기능(POI/postal) 후보, 서빙 미반영
+    "promotion_blocked_no_go",  # 대표좌표 승격 평가 후 보류 (C11 / T-125 no-go)
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +183,36 @@ CATEGORY_CATALOG: tuple[SourceCategory, ...] = (
 )
 
 category_by_code: dict[str, SourceCategory] = {c.code: c for c in CATEGORY_CATALOG}
+
+
+#: ADR-054 serving-usage class per category code (single source of truth for the
+#: T-221 /admin/source-files serving-usage badges). See ``docs/optional-source-usage-decision.md``.
+SERVING_USAGE_BY_CODE: dict[str, SourceServingUsage] = {
+    "roadname_hangul_full": "serving_core",
+    "locsum_full": "serving_core",
+    "navi_full": "serving_core",
+    "electronic_map_full": "serving_core",
+    "roadaddr_entrance_full": "serving_core",
+    "zone_shape_full": "serving_core",
+    "roadaddr_building_shape_bundle": "promotion_blocked_no_go",  # C11, T-125 no-go
+    "detail_dong_shape_bundle": "typed_feature_candidate",
+    "detail_address_db_full": "typed_feature_candidate",
+    "national_point_grid_shape": "validation_only",  # 좌표=core.sppn 계산값
+    "national_point_grid_center": "validation_only",
+    "civil_service_institution_map": "separate_feature_candidate",  # POI 후보
+    "address_db_full": "validation_only",
+    "building_db_full": "validation_only",
+    "epost_pobox_full": "separate_feature_candidate",
+    "epost_bulk_full": "separate_feature_candidate",
+}
+
+
+def serving_usage_for(code: str) -> SourceServingUsage:
+    """ADR-054 serving-usage class for a category code.
+
+    Unknown codes fall back to ``validation_only`` (never implies active serving).
+    """
+    return SERVING_USAGE_BY_CODE.get(code, "validation_only")
 
 
 # 17 시도 코드/명칭 (행정구역 시도 2자리 코드). ``multi_part`` 시도별 자료의
