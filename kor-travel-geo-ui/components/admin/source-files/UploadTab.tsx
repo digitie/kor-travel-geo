@@ -7,6 +7,7 @@ import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError, postJson, requestJson } from "@/lib/api";
 import { uploadSlotFile, type SlotUploadProgress } from "@/lib/multipart-upload";
+import { useUploadSessionEvents } from "@/lib/use-upload-session-events";
 import {
   isEpostCategory,
   isResumableSession,
@@ -36,6 +37,7 @@ export function UploadTab() {
   const [progress, setProgress] = useState<Record<string, SlotUploadProgress>>({});
   const [conflict, setConflict] = useState<DuplicateConflict | null>(null);
   const [lastResult, setLastResult] = useState<unknown>(null);
+  const [epostError, setEpostError] = useState<{ category: string; message: string } | null>(null);
 
   const { data: catalog } = useQuery({
     queryKey: ["source-file-categories"],
@@ -91,6 +93,7 @@ export function UploadTab() {
         enqueue_load: true
       }),
     onSuccess: (result) => {
+      setEpostError(null);
       setLastResult({
         category: result.category,
         upload_session_id: result.upload_session.upload_session_id,
@@ -102,8 +105,10 @@ export function UploadTab() {
       });
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     },
-    onError: (error) => {
-      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+    onError: (error, variables) => {
+      const message = parseApiErrorMessage(error);
+      setEpostError({ category: variables.category, message });
+      setLastResult({ error: message });
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     }
   });
@@ -188,7 +193,12 @@ export function UploadTab() {
               }
               onUpload={(yyyymm, file) => void startUpload(category, yyyymm, file)}
               progress={progress}
-              fetchingEpost={epostFetch.isPending}
+              fetchingEpost={
+                epostFetch.isPending && epostFetch.variables?.category === category.category
+              }
+              epostError={
+                epostError?.category === category.category ? epostError.message : null
+              }
               uploading={createSession.isPending}
             />
           ))}
@@ -197,7 +207,12 @@ export function UploadTab() {
       </Panel>
 
       <div className="source-side-column">
-        <ResumableSessions sessions={resumable} />
+        <ResumableSessions
+          sessions={resumable}
+          onSessionTerminal={() =>
+            void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] })
+          }
+        />
         {lastResult ? (
           <Panel title="최근 결과">
             <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
@@ -227,6 +242,7 @@ export function UploadTab() {
 function CategoryCard({
   category,
   fetchingEpost,
+  epostError,
   isActive,
   onEpostFetch,
   onSelect,
@@ -236,6 +252,7 @@ function CategoryCard({
 }: {
   category: SourceFileCategoryInfo;
   fetchingEpost: boolean;
+  epostError: string | null;
   isActive: boolean;
   onEpostFetch: (userYyyymm: string) => void;
   onSelect: () => void;
@@ -277,6 +294,7 @@ function CategoryCard({
 
       {epost ? (
         <EpostFetchControls
+          error={epostError}
           fetching={fetchingEpost}
           onFetch={() => onEpostFetch(userYyyymm)}
           onYyyymmChange={setUserYyyymm}
@@ -354,12 +372,14 @@ function SlotProgressBar({ progress }: { progress: SlotUploadProgress }) {
 }
 
 function EpostFetchControls({
+  error,
   fetching,
   onFetch,
   onYyyymmChange,
   userYyyymm,
   yyyymmValid
 }: {
+  error: string | null;
   fetching: boolean;
   onFetch: () => void;
   onYyyymmChange: (value: string) => void;
@@ -388,11 +408,22 @@ function EpostFetchControls({
         <Download size={16} />
         {fetching ? "받는 중" : "epost 받기"}
       </button>
+      {error ? (
+        <p className="form-note warn" role="alert">
+          epost 서버 fetch 실패: {error}
+        </p>
+      ) : null}
     </div>
   );
 }
 
-function ResumableSessions({ sessions }: { sessions: UploadSessionStatus[] }) {
+function ResumableSessions({
+  sessions,
+  onSessionTerminal
+}: {
+  sessions: UploadSessionStatus[];
+  onSessionTerminal: () => void;
+}) {
   return (
     <Panel title="재개 가능한 업로드">
       {sessions.length === 0 ? (
@@ -404,27 +435,75 @@ function ResumableSessions({ sessions }: { sessions: UploadSessionStatus[] }) {
               <th>카테고리</th>
               <th>기준월</th>
               <th>상태</th>
-              <th>업로드</th>
+              <th>진행</th>
             </tr>
           </thead>
           <tbody>
             {sessions.map((session) => (
-              <tr key={session.upload_session_id}>
-                <td>{session.category}</td>
-                <td>{session.user_yyyymm}</td>
-                <td>
-                  <StatusBadge value={session.state} />
-                </td>
-                <td>
-                  {session.uploaded_file_count}/{session.expected_file_count}
-                </td>
-              </tr>
+              <ResumableSessionRow
+                key={session.upload_session_id}
+                onTerminal={onSessionTerminal}
+                session={session}
+              />
             ))}
           </tbody>
         </table>
       )}
     </Panel>
   );
+}
+
+function ResumableSessionRow({
+  session,
+  onTerminal
+}: {
+  session: UploadSessionStatus;
+  onTerminal: () => void;
+}) {
+  // Live SSE progress; falls back to the session's static counts when the
+  // stream is unavailable (SSR / no EventSource) — react-query keeps polling.
+  const live = useUploadSessionEvents(session.upload_session_id, { onTerminal });
+  const state = live?.state ?? session.state;
+  const pct =
+    live?.progress != null ? Math.min(100, Math.max(0, Math.round(live.progress * 100))) : null;
+  return (
+    <tr>
+      <td>{session.category}</td>
+      <td>{session.user_yyyymm}</td>
+      <td>
+        <StatusBadge value={state} />
+      </td>
+      <td>
+        {live ? (
+          <div className="source-live-progress">
+            <span>{pct != null ? `${pct}%` : `${session.uploaded_file_count}/${session.expected_file_count}`}</span>
+            {live.stage ? <span className="form-note">{live.stage}</span> : null}
+          </div>
+        ) : (
+          `${session.uploaded_file_count}/${session.expected_file_count}`
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function parseApiErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    try {
+      const parsed = JSON.parse(error.message) as { detail?: unknown };
+      const detail = parsed.detail;
+      if (typeof detail === "string") {
+        return detail;
+      }
+      if (detail && typeof detail === "object" && "message" in detail) {
+        return String((detail as { message: unknown }).message);
+      }
+    } catch {
+      // error.message was not JSON; fall through to the raw message.
+    }
+    return error.message;
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 function DuplicateSessionDialog({

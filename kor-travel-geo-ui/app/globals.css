@@ -435,6 +435,13 @@ textarea {
   margin: 0;
 }
 
+.source-live-progress {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .key-list {
   background: var(--surface-muted, #f8fafc);
   border: 1px solid var(--line);
