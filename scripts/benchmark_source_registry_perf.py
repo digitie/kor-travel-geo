@@ -7,13 +7,18 @@ across machines and the memory bound is a real regression guard:
 
   * **deep rehash** — ``infra.rustfs.sha256_file`` (the hash used by reconcile
     ``deep`` mode), measured over N synthetic objects.
-  * **multipart 대용량** — ``infra.rustfs._read_file_chunks`` (the streamed part
-    iterator used by ``put_file`` / multipart upload), measured over one large file.
+  * **multipart 대용량** — ``infra.rustfs._read_file_chunks`` (the streamed reader
+    used by ``put_file`` / multipart upload), measured over one large file.
 
-For each, wall time / throughput and **peak RSS delta** are reported. Streaming
-keeps peak RSS far below the file size; a regression that buffers a whole file
-shows up immediately. Absolute throughput is machine-dependent (informational);
-the memory bound is the device-independent assertion (see the opt-in unit guard
+Both primitives read a **fixed 1 MiB chunk** (the production contract), so this
+harness does not parameterize chunk size. For each, throughput and **per-phase
+peak Python allocation** (``tracemalloc``) are reported. Throughput is measured
+without ``tracemalloc`` (no overhead); the peak is measured in a separate pass
+with ``tracemalloc`` reset per phase — a reliable per-call high-water, unlike
+process-lifetime ``ru_maxrss``. Streaming keeps the peak ≈ one chunk regardless
+of file size; a regression that buffers a whole file shows up immediately.
+Absolute throughput is machine-dependent (informational); the peak is the
+device-independent signal (also locked by the opt-in unit guard
 ``tests/unit/test_t210_source_registry_perf.py``). Real-machine throughput is
 T-063; 전국 적재 perf is T-213/T-214.
 
@@ -31,24 +36,16 @@ import asyncio
 import json
 import tempfile
 import time
+import tracemalloc
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from kortravelgeo.infra.rustfs import _read_file_chunks, sha256_file
 
-try:  # Linux-only; absent on native Windows (run this in WSL).
-    import resource
-except ImportError:  # pragma: no cover - platform guard
-    resource = None  # type: ignore[assignment]
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 _MIB = 1024 * 1024
-
-
-def _peak_rss_bytes() -> int | None:
-    if resource is None:
-        return None
-    # ru_maxrss is KiB on Linux, bytes on macOS; this harness targets Linux/WSL.
-    return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
 
 
 def _write_synthetic(path: Path, size_bytes: int, *, chunk: int = _MIB) -> None:
@@ -62,6 +59,22 @@ def _write_synthetic(path: Path, size_bytes: int, *, chunk: int = _MIB) -> None:
             written += take
 
 
+async def _traced_peak_mib(op: Callable[[], Awaitable[None]]) -> float:
+    """Run ``op`` under tracemalloc (separate pass) and return its peak MiB.
+
+    Measured apart from the throughput timing so tracemalloc overhead does not
+    distort it; ``tracemalloc`` is reset per call so this is a reliable per-phase
+    high-water (unlike the process-lifetime ``ru_maxrss``).
+    """
+    tracemalloc.start()
+    try:
+        await op()
+        _current, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    return round(peak / _MIB, 2)
+
+
 async def _bench_deep_rehash(tmp: Path, *, count: int, size_mib: int) -> dict[str, Any]:
     size = size_mib * _MIB
     paths = []
@@ -69,11 +82,15 @@ async def _bench_deep_rehash(tmp: Path, *, count: int, size_mib: int) -> dict[st
         path = tmp / f"rehash_{index}.bin"
         _write_synthetic(path, size)
         paths.append(path)
-    rss_before = _peak_rss_bytes()
+
+    async def hash_all() -> None:
+        for path in paths:
+            await sha256_file(path)
+
     started = time.monotonic()
-    for path in paths:
-        await sha256_file(path)
+    await hash_all()
     elapsed = time.monotonic() - started
+    peak = await _traced_peak_mib(hash_all)
     total_mib = count * size_mib
     return {
         "objects": count,
@@ -82,41 +99,39 @@ async def _bench_deep_rehash(tmp: Path, *, count: int, size_mib: int) -> dict[st
         "elapsed_s": round(elapsed, 3),
         "throughput_mib_s": round(total_mib / elapsed, 1) if elapsed else None,
         "objects_per_s": round(count / elapsed, 2) if elapsed else None,
-        "peak_rss_mib": _rss_delta_mib(rss_before),
+        "peak_traced_mib": peak,
     }
 
 
-async def _bench_multipart(tmp: Path, *, size_mib: int, part_mib: int) -> dict[str, Any]:
+async def _bench_multipart(tmp: Path, *, size_mib: int) -> dict[str, Any]:
     size = size_mib * _MIB
     path = tmp / "multipart_large.bin"
     _write_synthetic(path, size)
-    rss_before = _peak_rss_bytes()
+    stats = {"chunks": 0, "bytes_read": 0, "max_chunk": 0}
+
+    async def read_all() -> None:
+        stats["chunks"] = 0
+        stats["bytes_read"] = 0
+        stats["max_chunk"] = 0
+        async for chunk in _read_file_chunks(path):
+            stats["chunks"] += 1
+            stats["bytes_read"] += len(chunk)
+            stats["max_chunk"] = max(stats["max_chunk"], len(chunk))
+
     started = time.monotonic()
-    chunks = 0
-    total = 0
-    max_chunk = 0
-    async for chunk in _read_file_chunks(path):
-        chunks += 1
-        total += len(chunk)
-        max_chunk = max(max_chunk, len(chunk))
+    await read_all()
     elapsed = time.monotonic() - started
+    peak = await _traced_peak_mib(read_all)
     return {
         "file_size_mib": size_mib,
-        "part_size_mib": part_mib,
-        "chunks": chunks,
-        "bytes_read": total,
-        "max_chunk_mib": round(max_chunk / _MIB, 3),
+        # _read_file_chunks() reads a fixed 1 MiB chunk; reported as actually observed.
+        "read_chunk_mib": round(stats["max_chunk"] / _MIB, 3),
+        "chunks": stats["chunks"],
+        "bytes_read": stats["bytes_read"],
         "elapsed_s": round(elapsed, 3),
         "throughput_mib_s": round(size_mib / elapsed, 1) if elapsed else None,
-        "peak_rss_mib": _rss_delta_mib(rss_before),
+        "peak_traced_mib": peak,
     }
-
-
-def _rss_delta_mib(before: int | None) -> float | None:
-    after = _peak_rss_bytes()
-    if before is None or after is None:
-        return None
-    return round(max(0, after - before) / _MIB, 1)
 
 
 async def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -126,9 +141,7 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
         results["deep_rehash"] = await _bench_deep_rehash(
             tmp, count=args.rehash_count, size_mib=args.rehash_size_mib
         )
-        results["multipart"] = await _bench_multipart(
-            tmp, size_mib=args.multipart_size_mib, part_mib=args.part_size_mib
-        )
+        results["multipart"] = await _bench_multipart(tmp, size_mib=args.multipart_size_mib)
     return results
 
 
@@ -145,7 +158,6 @@ def main() -> None:
     parser.add_argument("--rehash-count", type=int, default=8)
     parser.add_argument("--rehash-size-mib", type=int, default=64)
     parser.add_argument("--multipart-size-mib", type=int, default=512)
-    parser.add_argument("--part-size-mib", type=int, default=1)
     parser.add_argument("--output", default=None, help="artifact directory (optional)")
     args = parser.parse_args()
     results = asyncio.run(run(args))
