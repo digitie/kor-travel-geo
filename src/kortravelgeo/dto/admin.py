@@ -650,6 +650,10 @@ class OpsArtifact(FrozenModel):
 
 class BackupArtifact(OpsArtifact):
     download_url: str | None = None
+    # T-240: manifest-derived catalog summary (expires_at/retention_class inherited).
+    source_set_yyyymm: dict[str, str | None] | None = None
+    source_set_mixed: bool | None = None
+    source_inventory_ok: bool | None = None
 
 
 class BackupRetentionRunRequest(FrozenModel):
