@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 from collections.abc import Mapping
@@ -29,6 +30,7 @@ from kortravelgeo.dto.admin import (
     BackupVerifyResult,
     OpsArtifact,
     RestoreCreateRequest,
+    RestoreDryRunResult,
 )
 from kortravelgeo.exceptions import InvalidInputError, NotFoundError
 from kortravelgeo.infra.admin_repo import AdminRepository
@@ -1376,6 +1378,201 @@ async def verify_backup_artifact(
             shutil.rmtree(work_dir, ignore_errors=True)
 
     return _build()
+
+
+def _postgres_major(version: str | None) -> int | None:
+    if not version:
+        return None
+    match = re.match(r"\s*(\d+)", version)
+    return int(match.group(1)) if match else None
+
+
+def _postgis_major_minor(version: str | None) -> str | None:
+    if not version:
+        return None
+    match = re.match(r"\s*(\d+)\.(\d+)", version)
+    return f"{match.group(1)}.{match.group(2)}" if match else None
+
+
+def check_restore_version_compatibility(
+    *,
+    manifest_postgres_version: str | None,
+    manifest_postgis_version: str | None,
+    target_postgres_version: str | None,
+    target_postgis_version: str | None,
+) -> list[str]:
+    """Version-mismatch notes between a backup and a restore target (empty = OK).
+
+    Flags PostgreSQL **major** (16 vs 17) and PostGIS **major.minor** differences;
+    PostgreSQL minor/patch (16.3 vs 16.4) is allowed. Shared by the restore dry-run
+    (warnings, T-232) and the hard-fail version guard (T-234).
+    """
+    notes: list[str] = []
+    src_pg = _postgres_major(manifest_postgres_version)
+    tgt_pg = _postgres_major(target_postgres_version)
+    if src_pg is not None and tgt_pg is not None and src_pg != tgt_pg:
+        notes.append(f"PostgreSQL major mismatch: backup {src_pg} vs target {tgt_pg}")
+    src_gis = _postgis_major_minor(manifest_postgis_version)
+    tgt_gis = _postgis_major_minor(target_postgis_version)
+    if src_gis is not None and tgt_gis is not None and src_gis != tgt_gis:
+        notes.append(f"PostGIS major.minor mismatch: backup {src_gis} vs target {tgt_gis}")
+    return notes
+
+
+async def _query_cluster_versions(engine: AsyncEngine) -> tuple[str | None, str | None]:
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    "SELECT current_setting('server_version') AS pg, "
+                    "(SELECT extversion FROM pg_extension WHERE extname='postgis') AS gis"
+                )
+            )
+        ).mappings().one()
+    return row["pg"], row["gis"]
+
+
+async def run_restore_dry_run(
+    engine: AsyncEngine,
+    settings: Settings,
+    req: RestoreCreateRequest,
+) -> RestoreDryRunResult:
+    """Preflight a restore without running pg_restore (T-232).
+
+    Resolves+checksums the archive, extracts to a temp dir to verify the internal
+    ``checksums.sha256`` and ``manifest.json``, checks target restorability, and
+    compares versions — returning ``can_restore`` + ``blockers`` + ``warnings``.
+    Never mutates the target; never spawns pg_restore.
+    """
+    blockers: list[str] = []
+    warnings: list[str] = []
+    archive_ok: bool | None = None
+    internal_ok: bool | None = None
+    manifest_ok: bool | None = None
+    backup_pg: str | None = None
+    backup_gis: str | None = None
+    target_pg: str | None = None
+    target_gis: str | None = None
+    row_counts: dict[str, int] | None = None
+    repo = AdminRepository(engine)
+    target_dsn = resolve_restore_target_dsn(req, settings)
+    target_database = database_name_from_dsn(target_dsn)
+    current_database = database_name_from_dsn(settings.pg_dsn)
+
+    if req.mode == "replace_current":
+        if target_database != current_database:
+            blockers.append("replace_current target must match the current database")
+    elif current_database == target_database:
+        blockers.append("new_database target must differ from the current database")
+    else:
+        try:
+            await ensure_target_database_empty(target_dsn)
+        except InvalidInputError as exc:
+            blockers.append(f"target not restorable: {exc}")
+        except Exception as exc:
+            warnings.append(f"target emptiness check skipped: {exc}")
+
+    try:
+        archive_path, source_artifact = await resolve_restore_archive(req, repo, settings)
+    except (InvalidInputError, NotFoundError, FileNotFoundError) as exc:
+        blockers.append(f"archive unavailable: {exc}")
+        return RestoreDryRunResult(
+            can_restore=False,
+            mode=req.mode,
+            target_database=target_database,
+            blockers=tuple(blockers),
+            warnings=tuple(warnings),
+        )
+
+    try:
+        await verify_archive_checksum(archive_path, source_artifact)
+        archive_ok = True
+    except InvalidInputError as exc:
+        archive_ok = False
+        blockers.append(str(exc))
+
+    work_dir = (settings.backup_temp_dir / f"dryrun_{uuid4().hex}").resolve()
+    extract_dir = work_dir / "extract"
+    log_path = work_dir / "dryrun.ndjson"
+    event = asyncio.Event()
+    try:
+        work_dir.mkdir(parents=True)
+        extract_dir.mkdir()
+        await run_process_with_progress(
+            build_tar_extract_command(archive_path, extract_dir),
+            cancel_event=event,
+            progress=_noop_progress,
+            stage="dryrun",
+            bounds=(0.0, 1.0),
+            log_path=log_path,
+        )
+        try:
+            await verify_internal_checksums(extract_dir, cancel_event=event)
+            internal_ok = True
+        except InvalidInputError as exc:
+            internal_ok = False
+            blockers.append(str(exc))
+        manifest_path = extract_dir / "manifest.json"
+        if not manifest_path.is_file():
+            manifest_ok = False
+            blockers.append("manifest.json missing")
+        else:
+            try:
+                manifest = read_json(manifest_path)
+                db_block = manifest.get("database") or {}
+                backup_pg = db_block.get("postgres_version")
+                backup_gis = db_block.get("postgis_version")
+                raw_counts = manifest.get("row_counts")
+                if isinstance(raw_counts, dict):
+                    row_counts = {
+                        str(k): int(v)
+                        for k, v in raw_counts.items()
+                        if isinstance(v, (int, float))
+                    }
+                manifest_ok = all(k in manifest for k in ("database", "backup", "row_counts"))
+                if not manifest_ok:
+                    blockers.append("manifest missing required fields")
+                if manifest.get("source_match_set"):
+                    warnings.append(
+                        "manifest carries a source match set "
+                        "(run-validation reconstructable after restore)"
+                    )
+            except Exception as exc:
+                manifest_ok = False
+                blockers.append(f"manifest parse failed: {exc}")
+    except Exception as exc:
+        blockers.append(f"archive extract failed: {exc}")
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+    try:
+        target_pg, target_gis = await _query_cluster_versions(engine)
+    except Exception as exc:
+        warnings.append(f"target version query skipped: {exc}")
+    warnings.extend(
+        check_restore_version_compatibility(
+            manifest_postgres_version=backup_pg,
+            manifest_postgis_version=backup_gis,
+            target_postgres_version=target_pg,
+            target_postgis_version=target_gis,
+        )
+    )
+
+    return RestoreDryRunResult(
+        can_restore=not blockers,
+        mode=req.mode,
+        target_database=target_database,
+        blockers=tuple(blockers),
+        warnings=tuple(warnings),
+        archive_sha256_ok=archive_ok,
+        internal_checksums_ok=internal_ok,
+        manifest_ok=manifest_ok,
+        backup_postgres_version=backup_pg,
+        backup_postgis_version=backup_gis,
+        target_postgres_version=target_pg,
+        target_postgis_version=target_gis,
+        row_counts=row_counts,
+    )
 
 
 def _iter_checksum_files(root: Path) -> tuple[Path, ...]:

@@ -65,6 +65,7 @@ from kortravelgeo.dto.admin import (
     NormalizeResponse,
     OpsArtifact,
     RestoreCreateRequest,
+    RestoreDryRunResult,
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
     RollbackPlan,
@@ -1847,6 +1848,37 @@ async def run_backup_retention_janitor(
             "skipped_locked": result.skipped_locked,
         },
         resource_type="artifact",
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.post(
+    "/restores/dry-run",
+    response_model=RestoreDryRunResult,
+    response_model_exclude_none=True,
+)
+async def restore_dry_run(
+    req: RestoreCreateRequest,
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RestoreDryRunResult:
+    """Preflight a restore without running pg_restore (T-232).
+
+    Checks archive sha256 + internal checksums + manifest, target restorability, and
+    version compatibility, returning ``can_restore`` + ``blockers`` + ``warnings``.
+    Non-mutating — safe to run before a long restore.
+    """
+    result = await client.restore_dry_run(req)
+    await client.record_audit_event(
+        action="db_restore.dry_run",
+        outcome="succeeded" if result.can_restore else "blocked",
+        payload={
+            "mode": req.mode,
+            "can_restore": result.can_restore,
+            "blockers": list(result.blockers),
+        },
+        resource_type="load_job",
         **_audit_request(request),
     )
     return result

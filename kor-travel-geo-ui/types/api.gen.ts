@@ -782,6 +782,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/restores/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Dry Run
+         * @description Preflight a restore without running pg_restore (T-232).
+         *
+         *     Checks archive sha256 + internal checksums + manifest, target restorability, and
+         *     version compatibility, returning ``can_restore`` + ``blockers`` + ``warnings``.
+         *     Non-mutating — safe to run before a long restore.
+         */
+        post: operations["restore_dry_run_v1_admin_restores_dry_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/restores/hot-swap-plan": {
         parameters: {
             query?: never;
@@ -3507,6 +3531,49 @@ export interface components {
             target_database?: string | null;
             /** Target Dsn */
             target_dsn?: string | null;
+        };
+        /**
+         * RestoreDryRunResult
+         * @description T-232 restore dry-run: preflight checks without running pg_restore.
+         */
+        RestoreDryRunResult: {
+            /** Archive Sha256 Ok */
+            archive_sha256_ok?: boolean | null;
+            /** Backup Postgis Version */
+            backup_postgis_version?: string | null;
+            /** Backup Postgres Version */
+            backup_postgres_version?: string | null;
+            /**
+             * Blockers
+             * @default []
+             */
+            blockers: string[];
+            /** Can Restore */
+            can_restore: boolean;
+            /** Internal Checksums Ok */
+            internal_checksums_ok?: boolean | null;
+            /** Manifest Ok */
+            manifest_ok?: boolean | null;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "new_database" | "replace_current";
+            /** Row Counts */
+            row_counts?: {
+                [key: string]: number;
+            } | null;
+            /** Target Database */
+            target_database?: string | null;
+            /** Target Postgis Version */
+            target_postgis_version?: string | null;
+            /** Target Postgres Version */
+            target_postgres_version?: string | null;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
         };
         /** RestoreHotSwapPlan */
         RestoreHotSwapPlan: {
@@ -7075,6 +7142,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoadJobStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_dry_run_v1_admin_restores_dry_run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreDryRunResult"];
                 };
             };
             /** @description Validation Error */

@@ -5106,6 +5106,148 @@
         "title": "RestoreCreateRequest",
         "type": "object"
       },
+      "RestoreDryRunResult": {
+        "additionalProperties": false,
+        "description": "T-232 restore dry-run: preflight checks without running pg_restore.",
+        "properties": {
+          "archive_sha256_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive Sha256 Ok"
+          },
+          "backup_postgis_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Postgis Version"
+          },
+          "backup_postgres_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Postgres Version"
+          },
+          "blockers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "can_restore": {
+            "title": "Can Restore",
+            "type": "boolean"
+          },
+          "internal_checksums_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Checksums Ok"
+          },
+          "manifest_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest Ok"
+          },
+          "mode": {
+            "enum": [
+              "new_database",
+              "replace_current"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "row_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Counts"
+          },
+          "target_database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Database"
+          },
+          "target_postgis_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Postgis Version"
+          },
+          "target_postgres_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Postgres Version"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "can_restore",
+          "mode"
+        ],
+        "title": "RestoreDryRunResult",
+        "type": "object"
+      },
       "RestoreHotSwapPlan": {
         "additionalProperties": false,
         "properties": {
@@ -12969,6 +13111,48 @@
           }
         },
         "summary": "Submit Restore",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/restores/dry-run": {
+      "post": {
+        "description": "Preflight a restore without running pg_restore (T-232).\n\nChecks archive sha256 + internal checksums + manifest, target restorability, and\nversion compatibility, returning ``can_restore`` + ``blockers`` + ``warnings``.\nNon-mutating — safe to run before a long restore.",
+        "operationId": "restore_dry_run_v1_admin_restores_dry_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreDryRunResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Dry Run",
         "tags": [
           "admin"
         ]

@@ -76,6 +76,7 @@ export const apiSchemaNames = [
   "RegisterRequest",
   "RegisterResponse",
   "RestoreCreateRequest",
+  "RestoreDryRunResult",
   "RestoreHotSwapPlan",
   "RestoreHotSwapPlanRequest",
   "RestoreSourceVerificationResult",
