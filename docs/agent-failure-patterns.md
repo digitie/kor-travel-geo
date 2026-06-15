@@ -11,6 +11,8 @@
 | `apply_patch`가 `/mnt/f/...` 파일을 못 찾음 | 현재 세션의 patch helper가 NTFS mount 경로를 일관되게 해석하지 못함 | 작은 범위 치환 명령으로 대체하고 즉시 파일 재확인 |
 | `"\n"`, regex backslash가 코드 안에서 깨짐 | inline shell/Python 멀티라인 편집에서 escape가 여러 번 해석됨 | bulk rewrite 대신 line-oriented edit + `sed` 재확인 + lint/type-check 즉시 실행 |
 | `gh pr view`가 `.../mnt/f/.../F:/...` 경로 오류를 냄 | WSL `gh`가 현재 worktree의 Windows Git metadata를 로컬 git으로 읽으려 함 | `gh ... --repo digitie/kor-travel-geo`로 repo를 명시해 로컬 git 조회를 우회 |
+| Windows Python에서 `gh ... --json` 결과를 읽다가 `UnicodeDecodeError: 'cp949'`가 남 | `subprocess` `text=True`가 기본 locale(cp949)로 GitHub UTF-8 JSON을 디코딩함 | bytes로 받은 뒤 `decode("utf-8")`하거나 `PYTHONUTF8=1`을 명시 |
+| `gh pr merge`가 `main is already checked out`으로 실패함 | `gh`가 merge 후 로컬 git branch 정리를 시도하며 다른 worktree의 `main` checkout과 충돌함 | merge/조회 명령에 `--repo digitie/kor-travel-geo`를 붙이고, branch 정리는 별도 git 명령으로 수행 |
 | WSL에서 `node: command not found` | 기본 PATH에 Linux Node가 없고 Windows npm/node shim만 보이거나 아무 Node도 없음 | `source ~/.nvm/nvm.sh` 또는 `source scripts/agent_env.sh` 후 실행 |
 | `npm run start --hostname ...`가 인자를 못 받음 | npm script 인자는 `--` 뒤에만 하위 명령으로 전달됨 | `npm run start -- --hostname 0.0.0.0 --port 12505` |
 | Windows Playwright가 WSL 서버 URL을 못 받음 | WSL에서 `cmd.exe`로 넘기는 env var quoting이 Windows cmd 규칙과 어긋남 | `cmd.exe /V:ON /C "cd /d F:\...\kor-travel-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:<PORT>&& npx playwright test ..."` |
@@ -162,6 +164,33 @@ gh pr merge <PR_NUMBER> --repo digitie/kor-travel-geo --merge --delete-branch
 ```
 
 Git 자체는 계속 Windows `git.exe`를 쓴다. `gh`는 PR/Actions API 조회에만 쓰고, local branch/status/commit/push는 Windows `git.exe` 기준으로 유지한다.
+
+Windows PowerShell에서 Python으로 `gh ... --json` 결과를 읽을 때는 기본 encoding이 cp949일 수 있다. PR 제목이나 본문에 한글이 있으면 `subprocess.check_output(..., text=True)`가 다음 오류로 실패한다.
+
+```text
+UnicodeDecodeError: 'cp949' codec can't decode byte ...
+```
+
+표준은 bytes로 받고 UTF-8로 직접 디코딩하는 형태다.
+
+```python
+payload = subprocess.check_output(["gh", "pr", "list", "--json", "number,title"])
+prs = json.loads(payload.decode("utf-8"))
+```
+
+간단한 일회성 명령은 `PYTHONUTF8=1`을 명시해도 된다.
+
+```powershell
+$env:PYTHONUTF8 = "1"
+python scripts\some_github_scan.py
+```
+
+PR merge도 repo를 명시한다. `gh pr merge <번호> --squash --delete-branch`처럼 repo를 생략하면 merge는 성공한 뒤에도 로컬 `main` checkout이 다른 worktree에 있다는 이유로 branch 정리 단계가 실패할 수 있다. merge와 원격 branch 삭제를 분리하면 실패 지점을 좁힐 수 있다.
+
+```powershell
+gh pr merge <PR_NUMBER> --repo digitie/kor-travel-geo --squash
+git push origin --delete <BRANCH>
+```
 
 ### npm server parameter 전달
 

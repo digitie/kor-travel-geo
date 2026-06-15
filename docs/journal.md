@@ -2,6 +2,16 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-130 C11 C4/C6/C7 회귀 원인 분석)
+
+**작업**: `scripts/run_t130_c11_regression_root_cause.py`를 추가해 T-125에서 악화된 C4/C6/C7을 row-level로 분석했다. T-129에서 남긴 `_ktg_t125_*` 후보 테이블을 재사용하고, baseline serving 출입구와 C11 후보점의 건물·우편번호·행정구역 polygon 오류를 같은 row에서 비교했다.
+
+**결과**: C4 over500 68건은 candidate regression 52건, shared error 16건이다. C6는 candidate error 3,635건 중 candidate regression 2,834건, shared 801건, 개선 2건이며, 회귀 2,834건 중 2,827건은 기존 baseline 출입구가 없어 평가 대상이 아니던 row다. C7는 candidate error 9,896건 중 candidate regression 3,087건, shared 6,809건, 개선 6건이며, 회귀 3,087건 중 3,077건은 baseline 출입구 결측 row다.
+
+**문서화**: GitHub PR thread 스캔 중 Windows Python 기본 encoding(cp949)이 GitHub UTF-8 JSON을 잘못 디코딩해 실패한 패턴과, `gh pr merge`가 repo 생략 시 로컬 worktree checkout 충돌을 일으키는 패턴을 `docs/agent-failure-patterns.md`에 추가했다.
+
+**산출물**: `F:\dev\geodata\t130-c11-regression-root-cause\20260616-r1\`에 case별 CSV/GeoJSON, `summary.json`, 재현 SQL을 보존했다. 상세는 `docs/t130-c11-regression-root-cause.md`에 정리했다. T-131에서 재사용할 수 있도록 작업 테이블은 계속 남겨 두었다.
+
 ## 2026-06-16 (T-129 C11 outlier 원인 태깅)
 
 **작업**: `scripts/run_t129_c11_outlier_triage.py`를 추가해 T-125의 C11 후보 100m 초과 outlier 14,433건 전체를 자동 태깅했다. 기존 T-125 staging/candidate 생성 함수를 재사용하고, row별 건물·우편번호·행정구역 containment, 경도 약 2도 shift, 다중 후보, natural-key polygon 미매칭, 기준월 차이를 CSV/GeoJSON/summary로 export한다.
