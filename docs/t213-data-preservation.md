@@ -30,7 +30,7 @@ T-213 전국 라이브데이터 로딩 결과는 T-214/T-215의 기준 입력이
 아래는 형식 예시다. 실제 secret은 로컬 파일에만 둔다.
 
 ```bash
-KTG_PG_DSN=postgresql+psycopg://<user>:<password>@localhost:15434/kor_travel_geo_t213_<YYYYMMDD>[_rN]
+KTG_PG_DSN=postgresql+psycopg://<user>:<password>@localhost:5432/kor_travel_geo_t213_<YYYYMMDD>[_rN]
 KTG_RUSTFS_ENABLED=true
 KTG_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101
 KTG_RUSTFS_BUCKET=kor-travel-geo
@@ -40,6 +40,51 @@ KTG_RUSTFS_MATERIALIZE_DIR=artifacts/t213/<run-id>/rustfs-materialized
 ```
 
 `scripts/run_t213_live_pipeline.py`, T-214 SQL/REST/MV benchmark, RustFS reconcile은 새 전용 환경변수명을 만들지 않고 위 파일을 source한 셸에서 기존 설정 키를 사용한다.
+
+## 다른 에이전트용 현재 접속 요약
+
+PostgreSQL 기준 데이터는 파일 경로가 아니라 `KTG_PG_DSN`이 가리키는 논리 DB로 접근한다. Docker volume 또는 `pgdata` 내부 경로는 `kor-travel-docker-manager` 구현 세부사항이므로 다른 에이전트의 작업 계약으로 쓰지 않는다.
+
+| 항목 | 값 |
+|------|----|
+| PostgreSQL host/port | `localhost:5432` |
+| PostgreSQL database | `kor_travel_geo_t213_20260615_r3` |
+| `KTG_PG_DSN` template | `postgresql+psycopg://<user>:<password>@localhost:5432/kor_travel_geo_t213_20260615_r3` |
+| RustFS endpoint | `http://127.0.0.1:12101` |
+| RustFS bucket/prefix | `kor-travel-geo` / `kor-travel-geo/t213/20260615-rerun3` |
+| 원천 루트 | `F:\dev\geodata\juso` (`/mnt/f/dev/geodata/juso`) |
+| T-213 artifact 루트 | `F:\dev\geodata\t213-baseline\20260615-rerun3\` |
+| T-214 artifact 루트 | `F:\dev\geodata\t214-benchmark\20260615-r3\` |
+| T-215 artifact 루트 | `F:\dev\geodata\t215-acceptance\20260615-r1\` |
+| active serving release | `54e17e80-312e-46da-a58f-d8b10be37c85` |
+| dataset snapshot | `1b354560-52bc-4ec6-8760-55fed63d9e98` |
+| source match set | `a0c2d514-a91d-44c4-bdb6-0bc4771ae61a` |
+
+다른 에이전트는 작업 시작 시 일반 `.env`의 `kor_travel_geo`를 암묵적으로 쓰지 말고, 자기 worktree의 비커밋 `.env.t213` 또는 셸 export로 위 값을 명시한다. DB 계정과 password는 로컬 secret이므로 문서에 쓰지 않는다.
+
+WSL/bash 예시는 다음과 같다.
+
+```bash
+export KTG_PG_DSN='postgresql+psycopg://<user>:<password>@localhost:5432/kor_travel_geo_t213_20260615_r3'
+export KTG_RUSTFS_ENABLED=true
+export KTG_RUSTFS_ENDPOINT_URL='http://127.0.0.1:12101'
+export KTG_RUSTFS_BUCKET='kor-travel-geo'
+export KTG_RUSTFS_PREFIX='kor-travel-geo/t213/20260615-rerun3'
+export KTG_JUSO_DATA_ROOT='/mnt/f/dev/geodata/juso'
+export KTG_RUSTFS_MATERIALIZE_DIR='artifacts/t213/20260615-rerun3/rustfs-materialized'
+```
+
+PowerShell 예시는 다음과 같다.
+
+```powershell
+$env:KTG_PG_DSN = 'postgresql+psycopg://<user>:<password>@localhost:5432/kor_travel_geo_t213_20260615_r3'
+$env:KTG_RUSTFS_ENABLED = 'true'
+$env:KTG_RUSTFS_ENDPOINT_URL = 'http://127.0.0.1:12101'
+$env:KTG_RUSTFS_BUCKET = 'kor-travel-geo'
+$env:KTG_RUSTFS_PREFIX = 'kor-travel-geo/t213/20260615-rerun3'
+$env:KTG_JUSO_DATA_ROOT = 'F:\dev\geodata\juso'
+$env:KTG_RUSTFS_MATERIALIZE_DIR = 'artifacts\t213\20260615-rerun3\rustfs-materialized'
+```
 
 ## T-213 재실행/복원 규칙
 
@@ -72,7 +117,9 @@ RustFS가 필요한 benchmark나 reconcile은 `KTG_RUSTFS_ENABLED=true`이고 `K
 | 항목 | 값 |
 |------|----|
 | run id | `20260615-rerun3` |
+| PostgreSQL host/port | `localhost:5432` |
 | PostgreSQL DB | `kor_travel_geo_t213_20260615_r3` |
+| `KTG_PG_DSN` template | `postgresql+psycopg://<user>:<password>@localhost:5432/kor_travel_geo_t213_20260615_r3` |
 | RustFS bucket/prefix | `kor-travel-geo` / `kor-travel-geo/t213/20260615-rerun3` |
 | artifact 사본 | `F:\dev\geodata\t213-baseline\20260615-rerun3\` |
 | T-214 benchmark artifact | `F:\dev\geodata\t214-benchmark\20260615-r3\` |
