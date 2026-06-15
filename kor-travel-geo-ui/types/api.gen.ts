@@ -1462,9 +1462,11 @@ export interface paths {
          *     ``passed`` group to ``not_started`` and marks referencing match sets needing
          *     re-validation. Requires the ``source_file_manager`` role.
          *
-         *     Only the C11~C17 registry cases are run-validatable (their metric reuses the
-         *     phase-① prototype ``.metrics()`` via ``loaders/consistency_run_validation.py``
-         *     — the regression bridge). A request for any non-augment case is rejected.
+         *     Only the C11~C17 registry cases are run-validatable. This endpoint performs
+         *     the source-archive presence/integrity gate and returns whether each case is
+         *     runnable; it does not execute the heavy prototype metric validators inline.
+         *     The prototype metric binding remains a drift guard for the later validator
+         *     execution path. A request for any non-augment case is rejected.
          */
         post: operations["run_source_match_set_validation_v1_admin_source_match_sets__source_match_set_id__run_validation_post"];
         delete?: never;
