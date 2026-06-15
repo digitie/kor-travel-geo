@@ -77,6 +77,8 @@ from kortravelgeo.dto.admin import (
     RustfsStorageConfigPatch,
     RustfsSyncLocalRequest,
     RustfsSyncLocalResult,
+    ScheduledBackupRunResult,
+    ScheduledBackupStatus,
     ServingRelease,
     TableStat,
     TableStatsSnapshot,
@@ -134,7 +136,13 @@ from kortravelgeo.infra.backup import (
     resolve_existing_archive_path,
     validate_download_token,
 )
-from kortravelgeo.infra.concurrency import cross_process_lock
+from kortravelgeo.infra.backup_schedule import scheduled_backup_payload
+from kortravelgeo.infra.concurrency import (
+    AdvisoryLockKey,
+    AdvisoryLockNamespace,
+    ConcurrentExecutionError,
+    cross_process_lock,
+)
 from kortravelgeo.infra.rustfs import (
     RustfsClient,
     RustfsUploadedPart,
@@ -1886,6 +1894,63 @@ async def run_backup_retention_janitor(
         **_audit_request(request),
     )
     return result
+
+
+@router.get(
+    "/backups/scheduled/status",
+    response_model=ScheduledBackupStatus,
+    response_model_exclude_none=True,
+)
+async def scheduled_backup_status(
+    client: AsyncAddressClient = Depends(get_client),
+) -> ScheduledBackupStatus:
+    """Report whether a scheduled backup is due now, last run, and next due (T-239).
+
+    Read-only — does not enqueue anything. ``enabled`` reflects
+    ``KTG_BACKUP_SCHEDULE_ENABLED``; ``next_due_at`` is ``last_scheduled_at + interval``.
+    """
+    return await client.scheduled_backup_status()
+
+
+@router.post(
+    "/backups/scheduled/run-due",
+    response_model=ScheduledBackupRunResult,
+    response_model_exclude_none=True,
+)
+async def run_due_scheduled_backup(
+    request: Request,
+    client: AsyncAddressClient = Depends(get_client),
+    queue: JobQueue = Depends(get_job_queue),
+) -> ScheduledBackupRunResult:
+    """Idempotent scheduled-backup trigger for an external cron (T-239).
+
+    Enqueues exactly one ``retention_class='scheduled'`` backup, and only if scheduling
+    is enabled and ``interval_hours`` has elapsed since the last scheduled run (no-op
+    otherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``
+    advisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that
+    cannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).
+    """
+    key = AdvisoryLockKey.global_key(AdvisoryLockNamespace.BACKUP_SCHEDULE)
+    try:
+        async with cross_process_lock(client._engine(), key):
+            status = await client.scheduled_backup_status()
+            if not status.due:
+                return ScheduledBackupRunResult(enqueued=False, status=status)
+            payload = scheduled_backup_payload(get_settings())
+            job_id = await queue.enqueue("db_backup", payload)
+            await client.record_audit_event(
+                action="db_backup.scheduled_run_due",
+                outcome="started",
+                payload={"job_id": job_id, "reason": status.reason},
+                resource_type="load_job",
+                resource_id=job_id,
+                job_id=job_id,
+                **_audit_request(request),
+            )
+            return ScheduledBackupRunResult(enqueued=True, job_id=job_id, status=status)
+    except ConcurrentExecutionError:
+        status = await client.scheduled_backup_status()
+        return ScheduledBackupRunResult(enqueued=False, skipped_locked=True, status=status)
 
 
 @router.post(

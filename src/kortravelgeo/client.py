@@ -56,6 +56,7 @@ from .dto.admin import (
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
     RollbackPlan,
+    ScheduledBackupStatus,
     ServingRelease,
     TableStat,
     TableStatsSnapshot,
@@ -963,6 +964,18 @@ class AsyncAddressClient:
         from .infra.backup import run_restore_dry_run
 
         return await run_restore_dry_run(self._engine(), self.settings, req)
+
+    async def scheduled_backup_status(
+        self, *, now: datetime | None = None
+    ) -> ScheduledBackupStatus:
+        """Compute the current scheduled-backup due-check status (T-239, read-only).
+
+        Reports whether a scheduled backup is due at ``now`` given the last scheduled
+        run and whether one is in progress. Does not enqueue anything.
+        """
+        from .infra.backup_schedule import resolve_scheduled_backup_status
+
+        return await resolve_scheduled_backup_status(self._engine(), self.settings, now=now)
 
     # --- RustFS reconciliation (T-204) ------------------------------------
 

@@ -882,6 +882,16 @@
             "title": "Profile",
             "type": "string"
           },
+          "retention_class": {
+            "default": "default",
+            "enum": [
+              "default",
+              "scheduled",
+              "pinned"
+            ],
+            "title": "Retention Class",
+            "type": "string"
+          },
           "retention_days": {
             "anyOf": [
               {
@@ -6282,6 +6292,122 @@
         "title": "RustfsSyncLocalResult",
         "type": "object"
       },
+      "ScheduledBackupRunResult": {
+        "additionalProperties": false,
+        "description": "T-239 result of one idempotent ``run-due`` trigger.\n\n``enqueued`` is ``True`` only when this call actually queued a backup job.\n``skipped_locked`` means another concurrent trigger held the schedule lock, so this\ncall did nothing (still a successful 200 for an external cron).",
+        "properties": {
+          "enqueued": {
+            "title": "Enqueued",
+            "type": "boolean"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "skipped_locked": {
+            "default": false,
+            "title": "Skipped Locked",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScheduledBackupStatus"
+          }
+        },
+        "required": [
+          "enqueued",
+          "status"
+        ],
+        "title": "ScheduledBackupRunResult",
+        "type": "object"
+      },
+      "ScheduledBackupStatus": {
+        "additionalProperties": false,
+        "description": "T-239 scheduled-backup due-check status (read-only).\n\n``due`` reflects the decision at ``now``: ``True`` iff scheduling is enabled, no\nscheduled backup is in progress, and ``interval_hours`` has elapsed since the last\nscheduled run (or none has ever run).",
+        "properties": {
+          "due": {
+            "title": "Due",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "in_progress": {
+            "default": false,
+            "title": "In Progress",
+            "type": "boolean"
+          },
+          "interval_hours": {
+            "title": "Interval Hours",
+            "type": "number"
+          },
+          "keep_min": {
+            "title": "Keep Min",
+            "type": "integer"
+          },
+          "last_scheduled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Scheduled At"
+          },
+          "next_due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Due At"
+          },
+          "reason": {
+            "enum": [
+              "disabled",
+              "in_progress",
+              "due_initial",
+              "due",
+              "not_due"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "retention_class": {
+            "default": "scheduled",
+            "enum": [
+              "default",
+              "scheduled",
+              "pinned"
+            ],
+            "title": "Retention Class",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "interval_hours",
+          "keep_min",
+          "due",
+          "reason"
+        ],
+        "title": "ScheduledBackupStatus",
+        "type": "object"
+      },
       "SearchInput": {
         "additionalProperties": false,
         "properties": {
@@ -11014,6 +11140,50 @@
           }
         },
         "summary": "Run Backup Retention Janitor",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/backups/scheduled/run-due": {
+      "post": {
+        "description": "Idempotent scheduled-backup trigger for an external cron (T-239).\n\nEnqueues exactly one ``retention_class='scheduled'`` backup, and only if scheduling\nis enabled and ``interval_hours`` has elapsed since the last scheduled run (no-op\notherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``\nadvisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that\ncannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).",
+        "operationId": "run_due_scheduled_backup_v1_admin_backups_scheduled_run_due_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledBackupRunResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Run Due Scheduled Backup",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/backups/scheduled/status": {
+      "get": {
+        "description": "Report whether a scheduled backup is due now, last run, and next due (T-239).\n\nRead-only — does not enqueue anything. ``enabled`` reflects\n``KTG_BACKUP_SCHEDULE_ENABLED``; ``next_due_at`` is ``last_scheduled_at + interval``.",
+        "operationId": "scheduled_backup_status_v1_admin_backups_scheduled_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledBackupStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Scheduled Backup Status",
         "tags": [
           "admin"
         ]
