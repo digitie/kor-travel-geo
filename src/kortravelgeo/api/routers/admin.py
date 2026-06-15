@@ -68,8 +68,10 @@ from kortravelgeo.dto.admin import (
     OpsArtifact,
     RestoreCreateRequest,
     RestoreDryRunResult,
+    RestoreHotSwapExecuteRequest,
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
+    RestoreHotSwapResult,
     RollbackPlan,
     RustfsConnectionCheck,
     RustfsImportPrefixRequest,
@@ -2037,6 +2039,32 @@ async def restore_hot_swap_plan(
         **_audit_request(request),
     )
     return plan
+
+
+@router.post(
+    "/restores/hot-swap",
+    response_model=RestoreHotSwapResult,
+    response_model_exclude_none=True,
+)
+async def restore_hot_swap_execute(
+    req: RestoreHotSwapExecuteRequest,
+    request: Request,
+    ctx: RequestContext = _DESTRUCTIVE_ADMIN,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RestoreHotSwapResult:
+    """Execute the ADR-036 rename hot-swap (T-241; ADR-036/T-058 plan → execution).
+
+    Renames `current↔restore` in two `ALTER DATABASE RENAME` steps under the `HOT_SWAP`
+    advisory lock, only with an active `restore` maintenance window + exact typed
+    confirmation, then refreshes the engine pool, runs a post-swap smoke test, and
+    **auto-rolls-back on smoke failure**. A concurrent second hot-swap fails fast (409).
+    Records started/succeeded/failed/rolled_back audits + an active `serving_releases`
+    row with `previous_release_id` lineage. Live serving DB swap → requires
+    `destructive_admin`. Integration-tested in T-246.
+    """
+    return await client.execute_restore_hot_swap(
+        req, actor=ctx.actor, audit_meta=_audit_request(request)
+    )
 
 
 @router.post(

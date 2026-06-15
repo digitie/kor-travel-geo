@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any, Literal, Self
 
@@ -53,8 +53,10 @@ from .dto.admin import (
     OpsArtifact,
     RestoreCreateRequest,
     RestoreDryRunResult,
+    RestoreHotSwapExecuteRequest,
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
+    RestoreHotSwapResult,
     RollbackPlan,
     ScheduledBackupStatus,
     ServingRelease,
@@ -1597,6 +1599,26 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         req: RestoreHotSwapPlanRequest,
     ) -> RestoreHotSwapPlan:
         return await inspect_restore_hot_swap_plan(self.settings, req)
+
+    async def execute_restore_hot_swap(
+        self,
+        req: RestoreHotSwapExecuteRequest,
+        *,
+        actor: str | None = None,
+        audit_meta: Mapping[str, Any] | None = None,
+    ) -> RestoreHotSwapResult:
+        """Execute the ADR-036 rename hot-swap with auto-rollback (T-241).
+
+        Requires an active ``restore`` maintenance window + exact typed confirmation, runs
+        under the ``HOT_SWAP`` advisory lock (concurrent second call fails fast), and
+        auto-rolls-back if the post-swap smoke test fails. Disposes/refreshes this client's
+        engine pool as part of the swap.
+        """
+        from .infra.hotswap import execute_restore_hot_swap
+
+        return await execute_restore_hot_swap(
+            self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
+        )
 
     async def list_maintenance_windows(
         self,

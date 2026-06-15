@@ -145,6 +145,38 @@ class RestoreHotSwapPlan(FrozenModel):
     sql: tuple[str, ...] = ()
 
 
+class RestoreHotSwapExecuteRequest(FrozenModel):
+    """T-241 request to actually execute the ADR-036 rename hot-swap.
+
+    Requires an active ``ops.maintenance_windows(kind='restore')`` whose confirmation
+    equals ``typed_confirmation`` (= ``HOT_SWAP <current> FROM <restore>``). The swap runs
+    under the ``HOT_SWAP`` advisory lock; a concurrent second call fails fast (409).
+    """
+
+    restore_database: str = Field(min_length=1, max_length=63)
+    typed_confirmation: str = Field(min_length=1, max_length=200)
+    previous_alias: str | None = Field(default=None, min_length=1, max_length=63)
+    previous_alias_retention_days: int = Field(default=7, ge=1, le=3650)
+    maintenance_database: str = Field(default="postgres", min_length=1, max_length=63)
+    run_smoke_test: bool = True
+    allow_version_mismatch: bool = False
+
+
+class RestoreHotSwapResult(FrozenModel):
+    """T-241 result of a hot-swap execution attempt."""
+
+    swapped: bool
+    current_database: str
+    restore_database: str
+    previous_alias: str
+    rolled_back: bool = False
+    smoke_ok: bool | None = None
+    serving_release_id: str | None = None
+    previous_release_id: str | None = None
+    rollback_confirmation: str | None = None
+    message: str | None = None
+
+
 class SourceCandidate(FrozenModel):
     kind: SourceKind
     path: str
