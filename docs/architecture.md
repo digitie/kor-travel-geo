@@ -117,6 +117,8 @@ T-155 이후 psycopg server-side prepared statement threshold는 `pg_prepare_thr
 
 T-156 이후 geocode/reverse hot-key 결과 캐시는 기존 `geo_cache` 테이블을 사용한다. 대상은 local OK geocode/reverse 결과이며, external fallback, search/keyword, geometry enrich 경로는 캐시하지 않는다. Cache hit는 v1 내부 응답에서 `source="cache"`로 표시하지만 v2 공개 source는 `local`로 접는다. `refresh_mv()`가 concurrent refresh와 shadow swap 성공 후 `geo_cache`를 삭제해 적재·MV swap 뒤 stale 결과가 남지 않게 한다.
 
+T-146 이후 적재 직후 read-mostly maintenance는 새 API 계약이 아니라 report/runbook으로 표준화한다. `loaders.postload_maintenance`는 source relation `VACUUM (ANALYZE)` opt-in, `resolve_text_geometry_links()`, `refresh_mv(strategy=...)`, `ops.table_stats_snapshots` capture, index budget/bloat warning을 같은 JSON report에 남긴다. `REINDEX CONCURRENTLY`, `CLUSTER`/물리 정렬, `pg_prewarm`은 자동 실행하지 않고 운영자 판단 또는 T-162 runtime warm 범위로 분리한다.
+
 T-141부터 단발 benchmark 위에 SQL/REST workload matrix를 둔다. `steady`/`burst`/
 `recovery`/`soak` phase와 workload별 concurrency를 같은 corpus로 반복 실행하고, T-163은
 soak phase의 runner process RSS/CPU/`/proc/self/io` budget과 누수 판정식을
