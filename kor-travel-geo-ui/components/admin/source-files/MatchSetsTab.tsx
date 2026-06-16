@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Hammer, Play, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import { useState } from "react";
+import { MatchSetComparePanel } from "@/components/admin/source-files/MatchSetComparePanel";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { postJson, requestJson } from "@/lib/api";
@@ -57,7 +58,8 @@ export function MatchSetsTab() {
   });
 
   return (
-    <div className="source-split">
+    <div className="source-stack">
+      <div className="source-split">
       <Panel
         title="매칭 세트"
         actions={
@@ -109,6 +111,8 @@ export function MatchSetsTab() {
           </Panel>
         ) : null}
       </div>
+      </div>
+      <MatchSetComparePanel matchSets={matchSets} />
     </div>
   );
 }

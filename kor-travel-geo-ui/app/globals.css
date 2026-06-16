@@ -1531,6 +1531,36 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+/* T-226 매칭 세트 비교 */
+.compare-selectors {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.compare-counts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+
+.compare-changed > td,
+.compare-changed > th {
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+}
+
+.compare-field-changed {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.compare-item-cell {
+  font-size: 13px;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
