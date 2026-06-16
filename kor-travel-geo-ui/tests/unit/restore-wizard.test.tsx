@@ -77,6 +77,26 @@ describe("RestoreWizard (T-249)", () => {
     await waitFor(() => expect(screen.getByText(/복원 job이 제출됐습니다/)).toBeTruthy());
   });
 
+  it("blocks submit when the dry-run says can_restore=false (Codex H1)", async () => {
+    apiMocks.postJson.mockResolvedValue({
+      can_restore: false,
+      mode: "new_database",
+      target_database: "kor_travel_geo_restore",
+      blockers: ["restore target database is not empty"],
+      warnings: []
+    });
+
+    await gotoStep2();
+    fireEvent.click(screen.getByRole("button", { name: /dry-run 실행/ }));
+    await waitFor(() => expect(screen.getByText("복원 불가")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /확인 단계로/ }));
+
+    // step 4: blocker warning shown AND submit disabled even for new_database
+    expect(screen.getByText(/복원 불가로 판정/)).toBeTruthy();
+    const submit = screen.getByRole("button", { name: /복원 시작/ });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("gates replace_current submit on the exact typed confirmation", async () => {
     apiMocks.postJson.mockResolvedValue({
       can_restore: true,

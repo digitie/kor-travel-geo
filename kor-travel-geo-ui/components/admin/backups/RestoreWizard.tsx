@@ -24,7 +24,11 @@ const STEP_LABELS: Record<WizardStep, string> = {
   4: "4. 확인·실행"
 };
 
-export function RestoreWizard({ onSubmitted }: { onSubmitted?: () => void }) {
+export function RestoreWizard({
+  onSubmitted
+}: {
+  onSubmitted?: (result: LoadJobStatus) => void;
+}) {
   const [artifacts, setArtifacts] = useState<BackupArtifact[]>([]);
   const [step, setStep] = useState<WizardStep>(1);
   const [artifactId, setArtifactId] = useState("");
@@ -98,7 +102,7 @@ export function RestoreWizard({ onSubmitted }: { onSubmitted?: () => void }) {
     try {
       const result = await postJson<LoadJobStatus>("/admin/restores", restoreBody);
       setSubmitted(result);
-      onSubmitted?.();
+      onSubmitted?.(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -110,7 +114,9 @@ export function RestoreWizard({ onSubmitted }: { onSubmitted?: () => void }) {
   const confirmationValid =
     mode === "new_database" ||
     (expectedConfirmation !== null && confirmation === expectedConfirmation);
-  const canSubmit = confirmationValid && !busy;
+  // The dry-run is the safety gate: a can_restore=false result must block submit (not just
+  // warn), otherwise the wizard would bypass its own blockers. Codex H1 review of #235.
+  const canSubmit = confirmationValid && !busy && dryRun?.can_restore === true;
 
   return (
     <Panel title="복원 위저드">

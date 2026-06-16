@@ -70,6 +70,7 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
     jobRows,
     lastResult,
     loadAll,
+    recordResult,
     submitBackup,
     cancelJob,
     updateBackupForm
@@ -141,7 +142,14 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
             <BackupArtifactsPanel artifacts={artifacts} onDeleteArtifact={deleteArtifact} />
           </div>
         ) : null}
-        {activeTab === "restore" ? <RestoreWizard onSubmitted={loadAll} /> : null}
+        {activeTab === "restore" ? (
+          <RestoreWizard
+            onSubmitted={(result) => {
+              recordResult(result);
+              void loadAll();
+            }}
+          />
+        ) : null}
         {activeTab === "hotswap" ? <HotSwapTab /> : null}
         {activeTab === "jobs" ? (
           <BackupJobsPanel jobRows={jobRows} onCancelJob={cancelJob} />
@@ -267,6 +275,11 @@ function useBackupsPanelController() {
   const updateBackupForm = useCallback((patch: Partial<BackupFormState>) => {
     setBackupForm((current) => ({ ...current, ...patch }));
   }, []);
+  // M1 (Codex #235): surface child-panel results (e.g. the restore wizard) in the shared
+  // Overview "Last Response" so they survive tab switches.
+  const recordResult = useCallback((value: unknown) => {
+    setPanelState((current) => ({ ...current, lastResult: value }));
+  }, []);
 
   async function submitBackup(event: FormEvent) {
     event.preventDefault();
@@ -352,6 +365,7 @@ function useBackupsPanelController() {
     jobRows,
     lastResult,
     loadAll,
+    recordResult,
     submitBackup,
     updateBackupForm
   };
