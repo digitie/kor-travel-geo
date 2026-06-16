@@ -994,6 +994,58 @@ textarea {
   gap: 16px;
 }
 
+.backups-shell {
+  display: grid;
+  gap: 16px;
+}
+
+.backups-pane {
+  display: grid;
+  gap: 16px;
+}
+
+.backups-next-action {
+  background: var(--surface-muted, rgba(148, 163, 184, 0.12));
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+}
+
+.backups-guide {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.backups-guide > li {
+  border-left: 3px solid rgba(148, 163, 184, 0.4);
+  padding: 2px 0 2px 12px;
+}
+
+.backups-guide > li p {
+  color: var(--muted, #64748b);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.backups-guide-step {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.backups-guide-note {
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+
 .source-stack {
   display: grid;
   gap: 16px;
