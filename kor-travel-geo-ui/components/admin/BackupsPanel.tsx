@@ -2,6 +2,7 @@
 
 import { Archive, Download, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { HotSwapTab } from "@/components/admin/backups/HotSwapTab";
 import { RestoreWizard } from "@/components/admin/backups/RestoreWizard";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
@@ -141,7 +142,7 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
           </div>
         ) : null}
         {activeTab === "restore" ? <RestoreWizard onSubmitted={loadAll} /> : null}
-        {activeTab === "hotswap" ? <HotSwapGuideTab /> : null}
+        {activeTab === "hotswap" ? <HotSwapTab /> : null}
         {activeTab === "jobs" ? (
           <BackupJobsPanel jobRows={jobRows} onCancelJob={cancelJob} />
         ) : null}
@@ -221,41 +222,6 @@ function BackupsWorkflowGuide({
           </li>
         ))}
       </ol>
-    </Panel>
-  );
-}
-
-function HotSwapGuideTab() {
-  return (
-    <Panel title="Hot-swap (운영 DB 교체)">
-      <p className="backups-next-action">
-        Hot-swap은 복원된 DB를 <code>ALTER DATABASE RENAME</code> 2-step으로 운영 serving DB와
-        교체합니다. 활성 maintenance window(kind=restore)와 정확한 typed confirmation이 필요하며,
-        smoke 실패 시 자동 rollback됩니다.
-      </p>
-      <ol className="backups-guide">
-        <li>
-          <p>
-            먼저 [복원] 탭에서 새 DB로 복원하고 <code>restore-drill</code>로 복원 가능성을
-            확인합니다.
-          </p>
-        </li>
-        <li>
-          <p>
-            <code>POST /v1/admin/restores/hot-swap-plan</code>으로 plan·blockers·typed
-            confirmation을 확인합니다.
-          </p>
-        </li>
-        <li>
-          <p>
-            maintenance window를 열고 <code>POST /v1/admin/restores/hot-swap</code>으로 실행,
-            필요 시 <code>POST /v1/admin/restores/hot-swap-rollback</code>으로 되돌립니다.
-          </p>
-        </li>
-      </ol>
-      <p className="backups-guide-note">
-        전용 위저드 UI(plan·maintenance window·실행·rollback)는 T-250에서 제공됩니다.
-      </p>
     </Panel>
   );
 }

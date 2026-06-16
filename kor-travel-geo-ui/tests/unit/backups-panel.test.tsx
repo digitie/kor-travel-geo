@@ -72,11 +72,11 @@ describe("BackupsPanel tab shell (T-248)", () => {
     );
   });
 
-  it("shows the hot-swap guide pointing at the T-250 wizard", async () => {
+  it("shows the hot-swap plan UI (T-250)", async () => {
     render(<BackupsPanel />);
     await screen.findByRole("tablist", { name: "백업/복원 관리 탭" });
     fireEvent.click(screen.getByRole("tab", { name: "Hot-swap" }));
-    expect(screen.getByText(/운영 DB 교체/)).toBeTruthy();
-    expect(screen.getByText(/T-250/)).toBeTruthy();
+    expect(screen.getByText("1 · Hot-swap plan")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "plan 생성" })).toBeTruthy();
   });
 });

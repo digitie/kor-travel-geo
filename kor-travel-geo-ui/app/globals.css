@@ -1147,6 +1147,23 @@ textarea {
   gap: 12px;
 }
 
+.hotswap-side {
+  display: grid;
+  gap: 16px;
+}
+
+.hotswap-plan {
+  margin-top: 12px;
+}
+
+.hotswap-steps {
+  color: var(--muted, #64748b);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
 .source-stack {
   display: grid;
   gap: 16px;

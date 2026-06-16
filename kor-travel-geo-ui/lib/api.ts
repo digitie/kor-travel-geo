@@ -377,6 +377,56 @@ export type RestoreDryRunResult = {
   row_counts?: Record<string, number> | null;
 };
 
+export type RestoreHotSwapPlan = {
+  current_database: string;
+  restore_database: string;
+  previous_alias: string;
+  maintenance_database: string;
+  typed_confirmation: string;
+  rollback_confirmation: string;
+  previous_alias_retention_days: number;
+  can_execute: boolean;
+  blockers?: string[];
+  steps?: string[];
+  sql?: string[];
+};
+
+export type RestoreHotSwapResult = {
+  swapped: boolean;
+  current_database: string;
+  restore_database: string;
+  previous_alias: string;
+  rolled_back?: boolean;
+  smoke_ok?: boolean | null;
+  serving_release_id?: string | null;
+  previous_release_id?: string | null;
+  rollback_confirmation?: string | null;
+  message?: string | null;
+};
+
+export type RestoreHotSwapRollbackResult = {
+  rolled_back: boolean;
+  current_database: string;
+  restore_database: string;
+  previous_alias: string;
+  smoke_ok?: boolean | null;
+  serving_release_id?: string | null;
+  previous_release_id?: string | null;
+  blockers?: string[];
+  message?: string | null;
+};
+
+export type RestoreSourceVerificationResult = {
+  entrypoint: "pg_restore" | "rename_hot_swap";
+  run_quick_reconcile: boolean;
+  legacy_estimate_only?: boolean;
+  active_source_match_set_id?: string | null;
+  reconcile_run_id?: string | null;
+  mismatch_count: number;
+  reconstruct_unavailable: boolean;
+  message?: string | null;
+};
+
 export type MaintenanceWindow = {
   maintenance_window_id: string;
   kind: "full_load" | "restore" | "schema_migration" | "mv_refresh" | "read_only" | "exclusive";
