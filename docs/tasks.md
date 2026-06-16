@@ -103,7 +103,7 @@
 
 백엔드 백업/복원 스위트(`T-239`~`T-244`/`T-264`)와 백업/복원 Admin UI(`T-248`~`T-254`) + 백업 e2e(`T-255`)를 완료한 이후, 남은 Agent B 작업은 번호순보다 **의존성과 도메인 우선순위(개인 서버 = 백업/복원 최우선)**를 따른다. 각 항목은 독립 PR로 머지하고, 리뷰 반영(fixup) PR은 추가 리뷰하지 않는다. e2e는 CI 게이트가 아니며 `next dev` HMR이 hydration을 깨므로 **production build(`next build` + `next start --port 12505`)에서 실행**한다(`T-255` 기록, `tests/e2e/backups.spec.ts`가 mock-fixture 템플릿).
 
-1. **백업/복원 e2e 마무리**(T-255 `backups.spec.ts` mock-fixture 하네스 재사용): `T-256`(복원 위저드 e2e — 모드·manifest·dry-run·confirmation·blocker) → `T-257`(hot-swap e2e — plan·window·source-verify·rollback) → `T-258`(백업/복원 위저드/hot-swap dialog 접근성·회복성 e2e; T-256·T-257 머지 후).
+1. **백업/복원 e2e 마무리**(T-255 `backups.spec.ts` mock-fixture 하네스 재사용): ~~`T-256`(복원 위저드 e2e)~~ ✅ → `T-257`(hot-swap e2e — plan·window·source-verify·rollback) **(다음)** → `T-258`(백업/복원 위저드/hot-swap dialog 접근성·회복성 e2e; T-256·T-257 머지 후).
 2. **source-files e2e 기반·단계별**: `T-225`(검증·매칭·DB 입력 fixture harness — T-259~263에 공급) → `T-259`(업로드 적재) → `T-260`(대기·재개·409 충돌) → `T-261`(구조 검증) → `T-262`(매칭 세트) → `T-263`(DB 입력).
 3. **Admin UI 기능·편의·접근성**: `T-222`(성능·C1~C17 검증 artifact read-only 노출) → `T-226`(운영 편의 기능 보강; T-254 가상화 공통 컴포넌트 공유) → `T-227`(기존 표면 `/admin/source-files`·`/admin/consistency`·`/admin/ops` 접근성·회복성 e2e).
 4. **통합 gate**: `T-153`(Agent A 성능·정확도 트랙과 함께 최종 안정화 acceptance) — 양 트랙 완료 후.
@@ -127,7 +127,6 @@
 
 #### 백업/복원 Admin UI + e2e (T-248~ · Agent B)
 
-- T-256 복원 Playwright e2e — 위저드 모드·manifest 미리보기·dry-run·replace_current 확인·blocker를 mock으로 고정. (Agent B, 의존: T-249)
 - T-257 hot-swap Playwright e2e — plan·blockers·maintenance window·source-verify·rollback을 mock으로 고정. (Agent B, 의존: T-250)
 - T-258 백업/복원 접근성·회복성 Playwright e2e — 신규 backups 위저드/hot-swap dialog의 키보드·focus trap·네트워크 오류·SSE 끊김·refresh 후 상태 복원을 검증(T-227 기존 표면과 중복 회피). (Agent B, 의존: T-255, T-256, T-257)
 
@@ -157,6 +156,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-256 복원 위저드 Playwright e2e(Agent B/Claude). `tests/e2e/restore.spec.ts`(Chromium+Firefox)에서 복원 위저드(T-249)의 4단계 흐름을 백엔드 없이 `page.route` mock fixture로 고정했다(T-255 `backups.spec.ts` 하네스 재사용, dryRun 응답은 시나리오별 클로저 주입). 4 시나리오: ① **new_database happy path**(artifact 선택→manifest 미리보기 profile/PG/PostGIS/row_counts→dry-run '복원 가능'+버전 비교→`POST /admin/restores` 제출→'복원 job 제출됨'), ② **replace_current typed confirmation 게이팅**(정확한 `RESTORE <db>` 입력 전 제출 차단, 오타도 차단, 정확 입력 시 제출+body `mode`/`confirmation` 검증), ③ **dry-run 복원 불가(blocker)**(`can_restore=false`면 verdict '복원 불가'+blocker 목록+확인 단계 alert+제출 차단), ④ **archive_path 직접 경로**(artifact 미선택 시 manifest 안내 문구+dry-run+제출 body `archive_path` 검증). strict-mode locator는 leaf 텍스트 `exact:true`/태그 scoped `hasText`로 ancestor 중복 회피, 위저드 Panel scoped. **4 테스트 × 2 브라우저 = 8 passed**(Windows Playwright, production build `next build`+`next start --port 12505`). 프론트 type-check/lint/test(95)/build 통과. (2026-06-16)
 - [x] T-157 pg_stat_statements 상시 수집·persist·Admin/Prometheus 노출(Agent A/Codex). `ops.pg_stat_statements_snapshots` table/Alembic migration을 추가하고, API lifespan scheduler가 기본 5분마다 `x_extension.pg_stat_statements` top-N을 advisory lock으로 중복 없이 저장한다. `GET/POST /v1/admin/ops/pg-stat-statements`와 `AsyncAddressClient` 메서드, `/admin/ops` Top-N panel을 추가했다. `/metrics`는 최신 persisted snapshot을 `rank`/`operation`/`query_fingerprint` label만 가진 gauge로 노출하고, query 원문은 label에 넣지 않는다. Admin용 `query_preview`는 literal/숫자를 `?`로 마스킹하고 500자로 제한한다. 상세: `docs/t157-pgstat-observability.md`. (2026-06-16)
 - [x] T-255 백업 Playwright e2e(Agent B/Claude). `tests/e2e/backups.spec.ts`(Chromium+Firefox)에서 `/admin/backups` 콘솔의 핵심 흐름을 백엔드 없이 `page.route` mock fixture로 고정했다 — 5탭+개요 가이드 렌더, 백업 탭의 생성 폼+만료/검증 컬럼(retention/expires/인벤토리 '불일치'), 백업 생성 POST 요청 발생, VirtualTable 검색 필터링, manifest 재현성 뷰어(source_set·active serving lineage)·닫기, 작업 탭의 실시간 진행률 카드(SSE /events mock + 폴링 fallback, 단계·42%)·취소 POST. **다운로드**는 mock artifact의 download_url 노출까지, **삭제/취소**는 POST 요청 발생으로 검증. **6 테스트 × 2 브라우저 = 12 passed**(Windows Playwright). **중요**: e2e는 CI 게이트가 아니며, `next dev`의 HMR websocket 실패가 hydration을 깨므로 **production build(`next build` + `next start --port 12505`)에서 실행**해야 안정적이다(strict-mode locator는 page heading 'DB Backups'·JsonBlock·jobs 테이블 셀과의 중복을 피해 특정 텍스트로 한정). 의존 e2e fixture는 T-256~258에서 재사용. (2026-06-16)
 - [x] T-170 v2 producer 1:N candidate-list 전환(Agent A/Codex). public wire `candidates` tuple은 유지하고 `core/v2.py`에 후보 dedup/병합 helper를 추가했다. `AsyncAddressClient.geocode()`는 local v1 primary 후보와 보조 road geometry 후보를 병합하며, dedup 후 `limit`을 적용한다. dedup 키는 국가지점번호, 건물관리번호, 도로명코드, 행정구역 코드, POI 이름/좌표, fallback metadata 순서이고 먼저 나온 v1 primary 후보를 보존한다. 상세: `docs/t170-v2-multicandidate-producer.md`, ADR-057. (2026-06-16)
