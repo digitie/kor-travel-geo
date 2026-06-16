@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-143 geocode/search query plan 안정화)
+
+**작업**: `/v2/search` address/road exact preflight SQL을 OR 기반 단일 scan에서 `rn_nrm`/`buld_nm_nrm`/`sigungu_buld_nm_nrm` branch의 `UNION ALL`로 분리했다. 각 branch는 같은 region hint filter를 유지하고, 중복 후보는 `DISTINCT ON (bd_mgt_sn)`과 match priority로 결정 정렬한다. Broad fallback은 SQL 내부 공백 제거 대신 `_normalize_search_query()`가 만든 `query_nrm` bind를 받게 했다.
+
+**결정**: 이번 PR에서는 새 DB object, migration, OpenAPI/typegen 변경을 만들지 않는다. Exact equality path는 이미 exact match가 보장되므로 `similarity()`/`GREATEST()` 계산을 제거하고 score를 `1.0`으로 고정한다. 기존 benchmark corpus는 `query_nrm` 필드를 강제하지 않고 실행 직전 `_search_sql_params()`로 합성해 호환한다.
+
+**검증/문서**: Windows focused unit 81개, Ruff, mypy가 통과했다. WSL ext4 미러에서는 전체 `pytest -q` 929 passed/54 skipped, Ruff, mypy, `lint-imports`, OpenAPI check가 통과했다. WSL Q4 search smoke artifact는 `artifacts/perf/t143-search-plan-q4-smoke/`이며 `search`/`search_sig`/`search_fuzzy` 각 1건 error 0, p95는 각각 6.756ms/5.926ms/5.923ms다. EXPLAIN에서 exact case는 `exact_keys` CTE와 `idx_mv_*_nrm_exact`, fuzzy miss는 `scored` CTE와 `idx_mv_text_search_*_trgm`를 탔다. 상세는 `docs/t143-geocode-search-plan.md`에 기록했고, 다음 Agent A 작업은 T-142다. CodeGraph MCP는 이전과 같이 안정적으로 붙지 않아 `codegraph sync/status` CLI 최신 상태를 확인했다.
+
 ## 2026-06-16 (T-165 주소 정규화/파싱 견고성 강화)
 
 **작업**: `core.normalize`의 `normalize_spaces()`와 도로명/지번 parser를 보강했다. 입력은 NFKC로 접고, 전각 숫자·대시 변형, 쉼표류 구분자, 숫자 사이 하이픈 공백을 canonicalize한다. 시도 별칭에는 `서울시`, `강원도`, `전라북도` 같은 약어·구/신 표기를 추가했고, `성복1로35`, `왕산로189-4`, `산12 - 3번지`, `189번` 같은 입력이 exact lookup key를 잃지 않도록 했다.

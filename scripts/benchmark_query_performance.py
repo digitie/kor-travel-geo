@@ -1084,9 +1084,12 @@ async def _explain_case(
             await conn.execute(text(setup))
         statement = spec.statement
         params = case.params
-        if _is_search_sql(case) and await _search_exact_match_exists(conn, case):
-            statement = _SEARCH_EXACT_SQL
-            params = _search_exact_params(case.params)
+        if _is_search_sql(case):
+            if await _search_exact_match_exists(conn, case):
+                statement = _SEARCH_EXACT_SQL
+                params = _search_exact_params(case.params)
+            else:
+                params = _search_sql_params(case.params)
         explain_sql = "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, SETTINGS) " + str(statement)
         result = await conn.execute(text(explain_sql), params)
         first = result.scalar_one()
@@ -1099,7 +1102,7 @@ async def _execute_search_case(conn: AsyncConnection, case: BenchmarkCase) -> in
     exact_total = int(exact_rows[0]._mapping["total"]) if exact_rows else 0
     if exact_total > 0:
         return len(exact_rows)
-    result = await conn.execute(_SEARCH_SQL, case.params)
+    result = await conn.execute(_SEARCH_SQL, _search_sql_params(case.params))
     return len(result.fetchall())
 
 
@@ -1119,6 +1122,13 @@ def _search_exact_params(params: Params) -> Params:
         "limit": int(cast("int", params["limit"])),
         "offset": int(cast("int", params["offset"])),
         **_region_params_from_params(params),
+    }
+
+
+def _search_sql_params(params: Params) -> Params:
+    return {
+        **params,
+        "query_nrm": _normalize_search_query(str(params["query"])),
     }
 
 
