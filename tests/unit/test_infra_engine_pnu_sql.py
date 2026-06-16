@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import Any
+
+import pytest
+
 from kortravelgeo.infra.engine import _connect_options, make_async_engine
 from kortravelgeo.infra.pnu import build_pnu, pnu_land_type_from_mntn_yn
 from kortravelgeo.infra.sql import INDEX_SQL, MV_SQL, SCHEMA_SQL, iter_sql_statements
@@ -17,6 +21,35 @@ def test_engine_uses_settings_dsn_and_x_extension_search_path() -> None:
     assert str(engine.url).startswith("postgresql+psycopg://")
     assert "statement_timeout=4321" in _connect_options(settings)
     assert "search_path=public,x_extension" in _connect_options(settings)
+
+
+def test_engine_wires_explicit_pool_failfast_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+    fake_engine = object()
+
+    def fake_create_async_engine(url: str, **kwargs: Any) -> object:
+        captured["url"] = url
+        captured.update(kwargs)
+        return fake_engine
+
+    monkeypatch.setattr(
+        "kortravelgeo.infra.engine.create_async_engine",
+        fake_create_async_engine,
+    )
+    settings = Settings(
+        pg_pool_size=3,
+        pg_max_overflow=2,
+        pg_pool_timeout_ms=2_500,
+        pg_query_metrics_enabled=False,
+    )
+
+    engine = make_async_engine(settings)
+
+    assert engine is fake_engine
+    assert captured["pool_size"] == 3
+    assert captured["max_overflow"] == 2
+    assert captured["pool_timeout"] == pytest.approx(2.5)
+    assert captured["pool_pre_ping"] is True
 
 
 def test_engine_accepts_shadow_search_path_for_read_only_rehearsal() -> None:

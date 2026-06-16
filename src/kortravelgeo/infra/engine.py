@@ -51,6 +51,7 @@ def make_async_engine(
         resolved.pg_dsn,
         pool_size=resolved.pg_pool_size,
         max_overflow=resolved.pg_max_overflow,
+        pool_timeout=resolved.pg_pool_timeout_ms / 1_000,
         pool_pre_ping=True,
         pool_recycle=resolved.pg_pool_recycle_s,
         poolclass=AsyncAdaptedQueuePool,

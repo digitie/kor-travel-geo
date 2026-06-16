@@ -22,7 +22,7 @@
 | `E0403` | 403 | 지역 접근 제한 | T-054 GeoIP gate에서 한국 외 공용 IP 또는 DB 부재 strict 차단 |
 | `E0404` | 404 | 찾을 수 없음 | 대상 주소, job, artifact, report 없음 |
 | `E0409` | 409 | 동시 실행 충돌 | T-059 이후 같은 advisory lock key의 CLI/API 운영 작업이 이미 실행 중 |
-| `E0500` | 503 | DB 오류 | PostgreSQL 연결/쿼리 실패 |
+| `E0500` | 503 | DB 오류 | PostgreSQL 연결/쿼리 실패, SQLAlchemy pool checkout timeout |
 | `E0501` | 502 | 외부 API 오류 | vworld/juso fallback 호출 실패 |
 | `E0502` | 500 | 로더 오류 | 원천 파일 파싱, 적재, 후처리 실패 |
 | `E0503` | 500 | 설정 오류 | 필수 환경변수 또는 provider 설정 오류 |

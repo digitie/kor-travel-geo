@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-154 DB pool checkout timeout/fail-fast)
+
+**작업**: `Settings.pg_pool_timeout_ms`와 `create_async_engine(pool_timeout=...)` 배선을 추가했다. SQLAlchemy pool checkout timeout은 API exception handler에서 구조화된 `DatabaseError(E0500, HTTP 503)`로 변환하고, `/metrics`에는 route/method별 checkout timeout counter를 추가했다.
+
+**결정**: 풀 포화는 DB 인프라 가용성 문제라 503 + `E0500`으로 둔다. `E0409`는 advisory lock 기반 동시 실행 충돌 전용으로 유지한다. `/v1/readyz`는 pool detail에 `timeout_ms`를 보여 주되, overload admission/envelope 전체 설계는 T-145로 넘긴다.
+
+**문서/검증**: 상세는 `docs/t154-pool-failfast.md`에 기록했다. Windows focused run은 30 passed/1 skipped이며 Ruff와 mypy가 통과했다. `KTG_TEST_PG_DSN`이 없으면 실제 pool timeout 통합 테스트는 skip된다.
+
 ## 2026-06-16 (T-174 좌표계 왕복 정밀도 검증·변환 경로 통일)
 
 **작업**: `src/kortravelgeo/infra/coordinates.py`를 추가해 EPSG:5179↔4326 point projection helper를 단일화했다. `GeocodeRepository.project_sppn_point_4326()`와 `ReverseRepository.project_reverse_point_5179()`는 자체 projection SQL을 갖지 않고 shared helper를 호출한다.

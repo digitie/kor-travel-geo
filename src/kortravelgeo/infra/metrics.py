@@ -137,6 +137,11 @@ PG_POOL_OVERFLOW = _gauge(
     "kor_travel_geo_pg_pool_overflow",
     "SQLAlchemy DB pool overflow connections currently opened by this API process.",
 )
+PG_POOL_CHECKOUT_TIMEOUTS = _counter(
+    "kor_travel_geo_pg_pool_checkout_timeouts_total",
+    "SQLAlchemy DB pool checkout timeouts by route template and method.",
+    ("method", "route"),
+)
 DB_QUERIES = _counter(
     "kor_travel_geo_db_queries_total",
     "SQL queries executed by this API process by operation, fingerprint, and status.",
@@ -290,6 +295,10 @@ def record_api_request(
             route=route,
             status_code=str(status_code),
         ).inc()
+
+
+def record_db_pool_checkout_timeout(*, method: str, route: str) -> None:
+    PG_POOL_CHECKOUT_TIMEOUTS.labels(method=method, route=route).inc()
 
 
 def record_load_job_duration(*, kind: str, state: str, elapsed_s: float) -> None:

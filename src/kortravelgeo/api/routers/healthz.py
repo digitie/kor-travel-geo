@@ -144,6 +144,7 @@ def _pool_component(engine: Any, settings: Settings) -> ReadinessComponent:
         "overflow": overflow,
         "capacity": capacity,
         "utilization": round(utilization, 4),
+        "timeout_ms": settings.pg_pool_timeout_ms,
     }
     if checked_out >= capacity and checked_in <= 0:
         return ReadinessComponent(status="saturated", detail=detail)

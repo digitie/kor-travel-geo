@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     pg_dsn: str = "postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo"
     pg_pool_size: int = Field(default=10, ge=1)
     pg_max_overflow: int = Field(default=5, ge=0)
+    pg_pool_timeout_ms: int = Field(default=1_000, ge=1)
     pg_statement_timeout_ms: int = Field(default=5_000, ge=1)
     pg_search_path: str = "public,x_extension"
     pg_pool_recycle_s: int = Field(default=3_600, ge=1)
