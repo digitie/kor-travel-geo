@@ -57,7 +57,7 @@
 
 지오코딩 serving용 단일 머티리얼라이즈드 뷰. **텍스트 정본**(`tl_juso_text`)에 **대표 출입구 좌표**(`tl_locsum_entrc`, 같은 기준월일 때만 `tl_roadaddr_entrc` direct 출입구 fallback)와 **centroid fallback**(`tl_navi_buld_centroid`)을 합쳐 단일 lookup으로 응답한다. `pt_source` 컬럼(`entrance`/`centroid`)이 응답 좌표의 출처를 노출한다(ADR-003/ADR-012 호환). 라우터는 `centroid` 결과에 `confidence`를 낮춰 반환한다.
 
-`mv_geocode_text_search`는 `mv_geocode_target`에서 재생성하는 read-only fuzzy 검색 helper MV(T-061)다. MV 갱신은 두 객체를 함께 다루는 orchestration 경로(`ktgctl refresh mv`)만 사용한다.
+`mv_geocode_text_search`는 `mv_geocode_target`에서 재생성하는 read-only fuzzy 검색 helper MV(T-061)다. T-171 이후 helper에는 `buld_mnnm`/`buld_slno`/`buld_se_cd`가 함께 들어가 fuzzy geocode도 exact 조회와 같은 건물번호 계약을 유지한다. MV 갱신은 두 객체를 함께 다루는 orchestration 경로(`ktgctl refresh mv`)만 사용한다.
 
 전체 DDL과 추가 인덱스, swap 갱신 전략은 `docs/data-model.md`를 본다.
 

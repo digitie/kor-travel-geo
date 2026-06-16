@@ -125,6 +125,22 @@ def test_t075_region_radius_parts_migration_builds_accelerator() -> None:
     assert "DROP TABLE IF EXISTS region_radius_parts" in migration
 
 
+def test_t171_fuzzy_ranking_migration_rebuilds_text_search_helper() -> None:
+    migration = Path("alembic/versions/0020_t171_fuzzy_ranking.py").read_text(
+        encoding="utf-8"
+    )
+    infra_sql = Path("src/kortravelgeo/infra/sql.py").read_text(encoding="utf-8")
+
+    assert 'revision = "0020_t171_fuzzy_ranking"' in migration
+    assert 'down_revision = "0019_t157_pg_stat_snapshots"' in migration
+    assert "TEXT_SEARCH_MV_SQL" in migration
+    assert "TEXT_SEARCH_MV_SQL_PRE_T171" in migration
+    assert "buld_slno" in infra_sql
+    assert "buld_se_cd" in infra_sql
+    assert "SET LOCAL statement_timeout = 0" in migration
+    assert "ANALYZE mv_geocode_text_search" in migration
+
+
 def test_t200_ops_id_rename_migration_renames_every_short_ops_id() -> None:
     migration = Path("alembic/versions/0018_t200_ops_id_rename.py").read_text(
         encoding="utf-8"

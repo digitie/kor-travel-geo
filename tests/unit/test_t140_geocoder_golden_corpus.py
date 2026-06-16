@@ -100,6 +100,7 @@ def test_t140_expected_payload_checks_paths_contains_and_numeric_budget() -> Non
             "fields": {"candidates[0].match_kind": "road"},
             "field_contains": {"candidates[0].address.full": "왕산로"},
             "numeric_lte": {"candidates[0].distance_m": 50},
+            "numeric_gte": {"candidates[0].confidence": 0.42},
             "contains_text": ["동대문구"],
         },
         tags=(),
@@ -114,12 +115,21 @@ def test_t140_expected_payload_checks_paths_contains_and_numeric_budget() -> Non
                 "match_kind": "road",
                 "address": {"full": "서울특별시 동대문구 왕산로 189-4"},
                 "distance_m": 3.2,
+                "confidence": 0.88,
             }
         ],
     }
 
     assert _check_expected_payload(case, payload, elapsed_ms=10.0) == []
     assert get_path(payload, "candidates[0].address.full") == "서울특별시 동대문구 왕산로 189-4"
+
+    low_confidence = {
+        **payload,
+        "candidates": [{**payload["candidates"][0], "confidence": 0.3}],
+    }
+    assert _check_expected_payload(case, low_confidence, elapsed_ms=10.0) == [
+        "candidates[0].confidence expected >= 0.42, got 0.3"
+    ]
 
 
 def test_t140_response_hash_ignores_unstable_query_id() -> None:

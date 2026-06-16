@@ -125,6 +125,9 @@ def test_text_search_queries_use_slim_mv_before_target_join() -> None:
 
     assert "WITH candidates AS MATERIALIZED" in fuzzy_sql
     assert "FROM mv_geocode_text_search ts" in fuzzy_sql
+    assert "AND ts.buld_mnnm = :mnnm" in fuzzy_sql
+    assert "AND ts.buld_slno = :slno" in fuzzy_sql
+    assert "AND ts.buld_se_cd = :buld_se_cd" in fuzzy_sql
     assert "JOIN mv_geocode_target t ON t.bd_mgt_sn = c.bd_mgt_sn" in fuzzy_sql
     assert "WITH query_input AS" in search_sql
     assert "FROM mv_geocode_text_search ts" in search_sql
@@ -146,8 +149,12 @@ def test_mv_sql_includes_search_indexes_and_slim_text_search_mv() -> None:
     assert "FROM mv_geocode_target" in text_search_sql
     assert "left(bjd_cd, 5) AS sig_cd" in text_search_sql
     assert "sigungu_buld_nm_nrm" in text_search_sql
+    assert "buld_slno" in text_search_sql
+    assert "buld_se_cd" in text_search_sql
     assert "idx_mv_text_search_rn_trgm" in text_search_sql
     assert "idx_mv_text_search_bjd_prefix_buld" in text_search_sql
+    assert "sig_cd, buld_mnnm, buld_slno, buld_se_cd, bd_mgt_sn" in text_search_sql
+    assert "sido_cd, buld_mnnm, buld_slno, buld_se_cd, bd_mgt_sn" in text_search_sql
     assert "idx_mv_text_search_sigungu_buld_nm_trgm" in text_search_sql
     assert "idx_mv_text_search_rn_exact" not in text_search_sql
 

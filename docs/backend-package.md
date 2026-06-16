@@ -295,7 +295,7 @@ await client.reverse(127.0, 37.5, sig_cd="11")
 ### `core/geocoder.py` 흐름
 
 1. `parse_address` → `AddrParts`. `sgg_nrm` 없으면 `InvalidAddressError`.
-2. `type=="road"`: 도로명/본번 검증 → `repo.lookup_by_road(...)`. 실패 시 `fallback != "off"`면 `repo.fuzzy_roads(...)`로 5개 후보 재시도 (`confidence = sim`).
+2. `type=="road"`: 도로명/본번/부번/지하구분 검증 → `repo.lookup_by_road(...)`. 실패 시 `fallback != "off"`면 `repo.fuzzy_roads(...)`로 5개 후보 재시도 (`confidence = sim`). T-171 이후 fuzzy fallback도 `buld_mnnm`/`buld_slno`/`buld_se_cd`를 모두 맞춘 뒤 `similarity DESC → entrance 우선 → bd_mgt_sn` 순서로 결정적으로 정렬한다.
 3. `type=="parcel"`: 동/번지 검증 → `repo.lookup_by_jibun(...)`.
 4. 결과 없으면 `GeocodeResponse(status="NOT_FOUND")`.
 5. `RefinedAddress(text, structure)` 빌드. `GeocodeExtension(source="local", confidence, bd_mgt_sn, rncode_full, bjd_cd, zip_no, zip_source, buld_nm)`.
@@ -1281,7 +1281,7 @@ CPU seconds, `/proc/self/io` read/write budget, RSS leak 판정 실패 시 exit 
 2. index: btree composite/`INCLUDE`, `gin_trgm_ops`, partial index, GiST 5179 geometry.
 3. read-only 보조 view/MV: `mv_geocode_exact_key`, `mv_geocode_text_search`, `mv_reverse_point_5179`, `mv_zipcode_lookup`.
 
-보조 view/MV는 source of truth가 아니며, 기존 master table 또는 `mv_geocode_target`에서 재생성 가능해야 한다. 도입 PR은 전후 p95/p99, plan, buffer, index/MV size, refresh/swap 시간 영향, T-046 backup/restore 영향을 모두 기록한다. T-061에서 `mv_geocode_text_search`가 실제 helper MV로 추가됐으며, Q3 fuzzy geocode와 Q4 broad search fallback의 후보 추출에 사용한다. Q4 exact preflight는 기존 `mv_geocode_target` exact index를 유지한다.
+보조 view/MV는 source of truth가 아니며, 기존 master table 또는 `mv_geocode_target`에서 재생성 가능해야 한다. 도입 PR은 전후 p95/p99, plan, buffer, index/MV size, refresh/swap 시간 영향, T-046 backup/restore 영향을 모두 기록한다. T-061에서 `mv_geocode_text_search`가 실제 helper MV로 추가됐으며, Q3 fuzzy geocode와 Q4 broad search fallback의 후보 추출에 사용한다. T-171 이후 이 helper는 fuzzy geocode가 exact 조회와 같은 건물번호 계약을 유지하도록 `buld_mnnm`/`buld_slno`/`buld_se_cd`를 포함한다. Q4 exact preflight는 기존 `mv_geocode_target` exact index를 유지한다.
 
 ### 9.8 적재 진행도/상태 — 라이브러리·API 표면 (ADR-016)
 

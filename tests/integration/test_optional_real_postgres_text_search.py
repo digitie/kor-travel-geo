@@ -23,6 +23,8 @@ SELECT bd_mgt_sn,
    AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
    AND rn_nrm % :road_nrm
    AND buld_mnnm = :mnnm
+   AND buld_slno = :slno
+   AND buld_se_cd = :buld_se_cd
  ORDER BY similarity(rn_nrm, :road_nrm) DESC,
           CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END,
           bd_mgt_sn
@@ -43,15 +45,33 @@ async def test_real_postgres_text_search_mv_matches_legacy_fuzzy_order() -> None
             helper = await conn.scalar(text("SELECT to_regclass('mv_geocode_text_search')"))
             if helper is None:
                 pytest.skip("mv_geocode_text_search is not available")
+            helper_columns = set(
+                (
+                    await conn.execute(
+                        text(
+                            """
+SELECT column_name
+  FROM information_schema.columns
+ WHERE table_schema = 'public'
+   AND table_name = 'mv_geocode_text_search'
+"""
+                        )
+                    )
+                ).scalars()
+            )
+            if not {"buld_se_cd", "buld_slno"} <= helper_columns:
+                pytest.skip("mv_geocode_text_search has not been rebuilt with T-171 columns")
             rows = (
                 await conn.execute(
                     text(
                         """
-SELECT si_nm, sgg_nm, rn_nrm, buld_mnnm, left(bjd_cd, 5) AS sig_cd
+SELECT si_nm, sgg_nm, rn_nrm, buld_mnnm, buld_slno, buld_se_cd, left(bjd_cd, 5) AS sig_cd
   FROM mv_geocode_target
  WHERE rn_nrm IS NOT NULL
    AND rn_nrm <> ''
    AND buld_mnnm IS NOT NULL
+   AND buld_slno IS NOT NULL
+   AND buld_se_cd IS NOT NULL
  ORDER BY bd_mgt_sn
  LIMIT 8
 """
@@ -71,6 +91,8 @@ SELECT si_nm, sgg_nm, rn_nrm, buld_mnnm, left(bjd_cd, 5) AS sig_cd
                     "bjd_cd_prefix": None,
                     "road_nrm": str(row["rn_nrm"])[: max(2, len(str(row["rn_nrm"])) - 1)],
                     "mnnm": row["buld_mnnm"],
+                    "slno": row["buld_slno"],
+                    "buld_se_cd": row["buld_se_cd"],
                     "limit": 5,
                 }
                 legacy = await _fetch_fuzzy(conn, _LEGACY_FUZZY_ROADS, params)

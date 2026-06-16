@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-171 fuzzy ranking 결정성·품질을 보강했다. `mv_geocode_text_search` helper MV에 `buld_slno`/`buld_se_cd`를 포함하고, 도로명 fuzzy fallback이 본번·부번·지하구분을 모두 맞춘 후보를 `similarity DESC → entrance 우선 → bd_mgt_sn`으로 결정 정렬한다. T-140 fuzzy corpus case는 `왕산길 189-4` 입력이 `왕산로 189-4`를 1순위로 반환하고 `confidence >= 0.42`를 만족해야 한다.
 - T-164 p99 regression guard를 추가했다. `scripts/evaluate_t164_p99_regression.py`가 T-141 `matrix-report.json` baseline/current의 같은 `profile_id`를 비교해 p99 회귀 임계, error 0, T-163 soak guard 통과 여부를 판정하고, 실패 시 `p99-guard.json`/`summary.md`를 남긴 뒤 exit code `2`로 종료한다.
 - T-163 60분 soak resource guard를 추가했다. `scripts/run_t141_load_matrix.py` schema v2가 soak profile 실행 중 runner process RSS/CPU/`/proc/self/io` sample을 남기고, RSS 증가 budget, leak 판정식, CPU/read/write budget, error 0 기준을 `soak-guard.json`과 `matrix-report.json`에 기록한다. `--soak-guard-mode enforce`는 guard 실패 시 artifact를 쓴 뒤 exit code `2`로 종료한다.
 - T-159 DB 장애 주입과 안정 저하 검증을 추가했다. SQLAlchemy `DBAPIError` 계열 DB 드라이버/연결 오류를 HTTP 503 + `E0500`으로 구조화하고, VWorld 호환 경로는 기존 `SYSTEM_ERROR` envelope를 유지한다. `/metrics`는 `kor_travel_geo_api_db_errors_total{method,route,error_type}`를 노출하며, `scripts/run_t159_db_fault_injection.py`는 실제 DB/RustFS를 제어하지 않는 ASGI 하니스로 단절·느린 probe·복구 시나리오를 검증한다.
