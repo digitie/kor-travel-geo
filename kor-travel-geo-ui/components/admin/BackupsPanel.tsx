@@ -1,9 +1,10 @@
 "use client";
 
-import { Archive, Download, RefreshCw, Trash2, XCircle } from "lucide-react";
+import { Archive, Download, FileText, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { HotSwapTab } from "@/components/admin/backups/HotSwapTab";
 import { JobProgress } from "@/components/admin/backups/JobProgress";
+import { inventoryTone, ManifestViewer } from "@/components/admin/backups/ManifestViewer";
 import { RestoreWizard } from "@/components/admin/backups/RestoreWizard";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
@@ -12,7 +13,6 @@ import { BackupAllowedDirs, BackupArtifact, LoadJobStatus, postJson, requestJson
 import {
   backupDownloadHref,
   backupProfileLabel,
-  shaPrefix,
   stagePhase,
   terminalJobState
 } from "@/lib/backup-workflow";
@@ -530,6 +530,7 @@ function BackupArtifactsPanel({
   artifacts: BackupArtifact[];
   onDeleteArtifact: (artifactId: string) => Promise<void>;
 }) {
+  const [viewing, setViewing] = useState<BackupArtifact | null>(null);
   return (
     <Panel title="Backup Artifacts">
       <table className="table">
@@ -539,14 +540,16 @@ function BackupArtifactsPanel({
             <th>state</th>
             <th>profile</th>
             <th>size</th>
-            <th>sha256</th>
-            <th>callback</th>
+            <th>retention</th>
+            <th>expires</th>
+            <th>인벤토리</th>
             <th>action</th>
           </tr>
         </thead>
         <tbody>
           {artifacts.map((artifact) => {
             const href = backupDownloadHref(artifact.download_url);
+            const inv = inventoryTone(artifact.source_inventory_ok);
             return (
               <tr key={artifact.artifact_id}>
                 <td>{artifact.display_name ?? artifact.artifact_id}</td>
@@ -555,10 +558,21 @@ function BackupArtifactsPanel({
                 </td>
                 <td>{backupProfileLabel(readNested(artifact.manifest, "backup", "profile"))}</td>
                 <td>{formatBytes(artifact.size_bytes)}</td>
-                <td>{shaPrefix(artifact.sha256)}</td>
-                <td>{artifact.callback_state ?? "-"}</td>
+                <td>{artifact.retention_class ?? "default"}</td>
+                <td>{artifact.expires_at ? artifact.expires_at.slice(0, 10) : "-"}</td>
+                <td>
+                  <StatusBadge tone={inv.tone} value={inv.label} />
+                </td>
                 <td>
                   <div className="toolbar-inline">
+                    <button
+                      className="icon-button"
+                      onClick={() => setViewing(artifact)}
+                      title="manifest 보기"
+                      type="button"
+                    >
+                      <FileText size={16} />
+                    </button>
                     {href && (
                       <a className="icon-button" href={href} title="다운로드">
                         <Download size={16} />
@@ -579,6 +593,7 @@ function BackupArtifactsPanel({
           })}
         </tbody>
       </table>
+      {viewing ? <ManifestViewer artifact={viewing} onClose={() => setViewing(null)} /> : null}
     </Panel>
   );
 }
