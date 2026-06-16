@@ -33,6 +33,12 @@ export type BenchmarkSummaryRow = {
   /** The compared-against run (explicit baseline_artifact_id if resolvable, else previous run). */
   baseline: BenchmarkMetrics | null;
   baselineArtifactId: string | null;
+  /**
+   * True when the latest run names an explicit `baseline_artifact_id` that is NOT in the fetched
+   * artifact set — we then do NOT silently fall back to the previous run, so the UI can signal
+   * "baseline out of range" instead of showing a misleading delta (Codex review of #282).
+   */
+  baselineUnavailable: boolean;
   /** latest - baseline per metric (only where both are finite numbers). */
   deltas: Partial<Record<keyof BenchmarkMetrics, number>>;
 };
@@ -104,9 +110,22 @@ export function summarizeBenchmarkArtifacts(artifacts: OpsArtifact[]): Benchmark
     const latestManifest = asRecord(latest.manifest);
     const latestMetrics = parseMetrics(latestManifest);
 
+    // An explicit baseline_artifact_id that isn't in the fetched set must NOT silently fall back
+    // to the previous run — that would show a delta against the wrong baseline with no signal.
     const baselineId = asString(latestManifest.baseline_artifact_id);
-    const baselineArtifact =
-      (baselineId ? byId.get(baselineId) : undefined) ?? sorted[1] ?? null;
+    let baselineArtifact: OpsArtifact | null;
+    let baselineUnavailable = false;
+    if (baselineId) {
+      const found = byId.get(baselineId);
+      if (found) {
+        baselineArtifact = found;
+      } else {
+        baselineArtifact = null;
+        baselineUnavailable = true;
+      }
+    } else {
+      baselineArtifact = sorted[1] ?? null;
+    }
     const baselineMetrics = baselineArtifact ? parseMetrics(asRecord(baselineArtifact.manifest)) : null;
 
     const deltas: Partial<Record<keyof BenchmarkMetrics, number>> = {};
@@ -131,7 +150,8 @@ export function summarizeBenchmarkArtifacts(artifacts: OpsArtifact[]): Benchmark
       storageUri: latest.storage_uri ?? null,
       latest: latestMetrics,
       baseline: baselineMetrics,
-      baselineArtifactId: baselineArtifact ? baselineArtifact.artifact_id : null,
+      baselineArtifactId: baselineArtifact ? baselineArtifact.artifact_id : baselineId,
+      baselineUnavailable,
       deltas
     });
   }
