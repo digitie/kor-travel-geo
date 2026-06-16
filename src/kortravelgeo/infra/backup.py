@@ -478,11 +478,20 @@ async def run_restore_job(
             ),
         )
         manifest = read_json(extract_dir / "manifest.json")
-        await verify_internal_checksums(extract_dir, cancel_event=cancel_event)
         dump_dir = extract_dir / "dump"
         if not dump_dir.is_dir():
             msg = f"restore archive does not contain dump directory: {archive_path}"
             raise InvalidInputError(msg)
+        # T-243: allow_partial restores intact tables and skips corrupted data files; the
+        # default path verifies every checksum strictly (zero regression).
+        partial_restore_info: dict[str, Any] | None = None
+        use_list_path: Path | None = None
+        if req.allow_partial:
+            partial_restore_info, use_list_path = await _plan_partial_restore(
+                extract_dir, dump_dir, work_dir, cancel_event=cancel_event, progress=progress
+            )
+        else:
+            await verify_internal_checksums(extract_dir, cancel_event=cancel_event)
 
         # T-234: hard-fail on PostgreSQL major / PostGIS major.minor mismatch unless
         # explicitly overridden. Query the actual target DSN so external target_dsn
@@ -513,6 +522,7 @@ async def run_restore_job(
             target_dsn,
             dump_dir,
             jobs=jobs,
+            use_list=use_list_path,
         )
         await progress(
             progress=0.20,
@@ -565,6 +575,7 @@ async def run_restore_job(
             "target_database": target_database,
             "source_manifest": manifest,
             "row_count_verification": reconcile_block,
+            "partial_restore": partial_restore_info,
         }
         updated_restore_artifact = await repo.update_artifact(
             restore_artifact.artifact_id,
@@ -938,6 +949,7 @@ def build_pg_restore_command(
     dump_dir: Path,
     *,
     jobs: int,
+    use_list: Path | None = None,
 ) -> PreparedCommand:
     libpq_dsn, env = to_process_safe_libpq_dsn(target_dsn)
     argv = [
@@ -945,11 +957,19 @@ def build_pg_restore_command(
         "--format=directory",
         f"--jobs={jobs}",
         "--verbose",
-        "--dbname",
-        libpq_dsn,
-        str(dump_dir),
     ]
+    # T-243: restore only the (non-commented) entries in the filtered TOC list, skipping
+    # the corrupted table data files identified by partial-restore planning.
+    if use_list is not None:
+        argv += ["--use-list", str(use_list)]
+    argv += ["--dbname", libpq_dsn, str(dump_dir)]
     return PreparedCommand(tuple(argv), tuple(redact_command(argv)), env or None)
+
+
+def build_pg_restore_list_command(dump_dir: Path) -> PreparedCommand:
+    """``pg_restore -l`` (TOC listing) for partial-restore planning (T-243)."""
+    argv = ["pg_restore", "--format=directory", "--list", str(dump_dir)]
+    return PreparedCommand(tuple(argv), tuple(redact_command(argv)), None)
 
 
 def build_tar_create_command(
@@ -1579,6 +1599,99 @@ async def verify_internal_checksums(
         if actual != digest:
             msg = f"restore archive checksum mismatch: {relative}"
             raise InvalidInputError(msg)
+
+
+async def collect_internal_checksum_failures(
+    extract_dir: Path,
+    *,
+    cancel_event: asyncio.Event,
+) -> list[str]:
+    """T-243: like :func:`verify_internal_checksums` but collect ALL bad relative paths.
+
+    Returns every corrupted-or-missing file (sha256 mismatch or absent target) instead of
+    raising on the first. Used only by the ``allow_partial`` restore path; a missing
+    ``checksums.sha256`` is still a hard failure (there is nothing to verify against).
+    """
+    checksum_file = extract_dir / "checksums.sha256"
+    if not checksum_file.is_file():
+        msg = "restore archive is missing checksums.sha256"
+        raise InvalidInputError(msg)
+    failures: list[str] = []
+    for line in checksum_file.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        digest, relative = line.split("  ", 1)
+        path = extract_dir / relative
+        if not path.is_file():
+            failures.append(relative)
+            continue
+        actual = await sha256_file(path, cancel_event=cancel_event)
+        if actual != digest:
+            failures.append(relative)
+    return failures
+
+
+async def _plan_partial_restore(
+    extract_dir: Path,
+    dump_dir: Path,
+    work_dir: Path,
+    *,
+    cancel_event: asyncio.Event,
+    progress: ProgressReporter,
+) -> tuple[dict[str, Any] | None, Path | None]:
+    """Plan a best-effort partial restore (T-243): which tables to skip + the use-list file.
+
+    Returns ``(None, None)`` when nothing is corrupted (normal full restore). Raises if a
+    critical file (``manifest.json``/``dump/toc.dat``) is corrupted — there is no trustworthy
+    TOC to selectively restore from. Otherwise writes a filtered ``pg_restore --use-list`` and
+    returns the ``partial_restore`` manifest block describing the skipped tables.
+    """
+    from kortravelgeo.infra.partial_restore import (
+        build_partial_restore_uselist,
+        partial_restore_block,
+        partition_checksum_failures,
+    )
+
+    failures = await collect_internal_checksum_failures(extract_dir, cancel_event=cancel_event)
+    if not failures:
+        return None, None
+    partition = partition_checksum_failures(failures)
+    if not partition.can_partial_restore:
+        msg = "partial restore impossible; critical files corrupted: " + ", ".join(
+            partition.critical
+        )
+        raise InvalidInputError(msg)
+    toc_lines = await capture_pg_restore_toc(dump_dir)
+    use_list = build_partial_restore_uselist(toc_lines, partition.skippable_data_ids)
+    use_list_path = work_dir / "partial-use-list.txt"
+    use_list_path.write_text("\n".join(use_list.lines) + "\n", encoding="utf-8")
+    os.chmod(use_list_path, 0o600)
+    await progress(
+        progress=0.19,
+        stage="restore",
+        message=(
+            f"부분 복원(비상): 손상 테이블 데이터 {len(use_list.skipped_ids)}개 스킵, "
+            "나머지만 복원"
+        ),
+    )
+    return partial_restore_block(partition, use_list), use_list_path
+
+
+async def capture_pg_restore_toc(dump_dir: Path) -> list[str]:
+    """Run ``pg_restore -l`` and return the TOC listing lines (T-243)."""
+    prepared = build_pg_restore_list_command(dump_dir)
+    process = await asyncio.create_subprocess_exec(
+        *prepared.argv,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=prepared.env,
+    )
+    stdout, stderr = await process.communicate()
+    if process.returncode != 0:
+        detail = stderr.decode("utf-8", errors="replace")[:500]
+        msg = f"pg_restore -l failed (corrupt toc.dat?): {detail}"
+        raise InvalidInputError(msg)
+    return stdout.decode("utf-8", errors="replace").splitlines()
 
 
 async def verify_archive_checksum(archive_path: Path, artifact: OpsArtifact | None) -> None:

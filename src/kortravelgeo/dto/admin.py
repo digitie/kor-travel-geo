@@ -120,6 +120,8 @@ class RestoreCreateRequest(FrozenModel):
     run_consistency: bool = False
     run_row_count_check: bool = True
     allow_version_mismatch: bool = False
+    # T-243: emergency last resort — restore intact tables, skipping corrupted data files.
+    allow_partial: bool = False
     callback_url: str | None = None
     confirmation: str | None = Field(default=None, max_length=200)
 
