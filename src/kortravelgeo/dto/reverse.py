@@ -10,6 +10,7 @@ from pydantic_core import PydanticCustomError
 from .address import AddressStructure
 from .common import (
     CRS,
+    KOREA_LON_LAT_BOUNDS_MESSAGE,
     AddressType,
     FrozenModel,
     Point,
@@ -17,6 +18,7 @@ from .common import (
     ServiceMeta,
     Status,
     ZipSource,
+    is_korea_lon_lat,
 )
 from .geocode import SppnMakareaContext
 
@@ -41,9 +43,11 @@ class ReverseInput(FrozenModel):
 
     @model_validator(mode="after")
     def validate_korea_lon_lat(self) -> ReverseInput:
-        if not (123 < self.point.x < 132 and 32 < self.point.y < 39):
-            msg = "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
-            raise PydanticCustomError("kor_travel_geo.coordinate_bounds", msg)
+        if not is_korea_lon_lat(self.point.x, self.point.y):
+            raise PydanticCustomError(
+                "kor_travel_geo.coordinate_bounds",
+                KOREA_LON_LAT_BOUNDS_MESSAGE,
+            )
         return self
 
 

@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-173 negative/악성/경계 입력 안전성 하니스를 추가했다. Geocode text 입력은 ASCII control character를 DTO 단계에서 거절하고, v2 reverse 좌표는 finite 값과 한국 lon/lat bounds를 먼저 검증한다. API 하니스는 v1/v2 geocode/reverse/SPPN 악성·경계 입력이 구조화 4xx 또는 core `NOT_FOUND`로 끝나며 500/crash가 없음을 고정한다.
 - T-172 confidence 산정 중앙 모델을 추가했다. `kortravelgeo.core.confidence`가 centroid cap, 국가지점번호 grid cell, external fallback, reverse distance, search/geometry score confidence를 한곳에서 산정하며, SPPN reverse 후보 confidence는 exact 주소와 구분해 `0.72`로 낮춘다. T-140 SPPN corpus case는 `confidence=0.72`를 golden으로 고정한다.
 - T-171 fuzzy ranking 결정성·품질을 보강했다. `mv_geocode_text_search` helper MV에 `buld_slno`/`buld_se_cd`를 포함하고, 도로명 fuzzy fallback이 본번·부번·지하구분을 모두 맞춘 후보를 `similarity DESC → entrance 우선 → bd_mgt_sn`으로 결정 정렬한다. T-140 fuzzy corpus case는 `왕산길 189-4` 입력이 `왕산로 189-4`를 1순위로 반환하고 `confidence >= 0.42`를 만족해야 한다.
 - T-164 p99 regression guard를 추가했다. `scripts/evaluate_t164_p99_regression.py`가 T-141 `matrix-report.json` baseline/current의 같은 `profile_id`를 비교해 p99 회귀 임계, error 0, T-163 soak guard 통과 여부를 판정하고, 실패 시 `p99-guard.json`/`summary.md`를 남긴 뒤 exit code `2`로 종료한다.

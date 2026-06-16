@@ -6,9 +6,20 @@ from collections.abc import Sequence
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, FiniteFloat, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
-from kortravelgeo.dto.common import CRS, AddressType, FrozenModel, Page, Point, Status
+from kortravelgeo.dto.common import (
+    CRS,
+    KOREA_LON_LAT_BOUNDS_MESSAGE,
+    AddressType,
+    FrozenModel,
+    Page,
+    Point,
+    Status,
+    is_korea_lon_lat,
+    reject_control_characters,
+)
 from kortravelgeo.dto.region import RegionHint
 
 V2Source = Literal["local", "vworld", "juso"]
@@ -103,6 +114,11 @@ class GeocodeV2Input(FrozenModel):
     fallback: V2FallbackMode = "none"
     include_geometry: bool = False
 
+    @field_validator("query", "road_address", "jibun_address", "keyword")
+    @classmethod
+    def reject_text_control_characters(cls, value: str | None) -> str | None:
+        return reject_control_characters(value)
+
     @model_validator(mode="after")
     def require_query_surface(self) -> GeocodeV2Input:
         if not any((self.query, self.road_address, self.jibun_address, self.keyword)):
@@ -126,14 +142,23 @@ class GeocodeV2Response(FrozenModel):
 
 
 class ReverseV2Input(FrozenModel):
-    lon: float
-    lat: float
+    lon: FiniteFloat
+    lat: FiniteFloat
     crs: CRS = "EPSG:4326"
     include_region: bool = True
     include_zipcode: bool = True
     radius_m: int = Field(default=200, ge=1, le=2_000)
     sig_cd: str | None = Field(default=None, pattern=r"^(\d{2}|\d{5})$")
     bjd_cd: str | None = Field(default=None, pattern=r"^(\d{8}|\d{10})$")
+
+    @model_validator(mode="after")
+    def validate_korea_lon_lat(self) -> ReverseV2Input:
+        if not is_korea_lon_lat(self.lon, self.lat):
+            raise PydanticCustomError(
+                "kor_travel_geo.coordinate_bounds",
+                KOREA_LON_LAT_BOUNDS_MESSAGE,
+            )
+        return self
 
     @property
     def region_hint(self) -> RegionHint | None:

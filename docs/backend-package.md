@@ -221,6 +221,7 @@ SQLAlchemy pool checkout timeout은 전용 메시지 `database connection pool c
 - `ResultSource = Literal["local","api_juso","api_vworld","cache"]`
 - `AddressType = Literal["road","parcel"]`
 - `Page(page>=1, size 1..100)`
+- 공개 geocode text 입력은 ASCII control character를 DTO 단계에서 거절한다. `%00`/NUL 같은 값이 SQL parameter 경로까지 내려가 DB 드라이버 오류로 번지는 것을 막기 위한 T-173 안전성 계약이다.
 
 ### `AddressStructure` (vworld 호환)
 
@@ -235,7 +236,7 @@ SQLAlchemy pool checkout timeout은 전용 메시지 `database connection pool c
 
 ### Reverse / Search / Zipcode / Pobox
 
-- `ReverseInput`: `point`, `crs`, `type ∈ {"both","road","parcel"}`, `zipcode: bool`, `radius_m (1..2000)`. `model_validator`로 한국 좌표 범위(`123<x<132, 32<y<39`) 검증.
+- `ReverseInput`: `point`, `crs`, `type ∈ {"both","road","parcel"}`, `zipcode: bool`, `radius_m (1..2000)`. `model_validator`로 한국 좌표 범위(`123<x<132, 32<y<39`) 검증. v2 `ReverseV2Input`도 같은 bounds와 finite 좌표 검증을 DTO 단계에서 수행한다.
 - `SearchInput(Page)`: `query`, `type ∈ {"address","place","district","road"}`, `category`, `crs`, `bbox?`.
 - `ZipcodeInput`: `address | point | bd_mgt_sn` 중 하나 필수(`model_validator(mode="after")`), `include_bulk`.
 - `PoboxInput(Page)`: `query`, `si_nm`, `sgg_nm`, `kind ∈ {"PO","PG","ALL"}`.

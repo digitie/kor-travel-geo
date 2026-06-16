@@ -13,6 +13,9 @@ type ResultSource = Literal["local", "api_juso", "api_vworld", "cache"]
 type AddressType = Literal["road", "parcel"]
 
 _CRS_RE = re.compile(r"^EPSG:\d{4,6}$")
+KOREA_LON_LAT_BOUNDS_MESSAGE = (
+    "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
+)
 
 
 class FrozenModel(BaseModel):
@@ -40,6 +43,21 @@ def normalize_crs(value: object) -> str:
         msg = "CRS must look like EPSG:4326"
         raise ValueError(msg)
     return text
+
+
+def reject_control_characters(value: str | None) -> str | None:
+    """Reject ASCII control characters in public text input."""
+
+    if value is None:
+        return None
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        msg = "text fields must not contain control characters"
+        raise ValueError(msg)
+    return value
+
+
+def is_korea_lon_lat(lon: float, lat: float) -> bool:
+    return 123 < lon < 132 and 32 < lat < 39
 
 
 type CRS = Annotated[
