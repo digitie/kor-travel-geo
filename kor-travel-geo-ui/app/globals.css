@@ -1561,6 +1561,54 @@ textarea {
   font-size: 13px;
 }
 
+/* T-226 검증 case drilldown */
+.case-sample-schema,
+.case-source-snapshot {
+  margin-top: 8px;
+}
+
+.case-sample-schema summary,
+.case-source-snapshot summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.case-metric {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.case-metric-grid dd {
+  font-variant-numeric: tabular-nums;
+}
+
+/* T-226 rebuild-db preflight */
+.preflight {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.preflight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preflight-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
