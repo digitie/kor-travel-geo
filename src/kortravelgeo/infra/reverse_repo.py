@@ -18,6 +18,39 @@ _NEAREST_SQL = text(
     """
 WITH target_pt AS (
   SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), :in_srid), 5179) AS geom
+),
+knn_candidates AS MATERIALIZED (
+  SELECT t.bd_mgt_sn, t.rncode_full, t.rn AS road_nm, t.buld_mnnm, t.buld_slno,
+         t.buld_se_cd, t.buld_nm, t.bjd_cd, t.adm_cd, t.adm_kor_nm, t.mntn_yn,
+         t.lnbr_mnnm, t.lnbr_slno, t.zip_no, t.si_nm, t.sgg_nm, t.emd_nm, t.li_nm,
+         t.pnu, t.pt_source,
+         ST_X(t.pt_4326) AS lon, ST_Y(t.pt_4326) AS lat,
+         ST_Distance(t.pt_5179, p.geom) AS distance_m
+    FROM mv_geocode_target t, target_pt p
+   WHERE t.pt_5179 IS NOT NULL
+     AND (CAST(:sig_cd_filter AS text) IS NULL OR t.bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
+     AND (CAST(:sig_cd_prefix AS text) IS NULL OR t.bjd_cd LIKE CAST(:sig_cd_prefix AS text))
+     AND (CAST(:bjd_cd_filter AS text) IS NULL OR t.bjd_cd = CAST(:bjd_cd_filter AS text))
+     AND (CAST(:bjd_cd_prefix AS text) IS NULL OR t.bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
+   ORDER BY t.pt_5179 <-> p.geom
+   LIMIT GREATEST(CAST(:limit AS integer) * 8, 64)
+)
+SELECT *
+  FROM knn_candidates
+ WHERE distance_m <= :radius_m
+ ORDER BY distance_m ASC,
+          CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END,
+          bd_mgt_sn ASC,
+          rncode_full ASC,
+          bjd_cd ASC
+ LIMIT :limit
+"""
+)
+
+_RADIUS_SQL = text(
+    """
+WITH target_pt AS (
+  SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), :in_srid), 5179) AS geom
 )
 SELECT t.bd_mgt_sn, t.rncode_full, t.rn AS road_nm, t.buld_mnnm, t.buld_slno,
        t.buld_se_cd, t.buld_nm, t.bjd_cd, t.adm_cd, t.adm_kor_nm, t.mntn_yn,

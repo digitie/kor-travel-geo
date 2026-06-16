@@ -227,6 +227,14 @@ def test_query_benchmark_tracks_sppn_geocode_and_reverse_paths() -> None:
     assert QUERY_SPECS["sppn_reverse"].group == "Q11_SPPN"
 
 
+def test_reverse_nearest_and_radius_benchmark_paths_are_split() -> None:
+    assert QUERY_SPECS["reverse_nearest"].statement is not QUERY_SPECS["reverse_radius"].statement
+    assert "knn_candidates AS MATERIALIZED" in str(QUERY_SPECS["reverse_nearest"].statement)
+    assert "ST_DWithin(t.pt_5179, p.geom, :radius_m)" in str(
+        QUERY_SPECS["reverse_radius"].statement
+    )
+
+
 def test_pg_stat_delta_uses_queryid_and_sorts_by_total_exec_time() -> None:
     before = {
         "available": True,

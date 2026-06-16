@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-142 reverse-geocoder 공간 조회 최적화)
+
+**작업**: reverse nearest runtime SQL과 radius-heavy benchmark SQL을 분리했다. `ReverseRepository.nearest()`는 `knn_candidates AS MATERIALIZED` CTE로 `mv_geocode_target.pt_5179` GiST KNN 후보를 먼저 뽑고, outer query에서 `distance_m <= :radius_m`을 적용한다. Q6 benchmark는 새 `_RADIUS_SQL`로 기존 `ST_DWithin` prefilter path를 유지한다. 우편번호 point lookup은 polygon 경계 좌표를 포함하도록 `ST_Contains`에서 `ST_Covers`로 바꿨다.
+
+**결정**: 이번 PR에서는 새 DB object, migration, OpenAPI/typegen 변경을 만들지 않는다. KNN runtime path는 실제 API의 "가장 가까운 후보" 요구에 맞추고, radius benchmark는 T-141/T-164에서 별도 plan surface로 계속 측정한다. KNN 후보는 tie-break와 반경 경계 포함을 유지하기 위해 `GREATEST(limit * 8, 64)`까지 over-fetch한다.
+
+**검증/문서**: Windows focused unit 83개, Ruff, 변경 파일 mypy가 통과했다. WSL ext4 미러에서는 전체 `pytest -q` 932 passed/54 skipped, Ruff, mypy, `lint-imports`, OpenAPI check가 통과했다. WSL reverse/zipcode/SPPN smoke artifact는 `artifacts/perf/t142-reverse-spatial-smoke/`이며 7건 error 0, `reverse_nearest` p95 18.649ms, `reverse_radius` p95 4.034ms다. EXPLAIN은 nearest 계열이 `knn_candidates` CTE와 `idx_mv_geom5179`, zipcode가 `idx_kodis_bas_geom`, SPPN이 `idx_sppn_makarea_geom`을 탔다. 상세는 `docs/t142-reverse-spatial-optimization.md`에 기록했고, 다음 Agent A 작업은 T-155다.
+
 ## 2026-06-16 (T-143 geocode/search query plan 안정화)
 
 **작업**: `/v2/search` address/road exact preflight SQL을 OR 기반 단일 scan에서 `rn_nrm`/`buld_nm_nrm`/`sigungu_buld_nm_nrm` branch의 `UNION ALL`로 분리했다. 각 branch는 같은 region hint filter를 유지하고, 중복 후보는 `DISTINCT ON (bd_mgt_sn)`과 match priority로 결정 정렬한다. Broad fallback은 SQL 내부 공백 제거 대신 `_normalize_search_query()`가 만든 `query_nrm` bind를 받게 했다.

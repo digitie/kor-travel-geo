@@ -552,23 +552,31 @@ swap 트리거는 `ktgctl refresh mv --swap` CLI(T-018)와 `loaders/postload.py:
 **반경/nearest 쿼리는 5179 기준**으로 한다. PostGIS의 geometry 거리는 SRID 단위를 그대로 쓰므로, EPSG:4326에서 `:radius_m`을 넣으면 단위가 **도(degree)**가 되어 의도와 다르다. 5179는 GRS80 UTM-K로 단위가 meter라 `:radius_m`이 그대로 의미를 가진다.
 
 ```sql
--- 입력 좌표 (lon, lat, in_srid)를 5179로 한 번만 변환하고 GiST 인덱스 스캔
+-- 입력 좌표 (lon, lat, in_srid)를 5179로 한 번만 변환하고 GiST KNN 후보 스캔
 WITH target_pt AS (
   SELECT ST_Transform(
     ST_SetSRID(ST_MakePoint(:x, :y), :in_srid),
     5179
   ) AS geom
+),
+knn_candidates AS MATERIALIZED (
+  SELECT t.bd_mgt_sn, t.road_nm, t.buld_nm, t.pt_source,
+         ST_X(t.pt_4326) AS lon, ST_Y(t.pt_4326) AS lat,   -- 응답은 4326
+         ST_Distance(t.pt_5179, p.geom) AS dist_m
+    FROM mv_geocode_target t, target_pt p
+   WHERE t.pt_5179 IS NOT NULL
+   ORDER BY t.pt_5179 <-> p.geom
+   LIMIT GREATEST(:limit * 8, 64)
 )
-SELECT t.bd_mgt_sn, t.road_nm, t.buld_nm, t.pt_source,
-       ST_X(t.pt_4326) AS lon, ST_Y(t.pt_4326) AS lat,   -- 응답은 4326
-       ST_Distance(t.pt_5179, p.geom) AS dist_m
-FROM mv_geocode_target t, target_pt p
-WHERE ST_DWithin(t.pt_5179, p.geom, :radius_m)
-ORDER BY t.pt_5179 <-> p.geom
+SELECT *
+FROM knn_candidates
+WHERE dist_m <= :radius_m
+ORDER BY dist_m ASC, bd_mgt_sn
 LIMIT :limit;
 ```
 
 - `pt_4326`은 응답에서 `(lon, lat)` 추출 전용. **거리 술어에 쓰면 안 된다**.
+- T-142 이후 런타임 reverse nearest는 KNN 후보 CTE를 쓰고, Q6 reverse radius benchmark는 별도 `_RADIUS_SQL`로 `ST_DWithin(t.pt_5179, p.geom, :radius_m)` prefilter 경로를 측정한다.
 - `pt_source = 'centroid'` 결과는 `entrance` 결과보다 정밀도가 낮으므로 T-172 confidence 모델이 `confidence`를 `0.82` 이하로 cap한다(ADR-012 후속).
 - 입력 SRID(`:in_srid`)는 사용자 입력 `crs`에서 4326/5179만 허용(`docs/backend-package.md` §4 — `CRS` Annotated 정규화). 추가 SRID가 들어오면 repo 레벨에서 `InvalidCoordinateError`로 거부(SKILL.md §4-5와 별개의 SRID 화이트리스트).
 
