@@ -100,8 +100,8 @@
 
 백엔드 백업/복원 스위트(`T-239`~`T-244`/`T-264`)와 백업/복원 Admin UI(`T-248`~`T-254`) + 백업 e2e(`T-255`)를 완료한 이후, 남은 Agent B 작업은 번호순보다 **의존성과 도메인 우선순위(개인 서버 = 백업/복원 최우선)**를 따른다. 각 항목은 독립 PR로 머지하고, 리뷰 반영(fixup) PR은 추가 리뷰하지 않는다. e2e는 CI 게이트가 아니며 `next dev` HMR이 hydration을 깨므로 **production build(`next build` + `next start --port 12505`)에서 실행**한다(`T-255` 기록, `tests/e2e/backups.spec.ts`가 mock-fixture 템플릿).
 
-1. **백업/복원 e2e 마무리**(T-255 `backups.spec.ts` mock-fixture 하네스 재사용): ~~`T-256`(복원 위저드 e2e)~~ ✅ → ~~`T-257`(hot-swap e2e)~~ ✅ → `T-258`(백업/복원 위저드/hot-swap dialog 접근성·회복성 e2e; T-256·T-257 머지 후) **(다음)**.
-2. **source-files e2e 기반·단계별**: `T-225`(검증·매칭·DB 입력 fixture harness — T-259~263에 공급) → `T-259`(업로드 적재) → `T-260`(대기·재개·409 충돌) → `T-261`(구조 검증) → `T-262`(매칭 세트) → `T-263`(DB 입력).
+1. **백업/복원 e2e 마무리**(T-255 `backups.spec.ts` mock-fixture 하네스 재사용): ~~`T-256`(복원 위저드 e2e)~~ ✅ → ~~`T-257`(hot-swap e2e)~~ ✅ → ~~`T-258`(접근성·회복성 e2e)~~ ✅ — **섹션 1 완료**.
+2. **source-files e2e 기반·단계별**: `T-225`(검증·매칭·DB 입력 fixture harness — T-259~263에 공급) **(다음)** → `T-259`(업로드 적재) → `T-260`(대기·재개·409 충돌) → `T-261`(구조 검증) → `T-262`(매칭 세트) → `T-263`(DB 입력).
 3. **Admin UI 기능·편의·접근성**: `T-222`(성능·C1~C17 검증 artifact read-only 노출) → `T-226`(운영 편의 기능 보강; T-254 가상화 공통 컴포넌트 공유) → `T-227`(기존 표면 `/admin/source-files`·`/admin/consistency`·`/admin/ops` 접근성·회복성 e2e).
 4. **통합 gate**: `T-153`(Agent A 성능·정확도 트랙과 함께 최종 안정화 acceptance) — 양 트랙 완료 후.
 
@@ -124,7 +124,6 @@
 
 #### 백업/복원 Admin UI + e2e (T-248~ · Agent B)
 
-- T-258 백업/복원 접근성·회복성 Playwright e2e — 신규 backups 위저드/hot-swap dialog의 키보드·focus trap·네트워크 오류·SSE 끊김·refresh 후 상태 복원을 검증(T-227 기존 표면과 중복 회피). (Agent B, 의존: T-255, T-256, T-257)
 
 #### source-files 단계별 e2e (T-259~ · Agent B) — T-223 상위 spec의 단계 세분, fixture는 T-225
 
@@ -152,6 +151,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-258 백업/복원 접근성·회복성 Playwright e2e(Agent B/Claude). `tests/e2e/backups-a11y.spec.ts`(Chromium+Firefox)에서 신규 backups 표면(manifest 모달·탭·작업 카드)의 키보드·회복성을 백엔드 없이 mock fixture로 검증했다(T-255 하네스 재사용, 기존 source-files/consistency/ops a11y는 T-227이라 중복 회피). 함께 `ManifestViewer`(T-252)에 **모달 a11y를 강화**: 열면 닫기 버튼으로 focus 이동, **Escape로 닫기**, **Tab focus trap**, `aria-modal`, 닫을 때 trigger로 focus 복귀(best-effort — VirtualTable이 row를 re-window해 trigger 노드가 detach되면 `isConnected` 가드로 skip). 6 시나리오: ① 모달 open→닫기 버튼 focus→Esc 닫힘→닫은 뒤 콘솔 정상 조작, ② Tab/Shift+Tab이 모달 안에 갇힘+Enter로 닫기, ③ 탭 키보드(Enter) 전환, ④ 백업 목록 API 500이어도 콘솔 미crash+개요 Last Response에 오류 노출+이후 상호작용 가능, ⑤ SSE(/events) 500 끊김에도 작업 카드가 폴링 스냅샷으로 렌더, ⑥ refresh 후 서버 artifacts 재적재. **6 테스트 × 2 브라우저 = 12 passed**(Windows Playwright, production build). 프론트 type-check/lint/test(95)/build 통과. 섹션 1(백업/복원 e2e) 완료. (2026-06-16)
 - [x] T-154 async DB pool 포화·checkout timeout 튜닝 + 풀 포화 fail-fast(Agent A/Codex). `Settings.pg_pool_timeout_ms`(기본 1000ms)를 추가하고 `make_async_engine()`이 `pool_size`/`max_overflow`/`pool_timeout`/`pool_pre_ping`/`pool_recycle`을 모두 명시하게 했다. SQLAlchemy pool checkout `TimeoutError`는 API exception handler에서 HTTP 503 + `E0500`으로 구조화하고, VWorld 호환 경로는 기존 `SYSTEM_ERROR` shape를 유지한다. `/metrics`에는 `kor_travel_geo_pg_pool_checkout_timeouts_total{method,route}` counter를 추가했고, `/v1/readyz` pool detail에는 `timeout_ms`를 노출한다. `E0409`는 advisory lock 동시 실행 충돌 전용으로 유지한다. 상세: `docs/t154-pool-failfast.md`. (2026-06-16)
 - [x] T-174 좌표계(EPSG:5179↔4326) 왕복 정밀도 검증·변환 경로 통일(Agent A/Codex). `infra.coordinates`에 PostGIS 기반 projection helper를 추가해 `project_point_to_5179`, `project_point_5179_to_4326`, `srid_from_crs`를 단일 진입점으로 두고, `GeocodeRepository.project_sppn_point_4326()`와 `ReverseRepository.project_reverse_point_5179()`가 자체 projection SQL 대신 shared helper만 호출하게 했다. `ROUNDTRIP_MAX_ERROR_M=0.001` 기준 opt-in PostGIS integration test가 서울·부산·제주·국가지점번호 회귀 샘플의 EPSG:5179→4326→5179 왕복 오차를 검증한다. 상세: `docs/t174-coordinate-transform.md`. (2026-06-16)
 - [x] T-257 Hot-swap Playwright e2e(Agent B/Claude). `tests/e2e/hotswap.spec.ts`(Chromium+Firefox)에서 Hot-swap 탭(T-250)의 상태기계를 백엔드 없이 `page.route` mock fixture로 고정했다(T-255 하네스 재사용, plan 응답은 시나리오별 클로저 주입; 엔드포인트가 `/restores/*`·`/ops/*`라 route는 `**/api/proxy/v1/**` 광역 매칭). 4 시나리오: ① **plan 생성**(`can_execute=true` plan 카드 current/restore/previous alias·'가능' 배지·steps), ② **blocker**(`can_execute=false`면 '불가' 배지+blocker 목록+maintenance window·hot-swap 실행 버튼 차단), ③ **실행 순서 게이팅**(window 미오픈이면 정확한 typed confirmation에도 실행 차단 → maintenance window 열기(active) → 틀린 confirmation 차단·정확(`SWAP <db>`) 시 `POST /restores/hot-swap` 실행→'swap 완료'+smoke), ④ **source 재검증 + rollback**(`POST /restores/hot-swap-source-verify` '검증됨'+mismatch, rollback confirmation `ROLLBACK <db>` 게이팅→`POST /restores/hot-swap-rollback`). strict-mode locator는 4개 Panel을 heading regex로 scoped, leaf 텍스트 `exact:true`/`hasText` p·li로 ancestor 중복 회피. **4 테스트 × 2 브라우저 = 8 passed**(Windows Playwright, production build `next build`+`next start --port 12505`). 프론트 type-check/lint/test(95)/build 통과. (2026-06-16)
