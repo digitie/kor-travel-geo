@@ -56,8 +56,8 @@
 
 `T-140`/`T-141`/`T-166`~`T-170` 완료 이후에는 번호순보다 의존성과 위험도 기준을 우선한다. 각 항목은 독립 PR로 머지하고, 리뷰 반영(fixup) PR은 추가 리뷰하지 않는다.
 
-1. **기반 관측·헬스**: `T-174`. `T-157`/`T-160`은 완료됐으므로 좌표 변환 단일 경로를 다음 관측·정합 기준으로 닫는다.
-2. **풀 포화·fail-fast 안정성**: `T-154` → `T-145` → `T-161` → `T-159`. pool checkout timeout과 overload envelope를 먼저 고정한 뒤 endpoint cap, client cancel, DB 장애 주입을 검증한다.
+1. **기반 관측·헬스**: 완료. `T-157`/`T-160`/`T-174`로 pg_stat 관측, DB readiness, 좌표 변환 단일 경로를 닫았다.
+2. **풀 포화·fail-fast 안정성**: `T-154` → `T-145` → `T-161` → `T-159` **(다음)**. pool checkout timeout과 overload envelope를 먼저 고정한 뒤 endpoint cap, client cancel, DB 장애 주입을 검증한다.
 3. **고부하 회귀 gate**: `T-163` → `T-164`. T-141 matrix를 합격 budget과 nightly/CI 후보로 승격한다.
 4. **정확도·결정성**: `T-171` → `T-172` → `T-173` → `T-175` → `T-176` → `T-165`. 이미 만든 T-140 corpus를 ranking/confidence/negative/hint/reverse boundary case로 확장한 뒤, 마지막에 parser 변형 case를 넓힌다.
 5. **쿼리·공간 최적화**: `T-143` → `T-142` → `T-155` → `T-156`. geocode/search plan을 먼저 안정화하고 reverse 공간 조회를 분리 측정한 뒤 prepared statement와 hot-key cache를 검증한다.
@@ -85,7 +85,6 @@
 - T-171 fuzzy ranking 결정성·품질 보강 — tie-break·threshold 일관성·동률 정렬 결정성을 보강한다(case는 T-140 corpus 등록). 합격: 동일 입력 결과 결정적·corpus ranking 품질 목표. (Agent A, 의존: T-140)
 - T-172 confidence 산정 결정성·교정 중앙 모델 — centroid 캡·sppn 하드코딩 등을 중앙 confidence 모델로 일관화한다. 합격: confidence가 거리/매치종류와 단조·golden 고정. (Agent A, 의존: T-140)
 - T-173 negative/악성/경계 입력 안전성 하니스 — geocode/reverse/sppn에 악성·경계 입력 안전성(예외→구조화 4xx)을 하니스로 고정한다. 합격: 악성 입력 set 전부 구조화 응답·500/크래시 0. (Agent A, 의존: T-140)
-- T-174 좌표계(EPSG:5179↔4326) 왕복 정밀도 검증·변환 경로 통일 — 왕복 정밀도를 검증하고 변환 helper 경로를 단일화한다. 합격: 왕복 오차 임계 이내·변환 helper 단일. (Agent A, 의존: —)
 - T-175 region hint 정확도·교차검증 — `sig_cd`/`bjd_cd` 필터 정합성을 교차검증한다. 합격: hint 적용/미적용 결과 정합·오적용 0. (Agent A, 의존: T-140)
 - T-176 reverse 경계·근접 정확도 정합 — both fan-out·동률 거리·radius 경계 규약을 고정한다. 합격: 경계 case 결정적·radius 포함/제외 명시·먼 좌표 NOT_FOUND/OK 의미 일관. (Agent A, 의존: T-140)
 
@@ -154,6 +153,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-174 좌표계(EPSG:5179↔4326) 왕복 정밀도 검증·변환 경로 통일(Agent A/Codex). `infra.coordinates`에 PostGIS 기반 projection helper를 추가해 `project_point_to_5179`, `project_point_5179_to_4326`, `srid_from_crs`를 단일 진입점으로 두고, `GeocodeRepository.project_sppn_point_4326()`와 `ReverseRepository.project_reverse_point_5179()`가 자체 projection SQL 대신 shared helper만 호출하게 했다. `ROUNDTRIP_MAX_ERROR_M=0.001` 기준 opt-in PostGIS integration test가 서울·부산·제주·국가지점번호 회귀 샘플의 EPSG:5179→4326→5179 왕복 오차를 검증한다. 상세: `docs/t174-coordinate-transform.md`. (2026-06-16)
 - [x] T-257 Hot-swap Playwright e2e(Agent B/Claude). `tests/e2e/hotswap.spec.ts`(Chromium+Firefox)에서 Hot-swap 탭(T-250)의 상태기계를 백엔드 없이 `page.route` mock fixture로 고정했다(T-255 하네스 재사용, plan 응답은 시나리오별 클로저 주입; 엔드포인트가 `/restores/*`·`/ops/*`라 route는 `**/api/proxy/v1/**` 광역 매칭). 4 시나리오: ① **plan 생성**(`can_execute=true` plan 카드 current/restore/previous alias·'가능' 배지·steps), ② **blocker**(`can_execute=false`면 '불가' 배지+blocker 목록+maintenance window·hot-swap 실행 버튼 차단), ③ **실행 순서 게이팅**(window 미오픈이면 정확한 typed confirmation에도 실행 차단 → maintenance window 열기(active) → 틀린 confirmation 차단·정확(`SWAP <db>`) 시 `POST /restores/hot-swap` 실행→'swap 완료'+smoke), ④ **source 재검증 + rollback**(`POST /restores/hot-swap-source-verify` '검증됨'+mismatch, rollback confirmation `ROLLBACK <db>` 게이팅→`POST /restores/hot-swap-rollback`). strict-mode locator는 4개 Panel을 heading regex로 scoped, leaf 텍스트 `exact:true`/`hasText` p·li로 ancestor 중복 회피. **4 테스트 × 2 브라우저 = 8 passed**(Windows Playwright, production build `next build`+`next start --port 12505`). 프론트 type-check/lint/test(95)/build 통과. (2026-06-16)
 - [x] T-160 DB 의존 readiness/health 엔드포인트·degradation 신호(Agent A/Codex). `/v1/healthz`는 DB를 건드리지 않는 liveness로 유지하고, 새 `/v1/readyz`가 DB probe와 SQLAlchemy pool 상태를 `ready`/`degraded`/component 구조로 반환한다. DB 단절·timeout·API client 미시작은 HTTP 503과 `ready=false`, `degraded=true`로 표시하고, pool 포화는 새 DB checkout 없이 fail-fast로 `database.status="skipped"`를 반환한다. pool utilization 0.8 이상은 HTTP 200이지만 `degraded=true`로 운영 경고를 노출한다. `api_readiness_timeout_ms` 기본값은 1000ms다. 상세: `docs/t160-db-readiness.md`. (2026-06-16)
 - [x] T-256 복원 위저드 Playwright e2e(Agent B/Claude). `tests/e2e/restore.spec.ts`(Chromium+Firefox)에서 복원 위저드(T-249)의 4단계 흐름을 백엔드 없이 `page.route` mock fixture로 고정했다(T-255 `backups.spec.ts` 하네스 재사용, dryRun 응답은 시나리오별 클로저 주입). 4 시나리오: ① **new_database happy path**(artifact 선택→manifest 미리보기 profile/PG/PostGIS/row_counts→dry-run '복원 가능'+버전 비교→`POST /admin/restores` 제출→'복원 job 제출됨'), ② **replace_current typed confirmation 게이팅**(정확한 `RESTORE <db>` 입력 전 제출 차단, 오타도 차단, 정확 입력 시 제출+body `mode`/`confirmation` 검증), ③ **dry-run 복원 불가(blocker)**(`can_restore=false`면 verdict '복원 불가'+blocker 목록+확인 단계 alert+제출 차단), ④ **archive_path 직접 경로**(artifact 미선택 시 manifest 안내 문구+dry-run+제출 body `archive_path` 검증). strict-mode locator는 leaf 텍스트 `exact:true`/태그 scoped `hasText`로 ancestor 중복 회피, 위저드 Panel scoped. **4 테스트 × 2 브라우저 = 8 passed**(Windows Playwright, production build `next build`+`next start --port 12505`). 프론트 type-check/lint/test(95)/build 통과. (2026-06-16)
