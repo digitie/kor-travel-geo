@@ -3,6 +3,7 @@
 import { Archive, Download, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { HotSwapTab } from "@/components/admin/backups/HotSwapTab";
+import { JobProgress } from "@/components/admin/backups/JobProgress";
 import { RestoreWizard } from "@/components/admin/backups/RestoreWizard";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
@@ -471,8 +472,16 @@ function BackupJobsPanel({
   jobRows: LoadJobStatus[];
   onCancelJob: (jobId: string) => Promise<void>;
 }) {
+  const activeJobs = jobRows.filter((job) => !terminalJobState(job.state));
   return (
     <Panel title="Backup / Restore Jobs">
+      {activeJobs.length > 0 ? (
+        <div className="job-progress-list">
+          {activeJobs.map((job) => (
+            <JobProgress job={job} key={job.job_id} />
+          ))}
+        </div>
+      ) : null}
       <table className="table">
         <thead>
           <tr>
