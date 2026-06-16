@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from kortravelgeo.dto.address import AddressStructure
-from kortravelgeo.dto.common import AddressType, Point, ResultSource
+from kortravelgeo.dto.common import AddressType, Point, ResultSource, Status
 from kortravelgeo.dto.geocode import GeocodeResponse, SppnMakareaContext
 from kortravelgeo.dto.reverse import ReverseResponse, ReverseResultItem
 from kortravelgeo.dto.search import SearchResponse, SearchResultItem
@@ -69,7 +70,7 @@ def reverse_v2_from_v1(inp: ReverseV2Input, response: ReverseResponse) -> Revers
     return ReverseV2Response(
         status=response.status,
         input=inp,
-        candidates=tuple(candidates),
+        candidates=dedupe_candidates(candidates),
         region_hint_applied=inp.region_hint,
     )
 
@@ -78,17 +79,18 @@ def search_v2_from_v1(inp: SearchV2Input, response: SearchResponse) -> SearchV2R
     return SearchV2Response(
         status=response.status,
         input=inp,
-        candidates=tuple(_candidate_from_search_item(item) for item in response.result),
+        candidates=dedupe_candidates(_candidate_from_search_item(item) for item in response.result),
         total=response.total,
         region_hint_applied=inp.region_hint,
     )
 
 
 def geocode_v2_from_search(inp: GeocodeV2Input, response: SearchV2Response) -> GeocodeV2Response:
+    candidates = dedupe_candidates(response.candidates, limit=inp.limit)
     return GeocodeV2Response(
-        status=response.status,
+        status="OK" if candidates else response.status,
         input=inp,
-        candidates=response.candidates[: inp.limit],
+        candidates=candidates,
         region_hint_applied=inp.region_hint,
     )
 
@@ -97,13 +99,52 @@ def geocode_v2_from_geometry_lookups(
     inp: GeocodeV2Input,
     rows: list[GeometryLookup],
 ) -> GeocodeV2Response:
-    candidates = tuple(_candidate_from_geometry_lookup(inp, row) for row in rows[: inp.limit])
+    candidates = dedupe_candidates(
+        (_candidate_from_geometry_lookup(inp, row) for row in rows),
+        limit=inp.limit,
+    )
     return GeocodeV2Response(
         status="OK" if candidates else "NOT_FOUND",
         input=inp,
         candidates=candidates,
         region_hint_applied=inp.region_hint,
     )
+
+
+def merge_geocode_v2_responses(
+    inp: GeocodeV2Input,
+    *responses: GeocodeV2Response,
+) -> GeocodeV2Response:
+    """Merge producer paths while preserving first-candidate priority."""
+    candidates = dedupe_candidates(
+        (candidate for response in responses for candidate in response.candidates),
+        limit=inp.limit,
+    )
+    status: Status = "OK" if candidates else _merged_geocode_status(responses)
+    return GeocodeV2Response(
+        status=status,
+        input=inp,
+        candidates=candidates,
+        region_hint_applied=inp.region_hint,
+    )
+
+
+def dedupe_candidates(
+    candidates: Iterable[CandidateV2],
+    *,
+    limit: int | None = None,
+) -> tuple[CandidateV2, ...]:
+    seen: set[tuple[object, ...]] = set()
+    deduped: list[CandidateV2] = []
+    for candidate in candidates:
+        key = _candidate_dedupe_key(candidate)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(candidate)
+        if limit is not None and len(deduped) >= limit:
+            break
+    return tuple(deduped)
 
 
 def with_candidate_geometry(
@@ -132,6 +173,60 @@ def _geocode_match_kind(inp: GeocodeV2Input, response: GeocodeResponse) -> V2Mat
     if inp.keyword:
         return "keyword"
     return response.input.type
+
+
+def _merged_geocode_status(responses: tuple[GeocodeV2Response, ...]) -> Status:
+    for response in responses:
+        if response.status == "ERROR":
+            return "ERROR"
+    return "NOT_FOUND"
+
+
+def _candidate_dedupe_key(candidate: CandidateV2) -> tuple[object, ...]:
+    national_point_number = _as_str(candidate.metadata.get("national_point_number"))
+    if national_point_number:
+        return ("sppn", national_point_number)
+
+    bd_mgt_sn = _as_str(candidate.metadata.get("bd_mgt_sn"))
+    if bd_mgt_sn:
+        return ("building", bd_mgt_sn)
+
+    rncode_full = _as_str(
+        candidate.metadata.get("rncode_full")
+        or (candidate.address.road_name_code if candidate.address else None)
+    )
+    if rncode_full and candidate.match_kind == "road":
+        return ("road", rncode_full, _address_full(candidate), _point_key(candidate.point))
+
+    region_code = (
+        candidate.region.bjd_cd or candidate.region.sig_cd if candidate.region is not None else None
+    )
+    if region_code and candidate.match_kind == "region":
+        return ("region", region_code)
+
+    if candidate.place is not None:
+        return (
+            "place",
+            candidate.place.name,
+            candidate.place.category_code,
+            _point_key(candidate.point),
+        )
+
+    if candidate.address is not None:
+        return (
+            "address",
+            candidate.match_kind,
+            candidate.address.full,
+            _point_key(candidate.point),
+        )
+
+    return (
+        "candidate",
+        candidate.match_kind,
+        candidate.source,
+        _point_key(candidate.point),
+        tuple(sorted((key, repr(value)) for key, value in candidate.metadata.items())),
+    )
 
 
 def _candidate_from_reverse_item(inp: ReverseV2Input, item: ReverseResultItem) -> CandidateV2:
@@ -369,3 +464,13 @@ def _as_str(value: object | None) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _address_full(candidate: CandidateV2) -> str | None:
+    return candidate.address.full if candidate.address is not None else None
+
+
+def _point_key(point: Point | None) -> tuple[float, float] | None:
+    if point is None:
+        return None
+    return (round(point.x, 7), round(point.y, 7))

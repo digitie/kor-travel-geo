@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-170 v2 geocode producer가 1:N 후보를 방출할 수 있게 했다. Public wire schema는 기존 `candidates` tuple을 유지하며, local v1 primary 후보와 보조 road geometry 후보를 병합하고 dedup 후 `limit`을 적용한다.
 - T-169 v2 후보 enum을 정직화했다. `V2MatchKind`는 `road`/`parcel`/`keyword`/`region`/`sppn`/`detail`/`poi`, `V2PointPrecision`은 기존 값에 `grid_cell`을 추가하고, `V2Source`는 `local`/`vworld`/`juso`로 좁힌다. 장소 검색 결과는 `poi`, 국가지점번호 후보는 `point_precision="grid_cell"`로 노출한다.
 - T-166~T-168 국가지점번호 계산 좌표를 first-class로 노출했다. Forward geocode는 `TL_SPPN_MAKAREA` 포함 여부와 무관하게 유효한 국가지점번호 문자열의 10m cell 중심을 계산해 좌표를 반환하고, reverse geocode는 입력 좌표에서 계산한 `national_point_number`를 `x_extension`과 v2 `match_kind="sppn"` 후보 metadata에 담는다. 한국 SPPN 지원 envelope 밖 grid code는 거절한다.
 - T-140~T-153 안정화·고성능·Admin UI 보강 Task를 추가했다. geocoder/reverse-geocoder golden corpus, 고부하 benchmark matrix, reverse 공간조회 최적화, query plan 안정화, 성능 우선 API 계약 재설계, backpressure/fail-fast, post-load read-optimized maintenance, Admin UI artifact 노출, source-files Playwright e2e matrix, 적재 UX, fixture harness, 운영 편의·접근성·회복성 e2e, 최종 acceptance gate를 Agent A/B 병렬 작업으로 정리했다.

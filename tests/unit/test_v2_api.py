@@ -8,7 +8,12 @@ import pytest
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.client import AsyncAddressClient
-from kortravelgeo.core.v2 import geocode_v2_from_v1, reverse_v2_from_v1, search_v2_from_v1
+from kortravelgeo.core.v2 import (
+    geocode_v2_from_geometry_lookups,
+    geocode_v2_from_v1,
+    reverse_v2_from_v1,
+    search_v2_from_v1,
+)
 from kortravelgeo.dto.address import AddressStructure, RefinedAddress
 from kortravelgeo.dto.common import Point, ServiceMeta
 from kortravelgeo.dto.geocode import (
@@ -233,6 +238,68 @@ async def test_async_client_geocode_promotes_road_name_only_to_line_geometry(
 
 
 @pytest.mark.asyncio
+async def test_async_client_geocode_merges_local_primary_and_supplemental_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kortravelgeo.core.protocols import GeometryLookup
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        assert address == "테헤란로"
+        return _v1_geocode_response(GeocodeInput(address=address))
+
+    async def fake_road_geometries(
+        self: GeometryRepository,
+        query: str,
+        **kwargs: Any,
+    ) -> list[GeometryLookup]:
+        assert query == "테헤란로"
+        assert kwargs["limit"] == 3
+        return [
+            GeometryLookup(
+                kind="building",
+                title="서울특별시 강남구 테헤란로 152",
+                rncode_full="116803122001",
+                bd_mgt_sn="1168010100108250000028924",
+                point=Point(x=127.036, y=37.501),
+                geometry=GeometryV2(
+                    kind="building",
+                    source_table="tl_spbd_buld_polygon",
+                    geojson={"type": "MultiPolygon", "coordinates": []},
+                ),
+            ),
+            GeometryLookup(
+                kind="road",
+                title="서울특별시 강남구 테헤란로",
+                road_name="테헤란로",
+                rncode_full="116803122000",
+                sig_cd="11680",
+                point=Point(x=127.04, y=37.5),
+                score=0.91,
+                geometry=GeometryV2(
+                    kind="road",
+                    source_table="tl_sprd_manage",
+                    geojson={"type": "MultiLineString", "coordinates": []},
+                ),
+            ),
+        ]
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", fake_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(query="테헤란로", limit=3)
+
+    assert response.status == "OK"
+    assert [candidate.match_kind for candidate in response.candidates] == ["road", "road"]
+    assert response.candidates[0].address is not None
+    assert response.candidates[0].address.full == "서울특별시 강남구 테헤란로 152"
+    assert response.candidates[1].address is not None
+    assert response.candidates[1].address.road_name == "테헤란로"
+    assert response.candidates[1].metadata["rncode_full"] == "116803122000"
+
+
+@pytest.mark.asyncio
 async def test_v2_geocode_route_uses_client_dependency() -> None:
     class FakeClient:
         async def geocode(self, **kwargs: Any) -> GeocodeV2Response:
@@ -409,6 +476,61 @@ def test_v2_input_preserves_bbox() -> None:
     assert geocode.bbox.min_lon == pytest.approx(127.0)
     assert search.bbox is not None
     assert search.bbox.max_lat == pytest.approx(37.6)
+
+
+def test_geocode_v2_geometry_candidates_dedupe_before_limit() -> None:
+    from kortravelgeo.core.protocols import GeometryLookup
+
+    inp = GeocodeV2Input(query="성복1로", limit=2)
+    rows = [
+        GeometryLookup(
+            kind="road",
+            title="경기도 용인시 수지구 성복1로",
+            road_name="성복1로",
+            rncode_full="414653205009",
+            point=Point(x=127.0743, y=37.3134),
+            geometry=GeometryV2(
+                kind="road",
+                source_table="tl_sprd_manage",
+                geojson={"type": "MultiLineString", "coordinates": []},
+            ),
+        ),
+        GeometryLookup(
+            kind="road",
+            title="경기도 용인시 수지구 성복1로",
+            road_name="성복1로",
+            rncode_full="414653205009",
+            point=Point(x=127.0743, y=37.3134),
+            geometry=GeometryV2(
+                kind="road",
+                source_table="tl_sprd_manage",
+                geojson={"type": "MultiLineString", "coordinates": []},
+            ),
+        ),
+        GeometryLookup(
+            kind="road",
+            title="경기도 용인시 수지구 성복2로",
+            road_name="성복2로",
+            rncode_full="414653205010",
+            point=Point(x=127.076, y=37.315),
+            geometry=GeometryV2(
+                kind="road",
+                source_table="tl_sprd_manage",
+                geojson={"type": "MultiLineString", "coordinates": []},
+            ),
+        ),
+    ]
+
+    converted = geocode_v2_from_geometry_lookups(inp, rows)
+
+    assert converted.status == "OK"
+    road_names = [
+        candidate.address.road_name for candidate in converted.candidates if candidate.address
+    ]
+    assert road_names == [
+        "성복1로",
+        "성복2로",
+    ]
 
 
 def test_regions_within_radius_input_defaults_and_dedupes_levels() -> None:

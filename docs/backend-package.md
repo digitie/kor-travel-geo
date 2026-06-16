@@ -301,6 +301,8 @@ await client.reverse(127.0, 37.5, sig_cd="11")
 
 T-064 이후 `/v2/geocode`는 상세번호가 없는 상위 주소 입력도 별도 endpoint 없이 처리한다. 일반 도로명/지번 parser가 번호 부재로 실패하면 같은 입력을 `search(type="district")`로 넘기고, `tl_scco_ctprvn/sig/emd/li` polygon 후보를 `CandidateV2.match_kind="region"`으로 반환한다. 대표점은 `ST_PointOnSurface`를 사용한다. `ST_Centroid`는 polygon 밖으로 나갈 수 있어 화면 선택 후보의 기본 대표점으로 쓰지 않는다.
 
+T-170 이후 v2 geocode producer는 public `candidates` tuple 안에서 복수 후보를 반환할 수 있다. local v1 primary 후보와 보조 road geometry 후보를 병합하고, 국가지점번호·건물관리번호·도로명코드·행정구역 코드 등 안정 키로 dedup한 뒤 `limit`을 적용한다. REST v1 호환 응답과 내부 `GeocodeResponse` 계약은 바꾸지 않는다.
+
 `reverse_geocoder`, `searcher`, `zipcoder`, `poboxer`도 같은 패턴.
 
 ## 7. DB 어댑터

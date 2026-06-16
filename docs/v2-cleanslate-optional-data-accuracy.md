@@ -141,7 +141,7 @@ ADR-007 선택 로직(`sql.py:1212-1296`)을 `location_point.is_representative=t
 
 - **reverse(`reverse_repo.py:33-35,92-98`)**: 오늘은 GiST k-NN + `LIMIT :limit`이고 `address_type='both'`가 행을 2배로 만든다. 1:N에서는 한 건물의 다수 sub-point가 최근접 리스트를 같은 주소로 도배 → **default는 "건물당 최근접 1점 collapse"(오늘 동작 유지)**, opt-in으로 'all typed points' 모드. both×point_type fan-out이 곱셈으로 터지지 않게 typed grouping 규약 필수.
 - **search/fuzzy(`search_repo.py:84-87`, `geocode_repo.py:117-118`)**: 1:N MV로 join하면 fan-out으로 결과·`count(*) OVER ()` total이 부풀려진다. → default join-back은 `mv_address_rep`(UNIQUE) 대상으로 유지, all-points 모드만 `mv_address_points`를 `GROUP BY address_id` dedup. **pagination total = collapse 모드 `count(DISTINCT address_id)`, all-points 모드 `count(*)`** — 모드 인지형으로 명시.
-- **wire 영향 0**: CandidateV2는 1:N을 이미 표현 가능(`dto/v2.py:79-91`)하나, 현재 producer `geocode_v2_from_v1`는 1개로 collapse한다(`core/v2.py:31-56`, 확인). **public 스키마 변경 없이 producer만** 다점 방출하면 된다. 단 1:N 후보 dedup/주소화를 위해 CandidateV2에 명시적 `point_type` + 안정 `candidate_id` 추가 권장(오늘은 metadata dict가 유일 탈출구).
+- **wire 영향 0**: CandidateV2는 1:N을 이미 표현 가능(`dto/v2.py:79-91`)하다. T-170에서 public 스키마 변경 없이 producer dedup/병합을 추가해 local primary와 보조 후보를 같은 tuple로 방출한다. 단 상세주소·다중 출입구 후보 dedup/주소화를 위해 CandidateV2에 명시적 `point_type` + 안정 `candidate_id` 추가 권장은 여전히 남는다(오늘은 metadata dict가 유일 탈출구).
 
 ---
 
@@ -179,7 +179,7 @@ ADR-007 선택 로직(`sql.py:1212-1296`)을 `location_point.is_representative=t
 
 ### 싸게 되는 것 (compute, 신규 소스·MV 0)
 - (b) 국가지점번호 forward 노출 + makarea 게이트 분리 + reverse 코드 방출 + envelope bound-check — 전부 parser 계산.
-- v2 candidate-list 1:N producer — wire는 이미 지원(`dto/v2.py:79-91`), `core/v2.py:31-56`가 1개로 collapse할 뿐. producer만 N개 방출.
+- v2 candidate-list 1:N producer — T-170에서 wire 변경 없이 producer dedup/병합을 구현했다. 상세주소·다중 출입구처럼 더 큰 typed 후보는 후속 schema/producer 설계가 필요하다.
 - 죽은 enum 정리(`postal`/`category`는 producer가 한 번도 안 냄, `cache`도 미사용) + T-105 envelope/pagination/error 일관화 — 새 스트림 얹기 전 토대.
 
 ### 비싼데 한계이득
@@ -230,7 +230,7 @@ ADR-007 선택 로직(`sql.py:1212-1296`)을 `location_point.is_representative=t
 | TL_SGCO_RNADR_DONG | ~6.45M (subset) | `:223` 6,454,292; `decisions.md:1539` subset | ✅ 확정 |
 | TL_SPBD_ENTRC_DONG | 424,639 | `:224` 424,639 | ✅ 확정 |
 | SPPN forward 게이트 | makarea None→NOT_FOUND | `geocoder.py:91-96` | ✅ 확정 |
-| v2 producer collapse | 1 candidate | `core/v2.py:31-56` | ✅ 확정 |
+| v2 producer collapse | T-170에서 local primary+보조 후보 병합으로 해소 | `core/v2.py`, `client.py` | ✅ 확정 |
 | C15 p99 | 없음 | `c15:399-401` (0.5/0.95/max만) | ✅ 확정 |
 | match_kind 'place' | enum에 없음 | `dto/v2.py:15` | ✅ 확정 |
 
