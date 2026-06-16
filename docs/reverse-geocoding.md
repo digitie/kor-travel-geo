@@ -20,12 +20,15 @@ class ReverseInput(BaseModel):
 ## 흐름
 
 1. 입력 좌표를 EPSG:5179로 변환하는 일은 repo 내부에서 `ST_Transform`으로 처리. core는 좌표값(`Point`)과 `crs`만 넘긴다.
-2. `repo.nearest(point, crs=..., address_type=..., radius_m=..., limit=...)` — serving MV `mv_geocode_target`의 `pt_5179` GiST 인덱스(`ST_DWithin` + `<->` KNN)로 반경 내 최근접 후보를 거리순으로 조회한다. MV의 좌표는 텍스트 정본(`tl_juso_text`)에 위치정보요약DB 대표 출입구(`tl_locsum_entrc`, same-month일 때만 `tl_roadaddr_entrc`)와 centroid fallback(`tl_navi_buld_centroid`)을 합친 것이며, 각 행의 `pt_source`가 `entrance`/`centroid`를 구분한다.
-3. 후보가 `radius_m` 이내이면 **hit** → `address_type`에 따라 도로명/지번 `ReverseItem`을 만든다.
-   - 우편번호: 행의 `zip_no`가 있으면 `(zip_no, "building_bsi_zon_no")`. 없고 `inp.zipcode`면 `zip_repo`/`repo.zip_at(...)`로 4단계 fallback.
-   - `inp.type ∈ {"both","road"}`이면 도로명 `ReverseItem` 생성 (`level5=road_nm`, `detail=본번-부번`, `x_extension.matched` = `pt_source`).
-   - `inp.type ∈ {"both","parcel"}`이면 지번 `ReverseItem` 생성.
-4. 반경 내 후보가 없으면 빈 후보 → `ReverseResponse(status="NOT_FOUND")`. (국가지점번호가 필요한 경로는 `repo.sppn_areas(...)`로 `tl_sppn_makarea` polygon을 별도 조회한다.)
+2. `repo.nearest(point, crs=..., address_type=..., radius_m=..., limit=...)` — serving MV `mv_geocode_target`의 `pt_5179` GiST 인덱스(`ST_DWithin` + `<->` KNN)로 반경 내 최근접 후보를 조회한다. MV의 좌표는 텍스트 정본(`tl_juso_text`)에 위치정보요약DB 대표 출입구(`tl_locsum_entrc`, same-month일 때만 `tl_roadaddr_entrc`)와 centroid fallback(`tl_navi_buld_centroid`)을 합친 것이며, 각 행의 `pt_source`가 `entrance`/`centroid`를 구분한다.
+3. 최근접 정렬은 `t.pt_5179 <-> p.geom` KNN을 먼저 쓰고, 동률은 `distance_m ASC` → `pt_source='entrance'` 우선 → `bd_mgt_sn` → `rncode_full` → `bjd_cd` 순으로 결정한다.
+4. 후보가 `radius_m` 이내이면 **hit**다. `ST_DWithin` 기준이므로 경계 거리(`distance_m == radius_m`)도 포함한다.
+   - 우편번호: 행의 `zip_no`가 있고 `inp.zipcode`가 true이면 `zip_source="building_bsi_zon_no"`로 함께 반환한다.
+   - `inp.type="road"`이면 도로명 `ReverseItem`만 만든다.
+   - `inp.type="parcel"`이면 지번 `ReverseItem`만 만든다.
+   - `inp.type="both"`이면 SQL base row `limit`을 먼저 적용한 뒤 각 row를 `road`, `parcel` 순서로 fan-out한다. 내부 `limit=5` 기준 최대 10개 주소 후보가 나올 수 있다.
+5. 주소 후보가 없더라도 `repo.project_reverse_point_5179(...)` 결과가 국가지점번호 지원 envelope 안에 있으면 `ReverseResponse(status="OK")`다. v1은 빈 `result`와 `x_extension.national_point_number`를 반환하고, v2는 `match_kind="sppn"` 후보를 반환한다.
+6. 주소 후보도 없고 국가지점번호 context도 없으면 `ReverseResponse(status="NOT_FOUND")`다. 한국 lon/lat bounds 밖 입력은 DTO 단계에서 구조화 오류로 거절한다.
 
 ## 우편번호 lookup 4단계 우선순위
 
@@ -57,10 +60,10 @@ asyncio.run(main())
 REST:
 
 ```
-GET /v1/address/reverse?point=127.028601,37.500344&crs=EPSG:4326&type=both&zipcode=true&radius_m=200
+GET /v1/address/reverse?x=127.028601&y=37.500344&crs=EPSG:4326&type=both&zipcode=true&radius_m=200
 ```
 
-응답은 vworld 호환 구조 (`service`, `status`, `input`, `result: list[ReverseItem]`). 각 item에 `x_extension`(`bd_mgt_sn`, `distance_m`, `matched ∈ {"entrance","centroid"}` = MV의 `pt_source`, `zip_source`)가 들어간다.
+응답은 vworld 호환 envelope인 `response.service`, `response.status`, `response.input`, `response.result[]` 구조다. 각 item은 `type`, `text`, `structure`, `point`, `zipcode`, `zip_source`, `distance_m`를 가진다. 국가지점번호 context는 response-level `response.x_extension.national_point_number`와 `response.x_extension.sppn_makarea[]`에 들어간다.
 
 ## 디버깅 UI
 

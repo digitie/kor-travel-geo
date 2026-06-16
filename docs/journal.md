@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-176 reverse 경계·근접 정확도 정합)
+
+**작업**: reverse nearest SQL의 KNN 정렬 뒤에 `distance_m`, `pt_source='entrance'`, `bd_mgt_sn`, `rncode_full`, `bjd_cd` tie-break를 추가해 같은 거리 후보 순서를 결정적으로 고정했다. `type="both"`는 SQL base row `limit` 적용 후 `road`/`parcel` 순으로 fan-out하는 계약을 단위 테스트로 고정했다.
+
+**결정**: `radius_m`은 `ST_DWithin` 기준이라 경계 거리도 포함한다. v2 reverse의 거리 confidence는 `distance_m == radius_m`에서 `0.0`이지만 후보는 유지한다. 주소 후보가 없는 먼 좌표라도 국가지점번호 계산 context가 있으면 `OK`/SPPN 후보이고, 주소 후보와 SPPN context가 모두 없을 때만 `NOT_FOUND`다.
+
+**검증/문서**: `tests/unit/test_t176_reverse_boundary.py`가 SQL 정렬, `both` fan-out, context-only `OK`, true `NOT_FOUND`, radius edge confidence를 검증한다. T-140 corpus는 `T140-REV-BOUNDARY-001` 기대값을 좁히고 `T140-REV-SEA-001`을 기본 live SPPN context-only case로 승격했다. Fixture smoke는 25/25 통과했고 SHA-256은 `7db1b91c556e8fea22a05eda4a209d6c06925dacea287ff26e8eb47292173f83`이다. 상세는 `docs/t176-reverse-boundary.md`에 기록했고, 다음 Agent A 작업은 T-165다. CodeGraph MCP는 `Transport closed`로 실패해 `codegraph sync/status` CLI 최신 상태를 확인했다.
+
 ## 2026-06-16 (T-175 region hint 정확도·교차검증)
 
 **작업**: `RegionHint`에 `sig_cd`/`bjd_cd` prefix 일관성 검증을 추가하고, v2 geocode/reverse/search 입력 모델도 생성 시점에 같은 검증을 실행하게 했다. 모순 hint는 SQL까지 내려가지 않고 기존 validation 계약대로 HTTP 400 입력 오류가 된다.

@@ -291,6 +291,12 @@
       "expected": {
         "status": "OK",
         "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "road"
+        },
+        "field_contains": {
+          "candidates[0].address.full": "평창"
+        },
         "numeric_lte": {
           "candidates[0].distance_m": 200
         },
@@ -633,31 +639,39 @@
     {
       "case_id": "T140-REV-SEA-001",
       "operation": "reverse",
-      "category": "sea-negative",
-      "description": "바다 좌표 negative: 먼 바다 좌표는 NOT_FOUND 또는 SPPN context-only로 분류",
+      "category": "reverse-context-only",
+      "description": "바다 좌표 context-only: 주소 후보가 없어도 국가지점번호 계산값이 있으면 OK",
       "params": {
         "lon": 126.2,
         "lat": 34.1,
         "radius_m": 200
       },
       "expected": {
-        "status_any": [
-          "OK",
-          "NOT_FOUND"
+        "status": "OK",
+        "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "sppn"
+        },
+        "contains_text": [
+          "national_point_number"
         ]
       },
       "golden_fields": [
         "status",
         "candidates[0].match_kind",
+        "candidates[0].metadata.national_point_number",
         "candidates[0].distance_m"
       ],
       "tags": [
-        "future-followup",
+        "default-live",
         "reverse-boundary",
         "sea",
-        "negative"
+        "context-only",
+        "sppn",
+        "v2"
       ],
-      "source": "T-140 manual boundary seed"
+      "source": "T-140 manual boundary seed, T-176 context-only classification",
+      "performance_budget_ms": 1200
     },
     {
       "case_id": "T140-REV-ISLAND-001",
