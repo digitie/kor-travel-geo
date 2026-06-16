@@ -154,6 +154,7 @@ def create_app() -> FastAPI:
     app.include_router(pobox.router, prefix="/v1")
     app.include_router(admin.router, prefix="/v1/admin")
     app.include_router(v2.router, prefix="/v2")
+    _install_openapi_customization(app)
 
     @app.get("/metrics", include_in_schema=False)
     async def prometheus_metrics(request: Request) -> Response:
@@ -175,6 +176,34 @@ def create_app() -> FastAPI:
         return Response(render_prometheus(), media_type=PROMETHEUS_CONTENT_TYPE)
 
     return app
+
+
+_VWORLD_VALIDATION_PATHS = ("/v1/address/geocode", "/v1/address/reverse")
+
+
+def _install_openapi_customization(app: FastAPI) -> None:
+    """Align the published OpenAPI with actual v1 vworld wire behaviour (T-219 M3).
+
+    The two v1 address endpoints translate request-validation failures into a
+    ``400`` VWorld error envelope (see :mod:`kortravelgeo.api.responses`), so the
+    auto-generated ``422`` response they would otherwise advertise is never emitted.
+    Drop it from the schema and keep the explicitly declared ``400`` instead. Wire
+    behaviour is unchanged — this only fixes published-contract drift.
+    """
+    base_openapi = app.openapi
+
+    def custom_openapi() -> dict[str, Any]:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        schema = base_openapi()
+        for path in _VWORLD_VALIDATION_PATHS:
+            operation = schema.get("paths", {}).get(path, {}).get("get")
+            if operation is not None:
+                operation.get("responses", {}).pop("422", None)
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi  # type: ignore[method-assign]
 
 
 def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:

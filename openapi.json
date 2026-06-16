@@ -3224,57 +3224,6 @@
         "title": "GeocodeInput",
         "type": "object"
       },
-      "GeocodeResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "input": {
-            "$ref": "#/components/schemas/GeocodeInput"
-          },
-          "refined": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/RefinedAddress"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "result": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/GeocodeResult"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "service": {
-            "$ref": "#/components/schemas/ServiceMeta"
-          },
-          "status": {
-            "$ref": "#/components/schemas/Status"
-          },
-          "x_extension": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/GeocodeExtension"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "service",
-          "status",
-          "input"
-        ],
-        "title": "GeocodeResponse",
-        "type": "object"
-      },
       "GeocodeResult": {
         "additionalProperties": false,
         "properties": {
@@ -6466,118 +6415,6 @@
           "point"
         ],
         "title": "ReverseInput",
-        "type": "object"
-      },
-      "ReverseResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "input": {
-            "$ref": "#/components/schemas/ReverseInput"
-          },
-          "result": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ReverseResultItem"
-            },
-            "title": "Result",
-            "type": "array"
-          },
-          "service": {
-            "$ref": "#/components/schemas/ServiceMeta"
-          },
-          "status": {
-            "$ref": "#/components/schemas/Status"
-          },
-          "x_extension": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReverseExtension"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "service",
-          "status",
-          "input"
-        ],
-        "title": "ReverseResponse",
-        "type": "object"
-      },
-      "ReverseResultItem": {
-        "additionalProperties": false,
-        "properties": {
-          "distance_m": {
-            "anyOf": [
-              {
-                "minimum": 0.0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Distance M"
-          },
-          "point": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Point"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "source": {
-            "$ref": "#/components/schemas/ResultSource",
-            "default": "local"
-          },
-          "structure": {
-            "$ref": "#/components/schemas/AddressStructure"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "type": {
-            "enum": [
-              "ROAD",
-              "PARCEL"
-            ],
-            "type": "string"
-          },
-          "zip_source": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ZipSource"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "zipcode": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Zipcode"
-          }
-        },
-        "required": [
-          "type",
-          "text",
-          "structure"
-        ],
-        "title": "ReverseResultItem",
         "type": "object"
       },
       "ReverseV2Input": {
@@ -10861,11 +10698,133 @@
         "title": "UploadSidoZipResponse",
         "type": "object"
       },
+      "VWorldErrorBody": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/VWorldErrorDetail"
+          },
+          "service": {
+            "additionalProperties": true,
+            "title": "Service",
+            "type": "object"
+          },
+          "status": {
+            "const": "ERROR",
+            "default": "ERROR",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "error"
+        ],
+        "title": "VWorldErrorBody",
+        "type": "object"
+      },
+      "VWorldErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "level": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Level",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "code",
+          "text"
+        ],
+        "title": "VWorldErrorDetail",
+        "type": "object"
+      },
+      "VWorldErrorEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/VWorldErrorBody"
+          }
+        },
+        "required": [
+          "response"
+        ],
+        "title": "VWorldErrorEnvelope",
+        "type": "object"
+      },
+      "VWorldGeocodeBody": {
+        "additionalProperties": false,
+        "description": "Published v1 ``getCoord`` success body.\n\nThe wire omits ``input`` when ``simple=true`` (see :func:`vworld_success_payload`),\nso it is optional in the published schema even though :class:`GeocodeResponse`\nrequires it. ``refined``/``result`` are already optional. This aligns the OpenAPI\ncontract with what the endpoint actually emits — wire behaviour is unchanged (T-219 M2).",
+        "properties": {
+          "input": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "refined": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefinedAddress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceMeta"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "x_extension": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeocodeExtension"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "service",
+          "status"
+        ],
+        "title": "VWorldGeocodeBody",
+        "type": "object"
+      },
       "VWorldGeocodeEnvelope": {
         "additionalProperties": false,
         "properties": {
           "response": {
-            "$ref": "#/components/schemas/GeocodeResponse"
+            "$ref": "#/components/schemas/VWorldGeocodeBody"
           }
         },
         "required": [
@@ -10874,17 +10833,136 @@
         "title": "VWorldGeocodeEnvelope",
         "type": "object"
       },
+      "VWorldReverseBody": {
+        "additionalProperties": false,
+        "description": "Published v1 ``getAddress`` success body.\n\nThe wire omits ``input`` when ``simple=true`` and drops each result item's\n``type`` in the same mode, so both are optional in the published schema while\nwire behaviour is unchanged (T-219 M2).",
+        "properties": {
+          "input": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReverseInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/VWorldReverseResultItem"
+            },
+            "title": "Result",
+            "type": "array"
+          },
+          "service": {
+            "$ref": "#/components/schemas/ServiceMeta"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          },
+          "x_extension": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReverseExtension"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "service",
+          "status"
+        ],
+        "title": "VWorldReverseBody",
+        "type": "object"
+      },
       "VWorldReverseEnvelope": {
         "additionalProperties": false,
         "properties": {
           "response": {
-            "$ref": "#/components/schemas/ReverseResponse"
+            "$ref": "#/components/schemas/VWorldReverseBody"
           }
         },
         "required": [
           "response"
         ],
         "title": "VWorldReverseEnvelope",
+        "type": "object"
+      },
+      "VWorldReverseResultItem": {
+        "additionalProperties": false,
+        "description": "Reverse result item whose ``type`` is dropped from the wire in simple mode.",
+        "properties": {
+          "distance_m": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance M"
+          },
+          "point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/ResultSource",
+            "default": "local"
+          },
+          "structure": {
+            "$ref": "#/components/schemas/AddressStructure"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "ROAD",
+              "PARCEL"
+            ],
+            "type": "string"
+          },
+          "zip_source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ZipSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "zipcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zipcode"
+          }
+        },
+        "required": [
+          "text",
+          "structure"
+        ],
+        "title": "VWorldReverseResultItem",
         "type": "object"
       },
       "ValidationError": {
@@ -11194,15 +11272,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/VWorldErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "VWorld 호환 검증·도메인 오류"
           }
         },
         "summary": "Geocode",
@@ -11465,15 +11543,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/VWorldErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "VWorld 호환 검증·도메인 오류"
           }
         },
         "summary": "Reverse Geocode",

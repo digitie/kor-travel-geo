@@ -412,3 +412,203 @@ def test_v1_paths_are_published_in_openapi() -> None:
     for path in ("/v1/address/geocode", "/v1/address/reverse"):
         assert path in schema["paths"]
         assert "200" in schema["paths"][path]["get"]["responses"]
+
+
+# --- #304 (T-219 M2/M3/M1): the published OpenAPI matches actual wire behaviour ------------
+#
+# M2: success-body fields the endpoint drops in simple mode must be optional in the schema.
+# M3: validation failures surface as the 400 VWorld error envelope, so the auto-422 is gone.
+# M1: representative runtime bodies are cross-validated against the published 200 schema, so
+#     future drift (an undeclared field, or a schema-required field omitted) fails in CI.
+
+
+_SCALAR_TYPE_CHECKS: dict[str, Any] = {
+    "string": lambda v: isinstance(v, str),
+    "boolean": lambda v: isinstance(v, bool),
+    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
+    "null": lambda v: v is None,
+}
+
+
+def _resolve_ref(schema: dict[str, Any], components: dict[str, Any]) -> dict[str, Any]:
+    ref = schema.get("$ref")
+    if ref is None:
+        return schema
+    resolved: dict[str, Any] = components[ref.rsplit("/", 1)[-1]]
+    return resolved
+
+
+def _assert_conforms(
+    instance: Any,
+    schema: dict[str, Any],
+    components: dict[str, Any],
+    *,
+    path: str = "$",
+) -> None:
+    """Closed-world structural validation of a runtime body against an OpenAPI schema.
+
+    The published v1 DTOs use ``extra='forbid'`` (``additionalProperties: false``), so both
+    drift directions are contract violations and fail here: a runtime key absent from the
+    schema ``properties``, or a schema-``required`` key absent at runtime.
+    """
+    schema = _resolve_ref(schema, components)
+    branches = schema.get("anyOf") or schema.get("oneOf")
+    if branches is not None:
+        failures: list[str] = []
+        for branch in branches:
+            # Probe each branch; nullable optionals render as anyOf[<schema>, null].
+            try:
+                _assert_conforms(instance, branch, components, path=path)
+            except AssertionError as exc:
+                failures.append(str(exc))
+            else:
+                return
+        msg = f"{path}: no anyOf/oneOf branch matched ({failures})"
+        raise AssertionError(msg)
+
+    schema_type = schema.get("type")
+    if schema_type == "null":
+        assert instance is None, f"{path}: expected null, got {instance!r}"
+        return
+    if schema_type == "array" or "items" in schema:
+        assert isinstance(instance, list), f"{path}: expected array, got {type(instance).__name__}"
+        for index, item in enumerate(instance):
+            _assert_conforms(item, schema["items"], components, path=f"{path}[{index}]")
+        return
+    if schema_type == "object" or "properties" in schema:
+        assert isinstance(instance, dict), f"{path}: expected object, got {type(instance).__name__}"
+        props: dict[str, Any] = schema.get("properties", {})
+        for required in schema.get("required", []):
+            assert required in instance, f"{path}: missing schema-required key {required!r}"
+        closed = schema.get("additionalProperties", True) is False
+        for key, value in instance.items():
+            if key in props:
+                _assert_conforms(value, props[key], components, path=f"{path}.{key}")
+            else:
+                assert not closed, f"{path}: runtime key {key!r} is not declared in the schema"
+        return
+    if "const" in schema:
+        assert instance == schema["const"], f"{path}: {instance!r} != const {schema['const']!r}"
+        return
+    if "enum" in schema:
+        assert instance in schema["enum"], f"{path}: {instance!r} not in enum {schema['enum']}"
+        return
+    declared = schema_type if isinstance(schema_type, list) else [schema_type]
+    checks = [_SCALAR_TYPE_CHECKS[name] for name in declared if name in _SCALAR_TYPE_CHECKS]
+    if checks:
+        assert any(check(instance) for check in checks), (
+            f"{path}: {instance!r} does not match declared type {schema_type!r}"
+        )
+
+
+def _v1_200_body_schema(
+    schema: dict[str, Any],
+    path: str,
+    components: dict[str, Any],
+) -> dict[str, Any]:
+    envelope_ref = schema["paths"][path]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    envelope = _resolve_ref(envelope_ref, components)
+    return _resolve_ref(envelope["properties"]["response"], components)
+
+
+def test_v1_openapi_marks_simple_mode_fields_optional() -> None:
+    schema = create_app().openapi()
+    components = schema["components"]["schemas"]
+    geocode_body = _v1_200_body_schema(schema, "/v1/address/geocode", components)
+    reverse_body = _v1_200_body_schema(schema, "/v1/address/reverse", components)
+
+    # `input` is dropped from the wire in simple mode -> optional; service/status stay required.
+    assert "input" not in geocode_body["required"]
+    assert "input" not in reverse_body["required"]
+    assert {"service", "status"} <= set(geocode_body["required"])
+    assert {"service", "status"} <= set(reverse_body["required"])
+
+    # reverse result items drop `type` in simple mode -> optional, but keep text/structure.
+    result_item = _resolve_ref(reverse_body["properties"]["result"]["items"], components)
+    assert "type" not in result_item["required"]
+    assert {"text", "structure"} <= set(result_item["required"])
+
+
+def test_v1_openapi_advertises_vworld_400_and_drops_auto_422() -> None:
+    schema = create_app().openapi()
+    for path in ("/v1/address/geocode", "/v1/address/reverse"):
+        responses = schema["paths"][path]["get"]["responses"]
+        # validation failures return the 400 VWorld error envelope, never FastAPI's 422.
+        assert "422" not in responses
+        ref = responses["400"]["content"]["application/json"]["schema"]["$ref"]
+        assert ref.endswith("/VWorldErrorEnvelope")
+
+
+@pytest.mark.parametrize(
+    ("path", "params"),
+    [
+        ("/v1/address/geocode", {"address": "서울특별시 강남구 테헤란로 152"}),
+        ("/v1/address/geocode", {"address": "서울특별시 강남구 테헤란로 152", "simple": "true"}),
+        ("/v1/address/geocode", {"address": "서울특별시 강남구 테헤란로 152", "refine": "false"}),
+        ("/v1/address/reverse", {"x": 127.036, "y": 37.501}),
+        ("/v1/address/reverse", {"x": 127.036, "y": 37.501, "simple": "true"}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_v1_runtime_success_body_conforms_to_published_openapi(
+    path: str,
+    params: dict[str, Any],
+) -> None:
+    schema = create_app().openapi()
+    components = schema["components"]["schemas"]
+    body_schema = schema["paths"][path]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+
+    response = await _get_v1(path, params, _FakeV1Client)
+
+    assert response.status_code == 200
+    _assert_conforms(response.json(), body_schema, components)
+
+
+def test_contract_validator_detects_required_and_undeclared_drift() -> None:
+    # Guards the M1 cross-validator itself: it must catch both drift directions.
+    schema = create_app().openapi()
+    components = schema["components"]["schemas"]
+    body_schema = schema["paths"]["/v1/address/geocode"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    service = {"name": "address", "operation": "getCoord", "version": "2.0"}
+
+    baseline = {"response": {"service": service, "status": "OK"}}
+    _assert_conforms(baseline, body_schema, components)  # sanity: a valid body passes.
+
+    # top-level drift, both directions.
+    with pytest.raises(AssertionError, match="status"):
+        _assert_conforms({"response": {"service": service}}, body_schema, components)
+    with pytest.raises(AssertionError, match="bogus"):
+        _assert_conforms(
+            {"response": {"service": service, "status": "OK", "bogus": 1}},
+            body_schema,
+            components,
+        )
+
+    # nested drift (inside the `service` object) is caught just as well, both directions.
+    with pytest.raises(AssertionError, match="operation"):
+        _assert_conforms(
+            {"response": {"service": {"name": "address", "version": "2.0"}, "status": "OK"}},
+            body_schema,
+            components,
+        )
+    with pytest.raises(AssertionError, match="nested"):
+        _assert_conforms(
+            {"response": {"service": {**service, "nested": 1}, "status": "OK"}},
+            body_schema,
+            components,
+        )
+
+    # scalar type drift in a declared key is caught (service.name must be a string).
+    with pytest.raises(AssertionError, match="does not match declared type"):
+        _assert_conforms(
+            {"response": {"service": {**service, "name": 123}, "status": "OK"}},
+            body_schema,
+            components,
+        )
