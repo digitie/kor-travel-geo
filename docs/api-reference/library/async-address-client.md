@@ -20,6 +20,7 @@ async with AsyncAddressClient() as client:
 
 - Python 라이브러리의 주소 조회 표면은 후보 목록 응답만 공개한다. 이전 vworld 호환 응답은 REST `/v1/*`에서 유지하고, 라이브러리 내부에서는 REST v1 라우터 전용 내부 어댑터로만 사용한다.
 - `geocode()`는 `query`, `road_address`, `jibun_address`, `keyword` 중 하나를 받는다.
+- `geocode()`는 v2 후보 목록을 반환한다. local primary 후보와 보조 road geometry 후보가 함께 나올 수 있으며, 중복 후보는 제거한 뒤 `limit`을 적용한다.
 - `geocode()`와 `search()`는 `bbox={"min_lon": ..., "min_lat": ..., "max_lon": ..., "max_lat": ...}` 형식의 EPSG:4326 범위를 받을 수 있다.
 - `geocode(include_geometry=True)`는 기존 후보 `point`를 유지하면서 `geometry`와 `bbox`를 추가한다. `성복동`은 행정구역 polygon, `성복1로`는 도로 line, `성복1로 35`는 건물 polygon처럼 입력 수준에 맞는 로컬 도형을 붙인다.
 - `regions_within_radius()`는 POI `(lon, lat)` 기준 반경 `radius_km` 안에 들어오는 `sido`/`sigungu`/`emd`를 반환한다. `relation="contains"`는 POI 중심점을 포함하는 행정구역이고, `relation="overlaps"`는 중심점은 포함하지 않지만 반경에 걸친 인접 행정구역이다.

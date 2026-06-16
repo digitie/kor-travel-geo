@@ -23,6 +23,8 @@
 
 ## 출력
 
+`candidates`는 0개 이상이다. local primary 후보가 있고 입력이 정규화된 exact 주소와 다르면 보조 road geometry 후보가 같은 tuple 뒤쪽에 병합될 수 있다. 중복 후보는 먼저 나온 후보를 유지하는 방식으로 제거한 뒤 `limit`을 적용한다.
+
 ```json
 {
   "status": "OK",

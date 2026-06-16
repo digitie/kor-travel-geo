@@ -20,6 +20,7 @@ from .core.v2 import (
     geocode_v2_from_geometry_lookups,
     geocode_v2_from_search,
     geocode_v2_from_v1,
+    merge_geocode_v2_responses,
     reverse_v2_from_v1,
     search_v2_from_v1,
     with_candidate_geometry,
@@ -236,9 +237,45 @@ class AsyncAddressClient:
             return await self._geocode_road_or_region_candidates(inp, address)
         converted = geocode_v2_from_v1(inp, response)
         if response.status == "OK":
-            return await self._with_geocode_geometries(converted)
+            converted = await self._with_geocode_geometries(converted)
+            if self._should_collect_geocode_supplements(inp, response, address):
+                supplemental = await self._geocode_supplemental_road_candidates(inp, address)
+                if supplemental.status == "OK":
+                    return merge_geocode_v2_responses(inp, converted, supplemental)
+            return converted
         fallback_response = await self._geocode_road_or_region_candidates(inp, address)
         return fallback_response if fallback_response.status == "OK" else converted
+
+    @staticmethod
+    def _should_collect_geocode_supplements(
+        inp: GeocodeV2Input,
+        response: GeocodeResponse,
+        address: str,
+    ) -> bool:
+        if inp.limit <= 1:
+            return False
+        if inp.jibun_address and not (inp.road_address or inp.query):
+            return False
+        if response.x_extension and response.x_extension.national_point_number:
+            return False
+        source = response.x_extension.source if response.x_extension else "local"
+        if source not in {"local", "cache"}:
+            return False
+        refined_text = response.refined.text if response.refined else None
+        return refined_text is None or address.strip() != refined_text.strip()
+
+    async def _geocode_supplemental_road_candidates(
+        self,
+        inp: GeocodeV2Input,
+        address: str,
+    ) -> GeocodeV2Response:
+        geometry_repo = GeometryRepository(self._engine())
+        road_rows = await geometry_repo.road_geometries(
+            address,
+            limit=inp.limit,
+            region_hint=inp.region_hint,
+        )
+        return geocode_v2_from_geometry_lookups(inp, road_rows)
 
     async def _geocode_road_or_region_candidates(
         self,

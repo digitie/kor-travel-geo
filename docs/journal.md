@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-170 v2 producer 1:N candidate-list 전환)
+
+**작업**: v2 geocode producer의 단일 후보 collapse를 풀었다. `core/v2.py`에 후보 dedup helper와 geocode 응답 병합 helper를 추가했고, `AsyncAddressClient.geocode()`는 local v1 primary 후보와 보조 road geometry 후보를 같은 `candidates` tuple 안에 병합한다.
+
+**결정**: public wire schema는 바꾸지 않는다. `CandidateV2.candidate_id`가 아직 없으므로 dedup은 `national_point_number`, `bd_mgt_sn`, `rncode_full`, 행정구역 코드, POI 이름/좌표, fallback metadata 순서로 처리한다. 후보 순서는 먼저 나온 후보를 유지해 v1 primary를 보존한다.
+
+**검증**: 상세는 `docs/t170-v2-multicandidate-producer.md`와 ADR-057에 기록했다. 단위 테스트는 primary+보조 후보 병합과 dedup 후 limit 적용을 추가했다.
+
 ## 2026-06-16 (T-169 v2 enum 정직화)
 
 **작업**: v2 후보 enum을 실제 producer 의미 기준으로 정리했다. `V2MatchKind`에서 미사용 `postal`/`category`를 제거하고 `detail`/`poi`를 추가했다. 장소 검색 결과는 `keyword`가 아니라 `poi` 후보로 변환한다.
