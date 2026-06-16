@@ -41,6 +41,7 @@ from kortravelgeo.dto.admin import (
     BackupRetentionRunRequest,
     BackupVerifyRequest,
     BackupVerifyResult,
+    BenchmarkArtifactRegisterRequest,
     CacheMetrics,
     ConsistencyBulkDecisionRequest,
     ConsistencyBulkDecisionResponse,
@@ -2544,6 +2545,22 @@ async def list_ops_artifacts(
     client: AsyncAddressClient = Depends(get_client),
 ) -> list[OpsArtifact]:
     return await client.list_artifacts(limit=limit, artifact_type=artifact_type, state=state)
+
+
+@router.post(
+    "/ops/benchmark-artifacts",
+    response_model=OpsArtifact,
+    response_model_exclude_none=True,
+    status_code=201,
+)
+async def register_benchmark_artifact(
+    req: BenchmarkArtifactRegisterRequest,
+    client: AsyncAddressClient = Depends(get_client),
+) -> OpsArtifact:
+    """T-265 (precursor to T-222): register a perf benchmark run (T-138/T-141/T-146) as a
+    ``benchmark`` ops artifact so the Admin UI can surface latest-vs-baseline p95/p99
+    read-only. List them via ``GET /ops/artifacts?artifact_type=benchmark``."""
+    return await client.register_benchmark_artifact(req)
 
 
 @router.get(

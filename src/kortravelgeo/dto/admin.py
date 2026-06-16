@@ -69,6 +69,18 @@ BackupProfile = Literal["serving-ready", "lean-serving", "forensic"]
 # expired by the janitor; ``scheduled`` marks cron-driven backups (respects keep_min).
 BackupRetentionClass = Literal["default", "scheduled", "pinned"]
 RestoreMode = Literal["new_database", "replace_current"]
+# T-265 (precursor to T-222): perf benchmark runs (T-138/T-141/T-146) registered as ops
+# artifacts so the Admin UI can surface them read-only. The benchmark sub-type lives in the
+# manifest ``kind`` field; the ops artifact_type is a single canonical value.
+BENCHMARK_ARTIFACT_TYPE = "benchmark"
+BenchmarkKind = Literal[
+    "load_matrix",
+    "sql",
+    "rest",
+    "geocoder_golden",
+    "reverse_golden",
+    "other",
+]
 
 
 class TableStat(FrozenModel):
@@ -726,6 +738,40 @@ class BackupArtifact(OpsArtifact):
     source_set_yyyymm: dict[str, str | None] | None = None
     source_set_mixed: bool | None = None
     source_inventory_ok: bool | None = None
+
+
+class BenchmarkMetrics(FrozenModel):
+    """T-265: headline metrics for a perf benchmark run (T-222 read-only summary source)."""
+
+    samples: int | None = Field(default=None, ge=0)
+    error_count: int | None = Field(default=None, ge=0)
+    error_rate: float | None = Field(default=None, ge=0, le=1)
+    qps: float | None = Field(default=None, ge=0)
+    p50_ms: float | None = Field(default=None, ge=0)
+    p95_ms: float | None = Field(default=None, ge=0)
+    p99_ms: float | None = Field(default=None, ge=0)
+    max_ms: float | None = Field(default=None, ge=0)
+
+
+class BenchmarkArtifactRegisterRequest(FrozenModel):
+    """T-265: register a perf benchmark run (T-138/T-141/T-146) as an ops artifact so the
+    Admin UI (T-222) can surface latest-vs-baseline p95/p99 read-only. The run's heavy data
+    stays as a local/remote file referenced by ``storage_uri``; only headline metrics are
+    persisted in the artifact manifest."""
+
+    run_id: str = Field(min_length=1, max_length=128)
+    kind: BenchmarkKind
+    display_name: str = Field(min_length=1, max_length=200)
+    profile: str | None = Field(default=None, max_length=128)
+    workload: str | None = Field(default=None, max_length=64)
+    phase: str | None = Field(default=None, max_length=32)
+    metrics: BenchmarkMetrics = Field(default_factory=BenchmarkMetrics)
+    baseline_artifact_id: str | None = Field(default=None, max_length=64)
+    storage_uri: str | None = Field(default=None, max_length=1024)
+    size_bytes: int | None = Field(default=None, ge=0)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    captured_at: datetime | None = None
+    notes: str | None = Field(default=None, max_length=1000)
 
 
 class BackupRetentionRunRequest(FrozenModel):
