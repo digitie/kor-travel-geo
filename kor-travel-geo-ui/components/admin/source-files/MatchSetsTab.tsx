@@ -5,6 +5,10 @@ import { AlertTriangle, CheckCircle2, Hammer, Play, RefreshCw, ShieldCheck, XCir
 import { useState } from "react";
 import { MatchSetComparePanel } from "@/components/admin/source-files/MatchSetComparePanel";
 import { Panel } from "@/components/ui/Panel";
+import {
+  type PreflightSeverity,
+  summarizeRebuildPreflight
+} from "@/lib/rebuild-preflight";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { postJson, requestJson } from "@/lib/api";
 import {
@@ -208,6 +212,7 @@ function MatchSetDetail({
       </div>
 
       <RebuildDbForm
+        detail={detail}
         matchSetId={set.source_match_set_id}
         onRebuild={(body) => onAction("rebuild-db", body)}
         pending={pending}
@@ -216,12 +221,25 @@ function MatchSetDetail({
   );
 }
 
+const PREFLIGHT_TONE: Record<PreflightSeverity, "ok" | "warn" | "error"> = {
+  ok: "ok",
+  warn: "warn",
+  blocker: "error"
+};
+const PREFLIGHT_LABEL: Record<PreflightSeverity, string> = {
+  ok: "정상",
+  warn: "주의",
+  blocker: "차단"
+};
+
 function RebuildDbForm({
   matchSetId,
+  detail,
   onRebuild,
   pending
 }: {
   matchSetId: string;
+  detail: SourceMatchSetDetail;
   onRebuild: (body: unknown) => void;
   pending: boolean;
 }) {
@@ -230,10 +248,30 @@ function RebuildDbForm({
   const [confirmation, setConfirmation] = useState("");
   const requiredPhrase = rebuildPromoteConfirmation(matchSetId);
   const confirmationOk = !force || confirmation === requiredPhrase;
+  const preflight = summarizeRebuildPreflight(detail);
 
   return (
     <div className="rebuild-form">
       <h3>DB 재구성 (rebuild-db)</h3>
+      <div className="preflight">
+        <strong>사전 점검 (preflight)</strong>
+        <ul className="preflight-list">
+          {preflight.items.map((check) => (
+            <li className="preflight-item" key={check.key}>
+              <StatusBadge tone={PREFLIGHT_TONE[check.severity]} value={PREFLIGHT_LABEL[check.severity]} />
+              <span>
+                {check.label}: {check.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {preflight.blockerCount > 0 ? (
+          <p className="form-note warn">
+            차단 {preflight.blockerCount}건 — 백엔드 promotion gate에서 막힐 수 있습니다(force_promotion으로도
+            무결성·필수 그룹 게이트는 우회 불가).
+          </p>
+        ) : null}
+      </div>
       <label className="checkbox-row">
         <input checked={force} onChange={(event) => setForce(event.target.checked)} type="checkbox" />
         consistency ERROR 강제 승급 (force_promotion)
@@ -244,7 +282,15 @@ function RebuildDbForm({
       </label>
       {force ? (
         <div className="confirm-box">
-          <label>확인 문구 입력: {requiredPhrase}</label>
+          <div className="confirm-title">위험작업 미리보기</div>
+          <p className="form-note">
+            이 작업은 영향 카테고리 {preflight.affectedCategories.length}개로 serving DB를 재구성하고,
+            force_promotion은 consistency ERROR 게이트만 우회합니다(무결성·필수 그룹 게이트는 우회 안 됨).
+            완료 시 새 release/snapshot으로 swap되며 이전 release로의 rollback은 별도 작업입니다.
+          </p>
+          <label>
+            정확히 입력: <code>{requiredPhrase}</code>
+          </label>
           <input
             aria-label="rebuild 강제 승급 확인 문구"
             onChange={(event) => setConfirmation(event.target.value)}
