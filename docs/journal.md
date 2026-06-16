@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (Timescale PostgreSQL 계열 Codex skill 변환)
+
+**작업**: `timescale/pg-aiguide`의 `skills/` 하위 Claude Code용 skill 8종을 Codex repo-scoped skill 형식으로 변환해 `.agents/skills/`에 추가했다. Codex frontmatter에는 `name`/`description`만 남기고, 원본 `license`/`compatibility`/source URL은 본문 상단에 보존했다. `postgres` 통합 skill의 reference 파일은 Windows에서 symlink 텍스트로 남지 않도록 실제 대상 내용을 펼쳐 넣었다.
+
+**결정**: subagent는 `.codex/agents`, skill은 Codex 공식 repo discovery 위치인 `.agents/skills`를 사용한다. `agents/openai.yaml`은 `skill-creator` 스크립트로 생성한다. 원본 skill 본문은 제공자 원문이므로 영어를 유지한다.
+
+**검증/문서**: `quick_validate.py`로 8개 skill 모두 검증했고, YAML frontmatter가 `name`/`description`만 갖는지 별도 파싱으로 확인했다. 같은 agent/skill 구성을 `F:\dev` 바로 아래 다른 Git repo 78개에도 복사했고, 모든 대상이 agent 6개와 skill 8개를 갖는 것을 확인했다. `.codex/agents`와 `.agents/skills`는 어느 대상 repo에서도 ignore되지 않아 `.gitignore` 추가 수정은 없었다.
+
+## 2026-06-16 (Codex 프로젝트 subagent 정의 등록)
+
+**작업**: VoltAgent core-development subagent 6종(`api-designer`, `backend-developer`, `frontend-developer`, `mobile-developer`, `ui-designer`, `ui-fixer`)을 프로젝트 `.codex/agents/`에 추가해 Git 추적 대상 구성으로 옮겼다. 기존 사용자 전역 `C:\Users\digit\.codex\agents` 복사본도 같은 값으로 맞췄다.
+
+**결정**: 모든 subagent의 `model`은 `gpt-5.5`, `model_reasoning_effort`는 `xhigh`로 통일한다. 프로젝트 `.codex/agents/`가 전역 agent보다 우선하므로 이 저장소에서는 repo-scoped 정의를 기준으로 사용한다.
+
+**검증/문서**: Python `tomllib`로 전역/프로젝트 TOML 12개를 파싱하고 `name`, `description`, `developer_instructions`, model 설정을 확인했다. 코드 변경이 아니라 pytest/Ruff/mypy는 실행하지 않았다.
+
 ## 2026-06-16 (T-153 최종 안정화 acceptance)
 
 **작업**: Agent A 성능·정확도 트랙과 Agent B Admin UI·백업/복원 트랙을 `docs/t153-final-stabilization-acceptance.md`로 묶었다. Golden corpus, C1~C17, SQL/REST c64 budget, Admin UI Playwright, 백업/복원 round-trip·fault injection·hot-swap, React Doctor, OpenAPI/typegen drift를 같은 수락 표로 정리했다.
