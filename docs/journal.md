@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-163 60분 soak resource guard)
+
+**작업**: `scripts/run_t141_load_matrix.py`의 artifact schema를 `2`로 올리고, T-141 soak profile에 `soak_guard_budget`과 profile별 `soak_guard`를 추가했다. Soak 실행 중 runner process current RSS, CPU seconds, `/proc/self/io` delta를 sampling해 `soak-resource-samples.json`과 `soak-guard.json`에 남긴다.
+
+**결정**: 기본 60분 budget은 RSS 증가 256MiB, leak floor 64MiB, CPU 3600초, read/write 각 2GiB다. Leak은 current RSS 첫 1/3 평균 대비 마지막 1/3 평균과 final growth가 모두 floor를 넘을 때로 판정한다. PostgreSQL server와 외부 REST worker process 자원은 runner process guard 범위 밖으로 문서화했다.
+
+**검증/문서**: Windows focused unit 6개와 Ruff가 통과했고, `--mode plan --include-soak --soak-seconds 3600 --soak-guard-mode enforce` smoke가 schema v2 artifact를 생성했다. 상세는 `docs/t163-soak-guard.md`에 기록했고, 다음 Agent A 작업은 T-164다.
+
 ## 2026-06-16 (T-159 DB 장애 주입·안정 저하 검증)
 
 **작업**: SQLAlchemy `DBAPIError` 계열 DB 드라이버/연결 오류를 FastAPI exception handler에서 `DatabaseError(E0500, HTTP 503)`로 구조화했다. VWorld 호환 경로는 기존 `SYSTEM_ERROR` envelope를 유지하며, SQL 문장·파라미터·secret 값은 응답에 노출하지 않는다.
