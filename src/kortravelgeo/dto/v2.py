@@ -20,7 +20,7 @@ from kortravelgeo.dto.common import (
     is_korea_lon_lat,
     reject_control_characters,
 )
-from kortravelgeo.dto.region import RegionHint
+from kortravelgeo.dto.region import RegionHint, validate_region_hint_consistency
 
 V2Source = Literal["local", "vworld", "juso"]
 V2MatchKind = Literal["road", "parcel", "keyword", "region", "sppn", "detail", "poi"]
@@ -124,6 +124,7 @@ class GeocodeV2Input(FrozenModel):
         if not any((self.query, self.road_address, self.jibun_address, self.keyword)):
             msg = "one of query, road_address, jibun_address, or keyword is required"
             raise ValueError(msg)
+        validate_region_hint_consistency(self.sig_cd, self.bjd_cd)
         return self
 
     @property
@@ -158,6 +159,7 @@ class ReverseV2Input(FrozenModel):
                 "kor_travel_geo.coordinate_bounds",
                 KOREA_LON_LAT_BOUNDS_MESSAGE,
             )
+        validate_region_hint_consistency(self.sig_cd, self.bjd_cd)
         return self
 
     @property
@@ -182,6 +184,11 @@ class SearchV2Input(Page):
     sig_cd: str | None = Field(default=None, pattern=r"^(\d{2}|\d{5})$")
     bjd_cd: str | None = Field(default=None, pattern=r"^(\d{8}|\d{10})$")
     bbox: BBoxV2 | None = None
+
+    @model_validator(mode="after")
+    def validate_region_hint(self) -> SearchV2Input:
+        validate_region_hint_consistency(self.sig_cd, self.bjd_cd)
+        return self
 
     @property
     def region_hint(self) -> RegionHint | None:

@@ -4,12 +4,22 @@ from __future__ import annotations
 
 import re
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from .common import FrozenModel
 
 _SIG_CD_RE = re.compile(r"^\d{2}(\d{3})?$")
 _BJD_CD_RE = re.compile(r"^\d{8}(\d{2})?$")
+REGION_HINT_MISMATCH_MESSAGE = "bjd_cd must start with sig_cd when both hints are provided"
+
+
+def validate_region_hint_consistency(sig_cd: str | None, bjd_cd: str | None) -> None:
+    """Reject contradictory administrative-code hints before SQL lookup."""
+
+    if sig_cd is None or bjd_cd is None:
+        return
+    if not bjd_cd.startswith(sig_cd):
+        raise ValueError(REGION_HINT_MISMATCH_MESSAGE)
 
 
 class RegionHint(FrozenModel):
@@ -45,6 +55,11 @@ class RegionHint(FrozenModel):
             msg = "bjd_cd must be an 8-digit legal dong prefix or 10-digit legal dong code"
             raise ValueError(msg)
         return text
+
+    @model_validator(mode="after")
+    def validate_hint_consistency(self) -> RegionHint:
+        validate_region_hint_consistency(self.sig_cd, self.bjd_cd)
+        return self
 
     @property
     def is_empty(self) -> bool:

@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-175 region hint 정확도·교차검증)
+
+**작업**: `RegionHint`에 `sig_cd`/`bjd_cd` prefix 일관성 검증을 추가하고, v2 geocode/reverse/search 입력 모델도 생성 시점에 같은 검증을 실행하게 했다. 모순 hint는 SQL까지 내려가지 않고 기존 validation 계약대로 HTTP 400 입력 오류가 된다.
+
+**결정**: `sig_cd=11230` + `bjd_cd=1123010700`처럼 `bjd_cd`가 `sig_cd`로 시작하는 조합만 유효하다. `sig_cd=11680` + `bjd_cd=1123010700`처럼 서로 다른 지역을 가리키는 조합은 조용한 `NOT_FOUND`가 아니라 오적용 방지를 위한 입력 오류로 고정한다. v1 VWorld 호환 geocode/reverse는 상세 validation hint를 숨기고 `INVALID_TYPE` envelope를 유지한다.
+
+**검증/문서**: `tests/unit/test_t175_region_hint_validation.py`가 v1/v2 public API의 모순 hint 4xx와 core search/reverse hint 전달을 검증한다. `test_infra_repo_sql.py`는 geocode/search/reverse/road geometry SQL이 공통 hint bind를 모두 갖는지 고정한다. T-140 corpus는 정상 BJD hint와 모순 hint negative를 추가해 25개가 됐고 fixture smoke 25/25를 통과했다. 상세는 `docs/t175-region-hint-validation.md`에 기록했고, 다음 Agent A 작업은 T-176이다. CodeGraph MCP는 `Transport closed`로 실패해 `codegraph sync/status` CLI 최신 상태를 확인했다.
+
 ## 2026-06-16 (T-173 negative/악성/경계 입력 안전성 하니스)
 
 **작업**: geocode text 입력의 ASCII control character를 DTO에서 거절하고, v2 reverse 입력을 `FiniteFloat`와 한국 lon/lat bounds 검증으로 좁혔다. FastAPI request validation도 좌표 bounds 오류는 `E0102`로 매핑하도록 기존 Pydantic validation helper를 재사용한다.

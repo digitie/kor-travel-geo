@@ -81,6 +81,68 @@
       "performance_budget_ms": 1000
     },
     {
+      "case_id": "T140-GEO-ROAD-BJD-HINT-001",
+      "operation": "geocode",
+      "category": "road-exact-region-hint",
+      "description": "도로명 exact: 시도/시군구를 제거하고 bjd_cd hint만으로 찾는 case",
+      "params": {
+        "road_address": "왕산로 189-4",
+        "bjd_cd": "1123010700",
+        "limit": 5
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "road",
+          "region_hint_applied.bjd_cd": "1123010700"
+        },
+        "field_contains": {
+          "candidates[0].address.full": "왕산로"
+        }
+      },
+      "golden_fields": [
+        "candidates[0].address.full",
+        "candidates[0].address.legal_dong_code",
+        "region_hint_applied.bjd_cd"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "region-hint",
+        "v2"
+      ],
+      "source": "T-141 sql-live-smoke corpus Q2 bjd_cd_filter=1123010700",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-GEO-REGION-HINT-MISMATCH-001",
+      "operation": "geocode",
+      "category": "region-hint-negative",
+      "description": "negative: sig_cd와 bjd_cd가 서로 다른 지역을 가리키면 DB 조회 전 입력 오류로 고정",
+      "params": {
+        "road_address": "왕산로 189-4",
+        "sig_cd": "11680",
+        "bjd_cd": "1123010700",
+        "limit": 5
+      },
+      "expected": {
+        "status": "ERROR",
+        "error_contains": "bjd_cd must start with sig_cd"
+      },
+      "golden_fields": [
+        "status"
+      ],
+      "tags": [
+        "default-live",
+        "negative",
+        "region-hint",
+        "v2"
+      ],
+      "source": "T-175 region hint consistency guard",
+      "performance_budget_ms": 1000
+    },
+    {
       "case_id": "T140-GEO-ROAD-FUZZY-001",
       "operation": "geocode",
       "category": "road-fuzzy",

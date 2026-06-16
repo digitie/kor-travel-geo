@@ -16,6 +16,8 @@ def test_region_hint_accepts_sido_sigungu_and_bjd_prefixes() -> None:
     assert RegionHint(sig_cd="11110").sql_params()["sig_cd_filter"] == "11110"
     assert RegionHint(bjd_cd="11110101").sql_params()["bjd_cd_prefix"] == "11110101%"
     assert RegionHint(bjd_cd="1111010100").sql_params()["bjd_cd_filter"] == "1111010100"
+    assert RegionHint(sig_cd="11", bjd_cd="1111010100").sql_params()["sig_cd_prefix"] == "11%"
+    assert RegionHint(sig_cd="11110", bjd_cd="11110101").sql_params()["sig_cd_filter"] == "11110"
 
 
 def test_region_hint_rejects_ambiguous_code_lengths() -> None:
@@ -23,6 +25,13 @@ def test_region_hint_rejects_ambiguous_code_lengths() -> None:
         RegionHint(sig_cd="111")
     with pytest.raises(ValidationError):
         RegionHint(bjd_cd="111101")
+
+
+def test_region_hint_rejects_contradictory_sig_and_bjd_codes() -> None:
+    with pytest.raises(ValidationError, match="bjd_cd must start with sig_cd"):
+        RegionHint(sig_cd="11680", bjd_cd="1111010100")
+    with pytest.raises(ValidationError, match="bjd_cd must start with sig_cd"):
+        RegionHint(sig_cd="26", bjd_cd="11110101")
 
 
 def test_empty_region_params_are_complete_for_sql_binds() -> None:

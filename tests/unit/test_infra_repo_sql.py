@@ -176,6 +176,30 @@ def test_optional_filters_cast_parameters_for_psycopg_type_inference() -> None:
     assert "CAST(:query AS text) IS NULL" in pobox_sql
 
 
+def test_region_hint_filters_are_present_on_all_address_lookup_sql_surfaces() -> None:
+    statements = {
+        "geocode_road": str(geocode_repo._LOOKUP_ROAD),
+        "geocode_jibun": str(geocode_repo._LOOKUP_JIBUN),
+        "geocode_fuzzy": str(geocode_repo._FUZZY_ROADS),
+        "search_exact": str(search_repo._SEARCH_EXACT_SQL),
+        "search_fuzzy": str(search_repo._SEARCH_SQL),
+        "search_district": str(search_repo._DISTRICT_SEARCH_SQL),
+        "reverse_nearest": str(reverse_repo._NEAREST_SQL),
+        "geometry_road": str(geometry_repo._ROAD_GEOMETRY_SQL),
+    }
+
+    for name, sql in statements.items():
+        assert "CAST(:sig_cd_filter AS text)" in sql, name
+        assert "CAST(:sig_cd_prefix AS text)" in sql, name
+        assert "CAST(:bjd_cd_filter AS text)" in sql, name
+        assert "CAST(:bjd_cd_prefix AS text)" in sql, name
+
+    assert "ts.sig_cd = CAST(:sig_cd_filter AS text)" in statements["search_fuzzy"]
+    assert "ts.sido_cd = left(CAST(:sig_cd_prefix AS text), 2)" in statements["search_fuzzy"]
+    assert "bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%'" in statements["geocode_road"]
+    assert "t.bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%'" in statements["reverse_nearest"]
+
+
 def test_geocode_uses_separate_suffix_retry_for_district_only_compound_sigungu_names() -> None:
     lookup_sql = str(geocode_repo._LOOKUP_ROAD)
     suffix_sql = str(geocode_repo._LOOKUP_ROAD_SGG_SUFFIX)
