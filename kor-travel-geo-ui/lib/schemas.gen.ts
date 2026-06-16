@@ -15,6 +15,8 @@ export const apiSchemaNames = [
   "BackupRetentionRunRequest",
   "BackupVerifyRequest",
   "BackupVerifyResult",
+  "BenchmarkArtifactRegisterRequest",
+  "BenchmarkMetrics",
   "CRS",
   "CacheMetrics",
   "CandidateV2",

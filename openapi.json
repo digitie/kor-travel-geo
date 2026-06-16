@@ -1107,6 +1107,260 @@
         "title": "BackupVerifyResult",
         "type": "object"
       },
+      "BenchmarkArtifactRegisterRequest": {
+        "additionalProperties": false,
+        "description": "T-265: register a perf benchmark run (T-138/T-141/T-146) as an ops artifact so the\nAdmin UI (T-222) can surface latest-vs-baseline p95/p99 read-only. The run's heavy data\nstays as a local/remote file referenced by ``storage_uri``; only headline metrics are\npersisted in the artifact manifest.",
+        "properties": {
+          "baseline_artifact_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Artifact Id"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "load_matrix",
+              "sql",
+              "rest",
+              "geocoder_golden",
+              "reverse_golden",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/BenchmarkMetrics"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phase"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "run_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "storage_uri": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Uri"
+          },
+          "workload": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workload"
+          }
+        },
+        "required": [
+          "run_id",
+          "kind",
+          "display_name"
+        ],
+        "title": "BenchmarkArtifactRegisterRequest",
+        "type": "object"
+      },
+      "BenchmarkMetrics": {
+        "additionalProperties": false,
+        "description": "T-265: headline metrics for a perf benchmark run (T-222 read-only summary source).",
+        "properties": {
+          "error_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Count"
+          },
+          "error_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Rate"
+          },
+          "max_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Ms"
+          },
+          "p50_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50 Ms"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "p99_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P99 Ms"
+          },
+          "qps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qps"
+          },
+          "samples": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Samples"
+          }
+        },
+        "title": "BenchmarkMetrics",
+        "type": "object"
+      },
       "CRS": {
         "description": "Coordinate reference system normalized as EPSG:XXXX",
         "type": "string"
@@ -13398,6 +13652,48 @@
           }
         },
         "summary": "List Ops Audit Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/benchmark-artifacts": {
+      "post": {
+        "description": "T-265 (precursor to T-222): register a perf benchmark run (T-138/T-141/T-146) as a\n``benchmark`` ops artifact so the Admin UI can surface latest-vs-baseline p95/p99\nread-only. List them via ``GET /ops/artifacts?artifact_type=benchmark``.",
+        "operationId": "register_benchmark_artifact_v1_admin_ops_benchmark_artifacts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkArtifactRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsArtifact"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Benchmark Artifact",
         "tags": [
           "admin"
         ]

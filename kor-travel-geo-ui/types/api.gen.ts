@@ -690,6 +690,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/ops/benchmark-artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register Benchmark Artifact
+         * @description T-265 (precursor to T-222): register a perf benchmark run (T-138/T-141/T-146) as a
+         *     ``benchmark`` ops artifact so the Admin UI can surface latest-vs-baseline p95/p99
+         *     read-only. List them via ``GET /ops/artifacts?artifact_type=benchmark``.
+         */
+        post: operations["register_benchmark_artifact_v1_admin_ops_benchmark_artifacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/ops/maintenance-windows": {
         parameters: {
             query?: never;
@@ -2312,6 +2334,65 @@ export interface components {
             row_counts?: {
                 [key: string]: number;
             } | null;
+        };
+        /**
+         * BenchmarkArtifactRegisterRequest
+         * @description T-265: register a perf benchmark run (T-138/T-141/T-146) as an ops artifact so the
+         *     Admin UI (T-222) can surface latest-vs-baseline p95/p99 read-only. The run's heavy data
+         *     stays as a local/remote file referenced by ``storage_uri``; only headline metrics are
+         *     persisted in the artifact manifest.
+         */
+        BenchmarkArtifactRegisterRequest: {
+            /** Baseline Artifact Id */
+            baseline_artifact_id?: string | null;
+            /** Captured At */
+            captured_at?: string | null;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "load_matrix" | "sql" | "rest" | "geocoder_golden" | "reverse_golden" | "other";
+            metrics?: components["schemas"]["BenchmarkMetrics"];
+            /** Notes */
+            notes?: string | null;
+            /** Phase */
+            phase?: string | null;
+            /** Profile */
+            profile?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** Storage Uri */
+            storage_uri?: string | null;
+            /** Workload */
+            workload?: string | null;
+        };
+        /**
+         * BenchmarkMetrics
+         * @description T-265: headline metrics for a perf benchmark run (T-222 read-only summary source).
+         */
+        BenchmarkMetrics: {
+            /** Error Count */
+            error_count?: number | null;
+            /** Error Rate */
+            error_rate?: number | null;
+            /** Max Ms */
+            max_ms?: number | null;
+            /** P50 Ms */
+            p50_ms?: number | null;
+            /** P95 Ms */
+            p95_ms?: number | null;
+            /** P99 Ms */
+            p99_ms?: number | null;
+            /** Qps */
+            qps?: number | null;
+            /** Samples */
+            samples?: number | null;
         };
         /** @description Coordinate reference system normalized as EPSG:XXXX */
         CRS: string;
@@ -7390,6 +7471,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_benchmark_artifact_v1_admin_ops_benchmark_artifacts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchmarkArtifactRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpsArtifact"];
                 };
             };
             /** @description Validation Error */

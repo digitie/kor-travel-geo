@@ -27,10 +27,12 @@ from .core.v2 import (
 )
 from .core.zipcoder import zipcode as core_zipcode
 from .dto.admin import (
+    BENCHMARK_ARTIFACT_TYPE,
     AuditEvent,
     BackupCopyResult,
     BackupRetentionResult,
     BackupVerifyResult,
+    BenchmarkArtifactRegisterRequest,
     CacheMetrics,
     ConsistencyBulkDecisionRequest,
     ConsistencyBulkDecisionResponse,
@@ -1660,6 +1662,39 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
 
             raise NotFoundError(f"artifact not found: {artifact_id}")
         return artifact
+
+    async def register_benchmark_artifact(
+        self, request: BenchmarkArtifactRegisterRequest
+    ) -> OpsArtifact:
+        """T-265: persist a perf benchmark run's headline metrics as a ``benchmark`` ops
+        artifact (T-138/T-141/T-146) so the Admin UI (T-222) can surface it read-only. The
+        benchmark sub-type/workload/phase and metrics live in the artifact manifest; heavy
+        run data stays as the file referenced by ``storage_uri``."""
+        from uuid import uuid4
+
+        manifest: dict[str, Any] = {
+            "run_id": request.run_id,
+            "kind": request.kind,
+            "profile": request.profile,
+            "workload": request.workload,
+            "phase": request.phase,
+            "metrics": request.metrics.model_dump(exclude_none=True),
+            "baseline_artifact_id": request.baseline_artifact_id,
+            "captured_at": request.captured_at.isoformat() if request.captured_at else None,
+            "notes": request.notes,
+        }
+        return await AdminRepository(self._engine()).insert_artifact(
+            artifact_id=uuid4().hex,
+            artifact_type=BENCHMARK_ARTIFACT_TYPE,
+            state="available",
+            storage_kind="local_file" if request.storage_uri else "none",
+            storage_uri=request.storage_uri,
+            display_name=request.display_name,
+            media_type="application/json",
+            size_bytes=request.size_bytes,
+            sha256=request.sha256,
+            manifest=manifest,
+        )
 
     async def restore_hot_swap_plan(
         self,
