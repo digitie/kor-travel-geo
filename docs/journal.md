@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (Agent A 남은 작업 진행순서 재정렬)
+
+**작업**: `docs/tasks.md`의 병행 운영 규칙을 다시 확인하고, Agent A(Codex)에 남은 성능·안정성·정확도 작업의 실행 순서를 재정렬했다.
+
+**결정**: 번호순이 아니라 의존성과 검증 기반을 우선한다. 순서는 기반 관측·헬스(`T-157`/`T-160`/`T-174`) → 풀 포화·fail-fast(`T-154`/`T-145`/`T-161`/`T-159`) → 고부하 회귀 gate(`T-163`/`T-164`) → 정확도·결정성(`T-171`/`T-172`/`T-173`/`T-175`/`T-176`/`T-165`) → 쿼리·공간 최적화(`T-143`/`T-142`/`T-155`/`T-156`) → maintenance/API 계약(`T-146`/`T-162`/`T-144`) → 백업/복원 A 몫(`T-238`/`T-245`/`T-247`) → 최종 gate(`T-153`)다.
+
+**검증**: docs-only 변경이다. `docs/resume.md`의 "다음 한 작업"도 같은 순서로 갱신한다. 리뷰 반영(fixup) PR은 추가 리뷰하지 않는 규칙을 유지한다.
+
 ## 2026-06-16 (T-170 v2 producer 1:N candidate-list 전환)
 
 **작업**: v2 geocode producer의 단일 후보 collapse를 풀었다. `core/v2.py`에 후보 dedup helper와 geocode 응답 병합 helper를 추가했고, `AsyncAddressClient.geocode()`는 local v1 primary 후보와 보조 road geometry 후보를 같은 `candidates` tuple 안에 병합한다.
