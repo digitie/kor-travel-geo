@@ -104,4 +104,21 @@ test.describe("DB 입력(rebuild-db) /admin/source-files (T-263)", () => {
     const result = page.locator(".panel", { hasText: "최근 결과" });
     await expect(result.locator("pre")).toContainText("mock 500");
   });
+
+  test("preflight 체크리스트 + 위험작업 미리보기를 노출한다 (T-226)", async ({ page }) => {
+    await installSourceFilesMock(page); // 기본 detail: integrity_alert=true, item 1개(그룹 연결됨)
+    await page.goto("/admin/source-files");
+    await page.getByRole("tab", { name: "매칭 세트" }).click();
+
+    const form = page.locator(REBUILD_FORM);
+    await expect(form.getByText("사전 점검 (preflight)")).toBeVisible();
+    await expect(form.getByText("무결성 경보:", { exact: false })).toBeVisible();
+    // 기본 세트는 integrity_alert=true → 무결성 항목이 '차단'.
+    await expect(form.getByText("차단", { exact: true }).first()).toBeVisible();
+
+    // force 체크 시 위험작업 미리보기(영향·rollback 안내) + 확인 문구가 보인다.
+    await form.getByRole("checkbox").check();
+    await expect(form.getByText("위험작업 미리보기")).toBeVisible();
+    await expect(form.getByText(/serving DB를 재구성/)).toBeVisible();
+  });
 });
