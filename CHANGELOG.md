@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-176 reverse 경계·근접 정확도 정합을 추가했다. Reverse nearest SQL은 KNN 뒤 `distance_m`, `pt_source='entrance'`, `bd_mgt_sn`, `rncode_full`, `bjd_cd`로 동률을 결정하고, `radius_m` 경계 포함, `type="both"` fan-out, 주소 없음+국가지점번호 context-only `OK` 의미를 테스트와 corpus로 고정한다.
 - T-175 region hint 정확도·교차검증을 추가했다. `RegionHint`가 `sig_cd`/`bjd_cd` prefix 일관성을 검증해 모순 hint를 DB 조회 전 입력 오류로 거절하고, v2 geocode/reverse/search 입력 모델도 같은 검증을 생성 시점에 실행한다. T-140 corpus는 정상 BJD hint와 모순 hint negative를 추가해 25개가 됐다.
 - T-173 negative/악성/경계 입력 안전성 하니스를 추가했다. Geocode text 입력은 ASCII control character를 DTO 단계에서 거절하고, v2 reverse 좌표는 finite 값과 한국 lon/lat bounds를 먼저 검증한다. API 하니스는 v1/v2 geocode/reverse/SPPN 악성·경계 입력이 구조화 4xx 또는 core `NOT_FOUND`로 끝나며 500/crash가 없음을 고정한다.
 - T-172 confidence 산정 중앙 모델을 추가했다. `kortravelgeo.core.confidence`가 centroid cap, 국가지점번호 grid cell, external fallback, reverse distance, search/geometry score confidence를 한곳에서 산정하며, SPPN reverse 후보 confidence는 exact 주소와 구분해 `0.72`로 낮춘다. T-140 SPPN corpus case는 `confidence=0.72`를 golden으로 고정한다.

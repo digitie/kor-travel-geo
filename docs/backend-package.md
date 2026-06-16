@@ -236,7 +236,7 @@ SQLAlchemy pool checkout timeout은 전용 메시지 `database connection pool c
 
 ### Reverse / Search / Zipcode / Pobox
 
-- `ReverseInput`: `point`, `crs`, `type ∈ {"both","road","parcel"}`, `zipcode: bool`, `radius_m (1..2000)`. `model_validator`로 한국 좌표 범위(`123<x<132, 32<y<39`) 검증. v2 `ReverseV2Input`도 같은 bounds와 finite 좌표 검증을 DTO 단계에서 수행한다.
+- `ReverseInput`: `point`, `crs`, `type ∈ {"both","road","parcel"}`, `zipcode: bool`, `radius_m (1..2000)`. `model_validator`로 한국 좌표 범위(`123<x<132, 32<y<39`) 검증. v2 `ReverseV2Input`도 같은 bounds와 finite 좌표 검증을 DTO 단계에서 수행한다. T-176 이후 reverse 반경은 `ST_DWithin` 기준이라 `distance_m == radius_m` 경계 후보를 포함한다. `type="both"`는 SQL base row `limit`을 먼저 적용한 뒤 각 row를 `road`, `parcel` 순으로 펼치며, 주소 후보가 없어도 국가지점번호 context가 있으면 v2 `match_kind="sppn"` 후보를 담아 `OK`를 반환한다.
 - `SearchInput(Page)`: `query`, `type ∈ {"address","place","district","road"}`, `category`, `crs`, `bbox?`.
 - `ZipcodeInput`: `address | point | bd_mgt_sn` 중 하나 필수(`model_validator(mode="after")`), `include_bulk`.
 - `PoboxInput(Page)`: `query`, `si_nm`, `sgg_nm`, `kind ∈ {"PO","PG","ALL"}`.
@@ -310,7 +310,7 @@ T-064 이후 `/v2/geocode`는 상세번호가 없는 상위 주소 입력도 별
 
 T-170 이후 v2 geocode producer는 public `candidates` tuple 안에서 복수 후보를 반환할 수 있다. local v1 primary 후보와 보조 road geometry 후보를 병합하고, 국가지점번호·건물관리번호·도로명코드·행정구역 코드 등 안정 키로 dedup한 뒤 `limit`을 적용한다. REST v1 호환 응답과 내부 `GeocodeResponse` 계약은 바꾸지 않는다.
 
-`reverse_geocoder`, `searcher`, `zipcoder`, `poboxer`도 같은 패턴.
+`reverse_geocoder`, `searcher`, `zipcoder`, `poboxer`도 같은 패턴. Reverse nearest SQL은 T-176 이후 `t.pt_5179 <-> p.geom` KNN 정렬 뒤 `distance_m`, `pt_source='entrance'`, `bd_mgt_sn`, `rncode_full`, `bjd_cd`로 동률을 깨서 같은 DB snapshot에서 후보 순서가 흔들리지 않게 한다.
 
 ## 7. DB 어댑터
 

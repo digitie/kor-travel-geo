@@ -32,7 +32,12 @@ SELECT t.bd_mgt_sn, t.rncode_full, t.rn AS road_nm, t.buld_mnnm, t.buld_slno,
    AND (CAST(:bjd_cd_filter AS text) IS NULL OR t.bjd_cd = CAST(:bjd_cd_filter AS text))
    AND (CAST(:bjd_cd_prefix AS text) IS NULL OR t.bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
    AND ST_DWithin(t.pt_5179, p.geom, :radius_m)
- ORDER BY t.pt_5179 <-> p.geom
+ ORDER BY t.pt_5179 <-> p.geom,
+          distance_m ASC,
+          CASE WHEN t.pt_source = 'entrance' THEN 0 ELSE 1 END,
+          t.bd_mgt_sn ASC,
+          t.rncode_full ASC,
+          t.bjd_cd ASC
  LIMIT :limit
 """
 )
