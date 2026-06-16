@@ -12,7 +12,7 @@ from kortravelgeo.core.source_reconcile import (
     CategoryCapacity,
     build_source_registry_metric_facts,
 )
-from kortravelgeo.dto.admin import CacheMetrics
+from kortravelgeo.dto.admin import CacheMetrics, PgStatStatementSnapshot
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -183,6 +183,26 @@ DB_QUERY_DURATION = _histogram(
     ("operation", "query_fingerprint", "status"),
     (0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
+PG_STAT_STATEMENTS_TOTAL_EXEC_MS = _gauge(
+    "kor_travel_geo_pg_stat_statements_total_exec_time_ms",
+    "Latest persisted pg_stat_statements top query total execution time in milliseconds.",
+    ("rank", "operation", "query_fingerprint"),
+)
+PG_STAT_STATEMENTS_CALLS = _gauge(
+    "kor_travel_geo_pg_stat_statements_calls",
+    "Latest persisted pg_stat_statements top query call count.",
+    ("rank", "operation", "query_fingerprint"),
+)
+PG_STAT_STATEMENTS_MEAN_EXEC_MS = _gauge(
+    "kor_travel_geo_pg_stat_statements_mean_exec_time_ms",
+    "Latest persisted pg_stat_statements top query mean execution time in milliseconds.",
+    ("rank", "operation", "query_fingerprint"),
+)
+PG_STAT_STATEMENTS_MAX_EXEC_MS = _gauge(
+    "kor_travel_geo_pg_stat_statements_max_exec_time_ms",
+    "Latest persisted pg_stat_statements top query max execution time in milliseconds.",
+    ("rank", "operation", "query_fingerprint"),
+)
 # --- source-registry observability gauges (T-211) --------------------------
 # T-203c janitor (3 counters) and T-204 reconcile (3 counters) metrics already
 # exist above; T-211 adds the upload-session state gauge and the storage
@@ -291,8 +311,8 @@ def record_load_job_stage_duration(
 
 
 def record_db_query(*, statement: str, elapsed_s: float, status: str) -> None:
-    operation = _sql_operation(statement)
-    fingerprint = _sql_fingerprint(statement)
+    operation = sql_operation(statement)
+    fingerprint = sql_fingerprint(statement)
     DB_QUERIES.labels(
         operation=operation,
         query_fingerprint=fingerprint,
@@ -350,6 +370,36 @@ def refresh_admin_metrics(
     CACHE_EXPIRED.set(cache.expired)
     for kind, state, count in load_jobs:
         LOAD_JOBS.labels(kind=kind, state=state).set(count)
+
+
+def refresh_pg_stat_statement_metrics(rows: list[PgStatStatementSnapshot]) -> None:
+    for metric in (
+        PG_STAT_STATEMENTS_TOTAL_EXEC_MS,
+        PG_STAT_STATEMENTS_CALLS,
+        PG_STAT_STATEMENTS_MEAN_EXEC_MS,
+        PG_STAT_STATEMENTS_MAX_EXEC_MS,
+    ):
+        _clear_metric(metric)
+    for row in rows:
+        labels = {
+            "rank": str(row.rank),
+            "operation": row.operation,
+            "query_fingerprint": row.query_fingerprint,
+        }
+        PG_STAT_STATEMENTS_TOTAL_EXEC_MS.labels(**labels).set(row.total_exec_time_ms)
+        PG_STAT_STATEMENTS_CALLS.labels(**labels).set(row.calls)
+        PG_STAT_STATEMENTS_MEAN_EXEC_MS.labels(**labels).set(row.mean_exec_time_ms)
+        PG_STAT_STATEMENTS_MAX_EXEC_MS.labels(**labels).set(row.max_exec_time_ms)
+
+
+def _clear_metric(metric: Any) -> None:
+    clear = getattr(metric, "clear", None)
+    if not callable(clear):
+        return
+    try:
+        clear()
+    except Exception:  # pragma: no cover - defensive for alternate metric backends.
+        return
 
 
 def refresh_source_registry_metrics(
@@ -486,7 +536,7 @@ def _normalize_stage_label(stage: str) -> str:
     return stage.split(":", 1)[0]
 
 
-def _sql_operation(statement: str) -> str:
+def sql_operation(statement: str) -> str:
     stripped = statement.lstrip()
     if not stripped:
         return "unknown"
@@ -500,7 +550,7 @@ def _sql_operation(statement: str) -> str:
     return "other"
 
 
-def _sql_fingerprint(statement: str) -> str:
+def sql_fingerprint(statement: str) -> str:
     normalized = _SQL_COMMENT_RE.sub(" ", statement).strip().lower()
     normalized = _SQL_WHITESPACE_RE.sub(" ", normalized)
     if not normalized:

@@ -477,3 +477,23 @@ export type TableStatsSnapshot = {
   exact_rows?: number | null;
   total_bytes?: number | null;
 };
+
+export type PgStatStatementSnapshot = {
+  pg_stat_snapshot_id: string;
+  captured_at: string;
+  rank: number;
+  queryid?: string | null;
+  query_fingerprint: string;
+  operation: string;
+  calls: number;
+  total_exec_time_ms: number;
+  mean_exec_time_ms: number;
+  max_exec_time_ms: number;
+  rows_returned: number;
+  shared_blks_hit: number;
+  shared_blks_read: number;
+  temp_blks_read: number;
+  temp_blks_written: number;
+  query_preview: string;
+  stats?: Record<string, unknown>;
+};

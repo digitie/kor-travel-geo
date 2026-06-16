@@ -9,6 +9,7 @@ from kortravelgeo.dto.admin import (
     AuditEvent,
     MaintenanceWindowCreate,
     OpsArtifact,
+    PgStatStatementSnapshot,
     TableStatsSnapshot,
 )
 from kortravelgeo.infra import admin_repo
@@ -25,6 +26,7 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
         "ops.artifacts",
         "ops.maintenance_windows",
         "ops.table_stats_snapshots",
+        "ops.pg_stat_statements_snapshots",
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in SCHEMA_SQL
 
@@ -40,8 +42,13 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
     assert "idx_ops_serving_releases_one_active" in INDEX_SQL
     assert "idx_ops_consistency_case_samples_report" in INDEX_SQL
     assert "idx_ops_consistency_case_samples_4326" in INDEX_SQL
+    assert "idx_ops_pg_stat_statements_snapshots_captured" in INDEX_SQL
+    assert "idx_ops_pg_stat_statements_snapshots_fingerprint" in INDEX_SQL
     assert "WHERE state = 'active'" in INDEX_SQL
     assert any("ops.table_stats_snapshots" in sql for sql in iter_sql_statements(SCHEMA_SQL))
+    assert any(
+        "ops.pg_stat_statements_snapshots" in sql for sql in iter_sql_statements(SCHEMA_SQL)
+    )
 
 
 def test_audit_redaction_never_keeps_secrets_dsn_tokens_or_raw_address() -> None:
@@ -108,6 +115,21 @@ def test_ops_dtos_validate_core_contracts() -> None:
     )
     assert stats.estimated_rows == 10
 
+    pg_stat = PgStatStatementSnapshot(
+        pg_stat_snapshot_id="pg-stat-1",
+        captured_at=now,
+        rank=1,
+        query_fingerprint="abc123",
+        operation="select",
+        calls=3,
+        total_exec_time_ms=15.0,
+        mean_exec_time_ms=5.0,
+        max_exec_time_ms=7.5,
+        rows_returned=30,
+        query_preview="SELECT * FROM mv_geocode_target WHERE road_address = ?",
+    )
+    assert pg_stat.stats == {}
+
 
 def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     source = inspect.getsource(admin_repo.AdminRepository)
@@ -127,6 +149,11 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "_OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0" in module_source
     assert "pg_try_advisory_xact_lock" in module_source
     assert "TABLE_STATS_CAPTURE_LOCKED_MESSAGE" in module_source
+    assert "capture_pg_stat_statement_snapshots" in source
+    assert "_OPS_PG_STAT_STATEMENTS_ADVISORY_LOCK = 0x4B47_00A1" in module_source
+    assert "PG_STAT_STATEMENTS_CAPTURE_LOCKED_MESSAGE" in module_source
+    assert "x_extension.pg_stat_statements" in module_source
+    assert "_pg_stat_query_preview" in module_source
     assert "skip_if_locked" in source
     assert "http_status=409" in source
     assert "insert_artifact" in source
@@ -142,6 +169,21 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "mv_hash=mv_hash" in module_source
     assert "CAST(:mv_row_count AS text)" in module_source
     assert "serving_release.activate" in module_source
+
+
+def test_pg_stat_query_preview_masks_literals_and_limits_length() -> None:
+    query = (
+        "SELECT $$서울특별시 강남구$$, E'비밀', 123 "
+        "FROM mv_geocode_target WHERE road_address = '테헤란로 152'"
+    )
+
+    preview = admin_repo._pg_stat_query_preview(query * 20)
+
+    assert "서울특별시" not in preview
+    assert "비밀" not in preview
+    assert "테헤란로" not in preview
+    assert "123" not in preview
+    assert len(preview) <= 500
 
 
 def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
@@ -168,16 +210,23 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
     assert "dataset_snapshot_id" in restore_source
 
 
-def test_table_stats_scheduler_is_opt_in_and_uses_settings() -> None:
+def test_ops_capture_schedulers_use_settings_and_advisory_locks() -> None:
     from kortravelgeo.api import app
 
     module_source = inspect.getsource(app)
     scheduler_source = inspect.getsource(app._start_table_stats_capture_scheduler)
     loop_source = inspect.getsource(app._run_table_stats_capture_scheduler)
+    pg_scheduler_source = inspect.getsource(app._start_pg_stat_statements_capture_scheduler)
+    pg_loop_source = inspect.getsource(app._run_pg_stat_statements_capture_scheduler)
 
     assert "ops_table_stats_capture_interval_minutes <= 0" in scheduler_source
     assert "asyncio.create_task" in scheduler_source
     assert "ops_table_stats_capture_on_startup" in loop_source
     assert "ops_table_stats_capture_limit" in module_source
     assert "capture_table_stats_snapshots(" in module_source
+    assert "ops_pg_stat_statements_capture_interval_minutes <= 0" in pg_scheduler_source
+    assert "ops_pg_stat_statements_capture_on_startup" in pg_loop_source
+    assert "ops_pg_stat_statements_capture_limit" in module_source
+    assert "capture_pg_stat_statement_snapshots(" in module_source
+    assert "refresh_pg_stat_statement_metrics" in module_source
     assert "skip_if_locked=True" in module_source

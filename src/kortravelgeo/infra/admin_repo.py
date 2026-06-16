@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -37,12 +38,14 @@ from kortravelgeo.dto.admin import (
     MaintenanceWindow,
     MaintenanceWindowCreate,
     OpsArtifact,
+    PgStatStatementSnapshot,
     RollbackPlan,
     ServingRelease,
     TableStat,
     TableStatsSnapshot,
 )
 from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.metrics import sql_fingerprint, sql_operation
 from kortravelgeo.infra.uploads import extract_upload_set_ids
 from kortravelgeo.version import __version__
 
@@ -101,6 +104,14 @@ SELECT table_stats_snapshot_id, dataset_snapshot_id, captured_at, schema_name, o
   FROM ops.table_stats_snapshots
 """
 
+_PG_STAT_STATEMENTS_SNAPSHOT_SELECT = """
+SELECT pg_stat_snapshot_id, captured_at, rank, queryid, query_fingerprint, operation,
+       calls, total_exec_time_ms, mean_exec_time_ms, max_exec_time_ms, rows_returned,
+       shared_blks_hit, shared_blks_read, temp_blks_read, temp_blks_written,
+       query_preview, stats
+  FROM ops.pg_stat_statements_snapshots
+"""
+
 _ROW_COUNT_OBJECTS = (
     "tl_juso_text",
     "tl_juso_parcel_link",
@@ -115,7 +126,15 @@ _ROW_COUNT_OBJECTS = (
 )
 
 _OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0
+_OPS_PG_STAT_STATEMENTS_ADVISORY_LOCK = 0x4B47_00A1
 TABLE_STATS_CAPTURE_LOCKED_MESSAGE = "table stats capture is already running"
+PG_STAT_STATEMENTS_CAPTURE_LOCKED_MESSAGE = "pg_stat_statements capture is already running"
+_SQL_LITERAL_RE = re.compile(
+    r"\$([A-Za-z_][A-Za-z_0-9]*)\$.*?\$\1\$|\$\$.*?\$\$|"
+    r"[eE]?'(?:''|[^'])*'|\b\d+(?:\.\d+)?\b",
+    re.DOTALL,
+)
+_SQL_SPACE_RE = re.compile(r"\s+")
 
 _CONSISTENCY_SAMPLE_SELECT = """
 SELECT sample_id::text AS sample_id, report_id, case_code, severity, sample_rank,
@@ -1128,6 +1147,140 @@ VALUES
                     records,
                 )
         return [_table_stats_snapshot(record) for record in records]
+
+    async def list_pg_stat_statement_snapshots(
+        self,
+        *,
+        limit: int = 20,
+        latest_only: bool = True,
+    ) -> list[PgStatStatementSnapshot]:
+        params: dict[str, Any] = {"limit": limit}
+        if latest_only:
+            sql = text(
+                """
+WITH latest AS (
+  SELECT captured_at
+    FROM ops.pg_stat_statements_snapshots
+   ORDER BY captured_at DESC
+   LIMIT 1
+)
+"""
+                + _PG_STAT_STATEMENTS_SNAPSHOT_SELECT
+                + """
+ WHERE captured_at = (SELECT captured_at FROM latest)
+ ORDER BY rank
+ LIMIT :limit
+"""
+            )
+        else:
+            sql = text(
+                _PG_STAT_STATEMENTS_SNAPSHOT_SELECT
+                + " ORDER BY captured_at DESC, rank LIMIT :limit"
+            )
+        async with self.engine.connect() as conn:
+            rows = (await conn.execute(sql, params)).mappings().all()
+        return [_pg_stat_statement_snapshot(dict(row)) for row in rows]
+
+    async def capture_pg_stat_statement_snapshots(
+        self,
+        *,
+        limit: int = 20,
+        skip_if_locked: bool = True,
+    ) -> list[PgStatStatementSnapshot]:
+        captured_at = datetime.now(UTC)
+        async with self.engine.begin() as conn:
+            locked = await conn.scalar(
+                text("SELECT pg_try_advisory_xact_lock(:lock_key)"),
+                {"lock_key": _OPS_PG_STAT_STATEMENTS_ADVISORY_LOCK},
+            )
+            if locked is not True:
+                if not skip_if_locked:
+                    raise InvalidInputError(
+                        PG_STAT_STATEMENTS_CAPTURE_LOCKED_MESSAGE,
+                        code="E0409",
+                        http_status=409,
+                    )
+                return []
+            stats_rows = (
+                await conn.execute(
+                    text(
+                        """
+SELECT row_number() OVER (ORDER BY total_exec_time DESC, calls DESC)::integer AS rank,
+       queryid::text AS queryid,
+       query,
+       GREATEST(calls, 0)::bigint AS calls,
+       GREATEST(total_exec_time, 0)::double precision AS total_exec_time_ms,
+       GREATEST(mean_exec_time, 0)::double precision AS mean_exec_time_ms,
+       GREATEST(max_exec_time, 0)::double precision AS max_exec_time_ms,
+       GREATEST(rows, 0)::bigint AS rows_returned,
+       GREATEST(shared_blks_hit, 0)::bigint AS shared_blks_hit,
+       GREATEST(shared_blks_read, 0)::bigint AS shared_blks_read,
+       GREATEST(temp_blks_read, 0)::bigint AS temp_blks_read,
+       GREATEST(temp_blks_written, 0)::bigint AS temp_blks_written,
+       COALESCE(wal_bytes, 0)::numeric AS wal_bytes,
+       COALESCE(blk_read_time, 0)::double precision AS blk_read_time_ms,
+       COALESCE(blk_write_time, 0)::double precision AS blk_write_time_ms
+  FROM x_extension.pg_stat_statements
+ WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+   AND calls > 0
+   AND query IS NOT NULL
+   AND query NOT ILIKE '%pg_stat_statements%'
+ ORDER BY total_exec_time DESC, calls DESC
+ LIMIT :limit
+"""
+                    ),
+                    {"limit": limit},
+                )
+            ).mappings().all()
+            records = []
+            for row in stats_rows:
+                query = str(row["query"] or "")
+                records.append(
+                    {
+                        "pg_stat_snapshot_id": str(uuid4()),
+                        "captured_at": captured_at,
+                        "rank": int(row["rank"]),
+                        "queryid": _optional_str(row.get("queryid")),
+                        "query_fingerprint": sql_fingerprint(query),
+                        "operation": sql_operation(query),
+                        "calls": int(row["calls"] or 0),
+                        "total_exec_time_ms": float(row["total_exec_time_ms"] or 0.0),
+                        "mean_exec_time_ms": float(row["mean_exec_time_ms"] or 0.0),
+                        "max_exec_time_ms": float(row["max_exec_time_ms"] or 0.0),
+                        "rows_returned": int(row["rows_returned"] or 0),
+                        "shared_blks_hit": int(row["shared_blks_hit"] or 0),
+                        "shared_blks_read": int(row["shared_blks_read"] or 0),
+                        "temp_blks_read": int(row["temp_blks_read"] or 0),
+                        "temp_blks_written": int(row["temp_blks_written"] or 0),
+                        "query_preview": _pg_stat_query_preview(query),
+                        "stats": {
+                            "source": "pg_stat_statements",
+                            "wal_bytes": float(row["wal_bytes"] or 0),
+                            "blk_read_time_ms": float(row["blk_read_time_ms"] or 0.0),
+                            "blk_write_time_ms": float(row["blk_write_time_ms"] or 0.0),
+                        },
+                    }
+                )
+            if records:
+                await conn.execute(
+                    _json_text(
+                        """
+INSERT INTO ops.pg_stat_statements_snapshots
+  (pg_stat_snapshot_id, captured_at, rank, queryid, query_fingerprint,
+   operation, calls, total_exec_time_ms, mean_exec_time_ms, max_exec_time_ms,
+   rows_returned, shared_blks_hit, shared_blks_read, temp_blks_read,
+   temp_blks_written, query_preview, stats)
+VALUES
+  (:pg_stat_snapshot_id, :captured_at, :rank, :queryid, :query_fingerprint,
+   :operation, :calls, :total_exec_time_ms, :mean_exec_time_ms, :max_exec_time_ms,
+   :rows_returned, :shared_blks_hit, :shared_blks_read, :temp_blks_read,
+   :temp_blks_written, :query_preview, :stats)
+""",
+                        "stats",
+                    ),
+                    records,
+                )
+        return [_pg_stat_statement_snapshot(record) for record in records]
 
     async def insert_load_job(
         self,
@@ -2529,6 +2682,34 @@ def _table_stats_snapshot(row: Mapping[str, Any]) -> TableStatsSnapshot:
         last_analyze=row.get("last_analyze"),
         stats=_json_dict(row.get("stats")),
     )
+
+
+def _pg_stat_statement_snapshot(row: Mapping[str, Any]) -> PgStatStatementSnapshot:
+    return PgStatStatementSnapshot(
+        pg_stat_snapshot_id=str(row["pg_stat_snapshot_id"]),
+        captured_at=row["captured_at"],
+        rank=int(row["rank"]),
+        queryid=_optional_str(row.get("queryid")),
+        query_fingerprint=str(row["query_fingerprint"]),
+        operation=str(row["operation"]),
+        calls=int(row["calls"]),
+        total_exec_time_ms=float(row["total_exec_time_ms"]),
+        mean_exec_time_ms=float(row["mean_exec_time_ms"]),
+        max_exec_time_ms=float(row["max_exec_time_ms"]),
+        rows_returned=int(row["rows_returned"]),
+        shared_blks_hit=int(row.get("shared_blks_hit") or 0),
+        shared_blks_read=int(row.get("shared_blks_read") or 0),
+        temp_blks_read=int(row.get("temp_blks_read") or 0),
+        temp_blks_written=int(row.get("temp_blks_written") or 0),
+        query_preview=str(row["query_preview"]),
+        stats=_json_dict(row.get("stats")),
+    )
+
+
+def _pg_stat_query_preview(query: str) -> str:
+    normalized = _SQL_SPACE_RE.sub(" ", query).strip()
+    masked = _SQL_LITERAL_RE.sub("?", normalized)
+    return (masked[:500] or "empty")
 
 
 def _default_maintenance_blocks(kind: str) -> dict[str, Any]:

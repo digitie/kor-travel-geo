@@ -33,9 +33,8 @@ export function JobProgress({
   const current = live ?? job;
   const isTerminal = terminalJobState(current.state);
   // Tick a clock (off the render path) so the ETA refreshes once a second while running.
-  const [nowMs, setNowMs] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    setNowMs(Date.now());
     if (isTerminal) return;
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -43,9 +42,7 @@ export function JobProgress({
 
   const pct = progressPercent(current.progress);
   const eta =
-    isTerminal || nowMs === 0
-      ? null
-      : estimateEtaSeconds(current.started_at, current.progress, nowMs);
+    isTerminal ? null : estimateEtaSeconds(current.started_at, current.progress, nowMs);
   const log = latestLogLine(current);
 
   return (

@@ -10,6 +10,7 @@ import {
   DatasetSnapshot,
   MaintenanceWindow,
   OpsArtifact,
+  PgStatStatementSnapshot,
   ServingRelease,
   TableStatsSnapshot,
   postJson,
@@ -31,6 +32,7 @@ type OpsDataState = {
   artifacts: OpsArtifact[];
   auditEvents: AuditEvent[];
   lastResult: unknown;
+  pgStats: PgStatStatementSnapshot[];
   releases: ServingRelease[];
   snapshots: DatasetSnapshot[];
   stats: TableStatsSnapshot[];
@@ -46,6 +48,7 @@ const initialOpsDataState: OpsDataState = {
   artifacts: [],
   auditEvents: [],
   lastResult: { status: "READY" },
+  pgStats: [],
   releases: [],
   snapshots: [],
   stats: [],
@@ -60,7 +63,8 @@ const initialWindowFormState: MaintenanceWindowFormState = {
 export function OpsPanel() {
   const [opsData, setOpsData] = useState<OpsDataState>(initialOpsDataState);
   const [windowForm, setWindowForm] = useState<MaintenanceWindowFormState>(initialWindowFormState);
-  const { artifacts, auditEvents, lastResult, releases, snapshots, stats, windows } = opsData;
+  const { artifacts, auditEvents, lastResult, pgStats, releases, snapshots, stats, windows } =
+    opsData;
   const { confirmation, kind, reason } = windowForm;
 
   function setLastResult(value: unknown) {
@@ -69,19 +73,28 @@ export function OpsPanel() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [nextAudit, nextSnapshots, nextReleases, nextArtifacts, nextWindows, nextStats] =
-        await Promise.all([
-          requestJson<AuditEvent[]>("/admin/ops/audit-events?limit=20"),
-          requestJson<DatasetSnapshot[]>("/admin/ops/snapshots?limit=10"),
-          requestJson<ServingRelease[]>("/admin/ops/releases?limit=10"),
-          requestJson<OpsArtifact[]>("/admin/ops/artifacts?limit=10"),
-          requestJson<MaintenanceWindow[]>("/admin/ops/maintenance-windows?limit=10"),
-          requestJson<TableStatsSnapshot[]>("/admin/ops/table-stats?limit=10")
-        ]);
+      const [
+        nextAudit,
+        nextSnapshots,
+        nextReleases,
+        nextArtifacts,
+        nextWindows,
+        nextStats,
+        nextPgStats
+      ] = await Promise.all([
+        requestJson<AuditEvent[]>("/admin/ops/audit-events?limit=20"),
+        requestJson<DatasetSnapshot[]>("/admin/ops/snapshots?limit=10"),
+        requestJson<ServingRelease[]>("/admin/ops/releases?limit=10"),
+        requestJson<OpsArtifact[]>("/admin/ops/artifacts?limit=10"),
+        requestJson<MaintenanceWindow[]>("/admin/ops/maintenance-windows?limit=10"),
+        requestJson<TableStatsSnapshot[]>("/admin/ops/table-stats?limit=10"),
+        requestJson<PgStatStatementSnapshot[]>("/admin/ops/pg-stat-statements?limit=10")
+      ]);
       setOpsData((current) => ({
         ...current,
         artifacts: nextArtifacts,
         auditEvents: nextAudit,
+        pgStats: nextPgStats,
         releases: nextReleases,
         snapshots: nextSnapshots,
         stats: nextStats,
@@ -113,6 +126,19 @@ export function OpsPanel() {
   async function captureStats() {
     try {
       const result = await postJson<TableStatsSnapshot[]>("/admin/ops/table-stats/capture", {});
+      setLastResult(result.slice(0, 5));
+      await loadAll();
+    } catch (error) {
+      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  async function capturePgStats() {
+    try {
+      const result = await postJson<PgStatStatementSnapshot[]>(
+        "/admin/ops/pg-stat-statements/capture?limit=20",
+        {}
+      );
       setLastResult(result.slice(0, 5));
       await loadAll();
     } catch (error) {
@@ -253,38 +279,9 @@ export function OpsPanel() {
         </table>
       </Panel>
 
-      <Panel
-        title="Table Stats Snapshots"
-        actions={
-          <button className="button secondary" onClick={captureStats} type="button">
-            <Play size={16} />
-            Capture
-          </button>
-        }
-      >
-        <table className="table">
-          <thead>
-            <tr>
-              <th>object</th>
-              <th>kind</th>
-              <th>rows</th>
-              <th>size</th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.map((row) => (
-              <tr key={row.table_stats_snapshot_id}>
-                <td>
-                  {row.schema_name}.{row.object_name}
-                </td>
-                <td>{row.object_kind}</td>
-                <td>{row.estimated_rows?.toLocaleString() ?? "-"}</td>
-                <td>{formatBytes(row.total_bytes)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Panel>
+      <TableStatsSnapshotsPanel stats={stats} onCapture={captureStats} />
+
+      <PgStatStatementsPanel pgStats={pgStats} onCapture={capturePgStats} />
 
       <Panel title="Artifacts">
         <table className="table">
@@ -337,4 +334,98 @@ export function OpsPanel() {
       </Panel>
     </div>
   );
+}
+
+function TableStatsSnapshotsPanel({
+  stats,
+  onCapture
+}: {
+  stats: TableStatsSnapshot[];
+  onCapture: () => void;
+}) {
+  return (
+    <Panel
+      title="Table Stats Snapshots"
+      actions={
+        <button className="button secondary" onClick={onCapture} type="button">
+          <Play size={16} />
+          Capture
+        </button>
+      }
+    >
+      <table className="table">
+        <thead>
+          <tr>
+            <th>object</th>
+            <th>kind</th>
+            <th>rows</th>
+            <th>size</th>
+          </tr>
+        </thead>
+        <tbody>
+          {stats.map((row) => (
+            <tr key={row.table_stats_snapshot_id}>
+              <td>
+                {row.schema_name}.{row.object_name}
+              </td>
+              <td>{row.object_kind}</td>
+              <td>{row.estimated_rows?.toLocaleString() ?? "-"}</td>
+              <td>{formatBytes(row.total_bytes)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Panel>
+  );
+}
+
+function PgStatStatementsPanel({
+  pgStats,
+  onCapture
+}: {
+  pgStats: PgStatStatementSnapshot[];
+  onCapture: () => void;
+}) {
+  return (
+    <Panel
+      title="pg_stat Statements"
+      actions={
+        <button className="button secondary" onClick={onCapture} type="button">
+          <Play size={16} />
+          Capture
+        </button>
+      }
+    >
+      <table className="table">
+        <thead>
+          <tr>
+            <th>rank</th>
+            <th>op</th>
+            <th>calls</th>
+            <th>total ms</th>
+            <th>mean ms</th>
+            <th>query</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pgStats.map((row) => (
+            <tr key={row.pg_stat_snapshot_id}>
+              <td>{row.rank}</td>
+              <td>{row.operation}</td>
+              <td>{row.calls.toLocaleString()}</td>
+              <td>{formatMs(row.total_exec_time_ms)}</td>
+              <td>{formatMs(row.mean_exec_time_ms)}</td>
+              <td>
+                <code>{row.query_preview}</code>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Panel>
+  );
+}
+
+function formatMs(value: number) {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }

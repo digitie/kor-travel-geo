@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-157 pg_stat_statements 상시 수집·노출)
+
+**작업**: `ops.pg_stat_statements_snapshots` table/Alembic migration을 추가하고, `AdminRepository`/`AsyncAddressClient`/Admin router에 `pg_stat_statements` top-N snapshot 조회·수집 표면을 붙였다. API lifespan scheduler는 기본 5분마다 시작 시 1회 포함 capture를 수행하고, `/metrics`는 최신 persisted snapshot을 Prometheus gauge로 노출한다. `/admin/ops`에는 top-N panel과 수동 capture 버튼을 추가했다.
+
+**결정**: query 원문은 Prometheus label로 노출하지 않는다. label은 `rank`, `operation`, `query_fingerprint`만 쓰고, Admin `query_preview`는 literal/숫자를 `?`로 마스킹한 뒤 500자로 제한한다. 수동 capture와 scheduler는 PostgreSQL advisory transaction lock을 공유해 중복 실행을 막는다.
+
+**문서/검증**: 상세는 `docs/t157-pgstat-observability.md`에 기록했다. `docs/tasks.md`에서는 T-157을 완료로 옮기고 다음 Agent A 작업을 T-160으로 갱신한다. WSL ext4 미러에서 backend pytest 849 passed/51 skipped, ruff, mypy, lint-imports, OpenAPI check, UI lint/type-check/test/build를 통과했다. React Doctor는 `JobProgress` prop-state sync error와 이번 `OpsPanel` giant component warning을 해소해 `errorCount=0`으로 통과했고, 기존 source-files/backups warning 16건은 별도 후속 정리 대상으로 남긴다.
+
 ## 2026-06-16 (Agent A 남은 작업 진행순서 재정렬)
 
 **작업**: `docs/tasks.md`의 병행 운영 규칙을 다시 확인하고, Agent A(Codex)에 남은 성능·안정성·정확도 작업의 실행 순서를 재정렬했다.

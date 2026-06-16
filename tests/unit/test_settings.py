@@ -48,6 +48,9 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.ops_table_stats_capture_interval_minutes == 0
     assert settings.ops_table_stats_capture_limit == 500
     assert settings.ops_table_stats_capture_on_startup is False
+    assert settings.ops_pg_stat_statements_capture_interval_minutes == 5
+    assert settings.ops_pg_stat_statements_capture_limit == 20
+    assert settings.ops_pg_stat_statements_capture_on_startup is True
     assert settings.epost_download_url == (
         "http://openapi.epost.go.kr/postal/downloadAreaCodeService/"
         "downloadAreaCodeService/getAreaCodeInfo"

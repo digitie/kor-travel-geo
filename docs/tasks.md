@@ -56,7 +56,7 @@
 
 `T-140`/`T-141`/`T-166`~`T-170` 완료 이후에는 번호순보다 의존성과 위험도 기준을 우선한다. 각 항목은 독립 PR로 머지하고, 리뷰 반영(fixup) PR은 추가 리뷰하지 않는다.
 
-1. **기반 관측·헬스**: `T-157` → `T-160` → `T-174`. slow-query/overload 기록, DB readiness/degradation 신호, 좌표 변환 단일 경로가 뒤 작업의 관측·정합 기준이 된다.
+1. **기반 관측·헬스**: `T-160` → `T-174`. `T-157`은 완료됐으므로 DB readiness/degradation 신호와 좌표 변환 단일 경로를 다음 관측·정합 기준으로 닫는다.
 2. **풀 포화·fail-fast 안정성**: `T-154` → `T-145` → `T-161` → `T-159`. pool checkout timeout과 overload envelope를 먼저 고정한 뒤 endpoint cap, client cancel, DB 장애 주입을 검증한다.
 3. **고부하 회귀 gate**: `T-163` → `T-164`. T-141 matrix를 합격 budget과 nightly/CI 후보로 승격한다.
 4. **정확도·결정성**: `T-171` → `T-172` → `T-173` → `T-175` → `T-176` → `T-165`. 이미 만든 T-140 corpus를 ranking/confidence/negative/hint/reverse boundary case로 확장한 뒤, 마지막에 parser 변형 case를 넓힌다.
@@ -74,7 +74,6 @@
 - T-154 async DB pool 포화·checkout timeout 튜닝 + 풀 포화 fail-fast — `engine.py`에 pool_size/max_overflow/pool_timeout/pre-ping을 명시 설정하고, 풀 고갈 시 무한 대기 대신 명시적 503/E0409 fail-fast로 전환한다. T-047 c64 tail의 주원인인 checkout 대기를 계측·상한한다. 합격: 풀 포화 부하에서 무한대기 0·명시 에러·p99 안정, 오류 0. (Agent A, 의존: T-138, T-141)
 - T-155 psycopg server-side prepared statement·plan cache 튜닝 — hot 쿼리(geocode/reverse/search)의 `prepare_threshold`·서버 prepared statement 재사용을 측정·튜닝하고 plan 캐시 효과와 pool 재사용 상호작용을 확인한다. 합격: 동일 쿼리 반복 시 plan 재사용 증가·p95 개선·결과 회귀 0. (Agent A, 의존: T-138)
 - T-156 geocode/reverse hot-key 결과 캐시 전략·무효화 — 현재 `geo_cache` 테이블/인덱스/metric은 있으나 라우터에 미연결(gap)이다. hot-key 결과 캐시(in-proc LRU 또는 geo_cache)와 적재/MV swap 시 무효화 규약을 설계·측정한다. 합격: hot-key hit율·p95 개선, swap 후 stale 응답 0. (Agent A, 의존: T-138)
-- T-157 pg_stat_statements 상시 수집·persist·Admin/Prometheus 노출 — 상시 수집 + 주기 스냅샷 persist, top-N slow query를 Prometheus/Admin에 노출한다. 합격: 재기동 후에도 누적 통계 유지·top-N 노출. (Agent A, 의존: —)
 - T-158 slow-query·overload 구조화 로깅·sampling persist — 임계 초과 쿼리/요청을 구조화 로깅 + sampling으로 persist(과다 로깅 방지)한다. 합격: 느린 쿼리 표본이 endpoint/plan과 함께 남고 정상부하 로깅 비용은 무시가능. (Agent A, 의존: T-157)
 - T-159 DB 단절·복구·IO 지연 chaos/fault injection 하 graceful degradation — DB 끊김/복구/IO 지연을 주입해 API가 graceful degrade(fast-fail·자동 회복)되는지 검증한다. 합격: 단절 중 fast-fail·복구 후 자동 회복·crash 0. (Agent A, 의존: T-160)
 - T-160 DB 의존 readiness/health 엔드포인트·degradation 신호 — readiness가 DB/pool 상태를 반영하고 과부하 시 degradation 신호를 노출한다. 합격: DB 불가 시 ready=false·degraded 신호 정확. (Agent A, 의존: —)
@@ -158,6 +157,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-157 pg_stat_statements 상시 수집·persist·Admin/Prometheus 노출(Agent A/Codex). `ops.pg_stat_statements_snapshots` table/Alembic migration을 추가하고, API lifespan scheduler가 기본 5분마다 `x_extension.pg_stat_statements` top-N을 advisory lock으로 중복 없이 저장한다. `GET/POST /v1/admin/ops/pg-stat-statements`와 `AsyncAddressClient` 메서드, `/admin/ops` Top-N panel을 추가했다. `/metrics`는 최신 persisted snapshot을 `rank`/`operation`/`query_fingerprint` label만 가진 gauge로 노출하고, query 원문은 label에 넣지 않는다. Admin용 `query_preview`는 literal/숫자를 `?`로 마스킹하고 500자로 제한한다. 상세: `docs/t157-pgstat-observability.md`. (2026-06-16)
 - [x] T-255 백업 Playwright e2e(Agent B/Claude). `tests/e2e/backups.spec.ts`(Chromium+Firefox)에서 `/admin/backups` 콘솔의 핵심 흐름을 백엔드 없이 `page.route` mock fixture로 고정했다 — 5탭+개요 가이드 렌더, 백업 탭의 생성 폼+만료/검증 컬럼(retention/expires/인벤토리 '불일치'), 백업 생성 POST 요청 발생, VirtualTable 검색 필터링, manifest 재현성 뷰어(source_set·active serving lineage)·닫기, 작업 탭의 실시간 진행률 카드(SSE /events mock + 폴링 fallback, 단계·42%)·취소 POST. **다운로드**는 mock artifact의 download_url 노출까지, **삭제/취소**는 POST 요청 발생으로 검증. **6 테스트 × 2 브라우저 = 12 passed**(Windows Playwright). **중요**: e2e는 CI 게이트가 아니며, `next dev`의 HMR websocket 실패가 hydration을 깨므로 **production build(`next build` + `next start --port 12505`)에서 실행**해야 안정적이다(strict-mode locator는 page heading 'DB Backups'·JsonBlock·jobs 테이블 셀과의 중복을 피해 특정 텍스트로 한정). 의존 e2e fixture는 T-256~258에서 재사용. (2026-06-16)
 - [x] T-170 v2 producer 1:N candidate-list 전환(Agent A/Codex). public wire `candidates` tuple은 유지하고 `core/v2.py`에 후보 dedup/병합 helper를 추가했다. `AsyncAddressClient.geocode()`는 local v1 primary 후보와 보조 road geometry 후보를 병합하며, dedup 후 `limit`을 적용한다. dedup 키는 국가지점번호, 건물관리번호, 도로명코드, 행정구역 코드, POI 이름/좌표, fallback metadata 순서이고 먼저 나온 v1 primary 후보를 보존한다. 상세: `docs/t170-v2-multicandidate-producer.md`, ADR-057. (2026-06-16)
 - [x] T-169 v2 match_kind/point_precision enum 정직화(Agent A/Codex). `V2MatchKind`에서 미사용 `postal`/`category`를 제거하고 `detail`/`poi`를 추가했다. 장소 검색 결과는 `match_kind="poi"`로 변환하고, 국가지점번호 후보는 `point_precision="grid_cell"`을 사용한다. `V2Source`에서는 provider가 아닌 `cache`를 제거하고 v1 cache 결과를 v2 `local`로 접는다. ADR-056과 `docs/t169-v2-enum-honesty.md`에 결정과 검증 범위를 기록했다. (2026-06-16)

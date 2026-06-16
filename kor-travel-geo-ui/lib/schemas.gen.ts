@@ -60,6 +60,7 @@ export const apiSchemaNames = [
   "NormalizeRequest",
   "NormalizeResponse",
   "OpsArtifact",
+  "PgStatStatementSnapshot",
   "PlaceV2",
   "PoboxInput",
   "PoboxResponse",

@@ -52,6 +52,7 @@ from .dto.admin import (
     MaintenanceWindowCreate,
     MaintenanceWindowEnd,
     OpsArtifact,
+    PgStatStatementSnapshot,
     RestoreCreateRequest,
     RestoreDrillResult,
     RestoreDryRunResult,
@@ -1775,6 +1776,28 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
     ) -> list[TableStatsSnapshot]:
         return await AdminRepository(self._engine()).capture_table_stats_snapshots(
             dataset_snapshot_id=dataset_snapshot_id,
+            limit=limit,
+            skip_if_locked=skip_if_locked,
+        )
+
+    async def list_pg_stat_statement_snapshots(
+        self,
+        *,
+        limit: int = 20,
+        latest_only: bool = True,
+    ) -> list[PgStatStatementSnapshot]:
+        return await AdminRepository(self._engine()).list_pg_stat_statement_snapshots(
+            limit=limit,
+            latest_only=latest_only,
+        )
+
+    async def capture_pg_stat_statement_snapshots(
+        self,
+        *,
+        limit: int = 20,
+        skip_if_locked: bool = False,
+    ) -> list[PgStatStatementSnapshot]:
+        return await AdminRepository(self._engine()).capture_pg_stat_statement_snapshots(
             limit=limit,
             skip_if_locked=skip_if_locked,
         )
