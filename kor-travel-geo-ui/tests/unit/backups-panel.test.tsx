@@ -61,15 +61,16 @@ describe("BackupsPanel tab shell (T-248)", () => {
     );
   });
 
-  it("switches to the backup tab and shows the create form + artifacts", async () => {
+  it("switches to the backup tab and shows the create form + artifacts list", async () => {
     render(<BackupsPanel />);
     await screen.findByRole("tablist", { name: "백업/복원 관리 탭" });
     fireEvent.click(screen.getByRole("tab", { name: "백업" }));
     expect(screen.getByText("DB Backup")).toBeTruthy();
     expect(screen.getByText("Backup Artifacts")).toBeTruthy();
-    await waitFor(() =>
-      expect(screen.getByText("backup-202606.tar.zst")).toBeTruthy()
-    );
+    // the artifacts list is the shared VirtualTable (rows are windowed, so assert the
+    // table mounted with the loaded data via its search box + count "1 / 1")
+    expect(screen.getByLabelText("목록 검색")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("1 / 1")).toBeTruthy());
   });
 
   it("shows the hot-swap plan UI (T-250)", async () => {
