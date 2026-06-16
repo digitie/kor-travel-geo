@@ -44,12 +44,16 @@ from kortravelgeo.core.source_events import (
     SOURCE_RESTORED_FROM_BACKUP_RELINK,
 )
 from kortravelgeo.core.source_restore import (
+    ManifestSourceDbFileFact,
     ManifestSourceFile,
+    ManifestSourceFileReconcileDecision,
+    ManifestSourceHeadFact,
     ManifestSourceItem,
     ManifestSourceMatchSet,
     RelinkObjectCheck,
     RestoreEntrypoint,
     RestoreSourceVerificationPlan,
+    decide_manifest_source_file_reconcile,
     decide_relink_child,
     plan_restore_source_verification,
     plan_restored_from_backup,
@@ -162,7 +166,7 @@ async def _group_manifest_files(
             text(
                 """
 SELECT source_file_id, original_filename, part_kind, part_key, sha256,
-       size_bytes, storage_uri, object_key, bucket
+       size_bytes, storage_uri, object_key, bucket, object_etag
   FROM ops.source_files
  WHERE source_file_group_id = :gid
    AND state NOT IN ('hard_deleted', 'soft_deleted')
@@ -183,6 +187,7 @@ SELECT source_file_id, original_filename, part_kind, part_key, sha256,
             part_key=str(r["part_key"]),
             object_key=r["object_key"],
             bucket=r["bucket"],
+            object_etag=r["object_etag"],
         )
         for r in rows
     )
@@ -209,6 +214,7 @@ def parse_manifest_source_match_set(
                 part_key=str(f.get("part_key") or "archive"),
                 object_key=f.get("object_key"),
                 bucket=f.get("bucket"),
+                object_etag=f.get("object_etag"),
             )
             for f in (it.get("files") or [])
         )
@@ -233,6 +239,229 @@ def parse_manifest_source_match_set(
         items=tuple(items),
         omitted_optional=dict(block.get("omitted_optional") or {}),
     )
+
+
+# --- manifest ↔ DB ↔ RustFS reconcile (T-238) -----------------------------
+
+
+@dataclass(frozen=True)
+class ManifestSourceReconcileRow:
+    """One T-238 manifest per-file reconcile row."""
+
+    category: str
+    source_file_id: str
+    filename: str
+    part_key: str
+    object_key: str | None
+    decision: ManifestSourceFileReconcileDecision
+
+
+@dataclass(frozen=True)
+class ManifestSourceReconcileReport:
+    """Opt-in backup manifest/source inventory reconcile report."""
+
+    artifact_schema_version: int | None
+    source_match_set_id: str | None
+    skipped: bool
+    reason: str | None
+    total: int
+    counts: dict[str, int]
+    ok: bool
+    rows: tuple[ManifestSourceReconcileRow, ...]
+
+
+def manifest_source_reconcile_report_to_dict(
+    report: ManifestSourceReconcileReport,
+) -> dict[str, Any]:
+    return {
+        "artifact_schema_version": report.artifact_schema_version,
+        "source_match_set_id": report.source_match_set_id,
+        "skipped": report.skipped,
+        "reason": report.reason,
+        "total": report.total,
+        "counts": dict(report.counts),
+        "ok": report.ok,
+        "rows": [
+            {
+                "category": row.category,
+                "source_file_id": row.source_file_id,
+                "filename": row.filename,
+                "part_key": row.part_key,
+                "object_key": row.object_key,
+                "status": row.decision.status,
+                "db_status": row.decision.db_status,
+                "expected_object_key": row.decision.expected_object_key,
+                "observed_object_key": row.decision.observed_object_key,
+                "expected_size_bytes": row.decision.expected_size_bytes,
+                "observed_size_bytes": row.decision.observed_size_bytes,
+                "expected_etag": row.decision.expected_etag,
+                "observed_etag": row.decision.observed_etag,
+                "reasons": list(row.decision.reasons),
+            }
+            for row in report.rows
+        ],
+    }
+
+
+async def reconcile_manifest_source_inventory(
+    engine: AsyncEngine,
+    manifest: Mapping[str, Any],
+    *,
+    rustfs: RustfsClient | None,
+    actor: str | None = None,
+) -> ManifestSourceReconcileReport:
+    """Compare backup manifest ``source_match_set`` files with DB and RustFS HEAD.
+
+    This is the T-238 opt-in check. Legacy manifests and RustFS-disabled
+    environments degrade to a skipped report instead of failing restore/backup
+    flows.
+    """
+    artifact_schema_version = _int_or_none(manifest.get("artifact_schema_version"))
+    block_json = manifest.get("source_match_set")
+    if not isinstance(block_json, Mapping):
+        return ManifestSourceReconcileReport(
+            artifact_schema_version=artifact_schema_version,
+            source_match_set_id=None,
+            skipped=True,
+            reason="legacy_manifest_no_source_match_set",
+            total=0,
+            counts={},
+            ok=True,
+            rows=(),
+        )
+    block = parse_manifest_source_match_set(block_json)
+    files = tuple((item.category, file) for item in block.items for file in item.files)
+    if rustfs is None:
+        return ManifestSourceReconcileReport(
+            artifact_schema_version=artifact_schema_version,
+            source_match_set_id=block.source_match_set_id,
+            skipped=True,
+            reason="rustfs_unavailable",
+            total=len(files),
+            counts={},
+            ok=True,
+            rows=(),
+        )
+
+    db_facts = await _manifest_source_db_facts(engine, tuple(file for _, file in files))
+    rows: list[ManifestSourceReconcileRow] = []
+    for category, file in files:
+        head = await _head_manifest_file(rustfs, file)
+        db = db_facts.get(file.source_file_id)
+        if db is None and file.object_key:
+            db = db_facts.get(f"object_key:{file.object_key}")
+        decision = decide_manifest_source_file_reconcile(
+            file,
+            db=db,
+            head=head,
+        )
+        rows.append(
+            ManifestSourceReconcileRow(
+                category=category,
+                source_file_id=file.source_file_id,
+                filename=file.filename,
+                part_key=file.part_key,
+                object_key=file.object_key,
+                decision=decision,
+            )
+        )
+
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row.decision.status] = counts.get(row.decision.status, 0) + 1
+    ok = not any(status != "present" for status in counts)
+    report = ManifestSourceReconcileReport(
+        artifact_schema_version=artifact_schema_version,
+        source_match_set_id=block.source_match_set_id,
+        skipped=False,
+        reason=None,
+        total=len(rows),
+        counts=counts,
+        ok=ok,
+        rows=tuple(rows),
+    )
+    if actor is not None:
+        async with engine.begin() as conn:
+            await _audit(
+                conn,
+                action=SOURCE_RESTORE_SOURCE_VERIFY,
+                actor=actor,
+                resource_id=block.source_match_set_id,
+                outcome="verified" if ok else "mismatch",
+                payload={
+                    "mode": "manifest_source_reconcile",
+                    "total": report.total,
+                    "counts": report.counts,
+                    "ok": report.ok,
+                },
+            )
+    return report
+
+
+async def _manifest_source_db_facts(
+    engine: AsyncEngine,
+    files: tuple[ManifestSourceFile, ...],
+) -> dict[str, ManifestSourceDbFileFact]:
+    ids = tuple({f.source_file_id for f in files if f.source_file_id})
+    keys = tuple({f.object_key for f in files if f.object_key})
+    if not ids and not keys:
+        return {}
+    clauses: list[str] = []
+    params: dict[str, object] = {}
+    bindparams: list[Any] = []
+    if ids:
+        clauses.append("source_file_id::text IN :ids")
+        params["ids"] = ids
+        bindparams.append(bindparam("ids", expanding=True))
+    if keys:
+        clauses.append("object_key IN :keys")
+        params["keys"] = keys
+        bindparams.append(bindparam("keys", expanding=True))
+    sql = f"""
+SELECT source_file_id::text AS source_file_id, object_key, sha256,
+       size_bytes, object_etag
+  FROM ops.source_files
+ WHERE {" OR ".join(clauses)}
+"""
+    stmt = text(sql).bindparams(*bindparams)
+    facts: dict[str, ManifestSourceDbFileFact] = {}
+    async with engine.connect() as conn:
+        rows = (await conn.execute(stmt, params)).mappings().all()
+    for row in rows:
+        fact = ManifestSourceDbFileFact(
+            source_file_id=str(row["source_file_id"]),
+            object_key=row["object_key"],
+            sha256=row["sha256"],
+            size_bytes=int(row["size_bytes"]) if row["size_bytes"] is not None else None,
+            object_etag=row["object_etag"],
+        )
+        facts[fact.source_file_id] = fact
+        if fact.object_key:
+            facts.setdefault(f"object_key:{fact.object_key}", fact)
+    return facts
+
+
+async def _head_manifest_file(
+    rustfs: RustfsClient,
+    file: ManifestSourceFile,
+) -> ManifestSourceHeadFact | None:
+    if not file.object_key:
+        return None
+    try:
+        head = await rustfs.head_object(file.object_key)
+    except Exception:
+        return ManifestSourceHeadFact(present=False)
+    return ManifestSourceHeadFact(
+        present=True,
+        size=head.size,
+        etag=head.etag,
+    )
+
+
+def _int_or_none(value: object) -> int | None:
+    if isinstance(value, int):
+        return value
+    return None
 
 
 # --- create restored_from_backup (doc steps 1-6, ~1906-1911) ---------------
