@@ -24,6 +24,8 @@ describe("job-progress helpers (T-251)", () => {
     expect(estimateEtaSeconds("not-a-date", 0.5, now)).toBeNull();
     // clock skew: now before start → non-positive elapsed
     expect(estimateEtaSeconds("2026-06-16T00:00:00Z", 0.5, Date.parse("2026-06-15T00:00:00Z"))).toBeNull();
+    // SSR-safe sentinel: nowMs===0 (clock not yet initialized client-side) → no estimate (issue #256 M2).
+    expect(estimateEtaSeconds("2026-06-16T00:00:00Z", 0.5, 0)).toBeNull();
   });
 
   it("formats ETA across magnitudes", () => {
