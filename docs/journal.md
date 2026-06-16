@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-140 geocoder/reverse golden corpus)
+
+**작업**: 정확도 회귀 방지용 static golden corpus 23개 case를 `tests/fixtures/geocoder_golden_corpus.json`에 추가하고, `scripts/run_geocoder_golden_corpus.py`로 fixture/schema 검증과 live DB 실행을 모두 지원하게 했다. 범위는 도로명 exact/fuzzy, 지번, reverse nearest/boundary, search, zipcode, 국가지점번호, negative, 후속 seed(행정구역/건물명/사서함/도서/산지/동명이인 도로명)를 포함한다.
+
+**결정**: 기본 live 실행에서는 `optional-source`와 `future-followup` 태그를 제외한다. epost 사서함/다량배달처와 아직 기대 field를 좁히지 않은 ranking/boundary seed는 fixture에는 남기되, T-165/T-171/T-172/T-176에서 구체 expected field로 승격한다. Runner는 `query_id`를 제거한 stable response hash와 `golden_fields` snapshot을 artifact에 남긴다.
+
+**검증**: WSL ext4 미러에서 새 단위 테스트 5개와 fixture run이 통과했다. Fixture artifact는 `F:\dev\geodata\t140-geocoder-golden-corpus\20260616-r1\fixture\`에 보존한다. Live mode는 T-213 r3 DB명으로 시도했지만 현재 세션의 WSL `.env` `KTG_PG_DSN` credential이 로컬 PostgreSQL 인증과 맞지 않아 DB 접속 전 단계에서 실패했다. 올바른 DSN을 주입하면 같은 runner로 재실행한다.
+
 ## 2026-06-16 (T-138 read-mostly serving 성능 benchmark)
 
 **작업**: T-213 r3 기준 DB(`kor_travel_geo_t213_20260615_r3`)에서 SQL 2,000 case/32,000 measurement와 REST 425 case/1,275 measurement를 재측정했다. Q4 broad search threshold `0.42`, `limit-before-join` 후보를 같은 corpus로 비교하고 `docs/t138-read-heavy-serving-performance.md`에 정리했다.

@@ -1,0 +1,704 @@
+{
+  "schema_version": 1,
+  "name": "T-140 geocoder/reverse golden corpus",
+  "notes": [
+    "기본 live smoke는 T-138 SQL corpus(T-213 r3 DB-derived row)를 seed로 삼는다.",
+    "optional-source/future-followup 태그는 기본 live 실행에서 제외하고 fixture/schema 검증에는 포함한다.",
+    "좌표 입력은 외부 인터페이스 규칙대로 (lon, lat) 순서다."
+  ],
+  "cases": [
+    {
+      "case_id": "T140-GEO-ROAD-EXACT-001",
+      "operation": "geocode",
+      "category": "road-exact",
+      "description": "도로명 exact: T-138 Q1 road seed, 지하/부번 없는 일반 도로명",
+      "params": {
+        "road_address": "서울특별시 동대문구 왕산로 189-4",
+        "limit": 5
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "road"
+        },
+        "field_contains": {
+          "candidates[0].address.full": "왕산로"
+        },
+        "contains_text": [
+          "서울특별시",
+          "동대문구"
+        ]
+      },
+      "golden_fields": [
+        "candidates[0].match_kind",
+        "candidates[0].address.full",
+        "candidates[0].address.legal_dong_code",
+        "candidates[0].address.postal_code",
+        "candidates[0].point.x",
+        "candidates[0].point.y"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q1-road-001",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-GEO-ROAD-SIG-HINT-001",
+      "operation": "geocode",
+      "category": "road-exact-region-hint",
+      "description": "도로명 exact: 시도/시군구를 제거하고 sig_cd hint만으로 찾는 case",
+      "params": {
+        "road_address": "왕산로 189-4",
+        "sig_cd": "11230",
+        "limit": 5
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "road",
+          "region_hint_applied.sig_cd": "11230"
+        },
+        "field_contains": {
+          "candidates[0].address.full": "왕산로"
+        }
+      },
+      "golden_fields": [
+        "candidates[0].address.full",
+        "region_hint_applied.sig_cd"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "region-hint",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q1-road-sig-001",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-GEO-ROAD-FUZZY-001",
+      "operation": "geocode",
+      "category": "road-fuzzy",
+      "description": "도로명 fuzzy: 왕산로를 왕산길로 변형해 trigram fallback을 통과해야 하는 case",
+      "params": {
+        "road_address": "서울특별시 동대문구 왕산길 189-4",
+        "limit": 5
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "road"
+        },
+        "field_contains": {
+          "candidates[0].address.full": "왕산로"
+        }
+      },
+      "golden_fields": [
+        "candidates[0].confidence",
+        "candidates[0].address.full"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "fuzzy",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q3-fuzzy-001 adapted to human input",
+      "performance_budget_ms": 1500
+    },
+    {
+      "case_id": "T140-GEO-PARCEL-EXACT-001",
+      "operation": "geocode",
+      "category": "parcel-exact",
+      "description": "지번 exact: T-138 Q2 parcel seed",
+      "params": {
+        "jibun_address": "서울특별시 동대문구 청량리동 819-1",
+        "limit": 5
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "parcel"
+        },
+        "contains_text": [
+          "청량리동"
+        ]
+      },
+      "golden_fields": [
+        "candidates[0].match_kind",
+        "candidates[0].address.full",
+        "candidates[0].address.legal_dong_code"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q2-parcel-001",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-GEO-SGG-SUFFIX-001",
+      "operation": "geocode",
+      "category": "complex-sigungu-suffix",
+      "description": "복합 시군구 suffix: 서울특별시 종로구 suffix lookup이 필요한 도로명 case",
+      "params": {
+        "road_address": "서울 종로구 동순라길 82-7",
+        "limit": 5
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "field_contains": {
+          "candidates[0].address.full": "동순라길"
+        },
+        "contains_text": [
+          "종로구"
+        ]
+      },
+      "golden_fields": [
+        "candidates[0].address.full",
+        "candidates[0].region.sig_cd"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "normalization",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q1-road-025",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-REV-NEAREST-001",
+      "operation": "reverse",
+      "category": "reverse-nearest",
+      "description": "reverse nearest: T-138 Q5 point seed, 50m 반경",
+      "params": {
+        "lon": 127.04416880226447,
+        "lat": 37.579995940386155,
+        "radius_m": 50
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "road"
+        },
+        "numeric_lte": {
+          "candidates[0].distance_m": 50
+        },
+        "contains_text": [
+          "왕산로"
+        ]
+      },
+      "golden_fields": [
+        "candidates[0].address.full",
+        "candidates[0].distance_m",
+        "candidates[0].address.postal_code"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q5-reverse-nearest-001",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-REV-BOUNDARY-001",
+      "operation": "reverse",
+      "category": "reverse-near-boundary",
+      "description": "reverse boundary seed: 평창동 산지/경계 근접 도로명 point",
+      "params": {
+        "lon": 126.9777342474764,
+        "lat": 37.612714935197424,
+        "radius_m": 200
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "numeric_lte": {
+          "candidates[0].distance_m": 200
+        },
+        "contains_text": [
+          "평창"
+        ]
+      },
+      "golden_fields": [
+        "candidates[0].address.full",
+        "candidates[0].distance_m",
+        "candidates[0].region.bjd_cd"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "boundary",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q5-reverse-nearest-075",
+      "performance_budget_ms": 1200
+    },
+    {
+      "case_id": "T140-SEARCH-ROAD-001",
+      "operation": "search",
+      "category": "search-road",
+      "description": "도로명 search: 왕산로 broad search smoke",
+      "params": {
+        "query": "왕산로",
+        "type": "road",
+        "size": 10
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "contains_text": [
+          "왕산로"
+        ]
+      },
+      "golden_fields": [
+        "candidates[0].match_kind",
+        "candidates[0].address.full",
+        "total"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q4-search-001",
+      "performance_budget_ms": 1200
+    },
+    {
+      "case_id": "T140-ZIP-ADDRESS-001",
+      "operation": "zipcode",
+      "category": "zipcode-address",
+      "description": "우편번호: 도로명 주소 기반 building zip lookup",
+      "params": {
+        "address": "서울특별시 동대문구 왕산로 189-4"
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "contains_text": [
+          "zip_no"
+        ]
+      },
+      "golden_fields": [
+        "result[0].zip_no",
+        "result[0].source",
+        "result[0].address"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "zipcode"
+      ],
+      "source": "T-138 sql-baseline corpus Q7-zip-address-001 adapted to public input",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-GEO-SPPN-001",
+      "operation": "geocode",
+      "category": "national-point-number",
+      "description": "국가지점번호 forward: T-138 Q11 SPPN 5179 seed",
+      "params": {
+        "query": "라사 2670 8512",
+        "limit": 5
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "sppn"
+        },
+        "contains_text": [
+          "라사 2670 8512"
+        ]
+      },
+      "golden_fields": [
+        "candidates[0].match_kind",
+        "candidates[0].point.x",
+        "candidates[0].point.y",
+        "candidates[0].metadata.national_point_number"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "sppn",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q11-sppn-geocode-001 formatted with core.sppn",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-REV-SPPN-001",
+      "operation": "reverse",
+      "category": "national-point-number-reverse-context",
+      "description": "국가지점번호 reverse context: makarea enrichment가 있는 point",
+      "params": {
+        "lon": 127.80364354062208,
+        "lat": 37.865549139522855,
+        "radius_m": 200
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "contains_text": [
+          "makarea"
+        ]
+      },
+      "golden_fields": [
+        "candidates[0].match_kind",
+        "candidates[0].metadata.makarea_id",
+        "candidates[0].metadata.makarea_nm"
+      ],
+      "tags": [
+        "t213-r3",
+        "default-live",
+        "sppn",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q11-sppn-reverse-001",
+      "performance_budget_ms": 1200
+    },
+    {
+      "case_id": "T140-NEG-GEOCODE-001",
+      "operation": "geocode",
+      "category": "negative-address",
+      "description": "negative: 존재하지 않는 도로명은 NOT_FOUND",
+      "params": {
+        "road_address": "없는시 없는도로1 999999"
+      },
+      "expected": {
+        "status": "NOT_FOUND",
+        "max_results": 0
+      },
+      "golden_fields": [
+        "status"
+      ],
+      "tags": [
+        "default-live",
+        "negative",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q8-no-result-road-001 adapted to public input",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-NEG-REVERSE-001",
+      "operation": "reverse",
+      "category": "negative-coordinate",
+      "description": "negative: 한국 bounds 밖 reverse 좌표는 구조화 오류로 고정",
+      "params": {
+        "lon": 0.0,
+        "lat": 0.0,
+        "radius_m": 200
+      },
+      "expected": {
+        "status": "ERROR",
+        "error_contains": "coordinate_bounds"
+      },
+      "golden_fields": [
+        "status"
+      ],
+      "tags": [
+        "default-live",
+        "negative",
+        "v2"
+      ],
+      "source": "T-138 sql-baseline corpus Q8-no-result-reverse-001 adapted to public input",
+      "performance_budget_ms": 1000
+    },
+    {
+      "case_id": "T140-GEO-REGION-001",
+      "operation": "geocode",
+      "category": "standalone-region",
+      "description": "단독 행정구역: 도로명/지번이 아닌 region candidate",
+      "params": {
+        "query": "서울특별시 동대문구",
+        "limit": 5
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ],
+        "contains_text": [
+          "동대문구"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "candidates[0].match_kind",
+        "candidates[0].region.sig_cd"
+      ],
+      "tags": [
+        "future-followup",
+        "region",
+        "v2"
+      ],
+      "source": "T-140 seed from administrative region query requirement"
+    },
+    {
+      "case_id": "T140-GEO-BUILDING-NAME-001",
+      "operation": "geocode",
+      "category": "building-name",
+      "description": "건물명/장소명: 서울역 keyword 후보. T-165/T-171에서 ranking 품질 목표를 구체화한다.",
+      "params": {
+        "keyword": "서울역",
+        "limit": 5
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "candidates[0].match_kind",
+        "candidates[0].place.name"
+      ],
+      "tags": [
+        "future-followup",
+        "building-name",
+        "keyword",
+        "v2"
+      ],
+      "source": "T-140 manual representative seed"
+    },
+    {
+      "case_id": "T140-GEO-SIGUNGU-BUILDING-001",
+      "operation": "geocode",
+      "category": "sigungu-building-name",
+      "description": "시군구용건물명: 구청명/공공건물명 후보. 후속 ranking 작업에서 OK 목표로 승격한다.",
+      "params": {
+        "keyword": "동대문구청",
+        "sig_cd": "11230",
+        "limit": 5
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "region_hint_applied.sig_cd",
+        "candidates[0].place.name"
+      ],
+      "tags": [
+        "future-followup",
+        "sigungu-building-name",
+        "keyword",
+        "v2"
+      ],
+      "source": "T-140 manual representative seed"
+    },
+    {
+      "case_id": "T140-ZIP-POBOX-001",
+      "operation": "pobox",
+      "category": "pobox",
+      "description": "사서함 우편번호: epost optional source가 적재된 환경에서 OK로 검증",
+      "params": {
+        "query": "서울중앙",
+        "kind": "PO",
+        "size": 5
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "result[0].zip_no",
+        "result[0].pobox_kind",
+        "total"
+      ],
+      "tags": [
+        "optional-source",
+        "epost",
+        "pobox"
+      ],
+      "source": "T-120/T-207 epost pobox representative seed"
+    },
+    {
+      "case_id": "T140-ZIP-BULK-001",
+      "operation": "zipcode",
+      "category": "bulk-delivery-zipcode",
+      "description": "다량배달처 우편번호: epost bulk optional source가 적재된 환경에서 OK로 검증",
+      "params": {
+        "address": "정부세종청사",
+        "include_bulk": true
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "result[0].zip_no",
+        "result[0].source",
+        "result[0].address"
+      ],
+      "tags": [
+        "optional-source",
+        "epost",
+        "bulk-delivery"
+      ],
+      "source": "T-120/T-207 epost bulk representative seed"
+    },
+    {
+      "case_id": "T140-REV-SEA-001",
+      "operation": "reverse",
+      "category": "sea-negative",
+      "description": "바다 좌표 negative: 먼 바다 좌표는 NOT_FOUND 또는 SPPN context-only로 분류",
+      "params": {
+        "lon": 126.2,
+        "lat": 34.1,
+        "radius_m": 200
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "candidates[0].match_kind",
+        "candidates[0].distance_m"
+      ],
+      "tags": [
+        "future-followup",
+        "reverse-boundary",
+        "sea",
+        "negative"
+      ],
+      "source": "T-140 manual boundary seed"
+    },
+    {
+      "case_id": "T140-REV-ISLAND-001",
+      "operation": "reverse",
+      "category": "island-reverse",
+      "description": "도서 지역 reverse: 제주/도서권 좌표 경계 회귀 seed",
+      "params": {
+        "lon": 126.5312,
+        "lat": 33.4996,
+        "radius_m": 500
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "candidates[0].address.full",
+        "candidates[0].distance_m"
+      ],
+      "tags": [
+        "future-followup",
+        "reverse-boundary",
+        "island"
+      ],
+      "source": "T-140 manual island seed"
+    },
+    {
+      "case_id": "T140-GEO-MOUNTAIN-PARCEL-001",
+      "operation": "geocode",
+      "category": "mountain-parcel",
+      "description": "산 지번: mt/mntn_yn parser 회귀 seed",
+      "params": {
+        "jibun_address": "서울특별시 종로구 평창동 산 116-12",
+        "limit": 5
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "candidates[0].match_kind",
+        "candidates[0].address.full"
+      ],
+      "tags": [
+        "future-followup",
+        "parcel",
+        "mountain"
+      ],
+      "source": "T-140 mountain parcel representative seed"
+    },
+    {
+      "case_id": "T140-GEO-DUP-ROAD-NAME-001",
+      "operation": "geocode",
+      "category": "duplicate-road-name",
+      "description": "동명이인 도로명: region hint가 없으면 후보 결정성이 필요한 case",
+      "params": {
+        "road_address": "중앙로 1",
+        "limit": 5
+      },
+      "expected": {
+        "status_any": [
+          "OK",
+          "NOT_FOUND"
+        ]
+      },
+      "golden_fields": [
+        "status",
+        "candidates[0].address.full",
+        "candidates[0].region.sig_cd"
+      ],
+      "tags": [
+        "future-followup",
+        "duplicate-road",
+        "ranking"
+      ],
+      "source": "T-140 manual duplicate-road representative seed"
+    },
+    {
+      "case_id": "T140-GEO-WHITESPACE-ALIAS-001",
+      "operation": "geocode",
+      "category": "normalization-variant",
+      "description": "공백/축약 변형: T-165에서 기대 field를 더 좁히는 normalization seed",
+      "params": {
+        "road_address": "서울 동대문구   왕산로   189-4",
+        "limit": 5
+      },
+      "expected": {
+        "status": "OK",
+        "min_results": 1,
+        "field_contains": {
+          "candidates[0].address.full": "왕산로"
+        }
+      },
+      "golden_fields": [
+        "candidates[0].address.full",
+        "candidates[0].region.sig_cd"
+      ],
+      "tags": [
+        "default-live",
+        "normalization",
+        "variant"
+      ],
+      "source": "T-140 variant derived from T-138 Q1-road-001",
+      "performance_budget_ms": 1000
+    }
+  ]
+}
