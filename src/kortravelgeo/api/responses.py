@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+from typing import Any
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import ORJSONResponse
@@ -104,7 +107,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 vworld_validation_error_payload(exc.errors(), operation=operation),
                 status_code=400,
             )
-        domain_error = InvalidInputError("invalid request data", hint=str(exc.errors()))
+        domain_error = _validation_errors_to_domain(exc.errors())
         return ORJSONResponse(error_payload(domain_error), status_code=domain_error.http_status)
 
     @app.exception_handler(ValidationError)
@@ -118,7 +121,10 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 
 def _validation_error_to_domain(exc: ValidationError) -> KorTravelGeoError:
-    errors = exc.errors()
+    return _validation_errors_to_domain(exc.errors())
+
+
+def _validation_errors_to_domain(errors: Sequence[Mapping[str, Any]]) -> KorTravelGeoError:
     if any(error.get("type") == _COORDINATE_BOUNDS_ERROR for error in errors):
         return InvalidCoordinateError(_COORDINATE_BOUNDS_MESSAGE)
     return InvalidInputError("invalid request data", hint=str(errors))

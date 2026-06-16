@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field, field_serializer
+from pydantic import Field, field_serializer, field_validator
 
 from .address import RefinedAddress
 from .common import (
@@ -16,6 +16,7 @@ from .common import (
     ServiceMeta,
     Status,
     ZipSource,
+    reject_control_characters,
 )
 
 FallbackMode = Literal["off", "local_only", "api"]
@@ -29,6 +30,11 @@ class GeocodeInput(FrozenModel):
     refine: bool = True
     simple: bool = False
     fallback: FallbackMode = "local_only"
+
+    @field_validator("address")
+    @classmethod
+    def reject_address_control_characters(cls, value: str) -> str:
+        return reject_control_characters(value) or value
 
     @field_serializer("type", return_type=VWorldAddressType)
     def serialize_type(self, value: AddressType) -> VWorldAddressType:

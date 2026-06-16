@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-173 negative/악성/경계 입력 안전성 하니스)
+
+**작업**: geocode text 입력의 ASCII control character를 DTO에서 거절하고, v2 reverse 입력을 `FiniteFloat`와 한국 lon/lat bounds 검증으로 좁혔다. FastAPI request validation도 좌표 bounds 오류는 `E0102`로 매핑하도록 기존 Pydantic validation helper를 재사용한다.
+
+**결정**: T-219의 non-vworld validation envelope 재결정은 하지 않는다. 일반 request validation은 기존 `E0100`/HTTP 400을 유지하고, 좌표 bounds custom error만 `E0102`로 보존한다. malformed SPPN은 parser/core에서 `None` 또는 `NOT_FOUND`로 끝나는 안전성만 이번 범위에서 고정한다.
+
+**검증/문서**: `tests/unit/test_t173_input_safety.py`가 v1/v2 geocode/reverse/SPPN 악성·경계 입력의 구조화 4xx와 core `NOT_FOUND`를 검증한다. 상세는 `docs/t173-input-safety-harness.md`에 기록했고, 다음 Agent A 작업은 T-175다.
+
 ## 2026-06-16 (T-172 confidence 산정 결정성·교정 중앙 모델)
 
 **작업**: `kortravelgeo.core.confidence`를 추가해 geocode centroid cap, 국가지점번호 grid cell, external fallback, reverse distance, search/geometry score confidence를 중앙 helper로 모았다. 기존 호출부의 하드코딩 상수는 helper 호출로 바꿨다.
