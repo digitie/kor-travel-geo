@@ -18,6 +18,8 @@ from kortravelgeo.dto.admin import (
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
     RestoreHotSwapResult,
+    RestoreHotSwapRollbackRequest,
+    RestoreHotSwapRollbackResult,
 )
 from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.admin_repo import AdminRepository
@@ -491,6 +493,188 @@ async def execute_restore_hot_swap(
                 previous_release_id=pre_swap_release_id,
                 rollback_confirmation=plan.rollback_confirmation,
                 message="hot-swap completed",
+            )
+    finally:
+        await maintenance_engine.dispose()
+
+
+# --- T-264 manual rollback ------------------------------------------------
+
+
+def hot_swap_rollback_blockers(
+    *,
+    current_database: str,
+    restore_database: str,
+    previous_alias: str,
+    existing_databases: Collection[str] | None,
+) -> list[str]:
+    """Pure rollback preflight: the three DBs must be distinct, ``previous_alias`` must still
+    exist (retention guard — rejected once it has been dropped), and ``restore_database`` (the
+    name the current serving DB will take) must be free."""
+    blockers: list[str] = []
+    names = {current_database, restore_database, previous_alias}
+    if len(names) != 3:
+        blockers.append("current, restore_database and previous_alias must all differ")
+    if existing_databases is not None:
+        existing = set(existing_databases)
+        if current_database not in existing:
+            blockers.append(f"current database does not exist in cluster: {current_database}")
+        if previous_alias not in existing:
+            blockers.append(
+                f"previous alias no longer exists (retention expired?): {previous_alias}"
+            )
+        if restore_database in existing:
+            blockers.append(f"restore target name already exists in cluster: {restore_database}")
+    return blockers
+
+
+async def _existing_databases(
+    settings: Settings, maintenance_database: str, candidates: tuple[str, ...]
+) -> set[str]:
+    engine = create_async_engine(_dsn_for_database(settings.pg_dsn, maintenance_database))
+    try:
+        async with engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text("SELECT datname FROM pg_database WHERE datname = ANY(:names)"),
+                    {"names": list(candidates)},
+                )
+            ).scalars().all()
+    finally:
+        await engine.dispose()
+    return {str(row) for row in rows}
+
+
+async def execute_hot_swap_rollback(
+    engine: AsyncEngine,
+    settings: Settings,
+    req: RestoreHotSwapRollbackRequest,
+    *,
+    actor: str | None = None,
+    audit_meta: Mapping[str, Any] | None = None,
+) -> RestoreHotSwapRollbackResult:
+    """Manually roll back a completed hot-swap (T-264; live, integration-tested in T-246).
+
+    Brings ``previous_alias`` back as the current DB and renames the currently-serving
+    (restored) DB to ``restore_database``. Guard order (before any rename): exact
+    ``rollback_confirmation`` → preflight blockers (incl. the **retention guard**: rejected once
+    ``previous_alias`` has been dropped) → active ``restore`` maintenance window → ``HOT_SWAP``
+    advisory lock (concurrent call fails fast). Refreshes the pool, runs a post-rollback smoke,
+    and records a ``rollback`` serving release (previous/rollback_target lineage) + audits.
+    """
+    repo = AdminRepository(engine)
+    current = _current_database(settings)
+    previous = _validate_database_identifier(req.previous_alias, "previous_alias")
+    restore = _validate_database_identifier(req.restore_database, "restore_database")
+    maintenance_database = _maintenance_database(current, req.maintenance_database)
+
+    expected = rollback_confirmation(current, previous)
+    if req.rollback_confirmation != expected:
+        msg = f"rollback_confirmation must be exactly '{expected}'"
+        raise InvalidInputError(msg)
+
+    existing = await _existing_databases(
+        settings, maintenance_database, (current, previous, restore)
+    )
+    blockers = hot_swap_rollback_blockers(
+        current_database=current,
+        restore_database=restore,
+        previous_alias=previous,
+        existing_databases=existing,
+    )
+    if blockers:
+        msg = "hot-swap rollback blocked: " + "; ".join(blockers)
+        raise InvalidInputError(msg)
+
+    window = await repo.require_active_maintenance_window(
+        kind="restore", confirmation=req.rollback_confirmation
+    )
+    pre_rollback_release_id = await _active_serving_release_id(engine)
+    meta = dict(audit_meta or {})
+    base_payload = {
+        "current_database": current,
+        "restore_database": restore,
+        "previous_alias": previous,
+        "previous_release_id": pre_rollback_release_id,
+        "maintenance_window_id": window.maintenance_window_id,
+    }
+
+    async def audit(outcome: str, payload: dict[str, Any], *, resource_id: str | None) -> None:
+        try:
+            await AdminRepository(engine).record_audit_event(
+                action="serving_release.hot_swap_rollback",
+                actor_type="system",
+                actor_id=actor,
+                outcome=outcome,
+                payload=payload,
+                resource_type="serving_release",
+                resource_id=resource_id,
+                **meta,
+            )
+        except Exception:
+            _LOGGER.warning("hot-swap rollback audit %s failed", outcome, exc_info=True)
+
+    maintenance_engine = create_async_engine(
+        _dsn_for_database(settings.pg_dsn, maintenance_database), isolation_level="AUTOCOMMIT"
+    )
+    lock_key = AdvisoryLockKey.global_key(AdvisoryLockNamespace.HOT_SWAP)
+    try:
+        async with cross_process_lock(maintenance_engine, lock_key):
+            await audit("started", dict(base_payload), resource_id=None)
+            try:
+                # Reuse the forward primitive in the rollback direction: rename current→restore,
+                # then previous→current (with the same partial-failure undo).
+                await _execute_swap_with_undo(
+                    maintenance_engine, current=current, restore=previous, previous=restore
+                )
+            except Exception as exc:
+                await audit(
+                    "failed",
+                    {**base_payload, "reason": f"rename failed (undone): {exc}"},
+                    resource_id=None,
+                )
+                msg = f"hot-swap rollback rename failed and was undone: {exc}"
+                raise InvalidInputError(msg) from exc
+
+            await engine.dispose()
+            smoke_ok: bool | None = None
+            if req.run_smoke_test:
+                try:
+                    await smoke_test_restore(settings.pg_dsn)
+                    smoke_ok = True
+                except Exception as exc:
+                    smoke_ok = False
+                    await audit(
+                        "failed",
+                        {**base_payload, "reason": f"post-rollback smoke failed: {exc}"},
+                        resource_id=None,
+                    )
+
+            release = await repo.record_hot_swap_rollback_release(
+                current_database=current,
+                restore_database=restore,
+                previous_alias=previous,
+                pre_rollback_release_id=pre_rollback_release_id,
+                maintenance_window_id=window.maintenance_window_id,
+            )
+            await audit(
+                "succeeded",
+                {
+                    **base_payload,
+                    "serving_release_id": release.serving_release_id,
+                    "smoke_ok": smoke_ok,
+                },
+                resource_id=release.serving_release_id,
+            )
+            return RestoreHotSwapRollbackResult(
+                rolled_back=True,
+                current_database=current,
+                restore_database=restore,
+                previous_alias=previous,
+                smoke_ok=smoke_ok,
+                serving_release_id=release.serving_release_id,
+                previous_release_id=pre_rollback_release_id,
+                message="hot-swap rollback completed",
             )
     finally:
         await maintenance_engine.dispose()

@@ -83,6 +83,8 @@ export const apiSchemaNames = [
   "RestoreHotSwapPlan",
   "RestoreHotSwapPlanRequest",
   "RestoreHotSwapResult",
+  "RestoreHotSwapRollbackRequest",
+  "RestoreHotSwapRollbackResult",
   "RestoreSourceVerificationResult",
   "RestoredFromBackupCreateRequest",
   "RestoredFromBackupCreateResponse",

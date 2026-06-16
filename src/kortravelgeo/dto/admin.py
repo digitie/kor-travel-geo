@@ -179,6 +179,38 @@ class RestoreHotSwapResult(FrozenModel):
     message: str | None = None
 
 
+class RestoreHotSwapRollbackRequest(FrozenModel):
+    """T-264 request to manually roll back a previously-completed hot-swap.
+
+    Brings ``previous_alias`` (the pre-swap serving DB, retained for
+    ``previous_alias_retention_days``) back as the current database, renaming the currently
+    serving (restored) DB to ``restore_database``. Requires an active
+    ``ops.maintenance_windows(kind='restore')`` whose confirmation equals
+    ``rollback_confirmation`` (= ``ROLLBACK_HOT_SWAP <current> FROM <previous_alias>``). Rejected
+    once retention has dropped ``previous_alias``; runs under the ``HOT_SWAP`` lock (fail-fast).
+    """
+
+    previous_alias: str = Field(min_length=1, max_length=63)
+    restore_database: str = Field(min_length=1, max_length=63)
+    rollback_confirmation: str = Field(min_length=1, max_length=200)
+    maintenance_database: str = Field(default="postgres", min_length=1, max_length=63)
+    run_smoke_test: bool = True
+
+
+class RestoreHotSwapRollbackResult(FrozenModel):
+    """T-264 result of a manual hot-swap rollback attempt."""
+
+    rolled_back: bool
+    current_database: str
+    restore_database: str
+    previous_alias: str
+    smoke_ok: bool | None = None
+    serving_release_id: str | None = None
+    previous_release_id: str | None = None
+    blockers: tuple[str, ...] = ()
+    message: str | None = None
+
+
 class SourceCandidate(FrozenModel):
     kind: SourceKind
     path: str

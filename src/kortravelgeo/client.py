@@ -58,6 +58,8 @@ from .dto.admin import (
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
     RestoreHotSwapResult,
+    RestoreHotSwapRollbackRequest,
+    RestoreHotSwapRollbackResult,
     RollbackPlan,
     ScheduledBackupStatus,
     ServingRelease,
@@ -1644,6 +1646,25 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         from .infra.hotswap import execute_restore_hot_swap
 
         return await execute_restore_hot_swap(
+            self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
+        )
+
+    async def execute_hot_swap_rollback(
+        self,
+        req: RestoreHotSwapRollbackRequest,
+        *,
+        actor: str | None = None,
+        audit_meta: Mapping[str, Any] | None = None,
+    ) -> RestoreHotSwapRollbackResult:
+        """Manually roll back a completed hot-swap to the previous serving DB (T-264).
+
+        Requires an active ``restore`` maintenance window + exact rollback confirmation, rejects
+        once ``previous_alias`` retention has dropped it, runs under the ``HOT_SWAP`` lock
+        (concurrent call fails fast), and disposes/refreshes this client's engine pool.
+        """
+        from .infra.hotswap import execute_hot_swap_rollback
+
+        return await execute_hot_swap_rollback(
             self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
         )
 

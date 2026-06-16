@@ -16,6 +16,8 @@ from kortravelgeo.infra.hotswap import (
     build_hot_swap_rollback_sql,
     build_hot_swap_swap_sql,
     build_restore_hot_swap_plan,
+    hot_swap_rollback_blockers,
+    rollback_confirmation,
     validate_hot_swap_confirmation,
 )
 from kortravelgeo.settings import Settings
@@ -83,3 +85,54 @@ def test_plan_blocks_when_restore_database_missing() -> None:
     plan = _plan(existing={"kor_travel_geo"})  # restore DB absent
     assert plan.can_execute is False
     assert any("restore database does not exist" in b for b in plan.blockers)
+
+
+# --- T-264 manual rollback ------------------------------------------------
+
+
+def test_rollback_confirmation_format() -> None:
+    assert (
+        rollback_confirmation("kor_travel_geo", "kor_travel_geo_previous_x")
+        == "ROLLBACK_HOT_SWAP kor_travel_geo FROM kor_travel_geo_previous_x"
+    )
+
+
+def test_rollback_clean_when_previous_exists_and_target_free() -> None:
+    blockers = hot_swap_rollback_blockers(
+        current_database="kor_travel_geo",
+        restore_database="kor_travel_geo_restore",
+        previous_alias="kor_travel_geo_previous",
+        existing_databases={"kor_travel_geo", "kor_travel_geo_previous"},
+    )
+    assert blockers == []
+
+
+def test_rollback_rejected_when_previous_alias_retention_expired() -> None:
+    # previous_alias has been dropped (retention passed) → rollback must be rejected
+    blockers = hot_swap_rollback_blockers(
+        current_database="kor_travel_geo",
+        restore_database="kor_travel_geo_restore",
+        previous_alias="kor_travel_geo_previous",
+        existing_databases={"kor_travel_geo"},
+    )
+    assert any("previous alias no longer exists" in b for b in blockers)
+
+
+def test_rollback_rejected_when_restore_target_name_taken() -> None:
+    blockers = hot_swap_rollback_blockers(
+        current_database="kor_travel_geo",
+        restore_database="kor_travel_geo_restore",
+        previous_alias="kor_travel_geo_previous",
+        existing_databases={"kor_travel_geo", "kor_travel_geo_previous", "kor_travel_geo_restore"},
+    )
+    assert any("restore target name already exists" in b for b in blockers)
+
+
+def test_rollback_rejected_when_names_not_distinct() -> None:
+    blockers = hot_swap_rollback_blockers(
+        current_database="kor_travel_geo",
+        restore_database="kor_travel_geo",
+        previous_alias="kor_travel_geo_previous",
+        existing_databases=None,
+    )
+    assert any("must all differ" in b for b in blockers)
