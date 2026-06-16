@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-171 fuzzy ranking 결정성·품질 보강)
+
+**작업**: `mv_geocode_text_search` helper MV에 `buld_slno`와 `buld_se_cd`를 추가하고, `GeocodeRepository.fuzzy_roads()`가 fuzzy fallback에서도 본번·부번·지하구분을 모두 맞춘 후보만 ranking하게 했다. 기존 `similarity DESC → entrance 우선 → bd_mgt_sn` 정렬은 유지해 동률 순서를 결정적으로 둔다.
+
+**결정**: 도로명 fuzzy는 도로명 오타 보정 범위로 한정하고, 건물번호 오타까지 동시에 보정하지 않는다. 따라서 exact 조회와 같은 `buld_mnnm`/`buld_slno`/`buld_se_cd` 계약을 유지한다. `pg_trgm.similarity_threshold`는 기존 `0.42`를 유지하고 트랜잭션 `SET LOCAL`만 사용한다.
+
+**검증/문서**: T-140 corpus의 `T140-GEO-ROAD-FUZZY-001`을 `왕산길 189-4` → `왕산로 189-4` ranking case로 강화하고, runner expected에 `numeric_gte`를 추가했다. Windows focused unit 44개와 fixture smoke가 통과했다. 상세는 `docs/t171-fuzzy-ranking.md`에 기록했고, 다음 Agent A 작업은 T-172다.
+
 ## 2026-06-16 (T-164 p99 regression guard)
 
 **작업**: `scripts/evaluate_t164_p99_regression.py`를 추가해 T-141 `matrix-report.json` baseline/current의 같은 `profile_id`를 비교하는 p99 회귀 gate를 만들었다. 결과는 `p99-guard.json`과 `summary.md`로 남기고, `--mode enforce`에서는 실패 시 exit code 2로 종료한다.

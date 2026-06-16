@@ -1368,6 +1368,8 @@ SELECT
   buld_nm_nrm,
   sigungu_buld_nm_nrm,
   buld_mnnm,
+  buld_slno,
+  buld_se_cd,
   pt_source
 FROM mv_geocode_target
 WHERE rn_nrm IS NOT NULL
@@ -1377,11 +1379,13 @@ WITH DATA;
 CREATE UNIQUE INDEX idx_mv_text_search_pk
   ON mv_geocode_text_search (bd_mgt_sn);
 CREATE INDEX idx_mv_text_search_sig_buld
-  ON mv_geocode_text_search (sig_cd, buld_mnnm, bd_mgt_sn);
+  ON mv_geocode_text_search (sig_cd, buld_mnnm, buld_slno, buld_se_cd, bd_mgt_sn);
 CREATE INDEX idx_mv_text_search_sido_buld
-  ON mv_geocode_text_search (sido_cd, buld_mnnm, bd_mgt_sn);
+  ON mv_geocode_text_search (sido_cd, buld_mnnm, buld_slno, buld_se_cd, bd_mgt_sn);
 CREATE INDEX idx_mv_text_search_bjd_prefix_buld
-  ON mv_geocode_text_search (bjd_cd text_pattern_ops, buld_mnnm, bd_mgt_sn);
+  ON mv_geocode_text_search (
+    bjd_cd text_pattern_ops, buld_mnnm, buld_slno, buld_se_cd, bd_mgt_sn
+  );
 CREATE INDEX idx_mv_text_search_rn_trgm
   ON mv_geocode_text_search USING GIN (rn_nrm gin_trgm_ops);
 CREATE INDEX idx_mv_text_search_buld_nm_trgm

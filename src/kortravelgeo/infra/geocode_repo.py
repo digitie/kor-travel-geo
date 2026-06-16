@@ -13,6 +13,8 @@ from kortravelgeo.dto.region import RegionHint, region_params
 from ._rows import map_address, map_sppn_area
 from .coordinates import project_point_5179_to_4326
 
+FUZZY_ROAD_SIMILARITY_THRESHOLD = 0.42
+
 _BASE_SELECT = """
 SELECT bd_mgt_sn, rncode_full, rn AS road_nm, buld_mnnm, buld_slno, buld_se_cd,
        buld_nm, bjd_cd, adm_cd, adm_kor_nm, mntn_yn, lnbr_mnnm, lnbr_slno, zip_no,
@@ -104,6 +106,8 @@ WITH candidates AS MATERIALIZED (
     + """
      AND ts.rn_nrm % :road_nrm
      AND ts.buld_mnnm = :mnnm
+     AND ts.buld_slno = :slno
+     AND ts.buld_se_cd = :buld_se_cd
    ORDER BY confidence DESC,
             CASE WHEN ts.pt_source = 'entrance' THEN 0 ELSE 1 END,
             ts.bd_mgt_sn
@@ -234,7 +238,12 @@ class GeocodeRepository:
         if parts.road_nrm is None or parts.mnnm is None:
             return []
         async with self.engine.begin() as conn:
-            await conn.execute(text("SET LOCAL pg_trgm.similarity_threshold = 0.42"))
+            await conn.execute(
+                text(
+                    "SET LOCAL pg_trgm.similarity_threshold = "
+                    f"{FUZZY_ROAD_SIMILARITY_THRESHOLD:.2f}"
+                )
+            )
             rows = (
                 await conn.execute(
                     _FUZZY_ROADS,
@@ -244,6 +253,8 @@ class GeocodeRepository:
                         "sgg": parts.sgg,
                         "road_nrm": parts.road_nrm,
                         "mnnm": parts.mnnm,
+                        "slno": parts.slno,
+                        "buld_se_cd": parts.buld_se_cd,
                         "limit": limit,
                     },
                 )

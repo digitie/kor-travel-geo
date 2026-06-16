@@ -84,7 +84,7 @@
       "case_id": "T140-GEO-ROAD-FUZZY-001",
       "operation": "geocode",
       "category": "road-fuzzy",
-      "description": "도로명 fuzzy: 왕산로를 왕산길로 변형해 trigram fallback을 통과해야 하는 case",
+      "description": "도로명 fuzzy: 왕산로를 왕산길로 변형해 trigram fallback을 통과하고 같은 본번의 부번 189-4가 1순위여야 하는 ranking case",
       "params": {
         "road_address": "서울특별시 동대문구 왕산길 189-4",
         "limit": 5
@@ -96,7 +96,10 @@
           "candidates[0].match_kind": "road"
         },
         "field_contains": {
-          "candidates[0].address.full": "왕산로"
+          "candidates[0].address.full": "왕산로 189-4"
+        },
+        "numeric_gte": {
+          "candidates[0].confidence": 0.42
         }
       },
       "golden_fields": [
@@ -107,6 +110,7 @@
         "t213-r3",
         "default-live",
         "fuzzy",
+        "ranking",
         "v2"
       ],
       "source": "T-138 sql-baseline corpus Q3-fuzzy-001 adapted to human input",

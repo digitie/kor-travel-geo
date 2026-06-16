@@ -606,13 +606,13 @@ T-047은 전국 full-load 이후 지오코딩/역지오코딩/검색 쿼리 p95/
 | 후보 | 목적 | 핵심 컬럼 예시 | 주요 인덱스 후보 |
 |------|------|----------------|------------------|
 | `mv_geocode_exact_key` | 도로명/지번 exact lookup | `bd_mgt_sn`, `rncode_full`, `bjd_cd`, 건물번호, PNU, 표시 주소, 좌표 key | btree composite, `INCLUDE` 응답 컬럼 |
-| `mv_geocode_text_search` | fuzzy geocode/search | `bd_mgt_sn`, `sido_cd`, `sig_cd`, `bjd_cd`, `si_nm`, `sgg_nm`, `rn_nrm`, `buld_nm_nrm`, `sigungu_buld_nm_nrm`, `buld_mnnm`, `pt_source` | `rn_nrm`/`buld_nm_nrm`/`sigungu_buld_nm_nrm` `gin_trgm_ops`, region+건물본번 btree |
+| `mv_geocode_text_search` | fuzzy geocode/search | `bd_mgt_sn`, `sido_cd`, `sig_cd`, `bjd_cd`, `si_nm`, `sgg_nm`, `rn_nrm`, `buld_nm_nrm`, `sigungu_buld_nm_nrm`, `buld_mnnm`, `buld_slno`, `buld_se_cd`, `pt_source` | `rn_nrm`/`buld_nm_nrm`/`sigungu_buld_nm_nrm` `gin_trgm_ops`, region+건물번호 btree |
 | `mv_reverse_point_5179` | reverse nearest/radius | `bd_mgt_sn`, `address_type`, `pt_source`, `pt_5179`, `pt_4326`, 우선순위 | GiST `pt_5179`, btree filter |
 | `mv_zipcode_lookup` | zipcode lookup | `zip_no`, `sido`, `sig`, 도로명/지번 표시 최소 컬럼 | btree `zip_no`, `zip_no + sig_cd` |
 | `v_admin_boundary_4326` | 디버그 지도 표시 | 행정/기초구역 polygon 4326 변환 | 일반 view, 필요 시 materialized |
 | `mv_sppn_reverse_area` | 국가지점번호 보조 reverse | `TL_SPPN_MAKAREA` polygon key와 면적/우선순위 | GiST polygon, 면적 정렬 key |
 
-T-061에서 `mv_geocode_text_search`는 실제 DDL로 승격했다. 이 객체는 `mv_geocode_target`에서 재생성하는 read-only helper이며, Q3 fuzzy geocode와 Q4 broad search fallback의 후보 추출에만 사용한다. Q4 exact preflight는 기존 `mv_geocode_target` exact index가 충분히 빨라 그대로 유지한다. helper MV를 추가·변경할 때는 `docs/t061-slim-text-search.md`처럼 semantic parity, Q3/Q4 p95/p99, helper size, shadow swap, backup envelope를 함께 기록한다. helper가 생긴 뒤 MV 갱신은 target과 helper를 같이 다루는 orchestration 경로만 사용한다.
+T-061에서 `mv_geocode_text_search`는 실제 DDL로 승격했다. 이 객체는 `mv_geocode_target`에서 재생성하는 read-only helper이며, Q3 fuzzy geocode와 Q4 broad search fallback의 후보 추출에만 사용한다. T-171 이후 fuzzy geocode는 이 helper의 `buld_mnnm`/`buld_slno`/`buld_se_cd`를 함께 필터링해 exact 조회와 같은 건물번호 계약을 유지한다. Q4 exact preflight는 기존 `mv_geocode_target` exact index가 충분히 빨라 그대로 유지한다. helper MV를 추가·변경할 때는 `docs/t061-slim-text-search.md`처럼 semantic parity, Q3/Q4 p95/p99, helper size, shadow swap, backup envelope를 함께 기록한다. helper가 생긴 뒤 MV 갱신은 target과 helper를 같이 다루는 orchestration 경로만 사용한다.
 
 ## PNU 조립 (외부 시스템 연동)
 

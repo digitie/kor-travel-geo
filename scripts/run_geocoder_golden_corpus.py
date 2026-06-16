@@ -316,6 +316,11 @@ def _check_expected_payload(
         if actual is None or float(actual) > float(value):
             errors.append(f"{path} expected <= {value!r}, got {actual!r}")
 
+    for path, value in _mapping(expected.get("numeric_gte")).items():
+        actual = get_path(payload, path)
+        if actual is None or float(actual) < float(value):
+            errors.append(f"{path} expected >= {value!r}, got {actual!r}")
+
     if case.performance_budget_ms is not None and elapsed_ms > case.performance_budget_ms:
         errors.append(
             f"elapsed_ms {elapsed_ms:.3f} exceeded budget {case.performance_budget_ms:.3f}"

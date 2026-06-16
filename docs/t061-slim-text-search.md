@@ -31,7 +31,7 @@ T-057의 `sig_cd`/`bjd_cd` hint는 Q3 fuzzy tail을 낮췄지만, `mv_geocode_ta
 | `si_nm`, `sgg_nm` | 기존 parser 지역명 filter 보존 |
 | `rn_nrm`, `buld_nm_nrm` | trigram/exact text 후보 |
 | `sigungu_buld_nm_nrm` | T-065 내비게이션용DB `시군구용건물명` 검색 후보 |
-| `buld_mnnm` | 도로명 fuzzy의 건물 본번 filter |
+| `buld_mnnm`, `buld_slno`, `buld_se_cd` | 도로명 fuzzy의 건물번호 filter(T-171 이후 exact 조회와 같은 본번·부번·지하구분 계약 유지) |
 | `pt_source` | 기존 fuzzy 정렬의 entrance 우선순위 보존 |
 
 인덱스는 최종 채택본 기준 6개다.
@@ -39,9 +39,9 @@ T-057의 `sig_cd`/`bjd_cd` hint는 Q3 fuzzy tail을 낮췄지만, `mv_geocode_ta
 | index | 용도 |
 |-------|------|
 | `idx_mv_text_search_pk` | `REFRESH CONCURRENTLY`와 target join |
-| `idx_mv_text_search_sig_buld` | 5자리 `sig_cd` hint + 건물 본번 |
-| `idx_mv_text_search_sido_buld` | 2자리 시도 prefix hint + 건물 본번 |
-| `idx_mv_text_search_bjd_prefix_buld` | 8/10자리 `bjd_cd` hint + 건물 본번 |
+| `idx_mv_text_search_sig_buld` | 5자리 `sig_cd` hint + 건물번호 |
+| `idx_mv_text_search_sido_buld` | 2자리 시도 prefix hint + 건물번호 |
+| `idx_mv_text_search_bjd_prefix_buld` | 8/10자리 `bjd_cd` hint + 건물번호 |
 | `idx_mv_text_search_rn_trgm` | 도로명 fuzzy |
 | `idx_mv_text_search_buld_nm_trgm` | 건물명 broad search fallback |
 | `idx_mv_text_search_sigungu_buld_nm_trgm` | T-065 `시군구용건물명` broad search fallback |
@@ -49,6 +49,8 @@ T-057의 `sig_cd`/`bjd_cd` hint는 Q3 fuzzy tail을 낮췄지만, `mv_geocode_ta
 초기안에는 helper exact index와 `buld_mnnm` 단독 index도 포함했지만, Q4 exact는 기존 target index를 유지하기로 하면서 제거했다. 이 조정으로 helper rebuild 시간이 `235.22초`에서 `82.77초`로 줄고, helper total size가 `3.4GiB`에서 `2.4GiB`로 줄었다.
 
 T-065에서는 helper 컬럼과 인덱스가 하나 늘었다. 202604 전국 DB 기준 helper row count는 `6,416,642`, heap `904MB`, indexes `1,582MB`, total `2,486MB`이고, 새 `idx_mv_text_search_sigungu_buld_nm_trgm`은 약 `10MB`였다. 상세 전후 recall/latency는 `docs/t065-navi-building-name-search.md`에 둔다.
+
+T-171에서는 helper에 `buld_slno`와 `buld_se_cd`를 추가하고 region+건물번호 btree 인덱스에 두 컬럼을 포함했다. 이 변경은 도로명 오타 보정 중에도 부번이 다른 후보가 1순위로 올라오는 것을 막기 위한 ranking 결정성 보강이다. 별도 live size/latency 실측은 T-143 plan 안정화 작업에서 다시 측정한다.
 
 ## 성능 결과
 
