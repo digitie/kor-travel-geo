@@ -71,6 +71,30 @@ describe("summarizeBenchmarkArtifacts (T-222)", () => {
     expect(row.deltas.p99_ms).toBe(-10); // 90 - 100
   });
 
+  it("does not silently fall back when an explicit baseline is outside the fetched set", () => {
+    const rows = summarizeBenchmarkArtifacts([
+      benchmark({
+        artifact_id: "prev",
+        manifest: { kind: "rest", captured_at: "2026-06-12T00:00:00Z", metrics: { p99_ms: 50 } }
+      }),
+      benchmark({
+        artifact_id: "cur",
+        manifest: {
+          kind: "rest",
+          captured_at: "2026-06-16T00:00:00Z",
+          baseline_artifact_id: "missing-from-window",
+          metrics: { p99_ms: 90 }
+        }
+      })
+    ]);
+    const row = rows[0];
+    expect(row.latestArtifactId).toBe("cur");
+    expect(row.baselineUnavailable).toBe(true);
+    expect(row.baseline).toBeNull();
+    expect(row.deltas).toEqual({}); // no misleading delta vs the wrong (previous) run
+    expect(row.baselineArtifactId).toBe("missing-from-window");
+  });
+
   it("is defensive against missing/empty manifest and metrics", () => {
     const rows = summarizeBenchmarkArtifacts([
       benchmark({ artifact_id: "x" }), // no manifest at all

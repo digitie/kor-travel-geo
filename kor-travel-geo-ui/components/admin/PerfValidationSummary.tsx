@@ -102,6 +102,9 @@ export function PerfValidationSummary() {
                     <div className="perf-bench-name">
                       <span>{row.kind}</span>
                       {row.profile ? <small className="form-note">{row.profile}</small> : null}
+                      {row.baselineUnavailable ? (
+                        <small className="form-note warn">baseline 범위 밖 (delta 없음)</small>
+                      ) : null}
                     </div>
                   </td>
                   <MetricCell metric="p95_ms" row={row} />
@@ -109,13 +112,11 @@ export function PerfValidationSummary() {
                   <MetricCell digits={4} metric="error_rate" row={row} />
                   <MetricCell metric="qps" row={row} />
                   <td>
-                    {row.storageUri ? (
-                      <span className="perf-artifact-link" title={row.storageUri}>
-                        <ExternalLink size={13} /> {row.latestArtifactId.slice(0, 8)}…
-                      </span>
-                    ) : (
-                      `${row.latestArtifactId.slice(0, 8)}…`
-                    )}
+                    {/* storage_uri는 서버 로컬 경로라 클릭 가능한 link가 아니다 — id를 보여 주고
+                        경로는 title로만 노출한다(Codex #282 리뷰). */}
+                    <span className="perf-artifact-id" title={row.storageUri ?? row.latestArtifactId}>
+                      {row.latestArtifactId.slice(0, 8)}…
+                    </span>
                   </td>
                 </tr>
               ))}
