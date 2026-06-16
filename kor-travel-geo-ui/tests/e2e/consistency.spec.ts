@@ -23,7 +23,7 @@ const SAMPLE_WITH_POINT = {
   sig_cd: "41463",
   distance_m: 609.42,
   source_kind: "locsum",
-  case_metric: {},
+  case_metric: { distance_m: 609.42, threshold_m: 50 },
   source_snapshot: { distance_m: 609.42 },
   point: { x: 127.163213, y: 37.295898 },
   bbox_4326: {},
@@ -75,9 +75,10 @@ function resolveConsistencyBody(pathname: string): unknown {
       compares: "대표 출입구 좌표와 건물 polygon",
       abnormal_criteria: "출입구와 nearest polygon 거리가 50m를 초과한다.",
       evidence: ["출입구 점", "건물 polygon"],
-      likely_causes: ["좌표 원천 이상치"],
+      likely_causes: ["좌표 원천 이상치", "polygon 누락"],
       decision_guide: "지도 확인 후 승인 또는 거절",
-      threshold: "50m 초과 WARN"
+      default_severity: item.severity,
+      sample_schema: { distance_m: "number", bd_mgt_sn: "string" }
     }));
   }
   if (pathname.includes("/summary")) {
@@ -156,5 +157,25 @@ test.describe("Consistency 분석 콘솔", () => {
     await expect(page.getByText("표본 선택 대기")).toHaveCount(0);
     await expect(page.getByText("분류 C4")).toBeVisible();
     await expect(page.getByText("건물 도형 있음")).toBeVisible();
+  });
+
+  test("검증 case drilldown: 추정 원인·기본 심각도·sample_schema·case_metric을 노출한다 (T-226)", async ({
+    page
+  }) => {
+    await mockConsistencyApi(page);
+    await page.goto("/admin/consistency");
+
+    // CriteriaPanel(선택된 C4): likely_causes·default_severity·sample_schema.
+    await expect(page.getByText("추정 원인")).toBeVisible();
+    await expect(page.getByText("좌표 원천 이상치, polygon 누락")).toBeVisible();
+    await expect(page.getByText("기본 심각도")).toBeVisible();
+    await expect(page.getByText("sample 구조 (sample_schema)")).toBeVisible();
+
+    // 표본 선택 → DecisionPanel의 구조화된 case_metric.
+    await page.getByRole("button", { name: "#1" }).click();
+    await expect(page.getByText("지표 (case_metric)")).toBeVisible();
+    const metric = page.locator(".case-metric");
+    await expect(metric.getByText("distance_m")).toBeVisible();
+    await expect(metric.getByText("threshold_m")).toBeVisible();
   });
 });

@@ -211,6 +211,9 @@ export type ConsistencyCaseDefinition = {
   evidence: string[];
   likely_causes: string[];
   decision_guide: string;
+  // T-226: align hand-rolled type with the backend contract (api.gen ConsistencyCaseDefinition).
+  default_severity?: "OK" | "INFO" | "WARN" | "ERROR" | null;
+  sample_schema?: Record<string, unknown> | null;
   threshold?: string | null;
 };
 

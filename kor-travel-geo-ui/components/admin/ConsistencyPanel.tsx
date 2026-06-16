@@ -592,6 +592,14 @@ function CriteriaPanel({
           <dd>{definition.evidence.join(", ")}</dd>
         </div>
         <div>
+          <dt>추정 원인</dt>
+          <dd>{definition.likely_causes.length > 0 ? definition.likely_causes.join(", ") : "-"}</dd>
+        </div>
+        <div>
+          <dt>기본 심각도</dt>
+          <dd>{definition.default_severity ? <StatusBadge value={definition.default_severity} /> : "-"}</dd>
+        </div>
+        <div>
           <dt>진행률</dt>
           <dd>
             {Object.entries(summary?.by_decision ?? {})
@@ -600,6 +608,14 @@ function CriteriaPanel({
           </dd>
         </div>
       </dl>
+      {definition.sample_schema && Object.keys(definition.sample_schema).length > 0 ? (
+        <details className="case-sample-schema">
+          <summary>sample 구조 (sample_schema)</summary>
+          <pre className="json-box compact-json">
+            {JSON.stringify(definition.sample_schema, null, 2)}
+          </pre>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -766,9 +782,35 @@ function DecisionPanel({
           <RotateCw size={16} />
         </button>
       </div>
-      {sample ? <pre className="json-box compact-json">{JSON.stringify(sample.source_snapshot, null, 2)}</pre> : null}
+      {sample?.case_metric && Object.keys(sample.case_metric).length > 0 ? (
+        <div className="case-metric">
+          <strong>지표 (case_metric)</strong>
+          <dl className="criteria-grid case-metric-grid">
+            {Object.entries(sample.case_metric).map(([key, value]) => (
+              <div key={key}>
+                <dt>{key}</dt>
+                <dd>{formatMetricValue(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
+      {sample ? (
+        <details className="case-source-snapshot">
+          <summary>source_snapshot</summary>
+          <pre className="json-box compact-json">{JSON.stringify(sample.source_snapshot, null, 2)}</pre>
+        </details>
+      ) : null}
     </div>
   );
+}
+
+function formatMetricValue(value: unknown): string {
+  if (value == null) return "-";
+  if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value);
 }
 
 function DecisionModal({
