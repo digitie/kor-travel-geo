@@ -22,7 +22,7 @@ dist/
 .wsl-node/
 .codex_tmp/
 .codegraph/
-.claude/
+.claude/settings.local.json
 
 data/
 *.sqlite
