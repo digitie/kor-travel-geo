@@ -361,6 +361,22 @@ export type BackupAllowedDirs = {
   default_dir?: string | null;
 };
 
+export type RestoreDryRunResult = {
+  can_restore: boolean;
+  mode: "new_database" | "replace_current";
+  target_database?: string | null;
+  blockers?: string[];
+  warnings?: string[];
+  archive_sha256_ok?: boolean | null;
+  internal_checksums_ok?: boolean | null;
+  manifest_ok?: boolean | null;
+  backup_postgres_version?: string | null;
+  backup_postgis_version?: string | null;
+  target_postgres_version?: string | null;
+  target_postgis_version?: string | null;
+  row_counts?: Record<string, number> | null;
+};
+
 export type MaintenanceWindow = {
   maintenance_window_id: string;
   kind: "full_load" | "restore" | "schema_migration" | "mv_refresh" | "read_only" | "exclusive";
