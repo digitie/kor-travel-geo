@@ -13,9 +13,12 @@
 | `crs` | string | `EPSG:4326` | 입력 좌표계 |
 | `include_region` | boolean | `true` | region 보강 필드 포함 여부 |
 | `include_zipcode` | boolean | `true` | 우편번호 보강 여부 |
-| `radius_m` | integer | `200` | 검색 반경 |
+| `radius_m` | integer | `200` | 검색 반경(미터, 단위 suffix 규약 — ADR-060 §6) |
 | `sig_cd` | string | 없음 | 시도/시군구 hint |
 | `bjd_cd` | string | 없음 | 법정동 hint |
+| `include_geometry` | boolean | `false` | 후보에 도형(`geometry`/`bbox`) 포함 여부. geocode/search와 동일한 opt-in(ADR-060 §5, ADR-059) |
+
+`include_geometry`는 geocode/search와 대칭으로 받는다. 후보가 도형 조회 key를 가질 때만 채워진다 — 현재 reverse local 후보는 도로명/지번(`match_kind="road"`/`"parcel"`)이고 건물 도형 key(`bd_mgt_sn` 또는 `rncode_full`+`bjd_cd`+상세번호)를 함께 싣지 않으므로 `geometry`는 보통 `null`이다. 점 기반 건물 도형 조회는 후속 확장으로 남긴다.
 
 ## 출력
 

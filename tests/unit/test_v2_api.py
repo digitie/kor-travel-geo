@@ -725,3 +725,134 @@ def test_reverse_v2_promotes_sppn_number_without_makarea_to_candidate() -> None:
     assert converted.candidates[0].point == Point(x=127.1, y=36.6)
     assert converted.candidates[0].point_precision == "grid_cell"
     assert converted.candidates[0].metadata == {"national_point_number": "다사 6925 4045"}
+
+
+# --- T-105/§5 (#308): include_geometry symmetry on reverse/search (ADR-060) -----------------
+
+
+def _district_search_v1_response(query: str) -> SearchResponse:
+    return SearchResponse(
+        service=ServiceMeta(name="kor-travel-geo", operation="search"),
+        status="OK",
+        input=SearchInput(query=query),
+        result=(
+            SearchResultItem(
+                type="district",
+                title="용인시 수지구",
+                structure=AddressStructure(level1="경기도", level2="용인시 수지구"),
+                point=Point(x=127.0887, y=37.3328),
+                score=0.95,
+            ),
+        ),
+        total=1,
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_district_include_geometry_enriches_region_polygon(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kortravelgeo.core.protocols import GeometryLookup
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_search_v1(self: AsyncAddressClient, query: str, **_: Any) -> SearchResponse:
+        return _district_search_v1_response(query)
+
+    queried: list[dict[str, Any]] = []
+
+    async def fake_region_geometry(self: GeometryRepository, **kwargs: Any) -> GeometryLookup:
+        queried.append(kwargs)
+        return GeometryLookup(
+            kind="region",
+            geometry=GeometryV2(
+                kind="region",
+                source_table="tl_scco_sig",
+                geojson={
+                    "type": "MultiPolygon",
+                    "coordinates": [[[[127.0, 37.0], [127.1, 37.0], [127.1, 37.1], [127.0, 37.0]]]],
+                },
+            ),
+            bbox=BBoxV2(min_lon=127.0, min_lat=37.0, max_lon=127.1, max_lat=37.1),
+        )
+
+    monkeypatch.setattr(AsyncAddressClient, "_search_v1", fake_search_v1)
+    monkeypatch.setattr(GeometryRepository, "region_geometry", fake_region_geometry)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.search(query="수지구", type="district", include_geometry=True)
+
+    assert response.input.include_geometry is True
+    candidate = response.candidates[0]
+    assert candidate.match_kind == "region"
+    assert candidate.geometry is not None
+    assert candidate.geometry.kind == "region"
+    assert candidate.bbox is not None
+    assert queried, "region_geometry should be queried when include_geometry is true"
+
+
+@pytest.mark.asyncio
+async def test_search_without_include_geometry_does_not_query_geometry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_search_v1(self: AsyncAddressClient, query: str, **_: Any) -> SearchResponse:
+        return _district_search_v1_response(query)
+
+    async def forbidden(self: GeometryRepository, **_: Any) -> None:
+        raise AssertionError("geometry must not be queried when include_geometry is false")
+
+    monkeypatch.setattr(AsyncAddressClient, "_search_v1", fake_search_v1)
+    monkeypatch.setattr(GeometryRepository, "region_geometry", forbidden)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.search(query="수지구", type="district")
+
+    assert response.input.include_geometry is False
+    assert response.candidates[0].geometry is None
+
+
+@pytest.mark.asyncio
+async def test_reverse_accepts_include_geometry_symmetric_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_reverse_v1(
+        self: AsyncAddressClient,
+        lon: float,
+        lat: float,
+        **_: Any,
+    ) -> ReverseResponse:
+        return ReverseResponse(
+            service=ServiceMeta(name="kor-travel-geo", operation="reverse_geocode"),
+            status="OK",
+            input=ReverseInput(point=Point(x=lon, y=lat), radius_m=200),
+            result=(
+                ReverseResultItem(
+                    type="road",
+                    text="서울특별시 강남구 테헤란로 152",
+                    structure=AddressStructure(level1="서울특별시", level2="강남구"),
+                    point=Point(x=lon, y=lat),
+                    distance_m=12.0,
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(AsyncAddressClient, "_reverse_geocode_v1", fake_reverse_v1)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.reverse(127.036, 37.501, include_geometry=True)
+
+    # include_geometry is accepted symmetrically (ADR-060 §5). reverse road/parcel candidates
+    # carry no building keys, so geometry stays None today (documented; building_geometry
+    # short-circuits before any DB access).
+    assert response.input.include_geometry is True
+    assert response.candidates[0].geometry is None
+
+
+def test_v2_reverse_search_inputs_publish_include_geometry() -> None:
+    schema = create_app().openapi()
+    components = schema["components"]["schemas"]
+    for name in ("ReverseV2Input", "SearchV2Input"):
+        assert "include_geometry" in components[name]["properties"], name
+        # additive optional field -> not required.
+        assert "include_geometry" not in components[name].get("required", [])

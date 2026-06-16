@@ -4278,6 +4278,11 @@ export interface components {
             /** @default EPSG:4326 */
             crs: components["schemas"]["CRS"];
             /**
+             * Include Geometry
+             * @default false
+             */
+            include_geometry: boolean;
+            /**
              * Include Region
              * @default true
              */
@@ -4573,6 +4578,11 @@ export interface components {
             bjd_cd?: string | null;
             /** Category Group Code */
             category_group_code?: string | null;
+            /**
+             * Include Geometry
+             * @default false
+             */
+            include_geometry: boolean;
             /**
              * Page
              * @default 1

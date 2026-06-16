@@ -104,6 +104,7 @@ from .dto.source import (
 )
 from .dto.v2 import (
     BBoxV2,
+    CandidateV2,
     GeocodeV2Input,
     GeocodeV2Response,
     RegionsWithinRadiusInput,
@@ -342,11 +343,31 @@ class AsyncAddressClient:
         self,
         response: GeocodeV2Response,
     ) -> GeocodeV2Response:
-        if not response.input.include_geometry or not response.candidates:
+        enriched = await self._enrich_candidates_with_geometry(
+            response.candidates, include_geometry=response.input.include_geometry
+        )
+        if enriched is response.candidates:
             return response
+        return response.model_copy(update={"candidates": enriched})
+
+    async def _enrich_candidates_with_geometry(
+        self,
+        candidates: tuple[CandidateV2, ...],
+        *,
+        include_geometry: bool,
+    ) -> tuple[CandidateV2, ...]:
+        """Attach opt-in geometry to local candidates (ADR-059/ADR-060 §5).
+
+        Shared by geocode/reverse/search so ``include_geometry`` behaves identically across
+        v2 endpoints. ``region`` candidates resolve to a region polygon; ``road``/``parcel``
+        candidates resolve to a building polygon when they carry the lookup keys. Returns the
+        same tuple object (no copy) when there is nothing to enrich.
+        """
+        if not include_geometry or not candidates:
+            return candidates
         geometry_repo = GeometryRepository(self._engine())
-        enriched = []
-        for candidate in response.candidates:
+        enriched: list[CandidateV2] = []
+        for candidate in candidates:
             if candidate.source != "local":
                 enriched.append(candidate)
                 continue
@@ -371,13 +392,9 @@ class AsyncAddressClient:
             else:
                 geometry = None
             enriched.append(
-                with_candidate_geometry(
-                    candidate,
-                    geometry,
-                    include_geometry=response.input.include_geometry,
-                )
+                with_candidate_geometry(candidate, geometry, include_geometry=include_geometry)
             )
-        return response.model_copy(update={"candidates": tuple(enriched)})
+        return tuple(enriched)
 
     async def _geocode_v1(
         self,
@@ -554,6 +571,7 @@ class AsyncAddressClient:
         radius_m: int | None = None,
         sig_cd: str | None = None,
         bjd_cd: str | None = None,
+        include_geometry: bool = False,
     ) -> ReverseV2Response:
         inp = ReverseV2Input(
             lon=lon,
@@ -564,6 +582,7 @@ class AsyncAddressClient:
             radius_m=radius_m or self.settings.api_default_radius_m,
             sig_cd=sig_cd,
             bjd_cd=bjd_cd,
+            include_geometry=include_geometry,
         )
         response = await self._reverse_geocode_v1(
             lon,
@@ -574,7 +593,13 @@ class AsyncAddressClient:
             sig_cd=sig_cd,
             bjd_cd=bjd_cd,
         )
-        return reverse_v2_from_v1(inp, response)
+        result = reverse_v2_from_v1(inp, response)
+        enriched = await self._enrich_candidates_with_geometry(
+            result.candidates, include_geometry=inp.include_geometry
+        )
+        if enriched is result.candidates:
+            return result
+        return result.model_copy(update={"candidates": enriched})
 
     async def search(
         self,
@@ -587,6 +612,7 @@ class AsyncAddressClient:
         sig_cd: str | None = None,
         bjd_cd: str | None = None,
         bbox: BBoxV2 | None = None,
+        include_geometry: bool = False,
     ) -> SearchV2Response:
         inp = SearchV2Input(
             query=query,
@@ -597,6 +623,7 @@ class AsyncAddressClient:
             sig_cd=sig_cd,
             bjd_cd=bjd_cd,
             bbox=bbox,
+            include_geometry=include_geometry,
         )
         response = await self._search_v1(
             query,
@@ -606,7 +633,13 @@ class AsyncAddressClient:
             sig_cd=sig_cd,
             bjd_cd=bjd_cd,
         )
-        return search_v2_from_v1(inp, response)
+        result = search_v2_from_v1(inp, response)
+        enriched = await self._enrich_candidates_with_geometry(
+            result.candidates, include_geometry=inp.include_geometry
+        )
+        if enriched is result.candidates:
+            return result
+        return result.model_copy(update={"candidates": enriched})
 
     async def regions_within_radius(
         self,

@@ -32,7 +32,8 @@ export function ReverseDebugger() {
         crs: "EPSG:4326",
         include_region: true,
         include_zipcode: true,
-        radius_m: parsed.data.radius_m
+        radius_m: parsed.data.radius_m,
+        include_geometry: false
       };
       setResult(await postJson<ReverseV2Response>("/v2/reverse", body));
     } catch (error) {

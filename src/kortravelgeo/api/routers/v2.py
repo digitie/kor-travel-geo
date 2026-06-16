@@ -72,6 +72,7 @@ async def reverse_v2(
         radius_m=req.radius_m,
         sig_cd=req.sig_cd,
         bjd_cd=req.bjd_cd,
+        include_geometry=req.include_geometry,
     )
 
 
@@ -94,6 +95,7 @@ async def search_v2(
         sig_cd=req.sig_cd,
         bjd_cd=req.bjd_cd,
         bbox=req.bbox,
+        include_geometry=req.include_geometry,
     )
 
 

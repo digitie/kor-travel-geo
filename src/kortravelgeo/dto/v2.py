@@ -151,6 +151,7 @@ class ReverseV2Input(FrozenModel):
     radius_m: int = Field(default=200, ge=1, le=2_000)
     sig_cd: str | None = Field(default=None, pattern=r"^(\d{2}|\d{5})$")
     bjd_cd: str | None = Field(default=None, pattern=r"^(\d{8}|\d{10})$")
+    include_geometry: bool = False
 
     @model_validator(mode="after")
     def validate_korea_lon_lat(self) -> ReverseV2Input:
@@ -184,6 +185,7 @@ class SearchV2Input(Page):
     sig_cd: str | None = Field(default=None, pattern=r"^(\d{2}|\d{5})$")
     bjd_cd: str | None = Field(default=None, pattern=r"^(\d{8}|\d{10})$")
     bbox: BBoxV2 | None = None
+    include_geometry: bool = False
 
     @model_validator(mode="after")
     def validate_region_hint(self) -> SearchV2Input:
