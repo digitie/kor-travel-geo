@@ -66,6 +66,7 @@ from kortravelgeo.dto.admin import (
     NormalizeRequest,
     NormalizeResponse,
     OpsArtifact,
+    PgStatStatementSnapshot,
     RestoreCreateRequest,
     RestoreDryRunResult,
     RestoreHotSwapExecuteRequest,
@@ -2611,6 +2612,34 @@ async def capture_ops_table_stats(
     return await client.capture_table_stats_snapshots(
         dataset_snapshot_id=dataset_snapshot_id, limit=limit
     )
+
+
+@router.get(
+    "/ops/pg-stat-statements",
+    response_model=list[PgStatStatementSnapshot],
+    response_model_exclude_none=True,
+)
+async def list_ops_pg_stat_statements(
+    limit: int = Query(default=20, ge=1, le=100),
+    latest_only: bool = True,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[PgStatStatementSnapshot]:
+    return await client.list_pg_stat_statement_snapshots(
+        limit=limit,
+        latest_only=latest_only,
+    )
+
+
+@router.post(
+    "/ops/pg-stat-statements/capture",
+    response_model=list[PgStatStatementSnapshot],
+    response_model_exclude_none=True,
+)
+async def capture_ops_pg_stat_statements(
+    limit: int = Query(default=20, ge=1, le=100),
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[PgStatStatementSnapshot]:
+    return await client.capture_pg_stat_statement_snapshots(limit=limit)
 
 
 def backup_catalog_summary(manifest: dict[str, Any] | None) -> dict[str, Any]:

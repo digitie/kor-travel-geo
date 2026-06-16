@@ -35,6 +35,7 @@ from kortravelgeo.infra.metrics import (
     record_api_request_started,
     refresh_admin_metrics,
     refresh_db_pool_metrics,
+    refresh_pg_stat_statement_metrics,
     refresh_source_registry_metrics,
     render_prometheus,
 )
@@ -78,12 +79,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await queue.recover_startup()
     table_stats_task = _start_table_stats_capture_scheduler(client.engine, get_settings())
     app.state.table_stats_capture_task = table_stats_task
+    pg_stat_task = _start_pg_stat_statements_capture_scheduler(client.engine, get_settings())
+    app.state.pg_stat_statements_capture_task = pg_stat_task
     janitor_task = _start_source_janitor_scheduler(client, get_settings())
     app.state.source_janitor_task = janitor_task
     try:
         yield
     finally:
-        for task in (table_stats_task, janitor_task):
+        for task in (table_stats_task, pg_stat_task, janitor_task):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -127,6 +130,10 @@ def create_app() -> FastAPI:
         refresh_source_registry_metrics(
             capacity=capacity, session_state_counts=session_state_counts
         )
+        pg_stat_rows = await client.list_pg_stat_statement_snapshots(
+            limit=settings.ops_pg_stat_statements_capture_limit
+        )
+        refresh_pg_stat_statement_metrics(pg_stat_rows)
         return Response(render_prometheus(), media_type=PROMETHEUS_CONTENT_TYPE)
 
     return app
@@ -249,6 +256,47 @@ async def _capture_table_stats_once(engine: AsyncEngine, settings: Settings) -> 
     _LOGGER.info(
         "captured ops.table_stats_snapshots",
         extra={"row_count": len(rows), "limit": settings.ops_table_stats_capture_limit},
+    )
+
+
+def _start_pg_stat_statements_capture_scheduler(
+    engine: AsyncEngine,
+    settings: Settings,
+) -> asyncio.Task[None] | None:
+    if settings.ops_pg_stat_statements_capture_interval_minutes <= 0:
+        return None
+    return asyncio.create_task(_run_pg_stat_statements_capture_scheduler(engine, settings))
+
+
+async def _run_pg_stat_statements_capture_scheduler(
+    engine: AsyncEngine,
+    settings: Settings,
+) -> None:
+    interval_s = settings.ops_pg_stat_statements_capture_interval_minutes * 60
+    if settings.ops_pg_stat_statements_capture_on_startup:
+        await _capture_pg_stat_statements_once(engine, settings)
+
+    while True:
+        await asyncio.sleep(interval_s)
+        await _capture_pg_stat_statements_once(engine, settings)
+
+
+async def _capture_pg_stat_statements_once(engine: AsyncEngine, settings: Settings) -> None:
+    try:
+        rows = await AdminRepository(engine).capture_pg_stat_statement_snapshots(
+            limit=settings.ops_pg_stat_statements_capture_limit,
+            skip_if_locked=True,
+        )
+    except Exception:
+        _LOGGER.exception("failed to capture ops.pg_stat_statements_snapshots")
+        return
+
+    _LOGGER.info(
+        "captured ops.pg_stat_statements_snapshots",
+        extra={
+            "row_count": len(rows),
+            "limit": settings.ops_pg_stat_statements_capture_limit,
+        },
     )
 
 

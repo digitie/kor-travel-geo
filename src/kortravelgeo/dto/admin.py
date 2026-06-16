@@ -931,3 +931,23 @@ class TableStatsSnapshot(FrozenModel):
     last_vacuum: datetime | None = None
     last_analyze: datetime | None = None
     stats: dict[str, Any] = Field(default_factory=dict)
+
+
+class PgStatStatementSnapshot(FrozenModel):
+    pg_stat_snapshot_id: str
+    captured_at: datetime
+    rank: int = Field(ge=1)
+    queryid: str | None = None
+    query_fingerprint: str = Field(min_length=1, max_length=64)
+    operation: str = Field(min_length=1, max_length=32)
+    calls: int = Field(ge=0)
+    total_exec_time_ms: float = Field(ge=0.0)
+    mean_exec_time_ms: float = Field(ge=0.0)
+    max_exec_time_ms: float = Field(ge=0.0)
+    rows_returned: int = Field(ge=0)
+    shared_blks_hit: int = Field(default=0, ge=0)
+    shared_blks_read: int = Field(default=0, ge=0)
+    temp_blks_read: int = Field(default=0, ge=0)
+    temp_blks_written: int = Field(default=0, ge=0)
+    query_preview: str = Field(min_length=1, max_length=500)
+    stats: dict[str, Any] = Field(default_factory=dict)

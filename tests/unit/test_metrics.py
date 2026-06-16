@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from kortravelgeo.dto.admin import CacheMetrics
+from datetime import UTC, datetime
+
+from kortravelgeo.dto.admin import CacheMetrics, PgStatStatementSnapshot
 from kortravelgeo.infra import metrics
 
 
@@ -102,3 +104,32 @@ def test_metrics_render_includes_db_query_duration_histogram() -> None:
     assert 'operation="select"' in body
     assert 'status="success"' in body
     assert "query_fingerprint=" in body
+
+
+def test_metrics_render_includes_pg_stat_statement_snapshot_without_query_text() -> None:
+    metrics.refresh_pg_stat_statement_metrics(
+        [
+            PgStatStatementSnapshot(
+                pg_stat_snapshot_id="pg-stat-1",
+                captured_at=datetime.now(UTC),
+                rank=1,
+                query_fingerprint="abcdef123456",
+                operation="select",
+                calls=12,
+                total_exec_time_ms=120.5,
+                mean_exec_time_ms=10.0,
+                max_exec_time_ms=40.25,
+                rows_returned=24,
+                query_preview="SELECT * FROM mv_geocode_target WHERE road_address = ?",
+            )
+        ]
+    )
+
+    body = metrics.render_prometheus().decode()
+
+    assert "kor_travel_geo_pg_stat_statements_total_exec_time_ms" in body
+    assert "kor_travel_geo_pg_stat_statements_calls" in body
+    assert 'operation="select"' in body
+    assert 'query_fingerprint="abcdef123456"' in body
+    assert "mv_geocode_target" not in body
+    assert "road_address" not in body

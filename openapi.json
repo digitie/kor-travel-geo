@@ -4158,6 +4158,123 @@
         "title": "OpsArtifact",
         "type": "object"
       },
+      "PgStatStatementSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "calls": {
+            "minimum": 0.0,
+            "title": "Calls",
+            "type": "integer"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "max_exec_time_ms": {
+            "minimum": 0.0,
+            "title": "Max Exec Time Ms",
+            "type": "number"
+          },
+          "mean_exec_time_ms": {
+            "minimum": 0.0,
+            "title": "Mean Exec Time Ms",
+            "type": "number"
+          },
+          "operation": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Operation",
+            "type": "string"
+          },
+          "pg_stat_snapshot_id": {
+            "title": "Pg Stat Snapshot Id",
+            "type": "string"
+          },
+          "query_fingerprint": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Query Fingerprint",
+            "type": "string"
+          },
+          "query_preview": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Query Preview",
+            "type": "string"
+          },
+          "queryid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queryid"
+          },
+          "rank": {
+            "minimum": 1.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "rows_returned": {
+            "minimum": 0.0,
+            "title": "Rows Returned",
+            "type": "integer"
+          },
+          "shared_blks_hit": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Shared Blks Hit",
+            "type": "integer"
+          },
+          "shared_blks_read": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Shared Blks Read",
+            "type": "integer"
+          },
+          "stats": {
+            "additionalProperties": true,
+            "title": "Stats",
+            "type": "object"
+          },
+          "temp_blks_read": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Temp Blks Read",
+            "type": "integer"
+          },
+          "temp_blks_written": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Temp Blks Written",
+            "type": "integer"
+          },
+          "total_exec_time_ms": {
+            "minimum": 0.0,
+            "title": "Total Exec Time Ms",
+            "type": "number"
+          }
+        },
+        "required": [
+          "pg_stat_snapshot_id",
+          "captured_at",
+          "rank",
+          "query_fingerprint",
+          "operation",
+          "calls",
+          "total_exec_time_ms",
+          "mean_exec_time_ms",
+          "max_exec_time_ms",
+          "rows_returned",
+          "query_preview"
+        ],
+        "title": "PgStatStatementSnapshot",
+        "type": "object"
+      },
       "PlaceV2": {
         "additionalProperties": false,
         "properties": {
@@ -13351,6 +13468,114 @@
           }
         },
         "summary": "End Ops Maintenance Window",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/pg-stat-statements": {
+      "get": {
+        "operationId": "list_ops_pg_stat_statements_v1_admin_ops_pg_stat_statements_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "latest_only",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Latest Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PgStatStatementSnapshot"
+                  },
+                  "title": "Response List Ops Pg Stat Statements V1 Admin Ops Pg Stat Statements Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ops Pg Stat Statements",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/ops/pg-stat-statements/capture": {
+      "post": {
+        "operationId": "capture_ops_pg_stat_statements_v1_admin_ops_pg_stat_statements_capture_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PgStatStatementSnapshot"
+                  },
+                  "title": "Response Capture Ops Pg Stat Statements V1 Admin Ops Pg Stat Statements Capture Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Capture Ops Pg Stat Statements",
         "tags": [
           "admin"
         ]

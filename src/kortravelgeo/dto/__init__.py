@@ -16,6 +16,7 @@ from .admin import (
     LoadJobStatus,
     NormalizeRequest,
     NormalizeResponse,
+    PgStatStatementSnapshot,
     TableStat,
     UploadSidoZipResponse,
 )
@@ -78,6 +79,7 @@ __all__ = [
     "NormalizeRequest",
     "NormalizeResponse",
     "Page",
+    "PgStatStatementSnapshot",
     "PlaceV2",
     "PoboxInput",
     "PoboxResponse",

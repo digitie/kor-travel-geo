@@ -79,6 +79,8 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/v1/admin/ops/maintenance-windows/{maintenance_window_id}/end" in paths
     assert "/v1/admin/ops/table-stats" in paths
     assert "/v1/admin/ops/table-stats/capture" in paths
+    assert "/v1/admin/ops/pg-stat-statements" in paths
+    assert "/v1/admin/ops/pg-stat-statements/capture" in paths
     assert "/metrics" in paths
 
 

@@ -568,6 +568,26 @@ CREATE TABLE IF NOT EXISTS ops.table_stats_snapshots (
   stats                       JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
+CREATE TABLE IF NOT EXISTS ops.pg_stat_statements_snapshots (
+  pg_stat_snapshot_id         UUID PRIMARY KEY,
+  captured_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  rank                        INTEGER NOT NULL CHECK (rank >= 1),
+  queryid                     TEXT,
+  query_fingerprint           TEXT NOT NULL CHECK (char_length(query_fingerprint) BETWEEN 1 AND 64),
+  operation                   TEXT NOT NULL CHECK (char_length(operation) BETWEEN 1 AND 32),
+  calls                       BIGINT NOT NULL CHECK (calls >= 0),
+  total_exec_time_ms          DOUBLE PRECISION NOT NULL CHECK (total_exec_time_ms >= 0),
+  mean_exec_time_ms           DOUBLE PRECISION NOT NULL CHECK (mean_exec_time_ms >= 0),
+  max_exec_time_ms            DOUBLE PRECISION NOT NULL CHECK (max_exec_time_ms >= 0),
+  rows_returned               BIGINT NOT NULL CHECK (rows_returned >= 0),
+  shared_blks_hit             BIGINT NOT NULL DEFAULT 0 CHECK (shared_blks_hit >= 0),
+  shared_blks_read            BIGINT NOT NULL DEFAULT 0 CHECK (shared_blks_read >= 0),
+  temp_blks_read              BIGINT NOT NULL DEFAULT 0 CHECK (temp_blks_read >= 0),
+  temp_blks_written           BIGINT NOT NULL DEFAULT 0 CHECK (temp_blks_written >= 0),
+  query_preview               TEXT NOT NULL CHECK (char_length(query_preview) BETWEEN 1 AND 500),
+  stats                       JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
 CREATE TABLE IF NOT EXISTS ops.source_file_groups (
   source_file_group_id  UUID PRIMARY KEY,
   category              TEXT NOT NULL,

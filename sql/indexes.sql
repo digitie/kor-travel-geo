@@ -99,3 +99,7 @@ CREATE INDEX IF NOT EXISTS idx_ops_maintenance_windows_active
   WHERE state IN ('scheduled','active','ending');
 CREATE INDEX IF NOT EXISTS idx_ops_table_stats_snapshots_captured
   ON ops.table_stats_snapshots (captured_at DESC, schema_name, object_name);
+CREATE INDEX IF NOT EXISTS idx_ops_pg_stat_statements_snapshots_captured
+  ON ops.pg_stat_statements_snapshots (captured_at DESC, rank);
+CREATE INDEX IF NOT EXISTS idx_ops_pg_stat_statements_snapshots_fingerprint
+  ON ops.pg_stat_statements_snapshots (query_fingerprint, captured_at DESC);

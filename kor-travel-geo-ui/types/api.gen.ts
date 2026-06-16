@@ -725,6 +725,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/ops/pg-stat-statements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Ops Pg Stat Statements */
+        get: operations["list_ops_pg_stat_statements_v1_admin_ops_pg_stat_statements_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/ops/pg-stat-statements/capture": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Capture Ops Pg Stat Statements */
+        post: operations["capture_ops_pg_stat_statements_v1_admin_ops_pg_stat_statements_capture_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/ops/releases": {
         parameters: {
             query?: never;
@@ -3325,6 +3359,60 @@ export interface components {
             storage_kind: "local_file" | "s3" | "gcs" | "none";
             /** Storage Uri */
             storage_uri?: string | null;
+        };
+        /** PgStatStatementSnapshot */
+        PgStatStatementSnapshot: {
+            /** Calls */
+            calls: number;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Max Exec Time Ms */
+            max_exec_time_ms: number;
+            /** Mean Exec Time Ms */
+            mean_exec_time_ms: number;
+            /** Operation */
+            operation: string;
+            /** Pg Stat Snapshot Id */
+            pg_stat_snapshot_id: string;
+            /** Query Fingerprint */
+            query_fingerprint: string;
+            /** Query Preview */
+            query_preview: string;
+            /** Queryid */
+            queryid?: string | null;
+            /** Rank */
+            rank: number;
+            /** Rows Returned */
+            rows_returned: number;
+            /**
+             * Shared Blks Hit
+             * @default 0
+             */
+            shared_blks_hit: number;
+            /**
+             * Shared Blks Read
+             * @default 0
+             */
+            shared_blks_read: number;
+            /** Stats */
+            stats?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Temp Blks Read
+             * @default 0
+             */
+            temp_blks_read: number;
+            /**
+             * Temp Blks Written
+             * @default 0
+             */
+            temp_blks_written: number;
+            /** Total Exec Time Ms */
+            total_exec_time_ms: number;
         };
         /** PlaceV2 */
         PlaceV2: {
@@ -7353,6 +7441,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_ops_pg_stat_statements_v1_admin_ops_pg_stat_statements_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                latest_only?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PgStatStatementSnapshot"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capture_ops_pg_stat_statements_v1_admin_ops_pg_stat_statements_capture_post: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PgStatStatementSnapshot"][];
                 };
             };
             /** @description Validation Error */

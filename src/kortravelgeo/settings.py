@@ -108,6 +108,9 @@ class Settings(BaseSettings):
     ops_table_stats_capture_interval_minutes: int = Field(default=0, ge=0)
     ops_table_stats_capture_limit: int = Field(default=500, ge=1, le=2_000)
     ops_table_stats_capture_on_startup: bool = False
+    ops_pg_stat_statements_capture_interval_minutes: int = Field(default=5, ge=0)
+    ops_pg_stat_statements_capture_limit: int = Field(default=20, ge=1, le=100)
+    ops_pg_stat_statements_capture_on_startup: bool = True
     # T-203c source upload-session janitor (doc 1차 기본값, lines ~519-525).
     source_upload_session_ttl_days: int = Field(default=7, ge=1)
     source_registration_deadline_days: int = Field(default=30, ge=1)
