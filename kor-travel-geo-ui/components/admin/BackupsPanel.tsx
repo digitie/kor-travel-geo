@@ -1,14 +1,8 @@
 "use client";
 
-import {
-  Archive,
-  Download,
-  RefreshCw,
-  RotateCcw,
-  Trash2,
-  XCircle
-} from "lucide-react";
+import { Archive, Download, RefreshCw, Trash2, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { RestoreWizard } from "@/components/admin/backups/RestoreWizard";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -32,14 +26,6 @@ type BackupFormState = {
   jobs: number;
   profile: BackupProfile;
 };
-type RestoreFormState = {
-  restoreArchivePath: string;
-  restoreArtifactId: string;
-  restoreJobs: number;
-  runAnalyze: boolean;
-  runSmokeTest: boolean;
-  targetDatabase: string;
-};
 type BackupsPanelState = {
   allowedDirs: string[];
   artifacts: BackupArtifact[];
@@ -53,14 +39,6 @@ const initialBackupFormState: BackupFormState = {
   destinationDir: "data/backups",
   jobs: 4,
   profile: "serving-ready"
-};
-const initialRestoreFormState: RestoreFormState = {
-  restoreArchivePath: "",
-  restoreArtifactId: "",
-  restoreJobs: 4,
-  runAnalyze: true,
-  runSmokeTest: true,
-  targetDatabase: "kor_travel_geo_restore"
 };
 const initialBackupsPanelState: BackupsPanelState = {
   allowedDirs: [],
@@ -91,12 +69,9 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
     jobRows,
     lastResult,
     loadAll,
-    restoreForm,
     submitBackup,
-    submitRestore,
     cancelJob,
-    updateBackupForm,
-    updateRestoreForm
+    updateBackupForm
   } = controller;
 
   const runningCount = useMemo(
@@ -165,14 +140,7 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
             <BackupArtifactsPanel artifacts={artifacts} onDeleteArtifact={deleteArtifact} />
           </div>
         ) : null}
-        {activeTab === "restore" ? (
-          <RestoreFormPanel
-            artifacts={availableArtifacts}
-            form={restoreForm}
-            onChange={updateRestoreForm}
-            onSubmit={submitRestore}
-          />
-        ) : null}
+        {activeTab === "restore" ? <RestoreWizard onSubmitted={loadAll} /> : null}
         {activeTab === "hotswap" ? <HotSwapGuideTab /> : null}
         {activeTab === "jobs" ? (
           <BackupJobsPanel jobRows={jobRows} onCancelJob={cancelJob} />
@@ -294,7 +262,6 @@ function HotSwapGuideTab() {
 
 function useBackupsPanelController() {
   const [backupForm, setBackupForm] = useState<BackupFormState>(initialBackupFormState);
-  const [restoreForm, setRestoreForm] = useState<RestoreFormState>(initialRestoreFormState);
   const [panelState, setPanelState] = useState<BackupsPanelState>(initialBackupsPanelState);
   const { allowedDirs, artifacts, jobRows, lastResult } = panelState;
 
@@ -334,9 +301,6 @@ function useBackupsPanelController() {
   const updateBackupForm = useCallback((patch: Partial<BackupFormState>) => {
     setBackupForm((current) => ({ ...current, ...patch }));
   }, []);
-  const updateRestoreForm = useCallback((patch: Partial<RestoreFormState>) => {
-    setRestoreForm((current) => ({ ...current, ...patch }));
-  }, []);
 
   async function submitBackup(event: FormEvent) {
     event.preventDefault();
@@ -347,27 +311,6 @@ function useBackupsPanelController() {
         destination_dir: backupForm.destinationDir || undefined,
         jobs: backupForm.jobs,
         profile: backupForm.profile
-      });
-      setPanelState((current) => ({ ...current, lastResult: result }));
-      await loadAll();
-    } catch (error) {
-      setPanelState((current) => ({
-        ...current,
-        lastResult: { error: error instanceof Error ? error.message : String(error) }
-      }));
-    }
-  }
-
-  async function submitRestore(event: FormEvent) {
-    event.preventDefault();
-    try {
-      const result = await postJson<LoadJobStatus>("/admin/restores", {
-        archive_path: restoreForm.restoreArchivePath || undefined,
-        artifact_id: restoreForm.restoreArtifactId || undefined,
-        jobs: restoreForm.restoreJobs,
-        run_analyze: restoreForm.runAnalyze,
-        run_smoke_test: restoreForm.runSmokeTest,
-        target_database: restoreForm.targetDatabase
       });
       setPanelState((current) => ({ ...current, lastResult: result }));
       await loadAll();
@@ -443,11 +386,8 @@ function useBackupsPanelController() {
     jobRows,
     lastResult,
     loadAll,
-    restoreForm,
     submitBackup,
-    submitRestore,
-    updateBackupForm,
-    updateRestoreForm
+    updateBackupForm
   };
 }
 
@@ -538,84 +478,6 @@ function BackupFormPanel({
         <button className="button" type="submit">
           <Archive size={16} />
           백업 시작
-        </button>
-      </form>
-    </Panel>
-  );
-}
-
-function RestoreFormPanel({
-  artifacts,
-  form,
-  onChange,
-  onSubmit
-}: {
-  artifacts: BackupArtifact[];
-  form: RestoreFormState;
-  onChange: (patch: Partial<RestoreFormState>) => void;
-  onSubmit: (event: FormEvent) => void;
-}) {
-  return (
-    <Panel title="DB Restore">
-      <form className="form-grid" onSubmit={onSubmit}>
-        <div className="field">
-          <label htmlFor="restore-artifact">복원할 백업본 (artifact_id)</label>
-          <select
-            id="restore-artifact"
-            value={form.restoreArtifactId}
-            onChange={(event) => onChange({ restoreArtifactId: event.target.value })}
-          >
-            <option value="">직접 경로 사용</option>
-            {artifacts.map((artifact) => (
-              <option key={artifact.artifact_id} value={artifact.artifact_id}>
-                {artifact.display_name ?? artifact.artifact_id}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="restore-archive">백업본 직접 경로 (archive_path)</label>
-          <input
-            id="restore-archive"
-            value={form.restoreArchivePath}
-            onChange={(event) => onChange({ restoreArchivePath: event.target.value })}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="restore-target">복원 대상 DB 이름 (target_database)</label>
-          <input
-            id="restore-target"
-            value={form.targetDatabase}
-            onChange={(event) => onChange({ targetDatabase: event.target.value })}
-          />
-        </div>
-        <NumberField
-          id="restore-jobs"
-          label="병렬 작업 수 (jobs)"
-          max={64}
-          min={1}
-          value={form.restoreJobs}
-          onChange={(value) => onChange({ restoreJobs: value })}
-        />
-        <label className="checkbox-row">
-          <input
-            checked={form.runAnalyze}
-            onChange={(event) => onChange({ runAnalyze: event.target.checked })}
-            type="checkbox"
-          />
-          ANALYZE
-        </label>
-        <label className="checkbox-row">
-          <input
-            checked={form.runSmokeTest}
-            onChange={(event) => onChange({ runSmokeTest: event.target.checked })}
-            type="checkbox"
-          />
-          smoke test
-        </label>
-        <button className="button" type="submit">
-          <RotateCcw size={16} />
-          Restore 시작
         </button>
       </form>
     </Panel>
