@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-158 slow-query·overload 구조화 로깅)
+
+**작업**: `ops.slow_observability_samples`와 Alembic `0021_t158_slow_observability`를 추가했다. `infra.slow_observability`가 느린 API 요청, admission overload, 느린 DB query를 sample rate·최소 간격·queue 크기로 제한해 큐에 넣고, API lifespan flush task가 batch insert한다. DB query metric hook은 `ops_slow_samples_enabled=true`일 때만 slow query callback을 설치한다.
+
+**결정**: 기본은 비활성이다. 원문 SQL, query parameter, 주소 문자열은 저장하지 않고 `query_fingerprint`와 literal 마스킹 `query_preview`만 남긴다. Optional plan은 `KTG_OPS_SLOW_QUERY_EXPLAIN_ENABLED=true`일 때 `SELECT`/`WITH` 쿼리에 한해 `EXPLAIN (FORMAT JSON)`으로 수집하며 `ANALYZE`는 사용하지 않는다. Admission timeout은 `sample_type="overload"` 표본으로 기록하되 raw 요청 값은 저장하지 않는다.
+
+**검증/문서**: Windows 집중 검증에서 T-158/관측성 관련 단위 테스트 42개 통과, 변경 파일 Ruff 통과, `mypy`는 변경 infra 모듈 3개 기준 통과했다. Windows 전체 app mypy는 기존 GDAL `osgeo` stub 부재가 app import 경로에 섞여 WSL 전체 검증에서 확인한다. 상세는 `docs/t158-slow-observability.md`에 기록했다. Agent A 단독 명시 잔여는 닫혔고, `T-153`은 A+B 통합 gate로 진행한다.
+
 ## 2026-06-16 (T-247 백업/복원 벤치마크 스크립트)
 
 **작업**: `scripts/benchmark_backup_restore.py`를 추가해 `profile(serving-ready/lean-serving/forensic) × jobs(1/2/4) × zstd compression(3/9/19)` 기본 조합의 백업/복원 소요시간, dump directory 크기, `.tar.zst` 아카이브 크기, 압축률을 `benchmark-report.json`과 `summary.md`로 남기게 했다. 기본은 계획 전용이고, 실행 모드는 typed confirmation(`RUN-T247-BENCHMARK <current_database>`)과 백업 도구(`pg_dump`/`pg_restore`/`tar`/`zstd`)를 요구한다. T-055 N150/Odroid runbook도 T-247 실행기 기준으로 갱신했다.

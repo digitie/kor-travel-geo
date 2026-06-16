@@ -15,7 +15,7 @@ from kortravelgeo.api.app import (
     _install_performance_monitoring,
     create_app,
 )
-from kortravelgeo.infra import metrics
+from kortravelgeo.infra import metrics, slow_observability
 from kortravelgeo.settings import Settings
 
 if TYPE_CHECKING:
@@ -133,6 +133,38 @@ async def test_performance_logging_uses_route_template_without_query(
     assert record.__dict__["status_code"] == 200
     assert "address" not in record.getMessage()
     assert "서울특별시" not in record.getMessage()
+
+
+@pytest.mark.asyncio
+async def test_performance_monitoring_enqueues_slow_request_sample() -> None:
+    app = FastAPI()
+
+    @app.get("/items/{item_id}")
+    async def item(item_id: str) -> dict[str, Any]:
+        await asyncio.sleep(0.002)
+        return {"item_id": item_id}
+
+    settings = Settings(
+        ops_slow_samples_enabled=True,
+        api_slow_request_ms=1,
+        ops_slow_sample_min_interval_ms=0,
+    )
+    slow_observability.configure_slow_observability(settings)
+    _install_performance_monitoring(app, settings)
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/items/123?address=서울특별시 종로구 인사동")
+
+        samples = slow_observability.pop_slow_samples_for_tests()
+    finally:
+        slow_observability.reset_slow_observability_for_tests()
+
+    assert response.status_code == 200
+    assert len(samples) == 1
+    assert samples[0].sample_type == "api_request"
+    assert samples[0].route == "/items/{item_id}"
+    assert "서울특별시" not in str(slow_observability.sample_record(samples[0]))
 
 
 @pytest.mark.asyncio

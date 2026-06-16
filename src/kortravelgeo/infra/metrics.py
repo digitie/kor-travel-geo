@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
+from collections.abc import Callable
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Final
 
@@ -566,7 +567,17 @@ def _set_pool_metric(metric: Any, pool: object, method_name: str) -> None:
         metric.set(float(value))
 
 
-def install_db_query_metrics(engine: Any) -> None:
+SlowQueryRecorder = Callable[
+    [str, Any, float, str, bool],
+    None,
+]
+
+
+def install_db_query_metrics(
+    engine: Any,
+    *,
+    slow_query_recorder: SlowQueryRecorder | None = None,
+) -> None:
     if _prometheus_client is None:
         return
 
@@ -594,16 +605,34 @@ def install_db_query_metrics(engine: Any) -> None:
         statement: str,
         _parameters: Any,
         context: Any,
-        _executemany: bool,
+        executemany: bool,
     ) -> None:
         _record_db_query_from_context(statement, context, status="success")
+        _record_slow_query_sample(
+            slow_query_recorder,
+            statement,
+            _parameters,
+            context,
+            status="success",
+            executemany=executemany,
+        )
 
     @event.listens_for(sync_engine, "handle_error")
     def _handle_error(exception_context: Any) -> None:
+        statement = str(getattr(exception_context, "statement", "") or "")
+        status = _db_query_status_from_exception(exception_context)
         _record_db_query_from_context(
-            str(getattr(exception_context, "statement", "") or ""),
+            statement,
             getattr(exception_context, "execution_context", None),
-            status=_db_query_status_from_exception(exception_context),
+            status=status,
+        )
+        _record_slow_query_sample(
+            slow_query_recorder,
+            statement,
+            getattr(exception_context, "parameters", None),
+            getattr(exception_context, "execution_context", None),
+            status=status,
+            executemany=bool(getattr(exception_context, "ismulti", False)),
         )
 
 
@@ -612,6 +641,23 @@ def _record_db_query_from_context(statement: str, context: Any, *, status: str) 
     if not isinstance(started_at, float):
         return
     record_db_query(statement=statement, elapsed_s=perf_counter() - started_at, status=status)
+
+
+def _record_slow_query_sample(
+    recorder: SlowQueryRecorder | None,
+    statement: str,
+    parameters: Any,
+    context: Any,
+    *,
+    status: str,
+    executemany: bool,
+) -> None:
+    if recorder is None:
+        return
+    started_at = getattr(context, _QUERY_START_ATTR, None)
+    if not isinstance(started_at, float):
+        return
+    recorder(statement, parameters, perf_counter() - started_at, status, executemany)
 
 
 def _db_query_status_from_exception(exception_context: Any) -> str:

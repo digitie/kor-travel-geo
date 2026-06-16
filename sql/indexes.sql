@@ -103,3 +103,11 @@ CREATE INDEX IF NOT EXISTS idx_ops_pg_stat_statements_snapshots_captured
   ON ops.pg_stat_statements_snapshots (captured_at DESC, rank);
 CREATE INDEX IF NOT EXISTS idx_ops_pg_stat_statements_snapshots_fingerprint
   ON ops.pg_stat_statements_snapshots (query_fingerprint, captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_slow_observability_samples_captured
+  ON ops.slow_observability_samples (captured_at DESC, sample_type);
+CREATE INDEX IF NOT EXISTS idx_ops_slow_observability_samples_route
+  ON ops.slow_observability_samples (route, captured_at DESC)
+  WHERE route IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ops_slow_observability_samples_query
+  ON ops.slow_observability_samples (query_fingerprint, captured_at DESC)
+  WHERE query_fingerprint IS NOT NULL;

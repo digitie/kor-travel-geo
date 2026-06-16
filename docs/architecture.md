@@ -287,7 +287,7 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 
 ## 관찰가능성
 
-- 구조화 로그: `structlog` JSON. PR #12의 `/admin/logs`는 우선 `load_jobs.log_tail` 최근 라인을 조회하며, WebSocket tail은 후속 후보로 둔다.
+- 구조화 로그: `structlog` JSON. PR #12의 `/admin/logs`는 우선 `load_jobs.log_tail` 최근 라인을 조회하며, WebSocket tail은 후속 후보로 둔다. T-158 이후 느린 API 요청, admission overload, 느린 DB query는 기본 비활성 sampled 표본으로 `ops.slow_observability_samples`에 저장할 수 있고, 원문 SQL·파라미터·주소 문자열은 저장하지 않는다.
 - 메트릭: `prometheus-client`. API `/metrics`에서 외부 API 호출 카운터, cache entries/hits/expired, 적재 작업 kind/state gauge, 적재 job/stage duration histogram, v1/v2 API 요청 total/duration/slow/in-flight/cancel, API admission wait/rejection/in-flight, SQLAlchemy DB pool gauge와 checkout timeout counter, API 레벨 DB 드라이버 오류 counter, SQL query operation/fingerprint/status별 duration histogram과 query cancel counter, persisted `pg_stat_statements` top-N gauge를 노출한다. query fingerprint는 원문 주소와 literal을 label로 노출하지 않기 위한 저카디널리티 식별자이며, `pg_stat_statements` metric도 query 원문 대신 `rank`/`operation`/`query_fingerprint`만 label로 사용한다.
 - 헬스: `/v1/healthz`는 DB를 건드리지 않는 liveness, `/v1/readyz`는 DB probe와 SQLAlchemy pool 상태를 반영하는 readiness다. DB 불가·client 미시작·pool 포화는 `ready=false`와 503으로, pool 고부하는 `ready=true`/`degraded=true`로 노출한다. DB 드라이버/연결 오류는 공개 API에서 HTTP 503 + `E0500`으로 구조화하고, VWorld 호환 경로는 `SYSTEM_ERROR` envelope를 유지한다. Admission control이 활성화된 경우 `/v1/readyz`는 `components.admission`으로 scope별 utilization과 포화 상태를 노출하며, admission 포화는 HTTP 200 + `degraded=true`로 처리해 DB 장애와 구분한다.
 - `kor-travel-geo-ui`는 `/api/metrics`에서 Next.js route handler duration, backend proxy upstream duration, Web Vitals를 노출한다.

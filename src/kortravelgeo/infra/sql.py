@@ -660,6 +660,36 @@ CREATE TABLE IF NOT EXISTS ops.pg_stat_statements_snapshots (
   stats                       JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
+CREATE TABLE IF NOT EXISTS ops.slow_observability_samples (
+  slow_sample_id              UUID PRIMARY KEY,
+  captured_at                 TIMESTAMPTZ NOT NULL DEFAULT now(),
+  sample_type                 TEXT NOT NULL CHECK (
+                                sample_type IN ('api_request','db_query','overload')
+                              ),
+  method                      TEXT,
+  route                       TEXT,
+  status_code                 INTEGER,
+  elapsed_ms                  DOUBLE PRECISION NOT NULL CHECK (elapsed_ms >= 0),
+  threshold_ms                INTEGER CHECK (threshold_ms IS NULL OR threshold_ms >= 0),
+  sample_rate                 DOUBLE PRECISION NOT NULL CHECK (
+                                sample_rate >= 0 AND sample_rate <= 1
+                              ),
+  operation                   TEXT CHECK (
+                                operation IS NULL
+                                OR char_length(operation) BETWEEN 1 AND 32
+                              ),
+  query_fingerprint           TEXT CHECK (
+                                query_fingerprint IS NULL
+                                OR char_length(query_fingerprint) BETWEEN 1 AND 64
+                              ),
+  query_preview               TEXT CHECK (
+                                query_preview IS NULL
+                                OR char_length(query_preview) BETWEEN 1 AND 500
+                              ),
+  plan                        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  context                     JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
 CREATE TABLE IF NOT EXISTS ops.source_file_groups (
   source_file_group_id  UUID PRIMARY KEY,
   category              TEXT NOT NULL,
@@ -1127,6 +1157,14 @@ CREATE INDEX IF NOT EXISTS idx_ops_pg_stat_statements_snapshots_captured
   ON ops.pg_stat_statements_snapshots (captured_at DESC, rank);
 CREATE INDEX IF NOT EXISTS idx_ops_pg_stat_statements_snapshots_fingerprint
   ON ops.pg_stat_statements_snapshots (query_fingerprint, captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_slow_observability_samples_captured
+  ON ops.slow_observability_samples (captured_at DESC, sample_type);
+CREATE INDEX IF NOT EXISTS idx_ops_slow_observability_samples_route
+  ON ops.slow_observability_samples (route, captured_at DESC)
+  WHERE route IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ops_slow_observability_samples_query
+  ON ops.slow_observability_samples (query_fingerprint, captured_at DESC)
+  WHERE query_fingerprint IS NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_source_match_sets_one_active
   ON ops.source_match_sets (state) WHERE state = 'active';

@@ -141,6 +141,20 @@ def test_t171_fuzzy_ranking_migration_rebuilds_text_search_helper() -> None:
     assert "ANALYZE mv_geocode_text_search" in migration
 
 
+def test_t158_slow_observability_migration_adds_sample_table() -> None:
+    migration = Path("alembic/versions/0021_t158_slow_observability.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'revision = "0021_t158_slow_observability"' in migration
+    assert 'down_revision = "0020_t171_fuzzy_ranking"' in migration
+    assert "CREATE TABLE IF NOT EXISTS ops.slow_observability_samples" in migration
+    assert "sample_type IN ('api_request','db_query','overload')" in migration
+    assert "idx_ops_slow_observability_samples_captured" in migration
+    assert "idx_ops_slow_observability_samples_query" in migration
+    assert "DROP TABLE IF EXISTS ops.slow_observability_samples" in migration
+
+
 def test_t200_ops_id_rename_migration_renames_every_short_ops_id() -> None:
     migration = Path("alembic/versions/0018_t200_ops_id_rename.py").read_text(
         encoding="utf-8"

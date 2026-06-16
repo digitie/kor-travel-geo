@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 from kortravelgeo.infra.metrics import install_db_query_metrics
+from kortravelgeo.infra.slow_observability import record_slow_query
 from kortravelgeo.settings import Settings, get_settings
 
 
@@ -63,5 +64,10 @@ def make_async_engine(
         json_deserializer=orjson.loads,
     )
     if resolved.pg_query_metrics_enabled:
-        install_db_query_metrics(engine)
+        install_db_query_metrics(
+            engine,
+            slow_query_recorder=record_slow_query
+            if resolved.ops_slow_samples_enabled
+            else None,
+        )
     return engine

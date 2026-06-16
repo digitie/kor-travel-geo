@@ -62,6 +62,15 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.ops_pg_stat_statements_capture_interval_minutes == 5
     assert settings.ops_pg_stat_statements_capture_limit == 20
     assert settings.ops_pg_stat_statements_capture_on_startup is True
+    assert settings.ops_slow_samples_enabled is False
+    assert settings.ops_slow_query_ms == 250
+    assert settings.ops_slow_sample_rate == 1.0
+    assert settings.ops_slow_sample_min_interval_ms == 1_000
+    assert settings.ops_slow_sample_queue_size == 1_000
+    assert settings.ops_slow_sample_flush_interval_ms == 1_000
+    assert settings.ops_slow_sample_flush_batch_size == 50
+    assert settings.ops_slow_query_explain_enabled is False
+    assert settings.ops_slow_query_explain_timeout_ms == 3_000
     assert settings.runtime_warm_on_startup is False
     assert settings.runtime_warm_interval_minutes == 0
     assert settings.runtime_warm_query_limit == 32

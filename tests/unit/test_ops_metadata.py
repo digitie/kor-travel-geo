@@ -12,7 +12,7 @@ from kortravelgeo.dto.admin import (
     PgStatStatementSnapshot,
     TableStatsSnapshot,
 )
-from kortravelgeo.infra import admin_repo
+from kortravelgeo.infra import admin_repo, slow_observability
 from kortravelgeo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
 
 
@@ -27,6 +27,7 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
         "ops.maintenance_windows",
         "ops.table_stats_snapshots",
         "ops.pg_stat_statements_snapshots",
+        "ops.slow_observability_samples",
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in SCHEMA_SQL
 
@@ -44,10 +45,15 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
     assert "idx_ops_consistency_case_samples_4326" in INDEX_SQL
     assert "idx_ops_pg_stat_statements_snapshots_captured" in INDEX_SQL
     assert "idx_ops_pg_stat_statements_snapshots_fingerprint" in INDEX_SQL
+    assert "idx_ops_slow_observability_samples_captured" in INDEX_SQL
+    assert "idx_ops_slow_observability_samples_query" in INDEX_SQL
     assert "WHERE state = 'active'" in INDEX_SQL
     assert any("ops.table_stats_snapshots" in sql for sql in iter_sql_statements(SCHEMA_SQL))
     assert any(
         "ops.pg_stat_statements_snapshots" in sql for sql in iter_sql_statements(SCHEMA_SQL)
+    )
+    assert any(
+        "ops.slow_observability_samples" in sql for sql in iter_sql_statements(SCHEMA_SQL)
     )
 
 
@@ -150,6 +156,7 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "pg_try_advisory_xact_lock" in module_source
     assert "TABLE_STATS_CAPTURE_LOCKED_MESSAGE" in module_source
     assert "capture_pg_stat_statement_snapshots" in source
+    assert "ops.slow_observability_samples" in inspect.getsource(slow_observability)
     assert "_OPS_PG_STAT_STATEMENTS_ADVISORY_LOCK = 0x4B47_00A1" in module_source
     assert "PG_STAT_STATEMENTS_CAPTURE_LOCKED_MESSAGE" in module_source
     assert "x_extension.pg_stat_statements" in module_source

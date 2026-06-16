@@ -120,6 +120,15 @@ class Settings(BaseSettings):
     ops_pg_stat_statements_capture_interval_minutes: int = Field(default=5, ge=0)
     ops_pg_stat_statements_capture_limit: int = Field(default=20, ge=1, le=100)
     ops_pg_stat_statements_capture_on_startup: bool = True
+    ops_slow_samples_enabled: bool = False
+    ops_slow_query_ms: int = Field(default=250, ge=1)
+    ops_slow_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    ops_slow_sample_min_interval_ms: int = Field(default=1_000, ge=0)
+    ops_slow_sample_queue_size: int = Field(default=1_000, ge=1, le=100_000)
+    ops_slow_sample_flush_interval_ms: int = Field(default=1_000, ge=100)
+    ops_slow_sample_flush_batch_size: int = Field(default=50, ge=1, le=1_000)
+    ops_slow_query_explain_enabled: bool = False
+    ops_slow_query_explain_timeout_ms: int = Field(default=3_000, ge=1)
     runtime_warm_on_startup: bool = False
     runtime_warm_interval_minutes: int = Field(default=0, ge=0)
     runtime_warm_query_limit: int = Field(default=32, ge=1, le=500)
