@@ -40,6 +40,13 @@ def test_shadow_swap_handles_missing_current_mv() -> None:
     assert source.count("async with engine.begin()") == 2
 
 
+def test_refresh_mv_clears_geo_cache_after_successful_refresh() -> None:
+    source = inspect.getsource(postload.refresh_mv)
+
+    assert "GeoCacheRepository(engine).clear()" in source
+    assert source.count("GeoCacheRepository(engine).clear()") == 2
+
+
 def test_shadow_swap_normalizes_next_index_names() -> None:
     refresh_source = inspect.getsource(postload.refresh_mv)
     swap_source = inspect.getsource(postload.shadow_swap_mv)

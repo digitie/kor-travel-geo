@@ -73,7 +73,7 @@ from .dto.admin import (
 from .dto.geocode import FallbackMode, GeocodeInput, GeocodeResponse
 from .dto.pobox import PoboxInput, PoboxKind, PoboxResponse
 from .dto.region import RegionHint
-from .dto.reverse import ReverseResponse, ReverseType
+from .dto.reverse import ReverseInput, ReverseResponse, ReverseType
 from .dto.search import SearchResponse, SearchType
 from .dto.source import (
     GroupValidationResult,
@@ -119,6 +119,7 @@ from .dto.zipcode import ZipcodeResponse
 from .exceptions import InvalidAddressError
 from .infra.admin_repo import AdminRepository
 from .infra.batch import batch_children
+from .infra.cache import GeoCacheRepository, make_cache_key
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
@@ -143,6 +144,40 @@ def _metadata_str(value: object | None) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _geocode_cache_payload(response: GeocodeResponse) -> dict[str, Any]:
+    payload = response.model_dump(mode="json")
+    payload["input"]["type"] = response.input.type
+    return payload
+
+
+def _reverse_cache_payload(response: ReverseResponse) -> dict[str, Any]:
+    payload = response.model_dump(mode="json")
+    payload["input"]["type"] = response.input.type
+    payload["result"] = [
+        {**item_payload, "type": item.type}
+        for item_payload, item in zip(payload["result"], response.result, strict=True)
+    ]
+    return payload
+
+
+def _cached_geocode_response(response: GeocodeResponse) -> GeocodeResponse:
+    if response.x_extension is None:
+        return response
+    return response.model_copy(
+        update={"x_extension": response.x_extension.model_copy(update={"source": "cache"})}
+    )
+
+
+def _cached_reverse_response(response: ReverseResponse) -> ReverseResponse:
+    return response.model_copy(
+        update={
+            "result": tuple(
+                item.model_copy(update={"source": "cache"}) for item in response.result
+            )
+        }
+    )
 
 
 class AsyncAddressClient:
@@ -365,11 +400,18 @@ class AsyncAddressClient:
             fallback=fallback,
         )
         region_hint = self._region_hint(sig_cd, bjd_cd)
+        cache_key = self._geocode_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd)
+        if self._use_result_cache(fallback=fallback):
+            cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
+            if cached is not None:
+                return _cached_geocode_response(GeocodeResponse.model_validate(cached))
         response = await core_geocode(
             GeocodeRepository(self._engine()),
             inp,
             region_hint=region_hint,
         )
+        if self._use_result_cache(fallback=fallback):
+            await self._store_geocode_cache(cache_key, response)
         if fallback != "api" or response.status != "NOT_FOUND" or region_hint is not None:
             return response
         external = await ExternalGeocodeClient(self.settings).geocode(inp)
@@ -403,7 +445,6 @@ class AsyncAddressClient:
         bjd_cd: str | None = None,
     ) -> ReverseResponse:
         from .dto.common import Point
-        from .dto.reverse import ReverseInput
 
         inp = ReverseInput(
             point=Point(x=x, y=y),
@@ -413,10 +454,93 @@ class AsyncAddressClient:
             simple=simple,
             radius_m=radius_m or self.settings.api_default_radius_m,
         )
-        return await core_reverse_geocode(
+        region_hint = self._region_hint(sig_cd, bjd_cd)
+        cache_key = self._reverse_cache_key(inp, sig_cd=sig_cd, bjd_cd=bjd_cd)
+        if self._use_result_cache(fallback="local_only"):
+            cached = await GeoCacheRepository(self._engine()).get_json(cache_key)
+            if cached is not None:
+                return _cached_reverse_response(ReverseResponse.model_validate(cached))
+        response = await core_reverse_geocode(
             ReverseRepository(self._engine()),
             inp,
-            region_hint=self._region_hint(sig_cd, bjd_cd),
+            region_hint=region_hint,
+        )
+        if self._use_result_cache(fallback="local_only"):
+            await self._store_reverse_cache(cache_key, response)
+        return response
+
+    def _use_result_cache(
+        self,
+        *,
+        fallback: FallbackMode,
+    ) -> bool:
+        return self.settings.cache_enabled and fallback != "api"
+
+    @staticmethod
+    def _geocode_cache_key(
+        inp: GeocodeInput,
+        *,
+        sig_cd: str | None,
+        bjd_cd: str | None,
+    ) -> str:
+        return make_cache_key(
+            "geocode",
+            {
+                "address": inp.address,
+                "type": inp.type,
+                "crs": inp.crs,
+                "refine": inp.refine,
+                "simple": inp.simple,
+                "fallback": inp.fallback,
+                "sig_cd": sig_cd,
+                "bjd_cd": bjd_cd,
+            },
+        )
+
+    @staticmethod
+    def _reverse_cache_key(
+        inp: ReverseInput,
+        *,
+        sig_cd: str | None,
+        bjd_cd: str | None,
+    ) -> str:
+        return make_cache_key(
+            "reverse",
+            {
+                "x": inp.point.x,
+                "y": inp.point.y,
+                "crs": inp.crs,
+                "type": inp.type,
+                "zipcode": inp.zipcode,
+                "simple": inp.simple,
+                "radius_m": inp.radius_m,
+                "sig_cd": sig_cd,
+                "bjd_cd": bjd_cd,
+            },
+        )
+
+    async def _store_geocode_cache(self, cache_key: str, response: GeocodeResponse) -> None:
+        if response.status != "OK":
+            return
+        if response.x_extension is not None and response.x_extension.source != "local":
+            return
+        await GeoCacheRepository(self._engine()).set_json(
+            cache_key=cache_key,
+            service="geocode",
+            payload=_geocode_cache_payload(response),
+            ttl_days=self.settings.cache_ttl_days,
+        )
+
+    async def _store_reverse_cache(self, cache_key: str, response: ReverseResponse) -> None:
+        if response.status != "OK":
+            return
+        if any(item.source != "local" for item in response.result):
+            return
+        await GeoCacheRepository(self._engine()).set_json(
+            cache_key=cache_key,
+            service="reverse",
+            payload=_reverse_cache_payload(response),
+            ttl_days=self.settings.cache_ttl_days,
         )
 
     async def reverse(

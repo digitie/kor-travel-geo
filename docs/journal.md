@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-156 geocode/reverse hot-key 결과 캐시)
+
+**작업**: 기존 `geo_cache` 테이블을 `AsyncAddressClient._geocode_v1()`과 `_reverse_geocode_v1()` local OK 응답 경로에 연결했다. Cache key는 service와 요청 파라미터 canonical JSON의 SHA-256 digest로 만들고, payload는 v1 DTO serializer의 `ROAD`/`PARCEL` 변환을 되돌려 내부 `model_validate()` round-trip이 되게 저장한다. Cache hit는 v1 geocode `x_extension.source`와 reverse item `source`를 `cache`로 표시한다.
+
+**결정**: 외부 API fallback, keyword/search, geometry enrich, `NOT_FOUND`는 이번 캐시 범위에서 제외한다. v2 공개 source는 T-169 결정대로 `cache`를 별도 provider로 드러내지 않고 `local`로 접는다. `refresh_mv()`가 concurrent refresh와 shadow swap 성공 뒤 `geo_cache`를 삭제해 적재/MV swap 뒤 stale 응답을 막는다.
+
+**검증/문서**: Windows focused unit 14개, Ruff, 변경 source mypy가 통과했다. WSL live smoke artifact는 `artifacts/perf/t156-hot-key-cache-smoke-r2/`이며 같은 cache key 반복 호출 뒤 geocode/reverse `hit_count=21`을 확인했다. `서울특별시 종로구 자하문로 94` 기준 geocode p95는 cold 11.871ms → hot 4.630ms, reverse p95는 cold 37.455ms → hot 4.757ms였다. 상세는 `docs/t156-hot-key-cache.md`에 기록했고, 다음 Agent A 작업은 T-146이다. CodeGraph MCP는 `Transport closed`로 실패해 `codegraph status` CLI 최신 상태를 확인했다.
+
 ## 2026-06-16 (T-155 psycopg prepared statement·plan cache 튜닝)
 
 **작업**: `Settings.pg_prepare_threshold`와 `KTG_PG_PREPARE_THRESHOLD`를 추가하고, `make_async_engine()`이 psycopg `prepare_threshold`로 전달하게 했다. SQL benchmark는 `--prepare-threshold`와 `--disable-prepared-statements`를 받아 run별 threshold를 바꾸고, `environment.json`/`summary.md`에 값을 기록한다. 또한 `pg_prepared_statements` session-local snapshot을 `prepared-statements-before/after.json`으로 남긴다.
