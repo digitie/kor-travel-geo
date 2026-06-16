@@ -5635,6 +5635,131 @@
         "title": "RestoreHotSwapResult",
         "type": "object"
       },
+      "RestoreHotSwapRollbackRequest": {
+        "additionalProperties": false,
+        "description": "T-264 request to manually roll back a previously-completed hot-swap.\n\nBrings ``previous_alias`` (the pre-swap serving DB, retained for\n``previous_alias_retention_days``) back as the current database, renaming the currently\nserving (restored) DB to ``restore_database``. Requires an active\n``ops.maintenance_windows(kind='restore')`` whose confirmation equals\n``rollback_confirmation`` (= ``ROLLBACK_HOT_SWAP <current> FROM <previous_alias>``). Rejected\nonce retention has dropped ``previous_alias``; runs under the ``HOT_SWAP`` lock (fail-fast).",
+        "properties": {
+          "maintenance_database": {
+            "default": "postgres",
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Maintenance Database",
+            "type": "string"
+          },
+          "previous_alias": {
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Previous Alias",
+            "type": "string"
+          },
+          "restore_database": {
+            "maxLength": 63,
+            "minLength": 1,
+            "title": "Restore Database",
+            "type": "string"
+          },
+          "rollback_confirmation": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Rollback Confirmation",
+            "type": "string"
+          },
+          "run_smoke_test": {
+            "default": true,
+            "title": "Run Smoke Test",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "previous_alias",
+          "restore_database",
+          "rollback_confirmation"
+        ],
+        "title": "RestoreHotSwapRollbackRequest",
+        "type": "object"
+      },
+      "RestoreHotSwapRollbackResult": {
+        "additionalProperties": false,
+        "description": "T-264 result of a manual hot-swap rollback attempt.",
+        "properties": {
+          "blockers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "current_database": {
+            "title": "Current Database",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "previous_alias": {
+            "title": "Previous Alias",
+            "type": "string"
+          },
+          "previous_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Release Id"
+          },
+          "restore_database": {
+            "title": "Restore Database",
+            "type": "string"
+          },
+          "rolled_back": {
+            "title": "Rolled Back",
+            "type": "boolean"
+          },
+          "serving_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Release Id"
+          },
+          "smoke_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smoke Ok"
+          }
+        },
+        "required": [
+          "rolled_back",
+          "current_database",
+          "restore_database",
+          "previous_alias"
+        ],
+        "title": "RestoreHotSwapRollbackResult",
+        "type": "object"
+      },
       "RestoreSourceVerificationResult": {
         "additionalProperties": false,
         "description": "Result of the post-restore source quick reconcile (doc ~1896-1902).\n\nSurfaced after a ``pg_restore`` manifest restore or an ADR-036 rename\nhot-swap. ``run_quick_reconcile`` is False (and ``legacy_estimate_only`` True)\nwhen the active snapshot has no ``source_match_set_id`` FK. When the reconcile\nfinds missing source objects, serving stays up but ``reconstruct_unavailable``\nis True and a \"재구성 불가\" warning is surfaced.",
@@ -13736,6 +13861,48 @@
           }
         },
         "summary": "Restore Hot Swap Plan",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/restores/hot-swap-rollback": {
+      "post": {
+        "description": "Manually roll back a completed hot-swap to the previous serving DB (T-264).\n\nBrings `previous_alias` back as the current DB (renaming the restored DB to\n`restore_database`) under the `HOT_SWAP` advisory lock, only with an active `restore`\nmaintenance window + exact `rollback_confirmation`. **Rejected once `previous_alias`\nretention has dropped it.** Records a `rollback` serving release with\nprevious/rollback_target lineage. Live serving DB swap → requires `destructive_admin`.\nIntegration-tested in T-246.",
+        "operationId": "restore_hot_swap_rollback_v1_admin_restores_hot_swap_rollback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreHotSwapRollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreHotSwapRollbackResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Hot Swap Rollback",
         "tags": [
           "admin"
         ]

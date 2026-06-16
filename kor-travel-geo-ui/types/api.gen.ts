@@ -924,6 +924,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/restores/hot-swap-rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Hot Swap Rollback
+         * @description Manually roll back a completed hot-swap to the previous serving DB (T-264).
+         *
+         *     Brings `previous_alias` back as the current DB (renaming the restored DB to
+         *     `restore_database`) under the `HOT_SWAP` advisory lock, only with an active `restore`
+         *     maintenance window + exact `rollback_confirmation`. **Rejected once `previous_alias`
+         *     retention has dropped it.** Records a `rollback` serving release with
+         *     previous/rollback_target lineage. Live serving DB swap → requires `destructive_admin`.
+         *     Integration-tested in T-246.
+         */
+        post: operations["restore_hot_swap_rollback_v1_admin_restores_hot_swap_rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/restores/hot-swap-source-verify": {
         parameters: {
             query?: never;
@@ -3847,6 +3874,62 @@ export interface components {
             smoke_ok?: boolean | null;
             /** Swapped */
             swapped: boolean;
+        };
+        /**
+         * RestoreHotSwapRollbackRequest
+         * @description T-264 request to manually roll back a previously-completed hot-swap.
+         *
+         *     Brings ``previous_alias`` (the pre-swap serving DB, retained for
+         *     ``previous_alias_retention_days``) back as the current database, renaming the currently
+         *     serving (restored) DB to ``restore_database``. Requires an active
+         *     ``ops.maintenance_windows(kind='restore')`` whose confirmation equals
+         *     ``rollback_confirmation`` (= ``ROLLBACK_HOT_SWAP <current> FROM <previous_alias>``). Rejected
+         *     once retention has dropped ``previous_alias``; runs under the ``HOT_SWAP`` lock (fail-fast).
+         */
+        RestoreHotSwapRollbackRequest: {
+            /**
+             * Maintenance Database
+             * @default postgres
+             */
+            maintenance_database: string;
+            /** Previous Alias */
+            previous_alias: string;
+            /** Restore Database */
+            restore_database: string;
+            /** Rollback Confirmation */
+            rollback_confirmation: string;
+            /**
+             * Run Smoke Test
+             * @default true
+             */
+            run_smoke_test: boolean;
+        };
+        /**
+         * RestoreHotSwapRollbackResult
+         * @description T-264 result of a manual hot-swap rollback attempt.
+         */
+        RestoreHotSwapRollbackResult: {
+            /**
+             * Blockers
+             * @default []
+             */
+            blockers: string[];
+            /** Current Database */
+            current_database: string;
+            /** Message */
+            message?: string | null;
+            /** Previous Alias */
+            previous_alias: string;
+            /** Previous Release Id */
+            previous_release_id?: string | null;
+            /** Restore Database */
+            restore_database: string;
+            /** Rolled Back */
+            rolled_back: boolean;
+            /** Serving Release Id */
+            serving_release_id?: string | null;
+            /** Smoke Ok */
+            smoke_ok?: boolean | null;
         };
         /**
          * RestoreSourceVerificationResult
@@ -7594,6 +7677,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RestoreHotSwapPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_hot_swap_rollback_v1_admin_restores_hot_swap_rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreHotSwapRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreHotSwapRollbackResult"];
                 };
             };
             /** @description Validation Error */

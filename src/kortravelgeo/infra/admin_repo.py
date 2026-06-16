@@ -590,6 +590,51 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
             )
             return release
 
+    async def record_hot_swap_rollback_release(
+        self,
+        *,
+        current_database: str,
+        restore_database: str,
+        previous_alias: str,
+        pre_rollback_release_id: str | None = None,
+        maintenance_window_id: str | None = None,
+    ) -> ServingRelease:
+        """Record a manual hot-swap rollback as the active serving release (T-264).
+
+        Runs against the now-current (rolled-back/previous) database. ``release_kind='rollback'``
+        with ``previous_release_id`` lineage; ``rollback_target`` (where the restored DB went)
+        and the pre-rollback release id are kept in notes/metadata for cross-DB tracing.
+        """
+        async with self.engine.begin() as conn:
+            _, release = await _insert_dataset_snapshot_and_release(
+                conn,
+                snapshot_state="released",
+                release_state="active",
+                release_kind="rollback",
+                source_set={
+                    "hot_swap_rollback": {
+                        "current_database": current_database,
+                        "rollback_target": restore_database,
+                        "previous_alias": previous_alias,
+                    }
+                },
+                row_counts={},
+                notes=(
+                    f"hot-swap rollback rollback_target={restore_database} "
+                    f"previous_alias={previous_alias} "
+                    f"pre_rollback_release_id={pre_rollback_release_id}"
+                ),
+                snapshot_metadata={
+                    "hot_swap_rollback": {
+                        "rollback_target": restore_database,
+                        "previous_alias": previous_alias,
+                        "pre_rollback_release_id": pre_rollback_release_id,
+                        "maintenance_window_id": maintenance_window_id,
+                    }
+                },
+            )
+            return release
+
     async def rollback_plan(self, serving_release_id: str) -> RollbackPlan | None:
         async with self.engine.connect() as conn:
             row = (

@@ -72,6 +72,8 @@ from kortravelgeo.dto.admin import (
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
     RestoreHotSwapResult,
+    RestoreHotSwapRollbackRequest,
+    RestoreHotSwapRollbackResult,
     RollbackPlan,
     RustfsConnectionCheck,
     RustfsImportPrefixRequest,
@@ -2063,6 +2065,31 @@ async def restore_hot_swap_execute(
     `destructive_admin`. Integration-tested in T-246.
     """
     return await client.execute_restore_hot_swap(
+        req, actor=ctx.actor, audit_meta=_audit_request(request)
+    )
+
+
+@router.post(
+    "/restores/hot-swap-rollback",
+    response_model=RestoreHotSwapRollbackResult,
+    response_model_exclude_none=True,
+)
+async def restore_hot_swap_rollback(
+    req: RestoreHotSwapRollbackRequest,
+    request: Request,
+    ctx: RequestContext = _DESTRUCTIVE_ADMIN,
+    client: AsyncAddressClient = Depends(get_client),
+) -> RestoreHotSwapRollbackResult:
+    """Manually roll back a completed hot-swap to the previous serving DB (T-264).
+
+    Brings `previous_alias` back as the current DB (renaming the restored DB to
+    `restore_database`) under the `HOT_SWAP` advisory lock, only with an active `restore`
+    maintenance window + exact `rollback_confirmation`. **Rejected once `previous_alias`
+    retention has dropped it.** Records a `rollback` serving release with
+    previous/rollback_target lineage. Live serving DB swap → requires `destructive_admin`.
+    Integration-tested in T-246.
+    """
+    return await client.execute_hot_swap_rollback(
         req, actor=ctx.actor, audit_meta=_audit_request(request)
     )
 
