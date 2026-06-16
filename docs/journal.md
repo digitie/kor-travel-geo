@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-245 복원 장애 주입 live 통합 테스트)
+
+**작업**: T-244 round-trip fixture를 재사용하는 `tests/integration/test_backup_restore_fault_injection.py`를 추가했다. 실제 백업 artifact를 만든 뒤 archive-level sha256 flip, truncated tar, 내부 `checksums.sha256` 위조, checksum 누락을 주입하고, 각 실패 뒤 `restore_failed_target_cleanup="drop"` 정책으로 job-owned target DB가 남지 않아야 함을 검증한다. 별도 테스트로 백업 cancel의 failed artifact·최종 archive/`.part`/work dir 삭제, `replace_current`의 `target_dsn` 금지·typed confirmation·maintenance window confirmation matching guard도 고정했다.
+
+**결정**: 제품 복원 코드는 바꾸지 않고 T-235/T-243/T-244의 정책을 live opt-in 통합 테스트로 묶었다. `replace_current` positive restore는 실제 serving DB를 덮어쓰는 위험 경로라 T-245에서 실행하지 않고, `pg_restore` 도달 시 테스트가 실패하도록 막은 뒤 matching confirmation이 없는 window가 `run_restore_job`에서 인가되지 않는 guard를 검증한다. 실제 hot-swap/rollback round-trip은 T-246 범위다.
+
+**검증/문서**: Windows에서 `python -m pytest tests/integration/test_backup_restore_fault_injection.py -q`는 `KTG_TEST_PG_DSN` 미설정으로 3 skipped, Ruff는 새 테스트 파일 기준 통과했다. 현재 Windows/WSL PATH에는 `pg_dump`/`pg_restore`/`zstd`가 없어 live 실행은 할 수 없었고, 이 상태는 "live off skip" 합격조건으로 문서화했다. 상세는 `docs/t245-restore-fault-injection.md`에 기록했다. 다음 Agent A 작업은 T-247이다.
+
 ## 2026-06-16 (T-238 백업 manifest 원천 3자 reconcile)
 
 **작업**: 백업 `manifest.json`의 `source_match_set` per-file을 현재 DB `ops.source_files`와 RustFS `HEAD` 결과에 대조하는 opt-in reconcile을 추가했다. 새 manifest는 `ManifestSourceFile.object_etag`를 보존하고, `ktgctl backup reconcile-source --artifact-id ...` 또는 `--manifest-path ...`가 `present`/`missing`/`etag_mismatch`/`size_mismatch`/DB 불일치 row report를 JSON으로 출력한다.
