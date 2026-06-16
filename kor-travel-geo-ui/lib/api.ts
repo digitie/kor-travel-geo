@@ -354,6 +354,10 @@ export type OpsArtifact = {
 export type BackupArtifact = OpsArtifact & {
   artifact_type: "db_backup";
   download_url?: string | null;
+  // T-240 manifest-derived catalog summary (null for legacy/skipped manifests).
+  source_set_yyyymm?: Record<string, string | null> | null;
+  source_set_mixed?: boolean | null;
+  source_inventory_ok?: boolean | null;
 };
 
 export type BackupAllowedDirs = {
