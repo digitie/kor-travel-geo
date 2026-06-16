@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     api_max_upload_bytes: int = Field(default=2 * 1024 * 1024 * 1024, ge=1)
     api_explain_timeout_ms: int = Field(default=3_000, ge=1)
     api_max_concurrency: int | None = Field(default=None, ge=1)
+    api_geocode_max_concurrency: int | None = Field(default=None, ge=1)
+    api_reverse_max_concurrency: int | None = Field(default=None, ge=1)
+    api_search_max_concurrency: int | None = Field(default=None, ge=1)
+    api_zipcode_max_concurrency: int | None = Field(default=None, ge=1)
+    api_pobox_max_concurrency: int | None = Field(default=None, ge=1)
+    api_regions_max_concurrency: int | None = Field(default=None, ge=1)
     api_admission_timeout_ms: int = Field(default=30_000, ge=1)
     api_readiness_timeout_ms: int = Field(default=1_000, ge=1)
     api_performance_logging_enabled: bool = False

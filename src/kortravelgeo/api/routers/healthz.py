@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from time import perf_counter
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Request, Response
 from sqlalchemy import text
 
+from kortravelgeo.api.admission import AdmissionScopeSnapshot
 from kortravelgeo.dto.health import (
+    ComponentStatus,
     ReadinessComponent,
     ReadinessResponse,
     ReadinessStatus,
@@ -36,45 +39,61 @@ async def readyz(request: Request, response: Response) -> ReadinessResponse:
 
     if engine is None:
         response.status_code = 503
+        components = {
+            "database": ReadinessComponent(
+                status="unavailable",
+                detail={"reason": "client_not_started"},
+            ),
+            "pool": ReadinessComponent(status="unknown"),
+        }
+        admission = _admission_component(request, settings)
+        if admission is not None:
+            components["admission"] = admission
         return ReadinessResponse(
             status="unavailable",
             ready=False,
             degraded=True,
-            components={
-                "database": ReadinessComponent(
-                    status="unavailable",
-                    detail={"reason": "client_not_started"},
-                ),
-                "pool": ReadinessComponent(status="unknown"),
-            },
+            components=components,
         )
 
     pool = _pool_component(engine, settings)
     if pool.status == "saturated":
         response.status_code = 503
+        components = {
+            "database": ReadinessComponent(
+                status="skipped",
+                detail={"reason": "pool_saturated"},
+            ),
+            "pool": pool,
+        }
+        admission = _admission_component(request, settings)
+        if admission is not None:
+            components["admission"] = admission
         return ReadinessResponse(
             status="unavailable",
             ready=False,
             degraded=True,
-            components={
-                "database": ReadinessComponent(
-                    status="skipped",
-                    detail={"reason": "pool_saturated"},
-                ),
-                "pool": pool,
-            },
+            components=components,
         )
 
     database = await _database_component(engine, settings.api_readiness_timeout_ms)
+    admission = _admission_component(request, settings)
     ready = database.status == "ok"
-    degraded = database.status != "ok" or pool.status == "degraded"
+    degraded = (
+        database.status != "ok"
+        or pool.status == "degraded"
+        or (admission is not None and admission.status in {"degraded", "saturated"})
+    )
     if not ready:
         response.status_code = 503
+    components = {"database": database, "pool": pool}
+    if admission is not None:
+        components["admission"] = admission
     return ReadinessResponse(
         status=_readiness_status(ready=ready, degraded=degraded),
         ready=ready,
         degraded=degraded,
-        components={"database": database, "pool": pool},
+        components=components,
     )
 
 
@@ -162,6 +181,41 @@ def _pool_value(pool: object, method_name: str) -> int | None:
     except Exception:
         return None
     return int(value) if isinstance(value, (int, float)) else None
+
+
+def _admission_component(request: Request, settings: Settings) -> ReadinessComponent | None:
+    controller = getattr(request.app.state, "admission_control", None)
+    snapshots_method = getattr(controller, "snapshots", None)
+    if not callable(snapshots_method):
+        return None
+
+    snapshots = tuple(cast("Sequence[AdmissionScopeSnapshot]", snapshots_method()))
+    if not snapshots:
+        return None
+
+    max_utilization = max(snapshot.utilization for snapshot in snapshots)
+    status: ComponentStatus = "ok"
+    if any(snapshot.available <= 0 for snapshot in snapshots):
+        status = "saturated"
+    elif max_utilization >= 0.8:
+        status = "degraded"
+    return ReadinessComponent(
+        status=status,
+        detail={
+            "timeout_ms": settings.api_admission_timeout_ms,
+            "max_utilization": round(max_utilization, 4),
+            "scopes": [
+                {
+                    "scope": snapshot.scope,
+                    "limit": snapshot.limit,
+                    "in_use": snapshot.in_use,
+                    "available": snapshot.available,
+                    "utilization": snapshot.utilization,
+                }
+                for snapshot in snapshots
+            ],
+        },
+    )
 
 
 def _readiness_status(*, ready: bool, degraded: bool) -> ReadinessStatus:

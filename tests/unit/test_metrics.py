@@ -81,6 +81,30 @@ def test_metrics_render_includes_db_pool_checkout_timeout_counter() -> None:
     assert 'route="/v1/address/geocode"' in body
 
 
+def test_metrics_render_includes_api_admission_counters_and_histograms() -> None:
+    metrics.record_api_admission_started(scope="geocode")
+    metrics.record_api_admission_finished(scope="geocode")
+    metrics.record_api_admission_wait(
+        method="GET",
+        route="/v1/address/geocode",
+        scope="geocode",
+        outcome="accepted",
+        elapsed_s=0.001,
+    )
+    metrics.record_api_admission_rejection(
+        method="GET",
+        route="/v1/address/geocode",
+        scope="geocode",
+    )
+
+    body = metrics.render_prometheus().decode()
+
+    assert "kor_travel_geo_api_admission_wait_seconds_bucket" in body
+    assert "kor_travel_geo_api_admission_rejections_total" in body
+    assert "kor_travel_geo_api_admission_in_progress" in body
+    assert 'scope="geocode"' in body
+
+
 def test_metrics_render_includes_load_job_duration_histograms() -> None:
     metrics.record_load_job_duration(kind="full_load_batch", state="done", elapsed_s=1.25)
     metrics.record_load_job_stage_duration(

@@ -43,6 +43,12 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.api_max_upload_bytes == 2 * 1024 * 1024 * 1024
     assert settings.api_explain_timeout_ms == 3_000
     assert settings.api_max_concurrency is None
+    assert settings.api_geocode_max_concurrency is None
+    assert settings.api_reverse_max_concurrency is None
+    assert settings.api_search_max_concurrency is None
+    assert settings.api_zipcode_max_concurrency is None
+    assert settings.api_pobox_max_concurrency is None
+    assert settings.api_regions_max_concurrency is None
     assert settings.api_admission_timeout_ms == 30_000
     assert settings.api_readiness_timeout_ms == 1_000
     assert settings.api_performance_logging_enabled is False

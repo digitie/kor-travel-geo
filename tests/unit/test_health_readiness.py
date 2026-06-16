@@ -6,6 +6,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
+from kortravelgeo.api.admission import AdmissionScopeSnapshot
 from kortravelgeo.api.routers import healthz
 
 
@@ -82,11 +83,24 @@ class _FakeClient:
         self.engine = engine
 
 
-def _app(client: Any | None = None) -> FastAPI:
+class _FakeAdmissionController:
+    def __init__(self, snapshots: tuple[AdmissionScopeSnapshot, ...]) -> None:
+        self._snapshots = snapshots
+
+    def snapshots(self) -> tuple[AdmissionScopeSnapshot, ...]:
+        return self._snapshots
+
+
+def _app(
+    client: Any | None = None,
+    admission: _FakeAdmissionController | None = None,
+) -> FastAPI:
     app = FastAPI()
     app.include_router(healthz.router, prefix="/v1")
     if client is not None:
         app.state.client = client
+    if admission is not None:
+        app.state.admission_control = admission
     return app
 
 
@@ -165,3 +179,30 @@ async def test_readyz_reports_degraded_when_pool_utilization_is_high() -> None:
     assert payload["degraded"] is True
     assert payload["status"] == "degraded"
     assert payload["components"]["pool"]["status"] == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_readyz_reports_degraded_when_admission_scope_is_saturated() -> None:
+    admission = _FakeAdmissionController(
+        (
+            AdmissionScopeSnapshot(
+                scope="geocode",
+                limit=1,
+                in_use=1,
+                available=0,
+                utilization=1.0,
+            ),
+        )
+    )
+    transport = httpx.ASGITransport(app=_app(_FakeClient(_FakeEngine()), admission))
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/readyz")
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["ready"] is True
+    assert payload["degraded"] is True
+    assert payload["status"] == "degraded"
+    assert payload["components"]["admission"]["status"] == "saturated"
+    assert payload["components"]["admission"]["detail"]["scopes"][0]["scope"] == "geocode"

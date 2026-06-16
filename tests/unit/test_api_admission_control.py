@@ -61,6 +61,40 @@ async def test_admission_control_times_out_with_rate_limit_error() -> None:
 
     assert response.status_code == 429
     assert response.json()["response"]["errorCode"] == "E0200"
+    assert response.headers["Retry-After"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_endpoint_admission_control_limits_only_matching_scope() -> None:
+    app = FastAPI()
+    _install_admission_control(
+        app,
+        Settings(api_geocode_max_concurrency=1, api_admission_timeout_ms=1),
+    )
+    entered = asyncio.Event()
+
+    @app.get("/v1/address/geocode")
+    async def geocode() -> dict[str, str]:
+        entered.set()
+        await asyncio.sleep(0.05)
+        return {"status": "OK"}
+
+    @app.get("/v1/address/reverse")
+    async def reverse() -> dict[str, str]:
+        return {"status": "OK"}
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        first = asyncio.create_task(client.get("/v1/address/geocode"))
+        await entered.wait()
+        blocked_geocode = await client.get("/v1/address/geocode")
+        reverse_response = await client.get("/v1/address/reverse")
+        await first
+
+    assert blocked_geocode.status_code == 429
+    assert blocked_geocode.json()["response"]["error"]["code"] == "OVER_REQUEST_LIMIT"
+    assert blocked_geocode.headers["Cache-Control"] == "no-store"
+    assert reverse_response.status_code == 200
 
 
 @pytest.mark.asyncio

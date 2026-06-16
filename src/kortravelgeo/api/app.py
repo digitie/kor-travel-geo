@@ -15,6 +15,11 @@ from fastapi.responses import ORJSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.api import _jobs
+from kortravelgeo.api.admission import (
+    AdmissionController,
+    admission_scope_setting_name,
+    build_admission_controller,
+)
 from kortravelgeo.api.middleware.geoip_gate import install_geoip_gate
 from kortravelgeo.api.responses import error_payload, register_exception_handlers
 from kortravelgeo.api.vworld import vworld_operation_for_path
@@ -30,6 +35,10 @@ from kortravelgeo.infra.concurrency import (
 )
 from kortravelgeo.infra.metrics import (
     PROMETHEUS_CONTENT_TYPE,
+    record_api_admission_finished,
+    record_api_admission_rejection,
+    record_api_admission_started,
+    record_api_admission_wait,
     record_api_request,
     record_api_request_finished,
     record_api_request_started,
@@ -65,6 +74,7 @@ from .routers import admin, geocode, healthz, pobox, reverse, search, v2, zipcod
 
 _LOGGER = logging.getLogger(__name__)
 _PERFORMANCE_LOGGER = logging.getLogger("kortravelgeo.api.performance")
+_ADMISSION_RETRY_AFTER_SECONDS = "1"
 
 
 @asynccontextmanager
@@ -185,10 +195,11 @@ def _route_template(request: Request) -> str:
 
 
 def _install_admission_control(app: FastAPI, settings: Settings) -> None:
-    if settings.api_max_concurrency is None:
+    controller = build_admission_controller(settings)
+    if controller is None:
         return
 
-    semaphore = asyncio.Semaphore(settings.api_max_concurrency)
+    app.state.admission_control = controller
     timeout_s = settings.api_admission_timeout_ms / 1_000
 
     @app.middleware("http")
@@ -196,29 +207,101 @@ def _install_admission_control(app: FastAPI, settings: Settings) -> None:
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if not (request.url.path.startswith("/v1/address/") or request.url.path.startswith("/v2/")):
+        scopes = controller.scopes_for_path(request.url.path)
+        if not scopes:
             return await call_next(request)
 
-        try:
-            await asyncio.wait_for(semaphore.acquire(), timeout=timeout_s)
-        except TimeoutError:
-            error = RateLimitError(
-                "too many concurrent address API requests",
-                hint=(
-                    "increase KTG_API_MAX_CONCURRENCY or retry after current "
-                    "requests complete"
-                ),
-            )
-            operation = vworld_operation_for_path(request.url.path)
-            return ORJSONResponse(
-                error_payload(error, operation=operation),
-                status_code=error.http_status,
+        method = request.method
+        route = _route_template(request)
+        acquired_scopes: list[str] = []
+        deadline = perf_counter() + timeout_s
+        for scope in scopes:
+            started = perf_counter()
+            remaining_s = deadline - started
+            if remaining_s <= 0:
+                record_api_admission_wait(
+                    method=method,
+                    route=route,
+                    scope=scope,
+                    outcome="rejected",
+                    elapsed_s=0.0,
+                )
+                record_api_admission_rejection(method=method, route=route, scope=scope)
+                _log_admission_rejection(settings, method=method, route=route, scope=scope)
+                _release_admission_scopes(controller, acquired_scopes)
+                return _admission_error_response(scope=scope, path=request.url.path)
+
+            try:
+                await asyncio.wait_for(controller.acquire(scope), timeout=remaining_s)
+            except TimeoutError:
+                record_api_admission_wait(
+                    method=method,
+                    route=route,
+                    scope=scope,
+                    outcome="rejected",
+                    elapsed_s=perf_counter() - started,
+                )
+                record_api_admission_rejection(method=method, route=route, scope=scope)
+                _log_admission_rejection(settings, method=method, route=route, scope=scope)
+                _release_admission_scopes(controller, acquired_scopes)
+                return _admission_error_response(scope=scope, path=request.url.path)
+
+            acquired_scopes.append(scope)
+            record_api_admission_started(scope=scope)
+            record_api_admission_wait(
+                method=method,
+                route=route,
+                scope=scope,
+                outcome="accepted",
+                elapsed_s=perf_counter() - started,
             )
 
         try:
             return await call_next(request)
         finally:
-            semaphore.release()
+            _release_admission_scopes(controller, acquired_scopes)
+
+
+def _release_admission_scopes(
+    controller: AdmissionController,
+    scopes: list[str],
+) -> None:
+    while scopes:
+        scope = scopes.pop()
+        controller.release(scope)
+        record_api_admission_finished(scope=scope)
+
+
+def _admission_error_response(*, scope: str, path: str) -> ORJSONResponse:
+    setting_name = admission_scope_setting_name(scope)
+    error = RateLimitError(
+        f"too many concurrent {scope} API requests",
+        hint=(
+            f"increase {setting_name} or lower caller concurrency after checking "
+            "database capacity"
+        ),
+    )
+    operation = vworld_operation_for_path(path)
+    return ORJSONResponse(
+        error_payload(error, operation=operation),
+        status_code=error.http_status,
+        headers={"Retry-After": _ADMISSION_RETRY_AFTER_SECONDS, "Cache-Control": "no-store"},
+    )
+
+
+def _log_admission_rejection(
+    settings: Settings,
+    *,
+    method: str,
+    route: str,
+    scope: str,
+) -> None:
+    if not settings.api_performance_logging_enabled:
+        return
+    _PERFORMANCE_LOGGER.warning(
+        "api_admission_rejected",
+        extra={"method": method, "route": route, "scope": scope},
+    )
 
 
 app = create_app()

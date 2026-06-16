@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-145 운영 backpressure/fail-fast)
+
+**작업**: 기존 `api_max_concurrency` 전역 admission control을 `AdmissionController`로 분리하고, geocode/reverse/search/zipcode/pobox/regions endpoint scope별 concurrency cap을 추가했다. Admission timeout은 `RateLimitError(E0200, HTTP 429)` 또는 VWorld `OVER_REQUEST_LIMIT`로 변환하며 `Retry-After: 1`과 `Cache-Control: no-store`를 함께 반환한다.
+
+**결정**: endpoint scope가 포화됐을 때 전역 slot을 오래 잡지 않도록 endpoint scope를 먼저 얻고, 전역 `address` scope를 나중에 얻는다. Admission 포화는 DB 단절과 달리 process가 살아 있는 overload 신호이므로 `/v1/readyz`는 HTTP 200을 유지하되 `components.admission.status="saturated"`와 `degraded=true`로 노출한다.
+
+**문서/검증**: 상세는 `docs/t145-backpressure-failfast.md`에 기록했다. Windows 전체 pytest는 860 passed/56 skipped, Ruff는 통과했다. Windows 전체 mypy는 로컬 GDAL `osgeo` import/stub 부재로 기존 loader 파일에서 실패했으나, WSL ext4 미러 공식 gate는 pytest 863 passed/53 skipped, Ruff, mypy, import-linter, OpenAPI check 모두 통과했다.
+
 ## 2026-06-16 (T-154 DB pool checkout timeout/fail-fast)
 
 **작업**: `Settings.pg_pool_timeout_ms`와 `create_async_engine(pool_timeout=...)` 배선을 추가했다. SQLAlchemy pool checkout timeout은 API exception handler에서 구조화된 `DatabaseError(E0500, HTTP 503)`로 변환하고, `/metrics`에는 route/method별 checkout timeout counter를 추가했다.
