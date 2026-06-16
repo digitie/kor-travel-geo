@@ -64,10 +64,12 @@ export function makeCategoryCatalog(extra: Json[] = []): Json {
 
 export function makeFileSlot(overrides: Json = {}): Json {
   return {
+    slot: "archive",
     part_key: "archive",
     part_kind: "single",
     part_label: null,
     required: true,
+    uploaded: false,
     received_bytes: 0,
     object_key: null,
     object_etag: null,
