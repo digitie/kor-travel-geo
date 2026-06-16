@@ -22,7 +22,8 @@ v2(자체 통합 candidate, ADR-039)의 endpoint 공통 규약이다. 각 endpoi
 
 | 분류 | endpoint | 방식 |
 |------|----------|------|
-| ranked-candidate | `geocode`, `reverse` | `limit`(≤100)로 상위 N 후보. `page`/`total` 없음 — 정렬된 best-match는 페이징 대상이 아니다. |
+| ranked-candidate | `geocode` | `limit`(≤100)로 상위 N 후보. `page`/`total` 없음 — 정렬된 best-match는 페이징 대상이 아니다. |
+| ranked-candidate | `reverse` | `page`/`total`/`limit` 모두 없음. `radius_m`로 검색 반경만 제어하고 후보는 거리순으로 반환한다. |
 | collection | `search` | `page`/`size`(≤100) + `total`. |
 | 공간 그룹 | `regions/within-radius` | 레벨별(`sido`/`sigungu`/`emd`) 배열. 공간 조회는 페이징하지 않는다. |
 
@@ -37,9 +38,12 @@ v2(자체 통합 candidate, ADR-039)의 endpoint 공통 규약이다. 각 endpoi
 ## geometry opt-in (ADR-060 §5, ADR-059)
 
 - candidate를 반환하는 모든 endpoint(geocode/reverse/search)가 `include_geometry`(기본 `false`)를
-  대칭으로 받는다. `bbox` 공간 필터는 geocode/search에만 둔다(reverse는 이미 점+radius).
+  대칭으로 받는다. `bbox`(EPSG:4326 비교 범위)는 geocode/search 입력에만 둔다(reverse는 이미 점+radius).
+  **현재 `bbox`는 입력/응답 schema 보존용 echo이고, 엄격한 공간 필터는 후속**이다(`geocode.md`/`search.md`).
 - geometry는 후보가 도형 조회 key를 가질 때 채워진다(`region`→region polygon, 건물 key 있는
-  `road`/`parcel`→building polygon). key가 없으면 `null`. 상세는 각 endpoint 문서.
+  `road`/`parcel`→building polygon). key가 없으면 DTO에서는 `None`이고, v2 라우터는
+  `response_model_exclude_none=True`라 **REST 응답에서는 `geometry`/`bbox` 필드가 생략**된다(`null` 아님).
+  상세는 각 endpoint 문서.
 
 ## 변경 정책
 
