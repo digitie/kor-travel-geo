@@ -120,6 +120,16 @@ class Settings(BaseSettings):
     ops_pg_stat_statements_capture_interval_minutes: int = Field(default=5, ge=0)
     ops_pg_stat_statements_capture_limit: int = Field(default=20, ge=1, le=100)
     ops_pg_stat_statements_capture_on_startup: bool = True
+    runtime_warm_on_startup: bool = False
+    runtime_warm_interval_minutes: int = Field(default=0, ge=0)
+    runtime_warm_query_limit: int = Field(default=32, ge=1, le=500)
+    runtime_warm_statement_timeout_ms: int = Field(default=30_000, ge=1)
+    runtime_warm_prewarm_enabled: bool = False
+    runtime_warm_prewarm_relations: Annotated[tuple[str, ...], NoDecode] = (
+        "mv_geocode_target",
+        "mv_geocode_text_search",
+        "region_radius_parts",
+    )
     # T-203c source upload-session janitor (doc 1차 기본값, lines ~519-525).
     source_upload_session_ttl_days: int = Field(default=7, ge=1)
     source_registration_deadline_days: int = Field(default=30, ge=1)
@@ -242,6 +252,17 @@ class Settings(BaseSettings):
         if isinstance(value, (list, tuple, set)):
             return tuple(str(part).lower() for part in value)
         return (str(value).lower(),)
+
+    @field_validator("runtime_warm_prewarm_relations", mode="before")
+    @classmethod
+    def normalize_runtime_warm_prewarm_relations(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, str):
+            return tuple(part.strip() for part in value.split(",") if part.strip())
+        if value is None:
+            return ()
+        if isinstance(value, (list, tuple, set)):
+            return tuple(str(part).strip() for part in value if str(part).strip())
+        return (str(value).strip(),)
 
     @field_validator(
         "geoip_allow_cidrs",

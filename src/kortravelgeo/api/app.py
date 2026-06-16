@@ -58,6 +58,7 @@ from kortravelgeo.loaders.postload import (
     refresh_region_radius_parts,
     resolve_text_geometry_links,
 )
+from kortravelgeo.loaders.runtime_warm import run_runtime_warm, runtime_warm_report_metrics
 from kortravelgeo.loaders.shp.polygons_loader import load_shp_polygons
 from kortravelgeo.loaders.sppn_makarea_loader import load_sppn_makarea
 from kortravelgeo.loaders.text.daily_juso_loader import load_daily_juso_delta
@@ -95,12 +96,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.table_stats_capture_task = table_stats_task
     pg_stat_task = _start_pg_stat_statements_capture_scheduler(client.engine, get_settings())
     app.state.pg_stat_statements_capture_task = pg_stat_task
+    runtime_warm_task = _start_runtime_warm_scheduler(client.engine, get_settings())
+    app.state.runtime_warm_task = runtime_warm_task
     janitor_task = _start_source_janitor_scheduler(client, get_settings())
     app.state.source_janitor_task = janitor_task
     try:
         yield
     finally:
-        for task in (table_stats_task, pg_stat_task, janitor_task):
+        for task in (table_stats_task, pg_stat_task, runtime_warm_task, janitor_task):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -459,6 +462,59 @@ async def _capture_pg_stat_statements_once(engine: AsyncEngine, settings: Settin
         extra={
             "row_count": len(rows),
             "limit": settings.ops_pg_stat_statements_capture_limit,
+        },
+    )
+
+
+def _start_runtime_warm_scheduler(
+    engine: AsyncEngine,
+    settings: Settings,
+) -> asyncio.Task[None] | None:
+    if (
+        not settings.runtime_warm_on_startup
+        and settings.runtime_warm_interval_minutes <= 0
+    ):
+        return None
+    return asyncio.create_task(_run_runtime_warm_scheduler(engine, settings))
+
+
+async def _run_runtime_warm_scheduler(engine: AsyncEngine, settings: Settings) -> None:
+    interval_s = settings.runtime_warm_interval_minutes * 60
+    if settings.runtime_warm_on_startup:
+        await _run_runtime_warm_once(engine, settings)
+    while interval_s > 0:
+        await asyncio.sleep(interval_s)
+        await _run_runtime_warm_once(engine, settings)
+
+
+async def _run_runtime_warm_once(engine: AsyncEngine, settings: Settings) -> None:
+    key = AdvisoryLockKey.global_key(AdvisoryLockNamespace.RUNTIME_WARM)
+    try:
+        async with cross_process_lock(engine, key):
+            report = await run_runtime_warm(
+                engine,
+                mode="execute",
+                prewarm_enabled=settings.runtime_warm_prewarm_enabled,
+                prewarm_relations=settings.runtime_warm_prewarm_relations,
+                query_limit=settings.runtime_warm_query_limit,
+                statement_timeout_ms=settings.runtime_warm_statement_timeout_ms,
+            )
+    except ConcurrentExecutionError:
+        _LOGGER.info("runtime warm skipped because another worker holds the lock")
+        return
+    except Exception:
+        _LOGGER.exception("runtime warm pass failed")
+        return
+
+    metrics = runtime_warm_report_metrics(report)
+    _LOGGER.info(
+        "runtime warm scheduler pass",
+        extra={
+            "status": "failed" if metrics["error_count"] else "ok",
+            "samples": metrics["samples"],
+            "error_count": metrics["error_count"],
+            "warning_count": metrics["warning_count"],
+            "max_ms": metrics["max_ms"],
         },
     )
 

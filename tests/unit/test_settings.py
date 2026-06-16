@@ -62,6 +62,16 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.ops_pg_stat_statements_capture_interval_minutes == 5
     assert settings.ops_pg_stat_statements_capture_limit == 20
     assert settings.ops_pg_stat_statements_capture_on_startup is True
+    assert settings.runtime_warm_on_startup is False
+    assert settings.runtime_warm_interval_minutes == 0
+    assert settings.runtime_warm_query_limit == 32
+    assert settings.runtime_warm_statement_timeout_ms == 30_000
+    assert settings.runtime_warm_prewarm_enabled is False
+    assert settings.runtime_warm_prewarm_relations == (
+        "mv_geocode_target",
+        "mv_geocode_text_search",
+        "region_radius_parts",
+    )
     assert settings.epost_download_url == (
         "http://openapi.epost.go.kr/postal/downloadAreaCodeService/"
         "downloadAreaCodeService/getAreaCodeInfo"
@@ -106,6 +116,7 @@ def test_settings_normalize_backup_csv_values() -> None:
         geoip_allow_cidrs="203.0.113.0/24,2001:db8::/32",
         geoip_trusted_proxies="127.0.0.1/32",
         geoip_open_paths="/v1/healthz,/metrics",
+        runtime_warm_prewarm_relations="mv_geocode_target,region_radius_parts",
     )
 
     assert tuple(path.as_posix() for path in settings.backup_allowed_dirs) == ("/tmp/a", "/tmp/b")
@@ -114,3 +125,7 @@ def test_settings_normalize_backup_csv_values() -> None:
     assert str(settings.geoip_allow_cidrs[1]) == "2001:db8::/32"
     assert str(settings.geoip_trusted_proxies[0]) == "127.0.0.1/32"
     assert settings.geoip_open_paths == ("/v1/healthz", "/metrics")
+    assert settings.runtime_warm_prewarm_relations == (
+        "mv_geocode_target",
+        "region_radius_parts",
+    )

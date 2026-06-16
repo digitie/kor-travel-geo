@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-162 런타임 캐시/버퍼 예열)
+
+**작업**: `loaders.runtime_warm`을 추가해 API 재기동·서빙 swap 직후 read path를 데우는 plan/execute report를 만들었다. Report는 `pg_prewarm` extension과 서빙 relation 존재 여부, 선택형 `pg_prewarm`, geocode exact/search text/reverse nearest/region radius 상한 있는 읽기 전용 probe 실행 결과를 담는다. API lifespan에는 기본 비활성 opt-in scheduler를 붙였고, `RUNTIME_WARM` advisory lock으로 여러 worker가 동시에 예열을 실행하지 않게 했다.
+
+**결정**: T-162는 공개 API 계약이나 DB object를 추가하지 않는다. `pg_prewarm` extension 설치·DB 재시작·RustFS/DB 구동은 이 저장소가 수행하지 않으며, extension이 이미 있고 명시 설정이 켜진 경우에만 호출한다. 재기동 직후 p99 acceptance는 이 저장소가 DB를 재시작하지 않는 제약을 반영해 `scripts/evaluate_t162_cold_warm_ratio.py`가 cold REST benchmark와 예열 후 REST benchmark의 같은 `(group, sql_name, concurrency)` p99를 비교하는 gate로 남긴다.
+
+**검증/문서**: Windows focused unit은 `tests/unit/test_t162_runtime_warm.py`/`tests/unit/test_settings.py` 15개가 통과했고, 변경 source/script/test Ruff와 T-162 순수 모듈 mypy가 통과했다. WSL ext4 미러에서는 전체 `pytest -q` 955 passed/54 skipped, Ruff, mypy, `lint-imports`, OpenAPI check가 통과했다. WSL 읽기 전용 execute smoke는 `artifacts/perf/t162-runtime-warm-execute-smoke/report.json`이며 `pg_prewarm` extension 없음으로 선택형 단계만 skipped, 4개 쿼리 예열 profile은 모두 succeeded였다. 상세는 `docs/t162-runtime-warm.md`에 기록했다. 다음 Agent A 작업은 T-144다. CodeGraph MCP는 이번 세션에서도 `Transport closed`로 실패해 파일 직접 확인으로 진행했다.
+
 ## 2026-06-16 (T-146 post-load read-optimized maintenance)
 
 **작업**: `loaders.postload_maintenance`를 추가해 적재 직후 read-mostly maintenance plan/report를 표준화했다. Report는 source/MV/index catalog 상태, `VACUUM (ANALYZE)` opt-in 단계, `resolve_text_geometry_links()`, `refresh_mv(strategy=...)`, table stats capture, index budget/dead tuple/analyze warning을 담는다. `scripts/run_t146_postload_maintenance.py`는 기본 plan-only와 `execute-safe`, T-265 benchmark artifact 등록을 지원한다.
