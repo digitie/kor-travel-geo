@@ -72,6 +72,15 @@ def test_metrics_render_includes_db_pool_gauges() -> None:
     assert "kor_travel_geo_pg_pool_overflow" in body
 
 
+def test_metrics_render_includes_db_pool_checkout_timeout_counter() -> None:
+    metrics.record_db_pool_checkout_timeout(method="GET", route="/v1/address/geocode")
+
+    body = metrics.render_prometheus().decode()
+
+    assert "kor_travel_geo_pg_pool_checkout_timeouts_total" in body
+    assert 'route="/v1/address/geocode"' in body
+
+
 def test_metrics_render_includes_load_job_duration_histograms() -> None:
     metrics.record_load_job_duration(kind="full_load_batch", state="done", elapsed_s=1.25)
     metrics.record_load_job_stage_duration(

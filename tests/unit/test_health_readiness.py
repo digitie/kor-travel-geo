@@ -114,6 +114,7 @@ async def test_readyz_returns_ready_when_database_ping_and_pool_are_ok() -> None
     assert payload["degraded"] is False
     assert payload["components"]["database"]["status"] == "ok"
     assert payload["components"]["pool"]["status"] == "ok"
+    assert payload["components"]["pool"]["detail"]["timeout_ms"] == 1000
     assert engine.connect_count == 1
 
 

@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import ORJSONResponse
 from pydantic import ValidationError
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from kortravelgeo.api.vworld import (
     VWorldOperation,
@@ -13,10 +14,21 @@ from kortravelgeo.api.vworld import (
     vworld_operation_for_path,
     vworld_validation_error_payload,
 )
-from kortravelgeo.exceptions import InvalidCoordinateError, InvalidInputError, KorTravelGeoError
+from kortravelgeo.exceptions import (
+    DatabaseError,
+    InvalidCoordinateError,
+    InvalidInputError,
+    KorTravelGeoError,
+)
+from kortravelgeo.infra.metrics import record_db_pool_checkout_timeout
 
 _COORDINATE_BOUNDS_ERROR = "kor_travel_geo.coordinate_bounds"
 _COORDINATE_BOUNDS_MESSAGE = "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
+_POOL_TIMEOUT_MESSAGE = "database connection pool checkout timed out"
+_POOL_TIMEOUT_HINT = (
+    "increase KTG_PG_POOL_SIZE/KTG_PG_MAX_OVERFLOW, lower KTG_API_MAX_CONCURRENCY, "
+    "or raise KTG_PG_POOL_TIMEOUT_MS after checking DB capacity"
+)
 
 
 def error_payload(
@@ -43,6 +55,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_ktg_error(request: Request, exc: KorTravelGeoError) -> ORJSONResponse:
         operation = vworld_operation_for_path(request.url.path)
         return ORJSONResponse(error_payload(exc, operation=operation), status_code=exc.http_status)
+
+    @app.exception_handler(SQLAlchemyTimeoutError)
+    async def handle_sqlalchemy_timeout_error(
+        request: Request,
+        _exc: SQLAlchemyTimeoutError,
+    ) -> ORJSONResponse:
+        route = _route_template(request)
+        record_db_pool_checkout_timeout(method=request.method, route=route)
+        domain_error = DatabaseError(_POOL_TIMEOUT_MESSAGE, hint=_POOL_TIMEOUT_HINT)
+        operation = vworld_operation_for_path(request.url.path)
+        return ORJSONResponse(
+            error_payload(domain_error, operation=operation),
+            status_code=domain_error.http_status,
+        )
 
     @app.exception_handler(RequestValidationError)
     async def handle_request_validation_error(
@@ -73,3 +99,9 @@ def _validation_error_to_domain(exc: ValidationError) -> KorTravelGeoError:
     if any(error.get("type") == _COORDINATE_BOUNDS_ERROR for error in errors):
         return InvalidCoordinateError(_COORDINATE_BOUNDS_MESSAGE)
     return InvalidInputError("invalid request data", hint=str(errors))
+
+
+def _route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    return str(path) if path else request.url.path

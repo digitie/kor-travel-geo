@@ -33,6 +33,9 @@ def test_set_settings_overrides_singleton() -> None:
 def test_settings_defaults_match_backend_spec() -> None:
     settings = Settings()
 
+    assert settings.pg_pool_size == 10
+    assert settings.pg_max_overflow == 5
+    assert settings.pg_pool_timeout_ms == 1_000
     assert settings.pg_statement_timeout_ms == 5_000
     assert settings.pg_search_path == "public,x_extension"
     assert settings.api_cors_origins == ()
