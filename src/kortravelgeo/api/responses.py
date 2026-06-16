@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import ORJSONResponse
 from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from kortravelgeo.api.vworld import (
@@ -20,7 +21,7 @@ from kortravelgeo.exceptions import (
     InvalidInputError,
     KorTravelGeoError,
 )
-from kortravelgeo.infra.metrics import record_db_pool_checkout_timeout
+from kortravelgeo.infra.metrics import record_api_db_error, record_db_pool_checkout_timeout
 
 _COORDINATE_BOUNDS_ERROR = "kor_travel_geo.coordinate_bounds"
 _COORDINATE_BOUNDS_MESSAGE = "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
@@ -28,6 +29,10 @@ _POOL_TIMEOUT_MESSAGE = "database connection pool checkout timed out"
 _POOL_TIMEOUT_HINT = (
     "increase KTG_PG_POOL_SIZE/KTG_PG_MAX_OVERFLOW, lower KTG_API_MAX_CONCURRENCY, "
     "or raise KTG_PG_POOL_TIMEOUT_MS after checking DB capacity"
+)
+_DB_UNAVAILABLE_MESSAGE = "database operation failed"
+_DB_UNAVAILABLE_HINT = (
+    "check KTG_PG_DSN, PostgreSQL connectivity, and /v1/readyz before retrying"
 )
 
 
@@ -64,6 +69,24 @@ def register_exception_handlers(app: FastAPI) -> None:
         route = _route_template(request)
         record_db_pool_checkout_timeout(method=request.method, route=route)
         domain_error = DatabaseError(_POOL_TIMEOUT_MESSAGE, hint=_POOL_TIMEOUT_HINT)
+        operation = vworld_operation_for_path(request.url.path)
+        return ORJSONResponse(
+            error_payload(domain_error, operation=operation),
+            status_code=domain_error.http_status,
+        )
+
+    @app.exception_handler(DBAPIError)
+    async def handle_sqlalchemy_dbapi_error(
+        request: Request,
+        exc: DBAPIError,
+    ) -> ORJSONResponse:
+        route = _route_template(request)
+        record_api_db_error(
+            method=request.method,
+            route=route,
+            error_type=exc.__class__.__name__,
+        )
+        domain_error = DatabaseError(_DB_UNAVAILABLE_MESSAGE, hint=_DB_UNAVAILABLE_HINT)
         operation = vworld_operation_for_path(request.url.path)
         return ORJSONResponse(
             error_payload(domain_error, operation=operation),

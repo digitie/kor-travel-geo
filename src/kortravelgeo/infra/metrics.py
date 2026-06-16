@@ -164,6 +164,11 @@ PG_POOL_CHECKOUT_TIMEOUTS = _counter(
     "SQLAlchemy DB pool checkout timeouts by route template and method.",
     ("method", "route"),
 )
+API_DB_ERRORS = _counter(
+    "kor_travel_geo_api_db_errors_total",
+    "Database driver errors surfaced to API clients by route, method, and error type.",
+    ("method", "route", "error_type"),
+)
 DB_QUERIES = _counter(
     "kor_travel_geo_db_queries_total",
     "SQL queries executed by this API process by operation, fingerprint, and status.",
@@ -358,6 +363,10 @@ def record_api_admission_rejection(*, method: str, route: str, scope: str) -> No
 
 def record_db_pool_checkout_timeout(*, method: str, route: str) -> None:
     PG_POOL_CHECKOUT_TIMEOUTS.labels(method=method, route=route).inc()
+
+
+def record_api_db_error(*, method: str, route: str, error_type: str) -> None:
+    API_DB_ERRORS.labels(method=method, route=route, error_type=error_type).inc()
 
 
 def record_load_job_duration(*, kind: str, state: str, elapsed_s: float) -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from time import perf_counter
 from typing import Any
 
 import httpx
@@ -8,6 +10,7 @@ from fastapi import FastAPI
 
 from kortravelgeo.api.admission import AdmissionScopeSnapshot
 from kortravelgeo.api.routers import healthz
+from kortravelgeo.settings import Settings, reset_settings, set_settings
 
 
 class _FakePool:
@@ -42,12 +45,14 @@ class _FakeResult:
 
 
 class _FakeConnection:
-    def __init__(self, *, fail: bool = False) -> None:
-        self.fail = fail
+    def __init__(self, engine: _FakeEngine) -> None:
+        self.engine = engine
 
     async def execute(self, _statement: object) -> _FakeResult:
-        if self.fail:
+        if self.engine.mode == "fail":
             raise RuntimeError("database unavailable")
+        if self.engine.mode == "slow":
+            await asyncio.sleep(1.0)
         return _FakeResult()
 
 
@@ -57,7 +62,7 @@ class _FakeConnectionContext:
 
     async def __aenter__(self) -> _FakeConnection:
         self.engine.connect_count += 1
-        return _FakeConnection(fail=self.engine.fail)
+        return _FakeConnection(self.engine)
 
     async def __aexit__(self, *_args: object) -> None:
         return None
@@ -69,9 +74,10 @@ class _FakeEngine:
         *,
         pool: _FakePool | None = None,
         fail: bool = False,
+        mode: str = "ok",
     ) -> None:
         self.sync_engine = _FakeSyncEngine(pool or _FakePool())
-        self.fail = fail
+        self.mode = "fail" if fail else mode
         self.connect_count = 0
 
     def connect(self) -> _FakeConnectionContext:
@@ -145,6 +151,38 @@ async def test_readyz_returns_unavailable_when_database_ping_fails() -> None:
     assert payload["degraded"] is True
     assert payload["components"]["database"]["status"] == "unavailable"
     assert payload["components"]["database"]["error_type"] == "RuntimeError"
+
+
+@pytest.mark.asyncio
+async def test_readyz_times_out_slow_database_probe_and_recovers() -> None:
+    set_settings(Settings(api_readiness_timeout_ms=10))
+    engine = _FakeEngine(mode="slow")
+    transport = httpx.ASGITransport(app=_app(_FakeClient(engine)))
+
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            started = perf_counter()
+            unavailable = await client.get("/v1/readyz")
+            elapsed = perf_counter() - started
+
+            engine.mode = "ok"
+            recovered = await client.get("/v1/readyz")
+    finally:
+        reset_settings()
+
+    unavailable_payload = unavailable.json()
+    recovered_payload = recovered.json()
+    assert elapsed < 0.5
+    assert unavailable.status_code == 503
+    assert unavailable_payload["ready"] is False
+    assert unavailable_payload["degraded"] is True
+    assert unavailable_payload["components"]["database"]["status"] == "unavailable"
+    assert unavailable_payload["components"]["database"]["error_type"] == "TimeoutError"
+    assert recovered.status_code == 200
+    assert recovered_payload["ready"] is True
+    assert recovered_payload["degraded"] is False
+    assert recovered_payload["components"]["database"]["status"] == "ok"
+    assert engine.connect_count == 2
 
 
 @pytest.mark.asyncio
