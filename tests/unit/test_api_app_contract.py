@@ -1,16 +1,25 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
 from kortravelgeo.api import app as app_module
-from kortravelgeo.api.app import _install_performance_monitoring, create_app
+from kortravelgeo.api.app import (
+    _install_client_disconnect_cancellation,
+    _install_performance_monitoring,
+    create_app,
+)
+from kortravelgeo.infra import metrics
 from kortravelgeo.settings import Settings
+
+if TYPE_CHECKING:
+    from collections.abc import MutableMapping
 
 
 def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
@@ -124,3 +133,60 @@ async def test_performance_logging_uses_route_template_without_query(
     assert record.__dict__["status_code"] == 200
     assert "address" not in record.getMessage()
     assert "서울특별시" not in record.getMessage()
+
+
+@pytest.mark.asyncio
+async def test_client_disconnect_cancels_public_address_request() -> None:
+    app = FastAPI()
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    @app.get("/v1/address/slow")
+    async def slow() -> dict[str, str]:
+        started.set()
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return {"status": "OK"}
+
+    _install_performance_monitoring(app, Settings())
+    _install_client_disconnect_cancellation(app)
+
+    receive_messages: asyncio.Queue[MutableMapping[str, Any]] = asyncio.Queue()
+    await receive_messages.put({"type": "http.request", "body": b"", "more_body": False})
+    sent_messages: list[dict[str, Any]] = []
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/v1/address/slow",
+        "raw_path": b"/v1/address/slow",
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+        "client": ("127.0.0.1", 12345),
+        "server": ("testserver", 80),
+    }
+
+    async def receive() -> MutableMapping[str, Any]:
+        return await receive_messages.get()
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        sent_messages.append(dict(message))
+
+    task = asyncio.create_task(app(scope, receive, send))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await receive_messages.put({"type": "http.disconnect"})
+    await asyncio.wait_for(cancelled.wait(), timeout=1)
+    await asyncio.wait_for(task, timeout=1)
+
+    body = metrics.render_prometheus().decode()
+
+    assert sent_messages == []
+    assert "kor_travel_geo_api_request_cancellations_total" in body
+    assert 'route="/v1/address/slow"' in body
+    assert 'status_code="499"' in body

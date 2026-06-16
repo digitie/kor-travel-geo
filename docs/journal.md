@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-161 client disconnect/query cancellation)
+
+**작업**: 공개 주소 API(`/v1/address/*`, `/v2/*`)에서 ASGI `http.disconnect`를 감지하면 inner app task를 cancel하는 middleware를 추가했다. 성능 middleware는 취소 요청을 `status_code=499` request metric과 `api_request_cancelled` 로그로 남기고 `CancelledError`를 재전파한다.
+
+**관측**: `/metrics`에 `kor_travel_geo_api_request_cancellations_total{method,route}`와 `kor_travel_geo_db_query_cancellations_total{operation,query_fingerprint}`를 추가했다. SQLAlchemy query metric은 `asyncio.CancelledError`와 PostgreSQL "user request" `QueryCanceled`를 `status="cancelled"`로 분류한다.
+
+**문서/검증**: 상세는 `docs/t161-cancellation.md`에 기록했다. Windows focused run은 disconnect ASGI 단위 테스트와 cancel metric 단위 테스트 4개, 변경 파일 Ruff를 통과했다. `KTG_TEST_PG_DSN`이 있으면 `pg_sleep` 취소 후 orphan query/connection leak이 없는지 선택형 통합 테스트가 실행된다.
+
 ## 2026-06-16 (T-145 운영 backpressure/fail-fast)
 
 **작업**: 기존 `api_max_concurrency` 전역 admission control을 `AdmissionController`로 분리하고, geocode/reverse/search/zipcode/pobox/regions endpoint scope별 concurrency cap을 추가했다. Admission timeout은 `RateLimitError(E0200, HTTP 429)` 또는 VWorld `OVER_REQUEST_LIMIT`로 변환하며 `Retry-After: 1`과 `Cache-Control: no-store`를 함께 반환한다.

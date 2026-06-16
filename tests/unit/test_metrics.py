@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from kortravelgeo.dto.admin import CacheMetrics, PgStatStatementSnapshot
@@ -40,6 +41,15 @@ def test_metrics_render_includes_api_request_duration_histogram() -> None:
     assert "kor_travel_geo_api_requests_in_progress" in body
     assert "kor_travel_geo_api_request_duration_seconds_bucket" in body
     assert 'route="/v1/healthz"' in body
+
+
+def test_metrics_render_includes_api_request_cancellation_counter() -> None:
+    metrics.record_api_request_cancelled(method="GET", route="/v1/address/geocode")
+
+    body = metrics.render_prometheus().decode()
+
+    assert "kor_travel_geo_api_request_cancellations_total" in body
+    assert 'route="/v1/address/geocode"' in body
 
 
 def test_metrics_render_includes_db_pool_gauges() -> None:
@@ -137,6 +147,28 @@ def test_metrics_render_includes_db_query_duration_histogram() -> None:
     assert 'operation="select"' in body
     assert 'status="success"' in body
     assert "query_fingerprint=" in body
+
+
+def test_metrics_render_includes_db_query_cancellation_counter() -> None:
+    metrics.record_db_query(
+        statement="SELECT pg_sleep(10)",
+        elapsed_s=0.125,
+        status="cancelled",
+    )
+
+    body = metrics.render_prometheus().decode()
+
+    assert "kor_travel_geo_db_query_cancellations_total" in body
+    assert 'operation="select"' in body
+    assert 'status="cancelled"' in body
+
+
+def test_db_query_status_detects_asyncio_cancellation() -> None:
+    class FakeExceptionContext:
+        original_exception = asyncio.CancelledError()
+        sqlalchemy_exception = None
+
+    assert metrics._db_query_status_from_exception(FakeExceptionContext()) == "cancelled"
 
 
 def test_metrics_render_includes_pg_stat_statement_snapshot_without_query_text() -> None:

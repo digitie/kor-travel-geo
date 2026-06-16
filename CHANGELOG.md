@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-161 client disconnect/query cancellation 관측을 추가했다. 공개 주소 API(`/v1/address/*`, `/v2/*`)에서 ASGI `http.disconnect`를 감지하면 진행 중인 요청 task를 cancel하고, 요청 취소는 `499` request metric과 `kor_travel_geo_api_request_cancellations_total{method,route}`로 기록한다. DB query 취소는 `status="cancelled"`와 `kor_travel_geo_db_query_cancellations_total{operation,query_fingerprint}`로 노출하며, 선택형 PostGIS 통합 테스트가 취소 후 orphan query/connection leak이 없는지 검증한다.
 - T-145 운영 backpressure/fail-fast를 보강했다. `KTG_API_GEOCODE_MAX_CONCURRENCY` 등 endpoint scope별 admission cap을 추가하고, overload는 HTTP 429 + `E0200` 또는 VWorld `OVER_REQUEST_LIMIT`와 `Retry-After: 1`로 fail-fast한다. `/metrics`는 admission wait/rejection/in-progress 지표를, `/v1/readyz`는 `components.admission` degradation 신호를 노출한다.
 - T-154 DB pool checkout timeout/fail-fast를 추가했다. `KTG_PG_POOL_TIMEOUT_MS` 기본 1000ms를 engine `pool_timeout`에 연결하고, SQLAlchemy pool checkout timeout을 HTTP 503 + `E0500` 구조화 응답으로 변환한다. `/metrics`는 `kor_travel_geo_pg_pool_checkout_timeouts_total{method,route}`를 노출하고, `/v1/readyz` pool detail에는 `timeout_ms`가 포함된다.
 - T-174 좌표계 왕복 정밀도 검증과 변환 helper 단일 경로를 추가했다. `infra.coordinates`가 EPSG:5179↔4326 point projection을 담당하고, geocode/reverse repository의 명시적 projection method가 shared helper를 사용한다. Opt-in PostGIS integration test가 왕복 오차 1mm 이하를 검증한다.
