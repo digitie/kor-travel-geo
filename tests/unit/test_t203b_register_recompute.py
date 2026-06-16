@@ -383,6 +383,170 @@ def test_navi_optional_match_jibun_absent_is_warning() -> None:
     assert any("match_jibun" in w for p in result.parts for w in p.warnings)
 
 
+def test_t127_detail_address_db_profile_requires_17_adrdc_files() -> None:
+    members = tuple(ManifestMember(member_path=f"adrdc_{i:02d}.txt") for i in range(17))
+    manifest = GroupManifest(
+        category="detail_address_db_full",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=members),),
+    )
+    assert validate_group_manifest(manifest).outcome == "passed"
+
+    short = GroupManifest(
+        category="detail_address_db_full",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=members[:-1]),),
+    )
+    result = validate_group_manifest(short)
+    assert result.outcome == "warning"
+    assert any("adrdc_" in w for p in result.parts for w in p.warnings)
+
+
+def test_t127_national_point_grid_shape_requires_four_layers_and_sidecars() -> None:
+    layers = tuple(
+        _layer(name, suffixes=frozenset({".shp", ".shx", ".dbf"}))
+        for name in (
+            "TL_SPPN_GRID_100KM",
+            "TL_SPPN_GRID_10KM",
+            "TL_SPPN_GRID_1KM",
+            "TL_SPPN_GRID_100M",
+        )
+    )
+    manifest = GroupManifest(
+        category="national_point_grid_shape",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=layers),),
+    )
+    result = validate_group_manifest(manifest)
+    assert result.outcome == "warning"  # .prj 없음은 좌표계 가정 warning
+    assert all("prj 없음" in w for p in result.parts for w in p.warnings)
+
+    missing = GroupManifest(
+        category="national_point_grid_shape",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=layers[:-1]),),
+    )
+    result = validate_group_manifest(missing)
+    assert result.outcome == "failed"
+    assert any("TL_SPPN_GRID_100M" in r for p in result.parts for r in p.reasons)
+
+
+def test_t127_national_point_grid_center_requires_sppn_text() -> None:
+    manifest = GroupManifest(
+        category="national_point_grid_center",
+        group_kind="single_file",
+        parts=(
+            PartManifest(
+                part_key="archive",
+                members=(
+                    ManifestMember(
+                        member_path="SPPN_20240508.TXT",
+                        detected_yyyymm="202405",
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert validate_group_manifest(manifest).outcome == "passed"
+
+    missing = GroupManifest(
+        category="national_point_grid_center",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=(ManifestMember("README.txt"),)),),
+    )
+    result = validate_group_manifest(missing)
+    assert result.outcome == "failed"
+    assert any("SPPN_" in r for p in result.parts for r in p.reasons)
+
+
+def test_t127_civil_service_institution_map_requires_one_shp_layer() -> None:
+    manifest = GroupManifest(
+        category="civil_service_institution_map",
+        group_kind="single_file",
+        parts=(
+            PartManifest(
+                part_key="archive",
+                members=(
+                    _layer(
+                        "민원행정기관_202401",
+                        suffixes=frozenset({".shp", ".shx", ".dbf", ".prj"}),
+                    ),
+                ),
+            ),
+        ),
+    )
+    assert validate_group_manifest(manifest).outcome == "passed"
+
+    no_sidecar = GroupManifest(
+        category="civil_service_institution_map",
+        group_kind="single_file",
+        parts=(
+            PartManifest(
+                part_key="archive",
+                members=(_layer("민원행정기관_202401", suffixes=frozenset({".shp"})),),
+            ),
+        ),
+    )
+    result = validate_group_manifest(no_sidecar)
+    assert result.outcome == "failed"
+    assert any("sidecar" in r for p in result.parts for r in p.reasons)
+
+
+def test_t127_address_and_building_db_profiles_require_core_text_sets() -> None:
+    address_members = (
+        *(ManifestMember(member_path=f"주소_{i:02d}.txt") for i in range(17)),
+        *(ManifestMember(member_path=f"부가정보_{i:02d}.txt") for i in range(17)),
+        *(ManifestMember(member_path=f"지번_{i:02d}.txt") for i in range(17)),
+        ManifestMember(member_path="개선_도로명코드_전체분.txt"),
+    )
+    address = GroupManifest(
+        category="address_db_full",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=address_members),),
+    )
+    assert validate_group_manifest(address).outcome == "passed"
+
+    building_members = (
+        *(ManifestMember(member_path=f"build_{i:02d}.txt") for i in range(17)),
+        *(ManifestMember(member_path=f"jibun_{i:02d}.txt") for i in range(17)),
+        ManifestMember(member_path="road_code_total.txt"),
+    )
+    building = GroupManifest(
+        category="building_db_full",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=building_members),),
+    )
+    assert validate_group_manifest(building).outcome == "passed"
+
+    missing = GroupManifest(
+        category="building_db_full",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=building_members[:17]),),
+    )
+    result = validate_group_manifest(missing)
+    assert result.outcome == "failed"
+    assert any("jibun_" in r for p in result.parts for r in p.reasons)
+
+
+def test_t127_mixed_detected_yyyymm_is_warning() -> None:
+    manifest = GroupManifest(
+        category="national_point_grid_center",
+        group_kind="single_file",
+        parts=(
+            PartManifest(
+                part_key="archive",
+                members=(
+                    ManifestMember(member_path="SPPN_20240508.TXT", detected_yyyymm="202405"),
+                    ManifestMember(member_path="SPPN_20240608.TXT", detected_yyyymm="202406"),
+                ),
+            ),
+        ),
+    )
+    result = validate_group_manifest(manifest)
+    assert result.outcome == "warning"
+    assert any("기준월 혼재" in w for p in result.parts for w in p.warnings)
+
+
 def test_zone_shape_requires_makarea_layer() -> None:
     ok = tuple(
         PartManifest(part_key=key, members=(_layer("TL_SPPN_MAKAREA"),)) for key, _ in _sido_pairs()

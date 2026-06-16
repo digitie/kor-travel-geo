@@ -41,7 +41,7 @@ from kortravelgeo.core.source_layers import (
 
 #: Bumped whenever the decision logic / profile expectations change so that
 #: previously ``passed`` validations can be re-run (doc "validator_version").
-VALIDATOR_VERSION = "t203b.1"
+VALIDATOR_VERSION = "t127.1"
 
 ValidationOutcome = Literal["passed", "warning", "failed"]
 
@@ -164,6 +164,14 @@ class TextMemberProfile:
     optional_prefixes: tuple[tuple[str, int | None], ...] = ()
 
 
+@dataclass(frozen=True)
+class SingleLayerProfile:
+    """A single-file SHP profile whose layer name may include a 기준월 suffix."""
+
+    required_layer_prefixes: tuple[str, ...] = ()
+    expected_count: int | None = 1
+
+
 #: multi_part SHP profiles keyed by category.
 LAYER_PROFILES: dict[str, LayerProfile] = {
     "electronic_map_full": LayerProfile(
@@ -180,6 +188,12 @@ LAYER_PROFILES: dict[str, LayerProfile] = {
     ),
     "detail_dong_shape_bundle": LayerProfile(
         required_layers=frozenset({DETAIL_DONG_POLYGON_LAYER, DETAIL_DONG_ENTRANCE_LAYER}),
+    ),
+}
+
+SINGLE_LAYER_PROFILES: dict[str, SingleLayerProfile] = {
+    "civil_service_institution_map": SingleLayerProfile(
+        required_layer_prefixes=("민원행정기관",),
     ),
 }
 
@@ -203,7 +217,37 @@ SINGLE_FILE_TEXT_PROFILES: dict[str, TextMemberProfile] = {
         required_prefixes=(("match_build_", 17), ("match_rs_entrc", 1)),
         optional_prefixes=(("match_jibun_", 17),),
     ),
+    "detail_address_db_full": TextMemberProfile(
+        required_prefixes=(("adrdc_", 17),),
+    ),
+    "national_point_grid_center": TextMemberProfile(
+        required_prefixes=(("SPPN_", 1),),
+    ),
+    "address_db_full": TextMemberProfile(
+        required_prefixes=(
+            ("주소_", 17),
+            ("부가정보_", 17),
+            ("지번_", 17),
+            ("개선_도로명코드_", 1),
+        ),
+    ),
+    "building_db_full": TextMemberProfile(
+        required_prefixes=(("build_", 17), ("jibun_", 17), ("road_code_total", 1)),
+    ),
 }
+
+T127_GRID_SHAPE_LAYERS: frozenset[str] = frozenset(
+    {
+        "TL_SPPN_GRID_100KM",
+        "TL_SPPN_GRID_10KM",
+        "TL_SPPN_GRID_1KM",
+        "TL_SPPN_GRID_100M",
+    }
+)
+
+LAYER_PROFILES["national_point_grid_shape"] = LayerProfile(
+    required_layers=T127_GRID_SHAPE_LAYERS,
+)
 
 
 # --- pure decision functions -----------------------------------------------
@@ -240,6 +284,11 @@ def _validate_text_part(
             warnings.append(f"optional member 없음: {prefix}*")
             if outcome == "passed":
                 outcome = "warning"
+    yyyymm_warning = _detected_yyyymm_warning(part.members)
+    if yyyymm_warning is not None:
+        warnings.append(yyyymm_warning)
+        if outcome == "passed":
+            outcome = "warning"
     return PartValidation(
         part_key=part.part_key,
         outcome=outcome,
@@ -276,6 +325,11 @@ def _validate_layer_part(part: PartManifest, profile: LayerProfile) -> PartValid
             warnings.append(f"{member.layer_name}.prj 없음 (EPSG:5179 가정)")
             if outcome == "passed":
                 outcome = "warning"
+    yyyymm_warning = _detected_yyyymm_warning(part.members)
+    if yyyymm_warning is not None:
+        warnings.append(yyyymm_warning)
+        if outcome == "passed":
+            outcome = "warning"
     return PartValidation(
         part_key=part.part_key,
         outcome=outcome,
@@ -284,6 +338,62 @@ def _validate_layer_part(part: PartManifest, profile: LayerProfile) -> PartValid
         missing_layers=missing,
         warnings=tuple(warnings),
     )
+
+
+def _validate_single_layer_part(
+    part: PartManifest, profile: SingleLayerProfile
+) -> PartValidation:
+    layers = tuple(m for m in part.members if m.member_kind == "shp_layer" and m.layer_name)
+    reasons: list[str] = []
+    warnings: list[str] = []
+    outcome: ValidationOutcome = "passed"
+    if not layers:
+        reasons.append("필수 SHP layer 누락")
+        outcome = "failed"
+    elif profile.expected_count is not None and len(layers) != profile.expected_count:
+        warnings.append(f"SHP layer {len(layers)}개 (기대 {profile.expected_count}개)")
+        outcome = "warning"
+    for member in layers:
+        assert member.layer_name is not None
+        if profile.required_layer_prefixes and not any(
+            member.layer_name.startswith(prefix) for prefix in profile.required_layer_prefixes
+        ):
+            warnings.append(
+                f"{member.layer_name} layer 이름이 기대 prefix와 다름: "
+                + ", ".join(profile.required_layer_prefixes)
+            )
+            if outcome == "passed":
+                outcome = "warning"
+        missing_suffixes = REQUIRED_SHP_SUFFIXES - member.suffixes
+        if missing_suffixes:
+            reasons.append(
+                f"{member.layer_name} sidecar 누락: " + ", ".join(sorted(missing_suffixes))
+            )
+            outcome = "failed"
+        if ".prj" not in member.suffixes:
+            warnings.append(f"{member.layer_name}.prj 없음 (EPSG:5179 가정)")
+            if outcome == "passed":
+                outcome = "warning"
+    yyyymm_warning = _detected_yyyymm_warning(part.members)
+    if yyyymm_warning is not None:
+        warnings.append(yyyymm_warning)
+        if outcome == "passed":
+            outcome = "warning"
+    present = frozenset(member.layer_name for member in layers if member.layer_name)
+    return PartValidation(
+        part_key=part.part_key,
+        outcome=outcome,
+        reasons=tuple(reasons),
+        present_layers=present,
+        warnings=tuple(warnings),
+    )
+
+
+def _detected_yyyymm_warning(members: tuple[ManifestMember, ...]) -> str | None:
+    values = sorted({member.detected_yyyymm for member in members if member.detected_yyyymm})
+    if len(values) <= 1:
+        return None
+    return "member 기준월 혼재: " + ", ".join(values)
 
 
 def _expected_part_keys(group_kind: str) -> tuple[str, ...]:
@@ -303,6 +413,7 @@ def validate_group_manifest(manifest: GroupManifest) -> GroupValidation:
     by_key = {part.part_key: part for part in manifest.parts}
 
     layer_profile = LAYER_PROFILES.get(manifest.category)
+    single_layer_profile = SINGLE_LAYER_PROFILES.get(manifest.category)
     text_part_profile = TEXT_PART_PROFILES.get(manifest.category)
     single_profile = SINGLE_FILE_TEXT_PROFILES.get(manifest.category)
 
@@ -319,6 +430,8 @@ def validate_group_manifest(manifest: GroupManifest) -> GroupValidation:
             continue
         if layer_profile is not None:
             result = _validate_layer_part(part, layer_profile)
+        elif single_layer_profile is not None:
+            result = _validate_single_layer_part(part, single_layer_profile)
         elif manifest.group_kind == "multi_part" and text_part_profile is not None:
             result = _validate_text_part(part, text_part_profile)
         elif single_profile is not None:

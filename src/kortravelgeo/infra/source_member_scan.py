@@ -13,6 +13,7 @@ lines ~970-977): no GB-scale reads to validate structure.
 
 from __future__ import annotations
 
+import re
 import zipfile
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from kortravelgeo.core.source_validation import (
 )
 
 _SHP_SUFFIXES = {".shp", ".shx", ".dbf", ".prj"}
+_YYYYMM_RE = re.compile(r"(20\d{2})(0[1-9]|1[0-2])(?:\d{2})?")
 _KNOWN_LAYER_NAMES = tuple(
     sorted(
         {
@@ -59,9 +61,23 @@ def _member_names(archive: Path) -> list[str]:
         ]
     if zipfile.is_zipfile(archive):
         with zipfile.ZipFile(archive) as zf:
-            return [name for name in zf.namelist() if not name.endswith("/")]
+            return [
+                _decode_zip_member_name(info.filename, flag_bits=info.flag_bits)
+                for info in zf.infolist()
+                if not info.filename.endswith("/")
+            ]
     # 7z / other: caller supplies a pre-extracted dir; treat as the lone member.
     return [archive.name]
+
+
+def _decode_zip_member_name(name: str, *, flag_bits: int) -> str:
+    """Recover CP949 member names from legacy ZIPs when the UTF-8 flag is absent."""
+    if flag_bits & 0x800:
+        return name
+    try:
+        return name.encode("cp437").decode("cp949")
+    except UnicodeError:
+        return name
 
 
 def scan_part_manifest(archive: Path, *, part_key: str) -> PartManifest:
@@ -81,15 +97,23 @@ def scan_part_manifest(archive: Path, *, part_key: str) -> PartManifest:
         stem, _, ext = base.rpartition(".")
         suffix = f".{ext.lower()}" if ext else ""
         if suffix in _SHP_SUFFIXES and stem:
-            layers.setdefault(_canonical_layer_name(stem), set()).add(suffix)
+            layer = _canonical_layer_name(stem)
+            layers.setdefault(layer, set()).add(suffix)
         else:
-            files.append(ManifestMember(member_path=name, member_kind="file"))
+            files.append(
+                ManifestMember(
+                    member_path=name,
+                    member_kind="file",
+                    detected_yyyymm=_detect_yyyymm(base),
+                )
+            )
     members = [
         ManifestMember(
             member_path=f"{layer}.shp",
             member_kind="shp_layer",
             layer_name=layer,
             suffixes=frozenset(suffixes),
+            detected_yyyymm=_detect_yyyymm(layer),
         )
         for layer, suffixes in sorted(layers.items())
     ]
@@ -112,6 +136,13 @@ def _canonical_layer_name(stem: str) -> str:
                 return layer
             start = index + 1
     return upper
+
+
+def _detect_yyyymm(text: str) -> str | None:
+    match = _YYYYMM_RE.search(text)
+    if match is None:
+        return None
+    return "".join(match.groups())
 
 
 def _has_layer_token_boundary(text: str, start: int, end: int) -> bool:
