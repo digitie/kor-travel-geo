@@ -115,6 +115,8 @@ T-142 이후 reverse nearest runtime은 `mv_geocode_target.pt_5179` KNN 후보 C
 
 T-155 이후 psycopg server-side prepared statement threshold는 `pg_prepare_threshold` 설정으로 명시한다. 기본값은 psycopg 기본과 같은 `5`이며, SQL benchmark artifact는 run별 threshold와 `pg_prepared_statements` session-local snapshot을 남긴다. Session-local 검증은 `pool_size=1/max_overflow=0`에서 비교한다.
 
+T-156 이후 geocode/reverse hot-key 결과 캐시는 기존 `geo_cache` 테이블을 사용한다. 대상은 local OK geocode/reverse 결과이며, external fallback, search/keyword, geometry enrich 경로는 캐시하지 않는다. Cache hit는 v1 내부 응답에서 `source="cache"`로 표시하지만 v2 공개 source는 `local`로 접는다. `refresh_mv()`가 concurrent refresh와 shadow swap 성공 후 `geo_cache`를 삭제해 적재·MV swap 뒤 stale 결과가 남지 않게 한다.
+
 T-141부터 단발 benchmark 위에 SQL/REST workload matrix를 둔다. `steady`/`burst`/
 `recovery`/`soak` phase와 workload별 concurrency를 같은 corpus로 반복 실행하고, T-163은
 soak phase의 runner process RSS/CPU/`/proc/self/io` budget과 누수 판정식을

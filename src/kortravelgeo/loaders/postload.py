@@ -9,6 +9,7 @@ from typing import Any, Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.infra.cache import GeoCacheRepository
 from kortravelgeo.infra.sql import (
     MV_SQL,
     POSTLOAD_SQL,
@@ -55,6 +56,7 @@ async def refresh_mv(
         await rebuild_text_search_mv_next(engine)
         await shadow_swap_mv(engine)
         await refresh_region_radius_parts(engine)
+        await GeoCacheRepository(engine).clear()
         return
     statement = "REFRESH MATERIALIZED VIEW"
     if concurrently:
@@ -76,6 +78,7 @@ async def refresh_mv(
         await conn.execute(text("ANALYZE mv_geocode_target"))
         await conn.execute(text("ANALYZE mv_geocode_text_search"))
     await refresh_region_radius_parts(engine)
+    await GeoCacheRepository(engine).clear()
 
 
 async def refresh_region_radius_parts(engine: AsyncEngine) -> None:

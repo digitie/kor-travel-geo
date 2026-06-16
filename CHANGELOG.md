@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-156 geocode/reverse hot-key 결과 캐시를 추가했다. 기존 `geo_cache` 테이블을 v1/v2 geocode·reverse local OK 응답 경로에 연결하고, cache hit는 v1 `source="cache"`로 표시하되 v2 공개 source는 기존 결정대로 `local`로 유지한다. MV refresh concurrent/swap 성공 뒤 `geo_cache`를 비워 적재 후 stale 응답을 막는다.
 - T-155 psycopg prepared statement·plan cache 튜닝을 추가했다. `KTG_PG_PREPARE_THRESHOLD` / `Settings.pg_prepare_threshold`로 server-side prepared statement threshold를 명시하고, SQL benchmark는 `--prepare-threshold`/`--disable-prepared-statements`와 `prepared-statements-before/after.json` artifact를 제공한다. WSL smoke에서 기본 threshold `5`는 prepared count를 `0 -> 13`으로 늘리고 hot-query 전체 p95를 5.585ms에서 5.383ms로 낮췄다.
 - T-142 reverse-geocoder 공간 조회 최적화를 추가했다. Reverse nearest runtime은 `knn_candidates` CTE로 `pt_5179` KNN 후보를 먼저 추출한 뒤 `distance_m <= radius_m`으로 경계 포함 반경을 적용하고, Q6 reverse radius benchmark는 별도 `_RADIUS_SQL`로 `ST_DWithin` prefilter plan을 측정한다. 우편번호 point lookup은 `ST_Contains`에서 `ST_Covers`로 바꿔 polygon 경계 좌표를 포함한다.
 - T-265 perf benchmark artifact 등록·노출 백엔드를 추가했다(T-222 선행). `POST /v1/admin/ops/benchmark-artifacts`가 T-138/T-141/T-146 benchmark run을 `artifact_type="benchmark"` ops artifact로 등록하고, headline metrics(p50/p95/p99/max/error_rate/qps/samples)와 run_id·kind·workload·phase·baseline_artifact_id를 manifest에 보존한다. 무거운 run 데이터는 `storage_uri`로 참조만 한다. 기존 `GET /v1/admin/ops/artifacts?artifact_type=benchmark`로 조회한다. Admin UI(T-222)가 latest-vs-baseline p95/p99를 read-only로 노출할 데이터 소스다.
