@@ -13,6 +13,7 @@ from typing import Any, cast
 from fastapi import FastAPI, Request
 from fastapi.responses import ORJSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncEngine
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from kortravelgeo.api import _jobs
 from kortravelgeo.api.admission import (
@@ -40,6 +41,7 @@ from kortravelgeo.infra.metrics import (
     record_api_admission_started,
     record_api_admission_wait,
     record_api_request,
+    record_api_request_cancelled,
     record_api_request_finished,
     record_api_request_started,
     refresh_admin_metrics,
@@ -75,6 +77,8 @@ from .routers import admin, geocode, healthz, pobox, reverse, search, v2, zipcod
 _LOGGER = logging.getLogger(__name__)
 _PERFORMANCE_LOGGER = logging.getLogger("kortravelgeo.api.performance")
 _ADMISSION_RETRY_AFTER_SECONDS = "1"
+_CLIENT_CLOSED_STATUS_CODE = 499
+_CLIENT_DISCONNECT_CANCEL_PREFIXES = ("/v1/address/", "/v2/")
 
 
 @asynccontextmanager
@@ -118,6 +122,7 @@ def create_app() -> FastAPI:
     _install_admission_control(app, settings)
     install_geoip_gate(app, settings)
     _install_performance_monitoring(app, settings)
+    _install_client_disconnect_cancellation(app)
     app.include_router(healthz.router, prefix="/v1")
     app.include_router(geocode.router, prefix="/v1")
     app.include_router(reverse.router, prefix="/v1")
@@ -158,15 +163,22 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
         started = perf_counter()
         method = request.method
         status_code = 500
+        cancelled = False
         record_api_request_started(method=method)
         try:
             response = await call_next(request)
             status_code = response.status_code
             return response
+        except asyncio.CancelledError:
+            cancelled = True
+            status_code = _CLIENT_CLOSED_STATUS_CODE
+            raise
         finally:
             elapsed_s = perf_counter() - started
             elapsed_ms = elapsed_s * 1_000
             route = _route_template(request)
+            if cancelled:
+                record_api_request_cancelled(method=method, route=route)
             record_api_request(
                 method=method,
                 route=route,
@@ -177,7 +189,7 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
             record_api_request_finished(method=method)
             if settings.api_performance_logging_enabled:
                 _PERFORMANCE_LOGGER.info(
-                    "api_request",
+                    "api_request_cancelled" if cancelled else "api_request",
                     extra={
                         "method": method,
                         "route": route,
@@ -186,6 +198,74 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
                         "slow": elapsed_ms >= settings.api_slow_request_ms,
                     },
                 )
+
+
+class ClientDisconnectCancellationMiddleware:
+    """Cancel public address API work when the ASGI server reports disconnect."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not _cancels_on_client_disconnect(scope):
+            await self.app(scope, receive, send)
+            return
+
+        queue: asyncio.Queue[Message] = asyncio.Queue()
+        app_task: asyncio.Future[None] = asyncio.ensure_future(
+            self.app(scope, queue.get, send)
+        )
+        receive_task = asyncio.create_task(_pump_disconnect_aware_receive(receive, queue, app_task))
+        try:
+            done, _pending = await asyncio.wait(
+                {app_task, receive_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if app_task in done:
+                await app_task
+                return
+
+            exc = receive_task.exception()
+            if exc is not None:
+                app_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await app_task
+                raise exc
+
+            with suppress(asyncio.CancelledError):
+                await app_task
+        finally:
+            if not app_task.done():
+                app_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await app_task
+            if not receive_task.done():
+                receive_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await receive_task
+
+
+async def _pump_disconnect_aware_receive(
+    receive: Receive,
+    queue: asyncio.Queue[Message],
+    app_task: asyncio.Future[None],
+) -> None:
+    while True:
+        message = await receive()
+        if message["type"] == "http.disconnect":
+            app_task.cancel()
+            await queue.put(message)
+            return
+        await queue.put(message)
+
+
+def _install_client_disconnect_cancellation(app: FastAPI) -> None:
+    app.add_middleware(ClientDisconnectCancellationMiddleware)
+
+
+def _cancels_on_client_disconnect(scope: Scope) -> bool:
+    path = scope.get("path")
+    return isinstance(path, str) and path.startswith(_CLIENT_DISCONNECT_CANCEL_PREFIXES)
 
 
 def _route_template(request: Request) -> str:

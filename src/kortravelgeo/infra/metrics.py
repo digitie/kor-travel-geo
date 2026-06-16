@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 from time import perf_counter
@@ -103,6 +104,11 @@ API_REQUESTS_IN_PROGRESS = _gauge(
     "HTTP requests currently being handled by this API process.",
     ("method",),
 )
+API_REQUEST_CANCELLATIONS = _counter(
+    "kor_travel_geo_api_request_cancellations_total",
+    "HTTP requests cancelled by client disconnect or server-side task cancellation.",
+    ("method", "route"),
+)
 API_REQUEST_DURATION = _histogram(
     "kor_travel_geo_api_request_duration_seconds",
     "HTTP request duration by route template, method, and status code.",
@@ -162,6 +168,11 @@ DB_QUERIES = _counter(
     "kor_travel_geo_db_queries_total",
     "SQL queries executed by this API process by operation, fingerprint, and status.",
     ("operation", "query_fingerprint", "status"),
+)
+DB_QUERY_CANCELLATIONS = _counter(
+    "kor_travel_geo_db_query_cancellations_total",
+    "SQL queries cancelled by asyncio cancellation or PostgreSQL user cancellation.",
+    ("operation", "query_fingerprint"),
 )
 SOURCE_JANITOR_RUNS = _counter(
     "kor_travel_geo_source_janitor_runs_total",
@@ -287,6 +298,10 @@ def record_api_request_finished(*, method: str) -> None:
     API_REQUESTS_IN_PROGRESS.labels(method=method).dec()
 
 
+def record_api_request_cancelled(*, method: str, route: str) -> None:
+    API_REQUEST_CANCELLATIONS.labels(method=method, route=route).inc()
+
+
 def record_api_request(
     *,
     method: str,
@@ -376,6 +391,11 @@ def record_db_query(*, statement: str, elapsed_s: float, status: str) -> None:
         query_fingerprint=fingerprint,
         status=status,
     ).observe(max(0.0, elapsed_s))
+    if status == "cancelled":
+        DB_QUERY_CANCELLATIONS.labels(
+            operation=operation,
+            query_fingerprint=fingerprint,
+        ).inc()
 
 
 def record_source_janitor_run(*, outcome: str) -> None:
@@ -574,7 +594,7 @@ def install_db_query_metrics(engine: Any) -> None:
         _record_db_query_from_context(
             str(getattr(exception_context, "statement", "") or ""),
             getattr(exception_context, "execution_context", None),
-            status="error",
+            status=_db_query_status_from_exception(exception_context),
         )
 
 
@@ -583,6 +603,28 @@ def _record_db_query_from_context(statement: str, context: Any, *, status: str) 
     if not isinstance(started_at, float):
         return
     record_db_query(statement=statement, elapsed_s=perf_counter() - started_at, status=status)
+
+
+def _db_query_status_from_exception(exception_context: Any) -> str:
+    for attr in ("original_exception", "sqlalchemy_exception"):
+        exc = getattr(exception_context, attr, None)
+        if isinstance(exc, BaseException) and _is_cancelled_exception(exc):
+            return "cancelled"
+    return "error"
+
+
+def _is_cancelled_exception(exc: BaseException) -> bool:
+    if isinstance(exc, asyncio.CancelledError):
+        return True
+    exceptions = getattr(exc, "exceptions", None)
+    if isinstance(exceptions, tuple) and any(
+        isinstance(child, BaseException) and _is_cancelled_exception(child)
+        for child in exceptions
+    ):
+        return True
+    exc_name = exc.__class__.__name__.lower()
+    message = str(exc).lower()
+    return exc_name == "querycanceled" and "user request" in message
 
 
 def _normalize_stage_label(stage: str) -> str:

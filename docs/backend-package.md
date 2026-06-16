@@ -383,6 +383,16 @@ Prometheus 지표는 다음을 노출한다.
 - `kor_travel_geo_api_admission_rejections_total{method,route,scope}` counter
 - `kor_travel_geo_api_admission_in_progress{scope}` gauge
 
+### Client disconnect와 query cancellation
+
+공개 주소 API(`/v1/address/*`, `/v2/*`)는 ASGI `http.disconnect` 메시지를 감지하면 진행 중인 요청 task를 cancel한다. 이 범위는 대용량 admin upload body를 미리 읽지 않도록 주소 API로 제한한다. 취소는 `asyncio.CancelledError`로 내부 코루틴에 전파되며, 성능 middleware는 요청 metric을 `status_code=499`로 남기고 예외를 다시 raise한다.
+
+Prometheus 지표는 다음을 노출한다.
+
+- `kor_travel_geo_api_request_cancellations_total{method,route}` counter
+- `kor_travel_geo_db_query_cancellations_total{operation,query_fingerprint}` counter
+- 기존 `kor_travel_geo_db_queries_total`/`kor_travel_geo_db_query_duration_seconds`의 `status="cancelled"` label
+
 ### 라우터 — geocode
 
 ```python
