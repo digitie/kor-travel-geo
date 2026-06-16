@@ -497,6 +497,7 @@ def _api_case_for_corpus(case: CorpusCase) -> ApiCase | None:
                 "size": int(cast("int", params["limit"])),
                 **_api_region_hint_params(params),
             },
+            expected_status=None if case.sql_name == "search_fuzzy" else "OK",
         )
     if case.sql_name == "no_result_reverse":
         return None

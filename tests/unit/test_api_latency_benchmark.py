@@ -87,6 +87,7 @@ def test_build_api_cases_maps_geocode_addresses() -> None:
     assert cases[3].path == "/v1/address/search"
     assert cases[3].sql_name == "search_fuzzy"
     assert cases[3].params["query"] == "테헤란로임의불일치"
+    assert cases[3].expected_status is None
 
 
 def test_address_helpers_preserve_parseable_road_suffixes() -> None:
