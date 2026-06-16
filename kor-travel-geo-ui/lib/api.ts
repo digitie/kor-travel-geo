@@ -420,6 +420,26 @@ export type RestoreHotSwapRollbackResult = {
   message?: string | null;
 };
 
+export type RestoreRowCountDiff = {
+  object: string;
+  expected?: number | null;
+  actual: number;
+  match: boolean;
+};
+
+export type RestoreReconcileResult = {
+  ok: boolean;
+  target_database?: string | null;
+  row_count_diffs?: RestoreRowCountDiff[];
+  mv_geocode_target_rows?: number | null;
+  mv_geocode_text_search_rows?: number | null;
+  mv_nonempty_ok?: boolean | null;
+  sppn_rows?: number | null;
+  pt_source_distribution?: Record<string, number> | null;
+  source_set_yyyymm?: Record<string, string | null> | null;
+  warnings?: string[];
+};
+
 export type RestoreSourceVerificationResult = {
   entrypoint: "pg_restore" | "rename_hot_swap";
   run_quick_reconcile: boolean;
