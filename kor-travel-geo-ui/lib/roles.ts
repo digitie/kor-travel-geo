@@ -6,7 +6,7 @@
  * shown proactively next to high-risk actions so an operator knows the role they need
  * before attempting (and before hitting a 403).
  */
-export const ADMIN_ROLE_LABELS: Record<string, string> = {
+const ADMIN_ROLE_LABELS: Record<string, string> = {
   source_file_viewer: "원천 파일 조회",
   source_file_manager: "원천 파일 관리",
   rebuild_operator: "DB 재구성 운영",

@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-153 최종 안정화 acceptance)
+
+**작업**: Agent A 성능·정확도 트랙과 Agent B Admin UI·백업/복원 트랙을 `docs/t153-final-stabilization-acceptance.md`로 묶었다. Golden corpus, C1~C17, SQL/REST c64 budget, Admin UI Playwright, 백업/복원 round-trip·fault injection·hot-swap, React Doctor, OpenAPI/typegen drift를 같은 수락 표로 정리했다.
+
+**결정**: T-153은 "새 release blocker 없음"으로 완료한다. C1~C10 `ERROR`는 T-213 r3 force promotion의 known source-quality 상태로 유지하고, C11 active serving promotion은 T-137 결론대로 금지한다. 실제 60분 live soak, N150/Odroid 실측, T-219 published contract 정합, T-105 audit 이후 ADR-060 반영 backlog는 T-153 blocker가 아니라 별도 잔여다. 사용자 지시에 따라 T-246은 acceptance 근거로만 인용하고 추가 작업·추가 리뷰는 하지 않는다.
+
+**검증/문서**: React Doctor hard error 3건(`JobProgress` prop-state sync, `MatchSetComparePanel` query result 구독, `useModalA11y` dependency)을 정리했다. WSL ext4 미러에서 backend pytest 997 passed/69 skipped, Ruff, mypy, import-linter, OpenAPI check, frontend `gen:types`/lint/type-check/unit 110/build를 통과했다. React Doctor는 `ok=true`, warning 16, error 0이며 생성 타입 drift는 0이다.
+
 ## 2026-06-16 (T-127 optional source 구조 validator 강화)
 
 **작업**: `core.source_validation`에 optional single-file category 6종(`detail_address_db_full`, `national_point_grid_shape`, `national_point_grid_center`, `civil_service_institution_map`, `address_db_full`, `building_db_full`)의 상세 구조 profile을 추가했다. `infra.source_member_scan`은 UTF-8 flag가 없는 legacy ZIP member name을 CP949로 복원하고, member filename에서 기준월을 감지한다. `national_point_grid_center` catalog의 `expected_member_kinds`는 실제 `SPPN_*.TXT` 원천에 맞춰 `grid_center_txt`로 정정했다.

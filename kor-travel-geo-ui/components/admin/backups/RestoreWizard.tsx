@@ -120,7 +120,7 @@ export function RestoreWizard({
 
   return (
     <Panel title="복원 위저드">
-      <ol className="wizard-steps" role="list">
+      <ol className="wizard-steps">
         {([1, 2, 3, 4] as WizardStep[]).map((n) => (
           <li className={n === step ? "wizard-step active" : "wizard-step"} key={n}>
             {STEP_LABELS[n]}

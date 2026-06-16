@@ -42,7 +42,7 @@
    - Agent A(Codex): `T-129` → `T-130` → `T-131` → `T-132` → `T-133` → `T-134` → `T-137`로 C11 후속 gate를 닫았고, 결론은 validation-only 고정이다. `T-138`도 read-heavy baseline 재측정과 harness 보정으로 완료했고, `T-140`/`T-141`으로 golden corpus와 고부하 matrix 기반을 추가했다. `T-166`~`T-170`은 v2/국가지점번호 low-risk 정확도 보강으로 먼저 완료했다. 남은 Agent A 작업은 아래 "Agent A 재정렬 실행 순서"를 따른다. `T-139`는 T-138/T-146 이후 목표 미달일 때만 별도 변경 DB 실험으로 착수한다.
    - Agent B(Claude Code): Admin UI는 전부 T-2xx로 옮겼다 — `T-220` → `T-221`로 실제 활용 파일과 Admin UI 상태 표시를 맞추고(과거 T-135/T-136), `T-222`~`T-227`로 기능·편의성·Playwright e2e를 보강한다(과거 T-147~T-152). 신규 백업/복원 Admin UI·e2e(`T-248`~`T-258`)와 source-files 단계별 e2e(`T-259`~`T-263`)도 B가 맡는다. T-138/T-144/T-169에서 API 계약·v2 enum을 바꾸면 Agent B가 UI typegen/e2e 반영을 병행한다.
    - Agent A+B(백엔드 백업/복원): `T-228`~`T-247`의 백업/복원 기능·검증·hot-swap·통합 테스트·benchmark는 Claude가 도메인을 주도하고(B), `pg_terminate_backend`·restore-drill 등 부하·DB 작업은 Codex(A)와 시간대 조율한다(A+B).
-   - Agent A+B: `T-153`에서 두 트랙(A 성능·정확도 `T-138`/`T-140`~`T-146`/`T-154`~`T-176`, B Admin UI·백업/복원 `T-220`~`T-263`)의 결과를 같은 benchmark/e2e/문서 gate로 묶어 최종 안정화 acceptance를 수행한다.
+   - Agent A+B: `T-153`에서 두 트랙(A 성능·정확도 `T-138`/`T-140`~`T-146`/`T-154`~`T-176`, B Admin UI·백업/복원 `T-220`~`T-263`)의 결과를 같은 benchmark/e2e/문서 gate로 묶어 최종 안정화 acceptance를 수행했다.
 
 ### ① 데이터 원천 보강·C11 후속 검증 (T-110~, phase 1 · T-1xx)
 
@@ -63,12 +63,12 @@
 5. **쿼리·공간 최적화**: 완료. `T-143`/`T-142`/`T-155`/`T-156`으로 geocode/search plan, reverse 공간 조회 분리 측정, prepared statement threshold, hot-key result cache를 닫았다.
 6. **운영 maintenance·API 계약**: 완료. `T-146`/`T-162`/`T-144`로 post-load maintenance, runtime warm, 성능 우선 v2 계약 기준을 닫았다. 실제 이득이 확인된 새 계약 변경만 ADR/OpenAPI/UI typegen 범위로 올린다.
 7. **백업/복원 Agent A 몫**: `T-238`/`T-245`/`T-247` 완료. Agent A 주도 백업/복원 벤치마크까지 닫았다.
-8. **통합 gate**: `T-153`. Agent B의 `T-220`~`T-263` 결과와 함께 최종 안정화 acceptance를 닫는다.
+8. **통합 gate**: 완료. `T-153`으로 Agent B의 `T-220`~`T-263` 결과와 함께 최종 안정화 acceptance를 닫았다.
 
 - T-139 DB 구조 변경 실험 DB 비교 및 최적안 정리 — T-138의 index/MV/API 튜닝으로 충분히 빠르지 않을 때만 진행한다. 현 DB(`kor_travel_geo_t213_20260615_r3`)와 같은 원천/같은 commit/같은 benchmark corpus로 별도 변경 DB를 만들고, 더 과격한 구조 변경안을 실험한다. 후보는 read 전용 projection table, `mv_geocode_target`/`mv_geocode_text_search` 재분해, 주소 검색 전용 pre-tokenized table, geometry/point 분리, partitioning/clustered layout, key별 denormalized lookup table, 대형 polygon 검증 table과 serving table 분리, API 응답에 맞춘 pre-shaped serving table 등이다. 각 변경 DB는 load/rebuild/MV refresh 시간, storage/index size, backup/restore size, SQL/REST latency, consistency count, API 응답 hash 또는 새 계약의 golden response, 운영 rollback 난이도를 현 DB와 같은 표로 비교한다. 최종 산출물은 `docs/t139-db-structure-comparison.md`와 "현 구조 유지 / additive 튜닝만 적용 / API 계약 변경 포함 / 구조 변경 PR 분리" 중 하나의 권고안이며, 실제 migration은 별도 후속 Task로 다시 쪼갠다. (의존: T-138 목표 미달)
 ### 최종 안정화 acceptance (A+B)
 
-- T-153 geocoder/Admin UI/백업 최종 안정화 acceptance (**번호 규칙 예외**: T-1xx·T-2xx 두 트랙을 묶는 통합 capstone이라 어느 한 범위에도 속하지 않는 의도된 예외 ID다 — 새 acceptance task는 트랙별로 T-1xx/T-2xx에 만든다) — Agent A 성능·정확도 트랙(T-138·T-140~T-146·T-154~T-176)과 Agent B Admin UI·백업/복원 트랙(T-220~T-263)을 하나의 최종 gate로 묶는다. 산출물은 golden corpus 통과율, C1~C17 상태, SQL/REST p95/p99/error budget, soak 안정성, API 계약 변경 목록, Admin UI Playwright 결과, 백업/복원 round-trip·restore-drill 결과, React Doctor, OpenAPI/typegen drift, 운영 runbook 갱신 여부를 한 문서에 정리한다. gate 미달 항목은 release blocker와 후속 Task로 분리한다. (Agent A+B, 의존: T-140~T-176, T-220~T-263)
+대기 항목 없음. T-153은 완료 섹션으로 이동했다.
 
 ### ② 데이터 적재/백업/복원 + Admin UI (T-200~ · T-2xx · phase 2 — T-109 설계 구현)
 
@@ -80,8 +80,8 @@
 
 1. **백업/복원 e2e 마무리**(T-255 `backups.spec.ts` mock-fixture 하네스 재사용): ~~`T-256`(복원 위저드 e2e)~~ ✅ → ~~`T-257`(hot-swap e2e)~~ ✅ → ~~`T-258`(접근성·회복성 e2e)~~ ✅ — **섹션 1 완료**.
 2. **source-files e2e 기반·단계별**: ~~`T-225`(fixture harness)~~ ✅ → ~~`T-259`(업로드 적재)~~ ✅ → ~~`T-260`(대기·재개·409 충돌)~~ ✅ → ~~`T-261`(구조 검증)~~ ✅ → ~~`T-262`(매칭 세트)~~ ✅ → ~~`T-263`(DB 입력)~~ ✅ — **섹션 2 완료**. (harness: `tests/e2e/fixtures/source-files.ts`, `installSourceFilesMock`)
-3. **Admin UI 기능·편의·접근성**: ~~`T-265`(benchmark artifact 백엔드)~~ ✅ → ~~`T-222`(성능·C1~C17 검증 artifact read-only 노출)~~ ✅ → ~~`T-226`(운영 편의 기능 보강; 4개 분할 PR)~~ ✅ → ~~`T-227`(기존 표면 `/admin/source-files`·`/admin/consistency`·`/admin/ops` 접근성·회복성 e2e)~~ ✅ — **섹션 3 완료**. *(사용자 지시 2026-06-16: benchmark artifact가 API 미노출이라 T-222 선행으로 백엔드 등록 엔드포인트 T-265를 먼저 구현.)* → 백업/복원 잔여 `T-246`(hot-swap round-trip)도 ✅ 완료. **남은 Agent B 독립 작업 없음**: `T-153`(최종 acceptance; A 성능·정확도 트랙 완료에 의존)만 남는다.
-4. **통합 gate**: `T-153`(Agent A 성능·정확도 트랙과 함께 최종 안정화 acceptance) — 양 트랙 완료 후.
+3. **Admin UI 기능·편의·접근성**: ~~`T-265`(benchmark artifact 백엔드)~~ ✅ → ~~`T-222`(성능·C1~C17 검증 artifact read-only 노출)~~ ✅ → ~~`T-226`(운영 편의 기능 보강; 4개 분할 PR)~~ ✅ → ~~`T-227`(기존 표면 `/admin/source-files`·`/admin/consistency`·`/admin/ops` 접근성·회복성 e2e)~~ ✅ — **섹션 3 완료**. *(사용자 지시 2026-06-16: benchmark artifact가 API 미노출이라 T-222 선행으로 백엔드 등록 엔드포인트 T-265를 먼저 구현.)* → 백업/복원 잔여 `T-246`(hot-swap round-trip)도 ✅ 완료.
+4. **통합 gate**: ~~`T-153`(Agent A 성능·정확도 트랙과 함께 최종 안정화 acceptance)~~ ✅ — 양 트랙 결과를 `docs/t153-final-stabilization-acceptance.md`로 묶어 완료했다.
 
 > Agent A 주도 백엔드 백업/복원 잔여(`T-238`/`T-245`/`T-247`)는 완료됐다. ~~`T-246`(hot-swap·rollback round-trip 통합)~~ ✅ — B의 `T-241`/`T-264` 위에서 Claude가 작성하고 로컬 Docker PostGIS(15434, PG 16.9)에서 라이브로 3케이스 검증 완료.
 
@@ -118,6 +118,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] **T-153 완료** geocoder/Admin UI/백업 최종 안정화 acceptance(Agent A+B). Agent A 성능·정확도 트랙(T-138, T-140~T-146, T-154~T-176)과 Agent B Admin UI·백업/복원 트랙(T-220~T-263), 백업/복원 A/B 교차 항목(T-238/T-245/T-247/T-246)을 `docs/t153-final-stabilization-acceptance.md`로 묶어 수락했다. Golden corpus fixture 25/25, C1~C17 상태, SQL/REST c64 budget, Admin UI Playwright 결과, 백업/복원 round-trip·fault injection·hot-swap 결과, React Doctor, OpenAPI/typegen drift를 함께 정리했다. 새 release blocker는 없고, T-119/C11 active promotion, 실제 60분 live soak, T-063 N150/Odroid 실측, T-219 published contract 정합, T-105 audit 이후 ADR-060 반영 backlog는 별도 잔여로 남긴다. (2026-06-16)
 - [x] **T-105 audit 완료** v2 API 재audit(Agent B/Claude). `docs/api-reference/v2/conventions.md`(신규)와 **ADR-060**으로 v2 표면을 8개 차원으로 재감사했다 — (1) envelope 일관(`regions/within-radius`만 `status`/`query_id`/`input` 없음), (2) 후보 enum producer 추적(`match_kind=detail`·`point_precision` exact/interpolated/approximate 미emit=T-169 예약값; `source` vworld/juso는 fallback 전용 조건부 live; `keyword`는 near-dead), (3) 페이지네이션 3종 혼재(limit / page+total / 그룹배열), (4) v2 전용 error 모델 부재(성공/에러 envelope 분기·trace 단절), (5) `include_geometry`/`bbox` endpoint 간 비대칭, (6) 출력 `{x,y}` vs 입력 `lon/lat`·반경 `_m`/`_km` 단위, (7) POST 고정·버전/service 메타, (8) typegen 정합. 각 차원에 **현재→문제→목표 컨벤션→변경 성격(breaking/additive/doc)**을 기록하고 ADR-060이 적용 순서(additive·doc → enum 정직화 → envelope+error → 좌표 lon/lat)를 고정했다. **문서·ADR만 추가(코드/openapi/typegen 변경 0).** 반영 backlog=#308(#305 합류). enum producer 추적은 service 레이어(`core/v2.py`·`infra/geometry_repo.py`·`client.py`) 실증. (2026-06-16)
 - [x] T-127 optional source 구조 validator 강화(Agent A/Codex). `detail_address_db_full`, `national_point_grid_shape`, `national_point_grid_center`, `civil_service_institution_map`, `address_db_full`, `building_db_full`의 single-file archive member naming, 필수 TXT/SHP layer, `.shp/.shx/.dbf` sidecar, 기준월 혼재 warning profile을 추가했다. Legacy ZIP의 CP949 member name을 복원해 한글 파일명 원천도 검증하며, 실제 보존 원천 smoke는 `national_point_grid_shape`만 `.prj` 없음 `warning`, 나머지 5개는 `passed`로 고정했다. 상세: `docs/t127-optional-source-validator.md`. (2026-06-16)
 - [x] **T-219 부분 완료** (M5 + M1 wire-shape 회귀) v1 VWorld 검증 커버리지(Agent B/Claude). T-106 #189 적대적 리뷰의 M5(미테스트 라이브 분기)를 `tests/unit/test_v1_vworld_compat.py`에 DB-free로 닫았다(4→19 테스트) — reverse `simple`(input+각 `result[].type` 제거), geocode `refine=false`(refined만 제거·input 유지), 도메인 에러 4종(`INVALID_RANGE`/`INVALID_TYPE`/`OVER_REQUEST_LIMIT`/`SYSTEM_ERROR` 코드·레벨·text=message), 검증 에러 템플릿 `<param>` 보간(range/type), `NOT_FOUND` 200 success envelope(error 없음), geocode `PARCEL` input casing + reverse `PARCEL` result casing, M1 대표 success body **contract-shape 회귀**(default/simple/reverse present·absent 키셋) + openapi v1 path 게시 확인. **wire 변경 0**(테스트만, `responses.py`·라우터 무변경) → openapi drift 0·ruff 통과·v1 19 passed. **잔여 분리**: M2/M3(openapi/typegen 정합, Codex 조율)=#304, M4(전역 RequestValidationError 핸들러 범위)=#305 — M4는 단순 "v2 422 복원"이 T-173(input safety; v2 구조화 4xx를 의도적으로 단언)을 회귀시킴을 구현 중 확인해 ADR 선행으로 분리. (2026-06-16)

@@ -52,6 +52,7 @@ const initialBackupsPanelState: BackupsPanelState = {
 };
 
 export type BackupsTabId = "overview" | "backup" | "restore" | "hotswap" | "jobs";
+type BackupWorkflowStep = { title: string; hint: string; tab?: BackupsTabId };
 
 const BACKUPS_TABS: { id: BackupsTabId; label: string }[] = [
   { id: "overview", label: "개요" },
@@ -59,6 +60,26 @@ const BACKUPS_TABS: { id: BackupsTabId; label: string }[] = [
   { id: "restore", label: "복원" },
   { id: "hotswap", label: "Hot-swap" },
   { id: "jobs", label: "작업" }
+];
+const BACKUP_WORKFLOW_STEPS: BackupWorkflowStep[] = [
+  {
+    title: "1. 백업 생성",
+    hint: "[백업] 탭에서 profile·destination·압축 레벨을 골라 백업을 시작합니다.",
+    tab: "backup"
+  },
+  {
+    title: "2. 무결성 검증",
+    hint: "`ktgctl backup verify <id> --deep` 로 archive 손상(bit rot)을 복원 전에 확인합니다."
+  },
+  {
+    title: "3. 복원 드릴",
+    hint: "`ktgctl backup restore-drill --artifact-id <id>` 로 throwaway DB에 복원해 PASS/FAIL을 점검합니다."
+  },
+  {
+    title: "4. 복원 / Hot-swap",
+    hint: "[복원]에서 new_database로 복원하고, 운영 교체는 [Hot-swap]에서 maintenance window + typed confirmation으로 진행합니다.",
+    tab: "restore"
+  }
 ];
 
 export function BackupsPanel({ initialTab = "overview" }: { initialTab?: BackupsTabId }) {
@@ -185,27 +206,6 @@ function BackupsWorkflowGuide({
         ? `진행 중인 백업/복원 작업 ${runningCount}개 — [작업] 탭에서 진행률을 확인하세요.`
         : `사용 가능한 백업 ${availableCount}개 — 검증·복원 드릴로 복원 가능성을 정기 점검하세요.`;
 
-  const steps: { title: string; hint: string; tab?: BackupsTabId }[] = [
-    {
-      title: "1. 백업 생성",
-      hint: "[백업] 탭에서 profile·destination·압축 레벨을 골라 백업을 시작합니다.",
-      tab: "backup"
-    },
-    {
-      title: "2. 무결성 검증",
-      hint: "`ktgctl backup verify <id> --deep` 로 archive 손상(bit rot)을 복원 전에 확인합니다."
-    },
-    {
-      title: "3. 복원 드릴",
-      hint: "`ktgctl backup restore-drill --artifact-id <id>` 로 throwaway DB에 복원해 PASS/FAIL을 점검합니다."
-    },
-    {
-      title: "4. 복원 / Hot-swap",
-      hint: "[복원]에서 new_database로 복원하고, 운영 교체는 [Hot-swap]에서 maintenance window + typed confirmation으로 진행합니다.",
-      tab: "restore"
-    }
-  ];
-
   return (
     <Panel
       title="백업/복원 다음 액션"
@@ -218,7 +218,7 @@ function BackupsWorkflowGuide({
     >
       <p className="backups-next-action">{nextAction}</p>
       <ol className="backups-guide">
-        {steps.map((step) => (
+        {BACKUP_WORKFLOW_STEPS.map((step) => (
           <li key={step.title}>
             <div className="backups-guide-step">
               <strong>{step.title}</strong>

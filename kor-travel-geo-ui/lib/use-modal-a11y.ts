@@ -33,9 +33,7 @@ export function useModalA11y({
     return () => {
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
-    // Mount === open; refs are stable, so this intentionally runs once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [dialogRef, initialFocusRef]);
 
   // Escape closes; Tab is trapped within the dialog.
   useEffect(() => {

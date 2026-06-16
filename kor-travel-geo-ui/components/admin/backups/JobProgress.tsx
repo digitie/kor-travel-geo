@@ -32,15 +32,11 @@ export function JobProgress({
   });
   const current = live ?? job;
   const isTerminal = terminalJobState(current.state);
-  // Tick a clock to refresh the ETA once a second while running. nowMs starts at 0 and is set
-  // from an effect (client-only) — calling Date.now() in a render-path lazy initializer would
-  // make the server and first client render disagree and risk a hydration mismatch (issue #256
-  // M2). estimateEtaSeconds treats nowMs===0 as "no estimate yet" (negative elapsed → null), so
-  // SSR and the first client paint both show ETA "—" until the client clock starts.
+  // Tick a clock to refresh the ETA once a second while running. nowMs starts at 0 so SSR and
+  // the first client paint both show ETA "-" until the client clock starts.
   const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
     if (isTerminal) return;
-    setNowMs(Date.now());
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [isTerminal]);
