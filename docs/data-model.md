@@ -996,8 +996,8 @@ CREATE INDEX idx_sppn_makarea_sig
 | `geom` | EPSG:5179 MultiPolygon. reverse geocode 포함 여부 판단에 사용 |
 | `source_file`, `source_yyyymm`, `loaded_at` | 원천 추적과 기준월 정합성 기록 |
 
-reverse geocode 쿼리는 입력 좌표를 한 번만 5179로 변환하고 `ST_Covers(m.geom, p.geom)`로 GiST index를 타게 한다. 경계 위 좌표를 놓치지 않기 위해 `ST_Contains`보다 `ST_Covers`를 우선한다. 여러 구역에 포함되면 면적이 작은 polygon을 우선한다. 응답은 vworld 호환 주소 후보를 오염시키지 않고 `ReverseResponse.x_extension.sppn_makarea` 배열에 담는다.
+reverse geocode 쿼리는 입력 좌표를 한 번만 5179로 변환하고 `ST_Covers(m.geom, p.geom)`로 GiST index를 타게 한다. 경계 위 좌표를 놓치지 않기 위해 `ST_Contains`보다 `ST_Covers`를 우선한다. 여러 구역에 포함되면 면적이 작은 polygon을 우선한다. T-168 이후 reverse는 같은 5179 계산점에서 국가지점번호 문자열도 만들어 `ReverseResponse.x_extension.national_point_number`에 담는다. 표기 의무지역 문맥은 vworld 호환 주소 후보를 오염시키지 않고 `ReverseResponse.x_extension.sppn_makarea` 배열에 담는다.
 
-geocode에서 국가지점번호 문자열은 `core.sppn` parser가 EPSG:5179 10m cell 중심을 계산한다. `tl_sppn_makarea`는 계산된 point가 표기 의무지역에 속하는지 검증하고, `MAKAREA_NM` 같은 문맥을 `GeocodeResponse.x_extension.sppn_makarea`에 붙이는 역할을 맡는다. 좌표에서 국가지점번호 문자열을 만드는 formatter도 제공해 실제 polygon 내부 점 기반 테스트와 향후 UI 표시를 지원한다. 구역명만으로 좌표를 반환하는 기능은 주소 geocode가 아니라 구역 검색이므로, 도입한다면 낮은 confidence centroid/bbox 결과로 분리한다.
+geocode에서 국가지점번호 문자열은 `core.sppn` parser가 EPSG:5179 10m cell 중심을 계산한다. T-166 이후 `tl_sppn_makarea`는 계산된 point가 표기 의무지역에 속하지 않더라도 좌표 반환을 막지 않는다. 좌표는 계산점 자체를 EPSG:4326으로 투영해 반환하고, `tl_sppn_makarea`가 있으면 `MAKAREA_NM` 같은 문맥을 `GeocodeResponse.x_extension.sppn_makarea`에 붙인다. 좌표에서 국가지점번호 문자열을 만드는 formatter도 제공해 실제 polygon 내부 점 기반 테스트와 향후 UI 표시를 지원한다. T-167 이후 parser/formatter는 한국 SPPN 지원 envelope 밖 grid code를 거절한다. 구역명만으로 좌표를 반환하는 기능은 주소 geocode가 아니라 구역 검색이므로, 도입한다면 낮은 confidence centroid/bbox 결과로 분리한다.
 
 T-042 실제 검증은 세종 `구역의 도형` ZIP으로 수행했다. Docker PostGIS `kor_travel_geo_t042_sppn`에 146행을 적재했고, 146개 key가 모두 distinct이며 모든 geometry가 valid `MultiPolygon`임을 확인했다. `금이산` polygon 내부 점은 formatter 결과 `다바 7363 4856`으로 변환됐고, geocode/reverse 보조 조회가 같은 `sppn_makarea` 문맥을 반환했다. 상세 실행 로그와 시스템 상태는 `docs/t042-sppn-makarea.md`에 둔다.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from kortravelgeo.dto.address import AddressStructure, RefinedAddress
+from kortravelgeo.dto.common import Point
 from kortravelgeo.dto.geocode import (
     GeocodeExtension,
     GeocodeInput,
@@ -62,7 +63,8 @@ def _sppn_context(area: SppnAreaLookup) -> SppnMakareaContext:
 def _response_from_sppn(
     inp: GeocodeInput,
     sppn: NationalPointNumber,
-    area: SppnAreaLookup,
+    point_4326: Point,
+    area: SppnAreaLookup | None,
 ) -> GeocodeResponse:
     return GeocodeResponse(
         service=service_meta("geocode"),
@@ -72,12 +74,12 @@ def _response_from_sppn(
             text=f"국가지점번호 {sppn.text}",
             structure=AddressStructure(),
         ),
-        result=GeocodeResult(crs="EPSG:4326", point=area.point) if area.point else None,
+        result=GeocodeResult(crs="EPSG:4326", point=point_4326),
         x_extension=GeocodeExtension(
             source="local",
             confidence=0.72,
             national_point_number=sppn.text,
-            sppn_makarea=_sppn_context(area),
+            sppn_makarea=_sppn_context(area) if area is not None else None,
         ),
     )
 
@@ -91,9 +93,12 @@ async def geocode(
     sppn = parse_national_point_number(inp.address)
     if sppn is not None:
         area = await repo.lookup_sppn_area(sppn.point_5179)
-        if area is None:
+        point_4326 = area.point if area is not None and area.point else None
+        if point_4326 is None:
+            point_4326 = await repo.project_sppn_point_4326(sppn.point_5179)
+        if point_4326 is None:
             return GeocodeResponse(service=service_meta("geocode"), status="NOT_FOUND", input=inp)
-        return _response_from_sppn(inp, sppn, area)
+        return _response_from_sppn(inp, sppn, point_4326, area)
 
     parts = parse_address(inp.address)
     row: AddressLookup | None

@@ -28,6 +28,11 @@ def test_parse_national_point_number_rejects_embedded_address_text() -> None:
     assert parse_national_point_number("다사 692 4045") is None
 
 
+def test_parse_national_point_number_rejects_outside_korea_grid_envelope() -> None:
+    assert parse_national_point_number("가가 0000 0000") is None
+    assert parse_national_point_number("하하 9999 9999") is None
+
+
 def test_format_national_point_number_from_epsg5179_round_trips_cell() -> None:
     formatted = format_national_point_number_from_5179(Point(x=969258.1, y=1940457.9))
 
@@ -66,6 +71,10 @@ class _SppnGeocodeRepo:
             point=Point(x=127.1, y=36.6),
         )
 
+    async def project_sppn_point_4326(self, point_5179: Point) -> Point | None:
+        _ = point_5179
+        return Point(x=127.1, y=36.6)
+
 
 async def test_geocode_enriches_national_point_number_with_makarea_context() -> None:
     response = await geocode(_SppnGeocodeRepo(), GeocodeInput(address="다사 6925 4045"))
@@ -77,6 +86,27 @@ async def test_geocode_enriches_national_point_number_with_makarea_context() -> 
     assert response.x_extension.national_point_number == "다사 6925 4045"
     assert response.x_extension.sppn_makarea is not None
     assert response.x_extension.sppn_makarea.makarea_nm == "운주산"
+
+
+class _SppnNoMakareaGeocodeRepo(_SppnGeocodeRepo):
+    async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None:
+        _ = point_5179
+        return None
+
+    async def project_sppn_point_4326(self, point_5179: Point) -> Point | None:
+        assert point_5179.x == pytest.approx(969255)
+        return Point(x=127.101, y=36.601)
+
+
+async def test_geocode_returns_calculated_national_point_without_makarea_gate() -> None:
+    response = await geocode(_SppnNoMakareaGeocodeRepo(), GeocodeInput(address="다사 6925 4045"))
+
+    assert response.status == "OK"
+    assert response.result is not None
+    assert response.result.point == Point(x=127.101, y=36.601)
+    assert response.x_extension is not None
+    assert response.x_extension.national_point_number == "다사 6925 4045"
+    assert response.x_extension.sppn_makarea is None
 
 
 class _SppnReverseRepo:
@@ -110,6 +140,10 @@ class _SppnReverseRepo:
             )
         ]
 
+    async def project_reverse_point_5179(self, point: Point, *, crs: str) -> Point | None:
+        _ = (point, crs)
+        return Point(x=969255, y=1940455)
+
 
 async def test_reverse_returns_ok_when_only_sppn_area_matches() -> None:
     response = await reverse_geocode(
@@ -120,4 +154,30 @@ async def test_reverse_returns_ok_when_only_sppn_area_matches() -> None:
     assert response.status == "OK"
     assert response.result == ()
     assert response.x_extension is not None
+    assert response.x_extension.national_point_number == "다사 6925 4045"
     assert response.x_extension.sppn_makarea[0].makarea_id == "17"
+
+
+class _SppnNoMakareaReverseRepo(_SppnReverseRepo):
+    async def sppn_areas(
+        self,
+        point: Point,
+        *,
+        crs: str,
+        limit: int = 5,
+    ) -> list[SppnAreaLookup]:
+        _ = (point, crs, limit)
+        return []
+
+
+async def test_reverse_returns_national_point_number_without_makarea_context() -> None:
+    response = await reverse_geocode(
+        _SppnNoMakareaReverseRepo(),
+        ReverseInput(point=Point(x=127.1, y=36.6)),
+    )
+
+    assert response.status == "OK"
+    assert response.result == ()
+    assert response.x_extension is not None
+    assert response.x_extension.national_point_number == "다사 6925 4045"
+    assert response.x_extension.sppn_makarea == ()

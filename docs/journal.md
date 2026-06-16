@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-166~T-168 국가지점번호 계산 좌표 first-class 노출)
+
+**작업**: 국가지점번호 forward geocode의 `TL_SPPN_MAKAREA` gate를 제거했다. 유효한 국가지점번호 문자열이면 `core.sppn` 계산식으로 EPSG:5179 10m cell 중심을 만들고, PostGIS 투영 helper로 EPSG:4326 좌표를 반환한다. `TL_SPPN_MAKAREA`는 좌표 생성 조건이 아니라 `x_extension.sppn_makarea` enrich로만 남긴다.
+
+**보강**: `core.sppn` parser/formatter에 한국 SPPN 지원 envelope를 추가해 명백한 바다·국경 밖 grid code를 거절한다. reverse geocode는 입력 좌표를 EPSG:5179로 투영한 뒤 formatter를 배선해 `x_extension.national_point_number`를 반환하고, v2 reverse는 makarea가 없어도 `match_kind="sppn"` 후보를 노출한다.
+
+**문서/검증**: 상세는 `docs/t166-t168-sppn-first-class.md`에 정리했다. 단위 테스트는 forward makarea 없음, reverse makarea 없음, envelope 거절, v2 후보 metadata, SPPN 투영 SQL을 추가했다. DTO 변경이 있으므로 OpenAPI와 UI 생성 타입을 갱신한다.
+
 ## 2026-06-16 (T-141 SQL/REST 고부하 benchmark matrix)
 
 **작업**: T-047/T-138 단발 SQL/REST benchmark를 운영형 matrix로 묶는 `scripts/run_t141_load_matrix.py`를 추가했다. workload는 `actual_mix`, `worst_case_mix`, `adversarial_fuzzy`, `reverse_polygon_heavy`로 나누고, phase는 steady/burst/recovery/soak, concurrency는 1/4/16/64/128/256을 지원한다. SQL은 pool checkout·DB execute·`pg_stat_statements` delta를, REST는 응답 크기와 admin summary endpoint를 함께 기록할 수 있다.

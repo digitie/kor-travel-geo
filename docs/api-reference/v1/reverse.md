@@ -30,7 +30,7 @@ HTTP 응답 최상위는 항상 `response`다.
 
 각 `result[]` 항목은 `text`, `type`, `structure`, `point`, `zipcode`, `distance_m`, `source`를 포함할 수 있다. HTTP 응답의 주소 유형은 `ROAD` 또는 `PARCEL` 대문자로 직렬화한다. `simple=true`이면 vworld와 같이 `response.input`을 생략하고 `result[]` 항목의 `type`도 생략한다.
 
-에러는 `response.status="ERROR"`와 `response.error.level/code/text`로 반환한다. 요청 검증 에러의 대표 code는 `PARAM_REQUIRED`, `INVALID_TYPE`, `INVALID_RANGE`다. 국가지점번호 표기 의무지역 보조 문맥은 vworld 원응답을 오염시키지 않도록 `response.x_extension.sppn_makarea`에만 둔다.
+에러는 `response.status="ERROR"`와 `response.error.level/code/text`로 반환한다. 요청 검증 에러의 대표 code는 `PARAM_REQUIRED`, `INVALID_TYPE`, `INVALID_RANGE`다. 국가지점번호 reverse code는 vworld 원응답을 오염시키지 않도록 `response.x_extension.national_point_number`에 둔다. 표기 의무지역 보조 문맥도 `response.x_extension.sppn_makarea`에만 둔다.
 
 ## 예시
 

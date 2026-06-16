@@ -4028,6 +4028,8 @@ export interface components {
         ResultSource: "local" | "api_juso" | "api_vworld" | "cache";
         /** ReverseExtension */
         ReverseExtension: {
+            /** National Point Number */
+            national_point_number?: string | null;
             /**
              * Sppn Makarea
              * @default []

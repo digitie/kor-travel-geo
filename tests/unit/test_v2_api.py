@@ -482,6 +482,7 @@ def test_reverse_v2_promotes_sppn_extension_to_candidate() -> None:
         status="OK",
         input=inp,
         x_extension=ReverseExtension(
+            national_point_number="다사 6925 4045",
             sppn_makarea=(
                 SppnMakareaContext(
                     sig_cd="36110",
@@ -503,4 +504,26 @@ def test_reverse_v2_promotes_sppn_extension_to_candidate() -> None:
     assert converted.candidates[0].match_kind == "sppn"
     assert converted.candidates[0].region is not None
     assert converted.candidates[0].region.sig_cd == "36110"
+    assert converted.candidates[0].metadata["national_point_number"] == "다사 6925 4045"
     assert converted.candidates[0].metadata["makarea_nm"] == "운주산"
+
+
+def test_reverse_v2_promotes_sppn_number_without_makarea_to_candidate() -> None:
+    inp = ReverseInput(point=Point(x=127.1, y=36.6), radius_m=200)
+    response = ReverseResponse(
+        service=ServiceMeta(name="kor-travel-geo", operation="reverse_geocode"),
+        status="OK",
+        input=inp,
+        x_extension=ReverseExtension(national_point_number="다사 6925 4045"),
+    )
+
+    converted = reverse_v2_from_v1(
+        inp=ReverseV2Input(lon=127.1, lat=36.6, radius_m=200),
+        response=response,
+    )
+
+    assert converted.status == "OK"
+    assert converted.candidates[0].match_kind == "sppn"
+    assert converted.candidates[0].point == Point(x=127.1, y=36.6)
+    assert converted.candidates[0].point_precision == "approximate"
+    assert converted.candidates[0].metadata == {"national_point_number": "다사 6925 4045"}
