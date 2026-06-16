@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-133 C11 shadow serving 성능·rollback 리허설)
+
+**작업**: `scripts/run_t133_c11_shadow_serving_rehearsal.py`를 추가해 T-132 guarded C11 정책을 active serving으로 승격하지 않고 `_ktg_t133_shadow` schema의 shadow `mv_geocode_target`/`mv_geocode_text_search`로 리허설했다. shadow REST 서버용 `KTG_PG_SEARCH_PATH` 설정도 추가했다(기본값은 기존과 같은 `public,x_extension`).
+
+**결과**: flag off public identity는 전후 동일했다(`mv_geocode_target=6,419,795`, point rows `6,404,343`, text-search rows `6,419,795`, sample hash `98b0cc91c67176575a87ddd856156d8d`, active release `54e17e80-312e-46da-a58f-d8b10be37c85`). shadow row count도 public과 같고 guarded C11 적용 row는 3,482,270건이었다.
+
+**Gate**: rollback과 cleanup은 통과했다(`_ktg_t133_shadow` drop, `_ktg_t125_*`/`_ktg_t131_*` 잔존 0). 하지만 SQL/REST p95 성능 gate는 실패했다. 최종 summary 기준 SQL max p95 regression은 83.087%, REST(T-216 c64-425 baseline 대비) max p95 regression은 132.447%다. 오류 row는 0건이므로 correctness 문제가 아니라 shadow search path/table 경로의 latency 회귀다. 따라서 active serving promotion은 계속 금지한다. 상세와 artifact는 `docs/t133-c11-shadow-serving-rehearsal.md`, `F:\dev\geodata\t133-c11-shadow-serving-rehearsal\20260616-r1\`.
+
 ## 2026-06-16 (T-132 C11 guarded 후보 검증 harness)
 
 **작업**: `scripts/run_t132_c11_guarded_policy_validation.py`를 추가해 T-131의 `centroid_c4_50_c6_c7_move_500` 정책을 threshold flag 기반으로 반복 검증할 수 있게 했다. 정책 mode, sample CSV/GeoJSON export, 결정적 `summary.json` schema, `coord_source_detail="c11_bundle_guarded"` sample column, 작업 테이블 cleanup 검증을 포함한다.

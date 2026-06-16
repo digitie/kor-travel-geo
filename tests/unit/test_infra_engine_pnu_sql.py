@@ -19,6 +19,17 @@ def test_engine_uses_settings_dsn_and_x_extension_search_path() -> None:
     assert "search_path=public,x_extension" in _connect_options(settings)
 
 
+def test_engine_accepts_shadow_search_path_for_read_only_rehearsal() -> None:
+    settings = Settings(
+        pg_statement_timeout_ms=4321,
+        pg_search_path="_ktg_t133_shadow,public,x_extension",
+    )
+
+    assert _connect_options(settings) == (
+        "-c statement_timeout=4321 -c search_path=_ktg_t133_shadow,public,x_extension"
+    )
+
+
 def test_pnu_mapping_is_standard_and_null_safe() -> None:
     assert pnu_land_type_from_mntn_yn("0") == "1"
     assert pnu_land_type_from_mntn_yn("1") == "2"

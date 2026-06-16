@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from ipaddress import IPv4Network, IPv6Network, ip_network
 from pathlib import Path
 from typing import Annotated, Literal
@@ -10,6 +11,7 @@ from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 LoadCodeAction = Literal["insert", "update", "delete"]
+_PG_SEARCH_PATH_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
 def _default_mvm_res_code_actions() -> dict[str, LoadCodeAction]:
@@ -39,6 +41,7 @@ class Settings(BaseSettings):
     pg_pool_size: int = Field(default=10, ge=1)
     pg_max_overflow: int = Field(default=5, ge=0)
     pg_statement_timeout_ms: int = Field(default=5_000, ge=1)
+    pg_search_path: str = "public,x_extension"
     pg_pool_recycle_s: int = Field(default=3_600, ge=1)
     pg_query_metrics_enabled: bool = True
 
@@ -159,6 +162,26 @@ class Settings(BaseSettings):
         if text.startswith("postgresql://"):
             return text.replace("postgresql://", "postgresql+psycopg://", 1)
         return text
+
+    @field_validator("pg_search_path", mode="before")
+    @classmethod
+    def normalize_pg_search_path(cls, value: object) -> str:
+        if value is None:
+            msg = "pg_search_path must not be empty"
+            raise ValueError(msg)
+        if isinstance(value, (list, tuple, set)):
+            parts = [str(part).strip() for part in value]
+        else:
+            parts = [part.strip() for part in str(value).split(",")]
+        normalized = [part for part in parts if part]
+        if not normalized:
+            msg = "pg_search_path must not be empty"
+            raise ValueError(msg)
+        invalid = [part for part in normalized if not _PG_SEARCH_PATH_IDENTIFIER.fullmatch(part)]
+        if invalid:
+            msg = f"pg_search_path contains invalid identifier: {invalid[0]!r}"
+            raise ValueError(msg)
+        return ",".join(normalized)
 
     @field_validator("log_level", mode="before")
     @classmethod
