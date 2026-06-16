@@ -52,10 +52,10 @@
 
 ## 후보 해석
 
-- `match_kind`: `road`, `parcel`, `postal`, `keyword`, `category`, `region`, `sppn`
-- `source`: `local`, `vworld`, `juso`, `cache`
+- `match_kind`: `road`, `parcel`, `keyword`, `region`, `sppn`, `detail`, `poi`
+- `source`: `local`, `vworld`, `juso`
 - `distance_m`: reverse/nearby/keyword처럼 후보와 기준점 사이의 거리가 있는 경우 정식 필드로 노출한다. geocode 단일 주소 변환에서는 보통 `null`이다.
-- `point_precision`: Google `location_type` 패턴을 참고한 좌표 정밀도 필드다. `exact`, `interpolated`, `centroid`, `approximate` 중 하나이며, 현재 local geocode에서는 국가지점번호처럼 면 중심 성격이 분명한 경우 `approximate`만 채운다.
+- `point_precision`: Google `location_type` 패턴을 참고한 좌표 정밀도 필드다. `exact`, `interpolated`, `centroid`, `approximate`, `grid_cell` 중 하나이며, 현재 local geocode에서는 국가지점번호 10m cell 계산 좌표에 `grid_cell`을 채운다.
 - `confidence`: endpoint-local 점수다. geocode는 v1 매칭 신뢰도, reverse는 검색 반경 대비 거리 기반 점수, search는 검색 score를 뜻한다. 서로 다른 endpoint의 `confidence`를 그대로 비교하지 않는다.
 - `bbox`: Google-style viewport/bounds 표현을 참고한 후보 범위 필드다. `include_geometry=true`일 때 후보 도형의 EPSG:4326 범위를 담는다.
 - `geometry`: `include_geometry=true`일 때만 채우는 GeoJSON geometry다. `kind`는 `building`, `region`, `road` 중 하나이고, `source_table`은 `tl_spbd_buld_polygon`, `tl_scco_*`, `tl_sprd_manage` 같은 로컬 도형 원천을 가리킨다.

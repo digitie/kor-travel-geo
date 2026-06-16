@@ -2288,7 +2288,7 @@ export interface components {
              * Match Kind
              * @enum {string}
              */
-            match_kind: "road" | "parcel" | "postal" | "keyword" | "category" | "region" | "sppn";
+            match_kind: "road" | "parcel" | "keyword" | "region" | "sppn" | "detail" | "poi";
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -2296,14 +2296,14 @@ export interface components {
             place?: components["schemas"]["PlaceV2"] | null;
             point?: components["schemas"]["Point"] | null;
             /** Point Precision */
-            point_precision?: ("exact" | "interpolated" | "centroid" | "approximate") | null;
+            point_precision?: ("exact" | "interpolated" | "centroid" | "approximate" | "grid_cell") | null;
             region?: components["schemas"]["RegionV2"] | null;
             /**
              * Source
              * @default local
              * @enum {string}
              */
-            source: "local" | "vworld" | "juso" | "cache";
+            source: "local" | "vworld" | "juso";
         };
         /** ConsistencyBulkDecisionRequest */
         ConsistencyBulkDecisionRequest: {

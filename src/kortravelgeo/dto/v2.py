@@ -11,10 +11,10 @@ from pydantic import Field, field_validator, model_validator
 from kortravelgeo.dto.common import CRS, AddressType, FrozenModel, Page, Point, Status
 from kortravelgeo.dto.region import RegionHint
 
-V2Source = Literal["local", "vworld", "juso", "cache"]
-V2MatchKind = Literal["road", "parcel", "postal", "keyword", "category", "region", "sppn"]
+V2Source = Literal["local", "vworld", "juso"]
+V2MatchKind = Literal["road", "parcel", "keyword", "region", "sppn", "detail", "poi"]
 V2FallbackMode = Literal["none", "api"]
-V2PointPrecision = Literal["exact", "interpolated", "centroid", "approximate"]
+V2PointPrecision = Literal["exact", "interpolated", "centroid", "approximate", "grid_cell"]
 V2GeometryKind = Literal["building", "region", "road"]
 RegionWithinRadiusLevel = Literal["sido", "sigungu", "emd"]
 RegionWithinRadiusRelation = Literal["contains", "overlaps"]

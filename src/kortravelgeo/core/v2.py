@@ -176,7 +176,7 @@ def _candidate_from_sppn_area(
         confidence=1.0,
         match_kind="sppn",
         point=Point(x=inp.lon, y=inp.lat),
-        point_precision="approximate",
+        point_precision="grid_cell",
         region=RegionV2(sig_cd=area.sig_cd),
         source="local",
         metadata={key: value for key, value in metadata.items() if value is not None},
@@ -188,7 +188,7 @@ def _candidate_from_sppn_number(inp: ReverseV2Input, national_point_number: str)
         confidence=1.0,
         match_kind="sppn",
         point=Point(x=inp.lon, y=inp.lat),
-        point_precision="approximate",
+        point_precision="grid_cell",
         source="local",
         metadata={"national_point_number": national_point_number},
     )
@@ -278,7 +278,7 @@ def _reverse_confidence(distance_m: float | None, radius_m: int) -> float:
 
 def _geocode_point_precision(response: GeocodeResponse) -> V2PointPrecision | None:
     if response.x_extension and response.x_extension.national_point_number:
-        return "approximate"
+        return "grid_cell"
     return None
 
 
@@ -336,7 +336,7 @@ def _region_from_structure(structure: AddressStructure | None) -> RegionV2 | Non
 
 def _search_match_kind(item: SearchResultItem) -> V2MatchKind:
     if item.type == "place":
-        return "keyword"
+        return "poi"
     if item.type == "district":
         return "region"
     return "road"
@@ -362,7 +362,7 @@ def _source_from_v1(source: ResultSource) -> V2Source:
         return "vworld"
     if source == "api_juso":
         return "juso"
-    return source
+    return "local"
 
 
 def _as_str(value: object | None) -> str | None:

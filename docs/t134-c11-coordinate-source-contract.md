@@ -26,7 +26,7 @@ T-125 이후 C11 `도로명주소 건물 도형` 출입구 후보는 active serv
 |------|------|--------|
 | `pt_source` | 좌표의 큰 분류. `entrance`는 출입구급 좌표, `centroid`는 건물 중심 fallback이다. | 안정 enum |
 | `coord_source_detail` | 실제 좌표 산출 경로. 예: `locsum_entrc`, `roadaddr_entrc_same_month`, `navi_buld_centroid`, `c11_bundle_guarded`. | 확장 가능한 문자열 |
-| `point_precision` | v2 후보 좌표 정밀도. 현재 enum은 `exact`, `interpolated`, `centroid`, `approximate`다. | 안정 enum, T-169에서 재audit |
+| `point_precision` | v2 후보 좌표 정밀도. 현재 enum은 `exact`, `interpolated`, `centroid`, `approximate`, `grid_cell`이다. | 안정 enum, T-169에서 국가지점번호 `grid_cell`만 확정 |
 
 `coord_source_detail` 값은 PostgreSQL identifier와 비슷한 소문자 snake_case로 둔다. provider 원문, 파일명, 기준월은 여기에 직접 넣지 않고 별도 metadata나 artifact에 둔다.
 
@@ -85,13 +85,13 @@ v2는 후보 목록 API이므로 후보별 metadata를 사용할 수 있다.
 | `centroid` | `centroid` | `navi_buld_centroid` |
 | 없음 | `null` 또는 기존 특수값 | 국가지점번호 등 별도 흐름 |
 
-국가지점번호는 C11과 다른 좌표 계열이다. 현행 v2는 국가지점번호를 `approximate`로 내지만, ADR-054 후속으로 `grid_cell` 같은 정직한 enum을 추가할지는 T-169에서 결정한다. T-134는 C11 때문에 `point_precision` enum을 즉시 늘리지 않는다.
+국가지점번호는 C11과 다른 좌표 계열이다. T-169에서 v2 국가지점번호 후보는 `point_precision="grid_cell"`로 정정했다. T-134는 C11 때문에 `point_precision` enum을 더 넓게 늘리거나 C11 세부 출처를 stable field로 승격하지 않는다.
 
 v2에서 안정 public field를 추가할 후보는 다음과 같다.
 
 - `CandidateV2.point_source`: `pt_source`를 metadata 밖으로 승격
 - `CandidateV2.coordinate_source_detail`: `coord_source_detail`을 metadata 밖으로 승격
-- `V2PointPrecision` enum 확장: `entrance`, `grid_cell`, `detail`, `poi` 등
+- `V2PointPrecision` enum 확장: T-169에서 `grid_cell`만 확정. `entrance`, `detail`, `poi` 같은 세부 좌표 유형은 아직 precision enum으로 승격하지 않는다.
 
 이 후보는 T-105 v2 재audit과 T-169 enum 정직화에서 API 전체와 함께 재검토한다. T-134에서는 `metadata`를 임시 안정 표면으로 둔다.
 

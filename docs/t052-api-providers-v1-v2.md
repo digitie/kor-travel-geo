@@ -95,16 +95,16 @@ class GeocodeV2Input(FrozenModel):
 
 class CandidateV2(FrozenModel):
     confidence: float                       # 0~1
-    match_kind: Literal["road","parcel","postal","keyword","category","region","sppn"]
+    match_kind: Literal["road","parcel","keyword","region","sppn","detail","poi"]
     address: GeocodeV2Address                # 통합 address 표현
     point: GeocodeV2Point                    # (lon, lat) + EPSG
-    point_precision: Literal["exact","interpolated","centroid","approximate"] | None = None
+    point_precision: Literal["exact","interpolated","centroid","approximate","grid_cell"] | None = None
     distance_m: float | None = None
     region: GeocodeV2Region | None = None    # 시도/시군구/법정동/행정동
     place: GeocodeV2Place | None = None      # 키워드/카테고리 매칭 시
     bbox: GeocodeV2BBox | None = None
     geometry: GeocodeV2Geometry | None = None
-    source: Literal["local","vworld","juso","cache"] = "local"
+    source: Literal["local","vworld","juso"] = "local"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 class GeocodeV2Response(FrozenModel):
@@ -145,7 +145,7 @@ class AsyncAddressClient:
 - T-052 범위에서 새 외부 provider 직접 호출은 추가하지 않는다. 기존 ADR-019의 vworld/juso geocode fallback만 유지한다.
 - v2 `fallback="api"`는 기존 v1 fallback 결과를 candidate schema로 감싸기 위한 호환 옵션이다. 이 옵션이 Kakao/Naver/Google 호출을 의미하지 않는다.
 - 외부 API 스타일 분석은 schema 설계를 위한 참고 자료다. 운영 키, quota, provider 약관, 캐시 정책을 새로 늘리지 않는다.
-- `V2Source`는 현재 구현 가능한 `local`, `vworld`, `juso`, `cache`만 허용한다. Kakao/Naver/Google live adapter가 실제로 필요해지면 source enum 확장도 별도 task/ADR에서 함께 처리한다.
+- `V2Source`는 현재 구현 가능한 `local`, `vworld`, `juso`만 허용한다. v1 내부 캐시 결과는 v2 provider source로 공개하지 않고 `local`로 접는다. Kakao/Naver/Google live adapter가 실제로 필요해지면 source enum 확장도 별도 task/ADR에서 함께 처리한다.
 
 ## AI-friendly 문서화
 

@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-169 v2 enum 정직화)
+
+**작업**: v2 후보 enum을 실제 producer 의미 기준으로 정리했다. `V2MatchKind`에서 미사용 `postal`/`category`를 제거하고 `detail`/`poi`를 추가했다. 장소 검색 결과는 `keyword`가 아니라 `poi` 후보로 변환한다.
+
+**결정**: 국가지점번호 후보는 EPSG:5179 10m cell 중심 계산 좌표이므로 v2 `point_precision="grid_cell"`을 사용한다. `V2Source`에서는 provider가 아닌 `cache`를 제거하고, v1 `source="cache"`가 들어오면 v2에서는 `local`로 접는다. ADR-056에 배경과 후속 범위를 남겼다.
+
+**문서/검증**: 상세는 `docs/t169-v2-enum-honesty.md`에 정리했다. OpenAPI와 UI 생성 타입 갱신이 필요하다. 단위 테스트는 dead enum 거절, `detail`/`poi`/`grid_cell` 수용, place→poi 변환, SPPN grid_cell 변환을 추가했다.
+
 ## 2026-06-16 (T-166~T-168 국가지점번호 계산 좌표 first-class 노출)
 
 **작업**: 국가지점번호 forward geocode의 `TL_SPPN_MAKAREA` gate를 제거했다. 유효한 국가지점번호 문자열이면 `core.sppn` 계산식으로 EPSG:5179 10m cell 중심을 만들고, PostGIS 투영 helper로 EPSG:4326 좌표를 반환한다. `TL_SPPN_MAKAREA`는 좌표 생성 조건이 아니라 `x_extension.sppn_makarea` enrich로만 남긴다.

@@ -109,7 +109,7 @@ clean-slate 전제(v1 vworld 호환 폐기 + 신규 스키마 + 신규 단일월
 - 방향 정확: POI이지 주소 정본 아님(`c15:115-122` "does not add institution names or POI coordinates to normal address candidates", `serving_promotion=False`). 좌표를 POI 점으로 대체하면 ADR-051 게이트(p95≤10m, outlier≤0.1%)를 ~19배·~140배 초과 — 좌표 대체 금지는 옳다.
 - **메트릭 해석 교정**: 194.350m/14.054%는 "POI 품질"이 아니라 **"POI점 vs 주소 대표점" 양방향 불일치**다. SQL은 정확 도로키 join 후 `ST_Distance(p.geom, t.pt_5179)`(`c15:360-374`). 책임이 (i) POI 품질인지 (ii) 대형/캠퍼스 건물에서 ADR-007 단일 대표점이 거친 탓인지 (iii) 202401 vs 202603/604 월 drift인지 **분리 불가**다. "POI는 주소급 아님"을 이 숫자만으로 단정할 수 없다.
 - **죽은 표면 교정**: `SearchRepository.search`는 place/category에 `([],0)` 반환(`search_repo.py:241-242`, 확인). "재라우팅"이 아니라 신규 serving POI 테이블+producer 신규 구축이다.
-- **enum 정밀도**: enum에 'place'는 없다(`dto/v2.py:15`: road/parcel/postal/keyword/category/region/sppn). 본 프로젝트 문서는 상세주소에 `match_kind="detail"`을 이미 제안한다(`source-data-accuracy-review.md:253`). clean-slate라면 'keyword' 과적재 대신 명시적 `'poi'`(POI)·`'detail'`(상세주소)을 추가하라.
+- **enum 정밀도**: T-169 이후 `dto/v2.py`의 `V2MatchKind`는 `road`/`parcel`/`keyword`/`region`/`sppn`/`detail`/`poi`다. `postal`/`category`는 후보 실체가 아니라 별도 표면·입력 hint라 제거했고, 장소 후보는 `poi`, 상세주소 후보는 `detail`로 표현한다.
 - 숫자: parse 100% / match ratio 0.976742 / p95 194.350m / 100m 초과 14.054% — `t123:50` 일치, 소수 3자리까지 정확. **확정.** 보강: 문서·코드 모두 **p99 없음**(`c15:399-401`은 percentile_cont 0.5/0.95 + max만) — T-125 게이트 요구 미달.
 
 ---
