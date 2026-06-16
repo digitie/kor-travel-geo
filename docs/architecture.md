@@ -111,6 +111,12 @@ T-047의 보조 view/MV는 별도 source of truth가 아니다. master table 또
 
 T-061에서 `mv_geocode_text_search`가 실제 read-only helper MV로 추가됐다. Q3 fuzzy geocode와 Q4 broad search fallback은 이 helper에서 `bd_mgt_sn` 후보를 먼저 추출한 뒤 `mv_geocode_target`에 join한다. Q4 exact preflight는 기존 target exact index를 유지한다. T-065 이후 helper에는 내비게이션용DB `시군구용건물명` 정규화 컬럼(`sigungu_buld_nm_nrm`)도 포함되어, 지역 문맥의 건물 별칭·동명 검색 후보 recall을 보강한다.
 
+T-141부터 단발 benchmark 위에 SQL/REST workload matrix를 둔다. `steady`/`burst`/
+`recovery`/`soak` phase와 workload별 concurrency를 같은 corpus로 반복 실행하고, T-163은
+soak phase의 runner process RSS/CPU/`/proc/self/io` budget과 누수 판정식을
+`soak_guard` artifact로 고정한다. PostgreSQL server 자원과 외부 REST worker 자원은 이
+runner process guard 범위 밖이므로 운영 관측과 함께 해석한다.
+
 ## 데이터 흐름 — 적재 (full-load batch)
 
 ```

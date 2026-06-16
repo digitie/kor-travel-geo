@@ -1266,6 +1266,13 @@ benchmark job은 `load_jobs(kind="query_benchmark")` 또는 후속 generic job t
 
 측정 대상은 도로명 exact, 지번 exact, fuzzy geocode, 통합 search, reverse nearest, reverse radius, zipcode lookup, no-result/invalid 경로다. 각 query군은 p50/p90/p95/p99/max, timeout, error rate, `EXPLAIN ANALYZE BUFFERS`, `pg_stat_statements`, plan hash를 기록한다.
 
+T-141 이후 장시간 고부하 검증은 `scripts/run_t141_load_matrix.py`가 담당한다. 이 runner는
+SQL/REST workload를 `steady`/`burst`/`recovery`/`soak` phase로 묶고, T-163 기준
+`--soak-guard-mode enforce`를 사용하면 soak profile의 runner process RSS 증가,
+CPU seconds, `/proc/self/io` read/write budget, RSS leak 판정 실패 시 exit code `2`로
+종료한다. API 서버나 PostgreSQL 서버의 별도 process 자원은 이 guard의 직접 측정 범위가
+아니다.
+
 목표를 초과하면 다음 순서로 실험한다.
 
 1. query rewrite: exact와 fuzzy 경로 분리, `UNION ALL` branch 분리, early limit, KNN 후보 추출.
