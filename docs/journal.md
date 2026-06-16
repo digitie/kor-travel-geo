@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-137 C11 후속 종합 gate 및 ADR-051 재판정)
+
+**작업**: T-129~T-134와 Admin UI 반영 T-220/T-221을 종합해 C11 최종 gate를 닫았다. 새 문서 `docs/t137-c11-final-gate.md`를 추가하고, ADR-051·T-118·T-125·tasks/resume를 같은 결론으로 갱신했다.
+
+**결정**: Blanket C11은 T-125/T-129/T-130 근거로 계속 no-go다. Guarded `centroid_c4_50_c6_c7_move_500` 정책은 T-131/T-132에서 C4/C6/C7 오류 0을 재현했지만 100m 초과 이동 10,099건과 기준월 차이가 남는다. T-133 shadow serving은 rollback/cleanup은 통과했지만 SQL max p95 회귀 83.087%, REST max p95 회귀 132.447%로 성능 gate가 실패했다. 따라서 C11은 validation-only로 고정하고, ADR-051은 accepted로 전환하지 않는다.
+
+**후속**: T-119는 착수하지 않는다. 새 같은 기준월 C11 원천 또는 동등한 새 증거, correctness 무회귀, SQL/REST p95 회귀 5% 이하, rollback, ADR-055 구현 계획, ADR-051 accepted PR, 사용자 명시 승인이 모두 갖춰질 때만 재논의한다. 다음 Agent A 후보는 T-138/T-140/T-141 또는 T-127이다.
+
 ## 2026-06-16 (T-134 C11 좌표 출처 노출 계약)
 
 **작업**: C11이 나중에 다시 serving 후보로 논의될 때 v1/v2 응답에서 좌표 출처를 어떻게 표현할지 `docs/t134-c11-coordinate-source-contract.md`와 ADR-055로 확정했다. `pt_source`는 coarse enum `entrance`/`centroid`만 유지하고, `c11_bundle_guarded` 같은 세부 원천명은 `coord_source_detail`로 분리한다.
