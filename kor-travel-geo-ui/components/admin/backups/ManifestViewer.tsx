@@ -1,13 +1,11 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { BackupArtifact } from "@/lib/api";
-
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+import { useModalA11y } from "@/lib/use-modal-a11y";
 
 /** ok=true → 검증됨, false → 불일치, null/undefined → 미검증(legacy/skipped). */
 export function inventoryTone(ok: boolean | null | undefined): {
@@ -40,42 +38,9 @@ export function ManifestViewer({
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
-  // a11y (T-258): move focus into the modal on open, return it to the trigger on close.
-  // Best-effort: skip restore when the trigger has been detached (e.g. the artifact list row
-  // was re-windowed by the virtual table while the modal was open) to avoid dumping focus.
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    closeRef.current?.focus();
-    return () => {
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
-    };
-  }, []);
-
-  // a11y (T-258): Escape closes; Tab is trapped within the dialog.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
-      if (!focusables || focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && active === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && active === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  // a11y (T-227, shared from T-258): focus into the modal on open (the 닫기 button), Esc closes,
+  // Tab trapped, focus returns to the trigger on close.
+  useModalA11y({ dialogRef, onClose, initialFocusRef: closeRef });
 
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">

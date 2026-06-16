@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, RefreshCw, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { RetentionWarning } from "@/components/admin/source-files/RetentionWarning";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { postJson, requestJson } from "@/lib/api";
+import { useModalA11y } from "@/lib/use-modal-a11y";
 import { formatBytes } from "@/lib/format";
 import {
   HARD_DELETE_CONFIRMATION,
@@ -337,10 +338,21 @@ function BulkHardDeleteDialog({
   const [manifestAck, setManifestAck] = useState(false);
   const [reason, setReason] = useState("");
   const confirmationOk = confirmation === HARD_DELETE_CONFIRMATION;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
+  // a11y (T-227): Esc cancels this destructive dialog, Tab is trapped, focus lands on the
+  // confirmation input and returns to the trigger on close.
+  useModalA11y({ dialogRef, onClose: onCancel, initialFocusRef: confirmRef });
 
   return (
     <div className="modal-backdrop">
-      <div className="modal" role="dialog" aria-modal="true" aria-label="원천 객체 영구 삭제">
+      <div
+        aria-label="원천 객체 영구 삭제"
+        aria-modal="true"
+        className="modal"
+        ref={dialogRef}
+        role="dialog"
+      >
         <h2>정리 대상 {objectKeys.length}건 영구 삭제</h2>
         <p className="form-note warn">
           선택한 미등록 stored object를 RustFS에서 영구(hard) 삭제합니다. 되돌릴 수 없습니다.
@@ -375,6 +387,7 @@ function BulkHardDeleteDialog({
             aria-label="hard-delete 확인 문구"
             onChange={(event) => setConfirmation(event.target.value)}
             placeholder={HARD_DELETE_CONFIRMATION}
+            ref={confirmRef}
             value={confirmation}
           />
           {!confirmationOk ? (

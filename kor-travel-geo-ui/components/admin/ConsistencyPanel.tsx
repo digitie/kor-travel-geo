@@ -8,7 +8,7 @@ import {
   type ColumnDef
 } from "@tanstack/react-table";
 import { Check, Clock, Download, Play, RefreshCw, RotateCw, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -36,6 +36,7 @@ import {
   decisionLabels,
   decisionReasons
 } from "@/lib/consistency";
+import { useModalA11y } from "@/lib/use-modal-a11y";
 import { useConsistencyAnalysisStore } from "@/lib/stores/consistency-analysis-store";
 
 type DecisionTarget = "single" | "bulk";
@@ -829,9 +830,14 @@ function DecisionModal({
   onSubmit: () => void;
 }) {
   const reasons = decisionReasons[form.state];
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const reasonRef = useRef<HTMLSelectElement>(null);
+  // a11y (T-227): Esc closes the decision modal, Tab is trapped, focus lands on the reason
+  // select and returns to the trigger (판정 버튼) on close.
+  useModalA11y({ dialogRef, onClose, initialFocusRef: reasonRef });
   return (
     <div className="modal-backdrop">
-      <div className="modal">
+      <div aria-label="정합성 판정" aria-modal="true" className="modal" ref={dialogRef} role="dialog">
         <h2>
           {decisionLabels[form.state]} · {sampleCount.toLocaleString()}건
         </h2>
@@ -840,6 +846,7 @@ function DecisionModal({
             <span>reason</span>
             <select
               onChange={(event) => onChange({ ...form, reasonCode: event.target.value })}
+              ref={reasonRef}
               value={form.reasonCode}
             >
               {reasons.map((reason) => (
