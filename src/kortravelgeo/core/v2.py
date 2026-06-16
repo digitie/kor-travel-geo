@@ -26,6 +26,12 @@ from kortravelgeo.dto.v2 import (
     V2Source,
 )
 
+from .confidence import (
+    geometry_confidence,
+    reverse_distance_confidence,
+    search_confidence,
+    sppn_reverse_confidence,
+)
 from .protocols import GeometryLookup
 
 
@@ -231,7 +237,7 @@ def _candidate_dedupe_key(candidate: CandidateV2) -> tuple[object, ...]:
 
 def _candidate_from_reverse_item(inp: ReverseV2Input, item: ReverseResultItem) -> CandidateV2:
     return CandidateV2(
-        confidence=_reverse_confidence(item.distance_m, inp.radius_m),
+        confidence=reverse_distance_confidence(item.distance_m, inp.radius_m),
         match_kind=item.type,
         address=_address_from_v1(
             full=item.text,
@@ -268,7 +274,7 @@ def _candidate_from_sppn_area(
         "area_m2": area.area_m2,
     }
     return CandidateV2(
-        confidence=1.0,
+        confidence=sppn_reverse_confidence(),
         match_kind="sppn",
         point=Point(x=inp.lon, y=inp.lat),
         point_precision="grid_cell",
@@ -280,7 +286,7 @@ def _candidate_from_sppn_area(
 
 def _candidate_from_sppn_number(inp: ReverseV2Input, national_point_number: str) -> CandidateV2:
     return CandidateV2(
-        confidence=1.0,
+        confidence=sppn_reverse_confidence(),
         match_kind="sppn",
         point=Point(x=inp.lon, y=inp.lat),
         point_precision="grid_cell",
@@ -304,7 +310,7 @@ def _candidate_from_search_item(item: SearchResultItem) -> CandidateV2:
     )
     place = PlaceV2(name=item.title) if item.type == "place" else None
     return CandidateV2(
-        confidence=item.score or 0.0,
+        confidence=search_confidence(item.score),
         match_kind=match_kind,
         address=address,
         point=item.point,
@@ -317,7 +323,6 @@ def _candidate_from_search_item(item: SearchResultItem) -> CandidateV2:
 
 
 def _candidate_from_geometry_lookup(inp: GeocodeV2Input, row: GeometryLookup) -> CandidateV2:
-    confidence = row.score if row.score is not None else 0.9
     match_kind: V2MatchKind = "region" if row.kind == "region" else "road"
     metadata = {
         "score": row.score,
@@ -327,7 +332,7 @@ def _candidate_from_geometry_lookup(inp: GeocodeV2Input, row: GeometryLookup) ->
         "bd_mgt_sn": row.bd_mgt_sn,
     }
     return CandidateV2(
-        confidence=max(0.0, min(1.0, confidence)),
+        confidence=geometry_confidence(row.score),
         match_kind=match_kind,
         address=_address_from_geometry_lookup(row),
         point=row.point,
@@ -363,12 +368,6 @@ def _region_from_geometry_lookup(row: GeometryLookup) -> RegionV2 | None:
         sigungu=row.sigungu,
         legal_dong=row.eup_myeon_dong,
     )
-
-
-def _reverse_confidence(distance_m: float | None, radius_m: int) -> float:
-    if distance_m is None:
-        return 1.0
-    return max(0.0, min(1.0, 1.0 - (distance_m / radius_m)))
 
 
 def _geocode_point_precision(response: GeocodeResponse) -> V2PointPrecision | None:

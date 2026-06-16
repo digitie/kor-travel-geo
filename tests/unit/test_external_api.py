@@ -4,6 +4,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 
+from kortravelgeo.core.confidence import JUSO_FALLBACK_CONFIDENCE, VWORLD_FALLBACK_CONFIDENCE
 from kortravelgeo.dto.geocode import GeocodeInput
 from kortravelgeo.exceptions import ConfigError, ExternalApiError
 from kortravelgeo.infra.external_api import ExternalGeocodeClient
@@ -41,6 +42,7 @@ async def test_external_geocode_client_maps_vworld_response() -> None:
     assert response.result.point.x == pytest.approx(127.036)
     assert response.x_extension is not None
     assert response.x_extension.source == "api_vworld"
+    assert response.x_extension.confidence == pytest.approx(VWORLD_FALLBACK_CONFIDENCE)
 
 
 @pytest.mark.asyncio
@@ -91,6 +93,7 @@ async def test_external_geocode_client_maps_juso_search_and_coord_response() -> 
     assert response is not None
     assert response.x_extension is not None
     assert response.x_extension.source == "api_juso"
+    assert response.x_extension.confidence == pytest.approx(JUSO_FALLBACK_CONFIDENCE)
     assert response.x_extension.bd_mgt_sn == "1168010100108250000028924"
     assert response.x_extension.zip_no == "06236"
 

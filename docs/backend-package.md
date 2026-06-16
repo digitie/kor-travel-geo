@@ -300,6 +300,8 @@ await client.reverse(127.0, 37.5, sig_cd="11")
 4. 결과 없으면 `GeocodeResponse(status="NOT_FOUND")`.
 5. `RefinedAddress(text, structure)` 빌드. `GeocodeExtension(source="local", confidence, bd_mgt_sn, rncode_full, bjd_cd, zip_no, zip_source, buld_nm)`.
 
+Confidence 산정은 T-172 이후 `kortravelgeo.core.confidence`가 담당한다. Local exact 기본값은 `1.0`이고, `pt_source="centroid"`는 `0.82` cap을 적용한다. 국가지점번호 10m grid cell 후보는 geocode/reverse 모두 `0.72`, VWorld fallback은 `0.70`, Juso fallback은 `0.65`다. Reverse v2 주소 후보는 `1 - distance_m / radius_m` 선형식으로 거리 증가에 따라 단조 감소한다.
+
 `fallback="api"`는 core가 직접 HTTP를 호출하지 않는다. `AsyncAddressClient.geocode()`가 내부 v1 호환 geocode 경로를 실행하다가 로컬 core 결과가 `NOT_FOUND`일 때만 `infra/external_api.py::ExternalGeocodeClient`를 호출하고, 결과를 후보 schema로 투영한다. 호출 순서는 vworld 주소 좌표 API → juso 검색 + 좌표 API다. Juso 좌표 API의 `admCd`/`rnMgtSn`/`udrtYn`/`buldMnnm`/`buldSlno`는 `core.address.AddressCodeSet`으로 정규화한 뒤 전달한다(T-056). 외부 응답은 내부적으로 `GeocodeResponse` DTO로 변환한 뒤 공개 응답에서는 `CandidateV2.source = "vworld" | "juso"`로 노출한다. 단, T-057 region hint가 명시된 요청에서는 외부 provider가 hint를 보존하지 못하므로 로컬 `NOT_FOUND` 뒤에도 외부 fallback을 호출하지 않는다.
 
 T-064 이후 `/v2/geocode`는 상세번호가 없는 상위 주소 입력도 별도 endpoint 없이 처리한다. 일반 도로명/지번 parser가 번호 부재로 실패하면 같은 입력을 `search(type="district")`로 넘기고, `tl_scco_ctprvn/sig/emd/li` polygon 후보를 `CandidateV2.match_kind="region"`으로 반환한다. 대표점은 `ST_PointOnSurface`를 사용한다. `ST_Centroid`는 polygon 밖으로 나갈 수 있어 화면 선택 후보의 기본 대표점으로 쓰지 않는다.
@@ -606,7 +608,7 @@ API job kind는 `roadaddr_entrance_load`다. payload는 다른 경로 기반 loa
 - `tl_sppn_makarea` 별도 테이블로 적재한다.
 - primary key는 실제 세종/경남 파일에서 distinct로 확인한 `SIG_CD + MAKAREA_ID`를 사용한다.
 - `MAKAREA_NM`은 표시명으로만 보존하고 unique key로 쓰지 않는다.
-- reverse geocode는 도로명/지번 후보가 없거나 낮은 confidence일 때 `ST_Covers(tl_sppn_makarea.geom, target_pt_5179)`로 보조 후보를 찾는다.
+- reverse geocode는 도로명/지번 후보 유무와 별개로 `ST_Covers(tl_sppn_makarea.geom, target_pt_5179)`로 국가지점번호 표기 의무지역 문맥을 보조 조회한다.
 - geocode는 국가지점번호 문자열 parser가 EPSG:5179 10m cell 중심 좌표를 계산한 뒤, 계산점을 EPSG:4326으로 투영해 좌표를 반환한다. `TL_SPPN_MAKAREA`는 좌표 생성 gate가 아니라 `x_extension.sppn_makarea` 구역 문맥 enrich로만 사용한다(T-166).
 - reverse geocode는 입력 좌표를 EPSG:5179로 투영한 뒤 formatter로 `x_extension.national_point_number`를 노출한다. 해당 좌표가 표기 의무지역에 속하면 기존처럼 `x_extension.sppn_makarea` 구역 문맥도 붙인다(T-168).
 - parser/formatter는 한국 SPPN 지원 envelope 밖의 명백한 바다·국경 밖 grid code를 거절한다(T-167).

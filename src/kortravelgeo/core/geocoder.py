@@ -13,17 +13,11 @@ from kortravelgeo.dto.geocode import (
 )
 from kortravelgeo.dto.region import RegionHint
 
+from .confidence import geocode_lookup_confidence, sppn_geocode_confidence
 from .normalize import parse_address
 from .protocols import AddressLookup, GeocodeRepo, SppnAreaLookup
 from .responses import refined_from_lookup, service_meta
 from .sppn import NationalPointNumber, parse_national_point_number
-
-
-def _confidence(row: AddressLookup) -> float:
-    value = row.confidence
-    if row.pt_source == "centroid":
-        value = min(value, 0.82)
-    return max(0.0, min(value, 1.0))
 
 
 def _response_from_row(inp: GeocodeInput, row: AddressLookup) -> GeocodeResponse:
@@ -35,7 +29,7 @@ def _response_from_row(inp: GeocodeInput, row: AddressLookup) -> GeocodeResponse
         result=GeocodeResult(crs=inp.crs, point=row.point) if row.point else None,
         x_extension=GeocodeExtension(
             source="local",
-            confidence=_confidence(row),
+            confidence=geocode_lookup_confidence(row.confidence, pt_source=row.pt_source),
             bd_mgt_sn=row.bd_mgt_sn,
             rncode_full=row.rncode_full,
             bjd_cd=row.bjd_cd,
@@ -77,7 +71,7 @@ def _response_from_sppn(
         result=GeocodeResult(crs="EPSG:4326", point=point_4326),
         x_extension=GeocodeExtension(
             source="local",
-            confidence=0.72,
+            confidence=sppn_geocode_confidence(),
             national_point_number=sppn.text,
             sppn_makarea=_sppn_context(area) if area is not None else None,
         ),
