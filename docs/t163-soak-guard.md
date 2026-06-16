@@ -123,6 +123,7 @@ python scripts/run_t141_load_matrix.py `
 
 ## 후속
 
-- T-164는 이 `soak_guard` 결과와 T-141 p99 summary를 함께 사용해 adversarial/입력분포
-  변화 회귀 gate를 CI/nightly 후보로 고정한다.
+- T-164는 이 `soak_guard` 결과와 T-141 p99 summary를 함께 사용해
+  `scripts/evaluate_t164_p99_regression.py` 기반 baseline/current p99 회귀 gate를
+  고정했다.
 - 실제 장비별 60분 baseline이 쌓이면 budget 기본값을 별도 문서나 실행 profile로 조정한다.
