@@ -926,9 +926,17 @@ TL_SPBD_EQB, TL_SPBD_BULD, TL_SPBD_ENTRC
 
 머지 후 staging은 `TRUNCATE`(drop은 하지 않음).
 
-### 후처리 (`loaders/postload.py`)
+### 후처리 (`loaders/postload.py`, `loaders/postload_maintenance.py`)
 
-`VACUUM (ANALYZE)` → `SET LOCAL maintenance_work_mem='1500MB'` → `ktgctl refresh mv` 또는 `refresh_mv()` orchestration → `ANALYZE mv_geocode_target` → (옵션) `CLUSTER ... USING idx_buld_road_match`.
+T-146 이후 적재 직후 read-mostly maintenance는 다음 순서를 표준으로 둔다.
+
+1. `scripts/run_t146_postload_maintenance.py --mode plan`으로 source/MV/index catalog 상태와 warning을 먼저 남긴다.
+2. 필요할 때만 `--mode execute-safe --vacuum-analyze`로 source relation `VACUUM (ANALYZE)`를 실행한다.
+3. `resolve_text_geometry_links()`로 geometry link를 해소한다.
+4. `ktgctl refresh mv`, `/v1/admin/maintenance/refresh-mv`, 또는 `refresh_mv(strategy=...)`로 `mv_geocode_target`과 helper MV를 같은 세대로 갱신한다.
+5. `ops.table_stats_snapshots` capture와 T-146 report를 artifact로 남긴다.
+
+`REINDEX CONCURRENTLY`는 invalid/bloated index 증거가 있을 때만 수동으로 실행한다. Raw `CLUSTER`는 live relation에 강한 잠금을 요구하므로 기본 runbook에서는 shadow rebuild 또는 `pg_repack`류 대안을 우선 검토한다. `pg_prewarm`과 hot query warm 자동화는 T-162 범위다.
 
 T-061 이후에는 `mv_geocode_text_search`가 `mv_geocode_target`에서 파생되는 read-only helper MV다. 운영자가 psql에서 `REFRESH MATERIALIZED VIEW mv_geocode_target`만 직접 실행하면 helper가 stale해질 수 있으므로 raw 단독 refresh는 금지하고 `ktgctl refresh mv`, `/v1/admin/maintenance/refresh-mv`, `refresh_mv(strategy=...)` 경로를 사용한다.
 

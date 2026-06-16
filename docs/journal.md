@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-146 post-load read-optimized maintenance)
+
+**작업**: `loaders.postload_maintenance`를 추가해 적재 직후 read-mostly maintenance plan/report를 표준화했다. Report는 source/MV/index catalog 상태, `VACUUM (ANALYZE)` opt-in 단계, `resolve_text_geometry_links()`, `refresh_mv(strategy=...)`, table stats capture, index budget/dead tuple/analyze warning을 담는다. `scripts/run_t146_postload_maintenance.py`는 기본 plan-only와 `execute-safe`, T-265 benchmark artifact 등록을 지원한다.
+
+**결정**: T-146은 새 API 계약이나 DB object를 만들지 않는다. `REINDEX CONCURRENTLY`, raw `CLUSTER`/물리 정렬, `pg_prewarm`은 자동화하지 않고 수동 runbook 또는 T-162 runtime warm 범위로 분리한다. Rollback은 relation-level undo가 아니라 기존 백업/복원 또는 serving hot-swap rollback에 의존한다.
+
+**검증/문서**: Windows focused unit 17개, Ruff, 변경 source/script mypy가 통과했다. WSL ext4 미러에서는 전체 `pytest -q` 948 passed/54 skipped, Ruff, mypy, `lint-imports`, OpenAPI check가 통과했다. WSL plan smoke artifact는 `artifacts/perf/t146-postload-maintenance-plan/report.json`이며 75개 object, index bytes 12,183,379,968, relation bytes 27,936,006,144, warning 2건(`postal_bulk_delivery`/`postal_pobox` analyze 누락)을 확인했다. 상세는 `docs/t146-postload-maintenance.md`에 기록했고, 다음 Agent A 작업은 T-162다.
+
 ## 2026-06-16 (T-156 geocode/reverse hot-key 결과 캐시)
 
 **작업**: 기존 `geo_cache` 테이블을 `AsyncAddressClient._geocode_v1()`과 `_reverse_geocode_v1()` local OK 응답 경로에 연결했다. Cache key는 service와 요청 파라미터 canonical JSON의 SHA-256 digest로 만들고, payload는 v1 DTO serializer의 `ROAD`/`PARCEL` 변환을 되돌려 내부 `model_validate()` round-trip이 되게 저장한다. Cache hit는 v1 geocode `x_extension.source`와 reverse item `source`를 `cache`로 표시한다.
