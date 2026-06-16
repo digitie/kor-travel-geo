@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-159 DB 장애 주입·안정 저하 검증)
+
+**작업**: SQLAlchemy `DBAPIError` 계열 DB 드라이버/연결 오류를 FastAPI exception handler에서 `DatabaseError(E0500, HTTP 503)`로 구조화했다. VWorld 호환 경로는 기존 `SYSTEM_ERROR` envelope를 유지하며, SQL 문장·파라미터·secret 값은 응답에 노출하지 않는다.
+
+**관측/검증**: `/metrics`에 `kor_travel_geo_api_db_errors_total{method,route,error_type}` counter를 추가했다. `/v1/readyz`는 느린 DB probe를 `api_readiness_timeout_ms` 안에서 끊고, DB가 정상화되면 같은 프로세스에서 자동 회복하는 단위 테스트를 추가했다. `scripts/run_t159_db_fault_injection.py`는 실제 PostgreSQL/RustFS를 제어하지 않는 ASGI 가짜 engine 하니스로 `ok → down → slow → ok` 시나리오를 재현한다.
+
+**문서**: 상세는 `docs/t159-db-fault-injection.md`에 기록했다. `docs/tasks.md`의 Agent A 재정렬 순서는 T-159 완료 후 다음 작업을 T-163으로 갱신했다.
+
 ## 2026-06-16 (T-161 client disconnect/query cancellation)
 
 **작업**: 공개 주소 API(`/v1/address/*`, `/v2/*`)에서 ASGI `http.disconnect`를 감지하면 inner app task를 cancel하는 middleware를 추가했다. 성능 middleware는 취소 요청을 `status_code=499` request metric과 `api_request_cancelled` 로그로 남기고 `CancelledError`를 재전파한다.

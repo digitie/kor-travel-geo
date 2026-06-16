@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-159 DB 장애 주입과 안정 저하 검증을 추가했다. SQLAlchemy `DBAPIError` 계열 DB 드라이버/연결 오류를 HTTP 503 + `E0500`으로 구조화하고, VWorld 호환 경로는 기존 `SYSTEM_ERROR` envelope를 유지한다. `/metrics`는 `kor_travel_geo_api_db_errors_total{method,route,error_type}`를 노출하며, `scripts/run_t159_db_fault_injection.py`는 실제 DB/RustFS를 제어하지 않는 ASGI 하니스로 단절·느린 probe·복구 시나리오를 검증한다.
 - T-161 client disconnect/query cancellation 관측을 추가했다. 공개 주소 API(`/v1/address/*`, `/v2/*`)에서 ASGI `http.disconnect`를 감지하면 진행 중인 요청 task를 cancel하고, 요청 취소는 `499` request metric과 `kor_travel_geo_api_request_cancellations_total{method,route}`로 기록한다. DB query 취소는 `status="cancelled"`와 `kor_travel_geo_db_query_cancellations_total{operation,query_fingerprint}`로 노출하며, 선택형 PostGIS 통합 테스트가 취소 후 orphan query/connection leak이 없는지 검증한다.
 - T-145 운영 backpressure/fail-fast를 보강했다. `KTG_API_GEOCODE_MAX_CONCURRENCY` 등 endpoint scope별 admission cap을 추가하고, overload는 HTTP 429 + `E0200` 또는 VWorld `OVER_REQUEST_LIMIT`와 `Retry-After: 1`로 fail-fast한다. `/metrics`는 admission wait/rejection/in-progress 지표를, `/v1/readyz`는 `components.admission` degradation 신호를 노출한다.
 - T-154 DB pool checkout timeout/fail-fast를 추가했다. `KTG_PG_POOL_TIMEOUT_MS` 기본 1000ms를 engine `pool_timeout`에 연결하고, SQLAlchemy pool checkout timeout을 HTTP 503 + `E0500` 구조화 응답으로 변환한다. `/metrics`는 `kor_travel_geo_pg_pool_checkout_timeouts_total{method,route}`를 노출하고, `/v1/readyz` pool detail에는 `timeout_ms`가 포함된다.

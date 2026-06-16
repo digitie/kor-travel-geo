@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field, model_validator
 from pydantic_core import PydanticCustomError
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from kortravelgeo.api.responses import register_exception_handlers
@@ -72,6 +73,31 @@ def test_sqlalchemy_pool_timeout_maps_to_database_unavailable_response() -> None
     assert "KTG_PG_POOL_TIMEOUT_MS" in payload["response"]["hint"]
 
 
+def test_sqlalchemy_operational_error_maps_to_database_unavailable_response() -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/db-down")
+    async def db_down() -> dict[str, str]:
+        raise OperationalError(
+            "SELECT secret_value FROM private_table",
+            {"secret": "plain-text"},
+            RuntimeError("server closed the connection unexpectedly"),
+        )
+
+    response = TestClient(app, raise_server_exceptions=False).get("/db-down")
+
+    payload_text = response.text
+    payload = response.json()
+    assert response.status_code == 503
+    assert payload["response"]["status"] == "ERROR"
+    assert payload["response"]["errorCode"] == "E0500"
+    assert payload["response"]["errorMessage"] == "database operation failed"
+    assert "KTG_PG_DSN" in payload["response"]["hint"]
+    assert "secret_value" not in payload_text
+    assert "plain-text" not in payload_text
+
+
 def test_vworld_sqlalchemy_pool_timeout_keeps_vworld_error_shape() -> None:
     app = FastAPI()
     register_exception_handlers(app)
@@ -87,3 +113,26 @@ def test_vworld_sqlalchemy_pool_timeout_keeps_vworld_error_shape() -> None:
     assert payload["response"]["status"] == "ERROR"
     assert payload["response"]["service"]["operation"] == "getCoord"
     assert payload["response"]["error"]["code"] == "SYSTEM_ERROR"
+
+
+def test_vworld_sqlalchemy_operational_error_keeps_vworld_error_shape() -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/v1/address/geocode")
+    async def geocode_db_down() -> dict[str, str]:
+        raise OperationalError(
+            "SELECT private_query",
+            {},
+            RuntimeError("database is restarting"),
+        )
+
+    response = TestClient(app, raise_server_exceptions=False).get("/v1/address/geocode")
+
+    payload = response.json()
+    assert response.status_code == 503
+    assert payload["response"]["status"] == "ERROR"
+    assert payload["response"]["service"]["operation"] == "getCoord"
+    assert payload["response"]["error"]["code"] == "SYSTEM_ERROR"
+    assert payload["response"]["error"]["text"] == "database operation failed"
+    assert "private_query" not in response.text
