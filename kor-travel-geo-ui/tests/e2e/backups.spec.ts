@@ -176,4 +176,17 @@ test.describe("백업/복원 콘솔 /admin/backups", () => {
     await page.getByTitle("취소").click();
     await cancelRequest;
   });
+
+  test("작업 탭: 작업이 없으면 빈 상태 안내를 보여 준다 (T-226)", async ({ page }) => {
+    await mockBackupsApi(page);
+    // jobs를 빈 배열로 덮어쓴다(마지막 등록 route 우선).
+    await page.route("**/api/proxy/v1/admin/jobs**", async (route) => {
+      await route.fulfill({ contentType: "application/json", body: "[]" });
+    });
+    await page.goto("/admin/backups");
+    await page.getByRole("tab", { name: "작업" }).click();
+
+    await expect(page.getByText("Backup / Restore Jobs")).toBeVisible();
+    await expect(page.getByText("진행 중이거나 완료된 백업/복원 작업이 없습니다.")).toBeVisible();
+  });
 });

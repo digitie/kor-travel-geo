@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Hammer, Play, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import { useState } from "react";
+import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { MatchSetComparePanel } from "@/components/admin/source-files/MatchSetComparePanel";
 import { Panel } from "@/components/ui/Panel";
 import {
@@ -253,6 +254,10 @@ function RebuildDbForm({
   return (
     <div className="rebuild-form">
       <h3>DB 재구성 (rebuild-db)</h3>
+      <RoleRequirementNote
+        note={force ? "force_promotion(consistency ERROR 우회)은 destructive_admin 필요" : undefined}
+        roles={force ? ["rebuild_operator", "destructive_admin"] : ["rebuild_operator"]}
+      />
       <div className="preflight">
         <strong>사전 점검 (preflight)</strong>
         <ul className="preflight-list">
