@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 
 from kortravelgeo.api.app import _install_admission_control
+from kortravelgeo.infra import slow_observability
 from kortravelgeo.settings import Settings
 
 
@@ -62,6 +63,42 @@ async def test_admission_control_times_out_with_rate_limit_error() -> None:
     assert response.status_code == 429
     assert response.json()["response"]["errorCode"] == "E0200"
     assert response.headers["Retry-After"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_admission_timeout_enqueues_overload_sample() -> None:
+    app = FastAPI()
+    settings = Settings(
+        api_max_concurrency=1,
+        api_admission_timeout_ms=1,
+        ops_slow_samples_enabled=True,
+        ops_slow_sample_min_interval_ms=0,
+    )
+    slow_observability.configure_slow_observability(settings)
+    _install_admission_control(app, settings)
+    entered = asyncio.Event()
+
+    @app.get("/v1/address/slow")
+    async def slow() -> dict[str, str]:
+        entered.set()
+        await asyncio.sleep(0.05)
+        return {"status": "OK"}
+
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            first = asyncio.create_task(client.get("/v1/address/slow"))
+            await entered.wait()
+            response = await client.get("/v1/address/slow")
+            await first
+        samples = slow_observability.pop_slow_samples_for_tests()
+    finally:
+        slow_observability.reset_slow_observability_for_tests()
+
+    assert response.status_code == 429
+    assert len(samples) == 1
+    assert samples[0].sample_type == "overload"
+    assert samples[0].context["scope"] == "address"
 
 
 @pytest.mark.asyncio

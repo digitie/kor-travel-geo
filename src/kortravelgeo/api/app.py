@@ -50,6 +50,14 @@ from kortravelgeo.infra.metrics import (
     refresh_source_registry_metrics,
     render_prometheus,
 )
+from kortravelgeo.infra.slow_observability import (
+    configure_slow_observability,
+    record_overload_event,
+    record_slow_api_request,
+    reset_request_observability_context,
+    run_slow_observability_flush_loop,
+    set_request_observability_context,
+)
 from kortravelgeo.loaders.bulk_loader import load_bulk_delivery
 from kortravelgeo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kortravelgeo.loaders.pobox_loader import load_pobox
@@ -98,12 +106,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.pg_stat_statements_capture_task = pg_stat_task
     runtime_warm_task = _start_runtime_warm_scheduler(client.engine, get_settings())
     app.state.runtime_warm_task = runtime_warm_task
+    slow_observability_task = _start_slow_observability_scheduler(
+        client.engine,
+        get_settings(),
+    )
+    app.state.slow_observability_task = slow_observability_task
     janitor_task = _start_source_janitor_scheduler(client, get_settings())
     app.state.source_janitor_task = janitor_task
     try:
         yield
     finally:
-        for task in (table_stats_task, pg_stat_task, runtime_warm_task, janitor_task):
+        for task in (
+            table_stats_task,
+            pg_stat_task,
+            runtime_warm_task,
+            slow_observability_task,
+            janitor_task,
+        ):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -113,6 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_slow_observability(settings)
     app = FastAPI(
         title=settings.api_title,
         version=__version__,
@@ -165,6 +185,7 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
     ) -> Response:
         started = perf_counter()
         method = request.method
+        context_token = set_request_observability_context(method, request.url.path)
         status_code = 500
         cancelled = False
         record_api_request_started(method=method)
@@ -201,6 +222,13 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
                         "slow": elapsed_ms >= settings.api_slow_request_ms,
                     },
                 )
+            record_slow_api_request(
+                method=method,
+                route=route,
+                status_code=status_code,
+                elapsed_ms=elapsed_ms,
+            )
+            reset_request_observability_context(context_token)
 
 
 class ClientDisconnectCancellationMiddleware:
@@ -310,6 +338,7 @@ def _install_admission_control(app: FastAPI, settings: Settings) -> None:
                     elapsed_s=0.0,
                 )
                 record_api_admission_rejection(method=method, route=route, scope=scope)
+                record_overload_event(method=method, route=route, scope=scope)
                 _log_admission_rejection(settings, method=method, route=route, scope=scope)
                 _release_admission_scopes(controller, acquired_scopes)
                 return _admission_error_response(scope=scope, path=request.url.path)
@@ -325,6 +354,7 @@ def _install_admission_control(app: FastAPI, settings: Settings) -> None:
                     elapsed_s=perf_counter() - started,
                 )
                 record_api_admission_rejection(method=method, route=route, scope=scope)
+                record_overload_event(method=method, route=route, scope=scope)
                 _log_admission_rejection(settings, method=method, route=route, scope=scope)
                 _release_admission_scopes(controller, acquired_scopes)
                 return _admission_error_response(scope=scope, path=request.url.path)
@@ -517,6 +547,15 @@ async def _run_runtime_warm_once(engine: AsyncEngine, settings: Settings) -> Non
             "max_ms": metrics["max_ms"],
         },
     )
+
+
+def _start_slow_observability_scheduler(
+    engine: AsyncEngine,
+    settings: Settings,
+) -> asyncio.Task[None] | None:
+    if not settings.ops_slow_samples_enabled:
+        return None
+    return asyncio.create_task(run_slow_observability_flush_loop(engine))
 
 
 def _start_source_janitor_scheduler(

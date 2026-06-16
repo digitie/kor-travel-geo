@@ -195,6 +195,7 @@ ignore_imports = ["kortravelgeo.api.routers.admin -> kortravelgeo.loaders"]
 | 로더 | `loader_data_dir`, `loader_batch_size`, `loader_temp_schema` | |
 | 운영 table stats | `ops_table_stats_capture_interval_minutes`, `ops_table_stats_capture_limit`, `ops_table_stats_capture_on_startup` | API lifespan의 `ops.table_stats_snapshots` opt-in 주기 capture. 기본 interval 0은 비활성 |
 | 운영 pg_stat_statements | `ops_pg_stat_statements_capture_interval_minutes`, `ops_pg_stat_statements_capture_limit`, `ops_pg_stat_statements_capture_on_startup` | API lifespan의 `ops.pg_stat_statements_snapshots` 주기 capture. 기본 5분 주기·시작 시 1회 capture이며, Prometheus label에는 query 원문을 노출하지 않는다. |
+| 느린 요청·쿼리 표본 | `ops_slow_samples_enabled`, `ops_slow_query_ms`, `ops_slow_sample_rate`, `ops_slow_sample_min_interval_ms`, `ops_slow_sample_queue_size`, `ops_slow_sample_flush_interval_ms`, `ops_slow_sample_flush_batch_size`, `ops_slow_query_explain_enabled`, `ops_slow_query_explain_timeout_ms` | T-158. 느린 API 요청, admission overload, 느린 DB query를 sampled 구조화 로그와 `ops.slow_observability_samples`에 저장한다. 기본은 비활성이며 원문 SQL·파라미터·주소 문자열은 저장하지 않는다. `EXPLAIN`은 opt-in이고 `ANALYZE`를 쓰지 않는다. |
 | 런타임 예열 | `runtime_warm_on_startup`, `runtime_warm_interval_minutes`, `runtime_warm_query_limit`, `runtime_warm_statement_timeout_ms`, `runtime_warm_prewarm_enabled`, `runtime_warm_prewarm_relations` | T-162. API 시작/swap 직후 cold p99 spike를 줄이기 위한 opt-in 백그라운드 예열. 기본은 비활성이며, 쿼리 예열은 상한 있는 읽기 전용 probe만 실행한다. `pg_prewarm`은 extension이 이미 있고 명시 설정이 켜진 경우에만 호출한다. |
 | 백업/복원 | `backup_allowed_dirs`, `backup_temp_dir`, `backup_default_jobs`, `backup_artifact_ttl_days`, `backup_callback_allowed_hosts`, `backup_callback_secret`, `backup_callback_max_attempts`, `backup_callback_backoff_ms` | T-046/T-050. 서버 측 allowlist 경로에만 `.tar.zst` artifact 저장, callback은 HMAC 서명과 retry/backoff 적용 |
 | RustFS 업로드 저장소 | `rustfs_enabled`, `rustfs_endpoint_url`, `rustfs_bucket`, `rustfs_region`, `rustfs_prefix`, `rustfs_access_key`, `rustfs_secret_key`, `rustfs_config_path`, `rustfs_materialize_dir`, `rustfs_retention_days`, `rustfs_local_import_roots` | T-076/ADR-044. upload set을 S3 호환 RustFS에 저장하고, 기존 로컬 파일 sync/prefix import/materialized cache를 제공한다. 이 프로젝트는 RustFS를 직접 구동하지 않고 이미 동작 중인 bucket 접속 설정만 사용한다. |
@@ -388,6 +389,8 @@ app.include_router(admin.router, prefix="/v1/admin")
 공개 주소 API(`/v1/address/*`, `/v2/*`)는 process-local admission control을 선택적으로 사용할 수 있다. `api_max_concurrency`는 전체 공개 주소 API cap이고, `api_geocode_max_concurrency`/`api_reverse_max_concurrency`/`api_search_max_concurrency`/`api_zipcode_max_concurrency`/`api_pobox_max_concurrency`/`api_regions_max_concurrency`는 endpoint scope별 cap이다. endpoint cap과 전체 cap을 함께 설정하면 요청은 endpoint scope를 먼저 얻고 전역 `address` scope를 나중에 얻는다.
 
 Admission timeout은 `RateLimitError(E0200, HTTP 429)`로 반환한다. `/v1/address/geocode`와 `/v1/address/reverse`는 VWorld 호환 `OVER_REQUEST_LIMIT` envelope를 유지한다. 응답 header에는 `Retry-After: 1`, `Cache-Control: no-store`를 넣는다. 서버 내부에서 overload 요청을 자동 재시도하지 않는다.
+
+T-158 이후 `ops_slow_samples_enabled=true`이면 admission timeout은 `sample_type="overload"` 표본으로도 남는다. 표본에는 `method`, `route`, `status_code=429`, `context.scope`만 저장하고 원문 요청 값은 저장하지 않는다.
 
 Prometheus 지표는 다음을 노출한다.
 
@@ -1483,6 +1486,7 @@ async def run_all_cases(
 
 - **JSON 라인 로그**: `structlog`. 키는 `event`, `job_id`, `kind`, `stage`, `progress`, `rows`, `bytes`, `severity`. 작업 시작/단계 전환/완료/실패 4 시점은 필수, 나머지 진행 갱신은 5초~1MB throttle.
 - **`load_jobs.log_tail` JSONB**: 최근 200줄을 DB에 직접 보관한다. 작업 시작, 단계 전환, 완료, 실패, handler의 `progress_cb(..., message=...)` 호출 시 tail을 갱신한다. 프로세스 재시작 후에도 마지막 로그 단서가 남아야 하므로 메모리 전용 deque에 의존하지 않는다.
+- **`ops.slow_observability_samples`**: T-158의 opt-in sampled 관측 테이블. 느린 API 요청, admission overload, 느린 DB query의 endpoint·fingerprint·마스킹 preview·선택적 `EXPLAIN (FORMAT JSON)` plan을 저장한다. raw SQL, query parameter, 주소 문자열은 저장하지 않는다.
 - **`load_consistency_reports.cases`**: JSONB로 전체 케이스 결과를 한 행에 보관. 시계열 회귀는 `started_at` 인덱스로 조회.
 - **알람 정책**(ADR-011 후속, 운영 단계): `severity_max IN ('ERROR')`인 리포트가 생성되면 Prometheus alert (T-025).
 
