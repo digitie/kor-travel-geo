@@ -83,5 +83,5 @@ T-119는 다음 조건이 모두 새로 충족될 때만 재논의한다.
 
 - T-119는 계속 보류한다.
 - T-138/T-140/T-141 이후 read-heavy 성능·golden corpus·고부하 benchmark 작업을 진행한다.
-- T-127은 optional source 구조 validator 강화가 필요할 때 별도 진행한다.
+- T-127은 optional source 구조 validator 강화로 완료했다.
 - T-105/T-169는 v2 `point_precision`과 후보 metadata 정직화를 별도 API 재audit 범위에서 다룬다.

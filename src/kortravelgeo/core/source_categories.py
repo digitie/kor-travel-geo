@@ -136,7 +136,7 @@ CATEGORY_CATALOG: tuple[SourceCategory, ...] = (
         display_name="국가지점번호 중심점",
         group_kind="single_file",
         default_role="validation_optional",
-        expected_member_kinds=("grid_center_shp",),
+        expected_member_kinds=("grid_center_txt",),
         optional=True,
     ),
     SourceCategory(

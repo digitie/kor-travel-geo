@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from kortravelgeo.core.source_validation import validate_group_manifest
 from kortravelgeo.infra.source_member_scan import (
+    _decode_zip_member_name,
     scan_group_manifest,
     scan_part_manifest,
 )
@@ -61,6 +62,24 @@ def test_scan_extracts_layer_name_from_supplier_filename(tmp_path: Path) -> None
         "TL_SPBD_ENTRC_DONG",
     } <= part.layer_names()
     assert all(not layer.startswith("TOTAL") for layer in part.layer_names())
+
+
+def test_scan_recovers_cp949_zip_member_names() -> None:
+    original = "민원행정기관_202401.shp"
+    mojibake = original.encode("cp949").decode("cp437")
+
+    assert _decode_zip_member_name(mojibake, flag_bits=0) == original
+    assert _decode_zip_member_name(original, flag_bits=0x800) == original
+
+
+def test_scan_detects_member_yyyymm(tmp_path: Path) -> None:
+    archive = tmp_path / "grid-center.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("SPPN_20240508.TXT", b"x")
+
+    part = scan_part_manifest(archive, part_key="archive")
+
+    assert part.members[0].detected_yyyymm == "202405"
 
 
 def test_scan_dir_input_lists_files(tmp_path: Path) -> None:

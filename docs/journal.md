@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-127 optional source 구조 validator 강화)
+
+**작업**: `core.source_validation`에 optional single-file category 6종(`detail_address_db_full`, `national_point_grid_shape`, `national_point_grid_center`, `civil_service_institution_map`, `address_db_full`, `building_db_full`)의 상세 구조 profile을 추가했다. `infra.source_member_scan`은 UTF-8 flag가 없는 legacy ZIP member name을 CP949로 복원하고, member filename에서 기준월을 감지한다. `national_point_grid_center` catalog의 `expected_member_kinds`는 실제 `SPPN_*.TXT` 원천에 맞춰 `grid_center_txt`로 정정했다.
+
+**결정**: T-216 수용 결과를 깨지 않도록 `.prj` 누락은 계속 `warning`이다. 필수 TXT prefix, SHP layer, `.shp/.shx/.dbf` sidecar 누락은 `failed`로 좁혔다. 한 archive 안에서 여러 기준월이 감지되면 `warning`으로 기록한다.
+
+**검증/문서**: Windows에서 `PYTHONPATH=src`를 명시하고 focused pytest 61개와 변경 파일 Ruff를 통과했다. WSL ext4 테스트 미러에서는 전체 pytest 990 passed/61 skipped, Ruff, mypy, import-linter, OpenAPI drift check를 통과했다. 실제 보존 원천 smoke는 `data/juso/unused` 또는 `F:/dev/geodata/juso/unused`가 있을 때만 ZIP 중앙 디렉터리를 읽고, 현재 6개 실제 archive는 기대 결과(`national_point_grid_shape`만 `.prj` 없음 warning, 나머지 passed)를 만족했다. 상세는 `docs/t127-optional-source-validator.md`에 기록했다.
+
 ## 2026-06-16 (T-158 slow-query·overload 구조화 로깅)
 
 **작업**: `ops.slow_observability_samples`와 Alembic `0021_t158_slow_observability`를 추가했다. `infra.slow_observability`가 느린 API 요청, admission overload, 느린 DB query를 sample rate·최소 간격·queue 크기로 제한해 큐에 넣고, API lifespan flush task가 batch insert한다. DB query metric hook은 `ops_slow_samples_enabled=true`일 때만 slow query callback을 설치한다.
