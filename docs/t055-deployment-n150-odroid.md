@@ -186,6 +186,35 @@ python scripts/benchmark_mv_refresh.py \
   --output "$RUN_ROOT/$ENV_LABEL/mv-refresh-swap-1.json"
 ```
 
+백업/복원은 T-247 실행기로 먼저 계획 전용 조합을 확인한 뒤, 장비별로 빠른 실행 또는 전체 조합을 실행한다. 실행 모드는 행별 일회용 target DB를 만들고 복원 후 drop한다.
+
+```bash
+python scripts/benchmark_backup_restore.py \
+  --run-id "$ENV_LABEL-backup-restore-plan" \
+  --output-dir "$RUN_ROOT/$ENV_LABEL/backup-restore-plan"
+```
+
+저전력 빠른 실행은 `serving-ready`에서 `jobs=1/2`, zstd `3/9`를 먼저 비교한다.
+
+```bash
+python scripts/benchmark_backup_restore.py \
+  --profile serving-ready \
+  --jobs 1 --jobs 2 \
+  --compression-level 3 --compression-level 9 \
+  --output-dir "$RUN_ROOT/$ENV_LABEL/backup-restore" \
+  --execute \
+  --confirmation "RUN-T247-BENCHMARK kor_travel_geo"
+```
+
+장비 시간이 허용되면 기본 전체 조합(`serving-ready`/`lean-serving`/`forensic` × jobs `1/2/4` × zstd `3/9/19`)을 실행한다.
+
+```bash
+python scripts/benchmark_backup_restore.py \
+  --output-dir "$RUN_ROOT/$ENV_LABEL/backup-restore-full" \
+  --execute \
+  --confirmation "RUN-T247-BENCHMARK kor_travel_geo"
+```
+
 ## PostgreSQL 설정 비교
 
 | 파라미터 | WSL 기본 | N150 권장 | Odroid 권장 |
@@ -222,7 +251,7 @@ T-055 실측의 1차 비교는 PostGIS 16+3.5 계열을 고정하고, PostgreSQL
 - `<env>/sql/benchmark.json`: T-047 SQL corpus 결과(`scripts/benchmark_query_performance.py` JSON 형식).
 - `<env>/rest/benchmark.json`: REST e2e 결과(`scripts/benchmark_api_latency.py` JSON 형식).
 - `<env>/mv-refresh-*.json`: MV refresh/swap 결과(`scripts/benchmark_mv_refresh.py` JSON 형식).
-- `backup-restore.md`: 두 환경의 backup/restore 시간 + archive 크기.
+- `<env>/backup-restore/benchmark-report.json`, `<env>/backup-restore/summary.md`: T-247 백업/복원 시간, dump/archive 크기, 압축률, jobs/compression 절충점.
 - `summary.md`: 의사결정 요약 — 어느 환경이 어떤 use case에 적합한가.
 
 ## 결정 기준

@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-247 백업/복원 벤치마크 스크립트)
+
+**작업**: `scripts/benchmark_backup_restore.py`를 추가해 `profile(serving-ready/lean-serving/forensic) × jobs(1/2/4) × zstd compression(3/9/19)` 기본 조합의 백업/복원 소요시간, dump directory 크기, `.tar.zst` 아카이브 크기, 압축률을 `benchmark-report.json`과 `summary.md`로 남기게 했다. 기본은 계획 전용이고, 실행 모드는 typed confirmation(`RUN-T247-BENCHMARK <current_database>`)과 백업 도구(`pg_dump`/`pg_restore`/`tar`/`zstd`)를 요구한다. T-055 N150/Odroid runbook도 T-247 실행기 기준으로 갱신했다.
+
+**결정**: 실제 실행은 행별 일회용 target DB를 만들고 복원 후 drop한다. 벤치마크 settings는 `backup_allowed_dirs`/`backup_temp_dir`를 output dir 아래로 고정하고 `restore_failed_target_cleanup="drop"`을 강제한다. 아카이브는 크기 비교 산출물이므로 삭제하지 않고 보존한다. 저전력 장비 해석은 `jobs=1/2/4`와 zstd `3/9/19`의 총합 최단, 최소 아카이브, 최고 압축률을 같은 표에서 비교하는 방식으로 정리했다.
+
+**검증/문서**: Windows에서 `python -m pytest tests/unit/test_t247_backup_restore_benchmark.py -q` 4개 통과, `python -m ruff check scripts/benchmark_backup_restore.py tests/unit/test_t247_backup_restore_benchmark.py` 통과, `python -m mypy scripts/benchmark_backup_restore.py` 통과, 계획 전용 smoke 통과 후 산출물은 삭제했다. WSL ext4 미러에서도 T-247 단위 테스트 4개, 계획 전용 smoke, 전체 `pytest -q` 967 passed/60 skipped, `ruff check .`, `mypy src/kortravelgeo`, `mypy scripts/benchmark_backup_restore.py`, `lint-imports`, `scripts/export_openapi.py --check`를 통과했다. 현재 Windows/WSL PATH에는 `pg_dump`/`pg_restore`/`zstd`가 없어 실행 모드 live 조합은 실행하지 않았다. 상세는 `docs/t247-backup-restore-benchmark.md`에 기록했다. 사용자 지시에 따라 이번 작업까지만 진행하고 다음 작업은 착수하지 않는다.
+
 ## 2026-06-16 (T-245 복원 장애 주입 live 통합 테스트)
 
 **작업**: T-244 round-trip fixture를 재사용하는 `tests/integration/test_backup_restore_fault_injection.py`를 추가했다. 실제 백업 artifact를 만든 뒤 archive-level sha256 flip, truncated tar, 내부 `checksums.sha256` 위조, checksum 누락을 주입하고, 각 실패 뒤 `restore_failed_target_cleanup="drop"` 정책으로 job-owned target DB가 남지 않아야 함을 검증한다. 별도 테스트로 백업 cancel의 failed artifact·최종 archive/`.part`/work dir 삭제, `replace_current`의 `target_dsn` 금지·typed confirmation·maintenance window confirmation matching guard도 고정했다.
