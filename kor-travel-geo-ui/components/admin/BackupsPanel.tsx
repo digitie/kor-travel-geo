@@ -10,6 +10,7 @@ import { RestoreWizard } from "@/components/admin/backups/RestoreWizard";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import { BackupAllowedDirs, BackupArtifact, LoadJobStatus, postJson, requestJson } from "@/lib/api";
 import {
   backupDownloadHref,
@@ -535,68 +536,101 @@ function BackupArtifactsPanel({
   onDeleteArtifact: (artifactId: string) => Promise<void>;
 }) {
   const [viewing, setViewing] = useState<BackupArtifact | null>(null);
+  const columns: VirtualColumn<BackupArtifact>[] = [
+    {
+      key: "file",
+      header: "file",
+      width: "1.7fr",
+      sortValue: (a) => a.display_name ?? a.artifact_id,
+      cell: (a) => a.display_name ?? a.artifact_id
+    },
+    {
+      key: "state",
+      header: "state",
+      width: "0.8fr",
+      sortValue: (a) => a.state,
+      cell: (a) => <StatusBadge value={a.state} />
+    },
+    {
+      key: "profile",
+      header: "profile",
+      width: "0.9fr",
+      cell: (a) => backupProfileLabel(readNested(a.manifest, "backup", "profile"))
+    },
+    {
+      key: "size",
+      header: "size",
+      width: "0.7fr",
+      sortValue: (a) => a.size_bytes ?? 0,
+      cell: (a) => formatBytes(a.size_bytes)
+    },
+    {
+      key: "retention",
+      header: "retention",
+      width: "0.9fr",
+      sortValue: (a) => a.retention_class ?? "default",
+      cell: (a) => a.retention_class ?? "default"
+    },
+    {
+      key: "expires",
+      header: "expires",
+      width: "0.9fr",
+      sortValue: (a) => a.expires_at ?? "",
+      cell: (a) => (a.expires_at ? a.expires_at.slice(0, 10) : "-")
+    },
+    {
+      key: "inv",
+      header: "인벤토리",
+      width: "0.8fr",
+      cell: (a) => {
+        const inv = inventoryTone(a.source_inventory_ok);
+        return <StatusBadge tone={inv.tone} value={inv.label} />;
+      }
+    },
+    {
+      key: "action",
+      header: "action",
+      width: "1fr",
+      cell: (a) => {
+        const href = backupDownloadHref(a.download_url);
+        return (
+          <div className="toolbar-inline">
+            <button
+              className="icon-button"
+              onClick={() => setViewing(a)}
+              title="manifest 보기"
+              type="button"
+            >
+              <FileText size={16} />
+            </button>
+            {href && (
+              <a className="icon-button" href={href} title="다운로드">
+                <Download size={16} />
+              </a>
+            )}
+            <button
+              className="icon-button"
+              onClick={() => void onDeleteArtifact(a.artifact_id)}
+              title="삭제"
+              type="button"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        );
+      }
+    }
+  ];
   return (
     <Panel title="Backup Artifacts">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>file</th>
-            <th>state</th>
-            <th>profile</th>
-            <th>size</th>
-            <th>retention</th>
-            <th>expires</th>
-            <th>인벤토리</th>
-            <th>action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {artifacts.map((artifact) => {
-            const href = backupDownloadHref(artifact.download_url);
-            const inv = inventoryTone(artifact.source_inventory_ok);
-            return (
-              <tr key={artifact.artifact_id}>
-                <td>{artifact.display_name ?? artifact.artifact_id}</td>
-                <td>
-                  <StatusBadge value={artifact.state} />
-                </td>
-                <td>{backupProfileLabel(readNested(artifact.manifest, "backup", "profile"))}</td>
-                <td>{formatBytes(artifact.size_bytes)}</td>
-                <td>{artifact.retention_class ?? "default"}</td>
-                <td>{artifact.expires_at ? artifact.expires_at.slice(0, 10) : "-"}</td>
-                <td>
-                  <StatusBadge tone={inv.tone} value={inv.label} />
-                </td>
-                <td>
-                  <div className="toolbar-inline">
-                    <button
-                      className="icon-button"
-                      onClick={() => setViewing(artifact)}
-                      title="manifest 보기"
-                      type="button"
-                    >
-                      <FileText size={16} />
-                    </button>
-                    {href && (
-                      <a className="icon-button" href={href} title="다운로드">
-                        <Download size={16} />
-                      </a>
-                    )}
-                    <button
-                      className="icon-button"
-                      onClick={() => void onDeleteArtifact(artifact.artifact_id)}
-                      title="삭제"
-                      type="button"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <VirtualTable
+        columns={columns}
+        emptyHint="백업본이 없습니다."
+        getSearchText={(a) => a.display_name ?? a.artifact_id}
+        rowKey={(a) => a.artifact_id}
+        rows={artifacts}
+        searchPlaceholder="파일명 검색"
+      />
       {viewing ? <ManifestViewer artifact={viewing} onClose={() => setViewing(null)} /> : null}
     </Panel>
   );

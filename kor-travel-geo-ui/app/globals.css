@@ -1254,6 +1254,77 @@ textarea {
   font-size: 13px;
 }
 
+.vtable {
+  display: grid;
+  gap: 8px;
+}
+
+.vtable-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.vtable-search {
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 8px;
+  min-height: 36px;
+  padding: 7px 10px;
+  width: min(320px, 60%);
+}
+
+.vtable-count {
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.vtable-head {
+  border-bottom: 2px solid var(--line, #d8dee8);
+  display: grid;
+  gap: 8px;
+}
+
+.vtable-th {
+  background: none;
+  border: none;
+  color: #344054;
+  cursor: default;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 6px;
+  text-align: left;
+}
+
+.vtable-th.sortable {
+  cursor: pointer;
+}
+
+.vtable-th.sortable:hover {
+  color: var(--brand, #0f766e);
+}
+
+.vtable-body {
+  overflow: auto;
+  position: relative;
+}
+
+.vtable-row {
+  align-items: center;
+  border-bottom: 1px solid var(--line, #d8dee8);
+  display: grid;
+  gap: 8px;
+}
+
+.vtable-td {
+  font-size: 13px;
+  overflow: hidden;
+  padding: 0 6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .source-stack {
   display: grid;
   gap: 16px;
