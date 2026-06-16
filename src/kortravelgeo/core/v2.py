@@ -416,7 +416,16 @@ def _region_from_structure(structure: AddressStructure | None) -> RegionV2 | Non
     ):
         return None
     code = structure.level4LC
-    sig_cd = code[:5] if code and len(code) >= 5 else None
+    # level4LC carries the resolved region code: 2-digit 시도(ctprvn), 5-digit 시군구,
+    # 8/10-digit 법정동. Preserve the 2-digit 시도 code as sig_cd too — region_geometry()
+    # resolves a 2-digit sig_cd via the ctprvn query, so 시도-level district candidates can
+    # still be enriched (T-266 review #317). sig_cd's contract already allows 2 or 5 digits.
+    if code and len(code) >= 5:
+        sig_cd: str | None = code[:5]
+    elif code and len(code) == 2:
+        sig_cd = code
+    else:
+        sig_cd = None
     bjd_cd = code if code and len(code) >= 8 else None
     return RegionV2(
         sig_cd=sig_cd,

@@ -18,7 +18,7 @@
 | `bbox` | object | 없음 | `min_lon`, `min_lat`, `max_lon`, `max_lat`로 표현하는 EPSG:4326 비교 범위. 1차 구현은 입력과 응답 schema를 보존하고, 엄격한 공간 필터는 후속으로 확장한다. |
 | `include_geometry` | boolean | `false` | 후보에 도형(`geometry`/`bbox`) 포함 여부. geocode/reverse와 동일한 opt-in(ADR-060 §5, ADR-059) |
 
-`include_geometry`는 geocode/reverse와 대칭으로 받는다. 후보가 도형 조회 key를 가질 때 채워진다 — `type="district"`(행정구역, `match_kind="region"`) 후보는 region polygon(`geometry.kind="region"`)을 받고, 건물 key를 가진 도로명/지번 후보는 건물 도형을 받는다. key가 없는 후보는 `geometry`가 `null`이다. 페이지네이션은 collection 규약(`page`/`size`+`total`, ADR-060 §3)을 따른다.
+`include_geometry`는 geocode/reverse와 대칭으로 받는다. **현재 채워지는 경우는 `type="district"` 후보**다 — `match_kind="region"`이고 해석된 행정구역 코드(시도 2자리, 시군구 5자리, 법정동 8/10자리)로 region polygon(`geometry.kind="region"`)을 받는다. **도로명/지번/장소 후보는 `null`이다**: `bd_mgt_sn`/`rncode_full`/`bjd_cd`/건물번호 같은 건물 도형 조회 key가 v1→v2 search 변환(`metadata={"score"}`만 보존)에서 떨어져 building polygon을 조회할 수 없기 때문이다. 이 key들을 v2 metadata/address까지 보존해 도로/주소 후보도 도형을 받게 하는 것은 후속 작업으로 남긴다. 페이지네이션은 collection 규약(`page`/`size`+`total`, ADR-060 §3)을 따른다.
 
 ## 출력
 

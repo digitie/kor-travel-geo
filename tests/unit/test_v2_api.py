@@ -730,7 +730,14 @@ def test_reverse_v2_promotes_sppn_number_without_makarea_to_candidate() -> None:
 # --- T-105/§5 (#308): include_geometry symmetry on reverse/search (ADR-060) -----------------
 
 
-def _district_search_v1_response(query: str) -> SearchResponse:
+def _district_search_v1_response(
+    query: str,
+    *,
+    region_code: str = "41465",
+    title: str = "용인시 수지구",
+) -> SearchResponse:
+    # map_region_search() puts the resolved region code in level4LC (2-digit 시도, 5-digit
+    # 시군구, 8/10-digit 법정동); _region_from_structure reads it into RegionV2.
     return SearchResponse(
         service=ServiceMeta(name="kor-travel-geo", operation="search"),
         status="OK",
@@ -738,8 +745,10 @@ def _district_search_v1_response(query: str) -> SearchResponse:
         result=(
             SearchResultItem(
                 type="district",
-                title="용인시 수지구",
-                structure=AddressStructure(level1="경기도", level2="용인시 수지구"),
+                title=title,
+                structure=AddressStructure(
+                    level1="경기도", level2="용인시 수지구", level4LC=region_code
+                ),
                 point=Point(x=127.0887, y=37.3328),
                 score=0.95,
             ),
@@ -748,19 +757,12 @@ def _district_search_v1_response(query: str) -> SearchResponse:
     )
 
 
-@pytest.mark.asyncio
-async def test_search_district_include_geometry_enriches_region_polygon(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _fake_region_geometry_recorder(
+    queried: list[dict[str, object]],
+) -> Any:
     from kortravelgeo.core.protocols import GeometryLookup
-    from kortravelgeo.infra.geometry_repo import GeometryRepository
 
-    async def fake_search_v1(self: AsyncAddressClient, query: str, **_: Any) -> SearchResponse:
-        return _district_search_v1_response(query)
-
-    queried: list[dict[str, Any]] = []
-
-    async def fake_region_geometry(self: GeometryRepository, **kwargs: Any) -> GeometryLookup:
+    async def fake_region_geometry(self: Any, **kwargs: Any) -> GeometryLookup:
         queried.append(kwargs)
         return GeometryLookup(
             kind="region",
@@ -775,19 +777,95 @@ async def test_search_district_include_geometry_enriches_region_polygon(
             bbox=BBoxV2(min_lon=127.0, min_lat=37.0, max_lon=127.1, max_lat=37.1),
         )
 
+    return fake_region_geometry
+
+
+@pytest.mark.asyncio
+async def test_search_sigungu_district_include_geometry_enriches_with_resolved_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_search_v1(self: AsyncAddressClient, query: str, **_: Any) -> SearchResponse:
+        return _district_search_v1_response(query, region_code="41465")  # 5-digit 시군구
+
+    queried: list[dict[str, object]] = []
     monkeypatch.setattr(AsyncAddressClient, "_search_v1", fake_search_v1)
-    monkeypatch.setattr(GeometryRepository, "region_geometry", fake_region_geometry)
+    monkeypatch.setattr(
+        GeometryRepository, "region_geometry", _fake_region_geometry_recorder(queried)
+    )
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
 
     response = await client.search(query="수지구", type="district", include_geometry=True)
 
-    assert response.input.include_geometry is True
     candidate = response.candidates[0]
     assert candidate.match_kind == "region"
-    assert candidate.geometry is not None
-    assert candidate.geometry.kind == "region"
+    assert candidate.region is not None and candidate.region.sig_cd == "41465"
+    assert candidate.geometry is not None and candidate.geometry.kind == "region"
     assert candidate.bbox is not None
-    assert queried, "region_geometry should be queried when include_geometry is true"
+    # rigorous: the lookup uses the resolved region code, not a blind call.
+    assert queried == [{"sig_cd": "41465", "bjd_cd": None}]
+
+
+@pytest.mark.asyncio
+async def test_search_sido_district_include_geometry_resolves_via_ctprvn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # 시도(2-digit ctprvn) district candidates must also enrich (#317 review): the 2-digit code
+    # is preserved as sig_cd and region_geometry resolves it through the ctprvn query.
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_search_v1(self: AsyncAddressClient, query: str, **_: Any) -> SearchResponse:
+        return _district_search_v1_response(query, region_code="41", title="경기도")
+
+    queried: list[dict[str, object]] = []
+    monkeypatch.setattr(AsyncAddressClient, "_search_v1", fake_search_v1)
+    monkeypatch.setattr(
+        GeometryRepository, "region_geometry", _fake_region_geometry_recorder(queried)
+    )
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.search(query="경기도", type="district", include_geometry=True)
+
+    candidate = response.candidates[0]
+    assert candidate.region is not None and candidate.region.sig_cd == "41"
+    assert candidate.geometry is not None and candidate.geometry.kind == "region"
+    assert queried == [{"sig_cd": "41", "bjd_cd": None}]
+
+
+@pytest.mark.asyncio
+async def test_search_road_candidate_geometry_is_null_pending_key_preservation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # #317 review: search road/address candidates lose bd_mgt_sn/rncode_full/bjd_cd/detail in the
+    # v1->v2 conversion (metadata={"score"} only), so building_geometry short-circuits to None and
+    # include_geometry yields null today. Pin that so docs and behaviour stay honest.
+    async def fake_search_v1(self: AsyncAddressClient, query: str, **_: Any) -> SearchResponse:
+        return SearchResponse(
+            service=ServiceMeta(name="kor-travel-geo", operation="search"),
+            status="OK",
+            input=SearchInput(query=query),
+            result=(
+                SearchResultItem(
+                    type="road",
+                    title="테헤란로",
+                    address="서울특별시 강남구 테헤란로",
+                    structure=AddressStructure(level1="서울특별시", level2="강남구"),
+                    point=Point(x=127.036, y=37.501),
+                    score=0.9,
+                ),
+            ),
+            total=1,
+        )
+
+    monkeypatch.setattr(AsyncAddressClient, "_search_v1", fake_search_v1)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.search(query="테헤란로", type="road", include_geometry=True)
+
+    candidate = response.candidates[0]
+    assert candidate.match_kind != "region"
+    assert candidate.geometry is None
 
 
 @pytest.mark.asyncio

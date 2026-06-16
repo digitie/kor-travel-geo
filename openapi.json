@@ -9712,12 +9712,12 @@
           },
           "status": {
             "const": "ERROR",
-            "default": "ERROR",
             "title": "Status",
             "type": "string"
           }
         },
         "required": [
+          "status",
           "errorCode",
           "errorMessage"
         ],

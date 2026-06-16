@@ -5759,7 +5759,6 @@ export interface components {
             hint?: string | null;
             /**
              * Status
-             * @default ERROR
              * @constant
              */
             status: "ERROR";

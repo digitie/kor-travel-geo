@@ -101,7 +101,7 @@ class StructuredErrorBody(FrozenModel):
     names carry aliases so the published schema matches the emitted JSON.
     """
 
-    status: Literal["ERROR"] = "ERROR"
+    status: Literal["ERROR"]
     error_code: str = Field(alias="errorCode")
     error_message: str = Field(alias="errorMessage")
     hint: str | None = None
