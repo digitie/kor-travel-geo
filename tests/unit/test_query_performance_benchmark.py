@@ -15,6 +15,7 @@ from scripts.benchmark_query_performance import (
     Measurement,
     _case_group_counts,
     _search_exact_params,
+    _search_sql_params,
     _with_region_params,
     build_parser,
     corpus_from_json,
@@ -171,7 +172,7 @@ def test_corpus_json_roundtrip(tmp_path: Path) -> None:
 
 def test_search_exact_preflight_params_match_repository_normalization() -> None:
     params = _with_region_params(
-        {"query": "선릉로 111길", "limit": 10, "offset": 20},
+        {"query": "선릉로 １１１길", "limit": 10, "offset": 20},
         sig_cd="11680",
     )
 
@@ -180,6 +181,25 @@ def test_search_exact_preflight_params_match_repository_normalization() -> None:
         "limit": 10,
         "offset": 20,
         "sig_cd_filter": "11680",
+        "sig_cd_prefix": None,
+        "bjd_cd_filter": None,
+        "bjd_cd_prefix": None,
+    }
+
+
+def test_search_sql_params_add_normalized_query_for_legacy_corpus() -> None:
+    query = " 왕산로\uff11\uff18\uff19\uff0d\uff14 "
+    params = _with_region_params(
+        {"query": query, "limit": 10, "offset": 0},
+        sig_cd="11230",
+    )
+
+    assert _search_sql_params(params) == {
+        "query": query,
+        "query_nrm": "왕산로189-4",
+        "limit": 10,
+        "offset": 0,
+        "sig_cd_filter": "11230",
         "sig_cd_prefix": None,
         "bjd_cd_filter": None,
         "bjd_cd_prefix": None,

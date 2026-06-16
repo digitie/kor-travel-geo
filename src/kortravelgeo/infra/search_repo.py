@@ -7,6 +7,7 @@ from typing import Literal
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.core.normalize import compact, normalize_spaces
 from kortravelgeo.core.protocols import SearchLookup
 from kortravelgeo.dto.region import RegionHint, region_params
 
@@ -14,31 +15,53 @@ from ._rows import map_region_search, map_search
 
 _SEARCH_EXACT_SQL = text(
     """
-WITH matched AS (
-  SELECT bd_mgt_sn, rncode_full, rn AS road_nm, buld_mnnm, buld_slno, buld_se_cd,
-         buld_nm, bjd_cd, adm_cd, adm_kor_nm, mntn_yn, lnbr_mnnm, lnbr_slno, zip_no,
-         si_nm, sgg_nm, emd_nm, li_nm, pnu, pt_source,
-         CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_X(pt_4326) END AS lon,
-         CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_Y(pt_4326) END AS lat,
-         GREATEST(
-           similarity(rn_nrm, :query_nrm),
-           similarity(buld_nm_nrm, :query_nrm),
-           similarity(sigungu_buld_nm_nrm, :query_nrm)
-         ) AS score
+WITH exact_keys AS MATERIALIZED (
+  SELECT bd_mgt_sn, 1.0::double precision AS score, 0 AS match_priority
     FROM mv_geocode_target
    WHERE (CAST(:sig_cd_filter AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
      AND (CAST(:sig_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_prefix AS text))
      AND (CAST(:bjd_cd_filter AS text) IS NULL OR bjd_cd = CAST(:bjd_cd_filter AS text))
      AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
-     AND (
-       rn_nrm = :query_nrm
-       OR (buld_nm_nrm = :query_nrm AND buld_nm_nrm IS NOT NULL)
-       OR (sigungu_buld_nm_nrm = :query_nrm AND sigungu_buld_nm_nrm IS NOT NULL)
-     )
+     AND rn_nrm = :query_nrm
+  UNION ALL
+  SELECT bd_mgt_sn, 1.0::double precision AS score, 1 AS match_priority
+    FROM mv_geocode_target
+   WHERE (CAST(:sig_cd_filter AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
+     AND (CAST(:sig_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_prefix AS text))
+     AND (CAST(:bjd_cd_filter AS text) IS NULL OR bjd_cd = CAST(:bjd_cd_filter AS text))
+     AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
+     AND buld_nm_nrm IS NOT NULL
+     AND buld_nm_nrm = :query_nrm
+  UNION ALL
+  SELECT bd_mgt_sn, 1.0::double precision AS score, 2 AS match_priority
+    FROM mv_geocode_target
+   WHERE (CAST(:sig_cd_filter AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_filter AS text) || '%')
+     AND (CAST(:sig_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:sig_cd_prefix AS text))
+     AND (CAST(:bjd_cd_filter AS text) IS NULL OR bjd_cd = CAST(:bjd_cd_filter AS text))
+     AND (CAST(:bjd_cd_prefix AS text) IS NULL OR bjd_cd LIKE CAST(:bjd_cd_prefix AS text))
+     AND sigungu_buld_nm_nrm IS NOT NULL
+     AND sigungu_buld_nm_nrm = :query_nrm
+),
+deduped AS (
+  SELECT DISTINCT ON (bd_mgt_sn) bd_mgt_sn, score, match_priority
+    FROM exact_keys
+   ORDER BY bd_mgt_sn, match_priority
+),
+matched AS (
+  SELECT t.bd_mgt_sn, t.rncode_full, t.rn AS road_nm, t.buld_mnnm, t.buld_slno,
+         t.buld_se_cd, t.buld_nm, t.bjd_cd, t.adm_cd, t.adm_kor_nm, t.mntn_yn,
+         t.lnbr_mnnm, t.lnbr_slno, t.zip_no, t.si_nm, t.sgg_nm, t.emd_nm, t.li_nm,
+         t.pnu, t.pt_source,
+         CASE WHEN t.pt_4326 IS NULL THEN NULL ELSE ST_X(t.pt_4326) END AS lon,
+         CASE WHEN t.pt_4326 IS NULL THEN NULL ELSE ST_Y(t.pt_4326) END AS lat,
+         d.score,
+         d.match_priority
+    FROM deduped d
+    JOIN mv_geocode_target t ON t.bd_mgt_sn = d.bd_mgt_sn
 )
 SELECT *, count(*) OVER () AS total
   FROM matched
- ORDER BY score DESC NULLS LAST, bd_mgt_sn
+ ORDER BY score DESC NULLS LAST, match_priority, bd_mgt_sn
  LIMIT :limit OFFSET :offset
 """
 )
@@ -46,7 +69,7 @@ SELECT *, count(*) OVER () AS total
 _SEARCH_SQL = text(
     """
 WITH query_input AS (
-  SELECT regexp_replace(:query, '\\s+', '', 'g') AS query_nrm
+  SELECT CAST(:query_nrm AS text) AS query_nrm
 ),
 scored AS MATERIALIZED (
   SELECT ts.bd_mgt_sn,
@@ -222,7 +245,7 @@ SELECT *, count(*) OVER () AS total
 
 
 def _normalize_search_query(query: str) -> str:
-    return "".join(query.split())
+    return compact(normalize_spaces(query)) or ""
 
 
 class SearchRepository:
@@ -242,7 +265,14 @@ class SearchRepository:
             return ([], 0)
         offset = (page - 1) * size
         hint_params = region_params(region_hint)
-        params = {"query": query, "limit": size, "offset": offset, **hint_params}
+        query_nrm = _normalize_search_query(query)
+        params = {
+            "query": query,
+            "query_nrm": query_nrm,
+            "limit": size,
+            "offset": offset,
+            **hint_params,
+        }
         if search_type == "district":
             async with self.engine.begin() as conn:
                 rows = (
@@ -254,7 +284,7 @@ class SearchRepository:
             total = int(rows[0]["total"]) if rows else 0
             return ([map_region_search(dict(row)) for row in rows], total)
         exact_params = {
-            "query_nrm": _normalize_search_query(query),
+            "query_nrm": query_nrm,
             "limit": size,
             "offset": offset,
             **hint_params,

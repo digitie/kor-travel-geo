@@ -70,11 +70,16 @@ def test_search_repo_uses_exact_preflight_before_broad_trgm_search() -> None:
     exact_sql = str(search_repo._SEARCH_EXACT_SQL)
     source = inspect.getsource(search_repo.SearchRepository.search)
 
+    assert "WITH exact_keys AS MATERIALIZED" in exact_sql
+    assert "UNION ALL" in exact_sql
+    assert "SELECT DISTINCT ON (bd_mgt_sn)" in exact_sql
     assert "FROM mv_geocode_target" in exact_sql
     assert "mv_geocode_text_search" not in exact_sql
     assert "rn_nrm = :query_nrm" in exact_sql
     assert "buld_nm_nrm = :query_nrm" in exact_sql
     assert "sigungu_buld_nm_nrm = :query_nrm" in exact_sql
+    assert "OR (buld_nm_nrm = :query_nrm" not in exact_sql
+    assert "GREATEST(" not in exact_sql
     assert "_SEARCH_EXACT_SQL" in source
     assert "exact_total > 0" in source
     assert source.index("_SEARCH_EXACT_SQL") < source.rindex("_SEARCH_SQL")
@@ -130,9 +135,17 @@ def test_text_search_queries_use_slim_mv_before_target_join() -> None:
     assert "AND ts.buld_se_cd = :buld_se_cd" in fuzzy_sql
     assert "JOIN mv_geocode_target t ON t.bd_mgt_sn = c.bd_mgt_sn" in fuzzy_sql
     assert "WITH query_input AS" in search_sql
+    assert "SELECT CAST(:query_nrm AS text) AS query_nrm" in search_sql
+    assert "regexp_replace(:query" not in search_sql
     assert "FROM mv_geocode_text_search ts" in search_sql
     assert "ts.sigungu_buld_nm_nrm % q.query_nrm" in search_sql
     assert "JOIN mv_geocode_target t ON t.bd_mgt_sn = s.bd_mgt_sn" in search_sql
+
+
+def test_search_query_normalization_folds_unicode_variants() -> None:
+    query = " 서울시  왕산로\uff11\uff18\uff19\uff0d\uff14 "
+
+    assert search_repo._normalize_search_query(query) == "서울시왕산로189-4"
 
 
 def test_mv_sql_includes_search_indexes_and_slim_text_search_mv() -> None:
