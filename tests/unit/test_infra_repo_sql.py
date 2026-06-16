@@ -15,6 +15,7 @@ from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
 from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra import (
     admin_repo,
+    coordinates,
     geocode_repo,
     geometry_repo,
     pobox_repo,
@@ -48,7 +49,7 @@ def test_sppn_reverse_sql_uses_covers_and_keeps_polygon_indexed_column_raw() -> 
 
 
 def test_sppn_reverse_projection_sql_transforms_input_point_only() -> None:
-    sql = str(reverse_repo._POINT_TO_5179_SQL)
+    sql = str(coordinates._POINT_TO_5179_SQL)
 
     assert "ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), :in_srid), 5179)" in sql
     assert "ST_X(geom) AS x5179" in sql
@@ -199,12 +200,27 @@ def test_sppn_geocode_sql_verifies_point_inside_makarea_polygon() -> None:
 
 
 def test_sppn_geocode_projection_sql_transforms_calculated_point_only() -> None:
-    sql = str(geocode_repo._SPPN_POINT_4326)
+    sql = str(coordinates._POINT_5179_TO_4326_SQL)
 
     assert "ST_SetSRID(ST_MakePoint(:x, :y), 5179)" in sql
     assert "ST_X(ST_Transform(geom, 4326)) AS lon" in sql
     assert "ST_Transform(m.geom" not in sql
     assert "ST_Transform(t.pt_5179" not in sql
+
+
+def test_coordinate_projection_methods_delegate_to_shared_helpers() -> None:
+    geocode_source = inspect.getsource(geocode_repo.GeocodeRepository.project_sppn_point_4326)
+    reverse_source = inspect.getsource(reverse_repo.ReverseRepository.project_reverse_point_5179)
+
+    assert "project_point_5179_to_4326" in geocode_source
+    assert "project_point_to_5179" in reverse_source
+    assert "_SPPN_POINT_4326" not in geocode_source
+    assert "_POINT_TO_5179_SQL" not in reverse_source
+
+
+def test_coordinate_srid_parser_uses_common_crs_normalization() -> None:
+    assert coordinates.srid_from_crs("epsg-4326") == 4326
+    assert coordinates.srid_from_crs("EPSG5179") == 5179
 
 
 def test_consistency_cases_cover_c1_through_c10_with_metrics() -> None:

@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-174 좌표계 왕복 정밀도 검증과 변환 helper 단일 경로를 추가했다. `infra.coordinates`가 EPSG:5179↔4326 point projection을 담당하고, geocode/reverse repository의 명시적 projection method가 shared helper를 사용한다. Opt-in PostGIS integration test가 왕복 오차 1mm 이하를 검증한다.
 - T-160 DB readiness/degradation 신호를 추가했다. `/v1/healthz`는 DB를 건드리지 않는 liveness로 유지하고, 새 `/v1/readyz`가 DB probe와 SQLAlchemy pool 상태를 `ready`/`degraded`/component 구조로 반환한다. DB 단절·timeout·API client 미시작은 HTTP 503, pool 포화는 DB checkout 없이 503 fail-fast, pool utilization 0.8 이상은 HTTP 200 + `degraded=true`로 노출한다.
 - T-157 pg_stat_statements 상시 수집·노출을 추가했다. `ops.pg_stat_statements_snapshots`에 top-N query snapshot을 저장하고, `GET/POST /v1/admin/ops/pg-stat-statements`, `/admin/ops` panel, `/metrics` gauge로 확인할 수 있다. Prometheus label은 `rank`/`operation`/`query_fingerprint`만 사용하고 query 원문은 노출하지 않는다.
 - T-170 v2 geocode producer가 1:N 후보를 방출할 수 있게 했다. Public wire schema는 기존 `candidates` tuple을 유지하며, local v1 primary 후보와 보조 road geometry 후보를 병합하고 dedup 후 `limit`을 적용한다.

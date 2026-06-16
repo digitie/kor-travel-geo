@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-174 좌표계 왕복 정밀도 검증·변환 경로 통일)
+
+**작업**: `src/kortravelgeo/infra/coordinates.py`를 추가해 EPSG:5179↔4326 point projection helper를 단일화했다. `GeocodeRepository.project_sppn_point_4326()`와 `ReverseRepository.project_reverse_point_5179()`는 자체 projection SQL을 갖지 않고 shared helper를 호출한다.
+
+**결정**: 새 Python projection dependency를 추가하지 않고 PostGIS `ST_Transform`을 단일 source로 유지한다. Serving SQL 안에서 index-friendly 하게 한 번만 변환하는 CTE는 성능 계획에 묶여 있으므로 유지하고, 명시적 helper method만 단일 경로로 모은다. 왕복 정밀도 기준은 EPSG:5179 x/y 각각 `0.001m` 이하로 둔다.
+
+**문서/검증**: 상세는 `docs/t174-coordinate-transform.md`에 기록했다. Windows focused run은 28 passed/1 skipped이며 Ruff와 mypy가 통과했다. WSL ext4 미러에서 backend pytest 856 passed/52 skipped, Ruff, mypy, import-linter, OpenAPI check를 통과했다.
+
 ## 2026-06-16 (T-160 DB readiness/degradation 신호)
 
 **작업**: `/v1/healthz`는 DB를 건드리지 않는 liveness로 유지하고, 새 `/v1/readyz`를 추가했다. Readiness 응답은 `ready`, `degraded`, `components.database`, `components.pool`을 반환하며 DB probe와 SQLAlchemy pool 상태를 분리해서 보여준다.

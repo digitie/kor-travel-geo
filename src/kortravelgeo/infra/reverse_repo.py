@@ -12,6 +12,7 @@ from kortravelgeo.dto.common import Point
 from kortravelgeo.dto.region import RegionHint, region_params
 
 from ._rows import map_reverse, map_sppn_area
+from .coordinates import project_point_to_5179, srid_from_crs
 
 _NEAREST_SQL = text(
     """
@@ -59,18 +60,6 @@ SELECT m.sig_cd,
 """
 )
 
-_POINT_TO_5179_SQL = text(
-    """
-WITH target_pt AS (
-  SELECT ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), :in_srid), 5179) AS geom
-)
-SELECT ST_X(geom) AS x5179,
-       ST_Y(geom) AS y5179
-  FROM target_pt
-"""
-)
-
-
 class ReverseRepository:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
@@ -85,7 +74,7 @@ class ReverseRepository:
         limit: int = 5,
         region_hint: RegionHint | None = None,
     ) -> list[ReverseLookup]:
-        in_srid = int(crs.split(":", 1)[1])
+        in_srid = srid_from_crs(crs)
         async with self.engine.connect() as conn:
             rows = (
                 await conn.execute(
@@ -118,7 +107,7 @@ class ReverseRepository:
         crs: str,
         limit: int = 5,
     ) -> list[SppnAreaLookup]:
-        in_srid = int(crs.split(":", 1)[1])
+        in_srid = srid_from_crs(crs)
         async with self.engine.connect() as conn:
             rows = (
                 await conn.execute(
@@ -134,14 +123,4 @@ class ReverseRepository:
         return [map_sppn_area(dict(row)) for row in rows]
 
     async def project_reverse_point_5179(self, point: Point, *, crs: str) -> Point | None:
-        in_srid = int(crs.split(":", 1)[1])
-        async with self.engine.connect() as conn:
-            row = (
-                await conn.execute(
-                    _POINT_TO_5179_SQL,
-                    {"x": point.x, "y": point.y, "in_srid": in_srid},
-                )
-            ).mappings().first()
-        if row is None or row["x5179"] is None or row["y5179"] is None:
-            return None
-        return Point(x=float(row["x5179"]), y=float(row["y5179"]))
+        return await project_point_to_5179(self.engine, point, crs=crs)
