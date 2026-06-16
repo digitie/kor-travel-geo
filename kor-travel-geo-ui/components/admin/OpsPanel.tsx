@@ -2,6 +2,7 @@
 
 import { Play, RefreshCw, ShieldCheck } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { PerfValidationSummary } from "@/components/admin/PerfValidationSummary";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -151,7 +152,9 @@ export function OpsPanel() {
   }, [loadAll]);
 
   return (
-    <div className="grid two">
+    <div className="ops-stack">
+      <PerfValidationSummary />
+      <div className="grid two">
       <Panel
         title="Serving Releases"
         actions={
@@ -332,6 +335,7 @@ export function OpsPanel() {
       <Panel title="Last Response">
         <JsonBlock value={lastResult} />
       </Panel>
+      </div>
     </div>
   );
 }
