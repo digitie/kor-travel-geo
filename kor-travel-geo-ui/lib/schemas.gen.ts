@@ -148,6 +148,8 @@ export const apiSchemaNames = [
   "SourceRetentionRecommendation",
   "SppnMakareaContext",
   "Status",
+  "StructuredErrorBody",
+  "StructuredErrorEnvelope",
   "TableStat",
   "TableStatsSnapshot",
   "UploadFileStatus",

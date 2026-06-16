@@ -178,17 +178,25 @@ def create_app() -> FastAPI:
     return app
 
 
-_VWORLD_VALIDATION_PATHS = ("/v1/address/geocode", "/v1/address/reverse")
+# Public address endpoints translate request-validation failures into an explicit 400
+# error envelope (see :mod:`kortravelgeo.api.responses`): v1 -> VWorld error object,
+# v2 -> structured envelope (intended input-safety, T-173/ADR-061). FastAPI's auto-422 is
+# therefore never emitted on these paths, so drop it from the published schema.
+_VALIDATION_STRUCTURED_400 = (
+    ("/v1/address/geocode", "get"),
+    ("/v1/address/reverse", "get"),
+    ("/v2/geocode", "post"),
+    ("/v2/reverse", "post"),
+    ("/v2/search", "post"),
+)
 
 
 def _install_openapi_customization(app: FastAPI) -> None:
-    """Align the published OpenAPI with actual v1 vworld wire behaviour (T-219 M3).
+    """Align the published OpenAPI with actual public-address wire behaviour (T-219 M3/M4).
 
-    The two v1 address endpoints translate request-validation failures into a
-    ``400`` VWorld error envelope (see :mod:`kortravelgeo.api.responses`), so the
-    auto-generated ``422`` response they would otherwise advertise is never emitted.
-    Drop it from the schema and keep the explicitly declared ``400`` instead. Wire
-    behaviour is unchanged — this only fixes published-contract drift.
+    Each operation in :data:`_VALIDATION_STRUCTURED_400` declares its own ``400`` and never
+    emits FastAPI's auto-generated ``422``; remove that ``422`` so the schema matches the wire.
+    Wire behaviour is unchanged — this only fixes published-contract drift.
     """
     base_openapi = app.openapi
 
@@ -196,8 +204,8 @@ def _install_openapi_customization(app: FastAPI) -> None:
         if app.openapi_schema is not None:
             return app.openapi_schema
         schema = base_openapi()
-        for path in _VWORLD_VALIDATION_PATHS:
-            operation = schema.get("paths", {}).get(path, {}).get("get")
+        for path, method in _VALIDATION_STRUCTURED_400:
+            operation = schema.get("paths", {}).get(path, {}).get(method)
             if operation is not None:
                 operation.get("responses", {}).pop("422", None)
         app.openapi_schema = schema

@@ -92,3 +92,22 @@ class ZipSource(StrEnum):
     KODIS_BAS_WITHIN = "kodis_bas_within"
     KODIS_BAS_CENTROID = "kodis_bas_centroid"
     POBOX = "pobox"
+
+
+class StructuredErrorBody(FrozenModel):
+    """Non-vworld API error body produced by ``error_payload`` (ADR-061).
+
+    The wire keys are ``errorCode``/``errorMessage`` (camelCase); the snake_case field
+    names carry aliases so the published schema matches the emitted JSON.
+    """
+
+    status: Literal["ERROR"] = "ERROR"
+    error_code: str = Field(alias="errorCode")
+    error_message: str = Field(alias="errorMessage")
+    hint: str | None = None
+
+
+class StructuredErrorEnvelope(FrozenModel):
+    """Published 4xx envelope for non-vworld endpoints (v2 public address paths, ADR-061)."""
+
+    response: StructuredErrorBody

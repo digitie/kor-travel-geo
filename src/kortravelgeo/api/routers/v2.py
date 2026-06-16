@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.dto.common import StructuredErrorEnvelope
 from kortravelgeo.dto.v2 import (
     GeocodeV2Input,
     GeocodeV2Response,
@@ -19,8 +22,19 @@ from kortravelgeo.dto.v2 import (
 
 router = APIRouter(tags=["v2"])
 
+# v2 public address paths return a structured 400 on validation failure (intended
+# input-safety, T-173/ADR-061). Declaring it makes the published contract match the wire.
+_V2_VALIDATION_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: {"model": StructuredErrorEnvelope, "description": "구조화 검증·도메인 오류 (ADR-061)"}
+}
 
-@router.post("/geocode", response_model=GeocodeV2Response, response_model_exclude_none=True)
+
+@router.post(
+    "/geocode",
+    response_model=GeocodeV2Response,
+    response_model_exclude_none=True,
+    responses=_V2_VALIDATION_RESPONSES,
+)
 async def geocode_v2(
     req: GeocodeV2Input,
     client: AsyncAddressClient = Depends(get_client),
@@ -39,7 +53,12 @@ async def geocode_v2(
     )
 
 
-@router.post("/reverse", response_model=ReverseV2Response, response_model_exclude_none=True)
+@router.post(
+    "/reverse",
+    response_model=ReverseV2Response,
+    response_model_exclude_none=True,
+    responses=_V2_VALIDATION_RESPONSES,
+)
 async def reverse_v2(
     req: ReverseV2Input,
     client: AsyncAddressClient = Depends(get_client),
@@ -56,7 +75,12 @@ async def reverse_v2(
     )
 
 
-@router.post("/search", response_model=SearchV2Response, response_model_exclude_none=True)
+@router.post(
+    "/search",
+    response_model=SearchV2Response,
+    response_model_exclude_none=True,
+    responses=_V2_VALIDATION_RESPONSES,
+)
 async def search_v2(
     req: SearchV2Input,
     client: AsyncAddressClient = Depends(get_client),

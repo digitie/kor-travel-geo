@@ -5733,6 +5733,34 @@ export interface components {
         };
         /** @enum {string} */
         Status: "OK" | "NOT_FOUND" | "ERROR";
+        /**
+         * StructuredErrorBody
+         * @description Non-vworld API error body produced by ``error_payload`` (ADR-061).
+         *
+         *     The wire keys are ``errorCode``/``errorMessage`` (camelCase); the snake_case field
+         *     names carry aliases so the published schema matches the emitted JSON.
+         */
+        StructuredErrorBody: {
+            /** Errorcode */
+            errorCode: string;
+            /** Errormessage */
+            errorMessage: string;
+            /** Hint */
+            hint?: string | null;
+            /**
+             * Status
+             * @default ERROR
+             * @constant
+             */
+            status: "ERROR";
+        };
+        /**
+         * StructuredErrorEnvelope
+         * @description Published 4xx envelope for non-vworld endpoints (v2 public address paths, ADR-061).
+         */
+        StructuredErrorEnvelope: {
+            response: components["schemas"]["StructuredErrorBody"];
+        };
         /** TableStat */
         TableStat: {
             /** Row Count */
@@ -9417,13 +9445,13 @@ export interface operations {
                     "application/json": components["schemas"]["GeocodeV2Response"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description 구조화 검증·도메인 오류 (ADR-061) */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["StructuredErrorEnvelope"];
                 };
             };
         };
@@ -9483,13 +9511,13 @@ export interface operations {
                     "application/json": components["schemas"]["ReverseV2Response"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description 구조화 검증·도메인 오류 (ADR-061) */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["StructuredErrorEnvelope"];
                 };
             };
         };
@@ -9516,13 +9544,13 @@ export interface operations {
                     "application/json": components["schemas"]["SearchV2Response"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description 구조화 검증·도메인 오류 (ADR-061) */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["StructuredErrorEnvelope"];
                 };
             };
         };
