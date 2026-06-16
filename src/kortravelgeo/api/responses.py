@@ -37,6 +37,8 @@ _DB_UNAVAILABLE_MESSAGE = "database operation failed"
 _DB_UNAVAILABLE_HINT = (
     "check KTG_PG_DSN, PostgreSQL connectivity, and /v1/readyz before retrying"
 )
+_MAX_VALIDATION_HINT_PARTS = 8
+_MAX_VALIDATION_HINT_CHARS = 600
 
 
 def error_payload(
@@ -127,7 +129,41 @@ def _validation_error_to_domain(exc: ValidationError) -> KorTravelGeoError:
 def _validation_errors_to_domain(errors: Sequence[Mapping[str, Any]]) -> KorTravelGeoError:
     if any(error.get("type") == _COORDINATE_BOUNDS_ERROR for error in errors):
         return InvalidCoordinateError(_COORDINATE_BOUNDS_MESSAGE)
-    return InvalidInputError("invalid request data", hint=str(errors))
+    return InvalidInputError("invalid request data", hint=_summarize_validation_errors(errors))
+
+
+def _summarize_validation_errors(errors: Sequence[Mapping[str, Any]]) -> str | None:
+    """Build a stable, bounded ``loc: msg`` hint (ADR-061).
+
+    ``str(exc.errors())`` leaked the raw pydantic error reprs — including the user-supplied
+    ``input`` value and internal ``url``/``ctx`` — into the response. Keep only the field
+    location and the (template) message so the hint is useful without echoing input.
+
+    The DTOs are ``extra='forbid'``, so an ``extra_forbidden`` error's ``loc`` leaf is the
+    user-supplied key name; drop that leaf so the key is not reflected back. Deduplicate and
+    cap the count/length so a request stuffed with bogus keys can't amplify the response.
+    """
+    parts: list[str] = []
+    for error in errors:
+        loc = tuple(error.get("loc", ()))
+        msg = str(error.get("msg") or "invalid value")
+        if error.get("type") == "extra_forbidden":
+            loc = loc[:-1]  # leaf is the user-supplied key name — do not reflect it
+            msg = "unexpected field"
+        field = ".".join(str(piece) for piece in loc) or "request"
+        part = f"{field}: {msg}"
+        if part not in parts:
+            parts.append(part)
+    if not parts:
+        return None
+    extra = len(parts) - _MAX_VALIDATION_HINT_PARTS
+    shown = parts[:_MAX_VALIDATION_HINT_PARTS]
+    if extra > 0:
+        shown.append(f"(+{extra} more)")
+    hint = "; ".join(shown)
+    if len(hint) > _MAX_VALIDATION_HINT_CHARS:
+        hint = hint[: _MAX_VALIDATION_HINT_CHARS - 3].rstrip() + "..."
+    return hint
 
 
 def _route_template(request: Request) -> str:

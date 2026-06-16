@@ -9677,6 +9677,57 @@
         ],
         "type": "string"
       },
+      "StructuredErrorBody": {
+        "additionalProperties": false,
+        "description": "Non-vworld API error body produced by ``error_payload`` (ADR-061).\n\nThe wire keys are ``errorCode``/``errorMessage`` (camelCase); the snake_case field\nnames carry aliases so the published schema matches the emitted JSON.",
+        "properties": {
+          "errorCode": {
+            "title": "Errorcode",
+            "type": "string"
+          },
+          "errorMessage": {
+            "title": "Errormessage",
+            "type": "string"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "status": {
+            "const": "ERROR",
+            "default": "ERROR",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "errorCode",
+          "errorMessage"
+        ],
+        "title": "StructuredErrorBody",
+        "type": "object"
+      },
+      "StructuredErrorEnvelope": {
+        "additionalProperties": false,
+        "description": "Published 4xx envelope for non-vworld endpoints (v2 public address paths, ADR-061).",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/StructuredErrorBody"
+          }
+        },
+        "required": [
+          "response"
+        ],
+        "title": "StructuredErrorEnvelope",
+        "type": "object"
+      },
       "TableStat": {
         "additionalProperties": false,
         "properties": {
@@ -16597,15 +16648,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/StructuredErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "구조화 검증·도메인 오류 (ADR-061)"
           }
         },
         "summary": "Geocode V2",
@@ -16679,15 +16730,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/StructuredErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "구조화 검증·도메인 오류 (ADR-061)"
           }
         },
         "summary": "Reverse V2",
@@ -16720,15 +16771,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/StructuredErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "구조화 검증·도메인 오류 (ADR-061)"
           }
         },
         "summary": "Search V2",
