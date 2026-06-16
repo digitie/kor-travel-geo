@@ -1270,6 +1270,8 @@ T-141 이후 장시간 고부하 검증은 `scripts/run_t141_load_matrix.py`가 
 SQL/REST workload를 `steady`/`burst`/`recovery`/`soak` phase로 묶고, T-163 기준
 `--soak-guard-mode enforce`를 사용하면 soak profile의 runner process RSS 증가,
 CPU seconds, `/proc/self/io` read/write budget, RSS leak 판정 실패 시 exit code `2`로
+종료한다. T-164 기준 `scripts/evaluate_t164_p99_regression.py`는 baseline/current
+`matrix-report.json`의 같은 `profile_id`를 비교해 p99 회귀 임계 초과 시 exit code `2`로
 종료한다. API 서버나 PostgreSQL 서버의 별도 process 자원은 이 guard의 직접 측정 범위가
 아니다.
 

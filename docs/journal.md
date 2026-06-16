@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-164 p99 regression guard)
+
+**작업**: `scripts/evaluate_t164_p99_regression.py`를 추가해 T-141 `matrix-report.json` baseline/current의 같은 `profile_id`를 비교하는 p99 회귀 gate를 만들었다. 결과는 `p99-guard.json`과 `summary.md`로 남기고, `--mode enforce`에서는 실패 시 exit code 2로 종료한다.
+
+**결정**: 기본 허용 p99는 `max(baseline * 1.20, baseline + 25ms)`다. Current row의 error는 기본 0이어야 하며, `phase="soak"` row는 T-163 `soak_guard.passed=true`를 요구한다. Adversarial/입력분포 변화 gate는 `--workload adversarial_fuzzy`, `worst_case_mix`, `reverse_polygon_heavy` 필터를 우선 사용한다.
+
+**검증/문서**: Windows focused unit 4개, Ruff, mypy가 통과했다. 상세는 `docs/t164-p99-regression-guard.md`에 기록했고, 다음 Agent A 작업은 T-171이다.
+
 ## 2026-06-16 (T-163 60분 soak resource guard)
 
 **작업**: `scripts/run_t141_load_matrix.py`의 artifact schema를 `2`로 올리고, T-141 soak profile에 `soak_guard_budget`과 profile별 `soak_guard`를 추가했다. Soak 실행 중 runner process current RSS, CPU seconds, `/proc/self/io` delta를 sampling해 `soak-resource-samples.json`과 `soak-guard.json`에 남긴다.
