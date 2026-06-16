@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-165 주소 정규화/파싱 견고성을 보강했다. `core.normalize`가 NFKC 정규화, 전각 숫자·대시 접기, 쉼표류 구분자 공백화, 숫자 사이 하이픈 공백 제거, 시도 약어·구/신 표기, 도로명-건물번호 무공백, `번`/`번지` 접미, 괄호·영문 혼용 prefix를 exact lookup key 손실 없이 처리한다. T-140 normalization corpus case는 `서울시 동대문구 왕산로１８９－４ (청량리동)` 입력이 `왕산로 189-4`/`sig_cd=11230` road 후보를 반환해야 한다.
 - T-176 reverse 경계·근접 정확도 정합을 추가했다. Reverse nearest SQL은 KNN 뒤 `distance_m`, `pt_source='entrance'`, `bd_mgt_sn`, `rncode_full`, `bjd_cd`로 동률을 결정하고, `radius_m` 경계 포함, `type="both"` fan-out, 주소 없음+국가지점번호 context-only `OK` 의미를 테스트와 corpus로 고정한다.
 - T-175 region hint 정확도·교차검증을 추가했다. `RegionHint`가 `sig_cd`/`bjd_cd` prefix 일관성을 검증해 모순 hint를 DB 조회 전 입력 오류로 거절하고, v2 geocode/reverse/search 입력 모델도 같은 검증을 생성 시점에 실행한다. T-140 corpus는 정상 BJD hint와 모순 hint negative를 추가해 25개가 됐다.
 - T-173 negative/악성/경계 입력 안전성 하니스를 추가했다. Geocode text 입력은 ASCII control character를 DTO 단계에서 거절하고, v2 reverse 좌표는 finite 값과 한국 lon/lat bounds를 먼저 검증한다. API 하니스는 v1/v2 geocode/reverse/SPPN 악성·경계 입력이 구조화 4xx 또는 core `NOT_FOUND`로 끝나며 500/crash가 없음을 고정한다.

@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-165 주소 정규화/파싱 견고성 강화)
+
+**작업**: `core.normalize`의 `normalize_spaces()`와 도로명/지번 parser를 보강했다. 입력은 NFKC로 접고, 전각 숫자·대시 변형, 쉼표류 구분자, 숫자 사이 하이픈 공백을 canonicalize한다. 시도 별칭에는 `서울시`, `강원도`, `전라북도` 같은 약어·구/신 표기를 추가했고, `성복1로35`, `왕산로189-4`, `산12 - 3번지`, `189번` 같은 입력이 exact lookup key를 잃지 않도록 했다.
+
+**결정**: 영문 주소 transliteration은 하지 않는다. 한국어 도로명이 함께 들어온 영문 혼용 prefix가 parser를 깨지 않게 하는 범위에 머문다. 도로명 오타 ranking은 T-171 fuzzy fallback 책임으로 유지하고, T-165는 오타 입력에서도 본번·부번·지하구분을 보존하는 데 집중한다.
+
+**검증/문서**: `tests/unit/test_t165_normalization.py`가 정규화 helper, 도로명 변형, 지번 변형, core geocode repository 전달 값을 고정한다. T-140 `T140-GEO-WHITESPACE-ALIAS-001`은 `서울시 동대문구 왕산로１８９－４ (청량리동)` 입력이 `왕산로 189-4`/`sig_cd=11230` road 후보를 반환해야 하는 기본 live case로 좁혔다. Fixture smoke는 25/25 통과했고 SHA-256은 `0b4ff00d1a59520da3237daf57c51e9be1e870a699976f1b86e1d48482d32b99`이다. 상세는 `docs/t165-normalization-robustness.md`에 기록했고, 다음 Agent A 작업은 T-143이다. CodeGraph MCP는 `Transport closed`로 실패해 `codegraph sync/status` CLI 최신 상태를 확인했다.
+
 ## 2026-06-16 (T-176 reverse 경계·근접 정확도 정합)
 
 **작업**: reverse nearest SQL의 KNN 정렬 뒤에 `distance_m`, `pt_source='entrance'`, `bd_mgt_sn`, `rncode_full`, `bjd_cd` tie-break를 추가해 같은 거리 후보 순서를 결정적으로 고정했다. `type="both"`는 SQL base row `limit` 적용 후 `road`/`parcel` 순으로 fan-out하는 계약을 단위 테스트로 고정했다.

@@ -9,12 +9,28 @@ from dataclasses import dataclass
 from kortravelgeo.exceptions import InvalidAddressError
 
 _SPACE_RE = re.compile(r"\s+")
-_BRACKET_RE = re.compile(r"\(([^)]*)\)")
-_ROAD_RE = re.compile(
-    r"(?P<road>[가-힣0-9A-Za-z·.\-\s]+?(?:대로|로|길))\s+"
-    r"(?P<main>\d+)(?:-(?P<sub>\d+))?"
+_SEPARATOR_RE = re.compile(r"[,\uFF0C\u3001;\uFF1B]")
+_NUMBER_HYPHEN_RE = re.compile(r"(?<=\d)\s*-\s*(?=\d)")
+_DASH_TRANSLATION = str.maketrans(
+    {
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2015": "-",
+        "\u2212": "-",
+        "\uFF0D": "-",
+    }
 )
-_JIBUN_RE = re.compile(r"(?P<mt>산\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?")
+_BRACKET_RE = re.compile(r"[\(\[\{]([^)\]\}]*)[\)\]\}]")
+_ROAD_RE = re.compile(
+    r"(?P<road>[가-힣0-9A-Za-z·.\-\s]+?(?:대로|로|길))\s*"
+    r"(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?"
+)
+_JIBUN_RE = re.compile(
+    r"(?P<mt>산\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?"
+)
 
 _SIDO_ALIASES = {
     "서울": "서울특별시",
@@ -34,6 +50,22 @@ _SIDO_ALIASES = {
     "경북": "경상북도",
     "경남": "경상남도",
     "제주": "제주특별자치도",
+    "서울시": "서울특별시",
+    "부산시": "부산광역시",
+    "대구시": "대구광역시",
+    "인천시": "인천광역시",
+    "대전시": "대전광역시",
+    "울산시": "울산광역시",
+    "세종시": "세종특별자치시",
+    "강원도": "강원특별자치도",
+    "전라북도": "전북특별자치도",
+    "전북도": "전북특별자치도",
+    "제주도": "제주특별자치도",
+    "충북도": "충청북도",
+    "충남도": "충청남도",
+    "전남도": "전라남도",
+    "경북도": "경상북도",
+    "경남도": "경상남도",
 }
 
 _SIDO_SUFFIXES = ("특별시", "광역시", "특별자치시", "특별자치도", "자치도", "도")
@@ -73,7 +105,10 @@ class AddrParts:
 
 
 def normalize_spaces(value: str) -> str:
-    return _SPACE_RE.sub(" ", unicodedata.normalize("NFC", value).strip())
+    normalized = unicodedata.normalize("NFKC", value).translate(_DASH_TRANSLATION)
+    normalized = _SEPARATOR_RE.sub(" ", normalized)
+    normalized = _NUMBER_HYPHEN_RE.sub("-", normalized)
+    return _SPACE_RE.sub(" ", normalized.strip())
 
 
 def normalize_sido(value: str | None) -> str | None:
