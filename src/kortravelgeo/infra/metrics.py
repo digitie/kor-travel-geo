@@ -109,6 +109,22 @@ API_REQUEST_DURATION = _histogram(
     ("method", "route", "status_code"),
     (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
+API_ADMISSION_WAIT = _histogram(
+    "kor_travel_geo_api_admission_wait_seconds",
+    "Admission-control wait time by route template, method, scope, and outcome.",
+    ("method", "route", "scope", "outcome"),
+    (0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
+)
+API_ADMISSION_REJECTIONS = _counter(
+    "kor_travel_geo_api_admission_rejections_total",
+    "Admission-control rejected requests by route template, method, and scope.",
+    ("method", "route", "scope"),
+)
+API_ADMISSION_IN_PROGRESS = _gauge(
+    "kor_travel_geo_api_admission_in_progress",
+    "HTTP requests currently holding an admission-control slot by scope.",
+    ("scope",),
+)
 LOAD_JOB_DURATION = _histogram(
     "kor_travel_geo_load_job_duration_seconds",
     "Load job wall-clock duration by job kind and final state.",
@@ -295,6 +311,34 @@ def record_api_request(
             route=route,
             status_code=str(status_code),
         ).inc()
+
+
+def record_api_admission_started(*, scope: str) -> None:
+    API_ADMISSION_IN_PROGRESS.labels(scope=scope).inc()
+
+
+def record_api_admission_finished(*, scope: str) -> None:
+    API_ADMISSION_IN_PROGRESS.labels(scope=scope).dec()
+
+
+def record_api_admission_wait(
+    *,
+    method: str,
+    route: str,
+    scope: str,
+    outcome: str,
+    elapsed_s: float,
+) -> None:
+    API_ADMISSION_WAIT.labels(
+        method=method,
+        route=route,
+        scope=scope,
+        outcome=outcome,
+    ).observe(max(0.0, elapsed_s))
+
+
+def record_api_admission_rejection(*, method: str, route: str, scope: str) -> None:
+    API_ADMISSION_REJECTIONS.labels(method=method, route=route, scope=scope).inc()
 
 
 def record_db_pool_checkout_timeout(*, method: str, route: str) -> None:

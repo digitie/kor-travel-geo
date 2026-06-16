@@ -187,7 +187,7 @@ ignore_imports = ["kortravelgeo.api.routers.admin -> kortravelgeo.loaders"]
 | 카테고리 | 키 | 비고 |
 |----------|----|------|
 | DB | `pg_dsn`, `pg_pool_size`, `pg_max_overflow`, `pg_pool_timeout_ms`, `pg_statement_timeout_ms`, `pg_pool_recycle_s` | `postgresql+psycopg://...`. `pg_pool_timeout_ms` 기본값은 1000ms이며 pool 포화 시 API는 HTTP 503 + `E0500`으로 fail-fast한다. |
-| API | `api_title`, `api_cors_origins`, `api_default_radius_m`, `api_max_search_size`, `api_max_upload_bytes`, `api_explain_timeout_ms`, `api_max_concurrency`, `api_admission_timeout_ms`, `api_readiness_timeout_ms` | 업로드 기본 상한 2GiB, EXPLAIN 기본 timeout 3초. `api_max_concurrency`는 unset이면 비활성화하며 `/v1/address/*` 요청을 process별 semaphore로 제한한다. `api_readiness_timeout_ms`는 `/v1/readyz` DB probe timeout이며 기본값은 1000ms다. |
+| API | `api_title`, `api_cors_origins`, `api_default_radius_m`, `api_max_search_size`, `api_max_upload_bytes`, `api_explain_timeout_ms`, `api_max_concurrency`, `api_geocode_max_concurrency`, `api_reverse_max_concurrency`, `api_search_max_concurrency`, `api_zipcode_max_concurrency`, `api_pobox_max_concurrency`, `api_regions_max_concurrency`, `api_admission_timeout_ms`, `api_readiness_timeout_ms` | 업로드 기본 상한 2GiB, EXPLAIN 기본 timeout 3초. `api_max_concurrency`는 unset이면 비활성화하며 `/v1/address/*`와 `/v2/*` 공개 주소 API 전체를 process별 semaphore로 제한한다. endpoint별 cap은 geocode/reverse/search/zipcode/pobox/regions scope에만 적용된다. `api_readiness_timeout_ms`는 `/v1/readyz` DB probe timeout이며 기본값은 1000ms다. |
 | GeoIP gate | `geoip_db_path`, `geoip_gate_mode`, `geoip_allow_cidrs`, `geoip_deny_cidrs`, `geoip_open_paths`, `geoip_trusted_proxies`, `geoip_audit_denials` | T-054. 외부 공용 IP는 GeoIP country `KR`만 허용하고, 내부/loopback은 허용한다. 기본 mode는 `strict`라 DB 부재 시 공용 IP를 차단한다. |
 | 외부 | `juso_api_key`, `juso_search_url`, `juso_coord_url`, `juso_coord_api_key`, `vworld_api_key`, `vworld_url`, `epost_api_key`, `epost_download_url` | 모두 `SecretStr` 또는 URL |
 | 캐시 | `cache_enabled`, `cache_ttl_days` | `geo_cache` 테이블 사용 |
@@ -369,7 +369,19 @@ app.include_router(admin.router, prefix="/v1/admin")
 ### 헬스와 readiness
 
 - `GET /v1/healthz`: process liveness. DB checkout이나 SQL probe를 수행하지 않는다.
-- `GET /v1/readyz`: DB와 SQLAlchemy pool readiness. DB 단절·timeout·API client 미시작은 HTTP 503, `ready=false`, `degraded=true`로 반환한다. Pool 포화 상태에서는 새 DB checkout을 시도하지 않고 HTTP 503으로 fail-fast하며 database component는 `status="skipped"`가 된다. Pool utilization 0.8 이상은 HTTP 200을 유지하지만 `degraded=true`로 운영 경고를 노출한다.
+- `GET /v1/readyz`: DB와 SQLAlchemy pool readiness. DB 단절·timeout·API client 미시작은 HTTP 503, `ready=false`, `degraded=true`로 반환한다. Pool 포화 상태에서는 새 DB checkout을 시도하지 않고 HTTP 503으로 fail-fast하며 database component는 `status="skipped"`가 된다. Pool utilization 0.8 이상은 HTTP 200을 유지하지만 `degraded=true`로 운영 경고를 노출한다. Admission control이 활성화된 경우 `components.admission`에 scope별 `limit`/`in_use`/`available`/`utilization`을 포함하며, scope 포화는 HTTP 200 + `degraded=true`로 노출한다.
+
+### Admission control과 overload 응답
+
+공개 주소 API(`/v1/address/*`, `/v2/*`)는 process-local admission control을 선택적으로 사용할 수 있다. `api_max_concurrency`는 전체 공개 주소 API cap이고, `api_geocode_max_concurrency`/`api_reverse_max_concurrency`/`api_search_max_concurrency`/`api_zipcode_max_concurrency`/`api_pobox_max_concurrency`/`api_regions_max_concurrency`는 endpoint scope별 cap이다. endpoint cap과 전체 cap을 함께 설정하면 요청은 endpoint scope를 먼저 얻고 전역 `address` scope를 나중에 얻는다.
+
+Admission timeout은 `RateLimitError(E0200, HTTP 429)`로 반환한다. `/v1/address/geocode`와 `/v1/address/reverse`는 VWorld 호환 `OVER_REQUEST_LIMIT` envelope를 유지한다. 응답 header에는 `Retry-After: 1`, `Cache-Control: no-store`를 넣는다. 서버 내부에서 overload 요청을 자동 재시도하지 않는다.
+
+Prometheus 지표는 다음을 노출한다.
+
+- `kor_travel_geo_api_admission_wait_seconds{method,route,scope,outcome}` histogram
+- `kor_travel_geo_api_admission_rejections_total{method,route,scope}` counter
+- `kor_travel_geo_api_admission_in_progress{scope}` gauge
 
 ### 라우터 — geocode
 
