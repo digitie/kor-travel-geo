@@ -8,6 +8,7 @@ import pytest
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.core.confidence import SPPN_GRID_CONFIDENCE
 from kortravelgeo.core.v2 import (
     geocode_v2_from_geometry_lookups,
     geocode_v2_from_v1,
@@ -697,6 +698,7 @@ def test_reverse_v2_promotes_sppn_extension_to_candidate() -> None:
 
     assert converted.status == "OK"
     assert converted.candidates[0].match_kind == "sppn"
+    assert converted.candidates[0].confidence == pytest.approx(SPPN_GRID_CONFIDENCE)
     assert converted.candidates[0].region is not None
     assert converted.candidates[0].region.sig_cd == "36110"
     assert converted.candidates[0].metadata["national_point_number"] == "다사 6925 4045"
@@ -719,6 +721,7 @@ def test_reverse_v2_promotes_sppn_number_without_makarea_to_candidate() -> None:
 
     assert converted.status == "OK"
     assert converted.candidates[0].match_kind == "sppn"
+    assert converted.candidates[0].confidence == pytest.approx(SPPN_GRID_CONFIDENCE)
     assert converted.candidates[0].point == Point(x=127.1, y=36.6)
     assert converted.candidates[0].point_precision == "grid_cell"
     assert converted.candidates[0].metadata == {"national_point_number": "다사 6925 4045"}

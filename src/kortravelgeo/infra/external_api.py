@@ -11,6 +11,7 @@ from pydantic import SecretStr
 from tenacity import AsyncRetrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from kortravelgeo.core.address import address_code_set_from_mapping
+from kortravelgeo.core.confidence import external_geocode_confidence
 from kortravelgeo.dto.address import AddressStructure, RefinedAddress
 from kortravelgeo.dto.common import Point, ServiceMeta
 from kortravelgeo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
@@ -175,7 +176,10 @@ def _vworld_response(inp: GeocodeInput, payload: Mapping[str, Any]) -> GeocodeRe
         input=inp,
         refined=RefinedAddress(text=text, structure=_structure(structure)),
         result=GeocodeResult(crs=inp.crs, point=point),
-        x_extension=GeocodeExtension(source="api_vworld", confidence=0.70),
+        x_extension=GeocodeExtension(
+            source="api_vworld",
+            confidence=external_geocode_confidence("api_vworld"),
+        ),
     )
 
 
@@ -230,7 +234,7 @@ def _juso_response(
         result=GeocodeResult(crs="EPSG:4326", point=point),
         x_extension=GeocodeExtension(
             source="api_juso",
-            confidence=0.65,
+            confidence=external_geocode_confidence("api_juso"),
             bd_mgt_sn=_str_or_none(search_item.get("bdMgtSn")),
             rncode_full=_str_or_none(search_item.get("rnMgtSn")),
             zip_no=_str_or_none(search_item.get("zipNo")),

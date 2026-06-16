@@ -59,7 +59,7 @@
 1. **기반 관측·헬스**: 완료. `T-157`/`T-160`/`T-174`로 pg_stat 관측, DB readiness, 좌표 변환 단일 경로를 닫았다.
 2. **풀 포화·fail-fast 안정성**: 완료. `T-154`(pool checkout timeout) → `T-145`(endpoint admission/backpressure) → `T-161`(client disconnect/query cancellation) → `T-159`(DB 장애 주입·안정 저하 검증) 순서로 닫았다.
 3. **고부하 회귀 gate**: 완료. `T-163`/`T-164`로 T-141 matrix를 resource budget과 p99 회귀 gate가 있는 nightly/CI 후보로 승격했다.
-4. **정확도·결정성**: `T-171` 완료 → `T-172` → `T-173` → `T-175` → `T-176` → `T-165`. 이미 만든 T-140 corpus를 ranking/confidence/negative/hint/reverse boundary case로 확장한 뒤, 마지막에 parser 변형 case를 넓힌다.
+4. **정확도·결정성**: `T-171`/`T-172` 완료 → `T-173` → `T-175` → `T-176` → `T-165`. 이미 만든 T-140 corpus를 ranking/confidence/negative/hint/reverse boundary case로 확장한 뒤, 마지막에 parser 변형 case를 넓힌다.
 5. **쿼리·공간 최적화**: `T-143` → `T-142` → `T-155` → `T-156`. geocode/search plan을 먼저 안정화하고 reverse 공간 조회를 분리 측정한 뒤 prepared statement와 hot-key cache를 검증한다.
 6. **운영 maintenance·API 계약**: `T-146` → `T-162` → `T-144`. post-load maintenance와 runtime warm 기준을 정한 뒤, 실제 이득이 확인된 계약 변경만 ADR/OpenAPI/UI typegen 범위로 올린다.
 7. **백업/복원 Agent A 몫**: `T-238` → `T-245` → `T-247`. Claude 주도 백업 트랙이 필요한 선행 PR을 머지한 뒤, RustFS reconcile, fault injection, backup/restore benchmark를 시간대 조율해 수행한다.
@@ -76,7 +76,6 @@
 - T-162 cold-start·cache warm 자동화·재기동 후 일관 성능 — 재기동/swap 후 cache warm(`pg_prewarm` 등)을 자동화해 cold p99 spike를 완화한다(T-146 maintenance와 경계: 여기는 runtime warm 코드). 합격: 재기동 직후 p99가 warm 대비 일정 배수 이내. (Agent A+B, 의존: T-138)
 - T-165 주소 정규화/파싱 견고성 강화 — 이형 표기·약어·공백·괄호·구주소/신주소·영문혼용·오타 케이스 견고성을 강화하고 변형/경계 case를 T-140 corpus에 등록한다. 합격: 변형 corpus 통과율 목표 달성·기존 회귀 0. (Agent A+B, 의존: T-140)
 - T-170 v2 producer 1:N candidate-list 전환 — `core/v2.py`의 단일 candidate collapse를 해제해 다점 후보를 방출한다(wire `candidates` tuple 무변경). 합격: 다점 후보 dedup 방출·v1 무영향. (Agent A+B, 의존: T-169)
-- T-172 confidence 산정 결정성·교정 중앙 모델 — centroid 캡·sppn 하드코딩 등을 중앙 confidence 모델로 일관화한다. 합격: confidence가 거리/매치종류와 단조·golden 고정. (Agent A, 의존: T-140)
 - T-173 negative/악성/경계 입력 안전성 하니스 — geocode/reverse/sppn에 악성·경계 입력 안전성(예외→구조화 4xx)을 하니스로 고정한다. 합격: 악성 입력 set 전부 구조화 응답·500/크래시 0. (Agent A, 의존: T-140)
 - T-175 region hint 정확도·교차검증 — `sig_cd`/`bjd_cd` 필터 정합성을 교차검증한다. 합격: hint 적용/미적용 결과 정합·오적용 0. (Agent A, 의존: T-140)
 - T-176 reverse 경계·근접 정확도 정합 — both fan-out·동률 거리·radius 경계 규약을 고정한다. 합격: 경계 case 결정적·radius 포함/제외 명시·먼 좌표 NOT_FOUND/OK 의미 일관. (Agent A, 의존: T-140)
@@ -139,6 +138,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-172 confidence 산정 결정성·교정 중앙 모델(Agent A/Codex). `kortravelgeo.core.confidence`를 추가해 local exact, centroid cap, 국가지점번호 grid cell, external fallback, reverse distance, search/geometry score confidence를 중앙 helper로 고정했다. SPPN reverse 후보 confidence는 exact 주소와 구분되도록 `1.0`에서 `0.72`로 낮췄고, T-140 corpus의 `T140-GEO-SPPN-001`은 `confidence=0.72`를 golden으로 확인한다. 상세: `docs/t172-confidence-model.md`, ADR-058. (2026-06-16)
 - [x] T-171 fuzzy ranking 결정성·품질 보강(Agent A/Codex). `mv_geocode_text_search`에 `buld_slno`/`buld_se_cd`를 포함하고 Alembic `0020_t171_fuzzy_ranking`으로 helper MV를 재생성하게 했다. `GeocodeRepository.fuzzy_roads()`는 도로명 trigram fallback에서도 `buld_mnnm`/`buld_slno`/`buld_se_cd`를 모두 맞춘 뒤 `similarity DESC → entrance 우선 → bd_mgt_sn`으로 결정 정렬한다. T-140 corpus의 `T140-GEO-ROAD-FUZZY-001`은 `왕산길 189-4` 입력이 `왕산로 189-4`를 1순위로 반환하고 `confidence >= 0.42`를 만족해야 하는 ranking case로 강화했다. 상세: `docs/t171-fuzzy-ranking.md`. (2026-06-16)
 - [x] T-263 단계별 e2e: DB 입력(rebuild-db)(Agent B/Claude). `tests/e2e/source-files-rebuild.spec.ts`(Chromium+Firefox)에서 T-225 공용 하네스로 매칭 세트 세부의 DB 재구성 흐름을 고정했다 — ① **force_promotion typed confirmation 게이팅**(force 체크 시 `REBUILD-PROMOTE <id>` 정확 입력 전 rebuild 차단, 오타 시 "확인 문구가 일치해야 합니다.") ② **enqueue**(rebuild-db 실행 → `최근 결과`에 `enqueued: true` + `job_id`) ③ **force_promotion enqueue**(확인 문구 후 요청 본문 `force_promotion: true`/`typed_confirmation` + 결과 `forced_promotion: true`) ④ **실패 경로**(rebuild-db 500 → `최근 결과`에 오류). enqueue/오류는 하네스 `responses`/`errors` knob으로 주입. enqueue된 load job의 라이브 진행률(SSE/polling)은 `/admin/load` 표면이라 여기서는 enqueue 응답까지 검증. **4 테스트 × 2 브라우저 = 8 passed**(Windows Playwright, production build). 프론트 type-check/lint/test(95)/build 통과. **섹션 2(source-files 단계별 e2e: T-225·T-259~263) 완료.** (2026-06-16)
 - [x] T-164 adversarial/입력분포 변화 하 p99 안정성 회귀 가드 CI화(Agent A/Codex). `scripts/evaluate_t164_p99_regression.py`를 추가해 T-141 `matrix-report.json` baseline/current의 같은 `profile_id`를 비교한다. 기본 gate는 current p99가 `max(baseline * 1.20, baseline + 25ms)`를 넘거나, current error가 0이 아니거나, soak row의 T-163 `soak_guard.passed`가 true가 아니면 실패한다. `p99-guard.json`과 `summary.md`를 쓰며 `--mode enforce`는 실패 시 exit code 2로 종료한다. 상세: `docs/t164-p99-regression-guard.md`. (2026-06-16)

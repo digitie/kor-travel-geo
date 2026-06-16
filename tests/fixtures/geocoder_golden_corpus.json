@@ -321,7 +321,8 @@
         "status": "OK",
         "min_results": 1,
         "fields": {
-          "candidates[0].match_kind": "sppn"
+          "candidates[0].match_kind": "sppn",
+          "candidates[0].confidence": 0.72
         },
         "contains_text": [
           "라사 2670 8512"
@@ -329,6 +330,7 @@
       },
       "golden_fields": [
         "candidates[0].match_kind",
+        "candidates[0].confidence",
         "candidates[0].point.x",
         "candidates[0].point.y",
         "candidates[0].metadata.national_point_number"
@@ -337,6 +339,7 @@
         "t213-r3",
         "default-live",
         "sppn",
+        "confidence",
         "v2"
       ],
       "source": "T-138 sql-baseline corpus Q11-sppn-geocode-001 formatted with core.sppn",

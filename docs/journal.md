@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-172 confidence 산정 결정성·교정 중앙 모델)
+
+**작업**: `kortravelgeo.core.confidence`를 추가해 geocode centroid cap, 국가지점번호 grid cell, external fallback, reverse distance, search/geometry score confidence를 중앙 helper로 모았다. 기존 호출부의 하드코딩 상수는 helper 호출로 바꿨다.
+
+**결정**: exact local 주소 후보 기본 confidence는 `1.0`, centroid cap은 `0.82`, SPPN grid cell 후보는 geocode/reverse 모두 `0.72`, VWorld/Juso fallback은 `0.70`/`0.65`로 둔다. SPPN reverse 후보는 `point_precision="grid_cell"` 의미와 맞게 기존 `1.0`에서 `0.72`로 낮췄다. 결정은 ADR-058에 기록했다.
+
+**검증/문서**: `tests/unit/test_confidence.py`가 clamp와 단조성을 고정하고, v2/external adapter 단위 테스트와 T-140 SPPN corpus expected field를 갱신했다. 상세는 `docs/t172-confidence-model.md`에 기록했고, 다음 Agent A 작업은 T-173이다.
+
 ## 2026-06-16 (T-171 fuzzy ranking 결정성·품질 보강)
 
 **작업**: `mv_geocode_text_search` helper MV에 `buld_slno`와 `buld_se_cd`를 추가하고, `GeocodeRepository.fuzzy_roads()`가 fuzzy fallback에서도 본번·부번·지하구분을 모두 맞춘 후보만 ranking하게 했다. 기존 `similarity DESC → entrance 우선 → bd_mgt_sn` 정렬은 유지해 동률 순서를 결정적으로 둔다.
