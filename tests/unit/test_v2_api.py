@@ -8,7 +8,7 @@ import pytest
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.client import AsyncAddressClient
-from kortravelgeo.core.v2 import geocode_v2_from_v1, reverse_v2_from_v1
+from kortravelgeo.core.v2 import geocode_v2_from_v1, reverse_v2_from_v1, search_v2_from_v1
 from kortravelgeo.dto.address import AddressStructure, RefinedAddress
 from kortravelgeo.dto.common import Point, ServiceMeta
 from kortravelgeo.dto.geocode import (
@@ -24,6 +24,7 @@ from kortravelgeo.dto.reverse import (
     ReverseResponse,
     ReverseResultItem,
 )
+from kortravelgeo.dto.search import SearchInput, SearchResponse, SearchResultItem
 from kortravelgeo.dto.v2 import (
     BBoxV2,
     CandidateV2,
@@ -446,6 +447,78 @@ def test_geocode_v2_maps_external_provider_sources() -> None:
     assert geocode_v2_from_v1(inp, response).candidates[0].source == "vworld"
 
 
+def test_geocode_v2_marks_sppn_precision_as_grid_cell() -> None:
+    inp = GeocodeV2Input(query="다사 6925 4045")
+    response = GeocodeResponse(
+        service=ServiceMeta(name="kor-travel-geo", operation="geocode"),
+        status="OK",
+        input=GeocodeInput(address="다사 6925 4045"),
+        refined=RefinedAddress(text="국가지점번호 다사 6925 4045", structure=AddressStructure()),
+        result=GeocodeResult(point=Point(x=127.1, y=36.6)),
+        x_extension=GeocodeExtension(
+            source="local",
+            confidence=0.72,
+            national_point_number="다사 6925 4045",
+        ),
+    )
+
+    converted = geocode_v2_from_v1(inp, response)
+
+    assert converted.candidates[0].match_kind == "sppn"
+    assert converted.candidates[0].point_precision == "grid_cell"
+
+
+def test_geocode_v2_collapses_v1_cache_source_to_local_source() -> None:
+    inp = GeocodeV2Input(road_address="서울특별시 강남구 테헤란로 152")
+    v1_response = _v1_geocode_response(GeocodeInput(address="서울특별시 강남구 테헤란로 152"))
+    response = v1_response.model_copy(
+        update={
+            "x_extension": GeocodeExtension(
+                source="cache",
+                confidence=0.97,
+            )
+        }
+    )
+
+    assert geocode_v2_from_v1(inp, response).candidates[0].source == "local"
+
+
+def test_v2_candidate_enum_accepts_current_and_planned_values_only() -> None:
+    CandidateV2(confidence=1.0, match_kind="detail", point_precision="approximate")
+    CandidateV2(confidence=1.0, match_kind="poi", point_precision="grid_cell")
+
+    with pytest.raises(ValueError):
+        CandidateV2(confidence=1.0, match_kind="postal")
+    with pytest.raises(ValueError):
+        CandidateV2(confidence=1.0, match_kind="category")
+    with pytest.raises(ValueError):
+        CandidateV2(confidence=1.0, match_kind="road", source="cache")
+
+
+def test_search_v2_maps_place_results_to_poi_candidates() -> None:
+    inp = SearchV2Input(query="카페", type="category", category_group_code="FD6")
+    response = SearchResponse(
+        service=ServiceMeta(name="kor-travel-geo", operation="search"),
+        status="OK",
+        input=SearchInput(query="카페", type="place"),
+        result=(
+            SearchResultItem(
+                type="place",
+                title="근처 카페",
+                point=Point(x=127.036, y=37.501),
+                score=0.81,
+            ),
+        ),
+        total=1,
+    )
+
+    converted = search_v2_from_v1(inp, response)
+
+    assert converted.candidates[0].match_kind == "poi"
+    assert converted.candidates[0].place is not None
+    assert converted.candidates[0].place.name == "근처 카페"
+
+
 def test_reverse_v2_promotes_distance_and_uses_distance_confidence() -> None:
     inp = ReverseInput(point=Point(x=127.036, y=37.501), radius_m=200)
     response = ReverseResponse(
@@ -525,5 +598,5 @@ def test_reverse_v2_promotes_sppn_number_without_makarea_to_candidate() -> None:
     assert converted.status == "OK"
     assert converted.candidates[0].match_kind == "sppn"
     assert converted.candidates[0].point == Point(x=127.1, y=36.6)
-    assert converted.candidates[0].point_precision == "approximate"
+    assert converted.candidates[0].point_precision == "grid_cell"
     assert converted.candidates[0].metadata == {"national_point_number": "다사 6925 4045"}
