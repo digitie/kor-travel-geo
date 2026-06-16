@@ -22,7 +22,7 @@ def _connect_options(settings: Settings) -> str:
     # avoids public-schema extension drift while still allowing unqualified ST_* calls.
     return (
         f"-c statement_timeout={settings.pg_statement_timeout_ms} "
-        "-c search_path=public,x_extension"
+        f"-c search_path={settings.pg_search_path}"
     )
 
 

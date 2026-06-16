@@ -34,6 +34,7 @@ def test_settings_defaults_match_backend_spec() -> None:
     settings = Settings()
 
     assert settings.pg_statement_timeout_ms == 5_000
+    assert settings.pg_search_path == "public,x_extension"
     assert settings.api_cors_origins == ()
     assert settings.api_default_radius_m == 200
     assert settings.api_max_upload_bytes == 2 * 1024 * 1024 * 1024
@@ -65,6 +66,17 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.geoip_deny_cidrs == ()
     assert settings.geoip_trusted_proxies == ()
     assert settings.geoip_audit_denials is True
+
+
+def test_settings_normalize_pg_search_path() -> None:
+    settings = Settings(pg_search_path=" _ktg_t133_shadow, public ,x_extension ")
+
+    assert settings.pg_search_path == "_ktg_t133_shadow,public,x_extension"
+
+
+def test_settings_reject_invalid_pg_search_path_identifier() -> None:
+    with pytest.raises(ValueError, match="pg_search_path"):
+        Settings(pg_search_path="public;DROP SCHEMA public")
 
 
 def test_settings_normalize_backup_csv_values() -> None:
