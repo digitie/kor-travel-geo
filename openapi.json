@@ -6436,6 +6436,11 @@
             "$ref": "#/components/schemas/CRS",
             "default": "EPSG:4326"
           },
+          "include_geometry": {
+            "default": false,
+            "title": "Include Geometry",
+            "type": "boolean"
+          },
           "include_region": {
             "default": true,
             "title": "Include Region",
@@ -7204,6 +7209,11 @@
               }
             ],
             "title": "Category Group Code"
+          },
+          "include_geometry": {
+            "default": false,
+            "title": "Include Geometry",
+            "type": "boolean"
           },
           "page": {
             "default": 1,
@@ -9702,12 +9712,12 @@
           },
           "status": {
             "const": "ERROR",
-            "default": "ERROR",
             "title": "Status",
             "type": "string"
           }
         },
         "required": [
+          "status",
           "errorCode",
           "errorMessage"
         ],

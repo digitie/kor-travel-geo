@@ -37,7 +37,9 @@ def test_v2_public_paths_advertise_structured_400_and_drop_422() -> None:
 def test_structured_error_schema_uses_wire_keys() -> None:
     schema = create_app().openapi()
     body = schema["components"]["schemas"]["StructuredErrorBody"]
-    assert {"errorCode", "errorMessage"} <= set(body["required"])
+    # error_payload() always emits status="ERROR", so the published schema requires it too
+    # (PR #316 review): a required const, not an optional defaulted field.
+    assert {"status", "errorCode", "errorMessage"} <= set(body["required"])
     assert {"status", "errorCode", "errorMessage", "hint"} == set(body["properties"])
 
 

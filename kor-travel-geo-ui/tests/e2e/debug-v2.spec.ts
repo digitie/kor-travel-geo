@@ -161,7 +161,8 @@ test.describe("디버그 UI v2 REST 연동", () => {
       crs: "EPSG:4326",
       include_region: true,
       include_zipcode: true,
-      radius_m: 200
+      radius_m: 200,
+      include_geometry: false
     });
   });
 
