@@ -3636,6 +3636,11 @@ export interface components {
         /** RestoreCreateRequest */
         RestoreCreateRequest: {
             /**
+             * Allow Partial
+             * @default false
+             */
+            allow_partial: boolean;
+            /**
              * Allow Version Mismatch
              * @default false
              */

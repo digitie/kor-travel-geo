@@ -5100,6 +5100,11 @@
       "RestoreCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "allow_partial": {
+            "default": false,
+            "title": "Allow Partial",
+            "type": "boolean"
+          },
           "allow_version_mismatch": {
             "default": false,
             "title": "Allow Version Mismatch",
