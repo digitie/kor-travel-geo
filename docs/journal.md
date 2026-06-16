@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-141 SQL/REST 고부하 benchmark matrix)
+
+**작업**: T-047/T-138 단발 SQL/REST benchmark를 운영형 matrix로 묶는 `scripts/run_t141_load_matrix.py`를 추가했다. workload는 `actual_mix`, `worst_case_mix`, `adversarial_fuzzy`, `reverse_polygon_heavy`로 나누고, phase는 steady/burst/recovery/soak, concurrency는 1/4/16/64/128/256을 지원한다. SQL은 pool checkout·DB execute·`pg_stat_statements` delta를, REST는 응답 크기와 admin summary endpoint를 함께 기록할 수 있다.
+
+**검증/산출물**: DB 없는 plan-only artifact를 `F:\dev\geodata\t141-load-matrix\20260616-r1\plan\`과 `...\full-plan\`에 남겼다. Full plan은 64개 profile이다. 단위 테스트는 workload weighting, REST admin case, plan serialization을 검증한다.
+
+**제약**: 실제 T-213 r3 SQL live smoke는 Windows async event loop 문제를 runner에서 고친 뒤 재시도했지만, 현재 `127.0.0.1:5432`가 listen 중이 아니라 connection timeout으로 실패했다. 이 저장소는 DB를 직접 구동하지 않으므로 live 고부하 수치는 남기지 않았고, 성능 결론도 내리지 않는다. 상세는 `docs/t141-load-matrix.md`.
+
 ## 2026-06-16 (T-140 geocoder/reverse golden corpus)
 
 **작업**: 정확도 회귀 방지용 static golden corpus 23개 case를 `tests/fixtures/geocoder_golden_corpus.json`에 추가하고, `scripts/run_geocoder_golden_corpus.py`로 fixture/schema 검증과 live DB 실행을 모두 지원하게 했다. 범위는 도로명 exact/fuzzy, 지번, reverse nearest/boundary, search, zipcode, 국가지점번호, negative, 후속 seed(행정구역/건물명/사서함/도서/산지/동명이인 도로명)를 포함한다.
