@@ -547,7 +547,7 @@ API job kind는 `roadaddr_entrance_load`다. payload는 다른 경로 기반 loa
 }
 ```
 
-`tl_roadaddr_entrc`가 채워져도 기준월이 다른 direct 출입구를 즉시 serving 좌표로 승격하지 않는다. `mv_geocode_target` 대표 좌표는 `tl_locsum_entrc` → same-month `tl_roadaddr_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 여기서 same-month는 `tl_roadaddr_entrc.source_yyyymm`이 현재 `tl_juso_text.source_yyyymm` 집합에 포함되는 경우다. API 응답 호환성을 위해 `pt_source`는 direct 출입구와 위치정보요약DB 출입구 모두 `entrance`로 유지한다. direct 여부를 더 자세히 분석해야 하는 경우에는 `tl_roadaddr_entrc.source_file`, `source_yyyymm`, 정합성 sample의 `source_kind='roadaddr'`를 본다.
+`tl_roadaddr_entrc`가 채워져도 기준월이 다른 direct 출입구를 즉시 serving 좌표로 승격하지 않는다. `mv_geocode_target` 대표 좌표는 `tl_locsum_entrc` → same-month `tl_roadaddr_entrc` → `tl_navi_buld_centroid` 순서로 선택한다. 여기서 same-month는 `tl_roadaddr_entrc.source_yyyymm`이 현재 `tl_juso_text.source_yyyymm` 집합에 포함되는 경우다. API 응답 호환성을 위해 `pt_source`는 direct 출입구와 위치정보요약DB 출입구 모두 `entrance`로 유지한다. T-134/ADR-055 이후 direct 여부나 C11 여부를 응답에 노출해야 하면 `pt_source` enum을 확장하지 않고 `coord_source_detail`로 분리한다. direct 여부를 더 자세히 분석해야 하는 경우에는 `tl_roadaddr_entrc.source_file`, `source_yyyymm`, 정합성 sample의 `source_kind='roadaddr'`를 본다.
 
 적재 결과를 기존 DB의 serving MV에 반영할 때는 `ktgctl refresh mv --swap`을 권장한다. T-039/T-027 이전에 만들어진 MV에 단순 `REFRESH CONCURRENTLY`만 수행하면 옛 MV 정의가 그대로 새로고침되어 same-month direct fallback 규칙이 적용되지 않는다.
 

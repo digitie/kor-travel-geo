@@ -547,7 +547,7 @@ serving 원천으로 쓰지 않는다. regression fixture 또는 migration/resto
 
 ## 구현 시 주의점
 
-- 새 좌표 후보를 `mv_geocode_target`에 넣을 때는 반드시 `pt_source`를 확장하고 priority를 문서화한다.
+- 새 좌표 후보를 `mv_geocode_target`에 넣을 때는 `pt_source` coarse enum(`entrance`/`centroid`)을 확장하지 않고, 세부 원천은 `coord_source_detail`로 분리한다(ADR-055). priority와 gate는 별도 문서에 남긴다.
 - 같은 건물에 여러 출입구 후보가 있을 때 `source_kind`, 기준월, distance-to-road, polygon containment를 scoring feature로 분리한다.
 - `TL_SGCO_RNADR_MST`와 `TL_SPBD_BULD`는 의미가 다르므로 같은 테이블에 덮어쓰지 않는다.
 - `TL_SPBD_ENTRC`가 여러 원천에 있으므로 전자지도, 건물 도형 bundle, direct entrance, locsum의 우선순위를 먼저 정한다.

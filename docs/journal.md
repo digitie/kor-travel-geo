@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-134 C11 좌표 출처 노출 계약)
+
+**작업**: C11이 나중에 다시 serving 후보로 논의될 때 v1/v2 응답에서 좌표 출처를 어떻게 표현할지 `docs/t134-c11-coordinate-source-contract.md`와 ADR-055로 확정했다. `pt_source`는 coarse enum `entrance`/`centroid`만 유지하고, `c11_bundle_guarded` 같은 세부 원천명은 `coord_source_detail`로 분리한다.
+
+**결정**: v1 VWorld 호환 표면에는 최상위나 `result` 내부 field를 추가하지 않는다. 필요 시 `response.x_extension.pt_source`/`coord_source_detail`만 사용한다. v1 reverse는 후보별 detail을 새로 노출하지 않고, v2는 `CandidateV2.point_precision`과 `metadata.pt_source`/`metadata.coord_source_detail`을 사용한다. 현재 코드에는 해당 DTO field가 없으므로 이번 작업은 OpenAPI/typegen/code 변경 없이 문서와 테스트 계획만 확정했다.
+
+**후속**: T-137에서 C11 최종 gate와 ADR-051을 재판정한다. C11이 계속 no-go면 구현하지 않고, 조건부 go가 되더라도 T-119는 ADR-051 accepted와 사용자 명시 승인 뒤에만 착수한다.
+
 ## 2026-06-16 (T-133 C11 shadow serving 성능·rollback 리허설)
 
 **작업**: `scripts/run_t133_c11_shadow_serving_rehearsal.py`를 추가해 T-132 guarded C11 정책을 active serving으로 승격하지 않고 `_ktg_t133_shadow` schema의 shadow `mv_geocode_target`/`mv_geocode_text_search`로 리허설했다. shadow REST 서버용 `KTG_PG_SEARCH_PATH` 설정도 추가했다(기본값은 기존과 같은 `public,x_extension`).
