@@ -69,7 +69,18 @@ const initialBackupsPanelState: BackupsPanelState = {
   lastResult: { status: "READY" }
 };
 
-export function BackupsPanel() {
+export type BackupsTabId = "overview" | "backup" | "restore" | "hotswap" | "jobs";
+
+const BACKUPS_TABS: { id: BackupsTabId; label: string }[] = [
+  { id: "overview", label: "개요" },
+  { id: "backup", label: "백업" },
+  { id: "restore", label: "복원" },
+  { id: "hotswap", label: "Hot-swap" },
+  { id: "jobs", label: "작업" }
+];
+
+export function BackupsPanel({ initialTab = "overview" }: { initialTab?: BackupsTabId }) {
+  const [activeTab, setActiveTab] = useState<BackupsTabId>(initialTab);
   const controller = useBackupsPanelController();
   const {
     allowedDirs,
@@ -88,27 +99,196 @@ export function BackupsPanel() {
     updateRestoreForm
   } = controller;
 
+  const runningCount = useMemo(
+    () => jobRows.filter((job) => !terminalJobState(job.state)).length,
+    [jobRows]
+  );
+
   return (
-    <div className="grid two">
-      <BackupFormPanel
-        allowedDirs={allowedDirs}
-        form={backupForm}
-        onChange={updateBackupForm}
-        onRefresh={loadAll}
-        onSubmit={submitBackup}
-      />
-      <RestoreFormPanel
-        artifacts={availableArtifacts}
-        form={restoreForm}
-        onChange={updateRestoreForm}
-        onSubmit={submitRestore}
-      />
-      <BackupJobsPanel jobRows={jobRows} onCancelJob={cancelJob} />
-      <BackupArtifactsPanel artifacts={artifacts} onDeleteArtifact={deleteArtifact} />
-      <Panel title="Last Response">
-        <JsonBlock value={lastResult} />
-      </Panel>
+    <div className="backups-shell">
+      <nav aria-label="백업/복원 탭" className="case-tabs">
+        <div
+          aria-label="백업/복원 관리 탭"
+          aria-orientation="horizontal"
+          className="case-tab-list"
+          role="tablist"
+        >
+          {BACKUPS_TABS.map((tab) => {
+            const isSelected = tab.id === activeTab;
+            return (
+              <button
+                aria-controls="backups-panel"
+                aria-selected={isSelected}
+                className={isSelected ? "case-tab active" : "case-tab"}
+                id={`backups-tab-${tab.id}`}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                type="button"
+              >
+                <strong>{tab.label}</strong>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      <section
+        aria-labelledby={`backups-tab-${activeTab}`}
+        className="backups-pane"
+        id="backups-panel"
+        role="tabpanel"
+      >
+        {activeTab === "overview" ? (
+          <div className="grid two">
+            <BackupsWorkflowGuide
+              availableCount={availableArtifacts.length}
+              onGoTo={setActiveTab}
+              onRefresh={loadAll}
+              runningCount={runningCount}
+              totalArtifacts={artifacts.length}
+            />
+            <Panel title="Last Response">
+              <JsonBlock value={lastResult} />
+            </Panel>
+          </div>
+        ) : null}
+        {activeTab === "backup" ? (
+          <div className="grid two">
+            <BackupFormPanel
+              allowedDirs={allowedDirs}
+              form={backupForm}
+              onChange={updateBackupForm}
+              onRefresh={loadAll}
+              onSubmit={submitBackup}
+            />
+            <BackupArtifactsPanel artifacts={artifacts} onDeleteArtifact={deleteArtifact} />
+          </div>
+        ) : null}
+        {activeTab === "restore" ? (
+          <RestoreFormPanel
+            artifacts={availableArtifacts}
+            form={restoreForm}
+            onChange={updateRestoreForm}
+            onSubmit={submitRestore}
+          />
+        ) : null}
+        {activeTab === "hotswap" ? <HotSwapGuideTab /> : null}
+        {activeTab === "jobs" ? (
+          <BackupJobsPanel jobRows={jobRows} onCancelJob={cancelJob} />
+        ) : null}
+      </section>
     </div>
+  );
+}
+
+function BackupsWorkflowGuide({
+  availableCount,
+  onGoTo,
+  onRefresh,
+  runningCount,
+  totalArtifacts
+}: {
+  availableCount: number;
+  onGoTo: (tab: BackupsTabId) => void;
+  onRefresh: () => void;
+  runningCount: number;
+  totalArtifacts: number;
+}) {
+  const nextAction =
+    totalArtifacts === 0
+      ? "백업본이 없습니다 — [백업] 탭에서 첫 백업을 생성하세요."
+      : runningCount > 0
+        ? `진행 중인 백업/복원 작업 ${runningCount}개 — [작업] 탭에서 진행률을 확인하세요.`
+        : `사용 가능한 백업 ${availableCount}개 — 검증·복원 드릴로 복원 가능성을 정기 점검하세요.`;
+
+  const steps: { title: string; hint: string; tab?: BackupsTabId }[] = [
+    {
+      title: "1. 백업 생성",
+      hint: "[백업] 탭에서 profile·destination·압축 레벨을 골라 백업을 시작합니다.",
+      tab: "backup"
+    },
+    {
+      title: "2. 무결성 검증",
+      hint: "`ktgctl backup verify <id> --deep` 로 archive 손상(bit rot)을 복원 전에 확인합니다."
+    },
+    {
+      title: "3. 복원 드릴",
+      hint: "`ktgctl backup restore-drill --artifact-id <id>` 로 throwaway DB에 복원해 PASS/FAIL을 점검합니다."
+    },
+    {
+      title: "4. 복원 / Hot-swap",
+      hint: "[복원]에서 new_database로 복원하고, 운영 교체는 [Hot-swap]에서 maintenance window + typed confirmation으로 진행합니다.",
+      tab: "restore"
+    }
+  ];
+
+  return (
+    <Panel
+      title="백업/복원 다음 액션"
+      actions={
+        <button className="button secondary" onClick={onRefresh} type="button">
+          <RefreshCw size={16} />
+          새로고침
+        </button>
+      }
+    >
+      <p className="backups-next-action">{nextAction}</p>
+      <ol className="backups-guide">
+        {steps.map((step) => (
+          <li key={step.title}>
+            <div className="backups-guide-step">
+              <strong>{step.title}</strong>
+              {step.tab ? (
+                <button
+                  className="button secondary"
+                  onClick={() => onGoTo(step.tab as BackupsTabId)}
+                  type="button"
+                >
+                  열기
+                </button>
+              ) : null}
+            </div>
+            <p>{step.hint}</p>
+          </li>
+        ))}
+      </ol>
+    </Panel>
+  );
+}
+
+function HotSwapGuideTab() {
+  return (
+    <Panel title="Hot-swap (운영 DB 교체)">
+      <p className="backups-next-action">
+        Hot-swap은 복원된 DB를 <code>ALTER DATABASE RENAME</code> 2-step으로 운영 serving DB와
+        교체합니다. 활성 maintenance window(kind=restore)와 정확한 typed confirmation이 필요하며,
+        smoke 실패 시 자동 rollback됩니다.
+      </p>
+      <ol className="backups-guide">
+        <li>
+          <p>
+            먼저 [복원] 탭에서 새 DB로 복원하고 <code>restore-drill</code>로 복원 가능성을
+            확인합니다.
+          </p>
+        </li>
+        <li>
+          <p>
+            <code>POST /v1/admin/restores/hot-swap-plan</code>으로 plan·blockers·typed
+            confirmation을 확인합니다.
+          </p>
+        </li>
+        <li>
+          <p>
+            maintenance window를 열고 <code>POST /v1/admin/restores/hot-swap</code>으로 실행,
+            필요 시 <code>POST /v1/admin/restores/hot-swap-rollback</code>으로 되돌립니다.
+          </p>
+        </li>
+      </ol>
+      <p className="backups-guide-note">
+        전용 위저드 UI(plan·maintenance window·실행·rollback)는 T-250에서 제공됩니다.
+      </p>
+    </Panel>
   );
 }
 
