@@ -1164,6 +1164,28 @@ textarea {
   padding-left: 18px;
 }
 
+.job-progress-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.job-progress {
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.job-progress-log {
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .source-stack {
   display: grid;
   gap: 16px;
