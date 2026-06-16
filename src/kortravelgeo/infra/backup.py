@@ -451,7 +451,24 @@ async def run_restore_job(
     try:
         await progress(progress=0.02, stage="preflight", message="restore preflight 시작")
         _preflight_restore_tools()
-        await verify_archive_checksum(archive_path, source_artifact)
+        # T-243 fix: an allow_partial restore must reach per-file (internal) checksum
+        # partitioning even for artifact_id restores. The archive-level sha256 covers the whole
+        # .tar.zst, so bit rot in one dump/<id>.dat fails it too — hard-failing here would skip
+        # the partial path entirely. So downgrade the archive mismatch to a recorded warning and
+        # let internal checksum partitioning split skippable vs critical. Default path stays strict.
+        archive_checksum_warning: str | None = None
+        if req.allow_partial:
+            try:
+                await verify_archive_checksum(archive_path, source_artifact)
+            except InvalidInputError as exc:
+                archive_checksum_warning = str(exc)
+                await progress(
+                    progress=0.03,
+                    stage="preflight",
+                    message=f"부분 복원: archive sha256 불일치를 경고로 강등 — {exc}",
+                )
+        else:
+            await verify_archive_checksum(archive_path, source_artifact)
         work_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(work_dir, 0o700)
         extract_dir.mkdir()
@@ -488,7 +505,12 @@ async def run_restore_job(
         use_list_path: Path | None = None
         if req.allow_partial:
             partial_restore_info, use_list_path = await _plan_partial_restore(
-                extract_dir, dump_dir, work_dir, cancel_event=cancel_event, progress=progress
+                extract_dir,
+                dump_dir,
+                work_dir,
+                cancel_event=cancel_event,
+                progress=progress,
+                archive_checksum_warning=archive_checksum_warning,
             )
         else:
             await verify_internal_checksums(extract_dir, cancel_event=cancel_event)
@@ -1638,6 +1660,7 @@ async def _plan_partial_restore(
     *,
     cancel_event: asyncio.Event,
     progress: ProgressReporter,
+    archive_checksum_warning: str | None = None,
 ) -> tuple[dict[str, Any] | None, Path | None]:
     """Plan a best-effort partial restore (T-243): which tables to skip + the use-list file.
 
@@ -1645,6 +1668,8 @@ async def _plan_partial_restore(
     critical file (``manifest.json``/``dump/toc.dat``) is corrupted — there is no trustworthy
     TOC to selectively restore from. Otherwise writes a filtered ``pg_restore --use-list`` and
     returns the ``partial_restore`` manifest block describing the skipped tables.
+    ``archive_checksum_warning`` (downgraded archive-level sha256 mismatch) is recorded for
+    traceability even when every per-file checksum still passes.
     """
     from kortravelgeo.infra.partial_restore import (
         build_partial_restore_uselist,
@@ -1654,6 +1679,14 @@ async def _plan_partial_restore(
 
     failures = await collect_internal_checksum_failures(extract_dir, cancel_event=cancel_event)
     if not failures:
+        if archive_checksum_warning is not None:
+            # Archive sha256 differed but every internal checksum passed → the dump payload is
+            # intact (corruption was outside it). Record it and proceed with a full restore.
+            return {
+                "enabled": False,
+                "skipped_count": 0,
+                "archive_sha256_warning": archive_checksum_warning,
+            }, None
         return None, None
     partition = partition_checksum_failures(failures)
     if not partition.can_partial_restore:
@@ -1674,7 +1707,10 @@ async def _plan_partial_restore(
             "나머지만 복원"
         ),
     )
-    return partial_restore_block(partition, use_list), use_list_path
+    block = partial_restore_block(partition, use_list)
+    if archive_checksum_warning is not None:
+        block["archive_sha256_warning"] = archive_checksum_warning
+    return block, use_list_path
 
 
 async def capture_pg_restore_toc(dump_dir: Path) -> list[str]:
