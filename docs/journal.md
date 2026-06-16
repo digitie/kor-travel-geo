@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-138 read-mostly serving 성능 benchmark)
+
+**작업**: T-213 r3 기준 DB(`kor_travel_geo_t213_20260615_r3`)에서 SQL 2,000 case/32,000 measurement와 REST 425 case/1,275 measurement를 재측정했다. Q4 broad search threshold `0.42`, `limit-before-join` 후보를 같은 corpus로 비교하고 `docs/t138-read-heavy-serving-performance.md`에 정리했다.
+
+**결정**: 이번 단계에서는 production index/MV/API SQL을 바꾸지 않는다. SQL baseline worst c64 p95는 `Q4_SEARCH/search_fuzzy=289.146ms`, REST fixed run worst c64 p95는 `Q1_ROAD_EXACT/geocode_road=350.545ms`로 T-214/T-216 band 안이다. Q4 threshold와 join 지연 후보는 p95를 개선하지 못했다. 대신 REST latency harness에서 synthetic `search_fuzzy` case가 `NOT_FOUND`를 정상 latency 표본으로 인정하도록 보정했다.
+
+**후속**: T-139는 즉시 착수하지 않는다. checkout 대기와 high-load tail은 T-141/T-154/T-155/T-156/T-146에서 이어서 다룬다. Artifact는 `F:\dev\geodata\t138-read-heavy-serving-performance\20260616-r1\`에 보존한다.
+
 ## 2026-06-16 (T-137 C11 후속 종합 gate 및 ADR-051 재판정)
 
 **작업**: T-129~T-134와 Admin UI 반영 T-220/T-221을 종합해 C11 최종 gate를 닫았다. 새 문서 `docs/t137-c11-final-gate.md`를 추가하고, ADR-051·T-118·T-125·tasks/resume를 같은 결론으로 갱신했다.
