@@ -97,7 +97,7 @@
 백엔드 백업/복원 스위트(`T-239`~`T-244`/`T-264`)와 백업/복원 Admin UI(`T-248`~`T-254`) + 백업 e2e(`T-255`)를 완료한 이후, 남은 Agent B 작업은 번호순보다 **의존성과 도메인 우선순위(개인 서버 = 백업/복원 최우선)**를 따른다. 각 항목은 독립 PR로 머지하고, 리뷰 반영(fixup) PR은 추가 리뷰하지 않는다. e2e는 CI 게이트가 아니며 `next dev` HMR이 hydration을 깨므로 **production build(`next build` + `next start --port 12505`)에서 실행**한다(`T-255` 기록, `tests/e2e/backups.spec.ts`가 mock-fixture 템플릿).
 
 1. **백업/복원 e2e 마무리**(T-255 `backups.spec.ts` mock-fixture 하네스 재사용): ~~`T-256`(복원 위저드 e2e)~~ ✅ → ~~`T-257`(hot-swap e2e)~~ ✅ → ~~`T-258`(접근성·회복성 e2e)~~ ✅ — **섹션 1 완료**.
-2. **source-files e2e 기반·단계별**: ~~`T-225`(fixture harness)~~ ✅ → ~~`T-259`(업로드 적재)~~ ✅ → ~~`T-260`(대기·재개·409 충돌)~~ ✅ → ~~`T-261`(구조 검증)~~ ✅ → ~~`T-262`(매칭 세트)~~ ✅ → `T-263`(DB 입력) **(다음)** — 섹션 2 마지막. (harness: `tests/e2e/fixtures/source-files.ts`, `installSourceFilesMock`)
+2. **source-files e2e 기반·단계별**: ~~`T-225`(fixture harness)~~ ✅ → ~~`T-259`(업로드 적재)~~ ✅ → ~~`T-260`(대기·재개·409 충돌)~~ ✅ → ~~`T-261`(구조 검증)~~ ✅ → ~~`T-262`(매칭 세트)~~ ✅ → ~~`T-263`(DB 입력)~~ ✅ — **섹션 2 완료**. (harness: `tests/e2e/fixtures/source-files.ts`, `installSourceFilesMock`)
 3. **Admin UI 기능·편의·접근성**: `T-222`(성능·C1~C17 검증 artifact read-only 노출) → `T-226`(운영 편의 기능 보강; T-254 가상화 공통 컴포넌트 공유) → `T-227`(기존 표면 `/admin/source-files`·`/admin/consistency`·`/admin/ops` 접근성·회복성 e2e).
 4. **통합 gate**: `T-153`(Agent A 성능·정확도 트랙과 함께 최종 안정화 acceptance) — 양 트랙 완료 후.
 
@@ -122,7 +122,6 @@
 
 #### source-files 단계별 e2e (T-259~ · Agent B) — T-223 상위 spec의 단계 세분, fixture는 T-225
 
-- T-263 단계별 e2e: DB 입력 — rebuild-db enqueue·job progress(SSE/polling)·force_promotion 확인·실패 경로를 고정. (Agent B, 의존: T-225)
 
 ### 최하위 우선순위 (ID는 낮지만 순위 최하위)
 
@@ -142,6 +141,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-263 단계별 e2e: DB 입력(rebuild-db)(Agent B/Claude). `tests/e2e/source-files-rebuild.spec.ts`(Chromium+Firefox)에서 T-225 공용 하네스로 매칭 세트 세부의 DB 재구성 흐름을 고정했다 — ① **force_promotion typed confirmation 게이팅**(force 체크 시 `REBUILD-PROMOTE <id>` 정확 입력 전 rebuild 차단, 오타 시 "확인 문구가 일치해야 합니다.") ② **enqueue**(rebuild-db 실행 → `최근 결과`에 `enqueued: true` + `job_id`) ③ **force_promotion enqueue**(확인 문구 후 요청 본문 `force_promotion: true`/`typed_confirmation` + 결과 `forced_promotion: true`) ④ **실패 경로**(rebuild-db 500 → `최근 결과`에 오류). enqueue/오류는 하네스 `responses`/`errors` knob으로 주입. enqueue된 load job의 라이브 진행률(SSE/polling)은 `/admin/load` 표면이라 여기서는 enqueue 응답까지 검증. **4 테스트 × 2 브라우저 = 8 passed**(Windows Playwright, production build). 프론트 type-check/lint/test(95)/build 통과. **섹션 2(source-files 단계별 e2e: T-225·T-259~263) 완료.** (2026-06-16)
 - [x] T-262 단계별 e2e: 매칭 세트(Agent B/Claude). `tests/e2e/source-files-matchset.spec.ts`(Chromium+Firefox)에서 T-225 공용 하네스로 match set lifecycle을 고정했다 — ① 목록의 상태 라벨(활성/무효 등)과 `integrity_alert` 배지 구분 표시 ② 세부 패널의 무결성 경보 박스(`role=alert` + `integrity_alert_detail` hash_mismatch) ③ invalid 세트 `run-validation`이 `state: "revalidatable"` 판정+사유 노출 ④ `activate`가 `state: "active"` 전이 노출. 검증/활성 결과는 하네스 `responses` knob(`/run-validation`·`/activate` suffix)으로 주입. **match set '생성'은 매칭 세트 탭에 전용 UI가 없어(CLI/업로드 register로 out-of-band) lifecycle 액션만 고정.** **4 테스트 × 2 브라우저 = 8 passed**(Windows Playwright, production build). 프론트 type-check/lint/test(95)/build 통과. (2026-06-16)
 - [x] T-261 단계별 e2e: 구조 검증(Agent B/Claude). `tests/e2e/source-files-validation.spec.ts`(Chromium+Firefox)에서 T-225 공용 하네스로 원천 파일 그룹의 구조 검증을 성공/warning/failed로 구분·사유 표시하는 경로를 고정했다 — ① 목록 탭의 그룹 상태 배지가 성공(available)·실패(failed_structure)를 구분 표시 ② 재검증(groupValidate)이 `state: "warning"` + 사유("기준월 혼합…")를 `최근 결과`에 노출 ③ 재검증이 `state: "failed"` + 사유("필수 파일 누락…")를 노출. 검증 결과는 하네스 `responses` knob(`/validate` suffix override)으로 주입. **3 테스트 × 2 브라우저 = 6 passed**(Windows Playwright, production build). 프론트 type-check/lint/test(95)/build 통과. (2026-06-16)
 - [x] T-163 60분 soak 메모리/IO/CPU budget·누수 감지 가드(Agent A/Codex). `scripts/run_t141_load_matrix.py` schema v2에 `soak_guard_budget`과 profile별 `soak_guard` 결과를 추가했다. Soak profile은 `soak-resource-samples.json`과 `soak-guard.json`에 runner process current RSS, CPU seconds, `/proc/self/io` delta, RSS leak 판정, 실패 사유를 남긴다. 기본 60분 budget은 RSS 증가 256MiB, leak floor 64MiB, CPU 3600초, read/write 각 2GiB이며 `--soak-guard-mode enforce`는 실패 시 exit code 2로 종료한다. 상세: `docs/t163-soak-guard.md`. (2026-06-16)
