@@ -43,7 +43,10 @@ def make_async_engine(
     if pg_dsn is not None:
         resolved = resolved.model_copy(update={"pg_dsn": pg_dsn})
 
-    merged_connect_args: dict[str, Any] = {"options": _connect_options(resolved)}
+    merged_connect_args: dict[str, Any] = {
+        "options": _connect_options(resolved),
+        "prepare_threshold": resolved.pg_prepare_threshold,
+    }
     if connect_args:
         merged_connect_args.update(connect_args)
 

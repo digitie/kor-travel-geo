@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     pg_statement_timeout_ms: int = Field(default=5_000, ge=1)
     pg_search_path: str = "public,x_extension"
     pg_pool_recycle_s: int = Field(default=3_600, ge=1)
+    pg_prepare_threshold: int | None = Field(default=5, ge=0)
     pg_query_metrics_enabled: bool = True
 
     api_title: str = "kor-travel-geo"
@@ -173,6 +174,16 @@ class Settings(BaseSettings):
         if text.startswith("postgresql://"):
             return text.replace("postgresql://", "postgresql+psycopg://", 1)
         return text
+
+    @field_validator("pg_prepare_threshold", mode="before")
+    @classmethod
+    def normalize_pg_prepare_threshold(cls, value: object) -> int | None | object:
+        if value is None or isinstance(value, int):
+            return value
+        text = str(value).strip().lower()
+        if text in {"", "none", "null", "off", "disable", "disabled"}:
+            return None
+        return value
 
     @field_validator("pg_search_path", mode="before")
     @classmethod

@@ -39,6 +39,7 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.pg_statement_timeout_ms == 5_000
     assert settings.pg_search_path == "public,x_extension"
     assert settings.api_cors_origins == ()
+    assert settings.pg_prepare_threshold == 5
     assert settings.api_default_radius_m == 200
     assert settings.api_max_upload_bytes == 2 * 1024 * 1024 * 1024
     assert settings.api_explain_timeout_ms == 3_000
@@ -90,6 +91,12 @@ def test_settings_normalize_pg_search_path() -> None:
 def test_settings_reject_invalid_pg_search_path_identifier() -> None:
     with pytest.raises(ValueError, match="pg_search_path"):
         Settings(pg_search_path="public;DROP SCHEMA public")
+
+
+def test_settings_accepts_disabled_pg_prepare_threshold() -> None:
+    settings = Settings(pg_prepare_threshold="none")
+
+    assert settings.pg_prepare_threshold is None
 
 
 def test_settings_normalize_backup_csv_values() -> None:

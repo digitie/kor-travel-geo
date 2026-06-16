@@ -40,6 +40,7 @@ def test_engine_wires_explicit_pool_failfast_options(monkeypatch: pytest.MonkeyP
         pg_pool_size=3,
         pg_max_overflow=2,
         pg_pool_timeout_ms=2_500,
+        pg_prepare_threshold=1,
         pg_query_metrics_enabled=False,
     )
 
@@ -50,6 +51,7 @@ def test_engine_wires_explicit_pool_failfast_options(monkeypatch: pytest.MonkeyP
     assert captured["max_overflow"] == 2
     assert captured["pool_timeout"] == pytest.approx(2.5)
     assert captured["pool_pre_ping"] is True
+    assert captured["connect_args"]["prepare_threshold"] == 1
 
 
 def test_engine_accepts_shadow_search_path_for_read_only_rehearsal() -> None:

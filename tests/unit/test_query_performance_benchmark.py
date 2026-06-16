@@ -16,6 +16,7 @@ from scripts.benchmark_query_performance import (
     _case_group_counts,
     _search_exact_params,
     _search_sql_params,
+    _settings_for_run,
     _with_region_params,
     build_parser,
     corpus_from_json,
@@ -37,6 +38,8 @@ def test_query_benchmark_parser_defaults() -> None:
     assert args.statement_timeout_ms == 5_000
     assert args.pool_size is None
     assert args.max_overflow is None
+    assert args.prepare_threshold is None
+    assert args.disable_prepared_statements is False
     assert args.reset_pg_stat_statements is False
     assert args.pg_stat_limit == 50
 
@@ -52,15 +55,60 @@ def test_pg_stat_statements_uses_extension_schema_prefix() -> None:
     assert "x_extension.pg_stat_statements LIMIT 1" in status_source
 
 
+def test_prepared_statement_capture_uses_session_local_pg_view() -> None:
+    import scripts.benchmark_query_performance as benchmark
+
+    capture_source = inspect.getsource(benchmark.capture_prepared_statements)
+
+    assert "FROM pg_prepared_statements" in capture_source
+    assert "pool_size=1/max_overflow=0" in capture_source
+
+
 def test_query_benchmark_parser_accepts_multiple_concurrency_values() -> None:
     parser = build_parser()
     args = parser.parse_args(
-        ["--concurrency", "1", "--concurrency", "4", "--pool-size", "64", "--max-overflow", "0"]
+        [
+            "--concurrency",
+            "1",
+            "--concurrency",
+            "4",
+            "--pool-size",
+            "64",
+            "--max-overflow",
+            "0",
+            "--prepare-threshold",
+            "1",
+        ]
     )
 
     assert args.concurrency == [1, 4]
     assert args.pool_size == 64
     assert args.max_overflow == 0
+    assert args.prepare_threshold == 1
+
+
+def test_query_benchmark_settings_can_disable_prepared_statements() -> None:
+    settings = _settings_for_run(
+        None,
+        pool_size=None,
+        max_overflow=None,
+        prepare_threshold=None,
+        disable_prepared_statements=True,
+    )
+
+    assert settings.pg_prepare_threshold is None
+
+
+def test_query_benchmark_settings_can_override_prepare_threshold() -> None:
+    settings = _settings_for_run(
+        None,
+        pool_size=None,
+        max_overflow=None,
+        prepare_threshold=0,
+        disable_prepared_statements=False,
+    )
+
+    assert settings.pg_prepare_threshold == 0
 
 
 def test_percentile_uses_linear_interpolation() -> None:
