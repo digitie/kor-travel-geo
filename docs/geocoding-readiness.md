@@ -44,7 +44,7 @@ PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/kor-travel-geo-*`)
 - `mv_geocode_target` 행 수 = `tl_juso_text` 건물 수 (좌표 출처는 `pt_source`로 entrance/centroid 분포 확인)
 - 도로명·지번 매칭 쿼리에 `EXPLAIN(ANALYZE)`로 인덱스 사용 확인
 - 샘플 주소 100건에 대해 vworld 원응답과 `AsyncAddressClient.geocode` 결과 비교 (좌표 오차 < 10m 비율 측정)
-- 역지오코딩: 임의 (lon, lat) 1,000건을 입력해 `/v1/address/reverse`가 출입구 hit / 동 폴리곤 fallback / NOT_FOUND 비율을 측정
+- 역지오코딩: 임의 (lon, lat) 1,000건을 입력해 `/v1/address/reverse`가 출입구·centroid hit / 국가지점번호 context-only / NOT_FOUND 비율을 측정
 
 ## 알려진 빈틈
 

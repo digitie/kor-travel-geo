@@ -35,7 +35,7 @@ from kortravelgeo.infra.geocode_repo import (
     _LOOKUP_ROAD,
     _SPPN_AREA_BY_POINT,
 )
-from kortravelgeo.infra.reverse_repo import _NEAREST_SQL, _SPPN_AREAS_SQL
+from kortravelgeo.infra.reverse_repo import _NEAREST_SQL, _RADIUS_SQL, _SPPN_AREAS_SQL
 from kortravelgeo.infra.search_repo import _SEARCH_EXACT_SQL, _SEARCH_SQL, _normalize_search_query
 from kortravelgeo.infra.zip_repo import _ZIP_BY_ADDRESS, _ZIP_BY_POINT
 from kortravelgeo.settings import Settings, get_settings
@@ -189,8 +189,8 @@ QUERY_SPECS: dict[str, QuerySpec] = {
     ),
     "reverse_nearest": QuerySpec("reverse_nearest", "Q5_REVERSE_NEAREST", _NEAREST_SQL),
     "reverse_nearest_sig": QuerySpec("reverse_nearest_sig", "Q5_REVERSE_NEAREST", _NEAREST_SQL),
-    "reverse_radius": QuerySpec("reverse_radius", "Q6_REVERSE_RADIUS", _NEAREST_SQL),
-    "reverse_radius_sig": QuerySpec("reverse_radius_sig", "Q6_REVERSE_RADIUS", _NEAREST_SQL),
+    "reverse_radius": QuerySpec("reverse_radius", "Q6_REVERSE_RADIUS", _RADIUS_SQL),
+    "reverse_radius_sig": QuerySpec("reverse_radius_sig", "Q6_REVERSE_RADIUS", _RADIUS_SQL),
     "zipcode_address": QuerySpec("zipcode_address", "Q7_ZIPCODE", _ZIP_BY_ADDRESS),
     "zipcode_point": QuerySpec("zipcode_point", "Q7_ZIPCODE", _ZIP_BY_POINT),
     "no_result_road": QuerySpec("no_result_road", "Q8_NO_RESULT", _LOOKUP_ROAD),

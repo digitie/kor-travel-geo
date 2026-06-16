@@ -33,7 +33,7 @@ WITH target_pt AS (
 SELECT bas_id AS zip_no, 'kodis_bas_within' AS source, NULL AS address,
        NULL AS bd_mgt_sn, NULL AS detail
   FROM tl_kodis_bas k, target_pt p
- WHERE ST_Contains(k.geom, p.geom)
+ WHERE ST_Covers(k.geom, p.geom)
  LIMIT 1
 """
 )

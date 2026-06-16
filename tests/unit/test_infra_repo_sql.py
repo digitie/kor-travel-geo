@@ -32,10 +32,22 @@ def test_reverse_sql_transforms_input_once_and_keeps_indexed_column_raw() -> Non
     sql = str(reverse_repo._NEAREST_SQL)
 
     assert "WITH target_pt AS" in sql
+    assert "knn_candidates AS MATERIALIZED" in sql
     assert "ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), :in_srid), 5179)" in sql
-    assert "ST_DWithin(t.pt_5179, p.geom, :radius_m)" in sql
+    assert "WHERE distance_m <= :radius_m" in sql
     assert "ST_Transform(t.pt_5179" not in sql
     assert "ORDER BY t.pt_5179 <-> p.geom" in sql
+    assert "ST_DWithin(t.pt_5179, p.geom, :radius_m)" not in sql
+
+
+def test_reverse_radius_sql_keeps_dwithin_prefilter_for_benchmark_path() -> None:
+    sql = str(reverse_repo._RADIUS_SQL)
+
+    assert "WITH target_pt AS" in sql
+    assert "ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), :in_srid), 5179)" in sql
+    assert "ST_DWithin(t.pt_5179, p.geom, :radius_m)" in sql
+    assert "ORDER BY t.pt_5179 <-> p.geom" in sql
+    assert "knn_candidates AS MATERIALIZED" not in sql
 
 
 def test_sppn_reverse_sql_uses_covers_and_keeps_polygon_indexed_column_raw() -> None:
@@ -46,6 +58,16 @@ def test_sppn_reverse_sql_uses_covers_and_keeps_polygon_indexed_column_raw() -> 
     assert "ST_Covers(m.geom, p.geom)" in sql
     assert "ST_Transform(m.geom" not in sql
     assert "ORDER BY ST_Area(m.geom) ASC" in sql
+
+
+def test_zipcode_point_sql_uses_covers_and_keeps_polygon_indexed_column_raw() -> None:
+    sql = str(zip_repo._ZIP_BY_POINT)
+
+    assert "WITH target_pt AS" in sql
+    assert "ST_Transform(ST_SetSRID(ST_MakePoint(:x, :y), 4326), 5179)" in sql
+    assert "ST_Covers(k.geom, p.geom)" in sql
+    assert "ST_Contains(k.geom, p.geom)" not in sql
+    assert "ST_Transform(k.geom" not in sql
 
 
 def test_sppn_reverse_projection_sql_transforms_input_point_only() -> None:
@@ -198,6 +220,7 @@ def test_region_hint_filters_are_present_on_all_address_lookup_sql_surfaces() ->
         "search_fuzzy": str(search_repo._SEARCH_SQL),
         "search_district": str(search_repo._DISTRICT_SEARCH_SQL),
         "reverse_nearest": str(reverse_repo._NEAREST_SQL),
+        "reverse_radius": str(reverse_repo._RADIUS_SQL),
         "geometry_road": str(geometry_repo._ROAD_GEOMETRY_SQL),
     }
 

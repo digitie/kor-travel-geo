@@ -111,6 +111,8 @@ T-047의 보조 view/MV는 별도 source of truth가 아니다. master table 또
 
 T-061에서 `mv_geocode_text_search`가 실제 read-only helper MV로 추가됐다. Q3 fuzzy geocode와 Q4 broad search fallback은 이 helper에서 `bd_mgt_sn` 후보를 먼저 추출한 뒤 `mv_geocode_target`에 join한다. Q4 exact preflight는 기존 target exact index를 유지하되, T-143 이후 `rn_nrm`/`buld_nm_nrm`/`sigungu_buld_nm_nrm` branch를 `UNION ALL`로 분리해 broad fallback과 독립된 plan을 탄다. T-065 이후 helper에는 내비게이션용DB `시군구용건물명` 정규화 컬럼(`sigungu_buld_nm_nrm`)도 포함되어, 지역 문맥의 건물 별칭·동명 검색 후보 recall을 보강한다. T-171 이후 fuzzy geocode 후보 추출은 helper의 `buld_mnnm`/`buld_slno`/`buld_se_cd`로 exact 조회와 같은 건물번호 계약을 유지한다.
 
+T-142 이후 reverse nearest runtime은 `mv_geocode_target.pt_5179` KNN 후보 CTE를 먼저 타고 `distance_m <= radius_m`으로 반경을 적용한다. Reverse radius benchmark는 별도 `_RADIUS_SQL`로 `ST_DWithin` prefilter plan을 유지해 nearest와 radius-heavy surface를 분리 측정한다.
+
 T-141부터 단발 benchmark 위에 SQL/REST workload matrix를 둔다. `steady`/`burst`/
 `recovery`/`soak` phase와 workload별 concurrency를 같은 corpus로 반복 실행하고, T-163은
 soak phase의 runner process RSS/CPU/`/proc/self/io` budget과 누수 판정식을

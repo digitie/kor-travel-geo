@@ -20,9 +20,9 @@ class ReverseInput(BaseModel):
 ## 흐름
 
 1. 입력 좌표를 EPSG:5179로 변환하는 일은 repo 내부에서 `ST_Transform`으로 처리. core는 좌표값(`Point`)과 `crs`만 넘긴다.
-2. `repo.nearest(point, crs=..., address_type=..., radius_m=..., limit=...)` — serving MV `mv_geocode_target`의 `pt_5179` GiST 인덱스(`ST_DWithin` + `<->` KNN)로 반경 내 최근접 후보를 조회한다. MV의 좌표는 텍스트 정본(`tl_juso_text`)에 위치정보요약DB 대표 출입구(`tl_locsum_entrc`, same-month일 때만 `tl_roadaddr_entrc`)와 centroid fallback(`tl_navi_buld_centroid`)을 합친 것이며, 각 행의 `pt_source`가 `entrance`/`centroid`를 구분한다.
+2. `repo.nearest(point, crs=..., address_type=..., radius_m=..., limit=...)` — serving MV `mv_geocode_target`의 `pt_5179` GiST KNN 인덱스로 작은 후보군을 먼저 조회한 뒤 `distance_m <= radius_m`로 반경을 적용한다(T-142). MV의 좌표는 텍스트 정본(`tl_juso_text`)에 위치정보요약DB 대표 출입구(`tl_locsum_entrc`, same-month일 때만 `tl_roadaddr_entrc`)와 centroid fallback(`tl_navi_buld_centroid`)을 합친 것이며, 각 행의 `pt_source`가 `entrance`/`centroid`를 구분한다.
 3. 최근접 정렬은 `t.pt_5179 <-> p.geom` KNN을 먼저 쓰고, 동률은 `distance_m ASC` → `pt_source='entrance'` 우선 → `bd_mgt_sn` → `rncode_full` → `bjd_cd` 순으로 결정한다.
-4. 후보가 `radius_m` 이내이면 **hit**다. `ST_DWithin` 기준이므로 경계 거리(`distance_m == radius_m`)도 포함한다.
+4. 후보가 `radius_m` 이내이면 **hit**다. `distance_m <= radius_m` 기준이므로 경계 거리(`distance_m == radius_m`)도 포함한다.
    - 우편번호: 행의 `zip_no`가 있고 `inp.zipcode`가 true이면 `zip_source="building_bsi_zon_no"`로 함께 반환한다.
    - `inp.type="road"`이면 도로명 `ReverseItem`만 만든다.
    - `inp.type="parcel"`이면 지번 `ReverseItem`만 만든다.
@@ -30,14 +30,16 @@ class ReverseInput(BaseModel):
 5. 주소 후보가 없더라도 `repo.project_reverse_point_5179(...)` 결과가 국가지점번호 지원 envelope 안에 있으면 `ReverseResponse(status="OK")`다. v1은 빈 `result`와 `x_extension.national_point_number`를 반환하고, v2는 `match_kind="sppn"` 후보를 반환한다.
 6. 주소 후보도 없고 국가지점번호 context도 없으면 `ReverseResponse(status="NOT_FOUND")`다. 한국 lon/lat bounds 밖 입력은 DTO 단계에서 구조화 오류로 거절한다.
 
-## 우편번호 lookup 4단계 우선순위
+## 우편번호 lookup
 
-`repo.zip_at(point_5179_wkt=...)`는 `ZipSource` enum과 함께 `(zip_no, zip_source)`를 반환한다:
+v1 reverse 응답의 우편번호는 nearest 후보 row의 `zip_no`를 그대로 사용하며,
+`zip_source="building_bsi_zon_no"`로 표시한다. 별도 좌표 기반 우편번호 lookup은
+`ZipRepository.lookup_zipcode_by_point()`가 담당한다.
 
-1. **`building_bsi_zon_no`** — 출입구의 건물 BSI에 우편번호가 들어있는 경우 (가장 신뢰도 높음)
-2. **`bulk_delivery`** — `postal_bulk_delivery`에서 `bd_mgt_sn` 매핑이 있는 경우
-3. **`kodis_bas_within`** — `tl_kodis_bas` polygon 안에 점이 들어가는 경우
-4. **`kodis_bas_centroid`** — `kodis_bas_within`이 실패하면 centroid 거리로 fallback
+좌표 기반 우편번호 lookup은 입력 좌표를 EPSG:5179로 한 번 변환한 뒤
+`ST_Covers(tl_kodis_bas.geom, target.geom)`로 기초구역 polygon을 조회한다(T-142).
+경계 위 좌표도 포함하며 `ZipSource`는 `kodis_bas_within`이다. 현재 구현에는
+`kodis_bas_centroid` fallback이 연결되어 있지 않다.
 
 `postal_pobox`는 사서함 도메인이므로 좌표 기반 역지오코딩 lookup에는 사용하지 않는다(주소 입력 기반 zipcode lookup에서만 사용).
 

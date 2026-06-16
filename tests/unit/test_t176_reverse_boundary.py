@@ -90,13 +90,14 @@ class _FakeEngine:
 def test_t176_reverse_nearest_sql_defines_inclusive_radius_and_tie_breaks() -> None:
     sql = str(reverse_repo._NEAREST_SQL)
 
-    assert "ST_DWithin(t.pt_5179, p.geom, :radius_m)" in sql
+    assert "knn_candidates AS MATERIALIZED" in sql
+    assert "WHERE distance_m <= :radius_m" in sql
     assert "ORDER BY t.pt_5179 <-> p.geom" in sql
     assert "distance_m ASC" in sql
-    assert "CASE WHEN t.pt_source = 'entrance' THEN 0 ELSE 1 END" in sql
-    assert "t.bd_mgt_sn ASC" in sql
-    assert "t.rncode_full ASC" in sql
-    assert "t.bjd_cd ASC" in sql
+    assert "CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END" in sql
+    assert "bd_mgt_sn ASC" in sql
+    assert "rncode_full ASC" in sql
+    assert "bjd_cd ASC" in sql
 
 
 @pytest.mark.asyncio
