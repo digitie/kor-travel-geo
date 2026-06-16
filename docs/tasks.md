@@ -39,7 +39,7 @@
    - Agent A: `T-119`는 T-137 최종 gate에서 no-go로 재판정됐다. 새 C11 증거와 ADR-051 accepted, 사용자 명시 승인 전에는 진행하지 않고 검증 전용 결론을 유지한다.
    - Agent A+B: `T-138` 완료. 적재 후 read-mostly serving 경로를 재측정했고, production index/MV/API SQL 변경 없이 benchmark harness만 보정했다. 그래도 이후 T-141/T-146까지 목표 속도에 못 미치면 `T-139`에서 별도 변경 DB를 만들어 현 DB와 구조 변경안을 비교한다.
 4. 신규 안정화·성능·Admin UI·백업 병행 (**번호 규칙: T-1xx = 성능/기능/geocoder/안정성, T-2xx = Admin UI + 데이터 적재/백업/복원**)
-   - Agent A(Codex): `T-129` → `T-130` → `T-131` → `T-132` → `T-133` → `T-134` → `T-137`로 C11 후속 gate를 닫았고, 결론은 validation-only 고정이다. `T-138`도 read-heavy baseline 재측정과 harness 보정으로 완료했고, `T-140`으로 golden corpus 기반을 추가했다. 이후 `T-141`~`T-146`과 신규 성능/안정성/관측성 `T-154`~`T-164`, geocoder/reverse 정확도 `T-165`~`T-176`을 진행해 정확도·성능·고부하 안정성을 끌어올린다. `T-139`는 T-138/T-146 이후 목표 미달일 때만 별도 변경 DB 실험으로 착수한다. (T-166~T-168 국가지점번호 forward 게이트 분리·reverse 코드 방출은 `docs/v2-cleanslate-optional-data-accuracy.md` 권고를 코드화하는 저비용·고확실 항목이라 우선 배치 가능.)
+   - Agent A(Codex): `T-129` → `T-130` → `T-131` → `T-132` → `T-133` → `T-134` → `T-137`로 C11 후속 gate를 닫았고, 결론은 validation-only 고정이다. `T-138`도 read-heavy baseline 재측정과 harness 보정으로 완료했고, `T-140`/`T-141`으로 golden corpus와 고부하 matrix 기반을 추가했다. `T-166`~`T-170`은 v2/국가지점번호 low-risk 정확도 보강으로 먼저 완료했다. 남은 Agent A 작업은 아래 "Agent A 재정렬 실행 순서"를 따른다. `T-139`는 T-138/T-146 이후 목표 미달일 때만 별도 변경 DB 실험으로 착수한다.
    - Agent B(Claude Code): Admin UI는 전부 T-2xx로 옮겼다 — `T-220` → `T-221`로 실제 활용 파일과 Admin UI 상태 표시를 맞추고(과거 T-135/T-136), `T-222`~`T-227`로 기능·편의성·Playwright e2e를 보강한다(과거 T-147~T-152). 신규 백업/복원 Admin UI·e2e(`T-248`~`T-258`)와 source-files 단계별 e2e(`T-259`~`T-263`)도 B가 맡는다. T-138/T-144/T-169에서 API 계약·v2 enum을 바꾸면 Agent B가 UI typegen/e2e 반영을 병행한다.
    - Agent A+B(백엔드 백업/복원): `T-228`~`T-247`의 백업/복원 기능·검증·hot-swap·통합 테스트·benchmark는 Claude가 도메인을 주도하고(B), `pg_terminate_backend`·restore-drill 등 부하·DB 작업은 Codex(A)와 시간대 조율한다(A+B).
    - Agent A+B: `T-153`에서 두 트랙(A 성능·정확도 `T-138`/`T-140`~`T-146`/`T-154`~`T-176`, B Admin UI·백업/복원 `T-220`~`T-263`)의 결과를 같은 benchmark/e2e/문서 gate로 묶어 최종 안정화 acceptance를 수행한다.
@@ -51,6 +51,19 @@
 ### 성능·안정성·고성능 geocoder/reverse 강화 (T-138~ · T-1xx · 주 Agent A, 계약/typegen 변경 시 A+B)
 
 > 역할 경계(중복 방지): **T-138** = index/MV/EXPLAIN 중심 read-mostly 튜닝(결과캐시·prepared·풀은 T-156/T-155/T-154로 위임). **T-141** = 고부하 측정 matrix(합격 budget/누수·회귀 gate는 T-163/T-164). **T-145** = per-endpoint concurrency cap·circuit breaker·retry 금지 우산(pool/cancel/readiness 세부는 T-154/T-161/T-160). **T-146** = maintenance pipeline/DDL/runbook(재기동·swap 후 runtime warm은 T-162). **T-140 corpus**는 변형/경계/negative/confidence-golden 필드를 수용하도록 확장해 T-165/T-171/T-172/T-176 case를 등록만 한다.
+
+#### Agent A 재정렬 실행 순서 (2026-06-16)
+
+`T-140`/`T-141`/`T-166`~`T-170` 완료 이후에는 번호순보다 의존성과 위험도 기준을 우선한다. 각 항목은 독립 PR로 머지하고, 리뷰 반영(fixup) PR은 추가 리뷰하지 않는다.
+
+1. **기반 관측·헬스**: `T-157` → `T-160` → `T-174`. slow-query/overload 기록, DB readiness/degradation 신호, 좌표 변환 단일 경로가 뒤 작업의 관측·정합 기준이 된다.
+2. **풀 포화·fail-fast 안정성**: `T-154` → `T-145` → `T-161` → `T-159`. pool checkout timeout과 overload envelope를 먼저 고정한 뒤 endpoint cap, client cancel, DB 장애 주입을 검증한다.
+3. **고부하 회귀 gate**: `T-163` → `T-164`. T-141 matrix를 합격 budget과 nightly/CI 후보로 승격한다.
+4. **정확도·결정성**: `T-171` → `T-172` → `T-173` → `T-175` → `T-176` → `T-165`. 이미 만든 T-140 corpus를 ranking/confidence/negative/hint/reverse boundary case로 확장한 뒤, 마지막에 parser 변형 case를 넓힌다.
+5. **쿼리·공간 최적화**: `T-143` → `T-142` → `T-155` → `T-156`. geocode/search plan을 먼저 안정화하고 reverse 공간 조회를 분리 측정한 뒤 prepared statement와 hot-key cache를 검증한다.
+6. **운영 maintenance·API 계약**: `T-146` → `T-162` → `T-144`. post-load maintenance와 runtime warm 기준을 정한 뒤, 실제 이득이 확인된 계약 변경만 ADR/OpenAPI/UI typegen 범위로 올린다.
+7. **백업/복원 Agent A 몫**: `T-238` → `T-245` → `T-247`. Claude 주도 백업 트랙이 필요한 선행 PR을 머지한 뒤, RustFS reconcile, fault injection, backup/restore benchmark를 시간대 조율해 수행한다.
+8. **통합 gate**: `T-153`. Agent B의 `T-220`~`T-263` 결과와 함께 최종 안정화 acceptance를 닫는다.
 
 - T-139 DB 구조 변경 실험 DB 비교 및 최적안 정리 — T-138의 index/MV/API 튜닝으로 충분히 빠르지 않을 때만 진행한다. 현 DB(`kor_travel_geo_t213_20260615_r3`)와 같은 원천/같은 commit/같은 benchmark corpus로 별도 변경 DB를 만들고, 더 과격한 구조 변경안을 실험한다. 후보는 read 전용 projection table, `mv_geocode_target`/`mv_geocode_text_search` 재분해, 주소 검색 전용 pre-tokenized table, geometry/point 분리, partitioning/clustered layout, key별 denormalized lookup table, 대형 polygon 검증 table과 serving table 분리, API 응답에 맞춘 pre-shaped serving table 등이다. 각 변경 DB는 load/rebuild/MV refresh 시간, storage/index size, backup/restore size, SQL/REST latency, consistency count, API 응답 hash 또는 새 계약의 golden response, 운영 rollback 난이도를 현 DB와 같은 표로 비교한다. 최종 산출물은 `docs/t139-db-structure-comparison.md`와 "현 구조 유지 / additive 튜닝만 적용 / API 계약 변경 포함 / 구조 변경 PR 분리" 중 하나의 권고안이며, 실제 migration은 별도 후속 Task로 다시 쪼갠다. (의존: T-138 목표 미달)
 - T-142 reverse-geocoder 공간 조회 최적화 — reverse path의 행정구역 polygon, 건물 polygon, 우편번호 polygon, 국가지점번호, nearest-road/building 후보 조회를 분리 측정하고 최적화한다. 후보는 `ST_Subdivide`/parts table, KNN GiST, bbox prefilter, point-to-region ancestry precompute, geometry simplification 허용 여부, `ST_Covers`/`ST_Intersects` 선택, reverse 전용 MV/table, 좌표 grid bucket이다. boundary correctness golden case와 성능 benchmark를 동시에 통과해야 하며, 좌표 외부 인터페이스는 `(lon, lat)` 유지한다. (Agent A, 의존: T-140, T-141)
