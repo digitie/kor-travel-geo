@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-160 DB readiness/degradation 신호)
+
+**작업**: `/v1/healthz`는 DB를 건드리지 않는 liveness로 유지하고, 새 `/v1/readyz`를 추가했다. Readiness 응답은 `ready`, `degraded`, `components.database`, `components.pool`을 반환하며 DB probe와 SQLAlchemy pool 상태를 분리해서 보여준다.
+
+**결정**: pool이 capacity까지 checked-out이고 checked-in이 없으면 DB checkout을 새로 만들지 않고 즉시 503을 반환한다. DB 단절·timeout·client 미시작은 `ready=false`와 `degraded=true`로 표시한다. Pool utilization 0.8 이상은 트래픽 수신은 가능하므로 200을 유지하되 `degraded=true`로 운영 경고를 노출한다. Readiness DB probe timeout 기본값은 `api_readiness_timeout_ms=1000`이다.
+
+**문서/검증**: 상세는 `docs/t160-db-readiness.md`에 기록했다. `docs/tasks.md`에서는 T-160을 완료로 옮기고 다음 Agent A 작업을 T-174로 갱신한다. WSL ext4 미러에서 backend pytest 854 passed/51 skipped, Ruff, mypy, import-linter, OpenAPI check, UI lint/type-check/test/build를 통과했다. React Doctor는 `errorCount=0`, 기존 경고 16건이다.
+
 ## 2026-06-16 (T-157 pg_stat_statements 상시 수집·노출)
 
 **작업**: `ops.pg_stat_statements_snapshots` table/Alembic migration을 추가하고, `AdminRepository`/`AsyncAddressClient`/Admin router에 `pg_stat_statements` top-N snapshot 조회·수집 표면을 붙였다. API lifespan scheduler는 기본 5분마다 시작 시 1회 포함 capture를 수행하고, `/metrics`는 최신 persisted snapshot을 Prometheus gauge로 노출한다. `/admin/ops`에는 top-N panel과 수동 capture 버튼을 추가했다.

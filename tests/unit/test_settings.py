@@ -41,6 +41,7 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.api_explain_timeout_ms == 3_000
     assert settings.api_max_concurrency is None
     assert settings.api_admission_timeout_ms == 30_000
+    assert settings.api_readiness_timeout_ms == 1_000
     assert settings.api_performance_logging_enabled is False
     assert settings.api_slow_request_ms == 500
     assert settings.upload_set_ttl_days == 30

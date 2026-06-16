@@ -1856,6 +1856,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Readyz */
+        get: operations["readyz_v1_readyz_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/geocode": {
         parameters: {
             query?: never;
@@ -3501,6 +3518,38 @@ export interface components {
             x: number;
             /** Y */
             y: number;
+        };
+        /** ReadinessComponent */
+        ReadinessComponent: {
+            /** Detail */
+            detail?: {
+                [key: string]: unknown;
+            };
+            /** Error Type */
+            error_type?: string | null;
+            /** Latency Ms */
+            latency_ms?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "saturated" | "unavailable" | "skipped" | "unknown";
+        };
+        /** ReadinessResponse */
+        ReadinessResponse: {
+            /** Components */
+            components: {
+                [key: string]: components["schemas"]["ReadinessComponent"];
+            };
+            /** Degraded */
+            degraded: boolean;
+            /** Ready */
+            ready: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "unavailable";
         };
         /**
          * ReconcileResolveRequest
@@ -9163,6 +9212,26 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    readyz_v1_readyz_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessResponse"];
                 };
             };
         };

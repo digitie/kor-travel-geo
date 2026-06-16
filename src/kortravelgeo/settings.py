@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     api_explain_timeout_ms: int = Field(default=3_000, ge=1)
     api_max_concurrency: int | None = Field(default=None, ge=1)
     api_admission_timeout_ms: int = Field(default=30_000, ge=1)
+    api_readiness_timeout_ms: int = Field(default=1_000, ge=1)
     api_performance_logging_enabled: bool = False
     api_slow_request_ms: int = Field(default=500, ge=1)
     geoip_db_path: Path | None = Path("data/geoip/GeoLite2-Country.mmdb")
