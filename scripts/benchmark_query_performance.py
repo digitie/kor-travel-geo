@@ -127,6 +127,7 @@ class EnvironmentSnapshot:
     cwd: str
     pg_pool_size: int
     pg_max_overflow: int
+    pg_prepare_threshold: int | None
     database_version: str | None
     postgis_version: str | None
     pg_stat_statements: bool
@@ -254,6 +255,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-overflow",
         type=int,
         help="Override SQLAlchemy max_overflow for this benchmark run.",
+    )
+    parser.add_argument(
+        "--prepare-threshold",
+        type=int,
+        help=(
+            "Override psycopg prepare_threshold for this run. "
+            "Use 0 to prepare immediately; omit to use settings."
+        ),
+    )
+    parser.add_argument(
+        "--disable-prepared-statements",
+        action="store_true",
+        help="Set psycopg prepare_threshold=None for this run.",
     )
     parser.add_argument(
         "--explain-slowest-per-group",
@@ -726,6 +740,7 @@ async def collect_environment(
         cwd=str(Path.cwd()),
         pg_pool_size=settings.pg_pool_size,
         pg_max_overflow=settings.pg_max_overflow,
+        pg_prepare_threshold=settings.pg_prepare_threshold,
         database_version=database_version,
         postgis_version=postgis_version,
         pg_stat_statements=pg_stat_statements,
@@ -853,9 +868,61 @@ SELECT queryid::text AS queryid,
                 )
             ).mappings().all()
             payload["rows"] = [_plain_pg_stat_row(dict(row)) for row in rows]
+            await conn.commit()
         except (DBAPIError, ProgrammingError) as exc:
+            await conn.rollback()
             payload["error"] = _redact_error(exc)
     return payload
+
+
+async def capture_prepared_statements(engine: AsyncEngine) -> dict[str, object]:
+    """Capture prepared statements visible on one sampled pool connection.
+
+    PostgreSQL prepared statements are session-local. For deterministic T-155
+    comparisons, run with ``--pool-size 1 --max-overflow 0``.
+    """
+
+    try:
+        async with engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        """
+SELECT name, statement, from_sql, parameter_types::text[] AS parameter_types
+  FROM pg_prepared_statements
+ ORDER BY name
+"""
+                    )
+                )
+            ).mappings().all()
+            await conn.commit()
+    except (DBAPIError, ProgrammingError) as exc:
+        return {
+            "schema_version": BENCHMARK_SCHEMA_VERSION,
+            "captured_at": datetime.now(UTC).isoformat(),
+            "available": False,
+            "count": 0,
+            "error": _redact_error(exc),
+            "rows": [],
+        }
+
+    normalized = [
+        {
+            "name": str(row["name"]),
+            "statement": str(row["statement"]),
+            "from_sql": bool(row["from_sql"]),
+            "parameter_types": list(row["parameter_types"] or ()),
+        }
+        for row in rows
+    ]
+    return {
+        "schema_version": BENCHMARK_SCHEMA_VERSION,
+        "captured_at": datetime.now(UTC).isoformat(),
+        "available": True,
+        "count": len(normalized),
+        "note": "session-local sample; use pool_size=1/max_overflow=0 for deterministic comparison",
+        "rows": normalized,
+    }
 
 
 def pg_stat_delta(before: Mapping[str, Any], after: Mapping[str, Any]) -> dict[str, Any]:
@@ -905,7 +972,12 @@ def pg_stat_delta(before: Mapping[str, Any], after: Mapping[str, Any]) -> dict[s
     return payload
 
 
-def write_summary_markdown(report: BenchmarkReport, output_path: Path) -> None:
+def write_summary_markdown(
+    report: BenchmarkReport,
+    output_path: Path,
+    *,
+    prepared_statements: Mapping[str, object] | None = None,
+) -> None:
     lines = [
         f"# T-047 query benchmark: {report.run_id}",
         "",
@@ -918,13 +990,22 @@ def write_summary_markdown(report: BenchmarkReport, output_path: Path) -> None:
         f"- Platform: `{report.environment.platform}`",
         f"- Pool: `size={report.environment.pg_pool_size}, "
         f"max_overflow={report.environment.pg_max_overflow}`",
+        f"- psycopg `prepare_threshold`: `{report.environment.pg_prepare_threshold}`",
         f"- `pg_stat_statements`: `{report.environment.pg_stat_statements}`",
-        "",
-        "### Row count",
-        "",
-        "| relation | rows |",
-        "|----------|-----:|",
     ]
+    if prepared_statements is not None:
+        lines.append(
+            f"- Prepared statements sampled after run: `{prepared_statements.get('count', 0)}`"
+        )
+    lines.extend(
+        [
+            "",
+            "### Row count",
+            "",
+            "| relation | rows |",
+            "|----------|-----:|",
+        ]
+    )
     for name, value in report.environment.row_counts.items():
         lines.append(f"| `{name}` | {value if value is not None else 'n/a'} |")
     lines.extend(
@@ -1438,15 +1519,21 @@ def _settings_for_run(
     *,
     pool_size: int | None,
     max_overflow: int | None,
+    prepare_threshold: int | None,
+    disable_prepared_statements: bool,
 ) -> Settings:
     settings = get_settings()
-    updates: dict[str, str | int] = {}
+    updates: dict[str, object] = {}
     if pg_dsn is not None:
         updates["pg_dsn"] = pg_dsn
     if pool_size is not None:
         updates["pg_pool_size"] = pool_size
     if max_overflow is not None:
         updates["pg_max_overflow"] = max_overflow
+    if disable_prepared_statements:
+        updates["pg_prepare_threshold"] = None
+    elif prepare_threshold is not None:
+        updates["pg_prepare_threshold"] = prepare_threshold
     return settings.model_copy(update=updates) if updates else settings
 
 
@@ -1462,10 +1549,15 @@ async def _amain(args: argparse.Namespace) -> None:
     if args.pg_stat_limit < 1:
         msg = "--pg-stat-limit must be at least 1"
         raise ValueError(msg)
+    if args.disable_prepared_statements and args.prepare_threshold is not None:
+        msg = "--prepare-threshold and --disable-prepared-statements are mutually exclusive"
+        raise ValueError(msg)
     settings = _settings_for_run(
         args.pg_dsn,
         pool_size=args.pool_size,
         max_overflow=args.max_overflow,
+        prepare_threshold=args.prepare_threshold,
+        disable_prepared_statements=args.disable_prepared_statements,
     )
     engine = make_async_engine(settings)
     try:
@@ -1503,6 +1595,11 @@ async def _amain(args: argparse.Namespace) -> None:
             json.dumps(pg_stat_before, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        prepared_before = await capture_prepared_statements(engine)
+        (output_dir / "prepared-statements-before.json").write_text(
+            json.dumps(prepared_before, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         report = await run_benchmark(
             engine,
             cases,
@@ -1528,11 +1625,20 @@ async def _amain(args: argparse.Namespace) -> None:
             json.dumps(pg_stat_after, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        prepared_after = await capture_prepared_statements(engine)
+        (output_dir / "prepared-statements-after.json").write_text(
+            json.dumps(prepared_after, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         (output_dir / "pg-stat-statements-delta.json").write_text(
             json.dumps(pg_stat_delta(pg_stat_before, pg_stat_after), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        write_summary_markdown(report, output_dir / "summary.md")
+        write_summary_markdown(
+            report,
+            output_dir / "summary.md",
+            prepared_statements=prepared_after,
+        )
         await explain_slowest_cases(
             engine,
             report,

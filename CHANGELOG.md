@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-155 psycopg prepared statement·plan cache 튜닝을 추가했다. `KTG_PG_PREPARE_THRESHOLD` / `Settings.pg_prepare_threshold`로 server-side prepared statement threshold를 명시하고, SQL benchmark는 `--prepare-threshold`/`--disable-prepared-statements`와 `prepared-statements-before/after.json` artifact를 제공한다. WSL smoke에서 기본 threshold `5`는 prepared count를 `0 -> 13`으로 늘리고 hot-query 전체 p95를 5.585ms에서 5.383ms로 낮췄다.
 - T-142 reverse-geocoder 공간 조회 최적화를 추가했다. Reverse nearest runtime은 `knn_candidates` CTE로 `pt_5179` KNN 후보를 먼저 추출한 뒤 `distance_m <= radius_m`으로 경계 포함 반경을 적용하고, Q6 reverse radius benchmark는 별도 `_RADIUS_SQL`로 `ST_DWithin` prefilter plan을 측정한다. 우편번호 point lookup은 `ST_Contains`에서 `ST_Covers`로 바꿔 polygon 경계 좌표를 포함한다.
 - T-265 perf benchmark artifact 등록·노출 백엔드를 추가했다(T-222 선행). `POST /v1/admin/ops/benchmark-artifacts`가 T-138/T-141/T-146 benchmark run을 `artifact_type="benchmark"` ops artifact로 등록하고, headline metrics(p50/p95/p99/max/error_rate/qps/samples)와 run_id·kind·workload·phase·baseline_artifact_id를 manifest에 보존한다. 무거운 run 데이터는 `storage_uri`로 참조만 한다. 기존 `GET /v1/admin/ops/artifacts?artifact_type=benchmark`로 조회한다. Admin UI(T-222)가 latest-vs-baseline p95/p99를 read-only로 노출할 데이터 소스다.
 - T-143 geocode/search query plan 안정화를 추가했다. `/v2/search` exact preflight가 `rn_nrm`/`buld_nm_nrm`/`sigungu_buld_nm_nrm` branch를 `UNION ALL`로 분리해 OR 기반 planner 변동을 줄이고, 중복 후보는 `DISTINCT ON (bd_mgt_sn)`과 match priority로 결정 정렬한다. Broad fallback은 repository와 benchmark가 같은 `query_nrm` 정규화 bind를 쓰도록 맞췄다.

@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-155 psycopg prepared statement·plan cache 튜닝)
+
+**작업**: `Settings.pg_prepare_threshold`와 `KTG_PG_PREPARE_THRESHOLD`를 추가하고, `make_async_engine()`이 psycopg `prepare_threshold`로 전달하게 했다. SQL benchmark는 `--prepare-threshold`와 `--disable-prepared-statements`를 받아 run별 threshold를 바꾸고, `environment.json`/`summary.md`에 값을 기록한다. 또한 `pg_prepared_statements` session-local snapshot을 `prepared-statements-before/after.json`으로 남긴다.
+
+**결정**: production 기본값은 psycopg 기본과 같은 `5`로 유지한다. WSL hot-query smoke에서 `threshold=1`은 prepared count 17로 가장 많이 prepare했지만 전체 p95가 `5.644ms`로 기준보다 약간 나빠졌고, `threshold=5`는 prepared count 13, 전체 p95 `5.383ms`로 `threshold=None`의 `5.585ms`보다 낮았다. `pg_prepared_statements`와 `pg_stat_statements` snapshot은 read-only SELECT라도 transaction을 열기 때문에, connection 반환 시 psycopg가 `ROLLBACK`을 보고 prepared cache를 지우지 않도록 명시 `commit()`한다.
+
+**검증/문서**: Windows focused unit 31개, Ruff, 변경 source mypy가 통과했다. WSL smoke artifact는 `artifacts/perf/t155-prepared-disabled-nofuzzy-r2/`, `artifacts/perf/t155-prepared-threshold1-nofuzzy-r2/`, `artifacts/perf/t155-prepared-threshold5-nofuzzy-r2/`이며 17개 hot-query corpus error 0이다. live DB의 Q3 fuzzy helper MV는 T-171 컬럼이 없어 no-fuzzy corpus로 측정했다. 상세는 `docs/t155-prepared-plan-cache.md`에 기록했고, 다음 Agent A 작업은 T-156이다.
+
 ## 2026-06-16 (T-142 reverse-geocoder 공간 조회 최적화)
 
 **작업**: reverse nearest runtime SQL과 radius-heavy benchmark SQL을 분리했다. `ReverseRepository.nearest()`는 `knn_candidates AS MATERIALIZED` CTE로 `mv_geocode_target.pt_5179` GiST KNN 후보를 먼저 뽑고, outer query에서 `distance_m <= :radius_m`을 적용한다. Q6 benchmark는 새 `_RADIUS_SQL`로 기존 `ST_DWithin` prefilter path를 유지한다. 우편번호 point lookup은 polygon 경계 좌표를 포함하도록 `ST_Contains`에서 `ST_Covers`로 바꿨다.

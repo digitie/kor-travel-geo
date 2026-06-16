@@ -186,7 +186,7 @@ ignore_imports = ["kortravelgeo.api.routers.admin -> kortravelgeo.loaders"]
 
 | 카테고리 | 키 | 비고 |
 |----------|----|------|
-| DB | `pg_dsn`, `pg_pool_size`, `pg_max_overflow`, `pg_pool_timeout_ms`, `pg_statement_timeout_ms`, `pg_pool_recycle_s` | `postgresql+psycopg://...`. `pg_pool_timeout_ms` 기본값은 1000ms이며 pool 포화 시 API는 HTTP 503 + `E0500`으로 fail-fast한다. DB 드라이버/연결 오류도 HTTP 503 + `E0500`으로 구조화한다. |
+| DB | `pg_dsn`, `pg_pool_size`, `pg_max_overflow`, `pg_pool_timeout_ms`, `pg_statement_timeout_ms`, `pg_pool_recycle_s`, `pg_prepare_threshold` | `postgresql+psycopg://...`. `pg_pool_timeout_ms` 기본값은 1000ms이며 pool 포화 시 API는 HTTP 503 + `E0500`으로 fail-fast한다. `pg_prepare_threshold` 기본값은 psycopg 기본과 같은 `5`이고, `0`은 즉시 prepare, `none`/`off`는 server-side prepared statement 비활성화다. DB 드라이버/연결 오류도 HTTP 503 + `E0500`으로 구조화한다. |
 | API | `api_title`, `api_cors_origins`, `api_default_radius_m`, `api_max_search_size`, `api_max_upload_bytes`, `api_explain_timeout_ms`, `api_max_concurrency`, `api_geocode_max_concurrency`, `api_reverse_max_concurrency`, `api_search_max_concurrency`, `api_zipcode_max_concurrency`, `api_pobox_max_concurrency`, `api_regions_max_concurrency`, `api_admission_timeout_ms`, `api_readiness_timeout_ms` | 업로드 기본 상한 2GiB, EXPLAIN 기본 timeout 3초. `api_max_concurrency`는 unset이면 비활성화하며 `/v1/address/*`와 `/v2/*` 공개 주소 API 전체를 process별 semaphore로 제한한다. endpoint별 cap은 geocode/reverse/search/zipcode/pobox/regions scope에만 적용된다. `api_readiness_timeout_ms`는 `/v1/readyz` DB probe timeout이며 기본값은 1000ms다. |
 | GeoIP gate | `geoip_db_path`, `geoip_gate_mode`, `geoip_allow_cidrs`, `geoip_deny_cidrs`, `geoip_open_paths`, `geoip_trusted_proxies`, `geoip_audit_denials` | T-054. 외부 공용 IP는 GeoIP country `KR`만 허용하고, 내부/loopback은 허용한다. 기본 mode는 `strict`라 DB 부재 시 공용 IP를 차단한다. |
 | 외부 | `juso_api_key`, `juso_search_url`, `juso_coord_url`, `juso_coord_api_key`, `vworld_api_key`, `vworld_url`, `epost_api_key`, `epost_download_url` | 모두 `SecretStr` 또는 URL |
@@ -327,7 +327,10 @@ engine = create_async_engine(
     pool_pre_ping=True,
     pool_recycle=settings.pg_pool_recycle_s,
     poolclass=AsyncAdaptedQueuePool,
-    connect_args={"options": f"-c statement_timeout={settings.pg_statement_timeout_ms}"},
+    connect_args={
+        "options": f"-c statement_timeout={settings.pg_statement_timeout_ms}",
+        "prepare_threshold": settings.pg_prepare_threshold,
+    },
     json_serializer=lambda o: orjson.dumps(o).decode(),
     json_deserializer=orjson.loads,
 )
