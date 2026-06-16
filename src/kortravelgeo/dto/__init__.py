@@ -28,6 +28,7 @@ from .geocode import (
     GeocodeResult,
     SppnMakareaContext,
 )
+from .health import ReadinessComponent, ReadinessResponse
 from .pobox import PoboxInput, PoboxResponse, PoboxResultItem
 from .region import RegionHint
 from .reverse import ReverseExtension, ReverseInput, ReverseResponse, ReverseResultItem
@@ -85,6 +86,8 @@ __all__ = [
     "PoboxResponse",
     "PoboxResultItem",
     "Point",
+    "ReadinessComponent",
+    "ReadinessResponse",
     "RefinedAddress",
     "RegionHint",
     "RegionV2",

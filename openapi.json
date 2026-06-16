@@ -4557,6 +4557,92 @@
         "title": "Point",
         "type": "object"
       },
+      "ReadinessComponent": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "error_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Type"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "degraded",
+              "saturated",
+              "unavailable",
+              "skipped",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ReadinessComponent",
+        "type": "object"
+      },
+      "ReadinessResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ReadinessComponent"
+            },
+            "title": "Components",
+            "type": "object"
+          },
+          "degraded": {
+            "title": "Degraded",
+            "type": "boolean"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "degraded",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "ready",
+          "degraded",
+          "components"
+        ],
+        "title": "ReadinessResponse",
+        "type": "object"
+      },
       "ReconcileResolveRequest": {
         "additionalProperties": false,
         "description": "``POST .../reconcile/items/{id}/resolve`` body (doc lines ~1458-1469).\n\n``import_object`` requires ``category`` + ``user_yyyymm``;\n``extend_registration_deadline`` requires ``registration_deadline_at``;\n``update_hash_after_verify`` requires a non-empty ``typed_confirmation``.",
@@ -16087,6 +16173,27 @@
           }
         },
         "summary": "Healthz",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/readyz": {
+      "get": {
+        "operationId": "readyz_v1_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readyz",
         "tags": [
           "health"
         ]

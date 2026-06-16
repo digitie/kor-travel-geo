@@ -66,6 +66,8 @@ export const apiSchemaNames = [
   "PoboxResponse",
   "PoboxResultItem",
   "Point",
+  "ReadinessComponent",
+  "ReadinessResponse",
   "ReconcileResolveRequest",
   "ReconcileResolveResponse",
   "ReconcileRunRequest",

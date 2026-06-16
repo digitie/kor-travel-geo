@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-160 DB readiness/degradation 신호를 추가했다. `/v1/healthz`는 DB를 건드리지 않는 liveness로 유지하고, 새 `/v1/readyz`가 DB probe와 SQLAlchemy pool 상태를 `ready`/`degraded`/component 구조로 반환한다. DB 단절·timeout·API client 미시작은 HTTP 503, pool 포화는 DB checkout 없이 503 fail-fast, pool utilization 0.8 이상은 HTTP 200 + `degraded=true`로 노출한다.
 - T-157 pg_stat_statements 상시 수집·노출을 추가했다. `ops.pg_stat_statements_snapshots`에 top-N query snapshot을 저장하고, `GET/POST /v1/admin/ops/pg-stat-statements`, `/admin/ops` panel, `/metrics` gauge로 확인할 수 있다. Prometheus label은 `rank`/`operation`/`query_fingerprint`만 사용하고 query 원문은 노출하지 않는다.
 - T-170 v2 geocode producer가 1:N 후보를 방출할 수 있게 했다. Public wire schema는 기존 `candidates` tuple을 유지하며, local v1 primary 후보와 보조 road geometry 후보를 병합하고 dedup 후 `limit`을 적용한다.
 - T-169 v2 후보 enum을 정직화했다. `V2MatchKind`는 `road`/`parcel`/`keyword`/`region`/`sppn`/`detail`/`poi`, `V2PointPrecision`은 기존 값에 `grid_cell`을 추가하고, `V2Source`는 `local`/`vworld`/`juso`로 좁힌다. 장소 검색 결과는 `poi`, 국가지점번호 후보는 `point_precision="grid_cell"`로 노출한다.
