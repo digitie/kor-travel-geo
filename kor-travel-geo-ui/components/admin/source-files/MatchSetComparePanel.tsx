@@ -50,20 +50,20 @@ export function MatchSetComparePanel({ matchSets }: { matchSets: SourceMatchSet[
   const effectiveA = aId || sorted[0]?.source_match_set_id || "";
   const effectiveB = bId || sorted.find((s) => s.source_match_set_id !== effectiveA)?.source_match_set_id || "";
 
-  const detailA = useQuery({
+  const { data: detailA } = useQuery({
     queryKey: ["source-match-set", effectiveA],
     queryFn: () => requestJson<SourceMatchSetDetail>(sourceFilesPaths.matchSet(effectiveA)),
     enabled: Boolean(effectiveA)
   });
-  const detailB = useQuery({
+  const { data: detailB } = useQuery({
     queryKey: ["source-match-set", effectiveB],
     queryFn: () => requestJson<SourceMatchSetDetail>(sourceFilesPaths.matchSet(effectiveB)),
     enabled: Boolean(effectiveB)
   });
 
   const diff =
-    detailA.data && detailB.data && effectiveA !== effectiveB
-      ? diffMatchSets(detailA.data, detailB.data)
+    detailA && detailB && effectiveA !== effectiveB
+      ? diffMatchSets(detailA, detailB)
       : null;
 
   return (

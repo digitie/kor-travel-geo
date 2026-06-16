@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-153 최종 안정화 acceptance 문서를 추가했다. Agent A 성능·정확도 트랙과 Agent B Admin UI·백업/복원 트랙의 golden corpus, C1~C17, SQL/REST c64 budget, Admin UI Playwright, 백업/복원 round-trip·fault injection·hot-swap, React Doctor, OpenAPI/typegen drift를 한 gate로 묶고, 새 release blocker 없음과 별도 잔여(T-119, T-063, T-219, T-105 audit 이후 ADR-060 반영 backlog)를 구분했다. 함께 React Doctor hard error 3건을 정리했다.
 - T-127 optional source 구조 validator를 보강했다. `detail_address_db_full`, `national_point_grid_shape`, `national_point_grid_center`, `civil_service_institution_map`, `address_db_full`, `building_db_full`의 single-file archive member naming, 필수 TXT/SHP layer, sidecar, 기준월 혼재 warning을 category별 profile로 검증한다. legacy ZIP의 CP949 member name도 복원해 한글 파일명 원천을 검증한다.
 - T-158 slow-query·overload sampled observability를 추가했다. `ops.slow_observability_samples`가 느린 API 요청, admission overload, 느린 DB query 표본을 endpoint context, query fingerprint, literal 마스킹 preview, 선택적 `EXPLAIN (FORMAT JSON)` plan과 함께 저장한다. 기본은 `KTG_OPS_SLOW_SAMPLES_ENABLED=false`이고 raw SQL·파라미터·주소 문자열은 저장하지 않는다.
 - T-247 백업/복원 벤치마크 실행기를 추가했다. `scripts/benchmark_backup_restore.py`가 `profile(serving-ready/lean-serving/forensic) × jobs(1/2/4) × zstd compression(3/9/19)` 조합의 백업/복원 소요시간, dump/archive bytes, 압축률을 `benchmark-report.json`/`summary.md`로 남긴다. 기본은 계획 전용이고, 실제 실행은 `--execute --confirmation "RUN-T247-BENCHMARK <current_database>"`와 `pg_dump`/`pg_restore`/`tar`/`zstd`를 요구한다. T-055 N150/Odroid runbook도 새 실행기 기준으로 갱신했다.
