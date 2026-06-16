@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-119/T-139 종료 판정)
+
+**작업**: `docs/tasks.md`에서 `T-119`를 보류 항목에서 제거하고 완료/종료 항목으로 이동했다. `T-139`도 조건부 대기 항목에서 제거하고 완료/종료 항목으로 이동했다. `docs/resume.md`의 현재 기준과 "다음 한 작업"도 두 task가 잔여로 보이지 않도록 갱신했다.
+
+**결정**: `T-119`는 T-137 최종 gate와 T-153 acceptance 근거에 따라 C11 active serving promotion no-go로 닫는다. C11은 validation-only로 고정하며, 향후 새 같은 기준월 C11 원천 또는 동등한 새 증거가 있으면 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인으로 다룬다. `T-139`는 T-153 기준 구조적 성능 blocker가 없어 별도 변경 DB 실험을 no-action 종료한다.
+
+**검증/문서**: 문서-only 변경이다. `CHANGELOG.md`에도 backlog 종료 기준을 기록했고, `git diff --check`로 공백 오류를 확인했다.
+
 ## 2026-06-16 (Timescale PostgreSQL 계열 Codex skill 변환)
 
 **작업**: `timescale/pg-aiguide`의 `skills/` 하위 Claude Code용 skill 8종을 Codex repo-scoped skill 형식으로 변환해 `.agents/skills/`에 추가했다. Codex frontmatter에는 `name`/`description`만 남기고, 원본 `license`/`compatibility`/source URL은 본문 상단에 보존했다. `postgres` 통합 skill의 reference 파일은 Windows에서 symlink 텍스트로 남지 않도록 실제 대상 내용을 펼쳐 넣었다.
