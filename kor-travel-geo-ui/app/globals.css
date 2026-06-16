@@ -1224,6 +1224,36 @@ textarea {
   font-size: 13px;
 }
 
+.reconcile-list {
+  display: grid;
+  gap: 12px;
+}
+
+.reconcile-card {
+  border: 1px solid var(--line, #d8dee8);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.reconcile-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.reconcile-table {
+  font-size: 13px;
+}
+
+.reconcile-detail summary {
+  color: var(--muted, #64748b);
+  cursor: pointer;
+  font-size: 13px;
+}
+
 .source-stack {
   display: grid;
   gap: 16px;
