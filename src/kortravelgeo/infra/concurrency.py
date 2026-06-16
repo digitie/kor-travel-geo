@@ -43,6 +43,7 @@ class AdvisoryLockNamespace(IntEnum):
     SOURCE_REBUILD_DB = 0x4B47_00A2
     BACKUP_JANITOR = 0x4B47_00A3
     BACKUP_SCHEDULE = 0x4B47_00A4
+    RUNTIME_WARM = 0x4B47_00A5
 
 
 @dataclass(frozen=True, slots=True)
