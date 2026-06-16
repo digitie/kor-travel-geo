@@ -53,6 +53,7 @@ class ManifestSourceFile:
     part_key: str = "archive"
     object_key: str | None = None
     bucket: str | None = None
+    object_etag: str | None = None
 
     def as_manifest(self) -> dict[str, Any]:
         return {
@@ -65,6 +66,7 @@ class ManifestSourceFile:
             "part_key": self.part_key,
             "object_key": self.object_key,
             "bucket": self.bucket,
+            "object_etag": self.object_etag,
         }
 
 
@@ -436,4 +438,159 @@ def plan_restore_source_verification(
             if has_active
             else "legacy snapshot: source_set 추정만 표시"
         ),
+    )
+
+
+# --- backup manifest ↔ DB ↔ RustFS per-file reconcile (T-238) -------------
+
+ManifestSourceReconcileStatus = Literal[
+    "present",
+    "missing",
+    "etag_mismatch",
+    "size_mismatch",
+    "db_missing",
+    "db_mismatch",
+    "object_key_missing",
+]
+
+ManifestSourceDbStatus = Literal["matched", "missing", "mismatch"]
+
+
+@dataclass(frozen=True)
+class ManifestSourceDbFileFact:
+    """DB-side ``ops.source_files`` fact used by the T-238 manifest reconcile."""
+
+    source_file_id: str
+    object_key: str | None
+    sha256: str | None
+    size_bytes: int | None
+    object_etag: str | None = None
+
+
+@dataclass(frozen=True)
+class ManifestSourceHeadFact:
+    """RustFS HEAD result for one manifest object."""
+
+    present: bool
+    size: int | None = None
+    etag: str | None = None
+
+
+@dataclass(frozen=True)
+class ManifestSourceFileReconcileDecision:
+    """Three-way manifest/DB/RustFS classification for one source file."""
+
+    status: ManifestSourceReconcileStatus
+    db_status: ManifestSourceDbStatus
+    expected_object_key: str | None
+    observed_object_key: str | None
+    expected_size_bytes: int | None
+    observed_size_bytes: int | None
+    expected_etag: str | None
+    observed_etag: str | None
+    reasons: tuple[str, ...] = ()
+
+
+def decide_manifest_source_file_reconcile(
+    file: ManifestSourceFile,
+    *,
+    db: ManifestSourceDbFileFact | None,
+    head: ManifestSourceHeadFact | None,
+) -> ManifestSourceFileReconcileDecision:
+    """Classify one backup-manifest source file against DB and RustFS HEAD.
+
+    The manifest is the backup-time contract. The DB row is checked for drift
+    first, then the RustFS object referenced by the manifest is HEAD-checked.
+    ETag is compared only when the manifest or DB has an expected ETag; SHA-256
+    is intentionally not inferred from ETag.
+    """
+    reasons: list[str] = []
+    db_status: ManifestSourceDbStatus = "matched"
+    if db is None:
+        db_status = "missing"
+        reasons.append("manifest source_file_id/object_key에 해당하는 DB row가 없습니다")
+    else:
+        db_mismatches: list[str] = []
+        if db.object_key != file.object_key:
+            db_mismatches.append("object_key")
+        if db.sha256 is not None and db.sha256 != file.sha256:
+            db_mismatches.append("sha256")
+        if db.size_bytes is not None and db.size_bytes != file.size_bytes:
+            db_mismatches.append("size_bytes")
+        if db_mismatches:
+            db_status = "mismatch"
+            reasons.append("DB row가 manifest와 다릅니다: " + ", ".join(db_mismatches))
+
+    expected_key = file.object_key
+    expected_size = file.size_bytes
+    expected_etag = file.object_etag or (db.object_etag if db is not None else None)
+
+    if not expected_key:
+        return ManifestSourceFileReconcileDecision(
+            status="object_key_missing",
+            db_status=db_status,
+            expected_object_key=expected_key,
+            observed_object_key=db.object_key if db is not None else None,
+            expected_size_bytes=expected_size,
+            observed_size_bytes=head.size if head is not None else None,
+            expected_etag=expected_etag,
+            observed_etag=head.etag if head is not None else None,
+            reasons=(*reasons, "manifest에 object_key가 없습니다"),
+        )
+
+    if head is None or not head.present:
+        return ManifestSourceFileReconcileDecision(
+            status="missing",
+            db_status=db_status,
+            expected_object_key=expected_key,
+            observed_object_key=db.object_key if db is not None else None,
+            expected_size_bytes=expected_size,
+            observed_size_bytes=head.size if head is not None else None,
+            expected_etag=expected_etag,
+            observed_etag=head.etag if head is not None else None,
+            reasons=(*reasons, "RustFS HEAD에서 object를 찾지 못했습니다"),
+        )
+
+    if head.size is not None and expected_size is not None and head.size != expected_size:
+        return ManifestSourceFileReconcileDecision(
+            status="size_mismatch",
+            db_status=db_status,
+            expected_object_key=expected_key,
+            observed_object_key=db.object_key if db is not None else None,
+            expected_size_bytes=expected_size,
+            observed_size_bytes=head.size,
+            expected_etag=expected_etag,
+            observed_etag=head.etag,
+            reasons=(*reasons, "RustFS size가 manifest 값과 다릅니다"),
+        )
+
+    if expected_etag and head.etag and head.etag != expected_etag:
+        return ManifestSourceFileReconcileDecision(
+            status="etag_mismatch",
+            db_status=db_status,
+            expected_object_key=expected_key,
+            observed_object_key=db.object_key if db is not None else None,
+            expected_size_bytes=expected_size,
+            observed_size_bytes=head.size,
+            expected_etag=expected_etag,
+            observed_etag=head.etag,
+            reasons=(*reasons, "RustFS ETag가 manifest/DB 기록과 다릅니다"),
+        )
+
+    if db_status == "missing":
+        status: ManifestSourceReconcileStatus = "db_missing"
+    elif db_status == "mismatch":
+        status = "db_mismatch"
+    else:
+        status = "present"
+    return ManifestSourceFileReconcileDecision(
+        status=status,
+        db_status=db_status,
+        expected_object_key=expected_key,
+        observed_object_key=db.object_key if db is not None else None,
+        expected_size_bytes=expected_size,
+        observed_size_bytes=head.size,
+        expected_etag=expected_etag,
+        observed_etag=head.etag,
+        reasons=tuple(reasons),
     )

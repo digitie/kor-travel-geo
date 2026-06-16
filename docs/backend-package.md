@@ -1189,6 +1189,8 @@ POST /v1/admin/loads
 
 기본 백업 형식은 `pg_dump -Fd --jobs <N>` directory dump를 만든 뒤 `manifest.json`, checksum, job log와 함께 `tar.zst`로 묶는 `directory_tar_zstd`다. plain SQL/DDL dump는 대용량 운영 기본값으로 두지 않는다. 복원은 archive를 풀어 `pg_restore -Fd --jobs <N>`로 새 빈 DB에 수행한다.
 
+T-238 이후 `ktgctl backup reconcile-source`는 백업 artifact 또는 `manifest.json`의 `source_match_set` per-file을 현재 DB `ops.source_files`와 RustFS `HEAD` 결과에 대조한다. 기본 백업/복원 흐름에는 영향을 주지 않는 opt-in 점검이며, RustFS 비활성 또는 `source_match_set` 없는 legacy manifest는 `skipped=true` report로 graceful 처리한다.
+
 라이브러리 1차 표면:
 
 ```python

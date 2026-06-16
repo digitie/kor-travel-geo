@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-238 백업 manifest 원천 3자 reconcile)
+
+**작업**: 백업 `manifest.json`의 `source_match_set` per-file을 현재 DB `ops.source_files`와 RustFS `HEAD` 결과에 대조하는 opt-in reconcile을 추가했다. 새 manifest는 `ManifestSourceFile.object_etag`를 보존하고, `ktgctl backup reconcile-source --artifact-id ...` 또는 `--manifest-path ...`가 `present`/`missing`/`etag_mismatch`/`size_mismatch`/DB 불일치 row report를 JSON으로 출력한다.
+
+**결정**: 기본 백업/복원 흐름은 실패시키지 않는다. RustFS 비활성 또는 credential 없음, `source_match_set` 없는 legacy manifest는 `skipped=true` report로 graceful 처리한다. ETag는 SHA-256으로 간주하지 않고 빠른 HEAD 정합성 신호로만 사용한다. 실제 DB/RustFS 검증은 `KTG_TEST_RUSTFS_SOURCE_RECONCILE=1`과 `KTG_TEST_BACKUP_MANIFEST`를 요구하는 opt-in integration으로 분리했다.
+
+**검증/문서**: Windows focused unit `tests/unit/test_t238_manifest_source_reconcile.py`와 `tests/unit/test_t208_backup_restore_source.py` 28개가 통과했고, 변경 backend 파일 Ruff와 T-238 순수/infra mypy가 통과했다. WSL ext4 미러에서는 전체 `pytest -q` 965 passed/55 skipped, Ruff, mypy, `lint-imports`, OpenAPI check가 통과했다. 상세는 `docs/t238-backup-manifest-reconcile.md`에 기록했다. 다음 Agent A 작업은 T-245다. CodeGraph MCP는 이번 세션에서도 `Transport closed`로 실패해 파일 직접 확인으로 진행했다.
+
 ## 2026-06-16 (T-144 성능 우선 v2/API 계약 후보 검증)
 
 **작업**: `docs/t144-api-contract-performance.md`와 ADR-059를 추가해 성능 우선 API 계약 후보를 평가했다. 현재 v2의 `include_geometry=false`, `response_model_exclude_none=True`, geocode/search 상한 100을 accepted profile로 고정하고, geometry endpoint 분리·field slim mode·detail expansion·pre-shaped response table은 T-105/T-139 근거가 생길 때 별도 breaking change로 다루기로 했다.

@@ -937,6 +937,59 @@ def verify_backup(
     asyncio.run(run())
 
 
+@backup_app.command("reconcile-source")
+def reconcile_backup_source(
+    artifact_id: str | None = typer.Option(None, "--artifact-id"),
+    manifest_path: Path | None = typer.Option(None, "--manifest-path"),
+    output: Path | None = typer.Option(None, "--output", help="결과 JSON 경로."),
+    enforce: bool = typer.Option(False, "--enforce", help="불일치가 있으면 exit 2."),
+) -> None:
+    """Opt-in manifest↔DB↔RustFS source-object reconcile (T-238)."""
+    if (artifact_id is None) == (manifest_path is None):
+        typer.echo("error: --artifact-id 또는 --manifest-path 중 하나만 지정하세요", err=True)
+        raise typer.Exit(2)
+
+    async def run() -> dict[str, object]:
+        from kortravelgeo.infra.backup import read_json
+        from kortravelgeo.infra.rustfs import RustfsClient, load_rustfs_config
+        from kortravelgeo.infra.source_restore_service import (
+            manifest_source_reconcile_report_to_dict,
+            reconcile_manifest_source_inventory,
+        )
+
+        async with AsyncAddressClient() as client:
+            manifest = (
+                read_json(manifest_path)
+                if manifest_path is not None
+                else (await client.get_artifact(artifact_id or "")).manifest
+            )
+            config = load_rustfs_config(client.settings)
+            rustfs = None
+            if config.enabled and config.credentials_configured:
+                try:
+                    rustfs = RustfsClient(config)
+                except Exception:
+                    rustfs = None
+            engine = client._engine()
+            assert engine is not None
+            report = await reconcile_manifest_source_inventory(
+                engine,
+                manifest,
+                rustfs=rustfs,
+                actor="ktgctl",
+            )
+        return manifest_source_reconcile_report_to_dict(report)
+
+    result = asyncio.run(run())
+    text = json.dumps(result, ensure_ascii=False, indent=2)
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(text + "\n", encoding="utf-8")
+    typer.echo(text)
+    if enforce and not bool(result.get("ok", False)):
+        raise typer.Exit(2)
+
+
 @backup_app.command("janitor")
 def backup_janitor(
     dry_run: bool = typer.Option(False, "--dry-run", help="대상만 보고(파일 미변경)."),
