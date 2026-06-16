@@ -59,7 +59,7 @@
 1. **기반 관측·헬스**: 완료. `T-157`/`T-160`/`T-174`로 pg_stat 관측, DB readiness, 좌표 변환 단일 경로를 닫았다.
 2. **풀 포화·fail-fast 안정성**: 완료. `T-154`(pool checkout timeout) → `T-145`(endpoint admission/backpressure) → `T-161`(client disconnect/query cancellation) → `T-159`(DB 장애 주입·안정 저하 검증) 순서로 닫았다.
 3. **고부하 회귀 gate**: 완료. `T-163`/`T-164`로 T-141 matrix를 resource budget과 p99 회귀 gate가 있는 nightly/CI 후보로 승격했다.
-4. **정확도·결정성**: `T-171`/`T-172`/`T-173`/`T-175`/`T-176` 완료 → `T-165`. 이미 만든 T-140 corpus를 ranking/confidence/negative/hint/reverse boundary case로 확장한 뒤, 마지막에 parser 변형 case를 넓힌다.
+4. **정확도·결정성**: 완료. `T-171`/`T-172`/`T-173`/`T-175`/`T-176`/`T-165`로 ranking, confidence, negative, hint, reverse boundary, parser 변형 case를 T-140 corpus와 단위 테스트에 고정했다.
 5. **쿼리·공간 최적화**: `T-143` → `T-142` → `T-155` → `T-156`. geocode/search plan을 먼저 안정화하고 reverse 공간 조회를 분리 측정한 뒤 prepared statement와 hot-key cache를 검증한다.
 6. **운영 maintenance·API 계약**: `T-146` → `T-162` → `T-144`. post-load maintenance와 runtime warm 기준을 정한 뒤, 실제 이득이 확인된 계약 변경만 ADR/OpenAPI/UI typegen 범위로 올린다.
 7. **백업/복원 Agent A 몫**: `T-238` → `T-245` → `T-247`. Claude 주도 백업 트랙이 필요한 선행 PR을 머지한 뒤, RustFS reconcile, fault injection, backup/restore benchmark를 시간대 조율해 수행한다.
@@ -74,8 +74,6 @@
 - T-156 geocode/reverse hot-key 결과 캐시 전략·무효화 — 현재 `geo_cache` 테이블/인덱스/metric은 있으나 라우터에 미연결(gap)이다. hot-key 결과 캐시(in-proc LRU 또는 geo_cache)와 적재/MV swap 시 무효화 규약을 설계·측정한다. 합격: hot-key hit율·p95 개선, swap 후 stale 응답 0. (Agent A, 의존: T-138)
 - T-158 slow-query·overload 구조화 로깅·sampling persist — 임계 초과 쿼리/요청을 구조화 로깅 + sampling으로 persist(과다 로깅 방지)한다. 합격: 느린 쿼리 표본이 endpoint/plan과 함께 남고 정상부하 로깅 비용은 무시가능. (Agent A, 의존: T-157)
 - T-162 cold-start·cache warm 자동화·재기동 후 일관 성능 — 재기동/swap 후 cache warm(`pg_prewarm` 등)을 자동화해 cold p99 spike를 완화한다(T-146 maintenance와 경계: 여기는 runtime warm 코드). 합격: 재기동 직후 p99가 warm 대비 일정 배수 이내. (Agent A+B, 의존: T-138)
-- T-165 주소 정규화/파싱 견고성 강화 — 이형 표기·약어·공백·괄호·구주소/신주소·영문혼용·오타 케이스 견고성을 강화하고 변형/경계 case를 T-140 corpus에 등록한다. 합격: 변형 corpus 통과율 목표 달성·기존 회귀 0. (Agent A+B, 의존: T-140)
-
 ### 최종 안정화 acceptance (A+B)
 
 - T-153 geocoder/Admin UI/백업 최종 안정화 acceptance (**번호 규칙 예외**: T-1xx·T-2xx 두 트랙을 묶는 통합 capstone이라 어느 한 범위에도 속하지 않는 의도된 예외 ID다 — 새 acceptance task는 트랙별로 T-1xx/T-2xx에 만든다) — Agent A 성능·정확도 트랙(T-138·T-140~T-146·T-154~T-176)과 Agent B Admin UI·백업/복원 트랙(T-220~T-263)을 하나의 최종 gate로 묶는다. 산출물은 golden corpus 통과율, C1~C17 상태, SQL/REST p95/p99/error budget, soak 안정성, API 계약 변경 목록, Admin UI Playwright 결과, 백업/복원 round-trip·restore-drill 결과, React Doctor, OpenAPI/typegen drift, 운영 runbook 갱신 여부를 한 문서에 정리한다. gate 미달 항목은 release blocker와 후속 Task로 분리한다. (Agent A+B, 의존: T-140~T-176, T-220~T-263)
@@ -134,6 +132,7 @@
 - T-063 N150/Odroid 실측 실행 — 실제 N150/Odroid 장비가 준비되면 T-055 runbook을 사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소 3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면 진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`
 
 ## 완료
+- [x] T-165 주소 정규화/파싱 견고성 강화(Agent A/Codex). `core.normalize`가 NFKC 정규화, 전각 숫자·대시 접기, 쉼표류 구분자 공백화, 숫자 사이 하이픈 공백 제거, 괄호 노트 분리, 시도 약어·구/신 표기 별칭, 도로명-건물번호 무공백, `번`/`번지` 접미를 exact lookup key로 보존한다. 영문 혼용 prefix와 도로명 오타 입력도 한국어 도로명/본번/부번을 잃지 않아 fuzzy fallback으로 넘어간다. T-140 `T140-GEO-WHITESPACE-ALIAS-001`은 `서울시 동대문구 왕산로１８９－４ (청량리동)` 입력이 `왕산로 189-4`/`sig_cd=11230` road 후보를 반환해야 하는 기본 live case로 좁혔다. 상세: `docs/t165-normalization-robustness.md`. (2026-06-16)
 - [x] T-176 reverse 경계·근접 정확도 정합(Agent A/Codex). Reverse nearest SQL은 KNN 정렬 뒤 `distance_m`, `pt_source='entrance'`, `bd_mgt_sn`, `rncode_full`, `bjd_cd`로 동률을 결정한다. `ST_DWithin` 반경은 경계 포함으로 문서화했고, `type="both"`는 base row limit 적용 후 `road`/`parcel` 순 fan-out으로 고정했다. 주소 후보가 없어도 국가지점번호 context가 있으면 `OK`/SPPN 후보, 둘 다 없으면 `NOT_FOUND`로 고정했다. T-140 `T140-REV-BOUNDARY-001`과 `T140-REV-SEA-001` 기대값도 좁혔다. 상세: `docs/t176-reverse-boundary.md`. (2026-06-16)
 - [x] T-175 region hint 정확도·교차검증(Agent A/Codex). `RegionHint`가 `sig_cd`/`bjd_cd` prefix 일관성을 검증해 모순 hint를 DB 조회 전 입력 오류로 거절한다. v2 입력 모델도 생성 시점에 같은 검증을 실행하며, geocode/search/reverse/road geometry SQL의 공통 hint bind를 회귀 테스트로 고정했다. T-140 corpus는 정상 BJD hint와 모순 hint negative case를 추가해 25개가 됐다. 상세: `docs/t175-region-hint-validation.md`. (2026-06-16)
 - [x] T-173 negative/악성/경계 입력 안전성 하니스(Agent A/Codex). Geocode text 입력의 ASCII control character를 DTO에서 거절하고, v2 reverse 좌표를 `FiniteFloat` + 한국 bounds로 검증해 악성·경계 입력이 DB 경로까지 내려가지 않게 했다. API 하니스는 v1/v2 geocode/reverse/SPPN 악성 case가 모두 구조화 4xx이고 500/crash가 없음을 고정한다. 상세: `docs/t173-input-safety-harness.md`. (2026-06-16)

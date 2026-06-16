@@ -39,6 +39,7 @@ T-140은 정확도와 회귀 방지를 위한 고정 corpus와 실행 harness를
 | 도로명 exact | `T140-GEO-ROAD-EXACT-001` |
 | region hint | `T140-GEO-ROAD-SIG-HINT-001`, `T140-GEO-ROAD-BJD-HINT-001`, `T140-GEO-REGION-HINT-MISMATCH-001` |
 | 도로명 fuzzy/ranking | `T140-GEO-ROAD-FUZZY-001` |
+| 정규화 변형 | `T140-GEO-WHITESPACE-ALIAS-001` |
 | 지번 exact | `T140-GEO-PARCEL-EXACT-001` |
 | 복합 시군구 suffix | `T140-GEO-SGG-SUFFIX-001` |
 | reverse nearest/boundary | `T140-REV-NEAREST-001`, `T140-REV-BOUNDARY-001` |
@@ -47,7 +48,7 @@ T-140은 정확도와 회귀 방지를 위한 고정 corpus와 실행 harness를
 | negative | `T140-NEG-GEOCODE-001`, `T140-NEG-REVERSE-001` |
 | 후속 seed | 단독 행정구역, 건물명, 시군구용건물명, 사서함/다량배달처, 바다/도서/산지/동명이인 도로명 |
 
-기본 live 실행은 `optional-source`, `future-followup` 태그를 제외한다. T-171 이후 `T140-GEO-ROAD-FUZZY-001`은 기본 live에 포함되는 ranking case이며, 도로명 오타 입력에서도 같은 본번·부번 후보가 1순위인지 확인한다. T-172 이후 `T140-GEO-SPPN-001`은 국가지점번호 grid cell 후보 confidence `0.72`를 golden으로 고정한다. T-175 이후 region hint case는 `sig_cd` 단독, `bjd_cd` 단독, 모순 hint negative를 모두 포함한다. T-176 이후 `T140-REV-BOUNDARY-001`은 1순위 road 후보와 반경 포함을 확인하고, `T140-REV-SEA-001`은 주소 후보가 없는 먼 좌표의 SPPN context-only `OK` 의미를 기본 live case로 고정한다. epost 사서함/다량배달처와 아직 기대 field를 좁히지 않은 건물명/도서 seed는 fixture에는 남기되, 후속 task에서 OK 기준으로 승격한다.
+기본 live 실행은 `optional-source`, `future-followup` 태그를 제외한다. T-165 이후 `T140-GEO-WHITESPACE-ALIAS-001`은 `서울시`, 불규칙 공백, 괄호 노트, 전각 숫자·하이픈, 도로명-건물번호 무공백 입력에서도 `왕산로 189-4` road 후보와 `sig_cd=11230`을 반환해야 하는 기본 live 정규화 case다. T-171 이후 `T140-GEO-ROAD-FUZZY-001`은 기본 live에 포함되는 ranking case이며, 도로명 오타 입력에서도 같은 본번·부번 후보가 1순위인지 확인한다. T-172 이후 `T140-GEO-SPPN-001`은 국가지점번호 grid cell 후보 confidence `0.72`를 golden으로 고정한다. T-175 이후 region hint case는 `sig_cd` 단독, `bjd_cd` 단독, 모순 hint negative를 모두 포함한다. T-176 이후 `T140-REV-BOUNDARY-001`은 1순위 road 후보와 반경 포함을 확인하고, `T140-REV-SEA-001`은 주소 후보가 없는 먼 좌표의 SPPN context-only `OK` 의미를 기본 live case로 고정한다. epost 사서함/다량배달처와 아직 기대 field를 좁히지 않은 건물명/도서 seed는 fixture에는 남기되, 후속 task에서 OK 기준으로 승격한다.
 
 ## 실행
 
@@ -76,7 +77,7 @@ python scripts/run_geocoder_golden_corpus.py \
 
 Fixture run 결과:
 
-- corpus SHA-256: `7db1b91c556e8fea22a05eda4a209d6c06925dacea287ff26e8eb47292173f83`
+- corpus SHA-256: `0b4ff00d1a59520da3237daf57c51e9be1e870a699976f1b86e1d48482d32b99`
 - cases: `25`
 - selected: `25`
 - ok: `25`
@@ -88,5 +89,5 @@ Live mode는 runner 기능을 확인하기 위해 T-213 r3 DB명으로 시도했
 
 - T-141/T-163: `performance_budget_ms`는 smoke budget으로만 쓰고, 고부하 p95/p99/error budget은 별도 matrix 결과로 고정한다.
 - T-142: T-176에서 좁힌 reverse boundary/context-only case를 공간 조회 최적화 전후의 correctness gate로 재사용한다.
-- T-165: normalization 작업에서 관련 case의 expected field를 더 좁힌다. T-171 fuzzy ranking case는 `ranking` 태그와 `numeric_gte` confidence 하한으로 승격됐고, T-172는 SPPN forward case에 `confidence` 태그와 고정 confidence field를 추가했다.
+- T-165: `T140-GEO-WHITESPACE-ALIAS-001` expected field를 road 후보, `왕산로 189-4`, `sig_cd=11230`으로 좁혔다. T-171 fuzzy ranking case는 `ranking` 태그와 `numeric_gte` confidence 하한으로 승격됐고, T-172는 SPPN forward case에 `confidence` 태그와 고정 confidence field를 추가했다.
 - T-166~T-168: 국가지점번호 case를 forward gate 분리와 reverse first-class code 방출의 회귀 기준으로 쓴다.

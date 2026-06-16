@@ -283,7 +283,7 @@ await client.geocode(query="왕산로 189-4", sig_cd="11230", bjd_cd="1123010700
 ### 주소 정규화 (`core/normalize.py`)
 
 - 입력: raw 문자열. 출력: `AddrParts(frozen dataclass)`.
-- 처리: NFC 정규화, 괄호 노트 분리, 공백 정규화, 시도 별칭 정규화(`서울→서울특별시` 등), 시군구 매칭, 도로명/지번 분기 (`ROAD_RE`/`JIBUN_RE`).
+- 처리: NFKC 정규화, 전각 숫자·대시 변형 접기, 쉼표류 구분자와 공백 정규화, 괄호 노트 분리, 시도 별칭·구/신 표기 정규화(`서울시→서울특별시`, `강원도→강원특별자치도`, `전라북도→전북특별자치도` 등), 시군구 매칭, 도로명/지번 분기 (`ROAD_RE`/`JIBUN_RE`). T-165 이후 도로명과 건물번호 사이 공백이 없는 `성복1로35`, 본번-부번 주변 공백이 있는 `189 - 4`, `번`/`번지` 접미, 괄호·영문 혼용 prefix는 exact lookup에 필요한 `road_nrm`/`mnnm`/`slno`를 유지한다.
 - 산물: `si`, `sgg`, `sgg_nrm`, `emd`, `li`, `road`, `road_nrm`, `mnnm`, `slno`, `mt`(산 여부), `under`(지하), `detail`, `bracket_note`, `is_road`.
 
 ### 주소 코드 helper (`core/address/`, T-056)

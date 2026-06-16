@@ -759,25 +759,36 @@
       "case_id": "T140-GEO-WHITESPACE-ALIAS-001",
       "operation": "geocode",
       "category": "normalization-variant",
-      "description": "공백/축약 변형: T-165에서 기대 field를 더 좁히는 normalization seed",
+      "description": "공백/축약/괄호/전각 숫자 변형: T-165 normalization acceptance case",
       "params": {
-        "road_address": "서울 동대문구   왕산로   189-4",
+        "road_address": "서울시 동대문구   왕산로１８９－４ (청량리동)",
         "limit": 5
       },
       "expected": {
         "status": "OK",
         "min_results": 1,
+        "fields": {
+          "candidates[0].match_kind": "road",
+          "candidates[0].region.sig_cd": "11230"
+        },
         "field_contains": {
-          "candidates[0].address.full": "왕산로"
+          "candidates[0].address.full": "왕산로 189-4"
         }
       },
       "golden_fields": [
+        "candidates[0].match_kind",
         "candidates[0].address.full",
         "candidates[0].region.sig_cd"
       ],
       "tags": [
         "default-live",
+        "t165",
         "normalization",
+        "abbrev",
+        "bracket",
+        "unicode",
+        "no-space",
+        "v2",
         "variant"
       ],
       "source": "T-140 variant derived from T-138 Q1-road-001",
