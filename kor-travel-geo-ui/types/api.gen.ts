@@ -3106,15 +3106,6 @@ export interface components {
             /** @enum {string} */
             type?: "ROAD" | "PARCEL";
         };
-        /** GeocodeResponse */
-        GeocodeResponse: {
-            input: components["schemas"]["GeocodeInput"];
-            refined?: components["schemas"]["RefinedAddress"] | null;
-            result?: components["schemas"]["GeocodeResult"] | null;
-            service: components["schemas"]["ServiceMeta"];
-            status: components["schemas"]["Status"];
-            x_extension?: components["schemas"]["GeocodeExtension"] | null;
-        };
         /** GeocodeResult */
         GeocodeResult: {
             /** @default EPSG:4326 */
@@ -4279,34 +4270,6 @@ export interface components {
              * @default true
              */
             zipcode: boolean;
-        };
-        /** ReverseResponse */
-        ReverseResponse: {
-            input: components["schemas"]["ReverseInput"];
-            /**
-             * Result
-             * @default []
-             */
-            result: components["schemas"]["ReverseResultItem"][];
-            service: components["schemas"]["ServiceMeta"];
-            status: components["schemas"]["Status"];
-            x_extension?: components["schemas"]["ReverseExtension"] | null;
-        };
-        /** ReverseResultItem */
-        ReverseResultItem: {
-            /** Distance M */
-            distance_m?: number | null;
-            point?: components["schemas"]["Point"] | null;
-            /** @default local */
-            source: components["schemas"]["ResultSource"];
-            structure: components["schemas"]["AddressStructure"];
-            /** Text */
-            text: string;
-            /** @enum {string} */
-            type: "ROAD" | "PARCEL";
-            zip_source?: components["schemas"]["ZipSource"] | null;
-            /** Zipcode */
-            zipcode?: string | null;
         };
         /** ReverseV2Input */
         ReverseV2Input: {
@@ -6135,13 +6098,95 @@ export interface components {
             /** Upload Id */
             upload_id: string;
         };
+        /** VWorldErrorBody */
+        VWorldErrorBody: {
+            error: components["schemas"]["VWorldErrorDetail"];
+            /** Service */
+            service: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @default ERROR
+             * @constant
+             */
+            status: "ERROR";
+        };
+        /** VWorldErrorDetail */
+        VWorldErrorDetail: {
+            /** Code */
+            code: string;
+            /** Level */
+            level: number;
+            /** Text */
+            text: string;
+        };
+        /** VWorldErrorEnvelope */
+        VWorldErrorEnvelope: {
+            response: components["schemas"]["VWorldErrorBody"];
+        };
+        /**
+         * VWorldGeocodeBody
+         * @description Published v1 ``getCoord`` success body.
+         *
+         *     The wire omits ``input`` when ``simple=true`` (see :func:`vworld_success_payload`),
+         *     so it is optional in the published schema even though :class:`GeocodeResponse`
+         *     requires it. ``refined``/``result`` are already optional. This aligns the OpenAPI
+         *     contract with what the endpoint actually emits — wire behaviour is unchanged (T-219 M2).
+         */
+        VWorldGeocodeBody: {
+            input?: components["schemas"]["GeocodeInput"] | null;
+            refined?: components["schemas"]["RefinedAddress"] | null;
+            result?: components["schemas"]["GeocodeResult"] | null;
+            service: components["schemas"]["ServiceMeta"];
+            status: components["schemas"]["Status"];
+            x_extension?: components["schemas"]["GeocodeExtension"] | null;
+        };
         /** VWorldGeocodeEnvelope */
         VWorldGeocodeEnvelope: {
-            response: components["schemas"]["GeocodeResponse"];
+            response: components["schemas"]["VWorldGeocodeBody"];
+        };
+        /**
+         * VWorldReverseBody
+         * @description Published v1 ``getAddress`` success body.
+         *
+         *     The wire omits ``input`` when ``simple=true`` and drops each result item's
+         *     ``type`` in the same mode, so both are optional in the published schema while
+         *     wire behaviour is unchanged (T-219 M2).
+         */
+        VWorldReverseBody: {
+            input?: components["schemas"]["ReverseInput"] | null;
+            /**
+             * Result
+             * @default []
+             */
+            result: components["schemas"]["VWorldReverseResultItem"][];
+            service: components["schemas"]["ServiceMeta"];
+            status: components["schemas"]["Status"];
+            x_extension?: components["schemas"]["ReverseExtension"] | null;
         };
         /** VWorldReverseEnvelope */
         VWorldReverseEnvelope: {
-            response: components["schemas"]["ReverseResponse"];
+            response: components["schemas"]["VWorldReverseBody"];
+        };
+        /**
+         * VWorldReverseResultItem
+         * @description Reverse result item whose ``type`` is dropped from the wire in simple mode.
+         */
+        VWorldReverseResultItem: {
+            /** Distance M */
+            distance_m?: number | null;
+            point?: components["schemas"]["Point"] | null;
+            /** @default local */
+            source: components["schemas"]["ResultSource"];
+            structure: components["schemas"]["AddressStructure"];
+            /** Text */
+            text: string;
+            /** @enum {string} */
+            type?: "ROAD" | "PARCEL";
+            zip_source?: components["schemas"]["ZipSource"] | null;
+            /** Zipcode */
+            zipcode?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -6233,13 +6278,13 @@ export interface operations {
                     "application/json": components["schemas"]["VWorldGeocodeEnvelope"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description VWorld 호환 검증·도메인 오류 */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["VWorldErrorEnvelope"];
                 };
             };
         };
@@ -6308,13 +6353,13 @@ export interface operations {
                     "application/json": components["schemas"]["VWorldReverseEnvelope"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description VWorld 호환 검증·도메인 오류 */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["VWorldErrorEnvelope"];
                 };
             };
         };

@@ -8,9 +8,9 @@ from typing import Any, Literal, cast
 from fastapi.responses import ORJSONResponse
 from pydantic import Field
 
-from kortravelgeo.dto.common import FrozenModel
-from kortravelgeo.dto.geocode import GeocodeResponse
-from kortravelgeo.dto.reverse import ReverseResponse
+from kortravelgeo.dto.common import AddressType, FrozenModel
+from kortravelgeo.dto.geocode import GeocodeInput, GeocodeResponse
+from kortravelgeo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
 from kortravelgeo.exceptions import (
     InvalidCoordinateError,
     InvalidInputError,
@@ -26,12 +26,42 @@ _VWORLD_OPERATIONS: dict[str, VWorldOperation] = {
 }
 
 
+class VWorldGeocodeBody(GeocodeResponse):
+    """Published v1 ``getCoord`` success body.
+
+    The wire omits ``input`` when ``simple=true`` (see :func:`vworld_success_payload`),
+    so it is optional in the published schema even though :class:`GeocodeResponse`
+    requires it. ``refined``/``result`` are already optional. This aligns the OpenAPI
+    contract with what the endpoint actually emits — wire behaviour is unchanged (T-219 M2).
+    """
+
+    input: GeocodeInput | None = None  # type: ignore[assignment]
+
+
+class VWorldReverseResultItem(ReverseResultItem):
+    """Reverse result item whose ``type`` is dropped from the wire in simple mode."""
+
+    type: AddressType | None = None  # type: ignore[assignment]
+
+
+class VWorldReverseBody(ReverseResponse):
+    """Published v1 ``getAddress`` success body.
+
+    The wire omits ``input`` when ``simple=true`` and drops each result item's
+    ``type`` in the same mode, so both are optional in the published schema while
+    wire behaviour is unchanged (T-219 M2).
+    """
+
+    input: ReverseInput | None = None  # type: ignore[assignment]
+    result: tuple[VWorldReverseResultItem, ...] = ()
+
+
 class VWorldGeocodeEnvelope(FrozenModel):
-    response: GeocodeResponse
+    response: VWorldGeocodeBody
 
 
 class VWorldReverseEnvelope(FrozenModel):
-    response: ReverseResponse
+    response: VWorldReverseBody
 
 
 class VWorldErrorDetail(FrozenModel):

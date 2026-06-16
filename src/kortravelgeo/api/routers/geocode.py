@@ -8,7 +8,11 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import ORJSONResponse
 
 from kortravelgeo.api.deps import get_client
-from kortravelgeo.api.vworld import VWorldGeocodeEnvelope, vworld_success_response
+from kortravelgeo.api.vworld import (
+    VWorldErrorEnvelope,
+    VWorldGeocodeEnvelope,
+    vworld_success_response,
+)
 from kortravelgeo.client import AsyncAddressClient
 
 router = APIRouter(tags=["address"])
@@ -18,6 +22,7 @@ router = APIRouter(tags=["address"])
     "/address/geocode",
     response_model=VWorldGeocodeEnvelope,
     response_model_exclude_none=True,
+    responses={400: {"model": VWorldErrorEnvelope, "description": "VWorld 호환 검증·도메인 오류"}},
 )
 async def geocode(
     address: str = Query(..., min_length=1, max_length=200),
