@@ -1,9 +1,13 @@
 "use client";
 
 import { X } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { BackupArtifact } from "@/lib/api";
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** ok=true → 검증됨, false → 불일치, null/undefined → 미검증(legacy/skipped). */
 export function inventoryTone(ok: boolean | null | undefined): {
@@ -33,18 +37,65 @@ export function ManifestViewer({
   const sourceMatchSet = nested(manifest, "source_match_set");
   const inv = inventoryTone(artifact.source_inventory_ok);
   const yyyymm = artifact.source_set_yyyymm ?? null;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // a11y (T-258): move focus into the modal on open, return it to the trigger on close.
+  // Best-effort: skip restore when the trigger has been detached (e.g. the artifact list row
+  // was re-windowed by the virtual table while the modal was open) to avoid dumping focus.
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    return () => {
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, []);
+
+  // a11y (T-258): Escape closes; Tab is trapped within the dialog.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
+      if (!focusables || focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
 
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
         aria-label="백업 manifest 재현성 뷰어"
+        aria-modal="true"
         className="modal"
         onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
         role="dialog"
       >
         <div className="manifest-head">
           <h2>{artifact.display_name ?? artifact.artifact_id}</h2>
-          <button aria-label="닫기" className="icon-button" onClick={onClose} type="button">
+          <button
+            aria-label="닫기"
+            className="icon-button"
+            onClick={onClose}
+            ref={closeRef}
+            type="button"
+          >
             <X size={16} />
           </button>
         </div>
