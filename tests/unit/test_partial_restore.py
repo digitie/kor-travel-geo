@@ -8,6 +8,17 @@ corrupted entries in a ``pg_restore -l`` listing so only intact tables are resto
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+from typing import TYPE_CHECKING
+
+import pytest
+
+from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.backup import _plan_partial_restore
+
+if TYPE_CHECKING:
+    from pathlib import Path
 from kortravelgeo.infra.partial_restore import (
     build_partial_restore_uselist,
     partial_restore_block,
@@ -85,3 +96,74 @@ def test_partial_restore_block_records_skips() -> None:
     assert block["skipped_count"] == 1
     assert block["skipped_data_ids"] == ["2842"]
     assert block["skipped_files"] == ["dump/2842.dat"]
+
+
+# --- T-243 fix (Codex H review): the downgraded archive-level sha256 mismatch must reach
+# per-file partition planning, and corrupt critical files must still hard-fail. Filesystem
+# only (no DB / pg_restore), exercising _plan_partial_restore's pre-pg_restore branches.
+
+
+async def _noop_progress(
+    *, progress: float | None = None, stage: str | None = None, message: str | None = None
+) -> None:
+    return None
+
+
+def _write_extract(
+    extract: Path, files: dict[str, bytes], *, corrupt: set[str] | None = None
+) -> None:
+    (extract / "dump").mkdir(parents=True)
+    lines = []
+    for rel, content in files.items():
+        (extract / rel).write_bytes(content)
+        digest = hashlib.sha256(content).hexdigest()
+        if corrupt and rel in corrupt:
+            digest = "0" * 64  # recorded digest no longer matches the file → "corrupted"
+        lines.append(f"{digest}  {rel}")
+    (extract / "checksums.sha256").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_plan_partial_restore_records_archive_warning_when_internals_ok(
+    tmp_path: Path,
+) -> None:
+    # artifact_id restore with a recorded archive sha256: bit rot fails the archive check,
+    # but if every internal checksum still passes the dump is intact → proceed (full restore)
+    # and record the downgraded warning instead of hard-failing before the partial path.
+    extract = tmp_path / "extract"
+    _write_extract(
+        extract,
+        {"manifest.json": b'{"database":{}}', "dump/toc.dat": b"toc", "dump/2841.dat": b"data"},
+    )
+    block, use_list = await _plan_partial_restore(
+        extract,
+        extract / "dump",
+        tmp_path / "work",
+        cancel_event=asyncio.Event(),
+        progress=_noop_progress,
+        archive_checksum_warning="archive sha256 mismatch",
+    )
+    assert use_list is None
+    assert block == {
+        "enabled": False,
+        "skipped_count": 0,
+        "archive_sha256_warning": "archive sha256 mismatch",
+    }
+
+
+@pytest.mark.asyncio
+async def test_plan_partial_restore_hard_fails_on_corrupt_manifest(tmp_path: Path) -> None:
+    extract = tmp_path / "extract"
+    _write_extract(
+        extract,
+        {"manifest.json": b'{"database":{}}', "dump/toc.dat": b"toc"},
+        corrupt={"manifest.json"},
+    )
+    with pytest.raises(InvalidInputError, match="critical files corrupted"):
+        await _plan_partial_restore(
+            extract,
+            extract / "dump",
+            tmp_path / "work",
+            cancel_event=asyncio.Event(),
+            progress=_noop_progress,
+        )
