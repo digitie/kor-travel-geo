@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-16 (T-144 성능 우선 v2/API 계약 후보 검증)
+
+**작업**: `docs/t144-api-contract-performance.md`와 ADR-059를 추가해 성능 우선 API 계약 후보를 평가했다. 현재 v2의 `include_geometry=false`, `response_model_exclude_none=True`, geocode/search 상한 100을 accepted profile로 고정하고, geometry endpoint 분리·field slim mode·detail expansion·pre-shaped response table은 T-105/T-139 근거가 생길 때 별도 breaking change로 다루기로 했다.
+
+**결정**: 이번 PR은 wire schema를 바꾸지 않는다. 따라서 OpenAPI/typegen migration은 없고, UI는 기존처럼 geometry가 필요한 debug 호출에서만 `include_geometry=true`를 명시하면 된다. Payload/p99 budget은 새 `scripts/evaluate_t144_api_contract.py`로 REST benchmark `api-report.json`에서 판정한다.
+
+**검증/문서**: Windows focused unit `tests/unit/test_t144_api_contract.py` 4개와 Ruff가 통과했다. WSL ext4 미러에서는 전체 `pytest -q` 959 passed/54 skipped, Ruff, mypy, `lint-imports`, OpenAPI check가 통과했다. Golden response test는 기본 geocode 응답에 후보 `geometry`/`bbox`가 없고, geocode/search 상한 100과 v2 route `response_model_exclude_none=True`가 유지됨을 고정한다. 다음 Agent A 작업은 T-238이다.
+
 ## 2026-06-16 (T-162 런타임 캐시/버퍼 예열)
 
 **작업**: `loaders.runtime_warm`을 추가해 API 재기동·서빙 swap 직후 read path를 데우는 plan/execute report를 만들었다. Report는 `pg_prewarm` extension과 서빙 relation 존재 여부, 선택형 `pg_prewarm`, geocode exact/search text/reverse nearest/region radius 상한 있는 읽기 전용 probe 실행 결과를 담는다. API lifespan에는 기본 비활성 opt-in scheduler를 붙였고, `RUNTIME_WARM` advisory lock으로 여러 worker가 동시에 예열을 실행하지 않게 했다.
