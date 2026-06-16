@@ -101,6 +101,8 @@ test.describe("원천 파일 관리 /admin/source-files", () => {
 
     const dialog = page.getByRole("dialog", { name: "원천 객체 영구 삭제" });
     await expect(dialog).toBeVisible();
+    // T-226: 위험작업 필요 역할 안내(destructive_admin).
+    await expect(dialog.getByText(/필요 역할/)).toContainText("destructive_admin");
     const exec = dialog.getByRole("button", { name: /영구 삭제 실행/ });
     await expect(exec).toBeDisabled();
     await dialog.getByLabel("hard-delete 확인 문구").fill("HARD-DELETE-SOURCES");

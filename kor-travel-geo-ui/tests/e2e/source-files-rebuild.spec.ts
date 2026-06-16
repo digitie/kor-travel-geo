@@ -115,10 +115,13 @@ test.describe("DB 입력(rebuild-db) /admin/source-files (T-263)", () => {
     await expect(form.getByText("무결성 경보:", { exact: false })).toBeVisible();
     // 기본 세트는 integrity_alert=true → 무결성 항목이 '차단'.
     await expect(form.getByText("차단", { exact: true }).first()).toBeVisible();
+    // 필요 역할 안내(기본: rebuild_operator).
+    await expect(form.getByText(/필요 역할/)).toContainText("rebuild_operator");
 
-    // force 체크 시 위험작업 미리보기(영향·rollback 안내) + 확인 문구가 보인다.
+    // force 체크 시 위험작업 미리보기 + destructive_admin 역할 안내가 추가된다.
     await form.getByRole("checkbox").check();
     await expect(form.getByText("위험작업 미리보기")).toBeVisible();
     await expect(form.getByText(/serving DB를 재구성/)).toBeVisible();
+    await expect(form.getByText(/필요 역할/)).toContainText("destructive_admin");
   });
 });

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
+import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { RetentionWarning } from "@/components/admin/source-files/RetentionWarning";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { postJson, requestJson } from "@/lib/api";
@@ -345,6 +346,7 @@ function BulkHardDeleteDialog({
           선택한 미등록 stored object를 RustFS에서 영구(hard) 삭제합니다. 되돌릴 수 없습니다.
           활성 정본이 참조하는 객체는 백엔드 가드로 자동 제외(skip)됩니다.
         </p>
+        <RoleRequirementNote roles={["destructive_admin"]} />
         <ul className="key-list">
           {objectKeys.slice(0, 8).map((key) => (
             <li key={key} title={key}>

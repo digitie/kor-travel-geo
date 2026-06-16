@@ -524,6 +524,9 @@ function BackupJobsPanel({
           ))}
         </tbody>
       </table>
+      {jobRows.length === 0 ? (
+        <p className="form-note">진행 중이거나 완료된 백업/복원 작업이 없습니다.</p>
+      ) : null}
     </Panel>
   );
 }
