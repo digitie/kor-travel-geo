@@ -24,6 +24,7 @@
 - [v1 geocode](v1/geocode.md)
 - [v1 reverse](v1/reverse.md)
 - [v1 search](v1/search.md)
+- [v2 컨벤션 (재audit)](v2/conventions.md)
 - [v2 geocode](v2/geocode.md)
 - [v2 reverse](v2/reverse.md)
 - [v2 search](v2/search.md)
