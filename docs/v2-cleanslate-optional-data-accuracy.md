@@ -59,7 +59,7 @@ clean-slate 전제(v1 vworld 호환 폐기 + 신규 스키마 + 신규 단일월
 
 - **(a) 상세주소 — 조건부 가능, 단 "열거+거친 앵커링"까지.** 단위(동/층/호)별 좌표는 **어떤 optional 데이터셋에도 없다.** 유일한 단위 원천 `detail_address_db`(전국 3,204,565행, `source-data-accuracy-review.md:268`)는 좌표 컬럼이 0개다(`c13_detail_dong.py:88-108`, 로더 주석 `:259-262` "detail_address_db has no geometry"). 좌표를 붙일 수 있는 가장 미세한 도형은 상세주소 동(洞) 폴리곤 `TL_SGCO_RNADR_DONG`과 동 출입구점 `TL_SPBD_ENTRC_DONG`(전국 424,639점)뿐이다. 따라서 (a)는 **door-level(호별) 정밀 geocoding이 아니라 동-폴리곤/건물 출입구에 앵커링한 sub-address 열거(enumeration)**다. 측정된 한계: 동 출입구점의 자기 동 폴리곤 포함률 96.48%(409,672/424,639, `t123:48`).
 
-- **(b) 무주소 (국가지점번호) — 이미 가능, 데이터 추가 0.** 좌표는 **데이터가 아니라 코드로 합성**된다. `parse_national_point_number`가 EPSG:5179 10m 셀 중심을 문자열에서 계산한다(`sppn.py:38-70`). optional grid(C14)는 최저해상도 100m로 오히려 더 거칠고 `serving_promotion=False`(`c14:176-183`); T-118이 "현 core/sppn.py의 10m 좌표 계산보다 더 정밀한 좌표 원천이 아니다"라고 명시(`t118:64`). 다만 현재 forward는 makarea 게이트 때문에 의무지역 밖 유효 코드를 `NOT_FOUND`로 죽인다(`geocoder.py:91-96`) — **버그가 아니라 capability gap**이고 clean-slate에서 해소 가능하다.
+- **(b) 무주소 (국가지점번호) — 이미 가능, 데이터 추가 0.** 좌표는 **데이터가 아니라 코드로 합성**된다. `parse_national_point_number`가 EPSG:5179 10m 셀 중심을 문자열에서 계산한다(`sppn.py:38-70`). optional grid(C14)는 최저해상도 100m로 오히려 더 거칠고 `serving_promotion=False`(`c14:176-183`); T-118이 "현 core/sppn.py의 10m 좌표 계산보다 더 정밀한 좌표 원천이 아니다"라고 명시(`t118:64`). T-166~T-168에서 makarea gate 분리, reverse code 방출, 한국 SPPN 지원 envelope gate를 구현했다.
 
 - **(b)' 무주소 "명명된 장소" POI(산/들/해안 trailhead 등) — 불가(serving-grade 소스 부재).** 유일 후보 C15(민원행정기관)는 기준월 202401, p95 194.350m, 100m 초과 14.054%, `serving_promotion=False`(`t123:50`, `c15:122`).
 
@@ -100,9 +100,9 @@ clean-slate 전제(v1 vworld 호환 폐기 + 신규 스키마 + 신규 단일월
 
 **C14 (국가지점번호 grid) + makarea — Codex 옳음, 단 "이미 충분히 서빙"은 과장.**
 - 코드로 확정: 국가지점번호 좌표는 grid 파일이 아니라 `sppn.py:38-70`이 합성한다(`X_ORIGIN_5179=700000`, `GRID_SIZE_M=100000`, `CELL_SIZE_M=10`, +5 셀 중심). grid는 최저 100m(`c14:44-49`), parser 10m보다 거칠고 검증 전용(`c14:176-183`, `t118:64`). makarea(`tl_sppn_makarea`, 24,204존)는 별도 테이블로 zone context를 이미 서빙(`geocode_repo.py:126-147`, match_kind='sppn').
-- **과장 교정**: forward가 인위적으로 불구다. parser가 정밀 점을 계산해 놓고도 makarea 폴리곤에 안 걸리면 `NOT_FOUND` 반환(`geocoder.py:91-96`, 코드로 확정). **24,204 의무존 밖의 유효 국가지점번호는 좌표가 있어도 안 나온다.** "이미 서빙" 프레임이 이 gap을 가린다.
-- **추가 리스크**: parser bound-check가 헐겁다. `_cell_index`는 offset<0 / grid_index>=14 / digit>=10000만 거른다(`sppn.py:88-99`). EPSG:5179 유효 범위만 보고 한국 실제 육지/grid envelope를 제약하지 않아 바다·국경 밖 코드에도 좌표를 뱉을 수 있다 — clean-slate에서 노출 확대 시 bound-check 필요.
-- **reverse 미배선**: `format_national_point_number_from_5179`(`sppn.py:73-99`)는 존재하고 테스트되지만 C14 검증에만 배선됐다. reverse에서 코드를 first-class로 방출해야 하는데 — 순수 계산, 신규 데이터 0.
+- **과장 교정 이력**: T-166에서 forward makarea gate를 제거했다. 이제 parser가 계산한 점은 좌표로 반환하고, makarea는 enrich로 강등한다.
+- **bound-check 이력**: T-167에서 한국 SPPN 지원 envelope gate를 parser/formatter에 추가했다. 이는 정밀 국경 polygon 판정이 아니라 명백한 바다·국경 밖 code 차단용 bounding gate다.
+- **reverse 배선 이력**: T-168에서 `format_national_point_number_from_5179`를 reverse 경로에 배선해 code를 first-class로 방출한다.
 - 숫자: grid/center 10,184,741 / formatter parent mismatch 0 / 1km bbox·center mismatch 1,489 — `t123:49` 일치. **확정.**
 
 **C15 (POI) — 분류는 옳음, "POI 품질 미달" 단정은 메트릭상 과도.**
@@ -171,7 +171,7 @@ ADR-007 선택 로직(`sql.py:1212-1296`)을 `location_point.is_representative=t
 | 한국 육지/envelope bound-check | ⚠️ 없음 → 바다/국경 밖 좌표 산출 가능 | `sppn.py:88-99` |
 | **무주소 명명 장소 POI**(산/들/해안) | ❌ serving-grade 소스 없음 | C15 202401/p95 194.350m/14.054% `t123:50` |
 
-**판정**: (b) 국가지점번호는 **데이터 추가 0**으로 충족된다 — forward를 makarea 게이트에서 분리(존 밖이면 점은 계산값 반환, makarea는 선택적 enrich로 강등)하고 reverse에 formatter를 배선하면 된다. 단 envelope bound-check 추가 필요. **무주소 명명 장소 POI는 별도 미해결 데이터 문제**다(serving-grade·라이선스 정리된 신규 소스 필요).
+**판정**: (b) 국가지점번호는 **데이터 추가 0**으로 충족된다. T-166~T-168에서 forward makarea gate 분리, reverse formatter 배선, envelope bound-check를 구현했다. **무주소 명명 장소 POI는 별도 미해결 데이터 문제**다(serving-grade·라이선스 정리된 신규 소스 필요).
 
 ---
 

@@ -573,7 +573,9 @@ API job kind는 `roadaddr_entrance_load`다. payload는 다른 경로 기반 loa
 - primary key는 실제 세종/경남 파일에서 distinct로 확인한 `SIG_CD + MAKAREA_ID`를 사용한다.
 - `MAKAREA_NM`은 표시명으로만 보존하고 unique key로 쓰지 않는다.
 - reverse geocode는 도로명/지번 후보가 없거나 낮은 confidence일 때 `ST_Covers(tl_sppn_makarea.geom, target_pt_5179)`로 보조 후보를 찾는다.
-- geocode는 국가지점번호 문자열 parser가 EPSG:5179 10m cell 중심 좌표를 계산한 뒤, 해당 좌표가 표기 의무지역에 속하는지 검증하고 `x_extension.national_point_number`와 `x_extension.sppn_makarea`에 구역 문맥을 붙인다.
+- geocode는 국가지점번호 문자열 parser가 EPSG:5179 10m cell 중심 좌표를 계산한 뒤, 계산점을 EPSG:4326으로 투영해 좌표를 반환한다. `TL_SPPN_MAKAREA`는 좌표 생성 gate가 아니라 `x_extension.sppn_makarea` 구역 문맥 enrich로만 사용한다(T-166).
+- reverse geocode는 입력 좌표를 EPSG:5179로 투영한 뒤 formatter로 `x_extension.national_point_number`를 노출한다. 해당 좌표가 표기 의무지역에 속하면 기존처럼 `x_extension.sppn_makarea` 구역 문맥도 붙인다(T-168).
+- parser/formatter는 한국 SPPN 지원 envelope 밖의 명백한 바다·국경 밖 grid code를 거절한다(T-167).
 - EPSG:5179 좌표를 국가지점번호 문자열로 바꾸는 formatter도 제공한다. 실제 polygon 내부 점 기반 테스트와 향후 지도 UI 표시에서 사용한다.
 - 이 레이어는 개별 국가지점번호판 point 목록이 아니므로, `MAKAREA_NM`만으로 정밀 좌표를 만들지 않는다. 구역명 검색이 필요하면 centroid/bbox 기반 낮은 confidence `search` 기능으로 분리한다.
 
@@ -586,8 +588,8 @@ API job kind는 `roadaddr_entrance_load`다. payload는 다른 경로 기반 loa
 | CLI | `ktgctl load sppn-makarea <path> --yyyymm YYYYMM --mode full\|append\|delta` |
 | API queue | `sppn_makarea_load` job kind |
 | source set | optional `sppn_makarea` source가 발견되면 `sppn_makarea_load` child를 만들고 `mode="full"`을 넣음 |
-| geocode | 국가지점번호 parser → `GeocodeRepository.lookup_sppn_area()` → `GeocodeResponse.x_extension.sppn_makarea` |
-| reverse | `ReverseRepository.sppn_areas()` → `ReverseResponse.x_extension.sppn_makarea` |
+| geocode | 국가지점번호 parser → `GeocodeRepository.project_sppn_point_4326()` → `GeocodeResponse.result.point`; 선택적으로 `lookup_sppn_area()` → `x_extension.sppn_makarea` |
+| reverse | `ReverseRepository.project_reverse_point_5179()` → `ReverseResponse.x_extension.national_point_number`; 선택적으로 `sppn_areas()` → `x_extension.sppn_makarea` |
 
 실제 검증은 세종 `구역의 도형/구역의도형_전체분_세종특별자치시.zip`으로 수행했다. Docker PostGIS에서 146행을 적재했고, 모든 key가 distinct이며 모든 geometry가 valid `MultiPolygon`이었다. `금이산` polygon 내부 점을 formatter로 `다바 7363 4856`으로 만든 뒤 geocode/reverse 보조 조회가 같은 `sppn_makarea` 문맥을 반환하는 것도 확인했다. 상세 로그는 `docs/t042-sppn-makarea.md`를 본다.
 | 22 | 건물명 | 비어 있거나 `평안빌` |

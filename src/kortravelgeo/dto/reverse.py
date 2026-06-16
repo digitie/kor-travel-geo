@@ -63,6 +63,7 @@ class ReverseResultItem(FrozenModel):
 
 
 class ReverseExtension(FrozenModel):
+    national_point_number: str | None = None
     sppn_makarea: tuple[SppnMakareaContext, ...] = ()
 
 

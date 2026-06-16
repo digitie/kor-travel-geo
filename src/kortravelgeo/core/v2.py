@@ -59,10 +59,13 @@ def geocode_v2_from_v1(inp: GeocodeV2Input, response: GeocodeResponse) -> Geocod
 def reverse_v2_from_v1(inp: ReverseV2Input, response: ReverseResponse) -> ReverseV2Response:
     candidates = [*(_candidate_from_reverse_item(inp, item) for item in response.result)]
     if response.x_extension is not None:
+        national_point_number = response.x_extension.national_point_number
         candidates.extend(
-            _candidate_from_sppn_area(inp, area)
+            _candidate_from_sppn_area(inp, area, national_point_number=national_point_number)
             for area in response.x_extension.sppn_makarea
         )
+        if national_point_number and not response.x_extension.sppn_makarea:
+            candidates.append(_candidate_from_sppn_number(inp, national_point_number))
     return ReverseV2Response(
         status=response.status,
         input=inp,
@@ -151,8 +154,14 @@ def _candidate_from_reverse_item(inp: ReverseV2Input, item: ReverseResultItem) -
     )
 
 
-def _candidate_from_sppn_area(inp: ReverseV2Input, area: SppnMakareaContext) -> CandidateV2:
+def _candidate_from_sppn_area(
+    inp: ReverseV2Input,
+    area: SppnMakareaContext,
+    *,
+    national_point_number: str | None = None,
+) -> CandidateV2:
     metadata = {
+        "national_point_number": national_point_number,
         "sig_cd": area.sig_cd,
         "makarea_id": area.makarea_id,
         "makarea_nm": area.makarea_nm,
@@ -171,6 +180,17 @@ def _candidate_from_sppn_area(inp: ReverseV2Input, area: SppnMakareaContext) -> 
         region=RegionV2(sig_cd=area.sig_cd),
         source="local",
         metadata={key: value for key, value in metadata.items() if value is not None},
+    )
+
+
+def _candidate_from_sppn_number(inp: ReverseV2Input, national_point_number: str) -> CandidateV2:
+    return CandidateV2(
+        confidence=1.0,
+        match_kind="sppn",
+        point=Point(x=inp.lon, y=inp.lat),
+        point_precision="approximate",
+        source="local",
+        metadata={"national_point_number": national_point_number},
     )
 
 

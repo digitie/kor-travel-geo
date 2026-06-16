@@ -17,6 +17,10 @@ GRID_SIZE_M = 100_000
 CELL_SIZE_M = 10
 X_ORIGIN_5179 = 700_000
 Y_ORIGIN_5179 = 1_300_000
+KOREA_GRID_MIN_X_5179 = 700_000
+KOREA_GRID_MAX_X_5179 = 1_400_000
+KOREA_GRID_MIN_Y_5179 = 1_450_000
+KOREA_GRID_MAX_Y_5179 = 2_100_000
 
 _SPPN_RE = re.compile(
     rf"(?P<x_letter>[{GRID_LETTERS}])\s*(?P<y_letter>[{GRID_LETTERS}])"
@@ -57,6 +61,9 @@ def parse_national_point_number(value: str) -> NationalPointNumber | None:
     y_index = GRID_LETTERS.index(y_letter)
     x = X_ORIGIN_5179 + x_index * GRID_SIZE_M + int(x_digits) * CELL_SIZE_M + 5
     y = Y_ORIGIN_5179 + y_index * GRID_SIZE_M + int(y_digits) * CELL_SIZE_M + 5
+    point_5179 = Point(x=x, y=y)
+    if not is_in_korea_grid_envelope(point_5179):
+        return None
     compact = f"{x_letter}{y_letter}{x_digits}{y_digits}"
     text = f"{x_letter}{y_letter} {x_digits} {y_digits}"
     return NationalPointNumber(
@@ -66,13 +73,15 @@ def parse_national_point_number(value: str) -> NationalPointNumber | None:
         y_letter=y_letter,
         x_digits=x_digits,
         y_digits=y_digits,
-        point_5179=Point(x=x, y=y),
+        point_5179=point_5179,
     )
 
 
 def format_national_point_number_from_5179(point: Point) -> NationalPointNumber | None:
     """Format an EPSG:5179 point as the containing 10 m national grid cell."""
 
+    if not is_in_korea_grid_envelope(point):
+        return None
     x_cell = _cell_index(point.x, X_ORIGIN_5179)
     y_cell = _cell_index(point.y, Y_ORIGIN_5179)
     if x_cell is None or y_cell is None:
@@ -82,6 +91,15 @@ def format_national_point_number_from_5179(point: Point) -> NationalPointNumber 
     y_letter, y_digits = y_cell
     return parse_national_point_number(
         f"{x_letter}{y_letter} {x_digits:04d} {y_digits:04d}"
+    )
+
+
+def is_in_korea_grid_envelope(point: Point) -> bool:
+    """Return whether a 5179 point is inside the supported Korea SPPN envelope."""
+
+    return (
+        KOREA_GRID_MIN_X_5179 <= point.x < KOREA_GRID_MAX_X_5179
+        and KOREA_GRID_MIN_Y_5179 <= point.y < KOREA_GRID_MAX_Y_5179
     )
 
 

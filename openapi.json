@@ -5945,6 +5945,17 @@
       "ReverseExtension": {
         "additionalProperties": false,
         "properties": {
+          "national_point_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "National Point Number"
+          },
           "sppn_makarea": {
             "default": [],
             "items": {

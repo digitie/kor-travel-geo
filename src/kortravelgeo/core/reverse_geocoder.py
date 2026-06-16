@@ -13,6 +13,7 @@ from kortravelgeo.dto.reverse import (
 
 from .protocols import ReverseRepo, SppnAreaLookup
 from .responses import service_meta, structure_from_lookup
+from .sppn import format_national_point_number_from_5179
 
 
 def _sppn_context(area: SppnAreaLookup) -> SppnMakareaContext:
@@ -44,6 +45,8 @@ async def reverse_geocode(
         region_hint=region_hint,
     )
     sppn_areas = await repo.sppn_areas(inp.point, crs=inp.crs, limit=5)
+    point_5179 = await repo.project_reverse_point_5179(inp.point, crs=inp.crs)
+    sppn = format_national_point_number_from_5179(point_5179) if point_5179 else None
     items = tuple(
         ReverseResultItem(
             type=row.address_type,
@@ -57,11 +60,12 @@ async def reverse_geocode(
         )
         for row in rows
     )
-    extension = (
-        ReverseExtension(sppn_makarea=tuple(_sppn_context(area) for area in sppn_areas))
-        if sppn_areas
-        else None
-    )
+    extension = None
+    if sppn is not None or sppn_areas:
+        extension = ReverseExtension(
+            national_point_number=sppn.text if sppn is not None else None,
+            sppn_makarea=tuple(_sppn_context(area) for area in sppn_areas),
+        )
     return ReverseResponse(
         service=service_meta("reverse_geocode"),
         status="OK" if items or extension else "NOT_FOUND",

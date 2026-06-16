@@ -146,6 +146,17 @@ SELECT m.sig_cd,
 """
 )
 
+_SPPN_POINT_4326 = text(
+    """
+WITH target_pt AS (
+  SELECT ST_SetSRID(ST_MakePoint(:x, :y), 5179) AS geom
+)
+SELECT ST_X(ST_Transform(geom, 4326)) AS lon,
+       ST_Y(ST_Transform(geom, 4326)) AS lat
+  FROM target_pt
+"""
+)
+
 
 def _sgg_suffix(parts: AddrParts) -> str | None:
     if parts.sgg is None or " " in parts.sgg or not parts.sgg.endswith("구"):
@@ -259,3 +270,15 @@ class GeocodeRepository:
                 )
             ).mappings().first()
         return map_sppn_area(dict(row)) if row else None
+
+    async def project_sppn_point_4326(self, point_5179: Point) -> Point | None:
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    _SPPN_POINT_4326,
+                    {"x": point_5179.x, "y": point_5179.y},
+                )
+            ).mappings().first()
+        if row is None or row["lon"] is None or row["lat"] is None:
+            return None
+        return Point(x=float(row["lon"]), y=float(row["lat"]))

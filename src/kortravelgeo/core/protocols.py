@@ -174,6 +174,8 @@ class GeocodeRepo(Protocol):
 
     async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None: ...
 
+    async def project_sppn_point_4326(self, point_5179: Point) -> Point | None: ...
+
 
 @runtime_checkable
 class ReverseRepo(Protocol):
@@ -195,6 +197,13 @@ class ReverseRepo(Protocol):
         crs: str,
         limit: int = 5,
     ) -> list[SppnAreaLookup]: ...
+
+    async def project_reverse_point_5179(
+        self,
+        point: Point,
+        *,
+        crs: str,
+    ) -> Point | None: ...
 
 
 @runtime_checkable
@@ -322,5 +331,9 @@ class FakeGeocodeRepo:
         return self.fuzzy_result[:limit]
 
     async def lookup_sppn_area(self, point_5179: Point) -> SppnAreaLookup | None:
+        _ = point_5179
+        return None
+
+    async def project_sppn_point_4326(self, point_5179: Point) -> Point | None:
         _ = point_5179
         return None
