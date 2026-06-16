@@ -100,6 +100,17 @@
 
 > 개인 서버·낮은 HW 신뢰성 전제 → **백업/복원이 간단하고 안정적인 것**이 최우선. 아직 배포 전이므로 호환성·코드수정 최소화보다 성능·안정성을 우선한다. backup/restore 백엔드는 Claude(B)가 도메인 주도, `pg_terminate_backend`·restore-drill 등 DB 부하는 Codex(A)와 조율(A+B). Admin UI/e2e는 전부 B. 백엔드 기존 자산: `infra/backup.py`, `/v1/admin/backups|restores`, `dto/admin.py`, ADR-030(parallel dump+압축)/ADR-036(`ALTER DATABASE RENAME` hot-swap), `docs/t046`·`t058`·`backup-restore-source-inventory.md`. (시퀀싱: expires_at→janitor→스케줄; verify→카탈로그→manifest UI; dry-run→version guard→복원 위저드; row_count/reconcile→restore-test; round-trip→장애주입; hot-swap 실행→hot-swap 통합. UI 탭 셸이 root, e2e는 구현 머지 후.)
 
+#### Agent B 재정렬 실행 순서 (2026-06-16)
+
+백엔드 백업/복원 스위트(`T-239`~`T-244`/`T-264`)와 백업/복원 Admin UI(`T-248`~`T-254`) + 백업 e2e(`T-255`)를 완료한 이후, 남은 Agent B 작업은 번호순보다 **의존성과 도메인 우선순위(개인 서버 = 백업/복원 최우선)**를 따른다. 각 항목은 독립 PR로 머지하고, 리뷰 반영(fixup) PR은 추가 리뷰하지 않는다. e2e는 CI 게이트가 아니며 `next dev` HMR이 hydration을 깨므로 **production build(`next build` + `next start --port 12505`)에서 실행**한다(`T-255` 기록, `tests/e2e/backups.spec.ts`가 mock-fixture 템플릿).
+
+1. **백업/복원 e2e 마무리**(T-255 `backups.spec.ts` mock-fixture 하네스 재사용): `T-256`(복원 위저드 e2e — 모드·manifest·dry-run·confirmation·blocker) → `T-257`(hot-swap e2e — plan·window·source-verify·rollback) → `T-258`(백업/복원 위저드/hot-swap dialog 접근성·회복성 e2e; T-256·T-257 머지 후).
+2. **source-files e2e 기반·단계별**: `T-225`(검증·매칭·DB 입력 fixture harness — T-259~263에 공급) → `T-259`(업로드 적재) → `T-260`(대기·재개·409 충돌) → `T-261`(구조 검증) → `T-262`(매칭 세트) → `T-263`(DB 입력).
+3. **Admin UI 기능·편의·접근성**: `T-222`(성능·C1~C17 검증 artifact read-only 노출) → `T-226`(운영 편의 기능 보강; T-254 가상화 공통 컴포넌트 공유) → `T-227`(기존 표면 `/admin/source-files`·`/admin/consistency`·`/admin/ops` 접근성·회복성 e2e).
+4. **통합 gate**: `T-153`(Agent A 성능·정확도 트랙과 함께 최종 안정화 acceptance) — 양 트랙 완료 후.
+
+> A+B 백엔드 백업/복원 잔여(`T-238`/`T-245`/`T-247`)는 Agent A 재정렬 7번이 주도한다. `T-246`(hot-swap·rollback round-trip 통합)은 B의 `T-241`/`T-264` 위에서 A+B로 시간대 조율한다.
+
 - T-210 통합/성능 검증 — 백엔드 fixture 통합 27 시나리오(#27 epost 포함) + `KTG_SLOW_REAL_DATA` 실데이터, 백엔드 `openapi.json` drift 0 + 통합 후 `api.gen.ts` 재생성 drift 0(T-209가 갱신한 api.gen.ts 기준이라 T-209 머지 후 검증; UI e2e/프론트 단위 테스트 자체는 T-209 소유), 장비 비종속 성능(fixture 기반 deep rehash·multipart 대용량 회귀·메모리 상한)은 여기서 수행하고 실측 throughput만 N150/Odroid(T-063)로 연계. **[부분 완료, Agent B]** 백엔드 통합 18 시나리오(라이브 PostGIS + FakeS3Store harness) + 런타임 버그 2건 수정을 #162로 머지. #27 epost 시나리오는 T-207 unit/API fake 테스트로 위임(통합 suite는 외부 epost OpenAPI를 호출하지 않음). T-209 머지 후 `openapi.json`/`api.gen.ts` drift 0 검증 완료. 장비 비종속 fixture 성능(deep rehash `sha256_file`·multipart 대용량 `_read_file_chunks`·메모리 상한)은 `scripts/benchmark_source_registry_perf.py` + 상시 tracemalloc 가드(`tests/unit/test_t210_source_registry_perf.py`)로 구현(`docs/t210-device-independent-perf.md`). **잔여**(rebuild-db SHP/text 로더 전국 적재 통합·`KTG_SLOW_REAL_DATA` 실데이터)는 GDAL·전국 데이터 필요한 A+B 공동이며 T-213(#172) 결과와 합친다; 실측 throughput은 T-063. (의존: T-205·T-206·T-207·T-208·T-209)
 #### Admin UI (T-2xx · 주 Agent B) — 과거 T-1xx에서 이동
 
