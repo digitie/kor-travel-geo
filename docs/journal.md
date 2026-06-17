@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-178a Claude Code 리뷰 후속)
+
+**작업**: 2026-06-16 이후 PR을 Closed 포함해 훑고, 리뷰 반영 PR은 제외한 뒤 Claude Code 코멘트 중 미반영으로 보이는 6건을 #336/T-178로 분리했다. 그중 T-178a로 PR #248 코멘트를 먼저 반영했다.
+
+**결정**: v2 geocode의 보조 road 후보 조회는 primary geocode OK 응답을 보강하는 best-effort 경로다. 따라서 보조 조회 실패는 warning log만 남기고 이미 계산된 primary 응답을 반환한다. `InvalidAddressError` 이후의 fallback 후보 조회는 primary 응답이 없으므로 기존처럼 실패를 드러낸다.
+
+**검증/문서**: `tests/unit/test_v2_api.py`에 보조 `GeometryRepository.road_geometries()` 실패 시 primary 후보가 유지되는 회귀 테스트를 추가했다. 남은 T-178b~T-178f는 `docs/tasks.md`에 열린 선행 리뷰 후속으로 등록했다.
+
 ## 2026-06-17 (T-119/T-139 종료 판정)
 
 **작업**: `docs/tasks.md`에서 `T-119`를 보류 항목에서 제거하고 완료/종료 항목으로 이동했다. `T-139`도 조건부 대기 항목에서 제거하고 완료/종료 항목으로 이동했다. `docs/resume.md`의 현재 기준과 "다음 한 작업"도 두 task가 잔여로 보이지 않도록 갱신했다.

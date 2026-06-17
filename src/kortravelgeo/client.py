@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any, Literal, Self
@@ -139,6 +140,8 @@ from .infra.source_upload_repo import (
 )
 from .infra.zip_repo import ZipRepository
 from .settings import Settings, get_settings
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _metadata_str(value: object | None) -> str | None:
@@ -278,9 +281,19 @@ class AsyncAddressClient:
         if response.status == "OK":
             converted = await self._with_geocode_geometries(converted)
             if self._should_collect_geocode_supplements(inp, response, address):
-                supplemental = await self._geocode_supplemental_road_candidates(inp, address)
-                if supplemental.status == "OK":
-                    return merge_geocode_v2_responses(inp, converted, supplemental)
+                try:
+                    supplemental = await self._geocode_supplemental_road_candidates(
+                        inp, address
+                    )
+                except Exception:
+                    _LOGGER.warning(
+                        "supplemental road candidate lookup failed; "
+                        "returning primary geocode response",
+                        exc_info=True,
+                    )
+                else:
+                    if supplemental.status == "OK":
+                        return merge_geocode_v2_responses(inp, converted, supplemental)
             return converted
         fallback_response = await self._geocode_road_or_region_candidates(inp, address)
         return fallback_response if fallback_response.status == "OK" else converted

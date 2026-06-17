@@ -22,9 +22,41 @@
 > 두 에이전트 병행 권장 순서·병행 운영 원칙(PR/리뷰 루프)은
 > [`docs/runbooks/agent-workflow.md`](runbooks/agent-workflow.md)를 본다.
 
-신규 큰 트랙은 없다. T-110~T-176(데이터 원천 보강·성능·정확도)과 T-200~T-276(데이터
-적재/백업/복원 + Admin UI)은 모두 완료됐고, T-153 최종 안정화 acceptance도 닫혔다
-(`tasks-done.md`). 남은 항목은 선택적 후속과 외부 조건 보류뿐이다.
+T-177 파일 기반 full-load e2e 재검증에 들어가기 전, 2026-06-16 이후 PR에서 발견한
+Claude Code 리뷰 후속을 먼저 닫는다. T-110~T-176(데이터 원천 보강·성능·정확도)과
+T-200~T-276(데이터 적재/백업/복원 + Admin UI)은 모두 완료됐고, T-153 최종 안정화
+acceptance도 닫혔다(`tasks-done.md`). 남은 항목은 아래 리뷰 후속, 선택적 후속, 외부 조건
+보류다.
+
+### 선행 리뷰 후속
+
+- [ ] **T-178b** — geocode/reverse cache write best-effort 보강(#336).
+
+  PR #285 Claude Code 코멘트 후속. `_store_geocode_cache`/`_store_reverse_cache` 실패가 이미
+  계산된 OK 응답을 500으로 바꾸지 않도록 best-effort 처리하고, 회귀 테스트로 cache write
+  실패 시 응답 shape를 고정한다.
+
+- [ ] **T-178c** — 번호형 가지도로 파싱 회귀 방지(#336).
+
+  PR #277 Claude Code 코멘트 후속. `테헤란로1길 10`, `올림픽로35길` 같은 번호형 가지도로가
+  도로명/건물번호로 잘못 분리되지 않도록 정규화/파싱 테스트와 최소 보정을 추가한다.
+
+- [ ] **T-178d** — `DBAPIError` handler 오류 분류 보정(#336).
+
+  PR #266 Claude Code 코멘트 후속. transient 연결/운영 DB 장애와 `ProgrammingError`·
+  `IntegrityError` 같은 버그성 오류가 같은 503 재시도 가능 오류처럼 보이지 않도록 API
+  error handler 분류와 테스트를 보강한다.
+
+- [ ] **T-178e** — `ops.pg_stat_statements_snapshots` retention/prune 정책(#336).
+
+  PR #253 Claude Code 코멘트 후속. 저사양 운영에서 pg_stat snapshot이 무한 증가하지 않도록
+  retention 설정, pruning 실행 지점, 단위/통합 테스트를 추가한다.
+
+- [ ] **T-178f** — RustFS HEAD 오류/size 판정 정직화(#336).
+
+  PR #290 Claude Code 코멘트 후속. RustFS HEAD 오류를 모두 missing으로 뭉개지 않고,
+  `content-length` 부재를 size `0`으로 처리하지 않도록 `head_object`와 restore-source
+  reconcile 경로를 보강한다.
 
 ### 선택 후속 (낮은 우선순위)
 
