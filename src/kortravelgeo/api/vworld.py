@@ -26,6 +26,18 @@ _VWORLD_OPERATIONS: dict[str, VWorldOperation] = {
 }
 
 
+def normalize_type_param(value: object) -> object:
+    """Accept the ``type`` param case-insensitively.
+
+    The v1 ``type`` query param canonicalizes to lower-case (``road``/``parcel``/``both``),
+    but the wire serializes ``input.type`` upper-case for vworld compatibility
+    (``ROAD``/``PARCEL``). Without this, echoing the response value back as input
+    (``type=ROAD``) would 400. Used as a Pydantic ``BeforeValidator`` so the published
+    OpenAPI enum (lower-case) is unchanged — only accepted inputs widen.
+    """
+    return value.lower() if isinstance(value, str) else value
+
+
 class VWorldGeocodeBody(GeocodeResponse):
     """Published v1 ``getCoord`` success body.
 

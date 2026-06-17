@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import ORJSONResponse
+from pydantic import BeforeValidator
 
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.vworld import (
     VWorldErrorEnvelope,
     VWorldReverseEnvelope,
+    normalize_type_param,
     vworld_success_response,
 )
 from kortravelgeo.client import AsyncAddressClient
@@ -28,7 +30,9 @@ async def reverse_geocode(
     x: float = Query(...),
     y: float = Query(...),
     crs: str = "EPSG:4326",
-    type: Literal["both", "road", "parcel"] = "both",
+    type: Annotated[
+        Literal["both", "road", "parcel"], BeforeValidator(normalize_type_param)
+    ] = "both",
     zipcode: bool = True,
     simple: bool = False,
     radius_m: int | None = Query(default=None, ge=1, le=2000),
