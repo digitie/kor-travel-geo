@@ -2,6 +2,20 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-180 SHP invalid geometry repair)
+
+**작업**: T-177D 실제 opt-in 실행 중 세종 202604 전자지도 SHP 적재 결과에서
+`ST_IsValid(geom)=false` row가 남는 문제를 #348/T-180으로 분리했다.
+
+**결정**: `ogr2ogr` subprocess를 도입하지 않고 기존 GDAL Python binding 적재 경로를 유지한다.
+대신 SHP geometry target table 적재가 끝난 직후 target table별 DDL geometry type에 맞춰
+`ST_MakeValid`와 `ST_CollectionExtract`를 적용하고 SRID 5179 `MultiPolygon`/`MultiLineString`으로
+되돌린다. geometry가 없는 `tl_sprd_intrvl`은 repair 대상에서 제외한다.
+
+**검증/문서**: `tests/unit/test_shp_loader_gdal.py`가 repair가 analyze 전에 실행되고
+`tl_sprd_manage`/`tl_spbd_buld_polygon` repair type이 target DDL과 맞는지 고정한다. 이 fix를
+main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
+
 ## 2026-06-17 (T-177C 텍스트 정본/daily delta fast-sample e2e)
 
 **작업**: T-177 파일 기반 full-load e2e의 두 번째 구현 Task로 실제 텍스트 계열 원천 fast-sample DB 적재 테스트를 추가했다.

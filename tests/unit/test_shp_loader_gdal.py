@@ -63,6 +63,25 @@ def test_shp_loader_analyzes_target_tables_after_requested_batch() -> None:
     )
 
 
+def test_shp_loader_repairs_invalid_geometries_before_analyze() -> None:
+    source = inspect.getsource(polygons_loader._load_plans_sync)
+    repair_source = inspect.getsource(polygons_loader._repair_invalid_geometries)
+
+    assert "_repair_invalid_geometries" in source
+    assert source.index("_repair_invalid_geometries") < source.index("if analyze:")
+    assert "ST_MakeValid(geom)" in repair_source
+    assert "ST_CollectionExtract" in repair_source
+    assert "ST_IsValid(geom)" in repair_source
+    assert polygons_loader.GEOMETRY_REPAIR_SPECS["tl_sprd_manage"] == (
+        "MultiLineString",
+        2,
+    )
+    assert polygons_loader.GEOMETRY_REPAIR_SPECS["tl_spbd_buld_polygon"] == (
+        "MultiPolygon",
+        3,
+    )
+
+
 def test_unique_target_tables_preserves_order() -> None:
     plans = (
         polygons_loader.ShpLoadPlan("A", "table_a", Path("a.shp"), Path("a.dbf"), "a.shp"),

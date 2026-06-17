@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -43,6 +43,17 @@ TARGET_TABLES: dict[str, str] = {
     "TL_SPRD_INTRVL": "tl_sprd_intrvl",
     "TL_SPRD_RW": "tl_sprd_rw",
     "TL_SPBD_BULD": "tl_spbd_buld_polygon",
+}
+
+GEOMETRY_REPAIR_SPECS: dict[str, tuple[str, int]] = {
+    "tl_scco_ctprvn": ("MultiPolygon", 3),
+    "tl_scco_sig": ("MultiPolygon", 3),
+    "tl_scco_emd": ("MultiPolygon", 3),
+    "tl_scco_li": ("MultiPolygon", 3),
+    "tl_kodis_bas": ("MultiPolygon", 3),
+    "tl_sprd_manage": ("MultiLineString", 2),
+    "tl_sprd_rw": ("MultiPolygon", 3),
+    "tl_spbd_buld_polygon": ("MultiPolygon", 3),
 }
 
 BUILDING_POLYGON_LAYER_NAME = "TL_SPBD_BULD"
@@ -250,6 +261,7 @@ def _load_plans_sync(
             msg = f"GDAL VectorTranslate failed for {plan.source_layer}"
             raise LoaderError(msg)
         loaded += 1
+    _repair_invalid_geometries(pg_url, _unique_target_tables(plans))
     if analyze:
         _analyze_target_tables(
             pg_url,
@@ -258,6 +270,42 @@ def _load_plans_sync(
     if on_progress:
         on_progress(1.0)
     return loaded
+
+
+def _repair_invalid_geometries(pg_url: str, table_names: Sequence[str]) -> None:
+    repair_tables = [
+        table_name for table_name in table_names if table_name in GEOMETRY_REPAIR_SPECS
+    ]
+    if not repair_tables:
+        return
+
+    engine = create_engine(pg_url)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("SET LOCAL search_path = public, x_extension"))
+            for table_name in repair_tables:
+                geometry_type, collection_type = GEOMETRY_REPAIR_SPECS[table_name]
+                result = conn.execute(
+                    text(
+                        f"""
+UPDATE {table_name}
+   SET geom = ST_Multi(
+     ST_CollectionExtract(ST_MakeValid(geom), :collection_type)
+   )::geometry({geometry_type}, 5179)
+ WHERE geom IS NOT NULL
+   AND NOT ST_IsValid(geom)
+"""
+                    ),
+                    {"collection_type": collection_type},
+                )
+                repaired_count = result.rowcount if result.rowcount >= 0 else 0
+                if repaired_count:
+                    print(
+                        "SHP geometry repair applied: "
+                        f"table={table_name}, repaired={repaired_count}"
+                    )
+    finally:
+        engine.dispose()
 
 
 def _emit_layer_progress(

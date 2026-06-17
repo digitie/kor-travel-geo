@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-180 SHP loader invalid geometry repair를 추가했다. 실제 T-177D 세종 전자지도 적재에서 발견한 invalid geometry를 닫기 위해 SHP geometry target 적재 직후 `ST_MakeValid`/`ST_CollectionExtract` 후처리를 실행하고, target DDL의 geometry type/SRID 5179로 되돌린다.
 - T-177C 텍스트 정본/daily delta fast-sample e2e를 추가했다. opt-in 상태에서 실제 도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB 파일을 loader Python API로 직접 읽어 scratch DB에 적재하고, `load_manifest`, table row count, `resolve_text_geometry_links()` 전후 링크 수치와 `t177c-text-delta-fast-sample-load.json` artifact를 검증한다. 기본 sample 크기는 `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 조정한다.
 - T-177B opt-in full-load e2e 하니스를 추가했다. `KTG_TEST_FULL_LOAD_E2E=1`, `KTG_TEST_PG_DSN`, `KTG_TEST_FULL_LOAD_E2E_CONFIRM="RUN-T177-E2E <database>"`를 요구하고, scratch DB 이름 allowlist, non-empty DB guard(`KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1` 별도 요구), 실제 Juso data-root discovery artifact, `SCHEMA_SQL`/`INDEX_SQL` smoke를 검증한다.
 - T-179 CI backend GDAL 설치 hardening을 추가했다. backend job과 GDAL apt 설치 단계에 timeout을 두고, `apt-get update` retry와 `Dpkg::Lock::Timeout`/`--no-install-recommends`를 적용해 apt mirror/network/lock 문제가 PR을 장시간 붙잡지 않게 했다.
