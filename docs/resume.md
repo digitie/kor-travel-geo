@@ -24,6 +24,12 @@
   allowlist를 모두 요구하고, 기존 row가 있으면 `KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1`
   없이는 실패한다. 하니스는 실제 data-root discovery artifact와 `SCHEMA_SQL`/`INDEX_SQL`
   smoke report를 `artifacts/t177/<run_id>/`에 남긴다.
+- ✅ T-177C 텍스트 정본/daily delta fast-sample e2e 완료 — opt-in 상태에서 실제
+  도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB를 loader Python
+  API로 직접 읽어 scratch DB에 적재한다. 기본 `limit_per_file=2`이며
+  `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 조정한다. 테스트는 지번 링크 FK parent seed,
+  table row count, `load_manifest`, `resolve_text_geometry_links()` 전후 링크 수치,
+  `t177c-text-delta-fast-sample-load.json` artifact를 검증한다.
 - ✅ T-179 CI backend GDAL 설치 timeout/retry hardening 완료 — PR #344의 backend CI가
   `Install GDAL system libraries` 단계에서 장시간 진행 중으로 멈춘 문제를 #345/T-179로
   분리했다. `.github/workflows/ci.yml` backend job과 GDAL apt 설치 step에 timeout을 두고,
@@ -265,7 +271,8 @@
 현재는 T-177 파일 기반 full-load e2e 재검증에 들어가기 전, 2026-06-16 이후 PR 스캔에서
 발견한 Claude Code 리뷰 후속을 먼저 닫았다. `T-178a`~`T-178f`와 `T-177A` 계획/Task 등록이
 완료됐고, `T-179` CI backend GDAL 설치 hardening도 완료됐다. `T-177B` opt-in e2e 하니스
-구현 후 다음 한 작업은 `T-177C` 텍스트 정본과 daily delta DB 구축 e2e 구현이다.
+구현과 `T-177C` 텍스트 정본/daily delta fast-sample e2e 구현도 완료됐다. 다음 한 작업은
+`T-177D` 전자지도 SHP/PostGIS geometry e2e 구현이다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

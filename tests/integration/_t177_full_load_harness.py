@@ -48,7 +48,9 @@ ENV_DATA_ROOT = "KTG_TEST_FULL_LOAD_E2E_DATA_ROOT"
 ENV_ARTIFACT_DIR = "KTG_TEST_FULL_LOAD_E2E_ARTIFACT_DIR"
 ENV_RUN_ID = "KTG_TEST_FULL_LOAD_E2E_RUN_ID"
 ENV_ALLOW_NONEMPTY = "KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY"
+ENV_SAMPLE_LIMIT = "KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT"
 CONFIRM_PREFIX = "RUN-T177-E2E"
+DEFAULT_SAMPLE_LIMIT_PER_FILE = 2
 
 DEFAULT_DATA_ROOTS = (
     Path("data/juso"),
@@ -86,6 +88,17 @@ ROW_GUARD_TABLES = (
     "ops.serving_releases",
 )
 
+T177C_TARGET_TABLES = (
+    "public.tl_juso_parcel_link",
+    "public.tl_locsum_entrc",
+    "public.tl_navi_entrc",
+    "public.tl_navi_buld_centroid",
+    "public.tl_juso_text",
+    "public.load_manifest",
+)
+
+T177C_MANIFEST_TABLES = ("tl_juso_text", "tl_juso_parcel_link")
+
 
 class T177SkipError(RuntimeError):
     """Raised when the opt-in T-177 e2e test should skip cleanly."""
@@ -101,6 +114,16 @@ class T177Runtime:
     data_root: Path
     artifact_dir: Path
     run_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class T177TextDeltaSourcePaths:
+    juso_hangul: Path
+    jibun_rnaddrkor: Path
+    daily_juso: Path
+    daily_lnbr: Path
+    locsum: Path
+    navi: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +173,20 @@ def runtime_from_env(
         artifact_dir=artifact_dir,
         run_id=run_id,
     )
+
+
+def sample_limit_from_env(environ: Mapping[str, str] | None = None) -> int:
+    env = environ if environ is not None else os.environ
+    raw = env.get(ENV_SAMPLE_LIMIT)
+    if raw is None:
+        return DEFAULT_SAMPLE_LIMIT_PER_FILE
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise T177PreflightError(f"{ENV_SAMPLE_LIMIT} must be a positive integer") from exc
+    if value < 1:
+        raise T177PreflightError(f"{ENV_SAMPLE_LIMIT} must be a positive integer")
+    return value
 
 
 def candidate_data_roots(environ: Mapping[str, str] | None = None) -> tuple[Path, ...]:
@@ -356,6 +393,49 @@ def build_discovery_plan(data_root: Path) -> dict[str, Any]:
     }
 
 
+def t177c_text_delta_source_paths(discovery_plan: Mapping[str, Any]) -> T177TextDeltaSourcePaths:
+    return T177TextDeltaSourcePaths(
+        juso_hangul=required_source_path(discovery_plan, "juso_hangul"),
+        jibun_rnaddrkor=required_source_path(discovery_plan, "jibun_rnaddrkor"),
+        daily_juso=required_source_path(discovery_plan, "daily_juso"),
+        daily_lnbr=required_source_path(discovery_plan, "daily_lnbr"),
+        locsum=required_source_path(discovery_plan, "locsum"),
+        navi=required_source_path(discovery_plan, "navi"),
+    )
+
+
+def required_source_path(discovery_plan: Mapping[str, Any], kind: str) -> Path:
+    sources = discovery_plan.get("sources")
+    if not isinstance(sources, Mapping):
+        raise T177SkipError("T-177 discovery plan does not contain sources")
+    summary = sources.get(kind)
+    if not isinstance(summary, Mapping):
+        raise T177SkipError(f"T-177 source discovery is missing required kind: {kind}")
+    error = summary.get("error")
+    if error:
+        raise T177SkipError(f"T-177 source {kind} discovery failed: {error}")
+    if not summary.get("exists"):
+        raise T177SkipError(f"T-177 source {kind} path does not exist")
+    source_count = summary.get("source_count")
+    if not isinstance(source_count, int) or source_count < 1:
+        raise T177SkipError(f"T-177 source {kind} has no discovered files")
+    raw_path = summary.get("path")
+    if not isinstance(raw_path, str) or not raw_path:
+        raise T177SkipError(f"T-177 source {kind} has no usable path")
+    return Path(raw_path)
+
+
+def source_yyyymm(discovery_plan: Mapping[str, Any], kind: str) -> str | None:
+    sources = discovery_plan.get("sources")
+    if not isinstance(sources, Mapping):
+        return None
+    summary = sources.get(kind)
+    if not isinstance(summary, Mapping):
+        return None
+    value = summary.get("source_yyyymm")
+    return value if isinstance(value, str) else None
+
+
 def write_json_artifact(artifact_dir: Path, filename: str, payload: Mapping[str, Any]) -> Path:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     destination = artifact_dir / filename
@@ -364,6 +444,232 @@ def write_json_artifact(artifact_dir: Path, filename: str, payload: Mapping[str,
         encoding="utf-8",
     )
     return destination
+
+
+async def reset_t177c_target_tables(engine: AsyncEngine) -> None:
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+TRUNCATE TABLE
+  public.tl_juso_parcel_link,
+  public.tl_locsum_entrc,
+  public.tl_navi_entrc,
+  public.tl_navi_buld_centroid,
+  public.tl_juso_text
+RESTART IDENTITY CASCADE
+"""
+            )
+        )
+        await conn.execute(
+            text(
+                """
+DELETE FROM public.load_manifest
+ WHERE table_name IN ('tl_juso_text', 'tl_juso_parcel_link')
+"""
+            )
+        )
+
+
+async def collect_t177c_table_counts(engine: AsyncEngine) -> dict[str, int]:
+    return await _collect_table_counts(engine, T177C_TARGET_TABLES)
+
+
+async def collect_t177c_link_counts(engine: AsyncEngine) -> dict[str, int]:
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    """
+SELECT
+  (SELECT count(*) FROM public.tl_locsum_entrc) AS locsum_rows,
+  (SELECT count(*) FROM public.tl_locsum_entrc WHERE bd_mgt_sn IS NOT NULL)
+    AS locsum_resolved_rows,
+  (SELECT count(*) FROM public.tl_navi_entrc) AS navi_entrance_rows,
+  (SELECT count(*) FROM public.tl_navi_entrc WHERE bd_mgt_sn IS NOT NULL)
+    AS navi_entrance_resolved_rows
+"""
+                )
+            )
+        ).mappings().one()
+    return {key: int(value or 0) for key, value in row.items()}
+
+
+async def collect_t177c_manifests(engine: AsyncEngine) -> dict[str, Any]:
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                """
+SELECT table_name, last_mvmn_de, row_count, source_zip, source_yyyymm, source_set
+  FROM public.load_manifest
+ WHERE table_name IN ('tl_juso_text', 'tl_juso_parcel_link')
+ ORDER BY table_name
+"""
+            )
+        )
+        rows = list(result.mappings())
+    return {
+        str(row["table_name"]): {
+            "last_mvmn_de": row["last_mvmn_de"],
+            "row_count": int(row["row_count"]),
+            "source_zip": row["source_zip"],
+            "source_yyyymm": row["source_yyyymm"],
+            "source_set": _jsonable_source_set(row["source_set"]),
+        }
+        for row in rows
+    }
+
+
+async def run_t177c_text_delta_fast_sample_load(
+    engine: AsyncEngine,
+    *,
+    source_paths: T177TextDeltaSourcePaths,
+    source_months: Mapping[str, str | None],
+    limit_per_file: int,
+) -> dict[str, Any]:
+    from kortravelgeo.loaders.postload import resolve_text_geometry_links
+    from kortravelgeo.loaders.text.daily_juso_loader import load_daily_juso_delta
+    from kortravelgeo.loaders.text.juso_hangul_loader import load_juso_hangul
+    from kortravelgeo.loaders.text.locsum_loader import load_locsum
+    from kortravelgeo.loaders.text.navi_loader import load_navi
+    from kortravelgeo.loaders.text.parcel_link_loader import (
+        load_daily_parcel_link_delta,
+        load_juso_parcel_link_snapshot,
+    )
+
+    juso_count = await load_juso_hangul(
+        engine,
+        source_paths.juso_hangul,
+        source_yyyymm=source_months.get("juso_hangul"),
+        limit_per_file=limit_per_file,
+    )
+    daily_result = await load_daily_juso_delta(
+        engine,
+        source_paths.daily_juso,
+        source_yyyymm=None,
+        limit_per_file=limit_per_file,
+    )
+    parent_seed_count = await insert_t177c_parcel_link_parent_rows(
+        engine,
+        source_paths=source_paths,
+        source_months=source_months,
+        limit_per_file=limit_per_file,
+    )
+    parcel_snapshot = await load_juso_parcel_link_snapshot(
+        engine,
+        source_paths.jibun_rnaddrkor,
+        source_yyyymm=source_months.get("jibun_rnaddrkor"),
+        limit_per_file=limit_per_file,
+        replace=True,
+    )
+    parcel_delta = await load_daily_parcel_link_delta(
+        engine,
+        source_paths.daily_lnbr,
+        source_yyyymm=None,
+        limit_per_file=limit_per_file,
+    )
+    locsum_count = await load_locsum(
+        engine,
+        source_paths.locsum,
+        source_yyyymm=source_months.get("locsum"),
+        limit_per_file=limit_per_file,
+    )
+    navi_build_count, navi_entrance_count = await load_navi(
+        engine,
+        source_paths.navi,
+        source_yyyymm=source_months.get("navi"),
+        limit_per_file=limit_per_file,
+    )
+    links_before = await collect_t177c_link_counts(engine)
+    await resolve_text_geometry_links(engine)
+    links_after = await collect_t177c_link_counts(engine)
+    table_counts = await collect_t177c_table_counts(engine)
+    manifests = await collect_t177c_manifests(engine)
+    return {
+        "limit_per_file": limit_per_file,
+        "source_paths": {
+            field: str(value) for field, value in asdict(source_paths).items()
+        },
+        "source_months": dict(source_months),
+        "loader_results": {
+            "juso_hangul_rows": juso_count,
+            "daily_juso": asdict(daily_result),
+            "parcel_parent_seed_rows": parent_seed_count,
+            "juso_parcel_link_snapshot": asdict(parcel_snapshot),
+            "daily_parcel_link": asdict(parcel_delta),
+            "locsum_rows": locsum_count,
+            "navi_build_rows": navi_build_count,
+            "navi_entrance_rows": navi_entrance_count,
+        },
+        "links": {
+            "before_resolve": links_before,
+            "after_resolve": links_after,
+        },
+        "table_counts": table_counts,
+        "manifests": manifests,
+    }
+
+
+async def insert_t177c_parcel_link_parent_rows(
+    engine: AsyncEngine,
+    *,
+    source_paths: T177TextDeltaSourcePaths,
+    source_months: Mapping[str, str | None],
+    limit_per_file: int,
+) -> int:
+    from kortravelgeo.loaders.text.parcel_link_loader import (
+        discover_daily_lnbr_sources,
+        discover_jibun_rnaddrkor_files,
+        iter_daily_lnbr_rows,
+        iter_jibun_parcel_link_rows,
+    )
+
+    rows = [
+        row
+        for source in discover_jibun_rnaddrkor_files(source_paths.jibun_rnaddrkor)
+        for row in iter_jibun_parcel_link_rows(
+            source,
+            source_yyyymm=source_months.get("jibun_rnaddrkor"),
+            limit=limit_per_file,
+        )
+    ]
+    rows.extend(
+        row
+        for source in discover_daily_lnbr_sources(source_paths.daily_lnbr)
+        for row in iter_daily_lnbr_rows(
+            source,
+            source_yyyymm=None,
+            limit=limit_per_file,
+        )
+    )
+    async with engine.begin() as conn:
+        for row in rows:
+            await conn.execute(
+                text(
+                    """
+INSERT INTO public.tl_juso_text (
+  bd_mgt_sn, sig_cd, rn_cd, bjd_cd, mntn_yn, lnbr_mnnm, lnbr_slno,
+  source_file, source_yyyymm
+) VALUES (
+  :bd_mgt_sn, :sig_cd, :rn_cd, :bjd_cd, :mntn_yn, :lnbr_mnnm, :lnbr_slno,
+  :source_file, :source_yyyymm
+)
+ON CONFLICT (bd_mgt_sn) DO NOTHING
+"""
+                ),
+                {
+                    "bd_mgt_sn": row.bd_mgt_sn,
+                    "sig_cd": row.sig_cd,
+                    "rn_cd": row.rn_cd,
+                    "bjd_cd": row.bjd_cd,
+                    "mntn_yn": row.mntn_yn,
+                    "lnbr_mnnm": row.lnbr_mnnm,
+                    "lnbr_slno": row.lnbr_slno,
+                    "source_file": row.source_file,
+                    "source_yyyymm": row.source_yyyymm,
+                },
+            )
+    return len(rows)
 
 
 def _artifact_dir(env: Mapping[str, str], *, run_id: str, cwd: Path) -> Path:
@@ -529,3 +835,30 @@ def _path_notes(path: Path) -> tuple[str, ...]:
         if zip_count:
             notes.append(f"zip_files={zip_count}")
     return tuple(notes)
+
+
+async def _collect_table_counts(
+    engine: AsyncEngine,
+    table_names: Sequence[str],
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    async with engine.connect() as conn:
+        for table_name in table_names:
+            exists = await conn.scalar(
+                text("SELECT to_regclass(:table_name) IS NOT NULL"),
+                {"table_name": table_name},
+            )
+            if not exists:
+                continue
+            count = await conn.scalar(text(f"SELECT count(*) FROM {table_name}"))
+            counts[table_name] = int(count or 0)
+    return counts
+
+
+def _jsonable_source_set(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value

@@ -33,12 +33,6 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
 
 ### T-177 파일 기반 full-load e2e
 
-- [ ] **T-177C** — 텍스트 정본과 daily delta DB 구축 e2e.
-
-  실제 도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB 파일을
-  loader API로 읽어 DB에 적재한다. Row count, `load_manifest`, 기준월, 링크 해소 전후 수치를
-  artifact로 고정한다.
-
 - [ ] **T-177D** — 전자지도 SHP/PostGIS geometry e2e.
 
   실제 도로명주소 전자지도 selected 시도 SHP 9개 레이어를 읽어 PostGIS 테이블에 적재한다.

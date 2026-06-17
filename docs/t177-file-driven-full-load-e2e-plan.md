@@ -56,8 +56,10 @@ PR로 머지하고, 다음 Task로 넘어가기 전 2026-06-16 이후 PR의 Clau
 
 3. 파일 적재
    - 각 loader API를 직접 호출한다.
-   - fast e2e는 `limit_per_file` 또는 시도 subset을 사용해 수분 내 완료를 목표로 한다.
-   - long-run e2e는 전국 원천 전체를 읽으며 별도 marker와 긴 timeout을 요구한다.
+- fast e2e는 `limit_per_file` 또는 시도 subset을 사용해 수분 내 완료를 목표로 한다.
+- T-177C 텍스트 fast-sample의 기본 `limit_per_file`은 2이며
+  `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 조정한다.
+- long-run e2e는 전국 원천 전체를 읽으며 별도 marker와 긴 timeout을 요구한다.
 
 4. 후처리와 serving 구축
    - `resolve_text_geometry_links()`
@@ -107,6 +109,7 @@ PR로 머지하고, 다음 Task로 넘어가기 전 2026-06-16 이후 PR의 Clau
 - fast sample mode에서 row count와 `load_manifest`를 검증한다.
 - daily delta가 snapshot 이후 upsert/delete manifest를 남긴다.
 - `resolve_text_geometry_links()` 전후 핵심 링크 수치를 artifact에 저장한다.
+- 지번 링크 FK parent sample seed와 `t177c-text-delta-fast-sample-load.json` artifact가 있다.
 
 ### T-177D 전자지도 SHP/PostGIS geometry e2e
 

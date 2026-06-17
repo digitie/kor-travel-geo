@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-177C 텍스트 정본/daily delta fast-sample e2e)
+
+**작업**: T-177 파일 기반 full-load e2e의 두 번째 구현 Task로 실제 텍스트 계열 원천 fast-sample DB 적재 테스트를 추가했다.
+
+**결정**: 테스트는 `scripts/fullload_test.sh`를 재사용하지 않고, `load_juso_hangul`, `load_juso_parcel_link_snapshot`, `load_daily_juso_delta`, `load_daily_parcel_link_delta`, `load_locsum`, `load_navi`, `resolve_text_geometry_links()`를 직접 호출한다. 지번 링크 loader의 FK 제약 때문에 sample 지번/daily LNBR 행의 parent `tl_juso_text` row를 먼저 seed한다. 기본 sample limit은 2행이고 `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 조정한다.
+
+**검증/문서**: `tests/integration/_t177_full_load_harness.py`에 T-177C source path, target reset, loader 실행, table count, manifest, 링크 해소 metric helper를 추가했다. `tests/integration/test_t177_file_driven_full_load_e2e.py`는 opt-in 상태에서 `t177c-text-delta-fast-sample-load.json` artifact를 쓰고 `load_manifest`와 링크 해소 전후 수치를 검증한다. 다음 PR은 T-177D 전자지도 SHP/PostGIS geometry e2e다.
+
 ## 2026-06-17 (T-177B opt-in full-load e2e 하니스)
 
 **작업**: T-177 파일 기반 full-load e2e의 첫 구현 Task로 opt-in pytest 하니스와 destructive preflight를 추가했다.
