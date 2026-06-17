@@ -607,7 +607,7 @@ SELECT issue_type, source_file_group_id, source_file_id, object_key,
             try:
                 await rustfs.head_object(object_key)
                 object_present = True
-            except Exception:
+            except NotFoundError:
                 object_present = False
         elif object_key and rustfs is None:
             # No storage client: trust the recorded object_key (cannot recheck).

@@ -4,15 +4,16 @@
 
 ## 현재 진척도 (2026-06-17 갱신, by codex)
 
-- ✅ T-178a~T-178e Claude Code 리뷰 후속 완료 — 2026-06-16 이후 PR 리뷰 스캔에서 미반영으로 보인
+- ✅ T-178a~T-178f Claude Code 리뷰 후속 완료 — 2026-06-16 이후 PR 리뷰 스캔에서 미반영으로 보인
   Claude Code 코멘트 6건을 #336/T-178로 분리했다. 첫 항목으로 PR #248 코멘트를 반영해,
   v2 geocode 보조 road 후보 조회 실패가 primary OK 응답을 깨지 않도록 best-effort 처리했다.
   이어서 PR #285 코멘트를 반영해 geocode/reverse cache write 실패가 OK 응답을 깨지 않도록
   best-effort 처리했다. PR #277 코멘트도 반영해 `테헤란로1길 10` 같은 번호형 가지도로를
   도로명으로 보존한다. PR #266 코멘트는 `DBAPIError` 중 운영 장애는 503, SQL/schema/constraint
   오류는 500으로 분류하도록 보정했다. PR #253 코멘트는 `ops.pg_stat_statements_snapshots`
-  retention 기본 7일과 capture transaction 내 pruning으로 닫았다. 남은 선행 후속은
-  `T-178f`다.
+  retention 기본 7일과 capture transaction 내 pruning으로 닫았다. PR #290 코멘트는 RustFS
+  HEAD 404와 비-404/불완전 응답을 분리하고, 크기 누락을 size `0`으로 보정하지 않게 닫았다.
+  다음은 T-177 파일 기반 full-load e2e 계획/Task 정리다.
 - ✅ T-119/T-139 종료 판정 완료 — `T-119`는 T-137 최종 gate와 T-153 acceptance 근거로 C11 active serving promotion을 no-go 종료했다. C11은 validation-only로 고정하며, 새 같은 기준월 C11 원천 또는 동등한 새 증거가 있으면 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인으로만 다룬다. `T-139`는 T-153 기준 구조적 성능 blocker가 없어 별도 변경 DB 실험을 no-action 종료했다.
 - ✅ Timescale PostgreSQL 계열 Codex skill 변환 완료 — `timescale/pg-aiguide`의 Claude Code용 skill 8종을 Codex repo-scoped skill로 변환해 `.agents/skills/`에 추가했다. Codex frontmatter는 `name`/`description`만 유지하고 원본 Apache-2.0/source/compatibility 표기는 본문에 보존했다. `quick_validate.py` 검증과 YAML frontmatter 파싱 검증을 통과했다. 같은 `.codex/agents` 6종과 `.agents/skills` 8종을 `F:\dev` 바로 아래 다른 Git repo 78개에도 복사·stage했고, 모든 대상에서 agent 6개와 skill 8개가 확인됐다. 대상 repo에서 해당 경로는 ignore되지 않아 `.gitignore` 추가 수정은 없었다.
 - ✅ Codex 프로젝트 subagent 정의 등록 완료 — VoltAgent core-development subagent 6종을 `.codex/agents/`에 추가해 Git 추적 대상 구성으로 옮겼고, 전역 `C:\Users\digit\.codex\agents` 복사본도 같은 값으로 맞췄다. 모든 subagent는 `model="gpt-5.5"`, `model_reasoning_effort="xhigh"`를 사용한다. TOML 파싱과 필수 필드 검증을 통과했다.
@@ -23,7 +24,7 @@
 - ✅ T-158 slow-query·overload 구조화 로깅·sampling persist 완료 — `ops_slow_samples_enabled` 기본 비활성 설정과 `ops.slow_observability_samples`를 추가해 느린 API 요청, admission overload, 느린 DB query 표본을 sampled queue → API lifespan flush task로 저장한다. DB query 표본은 endpoint context, operation, `query_fingerprint`, literal 마스킹 `query_preview`, 선택적 `EXPLAIN (FORMAT JSON)` plan을 남기며 raw SQL·파라미터·주소 문자열은 저장하지 않는다. 상세는 `docs/t158-slow-observability.md`. Agent A 단독 명시 잔여와 공동 gate `T-153`은 닫혔다.
 - ✅ T-247 백업/복원 벤치마크 스크립트 완료 — `scripts/benchmark_backup_restore.py`가 `profile(serving-ready/lean-serving/forensic) × jobs(1/2/4) × zstd compression(3/9/19)` 기본 27행 조합을 계획 전용으로 생성하고, 실행 모드에서는 typed confirmation(`RUN-T247-BENCHMARK <current_database>`)과 백업 도구를 요구한다. 결과 artifact는 `matrix-plan.json`, `benchmark-report.json`, `summary.md`이며 백업/복원 seconds, dump/archive bytes, compression ratio, profile별 최단/최소 후보와 N150/Odroid 절충 메모를 남긴다. T-055 runbook도 새 실행기 기준으로 갱신했다. 상세는 `docs/t247-backup-restore-benchmark.md`.
 - ✅ T-245 복원 장애 주입 live 통합 테스트 완료 — `tests/integration/test_backup_restore_fault_injection.py`가 T-244 round-trip fixture로 만든 실제 백업 artifact에 archive-level sha256 flip, truncated tar, 내부 `checksums.sha256` 위조, checksum 누락을 주입하고, 각 복원 실패 뒤 job-owned target DB가 `restore_failed_target_cleanup="drop"` 정책으로 남지 않음을 검증한다. 백업 cancel은 artifact failed·최종 archive/`.part`/work dir 삭제를 확인하고, `replace_current`는 `target_dsn` 금지·typed confirmation·maintenance window confirmation matching guard를 고정했다. 기본 CI는 `KTG_TEST_PG_DSN` 또는 백업 도구 부재 시 skip된다. 상세는 `docs/t245-restore-fault-injection.md`.
-- ✅ T-238 백업 manifest↔DB↔RustFS 3자 reconcile 완료 — `ManifestSourceFile.object_etag`를 manifest에 보존하고, `ktgctl backup reconcile-source`가 backup artifact 또는 `manifest.json`의 `source_match_set` per-file을 DB `ops.source_files`와 RustFS `HEAD` 결과에 대조한다. Report는 `present`/`missing`/`etag_mismatch`/`size_mismatch`/DB 불일치 count와 row별 reason을 낸다. RustFS 비활성 또는 legacy manifest는 `skipped=true`로 graceful 처리하고, live DB/RustFS 검증은 `KTG_TEST_RUSTFS_SOURCE_RECONCILE=1` opt-in integration으로만 실행한다. 상세는 `docs/t238-backup-manifest-reconcile.md`.
+- ✅ T-238 백업 manifest↔DB↔RustFS 3자 reconcile 완료 — `ManifestSourceFile.object_etag`를 manifest에 보존하고, `ktgctl backup reconcile-source`가 backup artifact 또는 `manifest.json`의 `source_match_set` per-file을 DB `ops.source_files`와 RustFS `HEAD` 결과에 대조한다. Report는 `present`/`missing`/`head_error`/`etag_mismatch`/`size_mismatch`/DB 불일치 count와 row별 reason을 낸다. RustFS 비활성 또는 legacy manifest는 `skipped=true`로 graceful 처리하고, live DB/RustFS 검증은 `KTG_TEST_RUSTFS_SOURCE_RECONCILE=1` opt-in integration으로만 실행한다. 상세는 `docs/t238-backup-manifest-reconcile.md`.
 - ✅ T-144 성능 우선 v2/API 계약 후보 검증 완료 — `include_geometry=false`, `response_model_exclude_none=True`, geocode/search 상한 100을 성능 기준 profile로 고정했다. Geometry endpoint 분리, field slim mode, detail expansion, pre-shaped response table은 즉시 도입하지 않고 T-105 후속 또는 새 구조 실험 근거가 생길 때 별도 breaking change로 다룬다. ADR-059와 `docs/t144-api-contract-performance.md`에 후보 평가, migration note, golden response test, UI 반영 계획을 기록했고, `scripts/evaluate_t144_api_contract.py`로 REST benchmark `api-report.json`의 p99/평균 응답 크기 budget을 판정한다.
 - ✅ T-162 런타임 캐시/버퍼 예열 자동화 완료 — `loaders.runtime_warm`이 `pg_prewarm` extension·서빙 relation 존재 여부를 확인한 뒤 선택형 `pg_prewarm`과 geocode exact/search text/reverse nearest/region radius 상한 있는 읽기 전용 probe를 실행한다. API lifespan에는 기본 비활성 opt-in scheduler를 붙였고, `RUNTIME_WARM` advisory lock으로 여러 worker의 중복 예열을 막는다. `scripts/run_t162_runtime_warm.py`는 plan/execute/report/artifact 등록을, `scripts/evaluate_t162_cold_warm_ratio.py`는 재기동 직후 REST p99와 예열 후 REST p99 비율 gate를 제공한다. 상세는 `docs/t162-runtime-warm.md`.
 - ✅ T-146 post-load read-optimized maintenance pipeline 완료 — `loaders.postload_maintenance`와 `scripts/run_t146_postload_maintenance.py`가 적재 직후 read-mostly maintenance를 plan/report로 표준화한다. 기본은 read-only catalog report이고, `execute-safe`에서만 `VACUUM (ANALYZE)` opt-in, `resolve_text_geometry_links()`, `refresh_mv(strategy=...)`, `ops.table_stats_snapshots` capture를 실행한다. WSL plan smoke는 75개 object와 warning 2건(`postal_bulk_delivery`/`postal_pobox` analyze 누락)을 기록했다. Invalid/bloated index `REINDEX CONCURRENTLY`, `CLUSTER`/물리 정렬, `pg_prewarm`은 자동화하지 않고 수동 runbook 또는 T-162 범위로 분리했다. 상세는 `docs/t146-postload-maintenance.md`.
@@ -248,9 +249,8 @@
 `T-153` 통합 gate까지 완료됐다. Agent A 단독 명시 잔여(`T-127`, `T-158`, `T-238`, `T-245`, `T-247`)와 Agent B의 `T-226`/`T-227`, `T-246`도 완료됐다. 새 release blocker는 없으며, 다음에 자동 착수할 Agent A 고우선순위 task는 없다.
 
 현재는 T-177 파일 기반 full-load e2e 재검증에 들어가기 전, 2026-06-16 이후 PR 스캔에서
-발견한 Claude Code 리뷰 후속을 먼저 닫는 중이다. `T-178a`~`T-178d`는 완료됐고, 다음 한
-작업은 `T-178e` `ops.pg_stat_statements_snapshots` retention/prune 정책이다. 이 선행 후속을 모두 머지한 뒤 `T-177A` 테스트
-계획/Task PR로 돌아간다.
+발견한 Claude Code 리뷰 후속을 먼저 닫았다. `T-178a`~`T-178f`가 모두 완료됐으므로 다음 한
+작업은 `T-177A` 파일 기반 full-load e2e 테스트 계획/Task PR이다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

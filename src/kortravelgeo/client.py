@@ -118,7 +118,7 @@ from .dto.v2 import (
     SearchV2Response,
 )
 from .dto.zipcode import ZipcodeResponse
-from .exceptions import InvalidAddressError
+from .exceptions import InvalidAddressError, NotFoundError
 from .infra.admin_repo import AdminRepository
 from .infra.batch import batch_children
 from .infra.cache import GeoCacheRepository, make_cache_key
@@ -1078,7 +1078,7 @@ class AsyncAddressClient:
                 continue
             try:
                 head = await rustfs.head_object(child.object_key)
-            except Exception:  # absent / unreadable object → missing transition
+            except NotFoundError:
                 verifications.append(
                     RestoreChildVerification(
                         source_file_id=child.source_file_id,
@@ -1096,7 +1096,7 @@ class AsyncAddressClient:
                     part_key=child.part_key,
                     object_present=True,
                     observed_sha256=observed_sha256,
-                    observed_size=head.size or None,
+                    observed_size=head.size,
                 )
             )
         return await restore_group(
@@ -1571,10 +1571,10 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
                     continue
                 try:
                     head = await rustfs.head_object(object_key)
-                except Exception:
+                except NotFoundError:
                     all_present = False
                     continue
-                observed_size = head.size or 0
+                observed_size = head.size
                 if observed_size != int(row["size_bytes"]):
                     size_ok = False
                 observed_sha = head.metadata.get("ktg-sha256")
@@ -1730,7 +1730,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
                 continue
             try:
                 head = await rustfs.head_object(child.object_key)
-            except Exception:  # absent / unreadable object → missing transition
+            except NotFoundError:
                 verifications.append(
                     RelinkChildVerification(
                         source_file_id=child.source_file_id,
@@ -1748,7 +1748,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
                     part_key=child.part_key,
                     object_present=True,
                     observed_sha256=observed_sha256,
-                    observed_size=head.size or None,
+                    observed_size=head.size,
                 )
             )
         return await relink_restored_group(
@@ -2230,10 +2230,10 @@ SELECT part_kind, part_key, state, sha256, size_bytes, object_key
                 continue
             try:
                 head = await rustfs.head_object(object_key)
-            except Exception:
+            except NotFoundError:
                 all_present = False
                 continue
-            observed_size = head.size or 0
+            observed_size = head.size
             if observed_size != int(row["size_bytes"]):
                 size_ok = False
             observed_sha = head.metadata.get("ktg-sha256")

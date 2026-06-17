@@ -427,6 +427,23 @@ async def test_list_objects_enforces_scan_limit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_objects_requires_size_for_each_object() -> None:
+    transport = _FakeTransport()
+    transport.enqueue(
+        _xml_response(
+            200,
+            "<ListBucketResult>"
+            "<Contents><Key>ktg/a</Key><ETag>\"e1\"</ETag></Contents>"
+            "</ListBucketResult>",
+        )
+    )
+    client = RustfsClient(_config(), sender=transport)
+
+    with pytest.raises(InvalidInputError, match="ListObjectsV2 response missing Size"):
+        await client.list_objects("ktg")
+
+
+@pytest.mark.asyncio
 async def test_abort_multipart_upload_tolerates_404() -> None:
     transport = _FakeTransport()
     transport.enqueue(_xml_response(404, "<Error><Code>NoSuchUpload</Code></Error>"))
@@ -461,3 +478,41 @@ async def test_head_object_extracts_metadata_and_size() -> None:
     assert head.metadata["ktg-category"] == "roadname_hangul_full"
     assert head.metadata["ktg-sha256"] == "a" * 64
     assert transport.calls[0][0] == "HEAD"
+
+
+@pytest.mark.asyncio
+async def test_head_object_maps_404_to_not_found() -> None:
+    transport = _FakeTransport()
+    transport.enqueue(_xml_response(404, "<Error><Code>NoSuchKey</Code></Error>"))
+    client = RustfsClient(_config(), sender=transport)
+
+    with pytest.raises(NotFoundError, match="RustFS object not found"):
+        await client.head_object("obj-key")
+
+
+@pytest.mark.asyncio
+async def test_head_object_requires_content_length() -> None:
+    transport = _FakeTransport()
+    response = _xml_response(200, "", headers={"etag": '"obj-etag"'})
+    del response.headers["content-length"]
+    transport.enqueue(response)
+    client = RustfsClient(_config(), sender=transport)
+
+    with pytest.raises(InvalidInputError, match="HEAD response missing content-length"):
+        await client.head_object("obj-key")
+
+
+@pytest.mark.asyncio
+async def test_head_object_rejects_invalid_content_length() -> None:
+    transport = _FakeTransport()
+    transport.enqueue(
+        _xml_response(
+            200,
+            "",
+            headers={"content-length": "not-an-int", "etag": '"obj-etag"'},
+        )
+    )
+    client = RustfsClient(_config(), sender=transport)
+
+    with pytest.raises(InvalidInputError, match="invalid content-length"):
+        await client.head_object("obj-key")

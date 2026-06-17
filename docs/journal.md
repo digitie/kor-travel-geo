@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-178f RustFS HEAD/size 정직화)
+
+**작업**: #336/T-178 선행 리뷰 후속 중 PR #290 Claude Code 코멘트를 반영했다. RustFS HEAD 오류와 `content-length` 부재가 missing 또는 size `0`으로 뭉개지던 경로를 분리했다.
+
+**결정**: RustFS HEAD 404만 object missing으로 본다. 그 밖의 HEAD 오류나 불완전한 HEAD 응답(`content-length` 부재/비정수/음수)은 숨기지 않는다. Restore/relink/source-reconcile처럼 상태를 바꾸는 경로는 비-404 HEAD 오류를 실패로 드러내고, 백업 manifest inventory처럼 best-effort인 경로는 `head_error` status/count로 기록한다. 진짜 0바이트와 알 수 없는 크기를 섞지 않기 위해 `head.size or 0/None` 패턴을 제거했다.
+
+**검증/문서**: RustFS transport, backup source inventory, manifest source reconcile 단위 테스트에 404/missing과 head_error/불완전 응답 분리 회귀를 추가했다. 이로써 T-178a~T-178f 선행 리뷰 후속은 모두 닫혔다.
+
 ## 2026-06-17 (T-178e pg_stat snapshot retention)
 
 **작업**: #336/T-178 선행 리뷰 후속 중 PR #253 Claude Code 코멘트를 반영했다. `ops.pg_stat_statements_snapshots`가 주기 capture로 무한 증가하지 않도록 retention 설정과 pruning 경로를 추가했다.

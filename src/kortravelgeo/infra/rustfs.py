@@ -255,17 +255,22 @@ class RustfsClient:
             "HEAD",
             bucket=self._config.bucket,
             key=key,
-            expected_status=(200,),
+            expected_status=(200, 404),
         )
+        if response.status_code == 404:
+            raise NotFoundError(f"RustFS object not found: {key}")
         metadata = {
             name[len("x-amz-meta-") :]: value
             for name, value in response.headers.items()
             if name.lower().startswith("x-amz-meta-")
         }
-        size_header = response.headers.get("content-length")
         return RustfsObjectHead(
             key=key,
-            size=int(size_header) if size_header is not None else 0,
+            size=_required_non_negative_int(
+                response.headers.get("content-length"),
+                "content-length",
+                "RustFS HEAD",
+            ),
             etag=_strip_etag(response.headers.get("etag")),
             version_id=response.headers.get("x-amz-version-id"),
             last_modified=response.headers.get("last-modified"),
@@ -729,11 +734,15 @@ def _parse_list_objects_response(payload: str) -> tuple[tuple[RustfsObject, ...]
         key = _xml_text(item, "Key")
         if not key or key.endswith("/"):
             continue
-        size_text = _xml_text(item, "Size") or "0"
+        size_text = _xml_text(item, "Size")
         objects.append(
             RustfsObject(
                 key=key,
-                size=int(size_text),
+                size=_required_non_negative_int(
+                    size_text,
+                    "Size",
+                    "RustFS ListObjectsV2",
+                ),
                 etag=_strip_etag(_xml_text(item, "ETag")),
                 last_modified=_xml_text(item, "LastModified"),
             )
@@ -828,3 +837,19 @@ def _extract_s3_error_code(payload: str) -> str | None:
     except ElementTree.ParseError:
         return None
     return _xml_text(root, "Code")
+
+
+def _required_non_negative_int(
+    value: str | None,
+    name: str,
+    context: str,
+) -> int:
+    if value is None or value == "":
+        raise InvalidInputError(f"{context} response missing {name}")
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise InvalidInputError(f"{context} response has invalid {name}: {value!r}") from exc
+    if parsed < 0:
+        raise InvalidInputError(f"{context} response has negative {name}: {value!r}")
+    return parsed
