@@ -11,13 +11,18 @@ from tests.integration._t177_full_load_harness import (
     ENV_DSN,
     ENV_ENABLED,
     ENV_RUN_ID,
+    ENV_SAMPLE_LIMIT,
     T177PreflightError,
     T177SkipError,
     assert_no_existing_rows_without_confirmation,
     build_discovery_plan,
     expected_confirmation,
     looks_like_t177_scratch_database,
+    required_source_path,
     runtime_from_env,
+    sample_limit_from_env,
+    source_yyyymm,
+    t177c_text_delta_source_paths,
     validate_t177_confirmation,
     write_json_artifact,
 )
@@ -82,6 +87,16 @@ def test_existing_row_guard_requires_destructive_confirmation() -> None:
     )
 
 
+def test_sample_limit_from_env() -> None:
+    assert sample_limit_from_env({}) == 2
+    assert sample_limit_from_env({ENV_SAMPLE_LIMIT: "7"}) == 7
+
+    with pytest.raises(T177PreflightError):
+        sample_limit_from_env({ENV_SAMPLE_LIMIT: "0"})
+    with pytest.raises(T177PreflightError):
+        sample_limit_from_env({ENV_SAMPLE_LIMIT: "many"})
+
+
 def test_discovery_plan_and_artifact_shape(tmp_path: Path) -> None:
     data_root = tmp_path / "juso"
     _seed_minimal_t177_sources(data_root)
@@ -99,6 +114,16 @@ def test_discovery_plan_and_artifact_shape(tmp_path: Path) -> None:
     assert sources["roadaddr_entrance"]["source_count"] == 1
     assert sources["sppn_makarea"]["source_count"] == 1
     assert sources["electronic_map"]["exists"] is False
+    assert source_yyyymm(plan, "juso_hangul") == "202605"
+    assert required_source_path(plan, "juso_hangul") == data_root / "202605_도로명주소 한글_전체분"
+
+    source_paths = t177c_text_delta_source_paths(plan)
+    assert source_paths.juso_hangul == data_root / "202605_도로명주소 한글_전체분"
+    assert source_paths.jibun_rnaddrkor == data_root / "202605_도로명주소 한글_전체분"
+    assert source_paths.daily_juso == data_root / "daily" / "20260401_dailyjusukrdata.zip"
+    assert source_paths.daily_lnbr == data_root / "daily" / "20260401_dailyjusukrdata.zip"
+    assert source_paths.locsum == data_root / "202604_위치정보요약DB_전체분.zip"
+    assert source_paths.navi == data_root / "202604_내비게이션용DB_전체분"
 
     artifact = write_json_artifact(tmp_path / "artifacts", "plan.json", plan)
     saved = json.loads(artifact.read_text(encoding="utf-8"))

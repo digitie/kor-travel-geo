@@ -6,6 +6,14 @@
 
 ## 완료
 
+- [x] **T-177C** — 텍스트 정본과 daily delta DB 구축 e2e(Agent A/Codex).
+  실제 도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB를
+  loader Python API로 직접 읽는 opt-in fast-sample 테스트를 추가했다.
+  `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 sample 크기를 조정하고,
+  지번 링크 FK parent seed, table row count, `load_manifest`, `resolve_text_geometry_links()`
+  전후 링크 수치, `t177c-text-delta-fast-sample-load.json` artifact를 검증한다.
+  기본 CI에서는 skip된다. (2026-06-17)
+
 - [x] **T-177B** — opt-in e2e 하니스와 destructive preflight(Agent A/Codex).
   `tests/integration/_t177_full_load_harness.py`와
   `tests/integration/test_t177_file_driven_full_load_e2e.py`를 추가했다.

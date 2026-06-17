@@ -16,8 +16,14 @@ from tests.integration._t177_full_load_harness import (
     assert_no_existing_rows_without_confirmation,
     build_discovery_plan,
     collect_existing_row_counts,
+    collect_t177c_table_counts,
+    reset_t177c_target_tables,
+    run_t177c_text_delta_fast_sample_load,
     runtime_from_env,
+    sample_limit_from_env,
     schema_smoke_report,
+    source_yyyymm,
+    t177c_text_delta_source_paths,
     validate_database_preflight,
     write_json_artifact,
 )
@@ -82,6 +88,122 @@ async def test_t177_file_driven_full_load_preflight_and_schema_smoke() -> None:
         assert artifact_path.is_file()
         assert schema_report["missing_objects"] == []
         assert discovery_plan["data_root"] == str(runtime.data_root)
+    except T177PreflightError as exc:
+        pytest.fail(str(exc))
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_t177c_file_driven_text_delta_fast_sample_load() -> None:
+    started_at = datetime.now(UTC)
+    try:
+        runtime = runtime_from_env()
+        limit_per_file = sample_limit_from_env()
+    except T177SkipError as exc:
+        pytest.skip(str(exc))
+    except T177PreflightError as exc:
+        pytest.fail(str(exc))
+
+    engine = make_async_engine(Settings(pg_dsn=runtime.dsn))
+    try:
+        preflight = await validate_database_preflight(
+            engine,
+            confirmation=os.getenv(ENV_CONFIRM),
+        )
+        discovery_plan = build_discovery_plan(runtime.data_root)
+        source_paths = t177c_text_delta_source_paths(discovery_plan)
+        source_months = {
+            "juso_hangul": source_yyyymm(discovery_plan, "juso_hangul"),
+            "jibun_rnaddrkor": source_yyyymm(discovery_plan, "jibun_rnaddrkor"),
+            "daily_juso": source_yyyymm(discovery_plan, "daily_juso"),
+            "daily_lnbr": source_yyyymm(discovery_plan, "daily_lnbr"),
+            "locsum": source_yyyymm(discovery_plan, "locsum"),
+            "navi": source_yyyymm(discovery_plan, "navi"),
+        }
+
+        await apply_schema_index_smoke(engine)
+        schema_report = await schema_smoke_report(engine)
+        existing_rows = await collect_existing_row_counts(engine)
+        allow_nonempty = os.getenv(ENV_ALLOW_NONEMPTY) == "1"
+        assert_no_existing_rows_without_confirmation(
+            existing_rows,
+            destructive_confirmed=preflight.destructive_confirmed,
+            allow_nonempty=allow_nonempty,
+        )
+
+        await reset_t177c_target_tables(engine)
+        before_counts = await collect_t177c_table_counts(engine)
+        result = await run_t177c_text_delta_fast_sample_load(
+            engine,
+            source_paths=source_paths,
+            source_months=source_months,
+            limit_per_file=limit_per_file,
+        )
+
+        artifact = {
+            "schema_version": 1,
+            "task": "T-177C",
+            "run_id": runtime.run_id,
+            "mode": "text_delta_fast_sample_load",
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(UTC).isoformat(),
+            "gates": {
+                "full_load_e2e": True,
+                "pg_dsn": True,
+                "confirmation_ok": preflight.destructive_confirmed,
+                "allow_nonempty": allow_nonempty,
+                "longrun": False,
+                "limit_per_file": limit_per_file,
+            },
+            "database": {
+                "name": preflight.database_name,
+                "expected_confirmation": preflight.expected_confirmation,
+            },
+            "data": discovery_plan,
+            "schema": schema_report,
+            "before_counts": before_counts,
+            "result": result,
+        }
+        artifact_path = write_json_artifact(
+            runtime.artifact_dir,
+            "t177c-text-delta-fast-sample-load.json",
+            artifact,
+        )
+
+        loader_results = result["loader_results"]
+        table_counts = result["table_counts"]
+        manifests = result["manifests"]
+        links = result["links"]
+
+        assert artifact_path.is_file()
+        assert schema_report["missing_objects"] == []
+        assert loader_results["juso_hangul_rows"] >= limit_per_file
+        assert loader_results["daily_juso"]["processed_rows"] == limit_per_file
+        assert loader_results["juso_parcel_link_snapshot"]["processed_rows"] >= limit_per_file
+        assert loader_results["daily_parcel_link"]["processed_rows"] == limit_per_file
+        assert loader_results["locsum_rows"] >= limit_per_file
+        assert loader_results["navi_build_rows"] >= limit_per_file
+        assert loader_results["navi_entrance_rows"] >= 1
+        assert table_counts["public.tl_juso_text"] >= limit_per_file
+        assert table_counts["public.tl_juso_parcel_link"] >= limit_per_file
+        assert table_counts["public.tl_locsum_entrc"] >= limit_per_file
+        assert table_counts["public.tl_navi_buld_centroid"] >= limit_per_file
+        assert table_counts["public.tl_navi_entrc"] >= 1
+        assert manifests["tl_juso_text"]["source_set"]["kind"] == "daily_juso_delta"
+        assert manifests["tl_juso_text"]["row_count"] == limit_per_file
+        assert manifests["tl_juso_parcel_link"]["source_set"]["kind"] == "daily_lnbr"
+        assert manifests["tl_juso_parcel_link"]["row_count"] == limit_per_file
+        assert (
+            links["after_resolve"]["locsum_resolved_rows"]
+            >= links["before_resolve"]["locsum_resolved_rows"]
+        )
+        assert (
+            links["after_resolve"]["navi_entrance_resolved_rows"]
+            >= links["before_resolve"]["navi_entrance_resolved_rows"]
+        )
+    except T177SkipError as exc:
+        pytest.skip(str(exc))
     except T177PreflightError as exc:
         pytest.fail(str(exc))
     finally:

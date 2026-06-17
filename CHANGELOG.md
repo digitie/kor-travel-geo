@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-177C 텍스트 정본/daily delta fast-sample e2e를 추가했다. opt-in 상태에서 실제 도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB 파일을 loader Python API로 직접 읽어 scratch DB에 적재하고, `load_manifest`, table row count, `resolve_text_geometry_links()` 전후 링크 수치와 `t177c-text-delta-fast-sample-load.json` artifact를 검증한다. 기본 sample 크기는 `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 조정한다.
 - T-177B opt-in full-load e2e 하니스를 추가했다. `KTG_TEST_FULL_LOAD_E2E=1`, `KTG_TEST_PG_DSN`, `KTG_TEST_FULL_LOAD_E2E_CONFIRM="RUN-T177-E2E <database>"`를 요구하고, scratch DB 이름 allowlist, non-empty DB guard(`KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1` 별도 요구), 실제 Juso data-root discovery artifact, `SCHEMA_SQL`/`INDEX_SQL` smoke를 검증한다.
 - T-179 CI backend GDAL 설치 hardening을 추가했다. backend job과 GDAL apt 설치 단계에 timeout을 두고, `apt-get update` retry와 `Dpkg::Lock::Timeout`/`--no-install-recommends`를 적용해 apt mirror/network/lock 문제가 PR을 장시간 붙잡지 않게 했다.
 - T-177 파일 기반 full-load e2e 테스트 계획을 추가했다. T-073 shell script에 맞춘 재실행 대신, pytest opt-in 통합/e2e가 실제 Juso 원천 파일을 읽어 scratch PostgreSQL/PostGIS DB를 구축하는 방향으로 `docs/t177-file-driven-full-load-e2e-plan.md`에 환경 gate, 파일 discovery, 산출물, T-177B~T-177H Task 분해를 고정했다.
