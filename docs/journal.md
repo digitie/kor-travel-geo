@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-177E 선택 보강 원천 fast-sample e2e)
+
+**작업**: T-177 파일 기반 full-load e2e의 네 번째 구현 Task로 실제 도로명주소 출입구 정보와
+`TL_SPPN_MAKAREA` 원천을 scratch PostGIS DB에 적재하는 opt-in 테스트를 추가했다.
+
+**결정**: fast-sample은 전국 전체가 아니라 세종 ZIP 단일 파일을 선택한다. `roadaddr_entrance`
+원천은 폴더월 `202604`와 ZIP 내부 `RNENTDATA_2605_*` 파일명월이 다르므로, loader 호출 시
+`source_yyyymm=None`을 넘겨 파일명 기준월 `202605`를 row/manifest에 기록한다. SPPN 원천은
+실제 보존 경로 `구역의도형/202603`과 과거 문서 경로 `구역의 도형`을 모두 discovery 후보로
+본다. core `reverse_geocode()`는 serving MV를 요구하므로 T-177E에서는
+`ReverseRepository.sppn_areas()`까지를 reverse smoke로 보고, MV 기반 reverse smoke는 T-177F로
+분리한다.
+
+**검증/문서**: `tests/integration/_t177_full_load_harness.py`에 T-177E source 선택, table reset,
+manifest, SRID/validity, SPPN geocode/reverse repository smoke, C10 report helper를 추가했다.
+`tests/integration/test_t177_file_driven_full_load_e2e.py`는 opt-in 상태에서
+`t177e-supplemental-fast-sample-load.json` artifact를 쓰고, GDAL Python binding이 없으면 skip한다.
+WSL scratch DB `kor_travel_geo_t177e_codex_20260617173732`에서 실제 opt-in 한 건이 통과했다.
+다음 PR은 T-177F post-load serving, smoke, consistency e2e다.
+
 ## 2026-06-17 (T-177D 전자지도 SHP/PostGIS geometry fast-sample e2e)
 
 **작업**: T-177 파일 기반 full-load e2e의 세 번째 구현 Task로 실제 전자지도 SHP를 selected
