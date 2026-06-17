@@ -6,6 +6,13 @@
 
 ## 완료
 
+- [x] **T-180** — SHP loader invalid geometry repair(Agent A/Codex, #348).
+  T-177D 실제 opt-in 실행에서 세종 202604 전자지도 SHP 적재 후 `tl_scco_emd`,
+  `tl_scco_li`, `tl_spbd_buld_polygon`, `tl_sprd_rw`에 invalid geometry가 남는 문제를 분리했다.
+  SHP geometry target table 적재 직후 `ST_MakeValid`/`ST_CollectionExtract` repair를 적용하고,
+  target DDL의 geometry type과 SRID 5179로 되돌린다. `tl_sprd_intrvl`처럼 geometry가 없는
+  테이블은 건너뛴다. (2026-06-17)
+
 - [x] **T-177C** — 텍스트 정본과 daily delta DB 구축 e2e(Agent A/Codex).
   실제 도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB를
   loader Python API로 직접 읽는 opt-in fast-sample 테스트를 추가했다.
