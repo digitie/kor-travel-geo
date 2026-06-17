@@ -299,5 +299,7 @@ class V2ErrorEnvelope(FrozenModel):
     """
 
     status: Literal["ERROR"]
-    query_id: str = Field(default_factory=lambda: uuid4().hex)
+    # always emitted by the error builder (responses.py `_v2_error_payload`), so required in
+    # the published schema — a stable trace key for generated clients (#319 review).
+    query_id: str
     error: V2ErrorDetail

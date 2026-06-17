@@ -121,6 +121,9 @@ test.describe("디버그 UI v2 REST 연동", () => {
 
   test("반경 행정구역은 v2 regions within-radius에 좌표와 레벨을 보낸다", async ({ page }) => {
     const requests = await captureJsonPost(page, "/api/proxy/v2/regions/within-radius", {
+      status: "OK",
+      query_id: "test-query-id",
+      input: { lon: 126.978, lat: 37.5665, radius_km: 3, levels: ["sigungu", "emd"] },
       center: { lon: 126.978, lat: 37.5665 },
       radius_km: 3,
       sigungu: [{ code: "11110", name: "종로구", relation: "contains" }],

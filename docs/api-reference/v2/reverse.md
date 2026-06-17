@@ -18,11 +18,11 @@
 | `bjd_cd` | string | 없음 | 법정동 hint |
 | `include_geometry` | boolean | `false` | 후보에 도형(`geometry`/`bbox`) 포함 여부. geocode/search와 동일한 opt-in(ADR-060 §5, ADR-059) |
 
-`include_geometry`는 geocode/search와 대칭으로 받는다. 후보가 도형 조회 key를 가질 때만 채워진다 — 현재 reverse local 후보는 도로명/지번(`match_kind="road"`/`"parcel"`)이고 건물 도형 key(`bd_mgt_sn` 또는 `rncode_full`+`bjd_cd`+상세번호)를 함께 싣지 않으므로 `geometry`는 보통 `null`이다. 점 기반 건물 도형 조회는 후속 확장으로 남긴다.
+`include_geometry`는 geocode/search와 대칭으로 받는다. 후보가 도형 조회 key를 가질 때만 채워진다 — 현재 reverse local 후보는 도로명/지번(`match_kind="road"`/`"parcel"`)이고 건물 도형 key(`bd_mgt_sn` 또는 `rncode_full`+`bjd_cd`+상세번호)를 함께 싣지 않으므로 `geometry`가 채워지지 않는다(REST 응답에서 필드 생략). 점 기반 건물 도형 조회는 후속 확장으로 남긴다.
 
 ## 출력
 
-`candidates[]`는 도로명/지번 후보를 함께 담는다. 입력 좌표가 한국 SPPN 지원 envelope 안에 있으면 계산된 국가지점번호를 `match_kind="sppn"` 후보로 함께 반환한다. 표기 의무지역 polygon에 포함되면 같은 후보 metadata에 `makarea` 문맥도 붙는다. 각 후보는 `match_kind`, `address`, `point`, `region`, `source`, `distance_m`, `confidence`를 포함할 수 있다.
+`candidates[]`는 도로명/지번 후보를 함께 담는다. 입력 좌표가 한국 SPPN 지원 envelope 안에 있으면 계산된 국가지점번호를 `match_kind="sppn"` 후보로 함께 반환한다. 표기 의무지역 polygon에 포함되면 같은 후보 metadata에 `makarea` 문맥도 붙는다. 각 후보는 `match_kind`, `address`, `point`(`{lon, lat}`), `region`, `source`, `distance_m`, `confidence`를 포함할 수 있다. 응답은 공통 header `{status, query_id, input}` 위에 `candidates[]`를 둔다. 값이 없는 선택 필드(`point_precision`/`geometry`/`bbox` 등)는 REST 응답에서 생략된다(`null` 아님).
 
 - `distance_m`: 입력 좌표와 후보 좌표 사이의 거리다. metadata에도 같은 값을 남기지만, 클라이언트는 정식 필드인 `distance_m`을 우선 사용한다.
 - `confidence`: `1 - distance_m / radius_m`로 계산한 반경 내 근접도다. 값은 0~1이고, geocode/search confidence와 직접 비교하지 않는다.

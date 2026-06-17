@@ -10798,6 +10798,7 @@
         },
         "required": [
           "status",
+          "query_id",
           "error"
         ],
         "title": "V2ErrorEnvelope",

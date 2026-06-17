@@ -35,11 +35,7 @@
       "confidence": 0.97,
       "match_kind": "road",
       "source": "local",
-      "point": {"x": 127.036, "y": 37.501},
-      "point_precision": null,
-      "distance_m": null,
-      "bbox": null,
-      "geometry": null,
+      "point": {"lon": 127.036, "lat": 37.501},
       "address": {
         "type": "road",
         "full": "서울특별시 강남구 테헤란로 152",
@@ -54,10 +50,11 @@
 
 ## 후보 해석
 
-- `match_kind`: `road`, `parcel`, `keyword`, `region`, `sppn`, `detail`, `poi`
-- `source`: `local`, `vworld`, `juso`
-- `distance_m`: reverse/nearby/keyword처럼 후보와 기준점 사이의 거리가 있는 경우 정식 필드로 노출한다. geocode 단일 주소 변환에서는 보통 `null`이다.
-- `point_precision`: Google `location_type` 패턴을 참고한 좌표 정밀도 필드다. `exact`, `interpolated`, `centroid`, `approximate`, `grid_cell` 중 하나이며, 현재 local geocode에서는 국가지점번호 10m cell 계산 좌표에 `grid_cell`을 채운다.
+- `match_kind`: `road`, `parcel`, `keyword`, `region`, `sppn`, `poi` (published enum = emit되는 값만; `detail`은 예약값 — `conventions.md` §2).
+- `source`: `local`, `vworld`, `juso` (vworld/juso는 `fallback="api"` 경로에서만).
+- `point`: 후보 좌표 `{lon, lat}`(`PointV2`). v1 vworld의 `{x, y}`와 분리(ADR-060 §6).
+- 선택 필드(`distance_m`/`point_precision`/`bbox`/`geometry`)는 값이 없으면 **REST 응답에서 생략**된다(`response_model_exclude_none=True` — `null` 아님). `distance_m`은 거리 기준점이 있을 때만, geocode 단일 변환에선 보통 생략된다.
+- `point_precision`: 좌표 정밀도. published 값은 `centroid`·`grid_cell`(emit되는 값만; `exact`/`interpolated`/`approximate`는 예약 — §2). 현재 local geocode는 국가지점번호 10m cell 좌표에 `grid_cell`을 채운다.
 - `confidence`: endpoint-local 점수다. geocode는 v1 매칭 신뢰도, reverse는 검색 반경 대비 거리 기반 점수, search는 검색 score를 뜻한다. 서로 다른 endpoint의 `confidence`를 그대로 비교하지 않는다.
 - `bbox`: Google-style viewport/bounds 표현을 참고한 후보 범위 필드다. `include_geometry=true`일 때 후보 도형의 EPSG:4326 범위를 담는다.
 - `geometry`: `include_geometry=true`일 때만 채우는 GeoJSON geometry다. `kind`는 `building`, `region`, `road` 중 하나이고, `source_table`은 `tl_spbd_buld_polygon`, `tl_scco_*`, `tl_sprd_manage` 같은 로컬 도형 원천을 가리킨다.
