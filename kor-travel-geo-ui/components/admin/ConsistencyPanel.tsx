@@ -1,17 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef
-} from "@tanstack/react-table";
 import { Check, Clock, Download, Play, RefreshCw, RotateCw, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import { LazyCoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import {
   API_BASE,
@@ -216,18 +211,11 @@ function useConsistencyPanelController(initialReportId: string | null) {
     }
   });
 
-  const columns = useSampleColumns({
+  const sampleColumns = useSampleColumns({
     selectedSampleIds: effectiveSelectedSampleIds,
     selectedSampleId: effectiveSelectedSampleId,
     onToggle: toggleSample,
     onSelect: setSelectedSample
-  });
-  // TanStack Table exposes instance callbacks that React Compiler cannot memoize safely.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const table = useReactTable({
-    data: samples,
-    columns,
-    getCoreRowModel: getCoreRowModel()
   });
 
   const csvHref =
@@ -284,11 +272,12 @@ function useConsistencyPanelController(initialReportId: string | null) {
       recheckMutation.isPending,
     sampleCountForDecision:
       decisionForm?.target === "bulk" ? effectiveSelectedSampleIds.length : 1,
+    sampleColumns,
+    samples,
     selectedCase,
     selectedDefinition,
     selectedSample,
     summary,
-    table,
     totalSamples: samplePage?.total ?? 0
   };
 }
@@ -427,33 +416,19 @@ function ConsistencyAnalysisSection({ controller }: { controller: ConsistencyPan
       ) : null}
       <div className="comparison-grid">
         <div className="table-pane">
-          <table className="table compact consistency-table">
-            <thead>
-              {controller.table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {controller.table.getRowModel().rows.map((row) => (
-                <tr
-                  className={row.original.sample_id === (controller.selectedSample?.sample_id ?? null) ? "active-row" : ""}
-                  key={row.id}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <VirtualTable
+            as="table"
+            columns={controller.sampleColumns}
+            compact
+            emptyHint="표본이 없습니다."
+            getRowClassName={(sample) =>
+              sample.sample_id === (controller.selectedSample?.sample_id ?? null)
+                ? "active-row"
+                : undefined
+            }
+            rowKey={(sample) => sample.sample_id}
+            rows={controller.samples}
+          />
           <Pager
             onPage={controller.onPage}
             page={controller.filters.page}
@@ -506,56 +481,56 @@ function useSampleColumns({
   selectedSampleId: string | null;
   onToggle: (sampleId: string) => void;
   onSelect: (sampleId: string | null) => void;
-}): ColumnDef<ConsistencyCaseSample>[] {
+}): VirtualColumn<ConsistencyCaseSample>[] {
   return useMemo(
     () => [
       {
-        id: "select",
+        key: "select",
         header: "",
-        cell: ({ row }) => (
+        cell: (sample) => (
           <input
-            aria-label={`표본 #${row.original.sample_rank + 1} 선택`}
-            checked={selectedSampleIds.includes(row.original.sample_id)}
-            onChange={() => onToggle(row.original.sample_id)}
+            aria-label={`표본 #${sample.sample_rank + 1} 선택`}
+            checked={selectedSampleIds.includes(sample.sample_id)}
+            onChange={() => onToggle(sample.sample_id)}
             type="checkbox"
           />
         )
       },
       {
+        key: "sample_rank",
         header: "표본",
-        accessorKey: "sample_rank",
-        cell: ({ row }) => (
+        cell: (sample) => (
           <button
-            className={row.original.sample_id === selectedSampleId ? "link-button active" : "link-button"}
-            onClick={() => onSelect(row.original.sample_id)}
+            className={sample.sample_id === selectedSampleId ? "link-button active" : "link-button"}
+            onClick={() => onSelect(sample.sample_id)}
             type="button"
           >
-            #{row.original.sample_rank + 1}
+            #{sample.sample_rank + 1}
           </button>
         )
       },
       {
+        key: "severity",
         header: "심각도",
-        accessorKey: "severity",
-        cell: ({ row }) => <StatusBadge value={row.original.severity} />
+        cell: (sample) => <StatusBadge value={sample.severity} />
       },
       {
+        key: "decision_state",
         header: "판정",
-        accessorKey: "decision_state",
-        cell: ({ row }) => <DecisionBadge value={row.original.decision_state} />
+        cell: (sample) => <DecisionBadge value={sample.decision_state} />
       },
-      { header: "건물관리번호", accessorKey: "bd_mgt_sn" },
-      { header: "시군구코드", accessorKey: "sig_cd" },
+      { key: "bd_mgt_sn", header: "건물관리번호", cell: (sample) => sample.bd_mgt_sn },
+      { key: "sig_cd", header: "시군구코드", cell: (sample) => sample.sig_cd },
       {
+        key: "distance_m",
         header: "거리",
-        accessorKey: "distance_m",
-        cell: ({ row }) =>
-          row.original.distance_m === null || row.original.distance_m === undefined
+        cell: (sample) =>
+          sample.distance_m === null || sample.distance_m === undefined
             ? "-"
-            : `${row.original.distance_m.toFixed(2)}m`
+            : `${sample.distance_m.toFixed(2)}m`
       },
-      { header: "원천", accessorKey: "source_kind" },
-      { header: "사유", accessorKey: "reason_code" }
+      { key: "source_kind", header: "원천", cell: (sample) => sample.source_kind },
+      { key: "reason_code", header: "사유", cell: (sample) => sample.reason_code }
     ],
     [onSelect, onToggle, selectedSampleId, selectedSampleIds]
   );
