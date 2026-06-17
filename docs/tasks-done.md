@@ -6,6 +6,17 @@
 
 ## 완료
 
+- [x] **T-177F** — post-load serving, smoke, consistency e2e(Agent A/Codex).
+  실제 정본 텍스트 snapshot, 위치정보요약DB, 전자지도 SHP, roadaddr entrance, SPPN makarea
+  fast-sample을 한 scratch DB에 적재한 뒤 `resolve_text_geometry_links()`와 `rebuild_mv()`로
+  `mv_geocode_target`/`mv_geocode_text_search`를 구축하는 opt-in 테스트를 추가했다.
+  `region_radius_parts`는 T-177D SHP helper가 갱신한 serving object로 함께 검증한다. 테스트는
+  cache-off geocode/reverse/search/zipcode smoke, 위치정보요약DB 링크 기반 smoke sample,
+  serving object/index row count, C1~C10 consistency report 생성과
+  `t177f-postload-serving-smoke.json` artifact를 검증한다.
+  fast-sample C1~C10 severity는 acceptance gate가 아니라 SQL 실행과 sample 산출 smoke로
+  기록한다. 기본 CI에서는 skip된다. (2026-06-17)
+
 - [x] **T-177E** — 선택 보강 원천 e2e(Agent A/Codex).
   실제 도로명주소 출입구 정보와 `TL_SPPN_MAKAREA` 원천에서 세종 ZIP을 선택해 scratch
   PostGIS DB에 적재하는 opt-in fast-sample 테스트를 추가했다. `roadaddr_entrance`는 ZIP

@@ -14,6 +14,8 @@ from tests.integration._t177_full_load_harness import (
     T177D_TARGET_TABLES,
     T177E_MANIFEST_TABLES,
     T177E_TARGET_TABLES,
+    T177F_CONSISTENCY_CASES,
+    T177F_SERVING_OBJECTS,
     T177PreflightError,
     T177SkipError,
     apply_schema_index_smoke,
@@ -28,6 +30,8 @@ from tests.integration._t177_full_load_harness import (
     run_t177c_text_delta_fast_sample_load,
     run_t177d_shp_geometry_fast_sample_load,
     run_t177e_supplemental_fast_sample_load,
+    run_t177f_postload_serving_smoke,
+    run_t177f_text_snapshot_fast_sample_load,
     runtime_from_env,
     sample_limit_from_env,
     schema_smoke_report,
@@ -354,6 +358,167 @@ async def test_t177e_file_driven_supplemental_fast_sample_load() -> None:
         if len(loaded_months) > 1:
             assert result["c10"]["severity"] == "WARN"
             assert result["c10"]["metric"]["distinct_months"] >= 2
+    except T177SkipError as exc:
+        pytest.skip(str(exc))
+    except T177PreflightError as exc:
+        pytest.fail(str(exc))
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_t177f_file_driven_postload_serving_smoke() -> None:
+    started_at = datetime.now(UTC)
+    try:
+        runtime = runtime_from_env()
+        limit_per_file = sample_limit_from_env()
+    except T177SkipError as exc:
+        pytest.skip(str(exc))
+    except T177PreflightError as exc:
+        pytest.fail(str(exc))
+
+    pytest.importorskip("osgeo.gdal")
+
+    engine = make_async_engine(Settings(pg_dsn=runtime.dsn))
+    try:
+        preflight = await validate_database_preflight(
+            engine,
+            confirmation=os.getenv(ENV_CONFIRM),
+        )
+        discovery_plan = build_discovery_plan(runtime.data_root)
+        shp_source = t177d_shp_geometry_source(
+            discovery_plan,
+            materialize_dir=runtime.artifact_dir / "t177f-electronic-map",
+        )
+        supplemental_source_paths = t177e_supplemental_source_paths(discovery_plan)
+
+        await apply_schema_index_smoke(engine)
+        schema_report = await schema_smoke_report(engine)
+        existing_rows = await collect_existing_row_counts(engine)
+        existing_shp_rows = await collect_t177d_table_counts(engine)
+        existing_supplemental_rows = await collect_t177e_table_counts(engine)
+        allow_nonempty = os.getenv(ENV_ALLOW_NONEMPTY) == "1"
+        assert_no_existing_rows_without_confirmation(
+            {**existing_rows, **existing_shp_rows, **existing_supplemental_rows},
+            destructive_confirmed=preflight.destructive_confirmed,
+            allow_nonempty=allow_nonempty,
+        )
+
+        await reset_t177c_target_tables(engine)
+        await reset_t177e_target_tables(engine)
+        before_counts = {
+            "t177c": await collect_t177c_table_counts(engine),
+            "t177d": await collect_t177d_table_counts(engine),
+            "t177e": await collect_t177e_table_counts(engine),
+        }
+        text_result = await run_t177f_text_snapshot_fast_sample_load(
+            engine,
+            discovery_plan=discovery_plan,
+            limit_per_file=limit_per_file,
+        )
+        shp_result = await run_t177d_shp_geometry_fast_sample_load(
+            engine,
+            source=shp_source,
+        )
+        supplemental_result = await run_t177e_supplemental_fast_sample_load(
+            engine,
+            source_paths=supplemental_source_paths,
+            limit_per_file=limit_per_file,
+        )
+        result = await run_t177f_postload_serving_smoke(
+            engine,
+            loaded_results={
+                "t177c": {
+                    "table_counts": text_result["table_counts"],
+                    "loader_results": text_result["loader_results"],
+                },
+                "t177d": {
+                    "table_counts": shp_result["table_counts"],
+                    "loaded_layers": shp_result["loaded_layers"],
+                    "source": shp_result["source"],
+                },
+                "t177e": {
+                    "table_counts": supplemental_result["table_counts"],
+                    "loader_results": supplemental_result["loader_results"],
+                    "source_months": supplemental_result["source_months"],
+                },
+            },
+        )
+
+        artifact = {
+            "schema_version": 1,
+            "task": "T-177F",
+            "run_id": runtime.run_id,
+            "mode": "postload_serving_smoke",
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(UTC).isoformat(),
+            "gates": {
+                "full_load_e2e": True,
+                "pg_dsn": True,
+                "confirmation_ok": preflight.destructive_confirmed,
+                "allow_nonempty": allow_nonempty,
+                "longrun": False,
+                "limit_per_file": limit_per_file,
+            },
+            "database": {
+                "name": preflight.database_name,
+                "expected_confirmation": preflight.expected_confirmation,
+            },
+            "data": discovery_plan,
+            "schema": schema_report,
+            "before_counts": before_counts,
+            "result": result,
+        }
+        artifact_path = write_json_artifact(
+            runtime.artifact_dir,
+            "t177f-postload-serving-smoke.json",
+            artifact,
+        )
+
+        serving = result["serving"]
+        smoke = result["smoke"]
+        consistency = result["consistency"]
+        link_evidence = result["link_evidence"]
+        serving_counts = {
+            row["object_name"]: row["row_count"] for row in serving["objects"]
+        }
+
+        assert artifact_path.is_file()
+        assert schema_report["missing_objects"] == []
+        assert serving["missing_objects"] == []
+        assert set(T177F_SERVING_OBJECTS).issubset(serving_counts)
+        assert serving_counts["public.mv_geocode_target"] > 0
+        assert serving_counts["public.mv_geocode_text_search"] > 0
+        assert serving_counts["public.region_radius_parts"] > 0
+        assert serving_counts["public.load_consistency_reports"] > 0
+        assert {index["tablename"] for index in serving["indexes"]} == {
+            "mv_geocode_target",
+            "mv_geocode_text_search",
+        }
+
+        assert result["cache_cleared_rows"] >= 0
+        assert link_evidence["text_rows"] > 0
+        assert link_evidence["locsum_rows"] > 0
+        assert link_evidence["locsum_resolved_rows"] > 0
+        assert link_evidence["locsum_serving_rows"] > 0
+        assert link_evidence["locsum_smokeable_serving_rows"] > 0
+        assert smoke["sample"]["has_locsum_link"] is True
+        assert smoke["geocode"]["status"] == "OK"
+        assert smoke["geocode"]["source"] != "cache"
+        assert smoke["reverse"]["status"] == "OK"
+        assert smoke["reverse"]["result_count"] > 0
+        assert "cache" not in smoke["reverse"]["sources"]
+        assert smoke["search"]["status"] == "OK"
+        assert smoke["search"]["candidate_count"] > 0
+        assert smoke["zipcode"]["status"] == "OK"
+        assert smoke["zipcode"]["result_count"] > 0
+
+        assert consistency["scope"] == "t177f-fast-sample"
+        assert len(consistency["cases"]) == len(T177F_CONSISTENCY_CASES)
+        assert {case["code"] for case in consistency["cases"]} == set(
+            T177F_CONSISTENCY_CASES
+        )
+        assert consistency["severity_max"] in {"OK", "INFO", "WARN", "ERROR"}
     except T177SkipError as exc:
         pytest.skip(str(exc))
     except T177PreflightError as exc:

@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-177F post-load serving/smoke/consistency fast-sample e2e)
+
+**작업**: T-177 파일 기반 full-load e2e의 다섯 번째 구현 Task로 실제 텍스트 snapshot,
+위치정보요약DB, 전자지도 SHP, 도로명주소 출입구 정보, `TL_SPPN_MAKAREA` fast-sample을 한
+scratch PostGIS DB에 적재한 뒤 post-load serving 표면을 검증하는 opt-in 테스트를 추가했다.
+
+**결정**: 현재 보존 원천에는 materialize되지 않은 daily ZIP과 7z 내비게이션용DB만 있어,
+T-177F는 T-177C helper를 그대로 재사용하지 않고 도로명주소 한글 snapshot과 위치정보요약DB를
+직접 적재하는 전용 fast-sample helper를 둔다. fresh DB에서는 `refresh_mv(strategy="swap")`보다
+`rebuild_mv()`가 단순하고 안정적인 serving 구축 표면이므로, 링크 해소 뒤
+`resolve_text_geometry_links()`와 `rebuild_mv()`를 실행한다. 서비스 캐시가 post-load smoke를
+가릴 수 있으므로 T-177F smoke client는 cache를 끄고, smoke 직전 `geo_cache`를 비운다. C1~C10
+consistency severity는 fast-sample의 원천 기준월 혼합과 제한된 row 수 때문에 acceptance gate로
+보지 않고, SQL 실행과 artifact 생성 smoke로만 검증한다.
+
+**검증/문서**: `tests/integration/_t177_full_load_harness.py`에 T-177F text snapshot load,
+위치정보요약DB 링크 evidence, serving object/index report, cache-off API-level smoke,
+consistency report helper를 추가했다. `tests/integration/test_t177_file_driven_full_load_e2e.py`는
+opt-in 상태에서 `t177f-postload-serving-smoke.json` artifact를 쓰고, GDAL Python binding이
+없으면 skip한다. WSL scratch DB `kor_travel_geo_t177f_codex_20260617181345`에서 실제 opt-in 한
+건이 통과했으며 `mv_geocode_target=34`, `mv_geocode_text_search=34`, `region_radius_parts=271`,
+`load_consistency_reports=1`, `locsum_smokeable_serving_rows=33`, geocode/reverse/search/zipcode
+smoke `OK`, geocode/reverse source `local`을 확인했다. 다음 PR은 T-177G 전국 long-run full-load
+e2e다.
+
 ## 2026-06-17 (T-177E 선택 보강 원천 fast-sample e2e)
 
 **작업**: T-177 파일 기반 full-load e2e의 네 번째 구현 Task로 실제 도로명주소 출입구 정보와
