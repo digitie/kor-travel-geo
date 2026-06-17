@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-177 파일 기반 full-load e2e 테스트 계획을 추가했다. T-073 shell script에 맞춘 재실행 대신, pytest opt-in 통합/e2e가 실제 Juso 원천 파일을 읽어 scratch PostgreSQL/PostGIS DB를 구축하는 방향으로 `docs/t177-file-driven-full-load-e2e-plan.md`에 환경 gate, 파일 discovery, 산출물, T-177B~T-177H Task 분해를 고정했다.
 - T-119/T-139를 열린 backlog에서 닫았다. T-119는 T-137/T-153 근거로 C11 active serving promotion no-go 종료, T-139는 T-153 기준 구조적 성능 blocker 부재로 별도 변경 DB 실험 no-action 종료로 정리했다. 향후 재논의는 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인 기준으로만 진행한다.
 - T-153 최종 안정화 acceptance 문서를 추가했다. Agent A 성능·정확도 트랙과 Agent B Admin UI·백업/복원 트랙의 golden corpus, C1~C17, SQL/REST c64 budget, Admin UI Playwright, 백업/복원 round-trip·fault injection·hot-swap, React Doctor, OpenAPI/typegen drift를 한 gate로 묶고, 새 release blocker 없음과 별도 잔여(T-063, T-219 M4, T-105 audit 이후 ADR-060 반영 backlog)를 구분했다. 함께 React Doctor hard error 3건을 정리했다.
 - T-127 optional source 구조 validator를 보강했다. `detail_address_db_full`, `national_point_grid_shape`, `national_point_grid_center`, `civil_service_institution_map`, `address_db_full`, `building_db_full`의 single-file archive member naming, 필수 TXT/SHP layer, sidecar, 기준월 혼재 warning을 category별 profile로 검증한다. legacy ZIP의 CP949 member name도 복원해 한글 파일명 원천을 검증한다.

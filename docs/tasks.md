@@ -22,15 +22,54 @@
 > 두 에이전트 병행 권장 순서·병행 운영 원칙(PR/리뷰 루프)은
 > [`docs/runbooks/agent-workflow.md`](runbooks/agent-workflow.md)를 본다.
 
-T-177 파일 기반 full-load e2e 재검증에 들어가기 전, 2026-06-16 이후 PR에서 발견한
-Claude Code 리뷰 후속을 먼저 닫는다. T-110~T-176(데이터 원천 보강·성능·정확도)과
-T-200~T-276(데이터 적재/백업/복원 + Admin UI)은 모두 완료됐고, T-153 최종 안정화
-acceptance도 닫혔다(`tasks-done.md`). 남은 항목은 아래 리뷰 후속, 선택적 후속, 외부 조건
-보류다.
+T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일 기반 full-load e2e
+재검증을 진행한다. T-177은 T-073 shell script에 맞추지 않고, opt-in pytest 통합/e2e가 실제
+파일을 읽어 scratch PostgreSQL DB를 구축하는 방향으로 진행한다. 상세 계획과 Task 분해는
+[`docs/t177-file-driven-full-load-e2e-plan.md`](t177-file-driven-full-load-e2e-plan.md)가 정본이다.
 
 ### 선행 리뷰 후속
 
 - **진행 중 작업 없음.** (T-178a~T-178f Claude Code 리뷰 후속 완료 — `tasks-done.md` 참조.)
+
+### T-177 파일 기반 full-load e2e
+
+- [ ] **T-177B** — opt-in e2e 하니스와 destructive preflight.
+
+  `KTG_TEST_FULL_LOAD_E2E`, `KTG_TEST_PG_DSN`, typed confirmation, DB 이름 allowlist,
+  data-root discovery artifact를 갖춘 공통 pytest fixture를 만든다. DB 구동/정지는 하지 않고,
+  scratch DB에만 schema/index 적용 smoke를 수행한다.
+
+- [ ] **T-177C** — 텍스트 정본과 daily delta DB 구축 e2e.
+
+  실제 도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB 파일을
+  loader API로 읽어 DB에 적재한다. Row count, `load_manifest`, 기준월, 링크 해소 전후 수치를
+  artifact로 고정한다.
+
+- [ ] **T-177D** — 전자지도 SHP/PostGIS geometry e2e.
+
+  실제 도로명주소 전자지도 selected 시도 SHP 9개 레이어를 읽어 PostGIS 테이블에 적재한다.
+  GDAL 부재 시 skip하고, SRID, geometry validity, source file/source yyyymm, 주요 row count를
+  검증한다.
+
+- [ ] **T-177E** — 선택 보강 원천 e2e.
+
+  도로명주소 출입구 정보와 `TL_SPPN_MAKAREA`를 실제 파일에서 읽어 선택 보강 테이블에
+  적재한다. Same-month gate, SPPN geocode/reverse smoke, 기준월 혼합 warning 표면을 검증한다.
+
+- [ ] **T-177F** — post-load serving, smoke, consistency e2e.
+
+  T-177C~E 적재 DB를 바탕으로 text-geometry link, serving MV, geocode/reverse/search/zipcode
+  smoke, C1~C10 consistency subset report를 검증하고 실패 sample artifact를 남긴다.
+
+- [ ] **T-177G** — 전국 long-run full-load e2e.
+
+  별도 `KTG_TEST_FULL_LOAD_E2E_LONGRUN=1` opt-in으로 전국 실제 원천 전체를 읽어 DB를 구축한다.
+  Phase별 wall time, row count, DB size, source month summary, 실패 재개 지점을 artifact로 남긴다.
+
+- [ ] **T-177H** — T-047 benchmark와 최종 acceptance report.
+
+  전국 long-run DB를 기준으로 SQL/REST benchmark hook, p95/p99, error count, slow plan,
+  `pg_stat_statements` snapshot을 수집하고 최종 acceptance 문서를 갱신한다.
 
 ### 선택 후속 (낮은 우선순위)
 

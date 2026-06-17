@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-177A 파일 기반 full-load e2e 계획)
+
+**작업**: 사용자의 "T-073 스크립트에 맞추지 말고 e2e 테스트가 파일을 읽어 DB를 구축" 지시에 맞춰 T-177 테스트 계획을 먼저 검토하고 Task로 쪼갰다.
+
+**결정**: T-177은 shell script 재실행이 아니라 pytest opt-in integration/e2e 트랙으로 진행한다. 테스트는 `KTG_TEST_PG_DSN`으로 이미 떠 있는 scratch PostgreSQL/PostGIS에 접속하고, `KTG_TEST_FULL_LOAD_E2E=1`과 typed confirmation, DB 이름 allowlist를 모두 요구한다. Loader Python API가 실제 파일 discovery/parse/load를 수행하고, fast sample e2e에서 전국 long-run e2e와 benchmark acceptance로 확장한다.
+
+**검증/문서**: `docs/t177-file-driven-full-load-e2e-plan.md`를 추가하고 `docs/tasks.md`에 T-177B~T-177H를 등록했다. T-178a~T-178f 선행 리뷰 후속은 모두 완료됐으므로 다음 PR부터 T-177B 하니스 구현에 들어간다.
+
 ## 2026-06-17 (T-178f RustFS HEAD/size 정직화)
 
 **작업**: #336/T-178 선행 리뷰 후속 중 PR #290 Claude Code 코멘트를 반영했다. RustFS HEAD 오류와 `content-length` 부재가 missing 또는 size `0`으로 뭉개지던 경로를 분리했다.

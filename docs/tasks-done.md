@@ -6,6 +6,12 @@
 
 ## 완료
 
+- [x] **T-177A** — 파일 기반 full-load e2e 테스트 계획/Task 등록(Agent A/Codex).
+  T-073 shell script 재실행에 맞추지 않고, pytest opt-in 통합/e2e가 실제 Juso 원천 파일을
+  읽어 scratch PostgreSQL/PostGIS DB를 구축하는 방향으로 계획을 확정했다.
+  `docs/t177-file-driven-full-load-e2e-plan.md`에 실행 원칙, DB 안전장치, 데이터 루트,
+  파일 discovery, 산출물, T-177B~T-177H PR 단위 Task 분해를 기록했다. (2026-06-17)
+
 - [x] **T-178f** — RustFS HEAD 오류/size 판정 정직화(Agent A/Codex).
   PR #290 Claude Code 코멘트를 #336 선행 후속으로 반영했다.
   `RustfsClient.head_object()`는 404만 `NotFoundError`로 매핑하고, `content-length`
