@@ -2,9 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Download, RefreshCw, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import { ApiError, postJson, requestJson } from "@/lib/api";
 import { uploadSlotFile, type SlotUploadProgress } from "@/lib/multipart-upload";
 import { useUploadSessionEvents } from "@/lib/use-upload-session-events";
@@ -24,6 +25,7 @@ import {
   type SourceFileCategoryInfo,
   type SourceMatchSet,
   type SourceMatchSetDetail,
+  type SourceUploadProgressEvent,
   type UploadSessionStatus
 } from "@/lib/source-files";
 
@@ -481,66 +483,98 @@ function ResumableSessions({
   sessions: UploadSessionStatus[];
   onSessionTerminal: () => void;
 }) {
+  // Each row's live SSE progress is subscribed by a sibling SessionLiveSubscriber
+  // (one EventSource per session, keyed by id → rules-of-hooks safe) that reports up
+  // into this map, so the VirtualTable cells stay pure render functions. Falls back to
+  // the session's static counts when the stream is unavailable (SSR / no EventSource).
+  const [liveById, setLiveById] = useState<Record<string, SourceUploadProgressEvent | null>>({});
+  const handleLive = useCallback(
+    (sessionId: string, live: SourceUploadProgressEvent | null) => {
+      setLiveById((prev) => (prev[sessionId] === live ? prev : { ...prev, [sessionId]: live }));
+    },
+    []
+  );
+
+  const columns = useMemo<VirtualColumn<UploadSessionStatus>[]>(
+    () => [
+      { key: "category", header: "카테고리", cell: (session) => session.category },
+      { key: "yyyymm", header: "기준월", cell: (session) => session.user_yyyymm },
+      {
+        key: "state",
+        header: "상태",
+        cell: (session) => (
+          <StatusBadge value={liveById[session.upload_session_id]?.state ?? session.state} />
+        )
+      },
+      {
+        key: "progress",
+        header: "진행",
+        cell: (session) => (
+          <SessionProgress live={liveById[session.upload_session_id] ?? null} session={session} />
+        )
+      }
+    ],
+    [liveById]
+  );
+
   return (
     <Panel title="재개 가능한 업로드">
-      {sessions.length === 0 ? (
-        <p className="form-note">재개할 수 있는 진행 중 세션이 없습니다.</p>
-      ) : (
-        <table className="table compact">
-          <thead>
-            <tr>
-              <th>카테고리</th>
-              <th>기준월</th>
-              <th>상태</th>
-              <th>진행</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.map((session) => (
-              <ResumableSessionRow
-                key={session.upload_session_id}
-                onTerminal={onSessionTerminal}
-                session={session}
-              />
-            ))}
-          </tbody>
-        </table>
-      )}
+      {sessions.map((session) => (
+        <SessionLiveSubscriber
+          key={session.upload_session_id}
+          onLive={handleLive}
+          onTerminal={onSessionTerminal}
+          sessionId={session.upload_session_id}
+        />
+      ))}
+      <VirtualTable
+        as="table"
+        columns={columns}
+        compact
+        emptyHint="재개할 수 있는 진행 중 세션이 없습니다."
+        rowKey={(session) => session.upload_session_id}
+        rows={sessions}
+      />
     </Panel>
   );
 }
 
-function ResumableSessionRow({
+/** Subscribes to one session's SSE progress and reports it up; renders nothing. */
+function SessionLiveSubscriber({
+  sessionId,
+  onTerminal,
+  onLive
+}: {
+  sessionId: string;
+  onTerminal: () => void;
+  onLive: (sessionId: string, live: SourceUploadProgressEvent | null) => void;
+}) {
+  const live = useUploadSessionEvents(sessionId, { onTerminal });
+  useEffect(() => {
+    onLive(sessionId, live);
+  }, [sessionId, live, onLive]);
+  return null;
+}
+
+function SessionProgress({
   session,
-  onTerminal
+  live
 }: {
   session: UploadSessionStatus;
-  onTerminal: () => void;
+  live: SourceUploadProgressEvent | null;
 }) {
-  // Live SSE progress; falls back to the session's static counts when the
-  // stream is unavailable (SSR / no EventSource) — react-query keeps polling.
-  const live = useUploadSessionEvents(session.upload_session_id, { onTerminal });
-  const state = live?.state ?? session.state;
+  if (!live) {
+    return <>{`${session.uploaded_file_count}/${session.expected_file_count}`}</>;
+  }
   const pct =
-    live?.progress != null ? Math.min(100, Math.max(0, Math.round(live.progress * 100))) : null;
+    live.progress != null ? Math.min(100, Math.max(0, Math.round(live.progress * 100))) : null;
   return (
-    <tr>
-      <td>{session.category}</td>
-      <td>{session.user_yyyymm}</td>
-      <td>
-        <StatusBadge value={state} />
-      </td>
-      <td>
-        {live ? (
-          <div className="source-live-progress">
-            <span>{pct != null ? `${pct}%` : `${session.uploaded_file_count}/${session.expected_file_count}`}</span>
-            {live.stage ? <span className="form-note">{live.stage}</span> : null}
-          </div>
-        ) : (
-          `${session.uploaded_file_count}/${session.expected_file_count}`
-        )}
-      </td>
-    </tr>
+    <div className="source-live-progress">
+      <span>
+        {pct != null ? `${pct}%` : `${session.uploaded_file_count}/${session.expected_file_count}`}
+      </span>
+      {live.stage ? <span className="form-note">{live.stage}</span> : null}
+    </div>
   );
 }
 

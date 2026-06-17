@@ -29,6 +29,12 @@ export type VirtualColumn<T> = {
   align?: "left" | "right" | "center";
   /** Extra class on each body cell (table mode `<td>` / grid mode `.vtable-td`). */
   cellClassName?: string;
+  /**
+   * In `as="table"` mode, render this column's body cell as a row header
+   * (`<th scope="row">`) instead of `<td>` — for transposed key/value tables
+   * (e.g. field-by-field comparison). No effect in grid mode.
+   */
+  rowHeader?: boolean;
   /** CSS grid track for this column in grid mode (default ``1fr``). */
   width?: string;
 };
@@ -64,6 +70,11 @@ type TableProps<T> = CommonProps<T> & {
   as?: "table" | "grid";
   /** Compact density in `as="table"` mode (reuses `.table.compact`). */
   compact?: boolean;
+  /**
+   * Suppress the `<thead>` in `as="table"` mode — for headerless key/value
+   * tables whose columns carry no meaningful header label. No effect in grid mode.
+   */
+  hideHeader?: boolean;
   /** grid-mode scroll viewport height. */
   height?: number;
   /** grid-mode estimated row height. */
@@ -94,6 +105,7 @@ export function VirtualTable<T>({
   wrapCells = false,
   as = "grid",
   compact = false,
+  hideHeader = false,
   height = 360,
   rowHeight = 44
 }: TableProps<T>) {
@@ -203,25 +215,29 @@ export function VirtualTable<T>({
         {toolbar}
         <table className={compact ? "table compact" : "table"}>
           {caption ? <caption className="vtable-caption">{caption}</caption> : null}
-          <thead>
-            <tr>
-              {headers.map((header) => {
-                const col = colByKey.get(header.column.id);
-                return (
-                  <th
-                    aria-sort={
-                      header.column.getCanSort() ? ariaSort(header.column.getIsSorted()) : undefined
-                    }
-                    key={header.id}
-                    scope="col"
-                    style={col?.align ? { textAlign: col.align } : undefined}
-                  >
-                    {headerButton(header)}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
+          {hideHeader ? null : (
+            <thead>
+              <tr>
+                {headers.map((header) => {
+                  const col = colByKey.get(header.column.id);
+                  return (
+                    <th
+                      aria-sort={
+                        header.column.getCanSort()
+                          ? ariaSort(header.column.getIsSorted())
+                          : undefined
+                      }
+                      key={header.id}
+                      scope="col"
+                      style={col?.align ? { textAlign: col.align } : undefined}
+                    >
+                      {headerButton(header)}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+          )}
           <tbody>
             {modelRows.length === 0 ? (
               <tr>
@@ -238,13 +254,15 @@ export function VirtualTable<T>({
                 >
                   {row.getVisibleCells().map((cell) => {
                     const col = colByKey.get(cell.column.id);
-                    return (
-                      <td
-                        className={col?.cellClassName}
-                        key={cell.id}
-                        style={col?.align ? { textAlign: col.align } : undefined}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    const style = col?.align ? { textAlign: col.align } : undefined;
+                    const content = flexRender(cell.column.columnDef.cell, cell.getContext());
+                    return col?.rowHeader ? (
+                      <th className={col.cellClassName} key={cell.id} scope="row" style={style}>
+                        {content}
+                      </th>
+                    ) : (
+                      <td className={col?.cellClassName} key={cell.id} style={style}>
+                        {content}
                       </td>
                     );
                   })}
