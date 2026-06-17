@@ -14,6 +14,7 @@ from kortravelgeo.core.source_restore import (
     ManifestSourceHeadFact,
     decide_manifest_source_file_reconcile,
 )
+from kortravelgeo.exceptions import InvalidInputError, NotFoundError
 from kortravelgeo.infra import source_restore_service as service
 
 _SHA_A = "a" * 64
@@ -75,6 +76,20 @@ def test_manifest_source_reconcile_classifies_missing_object() -> None:
     assert "RustFS HEAD" in decision.reasons[-1]
 
 
+def test_manifest_source_reconcile_classifies_head_error() -> None:
+    decision = decide_manifest_source_file_reconcile(
+        _file(),
+        db=_db(),
+        head=ManifestSourceHeadFact(
+            present=False,
+            error="InvalidInputError: RustFS HEAD response missing content-length",
+        ),
+    )
+
+    assert decision.status == "head_error"
+    assert "RustFS HEAD 오류" in decision.reasons[-1]
+
+
 def test_manifest_source_reconcile_classifies_etag_mismatch() -> None:
     decision = decide_manifest_source_file_reconcile(
         _file(object_etag=None),
@@ -99,8 +114,13 @@ class _FakeRustfs:
 
     async def head_object(self, key: str) -> _FakeHead:
         if key not in self._heads:
-            raise RuntimeError("not found")
+            raise NotFoundError("not found")
         return self._heads[key]
+
+
+class _FakeErrorRustfs:
+    async def head_object(self, key: str) -> _FakeHead:
+        raise InvalidInputError("RustFS HEAD response missing content-length")
 
 
 def _manifest() -> dict[str, object]:
@@ -176,6 +196,24 @@ async def test_manifest_source_reconcile_report_counts_one_missing(
     assert report.total == 2
     assert report.counts == {"present": 1, "missing": 1}
     assert [row.decision.status for row in report.rows] == ["present", "missing"]
+
+
+@pytest.mark.asyncio
+async def test_manifest_source_reconcile_report_counts_head_error(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(service, "_manifest_source_db_facts", _fake_db_facts)
+
+    report = await service.reconcile_manifest_source_inventory(
+        object(),  # type: ignore[arg-type]
+        _manifest(),
+        rustfs=_FakeErrorRustfs(),  # type: ignore[arg-type]
+    )
+
+    assert report.skipped is False
+    assert report.ok is False
+    assert report.counts == {"head_error": 2}
+    assert [row.decision.status for row in report.rows] == ["head_error", "head_error"]
 
 
 @pytest.mark.asyncio

@@ -1249,14 +1249,26 @@ def _iter_match_set_files(block: object) -> list[dict[str, Any]]:
 def summarize_source_inventory(
     files: list[dict[str, Any]],
     present_sizes: Mapping[str, int],
+    head_errors: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Inventory-verification summary (T-237). ``present_sizes`` maps an existing
     object_key to its storage size; absent keys are missing. Pure (no I/O)."""
-    total = present = missing = size_mismatch = 0
+    total = present = missing = size_mismatch = head_error = 0
     items: list[dict[str, Any]] = []
+    errors = head_errors or {}
     for file in files:
         total += 1
         key = file.get("object_key")
+        if isinstance(key, str) and key in errors:
+            head_error += 1
+            items.append(
+                {
+                    "object_key": key,
+                    "status": "head_error",
+                    "error": errors[key],
+                }
+            )
+            continue
         expected = file.get("size_bytes")
         if not isinstance(key, str) or key not in present_sizes:
             missing += 1
@@ -1273,7 +1285,8 @@ def summarize_source_inventory(
         "present": present,
         "missing": missing,
         "size_mismatch": size_mismatch,
-        "ok": missing == 0 and size_mismatch == 0,
+        "head_error": head_error,
+        "ok": missing == 0 and size_mismatch == 0 and head_error == 0,
         "secret_included": False,
         "items": items,
     }
@@ -1298,14 +1311,20 @@ async def build_source_inventory_verification(
     files = _iter_match_set_files(match_set_block)
     client = RustfsClient(config)
     present_sizes: dict[str, int] = {}
+    head_errors: dict[str, str] = {}
     for file in files:
         key = file.get("object_key")
         if not isinstance(key, str):
             continue
-        with suppress(Exception):
+        try:
             head = await client.head_object(key)
-            present_sizes[key] = head.size
-    return summarize_source_inventory(files, present_sizes)
+        except NotFoundError:
+            continue
+        except Exception as exc:
+            head_errors[key] = f"{type(exc).__name__}: {exc}"
+            continue
+        present_sizes[key] = head.size
+    return summarize_source_inventory(files, present_sizes, head_errors=head_errors)
 
 
 async def build_active_serving_summary(conn: Any) -> dict[str, Any] | None:

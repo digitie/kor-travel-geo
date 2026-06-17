@@ -451,6 +451,7 @@ ManifestSourceReconcileStatus = Literal[
     "db_missing",
     "db_mismatch",
     "object_key_missing",
+    "head_error",
 ]
 
 ManifestSourceDbStatus = Literal["matched", "missing", "mismatch"]
@@ -474,6 +475,7 @@ class ManifestSourceHeadFact:
     present: bool
     size: int | None = None
     etag: str | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -536,6 +538,19 @@ def decide_manifest_source_file_reconcile(
             expected_etag=expected_etag,
             observed_etag=head.etag if head is not None else None,
             reasons=(*reasons, "manifest에 object_key가 없습니다"),
+        )
+
+    if head is not None and head.error is not None:
+        return ManifestSourceFileReconcileDecision(
+            status="head_error",
+            db_status=db_status,
+            expected_object_key=expected_key,
+            observed_object_key=db.object_key if db is not None else None,
+            expected_size_bytes=expected_size,
+            observed_size_bytes=head.size,
+            expected_etag=expected_etag,
+            observed_etag=head.etag,
+            reasons=(*reasons, f"RustFS HEAD 오류: {head.error}"),
         )
 
     if head is None or not head.present:

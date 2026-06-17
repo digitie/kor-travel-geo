@@ -30,11 +30,7 @@ acceptance도 닫혔다(`tasks-done.md`). 남은 항목은 아래 리뷰 후속,
 
 ### 선행 리뷰 후속
 
-- [ ] **T-178f** — RustFS HEAD 오류/size 판정 정직화(#336).
-
-  PR #290 Claude Code 코멘트 후속. RustFS HEAD 오류를 모두 missing으로 뭉개지 않고,
-  `content-length` 부재를 size `0`으로 처리하지 않도록 `head_object`와 restore-source
-  reconcile 경로를 보강한다.
+- **진행 중 작업 없음.** (T-178a~T-178f Claude Code 리뷰 후속 완료 — `tasks-done.md` 참조.)
 
 ### 선택 후속 (낮은 우선순위)
 

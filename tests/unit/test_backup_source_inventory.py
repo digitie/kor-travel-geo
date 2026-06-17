@@ -39,6 +39,22 @@ def test_size_mismatch_is_flagged() -> None:
     assert summary["present"] == 1
 
 
+def test_head_error_is_not_counted_as_missing() -> None:
+    summary = summarize_source_inventory(
+        [_file("a", 10), _file("b", 20)],
+        {"a": 10},
+        head_errors={"b": "InvalidInputError: RustFS HEAD response missing content-length"},
+    )
+
+    assert summary["ok"] is False
+    assert summary["missing"] == 0
+    assert summary["head_error"] == 1
+    assert any(
+        i["object_key"] == "b" and i["status"] == "head_error"
+        for i in summary["items"]
+    )
+
+
 def test_summary_never_records_secrets() -> None:
     assert summarize_source_inventory([], {})["secret_included"] is False
 

@@ -449,8 +449,13 @@ async def _head_manifest_file(
         return None
     try:
         head = await rustfs.head_object(file.object_key)
-    except Exception:
+    except NotFoundError:
         return ManifestSourceHeadFact(present=False)
+    except Exception as exc:
+        return ManifestSourceHeadFact(
+            present=False,
+            error=f"{type(exc).__name__}: {exc}",
+        )
     return ManifestSourceHeadFact(
         present=True,
         size=head.size,

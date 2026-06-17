@@ -797,8 +797,7 @@ async def register_upload_session(
         if rustfs is not None:
             head = await rustfs.head_object(object_key)
             object_etag = head.etag or object_etag
-            if head.size:
-                size_bytes = head.size
+            size_bytes = head.size
             if sha256 is None:
                 # No streamed hash recorded → compute once from the object body.
                 sha256 = head.metadata.get("ktg-sha256") or await rustfs.compute_sha256(object_key)
