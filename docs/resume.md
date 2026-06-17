@@ -13,7 +13,10 @@
   오류는 500으로 분류하도록 보정했다. PR #253 코멘트는 `ops.pg_stat_statements_snapshots`
   retention 기본 7일과 capture transaction 내 pruning으로 닫았다. PR #290 코멘트는 RustFS
   HEAD 404와 비-404/불완전 응답을 분리하고, 크기 누락을 size `0`으로 보정하지 않게 닫았다.
-  다음은 T-177 파일 기반 full-load e2e 계획/Task 정리다.
+- ✅ T-177A 파일 기반 full-load e2e 계획/Task 등록 완료 — T-073 shell script 재실행에 맞추지
+  않고, pytest opt-in 통합/e2e가 실제 Juso 원천 파일을 읽어 scratch PostgreSQL/PostGIS DB를
+  구축하는 방향으로 계획을 확정했다. `docs/t177-file-driven-full-load-e2e-plan.md`에 실행
+  원칙, DB 안전장치, 데이터 루트, 파일 discovery, 산출물, T-177B~T-177H Task 분해를 기록했다.
 - ✅ T-119/T-139 종료 판정 완료 — `T-119`는 T-137 최종 gate와 T-153 acceptance 근거로 C11 active serving promotion을 no-go 종료했다. C11은 validation-only로 고정하며, 새 같은 기준월 C11 원천 또는 동등한 새 증거가 있으면 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인으로만 다룬다. `T-139`는 T-153 기준 구조적 성능 blocker가 없어 별도 변경 DB 실험을 no-action 종료했다.
 - ✅ Timescale PostgreSQL 계열 Codex skill 변환 완료 — `timescale/pg-aiguide`의 Claude Code용 skill 8종을 Codex repo-scoped skill로 변환해 `.agents/skills/`에 추가했다. Codex frontmatter는 `name`/`description`만 유지하고 원본 Apache-2.0/source/compatibility 표기는 본문에 보존했다. `quick_validate.py` 검증과 YAML frontmatter 파싱 검증을 통과했다. 같은 `.codex/agents` 6종과 `.agents/skills` 8종을 `F:\dev` 바로 아래 다른 Git repo 78개에도 복사·stage했고, 모든 대상에서 agent 6개와 skill 8개가 확인됐다. 대상 repo에서 해당 경로는 ignore되지 않아 `.gitignore` 추가 수정은 없었다.
 - ✅ Codex 프로젝트 subagent 정의 등록 완료 — VoltAgent core-development subagent 6종을 `.codex/agents/`에 추가해 Git 추적 대상 구성으로 옮겼고, 전역 `C:\Users\digit\.codex\agents` 복사본도 같은 값으로 맞췄다. 모든 subagent는 `model="gpt-5.5"`, `model_reasoning_effort="xhigh"`를 사용한다. TOML 파싱과 필수 필드 검증을 통과했다.
@@ -249,8 +252,8 @@
 `T-153` 통합 gate까지 완료됐다. Agent A 단독 명시 잔여(`T-127`, `T-158`, `T-238`, `T-245`, `T-247`)와 Agent B의 `T-226`/`T-227`, `T-246`도 완료됐다. 새 release blocker는 없으며, 다음에 자동 착수할 Agent A 고우선순위 task는 없다.
 
 현재는 T-177 파일 기반 full-load e2e 재검증에 들어가기 전, 2026-06-16 이후 PR 스캔에서
-발견한 Claude Code 리뷰 후속을 먼저 닫았다. `T-178a`~`T-178f`가 모두 완료됐으므로 다음 한
-작업은 `T-177A` 파일 기반 full-load e2e 테스트 계획/Task PR이다.
+발견한 Claude Code 리뷰 후속을 먼저 닫았다. `T-178a`~`T-178f`와 `T-177A` 계획/Task 등록이
+완료됐으므로 다음 한 작업은 `T-177B` opt-in e2e 하니스와 destructive preflight 구현이다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 
