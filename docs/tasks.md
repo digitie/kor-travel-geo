@@ -33,11 +33,6 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
 
 ### T-177 파일 기반 full-load e2e
 
-- [ ] **T-177F** — post-load serving, smoke, consistency e2e.
-
-  T-177C~E 적재 DB를 바탕으로 text-geometry link, serving MV, geocode/reverse/search/zipcode
-  smoke, C1~C10 consistency subset report를 검증하고 실패 sample artifact를 남긴다.
-
 - [ ] **T-177G** — 전국 long-run full-load e2e.
 
   별도 `KTG_TEST_FULL_LOAD_E2E_LONGRUN=1` opt-in으로 전국 실제 원천 전체를 읽어 DB를 구축한다.

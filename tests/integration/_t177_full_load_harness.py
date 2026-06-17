@@ -146,6 +146,15 @@ T177E_TARGET_TABLES = (
 
 T177E_MANIFEST_TABLES = ("tl_roadaddr_entrc", "tl_sppn_makarea")
 
+T177F_SERVING_OBJECTS = (
+    "public.mv_geocode_target",
+    "public.mv_geocode_text_search",
+    "public.region_radius_parts",
+    "public.load_consistency_reports",
+)
+
+T177F_CONSISTENCY_CASES = tuple(f"C{index}" for index in range(1, 11))
+
 
 class T177SkipError(RuntimeError):
     """Raised when the opt-in T-177 e2e test should skip cleanly."""
@@ -962,6 +971,233 @@ async def collect_t177e_c10_report(engine: AsyncEngine) -> dict[str, Any]:
     return _jsonable_model_value(await run_case(engine, "C10"))
 
 
+async def collect_t177f_serving_report(engine: AsyncEngine) -> dict[str, Any]:
+    async with engine.connect() as conn:
+        object_rows = []
+        for object_name in T177F_SERVING_OBJECTS:
+            exists = await conn.scalar(
+                text("SELECT to_regclass(:object_name) IS NOT NULL"),
+                {"object_name": object_name},
+            )
+            row_count = None
+            if exists:
+                row_count = await conn.scalar(text(f"SELECT count(*) FROM {object_name}"))
+            object_rows.append(
+                {
+                    "object_name": object_name,
+                    "exists": bool(exists),
+                    "row_count": int(row_count or 0) if exists else None,
+                }
+            )
+        index_rows = (
+            await conn.execute(
+                text(
+                    """
+SELECT schemaname, tablename, indexname
+  FROM pg_indexes
+ WHERE schemaname = 'public'
+   AND tablename IN ('mv_geocode_target', 'mv_geocode_text_search')
+ ORDER BY tablename, indexname
+"""
+                )
+            )
+        ).mappings()
+    return {
+        "objects": object_rows,
+        "missing_objects": [
+            row["object_name"] for row in object_rows if not row["exists"]
+        ],
+        "indexes": [dict(row) for row in index_rows],
+    }
+
+
+async def select_t177f_smoke_sample(engine: AsyncEngine) -> dict[str, Any]:
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    """
+SELECT bd_mgt_sn,
+       rn,
+       rn_nrm,
+       si_nm,
+       sgg_nm,
+       emd_nm,
+       li_nm,
+       buld_mnnm,
+       buld_slno,
+       zip_no,
+       pt_source,
+       ST_X(pt_4326) AS lon,
+       ST_Y(pt_4326) AS lat,
+       EXISTS (
+         SELECT 1
+           FROM public.tl_locsum_entrc l
+          WHERE l.bd_mgt_sn = target.bd_mgt_sn
+       ) AS has_locsum_link,
+       EXISTS (
+         SELECT 1
+           FROM public.tl_roadaddr_entrc r
+          WHERE r.bd_mgt_sn = target.bd_mgt_sn
+       ) AS has_roadaddr_entrc_link,
+       concat_ws(
+         ' ',
+         NULLIF(si_nm, ''),
+         NULLIF(sgg_nm, ''),
+         NULLIF(rn, ''),
+         buld_mnnm::text ||
+           CASE
+             WHEN COALESCE(buld_slno, 0) > 0 THEN '-' || buld_slno::text
+             ELSE ''
+           END
+       ) AS road_address
+  FROM public.mv_geocode_target target
+ WHERE pt_4326 IS NOT NULL
+   AND pt_5179 IS NOT NULL
+   AND bd_mgt_sn IS NOT NULL
+   AND rn IS NOT NULL
+   AND rn_nrm IS NOT NULL
+   AND rn_nrm <> ''
+   AND buld_mnnm IS NOT NULL
+   AND buld_slno IS NOT NULL
+   AND zip_no IS NOT NULL
+ ORDER BY CASE
+            WHEN EXISTS (
+              SELECT 1
+                FROM public.tl_locsum_entrc l
+               WHERE l.bd_mgt_sn = target.bd_mgt_sn
+            ) THEN 0
+            ELSE 1
+          END,
+          CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END,
+          bd_mgt_sn,
+          rncode_full,
+          bjd_cd
+ LIMIT 1
+"""
+                )
+            )
+        ).mappings().first()
+    if row is None:
+        raise T177SkipError("T-177F serving MV has no smokeable geocode target row")
+    sample = dict(row)
+    sample["lon"] = float(sample["lon"])
+    sample["lat"] = float(sample["lat"])
+    sample["has_locsum_link"] = bool(sample["has_locsum_link"])
+    sample["has_roadaddr_entrc_link"] = bool(sample["has_roadaddr_entrc_link"])
+    return sample
+
+
+async def collect_t177f_smoke_report(engine: AsyncEngine) -> dict[str, Any]:
+    from kortravelgeo.client import AsyncAddressClient
+    from kortravelgeo.settings import get_settings
+
+    sample = await select_t177f_smoke_sample(engine)
+    settings = get_settings().model_copy(update={"cache_enabled": False})
+    async with AsyncAddressClient(settings=settings, engine=engine) as client:
+        geocode_response = await client._geocode_v1(
+            str(sample["road_address"]),
+            type="road",
+            fallback="local_only",
+        )
+        reverse_response = await client._reverse_geocode_v1(
+            float(sample["lon"]),
+            float(sample["lat"]),
+            radius_m=200,
+        )
+        search_response = await client.search(
+            query=str(sample["rn"]),
+            type="address",
+            size=5,
+        )
+        zipcode_response = await client.zipcode(
+            address=str(sample["road_address"]),
+            include_bulk=True,
+        )
+    return {
+        "sample": sample,
+        "geocode": {
+            "status": geocode_response.status,
+            "point": _jsonable_model_value(
+                geocode_response.result.point if geocode_response.result else None
+            ),
+            "source": (
+                geocode_response.x_extension.source
+                if geocode_response.x_extension
+                else None
+            ),
+        },
+        "reverse": {
+            "status": reverse_response.status,
+            "result_count": len(reverse_response.result),
+            "sources": tuple(item.source for item in reverse_response.result),
+            "sppn_found": bool(
+                reverse_response.x_extension
+                and reverse_response.x_extension.sppn_makarea
+            ),
+        },
+        "search": {
+            "status": search_response.status,
+            "candidate_count": len(search_response.candidates),
+        },
+        "zipcode": {
+            "status": zipcode_response.status,
+            "result_count": len(zipcode_response.result),
+            "zip_sources": tuple(item.source for item in zipcode_response.result),
+        },
+    }
+
+
+async def collect_t177f_link_evidence(engine: AsyncEngine) -> dict[str, int]:
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    """
+SELECT
+  (SELECT count(*) FROM public.tl_juso_text) AS text_rows,
+  (SELECT count(*) FROM public.tl_locsum_entrc) AS locsum_rows,
+  (SELECT count(*) FROM public.tl_locsum_entrc WHERE bd_mgt_sn IS NOT NULL)
+    AS locsum_resolved_rows,
+  (SELECT count(*)
+     FROM public.mv_geocode_target target
+    WHERE EXISTS (
+      SELECT 1
+        FROM public.tl_locsum_entrc l
+       WHERE l.bd_mgt_sn = target.bd_mgt_sn
+    )) AS locsum_serving_rows,
+  (SELECT count(*)
+     FROM public.mv_geocode_target target
+    WHERE pt_4326 IS NOT NULL
+      AND pt_5179 IS NOT NULL
+      AND rn_nrm IS NOT NULL
+      AND rn_nrm <> ''
+      AND zip_no IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+          FROM public.tl_locsum_entrc l
+         WHERE l.bd_mgt_sn = target.bd_mgt_sn
+      )) AS locsum_smokeable_serving_rows
+"""
+                )
+            )
+        ).mappings().one()
+    return {key: int(value or 0) for key, value in row.items()}
+
+
+async def collect_t177f_consistency_report(engine: AsyncEngine) -> dict[str, Any]:
+    from kortravelgeo.loaders.consistency import run_all_cases
+
+    report = await run_all_cases(
+        engine,
+        scope="t177f-fast-sample",
+        cases=T177F_CONSISTENCY_CASES,
+        generated_by="cli",
+        source_set={"task": "T-177F", "mode": "postload_serving_fast_sample"},
+    )
+    return _jsonable_model_value(report)
+
+
 async def collect_t177d_region_radius_report(engine: AsyncEngine) -> dict[str, Any]:
     async with engine.connect() as conn:
         rows = (
@@ -1057,6 +1293,76 @@ async def run_t177e_supplemental_fast_sample_load(
         "sppn_report": sppn_report,
         "sppn_smoke": sppn_smoke,
         "c10": c10_report,
+    }
+
+
+async def run_t177f_text_snapshot_fast_sample_load(
+    engine: AsyncEngine,
+    *,
+    discovery_plan: Mapping[str, Any],
+    limit_per_file: int,
+) -> dict[str, Any]:
+    from kortravelgeo.loaders.text.juso_hangul_loader import load_juso_hangul
+    from kortravelgeo.loaders.text.locsum_loader import load_locsum
+
+    juso_hangul = required_source_path(discovery_plan, "juso_hangul")
+    locsum = required_source_path(discovery_plan, "locsum")
+    source_months = {
+        "juso_hangul": source_yyyymm(discovery_plan, "juso_hangul"),
+        "locsum": source_yyyymm(discovery_plan, "locsum"),
+    }
+    juso_count = await load_juso_hangul(
+        engine,
+        juso_hangul,
+        source_yyyymm=source_months["juso_hangul"],
+        limit_per_file=limit_per_file,
+    )
+    locsum_count = await load_locsum(
+        engine,
+        locsum,
+        source_yyyymm=source_months["locsum"],
+        limit_per_file=limit_per_file,
+    )
+    return {
+        "limit_per_file": limit_per_file,
+        "source_paths": {
+            "juso_hangul": str(juso_hangul),
+            "locsum": str(locsum),
+        },
+        "source_months": source_months,
+        "loader_results": {
+            "juso_hangul_rows": juso_count,
+            "locsum_rows": locsum_count,
+        },
+        "table_counts": await collect_t177c_table_counts(engine),
+    }
+
+
+async def run_t177f_postload_serving_smoke(
+    engine: AsyncEngine,
+    *,
+    loaded_results: Mapping[str, Any],
+) -> dict[str, Any]:
+    from kortravelgeo.infra.cache import GeoCacheRepository
+    from kortravelgeo.loaders.postload import (
+        rebuild_mv,
+        resolve_text_geometry_links,
+    )
+
+    await resolve_text_geometry_links(engine)
+    await rebuild_mv(engine)
+    cache_cleared_rows = await GeoCacheRepository(engine).clear()
+    link_evidence = await collect_t177f_link_evidence(engine)
+    smoke_report = await collect_t177f_smoke_report(engine)
+    consistency_report = await collect_t177f_consistency_report(engine)
+    serving_report = await collect_t177f_serving_report(engine)
+    return {
+        "loaded_results": dict(loaded_results),
+        "cache_cleared_rows": cache_cleared_rows,
+        "link_evidence": link_evidence,
+        "serving": serving_report,
+        "smoke": smoke_report,
+        "consistency": consistency_report,
     }
 
 

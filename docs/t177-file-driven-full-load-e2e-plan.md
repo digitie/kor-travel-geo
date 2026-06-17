@@ -19,7 +19,7 @@ PR로 머지하고, 다음 Task로 넘어가기 전 2026-06-16 이후 PR의 Clau
 | DB 생명주기 | 저장소가 PostgreSQL을 구동/정지/재시작하지 않는다. `KTG_TEST_PG_DSN`으로 이미 떠 있는 scratch DB에 접속한다. |
 | 안전장치 | `KTG_TEST_FULL_LOAD_E2E=1`, `KTG_TEST_FULL_LOAD_E2E_CONFIRM="RUN-T177-E2E <database>"`, DB 이름 allowlist(`t177`, `test`, `scratch` 포함)를 모두 요구한다. |
 | 데이터 루트 | 기본은 `data/juso`이며, WSL 미러에서는 `data -> /mnt/f/dev/geodata` symlink를 통해 `F:\dev\geodata\juso`를 본다. |
-| 기준월 | 원천별 기준월을 분리한다. 현재 보존 원천은 `roadname=202605`, `locsum=202604`, `navi=202604`, `electronic_map=202604`, `roadaddr_entrance=202604`, `sppn_makarea=202603/202604 fallback` 조합을 명시한다. |
+| 기준월 | 원천별 기준월을 분리한다. 현재 보존 원천은 `roadname=202605`, `locsum=202604`, `navi=202604`, `electronic_map=202604`, `roadaddr_entrance=202604`, `sppn_makarea=202603/202604 fallback` 조합을 명시한다. `roadaddr_entrance` row-level 기준월은 ZIP 내부 `RNENTDATA_*` 파일명에서 loader가 추론할 수 있다. |
 | 적재 표면 | loader Python API를 직접 호출한다. CLI는 최종 smoke나 사용자 runbook 확인에만 제한적으로 쓴다. |
 | 범위 확대 | 세종/시도 단위 fast e2e에서 시작해 전국 long-run e2e로 확장한다. 전국 실행은 별도 opt-in과 긴 timeout을 요구한다. |
 | 산출물 | `artifacts/t177/<run_id>/` 아래 JSON/Markdown/CSV를 쓰되 Git에는 커밋하지 않는다. 문서에는 핵심 요약과 재현 명령만 남긴다. |
@@ -147,9 +147,18 @@ T-177C~E의 loaded DB를 바탕으로 serving MV와 API-level smoke를 검증한
 
 완료 조건:
 
+- 현재 보존 원천에 daily ZIP 또는 materialize된 navi TXT가 없으면, T-177F fast-sample은
+  도로명주소 한글 snapshot과 위치정보요약DB를 직접 적재하는 전용 helper로 텍스트 정본을
+  구성한다. daily/navi 전체 조합은 T-177G long-run에서 다시 다룬다.
+- fresh scratch DB에서 `resolve_text_geometry_links()` 뒤 `rebuild_mv()`로 serving MV를 구축한다.
 - `mv_geocode_target`, `mv_geocode_text_search` row count와 핵심 index 존재를 검증한다.
+- `region_radius_parts`는 T-177D SHP helper가 갱신한 serving object로 row count를 함께 검증한다.
 - geocode/reverse/search/zipcode smoke가 local DB만으로 통과한다.
+- smoke는 `geo_cache`를 비우고 cache disabled client로 실행하며, sample이 위치정보요약DB 링크
+  기반 serving row에서 나왔음을 artifact와 assertion으로 남긴다.
 - C1~C10 consistency subset report를 artifact로 남긴다.
+- fast-sample C1~C10 `severity_max`는 acceptance gate가 아니다. 제한된 row 수와 기준월 혼합을
+  드러내는 smoke 산출물로 보고, 전국 acceptance 판정은 T-177G/T-177H에서 수행한다.
 - 실패 sample은 CSV/JSON으로 저장한다.
 
 ### T-177G 전국 long-run full-load e2e
