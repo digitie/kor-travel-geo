@@ -4,10 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import { requestJson } from "@/lib/api";
 import {
   diffMatchSets,
   type ItemDiffStatus,
+  type MatchSetFieldDiff,
   type MatchSetItemDiff
 } from "@/lib/match-set-diff";
 import {
@@ -32,6 +34,33 @@ const STATUS_TONE: Record<ItemDiffStatus, "ok" | "warn" | "error" | undefined> =
   changed: "warn",
   same: undefined
 };
+
+// setmeta is a transposed key/value comparison (field → A | B), so it is headerless
+// with the field rendered as a row header (<th scope="row">).
+const SET_META_COLUMNS: VirtualColumn<MatchSetFieldDiff>[] = [
+  { key: "field", header: "", rowHeader: true, cell: (row) => row.field },
+  { key: "a", header: "", cell: (row) => row.a ?? "-" },
+  { key: "b", header: "", cell: (row) => row.b ?? "-" }
+];
+
+const ITEM_DIFF_COLUMNS: VirtualColumn<MatchSetItemDiff>[] = [
+  { key: "category", header: "카테고리", cell: (item) => item.category },
+  {
+    key: "status",
+    header: "상태",
+    cell: (item) => <StatusBadge tone={STATUS_TONE[item.status]} value={STATUS_LABEL[item.status]} />
+  },
+  {
+    key: "a",
+    header: "A (역할·기준월·그룹)",
+    cell: (item) => <ItemCell changed={item.changedFields} item={item.a} />
+  },
+  {
+    key: "b",
+    header: "B (역할·기준월·그룹)",
+    cell: (item) => <ItemCell changed={item.changedFields} item={item.b} />
+  }
+];
 
 /**
  * T-226: 두 source match set을 비교(현재 구성 diff / match set 비교). 활성 세트를 기준(A)으로,
@@ -106,44 +135,24 @@ export function MatchSetComparePanel({ matchSets }: { matchSets: SourceMatchSet[
             <span className="form-note">동일 {diff.counts.same}</span>
           </p>
 
-          <table className="table compact">
-            <tbody>
-              {diff.setMeta.map((row) => (
-                <tr key={row.field} className={row.changed ? "compare-changed" : undefined}>
-                  <th>{row.field}</th>
-                  <td>{row.a ?? "-"}</td>
-                  <td>{row.b ?? "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <VirtualTable
+            as="table"
+            columns={SET_META_COLUMNS}
+            compact
+            getRowClassName={(row) => (row.changed ? "compare-changed" : undefined)}
+            hideHeader
+            rowKey={(row) => row.field}
+            rows={diff.setMeta}
+          />
 
-          <table className="table compact">
-            <thead>
-              <tr>
-                <th>카테고리</th>
-                <th>상태</th>
-                <th>A (역할·기준월·그룹)</th>
-                <th>B (역할·기준월·그룹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {diff.items.map((item) => (
-                <tr key={item.category} className={item.status !== "same" ? "compare-changed" : undefined}>
-                  <td>{item.category}</td>
-                  <td>
-                    <StatusBadge tone={STATUS_TONE[item.status]} value={STATUS_LABEL[item.status]} />
-                  </td>
-                  <td>
-                    <ItemCell changed={item.changedFields} item={item.a} />
-                  </td>
-                  <td>
-                    <ItemCell changed={item.changedFields} item={item.b} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <VirtualTable
+            as="table"
+            columns={ITEM_DIFF_COLUMNS}
+            compact
+            getRowClassName={(item) => (item.status !== "same" ? "compare-changed" : undefined)}
+            rowKey={(item) => item.category}
+            rows={diff.items}
+          />
         </>
       )}
     </Panel>
