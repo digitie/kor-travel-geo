@@ -6,6 +6,13 @@
 
 ## 완료
 
+- [x] **T-178c** — 번호형 가지도로 파싱 회귀 방지(Agent A/Codex).
+  PR #277 Claude Code 코멘트를 #336 선행 후속으로 반영했다. 도로명 parser가
+  `테헤란로1길 10`, `올림픽로35길 123-4` 같은 `로/대로 + 숫자 + 길` 도로명을 먼저
+  도로명으로 보존한 뒤 뒤따르는 건물번호를 읽도록 했다. `올림픽로35길`처럼 건물번호 없는
+  road-name-only 입력은 `35`를 건물번호나 지번으로 소비하지 않고 `InvalidAddressError`로
+  남겨 v2 geocode의 road geometry fallback이 처리할 수 있게 했다. (2026-06-17)
+
 - [x] **T-178b** — geocode/reverse cache write best-effort 처리(Agent A/Codex).
   PR #285 Claude Code 코멘트를 #336 선행 후속으로 반영했다.
   `_store_geocode_cache()`/`_store_reverse_cache()`에서 `geo_cache` write가 실패해도 이미 계산한
