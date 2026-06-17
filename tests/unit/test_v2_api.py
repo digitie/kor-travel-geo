@@ -302,6 +302,31 @@ async def test_async_client_geocode_merges_local_primary_and_supplemental_candid
 
 
 @pytest.mark.asyncio
+async def test_async_client_geocode_keeps_primary_when_supplemental_lookup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        assert address == "테헤란로"
+        return _v1_geocode_response(GeocodeInput(address=address))
+
+    async def fail_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        raise RuntimeError("geometry repository unavailable")
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", fail_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(query="테헤란로", limit=3)
+
+    assert response.status == "OK"
+    assert len(response.candidates) == 1
+    assert response.candidates[0].address is not None
+    assert response.candidates[0].address.full == "서울특별시 강남구 테헤란로 152"
+
+
+@pytest.mark.asyncio
 async def test_v2_geocode_route_uses_client_dependency() -> None:
     class FakeClient:
         async def geocode(self, **kwargs: Any) -> GeocodeV2Response:
