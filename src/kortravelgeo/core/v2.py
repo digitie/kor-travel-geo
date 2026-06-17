@@ -47,7 +47,6 @@ def geocode_v2_from_v1(inp: GeocodeV2Input, response: GeocodeResponse) -> Geocod
                 full=response.refined.text,
                 address_type=response.input.type,
                 structure=response.refined.structure,
-                point=response.result.point if response.result else None,
                 metadata=_geocode_metadata(response),
             ),
             point=_to_point_v2(response.result.point if response.result else None),
@@ -244,7 +243,6 @@ def _candidate_from_reverse_item(inp: ReverseV2Input, item: ReverseResultItem) -
             full=item.text,
             address_type=item.type,
             structure=item.structure,
-            point=item.point,
             metadata={"distance_m": item.distance_m, "zip_source": item.zip_source},
             postal_code=item.zipcode,
         ),
@@ -303,7 +301,6 @@ def _candidate_from_search_item(item: SearchResultItem) -> CandidateV2:
             full=item.address or item.title,
             address_type="road" if item.type == "road" else None,
             structure=item.structure,
-            point=item.point,
             metadata={},
         )
         if item.address or item.structure
@@ -382,7 +379,6 @@ def _address_from_v1(
     full: str,
     address_type: AddressType | None,
     structure: AddressStructure | None,
-    point: Point | None,
     metadata: dict[str, Any],
     postal_code: str | None = None,
 ) -> AddressV2:
