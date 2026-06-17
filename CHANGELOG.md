@@ -93,6 +93,7 @@
 - **(BREAKING)** 자동 탐지 중심 upload-set 표면을 제거했다(충돌#1, T-201). `guess_source_kind()` 자동 source 종류 추정, `/v1/admin/uploads*`·`/v1/admin/load-sources*` admin 엔드포인트, `AsyncAddressClient.discover_load_sources()`/`build_full_load_source_set_plan()`/`submit_full_load_source_set()`/`cleanup_upload_sets()`, `ktgctl load full-set`·`ktgctl uploads cleanup` CLI를 삭제했다. 명시 category 기반 업로드(T-203~)와 `rebuild-db`(T-205)가 대체한다. `UploadSetStatus` DTO와 full-load 로더는 유지한다. UI `/admin/load` 콘솔은 T-209 재구성 전까지 stub이다.
 
 ### Fixed
+- T-178b Claude Code 리뷰 후속으로 geocode/reverse cache write 실패를 best-effort로 처리한다. `geo_cache` 저장 실패가 이미 계산된 OK 응답을 500으로 바꾸지 않고 warning log만 남긴다.
 - T-178a Claude Code 리뷰 후속으로 v2 geocode 보조 road 후보 조회를 best-effort로 바꿨다. Primary geocode OK 응답을 얻은 뒤 supplemental `GeometryRepository.road_geometries()`가 실패해도 이미 계산된 primary 후보 응답을 반환하고 warning log만 남긴다.
 - PR #210~#217 사후 리뷰 후속으로 restore dry-run/restore version guard와 실패 cleanup을 보강했다. `target_dsn`이 외부 클러스터를 가리키는 경우에도 실제 target PostgreSQL/PostGIS 버전을 조회하고, target DB 접속·존재 확인 실패는 dry-run warning이 아니라 blocker가 된다. restore 실패 cleanup은 검증된 DB identifier만 quote하며, quarantine 이름은 PostgreSQL 63자 제한 안에 들어오도록 생성한다.
 - Windows에서 `TL_SPPN_MAKAREA` ZIP source를 발견할 때 ZIP 내부 prefix가 `\`로 기록되어 member lookup/test가 깨질 수 있던 문제를 수정했다. ZIP member path는 `PurePosixPath`로 처리한다.

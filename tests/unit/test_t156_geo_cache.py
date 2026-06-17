@@ -22,6 +22,7 @@ from kortravelgeo.settings import Settings
 
 class FakeGeoCacheRepository:
     get_payload: ClassVar[dict[str, Any] | None] = None
+    set_error: ClassVar[Exception | None] = None
     gets: ClassVar[list[str]] = []
     sets: ClassVar[list[dict[str, Any]]] = []
 
@@ -40,6 +41,8 @@ class FakeGeoCacheRepository:
         payload: dict[str, Any],
         ttl_days: int,
     ) -> None:
+        if self.set_error is not None:
+            raise self.set_error
         self.sets.append(
             {
                 "cache_key": cache_key,
@@ -50,8 +53,13 @@ class FakeGeoCacheRepository:
         )
 
 
-def _reset_fake_cache(payload: dict[str, Any] | None = None) -> None:
+def _reset_fake_cache(
+    payload: dict[str, Any] | None = None,
+    *,
+    set_error: Exception | None = None,
+) -> None:
     FakeGeoCacheRepository.get_payload = payload
+    FakeGeoCacheRepository.set_error = set_error
     FakeGeoCacheRepository.gets = []
     FakeGeoCacheRepository.sets = []
 
@@ -177,6 +185,27 @@ async def test_geocode_v1_stores_local_ok_response(
 
 
 @pytest.mark.asyncio
+async def test_geocode_v1_ignores_cache_write_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _reset_fake_cache(set_error=RuntimeError("cache unavailable"))
+    monkeypatch.setattr(client_module, "GeoCacheRepository", FakeGeoCacheRepository)
+
+    async def fake_core(_repo: object, inp: GeocodeInput, **_kwargs: Any) -> GeocodeResponse:
+        return _geocode_response(inp)
+
+    monkeypatch.setattr(client_module, "core_geocode", fake_core)
+    client = AsyncAddressClient(engine=object(), settings=_settings())
+
+    response = await client._geocode_v1("서울특별시 강남구 테헤란로 152")
+
+    assert response.status == "OK"
+    assert response.x_extension is not None
+    assert response.x_extension.source == "local"
+    assert FakeGeoCacheRepository.sets == []
+
+
+@pytest.mark.asyncio
 async def test_reverse_v1_returns_cache_hit_without_repo_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -196,6 +225,27 @@ async def test_reverse_v1_returns_cache_hit_without_repo_call(
     assert response.result
     assert {item.source for item in response.result} == {"cache"}
     assert FakeGeoCacheRepository.gets
+    assert FakeGeoCacheRepository.sets == []
+
+
+@pytest.mark.asyncio
+async def test_reverse_v1_ignores_cache_write_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _reset_fake_cache(set_error=RuntimeError("cache unavailable"))
+    monkeypatch.setattr(client_module, "GeoCacheRepository", FakeGeoCacheRepository)
+
+    async def fake_core(_repo: object, inp: ReverseInput, **_kwargs: Any) -> ReverseResponse:
+        return _reverse_response(inp)
+
+    monkeypatch.setattr(client_module, "core_reverse_geocode", fake_core)
+    client = AsyncAddressClient(engine=object(), settings=_settings())
+
+    response = await client._reverse_geocode_v1(127.036, 37.501)
+
+    assert response.status == "OK"
+    assert response.result
+    assert {item.source for item in response.result} == {"local"}
     assert FakeGeoCacheRepository.sets == []
 
 

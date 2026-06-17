@@ -6,6 +6,13 @@
 
 ## 완료
 
+- [x] **T-178b** — geocode/reverse cache write best-effort 처리(Agent A/Codex).
+  PR #285 Claude Code 코멘트를 #336 선행 후속으로 반영했다.
+  `_store_geocode_cache()`/`_store_reverse_cache()`에서 `geo_cache` write가 실패해도 이미 계산한
+  OK 응답을 그대로 반환하고 warning log만 남긴다. 회귀 테스트는 geocode/reverse 각각 cache
+  write 실패 시 `source="local"` 응답이 유지되고 cache set 기록이 남지 않는지 고정한다.
+  (2026-06-17)
+
 - [x] **T-178a** — v2 geocode 보조 road 후보 조회 best-effort 처리(Agent A/Codex).
   2026-06-16 이후 PR 리뷰 스캔에서 발견한 PR #248 Claude Code 코멘트를 #336 선행 후속으로
   반영했다. `AsyncAddressClient.geocode()`가 primary v1 geocode OK 응답을 얻은 뒤 보조

@@ -554,24 +554,36 @@ class AsyncAddressClient:
             return
         if response.x_extension is not None and response.x_extension.source != "local":
             return
-        await GeoCacheRepository(self._engine()).set_json(
-            cache_key=cache_key,
-            service="geocode",
-            payload=_geocode_cache_payload(response),
-            ttl_days=self.settings.cache_ttl_days,
-        )
+        try:
+            await GeoCacheRepository(self._engine()).set_json(
+                cache_key=cache_key,
+                service="geocode",
+                payload=_geocode_cache_payload(response),
+                ttl_days=self.settings.cache_ttl_days,
+            )
+        except Exception:
+            _LOGGER.warning(
+                "geocode cache write failed; returning uncached response",
+                exc_info=True,
+            )
 
     async def _store_reverse_cache(self, cache_key: str, response: ReverseResponse) -> None:
         if response.status != "OK":
             return
         if any(item.source != "local" for item in response.result):
             return
-        await GeoCacheRepository(self._engine()).set_json(
-            cache_key=cache_key,
-            service="reverse",
-            payload=_reverse_cache_payload(response),
-            ttl_days=self.settings.cache_ttl_days,
-        )
+        try:
+            await GeoCacheRepository(self._engine()).set_json(
+                cache_key=cache_key,
+                service="reverse",
+                payload=_reverse_cache_payload(response),
+                ttl_days=self.settings.cache_ttl_days,
+            )
+        except Exception:
+            _LOGGER.warning(
+                "reverse cache write failed; returning uncached response",
+                exc_info=True,
+            )
 
     async def reverse(
         self,

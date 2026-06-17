@@ -30,12 +30,6 @@ acceptance도 닫혔다(`tasks-done.md`). 남은 항목은 아래 리뷰 후속,
 
 ### 선행 리뷰 후속
 
-- [ ] **T-178b** — geocode/reverse cache write best-effort 보강(#336).
-
-  PR #285 Claude Code 코멘트 후속. `_store_geocode_cache`/`_store_reverse_cache` 실패가 이미
-  계산된 OK 응답을 500으로 바꾸지 않도록 best-effort 처리하고, 회귀 테스트로 cache write
-  실패 시 응답 shape를 고정한다.
-
 - [ ] **T-178c** — 번호형 가지도로 파싱 회귀 방지(#336).
 
   PR #277 Claude Code 코멘트 후속. `테헤란로1길 10`, `올림픽로35길` 같은 번호형 가지도로가

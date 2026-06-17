@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-178b cache write best-effort)
+
+**작업**: #336/T-178 선행 리뷰 후속 중 PR #285 Claude Code 코멘트를 반영했다. Geocode/reverse OK 응답을 계산한 뒤 `geo_cache` write가 실패해도 응답이 500으로 바뀌지 않게 했다.
+
+**결정**: cache read 실패는 기존처럼 호출 경로에서 오류를 드러내지만, cache write는 결과 저장 부가 경로이므로 best-effort로 처리한다. 실패 시 warning log만 남기고 uncached 응답을 반환한다.
+
+**검증/문서**: T-156 cache 단위 테스트에 geocode/reverse write 실패 회귀 테스트를 추가했다. `docs/tasks.md`의 선행 후속은 T-178c~T-178f만 남겼다.
+
 ## 2026-06-17 (T-178a Claude Code 리뷰 후속)
 
 **작업**: 2026-06-16 이후 PR을 Closed 포함해 훑고, 리뷰 반영 PR은 제외한 뒤 Claude Code 코멘트 중 미반영으로 보이는 6건을 #336/T-178로 분리했다. 그중 T-178a로 PR #248 코멘트를 먼저 반영했다.
