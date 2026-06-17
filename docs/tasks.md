@@ -33,12 +33,6 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
 
 ### T-177 파일 기반 full-load e2e
 
-- [ ] **T-177B** — opt-in e2e 하니스와 destructive preflight.
-
-  `KTG_TEST_FULL_LOAD_E2E`, `KTG_TEST_PG_DSN`, typed confirmation, DB 이름 allowlist,
-  data-root discovery artifact를 갖춘 공통 pytest fixture를 만든다. DB 구동/정지는 하지 않고,
-  scratch DB에만 schema/index 적용 smoke를 수행한다.
-
 - [ ] **T-177C** — 텍스트 정본과 daily delta DB 구축 e2e.
 
   실제 도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB 파일을

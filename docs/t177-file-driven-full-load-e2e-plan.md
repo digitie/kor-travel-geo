@@ -84,12 +84,15 @@ PR로 머지하고, 다음 Task로 넘어가기 전 2026-06-16 이후 PR의 Clau
 
 ### T-177B opt-in e2e 하니스와 destructive preflight
 
-`tests/integration/test_t177_file_driven_full_load_e2e.py`의 공통 fixture를 만든다.
+`tests/integration/_t177_full_load_harness.py`의 공통 helper와
+`tests/integration/test_t177_file_driven_full_load_e2e.py` opt-in 테스트를 만든다.
 
 완료 조건:
 
 - opt-in env가 없으면 skip한다.
 - `KTG_TEST_PG_DSN` DB 이름과 typed confirmation을 확인한다.
+- 기존 row가 있으면 typed confirmation 외에 `KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1`을
+  요구한다.
 - data root discovery plan을 JSON artifact로 저장한다.
 - schema/index 적용 smoke와 빈 DB/기존 DB guard 테스트가 있다.
 

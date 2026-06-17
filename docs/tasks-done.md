@@ -6,6 +6,16 @@
 
 ## 완료
 
+- [x] **T-177B** — opt-in e2e 하니스와 destructive preflight(Agent A/Codex).
+  `tests/integration/_t177_full_load_harness.py`와
+  `tests/integration/test_t177_file_driven_full_load_e2e.py`를 추가했다.
+  테스트는 `KTG_TEST_FULL_LOAD_E2E=1`, `KTG_TEST_PG_DSN`,
+  `KTG_TEST_FULL_LOAD_E2E_CONFIRM="RUN-T177-E2E <database>"`를 요구하고,
+  scratch DB 이름 allowlist와 `KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1` 없는
+  non-empty DB guard, 실제 Juso data-root discovery artifact, `SCHEMA_SQL`/`INDEX_SQL`
+  smoke를 수행한다. 기본 CI에서는 skip되고, 순수 unit test가 gate/artifact shape를 검증한다.
+  (2026-06-17)
+
 - [x] **T-179** — CI backend GDAL 설치 timeout/retry hardening(Agent A/Codex, #345).
   PR #344의 backend CI가 `Install GDAL system libraries` 단계에서 장시간 진행 중으로
   멈춘 문제를 분리했다. `.github/workflows/ci.yml` backend job에 전체 timeout을 추가하고,

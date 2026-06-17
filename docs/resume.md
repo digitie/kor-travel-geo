@@ -17,6 +17,13 @@
   않고, pytest opt-in 통합/e2e가 실제 Juso 원천 파일을 읽어 scratch PostgreSQL/PostGIS DB를
   구축하는 방향으로 계획을 확정했다. `docs/t177-file-driven-full-load-e2e-plan.md`에 실행
   원칙, DB 안전장치, 데이터 루트, 파일 discovery, 산출물, T-177B~T-177H Task 분해를 기록했다.
+- ✅ T-177B opt-in e2e 하니스와 destructive preflight 완료 — 기본 CI에서는 skip되는
+  `tests/integration/test_t177_file_driven_full_load_e2e.py`와 재사용 helper
+  `tests/integration/_t177_full_load_harness.py`를 추가했다. opt-in 실행은
+  `KTG_TEST_FULL_LOAD_E2E=1`, `KTG_TEST_PG_DSN`, typed confirmation, scratch DB 이름
+  allowlist를 모두 요구하고, 기존 row가 있으면 `KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1`
+  없이는 실패한다. 하니스는 실제 data-root discovery artifact와 `SCHEMA_SQL`/`INDEX_SQL`
+  smoke report를 `artifacts/t177/<run_id>/`에 남긴다.
 - ✅ T-179 CI backend GDAL 설치 timeout/retry hardening 완료 — PR #344의 backend CI가
   `Install GDAL system libraries` 단계에서 장시간 진행 중으로 멈춘 문제를 #345/T-179로
   분리했다. `.github/workflows/ci.yml` backend job과 GDAL apt 설치 step에 timeout을 두고,
@@ -257,9 +264,8 @@
 
 현재는 T-177 파일 기반 full-load e2e 재검증에 들어가기 전, 2026-06-16 이후 PR 스캔에서
 발견한 Claude Code 리뷰 후속을 먼저 닫았다. `T-178a`~`T-178f`와 `T-177A` 계획/Task 등록이
-완료됐고, `T-177B` opt-in e2e 하니스 PR #344가 열려 있다. PR #344의 backend CI가 GDAL apt
-설치 단계에서 장시간 멈춰 #345/T-179로 CI hardening을 먼저 진행 중이므로, 다음 한 작업은
-T-179 머지 후 #344를 최신 main으로 갱신하거나 CI를 재실행해 T-177B 머지를 계속하는 것이다.
+완료됐고, `T-179` CI backend GDAL 설치 hardening도 완료됐다. `T-177B` opt-in e2e 하니스
+구현 후 다음 한 작업은 `T-177C` 텍스트 정본과 daily delta DB 구축 e2e 구현이다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

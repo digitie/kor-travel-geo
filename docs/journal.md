@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-177B opt-in full-load e2e 하니스)
+
+**작업**: T-177 파일 기반 full-load e2e의 첫 구현 Task로 opt-in pytest 하니스와 destructive preflight를 추가했다.
+
+**결정**: 하니스는 `KTG_TEST_FULL_LOAD_E2E=1`, `KTG_TEST_PG_DSN`, `KTG_TEST_FULL_LOAD_E2E_CONFIRM="RUN-T177-E2E <database>"`를 모두 요구한다. DB 이름은 `t177`/`test`/`scratch` 계열 scratch DB만 허용하고, 기존 row가 있으면 typed confirmation만으로는 부족하게 두어 `KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1`을 별도로 요구한다. 저장소는 PostgreSQL을 구동/정지하지 않고, 이미 떠 있는 DB에 schema/index smoke만 수행한다.
+
+**검증/문서**: `tests/integration/_t177_full_load_harness.py`가 data-root discovery plan과 JSON artifact를 만들고, `tests/integration/test_t177_file_driven_full_load_e2e.py`가 opt-in DB preflight를 수행한다. 기본 CI에서는 skip되며 `tests/unit/test_t177_full_load_harness.py`가 env gate, confirmation, non-empty guard, discovery artifact shape를 검증한다. 다음 PR은 T-177C 텍스트 정본/daily delta 실제 파일 적재 e2e다.
+
 ## 2026-06-17 (T-179 CI GDAL 설치 hardening)
 
 **작업**: PR #344의 backend CI가 `Install GDAL system libraries` 단계에서 장시간 진행 중으로 멈춘 문제를 #345/T-179로 분리했다.
