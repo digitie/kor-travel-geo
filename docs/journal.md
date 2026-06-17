@@ -10,6 +10,14 @@
 
 **검증/문서**: `tests/integration/_t177_full_load_harness.py`가 data-root discovery plan과 JSON artifact를 만들고, `tests/integration/test_t177_file_driven_full_load_e2e.py`가 opt-in DB preflight를 수행한다. 기본 CI에서는 skip되며 `tests/unit/test_t177_full_load_harness.py`가 env gate, confirmation, non-empty guard, discovery artifact shape를 검증한다. 다음 PR은 T-177C 텍스트 정본/daily delta 실제 파일 적재 e2e다.
 
+## 2026-06-17 (T-179 CI GDAL 설치 hardening)
+
+**작업**: PR #344의 backend CI가 `Install GDAL system libraries` 단계에서 장시간 진행 중으로 멈춘 문제를 #345/T-179로 분리했다.
+
+**결정**: backend workflow는 외부 apt mirror/network/lock 상태에 직접 의존하므로, job 전체 timeout과 GDAL 설치 step timeout을 명시한다. `apt-get update`에는 retry를 두고, install에는 `Dpkg::Lock::Timeout`, `--no-install-recommends`, `DEBIAN_FRONTEND=noninteractive`를 적용해 실패가 무기한 대기로 바뀌지 않게 한다.
+
+**검증/문서**: `.github/workflows/ci.yml`, `CHANGELOG.md`, `docs/tasks-done.md`, `docs/resume.md`를 갱신한다. 이 PR이 머지되면 #344를 최신 main으로 갱신하거나 CI를 재실행해 T-177B를 계속 진행한다.
+
 ## 2026-06-17 (T-177A 파일 기반 full-load e2e 계획)
 
 **작업**: 사용자의 "T-073 스크립트에 맞추지 말고 e2e 테스트가 파일을 읽어 DB를 구축" 지시에 맞춰 T-177 테스트 계획을 먼저 검토하고 Task로 쪼갰다.

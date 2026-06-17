@@ -6,6 +6,7 @@
 
 ### Added
 - T-177B opt-in full-load e2e 하니스를 추가했다. `KTG_TEST_FULL_LOAD_E2E=1`, `KTG_TEST_PG_DSN`, `KTG_TEST_FULL_LOAD_E2E_CONFIRM="RUN-T177-E2E <database>"`를 요구하고, scratch DB 이름 allowlist, non-empty DB guard(`KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1` 별도 요구), 실제 Juso data-root discovery artifact, `SCHEMA_SQL`/`INDEX_SQL` smoke를 검증한다.
+- T-179 CI backend GDAL 설치 hardening을 추가했다. backend job과 GDAL apt 설치 단계에 timeout을 두고, `apt-get update` retry와 `Dpkg::Lock::Timeout`/`--no-install-recommends`를 적용해 apt mirror/network/lock 문제가 PR을 장시간 붙잡지 않게 했다.
 - T-177 파일 기반 full-load e2e 테스트 계획을 추가했다. T-073 shell script에 맞춘 재실행 대신, pytest opt-in 통합/e2e가 실제 Juso 원천 파일을 읽어 scratch PostgreSQL/PostGIS DB를 구축하는 방향으로 `docs/t177-file-driven-full-load-e2e-plan.md`에 환경 gate, 파일 discovery, 산출물, T-177B~T-177H Task 분해를 고정했다.
 - T-119/T-139를 열린 backlog에서 닫았다. T-119는 T-137/T-153 근거로 C11 active serving promotion no-go 종료, T-139는 T-153 기준 구조적 성능 blocker 부재로 별도 변경 DB 실험 no-action 종료로 정리했다. 향후 재논의는 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인 기준으로만 진행한다.
 - T-153 최종 안정화 acceptance 문서를 추가했다. Agent A 성능·정확도 트랙과 Agent B Admin UI·백업/복원 트랙의 golden corpus, C1~C17, SQL/REST c64 budget, Admin UI Playwright, 백업/복원 round-trip·fault injection·hot-swap, React Doctor, OpenAPI/typegen drift를 한 gate로 묶고, 새 release blocker 없음과 별도 잔여(T-063, T-219 M4, T-105 audit 이후 ADR-060 반영 backlog)를 구분했다. 함께 React Doctor hard error 3건을 정리했다.
