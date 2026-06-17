@@ -6,6 +6,7 @@ import { PerfValidationSummary } from "@/components/admin/PerfValidationSummary"
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import {
   AuditEvent,
   DatasetSnapshot,
@@ -60,6 +61,53 @@ const initialWindowFormState: MaintenanceWindowFormState = {
   kind: "full_load",
   reason: "운영 점검"
 };
+
+const servingReleaseColumns: VirtualColumn<ServingRelease>[] = [
+  { key: "release", header: "release", cell: (r) => r.serving_release_id },
+  { key: "state", header: "state", cell: (r) => <StatusBadge value={r.state} /> },
+  { key: "kind", header: "kind", cell: (r) => r.release_kind },
+  { key: "mv", header: "mv", cell: (r) => r.mv_name }
+];
+
+const datasetSnapshotColumns: VirtualColumn<DatasetSnapshot>[] = [
+  { key: "snapshot", header: "snapshot", cell: (r) => r.dataset_snapshot_id },
+  { key: "state", header: "state", cell: (r) => <StatusBadge value={r.state} /> },
+  { key: "rows", header: "rows", cell: (r) => Object.keys(r.row_counts).length }
+];
+
+const maintenanceWindowColumns: VirtualColumn<MaintenanceWindow>[] = [
+  { key: "kind", header: "kind", cell: (r) => r.kind },
+  { key: "state", header: "state", cell: (r) => <StatusBadge value={r.state} /> },
+  { key: "reason", header: "reason", cellClassName: "table-description", cell: (r) => r.reason }
+];
+
+const tableStatsColumns: VirtualColumn<TableStatsSnapshot>[] = [
+  { key: "object", header: "object", cell: (r) => `${r.schema_name}.${r.object_name}` },
+  { key: "kind", header: "kind", cell: (r) => r.object_kind },
+  { key: "rows", header: "rows", align: "right", cell: (r) => r.estimated_rows?.toLocaleString() ?? "-" },
+  { key: "size", header: "size", align: "right", cell: (r) => formatBytes(r.total_bytes) }
+];
+
+const pgStatColumns: VirtualColumn<PgStatStatementSnapshot>[] = [
+  { key: "rank", header: "rank", align: "right", cell: (r) => r.rank },
+  { key: "op", header: "op", cell: (r) => r.operation },
+  { key: "calls", header: "calls", align: "right", cell: (r) => r.calls.toLocaleString() },
+  { key: "total", header: "total ms", align: "right", cell: (r) => formatMs(r.total_exec_time_ms) },
+  { key: "mean", header: "mean ms", align: "right", cell: (r) => formatMs(r.mean_exec_time_ms) },
+  { key: "query", header: "query", cellClassName: "path-cell", cell: (r) => <code>{r.query_preview}</code> }
+];
+
+const artifactColumns: VirtualColumn<OpsArtifact>[] = [
+  { key: "type", header: "type", cell: (r) => r.artifact_type },
+  { key: "state", header: "state", cell: (r) => <StatusBadge value={r.state} /> },
+  { key: "size", header: "size", align: "right", cell: (r) => formatBytes(r.size_bytes) }
+];
+
+const auditEventColumns: VirtualColumn<AuditEvent>[] = [
+  { key: "time", header: "time", cell: (r) => r.occurred_at },
+  { key: "action", header: "action", cell: (r) => r.action },
+  { key: "outcome", header: "outcome", cell: (r) => <StatusBadge value={r.outcome} /> }
+];
 
 export function OpsPanel() {
   const [opsData, setOpsData] = useState<OpsDataState>(initialOpsDataState);
@@ -164,51 +212,25 @@ export function OpsPanel() {
           </button>
         }
       >
-        <table className="table">
-          <thead>
-            <tr>
-              <th>release</th>
-              <th>state</th>
-              <th>kind</th>
-              <th>mv</th>
-            </tr>
-          </thead>
-          <tbody>
-            {releases.map((release) => (
-              <tr key={release.serving_release_id}>
-                <td>{release.serving_release_id}</td>
-                <td>
-                  <StatusBadge value={release.state} />
-                </td>
-                <td>{release.release_kind}</td>
-                <td>{release.mv_name}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <VirtualTable
+          as="table"
+          caption="서빙 릴리스 목록"
+          columns={servingReleaseColumns}
+          emptyHint="서빙 릴리스가 없습니다."
+          rowKey={(r) => r.serving_release_id}
+          rows={releases}
+        />
       </Panel>
 
       <Panel title="Dataset Snapshots">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>snapshot</th>
-              <th>state</th>
-              <th>rows</th>
-            </tr>
-          </thead>
-          <tbody>
-            {snapshots.map((snapshot) => (
-              <tr key={snapshot.dataset_snapshot_id}>
-                <td>{snapshot.dataset_snapshot_id}</td>
-                <td>
-                  <StatusBadge value={snapshot.state} />
-                </td>
-                <td>{Object.keys(snapshot.row_counts).length}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <VirtualTable
+          as="table"
+          caption="데이터셋 스냅샷 목록"
+          columns={datasetSnapshotColumns}
+          emptyHint="데이터셋 스냅샷이 없습니다."
+          rowKey={(r) => r.dataset_snapshot_id}
+          rows={snapshots}
+        />
       </Panel>
 
       <Panel title="Maintenance Window">
@@ -260,26 +282,14 @@ export function OpsPanel() {
             Window 등록
           </button>
         </form>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>kind</th>
-              <th>state</th>
-              <th>reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {windows.map((window) => (
-              <tr key={window.maintenance_window_id}>
-                <td>{window.kind}</td>
-                <td>
-                  <StatusBadge value={window.state} />
-                </td>
-                <td>{window.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <VirtualTable
+          as="table"
+          caption="유지보수 윈도우 목록"
+          columns={maintenanceWindowColumns}
+          emptyHint="유지보수 윈도우가 없습니다."
+          rowKey={(r) => r.maintenance_window_id}
+          rows={windows}
+        />
       </Panel>
 
       <TableStatsSnapshotsPanel stats={stats} onCapture={captureStats} />
@@ -287,49 +297,25 @@ export function OpsPanel() {
       <PgStatStatementsPanel pgStats={pgStats} onCapture={capturePgStats} />
 
       <Panel title="Artifacts">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>type</th>
-              <th>state</th>
-              <th>size</th>
-            </tr>
-          </thead>
-          <tbody>
-            {artifacts.map((artifact) => (
-              <tr key={artifact.artifact_id}>
-                <td>{artifact.artifact_type}</td>
-                <td>
-                  <StatusBadge value={artifact.state} />
-                </td>
-                <td>{formatBytes(artifact.size_bytes)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <VirtualTable
+          as="table"
+          caption="아티팩트 목록"
+          columns={artifactColumns}
+          emptyHint="아티팩트가 없습니다."
+          rowKey={(r) => r.artifact_id}
+          rows={artifacts}
+        />
       </Panel>
 
       <Panel title="Audit Events">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>time</th>
-              <th>action</th>
-              <th>outcome</th>
-            </tr>
-          </thead>
-          <tbody>
-            {auditEvents.map((event) => (
-              <tr key={event.audit_event_id}>
-                <td>{event.occurred_at}</td>
-                <td>{event.action}</td>
-                <td>
-                  <StatusBadge value={event.outcome} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <VirtualTable
+          as="table"
+          caption="감사 이벤트 목록"
+          columns={auditEventColumns}
+          emptyHint="감사 이벤트가 없습니다."
+          rowKey={(r) => r.audit_event_id}
+          rows={auditEvents}
+        />
       </Panel>
 
       <Panel title="Last Response">
@@ -357,28 +343,14 @@ function TableStatsSnapshotsPanel({
         </button>
       }
     >
-      <table className="table">
-        <thead>
-          <tr>
-            <th>object</th>
-            <th>kind</th>
-            <th>rows</th>
-            <th>size</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stats.map((row) => (
-            <tr key={row.table_stats_snapshot_id}>
-              <td>
-                {row.schema_name}.{row.object_name}
-              </td>
-              <td>{row.object_kind}</td>
-              <td>{row.estimated_rows?.toLocaleString() ?? "-"}</td>
-              <td>{formatBytes(row.total_bytes)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <VirtualTable
+        as="table"
+        caption="테이블 통계 스냅샷 목록"
+        columns={tableStatsColumns}
+        emptyHint="테이블 통계 스냅샷이 없습니다."
+        rowKey={(r) => r.table_stats_snapshot_id}
+        rows={stats}
+      />
     </Panel>
   );
 }
@@ -400,32 +372,14 @@ function PgStatStatementsPanel({
         </button>
       }
     >
-      <table className="table">
-        <thead>
-          <tr>
-            <th>rank</th>
-            <th>op</th>
-            <th>calls</th>
-            <th>total ms</th>
-            <th>mean ms</th>
-            <th>query</th>
-          </tr>
-        </thead>
-        <tbody>
-          {pgStats.map((row) => (
-            <tr key={row.pg_stat_snapshot_id}>
-              <td>{row.rank}</td>
-              <td>{row.operation}</td>
-              <td>{row.calls.toLocaleString()}</td>
-              <td>{formatMs(row.total_exec_time_ms)}</td>
-              <td>{formatMs(row.mean_exec_time_ms)}</td>
-              <td>
-                <code>{row.query_preview}</code>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <VirtualTable
+        as="table"
+        caption="pg_stat_statements 상위 쿼리 목록"
+        columns={pgStatColumns}
+        emptyHint="pg_stat_statements 스냅샷이 없습니다."
+        rowKey={(r) => r.pg_stat_snapshot_id}
+        rows={pgStats}
+      />
     </Panel>
   );
 }
