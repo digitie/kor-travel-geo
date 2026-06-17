@@ -6,6 +6,16 @@
 
 ## 완료
 
+- [x] **T-177B** — opt-in e2e 하니스와 destructive preflight(Agent A/Codex).
+  `tests/integration/_t177_full_load_harness.py`와
+  `tests/integration/test_t177_file_driven_full_load_e2e.py`를 추가했다.
+  테스트는 `KTG_TEST_FULL_LOAD_E2E=1`, `KTG_TEST_PG_DSN`,
+  `KTG_TEST_FULL_LOAD_E2E_CONFIRM="RUN-T177-E2E <database>"`를 요구하고,
+  scratch DB 이름 allowlist와 `KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY=1` 없는
+  non-empty DB guard, 실제 Juso data-root discovery artifact, `SCHEMA_SQL`/`INDEX_SQL`
+  smoke를 수행한다. 기본 CI에서는 skip되고, 순수 unit test가 gate/artifact shape를 검증한다.
+  (2026-06-17)
+
 - [x] **T-177A** — 파일 기반 full-load e2e 테스트 계획/Task 등록(Agent A/Codex).
   T-073 shell script 재실행에 맞추지 않고, pytest opt-in 통합/e2e가 실제 Juso 원천 파일을
   읽어 scratch PostgreSQL/PostGIS DB를 구축하는 방향으로 계획을 확정했다.
