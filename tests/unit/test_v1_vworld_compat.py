@@ -285,6 +285,45 @@ async def test_v1_reverse_parcel_result_casing() -> None:
 
 
 @pytest.mark.asyncio
+async def test_v1_geocode_accepts_uppercase_type_param() -> None:
+    # The wire serializes input.type upper-case (vworld convention), so echoing the
+    # response value back as input (type=PARCEL) must be accepted case-insensitively.
+    response = await _get_v1(
+        "/v1/address/geocode",
+        {"address": "서울특별시 강남구 역삼동 737", "type": "PARCEL"},
+        _FakeV1Client,
+    )
+    payload = response.json()["response"]
+
+    assert response.status_code == 200
+    assert payload["input"]["type"] == "PARCEL"
+
+
+@pytest.mark.asyncio
+async def test_v1_reverse_accepts_uppercase_type_param() -> None:
+    response = await _get_v1(
+        "/v1/address/reverse",
+        {"x": 127.036, "y": 37.501, "type": "BOTH"},
+        _FakeV1Client,
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_v1_geocode_rejects_unknown_type_param() -> None:
+    # Case-insensitivity must not accept genuinely invalid values — still a vworld error.
+    response = await _get_v1(
+        "/v1/address/geocode",
+        {"address": "서울특별시 강남구 역삼동 737", "type": "zipcode"},
+        _FakeV1Client,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["response"]["error"]["code"] == "INVALID_TYPE"
+
+
+@pytest.mark.asyncio
 async def test_v1_geocode_not_found_returns_200_success_envelope() -> None:
     response = await _get_v1(
         "/v1/address/geocode",

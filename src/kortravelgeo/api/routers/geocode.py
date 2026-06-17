@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import ORJSONResponse
+from pydantic import BeforeValidator
 
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.vworld import (
     VWorldErrorEnvelope,
     VWorldGeocodeEnvelope,
+    normalize_type_param,
     vworld_success_response,
 )
 from kortravelgeo.client import AsyncAddressClient
@@ -26,7 +28,7 @@ router = APIRouter(tags=["address"])
 )
 async def geocode(
     address: str = Query(..., min_length=1, max_length=200),
-    type: Literal["road", "parcel"] = "road",
+    type: Annotated[Literal["road", "parcel"], BeforeValidator(normalize_type_param)] = "road",
     crs: str = "EPSG:4326",
     refine: bool = True,
     simple: bool = False,
