@@ -121,16 +121,12 @@ export function OpsPanel() {
   }
 
   const loadAll = useCallback(async () => {
-    try {
-      const [
-        nextAudit,
-        nextSnapshots,
-        nextReleases,
-        nextArtifacts,
-        nextWindows,
-        nextStats,
-        nextPgStats
-      ] = await Promise.all([
+    // Load each ops surface independently (Promise.allSettled, not Promise.all): one
+    // unavailable endpoint (e.g. pg-stat-statements → 503 when pg_stat_statements is not
+    // installed) must not blank every other table. Each panel keeps its last-good data on
+    // failure, and the failed endpoints are surfaced in "Last Response".
+    const [audit, snapshots, releases, artifacts, windows, stats, pgStats] =
+      await Promise.allSettled([
         requestJson<AuditEvent[]>("/admin/ops/audit-events?limit=20"),
         requestJson<DatasetSnapshot[]>("/admin/ops/snapshots?limit=10"),
         requestJson<ServingRelease[]>("/admin/ops/releases?limit=10"),
@@ -139,22 +135,32 @@ export function OpsPanel() {
         requestJson<TableStatsSnapshot[]>("/admin/ops/table-stats?limit=10"),
         requestJson<PgStatStatementSnapshot[]>("/admin/ops/pg-stat-statements?limit=10")
       ]);
-      setOpsData((current) => ({
-        ...current,
-        artifacts: nextArtifacts,
-        auditEvents: nextAudit,
-        pgStats: nextPgStats,
-        releases: nextReleases,
-        snapshots: nextSnapshots,
-        stats: nextStats,
-        windows: nextWindows
-      }));
-    } catch (error) {
-      setOpsData((current) => ({
-        ...current,
-        lastResult: { error: error instanceof Error ? error.message : String(error) }
-      }));
-    }
+
+    const failed: string[] = [];
+    const note = (label: string, result: PromiseSettledResult<unknown>) => {
+      if (result.status === "rejected") failed.push(label);
+    };
+    note("audit-events", audit);
+    note("snapshots", snapshots);
+    note("releases", releases);
+    note("artifacts", artifacts);
+    note("maintenance-windows", windows);
+    note("table-stats", stats);
+    note("pg-stat-statements", pgStats);
+
+    setOpsData((current) => ({
+      ...current,
+      auditEvents: audit.status === "fulfilled" ? audit.value : current.auditEvents,
+      snapshots: snapshots.status === "fulfilled" ? snapshots.value : current.snapshots,
+      releases: releases.status === "fulfilled" ? releases.value : current.releases,
+      artifacts: artifacts.status === "fulfilled" ? artifacts.value : current.artifacts,
+      windows: windows.status === "fulfilled" ? windows.value : current.windows,
+      stats: stats.status === "fulfilled" ? stats.value : current.stats,
+      pgStats: pgStats.status === "fulfilled" ? pgStats.value : current.pgStats,
+      lastResult: failed.length
+        ? { error: `일부 ops 데이터 로드 실패 (${failed.join(", ")})`, partial_failure: failed }
+        : current.lastResult
+    }));
   }, []);
 
   async function createWindow(event: FormEvent) {
