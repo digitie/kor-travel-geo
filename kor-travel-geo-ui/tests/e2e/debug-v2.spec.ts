@@ -39,7 +39,7 @@ test.describe("디버그 UI v2 REST 연동", () => {
     const requests = await captureJsonPost(page, "/api/proxy/v2/geocode", {
       status: "OK",
       input: { road_address: "서울특별시 강남구 테헤란로 152", fallback: "none" },
-      candidates: [{ source: "local", point: { x: 127.028601, y: 37.500344 } }]
+      candidates: [{ source: "local", point: { lon: 127.028601, lat: 37.500344 } }]
     });
 
     await page.goto("/debug/geocode");
@@ -63,7 +63,7 @@ test.describe("디버그 UI v2 REST 연동", () => {
     const requests = await captureJsonPost(page, "/api/proxy/v2/geocode", {
       status: "OK",
       input: { jibun_address: "서울특별시 강남구 역삼동 737", fallback: "api" },
-      candidates: [{ source: "external", point: { x: 127.027, y: 37.499 } }]
+      candidates: [{ source: "external", point: { lon: 127.027, lat: 37.499 } }]
     });
 
     await page.goto("/debug/geocode");
@@ -103,7 +103,7 @@ test.describe("디버그 UI v2 REST 연동", () => {
     const requests = await captureJsonPost(page, "/api/proxy/v2/geocode", {
       status: "OK",
       input: { road_address: "성복1로", include_geometry: false },
-      candidates: [{ source: "local", point: { x: 127.0743, y: 37.3134 } }]
+      candidates: [{ source: "local", point: { lon: 127.0743, lat: 37.3134 } }]
     });
 
     await page.goto("/debug/geocode");
@@ -145,7 +145,7 @@ test.describe("디버그 UI v2 REST 연동", () => {
     const requests = await captureJsonPost(page, "/api/proxy/v2/reverse", {
       status: "OK",
       input: { lon: 127.028601, lat: 37.500344 },
-      candidates: [{ source: "local", point: { x: 127.028601, y: 37.500344 } }]
+      candidates: [{ source: "local", point: { lon: 127.028601, lat: 37.500344 } }]
     });
 
     await page.goto("/debug/reverse");
@@ -170,7 +170,7 @@ test.describe("디버그 UI v2 REST 연동", () => {
     const requests = await captureJsonPost(page, "/api/proxy/v2/reverse", {
       status: "OK",
       input: { lon: 129.075642, lat: 35.179554 },
-      candidates: [{ source: "local", point: { x: 129.075642, y: 35.179554 } }]
+      candidates: [{ source: "local", point: { lon: 129.075642, lat: 35.179554 } }]
     });
 
     await page.goto("/debug/reverse");

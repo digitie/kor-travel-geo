@@ -2420,18 +2420,19 @@ export interface components {
              * Match Kind
              * @enum {string}
              */
-            match_kind: "road" | "parcel" | "keyword" | "region" | "sppn" | "detail" | "poi";
+            match_kind: "road" | "parcel" | "keyword" | "region" | "sppn" | "poi";
             /** Metadata */
             metadata?: {
                 [key: string]: unknown;
             };
             place?: components["schemas"]["PlaceV2"] | null;
-            point?: components["schemas"]["Point"] | null;
+            point?: components["schemas"]["PointV2"] | null;
             /** Point Precision */
-            point_precision?: ("exact" | "interpolated" | "centroid" | "approximate" | "grid_cell") | null;
+            point_precision?: ("centroid" | "grid_cell") | null;
             region?: components["schemas"]["RegionV2"] | null;
             /**
              * Source
+             * @description 후보 출처. vworld/juso는 fallback='api'에서만 발신(ADR-060 §2).
              * @default local
              * @enum {string}
              */
@@ -3591,6 +3592,18 @@ export interface components {
             /** Y */
             y: number;
         };
+        /**
+         * PointV2
+         * @description External v2 candidate coordinate in ``(lon, lat)`` order (ADR-060 §6).
+         *
+         *     v1 vworld exposes ``Point{x, y}``; v2 uses ``lon``/``lat`` to match its input naming.
+         */
+        PointV2: {
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+        };
         /** ReadinessComponent */
         ReadinessComponent: {
             /** Detail */
@@ -3791,6 +3804,9 @@ export interface components {
              * @default []
              */
             emd: components["schemas"]["RegionWithinRadiusItem"][];
+            input: components["schemas"]["RegionsWithinRadiusInput"];
+            /** Query Id */
+            query_id?: string;
             /** Radius Km */
             radius_km: number;
             /**
@@ -3803,6 +3819,7 @@ export interface components {
              * @default []
              */
             sigungu: components["schemas"]["RegionWithinRadiusItem"][];
+            status: components["schemas"]["Status"];
         };
         /**
          * RegisterRequest
@@ -5743,33 +5760,6 @@ export interface components {
         };
         /** @enum {string} */
         Status: "OK" | "NOT_FOUND" | "ERROR";
-        /**
-         * StructuredErrorBody
-         * @description Non-vworld API error body produced by ``error_payload`` (ADR-061).
-         *
-         *     The wire keys are ``errorCode``/``errorMessage`` (camelCase); the snake_case field
-         *     names carry aliases so the published schema matches the emitted JSON.
-         */
-        StructuredErrorBody: {
-            /** Errorcode */
-            errorCode: string;
-            /** Errormessage */
-            errorMessage: string;
-            /** Hint */
-            hint?: string | null;
-            /**
-             * Status
-             * @constant
-             */
-            status: "ERROR";
-        };
-        /**
-         * StructuredErrorEnvelope
-         * @description Published 4xx envelope for non-vworld endpoints (v2 public address paths, ADR-061).
-         */
-        StructuredErrorEnvelope: {
-            response: components["schemas"]["StructuredErrorBody"];
-        };
         /** TableStat */
         TableStat: {
             /** Row Count */
@@ -6134,6 +6124,37 @@ export interface components {
             size_bytes: number;
             /** Upload Id */
             upload_id: string;
+        };
+        /**
+         * V2ErrorDetail
+         * @description Structured v2 error detail (ADR-060 §4).
+         */
+        V2ErrorDetail: {
+            /** Code */
+            code: string;
+            /** Field */
+            field?: string | null;
+            /** Hint */
+            hint?: string | null;
+            /** Message */
+            message: string;
+        };
+        /**
+         * V2ErrorEnvelope
+         * @description v2 4xx/5xx error envelope sharing the success trace key ``query_id`` (ADR-060 §4).
+         *
+         *     Replaces the legacy ``{response:{errorCode,...}}`` shape for v2 API validation/domain errors.
+         *     Cross-cutting infra gates (GeoIP 403) keep the shared legacy shape across all surfaces.
+         */
+        V2ErrorEnvelope: {
+            error: components["schemas"]["V2ErrorDetail"];
+            /** Query Id */
+            query_id?: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "ERROR";
         };
         /** VWorldErrorBody */
         VWorldErrorBody: {
@@ -9454,13 +9475,13 @@ export interface operations {
                     "application/json": components["schemas"]["GeocodeV2Response"];
                 };
             };
-            /** @description 구조화 검증·도메인 오류 (ADR-061) */
+            /** @description v2 error envelope (ADR-060 §4) */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StructuredErrorEnvelope"];
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
                 };
             };
         };
@@ -9487,13 +9508,13 @@ export interface operations {
                     "application/json": components["schemas"]["RegionsWithinRadiusResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description v2 error envelope (ADR-060 §4) */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
                 };
             };
         };
@@ -9520,13 +9541,13 @@ export interface operations {
                     "application/json": components["schemas"]["ReverseV2Response"];
                 };
             };
-            /** @description 구조화 검증·도메인 오류 (ADR-061) */
+            /** @description v2 error envelope (ADR-060 §4) */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StructuredErrorEnvelope"];
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
                 };
             };
         };
@@ -9553,13 +9574,13 @@ export interface operations {
                     "application/json": components["schemas"]["SearchV2Response"];
                 };
             };
-            /** @description 구조화 검증·도메인 오류 (ADR-061) */
+            /** @description v2 error envelope (ADR-060 §4) */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StructuredErrorEnvelope"];
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
                 };
             };
         };

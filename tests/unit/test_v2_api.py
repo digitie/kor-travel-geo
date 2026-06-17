@@ -37,6 +37,7 @@ from kortravelgeo.dto.v2 import (
     GeocodeV2Input,
     GeocodeV2Response,
     GeometryV2,
+    PointV2,
     RegionsWithinRadiusInput,
     RegionsWithinRadiusResponse,
     RegionV2,
@@ -133,7 +134,7 @@ async def test_async_client_geocode_can_add_geometry_without_replacing_point(
     )
 
     candidate = response.candidates[0]
-    assert candidate.point == Point(x=127.036, y=37.501)
+    assert candidate.point == PointV2(lon=127.036, lat=37.501)
     assert candidate.geometry is not None
     assert candidate.geometry.kind == "building"
     assert candidate.bbox is not None
@@ -161,7 +162,7 @@ async def test_async_client_geocode_promotes_region_only_input_to_candidates(
                 CandidateV2(
                     confidence=0.95,
                     match_kind="region",
-                    point=Point(x=127.0887, y=37.3328),
+                    point=PointV2(lon=127.0887, lat=37.3328),
                     region=RegionV2(sig_cd="41465", sido="경기도", sigungu="용인시 수지구"),
                 ),
             ),
@@ -231,7 +232,7 @@ async def test_async_client_geocode_promotes_road_name_only_to_line_geometry(
     response = await client.geocode(road_address="성복1로", include_geometry=True)
 
     candidate = response.candidates[0]
-    assert candidate.point == Point(x=127.0743, y=37.3134)
+    assert candidate.point == PointV2(lon=127.0743, lat=37.3134)
     assert candidate.geometry is not None
     assert candidate.geometry.kind == "road"
     assert candidate.address is not None
@@ -314,7 +315,7 @@ async def test_v2_geocode_route_uses_client_dependency() -> None:
                     CandidateV2(
                         confidence=0.9,
                         match_kind="road",
-                        point=Point(x=127.036, y=37.501),
+                        point=PointV2(lon=127.036, lat=37.501),
                     ),
                 ),
             )
@@ -411,6 +412,13 @@ async def test_v2_regions_within_radius_route_uses_client_dependency() -> None:
                 "levels": ("sigungu",),
             }
             return RegionsWithinRadiusResponse(
+                status="OK",
+                input=RegionsWithinRadiusInput(
+                    lon=kwargs["lon"],
+                    lat=kwargs["lat"],
+                    radius_km=kwargs["radius_km"],
+                    levels=kwargs["levels"],
+                ),
                 center={"lon": kwargs["lon"], "lat": kwargs["lat"]},
                 radius_km=kwargs["radius_km"],
                 sigungu=(
@@ -606,10 +614,19 @@ def test_geocode_v2_collapses_v1_cache_source_to_local_source() -> None:
     assert geocode_v2_from_v1(inp, response).candidates[0].source == "local"
 
 
-def test_v2_candidate_enum_accepts_current_and_planned_values_only() -> None:
-    CandidateV2(confidence=1.0, match_kind="detail", point_precision="approximate")
+def test_v2_candidate_enum_accepts_only_emitted_values() -> None:
+    # current emitted values are accepted.
     CandidateV2(confidence=1.0, match_kind="poi", point_precision="grid_cell")
+    CandidateV2(confidence=1.0, match_kind="region", point_precision="centroid")
 
+    # reserved/unemitted values were removed from the published enums (ADR-060 §2, T-268).
+    with pytest.raises(ValueError):
+        CandidateV2(confidence=1.0, match_kind="detail")
+    for reserved_precision in ("exact", "interpolated", "approximate"):
+        with pytest.raises(ValueError):
+            CandidateV2(confidence=1.0, match_kind="poi", point_precision=reserved_precision)
+
+    # previously-removed values stay rejected.
     with pytest.raises(ValueError):
         CandidateV2(confidence=1.0, match_kind="postal")
     with pytest.raises(ValueError):
@@ -722,7 +739,7 @@ def test_reverse_v2_promotes_sppn_number_without_makarea_to_candidate() -> None:
     assert converted.status == "OK"
     assert converted.candidates[0].match_kind == "sppn"
     assert converted.candidates[0].confidence == pytest.approx(SPPN_GRID_CONFIDENCE)
-    assert converted.candidates[0].point == Point(x=127.1, y=36.6)
+    assert converted.candidates[0].point == PointV2(lon=127.1, lat=36.6)
     assert converted.candidates[0].point_precision == "grid_cell"
     assert converted.candidates[0].metadata == {"national_point_number": "다사 6925 4045"}
 

@@ -92,14 +92,17 @@ async def test_t173_public_address_inputs_return_structured_4xx(
 
     assert 400 <= response.status_code < 500
     payload = response.json()
-    assert set(payload) == {"response"}
-    assert payload["response"]["status"] == "ERROR"
     if expected_shape == "vworld":
+        assert set(payload) == {"response"}
+        assert payload["response"]["status"] == "ERROR"
         assert payload["response"]["service"]["name"] == "address"
         assert payload["response"]["error"]["code"] == expected_code
     else:
-        assert payload["response"]["errorCode"] == expected_code
-        assert payload["response"]["errorMessage"]
+        # v2 error envelope (ADR-060 §4): {status, query_id, error:{code, message, hint?, field?}}
+        assert payload["status"] == "ERROR"
+        assert payload["query_id"]
+        assert payload["error"]["code"] == expected_code
+        assert payload["error"]["message"]
 
 
 def test_t173_geocode_text_inputs_reject_control_characters() -> None:

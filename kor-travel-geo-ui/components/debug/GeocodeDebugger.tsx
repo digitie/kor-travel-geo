@@ -164,9 +164,10 @@ function firstCandidate(result: unknown): unknown {
 function extractPoint(result: unknown): Coordinate | null {
   const candidate = firstCandidate(result);
   if (!candidate || typeof candidate !== "object") return null;
-  const point = (candidate as { point?: { x?: unknown; y?: unknown } | null }).point;
-  return typeof point?.x === "number" && typeof point.y === "number"
-    ? { x: point.x, y: point.y }
+  // v2 candidate point is { lon, lat } (ADR-060 §6); the map uses internal { x, y } (x=lon).
+  const point = (candidate as { point?: { lon?: unknown; lat?: unknown } | null }).point;
+  return typeof point?.lon === "number" && typeof point.lat === "number"
+    ? { x: point.lon, y: point.lat }
     : null;
 }
 

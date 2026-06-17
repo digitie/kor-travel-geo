@@ -16,6 +16,7 @@ from kortravelgeo.dto.v2 import (
     GeocodeV2Input,
     GeocodeV2Response,
     PlaceV2,
+    PointV2,
     RegionV2,
     ReverseV2Input,
     ReverseV2Response,
@@ -46,10 +47,9 @@ def geocode_v2_from_v1(inp: GeocodeV2Input, response: GeocodeResponse) -> Geocod
                 full=response.refined.text,
                 address_type=response.input.type,
                 structure=response.refined.structure,
-                point=response.result.point if response.result else None,
                 metadata=_geocode_metadata(response),
             ),
-            point=response.result.point if response.result else None,
+            point=_to_point_v2(response.result.point if response.result else None),
             point_precision=_geocode_point_precision(response),
             region=_region_from_structure(response.refined.structure),
             source=_source_from_v1(source),
@@ -243,11 +243,10 @@ def _candidate_from_reverse_item(inp: ReverseV2Input, item: ReverseResultItem) -
             full=item.text,
             address_type=item.type,
             structure=item.structure,
-            point=item.point,
             metadata={"distance_m": item.distance_m, "zip_source": item.zip_source},
             postal_code=item.zipcode,
         ),
-        point=item.point,
+        point=_to_point_v2(item.point),
         distance_m=item.distance_m,
         region=_region_from_structure(item.structure),
         source=_source_from_v1(item.source),
@@ -276,7 +275,7 @@ def _candidate_from_sppn_area(
     return CandidateV2(
         confidence=sppn_reverse_confidence(),
         match_kind="sppn",
-        point=Point(x=inp.lon, y=inp.lat),
+        point=PointV2(lon=inp.lon, lat=inp.lat),
         point_precision="grid_cell",
         region=RegionV2(sig_cd=area.sig_cd),
         source="local",
@@ -288,7 +287,7 @@ def _candidate_from_sppn_number(inp: ReverseV2Input, national_point_number: str)
     return CandidateV2(
         confidence=sppn_reverse_confidence(),
         match_kind="sppn",
-        point=Point(x=inp.lon, y=inp.lat),
+        point=PointV2(lon=inp.lon, lat=inp.lat),
         point_precision="grid_cell",
         source="local",
         metadata={"national_point_number": national_point_number},
@@ -302,7 +301,6 @@ def _candidate_from_search_item(item: SearchResultItem) -> CandidateV2:
             full=item.address or item.title,
             address_type="road" if item.type == "road" else None,
             structure=item.structure,
-            point=item.point,
             metadata={},
         )
         if item.address or item.structure
@@ -313,7 +311,7 @@ def _candidate_from_search_item(item: SearchResultItem) -> CandidateV2:
         confidence=search_confidence(item.score),
         match_kind=match_kind,
         address=address,
-        point=item.point,
+        point=_to_point_v2(item.point),
         point_precision="centroid" if match_kind == "region" and item.point else None,
         region=_region_from_structure(item.structure),
         place=place,
@@ -335,7 +333,7 @@ def _candidate_from_geometry_lookup(inp: GeocodeV2Input, row: GeometryLookup) ->
         confidence=geometry_confidence(row.score),
         match_kind=match_kind,
         address=_address_from_geometry_lookup(row),
-        point=row.point,
+        point=_to_point_v2(row.point),
         point_precision="centroid" if row.point else None,
         bbox=row.bbox if inp.include_geometry else None,
         geometry=row.geometry if inp.include_geometry else None,
@@ -381,7 +379,6 @@ def _address_from_v1(
     full: str,
     address_type: AddressType | None,
     structure: AddressStructure | None,
-    point: Point | None,
     metadata: dict[str, Any],
     postal_code: str | None = None,
 ) -> AddressV2:
@@ -478,7 +475,12 @@ def _address_full(candidate: CandidateV2) -> str | None:
     return candidate.address.full if candidate.address is not None else None
 
 
-def _point_key(point: Point | None) -> tuple[float, float] | None:
+def _point_key(point: PointV2 | None) -> tuple[float, float] | None:
     if point is None:
         return None
-    return (round(point.x, 7), round(point.y, 7))
+    return (round(point.lon, 7), round(point.lat, 7))
+
+
+def _to_point_v2(point: Point | None) -> PointV2 | None:
+    """Convert internal v1 ``Point{x, y}`` to external v2 ``PointV2{lon, lat}`` (ADR-060 §6)."""
+    return None if point is None else PointV2(lon=point.x, lat=point.y)
