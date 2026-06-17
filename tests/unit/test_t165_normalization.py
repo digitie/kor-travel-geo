@@ -10,6 +10,7 @@ from kortravelgeo.core.normalize import AddrParts, normalize_spaces, parse_addre
 from kortravelgeo.core.protocols import AddressLookup, SppnAreaLookup
 from kortravelgeo.dto.common import Point
 from kortravelgeo.dto.geocode import GeocodeInput
+from kortravelgeo.exceptions import InvalidAddressError
 
 if TYPE_CHECKING:
     from kortravelgeo.dto.region import RegionHint
@@ -107,6 +108,8 @@ def test_normalize_spaces_folds_unicode_digits_dashes_and_separators() -> None:
             4,
         ),
         ("경기도 용인시 수지구 성복1로35", "경기도", "용인시 수지구", "성복1로", 35, 0),
+        ("서울특별시 강남구 테헤란로1길 10", "서울특별시", "강남구", "테헤란로1길", 10, 0),
+        ("서울 송파구 올림픽로35길 123-4", "서울특별시", "송파구", "올림픽로35길", 123, 4),
         ("Seoul 서울 동대문구 Wangsan-ro 왕산로 189-4", None, None, "왕산로", 189, 4),
         ("서울특별시 동대문구 왕산로 189번", "서울특별시", "동대문구", "왕산로", 189, 0),
     ],
@@ -128,6 +131,12 @@ def test_parse_road_variants_keep_exact_lookup_parts(
     assert parts.road_nrm == road.replace(" ", "")
     assert parts.mnnm == mnnm
     assert parts.slno == slno
+
+
+@pytest.mark.parametrize("raw", ["올림픽로35길", "서울 송파구 올림픽로35길"])
+def test_parse_road_name_only_does_not_consume_branch_road_number(raw: str) -> None:
+    with pytest.raises(InvalidAddressError):
+        parse_address(raw)
 
 
 @pytest.mark.parametrize(

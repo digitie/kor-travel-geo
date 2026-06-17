@@ -30,11 +30,6 @@ acceptance도 닫혔다(`tasks-done.md`). 남은 항목은 아래 리뷰 후속,
 
 ### 선행 리뷰 후속
 
-- [ ] **T-178c** — 번호형 가지도로 파싱 회귀 방지(#336).
-
-  PR #277 Claude Code 코멘트 후속. `테헤란로1길 10`, `올림픽로35길` 같은 번호형 가지도로가
-  도로명/건물번호로 잘못 분리되지 않도록 정규화/파싱 테스트와 최소 보정을 추가한다.
-
 - [ ] **T-178d** — `DBAPIError` handler 오류 분류 보정(#336).
 
   PR #266 Claude Code 코멘트 후속. transient 연결/운영 DB 장애와 `ProgrammingError`·

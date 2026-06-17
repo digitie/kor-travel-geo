@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-178c 번호형 가지도로 파싱)
+
+**작업**: #336/T-178 선행 리뷰 후속 중 PR #277 Claude Code 코멘트를 반영했다. `테헤란로1길 10`, `올림픽로35길 123-4` 같은 번호형 가지도로를 도로명으로 보존하도록 `_ROAD_RE`를 보정했다.
+
+**결정**: `로/대로 + 숫자 + 길`은 건물번호가 아니라 도로명 suffix의 일부로 우선 인식한다. 건물번호 없는 `올림픽로35길` 같은 road-name-only 입력은 `35`를 건물번호나 지번으로 소비하지 않고 `InvalidAddressError`로 남겨, v2 geocode의 도로 도형 fallback 경로가 처리하게 한다.
+
+**검증/문서**: T-165 normalization 테스트에 번호형 가지도로 full address 2건과 road-name-only negative 2건을 추가했다. `docs/tasks.md`의 선행 후속은 T-178d~T-178f만 남았다.
+
 ## 2026-06-17 (T-178b cache write best-effort)
 
 **작업**: #336/T-178 선행 리뷰 후속 중 PR #285 Claude Code 코멘트를 반영했다. Geocode/reverse OK 응답을 계산한 뒤 `geo_cache` write가 실패해도 응답이 500으로 바뀌지 않게 했다.
