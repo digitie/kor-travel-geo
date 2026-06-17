@@ -4,12 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, RotateCcw, Trash2, Link2, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { CapacitySummaryCard } from "@/components/admin/source-files/CapacitySummaryCard";
+import { MatchSetItemsTable } from "@/components/admin/source-files/MatchSetItemsTable";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import { postJson, requestJson } from "@/lib/api";
 import {
   sourceFilesPaths,
-  sourceRoleLabel,
   type SourceMatchSet,
   type SourceMatchSetDetail,
   type SourceMatchSetItem,
@@ -39,6 +40,25 @@ type GroupRow = {
   maxBytes: number;
   source: "upload" | "match-set";
 };
+
+const GROUP_STATIC_COLUMNS: VirtualColumn<GroupRow>[] = [
+  {
+    key: "groupId",
+    header: "그룹 ID",
+    cell: (row) => <span title={row.groupId}>{row.groupId.slice(0, 12)}…</span>
+  },
+  { key: "category", header: "카테고리", cell: (row) => row.category },
+  { key: "userYyyymm", header: "기준월", cell: (row) => row.userYyyymm },
+  { key: "state", header: "상태(무결성)", cell: (row) => <StatusBadge value={row.state} /> },
+  { key: "registrationState", header: "등록 상태", cell: (row) => row.registrationState },
+  { key: "groupKind", header: "종류", cell: (row) => row.groupKind },
+  {
+    key: "fileCount",
+    header: "파일 수",
+    cell: (row) => `${row.uploadedFileCount}/${row.expectedFileCount}`
+  },
+  { key: "maxBytes", header: "크기 한도", cell: (row) => formatMb(row.maxBytes) }
+];
 
 export function ListTab() {
   const queryClient = useQueryClient();
@@ -78,6 +98,59 @@ export function ListTab() {
     onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
   });
 
+  const groupColumns = useMemo<VirtualColumn<GroupRow>[]>(
+    () => [
+      ...GROUP_STATIC_COLUMNS,
+      {
+        key: "actions",
+        header: "작업",
+        cell: (row) => (
+          <div className="button-row">
+            <button
+              className="icon-button"
+              disabled={groupAction.isPending}
+              onClick={() => groupAction.mutate({ groupId: row.groupId, action: "validate" })}
+              title="재검증"
+              type="button"
+            >
+              <ShieldCheck size={15} />
+            </button>
+            <button
+              className="icon-button"
+              disabled={groupAction.isPending}
+              onClick={() => groupAction.mutate({ groupId: row.groupId, action: "relink" })}
+              title="relink (백업 복원 그룹 재연결)"
+              type="button"
+            >
+              <Link2 size={15} />
+            </button>
+            <button
+              className="icon-button"
+              disabled={groupAction.isPending}
+              onClick={() => groupAction.mutate({ groupId: row.groupId, action: "restore" })}
+              title="복원 (soft-delete 취소)"
+              type="button"
+            >
+              <RotateCcw size={15} />
+            </button>
+            <button
+              className="icon-button"
+              disabled={groupAction.isPending}
+              onClick={() => groupAction.mutate({ groupId: row.groupId, action: "soft-delete" })}
+              title="soft-delete"
+              type="button"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        )
+      }
+    ],
+    // groupAction.mutate is referentially stable; only the pending flag affects rendered output.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [groupAction.isPending]
+  );
+
   return (
     <div className="source-stack">
       <CapacitySummaryCard />
@@ -90,83 +163,13 @@ export function ListTab() {
           </button>
         }
       >
-        {rows.length === 0 ? (
-          <p className="form-note">등록된 원천 파일 그룹이 없습니다.</p>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>그룹 ID</th>
-                <th>카테고리</th>
-                <th>기준월</th>
-                <th>상태(무결성)</th>
-                <th>등록 상태</th>
-                <th>종류</th>
-                <th>파일 수</th>
-                <th>크기 한도</th>
-                <th>작업</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.groupId}>
-                  <td title={row.groupId}>{row.groupId.slice(0, 12)}…</td>
-                  <td>{row.category}</td>
-                  <td>{row.userYyyymm}</td>
-                  <td>
-                    <StatusBadge value={row.state} />
-                  </td>
-                  <td>{row.registrationState}</td>
-                  <td>{row.groupKind}</td>
-                  <td>
-                    {row.uploadedFileCount}/{row.expectedFileCount}
-                  </td>
-                  <td>{formatMb(row.maxBytes)}</td>
-                  <td>
-                    <div className="button-row">
-                      <button
-                        className="icon-button"
-                        disabled={groupAction.isPending}
-                        onClick={() => groupAction.mutate({ groupId: row.groupId, action: "validate" })}
-                        title="재검증"
-                        type="button"
-                      >
-                        <ShieldCheck size={15} />
-                      </button>
-                      <button
-                        className="icon-button"
-                        disabled={groupAction.isPending}
-                        onClick={() => groupAction.mutate({ groupId: row.groupId, action: "relink" })}
-                        title="relink (백업 복원 그룹 재연결)"
-                        type="button"
-                      >
-                        <Link2 size={15} />
-                      </button>
-                      <button
-                        className="icon-button"
-                        disabled={groupAction.isPending}
-                        onClick={() => groupAction.mutate({ groupId: row.groupId, action: "restore" })}
-                        title="복원 (soft-delete 취소)"
-                        type="button"
-                      >
-                        <RotateCcw size={15} />
-                      </button>
-                      <button
-                        className="icon-button"
-                        disabled={groupAction.isPending}
-                        onClick={() => groupAction.mutate({ groupId: row.groupId, action: "soft-delete" })}
-                        title="soft-delete"
-                        type="button"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <VirtualTable
+          as="table"
+          columns={groupColumns}
+          emptyHint="등록된 원천 파일 그룹이 없습니다."
+          rowKey={(row) => row.groupId}
+          rows={rows}
+        />
       </Panel>
 
       <Panel title="매칭 세트가 참조하는 카테고리">
@@ -194,28 +197,7 @@ function MatchSetCategorySummary({ matchSets }: { matchSets: SourceMatchSet[] })
     return <p className="form-note">활성 매칭 세트가 없습니다.</p>;
   }
   const items: SourceMatchSetItem[] = detail?.items ?? [];
-  return (
-    <table className="table compact">
-      <thead>
-        <tr>
-          <th>카테고리</th>
-          <th>역할</th>
-          <th>생략</th>
-          <th>그룹 ID</th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((item) => (
-          <tr key={item.source_match_set_item_id}>
-            <td>{item.category}</td>
-            <td>{sourceRoleLabel(item.role)}</td>
-            <td>{item.omitted ? "생략" : "포함"}</td>
-            <td>{item.source_file_group_id ? `${item.source_file_group_id.slice(0, 12)}…` : "-"}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+  return <MatchSetItemsTable items={items} variant="summary" />;
 }
 
 function buildGroupRows(sessions: UploadSessionStatus[]): GroupRow[] {

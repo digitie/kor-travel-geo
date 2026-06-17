@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Hammer, Play, RefreshCw, ShieldCheck, XCir
 import { useState } from "react";
 import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { MatchSetComparePanel } from "@/components/admin/source-files/MatchSetComparePanel";
+import { MatchSetItemsTable } from "@/components/admin/source-files/MatchSetItemsTable";
 import { Panel } from "@/components/ui/Panel";
 import {
   type PreflightSeverity,
@@ -16,7 +17,6 @@ import {
   matchSetStateLabels,
   rebuildPromoteConfirmation,
   sourceFilesPaths,
-  sourceRoleLabel,
   type SourceMatchSet,
   type SourceMatchSetDetail
 } from "@/lib/source-files";
@@ -170,28 +170,7 @@ function MatchSetDetail({
         </div>
       </dl>
 
-      <table className="table compact">
-        <thead>
-          <tr>
-            <th>카테고리</th>
-            <th>역할</th>
-            <th>생략</th>
-            <th>기준월</th>
-            <th>그룹 ID</th>
-          </tr>
-        </thead>
-        <tbody>
-          {detail.items.map((item) => (
-            <tr key={item.source_match_set_item_id}>
-              <td>{item.category}</td>
-              <td>{sourceRoleLabel(item.role)}</td>
-              <td>{item.omitted ? "생략" : "포함"}</td>
-              <td>{item.effective_yyyymm ?? "-"}</td>
-              <td>{item.source_file_group_id ? `${item.source_file_group_id.slice(0, 12)}…` : "-"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <MatchSetItemsTable items={detail.items} variant="detail" />
 
       <div className="button-row">
         <button className="button secondary" disabled={pending} onClick={() => onAction("validate")} type="button">

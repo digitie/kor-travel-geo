@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
+import { MatchSetItemsTable } from "@/components/admin/source-files/MatchSetItemsTable";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { requestJson } from "@/lib/api";
@@ -9,7 +10,6 @@ import {
   matchSetStateLabels,
   shortHash,
   sourceFilesPaths,
-  sourceRoleLabel,
   type DatasetSnapshot,
   type ServingRelease,
   type SourceMatchSet,
@@ -170,34 +170,7 @@ function ActiveMatchSetView({
           <AlertTriangle size={13} /> 활성 세트에 무결성 경보(integrity_alert)가 있습니다.
         </p>
       ) : null}
-      <table className="table compact">
-        <thead>
-          <tr>
-            <th>카테고리</th>
-            <th>역할</th>
-            <th>기준월</th>
-            <th>포함</th>
-            <th>그룹</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(detail?.items ?? []).map((item) => (
-            <tr key={item.source_match_set_item_id}>
-              <td>{item.category}</td>
-              <td>{sourceRoleLabel(item.role)}</td>
-              <td>{item.effective_yyyymm ?? "-"}</td>
-              <td>{item.omitted ? "생략" : "포함"}</td>
-              <td>
-                {item.source_file_group_id ? (
-                  `${item.source_file_group_id.slice(0, 12)}…`
-                ) : (
-                  <span className="form-note">source_file_unavailable</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <MatchSetItemsTable items={detail?.items ?? []} variant="active" />
     </>
   );
 }
