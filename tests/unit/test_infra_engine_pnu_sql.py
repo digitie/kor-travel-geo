@@ -108,6 +108,24 @@ def test_schema_contracts_follow_adr_012_and_016() -> None:
     assert "idx_sppn_makarea_sig" in INDEX_SQL
 
 
+def test_schema_sql_is_reapply_idempotent() -> None:
+    # Every CREATE in SCHEMA_SQL is IF NOT EXISTS (and triggers DROP-IF-EXISTS first), so the
+    # only re-apply hazard is ADD CONSTRAINT (Postgres has no IF NOT EXISTS for it). Each such
+    # statement must be wrapped in a DO/EXCEPTION guard so `ktgctl init-db` can re-run against an
+    # already-initialized DB (migrating it forward) instead of aborting on a duplicate object.
+    statements = iter_sql_statements(SCHEMA_SQL)
+    fk_statements = [stmt for stmt in statements if "ADD CONSTRAINT" in stmt]
+    assert fk_statements, "expected at least one ADD CONSTRAINT in SCHEMA_SQL"
+    for stmt in fk_statements:
+        # Each ADD CONSTRAINT must sit inside a DO/EXCEPTION guard (one statement, $$-aware
+        # splitting) so a duplicate constraint on re-apply is swallowed instead of aborting.
+        assert "DO $$" in stmt and "EXCEPTION WHEN duplicate_object" in stmt, (
+            f"unguarded ADD CONSTRAINT breaks init-db re-runs: {stmt[:80]}"
+        )
+    guarded = next(s for s in fk_statements if "fk_ops_dataset_snapshots_source_match_set" in s)
+    assert "ALTER TABLE ops.dataset_snapshots" in guarded
+
+
 def test_mv_contract_uses_pt_5179_and_partial_spatial_indexes() -> None:
     assert "pt_5179" in MV_SQL
     assert "pt_4326" in MV_SQL
