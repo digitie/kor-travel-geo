@@ -120,6 +120,7 @@ class Settings(BaseSettings):
     ops_pg_stat_statements_capture_interval_minutes: int = Field(default=5, ge=0)
     ops_pg_stat_statements_capture_limit: int = Field(default=20, ge=1, le=100)
     ops_pg_stat_statements_capture_on_startup: bool = True
+    ops_pg_stat_statements_retention_days: int = Field(default=7, ge=1)
     ops_slow_samples_enabled: bool = False
     ops_slow_query_ms: int = Field(default=250, ge=1)
     ops_slow_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)

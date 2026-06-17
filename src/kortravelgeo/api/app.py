@@ -518,6 +518,7 @@ async def _capture_pg_stat_statements_once(engine: AsyncEngine, settings: Settin
         rows = await AdminRepository(engine).capture_pg_stat_statement_snapshots(
             limit=settings.ops_pg_stat_statements_capture_limit,
             skip_if_locked=True,
+            retention_days=settings.ops_pg_stat_statements_retention_days,
         )
     except Exception:
         _LOGGER.exception("failed to capture ops.pg_stat_statements_snapshots")
@@ -528,6 +529,7 @@ async def _capture_pg_stat_statements_once(engine: AsyncEngine, settings: Settin
         extra={
             "row_count": len(rows),
             "limit": settings.ops_pg_stat_statements_capture_limit,
+            "retention_days": settings.ops_pg_stat_statements_retention_days,
         },
     )
 

@@ -62,6 +62,7 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.ops_pg_stat_statements_capture_interval_minutes == 5
     assert settings.ops_pg_stat_statements_capture_limit == 20
     assert settings.ops_pg_stat_statements_capture_on_startup is True
+    assert settings.ops_pg_stat_statements_retention_days == 7
     assert settings.ops_slow_samples_enabled is False
     assert settings.ops_slow_query_ms == 250
     assert settings.ops_slow_sample_rate == 1.0

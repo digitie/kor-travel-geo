@@ -30,11 +30,6 @@ acceptance도 닫혔다(`tasks-done.md`). 남은 항목은 아래 리뷰 후속,
 
 ### 선행 리뷰 후속
 
-- [ ] **T-178e** — `ops.pg_stat_statements_snapshots` retention/prune 정책(#336).
-
-  PR #253 Claude Code 코멘트 후속. 저사양 운영에서 pg_stat snapshot이 무한 증가하지 않도록
-  retention 설정, pruning 실행 지점, 단위/통합 테스트를 추가한다.
-
 - [ ] **T-178f** — RustFS HEAD 오류/size 판정 정직화(#336).
 
   PR #290 Claude Code 코멘트 후속. RustFS HEAD 오류를 모두 missing으로 뭉개지 않고,
