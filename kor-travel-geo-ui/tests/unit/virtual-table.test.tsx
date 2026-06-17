@@ -160,4 +160,29 @@ describe("VirtualTable as='table' semantic mode (T-270)", () => {
     // size column (align: right) → 2 body cells
     expect(rightCells.length).toBe(2);
   });
+
+  it("suppresses the thead when hideHeader is set (headerless key/value tables)", () => {
+    const { container } = render(
+      <VirtualTable as="table" columns={columns} hideHeader rowKey={(r) => r.id} rows={data} />
+    );
+    expect(container.querySelector("thead")).toBeNull();
+    expect(screen.queryAllByRole("columnheader").length).toBe(0);
+    // body rows still render
+    expect(screen.getByRole("cell", { name: "alpha" })).toBeTruthy();
+  });
+
+  it("renders rowHeader columns as <th scope='row'> in the body", () => {
+    const kvColumns: VirtualColumn<(typeof data)[number]>[] = [
+      { key: "name", header: "name", cell: (r) => r.name, rowHeader: true },
+      { key: "size", header: "size", cell: (r) => String(r.size) }
+    ];
+    const { container } = render(
+      <VirtualTable as="table" columns={kvColumns} hideHeader rowKey={(r) => r.id} rows={data} />
+    );
+    const rowHeaders = container.querySelectorAll("tbody th[scope='row']");
+    expect(rowHeaders.length).toBe(2);
+    expect(rowHeaders[0]?.textContent).toBe("alpha");
+    // the non-rowHeader column is still a <td>
+    expect(screen.getByRole("cell", { name: "30" })).toBeTruthy();
+  });
 });
