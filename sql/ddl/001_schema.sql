@@ -839,7 +839,11 @@ CREATE TABLE IF NOT EXISTS ops.source_match_sets (
     )
 );
 
-ALTER TABLE ops.dataset_snapshots ADD CONSTRAINT fk_ops_dataset_snapshots_source_match_set FOREIGN KEY (source_match_set_id) REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE SET NULL;
+-- Idempotent FK add (no ADD CONSTRAINT IF NOT EXISTS in Postgres) so the schema can re-apply.
+DO $$ BEGIN
+  ALTER TABLE ops.dataset_snapshots ADD CONSTRAINT fk_ops_dataset_snapshots_source_match_set FOREIGN KEY (source_match_set_id) REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS ops.source_match_set_items (
   source_match_set_item_id UUID PRIMARY KEY,
