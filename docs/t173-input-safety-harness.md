@@ -20,7 +20,7 @@
 - v1 geocode/reverse: 필수 query 누락, control character 포함 주소, 한국 bounds 밖 좌표
 - core SPPN: envelope 밖 grid, trailing text, digit overflow 형태의 malformed 문자열
 
-모든 API case는 `400 <= status_code < 500`, 최상위 `response`, `status="ERROR"`를 요구한다. VWorld 호환 v1 경로는 `response.error.code`, v2 경로는 `response.errorCode`를 확인한다.
+모든 API case는 `400 <= status_code < 500`, `status="ERROR"`를 요구한다. VWorld 호환 v1 경로는 최상위 `response` + `response.error.code`를 확인한다. v2 경로는 T-268(ADR-062)부터 `V2ErrorEnvelope` `{status, query_id, error:{code, message, hint?, field?}}`를 반환하므로 `error.code`를 확인한다(레거시 `response.errorCode` 아님).
 
 ## 비범위
 

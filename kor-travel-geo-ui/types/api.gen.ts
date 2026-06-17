@@ -6149,7 +6149,7 @@ export interface components {
         V2ErrorEnvelope: {
             error: components["schemas"]["V2ErrorDetail"];
             /** Query Id */
-            query_id?: string;
+            query_id: string;
             /**
              * Status
              * @constant

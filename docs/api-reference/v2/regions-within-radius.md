@@ -19,8 +19,13 @@
 
 ## 출력
 
+다른 v2 응답과 같은 공통 header `{status, query_id, input}` 위에 결과를 둔다(T-268, ADR-060 §1):
+
 ```json
 {
+  "status": "OK",
+  "query_id": "...",
+  "input": { "lon": 126.978, "lat": 37.5665, "radius_km": 3.0, "levels": ["sigungu", "emd"] },
   "center": { "lon": 126.978, "lat": 37.5665 },
   "radius_km": 3.0,
   "sido": [],

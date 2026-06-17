@@ -37,7 +37,8 @@ def test_v2_paths_advertise_v2_error_envelope_and_drop_422() -> None:
 def test_v2_error_schema_shares_trace_key_and_detail() -> None:
     comps = create_app().openapi()["components"]["schemas"]
     env = comps["V2ErrorEnvelope"]
-    assert {"status", "error"} <= set(env["required"])  # query_id has a default factory
+    # query_id is always emitted by the error builder, so it is required in the schema (#319).
+    assert set(env["required"]) == {"status", "query_id", "error"}
     assert set(env["properties"]) == {"status", "query_id", "error"}
     detail = comps["V2ErrorDetail"]
     assert {"code", "message"} <= set(detail["required"])
