@@ -880,11 +880,14 @@ textarea {
   overflow: auto;
 }
 
-.consistency-table {
+/* The consistency samples table is the only table inside `.table-pane`; scope its
+   wide min-width (horizontal scroll) + active-row highlight to the pane so it survives
+   the VirtualTable (`.vtable-static > table.table`) class structure. */
+.table-pane .table {
   min-width: 980px;
 }
 
-.consistency-table .active-row {
+.table-pane .active-row {
   background: #f0fdfa;
 }
 

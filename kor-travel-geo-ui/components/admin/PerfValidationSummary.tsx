@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import { type OpsArtifact, requestJson } from "@/lib/api";
 import {
   type BenchmarkMetrics,
@@ -32,6 +33,41 @@ type SummaryState = {
 };
 
 const EMPTY: SummaryState = { benchmarks: [], reports: [], matchSets: [], error: null };
+
+const BENCHMARK_COLUMNS: VirtualColumn<BenchmarkSummaryRow>[] = [
+  {
+    key: "benchmark",
+    header: "benchmark",
+    cell: (row) => (
+      <div className="perf-bench-name">
+        <span>{row.kind}</span>
+        {row.profile ? <small className="form-note">{row.profile}</small> : null}
+        {row.baselineUnavailable ? (
+          <small className="form-note warn">baseline 범위 밖 (delta 없음)</small>
+        ) : null}
+      </div>
+    )
+  },
+  { key: "p95", header: "p95 (ms)", cell: (row) => <MetricCell metric="p95_ms" row={row} /> },
+  { key: "p99", header: "p99 (ms)", cell: (row) => <MetricCell metric="p99_ms" row={row} /> },
+  {
+    key: "error_rate",
+    header: "error_rate",
+    cell: (row) => <MetricCell digits={4} metric="error_rate" row={row} />
+  },
+  { key: "qps", header: "qps", cell: (row) => <MetricCell metric="qps" row={row} /> },
+  {
+    // storage_uri는 서버 로컬 경로라 클릭 가능한 link가 아니다 — id를 보여 주고
+    // 경로는 title로만 노출한다(Codex #282 리뷰).
+    key: "artifact",
+    header: "artifact",
+    cell: (row) => (
+      <span className="perf-artifact-id" title={row.storageUri ?? row.latestArtifactId}>
+        {row.latestArtifactId.slice(0, 8)}…
+      </span>
+    )
+  }
+];
 
 export function PerfValidationSummary() {
   const [state, setState] = useState<SummaryState>(EMPTY);
@@ -84,44 +120,13 @@ export function PerfValidationSummary() {
             /v1/admin/ops/benchmark-artifacts`로 등록하면 여기에 비교가 노출됩니다.
           </p>
         ) : (
-          <table className="table compact">
-            <thead>
-              <tr>
-                <th>benchmark</th>
-                <th>p95 (ms)</th>
-                <th>p99 (ms)</th>
-                <th>error_rate</th>
-                <th>qps</th>
-                <th>artifact</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.benchmarks.map((row) => (
-                <tr key={row.group}>
-                  <td>
-                    <div className="perf-bench-name">
-                      <span>{row.kind}</span>
-                      {row.profile ? <small className="form-note">{row.profile}</small> : null}
-                      {row.baselineUnavailable ? (
-                        <small className="form-note warn">baseline 범위 밖 (delta 없음)</small>
-                      ) : null}
-                    </div>
-                  </td>
-                  <MetricCell metric="p95_ms" row={row} />
-                  <MetricCell metric="p99_ms" row={row} />
-                  <MetricCell digits={4} metric="error_rate" row={row} />
-                  <MetricCell metric="qps" row={row} />
-                  <td>
-                    {/* storage_uri는 서버 로컬 경로라 클릭 가능한 link가 아니다 — id를 보여 주고
-                        경로는 title로만 노출한다(Codex #282 리뷰). */}
-                    <span className="perf-artifact-id" title={row.storageUri ?? row.latestArtifactId}>
-                      {row.latestArtifactId.slice(0, 8)}…
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <VirtualTable
+            as="table"
+            columns={BENCHMARK_COLUMNS}
+            compact
+            rowKey={(row) => row.group}
+            rows={state.benchmarks}
+          />
         )}
       </section>
 
@@ -179,22 +184,19 @@ function MetricCell({
 }) {
   const value = row.latest[metric];
   const delta = row.deltas[metric];
+  if (value == null) {
+    return <>—</>;
+  }
   return (
-    <td>
-      {value == null ? (
-        "—"
-      ) : (
-        <div className="perf-metric-cell">
-          <span>{value.toFixed(digits)}</span>
-          {delta != null && delta !== 0 ? (
-            <small className={`perf-delta ${deltaTone(metric, delta)}`}>
-              {delta > 0 ? "▲" : "▼"}
-              {Math.abs(delta).toFixed(digits)}
-            </small>
-          ) : null}
-        </div>
-      )}
-    </td>
+    <div className="perf-metric-cell">
+      <span>{value.toFixed(digits)}</span>
+      {delta != null && delta !== 0 ? (
+        <small className={`perf-delta ${deltaTone(metric, delta)}`}>
+          {delta > 0 ? "▲" : "▼"}
+          {Math.abs(delta).toFixed(digits)}
+        </small>
+      ) : null}
+    </div>
   );
 }
 
