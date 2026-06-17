@@ -6,6 +6,16 @@
 
 ## 완료
 
+- [x] **T-177E** — 선택 보강 원천 e2e(Agent A/Codex).
+  실제 도로명주소 출입구 정보와 `TL_SPPN_MAKAREA` 원천에서 세종 ZIP을 선택해 scratch
+  PostGIS DB에 적재하는 opt-in fast-sample 테스트를 추가했다. `roadaddr_entrance`는 ZIP
+  내부 `RNENTDATA_*.txt` 파일명 기준월을 loader 추론값으로 기록하고, SPPN은 `구역의도형`
+  또는 `구역의 도형` 최신 월 폴더에서 ZIP을 고른다. 테스트는 table row count,
+  `load_manifest`, SRID 5179, geometry validity, `source_file`/`source_yyyymm`, SPPN
+  geocode/reverse repository smoke, C10 기준월 혼합 warning을
+  `t177e-supplemental-fast-sample-load.json` artifact로 검증한다. 기본 CI에서는 skip된다.
+  (2026-06-17)
+
 - [x] **T-177D** — 전자지도 SHP/PostGIS geometry e2e(Agent A/Codex).
   실제 도로명주소 전자지도 월 폴더에서 selected 시도 ZIP 또는 dataset을 고르고, ZIP 원천은
   artifact 작업 디렉터리에 materialize한 뒤 공개 `load_shp_polygons(mode="full")` API로

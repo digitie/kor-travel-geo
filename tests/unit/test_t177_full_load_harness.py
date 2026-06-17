@@ -25,6 +25,7 @@ from tests.integration._t177_full_load_harness import (
     source_yyyymm,
     t177c_text_delta_source_paths,
     t177d_shp_geometry_source,
+    t177e_supplemental_source_paths,
     validate_t177_confirmation,
     write_json_artifact,
 )
@@ -136,6 +137,22 @@ def test_discovery_plan_and_artifact_shape(tmp_path: Path) -> None:
     assert shp_source.archive_path is None
     assert shp_source.materialized is False
 
+    supplemental_paths = t177e_supplemental_source_paths(plan)
+    assert supplemental_paths.roadaddr_entrance == (
+        data_root
+        / "도로명주소 출입구 정보"
+        / "202604"
+        / "sejong.zip"
+    )
+    assert supplemental_paths.roadaddr_entrance_plan_yyyymm == "202604"
+    assert supplemental_paths.sppn_makarea == (
+        data_root
+        / "구역의도형"
+        / "202603"
+        / "구역의도형_전체분_세종특별자치시.zip"
+    )
+    assert supplemental_paths.sppn_makarea_source_yyyymm == "202603"
+
     artifact = write_json_artifact(tmp_path / "artifacts", "plan.json", plan)
     saved = json.loads(artifact.read_text(encoding="utf-8"))
     assert saved["sources"]["daily_juso"]["sample_names"] == [
@@ -194,8 +211,8 @@ def _seed_minimal_t177_sources(data_root: Path) -> None:
     roadaddr_dir.mkdir(parents=True)
     _write_zip(roadaddr_dir / "sejong.zip", {"RNENTDATA_2605_36110.txt": ""})
 
-    zone_dir = data_root / "구역의 도형"
-    zone_dir.mkdir()
+    zone_dir = data_root / "구역의도형" / "202603"
+    zone_dir.mkdir(parents=True)
     _write_zip(zone_dir / "구역의도형_전체분_세종특별자치시.zip", {"TL_SPPN_MAKAREA.shp": ""})
 
     _seed_minimal_electronic_map(

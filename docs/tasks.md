@@ -33,11 +33,6 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
 
 ### T-177 파일 기반 full-load e2e
 
-- [ ] **T-177E** — 선택 보강 원천 e2e.
-
-  도로명주소 출입구 정보와 `TL_SPPN_MAKAREA`를 실제 파일에서 읽어 선택 보강 테이블에
-  적재한다. Same-month gate, SPPN geocode/reverse smoke, 기준월 혼합 warning 표면을 검증한다.
-
 - [ ] **T-177F** — post-load serving, smoke, consistency e2e.
 
   T-177C~E 적재 DB를 바탕으로 text-geometry link, serving MV, geocode/reverse/search/zipcode

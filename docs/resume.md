@@ -37,6 +37,13 @@
   Python binding이 없으면 skip하고, 적재 layer 수, table row count, SRID 5179, geometry
   validity, `source_file`/`source_yyyymm`, `region_radius_parts`,
   `t177d-shp-geometry-fast-sample-load.json` artifact를 검증한다.
+- ✅ T-177E 선택 보강 원천 fast-sample e2e 완료 — opt-in 상태에서 실제 도로명주소 출입구
+  정보와 `TL_SPPN_MAKAREA` 원천을 세종 ZIP 단위로 선택해 scratch DB에 적재한다.
+  `roadaddr_entrance`는 ZIP 내부 `RNENTDATA_*.txt` 파일명 기준월을 loader 추론값으로
+  기록하고, SPPN은 `구역의도형`/`구역의 도형` 최신 월 폴더를 모두 지원한다. 테스트는
+  table row count, `load_manifest`, SRID 5179, geometry validity, `source_file`/
+  `source_yyyymm`, SPPN geocode/reverse repository smoke, C10 기준월 혼합 warning,
+  `t177e-supplemental-fast-sample-load.json` artifact를 검증한다.
 - ✅ T-179 CI backend GDAL 설치 timeout/retry hardening 완료 — PR #344의 backend CI가
   `Install GDAL system libraries` 단계에서 장시간 진행 중으로 멈춘 문제를 #345/T-179로
   분리했다. `.github/workflows/ci.yml` backend job과 GDAL apt 설치 step에 timeout을 두고,
@@ -283,7 +290,8 @@
 발견한 Claude Code 리뷰 후속을 먼저 닫았다. `T-178a`~`T-178f`와 `T-177A` 계획/Task 등록이
 완료됐고, `T-179` CI backend GDAL 설치 hardening도 완료됐다. `T-177B` opt-in e2e 하니스
 구현, `T-177C` 텍스트 정본/daily delta fast-sample e2e 구현, `T-177D` 전자지도
-SHP/PostGIS geometry e2e 구현도 완료됐다. 다음 한 작업은 `T-177E` 선택 보강 원천 e2e 구현이다.
+SHP/PostGIS geometry e2e 구현, `T-177E` 선택 보강 원천 e2e 구현도 완료됐다.
+다음 한 작업은 `T-177F` post-load serving, smoke, consistency e2e 구현이다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

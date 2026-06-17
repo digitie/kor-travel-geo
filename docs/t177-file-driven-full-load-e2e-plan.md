@@ -137,7 +137,8 @@ PR로 머지하고, 다음 Task로 넘어가기 전 2026-06-16 이후 PR의 Clau
 완료 조건:
 
 - roadaddr entrance는 같은 기준월 gate와 source_yyyymm 기록을 검증한다.
-- SPPN makarea는 polygon validity와 geocode/reverse SPPN smoke를 검증한다.
+- SPPN makarea는 polygon validity와 geocode/reverse repository SPPN smoke를 검증한다.
+  serving MV가 필요한 core reverse smoke는 T-177F에서 검증한다.
 - 기준월 혼합은 C10/manifest에서 의도된 warning으로 드러난다.
 
 ### T-177F post-load serving, smoke, consistency e2e

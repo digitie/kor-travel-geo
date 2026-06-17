@@ -7,11 +7,12 @@ import os
 import re
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
@@ -137,6 +138,14 @@ T177D_GEOMETRY_TABLES: Mapping[str, str] = {
 
 T177D_NON_GEOMETRY_TABLES = ("public.tl_sprd_intrvl",)
 
+T177E_TARGET_TABLES = (
+    "public.tl_roadaddr_entrc",
+    "public.tl_sppn_makarea",
+    "public.load_manifest",
+)
+
+T177E_MANIFEST_TABLES = ("tl_roadaddr_entrc", "tl_sppn_makarea")
+
 
 class T177SkipError(RuntimeError):
     """Raised when the opt-in T-177 e2e test should skip cleanly."""
@@ -173,6 +182,14 @@ class T177ShpGeometrySource:
     source_yyyymm: str | None
     archive_path: Path | None = None
     materialized: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class T177SupplementalSourcePaths:
+    roadaddr_entrance: Path
+    roadaddr_entrance_plan_yyyymm: str | None
+    sppn_makarea: Path
+    sppn_makarea_source_yyyymm: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,7 +449,7 @@ def build_discovery_plan(data_root: Path) -> dict[str, Any]:
         ),
         _summarize_source(
             "sppn_makarea",
-            data_root / "구역의 도형",
+            _sppn_makarea_candidate(data_root),
             _discover_sppn_makarea,
         ),
     )
@@ -495,6 +512,22 @@ def t177d_shp_geometry_source(
         sido_name=selected.sido_name,
         sig_code=selected.sig_code,
         source_yyyymm=source_yyyymm(discovery_plan, "electronic_map"),
+    )
+
+
+def t177e_supplemental_source_paths(
+    discovery_plan: Mapping[str, Any],
+) -> T177SupplementalSourcePaths:
+    roadaddr_root = required_source_path(discovery_plan, "roadaddr_entrance")
+    sppn_root = required_source_path(discovery_plan, "sppn_makarea")
+    return T177SupplementalSourcePaths(
+        roadaddr_entrance=_select_preferred_zip(roadaddr_root),
+        roadaddr_entrance_plan_yyyymm=source_yyyymm(
+            discovery_plan,
+            "roadaddr_entrance",
+        ),
+        sppn_makarea=_select_preferred_zip(sppn_root),
+        sppn_makarea_source_yyyymm=source_yyyymm(discovery_plan, "sppn_makarea"),
     )
 
 
@@ -565,12 +598,38 @@ DELETE FROM public.load_manifest
         )
 
 
+async def reset_t177e_target_tables(engine: AsyncEngine) -> None:
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                """
+TRUNCATE TABLE
+  public.tl_roadaddr_entrc,
+  public.tl_sppn_makarea
+RESTART IDENTITY CASCADE
+"""
+            )
+        )
+        await conn.execute(
+            text(
+                """
+DELETE FROM public.load_manifest
+ WHERE table_name IN ('tl_roadaddr_entrc', 'tl_sppn_makarea')
+"""
+            )
+        )
+
+
 async def collect_t177c_table_counts(engine: AsyncEngine) -> dict[str, int]:
     return await _collect_table_counts(engine, T177C_TARGET_TABLES)
 
 
 async def collect_t177d_table_counts(engine: AsyncEngine) -> dict[str, int]:
     return await _collect_table_counts(engine, T177D_TARGET_TABLES)
+
+
+async def collect_t177e_table_counts(engine: AsyncEngine) -> dict[str, int]:
+    return await _collect_table_counts(engine, T177E_TARGET_TABLES)
 
 
 async def collect_t177c_link_counts(engine: AsyncEngine) -> dict[str, int]:
@@ -609,6 +668,33 @@ SELECT table_name, last_mvmn_de, row_count, source_zip, source_yyyymm, source_se
     return {
         str(row["table_name"]): {
             "last_mvmn_de": row["last_mvmn_de"],
+            "row_count": int(row["row_count"]),
+            "source_zip": row["source_zip"],
+            "source_yyyymm": row["source_yyyymm"],
+            "source_set": _jsonable_source_set(row["source_set"]),
+        }
+        for row in rows
+    }
+
+
+async def collect_t177e_manifests(engine: AsyncEngine) -> dict[str, Any]:
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                """
+SELECT table_name, last_full_load_at, last_delta_at, row_count, source_zip,
+       source_yyyymm, source_set
+  FROM public.load_manifest
+ WHERE table_name IN ('tl_roadaddr_entrc', 'tl_sppn_makarea')
+ ORDER BY table_name
+"""
+            )
+        )
+        rows = list(result.mappings())
+    return {
+        str(row["table_name"]): {
+            "last_full_load_at": _jsonable_model_value(row["last_full_load_at"]),
+            "last_delta_at": _jsonable_model_value(row["last_delta_at"]),
             "row_count": int(row["row_count"]),
             "source_zip": row["source_zip"],
             "source_yyyymm": row["source_yyyymm"],
@@ -670,6 +756,104 @@ FROM {table_name}
     return reports
 
 
+async def collect_t177e_roadaddr_report(
+    engine: AsyncEngine,
+    *,
+    source_yyyymm: str | None,
+) -> dict[str, Any]:
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    """
+SELECT
+  count(*) AS row_count,
+  count(*) FILTER (WHERE geom IS NOT NULL) AS geom_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND ST_SRID(geom) = 5179)
+    AS srid_5179_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND ST_IsEmpty(geom))
+    AS empty_geom_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND NOT ST_IsValid(geom))
+    AS invalid_geom_rows,
+  count(*) FILTER (WHERE source_file IS NOT NULL) AS source_file_rows,
+  count(*) FILTER (WHERE source_yyyymm IS NOT DISTINCT FROM :source_yyyymm)
+    AS source_yyyymm_rows,
+  array_agg(DISTINCT ST_GeometryType(geom)) FILTER (WHERE geom IS NOT NULL)
+    AS geometry_types,
+  array_agg(DISTINCT source_file) FILTER (WHERE source_file IS NOT NULL)
+    AS source_files,
+  array_agg(DISTINCT source_yyyymm) FILTER (WHERE source_yyyymm IS NOT NULL)
+    AS source_yyyymms
+FROM public.tl_roadaddr_entrc
+"""
+                ),
+                {"source_yyyymm": source_yyyymm},
+            )
+        ).mappings().one()
+    return {
+        "expected_geometry_type": "ST_Point",
+        "row_count": _int_report_value(row, "row_count"),
+        "geom_rows": _int_report_value(row, "geom_rows"),
+        "srid_5179_rows": _int_report_value(row, "srid_5179_rows"),
+        "empty_geom_rows": _int_report_value(row, "empty_geom_rows"),
+        "invalid_geom_rows": _int_report_value(row, "invalid_geom_rows"),
+        "source_file_rows": _int_report_value(row, "source_file_rows"),
+        "source_yyyymm_rows": _int_report_value(row, "source_yyyymm_rows"),
+        "geometry_types": _distinct_text_values(row["geometry_types"]),
+        "source_files": _distinct_text_values(row["source_files"]),
+        "source_yyyymms": _distinct_text_values(row["source_yyyymms"]),
+    }
+
+
+async def collect_t177e_sppn_report(
+    engine: AsyncEngine,
+    *,
+    source_yyyymm: str | None,
+) -> dict[str, Any]:
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    """
+SELECT
+  count(*) AS row_count,
+  count(*) FILTER (WHERE geom IS NOT NULL) AS geom_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND ST_SRID(geom) = 5179)
+    AS srid_5179_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND ST_IsEmpty(geom))
+    AS empty_geom_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND NOT ST_IsValid(geom))
+    AS invalid_geom_rows,
+  count(*) FILTER (WHERE source_file IS NOT NULL) AS source_file_rows,
+  count(*) FILTER (WHERE source_yyyymm IS NOT DISTINCT FROM :source_yyyymm)
+    AS source_yyyymm_rows,
+  array_agg(DISTINCT ST_GeometryType(geom)) FILTER (WHERE geom IS NOT NULL)
+    AS geometry_types,
+  array_agg(DISTINCT source_file) FILTER (WHERE source_file IS NOT NULL)
+    AS source_files,
+  array_agg(DISTINCT source_yyyymm) FILTER (WHERE source_yyyymm IS NOT NULL)
+    AS source_yyyymms
+FROM public.tl_sppn_makarea
+"""
+                ),
+                {"source_yyyymm": source_yyyymm},
+            )
+        ).mappings().one()
+    return {
+        "expected_geometry_type": "ST_MultiPolygon",
+        "row_count": _int_report_value(row, "row_count"),
+        "geom_rows": _int_report_value(row, "geom_rows"),
+        "srid_5179_rows": _int_report_value(row, "srid_5179_rows"),
+        "empty_geom_rows": _int_report_value(row, "empty_geom_rows"),
+        "invalid_geom_rows": _int_report_value(row, "invalid_geom_rows"),
+        "source_file_rows": _int_report_value(row, "source_file_rows"),
+        "source_yyyymm_rows": _int_report_value(row, "source_yyyymm_rows"),
+        "geometry_types": _distinct_text_values(row["geometry_types"]),
+        "source_files": _distinct_text_values(row["source_files"]),
+        "source_yyyymms": _distinct_text_values(row["source_yyyymms"]),
+    }
+
+
 async def collect_t177d_non_geometry_report(
     engine: AsyncEngine,
     *,
@@ -707,6 +891,77 @@ FROM {table_name}
     return reports
 
 
+async def collect_t177e_sppn_smoke(engine: AsyncEngine) -> dict[str, Any]:
+    from kortravelgeo.core.geocoder import geocode
+    from kortravelgeo.core.sppn import format_national_point_number_from_5179
+    from kortravelgeo.dto.common import Point
+    from kortravelgeo.dto.geocode import GeocodeInput
+    from kortravelgeo.infra.geocode_repo import GeocodeRepository
+    from kortravelgeo.infra.reverse_repo import ReverseRepository
+
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    """
+SELECT sig_cd, makarea_id, makarea_nm,
+       ST_X(ST_PointOnSurface(geom)) AS x_5179,
+       ST_Y(ST_PointOnSurface(geom)) AS y_5179
+  FROM public.tl_sppn_makarea
+ WHERE geom IS NOT NULL
+   AND NOT ST_IsEmpty(geom)
+   AND ST_IsValid(geom)
+ ORDER BY ST_Area(geom) DESC, sig_cd, makarea_id
+ LIMIT 1
+"""
+                )
+            )
+        ).mappings().first()
+    if row is None:
+        raise T177PreflightError("T-177E SPPN smoke requires at least one valid makarea")
+
+    point_5179 = Point(x=float(row["x_5179"]), y=float(row["y_5179"]))
+    geocode_repo = GeocodeRepository(engine)
+    reverse_repo = ReverseRepository(engine)
+    direct_area = await geocode_repo.lookup_sppn_area(point_5179)
+    point_4326 = await geocode_repo.project_sppn_point_4326(point_5179)
+    if direct_area is None or point_4326 is None:
+        raise T177PreflightError("T-177E SPPN smoke could not resolve sample point")
+
+    national_point = format_national_point_number_from_5179(point_5179)
+    geocode_response = (
+        await geocode(geocode_repo, GeocodeInput(address=national_point.text))
+        if national_point is not None
+        else None
+    )
+    reverse_areas = await reverse_repo.sppn_areas(point_4326, crs="EPSG:4326", limit=5)
+    return {
+        "sample": {
+            "sig_cd": row["sig_cd"],
+            "makarea_id": row["makarea_id"],
+            "makarea_nm": row["makarea_nm"],
+            "point_5179": _point_payload(point_5179),
+            "point_4326": _point_payload(point_4326),
+        },
+        "national_point_number": national_point.text if national_point else None,
+        "direct_lookup": _jsonable_model_value(direct_area),
+        "geocode_status": geocode_response.status if geocode_response else None,
+        "geocode_sppn_found": bool(
+            geocode_response
+            and geocode_response.x_extension
+            and geocode_response.x_extension.sppn_makarea
+        ),
+        "reverse_area_count": len(reverse_areas),
+        "reverse_sppn_found": bool(reverse_areas),
+    }
+
+
+async def collect_t177e_c10_report(engine: AsyncEngine) -> dict[str, Any]:
+    from kortravelgeo.loaders.consistency import run_case
+
+    return _jsonable_model_value(await run_case(engine, "C10"))
+
+
 async def collect_t177d_region_radius_report(engine: AsyncEngine) -> dict[str, Any]:
     async with engine.connect() as conn:
         rows = (
@@ -742,6 +997,66 @@ ORDER BY level
             "geometry_types": _distinct_text_values(row["geometry_types"]),
         }
         for row in rows
+    }
+
+
+async def run_t177e_supplemental_fast_sample_load(
+    engine: AsyncEngine,
+    *,
+    source_paths: T177SupplementalSourcePaths,
+    limit_per_file: int,
+) -> dict[str, Any]:
+    from kortravelgeo.loaders.sppn_makarea_loader import load_sppn_makarea
+    from kortravelgeo.loaders.text.roadaddr_entrance_loader import load_roadaddr_entrances
+
+    roadaddr_result = await load_roadaddr_entrances(
+        engine,
+        source_paths.roadaddr_entrance,
+        source_yyyymm=None,
+        limit_per_file=limit_per_file,
+        replace=True,
+    )
+    sppn_rows = await load_sppn_makarea(
+        engine,
+        source_paths.sppn_makarea,
+        mode="full",
+        source_yyyymm=source_paths.sppn_makarea_source_yyyymm,
+        analyze=True,
+    )
+    table_counts = await collect_t177e_table_counts(engine)
+    manifests = await collect_t177e_manifests(engine)
+    roadaddr_source_yyyymm = roadaddr_result.source_yyyymm
+    roadaddr_report = await collect_t177e_roadaddr_report(
+        engine,
+        source_yyyymm=roadaddr_source_yyyymm,
+    )
+    sppn_report = await collect_t177e_sppn_report(
+        engine,
+        source_yyyymm=source_paths.sppn_makarea_source_yyyymm,
+    )
+    sppn_smoke = await collect_t177e_sppn_smoke(engine)
+    c10_report = await collect_t177e_c10_report(engine)
+    return {
+        "limit_per_file": limit_per_file,
+        "source_paths": {
+            field: str(value) if isinstance(value, Path) else value
+            for field, value in asdict(source_paths).items()
+        },
+        "source_months": {
+            "roadaddr_entrance_plan": source_paths.roadaddr_entrance_plan_yyyymm,
+            "roadaddr_entrance_loaded": roadaddr_source_yyyymm,
+            "sppn_makarea": source_paths.sppn_makarea_source_yyyymm,
+        },
+        "loader_results": {
+            "roadaddr_entrance": asdict(roadaddr_result),
+            "sppn_makarea_rows": sppn_rows,
+        },
+        "table_counts": table_counts,
+        "manifests": manifests,
+        "roadaddr_report": roadaddr_report,
+        "sppn_report": sppn_report,
+        "sppn_smoke": sppn_smoke,
+        "c10": c10_report,
     }
 
 
@@ -1116,6 +1431,14 @@ def _electronic_map_candidate(data_root: Path) -> Path | None:
     return _yyyymm_child_or_root(data_root / "도로명주소 전자지도")
 
 
+def _sppn_makarea_candidate(data_root: Path) -> Path | None:
+    for dirname in ("구역의도형", "구역의 도형"):
+        candidate = _yyyymm_child_or_root(data_root / dirname)
+        if candidate is not None:
+            return candidate
+    return None
+
+
 def _yyyymm_child_or_root(root: Path) -> Path | None:
     if not root.exists():
         return None
@@ -1158,6 +1481,24 @@ def _select_t177d_sido_dataset(datasets: Sequence[Any]) -> Any:
             dataset.sig_code,
         ),
     )[0]
+
+
+def _select_preferred_zip(path: Path) -> Path:
+    if path.is_file():
+        return path
+    if path.is_dir():
+        zip_files = sorted(path.glob("*.zip"), key=lambda item: item.name)
+        if zip_files:
+            return sorted(
+                zip_files,
+                key=lambda archive: (
+                    0
+                    if ("세종" in archive.stem or archive.stem.startswith("36"))
+                    else 1,
+                    archive.stem,
+                ),
+            )[0]
+    return path
 
 
 def _materialize_electronic_map_archive(archive: Path, materialize_dir: Path) -> Path:
@@ -1221,3 +1562,23 @@ def _jsonable_source_set(value: Any) -> Any:
         except json.JSONDecodeError:
             return value
     return value
+
+
+def _jsonable_model_value(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if is_dataclass(value) and not isinstance(value, type):
+        return _jsonable_model_value(asdict(value))
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable_model_value(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_jsonable_model_value(item) for item in value]
+    if isinstance(value, list):
+        return [_jsonable_model_value(item) for item in value]
+    return value
+
+
+def _point_payload(point: Any) -> dict[str, float]:
+    return {"x": float(point.x), "y": float(point.y)}

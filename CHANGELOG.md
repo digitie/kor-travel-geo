@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-177E 선택 보강 원천 fast-sample e2e를 추가했다. opt-in 상태에서 실제 도로명주소 출입구 정보와 `TL_SPPN_MAKAREA` 원천에서 세종 ZIP을 선택해 scratch DB에 적재하고, `load_manifest`, row-level `source_yyyymm`, SRID 5179, geometry validity, SPPN geocode/reverse repository smoke, C10 기준월 혼합 warning과 `t177e-supplemental-fast-sample-load.json` artifact를 검증한다. SPPN discovery는 실제 보존 경로인 `구역의도형`과 기존 문서 경로 `구역의 도형`을 모두 지원한다.
 - T-177D 전자지도 SHP/PostGIS geometry fast-sample e2e를 추가했다. opt-in 상태에서 실제 도로명주소 전자지도 월 폴더에서 selected 시도 ZIP 또는 dataset을 고르고, ZIP 원천은 artifact 작업 디렉터리에 materialize한 뒤 공개 `load_shp_polygons(mode="full")` API로 serving 9개 SHP 레이어를 scratch DB에 적재한다. GDAL Python binding이 없으면 skip하고, 적재 layer 수, 주요 table row count, SRID 5179, geometry validity, `source_file`/`source_yyyymm`, `refresh_region_radius_parts()` 결과와 `t177d-shp-geometry-fast-sample-load.json` artifact를 검증한다.
 - T-180 SHP loader invalid geometry repair를 추가했다. 실제 T-177D 세종 전자지도 적재에서 발견한 invalid geometry를 닫기 위해 SHP geometry target 적재 직후 `ST_MakeValid`/`ST_CollectionExtract` 후처리를 실행하고, target DDL의 geometry type/SRID 5179로 되돌린다.
 - T-177C 텍스트 정본/daily delta fast-sample e2e를 추가했다. opt-in 상태에서 실제 도로명주소 한글, 지번 연결, daily MST/LNBR, 위치정보요약DB, 내비게이션용DB 파일을 loader Python API로 직접 읽어 scratch DB에 적재하고, `load_manifest`, table row count, `resolve_text_geometry_links()` 전후 링크 수치와 `t177c-text-delta-fast-sample-load.json` artifact를 검증한다. 기본 sample 크기는 `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 조정한다.
