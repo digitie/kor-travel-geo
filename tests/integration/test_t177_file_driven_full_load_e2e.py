@@ -10,6 +10,8 @@ from kortravelgeo.settings import Settings
 from tests.integration._t177_full_load_harness import (
     ENV_ALLOW_NONEMPTY,
     ENV_CONFIRM,
+    T177D_REQUIRED_NONEMPTY_TABLES,
+    T177D_TARGET_TABLES,
     T177PreflightError,
     T177SkipError,
     apply_schema_index_smoke,
@@ -17,13 +19,16 @@ from tests.integration._t177_full_load_harness import (
     build_discovery_plan,
     collect_existing_row_counts,
     collect_t177c_table_counts,
+    collect_t177d_table_counts,
     reset_t177c_target_tables,
     run_t177c_text_delta_fast_sample_load,
+    run_t177d_shp_geometry_fast_sample_load,
     runtime_from_env,
     sample_limit_from_env,
     schema_smoke_report,
     source_yyyymm,
     t177c_text_delta_source_paths,
+    t177d_shp_geometry_source,
     validate_database_preflight,
     write_json_artifact,
 )
@@ -88,6 +93,114 @@ async def test_t177_file_driven_full_load_preflight_and_schema_smoke() -> None:
         assert artifact_path.is_file()
         assert schema_report["missing_objects"] == []
         assert discovery_plan["data_root"] == str(runtime.data_root)
+    except T177PreflightError as exc:
+        pytest.fail(str(exc))
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_t177d_file_driven_shp_geometry_fast_sample_load() -> None:
+    started_at = datetime.now(UTC)
+    try:
+        runtime = runtime_from_env()
+    except T177SkipError as exc:
+        pytest.skip(str(exc))
+
+    pytest.importorskip("osgeo.gdal")
+
+    engine = make_async_engine(Settings(pg_dsn=runtime.dsn))
+    try:
+        preflight = await validate_database_preflight(
+            engine,
+            confirmation=os.getenv(ENV_CONFIRM),
+        )
+        discovery_plan = build_discovery_plan(runtime.data_root)
+        source = t177d_shp_geometry_source(
+            discovery_plan,
+            materialize_dir=runtime.artifact_dir / "t177d-electronic-map",
+        )
+
+        await apply_schema_index_smoke(engine)
+        schema_report = await schema_smoke_report(engine)
+        existing_rows = await collect_existing_row_counts(engine)
+        existing_shp_rows = await collect_t177d_table_counts(engine)
+        allow_nonempty = os.getenv(ENV_ALLOW_NONEMPTY) == "1"
+        assert_no_existing_rows_without_confirmation(
+            {**existing_rows, **existing_shp_rows},
+            destructive_confirmed=preflight.destructive_confirmed,
+            allow_nonempty=allow_nonempty,
+        )
+
+        before_counts = await collect_t177d_table_counts(engine)
+        result = await run_t177d_shp_geometry_fast_sample_load(engine, source=source)
+
+        artifact = {
+            "schema_version": 1,
+            "task": "T-177D",
+            "run_id": runtime.run_id,
+            "mode": "shp_geometry_fast_sample_load",
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(UTC).isoformat(),
+            "gates": {
+                "full_load_e2e": True,
+                "pg_dsn": True,
+                "confirmation_ok": preflight.destructive_confirmed,
+                "allow_nonempty": allow_nonempty,
+                "longrun": False,
+            },
+            "database": {
+                "name": preflight.database_name,
+                "expected_confirmation": preflight.expected_confirmation,
+            },
+            "data": discovery_plan,
+            "schema": schema_report,
+            "before_counts": before_counts,
+            "result": result,
+        }
+        artifact_path = write_json_artifact(
+            runtime.artifact_dir,
+            "t177d-shp-geometry-fast-sample-load.json",
+            artifact,
+        )
+
+        assert artifact_path.is_file()
+        assert schema_report["missing_objects"] == []
+        assert result["loaded_layers"] == len(result["plans"]) == 9
+        assert result["source"]["sido_path"] == str(source.sido_path)
+
+        table_counts = result["table_counts"]
+        assert set(T177D_TARGET_TABLES).issubset(table_counts)
+        for table_name in T177D_REQUIRED_NONEMPTY_TABLES:
+            assert table_counts[table_name] > 0
+
+        for table_name, report in result["geometry_report"].items():
+            row_count = report["row_count"]
+            geom_rows = report["geom_rows"]
+            if row_count == 0:
+                continue
+            if table_name != "public.tl_sprd_manage":
+                assert geom_rows == row_count
+            assert report["srid_5179_rows"] == geom_rows
+            assert report["empty_geom_rows"] == 0
+            assert report["invalid_geom_rows"] == 0
+            assert report["source_file_rows"] == row_count
+            assert report["source_yyyymm_rows"] == row_count
+            assert set(report["geometry_types"]) <= {report["expected_geometry_type"]}
+
+        interval_report = result["non_geometry_report"]["public.tl_sprd_intrvl"]
+        assert interval_report["row_count"] > 0
+        assert interval_report["source_file_rows"] == interval_report["row_count"]
+        assert interval_report["source_yyyymm_rows"] == interval_report["row_count"]
+
+        region_report = result["region_radius_parts"]
+        for level in ("sido", "sigungu", "emd"):
+            assert region_report[level]["row_count"] > 0
+            assert region_report[level]["srid_5179_rows"] == region_report[level]["geom_rows"]
+            assert region_report[level]["empty_geom_rows"] == 0
+            assert region_report[level]["invalid_geom_rows"] == 0
+    except T177SkipError as exc:
+        pytest.skip(str(exc))
     except T177PreflightError as exc:
         pytest.fail(str(exc))
     finally:

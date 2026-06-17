@@ -30,6 +30,13 @@
   `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 조정한다. 테스트는 지번 링크 FK parent seed,
   table row count, `load_manifest`, `resolve_text_geometry_links()` 전후 링크 수치,
   `t177c-text-delta-fast-sample-load.json` artifact를 검증한다.
+- ✅ T-177D 전자지도 SHP/PostGIS geometry fast-sample e2e 완료 — opt-in 상태에서 실제
+  도로명주소 전자지도 월 폴더를 읽고 selected 시도 ZIP 또는 dataset(세종 우선, 없으면 이름순)을
+  고른다. ZIP 원천은 artifact 작업 디렉터리에 materialize한 뒤, 공개
+  `load_shp_polygons(mode="full")` API로 serving 9개 SHP 레이어를 scratch DB에 적재한다. GDAL
+  Python binding이 없으면 skip하고, 적재 layer 수, table row count, SRID 5179, geometry
+  validity, `source_file`/`source_yyyymm`, `region_radius_parts`,
+  `t177d-shp-geometry-fast-sample-load.json` artifact를 검증한다.
 - ✅ T-179 CI backend GDAL 설치 timeout/retry hardening 완료 — PR #344의 backend CI가
   `Install GDAL system libraries` 단계에서 장시간 진행 중으로 멈춘 문제를 #345/T-179로
   분리했다. `.github/workflows/ci.yml` backend job과 GDAL apt 설치 step에 timeout을 두고,
@@ -275,8 +282,8 @@
 현재는 T-177 파일 기반 full-load e2e 재검증에 들어가기 전, 2026-06-16 이후 PR 스캔에서
 발견한 Claude Code 리뷰 후속을 먼저 닫았다. `T-178a`~`T-178f`와 `T-177A` 계획/Task 등록이
 완료됐고, `T-179` CI backend GDAL 설치 hardening도 완료됐다. `T-177B` opt-in e2e 하니스
-구현과 `T-177C` 텍스트 정본/daily delta fast-sample e2e 구현도 완료됐다. 다음 한 작업은
-`T-177D` 전자지도 SHP/PostGIS geometry e2e 구현이다.
+구현, `T-177C` 텍스트 정본/daily delta fast-sample e2e 구현, `T-177D` 전자지도
+SHP/PostGIS geometry e2e 구현도 완료됐다. 다음 한 작업은 `T-177E` 선택 보강 원천 e2e 구현이다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

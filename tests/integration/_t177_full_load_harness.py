@@ -15,11 +15,12 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 
+from kortravelgeo.core.source_layers import POLYGON_LAYER_NAMES
 from kortravelgeo.exceptions import LoaderError
 from kortravelgeo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
 from kortravelgeo.loaders.juso_map import discover_sido_datasets
 from kortravelgeo.loaders.manifest import infer_yyyymm
-from kortravelgeo.loaders.shp.polygons_loader import build_shp_load_plan
+from kortravelgeo.loaders.shp.polygons_loader import build_shp_load_plan, load_shp_polygons
 from kortravelgeo.loaders.sppn_makarea_loader import discover_sppn_makarea_sources
 from kortravelgeo.loaders.text.daily_juso_loader import discover_daily_juso_sources
 from kortravelgeo.loaders.text.juso_hangul_loader import discover_juso_hangul_files
@@ -99,6 +100,43 @@ T177C_TARGET_TABLES = (
 
 T177C_MANIFEST_TABLES = ("tl_juso_text", "tl_juso_parcel_link")
 
+T177D_TARGET_TABLES = (
+    "public.tl_scco_ctprvn",
+    "public.tl_scco_sig",
+    "public.tl_scco_emd",
+    "public.tl_scco_li",
+    "public.tl_kodis_bas",
+    "public.tl_sprd_manage",
+    "public.tl_sprd_intrvl",
+    "public.tl_sprd_rw",
+    "public.tl_spbd_buld_polygon",
+    "public.region_radius_parts",
+)
+
+T177D_REQUIRED_NONEMPTY_TABLES = (
+    "public.tl_scco_ctprvn",
+    "public.tl_scco_sig",
+    "public.tl_scco_emd",
+    "public.tl_kodis_bas",
+    "public.tl_sprd_manage",
+    "public.tl_sprd_intrvl",
+    "public.tl_sprd_rw",
+    "public.tl_spbd_buld_polygon",
+)
+
+T177D_GEOMETRY_TABLES: Mapping[str, str] = {
+    "public.tl_scco_ctprvn": "ST_MultiPolygon",
+    "public.tl_scco_sig": "ST_MultiPolygon",
+    "public.tl_scco_emd": "ST_MultiPolygon",
+    "public.tl_scco_li": "ST_MultiPolygon",
+    "public.tl_kodis_bas": "ST_MultiPolygon",
+    "public.tl_sprd_manage": "ST_MultiLineString",
+    "public.tl_sprd_rw": "ST_MultiPolygon",
+    "public.tl_spbd_buld_polygon": "ST_MultiPolygon",
+}
+
+T177D_NON_GEOMETRY_TABLES = ("public.tl_sprd_intrvl",)
+
 
 class T177SkipError(RuntimeError):
     """Raised when the opt-in T-177 e2e test should skip cleanly."""
@@ -124,6 +162,17 @@ class T177TextDeltaSourcePaths:
     daily_lnbr: Path
     locsum: Path
     navi: Path
+
+
+@dataclass(frozen=True, slots=True)
+class T177ShpGeometrySource:
+    electronic_map_root: Path
+    sido_path: Path
+    sido_name: str
+    sig_code: str
+    source_yyyymm: str | None
+    archive_path: Path | None = None
+    materialized: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -404,6 +453,51 @@ def t177c_text_delta_source_paths(discovery_plan: Mapping[str, Any]) -> T177Text
     )
 
 
+def t177d_shp_geometry_source(
+    discovery_plan: Mapping[str, Any],
+    *,
+    materialize_dir: Path | None = None,
+) -> T177ShpGeometrySource:
+    electronic_map_root = required_source_path(discovery_plan, "electronic_map")
+    try:
+        datasets = discover_sido_datasets(electronic_map_root)
+    except LoaderError as exc:
+        archives = _electronic_map_archives(electronic_map_root)
+        if not archives:
+            raise T177SkipError(f"T-177 electronic_map source is not loadable: {exc}") from exc
+        if materialize_dir is None:
+            raise T177SkipError(
+                "T-177 electronic_map ZIP source requires a materialize_dir"
+            ) from exc
+        archive = _select_electronic_map_archive(archives)
+        sido_root = _materialize_electronic_map_archive(archive, materialize_dir)
+        try:
+            datasets = discover_sido_datasets(sido_root)
+        except LoaderError as zip_exc:
+            raise T177SkipError(
+                f"T-177 electronic_map ZIP source is not loadable after extraction: {zip_exc}"
+            ) from zip_exc
+        selected = _select_t177d_sido_dataset(datasets)
+        return T177ShpGeometrySource(
+            electronic_map_root=electronic_map_root,
+            sido_path=selected.root,
+            sido_name=selected.sido_name,
+            sig_code=selected.sig_code,
+            source_yyyymm=source_yyyymm(discovery_plan, "electronic_map"),
+            archive_path=archive,
+            materialized=True,
+        )
+
+    selected = _select_t177d_sido_dataset(datasets)
+    return T177ShpGeometrySource(
+        electronic_map_root=electronic_map_root,
+        sido_path=selected.root,
+        sido_name=selected.sido_name,
+        sig_code=selected.sig_code,
+        source_yyyymm=source_yyyymm(discovery_plan, "electronic_map"),
+    )
+
+
 def required_source_path(discovery_plan: Mapping[str, Any], kind: str) -> Path:
     sources = discovery_plan.get("sources")
     if not isinstance(sources, Mapping):
@@ -475,6 +569,10 @@ async def collect_t177c_table_counts(engine: AsyncEngine) -> dict[str, int]:
     return await _collect_table_counts(engine, T177C_TARGET_TABLES)
 
 
+async def collect_t177d_table_counts(engine: AsyncEngine) -> dict[str, int]:
+    return await _collect_table_counts(engine, T177D_TARGET_TABLES)
+
+
 async def collect_t177c_link_counts(engine: AsyncEngine) -> dict[str, int]:
     async with engine.connect() as conn:
         row = (
@@ -515,6 +613,133 @@ SELECT table_name, last_mvmn_de, row_count, source_zip, source_yyyymm, source_se
             "source_zip": row["source_zip"],
             "source_yyyymm": row["source_yyyymm"],
             "source_set": _jsonable_source_set(row["source_set"]),
+        }
+        for row in rows
+    }
+
+
+async def collect_t177d_geometry_report(
+    engine: AsyncEngine,
+    *,
+    source_yyyymm: str | None,
+) -> dict[str, Any]:
+    reports: dict[str, Any] = {}
+    async with engine.connect() as conn:
+        for table_name, expected_geometry_type in T177D_GEOMETRY_TABLES.items():
+            row = (
+                await conn.execute(
+                    text(
+                        f"""
+SELECT
+  count(*) AS row_count,
+  count(*) FILTER (WHERE geom IS NOT NULL) AS geom_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND ST_SRID(geom) = 5179)
+    AS srid_5179_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND ST_IsEmpty(geom))
+    AS empty_geom_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND NOT ST_IsValid(geom))
+    AS invalid_geom_rows,
+  count(*) FILTER (WHERE source_file IS NOT NULL) AS source_file_rows,
+  count(*) FILTER (WHERE source_yyyymm IS NOT DISTINCT FROM :source_yyyymm)
+    AS source_yyyymm_rows,
+  array_agg(DISTINCT ST_GeometryType(geom)) FILTER (WHERE geom IS NOT NULL)
+    AS geometry_types,
+  array_agg(DISTINCT source_file) FILTER (WHERE source_file IS NOT NULL)
+    AS source_files,
+  array_agg(DISTINCT source_yyyymm) FILTER (WHERE source_yyyymm IS NOT NULL)
+    AS source_yyyymms
+FROM {table_name}
+"""
+                    ),
+                    {"source_yyyymm": source_yyyymm},
+                )
+            ).mappings().one()
+            reports[table_name] = {
+                "expected_geometry_type": expected_geometry_type,
+                "row_count": _int_report_value(row, "row_count"),
+                "geom_rows": _int_report_value(row, "geom_rows"),
+                "srid_5179_rows": _int_report_value(row, "srid_5179_rows"),
+                "empty_geom_rows": _int_report_value(row, "empty_geom_rows"),
+                "invalid_geom_rows": _int_report_value(row, "invalid_geom_rows"),
+                "source_file_rows": _int_report_value(row, "source_file_rows"),
+                "source_yyyymm_rows": _int_report_value(row, "source_yyyymm_rows"),
+                "geometry_types": _distinct_text_values(row["geometry_types"]),
+                "source_files": _distinct_text_values(row["source_files"]),
+                "source_yyyymms": _distinct_text_values(row["source_yyyymms"]),
+            }
+    return reports
+
+
+async def collect_t177d_non_geometry_report(
+    engine: AsyncEngine,
+    *,
+    source_yyyymm: str | None,
+) -> dict[str, Any]:
+    reports: dict[str, Any] = {}
+    async with engine.connect() as conn:
+        for table_name in T177D_NON_GEOMETRY_TABLES:
+            row = (
+                await conn.execute(
+                    text(
+                        f"""
+SELECT
+  count(*) AS row_count,
+  count(*) FILTER (WHERE source_file IS NOT NULL) AS source_file_rows,
+  count(*) FILTER (WHERE source_yyyymm IS NOT DISTINCT FROM :source_yyyymm)
+    AS source_yyyymm_rows,
+  array_agg(DISTINCT source_file) FILTER (WHERE source_file IS NOT NULL)
+    AS source_files,
+  array_agg(DISTINCT source_yyyymm) FILTER (WHERE source_yyyymm IS NOT NULL)
+    AS source_yyyymms
+FROM {table_name}
+"""
+                    ),
+                    {"source_yyyymm": source_yyyymm},
+                )
+            ).mappings().one()
+            reports[table_name] = {
+                "row_count": _int_report_value(row, "row_count"),
+                "source_file_rows": _int_report_value(row, "source_file_rows"),
+                "source_yyyymm_rows": _int_report_value(row, "source_yyyymm_rows"),
+                "source_files": _distinct_text_values(row["source_files"]),
+                "source_yyyymms": _distinct_text_values(row["source_yyyymms"]),
+            }
+    return reports
+
+
+async def collect_t177d_region_radius_report(engine: AsyncEngine) -> dict[str, Any]:
+    async with engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(
+                    """
+SELECT
+  level,
+  count(*) AS row_count,
+  count(*) FILTER (WHERE geom IS NOT NULL) AS geom_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND ST_SRID(geom) = 5179)
+    AS srid_5179_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND ST_IsEmpty(geom))
+    AS empty_geom_rows,
+  count(*) FILTER (WHERE geom IS NOT NULL AND NOT ST_IsValid(geom))
+    AS invalid_geom_rows,
+  array_agg(DISTINCT ST_GeometryType(geom)) FILTER (WHERE geom IS NOT NULL)
+    AS geometry_types
+FROM public.region_radius_parts
+GROUP BY level
+ORDER BY level
+"""
+                )
+            )
+        ).mappings()
+    return {
+        str(row["level"]): {
+            "row_count": _int_report_value(row, "row_count"),
+            "geom_rows": _int_report_value(row, "geom_rows"),
+            "srid_5179_rows": _int_report_value(row, "srid_5179_rows"),
+            "empty_geom_rows": _int_report_value(row, "empty_geom_rows"),
+            "invalid_geom_rows": _int_report_value(row, "invalid_geom_rows"),
+            "geometry_types": _distinct_text_values(row["geometry_types"]),
         }
         for row in rows
     }
@@ -607,6 +832,68 @@ async def run_t177c_text_delta_fast_sample_load(
         },
         "table_counts": table_counts,
         "manifests": manifests,
+    }
+
+
+async def run_t177d_shp_geometry_fast_sample_load(
+    engine: AsyncEngine,
+    *,
+    source: T177ShpGeometrySource,
+) -> dict[str, Any]:
+    from kortravelgeo.loaders.postload import refresh_region_radius_parts
+
+    try:
+        plans = build_shp_load_plan(source.sido_path, source_yyyymm=source.source_yyyymm)
+    except LoaderError as exc:
+        raise T177SkipError(f"T-177 selected electronic_map source is not loadable: {exc}") from exc
+    if len(plans) != len(POLYGON_LAYER_NAMES):
+        raise T177SkipError(
+            "T-177 selected electronic_map source does not expose all serving SHP layers: "
+            f"expected {len(POLYGON_LAYER_NAMES)}, got {len(plans)}"
+        )
+
+    loaded_layers = await load_shp_polygons(
+        engine,
+        source.sido_path,
+        mode="full",
+        source_yyyymm=source.source_yyyymm,
+        analyze=True,
+    )
+    await refresh_region_radius_parts(engine)
+    table_counts = await collect_t177d_table_counts(engine)
+    geometry_report = await collect_t177d_geometry_report(
+        engine,
+        source_yyyymm=source.source_yyyymm,
+    )
+    non_geometry_report = await collect_t177d_non_geometry_report(
+        engine,
+        source_yyyymm=source.source_yyyymm,
+    )
+    region_radius_parts = await collect_t177d_region_radius_report(engine)
+    return {
+        "source": {
+            "electronic_map_root": str(source.electronic_map_root),
+            "sido_path": str(source.sido_path),
+            "sido_name": source.sido_name,
+            "sig_code": source.sig_code,
+            "source_yyyymm": source.source_yyyymm,
+            "archive_path": str(source.archive_path) if source.archive_path else None,
+            "materialized": source.materialized,
+        },
+        "plans": [
+            {
+                "source_layer": plan.source_layer,
+                "target_table": plan.target_table,
+                "source_file": plan.source_file,
+                "source_yyyymm": plan.source_yyyymm,
+            }
+            for plan in plans
+        ],
+        "loaded_layers": loaded_layers,
+        "table_counts": table_counts,
+        "geometry_report": geometry_report,
+        "non_geometry_report": non_geometry_report,
+        "region_radius_parts": region_radius_parts,
     }
 
 
@@ -770,16 +1057,32 @@ def _discover_roadaddr_entrance(path: Path) -> tuple[int, tuple[str, ...], tuple
 
 
 def _discover_shp(path: Path) -> tuple[int, tuple[str, ...], tuple[str, ...]]:
-    plans = build_shp_load_plan(path)
-    datasets = discover_sido_datasets(path)
-    sample_names = tuple(
-        f"{plan.source_file}:{plan.source_layer}" for plan in plans[:5]
-    )
-    notes = (
-        f"sido_datasets={len(datasets)}",
-        f"target_tables={len({plan.target_table for plan in plans})}",
-    )
-    return len(plans), sample_names, notes
+    try:
+        plans = build_shp_load_plan(path)
+        datasets = discover_sido_datasets(path)
+        sample_names = tuple(
+            f"{plan.source_file}:{plan.source_layer}" for plan in plans[:5]
+        )
+        notes = (
+            f"sido_datasets={len(datasets)}",
+            f"target_tables={len({plan.target_table for plan in plans})}",
+        )
+        return len(plans), sample_names, notes
+    except LoaderError:
+        archives = _electronic_map_archives(path)
+        if not archives:
+            raise
+        sample_names = tuple(
+            f"{archive.name}:{layer_name}"
+            for archive in archives[:2]
+            for layer_name in POLYGON_LAYER_NAMES[:3]
+        )
+        notes = (
+            f"sido_archives={len(archives)}",
+            "materialize_required=true",
+            f"target_tables={len(POLYGON_LAYER_NAMES)}",
+        )
+        return len(archives) * len(POLYGON_LAYER_NAMES), sample_names, notes
 
 
 def _discover_sppn_makarea(path: Path) -> tuple[int, tuple[str, ...], tuple[str, ...]]:
@@ -826,6 +1129,52 @@ def _yyyymm_child_or_root(root: Path) -> Path | None:
     return root
 
 
+def _electronic_map_archives(path: Path) -> tuple[Path, ...]:
+    if path.is_file() and path.suffix.lower() == ".zip":
+        return (path,)
+    if not path.is_dir():
+        return ()
+    return tuple(sorted(path.glob("*.zip"), key=lambda item: item.name))
+
+
+def _select_electronic_map_archive(archives: Sequence[Path]) -> Path:
+    return sorted(
+        archives,
+        key=lambda archive: (
+            0 if ("세종" in archive.stem or archive.stem.startswith("36")) else 1,
+            archive.stem,
+        ),
+    )[0]
+
+
+def _select_t177d_sido_dataset(datasets: Sequence[Any]) -> Any:
+    if not datasets:
+        raise T177SkipError("T-177 electronic_map source has no 시도 dataset")
+    return sorted(
+        datasets,
+        key=lambda dataset: (
+            0 if ("세종" in dataset.sido_name or dataset.sig_code.startswith("36")) else 1,
+            dataset.sido_name,
+            dataset.sig_code,
+        ),
+    )[0]
+
+
+def _materialize_electronic_map_archive(archive: Path, materialize_dir: Path) -> Path:
+    destination = materialize_dir / archive.stem
+    destination.mkdir(parents=True, exist_ok=True)
+    root = destination.resolve()
+    with zipfile.ZipFile(archive) as source_zip:
+        for member in source_zip.infolist():
+            target = (destination / member.filename).resolve()
+            if target != root and root not in target.parents:
+                raise T177SkipError(
+                    f"T-177 electronic_map ZIP contains unsafe member: {member.filename}"
+                )
+        source_zip.extractall(destination)
+    return destination
+
+
 def _path_notes(path: Path) -> tuple[str, ...]:
     notes: list[str] = []
     if path.suffix.lower() == ".7z":
@@ -853,6 +1202,16 @@ async def _collect_table_counts(
             count = await conn.scalar(text(f"SELECT count(*) FROM {table_name}"))
             counts[table_name] = int(count or 0)
     return counts
+
+
+def _int_report_value(row: Any, key: str) -> int:
+    return int(row[key] or 0)
+
+
+def _distinct_text_values(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    return tuple(sorted(str(item) for item in value if item is not None))
 
 
 def _jsonable_source_set(value: Any) -> Any:

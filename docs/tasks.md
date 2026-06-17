@@ -33,12 +33,6 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
 
 ### T-177 파일 기반 full-load e2e
 
-- [ ] **T-177D** — 전자지도 SHP/PostGIS geometry e2e.
-
-  실제 도로명주소 전자지도 selected 시도 SHP 9개 레이어를 읽어 PostGIS 테이블에 적재한다.
-  GDAL 부재 시 skip하고, SRID, geometry validity, source file/source yyyymm, 주요 row count를
-  검증한다.
-
 - [ ] **T-177E** — 선택 보강 원천 e2e.
 
   도로명주소 출입구 정보와 `TL_SPPN_MAKAREA`를 실제 파일에서 읽어 선택 보강 테이블에
