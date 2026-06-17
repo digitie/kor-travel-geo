@@ -15,7 +15,6 @@ from kortravelgeo.dto.common import (
     AddressType,
     FrozenModel,
     Page,
-    Point,
     Status,
     is_korea_lon_lat,
     reject_control_characters,
@@ -23,9 +22,14 @@ from kortravelgeo.dto.common import (
 from kortravelgeo.dto.region import RegionHint, validate_region_hint_consistency
 
 V2Source = Literal["local", "vworld", "juso"]
-V2MatchKind = Literal["road", "parcel", "keyword", "region", "sppn", "detail", "poi"]
+# Published v2 enums carry only values the server actually emits (ADR-060 §2). Reserved/planned
+# values are documented in docs/api-reference/v2/conventions.md §2 "예약 목록" and added back to
+# the Literal (with typegen) only when a producer exists:
+#   match_kind: "detail" (typed 상세주소) — reserved, no producer.
+#   point_precision: "exact"/"interpolated"/"approximate" — reserved, no producer.
+V2MatchKind = Literal["road", "parcel", "keyword", "region", "sppn", "poi"]
 V2FallbackMode = Literal["none", "api"]
-V2PointPrecision = Literal["exact", "interpolated", "centroid", "approximate", "grid_cell"]
+V2PointPrecision = Literal["centroid", "grid_cell"]
 V2GeometryKind = Literal["building", "region", "road"]
 RegionWithinRadiusLevel = Literal["sido", "sigungu", "emd"]
 RegionWithinRadiusRelation = Literal["contains", "overlaps"]
@@ -45,6 +49,16 @@ class BBoxV2(FrozenModel):
             msg = "bbox minimum coordinates must be less than maximum coordinates"
             raise ValueError(msg)
         return self
+
+
+class PointV2(FrozenModel):
+    """External v2 candidate coordinate in ``(lon, lat)`` order (ADR-060 §6).
+
+    v1 vworld exposes ``Point{x, y}``; v2 uses ``lon``/``lat`` to match its input naming.
+    """
+
+    lon: FiniteFloat
+    lat: FiniteFloat
 
 
 class AddressV2(FrozenModel):
@@ -91,14 +105,17 @@ class CandidateV2(FrozenModel):
     confidence: float = Field(ge=0.0, le=1.0)
     match_kind: V2MatchKind
     address: AddressV2 | None = None
-    point: Point | None = None
+    point: PointV2 | None = None
     point_precision: V2PointPrecision | None = None
     distance_m: float | None = Field(default=None, ge=0.0)
     bbox: BBoxV2 | None = None
     geometry: GeometryV2 | None = None
     region: RegionV2 | None = None
     place: PlaceV2 | None = None
-    source: V2Source = "local"
+    source: V2Source = Field(
+        default="local",
+        description="후보 출처. vworld/juso는 fallback='api'에서만 발신(ADR-060 §2).",
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -255,8 +272,32 @@ class RegionsWithinRadiusInput(FrozenModel):
 
 
 class RegionsWithinRadiusResponse(FrozenModel):
+    status: Status
+    query_id: str = Field(default_factory=lambda: uuid4().hex)
+    input: RegionsWithinRadiusInput
     center: RegionWithinRadiusCenter
     radius_km: float = Field(gt=0.0, le=500.0)
     sido: tuple[RegionWithinRadiusItem, ...] = ()
     sigungu: tuple[RegionWithinRadiusItem, ...] = ()
     emd: tuple[RegionWithinRadiusItem, ...] = ()
+
+
+class V2ErrorDetail(FrozenModel):
+    """Structured v2 error detail (ADR-060 §4)."""
+
+    code: str
+    message: str
+    hint: str | None = None
+    field: str | None = None
+
+
+class V2ErrorEnvelope(FrozenModel):
+    """v2 4xx/5xx error envelope sharing the success trace key ``query_id`` (ADR-060 §4).
+
+    Replaces the legacy ``{response:{errorCode,...}}`` shape for v2 API validation/domain errors.
+    Cross-cutting infra gates (GeoIP 403) keep the shared legacy shape across all surfaces.
+    """
+
+    status: Literal["ERROR"]
+    query_id: str = Field(default_factory=lambda: uuid4().hex)
+    error: V2ErrorDetail

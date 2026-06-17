@@ -13,10 +13,18 @@ v2(자체 통합 candidate, ADR-039)의 endpoint 공통 규약이다. 각 endpoi
 
 ## 응답 envelope (ADR-060 §1)
 
-- 후보 endpoint(geocode/reverse/search)는 공통 header `{status, query_id, input}` 위에
-  `candidates`(+ search는 `total`)를 둔다.
-- `regions/within-radius`는 현재 이 공통 header 없이 `center`/`radius_km`/레벨별 배열만 반환한다.
-  공통 header로 올리는 것은 **breaking이라 v2 배포 직전 묶음으로 연기**(ADR-060 §1, 우선순위 ③).
+- 모든 v2 응답이 공통 header `{status, query_id, input}` 위에 결과 본문을 둔다 — 후보
+  endpoint(geocode/reverse/search)는 `candidates`(+ search는 `total`), `regions/within-radius`는
+  `center`/`radius_km`/레벨별 배열. (T-268에서 `regions/within-radius`를 공통 header로 올렸다.)
+
+## 에러 envelope (ADR-060 §4)
+
+- v2 API의 검증/도메인 에러는 성공과 같은 trace 키를 공유하는 v2 error envelope를 쓴다:
+  `{status:"ERROR", query_id, error:{code, message, hint?, field?}}`. `error.code`는 내부 에러 코드
+  (`E0100`/`E0102`/…), `field`는 검증 실패 필드 경로(컨테이너 `body`/`query` 제외)다. `hint`는 입력값을
+  반영하지 않는 sanitized 요약이다(ADR-061).
+- 교차-cutting 인프라 게이트(GeoIP 403 등)는 모든 표면에서 공유 `{response:{errorCode,…}}` 형태를
+  유지한다(v2 전용 envelope 아님). v1 vworld는 별도 VWorld 에러 객체.
 
 ## 페이지네이션 (ADR-060 §3)
 
@@ -32,8 +40,8 @@ v2(자체 통합 candidate, ADR-039)의 endpoint 공통 규약이다. 각 endpoi
 - 외부 입력 좌표는 `lon`/`lat`(reverse·regions), bbox는 `min_lon`/`min_lat`/`max_lon`/`max_lat`.
 - **반경은 단위 suffix를 항상 드러낸다**: `radius_m`(미터, reverse) · `radius_km`(킬로미터, regions).
   점-수준 조회는 미터, 지역-수준 조회는 km가 자연스러우므로 단위 통일 대신 suffix 규약을 쓴다.
-- 후보 출력 좌표는 현재 `point: {x, y}`(x=lon, y=lat)다. `{lon, lat}` 노출은 **breaking이라
-  v2 배포 직전 묶음으로 연기**(ADR-060 §6, 우선순위 ④).
+- 후보 출력 좌표는 `point: {lon, lat}`(`PointV2`)로 노출한다 — 입력 좌표 네이밍과 일치(T-268에서
+  v1 내부 `{x, y}` 표기에서 전환). v1 vworld의 `Point{x, y}`(ADR-038)와는 분리된 별도 표면이다.
 
 ## geometry opt-in (ADR-060 §5, ADR-059)
 
@@ -45,9 +53,17 @@ v2(자체 통합 candidate, ADR-039)의 endpoint 공통 규약이다. 각 endpoi
   `response_model_exclude_none=True`라 **REST 응답에서는 `geometry`/`bbox` 필드가 생략**된다(`null` 아님).
   상세는 각 endpoint 문서.
 
+## enum 정직성 (ADR-060 §2)
+
+- published 후보 enum은 **현재 서버가 emit하는 값만** 담는다(`match_kind`/`point_precision`/`source`).
+  예약/확장 예정 값(`match_kind="detail"`, `point_precision` `exact`/`interpolated`/`approximate`)은
+  schema에서 빼고 `conventions.md` §2의 예약 목록으로 관리한다 — producer가 생기면 그때 enum+typegen에
+  추가한다. (T-268에서 미emit 값을 제거했다.)
+
 ## 변경 정책
 
-- v2는 미배포 candidate라 breaking이 가능하나, 각 변경은 backend DTO + frontend typegen
+- v2는 미배포 candidate라 breaking이 가능하다. 각 변경은 backend DTO + frontend typegen
   (`api.gen.ts`/`schemas.gen.ts`)을 동반하고 OpenAPI drift 0을 유지한다(ADR-059).
-- breaking 묶음(enum 정직화 §2 · envelope/error 통일 §1/§4 · 좌표 lon/lat §6)은
-  v2 배포 직전 한 번에 적용해 typegen/UI 분기 비용을 최소화한다(ADR-060 §9).
+- ADR-060 §2/§1/§4/§6 breaking 묶음(enum 정직화 · envelope/error 통일 · 좌표 lon/lat)은
+  **T-268에서 일괄 적용**했다(v2 미배포 중 사용자 지시로 배포 전 정리). 추가 breaking이 필요하면
+  같은 원칙으로 묶어 적용한다.

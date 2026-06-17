@@ -6,12 +6,12 @@ import pytest
 from pydantic import ValidationError
 
 from kortravelgeo.api.routers import v2
-from kortravelgeo.dto.common import Point
 from kortravelgeo.dto.v2 import (
     AddressV2,
     CandidateV2,
     GeocodeV2Input,
     GeocodeV2Response,
+    PointV2,
     SearchV2Input,
 )
 
@@ -29,8 +29,7 @@ def test_t144_v2_default_geocode_contract_omits_geometry_payload() -> None:
                     full="서울특별시 동대문구 왕산로 189-4",
                     road_name="왕산로",
                 ),
-                point=Point(x=127.044, y=37.58),
-                point_precision="exact",
+                point=PointV2(lon=127.044, lat=37.58),
                 source="local",
             ),
         ),

@@ -23,7 +23,6 @@ from kortravelgeo.api.admission import (
 )
 from kortravelgeo.api.middleware.geoip_gate import install_geoip_gate
 from kortravelgeo.api.responses import error_payload, register_exception_handlers
-from kortravelgeo.api.vworld import vworld_operation_for_path
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.exceptions import RateLimitError
 from kortravelgeo.infra.admin_repo import AdminRepository
@@ -188,6 +187,7 @@ _VALIDATION_STRUCTURED_400 = (
     ("/v2/geocode", "post"),
     ("/v2/reverse", "post"),
     ("/v2/search", "post"),
+    ("/v2/regions/within-radius", "post"),
 )
 
 
@@ -431,9 +431,8 @@ def _admission_error_response(*, scope: str, path: str) -> ORJSONResponse:
             "database capacity"
         ),
     )
-    operation = vworld_operation_for_path(path)
     return ORJSONResponse(
-        error_payload(error, operation=operation),
+        error_payload(error, path=path),
         status_code=error.http_status,
         headers={"Retry-After": _ADMISSION_RETRY_AFTER_SECONDS, "Cache-Control": "no-store"},
     )

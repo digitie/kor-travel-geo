@@ -73,7 +73,7 @@ def test_t175_v2_inputs_reject_contradictory_region_hints(
             "get",
             "/v1/address/search",
             {"params": {"query": "왕산로", "sig_cd": "11680", "bjd_cd": "1123010700"}},
-            "v2",
+            "legacy",
             "E0100",
         ),
         (
@@ -111,7 +111,7 @@ async def test_t175_public_api_rejects_contradictory_region_hints(
     method: HttpMethod,
     path: str,
     kwargs: dict[str, Any],
-    expected_shape: Literal["v2", "vworld"],
+    expected_shape: Literal["v2", "vworld", "legacy"],
     expected_code: str,
 ) -> None:
     app = create_app()
@@ -125,11 +125,18 @@ async def test_t175_public_api_rejects_contradictory_region_hints(
 
     assert response.status_code == 400
     payload = response.json()
-    assert payload["response"]["status"] == "ERROR"
     if expected_shape == "vworld":
+        assert payload["response"]["status"] == "ERROR"
         assert payload["response"]["error"]["code"] == expected_code
         assert payload["response"]["error"]["text"] == "invalid request data"
+    elif expected_shape == "v2":
+        # v2 error envelope (ADR-060 §4)
+        assert payload["status"] == "ERROR"
+        assert payload["error"]["code"] == expected_code
+        assert "bjd_cd" in response.text
     else:
+        # legacy {response:{errorCode}} for non-vworld, non-v2 paths (e.g. /v1/address/search)
+        assert payload["response"]["status"] == "ERROR"
         assert payload["response"]["errorCode"] == expected_code
         assert "bjd_cd" in response.text
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -13,7 +14,6 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from kortravelgeo.api.vworld import (
-    VWorldOperation,
     vworld_error_payload,
     vworld_operation_for_path,
     vworld_validation_error_payload,
@@ -44,10 +44,21 @@ _MAX_VALIDATION_HINT_CHARS = 600
 def error_payload(
     exc: KorTravelGeoError,
     *,
-    operation: VWorldOperation | None = None,
+    path: str,
+    field: str | None = None,
 ) -> dict[str, object]:
+    """Build the error body for ``path`` (ADR-038/ADR-060/ADR-061).
+
+    v1 vworld paths get the VWorld error object; v2 API paths get the v2 error envelope
+    (``{status, query_id, error:{code, message, hint?, field?}}``, ADR-060 §4); everything
+    else keeps the legacy ``{response:{errorCode,...}}`` shape. ``field`` is only used by the
+    v2 envelope. Cross-cutting infra gates (GeoIP 403) build their own shared shape directly.
+    """
+    operation = vworld_operation_for_path(path)
     if operation is not None:
         return vworld_error_payload(exc, operation=operation)
+    if _is_v2_path(path):
+        return _v2_error_payload(exc, field=field)
     body: dict[str, object] = {
         "response": {
             "status": "ERROR",
@@ -60,11 +71,25 @@ def error_payload(
     return body
 
 
+def _is_v2_path(path: str) -> bool:
+    return path.startswith("/v2/")
+
+
+def _v2_error_payload(exc: KorTravelGeoError, *, field: str | None = None) -> dict[str, object]:
+    error: dict[str, object] = {"code": exc.code, "message": exc.message}
+    if exc.hint:
+        error["hint"] = exc.hint
+    if field:
+        error["field"] = field
+    return {"status": "ERROR", "query_id": uuid4().hex, "error": error}
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(KorTravelGeoError)
     async def handle_ktg_error(request: Request, exc: KorTravelGeoError) -> ORJSONResponse:
-        operation = vworld_operation_for_path(request.url.path)
-        return ORJSONResponse(error_payload(exc, operation=operation), status_code=exc.http_status)
+        return ORJSONResponse(
+            error_payload(exc, path=request.url.path), status_code=exc.http_status
+        )
 
     @app.exception_handler(SQLAlchemyTimeoutError)
     async def handle_sqlalchemy_timeout_error(
@@ -74,9 +99,8 @@ def register_exception_handlers(app: FastAPI) -> None:
         route = _route_template(request)
         record_db_pool_checkout_timeout(method=request.method, route=route)
         domain_error = DatabaseError(_POOL_TIMEOUT_MESSAGE, hint=_POOL_TIMEOUT_HINT)
-        operation = vworld_operation_for_path(request.url.path)
         return ORJSONResponse(
-            error_payload(domain_error, operation=operation),
+            error_payload(domain_error, path=request.url.path),
             status_code=domain_error.http_status,
         )
 
@@ -92,9 +116,8 @@ def register_exception_handlers(app: FastAPI) -> None:
             error_type=exc.__class__.__name__,
         )
         domain_error = DatabaseError(_DB_UNAVAILABLE_MESSAGE, hint=_DB_UNAVAILABLE_HINT)
-        operation = vworld_operation_for_path(request.url.path)
         return ORJSONResponse(
-            error_payload(domain_error, operation=operation),
+            error_payload(domain_error, path=request.url.path),
             status_code=domain_error.http_status,
         )
 
@@ -110,20 +133,42 @@ def register_exception_handlers(app: FastAPI) -> None:
                 status_code=400,
             )
         domain_error = _validation_errors_to_domain(exc.errors())
-        return ORJSONResponse(error_payload(domain_error), status_code=domain_error.http_status)
+        return ORJSONResponse(
+            error_payload(
+                domain_error, path=request.url.path, field=_validation_field(exc.errors())
+            ),
+            status_code=domain_error.http_status,
+        )
 
     @app.exception_handler(ValidationError)
     async def handle_pydantic_error(request: Request, exc: ValidationError) -> ORJSONResponse:
         domain_error = _validation_error_to_domain(exc)
-        operation = vworld_operation_for_path(request.url.path)
         return ORJSONResponse(
-            error_payload(domain_error, operation=operation),
+            error_payload(
+                domain_error, path=request.url.path, field=_validation_field(exc.errors())
+            ),
             status_code=domain_error.http_status,
         )
 
 
 def _validation_error_to_domain(exc: ValidationError) -> KorTravelGeoError:
     return _validation_errors_to_domain(exc.errors())
+
+
+def _validation_field(errors: Sequence[Mapping[str, Any]]) -> str | None:
+    """First offending field path for the v2 error envelope ``error.field`` (ADR-060 §4).
+
+    Drops the FastAPI container segment (``body``/``query``) and the user-supplied
+    ``extra_forbidden`` key leaf so the field path doesn't reflect arbitrary input.
+    """
+    for error in errors:
+        loc = tuple(error.get("loc", ()))
+        if error.get("type") == "extra_forbidden":
+            loc = loc[:-1]
+        parts = [str(piece) for piece in loc if piece not in ("body", "query")]
+        if parts:
+            return ".".join(parts)
+    return None
 
 
 def _validation_errors_to_domain(errors: Sequence[Mapping[str, Any]]) -> KorTravelGeoError:

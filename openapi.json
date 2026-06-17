@@ -1455,7 +1455,6 @@
               "keyword",
               "region",
               "sppn",
-              "detail",
               "poi"
             ],
             "title": "Match Kind",
@@ -1479,7 +1478,7 @@
           "point": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Point"
+                "$ref": "#/components/schemas/PointV2"
               },
               {
                 "type": "null"
@@ -1490,10 +1489,7 @@
             "anyOf": [
               {
                 "enum": [
-                  "exact",
-                  "interpolated",
                   "centroid",
-                  "approximate",
                   "grid_cell"
                 ],
                 "type": "string"
@@ -1516,6 +1512,7 @@
           },
           "source": {
             "default": "local",
+            "description": "후보 출처. vworld/juso는 fallback='api'에서만 발신(ADR-060 §2).",
             "enum": [
               "local",
               "vworld",
@@ -4760,6 +4757,26 @@
         "title": "Point",
         "type": "object"
       },
+      "PointV2": {
+        "additionalProperties": false,
+        "description": "External v2 candidate coordinate in ``(lon, lat)`` order (ADR-060 §6).\n\nv1 vworld exposes ``Point{x, y}``; v2 uses ``lon``/``lat`` to match its input naming.",
+        "properties": {
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lon",
+          "lat"
+        ],
+        "title": "PointV2",
+        "type": "object"
+      },
       "ReadinessComponent": {
         "additionalProperties": false,
         "properties": {
@@ -5312,6 +5329,13 @@
             "title": "Emd",
             "type": "array"
           },
+          "input": {
+            "$ref": "#/components/schemas/RegionsWithinRadiusInput"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "string"
+          },
           "radius_km": {
             "exclusiveMinimum": 0.0,
             "maximum": 500.0,
@@ -5333,9 +5357,14 @@
             },
             "title": "Sigungu",
             "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
           }
         },
         "required": [
+          "status",
+          "input",
           "center",
           "radius_km"
         ],
@@ -9687,57 +9716,6 @@
         ],
         "type": "string"
       },
-      "StructuredErrorBody": {
-        "additionalProperties": false,
-        "description": "Non-vworld API error body produced by ``error_payload`` (ADR-061).\n\nThe wire keys are ``errorCode``/``errorMessage`` (camelCase); the snake_case field\nnames carry aliases so the published schema matches the emitted JSON.",
-        "properties": {
-          "errorCode": {
-            "title": "Errorcode",
-            "type": "string"
-          },
-          "errorMessage": {
-            "title": "Errormessage",
-            "type": "string"
-          },
-          "hint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hint"
-          },
-          "status": {
-            "const": "ERROR",
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status",
-          "errorCode",
-          "errorMessage"
-        ],
-        "title": "StructuredErrorBody",
-        "type": "object"
-      },
-      "StructuredErrorEnvelope": {
-        "additionalProperties": false,
-        "description": "Published 4xx envelope for non-vworld endpoints (v2 public address paths, ADR-061).",
-        "properties": {
-          "response": {
-            "$ref": "#/components/schemas/StructuredErrorBody"
-          }
-        },
-        "required": [
-          "response"
-        ],
-        "title": "StructuredErrorEnvelope",
-        "type": "object"
-      },
       "TableStat": {
         "additionalProperties": false,
         "properties": {
@@ -10757,6 +10735,72 @@
           "sha256"
         ],
         "title": "UploadSidoZipResponse",
+        "type": "object"
+      },
+      "V2ErrorDetail": {
+        "additionalProperties": false,
+        "description": "Structured v2 error detail (ADR-060 §4).",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "V2ErrorDetail",
+        "type": "object"
+      },
+      "V2ErrorEnvelope": {
+        "additionalProperties": false,
+        "description": "v2 4xx/5xx error envelope sharing the success trace key ``query_id`` (ADR-060 §4).\n\nReplaces the legacy ``{response:{errorCode,...}}`` shape for v2 API validation/domain errors.\nCross-cutting infra gates (GeoIP 403) keep the shared legacy shape across all surfaces.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/V2ErrorDetail"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "ERROR",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "error"
+        ],
+        "title": "V2ErrorEnvelope",
         "type": "object"
       },
       "VWorldErrorBody": {
@@ -16662,11 +16706,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StructuredErrorEnvelope"
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
                 }
               }
             },
-            "description": "구조화 검증·도메인 오류 (ADR-061)"
+            "description": "v2 error envelope (ADR-060 §4)"
           }
         },
         "summary": "Geocode V2",
@@ -16699,15 +16743,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "v2 error envelope (ADR-060 §4)"
           }
         },
         "summary": "Regions Within Radius V2",
@@ -16744,11 +16788,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StructuredErrorEnvelope"
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
                 }
               }
             },
-            "description": "구조화 검증·도메인 오류 (ADR-061)"
+            "description": "v2 error envelope (ADR-060 §4)"
           }
         },
         "summary": "Reverse V2",
@@ -16785,11 +16829,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StructuredErrorEnvelope"
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
                 }
               }
             },
-            "description": "구조화 검증·도메인 오류 (ADR-061)"
+            "description": "v2 error envelope (ADR-060 §4)"
           }
         },
         "summary": "Search V2",

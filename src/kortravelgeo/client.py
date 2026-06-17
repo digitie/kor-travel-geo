@@ -663,6 +663,8 @@ class AsyncAddressClient:
         )
         empty: tuple[RegionWithinRadiusItem, ...] = ()
         return RegionsWithinRadiusResponse(
+            status="OK",
+            input=inp,
             center=inp.center,
             radius_km=inp.radius_km,
             sido=regions.get("sido", empty),
