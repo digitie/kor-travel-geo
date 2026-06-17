@@ -7,6 +7,7 @@ import { Panel } from "@/components/ui/Panel";
 import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { RetentionWarning } from "@/components/admin/source-files/RetentionWarning";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import { postJson, requestJson } from "@/lib/api";
 import { useModalA11y } from "@/lib/use-modal-a11y";
 import { formatBytes } from "@/lib/format";
@@ -19,6 +20,7 @@ import {
   type SourceBulkHardDeleteRequest,
   type SourceBulkHardDeleteResponse,
   type SourceCapacityUsage,
+  type SourceCategoryCapacity,
   type SourceHardDeleteOutcome,
   type SourceReconcileItem,
   type SourceReconcileItemPage,
@@ -126,6 +128,114 @@ export function ReconcileTab() {
     );
   }
 
+  const runColumns = useMemo<VirtualColumn<SourceReconcileRun>[]>(
+    () => [
+      {
+        key: "run",
+        header: "실행",
+        cell: (run) => (
+          <button
+            className="link-button"
+            onClick={() => setSelectedRunId(run.source_storage_reconcile_run_id)}
+            type="button"
+          >
+            {run.source_storage_reconcile_run_id.slice(0, 12)}…
+          </button>
+        )
+      },
+      { key: "mode", header: "모드", cell: (run) => run.mode },
+      { key: "state", header: "상태", cell: (run) => <StatusBadge value={run.state} /> },
+      { key: "scanned", header: "객체", cell: (run) => run.scanned_objects.toLocaleString() },
+      { key: "mismatch", header: "불일치", cell: (run) => run.mismatch_count.toLocaleString() },
+      { key: "resolved", header: "해결", cell: (run) => run.resolved_count.toLocaleString() }
+    ],
+    []
+  );
+
+  const itemColumns = useMemo<VirtualColumn<SourceReconcileItem>[]>(
+    () => [
+      {
+        key: "select",
+        header: "",
+        headerCell:
+          cleanupTargets.length > 0 ? (
+            <input
+              aria-label="정리 대상 전체 선택"
+              checked={
+                selectedTargets.length > 0 && selectedTargets.length === cleanupTargets.length
+              }
+              onChange={(event) => toggleAllTargets(event.target.checked)}
+              type="checkbox"
+            />
+          ) : undefined,
+        cell: (item) => {
+          const eligible = isBulkHardDeleteEligible(item);
+          const objectKey = item.object_key ?? "";
+          return eligible ? (
+            <input
+              aria-label={`정리 대상 선택: ${objectKey}`}
+              checked={selectedKeys.has(objectKey)}
+              onChange={() => toggleKey(objectKey)}
+              type="checkbox"
+            />
+          ) : null;
+        }
+      },
+      {
+        key: "issue_type",
+        header: "이슈 유형",
+        cell: (item) => <span title={item.issue_type}>{reconcileIssueLabels[item.issue_type]}</span>
+      },
+      {
+        key: "severity",
+        header: "심각도",
+        cell: (item) => <StatusBadge value={item.severity} />
+      },
+      { key: "state", header: "상태", cell: (item) => item.state },
+      {
+        key: "object_key",
+        header: "객체 키",
+        cell: (item) => (
+          <span title={item.object_key ?? ""}>
+            {item.object_key ? `${item.object_key.slice(0, 24)}…` : "-"}
+          </span>
+        )
+      },
+      {
+        key: "action",
+        header: "작업",
+        cell: (item) =>
+          item.state === "open" ? (
+            <div className="button-row">
+              {SIMPLE_RESOLVE_ACTIONS.map((action) => (
+                <button
+                  className="button secondary"
+                  disabled={resolveItem.isPending}
+                  key={action}
+                  onClick={() =>
+                    resolveItem.mutate({
+                      itemId: item.source_storage_reconcile_item_id,
+                      action
+                    })
+                  }
+                  type="button"
+                >
+                  {action}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="form-note">{item.resolution_action ?? "-"}</span>
+          )
+      }
+    ],
+    // toggleAllTargets closes only over cleanupTargets (a listed dep) + the stable
+    // setSelectedKeys; resolveItem.mutate is referentially stable — only its pending
+    // flag affects rendered output. Widening would rebuild every render for no gain.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedKeys, cleanupTargets, selectedTargets, resolveItem.isPending]
+  );
+
   return (
     <div className="source-stack">
       <Panel
@@ -150,48 +260,17 @@ export function ReconcileTab() {
           </div>
         }
       >
-        <table className="table compact">
-          <thead>
-            <tr>
-              <th>실행</th>
-              <th>모드</th>
-              <th>상태</th>
-              <th>객체</th>
-              <th>불일치</th>
-              <th>해결</th>
-            </tr>
-          </thead>
-          <tbody>
-            {runs.map((run) => (
-              <tr
-                className={run.source_storage_reconcile_run_id === effectiveRunId ? "active-row" : ""}
-                key={run.source_storage_reconcile_run_id}
-              >
-                <td>
-                  <button
-                    className="link-button"
-                    onClick={() => setSelectedRunId(run.source_storage_reconcile_run_id)}
-                    type="button"
-                  >
-                    {run.source_storage_reconcile_run_id.slice(0, 12)}…
-                  </button>
-                </td>
-                <td>{run.mode}</td>
-                <td>
-                  <StatusBadge value={run.state} />
-                </td>
-                <td>{run.scanned_objects.toLocaleString()}</td>
-                <td>{run.mismatch_count.toLocaleString()}</td>
-                <td>{run.resolved_count.toLocaleString()}</td>
-              </tr>
-            ))}
-            {runs.length === 0 ? (
-              <tr>
-                <td colSpan={6}>정합성 실행 기록이 없습니다.</td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+        <VirtualTable
+          as="table"
+          columns={runColumns}
+          compact
+          emptyHint="정합성 실행 기록이 없습니다."
+          getRowClassName={(run) =>
+            run.source_storage_reconcile_run_id === effectiveRunId ? "active-row" : undefined
+          }
+          rowKey={(run) => run.source_storage_reconcile_run_id}
+          rows={runs}
+        />
       </Panel>
 
       <Panel
@@ -215,86 +294,14 @@ export function ReconcileTab() {
           ) : null
         }
       >
-        {items.length === 0 ? (
-          <p className="form-note">선택한 실행에 미해결 이슈가 없습니다.</p>
-        ) : (
-          <table className="table compact">
-            <thead>
-              <tr>
-                <th>
-                  {cleanupTargets.length > 0 ? (
-                    <input
-                      aria-label="정리 대상 전체 선택"
-                      checked={
-                        selectedTargets.length > 0 &&
-                        selectedTargets.length === cleanupTargets.length
-                      }
-                      onChange={(event) => toggleAllTargets(event.target.checked)}
-                      type="checkbox"
-                    />
-                  ) : null}
-                </th>
-                <th>이슈 유형</th>
-                <th>심각도</th>
-                <th>상태</th>
-                <th>객체 키</th>
-                <th>작업</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
-                const eligible = isBulkHardDeleteEligible(item);
-                const objectKey = item.object_key ?? "";
-                return (
-                  <tr key={item.source_storage_reconcile_item_id}>
-                    <td>
-                      {eligible ? (
-                        <input
-                          aria-label={`정리 대상 선택: ${objectKey}`}
-                          checked={selectedKeys.has(objectKey)}
-                          onChange={() => toggleKey(objectKey)}
-                          type="checkbox"
-                        />
-                      ) : null}
-                    </td>
-                    <td title={item.issue_type}>{reconcileIssueLabels[item.issue_type]}</td>
-                    <td>
-                      <StatusBadge value={item.severity} />
-                    </td>
-                    <td>{item.state}</td>
-                    <td title={objectKey}>
-                      {item.object_key ? `${item.object_key.slice(0, 24)}…` : "-"}
-                    </td>
-                    <td>
-                      {item.state === "open" ? (
-                        <div className="button-row">
-                          {SIMPLE_RESOLVE_ACTIONS.map((action) => (
-                            <button
-                              className="button secondary"
-                              disabled={resolveItem.isPending}
-                              key={action}
-                              onClick={() =>
-                                resolveItem.mutate({
-                                  itemId: item.source_storage_reconcile_item_id,
-                                  action
-                                })
-                              }
-                              type="button"
-                            >
-                              {action}
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="form-note">{item.resolution_action ?? "-"}</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+        <VirtualTable
+          as="table"
+          columns={itemColumns}
+          compact
+          emptyHint="선택한 실행에 미해결 이슈가 없습니다."
+          rowKey={(item) => item.source_storage_reconcile_item_id}
+          rows={items}
+        />
       </Panel>
 
       <Panel title="용량 (capacity)">
@@ -420,6 +427,17 @@ function BulkHardDeleteDialog({
   );
 }
 
+const CAPACITY_COLUMNS: VirtualColumn<SourceCategoryCapacity>[] = [
+  { key: "category", header: "카테고리", cell: (row) => row.category },
+  { key: "object_count", header: "객체", cell: (row) => row.object_count.toLocaleString() },
+  { key: "total_bytes", header: "용량", cell: (row) => formatBytes(row.total_bytes) },
+  {
+    key: "soft_deleted_bytes",
+    header: "soft-delete",
+    cell: (row) => formatBytes(row.soft_deleted_bytes)
+  }
+];
+
 function CapacityPanel({ capacity }: { capacity?: SourceCapacityUsage }) {
   if (!capacity) {
     return <p className="form-note">용량 정보를 불러오는 중…</p>;
@@ -445,26 +463,13 @@ function CapacityPanel({ capacity }: { capacity?: SourceCapacityUsage }) {
           <dd>{formatBytes(capacity.quarantined_bytes)}</dd>
         </div>
       </dl>
-      <table className="table compact">
-        <thead>
-          <tr>
-            <th>카테고리</th>
-            <th>객체</th>
-            <th>용량</th>
-            <th>soft-delete</th>
-          </tr>
-        </thead>
-        <tbody>
-          {capacity.categories.map((row) => (
-            <tr key={row.category}>
-              <td>{row.category}</td>
-              <td>{row.object_count.toLocaleString()}</td>
-              <td>{formatBytes(row.total_bytes)}</td>
-              <td>{formatBytes(row.soft_deleted_bytes)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <VirtualTable
+        as="table"
+        columns={CAPACITY_COLUMNS}
+        compact
+        rowKey={(row) => row.category}
+        rows={capacity.categories}
+      />
     </>
   );
 }
