@@ -5,7 +5,26 @@ import { useCallback, useEffect, useState } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { type OpsArtifact, type RestoreReconcileResult, requestJson } from "@/lib/api";
+import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
+import {
+  type OpsArtifact,
+  type RestoreReconcileResult,
+  type RestoreRowCountDiff,
+  requestJson
+} from "@/lib/api";
+
+const reconcileColumns: VirtualColumn<RestoreRowCountDiff>[] = [
+  { key: "object", header: "object", cell: (d) => d.object },
+  { key: "expected", header: "expected", cell: (d) => d.expected ?? "—" },
+  { key: "actual", header: "actual", cell: (d) => d.actual },
+  {
+    key: "match",
+    header: "match",
+    cell: (d) => (
+      <StatusBadge tone={d.match ? "ok" : "error"} value={d.match ? "ok" : "mismatch"} />
+    )
+  }
+];
 
 /**
  * Extract the T-233 ``row_count_verification`` reconcile block from a ``db_restore_log``
@@ -101,31 +120,14 @@ function RestoreReconcileCard({
       {reconcile ? (
         <>
           {reconcile.row_count_diffs && reconcile.row_count_diffs.length > 0 ? (
-            <table className="table reconcile-table">
-              <thead>
-                <tr>
-                  <th>object</th>
-                  <th>expected</th>
-                  <th>actual</th>
-                  <th>match</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reconcile.row_count_diffs.map((d) => (
-                  <tr key={d.object}>
-                    <td>{d.object}</td>
-                    <td>{d.expected ?? "—"}</td>
-                    <td>{d.actual}</td>
-                    <td>
-                      <StatusBadge
-                        tone={d.match ? "ok" : "error"}
-                        value={d.match ? "ok" : "mismatch"}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <VirtualTable
+              as="table"
+              caption="행 수 검증"
+              columns={reconcileColumns}
+              compact
+              rowKey={(d) => d.object}
+              rows={reconcile.row_count_diffs}
+            />
           ) : null}
           <ul className="manifest-kv">
             <li>

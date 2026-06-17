@@ -478,6 +478,54 @@ function BackupJobsPanel({
   onCancelJob: (jobId: string) => Promise<void>;
 }) {
   const activeJobs = jobRows.filter((job) => !terminalJobState(job.state));
+  const columns: VirtualColumn<LoadJobStatus>[] = [
+    {
+      key: "job",
+      header: "job",
+      sortValue: (job) => job.job_id,
+      cell: (job) => job.job_id
+    },
+    {
+      key: "kind",
+      header: "kind",
+      sortValue: (job) => job.kind,
+      cell: (job) => job.kind
+    },
+    {
+      key: "state",
+      header: "state",
+      sortValue: (job) => job.state,
+      cell: (job) => <StatusBadge value={job.state} />
+    },
+    {
+      key: "progress",
+      header: "progress",
+      align: "right",
+      sortValue: (job) => job.progress,
+      cell: (job) => `${Math.round(job.progress * 100)}%`
+    },
+    {
+      key: "stage",
+      header: "stage",
+      cell: (job) => stagePhase(job.current_stage)
+    },
+    {
+      key: "action",
+      header: "action",
+      cell: (job) =>
+        !terminalJobState(job.state) ? (
+          <button
+            aria-label="취소"
+            className="icon-button"
+            onClick={() => void onCancelJob(job.job_id)}
+            title="취소"
+            type="button"
+          >
+            <XCircle size={16} />
+          </button>
+        ) : null
+    }
+  ];
   return (
     <Panel title="Backup / Restore Jobs">
       {activeJobs.length > 0 ? (
@@ -487,46 +535,14 @@ function BackupJobsPanel({
           ))}
         </div>
       ) : null}
-      <table className="table">
-        <thead>
-          <tr>
-            <th>job</th>
-            <th>kind</th>
-            <th>state</th>
-            <th>progress</th>
-            <th>stage</th>
-            <th>action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {jobRows.map((job) => (
-            <tr key={job.job_id}>
-              <td>{job.job_id}</td>
-              <td>{job.kind}</td>
-              <td>
-                <StatusBadge value={job.state} />
-              </td>
-              <td>{Math.round(job.progress * 100)}%</td>
-              <td>{stagePhase(job.current_stage)}</td>
-              <td>
-                {!terminalJobState(job.state) && (
-                  <button
-                    className="icon-button"
-                    onClick={() => void onCancelJob(job.job_id)}
-                    title="취소"
-                    type="button"
-                  >
-                    <XCircle size={16} />
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {jobRows.length === 0 ? (
-        <p className="form-note">진행 중이거나 완료된 백업/복원 작업이 없습니다.</p>
-      ) : null}
+      <VirtualTable
+        as="table"
+        caption="백업/복원 작업 목록"
+        columns={columns}
+        emptyHint="진행 중이거나 완료된 백업/복원 작업이 없습니다."
+        rowKey={(job) => job.job_id}
+        rows={jobRows}
+      />
     </Panel>
   );
 }
