@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field, model_validator
 from pydantic_core import PydanticCustomError
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from kortravelgeo.api.responses import register_exception_handlers
@@ -98,6 +98,54 @@ def test_sqlalchemy_operational_error_maps_to_database_unavailable_response() ->
     assert "plain-text" not in payload_text
 
 
+def test_sqlalchemy_non_operational_dbapi_error_maps_to_internal_response() -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/db-bug")
+    async def db_bug() -> dict[str, str]:
+        raise ProgrammingError(
+            "SELECT secret_value FROM private_table",
+            {"secret": "plain-text"},
+            RuntimeError("syntax error at or near private_table"),
+        )
+
+    response = TestClient(app, raise_server_exceptions=False).get("/db-bug")
+
+    payload_text = response.text
+    payload = response.json()
+    assert response.status_code == 500
+    assert payload["response"]["status"] == "ERROR"
+    assert payload["response"]["errorCode"] == "E0500"
+    assert payload["response"]["errorMessage"] == "database statement failed"
+    assert "hint" not in payload["response"]
+    assert "secret_value" not in payload_text
+    assert "plain-text" not in payload_text
+
+
+def test_sqlalchemy_integrity_error_maps_to_internal_response() -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/db-integrity")
+    async def db_integrity() -> dict[str, str]:
+        raise IntegrityError(
+            "INSERT INTO private_table(secret_value) VALUES (:secret)",
+            {"secret": "plain-text"},
+            RuntimeError("duplicate key value violates unique constraint"),
+        )
+
+    response = TestClient(app, raise_server_exceptions=False).get("/db-integrity")
+
+    payload_text = response.text
+    payload = response.json()
+    assert response.status_code == 500
+    assert payload["response"]["errorCode"] == "E0500"
+    assert payload["response"]["errorMessage"] == "database statement failed"
+    assert "secret_value" not in payload_text
+    assert "plain-text" not in payload_text
+
+
 def test_vworld_sqlalchemy_pool_timeout_keeps_vworld_error_shape() -> None:
     app = FastAPI()
     register_exception_handlers(app)
@@ -135,4 +183,27 @@ def test_vworld_sqlalchemy_operational_error_keeps_vworld_error_shape() -> None:
     assert payload["response"]["service"]["operation"] == "getCoord"
     assert payload["response"]["error"]["code"] == "SYSTEM_ERROR"
     assert payload["response"]["error"]["text"] == "database operation failed"
+    assert "private_query" not in response.text
+
+
+def test_vworld_sqlalchemy_non_operational_error_keeps_vworld_shape() -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/v1/address/geocode")
+    async def geocode_db_bug() -> dict[str, str]:
+        raise ProgrammingError(
+            "SELECT private_query",
+            {},
+            RuntimeError("undefined column"),
+        )
+
+    response = TestClient(app, raise_server_exceptions=False).get("/v1/address/geocode")
+
+    payload = response.json()
+    assert response.status_code == 500
+    assert payload["response"]["status"] == "ERROR"
+    assert payload["response"]["service"]["operation"] == "getCoord"
+    assert payload["response"]["error"]["code"] == "SYSTEM_ERROR"
+    assert payload["response"]["error"]["text"] == "database statement failed"
     assert "private_query" not in response.text

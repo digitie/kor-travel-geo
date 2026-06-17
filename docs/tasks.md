@@ -30,12 +30,6 @@ acceptance도 닫혔다(`tasks-done.md`). 남은 항목은 아래 리뷰 후속,
 
 ### 선행 리뷰 후속
 
-- [ ] **T-178d** — `DBAPIError` handler 오류 분류 보정(#336).
-
-  PR #266 Claude Code 코멘트 후속. transient 연결/운영 DB 장애와 `ProgrammingError`·
-  `IntegrityError` 같은 버그성 오류가 같은 503 재시도 가능 오류처럼 보이지 않도록 API
-  error handler 분류와 테스트를 보강한다.
-
 - [ ] **T-178e** — `ops.pg_stat_statements_snapshots` retention/prune 정책(#336).
 
   PR #253 Claude Code 코멘트 후속. 저사양 운영에서 pg_stat snapshot이 무한 증가하지 않도록
