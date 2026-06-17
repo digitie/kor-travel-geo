@@ -172,4 +172,35 @@ test.describe("운영 콘솔 테이블 /admin/ops (T-271 VirtualTable)", () => {
       page.getByRole("table", { name: "서빙 릴리스 목록" }).getByText("서빙 릴리스가 없습니다.")
     ).toBeVisible();
   });
+
+  test("한 ops 엔드포인트(503)가 실패해도 나머지 표는 채워진다 (allSettled 복원력)", async ({
+    page
+  }) => {
+    await mockOpsApi(page);
+    // pg-stat-statements만 503으로 덮어쓴다(가장 나중에 등록한 route가 우선).
+    await page.route("**/api/proxy/v1/admin/ops/pg-stat-statements**", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "pg_stat_statements unavailable" })
+      });
+    });
+    await page.goto("/admin/ops");
+
+    // 한 엔드포인트 실패와 무관하게 나머지 표는 실데이터로 채워진다(Promise.all이었다면 전부 비었음).
+    await expect(
+      page.getByRole("table", { name: "서빙 릴리스 목록" }).getByRole("cell", { name: "rel-1" })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("table", { name: "데이터셋 스냅샷 목록" }).getByRole("cell", { name: "snap-1" })
+    ).toBeVisible();
+
+    // 실패한 pg-stat 표는 비어 있고(emptyHint), 실패 목록이 Last Response에 노출된다.
+    await expect(
+      page
+        .getByRole("table", { name: "pg_stat_statements 상위 쿼리 목록" })
+        .getByText("pg_stat_statements 스냅샷이 없습니다.")
+    ).toBeVisible();
+    await expect(page.getByText(/일부 ops 데이터 로드 실패/)).toBeVisible();
+  });
 });
