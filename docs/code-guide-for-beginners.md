@@ -8,7 +8,7 @@
 
 1. `README.md` — 5분 안에 프로젝트가 무엇인지, 어떻게 띄우는지.
 2. `SKILL.md` — DO NOT 룰, 도메인 어휘, 자주 묻는 작업.
-3. `docs/architecture.md` — 두 패키지의 관계, 백엔드 계층, 데이터 흐름.
+3. `docs/architecture/architecture.md` — 두 패키지의 관계, 백엔드 계층, 데이터 흐름.
 
 ## 2. 백엔드 (`kor-travel-geo`)
 
@@ -33,7 +33,7 @@ src/kortravelgeo/
 4. **client.py**의 `AsyncAddressClient` — 위 셋을 묶는 진입점.
 5. **api/routers/geocode.py** — REST v1 라우터는 client의 내부 v1 adapter를 호출한다.
 
-세부 사양은 `docs/backend-package.md`에 있다.
+세부 사양은 `docs/architecture/backend-package.md`에 있다.
 
 ## 3. 프론트엔드 (`kor-travel-geo-ui`)
 
@@ -54,16 +54,16 @@ kor-travel-geo-ui/
 3. `app/admin/load/page.tsx` — 업로드 단계 → 처리 단계 상태 머신.
 4. `components/admin/LoadConsole.tsx` — full-load batch payload, raw upload, MV refresh enqueue가 한 화면에 묶이는 방식.
 
-세부 사양은 `docs/frontend-package.md`에 있다.
+세부 사양은 `docs/architecture/frontend-package.md`에 있다.
 
 ## 4. 데이터·로더
 
-- `docs/data-model.md` — PostgreSQL + PostGIS 스키마 reference.
-- `docs/backend-package.md` §9 — GDAL Python binding 시도 로더, MVM_RES_CD 증분 로더, 작업 큐, 업로드+일괄 처리.
+- `docs/architecture/data-model.md` — PostgreSQL + PostGIS 스키마 reference.
+- `docs/architecture/backend-package.md` §9 — GDAL Python binding 시도 로더, MVM_RES_CD 증분 로더, 작업 큐, 업로드+일괄 처리.
 
 ## 5. 외부 API
 
-`docs/external-apis.md`에 vworld / juso / epost의 발급 절차, 환경변수, 호출 예시, 재시도·회로차단 정책이 모여 있다. 프론트엔드 지도는 VWorld WMTS + MapLibre를 쓰며, 공통 VWorld/MapLibre wrapper 문제가 나오면 `digitie/maplibre-vworld-js`도 함께 수정한다. 주소 디버그/관리 UI에만 의미가 있는 기능은 `kor-travel-geo-ui` wrapper에 둔다.
+`docs/architecture/external-apis.md`에 vworld / juso / epost의 발급 절차, 환경변수, 호출 예시, 재시도·회로차단 정책이 모여 있다. 프론트엔드 지도는 VWorld WMTS + MapLibre를 쓰며, 공통 VWorld/MapLibre wrapper 문제가 나오면 `digitie/maplibre-vworld-js`도 함께 수정한다. 주소 디버그/관리 UI에만 의미가 있는 기능은 `kor-travel-geo-ui` wrapper에 둔다.
 
 ## 6. 검증
 

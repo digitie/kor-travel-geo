@@ -1,6 +1,6 @@
 # 주소 DB 스키마 (요약)
 
-`kor-travel-geo`의 1차 저장소는 PostgreSQL + PostGIS다. 본 문서는 상위 요약만 두고, 컬럼·인덱스·MV·메타 테이블 전체 정의는 `docs/data-model.md`에 둔다.
+`kor-travel-geo`의 1차 저장소는 PostgreSQL + PostGIS다. 본 문서는 상위 요약만 두고, 컬럼·인덱스·MV·메타 테이블 전체 정의는 `docs/architecture/data-model.md`에 둔다.
 
 > 이전(v1) SQLite + SpatiaLite 기반 스키마(`juso_address_points`, `juso_boundary_polygons`, `juso_spatial_metadata`)는 `v1` 브랜치에 보존되어 있다. `main`은 더 이상 그 스키마를 유지보수하지 않는다(ADR-001).
 
@@ -19,7 +19,7 @@
 | 원천 registry (운영) | `ops.source_file_groups`, `ops.source_files`, `ops.source_file_members`, `ops.source_file_validations`, `ops.source_upload_sessions`, `ops.source_upload_session_parts`, `ops.source_match_sets`, `ops.source_match_set_items`, `ops.source_storage_reconcile_runs`, `ops.source_storage_reconcile_items`, `ops.consistency_case_definitions`, `ops.consistency_case_inputs` | 업로드 원천 archive registry, 사용자 조합 source match set, RustFS↔DB 정합성 검증, DB 기반 정합성 case 정의 (T-200/T-109) |
 | 평면화 (serving) | `mv_geocode_target`, `mv_geocode_text_search` | 지오코딩 serving MV + fuzzy 검색 helper MV |
 
-`ops.source_*` 원천 registry는 업로드 archive(`single_file`/`multi_part`), match set, RustFS 정합성, 정합성 case 정의를 관리하며 `ops.artifacts`(산출물)와 분리된다. match set은 file이 아니라 group을 참조하고, active match set은 한 건만(`idx_ops_source_match_sets_one_active`) 허용한다. `ops.dataset_snapshots`는 nullable `source_match_set_id` FK로 release의 원천 조합을 연결한다. 컬럼·CHECK 전체 정의는 `docs/data-model.md`와 `docs/t109-backup-source-upload-management.md`를 본다.
+`ops.source_*` 원천 registry는 업로드 archive(`single_file`/`multi_part`), match set, RustFS 정합성, 정합성 case 정의를 관리하며 `ops.artifacts`(산출물)와 분리된다. match set은 file이 아니라 group을 참조하고, active match set은 한 건만(`idx_ops_source_match_sets_one_active`) 허용한다. `ops.dataset_snapshots`는 nullable `source_match_set_id` FK로 release의 원천 조합을 연결한다. 컬럼·CHECK 전체 정의는 `docs/architecture/data-model.md`와 `docs/t109-backup-source-upload-management.md`를 본다.
 
 ## 좌표계
 
@@ -59,7 +59,7 @@
 
 `mv_geocode_text_search`는 `mv_geocode_target`에서 재생성하는 read-only fuzzy 검색 helper MV(T-061)다. T-171 이후 helper에는 `buld_mnnm`/`buld_slno`/`buld_se_cd`가 함께 들어가 fuzzy geocode도 exact 조회와 같은 건물번호 계약을 유지한다. MV 갱신은 두 객체를 함께 다루는 orchestration 경로(`ktgctl refresh mv`)만 사용한다.
 
-전체 DDL과 추가 인덱스, swap 갱신 전략은 `docs/data-model.md`를 본다.
+전체 DDL과 추가 인덱스, swap 갱신 전략은 `docs/architecture/data-model.md`를 본다.
 
 ## Alembic / DDL
 

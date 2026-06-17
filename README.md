@@ -5,7 +5,7 @@
 ![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)
 ![Database](https://img.shields.io/badge/database-PostgreSQL%20%2B%20PostGIS-336791.svg)
 
-**도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 한국 주소 지오코딩 라이브러리·REST API**입니다. vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 지원합니다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kor-travel-geo-ui`](docs/frontend-package.md)로 운영합니다.
+**도로명주소 전자지도(PDF 사양)를 PostgreSQL + PostGIS에 적재해 제공하는 한국 주소 지오코딩 라이브러리·REST API**입니다. vworld OpenAPI와 호환되는 응답 구조를 유지하면서 자체 확장(`x_extension`)을 지원합니다. 사용자 대상 UI가 아닌 디버깅/관리 UI는 별도 Node.js 패키지 [`kor-travel-geo-ui`](docs/architecture/frontend-package.md)로 운영합니다.
 
 > [!NOTE]
 > **현재 상태**
@@ -236,7 +236,7 @@ asyncio.run(main())
 
 ## 🔗 외부 연동 REST API
 
-본 패키지는 로컬 DB를 최우선으로 사용하며, 외부 API는 폴백(Fallback) 및 보조 용도로만 사용됩니다. 자세한 발급 절차 및 호출 정책은 [`docs/external-apis.md`](docs/external-apis.md)를 참조하세요.
+본 패키지는 로컬 DB를 최우선으로 사용하며, 외부 API는 폴백(Fallback) 및 보조 용도로만 사용됩니다. 자세한 발급 절차 및 호출 정책은 [`docs/architecture/external-apis.md`](docs/architecture/external-apis.md)를 참조하세요.
 
 | 서비스 | 환경변수 | 용도 |
 |--------|---------|------|
@@ -276,14 +276,14 @@ asyncio.run(main())
 ## 🗺️ 문서 지도 (Documentation Map)
 
 * [`SKILL.md`](SKILL.md) — 에이전트 작업 매뉴얼 (DO NOT 규칙, 자주 묻는 작업 등)
-* [`docs/architecture.md`](docs/architecture.md) — 패키지 간 계층 및 데이터 흐름도
+* [`docs/architecture/architecture.md`](docs/architecture/architecture.md) — 패키지 간 계층 및 데이터 흐름도
 * [`docs/decisions.md`](docs/decisions.md) — 아키텍처 의사결정 기록(ADR)
-* [`docs/data-model.md`](docs/data-model.md) — PostgreSQL DB 스키마 Reference
-* [`docs/backend-package.md`](docs/backend-package.md) — `kortravelgeo` 백엔드 사양서
-* [`docs/frontend-package.md`](docs/frontend-package.md) — `kor-travel-geo-ui` 프론트엔드 사양서
+* [`docs/architecture/data-model.md`](docs/architecture/data-model.md) — PostgreSQL DB 스키마 Reference
+* [`docs/architecture/backend-package.md`](docs/architecture/backend-package.md) — `kortravelgeo` 백엔드 사양서
+* [`docs/architecture/frontend-package.md`](docs/architecture/frontend-package.md) — `kor-travel-geo-ui` 프론트엔드 사양서
 * [`docs/optional-source-usage-decision.md`](docs/optional-source-usage-decision.md) — optional 원천 사용·미사용 최종 판정
 * [`docs/agent-guide.md`](docs/agent-guide.md) — AI 에이전트 작업 가이드
-* [`docs/external-apis.md`](docs/external-apis.md) — 외부 API 연동 가이드
+* [`docs/architecture/external-apis.md`](docs/architecture/external-apis.md) — 외부 API 연동 가이드
 * [`docs/tasks.md`](docs/tasks.md) / [`docs/resume.md`](docs/resume.md) / [`docs/journal.md`](docs/journal.md) — 백로그 및 작업 일지
 
 ---

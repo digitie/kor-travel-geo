@@ -21,7 +21,7 @@ T-176은 reverse geocode의 암묵 규약을 테스트와 문서로 고정한다
 - `tests/fixtures/geocoder_golden_corpus.json`
   - `T140-REV-BOUNDARY-001`을 road boundary assertion으로 좁혔다.
   - `T140-REV-SEA-001`을 `status_any` future seed에서 기본 live `OK`/SPPN context-only case로 승격했다.
-- `docs/reverse-geocoding.md`, `docs/backend-package.md`, `docs/t140-geocoder-golden-corpus.md`
+- `docs/reverse-geocoding.md`, `docs/architecture/backend-package.md`, `docs/t140-geocoder-golden-corpus.md`
   - 위 규약과 corpus 상태를 문서화했다.
 
 ## 검증

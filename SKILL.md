@@ -30,7 +30,7 @@
 - **로컬 secret/env 파일**(`.env`, `kor-travel-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
 - **프론트엔드 실행은 WSL ext4 테스트 미러의 Linux Node/npm 기준**이다. `kor-travel-geo-ui` 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL에서 실행한다.
 - **Playwright e2e는 Windows Node/브라우저 전용**이다. WSL Playwright는 실행하지 않고, Windows Playwright를 WSL UI 서버(`--hostname 0.0.0.0`)에 붙인다.
-- **반복되는 작업 실패 패턴은 먼저 `docs/agent-failure-patterns.md`를 본다.** 특히 NTFS worktree에서는 WSL `git`을 쓰지 않고, `exec_command`의 `CreateProcess ... os error 2`는 저장소 버그가 아니라 런처/quoting 문제로 먼저 분류한다.
+- **반복되는 작업 실패 패턴은 먼저 `docs/runbooks/agent-failure-patterns.md`를 본다.** 특히 NTFS worktree에서는 WSL `git`을 쓰지 않고, `exec_command`의 `CreateProcess ... os error 2`는 저장소 버그가 아니라 런처/quoting 문제로 먼저 분류한다.
 
 ### 에이전트별 worktree / CodeGraph
 
@@ -90,7 +90,7 @@ src/kortravelgeo/
 ## 4. 절대 하지 말 것 (DO NOT)
 
 1. **의존 방향 역행 금지**: 위 계층 순서를 거스르는 import 금지. 역방향 import 시 import-linter가 CI에서 실패시킴.
-2. **동기 인터페이스 추가 금지**: `AsyncAddressClient`만 둔다. 동기가 필요하면 호출자가 `asyncio.run`으로 감싼다.
+2. **동기 인터페이스 추가 금지**: `AsyncAddressClient`만 둔다. 동기가 필요하면 호출자가 `asyncio.run`으로 감싼다 (구 ADR-002 → 본 §4 룰로 통합).
 3. **`pg_trgm.similarity_threshold` 전역 변경 금지**: 항상 트랜잭션 내부에서 `SET LOCAL`.
 4. **ORM에 비즈니스 로직 금지**: `infra/models.py`는 매핑만. 쿼리는 `infra/*_repo.py`의 raw SQL에.
 5. **좌표 순서 혼동 금지**: 모든 외부 인터페이스는 `(lon, lat)`. 내부 PostGIS도 `ST_MakePoint(lon, lat)`.
@@ -99,10 +99,13 @@ src/kortravelgeo/
 8. **외부 API 키 평문 커밋 금지**: 모두 `SecretStr`. `.env`는 권한 600 또는 systemd `EnvironmentFile`/vault.
 9. **`ogr2ogr` subprocess 호출 금지**: GDAL Python binding(`gdal.VectorTranslate`) 사용. CP949 디코딩은 `open_options=["ENCODING=CP949"]`로 명시.
 10. **프론트엔드 패키지에 DB 드라이버 추가 금지**: `kor-travel-geo-ui`는 백엔드 REST API만 호출. `pg`, `prisma` 같은 의존성 들어오면 ADR 위반.
-11. **공간 쿼리 술어에서 좌표 형변환 금지**: 입력 좌표는 CTE/파라미터로 **한 번만** `ST_Transform`해서 상수로 굳히고, 술어는 `ST_DWithin(t.pt_5179, p.geom, :radius_m)`처럼 컬럼은 그대로 둔다. `ST_Transform(t.pt_5179, 4326)`이 술어에 들어가면 GiST 인덱스를 못 타고 매 행 변환이 돌아간다. **반경 검색은 `pt_5179`(meter)** 기준으로 한다 — `pt_4326`은 응답 직렬화 전용. MV의 `pt_source` 컬럼이 좌표 출처(entrance vs centroid)를 노출하므로 라우터는 centroid 결과의 `confidence`를 낮춰 반환(ADR-007, ADR-012, `docs/data-model.md` "공간 쿼리 가이드").
+11. **공간 쿼리 술어에서 좌표 형변환 금지**: 입력 좌표는 CTE/파라미터로 **한 번만** `ST_Transform`해서 상수로 굳히고, 술어는 `ST_DWithin(t.pt_5179, p.geom, :radius_m)`처럼 컬럼은 그대로 둔다. `ST_Transform(t.pt_5179, 4326)`이 술어에 들어가면 GiST 인덱스를 못 타고 매 행 변환이 돌아간다. **반경 검색은 `pt_5179`(meter)** 기준으로 한다 — `pt_4326`은 응답 직렬화 전용. MV의 `pt_source` 컬럼이 좌표 출처(entrance vs centroid)를 노출하므로 라우터는 centroid 결과의 `confidence`를 낮춰 반환(ADR-007, ADR-012, `docs/architecture/data-model.md` "공간 쿼리 가이드").
 12. **SQLAlchemy bulk `insert().values(rows)` 파라미터 폭주 금지**: PostgreSQL 프로토콜은 한 쿼리당 최대 65,535개 파라미터. row × column이 ~30,000 이상이면 `psycopg.copy_*` 또는 `gdal.VectorTranslate(... PG_USE_COPY=YES)`로 전환한다(ADR-005). 안전 마진은 한도의 절반(30k) 권장.
 13. **작업 큐 상태를 in-memory만 신뢰 금지**: 적재 작업은 `load_jobs` 테이블로 영속화한다(ADR-011). lifespan startup에서 `state IN ('queued','running')` 잔존 행을 `failed`로 마크하고, 실행 직렬성은 advisory lock 또는 `SELECT ... FOR UPDATE SKIP LOCKED`로 DB 수준에서 보강.
 14. **PostgreSQL/RustFS Docker 생명주기 직접 관리 금지**: 이 저장소는 이미 동작 중인 DB와 bucket에 접속만 한다. 구동·정지·재시작 절차는 이 저장소의 문서나 스크립트에 두지 않는다.
+15. **`gdal` 바인딩을 시스템 GDAL과 다른 버전으로 설치 금지**: Python `gdal`은 C++ 확장 wheel이라 시스템 `libgdal-dev`와 ABI가 일치해야 한다. 항상 `pip install "gdal==$(gdal-config --version)"`로 시스템 버전에 핀하고, 운영·CI는 `osgeo/gdal:ubuntu-small-*` 베이스 이미지로 시스템 GDAL과 바인딩을 한 번에 묶는다. `pip install gdal>=...`로 임의 버전을 가져오면 `ImportError: undefined symbol` 또는 segfault가 난다 (구 ADR-008 → 본 §4 룰로 통합).
+16. **base 예외명을 `KorTravelGeoError` 외 다른 이름으로 두지 말 것**: 패키지 식별자(`kortravelgeo`)와 일관되게 base 예외는 `KorTravelGeoError`로 고정한다. `AddrKrError` 같은 옛 이름이나 장기 호환 alias를 만들지 않는다 (구 ADR-014 → 본 §4 룰로 통합).
+17. **`src/kortravel/__init__.py` 생성 금지**: `kortravel`는 PEP 420 implicit namespace package로 둔다. parent `kortravel` 패키지에 `__init__.py`를 두면 namespace 병합을 막아 향후 `kortravel.*` 다른 배포 패키지와 충돌한다. setuptools는 namespace discovery(`namespaces = true`)로 `kortravelgeo`를 패키징한다 (구 ADR-015 → 본 §4 룰로 통합).
 
 ## 5. 자주 묻는 작업
 
