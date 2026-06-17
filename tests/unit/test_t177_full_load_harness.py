@@ -8,6 +8,7 @@ import pytest
 
 from kortravelgeo.core.source_layers import MASTER_LAYER_NAMES, POLYGON_LAYER_NAMES
 from tests.integration._t177_full_load_harness import (
+    _T177F_LINK_EVIDENCE_SQL,
     ENV_DATA_ROOT,
     ENV_DSN,
     ENV_ENABLED,
@@ -98,6 +99,15 @@ def test_sample_limit_from_env() -> None:
         sample_limit_from_env({ENV_SAMPLE_LIMIT: "0"})
     with pytest.raises(T177PreflightError):
         sample_limit_from_env({ENV_SAMPLE_LIMIT: "many"})
+
+
+def test_t177f_link_evidence_query_materializes_locsum_keys() -> None:
+    normalized_sql = " ".join(_T177F_LINK_EVIDENCE_SQL.split())
+
+    assert "locsum_bd AS MATERIALIZED" in normalized_sql
+    assert "SELECT DISTINCT bd_mgt_sn" in normalized_sql
+    assert "JOIN locsum_bd USING (bd_mgt_sn)" in normalized_sql
+    assert "WHERE EXISTS" not in normalized_sql
 
 
 def test_discovery_plan_and_artifact_shape(tmp_path: Path) -> None:

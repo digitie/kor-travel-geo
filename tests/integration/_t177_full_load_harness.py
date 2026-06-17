@@ -155,6 +155,42 @@ T177F_SERVING_OBJECTS = (
 
 T177F_CONSISTENCY_CASES = tuple(f"C{index}" for index in range(1, 11))
 
+_T177F_LINK_EVIDENCE_SQL = """
+WITH locsum_bd AS MATERIALIZED (
+  SELECT DISTINCT bd_mgt_sn
+    FROM public.tl_locsum_entrc
+   WHERE bd_mgt_sn IS NOT NULL
+),
+base AS (
+  SELECT
+    (SELECT count(*) FROM public.tl_juso_text) AS text_rows,
+    (SELECT count(*) FROM public.tl_locsum_entrc) AS locsum_rows,
+    (SELECT count(*) FROM public.tl_locsum_entrc WHERE bd_mgt_sn IS NOT NULL)
+      AS locsum_resolved_rows
+),
+linked AS (
+  SELECT
+    count(*) AS locsum_serving_rows,
+    count(*) FILTER (
+      WHERE target.pt_4326 IS NOT NULL
+        AND target.pt_5179 IS NOT NULL
+        AND target.rn_nrm IS NOT NULL
+        AND target.rn_nrm <> ''
+        AND target.zip_no IS NOT NULL
+    ) AS locsum_smokeable_serving_rows
+    FROM public.mv_geocode_target target
+    JOIN locsum_bd USING (bd_mgt_sn)
+)
+SELECT
+  base.text_rows,
+  base.locsum_rows,
+  base.locsum_resolved_rows,
+  linked.locsum_serving_rows,
+  linked.locsum_smokeable_serving_rows
+  FROM base
+  CROSS JOIN linked
+"""
+
 
 class T177SkipError(RuntimeError):
     """Raised when the opt-in T-177 e2e test should skip cleanly."""
@@ -1150,38 +1186,7 @@ async def collect_t177f_smoke_report(engine: AsyncEngine) -> dict[str, Any]:
 
 async def collect_t177f_link_evidence(engine: AsyncEngine) -> dict[str, int]:
     async with engine.connect() as conn:
-        row = (
-            await conn.execute(
-                text(
-                    """
-SELECT
-  (SELECT count(*) FROM public.tl_juso_text) AS text_rows,
-  (SELECT count(*) FROM public.tl_locsum_entrc) AS locsum_rows,
-  (SELECT count(*) FROM public.tl_locsum_entrc WHERE bd_mgt_sn IS NOT NULL)
-    AS locsum_resolved_rows,
-  (SELECT count(*)
-     FROM public.mv_geocode_target target
-    WHERE EXISTS (
-      SELECT 1
-        FROM public.tl_locsum_entrc l
-       WHERE l.bd_mgt_sn = target.bd_mgt_sn
-    )) AS locsum_serving_rows,
-  (SELECT count(*)
-     FROM public.mv_geocode_target target
-    WHERE pt_4326 IS NOT NULL
-      AND pt_5179 IS NOT NULL
-      AND rn_nrm IS NOT NULL
-      AND rn_nrm <> ''
-      AND zip_no IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-          FROM public.tl_locsum_entrc l
-         WHERE l.bd_mgt_sn = target.bd_mgt_sn
-      )) AS locsum_smokeable_serving_rows
-"""
-                )
-            )
-        ).mappings().one()
+        row = (await conn.execute(text(_T177F_LINK_EVIDENCE_SQL))).mappings().one()
     return {key: int(value or 0) for key, value in row.items()}
 
 
