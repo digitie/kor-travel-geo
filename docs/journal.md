@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-181 전국 long-run 링크 증거 집계 timeout 해소)
+
+**작업**: T-177G 전국 long-run full-load e2e 중 실제 전국 원천 적재와 serving MV swap까지
+완료된 뒤, 후처리 smoke의 위치정보요약DB 링크 증거 집계가 `statement_timeout`으로 실패하는
+문제를 #353/T-181로 분리했다.
+
+**결정**: 실패한 쿼리는 `mv_geocode_target` 전체 row에서 `tl_locsum_entrc` 존재 여부를
+`EXISTS`로 세는 형태였다. 전국 DB에서는 같은 증거를 더 안정적으로 수집하기 위해
+`tl_locsum_entrc`의 resolved `bd_mgt_sn` distinct key를 `MATERIALIZED` CTE로 먼저 만들고,
+unique `mv_geocode_target.bd_mgt_sn`과 조인한다. 전역 timeout 설정은 바꾸지 않는다.
+
+**검증/문서**: 실패 DB `kor_travel_geo_t177g_codex_20260617183049`에서 새 쿼리가
+`text_rows=6419795`, `locsum_rows=6405091`, `locsum_resolved_rows=2905941`,
+`locsum_serving_rows=2905941`, `locsum_smokeable_serving_rows=2905941`을 약 10초에 반환했다.
+회귀 테스트는 링크 증거 SQL이 materialized locsum key 조인을 쓰고 `WHERE EXISTS`로 되돌아가지
+않음을 고정한다. T-181 PR 머지 뒤 T-177G는 fresh scratch DB에서 다시 실행한다.
+
 ## 2026-06-17 (T-177F post-load serving/smoke/consistency fast-sample e2e)
 
 **작업**: T-177 파일 기반 full-load e2e의 다섯 번째 구현 Task로 실제 텍스트 snapshot,

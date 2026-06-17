@@ -6,6 +6,15 @@
 
 ## 완료
 
+- [x] **T-181** — 전국 long-run 후처리 링크 증거 집계 timeout 해소(Agent A/Codex, #353).
+  T-177G 전국 long-run full-load e2e에서 실제 원천 적재와 `refresh_mv(strategy="swap")`까지
+  완료된 뒤, `collect_t177f_link_evidence()`의 `EXISTS` 기반 전체 count가 전국 규모
+  `mv_geocode_target`/`tl_locsum_entrc` 조합에서 `statement_timeout`에 걸린 문제를 분리했다.
+  위치정보요약DB의 resolved `bd_mgt_sn` distinct key를 materialized CTE로 만든 뒤
+  `mv_geocode_target`과 조인해 `locsum_serving_rows`와 `locsum_smokeable_serving_rows`를
+  계산하도록 바꿨다. 기존 T-177F fast-sample 의미는 유지하면서, 전국 DB에서는 실패 쿼리가
+  약 10초 내 완료되는 것을 확인했다. (2026-06-17)
+
 - [x] **T-177F** — post-load serving, smoke, consistency e2e(Agent A/Codex).
   실제 정본 텍스트 snapshot, 위치정보요약DB, 전자지도 SHP, roadaddr entrance, SPPN makarea
   fast-sample을 한 scratch DB에 적재한 뒤 `resolve_text_geometry_links()`와 `rebuild_mv()`로
