@@ -59,3 +59,22 @@ npx playwright test tests/e2e/live
 - **VWorld 키**: `browser-flows`/지도 타일은 `.env`의 키(`KRADDR_GEO_VWORLD_API_KEY` 값을
   `KTG_VWORLD_API_KEY`로 주입)와 인터넷 접근이 필요하다.
 - 스택 종료: `wsl bash -lc 'cd /mnt/f/dev/kor-travel-geo-claude && bash scripts/docker_app.sh down'` + 12505 next 서버 종료.
+
+## 라이브에서 마주치는 알려진 제약 (실 스택 검증 중 발견)
+
+라이브 e2e를 실 백엔드로 돌리면 mock 런에서는 안 보이던 아래 동작을 만난다. 라이브 admin 스펙이
+"렌더+표 존재"까지만 단언하고 실데이터 행 수를 강제하지 않는 이유이기도 하다.
+
+- **source-files/match-set admin → 403 (의도된 RBAC).** `GET /v1/admin/source-match-sets` 등 source-files
+  도메인 read는 `require_role(source_file_viewer)`로 게이트된다(`api/security.py`). 신뢰되는
+  `X-KTG-Actor`/`X-KTG-Roles` 헤더(admin CIDR 내 peer만 신뢰)가 없으면 403. 로컬 docker 스택의
+  프록시는 이 헤더를 주입하지 않으므로 해당 패널은 에러 상태로 렌더된다(페이지는 정상). ops/consistency/
+  backups read는 이 게이트가 없어 200. → source-files/match-set 실데이터까지 라이브로 검증하려면 프록시가
+  역할 헤더를 주입하고 admin CIDR을 맞춰야 한다.
+- **`/v1/admin/ops/pg-stat-statements` → 503.** 이 엔드포인트는 (1) `pg_stat_statements` 확장(백엔드는
+  `x_extension.pg_stat_statements` 뷰를 조회)과 (2) `ops.pg_stat_statements_snapshots` 테이블 **둘 다**
+  필요하다. 테스트 DB(`ktg-t210-db`)에 확장을 설치해도 snapshots 테이블이 누락돼 있으면 `E0500`로 503.
+  스키마를 현재 `sql/ddl/001_schema.sql` 기준으로 정식 마이그레이션해야 해소된다(공유 DB 직접 DDL 금지).
+  OpsPanel은 한 엔드포인트 503이 다른 표를 비우지 않도록 `Promise.allSettled`로 부분 로드한다.
+- **v1 `type` 파라미터는 소문자만.** `type=ROAD`(대문자)는 `400 INVALID_TYPE`. 상세는
+  `docs/api-reference/v1/geocode.md`·`reverse.md` 참조.
