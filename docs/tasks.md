@@ -3,7 +3,7 @@
 작업 항목은 `T-NNN` 형식의 ID로 관리한다. 새 작업은 "대기"의 우선순위 순서대로 들어가고, 진행 중이 되면 담당자를 표시한다. 완료된 작업은 "완료" 섹션 상단에 누적한다.
 
 ## 진행 중
-- 없음.
+- **T-270~T-276 Admin UI 테이블 TanStack 전환 (Agent B/Claude)** — admin UI의 모든 테이블(27개)을 TanStack React Table+Virtual 공유 컴포넌트로 교체. 사용자 선택 아키텍처: `VirtualTable`을 semantic `<table>` 모드 + 가상화 grid 모드 2모드로 업그레이드(둘 다 TanStack Table 구동), a11y 보존·개선. 범위·verdict·테스트/e2e 플랜·세부 task는 `docs/t270-admin-tables-tanstack-migration.md`. **T-270**(공유 컴포넌트 업그레이드+단위테스트)=foundation 먼저, 이후 surface별 T-271~T-275 마이그레이션(서브에이전트 병렬), T-276 e2e 테스트 플랜 재점검+신규 커버리지+Playwright 실행. v1/백엔드 무영향(순수 프론트).
 
 ## 대기 (우선순위 순)
 

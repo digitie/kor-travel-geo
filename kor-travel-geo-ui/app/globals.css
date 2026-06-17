@@ -1254,7 +1254,9 @@ textarea {
   font-size: 13px;
 }
 
-.vtable {
+.vtable,
+.vtable-static,
+.vtable-grid {
   display: grid;
   gap: 8px;
 }
@@ -1264,6 +1266,12 @@ textarea {
   display: flex;
   gap: 12px;
   justify-content: space-between;
+}
+
+.vtable-toolbar-end {
+  align-items: center;
+  display: flex;
+  gap: 12px;
 }
 
 .vtable-search {
@@ -1280,6 +1288,20 @@ textarea {
   white-space: nowrap;
 }
 
+.vtable-caption {
+  caption-side: top;
+  color: var(--muted, #64748b);
+  font-size: 12px;
+  padding-bottom: 6px;
+  text-align: left;
+}
+
+.vtable-empty {
+  color: var(--muted, #64748b);
+  padding: 16px 6px;
+  text-align: center;
+}
+
 .vtable-head {
   border-bottom: 2px solid var(--line, #d8dee8);
   display: grid;
@@ -1287,21 +1309,24 @@ textarea {
 }
 
 .vtable-th {
-  background: none;
-  border: none;
   color: #344054;
-  cursor: default;
   font-size: 12px;
   font-weight: 700;
   padding: 8px 6px;
   text-align: left;
 }
 
-.vtable-th.sortable {
+.vtable-th-sort {
+  background: none;
+  border: none;
+  color: inherit;
   cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: inherit;
 }
 
-.vtable-th.sortable:hover {
+.vtable-th-sort:hover {
   color: var(--brand, #0f766e);
 }
 
@@ -1317,12 +1342,22 @@ textarea {
   gap: 8px;
 }
 
+.vtable-row[role="row"] {
+  cursor: inherit;
+}
+
 .vtable-td {
   font-size: 13px;
   overflow: hidden;
   padding: 0 6px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.vtable-wrap .vtable-td {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .source-stack {
