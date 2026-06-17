@@ -1186,7 +1186,15 @@ WITH latest AS (
         *,
         limit: int = 20,
         skip_if_locked: bool = True,
+        retention_days: int | None = None,
     ) -> list[PgStatStatementSnapshot]:
+        if retention_days is not None and retention_days < 1:
+            raise InvalidInputError(
+                "retention_days must be greater than or equal to 1",
+                code="E0102",
+                http_status=400,
+            )
+
         captured_at = datetime.now(UTC)
         async with self.engine.begin() as conn:
             locked = await conn.scalar(
@@ -1279,6 +1287,16 @@ VALUES
                         "stats",
                     ),
                     records,
+                )
+            if retention_days is not None:
+                await conn.execute(
+                    text(
+                        """
+DELETE FROM ops.pg_stat_statements_snapshots
+ WHERE captured_at < now() - (:retention_days * interval '1 day')
+"""
+                    ),
+                    {"retention_days": retention_days},
                 )
         return [_pg_stat_statement_snapshot(record) for record in records]
 

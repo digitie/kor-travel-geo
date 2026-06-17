@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-178e pg_stat snapshot retention)
+
+**작업**: #336/T-178 선행 리뷰 후속 중 PR #253 Claude Code 코멘트를 반영했다. `ops.pg_stat_statements_snapshots`가 주기 capture로 무한 증가하지 않도록 retention 설정과 pruning 경로를 추가했다.
+
+**결정**: 기본 보존 기간은 7일로 두고, capture interval이 켜져 있을 때 scheduler와 수동 Admin API capture가 모두 같은 retention 정책을 탄다. 삭제는 `pg_stat_statements` capture advisory transaction lock을 잡은 같은 transaction 안에서 실행해 중복 scheduler worker 간 pruning 경쟁을 줄인다. `retention_days < 1` 직접 호출은 방금 캡처한 row까지 지울 수 있으므로 입력 오류로 막는다.
+
+**검증/문서**: `tests/unit/test_ops_metadata.py`와 `tests/unit/test_settings.py`에 설정 기본값, scheduler 전달, 저장소 pruning SQL 회귀를 추가했다. 남은 선행 후속은 T-178f RustFS HEAD/size 정직화 하나다.
+
 ## 2026-06-17 (T-178d DBAPIError 분류)
 
 **작업**: #336/T-178 선행 리뷰 후속 중 PR #266 Claude Code 코멘트를 반영했다. `DBAPIError` handler가 모든 DBAPI 오류를 transient 503으로 접던 것을 `OperationalError`/connection-invalidated와 그 밖의 DBAPI 오류로 분리했다.

@@ -156,6 +156,10 @@ def test_admin_repo_ops_methods_redact_and_hash_confirmation() -> None:
     assert "pg_try_advisory_xact_lock" in module_source
     assert "TABLE_STATS_CAPTURE_LOCKED_MESSAGE" in module_source
     assert "capture_pg_stat_statement_snapshots" in source
+    assert "retention_days" in source
+    assert "DELETE FROM ops.pg_stat_statements_snapshots" in source
+    assert "captured_at < now() - (:retention_days * interval '1 day')" in source
+    assert "retention_days must be greater than or equal to 1" in source
     assert "ops.slow_observability_samples" in inspect.getsource(slow_observability)
     assert "_OPS_PG_STAT_STATEMENTS_ADVISORY_LOCK = 0x4B47_00A1" in module_source
     assert "PG_STAT_STATEMENTS_CAPTURE_LOCKED_MESSAGE" in module_source
@@ -234,6 +238,7 @@ def test_ops_capture_schedulers_use_settings_and_advisory_locks() -> None:
     assert "ops_pg_stat_statements_capture_interval_minutes <= 0" in pg_scheduler_source
     assert "ops_pg_stat_statements_capture_on_startup" in pg_loop_source
     assert "ops_pg_stat_statements_capture_limit" in module_source
+    assert "ops_pg_stat_statements_retention_days" in module_source
     assert "capture_pg_stat_statement_snapshots(" in module_source
     assert "refresh_pg_stat_statement_metrics" in module_source
     assert "skip_if_locked=True" in module_source

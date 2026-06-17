@@ -6,6 +6,14 @@
 
 ## 완료
 
+- [x] **T-178e** — `ops.pg_stat_statements_snapshots` retention/prune 정책(Agent A/Codex).
+  PR #253 Claude Code 코멘트를 #336 선행 후속으로 반영했다.
+  `KTG_OPS_PG_STAT_STATEMENTS_RETENTION_DAYS` 기본 7일 설정을 추가하고,
+  scheduler와 수동 capture 경로가 `AdminRepository.capture_pg_stat_statement_snapshots()`에
+  retention 값을 전달하게 했다. 저장소 메서드는 advisory transaction lock을 잡은 같은
+  transaction 안에서 오래된 `ops.pg_stat_statements_snapshots` row를 삭제하며,
+  `retention_days < 1` 직접 호출은 400 입력 오류로 거절한다. (2026-06-17)
+
 - [x] **T-178d** — `DBAPIError` handler 오류 분류 보정(Agent A/Codex).
   PR #266 Claude Code 코멘트를 #336 선행 후속으로 반영했다. SQLAlchemy `OperationalError`와
   `connection_invalidated` DBAPI 오류는 기존처럼 503 `database operation failed`로 유지하고,

@@ -4,13 +4,15 @@
 
 ## 현재 진척도 (2026-06-17 갱신, by codex)
 
-- ✅ T-178a~T-178d Claude Code 리뷰 후속 완료 — 2026-06-16 이후 PR 리뷰 스캔에서 미반영으로 보인
+- ✅ T-178a~T-178e Claude Code 리뷰 후속 완료 — 2026-06-16 이후 PR 리뷰 스캔에서 미반영으로 보인
   Claude Code 코멘트 6건을 #336/T-178로 분리했다. 첫 항목으로 PR #248 코멘트를 반영해,
   v2 geocode 보조 road 후보 조회 실패가 primary OK 응답을 깨지 않도록 best-effort 처리했다.
   이어서 PR #285 코멘트를 반영해 geocode/reverse cache write 실패가 OK 응답을 깨지 않도록
   best-effort 처리했다. PR #277 코멘트도 반영해 `테헤란로1길 10` 같은 번호형 가지도로를
   도로명으로 보존한다. PR #266 코멘트는 `DBAPIError` 중 운영 장애는 503, SQL/schema/constraint
-  오류는 500으로 분류하도록 보정했다. 남은 선행 후속은 `T-178e`~`T-178f`다.
+  오류는 500으로 분류하도록 보정했다. PR #253 코멘트는 `ops.pg_stat_statements_snapshots`
+  retention 기본 7일과 capture transaction 내 pruning으로 닫았다. 남은 선행 후속은
+  `T-178f`다.
 - ✅ T-119/T-139 종료 판정 완료 — `T-119`는 T-137 최종 gate와 T-153 acceptance 근거로 C11 active serving promotion을 no-go 종료했다. C11은 validation-only로 고정하며, 새 같은 기준월 C11 원천 또는 동등한 새 증거가 있으면 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인으로만 다룬다. `T-139`는 T-153 기준 구조적 성능 blocker가 없어 별도 변경 DB 실험을 no-action 종료했다.
 - ✅ Timescale PostgreSQL 계열 Codex skill 변환 완료 — `timescale/pg-aiguide`의 Claude Code용 skill 8종을 Codex repo-scoped skill로 변환해 `.agents/skills/`에 추가했다. Codex frontmatter는 `name`/`description`만 유지하고 원본 Apache-2.0/source/compatibility 표기는 본문에 보존했다. `quick_validate.py` 검증과 YAML frontmatter 파싱 검증을 통과했다. 같은 `.codex/agents` 6종과 `.agents/skills` 8종을 `F:\dev` 바로 아래 다른 Git repo 78개에도 복사·stage했고, 모든 대상에서 agent 6개와 skill 8개가 확인됐다. 대상 repo에서 해당 경로는 ignore되지 않아 `.gitignore` 추가 수정은 없었다.
 - ✅ Codex 프로젝트 subagent 정의 등록 완료 — VoltAgent core-development subagent 6종을 `.codex/agents/`에 추가해 Git 추적 대상 구성으로 옮겼고, 전역 `C:\Users\digit\.codex\agents` 복사본도 같은 값으로 맞췄다. 모든 subagent는 `model="gpt-5.5"`, `model_reasoning_effort="xhigh"`를 사용한다. TOML 파싱과 필수 필드 검증을 통과했다.

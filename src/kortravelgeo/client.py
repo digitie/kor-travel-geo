@@ -2015,10 +2015,16 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         *,
         limit: int = 20,
         skip_if_locked: bool = False,
+        retention_days: int | None = None,
     ) -> list[PgStatStatementSnapshot]:
         return await AdminRepository(self._engine()).capture_pg_stat_statement_snapshots(
             limit=limit,
             skip_if_locked=skip_if_locked,
+            retention_days=(
+                self.settings.ops_pg_stat_statements_retention_days
+                if retention_days is None
+                else retention_days
+            ),
         )
 
     def list_source_file_categories(self) -> tuple[SourceFileCategoryInfo, ...]:
