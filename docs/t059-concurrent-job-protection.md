@@ -239,7 +239,7 @@ advisory lock만으로는 "지금 누가 잠그고 있는지" 정보가 없다. 
 7. [완료] **queue 충돌 가시성**: API job handler가 lock 충돌을 만나면 `lock_conflict` progress event를 먼저 남긴 뒤 job을 `failed`로 닫는다.
 8. [후속] **운영 가시성**: CLI 단독 실행도 `load_jobs` row 생성 + advisory lock과 연계.
 9. [완료] **문서화**:
-   - `docs/backend-package.md`에 cross-process protection 정책 섹션 추가.
+   - `docs/architecture/backend-package.md`에 cross-process protection 정책 섹션 추가.
    - `docs/api-reference/library/error-codes.md`에 `E0409` 항목.
    - `docs/operators/runbook.md`(향후)에 "동시 실행 차단 만났을 때 처리 절차".
 

@@ -1,323 +1,418 @@
-# AI 에이전트 작업·문서화 가이드
+# agent-guide.md — 에이전트 작업·문서화 가이드
 
-본 문서는 첨부 사양서(2026-05-22 작성) Part B를 `main` 문서 체계로 정리한 것이다. AI 에이전트가 이 저장소에서 일관되게 작업하기 위한 표준이다.
+이 문서는 AI 에이전트(Claude Code / ChatGPT Codex / Google Antigravity 2.0)가
+`kor-travel-geo`에서 작업할 때의 행동 지침이다. `AGENTS.md`, `SKILL.md`와 함께
+읽는다. 환경·도구의 1차 reference는 `docs/dev-environment.md`, worktree +
+CodeGraph는 `docs/codegraph-worktree.md`, 표준 1-PR 운영 절차는
+`docs/runbooks/agent-workflow.md`, task 운영 규칙은 `docs/tasks-rule.md`다 —
+본 문서는 그것들을 **진입·문서화·PR 규약으로 엮는다**(중복 서술하지 않는다).
 
-## B1. 원칙: 컨텍스트가 휘발돼도 문서로 회복한다
+## 1. 첫 진입 프로토콜 (10분 안에 컨텍스트 확보)
 
-### B1.1 왜 이 가이드가 필요한가
+새 세션이 들어오면 이 순서로 컨텍스트를 확보한다.
 
-LLM 기반 에이전트는 매 대화가 끝나면 기억을 잃는다. 같은 에이전트가 며칠 뒤 이어받거나, 전혀 다른 에이전트가 처음 본다고 가정해야 한다. 의지할 수 있는 건 오직 저장소 안의 파일이다. 따라서 **"문서"의 1차 독자는 사람이 아니라 다음 에이전트**다.
+1. `README.md` — 정체성, 빠른 시작, 문서 지도
+2. `AGENTS.md` — 지시 우선순위, 개발 환경 정책, DO NOT 룰
+3. `SKILL.md` — DO NOT 룰, 자주 묻는 작업, 도메인 어휘
+4. `docs/architecture/architecture.md` 목차 — 두 패키지 관계, 의존 방향, 데이터 흐름
+5. `docs/resume.md` — "현재 진척도" + "다음 한 작업"
+6. `docs/journal.md` 최신 3 엔트리 — 직전 컨텍스트
+7. `docs/tasks-rule.md` + `docs/tasks.md` — task 번호 체계·병행 순서·PR 루프와,
+   resume이 가리키는 현재 항목
+8. 관련 ADR (`docs/decisions.md`)
+9. 직결 docs (loader면 `docs/architecture/backend-package.md`, UI면 `docs/architecture/frontend-package.md`,
+   외부 API면 `docs/architecture/external-apis.md`, 적재면 `docs/t027-fullload-plan.md` /
+   `docs/t213-data-preservation.md`)
+10. **운영 runbook** (`docs/runbooks/`) — 에이전트 공용. 실제 작업 전
+    [agent-workflow.md](runbooks/agent-workflow.md)(표준 1-PR 흐름)와
+    [agent-failure-patterns.md](runbooks/agent-failure-patterns.md)(반복 실패
+    회피)는 훑고 들어간다. 게이트가 깨지면 failure-patterns부터 본다.
 
-두 보장:
+### 1.1 코드 수정 우선순위
 
-- **Recoverability(회복성)**: 작업 중간에 컨텍스트가 끊겨도 다음 세션은 30분 안에 같은 상태로 복귀
-- **Continuity(연속성)**: 이전 결정을 모르고도 일관된 선택. 결정의 "근거"가 코드와 함께 살아 있음
+코드 작성·수정은 **최소 코드 변경**이나 **기존 임시 계약과의 호환성**보다
+완성도, 최적 구조, 확장성, 안정성을 우선한다. 문제를 발견하면 호출부만 맞추는
+shim, 임시 adapter, 런타임 추정값으로 덮기 전에 DTO, migration, repository,
+API schema, 테스트가 같은 계약을 공유하는지 먼저 본다. PR scope는 작게
+유지하되, 그 scope 안에서는 production으로 이어질 구조를 택한다. (단순 전달용
+래퍼/장기 호환 별칭/임시 facade를 만들지 않는다 — `AGENTS.md` §제공자 API
+사용 원칙.)
 
-### B1.2 5가지 원칙
+### 1.2 자기 worktree로 이동
 
-| 원칙 | 의미 | 안티패턴 |
+이 저장소는 **에이전트별 고정 worktree** 정책을 쓴다(ADR-041,
+`docs/codegraph-worktree.md`). 컨텍스트 확보 직전에 자기 worktree로 이동하고
+CodeGraph 인덱스를 맞춘다. NTFS worktree의 Git metadata는 Windows Git
+기준(`F:/dev/...`)이므로 git 명령은 Windows `git.exe`로 한다.
+
+```bash
+# 어떤 AI 에이전트인지에 따라 (Windows git.exe 사용)
+"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-codex       status -sb   # ChatGPT Codex
+"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-claude      status -sb   # Claude Code
+"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-antigravity status -sb   # Google Antigravity 2.0
+```
+
+worktree가 없으면 `docs/codegraph-worktree.md` §3 "최초 setup". CodeGraph
+인덱스는 새 branch 직후 `codegraph sync` → `codegraph status`(있으면) /
+`codegraph init -i`(최초). 사용자가 직접 작업할 때는 기준 clone
+(`/mnt/f/dev/kor-travel-geo`)을 쓰고 `kor-travel-geo-*` worktree에는 들어가지
+않는다.
+
+## 2. 결정·기록 5종 (필수 유지)
+
+| 파일 | 역할 | 갱신 시점 |
 |------|------|----------|
-| 문서가 진실의 원천 (DocAsCode) | README와 ADR이 코드와 함께 PR에 들어간다 | 구두 결정, 채팅 스레드만 남는 결정 |
-| 디렉토리는 자기설명적 | 이름과 위치만 봐도 무엇이 들어 있는지 짐작 | `utils/`, `helpers/`, `common/`, `misc/` |
-| 불변 결정은 분리 | `architecture.md` / `decisions.md`에 분리 | README가 비대해져 가독성 잃음 |
-| 진행상태는 명시적 | `resume.md`, `journal.md` 항상 최신 | PR 설명에만 적힌 진척도 |
-| 자동 검증 | pre-commit과 CI가 컨벤션 강제 | 사람 리뷰만으로 룰 유지 시도 |
+| `docs/decisions.md` | ADR 누적 | 결정이 발생할 때마다 |
+| `docs/resume.md` | 진척도 + "다음 한 작업" | 작업 마무리마다 |
+| `docs/journal.md` | 작업 로그 (역시간순 append) | 작업 끝낼 때마다 |
+| `docs/tasks.md` + `docs/tasks-done.md` | 진행/대기 백로그 + 완료·종료 이력 | 작업 추가/시작/완료 시 (규칙은 `docs/tasks-rule.md`) |
+| `CHANGELOG.md` | 릴리즈 노트 (사용자 가시 변경) | 사용자 가시 변경 시 |
 
-### B1.3 에이전트가 묻기 전에 알아야 할 5가지
+코드/문서를 바꿨는데 위 중 관련된 것이 하나도 갱신되지 않았다면 그 PR은
+불완전하다. DTO/스키마를 바꿨으면 `docs/architecture/data-model.md`도 DDL과 동기로 갱신한다.
 
-새로 들어온 에이전트가 가장 먼저 검색해야 할 정보:
+## 3. ADR 작성 규약
 
-1. 이 프로젝트는 무엇인가 → `README.md` 첫 단락
-2. 내가 지금 손대도 되는 가장 작은 일은 무엇인가 → `docs/tasks.md` 또는 `docs/resume.md`
-3. 절대 깨면 안 되는 규칙은 무엇인가 → `SKILL.md`의 "DO NOT" 섹션
-4. 이전에 어떤 결정이 있었나 → `docs/decisions.md` (ADR)
-5. 작업을 끝내면 어디에 기록하나 → `docs/journal.md` (append-only)
+번호: `ADR-NNN` 연번. 현재 번호는 `docs/decisions.md` 맨 위에서 확인한다(다음
+후보는 그 최댓값 + 1).
 
-## B2. 문서 계층
+```markdown
+## ADR-NNN: <결정 요약>
 
-### B2.1 파일의 역할 분담
+- 상태: proposed | accepted | superseded by ADR-XXX
+- 날짜: YYYY-MM-DD
+- 결정자: <agent | human> 또는 둘 모두
 
-문서를 늘리는 게 목적이 아니다. 각 파일은 명확히 다른 질문에 답하므로 합치면 검색 비용이 오른다. 한 파일이 두 가지 역할을 떠안기 시작하면 분리 신호.
+### 컨텍스트
+무엇이 문제였고 왜 결정이 필요했는지.
 
-| 파일 | 목적 | 수정 주기 | 1차 독자 |
-|------|------|-----------|---------|
-| `README.md` | 5분 안에 프로젝트 파악, 빠른 시작 | 월 단위 | 신규 합류자 |
-| `SKILL.md` | 에이전트가 작업 전 반드시 읽는 매뉴얼 | 필요 시 즉시 | AI 에이전트 |
-| `docs/architecture.md` | 변하지 않는 큰 구조 설계 | 분기 단위 | 에이전트, 리뷰어 |
-| `docs/decisions.md` | ADR — 왜 그렇게 결정했나 | 결정 발생 시 | 미래의 에이전트 |
-| `docs/data-model.md` | 스키마·도메인 모델 reference | 스키마 변경 시 | 에이전트, DBA |
-| `docs/tasks.md` | 현재 백로그·우선순위 | 수시 | 에이전트, PM |
-| `docs/resume.md` | 지금 어디까지 했나, 다음은 무엇 | 작업 단위 (필수) | AI 에이전트 |
-| `docs/journal.md` | append-only 작업 일지 | 작업 단위 (필수) | 에이전트, 자신 |
-| `CHANGELOG.md` | 릴리즈 노트 (사용자 가시) | 릴리즈 시 | 이용자, 통합자 |
+### 결정
+무엇을 하기로 했는지. 구체적으로.
 
-### B2.2 README.md — 5분 안의 약속
+### 근거
+왜 이 결정인지. 대안과의 비교.
 
-스크롤 한 번이면 6가지를 알 수 있어야 한다.
+### 결과 (긍정 / 부정)
+- ...
 
-1. 프로젝트가 무엇이고 무엇이 아닌지 (1~2 문단)
-2. 빠른 시작 (3~5 줄 셸 명령)
-3. 주요 진입점 (api 서버 / CLI / lib import 등)
-4. 디렉토리 한 줄 설명
-5. 기여 안내 — `SKILL.md`, `docs/tasks.md`, `docs/journal.md` 링크
-6. 라이선스와 연락처
-
-README는 마케팅 문서가 아니라 사용자 매뉴얼이다.
-
-### B2.3 architecture vs decisions
-
-둘 다 "왜"를 다루지만 시간 차원이 다르다.
-
-- `docs/architecture.md`: **현재 시점**에 적용되는 구조 — "우리는 이렇게 설계한다". 대체로 변하지 않는 큰 그림. 시퀀스 다이어그램, 계층, 데이터 흐름.
-- `docs/decisions.md` (ADR): **결정의 역사** — "우리는 왜 그렇게 정했나, 무엇을 포기했나". 결정이 뒤집힐 때도 이전 기록은 지우지 않고 `superseded by ADR-XXX`로 표시.
-
-### B2.4 resume.md — 작업 재개의 진입점
-
-새 에이전트 세션 시작 시 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다. 표준 섹션:
-
-- 현재 진척도 (✅ / 🟡 / ⬜ 토글)
-- 다음 한 작업 (1시간 이내 분량, 시작 파일/검증 방법 포함)
-- 작업 시작 전 확인할 것 (관련 ADR, 사양 절)
-- 알려진 함정
-- 작업 후 의무사항
-
-### B2.5 journal.md — append-only 작업 일지
-
-새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치.
-
-표준 엔트리:
-
+### 후속
+- 어떤 코드/문서/테스트가 변경되어야 하는지.
 ```
-## YYYY-MM-DD HH:MM (agent-or-human)
-**작업**:
+
+결정이 뒤집힐 때는 새 ADR을 추가하고 옛 ADR의 상태를 `superseded by ADR-XXX`로
+표시한다. **옛 ADR 본문은 지우지 않는다** — 결정 이력을 남긴다.
+
+## 4. journal.md 엔트리 형식
+
+역시간순으로 위에서 아래로 append. 가장 위가 가장 최근. 기존 항목은 수정하지
+않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
+
+```markdown
+## 2026-06-16 14:30 (claude)
+**작업**: v2 후보 목록 API에 좌표 정밀도 필드 추가 (T-NNN)
 **변경 파일**:
-**결정**:
-**발견**:
-**다음**:
+- src/kortravelgeo/dto/candidate.py (필드 추가)
+- src/kortravelgeo/api/v2/routes.py
+- tests/unit/test_dto_candidate.py
+- openapi.json (export 재실행)
+- docs/architecture/data-model.md / docs/resume.md
+**결정**: 정밀도는 x_extension이 아니라 v2 자체 스키마에만 노출 (v1 vworld 호환 유지)
+**발견**: v1 응답은 x_extension 외 자체 필드 추가 금지(ADR-003) — v2에만 추가
+**다음**: 프론트엔드 gen:types 재생성 후 UI 표면 반영
 ```
 
-### B2.6 tasks.md — 현재 백로그
+`작업/변경/결정/발견/다음` 5개 필드 유지. 빈 필드는 생략 가능. 세션이
+중단되면 가장 최근 journal 엔트리가 핸드오프 노트 역할을 한다(§11).
 
-진행 중 / 대기(우선순위 순) / 완료(최근 10건). 작업 ID는 `T-NNN`. PR/commit에서 참조.
+## 5. resume.md 형식
 
-## B3. SKILL.md — 에이전트의 작업 매뉴얼
+```markdown
+# resume.md
 
-표준 섹션 (`SKILL.md` 본문에 적용된 그대로):
+## 현재 진척도
+현재 상태는 `docs/resume.md`와 `docs/tasks.md`를 정본으로 본다.
+전국 실 데이터 적재·검증 완료(T-027). 관련 ADR은 `docs/decisions.md`.
 
-| 섹션 | 내용 | 분량 |
-|------|------|------|
-| 1. 정체성 | 프로젝트가 무엇이고 무엇이 아닌지 | 3~5 문장 |
-| 2. 빠른 시작 | 셸 명령 5줄 이내 | 코드 블록 1개 |
-| 3. 디렉토리 지도 | 트리 + 각 디렉토리 1줄 설명 | 최대 1 페이지 |
-| 4. 절대 하지 말 것 (DO NOT) | 5~10개 룰 | 리스트 |
-| 5. 자주 묻는 작업 → 어디서 시작 | 키워드 → 파일/명령 매핑 | 테이블 |
-| 6. 도메인 어휘 | 약어 사전 | 테이블 |
-| 7. 작업 후 체크리스트 | journal/resume/테스트 | 3~5 항목 |
+## 다음 한 작업
+(1시간 이내 분량. 시작 파일 / 검증 방법 포함)
 
-## B4. 재개 프로토콜
+## 작업 시작 전 확인할 것
+- 관련 ADR, 관련 docs
 
-### B4.1 새 세션의 첫 5분 (총 10분 안에 컨텍스트 확보)
+## 알려진 함정
+- TMPDIR가 Windows Temp를 가리키면 pytest capture가 FileNotFoundError로 죽는다
+- WSL에서 Playwright headless Chromium은 공유 라이브러리 누락으로 실패한다
 
-작업 디렉터리는 에이전트별 NTFS 고정 worktree를 우선한다. ChatGPT Codex는 `/mnt/f/dev/kor-travel-geo-codex`, Claude Code는 `/mnt/f/dev/kor-travel-geo-claude`, Google Antigravity 2.0은 `/mnt/f/dev/kor-travel-geo-antigravity`를 사용한다. worktree가 없다면 `docs/dev-environment.md` §1.1 절차로 생성하고, `.codegraph/`가 없다면 해당 worktree에서 `codegraph init -i`를 최초 1회 실행한다. Git metadata는 Windows Git 기준(`F:/dev/...`)으로 유지하고, WSL `git` 편의를 위해 `.git`/`gitdir`을 `/mnt/f/...`로 고치지 않는다. NTFS `/mnt` 경로에서는 CodeGraph live watch가 비활성화될 수 있으므로 새 작업 branch를 만든 직후 `codegraph sync`와 `codegraph status`로 인덱스를 맞춘다. 테스트와 장기 실행은 worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행하며, 미러에서는 commit/push하지 않는다. PostgreSQL/RustFS 검증은 이 저장소가 직접 구동하지 않고 `KTG_PG_DSN`, `KTG_RUSTFS_*`가 가리키는 이미 동작 중인 DB와 bucket을 사용한다. 미러 셋업·검증 루프·반복 함정(Windows npm shim, Windows Temp) 해결을 단계별로 따라하려면 `docs/agent-workflow.md` 런북을 보고, 미러 셸에서는 `source scripts/agent_env.sh`를 먼저 실행한다.
-
-| 순서 | 행동 | 시간 |
-|------|------|------|
-| 1 | `README.md` 처음부터 끝까지 | 2분 |
-| 2 | `SKILL.md` (특히 §4 DO NOT, §5 자주 묻는 작업) | 3분 |
-| 3 | `docs/architecture.md` 목차 훑기 | 1분 |
-| 4 | `docs/resume.md` "현재 진척도" + "다음 한 작업" | 1분 |
-| 5 | `docs/journal.md` 최근 3 엔트리 | 2분 |
-| 6 | `docs/tasks.md`에서 resume이 가리키는 항목 확인 | 1분 |
-
-컴포넌트 작업(`kor-travel-geo-ui/components/**`, App Router client component, 지도 wrapper, 공용 UI primitive)은 수정 전에 CodeGraph MCP의 `codegraph_explore`로 영향도를 먼저 확인한다. 확인 결과에는 호출자, 관련 테스트, props/type 공유 지점, `maplibre-vworld-js`와의 책임 경계를 포함한다. Codex Desktop 재시작 전처럼 MCP 도구가 아직 노출되지 않은 세션에서는 `codegraph sync`, `codegraph status`, `codegraph context <task>` 또는 `codegraph impact <symbol>` 결과로 임시 확인하고, 그 사유를 PR 설명이나 `docs/journal.md`에 남긴다.
-
-반복적으로 재현되는 작업 실패 패턴(예: NTFS worktree에서 WSL `git` 실패, `exec_command`의 `CreateProcess ... os error 2`, NTFS 경로에서 `apply_patch` 실패, inline rewrite의 escape 손상)은 [`docs/agent-failure-patterns.md`](./agent-failure-patterns.md)에 별도로 정리한다. 새 세션에서 같은 증상이 보이면 프로젝트 버그로 보기 전에 이 문서를 먼저 확인한다.
-
-### B4.2 작업 사이클
-
-```
-작업 1건 ─┬─→ [읽기] resume → architecture 관련 절 → 관련 ADR
-          ├─→ [분기] 고정 worktree에서 새 branch 생성 → codegraph sync → codegraph status
-          ├─→ [탐색] 컴포넌트 수정이면 codegraph_explore 영향도 확인
-          │
-          ├─→ [코드] 변경 (한 PR / 한 commit 단위)
-          │
-          ├─→ [검증] pytest -q + ruff + mypy + lint-imports
-          │
-          ├─→ [기록] journal 엔트리 추가 (작업/변경/결정/다음)
-          │
-          ├─→ [갱신] resume 진척도 토글, tasks 상태 변경
-          │
-          ├─→ [선택] ADR 추가 (decisions.md), CHANGELOG (사용자 가시 시)
-          │
-          └─→ [커밋] [scope] verb: object (#issue-id)
+## 차단 사유 / 결정 대기
+- T-063 N150/Odroid 실측은 실제 장비가 준비되면 진행 (하드웨어 보류)
 ```
 
-### B4.3 PR 리뷰 확인 프로토콜
+## 6. tasks.md / tasks-done.md
 
-PR 리뷰를 반영할 때는 GitHub의 "Conversation comment", "Review body", "Inline review thread"가 서로 다른 표면이라는 점을 전제로 한다. `gh pr view --json comments`만 보면 정식 review body(`latestReviews`/`reviews`)나 inline thread를 놓칠 수 있다. 특히 리뷰 제목이 `# PR #NN 리뷰 — ...` 형태로 review body에 들어간 경우 conversation comment 목록에는 보이지 않는다.
+task 문서(`tasks.md`/`tasks-done.md`)의 작성·유지 규약 — 번호 체계(T-1xx /
+T-2xx), 두 에이전트 병행 순서, PR/리뷰 루프, 사양 참조 — 은
+[`docs/tasks-rule.md`](tasks-rule.md)가 정본이다. 본 가이드는 그 규칙을
+다시 적지 않는다. task를 추가/시작/완료할 때는 먼저 `tasks-rule.md`를 본다.
 
-필수 절차:
+## 7. 변경 분류별 체크리스트
 
-1. PR 번호와 head branch를 확인한다.
-   ```bash
-   gh pr view <PR_NUMBER> --json number,title,url,state,headRefName,baseRefName,reviewDecision,statusCheckRollup
-   ```
-2. thread-aware 스크립트로 세 표면을 한 번에 저장한다.
-   ```bash
-   python3 /mnt/c/Users/<user>/.codex/plugins/cache/openai-curated/github/0d4f5414/skills/gh-address-comments/scripts/fetch_comments.py > /tmp/pr-comments.json
-   ```
-3. `conversation_comments`, `reviews[].body`, `review_threads[]`를 모두 읽는다. 리뷰 본문 첫 줄, 예를 들어 `# PR #14 리뷰 — T-027 actual full-load execution fixes` 같은 제목도 별도 항목으로 체크한다.
-4. 항목을 `High`, `Medium`, `Low`, `Optional`, `설명만 필요`로 분류하고, 반영 여부를 `docs/journal.md` 또는 PR 코멘트에 남긴다.
-5. `review_threads`가 비어 있어도 review body의 H/M/L 섹션은 actionable일 수 있다. "thread 없음"은 "리뷰 없음"이 아니다.
-6. 마지막 conversation comment도 별도로 확인한다. 본문 리뷰 뒤에 후속 Optional 제안이 붙을 수 있다.
+### 7.1 ADR 추가만
 
-반영 후 PR에 남길 요약은 "어떤 리뷰 항목을 코드로 반영했는지", "문서만 보강한 항목", "후속으로 이관한 항목", "검증 명령"을 분리해 쓴다.
+- [ ] `docs/decisions.md`에 추가
+- [ ] `docs/journal.md` 엔트리
+- [ ] `docs/resume.md` "다음 한 작업" 갱신
 
-### B4.4 컨텍스트 손실 시뮬레이션
+### 7.2 docs 신규/수정
 
-주기적으로(예: 매주 금요일):
+- [ ] 한국어 산문 (코드 식별자·API 필드명·명령어·URL만 영문 — `AGENTS.md`
+      §문서 언어 정책)
+- [ ] 관련 ADR 링크
+- [ ] `docs/journal.md` 엔트리
 
-1. 새 브랜치를 열고 `README.md`와 `docs/`만 본다.
-2. `docs/resume.md`의 "다음 한 작업"을 그대로 수행할 수 있는가?
-3. 필요 정보 중 못 찾은 게 있다면 그건 **문서의 결함**이다. 작업 전에 문서부터 보강.
+### 7.3 DTO 추가/변경
 
-## B5. 코드 주석 정책
+- [ ] **수정 전 영향도 평가** — MCP `codegraph_explore` 또는 CLI
+      `codegraph callers <sym>` + `codegraph impact <symbol>`로 호출자 파악
+      (`docs/codegraph-worktree.md` §7).
+- [ ] `dto/` 모듈 + Pydantic validator. 외부 인터페이스 좌표는 모두 `(lon,
+      lat)` (DO NOT §5)
+- [ ] `tests/unit/test_dto_*.py` validator branch 커버
+- [ ] v1 응답이면 `x_extension` 외 자체 필드 추가 금지(ADR-003); 자체 통합
+      필드는 v2 스키마에만 (ADR-038/039)
+- [ ] `docs/architecture/data-model.md` 갱신 (DDL과 동기)
+- [ ] `python scripts/export_openapi.py --check --output openapi.json`
+      재실행 → 프론트엔드 `npm run gen:types`
+- [ ] ADR (어느 정도 큰 변경이면) + journal + resume
 
-### "왜"만 적는다
+### 7.4 raw SQL 추가/변경 (ADR-004)
 
-```python
-# 나쁨: 코드 그대로 다시 쓰기
-i = i + 1  # increment i
+- [ ] `infra/*_repo.py`의 `_SQL` 상수에 추가 (ORM에 비즈니스 로직 금지)
+- [ ] 트랜잭션 단위로만 `SET LOCAL pg_trgm.similarity_threshold` (전역 변경 금지)
+- [ ] `tests/integration/`에 EXPLAIN 검증 테스트 1개 이상 (인덱스 사용 확인)
+- [ ] `docs/performance.md` 패턴/안티패턴 갱신 (필요 시)
+- [ ] journal + resume
 
-# 좋음: 직관에 반하는 선택의 이유
-# pg_trgm.similarity가 0.3 미만이면 노이즈가 많아 polluting.
-# 데이터 검증 후 0.42로 고정.
-SET LOCAL pg_trgm.similarity_threshold = 0.42;
+### 7.5 loader / 적재 변경
+
+- [ ] GDAL Python binding 사용 (ADR-005, `ogr2ogr` subprocess 호출 금지),
+      CP949 디코딩 명시
+- [ ] `MVM_RES_CD` 등 코드 매핑은 `load_codes` 테이블 또는 settings (하드코드 금지)
+- [ ] `tests/integration/test_load_*.py`
+- [ ] `docs/architecture/backend-package.md` / `docs/t027-fullload-plan.md` 갱신 (필요 시)
+- [ ] 재적재가 필요하면 `scripts/fullload_test.sh` (적재 자체는 T-027 완료)
+- [ ] journal + resume
+
+### 7.6 프론트엔드 (`kor-travel-geo-ui`) 변경
+
+- [ ] **수정 전 영향도 평가** — 컴포넌트/공용 primitive/`maplibre-vworld-js`
+      소비 경계면 `codegraph_explore` 먼저 (`docs/codegraph-worktree.md` §7)
+- [ ] DB 드라이버 추가 금지 — UI는 REST API만 호출 (DO NOT §10)
+- [ ] 백엔드 DTO가 바뀌었으면 `npm run gen:types`로 타입 재생성
+- [ ] `scripts/frontend_check.sh` (Linux Node 강제, gen:types→lint→type-check
+      →test→build) + `npx react-doctor@latest . --offline --verbose --json`
+- [ ] Playwright e2e는 Windows에서 WSL UI 서버 대상으로 (chromium/firefox)
+- [ ] journal + resume
+
+## 7.5 PR 워크플로 (ADR-021, 필수)
+
+main에 직접 push 금지. 모든 변경은 작업 branch + PR. 표준 운영 절차(worktree →
+branch → NTFS 편집 → WSL 게이트 → PR → CI green → 머지 → 동기화)의 단계별
+런북은 `docs/runbooks/agent-workflow.md`다.
+
+### 7.5.1 시작 (NTFS worktree, Windows git.exe)
+
+```bash
+cd /mnt/f/dev/kor-travel-geo-<agent>
+git fetch origin main
+git switch -c agent/<agent>-<task> origin/main
+codegraph sync && codegraph status
 ```
 
-### 모듈 docstring 의무
+### 7.5.2 작업
 
-핵심 가정·함정·관련 문서를 명시:
+- 짧은 commit + 명확한 메시지. 첫 줄 70자 이내.
+  ```
+  <scope> <verb>: <object> (#T-NNN 또는 ADR-NNN)
 
-```python
-"""Incremental loader using MVM_RES_CD (이동사유코드).
+  본문 — "왜" 위주. 변경 내용은 diff가 알려준다.
 
-본 모듈은 변동분 SHP을 staging 스키마에 적재한 후, MVM_RES_CD 값에 따라
-master 테이블로 INSERT/UPDATE/DELETE를 머지한다.
+  Refs: ADR-XXX, journal YYYY-MM-DD
+  ```
+  - `<scope>`: `api` / `core` / `infra` / `loaders` / `cli` / `dto` / `client` /
+    `ui` / `docs` / `ci` / `chore`
+  - `<verb>`: `add` / `fix` / `refactor` / `remove` / `rename` / `perf` /
+    `test` / `chore`
+- 작업 단위로 `docs/journal.md`, `docs/resume.md`, (필요 시) `docs/decisions.md`,
+  `CHANGELOG.md` 갱신.
+- 4 게이트 + 해당 시 추가 게이트를 통과 확인(§9).
 
-핵심 가정:
-  - 변동분 SHP는 본 SHP과 동일 컬럼 + MVM_RES_CD, MVMN_DE 추가
-  - PK는 PK_MAP 상수로 테이블별로 명시
-  - 코드 매핑(MVM_RES_INSERT/UPDATE/DELETE)은 settings에서 덮어쓰기 가능
+### 7.5.3 PR 작성
 
-함정:
-  - mvm_res_cd가 NULL인 행은 무시 (master에 영향 주지 않음)
-  - DELETE는 RETURNING 사용하지 않음 (대량 삭제 시 비용)
+표준 PR 본문(`.github/PULL_REQUEST_TEMPLATE.md`와 동기):
 
-관련 문서: docs/data-model.md, ADR-006
-"""
-```
-
-### TODO 규약
-
-"언젠가 고침"이 아닌, 추적 가능한 TODO만:
-
-```python
-# TODO(T-900): MVM_RES_CD 매핑을 실제 변동분 데이터로 검증
-# FIXME(T-901): pool_recycle이 statement_timeout과 충돌. PG 16.4+에서만 재현.
-# XXX: PostGIS 3.4 미만에서 ST_PointOnSurface가 polygon 외부 점 반환 가능 — 3.4+ 강제
-```
-
-### 함수 docstring (pydantic 활용)
-
-`Args` / `Returns` / `Raises` / `Notes` 섹션. fallback 동작, 좌표 순서 같은 비명시적 규칙은 `Notes`에.
-
-## B6. 검증 자동화
-
-### 강제할 수 있는 룰만 룰이다
-
-| 룰 | 도구 | 단계 |
-|----|------|------|
-| Python 스타일 | ruff check | pre-commit + CI |
-| 타입 | mypy --strict | CI (느려서 pre-commit은 선택) |
-| 의존 방향 | import-linter | CI |
-| TS 타입 | tsc --noEmit | CI |
-| TS 스타일 | eslint + prettier | pre-commit + CI |
-| 백엔드↔프론트 스키마 동기 | `openapi.json` diff + `openapi-typescript` 산출 diff | CI |
-| 문서 누락 (journal/resume) | custom pre-commit hook | pre-commit |
-| 테스트 | pytest, vitest, playwright | CI |
-| SQL DDL 유효성 | testcontainers + DDL apply 테스트 | CI |
-
-### OpenAPI ↔ Zod 동기 검증 (CI)
-
-`scripts/export_openapi.py` → frontend `gen:types` → `git diff --exit-code` 패턴. drift 즉시 발견.
-
-### "journal 갱신 잊기 방지" hook
-
-코드 변경(`src/`, `app/`, `components/`, `tests/`)이 있는데 `docs/journal.md` 변경이 없으면 pre-commit 경고. `BYPASS=1`로 일회 우회 가능.
-
-## B7. 커밋·PR 컨벤션
-
-### 커밋 메시지
-
-```
-<scope> <verb>: <object> (#<task-id>)
-
-[본문 — 선택. 왜 이 변경이 필요한가]
-
-[참조 — 선택. 관련 ADR, journal 엔트리]
-```
-
-예:
-
-```
-api add: /v1/zipcode router (#T-042)
-
-bd_mgt_sn을 받으면 다량배달처 lookup을 우선시함.
-사양서 §3.7.3 우선순위 표 그대로 구현.
-
-Refs: ADR-007, journal 2026-05-22
-```
-
-- scope: `api / core / infra / loaders / cli / dto / ui / docs / ci / chore`
-- verb: `add / fix / refactor / remove / rename / perf / test / chore`
-
-### PR 템플릿 (`.github/PULL_REQUEST_TEMPLATE.md`)
-
-```
+```bash
+git push -u origin HEAD
+gh pr create --repo digitie/kor-travel-geo \
+  --title "<scope> <verb>: <요약 (≤70자)>" --body "$(cat <<'EOF'
 ## 동기 / 무엇이 문제였나
+- 무엇을 바꾸는지 + 왜 (한 문단)
+
 ## 변경 내용 (한 줄 요약)
-- 
+- 파일/모듈별 핵심 변경
+- 새 DTO/엔드포인트/스키마/ADR 있으면 명시
+
 ## 영향 범위
-- 깨질 수 있는 곳:
-- 마이그레이션 필요 여부:
-- 외부 API 호환성:
+- BREAKING 여부 (DTO 시그니처, DB schema, OpenAPI, v1 vworld 호환)
+- kor-travel-geo-ui / loader / 외부 API 어느 쪽에 변경 필요한지
+
 ## 검증
-- [ ] pytest -q 통과
-- [ ] ruff / mypy / lint-imports 통과
-- [ ] (UI) playwright e2e 통과
-- [ ] (스키마 변경 시) testcontainers DDL 통과
+- [ ] pytest -q
+- [ ] ruff check . / mypy src/kortravelgeo / lint-imports
+- [ ] (해당 시) pytest tests/integration -q + EXPLAIN 인덱스 검증
+- [ ] (해당 시) python scripts/export_openapi.py --check --output openapi.json
+- [ ] (UI) scripts/frontend_check.sh + react-doctor + Playwright e2e
+
 ## 문서
-- [ ] docs/journal.md 추가
+- [ ] docs/journal.md 엔트리
 - [ ] docs/resume.md 진척도 갱신
 - [ ] (결정 있음) docs/decisions.md 새 ADR
 - [ ] (사용자 가시 변경) CHANGELOG.md
+- [ ] (DTO/스키마 변경) docs/architecture/data-model.md
+
 ## 관련
-- 작업: #T-???
-- ADR: ADR-???
+- ADR-XXX / T-NNN / (외부 spec 링크)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
 ```
 
-## B8. 부록 — 새 모듈 작성 체크리스트
+### 7.5.4 branch 명명 규약
 
-- [ ] 모듈 docstring (왜, 핵심 가정, 함정, 관련 문서)
-- [ ] 공개 심볼은 `__all__`로 명시
-- [ ] 의존 방향 점검 (lint-imports)
-- [ ] 단위 테스트 작성 (Fake repo 또는 mock)
-- [ ] DTO 또는 Protocol 변경이 있다면 백엔드↔프론트 스키마 동기 재생성
-- [ ] `docs/data-model.md` 또는 `docs/architecture.md`에 변경 반영
-- [ ] `docs/journal.md` 항목 추가
+| 형식 | 용도 |
+|------|------|
+| `agent/<agent>-<task>` | 에이전트 작업 branch (기본). `<agent>`=`codex`/`claude`/`antigravity` |
+| `agent/<agent>-idle` | 각 worktree의 idle branch (origin/main 동기) |
+
+`agent/<agent>-` 접두로 소유자를 명시한다. 같은 branch를 두 worktree에서 동시
+checkout하지 않는다.
+
+### 7.5.5 리뷰 / merge
+
+- CI green이어도 즉시 머지하지 않는다. PR 페이지에서 변경을 한 번 더 확인하고,
+  리뷰 반영 여유를 둔 뒤 머지한다.
+- 머지 방식: **Squash and merge** 권장(main 히스토리 깔끔). 머지 commit 제목은
+  PR 제목과 동일하게.
+- `gh pr merge`를 파이프로 감싸지 않는다(머지 실패를 숨김). `MERGED` 상태를
+  확인한 뒤에만 branch를 정리한다.
+  ```bash
+  gh pr view <PR> --repo digitie/kor-travel-geo --json number,state,mergeable,statusCheckRollup
+  gh pr merge <PR> --repo digitie/kor-travel-geo --merge --delete-branch
+  ```
+- WSL `gh`가 현재 worktree의 Windows Git metadata를 읽다 실패하면 같은 명령을
+  반복하지 말고 `--repo digitie/kor-travel-geo`로 repo를 명시한다.
+
+### 7.5.6 main 직접 push 차단
+
+GitHub branch protection(운영자 수동 설정): PR 필수, required status checks
+(ruff / mypy / lint-imports / pytest / OpenAPI drift / frontend) 통과, force-push
+차단. 설정해 두면 `git push origin main`은 서버에서 거부된다.
+
+## 8. 검증 게이트 (4 게이트 + 프론트엔드)
+
+설치·테스트·장기 실행은 **WSL ext4 테스트 미러**에서 한다. NTFS worktree는
+편집·branch·commit·PR 기준이다. 미러 셸에서 `source scripts/agent_env.sh`를
+먼저 실행하면 `TMPDIR`·venv·Node PATH 함정을 한 번에 없앤다(`docs/runbooks/
+agent-workflow.md` §1).
+
+```bash
+# 백엔드 4 게이트 (WSL ext4 미러)
+pytest -q
+ruff check .
+mypy src/kortravelgeo scripts/export_openapi.py
+lint-imports
+
+# OpenAPI drift (DTO/스키마 변경 시)
+python scripts/export_openapi.py --check --output openapi.json
+
+# 프론트엔드 (Linux Node 강제 — gen:types → lint → type-check → test → build)
+scripts/frontend_check.sh           # 의존성 재설치 필요 시 --install
+cd kor-travel-geo-ui && npx react-doctor@latest . --offline --verbose --json
+
+# Playwright e2e (Windows에서 WSL UI 서버 대상, chromium/firefox)
+```
+
+import 루트는 `from kortravelgeo import ...`(flat 금지), 의존 방향은 `dto →
+core → infra → client → api/cli` 한 방향(`lint-imports` 강제). 자세한 검증
+명령과 함정은 `docs/runbooks/agent-workflow.md`·`docs/dev-environment.md`.
+
+## 9. NTFS Git vs WSL 실행 흐름
+
+- 편집·branch·commit·push·PR은 NTFS worktree에서. Git metadata는 Windows Git
+  기준이므로 git 명령은 Windows `git.exe`로 한다.
+- 의존성 설치·테스트·lint·type-check·build·`uvicorn`·Node/npm·`gh`는 WSL ext4
+  테스트 미러에서. 미러에서는 commit/push하지 않는다(단방향: 수정 필요 사항은
+  NTFS worktree에 반영).
+- Playwright e2e와 브라우저는 Windows에서만. WSL UI 서버(`--hostname
+  0.0.0.0`)에 `PLAYWRIGHT_BASE_URL`로 붙인다.
+- 이 저장소는 PostgreSQL/PostGIS와 RustFS를 **직접 구동하지 않는다**(DO NOT
+  §11). 이미 동작 중인 DB/bucket에 `KTG_PG_DSN`, `KTG_RUSTFS_*`로 접속한다.
+- 대용량 Juso 원천은 NTFS 공용 루트 `F:\dev\geodata\juso`가 기준이고, 미러는
+  `data -> /mnt/f/dev/geodata` symlink로 참조한다(git에 넣지 않는다).
+
+상세는 `docs/dev-environment.md`, `docs/runbooks/agent-workflow.md`.
+
+## 10. PR 리뷰 확인 프로토콜 (세 표면)
+
+PR 리뷰를 반영할 때 GitHub의 "Conversation comment", "Review body", "Inline
+review thread"는 서로 다른 표면이다. `gh pr view --json comments`만 보면 정식
+review body(`latestReviews`/`reviews`)나 inline thread를 놓칠 수 있다. 특히
+리뷰 제목이 `# PR #NN 리뷰 — ...` 형태로 review body에 들어간 경우 conversation
+comment 목록에는 보이지 않는다.
+
+필수 절차:
+
+1. PR 번호와 head branch 확인:
+   ```bash
+   gh pr view <PR> --repo digitie/kor-travel-geo \
+     --json number,title,url,state,headRefName,baseRefName,reviewDecision,statusCheckRollup
+   ```
+2. thread-aware 스크립트로 세 표면을 한 번에 저장하고 `conversation_comments`,
+   `reviews[].body`, `review_threads[]`를 모두 읽는다. review body 첫 줄(제목)도
+   별도 항목으로 체크한다.
+3. 항목을 `High` / `Medium` / `Low` / `Optional` / `설명만 필요`로 분류하고,
+   반영 여부를 `docs/journal.md` 또는 PR 코멘트에 남긴다.
+4. `review_threads`가 비어 있어도 review body의 H/M/L 섹션은 actionable일 수
+   있다. "thread 없음"은 "리뷰 없음"이 아니다. 마지막 conversation comment도
+   별도 확인한다.
+
+WSL `gh`가 현재 worktree의 Windows Git metadata 충돌로 실패하면 같은 명령을
+반복하지 말고 `--repo digitie/kor-travel-geo`로 repo를 명시한다.
+
+리뷰 반영(fixup) PR에는 추가 리뷰를 붙이지 않는다(리뷰→fixup→fixup의 리뷰…
+무한 루프 방지). 반영 중 발견한 새 결함은 별도 Task/issue로 분리한다(정본 규칙은
+`docs/tasks-rule.md` §병행 운영 원칙).
+
+## 11. 핸드오프 / 막힐 때
+
+- 세션이 중단되거나 새 에이전트가 인수받을 때 `docs/journal.md`의 가장 최근
+  엔트리가 핸드오프 노트다. **무엇을 했는지 / 무엇이 남았는지 / 어떤 결정이
+  보류 중인지 / 어떤 파일을 먼저 봐야 하는지**를 모두 포함한다. PR 핸드오프
+  표준 포맷은 `docs/windows-reinstall-recovery.md` §4.
+- 같은 실패 명령을 같은 형태로 여러 번 반복하지 않는다. 한 번 실패하면
+  `docs/runbooks/agent-failure-patterns.md`의 대응 패턴으로 전환한다.
+- 사용자 요청이 모호하면 `AskUserQuestion` 사용. 코드 작성 요청이 `AGENTS.md`
+  규칙과 충돌하면 충돌을 명시하고 대안을 제시한다. 모르는 도메인 어휘는
+  `SKILL.md` §도메인 어휘 → 없으면 사용자에게 질의. 같은 결정이 두 번째로
+  흔들리면 ADR-NNN으로 박는다.
+
+## 12. 마침
+
+이 가이드는 살아 있는 문서다. 작업하면서 빠진 룰이 발견되면 ADR과 함께 추가
+하거나 이 문서를 직접 수정한다.
 
 ## 다음 에이전트에게 보내는 한 문장
 
-> 문서를 갱신하지 않은 작업은 절반만 끝난 작업이다. 미래의 너 자신과, 너를 이어받을 다음 에이전트를 위해 `journal.md`와 `resume.md`를 반드시 채워라. 그것이 컨텍스트를 잃어도 끊기지 않는 유일한 방법이다.
+> 문서를 갱신하지 않은 작업은 절반만 끝난 작업이다. 미래의 너 자신과, 너를
+> 이어받을 다음 에이전트를 위해 `journal.md`와 `resume.md`를 반드시 채워라.
+> 그것이 컨텍스트를 잃어도 끊기지 않는 유일한 방법이다.

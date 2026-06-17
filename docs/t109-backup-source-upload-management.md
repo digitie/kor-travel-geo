@@ -12,7 +12,7 @@
   - `docs/t046-db-backup-restore.md`
   - `docs/t076-rustfs-upload-storage.md`
   - `docs/t049-ops-metadata-schema.md`
-  - `docs/data-model.md`
+  - `docs/architecture/data-model.md`
   - `docs/decisions.md` ADR-049
 - 관련 기존 코드:
   - `src/kortravelgeo/dto/admin.py`
@@ -1924,7 +1924,7 @@ restore entrypoint별 source 검증:
 - `ops.source_file_groups`, `ops.source_upload_sessions`, `ops.source_match_set_items.source_file_group_id`, `ops.dataset_snapshots.source_match_set_id`, `ops.consistency_case_definitions`, `ops.consistency_case_inputs`, `ops.consistency_case_samples.case_code` CHECK 완화 포함
 - 기존 `ops` ID full-prefix rename migration과 admin API/DTO/OpenAPI 변경 포함
 - 기존 `UploadSetStatus`는 유지
-- `docs/data-model.md`와 `docs/address-db-schema.md` 갱신
+- `docs/architecture/data-model.md`와 `docs/architecture/address-db-schema.md` 갱신
 
 ### 2단계: 백엔드 registry와 upload session
 

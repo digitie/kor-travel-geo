@@ -1,6 +1,6 @@
 # 아키텍처
 
-본 문서는 `kor-travel-geo` 백엔드와 `kor-travel-geo-ui` 프론트엔드가 함께 구성하는 한 시스템의 큰 구조를 다룬다. 결정의 역사는 `decisions.md`(ADR)에서 별도로 관리한다.
+본 문서는 `kor-travel-geo` 백엔드와 `kor-travel-geo-ui` 프론트엔드가 함께 구성하는 한 시스템의 큰 구조를 다룬다. 결정의 역사는 `docs/decisions.md`(ADR)에서 별도로 관리한다.
 
 ## 두 패키지, 한 시스템
 
@@ -51,7 +51,7 @@ T-056 이후 `core/address/`는 시군구/법정동/도로명관리번호/도로
 | 데이터 패칭 | TanStack Query v5 | 폴링·optimistic update |
 | 타입 동기 | openapi-typescript + 수동 Zod mirror | 백엔드 `openapi.json`에서 TypeScript 타입 생성, 폼 스키마는 리뷰 가능한 수동 mirror |
 
-자세한 디렉토리 구조, 컴포넌트 설계, 페이지별 화면은 `docs/frontend-package.md`를 본다.
+자세한 디렉토리 구조, 컴포넌트 설계, 페이지별 화면은 `docs/architecture/frontend-package.md`를 본다.
 
 VWorld 지도 연동은 `kor-travel-geo-ui` 로컬 코드만의 책임으로 보지 않는다. `maplibre-vworld` package는 항상 최신 `main` 또는 stable release를 확인한 뒤 검증된 SHA로 소비한다. 2026-05-31 현재 `kor-travel-geo-ui`는 `digitie/maplibre-vworld-js` `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`을 사용하며, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 별도 upstream task/PR로 분리한다. 반대로 geocode/reverse 디버그 입력, 정합성/성능/적재 overlay, key 미설정 안내처럼 이 프로젝트에만 의미가 있는 기능은 `kor-travel-geo-ui` domain wrapper에서 구현한다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다.
 
@@ -296,8 +296,8 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 
 ## 참고
 
-- 백엔드 사양서: `docs/backend-package.md`
-- 프론트엔드 사양서: `docs/frontend-package.md`
-- 데이터 모델: `docs/data-model.md`, `docs/address-db-schema.md`
+- 백엔드 사양서: `docs/architecture/backend-package.md`
+- 프론트엔드 사양서: `docs/architecture/frontend-package.md`
+- 데이터 모델: `docs/architecture/data-model.md`, `docs/architecture/address-db-schema.md`
 - 결정 기록: `docs/decisions.md`
-- 외부 API: `docs/external-apis.md`
+- 외부 API: `docs/architecture/external-apis.md`

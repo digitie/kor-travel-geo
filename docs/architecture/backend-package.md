@@ -29,9 +29,10 @@ kor-travel-geo/
 ├── SKILL.md
 ├── CHANGELOG.md
 ├── docs/
-│   ├── architecture.md
-│   ├── decisions.md
-│   ├── data-model.md
+│   ├── architecture/          # architecture.md, data-model.md, backend-package.md, frontend-package.md ...
+│   ├── adr/                   # NNN-<slug>.md + README.md (ADR 인덱스)
+│   ├── runbooks/              # agent-workflow.md, agent-failure-patterns.md, restore-drill-runbook.md
+│   ├── decisions.md           # docs/adr/README.md 포인터
 │   ├── tasks.md
 │   ├── resume.md
 │   └── journal.md
@@ -1350,7 +1351,7 @@ POST   /v1/admin/loads/{job_id}/cancel → LoadJobStatus
 WS     /v1/admin/loads/{job_id}/stream → ndjson log lines (structlog)  -- 선택, 별도 후속 PR
 ```
 
-적재 표면은 `/v1/admin/loads`가 표준 경로다. 단, T-046/T-047부터 `db_backup`, `db_restore`, `query_benchmark`처럼 적재가 아닌 대형 관리 작업도 같은 영속 큐를 쓰므로, 상태 조회·취소·SSE는 중립 alias `/v1/admin/jobs/*`를 함께 둔다. `kor-travel-geo-ui /admin/load` 페이지(`docs/frontend-package.md` §A6.3)는 `/v1/admin/loads`를, `/admin/backups`와 `/admin/performance` 페이지는 `/v1/admin/jobs/*`를 우선 사용한다.
+적재 표면은 `/v1/admin/loads`가 표준 경로다. 단, T-046/T-047부터 `db_backup`, `db_restore`, `query_benchmark`처럼 적재가 아닌 대형 관리 작업도 같은 영속 큐를 쓰므로, 상태 조회·취소·SSE는 중립 alias `/v1/admin/jobs/*`를 함께 둔다. `kor-travel-geo-ui /admin/load` 페이지(`docs/architecture/frontend-package.md` §A6.3)는 `/v1/admin/loads`를, `/admin/backups`와 `/admin/performance` 페이지는 `/v1/admin/jobs/*`를 우선 사용한다.
 
 #### `LoadJobStatus` DTO 확장
 
@@ -1386,7 +1387,7 @@ class LoadJobStatus(FrozenModel):
 
 ### 9.9 정합성 검증 — 라이브러리·API 표면 (ADR-016)
 
-ADR-012의 텍스트 ↔ SHP 정합성 케이스(C1~C10, `docs/data-model.md` "정합성 검증")를 라이브러리 사용자와 디버그 UI가 직접 트리거·조회할 수 있다.
+ADR-012의 텍스트 ↔ SHP 정합성 케이스(C1~C10, `docs/architecture/data-model.md` "정합성 검증")를 라이브러리 사용자와 디버그 UI가 직접 트리거·조회할 수 있다.
 
 #### 라이브러리
 
@@ -1457,7 +1458,7 @@ class ConsistencyReport(FrozenModel):
 
 #### 검증 함수 (`loaders/consistency.py`)
 
-각 케이스 C1~C10은 단일 SQL로 표현하고 결과를 `ConsistencyCase`로 환원한다. 표는 `docs/data-model.md` "정합성 케이스 분류" 참조.
+각 케이스 C1~C10은 단일 SQL로 표현하고 결과를 `ConsistencyCase`로 환원한다. 표는 `docs/architecture/data-model.md` "정합성 케이스 분류" 참조.
 
 ```python
 # loaders/consistency.py — 케이스 한 건의 시그니처
@@ -1480,7 +1481,7 @@ async def run_all_cases(
 
 #### 디버그 UI 노출
 
-`kor-travel-geo-ui /admin/consistency` 페이지(신규)는 `GET /v1/admin/consistency`로 리스트 + 클릭 시 `GET /v1/admin/consistency/{report_id}`로 상세를 받아 케이스별 severity·count·sample을 카드로 표시한다. `POST /v1/admin/consistency/run`은 우측 상단 "정합성 재검증" 버튼에서 트리거. 화면 사양은 `docs/frontend-package.md`에 후속 PR로 추가.
+`kor-travel-geo-ui /admin/consistency` 페이지(신규)는 `GET /v1/admin/consistency`로 리스트 + 클릭 시 `GET /v1/admin/consistency/{report_id}`로 상세를 받아 케이스별 severity·count·sample을 카드로 표시한다. `POST /v1/admin/consistency/run`은 우측 상단 "정합성 재검증" 버튼에서 트리거. 화면 사양은 `docs/architecture/frontend-package.md`에 후속 PR로 추가.
 
 ### 9.10 적재 진행도 로그·리포트 정책
 
@@ -1664,7 +1665,7 @@ python scripts/export_openapi.py --check --output openapi.json
 
 ### 외부 REST API 키
 
-발급 절차·정책은 `docs/external-apis.md` 참조.
+발급 절차·정책은 `docs/architecture/external-apis.md` 참조.
 
 ### 운영 (uvicorn systemd)
 

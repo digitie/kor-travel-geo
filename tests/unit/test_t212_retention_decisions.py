@@ -11,7 +11,7 @@ T-204/T-203c/T-211, with synthetic facts — no DB, no RustFS:
 * the typed-confirmation token;
 * the pre-delete manifest/export safety gate (manifest present OR explicit ack);
 * the retention recommendation derived from capacity usage;
-* the ADR-052 presence in ``docs/decisions.md``.
+* the ADR-052 presence in ``docs/adr/052-rustfs-archive-no-auto-delete-manual-cleanup.md``.
 
 The DB/RustFS glue in ``infra.source_reconcile.bulk_hard_delete_sources`` is the
 thin wrapper around these decisions.
@@ -191,9 +191,12 @@ def test_retention_nothing_to_clean() -> None:
 
 
 def test_adr_052_retention_policy_documented() -> None:
-    decisions = (_REPO_ROOT / "docs" / "decisions.md").read_text(encoding="utf-8")
-    assert "ADR-052" in decisions
+    # ADRs are one-file-per-decision under docs/adr/ (decisions.md is now a pointer index).
+    adr = (
+        _REPO_ROOT / "docs" / "adr" / "052-rustfs-archive-no-auto-delete-manual-cleanup.md"
+    ).read_text(encoding="utf-8")
+    assert "ADR-052" in adr
     # The core policy statement: registered archives are never auto-deleted.
-    assert "등록 완료 원천 archive 자동 삭제 금지" in decisions
+    assert "등록 완료 원천 archive 자동 삭제 금지" in adr
     # The typed-confirmation token and the only-auto-cleanup carve-out.
-    assert "HARD-DELETE-SOURCES" in decisions
+    assert "HARD-DELETE-SOURCES" in adr

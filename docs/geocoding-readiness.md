@@ -51,7 +51,7 @@ PC 개발의 Git source of truth는 NTFS worktree(`/mnt/f/dev/kor-travel-geo-*`)
 - **GDAL Python binding 환경 의존성**: 시도별 SHP 적재는 GDAL 3.8+ 필요. 운영은 Docker 이미지로 표준화 권장(ADR-005).
 - **CP949 디코딩 누락 위험**: `gdal.OpenEx(..., open_options=["ENCODING=CP949"])`를 항상 명시. 누락 시 한글 깨짐 그대로 적재되는데 인덱스도 깨진 키로 만들어지므로 즉시 발견하기 어렵다.
 - **`MVM_RES_CD` 코드 신규 도입**: 데이터셋이 시간 흐름에 따라 새 코드를 추가할 수 있다. 매핑은 `load_codes` 테이블 또는 settings에서 hot-fix 가능(SKILL.md §4-6).
-- **외부 API 쿼터 침범**: vworld/juso 일 한도 도달 시 자동 fallback 비활성화 로직이 필요(`docs/external-apis.md` 호출 정책).
+- **외부 API 쿼터 침범**: vworld/juso 일 한도 도달 시 자동 fallback 비활성화 로직이 필요(`docs/architecture/external-apis.md` 호출 정책).
 - **fuzzy 매칭 임계값**: `pg_trgm.similarity_threshold = 0.42`로 검증되어 있다. 0.3 미만은 noisy, 0.5 이상은 reject 과다. 데이터셋 갱신 시 재검증 권장.
 - **좌표계 혼동**: 외부 인터페이스는 `(lon, lat)` 고정. 내부 PostGIS도 `ST_MakePoint(lon, lat)` 순서(SKILL.md §4-5).
 

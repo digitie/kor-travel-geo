@@ -19,7 +19,7 @@
 
 ## 핵심 테이블
 
-자세한 컬럼·인덱스는 `docs/data-model.md` 참조.
+자세한 컬럼·인덱스는 `docs/architecture/data-model.md` 참조.
 
 - `tl_juso_text(bd_mgt_sn)` — 도로명주소 한글_전체분 텍스트 정본. 생성 컬럼 `rncode_full`, `rn_nrm`, `buld_nm_nrm`, `pnu`.
 - `tl_locsum_entrc(sig_cd, ent_man_no)` — 위치정보요약DB 대표 출입구 좌표 (POINT, 5179). 대표 좌표 1순위.
@@ -67,7 +67,7 @@ CREATE INDEX idx_juso_text_rn_trgm
 - `"local_only"`: 정확 매칭 실패 시 `pg_trgm` fuzzy 후보 5개로 재시도. 외부 호출 없음.
 - `"api"`: 위 모두 실패 시 vworld → juso 순서로 외부 폴백. 결과 출처는 `x_extension.source`에 표시(`api_vworld` / `api_juso`).
 
-외부 호출 정책(재시도·회로차단·쿼터 보호)은 `docs/external-apis.md`.
+외부 호출 정책(재시도·회로차단·쿼터 보호)은 `docs/architecture/external-apis.md`.
 
 ## 적재 후 최적화
 
@@ -79,7 +79,7 @@ CREATE INDEX idx_juso_text_rn_trgm
 
 ## 참고
 
-- 백엔드 사양: `docs/backend-package.md`
-- 데이터 모델: `docs/data-model.md`
-- 외부 API: `docs/external-apis.md`
+- 백엔드 사양: `docs/architecture/backend-package.md`
+- 데이터 모델: `docs/architecture/data-model.md`
+- 외부 API: `docs/architecture/external-apis.md`
 - 결정: `docs/decisions.md` (ADR-001 ~ ADR-006, ADR-013)

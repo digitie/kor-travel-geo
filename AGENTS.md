@@ -83,6 +83,15 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 - **프론트엔드 실행**: `kor-travel-geo-ui`의 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL ext4 테스트 미러의 Linux Node/npm에서 실행한다.
 - **Playwright**: e2e 실행과 브라우저는 Windows Node/브라우저에서만 수행한다. WSL에서는 Playwright를 실행하지 않고, Windows Playwright를 WSL UI 서버(`--hostname 0.0.0.0`)에 붙인다.
 
+## 에이전트 공용 runbook (필독)
+
+`docs/runbooks/` — Claude/Codex/Antigravity가 공유하는 운영 runbook. 작업 전 두 개는 훑는다:
+
+- [`docs/runbooks/agent-workflow.md`](docs/runbooks/agent-workflow.md) — 표준 1-PR 흐름(worktree → 브랜치 → NTFS 편집 → WSL 4 게이트(`pytest`/`ruff`/`mypy`/`lint-imports`) → PR → CI green → 머지 → 동기화) + 갱신 필수 문서.
+- [`docs/runbooks/agent-failure-patterns.md`](docs/runbooks/agent-failure-patterns.md) — 본 repo 반복 실패 패턴(CI/로컬 괴리, 자연키 `::` 캐스팅, 스키마 한정, upstream drift, 테스트 격리 등)과 회피·복구. 게이트가 깨지면 여기부터.
+
+인덱스: [`docs/runbooks/README.md`](docs/runbooks/README.md). 환경 1차 문서는 `docs/dev-environment.md` / `docs/codegraph-worktree.md` / `docs/agent-guide.md`.
+
 ## 에이전트별 고정 worktree와 CodeGraph
 
 AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, NTFS의 `/mnt/f/dev` 아래 고정 worktree를 유지한다(ADR-041). `geo-*` 접두사는 더 이상 쓰지 않고 `kor-travel-geo-*` 접두사로 통일한다.
@@ -106,9 +115,9 @@ AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, NTFS의 `/mnt/f/d
 
 1. `README.md` — 프로젝트 개요와 빠른 시작
 2. `SKILL.md` — DO NOT 룰, 자주 묻는 작업, 도메인 어휘
-3. `docs/architecture.md` — 두 패키지의 관계, 의존 방향
+3. `docs/architecture/architecture.md` — 두 패키지의 관계, 의존 방향
 4. `docs/resume.md` — 현재 진척도와 "다음 한 작업"
-5. `docs/decisions.md` — 관련 ADR
+5. `docs/adr/README.md` — 관련 ADR (인덱스 포인터 `docs/decisions.md`)
 
 Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `docs/windows-reinstall-recovery.md`도 함께 읽는다. T-027 실 데이터 전체 적재는 이미 완료됐으므로 별도 금지선이 없다. 빈 DB가 필요하면 백업 복원(ADR-030/ADR-036) 또는 `scripts/fullload_test.sh` 재실행으로 처리한다. T-213/T-214 기준 원천과 산출물 경로는 `docs/t213-data-preservation.md`를 우선 참고하고, 과거 T-027 기준월 분리와 산출물 경로는 `docs/t027-fullload-plan.md`를 참고한다.
 
@@ -117,7 +126,7 @@ Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `do
 1. 사용자 요청
 2. 이 `AGENTS.md`
 3. `SKILL.md`
-4. `docs/architecture.md`, `docs/decisions.md`, `docs/data-model.md`, `docs/backend-package.md`, `docs/frontend-package.md`, `docs/agent-guide.md`, `docs/external-apis.md`
+4. `docs/architecture/architecture.md`, `docs/adr/README.md`, `docs/architecture/data-model.md`, `docs/architecture/backend-package.md`, `docs/architecture/frontend-package.md`, `docs/agent-guide.md`, `docs/architecture/external-apis.md`
 5. `README.md` 및 나머지 `docs/`
 6. 기존 코드와 테스트
 7. 최소한의, 되돌릴 수 있는 가정
@@ -143,7 +152,7 @@ Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `do
 - 외부 API 관련 작업은 단순 전달용 래퍼/어댑터/게이트웨이 지양 원칙을 먼저 확인하고 문서/코드에 반영한 뒤 진행한다.
 - 하위 사용자에게는 안정된 공개 클라이언트(`AsyncAddressClient`), 타입 모델(`kortravelgeo.dto`), 열거형(`ZipSource` 등), 보조 함수를 제공한다.
 - 단순 전달용 래퍼, 장기 호환 별칭, 임시 facade를 만들지 않는다.
-- vworld·juso·epost의 발급/호출 절차는 `docs/external-apis.md`에 모아 둔다. 외부 API 호출은 `httpx.AsyncClient` + `tenacity` 재시도, 회로차단, 쿼터 보호를 갖춘다. 프론트엔드 VWorld/MapLibre 연동 문제가 발생하면 `digitie/maplibre-vworld-js`도 적극 수정 대상에 포함한다.
+- vworld·juso·epost의 발급/호출 절차는 `docs/architecture/external-apis.md`에 모아 둔다. 외부 API 호출은 `httpx.AsyncClient` + `tenacity` 재시도, 회로차단, 쿼터 보호를 갖춘다. 프론트엔드 VWorld/MapLibre 연동 문제가 발생하면 `digitie/maplibre-vworld-js`도 적극 수정 대상에 포함한다.
 - 응답 구조는 vworld와 1:1로 호환되도록 유지하고 자체 확장은 `x_extension` 키에만 둔다.
 
 ## 작업 후 체크리스트

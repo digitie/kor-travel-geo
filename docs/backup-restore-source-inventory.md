@@ -5,7 +5,7 @@
 ## 범위
 
 - 기준 코드: `src/kortravelgeo/infra/source_set.py`, `src/kortravelgeo/loaders/**`
-- 기준 문서: `docs/t027-fullload-plan.md`, `docs/external-apis.md`, `docs/backend-package.md`
+- 기준 문서: `docs/t027-fullload-plan.md`, `docs/architecture/external-apis.md`, `docs/architecture/backend-package.md`
 - 현재 연결 DB 관찰일: 2026-06-14
 - PostgreSQL/RustFS 생명주기는 이 저장소가 직접 관리하지 않고, 접속 설정만 사용한다.
 
