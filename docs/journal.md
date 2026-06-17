@@ -2,6 +2,14 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-178d DBAPIError 분류)
+
+**작업**: #336/T-178 선행 리뷰 후속 중 PR #266 Claude Code 코멘트를 반영했다. `DBAPIError` handler가 모든 DBAPI 오류를 transient 503으로 접던 것을 `OperationalError`/connection-invalidated와 그 밖의 DBAPI 오류로 분리했다.
+
+**결정**: 연결 단절·운영 장애는 기존 503 `database operation failed`와 retry 안내 hint를 유지한다. `ProgrammingError`/`IntegrityError` 같은 SQL/schema/constraint 오류는 재시도 가능한 운영 장애로 보이지 않도록 500 `database statement failed`로 반환한다. 두 경로 모두 SQL/parameter는 응답에 노출하지 않는다.
+
+**검증/문서**: `tests/unit/test_api_responses.py`에 legacy/v1 VWorld shape의 운영 DB 오류와 비운영 DBAPI 오류 회귀 테스트를 추가했다. `docs/tasks.md`의 선행 후속은 T-178e~T-178f만 남았다.
+
 ## 2026-06-17 (T-178c 번호형 가지도로 파싱)
 
 **작업**: #336/T-178 선행 리뷰 후속 중 PR #277 Claude Code 코멘트를 반영했다. `테헤란로1길 10`, `올림픽로35길 123-4` 같은 번호형 가지도로를 도로명으로 보존하도록 `_ROAD_RE`를 보정했다.

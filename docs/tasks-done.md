@@ -6,6 +6,13 @@
 
 ## 완료
 
+- [x] **T-178d** — `DBAPIError` handler 오류 분류 보정(Agent A/Codex).
+  PR #266 Claude Code 코멘트를 #336 선행 후속으로 반영했다. SQLAlchemy `OperationalError`와
+  `connection_invalidated` DBAPI 오류는 기존처럼 503 `database operation failed`로 유지하고,
+  `ProgrammingError`/`IntegrityError` 같은 비운영 DBAPI 오류는 500 `database statement failed`로
+  분류한다. 두 경로 모두 SQL과 parameter는 응답에 노출하지 않는다. v1 VWorld 경로는 기존 error
+  shape를 유지하면서 error text만 새 분류를 따른다. (2026-06-17)
+
 - [x] **T-178c** — 번호형 가지도로 파싱 회귀 방지(Agent A/Codex).
   PR #277 Claude Code 코멘트를 #336 선행 후속으로 반영했다. 도로명 parser가
   `테헤란로1길 10`, `올림픽로35길 123-4` 같은 `로/대로 + 숫자 + 길` 도로명을 먼저

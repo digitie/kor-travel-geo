@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import ORJSONResponse
 from pydantic import ValidationError
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from kortravelgeo.api.vworld import (
@@ -37,6 +37,7 @@ _DB_UNAVAILABLE_MESSAGE = "database operation failed"
 _DB_UNAVAILABLE_HINT = (
     "check KTG_PG_DSN, PostgreSQL connectivity, and /v1/readyz before retrying"
 )
+_DB_INTERNAL_MESSAGE = "database statement failed"
 _MAX_VALIDATION_HINT_PARTS = 8
 _MAX_VALIDATION_HINT_CHARS = 600
 
@@ -115,7 +116,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             route=route,
             error_type=exc.__class__.__name__,
         )
-        domain_error = DatabaseError(_DB_UNAVAILABLE_MESSAGE, hint=_DB_UNAVAILABLE_HINT)
+        domain_error = _dbapi_error_to_domain(exc)
         return ORJSONResponse(
             error_payload(domain_error, path=request.url.path),
             status_code=domain_error.http_status,
@@ -149,6 +150,12 @@ def register_exception_handlers(app: FastAPI) -> None:
             ),
             status_code=domain_error.http_status,
         )
+
+
+def _dbapi_error_to_domain(exc: DBAPIError) -> DatabaseError:
+    if isinstance(exc, OperationalError) or exc.connection_invalidated:
+        return DatabaseError(_DB_UNAVAILABLE_MESSAGE, hint=_DB_UNAVAILABLE_HINT)
+    return DatabaseError(_DB_INTERNAL_MESSAGE, http_status=500)
 
 
 def _validation_error_to_domain(exc: ValidationError) -> KorTravelGeoError:
