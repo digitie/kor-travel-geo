@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from kortravelgeo.core.source_layers import MASTER_LAYER_NAMES, POLYGON_LAYER_NAMES
 from tests.integration._t177_full_load_harness import (
     ENV_DATA_ROOT,
     ENV_DSN,
@@ -23,6 +24,7 @@ from tests.integration._t177_full_load_harness import (
     sample_limit_from_env,
     source_yyyymm,
     t177c_text_delta_source_paths,
+    t177d_shp_geometry_source,
     validate_t177_confirmation,
     write_json_artifact,
 )
@@ -113,8 +115,9 @@ def test_discovery_plan_and_artifact_shape(tmp_path: Path) -> None:
     assert sources["navi"]["source_count"] == 2
     assert sources["roadaddr_entrance"]["source_count"] == 1
     assert sources["sppn_makarea"]["source_count"] == 1
-    assert sources["electronic_map"]["exists"] is False
+    assert sources["electronic_map"]["source_count"] == len(POLYGON_LAYER_NAMES)
     assert source_yyyymm(plan, "juso_hangul") == "202605"
+    assert source_yyyymm(plan, "electronic_map") == "202604"
     assert required_source_path(plan, "juso_hangul") == data_root / "202605_도로명주소 한글_전체분"
 
     source_paths = t177c_text_delta_source_paths(plan)
@@ -125,12 +128,43 @@ def test_discovery_plan_and_artifact_shape(tmp_path: Path) -> None:
     assert source_paths.locsum == data_root / "202604_위치정보요약DB_전체분.zip"
     assert source_paths.navi == data_root / "202604_내비게이션용DB_전체분"
 
+    shp_source = t177d_shp_geometry_source(plan)
+    assert shp_source.electronic_map_root == data_root / "도로명주소 전자지도" / "202604"
+    assert shp_source.sido_path == data_root / "도로명주소 전자지도" / "202604" / "세종특별자치시"
+    assert shp_source.sido_name == "세종특별자치시"
+    assert shp_source.sig_code == "36110"
+    assert shp_source.archive_path is None
+    assert shp_source.materialized is False
+
     artifact = write_json_artifact(tmp_path / "artifacts", "plan.json", plan)
     saved = json.loads(artifact.read_text(encoding="utf-8"))
     assert saved["sources"]["daily_juso"]["sample_names"] == [
         "AlterD.JUSUKR.20260402.TH_SGCO_RNADR_MST.TXT",
         "AlterD.JUSUKR.20260402.TH_SGCO_RNADR_LNBR.TXT",
     ]
+
+
+def test_t177d_shp_geometry_source_materializes_zip_source(tmp_path: Path) -> None:
+    data_root = tmp_path / "juso"
+    electronic_root = data_root / "도로명주소 전자지도" / "202604"
+    electronic_root.mkdir(parents=True)
+    archive = electronic_root / "세종특별자치시.zip"
+    _write_electronic_map_zip(archive, sig_code="36000")
+
+    plan = build_discovery_plan(data_root)
+    sources = plan["sources"]
+    assert sources["electronic_map"]["source_count"] == len(POLYGON_LAYER_NAMES)
+
+    materialize_dir = tmp_path / "work"
+    shp_source = t177d_shp_geometry_source(plan, materialize_dir=materialize_dir)
+
+    assert shp_source.electronic_map_root == electronic_root
+    assert shp_source.archive_path == archive
+    assert shp_source.sido_path == materialize_dir / "세종특별자치시"
+    assert shp_source.sido_name == "세종특별자치시"
+    assert shp_source.sig_code == "36000"
+    assert shp_source.materialized is True
+    assert (shp_source.sido_path / "36000" / "TL_SPBD_BULD.shp").is_file()
 
 
 def _seed_minimal_t177_sources(data_root: Path) -> None:
@@ -163,6 +197,26 @@ def _seed_minimal_t177_sources(data_root: Path) -> None:
     zone_dir = data_root / "구역의 도형"
     zone_dir.mkdir()
     _write_zip(zone_dir / "구역의도형_전체분_세종특별자치시.zip", {"TL_SPPN_MAKAREA.shp": ""})
+
+    _seed_minimal_electronic_map(
+        data_root / "도로명주소 전자지도" / "202604" / "세종특별자치시" / "36110"
+    )
+
+
+def _seed_minimal_electronic_map(sig_dir: Path) -> None:
+    sig_dir.mkdir(parents=True)
+    for layer_name in MASTER_LAYER_NAMES:
+        for suffix in (".shp", ".shx", ".dbf"):
+            (sig_dir / f"{layer_name}{suffix}").write_bytes(b"")
+
+
+def _write_electronic_map_zip(path: Path, *, sig_code: str) -> None:
+    members = {
+        f"{sig_code}/{layer_name}{suffix}": ""
+        for layer_name in MASTER_LAYER_NAMES
+        for suffix in (".shp", ".shx", ".dbf")
+    }
+    _write_zip(path, members)
 
 
 def _write_zip(path: Path, members: dict[str, str]) -> None:

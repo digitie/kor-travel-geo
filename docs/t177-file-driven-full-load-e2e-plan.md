@@ -59,6 +59,9 @@ PR로 머지하고, 다음 Task로 넘어가기 전 2026-06-16 이후 PR의 Clau
 - fast e2e는 `limit_per_file` 또는 시도 subset을 사용해 수분 내 완료를 목표로 한다.
 - T-177C 텍스트 fast-sample의 기본 `limit_per_file`은 2이며
   `KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT`로 조정한다.
+- T-177D SHP fast-sample은 전자지도 월 폴더에서 세종(없으면 이름순 첫 시도) ZIP 또는
+  디렉터리를 선택한다. ZIP 원천은 artifact 작업 디렉터리에 materialize한 뒤 공개
+  `load_shp_polygons()` API로 serving 9개 레이어를 모두 적재한다.
 - long-run e2e는 전국 원천 전체를 읽으며 별도 marker와 긴 timeout을 요구한다.
 
 4. 후처리와 serving 구축
@@ -117,10 +120,15 @@ PR로 머지하고, 다음 Task로 넘어가기 전 2026-06-16 이후 PR의 Clau
 
 완료 조건:
 
+- 실제 전자지도 root에서 selected 시도 ZIP 또는 dataset을 자동 선택한다(세종 우선, 없으면
+  이름순). ZIP 원천은 artifact 작업 디렉터리에 materialize한다.
 - GDAL Python binding이 없으면 skip한다.
-- `build_shp_load_plan()` discovery 결과와 실제 적재 layer 수를 검증한다.
+- `build_shp_load_plan()` discovery 결과와 실제 `load_shp_polygons(mode="full")` 적재 layer 수를
+  검증한다.
 - SRID, geometry validity, 주요 table row count, source file/source yyyymm을 검증한다.
-- `TL_SPBD_BULD` 대형 layer는 fast subset과 long-run mode를 분리한다.
+- `refresh_region_radius_parts()` 후 `region_radius_parts`의 SRID/validity도 함께 검증한다.
+- `t177d-shp-geometry-fast-sample-load.json` artifact를 남긴다.
+- 전국 장기 실행과 대형 레이어 전체 소요시간은 T-177G long-run에서 분리 검증한다.
 
 ### T-177E 선택 보강 원천 e2e
 

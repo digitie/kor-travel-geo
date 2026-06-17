@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-17 (T-177D 전자지도 SHP/PostGIS geometry fast-sample e2e)
+
+**작업**: T-177 파일 기반 full-load e2e의 세 번째 구현 Task로 실제 전자지도 SHP를 selected
+시도 단위로 scratch PostGIS DB에 적재하는 opt-in 테스트를 추가했다.
+
+**결정**: SHP loader에는 공개 `layers=`/row limit 옵션이 없으므로 private `_load_plans_sync()`에
+의존하지 않는다. 대신 전자지도 월 폴더에서 세종 ZIP 또는 dataset을 우선 선택하고, 없으면
+이름순 첫 시도 원천을 고른다. ZIP 원천은 artifact 작업 디렉터리에 materialize한 뒤 공개
+`load_shp_polygons(mode="full")` API로 serving 9개 레이어를 모두 적재한다. 적재 뒤 CLI/API와
+같은 후처리 의미를 확인하기 위해 `refresh_region_radius_parts()`도 실행한다.
+
+**검증/문서**: `tests/integration/_t177_full_load_harness.py`에 T-177D source 선택, SHP row
+guard, table count, SRID 5179, `ST_IsValid`, source metadata, `region_radius_parts` report helper를
+추가했다. `tests/integration/test_t177_file_driven_full_load_e2e.py`는 opt-in 상태에서
+`t177d-shp-geometry-fast-sample-load.json` artifact를 쓰고, GDAL Python binding이 없으면 skip한다.
+다음 PR은 T-177E 선택 보강 원천 e2e다.
+
 ## 2026-06-17 (T-180 SHP invalid geometry repair)
 
 **작업**: T-177D 실제 opt-in 실행 중 세종 202604 전자지도 SHP 적재 결과에서

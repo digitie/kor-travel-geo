@@ -6,6 +6,15 @@
 
 ## 완료
 
+- [x] **T-177D** — 전자지도 SHP/PostGIS geometry e2e(Agent A/Codex).
+  실제 도로명주소 전자지도 월 폴더에서 selected 시도 ZIP 또는 dataset을 고르고, ZIP 원천은
+  artifact 작업 디렉터리에 materialize한 뒤 공개 `load_shp_polygons(mode="full")` API로
+  serving 9개 SHP 레이어를 scratch PostGIS DB에 적재하는 opt-in 테스트를 추가했다. GDAL
+  Python binding이 없으면 skip하고, 적재 layer 수, table row count, SRID 5179, geometry
+  validity, `source_file`/`source_yyyymm`, `refresh_region_radius_parts()` 결과와
+  `t177d-shp-geometry-fast-sample-load.json` artifact를 검증한다. 기본 CI에서는 skip된다.
+  (2026-06-17)
+
 - [x] **T-180** — SHP loader invalid geometry repair(Agent A/Codex, #348).
   T-177D 실제 opt-in 실행에서 세종 202604 전자지도 SHP 적재 후 `tl_scco_emd`,
   `tl_scco_li`, `tl_spbd_buld_polygon`, `tl_sprd_rw`에 invalid geometry가 남는 문제를 분리했다.
