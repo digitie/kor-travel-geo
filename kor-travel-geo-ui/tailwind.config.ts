@@ -31,6 +31,20 @@ const config: Config = {
         border: "var(--ui-border)",
         input: "var(--ui-input)",
         ring: "var(--ui-ring)",
+        text: {
+          strong: "var(--text-strong)",
+          primary: "var(--text-primary)",
+          secondary: "var(--text-secondary)",
+          tertiary: "var(--text-tertiary)",
+          disabled: "var(--text-disabled)"
+        },
+        surface: {
+          page: "var(--surface-page)",
+          card: "var(--surface-card)",
+          subtle: "var(--surface-subtle)",
+          muted: "var(--surface-muted)",
+          row: "var(--surface-row)"
+        },
         ink: "#172033",
         muted: {
           DEFAULT: "var(--ui-muted)",
@@ -39,7 +53,9 @@ const config: Config = {
         line: "#d8dee8",
         panel: "#f7f9fc",
         brand: "#0f766e",
+        "brand-tint": "var(--brand-tint)",
         info: "#1d4ed8",
+        success: "var(--ok)",
         warn: "#b45309",
         danger: "#b42318"
       }
