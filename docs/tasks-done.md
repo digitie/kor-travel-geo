@@ -6,6 +6,13 @@
 
 ## 완료
 
+- [x] **T-179** — CI backend GDAL 설치 timeout/retry hardening(Agent A/Codex, #345).
+  PR #344의 backend CI가 `Install GDAL system libraries` 단계에서 장시간 진행 중으로
+  멈춘 문제를 분리했다. `.github/workflows/ci.yml` backend job에 전체 timeout을 추가하고,
+  GDAL apt 설치 step에 step timeout, `Acquire::Retries=3`, `Dpkg::Lock::Timeout=120`,
+  `--no-install-recommends`, `DEBIAN_FRONTEND=noninteractive`를 적용해 apt mirror/network/lock
+  문제가 PR을 무기한 붙잡지 않도록 했다. (2026-06-17)
+
 - [x] **T-177A** — 파일 기반 full-load e2e 테스트 계획/Task 등록(Agent A/Codex).
   T-073 shell script 재실행에 맞추지 않고, pytest opt-in 통합/e2e가 실제 Juso 원천 파일을
   읽어 scratch PostgreSQL/PostGIS DB를 구축하는 방향으로 계획을 확정했다.
