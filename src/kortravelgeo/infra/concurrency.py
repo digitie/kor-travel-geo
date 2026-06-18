@@ -93,6 +93,7 @@ async def cross_process_lock(
             text("SELECT pg_try_advisory_lock(:lock_key)"),
             {"lock_key": key.as_int()},
         )
+        await conn.commit()
         if acquired is not True:
             raise ConcurrentExecutionError(key)
         try:
@@ -102,3 +103,4 @@ async def cross_process_lock(
                 text("SELECT pg_advisory_unlock(:lock_key)"),
                 {"lock_key": key.as_int()},
             )
+            await conn.commit()

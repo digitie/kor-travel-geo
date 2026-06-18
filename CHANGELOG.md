@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### Changed
+- T-190 `rebuild-db` 요청을 비동기 control job 흐름으로 바꿨다. Admin API는 RustFS
+  materialize를 HTTP 요청 안에서 끝내지 않고 `source_rebuild_db` job id를 즉시 반환하며,
+  해당 job이 integrity gate와 materialize 후 `full_load_batch`를 큐잉하고 `load_batch_id`로
+  연결한다. session advisory lock은 lock/unlock 직후 commit해 장시간 작업 중
+  idle-in-transaction 연결을 남기지 않는다.
+
 ### Added
 - T-184 opt-in live e2e admin role proxy를 추가했다. Next.js `/api/proxy`가 `KTG_LIVE_E2E_ADMIN_PROXY=1`과 유효한 actor/role env를 받을 때만 `X-KTG-Actor`/`X-KTG-Roles`를 주입해 source-files/match-set live admin read를 403 없이 검증할 수 있다.
 - T-277 디버그 UI 지도를 GitHub `digitie/maplibre-vworld-react` 기반으로 전환했다. `maplibre-vworld-js`/`maplibre-vworld` 의존성을 제거하고, tarball SHA `a7cb0f8f41ec00b44b1d106664506730b87033bd`를 소비하며 Next.js 16 Turbopack, webpack, Vitest, TypeScript alias를 추가했다.

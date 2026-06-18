@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import datetime
 from typing import Any, Literal, Self
 
@@ -1460,6 +1460,7 @@ class AsyncAddressClient:
         download_concurrency: int = 3,
         materialize_concurrency: int = 2,
         materialize: bool = True,
+        progress: Callable[..., Awaitable[None]] | None = None,
     ) -> tuple[SourceRebuildDbResponse, dict[str, Any] | None]:
         """Run the rebuild-db precondition + pre-load integrity gate (T-205b).
 
@@ -1478,10 +1479,22 @@ class AsyncAddressClient:
         from .infra.source_rebuild_service import SourceRebuildService
 
         service = SourceRebuildService(self._engine())
+        if progress is not None:
+            await progress(
+                progress=0.05,
+                stage="rebuild_prepare",
+                message="rebuild precondition check started",
+            )
         plan, stale = await service.prepare_rebuild(source_match_set_id)
 
         config = require_enabled_rustfs(self.settings)
         rustfs = RustfsClient(config)
+        if progress is not None:
+            await progress(
+                progress=0.15,
+                stage="rebuild_integrity_gate",
+                message=f"checking {len(plan.groups)} source groups",
+            )
         checks = await self._rebuild_integrity_checks(rustfs, plan)
         gate = service.integrity_gate(checks)
         if not gate.ok:
@@ -1506,6 +1519,12 @@ class AsyncAddressClient:
             )
 
         if materialize:
+            if progress is not None:
+                await progress(
+                    progress=0.25,
+                    stage="rebuild_materialize",
+                    message="materializing RustFS sources for loader input",
+                )
             staging_root = (
                 self.settings.rustfs_materialize_dir
                 / "rebuild_staging"
@@ -1519,6 +1538,12 @@ class AsyncAddressClient:
                 download_concurrency=download_concurrency,
                 materialize_concurrency=materialize_concurrency,
             )
+            if progress is not None:
+                await progress(
+                    progress=0.70,
+                    stage="rebuild_materialized",
+                    message="RustFS sources materialized",
+                )
         else:
             batch_payload = dict(plan.batch_payload)
         if force_promotion:

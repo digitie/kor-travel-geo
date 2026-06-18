@@ -15,6 +15,7 @@ from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
 from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra import (
     admin_repo,
+    concurrency,
     coordinates,
     geocode_repo,
     geometry_repo,
@@ -345,6 +346,7 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     queue_source = inspect.getsource(_jobs.JobQueue)
 
     assert "full_load_batch" in queue_source
+    assert "source_rebuild_db" in _jobs._CONTROL_KINDS
     assert "consistency_check" in queue_source
     assert '"strategy": "swap"' in queue_source
     assert "consistency report severity ERROR" in queue_source
@@ -545,6 +547,50 @@ def test_admin_repo_active_upload_refs_scan_queued_and_running_payloads() -> Non
     assert "state IN ('queued','running')" in source
     assert "payload::text LIKE '%upload_%'" in source
     assert "extract_upload_set_ids" in source
+
+
+@pytest.mark.asyncio
+async def test_cross_process_lock_commits_after_lock_and_unlock() -> None:
+    class Conn:
+        def __init__(self) -> None:
+            self.statements: list[str] = []
+            self.commits = 0
+
+        async def scalar(self, statement: object, _params: dict[str, Any]) -> bool:
+            self.statements.append(str(statement))
+            return True
+
+        async def commit(self) -> None:
+            self.commits += 1
+
+    class Connect:
+        def __init__(self, conn: Conn) -> None:
+            self.conn = conn
+
+        async def __aenter__(self) -> Conn:
+            return self.conn
+
+        async def __aexit__(self, *_args: object) -> bool:
+            return False
+
+    class Engine:
+        def __init__(self) -> None:
+            self.conn = Conn()
+
+        def connect(self) -> Connect:
+            return Connect(self.conn)
+
+    engine = Engine()
+    key = concurrency.AdvisoryLockKey.global_key(concurrency.AdvisoryLockNamespace.MV_REFRESH)
+
+    async with concurrency.cross_process_lock(engine, key):  # type: ignore[arg-type]
+        pass
+
+    assert engine.conn.commits == 2
+    assert engine.conn.statements == [
+        "SELECT pg_try_advisory_lock(:lock_key)",
+        "SELECT pg_advisory_unlock(:lock_key)",
+    ]
 
 
 def test_consistency_severity_filter_is_pushed_to_sql() -> None:

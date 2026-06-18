@@ -18,6 +18,7 @@ class _FakeConnection:
     def __init__(self, *, acquired: bool) -> None:
         self.acquired = acquired
         self.calls: list[str] = []
+        self.commits = 0
 
     async def scalar(self, statement: object, params: object) -> bool:
         self.calls.append(str(statement))
@@ -28,6 +29,9 @@ class _FakeConnection:
     async def execute(self, statement: object, params: object) -> None:
         self.calls.append(str(statement))
         _ = params
+
+    async def commit(self) -> None:
+        self.commits += 1
 
 
 class _FakeConnectContext:
@@ -70,6 +74,7 @@ async def test_cross_process_lock_unlocks_after_success() -> None:
 
     assert any("pg_try_advisory_lock" in call for call in conn.calls)
     assert any("pg_advisory_unlock" in call for call in conn.calls)
+    assert conn.commits == 2
 
 
 @pytest.mark.asyncio
@@ -85,6 +90,7 @@ async def test_cross_process_lock_raises_conflict_when_busy() -> None:
 
     assert excinfo.value.http_status == 409
     assert not any("pg_advisory_unlock" in call for call in conn.calls)
+    assert conn.commits == 1
 
 
 def test_cli_and_api_register_cross_process_lock_helpers() -> None:

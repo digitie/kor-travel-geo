@@ -159,7 +159,6 @@ from kortravelgeo.infra.rustfs import (
     save_rustfs_config,
 )
 from kortravelgeo.infra.source_group_service import RegisterContext
-from kortravelgeo.infra.source_rebuild_service import SourceRebuildService
 from kortravelgeo.infra.source_upload_repo import should_fail_storage_state
 from kortravelgeo.infra.uploads import (
     import_rustfs_prefix_as_upload_set,
@@ -1451,15 +1450,11 @@ async def rebuild_source_match_set_db(
 ) -> SourceRebuildDbResponse:
     """Rebuild the serving DB from a match set (doc "DB 재구성", ~1532-1562).
 
-    Bridges to the EXISTING ``full_load_batch`` loader DAG: assembles the batch
-    payload from the match set's build groups and enqueues it under the
-    ``source_rebuild_db`` global advisory lock (409 if another rebuild is
-    enqueuing/running). Before any child loader is enqueued the pre-load
-    source-archive integrity gate re-verifies each group's RustFS objects'
-    ``sha256``/``size``/presence + ``group_sha256`` against the registry; a
-    mismatch quarantines the failing groups, propagates (active →
-    ``integrity_alert``, non-active ``validated`` → ``invalid``), and fails
-    without creating any child job.
+    Bridges to the EXISTING ``full_load_batch`` loader DAG via a persistent
+    ``source_rebuild_db`` control job. The HTTP request only enqueues the
+    control job; that job then runs the source-archive integrity gate, RustFS
+    materialization, and downstream ``full_load_batch`` enqueue under the
+    ``source_rebuild_db`` global advisory lock.
 
     ``force_promotion`` (the ERROR-bypass) additionally requires the
     ``destructive_admin`` role and a ``typed_confirmation`` of
@@ -1479,41 +1474,38 @@ async def rebuild_source_match_set_db(
                 f"'{_rebuild_typed_confirmation(source_match_set_id)}'"
             )
 
-    # The source_rebuild_db lock serializes the prepare+enqueue critical section
-    # vs other rebuilds (409 on conflict); the integrity gate + stale-job sweep
-    # run inside it. The actual COPY/MV steps are serialized by the JobQueue.
-    async with cross_process_lock(client._engine(), SourceRebuildService.rebuild_lock_key()):
-        response, batch_payload = await client.prepare_source_match_set_rebuild(
-            source_match_set_id,
-            actor=ctx.actor,
-            force_promotion=req.force_promotion,
-            typed_confirmation=req.typed_confirmation,
-            reason=req.reason,
-            download_concurrency=req.download_concurrency,
-            materialize_concurrency=req.materialize_concurrency,
-        )
-        if batch_payload is None:
-            await client.record_audit_event(
-                action="source.rebuild_db",
-                actor_type="ui",
-                actor_id=ctx.actor,
-                outcome="integrity_gate_failed",
-                payload={"failed_group_ids": list(response.failed_group_ids)},
-                resource_type="source_match_set",
-                resource_id=source_match_set_id,
-                **_audit_request(request),
-            )
-            return response
-        job_id = await queue.enqueue_batch(batch_payload)
-        await client.record_rebuild_enqueued(
-            source_match_set_id,
-            actor=ctx.actor,
-            job_id=job_id,
-            load_batch_id=job_id,
-            forced_promotion=req.force_promotion,
-            reason=req.reason,
-        )
-    return response.model_copy(update={"job_id": job_id, "load_batch_id": job_id})
+    job_id = await queue.enqueue(
+        "source_rebuild_db",
+        {
+            "source_match_set_id": source_match_set_id,
+            "actor": ctx.actor,
+            "force_promotion": req.force_promotion,
+            "reason": req.reason,
+            "download_concurrency": req.download_concurrency,
+            "materialize_concurrency": req.materialize_concurrency,
+        },
+    )
+    await client.record_audit_event(
+        action="source.rebuild_db",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="queued",
+        payload={
+            "force_promotion": req.force_promotion,
+            "reason": req.reason,
+        },
+        resource_type="source_match_set",
+        resource_id=source_match_set_id,
+        job_id=job_id,
+        **_audit_request(request),
+    )
+    return SourceRebuildDbResponse(
+        source_match_set_id=source_match_set_id,
+        enqueued=True,
+        job_id=job_id,
+        forced_promotion=req.force_promotion,
+        message="rebuild prepare job queued; integrity gate will run asynchronously",
+    )
 
 
 @router.post(

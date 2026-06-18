@@ -4,6 +4,15 @@
 
 ## 현재 진척도 (2026-06-18 갱신, by codex)
 
+- ✅ T-190 rebuild-db 요청 timeout 해소 — Admin UI live `rebuild-db` POST가
+  RustFS materialize 동안 5분 proxy timeout에 걸리던 문제를 백엔드에서 줄였다.
+  `/source-match-sets/{id}/rebuild-db`는 이제 `source_rebuild_db` 제어 job을 즉시 enqueue하고
+  반환하며, 제어 job이 integrity gate와 RustFS materialize 후 기존 `full_load_batch`를 enqueue한다.
+  제어 job은 생성된 `full_load_batch`와 `load_batch_id`로 연결되어 진행 상황 추적이 가능하다.
+  session advisory lock helper는 lock/unlock 직후 commit해 장시간 작업 중
+  idle-in-transaction 연결을 남기지 않는다. WSL `python -m pytest -q` 1068건,
+  `ruff check .`, `python -m mypy src/kortravelgeo`, `lint-imports` 통과. #370 선행 PR
+  머지 후 T-183 live UI 재실행이 다음 검증이다.
 - ✅ 라이선스 GPL-3.0-only 전환 — 사용자 요청에 따라 프로젝트 license metadata,
   classifier, README badge/고지, `CHANGELOG.md`, `LICENSE`를 `GPL-3.0-only` 기준으로 맞췄다.
   현재 reference 문서의 MIT 현재형 문구는 "당시 MIT"로 고쳤고, 과거 작업 로그 항목은
