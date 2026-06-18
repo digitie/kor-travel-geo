@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from time import perf_counter
@@ -675,6 +675,15 @@ def _locked_global_job_handler(
     return wrapped
 
 
+async def _run_loader_off_event_loop[LoaderResultT](
+    factory: Callable[[], Coroutine[Any, Any, LoaderResultT]],
+) -> LoaderResultT:
+    def run() -> LoaderResultT:
+        return asyncio.run(factory())
+
+    return await asyncio.to_thread(run)
+
+
 def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> None:
     settings = get_settings()
 
@@ -756,12 +765,14 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="juso_text_load", message="도로명주소 한글 적재 시작")
-        count = await load_juso_hangul(
-            engine,
-            _payload_path(payload),
-            source_yyyymm=_payload_str(payload, "source_yyyymm"),
-            limit_per_file=_payload_int(payload, "limit_per_file"),
-            cancel_event=cancel_event,
+        count = await _run_loader_off_event_loop(
+            lambda: load_juso_hangul(
+                engine,
+                _payload_path(payload),
+                source_yyyymm=_payload_str(payload, "source_yyyymm"),
+                limit_per_file=_payload_int(payload, "limit_per_file"),
+                cancel_event=cancel_event,
+            )
         )
         await progress(progress=1.0, stage="juso_text_load", message=f"{count} rows loaded")
 
@@ -771,12 +782,14 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="locsum_load", message="위치정보요약DB 적재 시작")
-        count = await load_locsum(
-            engine,
-            _payload_path(payload),
-            source_yyyymm=_payload_str(payload, "source_yyyymm"),
-            limit_per_file=_payload_int(payload, "limit_per_file"),
-            cancel_event=cancel_event,
+        count = await _run_loader_off_event_loop(
+            lambda: load_locsum(
+                engine,
+                _payload_path(payload),
+                source_yyyymm=_payload_str(payload, "source_yyyymm"),
+                limit_per_file=_payload_int(payload, "limit_per_file"),
+                cancel_event=cancel_event,
+            )
         )
         await progress(progress=1.0, stage="locsum_load", message=f"{count} rows loaded")
 
@@ -786,12 +799,14 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="daily_juso_delta", message="도로명주소 일변동 적재 시작")
-        result = await load_daily_juso_delta(
-            engine,
-            _payload_path(payload),
-            source_yyyymm=_payload_str(payload, "source_yyyymm"),
-            limit_per_file=_payload_int(payload, "limit_per_file"),
-            cancel_event=cancel_event,
+        result = await _run_loader_off_event_loop(
+            lambda: load_daily_juso_delta(
+                engine,
+                _payload_path(payload),
+                source_yyyymm=_payload_str(payload, "source_yyyymm"),
+                limit_per_file=_payload_int(payload, "limit_per_file"),
+                cancel_event=cancel_event,
+            )
         )
         await progress(
             progress=1.0,
@@ -808,13 +823,15 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="juso_parcel_link_load", message="건물-지번 링크 적재 시작")
-        result = await load_juso_parcel_link_snapshot(
-            engine,
-            _payload_path(payload),
-            source_yyyymm=_payload_str(payload, "source_yyyymm"),
-            limit_per_file=_payload_int(payload, "limit_per_file"),
-            replace=_payload_bool(payload, "replace", default=True),
-            cancel_event=cancel_event,
+        result = await _run_loader_off_event_loop(
+            lambda: load_juso_parcel_link_snapshot(
+                engine,
+                _payload_path(payload),
+                source_yyyymm=_payload_str(payload, "source_yyyymm"),
+                limit_per_file=_payload_int(payload, "limit_per_file"),
+                replace=_payload_bool(payload, "replace", default=True),
+                cancel_event=cancel_event,
+            )
         )
         await progress(
             progress=1.0,
@@ -828,12 +845,14 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="juso_parcel_link_delta", message="건물-지번 일변동 적재 시작")
-        result = await load_daily_parcel_link_delta(
-            engine,
-            _payload_path(payload),
-            source_yyyymm=_payload_str(payload, "source_yyyymm"),
-            limit_per_file=_payload_int(payload, "limit_per_file"),
-            cancel_event=cancel_event,
+        result = await _run_loader_off_event_loop(
+            lambda: load_daily_parcel_link_delta(
+                engine,
+                _payload_path(payload),
+                source_yyyymm=_payload_str(payload, "source_yyyymm"),
+                limit_per_file=_payload_int(payload, "limit_per_file"),
+                cancel_event=cancel_event,
+            )
         )
         await progress(
             progress=1.0,
@@ -850,13 +869,15 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="roadaddr_entrance_load", message="도로명주소 출입구 정보 적재 시작")
-        result = await load_roadaddr_entrances(
-            engine,
-            _payload_path(payload),
-            source_yyyymm=_payload_str(payload, "source_yyyymm"),
-            limit_per_file=_payload_int(payload, "limit_per_file"),
-            replace=_payload_bool(payload, "replace", default=True),
-            cancel_event=cancel_event,
+        result = await _run_loader_off_event_loop(
+            lambda: load_roadaddr_entrances(
+                engine,
+                _payload_path(payload),
+                source_yyyymm=_payload_str(payload, "source_yyyymm"),
+                limit_per_file=_payload_int(payload, "limit_per_file"),
+                replace=_payload_bool(payload, "replace", default=True),
+                cancel_event=cancel_event,
+            )
         )
         await progress(
             progress=1.0,
@@ -870,12 +891,14 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="navi_load", message="내비게이션용DB 적재 시작")
-        build_count, entrance_count = await load_navi(
-            engine,
-            _payload_path(payload),
-            source_yyyymm=_payload_str(payload, "source_yyyymm"),
-            limit_per_file=_payload_int(payload, "limit_per_file"),
-            cancel_event=cancel_event,
+        build_count, entrance_count = await _run_loader_off_event_loop(
+            lambda: load_navi(
+                engine,
+                _payload_path(payload),
+                source_yyyymm=_payload_str(payload, "source_yyyymm"),
+                limit_per_file=_payload_int(payload, "limit_per_file"),
+                cancel_event=cancel_event,
+            )
         )
         await progress(
             progress=1.0,

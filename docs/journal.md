@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (T-193 text loader event loop starvation 해소)
+
+**작업**: T-183 live UI e2e 재개 중 `source_rebuild_db` 제어 job과 RustFS materialize는
+완료됐지만, downstream batch의 첫 `juso_text_load` child가 시작된 뒤 `/v1/healthz`,
+`/v1/readyz`, `/v1/admin/jobs/{job_id}`가 60초 이상 응답하지 않았다. 원인은 대용량 text
+loader handler가 row parsing/COPY loop를 API main asyncio event loop 안에서 직접 실행한
+것으로 보고 #376으로 분리했다.
+
+**결정**: text 계열 loader handler만 coroutine factory를 worker thread의 별도 event loop에서
+실행하도록 `_run_loader_off_event_loop()`를 추가했다. SHP/SPPN은 이미 내부에서 worker thread를
+사용하고 있고, `source_rebuild_db` materialize는 이번 재현에서 status polling이 가능했으므로
+범위를 넓히지 않았다.
+
+**검증**: WSL ext4 테스트 미러에서 targeted
+`tests/unit/test_api_app_contract.py::test_loader_thread_wrapper_keeps_api_event_loop_responsive`를
+통과했다. 이후 `python -m pytest -q` 1072건 통과(75 skipped), `ruff check .`,
+`python -m mypy src/kortravelgeo`, `lint-imports` 통과. PR 머지 뒤 T-183 live UI e2e를
+처음부터 다시 실행한다.
+
 ## 2026-06-18 (T-192 JobQueue drain nudge/exception logging)
 
 **작업**: T-183 live UI e2e 재개 중 `rebuild-db` POST가 200을 반환하고

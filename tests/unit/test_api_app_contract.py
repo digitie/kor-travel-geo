@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import threading
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -101,6 +102,27 @@ def test_api_queue_registers_sppn_makarea_loader() -> None:
     assert '"sppn_makarea_load"' in source
     assert "AdvisoryLockNamespace.LOAD_SPPN_MAKAREA" in source
     assert "sppn_makarea" in source
+
+
+@pytest.mark.asyncio
+async def test_loader_thread_wrapper_keeps_api_event_loop_responsive() -> None:
+    main_thread_id = threading.get_ident()
+    worker_thread_ids: list[int] = []
+    blocker = threading.Event()
+
+    async def blocking_loader() -> str:
+        worker_thread_ids.append(threading.get_ident())
+        blocker.wait(0.2)
+        return "loaded"
+
+    task = asyncio.create_task(app_module._run_loader_off_event_loop(blocking_loader))
+
+    await asyncio.wait_for(asyncio.sleep(0.01), timeout=0.05)
+    assert not task.done()
+
+    assert await task == "loaded"
+    assert worker_thread_ids
+    assert worker_thread_ids[0] != main_thread_id
 
 
 @pytest.mark.asyncio

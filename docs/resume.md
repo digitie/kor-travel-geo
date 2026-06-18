@@ -4,6 +4,12 @@
 
 ## 현재 진척도 (2026-06-18 갱신, by codex)
 
+- ✅ T-193 text loader event loop starvation 해소 — T-183 live UI e2e에서
+  `juso_text_load` child가 시작된 뒤 API health/readiness/job status polling이 60초 이상
+  응답하지 않는 문제를 #376으로 분리했다. text 계열 loader handler는 이제 coroutine
+  factory를 worker thread의 별도 event loop에서 실행해 API main loop를 굶기지 않는다.
+  WSL `python -m pytest -q` 1072건, `ruff check .`, `python -m mypy src/kortravelgeo`,
+  `lint-imports` 통과. PR 머지 뒤 T-183 live UI e2e를 처음부터 다시 실행한다.
 - ✅ T-192 JobQueue drain nudge/exception logging — T-183 live UI e2e에서
   `rebuild-db` POST 200 뒤 `source_rebuild_db` control job이 `queued`에 머물고
   `log_tail=[]`로 worker progress가 없는 문제를 #374로 분리했다. `JobQueue`는 enqueue 뒤
