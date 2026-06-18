@@ -9169,7 +9169,7 @@
       },
       "SourceRebuildDbResponse": {
         "additionalProperties": false,
-        "description": "``rebuild-db`` enqueue result.\n\nThe rebuild runs asynchronously in a ``full_load_batch`` job under the\n``source_rebuild_db`` advisory lock; ``job_id``/``load_batch_id`` track it.\nThe integrity gate runs before any child loader is enqueued; on a gate\nfailure ``enqueued=false`` and ``failed_group_ids`` name the quarantined\ngroups. ``forced_promotion`` echoes whether the ERROR-bypass path was armed.",
+        "description": "``rebuild-db`` enqueue result.\n\nThe request returns after enqueueing a persistent ``source_rebuild_db``\ncontrol job. That job runs the integrity gate + RustFS materialization under\nthe ``source_rebuild_db`` advisory lock, then enqueues the downstream\n``full_load_batch``. ``job_id`` tracks the control job immediately;\n``load_batch_id`` is present only when a full-load batch is already known.\nOn an integrity-gate failure ``enqueued=false`` and ``failed_group_ids`` name\nthe quarantined groups. ``forced_promotion`` echoes whether the ERROR-bypass\npath was armed.",
         "properties": {
           "affected_match_set_ids": {
             "default": [],
@@ -16171,7 +16171,7 @@
     },
     "/v1/admin/source-match-sets/{source_match_set_id}/rebuild-db": {
       "post": {
-        "description": "Rebuild the serving DB from a match set (doc \"DB 재구성\", ~1532-1562).\n\nBridges to the EXISTING ``full_load_batch`` loader DAG: assembles the batch\npayload from the match set's build groups and enqueues it under the\n``source_rebuild_db`` global advisory lock (409 if another rebuild is\nenqueuing/running). Before any child loader is enqueued the pre-load\nsource-archive integrity gate re-verifies each group's RustFS objects'\n``sha256``/``size``/presence + ``group_sha256`` against the registry; a\nmismatch quarantines the failing groups, propagates (active →\n``integrity_alert``, non-active ``validated`` → ``invalid``), and fails\nwithout creating any child job.\n\n``force_promotion`` (the ERROR-bypass) additionally requires the\n``destructive_admin`` role and a ``typed_confirmation`` of\n``REBUILD-PROMOTE {id}``. It bypasses ONLY the later consistency ERROR\npromotion block — never the integrity gate above, an unavailable group, or a\nmatch set ``integrity_alert`` (doc ~1559, ADR-049 #13).",
+        "description": "Rebuild the serving DB from a match set (doc \"DB 재구성\", ~1532-1562).\n\nBridges to the EXISTING ``full_load_batch`` loader DAG via a persistent\n``source_rebuild_db`` control job. The HTTP request only enqueues the\ncontrol job; that job then runs the source-archive integrity gate, RustFS\nmaterialization, and downstream ``full_load_batch`` enqueue under the\n``source_rebuild_db`` global advisory lock.\n\n``force_promotion`` (the ERROR-bypass) additionally requires the\n``destructive_admin`` role and a ``typed_confirmation`` of\n``REBUILD-PROMOTE {id}``. It bypasses ONLY the later consistency ERROR\npromotion block — never the integrity gate above, an unavailable group, or a\nmatch set ``integrity_alert`` (doc ~1559, ADR-049 #13).",
         "operationId": "rebuild_source_match_set_db_v1_admin_source_match_sets__source_match_set_id__rebuild_db_post",
         "parameters": [
           {

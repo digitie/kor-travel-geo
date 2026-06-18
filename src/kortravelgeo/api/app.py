@@ -678,6 +678,78 @@ def _locked_global_job_handler(
 def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> None:
     settings = get_settings()
 
+    async def source_rebuild_db(
+        payload: dict[str, Any],
+        cancel_event: asyncio.Event,
+        progress: _jobs.ProgressCallback,
+    ) -> None:
+        source_match_set_id = _payload_str(payload, "source_match_set_id")
+        if source_match_set_id is None:
+            raise ValueError("source_rebuild_db payload requires source_match_set_id")
+        actor = _payload_str(payload, "actor")
+        force_promotion = _payload_bool(payload, "force_promotion", default=False)
+        reason = _payload_str(payload, "reason")
+        download_concurrency = _payload_int(payload, "download_concurrency") or 3
+        materialize_concurrency = _payload_int(payload, "materialize_concurrency") or 2
+        control_job_id = _payload_str(payload, "_job_id")
+        client = AsyncAddressClient(settings=settings, engine=engine)
+
+        await progress(
+            progress=0.01,
+            stage="rebuild_queued",
+            message="source rebuild control job started",
+        )
+        if cancel_event.is_set():
+            raise asyncio.CancelledError
+        response, batch_payload = await client.prepare_source_match_set_rebuild(
+            source_match_set_id,
+            actor=actor,
+            force_promotion=force_promotion,
+            typed_confirmation=None,
+            reason=reason,
+            download_concurrency=download_concurrency,
+            materialize_concurrency=materialize_concurrency,
+            progress=progress,
+        )
+        if cancel_event.is_set():
+            raise asyncio.CancelledError
+        if batch_payload is None:
+            await client.record_audit_event(
+                action="source.rebuild_db",
+                actor_type="ui",
+                actor_id=actor,
+                outcome="integrity_gate_failed",
+                payload={"failed_group_ids": list(response.failed_group_ids)},
+                resource_type="source_match_set",
+                resource_id=source_match_set_id,
+                job_id=control_job_id,
+            )
+            msg = response.message or "pre-load integrity gate failed; groups quarantined"
+            await progress(progress=1.0, stage="integrity_gate_failed", message=msg)
+            raise RuntimeError(msg)
+
+        await progress(
+            progress=0.80,
+            stage="full_load_batch_enqueue",
+            message="source rebuild materialized; enqueueing full_load_batch",
+        )
+        batch_job_id = await queue.enqueue_batch(batch_payload)
+        if control_job_id is not None:
+            await queue.link_job_to_batch(control_job_id, batch_job_id)
+        await client.record_rebuild_enqueued(
+            source_match_set_id,
+            actor=actor,
+            job_id=batch_job_id,
+            load_batch_id=batch_job_id,
+            forced_promotion=force_promotion,
+            reason=reason,
+        )
+        await progress(
+            progress=1.0,
+            stage="full_load_batch_queued",
+            message=f"full_load_batch queued: {batch_job_id}",
+        )
+
     async def juso(
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
@@ -949,6 +1021,14 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
     ) -> None:
         await run_restore_job(engine, settings, payload, cancel_event, progress)
 
+    queue.register(
+        "source_rebuild_db",
+        _locked_global_job_handler(
+            engine,
+            AdvisoryLockNamespace.SOURCE_REBUILD_DB,
+            source_rebuild_db,
+        ),
+    )
     queue.register(
         "juso_text_load",
         _locked_job_handler(engine, AdvisoryLockNamespace.LOAD_JUSO_TEXT, _payload_lock_path, juso),

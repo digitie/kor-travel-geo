@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (T-190 rebuild-db 요청 timeout 해소)
+
+**작업**: Admin UI live T183 `rebuild-db` 요청이 Next.js proxy 5분 timeout
+(`UND_ERR_HEADERS_TIMEOUT`)에 걸리고, backend가 `pg_try_advisory_lock` 뒤
+idle-in-transaction 연결을 유지한 채 RustFS materialize를 계속하던 문제를 백엔드에서
+T-190/#370으로 분리해 수정했다. `POST /v1/admin/source-match-sets/{id}/rebuild-db`는 이제 즉시
+`source_rebuild_db` 제어 job을 영속 큐에 넣고 반환한다. 제어 job이 기존
+`prepare_source_match_set_rebuild()` 경로로 integrity gate와 RustFS materialize를 수행한 뒤
+기존 `full_load_batch`를 enqueue한다.
+
+**결정**: full async 재설계 대신 최소 변경으로 `load_jobs` 기반 제어 job을 추가했다. 제어
+job은 `full_load_batch`가 생성되면 `load_batch_id`로 연결해 진행 상황을 추적할 수 있게 했다.
+`source_rebuild_db`를 batch successor 계산의 control kind에 포함해 consistency가 조기 enqueue되지
+않게 했고, session advisory lock helper는 lock/unlock 직후 commit해 장시간 lock 보유 중
+idle-in-transaction 상태를 만들지 않게 했다.
+
+**검증**: WSL ext4 테스트 미러에서 targeted pytest 44건을 먼저 통과한 뒤
+`python -m pytest -q` 1068건 통과(75 skipped), `ruff check .`,
+`python -m mypy src/kortravelgeo`, `lint-imports` 통과. 실제 T183 live UI 재실행은
+아직 미검증이다.
+
 ## 2026-06-18 (라이선스 GPL-3.0-only 전환)
 
 **작업**: 사용자 요청에 따라 프로젝트 라이선스 표기를 MIT에서 `GPL-3.0-only`로

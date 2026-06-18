@@ -8,8 +8,13 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from starlette.requests import Request
 
+from kortravelgeo.api import app as api_app
+from kortravelgeo.api.routers import admin
+from kortravelgeo.api.security import ROLE_REBUILD_OPERATOR, RequestContext
 from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.dto.source import SourceRebuildDbRequest, SourceRebuildDbResponse
 from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.source_rebuild_service import (
     RebuildFileRef,
@@ -344,6 +349,264 @@ async def test_prepare_rebuild_uses_attempt_scoped_staging_root(
     assert root.name.startswith("run_")
     assert root != tmp_path / "rebuild_staging" / "ms-1"
     assert payload["staging_dir"] == str(root)
+
+
+@pytest.mark.asyncio
+async def test_rebuild_route_enqueues_control_job_without_materializing() -> None:
+    class FakeQueue:
+        def __init__(self) -> None:
+            self.enqueued: tuple[str, dict[str, Any]] | None = None
+            self.enqueue_batch_called = False
+
+        async def enqueue(self, kind: str, payload: dict[str, Any]) -> str:
+            self.enqueued = (kind, payload)
+            return "job-control"
+
+        async def enqueue_batch(self, _payload: dict[str, Any]) -> str:
+            self.enqueue_batch_called = True
+            raise AssertionError("route must not enqueue full_load_batch synchronously")
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.audit: dict[str, Any] | None = None
+
+        async def prepare_source_match_set_rebuild(self, *_args: Any, **_kwargs: Any) -> None:
+            raise AssertionError("route must not materialize during the HTTP request")
+
+        async def record_audit_event(self, **kwargs: Any) -> None:
+            self.audit = kwargs
+
+    queue = FakeQueue()
+    client = FakeClient()
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+        }
+    )
+    ctx = RequestContext(
+        actor="tester",
+        roles=frozenset({ROLE_REBUILD_OPERATOR}),
+    )
+
+    response = await admin.rebuild_source_match_set_db(
+        "ms-1",
+        SourceRebuildDbRequest(),
+        request,
+        ctx=ctx,
+        client=cast("Any", client),
+        queue=cast("Any", queue),
+    )
+
+    assert response == SourceRebuildDbResponse(
+        source_match_set_id="ms-1",
+        enqueued=True,
+        job_id="job-control",
+        forced_promotion=False,
+        message="rebuild prepare job queued; integrity gate will run asynchronously",
+    )
+    assert queue.enqueued == (
+        "source_rebuild_db",
+        {
+            "source_match_set_id": "ms-1",
+            "actor": "tester",
+            "force_promotion": False,
+            "reason": None,
+            "download_concurrency": 3,
+            "materialize_concurrency": 2,
+        },
+    )
+    assert queue.enqueue_batch_called is False
+    assert client.audit is not None
+    assert client.audit["outcome"] == "queued"
+    assert client.audit["job_id"] == "job-control"
+
+
+@pytest.mark.asyncio
+async def test_source_rebuild_control_job_enqueues_full_load_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class QueueCapture:
+        def __init__(self) -> None:
+            self.handlers: dict[str, Any] = {}
+            self.batch_payload: dict[str, Any] | None = None
+            self.linked: tuple[str, str] | None = None
+
+        def register(self, kind: str, handler: Any) -> None:
+            self.handlers[kind] = handler
+
+        async def enqueue_batch(self, payload: dict[str, Any]) -> str:
+            self.batch_payload = payload
+            return "batch-1"
+
+        async def link_job_to_batch(self, job_id: str, load_batch_id: str) -> None:
+            self.linked = (job_id, load_batch_id)
+
+    class NoopLock:
+        async def __aenter__(self) -> None:
+            return None
+
+        async def __aexit__(self, *_args: object) -> bool:
+            return False
+
+    async def fake_prepare(
+        self: AsyncAddressClient,
+        source_match_set_id: str,
+        **kwargs: Any,
+    ) -> tuple[SourceRebuildDbResponse, dict[str, Any]]:
+        del self
+        progress = kwargs["progress"]
+        await progress(progress=0.70, stage="rebuild_materialized", message="ok")
+        return (
+            SourceRebuildDbResponse(
+                source_match_set_id=source_match_set_id,
+                enqueued=True,
+                integrity_gate_ok=True,
+            ),
+            {
+                "children": [{"kind": "juso_text_load", "payload": {"path": "/stage"}}],
+                "source_match_set_id": source_match_set_id,
+            },
+        )
+
+    record_calls: list[dict[str, Any]] = []
+
+    async def fake_record_rebuild_enqueued(
+        self: AsyncAddressClient,
+        source_match_set_id: str,
+        **kwargs: Any,
+    ) -> None:
+        del self
+        record_calls.append({"source_match_set_id": source_match_set_id, **kwargs})
+
+    monkeypatch.setattr(api_app, "cross_process_lock", lambda *_args, **_kwargs: NoopLock())
+    monkeypatch.setattr(
+        AsyncAddressClient,
+        "prepare_source_match_set_rebuild",
+        fake_prepare,
+    )
+    monkeypatch.setattr(
+        AsyncAddressClient,
+        "record_rebuild_enqueued",
+        fake_record_rebuild_enqueued,
+    )
+
+    queue = QueueCapture()
+    api_app._register_default_handlers(cast("Any", queue), cast("Any", object()))
+    progress_events: list[dict[str, Any]] = []
+
+    async def record_progress(**kwargs: Any) -> None:
+        progress_events.append(kwargs)
+
+    await queue.handlers["source_rebuild_db"](
+        {
+            "_job_id": "job-control",
+            "source_match_set_id": "ms-1",
+            "actor": "tester",
+        },
+        asyncio.Event(),
+        record_progress,
+    )
+
+    assert queue.batch_payload is not None
+    assert queue.batch_payload["source_match_set_id"] == "ms-1"
+    assert queue.linked == ("job-control", "batch-1")
+    assert record_calls == [
+        {
+            "source_match_set_id": "ms-1",
+            "actor": "tester",
+            "job_id": "batch-1",
+            "load_batch_id": "batch-1",
+            "forced_promotion": False,
+            "reason": None,
+        }
+    ]
+    assert any(event.get("stage") == "full_load_batch_queued" for event in progress_events)
+
+
+@pytest.mark.asyncio
+async def test_source_rebuild_control_job_fails_before_batch_on_integrity_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class QueueCapture:
+        def __init__(self) -> None:
+            self.handlers: dict[str, Any] = {}
+            self.enqueue_batch_called = False
+
+        def register(self, kind: str, handler: Any) -> None:
+            self.handlers[kind] = handler
+
+        async def enqueue_batch(self, _payload: dict[str, Any]) -> str:
+            self.enqueue_batch_called = True
+            raise AssertionError("integrity failure must not enqueue full_load_batch")
+
+    class NoopLock:
+        async def __aenter__(self) -> None:
+            return None
+
+        async def __aexit__(self, *_args: object) -> bool:
+            return False
+
+    async def fake_prepare(
+        self: AsyncAddressClient,
+        source_match_set_id: str,
+        **_kwargs: Any,
+    ) -> tuple[SourceRebuildDbResponse, None]:
+        del self
+        return (
+            SourceRebuildDbResponse(
+                source_match_set_id=source_match_set_id,
+                enqueued=False,
+                integrity_gate_ok=False,
+                failed_group_ids=("g1",),
+                message="pre-load integrity gate failed; groups quarantined",
+            ),
+            None,
+        )
+
+    audit_calls: list[dict[str, Any]] = []
+
+    async def fake_record_audit_event(self: AsyncAddressClient, **kwargs: Any) -> None:
+        del self
+        audit_calls.append(kwargs)
+
+    monkeypatch.setattr(api_app, "cross_process_lock", lambda *_args, **_kwargs: NoopLock())
+    monkeypatch.setattr(
+        AsyncAddressClient,
+        "prepare_source_match_set_rebuild",
+        fake_prepare,
+    )
+    monkeypatch.setattr(
+        AsyncAddressClient,
+        "record_audit_event",
+        fake_record_audit_event,
+    )
+
+    queue = QueueCapture()
+    api_app._register_default_handlers(cast("Any", queue), cast("Any", object()))
+    progress_events: list[dict[str, Any]] = []
+
+    async def record_progress(**kwargs: Any) -> None:
+        progress_events.append(kwargs)
+
+    with pytest.raises(RuntimeError, match="integrity gate failed"):
+        await queue.handlers["source_rebuild_db"](
+            {
+                "_job_id": "job-control",
+                "source_match_set_id": "ms-1",
+                "actor": "tester",
+            },
+            asyncio.Event(),
+            record_progress,
+        )
+
+    assert queue.enqueue_batch_called is False
+    assert audit_calls[0]["outcome"] == "integrity_gate_failed"
+    assert audit_calls[0]["payload"] == {"failed_group_ids": ["g1"]}
+    assert any(event.get("stage") == "integrity_gate_failed" for event in progress_events)
 
 
 def _plan(

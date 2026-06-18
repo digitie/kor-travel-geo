@@ -29,7 +29,14 @@ class ProgressCallback(Protocol):
 
 JobHandler = Callable[[dict[str, Any], asyncio.Event, ProgressCallback], Awaitable[None]]
 ADVISORY_SLOT_LOAD_QUEUE = 470017
-_CONTROL_KINDS = {"full_load_batch", "consistency_check", "mv_refresh", "db_backup", "db_restore"}
+_CONTROL_KINDS = {
+    "full_load_batch",
+    "source_rebuild_db",
+    "consistency_check",
+    "mv_refresh",
+    "db_backup",
+    "db_restore",
+}
 _CONTROL_KIND_SQL = ", ".join(f"'{kind}'" for kind in sorted(_CONTROL_KINDS))
 _FINAL_STAGES = {"done", "failed", "cancelled"}
 
@@ -92,6 +99,22 @@ class JobQueue:
             event.set()
         await AdminRepository(self.engine).cancel_load_job(job_id)
         await self._cancel_batch_children(job_id)
+
+    async def link_job_to_batch(self, job_id: str, load_batch_id: str) -> None:
+        """Record the downstream full-load batch id on a control job."""
+
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+UPDATE load_jobs
+   SET load_batch_id = :load_batch_id,
+       heartbeat_at = now()
+ WHERE job_id = :job_id
+"""
+                ),
+                {"job_id": job_id, "load_batch_id": load_batch_id},
+            )
 
     async def recover_startup(self) -> None:
         async with self.engine.begin() as conn:

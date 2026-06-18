@@ -928,11 +928,14 @@ class SourceRebuildDbRequest(FrozenModel):
 class SourceRebuildDbResponse(FrozenModel):
     """``rebuild-db`` enqueue result.
 
-    The rebuild runs asynchronously in a ``full_load_batch`` job under the
-    ``source_rebuild_db`` advisory lock; ``job_id``/``load_batch_id`` track it.
-    The integrity gate runs before any child loader is enqueued; on a gate
-    failure ``enqueued=false`` and ``failed_group_ids`` name the quarantined
-    groups. ``forced_promotion`` echoes whether the ERROR-bypass path was armed.
+    The request returns after enqueueing a persistent ``source_rebuild_db``
+    control job. That job runs the integrity gate + RustFS materialization under
+    the ``source_rebuild_db`` advisory lock, then enqueues the downstream
+    ``full_load_batch``. ``job_id`` tracks the control job immediately;
+    ``load_batch_id`` is present only when a full-load batch is already known.
+    On an integrity-gate failure ``enqueued=false`` and ``failed_group_ids`` name
+    the quarantined groups. ``forced_promotion`` echoes whether the ERROR-bypass
+    path was armed.
     """
 
     source_match_set_id: str

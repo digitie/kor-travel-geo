@@ -6,6 +6,19 @@
 
 ## 완료
 
+- [x] **T-190** — `rebuild-db` HTTP 요청 timeout 해소(Agent A/Codex, #370).
+  T-183 live UI e2e에서 Admin UI `rebuild-db` POST가 RustFS materialize 동안 Next.js proxy
+  5분 timeout(`UND_ERR_HEADERS_TIMEOUT`)에 걸리고, backend가 session advisory lock을
+  idle-in-transaction 상태로 오래 들고 있던 문제를 선행 결함으로 분리했다. REST route는
+  즉시 `source_rebuild_db` control job을 큐잉하고 반환하며, control job이 기존 integrity
+  gate/RustFS materialize를 수행한 뒤 `full_load_batch`를 큐잉한다. control job은 생성된
+  batch를 `load_batch_id`로 연결해 UI가 진행 상태를 이어 볼 수 있고, `source_rebuild_db`는
+  batch successor control kind에 포함되어 consistency/MV refresh가 조기 실행되지 않는다.
+  session advisory lock helper는 lock/unlock 직후 commit해 장시간 작업 중
+  idle-in-transaction을 남기지 않는다. WSL `python -m pytest -q` 1068건,
+  `ruff check .`, `python -m mypy src/kortravelgeo`, `lint-imports`를 통과했다.
+  (2026-06-18)
+
 - [x] **T-189** — `rebuild-db` RustFS staging materialize 누락 수정(Agent A/Codex, #367).
   T-183 live UI e2e가 Admin UI에서 실제 `rebuild-db`를 enqueue하자 backend가
   RustFS registry 객체를 로컬 staging으로 내려받지 않은 채 `rebuild_staging/...` 상대 경로만
