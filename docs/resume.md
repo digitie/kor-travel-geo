@@ -102,6 +102,16 @@
   `X-KTG-*` 헤더도 계속 버린다. fresh T-177G DB에 붙인 live API/UI에서 source category와
   match-set read가 200을 반환했고, Windows Playwright `tests/e2e/live/admin-readonly.spec.ts`
   7/7을 통과했다.
+- ✅ T-189 rebuild-db RustFS staging materialize 누락 수정 — T-183 live UI e2e에서 Admin UI가
+  실제 `rebuild-db`를 enqueue한 뒤 loader가 `rebuild_staging/.../roadname_hangul_full` 상대
+  경로를 찾지 못해 실패한 문제를 #367로 분리했다. `prepare_source_match_set_rebuild()`가
+  integrity gate 뒤 RustFS registry 객체를
+  `settings.rustfs_materialize_dir/rebuild_staging/<source_match_set_id>/run_<uuid>` 아래로
+  다운로드/검증하고 loader별 입력 형태로 추출한 뒤 batch를 enqueue한다. Attempt-scoped staging으로
+  같은 match set 재시도가 실행 중 loader 입력을 지우지 않게 했다. `roadname_hangul_full`은
+  `juso_text_load`와 `juso_parcel_link_load` 두 child로 fan-out하며, child `created_at` offset으로
+  FK parent 적재 순서를 보장한다. T-213 script는 `materialize=False`로 기존 artifact staging을
+  유지한다.
 - ✅ T-119/T-139 종료 판정 완료 — `T-119`는 T-137 최종 gate와 T-153 acceptance 근거로 C11 active serving promotion을 no-go 종료했다. C11은 validation-only로 고정하며, 새 같은 기준월 C11 원천 또는 동등한 새 증거가 있으면 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인으로만 다룬다. `T-139`는 T-153 기준 구조적 성능 blocker가 없어 별도 변경 DB 실험을 no-action 종료했다.
 - ✅ Timescale PostgreSQL 계열 Codex skill 변환 완료 — `timescale/pg-aiguide`의 Claude Code용 skill 8종을 Codex repo-scoped skill로 변환해 `.agents/skills/`에 추가했다. Codex frontmatter는 `name`/`description`만 유지하고 원본 Apache-2.0/source/compatibility 표기는 본문에 보존했다. `quick_validate.py` 검증과 YAML frontmatter 파싱 검증을 통과했다. 같은 `.codex/agents` 6종과 `.agents/skills` 8종을 `F:\dev` 바로 아래 다른 Git repo 78개에도 복사·stage했고, 모든 대상에서 agent 6개와 skill 8개가 확인됐다. 대상 repo에서 해당 경로는 ignore되지 않아 `.gitignore` 추가 수정은 없었다.
 - ✅ Codex 프로젝트 subagent 정의 등록 완료 — VoltAgent core-development subagent 6종을 `.codex/agents/`에 추가해 Git 추적 대상 구성으로 옮겼고, 전역 `C:\Users\digit\.codex\agents` 복사본도 같은 값으로 맞췄다. 모든 subagent는 `model="gpt-5.5"`, `model_reasoning_effort="xhigh"`를 사용한다. TOML 파싱과 필수 필드 검증을 통과했다.
@@ -342,10 +352,10 @@
 구현, `T-177C` 텍스트 정본/daily delta fast-sample e2e 구현, `T-177D` 전자지도
 SHP/PostGIS geometry e2e 구현, `T-177E` 선택 보강 원천 e2e 구현,
 `T-177F` post-load serving/smoke/consistency fast-sample e2e 구현도 완료됐다.
-`T-177G` 전국 long-run full-load e2e와 T-188 smoke sample timeout 후속도 완료됐다.
-다음 한 작업은 `T-183` UI 기반 full-load 적재 e2e다. T-184 admin role proxy는 완료됐으므로,
-Admin UI의 source match set/rebuild-db 흐름을 live opt-in으로 시작하고 job 완료 및 post-load
-serving 확인까지 닫는다.
+`T-177G` 전국 long-run full-load e2e, T-188 smoke sample timeout 후속, T-184 admin role
+proxy, T-189 rebuild-db RustFS staging materialize 누락 수정까지 완료됐다. 다음 한 작업은
+`T-183` UI 기반 full-load 적재 e2e다. Admin UI의 source match set/rebuild-db 흐름을 live
+opt-in으로 다시 시작하고 job 완료 및 post-load serving 확인까지 닫는다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any, Literal, Self
@@ -1456,6 +1457,9 @@ class AsyncAddressClient:
         force_promotion: bool,
         typed_confirmation: str | None,
         reason: str | None,
+        download_concurrency: int = 3,
+        materialize_concurrency: int = 2,
+        materialize: bool = True,
     ) -> tuple[SourceRebuildDbResponse, dict[str, Any] | None]:
         """Run the rebuild-db precondition + pre-load integrity gate (T-205b).
 
@@ -1501,7 +1505,22 @@ class AsyncAddressClient:
                 None,
             )
 
-        batch_payload = dict(plan.batch_payload)
+        if materialize:
+            staging_root = (
+                self.settings.rustfs_materialize_dir
+                / "rebuild_staging"
+                / source_match_set_id
+                / f"run_{uuid.uuid4().hex}"
+            )
+            batch_payload = await service.materialize_rebuild_plan(
+                rustfs,
+                plan,
+                staging_root,
+                download_concurrency=download_concurrency,
+                materialize_concurrency=materialize_concurrency,
+            )
+        else:
+            batch_payload = dict(plan.batch_payload)
         if force_promotion:
             batch_payload["forced_promotion"] = True
             batch_payload["forced_promotion_actor"] = actor
