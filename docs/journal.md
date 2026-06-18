@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (T-184 opt-in live e2e admin role proxy)
+
+**작업**: T-183 UI 기반 적재 e2e의 선행 조건으로, Next.js `/api/proxy`가 live e2e에서만
+backend admin role gate용 `X-KTG-Actor`/`X-KTG-Roles`를 주입할 수 있게 했다. 기본 allow-list는
+`accept`/`content-type`/`user-agent`만 유지하고, 브라우저가 직접 보낸 `X-KTG-*` 헤더는 계속
+버린다.
+
+**결정**: role header는 `KTG_LIVE_E2E_ADMIN_PROXY=1`, `KTG_LIVE_E2E_ADMIN_ACTOR`, 유효한
+`KTG_LIVE_E2E_ADMIN_ROLES`가 모두 있을 때만 주입한다. role 문자열은 backend
+`KNOWN_ADMIN_ROLES`와 같은 `source_file_viewer`/`source_file_manager`/`rebuild_operator`/
+`destructive_admin`으로 제한하고, `system`이나 미지 role은 버린다. backend 쪽 trust 경계는
+기존 `KTG_ADMIN_TRUSTED_PROXY_CIDRS`를 사용한다.
+
+**검증/문서**: WSL ext4 미러에서 `api.test.ts` 7/7과 production `next build`를 통과했다.
+fresh T-177G DB `kor_travel_geo_t177g_codex_20260618133300`에 API/UI를 붙여
+`/api/proxy/v1/admin/source-file-categories`와 `/api/proxy/v1/admin/source-match-sets?limit=5`
+가 각각 200을 반환함을 확인했고, Windows Playwright
+`tests/e2e/live/admin-readonly.spec.ts`는 chromium 7/7 통과했다. `docs/live-e2e.md`에는
+T-184 env 예시와 source-files RBAC 제약 갱신을 추가했다.
+
 ## 2026-06-18 (T-177G/T-188 전국 long-run full-load e2e 완료)
 
 **작업**: T-177G fresh run `t177g-codex-20260618T022500Z-fresh-t187`는 전국 원천 적재와

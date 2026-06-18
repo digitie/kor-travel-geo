@@ -42,10 +42,25 @@ $env:KTG_VWORLD_API_KEY = ((Get-Content ..\.env | Where-Object { $_ -match '^KRA
 npx next start -p 12505
 ```
 
+source-files/match-set 같은 role-gated admin read까지 live로 확인하려면 Next proxy도 명시 opt-in으로
+admin identity를 주입한다. 기본 실행에서는 아래 값을 비워 둔다.
+
+```powershell
+# API가 Next proxy peer를 신뢰하도록 backend env에 설정한다.
+# API와 UI가 같은 WSL host에서 127.0.0.1로 통신하면 loopback만으로 충분하다.
+$env:KTG_ADMIN_TRUSTED_PROXY_CIDRS = "127.0.0.1/32,::1/128"
+
+# Next.js server env: 이 3개가 모두 유효할 때만 X-KTG-Actor/X-KTG-Roles를 주입한다.
+$env:KTG_LIVE_E2E_ADMIN_PROXY = "1"
+$env:KTG_LIVE_E2E_ADMIN_ACTOR = "live-e2e"
+$env:KTG_LIVE_E2E_ADMIN_ROLES = "source_file_viewer,rebuild_operator"
+```
+
 ```powershell
 # 4) 라이브 e2e 실행 (Windows Playwright)
 cd kor-travel-geo-ui
 $env:LIVE_E2E = "1"; $env:PLAYWRIGHT_BROWSER = "chromium"
+$env:KTG_LIVE_E2E_ADMIN_PROXY = "1"  # source-files role-gate smoke를 실행할 때만
 npx playwright test tests/e2e/live
 ```
 
@@ -65,12 +80,11 @@ npx playwright test tests/e2e/live
 라이브 e2e를 실 백엔드로 돌리면 mock 런에서는 안 보이던 아래 동작을 만난다. 라이브 admin 스펙이
 "렌더+표 존재"까지만 단언하고 실데이터 행 수를 강제하지 않는 이유이기도 하다.
 
-- **source-files/match-set admin → 403 (의도된 RBAC).** `GET /v1/admin/source-match-sets` 등 source-files
+- **source-files/match-set admin은 RBAC가 있다.** `GET /v1/admin/source-match-sets` 등 source-files
   도메인 read는 `require_role(source_file_viewer)`로 게이트된다(`api/security.py`). 신뢰되는
-  `X-KTG-Actor`/`X-KTG-Roles` 헤더(admin CIDR 내 peer만 신뢰)가 없으면 403. 로컬 docker 스택의
-  프록시는 이 헤더를 주입하지 않으므로 해당 패널은 에러 상태로 렌더된다(페이지는 정상). ops/consistency/
-  backups read는 이 게이트가 없어 200. → source-files/match-set 실데이터까지 라이브로 검증하려면 프록시가
-  역할 헤더를 주입하고 admin CIDR을 맞춰야 한다.
+  `X-KTG-Actor`/`X-KTG-Roles` 헤더(admin CIDR 내 peer만 신뢰)가 없으면 403이다. T-184 이후 live e2e에서
+  source-files 실데이터까지 검증하려면 backend `KTG_ADMIN_TRUSTED_PROXY_CIDRS`와 Next
+  `KTG_LIVE_E2E_ADMIN_PROXY`/`KTG_LIVE_E2E_ADMIN_ACTOR`/`KTG_LIVE_E2E_ADMIN_ROLES`를 함께 켠다.
 - **`/v1/admin/ops/pg-stat-statements` → 503.** 이 엔드포인트는 (1) `pg_stat_statements` 확장(백엔드는
   `x_extension.pg_stat_statements` 뷰를 조회)과 (2) `ops.pg_stat_statements_snapshots` 테이블 **둘 다**
   필요하다. 테스트 DB(`ktg-t210-db`)에 확장을 설치해도 snapshots 테이블이 누락돼 있으면 `E0500`로 503.

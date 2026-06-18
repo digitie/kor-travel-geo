@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, backendPath } from "@/lib/api";
-import { buildProxyRequestInit, buildProxyTarget, forwardedProxyHeaders } from "@/lib/proxy";
+import {
+  buildProxyRequestInit,
+  buildProxyTarget,
+  forwardedProxyHeaders,
+  liveE2EAdminIdentityFromEnv
+} from "@/lib/proxy";
 
 describe("backendPath", () => {
   it("기본 백엔드 v1 prefix를 안정적으로 붙이고 명시 v2 경로는 보존한다", () => {
@@ -34,14 +39,61 @@ describe("backendPath", () => {
         accept: "application/json",
         authorization: "Bearer secret",
         cookie: "a=b",
-        "content-type": "application/json"
-      })
+        "content-type": "application/json",
+        "x-ktg-actor": "browser-forged",
+        "x-ktg-roles": "destructive_admin"
+      }),
+      {}
     );
 
     expect(headers.get("accept")).toBe("application/json");
     expect(headers.get("content-type")).toBe("application/json");
     expect(headers.has("authorization")).toBe(false);
     expect(headers.has("cookie")).toBe(false);
+    expect(headers.has("x-ktg-actor")).toBe(false);
+    expect(headers.has("x-ktg-roles")).toBe(false);
+  });
+
+  it("live e2e admin proxy opt-in일 때만 신뢰 role 헤더를 주입한다", () => {
+    expect(
+      liveE2EAdminIdentityFromEnv({
+        KTG_LIVE_E2E_ADMIN_ACTOR: "codex",
+        KTG_LIVE_E2E_ADMIN_ROLES: "source_file_viewer"
+      })
+    ).toBeNull();
+
+    const headers = forwardedProxyHeaders(
+      new Headers({ accept: "application/json" }),
+      {
+        KTG_LIVE_E2E_ADMIN_PROXY: "1",
+        KTG_LIVE_E2E_ADMIN_ACTOR: " codex-live ",
+        KTG_LIVE_E2E_ADMIN_ROLES:
+          "source_file_viewer,unknown,rebuild_operator,source_file_viewer"
+      }
+    );
+
+    expect(headers.get("accept")).toBe("application/json");
+    expect(headers.get("x-ktg-actor")).toBe("codex-live");
+    expect(headers.get("x-ktg-roles")).toBe("source_file_viewer,rebuild_operator");
+  });
+
+  it("live e2e admin proxy는 actor 또는 유효 role이 없으면 주입하지 않는다", () => {
+    expect(
+      liveE2EAdminIdentityFromEnv({
+        KTG_LIVE_E2E_ADMIN_PROXY: "1",
+        KTG_LIVE_E2E_ADMIN_ACTOR: "codex",
+        KTG_LIVE_E2E_ADMIN_ROLES: "system,unknown"
+      })
+    ).toBeNull();
+
+    const headers = forwardedProxyHeaders(new Headers(), {
+      KTG_LIVE_E2E_ADMIN_PROXY: "true",
+      KTG_LIVE_E2E_ADMIN_ACTOR: "   ",
+      KTG_LIVE_E2E_ADMIN_ROLES: "source_file_viewer"
+    });
+
+    expect(headers.has("x-ktg-actor")).toBe(false);
+    expect(headers.has("x-ktg-roles")).toBe(false);
   });
 
   it("프록시는 업로드 본문을 메모리 버퍼링 없이 스트림으로 전달한다", () => {

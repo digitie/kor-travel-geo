@@ -71,6 +71,21 @@ test.describe("LIVE admin read-only", () => {
     expect(snapBody.length).toBeGreaterThanOrEqual(1);
   });
 
+  test("source-files admin API passes the role gate when live admin proxy is enabled", async ({
+    request
+  }) => {
+    test.skip(
+      process.env.KTG_LIVE_E2E_ADMIN_PROXY !== "1",
+      "Run with KTG_LIVE_E2E_ADMIN_PROXY=1 and source_file_viewer role to verify admin role proxy"
+    );
+
+    const catalog = await proxyGet(request, "v1/admin/source-file-categories");
+    expect(catalog.status()).toBe(200);
+
+    const matchSets = await proxyGet(request, "v1/admin/source-match-sets", { limit: 5 });
+    expect(matchSets.status()).toBe(200);
+  });
+
   test("/admin/consistency renders the Consistency reports surface", async ({ page }) => {
     await page.goto("/admin/consistency");
 

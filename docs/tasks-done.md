@@ -6,6 +6,16 @@
 
 ## 완료
 
+- [x] **T-184** — opt-in live e2e admin role proxy(Agent A/Codex, #358).
+  Next.js `/api/proxy`가 기본 실행에서는 브라우저의 `X-KTG-*` 헤더를 계속 버리고,
+  `KTG_LIVE_E2E_ADMIN_PROXY=1` + `KTG_LIVE_E2E_ADMIN_ACTOR` + 유효
+  `KTG_LIVE_E2E_ADMIN_ROLES`가 모두 있을 때만 `X-KTG-Actor`/`X-KTG-Roles`를 backend로
+  주입하게 했다. role 문자열은 backend `KNOWN_ADMIN_ROLES`와 맞춘다. T-177G fresh DB
+  `kor_travel_geo_t177g_codex_20260618133300`에 API/UI를 붙이고
+  `KTG_ADMIN_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128`로 source-files role gate를
+  신뢰시켜, source category/match-set read 200과 Windows Playwright live admin spec 7/7
+  통과를 확인했다. 기본 CI는 opt-in 없으면 해당 smoke를 skip한다. (2026-06-18)
+
 - [x] **T-188** — T-177G smoke sample query timeout 해소(Agent A/Codex, #364).
   T-177G fresh run `t177g-codex-20260618T022500Z-fresh-t187`가 전국 적재와 serving MV swap을
   완료한 뒤 `postload_serving_smoke_consistency`에서 smoke sample SQL의

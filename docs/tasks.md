@@ -46,11 +46,6 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
   브라우저 e2e로 닫는다. T-073 shell script 경로가 아니라 파일을 읽어 DB를 구축하는 UI
   프로세스를 검증한다.
 
-- [ ] **T-184** — opt-in live e2e admin role proxy(#358).
-
-  live e2e에서 destructive/admin 권한이 필요한 endpoint를 안전하게 opt-in으로 검증할 수 있도록
-  테스트 전용 role/proxy 경계를 고정한다. 기본 CI에서는 비활성이다.
-
 ### 선택 후속 (낮은 우선순위)
 
 - [ ] **T-219 잔여 L** — v1 VWorld 호환 minor 후속(선택). M1~M5는 모두 완료
