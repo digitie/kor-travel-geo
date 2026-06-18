@@ -8,13 +8,13 @@ version = "0.1.0"
 description = "Korean address geocoding library and REST API backed by PostgreSQL/PostGIS."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = { text = "GPL-3.0-only" }
 authors = [{ name = "digitie" }]
 keywords = ["korea", "address", "geocoding", "postgis", "vworld", "juso"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",

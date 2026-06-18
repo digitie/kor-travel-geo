@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (라이선스 GPL-3.0-only 전환)
+
+**작업**: 사용자 요청에 따라 프로젝트 라이선스 표기를 MIT에서 `GPL-3.0-only`로
+변경했다. 공식 FSF GPLv3 본문을 `LICENSE`로 추가하고, `pyproject.toml`의 license
+metadata/classifier, README badge와 법적 고지, `CHANGELOG.md`를 함께 갱신했다.
+
+**결정**: "GPL3" 요청은 별도 `or later` 명시가 없으므로 `GPL-3.0-only`로 해석했다.
+현재 reference 문서의 MIT 현재형 문구는 "당시 MIT"로 고쳤다. 기존 작업 로그의
+과거 항목은 당시 의사결정 기록이므로 소급 수정하지 않았다.
+
+**검증**: `rg`로 현재 표기 대상의 `MIT` 잔존 여부를 확인하고, license metadata와 README
+로컬 `LICENSE` 링크를 확인한다. 코드 동작 변경은 없어 전체 테스트는 실행하지 않는다.
+
+## 2026-06-18 (README 중복 정리)
+
+**작업**: 사용자 요청에 따라 `README.md`를 정리했다. README에 길게 복제되어 있던
+진행 상황 목록, 상세 개발환경 절차, ADR 표, 외부 API 세부 설명, VWorld/MapLibre 세부
+설명을 줄이고, 각각의 정본 문서(`docs/resume.md`, `docs/dev-environment.md`,
+`docs/architecture/*`, `docs/adr/README.md`, `docs/architecture/external-apis.md`)로
+연결했다.
+
+**결정**: README는 새 진입자가 "무엇인지"와 "어디를 읽을지"를 판단하는 입구 문서로
+유지하고, 변경 가능성이 높은 실측 상태와 운영 절차는 세부 문서에만 둔다. Python 지원
+버전 badge도 `pyproject.toml`의 `requires-python >=3.12`와 맞췄다.
+
+**검증**: 문서 전용 변경이라 코드 테스트는 실행하지 않았다. README의 로컬 링크와
+마크다운 구조를 별도로 확인한다.
+
 ## 2026-06-18 (T-189 rebuild-db RustFS staging materialize 누락 수정)
 
 **작업**: T-183 live UI full-load e2e 준비 중 Admin UI에서 `rebuild-db`를 실제 enqueue했지만,
