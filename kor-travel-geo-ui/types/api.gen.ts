@@ -1655,15 +1655,11 @@ export interface paths {
          * Rebuild Source Match Set Db
          * @description Rebuild the serving DB from a match set (doc "DB 재구성", ~1532-1562).
          *
-         *     Bridges to the EXISTING ``full_load_batch`` loader DAG: assembles the batch
-         *     payload from the match set's build groups and enqueues it under the
-         *     ``source_rebuild_db`` global advisory lock (409 if another rebuild is
-         *     enqueuing/running). Before any child loader is enqueued the pre-load
-         *     source-archive integrity gate re-verifies each group's RustFS objects'
-         *     ``sha256``/``size``/presence + ``group_sha256`` against the registry; a
-         *     mismatch quarantines the failing groups, propagates (active →
-         *     ``integrity_alert``, non-active ``validated`` → ``invalid``), and fails
-         *     without creating any child job.
+         *     Bridges to the EXISTING ``full_load_batch`` loader DAG via a persistent
+         *     ``source_rebuild_db`` control job. The HTTP request only enqueues the
+         *     control job; that job then runs the source-archive integrity gate, RustFS
+         *     materialization, and downstream ``full_load_batch`` enqueue under the
+         *     ``source_rebuild_db`` global advisory lock.
          *
          *     ``force_promotion`` (the ERROR-bypass) additionally requires the
          *     ``destructive_admin`` role and a ``typed_confirmation`` of
@@ -5531,11 +5527,14 @@ export interface components {
          * SourceRebuildDbResponse
          * @description ``rebuild-db`` enqueue result.
          *
-         *     The rebuild runs asynchronously in a ``full_load_batch`` job under the
-         *     ``source_rebuild_db`` advisory lock; ``job_id``/``load_batch_id`` track it.
-         *     The integrity gate runs before any child loader is enqueued; on a gate
-         *     failure ``enqueued=false`` and ``failed_group_ids`` name the quarantined
-         *     groups. ``forced_promotion`` echoes whether the ERROR-bypass path was armed.
+         *     The request returns after enqueueing a persistent ``source_rebuild_db``
+         *     control job. That job runs the integrity gate + RustFS materialization under
+         *     the ``source_rebuild_db`` advisory lock, then enqueues the downstream
+         *     ``full_load_batch``. ``job_id`` tracks the control job immediately;
+         *     ``load_batch_id`` is present only when a full-load batch is already known.
+         *     On an integrity-gate failure ``enqueued=false`` and ``failed_group_ids`` name
+         *     the quarantined groups. ``forced_promotion`` echoes whether the ERROR-bypass
+         *     path was armed.
          */
         SourceRebuildDbResponse: {
             /**
