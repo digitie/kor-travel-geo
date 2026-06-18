@@ -13,8 +13,8 @@
 
 ## 진행 중
 
-- **진행 중 작업 없음.** (T-270~T-276 Admin UI 테이블 TanStack 전환 완료 — `tasks-done.md`
-  참조. T-276 e2e는 PR #327에서 머지.)
+- **진행 중 작업 없음.** (T-177G/T-188 전국 long-run full-load e2e 완료 — `tasks-done.md`
+  참조. 다음은 T-183/T-184 live UI full-load e2e 후속.)
 
 ## 대기
 
@@ -33,15 +33,23 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
 
 ### T-177 파일 기반 full-load e2e
 
-- [ ] **T-177G** — 전국 long-run full-load e2e.
-
-  별도 `KTG_TEST_FULL_LOAD_E2E_LONGRUN=1` opt-in으로 전국 실제 원천 전체를 읽어 DB를 구축한다.
-  Phase별 wall time, row count, DB size, source month summary, 실패 재개 지점을 artifact로 남긴다.
-
 - [ ] **T-177H** — T-047 benchmark와 최종 acceptance report.
 
   전국 long-run DB를 기준으로 SQL/REST benchmark hook, p95/p99, error count, slow plan,
   `pg_stat_statements` snapshot을 수집하고 최종 acceptance 문서를 갱신한다.
+
+### Live UI full-load e2e 후속
+
+- [ ] **T-183** — UI 기반 full-load 적재 프로세스 e2e(#357).
+
+  Admin UI에서 원천 선택부터 적재 트리거, 진행 상태 확인, post-load serving 확인까지 실제
+  브라우저 e2e로 닫는다. T-073 shell script 경로가 아니라 파일을 읽어 DB를 구축하는 UI
+  프로세스를 검증한다.
+
+- [ ] **T-184** — opt-in live e2e admin role proxy(#358).
+
+  live e2e에서 destructive/admin 권한이 필요한 endpoint를 안전하게 opt-in으로 검증할 수 있도록
+  테스트 전용 role/proxy 경계를 고정한다. 기본 CI에서는 비활성이다.
 
 ### 선택 후속 (낮은 우선순위)
 

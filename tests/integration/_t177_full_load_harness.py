@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
+import shutil
+import subprocess
+import time
 import zipfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,8 +55,14 @@ ENV_ARTIFACT_DIR = "KTG_TEST_FULL_LOAD_E2E_ARTIFACT_DIR"
 ENV_RUN_ID = "KTG_TEST_FULL_LOAD_E2E_RUN_ID"
 ENV_ALLOW_NONEMPTY = "KTG_TEST_FULL_LOAD_E2E_ALLOW_NONEMPTY"
 ENV_SAMPLE_LIMIT = "KTG_TEST_FULL_LOAD_E2E_SAMPLE_LIMIT"
+ENV_LONGRUN = "KTG_TEST_FULL_LOAD_E2E_LONGRUN"
+ENV_LONGRUN_DAILY_PATH = "KTG_TEST_FULL_LOAD_E2E_DAILY_PATH"
+ENV_LONGRUN_REQUIRE_DAILY = "KTG_TEST_FULL_LOAD_E2E_REQUIRE_DAILY"
+ENV_LONGRUN_MIN_FREE_GB = "KTG_TEST_FULL_LOAD_E2E_LONGRUN_MIN_FREE_GB"
 CONFIRM_PREFIX = "RUN-T177-E2E"
 DEFAULT_SAMPLE_LIMIT_PER_FILE = 2
+DEFAULT_LONGRUN_MIN_FREE_GIB = 120
+BYTES_PER_GIB = 1024**3
 
 DEFAULT_DATA_ROOTS = (
     Path("data/juso"),
@@ -191,6 +201,99 @@ SELECT
   CROSS JOIN linked
 """
 
+_T177F_SMOKE_SAMPLE_SQL = """
+WITH candidate AS MATERIALIZED (
+  SELECT target.bd_mgt_sn,
+         target.rn,
+         target.rn_nrm,
+         target.si_nm,
+         target.sgg_nm,
+         target.emd_nm,
+         target.li_nm,
+         target.buld_mnnm,
+         target.buld_slno,
+         target.zip_no,
+         target.pt_source,
+         target.pt_4326
+    FROM public.mv_geocode_target target
+   WHERE target.pt_4326 IS NOT NULL
+     AND target.pt_5179 IS NOT NULL
+     AND target.bd_mgt_sn IS NOT NULL
+     AND target.rn IS NOT NULL
+     AND target.rn_nrm IS NOT NULL
+     AND target.rn_nrm <> ''
+     AND target.buld_mnnm IS NOT NULL
+     AND target.buld_slno IS NOT NULL
+     AND target.zip_no IS NOT NULL
+     AND target.pt_source = 'entrance'
+     AND EXISTS (
+       SELECT 1
+         FROM public.tl_locsum_entrc l
+        WHERE l.bd_mgt_sn = target.bd_mgt_sn
+     )
+   LIMIT 1
+)
+SELECT bd_mgt_sn,
+       rn,
+       rn_nrm,
+       si_nm,
+       sgg_nm,
+       emd_nm,
+       li_nm,
+       buld_mnnm,
+       buld_slno,
+       zip_no,
+       pt_source,
+       ST_X(pt_4326) AS lon,
+       ST_Y(pt_4326) AS lat,
+       true AS has_locsum_link,
+       EXISTS (
+         SELECT 1
+           FROM public.tl_roadaddr_entrc r
+          WHERE r.bd_mgt_sn = candidate.bd_mgt_sn
+       ) AS has_roadaddr_entrc_link,
+       concat_ws(
+         ' ',
+         NULLIF(si_nm, ''),
+         NULLIF(sgg_nm, ''),
+         NULLIF(rn, ''),
+         buld_mnnm::text ||
+           CASE
+             WHEN COALESCE(buld_slno, 0) > 0 THEN '-' || buld_slno::text
+             ELSE ''
+           END
+       ) AS road_address
+  FROM candidate
+"""
+
+T177G_REQUIRED_SOURCE_KINDS = (
+    "juso_hangul",
+    "jibun_rnaddrkor",
+    "locsum",
+    "electronic_map",
+    "roadaddr_entrance",
+    "sppn_makarea",
+)
+
+T177G_SOURCE_MONTH_TABLES = (
+    "public.tl_juso_text",
+    "public.tl_juso_parcel_link",
+    "public.tl_locsum_entrc",
+    "public.tl_navi_buld_centroid",
+    "public.tl_navi_entrc",
+    "public.tl_scco_ctprvn",
+    "public.tl_scco_sig",
+    "public.tl_scco_emd",
+    "public.tl_scco_li",
+    "public.tl_kodis_bas",
+    "public.tl_sprd_manage",
+    "public.tl_sprd_intrvl",
+    "public.tl_sprd_rw",
+    "public.tl_spbd_buld_polygon",
+    "public.tl_roadaddr_entrc",
+    "public.tl_sppn_makarea",
+)
+
 
 class T177SkipError(RuntimeError):
     """Raised when the opt-in T-177 e2e test should skip cleanly."""
@@ -198,6 +301,15 @@ class T177SkipError(RuntimeError):
 
 class T177PreflightError(RuntimeError):
     """Raised when an explicit opt-in T-177 e2e run is unsafe."""
+
+
+class T177LongrunError(RuntimeError):
+    """Raised with partial phase evidence when a T-177G long-run phase fails."""
+
+    def __init__(self, phase: str, phases: Sequence[Mapping[str, Any]]) -> None:
+        super().__init__(f"T-177G long-run phase failed: {phase}")
+        self.phase = phase
+        self.phases = tuple(dict(item) for item in phases)
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +337,26 @@ class T177ShpGeometrySource:
     sido_name: str
     sig_code: str
     source_yyyymm: str | None
+    archive_path: Path | None = None
+    materialized: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class T177NationwideElectronicMapSource:
+    electronic_map_root: Path
+    load_path: Path
+    source_yyyymm: str | None
+    sido_count: int
+    archive_paths: tuple[Path, ...] = ()
+    materialized: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class T177NaviSource:
+    source_path: Path
+    source_yyyymm: str | None
+    build_source_count: int
+    entrance_source_count: int
     archive_path: Path | None = None
     materialized: bool = False
 
@@ -298,6 +430,59 @@ def sample_limit_from_env(environ: Mapping[str, str] | None = None) -> int:
     if value < 1:
         raise T177PreflightError(f"{ENV_SAMPLE_LIMIT} must be a positive integer")
     return value
+
+
+def require_longrun_from_env(environ: Mapping[str, str] | None = None) -> None:
+    env = environ if environ is not None else os.environ
+    if env.get(ENV_LONGRUN) != "1":
+        raise T177SkipError(f"set {ENV_LONGRUN}=1 to run T-177G nationwide long-run e2e")
+
+
+def t177g_longrun_min_free_bytes(environ: Mapping[str, str] | None = None) -> int:
+    env = environ if environ is not None else os.environ
+    raw = env.get(ENV_LONGRUN_MIN_FREE_GB)
+    if raw is None or raw == "":
+        return DEFAULT_LONGRUN_MIN_FREE_GIB * BYTES_PER_GIB
+    try:
+        value_gib = int(raw)
+    except ValueError as exc:
+        raise T177PreflightError(
+            f"{ENV_LONGRUN_MIN_FREE_GB} must be a positive integer GiB value"
+        ) from exc
+    if value_gib < 1:
+        raise T177PreflightError(
+            f"{ENV_LONGRUN_MIN_FREE_GB} must be a positive integer GiB value"
+        )
+    return value_gib * BYTES_PER_GIB
+
+
+def validate_t177g_longrun_disk_space(
+    artifact_dir: Path,
+    *,
+    environ: Mapping[str, str] | None = None,
+    disk_usage: Callable[[Path], Any] = shutil.disk_usage,
+) -> dict[str, Any]:
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    required_bytes = t177g_longrun_min_free_bytes(environ)
+    usage = disk_usage(artifact_dir)
+    free_bytes = int(usage.free)
+    if free_bytes < required_bytes:
+        required_gib = required_bytes / BYTES_PER_GIB
+        free_gib = free_bytes / BYTES_PER_GIB
+        raise T177PreflightError(
+            "T-177G long-run requires at least "
+            f"{required_gib:.0f} GiB free on the artifact filesystem before "
+            f"materializing nationwide sources; path={artifact_dir}, "
+            f"free_gib={free_gib:.1f}, override={ENV_LONGRUN_MIN_FREE_GB}"
+        )
+    return {
+        "path": str(artifact_dir),
+        "required_bytes": required_bytes,
+        "free_bytes": free_bytes,
+        "total_bytes": int(usage.total),
+        "required_gib": round(required_bytes / BYTES_PER_GIB, 3),
+        "free_gib": round(free_bytes / BYTES_PER_GIB, 3),
+    }
 
 
 def candidate_data_roots(environ: Mapping[str, str] | None = None) -> tuple[Path, ...]:
@@ -576,7 +761,143 @@ def t177e_supplemental_source_paths(
     )
 
 
+def t177g_electronic_map_source(
+    discovery_plan: Mapping[str, Any],
+    *,
+    materialize_dir: Path,
+) -> T177NationwideElectronicMapSource:
+    electronic_map_root = required_source_path(discovery_plan, "electronic_map")
+    source_month = source_yyyymm(discovery_plan, "electronic_map")
+    try:
+        datasets = discover_sido_datasets(electronic_map_root)
+    except LoaderError:
+        archives = _electronic_map_archives(electronic_map_root)
+        if not archives:
+            raise
+        materialize_dir.mkdir(parents=True, exist_ok=True)
+        for archive in archives:
+            _materialize_electronic_map_archive(archive, materialize_dir)
+        datasets = discover_sido_datasets(materialize_dir)
+        return T177NationwideElectronicMapSource(
+            electronic_map_root=electronic_map_root,
+            load_path=materialize_dir,
+            source_yyyymm=source_month,
+            sido_count=len(datasets),
+            archive_paths=tuple(archives),
+            materialized=True,
+        )
+    return T177NationwideElectronicMapSource(
+        electronic_map_root=electronic_map_root,
+        load_path=electronic_map_root,
+        source_yyyymm=source_month,
+        sido_count=len(datasets),
+    )
+
+
+def t177g_navi_source(
+    discovery_plan: Mapping[str, Any],
+    *,
+    materialize_dir: Path,
+) -> T177NaviSource:
+    navi_root = required_existing_source_path(discovery_plan, "navi")
+    source_month = source_yyyymm(discovery_plan, "navi")
+    build_sources = discover_navi_build_files(navi_root)
+    entrance_sources = discover_navi_entrance_files(navi_root)
+    if build_sources and entrance_sources:
+        return T177NaviSource(
+            source_path=navi_root,
+            source_yyyymm=source_month,
+            build_source_count=len(build_sources),
+            entrance_source_count=len(entrance_sources),
+        )
+    if navi_root.suffix.lower() != ".7z":
+        raise T177SkipError(
+            "T-177G navi source is not loadable and is not a materializable .7z archive"
+        )
+
+    extracted_root = _materialize_7z_archive(navi_root, materialize_dir / navi_root.stem)
+    build_sources = discover_navi_build_files(extracted_root)
+    entrance_sources = discover_navi_entrance_files(extracted_root)
+    if not build_sources or not entrance_sources:
+        raise T177SkipError(
+            "T-177G materialized navi source does not contain both "
+            "match_build_*.txt and match_rs_entrc.txt"
+        )
+    return T177NaviSource(
+        source_path=extracted_root,
+        source_yyyymm=source_month,
+        build_source_count=len(build_sources),
+        entrance_source_count=len(entrance_sources),
+        archive_path=navi_root,
+        materialized=True,
+    )
+
+
+def t177g_skipped_source_report(discovery_plan: Mapping[str, Any]) -> dict[str, Any]:
+    skipped: dict[str, Any] = {}
+    sources = discovery_plan.get("sources")
+    if not isinstance(sources, Mapping):
+        return skipped
+    for kind in ("daily_juso", "daily_lnbr"):
+        summary = sources.get(kind)
+        if not isinstance(summary, Mapping):
+            continue
+        if int(summary.get("source_count") or 0) > 0:
+            continue
+        skipped[kind] = {
+            "reason": "active daily source path was not discovered",
+            "path": summary.get("path"),
+            "notes": tuple(summary.get("notes") or ()),
+        }
+    data_root = Path(str(discovery_plan.get("data_root", "")))
+    unused_daily = data_root / "unused" / "daily"
+    if unused_daily.exists():
+        skipped["unused_daily"] = {
+            "reason": "preserved under unused/ and not part of the active T-177G source set",
+            "path": str(unused_daily),
+            "zip_count": len(tuple(unused_daily.glob("*.zip"))),
+        }
+    return skipped
+
+
+def t177g_daily_source_path(
+    discovery_plan: Mapping[str, Any],
+    environ: Mapping[str, str] | None = None,
+) -> Path | None:
+    env = environ if environ is not None else os.environ
+    configured = env.get(ENV_LONGRUN_DAILY_PATH)
+    if configured:
+        path = Path(configured).expanduser()
+        if not path.exists():
+            raise T177PreflightError(f"{ENV_LONGRUN_DAILY_PATH} does not exist: {path}")
+        return path
+
+    sources = discovery_plan.get("sources")
+    summary = sources.get("daily_juso") if isinstance(sources, Mapping) else None
+    if isinstance(summary, Mapping) and int(summary.get("source_count") or 0) > 0:
+        return required_source_path(discovery_plan, "daily_juso")
+
+    if env.get(ENV_LONGRUN_REQUIRE_DAILY) == "1":
+        raise T177PreflightError(
+            f"T-177G requires daily sources, but active daily discovery is empty; "
+            f"set {ENV_LONGRUN_DAILY_PATH} to an explicit daily ZIP or directory"
+        )
+    return None
+
+
 def required_source_path(discovery_plan: Mapping[str, Any], kind: str) -> Path:
+    raw_path, source_count = _required_source_summary(discovery_plan, kind)
+    if source_count < 1:
+        raise T177SkipError(f"T-177 source {kind} has no discovered files")
+    return raw_path
+
+
+def required_existing_source_path(discovery_plan: Mapping[str, Any], kind: str) -> Path:
+    raw_path, _source_count = _required_source_summary(discovery_plan, kind)
+    return raw_path
+
+
+def _required_source_summary(discovery_plan: Mapping[str, Any], kind: str) -> tuple[Path, int]:
     sources = discovery_plan.get("sources")
     if not isinstance(sources, Mapping):
         raise T177SkipError("T-177 discovery plan does not contain sources")
@@ -589,12 +910,12 @@ def required_source_path(discovery_plan: Mapping[str, Any], kind: str) -> Path:
     if not summary.get("exists"):
         raise T177SkipError(f"T-177 source {kind} path does not exist")
     source_count = summary.get("source_count")
-    if not isinstance(source_count, int) or source_count < 1:
+    if not isinstance(source_count, int):
         raise T177SkipError(f"T-177 source {kind} has no discovered files")
     raw_path = summary.get("path")
     if not isinstance(raw_path, str) or not raw_path:
         raise T177SkipError(f"T-177 source {kind} has no usable path")
-    return Path(raw_path)
+    return Path(raw_path), source_count
 
 
 def source_yyyymm(discovery_plan: Mapping[str, Any], kind: str) -> str | None:
@@ -1050,69 +1371,7 @@ SELECT schemaname, tablename, indexname
 async def select_t177f_smoke_sample(engine: AsyncEngine) -> dict[str, Any]:
     async with engine.connect() as conn:
         row = (
-            await conn.execute(
-                text(
-                    """
-SELECT bd_mgt_sn,
-       rn,
-       rn_nrm,
-       si_nm,
-       sgg_nm,
-       emd_nm,
-       li_nm,
-       buld_mnnm,
-       buld_slno,
-       zip_no,
-       pt_source,
-       ST_X(pt_4326) AS lon,
-       ST_Y(pt_4326) AS lat,
-       EXISTS (
-         SELECT 1
-           FROM public.tl_locsum_entrc l
-          WHERE l.bd_mgt_sn = target.bd_mgt_sn
-       ) AS has_locsum_link,
-       EXISTS (
-         SELECT 1
-           FROM public.tl_roadaddr_entrc r
-          WHERE r.bd_mgt_sn = target.bd_mgt_sn
-       ) AS has_roadaddr_entrc_link,
-       concat_ws(
-         ' ',
-         NULLIF(si_nm, ''),
-         NULLIF(sgg_nm, ''),
-         NULLIF(rn, ''),
-         buld_mnnm::text ||
-           CASE
-             WHEN COALESCE(buld_slno, 0) > 0 THEN '-' || buld_slno::text
-             ELSE ''
-           END
-       ) AS road_address
-  FROM public.mv_geocode_target target
- WHERE pt_4326 IS NOT NULL
-   AND pt_5179 IS NOT NULL
-   AND bd_mgt_sn IS NOT NULL
-   AND rn IS NOT NULL
-   AND rn_nrm IS NOT NULL
-   AND rn_nrm <> ''
-   AND buld_mnnm IS NOT NULL
-   AND buld_slno IS NOT NULL
-   AND zip_no IS NOT NULL
- ORDER BY CASE
-            WHEN EXISTS (
-              SELECT 1
-                FROM public.tl_locsum_entrc l
-               WHERE l.bd_mgt_sn = target.bd_mgt_sn
-            ) THEN 0
-            ELSE 1
-          END,
-          CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END,
-          bd_mgt_sn,
-          rncode_full,
-          bjd_cd
- LIMIT 1
-"""
-                )
-            )
+            await conn.execute(text(_T177F_SMOKE_SAMPLE_SQL))
         ).mappings().first()
     if row is None:
         raise T177SkipError("T-177F serving MV has no smokeable geocode target row")
@@ -1184,8 +1443,24 @@ async def collect_t177f_smoke_report(engine: AsyncEngine) -> dict[str, Any]:
     }
 
 
-async def collect_t177f_link_evidence(engine: AsyncEngine) -> dict[str, int]:
-    async with engine.connect() as conn:
+def _statement_timeout_setting(timeout_ms: int) -> str:
+    if timeout_ms < 0:
+        msg = "statement timeout must be >= 0"
+        raise ValueError(msg)
+    if timeout_ms == 0:
+        return "0"
+    return f"{timeout_ms}ms"
+
+
+async def collect_t177f_link_evidence(
+    engine: AsyncEngine, *, statement_timeout_ms: int | None = None
+) -> dict[str, int]:
+    async with engine.begin() as conn:
+        if statement_timeout_ms is not None:
+            await conn.execute(
+                text("SELECT set_config('statement_timeout', :timeout, true)"),
+                {"timeout": _statement_timeout_setting(statement_timeout_ms)},
+            )
         row = (await conn.execute(text(_T177F_LINK_EVIDENCE_SQL))).mappings().one()
     return {key: int(value or 0) for key, value in row.items()}
 
@@ -1368,6 +1643,364 @@ async def run_t177f_postload_serving_smoke(
         "serving": serving_report,
         "smoke": smoke_report,
         "consistency": consistency_report,
+    }
+
+
+async def run_t177g_postload_serving_smoke(
+    engine: AsyncEngine,
+    *,
+    loaded_results: Mapping[str, Any],
+) -> dict[str, Any]:
+    from kortravelgeo.infra.admin_repo import AdminRepository
+    from kortravelgeo.infra.cache import GeoCacheRepository
+    from kortravelgeo.loaders.postload import (
+        refresh_mv,
+        resolve_text_geometry_links,
+    )
+
+    await resolve_text_geometry_links(engine, statement_timeout_ms=0)
+    await refresh_mv(engine, strategy="swap")
+    cache_cleared_rows = await GeoCacheRepository(engine).clear()
+    link_evidence = await collect_t177f_link_evidence(engine, statement_timeout_ms=0)
+    smoke_report = await collect_t177f_smoke_report(engine)
+    consistency_report = await collect_t177f_consistency_report(engine)
+    serving_report = await collect_t177f_serving_report(engine)
+    snapshot, release = await AdminRepository(engine).record_mv_refresh_release(
+        strategy="swap",
+        notes="T-177G file-driven nationwide full-load e2e post-load release",
+    )
+    return {
+        "loaded_results": dict(loaded_results),
+        "cache_cleared_rows": cache_cleared_rows,
+        "link_evidence": link_evidence,
+        "serving": serving_report,
+        "smoke": smoke_report,
+        "consistency": consistency_report,
+        "ops": {
+            "dataset_snapshot": _jsonable_model_value(snapshot),
+            "serving_release": _jsonable_model_value(release),
+        },
+    }
+
+
+async def collect_t177g_database_size(engine: AsyncEngine) -> dict[str, Any]:
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(
+                    """
+SELECT pg_database_size(current_database()) AS bytes,
+       pg_size_pretty(pg_database_size(current_database())) AS pretty
+"""
+                )
+            )
+        ).mappings().one()
+    return {"bytes": int(row["bytes"] or 0), "pretty": row["pretty"]}
+
+
+async def collect_t177g_source_month_summary(engine: AsyncEngine) -> dict[str, Any]:
+    rows: dict[str, Any] = {}
+    async with engine.connect() as conn:
+        for table_name in T177G_SOURCE_MONTH_TABLES:
+            schema_name, relation_name = table_name.split(".", 1)
+            exists = await conn.scalar(
+                text("SELECT to_regclass(:table_name) IS NOT NULL"),
+                {"table_name": table_name},
+            )
+            if not exists:
+                rows[table_name] = {"exists": False}
+                continue
+            row_count = await conn.scalar(text(f"SELECT count(*) FROM {table_name}"))
+            has_source_month = await conn.scalar(
+                text(
+                    """
+SELECT EXISTS (
+  SELECT 1
+    FROM information_schema.columns
+   WHERE table_schema = :schema_name
+     AND table_name = :relation_name
+     AND column_name = 'source_yyyymm'
+)
+"""
+                ),
+                {"schema_name": schema_name, "relation_name": relation_name},
+            )
+            months: tuple[str, ...] = ()
+            if has_source_month:
+                month_rows = (
+                    await conn.execute(
+                        text(
+                            f"""
+SELECT DISTINCT source_yyyymm
+  FROM {table_name}
+ WHERE source_yyyymm IS NOT NULL
+ ORDER BY source_yyyymm
+"""
+                        )
+                    )
+                ).scalars()
+                months = tuple(str(value) for value in month_rows)
+            rows[table_name] = {
+                "exists": True,
+                "row_count": int(row_count or 0),
+                "source_yyyymm": months,
+            }
+    return rows
+
+
+async def _record_t177g_phase[T](
+    phases: list[dict[str, Any]],
+    name: str,
+    operation: Callable[[], Awaitable[T]],
+) -> T:
+    started = datetime.now(UTC)
+    start = time.perf_counter()
+    phase: dict[str, Any] = {
+        "name": name,
+        "started_at": started.isoformat(),
+    }
+    try:
+        result = await operation()
+    except Exception as exc:
+        phase.update(
+            {
+                "status": "failed",
+                "finished_at": datetime.now(UTC).isoformat(),
+                "duration_s": round(time.perf_counter() - start, 3),
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+        phases.append(phase)
+        raise T177LongrunError(name, phases) from exc
+    phase.update(
+        {
+            "status": "ok",
+            "finished_at": datetime.now(UTC).isoformat(),
+            "duration_s": round(time.perf_counter() - start, 3),
+        }
+    )
+    phases.append(phase)
+    return result
+
+
+async def run_t177g_nationwide_full_load(
+    engine: AsyncEngine,
+    *,
+    discovery_plan: Mapping[str, Any],
+    materialize_dir: Path,
+) -> dict[str, Any]:
+    from kortravelgeo.loaders.postload import refresh_region_radius_parts
+    from kortravelgeo.loaders.sppn_makarea_loader import load_sppn_makarea
+    from kortravelgeo.loaders.text.daily_juso_loader import load_daily_juso_delta
+    from kortravelgeo.loaders.text.juso_hangul_loader import load_juso_hangul
+    from kortravelgeo.loaders.text.locsum_loader import load_locsum
+    from kortravelgeo.loaders.text.navi_loader import load_navi
+    from kortravelgeo.loaders.text.parcel_link_loader import (
+        load_daily_parcel_link_delta,
+        load_juso_parcel_link_snapshot,
+    )
+    from kortravelgeo.loaders.text.roadaddr_entrance_loader import load_roadaddr_entrances
+
+    for kind in T177G_REQUIRED_SOURCE_KINDS:
+        required_source_path(discovery_plan, kind)
+
+    phases: list[dict[str, Any]] = []
+    source_months = {
+        "juso_hangul": source_yyyymm(discovery_plan, "juso_hangul"),
+        "jibun_rnaddrkor": source_yyyymm(discovery_plan, "jibun_rnaddrkor"),
+        "locsum": source_yyyymm(discovery_plan, "locsum"),
+        "navi": source_yyyymm(discovery_plan, "navi"),
+        "electronic_map": source_yyyymm(discovery_plan, "electronic_map"),
+        "roadaddr_entrance": source_yyyymm(discovery_plan, "roadaddr_entrance"),
+        "sppn_makarea": source_yyyymm(discovery_plan, "sppn_makarea"),
+    }
+
+    juso_hangul = required_source_path(discovery_plan, "juso_hangul")
+    jibun_rnaddrkor = required_source_path(discovery_plan, "jibun_rnaddrkor")
+    locsum = required_source_path(discovery_plan, "locsum")
+    roadaddr_entrance = required_source_path(discovery_plan, "roadaddr_entrance")
+    sppn_makarea = required_source_path(discovery_plan, "sppn_makarea")
+    daily_path = t177g_daily_source_path(discovery_plan)
+
+    navi_source = await _record_t177g_phase(
+        phases,
+        "materialize_navi",
+        lambda: asyncio.to_thread(
+            t177g_navi_source,
+            discovery_plan,
+            materialize_dir=materialize_dir / "navi",
+        ),
+    )
+    electronic_map_source = await _record_t177g_phase(
+        phases,
+        "materialize_electronic_map",
+        lambda: asyncio.to_thread(
+            t177g_electronic_map_source,
+            discovery_plan,
+            materialize_dir=materialize_dir / "electronic-map",
+        ),
+    )
+
+    juso_count = await _record_t177g_phase(
+        phases,
+        "load_juso_hangul",
+        lambda: load_juso_hangul(
+            engine,
+            juso_hangul,
+            source_yyyymm=source_months["juso_hangul"],
+            limit_per_file=None,
+        ),
+    )
+    parcel_snapshot = await _record_t177g_phase(
+        phases,
+        "load_juso_parcel_link_snapshot",
+        lambda: load_juso_parcel_link_snapshot(
+            engine,
+            jibun_rnaddrkor,
+            source_yyyymm=source_months["jibun_rnaddrkor"],
+            limit_per_file=None,
+            replace=True,
+        ),
+    )
+    daily_juso_result: Any | None = None
+    daily_parcel_result: Any | None = None
+    if daily_path is not None:
+        daily_juso_result = await _record_t177g_phase(
+            phases,
+            "load_daily_juso_delta",
+            lambda: load_daily_juso_delta(
+                engine,
+                daily_path,
+                source_yyyymm=None,
+                limit_per_file=None,
+            ),
+        )
+        daily_parcel_result = await _record_t177g_phase(
+            phases,
+            "load_daily_parcel_link_delta",
+            lambda: load_daily_parcel_link_delta(
+                engine,
+                daily_path,
+                source_yyyymm=None,
+                limit_per_file=None,
+            ),
+        )
+    locsum_count = await _record_t177g_phase(
+        phases,
+        "load_locsum",
+        lambda: load_locsum(
+            engine,
+            locsum,
+            source_yyyymm=source_months["locsum"],
+            limit_per_file=None,
+        ),
+    )
+    navi_build_count, navi_entrance_count = await _record_t177g_phase(
+        phases,
+        "load_navi",
+        lambda: load_navi(
+            engine,
+            navi_source.source_path,
+            source_yyyymm=navi_source.source_yyyymm,
+            limit_per_file=None,
+        ),
+    )
+
+    async def load_electronic_map() -> int:
+        loaded_layers = await load_shp_polygons(
+            engine,
+            electronic_map_source.load_path,
+            mode="full",
+            source_yyyymm=electronic_map_source.source_yyyymm,
+            analyze=True,
+        )
+        await refresh_region_radius_parts(engine)
+        return loaded_layers
+
+    shp_loaded_layers = await _record_t177g_phase(
+        phases,
+        "load_electronic_map",
+        load_electronic_map,
+    )
+    roadaddr_result = await _record_t177g_phase(
+        phases,
+        "load_roadaddr_entrance",
+        lambda: load_roadaddr_entrances(
+            engine,
+            roadaddr_entrance,
+            source_yyyymm=None,
+            limit_per_file=None,
+            replace=True,
+        ),
+    )
+    sppn_rows = await _record_t177g_phase(
+        phases,
+        "load_sppn_makarea",
+        lambda: load_sppn_makarea(
+            engine,
+            sppn_makarea,
+            mode="full",
+            source_yyyymm=source_months["sppn_makarea"],
+            analyze=True,
+        ),
+    )
+
+    loaded_results = {
+        "loader_results": {
+            "juso_hangul_rows": juso_count,
+            "juso_parcel_link_snapshot": asdict(parcel_snapshot),
+            "daily_juso": asdict(daily_juso_result) if daily_juso_result is not None else None,
+            "daily_parcel_link": (
+                asdict(daily_parcel_result) if daily_parcel_result is not None else None
+            ),
+            "locsum_rows": locsum_count,
+            "navi_build_rows": navi_build_count,
+            "navi_entrance_rows": navi_entrance_count,
+            "shp_loaded_layers": shp_loaded_layers,
+            "roadaddr_entrance": asdict(roadaddr_result),
+            "sppn_makarea_rows": sppn_rows,
+        },
+        "source_months": source_months,
+        "materialized_sources": {
+            "navi": {
+                "source_path": str(navi_source.source_path),
+                "archive_path": str(navi_source.archive_path) if navi_source.archive_path else None,
+                "materialized": navi_source.materialized,
+                "build_source_count": navi_source.build_source_count,
+                "entrance_source_count": navi_source.entrance_source_count,
+            },
+            "electronic_map": {
+                "load_path": str(electronic_map_source.load_path),
+                "archive_paths": tuple(str(path) for path in electronic_map_source.archive_paths),
+                "materialized": electronic_map_source.materialized,
+                "sido_count": electronic_map_source.sido_count,
+            },
+            "daily": str(daily_path) if daily_path is not None else None,
+        },
+        "skipped_sources": t177g_skipped_source_report(discovery_plan),
+    }
+    postload = await _record_t177g_phase(
+        phases,
+        "postload_serving_smoke_consistency",
+        lambda: run_t177g_postload_serving_smoke(engine, loaded_results=loaded_results),
+    )
+    table_counts = {
+        "t177c": await collect_t177c_table_counts(engine),
+        "t177d": await collect_t177d_table_counts(engine),
+        "t177e": await collect_t177e_table_counts(engine),
+    }
+    return {
+        "status": "ok",
+        "phases": phases,
+        "loaded_results": loaded_results,
+        "postload": postload,
+        "table_counts": table_counts,
+        "database_size": await collect_t177g_database_size(engine),
+        "source_month_summary": await collect_t177g_source_month_summary(engine),
+        "resume": {
+            "failed_phase": None,
+            "cleanup": "drop the scratch DB or rerun with a fresh T-177G database",
+        },
     }
 
 
@@ -1824,6 +2457,26 @@ def _materialize_electronic_map_archive(archive: Path, materialize_dir: Path) ->
                     f"T-177 electronic_map ZIP contains unsafe member: {member.filename}"
                 )
         source_zip.extractall(destination)
+    return destination
+
+
+def _materialize_7z_archive(archive: Path, destination: Path) -> Path:
+    extractor = shutil.which("7z") or shutil.which("7za") or shutil.which("7zr")
+    if extractor is None:
+        raise T177SkipError("T-177G navi .7z materialization requires 7z, 7za, or 7zr")
+    destination.mkdir(parents=True, exist_ok=True)
+    completed = subprocess.run(
+        [extractor, "x", "-y", f"-o{destination}", str(archive)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if completed.returncode != 0:
+        excerpt = completed.stdout[-1000:] if completed.stdout else ""
+        raise T177SkipError(
+            f"T-177G failed to materialize navi .7z archive {archive}: {excerpt}"
+        )
     return destination
 
 

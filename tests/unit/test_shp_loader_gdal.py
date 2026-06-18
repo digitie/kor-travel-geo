@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import struct
+from contextlib import nullcontext
 from pathlib import Path
 
 import pytest
@@ -231,6 +232,124 @@ def test_building_polygon_layer_uses_staging_table_copy_path() -> None:
     assert "skipped invalid rows" in insert_source
     assert "ST_Multi(geom)::geometry(MultiPolygon, 5179)" in insert_source
     assert "SET LOCAL search_path = public, x_extension" in insert_source
+
+
+class _FakeGdal:
+    def __init__(self, *results: object | None) -> None:
+        self.results = list(results)
+        self.calls: list[tuple[str, str, object]] = []
+        self.error_reset_count = 0
+
+    def VectorTranslateOptions(self, **kwargs: object) -> dict[str, object]:  # noqa: N802
+        return kwargs
+
+    def config_options(self, _options: dict[str, str]) -> object:
+        return nullcontext()
+
+    def VectorTranslate(  # noqa: N802
+        self,
+        destination: str,
+        source: str,
+        *,
+        options: object,
+    ) -> object | None:
+        self.calls.append((destination, source, options))
+        return self.results.pop(0)
+
+    def ErrorReset(self) -> None:  # noqa: N802
+        self.error_reset_count += 1
+
+    def GetLastErrorType(self) -> int:  # noqa: N802
+        return 3
+
+    def GetLastErrorNo(self) -> int:  # noqa: N802
+        return 777
+
+    def GetLastErrorMsg(self) -> str:  # noqa: N802
+        return "simulated GDAL failure"
+
+
+def _building_plan(tmp_path: Path) -> polygons_loader.ShpLoadPlan:
+    shp_path = tmp_path / "TL_SPBD_BULD.shp"
+    dbf_path = tmp_path / "TL_SPBD_BULD.dbf"
+    shp_path.write_bytes(b"shape")
+    dbf_path.write_bytes(b"dbf")
+    return polygons_loader.ShpLoadPlan(
+        source_layer=polygons_loader.BUILDING_POLYGON_LAYER_NAME,
+        target_table="tl_spbd_buld_polygon",
+        shp_path=shp_path,
+        dbf_path=dbf_path,
+        source_file="경기도/41000/TL_SPBD_BULD.shp",
+        sql_statement="SELECT * FROM TL_SPBD_BULD",
+        geometry_type="MULTIPOLYGON",
+    )
+
+
+def _patch_building_stage_db(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    dropped: list[str] = []
+    monkeypatch.setattr(
+        polygons_loader,
+        "_acquire_building_polygon_stage_lock",
+        lambda _pg_url: (object(), object()),
+    )
+    monkeypatch.setattr(
+        polygons_loader,
+        "_release_building_polygon_stage_lock",
+        lambda _engine, _conn: None,
+    )
+    monkeypatch.setattr(
+        polygons_loader,
+        "_drop_stage_table",
+        lambda _pg_url, table_name: dropped.append(table_name),
+    )
+    monkeypatch.setattr(polygons_loader, "_insert_building_polygon_stage", lambda *_args: None)
+    return dropped
+
+
+def test_building_polygon_staging_retries_transient_vector_translate_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    dropped = _patch_building_stage_db(monkeypatch)
+    fake_gdal = _FakeGdal(None, object())
+
+    polygons_loader._copy_building_polygon_with_stage(
+        "postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo",
+        _building_plan(tmp_path),
+        gdal_module=fake_gdal,
+        callback=lambda _complete, _message, _data: 1,
+        cancel_event=None,
+    )
+
+    assert len(fake_gdal.calls) == 2
+    assert fake_gdal.error_reset_count == 2
+    assert dropped == [polygons_loader.BUILDING_POLYGON_STAGE_TABLE] * 3
+
+
+def test_building_polygon_staging_failure_includes_source_and_gdal_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_building_stage_db(monkeypatch)
+    fake_gdal = _FakeGdal(None, None)
+
+    with pytest.raises(LoaderError) as exc:
+        polygons_loader._copy_building_polygon_with_stage(
+            "postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo",
+            _building_plan(tmp_path),
+            gdal_module=fake_gdal,
+            callback=lambda _complete, _message, _data: 1,
+            cancel_event=None,
+        )
+
+    message = str(exc.value)
+    assert "TL_SPBD_BULD staging" in message
+    assert "source_file=경기도/41000/TL_SPBD_BULD.shp" in message
+    assert f"shp_path={tmp_path / 'TL_SPBD_BULD.shp'}" in message
+    assert "attempts=2" in message
+    assert "type=3" in message
+    assert "no=777" in message
+    assert "simulated GDAL failure" in message
 
 
 def test_road_interval_dbf_rows_project_to_copy_columns(tmp_path: Path) -> None:

@@ -6,6 +6,28 @@
 
 ## 완료
 
+- [x] **T-188** — T-177G smoke sample query timeout 해소(Agent A/Codex, #364).
+  T-177G fresh run `t177g-codex-20260618T022500Z-fresh-t187`가 전국 적재와 serving MV swap을
+  완료한 뒤 `postload_serving_smoke_consistency`에서 smoke sample SQL의
+  `ORDER BY CASE WHEN EXISTS (...)` 전국 정렬이 `statement_timeout`에 걸려 실패했다.
+  smoke sample은 acceptance용 대표 row 1건이면 충분하므로 locsum-linked entrance row를
+  `LIMIT 1`로 고르는 쿼리로 바꾸고, 선택된 단일 `bd_mgt_sn`에 대해서만 roadaddr link 여부를
+  확인하도록 줄였다. 실패 DB에서 새 sample/report는 0.1초 안에 통과했고 post-load phase
+  재실행은 release `585e4e86-6ed7-4287-9d58-7d7b70615a99`를 기록하며 성공했다.
+  fresh run `t177g-codex-20260618T043300Z-fresh-t188`도 2:05:08에 통과했다. (2026-06-18)
+
+- [x] **T-177G** — 전국 long-run full-load e2e(Agent A/Codex).
+  `KTG_TEST_FULL_LOAD_E2E_LONGRUN=1` opt-in으로 전국 실제 Juso 원천 전체를 읽어 fresh scratch
+  PostgreSQL/PostGIS DB `kor_travel_geo_t177g_codex_20260618133300`을 구축했다. 성공 artifact는
+  `artifacts/t177/t177g-codex-20260618T043300Z-fresh-t188/t177g-nationwide-longrun-full-load.json`이며
+  DB 크기는 35GB, `mv_geocode_target`/`mv_geocode_text_search`는 각각 6,419,795행이다.
+  loader 결과는 `tl_juso_text=6,419,795`, `tl_juso_parcel_link=1,771,043`,
+  `tl_locsum_entrc=6,405,094`, `tl_navi_buld_centroid=10,687,317`,
+  `tl_roadaddr_entrc=6,404,697`, `tl_spbd_buld_polygon=10,687,732`,
+  `tl_sppn_makarea=24,204`를 기록했다. post-load는 geocode/reverse/search/zipcode smoke,
+  C1~C10 consistency report, ops snapshot/release를 모두 통과했고, 같은 새 DB로 Windows
+  Playwright live UI e2e `tests/e2e/live` 20/20 통과를 확인했다. (2026-06-18)
+
 - [x] **T-277** — 디버그 UI 지도 `maplibre-vworld-react` 전환(Agent A/Codex).
   사용자 지시에 따라 `maplibre-vworld-js`/`maplibre-vworld` 의존성을 제거하고 GitHub
   `digitie/maplibre-vworld-react` tarball SHA
@@ -15,6 +37,30 @@
   `vworld-map-core`/`vworld-map-web` import를 해석한다. WSL ext4 미러에서 frontend
   lint/type-check/unit/build/React Doctor를 실행하고, Windows Playwright chromium/firefox로
   `vworld-map.spec.ts` 2건씩 통과를 확인했다. (2026-06-18)
+
+- [x] **T-186** — T-177G DB live UI e2e ops ledger gap 해소(Agent A/Codex, #360).
+  T-183/T-184 착수 전 T-177G 적재 DB `kor_travel_geo_t177g_codex_20260618073652`에 API/UI를
+  붙여 live UI e2e를 먼저 실행했더니 20건 중 19건은 통과했지만, `/admin/ops` live API
+  테스트가 `ops.serving_releases=0`, `ops.dataset_snapshots=0` 때문에 실패했다. T-177G
+  post-load 경로가 `refresh_mv(strategy="swap")` 뒤 기존
+  `AdminRepository.record_mv_refresh_release()` hook을 호출하도록 연결해 serving snapshot과
+  active release를 기록한다. 같은 DB에 release를 기록한 뒤 Windows Playwright live e2e
+  `tests/e2e/live` 20/20 통과를 확인했다. (2026-06-18)
+
+- [x] **T-185** — T-177G post-load link evidence timeout 재발 해소(Agent A/Codex, #359).
+  T-181의 SQL 최적화 뒤에도 T-177G 전국 DB에서는 기본 `statement_timeout=5s` 때문에
+  link evidence 집계가 취소될 수 있었다. timeout을 전역으로 늘리지 않고, harness의
+  `collect_t177f_link_evidence()`에 호출 단위 `statement_timeout_ms` 옵션을 추가한 뒤
+  T-177G post-load에서만 `0`으로 해제한다. 기존 T-177F fast-sample 기본 동작은 유지한다.
+  실제 T-177G DB에서 같은 집계가 9.8초에 완료됨을 확인했다. (2026-06-18)
+
+- [x] **T-182** — T-177G long-run 디스크 여유 preflight 추가(Agent A/Codex, #355).
+  T-177G 재실행 중 artifact materialize가 약 19GB까지 진행되고 DB 적재가 시작된 뒤,
+  Windows `C:` 여유 2.5GB 상태에서 WSL 기본 명령까지 `Bus error`/`Input/output error`를 내고
+  PostgreSQL 5432 연결이 거부되는 런타임 장애를 분리했다. long-run 시작 직후 artifact
+  filesystem free space를 검사해 기본 120GiB 미만이면 materialize/DB 적재 전에
+  `T177PreflightError`로 중단한다. 요구량은
+  `KTG_TEST_FULL_LOAD_E2E_LONGRUN_MIN_FREE_GB`로 조정할 수 있다. (2026-06-17)
 
 - [x] **T-181** — 전국 long-run 후처리 링크 증거 집계 timeout 해소(Agent A/Codex, #353).
   T-177G 전국 long-run full-load e2e에서 실제 원천 적재와 `refresh_mv(strategy="swap")`까지

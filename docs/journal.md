@@ -2,6 +2,27 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (T-177G/T-188 전국 long-run full-load e2e 완료)
+
+**작업**: T-177G fresh run `t177g-codex-20260618T022500Z-fresh-t187`는 전국 원천 적재와
+serving MV swap까지 완료했지만, `postload_serving_smoke_consistency`에서 smoke sample SQL이
+전국 `mv_geocode_target` 후보를 `ORDER BY CASE WHEN EXISTS (...)`로 정렬하다
+`statement_timeout`에 걸렸다. 이를 #364/T-188로 분리했다.
+
+**결정**: smoke sample은 acceptance용 대표 row 1건이면 충분하므로 전체 후보 정렬을 없앴다.
+기존 T-177F acceptance의 `has_locsum_link is True` 의미는 유지하기 위해 locsum-linked entrance
+row를 `LIMIT 1`로 고르고, 선택된 단일 `bd_mgt_sn`에 대해서만 roadaddr link 여부를 확인한다.
+이 쿼리는 실패 DB에서 0.028초, 전체 smoke report는 0.097초에 완료됐다.
+
+**검증/문서**: 실패 DB `kor_travel_geo_t177g_codex_20260618112500`에서 post-load phase를 다시
+실행해 1,466.775초에 성공했고, release `585e4e86-6ed7-4287-9d58-7d7b70615a99`와 snapshot
+`8206cafa-e271-4307-9a9c-ff7e2ba2c468`을 기록했다. 이후 fresh scratch DB
+`kor_travel_geo_t177g_codex_20260618133300`에서 run
+`t177g-codex-20260618T043300Z-fresh-t188`를 처음부터 다시 실행해 2:05:08에 통과했다.
+성공 artifact는 `artifacts/t177/t177g-codex-20260618T043300Z-fresh-t188/t177g-nationwide-longrun-full-load.json`이고,
+DB 크기는 35GB, serving MV 2종은 각각 6,419,795행이다. 같은 DB에 API/UI를 붙여 Windows
+Playwright live e2e `tests/e2e/live`를 chromium으로 실행했고 20/20 통과했다.
+
 ## 2026-06-18 (T-277 `maplibre-vworld-react` 지도 전환)
 
 **작업**: 사용자 지시에 따라 디버그 UI 지도를 GitHub `digitie/maplibre-vworld-react` 기반으로
@@ -24,6 +45,46 @@ ADR-020/028/032는 최신 의존성 선택만 ADR-063으로 넘긴다.
 실행했다. React Doctor는 exit 0이지만 기존 source-files/VirtualTable 계열 경고 29건이 남아 있어
 이번 변경 범위에서는 수정하지 않았다. Windows Playwright는 WSL production `next start` 서버에 붙여
 `tests/e2e/vworld-map.spec.ts`를 `chromium`과 `firefox` project에서 각각 2/2 통과시켰다.
+
+## 2026-06-18 (T-185/T-186 T-177G DB live UI e2e 선행 검증)
+
+**작업**: T-183/T-184 진행 전에 T-177G로 적재된
+`kor_travel_geo_t177g_codex_20260618073652` DB를 API/UI에 붙여 Windows Playwright live UI e2e를
+먼저 실행했다. 첫 실행은 20건 중 19건이 통과했고, `/admin/ops` read-only 테스트만
+`ops.serving_releases=0`, `ops.dataset_snapshots=0` 때문에 실패했다. 동시에 T-177G pytest
+후처리 실패 원인인 link evidence 집계가 SQL 최적화 뒤에도 기본 `statement_timeout=5s`에
+걸릴 수 있음을 #359/T-185로, ops ledger 공백을 #360/T-186으로 분리했다.
+
+**결정**: timeout은 전역 설정을 바꾸지 않고 T-177G post-load 호출에서만
+`statement_timeout=0`을 `SET LOCAL`로 적용한다. T-177G의 serving MV swap 뒤에는 새 ledger
+로직을 만들지 않고 기존 `AdminRepository.record_mv_refresh_release()`를 재사용해
+`ops.dataset_snapshots`와 active `ops.serving_releases`를 남긴다. 이 hook은 기존 active release를
+transaction 안에서 supersede하므로 live UI가 기대하는 운영 표면과 같다.
+
+**검증/문서**: 실제 T-177G DB에서 link evidence는
+`text_rows=6419795`, `locsum_rows=6405091`, `locsum_resolved_rows=2905941`,
+`locsum_serving_rows=2905941`, `locsum_smokeable_serving_rows=2905941`을 9.784초에 반환했다.
+같은 DB에 release `e2f5c948-b64c-4f08-a618-d20c7bb84653`와 snapshot
+`d27900cc-41a0-49e4-bdc7-97c7f4e81ea5`를 기록한 뒤, live UI e2e
+`tests/e2e/live`는 20/20 통과했다. 2026-06-16 이후 PR 리뷰/코멘트를 다시 훑었고,
+PR #318/#319 지적은 #320/T-269에서 이미 닫혔으며 마지막 T-181 머지 이후 새 Claude Code
+후속 코멘트는 없었다. T-177G 본체는 fresh scratch DB 재실행 전까지 진행 중으로 유지한다.
+
+## 2026-06-17 (T-182 T-177G long-run 디스크 여유 preflight)
+
+**작업**: T-177G를 T-181 fix 포함 새 scratch DB에서 재실행하던 중, artifact materialize가
+약 19GB까지 진행되고 도로명주소 한글 적재가 시작된 뒤 PostgreSQL 5432 연결 거부와 WSL
+`Bus error`/`Input/output error`가 발생했다. Windows `C:` 여유가 약 2.5GB였고, WSL 기본 명령
+(`/bin/true`, `/bin/pwd`, `ls`, `df`, `dmesg`)도 실패해 #355/T-182로 분리했다.
+
+**결정**: 이 저장소는 DB/WSL을 직접 재시작하지 않으므로, long-run e2e가 환경을 망가뜨리기
+전에 중단해야 한다. T-177G 전용으로 artifact filesystem free space를 먼저 검사하고, 기본
+요구량을 120GiB로 둔다. 로컬 장비별 여유 공간 정책은 `KTG_TEST_FULL_LOAD_E2E_LONGRUN_MIN_FREE_GB`
+환경변수로 명시 override한다.
+
+**검증/문서**: 단위 테스트는 기본 요구량, override, 부족 시 `T177PreflightError` 메시지를
+고정한다. T-177G success/failure artifact에는 통과한 disk space report를 함께 남긴다.
+현재 WSL/DB 런타임은 외부 복구가 필요하므로, 복구 뒤 fresh scratch DB로 T-177G를 다시 실행한다.
 
 ## 2026-06-17 (T-181 전국 long-run 링크 증거 집계 timeout 해소)
 

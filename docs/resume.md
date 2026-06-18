@@ -72,6 +72,30 @@
   전체 count가 `statement_timeout`에 걸린 문제를 #353으로 분리했다. `tl_locsum_entrc`의
   resolved `bd_mgt_sn` distinct key를 materialized CTE로 만든 뒤 unique
   `mv_geocode_target.bd_mgt_sn`과 조인하도록 바꿔 전국 DB에서 약 10초 내 반환됨을 확인했다.
+- ✅ T-182 T-177G long-run 디스크 여유 preflight 추가 — T-177G 재실행 중 Windows `C:` 여유가
+  약 2.5GB인 상태에서 artifact materialize 19GB와 DB 적재가 겹치며 WSL `Bus error`와
+  PostgreSQL 5432 연결 거부가 발생했다. long-run 시작 직후 artifact filesystem free space를
+  검사하고, 기본 120GiB 미만이면 materialize/DB 적재 전에 `T177PreflightError`로 중단한다.
+  요구량은 `KTG_TEST_FULL_LOAD_E2E_LONGRUN_MIN_FREE_GB`로 조정할 수 있다.
+- ✅ T-185/T-186 T-177G DB live UI e2e 선행 검증 완료 — T-183/T-184 진행 전 T-177G 적재 DB
+  `kor_travel_geo_t177g_codex_20260618073652`에 API/UI를 붙여 Windows Playwright live e2e를
+  먼저 실행했다. 첫 실행은 `ops.serving_releases`/`ops.dataset_snapshots` 공백으로 19/20
+  통과였고, #359/T-185는 T-177G link evidence 집계에서만 `statement_timeout=0`을 `SET LOCAL`로
+  적용해 닫았다. #360/T-186은 T-177G post-load 뒤 기존 `record_mv_refresh_release()` hook으로
+  snapshot/release를 남기게 해 닫았다. 같은 DB에서 live UI e2e `tests/e2e/live`는 20/20
+  통과했다.
+- ✅ T-188 T-177G smoke sample query timeout 해소 — T-177G fresh run
+  `t177g-codex-20260618T022500Z-fresh-t187`가 전국 적재와 serving MV swap 뒤
+  `postload_serving_smoke_consistency`에서 smoke sample SQL의 전국 `ORDER BY CASE WHEN EXISTS`
+  정렬이 `statement_timeout`에 걸려 실패했다(#364). 샘플 선택을 locsum-linked entrance row
+  `LIMIT 1` 쿼리로 줄였고, 실패 DB에서 sample/report 0.1초 내 통과와 post-load phase 재실행
+  성공을 확인했다.
+- ✅ T-177G 전국 long-run full-load e2e 완료 — fresh scratch DB
+  `kor_travel_geo_t177g_codex_20260618133300`에서 run
+  `t177g-codex-20260618T043300Z-fresh-t188`가 2:05:08에 통과했다. 성공 artifact는
+  `artifacts/t177/t177g-codex-20260618T043300Z-fresh-t188/t177g-nationwide-longrun-full-load.json`,
+  DB size는 35GB, `mv_geocode_target`/`mv_geocode_text_search`는 각각 6,419,795행이다.
+  같은 새 DB로 API/UI를 띄워 Windows Playwright live e2e `tests/e2e/live` 20/20도 통과했다.
 - ✅ T-119/T-139 종료 판정 완료 — `T-119`는 T-137 최종 gate와 T-153 acceptance 근거로 C11 active serving promotion을 no-go 종료했다. C11은 validation-only로 고정하며, 새 같은 기준월 C11 원천 또는 동등한 새 증거가 있으면 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인으로만 다룬다. `T-139`는 T-153 기준 구조적 성능 blocker가 없어 별도 변경 DB 실험을 no-action 종료했다.
 - ✅ Timescale PostgreSQL 계열 Codex skill 변환 완료 — `timescale/pg-aiguide`의 Claude Code용 skill 8종을 Codex repo-scoped skill로 변환해 `.agents/skills/`에 추가했다. Codex frontmatter는 `name`/`description`만 유지하고 원본 Apache-2.0/source/compatibility 표기는 본문에 보존했다. `quick_validate.py` 검증과 YAML frontmatter 파싱 검증을 통과했다. 같은 `.codex/agents` 6종과 `.agents/skills` 8종을 `F:\dev` 바로 아래 다른 Git repo 78개에도 복사·stage했고, 모든 대상에서 agent 6개와 skill 8개가 확인됐다. 대상 repo에서 해당 경로는 ignore되지 않아 `.gitignore` 추가 수정은 없었다.
 - ✅ Codex 프로젝트 subagent 정의 등록 완료 — VoltAgent core-development subagent 6종을 `.codex/agents/`에 추가해 Git 추적 대상 구성으로 옮겼고, 전역 `C:\Users\digit\.codex\agents` 복사본도 같은 값으로 맞췄다. 모든 subagent는 `model="gpt-5.5"`, `model_reasoning_effort="xhigh"`를 사용한다. TOML 파싱과 필수 필드 검증을 통과했다.
@@ -312,7 +336,9 @@
 구현, `T-177C` 텍스트 정본/daily delta fast-sample e2e 구현, `T-177D` 전자지도
 SHP/PostGIS geometry e2e 구현, `T-177E` 선택 보강 원천 e2e 구현,
 `T-177F` post-load serving/smoke/consistency fast-sample e2e 구현도 완료됐다.
-다음 한 작업은 `T-177G` 전국 long-run full-load e2e 구현이다.
+`T-177G` 전국 long-run full-load e2e와 T-188 smoke sample timeout 후속도 완료됐다.
+다음 한 작업은 현재 T-177G/T-188 branch를 PR/머지한 뒤, `T-183` UI 기반 full-load 적재 e2e와
+`T-184` opt-in live e2e admin role proxy로 넘어가는 것이다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

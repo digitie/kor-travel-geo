@@ -10,12 +10,14 @@ from kortravelgeo.settings import Settings
 from tests.integration._t177_full_load_harness import (
     ENV_ALLOW_NONEMPTY,
     ENV_CONFIRM,
+    ENV_LONGRUN,
     T177D_REQUIRED_NONEMPTY_TABLES,
     T177D_TARGET_TABLES,
     T177E_MANIFEST_TABLES,
     T177E_TARGET_TABLES,
     T177F_CONSISTENCY_CASES,
     T177F_SERVING_OBJECTS,
+    T177LongrunError,
     T177PreflightError,
     T177SkipError,
     apply_schema_index_smoke,
@@ -25,6 +27,7 @@ from tests.integration._t177_full_load_harness import (
     collect_t177c_table_counts,
     collect_t177d_table_counts,
     collect_t177e_table_counts,
+    require_longrun_from_env,
     reset_t177c_target_tables,
     reset_t177e_target_tables,
     run_t177c_text_delta_fast_sample_load,
@@ -32,6 +35,7 @@ from tests.integration._t177_full_load_harness import (
     run_t177e_supplemental_fast_sample_load,
     run_t177f_postload_serving_smoke,
     run_t177f_text_snapshot_fast_sample_load,
+    run_t177g_nationwide_full_load,
     runtime_from_env,
     sample_limit_from_env,
     schema_smoke_report,
@@ -40,6 +44,7 @@ from tests.integration._t177_full_load_harness import (
     t177d_shp_geometry_source,
     t177e_supplemental_source_paths,
     validate_database_preflight,
+    validate_t177g_longrun_disk_space,
     write_json_artifact,
 )
 
@@ -519,6 +524,162 @@ async def test_t177f_file_driven_postload_serving_smoke() -> None:
             T177F_CONSISTENCY_CASES
         )
         assert consistency["severity_max"] in {"OK", "INFO", "WARN", "ERROR"}
+    except T177SkipError as exc:
+        pytest.skip(str(exc))
+    except T177PreflightError as exc:
+        pytest.fail(str(exc))
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.longrun
+async def test_t177g_file_driven_nationwide_longrun_full_load() -> None:
+    started_at = datetime.now(UTC)
+    try:
+        runtime = runtime_from_env()
+        require_longrun_from_env()
+        disk_space = validate_t177g_longrun_disk_space(runtime.artifact_dir)
+    except T177SkipError as exc:
+        pytest.skip(str(exc))
+
+    pytest.importorskip("osgeo.gdal")
+
+    engine = make_async_engine(Settings(pg_dsn=runtime.dsn))
+    try:
+        preflight = await validate_database_preflight(
+            engine,
+            confirmation=os.getenv(ENV_CONFIRM),
+        )
+        discovery_plan = build_discovery_plan(runtime.data_root)
+
+        await apply_schema_index_smoke(engine)
+        schema_report = await schema_smoke_report(engine)
+        existing_rows = await collect_existing_row_counts(engine)
+        existing_shp_rows = await collect_t177d_table_counts(engine)
+        existing_supplemental_rows = await collect_t177e_table_counts(engine)
+        existing_combined = {**existing_rows, **existing_shp_rows, **existing_supplemental_rows}
+        nonempty = {table: count for table, count in existing_combined.items() if count > 0}
+        if nonempty:
+            raise T177PreflightError(
+                "T-177G requires an empty scratch DB; create a fresh database instead of "
+                "reusing existing rows: "
+                + ", ".join(f"{table}={count}" for table, count in sorted(nonempty.items()))
+            )
+
+        await reset_t177c_target_tables(engine)
+        await reset_t177e_target_tables(engine)
+        before_counts = {
+            "t177c": await collect_t177c_table_counts(engine),
+            "t177d": await collect_t177d_table_counts(engine),
+            "t177e": await collect_t177e_table_counts(engine),
+        }
+        try:
+            result = await run_t177g_nationwide_full_load(
+                engine,
+                discovery_plan=discovery_plan,
+                materialize_dir=runtime.artifact_dir / "materialized",
+            )
+        except T177LongrunError as exc:
+            artifact = {
+                "schema_version": 1,
+                "task": "T-177G",
+                "run_id": runtime.run_id,
+                "mode": "nationwide_longrun_full_load",
+                "status": "failed",
+                "started_at": started_at.isoformat(),
+                "finished_at": datetime.now(UTC).isoformat(),
+                "failed_phase": exc.phase,
+                "phases": list(exc.phases),
+                "gates": {
+                    "full_load_e2e": True,
+                    "pg_dsn": True,
+                    "confirmation_ok": preflight.destructive_confirmed,
+                    "allow_nonempty": False,
+                    "longrun": os.getenv(ENV_LONGRUN) == "1",
+                },
+                "database": {
+                    "name": preflight.database_name,
+                    "expected_confirmation": preflight.expected_confirmation,
+                },
+                "disk_space": disk_space,
+                "data": discovery_plan,
+                "schema": schema_report,
+                "before_counts": before_counts,
+                "resume": {
+                    "failed_phase": exc.phase,
+                    "cleanup": "drop the scratch DB or rerun with a fresh T-177G database",
+                },
+            }
+            write_json_artifact(
+                runtime.artifact_dir,
+                "t177g-nationwide-longrun-full-load.failed.json",
+                artifact,
+            )
+            pytest.fail(str(exc))
+
+        artifact = {
+            "schema_version": 1,
+            "task": "T-177G",
+            "run_id": runtime.run_id,
+            "mode": "nationwide_longrun_full_load",
+            "status": "ok",
+            "started_at": started_at.isoformat(),
+            "finished_at": datetime.now(UTC).isoformat(),
+            "gates": {
+                "full_load_e2e": True,
+                "pg_dsn": True,
+                "confirmation_ok": preflight.destructive_confirmed,
+                "allow_nonempty": False,
+                "longrun": True,
+            },
+            "database": {
+                "name": preflight.database_name,
+                "expected_confirmation": preflight.expected_confirmation,
+            },
+            "disk_space": disk_space,
+            "data": discovery_plan,
+            "schema": schema_report,
+            "before_counts": before_counts,
+            "result": result,
+        }
+        artifact_path = write_json_artifact(
+            runtime.artifact_dir,
+            "t177g-nationwide-longrun-full-load.json",
+            artifact,
+        )
+
+        loader_results = result["loaded_results"]["loader_results"]
+        postload = result["postload"]
+        ops_snapshot = postload["ops"]["dataset_snapshot"]
+        ops_release = postload["ops"]["serving_release"]
+        serving_counts = {
+            row["object_name"]: row["row_count"]
+            for row in postload["serving"]["objects"]
+        }
+
+        assert artifact_path.is_file()
+        assert schema_report["missing_objects"] == []
+        assert result["status"] == "ok"
+        assert all(phase["status"] == "ok" for phase in result["phases"])
+        assert loader_results["juso_hangul_rows"] > 1_000_000
+        assert loader_results["juso_parcel_link_snapshot"]["processed_rows"] > 1_000_000
+        assert loader_results["locsum_rows"] > 1_000_000
+        assert loader_results["navi_build_rows"] > 1_000_000
+        assert loader_results["navi_entrance_rows"] > 0
+        assert loader_results["shp_loaded_layers"] >= 17 * len(T177D_REQUIRED_NONEMPTY_TABLES)
+        assert loader_results["roadaddr_entrance"]["processed_rows"] > 1_000_000
+        assert loader_results["sppn_makarea_rows"] > 0
+        assert serving_counts["public.mv_geocode_target"] > 1_000_000
+        assert serving_counts["public.mv_geocode_text_search"] > 1_000_000
+        assert serving_counts["public.region_radius_parts"] > 0
+        assert postload["smoke"]["geocode"]["status"] == "OK"
+        assert postload["smoke"]["reverse"]["status"] == "OK"
+        assert ops_snapshot["state"] == "released"
+        assert ops_release["state"] == "active"
+        assert ops_release["dataset_snapshot_id"] == ops_snapshot["dataset_snapshot_id"]
+        assert result["database_size"]["bytes"] > 0
+        assert result["source_month_summary"]["public.tl_juso_text"]["row_count"] > 1_000_000
     except T177SkipError as exc:
         pytest.skip(str(exc))
     except T177PreflightError as exc:
