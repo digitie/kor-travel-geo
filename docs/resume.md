@@ -4,6 +4,11 @@
 
 ## 현재 진척도 (2026-06-18 갱신, by codex)
 
+- ✅ T-192 JobQueue drain nudge/exception logging — T-183 live UI e2e에서
+  `rebuild-db` POST 200 뒤 `source_rebuild_db` control job이 `queued`에 머물고
+  `log_tail=[]`로 worker progress가 없는 문제를 #374로 분리했다. `JobQueue`는 enqueue 뒤
+  즉시 drain과 짧은 지연 nudge를 함께 걸며, advisory lock busy를 backoff 후 재시도하고
+  drain task 예외를 로그로 회수한다. PR 머지 뒤 T-183 live UI e2e를 다시 실행한다.
 - ✅ T-191 rebuild-db audit outcome 제약 위반 수정 — T-183 live UI e2e 재시작 중
   `rebuild-db`가 `source_rebuild_db` 제어 job을 enqueue한 직후 `ops.audit_events.outcome`
   제약에 없는 `queued`를 기록하려 해 HTTP 500을 반환했다(#372). 실행 중이던 재현 job은
