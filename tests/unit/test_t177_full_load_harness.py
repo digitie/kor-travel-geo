@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from collections import namedtuple
 from typing import TYPE_CHECKING
 
 import pytest
@@ -9,17 +10,26 @@ import pytest
 from kortravelgeo.core.source_layers import MASTER_LAYER_NAMES, POLYGON_LAYER_NAMES
 from tests.integration._t177_full_load_harness import (
     _T177F_LINK_EVIDENCE_SQL,
+    _T177F_SMOKE_SAMPLE_SQL,
+    BYTES_PER_GIB,
+    DEFAULT_LONGRUN_MIN_FREE_GIB,
     ENV_DATA_ROOT,
     ENV_DSN,
     ENV_ENABLED,
+    ENV_LONGRUN,
+    ENV_LONGRUN_DAILY_PATH,
+    ENV_LONGRUN_MIN_FREE_GB,
+    ENV_LONGRUN_REQUIRE_DAILY,
     ENV_RUN_ID,
     ENV_SAMPLE_LIMIT,
     T177PreflightError,
     T177SkipError,
+    _statement_timeout_setting,
     assert_no_existing_rows_without_confirmation,
     build_discovery_plan,
     expected_confirmation,
     looks_like_t177_scratch_database,
+    require_longrun_from_env,
     required_source_path,
     runtime_from_env,
     sample_limit_from_env,
@@ -27,12 +37,18 @@ from tests.integration._t177_full_load_harness import (
     t177c_text_delta_source_paths,
     t177d_shp_geometry_source,
     t177e_supplemental_source_paths,
+    t177g_daily_source_path,
+    t177g_electronic_map_source,
+    t177g_longrun_min_free_bytes,
     validate_t177_confirmation,
+    validate_t177g_longrun_disk_space,
     write_json_artifact,
 )
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+DiskUsage = namedtuple("DiskUsage", "total used free")
 
 
 def test_runtime_from_env_skips_when_not_opted_in(tmp_path: Path) -> None:
@@ -108,6 +124,78 @@ def test_t177f_link_evidence_query_materializes_locsum_keys() -> None:
     assert "SELECT DISTINCT bd_mgt_sn" in normalized_sql
     assert "JOIN locsum_bd USING (bd_mgt_sn)" in normalized_sql
     assert "WHERE EXISTS" not in normalized_sql
+
+
+def test_t177f_smoke_sample_query_avoids_nationwide_exists_sort() -> None:
+    normalized_sql = " ".join(_T177F_SMOKE_SAMPLE_SQL.split())
+
+    assert "WITH candidate AS MATERIALIZED" in normalized_sql
+    assert "target.pt_source = 'entrance'" in normalized_sql
+    assert "FROM public.tl_locsum_entrc l" in normalized_sql
+    assert "true AS has_locsum_link" in normalized_sql
+    assert "ORDER BY CASE" not in normalized_sql
+    assert "ORDER BY" not in normalized_sql
+
+
+def test_t177_statement_timeout_setting() -> None:
+    assert _statement_timeout_setting(0) == "0"
+    assert _statement_timeout_setting(5000) == "5000ms"
+
+    with pytest.raises(ValueError, match="statement timeout"):
+        _statement_timeout_setting(-1)
+
+
+def test_longrun_gate_from_env() -> None:
+    with pytest.raises(T177SkipError):
+        require_longrun_from_env({})
+    require_longrun_from_env({ENV_LONGRUN: "1"})
+
+
+def test_t177g_longrun_disk_space_preflight(tmp_path: Path) -> None:
+    assert t177g_longrun_min_free_bytes({}) == DEFAULT_LONGRUN_MIN_FREE_GIB * BYTES_PER_GIB
+    assert t177g_longrun_min_free_bytes({ENV_LONGRUN_MIN_FREE_GB: "2"}) == 2 * BYTES_PER_GIB
+
+    report = validate_t177g_longrun_disk_space(
+        tmp_path / "artifacts",
+        environ={ENV_LONGRUN_MIN_FREE_GB: "2"},
+        disk_usage=lambda _: DiskUsage(
+            total=10 * BYTES_PER_GIB,
+            used=7 * BYTES_PER_GIB,
+            free=3 * BYTES_PER_GIB,
+        ),
+    )
+    assert report["required_gib"] == 2
+    assert report["free_gib"] == 3
+
+    with pytest.raises(T177PreflightError, match="requires at least 4 GiB free"):
+        validate_t177g_longrun_disk_space(
+            tmp_path / "artifacts",
+            environ={ENV_LONGRUN_MIN_FREE_GB: "4"},
+            disk_usage=lambda _: DiskUsage(
+                total=10 * BYTES_PER_GIB,
+                used=7 * BYTES_PER_GIB,
+                free=3 * BYTES_PER_GIB,
+            ),
+        )
+
+    with pytest.raises(T177PreflightError, match="positive integer"):
+        t177g_longrun_min_free_bytes({ENV_LONGRUN_MIN_FREE_GB: "0"})
+    with pytest.raises(T177PreflightError, match="positive integer"):
+        t177g_longrun_min_free_bytes({ENV_LONGRUN_MIN_FREE_GB: "many"})
+
+
+def test_t177g_daily_source_path_requires_explicit_path_when_missing(tmp_path: Path) -> None:
+    data_root = tmp_path / "juso"
+    data_root.mkdir()
+    plan = build_discovery_plan(data_root)
+
+    assert t177g_daily_source_path(plan, {}) is None
+    with pytest.raises(T177PreflightError):
+        t177g_daily_source_path(plan, {ENV_LONGRUN_REQUIRE_DAILY: "1"})
+
+    daily_dir = tmp_path / "daily"
+    daily_dir.mkdir()
+    assert t177g_daily_source_path(plan, {ENV_LONGRUN_DAILY_PATH: str(daily_dir)}) == daily_dir
 
 
 def test_discovery_plan_and_artifact_shape(tmp_path: Path) -> None:
@@ -192,6 +280,30 @@ def test_t177d_shp_geometry_source_materializes_zip_source(tmp_path: Path) -> No
     assert shp_source.sig_code == "36000"
     assert shp_source.materialized is True
     assert (shp_source.sido_path / "36000" / "TL_SPBD_BULD.shp").is_file()
+
+
+def test_t177g_electronic_map_source_materializes_all_zip_sources(tmp_path: Path) -> None:
+    data_root = tmp_path / "juso"
+    electronic_root = data_root / "도로명주소 전자지도" / "202604"
+    electronic_root.mkdir(parents=True)
+    sejong_archive = electronic_root / "세종특별자치시.zip"
+    seoul_archive = electronic_root / "서울특별시.zip"
+    _write_electronic_map_zip(sejong_archive, sig_code="36000")
+    _write_electronic_map_zip(seoul_archive, sig_code="11000")
+
+    plan = build_discovery_plan(data_root)
+    source = t177g_electronic_map_source(
+        plan,
+        materialize_dir=tmp_path / "work" / "electronic-map",
+    )
+
+    assert source.electronic_map_root == electronic_root
+    assert source.load_path == tmp_path / "work" / "electronic-map"
+    assert source.materialized is True
+    assert source.sido_count == 2
+    assert set(source.archive_paths) == {sejong_archive, seoul_archive}
+    assert (source.load_path / "세종특별자치시" / "36000" / "TL_SPBD_BULD.shp").is_file()
+    assert (source.load_path / "서울특별시" / "11000" / "TL_SPBD_BULD.shp").is_file()
 
 
 def _seed_minimal_t177_sources(data_root: Path) -> None:

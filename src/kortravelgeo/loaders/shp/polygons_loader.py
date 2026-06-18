@@ -59,6 +59,7 @@ GEOMETRY_REPAIR_SPECS: dict[str, tuple[str, int]] = {
 BUILDING_POLYGON_LAYER_NAME = "TL_SPBD_BULD"
 BUILDING_POLYGON_STAGE_TABLE = "_ktg_stage_spbd_buld_polygon"
 BUILDING_POLYGON_STAGE_LOCK_KEY = "kor_travel_geo:tl_spbd_buld_polygon_stage"
+BUILDING_POLYGON_STAGE_TRANSLATE_ATTEMPTS = 2
 ROAD_INTERVAL_SOURCE_FIELDS = (
     "SIG_CD",
     "RDS_MAN_NO",
@@ -116,6 +117,47 @@ class ShpLoadPlan:
     source_yyyymm: str | None = None
     sql_statement: str | None = None
     geometry_type: str = "PROMOTE_TO_MULTI"
+
+
+def _reset_gdal_error(gdal_module: Any) -> None:
+    reset = getattr(gdal_module, "ErrorReset", None)
+    if callable(reset):
+        reset()
+
+
+def _last_gdal_error(gdal_module: Any) -> str:
+    message_getter = getattr(gdal_module, "GetLastErrorMsg", None)
+    type_getter = getattr(gdal_module, "GetLastErrorType", None)
+    number_getter = getattr(gdal_module, "GetLastErrorNo", None)
+    message = str(message_getter() or "") if callable(message_getter) else ""
+    error_type = type_getter() if callable(type_getter) else None
+    error_number = number_getter() if callable(number_getter) else None
+    details = []
+    if error_type not in (None, 0):
+        details.append(f"type={error_type}")
+    if error_number not in (None, 0):
+        details.append(f"no={error_number}")
+    if message:
+        details.append(f"message={message}")
+    return ", ".join(details)
+
+
+def _vector_translate_failure_message(
+    plan: ShpLoadPlan,
+    gdal_module: Any,
+    *,
+    staging: bool = False,
+    attempts: int = 1,
+) -> str:
+    suffix = " staging" if staging else ""
+    message = (
+        f"GDAL VectorTranslate failed for {plan.source_layer}{suffix}; "
+        f"source_file={plan.source_file}; shp_path={plan.shp_path}; attempts={attempts}"
+    )
+    gdal_error = _last_gdal_error(gdal_module)
+    if gdal_error:
+        message = f"{message}; gdal_error=({gdal_error})"
+    return message
 
 
 def build_shp_load_plan(
@@ -251,6 +293,7 @@ def _load_plans_sync(
             geometryType=plan.geometry_type,
             callback=callback,
         )
+        _reset_gdal_error(gdal)
         with gdal.config_options({"PG_USE_COPY": "YES", "SHAPE_ENCODING": "CP949"}):
             result = gdal.VectorTranslate(
                 destination,
@@ -258,8 +301,7 @@ def _load_plans_sync(
                 options=options,
             )
         if result is None:
-            msg = f"GDAL VectorTranslate failed for {plan.source_layer}"
-            raise LoaderError(msg)
+            raise LoaderError(_vector_translate_failure_message(plan, gdal))
         loaded += 1
     _repair_invalid_geometries(pg_url, _unique_target_tables(plans))
     if analyze:
@@ -373,15 +415,28 @@ def _copy_building_polygon_with_stage(
             geometryType=plan.geometry_type,
             callback=callback,
         )
-        with gdal_module.config_options({"PG_USE_COPY": "YES", "SHAPE_ENCODING": "CP949"}):
-            result = gdal_module.VectorTranslate(
-                _gdal_pg_destination(pg_url),
-                str(plan.shp_path),
-                options=options,
-            )
+        result = None
+        for attempt in range(1, BUILDING_POLYGON_STAGE_TRANSLATE_ATTEMPTS + 1):
+            _reset_gdal_error(gdal_module)
+            with gdal_module.config_options({"PG_USE_COPY": "YES", "SHAPE_ENCODING": "CP949"}):
+                result = gdal_module.VectorTranslate(
+                    _gdal_pg_destination(pg_url),
+                    str(plan.shp_path),
+                    options=options,
+                )
+            if result is not None:
+                break
+            if attempt < BUILDING_POLYGON_STAGE_TRANSLATE_ATTEMPTS:
+                _drop_stage_table(pg_url, BUILDING_POLYGON_STAGE_TABLE)
         if result is None:
-            msg = f"GDAL VectorTranslate failed for {plan.source_layer} staging"
-            raise LoaderError(msg)
+            raise LoaderError(
+                _vector_translate_failure_message(
+                    plan,
+                    gdal_module,
+                    staging=True,
+                    attempts=BUILDING_POLYGON_STAGE_TRANSLATE_ATTEMPTS,
+                )
+            )
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError("shp building polygon loader cancelled")
         _insert_building_polygon_stage(pg_url, plan)

@@ -85,6 +85,9 @@ namespaces = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src", "."]
+markers = [
+  "longrun: opt-in long-running integration/e2e tests",
+]
 
 [tool.mypy]
 python_version = "3.12"
