@@ -21,6 +21,10 @@ const nextConfig = {
     }
   },
   transpilePackages: ["maplibre-vworld-react"],
+  // Next 16은 dev/build 모두 Turbopack을 기본으로 쓰므로 실제 alias 해석은 위
+  // `turbopack.resolveAlias`가 담당한다. 아래 webpack alias는 `--webpack` opt-out
+  // 경로 전용 fallback이며 turbopack 블록과 같은 대상으로 동기 유지해야 한다.
+  // (이 webpack 블록만 남고 turbopack 키가 없으면 Next 16 build가 hard-fail한다.)
   webpack(config) {
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),

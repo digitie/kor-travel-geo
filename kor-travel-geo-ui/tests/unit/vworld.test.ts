@@ -33,6 +33,9 @@ describe("VWorld MapLibre style", () => {
       tileSize: 256,
       type: "raster"
     });
+    const grayBaseSource = style.sources["vworld-base"];
+    const grayTiles = grayBaseSource && "tiles" in grayBaseSource ? (grayBaseSource.tiles ?? []) : [];
+    expect(grayTiles[0] ?? "").toContain("/white/");
     expect(style.layers).toEqual([
       {
         id: "vworld-base-layer",
@@ -54,6 +57,11 @@ describe("VWorld MapLibre style", () => {
     const style = getVWorldStyle("sample-key", "Hybrid");
 
     expect(Object.keys(style.sources)).toEqual(["vworld-satellite", "vworld-base"]);
+    const hybridSatelliteSource = style.sources["vworld-satellite"];
+    expect(hybridSatelliteSource).toMatchObject({ type: "raster", maxzoom: 18 });
+    const satelliteTiles =
+      hybridSatelliteSource && "tiles" in hybridSatelliteSource ? (hybridSatelliteSource.tiles ?? []) : [];
+    expect(satelliteTiles[0] ?? "").toContain("/Satellite/");
     const hybridLabelSource = style.sources["vworld-base"];
     expect(hybridLabelSource).toMatchObject({ type: "raster" });
     const hybridTiles = hybridLabelSource && "tiles" in hybridLabelSource ? (hybridLabelSource.tiles ?? []) : [];

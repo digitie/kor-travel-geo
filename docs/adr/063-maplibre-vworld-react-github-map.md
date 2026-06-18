@@ -33,4 +33,7 @@ ADR-020/028/032는 디버그 UI 지도를 VWorld WMTS + MapLibre GL JS로 고정
 - `kor-travel-geo-ui/package.json`과 lockfile에서 `maplibre-vworld` / `maplibre-vworld-js` 의존성이 제거된다.
 - `maplibre-vworld-react` source package가 쓰는 `vworld-map-core` bare import를 해석하기 위한 alias 설정이 `tsconfig.json`, `vitest.config.ts`, `next.config.mjs`에 생긴다.
 - `getVWorldStyle()`의 source id 계약은 새 core 기준으로 바뀐다. `Base`/`gray`/`midnight`는 `vworld-base` source를 쓰고, `Hybrid`는 `vworld-satellite`와 `vworld-base` source를 함께 쓴다.
+- `lib/vworld.ts`는 package barrel(bare `vworld-map-web` index)이 아니라 `packages/.../src/*` 심층 경로에서 재수출한다. barrel은 `ClusterLayer`/`ServerClusterLayer`를 함께 내보내고 이들이 `use-supercluster`/`supercluster`를 정적 import하는데, 그 의존성은 이 lockfile에서 제거됐으므로 barrel로 단순화하면 빌드가 깨진다. 심층 경로 소비는 이를 회피하기 위한 의도된 제약이다.
+- npm은 이 tarball을 raw monorepo source 단일 패키지로만 풀고 `packages/*/package.json`의 `dependencies`는 설치하지 않는다. 따라서 `lib/vworld.ts`가 재수출하는 심층 경로가 닿는 런타임 의존성(`maplibre-gl`/`react`/`react-dom`/`zod`/`zustand` 등)은 반드시 UI `package.json`에 직접 선언돼 있어야 하며, SHA를 bump할 때 소비 import 그래프를 다시 감사한다.
+- GitHub `/archive/<sha>.tar.gz`는 commit SHA가 불변이어도 GitHub 측 gzip 재생성으로 바이트가 달라질 수 있어, lockfile `integrity`(SRI)와 어긋나면 `npm ci`가 `EINTEGRITY`로 실패할 수 있다. 복구는 lockfile의 해당 `integrity`를 지우고 `npm install`로 재생성한다. 아래 npm release 전환이 이 리스크를 근본 제거한다.
 - 후속으로 `maplibre-vworld-react`가 npm release와 compiled export를 제공하면 tarball/source subpath import와 alias를 줄일 수 있다. 이 전환도 `npm ci`, lint, type-check, unit test, build, Windows Playwright e2e를 통과한 뒤 별도 PR로 처리한다.
