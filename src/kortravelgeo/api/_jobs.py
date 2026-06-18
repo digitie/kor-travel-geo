@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from enum import Enum
 from time import perf_counter
 from typing import Any, Protocol
 
@@ -39,6 +41,16 @@ _CONTROL_KINDS = {
 }
 _CONTROL_KIND_SQL = ", ".join(f"'{kind}'" for kind in sorted(_CONTROL_KINDS))
 _FINAL_STAGES = {"done", "failed", "cancelled"}
+_DRAIN_NUDGE_DELAY_S = 0.25
+_DRAIN_LOCK_RETRY_DELAY_S = 0.25
+logger = logging.getLogger(__name__)
+
+
+type _ClaimRow = tuple[str, str, dict[str, Any]]
+
+
+class _ClaimState(Enum):
+    BUSY = "busy"
 
 
 class JobQueue:
@@ -139,14 +151,35 @@ UPDATE load_jobs
             self._spawn_drain()
 
     def _spawn_drain(self) -> None:
-        task = asyncio.create_task(self._drain_once())
+        self._start_drain_task(delay_s=0.0)
+        self._start_drain_task(delay_s=_DRAIN_NUDGE_DELAY_S)
+
+    def _start_drain_task(self, *, delay_s: float) -> None:
+        task = asyncio.create_task(self._drain_after_delay(delay_s))
         self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        task.add_done_callback(self._on_drain_done)
+
+    async def _drain_after_delay(self, delay_s: float) -> None:
+        if delay_s > 0:
+            await asyncio.sleep(delay_s)
+        await self._drain_once()
+
+    def _on_drain_done(self, task: asyncio.Task[None]) -> None:
+        self._tasks.discard(task)
+        if task.cancelled():
+            return
+        try:
+            task.result()
+        except Exception:
+            logger.exception("load job queue drain task failed")
 
     async def _drain_once(self) -> None:
         async with self._semaphore:
             while True:
                 row = await self._claim_one()
+                if row is _ClaimState.BUSY:
+                    await asyncio.sleep(_DRAIN_LOCK_RETRY_DELAY_S)
+                    continue
                 if row is None:
                     return
                 job_id, kind, payload = row
@@ -188,14 +221,14 @@ UPDATE load_jobs
                         elapsed_s=perf_counter() - job_started_at,
                     )
 
-    async def _claim_one(self) -> tuple[str, str, dict[str, Any]] | None:
+    async def _claim_one(self) -> _ClaimRow | _ClaimState | None:
         async with self.engine.begin() as conn:
             locked = await conn.scalar(
                 text("SELECT pg_try_advisory_xact_lock(:slot)"),
                 {"slot": ADVISORY_SLOT_LOAD_QUEUE},
             )
             if not locked:
-                return None
+                return _ClaimState.BUSY
             row = (
                 await conn.execute(
                     text(

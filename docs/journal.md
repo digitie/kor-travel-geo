@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (T-192 JobQueue drain nudge/exception logging)
+
+**작업**: T-183 live UI e2e 재개 중 `rebuild-db` POST가 200을 반환하고
+`source_rebuild_db` 제어 job을 만들었지만, live API에서 job이 `queued`에 머물고
+`log_tail=[]` 상태로 worker progress가 기록되지 않는 문제를 #374로 분리했다.
+
+**결정**: `JobQueue.enqueue()` 직후 drain task가 방금 commit된 queued row를 놓치거나
+advisory lock이 잠깐 busy인 상태를 queue empty처럼 처리하지 않도록, 즉시 drain과 짧은 지연
+nudge를 함께 등록하고 lock busy는 backoff 후 재시도한다. queue semaphore가 있어 중복 drain은
+직렬화된다. drain task가 실패하면 `logger.exception`으로 회수해 live 로그에서 원인을 볼 수
+있게 했다.
+
+**검증**: WSL ext4 테스트 미러에서 targeted `tests/unit/test_job_queue.py`와
+`tests/unit/test_t189_rebuild_materialize.py` 13건을 먼저 통과했다. 이후
+`python -m pytest -q` 1071건 통과(75 skipped), `ruff check .`,
+`python -m mypy src/kortravelgeo`, `lint-imports` 통과. T-183 live UI e2e는 PR 머지 뒤
+재개한다.
+
 ## 2026-06-18 (T-191 rebuild-db audit outcome 제약 위반 수정)
 
 **작업**: T-183 live UI e2e 재시작 중 `rebuild-db` 버튼이 `source_rebuild_db` 제어 job을
