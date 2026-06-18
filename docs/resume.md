@@ -4,6 +4,10 @@
 
 ## 현재 진척도 (2026-06-18 갱신, by codex)
 
+- ✅ README 입구 문서 정리 — `README.md`의 오래된 진행 목록과 상세 절차 복제를 줄이고,
+  현재 상태는 `docs/resume.md`/`docs/journal.md`, 개발 환경은 `docs/dev-environment.md`와
+  runbook, 아키텍처·외부 API·ADR은 각 정본 문서로 연결했다. Python badge도
+  `pyproject.toml`의 `requires-python >=3.12`와 맞췄다.
 - ✅ T-277 디버그 UI 지도 `maplibre-vworld-react` 전환 완료 — `maplibre-vworld-js`/
   `maplibre-vworld` 의존성을 제거하고 GitHub `digitie/maplibre-vworld-react` tarball SHA
   `a7cb0f8f41ec00b44b1d106664506730b87033bd`를 소비하도록 바꿨다. `lib/vworld.ts`가

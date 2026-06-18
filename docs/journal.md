@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (README 중복 정리)
+
+**작업**: 사용자 요청에 따라 `README.md`를 정리했다. README에 길게 복제되어 있던
+진행 상황 목록, 상세 개발환경 절차, ADR 표, 외부 API 세부 설명, VWorld/MapLibre 세부
+설명을 줄이고, 각각의 정본 문서(`docs/resume.md`, `docs/dev-environment.md`,
+`docs/architecture/*`, `docs/adr/README.md`, `docs/architecture/external-apis.md`)로
+연결했다.
+
+**결정**: README는 새 진입자가 "무엇인지"와 "어디를 읽을지"를 판단하는 입구 문서로
+유지하고, 변경 가능성이 높은 실측 상태와 운영 절차는 세부 문서에만 둔다. Python 지원
+버전 badge도 `pyproject.toml`의 `requires-python >=3.12`와 맞췄다.
+
+**검증**: 문서 전용 변경이라 코드 테스트는 실행하지 않았다. README의 로컬 링크와
+마크다운 구조를 별도로 확인한다.
+
 ## 2026-06-18 (T-184 opt-in live e2e admin role proxy)
 
 **작업**: T-183 UI 기반 적재 e2e의 선행 조건으로, Next.js `/api/proxy`가 live e2e에서만
