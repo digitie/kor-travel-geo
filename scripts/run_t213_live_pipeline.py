@@ -875,6 +875,7 @@ async def run(args: argparse.Namespace) -> int:
             force_promotion=bool(args.force_promotion),
             typed_confirmation=f"REBUILD-PROMOTE {msid}" if args.force_promotion else None,
             reason=args.force_promotion_reason,
+            materialize=False,
         )
         if batch_payload is None:
             raise RuntimeError(f"integrity gate 실패: {response}")

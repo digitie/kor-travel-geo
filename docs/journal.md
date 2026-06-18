@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (T-189 rebuild-db RustFS staging materialize 누락 수정)
+
+**작업**: T-183 live UI full-load e2e 준비 중 Admin UI에서 `rebuild-db`를 실제 enqueue했지만,
+backend가 RustFS registry 객체를 로컬 staging으로 materialize하지 않은 채
+`rebuild_staging/<match-set>/<category>` 상대 경로만 batch payload에 넣어 loader가
+`text source path does not exist`로 실패했다. 이를 #367/T-189로 분리해
+`prepare_source_match_set_rebuild()`가 integrity gate 통과 뒤 RustFS 객체를 다운로드하고
+loader별 입력 형태로 풀어 둔 다음 batch를 enqueue하도록 고쳤다.
+
+**결정**: UI/API의 `rebuild-db` 경로는 기본적으로
+`settings.rustfs_materialize_dir/rebuild_staging/<source_match_set_id>/run_<uuid>` 아래에
+category별 staging을 만든다. 같은 match set 재시도가 이전 loader 입력을 지우지 않도록
+attempt-scoped 경로를 사용한다. 도로명주소 한글 원천은 같은 staging path를 공유하는
+`juso_text_load`와 `juso_parcel_link_load` 두 child로 fan-out하며, FK 순서가 뒤집히지 않도록
+batch child `created_at`에 microsecond offset을 부여한다. 기존 T-213 live pipeline은 자체
+artifact staging을 사용하므로 `materialize=False`로 기존 동작을 유지한다.
+
+**검증/문서**: materializer 단위 테스트는 텍스트 ZIP 추출, 전자지도 시도별 ZIP 추출, ZIP-aware
+loader 입력 보존, generic RustFS object key 충돌 회피, roadname fan-out을 고정한다. Windows와
+WSL ext4 미러에서 T189 타깃 pytest 55건을 통과했고, WSL 전체 backend gate는 pytest
+1072건, ruff, mypy, lint-imports를 통과했다. T-183 live UI e2e는 이 PR 머지 뒤 같은
+DB/RustFS로 재시작한다.
+
 ## 2026-06-18 (T-184 opt-in live e2e admin role proxy)
 
 **작업**: T-183 UI 기반 적재 e2e의 선행 조건으로, Next.js `/api/proxy`가 live e2e에서만

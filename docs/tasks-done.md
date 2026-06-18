@@ -6,6 +6,17 @@
 
 ## 완료
 
+- [x] **T-189** — `rebuild-db` RustFS staging materialize 누락 수정(Agent A/Codex, #367).
+  T-183 live UI e2e가 Admin UI에서 실제 `rebuild-db`를 enqueue하자 backend가
+  RustFS registry 객체를 로컬 staging으로 내려받지 않은 채 `rebuild_staging/...` 상대 경로만
+  batch payload에 넣어 loader가 `text source path does not exist`로 실패했다. rebuild 준비
+  경로가 integrity gate 뒤 RustFS 객체를 다운로드·크기/sha256 검증하고 attempt-scoped staging
+  아래 category별 loader 입력 형태로 materialize한 뒤 batch를 enqueue하도록 고쳤다.
+  `roadname_hangul_full`은 `juso_text_load`와 `juso_parcel_link_load`로 fan-out하고, child
+  `created_at` offset으로 parent 텍스트 적재가 먼저 실행되게 했다. 기존 T-213 script는
+  `materialize=False`로 자체 artifact staging을 유지한다. WSL 전체 backend gate는 pytest
+  1072건, ruff, mypy, lint-imports를 통과했다. (2026-06-18)
+
 - [x] **T-184** — opt-in live e2e admin role proxy(Agent A/Codex, #358).
   Next.js `/api/proxy`가 기본 실행에서는 브라우저의 `X-KTG-*` 헤더를 계속 버리고,
   `KTG_LIVE_E2E_ADMIN_PROXY=1` + `KTG_LIVE_E2E_ADMIN_ACTOR` + 유효

@@ -14,7 +14,7 @@
 ## 진행 중
 
 - **진행 중 작업 없음.** (T-177G/T-188 전국 long-run full-load e2e 완료 — `tasks-done.md`
-  참조. 다음은 T-183/T-184 live UI full-load e2e 후속.)
+  참조. 다음은 T-183 live UI full-load e2e 후속.)
 
 ## 대기
 

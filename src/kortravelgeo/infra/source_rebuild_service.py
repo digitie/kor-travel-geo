@@ -11,7 +11,8 @@ Companion to ``infra/source_match_set_service.py`` (T-205a). This module:
   failing groups to ``quarantined`` and propagates via
   ``recompute_group_aggregates`` (active → ``integrity_alert``, non-active
   ``validated`` → ``invalid``);
-* force-closes stale prior rebuild jobs (heartbeat timeout) and re-inits staging;
+* force-closes stale prior rebuild jobs (heartbeat timeout); the next attempt
+  materializes into a fresh staging directory;
 * records ``ops.dataset_snapshots.source_match_set_id`` (정본 FK) on success;
 * performs the rollback atomic match-set swap.
 
@@ -24,6 +25,11 @@ these methods.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import shutil
+import subprocess
+import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -64,13 +70,13 @@ from kortravelgeo.infra.source_group_service import recompute_group_aggregates
 #: Only the build categories that the legacy ``full_load_batch`` DAG handles are
 #: bridged; optional validation/enrichment categories are loaded by
 #: ``run-validation`` (T-205b run-validation is out of this slice's scope).
-_CATEGORY_TO_LOAD_KIND: dict[str, str] = {
-    "roadname_hangul_full": "juso_text_load",
-    "locsum_full": "locsum_load",
-    "navi_full": "navi_load",
-    "electronic_map_full": "shp_polygons_load",
-    "roadaddr_entrance_full": "roadaddr_entrance_load",
-    "zone_shape_full": "sppn_makarea_load",
+_CATEGORY_TO_LOAD_KINDS: dict[str, tuple[str, ...]] = {
+    "roadname_hangul_full": ("juso_text_load", "juso_parcel_link_load"),
+    "locsum_full": ("locsum_load",),
+    "navi_full": ("navi_load",),
+    "electronic_map_full": ("shp_polygons_load",),
+    "roadaddr_entrance_full": ("roadaddr_entrance_load",),
+    "zone_shape_full": ("sppn_makarea_load",),
 }
 
 #: Default heartbeat timeout for stale rebuild-job detection (seconds).
@@ -82,6 +88,21 @@ def _json_text(sql: str, *json_params: str) -> Any:
 
 
 @dataclass(frozen=True)
+class RebuildFileRef:
+    """One registry file object that can be downloaded for rebuild staging."""
+
+    source_file_id: str
+    part_key: str | None
+    part_label: str | None
+    original_filename: str | None
+    object_key: str
+    storage_uri: str | None
+    sha256: str | None
+    size_bytes: int | None
+    compression_format: str | None
+
+
+@dataclass(frozen=True)
 class RebuildGroupRef:
     """One build-category group the rebuild will materialize + load."""
 
@@ -90,10 +111,11 @@ class RebuildGroupRef:
     group_sha256: str | None
     user_yyyymm: str | None
     effective_yyyymm: str | None
-    load_kind: str
+    load_kinds: tuple[str, ...]
     object_keys: tuple[str, ...]
     file_ids: tuple[str, ...]
     storage_uris: tuple[str, ...]
+    files: tuple[RebuildFileRef, ...]
 
 
 @dataclass(frozen=True)
@@ -224,7 +246,7 @@ SELECT job_id, state,
         )
         for job_id in decision.stale_job_ids:
             # Force-close the stale batch root + its children idempotently; the
-            # staging directory is keyed by job_id so re-init is implicit.
+            # next materialization attempt uses a fresh staging directory.
             await conn.execute(
                 text(
                     """
@@ -268,8 +290,8 @@ SELECT it.category, it.source_file_group_id, it.effective_yyyymm, it.omitted,
         refs: list[RebuildGroupRef] = []
         for r in rows:
             category = str(r["category"])
-            load_kind = _CATEGORY_TO_LOAD_KIND.get(category)
-            if load_kind is None:
+            load_kinds = _CATEGORY_TO_LOAD_KINDS.get(category)
+            if load_kinds is None:
                 # Optional validation/enrichment category — not part of the
                 # full_load_batch DAG (handled by run-validation, out of scope).
                 continue
@@ -278,7 +300,8 @@ SELECT it.category, it.source_file_group_id, it.effective_yyyymm, it.omitted,
                 await conn.execute(
                     text(
                         """
-SELECT source_file_id, object_key, storage_uri
+SELECT source_file_id, part_key, part_label, original_filename, object_key,
+       storage_uri, sha256, size_bytes, compression_format
   FROM ops.source_files
  WHERE source_file_group_id = :gid
    AND state NOT IN ('hard_deleted','soft_deleted')
@@ -295,13 +318,40 @@ SELECT source_file_id, object_key, storage_uri
                     group_sha256=r["group_sha256"],
                     user_yyyymm=r["user_yyyymm"],
                     effective_yyyymm=r["effective_yyyymm"],
-                    load_kind=load_kind,
+                    load_kinds=load_kinds,
                     object_keys=tuple(
                         str(f["object_key"]) for f in files if f["object_key"]
                     ),
                     file_ids=tuple(str(f["source_file_id"]) for f in files),
                     storage_uris=tuple(
                         str(f["storage_uri"]) for f in files if f["storage_uri"]
+                    ),
+                    files=tuple(
+                        RebuildFileRef(
+                            source_file_id=str(f["source_file_id"]),
+                            part_key=str(f["part_key"]) if f["part_key"] else None,
+                            part_label=str(f["part_label"]) if f["part_label"] else None,
+                            original_filename=(
+                                str(f["original_filename"])
+                                if f["original_filename"]
+                                else None
+                            ),
+                            object_key=str(f["object_key"]),
+                            storage_uri=(
+                                str(f["storage_uri"]) if f["storage_uri"] else None
+                            ),
+                            sha256=str(f["sha256"]) if f["sha256"] else None,
+                            size_bytes=(
+                                int(f["size_bytes"]) if f["size_bytes"] is not None else None
+                            ),
+                            compression_format=(
+                                str(f["compression_format"])
+                                if f["compression_format"]
+                                else None
+                            ),
+                        )
+                        for f in files
+                        if f["object_key"]
                     ),
                 )
             )
@@ -331,7 +381,8 @@ SELECT source_file_id, object_key, storage_uri
                 "group_sha256": ref.group_sha256,
                 "storage_uris": list(ref.storage_uris),
             }
-            children.append({"kind": ref.load_kind, "payload": child_payload})
+            for load_kind in ref.load_kinds:
+                children.append({"kind": load_kind, "payload": dict(child_payload)})
             source_set[ref.category] = {
                 "source_file_group_id": ref.source_file_group_id,
                 "group_sha256": ref.group_sha256,
@@ -357,6 +408,62 @@ SELECT source_file_id, object_key, storage_uri
     @staticmethod
     def category_staging_dir(staging_root: Path, category: str) -> Path:
         return staging_root / category
+
+    async def materialize_rebuild_plan(
+        self,
+        rustfs: Any,
+        plan: RebuildPlan,
+        staging_root: Path,
+        *,
+        download_concurrency: int = 3,
+        materialize_concurrency: int = 2,
+    ) -> dict[str, Any]:
+        """Download/extract registry objects into loader-readable staging paths.
+
+        The existing load DAG consumes filesystem paths. Source registry rebuilds
+        therefore have to turn RustFS objects back into the exact shape each
+        loader already understands before the batch is enqueued.
+        """
+
+        staging_root = await asyncio.to_thread(
+            lambda: staging_root.expanduser().resolve(strict=False)
+        )
+        if staging_root.exists():
+            await asyncio.to_thread(shutil.rmtree, staging_root)
+        await asyncio.to_thread(staging_root.mkdir, parents=True, exist_ok=True)
+
+        relocated = relocate_rebuild_batch_payload(plan.batch_payload, staging_root)
+        path_by_category = _child_paths_by_category(relocated)
+        download_sem = asyncio.Semaphore(max(1, download_concurrency))
+        materialize_sem = asyncio.Semaphore(max(1, materialize_concurrency))
+
+        async def materialize_group(ref: RebuildGroupRef) -> None:
+            target = path_by_category[ref.category]
+            await _materialize_group(
+                rustfs,
+                ref,
+                target,
+                download_sem=download_sem,
+                materialize_sem=materialize_sem,
+            )
+
+        tasks = [asyncio.create_task(materialize_group(ref)) for ref in plan.groups]
+
+        async def cleanup_failed_materialize() -> None:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await asyncio.to_thread(shutil.rmtree, staging_root, ignore_errors=True)
+
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            await cleanup_failed_materialize()
+            raise
+        except Exception:
+            await cleanup_failed_materialize()
+            raise
+        return relocated
 
     # --- pre-load source-archive integrity gate ----------------------------
 
@@ -676,7 +783,262 @@ def category_load_kind(category: str) -> str | None:
     """Public accessor: the loader job kind for a build category (or ``None``)."""
     if category not in category_by_code:
         return None
-    return _CATEGORY_TO_LOAD_KIND.get(category)
+    load_kinds = _CATEGORY_TO_LOAD_KINDS.get(category)
+    return load_kinds[0] if load_kinds else None
+
+
+def relocate_rebuild_batch_payload(
+    batch_payload: Mapping[str, Any], staging_root: Path
+) -> dict[str, Any]:
+    """Return a copy whose child paths point at ``staging_root``."""
+
+    relocated = dict(batch_payload)
+    relocated["staging_dir"] = str(staging_root)
+    children: list[dict[str, Any]] = []
+    for child in batch_payload.get("children", ()):
+        if not isinstance(child, Mapping):
+            continue
+        payload = child.get("payload")
+        child_payload = dict(payload) if isinstance(payload, Mapping) else {}
+        category = Path(str(child_payload.get("path") or "")).name
+        if category:
+            child_payload["path"] = str(staging_root / category)
+        children.append({"kind": child.get("kind"), "payload": child_payload})
+    relocated["children"] = children
+    return relocated
+
+
+def _child_paths_by_category(batch_payload: Mapping[str, Any]) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
+    for child in batch_payload.get("children", ()):
+        if not isinstance(child, Mapping):
+            continue
+        payload = child.get("payload")
+        if not isinstance(payload, Mapping):
+            continue
+        raw_path = payload.get("path")
+        if not isinstance(raw_path, str) or not raw_path:
+            continue
+        path = Path(raw_path)
+        paths[path.name] = path
+    return paths
+
+
+async def _materialize_group(
+    rustfs: Any,
+    ref: RebuildGroupRef,
+    target: Path,
+    *,
+    download_sem: asyncio.Semaphore,
+    materialize_sem: asyncio.Semaphore,
+) -> None:
+    if not ref.files:
+        raise InvalidInputError(
+            f"rebuild source group has no RustFS objects: {ref.category}"
+        )
+    await asyncio.to_thread(target.mkdir, parents=True, exist_ok=True)
+
+    if ref.category in {"roadaddr_entrance_full", "zone_shape_full"}:
+        await asyncio.gather(
+            *(
+                _download_rebuild_file(
+                    rustfs,
+                    ref,
+                    file,
+                    target / _archive_name(ref, file),
+                    download_sem,
+                )
+                for file in ref.files
+            )
+        )
+        await asyncio.to_thread(_write_materialized_marker, target)
+        return
+
+    download_dir = target.parent / f".{target.name}-downloads"
+    if download_dir.exists():
+        await asyncio.to_thread(shutil.rmtree, download_dir)
+    await asyncio.to_thread(download_dir.mkdir, parents=True, exist_ok=True)
+    downloads = {
+        file: download_dir / _archive_name(ref, file)
+        for file in ref.files
+    }
+    await asyncio.gather(
+        *(
+            _download_rebuild_file(rustfs, ref, file, destination, download_sem)
+            for file, destination in downloads.items()
+        )
+    )
+
+    async with materialize_sem:
+        await asyncio.to_thread(_materialize_downloads, ref, downloads, target)
+    await asyncio.to_thread(shutil.rmtree, download_dir)
+    await asyncio.to_thread(_write_materialized_marker, target)
+
+
+async def _download_rebuild_file(
+    rustfs: Any,
+    ref: RebuildGroupRef,
+    file: RebuildFileRef,
+    destination: Path,
+    sem: asyncio.Semaphore,
+) -> None:
+    async with sem:
+        await rustfs.download_file(file.object_key, destination)
+        await _verify_downloaded_rebuild_file(ref, file, destination)
+
+
+async def _verify_downloaded_rebuild_file(
+    ref: RebuildGroupRef, file: RebuildFileRef, destination: Path
+) -> None:
+    if file.size_bytes is not None:
+        stat = await asyncio.to_thread(destination.stat)
+        if stat.st_size != file.size_bytes:
+            raise InvalidInputError(
+                "rebuild source download size mismatch: "
+                f"{ref.category}/{file.part_key or file.source_file_id} "
+                f"expected={file.size_bytes} actual={stat.st_size}"
+            )
+    if file.sha256:
+        digest = await asyncio.to_thread(_sha256_file, destination)
+        if digest != file.sha256:
+            raise InvalidInputError(
+                "rebuild source download sha256 mismatch: "
+                f"{ref.category}/{file.part_key or file.source_file_id} "
+                f"expected={file.sha256} actual={digest}"
+            )
+
+
+def _materialize_downloads(
+    ref: RebuildGroupRef,
+    downloads: Mapping[RebuildFileRef, Path],
+    target: Path,
+) -> None:
+    if ref.category in {"roadname_hangul_full", "locsum_full"}:
+        _expect_one_file(ref, downloads)
+        _extract_zip_safe(next(iter(downloads.values())), target)
+        return
+    if ref.category == "navi_full":
+        _expect_one_file(ref, downloads)
+        _extract_navi_7z(next(iter(downloads.values())), target)
+        return
+    if ref.category == "electronic_map_full":
+        for file, archive in downloads.items():
+            part_label = file.part_label or file.part_key
+            if not part_label:
+                raise InvalidInputError(
+                    "electronic_map_full rebuild file requires part_label or part_key"
+                )
+            _extract_zip_safe(archive, target / _safe_path_name(part_label))
+        return
+    raise InvalidInputError(f"unsupported rebuild materialize category: {ref.category}")
+
+
+def _expect_one_file(
+    ref: RebuildGroupRef, downloads: Mapping[RebuildFileRef, Path]
+) -> None:
+    if len(downloads) != 1:
+        raise InvalidInputError(
+            f"{ref.category} rebuild staging expects one archive, got {len(downloads)}"
+        )
+
+
+def _archive_name(ref: RebuildGroupRef, file: RebuildFileRef) -> str:
+    suffix = _archive_suffix(ref, file)
+    candidates = (
+        file.original_filename,
+        Path(file.object_key).name,
+        file.part_key,
+        file.source_file_id,
+    )
+    for candidate in candidates:
+        if not candidate:
+            continue
+        name = _safe_path_name(candidate)
+        candidate_suffix = Path(name).suffix.lower()
+        if candidate_suffix:
+            if name in {"archive.zip", "archive.7z"} and file.part_key not in {
+                None,
+                "archive",
+            }:
+                continue
+            return name
+        if name != "archive" or file.part_key in {None, "archive"}:
+            return f"{name}{suffix}"
+    return f"{file.source_file_id}{suffix}"
+
+
+def _archive_suffix(ref: RebuildGroupRef, file: RebuildFileRef) -> str:
+    if ref.category == "navi_full":
+        return ".7z"
+    for value in (file.original_filename, file.object_key, file.storage_uri):
+        if not value:
+            continue
+        suffix = Path(value).suffix.lower()
+        if suffix in {".zip", ".7z"}:
+            return suffix
+    compression = (file.compression_format or "").lower().lstrip(".")
+    if compression in {"zip", "7z"}:
+        return f".{compression}"
+    return ".zip"
+
+
+def _safe_path_name(value: str) -> str:
+    name = Path(value).name
+    if name in {"", ".", ".."}:
+        raise InvalidInputError(f"invalid rebuild staging file name: {value}")
+    return name
+
+
+def _extract_zip_safe(archive: Path, target: Path) -> None:
+    target.mkdir(parents=True, exist_ok=True)
+    root = target.resolve()
+    with zipfile.ZipFile(archive) as zip_file:
+        for member in zip_file.infolist():
+            member_target = (target / member.filename).resolve()
+            if member_target != root and root not in member_target.parents:
+                raise InvalidInputError(
+                    f"rebuild source ZIP contains unsafe member: {member.filename}"
+                )
+        zip_file.extractall(target)
+
+
+def _extract_navi_7z(archive: Path, target: Path) -> None:
+    seven_zip = shutil.which("7z") or shutil.which("7zz") or shutil.which("7za")
+    if seven_zip is None:
+        raise InvalidInputError("7z/7zz/7za command not found; navi .7z를 풀 수 없습니다")
+    target.mkdir(parents=True, exist_ok=True)
+    completed = subprocess.run(
+        [
+            seven_zip,
+            "x",
+            "-y",
+            f"-o{target}",
+            str(archive),
+            "match_build_*.txt",
+            "match_rs_entrc.txt",
+            "match_jibun_*.txt",
+        ],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if completed.returncode != 0:
+        excerpt = completed.stdout[-1000:] if completed.stdout else ""
+        raise InvalidInputError(f"failed to materialize navi .7z archive: {excerpt}")
+
+
+def _write_materialized_marker(target: Path) -> None:
+    marker = target / ".ktg-materialized-ok"
+    marker.write_text(datetime.now(UTC).isoformat() + "\n", encoding="utf-8")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _coerce_source_match_set_id(payload: Mapping[str, Any]) -> str | None:

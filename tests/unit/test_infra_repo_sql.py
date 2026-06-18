@@ -352,6 +352,18 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     assert "kind NOT IN" in queue_source
 
 
+def test_insert_load_batch_preserves_child_queue_order() -> None:
+    source = inspect.getsource(admin_repo.AdminRepository.insert_load_batch)
+
+    assert "enumerate(children)" in source
+    assert "payload_summary, created_at" in source
+    assert (
+        "clock_timestamp() + (CAST(:child_order AS integer) * interval '1 microsecond')"
+        in source
+    )
+    assert '"child_order": index' in source
+
+
 @pytest.mark.asyncio
 async def test_batch_consistency_error_reaches_promotion_gate(
     monkeypatch: pytest.MonkeyPatch,
