@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (T-277 `maplibre-vworld-react` 지도 전환)
+
+**작업**: 사용자 지시에 따라 디버그 UI 지도를 GitHub `digitie/maplibre-vworld-react` 기반으로
+전환했다. npm registry에는 공개 package가 없어 GitHub tarball
+`a7cb0f8f41ec00b44b1d106664506730b87033bd`를 고정했고, 기존
+`maplibre-vworld-js`/`maplibre-vworld` dependency는 제거했다. `kor-travel-geo-ui/lib/vworld.ts`는
+`packages/vworld-map-web/src/*` source의 `VWorldMapView`, `Marker`, map hook, VWorld helper를
+재수출하고, `CoordinateMap`은 click callback, key 미설정 preview, tile error overlay 임계치,
+API 응답 geometry overlay만 계속 domain wrapper로 담당한다.
+
+**결정**: `maplibre-vworld-react` root tarball은 monorepo source를 포함하고
+`vworld-map-web`이 bare import `vworld-map-core`를 사용하므로, TypeScript/Vitest/Next webpack뿐
+아니라 Next.js 16 Turbopack `resolveAlias`도 함께 둔다. 전역 CSS는 package CSS가 아니라
+`maplibre-gl/dist/maplibre-gl.css`를 import한다. 새 core style source id는 `vworld-base`와
+`vworld-satellite` 기준으로 테스트를 갱신했다. 의존성 선택은 ADR-063에 기록하고,
+ADR-020/028/032는 최신 의존성 선택만 ADR-063으로 넘긴다.
+
+**검증**: WSL ext4 테스트 미러에서 `npm ci`, `npm run lint`, `npm run type-check`,
+`npm run test`(27 files / 118 tests), `npm run build`, `npx react-doctor@latest . --offline --verbose --json`을
+실행했다. React Doctor는 exit 0이지만 기존 source-files/VirtualTable 계열 경고 29건이 남아 있어
+이번 변경 범위에서는 수정하지 않았다. Windows Playwright는 WSL production `next start` 서버에 붙여
+`tests/e2e/vworld-map.spec.ts`를 `chromium`과 `firefox` project에서 각각 2/2 통과시켰다.
+
 ## 2026-06-17 (T-181 전국 long-run 링크 증거 집계 timeout 해소)
 
 **작업**: T-177G 전국 long-run full-load e2e 중 실제 전국 원천 적재와 serving MV swap까지

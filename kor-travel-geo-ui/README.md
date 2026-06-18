@@ -14,7 +14,7 @@ npm run dev -- --port 12505
 
 VWorld 키가 없으면 지도 대신 같은 크기의 좌표 프리뷰 UI를 보여 준다. MapLibre를 대체하는 별도 fallback 지도는 두지 않는다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다. 실행 중에는 `/api/runtime-config`가 Python API `.env`의 `KTG_VWORLD_API_KEY`를 우선 읽어 브라우저에 전달한다. 이 값이 없으면 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. `/admin/settings`에서 VWorld 인증키를 입력하면 브라우저 localStorage override로 저장되고, 기본값 버튼을 누르면 `.env` 기본값으로 되돌아간다.
 
-지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld` package는 현재 확인 SHA인 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정한다. 2026-05-31 기준 upstream `main`은 package version `0.1.2` 위의 문서 보강 commit까지 포함하며, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. `CoordinateMap`은 upstream `VWorldMap`, `Marker`, `useMap`, `useMapLoaded`, `redactVWorldUrl()`를 직접 소비하고, key 미설정 안내와 tile error overlay 임계치 같은 프로젝트 특화 UX만 감싼다.
+지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld-react` package는 현재 확인 SHA인 `a7cb0f8f41ec00b44b1d106664506730b87033bd`의 GitHub tarball로 고정한다. 2026-06-18 기준 npm registry에는 공개 package가 없어 HTTPS tarball URL을 유지한다. `CoordinateMap`은 upstream `VWorldMapView`, `Marker`, `useMap`, `useMapLoaded`, `redactVWorldUrl()`를 직접 소비하고, key 미설정 안내와 tile error overlay 임계치 같은 프로젝트 특화 UX만 감싼다. root tarball이 monorepo source를 포함하므로 TypeScript, Vitest, Next.js webpack, Next.js 16 Turbopack alias를 함께 유지한다.
 
 ## 검증
 

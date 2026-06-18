@@ -6,6 +6,16 @@
 
 ## 완료
 
+- [x] **T-277** — 디버그 UI 지도 `maplibre-vworld-react` 전환(Agent A/Codex).
+  사용자 지시에 따라 `maplibre-vworld-js`/`maplibre-vworld` 의존성을 제거하고 GitHub
+  `digitie/maplibre-vworld-react` tarball SHA
+  `a7cb0f8f41ec00b44b1d106664506730b87033bd`를 소비하도록 바꿨다. `CoordinateMap`은
+  upstream `VWorldMapView`/`Marker`/hook을 감싸는 domain wrapper로 유지하고, Next.js 16
+  Turbopack/webpack, Vitest, TypeScript alias를 추가해 monorepo source package의
+  `vworld-map-core`/`vworld-map-web` import를 해석한다. WSL ext4 미러에서 frontend
+  lint/type-check/unit/build/React Doctor를 실행하고, Windows Playwright chromium/firefox로
+  `vworld-map.spec.ts` 2건씩 통과를 확인했다. (2026-06-18)
+
 - [x] **T-181** — 전국 long-run 후처리 링크 증거 집계 timeout 해소(Agent A/Codex, #353).
   T-177G 전국 long-run full-load e2e에서 실제 원천 적재와 `refresh_mv(strategy="swap")`까지
   완료된 뒤, `collect_t177f_link_evidence()`의 `EXISTS` 기반 전체 count가 전국 규모

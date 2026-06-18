@@ -1,8 +1,10 @@
 # ADR-020: 디버그 UI 지도는 VWorld WMTS + MapLibre를 사용하고 wrapper도 적극 보강한다
 
-- 상태: accepted, amended by ADR-028 and ADR-032
+- 상태: accepted, amended by ADR-028, ADR-032, ADR-063
 - 날짜: 2026-05-25
 - 결정자: 사용자 요청, codex 구현
+
+> 최신 의존성 선택은 ADR-063을 우선한다. 이 ADR의 VWorld WMTS + MapLibre GL JS 방향과 domain wrapper 원칙은 유지하지만, `kor-travel-geo-ui`가 소비하는 패키지는 `maplibre-vworld-js`가 아니라 GitHub `digitie/maplibre-vworld-react` tarball로 바뀌었다.
 
 ## 컨텍스트
 

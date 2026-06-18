@@ -55,23 +55,23 @@ async with httpx.AsyncClient(timeout=5.0) as cx:
 - **타일 URL 규칙**: `https://api.vworld.kr/req/wmts/1.0.0/{key}/{layer}/{z}/{y}/{x}.{ext}`. `Base`/`gray`/`midnight`/`Hybrid`는 `png`, `Satellite`는 `jpeg`. UI option 이름 `gray`는 VWorld WMTS 요청에서는 `white` layer로 변환한다.
 - **zoom 한계**: `Base`/`gray`/`midnight`는 z19까지, `Hybrid`/`Satellite`는 z18까지만 요청한다. 상한을 넘긴 tile 404는 운영 장애로 보지 않고 MapLibre 컴포넌트에서 transient error로 다룬다.
 - **attribution**: MapLibre raster source의 attribution은 `공간정보 오픈플랫폼 브이월드`로 표기한다. 운영자는 VWorld 최신 이용약관에서 요구 표기가 바뀌었는지 배포 전 확인한다.
-- **소스 코드 위치**: `kor-travel-geo-ui/lib/vworld.ts`는 `maplibre-vworld` helper를 재수출하고, `components/vworld/LazyCoordinateMap.tsx`가 Next.js dynamic import, `components/vworld/CoordinateMap.tsx`가 click/marker/key-missing 안내/error 처리를 담당한다.
+- **소스 코드 위치**: `kor-travel-geo-ui/lib/vworld.ts`는 `maplibre-vworld-react` web package source를 재수출하고, `components/vworld/LazyCoordinateMap.tsx`가 Next.js dynamic import, `components/vworld/CoordinateMap.tsx`가 click/marker/key-missing 안내/error 처리를 담당한다.
 - **CSP 주의**: 현재 UI는 CSP를 강제하지 않지만, 향후 도입하면 `connect-src`와 `img-src`에 `https://api.vworld.kr`를 반드시 포함한다.
 - **키 제한·회전**: runtime config가 반환한 VWorld 키는 타일 URL path에 노출된다. 도메인/referrer 제한이 WMTS에 실제 적용되는지 VWorld 콘솔과 운영 환경에서 확인하고, 의심 노출 또는 제한 미적용이 확인되면 키를 회수·재발급한다.
 
-### `digitie/maplibre-vworld-js`와의 관계
+### `digitie/maplibre-vworld-react`와의 관계
 
-디버그 UI는 `digitie/maplibre-vworld-js`를 실제 package dependency로 사용한다. dependency를 변경할 때마다 최신 `main` 또는 stable release를 확인하고, 검증된 최신 버전으로 고정한다. 현재 `kor-travel-geo-ui`는 `maplibre-vworld`를 `git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정하고, `zod ^4.4.3`을 직접 의존성으로 둔다. 2026-05-31 기준 upstream `main`의 package version은 `0.1.2`이며 `dist/`, package `exports`, `types`, `style.css`, `VWorldMap`, marker/layer primitive, click/error/camera props, tile error helper가 포함되어 있다. npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. 최신 redaction helper 이름은 `redactVWorldUrl()`이며 redaction 표기는 `***`다. UI 내부도 더 이상 `redactVWorldTileUrl` alias를 쓰지 않고 upstream 이름을 사용한다.
+디버그 UI는 GitHub `digitie/maplibre-vworld-react`를 실제 package dependency로 사용한다. 현재 `kor-travel-geo-ui`는 `maplibre-vworld-react`를 `https://github.com/digitie/maplibre-vworld-react/archive/a7cb0f8f41ec00b44b1d106664506730b87033bd.tar.gz`로 고정한다. 2026-06-18 기준 npm registry에는 아직 공개 package가 없어 GitHub tarball SHA를 유지한다. root tarball은 monorepo source를 포함하고 `packages/vworld-map-web`이 `packages/vworld-map-core`를 bare import하므로 TypeScript, Vitest, Next.js webpack, Next.js 16 Turbopack alias를 함께 유지한다. 최신 redaction helper 이름은 `redactVWorldUrl()`이며 UI 내부도 upstream 이름을 사용한다.
 
-`CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 전환했다. 현재 디버그 UI는 지도 표시 외에 click callback, key 미설정 안내, transient tile error redaction/overlay, marker·camera 갱신, SSR-safe dynamic wrapper를 보장해야 한다. 범용 지도 primitive와 helper는 upstream API로 맞추되, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 안내 문구와 임계치는 `kor-travel-geo-ui` domain wrapper에 남긴다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다.
+`CoordinateMap`은 upstream `VWorldMapView`/`Marker`/hook을 감싸는 domain wrapper로 전환했다. 현재 디버그 UI는 지도 표시 외에 click callback, key 미설정 안내, transient tile error redaction/overlay, marker·camera 갱신, SSR-safe dynamic wrapper를 보장해야 한다. 범용 지도 primitive와 helper는 upstream API로 맞추되, geocode/reverse 입력 연결, API 응답 overlay, 정합성/성능/적재 상태 표시, 이 프로젝트 안내 문구와 임계치는 `kor-travel-geo-ui` domain wrapper에 남긴다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다.
 
 문제 발생 시 원칙:
 
-- `maplibre-vworld-js`의 `exports`, `files`, `dist`, type declaration 누락으로 생기는 build 실패는 별도 upstream task/PR로 분리한다.
-- VWorld layer helper, MapLibre marker/click/cluster, CSS import, React/Next.js 타입 호환성처럼 재사용 가능한 문제는 `kor-travel-geo-ui` 전용 workaround에 묻지 않는다. 단, T-044 0.1.0 재확인 범위에서는 upstream 코드를 직접 수정하지 않고 문서에만 보완점을 남긴다.
+- `maplibre-vworld-react`의 `exports`, source subpath, type declaration, CSS import 누락으로 생기는 build 실패는 별도 upstream task/PR로 분리한다.
+- VWorld layer helper, MapLibre marker/click, CSS import, React/Next.js 타입 호환성처럼 재사용 가능한 문제는 `kor-travel-geo-ui` 전용 workaround에 묻지 않는다.
 - 주소 지오코딩 디버그 화면과 운영 콘솔에만 필요한 상태 연결, overlay, 안내 문구, 임계치는 이 저장소에서 구현한다.
 - `kor-travel-geo-ui`에서 upstream SHA를 바꿀 때는 `npm ci` 직후 `lint`, `type-check`, `test`, `build`를 모두 확인한다.
-- 후속 PR에서는 click callback, marker 제어, tile error hook, key-missing surface, SSR-safe 사용 방식 중 범용화 가능한 부분을 `maplibre-vworld-js`에 맞추고, 프로젝트 특화 부분은 wrapper 경계로 남긴다.
+- 후속 PR에서는 click callback, marker 제어, tile error hook, key-missing surface, SSR-safe 사용 방식 중 범용화 가능한 부분을 `maplibre-vworld-react`에 맞추고, 프로젝트 특화 부분은 wrapper 경계로 남긴다.
 
 ## juso (도로명주소 안내시스템)
 

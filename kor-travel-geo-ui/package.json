@@ -23,7 +23,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",
     "maplibre-gl": "^5.24.0",
-    "maplibre-vworld": "git+https://github.com/digitie/maplibre-vworld-js.git#2f8ef8c59f2ff6d6360a16db038841473ea1dc41",
+    "maplibre-vworld-react": "https://github.com/digitie/maplibre-vworld-react/archive/a7cb0f8f41ec00b44b1d106664506730b87033bd.tar.gz",
     "next": "^16.2.6",
     "radix-ui": "^1.4.3",
     "react": "^18.3.1",

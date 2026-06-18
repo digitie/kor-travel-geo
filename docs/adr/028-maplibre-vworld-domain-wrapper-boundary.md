@@ -1,10 +1,10 @@
 # ADR-028: 디버그 UI 지도 구현은 `maplibre-vworld-js`를 최신으로 소비하고 domain wrapper로 경계화한다
 
-- 상태: accepted, amended by ADR-032
+- 상태: accepted, amended by ADR-032, ADR-063
 - 날짜: 2026-05-26
 - 결정자: 사용자 요청, codex
 
-> 최신 운영 정의는 ADR-032를 우선한다. ADR-028의 초기 표현인 "완전 포팅"은 `kor-travel-geo-ui` 특화 기능까지 upstream으로 옮긴다는 의미가 아니라, 범용 VWorld/MapLibre primitive는 최신 `maplibre-vworld-js`에서 소비하고 이 저장소의 geocode/reverse/admin 특화 UX는 domain wrapper로 경계화한다는 의미로 개정됐다. 2026-05-28 T-044 재확인 범위는 `maplibre-vworld-js` 0.1.0 code/API 기준 문서-only 보강으로 한정하고, upstream 코드는 직접 수정하지 않는다.
+> 최신 의존성 선택은 ADR-063을 우선한다. ADR-028의 초기 표현인 "완전 포팅"은 `kor-travel-geo-ui` 특화 기능까지 upstream으로 옮긴다는 의미가 아니라, 범용 VWorld/MapLibre primitive는 외부 VWorld MapLibre React 패키지에서 소비하고 이 저장소의 geocode/reverse/admin 특화 UX는 domain wrapper로 경계화한다는 의미로 개정됐다. 2026-05-28 T-044 재확인 범위는 `maplibre-vworld-js` 0.1.0 code/API 기준 문서-only 보강으로 한정하고, upstream 코드는 직접 수정하지 않는다.
 
 ## 컨텍스트
 
