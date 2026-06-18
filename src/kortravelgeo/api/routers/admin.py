@@ -1489,7 +1489,7 @@ async def rebuild_source_match_set_db(
         action="source.rebuild_db",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome="queued",
+        outcome="started",
         payload={
             "force_promotion": req.force_promotion,
             "reason": req.reason,
