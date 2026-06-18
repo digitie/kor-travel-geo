@@ -1489,6 +1489,8 @@ async def rebuild_source_match_set_db(
             force_promotion=req.force_promotion,
             typed_confirmation=req.typed_confirmation,
             reason=req.reason,
+            download_concurrency=req.download_concurrency,
+            materialize_concurrency=req.materialize_concurrency,
         )
         if batch_payload is None:
             await client.record_audit_event(

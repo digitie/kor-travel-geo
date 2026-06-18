@@ -110,6 +110,10 @@
 - **(BREAKING)** 자동 탐지 중심 upload-set 표면을 제거했다(충돌#1, T-201). `guess_source_kind()` 자동 source 종류 추정, `/v1/admin/uploads*`·`/v1/admin/load-sources*` admin 엔드포인트, `AsyncAddressClient.discover_load_sources()`/`build_full_load_source_set_plan()`/`submit_full_load_source_set()`/`cleanup_upload_sets()`, `ktgctl load full-set`·`ktgctl uploads cleanup` CLI를 삭제했다. 명시 category 기반 업로드(T-203~)와 `rebuild-db`(T-205)가 대체한다. `UploadSetStatus` DTO와 full-load 로더는 유지한다. UI `/admin/load` 콘솔은 T-209 재구성 전까지 stub이다.
 
 ### Fixed
+- T-189 `rebuild-db`가 RustFS registry 객체를 로컬 staging으로 materialize하지 않아 loader가
+  `rebuild_staging/...` 상대 경로를 찾지 못하던 문제를 수정했다. Integrity gate 뒤 source
+  객체를 다운로드·검증·추출해 attempt-scoped loader 입력 형태로 만들고,
+  `roadname_hangul_full`은 `juso_text_load`와 `juso_parcel_link_load` 순서로 fan-out한다.
 - T-178f Claude Code 리뷰 후속으로 RustFS HEAD 오류와 size 판정을 보정했다. `HEAD 404`만 missing으로 처리하고, 비-404 HEAD 오류와 `content-length` 부재/비정수/음수는 missing 또는 size `0`으로 뭉개지지 않는다. Backup inventory와 manifest reconcile은 비-404 HEAD 오류를 `head_error`로 분리한다.
 - T-178e Claude Code 리뷰 후속으로 `ops.pg_stat_statements_snapshots` retention/prune 정책을 추가했다. 기본 7일보다 오래된 snapshot은 capture transaction 안에서 정리해 운영 스냅샷 테이블이 무한 증가하지 않게 한다.
 - T-178d Claude Code 리뷰 후속으로 `DBAPIError` handler 오류 분류를 보정했다. 연결/운영 장애는 503을 유지하고, `ProgrammingError`/`IntegrityError` 같은 SQL/schema/constraint 오류는 500 `database statement failed`로 반환한다.

@@ -1384,15 +1384,17 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                     },
                 )
             ).mappings().one()
-            for kind, child_payload in children:
+            for index, (kind, child_payload) in enumerate(children):
                 await conn.execute(
                     _json_text(
                         """
 INSERT INTO load_jobs
-  (job_id, kind, payload, state, load_batch_id, parent_job_id, payload_summary)
+  (job_id, kind, payload, state, load_batch_id, parent_job_id,
+   payload_summary, created_at)
 VALUES
   (:job_id, :kind, :payload, 'queued', :load_batch_id, :parent_job_id,
-   :payload_summary)
+   :payload_summary,
+   clock_timestamp() + (CAST(:child_order AS integer) * interval '1 microsecond'))
 """,
                         "payload",
                         "payload_summary",
@@ -1404,6 +1406,7 @@ VALUES
                         "load_batch_id": root_job_id,
                         "parent_job_id": root_job_id,
                         "payload_summary": _summarize_payload(child_payload),
+                        "child_order": index,
                     },
                 )
         return map_load_job(dict(root))
