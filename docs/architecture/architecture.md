@@ -46,16 +46,16 @@ T-056 이후 `core/address/`는 시군구/법정동/도로명관리번호/도로
 | 프레임워크 | Next.js 16 (App Router) + TypeScript strict | RSC, 디렉토리=URL, 서버측 프록시 단순 |
 | UI | Tailwind 기반 자체 primitives | 운영 콘솔에 필요한 작은 컴포넌트부터 소스 코드로 관리 |
 | 폼 | controlled form + Zod helper | 초기 UI는 작은 폼 위주, Zod 스키마는 백엔드 pydantic v2와 미러 |
-| 지도 | MapLibre GL JS + VWorld WMTS + 최신 `maplibre-vworld` helper | vworld 호환 검증 표면과 같은 공급자의 지도 타일 사용, 범용 VWorld/MapLibre 기능은 `digitie/maplibre-vworld-js` 보강 가능 |
+| 지도 | MapLibre GL JS + VWorld WMTS + GitHub `maplibre-vworld-react` | vworld 호환 검증 표면과 같은 공급자의 지도 타일 사용, 범용 VWorld/MapLibre React 기능은 `digitie/maplibre-vworld-react` 보강 가능 |
 | 테이블 | native table 우선, TanStack Table v8 후속 | 초기 관리 화면은 행 수가 작고, 대량 필터·정렬이 필요하면 승격 |
 | 데이터 패칭 | TanStack Query v5 | 폴링·optimistic update |
 | 타입 동기 | openapi-typescript + 수동 Zod mirror | 백엔드 `openapi.json`에서 TypeScript 타입 생성, 폼 스키마는 리뷰 가능한 수동 mirror |
 
 자세한 디렉토리 구조, 컴포넌트 설계, 페이지별 화면은 `docs/architecture/frontend-package.md`를 본다.
 
-VWorld 지도 연동은 `kor-travel-geo-ui` 로컬 코드만의 책임으로 보지 않는다. `maplibre-vworld` package는 항상 최신 `main` 또는 stable release를 확인한 뒤 검증된 SHA로 소비한다. 2026-05-31 현재 `kor-travel-geo-ui`는 `digitie/maplibre-vworld-js` `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`을 사용하며, npm registry에는 아직 `maplibre-vworld` package가 없어 GitHub SHA를 유지한다. MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 별도 upstream task/PR로 분리한다. 반대로 geocode/reverse 디버그 입력, 정합성/성능/적재 overlay, key 미설정 안내처럼 이 프로젝트에만 의미가 있는 기능은 `kor-travel-geo-ui` domain wrapper에서 구현한다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다.
+VWorld 지도 연동은 `kor-travel-geo-ui` 로컬 코드만의 책임으로 보지 않는다. 현재 `kor-travel-geo-ui`는 GitHub `digitie/maplibre-vworld-react` tarball commit `a7cb0f8f41ec00b44b1d106664506730b87033bd`를 사용하며, npm registry에는 아직 공개 package가 없어 HTTPS tarball SHA를 유지한다. MapLibre/VWorld 공통 컴포넌트나 패키징 문제가 발견되면 별도 upstream task/PR로 분리한다. 반대로 geocode/reverse 디버그 입력, 정합성/성능/적재 overlay, key 미설정 안내처럼 이 프로젝트에만 의미가 있는 기능은 `kor-travel-geo-ui` domain wrapper에서 구현한다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않는다.
 
-`kor-travel-geo-ui/components/vworld/CoordinateMap.tsx`는 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper다. click callback, marker 제어, tile error redaction, SSR-safe 사용법 같은 범용 기능은 upstream public API를 소비한다. key 미설정 안내와 layout, API 응답 overlay, 운영 콘솔 상태 연결은 이 저장소에 남긴다.
+`kor-travel-geo-ui/components/vworld/CoordinateMap.tsx`는 upstream `VWorldMapView`/`Marker`/hook을 감싸는 domain wrapper다. click callback, marker 제어, tile error redaction, SSR-safe 사용법 같은 범용 기능은 upstream source package를 소비한다. key 미설정 안내와 layout, API 응답 overlay, 운영 콘솔 상태 연결은 이 저장소에 남긴다.
 
 ## 데이터 흐름 — 지오코딩
 

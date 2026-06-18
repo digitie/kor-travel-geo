@@ -1,6 +1,6 @@
 # ADR — Architecture Decision Records
 
-`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-063.**
+`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-064.**
 
 - ADR은 **프로그램 핵심 구조**(의존 계층·데이터/식별 모델·패키지/서비스 구조·REST 계약·
   운영 모델) 결정만 둔다. 도메인/ETL·taxonomy·알고리즘·process·운영 결정 중 해당 topic
@@ -35,7 +35,7 @@
 | ADR-017 | 전국 풀로드는 batch DAG + 정합성 게이트 통과 후 MV swap | [017-fullload-batch-dag-consistency-gate-mv-swap.md](017-fullload-batch-dag-consistency-gate-mv-swap.md) |
 | ADR-018 | PostGIS 보조 extension은 `x_extension` 스키마에 격리한다 | [018-extensions-in-x-extension-schema.md](018-extensions-in-x-extension-schema.md) |
 | ADR-019 | 프론트엔드 런타임은 Next.js 16을 보안 하한선으로 둔다 | [019-nextjs-16-security-floor.md](019-nextjs-16-security-floor.md) |
-| ADR-020 | 디버그 UI 지도는 VWorld WMTS + MapLibre를 사용한다 | [020-vworld-wmts-maplibre-debug-map.md](020-vworld-wmts-maplibre-debug-map.md) (amended by ADR-028, ADR-032) |
+| ADR-020 | 디버그 UI 지도는 VWorld WMTS + MapLibre를 사용한다 | [020-vworld-wmts-maplibre-debug-map.md](020-vworld-wmts-maplibre-debug-map.md) (amended by ADR-028, ADR-032, ADR-063) |
 | ADR-021 | 도로명주소 일변동 ZIP은 MST만 즉시 반영하고 LNBR은 manifest 기록 | [021-daily-juso-zip-mst-only-lnbr-manifest.md](021-daily-juso-zip-mst-only-lnbr-manifest.md) |
 | ADR-022 | 보조 지번 원천은 1:N 링크 테이블로 모델링한다 | [022-secondary-jibun-one-to-many-link-table.md](022-secondary-jibun-one-to-many-link-table.md) |
 | ADR-023 | 별도 도형/출입구 자료는 full-load 기본 경로에 즉시 섞지 않는다 | [023-separate-shape-entrance-data-split-candidates.md](023-separate-shape-entrance-data-split-candidates.md) |
@@ -43,11 +43,11 @@
 | ADR-025 | `도로명주소 건물 도형` bundle은 별도 분석 후보로 둔다 | [025-roadaddr-building-shape-bundle-analysis-only.md](025-roadaddr-building-shape-bundle-analysis-only.md) |
 | ADR-026 | 상세주소 동 도형·구역 추가 레이어는 별도 overlay/분석 후보로 둔다 | [026-detail-dong-and-area-layers-overlay-only.md](026-detail-dong-and-area-layers-overlay-only.md) (partially amended by ADR-027) |
 | ADR-027 | `TL_SPPN_MAKAREA`는 국가지점번호 보조 지오코딩 데이터로 별도 적재 | [027-sppn-makarea-national-point-number-aux.md](027-sppn-makarea-national-point-number-aux.md) |
-| ADR-028 | 디버그 UI 지도는 `maplibre-vworld-js` 최신 소비 + domain wrapper 경계화 | [028-maplibre-vworld-domain-wrapper-boundary.md](028-maplibre-vworld-domain-wrapper-boundary.md) (amended by ADR-032) |
+| ADR-028 | 디버그 UI 지도는 `maplibre-vworld-js` 최신 소비 + domain wrapper 경계화 | [028-maplibre-vworld-domain-wrapper-boundary.md](028-maplibre-vworld-domain-wrapper-boundary.md) (amended by ADR-032, ADR-063) |
 | ADR-029 | 원천 기준월은 source set으로 명시하고 혼합 적재는 확인 절차 | [029-source-set-mixed-yyyymm-confirmation.md](029-source-set-mixed-yyyymm-confirmation.md) |
 | ADR-030 | 적재 완료 DB 백업/복원은 병렬 directory dump + 압축 아카이브 | [030-db-backup-restore-directory-dump-tar-zst.md](030-db-backup-restore-directory-dump-tar-zst.md) |
 | ADR-031 | 전국 적재 후 쿼리 성능은 반복 벤치마크로 gate + 보조 view/MV 허용 | [031-post-load-query-benchmark-gate-aux-mv.md](031-post-load-query-benchmark-gate-aux-mv.md) |
-| ADR-032 | `maplibre-vworld-js`는 최신 소비, `kor-travel-geo` 특화 기능은 이 저장소 | [032-maplibre-vworld-latest-consume-domain-here.md](032-maplibre-vworld-latest-consume-domain-here.md) |
+| ADR-032 | `maplibre-vworld-js`는 최신 소비, `kor-travel-geo` 특화 기능은 이 저장소 | [032-maplibre-vworld-latest-consume-domain-here.md](032-maplibre-vworld-latest-consume-domain-here.md) (dependency choice superseded by ADR-063) |
 | ADR-033 | 운영 메타데이터는 `ops` 스키마 감사·스냅샷·릴리스 테이블로 관리 | [033-ops-schema-audit-snapshot-release.md](033-ops-schema-audit-snapshot-release.md) |
 | ADR-034 | AI 에이전트는 고정 Git worktree + CodeGraph 인덱스를 사용한다 | [034-ai-agent-fixed-worktree-codegraph.md](034-ai-agent-fixed-worktree-codegraph.md) (superseded by ADR-041) |
 | ADR-035 | Address 코드 helper를 독립 구현하고 외부 라이브러리 의존을 끊는다 | [035-address-code-helper-independent-impl.md](035-address-code-helper-independent-impl.md) |
@@ -78,6 +78,7 @@
 | ADR-060 | v2 API 컨벤션을 차원별로 명문화, 변경은 additive 우선·breaking 묶음 분리 | [060-v2-api-conventions-dimensions-additive-first.md](060-v2-api-conventions-dimensions-additive-first.md) |
 | ADR-061 | 전역 RequestValidationError 핸들러는 전 경로 구조화 400 envelope로 통일 | [061-global-validation-error-structured-400-envelope.md](061-global-validation-error-structured-400-envelope.md) |
 | ADR-062 | v2 breaking 묶음(enum 정직화·envelope/error 통일·좌표 lon/lat)을 배포 전 일괄 적용 | [062-v2-breaking-bundle-pre-deploy.md](062-v2-breaking-bundle-pre-deploy.md) |
+| ADR-063 | 디버그 UI 지도는 GitHub `maplibre-vworld-react` 패키지를 소비한다 | [063-maplibre-vworld-react-github-map.md](063-maplibre-vworld-react-github-map.md) |
 
 ## ADR 표준 형식
 

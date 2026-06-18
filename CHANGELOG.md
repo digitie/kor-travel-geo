@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- T-277 디버그 UI 지도를 GitHub `digitie/maplibre-vworld-react` 기반으로 전환했다. `maplibre-vworld-js`/`maplibre-vworld` 의존성을 제거하고, tarball SHA `a7cb0f8f41ec00b44b1d106664506730b87033bd`를 소비하며 Next.js 16 Turbopack, webpack, Vitest, TypeScript alias를 추가했다.
 - T-181 전국 long-run 후처리 링크 증거 집계 timeout을 해소했다. T-177G 실제 전국 DB에서 `collect_t177f_link_evidence()`의 `EXISTS` 기반 전체 count가 `statement_timeout`에 걸린 문제를 닫기 위해, 위치정보요약DB `bd_mgt_sn` distinct key를 materialized CTE로 만든 뒤 `mv_geocode_target`과 조인해 같은 링크 증거를 수집한다.
 - T-177F post-load serving/smoke/consistency fast-sample e2e를 추가했다. opt-in 상태에서 실제 텍스트 snapshot, 위치정보요약DB, 전자지도 SHP, 도로명주소 출입구 정보, `TL_SPPN_MAKAREA`를 scratch DB에 적재한 뒤 `resolve_text_geometry_links()`와 `rebuild_mv()`로 serving MV를 구축하고, geocode/reverse/search/zipcode smoke, serving object/index row count, C1~C10 consistency report 생성과 `t177f-postload-serving-smoke.json` artifact를 검증한다. fast-sample C1~C10 severity는 acceptance gate가 아니라 SQL 실행과 sample 산출 smoke로 기록한다.
 - T-177E 선택 보강 원천 fast-sample e2e를 추가했다. opt-in 상태에서 실제 도로명주소 출입구 정보와 `TL_SPPN_MAKAREA` 원천에서 세종 ZIP을 선택해 scratch DB에 적재하고, `load_manifest`, row-level `source_yyyymm`, SRID 5179, geometry validity, SPPN geocode/reverse repository smoke, C10 기준월 혼합 warning과 `t177e-supplemental-fast-sample-load.json` artifact를 검증한다. SPPN discovery는 실제 보존 경로인 `구역의도형`과 기존 문서 경로 `구역의 도형`을 모두 지원한다.

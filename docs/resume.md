@@ -2,8 +2,15 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-17 갱신, by codex)
+## 현재 진척도 (2026-06-18 갱신, by codex)
 
+- ✅ T-277 디버그 UI 지도 `maplibre-vworld-react` 전환 완료 — `maplibre-vworld-js`/
+  `maplibre-vworld` 의존성을 제거하고 GitHub `digitie/maplibre-vworld-react` tarball SHA
+  `a7cb0f8f41ec00b44b1d106664506730b87033bd`를 소비하도록 바꿨다. `lib/vworld.ts`가
+  upstream web source의 `VWorldMapView`/`Marker`/hook/helper를 재수출하고, `CoordinateMap`은
+  프로젝트 특화 click/key-missing/tile-error/geometry overlay만 감싼다. Next.js 16
+  Turbopack/webpack, Vitest, TypeScript alias를 추가했고, WSL frontend lint/type-check/unit/build와
+  Windows Playwright chromium/firefox `vworld-map.spec.ts`를 통과했다.
 - ✅ T-178a~T-178f Claude Code 리뷰 후속 완료 — 2026-06-16 이후 PR 리뷰 스캔에서 미반영으로 보인
   Claude Code 코멘트 6건을 #336/T-178로 분리했다. 첫 항목으로 PR #248 코멘트를 반영해,
   v2 geocode 보조 road 후보 조회 실패가 primary OK 응답을 깨지 않도록 best-effort 처리했다.

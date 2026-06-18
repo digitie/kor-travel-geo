@@ -15,6 +15,7 @@
 > **주요 구현 항목**:
 > - **T-005 ~ T-042**: PostgreSQL + PostGIS 기반의 지오코딩 엔진 및 실데이터 검증
 > - **T-044**: `maplibre-vworld-js` 0.1.0 기준 문서-only 재확인
+> - **T-277**: 디버그 UI 지도를 GitHub `maplibre-vworld-react` package 기반으로 전환
 > - **T-045**: Source set 기준월 선택 및 대용량 업로드/적재 UX 개선
 > - **T-046**: DB 백업/복원 UI 구현 및 대구 지역 부분 DB 실제 backup/restore 검증 완료
 > - **T-047**: 주요 benchmark 수행 및 튜닝
@@ -145,7 +146,7 @@ npm run dev -- --port 12505   # http://localhost:12505
 ```
 
 > [!TIP]
-> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KTG_VWORLD_API_KEY`를 우선 읽어 전달합니다. Docker 실행은 `scripts/docker_app.sh`를 사용하며, 이 스크립트는 API/UI 컨테이너에 `.env`/`.env.local`의 VWorld 키와 DB/RustFS 접속 설정을 주입합니다. PostgreSQL/PostGIS와 RustFS bucket은 이미 동작 중인 외부 인프라로 간주하고 이 프로젝트에서 직접 정지/재시작하지 않습니다. MapLibre 렌더링은 `maplibre-vworld` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KTG_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
+> 운영 콘솔은 `/admin/load` 및 `/debug/geocode`로 바로 진입합니다. 지도 영역은 MapLibre GL JS와 VWorld WMTS를 사용하며, `/api/runtime-config`가 Python API `.env`의 `KTG_VWORLD_API_KEY`를 우선 읽어 전달합니다. Docker 실행은 `scripts/docker_app.sh`를 사용하며, 이 스크립트는 API/UI 컨테이너에 `.env`/`.env.local`의 VWorld 키와 DB/RustFS 접속 설정을 주입합니다. PostgreSQL/PostGIS와 RustFS bucket은 이미 동작 중인 외부 인프라로 간주하고 이 프로젝트에서 직접 정지/재시작하지 않습니다. MapLibre 렌더링은 GitHub `maplibre-vworld-react` package에 위임하고 별도 타일/렌더링 fallback은 두지 않습니다. 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 줍니다. 백엔드 API 요청은 `KTG_API_INTERNAL_URL`을 통해 Next.js Route Handler가 서버 측에서 프록시합니다.
 
 ---
 
@@ -225,7 +226,8 @@ asyncio.run(main())
 | **ADR-029** | 원천 자료 기준월은 source set으로 명시하고 혼합 적재는 확인 절차를 거침 |
 | **ADR-030** | 적재 완료 DB 백업/복원은 병렬 directory dump + 압축 아카이브로 수행 |
 | **ADR-031** | 전국 적재 후 쿼리 성능은 반복 벤치마크로 gate하고 보조 view/MV 도입을 허용 |
-| **ADR-032** | `maplibre-vworld-js`는 최신으로 소비하고 `kor-travel-geo` 특화 기능은 이 저장소에서 구현 |
+| **ADR-032** | VWorld/MapLibre 책임 경계를 정하고 `kor-travel-geo` 특화 기능은 이 저장소에서 구현 |
+| **ADR-063** | 디버그 UI 지도는 GitHub `maplibre-vworld-react` 패키지를 소비 |
 | **ADR-033** | 운영 메타데이터는 `ops` 스키마의 감사·스냅샷·릴리스 테이블로 관리 |
 | **ADR-034** | AI 에이전트별 고정 Git worktree와 CodeGraph 인덱스를 사용 |
 | **ADR-039** | Python 라이브러리는 후보 목록 API만 공개하고 `_v2` 접미사를 제거 |
@@ -259,7 +261,7 @@ asyncio.run(main())
 - 운영자는 도로명주소 안내시스템, 공공데이터포털, vworld의 최신 약관과 API 호출 한도를 직접 확인하고 관리해야 합니다.
 - 본 패키지는 주소 정규화 및 지오코딩을 돕는 '기술적 도구'에 불과하며, 토지·건축물·행정구역 경계의 법적 효력이나 공적 증명을 보장하지 않습니다. 법적 판단이 필요한 업무는 해당 기관의 공식 고시를 기준으로 검증하십시오.
 
-디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kor-travel-geo-ui`는 [`digitie/maplibre-vworld-js`](https://github.com/digitie/maplibre-vworld-js)의 최신 확인 SHA 또는 stable release를 package dependency로 소비합니다. 2026-05-31 현재 npm registry에는 `maplibre-vworld` package가 없어 GitHub `main` commit `2f8ef8c59f2ff6d6360a16db038841473ea1dc41`로 고정합니다. `CoordinateMap`은 upstream `VWorldMap`/`Marker`/hook을 감싸는 domain wrapper로 두고, VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 upstream에서 소비합니다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않습니다. 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI 전용 UX처럼 이 저장소 특화 기능은 `kor-travel-geo-ui`에 남깁니다.
+디버그 UI 지도는 MapLibre GL JS + VWorld WMTS를 사용합니다. `kor-travel-geo-ui`는 [`digitie/maplibre-vworld-react`](https://github.com/digitie/maplibre-vworld-react) GitHub tarball을 package dependency로 소비합니다. 2026-06-18 현재 npm registry에는 공개 package가 없어 commit `a7cb0f8f41ec00b44b1d106664506730b87033bd` tarball로 고정합니다. `CoordinateMap`은 upstream `VWorldMapView`/`Marker`/hook을 감싸는 domain wrapper로 두고, VWorld layer/style, marker primitive, tile error redaction, 패키징 문제처럼 범용 기능은 upstream에서 소비합니다. MapLibre를 대체하는 별도 지도 fallback 구현은 두지 않습니다. 지오코딩/역지오코딩 디버그 입력 연결, 정합성·성능·적재 overlay, 관리 UI 전용 UX처럼 이 저장소 특화 기능은 `kor-travel-geo-ui`에 남깁니다.
 
 ---
 

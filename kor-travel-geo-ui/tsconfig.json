@@ -26,6 +26,18 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "vworld-map-core": [
+        "./node_modules/maplibre-vworld-react/packages/vworld-map-core/src"
+      ],
+      "vworld-map-core/*": [
+        "./node_modules/maplibre-vworld-react/packages/vworld-map-core/src/*"
+      ],
+      "vworld-map-web": [
+        "./node_modules/maplibre-vworld-react/packages/vworld-map-web/src"
+      ],
+      "vworld-map-web/*": [
+        "./node_modules/maplibre-vworld-react/packages/vworld-map-web/src/*"
       ]
     }
   },

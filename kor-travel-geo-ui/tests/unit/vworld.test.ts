@@ -27,7 +27,7 @@ describe("VWorld MapLibre style", () => {
   it("MapLibre raster style은 VWorld 타일 source와 layer를 연결한다", () => {
     const style = getVWorldStyle("sample-key", "gray");
 
-    expect(style.sources["vworld-gray"]).toMatchObject({
+    expect(style.sources["vworld-base"]).toMatchObject({
       attribution: "공간정보 오픈플랫폼 브이월드",
       maxzoom: 19,
       tileSize: 256,
@@ -35,9 +35,8 @@ describe("VWorld MapLibre style", () => {
     });
     expect(style.layers).toEqual([
       {
-        id: "vworld-gray-layer",
-        minzoom: 0,
-        source: "vworld-gray",
+        id: "vworld-base-layer",
+        source: "vworld-base",
         type: "raster"
       }
     ]);
@@ -46,7 +45,7 @@ describe("VWorld MapLibre style", () => {
   it("항공사진 계열은 VWorld z18 한계에 맞춘다", () => {
     expect(getVWorldMaxZoom("Base")).toBe(19);
     expect(getVWorldMaxZoom("Satellite")).toBe(18);
-    expect(getVWorldStyle("sample-key", "Hybrid").sources["vworld-Hybrid"]).toMatchObject({
+    expect(getVWorldStyle("sample-key", "Hybrid").sources["vworld-base"]).toMatchObject({
       maxzoom: 18
     });
   });
@@ -54,19 +53,21 @@ describe("VWorld MapLibre style", () => {
   it("Hybrid 레이어는 Satellite 배경 위에 Hybrid 오버레이를 쌓는다", () => {
     const style = getVWorldStyle("sample-key", "Hybrid");
 
-    expect(Object.keys(style.sources)).toEqual(["vworld-satellite", "vworld-Hybrid"]);
+    expect(Object.keys(style.sources)).toEqual(["vworld-satellite", "vworld-base"]);
+    const hybridLabelSource = style.sources["vworld-base"];
+    expect(hybridLabelSource).toMatchObject({ type: "raster" });
+    const hybridTiles = hybridLabelSource && "tiles" in hybridLabelSource ? (hybridLabelSource.tiles ?? []) : [];
+    expect(hybridTiles[0] ?? "").toContain("/Hybrid/");
     expect(style.layers).toEqual([
       {
         id: "vworld-satellite-layer",
         source: "vworld-satellite",
-        type: "raster",
-        minzoom: 0
+        type: "raster"
       },
       {
-        id: "vworld-Hybrid-layer",
-        source: "vworld-Hybrid",
-        type: "raster",
-        minzoom: 0
+        id: "vworld-base-layer",
+        source: "vworld-base",
+        type: "raster"
       }
     ]);
   });

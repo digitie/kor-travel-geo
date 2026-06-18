@@ -1,10 +1,12 @@
 # ADR-032: `maplibre-vworld-js`는 최신으로 소비하고 `kor-travel-geo` 특화 기능은 이 저장소에 둔다
 
-- 상태: accepted
+- 상태: accepted, dependency choice superseded by ADR-063
 - 날짜: 2026-05-27
 - 결정자: 사용자 요청, codex
 
 ## 컨텍스트
+
+> 최신 의존성 선택은 ADR-063을 우선한다. 이 ADR의 책임 경계 원칙은 유지하지만, `kor-travel-geo-ui`가 소비하는 패키지는 `maplibre-vworld-js`가 아니라 GitHub `digitie/maplibre-vworld-react` tarball로 바뀌었다.
 
 ADR-020과 ADR-028은 VWorld WMTS + MapLibre GL JS 전환 과정에서 `digitie/maplibre-vworld-js`를 적극 보강 대상으로 두었다. 이 방향은 유지한다. 다만 "완전 포팅"이라는 표현은 `kor-travel-geo-ui`의 지오코딩/역지오코딩 디버그 UX, 정합성 sample overlay, 적재/성능 분석 화면처럼 이 프로젝트에만 의미가 있는 기능까지 upstream package로 옮기는 것으로 오해될 수 있다.
 
