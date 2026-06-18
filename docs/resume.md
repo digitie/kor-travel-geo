@@ -96,6 +96,12 @@
   `artifacts/t177/t177g-codex-20260618T043300Z-fresh-t188/t177g-nationwide-longrun-full-load.json`,
   DB size는 35GB, `mv_geocode_target`/`mv_geocode_text_search`는 각각 6,419,795행이다.
   같은 새 DB로 API/UI를 띄워 Windows Playwright live e2e `tests/e2e/live` 20/20도 통과했다.
+- ✅ T-184 opt-in live e2e admin role proxy 완료 — Next.js `/api/proxy`가
+  `KTG_LIVE_E2E_ADMIN_PROXY=1`과 유효한 actor/role env를 받을 때만 backend RBAC용
+  `X-KTG-Actor`/`X-KTG-Roles`를 주입한다. 기본 실행에서는 주입하지 않고 브라우저가 보낸
+  `X-KTG-*` 헤더도 계속 버린다. fresh T-177G DB에 붙인 live API/UI에서 source category와
+  match-set read가 200을 반환했고, Windows Playwright `tests/e2e/live/admin-readonly.spec.ts`
+  7/7을 통과했다.
 - ✅ T-119/T-139 종료 판정 완료 — `T-119`는 T-137 최종 gate와 T-153 acceptance 근거로 C11 active serving promotion을 no-go 종료했다. C11은 validation-only로 고정하며, 새 같은 기준월 C11 원천 또는 동등한 새 증거가 있으면 기존 task 재개가 아니라 신규 task/ADR과 사용자 명시 승인으로만 다룬다. `T-139`는 T-153 기준 구조적 성능 blocker가 없어 별도 변경 DB 실험을 no-action 종료했다.
 - ✅ Timescale PostgreSQL 계열 Codex skill 변환 완료 — `timescale/pg-aiguide`의 Claude Code용 skill 8종을 Codex repo-scoped skill로 변환해 `.agents/skills/`에 추가했다. Codex frontmatter는 `name`/`description`만 유지하고 원본 Apache-2.0/source/compatibility 표기는 본문에 보존했다. `quick_validate.py` 검증과 YAML frontmatter 파싱 검증을 통과했다. 같은 `.codex/agents` 6종과 `.agents/skills` 8종을 `F:\dev` 바로 아래 다른 Git repo 78개에도 복사·stage했고, 모든 대상에서 agent 6개와 skill 8개가 확인됐다. 대상 repo에서 해당 경로는 ignore되지 않아 `.gitignore` 추가 수정은 없었다.
 - ✅ Codex 프로젝트 subagent 정의 등록 완료 — VoltAgent core-development subagent 6종을 `.codex/agents/`에 추가해 Git 추적 대상 구성으로 옮겼고, 전역 `C:\Users\digit\.codex\agents` 복사본도 같은 값으로 맞췄다. 모든 subagent는 `model="gpt-5.5"`, `model_reasoning_effort="xhigh"`를 사용한다. TOML 파싱과 필수 필드 검증을 통과했다.
@@ -337,8 +343,9 @@
 SHP/PostGIS geometry e2e 구현, `T-177E` 선택 보강 원천 e2e 구현,
 `T-177F` post-load serving/smoke/consistency fast-sample e2e 구현도 완료됐다.
 `T-177G` 전국 long-run full-load e2e와 T-188 smoke sample timeout 후속도 완료됐다.
-다음 한 작업은 현재 T-177G/T-188 branch를 PR/머지한 뒤, `T-183` UI 기반 full-load 적재 e2e와
-`T-184` opt-in live e2e admin role proxy로 넘어가는 것이다.
+다음 한 작업은 `T-183` UI 기반 full-load 적재 e2e다. T-184 admin role proxy는 완료됐으므로,
+Admin UI의 source match set/rebuild-db 흐름을 live opt-in으로 시작하고 job 완료 및 post-load
+serving 확인까지 닫는다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

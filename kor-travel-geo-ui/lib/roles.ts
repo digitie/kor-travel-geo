@@ -6,7 +6,16 @@
  * shown proactively next to high-risk actions so an operator knows the role they need
  * before attempting (and before hitting a 403).
  */
-const ADMIN_ROLE_LABELS: Record<string, string> = {
+export const KNOWN_ADMIN_ROLES = [
+  "source_file_viewer",
+  "source_file_manager",
+  "rebuild_operator",
+  "destructive_admin"
+] as const;
+
+export type AdminRole = (typeof KNOWN_ADMIN_ROLES)[number];
+
+const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
   source_file_viewer: "원천 파일 조회",
   source_file_manager: "원천 파일 관리",
   rebuild_operator: "DB 재구성 운영",
@@ -14,7 +23,7 @@ const ADMIN_ROLE_LABELS: Record<string, string> = {
 };
 
 export function roleLabel(role: string): string {
-  const label = ADMIN_ROLE_LABELS[role];
+  const label = (ADMIN_ROLE_LABELS as Record<string, string>)[role];
   return label ? `${role} (${label})` : role;
 }
 
