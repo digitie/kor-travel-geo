@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (T-191 rebuild-db audit outcome 제약 위반 수정)
+
+**작업**: T-183 live UI e2e 재시작 중 `rebuild-db` 버튼이 `source_rebuild_db` 제어 job을
+enqueue한 뒤 HTTP 500(`database statement failed`)을 반환했다. 원인은 enqueue 직후
+`ops.audit_events.outcome`에 `queued`를 기록했지만, 실제 CHECK 제약과 DTO 계약은
+`started`/`succeeded`/`failed`/`cancelled`/`denied`만 허용하는 불일치였다. 실행 중이던
+실패 재현 job은 `/v1/admin/jobs/{job_id}/cancel`로 취소했다.
+
+**결정**: HTTP 요청은 `source_rebuild_db` 제어 job을 시작시키는 lifecycle 이벤트이므로
+새 outcome을 추가하지 않고 기존 허용값인 `started`를 기록한다. route unit test도 이 값을
+계약으로 고정한다.
+
+**검증**: WSL ext4 테스트 미러에서 targeted
+`tests/unit/test_t189_rebuild_materialize.py` 10건, `python -m pytest -q` 1068건 통과(75 skipped),
+`ruff check .`, `python -m mypy src/kortravelgeo`, `lint-imports` 통과. T-183 live UI e2e는
+PR 머지 뒤 재개한다.
+
 ## 2026-06-18 (T-190 rebuild-db 요청 timeout 해소)
 
 **작업**: Admin UI live T183 `rebuild-db` 요청이 Next.js proxy 5분 timeout

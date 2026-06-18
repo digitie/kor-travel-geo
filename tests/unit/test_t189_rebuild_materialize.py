@@ -421,7 +421,7 @@ async def test_rebuild_route_enqueues_control_job_without_materializing() -> Non
     )
     assert queue.enqueue_batch_called is False
     assert client.audit is not None
-    assert client.audit["outcome"] == "queued"
+    assert client.audit["outcome"] == "started"
     assert client.audit["job_id"] == "job-control"
 
 

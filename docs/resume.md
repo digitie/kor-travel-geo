@@ -4,6 +4,11 @@
 
 ## 현재 진척도 (2026-06-18 갱신, by codex)
 
+- ✅ T-191 rebuild-db audit outcome 제약 위반 수정 — T-183 live UI e2e 재시작 중
+  `rebuild-db`가 `source_rebuild_db` 제어 job을 enqueue한 직후 `ops.audit_events.outcome`
+  제약에 없는 `queued`를 기록하려 해 HTTP 500을 반환했다(#372). 실행 중이던 재현 job은
+  취소했고, route audit outcome을 허용 lifecycle 값인 `started`로 고정했다. PR 머지 뒤
+  T-183 live UI e2e를 같은 DB/RustFS 기준으로 재개한다.
 - ✅ T-190 rebuild-db 요청 timeout 해소 — Admin UI live `rebuild-db` POST가
   RustFS materialize 동안 5분 proxy timeout에 걸리던 문제를 백엔드에서 줄였다.
   `/source-match-sets/{id}/rebuild-db`는 이제 `source_rebuild_db` 제어 job을 즉시 enqueue하고
