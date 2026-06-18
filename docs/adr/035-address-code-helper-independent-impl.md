@@ -8,7 +8,7 @@
 
 같은 WSL ext4 환경의 `~/dev/python-legacy-address-base`는 한국 주소 도메인 공통 helper(주소 조합/분리, 정규화, 외부 API client 등)를 제공해 왔다. 사용자 RFC에 따라 `python-legacy-address-base` 라이브러리는 archive 예정이다. 본 저장소 `kor-travel-geo`는 이 라이브러리에 명시·암시적으로 의존하는 표면이 있을 수 있으므로, 필요한 부분만 흡수해 외부 dependency를 제거해야 한다.
 
-2026-05-28 인벤토리 결과, `~/dev/python-legacy-address-base`는 Git checkout이 아니었고(`.git` 없음), license는 `GPL-3.0-or-later`였다. 사전 예상과 달리 `legacy.address_base.address.parser/composer/types/normalize` package는 없고, 실제 Address 표면은 `src/legacy/address-base/addresses.py` 단일 파일의 시군구/법정동/도로명관리번호/도로명주소관리번호 DTO와 mapping helper였다. 본 저장소는 MIT이므로 GPL 원본 코드를 직접 복사할 수 없다.
+2026-05-28 인벤토리 결과, `~/dev/python-legacy-address-base`는 Git checkout이 아니었고(`.git` 없음), license는 `GPL-3.0-or-later`였다. 사전 예상과 달리 `legacy.address_base.address.parser/composer/types/normalize` package는 없고, 실제 Address 표면은 `src/legacy/address-base/addresses.py` 단일 파일의 시군구/법정동/도로명관리번호/도로명주소관리번호 DTO와 mapping helper였다. 당시 본 저장소는 MIT였으므로 GPL 원본 코드를 직접 복사할 수 없었다.
 
 2026-05-28 사용자 확인에 따라 "Address 코드에 대한 조합/분리"는 주소 문자열 parser/composer가 아니라 코드 식별자의 조합·분해·정규화를 뜻하는 것으로 확정한다.
 
@@ -27,7 +27,7 @@
 - `python-legacy-address-base`는 곧 archive되므로, 본 저장소가 의존하면 빌드/CI/배포 위험이 발생한다.
 - Address 코드 조합/분리는 본 저장소의 PNU generated column 규칙(ADR-010)과 직접 맞물려 있어 같은 저장소에서 관리하는 것이 정합성에 좋다.
 - 라이브러리 분리를 유지하기에는 본 저장소가 유일한 consumer일 가능성이 높다.
-- GPL 원본을 MIT 저장소에 직접 복사하면 라이선스가 오염된다. 공개 주소 코드 규칙 기반 독립 구현이면 라이선스와 유지보수 경계를 둘 다 지킬 수 있다.
+- 당시 GPL 원본을 MIT 저장소에 직접 복사하면 라이선스가 오염될 수 있었다. 공개 주소 코드 규칙 기반 독립 구현이면 라이선스와 유지보수 경계를 둘 다 지킬 수 있다.
 
 ## 결과
 

@@ -11,7 +11,7 @@
 
 같은 WSL ext4 환경에 있는 `~/dev/python-legacy-address-base`는 한국 주소 도메인 공통 helper를 제공하는 별도 라이브러리다. 사용자 RFC에 따라 `python-legacy-address-base`는 곧 삭제 또는 archive될 수 있으므로, 이 저장소가 필요한 Address 코드 helper를 자체 보유하고 외부 dependency 위험을 없앤다.
 
-이번 확인 결과 `python-legacy-address-base`의 실제 Address 표면은 사전 문서의 예상과 달랐다. 도로명/지번 문자열 parser package가 아니라 `legacy.address_base.addresses` 단일 모듈의 코드 식별자 DTO/정규화 helper였고, 라이선스는 `GPL-3.0-or-later`였다. 본 저장소는 MIT이므로 원본 코드를 복사하지 않고, 공개 주소 코드 규칙에 기반한 독립 구현으로 재작성했다.
+이번 확인 결과 `python-legacy-address-base`의 실제 Address 표면은 사전 문서의 예상과 달랐다. 도로명/지번 문자열 parser package가 아니라 `legacy.address_base.addresses` 단일 모듈의 코드 식별자 DTO/정규화 helper였고, 라이선스는 `GPL-3.0-or-later`였다. 당시 본 저장소는 MIT였으므로 원본 코드를 복사하지 않고, 공개 주소 코드 규칙에 기반한 독립 구현으로 재작성했다.
 
 2026-05-28 사용자 확인에 따라 RFC의 "Address 코드에 대한 조합/분리"는 주소 문자열 parse/compose가 아니라 코드 식별자의 조합·분해·정규화를 뜻하는 것으로 확정한다.
 
@@ -73,7 +73,7 @@ src/kortravelgeo/core/address/
 
 ## 라이선스 처리
 
-원본은 GPL-3.0-or-later이고 본 저장소는 MIT이다. 따라서 다음 원칙을 지켰다.
+원본은 GPL-3.0-or-later이고, 이 작업 당시 본 저장소는 MIT였다. 따라서 다음 원칙을 지켰다.
 
 - 원본 `addresses.py`와 테스트 파일을 복사하지 않았다.
 - 새 모듈에는 GPL 원본 코드 미복사와 공개 주소 코드 규칙 기반 독립 구현임을 명시했다.

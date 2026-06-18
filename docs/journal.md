@@ -2,6 +2,19 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-18 (라이선스 GPL-3.0-only 전환)
+
+**작업**: 사용자 요청에 따라 프로젝트 라이선스 표기를 MIT에서 `GPL-3.0-only`로
+변경했다. 공식 FSF GPLv3 본문을 `LICENSE`로 추가하고, `pyproject.toml`의 license
+metadata/classifier, README badge와 법적 고지, `CHANGELOG.md`를 함께 갱신했다.
+
+**결정**: "GPL3" 요청은 별도 `or later` 명시가 없으므로 `GPL-3.0-only`로 해석했다.
+현재 reference 문서의 MIT 현재형 문구는 "당시 MIT"로 고쳤다. 기존 작업 로그의
+과거 항목은 당시 의사결정 기록이므로 소급 수정하지 않았다.
+
+**검증**: `rg`로 현재 표기 대상의 `MIT` 잔존 여부를 확인하고, license metadata와 README
+로컬 `LICENSE` 링크를 확인한다. 코드 동작 변경은 없어 전체 테스트는 실행하지 않는다.
+
 ## 2026-06-18 (README 중복 정리)
 
 **작업**: 사용자 요청에 따라 `README.md`를 정리했다. README에 길게 복제되어 있던

@@ -4,6 +4,10 @@
 
 ## 현재 진척도 (2026-06-18 갱신, by codex)
 
+- ✅ 라이선스 GPL-3.0-only 전환 — 사용자 요청에 따라 프로젝트 license metadata,
+  classifier, README badge/고지, `CHANGELOG.md`, `LICENSE`를 `GPL-3.0-only` 기준으로 맞췄다.
+  현재 reference 문서의 MIT 현재형 문구는 "당시 MIT"로 고쳤고, 과거 작업 로그 항목은
+  역사적 기록이라 소급 수정하지 않았다.
 - ✅ README 입구 문서 정리 — `README.md`의 오래된 진행 목록과 상세 절차 복제를 줄이고,
   현재 상태는 `docs/resume.md`/`docs/journal.md`, 개발 환경은 `docs/dev-environment.md`와
   runbook, 아키텍처·외부 API·ADR은 각 정본 문서로 연결했다. Python badge도
