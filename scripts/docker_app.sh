@@ -86,7 +86,7 @@ require_docker() {
 dotenv_get() {
   local key="$1"
   local file line value
-  for file in "$ROOT_DIR/.env" "$UI_DIR/.env.local"; do
+  for file in ${KTG_ENV_FILE:+"$KTG_ENV_FILE"} "$ROOT_DIR/.env" "$UI_DIR/.env.local"; do
     [[ -f "$file" ]] || continue
     line="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | tail -n 1 || true)"
     [[ -n "$line" ]] || continue
@@ -132,6 +132,24 @@ resolve_env_or_dotenv() {
     return 0
   fi
   printf '%s' "$default_value"
+}
+
+# Re-resolve runtime config from process env > dotenv files > defaults. dotenv
+# files are $KTG_ENV_FILE (e.g. .env.prod), $ROOT_DIR/.env, $UI_DIR/.env.local.
+# Called inside run_* so a consolidated prod env file drives the URL/RustFS/CORS
+# values, not just the process environment (top-level assigns read process env
+# only). This is what makes `KTG_ENV_FILE=.env.prod scripts/docker_app.sh up`
+# pick up the prod API/RustFS domains and CORS origins.
+resolve_runtime_env() {
+  PG_DSN="$(resolve_env_or_dotenv KTG_DOCKER_PG_DSN "$(resolve_env_or_dotenv KTG_PG_DSN "$DEFAULT_PG_DSN")")"
+  UI_API_INTERNAL_URL="$(resolve_env_or_dotenv KTG_API_INTERNAL_URL "$DEFAULT_UI_API_URL")"
+  RUSTFS_ENABLED="$(resolve_env_or_dotenv KTG_RUSTFS_ENABLED "0")"
+  RUSTFS_ENDPOINT_URL="$(resolve_env_or_dotenv KTG_RUSTFS_ENDPOINT_URL "$DEFAULT_RUSTFS_ENDPOINT")"
+  RUSTFS_BUCKET="$(resolve_env_or_dotenv KTG_RUSTFS_BUCKET "kor-travel-geo")"
+  RUSTFS_PREFIX="$(resolve_env_or_dotenv KTG_RUSTFS_PREFIX "kor-travel-geo")"
+  RUSTFS_REGION="$(resolve_env_or_dotenv KTG_RUSTFS_REGION "us-east-1")"
+  API_CORS_ORIGINS="$(resolve_env_or_dotenv KTG_API_CORS_ORIGINS "[]")"
+  GEOIP_GATE_MODE="$(resolve_env_or_dotenv KTG_GEOIP_GATE_MODE "off")"
 }
 
 ensure_network() {
@@ -194,6 +212,7 @@ run_api() {
   ensure_network
   remove_container "$API_CONTAINER"
   free_host_port "$API_HOST_PORT"
+  resolve_runtime_env
 
   local vworld_key rustfs_access_key rustfs_secret_key
   vworld_key="$(resolve_vworld_key)"
@@ -212,7 +231,8 @@ run_api() {
     -e "PORT=${API_CONTAINER_PORT}"
     -e "KTG_API_HOST=0.0.0.0"
     -e "KTG_PG_DSN=${PG_DSN}"
-    -e "KTG_GEOIP_GATE_MODE=${KTG_GEOIP_GATE_MODE:-off}"
+    -e "KTG_GEOIP_GATE_MODE=${GEOIP_GATE_MODE}"
+    -e "KTG_API_CORS_ORIGINS=${API_CORS_ORIGINS}"
     -e "KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES=${KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES:-0}"
     -e "KTG_RUSTFS_ENABLED=${RUSTFS_ENABLED}"
     -e "KTG_RUSTFS_ENDPOINT_URL=${RUSTFS_ENDPOINT_URL}"
@@ -242,6 +262,7 @@ run_ui() {
   ensure_network
   remove_container "$UI_CONTAINER"
   free_host_port "$UI_HOST_PORT"
+  resolve_runtime_env
 
   local vworld_key
   vworld_key="$(resolve_vworld_key)"
@@ -297,6 +318,7 @@ logs() {
 run_cli() {
   require_docker
   ensure_network
+  resolve_runtime_env
   local vworld_key rustfs_access_key rustfs_secret_key
   vworld_key="$(resolve_vworld_key)"
   rustfs_access_key="$(resolve_env_or_dotenv KTG_RUSTFS_ACCESS_KEY "")"
@@ -312,7 +334,7 @@ run_cli() {
     -v "${DATA_DIR}:/data:ro"
     -e "KTG_PG_DSN=${PG_DSN}"
     -e "KTG_LOADER_DATA_DIR=/data"
-    -e "KTG_GEOIP_GATE_MODE=${KTG_GEOIP_GATE_MODE:-off}"
+    -e "KTG_GEOIP_GATE_MODE=${GEOIP_GATE_MODE}"
     -e "KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES=${KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES:-0}"
     -e "KTG_RUSTFS_ENABLED=${RUSTFS_ENABLED}"
     -e "KTG_RUSTFS_ENDPOINT_URL=${RUSTFS_ENDPOINT_URL}"
