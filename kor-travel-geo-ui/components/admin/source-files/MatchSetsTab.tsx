@@ -1,9 +1,18 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Hammer, Play, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Hammer,
+  Play,
+  RefreshCw,
+  ShieldCheck,
+  XCircle
+} from "lucide-react";
 import { useState } from "react";
 import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
+import { JobProgress } from "@/components/admin/backups/JobProgress";
 import { MatchSetComparePanel } from "@/components/admin/source-files/MatchSetComparePanel";
 import { MatchSetItemsTable } from "@/components/admin/source-files/MatchSetItemsTable";
 import { Panel } from "@/components/ui/Panel";
@@ -12,7 +21,8 @@ import {
   summarizeRebuildPreflight
 } from "@/lib/rebuild-preflight";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { postJson, requestJson } from "@/lib/api";
+import { type LoadJobStatus, postJson, requestJson } from "@/lib/api";
+import { terminalJobState } from "@/lib/backup-workflow";
 import {
   matchSetStateLabels,
   rebuildPromoteConfirmation,
@@ -27,6 +37,7 @@ export function MatchSetsTab() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<unknown>(null);
+  const [lastRebuildJobId, setLastRebuildJobId] = useState<string | null>(null);
 
   const { data: matchSets = EMPTY_SETS, refetch } = useQuery({
     queryKey: ["source-match-sets"],
@@ -54,12 +65,20 @@ export function MatchSetsTab() {
                 : sourceFilesPaths.matchSetRebuildDb(id);
       return postJson(path, body ?? {});
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       setLastResult(data);
+      setLastRebuildJobId(
+        variables.kind === "rebuild-db" ? rebuildJobIdFromResponse(data) : null
+      );
       void queryClient.invalidateQueries({ queryKey: ["source-match-sets"] });
       void queryClient.invalidateQueries({ queryKey: ["source-match-set"] });
     },
-    onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
+    onError: (error, variables) => {
+      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      if (variables.kind === "rebuild-db") {
+        setLastRebuildJobId(null);
+      }
+    }
   });
 
   return (
@@ -77,6 +96,7 @@ export function MatchSetsTab() {
           {matchSets.map((set) => (
             <button
               className={set.source_match_set_id === effectiveId ? "report-row active" : "report-row"}
+              data-testid={`source-match-set-${set.source_match_set_id}`}
               key={set.source_match_set_id}
               onClick={() => setSelectedId(set.source_match_set_id)}
               type="button"
@@ -115,9 +135,112 @@ export function MatchSetsTab() {
             <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
           </Panel>
         ) : null}
+        {lastRebuildJobId ? <RebuildJobStatus jobId={lastRebuildJobId} /> : null}
       </div>
       </div>
       <MatchSetComparePanel matchSets={matchSets} />
+    </div>
+  );
+}
+
+function rebuildJobIdFromResponse(data: unknown): string | null {
+  if (!data || typeof data !== "object" || !("job_id" in data)) {
+    return null;
+  }
+  const jobId = (data as { job_id?: unknown }).job_id;
+  return typeof jobId === "string" && jobId ? jobId : null;
+}
+
+function RebuildJobStatus({ jobId }: { jobId: string }) {
+  const { data: job, refetch } = useQuery({
+    queryKey: ["admin-job", jobId],
+    queryFn: () => requestJson<LoadJobStatus>(`/admin/jobs/${jobId}`),
+    refetchInterval: (query) => {
+      const state = query.state.data?.state;
+      return state && terminalJobState(state) ? false : 5_000;
+    }
+  });
+
+  return (
+    <Panel title="rebuild-db 진행 상태">
+      {job ? (
+        <>
+          <JobProgress job={job} onTerminal={() => void refetch()} />
+          <dl className="criteria-grid">
+            <div>
+              <dt>job_id</dt>
+              <dd data-testid="rebuild-control-job-id">{job.job_id}</dd>
+            </div>
+            <div>
+              <dt>state</dt>
+              <dd>{job.state}</dd>
+            </div>
+            {job.load_batch_id ? (
+              <div>
+                <dt>load_batch_id</dt>
+                <dd data-testid="rebuild-load-batch-id">{job.load_batch_id}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt>stage</dt>
+              <dd>{job.current_stage ?? "-"}</dd>
+            </div>
+            <div>
+              <dt>finished_at</dt>
+              <dd>{job.finished_at ?? "-"}</dd>
+            </div>
+          </dl>
+          {job.load_batch_id && job.load_batch_id !== job.job_id ? (
+            <DownstreamBatchStatus batchJobId={job.load_batch_id} />
+          ) : null}
+          {job.error_message ? <p className="form-note warn">{job.error_message}</p> : null}
+        </>
+      ) : (
+        <p className="form-note">작업 상태를 불러오는 중입니다.</p>
+      )}
+    </Panel>
+  );
+}
+
+function DownstreamBatchStatus({ batchJobId }: { batchJobId: string }) {
+  const { data: batchJob, refetch } = useQuery({
+    queryKey: ["admin-job", batchJobId],
+    queryFn: () => requestJson<LoadJobStatus>(`/admin/jobs/${batchJobId}`),
+    refetchInterval: (query) => {
+      const state = query.state.data?.state;
+      return state && terminalJobState(state) ? false : 5_000;
+    }
+  });
+
+  return (
+    <div className="source-stack" data-testid="rebuild-load-batch-status">
+      <h3>full_load_batch 진행 상태</h3>
+      {batchJob ? (
+        <>
+          <JobProgress job={batchJob} onTerminal={() => void refetch()} />
+          <dl className="criteria-grid">
+            <div>
+              <dt>job_id</dt>
+              <dd>{batchJob.job_id}</dd>
+            </div>
+            <div>
+              <dt>state</dt>
+              <dd>{batchJob.state}</dd>
+            </div>
+            <div>
+              <dt>stage</dt>
+              <dd>{batchJob.current_stage ?? "-"}</dd>
+            </div>
+            <div>
+              <dt>finished_at</dt>
+              <dd>{batchJob.finished_at ?? "-"}</dd>
+            </div>
+          </dl>
+          {batchJob.error_message ? <p className="form-note warn">{batchJob.error_message}</p> : null}
+        </>
+      ) : (
+        <p className="form-note">하위 작업 상태를 불러오는 중입니다.</p>
+      )}
     </div>
   );
 }

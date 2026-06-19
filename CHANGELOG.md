@@ -12,6 +12,10 @@
   idle-in-transaction 연결을 남기지 않는다.
 
 ### Added
+- T-183 live UI full-load e2e를 추가하고 실제 `rebuild-db` 적재 흐름을 검증했다. Admin UI는
+  `source_rebuild_db` control job과 downstream `full_load_batch` 상태를 이어 보여 주며, live
+  spec은 완료된 job을 채택해 post-load serving release/snapshot evidence와 forced promotion
+  근거(`source_set.rebuild_metadata`, `consistency_gate`)를 확인할 수 있다.
 - T-184 opt-in live e2e admin role proxy를 추가했다. Next.js `/api/proxy`가 `KTG_LIVE_E2E_ADMIN_PROXY=1`과 유효한 actor/role env를 받을 때만 `X-KTG-Actor`/`X-KTG-Roles`를 주입해 source-files/match-set live admin read를 403 없이 검증할 수 있다.
 - T-277 디버그 UI 지도를 GitHub `digitie/maplibre-vworld-react` 기반으로 전환했다. `maplibre-vworld-js`/`maplibre-vworld` 의존성을 제거하고, tarball SHA `a7cb0f8f41ec00b44b1d106664506730b87033bd`를 소비하며 Next.js 16 Turbopack, webpack, Vitest, TypeScript alias를 추가했다.
 - T-177G 전국 long-run full-load e2e를 추가하고 실제 전국 원천 전체 적재를 통과시켰다. `KTG_TEST_FULL_LOAD_E2E_LONGRUN=1` opt-in으로 fresh scratch DB를 생성하고 phase별 duration, row count, DB size, source month summary, smoke/consistency/ops release evidence를 artifact로 남긴다.

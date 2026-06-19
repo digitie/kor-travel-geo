@@ -6,6 +6,30 @@
 
 ## 완료
 
+- [x] **T-183** — UI 기반 full-load 적재 프로세스 e2e(Agent A/Codex, #357).
+  `origin/main`의 dev/prod 환경 분리 정의(#384) 위로 리베이스하고 문서를 다시 읽은 뒤,
+  prod 도메인이 아닌 dev 공식 포트(API `12501`, UI `12505`) 기준으로 live UI e2e를 수행했다.
+  T-196 보강 뒤 Admin UI `rebuild-db`는 `source_rebuild_db`
+  `job_5e7106d5ca58414f86f1bc7d26953f35`를 만들고 RustFS materialize, downstream
+  `full_load_batch` `batch_66a52eb91d9c4833b1e8763cf1ec72e0`, consistency gate, MV swap까지
+  완료했다. 최종 active release는 `b232a167-682d-4e5c-b197-577f617e5107`, snapshot은
+  `6fb47bac-dccd-4791-a39f-f2f1e712689e`이며 `mv_geocode_target`/
+  `mv_geocode_text_search`/`tl_juso_text`가 각각 6,419,795행이다. live spec은 forced
+  promotion 근거를 실제 API 계약인 `dataset_snapshot.source_set.rebuild_metadata`와
+  `serving_release.consistency_gate`에서 확인하도록 고쳤고, Chromium/Firefox 각 1건 통과를
+  확인했다. 산출물은
+  `artifacts/t183/t183-ui-rebuild-20260618T120705Z/t183-ui-rebuild-live.json`이다.
+  (2026-06-19)
+
+- [x] **T-196** — `rebuild-db` materialize OOM 완화(Agent A/Codex, #382, PR #383).
+  T-195 force-promotion live UI e2e에서 RustFS materialize가 `[Errno 12] Cannot allocate
+  memory`로 실패한 문제를 분리했다. 대형 category(`navi_full`, `electronic_map_full`)가
+  포함된 rebuild는 압축 해제를 하나씩만 수행하고, 내비게이션 `.7z` 해제는 `stdout=PIPE`
+  누적 대신 임시 파일 tail과 `-mmt=1`을 사용해 메모리 사용을 줄였다. materialize 실패
+  메시지에는 `category/source_file_group_id`를 포함한다. WSL backend 전체 gate는
+  `pytest` 1075건, `ruff`, `mypy`, `lint-imports`를 통과했고 PR #383으로 머지했다.
+  (2026-06-19)
+
 - [x] **T-190** — `rebuild-db` HTTP 요청 timeout 해소(Agent A/Codex, #370).
   T-183 live UI e2e에서 Admin UI `rebuild-db` POST가 RustFS materialize 동안 Next.js proxy
   5분 timeout(`UND_ERR_HEADERS_TIMEOUT`)에 걸리고, backend가 session advisory lock을
