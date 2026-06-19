@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-19 (T-196 rebuild-db materialize OOM 완화)
+
+**작업**: T-195 force-promotion live UI e2e 재시도에서 UI POST와 `source_rebuild_db`
+control job 생성은 성공했지만, RustFS materialize 단계가 `[Errno 12] Cannot allocate memory`로
+실패했다(#382). 실패 job payload에는 `force_promotion=true`, actor/reason이 정상 기록됐고,
+API/UI는 계속 응답했다.
+
+**결정**: 대형 materialize category(`navi_full`, `electronic_map_full`)가 포함된 rebuild는
+압축 해제를 한 번에 하나만 수행하도록 제한했다. 내비게이션 `.7z` 해제는 `7z` 출력을
+메모리 `PIPE`로 누적하지 않고 임시 파일로 흘린 뒤 tail만 읽으며, `-mmt=1`로 내부 thread
+메모리 사용을 줄인다. materialize 실패 메시지에는 `category/source_file_group_id`를 포함해
+다음 live 실패 때 어느 원천에서 터졌는지 바로 볼 수 있게 했다.
+
+**검증**: WSL ext4 테스트 미러에서
+`python -m pytest tests/unit/test_t189_rebuild_materialize.py -q` 13건을 통과했다. 이후
+`python -m pytest -q` 1075건 통과(75 skipped), `ruff check .`,
+`python -m mypy src/kortravelgeo`, `lint-imports` 통과. PR로 머지하고 T-183/T-195 live UI e2e를
+다시 시작한다.
+
 ## 2026-06-19 (아키텍처 문서 UI 테이블 의존성 정정)
 
 **작업**: `docs/architecture/architecture.md`의 프론트엔드 테이블 항목이 여전히

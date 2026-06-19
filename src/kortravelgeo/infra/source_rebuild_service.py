@@ -29,6 +29,7 @@ import asyncio
 import hashlib
 import shutil
 import subprocess
+import tempfile
 import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -78,6 +79,8 @@ _CATEGORY_TO_LOAD_KINDS: dict[str, tuple[str, ...]] = {
     "roadaddr_entrance_full": ("roadaddr_entrance_load",),
     "zone_shape_full": ("sppn_makarea_load",),
 }
+
+_HEAVY_MATERIALIZE_CATEGORIES = frozenset({"navi_full", "electronic_map_full"})
 
 #: Default heartbeat timeout for stale rebuild-job detection (seconds).
 DEFAULT_REBUILD_HEARTBEAT_TIMEOUT_S = 900.0
@@ -435,17 +438,30 @@ SELECT source_file_id, part_key, part_label, original_filename, object_key,
         relocated = relocate_rebuild_batch_payload(plan.batch_payload, staging_root)
         path_by_category = _child_paths_by_category(relocated)
         download_sem = asyncio.Semaphore(max(1, download_concurrency))
-        materialize_sem = asyncio.Semaphore(max(1, materialize_concurrency))
+        materialize_sem = asyncio.Semaphore(
+            _effective_materialize_concurrency(plan.groups, materialize_concurrency)
+        )
 
         async def materialize_group(ref: RebuildGroupRef) -> None:
             target = path_by_category[ref.category]
-            await _materialize_group(
-                rustfs,
-                ref,
-                target,
-                download_sem=download_sem,
-                materialize_sem=materialize_sem,
-            )
+            try:
+                await _materialize_group(
+                    rustfs,
+                    ref,
+                    target,
+                    download_sem=download_sem,
+                    materialize_sem=materialize_sem,
+                )
+            except InvalidInputError as exc:
+                raise InvalidInputError(
+                    "failed to materialize rebuild source "
+                    f"{ref.category}/{ref.source_file_group_id}: {exc}"
+                ) from exc
+            except (OSError, RuntimeError) as exc:
+                raise RuntimeError(
+                    "failed to materialize rebuild source "
+                    f"{ref.category}/{ref.source_file_group_id}: {exc}"
+                ) from exc
 
         tasks = [asyncio.create_task(materialize_group(ref)) for ref in plan.groups]
 
@@ -824,6 +840,15 @@ def _child_paths_by_category(batch_payload: Mapping[str, Any]) -> dict[str, Path
     return paths
 
 
+def _effective_materialize_concurrency(
+    groups: tuple[RebuildGroupRef, ...], requested: int
+) -> int:
+    concurrency = max(1, requested)
+    if any(group.category in _HEAVY_MATERIALIZE_CATEGORIES for group in groups):
+        return 1
+    return concurrency
+
+
 async def _materialize_group(
     rustfs: Any,
     ref: RebuildGroupRef,
@@ -1007,25 +1032,35 @@ def _extract_navi_7z(archive: Path, target: Path) -> None:
     if seven_zip is None:
         raise InvalidInputError("7z/7zz/7za command not found; navi .7z를 풀 수 없습니다")
     target.mkdir(parents=True, exist_ok=True)
-    completed = subprocess.run(
-        [
-            seven_zip,
-            "x",
-            "-y",
-            f"-o{target}",
-            str(archive),
-            "match_build_*.txt",
-            "match_rs_entrc.txt",
-            "match_jibun_*.txt",
-        ],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as output:
+        completed = subprocess.run(
+            [
+                seven_zip,
+                "x",
+                "-y",
+                "-mmt=1",
+                f"-o{target}",
+                str(archive),
+                "match_build_*.txt",
+                "match_rs_entrc.txt",
+                "match_jibun_*.txt",
+            ],
+            check=False,
+            stdout=output,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        excerpt = _tail_text(output)
     if completed.returncode != 0:
-        excerpt = completed.stdout[-1000:] if completed.stdout else ""
         raise InvalidInputError(f"failed to materialize navi .7z archive: {excerpt}")
+
+
+def _tail_text(output: Any, *, limit: int = 1000) -> str:
+    output.flush()
+    output.seek(0, 2)
+    size = output.tell()
+    output.seek(max(0, size - limit))
+    return str(output.read())
 
 
 def _write_materialized_marker(target: Path) -> None:
