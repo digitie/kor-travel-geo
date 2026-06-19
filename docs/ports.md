@@ -64,3 +64,20 @@ scripts/docker_app.sh up
 cd kor-travel-geo-ui
 KTG_API_INTERNAL_URL=http://localhost:12501 npm run dev -- --port 12505
 ```
+
+## dev / prod 환경 프로파일
+
+**별도 지시가 없으면 dev 환경을 의미한다.**
+
+| 구분 | dev (이 저장소에서 직접 실행 / `docker_app.sh`) | prod (`kor-travel-docker-manager`) |
+|------|--------------------------------------------------|------------------------------------|
+| 주소 | 루프백 `127.0.0.1` | 공식 도메인 (`geo` / `geo-api` / `s3` / `s3-api` 등) |
+| 앱 포트 | 12xxx — API `12501`, UI `12505` | 같은 컨테이너 포트, 공개 도메인은 리버스 프록시가 매핑 |
+| UI→API URL | `http://127.0.0.1:12501` | 내부 docker 네트워크 또는 공식 API 도메인 |
+| RustFS S3 API | `http://127.0.0.1:12101` | `https://<s3-api 도메인>` |
+| 환경 파일 | `.env.dev` (예: `.env.dev.example`) / 직접 실행 시 `.env` | `.env.prod` (예: `.env.prod.example`) / 노드 `app.env` |
+| 기동 | `docker_app.sh`(기본 host 네트워크 모드) 또는 uvicorn/npm 직접 | `kor-travel-docker-manager` |
+
+- dev에서 `docker_app.sh`는 **host 네트워크 모드가 기본**이라 API/UI/DB/RustFS가 모두 `127.0.0.1`로 일관 동작한다. Docker Desktop의 host 모드 제약이 있으면 `KTG_DOCKER_NETWORK_MODE=bridge`로 바꾼다.
+- dev 스크립트는 같은 컨테이너/포트가 **이미 떠 있으면 새 포트로 우회하지 않는다.** 강제종료 여부를 묻고, 거부하면 작업을 중지한다(`KTG_FORCE_KILL=1`이면 묻지 않고 교체, 비대화형은 안전 중지).
+- prod 공식 도메인 실제 값은 추적 파일에 두지 않고 gitignored `.env.prod`(또는 배포 노드 `app.env`)에만 둔다(서버사이드 `KTG_*` 변수, `NEXT_PUBLIC_*` 아님).

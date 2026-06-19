@@ -28,6 +28,30 @@ T-108의 구현 범위는 다음으로 제한한다.
 - 배포 후 API `/v1/healthz`와 UI `/api/runtime-config` smoke check를 실행한다.
 - streaming replication 구성·확인·자동화는 이번 범위에서 제외한다.
 
+## 운영 도메인 / 환경값
+
+운영 도메인은 소스에 하드코딩하지 않고 **gitignored env 파일**에만 둔다. 추적 파일에는
+placeholder만 둔다(`.env.prod.example`). 두 배포 경로가 같은 prod env 파일을 공유한다.
+
+| 표면 | 공개 도메인(리버스 프록시 TLS 종단) | 환경 변수 |
+|------|--------------------------------------|-----------|
+| UI | `geo.*` | 진입은 프록시 / `KTG_API_CORS_ORIGINS`에 origin 등록 |
+| API | `geo-api.*` | UI 서버사이드 프록시 대상 `KTG_API_INTERNAL_URL` |
+| RustFS S3 API | `s3-api.*` | `KTG_RUSTFS_ENDPOINT_URL` (+ `KTG_RUSTFS_ENABLED=true`) |
+| RustFS console | `s3.*` | 운영자 UI — 앱 변수 아님 |
+
+- 실제 값: gitignored `.env.prod`(루트). 형식은 `.env.prod.example`를 따른다(docker `--env-file` 호환).
+- `deploy_app.py`: `.env.prod`를 노드 `/etc/kor-travel-geo/app.env`로 두고 `--remote-env-file`로 주입한다.
+  `--env-file`은 API·UI 컨테이너 모두에 적용되어 `KTG_API_CORS_ORIGINS`·`KTG_RUSTFS_*` 값이 그대로
+  전달된다. UI→API는 같은 docker 네트워크 내부 주소(`http://kor-travel-geo-api:12501`)를 기본으로
+  쓴다(co-located 최적). 공개 `geo-api.*`는 외부 진입용 리버스 프록시 엣지다.
+- `docker_app.sh`는 **dev 기본**(host 네트워크 모드, `127.0.0.1`, 앱 포트 12xxx)이다. `KTG_ENV_FILE=.env.prod`로
+  prod 프로파일을 읽게 할 수도 있으나, **정식 prod 기동은 `kor-travel-docker-manager`**가 담당한다. 이 스크립트는
+  URL·RustFS·CORS·GeoIP를 `.env`/env-file에서 해석하고 `KTG_API_CORS_ORIGINS`도 API 컨테이너에 주입한다.
+- 도메인은 서버사이드 변수(`KTG_*`)에만 둔다. `NEXT_PUBLIC_*`에는 넣지 않아 브라우저 번들로 노출되지 않는다.
+- **dev/prod 구분**: 별도 지시가 없으면 dev 환경을 의미한다. dev는 이 저장소(직접 실행 또는 `docker_app.sh`)에서
+  `127.0.0.1` + 12xxx로, prod는 `kor-travel-docker-manager` + 공식 도메인으로 동작한다. 비교표는 `docs/ports.md`.
+
 ## 스크립트
 
 `scripts/deploy_app.py`를 추가했다. 기본 동작은 계획 파일을 만들거나 명시한 명령을

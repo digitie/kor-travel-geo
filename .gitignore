@@ -18,6 +18,8 @@ dist/
 .env.*
 !.env.example
 !.env.local.example
+!.env.prod.example
+!.env.dev.example
 .venv/
 .wsl-node/
 .codex_tmp/
