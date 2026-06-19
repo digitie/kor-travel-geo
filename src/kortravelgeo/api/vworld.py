@@ -82,9 +82,15 @@ class VWorldErrorDetail(FrozenModel):
     text: str
 
 
+class VWorldService(FrozenModel):
+    name: Literal["address"]
+    version: Literal["2.0"]
+    operation: VWorldOperation
+
+
 class VWorldErrorBody(FrozenModel):
-    service: dict[str, object]
-    status: Literal["ERROR"] = "ERROR"
+    service: VWorldService
+    status: Literal["ERROR"]
     error: VWorldErrorDetail
 
 
@@ -94,6 +100,16 @@ class VWorldErrorEnvelope(FrozenModel):
 
 def vworld_operation_for_path(path: str) -> VWorldOperation | None:
     return _VWORLD_OPERATIONS.get(path)
+
+
+def vworld_operation_for_error_path(path: str) -> VWorldOperation | None:
+    operation = vworld_operation_for_path(path)
+    if operation is not None:
+        return operation
+    for prefix, prefix_operation in _VWORLD_OPERATIONS.items():
+        if path.startswith(f"{prefix}/"):
+            return prefix_operation
+    return None
 
 
 def vworld_success_response(response: GeocodeResponse | ReverseResponse) -> ORJSONResponse:

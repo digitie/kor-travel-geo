@@ -3212,6 +3212,16 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        LegacyErrorBody: {
+            errorCode: string;
+            errorMessage: string;
+            hint?: string;
+            /** @constant */
+            status: "ERROR";
+        };
+        LegacyErrorEnvelope: {
+            response: components["schemas"]["LegacyErrorBody"];
+        };
         /** LoadJobStatus */
         LoadJobStatus: {
             /** Current Stage */
@@ -6158,13 +6168,9 @@ export interface components {
         /** VWorldErrorBody */
         VWorldErrorBody: {
             error: components["schemas"]["VWorldErrorDetail"];
-            /** Service */
-            service: {
-                [key: string]: unknown;
-            };
+            service: components["schemas"]["VWorldService"];
             /**
              * Status
-             * @default ERROR
              * @constant
              */
             status: "ERROR";
@@ -6244,6 +6250,24 @@ export interface components {
             zip_source?: components["schemas"]["ZipSource"] | null;
             /** Zipcode */
             zipcode?: string | null;
+        };
+        /** VWorldService */
+        VWorldService: {
+            /**
+             * Name
+             * @constant
+             */
+            name: "address";
+            /**
+             * Operation
+             * @enum {string}
+             */
+            operation: "getCoord" | "getAddress";
+            /**
+             * Version
+             * @constant
+             */
+            version: "2.0";
         };
         /** ValidationError */
         ValidationError: {
@@ -6371,13 +6395,13 @@ export interface operations {
                     "application/json": components["schemas"]["PoboxResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6446,13 +6470,13 @@ export interface operations {
                     "application/json": components["schemas"]["SearchResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6481,13 +6505,13 @@ export interface operations {
                     "application/json": components["schemas"]["ZipcodeResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6514,13 +6538,13 @@ export interface operations {
                     "application/json": components["schemas"]["BackupArtifact"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6547,13 +6571,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6600,13 +6624,13 @@ export interface operations {
                     "application/json": components["schemas"]["BackupRetentionResult"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6671,13 +6695,13 @@ export interface operations {
                     "application/json": components["schemas"]["BackupArtifact"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6706,13 +6730,13 @@ export interface operations {
                     "application/json": components["schemas"]["BackupCopyResult"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6737,13 +6761,13 @@ export interface operations {
                     "application/json": components["schemas"]["BackupArtifact"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6770,13 +6794,13 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6805,13 +6829,13 @@ export interface operations {
                     "application/json": components["schemas"]["BackupVerifyResult"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6857,13 +6881,13 @@ export interface operations {
                     "application/json": components["schemas"]["ConsistencyReportSummary"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6910,13 +6934,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6941,13 +6965,13 @@ export interface operations {
                     "application/json": components["schemas"]["ConsistencyReport"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -6989,13 +7013,13 @@ export interface operations {
                     "application/json": components["schemas"]["ConsistencySamplePage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7025,13 +7049,13 @@ export interface operations {
                     "application/json": components["schemas"]["ConsistencyBulkDecisionResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7062,13 +7086,13 @@ export interface operations {
                     "application/json": components["schemas"]["ConsistencyCaseSample"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7095,13 +7119,13 @@ export interface operations {
                     "application/json": components["schemas"]["ConsistencySampleRecheckResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7127,13 +7151,13 @@ export interface operations {
                     "application/json": components["schemas"]["ConsistencyCaseSummary"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7160,13 +7184,13 @@ export interface operations {
                     "application/json": components["schemas"]["ExplainResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7193,13 +7217,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7224,13 +7248,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7255,13 +7279,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7286,13 +7310,13 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7319,13 +7343,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7352,13 +7376,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7383,13 +7407,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7414,13 +7438,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7445,13 +7469,13 @@ export interface operations {
                     "application/json": string[];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7476,13 +7500,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7509,13 +7533,13 @@ export interface operations {
                     "application/json": components["schemas"]["NormalizeResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7542,13 +7566,13 @@ export interface operations {
                     "application/json": components["schemas"]["OpsArtifact"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7575,13 +7599,13 @@ export interface operations {
                     "application/json": components["schemas"]["AuditEvent"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7608,13 +7632,13 @@ export interface operations {
                     "application/json": components["schemas"]["OpsArtifact"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7640,13 +7664,13 @@ export interface operations {
                     "application/json": components["schemas"]["MaintenanceWindow"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7673,13 +7697,13 @@ export interface operations {
                     "application/json": components["schemas"]["MaintenanceWindow"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7708,13 +7732,13 @@ export interface operations {
                     "application/json": components["schemas"]["MaintenanceWindow"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7740,13 +7764,13 @@ export interface operations {
                     "application/json": components["schemas"]["PgStatStatementSnapshot"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7771,13 +7795,13 @@ export interface operations {
                     "application/json": components["schemas"]["PgStatStatementSnapshot"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7803,13 +7827,13 @@ export interface operations {
                     "application/json": components["schemas"]["ServingRelease"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7838,13 +7862,13 @@ export interface operations {
                     "application/json": components["schemas"]["ServingReleaseRollbackResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7869,13 +7893,13 @@ export interface operations {
                     "application/json": components["schemas"]["RollbackPlan"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7901,13 +7925,13 @@ export interface operations {
                     "application/json": components["schemas"]["DatasetSnapshot"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7933,13 +7957,13 @@ export interface operations {
                     "application/json": components["schemas"]["TableStatsSnapshot"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7965,13 +7989,13 @@ export interface operations {
                     "application/json": components["schemas"]["TableStatsSnapshot"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -7998,13 +8022,13 @@ export interface operations {
                     "application/json": components["schemas"]["LoadJobStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8031,13 +8055,13 @@ export interface operations {
                     "application/json": components["schemas"]["RestoreDryRunResult"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8064,13 +8088,13 @@ export interface operations {
                     "application/json": components["schemas"]["RestoreHotSwapResult"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8097,13 +8121,13 @@ export interface operations {
                     "application/json": components["schemas"]["RestoreHotSwapPlan"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8130,13 +8154,13 @@ export interface operations {
                     "application/json": components["schemas"]["RestoreHotSwapRollbackResult"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8201,13 +8225,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceGroupRelinkResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8232,13 +8256,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceGroupRestoreResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8267,13 +8291,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceGroupSoftDeleteResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8298,13 +8322,13 @@ export interface operations {
                     "application/json": components["schemas"]["GroupValidationResult"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8331,13 +8355,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceBulkHardDeleteResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8384,13 +8408,13 @@ export interface operations {
                     "application/json": components["schemas"]["EpostServerFetchResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8435,13 +8459,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceReconcileRun"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8468,13 +8492,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceReconcileRun"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8503,13 +8527,13 @@ export interface operations {
                     "application/json": components["schemas"]["ReconcileResolveResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8534,13 +8558,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceReconcileRun"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8569,13 +8593,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceReconcileItemPage"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8604,13 +8628,13 @@ export interface operations {
                     "application/json": components["schemas"]["UploadSessionStatus"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8637,13 +8661,13 @@ export interface operations {
                     "application/json": components["schemas"]["UploadSessionStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8668,13 +8692,13 @@ export interface operations {
                     "application/json": components["schemas"]["UploadSessionStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8699,13 +8723,13 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8731,13 +8755,13 @@ export interface operations {
                     "application/json": components["schemas"]["MultipartInitiateResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8765,13 +8789,13 @@ export interface operations {
                     "application/json": components["schemas"]["UploadSessionStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8803,13 +8827,13 @@ export interface operations {
                     "application/json": components["schemas"]["UploadSessionStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8838,13 +8862,13 @@ export interface operations {
                     "application/json": components["schemas"]["UploadPartResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8870,13 +8894,13 @@ export interface operations {
                     "application/json": components["schemas"]["SlotReplaceResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8905,13 +8929,13 @@ export interface operations {
                     "application/json": components["schemas"]["RegisterResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8937,13 +8961,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceMatchSet"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -8970,13 +8994,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceMatchSetDetail"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9003,13 +9027,13 @@ export interface operations {
                     "application/json": components["schemas"]["RestoredFromBackupCreateResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9034,13 +9058,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceMatchSetDetail"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9065,13 +9089,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceMatchSetActivateResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9100,13 +9124,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceRebuildDbResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9131,13 +9155,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceMatchSetRetireResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9166,13 +9190,13 @@ export interface operations {
                     "application/json": components["schemas"]["ConsistencyRunValidationResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9197,13 +9221,13 @@ export interface operations {
                     "application/json": components["schemas"]["SourceMatchSetValidateResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9270,13 +9294,13 @@ export interface operations {
                     "application/json": components["schemas"]["RustfsStorageConfig"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9303,13 +9327,13 @@ export interface operations {
                     "application/json": components["schemas"]["UploadSetStatus"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9336,13 +9360,13 @@ export interface operations {
                     "application/json": components["schemas"]["RustfsSyncLocalResult"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9367,13 +9391,13 @@ export interface operations {
                     "application/json": components["schemas"]["TableStat"][];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };
@@ -9399,13 +9423,13 @@ export interface operations {
                     "application/json": components["schemas"]["UploadSidoZipResponse"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Legacy validation error envelope */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };

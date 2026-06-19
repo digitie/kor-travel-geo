@@ -2,6 +2,24 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-20 (T-219 잔여 L v1/OpenAPI 계약 정리)
+
+**작업**: T-219 잔여 low-priority 항목을 `codex/t219-v1-compat-minors`에서 처리했다.
+보조 API contract 에이전트 검토를 받아 v1 Starlette 404/405, coordinate bounds 문구,
+ADR-053 문서 gap, non-vworld OpenAPI `422` drift를 확인했다.
+
+**결정**: v1 404/405는 `/v1/address/geocode`·`/v1/address/reverse`처럼 operation을
+명확히 결정할 수 있는 경로만 VWorld error envelope로 감싼다. coordinate bounds는 한글 범위
+메시지로 통일하되 v1은 VWorld `INVALID_RANGE`, v2는 `E0102`를 유지한다. v2에서 폐기한
+`StructuredErrorEnvelope`는 되살리지 않고, legacy non-vworld 경로 문서화용
+`LegacyErrorEnvelope`를 OpenAPI component로 추가한다.
+
+**검증**: Windows quick check로 targeted pytest 55건과 ruff를 통과했다. NTFS 변경 파일을
+WSL ext4 미러에 반영한 뒤 OpenAPI `--check`, targeted pytest 55건, backend 전체
+`pytest` 1086 passed/75 skipped, `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`,
+UI lint/type-check/unit/build를 통과했다. React Doctor는 `ok=true`였고 기존 UI 경고 31건을
+보고했다.
+
 ## 2026-06-20 (T-177H 벤치마크 수용 완료)
 
 **작업**: PR #387(T-197 REST 벤치마크 client disconnect cancellation 오탐 수정)을 머지한 뒤,

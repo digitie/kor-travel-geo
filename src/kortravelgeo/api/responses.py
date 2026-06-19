@@ -12,12 +12,15 @@ from fastapi.responses import ORJSONResponse
 from pydantic import ValidationError
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from kortravelgeo.api.vworld import (
     vworld_error_payload,
+    vworld_operation_for_error_path,
     vworld_operation_for_path,
     vworld_validation_error_payload,
 )
+from kortravelgeo.dto.common import KOREA_LON_LAT_BOUNDS_MESSAGE
 from kortravelgeo.exceptions import (
     DatabaseError,
     InvalidCoordinateError,
@@ -27,7 +30,9 @@ from kortravelgeo.exceptions import (
 from kortravelgeo.infra.metrics import record_api_db_error, record_db_pool_checkout_timeout
 
 _COORDINATE_BOUNDS_ERROR = "kor_travel_geo.coordinate_bounds"
-_COORDINATE_BOUNDS_MESSAGE = "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
+_COORDINATE_BOUNDS_MESSAGE = KOREA_LON_LAT_BOUNDS_MESSAGE
+_HTTP_404_MESSAGE = "요청 경로를 찾을 수 없습니다."
+_HTTP_405_MESSAGE = "요청 메서드가 허용되지 않습니다."
 _POOL_TIMEOUT_MESSAGE = "database connection pool checkout timed out"
 _POOL_TIMEOUT_HINT = (
     "increase KTG_PG_POOL_SIZE/KTG_PG_MAX_OVERFLOW, lower KTG_API_MAX_CONCURRENCY, "
@@ -90,6 +95,28 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_ktg_error(request: Request, exc: KorTravelGeoError) -> ORJSONResponse:
         return ORJSONResponse(
             error_payload(exc, path=request.url.path), status_code=exc.http_status
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_exception(
+        request: Request,
+        exc: StarletteHTTPException,
+    ) -> ORJSONResponse:
+        operation = vworld_operation_for_error_path(request.url.path)
+        if operation is not None and exc.status_code in (404, 405):
+            domain_error = InvalidInputError(
+                _http_exception_message(exc),
+                http_status=exc.status_code,
+            )
+            return ORJSONResponse(
+                vworld_error_payload(domain_error, operation=operation),
+                status_code=exc.status_code,
+                headers=exc.headers,
+            )
+        return ORJSONResponse(
+            {"detail": exc.detail},
+            status_code=exc.status_code,
+            headers=exc.headers,
         )
 
     @app.exception_handler(SQLAlchemyTimeoutError)
@@ -160,6 +187,14 @@ def _dbapi_error_to_domain(exc: DBAPIError) -> DatabaseError:
 
 def _validation_error_to_domain(exc: ValidationError) -> KorTravelGeoError:
     return _validation_errors_to_domain(exc.errors())
+
+
+def _http_exception_message(exc: StarletteHTTPException) -> str:
+    if exc.status_code == 404:
+        return _HTTP_404_MESSAGE
+    if exc.status_code == 405:
+        return _HTTP_405_MESSAGE
+    return str(exc.detail)
 
 
 def _validation_field(errors: Sequence[Mapping[str, Any]]) -> str | None:

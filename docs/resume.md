@@ -4,6 +4,16 @@
 
 ## 현재 진척도 (2026-06-20 갱신, by codex)
 
+- ✅ T-219 잔여 L 완료 — v1 VWorld geocode/reverse의 Starlette 404/405를 operation이
+  명확한 경우 VWorld error envelope로 감싸고, 좌표 bounds 검증 문구를 한글 범위 메시지로
+  통일했다. v1 coordinate bounds는 `INVALID_RANGE`, v2 coordinate bounds는 `E0102`를
+  유지한다. ADR-053에는 `response.service.version="2.0"`과 error
+  `response.service`/`response.status="ERROR"`를 명시했고, ADR-061은 ADR-062 이후의
+  `V2ErrorEnvelope`와 legacy non-vworld `LegacyErrorEnvelope` 400 OpenAPI 정합 상태로
+  갱신했다. `openapi.json`과 UI 생성 타입도 재생성했다. WSL ext4 미러 검증은 backend 전체
+  `pytest` 1086 passed/75 skipped, `ruff`, `mypy`, `lint-imports`, OpenAPI `--check`, UI
+  lint/type-check/unit/build 통과다. React Doctor는 `ok=true`였고 기존 UI 경고 31건을
+  보고했다.
 - ✅ T-177H 벤치마크 수용 완료 — PR #387(T-197 REST 벤치마크 client disconnect
   cancellation 오탐 수정)을 먼저 머지하고 `codex/t177h-benchmark-acceptance`를 `origin/main`
   `2a3bee2b3db5675e39066abb31029feaa5b66573` 위로 리베이스했다. `docs/ports.md`,

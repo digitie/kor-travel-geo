@@ -6,6 +6,19 @@
 
 ## 완료
 
+- [x] **T-219 잔여 L** — v1 VWorld 호환 minor 후속 정리(Agent A/Codex).
+  Starlette 404/405가 `/v1/address/geocode`·`/v1/address/reverse`에서 기본
+  `{detail}`로 새지 않도록, operation이 명확한 경로만 VWorld error envelope로 감쌌다.
+  좌표 bounds 검증 문구는 한글 범위 메시지로 통일하고 v1은 `INVALID_RANGE`, v2는
+  `E0102`를 유지한다. ADR-053에는 `response.service.version="2.0"`과 error
+  `response.service`/`response.status="ERROR"` 계약을 명시했고, ADR-061은 ADR-062 이후
+  v2 error envelope 상태와 legacy non-vworld OpenAPI `422`→`400` 정합으로 갱신했다.
+  `/v1/address/search`·`zipcode`·`pobox`와 admin validation 경로는 OpenAPI에서
+  `LegacyErrorEnvelope` 400을 명세하고 자동 422를 제거했다. `openapi.json`과 UI 생성 타입을
+  갱신했다. WSL ext4 미러에서 backend 전체 `pytest` 1086건, `ruff`, `mypy`,
+  `lint-imports`, OpenAPI `--check`, UI lint/type-check/unit/build가 통과했다. React Doctor는
+  `ok=true`였고 기존 UI 경고 31건을 보고했다. (2026-06-20)
+
 - [x] **T-177H** — T-047 벤치마크와 최종 수용 보고서(Agent A/Codex).
   PR #387(T-197)을 먼저 머지하고 `codex/t177h-benchmark-acceptance`를 `origin/main` 위로
   리베이스한 뒤 prod/dev 정의 문서를 다시 읽었다. 이번 판정은 prod 도메인이 아닌 dev

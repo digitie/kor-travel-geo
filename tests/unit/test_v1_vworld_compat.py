@@ -8,7 +8,7 @@ import pytest
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.dto.address import AddressStructure, RefinedAddress
-from kortravelgeo.dto.common import Point, ServiceMeta
+from kortravelgeo.dto.common import KOREA_LON_LAT_BOUNDS_MESSAGE, Point, ServiceMeta
 from kortravelgeo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
 from kortravelgeo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
 from kortravelgeo.exceptions import (
@@ -396,6 +396,71 @@ async def test_v1_reverse_validation_error_uses_invalid_type_template() -> None:
     assert body["response"]["service"]["operation"] == "getAddress"
     assert body["response"]["error"]["code"] == "INVALID_TYPE"
     assert body["response"]["error"]["text"] == "<x> 파라미터 타입이 유효하지 않습니다."
+
+
+@pytest.mark.asyncio
+async def test_v1_reverse_coordinate_bounds_error_uses_invalid_range() -> None:
+    response = await _get_v1(
+        "/v1/address/reverse",
+        {"x": 0.0, "y": 0.0},
+        _FakeV1Client,
+    )
+    body = response.json()
+
+    assert response.status_code == 400
+    assert body["response"]["service"]["operation"] == "getAddress"
+    assert body["response"]["error"]["code"] == "INVALID_RANGE"
+    assert body["response"]["error"]["text"] == KOREA_LON_LAT_BOUNDS_MESSAGE
+
+
+@pytest.mark.asyncio
+async def test_v1_geocode_404_subpath_keeps_vworld_error_object() -> None:
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/address/geocode/not-found")
+
+    body = response.json()
+
+    assert response.status_code == 404
+    assert body["response"]["status"] == "ERROR"
+    assert body["response"]["service"] == {
+        "name": "address",
+        "version": "2.0",
+        "operation": "getCoord",
+    }
+    assert body["response"]["error"] == {
+        "level": 1,
+        "code": "INVALID_TYPE",
+        "text": "요청 경로를 찾을 수 없습니다.",
+    }
+
+
+@pytest.mark.parametrize(
+    ("path", "operation"),
+    [
+        ("/v1/address/geocode", "getCoord"),
+        ("/v1/address/reverse", "getAddress"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_v1_405_keeps_vworld_error_object(path: str, operation: str) -> None:
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(path)
+
+    body = response.json()
+
+    assert response.status_code == 405
+    assert body["response"]["status"] == "ERROR"
+    assert body["response"]["service"]["operation"] == operation
+    assert body["response"]["service"]["version"] == "2.0"
+    assert body["response"]["error"] == {
+        "level": 1,
+        "code": "INVALID_TYPE",
+        "text": "요청 메서드가 허용되지 않습니다.",
+    }
 
 
 # --- M1: representative success bodies pin the published v1 contract shape ------------------
