@@ -4,6 +4,14 @@
 
 ## 현재 진척도 (2026-06-19 갱신, by codex)
 
+- ✅ T-196 rebuild-db materialize OOM 완화 진행 중 — T-195 force-promotion live UI e2e가
+  `source_rebuild_db` control job 생성과 payload 기록까지 성공했지만, RustFS materialize에서
+  `[Errno 12] Cannot allocate memory`로 실패해 #382로 분리했다. 대형 원천
+  `navi_full`/`electronic_map_full`이 포함되면 압축 해제를 1개씩만 수행하고, 내비게이션
+  `.7z`는 `stdout=PIPE` 대신 임시 파일 tail과 `-mmt=1`을 쓰도록 보강했다. materialize 실패
+  메시지에는 `category/source_file_group_id`를 포함한다. Targeted
+  `tests/unit/test_t189_rebuild_materialize.py` 13건, 전체 `pytest` 1075건, `ruff`, `mypy`,
+  `lint-imports`가 통과했다. PR 머지 뒤 T-183/T-195 live UI e2e를 재개한다.
 - ✅ 아키텍처 문서 UI 테이블 의존성 정정 — `docs/architecture/architecture.md`와
   `docs/architecture/frontend-package.md`의 테이블 설명을 현재 `VirtualTable`
   구현 기준으로 맞췄다. 관리 UI 표면은 `@tanstack/react-table`로 컬럼·필터·정렬을

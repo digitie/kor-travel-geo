@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import subprocess
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +22,8 @@ from kortravelgeo.infra.source_rebuild_service import (
     RebuildGroupRef,
     RebuildPlan,
     SourceRebuildService,
+    _effective_materialize_concurrency,
+    _extract_navi_7z,
 )
 
 
@@ -39,6 +42,12 @@ class _CancellingRustfs:
     async def download_file(self, key: str, destination: Path) -> None:
         del key, destination
         raise asyncio.CancelledError
+
+
+class _FailingRustfs:
+    async def download_file(self, key: str, destination: Path) -> None:
+        del key, destination
+        raise OSError(12, "Cannot allocate memory")
 
 
 def test_rebuild_plan_fans_out_roadname_to_text_and_parcel_link() -> None:
@@ -253,6 +262,87 @@ async def test_materialize_rebuild_plan_cleans_up_on_cancellation(
         )
 
     assert not (tmp_path / "stage").exists()
+
+
+@pytest.mark.asyncio
+async def test_materialize_rebuild_plan_adds_group_context_to_os_errors(
+    tmp_path: Path,
+) -> None:
+    plan = _plan(
+        "navi_full",
+        "navi_load",
+        (
+            _file(
+                source_file_id="f-navi",
+                object_key="registry/navi/archive.7z",
+                compression_format="7z",
+            ),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="navi_full/g-navi_full") as exc_info:
+        await _service().materialize_rebuild_plan(
+            _FailingRustfs(),
+            plan,
+            tmp_path / "stage",
+        )
+
+    assert "Cannot allocate memory" in str(exc_info.value)
+    assert not (tmp_path / "stage").exists()
+
+
+def test_heavy_rebuild_materialization_is_single_extract_at_a_time() -> None:
+    heavy_group = _group(
+        "electronic_map_full",
+        "shp_polygons_load",
+        (
+            _file(
+                source_file_id="f-map",
+                object_key="registry/electronic/archive.zip",
+            ),
+        ),
+    )
+    light_group = _group(
+        "roadaddr_entrance_full",
+        "roadaddr_entrance_load",
+        (
+            _file(
+                source_file_id="f-ent",
+                object_key="registry/entrance/archive.zip",
+            ),
+        ),
+    )
+
+    assert _effective_materialize_concurrency((heavy_group,), 3) == 1
+    assert _effective_materialize_concurrency((light_group,), 3) == 3
+    assert _effective_materialize_concurrency((heavy_group,), 0) == 1
+
+
+def test_extract_navi_7z_uses_single_thread_and_temp_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    archive = tmp_path / "navi.7z"
+    archive.write_bytes(b"fake")
+    captured: dict[str, Any] = {}
+
+    def fake_which(name: str) -> str | None:
+        return "/usr/bin/7z" if name == "7z" else None
+
+    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        stdout = kwargs["stdout"]
+        stdout.write("ok\n")
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(shutil, "which", fake_which)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    _extract_navi_7z(archive, tmp_path / "out")
+
+    assert "-mmt=1" in captured["args"]
+    assert captured["kwargs"]["stdout"] is not subprocess.PIPE
+    assert captured["kwargs"]["stderr"] is subprocess.STDOUT
 
 
 @pytest.mark.asyncio
