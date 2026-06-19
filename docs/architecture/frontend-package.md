@@ -21,7 +21,7 @@
 | UI | Tailwind 기반 자체 primitives + shadcn/ui source components |
 | 폼 | React Hook Form + Zod helper |
 | 지도 | MapLibre GL JS + VWorld WMTS + GitHub `maplibre-vworld-react` |
-| 테이블 | TanStack Table v8 |
+| 테이블 | TanStack React Table v8 + TanStack React Virtual |
 | 상태 | Zustand는 디버그 UI의 초안/결과처럼 브라우저 화면 상태가 재사용될 때 사용 |
 | 데이터 패칭 | TanStack Query v5 |
 | 타입 동기 | openapi-typescript + 수동 Zod mirror |
@@ -195,7 +195,8 @@ npx react-doctor@latest . --offline --verbose --json
 - **CoordinateMap**: MapLibre GL JS와 VWorld WMTS raster style을 사용한다. VWorld 키가 없으면 지도 대신 좌표 프리뷰 UI를 보여 주고, MapLibre를 대체하는 별도 fallback 지도는 두지 않는다. 좌표 입력과 click callback은 모두 `(lon, lat)` 순서다. v2 후보의 `point` marker와 선택 `geometry` overlay를 함께 표시한다.
 - **GeocodeDebugger**: `address`, `type`, `fallback`, `include_geometry`를 받아 `/v2/geocode`를 호출하고 JSON 응답과 지도/좌표·도형 프리뷰를 함께 표시한다.
 - **RegionsWithinRadiusDebugger**: POI `(lon, lat)`와 `radius_km`, `levels`를 React Hook Form/Zod로 검증하고 `/v2/regions/within-radius`를 호출한다. 초안과 마지막 결과는 Zustand store에 저장하고, 요청은 TanStack Query mutation으로 실행한다. shadcn/ui `Card`, `Field`, `Input`, `Checkbox`, `Button`으로 구성한다.
-- **TableStatsPanel**: `GET /v1/admin/tables` 결과를 native table로 보여준다. 수천 행 이상 필터·정렬이 필요해지면 TanStack Table로 승격한다.
+- **VirtualTable**: 관리 UI 표면 공용 컴포넌트다. `@tanstack/react-table`로 컬럼 정의, 전역 필터, 정렬을 처리하고, 기본 `grid` 모드는 `@tanstack/react-virtual`로 row windowing을 적용한다. `as="table"` 모드는 작은 목록과 접근성 민감 화면에서 실제 `<table>` 구조를 렌더링한다.
+- **TableStatsPanel**: `GET /v1/admin/tables` 결과를 `VirtualTable`로 보여준다.
 - **JsonBlock**: JSON 응답과 EXPLAIN plan을 monospace pre 영역으로 표시. 별도 코드 표시 라이브러리는 production dependency로 두지 않는다.
 - **ZipSourceBadge**: `ZipSource` enum별 색상/라벨 메타데이터로 시각화.
 
