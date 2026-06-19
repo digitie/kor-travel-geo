@@ -45,9 +45,12 @@ placeholder만 둔다(`.env.prod.example`). 두 배포 경로가 같은 prod env
   `--env-file`은 API·UI 컨테이너 모두에 적용되어 `KTG_API_CORS_ORIGINS`·`KTG_RUSTFS_*` 값이 그대로
   전달된다. UI→API는 같은 docker 네트워크 내부 주소(`http://kor-travel-geo-api:12501`)를 기본으로
   쓴다(co-located 최적). 공개 `geo-api.*`는 외부 진입용 리버스 프록시 엣지다.
-- `docker_app.sh`: `KTG_ENV_FILE=.env.prod scripts/docker_app.sh up` 으로 같은 파일을 읽는다.
-  URL·RustFS·CORS·GeoIP 값을 `.env`/env-file에서 해석하고 `KTG_API_CORS_ORIGINS`도 API 컨테이너에 주입한다.
+- `docker_app.sh`는 **dev 기본**(host 네트워크 모드, `127.0.0.1`, 앱 포트 12xxx)이다. `KTG_ENV_FILE=.env.prod`로
+  prod 프로파일을 읽게 할 수도 있으나, **정식 prod 기동은 `kor-travel-docker-manager`**가 담당한다. 이 스크립트는
+  URL·RustFS·CORS·GeoIP를 `.env`/env-file에서 해석하고 `KTG_API_CORS_ORIGINS`도 API 컨테이너에 주입한다.
 - 도메인은 서버사이드 변수(`KTG_*`)에만 둔다. `NEXT_PUBLIC_*`에는 넣지 않아 브라우저 번들로 노출되지 않는다.
+- **dev/prod 구분**: 별도 지시가 없으면 dev 환경을 의미한다. dev는 이 저장소(직접 실행 또는 `docker_app.sh`)에서
+  `127.0.0.1` + 12xxx로, prod는 `kor-travel-docker-manager` + 공식 도메인으로 동작한다. 비교표는 `docs/ports.md`.
 
 ## 스크립트
 

@@ -9,7 +9,11 @@ UI_IMAGE="${KTG_UI_IMAGE:-kor-travel-geo-ui:latest-main}"
 API_CONTAINER="${KTG_API_CONTAINER:-kor-travel-geo-api-latest}"
 UI_CONTAINER="${KTG_UI_CONTAINER:-kor-travel-geo-ui-latest}"
 RESTART_POLICY="${KTG_DOCKER_RESTART_POLICY:-unless-stopped}"
-NETWORK_MODE="${KTG_DOCKER_NETWORK_MODE:-bridge}"
+# 별도 지시가 없으면 dev 환경이 기본이다. dev는 host 네트워크 모드로 띄워 API/UI/DB/RustFS가
+# 모두 루프백 127.0.0.1로 일관 동작한다(앱 포트는 12xxx — API 12501 / UI 12505).
+# prod는 이 스크립트가 아니라 kor-travel-docker-manager로 올리고 공식 도메인을 쓴다(.env.prod).
+# Docker Desktop(Windows/Mac) host 네트워크 제약이 있으면 KTG_DOCKER_NETWORK_MODE=bridge로 바꾼다.
+NETWORK_MODE="${KTG_DOCKER_NETWORK_MODE:-host}"
 NETWORK_NAME="${KTG_DOCKER_NETWORK:-kor-travel-geo-net}"
 HOST_GATEWAY="${KTG_DOCKER_HOST_GATEWAY:-host.docker.internal}"
 
@@ -54,21 +58,33 @@ Usage:
   scripts/docker_app.sh cli <command> [args...]
   scripts/docker_app.sh load <ktgctl load args...>
 
-This script only starts kor-travel-geo API/UI containers.
-PostgreSQL and RustFS must already be running somewhere reachable. Store their
-connection settings in this project via .env or process environment variables.
+This script starts the kor-travel-geo API/UI containers for the DEV environment.
+별도 지시가 없으면 dev 기본: host 네트워크 모드 + 루프백 127.0.0.1 + 앱 포트 12xxx
+(API http://127.0.0.1:12501, UI http://127.0.0.1:12505). PostgreSQL/RustFS는 직접
+구동하지 않고 127.0.0.1에 게시된(예: kor-travel-docker-manager) 인프라에 접속한다.
+prod는 이 스크립트가 아니라 kor-travel-docker-manager로 올리고 공식 도메인을 쓴다.
+
+이미 같은 컨테이너/포트가 떠 있으면 새 포트로 우회하지 않는다. 강제종료 여부를 물은 뒤,
+거부하면(또는 비대화형에서 KTG_FORCE_KILL 미설정이면) 작업을 중지한다.
+KTG_FORCE_KILL=1 이면 묻지 않고 강제종료 후 재기동한다.
+
+Env files (KTG_ENV_FILE 우선 → .env → kor-travel-geo-ui/.env.local):
+  KTG_ENV_FILE=.env.dev    # dev 프로파일(127.0.0.1, 12xxx) — .env.dev.example 참고
+  KTG_ENV_FILE=.env.prod   # prod 도메인 프로파일 — .env.prod.example 참고
 
 Important env:
-  KTG_DOCKER_PG_DSN=postgresql+psycopg://addr:addr@host.docker.internal:5432/kor_travel_geo
+  KTG_DOCKER_NETWORK_MODE=host                 # dev 기본. Docker Desktop 제약 시 bridge
+  KTG_DOCKER_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:5432/kor_travel_geo
   KTG_RUSTFS_ENABLED=1
-  KTG_RUSTFS_ENDPOINT_URL=http://host.docker.internal:12101
+  KTG_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101
   KTG_RUSTFS_BUCKET=kor-travel-geo
   KTG_RUSTFS_PREFIX=kor-travel-geo
   KTG_RUSTFS_ACCESS_KEY=<access key>
   KTG_RUSTFS_SECRET_KEY=<secret key>
   KTG_DOCKER_DATA_DIR=/mnt/f/dev/kor-travel-geo/data
-  KTG_DOCKER_RESTART_POLICY=unless-stopped   # set to "no" to disable
+  KTG_DOCKER_RESTART_POLICY=unless-stopped     # set to "no" to disable
   KTG_VWORLD_API_KEY=<runtime key>
+  KTG_FORCE_KILL=1                             # 이미 떠 있어도 묻지 않고 강제종료
 EOF
 }
 
@@ -195,6 +211,65 @@ free_host_port() {
   fi
 }
 
+# 이미 떠 있는 컨테이너/포트를 강제종료할지 사용자에게 확인한다.
+# 정책(prod 유무 무관): 새 포트로 우회하지 않는다. 거부하면 작업을 중지한다(컨테이너를 띄우지 않음).
+#  - KTG_FORCE_KILL=1|true|yes → 묻지 않고 강제종료(자동화용)
+#  - 비대화형(TTY 없음) + KTG_FORCE_KILL 미설정 → 안전하게 중지(exit 3)
+#  - 대화형 → [y/N] 프롬프트. 기본 No → 중지
+confirm_force_kill() {
+  local target="$1" reasons="$2"
+  case "${KTG_FORCE_KILL:-}" in
+    1 | true | TRUE | yes | YES)
+      log "KTG_FORCE_KILL set — 강제종료 후 재기동: ${target} (${reasons})"
+      return 0
+      ;;
+  esac
+  if [[ ! -t 0 ]]; then
+    log "ERROR: ${target} 가(이) 이미 사용 중입니다 (${reasons})."
+    log "비대화형 환경에서는 강제종료하지 않습니다. 새 포트로 열지 않고 작업을 중지합니다."
+    log "강제 교체가 필요하면 KTG_FORCE_KILL=1 로 다시 실행하세요."
+    exit 3
+  fi
+  local reply=""
+  printf '[docker-app] %s 가(이) 이미 사용 중입니다 (%s).\n' "$target" "$reasons" >&2
+  printf '[docker-app] 강제종료하고 다시 띄울까요? [y/N] ' >&2
+  read -r reply || reply=""
+  case "$reply" in
+    y | Y | yes | YES)
+      return 0
+      ;;
+    *)
+      log "사용자가 강제종료를 거부했습니다. 새 포트로 열지 않고 작업을 중지합니다."
+      exit 3
+      ;;
+  esac
+}
+
+# dev 포트/컨테이너가 이미 사용 중인지 검사하고, 그렇다면 confirm_force_kill로 확인한다.
+# 동의(또는 KTG_FORCE_KILL)한 경우에만 호출부의 remove_container/free_host_port가 정리한다.
+guard_running() {
+  local name="$1" port="$2"
+  local reasons=()
+  if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Fxq "$name"; then
+    reasons+=("container '${name}'")
+  fi
+  local published
+  published="$(docker ps --filter "publish=${port}" --format '{{.Names}}' 2>/dev/null | paste -sd' ' - || true)"
+  [[ -n "$published" ]] && reasons+=("docker publish :${port} (${published})")
+  local pids=""
+  if command -v lsof >/dev/null 2>&1; then
+    pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | paste -sd' ' - || true)"
+  elif command -v fuser >/dev/null 2>&1; then
+    pids="$(fuser -n tcp "$port" 2>/dev/null | tr -s ' ' || true)"
+  fi
+  [[ -n "$pids" ]] && reasons+=("host PID :${port} (${pids})")
+  if [[ ${#reasons[@]} -gt 0 ]]; then
+    local joined
+    printf -v joined '%s; ' "${reasons[@]}"
+    confirm_force_kill "${name}:${port}" "${joined%; }"
+  fi
+}
+
 build_api() {
   require_docker
   log "building API image: $API_IMAGE"
@@ -210,6 +285,7 @@ build_ui() {
 run_api() {
   require_docker
   ensure_network
+  guard_running "$API_CONTAINER" "$API_HOST_PORT"
   remove_container "$API_CONTAINER"
   free_host_port "$API_HOST_PORT"
   resolve_runtime_env
@@ -260,6 +336,7 @@ run_api() {
 run_ui() {
   require_docker
   ensure_network
+  guard_running "$UI_CONTAINER" "$UI_HOST_PORT"
   remove_container "$UI_CONTAINER"
   free_host_port "$UI_HOST_PORT"
   resolve_runtime_env
