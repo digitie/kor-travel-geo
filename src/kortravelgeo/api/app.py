@@ -177,10 +177,11 @@ def create_app() -> FastAPI:
     return app
 
 
-# Public address endpoints translate request-validation failures into an explicit 400
-# error envelope (see :mod:`kortravelgeo.api.responses`): v1 -> VWorld error object,
-# v2 -> structured envelope (intended input-safety, T-173/ADR-061). FastAPI's auto-422 is
-# therefore never emitted on these paths, so drop it from the published schema.
+# Endpoints translate request-validation failures into explicit 400 error envelopes
+# (see :mod:`kortravelgeo.api.responses`): v1 VWorld geocode/reverse -> VWorld error object,
+# v2 -> structured envelope, and legacy v1/admin paths -> ``{response:{errorCode,...}}``.
+# FastAPI's auto-422 is therefore never emitted on these paths, so drop it from the
+# published schema.
 _VALIDATION_STRUCTURED_400 = (
     ("/v1/address/geocode", "get"),
     ("/v1/address/reverse", "get"),
@@ -189,14 +190,21 @@ _VALIDATION_STRUCTURED_400 = (
     ("/v2/search", "post"),
     ("/v2/regions/within-radius", "post"),
 )
+_VALIDATION_LEGACY_400 = (
+    ("/v1/address/search", "get"),
+    ("/v1/address/zipcode", "get"),
+    ("/v1/address/pobox", "get"),
+)
+_HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
+_LEGACY_ERROR_ENVELOPE_REF = "#/components/schemas/LegacyErrorEnvelope"
 
 
 def _install_openapi_customization(app: FastAPI) -> None:
-    """Align the published OpenAPI with actual public-address wire behaviour (T-219 M3/M4).
+    """Align the published OpenAPI with actual validation-error wire behaviour (T-219).
 
-    Each operation in :data:`_VALIDATION_STRUCTURED_400` declares its own ``400`` and never
-    emits FastAPI's auto-generated ``422``; remove that ``422`` so the schema matches the wire.
-    Wire behaviour is unchanged — this only fixes published-contract drift.
+    Operations covered here emit ``400`` through the global validation handler instead of
+    FastAPI's auto-generated ``422``. Remove the misleading ``422`` and publish the matching
+    ``400`` envelope for legacy v1/admin paths that do not already declare a model.
     """
     base_openapi = app.openapi
 
@@ -204,14 +212,76 @@ def _install_openapi_customization(app: FastAPI) -> None:
         if app.openapi_schema is not None:
             return app.openapi_schema
         schema = base_openapi()
+        _ensure_legacy_error_schemas(schema)
         for path, method in _VALIDATION_STRUCTURED_400:
-            operation = schema.get("paths", {}).get(path, {}).get(method)
-            if operation is not None:
-                operation.get("responses", {}).pop("422", None)
+            _drop_validation_422(schema, path=path, method=method)
+        for path, method in _VALIDATION_LEGACY_400:
+            _publish_legacy_validation_400(schema, path=path, method=method)
+        for path, path_item in schema.get("paths", {}).items():
+            if not path.startswith("/v1/admin/") or not isinstance(path_item, dict):
+                continue
+            for method in _HTTP_METHODS:
+                if method in path_item:
+                    _publish_legacy_validation_400(schema, path=path, method=method)
         app.openapi_schema = schema
         return schema
 
     app.openapi = custom_openapi  # type: ignore[method-assign]
+
+
+def _drop_validation_422(schema: dict[str, Any], *, path: str, method: str) -> None:
+    operation = schema.get("paths", {}).get(path, {}).get(method)
+    if isinstance(operation, dict):
+        operation.get("responses", {}).pop("422", None)
+
+
+def _publish_legacy_validation_400(schema: dict[str, Any], *, path: str, method: str) -> None:
+    operation = schema.get("paths", {}).get(path, {}).get(method)
+    if not isinstance(operation, dict):
+        return
+    responses = operation.get("responses")
+    if not isinstance(responses, dict):
+        return
+    had_validation_422 = responses.pop("422", None) is not None
+    if not had_validation_422 or "400" in responses:
+        return
+    responses["400"] = {
+        "description": "Legacy validation error envelope",
+        "content": {
+            "application/json": {
+                "schema": {"$ref": _LEGACY_ERROR_ENVELOPE_REF},
+            },
+        },
+    }
+
+
+def _ensure_legacy_error_schemas(schema: dict[str, Any]) -> None:
+    components = schema.setdefault("components", {}).setdefault("schemas", {})
+    components.setdefault(
+        "LegacyErrorBody",
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["status", "errorCode", "errorMessage"],
+            "properties": {
+                "status": {"type": "string", "const": "ERROR"},
+                "errorCode": {"type": "string"},
+                "errorMessage": {"type": "string"},
+                "hint": {"type": "string"},
+            },
+        },
+    )
+    components.setdefault(
+        "LegacyErrorEnvelope",
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["response"],
+            "properties": {
+                "response": {"$ref": "#/components/schemas/LegacyErrorBody"},
+            },
+        },
+    )
 
 
 def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:

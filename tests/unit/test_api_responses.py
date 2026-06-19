@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError, ProgrammingError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from kortravelgeo.api.responses import register_exception_handlers
+from kortravelgeo.dto.common import KOREA_LON_LAT_BOUNDS_MESSAGE
 
 
 class _CoordinateModel(BaseModel):
@@ -15,8 +16,10 @@ class _CoordinateModel(BaseModel):
 
     @model_validator(mode="after")
     def reject_outside_korea(self) -> _CoordinateModel:
-        msg = "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
-        raise PydanticCustomError("kor_travel_geo.coordinate_bounds", msg)
+        raise PydanticCustomError(
+            "kor_travel_geo.coordinate_bounds",
+            KOREA_LON_LAT_BOUNDS_MESSAGE,
+        )
 
 
 def test_pydantic_validation_error_maps_to_invalid_coordinate_response() -> None:
@@ -33,6 +36,7 @@ def test_pydantic_validation_error_maps_to_invalid_coordinate_response() -> None
     assert response.status_code == 400
     assert response.json()["response"]["status"] == "ERROR"
     assert response.json()["response"]["errorCode"] == "E0102"
+    assert response.json()["response"]["errorMessage"] == KOREA_LON_LAT_BOUNDS_MESSAGE
 
 
 class _GenericInvalidModel(BaseModel):

@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Fixed
+- T-219 v1 VWorld geocode/reverse에서 Starlette 404/405가 기본 `{detail}` 응답으로 새던
+  계약 drift를 operation이 명확한 경로의 VWorld error envelope로 감쌌다. coordinate bounds
+  메시지는 한글 범위 문구로 통일하고, legacy non-vworld validation OpenAPI는 런타임과 같은
+  `400 LegacyErrorEnvelope`로 맞췄다.
 - T-197 public address API의 client disconnect cancellation 오탐을 수정했다. disconnect/app
   task 동시 완료 race에서는 정상 취소를 ASGI error로 흘리지 않고, 응답 완료 뒤 들어온
   `http.disconnect`는 이미 완료된 정상 응답을 취소하지 않는다.

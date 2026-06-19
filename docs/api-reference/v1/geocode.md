@@ -9,7 +9,7 @@
 | 필드 | 타입 | 기본값 | 설명 |
 |------|------|--------|------|
 | `address` | string | 필수 | 검색할 도로명 또는 지번 주소 |
-| `type` | `road` 또는 `parcel` (소문자) | `road` | 주소 유형 |
+| `type` | `road` 또는 `parcel` | `road` | 주소 유형. 입력은 대소문자를 구분하지 않는다. |
 | `crs` | string | `EPSG:4326` | 출력 좌표계 |
 | `refine` | boolean | `true` | 정규화 주소 반환 여부 |
 | `simple` | boolean | `false` | 간소 응답 후보 |
@@ -24,10 +24,7 @@ HTTP 응답 최상위는 항상 `response`다.
 - `response.service.name`: `address`
 - `response.service.operation`: `getCoord`
 - `response.status`: `OK`, `NOT_FOUND`, `ERROR`
-- `response.input.type`: `ROAD` 또는 `PARCEL`
-  - ⚠️ 입력 `type`은 **소문자**(`road`/`parcel`)만 받는다. 응답의 `input.type`은 vworld 호환을 위해
-    **대문자**(`ROAD`/`PARCEL`)로 직렬화되므로, 응답값을 그대로 입력에 되넣으면(`type=ROAD`)
-    `400 INVALID_TYPE`가 난다. 대소문자 무관 허용은 후속 과제(테스트 동반)로 검토.
+- `response.input.type`: `ROAD` 또는 `PARCEL`. 입력 `type`은 대소문자를 구분하지 않아 응답값(`ROAD`/`PARCEL`)을 그대로 다시 보낼 수 있다.
 - `response.refined`: vworld 호환 정제 주소 구조. `refine=false` 또는 `simple=true`이면 생략된다.
 - `response.result.point`: `x=lon`, `y=lat`
 - `response.x_extension.source`: `local`, `api_vworld`, `api_juso`, `cache`

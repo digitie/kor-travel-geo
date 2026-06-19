@@ -14,7 +14,8 @@ type AddressType = Literal["road", "parcel"]
 
 _CRS_RE = re.compile(r"^EPSG:\d{4,6}$")
 KOREA_LON_LAT_BOUNDS_MESSAGE = (
-    "point must be within Korea lon/lat bounds: 123 < x < 132, 32 < y < 39"
+    "좌표 파라미터의 값이 유효한 범위를 넘었습니다. "
+    "(123 < lon < 132, 32 < lat < 39)"
 )
 
 
@@ -92,5 +93,3 @@ class ZipSource(StrEnum):
     KODIS_BAS_WITHIN = "kodis_bas_within"
     KODIS_BAS_CENTROID = "kodis_bas_centroid"
     POBOX = "pobox"
-
-

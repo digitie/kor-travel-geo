@@ -3530,6 +3530,42 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "LegacyErrorBody": {
+        "additionalProperties": false,
+        "properties": {
+          "errorCode": {
+            "type": "string"
+          },
+          "errorMessage": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "status": {
+            "const": "ERROR",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "errorCode",
+          "errorMessage"
+        ],
+        "type": "object"
+      },
+      "LegacyErrorEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/LegacyErrorBody"
+          }
+        },
+        "required": [
+          "response"
+        ],
+        "type": "object"
+      },
       "LoadJobStatus": {
         "additionalProperties": false,
         "properties": {
@@ -10811,19 +10847,17 @@
             "$ref": "#/components/schemas/VWorldErrorDetail"
           },
           "service": {
-            "additionalProperties": true,
-            "title": "Service",
-            "type": "object"
+            "$ref": "#/components/schemas/VWorldService"
           },
           "status": {
             "const": "ERROR",
-            "default": "ERROR",
             "title": "Status",
             "type": "string"
           }
         },
         "required": [
           "service",
+          "status",
           "error"
         ],
         "title": "VWorldErrorBody",
@@ -11069,6 +11103,36 @@
           "structure"
         ],
         "title": "VWorldReverseResultItem",
+        "type": "object"
+      },
+      "VWorldService": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "const": "address",
+            "title": "Name",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "getCoord",
+              "getAddress"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "version": {
+            "const": "2.0",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "operation"
+        ],
+        "title": "VWorldService",
         "type": "object"
       },
       "ValidationError": {
@@ -11501,15 +11565,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Pobox",
@@ -11766,15 +11830,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Search",
@@ -11877,15 +11941,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Zipcode",
@@ -11959,15 +12023,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Backups",
@@ -11998,15 +12062,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Submit Backup",
@@ -12061,15 +12125,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Run Backup Retention Janitor",
@@ -12147,15 +12211,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Get Backup",
@@ -12200,15 +12264,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Copy Backup",
@@ -12242,15 +12306,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Delete Backup",
@@ -12293,15 +12357,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Download Backup",
@@ -12346,15 +12410,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Verify Backup",
@@ -12435,15 +12499,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Consistency",
@@ -12501,15 +12565,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Run Consistency",
@@ -12543,15 +12607,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Consistency Report",
@@ -12837,15 +12901,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Consistency Case Samples",
@@ -12898,15 +12962,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Bulk Update Consistency Sample Decisions",
@@ -12968,15 +13032,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Update Consistency Sample Decision",
@@ -13028,15 +13092,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Recheck Consistency Sample",
@@ -13079,15 +13143,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Consistency Case Summary",
@@ -13120,15 +13184,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Explain",
@@ -13199,15 +13263,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Jobs",
@@ -13241,15 +13305,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Job Status",
@@ -13283,15 +13347,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Cancel Job",
@@ -13323,15 +13387,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Job Events",
@@ -13402,15 +13466,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Loads",
@@ -13441,15 +13505,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Submit Load",
@@ -13483,15 +13547,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Load Status",
@@ -13525,15 +13589,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Cancel Load",
@@ -13574,15 +13638,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Recent Logs",
@@ -13621,15 +13685,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Refresh Mv",
@@ -13662,15 +13726,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Normalize",
@@ -13743,15 +13807,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Ops Artifacts",
@@ -13824,15 +13888,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Ops Audit Events",
@@ -13866,15 +13930,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Register Benchmark Artifact",
@@ -13931,15 +13995,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Ops Maintenance Windows",
@@ -13970,15 +14034,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Create Ops Maintenance Window",
@@ -14022,15 +14086,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "End Ops Maintenance Window",
@@ -14081,15 +14145,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Ops Pg Stat Statements",
@@ -14130,15 +14194,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Capture Ops Pg Stat Statements",
@@ -14195,15 +14259,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Ops Releases",
@@ -14248,15 +14312,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Rollback Serving Release",
@@ -14290,15 +14354,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Rollback Plan",
@@ -14355,15 +14419,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Ops Snapshots",
@@ -14420,15 +14484,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Ops Table Stats",
@@ -14485,15 +14549,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Capture Ops Table Stats",
@@ -14526,15 +14590,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Submit Restore",
@@ -14568,15 +14632,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Restore Dry Run",
@@ -14610,15 +14674,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Restore Hot Swap Execute",
@@ -14651,15 +14715,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Restore Hot Swap Plan",
@@ -14693,15 +14757,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Restore Hot Swap Rollback",
@@ -14780,15 +14844,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Relink Restored Source File Group",
@@ -14823,15 +14887,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Restore Source File Group",
@@ -14876,15 +14940,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Soft Delete Source File Group",
@@ -14919,15 +14983,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Validate Source File Group",
@@ -14961,15 +15025,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Bulk Hard Delete Source Files",
@@ -15025,15 +15089,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Fetch Epost Source",
@@ -15097,15 +15161,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Source Reconcile Runs",
@@ -15137,15 +15201,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Run Source Reconcile",
@@ -15190,15 +15254,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Resolve Source Reconcile Item",
@@ -15233,15 +15297,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Get Source Reconcile Run",
@@ -15320,15 +15384,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Source Reconcile Items",
@@ -15435,15 +15499,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Upload Sessions",
@@ -15475,15 +15539,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Create Upload Session",
@@ -15517,15 +15581,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Get Upload Session",
@@ -15558,15 +15622,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Upload Session Events",
@@ -15620,15 +15684,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Abort Multipart Upload",
@@ -15670,15 +15734,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Initiate Multipart Upload",
@@ -15742,15 +15806,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Complete Multipart Upload",
@@ -15813,15 +15877,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Upload Multipart Part",
@@ -15865,15 +15929,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Replace Upload Slot",
@@ -15918,15 +15982,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Register Upload Session",
@@ -15984,15 +16048,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "List Source Match Sets",
@@ -16024,15 +16088,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Create Source Match Set",
@@ -16066,15 +16130,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Create Restored From Backup Match Set",
@@ -16109,15 +16173,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Get Source Match Set",
@@ -16152,15 +16216,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Activate Source Match Set",
@@ -16205,15 +16269,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Rebuild Source Match Set Db",
@@ -16248,15 +16312,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Retire Source Match Set",
@@ -16301,15 +16365,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Run Source Match Set Validation",
@@ -16344,15 +16408,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Validate Source Match Set",
@@ -16425,15 +16489,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Patch Rustfs Storage Config",
@@ -16466,15 +16530,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Import Rustfs Prefix",
@@ -16507,15 +16571,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Sync Local To Rustfs Storage",
@@ -16556,15 +16620,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Table Stats",
@@ -16616,15 +16680,15 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "400": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Upload Sido Zip",

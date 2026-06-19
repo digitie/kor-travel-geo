@@ -21,16 +21,13 @@ T-106이 추가한 전역 `RequestValidationError` 핸들러(`api/responses.py`)
 
 1. **(사용자 결정, 옵션 a) 전 경로 검증 에러를 구조화 400 `{response:{...}}`로 통일 유지한다** — 비-address 경로
    (admin/zipcode/pobox/`regions/within-radius`) 포함. 단일 에러 envelope가 SDK·UI 분기 비용을 최소화한다. wire 무회귀.
-2. v2 public address 경로(geocode/reverse/search)의 구조화 400은 **의도된 input-safety(T-173)**로 명문화하고,
-   OpenAPI에 `400`(`StructuredErrorEnvelope`)을 명세 + 오해 소지 자동 `422`를 억제한다(v1 vworld의 M3와 동일 패턴).
+2. v2 public address 경로(geocode/reverse/search, `regions/within-radius`)의 구조화 400은 **의도된 input-safety(T-173)**로 명문화한다. ADR-062 이후 v2는 `{status:"ERROR", query_id, error:{code,message,hint?,field?}}` 형태의 `V2ErrorEnvelope`를 명세하고, 오해 소지 자동 `422`를 억제한다(v1 vworld의 M3와 동일 패턴).
 3. `hint`는 raw repr 대신 `loc: msg` 기반 sanitized 요약으로 교체한다(`_summarize_validation_errors`). 입력값·내부
    url/ctx를 노출하지 않으며, `extra='forbid'`가 만드는 `extra_forbidden`의 loc leaf(= 사용자가 보낸 키 이름)는
    reflect하지 않고 "unexpected field"로 일반화한다. bogus 키 대량 주입에 의한 응답 증폭을 막도록 항목 dedup +
    개수·길이 상한을 둔다. envelope 형태(`{response:{errorCode,errorMessage,hint?}}`)는 **비-breaking으로 유지**한다.
-4. ADR-060 §4의 **v2 전용 error envelope 재구조화**(`{status:"ERROR", query_id, error:{code,message,hint?,field?}}`)는
-   breaking이라 v2 배포 직전 묶음으로 **계속 연기**한다. 본 ADR은 현행 형태만 정직화한다.
-5. admin/zipcode/pobox/`regions/within-radius`의 런타임 400은 유지하되, 이들 경로의 OpenAPI `422`→`400` 명세 정합은
-   **낮은 우선순위 후속**으로 남긴다(내부·비-address endpoint, 본 PR scope 밖, pre-existing drift).
+4. ADR-060 §4의 **v2 전용 error envelope 재구조화**는 ADR-062/T-268에서 배포 전 breaking 묶음으로 완료됐다. 본 ADR의 "전 경로 구조화 400" 원칙은 그대로 유지하되, v2 public 경로는 더 이상 legacy `{response:{errorCode}}` envelope를 쓰지 않는다.
+5. admin/zipcode/pobox와 같은 legacy non-vworld 경로의 런타임 400은 유지한다. T-219 후속에서 이들 경로의 OpenAPI도 `LegacyErrorEnvelope` 400으로 명세하고 자동 `422`를 억제해 런타임과 문서 계약을 맞춘다.
 
 ## 근거
 
@@ -40,6 +37,6 @@ T-106이 추가한 전역 `RequestValidationError` 핸들러(`api/responses.py`)
 
 ## 결과
 
-- `responses.py`: `hint`를 `_summarize_validation_errors`로 교체(extra-key leaf 미reflect·dedup·개수/길이 상한). `dto/common.py`: `StructuredErrorEnvelope` 추가.
-- v2 geocode/reverse/search에 `400` 명세 + 자동 `422` 억제(`_install_openapi_customization` 확장). openapi/typegen 재생성.
-- 비-address 경로 OpenAPI 422→400 정합과 v2 error envelope 재구조화는 미실행(연기).
+- `responses.py`: `hint`를 `_summarize_validation_errors`로 교체(extra-key leaf 미reflect·dedup·개수/길이 상한).
+- v2 geocode/reverse/search/`regions/within-radius`에 `V2ErrorEnvelope` 400 명세 + 자동 `422` 억제(`_install_openapi_customization` 확장). openapi/typegen 재생성.
+- legacy non-vworld 경로는 `LegacyErrorEnvelope` 400 명세 + 자동 `422` 억제로 런타임 400과 OpenAPI를 맞춘다.
