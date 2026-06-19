@@ -13,7 +13,8 @@
 
 ## 진행 중
 
-- **진행 중 작업 없음.** (T-183 live UI full-load e2e 완료 — `tasks-done.md` 참조.)
+- **진행 중 작업 없음.** (T-177A~T-177H와 T-183 live UI full-load e2e 완료 —
+  `tasks-done.md` 참조.)
 
 ## 대기
 
@@ -21,21 +22,16 @@
 > 두 에이전트 병행 권장 순서·병행 운영 원칙(PR/리뷰 루프)은
 > [`docs/runbooks/agent-workflow.md`](runbooks/agent-workflow.md)를 본다.
 
-T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일 기반 full-load e2e
-재검증을 진행한다. T-177은 T-073 shell script에 맞추지 않고, opt-in pytest 통합/e2e가 실제
-파일을 읽어 scratch PostgreSQL DB를 구축하는 방향으로 진행한다. 상세 계획과 Task 분해는
-[`docs/t177-file-driven-full-load-e2e-plan.md`](t177-file-driven-full-load-e2e-plan.md)가 정본이다.
+T-178a~T-178f Claude Code 리뷰 후속과 T-177 파일 기반 full-load e2e 재검증은 모두 닫혔다.
+T-177은 T-073 shell script에 맞추지 않고, opt-in pytest 통합/e2e가 실제 파일을 읽어 scratch
+PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task 분해는
+[`docs/t177-file-driven-full-load-e2e-plan.md`](t177-file-driven-full-load-e2e-plan.md), 최종
+성능 수용은 [`docs/t177h-benchmark-acceptance.md`](t177h-benchmark-acceptance.md)가
+정본이다.
 
 ### 선행 리뷰 후속
 
 - **진행 중 작업 없음.** (T-178a~T-178f Claude Code 리뷰 후속 완료 — `tasks-done.md` 참조.)
-
-### T-177 파일 기반 full-load e2e
-
-- [ ] **T-177H** — T-047 benchmark와 최종 acceptance report.
-
-  전국 long-run DB를 기준으로 SQL/REST benchmark hook, p95/p99, error count, slow plan,
-  `pg_stat_statements` snapshot을 수집하고 최종 acceptance 문서를 갱신한다.
 
 ### 선택 후속 (낮은 우선순위)
 
@@ -55,6 +51,6 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
 ## 보류 (외부 조건)
 
 - [ ] **T-063** — N150/Odroid 실측 실행. 실제 N150/Odroid 장비가 준비되면 T-055 runbook을
-  사용해 full-load, SQL benchmark, REST benchmark, MV refresh/swap, backup/restore를 최소
+  사용해 full-load, SQL 벤치마크, REST 벤치마크, MV refresh/swap, backup/restore를 최소
   3회씩 측정하고 `artifacts/perf/n150-vs-odroid-*`와 요약 문서를 남긴다. 하드웨어가 없으면
   진행하지 않는다. 상세: `docs/t055-deployment-n150-odroid.md`.

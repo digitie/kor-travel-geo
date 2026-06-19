@@ -2,17 +2,30 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-19 갱신, by codex)
+## 현재 진척도 (2026-06-20 갱신, by codex)
 
-- ✅ T-197 REST benchmark client disconnect cancellation 오탐 수정 — T-177H REST benchmark가
+- ✅ T-177H 벤치마크 수용 완료 — PR #387(T-197 REST 벤치마크 client disconnect
+  cancellation 오탐 수정)을 먼저 머지하고 `codex/t177h-benchmark-acceptance`를 `origin/main`
+  `2a3bee2b3db5675e39066abb31029feaa5b66573` 위로 리베이스했다. `docs/ports.md`,
+  `.env.dev.example`, `.env.prod.example`, UI env 예시를 포함해 문서를 다시 읽고, 이번
+  벤치마크가 prod 공식 도메인이 아니라 dev 프로파일(API `127.0.0.1:12501`, PostgreSQL
+  `127.0.0.1:5432`) 기준임을 확인했다. 대상 DB는 T-177G 전국 DB
+  `kor_travel_geo_t177g_codex_20260618133300`이며 active release는
+  `d29594b5-f033-45c2-839e-71b1b0100a61`, snapshot은
+  `d9020c84-79e7-400c-b2e3-fc39baa44885`다. SQL 벤치마크
+  `artifacts/perf/t177h-sql-20260619T182225Z`는 18,000 measurement/error 0, REST 벤치마크
+  `artifacts/perf/t177h-rest-20260619T182653Z`는 21,600 measurement/error 0이다. 최악 p95는
+  SQL c64 `Q4_SEARCH/search_fuzzy` 146.225ms, REST c64
+  `Q8_NO_RESULT/geocode_no_result_road` 406.511ms다. 최종 보고서는
+  `docs/t177h-benchmark-acceptance.md`다.
+- ✅ T-197 REST 벤치마크 client disconnect cancellation 오탐 수정 — T-177H REST 벤치마크가
   T-177G DB `kor_travel_geo_t177g_codex_20260618133300`에 붙은 dev API(`12501`)에서 c1/c4/c16
   `Server disconnected without sending a response` 4,104건과 API `CancelledError`를 기록해
   #386으로 분리했다. `ClientDisconnectCancellationMiddleware`는 응답 완료 여부를 추적하고
   disconnect/app task 동시 완료 race에서 disconnect 경로를 우선 처리한다. 실행 중 실제
   disconnect는 계속 499 취소로 기록하고, 응답 완료 뒤 disconnect만 정상 응답을 취소하지
-  않는다. 패치 후 같은 corpus REST benchmark는 21,600 measurement, error 0이다. 이 PR 머지 뒤
-  `T-177H` 브랜치를 `origin/main` 위로 다시 리베이스하고 문서를 재확인한 다음 SQL/REST 최종
-  benchmark report를 재진행한다.
+  않는다. 패치 후 같은 corpus REST 벤치마크는 21,600 measurement, error 0이다. PR #387로
+  머지했다.
 - ✅ T-183 UI 기반 full-load 적재 e2e 완료 — PR #383(T-196) 머지 뒤
   `codex/t183-ui-full-load-e2e`를 `origin/main`의 dev/prod 환경 분리 정의(#384) 위로
   리베이스하고 문서를 다시 읽었다. prod 공식 도메인이 아니라 dev 기본 포트(API `12501`,
@@ -413,18 +426,14 @@
 
 `T-153` 통합 gate까지 완료됐다. Agent A 단독 명시 잔여(`T-127`, `T-158`, `T-238`, `T-245`, `T-247`)와 Agent B의 `T-226`/`T-227`, `T-246`도 완료됐다. 새 release blocker는 없으며, 다음에 자동 착수할 Agent A 고우선순위 task는 없다.
 
-현재는 T-177 파일 기반 full-load e2e 재검증에 들어가기 전, 2026-06-16 이후 PR 스캔에서
-발견한 Claude Code 리뷰 후속을 먼저 닫았다. `T-178a`~`T-178f`와 `T-177A` 계획/Task 등록이
-완료됐고, `T-179` CI backend GDAL 설치 hardening도 완료됐다. `T-177B` opt-in e2e 하니스
-구현, `T-177C` 텍스트 정본/daily delta fast-sample e2e 구현, `T-177D` 전자지도
-SHP/PostGIS geometry e2e 구현, `T-177E` 선택 보강 원천 e2e 구현,
-`T-177F` post-load serving/smoke/consistency fast-sample e2e 구현도 완료됐다.
-`T-177G` 전국 long-run full-load e2e, T-188 smoke sample timeout 후속, T-184 admin role
-proxy, T-189 rebuild-db RustFS staging materialize 누락 수정, T-196 materialize OOM 완화,
-T-183 UI 기반 full-load 적재 e2e까지 완료됐다. 다음 한 작업은 `T-177H` T-047 benchmark와
-최종 acceptance report다. 전국 long-run/T-183 live evidence를 기준으로 SQL/REST benchmark
-hook, p95/p99, error count, slow plan, `pg_stat_statements` snapshot을 수집하고 최종 문서를
-갱신한다.
+T-177 파일 기반 full-load e2e 재검증도 모두 닫혔다. 2026-06-16 이후 PR 스캔에서 발견한
+Claude Code 리뷰 후속 `T-178a`~`T-178f`, `T-177A` 계획/Task 등록, `T-179` CI backend GDAL
+설치 hardening, `T-177B`~`T-177F` opt-in fast-sample e2e, `T-177G` 전국 long-run full-load
+e2e, T-188 smoke sample timeout 후속, T-184 admin role proxy, T-189 rebuild-db RustFS staging
+materialize 누락 수정, T-196 materialize OOM 완화, T-183 UI 기반 full-load 적재 e2e,
+T-197 REST 벤치마크 client disconnect cancellation 오탐 수정, `T-177H` 최종 SQL/REST
+벤치마크 수용 보고서까지 완료됐다. 현재 자동으로 이어갈 고우선순위 Task는 없고, 새 작업은
+`docs/tasks.md`의 선택 후속/보류 항목 또는 사용자 지시를 따른다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

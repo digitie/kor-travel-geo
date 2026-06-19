@@ -6,6 +6,16 @@
 
 ## 완료
 
+- [x] **T-177H** — T-047 벤치마크와 최종 수용 보고서(Agent A/Codex).
+  PR #387(T-197)을 먼저 머지하고 `codex/t177h-benchmark-acceptance`를 `origin/main` 위로
+  리베이스한 뒤 prod/dev 정의 문서를 다시 읽었다. 이번 판정은 prod 도메인이 아닌 dev
+  프로파일(API `127.0.0.1:12501`, PostgreSQL `127.0.0.1:5432`) 기준이다. T-177G 전국 DB
+  `kor_travel_geo_t177g_codex_20260618133300`에서 SQL 벤치마크 18,000 measurement/error 0,
+  REST 벤치마크 21,600 measurement/error 0을 확인했다. 최악 p95는 SQL c64
+  `Q4_SEARCH/search_fuzzy` 146.225ms, REST c64
+  `Q8_NO_RESULT/geocode_no_result_road` 406.511ms다. 최종 보고서와 산출물 경로는
+  `docs/t177h-benchmark-acceptance.md`에 남겼다. (2026-06-20)
+
 - [x] **T-197** — REST benchmark client disconnect cancellation 오탐 수정(Agent A/Codex,
   #386). T-177H REST benchmark에서 c1/c4/c16 구간이 `Server disconnected without sending a
   response`와 API `CancelledError`를 대량 기록하던 문제를 분리했다. public address API의
