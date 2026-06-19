@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from kortravelgeo.api import app as app_module
 from kortravelgeo.api.app import (
+    ClientDisconnectCancellationMiddleware,
     _install_client_disconnect_cancellation,
     _install_performance_monitoring,
     create_app,
@@ -21,6 +22,8 @@ from kortravelgeo.settings import Settings
 
 if TYPE_CHECKING:
     from collections.abc import MutableMapping
+
+    from starlette.types import Receive, Scope, Send
 
 
 def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
@@ -190,7 +193,84 @@ async def test_performance_monitoring_enqueues_slow_request_sample() -> None:
 
 
 @pytest.mark.asyncio
-async def test_client_disconnect_cancels_public_address_request() -> None:
+async def test_client_disconnect_cancels_public_address_request_while_body_streams(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = FastAPI()
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+    original_wait = asyncio.wait
+
+    async def wait_with_cancel_race(
+        futures: set[asyncio.Future[Any]],
+        **kwargs: Any,
+    ) -> tuple[set[asyncio.Future[Any]], set[asyncio.Future[Any]]]:
+        done, pending = await original_wait(futures, **kwargs)
+        return_when = kwargs.get("return_when", asyncio.ALL_COMPLETED)
+        if return_when == asyncio.FIRST_COMPLETED:
+            for _ in range(20):
+                if all(future.done() for future in futures):
+                    break
+                await asyncio.sleep(0)
+            done = {future for future in futures if future.done()}
+            pending = futures - done
+        return done, pending
+
+    monkeypatch.setattr(app_module.asyncio, "wait", wait_with_cancel_race)
+
+    @app.post("/v1/address/slow")
+    async def slow() -> dict[str, str]:
+        started.set()
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return {"status": "OK"}
+
+    _install_performance_monitoring(app, Settings())
+    _install_client_disconnect_cancellation(app)
+
+    receive_messages: asyncio.Queue[MutableMapping[str, Any]] = asyncio.Queue()
+    await receive_messages.put({"type": "http.request", "body": b"{", "more_body": True})
+    sent_messages: list[dict[str, Any]] = []
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/v1/address/slow",
+        "raw_path": b"/v1/address/slow",
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+        "client": ("127.0.0.1", 12345),
+        "server": ("testserver", 80),
+    }
+
+    async def receive() -> MutableMapping[str, Any]:
+        return await receive_messages.get()
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        sent_messages.append(dict(message))
+
+    task = asyncio.create_task(app(scope, receive, send))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    await receive_messages.put({"type": "http.disconnect"})
+    await asyncio.wait_for(cancelled.wait(), timeout=1)
+    await asyncio.wait_for(task, timeout=1)
+
+    body = metrics.render_prometheus().decode()
+
+    assert sent_messages == []
+    assert "kor_travel_geo_api_request_cancellations_total" in body
+    assert 'route="/v1/address/slow"' in body
+    assert 'status_code="499"' in body
+
+
+@pytest.mark.asyncio
+async def test_client_disconnect_after_empty_body_cancels_public_get() -> None:
     app = FastAPI()
     started = asyncio.Event()
     cancelled = asyncio.Event()
@@ -238,9 +318,74 @@ async def test_client_disconnect_cancels_public_address_request() -> None:
     await asyncio.wait_for(cancelled.wait(), timeout=1)
     await asyncio.wait_for(task, timeout=1)
 
-    body = metrics.render_prometheus().decode()
-
     assert sent_messages == []
-    assert "kor_travel_geo_api_request_cancellations_total" in body
-    assert 'route="/v1/address/slow"' in body
-    assert 'status_code="499"' in body
+
+
+@pytest.mark.asyncio
+async def test_disconnect_after_response_complete_does_not_cancel_public_request() -> None:
+    response_sent = asyncio.Event()
+    finish = asyncio.Event()
+    cancelled = asyncio.Event()
+    sent_messages: list[dict[str, Any]] = []
+
+    async def asgi_app(_scope: Scope, receive: Receive, send: Send) -> None:
+        await receive()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-length", b"2")],
+            }
+        )
+        await send({"type": "http.response.body", "body": b"OK", "more_body": False})
+        response_sent.set()
+        try:
+            await finish.wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    middleware = ClientDisconnectCancellationMiddleware(asgi_app)
+    receive_messages: asyncio.Queue[MutableMapping[str, Any]] = asyncio.Queue()
+    await receive_messages.put({"type": "http.request", "body": b"", "more_body": False})
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/v1/address/slow",
+        "raw_path": b"/v1/address/slow",
+        "root_path": "",
+        "query_string": b"",
+        "headers": [],
+        "client": ("127.0.0.1", 12345),
+        "server": ("testserver", 80),
+    }
+
+    async def receive() -> MutableMapping[str, Any]:
+        return await receive_messages.get()
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        sent_messages.append(dict(message))
+
+    task = asyncio.create_task(middleware(scope, receive, send))
+    await asyncio.wait_for(response_sent.wait(), timeout=1)
+    await receive_messages.put({"type": "http.disconnect"})
+    await asyncio.sleep(0)
+
+    assert not cancelled.is_set()
+
+    finish.set()
+    await asyncio.wait_for(task, timeout=1)
+    assert sent_messages[0] == {
+        "type": "http.response.start",
+        "status": 200,
+        "headers": [(b"content-length", b"2")],
+    }
+    body = b"".join(
+        message.get("body", b"")
+        for message in sent_messages
+        if message["type"] == "http.response.body"
+    )
+    assert body == b"OK"

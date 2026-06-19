@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- T-197 public address API의 client disconnect cancellation 오탐을 수정했다. disconnect/app
+  task 동시 완료 race에서는 정상 취소를 ASGI error로 흘리지 않고, 응답 완료 뒤 들어온
+  `http.disconnect`는 이미 완료된 정상 응답을 취소하지 않는다.
+
 ### Changed
 - T-190 `rebuild-db` 요청을 비동기 control job 흐름으로 바꿨다. Admin API는 RustFS
   materialize를 HTTP 요청 안에서 끝내지 않고 `source_rebuild_db` job id를 즉시 반환하며,

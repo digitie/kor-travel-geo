@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-19 (T-197 REST benchmark client disconnect cancellation 오탐 수정)
+
+**작업**: T-177H REST benchmark를 T-177G DB
+`kor_travel_geo_t177g_codex_20260618133300`에 붙인 dev API(`127.0.0.1:12501`)로 실행하자,
+client error 4,104건(`Server disconnected without sending a response`)과 API
+`CancelledError` 로그가 반복됐다. 문제를 #386/T-197로 분리하고 T-177H를 일시 중단했다.
+
+**결정**: `ClientDisconnectCancellationMiddleware`가 `http.disconnect`에서 app task를 cancel한
+직후 receive task와 app task가 동시에 완료되면, app task의 `CancelledError`가 ASGI error로
+흐를 수 있었다. middleware가 응답 완료 여부를 추적하게 하고, disconnect receive task가
+완료된 경우를 우선 처리해 정상 취소를 흡수하도록 고쳤다. body streaming 중 실제 disconnect와
+빈 body GET 실행 중 disconnect는 계속 app task를 취소하며, 응답 완료 뒤 들어온 disconnect만
+정상 응답을 취소하지 않는다.
+
+**검증**: WSL ext4 미러에서 targeted
+`tests/unit/test_api_app_contract.py::test_client_disconnect_cancels_public_address_request_while_body_streams`
+와
+`tests/unit/test_api_app_contract.py::test_client_disconnect_after_empty_body_cancels_public_get`,
+`tests/unit/test_api_app_contract.py::test_disconnect_after_response_complete_does_not_cancel_public_request`
+3건을 포함한 `test_api_app_contract.py` 전체 8건을 통과했다. 패치된 API로 같은 SQL corpus REST full benchmark
+`t197-rest-disconnect-fix-20260619T175900Z`를 실행해 21,600 measurement, error 0을 확인했다.
+dev API 프로세스는 종료했고 `12501` 포트가 비었음을 확인했다.
+
 ## 2026-06-19 (T-183 UI 기반 full-load 적재 e2e 완료)
 
 **작업**: PR #383(T-196) 머지 뒤 `codex/t183-ui-full-load-e2e`를 `origin/main`의

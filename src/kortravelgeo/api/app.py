@@ -280,28 +280,39 @@ class ClientDisconnectCancellationMiddleware:
             return
 
         queue: asyncio.Queue[Message] = asyncio.Queue()
+        response_complete = asyncio.Event()
+
+        async def send_with_response_complete(message: Message) -> None:
+            await send(message)
+            if message["type"] == "http.response.body" and not message.get(
+                "more_body", False
+            ):
+                response_complete.set()
+
         app_task: asyncio.Future[None] = asyncio.ensure_future(
-            self.app(scope, queue.get, send)
+            self.app(scope, queue.get, send_with_response_complete)
         )
-        receive_task = asyncio.create_task(_pump_disconnect_aware_receive(receive, queue, app_task))
+        receive_task = asyncio.create_task(
+            _pump_disconnect_aware_receive(receive, queue, app_task, response_complete)
+        )
         try:
             done, _pending = await asyncio.wait(
                 {app_task, receive_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            if app_task in done:
-                await app_task
-                return
+            if receive_task in done:
+                exc = receive_task.exception()
+                if exc is not None:
+                    app_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await app_task
+                    raise exc
 
-            exc = receive_task.exception()
-            if exc is not None:
-                app_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await app_task
-                raise exc
+                return
 
-            with suppress(asyncio.CancelledError):
-                await app_task
+            await app_task
         finally:
             if not app_task.done():
                 app_task.cancel()
@@ -317,12 +328,15 @@ async def _pump_disconnect_aware_receive(
     receive: Receive,
     queue: asyncio.Queue[Message],
     app_task: asyncio.Future[None],
+    response_complete: asyncio.Event,
 ) -> None:
     while True:
         message = await receive()
         if message["type"] == "http.disconnect":
-            app_task.cancel()
             await queue.put(message)
+            if response_complete.is_set():
+                return
+            app_task.cancel()
             return
         await queue.put(message)
 
