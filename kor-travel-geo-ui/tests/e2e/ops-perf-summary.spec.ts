@@ -99,6 +99,12 @@ test.describe("성능·검증 요약 /admin/ops (T-222)", () => {
     page
   }) => {
     await mockOpsApi(page);
+    const rscRequests: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().includes("_rsc=")) {
+        rscRequests.push(request.url());
+      }
+    });
     await page.goto("/admin/ops");
 
     const panel = page.locator(".panel", { hasText: "성능·검증 요약 (read-only)" });
@@ -117,9 +123,12 @@ test.describe("성능·검증 요약 /admin/ops (T-222)", () => {
       "href",
       "/admin/consistency"
     );
-
     // 매칭 세트: 활성 세트 노출.
     await expect(panel.getByText("활성: 활성 세트")).toBeVisible();
+
+    await panel.getByRole("link", { name: /상세/ }).click();
+    await expect(page.getByRole("heading", { name: "Consistency", exact: true })).toBeVisible();
+    expect(rscRequests).toEqual([]);
   });
 
   test("benchmark artifact가 없으면 등록 안내를 보여 준다", async ({ page }) => {

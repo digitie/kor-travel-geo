@@ -1,8 +1,8 @@
 "use client";
 
 import { ExternalLink, RefreshCw } from "lucide-react";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
@@ -139,9 +139,9 @@ export function PerfValidationSummary() {
               {latestReport.scope} · {formatTimestamp(latestReport.finished_at)} ·{" "}
               {latestReport.generated_by}
             </span>{" "}
-            <Link className="perf-artifact-link" href="/admin/consistency">
+            <DocumentNavLink className="perf-artifact-link" href="/admin/consistency">
               <ExternalLink size={13} /> 상세
-            </Link>
+            </DocumentNavLink>
           </p>
         ) : (
           <p className="form-note">정합성 리포트가 없습니다.</p>

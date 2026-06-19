@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Fixed
+- T-278 Admin UI에서 Firefox를 포함한 브라우저가 Next 기본 전역 오류 화면
+  `This page couldn’t load`로 떨어질 수 있던 방어 공백을 보강했다. 앱 segment/global error
+  boundary가 한국어 복구 패널을 보여 주고, chunk/RSC/network 계열 오류는 같은 경로에서 1회
+  hard reload를 시도하며, `/admin/ops`의 남은 상세 이동은 `DocumentNavLink`로 전환했다.
 - T-219 v1 VWorld geocode/reverse에서 Starlette 404/405가 기본 `{detail}` 응답으로 새던
   계약 drift를 operation이 명확한 경로의 VWorld error envelope로 감쌌다. coordinate bounds
   메시지는 한글 범위 문구로 통일하고, legacy non-vworld validation OpenAPI는 런타임과 같은
