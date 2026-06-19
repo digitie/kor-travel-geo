@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-19 (아키텍처 문서 UI 테이블 의존성 정정)
+
+**작업**: `docs/architecture/architecture.md`의 프론트엔드 테이블 항목이 여전히
+native table 우선, TanStack Table 후속 승격으로 설명되어 있어 현재 UI 구현과 달랐다.
+실제 `kor-travel-geo-ui`는 `@tanstack/react-table`과 `@tanstack/react-virtual` 기반
+공용 `VirtualTable`로 관리 UI 표면을 통일했다.
+
+**결정**: `architecture.md`와 `frontend-package.md`를 현재 구현 기준으로 정정했다.
+지도 의존성은 `maplibre-vworld-js`가 아니라 ADR-063의 `maplibre-vworld-react` 기준을
+유지한다.
+
+**검증**: 문서 변경만 수행했다. `rg`로 `docs/architecture/architecture.md`에
+`maplibre-vworld-js`가 남아 있지 않고, 테이블 설명이 `TanStack React Table` /
+`TanStack React Virtual` 기준으로 바뀐 것을 확인했다.
+
 ## 2026-06-18 (T-193 text loader event loop starvation 해소)
 
 **작업**: T-183 live UI e2e 재개 중 `source_rebuild_db` 제어 job과 RustFS materialize는

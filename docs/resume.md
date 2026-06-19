@@ -2,8 +2,13 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-18 갱신, by codex)
+## 현재 진척도 (2026-06-19 갱신, by codex)
 
+- ✅ 아키텍처 문서 UI 테이블 의존성 정정 — `docs/architecture/architecture.md`와
+  `docs/architecture/frontend-package.md`의 테이블 설명을 현재 `VirtualTable`
+  구현 기준으로 맞췄다. 관리 UI 표면은 `@tanstack/react-table`로 컬럼·필터·정렬을
+  처리하고, 대량 목록은 `@tanstack/react-virtual` row windowing을 사용한다.
+  지도 의존성 기준은 ADR-063의 GitHub `maplibre-vworld-react` tarball이다.
 - ✅ T-193 text loader event loop starvation 해소 — T-183 live UI e2e에서
   `juso_text_load` child가 시작된 뒤 API health/readiness/job status polling이 60초 이상
   응답하지 않는 문제를 #376으로 분리했다. text 계열 loader handler는 이제 coroutine
