@@ -2,6 +2,31 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-20 (T-177H 벤치마크 수용 완료)
+
+**작업**: PR #387(T-197 REST 벤치마크 client disconnect cancellation 오탐 수정)을 머지한 뒤,
+`codex/t177h-benchmark-acceptance`를 `origin/main`
+`2a3bee2b3db5675e39066abb31029feaa5b66573` 위로 리베이스했다. 사용자 지시에 따라 다음
+벤치마크 전 `README.md`, `SKILL.md`, runbook, architecture/resume/ADR/tasks, `docs/ports.md`,
+`docs/dev-environment.md`, T-177 계획, `.env.dev.example`, `.env.prod.example`,
+`kor-travel-geo-ui/.env.local.example`를 다시 읽었다.
+
+**결정**: 새 prod 정의는 공식 도메인과 `.env.prod` 기준이므로, T-177H는 prod가 아니라 dev
+프로파일 기준으로 명시한다. API는 WSL ext4 테스트 미러에서 `127.0.0.1:12501`에만 띄우고,
+PostgreSQL은 이미 동작 중인 `127.0.0.1:5432`의 T-177G DB
+`kor_travel_geo_t177g_codex_20260618133300`에 접속했다. 저장소 정책대로 PostgreSQL/RustFS
+생명주기는 조작하지 않았다.
+
+**검증**: SQL 벤치마크 산출물
+`/home/digitie/dev/kor-travel-geo-codex-test/artifacts/perf/t177h-sql-20260619T182225Z`는
+18,000 measurement/error 0, 최악 p95 SQL c64 `Q4_SEARCH/search_fuzzy` 146.225ms를 기록했다.
+REST 벤치마크 산출물
+`/home/digitie/dev/kor-travel-geo-codex-test/artifacts/perf/t177h-rest-20260619T182653Z`는
+21,600 measurement/error 0, 최악 p95 REST c64
+`Q8_NO_RESULT/geocode_no_result_road` 406.511ms를 기록했다. 벤치마크 뒤 dev API 프로세스는
+종료했고 `12501` 포트가 비었음을 확인했다. 최종 판정은
+`docs/t177h-benchmark-acceptance.md`에 남겼다.
+
 ## 2026-06-19 (T-197 REST benchmark client disconnect cancellation 오탐 수정)
 
 **작업**: T-177H REST benchmark를 T-177G DB

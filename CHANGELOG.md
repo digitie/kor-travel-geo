@@ -17,6 +17,9 @@
   idle-in-transaction 연결을 남기지 않는다.
 
 ### Added
+- T-177H 벤치마크 수용 보고서를 추가했다. T-177G 전국 DB를 대상으로 리베이스와
+  prod/dev 문서 재확인 뒤 dev 프로파일에서 SQL 18,000 measurement/error 0, REST 21,600
+  measurement/error 0을 확인하고 산출물 경로와 p95/p99 판정을 문서화했다.
 - T-183 live UI full-load e2e를 추가하고 실제 `rebuild-db` 적재 흐름을 검증했다. Admin UI는
   `source_rebuild_db` control job과 downstream `full_load_batch` 상태를 이어 보여 주며, live
   spec은 완료된 job을 채택해 post-load serving release/snapshot evidence와 forced promotion
