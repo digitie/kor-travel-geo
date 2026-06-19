@@ -42,5 +42,9 @@
 - VWorld `Hybrid`/`Satellite`는 z18, `Base`/`gray`/`midnight`는 z19 maxZoom을 적용한다.
 
 ### Fixed
+- Next App Router segment/global error boundary를 추가해 기본 `This page couldn’t load`
+  화면 대신 한국어 복구 패널을 보여 준다. chunk/RSC/network 계열 오류는 같은 경로에서 1회
+  hard reload로 복구를 시도하고, `/admin/ops`의 상세 링크는 `DocumentNavLink`로 이동해 `_rsc`
+  client routing 요청을 만들지 않는다.
 - Chrome/Firefox에서 좌측 메뉴 이동 중 Next 기본 전역 오류 화면(`This page couldn’t load`, `Reload to try again, or go back.`)으로 떨어질 수 있던 문제를 수정했다.
 - VWorld 타일 요청이 페이지 이동 중 정상 취소될 때(`ERR_ABORTED`, `NS_BINDING_ABORTED`) 지도 타일 불안정 overlay와 warning 카운트에 반영하지 않도록 했다.

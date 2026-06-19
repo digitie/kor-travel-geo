@@ -4,6 +4,14 @@
 
 ## 현재 진척도 (2026-06-20 갱신, by codex)
 
+- ✅ T-278 Admin UI Next 기본 오류 화면 복구 보강 완료 — Firefox를 포함한 브라우저에서
+  `This page couldn’t load` / `Reload to try again, or go back.` Next 기본 화면이 노출될 수
+  있던 공백을 #390으로 분리했다. `app/error.tsx`/`app/global-error.tsx`가 한국어 복구 패널을
+  보여 주며, chunk/RSC/network 계열 오류는 같은 pathname에서 1회 hard reload를 시도한다.
+  `/admin/ops`의 남은 상세 이동 `next/link`는 `DocumentNavLink`로 바꿔 `_rsc` client routing을
+  피한다. WSL UI type-check/lint/unit/build, React Doctor(`ok=true`, 기존 warning 31건),
+  `scripts/frontend_check.sh`를 통과했고, Docker UI 재빌드 뒤 Windows Playwright Firefox 5건,
+  Chromium 3건과 `/debug/geocode`/proxy health HTTP 200을 확인했다.
 - ✅ T-219 잔여 L 완료 — v1 VWorld geocode/reverse의 Starlette 404/405를 operation이
   명확한 경우 VWorld error envelope로 감싸고, 좌표 bounds 검증 문구를 한글 범위 메시지로
   통일했다. v1 coordinate bounds는 `INVALID_RANGE`, v2 coordinate bounds는 `E0102`를

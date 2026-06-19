@@ -6,6 +6,17 @@
 
 ## 완료
 
+- [x] **T-278** — Admin UI Next 기본 오류 화면 복구 보강(Agent A/Codex, #390).
+  Firefox를 포함한 브라우저에서 Next.js 기본 전역 오류 화면(`This page couldn’t load`,
+  `Reload to try again, or go back.`)이 노출될 수 있던 경로를 보강했다. `app/error.tsx`와
+  `app/global-error.tsx`를 추가해 앱 자체 한국어 복구 패널을 보여 주고, chunk/RSC/network
+  계열 런타임 오류는 같은 경로에서 1회만 hard reload로 복구를 시도한다. `/admin/ops`
+  성능·검증 요약의 남은 `next/link` 상세 이동은 `DocumentNavLink`로 바꿔 `_rsc`
+  client-routing 요청을 피한다. WSL ext4 미러에서 UI type-check/lint/unit/build와
+  `scripts/frontend_check.sh`, React Doctor(`ok=true`, 기존 warning 31건)를 통과했고, Docker
+  UI 재빌드 뒤 Windows Playwright Firefox 5건, Chromium 3건, `/debug/geocode` 및 proxy
+  health HTTP 200을 확인했다. (2026-06-20)
+
 - [x] **T-219 잔여 L** — v1 VWorld 호환 minor 후속 정리(Agent A/Codex).
   Starlette 404/405가 `/v1/address/geocode`·`/v1/address/reverse`에서 기본
   `{detail}`로 새지 않도록, operation이 명확한 경로만 VWorld error envelope로 감쌌다.

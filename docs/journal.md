@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-20 (T-278 Admin UI Next 기본 오류 화면 복구 보강)
+
+**작업**: 사용자가 Firefox에서 Admin UI가 `This page couldn’t load` / `Reload to try again, or go back.`
+기본 오류 화면으로 떨어진다고 보고했다. 과거 브라우저 공통 재현 이력을 다시 확인하고 #390/T-278로
+분리했다. 현재 live Docker UI에서는 즉시 재현되지는 않았지만, 기본 오류 화면이 사용자에게 그대로
+노출되는 방어 공백을 닫았다.
+
+**결정**: App Router segment/global error boundary를 추가해 Next 기본 영어 오류 화면 대신 한국어
+복구 패널을 보여 준다. chunk/RSC/network 계열 런타임 오류는 sessionStorage flag로 같은 pathname당
+1회 hard reload를 시도하고, 반복 실패는 재시도/이전 화면/오류 정보 패널로 남긴다. `/admin/ops`
+성능·검증 요약에 남아 있던 `next/link` 상세 이동은 `DocumentNavLink`로 바꿔 `_rsc` client routing
+요청을 만들지 않는다.
+
+**검증**: WSL ext4 미러에서 UI `type-check`, `lint`, targeted unit, `build`, 전체 unit,
+React Doctor(`ok=true`, 기존 warning 31건), `scripts/frontend_check.sh`를 통과했다. Docker UI를
+재빌드/재기동한 뒤 Windows Playwright Firefox `navigation`/`ops-perf-summary`/`vworld-map` 5건,
+Chromium `navigation`/`ops-perf-summary` 3건을 통과했고, `http://127.0.0.1:12505/debug/geocode`와
+`/api/proxy/v1/healthz`가 HTTP 200을 반환했다.
+
 ## 2026-06-20 (T-219 잔여 L v1/OpenAPI 계약 정리)
 
 **작업**: T-219 잔여 low-priority 항목을 `codex/t219-v1-compat-minors`에서 처리했다.

@@ -147,6 +147,78 @@ textarea {
   padding: 26px 32px 48px;
 }
 
+.app-error-shell {
+  align-items: center;
+  display: flex;
+  min-height: min(640px, calc(100dvh - 80px));
+  padding: 24px;
+}
+
+.app-error-shell.standalone {
+  min-height: 100dvh;
+}
+
+.app-error-panel {
+  background: var(--surface-card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 680px;
+  padding: 24px;
+  width: 100%;
+}
+
+.eyebrow {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.app-error-panel h1 {
+  color: var(--text-strong);
+  font-size: 24px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.app-error-copy {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.app-error-details {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.app-error-details summary {
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.app-error-details pre {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 10px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
 .page-head {
   align-items: end;
   display: flex;
