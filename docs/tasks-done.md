@@ -6,6 +6,16 @@
 
 ## 완료
 
+- [x] **T-197** — REST benchmark client disconnect cancellation 오탐 수정(Agent A/Codex,
+  #386). T-177H REST benchmark에서 c1/c4/c16 구간이 `Server disconnected without sending a
+  response`와 API `CancelledError`를 대량 기록하던 문제를 분리했다. public address API의
+  disconnect 감시 middleware는 응답 완료 여부를 추적하고, receive task와 app task가 동시에
+  완료되는 race에서는 disconnect task를 우선 처리해 `CancelledError`가 ASGI error로 새지
+  않게 했다. body streaming 중 disconnect와 빈 body GET 실행 중 disconnect는 계속 499
+  취소로 처리하고, 응답 완료 뒤 들어온 disconnect만 정상 응답을 취소하지 않는다. 패치 후
+  같은 T-177G DB/REST corpus full benchmark는 21,600 measurement, error 0으로 통과했다.
+  (2026-06-19)
+
 - [x] **T-183** — UI 기반 full-load 적재 프로세스 e2e(Agent A/Codex, #357).
   `origin/main`의 dev/prod 환경 분리 정의(#384) 위로 리베이스하고 문서를 다시 읽은 뒤,
   prod 도메인이 아닌 dev 공식 포트(API `12501`, UI `12505`) 기준으로 live UI e2e를 수행했다.

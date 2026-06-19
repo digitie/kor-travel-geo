@@ -4,6 +4,15 @@
 
 ## 현재 진척도 (2026-06-19 갱신, by codex)
 
+- ✅ T-197 REST benchmark client disconnect cancellation 오탐 수정 — T-177H REST benchmark가
+  T-177G DB `kor_travel_geo_t177g_codex_20260618133300`에 붙은 dev API(`12501`)에서 c1/c4/c16
+  `Server disconnected without sending a response` 4,104건과 API `CancelledError`를 기록해
+  #386으로 분리했다. `ClientDisconnectCancellationMiddleware`는 응답 완료 여부를 추적하고
+  disconnect/app task 동시 완료 race에서 disconnect 경로를 우선 처리한다. 실행 중 실제
+  disconnect는 계속 499 취소로 기록하고, 응답 완료 뒤 disconnect만 정상 응답을 취소하지
+  않는다. 패치 후 같은 corpus REST benchmark는 21,600 measurement, error 0이다. 이 PR 머지 뒤
+  `T-177H` 브랜치를 `origin/main` 위로 다시 리베이스하고 문서를 재확인한 다음 SQL/REST 최종
+  benchmark report를 재진행한다.
 - ✅ T-183 UI 기반 full-load 적재 e2e 완료 — PR #383(T-196) 머지 뒤
   `codex/t183-ui-full-load-e2e`를 `origin/main`의 dev/prod 환경 분리 정의(#384) 위로
   리베이스하고 문서를 다시 읽었다. prod 공식 도메인이 아니라 dev 기본 포트(API `12501`,
