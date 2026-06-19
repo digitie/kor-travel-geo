@@ -13,8 +13,7 @@
 
 ## 진행 중
 
-- **진행 중 작업 없음.** (T-177G/T-188 전국 long-run full-load e2e 완료 — `tasks-done.md`
-  참조. 다음은 T-183 live UI full-load e2e 후속.)
+- **진행 중 작업 없음.** (T-183 live UI full-load e2e 완료 — `tasks-done.md` 참조.)
 
 ## 대기
 
@@ -37,14 +36,6 @@ T-178a~T-178f Claude Code 리뷰 후속은 모두 닫혔다. 이제 T-177 파일
 
   전국 long-run DB를 기준으로 SQL/REST benchmark hook, p95/p99, error count, slow plan,
   `pg_stat_statements` snapshot을 수집하고 최종 acceptance 문서를 갱신한다.
-
-### Live UI full-load e2e 후속
-
-- [ ] **T-183** — UI 기반 full-load 적재 프로세스 e2e(#357).
-
-  Admin UI에서 원천 선택부터 적재 트리거, 진행 상태 확인, post-load serving 확인까지 실제
-  브라우저 e2e로 닫는다. T-073 shell script 경로가 아니라 파일을 읽어 DB를 구축하는 UI
-  프로세스를 검증한다.
 
 ### 선택 후속 (낮은 우선순위)
 

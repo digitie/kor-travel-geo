@@ -4,14 +4,26 @@
 
 ## 현재 진척도 (2026-06-19 갱신, by codex)
 
-- ✅ T-196 rebuild-db materialize OOM 완화 진행 중 — T-195 force-promotion live UI e2e가
+- ✅ T-183 UI 기반 full-load 적재 e2e 완료 — PR #383(T-196) 머지 뒤
+  `codex/t183-ui-full-load-e2e`를 `origin/main`의 dev/prod 환경 분리 정의(#384) 위로
+  리베이스하고 문서를 다시 읽었다. prod 공식 도메인이 아니라 dev 기본 포트(API `12501`,
+  UI `12505`)로 API/UI를 띄워 `kor_travel_geo_t213_20260615_r3` DB에 붙였고, 이미 완료된
+  `source_rebuild_db` `job_5e7106d5ca58414f86f1bc7d26953f35` /
+  `full_load_batch` `batch_66a52eb91d9c4833b1e8763cf1ec72e0`를 채택해 post-load serving
+  evidence를 재검증했다. 최종 active release는
+  `b232a167-682d-4e5c-b197-577f617e5107`, snapshot은
+  `6fb47bac-dccd-4791-a39f-f2f1e712689e`, `mv_geocode_target`/
+  `mv_geocode_text_search`/`tl_juso_text`는 각각 6,419,795행이다. Windows Playwright
+  Chromium/Firefox live spec 각 1건 통과, WSL `scripts/frontend_check.sh` 통과, React Doctor
+  `ok=true`(기존 warning 31건, 이번 변경 파일 신규 warning 없음).
+- ✅ T-196 rebuild-db materialize OOM 완화 완료 — T-195 force-promotion live UI e2e가
   `source_rebuild_db` control job 생성과 payload 기록까지 성공했지만, RustFS materialize에서
   `[Errno 12] Cannot allocate memory`로 실패해 #382로 분리했다. 대형 원천
   `navi_full`/`electronic_map_full`이 포함되면 압축 해제를 1개씩만 수행하고, 내비게이션
   `.7z`는 `stdout=PIPE` 대신 임시 파일 tail과 `-mmt=1`을 쓰도록 보강했다. materialize 실패
   메시지에는 `category/source_file_group_id`를 포함한다. Targeted
   `tests/unit/test_t189_rebuild_materialize.py` 13건, 전체 `pytest` 1075건, `ruff`, `mypy`,
-  `lint-imports`가 통과했다. PR 머지 뒤 T-183/T-195 live UI e2e를 재개한다.
+  `lint-imports`가 통과했고 PR #383으로 머지했다.
 - ✅ 아키텍처 문서 UI 테이블 의존성 정정 — `docs/architecture/architecture.md`와
   `docs/architecture/frontend-package.md`의 테이블 설명을 현재 `VirtualTable`
   구현 기준으로 맞췄다. 관리 UI 표면은 `@tanstack/react-table`로 컬럼·필터·정렬을
@@ -399,9 +411,11 @@
 SHP/PostGIS geometry e2e 구현, `T-177E` 선택 보강 원천 e2e 구현,
 `T-177F` post-load serving/smoke/consistency fast-sample e2e 구현도 완료됐다.
 `T-177G` 전국 long-run full-load e2e, T-188 smoke sample timeout 후속, T-184 admin role
-proxy, T-189 rebuild-db RustFS staging materialize 누락 수정까지 완료됐다. 다음 한 작업은
-`T-183` UI 기반 full-load 적재 e2e다. Admin UI의 source match set/rebuild-db 흐름을 live
-opt-in으로 다시 시작하고 job 완료 및 post-load serving 확인까지 닫는다.
+proxy, T-189 rebuild-db RustFS staging materialize 누락 수정, T-196 materialize OOM 완화,
+T-183 UI 기반 full-load 적재 e2e까지 완료됐다. 다음 한 작업은 `T-177H` T-047 benchmark와
+최종 acceptance report다. 전국 long-run/T-183 live evidence를 기준으로 SQL/REST benchmark
+hook, p95/p99, error count, slow plan, `pg_stat_statements` snapshot을 수집하고 최종 문서를
+갱신한다.
 
 그 밖의 잔여는 `docs/tasks.md`의 최하위/보류 항목을 따른다. `T-063`은 실제 N150/Odroid 장비가 준비될 때 실행한다. `T-219` 잔여 L은 하위 우선순위 API contract 후속이다. C11 active promotion이나 DB 구조 변경 실험을 다시 논의해야 하면 기존 T-119/T-139 재개가 아니라 신규 task/ADR로 등록한다.
 

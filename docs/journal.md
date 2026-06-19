@@ -2,6 +2,32 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-19 (T-183 UI 기반 full-load 적재 e2e 완료)
+
+**작업**: PR #383(T-196) 머지 뒤 `codex/t183-ui-full-load-e2e`를 `origin/main`의
+dev/prod 환경 분리 정의(#384) 위로 리베이스하고 관련 문서(`docs/ports.md`,
+`docs/t108-deploy-automation.md`, `.env.*.example`, runbook)를 다시 읽었다. 새 정의에 맞춰
+다음 live 검증은 prod 도메인이 아니라 dev 기본 포트(API `12501`, UI `12505`)에서 수행했다.
+
+**결정**: T-183 live run은 이미 완료된 `source_rebuild_db`
+`job_5e7106d5ca58414f86f1bc7d26953f35` / `full_load_batch`
+`batch_66a52eb91d9c4833b1e8763cf1ec72e0`를 채택해 post-load serving evidence를 재검증했다.
+이전 Playwright 실패는 실제 적재 실패가 아니라 forced promotion 근거를
+`dataset_snapshot.metadata`에서 찾던 테스트 계약 오류였다. API 응답 정본은
+`dataset_snapshot.source_set.rebuild_metadata`와 `serving_release.consistency_gate`이므로 live
+spec을 그 구조에 맞췄다. Admin UI에는 rebuild control job과 downstream batch 진행 상태를
+보여 주는 패널을 추가해 실제 UI에서 적재 진행을 추적할 수 있게 했다.
+
+**검증**: `kor_travel_geo_t213_20260615_r3` DB에 API/UI를 붙여 Windows Playwright live e2e
+`tests/e2e/live/source-files-rebuild-live.spec.ts`를 Chromium/Firefox에서 각각 1/1 통과했다.
+최종 serving release는 `b232a167-682d-4e5c-b197-577f617e5107`, snapshot은
+`6fb47bac-dccd-4791-a39f-f2f1e712689e`이며 row count는
+`mv_geocode_target=6,419,795`, `mv_geocode_text_search=6,419,795`,
+`tl_juso_text=6,419,795`, `tl_juso_parcel_link=1,771,043`이다. 산출물은
+`artifacts/t183/t183-ui-rebuild-20260618T120705Z/t183-ui-rebuild-live.json`에 남겼다. WSL
+프론트 게이트 `scripts/frontend_check.sh`는 lint/type-check/unit 120건/build까지 통과했고,
+React Doctor는 `ok=true`로 종료했다(기존 warning 31건, 이번 변경 파일 신규 warning 없음).
+
 ## 2026-06-19 (T-196 rebuild-db materialize OOM 완화)
 
 **작업**: T-195 force-promotion live UI e2e 재시도에서 UI POST와 `source_rebuild_db`
