@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Activity,
   Archive,
@@ -9,13 +11,16 @@ import {
   GitBranch,
   ListChecks,
   MapPinned,
+  Menu,
   RotateCcw,
   Search,
   Server,
   Settings,
   ShieldCheck,
-  TerminalSquare
+  TerminalSquare,
+  X
 } from "lucide-react";
+import { useState } from "react";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 
 const debugLinks = [
@@ -38,9 +43,31 @@ const adminLinks = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div className="app-shell" data-menu-open={menuOpen}>
+      <header className="mobile-topbar">
+        <button
+          className="mobile-menu-toggle"
+          type="button"
+          aria-label={menuOpen ? "메뉴 닫기" : "메뉴 열기"}
+          aria-expanded={menuOpen}
+          aria-controls="app-sidebar"
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
+        <strong className="mobile-topbar-title">kor-travel-geo-ui</strong>
+      </header>
+      <button
+        className="sidebar-backdrop"
+        type="button"
+        aria-label="메뉴 닫기"
+        tabIndex={menuOpen ? 0 : -1}
+        onClick={() => setMenuOpen(false)}
+      />
+      <aside id="app-sidebar" className="sidebar" onClick={() => setMenuOpen(false)}>
         <div className="brand">
           <strong>kor-travel-geo-ui</strong>
           <span>내부 운영 콘솔</span>
