@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-20 (kor-travel-geo-ui Tailwind v4 전환, by claude)
+
+**작업**: 사용자 요청으로 admin UI(`kor-travel-geo-ui`)를 Tailwind CSS v3 → v4로 전환했다.
+형제 `kor-travel-map` admin은 이미 v4였고 geo-ui만 v3였다.
+
+**결정**: 회귀 위험 최소화를 위해 **@config 보존 방식**을 택했다. `tailwind.config.ts`
+(테마/색 토큰 매핑)를 그대로 두고 `app/globals.css`에서 `@config "../tailwind.config.ts"`로
+로드한다. `@tailwind base/components/utilities` → `@import "tailwindcss"`, postcss는
+`tailwindcss`+`autoprefixer` → `@tailwindcss/postcss`, deps는 `tailwindcss@^4`+
+`@tailwindcss/postcss`로 올리고 `autoprefixer` 제거. 컴포넌트는 이미 v4 호환 idiom
+(`ring-3`, `shadow-[var(--shadow-*)]`, `outline-none`)이라 유틸리티 rename은 불필요했다
+(bare ring/shadow/border 사용 0).
+
+**검증**: `tailwindcss@4.3.1` 설치 후 UI `type-check`·`lint`(0)·`build`(컴파일 성공,
+17 static pages)·`test`(28 files / 123 passed) 통과. 시각 회귀(Playwright e2e)는
+남은 게이트 — 테마/유틸리티 무변경이라 위험은 낮다.
+
 ## 2026-06-20 (T-278 Admin UI Next 기본 오류 화면 복구 보강)
 
 **작업**: 사용자가 Firefox에서 Admin UI가 `This page couldn’t load` / `Reload to try again, or go back.`
