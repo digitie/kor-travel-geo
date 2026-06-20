@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+- Tailwind CSS를 v3 → v4로 전환했다. `@tailwindcss/postcss` 플러그인,
+  `@import "tailwindcss"` + `@config "../tailwind.config.ts"`(기존 테마 설정 보존)로
+  바꾸고 `autoprefixer`를 제거했다. 컴포넌트는 이미 v4 호환 idiom(`ring-3`,
+  `shadow-[var(--shadow-*)]`, `outline-none`)을 써서 유틸리티 변경은 없다.
+
 ### Added
 - live e2e 전용 admin proxy opt-in env(`KTG_LIVE_E2E_ADMIN_PROXY`, `KTG_LIVE_E2E_ADMIN_ACTOR`, `KTG_LIVE_E2E_ADMIN_ROLES`)를 추가했다. 기본 실행에서는 role header를 주입하지 않고, opt-in 상태에서만 source-files admin read를 검증한다.
 - GitHub `digitie/maplibre-vworld-react` 기반 VWorld 지도 dependency와 Next.js 16 Turbopack/Vitest/TypeScript alias를 추가했다.
