@@ -4,6 +4,14 @@
 
 ## 현재 진척도 (2026-06-20 갱신, by codex)
 
+- ✅ PR #384/#392 Claude Code post-merge 리뷰 후속 완료 — 2026-06-19 KST 이후 Claude Code가
+  올린 PR을 closed 포함으로 확인했다. 대상은 #384(dev/prod 환경 분리)와 #392(Tailwind v4 전환)이며,
+  conversation comment/review body/review thread를 모두 확인했고 unresolved thread는 0건이다.
+  `scripts/docker_app.sh`는 `KTG_ENV_FILE=.env.dev` 같은 상대 env-file을 repo root 기준으로
+  해석하도록 보강했다. `kor-travel-geo-ui/README.md`, `docs/live-e2e.md`, root `CHANGELOG.md`,
+  `docs/postmerge-review-fixups-pr384-pr392.md`를 갱신했다. WSL `bash -n`, 전체 backend gate,
+  OpenAPI `--check`, UI `scripts/frontend_check.sh --install`, React Doctor(`ok=true`, 기존 warning
+  31건), Windows Playwright Chromium/Firefox targeted navigation+VWorld 3건씩을 통과했다.
 - ✅ T-278 Admin UI Next 기본 오류 화면 복구 보강 완료 — Firefox를 포함한 브라우저에서
   `This page couldn’t load` / `Reload to try again, or go back.` Next 기본 화면이 노출될 수
   있던 공백을 #390으로 분리했다. `app/error.tsx`/`app/global-error.tsx`가 한국어 복구 패널을

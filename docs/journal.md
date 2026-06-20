@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-20 (PR #384/#392 Claude Code post-merge 리뷰 후속, by codex)
+
+**작업**: 사용자 요청에 따라 2026-06-19 KST 이후 Claude Code가 올린 PR을 closed 포함으로
+확인했다. 대상은 #384(dev/prod 환경 분리)와 #392(Tailwind v4 전환)였고, conversation comment,
+review body, inline review thread를 모두 확인했다. 두 PR 모두 unresolved thread는 0건이고 CI는
+green이었다.
+
+**변경**: #384 후속으로 `scripts/docker_app.sh`의 `KTG_ENV_FILE=.env.dev` 같은 상대 경로를 repo
+root 기준으로 해석하게 했다. `kor-travel-geo-ui/README.md`와 `docs/live-e2e.md`의 Docker/dev
+실행 설명을 현재 host network + `12501`/`12505` dev 프로파일로 맞췄고,
+`CHANGELOG.md`와 `docs/postmerge-review-fixups-pr384-pr392.md`에 #384/#392 리뷰 후속을 기록했다.
+
+**검증**: WSL ext4 미러에서 `bash -n scripts/docker_app.sh`, 전체 `pytest -q`
+(`1094 passed, 67 skipped`), `ruff check .`, `mypy src/kortravelgeo scripts/export_openapi.py`,
+`lint-imports`, OpenAPI `--check`를 통과했다. UI는 stale `node_modules` 때문에 첫
+`scripts/frontend_check.sh`가 `@tailwindcss/postcss` 부재로 실패했으나, `--install` 재실행으로
+gen:types/lint/type-check/unit 123건/build가 통과했다. React Doctor는 `ok=true`, 기존 warning
+31건이다. Windows Playwright는 WSL UI server `12515`에 붙여 Chromium/Firefox
+`navigation.spec.ts`와 `vworld-map.spec.ts` 각 3건을 통과했다.
+
 ## 2026-06-20 (kor-travel-geo-ui Tailwind v4 전환, by claude)
 
 **작업**: 사용자 요청으로 admin UI(`kor-travel-geo-ui`)를 Tailwind CSS v3 → v4로 전환했다.

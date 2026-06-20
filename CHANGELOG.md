@@ -18,6 +18,12 @@
   `http.disconnect`는 이미 완료된 정상 응답을 취소하지 않는다.
 
 ### Changed
+- `scripts/docker_app.sh`의 dev/prod 환경 구분을 문서와 맞췄다. dev 기본은 host
+  network + `127.0.0.1` + API/UI `12501`/`12505`이며, `KTG_ENV_FILE=.env.dev`
+  같은 상대 env-file 경로는 repo root 기준으로 해석한다.
+- `kor-travel-geo-ui`를 Tailwind CSS v3에서 v4로 전환했다. 기존
+  `tailwind.config.ts` 토큰은 `@config "../tailwind.config.ts"`로 유지하고,
+  PostCSS 플러그인은 `@tailwindcss/postcss`를 사용한다.
 - T-190 `rebuild-db` 요청을 비동기 control job 흐름으로 바꿨다. Admin API는 RustFS
   materialize를 HTTP 요청 안에서 끝내지 않고 `source_rebuild_db` job id를 즉시 반환하며,
   해당 job이 integrity gate와 materialize 후 `full_load_batch`를 큐잉하고 `load_batch_id`로

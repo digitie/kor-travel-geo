@@ -69,8 +69,8 @@ prod는 이 스크립트가 아니라 kor-travel-docker-manager로 올리고 공
 KTG_FORCE_KILL=1 이면 묻지 않고 강제종료 후 재기동한다.
 
 Env files (KTG_ENV_FILE 우선 → .env → kor-travel-geo-ui/.env.local):
-  KTG_ENV_FILE=.env.dev    # dev 프로파일(127.0.0.1, 12xxx) — .env.dev.example 참고
-  KTG_ENV_FILE=.env.prod   # prod 도메인 프로파일 — .env.prod.example 참고
+  KTG_ENV_FILE=.env.dev    # repo root 기준 dev 프로파일 — .env.dev.example 참고
+  KTG_ENV_FILE=.env.prod   # repo root 기준 prod 프로파일 — .env.prod.example 참고
 
 Important env:
   KTG_DOCKER_NETWORK_MODE=host                 # dev 기본. Docker Desktop 제약 시 bridge
@@ -102,7 +102,16 @@ require_docker() {
 dotenv_get() {
   local key="$1"
   local file line value
-  for file in ${KTG_ENV_FILE:+"$KTG_ENV_FILE"} "$ROOT_DIR/.env" "$UI_DIR/.env.local"; do
+  local env_files=()
+  if [[ -n "${KTG_ENV_FILE:-}" ]]; then
+    if [[ "$KTG_ENV_FILE" == /* ]]; then
+      env_files+=("$KTG_ENV_FILE")
+    else
+      env_files+=("$ROOT_DIR/$KTG_ENV_FILE")
+    fi
+  fi
+  env_files+=("$ROOT_DIR/.env" "$UI_DIR/.env.local")
+  for file in "${env_files[@]}"; do
     [[ -f "$file" ]] || continue
     line="$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | tail -n 1 || true)"
     [[ -n "$line" ]] || continue
