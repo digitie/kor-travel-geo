@@ -1894,4 +1894,12 @@ textarea {
   button:not(:disabled), [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+  /* Tailwind v4 changes the default placeholder color to currentColor at 50%
+     opacity (darker than v3's gray-400). Restore the prior tone for the raw
+     `.field input/textarea`; the shadcn Input sets its own
+     `placeholder:text-muted-foreground` and overrides this rule. */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-disabled);
+  }
 }
