@@ -69,7 +69,12 @@ def test_shp_loader_repairs_invalid_geometries_before_analyze() -> None:
     repair_source = inspect.getsource(polygons_loader._repair_invalid_geometries)
 
     assert "_repair_invalid_geometries" in source
-    assert source.index("_repair_invalid_geometries") < source.index("if analyze:")
+    # #349 review fix: geometry repair is gated on the same `analyze` flag as
+    # ANALYZE so a batched per-시도 load runs the non-indexable NOT ST_IsValid scan
+    # once on the final batch. The call now sits inside the `if analyze:` block,
+    # immediately before _analyze_target_tables (no longer before the gate).
+    assert source.index("if analyze:") < source.index("_repair_invalid_geometries")
+    assert source.index("_repair_invalid_geometries") < source.index("_analyze_target_tables")
     assert "ST_MakeValid(geom)" in repair_source
     assert "ST_CollectionExtract" in repair_source
     assert "ST_IsValid(geom)" in repair_source
