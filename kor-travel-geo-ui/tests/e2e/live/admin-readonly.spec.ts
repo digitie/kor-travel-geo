@@ -79,6 +79,10 @@ test.describe("LIVE admin read-only", () => {
       "Run with KTG_LIVE_E2E_ADMIN_PROXY=1 and source_file_viewer role to verify admin role proxy"
     );
 
+    // source-file-categories is a static catalog with no role guard — it returns
+    // 200 regardless of injected identity, so it only sanity-checks proxy
+    // connectivity, not the role gate. The role gate is exercised by the
+    // source-match-sets read below (require_role(source_file_viewer)).
     const catalog = await proxyGet(request, "v1/admin/source-file-categories");
     expect(catalog.status()).toBe(200);
 

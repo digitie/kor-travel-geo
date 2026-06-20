@@ -93,7 +93,11 @@ uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12501 --reload
 실제 원천 적재는 원천 경로와 기준월 확인이 필요합니다. 운영 절차는 [`docs/architecture/backend-package.md`](docs/architecture/backend-package.md)의 CLI 절과 [`docs/runbooks/agent-workflow.md`](docs/runbooks/agent-workflow.md)를 먼저 확인합니다.
 
 ```bash
-ktgctl load full-set ./data/juso --discover
+ktgctl load all-sidos \
+  --juso "./data/juso/도로명주소 한글_전체분" \
+  --locsum "./data/juso/위치정보요약DB" \
+  --navi "./data/juso/내비게이션용DB" \
+  --yyyymm 202603
 ktgctl refresh mv --swap
 ```
 

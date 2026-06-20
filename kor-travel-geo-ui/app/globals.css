@@ -94,7 +94,7 @@ textarea {
 }
 
 .brand span {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -238,7 +238,7 @@ textarea {
 }
 
 .page-title p {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-size: 13px;
   margin: 0;
 }

@@ -303,8 +303,12 @@ def _load_plans_sync(
         if result is None:
             raise LoaderError(_vector_translate_failure_message(plan, gdal))
         loaded += 1
-    _repair_invalid_geometries(pg_url, _unique_target_tables(plans))
     if analyze:
+        # Gate geometry repair on the same flag as ANALYZE so batched per-시도
+        # loads (analyze=False until the final 시도) run the non-indexable
+        # `NOT ST_IsValid(geom)` scan once over the fully-loaded tables instead
+        # of re-validating every accumulated row after each 시도 (was O(N^2)).
+        _repair_invalid_geometries(pg_url, _unique_target_tables(plans))
         _analyze_target_tables(
             pg_url,
             _unique_target_tables(plans),

@@ -140,6 +140,27 @@ def test_parse_road_name_only_does_not_consume_branch_road_number(raw: str) -> N
 
 
 @pytest.mark.parametrize(
+    ("raw", "is_road", "mnnm", "slno"),
+    [
+        # #339 regression: a unit/floor suffix (호/층) glued to the number with no
+        # preceding space must not defeat the number match (was -> InvalidAddressError).
+        ("왕산로 189호", True, 189, 0),
+        ("왕산로 189-4호", True, 189, 4),
+        ("역삼동 642-16호", False, 642, 16),
+        ("역삼동 642-16층", False, 642, 16),
+    ],
+)
+def test_parse_keeps_number_when_unit_suffix_is_glued(
+    raw: str, is_road: bool, mnnm: int, slno: int
+) -> None:
+    parts = parse_address(raw)
+
+    assert parts.is_road is is_road
+    assert parts.mnnm == mnnm
+    assert parts.slno == slno
+
+
+@pytest.mark.parametrize(
     ("raw", "si", "sgg", "emd", "mntn_yn", "mnnm", "slno"),
     [
         ("강원도 춘천시 신북읍 산12 - 3번지", "강원특별자치도", "춘천시", "신북읍", "1", 12, 3),

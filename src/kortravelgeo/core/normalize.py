@@ -26,10 +26,10 @@ _DASH_TRANSLATION = str.maketrans(
 _BRACKET_RE = re.compile(r"[\(\[\{]([^)\]\}]*)[\)\]\}]")
 _ROAD_RE = re.compile(
     r"(?P<road>[가-힣0-9A-Za-z·.\-\s]+?(?:대로\d+(?:번)?길|로\d+(?:번)?길|대로|로|길))\s*"
-    r"(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?(?=\s|$)"
+    r"(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?(?![길로\d])"
 )
 _JIBUN_RE = re.compile(
-    r"(?P<mt>산\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?(?=\s|$)"
+    r"(?P<mt>산\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?(?![길로\d])"
 )
 
 _SIDO_ALIASES = {
