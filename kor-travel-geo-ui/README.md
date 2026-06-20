@@ -44,14 +44,14 @@ npx playwright test --config playwright.config.ts --project firefox --workers 1
 
 ## Docker 실행
 
-저장소 루트의 `scripts/docker_app.sh`를 사용한다. 이 스크립트는 API/UI 이미지를 빌드하고, 컨테이너 실행 시 `.env` 또는 `kor-travel-geo-ui/.env.local`에서 VWorld 키와 DB/RustFS 접속 설정을 읽어 환경변수로 주입한다. 키 값은 출력하지 않는다. PostgreSQL/PostGIS와 RustFS는 이 프로젝트에서 직접 구동하지 않고 이미 동작 중인 접속 대상을 사용한다.
+저장소 루트의 `scripts/docker_app.sh`를 사용한다. 이 스크립트는 API/UI 이미지를 빌드하고, 컨테이너 실행 시 `KTG_ENV_FILE`(예: 루트 `.env.dev`), 루트 `.env`, `kor-travel-geo-ui/.env.local` 순서로 VWorld 키와 DB/RustFS 접속 설정을 읽어 환경변수로 주입한다. 키 값은 출력하지 않는다. PostgreSQL/PostGIS와 RustFS는 이 프로젝트에서 직접 구동하지 않고 이미 동작 중인 접속 대상을 사용한다.
 
 ```bash
 scripts/docker_app.sh build-ui
 scripts/docker_app.sh up-ui
 ```
 
-API와 UI를 함께 띄우려면 `scripts/docker_app.sh build` 뒤 `scripts/docker_app.sh up`을 사용한다. 기본 실행은 Docker bridge network와 host port mapping을 사용하므로 브라우저 진입점은 `http://127.0.0.1:12505/debug/geocode`다. API 컨테이너는 `.env`의 `KTG_PG_DSN`과 `KTG_RUSTFS_*` 접속 설정으로 이미 동작 중인 DB와 bucket에 붙는다.
+API와 UI를 함께 띄우려면 `scripts/docker_app.sh build` 뒤 `scripts/docker_app.sh up`을 사용한다. 기본 dev 실행은 Docker host network를 사용하므로 API/UI/DB/RustFS가 모두 `127.0.0.1` 기준으로 동작하고, 브라우저 진입점은 `http://127.0.0.1:12505/debug/geocode`다. Docker Desktop 환경에서 host network 제약이 있으면 `KTG_DOCKER_NETWORK_MODE=bridge`를 명시한다. API 컨테이너는 `.env` 또는 `KTG_ENV_FILE`의 `KTG_PG_DSN`과 `KTG_RUSTFS_*` 접속 설정으로 이미 동작 중인 DB와 bucket에 붙는다.
 
 저장소 루트의 `scripts/frontend_check.sh`는 Windows `npm`이 PATH에 잡힌 경우 즉시 실패하고, Linux Node/npm에서 `gen:types`, lint, type-check, unit test, build를 순서대로 실행한다. 의존성을 새로 받는 검증이면 `scripts/frontend_check.sh --install`을 사용한다.
 
