@@ -70,6 +70,33 @@ textarea {
   min-height: 100vh;
 }
 
+/* Mobile-only top bar + drawer controls. Hidden on desktop; activated in the
+   max-width:980px block where the sidebar becomes an off-canvas drawer. */
+.mobile-topbar {
+  display: none;
+}
+
+.mobile-menu-toggle {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-grid;
+  height: 44px;
+  justify-items: center;
+  width: 44px;
+}
+
+.mobile-topbar-title {
+  font-size: 15px;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
 .sidebar {
   border-right: 1px solid var(--line);
   background: var(--surface-subtle);
@@ -1829,13 +1856,55 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .mobile-topbar {
+    align-items: center;
+    background: var(--surface-card);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 10px;
+    min-height: 56px;
+    padding: 8px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
   .source-split {
     grid-template-columns: 1fr;
   }
 
+  /* Off-canvas drawer toggled by the top bar; closed by default so the page
+     content is visible. (A plain `position: static` left the sidebar filling
+     100dvh with the content stuck entirely below the fold.) */
   .sidebar {
-    height: auto;
-    position: static;
+    bottom: 0;
+    box-shadow: var(--shadow-modal);
+    left: 0;
+    position: fixed;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform var(--duration-normal) var(--ease-default);
+    width: min(280px, 84vw);
+    z-index: 50;
+  }
+
+  .app-shell[data-menu-open="true"] .sidebar {
+    transform: translateX(0);
+  }
+
+  .app-shell[data-menu-open="true"] .sidebar-backdrop {
+    background: rgb(15 23 42 / 42%);
+    border: 0;
+    display: block;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    position: fixed;
+    z-index: 45;
+  }
+
+  .content {
+    padding: 18px 16px 40px;
   }
 
   .grid.two,
