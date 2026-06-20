@@ -14,6 +14,11 @@ type AppErrorPanelProps = {
   standalone?: boolean;
 };
 
+// Suppress an auto-reload only if the previous one was this recent (i.e. an
+// immediate reload→re-error loop). Older than this and a fresh transient error
+// is allowed to self-heal again, so the guard never permanently disables itself.
+const RELOAD_GUARD_WINDOW_MS = 10_000;
+
 function goBack() {
   if (window.history.length > 1) {
     window.history.back();
@@ -32,11 +37,12 @@ export function AppErrorPanel({ error, reset, standalone = false }: AppErrorPane
     }
 
     const key = errorReloadStorageKey(window.location.pathname);
-    if (window.sessionStorage.getItem(key) === "1") {
+    const lastReloadAt = Number(window.sessionStorage.getItem(key));
+    if (Number.isFinite(lastReloadAt) && Date.now() - lastReloadAt < RELOAD_GUARD_WINDOW_MS) {
       return;
     }
 
-    window.sessionStorage.setItem(key, "1");
+    window.sessionStorage.setItem(key, String(Date.now()));
     window.location.reload();
   }, [recoverable]);
 

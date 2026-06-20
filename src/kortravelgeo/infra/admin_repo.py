@@ -1191,7 +1191,7 @@ WITH latest AS (
         if retention_days is not None and retention_days < 1:
             raise InvalidInputError(
                 "retention_days must be greater than or equal to 1",
-                code="E0102",
+                code="E0100",
                 http_status=400,
             )
 

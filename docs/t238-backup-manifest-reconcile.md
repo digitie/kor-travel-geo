@@ -35,6 +35,7 @@ Report는 파일 단위 row와 summary count를 낸다.
 | `db_missing` | RustFS object는 있지만 manifest의 `source_file_id`/`object_key`에 맞는 DB row가 없음 |
 | `db_mismatch` | DB row의 `object_key`/`sha256`/`size_bytes`가 manifest와 다름 |
 | `object_key_missing` | legacy/불완전 manifest라 파일 entry에 `object_key`가 없음 |
+| `head_error` | RustFS `HEAD`가 404가 아닌 HTTP 오류이거나 `content-length` 누락 등 object 존재를 확정할 수 없는 응답 (T-178F) |
 
 Manifest에 `object_etag`가 있으면 그 값을 우선 비교한다. 없으면 현재 DB row의 `object_etag`를 사용한다. ETag는 SHA-256으로 간주하지 않으며, T-238은 `HEAD` 기반 빠른 정합성 검증만 수행한다. RustFS `HEAD` 404는 `missing`, 그 밖의 HTTP 오류나 `content-length` 누락처럼 object 존재 여부를 확정할 수 없는 응답은 `head_error`로 분리한다. 따라서 권한/서버 오류나 불완전한 HEAD 응답이 `missing` 또는 size `0`으로 기록되지 않는다.
 

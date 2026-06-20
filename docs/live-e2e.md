@@ -48,6 +48,10 @@ npm run start -- --hostname 0.0.0.0 --port 12505
 source-files/match-set 같은 role-gated admin read까지 live로 확인하려면 Next proxy도 명시 opt-in으로
 admin identity를 주입한다. 기본 실행에서는 아래 값을 비워 둔다.
 
+> ⚠️ 아래 `$env:KTG_LIVE_E2E_ADMIN_*` 값은 step 3의 `npm run start` **전에** 같은 PowerShell
+> 세션에서 설정해야 Next 서버 프로세스가 `process.env`로 읽는다. 서버를 이미 띄웠다면 중지한 뒤
+> 설정하고 `npm run start`를 다시 실행한다(서버 기동 후 설정하면 반영되지 않는다).
+
 ```powershell
 # API가 Next proxy peer를 신뢰하도록 backend env에 설정한다.
 # API와 UI가 같은 dev host에서 127.0.0.1로 통신하면 loopback만으로 충분하다.

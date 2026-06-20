@@ -1027,7 +1027,9 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="pobox_load", message="사서함 우편번호 적재 시작")
-        count = await load_pobox(engine, _payload_path(payload), cancel_event=cancel_event)
+        count = await _run_loader_off_event_loop(
+            lambda: load_pobox(engine, _payload_path(payload), cancel_event=cancel_event)
+        )
         await progress(progress=1.0, stage="pobox_load", message=f"{count} rows loaded")
 
     async def bulk(
@@ -1036,7 +1038,9 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         progress: _jobs.ProgressCallback,
     ) -> None:
         await progress(stage="bulk_load", message="대량배달처 우편번호 적재 시작")
-        count = await load_bulk_delivery(engine, _payload_path(payload), cancel_event=cancel_event)
+        count = await _run_loader_off_event_loop(
+            lambda: load_bulk_delivery(engine, _payload_path(payload), cancel_event=cancel_event)
+        )
         await progress(progress=1.0, stage="bulk_load", message=f"{count} rows loaded")
 
     async def consistency(
