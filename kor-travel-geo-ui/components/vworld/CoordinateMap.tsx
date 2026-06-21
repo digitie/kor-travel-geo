@@ -274,6 +274,11 @@ function addGeometryOverlay(map: MapLibreMap, geometry: MapGeometryOverlay): voi
 }
 
 function removeGeometryOverlay(map: MapLibreMap): void {
+  // A removed/torn-down map has no internal style, so getLayer/getSource would
+  // throw "this.style is undefined". This happens when this overlay effect's
+  // cleanup runs after the underlying VWorld map was destroyed (remount/unmount
+  // on apiKey/layerType change or navigation). Bail out instead of crashing.
+  if (!mapStyleAvailable(map)) return;
   for (const layerId of [
     OVERLAY_POINT_LAYER_ID,
     OVERLAY_LINE_LAYER_ID,
@@ -286,6 +291,12 @@ function removeGeometryOverlay(map: MapLibreMap): void {
   if (map.getSource(OVERLAY_SOURCE_ID)) {
     map.removeSource(OVERLAY_SOURCE_ID);
   }
+}
+
+function mapStyleAvailable(map: MapLibreMap): boolean {
+  // `style` is maplibre-internal (not in the public Map type); getLayer/getSource
+  // read it and it is undefined once the map is removed. Probe it defensively.
+  return Boolean((map as unknown as { style?: unknown }).style);
 }
 
 function boundsFromBBox(
