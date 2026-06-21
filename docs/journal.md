@@ -2,6 +2,40 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-21 (Admin UI live e2e 2배 추가 증설, by codex)
+
+**작업**: 사용자 추가 요청에 따라 `tests/e2e/live/*`의 라이브 풀스택 테스트를 81개에서 223개로
+다시 늘렸다. 공개 API read-only 행렬 94개와 admin API query 행렬 48개를 더해, v1/v2 geocode·reverse·
+search·zipcode·pobox·within-radius, validation 실패, tables/logs/backups/jobs/loads/consistency/
+audit/snapshots/releases/artifacts/maintenance/cache/source catalog GET 계약을 촘촘히 검증한다.
+
+**결정**: 추가된 행렬도 모두 same-origin UI proxy를 통과하는 live read-only 테스트로 제한했다.
+admin API는 GET만 호출하고, 공개 API 행렬은 상태 변경이 없는 검색·조회와 입력 검증 실패만 다룬다.
+
+**검증**: Windows Playwright `--list tests/e2e/live` 기준 446건(Chromium/Firefox 2 project,
+단일 project 223건)을 확인했다. WSL 미러의 Next 서버를 새로 올려 Windows Playwright 전체 live suite
+9개 spec을 실행했고 446건 중 430건 통과·16건 skip이었다. skip은 `source_file_viewer` role과
+destructive rebuild opt-in 환경이 없는 기본 live 실행에서 기대되는 건이다. WSL ext4 테스트 미러에서
+UI `type-check`, `lint`, unit test 123건, `build`, React Doctor(`ok=true`, 기존 UI 경고 33건)를
+다시 통과했다.
+
+## 2026-06-21 (Admin UI live e2e 커버리지 증설, by codex)
+
+**작업**: 사용자 요청에 따라 mock 기반 e2e가 아니라 `tests/e2e/live/*`의 라이브 풀스택 admin UI
+테스트를 22개에서 81개로 늘렸다. 추가 테스트는 실 백엔드+실 DB를 대상으로 하며, API read-only
+계약 30개와 브라우저 read-only 화면/탭 검증 29개를 더했다.
+
+**결정**: live admin 테스트는 파괴적 작업을 누르지 않는 읽기 전용 검증으로 유지했다. 백업/복원,
+rebuild, reconcile 실행, hard-delete 같은 상태 변경은 트리거하지 않고, role-gated source-files read는
+`KTG_LIVE_E2E_ADMIN_PROXY=1`과 `source_file_viewer` role이 있을 때만 실행되도록 분리했다.
+
+**검증**: Windows Playwright `--list tests/e2e/live`로 162건(Chromium/Firefox 2 project 기준,
+단일 project 81건)을 확인했다. WSL ext4 테스트 미러에서 UI `type-check`, `lint`, unit test 123건,
+`build`, React Doctor(`ok=true`, 기존 UI 경고 33건)를 통과했다. 이후 WSL 미러의 Next 서버를 새로
+올려 Windows Playwright로 admin live 3개 spec(`admin-readonly`, `admin-api-readonly`,
+`admin-browser-readonly`)을 Chromium/Firefox 양쪽에서 실행했고, 132건 중 118건 통과·14건
+role-gated skip이었다.
+
 ## 2026-06-20 (PR #384/#392 Claude Code post-merge 리뷰 후속, by codex)
 
 **작업**: 사용자 요청에 따라 2026-06-19 KST 이후 Claude Code가 올린 PR을 closed 포함으로

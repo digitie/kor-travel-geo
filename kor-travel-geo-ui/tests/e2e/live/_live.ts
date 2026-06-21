@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 // Shared helpers for the LIVE full-stack e2e suite (tests/e2e/live/*).
 //
@@ -26,6 +26,7 @@ export const KNOWN = {
 
 /** Approximate bounding box of South Korea, for coordinate-sanity assertions. */
 export const KR_BBOX = { lonMin: 124, lonMax: 132, latMin: 33, latMax: 43 } as const;
+export const LIVE_TIMEOUT = 15_000;
 
 export function expectInKorea(lon: unknown, lat: unknown): void {
   expect(typeof lon).toBe("number");
@@ -60,4 +61,23 @@ export async function proxyGet(
 /** POST JSON through the same-origin proxy. */
 export async function proxyPost(request: APIRequestContext, path: string, data: unknown) {
   return request.post(`/api/proxy/${path}`, { data });
+}
+
+export async function expectNoErrorScreen(page: Page): Promise<void> {
+  await expect(page.getByText("This page couldn")).toHaveCount(0);
+  await expect(page.getByText("이 화면을 불러오지 못했습니다")).toHaveCount(0);
+}
+
+export function hasLiveAdminProxyRole(role: string): boolean {
+  if (process.env.KTG_LIVE_E2E_ADMIN_PROXY !== "1") {
+    return false;
+  }
+  return (process.env.KTG_LIVE_E2E_ADMIN_ROLES ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .includes(role);
+}
+
+export function isLiveE2EEnabled(): boolean {
+  return Boolean(process.env.LIVE_E2E);
 }
