@@ -2,8 +2,19 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-20 갱신, by codex)
+## 현재 진척도 (2026-06-21 갱신, by codex)
 
+- ✅ Admin UI live e2e 커버리지 추가 증설 완료 — 사용자 요청에 따라 mock e2e가 아닌
+  `kor-travel-geo-ui/tests/e2e/live/*` 기준 테스트를 22개에서 81개로 늘린 뒤, 추가 요청으로 다시
+  223개까지 늘렸다. `admin-api-readonly.spec.ts`와 `admin-browser-readonly.spec.ts`는 admin UI/API
+  읽기 전용 표면을 실 백엔드+DB로 검증하고, `api-readonly-matrix.spec.ts`와
+  `admin-api-query-matrix.spec.ts`는 공개 API·admin API GET/validation 행렬을 촘촘히 검증한다.
+  파괴적 작업은 누르지 않는 read-only 원칙을 유지했고, source-files role-gated read는
+  `KTG_LIVE_E2E_ADMIN_PROXY=1`과 `source_file_viewer` role이 있을 때만 실행된다. Windows Playwright
+  `--list tests/e2e/live`는 446건(Chromium/Firefox 2 project, 단일 project 223건)을 확인했다.
+  WSL 미러의 Next 서버를 새로 올려 전체 live suite 9개 spec을 실행했고 446건 중 430건 통과·16건
+  role-gated/destructive-opt-in skip이었다. WSL UI type-check/lint/unit 123건/build/React
+  Doctor(`ok=true`, 기존 warning 33건)도 통과했다.
 - ✅ PR #384/#392 Claude Code post-merge 리뷰 후속 완료 — 2026-06-19 KST 이후 Claude Code가
   올린 PR을 closed 포함으로 확인했다. 대상은 #384(dev/prod 환경 분리)와 #392(Tailwind v4 전환)이며,
   conversation comment/review body/review thread를 모두 확인했고 unresolved thread는 0건이다.

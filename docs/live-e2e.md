@@ -2,19 +2,28 @@
 
 `kor-travel-geo-ui/tests/e2e/`의 기본 Playwright 스펙은 `page.route`로 백엔드를 mock해 DB/백엔드
 없이 UI 계약만 검증한다. 그것과 별개로 `tests/e2e/live/*`는 **실 백엔드 + 실 DB**를 끝까지 통과하는
-풀스택 e2e다. 실제 지오코딩 정확성(주소→좌표), 구조화 에러, admin 화면의 실데이터 렌더를 검증한다.
+풀스택 e2e다. 실제 지오코딩 정확성(주소→좌표), 구조화 에러, admin 화면의 실데이터 렌더와
+읽기 전용 admin/API 계약을 검증한다.
 
 이 스펙들은 `LIVE_E2E` 환경변수로 **게이트**된다 — 변수가 없으면 `test.skip`되어 기본 mock 런(백엔드
 없음)에서 실패하지 않는다.
 
-## 커버리지 (4계층)
+## 커버리지 (9파일 / 223개 case)
 
-| 파일 | 계층 | 내용 |
-|------|------|------|
-| `live/api-correctness.spec.ts` | 실 API 정확성 | v1(vworld 호환)·v2 geocode/reverse/search/within-radius + health. 알려진 앵커(서울시청)로 좌표·sig_cd·우편번호·bd_mgt_sn 단언 |
-| `live/api-negative.spec.ts` | 네거티브/엣지 | 빈/누락 입력 → 구조화 400(`V2ErrorEnvelope` `error.code=E0100`), 존재하지 않는 주소 → 빈 후보 |
-| `live/browser-flows.spec.ts` | 라이브 브라우저 | debug geocode/reverse/normalize 페이지를 실 입력→실행→결과로 구동(mock 없음) |
-| `live/admin-readonly.spec.ts` | 라이브 admin | ops/consistency/backups/source-files/tables 화면이 실데이터로 렌더(읽기 전용 — 파괴적 작업 금지) |
+| 파일 | case | 계층 | 내용 |
+|------|------|------|------|
+| `live/api-correctness.spec.ts` | 6 | 실 API 정확성 | v1(vworld 호환)·v2 geocode/reverse/search/within-radius + health. 알려진 앵커(서울시청)로 좌표·sig_cd·우편번호·bd_mgt_sn 단언 |
+| `live/api-negative.spec.ts` | 5 | 네거티브/엣지 | 빈/누락 입력 → 구조화 400(`V2ErrorEnvelope` `error.code=E0100`), 존재하지 않는 주소 → 빈 후보 |
+| `live/api-readonly-matrix.spec.ts` | 94 | 라이브 공개 API 행렬 | v1/v2 geocode·reverse·search·zipcode·pobox·within-radius와 검증 실패 케이스를 same-origin proxy로 촘촘히 확인 |
+| `live/admin-api-query-matrix.spec.ts` | 48 | 라이브 admin API 행렬 | tables/logs/backups/jobs/loads/consistency/audit/snapshots/releases/artifacts/maintenance/pg-stat/cache/source catalog GET 계약을 읽기 전용으로 확인 |
+| `live/admin-api-readonly.spec.ts` | 30 | 라이브 admin API 계약 | Next same-origin proxy를 통해 tables/cache/logs/backups/jobs/ops/consistency/source-file catalog를 실 백엔드+DB로 읽기 전용 검증. source-files role-gated read는 `source_file_viewer` opt-in일 때만 실행 |
+| `live/admin-browser-readonly.spec.ts` | 29 | 라이브 admin 화면 촘촘 검증 | load/cache/logs/settings/tables/backups/source-files/ops/consistency의 주요 탭·표·필터·입력 surface를 실제 UI로 탐색하되 submit/action 버튼은 누르지 않음 |
+| `live/browser-flows.spec.ts` | 3 | 라이브 브라우저 | debug geocode/reverse/normalize 페이지를 실 입력→실행→결과로 구동(mock 없음) |
+| `live/admin-readonly.spec.ts` | 7 | 라이브 admin smoke | ops/consistency/backups/source-files/tables 화면이 실데이터로 렌더(읽기 전용 — 파괴적 작업 금지) |
+| `live/source-files-rebuild-live.spec.ts` | 1 | 라이브 rebuild smoke | role-gated source-files rebuild 진입점의 라이브 경로 smoke |
+
+`case`는 단일 Playwright project 기준이다. 현재 Chromium/Firefox 2 project 목록 기준으로는
+`npx playwright test --config playwright.config.ts --list tests/e2e/live`가 446건을 출력한다.
 
 ## 스택 기동 (현재 dev 프로파일)
 
@@ -99,5 +108,6 @@ npx playwright test --config playwright.config.ts --project firefox --workers 1 
   필요하다. 테스트 DB(`ktg-t210-db`)에 확장을 설치해도 snapshots 테이블이 누락돼 있으면 `E0500`로 503.
   스키마를 현재 `sql/ddl/001_schema.sql` 기준으로 정식 마이그레이션해야 해소된다(공유 DB 직접 DDL 금지).
   OpsPanel은 한 엔드포인트 503이 다른 표를 비우지 않도록 `Promise.allSettled`로 부분 로드한다.
-- **v1 `type` 파라미터는 소문자만.** `type=ROAD`(대문자)는 `400 INVALID_TYPE`. 상세는
+- **v1 `type` 파라미터 검증은 실제 API 동작을 따른다.** 현재 live 스택에서는 `type=ROAD`가 정규화되어
+  성공하고, 존재하지 않는 값(`not-a-type`)은 `400 INVALID_TYPE`으로 거절된다. 상세는
   `docs/api-reference/v1/geocode.md`·`reverse.md` 참조.
