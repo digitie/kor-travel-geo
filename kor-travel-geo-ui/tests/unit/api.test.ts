@@ -107,4 +107,13 @@ describe("backendPath", () => {
     expect(getInit.body).toBeUndefined();
     expect(getInit.duplex).toBeUndefined();
   });
+
+  it("프록시는 클라이언트 abort signal을 upstream fetch로 전달한다", () => {
+    const controller = new AbortController();
+    const init = buildProxyRequestInit("GET", new Headers(), null, controller.signal);
+    expect(init.signal).toBe(controller.signal);
+
+    const withoutSignal = buildProxyRequestInit("GET", new Headers(), null);
+    expect(withoutSignal.signal).toBeUndefined();
+  });
 });

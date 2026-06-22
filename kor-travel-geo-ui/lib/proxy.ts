@@ -77,12 +77,18 @@ export function forwardedProxyHeaders(source: Headers, env: Env = process.env): 
 export function buildProxyRequestInit(
   method: string,
   headers: Headers,
-  body: ReadableStream<Uint8Array> | null
+  body: ReadableStream<Uint8Array> | null,
+  signal?: AbortSignal
 ): ProxyRequestInit {
   const init: ProxyRequestInit = {
     method,
     headers,
-    cache: "no-store"
+    cache: "no-store",
+    // Propagate the client's abort to the upstream fetch. Without this, a
+    // cancelled/navigated-away request leaks the undici connection (the backend
+    // keeps running and the response stream is never drained) — repeated leaks
+    // exhaust the pool and later requests stall. (cf. kor-travel-concierge #111)
+    signal
   };
   if (method !== "GET" && method !== "HEAD" && body !== null) {
     init.body = body;
