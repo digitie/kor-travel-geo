@@ -21,33 +21,41 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     const upstreamStartedAt = performance.now();
     const backendRoute = backendRouteForMetrics(params.path);
     let upstreamStatusCode = 500;
-    const response = await fetch(target, {
-      cache: "no-store",
-      ...buildProxyRequestInit(
-        request.method,
-        forwardedProxyHeaders(request.headers),
-        request.body
-      )
-    })
-      .then((upstreamResponse) => {
-        upstreamStatusCode = upstreamResponse.status;
-        return upstreamResponse;
-      })
-      .finally(() => {
-        recordProxyUpstream({
-          method: request.method,
-          backendRoute,
-          statusCode: upstreamStatusCode,
-          elapsedSeconds: (performance.now() - upstreamStartedAt) / 1000
-        });
+    try {
+      const response = await fetch(target, {
+        ...buildProxyRequestInit(
+          request.method,
+          forwardedProxyHeaders(request.headers),
+          request.body,
+          request.signal
+        )
       });
-    statusCode = response.status;
-    return new Response(response.body, {
-      status: response.status,
-      headers: {
-        "content-type": response.headers.get("content-type") ?? "application/json"
+      upstreamStatusCode = response.status;
+      statusCode = response.status;
+      return new Response(response.body, {
+        status: response.status,
+        headers: {
+          "content-type": response.headers.get("content-type") ?? "application/json"
+        }
+      });
+    } catch (error) {
+      // Client aborted (navigation / react-query cancel): request.signal aborts
+      // the upstream fetch above, freeing the connection. Surface 499 (client
+      // closed request) instead of letting it look like a 500 backend failure.
+      if (request.signal.aborted) {
+        upstreamStatusCode = 499;
+        statusCode = 499;
+        return new Response(null, { status: 499 });
       }
-    });
+      throw error;
+    } finally {
+      recordProxyUpstream({
+        method: request.method,
+        backendRoute,
+        statusCode: upstreamStatusCode,
+        elapsedSeconds: (performance.now() - upstreamStartedAt) / 1000
+      });
+    }
   } finally {
     recordUiRequest({
       method: request.method,
