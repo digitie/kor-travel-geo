@@ -16,7 +16,7 @@
 | `live/api-negative.spec.ts` | 5 | 네거티브/엣지 | 빈/누락 입력 → 구조화 400(`V2ErrorEnvelope` `error.code=E0100`), 존재하지 않는 주소 → 빈 후보 |
 | `live/api-readonly-matrix.spec.ts` | 94 | 라이브 공개 API 행렬 | v1/v2 geocode·reverse·search·zipcode·pobox·within-radius와 검증 실패 케이스를 same-origin proxy로 촘촘히 확인 |
 | `live/admin-api-query-matrix.spec.ts` | 48 | 라이브 admin API 행렬 | tables/logs/backups/jobs/loads/consistency/audit/snapshots/releases/artifacts/maintenance/pg-stat/cache/source catalog GET 계약을 읽기 전용으로 확인 |
-| `live/admin-api-readonly.spec.ts` | 30 | 라이브 admin API 계약 | Next same-origin proxy를 통해 tables/cache/logs/backups/jobs/ops/consistency/source-file catalog를 실 백엔드+DB로 읽기 전용 검증. source-files role-gated read는 `source_file_viewer` opt-in일 때만 실행 |
+| `live/admin-api-readonly.spec.ts` | 30 | 라이브 admin API 계약 | Next same-origin proxy를 통해 tables/cache/logs/backups/jobs/ops/consistency/source-file catalog를 실 백엔드+DB로 읽기 전용 검증. source-files role-gated read는 로그인된 admin 세션(`loginLiveAdmin`)으로 실행된다 — 세션이 `source_file_viewer`를 포함하므로 별도 opt-in env는 필요 없다 |
 | `live/admin-browser-readonly.spec.ts` | 29 | 라이브 admin 화면 촘촘 검증 | load/cache/logs/settings/tables/backups/source-files/ops/consistency의 주요 탭·표·필터·입력 surface를 실제 UI로 탐색하되 submit/action 버튼은 누르지 않음 |
 | `live/auth-public-api-keys-live.spec.ts` | 7 | 로그인·세션·공개 API key | 미인증 redirect, 로그인 실패/성공/로그아웃, 감사 기록 노출, trusted UI proxy key 우회, 외부 직접 호출 key 요구, opt-in DB key 생성·폐기 |
 | `live/browser-flows.spec.ts` | 3 | 라이브 브라우저 | debug geocode/reverse/normalize 페이지를 실 입력→실행→결과로 구동(mock 없음) |

@@ -11,6 +11,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -54,13 +55,16 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
             <h1 id="login-title">관리자 로그인</h1>
           </div>
         </div>
-        <form className="login-form" onSubmit={submit}>
+        <form className="login-form" onSubmit={submit} aria-busy={busy}>
           <div className="field">
             <label htmlFor="admin-username">아이디</label>
             <input
               autoComplete="username"
               id="admin-username"
               value={username}
+              disabled={busy}
+              aria-describedby="login-error"
+              aria-invalid={error ? true : undefined}
               onChange={(event) => setUsername(event.target.value)}
             />
           </div>
@@ -71,6 +75,9 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
               id="admin-password"
               type="password"
               value={password}
+              disabled={busy}
+              aria-describedby="login-error"
+              aria-invalid={error ? true : undefined}
               onChange={(event) => setPassword(event.target.value)}
             />
           </div>
@@ -78,7 +85,10 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
             <LogIn size={17} />
             로그인
           </button>
-          {error ? <p className="login-error">{error}</p> : null}
+          {/* Always-present assertive live region so a failed-login message is announced to AT. */}
+          <p className="login-error" id="login-error" role="alert" aria-live="assertive">
+            {error}
+          </p>
         </form>
       </div>
     </section>

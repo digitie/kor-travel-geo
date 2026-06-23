@@ -263,6 +263,11 @@ textarea {
   margin: 0;
 }
 
+/* The error node stays mounted as an aria-live region; hide it while empty to avoid a stray gap. */
+.login-error:empty {
+  display: none;
+}
+
 .app-error-shell {
   align-items: center;
   display: flex;

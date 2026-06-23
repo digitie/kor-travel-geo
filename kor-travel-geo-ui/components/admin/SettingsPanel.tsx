@@ -250,10 +250,23 @@ function PublicApiKeysSection() {
       message={state.message}
       publicKeys={state.publicKeys}
       onCopyGeneratedKey={async () => {
-        if (state.generatedKey) {
-          await navigator.clipboard.writeText(state.generatedKey);
-          patchState({ message: "생성된 키를 복사했습니다." });
+        if (!state.generatedKey) return;
+        // navigator.clipboard is undefined in insecure contexts (plain-http LAN/IP origins),
+        // which this internal console can be served over. Feature-detect and fall back to a
+        // manual-copy hint (the generated-key input is readOnly + selects on focus) instead of
+        // throwing an unhandled rejection that silently loses the once-shown key.
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(state.generatedKey);
+            patchState({ message: "생성된 키를 복사했습니다." });
+            return;
+          }
+        } catch {
+          // fall through to the manual-copy hint
         }
+        patchState({
+          message: "이 브라우저에서 자동 복사를 쓸 수 없습니다. ‘생성된 키’ 입력란을 클릭해 전체 선택 후 Ctrl+C로 복사하세요."
+        });
       }}
       onCreate={createPublicApiKey}
       onLabelChange={(label) => patchState({ label })}

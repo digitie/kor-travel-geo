@@ -10,7 +10,7 @@ import string
 from dataclasses import dataclass
 from time import monotonic
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -168,6 +168,14 @@ RETURNING public_api_key_id::text AS public_api_key_id,
         *,
         revoked_by: str | None,
     ) -> PublicApiKeySummary:
+        # The id flows into a UUID column; reject a malformed id as a clean 404 instead of
+        # letting Postgres raise 'invalid input syntax for type uuid' (a DBAPIError → 500).
+        try:
+            UUID(public_api_key_id)
+        except ValueError as exc:
+            raise NotFoundError(
+                f"active public API key not found: {public_api_key_id}"
+            ) from exc
         async with self.engine.begin() as conn:
             row = (
                 await conn.execute(

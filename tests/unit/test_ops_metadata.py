@@ -28,6 +28,7 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
         "ops.table_stats_snapshots",
         "ops.pg_stat_statements_snapshots",
         "ops.slow_observability_samples",
+        "ops.public_api_keys",
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in SCHEMA_SQL
 
