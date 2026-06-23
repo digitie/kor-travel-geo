@@ -1,11 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import {
-  hasLiveAdminProxyRole,
-  isLiveE2EEnabled,
-  loginLiveAdmin,
-  proxyGet
-} from "./_live";
+import { isLiveE2EEnabled, loginLiveAdmin, proxyGet } from "./_live";
 
 // LIVE admin API read-only contract tests.
 //
@@ -14,9 +9,6 @@ import {
 // hard-delete actions.
 
 type Row = Record<string, unknown>;
-
-const SOURCE_ROLE_HINT =
-  "Run with KTG_LIVE_E2E_ADMIN_PROXY=1 and source_file_viewer role for source-file admin reads";
 
 test.describe("LIVE admin API read-only contracts", () => {
   test.beforeEach(async ({ request }) => {
@@ -265,8 +257,9 @@ test.describe("LIVE admin API read-only contracts", () => {
 test.describe("LIVE source-files admin API read-only contracts", () => {
   test.beforeEach(async ({ request }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    // The logged-in admin session now carries source_file_viewer (the proxy injects all admin
+    // roles from the session), so these role-gated reads run without the legacy opt-in env trio.
     await loginLiveAdmin(request);
-    test.skip(!hasLiveAdminProxyRole("source_file_viewer"), SOURCE_ROLE_HINT);
   });
 
   test("source match-set list passes the live role gate", async ({ request }) => {

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import pytest
@@ -11,7 +11,9 @@ from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.api.responses import register_exception_handlers
+from kortravelgeo.api.security import ROLE_SOURCE_FILE_VIEWER, require_role
 from kortravelgeo.dto.v2 import GeocodeV2Input, GeocodeV2Response
+from kortravelgeo.exceptions import NotFoundError
 from kortravelgeo.infra import public_api_keys
 from kortravelgeo.settings import Settings, get_settings, reset_settings, set_settings
 
@@ -189,3 +191,76 @@ async def test_db_active_key_overrides_vworld_default(
     assert fallback.json()["response"]["error"]["code"] == "INVALID_KEY"
     assert generated.status_code == 200
     assert generated.json() == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_revoke_key_rejects_malformed_uuid_as_not_found() -> None:
+    # A non-UUID id must surface as NotFound (→ 404), not reach the UUID column and 500.
+    repo = public_api_keys.PublicApiKeyRepository(cast("Any", object()))
+    with pytest.raises(NotFoundError):
+        await repo.revoke_key("not-a-uuid", revoked_by="admin")
+
+
+def _proxy_secret_settings() -> Settings:
+    return Settings(
+        _env_file=None,
+        admin_trusted_proxy_cidrs="127.0.0.0/8",
+        admin_proxy_secret=SecretStr("proxy-secret"),
+        vworld_api_key=SecretStr(_VWORLD_DEFAULT_KEY),
+    )
+
+
+@pytest.mark.asyncio
+async def test_admin_proxy_secret_required_for_admin_route_when_configured() -> None:
+    # When admin_proxy_secret is set, a trusted-peer request with the admin identity headers is
+    # still denied (403) unless it also carries the matching X-KTG-Admin-Proxy-Secret.
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.dependency_overrides[get_settings] = _proxy_secret_settings
+
+    @app.get("/v1/admin/probe")
+    async def probe(_ctx: Any = Depends(require_role(ROLE_SOURCE_FILE_VIEWER))) -> dict[str, bool]:
+        return {"ok": True}
+
+    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        missing = await client.get("/v1/admin/probe", headers=_TRUSTED_HEADERS)
+        wrong = await client.get(
+            "/v1/admin/probe",
+            headers={**_TRUSTED_HEADERS, "X-KTG-Admin-Proxy-Secret": "nope"},
+        )
+        ok = await client.get(
+            "/v1/admin/probe",
+            headers={**_TRUSTED_HEADERS, "X-KTG-Admin-Proxy-Secret": "proxy-secret"},
+        )
+
+    assert missing.status_code == 403
+    assert wrong.status_code == 403
+    assert ok.status_code == 200
+    assert ok.json() == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_admin_proxy_secret_gates_public_key_bypass() -> None:
+    # The trusted-proxy public-key bypass is gated by the same secret: correct secret bypasses
+    # the key requirement (200); a missing secret falls through to the normal key check (400).
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.dependency_overrides[get_settings] = _proxy_secret_settings
+
+    @app.get("/v1/address/geocode")
+    async def protected(_api_key: None = Depends(require_public_api_key)) -> dict[str, bool]:
+        return {"ok": True}
+
+    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        bypassed = await client.get(
+            "/v1/address/geocode",
+            headers={**_TRUSTED_HEADERS, "X-KTG-Admin-Proxy-Secret": "proxy-secret"},
+        )
+        denied = await client.get("/v1/address/geocode", headers=_TRUSTED_HEADERS)
+
+    assert bypassed.status_code == 200
+    assert bypassed.json() == {"ok": True}
+    assert denied.status_code == 400
+    assert denied.json()["response"]["error"]["code"] == "PARAM_REQUIRED"

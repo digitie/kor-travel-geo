@@ -68,27 +68,10 @@ export async function expectNoErrorScreen(page: Page): Promise<void> {
   await expect(page.getByText("이 화면을 불러오지 못했습니다")).toHaveCount(0);
 }
 
-export function hasLiveAdminProxyRole(role: string): boolean {
-  // Mirror the proxy's actual role-header injection precondition
-  // (lib/proxy.ts `liveE2EAdminIdentityFromEnv`): the proxy injects X-KTG-Actor/X-KTG-Roles
-  // only when the toggle is enabled AND KTG_LIVE_E2E_ADMIN_ACTOR is non-empty AND the role is
-  // present. If we skipped on a looser condition, a partial env (e.g. PROXY=1 + ROLES set but
-  // ACTOR unset) would NOT skip, the proxy would inject no identity, and the backend role gate
-  // would 403 — turning a misconfig into a confusing hard failure instead of a clean skip.
-  // Keep in sync with liveE2EAdminIdentityFromEnv.
-  const toggle = process.env.KTG_LIVE_E2E_ADMIN_PROXY;
-  const enabled = toggle === "1" || toggle?.toLowerCase() === "true";
-  if (!enabled) {
-    return false;
-  }
-  if (!(process.env.KTG_LIVE_E2E_ADMIN_ACTOR ?? "").trim()) {
-    return false;
-  }
-  return (process.env.KTG_LIVE_E2E_ADMIN_ROLES ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .includes(role);
-}
+// NOTE: the legacy KTG_LIVE_E2E_ADMIN_PROXY/ACTOR/ROLES opt-in (and its hasLiveAdminProxyRole
+// gate) is retired — admin role injection now derives from the logged-in admin session
+// (loginLiveAdmin), so role-gated reads run without that env trio. lib/proxy.ts still keeps
+// liveE2EAdminIdentityFromEnv as a harmless fallback for the proxy.
 
 export function isLiveE2EEnabled(): boolean {
   return Boolean(process.env.LIVE_E2E);

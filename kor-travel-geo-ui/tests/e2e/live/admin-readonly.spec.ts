@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
   expectNoErrorScreen,
-  hasLiveAdminProxyRole,
   loginLiveAdmin,
   loginLiveAdminPage,
   proxyGet
@@ -81,14 +80,11 @@ test.describe("LIVE admin read-only", () => {
     }
   });
 
-  test("source-files admin API passes the role gate when live admin proxy is enabled", async ({
+  test("source-files admin API passes the role gate under the logged-in session", async ({
     request
   }) => {
-    test.skip(
-      !hasLiveAdminProxyRole("source_file_viewer"),
-      "Run with KTG_LIVE_E2E_ADMIN_PROXY=1, KTG_LIVE_E2E_ADMIN_ACTOR set, and source_file_viewer in KTG_LIVE_E2E_ADMIN_ROLES"
-    );
-
+    // The logged-in admin session (beforeEach) carries source_file_viewer, so this role-gated
+    // read runs without the legacy KTG_LIVE_E2E_ADMIN_PROXY opt-in.
     // source-file-categories is a static catalog with no role guard — it returns
     // 200 regardless of injected identity, so it only sanity-checks proxy
     // connectivity, not the role gate. The role gate is exercised by the

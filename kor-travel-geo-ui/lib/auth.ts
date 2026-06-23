@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { clientIpForThrottle } from "@/lib/request-ip";
 
 export const SESSION_COOKIE_NAME = "ktg_ui_session";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -469,11 +470,10 @@ function isHttpsRequest(request: RequestLike | null): boolean {
 }
 
 function loginAttemptKey(request: RequestLike): string {
-  return (
-    firstForwardedValue(request.headers.get("x-forwarded-for")) ??
-    firstForwardedValue(request.headers.get("x-real-ip")) ??
-    "local"
-  ).slice(0, 128);
+  // Trusted client IP (see lib/request-ip): falls back to a single shared "untrusted" bucket
+  // when X-Forwarded-For cannot be trusted, so the brute-force limit cannot be bypassed by
+  // rotating a forged header on each attempt.
+  return clientIpForThrottle(request);
 }
 
 function cleanupLoginFailures(nowSeconds: number): void {

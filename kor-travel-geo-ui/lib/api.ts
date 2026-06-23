@@ -25,6 +25,17 @@ export async function requestJson<T>(path: string, init?: RequestInit): Promise<
     }
   });
   if (!response.ok) {
+    // An expired/revoked session surfaces as 401 {"error":"AUTH_REQUIRED"} from the BFF proxy.
+    // For an already-loaded SPA page, send the user to /login (preserving the return path)
+    // instead of rendering the raw error string; guard against a redirect loop on /login itself.
+    if (
+      response.status === 401 &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login"
+    ) {
+      const next = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.assign(`/login?next=${next}`);
+    }
     const text = await response.text();
     throw new ApiError(response.status, text || `${response.status} ${response.statusText}`);
   }

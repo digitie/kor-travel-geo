@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { trustedClientIp } from "@/lib/request-ip";
 
 const INTERNAL_BASE = process.env.KTG_API_INTERNAL_URL ?? "http://localhost:12501";
 const ADMIN_PROXY_SECRET_ENV = "KTG_ADMIN_PROXY_SECRET";
@@ -33,7 +34,9 @@ export async function recordAuthAuditEvent(
       headers,
       body: JSON.stringify({
         attempted_username: event.attemptedUsername?.trim() || null,
-        client_ip: clientIpFromRequest(request),
+        // Only a trusted-proxy-validated IP is recorded; a spoofable X-Forwarded-For is dropped
+        // (null) rather than poisoning the audit log. See lib/request-ip.
+        client_ip: trustedClientIp(request),
         event_type: event.eventType,
         next_path: event.nextPath ?? null,
         outcome: event.outcome,
@@ -44,15 +47,4 @@ export async function recordAuthAuditEvent(
   } catch {
     // Login must not depend on audit persistence availability.
   }
-}
-
-function clientIpFromRequest(request: NextRequest): string | null {
-  return (
-    firstForwardedValue(request.headers.get("x-forwarded-for")) ??
-    firstForwardedValue(request.headers.get("x-real-ip"))
-  );
-}
-
-function firstForwardedValue(value: string | null): string | null {
-  return value?.split(",")[0]?.trim() || null;
 }

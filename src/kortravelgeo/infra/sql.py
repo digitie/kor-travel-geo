@@ -1032,6 +1032,23 @@ CREATE TABLE IF NOT EXISTS ops.consistency_case_inputs (
   required              BOOLEAN NOT NULL DEFAULT true,
   PRIMARY KEY (consistency_case_code, category)
 );
+
+-- Keep in sync with alembic 0022_public_api_keys (fresh init-db must not drift from head).
+CREATE TABLE IF NOT EXISTS ops.public_api_keys (
+  public_api_key_id UUID PRIMARY KEY,
+  key_hash          TEXT NOT NULL UNIQUE CHECK (key_hash ~ '^[0-9a-f]{64}$'),
+  key_hint          TEXT NOT NULL CHECK (char_length(key_hint) BETWEEN 6 AND 12),
+  label             TEXT CHECK (label IS NULL OR char_length(label) BETWEEN 1 AND 80),
+  state             TEXT NOT NULL DEFAULT 'active' CHECK (state IN ('active','revoked')),
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by        TEXT,
+  revoked_at        TIMESTAMPTZ,
+  revoked_by        TEXT,
+  CHECK (
+    (state = 'active' AND revoked_at IS NULL AND revoked_by IS NULL)
+    OR (state = 'revoked' AND revoked_at IS NOT NULL)
+  )
+);
 """
 
 INDEX_SQL = """
@@ -1195,6 +1212,11 @@ CREATE INDEX IF NOT EXISTS idx_ops_consistency_case_definitions_order
   ON ops.consistency_case_definitions (display_order);
 CREATE INDEX IF NOT EXISTS idx_ops_dataset_snapshots_source_match_set_id
   ON ops.dataset_snapshots (source_match_set_id) WHERE source_match_set_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_ops_public_api_keys_active_hash
+  ON ops.public_api_keys (key_hash)
+  WHERE state = 'active';
+CREATE INDEX IF NOT EXISTS idx_ops_public_api_keys_created_at
+  ON ops.public_api_keys (created_at DESC);
 """
 
 REGION_RADIUS_PARTS_REFRESH_SQL = """
