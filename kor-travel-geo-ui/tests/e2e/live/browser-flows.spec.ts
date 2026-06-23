@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { KNOWN } from "./_live";
+import { KNOWN, loginLiveAdminPage } from "./_live";
 
 // Layer 2 — real browser driving the debug pages against the LIVE backend.
 //
@@ -13,8 +13,9 @@ import { KNOWN } from "./_live";
 const LIVE_TIMEOUT = 15_000;
 
 test.describe("LIVE debug browser flows", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     test.skip(!process.env.LIVE_E2E, "Live full-stack test — run with LIVE_E2E=1 and the stack up (DB+API+UI)");
+    await loginLiveAdminPage(page, "/debug/geocode");
   });
 
   test("geocode 디버그 화면이 KNOWN 주소를 실제 백엔드로 지오코딩한다", async ({ page }) => {

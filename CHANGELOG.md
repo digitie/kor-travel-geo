@@ -18,6 +18,12 @@
   `http.disconnect`는 이미 완료된 정상 응답을 취소하지 않는다.
 
 ### Changed
+- Admin UI 보안 모델을 ADR-064 기준으로 바꿨다. 단일 admin 로그인, httpOnly session cookie,
+  user-agent fingerprint, logout revocation, 로그인 실패 rate limit, Next.js admin proxy shared
+  secret, backend trusted proxy role gate를 추가하고 ADR-013을 superseded로 표시했다.
+  `/v1/address/*`와 `/v2/*` 공개 REST API는 외부/비신뢰 클라이언트에 query parameter `key`를
+  요구하며, trusted proxy identity가 확인된 요청은 key 검증을 우회한다. 활성 DB 공개 API key가
+  없을 때만 `KTG_VWORLD_API_KEY`를 기본 key로 쓴다.
 - `scripts/docker_app.sh`의 dev/prod 환경 구분을 문서와 맞췄다. dev 기본은 host
   network + `127.0.0.1` + API/UI `12501`/`12505`이며, `KTG_ENV_FILE=.env.dev`
   같은 상대 env-file 경로는 repo root 기준으로 해석한다.
@@ -31,6 +37,15 @@
   idle-in-transaction 연결을 남기지 않는다.
 
 ### Added
+- Admin UI `/admin/settings`에 공개 REST API key 랜덤 생성·목록 조회·폐기 기능을 추가했다.
+  key는 `ops.public_api_keys`에 hash로만 저장되고 생성 응답에서 한 번만 plaintext로 반환된다.
+- Admin UI 로그인 시도·성공·실패·로그아웃 이벤트를 `ops.audit_events`에 저장하고
+  `/admin/settings`에서 최근 로그인 기록을 볼 수 있게 했다. client IP와 user-agent는 원문 대신
+  hash로만 저장된다.
+- Admin 로그인/session/public API key 보안 live e2e를 추가했다. 로컬 production Docker API/UI 기준
+  Chromium/Firefox에서 각 230건 중 222 passed/8 skipped를 확인했으며, 신규 auth/public-key spec은
+  각 browser 7/7 통과했다. 운영 배포 후에는 prod DB key row 생성을 피하려고 mutation 케이스를 꺼서
+  Chromium/Firefox 각 230건 중 221 passed/9 skipped를 확인했다.
 - T-177H 벤치마크 수용 보고서를 추가했다. T-177G 전국 DB를 대상으로 리베이스와
   prod/dev 문서 재확인 뒤 dev 프로파일에서 SQL 18,000 measurement/error 0, REST 21,600
   measurement/error 0을 확인하고 산출물 경로와 p95/p99 판정을 문서화했다.

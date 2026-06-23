@@ -7,7 +7,7 @@
 `kor-travel-geo`(이하 본 패키지)는 한 코어(`core/`) 위에 두 인터페이스를 노출한다.
 
 - **Python 라이브러리 API**: `AsyncAddressClient` — asyncio 컨텍스트 매니저, 주소 조회는 후보 목록 응답만 공개
-- **REST API**: FastAPI 라우터가 core/repository 경로를 호출하는 얇은 wrapper. `/v1/*`는 vworld 호환, `/v2/*`는 후보 목록 응답.
+- **REST API**: FastAPI 라우터가 core/repository 경로를 호출하는 얇은 wrapper. `/v1/*`는 vworld 호환, `/v2/*`는 후보 목록 응답. 공개 주소 API는 외부/비신뢰 클라이언트에 query parameter `key`를 요구한다. trusted proxy identity가 확인된 요청은 key 검증을 우회한다.
 
 두 인터페이스는 같은 코어 함수(`core.geocoder.geocode`, `core.reverse_geocoder.reverse_geocode` 등)를 호출하므로 동작이 갈리지 않는다. REST v1 호환 응답은 `AsyncAddressClient`의 내부 adapter에서만 사용하고, 공개 Python API는 v2 candidate schema로 투영한다. 코어는 DB 어댑터(Repository Protocol)를 받아 작동하므로 단위 테스트 시 in-memory Fake 어댑터로 교체 가능하다.
 
@@ -188,9 +188,10 @@ ignore_imports = ["kortravelgeo.api.routers.admin -> kortravelgeo.loaders"]
 | 카테고리 | 키 | 비고 |
 |----------|----|------|
 | DB | `pg_dsn`, `pg_pool_size`, `pg_max_overflow`, `pg_pool_timeout_ms`, `pg_statement_timeout_ms`, `pg_pool_recycle_s`, `pg_prepare_threshold` | `postgresql+psycopg://...`. `pg_pool_timeout_ms` 기본값은 1000ms이며 pool 포화 시 API는 HTTP 503 + `E0500`으로 fail-fast한다. `pg_prepare_threshold` 기본값은 psycopg 기본과 같은 `5`이고, `0`은 즉시 prepare, `none`/`off`는 server-side prepared statement 비활성화다. DB 드라이버/연결 오류도 HTTP 503 + `E0500`으로 구조화한다. |
-| API | `api_title`, `api_cors_origins`, `api_default_radius_m`, `api_max_search_size`, `api_max_upload_bytes`, `api_explain_timeout_ms`, `api_max_concurrency`, `api_geocode_max_concurrency`, `api_reverse_max_concurrency`, `api_search_max_concurrency`, `api_zipcode_max_concurrency`, `api_pobox_max_concurrency`, `api_regions_max_concurrency`, `api_admission_timeout_ms`, `api_readiness_timeout_ms` | 업로드 기본 상한 2GiB, EXPLAIN 기본 timeout 3초. `api_max_concurrency`는 unset이면 비활성화하며 `/v1/address/*`와 `/v2/*` 공개 주소 API 전체를 process별 semaphore로 제한한다. endpoint별 cap은 geocode/reverse/search/zipcode/pobox/regions scope에만 적용된다. `api_readiness_timeout_ms`는 `/v1/readyz` DB probe timeout이며 기본값은 1000ms다. |
+| API | `api_title`, `api_cors_origins`, `api_default_radius_m`, `api_max_search_size`, `api_max_upload_bytes`, `api_explain_timeout_ms`, `api_max_concurrency`, `api_geocode_max_concurrency`, `api_reverse_max_concurrency`, `api_search_max_concurrency`, `api_zipcode_max_concurrency`, `api_pobox_max_concurrency`, `api_regions_max_concurrency`, `api_admission_timeout_ms`, `api_readiness_timeout_ms`, `public_api_key_cache_ttl_s` | 업로드 기본 상한 2GiB, EXPLAIN 기본 timeout 3초. `api_max_concurrency`는 unset이면 비활성화하며 `/v1/address/*`와 `/v2/*` 공개 주소 API 전체를 process별 semaphore로 제한한다. endpoint별 cap은 geocode/reverse/search/zipcode/pobox/regions scope에만 적용된다. `api_readiness_timeout_ms`는 `/v1/readyz` DB probe timeout이며 기본값은 1000ms다. 공개 API key hash cache TTL 기본값은 30초다. |
 | GeoIP gate | `geoip_db_path`, `geoip_gate_mode`, `geoip_allow_cidrs`, `geoip_deny_cidrs`, `geoip_open_paths`, `geoip_trusted_proxies`, `geoip_audit_denials` | T-054. 외부 공용 IP는 GeoIP country `KR`만 허용하고, 내부/loopback은 허용한다. 기본 mode는 `strict`라 DB 부재 시 공용 IP를 차단한다. |
-| 외부 | `juso_api_key`, `juso_search_url`, `juso_coord_url`, `juso_coord_api_key`, `vworld_api_key`, `vworld_url`, `epost_api_key`, `epost_download_url` | 모두 `SecretStr` 또는 URL |
+| 외부 | `juso_api_key`, `juso_search_url`, `juso_coord_url`, `juso_coord_api_key`, `vworld_api_key`, `vworld_url`, `epost_api_key`, `epost_download_url` | 모두 `SecretStr` 또는 URL. 활성 DB 공개 API key가 없으면 `vworld_api_key`가 v1/v2 공개 REST API의 기본 `key`다. |
+| Admin proxy | `admin_trusted_proxy_cidrs`, `admin_proxy_secret` | `/v1/admin/*` role header를 신뢰할 proxy CIDR과 optional shared secret. secret이 설정되면 `X-KTG-Admin-Proxy-Secret`이 일치해야 한다. |
 | 캐시 | `cache_enabled`, `cache_ttl_days` | `geo_cache` 테이블을 geocode/reverse local OK 결과 캐시로 사용한다. Cache hit는 v1에서 `source="cache"`로 표시하고 v2 source는 `local`로 유지한다. `refresh_mv()` 성공 후 cache를 비워 적재/MV swap 뒤 stale 응답을 막는다. |
 | 로깅 | `log_level`, `log_format` | `json` 권장 |
 | 로더 | `loader_data_dir`, `loader_batch_size`, `loader_temp_schema` | |
@@ -445,6 +446,8 @@ reverse / search 라우터도 `sig_cd`/`bjd_cd`를 같은 의미로 받는다. z
 - `POST /v1/admin/upload/sido-zip?filename=...&sido=...` — 시도 ZIP raw body 스트리밍 업로드(SHA256 해시 반환). `filename`과 `sido`는 path token으로 정규화하고 `loader_data_dir/uploads` 밖으로 resolve되면 거절한다. `api_max_upload_bytes` 초과 시 partial file을 삭제하고 실패한다.
 - `POST /v1/admin/uploads`, `PUT /v1/admin/uploads/{upload_set_id}/files`, `GET /v1/admin/uploads/{upload_set_id}`, `POST /v1/admin/uploads/{upload_set_id}/cancel` — T-045 대용량 다중 파일 업로드 세션. 모든 파일 저장과 checksum 확인이 끝난 뒤 source set 분석으로 넘어간다.
 - `GET/PATCH /v1/admin/storage/rustfs/config`, `POST /v1/admin/storage/rustfs/check`, `POST /v1/admin/storage/rustfs/import-prefix`, `POST /v1/admin/storage/rustfs/sync-local` — T-076 RustFS 업로드 저장소 설정·연결 확인·기존 object 목록 import·로컬 파일 sync. secret 원문은 조회 응답에 노출하지 않는다.
+- `POST /v1/admin/auth-events` — Next.js login/logout route가 trusted proxy identity로 호출해 `admin_auth.login`/`admin_auth.logout` 감사 이벤트를 append-only `ops.audit_events`에 저장한다. client IP와 user-agent는 hash 컬럼에만 저장한다.
+- `GET/POST/DELETE /v1/admin/public-api-keys*` — v1/v2 공개 REST API용 `key`를 생성·조회·폐기한다. DB에는 SHA-256 hash와 hint만 저장하고 plaintext key는 생성 응답에서 한 번만 반환한다.
 - `POST /v1/admin/load-sources/discover` — 디렉터리 또는 upload set을 읽어 원천 후보, 기준월, 필수 원천 누락, 기준월 불일치 여부를 반환한다.
 - `POST /v1/admin/load-sources/plan` — 사용자가 선택한 원천별 기준월/경로와 혼합 기준월 확인 정보를 검증해 `SourceSetPlan`을 만든다.
 - `POST /v1/admin/loads` — 업로드된 시도 또는 full-load batch payload를 작업 큐에 직렬 등록

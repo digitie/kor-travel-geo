@@ -2,6 +2,32 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-23 (Admin 로그인·공개 API key 보안과 live e2e, by codex)
+
+**작업**: 사용자 요청에 따라 Admin UI 로그인과 공개 REST API key 검증을 추가했다. UI는 단일
+admin 계정 로그인, httpOnly `SameSite=Strict` 세션 cookie, user-agent fingerprint, logout revocation,
+로그인 rate limit을 사용한다. API는 trusted admin proxy shared secret과 proxy peer 검증을 거쳐
+admin API 및 공개 API key 검증 우회를 분리한다. 공개 v1/v2 API는 VWorld 호환 `key` query parameter를
+요구하며, 활성 DB key가 없을 때만 `KTG_VWORLD_API_KEY`를 기본 key로 인정한다. UI에서 생성한 key는
+plaintext를 한 번만 보여 주고 DB에는 hash와 hint만 저장한다.
+
+**변경**: `ops.public_api_keys` migration과 repository/cache를 추가했고, Admin UI `/admin/settings`에
+key 생성·목록·폐기 및 로그인 기록 패널을 추가했다. 로그인 시도·성공·실패·로그아웃 이벤트는
+`ops.audit_events`에 저장하며 client IP/user-agent는 hash로만 저장한다. ADR-013은 superseded로 표시하고
+ADR-064를 추가했다. `kor-travel-map` #508과 같은 prod endpoint 노출 패턴을 확인해 이 저장소의 stale
+local endpoint 예시를 placeholder로 redaction했다.
+
+**검증/배포**: WSL ext4 미러에서 backend 전체 `pytest -q` 1107 passed/67 skipped, `ruff check .`,
+`mypy src/kortravelgeo`, `lint-imports`, OpenAPI `--check`를 통과했다. UI는 `npm run type-check`,
+`npm run test` 129건, `npm run lint`, `npm run build`, React Doctor(`ok=true`, warning 33건)를 통과했다.
+로컬 production Docker API/UI를 재빌드·재기동하고 migration `0022_public_api_keys`를 적용한 뒤 Windows
+Playwright live e2e를 Chromium/Firefox 모두 실행했다. mutation 허용 로컬 production run은 각 browser
+230건 중 222 passed/8 skipped였고, 신규 auth/public-key live spec은 각 browser 7/7 통과했다. 이후 운영
+호스트에 소스와 prod-only env/compose override를 반영하고 API/UI 이미지를 재빌드, migration 적용,
+컨테이너 재기동, `/v1/readyz`와 `/login` smoke를 완료했다. 운영 전체 live e2e는 prod DB key row 생성을
+피하려고 `KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS`를 끈 상태로 Chromium/Firefox 각 230건 중 221 passed/9 skipped를
+확인했다.
+
 ## 2026-06-21 (Admin UI live e2e 2배 추가 증설, by codex)
 
 **작업**: 사용자 추가 요청에 따라 `tests/e2e/live/*`의 라이브 풀스택 테스트를 81개에서 223개로
@@ -1830,11 +1856,11 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 - `scripts/docker_app.sh build` — API image build와 UI `next build`/TypeScript 통과
 - `scripts/docker_app.sh up` — API `12201`, UI `12205`로 재생성
 - Docker port/status: PostgreSQL `5432` healthy, RustFS API `12101` healthy, API `12201`, UI `12205`, API/UI restart policy `unless-stopped`
-- `GET http://127.0.0.1:12201/v1/healthz` → `ok`
-- `POST http://127.0.0.1:12201/v2/geocode` `"서울특별시 종로구 인사동"` → `OK`, 후보 10건
-- `POST http://127.0.0.1:12201/v2/reverse` 인사동 좌표(`126.986`, `37.574`, 반경 200m) → `OK`, 후보 10건
-- `GET http://127.0.0.1:12205/debug/geocode` → HTTP 200
-- `GET http://127.0.0.1:12205/api/runtime-config` → VWorld key non-empty
+- `GET http://<legacy-api-host>:12201/v1/healthz` → `ok`
+- `POST http://<legacy-api-host>:12201/v2/geocode` `"서울특별시 종로구 인사동"` → `OK`, 후보 10건
+- `POST http://<legacy-api-host>:12201/v2/reverse` 인사동 좌표(`126.986`, `37.574`, 반경 200m) → `OK`, 후보 10건
+- `GET http://<legacy-ui-host>:12205/debug/geocode` → HTTP 200
+- `GET http://<legacy-ui-host>:12205/api/runtime-config` → VWorld key non-empty
 - `npm run test -- tests/unit/runtime-config.test.ts` → 5 passed
 - API image 안에서 `python -m pytest tests/unit/test_settings.py -q` → 5 passed
 - API image 안에서 `python -m ruff check alembic/versions/0013_t061_text_search_mv.py scripts/benchmark_api_latency.py src/kortravelgeo/settings.py` → pass
@@ -1893,7 +1919,7 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 - React Doctor `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
 - `scripts/docker_app.sh build`로 API/UI image를 다시 빌드했고, API build에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
 - 실제 API + RustFS 접속 테스트에서 `/data/juso/도로명주소 전자지도/서울특별시/11000/TL_SCCO_LI.shp`와 `/data/juso/202604_사서함주소DB_전체분.zip`을 RustFS로 sync하고 prefix import를 확인했다. 직접 `PUT /v1/admin/uploads/{id}/files` RustFS 업로드도 `state=uploaded`로 확인했다.
-- Windows Playwright Docker UI `http://localhost:9002`: Chromium 전체 e2e 16 passed, Firefox 전체 e2e 16 passed. 메뉴 반복 이동 테스트는 `This page couldn`, `Reload to try again`, `_rsc` client routing 요청 부재를 확인하고, VWorld 지도 테스트는 실제 WMTS 타일과 MapLibre canvas를 확인한다.
+- Windows Playwright Docker UI `http://<legacy-ui-host>:9002`: Chromium 전체 e2e 16 passed, Firefox 전체 e2e 16 passed. 메뉴 반복 이동 테스트는 `This page couldn`, `Reload to try again`, `_rsc` client routing 요청 부재를 확인하고, VWorld 지도 테스트는 실제 WMTS 타일과 MapLibre canvas를 확인한다.
 
 **발견**:
 - RustFS는 여러 프로젝트가 공유할 수 있으므로 이 저장소는 구동 책임을 갖지 않고 bucket/prefix 접속 설정만 유지하는 편이 안전하다.
@@ -1923,7 +1949,7 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 - 좌측 메뉴 반복 이동 e2e를 추가했다. 이 테스트는 메뉴 15개를 4회 순회하며 Next 전역 오류 문구, page error, 비정상 request failure, `_rsc` client routing 요청 부재를 확인한다.
 
 **검증**:
-- `scripts/docker_app.sh build-ui && scripts/docker_app.sh up-ui`로 UI image를 다시 빌드하고 `http://127.0.0.1:9002` 컨테이너를 교체했다.
+- `scripts/docker_app.sh build-ui && scripts/docker_app.sh up-ui`로 UI image를 다시 빌드하고 `http://<legacy-ui-host>:9002` 컨테이너를 교체했다.
 - Windows Playwright Chromium/Firefox: `tests/e2e/navigation.spec.ts` → 각 1 passed.
 - Windows Playwright Chromium/Firefox: `tests/e2e/vworld-map.spec.ts` → 각 2 passed.
 - ext4 테스트 미러 Linux Node에서 `npm run lint`, `npm run type-check`, `npm run test`를 통과했다. unit test는 11 files / 42 tests 통과다.
@@ -1975,10 +2001,10 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 - ext4 테스트 미러에서 `bash -n scripts/docker_app.sh`, `scripts/docker_app.sh --help`, `kor-travel-geo-ui` `npm run type-check`, `npm run lint`, `npm run test`, `npm run build`를 통과했다. unit test는 11 files / 42 tests 통과다.
 - React Doctor `npx react-doctor@latest . --offline --verbose --json` → score `100`, warning `0`.
 - `scripts/docker_app.sh build`로 API/UI 이미지를 빌드했고, API build/runtime에서 `libgdal=3.10.3`, `python_gdal=GDAL 3.10.3, released 2025/04/01`를 확인했다.
-- `scripts/docker_app.sh up`으로 API `http://127.0.0.1:9001`, UI `http://127.0.0.1:9002`를 올렸다. `/v1/healthz`, `/debug/geocode`, `/api/runtime-config`가 200을 반환했고 VWorld 키는 길이만 확인했다.
+- `scripts/docker_app.sh up`으로 API `http://<legacy-api-host>:9001`, UI `http://<legacy-ui-host>:9002`를 올렸다. `/v1/healthz`, `/debug/geocode`, `/api/runtime-config`가 200을 반환했고 VWorld 키는 길이만 확인했다.
 - `/debug/geocode` 20회 반복 HTTP load에서 `This page couldn`와 `지도 타일 로딩이 불안정합니다` 문자열이 나오지 않았다.
 - UI proxy `POST /api/proxy/v2/geocode` 실제 DB smoke가 `status=OK`, 후보 1건을 반환했다.
-- Windows Firefox Playwright: `PLAYWRIGHT_BASE_URL=http://localhost:9002`, `PLAYWRIGHT_BROWSER=firefox`, `tests/e2e/vworld-map.spec.ts` → 2 passed.
+- Windows Firefox Playwright: `PLAYWRIGHT_BASE_URL=http://<legacy-ui-host>:9002`, `PLAYWRIGHT_BROWSER=firefox`, `tests/e2e/vworld-map.spec.ts` → 2 passed.
 - Python `ruff`는 ext4 미러에 Python dev venv가 없어 실행하지 못했다. 이번 Python 변경(`scripts/benchmark_api_latency.py`)은 기본 URL 문자열 변경이며 `python3 -m compileall -q scripts/benchmark_api_latency.py`는 통과했다.
 
 ## 2026-06-02 23:20 (PR #114~#115 리뷰 감사와 실제 DB 테스트 보강)
@@ -2049,7 +2075,7 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 **검증**:
 - fresh ext4 mirror `/home/digitie/dev/kor-travel-geo-codex-test-admin-redirect`에서 `npx react-doctor@latest . --offline --verbose --json` → score 100, warning 0.
 - 같은 mirror에서 `scripts/frontend_check.sh` → `gen:types`, `lint`, `type-check`, unit test 37개, `next build` 통과.
-- `next start --port 13089` 후 `curl -i http://127.0.0.1:13089/admin` → `307 Temporary Redirect`, `location: /debug/geocode` 확인. `/admin/`은 Next.js canonical `308` 뒤 `/admin`으로 이동한다.
+- `next start --port 13089` 후 `curl -i http://<temporary-ui-host>:13089/admin` → `307 Temporary Redirect`, `location: /debug/geocode` 확인. `/admin/`은 Next.js canonical `308` 뒤 `/admin`으로 이동한다.
 
 **발견**:
 - 기존 공용 ext4 미러에는 root 소유 `node_modules/.vite`와 `.next` 생성물이 남아 있어 Vitest/Next build write가 막혔다. 검증은 새 mirror에서 `npm ci`부터 다시 실행해 통과시켰다.
@@ -2171,7 +2197,7 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 **반영**:
 - NTFS `/mnt/f/dev/kor-travel-geo`를 main repo 기준으로 두고 `/mnt/f/dev/kor-travel-geo-codex`, `/mnt/f/dev/kor-travel-geo-claude`, `/mnt/f/dev/kor-travel-geo-antigravity` worktree를 생성했다.
 - 각 worktree에 `.env`, `kor-travel-geo-ui/.env.local`, `.claude/settings.local.json`, `backend/.env.local`, `web/.env.local`을 복사했다. secret 값은 출력하지 않았다.
-- `kor-travel-geo-ui/.env.local`의 `KTG_API_INTERNAL_URL`은 공식 API 포트 `8888`에 맞춰 `http://localhost:8888`로 정리했다.
+- `kor-travel-geo-ui/.env.local`의 `KTG_API_INTERNAL_URL`은 당시 공식 API 포트 `8888`에 맞춰 placeholder host로 정리했다.
 - 세 worktree에서 `codegraph init -i`와 `codegraph status`를 실행했다. NTFS `/mnt` 경로에서는 CodeGraph live watch가 비활성화되므로 이후 branch 전환·pull·merge 뒤 수동 `codegraph sync`가 필요하다.
 - `.claude/`를 `.gitignore`에 추가하고, `AGENTS.md`, `SKILL.md`, README, 개발 환경/아키텍처/에이전트 가이드, ADR-041, resume, tasks를 갱신했다.
 
@@ -2188,7 +2214,7 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 
 **반영**:
 - README, `docs/ports.md`, `docs/dev-environment.md`, ADR-040의 공식 API 포트를 `8888`로 갱신했다.
-- `KTG_API_INTERNAL_URL` 예시와 `kor-travel-geo-ui` 프록시 기본 backend URL을 `http://localhost:8888`로 바꿨다.
+- `KTG_API_INTERNAL_URL` 예시와 `kor-travel-geo-ui` 프록시 기본 backend URL을 당시 공식 API 포트 `8888` 기준 placeholder host로 바꿨다.
 - API reference curl 예시와 REST latency benchmark 기본 `--base-url`도 `8888`로 맞췄다.
 
 **검증**:
@@ -2197,8 +2223,8 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 - `npm run build` → 통과
 - `python -m ruff check scripts/benchmark_api_latency.py` → 통과
 - `git diff --check` → 통과
-- `curl http://127.0.0.1:8888/v1/healthz` → `{"status":"ok"}`
-- `curl http://127.0.0.1:13088/api/proxy/v1/healthz` → `{"status":"ok"}`
+- `curl http://<legacy-api-host>:8888/v1/healthz` → `{"status":"ok"}`
+- `curl http://<legacy-ui-host>:13088/api/proxy/v1/healthz` → `{"status":"ok"}`
 
 ## 2026-05-31 08:15 (PR #97~#102 리뷰 감사, C1~C10 가로 탭, 포트 공식화)
 
@@ -2375,7 +2401,7 @@ main에 먼저 머지한 뒤 T-177D opt-in e2e를 다시 실행한다.
 - Windows Playwright: `6 passed`
 - `npm run build`
 - `docker build -t kor-travel-geo-ui:debug-v2 ./kor-travel-geo-ui`
-- Docker UI `http://127.0.0.1:13088`에서 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse` POST smoke `OK`
+- Docker UI `http://<legacy-ui-host>:13088`에서 `/api/proxy/v2/geocode`, `/api/proxy/v2/reverse` POST smoke `OK`
 
 **후속**:
 - 실제 백엔드와 연결한 UI e2e는 Docker UI + Windows Playwright 조합을 기준으로 실행한다.

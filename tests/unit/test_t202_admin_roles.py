@@ -23,6 +23,7 @@ from kortravelgeo.settings import Settings
 _TRUSTED = "10.0.0.1"
 _UNTRUSTED = "203.0.113.9"
 _SETTINGS = Settings(
+    _env_file=None,
     admin_trusted_proxy_cidrs="10.0.0.0/8",
     geoip_gate_mode="off",
 )

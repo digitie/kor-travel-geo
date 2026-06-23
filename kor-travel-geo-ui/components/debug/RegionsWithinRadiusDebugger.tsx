@@ -24,15 +24,16 @@ import {
   FieldSet
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { postJson } from "@/lib/api";
+import { postPublicJson } from "@/lib/api";
 import { regionsWithinRadiusFormSchema } from "@/lib/schemas";
 import {
   type RegionWithinRadiusLevel,
   useRegionsWithinRadiusStore
 } from "@/lib/stores/regions-within-radius-store";
+import { useVWorldApiKey } from "@/lib/vworld-key";
 import type { components } from "@/types/api.gen";
 
-type RegionsWithinRadiusInput = components["schemas"]["RegionsWithinRadiusInput"];
+type RegionsWithinRadiusInput = components["schemas"]["RegionsWithinRadiusInput-Input"];
 type RegionsWithinRadiusResponse = components["schemas"]["RegionsWithinRadiusResponse"];
 type RegionsWithinRadiusFormInput = z.input<typeof regionsWithinRadiusFormSchema>;
 type RegionsWithinRadiusFormValues = z.output<typeof regionsWithinRadiusFormSchema>;
@@ -44,6 +45,7 @@ const LEVEL_OPTIONS: { value: RegionWithinRadiusLevel; label: string }[] = [
 ];
 
 export function RegionsWithinRadiusDebugger() {
+  const { apiKey } = useVWorldApiKey();
   const draft = useRegionsWithinRadiusStore((state) => state.draft);
   const result = useRegionsWithinRadiusStore((state) => state.result);
   const setDraft = useRegionsWithinRadiusStore((state) => state.setDraft);
@@ -65,7 +67,11 @@ export function RegionsWithinRadiusDebugger() {
   >({
     mutationFn: (values) => {
       const body: RegionsWithinRadiusInput = values;
-      return postJson<RegionsWithinRadiusResponse>("/v2/regions/within-radius", body);
+      return postPublicJson<RegionsWithinRadiusResponse>(
+        "/v2/regions/within-radius",
+        body,
+        apiKey
+      );
     },
     onMutate: (values) => {
       setDraft(values);

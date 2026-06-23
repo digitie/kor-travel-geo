@@ -10,11 +10,12 @@ import type {
 } from "@/components/vworld/CoordinateMap";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
-import { postJson } from "@/lib/api";
+import { postPublicJson } from "@/lib/api";
 import { geocodeFormSchema } from "@/lib/schemas";
+import { useVWorldApiKey } from "@/lib/vworld-key";
 import type { components } from "@/types/api.gen";
 
-type GeocodeV2Input = components["schemas"]["GeocodeV2Input"];
+type GeocodeV2Input = components["schemas"]["GeocodeV2Input-Input"];
 type GeocodeV2Response = components["schemas"]["GeocodeV2Response"];
 
 type GeocodeDebuggerState = {
@@ -42,6 +43,7 @@ const initialGeocodeDebuggerState: GeocodeDebuggerState = {
 
 export function GeocodeDebugger() {
   const [state, dispatch] = useReducer(geocodeDebuggerReducer, initialGeocodeDebuggerState);
+  const { apiKey } = useVWorldApiKey();
   const { address, type, fallback, includeGeometry, result, loading } = state;
 
   function mergeState(patch: Partial<GeocodeDebuggerState>) {
@@ -71,7 +73,7 @@ export function GeocodeDebugger() {
               include_geometry: includeGeometry,
               limit: 10
             };
-      mergeState({ result: await postJson<GeocodeV2Response>("/v2/geocode", body) });
+      mergeState({ result: await postPublicJson<GeocodeV2Response>("/v2/geocode", body, apiKey) });
     } catch (error) {
       mergeState({ result: { error: error instanceof Error ? error.message : String(error) } });
     } finally {

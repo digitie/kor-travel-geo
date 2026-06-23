@@ -28,15 +28,24 @@
 | 코드 표시 | 자체 `JsonBlock` 컴포넌트 |
 | 테스트 | Vitest + @testing-library/react, Playwright e2e |
 
-### A1.3 보안 모델 (내부 전용)
+### A1.3 보안 모델
 
-ADR-013에 명시 — 사내망/VPN 뒤에서만 접근. 별도 애플리케이션 인증 없음. 보안은 네트워크 레벨(nginx IP allowlist, 사내 SSO 게이트웨이)에서.
+ADR-064에 명시 — Admin UI는 단일 admin 로그인으로 보호한다. password 평문은 저장하지 않고
+PBKDF2-SHA256 hash를 gitignored `.env.local` 또는 배포 env에만 둔다. 세션은 `httpOnly`
+`SameSite=Strict` cookie와 HMAC 서명 payload를 사용한다. payload는 session id, 발급/만료 시각,
+audience/version, user-agent fingerprint를 담고, logout 시 현재 session id를 process-local
+revocation map에 등록한다. 로그인 실패는 IP 기준 rate limit로 제한한다.
 
-- 브라우저 → Next.js: 동일 origin. CORS 부재.
-- Next.js → 백엔드: Route Handler가 서버 사이드에서 호출. CORS도 인증 헤더도 불필요.
-- `/admin/*` 페이지: 일반 라우트와 동일. 별도 가드 없음.
+- 브라우저 → Next.js: 동일 origin. 로그인 middleware가 `/login`과 `/api/auth/*` 외 경로를 막는다.
+- Next.js → 백엔드: Route Handler가 서버 사이드에서 호출한다. `/api/proxy/*`는 로그인 세션을 다시
+  확인하고 admin role header와 `KTG_ADMIN_PROXY_SECRET`을 주입한다.
+- 백엔드 `/v1/admin/*`: trusted proxy CIDR과 optional shared secret이 맞는 요청의
+  `X-KTG-Actor`/`X-KTG-Roles`만 권한으로 인정한다.
+- 로그인 시도·성공·실패·로그아웃은 `/v1/admin/auth-events`를 통해 `ops.audit_events`에 저장한다.
+  IP/user-agent는 원문 대신 hash 컬럼에만 저장하고, `/admin/settings`의 로그인 기록 패널에서
+  최근 이벤트를 조회한다.
 
-외부 노출이 불가피해지면 (1) nginx/traefik basic auth, (2) 사내 SSO 게이트웨이, (3) 최후 수단으로 NextAuth — 그 결정은 새 ADR로 기록.
+브라우저가 보낸 `X-KTG-*`, `cookie`, `authorization` header는 backend로 전달하지 않는다.
 
 ## A2. 프로젝트 구조
 
@@ -77,11 +86,23 @@ kor-travel-geo-ui/
 KTG_API_INTERNAL_URL=http://localhost:12501           # 서버 사이드 전용
 NEXT_PUBLIC_API_BASE_URL=/api/proxy                      # 브라우저 노출
 NEXT_PUBLIC_VWORLD_API_KEY=your_vworld_api_key           # 선택 fallback. 기본은 Python API .env의 KTG_VWORLD_API_KEY
+KTG_UI_ADMIN_USERNAME=admin
+KTG_UI_ADMIN_PASSWORD_HASH=pbkdf2_sha256$310000$<salt>$<hash>
+KTG_UI_SESSION_SECRET=<random-session-secret>
+KTG_ADMIN_PROXY_SECRET=<same-random-shared-secret-as-api>
 ```
 
-`KTG_API_INTERNAL_URL`은 `NEXT_PUBLIC_` 접두사가 없어 서버 사이드에서만 접근 가능. 인증/시크릿은 두지 않는다(ADR-013).
+`KTG_API_INTERNAL_URL`과 admin secret 계열은 `NEXT_PUBLIC_` 접두사가 없어 서버 사이드에서만 접근
+가능하다. 실제 password hash와 secret은 `.env.local.example`이 아니라 gitignored `.env.local`
+또는 배포 env에만 둔다.
 
-VWorld 키는 빌드 타임 상수로 직접 박지 않고 `/api/runtime-config`에서 런타임에 읽는다. 우선순위는 Python API의 `KTG_VWORLD_API_KEY` 환경변수, 저장소 루트 `.env`의 `KTG_VWORLD_API_KEY`, 마지막으로 UI 전용 `NEXT_PUBLIC_VWORLD_API_KEY`다. 저장소에는 실제 값을 커밋하지 않고, VWorld 콘솔에서 로컬/스테이징/운영 도메인을 각각 제한한다. `/admin/settings`는 `.env` 기본값을 보여 주고, 사용자가 저장한 값은 브라우저 localStorage override로 적용한다. 기본값 버튼은 override를 지우고 `.env` 값으로 되돌린다.
+VWorld 키는 빌드 타임 상수로 직접 박지 않고 `/api/runtime-config`에서 런타임에 읽는다. 우선순위는 Python API의 `KTG_VWORLD_API_KEY` 환경변수, 저장소 루트 `.env`의 `KTG_VWORLD_API_KEY`, 마지막으로 UI 전용 `NEXT_PUBLIC_VWORLD_API_KEY`다. 저장소에는 실제 값을 커밋하지 않고, VWorld 콘솔에서 로컬/스테이징/운영 도메인을 각각 제한한다. `/admin/settings`는 지도용 VWorld `.env` 기본값을 보여 주고, 사용자가 저장한 값은 브라우저 localStorage override로 적용한다. 기본값 버튼은 override를 지우고 `.env` 값으로 되돌린다.
+
+공개 REST API key는 같은 설정 화면에서 별도 관리한다. `POST /v1/admin/public-api-keys`가 랜덤 key를
+생성하고 DB에는 hash만 저장한다. UI는 생성 직후 plaintext key를 한 번 보여 주고 이 브라우저의
+`/v2/*` 디버그 요청 key로 저장한다. 활성 DB key가 없으면 backend의 `KTG_VWORLD_API_KEY`가 공개
+REST API 기본 key로 쓰인다. 로그인된 Admin UI proxy 요청은 backend trusted identity로 인정되어
+`key` 값 검증을 우회하지만, 저장된 key는 외부 client 호출을 재현하는 디버그 요청에 계속 붙인다.
 
 ## A3. 공통 기반
 
@@ -224,7 +245,7 @@ npx react-doctor@latest . --offline --verbose --json
 | `/admin/consistency` | C1~C10 정합성 리포트 조회·재검증 | `GET/POST /v1/admin/consistency*` |
 | `/admin/backups` | DB 백업/복원 작업, 진행률, callback 상태, artifact 다운로드 | `POST/GET /v1/admin/backups`, `POST /v1/admin/restores`, `GET /v1/admin/jobs/{id}/events` |
 | `/admin/performance` | 전국 DB query benchmark 결과, p95/p99 threshold, slow plan 조회 | `POST/GET /v1/admin/performance/benchmarks*` |
-| `/admin/settings` | VWorld 인증키 확인·브라우저 override 저장·기본값 복원, RustFS 업로드 저장소 설정·연결 확인 | `GET /api/runtime-config`, `GET/PATCH /v1/admin/storage/rustfs/config`, `POST /v1/admin/storage/rustfs/check` |
+| `/admin/settings` | VWorld 지도 인증키 확인·브라우저 override 저장·기본값 복원, 공개 REST API key 생성·폐기, 로그인 기록 조회, RustFS 업로드 저장소 설정·연결 확인 | `GET /api/runtime-config`, `GET/POST/DELETE /v1/admin/public-api-keys*`, `GET /v1/admin/ops/audit-events?action=admin_auth.*`, `GET/PATCH /v1/admin/storage/rustfs/config`, `POST /v1/admin/storage/rustfs/check` |
 
 `/admin/postal`과 WebSocket log stream은 문서상 장기 후보였지만 PR #12 구현 범위에는 넣지 않았다. 후속 PR에서 별도 백엔드 표면을 먼저 확정한 뒤 추가한다.
 

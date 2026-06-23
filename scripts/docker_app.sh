@@ -81,6 +81,11 @@ Important env:
   KTG_RUSTFS_PREFIX=kor-travel-geo
   KTG_RUSTFS_ACCESS_KEY=<access key>
   KTG_RUSTFS_SECRET_KEY=<secret key>
+  KTG_ADMIN_TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128
+  KTG_ADMIN_PROXY_SECRET=<shared admin proxy secret>
+  KTG_UI_ADMIN_USERNAME=admin
+  KTG_UI_ADMIN_PASSWORD_HASH=<pbkdf2 hash>
+  KTG_UI_SESSION_SECRET=<random session secret>
   KTG_DOCKER_DATA_DIR=/mnt/f/dev/kor-travel-geo/data
   KTG_DOCKER_RESTART_POLICY=unless-stopped     # set to "no" to disable
   KTG_VWORLD_API_KEY=<runtime key>
@@ -175,6 +180,12 @@ resolve_runtime_env() {
   RUSTFS_REGION="$(resolve_env_or_dotenv KTG_RUSTFS_REGION "us-east-1")"
   API_CORS_ORIGINS="$(resolve_env_or_dotenv KTG_API_CORS_ORIGINS "[]")"
   GEOIP_GATE_MODE="$(resolve_env_or_dotenv KTG_GEOIP_GATE_MODE "off")"
+  ADMIN_TRUSTED_PROXY_CIDRS="$(resolve_env_or_dotenv KTG_ADMIN_TRUSTED_PROXY_CIDRS "")"
+  ADMIN_PROXY_SECRET="$(resolve_env_or_dotenv KTG_ADMIN_PROXY_SECRET "")"
+  PUBLIC_API_KEY_CACHE_TTL_S="$(resolve_env_or_dotenv KTG_PUBLIC_API_KEY_CACHE_TTL_S "30")"
+  UI_ADMIN_USERNAME="$(resolve_env_or_dotenv KTG_UI_ADMIN_USERNAME "admin")"
+  UI_ADMIN_PASSWORD_HASH="$(resolve_env_or_dotenv KTG_UI_ADMIN_PASSWORD_HASH "")"
+  UI_SESSION_SECRET="$(resolve_env_or_dotenv KTG_UI_SESSION_SECRET "")"
 }
 
 ensure_network() {
@@ -318,6 +329,7 @@ run_api() {
     -e "KTG_PG_DSN=${PG_DSN}"
     -e "KTG_GEOIP_GATE_MODE=${GEOIP_GATE_MODE}"
     -e "KTG_API_CORS_ORIGINS=${API_CORS_ORIGINS}"
+    -e "KTG_PUBLIC_API_KEY_CACHE_TTL_S=${PUBLIC_API_KEY_CACHE_TTL_S}"
     -e "KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES=${KTG_OPS_TABLE_STATS_CAPTURE_INTERVAL_MINUTES:-0}"
     -e "KTG_RUSTFS_ENABLED=${RUSTFS_ENABLED}"
     -e "KTG_RUSTFS_ENDPOINT_URL=${RUSTFS_ENDPOINT_URL}"
@@ -334,6 +346,12 @@ run_api() {
   fi
   if [[ -n "$vworld_key" ]]; then
     args+=(-e "KTG_VWORLD_API_KEY=${vworld_key}")
+  fi
+  if [[ -n "$ADMIN_TRUSTED_PROXY_CIDRS" ]]; then
+    args+=(-e "KTG_ADMIN_TRUSTED_PROXY_CIDRS=${ADMIN_TRUSTED_PROXY_CIDRS}")
+  fi
+  if [[ -n "$ADMIN_PROXY_SECRET" ]]; then
+    args+=(-e "KTG_ADMIN_PROXY_SECRET=${ADMIN_PROXY_SECRET}")
   fi
   args+=("$API_IMAGE")
 
@@ -364,7 +382,17 @@ run_ui() {
     -e "HOSTNAME=0.0.0.0"
     -e "KTG_API_INTERNAL_URL=${UI_API_INTERNAL_URL}"
     -e "NEXT_PUBLIC_API_BASE_URL=/api/proxy"
+    -e "KTG_UI_ADMIN_USERNAME=${UI_ADMIN_USERNAME}"
   )
+  if [[ -n "$UI_ADMIN_PASSWORD_HASH" ]]; then
+    args+=(-e "KTG_UI_ADMIN_PASSWORD_HASH=${UI_ADMIN_PASSWORD_HASH}")
+  fi
+  if [[ -n "$UI_SESSION_SECRET" ]]; then
+    args+=(-e "KTG_UI_SESSION_SECRET=${UI_SESSION_SECRET}")
+  fi
+  if [[ -n "$ADMIN_PROXY_SECRET" ]]; then
+    args+=(-e "KTG_ADMIN_PROXY_SECRET=${ADMIN_PROXY_SECRET}")
+  fi
   if [[ -n "$vworld_key" ]]; then
     args+=(
       -e "KTG_VWORLD_API_KEY=${vworld_key}"

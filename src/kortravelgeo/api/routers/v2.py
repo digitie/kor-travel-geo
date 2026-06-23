@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from kortravelgeo.api.deps import get_client
+from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.dto.v2 import (
     GeocodeV2Input,
@@ -38,6 +39,7 @@ _V2_VALIDATION_RESPONSES: dict[int | str, dict[str, Any]] = {
 )
 async def geocode_v2(
     req: GeocodeV2Input,
+    _api_key: None = Depends(require_public_api_key),
     client: AsyncAddressClient = Depends(get_client),
 ) -> GeocodeV2Response:
     return await client.geocode(
@@ -62,6 +64,7 @@ async def geocode_v2(
 )
 async def reverse_v2(
     req: ReverseV2Input,
+    _api_key: None = Depends(require_public_api_key),
     client: AsyncAddressClient = Depends(get_client),
 ) -> ReverseV2Response:
     return await client.reverse(
@@ -85,6 +88,7 @@ async def reverse_v2(
 )
 async def search_v2(
     req: SearchV2Input,
+    _api_key: None = Depends(require_public_api_key),
     client: AsyncAddressClient = Depends(get_client),
 ) -> SearchV2Response:
     return await client.search(
@@ -108,6 +112,7 @@ async def search_v2(
 )
 async def regions_within_radius_v2(
     req: RegionsWithinRadiusInput,
+    _api_key: None = Depends(require_public_api_key),
     client: AsyncAddressClient = Depends(get_client),
 ) -> RegionsWithinRadiusResponse:
     return await client.regions_within_radius(

@@ -57,6 +57,8 @@ from .dto.admin import (
     MaintenanceWindowEnd,
     OpsArtifact,
     PgStatStatementSnapshot,
+    PublicApiKeyCreateResponse,
+    PublicApiKeySummary,
     RestoreCreateRequest,
     RestoreDrillResult,
     RestoreDryRunResult,
@@ -129,6 +131,7 @@ from .infra.geocode_repo import GeocodeRepository
 from .infra.geometry_repo import GeometryRepository
 from .infra.hotswap import inspect_restore_hot_swap_plan
 from .infra.pobox_repo import PoboxRepository
+from .infra.public_api_keys import PublicApiKeyRepository
 from .infra.reverse_repo import ReverseRepository
 from .infra.search_repo import SearchRepository
 from .infra.source_group_service import (
@@ -796,6 +799,31 @@ class AsyncAddressClient:
     async def cache_metrics(self) -> CacheMetrics:
         return await AdminRepository(self._engine()).cache_metrics(
             enabled=self.settings.cache_enabled,
+        )
+
+    async def list_public_api_keys(self, *, limit: int = 100) -> list[PublicApiKeySummary]:
+        return await PublicApiKeyRepository(self._engine()).list_keys(limit=limit)
+
+    async def create_public_api_key(
+        self,
+        *,
+        label: str | None = None,
+        created_by: str | None = None,
+    ) -> PublicApiKeyCreateResponse:
+        return await PublicApiKeyRepository(self._engine()).create_key(
+            label=label,
+            created_by=created_by,
+        )
+
+    async def revoke_public_api_key(
+        self,
+        public_api_key_id: str,
+        *,
+        revoked_by: str | None = None,
+    ) -> PublicApiKeySummary:
+        return await PublicApiKeyRepository(self._engine()).revoke_key(
+            public_api_key_id,
+            revoked_by=revoked_by,
         )
 
     async def recent_logs(self, *, limit: int = 200) -> list[str]:

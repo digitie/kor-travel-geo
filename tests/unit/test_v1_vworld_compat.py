@@ -7,6 +7,7 @@ import pytest
 
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
+from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.dto.address import AddressStructure, RefinedAddress
 from kortravelgeo.dto.common import KOREA_LON_LAT_BOUNDS_MESSAGE, Point, ServiceMeta
 from kortravelgeo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResponse, GeocodeResult
@@ -24,6 +25,7 @@ async def _get_v1(path: str, params: dict[str, Any], client_factory: Any) -> htt
     """Drive a v1 endpoint with a fake client dependency and return the raw HTTP response."""
     app = create_app()
     app.dependency_overrides[get_client] = client_factory
+    app.dependency_overrides[require_public_api_key] = lambda: None
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         return await client.get(path, params=params)
@@ -85,6 +87,7 @@ class _FakeV1Client:
 async def test_v1_geocode_http_response_uses_vworld_envelope() -> None:
     app = create_app()
     app.dependency_overrides[get_client] = _FakeV1Client
+    app.dependency_overrides[require_public_api_key] = lambda: None
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
@@ -111,6 +114,7 @@ async def test_v1_geocode_http_response_uses_vworld_envelope() -> None:
 async def test_v1_geocode_simple_omits_input_and_refined() -> None:
     app = create_app()
     app.dependency_overrides[get_client] = _FakeV1Client
+    app.dependency_overrides[require_public_api_key] = lambda: None
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
@@ -133,6 +137,7 @@ async def test_v1_geocode_simple_omits_input_and_refined() -> None:
 async def test_v1_reverse_http_response_uses_vworld_envelope() -> None:
     app = create_app()
     app.dependency_overrides[get_client] = _FakeV1Client
+    app.dependency_overrides[require_public_api_key] = lambda: None
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
@@ -155,6 +160,7 @@ async def test_v1_reverse_http_response_uses_vworld_envelope() -> None:
 async def test_v1_geocode_request_validation_uses_vworld_error_object() -> None:
     app = create_app()
     app.dependency_overrides[get_client] = _FakeV1Client
+    app.dependency_overrides[require_public_api_key] = lambda: None
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/v1/address/geocode")

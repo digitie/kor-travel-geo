@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 // Shared helpers for the LIVE full-stack e2e suite (tests/e2e/live/*).
 //
@@ -80,4 +80,129 @@ export function hasLiveAdminProxyRole(role: string): boolean {
 
 export function isLiveE2EEnabled(): boolean {
   return Boolean(process.env.LIVE_E2E);
+}
+
+export function liveAdminCredentials(): { username: string; password: string } | null {
+  const password = process.env.KTG_LIVE_E2E_ADMIN_PASSWORD?.trim();
+  if (!password) {
+    return null;
+  }
+  return {
+    username: process.env.KTG_LIVE_E2E_ADMIN_USERNAME?.trim() || "admin",
+    password
+  };
+}
+
+export async function loginLiveAdmin(
+  request: APIRequestContext,
+  nextPath = "/debug/geocode"
+): Promise<void> {
+  const credentials = liveAdminCredentials();
+  test.skip(
+    credentials === null,
+    "Live admin auth test — set KTG_LIVE_E2E_ADMIN_PASSWORD without committing it"
+  );
+  if (credentials === null) return;
+
+  const response = await request.post("/api/auth/login", {
+    data: {
+      next: nextPath,
+      password: credentials.password,
+      username: credentials.username
+    },
+    headers: {
+      "x-forwarded-for": "127.0.0.1"
+    }
+  });
+  expect(response.status()).toBe(200);
+  const setCookie = response.headers()["set-cookie"] ?? "";
+  expect(setCookie).toContain("ktg_ui_session=");
+  expect(setCookie.toLowerCase()).toContain("httponly");
+  expect(setCookie.toLowerCase()).toContain("samesite=strict");
+}
+
+export async function loginLiveAdminPage(
+  page: Page,
+  nextPath = "/debug/geocode"
+): Promise<void> {
+  const credentials = liveAdminCredentials();
+  test.skip(
+    credentials === null,
+    "Live admin auth test — set KTG_LIVE_E2E_ADMIN_PASSWORD without committing it"
+  );
+  if (credentials === null) return;
+
+  const userAgent = await page.evaluate(() => navigator.userAgent);
+  const response = await page.request.post("/api/auth/login", {
+    data: {
+      next: nextPath,
+      password: credentials.password,
+      username: credentials.username
+    },
+    headers: {
+      "user-agent": userAgent,
+      "x-forwarded-for": "127.0.0.1"
+    }
+  });
+  expect(response.status()).toBe(200);
+  const setCookie = response.headers()["set-cookie"] ?? "";
+  expect(setCookie).toContain("ktg_ui_session=");
+  expect(setCookie.toLowerCase()).toContain("httponly");
+  expect(setCookie.toLowerCase()).toContain("samesite=strict");
+}
+
+export function liveApiBaseUrl(): string | null {
+  const value = (process.env.KTG_LIVE_E2E_API_BASE_URL ?? process.env.KTG_API_INTERNAL_URL)?.trim();
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).toString();
+  } catch {
+    return null;
+  }
+}
+
+export async function directApiGet(
+  request: APIRequestContext,
+  path: string,
+  params?: Record<string, string | number | boolean>
+) {
+  const url = liveApiUrl(path, params);
+  test.skip(
+    url === null,
+    "Direct live API test — set KTG_LIVE_E2E_API_BASE_URL or KTG_API_INTERNAL_URL"
+  );
+  if (url === null) throw new Error("direct live API base URL is not configured");
+  return request.get(url);
+}
+
+export async function directApiPost(
+  request: APIRequestContext,
+  path: string,
+  data: unknown,
+  params?: Record<string, string | number | boolean>
+) {
+  const url = liveApiUrl(path, params);
+  test.skip(
+    url === null,
+    "Direct live API test — set KTG_LIVE_E2E_API_BASE_URL or KTG_API_INTERNAL_URL"
+  );
+  if (url === null) throw new Error("direct live API base URL is not configured");
+  return request.post(url, { data });
+}
+
+function liveApiUrl(
+  path: string,
+  params?: Record<string, string | number | boolean>
+): string | null {
+  const baseUrl = liveApiBaseUrl();
+  if (baseUrl === null) {
+    return null;
+  }
+  const url = new URL(path.startsWith("/") ? path : `/${path}`, baseUrl);
+  for (const [key, value] of Object.entries(params ?? {})) {
+    url.searchParams.set(key, String(value));
+  }
+  return url.toString();
 }

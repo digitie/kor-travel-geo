@@ -31,7 +31,7 @@ npm run type-check                 -> 통과
 npm run test -- consistency-panel  -> 3 passed
 npm run test                       -> 36 passed
 npm run build                      -> 통과
-curl http://127.0.0.1:13088/admin/consistency | grep case-tab-list -> 확인
+curl http://<legacy-ui-host>:13088/admin/consistency | grep case-tab-list -> 확인
 ```
 
 WSL Playwright는 `libasound.so.2` 누락으로 실행하지 못했다. 이 실패를 반복하지 않도록 `docs/dev-environment.md`, `docs/frontend-package.md`, `kor-travel-geo-ui/README.md`, `docs/resume.md`, `docs/code-guide-for-beginners.md`에 Windows-only 정책을 명시했다.

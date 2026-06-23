@@ -7,6 +7,7 @@ import pytest
 
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
+from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from kortravelgeo.core.searcher import search as core_search
@@ -118,6 +119,7 @@ async def test_t175_public_api_rejects_contradictory_region_hints(
     app.dependency_overrides[get_client] = lambda: AsyncAddressClient(
         engine=object()  # type: ignore[arg-type]
     )
+    app.dependency_overrides[require_public_api_key] = lambda: None
     transport = httpx.ASGITransport(app=app)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

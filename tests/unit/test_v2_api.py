@@ -7,6 +7,7 @@ import pytest
 
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
+from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.confidence import SPPN_GRID_CONFIDENCE
 from kortravelgeo.core.v2 import (
@@ -347,6 +348,7 @@ async def test_v2_geocode_route_uses_client_dependency() -> None:
 
     app = create_app()
     app.dependency_overrides[get_client] = lambda: FakeClient()
+    app.dependency_overrides[require_public_api_key] = lambda: None
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
         response = await http_client.post(
@@ -457,6 +459,7 @@ async def test_v2_regions_within_radius_route_uses_client_dependency() -> None:
 
     app = create_app()
     app.dependency_overrides[get_client] = lambda: FakeClient()
+    app.dependency_overrides[require_public_api_key] = lambda: None
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as http_client:
         response = await http_client.post(
@@ -972,7 +975,11 @@ async def test_reverse_accepts_include_geometry_symmetric_input(
 def test_v2_reverse_search_inputs_publish_include_geometry() -> None:
     schema = create_app().openapi()
     components = schema["components"]["schemas"]
-    for name in ("ReverseV2Input", "SearchV2Input"):
+    for path in ("/v2/reverse", "/v2/search"):
+        ref = schema["paths"][path]["post"]["requestBody"]["content"]["application/json"][
+            "schema"
+        ]["$ref"]
+        name = ref.rsplit("/", maxsplit=1)[-1]
         assert "include_geometry" in components[name]["properties"], name
         # additive optional field -> not required.
         assert "include_geometry" not in components[name].get("required", [])

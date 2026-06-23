@@ -1,6 +1,6 @@
 import { expect, test, type APIResponse } from "@playwright/test";
 
-import { isLiveE2EEnabled, proxyGet } from "./_live";
+import { isLiveE2EEnabled, loginLiveAdmin, proxyGet } from "./_live";
 
 // LIVE admin read-only query matrix.
 //
@@ -86,8 +86,9 @@ const matrix: MatrixCase[] = [
 ];
 
 test.describe("LIVE admin API query matrix", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ request }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdmin(request);
   });
 
   for (const item of matrix) {

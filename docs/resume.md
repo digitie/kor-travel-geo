@@ -2,8 +2,29 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-21 갱신, by codex)
+## 현재 진척도 (2026-06-23 갱신, by codex)
 
+- ✅ Admin 로그인·공개 API key 보안 구현 및 live e2e 완료 — 단일 admin 로그인, httpOnly
+  `SameSite=Strict` 세션 cookie, user-agent fingerprint, logout revocation, 로그인 rate limit,
+  admin proxy shared secret, trusted proxy peer/role 검증을 추가했다. 공개 v1/v2 REST API는 외부
+  클라이언트에 VWorld 호환 `key` query parameter를 요구하며, trusted admin proxy 요청은 key 검증을
+  우회한다. UI에서 생성한 공개 API key는 `ops.public_api_keys`에 hash/hint만 저장하고 plaintext는
+  생성 응답에서 한 번만 보여 준다. 활성 DB key가 없으면 `KTG_VWORLD_API_KEY`를 기본 key로 인정한다.
+  로그인 시도·성공·실패·로그아웃은 `ops.audit_events`에 남기고 `/admin/settings`에서 볼 수 있으며,
+  client IP/user-agent는 hash만 저장한다. ADR-013은 superseded, ADR-064는 accepted로 추가했다.
+  `kor-travel-map` #508과 같은 prod endpoint 노출 패턴도 확인해 stale local endpoint 예시는
+  placeholder로 redaction했다.
+- ✅ 검증/배포 완료 — WSL ext4 미러에서 backend 전체 `pytest -q` 1107 passed/67 skipped,
+  `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`, OpenAPI `--check`를 통과했다. UI는
+  `npm run type-check`, `npm run test` 129건, `npm run lint`, `npm run build`, React Doctor
+  `ok=true`(warning 33건)를 통과했다. 로컬 production Docker API/UI는 migration
+  `0022_public_api_keys` 적용 뒤 Chromium/Firefox live e2e 각 230건 중 222 passed/8 skipped를
+  통과했다. 운영 호스트에도 소스와 prod-only env/compose override를 반영하고 API/UI 이미지를
+  재빌드, migration 적용, 컨테이너 재기동, `/v1/readyz`와 `/login` smoke를 완료했다. 운영 전체
+  live e2e는 prod DB key row 생성을 피하려고 `KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS`를 끈 상태로
+  Chromium/Firefox 각 230건 중 221 passed/9 skipped를 통과했다.
+- ✅ 다음 작업 — 이 변경 묶음은 구현, WSL gate, 로컬 production Docker live e2e, 운영 배포,
+  운영 live e2e까지 완료됐다. 별도 후속 구현 항목은 없고, PR 생성·머지 절차만 남은 상태다.
 - ✅ Admin UI live e2e 커버리지 추가 증설 완료 — 사용자 요청에 따라 mock e2e가 아닌
   `kor-travel-geo-ui/tests/e2e/live/*` 기준 테스트를 22개에서 81개로 늘린 뒤, 추가 요청으로 다시
   223개까지 늘렸다. `admin-api-readonly.spec.ts`와 `admin-browser-readonly.spec.ts`는 admin UI/API

@@ -7,24 +7,33 @@ The ``hint`` is sanitized — no raw pydantic repr, no echoed input value, no ex
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
+from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.dto.common import KOREA_LON_LAT_BOUNDS_MESSAGE
+from kortravelgeo.settings import Settings, get_settings
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 _V2_PATHS = ("/v2/geocode", "/v2/reverse", "/v2/search", "/v2/regions/within-radius")
 _LEGACY_V1_GET_PATHS = ("/v1/address/search", "/v1/address/zipcode", "/v1/address/pobox")
 _HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
+_ADMIN_HEADERS = {"X-KTG-Actor": "contract-test", "X-KTG-Roles": "source_file_viewer"}
 
 
-def _app_with_dummy_client() -> object:
+def _app_with_dummy_client() -> FastAPI:
     app = create_app()
     # validation fails before the client is touched, so a dummy engine is enough.
     app.dependency_overrides[get_client] = lambda: AsyncAddressClient(
         engine=object()  # type: ignore[arg-type]
     )
+    app.dependency_overrides[require_public_api_key] = lambda: None
     return app
 
 
@@ -141,9 +150,14 @@ async def test_admin_validation_error_uses_400_error_envelope() -> None:
     import httpx
 
     app = _app_with_dummy_client()
-    transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        _env_file=None,
+        admin_trusted_proxy_cidrs="127.0.0.0/8",
+        geoip_gate_mode="off",
+    )
+    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/v1/admin/normalize", json={})
+        response = await client.post("/v1/admin/normalize", headers=_ADMIN_HEADERS, json={})
 
     assert response.status_code == 400
     payload = response.json()
