@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { proxyGet, proxyPost } from "./_live";
+import { loginLiveAdmin, proxyGet, proxyPost } from "./_live";
 
 // Layer 4 — negative / edge cases exercised through the same-origin proxy
 // against a LIVE backend (DB + API + UI). Gated behind LIVE_E2E.
@@ -28,8 +28,9 @@ interface V2GeocodeOk {
 }
 
 test.describe("LIVE v2 negative / edge cases", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ request }) => {
     test.skip(!process.env.LIVE_E2E, "Live full-stack test — run with LIVE_E2E=1 and the stack up (DB+API+UI)");
+    await loginLiveAdmin(request);
   });
 
   test("v2/geocode empty query → 400 E0100 invalid request data", async ({ request }) => {

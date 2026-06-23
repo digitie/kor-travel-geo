@@ -69,6 +69,7 @@ BackupProfile = Literal["serving-ready", "lean-serving", "forensic"]
 # expired by the janitor; ``scheduled`` marks cron-driven backups (respects keep_min).
 BackupRetentionClass = Literal["default", "scheduled", "pinned"]
 RestoreMode = Literal["new_database", "replace_current"]
+PublicApiKeyState = Literal["active", "revoked"]
 # T-265 (precursor to T-222): perf benchmark runs (T-138/T-141/T-146) registered as ops
 # artifacts so the Admin UI can surface them read-only. The benchmark sub-type lives in the
 # manifest ``kind`` field; the ops artifact_type is a single canonical value.
@@ -81,6 +82,31 @@ BenchmarkKind = Literal[
     "reverse_golden",
     "other",
 ]
+
+
+class PublicApiKeySummary(FrozenModel):
+    public_api_key_id: str
+    label: str | None = None
+    key_hint: str = Field(min_length=6, max_length=12)
+    state: PublicApiKeyState
+    created_at: datetime
+    created_by: str | None = None
+    revoked_at: datetime | None = None
+    revoked_by: str | None = None
+
+
+class PublicApiKeyCreateRequest(FrozenModel):
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+
+
+class PublicApiKeyCreateResponse(FrozenModel):
+    key: str = Field(
+        min_length=32,
+        max_length=32,
+        pattern=r"^[0-9A-Za-z]{32}$",
+        description="생성 직후 한 번만 반환되는 VWorld 형식 공개 API 키",
+    )
+    item: PublicApiKeySummary
 
 
 class TableStat(FrozenModel):
@@ -661,6 +687,16 @@ class AuditEvent(FrozenModel):
     error_code: str | None = None
     payload_redacted: dict[str, Any] = Field(default_factory=dict)
     payload_hash: str = Field(min_length=64, max_length=64)
+
+
+class AdminAuthEventRequest(FrozenModel):
+    event_type: Literal["login", "logout"]
+    outcome: OpsAuditOutcome
+    attempted_username: str | None = Field(default=None, max_length=120)
+    reason: str | None = Field(default=None, max_length=80)
+    next_path: str | None = Field(default=None, max_length=500)
+    client_ip: str | None = Field(default=None, max_length=128)
+    user_agent: str | None = Field(default=None, max_length=500)
 
 
 class DatasetSnapshot(FrozenModel):

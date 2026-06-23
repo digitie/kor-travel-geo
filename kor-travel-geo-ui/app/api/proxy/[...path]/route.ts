@@ -1,10 +1,12 @@
 import { NextRequest } from "next/server";
+import { adminUsernameFromEnv, requestHasValidSession } from "@/lib/auth";
 import {
   backendRouteForMetrics,
   recordProxyUpstream,
   recordUiRequest
 } from "@/lib/metrics";
 import { buildProxyRequestInit, buildProxyTarget, forwardedProxyHeaders } from "@/lib/proxy";
+import { KNOWN_ADMIN_ROLES } from "@/lib/roles";
 
 const INTERNAL_BASE = process.env.KTG_API_INTERNAL_URL ?? "http://localhost:12501";
 
@@ -18,6 +20,10 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       statusCode = 403;
       return new Response("Forbidden", { status: statusCode });
     }
+    if (!(await requestHasValidSession(request))) {
+      statusCode = 401;
+      return Response.json({ error: "AUTH_REQUIRED" }, { status: statusCode });
+    }
     const upstreamStartedAt = performance.now();
     const backendRoute = backendRouteForMetrics(params.path);
     let upstreamStatusCode = 500;
@@ -25,7 +31,10 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       const response = await fetch(target, {
         ...buildProxyRequestInit(
           request.method,
-          forwardedProxyHeaders(request.headers),
+          forwardedProxyHeaders(request.headers, process.env, {
+            actor: adminUsernameFromEnv(),
+            roles: [...KNOWN_ADMIN_ROLES]
+          }),
           request.body,
           request.signal
         )

@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 import {
   LIVE_TIMEOUT,
   expectNoErrorScreen,
-  isLiveE2EEnabled
+  isLiveE2EEnabled,
+  loginLiveAdminPage
 } from "./_live";
 
 // LIVE admin browser read-only coverage.
@@ -20,8 +21,9 @@ async function gotoAdmin(page: import("@playwright/test").Page, path: string, he
 }
 
 test.describe("LIVE admin browser read-only pages", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdminPage(page, "/admin/settings");
   });
 
   test("/admin/load points operators to Source Files", async ({ page }) => {
@@ -88,8 +90,9 @@ test.describe("LIVE admin browser read-only pages", () => {
 });
 
 test.describe("LIVE backups admin browser tabs", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdminPage(page, "/admin/backups");
   });
 
   test("backups overview tab renders the workflow guide", async ({ page }) => {
@@ -136,8 +139,9 @@ test.describe("LIVE backups admin browser tabs", () => {
 });
 
 test.describe("LIVE source-files admin browser tabs", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdminPage(page, "/admin/source-files");
   });
 
   test("source-files renders all six tabs", async ({ page }) => {
@@ -195,8 +199,9 @@ test.describe("LIVE source-files admin browser tabs", () => {
 });
 
 test.describe("LIVE ops and consistency browser panels", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdminPage(page, "/admin/ops");
   });
 
   test("ops renders serving release and snapshot tables", async ({ page }) => {

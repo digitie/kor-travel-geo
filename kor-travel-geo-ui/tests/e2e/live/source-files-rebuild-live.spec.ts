@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { proxyGet } from "./_live";
+import { loginLiveAdmin, loginLiveAdminPage, proxyGet } from "./_live";
 
 type LoadJob = {
   job_id: string;
@@ -61,7 +61,7 @@ const TIMEOUT_MS = positiveMs("KTG_LIVE_E2E_REBUILD_TIMEOUT_MS", 24 * 60 * 60 * 
 const POLL_MS = positiveMs("KTG_LIVE_E2E_REBUILD_POLL_MS", 10_000);
 
 test.describe("LIVE source-files rebuild-db through Admin UI (T-183)", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page, request }) => {
     test.skip(
       !process.env.LIVE_E2E ||
         process.env.KTG_LIVE_E2E_ADMIN_PROXY !== "1" ||
@@ -73,6 +73,8 @@ test.describe("LIVE source-files rebuild-db through Admin UI (T-183)", () => {
         !RUN_CONFIRMATION,
       "Destructive live rebuild — requires LIVE_E2E=1, admin proxy actor/roles, match set id, run confirmation, and destructive_admin when force promotion is enabled"
     );
+    await loginLiveAdmin(request);
+    await loginLiveAdminPage(page, "/admin/source-files");
   });
 
   test("starts rebuild-db from the UI and waits for post-load serving evidence", async ({

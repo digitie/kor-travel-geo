@@ -12,6 +12,7 @@ from kortravelgeo.dto.common import AddressType, FrozenModel
 from kortravelgeo.dto.geocode import GeocodeInput, GeocodeResponse
 from kortravelgeo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
 from kortravelgeo.exceptions import (
+    ApiKeyError,
     InvalidCoordinateError,
     InvalidInputError,
     KorTravelGeoError,
@@ -199,6 +200,8 @@ def _vworld_error_level(exc: KorTravelGeoError) -> int:
 
 
 def _vworld_error_code(exc: KorTravelGeoError) -> str:
+    if isinstance(exc, ApiKeyError):
+        return "INVALID_KEY"
     if isinstance(exc, InvalidCoordinateError):
         return "INVALID_RANGE"
     if isinstance(exc, InvalidInputError):

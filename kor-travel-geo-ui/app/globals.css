@@ -167,9 +167,93 @@ textarea {
   flex: 0 0 auto;
 }
 
+.nav-button {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.sidebar-footer {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 12px;
+}
+
 .content {
   min-width: 0;
   padding: 26px 32px 48px;
+}
+
+.login-content {
+  min-height: 100dvh;
+}
+
+.login-shell {
+  align-items: center;
+  display: grid;
+  min-height: 100dvh;
+  padding: 24px;
+}
+
+.login-panel {
+  background: var(--surface-card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  display: grid;
+  gap: 20px;
+  justify-self: center;
+  max-width: 420px;
+  padding: 24px;
+  width: min(100%, 420px);
+}
+
+.login-brand {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.login-brand p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0 0 3px;
+}
+
+.login-brand h1 {
+  color: var(--text-strong);
+  font-size: 24px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.login-icon {
+  align-items: center;
+  background: var(--brand-tint);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--brand);
+  display: grid;
+  height: 48px;
+  justify-items: center;
+  width: 48px;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-submit {
+  justify-content: center;
+}
+
+.login-error {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
 }
 
 .app-error-shell {
@@ -408,7 +492,8 @@ textarea {
     transform var(--duration-fast) var(--ease-default);
 }
 
-.button.secondary {
+.button.secondary,
+.button.button-secondary {
   background: #fff;
   border-color: var(--line);
   color: var(--ink);
@@ -741,6 +826,63 @@ textarea {
   justify-items: center;
   margin-top: 16px;
   width: 56px;
+}
+
+.generated-key-box {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.public-key-list {
+  display: grid;
+  gap: 8px;
+}
+
+.public-key-item {
+  align-items: center;
+  background: var(--surface-row);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 10px 12px;
+}
+
+.public-key-item div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.public-key-item strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.public-key-item span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.public-key-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.public-key-actions span[data-state="active"] {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.public-key-actions span[data-state="revoked"] {
+  color: var(--text-tertiary);
 }
 
 .map-marker {

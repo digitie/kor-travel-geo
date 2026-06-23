@@ -1,6 +1,6 @@
 # ADR — Architecture Decision Records
 
-`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-064.**
+`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-065.**
 
 - ADR은 **프로그램 핵심 구조**(의존 계층·데이터/식별 모델·패키지/서비스 구조·REST 계약·
   운영 모델) 결정만 둔다. 도메인/ETL·taxonomy·알고리즘·process·운영 결정 중 해당 topic
@@ -28,7 +28,7 @@
 | ADR-010 | PNU 토지구분 매핑은 infra 레이어에서 조립한다 | [010-pnu-land-class-mapping-in-infra.md](010-pnu-land-class-mapping-in-infra.md) |
 | ADR-011 | 적재 작업 큐 상태는 `load_jobs` 테이블로 영속화한다 | [011-load-jobs-table-persistence.md](011-load-jobs-table-persistence.md) |
 | ADR-012 | 적재는 행안부 텍스트 정본 1차 + SHP polygon 보조 하이브리드 | [012-text-canonical-plus-shp-polygon-hybrid.md](012-text-canonical-plus-shp-polygon-hybrid.md) |
-| ADR-013 | 프론트엔드 UI는 내부망 전용, 애플리케이션 인증 없음 | [013-internal-only-ui-no-app-auth.md](013-internal-only-ui-no-app-auth.md) |
+| ADR-013 | 프론트엔드 UI는 내부망 전용, 애플리케이션 인증 없음 | [013-internal-only-ui-no-app-auth.md](013-internal-only-ui-no-app-auth.md) (superseded by ADR-064) |
 | ADR-014 | 기본 예외명은 `KorTravelGeoError`로 둔다 | → 개발 규칙 ([SKILL.md §4](../../SKILL.md) #16) |
 | ADR-015 | `kortravel`는 implicit namespace package로 둔다 | → 개발 규칙 ([SKILL.md §4](../../SKILL.md) #17) |
 | ADR-016 | 적재 상태와 정합성 리포트는 라이브러리·API로 일급 노출한다 | [016-load-status-consistency-report-api.md](016-load-status-consistency-report-api.md) |
@@ -79,6 +79,7 @@
 | ADR-061 | 전역 RequestValidationError 핸들러는 전 경로 구조화 400 envelope로 통일 | [061-global-validation-error-structured-400-envelope.md](061-global-validation-error-structured-400-envelope.md) |
 | ADR-062 | v2 breaking 묶음(enum 정직화·envelope/error 통일·좌표 lon/lat)을 배포 전 일괄 적용 | [062-v2-breaking-bundle-pre-deploy.md](062-v2-breaking-bundle-pre-deploy.md) |
 | ADR-063 | 디버그 UI 지도는 GitHub `maplibre-vworld-react` 패키지를 소비한다 | [063-maplibre-vworld-react-github-map.md](063-maplibre-vworld-react-github-map.md) |
+| ADR-064 | Admin UI 로그인과 공개 API key 관리를 둔다 | [064-ui-login-admin-proxy-public-api-keys.md](064-ui-login-admin-proxy-public-api-keys.md) |
 
 ## ADR 표준 형식
 

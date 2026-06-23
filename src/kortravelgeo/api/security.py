@@ -16,6 +16,7 @@ not get a GeoIP bypass.
 
 from __future__ import annotations
 
+import hmac
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Annotated, Any
@@ -42,6 +43,7 @@ from kortravelgeo.settings import Settings, get_settings
 #: ``api.security`` must keep working.
 __all__ = [
     "ACTOR_HEADER",
+    "ADMIN_PROXY_SECRET_HEADER",
     "KNOWN_ADMIN_ROLES",
     "ROLES_HEADER",
     "ROLE_DESTRUCTIVE_ADMIN",
@@ -89,6 +91,7 @@ KNOWN_ADMIN_ROLES: frozenset[str] = frozenset(
 
 ACTOR_HEADER = "x-ktg-actor"
 ROLES_HEADER = "x-ktg-roles"
+ADMIN_PROXY_SECRET_HEADER = "x-ktg-admin-proxy-secret"
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +129,16 @@ def _parse_roles(raw: str | None) -> frozenset[str]:
     )
 
 
+def _admin_proxy_secret_matches(request: Request, settings: Settings) -> bool:
+    expected = settings.admin_proxy_secret
+    if expected is None:
+        return True
+    actual = (request.headers.get(ADMIN_PROXY_SECRET_HEADER) or "").strip()
+    if not actual:
+        return False
+    return hmac.compare_digest(actual, expected.get_secret_value())
+
+
 def resolve_request_context(request: Request, settings: Settings) -> RequestContext | None:
     """Build a :class:`RequestContext` from trusted proxy headers, or ``None``.
 
@@ -134,6 +147,8 @@ def resolve_request_context(request: Request, settings: Settings) -> RequestCont
     empty / unrecognized role set is never treated as an administrator (doc #6).
     """
     if not _peer_is_trusted(request, settings):
+        return None
+    if not _admin_proxy_secret_matches(request, settings):
         return None
     actor = (request.headers.get(ACTOR_HEADER) or "").strip()
     if not actor:

@@ -43,5 +43,5 @@
 - WSL ext4 미러: `npx react-doctor@latest . --offline --verbose --json` → `ok=true`, 기존 warning 31건
 - Windows Playwright → WSL UI server `12515`: Chromium/Firefox
   `tests/e2e/navigation.spec.ts tests/e2e/vworld-map.spec.ts` 각 3건 통과. Chromium 전체 e2e 1차 실행은
-  UI 서버가 오래된 `.env.local`의 `KTG_API_INTERNAL_URL=http://localhost:8888`을 읽어 proxy 500을
+  UI 서버가 오래된 `.env.local`의 `KTG_API_INTERNAL_URL=http://<legacy-api-host>:8888`을 읽어 proxy 500을
   만든 환경 오류로 2건 실패했고, dev API `12501`을 지정해 targeted 재실행으로 닫았다.

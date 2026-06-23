@@ -12,7 +12,16 @@ npm run dev -- --port 12505
 
 기본 진입점은 `/debug/geocode`이며 공식 로컬 UI 포트는 `12505`이다. `KTG_API_INTERNAL_URL`은 서버 사이드 프록시가 사용할 백엔드 주소이고, 브라우저는 `NEXT_PUBLIC_API_BASE_URL` 기본값인 `/api/proxy`만 호출한다. 지오코딩/역지오코딩 디버그 화면은 `/v2/geocode`, `/v2/reverse` REST API를 사용하며, 관리·정규화·EXPLAIN 화면은 아직 `/v1/admin/*` 운영 API를 사용한다.
 
+Admin UI는 `/login` 단일 admin 로그인으로 보호된다. 실제 환경에서는 `KTG_UI_ADMIN_USERNAME`,
+`KTG_UI_ADMIN_PASSWORD_HASH`, `KTG_UI_SESSION_SECRET`을 `kor-travel-geo-ui/.env.local`에 두고,
+API와 UI 양쪽에 같은 `KTG_ADMIN_PROXY_SECRET`을 둔다. password 평문은 커밋하지 않고 PBKDF2-SHA256
+hash만 env에 저장한다. 세션 cookie는 `httpOnly`/`SameSite=Strict`와 HMAC 서명을 사용하고,
+로그아웃 시 현재 session id를 무효화한다. 로그인 시도·성공·실패·로그아웃은 backend
+`ops.audit_events`에 저장되며 `/admin/settings`에서 최근 기록을 확인할 수 있다.
+
 VWorld 키가 없으면 지도 대신 같은 크기의 좌표 프리뷰 UI를 보여 준다. MapLibre를 대체하는 별도 fallback 지도는 두지 않는다. 내부망/CI 환경에서 VWorld 도메인 등록이 끝나지 않아도 나머지 디버그 기능은 그대로 확인할 수 있다. 실행 중에는 `/api/runtime-config`가 Python API `.env`의 `KTG_VWORLD_API_KEY`를 우선 읽어 브라우저에 전달한다. 이 값이 없으면 `NEXT_PUBLIC_VWORLD_API_KEY`를 사용한다. `/admin/settings`에서 VWorld 인증키를 입력하면 브라우저 localStorage override로 저장되고, 기본값 버튼을 누르면 `.env` 기본값으로 되돌아간다.
+
+같은 설정 화면에서 v1/v2 공개 REST API용 `key`를 랜덤 생성할 수 있다. 생성된 key는 DB에는 hash로만 저장되고 화면에는 한 번만 표시된다. 생성 직후 이 브라우저의 v2 디버그 요청 key로 저장되며, DB에 활성 key가 없을 때만 백엔드 `KTG_VWORLD_API_KEY`가 기본 `key`로 쓰인다. 로그인된 UI proxy 요청은 backend에서 trusted identity로 인정되어 key 검증을 우회한다.
 
 지도는 MapLibre GL JS + VWorld WMTS를 사용한다. `maplibre-vworld-react` package는 현재 확인 SHA인 `a7cb0f8f41ec00b44b1d106664506730b87033bd`의 GitHub tarball로 고정한다. 2026-06-18 기준 npm registry에는 공개 package가 없어 HTTPS tarball URL을 유지한다. `CoordinateMap`은 upstream `VWorldMapView`, `Marker`, `useMap`, `useMapLoaded`, `redactVWorldUrl()`를 직접 소비하고, key 미설정 안내와 tile error overlay 임계치 같은 프로젝트 특화 UX만 감싼다. root tarball이 monorepo source를 포함하므로 TypeScript, Vitest, Next.js webpack, Next.js 16 Turbopack alias를 함께 유지한다.
 

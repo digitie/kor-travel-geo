@@ -7,6 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query
 
 from kortravelgeo.api.deps import get_client
+from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.dto.pobox import PoboxResponse
 
@@ -21,6 +22,7 @@ async def pobox(
     kind: Literal["PO", "PG", "ALL"] = "ALL",
     page: int = Query(default=1, ge=1),
     size: int = Query(default=10, ge=1, le=100),
+    _api_key: None = Depends(require_public_api_key),
     client: AsyncAddressClient = Depends(get_client),
 ) -> PoboxResponse:
     return await client.pobox(
@@ -31,4 +33,3 @@ async def pobox(
         page=page,
         size=size,
     )
-

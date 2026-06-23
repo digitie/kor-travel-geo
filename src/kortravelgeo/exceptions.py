@@ -42,6 +42,11 @@ class ForbiddenError(KorTravelGeoError):
     http_status = 403
 
 
+class ApiKeyError(KorTravelGeoError):
+    code = "E0401"
+    http_status = 401
+
+
 class RateLimitError(KorTravelGeoError):
     code = "E0200"
     http_status = 429

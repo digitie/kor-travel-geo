@@ -30,6 +30,7 @@ from kortravelgeo.settings import (
 # ASGITransport reports a loopback peer; trust it as the admin proxy and turn the
 # GeoIP gate off so the test focuses on the role gate.
 _SETTINGS = Settings(
+    _env_file=None,
     admin_trusted_proxy_cidrs="127.0.0.0/8",
     geoip_gate_mode="off",
     rustfs_enabled=True,

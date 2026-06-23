@@ -5,14 +5,16 @@ import { FormEvent, useState } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
-import { postJson } from "@/lib/api";
+import { postPublicJson } from "@/lib/api";
 import { reverseFormSchema } from "@/lib/schemas";
+import { useVWorldApiKey } from "@/lib/vworld-key";
 import type { components } from "@/types/api.gen";
 
-type ReverseV2Input = components["schemas"]["ReverseV2Input"];
+type ReverseV2Input = components["schemas"]["ReverseV2Input-Input"];
 type ReverseV2Response = components["schemas"]["ReverseV2Response"];
 
 export function ReverseDebugger() {
+  const { apiKey } = useVWorldApiKey();
   const [x, setX] = useState("127.028601");
   const [y, setY] = useState("37.500344");
   const [radius, setRadius] = useState("200");
@@ -35,7 +37,7 @@ export function ReverseDebugger() {
         radius_m: parsed.data.radius_m,
         include_geometry: false
       };
-      setResult(await postJson<ReverseV2Response>("/v2/reverse", body));
+      setResult(await postPublicJson<ReverseV2Response>("/v2/reverse", body, apiKey));
     } catch (error) {
       setResult({ error: error instanceof Error ? error.message : String(error) });
     }

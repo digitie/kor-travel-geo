@@ -234,6 +234,96 @@
         "title": "AddressV2",
         "type": "object"
       },
+      "AdminAuthEventRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "attempted_username": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempted Username"
+          },
+          "client_ip": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip"
+          },
+          "event_type": {
+            "enum": [
+              "login",
+              "logout"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "next_path": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Path"
+          },
+          "outcome": {
+            "enum": [
+              "started",
+              "succeeded",
+              "failed",
+              "cancelled",
+              "denied"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          }
+        },
+        "required": [
+          "event_type",
+          "outcome"
+        ],
+        "title": "AdminAuthEventRequest",
+        "type": "object"
+      },
       "AuditEvent": {
         "additionalProperties": false,
         "properties": {
@@ -3238,7 +3328,124 @@
         "title": "GeocodeResult",
         "type": "object"
       },
-      "GeocodeV2Input": {
+      "GeocodeV2Input-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BBoxV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{8}|\\d{10})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "fallback": {
+            "default": "none",
+            "enum": [
+              "none",
+              "api"
+            ],
+            "title": "Fallback",
+            "type": "string"
+          },
+          "include_geometry": {
+            "default": false,
+            "title": "Include Geometry",
+            "type": "boolean"
+          },
+          "jibun_address": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jibun Address"
+          },
+          "key": {
+            "title": "Key"
+          },
+          "keyword": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword"
+          },
+          "limit": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "road_address": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Road Address"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{2}|\\d{5})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sig Cd"
+          }
+        },
+        "title": "GeocodeV2Input",
+        "type": "object"
+      },
+      "GeocodeV2Input-Output": {
         "additionalProperties": false,
         "properties": {
           "bbox": {
@@ -3364,7 +3571,7 @@
             "type": "array"
           },
           "input": {
-            "$ref": "#/components/schemas/GeocodeV2Input"
+            "$ref": "#/components/schemas/GeocodeV2Input-Output"
           },
           "query_id": {
             "title": "Query Id",
@@ -4813,6 +5020,129 @@
         "title": "PointV2",
         "type": "object"
       },
+      "PublicApiKeyCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "title": "PublicApiKeyCreateRequest",
+        "type": "object"
+      },
+      "PublicApiKeyCreateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/PublicApiKeySummary"
+          },
+          "key": {
+            "description": "생성 직후 한 번만 반환되는 VWorld 형식 공개 API 키",
+            "maxLength": 32,
+            "minLength": 32,
+            "pattern": "^[0-9A-Za-z]{32}$",
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "item"
+        ],
+        "title": "PublicApiKeyCreateResponse",
+        "type": "object"
+      },
+      "PublicApiKeySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "key_hint": {
+            "maxLength": 12,
+            "minLength": 6,
+            "title": "Key Hint",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "public_api_key_id": {
+            "title": "Public Api Key Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "revoked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked By"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "revoked"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "public_api_key_id",
+          "key_hint",
+          "state",
+          "created_at"
+        ],
+        "title": "PublicApiKeySummary",
+        "type": "object"
+      },
       "ReadinessComponent": {
         "additionalProperties": false,
         "properties": {
@@ -5305,7 +5635,56 @@
         "title": "RegionWithinRadiusItem",
         "type": "object"
       },
-      "RegionsWithinRadiusInput": {
+      "RegionsWithinRadiusInput-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key"
+          },
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "levels": {
+            "default": [
+              "sigungu",
+              "emd"
+            ],
+            "items": {
+              "enum": [
+                "sido",
+                "sigungu",
+                "emd"
+              ],
+              "type": "string"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "type": "number"
+          },
+          "radius_km": {
+            "default": 3.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 500.0,
+            "title": "Radius Km",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lon",
+          "lat"
+        ],
+        "title": "RegionsWithinRadiusInput",
+        "type": "object"
+      },
+      "RegionsWithinRadiusInput-Output": {
         "additionalProperties": false,
         "properties": {
           "lat": {
@@ -5366,7 +5745,7 @@
             "type": "array"
           },
           "input": {
-            "$ref": "#/components/schemas/RegionsWithinRadiusInput"
+            "$ref": "#/components/schemas/RegionsWithinRadiusInput-Output"
           },
           "query_id": {
             "title": "Query Id",
@@ -6482,7 +6861,79 @@
         "title": "ReverseInput",
         "type": "object"
       },
-      "ReverseV2Input": {
+      "ReverseV2Input-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{8}|\\d{10})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/CRS",
+            "default": "EPSG:4326"
+          },
+          "include_geometry": {
+            "default": false,
+            "title": "Include Geometry",
+            "type": "boolean"
+          },
+          "include_region": {
+            "default": true,
+            "title": "Include Region",
+            "type": "boolean"
+          },
+          "include_zipcode": {
+            "default": true,
+            "title": "Include Zipcode",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key"
+          },
+          "lat": {
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "title": "Lon",
+            "type": "number"
+          },
+          "radius_m": {
+            "default": 200,
+            "maximum": 2000.0,
+            "minimum": 1.0,
+            "title": "Radius M",
+            "type": "integer"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{2}|\\d{5})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sig Cd"
+          }
+        },
+        "required": [
+          "lon",
+          "lat"
+        ],
+        "title": "ReverseV2Input",
+        "type": "object"
+      },
+      "ReverseV2Input-Output": {
         "additionalProperties": false,
         "properties": {
           "bjd_cd": {
@@ -6563,7 +7014,7 @@
             "type": "array"
           },
           "input": {
-            "$ref": "#/components/schemas/ReverseV2Input"
+            "$ref": "#/components/schemas/ReverseV2Input-Output"
           },
           "query_id": {
             "title": "Query Id",
@@ -7237,7 +7688,103 @@
         "title": "SearchResultItem",
         "type": "object"
       },
-      "SearchV2Input": {
+      "SearchV2Input-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BBoxV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bjd_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{8}|\\d{10})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bjd Cd"
+          },
+          "category_group_code": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Group Code"
+          },
+          "include_geometry": {
+            "default": false,
+            "title": "Include Geometry",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key"
+          },
+          "page": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "sig_cd": {
+            "anyOf": [
+              {
+                "pattern": "^(\\d{2}|\\d{5})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sig Cd"
+          },
+          "size": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "type": {
+            "default": "address",
+            "enum": [
+              "address",
+              "place",
+              "district",
+              "road",
+              "category"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SearchV2Input",
+        "type": "object"
+      },
+      "SearchV2Input-Output": {
         "additionalProperties": false,
         "properties": {
           "bbox": {
@@ -7342,7 +7889,7 @@
             "type": "array"
           },
           "input": {
-            "$ref": "#/components/schemas/SearchV2Input"
+            "$ref": "#/components/schemas/SearchV2Input-Output"
           },
           "query_id": {
             "title": "Query Id",
@@ -11429,6 +11976,24 @@
               ],
               "title": "Bjd Cd"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -11551,6 +12116,24 @@
               "minimum": 1,
               "title": "Size",
               "type": "integer"
+            }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
             }
           }
         ],
@@ -11700,6 +12283,24 @@
               ],
               "title": "Bjd Cd"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -11817,6 +12418,24 @@
               ],
               "title": "Bjd Cd"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -11928,6 +12547,24 @@
               "title": "Include Bulk",
               "type": "boolean"
             }
+          },
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
           }
         ],
         "responses": {
@@ -11955,6 +12592,47 @@
         "summary": "Zipcode",
         "tags": [
           "zipcode"
+        ]
+      }
+    },
+    "/v1/admin/auth-events": {
+      "post": {
+        "operationId": "record_admin_auth_event_v1_admin_auth_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminAuthEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "Legacy validation error envelope"
+          }
+        },
+        "summary": "Record Admin Auth Event",
+        "tags": [
+          "admin"
         ]
       }
     },
@@ -14566,6 +15244,136 @@
         ]
       }
     },
+    "/v1/admin/public-api-keys": {
+      "get": {
+        "operationId": "list_public_api_keys_v1_admin_public_api_keys_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PublicApiKeySummary"
+                  },
+                  "title": "Response List Public Api Keys V1 Admin Public Api Keys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "Legacy validation error envelope"
+          }
+        },
+        "summary": "List Public Api Keys",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "operationId": "create_public_api_key_v1_admin_public_api_keys_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicApiKeyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicApiKeyCreateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "Legacy validation error envelope"
+          }
+        },
+        "summary": "Create Public Api Key",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/public-api-keys/{public_api_key_id}": {
+      "delete": {
+        "operationId": "revoke_public_api_key_v1_admin_public_api_keys__public_api_key_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "public_api_key_id",
+            "required": true,
+            "schema": {
+              "title": "Public Api Key Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicApiKeySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "Legacy validation error envelope"
+          }
+        },
+        "summary": "Revoke Public Api Key",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/restores": {
       "post": {
         "operationId": "submit_restore_v1_admin_restores_post",
@@ -16746,11 +17554,31 @@
     "/v2/geocode": {
       "post": {
         "operationId": "geocode_v2_v2_geocode_post",
+        "parameters": [
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GeocodeV2Input"
+                "$ref": "#/components/schemas/GeocodeV2Input-Input"
               }
             }
           },
@@ -16787,11 +17615,31 @@
     "/v2/regions/within-radius": {
       "post": {
         "operationId": "regions_within_radius_v2_v2_regions_within_radius_post",
+        "parameters": [
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RegionsWithinRadiusInput"
+                "$ref": "#/components/schemas/RegionsWithinRadiusInput-Input"
               }
             }
           },
@@ -16828,11 +17676,31 @@
     "/v2/reverse": {
       "post": {
         "operationId": "reverse_v2_v2_reverse_post",
+        "parameters": [
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ReverseV2Input"
+                "$ref": "#/components/schemas/ReverseV2Input-Input"
               }
             }
           },
@@ -16869,11 +17737,31 @@
     "/v2/search": {
       "post": {
         "operationId": "search_v2_v2_search_post",
+        "parameters": [
+          {
+            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "title": "Key"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SearchV2Input"
+                "$ref": "#/components/schemas/SearchV2Input-Input"
               }
             }
           },

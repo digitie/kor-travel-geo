@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { proxyGet } from "./_live";
+import { loginLiveAdmin, loginLiveAdminPage, proxyGet } from "./_live";
 
 // Layer 3 — LIVE full-stack admin console (real browser over the LIVE backend + DB, NO mocking).
 //
@@ -19,11 +19,13 @@ async function expectNoErrorScreen(page: import("@playwright/test").Page): Promi
 }
 
 test.describe("LIVE admin read-only", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ page, request }) => {
     test.skip(
       !process.env.LIVE_E2E,
       "Live full-stack test — run with LIVE_E2E=1 and the stack up (DB+API+UI)"
     );
+    await loginLiveAdmin(request);
+    await loginLiveAdminPage(page, "/admin/ops");
   });
 
   test("/admin/ops renders the Ops console and Serving Releases table", async ({ page }) => {

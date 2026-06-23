@@ -1,4 +1,5 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/proxy";
+export const PUBLIC_API_KEY_STORAGE_KEY = "kortravelgeo.publicApiKey";
 
 export class ApiError extends Error {
   status: number;
@@ -37,11 +38,58 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export async function postPublicJson<T>(
+  path: string,
+  body: unknown,
+  fallbackApiKey = ""
+): Promise<T> {
+  return postJson<T>(pathWithPublicApiKey(path, fallbackApiKey), body);
+}
+
 export async function patchJson<T>(path: string, body: unknown): Promise<T> {
   return requestJson<T>(path, {
     method: "PATCH",
     body: JSON.stringify(body)
   });
+}
+
+export async function deleteJson<T>(path: string): Promise<T> {
+  return requestJson<T>(path, { method: "DELETE" });
+}
+
+export function savePublicApiKeyForRequests(apiKey: string): void {
+  if (typeof window === "undefined") return;
+  const trimmed = apiKey.trim();
+  if (trimmed) {
+    window.localStorage.setItem(PUBLIC_API_KEY_STORAGE_KEY, trimmed);
+  }
+}
+
+export function clearPublicApiKeyForRequestsByHint(keyHint: string): void {
+  if (typeof window === "undefined") return;
+  const current = window.localStorage.getItem(PUBLIC_API_KEY_STORAGE_KEY)?.trim();
+  if (current?.endsWith(keyHint)) {
+    window.localStorage.removeItem(PUBLIC_API_KEY_STORAGE_KEY);
+  }
+}
+
+function pathWithPublicApiKey(path: string, fallbackApiKey: string): string {
+  const apiKey = publicApiKeyForRequests() || fallbackApiKey.trim();
+  if (!apiKey) {
+    return path;
+  }
+  const [pathname, search = ""] = path.split("?", 2);
+  const params = new URLSearchParams(search);
+  params.set("key", apiKey);
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+function publicApiKeyForRequests(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return window.localStorage.getItem(PUBLIC_API_KEY_STORAGE_KEY)?.trim() ?? "";
 }
 
 export type LoadJobStatus = {
@@ -152,6 +200,22 @@ export type RustfsConnectionCheck = {
   bucket: string;
   prefix: string;
   message?: string | null;
+};
+
+export type PublicApiKeySummary = {
+  public_api_key_id: string;
+  label?: string | null;
+  key_hint: string;
+  state: "active" | "revoked";
+  created_at: string;
+  created_by?: string | null;
+  revoked_at?: string | null;
+  revoked_by?: string | null;
+};
+
+export type PublicApiKeyCreateResponse = {
+  key: string;
+  item: PublicApiKeySummary;
 };
 
 export type RustfsSyncLocalResult = {
@@ -300,12 +364,16 @@ export type AuditEvent = {
   audit_event_id: string;
   occurred_at: string;
   actor_type: "system" | "cli" | "api" | "ui" | "scheduler";
+  actor_id?: string | null;
   action: string;
   outcome: "started" | "succeeded" | "failed" | "cancelled" | "denied";
   resource_type?: string | null;
   resource_id?: string | null;
   job_id?: string | null;
+  error_code?: string | null;
   payload_redacted?: Record<string, unknown>;
+  client_ip_hash?: string | null;
+  user_agent_hash?: string | null;
 };
 
 export type DatasetSnapshot = {

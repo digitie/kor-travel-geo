@@ -4,6 +4,7 @@ import {
   KNOWN,
   expectInKorea,
   expectNearKnown,
+  loginLiveAdmin,
   proxyGet,
   proxyPost
 } from "./_live";
@@ -57,8 +58,9 @@ type WithinRadiusV2 = {
 };
 
 test.describe("LIVE v1/v2 geocoding correctness", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ request }) => {
     test.skip(!process.env.LIVE_E2E, "Live full-stack test — run with LIVE_E2E=1 and the stack up (DB+API+UI)");
+    await loginLiveAdmin(request);
   });
 
   test("v1 health + readiness probes return 200", async ({ request }) => {

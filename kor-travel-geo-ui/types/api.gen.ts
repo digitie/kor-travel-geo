@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/auth-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Admin Auth Event */
+        post: operations["record_admin_auth_event_v1_admin_auth_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/backups": {
         parameters: {
             query?: never;
@@ -889,6 +906,41 @@ export interface paths {
         /** Capture Ops Table Stats */
         post: operations["capture_ops_table_stats_v1_admin_ops_table_stats_capture_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/public-api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Public Api Keys */
+        get: operations["list_public_api_keys_v1_admin_public_api_keys_get"];
+        put?: never;
+        /** Create Public Api Key */
+        post: operations["create_public_api_key_v1_admin_public_api_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/public-api-keys/{public_api_key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Public Api Key */
+        delete: operations["revoke_public_api_key_v1_admin_public_api_keys__public_api_key_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2019,6 +2071,29 @@ export interface components {
             road_name_code?: string | null;
             type?: components["schemas"]["AddressType"] | null;
         };
+        /** AdminAuthEventRequest */
+        AdminAuthEventRequest: {
+            /** Attempted Username */
+            attempted_username?: string | null;
+            /** Client Ip */
+            client_ip?: string | null;
+            /**
+             * Event Type
+             * @enum {string}
+             */
+            event_type: "login" | "logout";
+            /** Next Path */
+            next_path?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "started" | "succeeded" | "failed" | "cancelled" | "denied";
+            /** Reason */
+            reason?: string | null;
+            /** User Agent */
+            user_agent?: string | null;
+        };
         /** AuditEvent */
         AuditEvent: {
             /** Action */
@@ -3110,7 +3185,41 @@ export interface components {
             point: components["schemas"]["Point"];
         };
         /** GeocodeV2Input */
-        GeocodeV2Input: {
+        "GeocodeV2Input-Input": {
+            bbox?: components["schemas"]["BBoxV2"] | null;
+            /** Bjd Cd */
+            bjd_cd?: string | null;
+            /**
+             * Fallback
+             * @default none
+             * @enum {string}
+             */
+            fallback: "none" | "api";
+            /**
+             * Include Geometry
+             * @default false
+             */
+            include_geometry: boolean;
+            /** Jibun Address */
+            jibun_address?: string | null;
+            /** Key */
+            key?: unknown;
+            /** Keyword */
+            keyword?: string | null;
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
+            /** Query */
+            query?: string | null;
+            /** Road Address */
+            road_address?: string | null;
+            /** Sig Cd */
+            sig_cd?: string | null;
+        };
+        /** GeocodeV2Input */
+        "GeocodeV2Input-Output": {
             bbox?: components["schemas"]["BBoxV2"] | null;
             /** Bjd Cd */
             bjd_cd?: string | null;
@@ -3148,7 +3257,7 @@ export interface components {
              * @default []
              */
             candidates: components["schemas"]["CandidateV2"][];
-            input: components["schemas"]["GeocodeV2Input"];
+            input: components["schemas"]["GeocodeV2Input-Output"];
             /** Query Id */
             query_id?: string;
             region_hint_applied?: components["schemas"]["RegionHint"] | null;
@@ -3610,6 +3719,45 @@ export interface components {
             /** Lon */
             lon: number;
         };
+        /** PublicApiKeyCreateRequest */
+        PublicApiKeyCreateRequest: {
+            /** Label */
+            label?: string | null;
+        };
+        /** PublicApiKeyCreateResponse */
+        PublicApiKeyCreateResponse: {
+            item: components["schemas"]["PublicApiKeySummary"];
+            /**
+             * Key
+             * @description 생성 직후 한 번만 반환되는 VWorld 형식 공개 API 키
+             */
+            key: string;
+        };
+        /** PublicApiKeySummary */
+        PublicApiKeySummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by?: string | null;
+            /** Key Hint */
+            key_hint: string;
+            /** Label */
+            label?: string | null;
+            /** Public Api Key Id */
+            public_api_key_id: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /** Revoked By */
+            revoked_by?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "revoked";
+        };
         /** ReadinessComponent */
         ReadinessComponent: {
             /** Detail */
@@ -3783,7 +3931,29 @@ export interface components {
             relation: "contains" | "overlaps";
         };
         /** RegionsWithinRadiusInput */
-        RegionsWithinRadiusInput: {
+        "RegionsWithinRadiusInput-Input": {
+            /** Key */
+            key?: unknown;
+            /** Lat */
+            lat: number;
+            /**
+             * Levels
+             * @default [
+             *       "sigungu",
+             *       "emd"
+             *     ]
+             */
+            levels: ("sido" | "sigungu" | "emd")[];
+            /** Lon */
+            lon: number;
+            /**
+             * Radius Km
+             * @default 3
+             */
+            radius_km: number;
+        };
+        /** RegionsWithinRadiusInput */
+        "RegionsWithinRadiusInput-Output": {
             /** Lat */
             lat: number;
             /**
@@ -3810,7 +3980,7 @@ export interface components {
              * @default []
              */
             emd: components["schemas"]["RegionWithinRadiusItem"][];
-            input: components["schemas"]["RegionsWithinRadiusInput"];
+            input: components["schemas"]["RegionsWithinRadiusInput-Output"];
             /** Query Id */
             query_id?: string;
             /** Radius Km */
@@ -4295,7 +4465,42 @@ export interface components {
             zipcode: boolean;
         };
         /** ReverseV2Input */
-        ReverseV2Input: {
+        "ReverseV2Input-Input": {
+            /** Bjd Cd */
+            bjd_cd?: string | null;
+            /** @default EPSG:4326 */
+            crs: components["schemas"]["CRS"];
+            /**
+             * Include Geometry
+             * @default false
+             */
+            include_geometry: boolean;
+            /**
+             * Include Region
+             * @default true
+             */
+            include_region: boolean;
+            /**
+             * Include Zipcode
+             * @default true
+             */
+            include_zipcode: boolean;
+            /** Key */
+            key?: unknown;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /**
+             * Radius M
+             * @default 200
+             */
+            radius_m: number;
+            /** Sig Cd */
+            sig_cd?: string | null;
+        };
+        /** ReverseV2Input */
+        "ReverseV2Input-Output": {
             /** Bjd Cd */
             bjd_cd?: string | null;
             /** @default EPSG:4326 */
@@ -4334,7 +4539,7 @@ export interface components {
              * @default []
              */
             candidates: components["schemas"]["CandidateV2"][];
-            input: components["schemas"]["ReverseV2Input"];
+            input: components["schemas"]["ReverseV2Input-Output"];
             /** Query Id */
             query_id?: string;
             region_hint_applied?: components["schemas"]["RegionHint"] | null;
@@ -4595,7 +4800,42 @@ export interface components {
             type: "address" | "place" | "district" | "road";
         };
         /** SearchV2Input */
-        SearchV2Input: {
+        "SearchV2Input-Input": {
+            bbox?: components["schemas"]["BBoxV2"] | null;
+            /** Bjd Cd */
+            bjd_cd?: string | null;
+            /** Category Group Code */
+            category_group_code?: string | null;
+            /**
+             * Include Geometry
+             * @default false
+             */
+            include_geometry: boolean;
+            /** Key */
+            key?: unknown;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /** Query */
+            query: string;
+            /** Sig Cd */
+            sig_cd?: string | null;
+            /**
+             * Size
+             * @default 10
+             */
+            size: number;
+            /**
+             * Type
+             * @default address
+             * @enum {string}
+             */
+            type: "address" | "place" | "district" | "road" | "category";
+        };
+        /** SearchV2Input */
+        "SearchV2Input-Output": {
             bbox?: components["schemas"]["BBoxV2"] | null;
             /** Bjd Cd */
             bjd_cd?: string | null;
@@ -4634,7 +4874,7 @@ export interface components {
              * @default []
              */
             candidates: components["schemas"]["CandidateV2"][];
-            input: components["schemas"]["SearchV2Input"];
+            input: components["schemas"]["SearchV2Input-Output"];
             /** Query Id */
             query_id?: string;
             region_hint_applied?: components["schemas"]["RegionHint"] | null;
@@ -6343,6 +6583,8 @@ export interface operations {
                 fallback?: "off" | "local_only" | "api";
                 sig_cd?: string | null;
                 bjd_cd?: string | null;
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
             };
             header?: never;
             path?: never;
@@ -6379,6 +6621,8 @@ export interface operations {
                 kind?: "PO" | "PG" | "ALL";
                 page?: number;
                 size?: number;
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
             };
             header?: never;
             path?: never;
@@ -6418,6 +6662,8 @@ export interface operations {
                 radius_m?: number | null;
                 sig_cd?: string | null;
                 bjd_cd?: string | null;
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
             };
             header?: never;
             path?: never;
@@ -6454,6 +6700,8 @@ export interface operations {
                 size?: number;
                 sig_cd?: string | null;
                 bjd_cd?: string | null;
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
             };
             header?: never;
             path?: never;
@@ -6489,6 +6737,8 @@ export interface operations {
                 y?: number | null;
                 bd_mgt_sn?: string | null;
                 include_bulk?: boolean;
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
             };
             header?: never;
             path?: never;
@@ -6503,6 +6753,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ZipcodeResponse"];
+                };
+            };
+            /** @description Legacy validation error envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+        };
+    };
+    record_admin_auth_event_v1_admin_auth_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminAuthEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEvent"];
                 };
             };
             /** @description Legacy validation error envelope */
@@ -8000,6 +8283,101 @@ export interface operations {
             };
         };
     };
+    list_public_api_keys_v1_admin_public_api_keys_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicApiKeySummary"][];
+                };
+            };
+            /** @description Legacy validation error envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_public_api_key_v1_admin_public_api_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicApiKeyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicApiKeyCreateResponse"];
+                };
+            };
+            /** @description Legacy validation error envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+        };
+    };
+    revoke_public_api_key_v1_admin_public_api_keys__public_api_key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                public_api_key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicApiKeySummary"];
+                };
+            };
+            /** @description Legacy validation error envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+        };
+    };
     submit_restore_v1_admin_restores_post: {
         parameters: {
             query?: never;
@@ -9478,14 +9856,17 @@ export interface operations {
     };
     geocode_v2_v2_geocode_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["GeocodeV2Input"];
+                "application/json": components["schemas"]["GeocodeV2Input-Input"];
             };
         };
         responses: {
@@ -9511,14 +9892,17 @@ export interface operations {
     };
     regions_within_radius_v2_v2_regions_within_radius_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RegionsWithinRadiusInput"];
+                "application/json": components["schemas"]["RegionsWithinRadiusInput-Input"];
             };
         };
         responses: {
@@ -9544,14 +9928,17 @@ export interface operations {
     };
     reverse_v2_v2_reverse_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReverseV2Input"];
+                "application/json": components["schemas"]["ReverseV2Input-Input"];
             };
         };
         responses: {
@@ -9577,14 +9964,17 @@ export interface operations {
     };
     search_v2_v2_search_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                key?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SearchV2Input"];
+                "application/json": components["schemas"]["SearchV2Input-Input"];
             };
         };
         responses: {

@@ -1,15 +1,21 @@
 "use client";
 
-import { KeyRound, RefreshCw, RotateCcw, Save } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { Copy, KeyRound, RefreshCw, RotateCcw, Save, Trash2 } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import {
+  AuditEvent,
   RustfsConnectionCheck,
   RustfsStorageConfig,
   RustfsStorageConfigPatch,
+  PublicApiKeyCreateResponse,
+  PublicApiKeySummary,
+  clearPublicApiKeyForRequestsByHint,
+  deleteJson,
   patchJson,
   postJson,
-  requestJson
+  requestJson,
+  savePublicApiKeyForRequests
 } from "@/lib/api";
 import { useVWorldApiKey } from "@/lib/vworld-key";
 
@@ -120,6 +126,12 @@ export function SettingsPanel() {
           <KeyRound size={28} />
         </div>
       </Panel>
+      <Panel title="공개 API 키">
+        <PublicApiKeysSection />
+      </Panel>
+      <Panel title="로그인 기록">
+        <LoginHistorySection />
+      </Panel>
       <Panel title="RustFS 저장소">
         {effectiveRustfsDraft ? (
           <RustfsConfigForm
@@ -152,6 +164,146 @@ type RustfsDraft = {
   accessKey: string;
   secretKey: string;
 };
+
+type PublicApiKeysState = {
+  busy: boolean;
+  generatedKey: string | null;
+  label: string;
+  message: string | null;
+  publicKeys: PublicApiKeySummary[] | null;
+};
+
+function PublicApiKeysSection() {
+  const [state, setState] = useState<PublicApiKeysState>({
+    busy: false,
+    generatedKey: null,
+    label: "",
+    message: null,
+    publicKeys: null
+  });
+
+  const patchState = useCallback((patch: Partial<PublicApiKeysState>) => {
+    setState((current) => ({ ...current, ...patch }));
+  }, []);
+
+  const loadPublicApiKeys = useCallback(async () => {
+    patchState({ message: null });
+    try {
+      patchState({ publicKeys: await requestJson<PublicApiKeySummary[]>("/admin/public-api-keys") });
+    } catch (error) {
+      patchState({ message: error instanceof Error ? error.message : String(error) });
+    }
+  }, [patchState]);
+
+  useEffect(() => {
+    void loadPublicApiKeys();
+  }, [loadPublicApiKeys]);
+
+  async function createPublicApiKey(event: FormEvent) {
+    event.preventDefault();
+    patchState({ busy: true, generatedKey: null, message: null });
+    try {
+      const result = await postJson<PublicApiKeyCreateResponse>("/admin/public-api-keys", {
+        label: state.label.trim() || null
+      });
+      savePublicApiKeyForRequests(result.key);
+      setState((current) => ({
+        ...current,
+        generatedKey: result.key,
+        label: "",
+        message: "공개 API 키를 생성하고 이 브라우저의 API 요청 key로 적용했습니다.",
+        publicKeys: [result.item, ...(current.publicKeys ?? [])]
+      }));
+    } catch (error) {
+      patchState({ message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      patchState({ busy: false });
+    }
+  }
+
+  async function revokePublicApiKey(publicApiKeyId: string) {
+    patchState({ busy: true, message: null });
+    try {
+      const result = await deleteJson<PublicApiKeySummary>(
+        `/admin/public-api-keys/${publicApiKeyId}`
+      );
+      clearPublicApiKeyForRequestsByHint(result.key_hint);
+      setState((current) => ({
+        ...current,
+        message: "공개 API 키를 폐기했습니다.",
+        publicKeys: (current.publicKeys ?? []).map((item) =>
+          item.public_api_key_id === result.public_api_key_id ? result : item
+        )
+      }));
+    } catch (error) {
+      patchState({ message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      patchState({ busy: false });
+    }
+  }
+
+  return (
+    <PublicApiKeyPanel
+      busy={state.busy}
+      generatedKey={state.generatedKey}
+      label={state.label}
+      message={state.message}
+      publicKeys={state.publicKeys}
+      onCopyGeneratedKey={async () => {
+        if (state.generatedKey) {
+          await navigator.clipboard.writeText(state.generatedKey);
+          patchState({ message: "생성된 키를 복사했습니다." });
+        }
+      }}
+      onCreate={createPublicApiKey}
+      onLabelChange={(label) => patchState({ label })}
+      onRefresh={loadPublicApiKeys}
+      onRevoke={revokePublicApiKey}
+    />
+  );
+}
+
+type LoginHistoryState = {
+  events: AuditEvent[] | null;
+  message: string | null;
+};
+
+function LoginHistorySection() {
+  const [state, setState] = useState<LoginHistoryState>({ events: null, message: null });
+
+  const loadLoginEvents = useCallback(async () => {
+    setState((current) => ({ ...current, message: null }));
+    try {
+      const [logins, logouts] = await Promise.all([
+        requestJson<AuditEvent[]>("/admin/ops/audit-events?limit=50&action=admin_auth.login"),
+        requestJson<AuditEvent[]>("/admin/ops/audit-events?limit=50&action=admin_auth.logout")
+      ]);
+      setState({
+        events: [...logins, ...logouts]
+          .sort((left, right) => right.occurred_at.localeCompare(left.occurred_at))
+          .slice(0, 50),
+        message: null
+      });
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        message: error instanceof Error ? error.message : String(error)
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadLoginEvents();
+  }, [loadLoginEvents]);
+
+  return (
+    <LoginHistoryPanel
+      events={state.events}
+      message={state.message}
+      onRefresh={loadLoginEvents}
+    />
+  );
+}
 
 function VWorldKeyForm({
   apiKey,
@@ -209,6 +361,189 @@ function VWorldKeyForm({
       </div>
       {saved ? <p className="form-note">지도 설정을 저장했습니다.</p> : null}
     </form>
+  );
+}
+
+function LoginHistoryPanel({
+  events,
+  message,
+  onRefresh
+}: {
+  events: AuditEvent[] | null;
+  message: string | null;
+  onRefresh: () => Promise<void>;
+}) {
+  return (
+    <div className="form-grid">
+      <div className="button-row">
+        <button
+          className="button button-secondary"
+          onClick={() => void onRefresh()}
+          type="button"
+        >
+          <RefreshCw size={16} />
+          새로고침
+        </button>
+      </div>
+      <div className="public-key-list">
+        {events === null ? (
+          <p className="form-note">로그인 기록을 불러오는 중입니다.</p>
+        ) : events.length === 0 ? (
+          <p className="form-note">저장된 로그인 기록이 없습니다.</p>
+        ) : (
+          events.map((event) => (
+            <div className="public-key-item" key={event.audit_event_id}>
+              <div>
+                <strong>{loginEventTitle(event)}</strong>
+                <span>{loginEventDetail(event)}</span>
+              </div>
+              <div className="public-key-actions">
+                <span data-state={event.outcome === "succeeded" ? "active" : "revoked"}>
+                  {loginOutcomeLabel(event.outcome)}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      {message ? <p className="form-note">{message}</p> : null}
+    </div>
+  );
+}
+
+function loginEventTitle(event: AuditEvent): string {
+  const payload = event.payload_redacted ?? {};
+  const username =
+    typeof payload.attempted_username === "string" ? payload.attempted_username : "unknown";
+  const type = event.action === "admin_auth.logout" ? "로그아웃" : "로그인";
+  return `${type} · ${username} · ${event.occurred_at}`;
+}
+
+function loginEventDetail(event: AuditEvent): string {
+  const payload = event.payload_redacted ?? {};
+  const reason = typeof payload.reason === "string" ? payload.reason : "-";
+  const ip = event.client_ip_hash ? `ip:${event.client_ip_hash.slice(0, 10)}` : "ip:-";
+  const ua = event.user_agent_hash ? `ua:${event.user_agent_hash.slice(0, 10)}` : "ua:-";
+  return `${reason} · ${ip} · ${ua}`;
+}
+
+function loginOutcomeLabel(outcome: AuditEvent["outcome"]): string {
+  if (outcome === "succeeded") return "성공";
+  if (outcome === "denied") return "거부";
+  if (outcome === "failed") return "실패";
+  return outcome;
+}
+
+function PublicApiKeyPanel({
+  busy,
+  generatedKey,
+  label,
+  message,
+  publicKeys,
+  onCopyGeneratedKey,
+  onCreate,
+  onLabelChange,
+  onRefresh,
+  onRevoke
+}: {
+  busy: boolean;
+  generatedKey: string | null;
+  label: string;
+  message: string | null;
+  publicKeys: PublicApiKeySummary[] | null;
+  onCopyGeneratedKey: () => Promise<void>;
+  onCreate: (event: FormEvent) => Promise<void>;
+  onLabelChange: (value: string) => void;
+  onRefresh: () => Promise<void>;
+  onRevoke: (publicApiKeyId: string) => Promise<void>;
+}) {
+  return (
+    <div className="form-grid">
+      <form className="form-grid" onSubmit={onCreate}>
+        <div className="field">
+          <label htmlFor="public-api-key-label">키 이름</label>
+          <input
+            id="public-api-key-label"
+            maxLength={80}
+            placeholder="운영 콘솔, 테스트 클라이언트"
+            value={label}
+            onChange={(event) => onLabelChange(event.target.value)}
+          />
+        </div>
+        <div className="button-row">
+          <button className="button" disabled={busy} type="submit">
+            <KeyRound size={16} />
+            랜덤 키 생성
+          </button>
+          <button
+            className="button button-secondary"
+            disabled={busy}
+            onClick={() => void onRefresh()}
+            type="button"
+          >
+            <RefreshCw size={16} />
+            새로고침
+          </button>
+        </div>
+        <p className="form-note">
+          DB에 활성 공개 API 키가 없으면 백엔드의 KTG_VWORLD_API_KEY가 기본 key로
+          사용됩니다. 생성된 키는 이 브라우저의 API 요청 key로 적용됩니다.
+        </p>
+      </form>
+      {generatedKey ? (
+        <div className="generated-key-box">
+          <div className="field">
+            <label htmlFor="generated-public-api-key">생성된 키</label>
+            <input
+              id="generated-public-api-key"
+              readOnly
+              value={generatedKey}
+              onFocus={(event) => event.currentTarget.select()}
+            />
+          </div>
+          <button
+            className="button button-secondary"
+            onClick={() => void onCopyGeneratedKey()}
+            type="button"
+          >
+            <Copy size={16} />
+            복사
+          </button>
+          <p className="form-note">이 키는 지금 한 번만 표시됩니다.</p>
+        </div>
+      ) : null}
+      <div className="public-key-list">
+        {publicKeys === null ? (
+          <p className="form-note">공개 API 키 목록을 불러오는 중입니다.</p>
+        ) : publicKeys.length === 0 ? (
+          <p className="form-note">등록된 공개 API 키가 없습니다.</p>
+        ) : (
+          publicKeys.map((item) => (
+            <div className="public-key-item" key={item.public_api_key_id}>
+              <div>
+                <strong>{item.label ?? "이름 없음"}</strong>
+                <span>····{item.key_hint}</span>
+              </div>
+              <div className="public-key-actions">
+                <span data-state={item.state}>{item.state === "active" ? "활성" : "폐기됨"}</span>
+                {item.state === "active" ? (
+                  <button
+                    aria-label={`${item.label ?? item.key_hint} 키 폐기`}
+                    className="icon-button"
+                    disabled={busy}
+                    onClick={() => void onRevoke(item.public_api_key_id)}
+                    type="button"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      {message ? <p className="form-note">{message}</p> : null}
+    </div>
   );
 }
 

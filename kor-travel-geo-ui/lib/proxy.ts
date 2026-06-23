@@ -6,6 +6,7 @@ const KNOWN_ADMIN_ROLE_SET = new Set<string>(KNOWN_ADMIN_ROLES);
 const LIVE_E2E_ADMIN_PROXY_ENV = "KTG_LIVE_E2E_ADMIN_PROXY";
 const LIVE_E2E_ADMIN_ACTOR_ENV = "KTG_LIVE_E2E_ADMIN_ACTOR";
 const LIVE_E2E_ADMIN_ROLES_ENV = "KTG_LIVE_E2E_ADMIN_ROLES";
+const ADMIN_PROXY_SECRET_ENV = "KTG_ADMIN_PROXY_SECRET";
 
 export type ProxyRequestInit = RequestInit & { duplex?: "half" };
 type Env = Record<string, string | undefined>;
@@ -59,17 +60,25 @@ export function liveE2EAdminIdentityFromEnv(
   return { actor, roles };
 }
 
-export function forwardedProxyHeaders(source: Headers, env: Env = process.env): Headers {
+export function forwardedProxyHeaders(
+  source: Headers,
+  env: Env = process.env,
+  sessionIdentity: LiveE2EAdminIdentity | null = null
+): Headers {
   const headers = new Headers();
   source.forEach((value, key) => {
     if (ALLOWED_FORWARD_HEADERS.has(key.toLowerCase())) {
       headers.set(key, value);
     }
   });
-  const identity = liveE2EAdminIdentityFromEnv(env);
+  const identity = sessionIdentity ?? liveE2EAdminIdentityFromEnv(env);
   if (identity !== null) {
     headers.set("X-KTG-Actor", identity.actor);
     headers.set("X-KTG-Roles", identity.roles.join(","));
+    const proxySecret = env[ADMIN_PROXY_SECRET_ENV]?.trim();
+    if (proxySecret) {
+      headers.set("X-KTG-Admin-Proxy-Secret", proxySecret);
+    }
   }
   return headers;
 }

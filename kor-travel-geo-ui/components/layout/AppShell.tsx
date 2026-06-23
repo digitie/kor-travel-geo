@@ -10,6 +10,7 @@ import {
   FolderUp,
   GitBranch,
   ListChecks,
+  LogOut,
   MapPinned,
   Menu,
   RotateCcw,
@@ -20,6 +21,7 @@ import {
   TerminalSquare,
   X
 } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 
@@ -44,6 +46,11 @@ const adminLinks = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+
+  if (pathname === "/login") {
+    return <main className="login-content">{children}</main>;
+  }
 
   return (
     <div className="app-shell" data-menu-open={menuOpen}>
@@ -89,10 +96,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             PostGIS
           </DocumentNavLink>
         </div>
+        <div className="sidebar-footer">
+          <button className="nav-link nav-button" type="button" onClick={() => void logout()}>
+            <LogOut size={17} />
+            로그아웃
+          </button>
+        </div>
       </aside>
       <main className="content">{children}</main>
     </div>
   );
+}
+
+async function logout() {
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } finally {
+    window.location.assign("/login");
+  }
 }
 
 function NavGroup({

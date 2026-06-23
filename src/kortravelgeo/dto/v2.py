@@ -120,6 +120,7 @@ class CandidateV2(FrozenModel):
 
 
 class GeocodeV2Input(FrozenModel):
+    key: Any = Field(default=None, exclude=True)
     query: str | None = Field(default=None, min_length=1, max_length=200)
     road_address: str | None = Field(default=None, min_length=1, max_length=200)
     jibun_address: str | None = Field(default=None, min_length=1, max_length=200)
@@ -160,6 +161,7 @@ class GeocodeV2Response(FrozenModel):
 
 
 class ReverseV2Input(FrozenModel):
+    key: Any = Field(default=None, exclude=True)
     lon: FiniteFloat
     lat: FiniteFloat
     crs: CRS = "EPSG:4326"
@@ -196,6 +198,7 @@ class ReverseV2Response(FrozenModel):
 
 
 class SearchV2Input(Page):
+    key: Any = Field(default=None, exclude=True)
     query: str = Field(min_length=1, max_length=200)
     type: Literal["address", "place", "district", "road", "category"] = "address"
     category_group_code: str | None = Field(default=None, min_length=1, max_length=20)
@@ -241,6 +244,7 @@ class RegionWithinRadiusItem(FrozenModel):
 
 
 class RegionsWithinRadiusInput(FrozenModel):
+    key: Any = Field(default=None, exclude=True)
     lon: float = Field(ge=-180.0, le=180.0)
     lat: float = Field(ge=-90.0, le=90.0)
     radius_km: float = Field(default=3.0, gt=0.0, le=500.0)

@@ -24,7 +24,7 @@ describe("form schemas", () => {
     ).toThrow();
   });
 
-  it("생성된 schema 이름 목록은 GeocodeV2Input을 포함한다", () => {
-    expect(apiSchemaNames).toContain("GeocodeV2Input");
+  it("생성된 schema 이름 목록은 v2 요청 input schema를 포함한다", () => {
+    expect(apiSchemaNames).toContain("GeocodeV2Input-Input");
   });
 });

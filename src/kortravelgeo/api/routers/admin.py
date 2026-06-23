@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, ORJSONResponse, StreamingResponse
 from kortravelgeo.api._jobs import JobQueue
 from kortravelgeo.api.deps import get_client, get_job_queue
 from kortravelgeo.api.security import (
+    KNOWN_ADMIN_ROLES,
     ROLE_DESTRUCTIVE_ADMIN,
     ROLE_REBUILD_OPERATOR,
     ROLE_SOURCE_FILE_MANAGER,
@@ -31,6 +32,7 @@ from kortravelgeo.core.normalize import parse_address
 from kortravelgeo.core.source_categories import CATEGORY_CATALOG, serving_usage_for
 from kortravelgeo.core.source_validation import GroupValidation
 from kortravelgeo.dto.admin import (
+    AdminAuthEventRequest,
     AuditEvent,
     BackupAllowedDirs,
     BackupArtifact,
@@ -68,6 +70,9 @@ from kortravelgeo.dto.admin import (
     NormalizeResponse,
     OpsArtifact,
     PgStatStatementSnapshot,
+    PublicApiKeyCreateRequest,
+    PublicApiKeyCreateResponse,
+    PublicApiKeySummary,
     RestoreCreateRequest,
     RestoreDryRunResult,
     RestoreHotSwapExecuteRequest,
@@ -173,7 +178,7 @@ from kortravelgeo.loaders.epost_server_fetch import (
 )
 from kortravelgeo.settings import Settings, get_settings
 
-router = APIRouter(tags=["admin"])
+router = APIRouter(tags=["admin"], dependencies=[Depends(require_role(*KNOWN_ADMIN_ROLES))])
 _SAFE_TOKEN_RE = re.compile(r"[^0-9A-Za-z가-힣._-]+")
 
 
@@ -301,6 +306,108 @@ async def source_file_categories() -> SourceFileCategoryCatalog:
 
 _SOURCE_MANAGER = Depends(require_role(ROLE_SOURCE_FILE_MANAGER))
 _SOURCE_VIEWER = Depends(require_role(ROLE_SOURCE_FILE_VIEWER, ROLE_SOURCE_FILE_MANAGER))
+_PUBLIC_API_KEY_VIEWER = Depends(
+    require_role(ROLE_SOURCE_FILE_VIEWER, ROLE_SOURCE_FILE_MANAGER, ROLE_DESTRUCTIVE_ADMIN)
+)
+_PUBLIC_API_KEY_MANAGER = Depends(
+    require_role(ROLE_SOURCE_FILE_MANAGER, ROLE_DESTRUCTIVE_ADMIN)
+)
+
+
+@router.post(
+    "/auth-events",
+    response_model=AuditEvent,
+    response_model_exclude_none=True,
+)
+async def record_admin_auth_event(
+    req: AdminAuthEventRequest,
+    request: Request,
+    ctx: RequestContext = Depends(require_role(ROLE_SOURCE_FILE_VIEWER, ROLE_SOURCE_FILE_MANAGER)),
+    client: AsyncAddressClient = Depends(get_client),
+) -> AuditEvent:
+    payload = {
+        "event_type": req.event_type,
+        "attempted_username": req.attempted_username,
+        "reason": req.reason,
+        "next_path": req.next_path,
+        "proxy_actor": ctx.actor,
+    }
+    return await client.record_audit_event(
+        action=f"admin_auth.{req.event_type}",
+        actor_type="ui",
+        actor_id=req.attempted_username or ctx.actor,
+        outcome=req.outcome,
+        payload=payload,
+        resource_type="admin_session",
+        error_code=req.reason if req.outcome in {"denied", "failed"} else None,
+        client_ip=req.client_ip,
+        user_agent=req.user_agent,
+        request_id=request.headers.get("x-request-id"),
+        trace_id=request.headers.get("traceparent"),
+    )
+
+
+@router.get(
+    "/public-api-keys",
+    response_model=list[PublicApiKeySummary],
+    response_model_exclude_none=True,
+)
+async def list_public_api_keys(
+    limit: int = Query(default=100, ge=1, le=500),
+    _ctx: RequestContext = _PUBLIC_API_KEY_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> list[PublicApiKeySummary]:
+    return await client.list_public_api_keys(limit=limit)
+
+
+@router.post(
+    "/public-api-keys",
+    response_model=PublicApiKeyCreateResponse,
+    response_model_exclude_none=True,
+)
+async def create_public_api_key(
+    req: PublicApiKeyCreateRequest,
+    request: Request,
+    ctx: RequestContext = _PUBLIC_API_KEY_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> PublicApiKeyCreateResponse:
+    result = await client.create_public_api_key(label=req.label, created_by=ctx.actor)
+    await client.record_audit_event(
+        action="public_api_key.create",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="succeeded",
+        payload={"label": req.label, "key_hint": result.item.key_hint},
+        resource_type="public_api_key",
+        resource_id=result.item.public_api_key_id,
+        **_audit_request(request),
+    )
+    return result
+
+
+@router.delete(
+    "/public-api-keys/{public_api_key_id}",
+    response_model=PublicApiKeySummary,
+    response_model_exclude_none=True,
+)
+async def revoke_public_api_key(
+    public_api_key_id: str,
+    request: Request,
+    ctx: RequestContext = _PUBLIC_API_KEY_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> PublicApiKeySummary:
+    result = await client.revoke_public_api_key(public_api_key_id, revoked_by=ctx.actor)
+    await client.record_audit_event(
+        action="public_api_key.revoke",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="succeeded",
+        payload={"key_hint": result.key_hint},
+        resource_type="public_api_key",
+        resource_id=result.public_api_key_id,
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.post(

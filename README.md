@@ -86,6 +86,7 @@ uv pip install -e ".[api,dev]"
 test -f .env || cp .env.example .env
 
 # .env의 KTG_PG_DSN이 이미 동작 중인 PostgreSQL/PostGIS를 가리켜야 합니다.
+# 공개 REST API key를 UI에서 생성하기 전에는 KTG_VWORLD_API_KEY가 v1/v2 기본 key입니다.
 ktgctl init-db
 uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12501 --reload
 ```
@@ -111,7 +112,7 @@ npm run gen:types
 npm run dev -- --port 12505
 ```
 
-`kor-travel-geo-ui`는 DB에 직접 연결하지 않습니다. 브라우저 요청은 Next.js route handler를 거쳐 백엔드 REST API로 프록시됩니다.
+`kor-travel-geo-ui`는 DB에 직접 연결하지 않습니다. 브라우저 요청은 Next.js route handler를 거쳐 백엔드 REST API로 프록시됩니다. Admin UI 로그인 password hash와 session/admin proxy secret은 실제 `.env.local`과 루트 `.env`에만 두고 git에는 커밋하지 않습니다.
 
 ## 라이브러리 예제
 

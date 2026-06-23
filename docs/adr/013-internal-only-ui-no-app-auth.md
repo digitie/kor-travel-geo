@@ -1,6 +1,6 @@
 # ADR-013: 프론트엔드 UI는 내부망 전용, 애플리케이션 인증 없음
 
-- 상태: accepted
+- 상태: superseded by ADR-064
 - 날짜: 2026-05-22
 - 결정자: human
 
@@ -24,3 +24,9 @@
 
 ## 후속
 - (open) 운영 환경별 네트워크 정책 문서 정리
+
+## 대체
+
+2026-06-23에 ADR-064가 이 결정을 대체했다. Admin UI는 여전히 내부 운영 콘솔이지만,
+단일 admin 로그인, UI proxy shared secret, backend admin role gate를 애플리케이션 레벨
+보호 장치로 둔다.

@@ -9,6 +9,7 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BeforeValidator
 
 from kortravelgeo.api.deps import get_client
+from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.api.vworld import (
     VWorldErrorEnvelope,
     VWorldGeocodeEnvelope,
@@ -35,6 +36,7 @@ async def geocode(
     fallback: Literal["off", "local_only", "api"] = "local_only",
     sig_cd: str | None = Query(default=None, pattern=r"^(\d{2}|\d{5})$"),
     bjd_cd: str | None = Query(default=None, pattern=r"^(\d{8}|\d{10})$"),
+    _api_key: None = Depends(require_public_api_key),
     client: AsyncAddressClient = Depends(get_client),
 ) -> ORJSONResponse:
     response = await client._geocode_v1(

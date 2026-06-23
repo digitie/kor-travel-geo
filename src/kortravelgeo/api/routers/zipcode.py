@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 
 from kortravelgeo.api.deps import get_client
+from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.dto.zipcode import ZipcodeResponse
 
@@ -18,6 +19,7 @@ async def zipcode(
     y: float | None = None,
     bd_mgt_sn: str | None = Query(default=None, min_length=1, max_length=25),
     include_bulk: bool = True,
+    _api_key: None = Depends(require_public_api_key),
     client: AsyncAddressClient = Depends(get_client),
 ) -> ZipcodeResponse:
     point = (x, y) if x is not None and y is not None else None
@@ -27,4 +29,3 @@ async def zipcode(
         bd_mgt_sn=bd_mgt_sn,
         include_bulk=include_bulk,
     )
-

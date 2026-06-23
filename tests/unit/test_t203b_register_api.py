@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from kortravelgeo.core.source_validation import GroupValidation
 
 _SETTINGS = Settings(
+    _env_file=None,
     admin_trusted_proxy_cidrs="127.0.0.0/8",
     geoip_gate_mode="off",
     rustfs_enabled=True,

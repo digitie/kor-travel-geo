@@ -14,6 +14,15 @@
 
 모든 백엔드 키는 `Settings`에서 `SecretStr`로 저장되어 로그·예외 메시지에 노출되지 않는다. 운영에서는 `.env` 권한 600 또는 systemd `EnvironmentFile`, 그것도 안 되면 vault(HashiCorp Vault / sops / age) 사용. Git에 평문으로 커밋 금지 — `pre-commit`에 `detect-secrets` 또는 `gitleaks` 추가 권장.
 
+## `kor-travel-geo` 공개 REST API key
+
+`/v1/address/*`와 `/v2/*` 공개 REST API는 외부/비신뢰 클라이언트에 VWorld와 같은 query
+parameter `key`를 요구한다. Admin UI `/admin/settings`에서 랜덤 key를 생성하면 DB에는
+SHA-256 hash만 저장되고 plaintext key는 생성 직후 한 번만 반환된다. 활성 DB key가 하나 이상
+있으면 DB key만 유효하다. 아직 UI에서 생성한 활성 DB key가 없으면 `KTG_VWORLD_API_KEY`가
+기본 `key`로 쓰인다. Admin API와 같은 trusted proxy identity가 확인된 요청은 로컬 운영 UI
+호출로 보고 공개 API key 검증을 우회한다.
+
 ## vworld OpenAPI
 
 - **발급처**: https://www.vworld.kr/dev/v4api.do

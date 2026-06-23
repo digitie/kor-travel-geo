@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   hasLiveAdminProxyRole,
   isLiveE2EEnabled,
+  loginLiveAdmin,
   proxyGet
 } from "./_live";
 
@@ -18,8 +19,9 @@ const SOURCE_ROLE_HINT =
   "Run with KTG_LIVE_E2E_ADMIN_PROXY=1 and source_file_viewer role for source-file admin reads";
 
 test.describe("LIVE admin API read-only contracts", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ request }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdmin(request);
   });
 
   test("runtime config endpoint returns a JSON object", async ({ request }) => {
@@ -261,8 +263,9 @@ test.describe("LIVE admin API read-only contracts", () => {
 });
 
 test.describe("LIVE source-files admin API read-only contracts", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ request }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdmin(request);
     test.skip(!hasLiveAdminProxyRole("source_file_viewer"), SOURCE_ROLE_HINT);
   });
 

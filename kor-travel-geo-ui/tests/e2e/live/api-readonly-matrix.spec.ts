@@ -1,6 +1,14 @@
 import { expect, test, type APIResponse } from "@playwright/test";
 
-import { KNOWN, expectInKorea, expectNearKnown, isLiveE2EEnabled, proxyGet, proxyPost } from "./_live";
+import {
+  KNOWN,
+  expectInKorea,
+  expectNearKnown,
+  isLiveE2EEnabled,
+  loginLiveAdmin,
+  proxyGet,
+  proxyPost
+} from "./_live";
 
 // Broad LIVE public API matrix.
 //
@@ -34,8 +42,9 @@ function expectV1Envelope(body: Row, operation: string): Row {
 }
 
 test.describe("LIVE public API read-only matrix", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ request }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdmin(request);
   });
 
   const v1GeocodeCases: Array<{ name: string; params: Record<string, string | number | boolean> }> = [
@@ -49,7 +58,7 @@ test.describe("LIVE public API read-only matrix", () => {
     { name: "known road bjd_cd hint", params: { address: KNOWN.address, bjd_cd: KNOWN.bjdCd } },
     { name: "known road crs explicit", params: { address: KNOWN.address, crs: "EPSG:4326" } },
     { name: "known road abbreviated", params: { address: "서울 중구 세종대로 110" } },
-    { name: "known parcel default", params: { address: "서울특별시 중구 태평로1가 31", type: "parcel" } },
+    { name: "known parcel default", params: { address: "서울특별시 중구 정동 5-5", type: "parcel" } },
     { name: "known road spaced", params: { address: "  서울특별시 중구 세종대로 110  " } }
   ];
 
@@ -259,8 +268,9 @@ test.describe("LIVE public API read-only matrix", () => {
 });
 
 test.describe("LIVE public API validation matrix", () => {
-  test.beforeEach(() => {
+  test.beforeEach(async ({ request }) => {
     test.skip(!isLiveE2EEnabled(), "Live full-stack test — run with LIVE_E2E=1 and the stack up");
+    await loginLiveAdmin(request);
   });
 
   const v2BadRequests: Array<{ name: string; path: string; body: Row; field?: string }> = [
