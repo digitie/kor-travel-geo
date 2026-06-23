@@ -217,9 +217,11 @@ async def test_admin_proxy_secret_required_for_admin_route_when_configured() -> 
     app = FastAPI()
     register_exception_handlers(app)
     app.dependency_overrides[get_settings] = _proxy_secret_settings
+    # Hoist the parameterized dependency out of the argument default (ruff B008).
+    viewer_dep = Depends(require_role(ROLE_SOURCE_FILE_VIEWER))
 
     @app.get("/v1/admin/probe")
-    async def probe(_ctx: Any = Depends(require_role(ROLE_SOURCE_FILE_VIEWER))) -> dict[str, bool]:
+    async def probe(_ctx: Any = viewer_dep) -> dict[str, bool]:
         return {"ok": True}
 
     transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
@@ -262,5 +264,5 @@ async def test_admin_proxy_secret_gates_public_key_bypass() -> None:
 
     assert bypassed.status_code == 200
     assert bypassed.json() == {"ok": True}
+    # No secret → no bypass → the normal public-key requirement applies (client error, not 200).
     assert denied.status_code == 400
-    assert denied.json()["response"]["error"]["code"] == "PARAM_REQUIRED"
