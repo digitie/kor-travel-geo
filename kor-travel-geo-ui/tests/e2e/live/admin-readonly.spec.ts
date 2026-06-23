@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { loginLiveAdmin, loginLiveAdminPage, proxyGet } from "./_live";
+import {
+  expectNoErrorScreen,
+  hasLiveAdminProxyRole,
+  loginLiveAdmin,
+  loginLiveAdminPage,
+  proxyGet
+} from "./_live";
 
 // Layer 3 — LIVE full-stack admin console (real browser over the LIVE backend + DB, NO mocking).
 //
@@ -13,10 +19,9 @@ import { loginLiveAdmin, loginLiveAdminPage, proxyGet } from "./_live";
 
 const TIMEOUT = 15_000;
 
-/** The app error boundary renders "This page couldn't load…"; assert it never appears. */
-async function expectNoErrorScreen(page: import("@playwright/test").Page): Promise<void> {
-  await expect(page.getByText("This page couldn")).toHaveCount(0);
-}
+// expectNoErrorScreen is shared from ./_live (checks BOTH the English "This page couldn't
+// load…" and the Korean "이 화면을 불러오지 못했습니다" error-boundary copy), so a Korean-only error
+// screen is caught here too.
 
 test.describe("LIVE admin read-only", () => {
   test.beforeEach(async ({ page, request }) => {
@@ -80,8 +85,8 @@ test.describe("LIVE admin read-only", () => {
     request
   }) => {
     test.skip(
-      process.env.KTG_LIVE_E2E_ADMIN_PROXY !== "1",
-      "Run with KTG_LIVE_E2E_ADMIN_PROXY=1 and source_file_viewer role to verify admin role proxy"
+      !hasLiveAdminProxyRole("source_file_viewer"),
+      "Run with KTG_LIVE_E2E_ADMIN_PROXY=1, KTG_LIVE_E2E_ADMIN_ACTOR set, and source_file_viewer in KTG_LIVE_E2E_ADMIN_ROLES"
     );
 
     // source-file-categories is a static catalog with no role guard — it returns

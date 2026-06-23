@@ -69,7 +69,19 @@ export async function expectNoErrorScreen(page: Page): Promise<void> {
 }
 
 export function hasLiveAdminProxyRole(role: string): boolean {
-  if (process.env.KTG_LIVE_E2E_ADMIN_PROXY !== "1") {
+  // Mirror the proxy's actual role-header injection precondition
+  // (lib/proxy.ts `liveE2EAdminIdentityFromEnv`): the proxy injects X-KTG-Actor/X-KTG-Roles
+  // only when the toggle is enabled AND KTG_LIVE_E2E_ADMIN_ACTOR is non-empty AND the role is
+  // present. If we skipped on a looser condition, a partial env (e.g. PROXY=1 + ROLES set but
+  // ACTOR unset) would NOT skip, the proxy would inject no identity, and the backend role gate
+  // would 403 — turning a misconfig into a confusing hard failure instead of a clean skip.
+  // Keep in sync with liveE2EAdminIdentityFromEnv.
+  const toggle = process.env.KTG_LIVE_E2E_ADMIN_PROXY;
+  const enabled = toggle === "1" || toggle?.toLowerCase() === "true";
+  if (!enabled) {
+    return false;
+  }
+  if (!(process.env.KTG_LIVE_E2E_ADMIN_ACTOR ?? "").trim()) {
     return false;
   }
   return (process.env.KTG_LIVE_E2E_ADMIN_ROLES ?? "")

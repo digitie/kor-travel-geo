@@ -8,22 +8,27 @@ const FOCUSABLE =
  * dialog behaves the same for keyboard users: focus moves into the dialog on open, Tab is
  * trapped within it, Escape closes it, and focus returns to the triggering element on close.
  *
- * The hook assumes the dialog component is conditionally mounted while open (mount === open),
- * which is how the admin modals render. Focus restore is best-effort: it is skipped when the
- * previously-focused trigger has been detached (e.g. a virtual-table row re-windowed while the
- * modal was open) so focus is not dumped to the document body.
+ * Most callers mount the dialog only while open (mount === open) and can omit `open` (it
+ * defaults to true). Always-mounted overlays that toggle via CSS (e.g. the mobile nav drawer)
+ * pass `open` so the focus move/trap/restore and the Escape handler engage only while shown.
+ * Focus restore is best-effort: it is skipped when the previously-focused trigger has been
+ * detached (e.g. a virtual-table row re-windowed while the modal was open) so focus is not
+ * dumped to the document body.
  */
 export function useModalA11y({
   dialogRef,
   onClose,
-  initialFocusRef
+  initialFocusRef,
+  open = true
 }: {
   dialogRef: RefObject<HTMLElement | null>;
   onClose: () => void;
   initialFocusRef?: RefObject<HTMLElement | null>;
+  open?: boolean;
 }): void {
   // Move focus into the modal on open; restore it to the trigger on close.
   useEffect(() => {
+    if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const target =
       initialFocusRef?.current ??
@@ -33,10 +38,11 @@ export function useModalA11y({
     return () => {
       if (previouslyFocused?.isConnected) previouslyFocused.focus();
     };
-  }, [dialogRef, initialFocusRef]);
+  }, [dialogRef, initialFocusRef, open]);
 
   // Escape closes; Tab is trapped within the dialog.
   useEffect(() => {
+    if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -59,5 +65,5 @@ export function useModalA11y({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [dialogRef, onClose]);
+  }, [dialogRef, onClose, open]);
 }
