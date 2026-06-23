@@ -312,7 +312,12 @@ test.describe("LIVE public API validation matrix", () => {
   for (const item of v1BadRequests) {
     test(`v1 validation ${item.name}`, async ({ request }) => {
       const res = await proxyGet(request, item.path, item.params);
-      expect(res.status()).toBeGreaterThanOrEqual(400);
+      // Must be a 4xx client error, not a 5xx server fault. `>= 400` alone would let a
+      // 500/503 regression on a malformed-input path pass as long as the body still carried
+      // status ERROR; the v2 sibling matrix pins toBe(400), so keep v1 in the client range too.
+      const status = res.status();
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(status).toBeLessThan(500);
       const body = await json(res);
       expect(typeof body.response).toBe("object");
       expect((body.response as Row).status).toBe("ERROR");

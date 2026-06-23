@@ -97,6 +97,13 @@ textarea {
   display: none;
 }
 
+/* In-drawer close (X). Hidden on desktop where the sidebar is a persistent rail; shown inside
+   the mobile drawer (see the max-width:980px block) so the close affordance is visible above
+   the drawer's own stacking context instead of behind it under the topbar toggle. */
+.sidebar-close {
+  display: none;
+}
+
 .sidebar {
   border-right: 1px solid var(--line);
   background: var(--surface-subtle);
@@ -2032,6 +2039,23 @@ textarea {
 
   .app-shell[data-menu-open="true"] .sidebar {
     transform: translateX(0);
+  }
+
+  .sidebar-close {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    display: inline-grid;
+    height: 36px;
+    justify-items: center;
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    width: 36px;
+    z-index: 1;
   }
 
   .app-shell[data-menu-open="true"] .sidebar-backdrop {

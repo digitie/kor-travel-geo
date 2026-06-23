@@ -274,11 +274,10 @@ function addGeometryOverlay(map: MapLibreMap, geometry: MapGeometryOverlay): voi
 }
 
 function removeGeometryOverlay(map: MapLibreMap): void {
-  // A removed/torn-down map has no internal style, so getLayer/getSource would
-  // throw "this.style is undefined". This happens when this overlay effect's
-  // cleanup runs after the underlying VWorld map was destroyed (remount/unmount
-  // on apiKey/layerType change or navigation). Bail out instead of crashing.
-  if (!mapStyleAvailable(map)) return;
+  // Cleanup can run after the underlying VWorld map was torn down (remount/unmount on
+  // apiKey/layerType change or navigation). A removed map has its internal `style` deleted,
+  // so getLayer/getSource would throw "this.style is undefined". Bail out instead of crashing.
+  if (!isMapUsable(map)) return;
   for (const layerId of [
     OVERLAY_POINT_LAYER_ID,
     OVERLAY_LINE_LAYER_ID,
@@ -293,10 +292,17 @@ function removeGeometryOverlay(map: MapLibreMap): void {
   }
 }
 
-function mapStyleAvailable(map: MapLibreMap): boolean {
-  // `style` is maplibre-internal (not in the public Map type); getLayer/getSource
-  // read it and it is undefined once the map is removed. Probe it defensively.
-  return Boolean((map as unknown as { style?: unknown }).style);
+/**
+ * True when `map` can still service getLayer/getSource. maplibre sets the public `_removed`
+ * flag and deletes the map's `style` on Map.remove(); getLayer/getSource read `style` and
+ * throw once it is gone. Both are public Map members, but `style` is typed as always-present,
+ * so probe through a narrow cast. `_removed` is the canonical teardown signal; the `style`
+ * check additionally covers a transient styleless window (setStyle(null) in flight). Revisit
+ * on maplibre-gl major upgrades.
+ */
+export function isMapUsable(map: MapLibreMap): boolean {
+  const internals = map as unknown as { _removed?: boolean; style?: unknown };
+  return !internals._removed && Boolean(internals.style);
 }
 
 function boundsFromBBox(

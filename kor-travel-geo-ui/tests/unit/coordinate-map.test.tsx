@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CoordinateMap } from "@/components/vworld/CoordinateMap";
+import { CoordinateMap, isMapUsable } from "@/components/vworld/CoordinateMap";
 import { CoordinateMapSkeleton } from "@/components/vworld/LazyCoordinateMap";
 
 vi.mock("maplibre-gl", () => ({
@@ -37,5 +37,22 @@ describe("CoordinateMap", () => {
 
     expect(screen.getByLabelText("VWorld 지도 로딩")).toBeInTheDocument();
     expect(screen.getByText("지도 로딩 중")).toBeInTheDocument();
+  });
+});
+
+describe("isMapUsable (overlay teardown guard)", () => {
+  type MapArg = Parameters<typeof isMapUsable>[0];
+  const fakeMap = (props: Record<string, unknown>): MapArg => props as unknown as MapArg;
+
+  it("_removed된 map이면 false — overlay cleanup이 getLayer 호출 전에 빠져 크래시를 막는다", () => {
+    expect(isMapUsable(fakeMap({ _removed: true, style: undefined }))).toBe(false);
+  });
+
+  it("style이 사라진 map이면 false (setStyle(null) 진행 중 등)", () => {
+    expect(isMapUsable(fakeMap({ _removed: false, style: undefined }))).toBe(false);
+  });
+
+  it("살아있는 map이면 true", () => {
+    expect(isMapUsable(fakeMap({ _removed: false, style: {} }))).toBe(true);
   });
 });
