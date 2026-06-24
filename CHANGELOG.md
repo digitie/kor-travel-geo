@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Fixed
+- Admin UI 로그인 CSRF origin 검사에 `KTG_UI_PUBLIC_ORIGINS` 신뢰 목록을 추가했다. TLS 종단
+  프록시가 `X-Forwarded-Proto=https`를 주입하지 못해 내부 origin이 `http`로 재구성되는 운영
+  환경에서도, 명시한 공개 HTTPS origin의 로그인 요청은 허용하고 나머지 외부 origin은 계속 거부한다.
 - Admin 로그인·공개 API key 보안 후속을 보강했다. 잘못된 username에서도 PBKDF2를 수행해
   username timing 차이를 줄이고, 로그아웃 감사 기록은 유효 세션 폐기 때만 남긴다.
   공개 API key 검증의 process-local TTL 캐시를 제거해 key 폐기가 모든 API worker에 즉시

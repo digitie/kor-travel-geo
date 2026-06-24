@@ -2,6 +2,68 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-24 (PR #403 n150 배포와 full live e2e 완료, by codex)
+
+**작업**: concierge #127 origin allowlist 반영 PR #403을 n150에 배포하고 Windows Playwright full live
+e2e를 Chromium/Firefox 모두 실행했다.
+
+**배포**:
+- `~/kor-travel-geo` 배포 복사본에 현재 PR 소스를 rsync로 반영했다. `.env`, `.env.local`, `data`,
+  `artifacts`, `node_modules`, `.next`는 배포 중 보존했다.
+- `~/kor-travel-docker-manager/.env.kor-travel-geo-ui.local`에 `KTG_UI_PUBLIC_ORIGINS`를 실제
+  `KTDM_PROD_URL_GEO` 값으로 설정했다. 값 자체는 로그와 문서에 남기지 않았다.
+- `backend/ktd_venv/bin/ktdctl ensure geo --build --recreate --stream`으로 API/UI 이미지를 빌드하고
+  컨테이너를 재생성했다. 명령은 기존과 같이 `/data/juso` 원천 파일 mount empty precheck에서 exit 1로
+  끝났지만, 새 API/UI 컨테이너는 healthy다.
+
+**smoke**:
+- `kor-travel-geo-api-latest`, `kor-travel-geo-ui-latest`, `kor-travel-geo-postgres` 모두 healthy.
+- UI 컨테이너에 `KTG_UI_PUBLIC_ORIGINS`가 주입되어 있다.
+- `/v1/readyz` 200, `/login` 200.
+- `/api/auth/login` JSON POST에서 allowlisted 공개 origin은 CSRF를 통과해 잘못된 credential 기준
+  `401 INVALID_CREDENTIALS`, 임의 origin은 `403 INVALID_ORIGIN`으로 갈라짐을 확인했다.
+- v1 geocode smoke는 `서울특별시 중구 세종대로 110` 기준 `status=OK`,
+  `bd_mgt_sn=11140103200500100011000000`, `zip_no=04524`, 좌표
+  `126.97770627907322,37.56620502187806`로 응답했다.
+
+**full live e2e**:
+- Windows Playwright, n150 `PLAYWRIGHT_BASE_URL=http://192.168.1.14:12505`,
+  `KTG_LIVE_E2E_API_BASE_URL=http://192.168.1.14:12501`,
+  `KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS=1`.
+- Chromium: `npx playwright test --config playwright.config.ts --project chromium --workers 1 tests/e2e/live`
+  → 227 passed, 3 skipped.
+- Firefox: `npx playwright test --config playwright.config.ts --project firefox --workers 1 tests/e2e/live`
+  → 227 passed, 3 skipped.
+
+## 2026-06-24 (concierge #127 origin allowlist 반영과 n150 geo 데이터 확인, by codex)
+
+**작업**: `kor-travel-concierge` PR #127의 공개 도메인 로그인 `403 INVALID_ORIGIN` 수정 내용을
+`kor-travel-geo-ui`에 맞춰 반영했다. TLS 종단 프록시가 `X-Forwarded-Proto=https`를 주입하지 않아
+요청 origin이 내부 `http`로 재구성되는 경우를 위해 `KTG_UI_PUBLIC_ORIGINS` 신뢰 목록을 추가했다.
+브라우저 `Origin`이 재구성 origin과 다르면 명시된 공개 origin만 추가 허용하고, 그 외 외부 origin은
+계속 거부한다.
+
+**변경**:
+- `requestHasSameOrigin()`이 `KTG_UI_PUBLIC_ORIGINS`를 쉼표 구분 목록으로 읽고 정상 URL origin만
+  비교하도록 했다. 잘못된 설정 항목은 무시한다.
+- `.env.example`, `.env.prod.example`, `kor-travel-geo-ui/.env.local.example`에 운영 설정 예시를
+  추가했다.
+- TLS 프록시 proto 누락 상황의 origin 허용/거부 단위 테스트를 추가했다.
+
+**검증**:
+- WSL ext4 테스트 미러에서 `npm run test -- tests/unit/auth.test.ts`, `npm run type-check`,
+  `npm run lint -- --no-warn-ignored`를 통과했다.
+- WSL ext4 테스트 미러에서 `scripts/frontend_check.sh`를 통과했다.
+- WSL ext4 테스트 미러에서 `npx react-doctor@latest . --offline --verbose --json`을 실행해
+  `ok=true`, error 0, warning 0, diagnostics 0을 확인했다.
+- n150 PostgreSQL의 `public.tl_juso_text`와 `public.mv_geocode_target`은 각각 6,416,637행이다.
+- n150 API에서 `서울특별시 중구 세종대로 110` v1 geocode smoke가 `status=OK`, 좌표
+  `126.97770627907322,37.56620502187806`, `bd_mgt_sn=11140103200500100011000000`,
+  `zip_no=04524`로 응답했다.
+- n150의 API 컨테이너 `/data/juso` 원천 파일 mount는 비어 있다(`0` files). 따라서
+  docker-manager의 source-file precheck는 `/data/juso` empty로 실패할 수 있지만, 현재 DB 적재
+  데이터와 API serving 경로는 정상이다.
+
 ## 2026-06-24 (PR #402 n150 배포와 풀 live e2e 완료, by codex)
 
 **작업**: PR #402(`agent/codex-auth-followups-pr37-pr38`)를 n150에 배포하고 Windows Playwright로

@@ -8,6 +8,7 @@ import {
   createSessionCookieValue,
   hashAdminPasswordForEnv,
   recordLoginFailure,
+  requestHasSameOrigin,
   revokeSessionCookieValue,
   sanitizeLocalPath,
   verifyAdminLogin,
@@ -128,6 +129,18 @@ describe("admin auth", () => {
     expect((init?.headers as Headers).get("x-ktg-admin-proxy-secret")).toBe("proxy-secret");
   });
 
+  it("공개 origin allowlist로 TLS 프록시 proto 누락 로그인 origin을 허용한다", () => {
+    const env = {
+      KTG_UI_PUBLIC_ORIGINS: "https://geo.example.org, https://www.geo.example.org"
+    };
+
+    expect(requestHasSameOrigin(originRequest(null), env)).toBe(true);
+    expect(requestHasSameOrigin(originRequest("http://internal:12505"), env)).toBe(true);
+    expect(requestHasSameOrigin(originRequest("https://geo.example.org"), env)).toBe(true);
+    expect(requestHasSameOrigin(originRequest("https://evil.example"), env)).toBe(false);
+    expect(requestHasSameOrigin(originRequest("https://geo.example.org"), {})).toBe(false);
+  });
+
   it("next 경로는 로컬 경로만 허용한다", () => {
     expect(sanitizeLocalPath("/admin/settings")).toBe("/admin/settings");
     expect(sanitizeLocalPath("https://example.com/admin")).toBe("/debug/geocode");
@@ -144,6 +157,20 @@ async function makeEnv(password: string): Promise<Record<string, string>> {
     ),
     KTG_UI_ADMIN_USERNAME: "admin",
     KTG_UI_SESSION_SECRET: SESSION_SECRET
+  };
+}
+
+function originRequest(origin: string | null): {
+  headers: Headers;
+  nextUrl: { host: string; protocol: string };
+} {
+  const headers = new Headers({ host: "internal:12505" });
+  if (origin !== null) {
+    headers.set("origin", origin);
+  }
+  return {
+    headers,
+    nextUrl: { host: "internal:12505", protocol: "http:" }
   };
 }
 

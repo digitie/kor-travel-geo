@@ -9,6 +9,7 @@ const ADMIN_PASSWORD_HASH_ENV = "KTG_UI_ADMIN_PASSWORD_HASH";
 const SESSION_SECRET_ENV = "KTG_UI_SESSION_SECRET";
 const INTERNAL_BASE_ENV = "KTG_API_INTERNAL_URL";
 const ADMIN_PROXY_SECRET_ENV = "KTG_ADMIN_PROXY_SECRET";
+const PUBLIC_ORIGINS_ENV = "KTG_UI_PUBLIC_ORIGINS";
 const AUTH_AUDIT_ACTOR = "ui-auth-rate-limit";
 const AUTH_AUDIT_ROLES = "source_file_viewer";
 const PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256";
@@ -195,13 +196,20 @@ export function expiredSessionCookieOptions(request: RequestLike | null = null) 
   };
 }
 
-export function requestHasSameOrigin(request: RequestLike): boolean {
+export function requestHasSameOrigin(
+  request: RequestLike,
+  env: Env = process.env
+): boolean {
   const origin = request.headers.get("origin");
   if (!origin) {
     return true;
   }
   try {
-    return normalizeOrigin(origin) === requestOrigin(request);
+    const normalized = normalizeOrigin(origin);
+    if (normalized === requestOrigin(request)) {
+      return true;
+    }
+    return trustedPublicOrigins(env).includes(normalized);
   } catch {
     return false;
   }
@@ -517,6 +525,26 @@ function requestOrigin(request: RequestLike): string {
 function normalizeOrigin(value: string): string {
   const url = new URL(value);
   return `${url.protocol}//${url.host}`.toLowerCase();
+}
+
+function trustedPublicOrigins(env: Env): string[] {
+  const raw = env[PUBLIC_ORIGINS_ENV];
+  if (!raw) {
+    return [];
+  }
+  const origins: string[] = [];
+  for (const part of raw.split(",")) {
+    const trimmed = part.trim();
+    if (!trimmed) {
+      continue;
+    }
+    try {
+      origins.push(normalizeOrigin(trimmed));
+    } catch {
+      // Ignore malformed configured origins; valid entries still apply.
+    }
+  }
+  return origins;
 }
 
 function isHttpsRequest(request: RequestLike | null): boolean {

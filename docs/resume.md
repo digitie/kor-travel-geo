@@ -4,6 +4,17 @@
 
 ## 현재 진척도 (2026-06-24 갱신, by codex)
 
+- ✅ concierge #127 공개 origin allowlist를 `kor-travel-geo-ui`에도 반영했다.
+  `KTG_UI_PUBLIC_ORIGINS`가 설정된 경우 TLS 종단 프록시의 `X-Forwarded-Proto` 누락으로 내부 origin이
+  `http`로 재구성되어도, 명시된 공개 HTTPS origin 로그인 요청은 허용한다. 단위 테스트,
+  `scripts/frontend_check.sh`, React Doctor `ok=true`/warning 0을 WSL ext4 미러에서 통과했다.
+  n150 DB에는 `public.tl_juso_text`/`public.mv_geocode_target`이 각각 6,416,637행 있고,
+  `서울특별시 중구 세종대로 110` v1 geocode smoke도 `status=OK`로 응답했다. n150에는 PR #403
+  소스를 rsync 배포하고 docker-manager UI env-file에 `KTG_UI_PUBLIC_ORIGINS`를 설정한 뒤 새 API/UI
+  이미지를 빌드·재생성했다. `/api/auth/login` origin smoke는 allowlisted 공개 origin `401
+  INVALID_CREDENTIALS`, 임의 origin `403 INVALID_ORIGIN`으로 통과했다. Windows Playwright n150 full
+  live e2e는 Chromium/Firefox 각각 227 passed/3 skipped다. 다만 n150 API 컨테이너의 `/data/juso`
+  원천 파일 mount는 비어 있어 docker-manager source-file precheck는 별도 조치 전 계속 실패할 수 있다.
 - [/ ] Admin 보안 후속(docker-manager #37/#38 참고) 진행 중 — CORS/metrics 항목은 `kor-travel-geo`
   구조상 적용 대상이 아니라 제외하고, 대응되는 보안 항목을 반영했다. username 불일치 시에도 PBKDF2를
   수행하고, 로그인 rate limit은 backend `ops.audit_events` 기반 durable 판정을 우선 사용하며 실패 시
