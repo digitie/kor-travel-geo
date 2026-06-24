@@ -2,6 +2,37 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-24 (PR #402 n150 배포와 풀 live e2e 완료, by codex)
+
+**작업**: PR #402(`agent/codex-auth-followups-pr37-pr38`)를 n150에 배포하고 Windows Playwright로
+n150 대상 풀 live e2e를 Chromium/Firefox 모두 실행했다.
+
+**배포**:
+- n150 실제 SSH 계정은 `digitie@192.168.1.14`이며, `~/kor-travel-geo`는 Git checkout이 아니라
+  rsync 배포용 복사본이다. `.env*`, `data`, `artifacts`, `node_modules`, `.next`는 보존하고 현재 PR
+  소스를 rsync로 반영했다.
+- `~/kor-travel-docker-manager`에서 `backend/ktd_venv/bin/ktdctl ensure geo --build --recreate --stream`을
+  실행해 API/UI 이미지를 새 소스로 빌드하고 컨테이너를 재생성했다.
+- manager의 후속 source check는 `/data/juso`가 비어 있어 `source directory is empty: /data/juso`로
+  exit 1을 반환했다. 다만 API/UI 컨테이너는 새 이미지로 기동했고 `/v1/readyz` 200, `/login` 200,
+  `kor-travel-geo-api-latest`/`kor-travel-geo-ui-latest` healthy를 확인했다.
+
+**live e2e**:
+- Windows Playwright, n150 `PLAYWRIGHT_BASE_URL=http://192.168.1.14:12505`,
+  `KTG_LIVE_E2E_API_BASE_URL=http://192.168.1.14:12501`,
+  `KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS=1`.
+- Chromium: `npx playwright test --config playwright.config.ts --project chromium --workers 1 tests/e2e/live`
+  → 227 passed, 3 skipped.
+- Firefox: `npx playwright test --config playwright.config.ts --project firefox --workers 1 tests/e2e/live`
+  → 227 passed, 3 skipped.
+- 최초 Chromium run에서 `client_ip_hash`를 항상 요구하던 live spec 기대치가 실패했다. n150처럼
+  `KTG_UI_TRUSTED_PROXY_HOPS=0`인 직접 노출 UI는 spoof 가능한 `X-Forwarded-For`를 버리므로
+  `client_ip_hash`가 비는 것이 의도된 정책이다. live spec은 client IP hash를 optional로 보되
+  user-agent hash는 계속 요구하도록 보정했다.
+
+**PR 상태**: PR #402 head `712463e` 기준 GitHub CI `backend`/`frontend`/`openapi`는 모두 green이었다.
+문서 기록 커밋 후 CI를 재확인하고 머지한다.
+
 ## 2026-06-24 (React Doctor 경고 0 정리와 n150 live e2e 준비, by codex)
 
 **작업**: 사용자 추가 지시에 따라 Admin 보안 후속 변경 위에서 React Doctor 경고를 모두 제거했다.

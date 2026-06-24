@@ -11,8 +11,12 @@
   process-local TTL cache와 `KTG_PUBLIC_API_KEY_CACHE_TTL_S`를 제거해 key 폐기가 모든 API worker에 즉시
   반영되게 했다. Admin Settings에는 생성된 1회성 key `지우기` 버튼을 추가했다. WSL 전체 gate는
   backend `pytest -q` 1110 passed/67 skipped, `ruff`, `mypy`, `lint-imports`, OpenAPI check,
-  frontend `scripts/frontend_check.sh`, React Doctor `ok=true`/error 0/warning 0까지 통과했다. 남은
-  작업은 PR 생성, n150 배포, Windows Playwright n150 풀 live e2e, 통과 후 머지다.
+  frontend `scripts/frontend_check.sh`, React Doctor `ok=true`/error 0/warning 0까지 통과했다. PR #402를
+  열었고, n150에는 rsync 배포 후 `ktdctl ensure geo --build --recreate --stream`로 새 API/UI 이미지를
+  빌드·재생성했다. manager source check는 `/data/juso` empty로 exit 1이었지만 API/UI는 healthy이고
+  `/v1/readyz`와 `/login`은 정상이다. Windows Playwright n150 풀 live e2e는
+  `KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS=1` 기준 Chromium/Firefox 각각 227 passed/3 skipped로 통과했다.
+  남은 작업은 문서 커밋 후 PR CI 재확인과 머지다.
 - ✅ Admin 로그인·공개 API key 보안 구현 및 live e2e 완료 — 단일 admin 로그인, httpOnly
   `SameSite=Strict` 세션 cookie, user-agent fingerprint, logout revocation, 로그인 rate limit,
   admin proxy shared secret, trusted proxy peer/role 검증을 추가했다. 공개 v1/v2 REST API는 외부
