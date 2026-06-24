@@ -125,7 +125,10 @@ test.describe("LIVE admin auth and session security", () => {
     expect(["succeeded", "denied", "failed"]).toContain(latest.outcome);
     expect(typeof latest.payload_redacted).toBe("object");
     expect((latest.payload_redacted as Row).attempted_username).toBeTruthy();
-    expect(String(latest.client_ip_hash ?? "").length).toBeGreaterThan(0);
+    // Direct UI deployments intentionally drop untrusted X-Forwarded-For, so client IP can be null.
+    if (latest.client_ip_hash !== null && latest.client_ip_hash !== undefined) {
+      expect(String(latest.client_ip_hash).length).toBeGreaterThan(0);
+    }
     expect(String(latest.user_agent_hash ?? "").length).toBeGreaterThan(0);
   });
 });
