@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, RotateCcw, ShieldAlert, XCircle } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useReducer } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -14,29 +14,65 @@ import {
   postJson
 } from "@/lib/api";
 
+type HotSwapState = {
+  restoreDatabase: string;
+  previousAlias: string;
+  reason: string;
+  plan: RestoreHotSwapPlan | null;
+  windowOpened: MaintenanceWindow | null;
+  execConfirmation: string;
+  rollbackConfirmation: string;
+  result: RestoreHotSwapResult | null;
+  sourceVerify: RestoreSourceVerificationResult | null;
+  rollbackResult: RestoreHotSwapRollbackResult | null;
+  busy: string | null;
+  error: string | null;
+};
+
+const INITIAL_HOTSWAP_STATE: HotSwapState = {
+  restoreDatabase: "",
+  previousAlias: "",
+  reason: "restore hot-swap",
+  plan: null,
+  windowOpened: null,
+  execConfirmation: "",
+  rollbackConfirmation: "",
+  result: null,
+  sourceVerify: null,
+  rollbackResult: null,
+  busy: null,
+  error: null
+};
+
+function hotSwapReducer(state: HotSwapState, patch: Partial<HotSwapState>): HotSwapState {
+  return { ...state, ...patch };
+}
+
 export function HotSwapTab() {
-  const [restoreDatabase, setRestoreDatabase] = useState("");
-  const [previousAlias, setPreviousAlias] = useState("");
-  const [reason, setReason] = useState("restore hot-swap");
-  const [plan, setPlan] = useState<RestoreHotSwapPlan | null>(null);
-  const [windowOpened, setWindowOpened] = useState<MaintenanceWindow | null>(null);
-  const [execConfirmation, setExecConfirmation] = useState("");
-  const [rollbackConfirmation, setRollbackConfirmation] = useState("");
-  const [result, setResult] = useState<RestoreHotSwapResult | null>(null);
-  const [sourceVerify, setSourceVerify] = useState<RestoreSourceVerificationResult | null>(null);
-  const [rollbackResult, setRollbackResult] = useState<RestoreHotSwapRollbackResult | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatchState] = useReducer(hotSwapReducer, INITIAL_HOTSWAP_STATE);
+  const {
+    restoreDatabase,
+    previousAlias,
+    reason,
+    plan,
+    windowOpened,
+    execConfirmation,
+    rollbackConfirmation,
+    result,
+    sourceVerify,
+    rollbackResult,
+    busy,
+    error
+  } = state;
 
   const run = useCallback(async (label: string, fn: () => Promise<void>) => {
-    setBusy(label);
-    setError(null);
+    dispatchState({ busy: label, error: null });
     try {
       await fn();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      dispatchState({ error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(null);
+      dispatchState({ busy: null });
     }
   }, []);
 
@@ -46,10 +82,7 @@ export function HotSwapTab() {
         restore_database: restoreDatabase,
         previous_alias: previousAlias || undefined
       });
-      setPlan(next);
-      setWindowOpened(null);
-      setResult(null);
-      setRollbackResult(null);
+      dispatchState({ plan: next, windowOpened: null, result: null, rollbackResult: null });
     });
 
   const openWindow = () =>
@@ -60,7 +93,7 @@ export function HotSwapTab() {
         reason,
         confirmation: plan.typed_confirmation
       });
-      setWindowOpened(win);
+      dispatchState({ windowOpened: win });
     });
 
   const execute = () =>
@@ -71,7 +104,7 @@ export function HotSwapTab() {
         typed_confirmation: execConfirmation,
         previous_alias: plan.previous_alias
       });
-      setResult(next);
+      dispatchState({ result: next });
     });
 
   const verifySource = () =>
@@ -80,7 +113,7 @@ export function HotSwapTab() {
         "/restores/hot-swap-source-verify",
         {}
       );
-      setSourceVerify(next);
+      dispatchState({ sourceVerify: next });
     });
 
   const rollback = () =>
@@ -91,7 +124,7 @@ export function HotSwapTab() {
         restore_database: plan.restore_database,
         rollback_confirmation: rollbackConfirmation
       });
-      setRollbackResult(next);
+      dispatchState({ rollbackResult: next });
     });
 
   const planBlocked = Boolean(plan && !plan.can_execute);
@@ -118,7 +151,7 @@ export function HotSwapTab() {
             <label htmlFor="hs-restore">복원된 DB 이름 (restore_database)</label>
             <input
               id="hs-restore"
-              onChange={(e) => setRestoreDatabase(e.target.value)}
+              onChange={(e) => dispatchState({ restoreDatabase: e.target.value })}
               value={restoreDatabase}
             />
           </div>
@@ -126,7 +159,7 @@ export function HotSwapTab() {
             <label htmlFor="hs-prev">previous alias (선택 — 비우면 자동 생성)</label>
             <input
               id="hs-prev"
-              onChange={(e) => setPreviousAlias(e.target.value)}
+              onChange={(e) => dispatchState({ previousAlias: e.target.value })}
               value={previousAlias}
             />
           </div>
@@ -193,7 +226,11 @@ export function HotSwapTab() {
             <div className="form-grid">
               <div className="field">
                 <label htmlFor="hs-reason">사유 (reason)</label>
-                <input id="hs-reason" onChange={(e) => setReason(e.target.value)} value={reason} />
+                <input
+                  id="hs-reason"
+                  onChange={(e) => dispatchState({ reason: e.target.value })}
+                  value={reason}
+                />
               </div>
               <button
                 className="button"
@@ -224,7 +261,7 @@ export function HotSwapTab() {
                 </span>
                 <input
                   aria-label="typed confirmation"
-                  onChange={(e) => setExecConfirmation(e.target.value)}
+                  onChange={(e) => dispatchState({ execConfirmation: e.target.value })}
                   value={execConfirmation}
                 />
               </div>
@@ -288,7 +325,7 @@ export function HotSwapTab() {
                   </span>
                   <input
                     aria-label="rollback confirmation"
-                    onChange={(e) => setRollbackConfirmation(e.target.value)}
+                    onChange={(e) => dispatchState({ rollbackConfirmation: e.target.value })}
                     value={rollbackConfirmation}
                   />
                 </div>

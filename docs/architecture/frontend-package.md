@@ -34,7 +34,8 @@ ADR-064에 명시 — Admin UI는 단일 admin 로그인으로 보호한다. pas
 PBKDF2-SHA256 hash를 gitignored `.env.local` 또는 배포 env에만 둔다. 세션은 `httpOnly`
 `SameSite=Strict` cookie와 HMAC 서명 payload를 사용한다. payload는 session id, 발급/만료 시각,
 audience/version, user-agent fingerprint를 담고, logout 시 현재 session id를 process-local
-revocation map에 등록한다. 로그인 실패는 IP 기준 rate limit로 제한한다.
+revocation map에 등록한다. 로그인 실패는 backend `ops.audit_events` 기반 durable rate limit을
+우선 적용하고, audit 조회가 불가능할 때 process-local rate limit로 제한한다.
 
 - 브라우저 → Next.js: 동일 origin. 로그인 middleware가 `/login`과 `/api/auth/*` 외 경로를 막는다.
 - Next.js → 백엔드: Route Handler가 서버 사이드에서 호출한다. `/api/proxy/*`는 로그인 세션을 다시

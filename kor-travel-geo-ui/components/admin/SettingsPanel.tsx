@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, KeyRound, RefreshCw, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Copy, EyeOff, KeyRound, RefreshCw, RotateCcw, Save, Trash2 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import {
@@ -269,6 +269,9 @@ function PublicApiKeysSection() {
         });
       }}
       onCreate={createPublicApiKey}
+      onClearGeneratedKey={() =>
+        patchState({ generatedKey: null, message: "생성된 키 표시를 지웠습니다." })
+      }
       onLabelChange={(label) => patchState({ label })}
       onRefresh={loadPublicApiKeys}
       onRevoke={revokePublicApiKey}
@@ -455,6 +458,7 @@ function PublicApiKeyPanel({
   publicKeys,
   onCopyGeneratedKey,
   onCreate,
+  onClearGeneratedKey,
   onLabelChange,
   onRefresh,
   onRevoke
@@ -466,6 +470,7 @@ function PublicApiKeyPanel({
   publicKeys: PublicApiKeySummary[] | null;
   onCopyGeneratedKey: () => Promise<void>;
   onCreate: (event: FormEvent) => Promise<void>;
+  onClearGeneratedKey: () => void;
   onLabelChange: (value: string) => void;
   onRefresh: () => Promise<void>;
   onRevoke: (publicApiKeyId: string) => Promise<void>;
@@ -521,6 +526,14 @@ function PublicApiKeyPanel({
           >
             <Copy size={16} />
             복사
+          </button>
+          <button
+            className="button button-secondary"
+            onClick={onClearGeneratedKey}
+            type="button"
+          >
+            <EyeOff size={16} />
+            지우기
           </button>
           <p className="form-note">이 키는 지금 한 번만 표시됩니다.</p>
         </div>

@@ -18,13 +18,15 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   }
-  await revokeSessionCookieValue(request.cookies.get(SESSION_COOKIE_NAME)?.value);
-  await recordAuthAuditEvent(request, {
-    attemptedUsername: adminUsernameFromEnv(),
-    eventType: "logout",
-    outcome: "succeeded",
-    reason: "user_logout"
-  });
+  const revoked = await revokeSessionCookieValue(request.cookies.get(SESSION_COOKIE_NAME)?.value);
+  if (revoked) {
+    await recordAuthAuditEvent(request, {
+      attemptedUsername: adminUsernameFromEnv(),
+      eventType: "logout",
+      outcome: "succeeded",
+      reason: "user_logout"
+    });
+  }
   const response = NextResponse.json({ ok: true });
   response.cookies.set(SESSION_COOKIE_NAME, "", expiredSessionCookieOptions(request));
   return response;

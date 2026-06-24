@@ -132,7 +132,13 @@ export function servingUsageNote(category: SourceCategory, usage: SourceServingU
  * "현재 서빙 포함" vs merely "등록됨", so "등록됨" is never read as "활용 중".
  */
 export function activeServingCategorySet(items: readonly SourceMatchSetItem[]): Set<string> {
-  return new Set(items.filter((item) => !item.omitted).map((item) => item.category));
+  const active = new Set<string>();
+  for (const item of items) {
+    if (!item.omitted) {
+      active.add(item.category);
+    }
+  }
+  return active;
 }
 
 export const matchSetStateLabels: Record<SourceMatchSetState, string> = {

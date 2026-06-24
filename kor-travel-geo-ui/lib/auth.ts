@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { clientIpForThrottle } from "@/lib/request-ip";
+import { clientIpForThrottle, trustedClientIp } from "@/lib/request-ip";
 
 export const SESSION_COOKIE_NAME = "ktg_ui_session";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -7,6 +7,10 @@ export const SESSION_TTL_SECONDS = 8 * 60 * 60;
 const ADMIN_USERNAME_ENV = "KTG_UI_ADMIN_USERNAME";
 const ADMIN_PASSWORD_HASH_ENV = "KTG_UI_ADMIN_PASSWORD_HASH";
 const SESSION_SECRET_ENV = "KTG_UI_SESSION_SECRET";
+const INTERNAL_BASE_ENV = "KTG_API_INTERNAL_URL";
+const ADMIN_PROXY_SECRET_ENV = "KTG_ADMIN_PROXY_SECRET";
+const AUTH_AUDIT_ACTOR = "ui-auth-rate-limit";
+const AUTH_AUDIT_ROLES = "source_file_viewer";
 const PASSWORD_HASH_ALGORITHM = "pbkdf2_sha256";
 const PASSWORD_HASH_ITERATIONS = 310_000;
 const SESSION_ALGORITHM = "HMAC";
@@ -44,6 +48,15 @@ type LoginFailureBucket = {
   resetAt: number;
 };
 
+type AuditRow = {
+  occurred_at?: string;
+  outcome?: string;
+  client_ip_hash?: string | null;
+  payload_redacted?: {
+    reason?: unknown;
+  } | null;
+};
+
 const revokedSessionIds = new Map<string, number>();
 const loginFailures = new Map<string, LoginFailureBucket>();
 
@@ -61,10 +74,9 @@ export async function verifyAdminLogin(
   if (!passwordHash || !sessionSecretIsStrong(sessionSecret)) {
     return "misconfigured";
   }
-  if (input.username.trim() !== expectedUsername) {
-    return "invalid";
-  }
-  return (await verifyPassword(input.password, passwordHash)) ? "ok" : "invalid";
+  const passwordMatches = await verifyPassword(input.password, passwordHash);
+  const usernameMatches = constantTimeEqual(input.username.trim(), expectedUsername);
+  return usernameMatches && passwordMatches ? "ok" : "invalid";
 }
 
 export async function hashAdminPasswordForEnv(
@@ -139,17 +151,19 @@ export async function revokeSessionCookieValue(
   value: string | undefined,
   env: Env = process.env,
   nowMs = Date.now()
-): Promise<void> {
+): Promise<boolean> {
   const secret = env[SESSION_SECRET_ENV]?.trim();
   if (!value || !sessionSecretIsStrong(secret)) {
-    return;
+    return false;
   }
   const payload = await decodeSignedSession(value, secret);
   const nowSeconds = Math.floor(nowMs / 1000);
   if (payload !== null && payload.exp > nowSeconds && isBase64UrlString(payload.sid)) {
     cleanupRevokedSessions(nowSeconds);
     revokedSessionIds.set(payload.sid, payload.exp);
+    return true;
   }
+  return false;
 }
 
 export async function requestHasValidSession(
@@ -204,6 +218,53 @@ export function checkLoginRateLimit(
     return { allowed: true };
   }
   return { allowed: false, retryAfterSeconds: Math.max(bucket.resetAt - nowSeconds, 1) };
+}
+
+export async function checkDurableLoginRateLimit(
+  request: RequestLike,
+  env: Env = process.env,
+  nowMs = Date.now()
+): Promise<LoginRateLimitResult | null> {
+  const rows = await fetchLoginAuditRows(env);
+  if (rows === null) {
+    return null;
+  }
+  const nowSeconds = Math.floor(nowMs / 1000);
+  const bucketHash = await durableLoginBucketHash(request, env);
+  const windowStart = nowSeconds - LOGIN_FAILURE_WINDOW_SECONDS;
+  let lastSuccessAt = 0;
+  const failures: number[] = [];
+
+  for (const row of rows) {
+    const occurredAt = parseAuditTime(row.occurred_at);
+    if (occurredAt === null || occurredAt < windowStart || !sameDurableBucket(row, bucketHash)) {
+      continue;
+    }
+    if (row.outcome === "succeeded") {
+      lastSuccessAt = Math.max(lastSuccessAt, occurredAt);
+      continue;
+    }
+    const reason = row.payload_redacted?.reason;
+    if (
+      (row.outcome === "denied" || row.outcome === "failed") &&
+      (reason === "invalid_credentials" || reason === "misconfigured")
+    ) {
+      failures.push(occurredAt);
+    }
+  }
+
+  const countedFailures = failures.filter((occurredAt) => occurredAt > lastSuccessAt);
+  if (countedFailures.length < LOGIN_FAILURE_LIMIT) {
+    return { allowed: true };
+  }
+  const oldestCountedFailure = Math.min(...countedFailures);
+  return {
+    allowed: false,
+    retryAfterSeconds: Math.max(
+      oldestCountedFailure + LOGIN_FAILURE_WINDOW_SECONDS - nowSeconds,
+      1
+    )
+  };
 }
 
 export function recordLoginFailure(request: RequestLike, nowMs = Date.now()): void {
@@ -474,6 +535,66 @@ function loginAttemptKey(request: RequestLike): string {
   // when X-Forwarded-For cannot be trusted, so the brute-force limit cannot be bypassed by
   // rotating a forged header on each attempt.
   return clientIpForThrottle(request);
+}
+
+async function fetchLoginAuditRows(env: Env): Promise<AuditRow[] | null> {
+  const internalBase = env[INTERNAL_BASE_ENV]?.trim() || "http://localhost:12501";
+  const headers = new Headers({
+    "x-ktg-actor": AUTH_AUDIT_ACTOR,
+    "x-ktg-roles": AUTH_AUDIT_ROLES
+  });
+  const proxySecret = env[ADMIN_PROXY_SECRET_ENV]?.trim();
+  if (proxySecret) {
+    headers.set("x-ktg-admin-proxy-secret", proxySecret);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 750);
+  try {
+    const target = new URL("/v1/admin/ops/audit-events", internalBase);
+    target.searchParams.set("action", "admin_auth.login");
+    target.searchParams.set("limit", "500");
+    const response = await fetch(target, {
+      cache: "no-store",
+      headers,
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      return null;
+    }
+    const rows = await response.json();
+    return Array.isArray(rows) ? (rows as AuditRow[]) : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function durableLoginBucketHash(
+  request: RequestLike,
+  env: Env
+): Promise<string | null> {
+  const trustedIp = trustedClientIp(request, env);
+  return trustedIp === null ? null : sha256Hex(trustedIp);
+}
+
+function sameDurableBucket(row: AuditRow, bucketHash: string | null): boolean {
+  return bucketHash === null ? !row.client_ip_hash : row.client_ip_hash === bucketHash;
+}
+
+function parseAuditTime(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const millis = Date.parse(value);
+  return Number.isFinite(millis) ? Math.floor(millis / 1000) : null;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function cleanupLoginFailures(nowSeconds: number): void {

@@ -12,7 +12,7 @@ from kortravelgeo.api.security import resolve_request_context
 from kortravelgeo.exceptions import ApiKeyError
 from kortravelgeo.infra.public_api_keys import (
     PUBLIC_API_KEY_QUERY_PARAM,
-    cached_active_public_api_key_hashes,
+    PublicApiKeyRepository,
     hash_public_api_key,
     public_api_key_matches,
 )
@@ -35,14 +35,10 @@ async def require_public_api_key(
     _validate_public_api_key_shape(key)
     assert key is not None
     engine = _engine_from_request(request)
-    active_hashes = (
-        await cached_active_public_api_key_hashes(
-            engine,
-            ttl_seconds=settings.public_api_key_cache_ttl_s,
-        )
-        if engine is not None
-        else frozenset()
-    )
+    if engine is not None:
+        active_hashes = await PublicApiKeyRepository(engine).active_key_hashes()
+    else:
+        active_hashes = frozenset()
     effective_hashes = active_hashes or _vworld_default_key_hashes(settings)
     if not effective_hashes or not public_api_key_matches(key, effective_hashes):
         raise ApiKeyError("VWorld 호환 인증키가 유효하지 않습니다.")

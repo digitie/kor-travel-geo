@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, RotateCcw, XCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -24,29 +24,70 @@ const STEP_LABELS: Record<WizardStep, string> = {
   4: "4. 확인·실행"
 };
 
+type RestoreWizardState = {
+  artifacts: BackupArtifact[];
+  step: WizardStep;
+  artifactId: string;
+  archivePath: string;
+  mode: RestoreMode;
+  targetDatabase: string;
+  confirmation: string;
+  dryRun: RestoreDryRunResult | null;
+  busy: boolean;
+  error: string | null;
+  submitted: LoadJobStatus | null;
+};
+
+const INITIAL_RESTORE_WIZARD_STATE: RestoreWizardState = {
+  artifacts: [],
+  step: 1,
+  artifactId: "",
+  archivePath: "",
+  mode: "new_database",
+  targetDatabase: "kor_travel_geo_restore",
+  confirmation: "",
+  dryRun: null,
+  busy: false,
+  error: null,
+  submitted: null
+};
+
+function restoreWizardReducer(
+  state: RestoreWizardState,
+  patch: Partial<RestoreWizardState>
+): RestoreWizardState {
+  return { ...state, ...patch };
+}
+
 export function RestoreWizard({
   onSubmitted
 }: {
   onSubmitted?: (result: LoadJobStatus) => void;
 }) {
-  const [artifacts, setArtifacts] = useState<BackupArtifact[]>([]);
-  const [step, setStep] = useState<WizardStep>(1);
-  const [artifactId, setArtifactId] = useState("");
-  const [archivePath, setArchivePath] = useState("");
-  const [mode, setMode] = useState<RestoreMode>("new_database");
-  const [targetDatabase, setTargetDatabase] = useState("kor_travel_geo_restore");
-  const [confirmation, setConfirmation] = useState("");
-  const [dryRun, setDryRun] = useState<RestoreDryRunResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState<LoadJobStatus | null>(null);
+  const [state, dispatchState] = useReducer(
+    restoreWizardReducer,
+    INITIAL_RESTORE_WIZARD_STATE
+  );
+  const {
+    artifacts,
+    step,
+    artifactId,
+    archivePath,
+    mode,
+    targetDatabase,
+    confirmation,
+    dryRun,
+    busy,
+    error,
+    submitted
+  } = state;
 
   const loadArtifacts = useCallback(async () => {
     try {
       const rows = await requestJson<BackupArtifact[]>("/admin/backups?limit=50&state=available");
-      setArtifacts(rows);
+      dispatchState({ artifacts: rows });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      dispatchState({ error: err instanceof Error ? err.message : String(err) });
     }
   }, []);
 
@@ -78,8 +119,7 @@ export function RestoreWizard({
   );
 
   const runDryRun = useCallback(async () => {
-    setBusy(true);
-    setError(null);
+    dispatchState({ busy: true, error: null });
     try {
       const result = await postJson<RestoreDryRunResult>("/admin/restores/dry-run", {
         artifact_id: artifactId || undefined,
@@ -87,26 +127,24 @@ export function RestoreWizard({
         mode,
         target_database: targetDatabase || undefined
       });
-      setDryRun(result);
-      setStep(3);
+      dispatchState({ dryRun: result, step: 3 });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      dispatchState({ error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(false);
+      dispatchState({ busy: false });
     }
   }, [artifactId, archivePath, mode, targetDatabase]);
 
   const submitRestore = useCallback(async () => {
-    setBusy(true);
-    setError(null);
+    dispatchState({ busy: true, error: null });
     try {
       const result = await postJson<LoadJobStatus>("/admin/restores", restoreBody);
-      setSubmitted(result);
+      dispatchState({ submitted: result });
       onSubmitted?.(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      dispatchState({ error: err instanceof Error ? err.message : String(err) });
     } finally {
-      setBusy(false);
+      dispatchState({ busy: false });
     }
   }, [restoreBody, onSubmitted]);
 
@@ -147,7 +185,7 @@ export function RestoreWizard({
             <label htmlFor="rw-artifact">복원할 백업본 (artifact)</label>
             <select
               id="rw-artifact"
-              onChange={(e) => setArtifactId(e.target.value)}
+              onChange={(e) => dispatchState({ artifactId: e.target.value })}
               value={artifactId}
             >
               <option value="">직접 경로 사용 (archive_path)</option>
@@ -163,7 +201,7 @@ export function RestoreWizard({
               <label htmlFor="rw-archive">백업본 직접 경로 (archive_path)</label>
               <input
                 id="rw-archive"
-                onChange={(e) => setArchivePath(e.target.value)}
+                onChange={(e) => dispatchState({ archivePath: e.target.value })}
                 value={archivePath}
               />
             </div>
@@ -172,7 +210,7 @@ export function RestoreWizard({
             <label htmlFor="rw-mode">복원 모드 (mode)</label>
             <select
               id="rw-mode"
-              onChange={(e) => setMode(e.target.value as RestoreMode)}
+              onChange={(e) => dispatchState({ mode: e.target.value as RestoreMode })}
               value={mode}
             >
               <option value="new_database">new_database — 새 DB로 복원 (안전)</option>
@@ -183,7 +221,7 @@ export function RestoreWizard({
             <label htmlFor="rw-target">복원 대상 DB 이름 (target_database)</label>
             <input
               id="rw-target"
-              onChange={(e) => setTargetDatabase(e.target.value)}
+              onChange={(e) => dispatchState({ targetDatabase: e.target.value })}
               value={targetDatabase}
             />
             {mode === "replace_current" ? (
@@ -197,7 +235,7 @@ export function RestoreWizard({
             <button
               className="button"
               disabled={!step1Valid}
-              onClick={() => setStep(2)}
+              onClick={() => dispatchState({ step: 2 })}
               type="button"
             >
               다음 <ArrowRight size={15} />
@@ -208,7 +246,7 @@ export function RestoreWizard({
         <div className="wizard-preview">
           <ManifestPreview artifact={selected} archivePath={archivePath} />
           <div className="button-row">
-            <button className="button secondary" onClick={() => setStep(1)} type="button">
+            <button className="button secondary" onClick={() => dispatchState({ step: 1 })} type="button">
               <ArrowLeft size={15} /> 이전
             </button>
             <button className="button" disabled={busy} onClick={runDryRun} type="button">
@@ -220,10 +258,10 @@ export function RestoreWizard({
         <div className="wizard-dryrun">
           <DryRunReport result={dryRun} />
           <div className="button-row">
-            <button className="button secondary" onClick={() => setStep(2)} type="button">
+            <button className="button secondary" onClick={() => dispatchState({ step: 2 })} type="button">
               <ArrowLeft size={15} /> 이전
             </button>
-            <button className="button" onClick={() => setStep(4)} type="button">
+            <button className="button" onClick={() => dispatchState({ step: 4 })} type="button">
               확인 단계로 <ArrowRight size={15} />
             </button>
           </div>
@@ -244,13 +282,13 @@ export function RestoreWizard({
               </span>
               <input
                 aria-label="typed confirmation"
-                onChange={(e) => setConfirmation(e.target.value)}
+                onChange={(e) => dispatchState({ confirmation: e.target.value })}
                 value={confirmation}
               />
             </div>
           ) : null}
           <div className="button-row">
-            <button className="button secondary" onClick={() => setStep(3)} type="button">
+            <button className="button secondary" onClick={() => dispatchState({ step: 3 })} type="button">
               <ArrowLeft size={15} /> 이전
             </button>
             <button className="button" disabled={!canSubmit} onClick={submitRestore} type="button">

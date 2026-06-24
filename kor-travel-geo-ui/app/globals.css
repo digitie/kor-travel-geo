@@ -668,6 +668,7 @@ textarea {
   max-width: 880px;
   overflow: auto;
   padding: 18px;
+  position: relative;
   width: min(100%, 880px);
 }
 
@@ -1688,8 +1689,8 @@ textarea {
   gap: 8px;
 }
 
-.vtable-row[role="row"] {
-  cursor: inherit;
+.vtable-row[data-clickable="true"] {
+  cursor: pointer;
 }
 
 .vtable-td {

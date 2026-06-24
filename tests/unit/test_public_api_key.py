@@ -38,7 +38,6 @@ def _settings() -> Iterator[None]:
         yield
     finally:
         reset_settings()
-        public_api_keys.invalidate_public_api_key_cache()
 
 
 class _FakeV2Client:
@@ -154,7 +153,11 @@ async def test_trusted_proxy_identity_bypasses_public_key_for_v1_dependency() ->
 async def test_db_active_key_overrides_vworld_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_hashes(*_args: Any, **_kwargs: Any) -> frozenset[str]:
+    calls = 0
+
+    async def fake_hashes(_repo: Any) -> frozenset[str]:
+        nonlocal calls
+        calls += 1
         return frozenset({public_api_keys.hash_public_api_key("db-generated-key")})
 
     monkeypatch.setattr(
@@ -162,7 +165,7 @@ async def test_db_active_key_overrides_vworld_default(
         lambda _req: object(),
     )
     monkeypatch.setattr(
-        "kortravelgeo.api.public_api_key.cached_active_public_api_key_hashes",
+        "kortravelgeo.api.public_api_key.PublicApiKeyRepository.active_key_hashes",
         fake_hashes,
     )
     app = FastAPI()
@@ -191,6 +194,7 @@ async def test_db_active_key_overrides_vworld_default(
     assert fallback.json()["response"]["error"]["code"] == "INVALID_KEY"
     assert generated.status_code == 200
     assert generated.json() == {"ok": True}
+    assert calls == 2
 
 
 @pytest.mark.asyncio

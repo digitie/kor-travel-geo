@@ -4,7 +4,8 @@ import { Archive, Download, FileText, RefreshCw, Trash2, XCircle } from "lucide-
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { HotSwapTab } from "@/components/admin/backups/HotSwapTab";
 import { JobProgress } from "@/components/admin/backups/JobProgress";
-import { inventoryTone, ManifestViewer } from "@/components/admin/backups/ManifestViewer";
+import { inventoryTone } from "@/components/admin/backups/manifest-utils";
+import { ManifestViewer } from "@/components/admin/backups/ManifestViewer";
 import { RestoreReconcilePanel } from "@/components/admin/backups/RestoreReconcilePanel";
 import { RestoreWizard } from "@/components/admin/backups/RestoreWizard";
 import { JsonBlock } from "@/components/ui/JsonBlock";

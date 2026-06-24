@@ -76,12 +76,14 @@ describe("VirtualTable (T-254, TanStack Table + Virtual)", () => {
     expect(screen.getByRole("button", { name: /size ▲/ })).toBeTruthy();
   });
 
-  it("exposes ARIA grid roles in grid mode", () => {
-    render(<VirtualTable columns={columns} rowKey={(r) => r.id} rows={data} />);
-    expect(screen.getByRole("table")).toBeTruthy();
-    expect(screen.getAllByRole("columnheader").length).toBe(2);
-    // 1 header row + 2 data rows
-    expect(screen.getAllByRole("row").length).toBe(3);
+  it("renders virtualized grid markup without pretending to be a semantic table", () => {
+    const { container } = render(
+      <VirtualTable columns={columns} rowKey={(r) => r.id} rows={data} />
+    );
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(container.querySelector(".vtable-grid")).toBeTruthy();
+    expect(container.querySelectorAll(".vtable-th").length).toBe(2);
+    expect(container.querySelectorAll(".vtable-row").length).toBe(2);
   });
 });
 

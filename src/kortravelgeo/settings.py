@@ -64,7 +64,6 @@ class Settings(BaseSettings):
     api_readiness_timeout_ms: int = Field(default=1_000, ge=1)
     api_performance_logging_enabled: bool = False
     api_slow_request_ms: int = Field(default=500, ge=1)
-    public_api_key_cache_ttl_s: int = Field(default=30, ge=0, le=3_600)
     geoip_db_path: Path | None = Path("data/geoip/GeoLite2-Country.mmdb")
     geoip_gate_mode: Literal["strict", "permissive", "off"] = "strict"
     geoip_allow_cidrs: Annotated[tuple[IPv4Network | IPv6Network, ...], NoDecode] = ()

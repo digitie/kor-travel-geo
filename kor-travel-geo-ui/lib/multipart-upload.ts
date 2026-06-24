@@ -70,9 +70,9 @@ export async function uploadSlotFile({
   );
   const multipartUploadId = initiate.multipart_upload_id;
 
-  const partEtags: [number, string][] = [];
   let uploadedBytes = 0;
-  for (let index = 0; index < partsTotal; index += 1) {
+  let completedParts = 0;
+  const uploadPart = async (index: number): Promise<[number, string]> => {
     if (signal?.aborted) {
       throw new ApiError(0, "업로드가 취소되었습니다");
     }
@@ -90,14 +90,18 @@ export async function uploadSlotFile({
     );
     if (!response.ok) {
       const text = await response.text();
-      report({ state: "error", error: text, uploadedBytes, partsDone: index });
+      report({ state: "error", error: text, uploadedBytes, partsDone: completedParts });
       throw new ApiError(response.status, text || `${response.status} part upload failed`);
     }
     const part = (await response.json()) as UploadPartResponse;
-    partEtags.push([part.part_number, part.part_etag]);
     uploadedBytes += blob.size;
-    report({ state: "uploading", uploadedBytes, partsDone: partNumber });
-  }
+    completedParts += 1;
+    report({ state: "uploading", uploadedBytes, partsDone: completedParts });
+    return [part.part_number, part.part_etag];
+  };
+  const partEtags = await Promise.all(
+    Array.from({ length: partsTotal }, (_unused, index) => uploadPart(index))
+  );
 
   report({ state: "completing", uploadedBytes, partsDone: partsTotal });
   const completeBody: MultipartCompleteRequest = { part_etags: partEtags };

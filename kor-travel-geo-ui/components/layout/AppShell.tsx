@@ -74,14 +74,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [menuOpen]);
 
-  // Close the drawer when a nav link is activated. Scoped to anchors so clicking the brand text
-  // or selecting text inside the drawer does not collapse it (the whole-panel onClick did).
-  const handleSidebarClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
-    if ((event.target as HTMLElement).closest("a")) {
-      setMenuOpen(false);
-    }
-  }, []);
-
   // The login page renders standalone (no shell chrome). Placed after all hooks so hook order
   // stays stable across routes (rules of hooks).
   if (pathname === "/login") {
@@ -117,7 +109,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         role={menuOpen ? "dialog" : undefined}
         aria-modal={menuOpen ? true : undefined}
         aria-label={menuOpen ? "내비게이션 메뉴" : undefined}
-        onClick={handleSidebarClick}
       >
         <button
           ref={closeButtonRef}
@@ -132,19 +123,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <strong>kor-travel-geo-ui</strong>
           <span>내부 운영 콘솔</span>
         </div>
-        <NavGroup title="Debug" links={debugLinks} />
-        <NavGroup title="Admin" links={adminLinks} />
+        <NavGroup title="Debug" links={debugLinks} onNavigate={closeMenu} />
+        <NavGroup title="Admin" links={adminLinks} onNavigate={closeMenu} />
         <div className="nav-group">
           <p className="nav-title">Runtime</p>
-          <DocumentNavLink className="nav-link" href="/admin/cache">
+          <DocumentNavLink className="nav-link" href="/admin/cache" onNavigate={closeMenu}>
             <Activity size={17} />
             Metrics
           </DocumentNavLink>
-          <DocumentNavLink className="nav-link" href="/admin/load">
+          <DocumentNavLink className="nav-link" href="/admin/load" onNavigate={closeMenu}>
             <RotateCcw size={17} />
             MV refresh
           </DocumentNavLink>
-          <DocumentNavLink className="nav-link" href="/admin/tables">
+          <DocumentNavLink className="nav-link" href="/admin/tables" onNavigate={closeMenu}>
             <Server size={17} />
             PostGIS
           </DocumentNavLink>
@@ -173,10 +164,12 @@ async function logout() {
 
 function NavGroup({
   title,
-  links
+  links,
+  onNavigate
 }: {
   title: string;
   links: { href: string; label: string; icon: typeof Search }[];
+  onNavigate: () => void;
 }) {
   return (
     <nav className="nav-group" aria-label={title}>
@@ -184,7 +177,12 @@ function NavGroup({
       {links.map((link) => {
         const Icon = link.icon;
         return (
-          <DocumentNavLink className="nav-link" href={link.href} key={link.href}>
+          <DocumentNavLink
+            className="nav-link"
+            href={link.href}
+            key={link.href}
+            onNavigate={onNavigate}
+          >
             <Icon size={17} />
             {link.label}
           </DocumentNavLink>

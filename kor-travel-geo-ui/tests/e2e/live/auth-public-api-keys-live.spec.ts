@@ -238,6 +238,12 @@ test.describe("LIVE public API key security", () => {
     );
     expectStatusOk(directOk);
 
+    await page.getByRole("button", { name: "지우기" }).click();
+    await expect(page.getByLabel("생성된 키")).toHaveCount(0);
+    await expect(page.getByText("생성된 키 표시를 지웠습니다.")).toBeVisible({
+      timeout: LIVE_TIMEOUT
+    });
+
     const [revokeResponse] = await Promise.all([
       page.waitForResponse(
         (res) =>

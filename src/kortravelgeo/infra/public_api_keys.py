@@ -1,14 +1,11 @@
-"""Public API key persistence and process-local validation cache."""
+"""Public API key persistence."""
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import secrets
 import string
-from dataclasses import dataclass
-from time import monotonic
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -33,16 +30,6 @@ SELECT public_api_key_id::text AS public_api_key_id,
 """
 
 
-@dataclass(frozen=True, slots=True)
-class _ActiveKeyCacheEntry:
-    hashes: frozenset[str]
-    expires_at: float
-
-
-_active_key_cache: dict[int, _ActiveKeyCacheEntry] = {}
-_active_key_cache_lock = asyncio.Lock()
-
-
 def generate_public_api_key() -> str:
     """Return a VWorld-style opaque API key value.
 
@@ -62,38 +49,6 @@ def hash_public_api_key(api_key: str) -> str:
 def public_api_key_matches(api_key: str, key_hashes: frozenset[str]) -> bool:
     key_hash = hash_public_api_key(api_key)
     return any(hmac.compare_digest(key_hash, stored_hash) for stored_hash in key_hashes)
-
-
-async def cached_active_public_api_key_hashes(
-    engine: AsyncEngine,
-    *,
-    ttl_seconds: int,
-) -> frozenset[str]:
-    """Return active key hashes, cached per process for public request hot paths."""
-
-    cache_key = id(engine)
-    now = monotonic()
-    cached = _active_key_cache.get(cache_key)
-    if cached is not None and cached.expires_at > now:
-        return cached.hashes
-    async with _active_key_cache_lock:
-        cached = _active_key_cache.get(cache_key)
-        now = monotonic()
-        if cached is not None and cached.expires_at > now:
-            return cached.hashes
-        hashes = await PublicApiKeyRepository(engine).active_key_hashes()
-        _active_key_cache[cache_key] = _ActiveKeyCacheEntry(
-            hashes=frozenset(hashes),
-            expires_at=now + max(ttl_seconds, 0),
-        )
-        return frozenset(hashes)
-
-
-def invalidate_public_api_key_cache(engine: AsyncEngine | None = None) -> None:
-    if engine is None:
-        _active_key_cache.clear()
-    else:
-        _active_key_cache.pop(id(engine), None)
 
 
 class PublicApiKeyRepository:
@@ -159,7 +114,6 @@ RETURNING public_api_key_id::text AS public_api_key_id,
                     params,
                 )
             ).mappings().one()
-        invalidate_public_api_key_cache(self.engine)
         return PublicApiKeyCreateResponse(key=api_key, item=_map_public_api_key(row))
 
     async def revoke_key(
@@ -196,7 +150,6 @@ RETURNING public_api_key_id::text AS public_api_key_id,
             ).mappings().first()
         if row is None:
             raise NotFoundError(f"active public API key not found: {public_api_key_id}")
-        invalidate_public_api_key_cache(self.engine)
         return _map_public_api_key(row)
 
 

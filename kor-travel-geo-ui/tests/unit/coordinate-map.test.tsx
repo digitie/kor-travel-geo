@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CoordinateMap, isMapUsable } from "@/components/vworld/CoordinateMap";
+import { CoordinateMap } from "@/components/vworld/CoordinateMap";
 import { CoordinateMapSkeleton } from "@/components/vworld/LazyCoordinateMap";
+import { isMapUsable } from "@/components/vworld/map-utils";
 
 vi.mock("maplibre-gl", () => ({
   default: {

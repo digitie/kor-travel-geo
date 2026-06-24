@@ -97,6 +97,7 @@ export function ListTab() {
     },
     onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
   });
+  const { isPending: groupActionPending, mutate: mutateGroupAction } = groupAction;
 
   const groupColumns = useMemo<VirtualColumn<GroupRow>[]>(
     () => [
@@ -108,8 +109,8 @@ export function ListTab() {
           <div className="button-row">
             <button
               className="icon-button"
-              disabled={groupAction.isPending}
-              onClick={() => groupAction.mutate({ groupId: row.groupId, action: "validate" })}
+              disabled={groupActionPending}
+              onClick={() => mutateGroupAction({ groupId: row.groupId, action: "validate" })}
               title="재검증"
               type="button"
             >
@@ -117,8 +118,8 @@ export function ListTab() {
             </button>
             <button
               className="icon-button"
-              disabled={groupAction.isPending}
-              onClick={() => groupAction.mutate({ groupId: row.groupId, action: "relink" })}
+              disabled={groupActionPending}
+              onClick={() => mutateGroupAction({ groupId: row.groupId, action: "relink" })}
               title="relink (백업 복원 그룹 재연결)"
               type="button"
             >
@@ -126,8 +127,8 @@ export function ListTab() {
             </button>
             <button
               className="icon-button"
-              disabled={groupAction.isPending}
-              onClick={() => groupAction.mutate({ groupId: row.groupId, action: "restore" })}
+              disabled={groupActionPending}
+              onClick={() => mutateGroupAction({ groupId: row.groupId, action: "restore" })}
               title="복원 (soft-delete 취소)"
               type="button"
             >
@@ -135,8 +136,8 @@ export function ListTab() {
             </button>
             <button
               className="icon-button"
-              disabled={groupAction.isPending}
-              onClick={() => groupAction.mutate({ groupId: row.groupId, action: "soft-delete" })}
+              disabled={groupActionPending}
+              onClick={() => mutateGroupAction({ groupId: row.groupId, action: "soft-delete" })}
               title="soft-delete"
               type="button"
             >
@@ -146,9 +147,7 @@ export function ListTab() {
         )
       }
     ],
-    // groupAction.mutate is referentially stable; only the pending flag affects rendered output.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [groupAction.isPending]
+    [groupActionPending, mutateGroupAction]
   );
 
   return (
