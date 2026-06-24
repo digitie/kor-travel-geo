@@ -15,7 +15,7 @@ import {
   useReactTable
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useMemo, useRef, useState } from "react";
 
 export type VirtualColumn<T> = {
   key: string;
@@ -80,6 +80,12 @@ type TableProps<T> = CommonProps<T> & {
   /** grid-mode estimated row height. */
   rowHeight?: number;
 };
+
+const sortIndicator = (dir: false | "asc" | "desc") =>
+  dir === "asc" ? " ▲" : dir === "desc" ? " ▼" : "";
+
+const ariaSort = (dir: false | "asc" | "desc"): "ascending" | "descending" | "none" =>
+  dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none";
 
 /**
  * Shared admin table (T-254, extended T-270). TanStack **Table** drives column defs,
@@ -184,11 +190,6 @@ export function VirtualTable<T>({
     </div>
   ) : null;
 
-  const sortIndicator = (dir: false | "asc" | "desc") =>
-    dir === "asc" ? " ▲" : dir === "desc" ? " ▼" : "";
-  const ariaSort = (dir: false | "asc" | "desc"): "ascending" | "descending" | "none" =>
-    dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none";
-
   function headerButton(header: (typeof headers)[number]): ReactNode {
     const col = colByKey.get(header.column.id);
     if (col?.headerCell !== undefined) return col.headerCell;
@@ -287,8 +288,8 @@ export function VirtualTable<T>({
           </span>
         </div>
       )}
-      <div className="vtable-grid" role="table">
-        <div className="vtable-head" role="row" style={{ gridTemplateColumns: gridTemplate }}>
+      <div className="vtable-grid">
+        <div className="vtable-head" style={{ gridTemplateColumns: gridTemplate }}>
           {headers.map((header) => {
             const col = colByKey.get(header.column.id);
             const canSort = header.column.getCanSort();
@@ -297,7 +298,6 @@ export function VirtualTable<T>({
                 aria-sort={canSort ? ariaSort(header.column.getIsSorted()) : undefined}
                 className="vtable-th"
                 key={header.id}
-                role="columnheader"
                 style={col?.align ? { textAlign: col.align } : undefined}
               >
                 {headerButton(header)}
@@ -312,14 +312,25 @@ export function VirtualTable<T>({
             <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
               {virtualizer.getVirtualItems().map((item) => {
                 const row = modelRows[item.index] as Row<T>;
+                const rowClassName = getRowClassName?.(row.original);
+                const rowClickProps = onRowClick
+                  ? {
+                      onClick: () => onRowClick(row.original),
+                      onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onRowClick(row.original);
+                        }
+                      },
+                      tabIndex: 0
+                    }
+                  : {};
                 return (
                   <div
-                    className={`vtable-row${
-                      getRowClassName?.(row.original) ? ` ${getRowClassName(row.original)}` : ""
-                    }`}
+                    className={`vtable-row${rowClassName ? ` ${rowClassName}` : ""}`}
+                    data-clickable={onRowClick ? true : undefined}
                     key={row.id}
-                    onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                    role="row"
+                    {...rowClickProps}
                     style={{
                       gridTemplateColumns: gridTemplate,
                       height: item.size,
@@ -336,7 +347,6 @@ export function VirtualTable<T>({
                         <div
                           className={col?.cellClassName ? `vtable-td ${col.cellClassName}` : "vtable-td"}
                           key={cell.id}
-                          role="cell"
                           style={col?.align ? { textAlign: col.align } : undefined}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}

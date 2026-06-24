@@ -125,7 +125,10 @@ test.describe("LIVE admin auth and session security", () => {
     expect(["succeeded", "denied", "failed"]).toContain(latest.outcome);
     expect(typeof latest.payload_redacted).toBe("object");
     expect((latest.payload_redacted as Row).attempted_username).toBeTruthy();
-    expect(String(latest.client_ip_hash ?? "").length).toBeGreaterThan(0);
+    // Direct UI deployments intentionally drop untrusted X-Forwarded-For, so client IP can be null.
+    if (latest.client_ip_hash !== null && latest.client_ip_hash !== undefined) {
+      expect(String(latest.client_ip_hash).length).toBeGreaterThan(0);
+    }
     expect(String(latest.user_agent_hash ?? "").length).toBeGreaterThan(0);
   });
 });
@@ -237,6 +240,12 @@ test.describe("LIVE public API key security", () => {
       { key: generatedKey }
     );
     expectStatusOk(directOk);
+
+    await page.getByRole("button", { name: "지우기" }).click();
+    await expect(page.getByLabel("생성된 키")).toHaveCount(0);
+    await expect(page.getByText("생성된 키 표시를 지웠습니다.")).toBeVisible({
+      timeout: LIVE_TIMEOUT
+    });
 
     const [revokeResponse] = await Promise.all([
       page.waitForResponse(

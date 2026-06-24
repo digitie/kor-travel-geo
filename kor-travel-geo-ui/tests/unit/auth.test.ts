@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   SESSION_TTL_SECONDS,
+  checkDurableLoginRateLimit,
   checkLoginRateLimit,
   clearLoginFailures,
   createSessionCookieValue,
@@ -17,6 +18,11 @@ const SESSION_SECRET = "0123456789abcdef0123456789abcdef";
 const TEST_PASSWORD = "unit-test-admin-password";
 
 describe("admin auth", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it("PBKDF2 env hash로 관리자 비밀번호를 검증한다", async () => {
     const env = await makeEnv(TEST_PASSWORD);
 
@@ -29,6 +35,17 @@ describe("admin auth", () => {
     await expect(
       verifyAdminLogin({ username: "root", password: TEST_PASSWORD }, env)
     ).resolves.toBe("invalid");
+  });
+
+  it("아이디가 틀려도 PBKDF2를 수행해 username timing 차이를 줄인다", async () => {
+    const env = await makeEnv(TEST_PASSWORD);
+    const deriveBits = vi.spyOn(crypto.subtle, "deriveBits");
+
+    await expect(
+      verifyAdminLogin({ username: "root", password: TEST_PASSWORD }, env)
+    ).resolves.toBe("invalid");
+
+    expect(deriveBits).toHaveBeenCalled();
   });
 
   it("세션 secret이 약하면 로그인 설정을 거부한다", async () => {
@@ -76,6 +93,41 @@ describe("admin auth", () => {
     expect(checkLoginRateLimit({ headers: source })).toEqual({ allowed: true });
   });
 
+  it("audit 로그 기반 durable 로그인 제한을 적용한다", async () => {
+    const now = 1_800_000_000_000;
+    const clientIp = "203.0.113.42";
+    const clientIpHash = await sha256Hex(clientIp);
+    const rows = Array.from({ length: 5 }, (_, index) => ({
+      client_ip_hash: clientIpHash,
+      occurred_at: new Date(now - index * 1_000).toISOString(),
+      outcome: "denied",
+      payload_redacted: { reason: "invalid_credentials" }
+    }));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      return new Response(JSON.stringify(rows), {
+        headers: { "content-type": "application/json" },
+        status: 200
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await checkDurableLoginRateLimit(
+      { headers: new Headers({ "x-forwarded-for": clientIp }) },
+      {
+        KTG_ADMIN_PROXY_SECRET: "proxy-secret",
+        KTG_API_INTERNAL_URL: "http://backend.internal",
+        KTG_UI_TRUSTED_PROXY_HOPS: "1"
+      },
+      now
+    );
+
+    expect(result?.allowed).toBe(false);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
+    expect(String(url)).toContain("/v1/admin/ops/audit-events");
+    expect((init?.headers as Headers).get("x-ktg-admin-proxy-secret")).toBe("proxy-secret");
+  });
+
   it("next 경로는 로컬 경로만 허용한다", () => {
     expect(sanitizeLocalPath("/admin/settings")).toBe("/admin/settings");
     expect(sanitizeLocalPath("https://example.com/admin")).toBe("/debug/geocode");
@@ -93,4 +145,11 @@ async function makeEnv(password: string): Promise<Record<string, string>> {
     KTG_UI_ADMIN_USERNAME: "admin",
     KTG_UI_SESSION_SECRET: SESSION_SECRET
   };
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }

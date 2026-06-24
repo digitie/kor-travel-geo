@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { recordAuthAuditEvent } from "@/lib/auth-audit";
 import {
   SESSION_COOKIE_NAME,
+  checkDurableLoginRateLimit,
   checkLoginRateLimit,
   clearLoginFailures,
   createSessionCookieValue,
@@ -37,7 +38,9 @@ export async function POST(request: NextRequest) {
   const username = typeof payload.username === "string" ? payload.username : "";
   const password = typeof payload.password === "string" ? payload.password : "";
   const nextPath = sanitizeLocalPath(typeof payload.next === "string" ? payload.next : null);
-  const rateLimit = checkLoginRateLimit(request);
+  const durableRateLimit = await checkDurableLoginRateLimit(request);
+  const localRateLimit = checkLoginRateLimit(request);
+  const rateLimit = durableRateLimit?.allowed === false ? durableRateLimit : localRateLimit;
   if (!rateLimit.allowed) {
     await recordAuthAuditEvent(request, {
       attemptedUsername: username,

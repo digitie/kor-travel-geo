@@ -5,6 +5,13 @@
 ## [Unreleased]
 
 ### Fixed
+- Admin 로그인·공개 API key 보안 후속을 보강했다. 잘못된 username에서도 PBKDF2를 수행해
+  username timing 차이를 줄이고, 로그아웃 감사 기록은 유효 세션 폐기 때만 남긴다.
+  공개 API key 검증의 process-local TTL 캐시를 제거해 key 폐기가 모든 API worker에 즉시
+  반영되도록 했다.
+- Admin UI React Doctor 경고 34건을 모두 제거했다. role 기반 모달은 native `dialog`로 바꾸고,
+  대형 admin 컴포넌트는 reducer와 하위 패널로 분리했으며, virtual table 접근성 role 흉내와
+  web storage 오탐을 정리해 React Doctor `ok=true`, warning 0 상태로 맞췄다.
 - T-278 Admin UI에서 Firefox를 포함한 브라우저가 Next 기본 전역 오류 화면
   `This page couldn’t load`로 떨어질 수 있던 방어 공백을 보강했다. 앱 segment/global error
   boundary가 한국어 복구 패널을 보여 주고, chunk/RSC/network 계열 오류는 같은 경로에서 1회
@@ -18,6 +25,8 @@
   `http.disconnect`는 이미 완료된 정상 응답을 취소하지 않는다.
 
 ### Changed
+- Admin 로그인 rate limit은 backend `ops.audit_events` 기반 durable 판정을 우선 사용하고,
+  audit 조회가 불가능할 때 기존 process-local limiter로 fallback한다.
 - Admin UI 보안 모델을 ADR-064 기준으로 바꿨다. 단일 admin 로그인, httpOnly session cookie,
   user-agent fingerprint, logout revocation, 로그인 실패 rate limit, Next.js admin proxy shared
   secret, backend trusted proxy role gate를 추가하고 ADR-013을 superseded로 표시했다.
@@ -37,6 +46,8 @@
   idle-in-transaction 연결을 남기지 않는다.
 
 ### Added
+- Admin Settings의 1회성 공개 API key 표시 영역에 `지우기` 버튼을 추가하고, live e2e에서
+  생성 키 표시 제거까지 검증한다.
 - Admin UI `/admin/settings`에 공개 REST API key 랜덤 생성·목록 조회·폐기 기능을 추가했다.
   key는 `ops.public_api_keys`에 hash로만 저장되고 생성 응답에서 한 번만 plaintext로 반환된다.
 - Admin UI 로그인 시도·성공·실패·로그아웃 이벤트를 `ops.audit_events`에 저장하고

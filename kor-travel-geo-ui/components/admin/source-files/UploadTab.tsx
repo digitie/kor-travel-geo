@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Download, RefreshCw, Upload } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useReducer, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
@@ -39,13 +39,51 @@ type DuplicateConflict = {
   message: string;
 };
 
+type UploadViewState = {
+  activeCategory: string | null;
+  progress: Record<string, SlotUploadProgress>;
+  conflict: DuplicateConflict | null;
+  lastResult: unknown;
+  epostError: { category: string; message: string } | null;
+};
+
+type UploadViewAction =
+  | { type: "patch"; patch: Partial<UploadViewState> }
+  | { type: "select-category"; category: string }
+  | { type: "slot-progress"; progress: SlotUploadProgress };
+
+const INITIAL_UPLOAD_VIEW_STATE: UploadViewState = {
+  activeCategory: null,
+  progress: {},
+  conflict: null,
+  lastResult: null,
+  epostError: null
+};
+
+function uploadViewReducer(
+  state: UploadViewState,
+  action: UploadViewAction
+): UploadViewState {
+  switch (action.type) {
+    case "patch":
+      return { ...state, ...action.patch };
+    case "select-category":
+      return {
+        ...state,
+        activeCategory: state.activeCategory === action.category ? null : action.category
+      };
+    case "slot-progress":
+      return {
+        ...state,
+        progress: { ...state.progress, [action.progress.slot]: action.progress }
+      };
+  }
+}
+
 export function UploadTab() {
   const queryClient = useQueryClient();
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [progress, setProgress] = useState<Record<string, SlotUploadProgress>>({});
-  const [conflict, setConflict] = useState<DuplicateConflict | null>(null);
-  const [lastResult, setLastResult] = useState<unknown>(null);
-  const [epostError, setEpostError] = useState<{ category: string; message: string } | null>(null);
+  const [viewState, dispatchView] = useReducer(uploadViewReducer, INITIAL_UPLOAD_VIEW_STATE);
+  const { activeCategory, progress, conflict, lastResult, epostError } = viewState;
 
   const { data: catalog } = useQuery({
     queryKey: ["source-file-categories"],
@@ -81,7 +119,7 @@ export function UploadTab() {
   );
 
   function onSlotProgress(next: SlotUploadProgress) {
-    setProgress((current) => ({ ...current, [next.slot]: next }));
+    dispatchView({ type: "slot-progress", progress: next });
   }
 
   const createSession = useMutation({
@@ -98,14 +136,22 @@ export function UploadTab() {
     },
     onError: (error, variables) => {
       if (error instanceof ApiError && error.status === 409) {
-        setConflict({
-          category: variables.category as SourceFileCategoryInfo["category"],
-          userYyyymm: variables.userYyyymm,
-          existing: parseConflictSession(error.message),
-          message: error.message
+        dispatchView({
+          type: "patch",
+          patch: {
+            conflict: {
+              category: variables.category as SourceFileCategoryInfo["category"],
+              userYyyymm: variables.userYyyymm,
+              existing: parseConflictSession(error.message),
+              message: error.message
+            }
+          }
         });
       } else {
-        setLastResult({ error: error instanceof Error ? error.message : String(error) });
+        dispatchView({
+          type: "patch",
+          patch: { lastResult: { error: error instanceof Error ? error.message : String(error) } }
+        });
       }
     }
   });
@@ -116,24 +162,34 @@ export function UploadTab() {
         category: request.category,
         user_yyyymm: request.userYyyymm,
         enqueue_load: true
-      }),
+    }),
     onSuccess: (result) => {
-      setEpostError(null);
-      setLastResult({
-        category: result.category,
-        upload_session_id: result.upload_session.upload_session_id,
-        source_file_group_id: result.registration?.source_file_group_id,
-        load_job_id: result.load_job_id,
-        load_job_kind: result.load_job_kind,
-        warnings: result.warnings,
-        validation: result.validation
+      dispatchView({
+        type: "patch",
+        patch: {
+          epostError: null,
+          lastResult: {
+            category: result.category,
+            upload_session_id: result.upload_session.upload_session_id,
+            source_file_group_id: result.registration?.source_file_group_id,
+            load_job_id: result.load_job_id,
+            load_job_kind: result.load_job_kind,
+            warnings: result.warnings,
+            validation: result.validation
+          }
+        }
       });
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     },
     onError: (error, variables) => {
       const message = parseApiErrorMessage(error);
-      setEpostError({ category: variables.category, message });
-      setLastResult({ error: message });
+      dispatchView({
+        type: "patch",
+        patch: {
+          epostError: { category: variables.category, message },
+          lastResult: { error: message }
+        }
+      });
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     }
   });
@@ -143,9 +199,10 @@ export function UploadTab() {
     userYyyymm: string,
     file: File
   ) {
-    setConflict(null);
-    setLastResult(null);
-    setProgress({});
+    dispatchView({
+      type: "patch",
+      patch: { conflict: null, lastResult: null, progress: {} }
+    });
     let session: UploadSessionStatus;
     try {
       session = await createSession.mutateAsync({
@@ -162,7 +219,10 @@ export function UploadTab() {
   async function runUpload(session: UploadSessionStatus, file: File) {
     const slot = session.file_slots[0];
     if (!slot) {
-      setLastResult({ error: "세션에 업로드 슬롯이 없습니다" });
+      dispatchView({
+        type: "patch",
+        patch: { lastResult: { error: "세션에 업로드 슬롯이 없습니다" } }
+      });
       return;
     }
     try {
@@ -178,15 +238,23 @@ export function UploadTab() {
         sourceFilesPaths.registerSession(session.upload_session_id),
         {}
       );
-      setLastResult({
-        source_file_group_id: registered.source_file_group_id,
-        state: registered.state,
-        registration_state: registered.registration_state,
-        finished_state: finished.state
+      dispatchView({
+        type: "patch",
+        patch: {
+          lastResult: {
+            source_file_group_id: registered.source_file_group_id,
+            state: registered.state,
+            registration_state: registered.registration_state,
+            finished_state: finished.state
+          }
+        }
       });
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     } catch (error) {
-      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      dispatchView({
+        type: "patch",
+        patch: { lastResult: { error: error instanceof Error ? error.message : String(error) } }
+      });
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     }
   }
@@ -209,9 +277,7 @@ export function UploadTab() {
               hasActiveSet={Boolean(activeSet)}
               isActiveServing={activeServing.has(category.category)}
               key={category.category}
-              onSelect={() =>
-                setActiveCategory(activeCategory === category.category ? null : category.category)
-              }
+              onSelect={() => dispatchView({ type: "select-category", category: category.category })}
               onEpostFetch={(yyyymm) =>
                 void epostFetch.mutate({
                   category: category.category,
@@ -250,14 +316,19 @@ export function UploadTab() {
       {conflict ? (
         <DuplicateSessionDialog
           conflict={conflict}
-          onClose={() => setConflict(null)}
+          onClose={() => dispatchView({ type: "patch", patch: { conflict: null } })}
           onResume={(session) => {
-            setConflict(null);
-            setActiveCategory(session.category);
-            setLastResult({
-              resumed_session: session.upload_session_id,
-              state: session.state,
-              hint: "위 카테고리 카드에서 같은 파일을 다시 선택하면 이어서 업로드합니다."
+            dispatchView({
+              type: "patch",
+              patch: {
+                conflict: null,
+                activeCategory: session.category,
+                lastResult: {
+                  resumed_session: session.upload_session_id,
+                  state: session.state,
+                  hint: "위 카테고리 카드에서 같은 파일을 다시 선택하면 이어서 업로드합니다."
+                }
+              }
             });
           }}
         />
@@ -483,18 +554,6 @@ function ResumableSessions({
   sessions: UploadSessionStatus[];
   onSessionTerminal: () => void;
 }) {
-  // Each row's live SSE progress is subscribed by a sibling SessionLiveSubscriber
-  // (one EventSource per session, keyed by id → rules-of-hooks safe) that reports up
-  // into this map, so the VirtualTable cells stay pure render functions. Falls back to
-  // the session's static counts when the stream is unavailable (SSR / no EventSource).
-  const [liveById, setLiveById] = useState<Record<string, SourceUploadProgressEvent | null>>({});
-  const handleLive = useCallback(
-    (sessionId: string, live: SourceUploadProgressEvent | null) => {
-      setLiveById((prev) => (prev[sessionId] === live ? prev : { ...prev, [sessionId]: live }));
-    },
-    []
-  );
-
   const columns = useMemo<VirtualColumn<UploadSessionStatus>[]>(
     () => [
       { key: "category", header: "카테고리", cell: (session) => session.category },
@@ -502,31 +561,21 @@ function ResumableSessions({
       {
         key: "state",
         header: "상태",
-        cell: (session) => (
-          <StatusBadge value={liveById[session.upload_session_id]?.state ?? session.state} />
-        )
+        cell: (session) => <StatusBadge value={session.state} />
       },
       {
         key: "progress",
         header: "진행",
         cell: (session) => (
-          <SessionProgress live={liveById[session.upload_session_id] ?? null} session={session} />
+          <SessionProgressCell onTerminal={onSessionTerminal} session={session} />
         )
       }
     ],
-    [liveById]
+    [onSessionTerminal]
   );
 
   return (
     <Panel title="재개 가능한 업로드">
-      {sessions.map((session) => (
-        <SessionLiveSubscriber
-          key={session.upload_session_id}
-          onLive={handleLive}
-          onTerminal={onSessionTerminal}
-          sessionId={session.upload_session_id}
-        />
-      ))}
       <VirtualTable
         as="table"
         columns={columns}
@@ -539,21 +588,15 @@ function ResumableSessions({
   );
 }
 
-/** Subscribes to one session's SSE progress and reports it up; renders nothing. */
-function SessionLiveSubscriber({
-  sessionId,
-  onTerminal,
-  onLive
+function SessionProgressCell({
+  session,
+  onTerminal
 }: {
-  sessionId: string;
+  session: UploadSessionStatus;
   onTerminal: () => void;
-  onLive: (sessionId: string, live: SourceUploadProgressEvent | null) => void;
 }) {
-  const live = useUploadSessionEvents(sessionId, { onTerminal });
-  useEffect(() => {
-    onLive(sessionId, live);
-  }, [sessionId, live, onLive]);
-  return null;
+  const live = useUploadSessionEvents(session.upload_session_id, { onTerminal });
+  return <SessionProgress live={live} session={session} />;
 }
 
 function SessionProgress({

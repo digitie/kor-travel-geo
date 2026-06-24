@@ -4,18 +4,9 @@ import { X } from "lucide-react";
 import { useRef } from "react";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { inventoryTone } from "@/components/admin/backups/manifest-utils";
 import type { BackupArtifact } from "@/lib/api";
 import { useModalA11y } from "@/lib/use-modal-a11y";
-
-/** ok=true → 검증됨, false → 불일치, null/undefined → 미검증(legacy/skipped). */
-export function inventoryTone(ok: boolean | null | undefined): {
-  tone: "ok" | "error" | "warn";
-  label: string;
-} {
-  if (ok === true) return { tone: "ok", label: "검증됨" };
-  if (ok === false) return { tone: "error", label: "불일치" };
-  return { tone: "warn", label: "미검증" };
-}
 
 /**
  * Backup manifest reproducibility viewer (T-252): surfaces the T-237/T-240 manifest context —
@@ -35,7 +26,7 @@ export function ManifestViewer({
   const sourceMatchSet = nested(manifest, "source_match_set");
   const inv = inventoryTone(artifact.source_inventory_ok);
   const yyyymm = artifact.source_set_yyyymm ?? null;
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   // a11y (T-227, shared from T-258): focus into the modal on open (the 닫기 button), Esc closes,
@@ -43,14 +34,12 @@ export function ManifestViewer({
   useModalA11y({ dialogRef, onClose, initialFocusRef: closeRef });
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
-      <div
+    <div className="modal-backdrop">
+      <dialog
         aria-label="백업 manifest 재현성 뷰어"
-        aria-modal="true"
         className="modal"
-        onClick={(e) => e.stopPropagation()}
+        open
         ref={dialogRef}
-        role="dialog"
       >
         <div className="manifest-head">
           <h2>{artifact.display_name ?? artifact.artifact_id}</h2>
@@ -128,7 +117,7 @@ export function ManifestViewer({
           <strong>전체 manifest</strong>
           <JsonBlock value={manifest} />
         </section>
-      </div>
+      </dialog>
     </div>
   );
 }

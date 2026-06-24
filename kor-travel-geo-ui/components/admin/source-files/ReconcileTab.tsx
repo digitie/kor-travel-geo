@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, RefreshCw, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useReducer, useRef, useState } from "react";
 import { Panel } from "@/components/ui/Panel";
 import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { RetentionWarning } from "@/components/admin/source-files/RetentionWarning";
@@ -40,13 +40,77 @@ const SIMPLE_RESOLVE_ACTIONS: ReconcileResolveAction[] = [
   "restore_soft_deleted"
 ];
 
+type ReconcileViewState = {
+  selectedRunId: string | null;
+  mode: "quick" | "deep";
+  lastResult: unknown;
+  selectedKeys: ReadonlySet<string>;
+  hardDeleteOpen: boolean;
+};
+
+type ReconcileViewAction =
+  | { type: "set-mode"; mode: "quick" | "deep" }
+  | { type: "select-run"; runId: string }
+  | { type: "set-last-result"; result: unknown }
+  | { type: "toggle-key"; objectKey: string }
+  | { type: "set-all-keys"; objectKeys: string[] }
+  | { type: "open-hard-delete" }
+  | { type: "close-hard-delete" }
+  | { type: "hard-delete-succeeded"; result: SourceBulkHardDeleteResponse };
+
+const INITIAL_RECONCILE_VIEW_STATE: ReconcileViewState = {
+  selectedRunId: null,
+  mode: "quick",
+  lastResult: null,
+  selectedKeys: new Set(),
+  hardDeleteOpen: false
+};
+
+function reconcileViewReducer(
+  state: ReconcileViewState,
+  action: ReconcileViewAction
+): ReconcileViewState {
+  switch (action.type) {
+    case "set-mode":
+      return { ...state, mode: action.mode };
+    case "select-run":
+      return {
+        ...state,
+        selectedRunId: action.runId,
+        selectedKeys: new Set(),
+        hardDeleteOpen: false
+      };
+    case "set-last-result":
+      return { ...state, lastResult: action.result };
+    case "toggle-key": {
+      const selectedKeys = new Set(state.selectedKeys);
+      if (selectedKeys.has(action.objectKey)) selectedKeys.delete(action.objectKey);
+      else selectedKeys.add(action.objectKey);
+      return { ...state, selectedKeys };
+    }
+    case "set-all-keys":
+      return { ...state, selectedKeys: new Set(action.objectKeys) };
+    case "open-hard-delete":
+      return { ...state, hardDeleteOpen: true };
+    case "close-hard-delete":
+      return { ...state, hardDeleteOpen: false };
+    case "hard-delete-succeeded":
+      return {
+        ...state,
+        lastResult: action.result,
+        selectedKeys: new Set(),
+        hardDeleteOpen: false
+      };
+  }
+}
+
 export function ReconcileTab() {
   const queryClient = useQueryClient();
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [mode, setMode] = useState<"quick" | "deep">("quick");
-  const [lastResult, setLastResult] = useState<unknown>(null);
-  const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string>>(new Set());
-  const [hardDeleteOpen, setHardDeleteOpen] = useState(false);
+  const [viewState, dispatchView] = useReducer(
+    reconcileViewReducer,
+    INITIAL_RECONCILE_VIEW_STATE
+  );
+  const { selectedRunId, mode, lastResult, selectedKeys, hardDeleteOpen } = viewState;
 
   const { data: runs = EMPTY_RUNS, refetch: refetchRuns } = useQuery({
     queryKey: ["reconcile-runs"],
@@ -70,22 +134,31 @@ export function ReconcileTab() {
   const runReconcile = useMutation({
     mutationFn: () => postJson<SourceReconcileRun>(sourceFilesPaths.reconcile(), { mode }),
     onSuccess: (run) => {
-      setLastResult(run);
-      setSelectedRunId(run.source_storage_reconcile_run_id);
+      dispatchView({ type: "set-last-result", result: run });
+      dispatchView({ type: "select-run", runId: run.source_storage_reconcile_run_id });
       void queryClient.invalidateQueries({ queryKey: ["reconcile-runs"] });
     },
-    onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
+    onError: (error) =>
+      dispatchView({
+        type: "set-last-result",
+        result: { error: error instanceof Error ? error.message : String(error) }
+      })
   });
 
   const resolveItem = useMutation({
     mutationFn: ({ itemId, action }: { itemId: string; action: ReconcileResolveAction }) =>
       postJson(sourceFilesPaths.reconcileItemResolve(itemId), { action }),
     onSuccess: (data) => {
-      setLastResult(data);
+      dispatchView({ type: "set-last-result", result: data });
       void queryClient.invalidateQueries({ queryKey: ["reconcile-items"] });
     },
-    onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
+    onError: (error) =>
+      dispatchView({
+        type: "set-last-result",
+        result: { error: error instanceof Error ? error.message : String(error) }
+      })
   });
+  const { isPending: resolvePending, mutate: resolveMutate } = resolveItem;
 
   // 정리 대상(미등록 stored object) — 수동 일괄 영구 삭제 (T-212, ADR-052).
   const cleanupTargets = useMemo(() => items.filter(isBulkHardDeleteEligible), [items]);
@@ -94,40 +167,121 @@ export function ReconcileTab() {
     [cleanupTargets, selectedKeys]
   );
 
-  // 다른 실행을 선택하면 선택 상태를 초기화한다(stale object_key 방지).
-  useEffect(() => {
-    setSelectedKeys(new Set());
-    setHardDeleteOpen(false);
-  }, [effectiveRunId]);
-
   const bulkHardDelete = useMutation({
     mutationFn: (body: SourceBulkHardDeleteRequest) =>
       postJson<SourceBulkHardDeleteResponse>(sourceFilesPaths.bulkHardDelete(), body),
     onSuccess: (data) => {
-      setLastResult(data);
-      setSelectedKeys(new Set());
-      setHardDeleteOpen(false);
+      dispatchView({ type: "hard-delete-succeeded", result: data });
       void queryClient.invalidateQueries({ queryKey: ["reconcile-items"] });
       void queryClient.invalidateQueries({ queryKey: ["source-capacity"] });
     },
-    onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
+    onError: (error) =>
+      dispatchView({
+        type: "set-last-result",
+        result: { error: error instanceof Error ? error.message : String(error) }
+      })
   });
 
-  function toggleKey(objectKey: string): void {
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(objectKey)) next.delete(objectKey);
-      else next.add(objectKey);
-      return next;
-    });
-  }
+  const toggleKey = useCallback((objectKey: string): void => {
+    dispatchView({ type: "toggle-key", objectKey });
+  }, []);
 
-  function toggleAllTargets(checked: boolean): void {
-    setSelectedKeys(
-      checked ? new Set(cleanupTargets.map((item) => item.object_key as string)) : new Set()
-    );
-  }
+  const toggleAllTargets = useCallback(
+    (checked: boolean): void => {
+      dispatchView({
+        type: "set-all-keys",
+        objectKeys: checked ? cleanupTargets.map((item) => item.object_key as string) : []
+      });
+    },
+    [cleanupTargets]
+  );
+  const selectRun = useCallback((runId: string) => {
+    dispatchView({ type: "select-run", runId });
+  }, []);
+  const setMode = useCallback((nextMode: "quick" | "deep") => {
+    dispatchView({ type: "set-mode", mode: nextMode });
+  }, []);
+  const openHardDelete = useCallback(() => {
+    dispatchView({ type: "open-hard-delete" });
+  }, []);
+  const resolveOpenItem = useCallback(
+    (itemId: string, action: ReconcileResolveAction) => {
+      resolveMutate({ itemId, action });
+    },
+    [resolveMutate]
+  );
 
+  return (
+    <div className="source-stack">
+      <ReconcileRunsPanel
+        effectiveRunId={effectiveRunId}
+        mode={mode}
+        onModeChange={setMode}
+        onRefresh={() => void refetchRuns()}
+        onRun={() => runReconcile.mutate()}
+        onSelectRun={selectRun}
+        pending={runReconcile.isPending}
+        runs={runs}
+      />
+
+      <ReconcileItemsPanel
+        bulkPending={bulkHardDelete.isPending}
+        cleanupTargets={cleanupTargets}
+        items={items}
+        onOpenHardDelete={openHardDelete}
+        onResolve={resolveOpenItem}
+        onToggleAllTargets={toggleAllTargets}
+        onToggleKey={toggleKey}
+        resolvePending={resolvePending}
+        selectedKeys={selectedKeys}
+        selectedTargets={selectedTargets}
+      />
+
+      <Panel title="용량 (capacity)">
+        <CapacityPanel capacity={capacity} />
+      </Panel>
+
+      {lastResult ? (
+        <Panel title="최근 결과">
+          {isBulkDeleteResult(lastResult) ? (
+            <BulkDeleteResultSummary result={lastResult} />
+          ) : (
+            <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
+          )}
+        </Panel>
+      ) : null}
+
+      {hardDeleteOpen ? (
+        <BulkHardDeleteDialog
+          objectKeys={selectedTargets.map((item) => item.object_key as string)}
+          onCancel={() => dispatchView({ type: "close-hard-delete" })}
+          onConfirm={(body) => bulkHardDelete.mutate(body)}
+          pending={bulkHardDelete.isPending}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ReconcileRunsPanel({
+  effectiveRunId,
+  mode,
+  onModeChange,
+  onRefresh,
+  onRun,
+  onSelectRun,
+  pending,
+  runs
+}: {
+  effectiveRunId: string | null;
+  mode: "quick" | "deep";
+  onModeChange: (mode: "quick" | "deep") => void;
+  onRefresh: () => void;
+  onRun: () => void;
+  onSelectRun: (runId: string) => void;
+  pending: boolean;
+  runs: SourceReconcileRun[];
+}) {
   const runColumns = useMemo<VirtualColumn<SourceReconcileRun>[]>(
     () => [
       {
@@ -136,7 +290,7 @@ export function ReconcileTab() {
         cell: (run) => (
           <button
             className="link-button"
-            onClick={() => setSelectedRunId(run.source_storage_reconcile_run_id)}
+            onClick={() => onSelectRun(run.source_storage_reconcile_run_id)}
             type="button"
           >
             {run.source_storage_reconcile_run_id.slice(0, 12)}…
@@ -149,9 +303,70 @@ export function ReconcileTab() {
       { key: "mismatch", header: "불일치", cell: (run) => run.mismatch_count.toLocaleString() },
       { key: "resolved", header: "해결", cell: (run) => run.resolved_count.toLocaleString() }
     ],
-    []
+    [onSelectRun]
   );
 
+  return (
+    <Panel
+      title="정합성 실행 (RustFS ⟷ DB)"
+      actions={
+        <div className="toolbar-inline">
+          <select
+            aria-label="reconcile 모드"
+            onChange={(event) => onModeChange(event.target.value as "quick" | "deep")}
+            value={mode}
+          >
+            <option value="quick">quick</option>
+            <option value="deep">deep (전체 rehash)</option>
+          </select>
+          <button className="button" disabled={pending} onClick={onRun} type="button">
+            <Play size={16} />
+            실행
+          </button>
+          <button className="icon-button" onClick={onRefresh} title="새로고침" type="button">
+            <RefreshCw size={16} />
+          </button>
+        </div>
+      }
+    >
+      <VirtualTable
+        as="table"
+        columns={runColumns}
+        compact
+        emptyHint="정합성 실행 기록이 없습니다."
+        getRowClassName={(run) =>
+          run.source_storage_reconcile_run_id === effectiveRunId ? "active-row" : undefined
+        }
+        rowKey={(run) => run.source_storage_reconcile_run_id}
+        rows={runs}
+      />
+    </Panel>
+  );
+}
+
+function ReconcileItemsPanel({
+  bulkPending,
+  cleanupTargets,
+  items,
+  onOpenHardDelete,
+  onResolve,
+  onToggleAllTargets,
+  onToggleKey,
+  resolvePending,
+  selectedKeys,
+  selectedTargets
+}: {
+  bulkPending: boolean;
+  cleanupTargets: SourceReconcileItem[];
+  items: SourceReconcileItem[];
+  onOpenHardDelete: () => void;
+  onResolve: (itemId: string, action: ReconcileResolveAction) => void;
+  onToggleAllTargets: (checked: boolean) => void;
+  onToggleKey: (objectKey: string) => void;
+  resolvePending: boolean;
+  selectedKeys: ReadonlySet<string>;
+  selectedTargets: SourceReconcileItem[];
+}) {
   const itemColumns = useMemo<VirtualColumn<SourceReconcileItem>[]>(
     () => [
       {
@@ -164,7 +379,7 @@ export function ReconcileTab() {
               checked={
                 selectedTargets.length > 0 && selectedTargets.length === cleanupTargets.length
               }
-              onChange={(event) => toggleAllTargets(event.target.checked)}
+              onChange={(event) => onToggleAllTargets(event.target.checked)}
               type="checkbox"
             />
           ) : undefined,
@@ -175,7 +390,7 @@ export function ReconcileTab() {
             <input
               aria-label={`정리 대상 선택: ${objectKey}`}
               checked={selectedKeys.has(objectKey)}
-              onChange={() => toggleKey(objectKey)}
+              onChange={() => onToggleKey(objectKey)}
               type="checkbox"
             />
           ) : null;
@@ -210,14 +425,9 @@ export function ReconcileTab() {
               {SIMPLE_RESOLVE_ACTIONS.map((action) => (
                 <button
                   className="button secondary"
-                  disabled={resolveItem.isPending}
+                  disabled={resolvePending}
                   key={action}
-                  onClick={() =>
-                    resolveItem.mutate({
-                      itemId: item.source_storage_reconcile_item_id,
-                      action
-                    })
-                  }
+                  onClick={() => onResolve(item.source_storage_reconcile_item_id, action)}
                   type="button"
                 >
                   {action}
@@ -229,104 +439,48 @@ export function ReconcileTab() {
           )
       }
     ],
-    // toggleAllTargets closes only over cleanupTargets (a listed dep) + the stable
-    // setSelectedKeys; resolveItem.mutate is referentially stable — only its pending
-    // flag affects rendered output. Widening would rebuild every render for no gain.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedKeys, cleanupTargets, selectedTargets, resolveItem.isPending]
+    [
+      cleanupTargets.length,
+      onResolve,
+      onToggleAllTargets,
+      onToggleKey,
+      resolvePending,
+      selectedKeys,
+      selectedTargets.length
+    ]
   );
 
   return (
-    <div className="source-stack">
-      <Panel
-        title="정합성 실행 (RustFS ⟷ DB)"
-        actions={
+    <Panel
+      title="이슈 항목"
+      actions={
+        cleanupTargets.length > 0 ? (
           <div className="toolbar-inline">
-            <select
-              aria-label="reconcile 모드"
-              onChange={(event) => setMode(event.target.value as "quick" | "deep")}
-              value={mode}
+            <span className="form-note">
+              정리 대상 {cleanupTargets.length}건 · 선택 {selectedTargets.length}건
+            </span>
+            <button
+              className="button danger"
+              disabled={selectedTargets.length === 0 || bulkPending}
+              onClick={onOpenHardDelete}
+              type="button"
             >
-              <option value="quick">quick</option>
-              <option value="deep">deep (전체 rehash)</option>
-            </select>
-            <button className="button" disabled={runReconcile.isPending} onClick={() => runReconcile.mutate()} type="button">
-              <Play size={16} />
-              실행
-            </button>
-            <button className="icon-button" onClick={() => void refetchRuns()} title="새로고침" type="button">
-              <RefreshCw size={16} />
+              <Trash2 size={16} />
+              선택 항목 영구 삭제
             </button>
           </div>
-        }
-      >
-        <VirtualTable
-          as="table"
-          columns={runColumns}
-          compact
-          emptyHint="정합성 실행 기록이 없습니다."
-          getRowClassName={(run) =>
-            run.source_storage_reconcile_run_id === effectiveRunId ? "active-row" : undefined
-          }
-          rowKey={(run) => run.source_storage_reconcile_run_id}
-          rows={runs}
-        />
-      </Panel>
-
-      <Panel
-        title="이슈 항목"
-        actions={
-          cleanupTargets.length > 0 ? (
-            <div className="toolbar-inline">
-              <span className="form-note">
-                정리 대상 {cleanupTargets.length}건 · 선택 {selectedTargets.length}건
-              </span>
-              <button
-                className="button danger"
-                disabled={selectedTargets.length === 0 || bulkHardDelete.isPending}
-                onClick={() => setHardDeleteOpen(true)}
-                type="button"
-              >
-                <Trash2 size={16} />
-                선택 항목 영구 삭제
-              </button>
-            </div>
-          ) : null
-        }
-      >
-        <VirtualTable
-          as="table"
-          columns={itemColumns}
-          compact
-          emptyHint="선택한 실행에 미해결 이슈가 없습니다."
-          rowKey={(item) => item.source_storage_reconcile_item_id}
-          rows={items}
-        />
-      </Panel>
-
-      <Panel title="용량 (capacity)">
-        <CapacityPanel capacity={capacity} />
-      </Panel>
-
-      {lastResult ? (
-        <Panel title="최근 결과">
-          {isBulkDeleteResult(lastResult) ? (
-            <BulkDeleteResultSummary result={lastResult} />
-          ) : (
-            <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
-          )}
-        </Panel>
-      ) : null}
-
-      {hardDeleteOpen ? (
-        <BulkHardDeleteDialog
-          objectKeys={selectedTargets.map((item) => item.object_key as string)}
-          onCancel={() => setHardDeleteOpen(false)}
-          onConfirm={(body) => bulkHardDelete.mutate(body)}
-          pending={bulkHardDelete.isPending}
-        />
-      ) : null}
-    </div>
+        ) : null
+      }
+    >
+      <VirtualTable
+        as="table"
+        columns={itemColumns}
+        compact
+        emptyHint="선택한 실행에 미해결 이슈가 없습니다."
+        rowKey={(item) => item.source_storage_reconcile_item_id}
+        rows={items}
+      />
+    </Panel>
   );
 }
 
@@ -345,7 +499,7 @@ function BulkHardDeleteDialog({
   const [manifestAck, setManifestAck] = useState(false);
   const [reason, setReason] = useState("");
   const confirmationOk = confirmation === HARD_DELETE_CONFIRMATION;
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const confirmRef = useRef<HTMLInputElement>(null);
   // a11y (T-227): Esc cancels this destructive dialog, Tab is trapped, focus lands on the
   // confirmation input and returns to the trigger on close.
@@ -353,12 +507,11 @@ function BulkHardDeleteDialog({
 
   return (
     <div className="modal-backdrop">
-      <div
+      <dialog
         aria-label="원천 객체 영구 삭제"
-        aria-modal="true"
         className="modal"
+        open
         ref={dialogRef}
-        role="dialog"
       >
         <h2>정리 대상 {objectKeys.length}건 영구 삭제</h2>
         <p className="form-note warn">
@@ -422,7 +575,7 @@ function BulkHardDeleteDialog({
             취소
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

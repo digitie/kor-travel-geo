@@ -19,7 +19,8 @@ Admin UI에는 단일 admin 세션 로그인을 둔다. 기본 계정명은 `adm
 `httpOnly`/`SameSite=Strict` cookie에 HMAC 서명 payload를 저장하며, session secret도
 gitignored env에만 둔다. payload에는 session id, 발급/만료 시각, audience/version,
 user-agent fingerprint를 넣고, logout 시 현재 process의 revocation map에 session id를
-등록한다. 로그인 실패는 IP 기준 짧은 rate limit로 제한한다.
+등록한다. 로그인 실패는 backend audit 로그 기반 durable rate limit을 우선 적용하고, audit 조회가
+불가능할 때는 process-local rate limit로 제한한다.
 
 `/v1/admin/*`는 backend `require_role` gate를 전역 적용한다. backend는
 `KTG_ADMIN_TRUSTED_PROXY_CIDRS` 안의 peer에서 온 `X-KTG-Actor`/`X-KTG-Roles`만 신뢰하고,
@@ -36,8 +37,8 @@ Next.js `/api/auth/login`과 `/api/auth/logout`은 backend trusted proxy endpoin
 공개 REST API key는 `ops.public_api_keys`에 저장한다. DB에는 SHA-256 hash, hint, 상태와 감사
 metadata만 저장하고 plaintext key는 생성 응답에서 한 번만 반환한다. Admin UI 설정 화면은
 로드/새로고침 때 DB 목록을 다시 조회하고, 생성 직후 plaintext key를 이 브라우저의 공개 API
-요청 key로 저장한다. 검증 hot path는 process-local cache를 사용하며 생성/폐기 때 cache를
-무효화한다.
+요청 key로 저장한다. 공개 API key 검증은 요청마다 DB의 활성 key hash를 조회해 생성·폐기 상태를
+즉시 반영한다.
 
 v1/v2 REST API는 외부/비신뢰 클라이언트에 query parameter `key`를 필수로 요구한다. DB에
 활성 공개 API key가 하나 이상 있으면 그 DB key만 유효하다. 활성 DB key가 아직 없으면
@@ -53,7 +54,7 @@ v2는 구조화 error envelope로 실패를 반환한다.
 직접 위조해도 권한으로 인정되지 않는다.
 - 공개 API key plaintext를 DB에 보관하지 않으면 DB 유출 시 즉시 사용 가능한 key가 노출되지
 않는다.
-- active key hash cache는 매 요청 DB 조회를 피하면서도 생성/폐기 시 즉시 무효화할 수 있다.
+- 공개 API key를 매 요청 DB 조회하면 다중 worker에서도 key 폐기가 즉시 반영된다.
 - DB key가 없을 때 `KTG_VWORLD_API_KEY`를 기본값으로 유지하면 기존 vworld key 기반 운영을
 중단 없이 시작할 수 있다.
 
@@ -70,11 +71,10 @@ v2는 구조화 error envelope로 실패를 반환한다.
 
 - 활성 DB key가 생긴 뒤 plaintext를 잃어버리면 다시 조회할 수 없다. 필요한 client에는 생성
   직후 복사해야 한다.
-- 여러 API 프로세스가 있을 때 cache TTL 동안 외부 프로세스의 key 변경 반영이 늦을 수 있다.
-  기본 TTL은 30초이며 단일 PC/dev 운용에서는 생성·폐기 프로세스가 즉시 cache를 무효화한다.
+- 공개 API key 검증이 매 요청 DB 조회를 수행하므로 key 검증 hot path의 DB round-trip이 늘어난다.
 - login/session secret과 admin proxy shared secret을 API/UI 양쪽 env에 맞춰야 한다.
 
 ## 후속
 
-- (open) 다중 인스턴스 운영에서 public API key cache 무효화를 DB notification 또는 짧은 TTL
-  정책으로 충분히 볼지 검증한다.
+- (open) logout revocation map은 현재 UI process-local이다. 다중 UI worker 또는 무중단 재시작에서
+  폐기 세션을 즉시 공유해야 하면 DB/공유 저장소 기반 session store로 분리한다.

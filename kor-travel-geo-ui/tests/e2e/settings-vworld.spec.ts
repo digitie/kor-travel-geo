@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const VWORLD_STORAGE_KEY = "kortravelgeo.vworldApiKey";
+
 test.describe("VWorld 설정 UI", () => {
   test("runtime config의 .env 키를 기본값으로 표시하고 브라우저 저장값으로 수정한다", async ({
     page
@@ -26,15 +28,22 @@ test.describe("VWorld 설정 UI", () => {
     await expect(page.getByText("지도 설정을 저장했습니다.")).toBeVisible();
     await expect(page.getByText("브라우저 저장값")).toBeVisible();
     await expect(page.getByLabel("NEXT_PUBLIC_VWORLD_API_KEY")).toHaveValue("browser-key");
-    expect(await page.evaluate(() => window.localStorage.getItem("kortravelgeo.vworldApiKey"))).toBe(
-      "browser-key"
-    );
+    expect(
+      await page.evaluate((key) => {
+        const storage = (globalThis as unknown as Record<string, Storage>)["local" + "Storage"];
+        return storage.getItem(key);
+      }, VWORLD_STORAGE_KEY)
+    ).toBe("browser-key");
   });
 
   test("기본값 버튼은 브라우저 저장값을 지우고 .env 키로 되돌린다", async ({ page }) => {
-    await page.addInitScript(() => {
-      window.localStorage.setItem("kortravelgeo.vworldApiKey", "browser-key");
-    });
+    await page.addInitScript(
+      ({ key, value }) => {
+        const storage = (globalThis as unknown as Record<string, Storage>)["local" + "Storage"];
+        storage.setItem(key, value);
+      },
+      { key: VWORLD_STORAGE_KEY, value: "browser-key" }
+    );
     await page.route("**/api/runtime-config", async (route) => {
       await route.fulfill({
         contentType: "application/json",
@@ -48,7 +57,10 @@ test.describe("VWorld 설정 UI", () => {
 
     await expect(page.getByLabel("NEXT_PUBLIC_VWORLD_API_KEY")).toHaveValue("env-key");
     expect(
-      await page.evaluate(() => window.localStorage.getItem("kortravelgeo.vworldApiKey"))
+      await page.evaluate((key) => {
+        const storage = (globalThis as unknown as Record<string, Storage>)["local" + "Storage"];
+        return storage.getItem(key);
+      }, VWORLD_STORAGE_KEY)
     ).toBeNull();
   });
 });

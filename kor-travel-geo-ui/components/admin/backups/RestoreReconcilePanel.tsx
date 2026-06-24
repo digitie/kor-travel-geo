@@ -6,6 +6,7 @@ import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
+import { reconcileFromManifest } from "@/components/admin/backups/restore-reconcile-utils";
 import {
   type OpsArtifact,
   type RestoreReconcileResult,
@@ -25,18 +26,6 @@ const reconcileColumns: VirtualColumn<RestoreRowCountDiff>[] = [
     )
   }
 ];
-
-/**
- * Extract the T-233 ``row_count_verification`` reconcile block from a ``db_restore_log``
- * artifact manifest. Returns null for legacy restore logs that predate T-233.
- */
-export function reconcileFromManifest(
-  manifest: Record<string, unknown> | undefined
-): RestoreReconcileResult | null {
-  const block = manifest?.["row_count_verification"];
-  if (!block || typeof block !== "object") return null;
-  return block as RestoreReconcileResult;
-}
 
 /**
  * Post-restore reconcile results (T-253): lists recent ``db_restore_log`` artifacts and, for

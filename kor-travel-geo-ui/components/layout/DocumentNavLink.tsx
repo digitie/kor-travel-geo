@@ -6,11 +6,13 @@ import type { MouseEvent, ReactNode } from "react";
 export function DocumentNavLink({
   children,
   className,
-  href
+  href,
+  onNavigate
 }: {
   children: ReactNode;
   className?: string;
   href: string;
+  onNavigate?: () => void;
 }) {
   function navigate(event: MouseEvent<HTMLAnchorElement>) {
     if (
@@ -25,6 +27,7 @@ export function DocumentNavLink({
     }
 
     event.preventDefault();
+    onNavigate?.();
     window.location.assign(href);
   }
 

@@ -805,14 +805,14 @@ function DecisionModal({
   onSubmit: () => void;
 }) {
   const reasons = decisionReasons[form.state];
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const reasonRef = useRef<HTMLSelectElement>(null);
   // a11y (T-227): Esc closes the decision modal, Tab is trapped, focus lands on the reason
   // select and returns to the trigger (판정 버튼) on close.
   useModalA11y({ dialogRef, onClose, initialFocusRef: reasonRef });
   return (
     <div className="modal-backdrop">
-      <div aria-label="정합성 판정" aria-modal="true" className="modal" ref={dialogRef} role="dialog">
+      <dialog aria-label="정합성 판정" className="modal" open ref={dialogRef}>
         <h2>
           {decisionLabels[form.state]} · {sampleCount.toLocaleString()}건
         </h2>
@@ -854,7 +854,7 @@ function DecisionModal({
             닫기
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

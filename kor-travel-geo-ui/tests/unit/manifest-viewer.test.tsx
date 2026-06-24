@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ManifestViewer, inventoryTone } from "@/components/admin/backups/ManifestViewer";
+import { ManifestViewer } from "@/components/admin/backups/ManifestViewer";
+import { inventoryTone } from "@/components/admin/backups/manifest-utils";
 import type { BackupArtifact } from "@/lib/api";
 
 const ARTIFACT: BackupArtifact = {

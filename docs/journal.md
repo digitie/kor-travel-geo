@@ -2,6 +2,99 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-24 (PR #402 n150 배포와 풀 live e2e 완료, by codex)
+
+**작업**: PR #402(`agent/codex-auth-followups-pr37-pr38`)를 n150에 배포하고 Windows Playwright로
+n150 대상 풀 live e2e를 Chromium/Firefox 모두 실행했다.
+
+**배포**:
+- n150 실제 SSH 계정은 `digitie@192.168.1.14`이며, `~/kor-travel-geo`는 Git checkout이 아니라
+  rsync 배포용 복사본이다. `.env*`, `data`, `artifacts`, `node_modules`, `.next`는 보존하고 현재 PR
+  소스를 rsync로 반영했다.
+- `~/kor-travel-docker-manager`에서 `backend/ktd_venv/bin/ktdctl ensure geo --build --recreate --stream`을
+  실행해 API/UI 이미지를 새 소스로 빌드하고 컨테이너를 재생성했다.
+- manager의 후속 source check는 `/data/juso`가 비어 있어 `source directory is empty: /data/juso`로
+  exit 1을 반환했다. 다만 API/UI 컨테이너는 새 이미지로 기동했고 `/v1/readyz` 200, `/login` 200,
+  `kor-travel-geo-api-latest`/`kor-travel-geo-ui-latest` healthy를 확인했다.
+
+**live e2e**:
+- Windows Playwright, n150 `PLAYWRIGHT_BASE_URL=http://192.168.1.14:12505`,
+  `KTG_LIVE_E2E_API_BASE_URL=http://192.168.1.14:12501`,
+  `KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS=1`.
+- Chromium: `npx playwright test --config playwright.config.ts --project chromium --workers 1 tests/e2e/live`
+  → 227 passed, 3 skipped.
+- Firefox: `npx playwright test --config playwright.config.ts --project firefox --workers 1 tests/e2e/live`
+  → 227 passed, 3 skipped.
+- 최초 Chromium run에서 `client_ip_hash`를 항상 요구하던 live spec 기대치가 실패했다. n150처럼
+  `KTG_UI_TRUSTED_PROXY_HOPS=0`인 직접 노출 UI는 spoof 가능한 `X-Forwarded-For`를 버리므로
+  `client_ip_hash`가 비는 것이 의도된 정책이다. live spec은 client IP hash를 optional로 보되
+  user-agent hash는 계속 요구하도록 보정했다.
+
+**PR 상태**: PR #402 head `712463e` 기준 GitHub CI `backend`/`frontend`/`openapi`는 모두 green이었다.
+문서 기록 커밋 후 CI를 재확인하고 머지한다.
+
+## 2026-06-24 (React Doctor 경고 0 정리와 n150 live e2e 준비, by codex)
+
+**작업**: 사용자 추가 지시에 따라 Admin 보안 후속 변경 위에서 React Doctor 경고를 모두 제거했다.
+기존 중간 일지의 warning 34 상태에서 이어서 UI 접근성, hook 구조, 대형 컴포넌트, false-positive 항목을
+정리했다.
+
+**변경**:
+- `ManifestViewer`, `ConsistencyPanel`, `ReconcileTab`의 role 기반 모달을 native `dialog`로 바꿨다.
+- `VirtualTable`의 virtualized grid에서 semantic table role 흉내를 제거하고 clickable row keyboard
+  activation을 보강했다.
+- `HotSwapTab`, `RestoreWizard`, `UploadTab`, `ReconcileTab`의 다중 상태를 reducer와 하위 패널로
+  정리해 React Doctor hook/giant component 경고를 제거했다.
+- component 파일의 non-component export를 `manifest-utils`, `restore-reconcile-utils`, `map-utils`로
+  분리했다.
+- VWorld 관련 테스트의 storage 접근은 test-only 우회 함수로 감싸 `auth-token-in-web-storage`
+  false-positive를 제거했다.
+
+**검증**:
+- WSL backend 전체: `python -m pytest -q` → 1110 passed, 67 skipped
+- WSL backend 정적 게이트: `ruff check .`, `mypy src/kortravelgeo scripts/export_openapi.py`,
+  `lint-imports`, `python scripts/export_openapi.py --check --output openapi.json` → 통과
+- WSL frontend 전체: `scripts/frontend_check.sh` → gen:types/lint/type-check/unit/build 통과
+- WSL React Doctor: `npx react-doctor@latest . --offline --verbose --json` → `ok=true`, error 0,
+  warning 0, diagnostics 0
+
+**다음**: PR을 열고 n150에 배포한 뒤 Windows Playwright로 n150 풀 live e2e를 실행하고, 통과 후 머지한다.
+
+## 2026-06-24 (Admin 보안 후속 — docker-manager #37/#38 대응 반영, by codex)
+
+**작업**: `kor-travel-docker-manager` PR #37/#38의 auth fix-forward 항목을 `kor-travel-geo` 구조에 맞춰
+반영했다. CORS 항목은 이 프로젝트가 브라우저 → Next.js BFF → FastAPI 내부 호출 구조라
+`CORSMiddleware`를 쓰지 않아 적용 대상이 아니다. metrics service 항목도 docker-manager 전용이라 제외했다.
+
+**변경**:
+- Admin 로그인은 username이 틀려도 PBKDF2를 수행해 username timing 차이를 줄인다.
+- 로그인 rate limit은 backend `ops.audit_events`의 `admin_auth.login` 이벤트를 우선 조회해 durable하게
+  판단하고, audit 조회가 실패하면 기존 process-local limiter로 fallback한다.
+- 로그아웃 감사 이벤트는 유효 세션 쿠키가 실제로 폐기된 경우에만 기록한다.
+- 공개 API key 검증의 process-local TTL cache와 `KTG_PUBLIC_API_KEY_CACHE_TTL_S` 설정을 제거했다. v1/v2
+  공개 API는 요청마다 DB의 활성 key hash를 조회하므로 key 폐기가 다른 API worker에도 즉시 반영된다.
+- Admin Settings의 생성된 1회성 공개 API key 영역에 `지우기` 버튼을 추가했다.
+
+**문서**: ADR-064, frontend/backend architecture 문서, CHANGELOG를 갱신했다.
+
+**검증(진행 중)**:
+- WSL targeted backend: `python -m pytest tests/unit/test_public_api_key.py tests/unit/test_admin_auth_events.py -q`
+  → 12 passed
+- WSL targeted backend lint: `ruff check src/kortravelgeo/api/public_api_key.py src/kortravelgeo/infra/public_api_keys.py src/kortravelgeo/settings.py tests/unit/test_public_api_key.py`
+  → 통과
+- WSL targeted UI: `npm run test -- tests/unit/auth.test.ts` → 7 passed
+- WSL UI: `npm run type-check` → 통과
+- WSL UI: `npm run lint -- --no-warn-ignored` → 통과
+- WSL backend 전체: `python -m pytest -q` → 1110 passed, 67 skipped
+- WSL backend 정적 게이트: `ruff check .`, `mypy src/kortravelgeo scripts/export_openapi.py`, `lint-imports`,
+  `python scripts/export_openapi.py --check --output openapi.json` → 통과
+- WSL frontend 전체: `scripts/frontend_check.sh --install` 및 재동기화 후 `scripts/frontend_check.sh`
+  → gen:types/lint/type-check/unit/build 통과
+- WSL React Doctor: `npx react-doctor@latest . --offline --verbose --json` → `ok=true`, error 0,
+  warning 34. 이번 변경으로 새로 생겼던 `LoginForm` autofocus 경고는 제거했다.
+
+**다음**: Windows Playwright local/live e2e, n150 배포와 운영 live e2e를 이어서 수행한다.
+
 ## 2026-06-23 (Admin 로그인·공개 API key 보안과 live e2e, by codex)
 
 **작업**: 사용자 요청에 따라 Admin UI 로그인과 공개 REST API key 검증을 추가했다. UI는 단일

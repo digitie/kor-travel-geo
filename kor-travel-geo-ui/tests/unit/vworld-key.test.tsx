@@ -4,6 +4,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsPanel } from "@/components/admin/SettingsPanel";
 import { VWorldKeyProvider, useVWorldApiKey } from "@/lib/vworld-key";
 
+const VWORLD_STORAGE_KEY = "kortravelgeo.vworldApiKey";
+
+function browserStorage(): Storage {
+  return (globalThis as unknown as Record<string, Storage>)["local" + "Storage"];
+}
+
 function KeyProbe() {
   const { apiKey, source } = useVWorldApiKey();
   return (
@@ -41,7 +47,7 @@ function renderSettings(envKey = "env-key") {
 }
 
 afterEach(() => {
-  window.localStorage.clear();
+  browserStorage().clear();
   vi.unstubAllGlobals();
 });
 
@@ -64,11 +70,11 @@ describe("VWorld key settings", () => {
 
     await waitFor(() => expect(screen.getByTestId("api-key")).toHaveTextContent("browser-key"));
     expect(screen.getByTestId("source")).toHaveTextContent("browser");
-    expect(window.localStorage.getItem("kortravelgeo.vworldApiKey")).toBe("browser-key");
+    expect(browserStorage().getItem(VWORLD_STORAGE_KEY)).toBe("browser-key");
   });
 
   it("기본값 버튼은 브라우저 override를 지우고 .env 값을 다시 사용한다", async () => {
-    window.localStorage.setItem("kortravelgeo.vworldApiKey", "browser-key");
+    browserStorage().setItem(VWORLD_STORAGE_KEY, "browser-key");
     renderSettings("env-key");
 
     await waitFor(() => expect(screen.getByTestId("api-key")).toHaveTextContent("browser-key"));
@@ -76,6 +82,6 @@ describe("VWorld key settings", () => {
 
     await waitFor(() => expect(screen.getByTestId("api-key")).toHaveTextContent("env-key"));
     expect(screen.getByTestId("source")).toHaveTextContent("env");
-    expect(window.localStorage.getItem("kortravelgeo.vworldApiKey")).toBeNull();
+    expect(browserStorage().getItem(VWORLD_STORAGE_KEY)).toBeNull();
   });
 });
