@@ -92,6 +92,12 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 
 인덱스: [`docs/runbooks/README.md`](docs/runbooks/README.md). 환경 1차 문서는 `docs/dev-environment.md` / `docs/codegraph-worktree.md` / `docs/agent-guide.md`.
 
+> **로컬 필독 (커밋 안 됨)**: `docs/deploy-runbook.local.md` — 배포·검증·머지에서 **반복되는 실수**(특히 #399 이후
+> 로그인 깨짐)를 상세 기록하고 표준 배포 절차·체크리스트·push 전 프로젝트 민감값 스캔을 둔다. `docs/prod-access.local.md`
+> — prod 접속 정보와 필수 `.env` 키. git이 추적하지 않으므로(`.gitignore`의 `*.local.md` + `.git/info/exclude`)
+> **워크트리마다 수동 복사**한다(claude/codex/antigravity/opencode + main repo). 새 사고는 런북 "사고 로그"에 추가.
+> 비민감 반복 실패 패턴의 정본은 커밋된 `docs/runbooks/agent-failure-patterns.md`.
+
 ## 에이전트별 고정 worktree와 CodeGraph
 
 AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, NTFS의 `/mnt/f/dev` 아래 고정 worktree를 유지한다(ADR-041). `geo-*` 접두사는 더 이상 쓰지 않고 `kor-travel-geo-*` 접두사로 통일한다.
@@ -167,6 +173,24 @@ Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `do
 - [ ] 의사결정이 있었다면 `docs/decisions.md`에 ADR 추가
 - [ ] 사용자 가시 변경이면 `CHANGELOG.md` 갱신
 - [ ] DTO/스키마 변경이면 `scripts/export_openapi.py` 재실행 → 프론트엔드 `gen:types`
+
+## Remote push 전 보안 감사 절차 (필수)
+
+원격(`git push`)에 올리기 전 **항상** 아래를 수행한다. 민감한 grep 타깃·prod 접속 정보 등 구체값은
+gitignored `docs/deploy-runbook.local.md`(§0·§6) · `docs/prod-access.local.md`(워크트리별 로컬 복사본)에 있다.
+
+1. **스테이징 diff 직접 확인** — `git diff --staged` 로 무엇이 올라가는지 눈으로 본다.
+2. **비밀 패턴 스캔** — diff에서 secret/API 키/패스워드 해시(`pbkdf2_sha256$…`)/DB DSN(`…://user:pass@…`)/
+   private key/실 IP(prod 호스트)를 grep으로 점검한다(프로젝트별 구체 패턴은 `docs/deploy-runbook.local.md` §6).
+3. **로컬 비밀 파일 확인** — `.env`·`.env.local`·`app.env`·`*.local.md`·`settings.local.json`이
+   스테이징/추적되지 않았는지 `git status`로 확인한다. `.env*.example`은 `<placeholder>`만.
+4. **`git add -A` / `git add .` 금지** — 변경 파일을 **명시적으로** add 한다(untracked 민감 파일 동반 커밋 방지).
+5. **보안 민감 변경**(인증·세션·키·프록시·권한·암호화)이면 push 전 `/security-review` 스킬을 브랜치 diff에 돌려
+   결과를 반영한다.
+6. 의심되면 push하지 말고 사용자에게 확인한다.
+
+배포·검증·머지에서 반복되는 실수와 회피책은 gitignored `docs/deploy-runbook.local.md`(상세·민감)와 커밋된
+`docs/runbooks/agent-failure-patterns.md`(비민감)에 기록한다.
 
 ## 검증
 
