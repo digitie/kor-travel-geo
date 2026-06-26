@@ -26,9 +26,9 @@ dist/
 .codegraph/
 .claude/settings.local.json
 
-# 배포·릴리스 반복 실수 로그 + 민감 운영 메모(prod 호스트/secret 변수명·위치 등). 커밋 금지.
-# 워크트리별 수동 복사본으로만 둔다. AGENTS.md "Remote push 전 보안 감사 절차" 참고.
-AGENTS.local.md
+# 배포·운영 민감 로컬 문서(prod 접속/배포 런북, 민감 운영 메모). 커밋 금지 — 워크트리별 수동 복사본으로만 둔다.
+# docs/deploy-runbook.local.md · docs/prod-access.local.md. AGENTS.md "Remote push 전 보안 감사 절차" 참고.
+*.local.md
 
 data/
 *.sqlite
