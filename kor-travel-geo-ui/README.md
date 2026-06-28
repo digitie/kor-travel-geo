@@ -41,7 +41,7 @@ npx react-doctor@latest . --offline --verbose --json
 
 모든 프론트엔드 작업 뒤에는 React Doctor를 실행하고, 새 경고가 나오면 수정한 뒤 같은 명령을 다시 실행해 경고가 남지 않았음을 확인한다.
 
-브라우저 e2e는 Playwright로 수행하되 Windows Node/브라우저 환경에서만 실행한다. WSL에서는 `npm run test:e2e`나 `npx playwright test`를 실행하지 않는다. UI 서버는 WSL에서 실행한다. WSL 서버에 Windows Playwright를 붙일 때는 `next dev --hostname 0.0.0.0 --port 12505` 또는 `next start --hostname 0.0.0.0 --port 12505`로 띄우고, Windows 터미널에서 WSL IP를 `PLAYWRIGHT_BASE_URL`로 지정한다. PR 완료 전 e2e는 Chrome 기준 `chromium` project와 Firefox 기준 `firefox` project를 모두 실행한다.
+브라우저 e2e는 Playwright로 수행하되 n150 Linux 환경에서 먼저 실행한다. PR 완료 전 e2e는 Chrome 기준 `chromium` project와 Firefox 기준 `firefox` project를 모두 실행한다. n150에서 실행할 수 없는 경우에만 Windows Playwright를 fallback으로 사용하고, fallback 사유와 실행 명령을 PR 설명 또는 `docs/journal.md`에 기록한다.
 
 ```bat
 set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:12505

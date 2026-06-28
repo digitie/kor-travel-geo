@@ -36,13 +36,14 @@
 
 ## 스택 기동 (현재 dev 프로파일)
 
-Git source of truth는 NTFS worktree이고, 의존성 설치·API/UI 서버 실행은 WSL ext4 테스트 미러에서 수행한다.
-Playwright와 실제 브라우저만 Windows에서 실행한다. PostgreSQL/PostGIS와 RustFS는 이 저장소에서 직접
-구동하지 않고, 이미 떠 있는 공용 인프라에 `KTG_PG_DSN`과 `KTG_RUSTFS_*`로 접속한다. 현재 dev 기본 포트는
-API `12501`, UI `12505`다.
+개발 명령은 Linux 환경에서만 실행한다. 의존성 설치·API/UI 서버 실행은 WSL ext4 테스트 미러에서 수행하고,
+Playwright와 실제 브라우저 검증은 n150 Linux 환경에서 먼저 실행한다. n150에서 실행할 수 없는 경우에만
+Windows Playwright를 fallback으로 사용하고, 그 사유와 명령을 작업 기록에 남긴다. PostgreSQL/PostGIS와
+RustFS는 이 저장소에서 직접 구동하지 않고, 이미 떠 있는 공용 인프라에 `KTG_PG_DSN`과 `KTG_RUSTFS_*`로
+접속한다. 현재 dev 기본 포트는 API `12501`, UI `12505`다.
 
 ```bash
-# 1) WSL ext4 테스트 미러에서 최신 NTFS worktree를 동기화하고 환경 보정
+# 1) WSL ext4 테스트 미러에서 최신 고정 worktree를 동기화하고 환경 보정
 cd /mnt/f/dev/kor-travel-geo-codex
 rsync -a --delete \
   --exclude .git --exclude .codegraph --exclude .venv \
@@ -57,14 +58,14 @@ source scripts/agent_env.sh
 scripts/docker_app.sh build-api
 KTG_ENV_FILE=.env.dev KTG_GEOIP_GATE_MODE=off KTG_FORCE_KILL=1 scripts/docker_app.sh up-api
 
-# 3) UI 서버. Windows Playwright가 붙을 수 있도록 0.0.0.0으로 연다.
+# 3) UI 서버. 원격 브라우저가 붙을 수 있도록 0.0.0.0으로 연다.
 cd kor-travel-geo-ui
 npm run build
 npm run start -- --hostname 0.0.0.0 --port 12505
 ```
 
-Admin UI live e2e는 실제 로그인을 수행한다. 비밀번호 평문은 Git에 두지 말고 Windows PowerShell
-세션의 환경변수나 로컬 secret manager에서만 주입한다. `KTG_UI_ADMIN_PASSWORD_HASH`와
+Admin UI live e2e는 실제 로그인을 수행한다. 비밀번호 평문은 Git에 두지 말고 실행 환경의
+환경변수나 로컬 secret manager에서만 주입한다. `KTG_UI_ADMIN_PASSWORD_HASH`와
 `KTG_UI_SESSION_SECRET`, `KTG_ADMIN_PROXY_SECRET`은 UI 서버가 읽는 `.env.local`에, 같은
 `KTG_ADMIN_PROXY_SECRET`은 backend `.env`에 설정되어 있어야 한다.
 
@@ -72,28 +73,33 @@ Admin UI live e2e는 실제 로그인을 수행한다. 비밀번호 평문은 Gi
 > PowerShell 세션이나 `.env.local`에 설정해야 한다. 서버를 이미 띄웠다면 중지한 뒤 설정하고
 > `npm run start`를 다시 실행한다(서버 기동 후 설정하면 반영되지 않는다).
 
-```powershell
+```bash
 # API가 Next proxy peer를 신뢰하도록 backend env에 설정한다. API와 UI가 같은 dev host에서
 # 127.0.0.1로 통신하면 loopback만으로 충분하다. secret 값은 backend와 Next에 동일하게 둔다.
-$env:KTG_ADMIN_TRUSTED_PROXY_CIDRS = "127.0.0.1/32,::1/128"
-$env:KTG_ADMIN_PROXY_SECRET = "<same-random-admin-proxy-secret>"
+export KTG_ADMIN_TRUSTED_PROXY_CIDRS="127.0.0.1/32,::1/128"
+export KTG_ADMIN_PROXY_SECRET="<same-random-admin-proxy-secret>"
 ```
 
-```powershell
-# 4) 라이브 e2e 실행 (Windows Playwright)
+```bash
+# 4) 라이브 e2e 실행 (n150 Linux Playwright 우선)
 cd kor-travel-geo-ui
-$env:LIVE_E2E = "1"; $env:PLAYWRIGHT_BASE_URL = "http://<WSL_IP>:12505"
-$env:KTG_LIVE_E2E_ADMIN_USERNAME = "admin"
-$env:KTG_LIVE_E2E_ADMIN_PASSWORD = "<local-admin-password>"
-$env:KTG_LIVE_E2E_API_BASE_URL = "http://127.0.0.1:12501"
+export LIVE_E2E=1
+export PLAYWRIGHT_BASE_URL="http://127.0.0.1:12505"
+export KTG_LIVE_E2E_ADMIN_USERNAME="admin"
+export KTG_LIVE_E2E_ADMIN_PASSWORD="<local-admin-password>"
+export KTG_LIVE_E2E_API_BASE_URL="http://127.0.0.1:12501"
 
 # DB에 공개 API key를 만들고 즉시 폐기하는 opt-in 케이스까지 실행할 때만 켠다.
-$env:KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS = "1"
+export KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS=1
 npx playwright test --config playwright.config.ts --project chromium --workers 1 tests/e2e/live
 npx playwright test --config playwright.config.ts --project firefox --workers 1 tests/e2e/live
 ```
 
 기본 mock 런(`npx playwright test`, `LIVE_E2E` 없음)은 `live/*`를 건너뛰므로 영향 없다.
+
+n150에서 브라우저 실행이 불가능한 경우에는 Windows Playwright를 fallback으로 사용할 수 있다. 이때는
+`PLAYWRIGHT_BASE_URL`이 실제 UI 서버를 가리키는지 확인하고, fallback 사유·명령·브라우저 project·결과를
+`docs/journal.md` 또는 PR 설명에 남긴다. secret 값은 어느 환경에서도 문서화하지 않는다.
 
 ## 주의
 

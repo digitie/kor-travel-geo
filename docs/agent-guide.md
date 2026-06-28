@@ -40,16 +40,16 @@ API schema, 테스트가 같은 계약을 공유하는지 먼저 본다. PR scop
 
 ### 1.2 자기 worktree로 이동
 
-이 저장소는 **에이전트별 고정 worktree** 정책을 쓴다(ADR-041,
+이 저장소는 **에이전트별 고정 worktree** 정책을 쓴다(ADR-065,
 `docs/codegraph-worktree.md`). 컨텍스트 확보 직전에 자기 worktree로 이동하고
-CodeGraph 인덱스를 맞춘다. NTFS worktree의 Git metadata는 Windows Git
-기준(`F:/dev/...`)이므로 git 명령은 Windows `git.exe`로 한다.
+Linux Git과 CodeGraph 인덱스를 맞춘다. `.git`/`gitdir`이 `F:/...` 같은
+과거 Windows 경로를 가리키면 먼저 Linux 환경에서 repair한다.
 
 ```bash
-# 어떤 AI 에이전트인지에 따라 (Windows git.exe 사용)
-"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-codex       status -sb   # ChatGPT Codex
-"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-claude      status -sb   # Claude Code
-"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-antigravity status -sb   # Google Antigravity 2.0
+# 어떤 AI 에이전트인지에 따라
+git -C /mnt/f/dev/kor-travel-geo-codex       status -sb   # ChatGPT Codex
+git -C /mnt/f/dev/kor-travel-geo-claude      status -sb   # Claude Code
+git -C /mnt/f/dev/kor-travel-geo-antigravity status -sb   # Google Antigravity 2.0
 ```
 
 worktree가 없으면 `docs/codegraph-worktree.md` §3 "최초 setup". CodeGraph
@@ -210,16 +210,16 @@ T-2xx), 두 에이전트 병행 순서, PR/리뷰 루프, 사양 참조 — 은
 - [ ] 백엔드 DTO가 바뀌었으면 `npm run gen:types`로 타입 재생성
 - [ ] `scripts/frontend_check.sh` (Linux Node 강제, gen:types→lint→type-check
       →test→build) + `npx react-doctor@latest . --offline --verbose --json`
-- [ ] Playwright e2e는 Windows에서 WSL UI 서버 대상으로 (chromium/firefox)
+- [ ] Playwright e2e는 n150 Linux 환경 우선, 불가 시 Windows fallback 사유 기록 (chromium/firefox)
 - [ ] journal + resume
 
 ## 7.5 PR 워크플로 (ADR-021, 필수)
 
-main에 직접 push 금지. 모든 변경은 작업 branch + PR. 표준 운영 절차(worktree →
-branch → NTFS 편집 → WSL 게이트 → PR → CI green → 머지 → 동기화)의 단계별
+main에 직접 push 금지. 모든 변경은 작업 branch + PR. 표준 운영 절차(Linux worktree →
+branch → WSL/ext4 게이트 → PR → CI green → 머지 → 동기화)의 단계별
 런북은 `docs/runbooks/agent-workflow.md`다.
 
-### 7.5.1 시작 (NTFS worktree, Windows git.exe)
+### 7.5.1 시작 (Linux worktree)
 
 ```bash
 cd /mnt/f/dev/kor-travel-geo-<agent>
@@ -309,8 +309,8 @@ checkout하지 않는다.
   gh pr view <PR> --repo digitie/kor-travel-geo --json number,state,mergeable,statusCheckRollup
   gh pr merge <PR> --repo digitie/kor-travel-geo --merge --delete-branch
   ```
-- WSL `gh`가 현재 worktree의 Windows Git metadata를 읽다 실패하면 같은 명령을
-  반복하지 말고 `--repo digitie/kor-travel-geo`로 repo를 명시한다.
+- `gh`가 현재 worktree의 Git metadata를 읽다 실패하면 같은 명령을 반복하지 말고
+  `--repo digitie/kor-travel-geo`로 repo를 명시한다.
 
 ### 7.5.6 main 직접 push 차단
 
@@ -320,8 +320,8 @@ GitHub branch protection(운영자 수동 설정): PR 필수, required status ch
 
 ## 8. 검증 게이트 (4 게이트 + 프론트엔드)
 
-설치·테스트·장기 실행은 **WSL ext4 테스트 미러**에서 한다. NTFS worktree는
-편집·branch·commit·PR 기준이다. 미러 셸에서 `source scripts/agent_env.sh`를
+설치·테스트·장기 실행은 **WSL ext4 테스트 미러**에서 한다. 고정 worktree는
+Linux Git 기준 편집·branch·commit·PR 경로다. 미러 셸에서 `source scripts/agent_env.sh`를
 먼저 실행하면 `TMPDIR`·venv·Node PATH 함정을 한 번에 없앤다(`docs/runbooks/
 agent-workflow.md` §1).
 
@@ -339,25 +339,24 @@ python scripts/export_openapi.py --check --output openapi.json
 scripts/frontend_check.sh           # 의존성 재설치 필요 시 --install
 cd kor-travel-geo-ui && npx react-doctor@latest . --offline --verbose --json
 
-# Playwright e2e (Windows에서 WSL UI 서버 대상, chromium/firefox)
+# Playwright e2e (n150 Linux 우선, 불가 시 Windows fallback, chromium/firefox)
 ```
 
 import 루트는 `from kortravelgeo import ...`(flat 금지), 의존 방향은 `dto →
 core → infra → client → api/cli` 한 방향(`lint-imports` 강제). 자세한 검증
 명령과 함정은 `docs/runbooks/agent-workflow.md`·`docs/dev-environment.md`.
 
-## 9. NTFS Git vs WSL 실행 흐름
+## 9. Linux worktree vs WSL 테스트 미러 흐름
 
-- 편집·branch·commit·push·PR은 NTFS worktree에서. Git metadata는 Windows Git
-  기준이므로 git 명령은 Windows `git.exe`로 한다.
-- 의존성 설치·테스트·lint·type-check·build·`uvicorn`·Node/npm·`gh`는 WSL ext4
-  테스트 미러에서. 미러에서는 commit/push하지 않는다(단방향: 수정 필요 사항은
-  NTFS worktree에 반영).
-- Playwright e2e와 브라우저는 Windows에서만. WSL UI 서버(`--hostname
-  0.0.0.0`)에 `PLAYWRIGHT_BASE_URL`로 붙인다.
+- 편집·branch·commit·push·PR 준비는 고정 worktree에서 Linux `git`으로 수행한다.
+- 의존성 설치·테스트·lint·type-check·build·`uvicorn`·Node/npm은 WSL ext4 테스트
+  미러에서 수행한다. 미러에서는 commit/push하지 않는다(단방향: 수정 필요 사항은
+  고정 worktree에 반영).
+- CodeGraph는 고정 worktree에서 Linux `codegraph sync` → `codegraph status` 순서로 실행한다.
+- Playwright e2e와 브라우저 검증은 n150 Linux 환경에서 먼저 실행한다. n150에서 실행할 수 없을 때만 Windows fallback을 쓰고 사유와 명령을 기록한다.
 - 이 저장소는 PostgreSQL/PostGIS와 RustFS를 **직접 구동하지 않는다**(DO NOT
   §11). 이미 동작 중인 DB/bucket에 `KTG_PG_DSN`, `KTG_RUSTFS_*`로 접속한다.
-- 대용량 Juso 원천은 NTFS 공용 루트 `F:\dev\geodata\juso`가 기준이고, 미러는
+- 대용량 Juso 원천은 공용 루트 `/mnt/f/dev/geodata/juso`가 기준이고, 미러는
   `data -> /mnt/f/dev/geodata` symlink로 참조한다(git에 넣지 않는다).
 
 상세는 `docs/dev-environment.md`, `docs/runbooks/agent-workflow.md`.
@@ -386,8 +385,8 @@ comment 목록에는 보이지 않는다.
    있다. "thread 없음"은 "리뷰 없음"이 아니다. 마지막 conversation comment도
    별도 확인한다.
 
-WSL `gh`가 현재 worktree의 Windows Git metadata 충돌로 실패하면 같은 명령을
-반복하지 말고 `--repo digitie/kor-travel-geo`로 repo를 명시한다.
+`gh`가 현재 worktree의 Git metadata 충돌로 실패하면 같은 명령을 반복하지 말고
+`--repo digitie/kor-travel-geo`로 repo를 명시한다.
 
 리뷰 반영(fixup) PR에는 추가 리뷰를 붙이지 않는다(리뷰→fixup→fixup의 리뷰…
 무한 루프 방지). 반영 중 발견한 새 결함은 별도 Task/issue로 분리한다(정본 규칙은
