@@ -1,100 +1,118 @@
-# 에이전트 개발 워크플로 런북 — WSL 코딩/테스트 + NTFS git
+# 에이전트 개발 워크플로 런북 — Linux Git/CodeGraph + WSL 테스트 미러
 
-> **목적**: NTFS 고정 worktree에서 편집·git을, WSL ext4 미러에서 설치·테스트를 수행하는 **현재 방식**을 새 에이전트(특히 WSL의 Codex)가 그대로 따라할 수 있게 정리한다. 배경·세부는 `docs/dev-environment.md`, git 환경 정책은 `docs/dev-environment.md` §1.1, 포트는 `docs/ports.md`.
+> **목적**: 새 에이전트가 현재 개발 루프를 그대로 따라 할 수 있게 정리한다. 모든 개발 명령은 Linux 환경에서 실행한다(ADR-065). WSL은 허용되는 Linux 환경이며, Windows native `git.exe`/Node/npm/Python/CodeGraph는 표준 경로가 아니다.
 >
-> 이 문서는 "내가 손에 든 셸에서 어떤 순서로 무엇을 치면 동작하는 개발 루프가 되는가"에 답한다. 사양/이론이 아니라 런북이다.
+> 이 문서는 "내가 손에 든 Linux 셸에서 어떤 순서로 무엇을 치면 동작하는가"에 답한다. 배경과 reference는 `docs/dev-environment.md`, 포트는 `docs/ports.md`를 본다.
 
-## 0. 큰 그림 — 두 위치를 절대 헷갈리지 말 것
+## 0. 큰 그림
 
 | 위치 | 정체 | 여기서 하는 것 | 여기서 하지 않는 것 |
 |------|------|----------------|---------------------|
-| **NTFS 고정 worktree** (에이전트별) | git source of truth | 편집, branch, commit, push, PR | `pip install`, `pytest`, `npm`, `uvicorn` 같은 무거운 실행 |
-| **WSL ext4 테스트 미러** | 실행 산출물 전용 사본 | 의존성 설치, pytest, ruff/mypy, frontend 검증, 장기 실행 | commit, push, PR (여기 변경은 worktree로 되가져온다) |
+| **고정 worktree** (에이전트별) | Linux `git` source of truth | 편집, branch, commit, push, PR 준비, CodeGraph sync | `pip install`, `pytest`, `npm`, `uvicorn` 같은 무거운 실행 |
+| **WSL ext4 테스트 미러** | 실행 산출물 전용 사본 | 의존성 설치, pytest, ruff/mypy, frontend 검증, 장기 실행 | commit, push, PR |
+| **n150 Linux 환경** | 브라우저 e2e 우선 실행지 | Playwright live/mock e2e, 실제 브라우저 검증 | secret 값 문서화 |
 
-- 에이전트별 worktree는 **고정 이름**이다(ADR-041): Codex=`kor-travel-geo-codex`, Claude=`kor-travel-geo-claude`, Antigravity=`kor-travel-geo-antigravity`. idle branch는 `agent/<agent>-idle`.
-- **폐기된 옛 방식**(문서에서 보이면 무시): `geo-*` worktree 접두사, `~/kor-travel-geo-data` ext4 데이터 레이아웃, 단일 `~/dev/kor-travel-geo` ext4 클론. 대용량 Juso 원천은 NTFS 공용 루트 `F:\dev\geodata\juso`가 기준이고, 미러는 `data -> /mnt/f/dev/geodata` symlink로 참조한다.
-- **NTFS worktree에서 직접 무거운 테스트/설치를 돌리지 않는다.** `/mnt` NTFS는 대량 I/O·파일워치·임시파일 처리에서 반복 문제를 낸다. 그래서 미러가 따로 있다.
+- 에이전트별 worktree는 고정 이름이다(ADR-065): Codex=`kor-travel-geo-codex`, Claude=`kor-travel-geo-claude`, Antigravity=`kor-travel-geo-antigravity`.
+- 폐기된 옛 방식: `geo-*` worktree 접두사, Windows Git/Windows CodeGraph 포인터, Windows Playwright 우선 실행.
+- `/mnt/f/dev/...`처럼 NTFS mount 위의 worktree를 사용할 수는 있지만, Git metadata는 Linux 경로(`/mnt/f/...`)로 repair되어 있어야 한다.
+- 대용량 Juso 원천은 `/mnt/f/dev/geodata/juso`가 기준이고, 미러는 `data -> /mnt/f/dev/geodata` symlink로 참조한다.
 
-## 1. 먼저 없애야 할 두 함정 (이게 매번 발목을 잡는다)
-
-새 에이전트가 가장 자주 헤매는 지점이다. 셋업 첫 단계에서 한 번에 해결한다.
+## 1. 먼저 없애야 할 함정
 
 ### (A) Windows npm/node shim이 PATH를 가린다
-WSL PATH에 `/mnt/c/Users/.../AppData/Roaming/npm`이 먼저 잡히면 `node: not found`나 UNC 경로 경고가 나고, 프론트 검증이 통째로 실패/스킵된다.
-- 프론트 검증은 **반드시 `scripts/frontend_check.sh`로** 실행한다. 이 스크립트는 `npm`이 `/mnt/*`·`*.exe`·`*.cmd`면 즉시 `exit 2`로 막아 "Windows npm으로 잘못 돌리는" 사고를 차단한다.
-- 그 전에 **Linux Node를 PATH 앞에** 둔다(nvm 또는 로컬 Linux Node 설치). 예: `export PATH=<linux-node-bin>:$PATH`.
-- `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 **WSL ext4 미러의 Linux Node/npm**에서 한다.
-- Playwright·실제 브라우저 렌더링·스크린샷은 **Windows Node/브라우저에서만** 한다. WSL headless Chromium은 `libasound.so.2` 등 공유 라이브러리 누락으로 반복 실패한다. Windows Playwright는 WSL UI 서버(`--hostname 0.0.0.0`)의 IP/포트를 `PLAYWRIGHT_BASE_URL`로 받아 접속한다.
+
+WSL PATH에 `/mnt/c/Users/.../AppData/Roaming/npm`이 먼저 잡히면 `node: not found`나 UNC 경로 경고가 나고 프론트 검증이 실패한다.
+
+- 프론트 검증은 `scripts/frontend_check.sh`로 실행한다. 이 스크립트는 `npm`이 `/mnt/*`·`*.exe`·`*.cmd`면 즉시 실패시킨다.
+- 그 전에 Linux Node를 PATH 앞에 둔다. 예: `source ~/.nvm/nvm.sh`.
+- `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL ext4 미러의 Linux Node/npm에서 한다.
 
 ### (B) TMP/TEMP가 Windows Temp를 가리킨다
-WSL 셸의 기본 `TMP`/`TEMP`가 `/mnt/c/...`이면 pytest capture가 테스트 시작 전에 `FileNotFoundError`로 죽는다.
-- 셸에서 한 번 `export TMPDIR=/tmp TMP=/tmp TEMP=/tmp`.
 
-### 한 번에: `source scripts/agent_env.sh`
-미러 루트에서 셸을 열면 매번 다음 한 줄로 (A)·(B)를 같이 해결한다.
+WSL 셸의 기본 `TMP`/`TEMP`가 `/mnt/c/...`이면 pytest capture가 테스트 시작 전에 실패할 수 있다.
 
 ```bash
-source scripts/agent_env.sh   # TMPDIR=/tmp 고정 + .venv 활성화 + (nvm 있으면) Linux Node 우선 + npm 경고
+export TMPDIR=/tmp TMP=/tmp TEMP=/tmp
 ```
 
-`agent_env.sh`는 현재 셸에만 영향을 준다. Linux npm이 PATH 앞에 없으면 경고를 출력하니, 그때 `export PATH=<linux-node-bin>:$PATH`로 보정한다.
+### 한 번에: `source scripts/agent_env.sh`
 
-## 2. 셋업 — 미러 만들기/갱신 (세션 시작마다)
-
-NTFS worktree 기준으로 ext4 미러를 rsync하고, 대용량 `data/`는 symlink로 잇는다. (상세·정확한 exclude 목록은 `docs/dev-environment.md` §1.)
+미러 루트에서 셸을 열면 매번 다음 한 줄로 TMP·venv·Linux Node PATH를 같이 보정한다.
 
 ```bash
-# 1) 미러 디렉터리(예: 홈 아래 ext4 경로)를 만들고 worktree에서 rsync
-#    (.git/.codegraph/.venv/node_modules/.next/data는 제외)
-mkdir -p <wsl-test-mirror>
+source scripts/agent_env.sh
+```
+
+## 2. 작업 시작
+
+고정 worktree에서 Linux Git 상태를 먼저 확인한다. `.git` 또는 `gitdir`이 `F:/...`를 가리켜 실패하면 main repo에서 repair한다.
+
+```bash
+cd /mnt/f/dev/kor-travel-geo-codex
+git status --short --branch
+
+# 필요할 때만
+cd /mnt/f/dev/kor-travel-geo
+git worktree repair /mnt/f/dev/kor-travel-geo-codex
+```
+
+새 작업 branch는 최신 `origin/main`에서 만든다.
+
+```bash
+cd /mnt/f/dev/kor-travel-geo-codex
+git fetch origin main
+git switch -c agent/codex-<task> origin/main
+codegraph sync
+codegraph status
+```
+
+`codegraph sync`와 `codegraph status`는 병렬로 실행하지 않는다. sync가 끝난 뒤 status를 본다.
+
+## 3. 테스트 미러 만들기/갱신
+
+고정 worktree 기준으로 ext4 미러를 rsync하고, 대용량 `data/`는 symlink로 잇는다.
+
+```bash
+mkdir -p ~/dev/kor-travel-geo-codex-test
 rsync -a --delete \
   --exclude .git --exclude .codegraph --exclude .venv \
   --exclude node_modules --exclude kor-travel-geo-ui/.next \
   --exclude data --exclude artifacts \
-  <ntfs-worktree>/ <wsl-test-mirror>/
+  /mnt/f/dev/kor-travel-geo-codex/ ~/dev/kor-travel-geo-codex-test/
 
-cd <wsl-test-mirror>
-
-# 2) 대용량 data/는 NTFS 공용 geodata를 symlink로 참조 (복사하지 않는다)
+cd ~/dev/kor-travel-geo-codex-test
 test -e data || ln -s /mnt/f/dev/geodata data
-
-# 3) Python 환경 (최초 1회). GDAL 핀 절차는 dev-environment.md §3.
 uv venv && . .venv/bin/activate
-uv pip install -e ".[api,dev]"        # loaders가 필요하면 dev-environment.md §3의 gdal 핀 절차
-
-# 4) 셸 환경 보정 (매 셸)
+uv pip install -e ".[api,dev]"
 source scripts/agent_env.sh
 ```
 
-T-213처럼 후속 benchmark의 기준 입력이 되는 live run 산출물은 WSL 미러의 `artifacts/`를 유일한 보관소로 두지 않는다. 미러는 `rsync --delete`로 갱신되므로 `artifacts/`가 사라질 수 있다. T-213 기준 데이터는 `docs/t213-data-preservation.md`에 따라 전용 PostgreSQL DB, 전용 RustFS prefix, NTFS `F:\dev\geodata\t213-baseline\<run-id>\` artifact 사본으로 보존한다.
+T-213처럼 후속 benchmark의 기준 입력이 되는 live run 산출물은 미러 `artifacts/`를 유일한 보관소로 두지 않는다. `docs/t213-data-preservation.md`에 따라 전용 DB/RustFS prefix와 `/mnt/f/dev/geodata/t213-baseline/<run-id>/` 사본으로 보존한다.
 
-> 미러에서 발견한 수정 필요 사항은 **NTFS worktree에 반영**하고, commit/push도 NTFS worktree에서만 한다. 미러는 버려도 되는 실행 사본이다.
-
-## 3. 작업 루프 (편집은 NTFS, 실행은 미러)
+## 4. 작업 루프
 
 ```
-편집/branch/commit/push/PR  ── NTFS worktree (<ntfs-worktree>)
-        │   (변경을 미러로 rsync 또는 같은 파일을 미러에서 편집하지 말 것 — 단방향)
+편집/branch/commit/push/PR  ── 고정 worktree (Linux git)
+        │   (변경을 미러로 rsync, 미러에서 발견한 수정은 worktree에 다시 반영)
         ▼
-검증                         ── WSL ext4 미러 (<wsl-test-mirror>)
-  backend:  source scripts/agent_env.sh 후
-            pytest -q · ruff check . · mypy src/kortravelgeo scripts/export_openapi.py · lint-imports
+검증                         ── WSL ext4 미러
+  backend:  pytest -q · ruff check . · mypy src/kortravelgeo scripts/export_openapi.py · lint-imports
   openapi:  python scripts/export_openapi.py --check --output openapi.json
-  frontend: scripts/frontend_check.sh        # Linux Node 강제, gen:types→lint→type-check→test→build
-  browser:  Playwright/스크린샷은 Windows에서만, WSL UI 서버를 대상으로 실행하고 명령·경로를 journal에 기록
+  frontend: scripts/frontend_check.sh
+  browser:  n150 Linux Playwright 우선, 불가 시 Windows fallback 사유 기록
         │
         ▼
-기록                         ── journal.md(append) + resume.md 갱신 (NTFS worktree)
+기록                         ── docs/journal.md(append) + docs/resume.md 갱신
 ```
 
-검증 명령은 `source scripts/agent_env.sh`를 먼저 했다면 `TMPDIR=...` 접두를 매번 붙일 필요가 없다. 스니펫을 안 썼다면 각 명령 앞에 `TMPDIR=/tmp TMP=/tmp TEMP=/tmp`를 직접 붙인다.
+검증 명령은 `source scripts/agent_env.sh`를 먼저 했다면 `TMPDIR=...` 접두를 매번 붙일 필요가 없다.
 
-### 3.1 프론트엔드 서버와 Windows Playwright 표준 명령
+## 5. 프론트엔드 서버와 Playwright
 
-`npm run dev`/`npm run start`에 넘기는 Next.js 옵션은 `--` 뒤에만 둔다.
+Next.js 서버 옵션은 `--` 뒤에 둔다.
 
 ```bash
-# WSL ext4 미러, kor-travel-geo-ui 안에서
+cd ~/dev/kor-travel-geo-codex-test/kor-travel-geo-ui
 source ~/.nvm/nvm.sh
 npm run build
 npm run start -- --hostname 0.0.0.0 --port 12505
@@ -107,25 +125,24 @@ npm run start --hostname 0.0.0.0 --port 12505
 npm run dev --hostname 0.0.0.0 --port 12505
 ```
 
-Windows Playwright는 WSL UI 서버에 붙인다. WSL IP는 매번 확인한다. PR 완료 전 e2e는 Chrome 기준 `chromium` project와 Firefox 기준 `firefox` project를 모두 실행한다.
+Playwright와 실제 브라우저 검증은 n150 Linux 환경에서 먼저 수행한다. PR 완료 전 e2e는 Chrome 기준 `chromium` project와 Firefox 기준 `firefox` project를 모두 실행한다. n150에서 실행할 수 없는 경우에만 Windows Playwright를 fallback으로 사용하고, fallback 사유와 명령을 PR 설명 또는 `docs/journal.md`에 남긴다.
 
 ```bash
-# WSL
-hostname -I | awk '{print $1}'
-
-# WSL shell에서 Windows Playwright를 호출하는 검증된 형태
-cmd.exe /V:ON /C "cd /d F:\dev\kor-travel-geo-codex\kor-travel-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:12505&& npx playwright test --config playwright.config.ts --project chromium --workers 1"
-cmd.exe /V:ON /C "cd /d F:\dev\kor-travel-geo-codex\kor-travel-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:12505&& npx playwright test --config playwright.config.ts --project firefox --workers 1"
+# n150 Linux 예시
+cd ~/kor-travel-geo/kor-travel-geo-ui
+export LIVE_E2E=1
+export PLAYWRIGHT_BASE_URL=http://127.0.0.1:12505
+npx playwright test --config playwright.config.ts --project chromium --workers 1 tests/e2e/live
+npx playwright test --config playwright.config.ts --project firefox --workers 1 tests/e2e/live
 ```
 
-실제 VWorld 지도 로딩 e2e는 dev HMR origin 차단을 피하기 위해 production `next start` 서버에서 실행한다. VWorld 키는 Python API `.env`의 `KTG_VWORLD_API_KEY`를 우선 사용하며, 로그에는 키 값을 남기지 않고 존재 여부와 길이만 확인한다.
+VWorld 키는 값 자체를 출력하지 않고 존재 여부와 길이만 확인한다.
 
 ```bash
-source ~/.nvm/nvm.sh
 node -e "fetch('http://127.0.0.1:12505/api/runtime-config').then(r=>r.json()).then(j=>console.log('vworld_key_nonempty=' + Boolean(j.vworldApiKey) + ', length=' + String(j.vworldApiKey || '').length))"
 ```
 
-서버 종료는 session stdin에 기대지 않는다. 포트에서 PID를 찾아 죽인다.
+서버 종료는 포트에서 PID를 찾아 종료한다.
 
 ```bash
 ss -ltnp | rg ':12505'
@@ -133,86 +150,58 @@ kill <PID>
 ss -ltnp | rg ':12505' || true
 ```
 
-### 3.2 GitHub CLI 표준 명령
+## 6. GitHub CLI와 PR
 
-WSL shell의 `gh`는 현재 worktree의 Windows Git metadata를 읽다가 실패할 수 있다. PR 조회·머지는 repo를 명시한다.
+`gh`가 로컬 Git metadata를 읽다가 실패하면 repo를 명시한다. branch/status/commit/push는 Linux `git`으로 수행한다.
 
 ```bash
 gh pr view <PR_NUMBER> --repo digitie/kor-travel-geo --json number,state,mergeable,statusCheckRollup
 gh pr merge <PR_NUMBER> --repo digitie/kor-travel-geo --merge --delete-branch
 ```
 
-branch/status/commit/push는 `gh`가 아니라 Windows `git.exe`로 수행한다.
-
-### 3.3 CodeGraph 실행 순서
-
-`codegraph sync`와 `codegraph status`를 병렬로 실행하지 않는다. sync 완료 후 status를 본다.
-
 ```bash
-codegraph sync
-codegraph status
-codegraph impact <ExportedSymbolName>
+cd /mnt/f/dev/kor-travel-geo-codex
+git add -p
+git commit -m "<message>"
+git push -u origin HEAD
 ```
 
-`impact`는 파일 경로가 아니라 symbol 이름을 받는다.
+## 7. 붙여넣기용 체크리스트
 
-## 4. git worktree 환경 정책 (Windows Git metadata 기준)
-
-worktree의 `.git` 포인터에는 **만든 환경의 절대경로**가 박힌다(WSL은 `/mnt/...`, Windows 네이티브 git은 `F:/...`). 둘이 섞이면 다른 환경 git이 `fatal: not a git repository`를 내고 `git worktree list`에서 `prunable`로 보인다. 이를 막기 위해 **모든 worktree의 Git metadata는 Windows Git 기준(`F:/dev/...`)으로 통일**한다(`docs/dev-environment.md` §1).
-
-- worktree의 `.git`/`gitdir`은 `F:/dev/...`를 가리킨다. **WSL 편의를 위해 `/mnt/f/...`로 고치지 않는다.**
-- WSL에서 worktree에 git 작업(status·branch·commit)이 필요하면 Windows `git.exe`를 쓴다. 예: `"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-<agent> status -sb`.
-- 포인터가 `/mnt/f`로 틀어져 git이 깨지면 Windows에서 `git -C F:/dev/kor-travel-geo worktree repair F:/dev/kor-travel-geo-<agent>` 한 번으로 복구한다.
-- ⚠️ `git worktree prune`은 **Windows에서만** 실행한다. WSL에서 돌리면 `F:/` 기준의 정상 worktree가 `prunable`로 보여 등록이 삭제될 수 있다.
-- 커밋되는 문서/코드에는 절대경로를 넣지 않는다(사용자명·머신 구조 노출). 상대경로나 `<placeholder>`를 쓴다.
-- 자주 재발하는 환경/도구 실패 패턴(WSL `git`이 NTFS worktree에서 실패, `exec_command`의 `CreateProcess ... os error 2`, inline rewrite의 escape 손상 등)은 `docs/runbooks/agent-failure-patterns.md`에 정리돼 있다. 같은 증상이면 프로젝트 버그로 보기 전에 먼저 확인한다.
-- 같은 실패 명령을 같은 형태로 여러 번 반복하지 않는다. 한 번 실패하면 `docs/runbooks/agent-failure-patterns.md`의 대응 패턴으로 전환한다.
-
-## 5. 접속 설정과 로컬 앱 포트
-
-이 저장소는 PostgreSQL/PostGIS와 RustFS를 직접 구동하지 않는다. 이미 동작 중인 DB와 bucket의 접속 정보를 `.env`에 저장해 사용한다.
-
-| 설정/표면 | 예시 | 비고 |
-|------|------|------|
-| `KTG_PG_DSN` | `postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo` | 이미 동작 중인 DB |
-| `KTG_RUSTFS_ENDPOINT_URL` | `http://127.0.0.1:12101` | 이미 동작 중인 bucket endpoint |
-| RustFS console | `http://127.0.0.1:12105` | `kor-travel-docker-manager` 기준 운영 콘솔 |
-| Grafana / cAdvisor / Prometheus | `12205` / `12301` / `12401` | manager 기준 관측 스택 |
-| FastAPI 백엔드 | `12501` | `uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12501` |
-| `kor-travel-geo-ui` | `12505` | `npm run dev -- --port 12505`, Playwright base URL도 12505 |
-
-## 6. 붙여넣기용 체크리스트
+```bash
+# --- 고정 worktree에서 ---
+cd /mnt/f/dev/kor-travel-geo-codex
+git status --short --branch
+git fetch origin main
+git switch -c agent/codex-<task> origin/main
+codegraph sync
+codegraph status
+```
 
 ```bash
 # --- WSL ext4 미러에서 ---
-cd <wsl-test-mirror>
+cd ~/dev/kor-travel-geo-codex-test
 source scripts/agent_env.sh
 
-# backend
 pytest -q
 ruff check .
 mypy src/kortravelgeo scripts/export_openapi.py
 lint-imports
 python scripts/export_openapi.py --check --output openapi.json
-
-# frontend (Linux Node 강제)
-scripts/frontend_check.sh            # 의존성 재설치가 필요하면 --install
-
-# CodeGraph (NTFS는 watcher 비활성 → branch 전환·pull·rebase 뒤 수동)
-codegraph sync && codegraph status
+scripts/frontend_check.sh
 ```
 
 ```bash
-# --- NTFS worktree에서 (편집/git) ---
-cd <ntfs-worktree>
-git fetch origin && git switch -c agent/<agent>-<task> origin/main
-# ...편집...
-git add -p && git commit && git push -u origin HEAD
+# --- 고정 worktree에서 ---
+git add -p
+git commit -m "<message>"
+git push -u origin HEAD
 ```
 
 ## 참고
 
-- `docs/dev-environment.md` — 시스템 패키지(GDAL 핀), 미러 rsync exclude 전체, CodeGraph 설치, 알려진 함정 전체.
-- `docs/agent-guide.md` — 문서화·재개 프로토콜(이 런북은 그 §B4.1 환경 부분을 구체화한 것).
+- `docs/dev-environment.md` — 시스템 패키지(GDAL 핀), 미러 rsync exclude 전체, Linux Git/CodeGraph, 알려진 함정.
+- `docs/agent-guide.md` — 문서화·재개 프로토콜.
 - `docs/ports.md` — 포트 실행 예시.
+- `docs/runbooks/agent-failure-patterns.md` — 반복 실패 패턴과 복구.
 - `docs/windows-reinstall-recovery.md` / `docs/dev-environment-recovery.md` — 재설치/환경 복구.

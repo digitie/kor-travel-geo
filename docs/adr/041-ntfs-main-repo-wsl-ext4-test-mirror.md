@@ -1,6 +1,6 @@
 # ADR-041: NTFS main repo와 WSL ext4 테스트 미러를 사용한다
 
-- 상태: accepted
+- 상태: superseded by ADR-065
 - 날짜: 2026-05-31
 - 결정자: 사용자 요청, codex
 

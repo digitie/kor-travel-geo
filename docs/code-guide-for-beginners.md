@@ -82,7 +82,7 @@ npm run lint
 npm run type-check
 npm run test
 npm run build
-npm run test:e2e   # Windows Node/브라우저에서만 실행
+npm run test:e2e   # n150 Linux 우선, 불가 시 Windows fallback
 ```
 
 스키마 변경이 있다면 `python scripts/export_openapi.py` → `cd kor-travel-geo-ui && npm run gen:types`로 frontend Zod/types를 재생성한다.
@@ -96,7 +96,7 @@ npm run test:e2e   # Windows Node/브라우저에서만 실행
   ↓
 [코드] 변경 (한 PR / 한 commit 단위)
   ↓
-[검증] pytest / ruff / mypy / lint-imports / (UI) Windows Playwright
+[검증] pytest / ruff / mypy / lint-imports / (UI) n150 Linux Playwright
   ↓
 [기록] docs/journal.md 엔트리 추가
   ↓

@@ -1,6 +1,6 @@
 # ADR — Architecture Decision Records
 
-`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-065.**
+`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-066.**
 
 - ADR은 **프로그램 핵심 구조**(의존 계층·데이터/식별 모델·패키지/서비스 구조·REST 계약·
   운영 모델) 결정만 둔다. 도메인/ETL·taxonomy·알고리즘·process·운영 결정 중 해당 topic
@@ -56,7 +56,7 @@
 | ADR-038 | API 표면을 v1(vworld 호환)·v2(자체 통합 candidate)로 분리한다 | [038-api-v1-vworld-v2-candidate-split.md](038-api-v1-vworld-v2-candidate-split.md) |
 | ADR-039 | Python 라이브러리는 후보 목록 API만 공개하고 `_v2` 접미사를 제거한다 | [039-python-library-candidate-api-drop-v2-suffix.md](039-python-library-candidate-api-drop-v2-suffix.md) |
 | ADR-040 | ~~(삭제됨)~~ | 삭제 — PC/WSL 로컬 포트 15434/8888/13088 결정. ADR-042→045→046 거쳐 ADR-048로 완전 대체, 고유 근거 없음 |
-| ADR-041 | NTFS main repo와 WSL ext4 테스트 미러를 사용한다 | [041-ntfs-main-repo-wsl-ext4-test-mirror.md](041-ntfs-main-repo-wsl-ext4-test-mirror.md) |
+| ADR-041 | NTFS main repo와 WSL ext4 테스트 미러를 사용한다 | [041-ntfs-main-repo-wsl-ext4-test-mirror.md](041-ntfs-main-repo-wsl-ext4-test-mirror.md) (superseded by ADR-065) |
 | ADR-042 | ~~(삭제됨)~~ | 삭제 — 로컬 포트 9001/9002 + Docker 점유자 정리 결정. ADR-046→048로 완전 대체된 중간 포트표 |
 | ADR-043 | 행정구역 반경조회는 subdivided serving accelerator를 사용한다 | [043-region-radius-subdivided-accelerator.md](043-region-radius-subdivided-accelerator.md) |
 | ADR-044 | 관리 UI 업로드 파일은 선택적으로 RustFS에 저장한다 | [044-admin-upload-optional-rustfs-storage.md](044-admin-upload-optional-rustfs-storage.md) (superseded by ADR-045) |
@@ -80,6 +80,7 @@
 | ADR-062 | v2 breaking 묶음(enum 정직화·envelope/error 통일·좌표 lon/lat)을 배포 전 일괄 적용 | [062-v2-breaking-bundle-pre-deploy.md](062-v2-breaking-bundle-pre-deploy.md) |
 | ADR-063 | 디버그 UI 지도는 GitHub `maplibre-vworld-react` 패키지를 소비한다 | [063-maplibre-vworld-react-github-map.md](063-maplibre-vworld-react-github-map.md) |
 | ADR-064 | Admin UI 로그인과 공개 API key 관리를 둔다 | [064-ui-login-admin-proxy-public-api-keys.md](064-ui-login-admin-proxy-public-api-keys.md) |
+| ADR-065 | 개발 명령은 Linux 환경에서만 실행한다 | [065-linux-only-development-environment.md](065-linux-only-development-environment.md) |
 
 ## ADR 표준 형식
 

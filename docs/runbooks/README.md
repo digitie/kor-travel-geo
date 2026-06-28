@@ -21,13 +21,13 @@ branch)은 표로 분기한다.
 
 | 파일 | 범위 |
 |------|------|
-| [agent-workflow.md](./agent-workflow.md) | 표준 1-PR 작업 흐름 (자기 worktree → branch → NTFS 편집 → WSL ext4 미러에서 4 게이트 → PR → CI green → 머지 → 동기화). 미러 셋업, `source scripts/agent_env.sh`, 프론트엔드/Playwright/`gh`/CodeGraph 표준 명령 포함 |
-| [agent-failure-patterns.md](./agent-failure-patterns.md) | 반복된 **환경/도구 계층 실패 패턴**과 회피·복구 (NTFS worktree에서 WSL `git` 실패, `CreateProcess ... os error 2`, NTFS inline 편집 escape 손상, `gh` 로컬 git metadata 충돌, Windows npm shim, Playwright env 전달, CodeGraph 순서 등) |
+| [agent-workflow.md](./agent-workflow.md) | 표준 1-PR 작업 흐름 (Linux worktree → branch → WSL ext4 미러에서 4 게이트 → PR → CI green → 머지 → 동기화). 미러 셋업, `source scripts/agent_env.sh`, 프론트엔드/n150 Playwright/`gh`/CodeGraph 표준 명령 포함 |
+| [agent-failure-patterns.md](./agent-failure-patterns.md) | 반복된 **환경/도구 계층 실패 패턴**과 회피·복구 (Windows Git 포인터 repair, `CreateProcess ... os error 2`, `/mnt` inline 편집 escape 손상, `gh` 로컬 git metadata 충돌, Windows npm shim, n150 Playwright fallback, CodeGraph 순서 등) |
 | [restore-drill-runbook.md](./restore-drill-runbook.md) | 복원 드릴 (T-242). `ktgctl backup restore-drill`로 운영 serving DB를 건드리지 않고 백업이 실제 복원 가능한지 throwaway DB(`<base>_restoretest_<ts>`, `new_database` 모드)에서 증명 — reconcile(T-233) + smoke test + PASS/FAIL artifact, FAIL이면 비0 exit |
 
 > **환경·도구·문서화의 1차 reference는 별도다** — 본 runbook은 그걸 운영 절차로
 > 엮는다.
-> - 개발 환경(NTFS/WSL ext4 미러, GDAL 핀, 함정 전체): [`../dev-environment.md`](../dev-environment.md)
+> - 개발 환경(Linux-only/WSL ext4 미러, GDAL 핀, 함정 전체): [`../dev-environment.md`](../dev-environment.md)
 > - 에이전트 worktree + CodeGraph: [`../codegraph-worktree.md`](../codegraph-worktree.md)
 >   + `AGENTS.md` §"에이전트별 고정 worktree와 CodeGraph"
 > - 진입·문서화·PR 규약: [`../agent-guide.md`](../agent-guide.md)
@@ -36,7 +36,7 @@ branch)은 표로 분기한다.
 
 ## 3. 에이전트별 분기 (공유 표)
 
-| AI 에이전트 | 고정 worktree (NTFS) | idle branch | 작업 branch 예시 |
+| AI 에이전트 | 고정 worktree | idle branch | 작업 branch 예시 |
 |-------------|----------------------|-------------|------------------|
 | ChatGPT Codex | `/mnt/f/dev/kor-travel-geo-codex` | `agent/codex-idle` | `agent/codex-<task>` |
 | Claude Code | `/mnt/f/dev/kor-travel-geo-claude` | `agent/claude-idle` | `agent/claude-<task>` |
@@ -52,8 +52,8 @@ branch)은 표로 분기한다.
 
 | 항목 | 정책 | 근거 |
 |------|------|------|
-| Git source of truth | **NTFS** (`F:\dev\kor-travel-geo*`). 편집·commit·PR은 Windows `git.exe`(metadata가 `F:/dev/...` 기준) | ADR-041, dev-environment.md §1 |
-| 설치·테스트·장기 실행 | **WSL ext4 테스트 미러**(rsync 사본, `data`는 symlink). 여기서 commit/push하지 않는다 | ADR-041, agent-workflow.md |
+| Git source of truth | **Linux `git`이 읽는 고정 worktree**(`/mnt/f/dev/kor-travel-geo*` 또는 ext4). `.git`/`gitdir`은 Linux 경로 기준 | ADR-065, dev-environment.md §1 |
+| 설치·테스트·장기 실행 | **WSL ext4 테스트 미러**(rsync 사본, `data`는 symlink). 여기서 commit/push하지 않는다 | ADR-065, agent-workflow.md |
 | 4 게이트 | `ruff check` + `mypy src/kortravelgeo` + `lint-imports` + `pytest -q` (DTO/스키마 변경 시 OpenAPI drift, UI 변경 시 frontend 게이트 추가) | AGENTS.md §검증 |
 | main 직접 push | **금지** — 작업 branch + PR + **CI green 후** 머지 | ADR-021 |
 | import 루트 / 의존 방향 | `from kortravelgeo import ...` (flat 금지), `dto → core → infra → client → api/cli` 한 방향 | DO NOT §1 |

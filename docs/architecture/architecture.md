@@ -264,9 +264,9 @@ T-050 5차부터 `ops.table_stats_snapshots`는 수동 capture API뿐 아니라 
 
 일변동은 full-load batch의 기본 child가 아니다. full-load가 끝난 운영 DB에 후속으로 적용하는 별도 작업이며, 적용 후 조회 표면에 반영하려면 운영자가 `refresh mv` 또는 `mv_refresh` job을 실행한다. `MST`는 `daily_juso_delta`, `LNBR`는 `juso_parcel_link_delta`로 분리 적용한다. 이 분리는 도로명주소 정본 변경과 보조 지번 1:N 변경의 실패/재시도 단위를 분리하기 위한 것이다.
 
-## 개발 환경 (PC, WSL)
+## 개발 환경 (Linux-only, WSL 포함)
 
-PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 checkout이다. 코드 편집, branch, commit, PR은 NTFS worktree에서 수행하고, 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다(ADR-041).
+모든 개발 명령은 Linux 환경에서만 실행한다(ADR-065). WSL은 허용되는 Linux 환경이며, 코드 편집, branch, commit, PR, Git, CodeGraph는 Linux shell 기준으로 수행한다. 물리 파일은 NTFS mount(`/mnt/f/...`)에 있을 수 있지만, 과거 Windows Git 포인터나 Windows native Node/npm/Python/CodeGraph 실행은 표준 경로가 아니다. 테스트와 장기 실행은 WSL ext4 테스트 미러로 복사한 뒤 수행한다.
 
 ```
 /mnt/f/dev/kor-travel-geo/                         ← NTFS main repo, main 동기화와 worktree 관리
@@ -277,10 +277,10 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 /mnt/f/dev/geodata/juso/                           ← 도로명주소 ZIP/SHP 공용 원천 (NTFS, unused/ 보존 포함)
 ```
 
-- 테스트 전에는 NTFS worktree를 `rsync --delete`로 ext4 테스트 미러에 복사한다.
+- 테스트 전에는 Linux shell에서 worktree를 `rsync --delete`로 ext4 테스트 미러에 복사한다.
 - ext4 테스트 미러는 실행 산출물 전용이며 Git source of truth가 아니다.
 - **데이터(`data/`)는 NTFS main repo 아래에 둔다**. ext4 테스트 미러에는 심볼릭 링크 또는 절대경로로만 참조한다.
-- Playwright e2e는 Windows Node/브라우저에서만 실행한다.
+- Playwright e2e와 실제 브라우저 검증은 n150 Linux 환경에서 먼저 실행한다. n150에서 실행할 수 없을 때만 Windows Playwright를 fallback으로 사용하고 사유와 명령을 기록한다.
 
 ## 적재 ↔ 서빙은 단일 스키마 + MV로 분리한다
 

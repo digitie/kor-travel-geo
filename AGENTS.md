@@ -68,26 +68,27 @@
 | PostgreSQL DB 이름 | `kor_travel_geo` (dot 불가) |
 | 프론트엔드 패키지 | `kor-travel-geo-ui` (Node.js) |
 
-## 개발 환경 정책 (PC, WSL)
+## 개발 환경 정책 (Linux-only, WSL 포함)
 
-PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 checkout이다(ADR-041). 단, Python/Node 의존성 설치, 테스트, 장기 실행 검증은 NTFS worktree를 WSL ext4 테스트 미러로 복사한 뒤 수행한다.
+모든 개발 명령은 Linux 환경에서만 실행한다(ADR-065). WSL은 허용되는 Linux 환경이며, Windows native `git.exe`/Node/npm/Python/CodeGraph는 표준 개발 경로가 아니다. 물리 파일이 NTFS mount(`/mnt/f/...`)에 있을 수는 있지만, Git metadata와 실행 명령은 Linux 경로(`/mnt/f/...` 또는 ext4 경로)를 기준으로 맞춘다.
 
-- **메인 repo**: NTFS `/mnt/f/dev/kor-travel-geo/` (`F:\dev\kor-travel-geo`)
-- **에이전트 worktree**: NTFS `/mnt/f/dev/kor-travel-geo-codex`, `/mnt/f/dev/kor-travel-geo-claude`, `/mnt/f/dev/kor-travel-geo-antigravity`
+- **메인 repo**: Linux에서 읽히는 `/mnt/f/dev/kor-travel-geo/` 계열 checkout 또는 ext4 clone. Windows 드라이브 표기(`F:\...`, `F:/...`)를 Git/CodeGraph 정본 경로로 쓰지 않는다.
+- **에이전트 worktree**: `/mnt/f/dev/kor-travel-geo-codex`, `/mnt/f/dev/kor-travel-geo-claude`, `/mnt/f/dev/kor-travel-geo-antigravity`를 유지하되, branch/commit/push/PR 준비는 Linux `git`으로 수행한다.
 - **테스트 미러**: WSL ext4 `~/dev/kor-travel-geo-<agent>-test/` 같은 임시 복사본. `rsync --delete`로 갱신하고 여기서는 commit/push하지 않는다.
-- **데이터(`data/`)**: 대용량 Juso 원천은 NTFS 공용 루트 `F:\dev\geodata\juso`(`/mnt/f/dev/geodata/juso`)를 기준으로 둔다. ext4 테스트 미러에서는 `data -> /mnt/f/dev/geodata` 심볼릭 링크를 두면 기존 `data/juso` 상대경로가 같은 원천을 본다. 현재 쓰지 않는 원천은 `F:\dev\geodata\juso\unused\`에 보존한다.
-- **카피 정책**: 작업 시작/검증 전 NTFS worktree → ext4 테스트 미러로 복사한다. 작업 완료 후 별도 ext4 → NTFS 역카피를 source-of-truth 절차로 쓰지 않는다.
-- **Git 실행 기준**: NTFS worktree의 Git metadata는 Windows Git 기준(`F:\...`)을 유지한다. WSL 테스트 미러에서 실행하는 벤치마크·운영 스크립트가 Git commit/branch를 기록해야 하면 Windows `git.exe`와 `F:/dev/kor-travel-geo-*` 경로를 사용한다. WSL `git`이 읽히도록 `.git`/`gitdir` 포인터를 `/mnt/f/...`로 바꾸지 않는다.
+- **데이터(`data/`)**: 대용량 Juso 원천은 공용 루트 `/mnt/f/dev/geodata/juso`를 기준으로 둔다. ext4 테스트 미러에서는 `data -> /mnt/f/dev/geodata` 심볼릭 링크를 두면 기존 `data/juso` 상대경로가 같은 원천을 본다. 현재 쓰지 않는 원천은 `/mnt/f/dev/geodata/juso/unused/`에 보존한다.
+- **카피 정책**: 작업 시작/검증 전 고정 worktree → ext4 테스트 미러로 복사한다. 작업 완료 후 별도 ext4 → worktree 역카피를 source-of-truth 절차로 쓰지 않는다.
+- **Git 실행 기준**: Git은 Linux `git`만 사용한다. 기존 worktree의 `.git`/`gitdir`이 `F:/...` 같은 Windows 경로를 가리키면 작업 전에 Linux 환경에서 `git worktree repair <worktree>`를 실행하거나 worktree를 재생성해 `/mnt/f/...` 경로로 고친다. Windows Git 포인터를 유지하라는 과거 문서는 ADR-065로 대체됐다.
+- **CodeGraph 실행 기준**: CodeGraph는 Linux standalone 또는 Linux Node/npm 기반 실행만 사용한다. branch 전환·pull·merge 뒤에는 `codegraph sync` 후 `codegraph status`를 순서대로 실행한다.
 - **PostgreSQL/RustFS 접속**: 이 저장소는 PostgreSQL/PostGIS와 RustFS를 직접 구동·정지·재시작하지 않는다. 이미 동작 중인 DB와 bucket에 `KTG_PG_DSN`, `KTG_RUSTFS_*` 설정으로 접속해 사용한다.
-- **로컬 키**: `.env`, `kor-travel-geo-ui/.env.local`, `.claude/settings.local.json` 등은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다.
+- **로컬 키**: `.env`, `kor-travel-geo-ui/.env.local`, `.claude/settings.local.json` 등은 각 worktree에 복사하되 Git에 커밋하지 않는다.
 - **프론트엔드 실행**: `kor-travel-geo-ui`의 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL ext4 테스트 미러의 Linux Node/npm에서 실행한다.
-- **Playwright**: e2e 실행과 브라우저는 Windows Node/브라우저에서만 수행한다. WSL에서는 Playwright를 실행하지 않고, Windows Playwright를 WSL UI 서버(`--hostname 0.0.0.0`)에 붙인다.
+- **Playwright**: e2e 실행과 브라우저 검증은 n150 Linux 환경에서 먼저 수행한다. n150에서 실행이 불가능한 경우에만 Windows Playwright를 fallback으로 쓰고, PR 설명이나 `docs/journal.md`에 fallback 사유와 실행 명령을 남긴다.
 
 ## 에이전트 공용 runbook (필독)
 
 `docs/runbooks/` — Claude/Codex/Antigravity가 공유하는 운영 runbook. 작업 전 두 개는 훑는다:
 
-- [`docs/runbooks/agent-workflow.md`](docs/runbooks/agent-workflow.md) — 표준 1-PR 흐름(worktree → 브랜치 → NTFS 편집 → WSL 4 게이트(`pytest`/`ruff`/`mypy`/`lint-imports`) → PR → CI green → 머지 → 동기화) + 갱신 필수 문서.
+- [`docs/runbooks/agent-workflow.md`](docs/runbooks/agent-workflow.md) — 표준 1-PR 흐름(Linux worktree → 브랜치 → WSL/ext4 게이트(`pytest`/`ruff`/`mypy`/`lint-imports`) → PR → CI green → 머지 → 동기화) + 갱신 필수 문서.
 - [`docs/runbooks/agent-failure-patterns.md`](docs/runbooks/agent-failure-patterns.md) — 본 repo 반복 실패 패턴(CI/로컬 괴리, 자연키 `::` 캐스팅, 스키마 한정, upstream drift, 테스트 격리 등)과 회피·복구. 게이트가 깨지면 여기부터.
 
 인덱스: [`docs/runbooks/README.md`](docs/runbooks/README.md). 환경 1차 문서는 `docs/dev-environment.md` / `docs/codegraph-worktree.md` / `docs/agent-guide.md`.
@@ -100,7 +101,7 @@ PC 개발의 Git source of truth는 NTFS의 `F:\dev\kor-travel-geo` 계열 check
 
 ## 에이전트별 고정 worktree와 CodeGraph
 
-AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, NTFS의 `/mnt/f/dev` 아래 고정 worktree를 유지한다(ADR-041). `geo-*` 접두사는 더 이상 쓰지 않고 `kor-travel-geo-*` 접두사로 통일한다.
+AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, Linux에서 읽히는 `/mnt/f/dev` 아래 고정 worktree를 유지한다(ADR-065). `geo-*` 접두사는 더 이상 쓰지 않고 `kor-travel-geo-*` 접두사로 통일한다.
 
 | 에이전트 | 고정 worktree | idle branch |
 |----------|---------------|-------------|
@@ -111,6 +112,7 @@ AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, NTFS의 `/mnt/f/d
 - worktree는 에이전트별로 1회만 생성하고, 작업마다 해당 worktree 안에서 새 branch만 만든다.
 - 예: `git fetch origin main && git switch -c agent/codex-next origin/main`
 - 같은 branch를 여러 worktree에서 checkout하지 않는다. branch 이름에는 `agent/<agent>-<task>`처럼 소유자를 넣는다.
+- Git worktree 생성·repair·status·commit·push는 Linux `git`으로 실행한다. `.git`/`gitdir`에 Windows 드라이브 경로가 남아 있으면 먼저 Linux 경로로 repair한다.
 - CodeGraph는 worktree마다 1회 `codegraph init -i`로 초기화하고, 이후 branch 전환·pull·merge 뒤에는 재초기화하지 않고 `codegraph sync`로 유지한다. NTFS `/mnt` worktree에서는 live watch가 비활성화될 수 있으므로 수동 `sync`를 더 엄격히 지킨다.
 - 동기화 상태는 `codegraph status`로 확인한다. `codegraph init -i`는 최초 1회 인덱싱용이고, 평상시 상태 확인용 명령은 아니다.
 - 프로젝트 루트의 `.codex/config.toml`은 CodeGraph MCP stdio 서버를 등록한다. Codex Desktop 재시작 전에는 현재 세션 도구로 노출되지 않을 수 있으나, 설정 파일은 유지한다.

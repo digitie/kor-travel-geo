@@ -2,6 +2,23 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-06-28 (Linux-only 개발환경 정책 정리, by codex)
+
+**작업**: 사용자 지시에 따라 개발환경 정책을 Linux-only로 전환했다. 모든 개발 명령은 WSL을 포함한 Linux
+환경에서 실행하고, Git/CodeGraph도 Linux 경로 기준으로 repair·실행한다. Playwright e2e는 n150 Linux
+환경에서 먼저 실행하며, 불가할 때만 Windows Playwright fallback을 사용하고 사유와 명령을 기록한다.
+
+**문서**:
+- ADR-065를 추가하고 ADR-041을 superseded 처리했다.
+- `AGENTS.md`, `SKILL.md`, `README.md`, `docs/dev-environment.md`,
+  `docs/runbooks/agent-workflow.md`, `docs/runbooks/agent-failure-patterns.md`,
+  `docs/codegraph-worktree.md`, `docs/live-e2e.md`, `docs/geocoding-readiness.md`,
+  `docs/architecture/architecture.md`, `docs/architecture/frontend-package.md`,
+  `docs/code-guide-for-beginners.md`, `kor-travel-geo-ui/README.md`를 갱신했다.
+
+**검증**:
+- 문서 변경만 수행했다. 코드 테스트는 실행하지 않았다.
+
 ## 2026-06-24 (PR #403 n150 배포와 full live e2e 완료, by codex)
 
 **작업**: concierge #127 origin allowlist 반영 PR #403을 n150에 배포하고 Windows Playwright full live

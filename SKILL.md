@@ -20,24 +20,25 @@
 | PostgreSQL DB 이름 | `kor_travel_geo` |
 | 프론트엔드 패키지 | `kor-travel-geo-ui` |
 
-### 개발 환경 (PC, WSL)
+### 개발 환경 (Linux-only, WSL 포함)
 
-- **Git source of truth는 NTFS** `/mnt/f/dev/kor-travel-geo` 계열 checkout이다. 코드 편집, branch, commit, PR은 NTFS 에이전트 worktree에서 수행한다.
-- **테스트와 장기 실행은 WSL ext4 테스트 미러**에서 수행한다. NTFS worktree를 `rsync --delete`로 `~/dev/kor-travel-geo-<agent>-test/`에 복사한 뒤 `pip`/`npm`/`pytest`/`uvicorn`을 실행한다. ext4 미러에서는 commit/push하지 않는다.
-- **Git 명령은 Windows Git 기준**이다. NTFS worktree의 `.git`/`gitdir`은 `F:/dev/...`를 가리키게 두고, WSL 미러에서 Git commit/branch를 수집하는 스크립트는 Windows `git.exe`와 `F:/dev/kor-travel-geo-*` 경로를 사용한다. WSL `git` 편의를 위해 포인터를 `/mnt/f/...`로 바꾸지 않는다.
+- **모든 개발 명령은 Linux 환경에서만 실행**한다. WSL은 허용되는 Linux 환경이며, Windows native `git.exe`/Node/npm/Python/CodeGraph는 표준 개발 경로가 아니다.
+- **Git source of truth는 Linux `git`이 읽는 checkout/worktree**다. `/mnt/f/dev/kor-travel-geo` 계열 NTFS mount를 쓸 수는 있지만 `.git`/`gitdir`은 `/mnt/f/...` 같은 Linux 경로를 가리켜야 한다. `F:/...` 포인터가 남아 있으면 작업 전 Linux에서 `git worktree repair <worktree>`를 실행하거나 worktree를 재생성한다.
+- **테스트와 장기 실행은 WSL ext4 테스트 미러**에서 수행한다. 고정 worktree를 `rsync --delete`로 `~/dev/kor-travel-geo-<agent>-test/`에 복사한 뒤 `pip`/`npm`/`pytest`/`uvicorn`을 실행한다. ext4 미러에서는 commit/push하지 않는다.
+- **Git/CodeGraph 명령은 Linux 기준**이다. branch, commit, push, PR 준비, `codegraph sync/status`는 Linux shell에서 실행한다. 과거 Windows Git/Windows CodeGraph 포인터 정책은 ADR-065로 대체됐다.
 - **DB/RustFS 검증은 접속 설정 기준**이다. 이 저장소는 PostgreSQL/PostGIS와 RustFS를 직접 구동하지 않는다. 이미 동작 중인 DB와 bucket에 `KTG_PG_DSN`, `KTG_RUSTFS_*` 설정으로 접속해 사용한다.
 - **대용량 Juso 원천은 NTFS 공용 루트** `/mnt/f/dev/geodata/juso`(`F:\dev\geodata\juso`)를 기준으로 둔다. ext4 테스트 미러에서는 `data -> /mnt/f/dev/geodata` 심볼릭 링크로 참조해 기존 `data/juso` 상대경로를 유지한다. 현재 쓰지 않는 원천은 `F:\dev\geodata\juso\unused\`에 보존한다.
-- **로컬 secret/env 파일**(`.env`, `kor-travel-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 각 NTFS worktree에 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
+- **로컬 secret/env 파일**(`.env`, `kor-travel-geo-ui/.env.local`, `.claude/settings.local.json` 등)은 각 worktree에 복사하되 Git에 커밋하지 않는다. `.env*`, `.claude/`, `.codegraph/`는 ignore 대상이다.
 - **프론트엔드 실행은 WSL ext4 테스트 미러의 Linux Node/npm 기준**이다. `kor-travel-geo-ui` 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL에서 실행한다.
-- **Playwright e2e는 Windows Node/브라우저 전용**이다. WSL Playwright는 실행하지 않고, Windows Playwright를 WSL UI 서버(`--hostname 0.0.0.0`)에 붙인다.
-- **반복되는 작업 실패 패턴은 먼저 `docs/runbooks/agent-failure-patterns.md`를 본다.** 특히 NTFS worktree에서는 WSL `git`을 쓰지 않고, `exec_command`의 `CreateProcess ... os error 2`는 저장소 버그가 아니라 런처/quoting 문제로 먼저 분류한다.
+- **Playwright e2e는 n150 Linux 환경 우선**이다. n150에서 실행할 수 없는 경우에만 Windows Playwright를 fallback으로 사용하고, fallback 사유와 실행 명령을 작업 기록에 남긴다.
+- **반복되는 작업 실패 패턴은 먼저 `docs/runbooks/agent-failure-patterns.md`를 본다.** 특히 `.git`/`gitdir`이 `F:/...`를 가리키는 경우 Linux 경로로 repair한 뒤 진행하고, `exec_command`의 `CreateProcess ... os error 2`는 저장소 버그가 아니라 런처/quoting 문제로 먼저 분류한다.
 
 ### 에이전트별 worktree / CodeGraph
 
 - ChatGPT Codex는 `/mnt/f/dev/kor-travel-geo-codex`, Claude Code는 `/mnt/f/dev/kor-travel-geo-claude`, Google Antigravity 2.0은 `/mnt/f/dev/kor-travel-geo-antigravity` worktree를 고정으로 사용한다.
 - `geo-codex`, `geo-claude`, `geo-antigravity` 이름은 더 이상 새 작업에 쓰지 않는다.
 - worktree는 에이전트별로 유지하고 작업마다 새 branch만 만든다. 새 작업 시작 예시는 `git fetch origin main && git switch -c agent/codex-next origin/main`이다.
-- CodeGraph는 worktree마다 최초 1회 `codegraph init -i`로 초기화한다. `.codegraph/`가 이미 있으면 `codegraph init`을 반복하지 말고 `codegraph sync`로 증분 갱신한다. NTFS `/mnt`에서는 live watch가 비활성화될 수 있으므로 branch 전환·pull·merge 뒤 수동 `sync`가 필수다.
+- CodeGraph는 worktree마다 최초 1회 Linux `codegraph init -i`로 초기화한다. `.codegraph/`가 이미 있으면 `codegraph init`을 반복하지 말고 `codegraph sync`로 증분 갱신한다. NTFS `/mnt`에서는 live watch가 비활성화될 수 있으므로 branch 전환·pull·merge 뒤 수동 `sync`가 필수다.
 - 현재 인덱스 상태는 `codegraph status`로 확인한다.
 - Codex MCP 설정은 프로젝트 루트 `.codex/config.toml`에 둔다. Codex Desktop을 재시작한 뒤 CodeGraph MCP 도구가 노출된다.
 - `kor-travel-geo-ui`의 React 컴포넌트, 지도 wrapper, 공용 UI primitive를 수정하기 전에는 CodeGraph MCP의 `codegraph_explore`로 영향도를 먼저 평가한다. 확인 대상은 호출자, import 경로, 관련 테스트, `maplibre-vworld-js` 경계다.
@@ -46,7 +47,7 @@
 ## 2. 빠른 시작
 
 ```bash
-cd /mnt/f/dev/kor-travel-geo-codex              # NTFS Codex worktree
+cd /mnt/f/dev/kor-travel-geo-codex              # Linux에서 읽히는 Codex worktree
 git fetch origin main && git switch -c agent/codex-next origin/main
 rsync -a --delete --exclude .git --exclude .codegraph --exclude .venv --exclude node_modules --exclude kor-travel-geo-ui/.next --exclude data --exclude artifacts ./ ~/dev/kor-travel-geo-codex-test/
 cd ~/dev/kor-travel-geo-codex-test                 # WSL ext4 테스트 미러

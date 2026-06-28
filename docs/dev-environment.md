@@ -1,31 +1,36 @@
-# 개발 환경 셋업 (NTFS main + WSL ext4 테스트 미러)
+# 개발 환경 셋업 (Linux-only + WSL ext4 테스트 미러)
 
-본 문서는 `kor-travel-geo`(`kortravelgeo`)를 PC에서 개발할 때 필요한 시스템 의존성과 셋업 순서를 정리한다. 현재 정책은 NTFS의 Git checkout을 source of truth로 두고, 테스트와 장기 실행은 WSL ext4 테스트 미러에서 수행하는 방식이다(ADR-041).
+본 문서는 `kor-travel-geo`(`kortravelgeo`)를 개발할 때 필요한 시스템 의존성과 셋업 순서를 정리한다. 현재 정책은 모든 개발 명령을 Linux 환경에서 실행하는 것이다(ADR-065). WSL은 허용되는 Linux 환경이며, Git/CodeGraph도 Linux 경로와 Linux 실행 파일을 기준으로 둔다.
 
 > **바로 따라할 런북은 `docs/runbooks/agent-workflow.md`.** 이 문서는 시스템 패키지·rsync exclude 전체·CodeGraph·함정의 *reference*이고, 새 에이전트가 "어떤 순서로 무엇을 치면 동작하는 개발 루프가 되는가"는 런북이 단계별로 답한다. 미러 셸에서 `source scripts/agent_env.sh` 한 줄로 TMP·venv·Node PATH 함정을 한 번에 없앤다.
 
-## 1. NTFS main repo와 WSL 테스트 미러
+## 1. Linux worktree와 WSL 테스트 미러
 
-Git source of truth는 NTFS main repo다. Windows에서도 같은 파일을 열어 볼 수 있고, Codex/Claude/Antigravity가 각자 고정 worktree를 가진다.
+Git source of truth는 Linux `git`이 읽을 수 있는 checkout/worktree다. 물리 파일은 `/mnt/f/dev` 같은 NTFS mount에 둘 수 있지만, `.git` 파일과 main repo `.git/worktrees/*/gitdir` 포인터는 `/mnt/f/...` 같은 Linux 경로여야 한다. Windows 드라이브 표기(`F:\...`, `F:/...`)를 Git/CodeGraph의 정본 경로로 쓰지 않는다.
 
 ```text
-/mnt/f/dev/kor-travel-geo/                 # NTFS main repo, main 동기화와 worktree 관리
+/mnt/f/dev/kor-travel-geo/                 # Linux git 기준 main repo, main 동기화와 worktree 관리
 /mnt/f/dev/kor-travel-geo-codex/           # ChatGPT Codex worktree
 /mnt/f/dev/kor-travel-geo-claude/          # Claude Code worktree
 /mnt/f/dev/kor-travel-geo-antigravity/     # Google Antigravity 2.0 worktree
 ~/dev/kor-travel-geo-codex-test/           # WSL ext4 테스트 미러 예시
 ```
 
-NTFS worktree에서 코드 편집, branch, commit, push, PR을 수행한다. `pip`, `uv`, `npm test`, `next build`, `uvicorn` 같은 의존성 설치·검증·장기 실행은 ext4 테스트 미러에서 수행한다. NTFS worktree에서 장기 실행 테스트를 직접 돌리면 대량 I/O, 파일 감시, 권한 처리에서 반복 문제가 생길 수 있다.
+고정 worktree에서 Linux `git`으로 코드 편집, branch, commit, push, PR 준비를 수행한다. `pip`, `uv`, `npm test`, `next build`, `uvicorn` 같은 의존성 설치·검증·장기 실행은 ext4 테스트 미러에서 수행한다. `/mnt` NTFS worktree에서 장기 실행 테스트를 직접 돌리면 대량 I/O, 파일 감시, 권한 처리에서 반복 문제가 생길 수 있다.
 
-Git metadata는 Windows Git 기준으로 유지한다. NTFS worktree의 `.git` 파일과 main repo `.git/worktrees/*/gitdir`은 `F:/dev/...` 경로를 가리켜야 하며, WSL `git` 편의를 위해 `/mnt/f/...`로 고치지 않는다. WSL 테스트 미러에서 벤치마크나 운영 스크립트가 commit/branch를 기록해야 하면 Windows `git.exe`를 사용한다.
+Git metadata가 과거 정책 때문에 `F:/...` 같은 Windows 경로를 가리키면 Linux Git이 저장소를 읽지 못한다. 작업 전 실제로 사용할 Linux 환경에서 repair하거나 worktree를 재생성한다.
 
 ```bash
-# WSL에서 Windows Git으로 NTFS worktree 상태 확인
-"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-codex status --short --branch
+# Linux git으로 worktree 상태 확인
+cd /mnt/f/dev/kor-travel-geo-codex
+git status --short --branch
 
-# 스크립트 Git metadata 수집 경로를 명시할 때
-KTG_GIT_REPO=F:/dev/kor-travel-geo-codex \
+# 포인터가 Windows 경로라 깨졌다면 main repo에서 repair
+cd /mnt/f/dev/kor-travel-geo
+git worktree repair /mnt/f/dev/kor-travel-geo-codex
+
+# 스크립트 Git metadata 수집 경로를 명시할 때도 Linux 경로 사용
+KTG_GIT_REPO=/mnt/f/dev/kor-travel-geo-codex \
   python scripts/capture_deployment_envelope.py --env-label wsl-baseline
 ```
 
@@ -47,7 +52,7 @@ cd ~/dev/kor-travel-geo-codex-test
 test -e data || ln -s /mnt/f/dev/geodata data
 ```
 
-ext4 테스트 미러는 실행 산출물 전용이다. 여기서 발견한 수정 필요 사항은 NTFS worktree에 반영하고, commit/push도 NTFS worktree에서만 수행한다. 대용량 Juso 원천은 NTFS 공용 루트 `/mnt/f/dev/geodata/juso`를 기준으로 두며, 테스트 미러에서는 `data -> /mnt/f/dev/geodata` 심볼릭 링크를 통해 기존 `data/juso` 상대경로를 유지한다. T-213처럼 후속 benchmark의 기준 입력이 되는 live run 산출물은 미러 `artifacts/`를 유일한 사본으로 두지 않고, `docs/t213-data-preservation.md`에 따라 전용 DB/RustFS prefix와 NTFS `F:\dev\geodata\t213-baseline\<run-id>\`에 보존한다.
+ext4 테스트 미러는 실행 산출물 전용이다. 여기서 발견한 수정 필요 사항은 고정 worktree에 반영하고, commit/push도 고정 worktree에서 Linux `git`으로 수행한다. 대용량 Juso 원천은 공용 루트 `/mnt/f/dev/geodata/juso`를 기준으로 두며, 테스트 미러에서는 `data -> /mnt/f/dev/geodata` 심볼릭 링크를 통해 기존 `data/juso` 상대경로를 유지한다. T-213처럼 후속 benchmark의 기준 입력이 되는 live run 산출물은 미러 `artifacts/`를 유일한 사본으로 두지 않고, `docs/t213-data-preservation.md`에 따라 전용 DB/RustFS prefix와 `/mnt/f/dev/geodata/t213-baseline/<run-id>/` artifact 사본으로 보존한다.
 
 PostgreSQL 검증은 이 저장소가 직접 DB를 띄우지 않고, `KTG_PG_DSN`이 가리키는 이미 동작 중인 PostgreSQL/PostGIS에 접속해 수행한다. RustFS도 `KTG_RUSTFS_*` 설정으로 이미 준비된 bucket에 접속한다. 이 저장소에는 DB/RustFS Docker 구동·정지·재시작 절차를 두지 않는다.
 
@@ -80,28 +85,32 @@ git fetch origin main
 git switch -c agent/codex-next origin/main
 ```
 
-같은 branch를 두 worktree에서 동시에 checkout하지 말고, branch 이름에는 `agent/codex-*`, `agent/claude-*`, `agent/antigravity-*`처럼 소유자를 넣는다. NTFS main repo의 `main`에 미커밋 변경이 있으면 그대로 보존하고, 에이전트 작업은 별도 worktree에서 진행한다.
+같은 branch를 두 worktree에서 동시에 checkout하지 말고, branch 이름에는 `agent/codex-*`, `agent/claude-*`, `agent/antigravity-*`처럼 소유자를 넣는다. main repo의 `main`에 미커밋 변경이 있으면 그대로 보존하고, 에이전트 작업은 별도 worktree에서 진행한다.
 
-#### Windows·WSL 혼용 시 worktree 포인터 주의
+#### 과거 Windows Git 포인터 복구
 
-각 worktree의 `.git` 파일과 `.git/worktrees/<name>/gitdir`에는 worktree를 **만든 환경 기준의 절대경로**가 기록된다. WSL에서 만들면 WSL 마운트 경로가, Windows 네이티브 git에서 만들면 드라이브 경로가 들어간다. 같은 폴더라도 두 환경의 절대경로 표기가 다르므로, 다른 환경의 git으로 같은 worktree를 다루면 `fatal: not a git repository`가 나고 `git worktree list`에는 `prunable`로 표시된다.
+각 worktree의 `.git` 파일과 `.git/worktrees/<name>/gitdir`에는 worktree를 만든 환경 기준의 절대경로가 기록된다. 과거 Windows 네이티브 Git으로 만든 worktree는 `F:/...` 경로를 가리킬 수 있다. 현재 정책에서는 이 상태를 유지하지 않는다. Linux `git`이 읽을 수 있도록 `/mnt/f/...` 또는 ext4 경로로 repair한다.
 
-이 상태에서 `git worktree prune`을 그대로 돌리면 **살아있는 worktree 등록까지 지워질 수 있으니** 바로 prune하지 않는다. 복구는 실제로 사용할 환경에서 `git worktree repair <worktree 경로>`를 실행해 포인터를 그 환경 기준으로 맞춘다(`.git`과 admin `gitdir` 양방향을 함께 고친다). 정리는 repair로 살아있는 worktree를 먼저 valid 상태로 만든 뒤 prune해, 폴더가 실제로 사라진 등록만 표적 제거한다.
+```bash
+cd /mnt/f/dev/kor-travel-geo
+git worktree repair /mnt/f/dev/kor-travel-geo-codex
+git -C /mnt/f/dev/kor-travel-geo-codex status --short --branch
+```
 
-원칙(현재 정책): **모든 worktree의 Git metadata는 Windows Git 기준(`F:/dev/...`)으로 통일**한다(§1 참조). WSL에서 worktree에 git 작업이 필요하면 `.git`/`gitdir`을 `/mnt/f`로 고치지 말고 Windows `git.exe`를 쓴다(`"/mnt/c/Program Files/Git/cmd/git.exe" -C F:/dev/kor-travel-geo-<agent> ...`). `git worktree prune`은 **Windows에서만** 실행한다 — WSL에서 돌리면 `F:/` 기준의 정상 worktree가 `prunable`로 보여 등록이 삭제될 수 있다. 포인터가 `/mnt/f`로 틀어져 git이 깨졌으면 Windows에서 `git worktree repair <worktree 경로>`로 복구한다.
+repair 전에는 `git worktree prune`을 실행하지 않는다. 먼저 살아있는 worktree가 Linux 기준으로 valid 상태인지 확인한 뒤, 폴더가 실제로 사라진 등록만 정리한다. Windows `git.exe`로 다시 repair하거나 `F:/...` 포인터를 되살리는 방식은 현재 표준 절차가 아니다.
 
 ### 1.1.1 반복되는 에이전트 실패 패턴
 
 실무에서 자주 재발한 환경/도구 계층 실패는 [`docs/runbooks/agent-failure-patterns.md`](./runbooks/agent-failure-patterns.md)에 정리한다. 핵심은 세 가지다.
 
-- NTFS worktree의 Git metadata는 Windows 경로를 가리키므로, `/mnt/f/...`에서 WSL `git`을 쓰지 않는다.
+- `.git`/`gitdir`이 Windows 경로를 가리키면 Linux `git`이 깨지므로, 먼저 `git worktree repair`로 Linux 경로를 회복한다.
 - `exec_command`가 `CreateProcess ... os error 2`를 내면 heredoc, 복잡한 quoting, `workdir`, Windows exe 호출을 의심하고 명령을 단순화한다.
 - NTFS 파일을 inline script로 고칠 때는 `\n`, regex backslash, Windows path escape가 자주 깨지므로 수정 직후 해당 줄을 다시 읽어 확인한다.
 
 
 ### 로컬 secret/env 파일
 
-로컬 키와 환경 파일은 Git에 커밋하지 않는다. 새 NTFS worktree를 만들면 다음 파일들을 main repo 또는 기존 worktree에서 같은 상대 경로로 복사한다.
+로컬 키와 환경 파일은 Git에 커밋하지 않는다. 새 worktree를 만들면 다음 파일들을 main repo 또는 기존 worktree에서 같은 상대 경로로 복사한다.
 
 - `.env`
 - `kor-travel-geo-ui/.env.local`
@@ -122,7 +131,7 @@ hash -r
 codegraph --version
 ```
 
-각 NTFS worktree에서 최초 1회만 초기화한다.
+각 worktree에서 Linux CodeGraph로 최초 1회만 초기화한다.
 
 ```bash
 cd /mnt/f/dev/kor-travel-geo-codex
@@ -130,7 +139,7 @@ codegraph init -i
 codegraph status
 ```
 
-NTFS worktree는 WSL2 `/mnt` 경로라 recursive file watch가 비활성화될 수 있다. 따라서 작업 시작, branch 전환, `git pull`, rebase, merge 뒤에는 재초기화하지 않고 다음 명령을 수동으로 실행한다.
+`/mnt` 경로의 worktree는 recursive file watch가 비활성화될 수 있다. 따라서 작업 시작, branch 전환, `git pull`, rebase, merge 뒤에는 재초기화하지 않고 다음 명령을 수동으로 실행한다.
 
 ```bash
 codegraph sync
@@ -211,7 +220,7 @@ gdal-config --version    # 예: 3.8.4
 
 ## 3. Python 의존성
 
-아래 명령은 NTFS worktree가 아니라 WSL ext4 테스트 미러에서 실행한다.
+아래 명령은 고정 worktree가 아니라 WSL ext4 테스트 미러에서 실행한다.
 
 ```bash
 uv venv && source .venv/bin/activate
@@ -277,13 +286,13 @@ print(ds.GetLayer(0).GetFeatureCount())
 - **TMP가 Windows Temp를 가리키는 경우**: WSL에서 `TMP=/mnt/c/...`로 셸이 열리면 pytest capture가 `FileNotFoundError`로 실패한다. `TMPDIR=/tmp TMP=/tmp TEMP=/tmp pytest -q`로 Linux `/tmp`를 명시한다(docs/resume.md "알려진 함정").
 - **프론트엔드 실행 위치**: `kor-travel-geo-ui`의 의존성 설치, `next dev`/`next start`, lint, type-check, unit test, build, React Doctor는 WSL ext4 테스트 미러의 Linux Node/npm에서 실행한다. UI 서버도 WSL에서 `--hostname 0.0.0.0`으로 띄운다.
 - **npm 서버 파라미터 전달**: Next.js 서버 옵션은 `npm run start -- --hostname 0.0.0.0 --port 12505`처럼 `--` 뒤에 둔다. `npm run start --hostname ...` 형태는 쓰지 않는다.
-- **Playwright/UI 브라우저 테스트**: Playwright 실행과 브라우저는 Windows Node/브라우저 환경에서만 수행한다. WSL에서는 `npm run test:e2e`, `npx playwright test`, screenshot, 실제 지도 상호작용 검증을 실행하지 않는다. WSL headless Chromium은 반복적으로 `libasound.so.2` 같은 공유 라이브러리 누락으로 실패하므로, Windows Playwright에서 WSL UI 서버의 IP/포트를 `PLAYWRIGHT_BASE_URL`로 지정하고 실행한 명령, 브라우저, screenshot 경로를 기록한다.
+- **Playwright/UI 브라우저 테스트**: Playwright 실행과 브라우저 검증은 n150 Linux 환경에서 먼저 수행한다. n150에서 실행할 수 없는 경우에만 Windows Playwright를 fallback으로 사용하고, 그 사유와 실행 명령, 브라우저, screenshot 경로를 기록한다.
 - **프론트엔드 WSL 검증 표준화**: `scripts/frontend_check.sh`를 사용하면 Windows `npm`이 PATH에 잡힌 경우 즉시 실패하고 Linux Node/npm에서 `gen:types`, lint, type-check, unit test, build를 순서대로 실행한다. 의존성 재설치가 필요하면 `scripts/frontend_check.sh --install`을 사용한다.
-- **Windows Playwright env 전달**: WSL에서 Windows Playwright를 호출할 때는 `cmd.exe /V:ON /C "cd /d F:\...\kor-travel-geo-ui && set PLAYWRIGHT_BASE_URL=http://<WSL_IP>:<PORT>&& npx playwright test ..."` 형태를 사용한다. `PLAYWRIGHT_BASE_URL` 값 뒤에 공백을 두지 않는다.
-- **GitHub CLI와 로컬 Git metadata**: WSL `gh`가 현재 NTFS worktree의 Windows Git metadata를 읽다가 실패하면 같은 명령을 반복하지 말고 `gh ... --repo digitie/kor-travel-geo`로 repo를 명시한다. branch/status/commit/push는 계속 Windows `git.exe`를 사용한다.
+- **Windows Playwright fallback env 전달**: n150 실행이 불가능해 Windows fallback을 쓸 때는 `PLAYWRIGHT_BASE_URL`과 live e2e secret을 Windows 세션에만 주입하고, 실제 secret 값은 문서나 로그에 남기지 않는다.
+- **GitHub CLI와 로컬 Git metadata**: `gh`가 현재 worktree의 Git metadata를 읽다가 실패하면 같은 명령을 반복하지 말고 `gh ... --repo digitie/kor-travel-geo`로 repo를 명시한다. branch/status/commit/push는 Linux `git`으로 수행한다.
 - **장기 실행 서버 종료**: `exec_command` session stdin이 닫힌 서버는 `Ctrl-C`로 못 끌 수 있다. `ss -ltnp | rg ':<PORT>'`로 PID를 확인하고 `kill <PID>`로 종료한다. 작업 완료 전 포트가 비었는지 다시 확인한다.
 - **CodeGraph 순서**: `codegraph sync`와 `codegraph status`를 병렬로 실행하지 않는다. sync 종료 후 status를 보고, `impact`에는 파일 경로가 아니라 export symbol 이름을 전달한다.
-- **NTFS에서 직접 테스트/장기 실행**: Git source of truth는 NTFS worktree지만, `pip`/`npm test`/`uvicorn` 장기 실행은 ext4 테스트 미러에서 수행한다. NTFS worktree는 편집·branch·commit·PR의 기준으로 유지한다(AGENTS.md, SKILL.md §1).
+- **`/mnt` worktree에서 직접 테스트/장기 실행**: Git source of truth는 Linux worktree지만, `pip`/`npm test`/`uvicorn` 장기 실행은 ext4 테스트 미러에서 수행한다. 고정 worktree는 편집·branch·commit·PR의 기준으로 유지한다(AGENTS.md, SKILL.md §1).
 - **GDAL Python 바인딩 버전 미스매치**: `pip install gdal>=3.8`만으로는 시스템과 다른 wheel을 받아 import 시 `undefined symbol`. 위 §3의 핀 절차 필수.
 - **`libgdal-dev` 누락**: `gdal-config: command not found`. apt 설치만 하면 해결.
 
