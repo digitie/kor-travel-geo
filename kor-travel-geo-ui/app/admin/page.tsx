@@ -1,11 +1,22 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+
+import { AdminHome } from "@/components/admin/AdminHome";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ADMIN_PAGES } from "@/lib/admin-pages";
 
 export const metadata: Metadata = {
-  title: "Admin",
-  description: "관리 라우트 기본 진입점"
+  title: ADMIN_PAGES.home.title,
+  description: ADMIN_PAGES.home.description
 };
 
 export default function AdminPage() {
-  redirect("/debug/geocode");
+  return (
+    <>
+      <PageHeader
+        title={ADMIN_PAGES.home.title}
+        description={ADMIN_PAGES.home.description}
+      />
+      <AdminHome />
+    </>
+  );
 }
