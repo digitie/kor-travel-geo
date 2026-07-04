@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Progress } from "@/components/ui/progress";
 import type { LoadJobStatus } from "@/lib/api";
 import { stagePhase, terminalJobState } from "@/lib/backup-workflow";
 import {
@@ -56,9 +57,7 @@ export function JobProgress({
           {stagePhase(current.current_stage)} · {pct}% · ETA {formatEta(eta)}
         </span>
       </div>
-      <div className="progress-shell">
-        <div className="progress-bar" style={{ width: `${pct}%` }} />
-      </div>
+      <Progress aria-label={`${current.kind} 진행률`} value={pct} />
       {log ? <small className="job-progress-log">{log}</small> : null}
     </div>
   );

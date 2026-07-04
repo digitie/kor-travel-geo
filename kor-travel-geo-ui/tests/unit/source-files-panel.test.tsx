@@ -2,33 +2,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SourceFilesPanel } from "@/components/admin/source-files/SourceFilesPanel";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { ApiError } from "@/lib/api";
 
-const apiMocks = vi.hoisted(() => {
-  class FakeApiError extends Error {
-    status: number;
-    constructor(status: number, message: string) {
-      super(message);
-      this.name = "ApiError";
-      this.status = status;
-    }
-  }
+const apiMocks = vi.hoisted(() => ({
+  postJson: vi.fn(),
+  requestJson: vi.fn()
+}));
+
+// ApiError/getErrorMessage는 실제 구현을 유지해 detail 파싱 계약까지 함께 검증한다.
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
   return {
-    ApiError: FakeApiError,
-    postJson: vi.fn(),
-    requestJson: vi.fn()
+    ...actual,
+    postJson: apiMocks.postJson,
+    requestJson: apiMocks.requestJson
   };
 });
-
-const FakeApiError = apiMocks.ApiError;
-
-vi.mock("@/lib/api", () => ({
-  API_BASE: "/api/proxy",
-  ApiError: apiMocks.ApiError,
-  backendPath: (path: string) =>
-    path.startsWith("/v1") || path.startsWith("/v2") ? path : `/v1${path}`,
-  postJson: apiMocks.postJson,
-  requestJson: apiMocks.requestJson
-}));
 
 const CATEGORY_CATALOG = {
   categories: [
@@ -223,9 +213,12 @@ function renderPanel(initialTab?: Parameters<typeof SourceFilesPanel>[0]["initia
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } }
   });
+  // 앱 셸(app/providers.tsx)과 동일하게 TooltipProvider로 감싼다 (셀 툴팁 의존).
   return render(
     <QueryClientProvider client={queryClient}>
-      <SourceFilesPanel initialTab={initialTab} />
+      <TooltipProvider>
+        <SourceFilesPanel initialTab={initialTab} />
+      </TooltipProvider>
     </QueryClientProvider>
   );
 }
@@ -292,7 +285,7 @@ describe("SourceFilesPanel", () => {
       return { ok: true };
     });
     const epostCard = screen.getByText("epost 사서함").closest(".source-card") as HTMLElement;
-    const epostInput = within(epostCard).getByLabelText("기준년월 (user_yyyymm)");
+    const epostInput = within(epostCard).getByPlaceholderText("예: 202606");
     fireEvent.change(epostInput, { target: { value: "202606" } });
     const epostButton = within(epostCard).getByRole("button", { name: "epost 받기" });
     expect(epostButton).not.toBeDisabled();
@@ -318,9 +311,9 @@ describe("SourceFilesPanel", () => {
       ".source-card"
     ) as HTMLElement;
     apiMocks.postJson.mockImplementationOnce(async () => {
-      throw new FakeApiError(502, JSON.stringify({ detail: "epost 서버 응답 없음" }));
+      throw new ApiError(502, JSON.stringify({ detail: "epost 서버 응답 없음" }));
     });
-    fireEvent.change(within(epostCard).getByLabelText("기준년월 (user_yyyymm)"), {
+    fireEvent.change(within(epostCard).getByPlaceholderText("예: 202606"), {
       target: { value: "202606" }
     });
     fireEvent.click(within(epostCard).getByRole("button", { name: "epost 받기" }));
@@ -334,7 +327,7 @@ describe("SourceFilesPanel", () => {
     await screen.findByText("도로명주소 한글 전체분");
 
     apiMocks.postJson.mockImplementationOnce(async () => {
-      throw new FakeApiError(
+      throw new ApiError(
         409,
         JSON.stringify({
           detail: {
@@ -392,16 +385,16 @@ describe("SourceFilesPanel", () => {
 
   it("RustFS 정합성 탭에 실행/이슈/용량을 표시한다", async () => {
     renderPanel("reconcile");
-    await screen.findByText("정합성 실행 (RustFS ⟷ DB)");
+    await screen.findByText("정합성 실행");
     // 12 issue_type 라벨 중 hash_mismatch 매핑이 나타난다
     expect(await screen.findByText("해시 불일치")).toBeInTheDocument();
     // capacity panel
-    expect(await screen.findByText("용량 (capacity)")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "용량" })).toBeInTheDocument();
   });
 
   it("정리 대상을 선택해 typed-confirmation 일괄 영구 삭제(T-212)를 호출한다", async () => {
     renderPanel("reconcile");
-    await screen.findByText("정합성 실행 (RustFS ⟷ DB)");
+    await screen.findByText("정합성 실행");
 
     // 정리 대상(object_missing_db) 행의 선택 체크박스
     const rowCheckbox = await screen.findByLabelText(/정리 대상 선택:/);
@@ -409,7 +402,7 @@ describe("SourceFilesPanel", () => {
 
     // 일괄 삭제 버튼 → 다이얼로그
     fireEvent.click(screen.getByRole("button", { name: /선택 항목 영구 삭제/ }));
-    const dialog = await screen.findByRole("dialog", { name: "원천 객체 영구 삭제" });
+    const dialog = await screen.findByRole("alertdialog", { name: "원천 객체 영구 삭제" });
     const execButton = within(dialog).getByRole("button", { name: /영구 삭제 실행/ });
 
     // 확인 문구 입력 전에는 비활성
@@ -417,6 +410,9 @@ describe("SourceFilesPanel", () => {
     fireEvent.change(within(dialog).getByLabelText("hard-delete 확인 문구"), {
       target: { value: "HARD-DELETE-SOURCES" }
     });
+    // manifest_ack를 확인하기 전에는 여전히 비활성 (UI 필수 게이트)
+    expect(execButton).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /manifest 없이 진행/ }));
     expect(execButton).not.toBeDisabled();
 
     fireEvent.click(execButton);
@@ -426,7 +422,7 @@ describe("SourceFilesPanel", () => {
         expect.objectContaining({
           object_keys: ["source/electronic_map_full/orphan-36.zip"],
           typed_confirmation: "HARD-DELETE-SOURCES",
-          manifest_ack: false
+          manifest_ack: true
         })
       )
     );
@@ -476,16 +472,18 @@ describe("SourceFilesPanel", () => {
       return { ok: true };
     });
     renderPanel("reconcile");
-    await screen.findByText("정합성 실행 (RustFS ⟷ DB)");
+    await screen.findByText("정합성 실행");
     fireEvent.click(await screen.findByLabelText(/정리 대상 선택:/));
     fireEvent.click(screen.getByRole("button", { name: /선택 항목 영구 삭제/ }));
-    const dialog = await screen.findByRole("dialog", { name: "원천 객체 영구 삭제" });
+    const dialog = await screen.findByRole("alertdialog", { name: "원천 객체 영구 삭제" });
     fireEvent.change(within(dialog).getByLabelText("hard-delete 확인 문구"), {
       target: { value: "HARD-DELETE-SOURCES" }
     });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /manifest 없이 진행/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: /영구 삭제 실행/ }));
-    const summary = (await screen.findByText("최근 결과")).closest(".panel") as HTMLElement;
-    const deletedDt = within(summary).getByText("영구 삭제");
+    // '최근 결과' 패널은 상시 렌더되므로, 응답 요약(dt '영구 삭제')이 나타날 때까지 기다린다.
+    const deletedDt = await screen.findByText("영구 삭제");
+    const summary = deletedDt.closest(".panel") as HTMLElement;
     expect(deletedDt.parentElement?.querySelector("dd")).toHaveTextContent("1");
     // raw JSON dump 대신 구조화 요약을 쓴다
     expect(within(summary).queryByText(/requested_count/)).not.toBeInTheDocument();

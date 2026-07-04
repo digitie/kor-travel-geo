@@ -43,10 +43,10 @@ test.describe("매칭 세트 /admin/source-files (T-262)", () => {
     await page.goto("/admin/source-files");
     await page.getByRole("tab", { name: "매칭 세트" }).click();
 
-    // 경보 박스의 제목(괄호 표기)은 detail 전용 — 목록 배지 '무결성 경보'와 구분된다.
+    // 경보 박스(alert)는 detail 전용 — API 필드명(integrity_alert)은 HelpTip으로 이동했다.
     const alertBox = page.locator(".confirm-box[role='alert']");
     await expect(alertBox).toBeVisible();
-    await expect(alertBox).toContainText("무결성 경보 (integrity_alert)");
+    await expect(alertBox).toContainText("무결성 경보");
     await expect(alertBox).toContainText("hash_mismatch");
   });
 

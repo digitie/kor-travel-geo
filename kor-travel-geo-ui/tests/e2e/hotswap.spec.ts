@@ -138,7 +138,7 @@ async function gotoHotSwap(page: Page) {
 
 async function buildPlan(page: Page) {
   const planPanel = panel(page, /Hot-swap plan/);
-  await planPanel.getByLabel("복원된 DB 이름 (restore_database)").fill("kor_travel_geo_restore");
+  await planPanel.getByLabel("복원된 DB 이름", { exact: true }).fill("kor_travel_geo_restore");
   await planPanel.getByRole("button", { name: "plan 생성" }).click();
 }
 

@@ -171,7 +171,7 @@ async function startRebuildFromUi(
   const form = page.locator(".rebuild-form");
   if (options.forcePromotion) {
     await form.getByRole("checkbox", { name: /force_promotion/ }).check();
-    await form.getByLabel("사유 (reason)").fill(options.reason);
+    await form.getByLabel("사유", { exact: true }).fill(options.reason);
     await form
       .getByLabel("rebuild 강제 승급 확인 문구")
       .fill(`REBUILD-PROMOTE ${matchSetId}`);

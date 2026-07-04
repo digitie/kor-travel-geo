@@ -209,10 +209,12 @@ describe("ConsistencyPanel", () => {
     await screen.findByText("#1");
 
     const otherCase = await screen.findByRole("tab", { name: /C5/ });
-    fireEvent.click(otherCase);
+    // radix Tabs 트리거는 click이 아니라 mousedown(또는 focus)으로 활성화된다.
+    fireEvent.mouseDown(otherCase);
 
-    // 전환된 case(C5)의 기준 패널이 갱신되면 메인 스레드가 살아 있는 것이다.
-    // (abnormal_criteria 문구는 CriteriaPanel에만 나타나고 선택된 case에 따라 바뀐다.)
+    // 전환된 case(C5)의 판정 기준(기본 접힘 Collapsible)이 갱신되면 메인 스레드가
+    // 살아 있는 것이다. (abnormal_criteria 문구는 선택된 case에 따라 바뀐다.)
+    fireEvent.click(screen.getByRole("button", { name: "판정 기준 보기" }));
     await waitFor(() =>
       expect(screen.getByText("두 centroid 거리가 임계값을 초과한다.")).toBeInTheDocument()
     );

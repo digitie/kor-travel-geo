@@ -1,5 +1,11 @@
 @import "maplibre-gl/dist/maplibre-gl.css";
-@import "tailwindcss";
+/* 자동 소스 감지를 끄고 소스 디렉터리를 명시한다 — CHANGELOG.md나
+   playwright test-results의 프로즈 속 `shadow-[var(--…)]` 토큰이 클래스 후보로
+   스캔되면 Tailwind v4 CSS 파싱이 죽는 문제(로컬 next dev 재현)의 원천 차단. */
+@import "tailwindcss" source(none);
+@source "../app";
+@source "../components";
+@source "../lib";
 @config "../tailwind.config.ts";
 
 :root {

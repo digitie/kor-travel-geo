@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { ADMIN_PAGES } from "../../../lib/admin-pages";
 import {
   expectNoErrorScreen,
   loginLiveAdmin,
@@ -35,22 +36,24 @@ test.describe("LIVE admin read-only", () => {
   test("/admin/ops renders the Ops console and Serving Releases table", async ({ page }) => {
     await page.goto("/admin/ops");
 
-    // PageHeader renders <h1>Ops</h1>.
-    await expect(page.getByRole("heading", { name: "Ops", exact: true })).toBeVisible({
+    // PageHeader h1은 lib/admin-pages.ts(ADMIN_PAGES.ops.title)와 동기.
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.ops.title, exact: true })
+    ).toBeVisible({
       timeout: TIMEOUT
     });
     await expectNoErrorScreen(page);
 
-    // PerfValidationSummary Panel title (read-only summary).
-    await expect(
-      page.getByRole("heading", { name: "성능·검증 요약 (read-only)" })
-    ).toBeVisible({ timeout: TIMEOUT });
+    // PerfValidationSummary Panel title — "읽기 전용"은 heading 밖 Badge로 이동됨.
+    await expect(page.getByRole("heading", { name: "성능·검증 요약" })).toBeVisible({
+      timeout: TIMEOUT
+    });
 
     // The migrated VirtualTable(as="table", caption="서빙 릴리스 목록") renders a semantic
     // <table> with the caption as its accessible name. We assert it RENDERS (not its row
-    // count): OpsPanel.loadAll() uses Promise.all across all ops endpoints, so when an env
-    // endpoint is unavailable (e.g. pg_stat_statements → 503 if the extension isn't
-    // installed) the fetch fails-fast and every ops table renders its empty state. Data-row
+    // count): OpsPanel.loadAll() uses Promise.allSettled across all ops endpoints, so when an
+    // env endpoint is unavailable (e.g. pg_stat_statements → 503 if the extension isn't
+    // installed) only that table renders its empty state. Data-row
     // assertions live in the API layer instead (see api-correctness for the released data).
     await expect(page.getByRole("table", { name: "서빙 릴리스 목록" })).toBeVisible({
       timeout: TIMEOUT
@@ -99,7 +102,9 @@ test.describe("LIVE admin read-only", () => {
   test("/admin/consistency renders the Consistency reports surface", async ({ page }) => {
     await page.goto("/admin/consistency");
 
-    await expect(page.getByRole("heading", { name: "Consistency", exact: true })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.consistency.title, exact: true })
+    ).toBeVisible({
       timeout: TIMEOUT
     });
     await expectNoErrorScreen(page);
@@ -124,7 +129,9 @@ test.describe("LIVE admin read-only", () => {
   }) => {
     await page.goto("/admin/backups");
 
-    await expect(page.getByRole("heading", { name: "DB Backups", exact: true })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.backups.title, exact: true })
+    ).toBeVisible({
       timeout: TIMEOUT
     });
     await expectNoErrorScreen(page);
@@ -143,8 +150,10 @@ test.describe("LIVE admin read-only", () => {
   test("/admin/source-files renders the source-files tablist and cards", async ({ page }) => {
     await page.goto("/admin/source-files");
 
-    // PageHeader renders <h1>Source Files</h1>.
-    await expect(page.getByRole("heading", { name: "Source Files", exact: true })).toBeVisible({
+    // PageHeader h1은 ADMIN_PAGES.sourceFiles.title("원천 파일")와 동기.
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.sourceFiles.title, exact: true })
+    ).toBeVisible({
       timeout: TIMEOUT
     });
     await expectNoErrorScreen(page);
@@ -161,13 +170,15 @@ test.describe("LIVE admin read-only", () => {
   test("/admin/tables renders the PostgreSQL table stats list", async ({ page }) => {
     await page.goto("/admin/tables");
 
-    await expect(page.getByRole("heading", { name: "Tables", exact: true })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.tables.title, exact: true })
+    ).toBeVisible({
       timeout: TIMEOUT
     });
     await expectNoErrorScreen(page);
 
-    // TableStatsPanel -> Panel title="PostgreSQL Tables", VirtualTable caption "PostgreSQL 테이블 통계".
-    await expect(page.getByRole("heading", { name: "PostgreSQL Tables" })).toBeVisible({
+    // TableStatsPanel -> Panel title="PostgreSQL 테이블", VirtualTable caption "PostgreSQL 테이블 통계".
+    await expect(page.getByRole("heading", { name: "PostgreSQL 테이블", exact: true })).toBeVisible({
       timeout: TIMEOUT
     });
     const tablesTable = page.getByRole("table", { name: "PostgreSQL 테이블 통계" });

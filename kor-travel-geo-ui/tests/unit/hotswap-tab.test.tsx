@@ -11,6 +11,8 @@ vi.mock("@/lib/api", () => ({
   API_BASE: "/api/proxy",
   backendPath: (path: string) =>
     path.startsWith("/v1") || path.startsWith("/v2") ? path : `/v1${path}`,
+  getErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
   postJson: apiMocks.postJson,
   requestJson: apiMocks.requestJson
 }));
@@ -31,6 +33,9 @@ const PLAN = {
 describe("HotSwapTab (T-250)", () => {
   beforeEach(() => {
     apiMocks.postJson.mockReset();
+    apiMocks.requestJson.mockReset();
+    // restore_database datalist용 복원 이력 조회 (db_restore_log)
+    apiMocks.requestJson.mockResolvedValue([]);
   });
 
   it("gates execute behind plan + maintenance window + exact confirmation", async () => {
@@ -43,7 +48,7 @@ describe("HotSwapTab (T-250)", () => {
     });
 
     render(<HotSwapTab />);
-    fireEvent.change(screen.getByLabelText("복원된 DB 이름 (restore_database)"), {
+    fireEvent.change(screen.getByLabelText("복원된 DB 이름"), {
       target: { value: "kor_travel_geo_restore" }
     });
     fireEvent.click(screen.getByRole("button", { name: "plan 생성" }));
@@ -65,6 +70,8 @@ describe("HotSwapTab (T-250)", () => {
     fireEvent.change(screen.getByLabelText("typed confirmation"), {
       target: { value: PLAN.typed_confirmation }
     });
+    // TypedConfirmField가 실시간 일치 피드백을 보여 준다
+    expect(screen.getAllByText("확인 문구가 일치합니다.").length).toBeGreaterThan(0);
     expect((execBtn as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -76,7 +83,7 @@ describe("HotSwapTab (T-250)", () => {
     });
 
     render(<HotSwapTab />);
-    fireEvent.change(screen.getByLabelText("복원된 DB 이름 (restore_database)"), {
+    fireEvent.change(screen.getByLabelText("복원된 DB 이름"), {
       target: { value: "kor_travel_geo_restore" }
     });
     fireEvent.click(screen.getByRole("button", { name: "plan 생성" }));

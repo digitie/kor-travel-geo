@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ADMIN_PAGES } from "../../lib/admin-pages";
 
 // /admin/consistency 진입 프리즈 회귀를 검증한다. 백엔드 API는 page.route로 목킹하므로
 // DB 없이 UI 단독으로 실행할 수 있다. 메인 스레드가 멈추면(프리즈) 아래 단언이 타임아웃으로
@@ -124,7 +125,9 @@ test.describe("Consistency 분석 콘솔", () => {
     await page.goto("/admin/consistency");
 
     // 진입 직후 핵심 UI가 렌더되면 메인 스레드가 멈추지 않은 것이다.
-    await expect(page.getByRole("heading", { name: "Consistency" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.consistency.title })
+    ).toBeVisible();
     await expect(page.getByText(REPORT_ID).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "#1" })).toBeVisible();
 
@@ -165,16 +168,20 @@ test.describe("Consistency 분석 콘솔", () => {
     await mockConsistencyApi(page);
     await page.goto("/admin/consistency");
 
-    // CriteriaPanel(선택된 C4): likely_causes·default_severity·sample_schema.
+    // CriteriaPanel(선택된 C4): 판정 기준은 기본 접힘 Collapsible 안에 있다.
+    await page.getByRole("button", { name: "판정 기준 보기" }).click();
     await expect(page.getByText("추정 원인")).toBeVisible();
     await expect(page.getByText("좌표 원천 이상치, polygon 누락")).toBeVisible();
     await expect(page.getByText("기본 심각도")).toBeVisible();
-    await expect(page.getByText("sample 구조 (sample_schema)")).toBeVisible();
+
+    // sample_schema JSON은 접이식(JsonDetails)으로 노출된다.
+    await page.getByRole("button", { name: "표본 구조" }).click();
+    await expect(page.locator(".criteria-panel pre.json-box")).toContainText("bd_mgt_sn");
 
     // 표본 선택 → DecisionPanel의 구조화된 case_metric.
     await page.getByRole("button", { name: "#1" }).click();
-    await expect(page.getByText("지표 (case_metric)")).toBeVisible();
     const metric = page.locator(".case-metric");
+    await expect(metric.getByText("지표", { exact: true })).toBeVisible();
     await expect(metric.getByText("distance_m")).toBeVisible();
     await expect(metric.getByText("threshold_m")).toBeVisible();
   });

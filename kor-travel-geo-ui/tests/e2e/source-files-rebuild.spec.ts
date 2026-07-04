@@ -111,7 +111,7 @@ test.describe("DB 입력(rebuild-db) /admin/source-files (T-263)", () => {
     await page.getByRole("tab", { name: "매칭 세트" }).click();
 
     const form = page.locator(REBUILD_FORM);
-    await expect(form.getByText("사전 점검 (preflight)")).toBeVisible();
+    await expect(form.getByText("사전 점검", { exact: true })).toBeVisible();
     await expect(form.getByText("무결성 경보:", { exact: false })).toBeVisible();
     // 기본 세트는 integrity_alert=true → 무결성 항목이 '차단'.
     await expect(form.getByText("차단", { exact: true }).first()).toBeVisible();

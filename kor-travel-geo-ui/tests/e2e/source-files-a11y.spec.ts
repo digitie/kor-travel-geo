@@ -28,15 +28,15 @@ test.describe("원천 파일 관리 접근성·회복성 /admin/source-files (T-
     await trigger.focus();
     await page.keyboard.press("Enter");
 
-    const dialog = page.getByRole("dialog", { name: "원천 객체 영구 삭제" });
+    const dialog = page.getByRole("alertdialog", { name: "원천 객체 영구 삭제" });
     await expect(dialog).toBeVisible();
     // 열리면 포커스가 확인 입력으로 이동한다.
     await expect(page.getByLabel("hard-delete 확인 문구")).toBeFocused();
 
-    // Tab 트랩: 마지막 focusable(취소)에서 Tab → 첫 focusable(manifest_ack)로 순환(밖으로 안 나감).
+    // Tab 트랩: 마지막 focusable(취소)에서 Tab → 첫 focusable(manifest_ack 체크)로 순환(밖으로 안 나감).
     await dialog.getByRole("button", { name: "취소" }).focus();
     await page.keyboard.press("Tab");
-    await expect(dialog.getByRole("checkbox", { name: /manifest_ack/ })).toBeFocused();
+    await expect(dialog.getByRole("checkbox", { name: /manifest 없이 진행/ })).toBeFocused();
 
     // Esc로 닫히고(키보드 only) 포커스가 트리거로 복귀한다.
     await page.keyboard.press("Escape");

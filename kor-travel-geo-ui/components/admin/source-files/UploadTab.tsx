@@ -1,13 +1,32 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Download, RefreshCw, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Upload } from "lucide-react";
 import { useMemo, useReducer, useState } from "react";
+import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
+import { HelpTip } from "@/components/admin/shared/HelpTip";
+import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
+import { RefreshButton } from "@/components/admin/shared/RefreshButton";
+import { YyyymmField } from "@/components/admin/shared/YyyymmField";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import { Field, FieldError } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/Panel";
+import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
-import { ApiError, postJson, requestJson } from "@/lib/api";
+import { ApiError, getErrorMessage, postJson, requestJson } from "@/lib/api";
+import { formatBytes } from "@/lib/format";
 import { uploadSlotFile, type SlotUploadProgress } from "@/lib/multipart-upload";
+import { toast } from "@/lib/toast";
 import { useUploadSessionEvents } from "@/lib/use-upload-session-events";
 import {
   activeServingCategorySet,
@@ -91,15 +110,21 @@ export function UploadTab() {
   });
   const categories = catalog?.categories ?? EMPTY_CATEGORIES;
 
-  const { data: resumable = EMPTY_SESSIONS, refetch: refetchSessions } = useQuery({
-    queryKey: ["upload-sessions", "resumable"],
-    queryFn: async () => {
-      const all = await requestJson<UploadSessionStatus[]>(
-        sourceFilesPaths.uploadSessionsList()
-      );
-      return all.filter(isResumableSession);
-    }
+  const { data: sessions = EMPTY_SESSIONS, refetch: refetchSessions } = useQuery({
+    queryKey: ["upload-sessions", "all"],
+    queryFn: () => requestJson<UploadSessionStatus[]>(sourceFilesPaths.uploadSessionsList())
   });
+  const resumable = useMemo(() => sessions.filter(isResumableSession), [sessions]);
+  // 카테고리별 파일 크기 한도 — catalog에는 없어 세션 이력에서 유도한다 (사전 검증용, 근사치).
+  const knownMaxBytes = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const session of sessions) {
+      if (session.max_bytes > 0 && !map.has(session.category)) {
+        map.set(session.category, session.max_bytes);
+      }
+    }
+    return map;
+  }, [sessions]);
 
   // Active match set → which categories are actually in serving now (T-224).
   const { data: matchSets = [] } = useQuery({
@@ -142,16 +167,15 @@ export function UploadTab() {
             conflict: {
               category: variables.category as SourceFileCategoryInfo["category"],
               userYyyymm: variables.userYyyymm,
-              existing: parseConflictSession(error.message),
+              existing: conflictSessionFromError(error),
               message: error.message
             }
           }
         });
       } else {
-        dispatchView({
-          type: "patch",
-          patch: { lastResult: { error: error instanceof Error ? error.message : String(error) } }
-        });
+        const message = getErrorMessage(error);
+        toast.error("업로드 세션 생성 실패", message);
+        dispatchView({ type: "patch", patch: { lastResult: { error: message } } });
       }
     }
   });
@@ -162,8 +186,9 @@ export function UploadTab() {
         category: request.category,
         user_yyyymm: request.userYyyymm,
         enqueue_load: true
-    }),
+      }),
     onSuccess: (result) => {
+      toast.success("epost 받기 완료");
       dispatchView({
         type: "patch",
         patch: {
@@ -182,7 +207,8 @@ export function UploadTab() {
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     },
     onError: (error, variables) => {
-      const message = parseApiErrorMessage(error);
+      const message = getErrorMessage(error);
+      toast.error("epost 받기 실패", message);
       dispatchView({
         type: "patch",
         patch: {
@@ -238,6 +264,7 @@ export function UploadTab() {
         sourceFilesPaths.registerSession(session.upload_session_id),
         {}
       );
+      toast.success("업로드 완료", "세션이 등록되었습니다.");
       dispatchView({
         type: "patch",
         patch: {
@@ -251,10 +278,9 @@ export function UploadTab() {
       });
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     } catch (error) {
-      dispatchView({
-        type: "patch",
-        patch: { lastResult: { error: error instanceof Error ? error.message : String(error) } }
-      });
+      const message = getErrorMessage(error);
+      toast.error("업로드 실패", message);
+      dispatchView({ type: "patch", patch: { lastResult: { error: message } } });
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     }
   }
@@ -263,11 +289,7 @@ export function UploadTab() {
     <div className="grid two">
       <Panel
         title="카테고리별 업로드"
-        actions={
-          <button className="icon-button" onClick={() => void refetchSessions()} title="새로고침" type="button">
-            <RefreshCw size={16} />
-          </button>
-        }
+        actions={<RefreshButton iconOnly onClick={() => void refetchSessions()} />}
       >
         <div className="source-card-grid">
           {categories.map((category) => (
@@ -277,6 +299,7 @@ export function UploadTab() {
               hasActiveSet={Boolean(activeSet)}
               isActiveServing={activeServing.has(category.category)}
               key={category.category}
+              maxBytes={knownMaxBytes.get(category.category)}
               onSelect={() => dispatchView({ type: "select-category", category: category.category })}
               onEpostFetch={(yyyymm) =>
                 void epostFetch.mutate({
@@ -295,7 +318,9 @@ export function UploadTab() {
               uploading={createSession.isPending}
             />
           ))}
-          {categories.length === 0 ? <p className="form-note">카테고리 카탈로그를 불러오는 중…</p> : null}
+          {categories.length === 0 ? (
+            <p className="form-note">카테고리 카탈로그를 불러오는 중…</p>
+          ) : null}
         </div>
       </Panel>
 
@@ -306,11 +331,7 @@ export function UploadTab() {
             void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] })
           }
         />
-        {lastResult ? (
-          <Panel title="최근 결과">
-            <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
-          </Panel>
-        ) : null}
+        <ActionResultPanel result={lastResult} />
       </div>
 
       {conflict ? (
@@ -344,6 +365,7 @@ function CategoryCard({
   isActive,
   hasActiveSet,
   isActiveServing,
+  maxBytes,
   onEpostFetch,
   onSelect,
   onUpload,
@@ -358,6 +380,8 @@ function CategoryCard({
   hasActiveSet: boolean;
   /** Whether this category is a non-omitted item of the active match set. */
   isActiveServing: boolean;
+  /** 세션 이력에서 유도한 카테고리 파일 크기 한도 (없으면 사전 검증 생략). */
+  maxBytes?: number;
   onEpostFetch: (userYyyymm: string) => void;
   onSelect: () => void;
   onUpload: (userYyyymm: string, file: File) => void;
@@ -369,6 +393,7 @@ function CategoryCard({
   const epost = isEpostCategory(category.category);
   const slotProgress = useMemo(() => Object.values(progress), [progress]);
   const yyyymmValid = isValidYyyymm(userYyyymm);
+  const oversize = Boolean(file && maxBytes && file.size > maxBytes);
 
   return (
     <article className={isActive ? "source-card active" : "source-card"}>
@@ -388,19 +413,17 @@ function CategoryCard({
               tone={isActiveServing ? "ok" : "warn"}
             />
           ) : null}
+          <HelpTip label={`${category.label} 서빙 반영 도움말`}>
+            <p className="m-0">{servingUsageNote(category.category, category.serving_usage)}</p>
+            {hasActiveSet && !isActiveServing ? (
+              <p className="m-0 mt-1">
+                등록해도 활성 매칭 세트에 포함·활성화되기 전에는 서빙에 반영되지 않습니다(등록됨 ≠
+                활용 중).
+              </p>
+            ) : null}
+          </HelpTip>
         </div>
       </header>
-      <p className="source-card-serving-note">
-        {servingUsageNote(category.category, category.serving_usage)}
-        {hasActiveSet && !isActiveServing ? (
-          <>
-            {" "}
-            <span className="source-card-serving-emphasis">
-              등록해도 활성 매칭 세트에 포함·활성화되기 전에는 서빙에 반영되지 않습니다(등록됨 ≠ 활용 중).
-            </span>
-          </>
-        ) : null}
-      </p>
       <dl className="source-card-meta">
         <div>
           <dt>구성 역할</dt>
@@ -424,6 +447,7 @@ function CategoryCard({
 
       {epost ? (
         <EpostFetchControls
+          category={category}
           error={epostError}
           fetching={fetchingEpost}
           onFetch={() => onEpostFetch(userYyyymm)}
@@ -433,30 +457,42 @@ function CategoryCard({
         />
       ) : (
         <div className="source-card-upload">
-          <label className="field">
-            <span>기준년월 (user_yyyymm)</span>
-            <input
-              maxLength={6}
-              onChange={(event) => setUserYyyymm(event.target.value.replace(/[^\d]/g, ""))}
-              placeholder="예: 202606"
-              value={userYyyymm}
-            />
-          </label>
-          {!yyyymmValid ? <p className="form-note warn">YYYYMM 6자리를 입력하세요.</p> : null}
-          <input
-            aria-label={`${category.label} 파일 선택`}
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            type="file"
+          <YyyymmField
+            id={`yyyymm-${category.category}`}
+            value={userYyyymm}
+            onChange={setUserYyyymm}
+            help={
+              <>
+                API 필드 <code>user_yyyymm</code> — 이 원천 자료의 기준 년월입니다.
+              </>
+            }
           />
-          <button
-            className="button"
-            disabled={!file || !yyyymmValid || uploading}
+          <Field data-invalid={oversize || undefined}>
+            <Input
+              aria-label={`${category.label} 파일 선택`}
+              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              type="file"
+            />
+            {file ? (
+              <p className="form-note m-0">
+                {file.name} · {formatBytes(file.size)}
+                {maxBytes ? <> (한도 {formatBytes(maxBytes)})</> : null}
+              </p>
+            ) : null}
+            {oversize ? (
+              <FieldError>
+                파일이 크기 한도 {formatBytes(maxBytes)}를 초과합니다.
+              </FieldError>
+            ) : null}
+          </Field>
+          <Button
+            disabled={!file || !yyyymmValid || uploading || oversize}
             onClick={() => file && onUpload(userYyyymm, file)}
             type="button"
           >
-            <Upload size={16} />
+            <Upload aria-hidden="true" />
             업로드
-          </button>
+          </Button>
           {slotProgress.length > 0 ? (
             <div className="source-progress-list">
               {slotProgress.map((item) => (
@@ -493,15 +529,14 @@ function SlotProgressBar({ progress }: { progress: SlotUploadProgress }) {
           )}
         </span>
       </div>
-      <div className="progress-shell">
-        <div className="progress-bar" style={{ width: `${progress.state === "done" ? 100 : pct}%` }} />
-      </div>
+      <Progress value={progress.state === "done" ? 100 : pct} />
       {progress.error ? <p className="form-note warn">{progress.error}</p> : null}
     </div>
   );
 }
 
 function EpostFetchControls({
+  category,
   error,
   fetching,
   onFetch,
@@ -509,6 +544,7 @@ function EpostFetchControls({
   userYyyymm,
   yyyymmValid
 }: {
+  category: SourceFileCategoryInfo;
   error: string | null;
   fetching: boolean;
   onFetch: () => void;
@@ -518,26 +554,25 @@ function EpostFetchControls({
 }) {
   return (
     <div className="source-card-upload">
-      <label className="field">
-        <span>기준년월 (user_yyyymm)</span>
-        <input
-          maxLength={6}
-          onChange={(event) => onYyyymmChange(event.target.value.replace(/[^\d]/g, ""))}
-          placeholder="예: 202606"
-          value={userYyyymm}
-        />
-      </label>
-      {!yyyymmValid ? <p className="form-note warn">YYYYMM 6자리를 입력하세요.</p> : null}
-      <button
-        className="button secondary"
+      <YyyymmField
+        id={`yyyymm-${category.category}`}
+        value={userYyyymm}
+        onChange={onYyyymmChange}
+        help={
+          <>
+            API 필드 <code>user_yyyymm</code> — epost 서버에서 받아올 자료의 기준 년월입니다.
+          </>
+        }
+      />
+      <Button
         disabled={!yyyymmValid || fetching}
         onClick={onFetch}
-        title="epost 서버 fetch"
         type="button"
+        variant="outline"
       >
-        <Download size={16} />
+        <Download aria-hidden="true" />
         {fetching ? "받는 중" : "epost 받기"}
-      </button>
+      </Button>
       {error ? (
         <p className="form-note warn" role="alert">
           epost 서버 fetch 실패: {error}
@@ -621,25 +656,6 @@ function SessionProgress({
   );
 }
 
-function parseApiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    try {
-      const parsed = JSON.parse(error.message) as { detail?: unknown };
-      const detail = parsed.detail;
-      if (typeof detail === "string") {
-        return detail;
-      }
-      if (detail && typeof detail === "object" && "message" in detail) {
-        return String((detail as { message: unknown }).message);
-      }
-    } catch {
-      // error.message was not JSON; fall through to the raw message.
-    }
-    return error.message;
-  }
-  return error instanceof Error ? error.message : String(error);
-}
-
 function DuplicateSessionDialog({
   conflict,
   onClose,
@@ -650,65 +666,66 @@ function DuplicateSessionDialog({
   onResume: (session: UploadSessionStatus) => void;
 }) {
   return (
-    <div className="modal-backdrop">
-      <dialog className="modal" open aria-label="중복 업로드 세션">
-        <h2>이미 진행 중인 업로드 세션이 있습니다</h2>
-        <p className="form-note">
-          {conflict.category} · {conflict.userYyyymm} 조합의 비종료 세션이 이미 존재합니다 (409).
-          중복 그룹과 대용량 orphan 객체를 막기 위해 새로 만들지 않고 기존 세션을 재개합니다.
-        </p>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      {/* 접근명은 spec 계약 문자열 aria-label로 고정 — radix 기본 aria-labelledby(제목)를 해제한다. */}
+      <DialogContent
+        aria-label="중복 업로드 세션"
+        aria-labelledby={undefined}
+        showCloseButton={false}
+      >
+        <DialogHeader>
+          <DialogTitle>이미 진행 중인 업로드 세션이 있습니다</DialogTitle>
+          <DialogDescription>
+            {conflict.category} · {conflict.userYyyymm} 조합의 업로드가 이미 진행 중입니다. 새로
+            만들지 않고 기존 세션을 이어서 사용합니다.
+          </DialogDescription>
+        </DialogHeader>
         {conflict.existing ? (
-          <dl className="criteria-grid">
-            <div>
-              <dt>세션 ID</dt>
-              <dd>{conflict.existing.upload_session_id}</dd>
-            </div>
-            <div>
-              <dt>상태</dt>
-              <dd>{conflict.existing.state}</dd>
-            </div>
-            <div>
-              <dt>업로드 슬롯</dt>
-              <dd>
-                {conflict.existing.uploaded_file_count}/{conflict.existing.expected_file_count}
-              </dd>
-            </div>
-          </dl>
+          <KeyValueGrid
+            items={[
+              { label: "세션 ID", value: conflict.existing.upload_session_id },
+              { label: "상태", value: conflict.existing.state },
+              {
+                label: "업로드 슬롯",
+                value: `${conflict.existing.uploaded_file_count}/${conflict.existing.expected_file_count}`
+              }
+            ]}
+          />
         ) : (
           <pre className="json-box compact-json">{conflict.message}</pre>
         )}
-        <div className="button-row">
+        <DialogFooter>
           {conflict.existing ? (
-            <button className="button" onClick={() => onResume(conflict.existing!)} type="button">
+            <Button onClick={() => onResume(conflict.existing!)} type="button">
               기존 세션 재개
-            </button>
+            </Button>
           ) : null}
-          <button className="button secondary" onClick={onClose} type="button">
+          <Button onClick={onClose} type="button" variant="outline">
             닫기
-          </button>
-        </div>
-      </dialog>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-function parseConflictSession(message: string): UploadSessionStatus | null {
-  try {
-    const parsed = JSON.parse(message) as { detail?: unknown } | UploadSessionStatus;
-    const detail = (parsed as { detail?: unknown }).detail ?? parsed;
-    if (detail && typeof detail === "object" && "upload_session_id" in detail) {
-      return detail as UploadSessionStatus;
-    }
-    if (
-      detail &&
-      typeof detail === "object" &&
-      "session" in detail &&
-      (detail as { session?: unknown }).session
-    ) {
-      return (detail as { session: UploadSessionStatus }).session;
-    }
-  } catch {
-    return null;
+function conflictSessionFromError(error: ApiError): UploadSessionStatus | null {
+  const detail = error.detail ?? error.body;
+  if (detail && typeof detail === "object" && "upload_session_id" in detail) {
+    return detail as UploadSessionStatus;
+  }
+  if (
+    detail &&
+    typeof detail === "object" &&
+    "session" in detail &&
+    (detail as { session?: unknown }).session
+  ) {
+    return (detail as { session: UploadSessionStatus }).session;
   }
   return null;
 }

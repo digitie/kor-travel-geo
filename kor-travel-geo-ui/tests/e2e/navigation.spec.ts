@@ -1,21 +1,20 @@
 import { expect, test } from "@playwright/test";
 
+import { ADMIN_NAV_GROUPS, ADMIN_PAGES } from "../../lib/admin-pages";
+
+// 사이드바 라벨과 페이지 h1은 lib/admin-pages.ts를 단일 소스로 공유한다.
 const navLinks = [
   { label: "Geocode", heading: "Geocode" },
   { label: "Reverse", heading: "Reverse" },
   { label: "Normalize", heading: "Normalize" },
   { label: "Explain", heading: "Explain" },
-  { label: "Load", heading: "Load" },
-  { label: "Backups", heading: "DB Backups" },
-  { label: "Tables", heading: "Tables" },
-  { label: "Cache", heading: "Cache" },
-  { label: "Logs", heading: "Logs" },
-  { label: "Consistency", heading: "Consistency" },
-  { label: "Ops", heading: "Ops" },
-  { label: "Settings", heading: "Settings" },
-  { label: "Metrics", heading: "Cache" },
-  { label: "MV refresh", heading: "Load" },
-  { label: "PostGIS", heading: "Tables" }
+  { label: ADMIN_PAGES.home.title, heading: ADMIN_PAGES.home.title },
+  ...ADMIN_NAV_GROUPS.flatMap((group) =>
+    group.keys.map((key) => ({
+      label: ADMIN_PAGES[key].title,
+      heading: ADMIN_PAGES[key].title
+    }))
+  )
 ];
 
 test.describe("좌측 메뉴 이동", () => {

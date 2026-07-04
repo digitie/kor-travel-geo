@@ -1,5 +1,6 @@
 import { expect, test, type APIResponse } from "@playwright/test";
 
+import { ADMIN_PAGES } from "../../../lib/admin-pages";
 import {
   KNOWN,
   directApiGet,
@@ -62,7 +63,9 @@ test.describe("LIVE admin auth and session security", () => {
     expect(successfulLogin.status()).toBe(200);
     await page.waitForURL("**/admin/settings", { timeout: LIVE_TIMEOUT });
 
-    await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.settings.title, exact: true })
+    ).toBeVisible({
       timeout: LIVE_TIMEOUT
     });
     await expect(page.getByRole("heading", { name: "로그인 기록" })).toBeVisible();
@@ -88,7 +91,9 @@ test.describe("LIVE admin auth and session security", () => {
     expect(sessionCookie?.sameSite).toBe("Strict");
 
     await page.goto("/admin/settings");
-    await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible({
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.settings.title, exact: true })
+    ).toBeVisible({
       timeout: LIVE_TIMEOUT
     });
 
@@ -247,6 +252,9 @@ test.describe("LIVE public API key security", () => {
       timeout: LIVE_TIMEOUT
     });
 
+    // 키 폐기는 ConfirmActionDialog를 거친다 — 트리거 클릭 후 다이얼로그의 "폐기" 확인
+    // 버튼을 눌러야 DELETE가 발생한다. exact:true 필수(트리거 접근명에도 "폐기" 포함).
+    await page.getByRole("button", { name: `${label} 키 폐기` }).click();
     const [revokeResponse] = await Promise.all([
       page.waitForResponse(
         (res) =>
@@ -254,7 +262,7 @@ test.describe("LIVE public API key security", () => {
           res.request().method() === "DELETE",
         { timeout: LIVE_TIMEOUT }
       ),
-      page.getByRole("button", { name: `${label} 키 폐기` }).click()
+      page.getByRole("button", { name: "폐기", exact: true }).click()
     ]);
     expect(revokeResponse.status()).toBe(200);
     await expect(page.getByText("공개 API 키를 폐기했습니다.")).toBeVisible({

@@ -1,8 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Panel } from "@/components/ui/Panel";
+import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
 import { RetentionWarning } from "@/components/admin/source-files/RetentionWarning";
+import { Panel } from "@/components/ui/Panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { requestJson } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import {
@@ -47,48 +49,27 @@ export function CapacitySummaryCard() {
   return (
     <Panel title="용량 / 이슈 요약">
       {!capacity ? (
-        <p className="form-note">용량 정보를 불러오는 중…</p>
+        <div className="grid gap-2">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-4/5" />
+          <Skeleton className="h-5 w-2/3" />
+        </div>
       ) : (
         <>
-        <RetentionWarning retention={capacity.retention} />
-        <dl className="criteria-grid">
-          <div>
-            <dt>객체 수</dt>
-            <dd>{capacity.total_object_count.toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>전체 용량</dt>
-            <dd>{formatBytes(capacity.total_bytes)}</dd>
-          </div>
-          <div>
-            <dt>최근 30일 증가</dt>
-            <dd>{formatBytes(capacity.growth_30d_bytes)}</dd>
-          </div>
-          <div>
-            <dt>quarantine</dt>
-            <dd>{formatBytes(capacity.quarantined_bytes)}</dd>
-          </div>
-          <div>
-            <dt>soft-delete</dt>
-            <dd>{formatBytes(capacity.soft_deleted_bytes)}</dd>
-          </div>
-          <div>
-            <dt>미등록</dt>
-            <dd>{formatBytes(capacity.unregistered_bytes)}</dd>
-          </div>
-          <div>
-            <dt>한도 초과</dt>
-            <dd>{capacity.over_threshold ? "예" : "아니오"}</dd>
-          </div>
-          <div>
-            <dt>미해결 이슈</dt>
-            <dd>{openIssues.total.toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>오류(error) 이슈</dt>
-            <dd>{openIssues.error.toLocaleString()}</dd>
-          </div>
-        </dl>
+          <RetentionWarning retention={capacity.retention} />
+          <KeyValueGrid
+            items={[
+              { label: "객체 수", value: capacity.total_object_count.toLocaleString() },
+              { label: "전체 용량", value: formatBytes(capacity.total_bytes) },
+              { label: "최근 30일 증가", value: formatBytes(capacity.growth_30d_bytes) },
+              { label: "quarantine", value: formatBytes(capacity.quarantined_bytes) },
+              { label: "soft-delete", value: formatBytes(capacity.soft_deleted_bytes) },
+              { label: "미등록", value: formatBytes(capacity.unregistered_bytes) },
+              { label: "한도 초과", value: capacity.over_threshold ? "예" : "아니오" },
+              { label: "미해결 이슈", value: openIssues.total.toLocaleString() },
+              { label: "오류(error) 이슈", value: openIssues.error.toLocaleString() }
+            ]}
+          />
         </>
       )}
     </Panel>

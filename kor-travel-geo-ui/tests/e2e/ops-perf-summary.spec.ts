@@ -107,7 +107,7 @@ test.describe("성능·검증 요약 /admin/ops (T-222)", () => {
     });
     await page.goto("/admin/ops");
 
-    const panel = page.locator(".panel", { hasText: "성능·검증 요약 (read-only)" });
+    const panel = page.locator(".panel", { hasText: "성능·검증 요약" });
     await expect(panel).toBeVisible();
 
     // 성능 benchmark: load_matrix 그룹의 최신 p95=12.0 + baseline 대비 delta(▲2.0 회귀).
@@ -127,7 +127,7 @@ test.describe("성능·검증 요약 /admin/ops (T-222)", () => {
     await expect(panel.getByText("활성: 활성 세트")).toBeVisible();
 
     await panel.getByRole("link", { name: /상세/ }).click();
-    await expect(page.getByRole("heading", { name: "Consistency", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "정합성 검증", exact: true })).toBeVisible();
     expect(rscRequests).toEqual([]);
   });
 
@@ -149,7 +149,7 @@ test.describe("성능·검증 요약 /admin/ops (T-222)", () => {
     });
     await page.goto("/admin/ops");
 
-    const panel = page.locator(".panel", { hasText: "성능·검증 요약 (read-only)" });
+    const panel = page.locator(".panel", { hasText: "성능·검증 요약" });
     await expect(panel.getByText("등록된 benchmark artifact가 없습니다", { exact: false })).toBeVisible();
   });
 });

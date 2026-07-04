@@ -1,16 +1,38 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, RefreshCw, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useReducer, useRef, useState } from "react";
-import { Panel } from "@/components/ui/Panel";
+import { Play, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
+import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
+import { HelpTip } from "@/components/admin/shared/HelpTip";
+import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
+import { RefreshButton } from "@/components/admin/shared/RefreshButton";
+import { TypedConfirmField } from "@/components/admin/shared/TypedConfirmField";
 import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { RetentionWarning } from "@/components/admin/source-files/RetentionWarning";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Panel } from "@/components/ui/Panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
-import { postJson, requestJson } from "@/lib/api";
-import { useModalA11y } from "@/lib/use-modal-a11y";
+import { getErrorMessage, postJson, requestJson } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { toast } from "@/lib/toast";
 import {
   HARD_DELETE_CONFIRMATION,
   isBulkHardDeleteEligible,
@@ -134,29 +156,31 @@ export function ReconcileTab() {
   const runReconcile = useMutation({
     mutationFn: () => postJson<SourceReconcileRun>(sourceFilesPaths.reconcile(), { mode }),
     onSuccess: (run) => {
+      toast.success("정합성 실행을 시작했습니다");
       dispatchView({ type: "set-last-result", result: run });
       dispatchView({ type: "select-run", runId: run.source_storage_reconcile_run_id });
       void queryClient.invalidateQueries({ queryKey: ["reconcile-runs"] });
     },
-    onError: (error) =>
-      dispatchView({
-        type: "set-last-result",
-        result: { error: error instanceof Error ? error.message : String(error) }
-      })
+    onError: (error) => {
+      const message = getErrorMessage(error);
+      toast.error("정합성 실행 실패", message);
+      dispatchView({ type: "set-last-result", result: { error: message } });
+    }
   });
 
   const resolveItem = useMutation({
     mutationFn: ({ itemId, action }: { itemId: string; action: ReconcileResolveAction }) =>
       postJson(sourceFilesPaths.reconcileItemResolve(itemId), { action }),
     onSuccess: (data) => {
+      toast.success("이슈를 처리했습니다");
       dispatchView({ type: "set-last-result", result: data });
       void queryClient.invalidateQueries({ queryKey: ["reconcile-items"] });
     },
-    onError: (error) =>
-      dispatchView({
-        type: "set-last-result",
-        result: { error: error instanceof Error ? error.message : String(error) }
-      })
+    onError: (error) => {
+      const message = getErrorMessage(error);
+      toast.error("이슈 처리 실패", message);
+      dispatchView({ type: "set-last-result", result: { error: message } });
+    }
   });
   const { isPending: resolvePending, mutate: resolveMutate } = resolveItem;
 
@@ -171,15 +195,16 @@ export function ReconcileTab() {
     mutationFn: (body: SourceBulkHardDeleteRequest) =>
       postJson<SourceBulkHardDeleteResponse>(sourceFilesPaths.bulkHardDelete(), body),
     onSuccess: (data) => {
+      toast.success(`영구 삭제 완료 — ${data.hard_deleted_count.toLocaleString()}건`);
       dispatchView({ type: "hard-delete-succeeded", result: data });
       void queryClient.invalidateQueries({ queryKey: ["reconcile-items"] });
       void queryClient.invalidateQueries({ queryKey: ["source-capacity"] });
     },
-    onError: (error) =>
-      dispatchView({
-        type: "set-last-result",
-        result: { error: error instanceof Error ? error.message : String(error) }
-      })
+    onError: (error) => {
+      const message = getErrorMessage(error);
+      toast.error("영구 삭제 실패", message);
+      dispatchView({ type: "set-last-result", result: { error: message } });
+    }
   });
 
   const toggleKey = useCallback((objectKey: string): void => {
@@ -237,28 +262,33 @@ export function ReconcileTab() {
         selectedTargets={selectedTargets}
       />
 
-      <Panel title="용량 (capacity)">
+      <Panel
+        title="용량"
+        badges={
+          <HelpTip label="용량 도움말">
+            원천 저장소(capacity) 사용량 — 카테고리별 객체 수와 바이트, soft-delete·격리 용량을
+            보여 줍니다.
+          </HelpTip>
+        }
+      >
         <CapacityPanel capacity={capacity} />
       </Panel>
 
-      {lastResult ? (
+      {isBulkDeleteResult(lastResult) ? (
         <Panel title="최근 결과">
-          {isBulkDeleteResult(lastResult) ? (
-            <BulkDeleteResultSummary result={lastResult} />
-          ) : (
-            <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
-          )}
+          <BulkDeleteResultSummary result={lastResult} />
         </Panel>
-      ) : null}
+      ) : (
+        <ActionResultPanel result={lastResult} />
+      )}
 
-      {hardDeleteOpen ? (
-        <BulkHardDeleteDialog
-          objectKeys={selectedTargets.map((item) => item.object_key as string)}
-          onCancel={() => dispatchView({ type: "close-hard-delete" })}
-          onConfirm={(body) => bulkHardDelete.mutate(body)}
-          pending={bulkHardDelete.isPending}
-        />
-      ) : null}
+      <BulkHardDeleteDialog
+        objectKeys={selectedTargets.map((item) => item.object_key as string)}
+        onClose={() => dispatchView({ type: "close-hard-delete" })}
+        onConfirm={(body) => bulkHardDelete.mutate(body)}
+        open={hardDeleteOpen}
+        pending={bulkHardDelete.isPending}
+      />
     </div>
   );
 }
@@ -288,13 +318,14 @@ function ReconcileRunsPanel({
         key: "run",
         header: "실행",
         cell: (run) => (
-          <button
-            className="link-button"
+          <Button
             onClick={() => onSelectRun(run.source_storage_reconcile_run_id)}
+            size="xs"
             type="button"
+            variant="link"
           >
             {run.source_storage_reconcile_run_id.slice(0, 12)}…
-          </button>
+          </Button>
         )
       },
       { key: "mode", header: "모드", cell: (run) => run.mode },
@@ -308,24 +339,30 @@ function ReconcileRunsPanel({
 
   return (
     <Panel
-      title="정합성 실행 (RustFS ⟷ DB)"
+      title="정합성 실행"
+      badges={
+        <HelpTip label="정합성 실행 도움말">
+          RustFS 저장소 객체와 DB 등록 정보를 비교(RustFS ⟷ DB)해 불일치 이슈를 찾습니다. deep
+          모드는 모든 객체를 다시 해시하므로 오래 걸리고 저장소 부하가 큽니다.
+        </HelpTip>
+      }
       actions={
         <div className="toolbar-inline">
-          <select
-            aria-label="reconcile 모드"
-            onChange={(event) => onModeChange(event.target.value as "quick" | "deep")}
-            value={mode}
-          >
-            <option value="quick">quick</option>
-            <option value="deep">deep (전체 rehash)</option>
-          </select>
-          <button className="button" disabled={pending} onClick={onRun} type="button">
-            <Play size={16} />
+          <div className="w-56 shrink-0">
+            <NativeSelect
+              aria-label="reconcile 모드"
+              onChange={(event) => onModeChange(event.target.value as "quick" | "deep")}
+              value={mode}
+            >
+              <option value="quick">quick — 빠른 비교</option>
+              <option value="deep">deep — 전체 rehash (느림)</option>
+            </NativeSelect>
+          </div>
+          <Button disabled={pending} onClick={onRun} type="button">
+            <Play aria-hidden="true" />
             실행
-          </button>
-          <button className="icon-button" onClick={onRefresh} title="새로고침" type="button">
-            <RefreshCw size={16} />
-          </button>
+          </Button>
+          <RefreshButton iconOnly onClick={onRefresh} />
         </div>
       }
     >
@@ -374,24 +411,26 @@ function ReconcileItemsPanel({
         header: "",
         headerCell:
           cleanupTargets.length > 0 ? (
-            <input
+            <Checkbox
               aria-label="정리 대상 전체 선택"
               checked={
                 selectedTargets.length > 0 && selectedTargets.length === cleanupTargets.length
+                  ? true
+                  : selectedTargets.length > 0
+                    ? "indeterminate"
+                    : false
               }
-              onChange={(event) => onToggleAllTargets(event.target.checked)}
-              type="checkbox"
+              onCheckedChange={(checked) => onToggleAllTargets(checked === true)}
             />
           ) : undefined,
         cell: (item) => {
           const eligible = isBulkHardDeleteEligible(item);
           const objectKey = item.object_key ?? "";
           return eligible ? (
-            <input
+            <Checkbox
               aria-label={`정리 대상 선택: ${objectKey}`}
               checked={selectedKeys.has(objectKey)}
-              onChange={() => onToggleKey(objectKey)}
-              type="checkbox"
+              onCheckedChange={() => onToggleKey(objectKey)}
             />
           ) : null;
         }
@@ -399,7 +438,14 @@ function ReconcileItemsPanel({
       {
         key: "issue_type",
         header: "이슈 유형",
-        cell: (item) => <span title={item.issue_type}>{reconcileIssueLabels[item.issue_type]}</span>
+        cell: (item) => (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>{reconcileIssueLabels[item.issue_type]}</span>
+            </TooltipTrigger>
+            <TooltipContent>{item.issue_type}</TooltipContent>
+          </Tooltip>
+        )
       },
       {
         key: "severity",
@@ -410,11 +456,17 @@ function ReconcileItemsPanel({
       {
         key: "object_key",
         header: "객체 키",
-        cell: (item) => (
-          <span title={item.object_key ?? ""}>
-            {item.object_key ? `${item.object_key.slice(0, 24)}…` : "-"}
-          </span>
-        )
+        cell: (item) =>
+          item.object_key ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>{`${item.object_key.slice(0, 24)}…`}</span>
+              </TooltipTrigger>
+              <TooltipContent className="break-all">{item.object_key}</TooltipContent>
+            </Tooltip>
+          ) : (
+            "-"
+          )
       },
       {
         key: "action",
@@ -423,15 +475,16 @@ function ReconcileItemsPanel({
           item.state === "open" ? (
             <div className="button-row">
               {SIMPLE_RESOLVE_ACTIONS.map((action) => (
-                <button
-                  className="button secondary"
+                <Button
                   disabled={resolvePending}
                   key={action}
                   onClick={() => onResolve(item.source_storage_reconcile_item_id, action)}
+                  size="xs"
                   type="button"
+                  variant="outline"
                 >
                   {action}
-                </button>
+                </Button>
               ))}
             </div>
           ) : (
@@ -459,15 +512,16 @@ function ReconcileItemsPanel({
             <span className="form-note">
               정리 대상 {cleanupTargets.length}건 · 선택 {selectedTargets.length}건
             </span>
-            <button
-              className="button danger"
+            <Button
+              data-hard-delete-trigger=""
               disabled={selectedTargets.length === 0 || bulkPending}
               onClick={onOpenHardDelete}
               type="button"
+              variant="destructive"
             >
-              <Trash2 size={16} />
+              <Trash2 aria-hidden="true" />
               선택 항목 영구 삭제
-            </button>
+            </Button>
           </div>
         ) : null
       }
@@ -486,38 +540,66 @@ function ReconcileItemsPanel({
 
 function BulkHardDeleteDialog({
   objectKeys,
-  onCancel,
+  onClose,
   onConfirm,
+  open,
   pending
 }: {
   objectKeys: string[];
-  onCancel: () => void;
+  onClose: () => void;
   onConfirm: (body: SourceBulkHardDeleteRequest) => void;
+  open: boolean;
   pending: boolean;
 }) {
   const [confirmation, setConfirmation] = useState("");
   const [manifestAck, setManifestAck] = useState(false);
   const [reason, setReason] = useState("");
   const confirmationOk = confirmation === HARD_DELETE_CONFIRMATION;
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const confirmRef = useRef<HTMLInputElement>(null);
-  // a11y (T-227): Esc cancels this destructive dialog, Tab is trapped, focus lands on the
-  // confirmation input and returns to the trigger on close.
-  useModalA11y({ dialogRef, onClose: onCancel, initialFocusRef: confirmRef });
+  const confirmBoxRef = useRef<HTMLDivElement>(null);
+  const ackId = useId();
+  const reasonId = useId();
+
+  // 상시 마운트 + open 제어: radix가 닫힘 시 포커스를 트리거로 복귀시킨다.
+  // 열릴 때마다 확인 입력을 초기화한다.
+  useEffect(() => {
+    if (open) {
+      setConfirmation("");
+      setManifestAck(false);
+      setReason("");
+    }
+  }, [open]);
 
   return (
-    <div className="modal-backdrop">
-      <dialog
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      {/* 접근명은 spec 계약 문자열 aria-label로 고정 — radix 기본 aria-labelledby(제목)를 해제한다. */}
+      <AlertDialogContent
         aria-label="원천 객체 영구 삭제"
-        className="modal"
-        open
-        ref={dialogRef}
+        aria-labelledby={undefined}
+        onOpenAutoFocus={(event) => {
+          // 파괴적 다이얼로그: 열리면 확인 문구 입력에 바로 포커스를 둔다.
+          event.preventDefault();
+          confirmBoxRef.current?.querySelector("input")?.focus();
+        }}
+        onCloseAutoFocus={(event) => {
+          // 컨트롤드 다이얼로그(트리거 없음)라 radix 기본 복귀가 없음 — 트리거 버튼으로 복귀.
+          event.preventDefault();
+          document
+            .querySelector<HTMLElement>("[data-hard-delete-trigger]")
+            ?.focus();
+        }}
       >
-        <h2>정리 대상 {objectKeys.length}건 영구 삭제</h2>
-        <p className="form-note warn">
-          선택한 미등록 stored object를 RustFS에서 영구(hard) 삭제합니다. 되돌릴 수 없습니다.
-          활성 정본이 참조하는 객체는 백엔드 가드로 자동 제외(skip)됩니다.
-        </p>
+        <AlertDialogHeader>
+          <AlertDialogTitle>정리 대상 {objectKeys.length}건 영구 삭제</AlertDialogTitle>
+          <AlertDialogDescription>
+            선택한 미등록 저장 객체를 RustFS에서 영구 삭제합니다. 되돌릴 수 없습니다. 활성 정본이
+            참조하는 객체는 백엔드 가드가 자동 제외(skip)합니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
         <RoleRequirementNote roles={["destructive_admin"]} />
         <ul className="key-list">
           {objectKeys.slice(0, 8).map((key) => (
@@ -529,35 +611,46 @@ function BulkHardDeleteDialog({
             <li className="form-note">… 외 {objectKeys.length - 8}건</li>
           ) : null}
         </ul>
-        <label className="checkbox-row">
-          <input
+        <div className="checkbox-row">
+          <Checkbox
             checked={manifestAck}
-            onChange={(event) => setManifestAck(event.target.checked)}
-            type="checkbox"
+            id={ackId}
+            onCheckedChange={(checked) => setManifestAck(checked === true)}
           />
-          완료된 db_backup manifest 없이 진행함을 확인 (manifest_ack)
-        </label>
-        <label className="field">
-          <span>사유 (reason)</span>
-          <input onChange={(event) => setReason(event.target.value)} value={reason} />
-        </label>
-        <div className="confirm-box">
-          <label>확인 문구 입력: {HARD_DELETE_CONFIRMATION}</label>
-          <input
-            aria-label="hard-delete 확인 문구"
-            onChange={(event) => setConfirmation(event.target.value)}
-            placeholder={HARD_DELETE_CONFIRMATION}
-            ref={confirmRef}
+          <label className="m-0 text-sm" htmlFor={ackId}>
+            완료된 db_backup manifest 없이 진행함을 확인
+          </label>
+          <HelpTip label="manifest 확인 도움말">
+            API 필드 <code>manifest_ack</code> — 완료된 DB 백업 manifest 없이 영구 삭제를
+            진행함을 확인하는 필수 항목입니다.
+          </HelpTip>
+        </div>
+        <Field>
+          <span className="flex items-center gap-1">
+            <FieldLabel htmlFor={reasonId}>사유</FieldLabel>
+            <HelpTip label="사유 도움말">
+              API 필드 <code>reason</code> — 감사 기록에 남는 선택 입력입니다.
+            </HelpTip>
+          </span>
+          <Input
+            id={reasonId}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="예: 202605 재적재 전 저장소 정리"
+            value={reason}
+          />
+        </Field>
+        <div ref={confirmBoxRef}>
+          <TypedConfirmField
+            label="hard-delete 확인 문구"
+            onChange={setConfirmation}
+            phrase={HARD_DELETE_CONFIRMATION}
             value={confirmation}
           />
-          {!confirmationOk ? (
-            <p className="form-note warn">확인 문구가 일치해야 합니다.</p>
-          ) : null}
         </div>
-        <div className="button-row">
-          <button
-            className="button danger"
-            disabled={!confirmationOk || objectKeys.length === 0 || pending}
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={pending}>취소</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!confirmationOk || !manifestAck || objectKeys.length === 0 || pending}
             onClick={() =>
               onConfirm({
                 object_keys: objectKeys,
@@ -566,17 +659,14 @@ function BulkHardDeleteDialog({
                 reason: reason || null
               })
             }
-            type="button"
+            variant="destructive"
           >
-            <Trash2 size={16} />
+            <Trash2 aria-hidden="true" />
             영구 삭제 실행
-          </button>
-          <button className="button secondary" disabled={pending} onClick={onCancel} type="button">
-            취소
-          </button>
-        </div>
-      </dialog>
-    </div>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -593,29 +683,34 @@ const CAPACITY_COLUMNS: VirtualColumn<SourceCategoryCapacity>[] = [
 
 function CapacityPanel({ capacity }: { capacity?: SourceCapacityUsage }) {
   if (!capacity) {
-    return <p className="form-note">용량 정보를 불러오는 중…</p>;
+    return (
+      <div className="grid gap-2">
+        <Skeleton className="h-5 w-full" />
+        <Skeleton className="h-5 w-4/5" />
+        <Skeleton className="h-5 w-2/3" />
+      </div>
+    );
   }
   return (
     <>
       <RetentionWarning retention={capacity.retention} />
-      <dl className="criteria-grid">
-        <div>
-          <dt>전체 용량</dt>
-          <dd>{formatBytes(capacity.total_bytes)}</dd>
-        </div>
-        <div>
-          <dt>객체 수</dt>
-          <dd>{capacity.total_object_count.toLocaleString()}</dd>
-        </div>
-        <div>
-          <dt>한도 초과</dt>
-          <dd>{capacity.over_threshold ? "예" : "아니오"}</dd>
-        </div>
-        <div>
-          <dt>quarantine</dt>
-          <dd>{formatBytes(capacity.quarantined_bytes)}</dd>
-        </div>
-      </dl>
+      <KeyValueGrid
+        items={[
+          { label: "전체 용량", value: formatBytes(capacity.total_bytes) },
+          { label: "객체 수", value: capacity.total_object_count.toLocaleString() },
+          { label: "한도 초과", value: capacity.over_threshold ? "예" : "아니오" },
+          {
+            label: "격리",
+            value: formatBytes(capacity.quarantined_bytes),
+            help: (
+              <>
+                API 필드 <code>quarantined_bytes</code> — 격리(quarantine)된 객체 용량입니다.
+              </>
+            ),
+            helpLabel: "격리 도움말"
+          }
+        ]}
+      />
       <VirtualTable
         as="table"
         columns={CAPACITY_COLUMNS}
@@ -642,24 +737,14 @@ function BulkDeleteResultSummary({ result }: { result: SourceBulkHardDeleteRespo
   );
   return (
     <div className="source-stack">
-      <dl className="criteria-grid">
-        <div>
-          <dt>요청</dt>
-          <dd>{result.requested_count.toLocaleString()}건</dd>
-        </div>
-        <div>
-          <dt>영구 삭제</dt>
-          <dd>{result.hard_deleted_count.toLocaleString()}건</dd>
-        </div>
-        <div>
-          <dt>삭제 실패</dt>
-          <dd>{result.delete_failed_count.toLocaleString()}건</dd>
-        </div>
-        <div>
-          <dt>건너뜀(skip)</dt>
-          <dd>{result.skipped_count.toLocaleString()}건</dd>
-        </div>
-      </dl>
+      <KeyValueGrid
+        items={[
+          { label: "요청", value: `${result.requested_count.toLocaleString()}건` },
+          { label: "영구 삭제", value: `${result.hard_deleted_count.toLocaleString()}건` },
+          { label: "삭제 실패", value: `${result.delete_failed_count.toLocaleString()}건` },
+          { label: "건너뜀(skip)", value: `${result.skipped_count.toLocaleString()}건` }
+        ]}
+      />
       {result.affected_match_set_ids && result.affected_match_set_ids.length > 0 ? (
         <p className="form-note">
           영향받은 match set: {result.affected_match_set_ids.join(", ")}

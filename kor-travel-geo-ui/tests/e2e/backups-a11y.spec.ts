@@ -88,15 +88,17 @@ async function openManifestDialog(page: Page) {
 }
 
 test.describe("백업/복원 접근성·회복성 /admin/backups (T-258)", () => {
-  test("manifest 모달: 열면 닫기 버튼에 포커스, Esc로 닫히고 콘솔이 계속 조작된다", async ({
+  test("manifest 모달: 열면 포커스가 모달 안으로 이동, Esc로 닫히고 콘솔이 계속 조작된다", async ({
     page
   }) => {
     await mockApi(page);
     const dialog = await openManifestDialog(page);
     await expect(dialog).toBeVisible();
 
-    // 열리면 포커스가 모달 안(닫기 버튼)으로 이동한다.
-    await expect(page.getByRole("button", { name: "닫기" })).toBeFocused();
+    // 열리면 포커스가 모달 안으로 이동한다 (radix Dialog auto-focus).
+    await expect
+      .poll(() => dialog.evaluate((el) => el.contains(document.activeElement)))
+      .toBe(true);
 
     // Esc로 닫힌다(키보드 only).
     await page.keyboard.press("Escape");
@@ -110,15 +112,20 @@ test.describe("백업/복원 접근성·회복성 /admin/backups (T-258)", () =>
   test("manifest 모달: Tab이 모달 안에 갇힌다 (focus trap)", async ({ page }) => {
     await mockApi(page);
     const dialog = await openManifestDialog(page);
-    await expect(page.getByRole("button", { name: "닫기" })).toBeFocused();
+    await expect(dialog).toBeVisible();
 
-    // 유일한 focusable이 닫기 버튼이므로 Tab/Shift+Tab 모두 모달 안에 머문다.
-    await page.keyboard.press("Tab");
-    await expect(page.getByRole("button", { name: "닫기" })).toBeFocused();
-    await page.keyboard.press("Shift+Tab");
-    await expect(page.getByRole("button", { name: "닫기" })).toBeFocused();
+    // 열리면 포커스가 먼저 모달 안으로 이동한 뒤,
+    await expect
+      .poll(() => dialog.evaluate((el) => el.contains(document.activeElement)))
+      .toBe(true);
+    // Tab/Shift+Tab을 반복해도 포커스가 모달 안에 머문다 (radix FocusScope).
+    for (const key of ["Tab", "Tab", "Tab", "Shift+Tab", "Shift+Tab"]) {
+      await page.keyboard.press(key);
+      expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    }
 
-    // 닫기 버튼 Enter로 닫을 수 있다(키보드 only).
+    // 닫기 버튼을 키보드로 눌러 닫을 수 있다(키보드 only).
+    await dialog.getByRole("button", { name: "닫기" }).focus();
     await page.keyboard.press("Enter");
     await expect(dialog).toBeHidden();
   });
@@ -136,7 +143,7 @@ test.describe("백업/복원 접근성·회복성 /admin/backups (T-258)", () =>
     await mockApi(page, { backupsStatus: 500 });
     await page.goto("/admin/backups");
 
-    // 5개 탭이 여전히 렌더되고(앱이 죽지 않음), 개요 Last Response에 오류가 노출된다.
+    // 5개 탭이 여전히 렌더되고(앱이 죽지 않음), 개요 '최근 결과'에 오류가 노출된다.
     for (const name of ["개요", "백업", "복원", "Hot-swap", "작업"]) {
       await expect(page.getByRole("tab", { name })).toBeVisible();
     }

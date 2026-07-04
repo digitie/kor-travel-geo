@@ -144,6 +144,36 @@ test.describe("백업/복원 콘솔 /admin/backups", () => {
     await expect(page.getByText("kor_travel_geo-20260616.tar.zst")).toBeVisible();
   });
 
+  test("artifact 삭제: 확인 다이얼로그를 거쳐야 삭제 요청을 보낸다", async ({ page }) => {
+    await mockBackupsApi(page);
+    await page.goto("/admin/backups");
+    await page.getByRole("tab", { name: "백업" }).click();
+    await expect(page.getByText("kor_travel_geo-20260616.tar.zst")).toBeVisible();
+
+    // 확인 다이얼로그가 뜨고, 취소하면 요청이 나가지 않는다.
+    let deleteRequested = false;
+    page.on("request", (req) => {
+      if (req.url().includes("/delete") && req.method() === "POST") deleteRequested = true;
+    });
+    await page.getByTitle("삭제").click();
+    const dialog = page.getByRole("alertdialog", { name: "백업본 삭제" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "취소" }).click();
+    await expect(dialog).toBeHidden();
+    expect(deleteRequested).toBe(false);
+
+    // 확인을 누르면 delete 요청이 나간다.
+    await page.getByTitle("삭제").click();
+    const deleteRequest = page.waitForRequest(
+      (req) => req.url().includes("/delete") && req.method() === "POST"
+    );
+    await page
+      .getByRole("alertdialog", { name: "백업본 삭제" })
+      .getByRole("button", { name: "삭제" })
+      .click();
+    await deleteRequest;
+  });
+
   test("manifest 재현성 뷰어를 열어 source_set·active serving lineage를 보여 준다", async ({
     page
   }) => {
@@ -170,10 +200,14 @@ test.describe("백업/복원 콘솔 /admin/backups", () => {
     await expect(page.getByText(/db_backup · job-runn/)).toBeVisible();
     await expect(page.getByText(/dump · 42%/)).toBeVisible();
 
+    // 취소는 확인 다이얼로그를 거친다.
+    await page.getByTitle("취소").click();
+    const dialog = page.getByRole("alertdialog", { name: "작업 취소" });
+    await expect(dialog).toBeVisible();
     const cancelRequest = page.waitForRequest(
       (req) => req.url().includes("/cancel") && req.method() === "POST"
     );
-    await page.getByTitle("취소").click();
+    await dialog.getByRole("button", { name: "작업 취소" }).click();
     await cancelRequest;
   });
 

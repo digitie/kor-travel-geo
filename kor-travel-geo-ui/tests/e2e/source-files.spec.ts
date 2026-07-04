@@ -44,7 +44,10 @@ test.describe("원천 파일 관리 /admin/source-files", () => {
     const epostCard = page.locator(".source-card", { hasText: "epost 사서함" });
     await expect(epostCard.getByText("별도 기능 후보(서빙 미반영)")).toBeVisible();
     await expect(epostCard.getByText("현재 서빙 미포함")).toBeVisible();
-    await expect(epostCard.getByText(/등록됨 ≠ 활용 중/)).toBeVisible();
+    // ADR-054 상세 설명은 배지 옆 도움말(HelpTip Popover)로 이동 — 열어서 확인한다.
+    await epostCard.getByRole("button", { name: "epost 사서함 서빙 반영 도움말" }).click();
+    await expect(page.getByText(/등록됨 ≠ 활용 중/)).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 
   test("탭 교차 흐름: 모든 기능 탭을 오가도 선택 상태와 콘텐츠가 유지된다 (smoke)", async ({
@@ -77,10 +80,10 @@ test.describe("원천 파일 관리 /admin/source-files", () => {
     await page.goto("/admin/source-files");
     await page.getByRole("tab", { name: "RustFS 정합성" }).click();
 
-    await expect(page.getByText("정합성 실행 (RustFS ⟷ DB)")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "정합성 실행", exact: true })).toBeVisible();
     await expect(page.getByText("객체 있으나 DB row 없음")).toBeVisible();
     await expect(page.getByRole("button", { name: /선택 항목 영구 삭제/ })).toBeVisible();
-    await expect(page.getByText("용량 (capacity)")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "용량", exact: true })).toBeVisible();
   });
 
   test("검증 케이스 탭: registry에서 C1~C17를 동적으로 렌더한다", async ({ page }) => {
@@ -99,13 +102,16 @@ test.describe("원천 파일 관리 /admin/source-files", () => {
     await page.getByLabel(/정리 대상 선택:/).check();
     await page.getByRole("button", { name: /선택 항목 영구 삭제/ }).click();
 
-    const dialog = page.getByRole("dialog", { name: "원천 객체 영구 삭제" });
+    const dialog = page.getByRole("alertdialog", { name: "원천 객체 영구 삭제" });
     await expect(dialog).toBeVisible();
     // T-226: 위험작업 필요 역할 안내(destructive_admin).
     await expect(dialog.getByText(/필요 역할/)).toContainText("destructive_admin");
     const exec = dialog.getByRole("button", { name: /영구 삭제 실행/ });
     await expect(exec).toBeDisabled();
     await dialog.getByLabel("hard-delete 확인 문구").fill("HARD-DELETE-SOURCES");
+    // manifest_ack는 UI 필수 게이트 — 체크 전에는 실행이 막힌다.
+    await expect(exec).toBeDisabled();
+    await dialog.getByRole("checkbox", { name: /manifest 없이 진행/ }).check();
     await expect(exec).toBeEnabled();
     await exec.click();
 

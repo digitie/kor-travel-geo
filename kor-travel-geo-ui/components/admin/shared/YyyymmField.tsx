@@ -33,10 +33,12 @@ export function YyyymmField({
 
   return (
     <Field data-invalid={invalid || undefined}>
-      <FieldLabel htmlFor={id}>
-        {label}
+      {/* HelpTip은 label 밖 형제로 둔다 — label 내부 버튼은 RTL getByLabelText가
+          다중 컨트롤로 인식한다. */}
+      <span className="flex items-center gap-1">
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
         {help ? <HelpTip label={`${label} 도움말`}>{help}</HelpTip> : null}
-      </FieldLabel>
+      </span>
       <Input
         id={id}
         inputMode="numeric"

@@ -36,10 +36,12 @@ export function NumberField({
 }) {
   return (
     <Field>
-      <FieldLabel htmlFor={id}>
-        {label}
+      {/* HelpTip은 label 밖 형제로 둔다 — label 내부 버튼은 RTL getByLabelText가
+          다중 컨트롤로 인식한다. */}
+      <span className="flex items-center gap-1">
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
         {help ? <HelpTip>{help}</HelpTip> : null}
-      </FieldLabel>
+      </span>
       <span className="flex items-center gap-2">
         <Input
           id={id}

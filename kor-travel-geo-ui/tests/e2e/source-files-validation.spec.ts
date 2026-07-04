@@ -59,7 +59,12 @@ test.describe("구조 검증 /admin/source-files (T-261)", () => {
     await page.goto("/admin/source-files");
     await page.getByRole("tab", { name: "목록" }).click();
 
-    await page.getByRole("button", { name: "재검증" }).click();
+    // 아이콘 버튼 → 확인 다이얼로그 → 실행 (파괴적/부하 액션 공통 확인 단계).
+    await page.getByRole("button", { name: "재검증", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: "원천 그룹 재검증" })
+      .getByRole("button", { name: "재검증 실행" })
+      .click();
 
     const result = page.locator(".panel", { hasText: "최근 결과" });
     await expect(result.locator("pre")).toContainText('"state": "warning"');
@@ -87,7 +92,11 @@ test.describe("구조 검증 /admin/source-files (T-261)", () => {
     await page.goto("/admin/source-files");
     await page.getByRole("tab", { name: "목록" }).click();
 
-    await page.getByRole("button", { name: "재검증" }).click();
+    await page.getByRole("button", { name: "재검증", exact: true }).click();
+    await page
+      .getByRole("alertdialog", { name: "원천 그룹 재검증" })
+      .getByRole("button", { name: "재검증 실행" })
+      .click();
 
     const result = page.locator(".panel", { hasText: "최근 결과" });
     await expect(result.locator("pre")).toContainText('"state": "failed"');

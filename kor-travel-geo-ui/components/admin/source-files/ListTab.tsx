@@ -1,14 +1,21 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, RotateCcw, Trash2, Link2, ShieldCheck } from "lucide-react";
+import { RotateCcw, Trash2, Link2, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
+import { ConfirmActionDialog } from "@/components/admin/shared/ConfirmActionDialog";
+import { EmptyState } from "@/components/admin/shared/EmptyState";
+import { RefreshButton } from "@/components/admin/shared/RefreshButton";
 import { CapacitySummaryCard } from "@/components/admin/source-files/CapacitySummaryCard";
 import { MatchSetItemsTable } from "@/components/admin/source-files/MatchSetItemsTable";
+import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
-import { postJson, requestJson } from "@/lib/api";
+import { getErrorMessage, postJson, requestJson } from "@/lib/api";
+import { formatBytes } from "@/lib/format";
+import { toast } from "@/lib/toast";
 import {
   sourceFilesPaths,
   type SourceMatchSet,
@@ -20,6 +27,13 @@ import {
 const EMPTY_SESSIONS: UploadSessionStatus[] = [];
 
 type GroupAction = "soft-delete" | "restore" | "relink" | "validate";
+
+const GROUP_ACTION_LABELS: Record<GroupAction, string> = {
+  validate: "재검증",
+  relink: "재연결(relink)",
+  restore: "복원",
+  "soft-delete": "soft-delete"
+};
 
 /**
  * There is no dedicated list-groups endpoint; registered source file groups are
@@ -57,7 +71,11 @@ const GROUP_STATIC_COLUMNS: VirtualColumn<GroupRow>[] = [
     header: "파일 수",
     cell: (row) => `${row.uploadedFileCount}/${row.expectedFileCount}`
   },
-  { key: "maxBytes", header: "크기 한도", cell: (row) => formatMb(row.maxBytes) }
+  {
+    key: "maxBytes",
+    header: "크기 한도",
+    cell: (row) => (row.maxBytes ? formatBytes(row.maxBytes) : "-")
+  }
 ];
 
 export function ListTab() {
@@ -90,12 +108,17 @@ export function ListTab() {
           throw new Error(`unknown action: ${action satisfies never}`);
       }
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
+      toast.success(`${GROUP_ACTION_LABELS[variables.action]} 요청 완료`);
       setLastResult(data);
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
       void queryClient.invalidateQueries({ queryKey: ["source-match-sets"] });
     },
-    onError: (error) => setLastResult({ error: error instanceof Error ? error.message : String(error) })
+    onError: (error, variables) => {
+      const message = getErrorMessage(error);
+      toast.error(`${GROUP_ACTION_LABELS[variables.action]} 실패`, message);
+      setLastResult({ error: message });
+    }
   });
   const { isPending: groupActionPending, mutate: mutateGroupAction } = groupAction;
 
@@ -107,42 +130,81 @@ export function ListTab() {
         header: "작업",
         cell: (row) => (
           <div className="button-row">
-            <button
-              className="icon-button"
-              disabled={groupActionPending}
-              onClick={() => mutateGroupAction({ groupId: row.groupId, action: "validate" })}
-              title="재검증"
-              type="button"
-            >
-              <ShieldCheck size={15} />
-            </button>
-            <button
-              className="icon-button"
-              disabled={groupActionPending}
-              onClick={() => mutateGroupAction({ groupId: row.groupId, action: "relink" })}
-              title="relink (백업 복원 그룹 재연결)"
-              type="button"
-            >
-              <Link2 size={15} />
-            </button>
-            <button
-              className="icon-button"
-              disabled={groupActionPending}
-              onClick={() => mutateGroupAction({ groupId: row.groupId, action: "restore" })}
-              title="복원 (soft-delete 취소)"
-              type="button"
-            >
-              <RotateCcw size={15} />
-            </button>
-            <button
-              className="icon-button"
-              disabled={groupActionPending}
-              onClick={() => mutateGroupAction({ groupId: row.groupId, action: "soft-delete" })}
-              title="soft-delete"
-              type="button"
-            >
-              <Trash2 size={15} />
-            </button>
+            <ConfirmActionDialog
+              trigger={
+                <Button
+                  aria-label="재검증"
+                  disabled={groupActionPending}
+                  size="icon-sm"
+                  title="재검증"
+                  type="button"
+                  variant="outline"
+                >
+                  <ShieldCheck aria-hidden="true" />
+                </Button>
+              }
+              title="원천 그룹 재검증"
+              description={`${row.category} · ${row.userYyyymm} 그룹의 구조 검증을 다시 실행합니다.`}
+              destructive={false}
+              confirmLabel="재검증 실행"
+              onConfirm={() => mutateGroupAction({ groupId: row.groupId, action: "validate" })}
+            />
+            <ConfirmActionDialog
+              trigger={
+                <Button
+                  aria-label="재연결"
+                  disabled={groupActionPending}
+                  size="icon-sm"
+                  title="재연결 (백업 복원 그룹 relink)"
+                  type="button"
+                  variant="outline"
+                >
+                  <Link2 aria-hidden="true" />
+                </Button>
+              }
+              title="그룹 재연결 (relink)"
+              description={`${row.category} · ${row.userYyyymm} 그룹(백업 복원)을 현재 저장소 객체와 다시 연결합니다.`}
+              destructive={false}
+              confirmLabel="재연결 실행"
+              onConfirm={() => mutateGroupAction({ groupId: row.groupId, action: "relink" })}
+            />
+            <ConfirmActionDialog
+              trigger={
+                <Button
+                  aria-label="복원"
+                  disabled={groupActionPending}
+                  size="icon-sm"
+                  title="복원 (soft-delete 취소)"
+                  type="button"
+                  variant="outline"
+                >
+                  <RotateCcw aria-hidden="true" />
+                </Button>
+              }
+              title="soft-delete 복원"
+              description={`${row.category} · ${row.userYyyymm} 그룹의 soft-delete를 취소하고 복원합니다.`}
+              destructive={false}
+              confirmLabel="복원 실행"
+              onConfirm={() => mutateGroupAction({ groupId: row.groupId, action: "restore" })}
+            />
+            <ConfirmActionDialog
+              trigger={
+                <Button
+                  aria-label="soft-delete"
+                  disabled={groupActionPending}
+                  size="icon-sm"
+                  title="soft-delete"
+                  type="button"
+                  variant="outline"
+                >
+                  <Trash2 aria-hidden="true" />
+                </Button>
+              }
+              title="그룹 soft-delete"
+              description={`${row.category} · ${row.userYyyymm} 그룹을 soft-delete 상태로 표시합니다. 복원으로 되돌릴 수 있습니다.`}
+              confirmLabel="soft-delete 실행"
+              onConfirm={() => mutateGroupAction({ groupId: row.groupId, action: "soft-delete" })}
+            />
           </div>
         )
       }
@@ -156,11 +218,7 @@ export function ListTab() {
 
       <Panel
         title="원천 파일 그룹"
-        actions={
-          <button className="icon-button" onClick={() => void refetch()} title="새로고침" type="button">
-            <RefreshCw size={16} />
-          </button>
-        }
+        actions={<RefreshButton iconOnly onClick={() => void refetch()} />}
       >
         <VirtualTable
           as="table"
@@ -175,11 +233,7 @@ export function ListTab() {
         <MatchSetCategorySummary matchSets={matchSets} />
       </Panel>
 
-      {lastResult ? (
-        <Panel title="최근 결과">
-          <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
-        </Panel>
-      ) : null}
+      <ActionResultPanel result={lastResult} />
     </div>
   );
 }
@@ -193,7 +247,7 @@ function MatchSetCategorySummary({ matchSets }: { matchSets: SourceMatchSet[] })
   });
 
   if (!active) {
-    return <p className="form-note">활성 매칭 세트가 없습니다.</p>;
+    return <EmptyState>활성 매칭 세트가 없습니다.</EmptyState>;
   }
   const items: SourceMatchSetItem[] = detail?.items ?? [];
   return <MatchSetItemsTable items={items} variant="summary" />;
@@ -220,9 +274,4 @@ function buildGroupRows(sessions: UploadSessionStatus[]): GroupRow[] {
     });
   }
   return Array.from(byGroup.values());
-}
-
-function formatMb(bytes: number): string {
-  if (!bytes) return "-";
-  return `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 }
