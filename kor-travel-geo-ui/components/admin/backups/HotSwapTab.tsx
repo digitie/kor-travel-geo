@@ -231,7 +231,9 @@ export function HotSwapTab() {
             />
             <datalist id={restoreDbListId}>
               {restoreDbOptions.map((name) => (
-                <option key={name} value={name} />
+                <option key={name} value={name}>
+                  {name}
+                </option>
               ))}
             </datalist>
           </Field>

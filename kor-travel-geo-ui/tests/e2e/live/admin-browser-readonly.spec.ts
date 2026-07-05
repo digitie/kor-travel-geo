@@ -75,6 +75,15 @@ test.describe("LIVE admin browser read-only pages", () => {
     await expect(page.getByLabel("보존 기간")).toBeVisible();
   });
 
+  test("/admin/files renders the unified file inventory", async ({ page }) => {
+    await gotoAdmin(page, "/admin/files", ADMIN_PAGES.files.title);
+    await expect(page.getByRole("heading", { name: "파일 인벤토리" })).toBeVisible();
+    await expect(page.getByRole("table", { name: "파일 인벤토리 목록" })).toBeVisible({
+      timeout: LIVE_TIMEOUT
+    });
+    await expect(page.getByText("전체 파일")).toBeVisible();
+  });
+
   test("/admin/tables renders search and refresh controls", async ({ page }) => {
     await gotoAdmin(page, "/admin/tables", ADMIN_PAGES.tables.title);
     await expect(page.getByRole("heading", { name: "PostgreSQL 테이블", exact: true })).toBeVisible();

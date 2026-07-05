@@ -66,7 +66,9 @@ export function LogsPanel() {
           {lines.length === 0
             ? "NO LOGS"
             : lines.map((line, index) => (
-                <span className={logLineClass(line)} key={index}>
+                // 로그 tail은 append-only 스냅샷이라 위치가 곧 identity다 — 내용 접두를
+                // 섞어 재조회 시 안정적인 key를 만든다.
+                <span className={logLineClass(line)} key={`${index}:${line.slice(0, 40)}`}>
                   {line}
                   {"\n"}
                 </span>

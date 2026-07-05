@@ -695,9 +695,13 @@ function FilterToolbar({
 }) {
   // 시군구코드는 타이핑마다 refetch하지 않도록 300ms debounce 후 filters에 반영한다.
   const [sigCdDraft, setSigCdDraft] = useState(filters.sigCd);
-  useEffect(() => {
+  // 외부에서 filters.sigCd가 바뀌면(리포트/케이스 전환 등) draft를 렌더 중에 맞춘다
+  // (React 권장 adjust-state-during-render — 동기화 useEffect의 stale 프레임 회피).
+  const [lastExternalSigCd, setLastExternalSigCd] = useState(filters.sigCd);
+  if (filters.sigCd !== lastExternalSigCd) {
+    setLastExternalSigCd(filters.sigCd);
     setSigCdDraft(filters.sigCd);
-  }, [filters.sigCd]);
+  }
   useEffect(() => {
     if (sigCdDraft === filters.sigCd) return undefined;
     const timer = setTimeout(
@@ -749,7 +753,9 @@ function FilterToolbar({
         {sigCdOptions.length > 0 ? (
           <datalist id="consistency-sig-cd-options">
             {sigCdOptions.map((code) => (
-              <option key={code} value={code} />
+              <option key={code} value={code}>
+                {code}
+              </option>
             ))}
           </datalist>
         ) : null}
@@ -766,9 +772,10 @@ function FilterToolbar({
           <option value="reviewed_at">정렬: 검토 시각</option>
         </NativeSelect>
       </div>
-      <label className="checkbox-row">
+      <label className="checkbox-row" htmlFor="consistency-desc">
         <Checkbox
           checked={filters.desc}
+          id="consistency-desc"
           onCheckedChange={(checked) =>
             onChange({ ...filters, desc: checked === true, page: 1 })
           }
@@ -985,6 +992,7 @@ function DecisionModal({
           <Field>
             <FieldLabel htmlFor="consistency-decision-note">메모 (선택)</FieldLabel>
             <textarea
+              aria-label="메모 (선택)"
               className="min-h-20 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               id="consistency-decision-note"
               onChange={(event) => onChange({ ...form, note: event.target.value })}

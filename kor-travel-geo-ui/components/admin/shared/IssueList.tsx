@@ -31,7 +31,7 @@ export function IssueList({
       <AlertDescription>
         <ul className="m-0 list-disc pl-4">
           {items.map((item, index) => (
-            <li key={index}>{item}</li>
+            <li key={typeof item === "string" ? item : index}>{item}</li>
           ))}
         </ul>
       </AlertDescription>

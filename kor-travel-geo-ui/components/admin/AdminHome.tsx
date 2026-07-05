@@ -6,6 +6,7 @@ import {
   BarChart3,
   Database,
   FileText,
+  Files,
   FolderUp,
   ListChecks,
   Settings,
@@ -33,6 +34,7 @@ import { formatTimestamp } from "@/lib/format";
 const pageIcons: Record<AdminPageKey, typeof Archive> = {
   home: ShieldCheck,
   sourceFiles: FolderUp,
+  files: Files,
   consistency: ListChecks,
   backups: Archive,
   ops: ShieldCheck,
@@ -118,26 +120,28 @@ function StatusCard({
   queryKey: string;
   load: () => Promise<StatusValue | null>;
 }) {
-  const query = useQuery({ queryKey: [queryKey], queryFn: load, retry: false });
+  const { data, isPending, isError } = useQuery({
+    queryKey: [queryKey],
+    queryFn: load,
+    retry: false
+  });
 
   return (
     <Panel title={title} className="min-w-0">
-      {query.isPending ? (
+      {isPending ? (
         <Skeleton className="h-10 w-3/4" />
-      ) : query.isError ? (
+      ) : isError ? (
         <p className="m-0 text-sm text-muted-foreground">확인 불가</p>
-      ) : query.data == null ? (
+      ) : data == null ? (
         <p className="m-0 text-sm text-muted-foreground">기록 없음</p>
       ) : (
         <div className="grid gap-1">
           <div className="flex flex-wrap items-center gap-2">
-            <strong className="break-all text-sm">{query.data.headline}</strong>
-            {query.data.badge ? (
-              <StatusBadge value={query.data.badge.value} tone={query.data.badge.tone} />
-            ) : null}
+            <strong className="break-all text-sm">{data.headline}</strong>
+            {data.badge ? <StatusBadge value={data.badge.value} tone={data.badge.tone} /> : null}
           </div>
-          {query.data.detail ? (
-            <span className="text-xs text-muted-foreground">{query.data.detail}</span>
+          {data.detail ? (
+            <span className="text-xs text-muted-foreground">{data.detail}</span>
           ) : null}
         </div>
       )}

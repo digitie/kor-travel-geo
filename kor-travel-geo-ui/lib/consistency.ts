@@ -42,7 +42,7 @@ export const decisionReasons = {
  * 판정 사유 코드의 한국어 라벨 — 코드 값은 백엔드 enum 계약이므로 전송 값은
  * 그대로 두고 표시만 바꾼다.
  */
-export const decisionReasonLabels: Record<string, string> = {
+const decisionReasonLabels: Record<string, string> = {
   source_gap: "원천 자료 누락 (정상 편차)",
   known_boundary_issue: "알려진 경계 이슈",
   mixed_yyyymm_acknowledged: "혼합 기준월 확인됨",

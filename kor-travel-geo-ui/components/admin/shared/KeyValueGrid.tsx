@@ -24,7 +24,7 @@ export function KeyValueGrid({
   return (
     <dl className={cn("criteria-grid", className)}>
       {items.map((item, index) => (
-        <div key={index}>
+        <div key={typeof item.label === "string" ? item.label : index}>
           <dt className="flex items-center gap-1">
             {item.label}
             {item.help ? (

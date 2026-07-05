@@ -4,6 +4,34 @@
 
 ## [Unreleased]
 
+### Added
+- **파일 관리 화면(`/admin/files`)과 통합 파일 인벤토리 API를 추가했다.**
+  `GET /v1/admin/storage/files`는 원천 파일 그룹·백업/산출물(artifact)·DB에 등록되지 않은
+  저장소 객체를 한 목록으로 반환하며, 각 항목의 lifecycle(서빙 사용 중/구성 대기/미사용/
+  진행 중/미등록/격리 등), 사용 여부(활성 매칭 세트 포함), 임시 여부, 받은 시각·등록·검증·
+  마지막 적재 시각과 연결 정보(업로드 세션·매칭 세트·작업)를 제공한다.
+  `GET /v1/admin/storage/files/source-groups/{id}`는 파일·업로드 이력·매칭 세트 사용처·
+  미해결 저장소 이슈까지 연결 체인을 추적한다. 마지막 적재 시각은 기존
+  `match_set_items → match_sets.last_load_job_id → load_jobs` 체인에서 도출하므로
+  DB 스키마 변경 없이 동작한다.
+
+### Changed
+- **관리 UI를 shadcn(radix-nova) 기반으로 전면 개편했다.** 수제 CSS 위젯(버튼·폼·탭·모달·
+  배지·진행 바)을 공용 컴포넌트 체계로 통합하고, 네비게이션을 워크플로우 그룹(데이터 관리/
+  백업·운영/시스템/설정)으로 재편했으며 중복 별칭 그룹은 제거했다. `/admin`은 리다이렉트
+  대신 운영 상태 요약이 있는 관리 홈을 렌더한다.
+- 파괴적 액션(백업본 삭제, 작업 취소, 공개 API 키 폐기, 전체 재검증, 원천 그룹 정리)에
+  확인 다이얼로그를 표준화했고, 유지보수 윈도우의 confirmation 기본값을 제거해 운영자가
+  직접 입력해야 실행되도록 했다. typed confirmation 입력은 실시간 일치 피드백을 보여 준다.
+- 데이터 형태별 입력 검증·보조를 강화했다: 기준년월(YYYYMM 월 범위 + 최근 개월 선택),
+  PostgreSQL 식별자·URL·S3 버킷·정수 범위 zod 검증(한국어 메시지), 복원 대상 DB 자동완성,
+  백업 프로파일/유지보수 kind 한국어 설명.
+- 화면 문구를 간결화했다: 페이지 제목 한국어 통일(`lib/admin-pages.ts` 단일 소스),
+  `라벨 (api_field)` 병기와 장황한 상시 설명을 도움말 아이콘(HelpTip)으로 이동, 작업
+  결과는 toast + '최근 결과' 패널로 일원화.
+- mock Playwright 스펙은 admin 로그인(fail-closed) 뒤에 있으므로 `PLAYWRIGHT_MOCK_LOGIN=1`
+  글로벌 로그인(storageState)으로 실행한다 (`docs/live-e2e.md` 참고).
+
 ### Fixed
 - Admin UI 로그인 CSRF origin 검사에 `KTG_UI_PUBLIC_ORIGINS` 신뢰 목록을 추가했다. TLS 종단
   프록시가 `X-Forwarded-Proto=https`를 주입하지 못해 내부 origin이 `http`로 재구성되는 운영

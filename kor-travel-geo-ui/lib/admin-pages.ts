@@ -7,6 +7,7 @@
 export type AdminPageKey =
   | "home"
   | "sourceFiles"
+  | "files"
   | "consistency"
   | "backups"
   | "ops"
@@ -37,6 +38,12 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageMeta> = {
     path: "/admin/source-files",
     title: "원천 파일",
     description: "주소 원천 파일 업로드부터 DB 반영까지"
+  },
+  files: {
+    key: "files",
+    path: "/admin/files",
+    title: "파일 관리",
+    description: "저장된 모든 파일의 연결·사용 현황 추적"
   },
   consistency: {
     key: "consistency",
@@ -96,7 +103,7 @@ export interface AdminNavGroup {
 
 /** 사이드바 그룹 구성 (관리 홈은 그룹 위에 단독 노출). */
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
-  { title: "데이터 관리", keys: ["sourceFiles", "consistency"] },
+  { title: "데이터 관리", keys: ["sourceFiles", "files", "consistency"] },
   { title: "백업·운영", keys: ["backups", "ops", "logs"] },
   { title: "시스템", keys: ["tables", "cache"] },
   { title: "설정", keys: ["settings"] }

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useReducer, useRef, useState } from "react";
 import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
 import { HelpTip } from "@/components/admin/shared/HelpTip";
 import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
@@ -559,15 +559,18 @@ function BulkHardDeleteDialog({
   const ackId = useId();
   const reasonId = useId();
 
-  // 상시 마운트 + open 제어: radix가 닫힘 시 포커스를 트리거로 복귀시킨다.
-  // 열릴 때마다 확인 입력을 초기화한다.
-  useEffect(() => {
+  // 다이얼로그가 새로 열릴 때마다 확인 입력을 초기화한다. useEffect로 열림 후
+  // 상태를 되돌리면 stale 프레임이 한 번 보이므로, open 전이를 렌더 중에 감지해
+  // 초기화한다(React 권장 adjust-state-during-render).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setConfirmation("");
       setManifestAck(false);
       setReason("");
     }
-  }, [open]);
+  }
 
   return (
     <AlertDialog

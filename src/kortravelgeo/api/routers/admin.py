@@ -96,6 +96,10 @@ from kortravelgeo.dto.admin import (
     UploadSetStatus,
     UploadSidoZipResponse,
 )
+from kortravelgeo.dto.file_inventory import (
+    FileInventoryPage,
+    FileInventorySourceDetail,
+)
 from kortravelgeo.dto.source import (
     TERMINAL_UPLOAD_SESSION_STATES,
     EpostServerFetchRequest,
@@ -1739,6 +1743,47 @@ async def sync_local_to_rustfs_storage(req: RustfsSyncLocalRequest) -> RustfsSyn
         rustfs_config=config,
         allowed_roots=settings.rustfs_local_import_roots,
     )
+
+
+# --- 통합 파일 인벤토리 (T-283 파일 관리) ----------------------------------
+
+
+@router.get(
+    "/storage/files",
+    response_model=FileInventoryPage,
+    response_model_exclude_none=True,
+)
+async def list_storage_files(
+    kind: Literal["all", "source_group", "artifact", "orphan_object"] = "all",
+    category: str | None = Query(default=None, max_length=80),
+    lifecycle: str | None = Query(default=None, max_length=40),
+    temporary_only: bool = False,
+    limit: int = Query(default=200, ge=1, le=500),
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> FileInventoryPage:
+    """저장된 파일(원천 그룹·artifact·고아 객체) 통합 목록 + 연결/사용/시각 요약."""
+    return await client.file_inventory_page(
+        kind=kind,
+        category=category,
+        lifecycle=lifecycle,
+        temporary_only=temporary_only,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/storage/files/source-groups/{source_file_group_id}",
+    response_model=FileInventorySourceDetail,
+    response_model_exclude_none=True,
+)
+async def get_storage_file_source_group(
+    source_file_group_id: str,
+    _ctx: RequestContext = _SOURCE_VIEWER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> FileInventorySourceDetail:
+    """파일 그룹 1건의 연결 추적 상세 (파일·세션 이력·매칭 세트 사용처·이슈)."""
+    return await client.file_inventory_source_group(source_file_group_id)
 
 
 @router.post("/maintenance/refresh-mv", response_model=LoadJobStatus)

@@ -3158,6 +3158,731 @@
         "title": "ExplainResponse",
         "type": "object"
       },
+      "FileInventoryFileInfo": {
+        "additionalProperties": false,
+        "description": "그룹 상세의 개별 파일 (``ops.source_files``).",
+        "properties": {
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "last_deep_verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Deep Verified At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "object_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Key"
+          },
+          "original_filename": {
+            "title": "Original Filename",
+            "type": "string"
+          },
+          "part_key": {
+            "title": "Part Key",
+            "type": "string"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "source_file_id": {
+            "title": "Source File Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "storage_kind": {
+            "title": "Storage Kind",
+            "type": "string"
+          },
+          "uploaded_at": {
+            "format": "date-time",
+            "title": "Uploaded At",
+            "type": "string"
+          },
+          "validated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Validated At"
+          },
+          "validation_state": {
+            "title": "Validation State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file_id",
+          "original_filename",
+          "part_key",
+          "state",
+          "validation_state",
+          "size_bytes",
+          "sha256",
+          "storage_kind",
+          "uploaded_at"
+        ],
+        "title": "FileInventoryFileInfo",
+        "type": "object"
+      },
+      "FileInventoryIssue": {
+        "additionalProperties": false,
+        "description": "그룹 상세의 미해결 저장소 정합성 이슈.",
+        "properties": {
+          "detected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detected At"
+          },
+          "issue_type": {
+            "title": "Issue Type",
+            "type": "string"
+          },
+          "object_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object Key"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source_storage_reconcile_item_id": {
+            "title": "Source Storage Reconcile Item Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_storage_reconcile_item_id",
+          "issue_type",
+          "severity",
+          "state"
+        ],
+        "title": "FileInventoryIssue",
+        "type": "object"
+      },
+      "FileInventoryItem": {
+        "additionalProperties": false,
+        "description": "통합 파일 인벤토리의 한 행.",
+        "properties": {
+          "acquired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acquired At"
+          },
+          "active_match_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Match Set Id"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "dataset_snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Snapshot Id"
+          },
+          "detail": {
+            "additionalProperties": true,
+            "title": "Detail",
+            "type": "object"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Count"
+          },
+          "file_kind": {
+            "enum": [
+              "source_group",
+              "artifact",
+              "orphan_object"
+            ],
+            "title": "File Kind",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "in_use": {
+            "title": "In Use",
+            "type": "boolean"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "last_load_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Load Job Id"
+          },
+          "last_loaded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Loaded At"
+          },
+          "last_verified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Verified At"
+          },
+          "lifecycle": {
+            "title": "Lifecycle",
+            "type": "string"
+          },
+          "match_set_count": {
+            "default": 0,
+            "title": "Match Set Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "open_issue_count": {
+            "default": 0,
+            "title": "Open Issue Count",
+            "type": "integer"
+          },
+          "registered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered At"
+          },
+          "serving_release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving Release Id"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "storage_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Kind"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          },
+          "temporary": {
+            "title": "Temporary",
+            "type": "boolean"
+          },
+          "upload_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Session Id"
+          },
+          "upload_session_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Session State"
+          },
+          "user_yyyymm": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Yyyymm"
+          }
+        },
+        "required": [
+          "file_kind",
+          "id",
+          "name",
+          "category",
+          "state",
+          "lifecycle",
+          "in_use",
+          "temporary"
+        ],
+        "title": "FileInventoryItem",
+        "type": "object"
+      },
+      "FileInventoryPage": {
+        "additionalProperties": false,
+        "description": "``GET /v1/admin/storage/files`` 응답.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FileInventoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/FileInventorySummary"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "FileInventoryPage",
+        "type": "object"
+      },
+      "FileInventorySessionInfo": {
+        "additionalProperties": false,
+        "description": "그룹 상세의 업로드 세션 이력.",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "registered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registered At"
+          },
+          "registration_deadline_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Registration Deadline At"
+          },
+          "source_upload_session_id": {
+            "title": "Source Upload Session Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "source_upload_session_id",
+          "state",
+          "created_at"
+        ],
+        "title": "FileInventorySessionInfo",
+        "type": "object"
+      },
+      "FileInventorySourceDetail": {
+        "additionalProperties": false,
+        "description": "``GET /v1/admin/storage/files/source-groups/{id}`` 응답 — 연결 추적 상세.",
+        "properties": {
+          "files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FileInventoryFileInfo"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "item": {
+            "$ref": "#/components/schemas/FileInventoryItem"
+          },
+          "open_issues": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FileInventoryIssue"
+            },
+            "title": "Open Issues",
+            "type": "array"
+          },
+          "sessions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FileInventorySessionInfo"
+            },
+            "title": "Sessions",
+            "type": "array"
+          },
+          "usages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FileInventoryUsage"
+            },
+            "title": "Usages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "FileInventorySourceDetail",
+        "type": "object"
+      },
+      "FileInventorySummary": {
+        "additionalProperties": false,
+        "properties": {
+          "by_kind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Kind",
+            "type": "object"
+          },
+          "by_lifecycle": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Lifecycle",
+            "type": "object"
+          },
+          "in_use_count": {
+            "title": "In Use Count",
+            "type": "integer"
+          },
+          "open_issue_count": {
+            "title": "Open Issue Count",
+            "type": "integer"
+          },
+          "temporary_count": {
+            "title": "Temporary Count",
+            "type": "integer"
+          },
+          "total_bytes": {
+            "title": "Total Bytes",
+            "type": "integer"
+          },
+          "total_count": {
+            "title": "Total Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_count",
+          "total_bytes",
+          "in_use_count",
+          "temporary_count",
+          "open_issue_count"
+        ],
+        "title": "FileInventorySummary",
+        "type": "object"
+      },
+      "FileInventoryUsage": {
+        "additionalProperties": false,
+        "description": "그룹 상세의 매칭 세트 사용처 한 건.",
+        "properties": {
+          "last_load_job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Load Job Id"
+          },
+          "last_load_job_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Load Job State"
+          },
+          "last_loaded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Loaded At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "source_match_set_id": {
+            "title": "Source Match Set Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_match_set_id",
+          "name",
+          "state"
+        ],
+        "title": "FileInventoryUsage",
+        "type": "object"
+      },
       "GeocodeExtension": {
         "additionalProperties": false,
         "properties": {
@@ -17228,6 +17953,155 @@
           }
         },
         "summary": "Validate Source Match Set",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/storage/files": {
+      "get": {
+        "description": "저장된 파일(원천 그룹·artifact·고아 객체) 통합 목록 + 연결/사용/시각 요약.",
+        "operationId": "list_storage_files_v1_admin_storage_files_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "source_group",
+                "artifact",
+                "orphan_object"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lifecycle",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lifecycle"
+            }
+          },
+          {
+            "in": "query",
+            "name": "temporary_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Temporary Only",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileInventoryPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "Legacy validation error envelope"
+          }
+        },
+        "summary": "List Storage Files",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/storage/files/source-groups/{source_file_group_id}": {
+      "get": {
+        "description": "파일 그룹 1건의 연결 추적 상세 (파일·세션 이력·매칭 세트 사용처·이슈).",
+        "operationId": "get_storage_file_source_group_v1_admin_storage_files_source_groups__source_file_group_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_file_group_id",
+            "required": true,
+            "schema": {
+              "title": "Source File Group Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileInventorySourceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "Legacy validation error envelope"
+          }
+        },
+        "summary": "Get Storage File Source Group",
         "tags": [
           "admin"
         ]

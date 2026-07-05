@@ -5,12 +5,12 @@ const fallbackSchema = z.enum(["none", "api"]);
 const regionWithinRadiusLevelSchema = z.enum(["sido", "sigungu", "emd"]);
 
 // 대한민국 좌표 범위 (EPSG:4326) — reverse/regionsWithinRadius가 공유한다.
-export const koreaLonSchema = z.coerce
+const koreaLonSchema = z.coerce
   .number({ message: "경도는 숫자여야 합니다" })
   .min(123, "경도는 123~132 범위여야 합니다")
   .max(132, "경도는 123~132 범위여야 합니다");
 
-export const koreaLatSchema = z.coerce
+const koreaLatSchema = z.coerce
   .number({ message: "위도는 숫자여야 합니다" })
   .min(32, "위도는 32~39 범위여야 합니다")
   .max(39, "위도는 32~39 범위여야 합니다");
@@ -71,11 +71,6 @@ export const explainFormSchema = z.object({
 // Admin 폼 공용 스키마 — 데이터 형태별 검증을 한 곳에서 정의한다.
 // ---------------------------------------------------------------------------
 
-/** 기준년월 YYYYMM — 월 범위(01-12)까지 검증한다. */
-export const yyyymmSchema = z
-  .string()
-  .regex(/^\d{4}(0[1-9]|1[0-2])$/, "기준년월은 YYYYMM 형식입니다 (예: 202605)");
-
 /** PostgreSQL 식별자 (DB 이름 등): 소문자/숫자/밑줄, 문자로 시작, 63자 이하. */
 export const pgIdentifierSchema = z
   .string()
@@ -84,10 +79,9 @@ export const pgIdentifierSchema = z
     "소문자/숫자/밑줄만 사용하고 문자로 시작해야 합니다 (63자 이하)"
   );
 
-/** http(s) URL — callback URL, RustFS endpoint 등. */
+/** http(s) URL — callback URL, RustFS endpoint 등. (zod v4 top-level format) */
 export const httpUrlSchema = z
-  .string()
-  .url("http:// 또는 https:// URL 형식이어야 합니다")
+  .url({ message: "http:// 또는 https:// URL 형식이어야 합니다" })
   .refine((value) => /^https?:\/\//.test(value), {
     message: "http:// 또는 https:// URL 형식이어야 합니다"
   });
@@ -100,11 +94,3 @@ export const s3BucketSchema = z
     "버킷 이름은 소문자/숫자/하이픈 3~63자여야 합니다"
   );
 
-/** 정수 범위 입력 (병렬 작업 수, 압축 레벨 등). */
-export function intRangeSchema(min: number, max: number, label: string) {
-  return z.coerce
-    .number({ message: `${label}은(는) 숫자여야 합니다` })
-    .int(`${label}은(는) 정수여야 합니다`)
-    .min(min, `${label}은(는) ${min}~${max} 범위여야 합니다`)
-    .max(max, `${label}은(는) ${min}~${max} 범위여야 합니다`);
-}

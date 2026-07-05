@@ -409,6 +409,7 @@ function ModeCard({
           <FieldDescription>{description}</FieldDescription>
         </FieldContent>
         <input
+          aria-label={title}
           checked={checked}
           className="size-4 shrink-0 accent-[var(--brand)]"
           data-checked={checked ? "" : undefined}

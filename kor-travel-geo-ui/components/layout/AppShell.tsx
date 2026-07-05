@@ -6,6 +6,7 @@ import {
   Braces,
   Database,
   FileText,
+  Files,
   FolderUp,
   LayoutDashboard,
   ListChecks,
@@ -34,6 +35,7 @@ const debugLinks = [
 const adminIcons: Record<AdminPageKey, typeof Search> = {
   home: LayoutDashboard,
   sourceFiles: FolderUp,
+  files: Files,
   consistency: ListChecks,
   backups: Archive,
   ops: ShieldCheck,

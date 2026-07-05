@@ -335,11 +335,11 @@ export function VirtualTable<T>({
                   : {};
                 return (
                   <div
+                    {...rowClickProps}
+                    key={row.id}
                     className={`vtable-row${rowClassName ? ` ${rowClassName}` : ""}`}
                     data-clickable={onRowClick ? true : undefined}
-                    key={row.id}
                     role="row"
-                    {...rowClickProps}
                     style={{
                       gridTemplateColumns: gridTemplate,
                       height: item.size,

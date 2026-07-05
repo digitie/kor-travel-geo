@@ -52,7 +52,9 @@ export function YyyymmField({
       />
       <datalist id={listId}>
         {options.map((option) => (
-          <option key={option} value={option} />
+          <option key={option} value={option}>
+            {option}
+          </option>
         ))}
       </datalist>
       {invalid ? (
