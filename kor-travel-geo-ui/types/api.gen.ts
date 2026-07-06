@@ -1806,6 +1806,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/storage/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Storage Files
+         * @description 저장된 파일(원천 그룹·artifact·고아 객체) 통합 목록 + 연결/사용/시각 요약.
+         */
+        get: operations["list_storage_files_v1_admin_storage_files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/storage/files/source-groups/{source_file_group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Storage File Source Group
+         * @description 파일 그룹 1건의 연결 추적 상세 (파일·세션 이력·매칭 세트 사용처·이슈).
+         */
+        get: operations["get_storage_file_source_group_v1_admin_storage_files_source_groups__source_file_group_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/storage/rustfs/check": {
         parameters: {
             query?: never;
@@ -3131,6 +3171,243 @@ export interface components {
         ExplainResponse: {
             /** Plan */
             plan: unknown;
+        };
+        /**
+         * FileInventoryFileInfo
+         * @description 그룹 상세의 개별 파일 (``ops.source_files``).
+         */
+        FileInventoryFileInfo: {
+            /** Bucket */
+            bucket?: string | null;
+            /** Deleted At */
+            deleted_at?: string | null;
+            /** Last Deep Verified At */
+            last_deep_verified_at?: string | null;
+            /** Last Verified At */
+            last_verified_at?: string | null;
+            /** Object Key */
+            object_key?: string | null;
+            /** Original Filename */
+            original_filename: string;
+            /** Part Key */
+            part_key: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Source File Id */
+            source_file_id: string;
+            /** State */
+            state: string;
+            /** Storage Kind */
+            storage_kind: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+            /** Validated At */
+            validated_at?: string | null;
+            /** Validation State */
+            validation_state: string;
+        };
+        /**
+         * FileInventoryIssue
+         * @description 그룹 상세의 미해결 저장소 정합성 이슈.
+         */
+        FileInventoryIssue: {
+            /** Detected At */
+            detected_at?: string | null;
+            /** Issue Type */
+            issue_type: string;
+            /** Object Key */
+            object_key?: string | null;
+            /** Severity */
+            severity: string;
+            /** Source Storage Reconcile Item Id */
+            source_storage_reconcile_item_id: string;
+            /** State */
+            state: string;
+        };
+        /**
+         * FileInventoryItem
+         * @description 통합 파일 인벤토리의 한 행.
+         */
+        FileInventoryItem: {
+            /** Acquired At */
+            acquired_at?: string | null;
+            /** Active Match Set Id */
+            active_match_set_id?: string | null;
+            /** Category */
+            category: string;
+            /** Dataset Snapshot Id */
+            dataset_snapshot_id?: string | null;
+            /** Detail */
+            detail?: {
+                [key: string]: unknown;
+            };
+            /** Expires At */
+            expires_at?: string | null;
+            /** File Count */
+            file_count?: number | null;
+            /**
+             * File Kind
+             * @enum {string}
+             */
+            file_kind: "source_group" | "artifact" | "orphan_object";
+            /** Id */
+            id: string;
+            /** In Use */
+            in_use: boolean;
+            /** Job Id */
+            job_id?: string | null;
+            /** Last Load Job Id */
+            last_load_job_id?: string | null;
+            /** Last Loaded At */
+            last_loaded_at?: string | null;
+            /** Last Verified At */
+            last_verified_at?: string | null;
+            /** Lifecycle */
+            lifecycle: string;
+            /**
+             * Match Set Count
+             * @default 0
+             */
+            match_set_count: number;
+            /** Name */
+            name: string;
+            /**
+             * Open Issue Count
+             * @default 0
+             */
+            open_issue_count: number;
+            /** Registered At */
+            registered_at?: string | null;
+            /** Serving Release Id */
+            serving_release_id?: string | null;
+            /** Sha256 */
+            sha256?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** State */
+            state: string;
+            /** Storage Kind */
+            storage_kind?: string | null;
+            /** Storage Ref */
+            storage_ref?: string | null;
+            /** Temporary */
+            temporary: boolean;
+            /** Upload Session Id */
+            upload_session_id?: string | null;
+            /** Upload Session State */
+            upload_session_state?: string | null;
+            /** User Yyyymm */
+            user_yyyymm?: string | null;
+        };
+        /**
+         * FileInventoryPage
+         * @description ``GET /v1/admin/storage/files`` 응답.
+         */
+        FileInventoryPage: {
+            /**
+             * Items
+             * @default []
+             */
+            items: components["schemas"]["FileInventoryItem"][];
+            summary: components["schemas"]["FileInventorySummary"];
+        };
+        /**
+         * FileInventorySessionInfo
+         * @description 그룹 상세의 업로드 세션 이력.
+         */
+        FileInventorySessionInfo: {
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Registered At */
+            registered_at?: string | null;
+            /** Registration Deadline At */
+            registration_deadline_at?: string | null;
+            /** Source Upload Session Id */
+            source_upload_session_id: string;
+            /** State */
+            state: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * FileInventorySourceDetail
+         * @description ``GET /v1/admin/storage/files/source-groups/{id}`` 응답 — 연결 추적 상세.
+         */
+        FileInventorySourceDetail: {
+            /**
+             * Files
+             * @default []
+             */
+            files: components["schemas"]["FileInventoryFileInfo"][];
+            item: components["schemas"]["FileInventoryItem"];
+            /**
+             * Open Issues
+             * @default []
+             */
+            open_issues: components["schemas"]["FileInventoryIssue"][];
+            /**
+             * Sessions
+             * @default []
+             */
+            sessions: components["schemas"]["FileInventorySessionInfo"][];
+            /**
+             * Usages
+             * @default []
+             */
+            usages: components["schemas"]["FileInventoryUsage"][];
+        };
+        /** FileInventorySummary */
+        FileInventorySummary: {
+            /** By Kind */
+            by_kind?: {
+                [key: string]: number;
+            };
+            /** By Lifecycle */
+            by_lifecycle?: {
+                [key: string]: number;
+            };
+            /** In Use Count */
+            in_use_count: number;
+            /** Open Issue Count */
+            open_issue_count: number;
+            /** Temporary Count */
+            temporary_count: number;
+            /** Total Bytes */
+            total_bytes: number;
+            /** Total Count */
+            total_count: number;
+        };
+        /**
+         * FileInventoryUsage
+         * @description 그룹 상세의 매칭 세트 사용처 한 건.
+         */
+        FileInventoryUsage: {
+            /** Last Load Job Id */
+            last_load_job_id?: string | null;
+            /** Last Load Job State */
+            last_load_job_state?: string | null;
+            /** Last Loaded At */
+            last_loaded_at?: string | null;
+            /** Name */
+            name: string;
+            /** Role */
+            role?: string | null;
+            /** Source Match Set Id */
+            source_match_set_id: string;
+            /** State */
+            state: string;
         };
         /** GeocodeExtension */
         GeocodeExtension: {
@@ -9597,6 +9874,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceMatchSetValidateResponse"];
+                };
+            };
+            /** @description Legacy validation error envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+        };
+    };
+    list_storage_files_v1_admin_storage_files_get: {
+        parameters: {
+            query?: {
+                kind?: "all" | "source_group" | "artifact" | "orphan_object";
+                category?: string | null;
+                lifecycle?: string | null;
+                temporary_only?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileInventoryPage"];
+                };
+            };
+            /** @description Legacy validation error envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_storage_file_source_group_v1_admin_storage_files_source_groups__source_file_group_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_file_group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileInventorySourceDetail"];
                 };
             };
             /** @description Legacy validation error envelope */

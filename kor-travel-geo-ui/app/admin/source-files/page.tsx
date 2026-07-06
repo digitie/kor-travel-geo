@@ -1,18 +1,20 @@
 import type { Metadata } from "next";
 import { SourceFilesPanel } from "@/components/admin/source-files/SourceFilesPanel";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ADMIN_PAGES } from "@/lib/admin-pages";
 
 export const metadata: Metadata = {
-  title: "Source Files",
-  description: "원천 파일 업로드·목록·매칭 세트·RustFS 정합성·현재 구성 관리"
+  title: ADMIN_PAGES.sourceFiles.title,
+  description: ADMIN_PAGES.sourceFiles.description
 };
 
 export default function SourceFilesPage() {
   return (
     <>
+      {/* 탭 라벨과 중복되던 긴 나열식 설명은 제거했다. */}
       <PageHeader
-        title="Source Files"
-        description="카테고리별 업로드, 파일 목록, 매칭 세트, RustFS 정합성, 현재 구성, 검증 케이스"
+        title={ADMIN_PAGES.sourceFiles.title}
+        description={ADMIN_PAGES.sourceFiles.description}
       />
       <SourceFilesPanel />
     </>

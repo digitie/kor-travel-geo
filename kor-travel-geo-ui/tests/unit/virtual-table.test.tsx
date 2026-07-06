@@ -76,11 +76,16 @@ describe("VirtualTable (T-254, TanStack Table + Virtual)", () => {
     expect(screen.getByRole("button", { name: /size ▲/ })).toBeTruthy();
   });
 
-  it("renders virtualized grid markup without pretending to be a semantic table", () => {
+  it("renders virtualized grid markup with ARIA table roles (no <table> element)", () => {
     const { container } = render(
       <VirtualTable columns={columns} rowKey={(r) => r.id} rows={data} />
     );
-    expect(screen.queryByRole("table")).toBeNull();
+    // 실제 <table> 요소는 없지만(가상화 div 그리드) 보조기기에는 table로 노출된다.
+    expect(container.querySelector("table")).toBeNull();
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getAllByRole("columnheader").length).toBe(2);
+    expect(screen.getAllByRole("row").length).toBe(3); // 헤더 행 + 데이터 2행
+    expect(screen.getAllByRole("cell").length).toBe(4);
     expect(container.querySelector(".vtable-grid")).toBeTruthy();
     expect(container.querySelectorAll(".vtable-th").length).toBe(2);
     expect(container.querySelectorAll(".vtable-row").length).toBe(2);

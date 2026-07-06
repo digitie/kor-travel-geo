@@ -1,5 +1,11 @@
 @import "maplibre-gl/dist/maplibre-gl.css";
-@import "tailwindcss";
+/* 자동 소스 감지를 끄고 소스 디렉터리를 명시한다 — CHANGELOG.md나
+   playwright test-results의 프로즈 속 `shadow-[var(--…)]` 토큰이 클래스 후보로
+   스캔되면 Tailwind v4 CSS 파싱이 죽는 문제(로컬 next dev 재현)의 원천 차단. */
+@import "tailwindcss" source(none);
+@source "../app";
+@source "../components";
+@source "../lib";
 @config "../tailwind.config.ts";
 
 :root {
@@ -947,40 +953,11 @@ textarea {
   max-width: 360px;
 }
 
+/* .status 필 스타일은 components/ui/badge.tsx(StatusBadge)로 이전됐다.
+   클래스 자체는 e2e 셀렉터(span.status) 관성 훅으로 마크업에 남는다. */
 .status {
-  --status-color: var(--text-secondary);
-  align-items: center;
-  background: color-mix(in srgb, var(--status-color) 9%, white);
-  border-radius: 999px;
-  color: var(--status-color);
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 800;
-  gap: 6px;
   letter-spacing: 0.05em;
-  padding: 3px 8px;
   text-transform: uppercase;
-}
-
-.status::before {
-  background: currentColor;
-  border-radius: 999px;
-  content: "";
-  display: inline-block;
-  height: 6px;
-  width: 6px;
-}
-
-.status.ok {
-  --status-color: var(--ok);
-}
-
-.status.warn {
-  --status-color: var(--warn);
-}
-
-.status.error {
-  --status-color: var(--danger);
 }
 
 .metric {
@@ -2095,6 +2072,39 @@ textarea {
   }
 }
 
+/* radix 오버레이/팝업 진입 애니메이션 (tailwindcss-animate 미사용 — 자체 keyframes).
+   prefers-reduced-motion 전역 규칙이 함께 적용된다. */
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ui-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ui-overlay[data-state="open"] {
+  animation: ui-fade-in var(--duration-normal) var(--ease-default);
+}
+
+.ui-pop-in[data-state="open"],
+.ui-pop-in[data-state="delayed-open"] {
+  animation: ui-scale-in var(--duration-fast) var(--ease-default);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2127,6 +2137,25 @@ textarea {
     --ui-input: #d8dee8;
     --ui-ring: #0f766e;
     --radius: 0.625rem;
+
+    /* shadcn 컴포넌트가 var(--secondary) 같은 짧은 이름을 직접 참조하는 경우를
+       위한 별칭 (예: button.tsx secondary hover의 color-mix). */
+    --background: var(--ui-background);
+    --foreground: var(--ui-foreground);
+    --card: var(--ui-card);
+    --card-foreground: var(--ui-card-foreground);
+    --popover: var(--ui-popover);
+    --popover-foreground: var(--ui-popover-foreground);
+    --primary: var(--ui-primary);
+    --primary-foreground: var(--ui-primary-foreground);
+    --secondary: var(--ui-secondary);
+    --secondary-foreground: var(--ui-secondary-foreground);
+    --accent: var(--ui-accent);
+    --accent-foreground: var(--ui-accent-foreground);
+    --destructive: var(--ui-destructive);
+    --border: var(--ui-border);
+    --input: var(--ui-input);
+    --ring: var(--ui-ring);
   }
   * {
     border-color: var(--ui-border);

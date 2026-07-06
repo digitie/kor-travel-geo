@@ -1,28 +1,32 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Hammer,
-  Play,
-  RefreshCw,
-  ShieldCheck,
-  XCircle
-} from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, Hammer, Play, ShieldCheck, XCircle } from "lucide-react";
+import { useId, useState } from "react";
+import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
+import { EmptyState } from "@/components/admin/shared/EmptyState";
+import { HelpTip } from "@/components/admin/shared/HelpTip";
+import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
+import { RefreshButton } from "@/components/admin/shared/RefreshButton";
+import { TypedConfirmField } from "@/components/admin/shared/TypedConfirmField";
 import { RoleRequirementNote } from "@/components/admin/RoleRequirementNote";
 import { JobProgress } from "@/components/admin/backups/JobProgress";
 import { MatchSetComparePanel } from "@/components/admin/source-files/MatchSetComparePanel";
 import { MatchSetItemsTable } from "@/components/admin/source-files/MatchSetItemsTable";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/ui/Panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   type PreflightSeverity,
   summarizeRebuildPreflight
 } from "@/lib/rebuild-preflight";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { type LoadJobStatus, postJson, requestJson } from "@/lib/api";
+import { getErrorMessage, type LoadJobStatus, postJson, requestJson } from "@/lib/api";
 import { terminalJobState } from "@/lib/backup-workflow";
+import { toast } from "@/lib/toast";
 import {
   matchSetStateLabels,
   rebuildPromoteConfirmation,
@@ -32,6 +36,14 @@ import {
 } from "@/lib/source-files";
 
 const EMPTY_SETS: SourceMatchSet[] = [];
+
+const LIFECYCLE_LABELS: Record<string, string> = {
+  validate: "검증(validate)",
+  activate: "활성화(activate)",
+  retire: "은퇴(retire)",
+  "run-validation": "검증 실행(run-validation)",
+  "rebuild-db": "DB 재구성(rebuild-db)"
+};
 
 export function MatchSetsTab() {
   const queryClient = useQueryClient();
@@ -66,6 +78,7 @@ export function MatchSetsTab() {
       return postJson(path, body ?? {});
     },
     onSuccess: (data, variables) => {
+      toast.success(`${LIFECYCLE_LABELS[variables.kind] ?? variables.kind} 요청 완료`);
       setLastResult(data);
       setLastRebuildJobId(
         variables.kind === "rebuild-db" ? rebuildJobIdFromResponse(data) : null
@@ -74,7 +87,9 @@ export function MatchSetsTab() {
       void queryClient.invalidateQueries({ queryKey: ["source-match-set"] });
     },
     onError: (error, variables) => {
-      setLastResult({ error: error instanceof Error ? error.message : String(error) });
+      const message = getErrorMessage(error);
+      toast.error(`${LIFECYCLE_LABELS[variables.kind] ?? variables.kind} 실패`, message);
+      setLastResult({ error: message });
       if (variables.kind === "rebuild-db") {
         setLastRebuildJobId(null);
       }
@@ -86,11 +101,7 @@ export function MatchSetsTab() {
       <div className="source-split">
       <Panel
         title="매칭 세트"
-        actions={
-          <button className="icon-button" onClick={() => void refetch()} title="새로고침" type="button">
-            <RefreshCw size={16} />
-          </button>
-        }
+        actions={<RefreshButton iconOnly onClick={() => void refetch()} />}
       >
         <div className="report-list">
           {matchSets.map((set) => (
@@ -104,15 +115,13 @@ export function MatchSetsTab() {
               <span>{set.name}</span>
               <span className="report-row-meta">
                 {set.integrity_alert ? (
-                  <span className="status error" title="integrity_alert">
-                    <AlertTriangle size={12} /> 무결성 경보
-                  </span>
+                  <StatusBadge tone="error" value="무결성 경보" />
                 ) : null}
                 <StatusBadge value={matchSetStateLabels[set.state]} />
               </span>
             </button>
           ))}
-          {matchSets.length === 0 ? <p className="form-note">매칭 세트가 없습니다.</p> : null}
+          {matchSets.length === 0 ? <EmptyState>매칭 세트가 없습니다.</EmptyState> : null}
         </div>
       </Panel>
 
@@ -127,14 +136,10 @@ export function MatchSetsTab() {
           />
         ) : (
           <Panel title="세부 정보">
-            <p className="form-note">매칭 세트를 선택하세요.</p>
+            <EmptyState>매칭 세트를 선택하세요.</EmptyState>
           </Panel>
         )}
-        {lastResult ? (
-          <Panel title="최근 결과">
-            <pre className="json-box">{JSON.stringify(lastResult, null, 2)}</pre>
-          </Panel>
-        ) : null}
+        <ActionResultPanel result={lastResult} />
         {lastRebuildJobId ? <RebuildJobStatus jobId={lastRebuildJobId} /> : null}
       </div>
       </div>
@@ -166,37 +171,49 @@ function RebuildJobStatus({ jobId }: { jobId: string }) {
       {job ? (
         <>
           <JobProgress job={job} onTerminal={() => void refetch()} />
-          <dl className="criteria-grid">
-            <div>
-              <dt>job_id</dt>
-              <dd data-testid="rebuild-control-job-id">{job.job_id}</dd>
-            </div>
-            <div>
-              <dt>state</dt>
-              <dd>{job.state}</dd>
-            </div>
-            {job.load_batch_id ? (
-              <div>
-                <dt>load_batch_id</dt>
-                <dd data-testid="rebuild-load-batch-id">{job.load_batch_id}</dd>
-              </div>
-            ) : null}
-            <div>
-              <dt>stage</dt>
-              <dd>{job.current_stage ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>finished_at</dt>
-              <dd>{job.finished_at ?? "-"}</dd>
-            </div>
-          </dl>
+          <KeyValueGrid
+            items={[
+              {
+                label: "작업 ID",
+                value: <span data-testid="rebuild-control-job-id">{job.job_id}</span>,
+                help: (
+                  <>
+                    API 필드 <code>job_id</code>
+                  </>
+                ),
+                helpLabel: "작업 ID 도움말"
+              },
+              { label: "상태", value: job.state },
+              ...(job.load_batch_id
+                ? [
+                    {
+                      label: "적재 배치 ID",
+                      value: (
+                        <span data-testid="rebuild-load-batch-id">{job.load_batch_id}</span>
+                      ),
+                      help: (
+                        <>
+                          API 필드 <code>load_batch_id</code> — 하위 full_load_batch 작업
+                        </>
+                      ),
+                      helpLabel: "적재 배치 ID 도움말"
+                    }
+                  ]
+                : []),
+              { label: "단계", value: job.current_stage ?? "-" },
+              { label: "완료 시각", value: job.finished_at ?? "-" }
+            ]}
+          />
           {job.load_batch_id && job.load_batch_id !== job.job_id ? (
             <DownstreamBatchStatus batchJobId={job.load_batch_id} />
           ) : null}
           {job.error_message ? <p className="form-note warn">{job.error_message}</p> : null}
         </>
       ) : (
-        <p className="form-note">작업 상태를 불러오는 중입니다.</p>
+        <div className="grid gap-2">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-2/3" />
+        </div>
       )}
     </Panel>
   );
@@ -218,28 +235,21 @@ function DownstreamBatchStatus({ batchJobId }: { batchJobId: string }) {
       {batchJob ? (
         <>
           <JobProgress job={batchJob} onTerminal={() => void refetch()} />
-          <dl className="criteria-grid">
-            <div>
-              <dt>job_id</dt>
-              <dd>{batchJob.job_id}</dd>
-            </div>
-            <div>
-              <dt>state</dt>
-              <dd>{batchJob.state}</dd>
-            </div>
-            <div>
-              <dt>stage</dt>
-              <dd>{batchJob.current_stage ?? "-"}</dd>
-            </div>
-            <div>
-              <dt>finished_at</dt>
-              <dd>{batchJob.finished_at ?? "-"}</dd>
-            </div>
-          </dl>
+          <KeyValueGrid
+            items={[
+              { label: "작업 ID", value: batchJob.job_id },
+              { label: "상태", value: batchJob.state },
+              { label: "단계", value: batchJob.current_stage ?? "-" },
+              { label: "완료 시각", value: batchJob.finished_at ?? "-" }
+            ]}
+          />
           {batchJob.error_message ? <p className="form-note warn">{batchJob.error_message}</p> : null}
         </>
       ) : (
-        <p className="form-note">하위 작업 상태를 불러오는 중입니다.</p>
+        <div className="grid gap-2">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-2/3" />
+        </div>
       )}
     </div>
   );
@@ -258,11 +268,17 @@ function MatchSetDetail({
   return (
     <Panel
       title={set.name}
-      actions={<StatusBadge value={matchSetStateLabels[set.state]} />}
+      badges={<StatusBadge value={matchSetStateLabels[set.state]} />}
     >
       {set.integrity_alert ? (
         <div className="confirm-box" role="alert">
-          <div className="confirm-title">무결성 경보 (integrity_alert)</div>
+          <div className="confirm-title flex items-center gap-1">
+            무결성 경보
+            <HelpTip label="무결성 경보 도움말">
+              API 필드 <code>integrity_alert</code> — 활성 세트가 참조하는 원천의 무결성 이상
+              신호입니다.
+            </HelpTip>
+          </div>
           <p className="form-note">
             {set.integrity_alert_at ? `발생: ${set.integrity_alert_at}` : "활성 세트의 원천 무결성에 문제가 감지되었습니다."}
           </p>
@@ -274,44 +290,52 @@ function MatchSetDetail({
         </div>
       ) : null}
 
-      <dl className="criteria-grid">
-        <div>
-          <dt>profile</dt>
-          <dd>{set.profile}</dd>
-        </div>
-        <div>
-          <dt>source_set_hash</dt>
-          <dd>{set.source_set_hash ? `${set.source_set_hash.slice(0, 12)}…` : "-"}</dd>
-        </div>
-        <div>
-          <dt>혼합 기준월</dt>
-          <dd>{set.mixed_yyyymm ? "예" : "아니오"}</dd>
-        </div>
-        <div>
-          <dt>검증 시각</dt>
-          <dd>{set.validated_at ?? "-"}</dd>
-        </div>
-      </dl>
+      <KeyValueGrid
+        items={[
+          {
+            label: "프로파일",
+            value: set.profile,
+            help: (
+              <>
+                API 필드 <code>profile</code> — 매칭 세트 구성 프로파일
+              </>
+            ),
+            helpLabel: "프로파일 도움말"
+          },
+          {
+            label: "구성 해시",
+            value: set.source_set_hash ? `${set.source_set_hash.slice(0, 12)}…` : "-",
+            help: (
+              <>
+                API 필드 <code>source_set_hash</code>
+              </>
+            ),
+            helpLabel: "구성 해시 도움말"
+          },
+          { label: "혼합 기준월", value: set.mixed_yyyymm ? "예" : "아니오" },
+          { label: "검증 시각", value: set.validated_at ?? "-" }
+        ]}
+      />
 
       <MatchSetItemsTable items={detail.items} variant="detail" />
 
       <div className="button-row">
-        <button className="button secondary" disabled={pending} onClick={() => onAction("validate")} type="button">
-          <CheckCircle2 size={16} />
+        <Button disabled={pending} onClick={() => onAction("validate")} type="button" variant="outline">
+          <CheckCircle2 aria-hidden="true" />
           validate
-        </button>
-        <button className="button" disabled={pending} onClick={() => onAction("activate")} type="button">
-          <ShieldCheck size={16} />
+        </Button>
+        <Button disabled={pending} onClick={() => onAction("activate")} type="button">
+          <ShieldCheck aria-hidden="true" />
           activate
-        </button>
-        <button className="button secondary" disabled={pending} onClick={() => onAction("run-validation")} type="button">
-          <Play size={16} />
+        </Button>
+        <Button disabled={pending} onClick={() => onAction("run-validation")} type="button" variant="outline">
+          <Play aria-hidden="true" />
           run-validation
-        </button>
-        <button className="button danger" disabled={pending} onClick={() => onAction("retire")} type="button">
-          <XCircle size={16} />
+        </Button>
+        <Button disabled={pending} onClick={() => onAction("retire")} type="button" variant="destructive">
+          <XCircle aria-hidden="true" />
           retire
-        </button>
+        </Button>
       </div>
 
       <RebuildDbForm
@@ -352,16 +376,29 @@ function RebuildDbForm({
   const requiredPhrase = rebuildPromoteConfirmation(matchSetId);
   const confirmationOk = !force || confirmation === requiredPhrase;
   const preflight = summarizeRebuildPreflight(detail);
+  const forceId = useId();
+  const reasonId = useId();
 
   return (
     <div className="rebuild-form">
-      <h3>DB 재구성 (rebuild-db)</h3>
+      <h3 className="flex items-center gap-1">
+        DB 재구성
+        <HelpTip label="DB 재구성 도움말">
+          rebuild-db — 이 매칭 세트의 원천으로 serving DB를 다시 구성하는 위험 작업입니다.
+        </HelpTip>
+      </h3>
       <RoleRequirementNote
         note={force ? "force_promotion(consistency ERROR 우회)은 destructive_admin 필요" : undefined}
         roles={force ? ["rebuild_operator", "destructive_admin"] : ["rebuild_operator"]}
       />
       <div className="preflight">
-        <strong>사전 점검 (preflight)</strong>
+        <strong className="flex items-center gap-1">
+          사전 점검
+          <HelpTip label="사전 점검 도움말">
+            preflight — 실행 전 자동 점검 결과입니다. 차단 항목이 있으면 백엔드 promotion
+            gate에서 거부될 수 있습니다.
+          </HelpTip>
+        </strong>
         <ul className="preflight-list">
           {preflight.items.map((check) => (
             <li className="preflight-item" key={check.key}>
@@ -374,41 +411,48 @@ function RebuildDbForm({
         </ul>
         {preflight.blockerCount > 0 ? (
           <p className="form-note warn">
-            차단 {preflight.blockerCount}건 — 백엔드 promotion gate에서 막힐 수 있습니다(force_promotion으로도
-            무결성·필수 그룹 게이트는 우회 불가).
+            차단 {preflight.blockerCount}건 — 백엔드 promotion gate에서 막힐 수 있습니다.
+            <HelpTip label="차단 도움말">
+              force_promotion으로도 무결성·필수 그룹 게이트는 우회할 수 없습니다.
+            </HelpTip>
           </p>
         ) : null}
       </div>
-      <label className="checkbox-row">
-        <input checked={force} onChange={(event) => setForce(event.target.checked)} type="checkbox" />
-        consistency ERROR 강제 승급 (force_promotion)
-      </label>
-      <label className="field">
-        <span>사유 (reason)</span>
-        <input onChange={(event) => setReason(event.target.value)} value={reason} />
-      </label>
+      <div className="checkbox-row">
+        <Checkbox
+          checked={force}
+          id={forceId}
+          onCheckedChange={(checked) => setForce(checked === true)}
+        />
+        <label className="m-0 text-sm" htmlFor={forceId}>
+          consistency ERROR 강제 승급 (force_promotion)
+        </label>
+      </div>
+      <Field>
+        <span className="flex items-center gap-1">
+          <FieldLabel htmlFor={reasonId}>사유</FieldLabel>
+          <HelpTip label="사유 도움말">
+            API 필드 <code>reason</code> — 감사 기록에 남는 선택 입력입니다.
+          </HelpTip>
+        </span>
+        <Input
+          id={reasonId}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="예: 202605 원천 갱신 재적재"
+          value={reason}
+        />
+      </Field>
       {force ? (
-        <div className="confirm-box">
-          <div className="confirm-title">위험작업 미리보기</div>
-          <p className="form-note">
-            이 작업은 영향 카테고리 {preflight.affectedCategories.length}개로 serving DB를 재구성하고,
-            force_promotion은 consistency ERROR 게이트만 우회합니다(무결성·필수 그룹 게이트는 우회 안 됨).
-            완료 시 새 release/snapshot으로 swap되며 이전 release로의 rollback은 별도 작업입니다.
-          </p>
-          <label>
-            정확히 입력: <code>{requiredPhrase}</code>
-          </label>
-          <input
-            aria-label="rebuild 강제 승급 확인 문구"
-            onChange={(event) => setConfirmation(event.target.value)}
-            placeholder={requiredPhrase}
-            value={confirmation}
-          />
-          {!confirmationOk ? <p className="form-note warn">확인 문구가 일치해야 합니다.</p> : null}
-        </div>
+        <TypedConfirmField
+          description={`이 작업은 영향 카테고리 ${preflight.affectedCategories.length}개로 serving DB를 재구성하고, force_promotion은 consistency ERROR 게이트만 우회합니다(무결성·필수 그룹 게이트는 우회 안 됨). 완료 시 새 release/snapshot으로 swap되며 이전 release로의 rollback은 별도 작업입니다.`}
+          heading="위험작업 미리보기"
+          label="rebuild 강제 승급 확인 문구"
+          onChange={setConfirmation}
+          phrase={requiredPhrase}
+          value={confirmation}
+        />
       ) : null}
-      <button
-        className="button"
+      <Button
         disabled={pending || !confirmationOk}
         onClick={() =>
           onRebuild({
@@ -421,9 +465,9 @@ function RebuildDbForm({
         }
         type="button"
       >
-        <Hammer size={16} />
+        <Hammer aria-hidden="true" />
         rebuild-db 실행
-      </button>
+      </Button>
     </div>
   );
 }

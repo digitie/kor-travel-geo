@@ -2,7 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { AdminTabs, AdminTabsContent } from "@/components/admin/shared/AdminTabs";
+import { EmptyState } from "@/components/admin/shared/EmptyState";
+import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
+import { Badge } from "@/components/ui/badge";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { requestJson } from "@/lib/api";
@@ -52,83 +56,75 @@ export function SourceCasesTab() {
   const selectedDefinition = definitions.find((item) => item.code === effectiveCode);
   const selectedCase = effectiveCode ? caseByCode.get(effectiveCode) : undefined;
 
-  return (
-    <Panel title={`검증 케이스 (${definitions.length}개 · registry 기준)`}>
-      <nav aria-label="검증 케이스 선택" className="case-tabs">
-        <div aria-label="검증 케이스" aria-orientation="horizontal" className="case-tab-list" role="tablist">
-          {definitions.map((definition) => {
-            const isSelected = definition.code === effectiveCode;
-            const caseRow = caseByCode.get(definition.code);
-            return (
-              <button
-                aria-controls="source-case-panel"
-                aria-selected={isSelected}
-                className={isSelected ? "case-tab active" : "case-tab"}
-                id={`source-case-tab-${definition.code}`}
-                key={definition.code}
-                onClick={() => setSelectedCode(definition.code)}
-                role="tab"
-                type="button"
-              >
-                <strong>{definition.code}</strong>
-                <span>{definition.name}</span>
-                {caseRow ? <StatusBadge value={caseRow.severity} /> : null}
-                {caseRow ? <small>{caseRow.count.toLocaleString()}건</small> : null}
-              </button>
-            );
-          })}
-          {definitions.length === 0 ? <p className="form-note">케이스 정의를 불러오는 중…</p> : null}
-        </div>
-      </nav>
+  const tabItems = useMemo(
+    () =>
+      definitions.map((definition) => {
+        const caseRow = caseByCode.get(definition.code);
+        return {
+          value: definition.code,
+          label: (
+            <>
+              <strong>{definition.code}</strong>
+              <span>{definition.name}</span>
+              {caseRow ? <StatusBadge value={caseRow.severity} /> : null}
+              {caseRow ? <small>{caseRow.count.toLocaleString()}건</small> : null}
+            </>
+          )
+        };
+      }),
+    [definitions, caseByCode]
+  );
 
-      <section
-        aria-labelledby={`source-case-tab-${effectiveCode ?? "none"}`}
-        className="analysis-pane"
-        id="source-case-panel"
-        role="tabpanel"
-      >
-        {selectedDefinition ? (
-          <div className="criteria-panel">
-            <div>
-              <h3>
-                {selectedDefinition.code} {selectedDefinition.name}
-              </h3>
-              <p>{selectedDefinition.compares}</p>
-            </div>
-            <dl className="criteria-grid">
-              <div>
-                <dt>비정상 기준</dt>
-                <dd>{selectedDefinition.abnormal_criteria}</dd>
+  return (
+    <Panel
+      title="검증 케이스"
+      badges={<Badge tone="neutral">{definitions.length}개</Badge>}
+    >
+      {definitions.length === 0 ? (
+        <EmptyState>케이스 정의를 불러오는 중…</EmptyState>
+      ) : (
+        <AdminTabs
+          items={tabItems}
+          label="검증 케이스"
+          onValueChange={setSelectedCode}
+          value={effectiveCode ?? ""}
+        >
+          <AdminTabsContent className="analysis-pane" value={effectiveCode ?? ""}>
+            {selectedDefinition ? (
+              <div className="criteria-panel">
+                <div>
+                  <h3>
+                    {selectedDefinition.code} {selectedDefinition.name}
+                  </h3>
+                  <p>{selectedDefinition.compares}</p>
+                </div>
+                <KeyValueGrid
+                  items={[
+                    { label: "비정상 기준", value: selectedDefinition.abnormal_criteria },
+                    { label: "판정 가이드", value: selectedDefinition.decision_guide },
+                    { label: "증거", value: selectedDefinition.evidence.join(", ") || "-" },
+                    {
+                      label: "최근 결과",
+                      value: selectedCase
+                        ? `${selectedCase.severity} · ${selectedCase.count.toLocaleString()}건`
+                        : "최근 보고서에 없음"
+                    }
+                  ]}
+                />
+                <p className="form-note">
+                  상세 sample 분석과 수동 판정은{" "}
+                  <DocumentNavLink className="link-button" href="/admin/consistency">
+                    정합성(Consistency) 화면
+                  </DocumentNavLink>
+                  에서 진행합니다.
+                </p>
               </div>
-              <div>
-                <dt>판정 가이드</dt>
-                <dd>{selectedDefinition.decision_guide}</dd>
-              </div>
-              <div>
-                <dt>증거</dt>
-                <dd>{selectedDefinition.evidence.join(", ") || "-"}</dd>
-              </div>
-              <div>
-                <dt>최근 결과</dt>
-                <dd>
-                  {selectedCase
-                    ? `${selectedCase.severity} · ${selectedCase.count.toLocaleString()}건`
-                    : "최근 보고서에 없음"}
-                </dd>
-              </div>
-            </dl>
-            <p className="form-note">
-              상세 sample 분석과 수동 판정은{" "}
-              <DocumentNavLink className="link-button" href="/admin/consistency">
-                정합성(Consistency) 화면
-              </DocumentNavLink>
-              에서 진행합니다.
-            </p>
-          </div>
-        ) : (
-          <p className="form-note">표시할 케이스 정의가 없습니다.</p>
-        )}
-      </section>
+            ) : (
+              <EmptyState>표시할 케이스 정의가 없습니다.</EmptyState>
+            )}
+          </AdminTabsContent>
+        </AdminTabs>
+      )}
     </Panel>
   );
 }

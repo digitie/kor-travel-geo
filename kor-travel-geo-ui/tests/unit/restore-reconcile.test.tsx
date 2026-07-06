@@ -8,6 +8,8 @@ const apiMocks = vi.hoisted(() => ({ requestJson: vi.fn(), postJson: vi.fn() }))
 vi.mock("@/lib/api", () => ({
   API_BASE: "/api/proxy",
   backendPath: (p: string) => (p.startsWith("/v1") || p.startsWith("/v2") ? p : `/v1${p}`),
+  getErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
   requestJson: apiMocks.requestJson,
   postJson: apiMocks.postJson
 }));
@@ -60,6 +62,8 @@ describe("RestoreReconcilePanel (T-253)", () => {
     const table = screen.getByRole("table");
     expect(within(table).getByText("mv_geocode_target")).toBeTruthy();
     expect(within(table).getByText("mismatch")).toBeTruthy();
+    // 3상 이모지 대신 StatusBadge (mv_nonempty_ok=true → "OK")
+    expect(screen.getByText("OK")).toBeTruthy();
     expect(screen.getByText(/row_count mismatch: mv_geocode_target/)).toBeTruthy();
   });
 

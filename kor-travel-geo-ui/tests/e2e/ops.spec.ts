@@ -195,12 +195,64 @@ test.describe("운영 콘솔 테이블 /admin/ops (T-271 VirtualTable)", () => {
       page.getByRole("table", { name: "데이터셋 스냅샷 목록" }).getByRole("cell", { name: "snap-1" })
     ).toBeVisible();
 
-    // 실패한 pg-stat 표는 비어 있고(emptyHint), 실패 목록이 Last Response에 노출된다.
+    // 실패한 pg-stat 표는 비어 있고(emptyHint), 실패 알림이 role=alert로 노출된다
+    // (같은 문구가 최근 결과 JSON에도 남는다).
     await expect(
       page
         .getByRole("table", { name: "pg_stat_statements 상위 쿼리 목록" })
         .getByText("pg_stat_statements 스냅샷이 없습니다.")
     ).toBeVisible();
-    await expect(page.getByText(/일부 ops 데이터 로드 실패/)).toBeVisible();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "일부 ops 데이터 로드 실패" })
+    ).toBeVisible();
+  });
+
+  test("유지보수 윈도우 등록은 사유 입력과 CONFIRM 확인 문구로 게이트된다", async ({ page }) => {
+    await mockOpsApi(page);
+    let postBody: Record<string, unknown> | null = null;
+    // 가장 나중에 등록한 route가 우선 — GET은 목록을, POST는 body를 캡처해 응답한다.
+    await page.route("**/api/proxy/v1/admin/ops/maintenance-windows**", async (route) => {
+      if (route.request().method() === "POST") {
+        postBody = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill(
+          jsonRoute({
+            maintenance_window_id: "win-new",
+            kind: "full_load",
+            state: "open",
+            reason: "202606 전국 재적재 사전 점검",
+            created_at: "2026-06-16T00:00:00Z"
+          })
+        );
+        return;
+      }
+      await route.fulfill(jsonRoute(WINDOWS));
+    });
+    await page.goto("/admin/ops");
+
+    // 사유가 비어 있으면 등록 트리거 자체가 비활성이다.
+    const trigger = page.getByRole("button", { name: "윈도우 등록" });
+    await expect(trigger).toBeDisabled();
+
+    await page.getByLabel("사유", { exact: true }).fill("202606 전국 재적재 사전 점검");
+    await expect(trigger).toBeEnabled();
+    await trigger.click();
+
+    // 확인 다이얼로그에서 CONFIRM을 직접 입력해야 실행 버튼이 열린다(기본값 없음).
+    const dialog = page.getByRole("alertdialog", { name: "유지보수 윈도우 등록" });
+    await expect(dialog).toBeVisible();
+    const confirmButton = dialog.getByRole("button", { name: "윈도우 등록" });
+    await expect(confirmButton).toBeDisabled();
+    await dialog.getByLabel("유지보수 윈도우 확인 문구").fill("CONFIRM");
+    await expect(confirmButton).toBeEnabled();
+    await confirmButton.click();
+
+    // 성공 toast + 서버 계약 body(confirmation/kind/reason) 그대로 전송.
+    await expect(page.getByText("유지보수 윈도우를 등록했습니다.")).toBeVisible();
+    expect(postBody).not.toBeNull();
+    expect(postBody).toMatchObject({
+      confirmation: "CONFIRM",
+      kind: "full_load",
+      reason: "202606 전국 재적재 사전 점검"
+    });
   });
 });

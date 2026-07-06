@@ -1,38 +1,65 @@
 "use client";
 
-import { Archive, Download, FileText, RefreshCw, Trash2, XCircle } from "lucide-react";
+import { Archive, AlertTriangle, ChevronDown, Download, FileText, Trash2, XCircle } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { HotSwapTab } from "@/components/admin/backups/HotSwapTab";
 import { JobProgress } from "@/components/admin/backups/JobProgress";
-import { inventoryTone } from "@/components/admin/backups/manifest-utils";
+import { inventoryTone, nestedRecord } from "@/components/admin/backups/manifest-utils";
 import { ManifestViewer } from "@/components/admin/backups/ManifestViewer";
 import { RestoreReconcilePanel } from "@/components/admin/backups/RestoreReconcilePanel";
 import { RestoreWizard } from "@/components/admin/backups/RestoreWizard";
-import { JsonBlock } from "@/components/ui/JsonBlock";
+import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
+import { AdminTabs, AdminTabsContent } from "@/components/admin/shared/AdminTabs";
+import { ConfirmActionDialog } from "@/components/admin/shared/ConfirmActionDialog";
+import { HelpTip } from "@/components/admin/shared/HelpTip";
+import { NumberField } from "@/components/admin/shared/NumberField";
+import { RefreshButton } from "@/components/admin/shared/RefreshButton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger
+} from "@/components/ui/collapsible";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
-import { BackupAllowedDirs, BackupArtifact, LoadJobStatus, postJson, requestJson } from "@/lib/api";
+import {
+  BackupAllowedDirs,
+  BackupArtifact,
+  LoadJobStatus,
+  getErrorMessage,
+  postJson,
+  requestJson
+} from "@/lib/api";
 import {
   backupDownloadHref,
+  backupProfileDescriptions,
   backupProfileLabel,
   stagePhase,
   terminalJobState
 } from "@/lib/backup-workflow";
 import { formatBytes } from "@/lib/format";
+import { httpUrlSchema } from "@/lib/schemas";
+import { toast } from "@/lib/toast";
 
 const profiles = ["serving-ready", "lean-serving", "forensic"] as const;
 
 type BackupProfile = (typeof profiles)[number];
 type BackupFormState = {
   callbackUrl: string;
-  compressionLevel: number;
+  compressionLevel: number | null;
   destinationDir: string;
-  jobs: number;
+  jobs: number | null;
   profile: BackupProfile;
 };
 type BackupsPanelState = {
   allowedDirs: string[];
+  allowedDirsError: boolean;
   artifacts: BackupArtifact[];
   jobRows: LoadJobStatus[];
   lastResult: unknown;
@@ -47,13 +74,20 @@ const initialBackupFormState: BackupFormState = {
 };
 const initialBackupsPanelState: BackupsPanelState = {
   allowedDirs: [],
+  allowedDirsError: false,
   artifacts: [],
   jobRows: [],
-  lastResult: { status: "READY" }
+  lastResult: null
 };
 
 export type BackupsTabId = "overview" | "backup" | "restore" | "hotswap" | "jobs";
-type BackupWorkflowStep = { title: string; hint: string; tab?: BackupsTabId };
+type BackupWorkflowStep = {
+  title: string;
+  hint?: string;
+  cli?: string;
+  cliHint?: string;
+  tab?: BackupsTabId;
+};
 
 const BACKUPS_TABS: { id: BackupsTabId; label: string }[] = [
   { id: "overview", label: "개요" },
@@ -65,20 +99,22 @@ const BACKUPS_TABS: { id: BackupsTabId; label: string }[] = [
 const BACKUP_WORKFLOW_STEPS: BackupWorkflowStep[] = [
   {
     title: "1. 백업 생성",
-    hint: "[백업] 탭에서 profile·destination·압축 레벨을 골라 백업을 시작합니다.",
+    hint: "[백업] 탭에서 profile·저장 폴더·압축 레벨을 골라 시작합니다.",
     tab: "backup"
   },
   {
     title: "2. 무결성 검증",
-    hint: "`ktgctl backup verify <id> --deep` 로 archive 손상(bit rot)을 복원 전에 확인합니다."
+    cli: "ktgctl backup verify <id> --deep",
+    cliHint: "archive 손상(bit rot)을 복원 전에 확인합니다."
   },
   {
     title: "3. 복원 드릴",
-    hint: "`ktgctl backup restore-drill --artifact-id <id>` 로 throwaway DB에 복원해 PASS/FAIL을 점검합니다."
+    cli: "ktgctl backup restore-drill --artifact-id <id>",
+    cliHint: "throwaway DB에 복원해 PASS/FAIL을 점검합니다."
   },
   {
     title: "4. 복원 / Hot-swap",
-    hint: "[복원]에서 new_database로 복원하고, 운영 교체는 [Hot-swap]에서 maintenance window + typed confirmation으로 진행합니다.",
+    hint: "[복원] 탭에서 새 DB로 복원하고, 운영 교체는 [Hot-swap] 탭에서 진행합니다.",
     tab: "restore"
   }
 ];
@@ -88,6 +124,7 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
   const controller = useBackupsPanelController();
   const {
     allowedDirs,
+    allowedDirsError,
     artifacts,
     availableArtifacts,
     backupForm,
@@ -107,83 +144,54 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
   );
 
   return (
-    <div className="backups-shell">
-      <nav aria-label="백업/복원 탭" className="case-tabs">
-        <div
-          aria-label="백업/복원 관리 탭"
-          aria-orientation="horizontal"
-          className="case-tab-list"
-          role="tablist"
-        >
-          {BACKUPS_TABS.map((tab) => {
-            const isSelected = tab.id === activeTab;
-            return (
-              <button
-                aria-controls="backups-panel"
-                aria-selected={isSelected}
-                className={isSelected ? "case-tab active" : "case-tab"}
-                id={`backups-tab-${tab.id}`}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                role="tab"
-                type="button"
-              >
-                <strong>{tab.label}</strong>
-              </button>
-            );
-          })}
+    <AdminTabs
+      className="backups-shell"
+      items={BACKUPS_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
+      label="백업/복원 관리 탭"
+      onValueChange={setActiveTab}
+      value={activeTab}
+    >
+      <AdminTabsContent value="overview">
+        <div className="grid two">
+          <BackupsWorkflowGuide
+            availableCount={availableArtifacts.length}
+            onGoTo={setActiveTab}
+            onRefresh={loadAll}
+            runningCount={runningCount}
+            totalArtifacts={artifacts.length}
+          />
+          <ActionResultPanel result={lastResult} />
         </div>
-      </nav>
-
-      <section
-        aria-labelledby={`backups-tab-${activeTab}`}
-        className="backups-pane"
-        id="backups-panel"
-        role="tabpanel"
-      >
-        {activeTab === "overview" ? (
-          <div className="grid two">
-            <BackupsWorkflowGuide
-              availableCount={availableArtifacts.length}
-              onGoTo={setActiveTab}
-              onRefresh={loadAll}
-              runningCount={runningCount}
-              totalArtifacts={artifacts.length}
-            />
-            <Panel title="Last Response">
-              <JsonBlock value={lastResult} />
-            </Panel>
-          </div>
-        ) : null}
-        {activeTab === "backup" ? (
-          <div className="grid two">
-            <BackupFormPanel
-              allowedDirs={allowedDirs}
-              form={backupForm}
-              onChange={updateBackupForm}
-              onRefresh={loadAll}
-              onSubmit={submitBackup}
-            />
-            <BackupArtifactsPanel artifacts={artifacts} onDeleteArtifact={deleteArtifact} />
-          </div>
-        ) : null}
-        {activeTab === "restore" ? (
-          <div className="backups-pane">
-            <RestoreWizard
-              onSubmitted={(result) => {
-                recordResult(result);
-                void loadAll();
-              }}
-            />
-            <RestoreReconcilePanel />
-          </div>
-        ) : null}
-        {activeTab === "hotswap" ? <HotSwapTab /> : null}
-        {activeTab === "jobs" ? (
-          <BackupJobsPanel jobRows={jobRows} onCancelJob={cancelJob} />
-        ) : null}
-      </section>
-    </div>
+      </AdminTabsContent>
+      <AdminTabsContent value="backup">
+        <div className="grid two">
+          <BackupFormPanel
+            allowedDirs={allowedDirs}
+            allowedDirsError={allowedDirsError}
+            form={backupForm}
+            onChange={updateBackupForm}
+            onRefresh={loadAll}
+            onSubmit={submitBackup}
+          />
+          <BackupArtifactsPanel artifacts={artifacts} onDeleteArtifact={deleteArtifact} />
+        </div>
+      </AdminTabsContent>
+      <AdminTabsContent value="restore">
+        <RestoreWizard
+          onSubmitted={(result) => {
+            recordResult(result);
+            void loadAll();
+          }}
+        />
+        <RestoreReconcilePanel />
+      </AdminTabsContent>
+      <AdminTabsContent value="hotswap">
+        <HotSwapTab />
+      </AdminTabsContent>
+      <AdminTabsContent value="jobs">
+        <BackupJobsPanel jobRows={jobRows} onCancelJob={cancelJob} />
+      </AdminTabsContent>
+    </AdminTabs>
   );
 }
 
@@ -208,32 +216,39 @@ function BackupsWorkflowGuide({
         : `사용 가능한 백업 ${availableCount}개 — 검증·복원 드릴로 복원 가능성을 정기 점검하세요.`;
 
   return (
-    <Panel
-      title="백업/복원 다음 액션"
-      actions={
-        <button className="button secondary" onClick={onRefresh} type="button">
-          <RefreshCw size={16} />
-          새로고침
-        </button>
-      }
-    >
+    <Panel actions={<RefreshButton onClick={onRefresh} />} title="백업/복원 다음 액션">
       <p className="backups-next-action">{nextAction}</p>
       <ol className="backups-guide">
         {BACKUP_WORKFLOW_STEPS.map((step) => (
           <li key={step.title}>
             <div className="backups-guide-step">
               <strong>{step.title}</strong>
+              {step.cli ? <Badge tone="neutral">CLI 전용</Badge> : null}
               {step.tab ? (
-                <button
-                  className="button secondary"
+                <Button
                   onClick={() => onGoTo(step.tab as BackupsTabId)}
+                  size="sm"
                   type="button"
+                  variant="outline"
                 >
                   열기
-                </button>
+                </Button>
               ) : null}
             </div>
-            <p>{step.hint}</p>
+            {step.hint ? <p>{step.hint}</p> : null}
+            {step.cli ? (
+              <Collapsible>
+                <CollapsibleTrigger className="inline-flex min-h-9 items-center gap-1 rounded-md px-1.5 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&>svg]:-rotate-90 [&>svg]:transition-transform data-[state=open]:[&>svg]:rotate-0">
+                  <ChevronDown aria-hidden="true" className="size-3.5" />
+                  CLI 명령 보기
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <p className="m-0 text-xs text-muted-foreground">
+                    <code>{step.cli}</code> — {step.cliHint}
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
+            ) : null}
           </li>
         ))}
       </ol>
@@ -244,7 +259,7 @@ function BackupsWorkflowGuide({
 function useBackupsPanelController() {
   const [backupForm, setBackupForm] = useState<BackupFormState>(initialBackupFormState);
   const [panelState, setPanelState] = useState<BackupsPanelState>(initialBackupsPanelState);
-  const { allowedDirs, artifacts, jobRows, lastResult } = panelState;
+  const { allowedDirs, allowedDirsError, artifacts, jobRows, lastResult } = panelState;
 
   const availableArtifacts = useMemo(() => {
     const next: BackupArtifact[] = [];
@@ -274,7 +289,7 @@ function useBackupsPanelController() {
     } catch (error) {
       setPanelState((current) => ({
         ...current,
-        lastResult: { error: error instanceof Error ? error.message : String(error) }
+        lastResult: { error: getErrorMessage(error) }
       }));
     }
   }, []);
@@ -283,13 +298,17 @@ function useBackupsPanelController() {
     setBackupForm((current) => ({ ...current, ...patch }));
   }, []);
   // M1 (Codex #235): surface child-panel results (e.g. the restore wizard) in the shared
-  // Overview "Last Response" so they survive tab switches.
+  // Overview "최근 결과" so they survive tab switches.
   const recordResult = useCallback((value: unknown) => {
     setPanelState((current) => ({ ...current, lastResult: value }));
   }, []);
 
   async function submitBackup(event: FormEvent) {
     event.preventDefault();
+    if (backupForm.jobs == null || backupForm.compressionLevel == null) return;
+    if (backupForm.callbackUrl && !httpUrlSchema.safeParse(backupForm.callbackUrl).success) {
+      return;
+    }
     try {
       const result = await postJson<LoadJobStatus>("/admin/backups", {
         callback_url: backupForm.callbackUrl || undefined,
@@ -299,12 +318,12 @@ function useBackupsPanelController() {
         profile: backupForm.profile
       });
       setPanelState((current) => ({ ...current, lastResult: result }));
+      toast.success("백업 job이 제출됐습니다");
       await loadAll();
     } catch (error) {
-      setPanelState((current) => ({
-        ...current,
-        lastResult: { error: error instanceof Error ? error.message : String(error) }
-      }));
+      const message = getErrorMessage(error);
+      setPanelState((current) => ({ ...current, lastResult: { error: message } }));
+      toast.error("백업 시작 실패", message);
     }
   }
 
@@ -312,12 +331,12 @@ function useBackupsPanelController() {
     try {
       const result = await postJson<LoadJobStatus>(`/admin/jobs/${jobId}/cancel`, {});
       setPanelState((current) => ({ ...current, lastResult: result }));
+      toast.success("작업 취소를 요청했습니다");
       await loadAll();
     } catch (error) {
-      setPanelState((current) => ({
-        ...current,
-        lastResult: { error: error instanceof Error ? error.message : String(error) }
-      }));
+      const message = getErrorMessage(error);
+      setPanelState((current) => ({ ...current, lastResult: { error: message } }));
+      toast.error("작업 취소 실패", message);
     }
   }
 
@@ -325,12 +344,12 @@ function useBackupsPanelController() {
     try {
       const result = await postJson<BackupArtifact>(`/admin/backups/${artifactId}/delete`, {});
       setPanelState((current) => ({ ...current, lastResult: result }));
+      toast.success("백업본을 삭제했습니다");
       await loadAll();
     } catch (error) {
-      setPanelState((current) => ({
-        ...current,
-        lastResult: { error: error instanceof Error ? error.message : String(error) }
-      }));
+      const message = getErrorMessage(error);
+      setPanelState((current) => ({ ...current, lastResult: { error: message } }));
+      toast.error("백업본 삭제 실패", message);
     }
   }
 
@@ -342,13 +361,17 @@ function useBackupsPanelController() {
     async function loadAllowedDirs() {
       try {
         const config = await requestJson<BackupAllowedDirs>("/admin/backups/allowed-dirs");
-        setPanelState((current) => ({ ...current, allowedDirs: config.dirs }));
+        setPanelState((current) => ({
+          ...current,
+          allowedDirs: config.dirs,
+          allowedDirsError: false
+        }));
         const defaultDir = config.default_dir;
         if (typeof defaultDir === "string" && defaultDir.length > 0) {
           setBackupForm((current) => ({ ...current, destinationDir: defaultDir }));
         }
       } catch {
-        setPanelState((current) => ({ ...current, allowedDirs: [] }));
+        setPanelState((current) => ({ ...current, allowedDirs: [], allowedDirsError: true }));
       }
     }
     void loadAllowedDirs();
@@ -364,6 +387,7 @@ function useBackupsPanelController() {
 
   return {
     allowedDirs,
+    allowedDirsError,
     artifacts,
     availableArtifacts,
     backupForm,
@@ -380,92 +404,137 @@ function useBackupsPanelController() {
 
 function BackupFormPanel({
   allowedDirs,
+  allowedDirsError,
   form,
   onChange,
   onRefresh,
   onSubmit
 }: {
   allowedDirs: string[];
+  allowedDirsError: boolean;
   form: BackupFormState;
   onChange: (patch: Partial<BackupFormState>) => void;
   onRefresh: () => void;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const callbackInvalid =
+    form.callbackUrl.length > 0 && !httpUrlSchema.safeParse(form.callbackUrl).success;
+  const formValid = form.jobs != null && form.compressionLevel != null && !callbackInvalid;
+
   return (
-    <Panel
-      title="DB Backup"
-      actions={
-        <button className="button secondary" onClick={onRefresh} type="button">
-          <RefreshCw size={16} />
-          새로고침
-        </button>
-      }
-    >
-      <form className="form-grid" onSubmit={onSubmit}>
-        <div className="field">
-          <label htmlFor="backup-destination">백업본 저장 폴더 (destination_dir)</label>
+    <Panel actions={<RefreshButton onClick={onRefresh} />} title="DB Backup">
+      <form className="form-grid" noValidate onSubmit={onSubmit}>
+        <Field>
+          <span className="flex items-center gap-1">
+            <FieldLabel htmlFor="backup-destination">백업본 저장 폴더</FieldLabel>
+            <HelpTip label="백업본 저장 폴더 도움말">
+              API 필드 <code>destination_dir</code> — 서버가 허용한 디렉터리에만 저장할 수
+              있습니다.
+            </HelpTip>
+          </span>
           {allowedDirs.length > 0 ? (
-            <select
+            <NativeSelect
               id="backup-destination"
-              value={form.destinationDir}
               onChange={(event) => onChange({ destinationDir: event.target.value })}
+              value={form.destinationDir}
             >
               {allowedDirs.map((dir) => (
                 <option key={dir} value={dir}>
                   {dir}
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           ) : (
-            <input
+            <Input
               id="backup-destination"
-              value={form.destinationDir}
               onChange={(event) => onChange({ destinationDir: event.target.value })}
+              placeholder="data/backups"
+              value={form.destinationDir}
             />
           )}
-        </div>
-        <div className="field">
-          <label htmlFor="backup-profile">백업 프로파일 (profile)</label>
-          <select
+        </Field>
+        {allowedDirsError ? (
+          <Alert role="status" variant="warning">
+            <AlertTriangle aria-hidden="true" />
+            <AlertDescription>
+              허용 폴더 목록을 불러오지 못했습니다 — 직접 입력한 경로는 서버가 허용 목록으로 최종
+              검증합니다.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <Field>
+          <span className="flex items-center gap-1">
+            <FieldLabel htmlFor="backup-profile">백업 프로파일</FieldLabel>
+            <HelpTip label="백업 프로파일 도움말">
+              API 필드 <code>profile</code> — 백업 범위 사전 구성. 선택지별 설명은 아래에
+              표시됩니다.
+            </HelpTip>
+          </span>
+          <NativeSelect
             id="backup-profile"
-            value={form.profile}
             onChange={(event) => onChange({ profile: event.target.value as BackupProfile })}
+            value={form.profile}
           >
             {profiles.map((item) => (
               <option key={item} value={item}>
                 {item}
               </option>
             ))}
-          </select>
-        </div>
+          </NativeSelect>
+          <FieldDescription>{backupProfileDescriptions[form.profile]}</FieldDescription>
+        </Field>
         <NumberField
+          help={
+            <>
+              API 필드 <code>jobs</code> — pg_dump 병렬 작업 수 (1~64). 서버 CPU 코어 수 이하
+              권장, 기본 4.
+            </>
+          }
           id="backup-jobs"
-          label="병렬 작업 수 (jobs)"
+          label="병렬 작업 수"
           max={64}
           min={1}
-          value={form.jobs}
           onChange={(value) => onChange({ jobs: value })}
+          value={form.jobs}
         />
         <NumberField
+          help={
+            <>
+              API 필드 <code>compression_level</code> — zstd 압축 레벨 (1~19). 높을수록 작고
+              느립니다, 기본 3.
+            </>
+          }
           id="backup-compression"
-          label="압축 레벨 (compression_level)"
+          label="압축 레벨"
           max={19}
           min={1}
-          value={form.compressionLevel}
           onChange={(value) => onChange({ compressionLevel: value })}
+          value={form.compressionLevel}
         />
-        <div className="field">
-          <label htmlFor="backup-callback">완료 알림 URL (callback_url)</label>
-          <input
+        <Field data-invalid={callbackInvalid || undefined}>
+          <span className="flex items-center gap-1">
+            <FieldLabel htmlFor="backup-callback">완료 알림 URL</FieldLabel>
+            <HelpTip label="완료 알림 URL 도움말">
+              API 필드 <code>callback_url</code> (선택) — 백업 완료 시 job 상태를 이 URL로
+              POST합니다.
+            </HelpTip>
+          </span>
+          <Input
+            aria-invalid={callbackInvalid || undefined}
             id="backup-callback"
-            value={form.callbackUrl}
             onChange={(event) => onChange({ callbackUrl: event.target.value })}
+            placeholder="https://example.com/hooks/backup"
+            type="url"
+            value={form.callbackUrl}
           />
-        </div>
-        <button className="button" type="submit">
-          <Archive size={16} />
+          {callbackInvalid ? (
+            <FieldError>http:// 또는 https:// URL 형식이어야 합니다</FieldError>
+          ) : null}
+        </Field>
+        <Button disabled={!formValid} type="submit">
+          <Archive aria-hidden="true" size={16} />
           백업 시작
-        </button>
+        </Button>
       </form>
     </Panel>
   );
@@ -515,15 +584,27 @@ function BackupJobsPanel({
       header: "action",
       cell: (job) =>
         !terminalJobState(job.state) ? (
-          <button
-            aria-label="취소"
-            className="icon-button"
-            onClick={() => void onCancelJob(job.job_id)}
-            title="취소"
-            type="button"
-          >
-            <XCircle size={16} />
-          </button>
+          <ConfirmActionDialog
+            confirmLabel="작업 취소"
+            description={
+              <>
+                진행 중인 <code>{job.kind}</code> 작업을 취소합니다.
+              </>
+            }
+            onConfirm={() => onCancelJob(job.job_id)}
+            title="작업 취소"
+            trigger={
+              <Button
+                aria-label="취소"
+                size="icon-sm"
+                title="취소"
+                type="button"
+                variant="outline"
+              >
+                <XCircle aria-hidden="true" size={16} />
+              </Button>
+            }
+          />
         ) : null
     }
   ];
@@ -575,7 +656,7 @@ function BackupArtifactsPanel({
       key: "profile",
       header: "profile",
       width: "0.9fr",
-      cell: (a) => backupProfileLabel(readNested(a.manifest, "backup", "profile"))
+      cell: (a) => backupProfileLabel(nestedRecord(a.manifest, "backup")?.["profile"])
     },
     {
       key: "size",
@@ -615,27 +696,45 @@ function BackupArtifactsPanel({
         const href = backupDownloadHref(a.download_url);
         return (
           <div className="toolbar-inline">
-            <button
-              className="icon-button"
+            <Button
+              aria-label="manifest 보기"
               onClick={() => setViewing(a)}
+              size="icon-sm"
               title="manifest 보기"
               type="button"
+              variant="outline"
             >
-              <FileText size={16} />
-            </button>
+              <FileText aria-hidden="true" size={16} />
+            </Button>
             {href && (
-              <a className="icon-button" href={href} title="다운로드">
-                <Download size={16} />
-              </a>
+              <Button asChild size="icon-sm" variant="outline">
+                <a aria-label="다운로드" href={href} title="다운로드">
+                  <Download aria-hidden="true" size={16} />
+                </a>
+              </Button>
             )}
-            <button
-              className="icon-button"
-              onClick={() => void onDeleteArtifact(a.artifact_id)}
-              title="삭제"
-              type="button"
-            >
-              <Trash2 size={16} />
-            </button>
+            <ConfirmActionDialog
+              confirmLabel="삭제"
+              description={
+                <>
+                  백업본 <strong>{a.display_name ?? a.artifact_id}</strong>을(를) 영구
+                  삭제합니다. 되돌릴 수 없습니다.
+                </>
+              }
+              onConfirm={() => onDeleteArtifact(a.artifact_id)}
+              title="백업본 삭제"
+              trigger={
+                <Button
+                  aria-label="삭제"
+                  size="icon-sm"
+                  title="삭제"
+                  type="button"
+                  variant="outline"
+                >
+                  <Trash2 aria-hidden="true" size={16} />
+                </Button>
+              }
+            />
           </div>
         );
       }
@@ -654,44 +753,4 @@ function BackupArtifactsPanel({
       {viewing ? <ManifestViewer artifact={viewing} onClose={() => setViewing(null)} /> : null}
     </Panel>
   );
-}
-
-function NumberField({
-  id,
-  label,
-  value,
-  min,
-  max,
-  onChange
-}: {
-  id: string;
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        max={max}
-        min={min}
-        type="number"
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-      />
-    </div>
-  );
-}
-
-function readNested(
-  value: Record<string, unknown> | undefined,
-  first: string,
-  second: string
-): unknown {
-  const firstValue = value?.[first];
-  if (!firstValue || typeof firstValue !== "object") return undefined;
-  return (firstValue as Record<string, unknown>)[second];
 }

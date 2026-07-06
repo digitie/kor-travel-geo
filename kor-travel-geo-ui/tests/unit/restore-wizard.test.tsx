@@ -11,6 +11,8 @@ vi.mock("@/lib/api", () => ({
   API_BASE: "/api/proxy",
   backendPath: (path: string) =>
     path.startsWith("/v1") || path.startsWith("/v2") ? path : `/v1${path}`,
+  getErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : String(error),
   postJson: apiMocks.postJson,
   requestJson: apiMocks.requestJson
 }));
@@ -21,6 +23,7 @@ const ARTIFACT = {
   state: "available",
   display_name: "backup-202606.tar.zst",
   size_bytes: 2048,
+  created_at: "2026-06-16T00:00:00Z",
   manifest: {
     backup: { profile: "serving-ready" },
     database: { postgres_version: "16.4", postgis_version: "3.5.2" },
@@ -38,7 +41,7 @@ describe("RestoreWizard (T-249)", () => {
   async function gotoStep2() {
     render(<RestoreWizard />);
     await waitFor(() => expect(screen.getByRole("option", { name: /backup-202606/ })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("복원할 백업본 (artifact)"), {
+    fireEvent.change(screen.getByLabelText("복원할 백업본"), {
       target: { value: "art-1" }
     });
     fireEvent.click(screen.getByRole("button", { name: /다음/ }));
@@ -97,6 +100,28 @@ describe("RestoreWizard (T-249)", () => {
     expect((submit as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("validates target_database as a PostgreSQL identifier before step 2", async () => {
+    render(<RestoreWizard />);
+    await waitFor(() => expect(screen.getByRole("option", { name: /backup-202606/ })).toBeTruthy());
+    // artifact 옵션 텍스트에 생성일이 포함된다
+    expect(screen.getByRole("option", { name: /2026-06-16/ })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("복원할 백업본"), {
+      target: { value: "art-1" }
+    });
+
+    const next = screen.getByRole("button", { name: /다음/ });
+    fireEvent.change(screen.getByLabelText("복원 대상 DB 이름"), {
+      target: { value: "Bad Name!" }
+    });
+    expect(screen.getByText(/소문자\/숫자\/밑줄만 사용/)).toBeTruthy();
+    expect((next as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("복원 대상 DB 이름"), {
+      target: { value: "kor_travel_geo_restore" }
+    });
+    expect((next as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("gates replace_current submit on the exact typed confirmation", async () => {
     apiMocks.postJson.mockResolvedValue({
       can_restore: true,
@@ -108,13 +133,12 @@ describe("RestoreWizard (T-249)", () => {
 
     render(<RestoreWizard />);
     await waitFor(() => expect(screen.getByRole("option", { name: /backup-202606/ })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText("복원할 백업본 (artifact)"), {
+    fireEvent.change(screen.getByLabelText("복원할 백업본"), {
       target: { value: "art-1" }
     });
-    fireEvent.change(screen.getByLabelText("복원 모드 (mode)"), {
-      target: { value: "replace_current" }
-    });
-    fireEvent.change(screen.getByLabelText("복원 대상 DB 이름 (target_database)"), {
+    // 복원 모드는 라디오 카드 2개 — 위험(replace_current) 카드를 선택한다
+    fireEvent.click(screen.getByRole("radio", { name: /운영 DB 교체/ }));
+    fireEvent.change(screen.getByLabelText("복원 대상 DB 이름"), {
       target: { value: "kor_travel_geo" }
     });
     fireEvent.click(screen.getByRole("button", { name: /다음/ }));
@@ -128,6 +152,7 @@ describe("RestoreWizard (T-249)", () => {
     fireEvent.change(screen.getByLabelText("typed confirmation"), {
       target: { value: "RESTORE kor_travel_geo" }
     });
+    expect(screen.getByText("확인 문구가 일치합니다.")).toBeTruthy();
     expect((submit as HTMLButtonElement).disabled).toBe(false);
   });
 });

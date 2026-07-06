@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ADMIN_PAGES } from "../../lib/admin-pages";
 
 // /admin/consistency 접근성·회복성 e2e (T-227). 정합성 콘솔의 키보드(케이스 탭 활성·판정
 // 다이얼로그 focus 진입/trap/Esc/포커스 복귀)와 회복성(엔드포인트 500 graceful·표본 페이지네이션·
@@ -163,7 +164,9 @@ test.describe("정합성 콘솔 접근성·회복성 /admin/consistency (T-227)"
     await page.goto("/admin/consistency");
 
     // React Query 기본값(undefined→빈 배열)으로 graceful degradation: 헤더/패널이 렌더된다.
-    await expect(page.getByRole("heading", { name: "Consistency" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: ADMIN_PAGES.consistency.title })
+    ).toBeVisible();
     await expect(page.getByText("Reports").first()).toBeVisible();
   });
 

@@ -58,6 +58,34 @@ test.describe("LIVE admin API read-only contracts", () => {
     expect(rows.every((line) => typeof line === "string")).toBe(true);
   });
 
+  test("storage file inventory returns items and summary", async ({ request }) => {
+    const res = await proxyGet(request, "v1/admin/storage/files", { limit: 50 });
+    expect(res.status()).toBe(200);
+    const body = (await res.json()) as {
+      items: Array<Record<string, unknown>>;
+      summary: Record<string, unknown>;
+    };
+    expect(Array.isArray(body.items)).toBe(true);
+    expect(typeof body.summary.total_count).toBe("number");
+    expect(typeof body.summary.total_bytes).toBe("number");
+    for (const item of body.items) {
+      expect(typeof item.id).toBe("string");
+      expect(typeof item.lifecycle).toBe("string");
+      expect(typeof item.in_use).toBe("boolean");
+      expect(typeof item.temporary).toBe("boolean");
+    }
+  });
+
+  test("storage file inventory temporary filter narrows results", async ({ request }) => {
+    const res = await proxyGet(request, "v1/admin/storage/files", {
+      limit: 50,
+      temporary_only: "true"
+    });
+    expect(res.status()).toBe(200);
+    const body = (await res.json()) as { items: Array<{ temporary: boolean }> };
+    expect(body.items.every((item) => item.temporary)).toBe(true);
+  });
+
   test("backup allowed dirs endpoint returns dirs", async ({ request }) => {
     const res = await proxyGet(request, "v1/admin/backups/allowed-dirs");
     expect(res.status()).toBe(200);

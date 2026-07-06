@@ -9,6 +9,43 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.status = status;
   }
+
+  /** message(=raw 응답 본문)가 JSON이면 파싱해 반환하고, 아니면 null. */
+  get body(): unknown {
+    try {
+      return JSON.parse(this.message) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  /** 백엔드 관례인 `{"detail": ...}` 본문에서 detail만 추출한다 (없으면 null). */
+  get detail(): unknown {
+    const body = this.body;
+    if (body && typeof body === "object" && "detail" in body) {
+      return (body as { detail: unknown }).detail;
+    }
+    return null;
+  }
+}
+
+/**
+ * 오류를 사용자에게 보여줄 한 줄 문자열로 정리한다. ApiError는 raw JSON 본문 대신
+ * detail/error/message 필드를 우선 노출한다.
+ */
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const body = error.body;
+    if (body && typeof body === "object") {
+      const record = body as Record<string, unknown>;
+      const candidate = record.detail ?? record.error ?? record.message;
+      if (typeof candidate === "string" && candidate) return candidate;
+      if (candidate != null) return JSON.stringify(candidate);
+    }
+    return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 export function backendPath(path: string): string {

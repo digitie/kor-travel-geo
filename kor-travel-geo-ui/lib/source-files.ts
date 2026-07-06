@@ -320,5 +320,21 @@ export function suggestYyyymm(now: Date = new Date()): string {
 }
 
 export function isValidYyyymm(value: string): boolean {
-  return /^\d{6}$/.test(value);
+  return /^\d{4}(0[1-9]|1[0-2])$/.test(value);
+}
+
+/** 최근 n개월의 YYYYMM 목록 (이번 달부터 과거순) — 기준년월 입력 보조용. */
+export function recentYyyymmOptions(count = 24, now: Date = new Date()): string[] {
+  const options: string[] = [];
+  let year = now.getFullYear();
+  let month = now.getMonth() + 1;
+  for (let index = 0; index < count; index += 1) {
+    options.push(`${year}${String(month).padStart(2, "0")}`);
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+  }
+  return options;
 }

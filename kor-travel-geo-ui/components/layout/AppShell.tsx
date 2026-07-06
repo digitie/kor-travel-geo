@@ -1,21 +1,19 @@
 "use client";
 
 import {
-  Activity,
   Archive,
   BarChart3,
   Braces,
   Database,
   FileText,
+  Files,
   FolderUp,
-  GitBranch,
+  LayoutDashboard,
   ListChecks,
   LogOut,
   MapPinned,
   Menu,
-  RotateCcw,
   Search,
-  Server,
   Settings,
   ShieldCheck,
   TerminalSquare,
@@ -24,6 +22,7 @@ import {
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
+import { ADMIN_NAV_GROUPS, ADMIN_PAGES, type AdminPageKey } from "@/lib/admin-pages";
 import { useModalA11y } from "@/lib/use-modal-a11y";
 
 const debugLinks = [
@@ -33,17 +32,30 @@ const debugLinks = [
   { href: "/debug/explain", label: "Explain", icon: TerminalSquare }
 ];
 
-const adminLinks = [
-  { href: "/admin/source-files", label: "Source Files", icon: FolderUp },
-  { href: "/admin/load", label: "Load", icon: GitBranch },
-  { href: "/admin/backups", label: "Backups", icon: Archive },
-  { href: "/admin/tables", label: "Tables", icon: Database },
-  { href: "/admin/cache", label: "Cache", icon: BarChart3 },
-  { href: "/admin/logs", label: "Logs", icon: FileText },
-  { href: "/admin/consistency", label: "Consistency", icon: ListChecks },
-  { href: "/admin/ops", label: "Ops", icon: ShieldCheck },
-  { href: "/admin/settings", label: "Settings", icon: Settings }
-];
+const adminIcons: Record<AdminPageKey, typeof Search> = {
+  home: LayoutDashboard,
+  sourceFiles: FolderUp,
+  files: Files,
+  consistency: ListChecks,
+  backups: Archive,
+  ops: ShieldCheck,
+  logs: FileText,
+  tables: Database,
+  cache: BarChart3,
+  settings: Settings,
+  load: FolderUp
+};
+
+// 사이드바 그룹: 조회·진단(디버그) + 관리 홈 + lib/admin-pages.ts의 기능 그룹.
+// 같은 페이지를 다른 이름으로 다시 노출하던 Runtime 별칭 그룹은 제거했다.
+const adminNavGroups = ADMIN_NAV_GROUPS.map((group) => ({
+  title: group.title,
+  links: group.keys.map((key) => ({
+    href: ADMIN_PAGES[key].path,
+    label: ADMIN_PAGES[key].title,
+    icon: adminIcons[key]
+  }))
+}));
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -123,23 +135,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <strong>kor-travel-geo-ui</strong>
           <span>내부 운영 콘솔</span>
         </div>
-        <NavGroup title="Debug" links={debugLinks} onNavigate={closeMenu} />
-        <NavGroup title="Admin" links={adminLinks} onNavigate={closeMenu} />
-        <div className="nav-group">
-          <p className="nav-title">Runtime</p>
-          <DocumentNavLink className="nav-link" href="/admin/cache" onNavigate={closeMenu}>
-            <Activity size={17} />
-            Metrics
+        <NavGroup title="조회·진단" links={debugLinks} onNavigate={closeMenu} />
+        <nav className="nav-group" aria-label="관리 홈">
+          <p className="nav-title">관리</p>
+          <DocumentNavLink
+            className="nav-link"
+            href={ADMIN_PAGES.home.path}
+            onNavigate={closeMenu}
+          >
+            <LayoutDashboard size={17} />
+            {ADMIN_PAGES.home.title}
           </DocumentNavLink>
-          <DocumentNavLink className="nav-link" href="/admin/load" onNavigate={closeMenu}>
-            <RotateCcw size={17} />
-            MV refresh
-          </DocumentNavLink>
-          <DocumentNavLink className="nav-link" href="/admin/tables" onNavigate={closeMenu}>
-            <Server size={17} />
-            PostGIS
-          </DocumentNavLink>
-        </div>
+        </nav>
+        {adminNavGroups.map((group) => (
+          <NavGroup
+            key={group.title}
+            title={group.title}
+            links={group.links}
+            onNavigate={closeMenu}
+          />
+        ))}
         <div className="sidebar-footer">
           <button className="nav-link nav-button" type="button" onClick={() => void logout()}>
             <LogOut size={17} />

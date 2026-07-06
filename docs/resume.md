@@ -2,8 +2,19 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-06-24 갱신, by codex)
+## 현재 진척도 (2026-07-06 갱신, by codex)
 
+- [/ ] PR #406 Claude Code 리뷰 후속 진행 중 — 최근 5일(2026-07-01 KST 이후) Claude Code 공동 작성 PR을
+  closed 포함으로 확인했고, 닫힌 대상은 없으며 open PR #406만 대상이었다. PR #406에는 리뷰 코멘트를
+  남겼고, #407(CRLF/후행 공백), #408(파일 인벤토리 API `limit`/`category`/`lifecycle` 정합성),
+  #409(mypy 2.1 optional `osgeo` import ignore 코드)를 이슈로 묶었다. 현재 fixup은 PR #406 clean worktree
+  `/mnt/f/dev/kor-travel-geo-codex-pr406`의 `agent/codex-pr406-review` 브랜치에 반영 중이다.
+  완료된 보정은 CRLF 47개 파일 LF 정규화, `git diff --check origin/main` 통과, 파일 인벤토리 API의
+  전체 limit 적용/category 일관 필터/source group staging 판정 보정, optional GDAL import ignore 보정,
+  `tests/unit/test_file_inventory.py` 15 passed, targeted `ruff`, targeted `mypy`, WSL/ext4 전체 backend gate
+  (`pytest -q` 1125 passed/67 skipped, `ruff`, `mypy`, `lint-imports`, OpenAPI check), frontend
+  `scripts/frontend_check.sh`, React Doctor `ok=true`/error 0/warning 24 통과다. 남은 작업은 push 전 보안 감사,
+  PR #406 branch push/CI 확인, PR 머지, #407/#408/#409 닫기, 백업 리스토어를 제외한 live UI e2e 실행이다.
 - ✅ Linux-only 개발환경 정책 문서화 — 사용자 지시에 따라 ADR-065를 추가하고 ADR-041을 superseded 처리했다.
   모든 개발 명령은 Linux/WSL에서 실행하며 Git/CodeGraph도 Linux 경로 기준으로 repair·실행한다. 테스트와
   장기 실행은 WSL ext4 미러에서 수행하고, Playwright e2e는 n150 Linux 환경을 우선 사용하며 불가할 때만

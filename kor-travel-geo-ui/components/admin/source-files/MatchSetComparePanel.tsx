@@ -2,7 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { HelpTip } from "@/components/admin/shared/HelpTip";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Panel } from "@/components/ui/Panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import { requestJson } from "@/lib/api";
@@ -77,7 +81,13 @@ export function MatchSetComparePanel({ matchSets }: { matchSets: SourceMatchSet[
   const [aId, setAId] = useState<string>("");
   const [bId, setBId] = useState<string>("");
   const effectiveA = aId || sorted[0]?.source_match_set_id || "";
-  const effectiveB = bId || sorted.find((s) => s.source_match_set_id !== effectiveA)?.source_match_set_id || "";
+  // B 후보는 A를 제외한 나머지 — 같은 세트 비교 실수를 원천 차단한다.
+  const bOptions = useMemo(
+    () => sorted.filter((s) => s.source_match_set_id !== effectiveA),
+    [sorted, effectiveA]
+  );
+  const effectiveB =
+    (bId !== effectiveA ? bId : "") || bOptions[0]?.source_match_set_id || "";
 
   const { data: detailA } = useQuery({
     queryKey: ["source-match-set", effectiveA],
@@ -96,36 +106,53 @@ export function MatchSetComparePanel({ matchSets }: { matchSets: SourceMatchSet[
       : null;
 
   return (
-    <Panel title="매칭 세트 비교 (구성 diff)">
+    <Panel
+      title="매칭 세트 비교"
+      badges={
+        <HelpTip label="매칭 세트 비교 도움말">
+          두 매칭 세트의 카테고리 구성 차이(구성 diff)를 브라우저에서 비교합니다 — 기준(A)은
+          활성 세트가 앞에 정렬됩니다.
+        </HelpTip>
+      }
+    >
       <div className="form-grid compare-selectors">
-        <label className="field">
-          <span>기준 (A)</span>
-          <select onChange={(e) => setAId(e.target.value)} value={effectiveA}>
+        <Field>
+          <FieldLabel htmlFor="match-set-compare-a">기준 (A)</FieldLabel>
+          <NativeSelect
+            id="match-set-compare-a"
+            onChange={(e) => setAId(e.target.value)}
+            value={effectiveA}
+          >
             {sorted.map((s) => (
               <option key={s.source_match_set_id} value={s.source_match_set_id}>
                 {s.name} · {matchSetStateLabels[s.state]}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>비교 (B)</span>
-          <select onChange={(e) => setBId(e.target.value)} value={effectiveB}>
-            {sorted.map((s) => (
+          </NativeSelect>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="match-set-compare-b">비교 (B)</FieldLabel>
+          <NativeSelect
+            id="match-set-compare-b"
+            onChange={(e) => setBId(e.target.value)}
+            value={effectiveB}
+          >
+            {bOptions.map((s) => (
               <option key={s.source_match_set_id} value={s.source_match_set_id}>
                 {s.name} · {matchSetStateLabels[s.state]}
               </option>
             ))}
-          </select>
-        </label>
+          </NativeSelect>
+        </Field>
       </div>
 
       {sorted.length < 2 ? (
         <p className="form-note">비교하려면 매칭 세트가 2개 이상 필요합니다.</p>
-      ) : effectiveA === effectiveB ? (
-        <p className="form-note">같은 세트를 선택했습니다. 서로 다른 두 세트를 고르세요.</p>
       ) : !diff ? (
-        <p className="form-note">상세를 불러오는 중…</p>
+        <div className="grid gap-2">
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-3/4" />
+        </div>
       ) : (
         <>
           <p className="compare-counts">

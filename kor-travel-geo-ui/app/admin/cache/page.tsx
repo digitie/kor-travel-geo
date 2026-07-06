@@ -1,10 +1,14 @@
 import { CachePanel } from "@/components/admin/CachePanel";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ADMIN_PAGES } from "@/lib/admin-pages";
 
 export default function CachePage() {
   return (
     <>
-      <PageHeader title="Cache" description="외부 API 캐시의 현재 크기와 hit 누적치 확인" />
+      <PageHeader
+        title={ADMIN_PAGES.cache.title}
+        description={ADMIN_PAGES.cache.description}
+      />
       <CachePanel />
     </>
   );

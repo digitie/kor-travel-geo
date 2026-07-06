@@ -93,18 +93,18 @@ test.describe("운영 콘솔 접근성·회복성 /admin/ops (T-227)", () => {
     await page.goto("/admin/ops");
 
     // 성능·검증 요약 패널은 살아 있고 오류를 role=alert로 노출한다(앱이 죽지 않음).
-    const perf = page.locator(".panel", { hasText: "성능·검증 요약 (read-only)" });
+    const perf = page.locator(".panel", { hasText: "성능·검증 요약" });
     await expect(perf).toBeVisible();
     await expect(perf.getByRole("alert")).toBeVisible();
-    // 나머지 운영 패널(Serving Releases)도 여전히 렌더된다.
-    await expect(page.getByText("Serving Releases")).toBeVisible();
+    // 나머지 운영 패널(서빙 릴리스)도 여전히 렌더된다.
+    await expect(page.getByRole("heading", { name: "서빙 릴리스", exact: true })).toBeVisible();
   });
 
   test("키보드: 정합성 상세 링크를 focus→Enter로 이동할 수 있다", async ({ page }) => {
     await mockOpsApi(page);
     await page.goto("/admin/ops");
 
-    const perf = page.locator(".panel", { hasText: "성능·검증 요약 (read-only)" });
+    const perf = page.locator(".panel", { hasText: "성능·검증 요약" });
     const detail = perf.getByRole("link", { name: /상세/ });
     await detail.focus();
     await expect(detail).toBeFocused();
@@ -116,7 +116,7 @@ test.describe("운영 콘솔 접근성·회복성 /admin/ops (T-227)", () => {
     await mockOpsApi(page);
     await page.goto("/admin/ops");
 
-    const perf = page.locator(".panel", { hasText: "성능·검증 요약 (read-only)" });
+    const perf = page.locator(".panel", { hasText: "성능·검증 요약" });
     await expect(perf.getByText("load_matrix")).toBeVisible();
 
     await page.reload();

@@ -1,10 +1,14 @@
 import { LogsPanel } from "@/components/admin/LogsPanel";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ADMIN_PAGES } from "@/lib/admin-pages";
 
 export default function LogsPage() {
   return (
     <>
-      <PageHeader title="Logs" description="load_jobs에 영속된 최근 진행 로그 확인" />
+      <PageHeader
+        title={ADMIN_PAGES.logs.title}
+        description={ADMIN_PAGES.logs.description}
+      />
       <LogsPanel />
     </>
   );

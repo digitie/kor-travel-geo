@@ -1,5 +1,6 @@
 import { ConsistencyPanel } from "@/components/admin/ConsistencyPanel";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ADMIN_PAGES } from "@/lib/admin-pages";
 
 export default async function ConsistencyReportPage({
   params
@@ -9,7 +10,10 @@ export default async function ConsistencyReportPage({
   const { report_id } = await params;
   return (
     <>
-      <PageHeader title="Consistency" description="C1~C10 정합성 sample 분석과 수동 판정" />
+      <PageHeader
+        title={ADMIN_PAGES.consistency.title}
+        description={ADMIN_PAGES.consistency.description}
+      />
       <ConsistencyPanel initialReportId={report_id} />
     </>
   );

@@ -1,10 +1,13 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { RefreshButton } from "@/components/admin/shared/RefreshButton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/Panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
-import { TableStat, requestJson } from "@/lib/api";
+import { getErrorMessage, requestJson, type TableStat } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { tableDescription } from "@/lib/table-descriptions";
 
@@ -44,36 +47,44 @@ const columns: VirtualColumn<TableStat>[] = [
 ];
 
 export function TableStatsPanel() {
-  const [rows, setRows] = useState<TableStat[]>([]);
-
-  async function load() {
-    setRows(await requestJson<TableStat[]>("/admin/tables"));
-  }
-
-  useEffect(() => {
-    void load();
-  }, []);
+  const { data, error, isError, isFetching, isPending, refetch } = useQuery({
+    queryKey: ["admin-tables"],
+    queryFn: () => requestJson<TableStat[]>("/admin/tables")
+  });
 
   return (
     <Panel
-      title="PostgreSQL Tables"
-      actions={
-        <button className="button secondary" onClick={load} type="button">
-          <RefreshCw size={16} />
-          새로고침
-        </button>
-      }
+      title="PostgreSQL 테이블"
+      actions={<RefreshButton busy={isFetching} onClick={() => void refetch()} />}
     >
-      <VirtualTable
-        as="table"
-        caption="PostgreSQL 테이블 통계"
-        columns={columns}
-        emptyHint="테이블 통계가 없습니다."
-        getSearchText={(r) => `${r.table_name} ${tableDescription(r.table_name)}`}
-        rowKey={(r) => r.table_name}
-        rows={rows}
-        searchPlaceholder="테이블 검색"
-      />
+      {isPending ? (
+        <div aria-hidden="true" className="grid gap-2">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ) : isError ? (
+        <Alert role="alert" variant="destructive">
+          <AlertTitle>테이블 통계를 불러오지 못했습니다</AlertTitle>
+          <AlertDescription>
+            <p>{getErrorMessage(error)}</p>
+            <Button onClick={() => void refetch()} size="sm" type="button" variant="outline">
+              다시 시도
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <VirtualTable
+          as="table"
+          caption="PostgreSQL 테이블 통계"
+          columns={columns}
+          emptyHint="테이블 통계가 없습니다."
+          getSearchText={(r) => `${r.table_name} ${tableDescription(r.table_name)}`}
+          rowKey={(r) => r.table_name}
+          rows={data ?? []}
+          searchPlaceholder="테이블 검색"
+        />
+      )}
     </Panel>
   );
 }

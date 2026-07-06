@@ -46,3 +46,10 @@ export function backupProfileLabel(profile?: unknown): string {
   if (profile === "forensic") return "forensic";
   return "-";
 }
+
+/** 백업 프로파일별 한 줄 설명 — 폼 선택지/도움말에서 사용한다. */
+export const backupProfileDescriptions: Record<string, string> = {
+  "serving-ready": "서빙에 필요한 전체 구성 — 복원 후 바로 운영 가능 (기본)",
+  "lean-serving": "서빙 최소 구성 — 용량이 작지만 일부 보조 데이터 제외",
+  forensic: "원본 보존용 전체 백업 — 가장 크고 가장 완전함"
+};

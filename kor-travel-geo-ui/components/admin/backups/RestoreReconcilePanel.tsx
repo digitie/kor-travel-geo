@@ -1,18 +1,26 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
+import { XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { JsonBlock } from "@/components/ui/JsonBlock";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Panel } from "@/components/ui/Panel";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
+import { EmptyState } from "@/components/admin/shared/EmptyState";
+import { IssueList } from "@/components/admin/shared/IssueList";
+import { JsonDetails } from "@/components/admin/shared/JsonDetails";
+import { RefreshButton } from "@/components/admin/shared/RefreshButton";
+import { textValue, triState } from "@/components/admin/backups/manifest-utils";
 import { reconcileFromManifest } from "@/components/admin/backups/restore-reconcile-utils";
 import {
+  getErrorMessage,
   type OpsArtifact,
   type RestoreReconcileResult,
   type RestoreRowCountDiff,
   requestJson
 } from "@/lib/api";
+import { formatTimestamp } from "@/lib/format";
 
 const reconcileColumns: VirtualColumn<RestoreRowCountDiff>[] = [
   { key: "object", header: "object", cell: (d) => d.object },
@@ -35,16 +43,22 @@ const reconcileColumns: VirtualColumn<RestoreRowCountDiff>[] = [
 export function RestoreReconcilePanel() {
   const [rows, setRows] = useState<OpsArtifact[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
+    setBusy(true);
     try {
       const arts = await requestJson<OpsArtifact[]>(
         "/admin/ops/artifacts?artifact_type=db_restore_log&limit=20"
       );
       setRows(arts);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+      setBusy(false);
     }
   }, []);
 
@@ -55,20 +69,21 @@ export function RestoreReconcilePanel() {
   return (
     <Panel
       title="복원 reconcile 결과"
-      actions={
-        <button className="button secondary" onClick={() => void load()} type="button">
-          <RefreshCw size={16} />
-          새로고침
-        </button>
-      }
+      actions={<RefreshButton busy={busy} onClick={() => void load()} />}
     >
       {error ? (
-        <p className="wizard-error" role="alert">
-          {error}
-        </p>
+        <Alert role="alert" variant="destructive">
+          <XCircle aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
-      {rows.length === 0 ? (
-        <p className="wizard-hint">복원 기록이 없습니다. [복원] 위저드로 복원을 실행하세요.</p>
+      {loading ? (
+        <div className="grid gap-2">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyState>복원 기록이 없습니다. [복원] 위저드로 복원을 실행하세요.</EmptyState>
       ) : (
         <div className="reconcile-list">
           {rows.map((artifact) => (
@@ -92,7 +107,8 @@ function RestoreReconcileCard({
   reconcile: RestoreReconcileResult | null;
 }) {
   const target =
-    reconcile?.target_database ?? text(artifact.manifest?.["target_database"]) ?? "—";
+    reconcile?.target_database ?? textValue(artifact.manifest?.["target_database"]) ?? "—";
+  const mv = triState(reconcile?.mv_nonempty_ok);
   return (
     <div className="reconcile-card">
       <div className="reconcile-head">
@@ -104,7 +120,7 @@ function RestoreReconcileCard({
         )}
       </div>
       <p className="wizard-hint">
-        대상 DB: {String(target)} · {artifact.created_at.slice(0, 19).replace("T", " ")}
+        대상 DB: {String(target)} · {formatTimestamp(artifact.created_at)}
       </p>
       {reconcile ? (
         <>
@@ -119,36 +135,21 @@ function RestoreReconcileCard({
             />
           ) : null}
           <ul className="manifest-kv">
-            <li>
-              MV non-empty:{" "}
-              {reconcile.mv_nonempty_ok === true ? "✅" : reconcile.mv_nonempty_ok === false ? "❌" : "—"}{" "}
-              · mv_target {reconcile.mv_geocode_target_rows ?? "—"} / mv_text{" "}
+            <li className="flex flex-wrap items-center gap-1">
+              MV non-empty: <StatusBadge tone={mv.tone} value={mv.label} /> · mv_target{" "}
+              {reconcile.mv_geocode_target_rows ?? "—"} / mv_text{" "}
               {reconcile.mv_geocode_text_search_rows ?? "—"}
             </li>
             <li>sppn: {reconcile.sppn_rows ?? "—"}</li>
           </ul>
           {reconcile.pt_source_distribution ? (
-            <details className="reconcile-detail">
-              <summary>pt_source 분포</summary>
-              <JsonBlock value={reconcile.pt_source_distribution} />
-            </details>
+            <JsonDetails summary="pt_source 분포" value={reconcile.pt_source_distribution} />
           ) : null}
           {reconcile.warnings && reconcile.warnings.length > 0 ? (
-            <div className="wizard-list warn">
-              <strong>warnings</strong>
-              <ul>
-                {reconcile.warnings.map((w) => (
-                  <li key={w}>{w}</li>
-                ))}
-              </ul>
-            </div>
+            <IssueList items={reconcile.warnings} title="warnings" tone="warn" />
           ) : null}
         </>
       ) : null}
     </div>
   );
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }

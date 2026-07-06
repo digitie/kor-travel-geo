@@ -1,6 +1,8 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
+import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { formatBytes } from "@/lib/format";
 import type { SourceRetentionRecommendation } from "@/lib/source-files";
 
@@ -20,22 +22,21 @@ export function RetentionWarning({
     return null;
   }
   return (
-    <div className="retention-alert" role="alert">
-      <div className="retention-alert-head">
-        <AlertTriangle size={16} />
-        <strong>저장소 용량 한도 초과 — 정리 권장</strong>
-      </div>
-      {retention.guidance ? <p>{retention.guidance}</p> : null}
-      <dl className="criteria-grid">
-        <div>
-          <dt>정리 가능 용량</dt>
-          <dd>{formatBytes(retention.reclaimable_bytes)}</dd>
-        </div>
-        <div>
-          <dt>정리 대상 객체</dt>
-          <dd>{retention.eligible_object_count.toLocaleString()}건</dd>
-        </div>
-      </dl>
-    </div>
+    <Alert role="alert" variant="warning">
+      <AlertTriangle aria-hidden="true" />
+      <AlertTitle>저장소 용량 한도 초과 — 정리 권장</AlertTitle>
+      <AlertDescription>
+        {retention.guidance ? <p>{retention.guidance}</p> : null}
+        <KeyValueGrid
+          items={[
+            { label: "정리 가능 용량", value: formatBytes(retention.reclaimable_bytes) },
+            {
+              label: "정리 대상 객체",
+              value: `${retention.eligible_object_count.toLocaleString()}건`
+            }
+          ]}
+        />
+      </AlertDescription>
+    </Alert>
   );
 }

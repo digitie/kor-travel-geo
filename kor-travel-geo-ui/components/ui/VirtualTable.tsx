@@ -288,8 +288,12 @@ export function VirtualTable<T>({
           </span>
         </div>
       )}
-      <div className="vtable-grid">
-        <div className="vtable-head" style={{ gridTemplateColumns: gridTemplate }}>
+      <div aria-label={caption} className="vtable-grid" role="table">
+        <div
+          className="vtable-head"
+          role="row"
+          style={{ gridTemplateColumns: gridTemplate }}
+        >
           {headers.map((header) => {
             const col = colByKey.get(header.column.id);
             const canSort = header.column.getCanSort();
@@ -298,6 +302,7 @@ export function VirtualTable<T>({
                 aria-sort={canSort ? ariaSort(header.column.getIsSorted()) : undefined}
                 className="vtable-th"
                 key={header.id}
+                role="columnheader"
                 style={col?.align ? { textAlign: col.align } : undefined}
               >
                 {headerButton(header)}
@@ -305,11 +310,14 @@ export function VirtualTable<T>({
             );
           })}
         </div>
-        <div className="vtable-body" ref={parentRef} style={{ height }}>
+        <div className="vtable-body" ref={parentRef} role="rowgroup" style={{ height }}>
           {modelRows.length === 0 ? (
             <p className="wizard-hint">{emptyHint}</p>
           ) : (
-            <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
+            <div
+              role="presentation"
+              style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}
+            >
               {virtualizer.getVirtualItems().map((item) => {
                 const row = modelRows[item.index] as Row<T>;
                 const rowClassName = getRowClassName?.(row.original);
@@ -327,10 +335,11 @@ export function VirtualTable<T>({
                   : {};
                 return (
                   <div
+                    {...rowClickProps}
+                    key={row.id}
                     className={`vtable-row${rowClassName ? ` ${rowClassName}` : ""}`}
                     data-clickable={onRowClick ? true : undefined}
-                    key={row.id}
-                    {...rowClickProps}
+                    role="row"
                     style={{
                       gridTemplateColumns: gridTemplate,
                       height: item.size,
@@ -347,6 +356,7 @@ export function VirtualTable<T>({
                         <div
                           className={col?.cellClassName ? `vtable-td ${col.cellClassName}` : "vtable-td"}
                           key={cell.id}
+                          role="cell"
                           style={col?.align ? { textAlign: col.align } : undefined}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}

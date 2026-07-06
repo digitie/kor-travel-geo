@@ -74,6 +74,11 @@ from .dto.admin import (
     TableStat,
     TableStatsSnapshot,
 )
+from .dto.file_inventory import (
+    FileInventoryItem,
+    FileInventoryPage,
+    FileInventorySourceDetail,
+)
 from .dto.geocode import FallbackMode, GeocodeInput, GeocodeResponse
 from .dto.pobox import PoboxInput, PoboxKind, PoboxResponse
 from .dto.region import RegionHint
@@ -1902,6 +1907,62 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             state=state,
             expires_before=expires_before,
         )
+
+    async def file_inventory_page(
+        self,
+        *,
+        kind: str = "all",
+        category: str | None = None,
+        lifecycle: str | None = None,
+        temporary_only: bool = False,
+        limit: int = 200,
+    ) -> FileInventoryPage:
+        """통합 파일 인벤토리 (T-283): 원천 그룹 + artifact + 고아 객체."""
+        from .core.file_inventory import build_inventory_summary
+        from .infra.file_inventory_repo import (
+            FileInventoryRepository,
+            artifact_inventory_item,
+        )
+
+        repo = FileInventoryRepository(self._engine())
+        items: list[FileInventoryItem] = []
+        if kind in ("all", "source_group"):
+            items.extend(await repo.list_source_groups(category=category, limit=limit))
+        if kind in ("all", "artifact"):
+            artifacts = await AdminRepository(self._engine()).list_artifacts(
+                limit=limit, artifact_type=category
+            )
+            items.extend(artifact_inventory_item(artifact) for artifact in artifacts)
+        if kind in ("all", "orphan_object") and category in (None, "rustfs_object"):
+            items.extend(await repo.list_orphan_objects(limit=limit))
+
+        if lifecycle:
+            items = [item for item in items if item.lifecycle == lifecycle]
+        if temporary_only:
+            items = [item for item in items if item.temporary]
+        items.sort(
+            key=lambda item: item.acquired_at.timestamp() if item.acquired_at else 0.0,
+            reverse=True,
+        )
+        items = items[:limit]
+        return FileInventoryPage(
+            items=tuple(items), summary=build_inventory_summary(items)
+        )
+
+    async def file_inventory_source_group(
+        self, source_file_group_id: str
+    ) -> FileInventorySourceDetail:
+        """파일 그룹 1건의 연결 추적 상세 (T-283)."""
+        from .infra.file_inventory_repo import FileInventoryRepository
+
+        detail = await FileInventoryRepository(self._engine()).get_source_group_detail(
+            source_file_group_id
+        )
+        if detail is None:
+            from .exceptions import NotFoundError
+
+            raise NotFoundError(f"source file group not found: {source_file_group_id}")
+        return detail
 
     async def get_artifact(self, artifact_id: str) -> OpsArtifact:
         artifact = await AdminRepository(self._engine()).get_artifact(artifact_id)

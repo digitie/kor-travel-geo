@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AdminTabs, AdminTabsContent } from "@/components/admin/shared/AdminTabs";
 import { CurrentConfigTab } from "@/components/admin/source-files/CurrentConfigTab";
 import { ListTab } from "@/components/admin/source-files/ListTab";
 import { MatchSetsTab } from "@/components/admin/source-files/MatchSetsTab";
@@ -16,13 +17,13 @@ export type SourceFilesTabId =
   | "current"
   | "cases";
 
-const TABS: { id: SourceFilesTabId; label: string }[] = [
-  { id: "upload", label: "업로드" },
-  { id: "list", label: "목록" },
-  { id: "match", label: "매칭 세트" },
-  { id: "reconcile", label: "RustFS 정합성" },
-  { id: "current", label: "현재 구성" },
-  { id: "cases", label: "검증 케이스" }
+const TABS: { value: SourceFilesTabId; label: string }[] = [
+  { value: "upload", label: "업로드" },
+  { value: "list", label: "목록" },
+  { value: "match", label: "매칭 세트" },
+  { value: "reconcile", label: "RustFS 정합성" },
+  { value: "current", label: "현재 구성" },
+  { value: "cases", label: "검증 케이스" }
 ];
 
 export function SourceFilesPanel({
@@ -34,46 +35,31 @@ export function SourceFilesPanel({
 
   return (
     <div className="source-files-shell">
-      <nav aria-label="원천 파일 탭" className="case-tabs">
-        <div
-          aria-label="원천 파일 관리 탭"
-          aria-orientation="horizontal"
-          className="case-tab-list"
-          role="tablist"
-        >
-          {TABS.map((tab) => {
-            const isSelected = tab.id === activeTab;
-            return (
-              <button
-                aria-controls="source-files-panel"
-                aria-selected={isSelected}
-                className={isSelected ? "case-tab active" : "case-tab"}
-                id={`source-tab-${tab.id}`}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                role="tab"
-                type="button"
-              >
-                <strong>{tab.label}</strong>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-
-      <section
-        aria-labelledby={`source-tab-${activeTab}`}
-        className="source-files-pane"
-        id="source-files-panel"
-        role="tabpanel"
+      <AdminTabs
+        label="원천 파일 관리 탭"
+        value={activeTab}
+        onValueChange={setActiveTab}
+        items={TABS}
       >
-        {activeTab === "upload" ? <UploadTab /> : null}
-        {activeTab === "list" ? <ListTab /> : null}
-        {activeTab === "match" ? <MatchSetsTab /> : null}
-        {activeTab === "reconcile" ? <ReconcileTab /> : null}
-        {activeTab === "current" ? <CurrentConfigTab /> : null}
-        {activeTab === "cases" ? <SourceCasesTab /> : null}
-      </section>
+        <AdminTabsContent className="source-files-pane" value="upload">
+          <UploadTab />
+        </AdminTabsContent>
+        <AdminTabsContent className="source-files-pane" value="list">
+          <ListTab />
+        </AdminTabsContent>
+        <AdminTabsContent className="source-files-pane" value="match">
+          <MatchSetsTab />
+        </AdminTabsContent>
+        <AdminTabsContent className="source-files-pane" value="reconcile">
+          <ReconcileTab />
+        </AdminTabsContent>
+        <AdminTabsContent className="source-files-pane" value="current">
+          <CurrentConfigTab />
+        </AdminTabsContent>
+        <AdminTabsContent className="source-files-pane" value="cases">
+          <SourceCasesTab />
+        </AdminTabsContent>
+      </AdminTabs>
     </div>
   );
 }

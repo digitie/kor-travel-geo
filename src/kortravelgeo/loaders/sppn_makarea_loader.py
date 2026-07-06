@@ -132,7 +132,7 @@ def _load_sources_sync(
     cancel_event: asyncio.Event | None,
 ) -> int:
     try:
-        from osgeo import gdal  # type: ignore[import-untyped]
+        from osgeo import gdal  # type: ignore[import-not-found,import-untyped,unused-ignore]
     except ImportError as exc:  # pragma: no cover - depends on optional system GDAL
         msg = "GDAL Python binding is required for SPPN makarea loading"
         raise LoaderError(msg) from exc

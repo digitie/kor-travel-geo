@@ -97,6 +97,21 @@ npx playwright test --config playwright.config.ts --project firefox --workers 1 
 
 기본 mock 런(`npx playwright test`, `LIVE_E2E` 없음)은 `live/*`를 건너뛰므로 영향 없다.
 
+### mock 런의 admin 로그인 (PLAYWRIGHT_MOCK_LOGIN)
+
+admin 화면은 fail-closed 인증 뒤에 있으므로 mock 스펙도 로그인 세션이 필요하다.
+`PLAYWRIGHT_MOCK_LOGIN=1`이면 `tests/e2e/mock-auth-setup.ts`(globalSetup)가
+`POST /api/auth/login`으로 로그인해 storageState를 저장하고 모든 mock 스펙이 이를 공유한다.
+서버(.env: `KTG_UI_ADMIN_PASSWORD_HASH`/`KTG_UI_SESSION_SECRET`)와 테스트 프로세스
+(`KTG_LIVE_E2E_ADMIN_USERNAME`/`KTG_LIVE_E2E_ADMIN_PASSWORD`)의 자격증명이 일치해야 한다.
+
+```bash
+PLAYWRIGHT_MOCK_LOGIN=1 KTG_LIVE_E2E_ADMIN_PASSWORD=*** \
+npx playwright test --project chromium
+```
+
+live 스펙은 자체 로그인 헬퍼를 쓰므로 이 설정 없이 기존 방식대로 실행한다.
+
 n150에서 브라우저 실행이 불가능한 경우에는 Windows Playwright를 fallback으로 사용할 수 있다. 이때는
 `PLAYWRIGHT_BASE_URL`이 실제 UI 서버를 가리키는지 확인하고, fallback 사유·명령·브라우저 project·결과를
 `docs/journal.md` 또는 PR 설명에 남긴다. secret 값은 어느 환경에서도 문서화하지 않는다.

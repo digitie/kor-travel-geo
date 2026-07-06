@@ -2,17 +2,41 @@
 
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, RotateCcw, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useReducer } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+  FieldTitle
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { JsonBlock } from "@/components/ui/JsonBlock";
+import { NativeSelect } from "@/components/ui/native-select";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { HelpTip } from "@/components/admin/shared/HelpTip";
+import { IssueList } from "@/components/admin/shared/IssueList";
+import { TypedConfirmField } from "@/components/admin/shared/TypedConfirmField";
+import { WizardSteps } from "@/components/admin/shared/WizardSteps";
+import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
+import { nestedRecord, textValue, triState } from "@/components/admin/backups/manifest-utils";
 import {
   BackupArtifact,
   LoadJobStatus,
   RestoreDryRunResult,
+  getErrorMessage,
   postJson,
   requestJson
 } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { pgIdentifierSchema } from "@/lib/schemas";
+import { toast } from "@/lib/toast";
 
 type RestoreMode = "new_database" | "replace_current";
 type WizardStep = 1 | 2 | 3 | 4;
@@ -59,6 +83,12 @@ function restoreWizardReducer(
   return { ...state, ...patch };
 }
 
+function artifactOptionLabel(artifact: BackupArtifact): string {
+  const name = artifact.display_name ?? artifact.artifact_id;
+  const created = artifact.created_at ? ` · ${artifact.created_at.slice(0, 10)}` : "";
+  return `${name} · ${formatBytes(artifact.size_bytes)}${created}`;
+}
+
 export function RestoreWizard({
   onSubmitted
 }: {
@@ -87,7 +117,7 @@ export function RestoreWizard({
       const rows = await requestJson<BackupArtifact[]>("/admin/backups?limit=50&state=available");
       dispatchState({ artifacts: rows });
     } catch (err) {
-      dispatchState({ error: err instanceof Error ? err.message : String(err) });
+      dispatchState({ error: getErrorMessage(err) });
     }
   }, []);
 
@@ -129,7 +159,9 @@ export function RestoreWizard({
       });
       dispatchState({ dryRun: result, step: 3 });
     } catch (err) {
-      dispatchState({ error: err instanceof Error ? err.message : String(err) });
+      const message = getErrorMessage(err);
+      dispatchState({ error: message });
+      toast.error("dry-run 실패", message);
     } finally {
       dispatchState({ busy: false });
     }
@@ -140,15 +172,24 @@ export function RestoreWizard({
     try {
       const result = await postJson<LoadJobStatus>("/admin/restores", restoreBody);
       dispatchState({ submitted: result });
+      toast.success("복원 job이 제출됐습니다");
       onSubmitted?.(result);
     } catch (err) {
-      dispatchState({ error: err instanceof Error ? err.message : String(err) });
+      const message = getErrorMessage(err);
+      dispatchState({ error: message });
+      toast.error("복원 시작 실패", message);
     } finally {
       dispatchState({ busy: false });
     }
   }, [restoreBody, onSubmitted]);
 
-  const step1Valid = Boolean(artifactId || archivePath) && Boolean(targetDatabase);
+  const targetDbCheck = pgIdentifierSchema.safeParse(targetDatabase);
+  const targetDbError =
+    targetDatabase.length > 0 && !targetDbCheck.success
+      ? targetDbCheck.error.issues[0]?.message ?? "형식이 올바르지 않습니다"
+      : null;
+  const step1Valid =
+    Boolean(artifactId || archivePath) && Boolean(targetDatabase) && !targetDbError;
   const confirmationValid =
     mode === "new_database" ||
     (expectedConfirmation !== null && confirmation === expectedConfirmation);
@@ -158,18 +199,16 @@ export function RestoreWizard({
 
   return (
     <Panel title="복원 위저드">
-      <ol className="wizard-steps">
-        {([1, 2, 3, 4] as WizardStep[]).map((n) => (
-          <li className={n === step ? "wizard-step active" : "wizard-step"} key={n}>
-            {STEP_LABELS[n]}
-          </li>
-        ))}
-      </ol>
+      <WizardSteps
+        current={step - 1}
+        steps={[STEP_LABELS[1], STEP_LABELS[2], STEP_LABELS[3], STEP_LABELS[4]]}
+      />
 
       {error ? (
-        <p className="wizard-error" role="alert">
-          <XCircle size={15} /> {error}
-        </p>
+        <Alert role="alert" variant="destructive">
+          <XCircle aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       {submitted ? (
@@ -181,94 +220,129 @@ export function RestoreWizard({
         </div>
       ) : step === 1 ? (
         <div className="form-grid">
-          <div className="field">
-            <label htmlFor="rw-artifact">복원할 백업본 (artifact)</label>
-            <select
+          <Field>
+            <span className="flex items-center gap-1">
+              <FieldLabel htmlFor="rw-artifact">복원할 백업본</FieldLabel>
+              <HelpTip label="복원할 백업본 도움말">
+                API 필드 <code>artifact_id</code> — 등록된 백업본(state=available)을 선택합니다.
+                선택하지 않으면 아래 직접 경로(<code>archive_path</code>)로 복원합니다.
+              </HelpTip>
+            </span>
+            <NativeSelect
               id="rw-artifact"
               onChange={(e) => dispatchState({ artifactId: e.target.value })}
               value={artifactId}
             >
-              <option value="">직접 경로 사용 (archive_path)</option>
+              <option value="">직접 경로 사용</option>
               {artifacts.map((a) => (
                 <option key={a.artifact_id} value={a.artifact_id}>
-                  {(a.display_name ?? a.artifact_id) + ` · ${formatBytes(a.size_bytes)}`}
+                  {artifactOptionLabel(a)}
                 </option>
               ))}
-            </select>
-          </div>
+            </NativeSelect>
+          </Field>
           {artifactId ? null : (
-            <div className="field">
-              <label htmlFor="rw-archive">백업본 직접 경로 (archive_path)</label>
-              <input
+            <Field>
+              <span className="flex items-center gap-1">
+                <FieldLabel htmlFor="rw-archive">백업본 직접 경로</FieldLabel>
+                <HelpTip label="백업본 직접 경로 도움말">
+                  API 필드 <code>archive_path</code> — 서버 파일시스템의 백업 파일(
+                  <code>.tar.zst</code>) 경로.
+                </HelpTip>
+              </span>
+              <Input
                 id="rw-archive"
                 onChange={(e) => dispatchState({ archivePath: e.target.value })}
+                placeholder="/data/backups/backup.tar.zst"
                 value={archivePath}
               />
-            </div>
+            </Field>
           )}
-          <div className="field">
-            <label htmlFor="rw-mode">복원 모드 (mode)</label>
-            <select
-              id="rw-mode"
-              onChange={(e) => dispatchState({ mode: e.target.value as RestoreMode })}
-              value={mode}
-            >
-              <option value="new_database">new_database — 새 DB로 복원 (안전)</option>
-              <option value="replace_current">replace_current — 운영 DB 교체 (위험)</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="rw-target">복원 대상 DB 이름 (target_database)</label>
-            <input
+          <FieldSet>
+            <FieldLegend className="flex items-center gap-1" variant="label">
+              복원 모드
+              <HelpTip label="복원 모드 도움말">
+                API 필드 <code>mode</code> — <code>new_database</code> 또는{" "}
+                <code>replace_current</code>로 전송됩니다.
+              </HelpTip>
+            </FieldLegend>
+            <div className="grid gap-2">
+              <ModeCard
+                badge={<Badge tone="ok">안전</Badge>}
+                checked={mode === "new_database"}
+                description="별도 이름의 새 DB를 만들어 복원합니다 — 운영 DB는 그대로 둡니다."
+                id="rw-mode-new"
+                onSelect={() => dispatchState({ mode: "new_database" })}
+                title="새 DB로 복원"
+                value="new_database"
+              />
+              <ModeCard
+                badge={<Badge tone="error">위험</Badge>}
+                checked={mode === "replace_current"}
+                description="현재 운영 DB를 이 백업으로 교체합니다 — typed confirmation이 필요합니다."
+                destructive
+                id="rw-mode-replace"
+                onSelect={() => dispatchState({ mode: "replace_current" })}
+                title="운영 DB 교체"
+                value="replace_current"
+              />
+            </div>
+          </FieldSet>
+          <Field data-invalid={targetDbError ? true : undefined}>
+            <span className="flex items-center gap-1">
+              <FieldLabel htmlFor="rw-target">복원 대상 DB 이름</FieldLabel>
+              <HelpTip label="복원 대상 DB 이름 도움말">
+                API 필드 <code>target_database</code> — PostgreSQL 식별자: 소문자/숫자/밑줄, 문자로
+                시작, 63자 이하.
+              </HelpTip>
+            </span>
+            <Input
+              aria-invalid={targetDbError ? true : undefined}
               id="rw-target"
               onChange={(e) => dispatchState({ targetDatabase: e.target.value })}
               value={targetDatabase}
             />
+            {targetDbError ? <FieldError>{targetDbError}</FieldError> : null}
             {mode === "replace_current" ? (
-              <small className="wizard-hint">
+              <FieldDescription>
                 replace_current는 현재 운영 DB와 같은 이름이어야 하며 typed confirmation이
                 필요합니다.
-              </small>
+              </FieldDescription>
             ) : null}
-          </div>
+          </Field>
           <div className="button-row">
-            <button
-              className="button"
-              disabled={!step1Valid}
-              onClick={() => dispatchState({ step: 2 })}
-              type="button"
-            >
-              다음 <ArrowRight size={15} />
-            </button>
+            <Button disabled={!step1Valid} onClick={() => dispatchState({ step: 2 })} type="button">
+              다음 <ArrowRight aria-hidden="true" size={15} />
+            </Button>
           </div>
         </div>
       ) : step === 2 ? (
         <div className="wizard-preview">
-          <ManifestPreview artifact={selected} archivePath={archivePath} />
+          <ManifestPreview archivePath={archivePath} artifact={selected} />
           <div className="button-row">
-            <button className="button secondary" onClick={() => dispatchState({ step: 1 })} type="button">
-              <ArrowLeft size={15} /> 이전
-            </button>
-            <button className="button" disabled={busy} onClick={runDryRun} type="button">
-              dry-run 실행 <ArrowRight size={15} />
-            </button>
+            <Button onClick={() => dispatchState({ step: 1 })} type="button" variant="outline">
+              <ArrowLeft aria-hidden="true" size={15} /> 이전
+            </Button>
+            <Button disabled={busy} onClick={runDryRun} type="button">
+              dry-run 실행 <ArrowRight aria-hidden="true" size={15} />
+            </Button>
           </div>
         </div>
       ) : step === 3 ? (
         <div className="wizard-dryrun">
           <DryRunReport result={dryRun} />
           <div className="button-row">
-            <button className="button secondary" onClick={() => dispatchState({ step: 2 })} type="button">
-              <ArrowLeft size={15} /> 이전
-            </button>
-            <button className="button" onClick={() => dispatchState({ step: 4 })} type="button">
-              확인 단계로 <ArrowRight size={15} />
-            </button>
+            <Button onClick={() => dispatchState({ step: 2 })} type="button" variant="outline">
+              <ArrowLeft aria-hidden="true" size={15} /> 이전
+            </Button>
+            <Button onClick={() => dispatchState({ step: 4 })} type="button">
+              확인 단계로 <ArrowRight aria-hidden="true" size={15} />
+            </Button>
           </div>
         </div>
       ) : (
         <div className="wizard-confirm">
-          <DryRunReport result={dryRun} compact />
+          <DryRunReport compact result={dryRun} />
           {dryRun && !dryRun.can_restore ? (
             <p className="wizard-blocker" role="alert">
               <AlertTriangle size={15} /> dry-run이 복원 불가로 판정했습니다. 아래 blocker를 해소한
@@ -276,28 +350,77 @@ export function RestoreWizard({
             </p>
           ) : null}
           {mode === "replace_current" && expectedConfirmation ? (
-            <div className="confirm-box">
-              <span className="confirm-title">
-                운영 DB 교체 확인 — 정확히 <code>{expectedConfirmation}</code> 를 입력하세요
-              </span>
-              <input
-                aria-label="typed confirmation"
-                onChange={(e) => dispatchState({ confirmation: e.target.value })}
-                value={confirmation}
-              />
-            </div>
+            <TypedConfirmField
+              heading="운영 DB 교체 확인"
+              label="typed confirmation"
+              onChange={(value) => dispatchState({ confirmation: value })}
+              phrase={expectedConfirmation}
+              value={confirmation}
+            />
           ) : null}
           <div className="button-row">
-            <button className="button secondary" onClick={() => dispatchState({ step: 3 })} type="button">
-              <ArrowLeft size={15} /> 이전
-            </button>
-            <button className="button" disabled={!canSubmit} onClick={submitRestore} type="button">
-              <RotateCcw size={15} /> 복원 시작
-            </button>
+            <Button onClick={() => dispatchState({ step: 3 })} type="button" variant="outline">
+              <ArrowLeft aria-hidden="true" size={15} /> 이전
+            </Button>
+            <Button disabled={!canSubmit} onClick={submitRestore} type="button">
+              <RotateCcw aria-hidden="true" size={15} /> 복원 시작
+            </Button>
           </div>
         </div>
       )}
     </Panel>
+  );
+}
+
+/** 복원 모드 라디오 카드 — 안전(new_database) 기본, 위험(replace_current)은 destructive 강조. */
+function ModeCard({
+  id,
+  value,
+  title,
+  description,
+  badge,
+  checked,
+  destructive = false,
+  onSelect
+}: {
+  id: string;
+  value: RestoreMode;
+  title: string;
+  description: string;
+  badge: React.ReactNode;
+  checked: boolean;
+  destructive?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <FieldLabel
+      className={
+        destructive
+          ? "has-data-checked:border-[color-mix(in_srgb,var(--danger)_45%,transparent)] has-data-checked:bg-[color-mix(in_srgb,var(--danger)_6%,white)]"
+          : undefined
+      }
+      htmlFor={id}
+    >
+      <Field orientation="horizontal">
+        <FieldContent>
+          <FieldTitle>
+            {title} {badge}
+          </FieldTitle>
+          <FieldDescription>{description}</FieldDescription>
+        </FieldContent>
+        <input
+          aria-label={title}
+          checked={checked}
+          className="size-4 shrink-0 accent-[var(--brand)]"
+          data-checked={checked ? "" : undefined}
+          id={id}
+          name="rw-mode"
+          onChange={onSelect}
+          type="radio"
+          value={value}
+        />
+      </Field>
+    </FieldLabel>
   );
 }
 
@@ -317,29 +440,19 @@ function ManifestPreview({
     );
   }
   const manifest = artifact.manifest ?? {};
-  const database = nested(manifest, "database");
-  const backup = nested(manifest, "backup");
-  const rowCounts = nested(manifest, "row_counts");
+  const database = nestedRecord(manifest, "database");
+  const backup = nestedRecord(manifest, "backup");
+  const rowCounts = nestedRecord(manifest, "row_counts");
   return (
     <div className="wizard-manifest">
-      <dl className="wizard-meta">
-        <div>
-          <dt>profile</dt>
-          <dd>{text(backup?.profile) ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>PostgreSQL</dt>
-          <dd>{text(database?.postgres_version) ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>PostGIS</dt>
-          <dd>{text(database?.postgis_version) ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>size</dt>
-          <dd>{formatBytes(artifact.size_bytes)}</dd>
-        </div>
-      </dl>
+      <KeyValueGrid
+        items={[
+          { label: "profile", value: textValue(backup?.profile) ?? "-" },
+          { label: "PostgreSQL", value: textValue(database?.postgres_version) ?? "-" },
+          { label: "PostGIS", value: textValue(database?.postgis_version) ?? "-" },
+          { label: "size", value: formatBytes(artifact.size_bytes) }
+        ]}
+      />
       {rowCounts ? (
         <div className="wizard-rowcounts">
           <strong>row_counts</strong>
@@ -379,11 +492,14 @@ function DryRunReport({
       </p>
       {!compact ? (
         <ul className="wizard-checks">
-          {checks.map((c) => (
-            <li key={c.label}>
-              {c.ok === true ? "✅" : c.ok === false ? "❌" : "—"} {c.label}
-            </li>
-          ))}
+          {checks.map((c) => {
+            const state = triState(c.ok);
+            return (
+              <li className="flex items-center gap-2" key={c.label}>
+                <StatusBadge tone={state.tone} value={state.label} /> {c.label}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       {!compact ? (
@@ -393,34 +509,11 @@ function DryRunReport({
         </p>
       ) : null}
       {result.blockers && result.blockers.length > 0 ? (
-        <div className="wizard-list blocker">
-          <strong>blockers</strong>
-          <ul>
-            {result.blockers.map((b) => (
-              <li key={b}>{b}</li>
-            ))}
-          </ul>
-        </div>
+        <IssueList items={result.blockers} title="blockers" tone="error" />
       ) : null}
       {result.warnings && result.warnings.length > 0 ? (
-        <div className="wizard-list warn">
-          <strong>warnings</strong>
-          <ul>
-            {result.warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
-        </div>
+        <IssueList items={result.warnings} title="warnings" tone="warn" />
       ) : null}
     </div>
   );
-}
-
-function nested(value: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
-  const v = value[key];
-  return v && typeof v === "object" ? (v as Record<string, unknown>) : undefined;
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }

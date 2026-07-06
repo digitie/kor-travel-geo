@@ -62,7 +62,7 @@ describe("VWorld key settings", () => {
 
   it("UI 입력값을 저장하면 브라우저 override를 사용한다", async () => {
     renderSettings("env-key");
-    const input = await screen.findByLabelText("NEXT_PUBLIC_VWORLD_API_KEY");
+    const input = await screen.findByLabelText("VWorld 인증키");
     await waitFor(() => expect(input).toHaveValue("env-key"));
 
     fireEvent.change(input, { target: { value: "browser-key" } });
@@ -83,5 +83,16 @@ describe("VWorld key settings", () => {
     await waitFor(() => expect(screen.getByTestId("api-key")).toHaveTextContent("env-key"));
     expect(screen.getByTestId("source")).toHaveTextContent("env");
     expect(browserStorage().getItem(VWORLD_STORAGE_KEY)).toBeNull();
+  });
+
+  it("키 입력은 기본 마스킹되고 표시 토글로 평문 전환한다", async () => {
+    renderSettings("env-key");
+    const input = await screen.findByLabelText("VWorld 인증키");
+
+    expect(input).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "키 표시" }));
+    expect(input).toHaveAttribute("type", "text");
+    fireEvent.click(screen.getByRole("button", { name: "키 숨기기" }));
+    expect(input).toHaveAttribute("type", "password");
   });
 });

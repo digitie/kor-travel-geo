@@ -134,8 +134,9 @@ test.describe("복원 위저드 /admin/backups (T-256)", () => {
     await mockRestoreApi(page, NEW_DB_OK);
     const wizard = await gotoRestoreWizard(page);
 
-    // ① 백업·모드 선택 (mode는 new_database 기본값).
-    await wizard.getByLabel("복원할 백업본 (artifact)").selectOption("art-available");
+    // ① 백업·모드 선택 (mode는 new_database 라디오 카드 기본값).
+    await wizard.getByLabel("복원할 백업본", { exact: true }).selectOption("art-available");
+    await expect(wizard.getByRole("radio", { name: /새 DB로 복원/ })).toBeChecked();
     await wizard.getByRole("button", { name: "다음" }).click();
 
     // ② manifest 미리보기 — profile/PG/PostGIS/row_counts (leaf 텍스트는 exact로 ancestor 충돌 회피).
@@ -167,9 +168,10 @@ test.describe("복원 위저드 /admin/backups (T-256)", () => {
     await mockRestoreApi(page, REPLACE_OK);
     const wizard = await gotoRestoreWizard(page);
 
-    await wizard.getByLabel("복원할 백업본 (artifact)").selectOption("art-available");
-    await wizard.getByLabel("복원 모드 (mode)").selectOption("replace_current");
-    await wizard.getByLabel("복원 대상 DB 이름 (target_database)").fill("kor_travel_geo");
+    await wizard.getByLabel("복원할 백업본", { exact: true }).selectOption("art-available");
+    // 복원 모드는 라디오 카드 — 위험(replace_current) 카드를 선택한다.
+    await wizard.getByRole("radio", { name: /운영 DB 교체/ }).check();
+    await wizard.getByLabel("복원 대상 DB 이름", { exact: true }).fill("kor_travel_geo");
     await wizard.getByRole("button", { name: "다음" }).click();
     await wizard.getByRole("button", { name: "dry-run 실행" }).click();
     await expect(wizard.getByText("복원 가능", { exact: true })).toBeVisible();
@@ -201,7 +203,7 @@ test.describe("복원 위저드 /admin/backups (T-256)", () => {
     await mockRestoreApi(page, BLOCKED);
     const wizard = await gotoRestoreWizard(page);
 
-    await wizard.getByLabel("복원할 백업본 (artifact)").selectOption("art-available");
+    await wizard.getByLabel("복원할 백업본", { exact: true }).selectOption("art-available");
     await wizard.getByRole("button", { name: "다음" }).click();
     await wizard.getByRole("button", { name: "dry-run 실행" }).click();
 
@@ -213,7 +215,10 @@ test.describe("복원 위저드 /admin/backups (T-256)", () => {
     await wizard.getByRole("button", { name: "확인 단계로" }).click();
 
     // ④ blocker 경고(alert) + 제출 차단 (new_database라도 can_restore=false면 막힘).
-    await expect(wizard.getByRole("alert")).toContainText("복원 불가로 판정");
+    // blockers IssueList(Alert)도 role=alert라 문구로 스코핑한다.
+    await expect(
+      wizard.getByRole("alert").filter({ hasText: "복원 불가로 판정" })
+    ).toBeVisible();
     await expect(wizard.getByRole("button", { name: "복원 시작" })).toBeDisabled();
   });
 
@@ -222,7 +227,7 @@ test.describe("복원 위저드 /admin/backups (T-256)", () => {
     const wizard = await gotoRestoreWizard(page);
 
     // artifact 미선택 → archive_path 입력 경로.
-    await wizard.getByLabel("백업본 직접 경로 (archive_path)").fill("/data/backups/manual.tar.zst");
+    await wizard.getByLabel("백업본 직접 경로", { exact: true }).fill("/data/backups/manual.tar.zst");
     await wizard.getByRole("button", { name: "다음" }).click();
 
     // ② 직접 경로는 manifest 미리보기 대신 안내 문구.

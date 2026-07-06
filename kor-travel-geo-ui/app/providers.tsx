@@ -2,6 +2,8 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/toaster";
 import { ApiError } from "@/lib/api";
 import { VWorldKeyProvider } from "@/lib/vworld-key";
 
@@ -26,7 +28,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <VWorldKeyProvider>{children}</VWorldKeyProvider>
+      <VWorldKeyProvider>
+        <TooltipProvider>
+          {children}
+          <Toaster />
+        </TooltipProvider>
+      </VWorldKeyProvider>
     </QueryClientProvider>
   );
 }
