@@ -227,7 +227,7 @@ def _load_plans_sync(
     cancel_event: asyncio.Event | None,
 ) -> int:
     try:
-        from osgeo import gdal  # type: ignore[import-untyped]
+        from osgeo import gdal  # type: ignore[import-not-found,import-untyped,unused-ignore]
     except ImportError as exc:  # pragma: no cover - depends on optional system GDAL
         msg = "GDAL Python binding is required for SHP polygon loading"
         raise LoaderError(msg) from exc

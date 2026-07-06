@@ -53,6 +53,7 @@ SELECT
   s.registered_at,
   s.expires_at,
   ms.match_set_count,
+  ms.candidate_match_set_count,
   ms.active_match_set_id,
   ms.last_loaded_at,
   ms.last_load_job_id,
@@ -83,6 +84,9 @@ LEFT JOIN LATERAL (
 LEFT JOIN LATERAL (
   SELECT
     COUNT(*)::int AS match_set_count,
+    COUNT(*) FILTER (
+      WHERE m.state IN ('draft', 'validated', 'active', 'revalidatable', 'restored_from_backup')
+    )::int AS candidate_match_set_count,
     MAX(CASE WHEN m.state = 'active' THEN m.source_match_set_id::text END)
       AS active_match_set_id,
     MAX(j.finished_at) AS last_loaded_at,
@@ -200,6 +204,7 @@ def _group_item(row: dict[str, Any]) -> FileInventoryItem:
         registered_at_present=row["registered_at"] is not None,
         active_match_set_id=row["active_match_set_id"],
         match_set_count=row["match_set_count"] or 0,
+        candidate_match_set_count=row["candidate_match_set_count"] or 0,
     )
     verdict = derive_source_group_lifecycle(facts)
     return FileInventoryItem(

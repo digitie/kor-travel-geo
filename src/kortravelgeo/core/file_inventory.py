@@ -58,6 +58,7 @@ class SourceGroupFacts:
     registered_at_present: bool
     active_match_set_id: str | None
     match_set_count: int
+    candidate_match_set_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +96,7 @@ def derive_source_group_lifecycle(facts: SourceGroupFacts) -> LifecycleVerdict:
 
     if in_use:
         return LifecycleVerdict("serving", in_use=True, temporary=False)
-    if facts.match_set_count > 0:
+    if facts.candidate_match_set_count > 0:
         return LifecycleVerdict("staging", in_use=False, temporary=False)
     return LifecycleVerdict("idle", in_use=False, temporary=False)
 

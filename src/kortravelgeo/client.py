@@ -1930,10 +1930,10 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             items.extend(await repo.list_source_groups(category=category, limit=limit))
         if kind in ("all", "artifact"):
             artifacts = await AdminRepository(self._engine()).list_artifacts(
-                limit=limit, artifact_type=category if kind == "artifact" else None
+                limit=limit, artifact_type=category
             )
             items.extend(artifact_inventory_item(artifact) for artifact in artifacts)
-        if kind in ("all", "orphan_object"):
+        if kind in ("all", "orphan_object") and category in (None, "rustfs_object"):
             items.extend(await repo.list_orphan_objects(limit=limit))
 
         if lifecycle:
@@ -1944,6 +1944,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             key=lambda item: item.acquired_at.timestamp() if item.acquired_at else 0.0,
             reverse=True,
         )
+        items = items[:limit]
         return FileInventoryPage(
             items=tuple(items), summary=build_inventory_summary(items)
         )

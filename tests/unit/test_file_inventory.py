@@ -7,7 +7,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
+import pytest
+
+from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.file_inventory import (
     TEMPORARY_LIFECYCLES,
     SourceGroupFacts,
@@ -30,6 +34,7 @@ def _facts(**overrides: object) -> SourceGroupFacts:
         "registered_at_present": True,
         "active_match_set_id": None,
         "match_set_count": 0,
+        "candidate_match_set_count": 0,
     }
     base.update(overrides)
     return SourceGroupFacts(**base)  # type: ignore[arg-type]
@@ -45,8 +50,17 @@ class TestSourceGroupLifecycle:
         assert verdict.temporary is False
 
     def test_non_active_match_set_membership_is_staging(self) -> None:
-        verdict = derive_source_group_lifecycle(_facts(match_set_count=1))
+        verdict = derive_source_group_lifecycle(
+            _facts(match_set_count=1, candidate_match_set_count=1)
+        )
         assert verdict.lifecycle == "staging"
+        assert verdict.in_use is False
+
+    def test_retired_only_match_set_membership_is_idle(self) -> None:
+        verdict = derive_source_group_lifecycle(
+            _facts(match_set_count=3, candidate_match_set_count=0)
+        )
+        assert verdict.lifecycle == "idle"
         assert verdict.in_use is False
 
     def test_unreferenced_available_group_is_idle(self) -> None:
@@ -54,8 +68,11 @@ class TestSourceGroupLifecycle:
 
     def test_non_terminal_session_is_in_progress_and_temporary(self) -> None:
         verdict = derive_source_group_lifecycle(
-            _facts(group_state="validating", session_state="uploading",
-                   registered_at_present=False)
+            _facts(
+                group_state="validating",
+                session_state="uploading",
+                registered_at_present=False,
+            )
         )
         assert verdict.lifecycle == "in_progress"
         assert verdict.temporary is True
@@ -171,3 +188,164 @@ class TestInventorySummary:
             "artifact": 1,
             "orphan_object": 1,
         }
+
+
+@pytest.mark.asyncio
+class TestInventoryPageComposition:
+    async def test_kind_all_applies_global_limit_after_combining(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class FakeInventoryRepository:
+            def __init__(self, _engine: object) -> None:
+                pass
+
+            async def list_source_groups(
+                self, *, category: str | None = None, limit: int = 200
+            ) -> tuple[FileInventoryItem, ...]:
+                assert category is None
+                return (
+                    _item("source_group", "s1", "roadname_hangul_full", _NOW),
+                    _item(
+                        "source_group",
+                        "s2",
+                        "roadname_hangul_full",
+                        datetime(2026, 7, 1, tzinfo=UTC),
+                    ),
+                )
+
+            async def list_orphan_objects(
+                self, *, limit: int = 200
+            ) -> tuple[FileInventoryItem, ...]:
+                return (
+                    _item(
+                        "orphan_object",
+                        "o1",
+                        "rustfs_object",
+                        datetime(2026, 7, 3, tzinfo=UTC),
+                    ),
+                )
+
+        class FakeAdminRepository:
+            def __init__(self, _engine: object) -> None:
+                pass
+
+            async def list_artifacts(self, **_kwargs: Any) -> list[OpsArtifact]:
+                return [_artifact("a1", datetime(2026, 7, 4, tzinfo=UTC))]
+
+        monkeypatch.setattr(
+            "kortravelgeo.infra.file_inventory_repo.FileInventoryRepository",
+            FakeInventoryRepository,
+        )
+        monkeypatch.setattr("kortravelgeo.client.AdminRepository", FakeAdminRepository)
+
+        page = await AsyncAddressClient(engine=object()).file_inventory_page(limit=2)
+
+        assert [item.id for item in page.items] == ["s1", "a1"]
+        assert page.summary.total_count == 2
+
+    async def test_category_filters_all_kinds_consistently(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: dict[str, object] = {}
+
+        class FakeInventoryRepository:
+            def __init__(self, _engine: object) -> None:
+                pass
+
+            async def list_source_groups(
+                self, *, category: str | None = None, limit: int = 200
+            ) -> tuple[FileInventoryItem, ...]:
+                seen["source_category"] = category
+                return ()
+
+            async def list_orphan_objects(
+                self, *, limit: int = 200
+            ) -> tuple[FileInventoryItem, ...]:
+                seen["orphan_called"] = True
+                return (_item("orphan_object", "o1", "rustfs_object", _NOW),)
+
+        class FakeAdminRepository:
+            def __init__(self, _engine: object) -> None:
+                pass
+
+            async def list_artifacts(
+                self, *, artifact_type: str | None = None, **_kwargs: Any
+            ) -> list[OpsArtifact]:
+                seen["artifact_type"] = artifact_type
+                return []
+
+        monkeypatch.setattr(
+            "kortravelgeo.infra.file_inventory_repo.FileInventoryRepository",
+            FakeInventoryRepository,
+        )
+        monkeypatch.setattr("kortravelgeo.client.AdminRepository", FakeAdminRepository)
+
+        page = await AsyncAddressClient(engine=object()).file_inventory_page(
+            category="db_backup"
+        )
+
+        assert page.items == ()
+        assert seen == {"source_category": "db_backup", "artifact_type": "db_backup"}
+
+    async def test_rustfs_object_category_includes_orphans(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class FakeInventoryRepository:
+            def __init__(self, _engine: object) -> None:
+                pass
+
+            async def list_source_groups(
+                self, *, category: str | None = None, limit: int = 200
+            ) -> tuple[FileInventoryItem, ...]:
+                return ()
+
+            async def list_orphan_objects(
+                self, *, limit: int = 200
+            ) -> tuple[FileInventoryItem, ...]:
+                return (_item("orphan_object", "o1", "rustfs_object", _NOW),)
+
+        class FakeAdminRepository:
+            def __init__(self, _engine: object) -> None:
+                pass
+
+            async def list_artifacts(self, **_kwargs: Any) -> list[OpsArtifact]:
+                return []
+
+        monkeypatch.setattr(
+            "kortravelgeo.infra.file_inventory_repo.FileInventoryRepository",
+            FakeInventoryRepository,
+        )
+        monkeypatch.setattr("kortravelgeo.client.AdminRepository", FakeAdminRepository)
+
+        page = await AsyncAddressClient(engine=object()).file_inventory_page(
+            category="rustfs_object"
+        )
+
+        assert [item.id for item in page.items] == ["o1"]
+
+
+def _item(
+    kind: str, item_id: str, category: str, acquired_at: datetime
+) -> FileInventoryItem:
+    return FileInventoryItem(
+        file_kind=kind,  # type: ignore[arg-type]
+        id=item_id,
+        name=item_id,
+        category=category,
+        state="available",
+        lifecycle="available",
+        in_use=False,
+        temporary=False,
+        acquired_at=acquired_at,
+    )
+
+
+def _artifact(artifact_id: str, created_at: datetime) -> OpsArtifact:
+    return OpsArtifact(
+        artifact_id=artifact_id,
+        artifact_type="db_backup",
+        state="available",
+        storage_kind="local_file",
+        display_name=artifact_id,
+        created_at=created_at,
+    )

@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-06 (PR #406 Claude Code 리뷰 후속 반영, by codex)
+
+**작업**: 최근 5일(2026-07-01 KST 이후) Claude Code 공동 작성 PR을 closed 포함으로 확인했다.
+GitHub 검색 결과 닫힌 대상 PR은 없고, Claude 공동 작성 커밋이 포함된 open PR #406만 대상이었다.
+PR #406에 리뷰 코멘트를 남기고, 유사 항목을 #407(CRLF/후행 공백), #408(파일 인벤토리 API
+정합성), #409(mypy 2.1 optional `osgeo` import ignore 코드)로 묶어 이슈화했다.
+
+**변경**:
+- PR #406 변경 파일 중 CRLF로 저장된 UI/테스트 파일 47개를 LF로 정규화하고 EOF blank line을 정리했다.
+- `file_inventory_page()`가 `kind=all`에서도 category를 source group/artifact/orphan에 일관 적용하고,
+  조합 후 전체 `limit`을 적용하도록 보정했다.
+- source group lifecycle에서 retired/invalid 같은 과거 match set 이력과 현재 후보 match set을 분리해,
+  과거 이력만 있는 파일이 `staging`으로 남지 않게 했다.
+- optional GDAL import의 mypy ignore 코드를 `import-not-found`/`import-untyped` 양쪽 판정에 맞췄다.
+- 위 동작을 `tests/unit/test_file_inventory.py`에 추가했다.
+
+**검증**:
+- `git diff --check origin/main` 통과.
+- `uv run --extra api --extra dev ruff check src/kortravelgeo/core/file_inventory.py src/kortravelgeo/infra/file_inventory_repo.py src/kortravelgeo/client.py tests/unit/test_file_inventory.py` 통과.
+- `uv run python -m mypy src/kortravelgeo/core/file_inventory.py src/kortravelgeo/infra/file_inventory_repo.py src/kortravelgeo/client.py` 통과.
+- `TMPDIR=/tmp TMP=/tmp TEMP=/tmp uv run python -m pytest tests/unit/test_file_inventory.py -q` → 15 passed.
+- WSL/ext4 미러 `~/dev/kor-travel-geo-codex-pr406-test`에서 `pytest -q` → 1125 passed, 67 skipped.
+- 같은 미러에서 `ruff check .`, `mypy src/kortravelgeo scripts/export_openapi.py`, `lint-imports`,
+  `python scripts/export_openapi.py --check --output openapi.json` 통과.
+- `kor-travel-geo-ui/scripts/frontend_check.sh` 통과: types 생성, eslint, tsc, vitest 151 passed, Next build 통과.
+- React Doctor `npx react-doctor@latest . --offline --verbose --json` → `ok=true`, error 0, warning 24.
+- live UI e2e는 PR #406 최종 머지 후 백업 리스토어를 제외하고 이어서 실행한다.
+
 ## 2026-06-28 (Linux-only 개발환경 정책 정리, by codex)
 
 **작업**: 사용자 지시에 따라 개발환경 정책을 Linux-only로 전환했다. 모든 개발 명령은 WSL을 포함한 Linux

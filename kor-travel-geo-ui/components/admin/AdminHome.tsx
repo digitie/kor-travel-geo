@@ -190,4 +190,3 @@ async function loadLatestConsistency(): Promise<StatusValue | null> {
     badge: { value: latest.severity_max, tone }
   };
 }
-
