@@ -248,5 +248,13 @@ def settings_resource(_context: InitResourceContext) -> Settings:
     )
 )
 def admin_api_resource(_context: InitResourceContext) -> DagsterAdminApiClient:
-    """Default Dagster ``admin_api`` resource for API-backed orchestration onramps."""
+    """Default Dagster ``admin_api`` resource for API-backed orchestration onramps.
+
+    Deployment prerequisite (peer-trust / GeoIP): onramp calls reach the geo admin API
+    from the Dagster container, whose peer IP is NOT loopback. The API's
+    ``resolve_request_context`` / ``_peer_is_trusted`` (``kortravelgeo.api.security``)
+    plus the ADR-037 GeoIP gate will reject the call with **403** unless the Dagster
+    network CIDR is added to ``KTG_ADMIN_TRUSTED_PROXY_CIDRS``. The actual CIDR is
+    applied at M2 deploy (see docs/architecture/dagster-boundary.md §7).
+    """
     return DagsterAdminApiClient.from_settings(Settings())

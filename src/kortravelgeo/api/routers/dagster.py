@@ -300,7 +300,18 @@ def _graphql_error_message(raw_error: object) -> str:
     message = _optional_string(error.get("message"))
     if message:
         return message
-    return str(raw_error)
+    # Do not echo ``str(raw_error)`` — an unshaped GraphQL error can carry internal
+    # detail. Surface a fixed generic message instead.
+    return "Dagster GraphQL 오류 응답"
+
+
+def _sanitized_request_error(exc: Exception) -> str:
+    """Return a class-tagged generic message with no internal Dagster URL/detail.
+
+    ``str(exc)`` for ``httpx.HTTPStatusError`` embeds the request URL (the internal
+    Dagster host), so only the exception class name plus a fixed phrase is exposed.
+    """
+    return f"Dagster 요청 실패 ({type(exc).__name__})"
 
 
 def _parse_ticks(raw_ticks: object) -> list[DagsterInstigationTick]:
@@ -597,7 +608,7 @@ async def get_dagster_summary(
                 settings=settings,
                 graphql_url=dagster_urls.graphql_url,
                 checked_at=checked_at,
-                errors=[str(exc)],
+                errors=[_sanitized_request_error(exc)],
             ),
             started_at=started_at,
         )
@@ -699,7 +710,7 @@ async def get_dagster_run_detail(
                 dagster_url=dagster_urls.dagster_url,
                 graphql_url=dagster_urls.graphql_url,
                 checked_at=checked_at,
-                errors=[str(exc)],
+                errors=[_sanitized_request_error(exc)],
             ),
             started_at=started_at,
         )
