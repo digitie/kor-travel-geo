@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-07-08 갱신, by codex)
+## 현재 진척도 (2026-07-09 갱신, by codex)
 
 - ⏳ **T-290 — geo 독립 Dagster 오케스트레이션 이관 (계획·문서화 완료, 구현 착수)** — backup/restore·
   적재 오케스트레이션을 서비스 전용 독립 Dagster(`kortravelgeo_dagster`)로 이관한다. 3라운드 리뷰 수렴
@@ -26,6 +26,10 @@
   구현됐다. Dagster `scheduled_backup` schedule은 `scheduled_backup_run_due` job을 만들고, op는 기존
   `POST /v1/admin/backups/scheduled/run-due`를 `KTG_DAGSTER_ADMIN_API_URL`로 호출한다. 실제 backup
   실행은 T-290g 전까지 기존 in-process `load_jobs` 큐가 맡는다.
+  **M2 후속 리뷰(2026-07-09)**: Claude Code 후속 PR #433/#434를 리뷰했다. #433은 blocking finding
+  없이 수용 가능했고, #434에서는 summary 오류 응답이 invalid `dagster_public_url` raw 값을
+  browser-facing `dagster_url`로 되돌려주는 회귀를 #435로 분리했다. 수정 후 오류 응답도 검증/정규화된
+  public URL만 iframe/link 필드에 싣는다.
   **다음 한 작업**: M2 gate — n150 배포 후 **live UI e2e #1**(login → `/admin/dagster` summary/runs/
   iframe 렌더 + scheduled/triggered backup run 가시화 + 기존 `/admin/backups` 정상)을 수행한다.
   live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
