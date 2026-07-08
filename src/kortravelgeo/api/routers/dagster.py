@@ -171,6 +171,10 @@ query KorTravelGeoDagsterRunDetail(
 class _DagsterUrls:
     dagster_url: str
     graphql_url: str
+    # Browser-facing URL echoed to the admin UI (iframe/links). Validated as http/https
+    # with a host, but NOT restricted to ``dagster_allowed_hosts`` (that allowlist guards
+    # backend GraphQL calls only; the public URL is never fetched server-side).
+    public_url: str
 
 
 class DagsterUrlConfigurationError(ValueError):
@@ -195,9 +199,11 @@ def _validated_http_url(
     raw_url: str,
     *,
     setting_name: str,
-    allowed_hosts: set[str],
+    allowed_hosts: set[str] | None,
     require_graphql_path: bool = False,
 ) -> str:
+    # ``allowed_hosts=None`` skips the SSRF host allowlist (used for the browser-facing
+    # public URL, which is only echoed to the client and never fetched server-side).
     value = raw_url.strip()
     parsed = urlsplit(value)
     scheme = parsed.scheme.lower()
@@ -208,7 +214,7 @@ def _validated_http_url(
     hostname = parsed.hostname
     if hostname is None:
         raise DagsterUrlConfigurationError(f"{setting_name} host is required")
-    if hostname.lower().rstrip(".") not in allowed_hosts:
+    if allowed_hosts is not None and hostname.lower().rstrip(".") not in allowed_hosts:
         raise DagsterUrlConfigurationError(
             f"{setting_name} host is not in dagster_allowed_hosts"
         )
@@ -234,7 +240,19 @@ def _dagster_urls(settings: Settings) -> _DagsterUrls:
         allowed_hosts=allowed_hosts,
         require_graphql_path=True,
     )
-    return _DagsterUrls(dagster_url=dagster_url.rstrip("/"), graphql_url=graphql_url)
+    # Browser-facing URL: public domain if set, else fall back to the internal
+    # dagster_url. Not allowlist-checked (allowed_hosts=None) — it is only echoed to
+    # the admin UI, never used for a backend request.
+    public_url = _validated_http_url(
+        settings.dagster_public_url or settings.dagster_url,
+        setting_name="dagster_public_url",
+        allowed_hosts=None,
+    )
+    return _DagsterUrls(
+        dagster_url=dagster_url.rstrip("/"),
+        graphql_url=graphql_url,
+        public_url=public_url.rstrip("/"),
+    )
 
 
 def _dict(value: object) -> JsonDict:
@@ -547,7 +565,9 @@ def _empty_summary_data(
 ) -> DagsterSummaryData:
     return DagsterSummaryData(
         status=status,
-        dagster_url=settings.dagster_url,
+        # Browser-facing URL even on the outage/error path so the admin iframe keeps
+        # the public domain; graphql_url stays the internal backend target.
+        dagster_url=settings.dagster_public_url or settings.dagster_url,
         graphql_url=graphql_url,
         checked_at=checked_at,
         repository_count=0,
@@ -636,7 +656,9 @@ async def get_dagster_summary(
     return _summary_response(
         DagsterSummaryData(
             status="error" if errors else "ok",
-            dagster_url=dagster_urls.dagster_url,
+            # Browser-facing URL (public domain in prod) for the admin iframe/links;
+            # the backend GraphQL target stays internal via graphql_url.
+            dagster_url=dagster_urls.public_url,
             graphql_url=dagster_urls.graphql_url,
             version=_optional_string(data.get("version")),
             checked_at=checked_at,

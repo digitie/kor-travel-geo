@@ -132,6 +132,10 @@ class Settings(BaseSettings):
     ops_slow_query_explain_enabled: bool = False
     ops_slow_query_explain_timeout_ms: int = Field(default=3_000, ge=1)
     dagster_url: str = "http://127.0.0.1:12502"
+    # Browser-facing Dagster URL returned to the admin UI for the iframe/links (prod =
+    # the router-proxied public HTTPS domain). Empty -> fall back to `dagster_url`. NOT
+    # used for backend GraphQL (that stays internal `dagster_url`, SSRF-allowlisted).
+    dagster_public_url: str = ""
     dagster_graphql_url: str | None = None
     dagster_admin_api_url: str = "http://127.0.0.1:12501"
     dagster_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (

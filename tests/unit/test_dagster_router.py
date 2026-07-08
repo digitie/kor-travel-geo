@@ -479,3 +479,83 @@ def test_dagster_summary_openapi_path_is_mounted() -> None:
 
     assert "/v1/ops/dagster/runs/{run_id}" in paths
     assert "/v1/ops/dagster/summary" in paths
+
+
+def _empty_summary_payload() -> dict[str, Any]:
+    return {
+        "data": {
+            "repositoriesOrError": {"__typename": "RepositoryConnection", "nodes": []},
+            "runsOrError": {"__typename": "Runs", "results": []},
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_dagster_summary_returns_public_url_not_allowlisted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Browser-facing dagster_url echoes the public domain (T-290) even though its host
+    is not in dagster_allowed_hosts; the backend GraphQL target stays the internal host.
+    """
+    settings = Settings(
+        _env_file=None,
+        admin_trusted_proxy_cidrs="127.0.0.0/8",
+        dagster_url="http://dagster.example:12502",
+        dagster_public_url="https://geo-dagster.digitie.mywire.org/",
+        dagster_allowed_hosts=("dagster.example",),
+        dagster_request_timeout_seconds=1.0,
+        geoip_gate_mode="off",
+    )
+
+    async def _fake_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        # Backend GraphQL still targets the internal, allowlisted host.
+        assert graphql_url == "http://dagster.example:12502/graphql"
+        return _empty_summary_payload()
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _fake_post_graphql)
+
+    transport = httpx.ASGITransport(app=_app(settings), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "ok"
+    # Browser-facing URL = public domain (trailing slash normalized; host not allowlisted).
+    assert data["dagster_url"] == "https://geo-dagster.digitie.mywire.org"
+    # Backend GraphQL URL stays internal.
+    assert data["graphql_url"] == "http://dagster.example:12502/graphql"
+
+
+@pytest.mark.asyncio
+async def test_dagster_summary_dagster_url_falls_back_to_internal_when_public_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty dagster_public_url -> dagster_url falls back to the internal dagster_url."""
+
+    async def _fake_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        return _empty_summary_payload()
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _fake_post_graphql)
+
+    # Default _app() settings leave dagster_public_url unset (empty).
+    transport = httpx.ASGITransport(app=_app(), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "ok"
+    # Falls back to the internal dagster_url.
+    assert data["dagster_url"] == "http://dagster.example:12502"
+    assert data["graphql_url"] == "http://dagster.example:12502/graphql"
