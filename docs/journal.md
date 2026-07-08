@@ -2,6 +2,42 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-08 (T-290 Dagster 이관 M1 완결 — 패키지·배포·recovery 게이트, by claude/A)
+
+**작업**: [ADR-066](adr/066-geo-independent-dagster-orchestration.md)·[마스터플랜](dagster-migration-plan.md)의
+M1(Foundation)을 완결했다. Agent A 스트림 3개 태스크가 모두 머지되고 n150에서 실검증됐다.
+
+**머지**:
+- **T-290a**(#419): `kortravelgeo_dagster` 별도 top-level 패키지 스캐폴드 + resources(4-way fallback) +
+  `mv_refresh` @op/@job. `dagster definitions validate`·mypy strict·ruff·pytest 통과.
+- **T-290c**(#420): `load_jobs`에 `executor`/`orchestrator_run_id`/`lease_expires_at` 컬럼(3곳 drift +
+  alembic 0023) + executor별 startup recovery split + 순수 reconciler(`_job_recovery.py`) + seam
+  (RunLivenessProbe/OrchestratorCancelHook). 순수 additive — 기존 in-process 실행 무변경. 전체 pytest
+  1158 passed.
+- **T-290b**(#421, #422): geo Dagster 런타임 이미지(멀티스테이지 Dockerfile + `dagster.yaml`) + docker-manager
+  compose 3서비스(db-init/webserver/daemon) + 메타 DB `kor_travel_geo_dagster`. docker-manager 레포에도
+  버전관리(manager PR #47). 웹서버 포트는 map 포트 패턴(`12X0Y`: 02=Dagster)에 맞춰 **12502**로 확정
+  (초기 12703은 map 127xx 블록 침범이라 #422로 정정).
+
+**n150 실검증(M1 게이트)**: webserver(:12502)+daemon 기동, code location `kortravelgeo_dagster.definitions`
+서빙, resources(client/rustfs/settings)가 n150 앱 DB에 정상 resolve, **`mv_refresh`를 실제 Dagster run으로
+실행해 SUCCESS**(6.4M×2 MV concurrent refresh, ~7.6분). 기존 geo-api/ui/postgres 무손상.
+
+**런타임 검증이 잡은 통합 버그(성과)**: 1차 mv_refresh run이 `QueryCanceled: statement timeout`으로 실패했다.
+원인은 `make_async_engine`(`infra/engine.py`)가 모든 connection에 **서빙용 `statement_timeout`**을 걸고,
+`refresh_mv` leaf의 `SET LOCAL 0`이 concurrent 경로의 후속 statement(`GeoCacheRepository.clear()` 등)까지
+덮지 못한 것. **근본 fix**: Dagster는 서빙이 아니라 장시간 maintenance 오케스트레이터이므로 `client`
+resource engine을 `statement_timeout=0`(maintenance engine)으로 빌드(ADR-066 §7). unit/`definitions validate`로는
+못 잡고 n150 런타임에서만 드러난 케이스 — 배포 게이트 검증의 가치.
+
+**운영 교훈(기록)**: n150 동시 배포 중 geo-api가 T-290c 신 코드로 재생성됐는데 그 순간 alembic 0023이 아직
+미적용이라 startup recovery 쿼리(`executor` 컬럼 참조)가 실패해 잠깐 크래시 루프했다. 0023 적용 후 자가
+회복. **마이그레이션은 코드 재생성 전에** 적용해야 한다는 deploy-runbook 규칙의 실증 — 특히 여러 에이전트가
+같은 n150을 동시에 만질 때 순서 보장이 중요하다.
+
+**다음**: M2 — A는 T-290f(scheduled backup @schedule 온램프 + @run_failure_sensor), B(codex)는 T-290d/290e
+관측 표면(이미 머지)을 이어 배포. M2 완료 후 **live UI e2e #1**.
+
 ## 2026-07-08 (T-290e Dagster 관리자 관측 화면, by codex)
 
 **작업**: T-290d 관측 API가 통합 브랜치에 머지된 뒤, Agent B 범위의 M2 작업 중 독립 완료 가능한

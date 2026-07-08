@@ -21,9 +21,11 @@
 `agent/claude-dagster-migration`(전 milestone 완료 후 main 머지). 두 에이전트 A(실행엔진/백엔드)·
 B(배포/관측/e2e) 병렬. **기준: 최소수정 X, 미래지향(유지보수성·안정성·완성도·품질·최적구조).**
 
-- [ ] **T-290a** (A) — `kortravelgeo_dagster` 패키지 스캐폴드 + resources + `mv_refresh` @job (M1)
-- [ ] **T-290b** (B) — Dagster 배포(compose/Dockerfile/DB/포트 예약, n150 e2e deps 포함) (M1)
-- [ ] **T-290c** (A) — `load_jobs` executor/lease + recovery split + reconciler + cancel 골격 (M1, 4단계 게이트)
+- [x] **T-290a** (A) — `kortravelgeo_dagster` 패키지 스캐폴드 + resources + `mv_refresh` @job (M1) — #419
+- [x] **T-290b** (A) — Dagster 배포(Dockerfile/compose/메타DB/포트 12502) + n150 mv_refresh run SUCCESS (M1) — #421·#422, manager #47
+- [x] **T-290c** (A) — `load_jobs` executor/lease + recovery split + reconciler + cancel 골격 (M1, 4단계 게이트) — #420
+- [x] **T-290d** (B) — API GraphQL observe 라우터 (M2) — #417
+- [x] **T-290e** (B) — admin `/admin/dagster` 관측 화면 (M2) — #418
 - [ ] **T-290f** (A) — scheduled backup @schedule 온램프 + @run_failure_sensor + 알림 (M2)
 - [ ] **T-290g** (A) — `db_backup` Dagster 실행 + verify/copy/restore_drill (M3)
 - [ ] **T-290h** (B) — run detail 로그·artifact 링크 + 실패/overdue 알림 UI (M3)

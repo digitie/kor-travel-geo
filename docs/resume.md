@@ -16,9 +16,13 @@
   Dagster를 import하지 않고, API는 trusted admin role gate, SSRF allowlist, 200
   `status=unavailable` outage 응답을 제공한다. UI는 OpenAPI 생성 타입 기반 React Query hook으로
   summary/run detail을 읽고 repository·schedule/sensor tick·recent run·iframe을 표시한다.
-  **다음 한 작업**: (A) T-290a(패키지 스캐폴드+resources+mv_refresh @job)와 T-290c(load_jobs
-  executor/recovery 게이트), (B) T-290b(Dagster 배포; webserver host 포트 `12502` 예약은 완료)를
-  의존성 상태에 맞춰 진행.
+  **M1 완결(2026-07-08)**: T-290a(#419)·T-290c(#420)·T-290b(#421·#422, manager #47) 머지. n150에
+  Dagster webserver(:12502)+daemon 배포, code location 서빙, **`mv_refresh`를 실제 Dagster run으로
+  실행해 SUCCESS**로 M1 게이트 검증(상세·통합 버그·교훈은 journal 2026-07-08 참조). 포트는 map 패턴
+  12502로 확정(초기 12703 정정 #422).
+  **다음 한 작업**: M2 — (A) **T-290f**(scheduled backup @schedule 온램프 + @run_failure_sensor + 알림),
+  (B) T-290d/290e 관측 표면(머지 완료)의 n150 배포 검증. M2 완료 후 **live UI e2e #1**(login →
+  `/admin/dagster` 렌더 + backup run 가시화).
   live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
   미래지향(유지보수성·안정성·완성도·품질).
 
