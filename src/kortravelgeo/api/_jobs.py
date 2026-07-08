@@ -14,6 +14,20 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.api._job_recovery import (
+    DEFAULT_LEASE_TTL_SECONDS,
+    EXECUTOR_API_IN_PROCESS,
+    EXECUTOR_DAGSTER,
+    OrchestratorCancelHook,
+    ReconcileAction,
+    ReconcileOutcome,
+    RunLivenessProbe,
+    compute_lease_expiry,
+    is_lease_valid,
+    lease_only_liveness_probe,
+    noop_orchestrator_cancel,
+    reconcile_load_job,
+)
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.batch import batch_children
 from kortravelgeo.infra.metrics import record_load_job_duration, record_load_job_stage_duration
@@ -54,13 +68,29 @@ class _ClaimState(Enum):
 
 
 class JobQueue:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        *,
+        lease_ttl_seconds: float = DEFAULT_LEASE_TTL_SECONDS,
+        liveness_probe: RunLivenessProbe | None = None,
+        orchestrator_cancel: OrchestratorCancelHook | None = None,
+    ) -> None:
         self.engine = engine
         self._semaphore = asyncio.Semaphore(1)
         self._handlers: dict[str, JobHandler] = {}
         self._cancel_events: dict[str, asyncio.Event] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._stage_timers: dict[str, tuple[str, str, float]] = {}
+        # Executor boundary seams (T-290c). Defaults keep zero Dagster dependency: the
+        # lease-only probe treats a valid lease as "alive", and cancel propagation is a
+        # no-op that records intent only. The real GraphQL probe/hook are injected by a
+        # later milestone without touching this class.
+        self._lease_ttl_seconds = lease_ttl_seconds
+        self._liveness_probe: RunLivenessProbe = liveness_probe or lease_only_liveness_probe
+        self._orchestrator_cancel: OrchestratorCancelHook = (
+            orchestrator_cancel or noop_orchestrator_cancel
+        )
 
     def register(self, kind: str, handler: JobHandler) -> None:
         self._handlers[kind] = handler
@@ -106,11 +136,31 @@ class JobQueue:
         return row.job_id
 
     async def cancel(self, job_id: str) -> None:
+        """Cancel a job, closing both sides of the executor boundary (ADR-066 §5).
+
+        In-process jobs stop via their local ``cancel_event`` exactly as before.
+        ``load_jobs`` remains the cancel authority, so the row is converged to
+        ``cancelled`` for every executor. For ``executor='dagster'`` jobs the cancel is
+        additionally propagated to the Dagster run through the injected
+        :class:`~kortravelgeo.api._job_recovery.OrchestratorCancelHook` seam so we never
+        leave a one-sided cancel; the reconciler closes any residual gap.
+        """
+
         event = self._cancel_events.get(job_id)
         if event is not None:
             event.set()
+        executor, orchestrator_run_id = await self._executor_ref(job_id)
         await AdminRepository(self.engine).cancel_load_job(job_id)
         await self._cancel_batch_children(job_id)
+        if executor == EXECUTOR_DAGSTER:
+            await self._record_progress(
+                job_id,
+                message="cancel requested; propagating to Dagster run",
+            )
+            await self._orchestrator_cancel(
+                job_id=job_id,
+                orchestrator_run_id=orchestrator_run_id,
+            )
 
     async def link_job_to_batch(self, job_id: str, load_batch_id: str) -> None:
         """Record the downstream full-load batch id on a control job."""
@@ -129,6 +179,26 @@ UPDATE load_jobs
             )
 
     async def recover_startup(self) -> None:
+        """Recover interrupted jobs at API startup — executor-aware (ADR-066 §5).
+
+        ``api_in_process`` running jobs were bound to *this* process, so a restart means
+        they were interrupted → mark ``failed`` (unchanged historical behavior; every
+        legacy row defaults to ``api_in_process``, so this force-fail is byte-for-byte the
+        old query scoped by executor). ``dagster`` running jobs may still be alive in a
+        Dagster run the API does not own, so they are handed to the executor-aware
+        reconciler (:meth:`reconcile_dagster_jobs`) instead of being force-failed.
+        """
+
+        queued = await self._recover_in_process_running()
+        await self.reconcile_dagster_jobs()
+        if queued:
+            self._spawn_drain()
+
+    async def _recover_in_process_running(self) -> list[str]:
+        """Force-fail ``executor='api_in_process'`` running jobs (process-restart
+        interrupted) and return the queued job ids to re-drain. Dagster-executed running
+        jobs are deliberately excluded here and reconciled separately."""
+
         async with self.engine.begin() as conn:
             await conn.execute(
                 text(
@@ -139,6 +209,7 @@ UPDATE load_jobs
        finished_at = now(),
        heartbeat_at = now()
  WHERE state = 'running'
+   AND executor = 'api_in_process'
 """
                 )
             )
@@ -147,8 +218,197 @@ UPDATE load_jobs
                     text("SELECT job_id FROM load_jobs WHERE state = 'queued' ORDER BY created_at")
                 )
             ).scalars().all()
-        if queued:
-            self._spawn_drain()
+        return [str(job_id) for job_id in queued]
+
+    async def reconcile_dagster_jobs(self) -> list[tuple[str, ReconcileAction]]:
+        """Converge ``executor='dagster'`` running jobs toward their Dagster run state.
+
+        Shared by startup recovery and (later) a periodic reconciler tick. The Dagster
+        run state is resolved through the injected
+        :class:`~kortravelgeo.api._job_recovery.RunLivenessProbe` seam; the pure decision
+        is :func:`~kortravelgeo.api._job_recovery.reconcile_load_job`. State transitions
+        reuse the queue's own ``_done``/``_fail``/``_cancelled`` writers so progress and
+        audit stay single-sourced. The probe is invoked *outside* any DB transaction (the
+        real one does network I/O), so we snapshot rows first, then converge one by one.
+
+        Returns the ``(job_id, action)`` decisions for observability/testing.
+        """
+
+        rows = await self._dagster_running_rows()
+        now = datetime.now(UTC)
+        results: list[tuple[str, ReconcileAction]] = []
+        for row in rows:
+            job_id = str(row["job_id"])
+            lease_valid = is_lease_valid(
+                lease_expires_at=row.get("lease_expires_at"),
+                now=now,
+            )
+            run_state = await self._liveness_probe(
+                orchestrator_run_id=row.get("orchestrator_run_id"),
+                lease_valid=lease_valid,
+            )
+            action = reconcile_load_job(
+                run_state=run_state,
+                job_state="running",
+                lease_valid=lease_valid,
+            )
+            await self._apply_reconcile(
+                job_id,
+                action,
+                orchestrator_run_id=row.get("orchestrator_run_id"),
+            )
+            results.append((job_id, action))
+        return results
+
+    async def _dagster_running_rows(self) -> list[dict[str, Any]]:
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        """
+SELECT job_id, orchestrator_run_id, lease_expires_at
+  FROM load_jobs
+ WHERE state = 'running'
+   AND executor = 'dagster'
+ ORDER BY created_at
+"""
+                    )
+                )
+            ).mappings().all()
+        return [dict(row) for row in rows]
+
+    async def _apply_reconcile(
+        self,
+        job_id: str,
+        action: ReconcileAction,
+        *,
+        orchestrator_run_id: str | None = None,
+    ) -> None:
+        """Apply a :class:`ReconcileAction` by reusing the queue's state writers.
+
+        ``KEEP_RUNNING`` / ``NOOP`` write nothing.
+        """
+
+        if action.outcome is ReconcileOutcome.CONVERGE_DONE:
+            await self._done(job_id)
+        elif action.outcome is ReconcileOutcome.CONVERGE_FAILED:
+            await self._fail(job_id, f"reconciled: {action.reason}")
+        elif action.outcome is ReconcileOutcome.CONVERGE_CANCELLED:
+            await self._cancelled(job_id)
+        elif action.outcome is ReconcileOutcome.FLAG_ORPHAN:
+            await self._flag_orchestrator_orphan(
+                job_id,
+                action.reason,
+                orchestrator_run_id=orchestrator_run_id,
+            )
+
+    async def _flag_orchestrator_orphan(
+        self,
+        job_id: str,
+        reason: str,
+        *,
+        orchestrator_run_id: str | None = None,
+    ) -> None:
+        """Handle the reverse split-brain (Dagster run alive, ``load_jobs`` already
+        failed): record the orphan on the job log tail and request Dagster run
+        termination through the cancel seam so both sides converge. No extra column — the
+        orphan is surfaced in the log tail and (later) audited by the reconciler tick."""
+
+        if orchestrator_run_id is None:
+            orchestrator_run_id = await self._orchestrator_run_id(job_id)
+        await self._record_progress(job_id, message=f"orphan: {reason}")
+        await self._orchestrator_cancel(
+            job_id=job_id,
+            orchestrator_run_id=orchestrator_run_id,
+        )
+
+    async def mark_dagster_running(
+        self,
+        job_id: str,
+        orchestrator_run_id: str,
+        *,
+        ttl_seconds: float | None = None,
+    ) -> datetime:
+        """Adopt a job into the Dagster executor: set ``executor='dagster'``, record the
+        backing run id and an initial lease, and ensure it is ``running``.
+
+        This is the write half of the executor boundary that the future Dagster launch
+        adapter calls when it hands a ``load_jobs`` row to a Dagster run. The in-process
+        drain path never calls this, so current behavior is unchanged. Returns the new
+        lease expiry.
+        """
+
+        expires_at = self._new_lease_expiry(ttl_seconds)
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+UPDATE load_jobs
+   SET executor = 'dagster',
+       orchestrator_run_id = :orchestrator_run_id,
+       lease_expires_at = :expires_at,
+       state = CASE WHEN state = 'queued' THEN 'running' ELSE state END,
+       started_at = COALESCE(started_at, now()),
+       heartbeat_at = now()
+ WHERE job_id = :job_id
+"""
+                ),
+                {
+                    "job_id": job_id,
+                    "orchestrator_run_id": orchestrator_run_id,
+                    "expires_at": expires_at,
+                },
+            )
+        return expires_at
+
+    async def renew_lease(self, job_id: str, *, ttl_seconds: float | None = None) -> datetime:
+        """Renew ``lease_expires_at`` (and heartbeat) for a Dagster-executed job.
+
+        Provided for the later Dagster op wiring that renews the lease as it makes
+        progress; the in-process path never leases, so this is inert for current jobs.
+        Returns the new lease expiry.
+        """
+
+        expires_at = self._new_lease_expiry(ttl_seconds)
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+UPDATE load_jobs
+   SET lease_expires_at = :expires_at,
+       heartbeat_at = now()
+ WHERE job_id = :job_id
+"""
+                ),
+                {"job_id": job_id, "expires_at": expires_at},
+            )
+        return expires_at
+
+    def _new_lease_expiry(self, ttl_seconds: float | None) -> datetime:
+        ttl = self._lease_ttl_seconds if ttl_seconds is None else ttl_seconds
+        return compute_lease_expiry(now=datetime.now(UTC), ttl_seconds=ttl)
+
+    async def _executor_ref(self, job_id: str) -> tuple[str, str | None]:
+        """Return ``(executor, orchestrator_run_id)`` for a job, defaulting to the
+        in-process executor when the row is absent (defensive; keeps cancel total)."""
+
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        "SELECT executor, orchestrator_run_id "
+                        "FROM load_jobs WHERE job_id = :job_id"
+                    ),
+                    {"job_id": job_id},
+                )
+            ).mappings().first()
+        if row is None:
+            return (EXECUTOR_API_IN_PROCESS, None)
+        return (str(row["executor"]), row.get("orchestrator_run_id"))
+
+    async def _orchestrator_run_id(self, job_id: str) -> str | None:
+        _executor, run_id = await self._executor_ref(job_id)
+        return run_id
 
     def _spawn_drain(self) -> None:
         self._start_drain_task(delay_s=0.0)

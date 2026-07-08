@@ -146,6 +146,12 @@ class Settings(BaseSettings):
         default="kortravelgeo_dagster.definitions",
         min_length=1,
     )
+    # Lease TTL for executor='dagster' load_jobs (ADR-066 §5 / dagster-boundary §6). A
+    # Dagster op renews this while it runs; executor-aware startup recovery keeps a job
+    # 'running' only while its lease is still valid (or a live run is confirmed) and
+    # fails it once the lease expires with no live-run reference. In-process jobs never
+    # take a lease, so this has no effect on current behavior.
+    dagster_lease_ttl_seconds: float = Field(default=300.0, ge=1.0, le=86_400.0)
     runtime_warm_on_startup: bool = False
     runtime_warm_interval_minutes: int = Field(default=0, ge=0)
     runtime_warm_query_limit: int = Field(default=32, ge=1, le=500)
