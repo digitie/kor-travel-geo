@@ -95,7 +95,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await client.__aenter__()
     app.state.client = client
     assert client.engine is not None
-    queue = _jobs.JobQueue(client.engine)
+    queue = _jobs.JobQueue(
+        client.engine,
+        lease_ttl_seconds=get_settings().dagster_lease_ttl_seconds,
+    )
     _register_default_handlers(queue, client.engine)
     app.state.job_queue = queue
     await queue.recover_startup()

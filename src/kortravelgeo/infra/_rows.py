@@ -203,6 +203,9 @@ def map_load_job(row: Mapping[str, Any]) -> LoadJobRow:
         error_message=row.get("error_message"),
         log_tail=tuple(row.get("log_tail") or ()),
         payload_summary=row.get("payload_summary"),
+        executor=str(row.get("executor") or "api_in_process"),
+        orchestrator_run_id=row.get("orchestrator_run_id"),
+        lease_expires_at=row.get("lease_expires_at"),
     )
 
 

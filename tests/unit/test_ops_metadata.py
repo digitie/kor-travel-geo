@@ -58,6 +58,24 @@ def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> Non
     )
 
 
+def test_load_jobs_executor_lease_metadata_and_reconciler_index_declared() -> None:
+    # T-290c schema-drift gate: the executor-boundary columns/index must be declared in
+    # the fresh-init DDL (SCHEMA_SQL/INDEX_SQL), kept in lockstep with sql/ddl/001_schema.sql,
+    # sql/indexes.sql and alembic 0023 (the 3-place + migration schema-drift rule).
+    load_jobs_ddl = SCHEMA_SQL.split("CREATE TABLE IF NOT EXISTS load_jobs", 1)[1].split(
+        ");",
+        1,
+    )[0]
+    assert "executor" in load_jobs_ddl
+    assert "DEFAULT 'api_in_process'" in load_jobs_ddl
+    assert "CHECK (executor IN ('api_in_process','dagster'))" in load_jobs_ddl
+    assert "orchestrator_run_id TEXT" in load_jobs_ddl
+    assert "lease_expires_at" in load_jobs_ddl
+    # Partial index that the reconciler / startup-recovery hot path relies on.
+    assert "idx_load_jobs_dagster_running" in INDEX_SQL
+    assert "WHERE executor = 'dagster' AND state = 'running'" in INDEX_SQL
+
+
 def test_audit_redaction_never_keeps_secrets_dsn_tokens_or_raw_address() -> None:
     payload = {
         "api_key": "secret-key",

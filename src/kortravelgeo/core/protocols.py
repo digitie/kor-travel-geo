@@ -121,6 +121,11 @@ class LoadJobRow:
     error_message: str | None = None
     log_tail: tuple[str, ...] = ()
     payload_summary: dict[str, Any] | None = None
+    # Executor boundary (T-290c, ADR-066 §5). `executor` defaults to the historical
+    # in-process worker; the other two are only populated for `executor='dagster'`.
+    executor: str = "api_in_process"
+    orchestrator_run_id: str | None = None
+    lease_expires_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

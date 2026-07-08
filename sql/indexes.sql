@@ -77,6 +77,13 @@ CREATE INDEX IF NOT EXISTS idx_load_jobs_parent
   ON load_jobs (parent_job_id) WHERE parent_job_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_load_jobs_created
   ON load_jobs (created_at DESC);
+-- Reconciler / startup-recovery hot path: only executor='dagster' running jobs need a
+-- Dagster-run liveness/lease check, and they are a tiny minority of rows. A partial
+-- index on the lease keeps that scan cheap and lets the reconciler order/filter by
+-- lease_expires_at without touching the api_in_process majority (T-290c, ADR-066 §5).
+CREATE INDEX IF NOT EXISTS idx_load_jobs_dagster_running
+  ON load_jobs (lease_expires_at)
+  WHERE executor = 'dagster' AND state = 'running';
 CREATE INDEX IF NOT EXISTS idx_consistency_started
   ON load_consistency_reports (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_geo_cache_expires

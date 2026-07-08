@@ -404,6 +404,10 @@ CREATE TABLE IF NOT EXISTS load_jobs (
   started_at        TIMESTAMPTZ,
   finished_at       TIMESTAMPTZ,
   heartbeat_at      TIMESTAMPTZ,
+  executor          TEXT NOT NULL DEFAULT 'api_in_process'
+                      CHECK (executor IN ('api_in_process','dagster')),
+  orchestrator_run_id TEXT,
+  lease_expires_at  TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -54,7 +54,8 @@ from ._rows import map_consistency_report, map_load_job
 _JOB_SELECT = """
 SELECT job_id, kind, state, load_batch_id, parent_job_id,
        progress, current_stage, source_yyyymm, source_set,
-       started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
+       started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary,
+       executor, orchestrator_run_id, lease_expires_at
   FROM load_jobs
 """
 
