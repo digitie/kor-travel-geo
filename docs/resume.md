@@ -2,7 +2,25 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-07-06 갱신, by codex)
+## 현재 진척도 (2026-07-07 갱신, by claude)
+
+- ✅ **PR #406(관리 UI shadcn 전면 개편 + `/admin/files` 파일 관리 화면 + 통합 파일 인벤토리 API,
+  T-283) n150 배포 + live UI e2e 완료** — 아래 codex 항목이 남긴 "백업 리스토어를 제외한 live UI e2e
+  실행"을 이어받아 마무리했다. PR #406은 이미 main(`c3b158c`, 리뷰 후속 `898cf79` 포함)에 머지돼 있었고
+  CI backend/frontend/openapi 전부 green, 열린 코드 태스크는 없었다. 다만 n150 운영 스택은 (1) pre-#406
+  이미지로 가동 중이었고(`/v1/admin/storage/files` → 404), (2) admin 인증 env가 컨테이너에 빈 값이라
+  로그인이 깨져 있었다(직전 재생성이 docker-manager override의 `--env-file .env` 없이 수행돼 시크릿이
+  조용히 빈 값으로 뜸 — 로컬 배포 런북 §1 재현; 시크릿 자체는 docker-manager `.env`에 존재). origin/main
+  소스를 rsync 반영하고 ktdctl과 동일한 `docker compose --env-file .env -f base -f override` invocation으로
+  **api·ui만** 재빌드·force-recreate 했다(postgres/DB 무손상 — backup/restore·full-load 제외). 재생성 후
+  로그인 POST 200 + httpOnly `SameSite=Strict` 쿠키·틀린 비번 401, `/v1/admin/storage/files` 403(route
+  존재 = #406 배포 확인), readyz/healthz 200을 확인했다. live UI e2e(`tests/e2e/live`, read-only —
+  mutation/rebuild opt-in 미설정)는 배포된 n150 스택 대상 **Chromium 229 passed/4 skipped, Firefox 229
+  passed/4 skipped**(각 233). `/admin/files` 등 #406 신규 화면 렌더까지 통과. ADR-065는 n150 Linux
+  Playwright 우선이나 n150 headless에 chromium 시스템 라이브러리(`libatk` 등)가 없고 passwordless sudo가
+  없어 Windows Playwright를 n150 UI(LAN) 대상 fallback으로 사용했다(사유 기록). n150 Linux e2e 상시화에는
+  n150에서 `sudo npx playwright install-deps chromium`(+firefox) 1회가 필요하다. 상세는 `docs/journal.md`
+  2026-07-07 항목.
 
 - [/ ] PR #406 Claude Code 리뷰 후속 진행 중 — 최근 5일(2026-07-01 KST 이후) Claude Code 공동 작성 PR을
   closed 포함으로 확인했고, 닫힌 대상은 없으며 open PR #406만 대상이었다. PR #406에는 리뷰 코멘트를
