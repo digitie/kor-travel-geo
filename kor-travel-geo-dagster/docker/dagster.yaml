@@ -1,0 +1,7 @@
+telemetry:
+  enabled: false
+
+storage:
+  postgres:
+    postgres_url:
+      env: KTG_DAGSTER_PG_URL
