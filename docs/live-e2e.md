@@ -26,6 +26,18 @@
 `case`는 단일 Playwright project 기준이다. 현재 Chromium/Firefox 2 project 목록 기준으로는
 `npx playwright test --config playwright.config.ts --list tests/e2e/live`가 460건을 출력한다.
 
+## 최근 검증 (2026-07-07, n150 배포 스택)
+
+- PR #406(관리 UI 개편, T-283) 재배포 후 n150 운영 스택 대상 read-only 실행
+  (`KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS` 미설정): **Chromium 229 passed/4 skipped, Firefox 229 passed/4
+  skipped**(각 233 project). `/admin/files` 통합 파일 인벤토리 등 #406 신규 화면 렌더 포함. 4 skip은
+  파괴적/mutation opt-in(공개키 생성·rebuild) 2건 + 조건부(when-exists) API 2건.
+- ADR-065는 n150 Linux Playwright 우선이나, n150 headless 서버에 chromium 시스템 라이브러리
+  (`libatk-1.0.so.0` 등)가 없고 passwordless sudo가 없어 브라우저 launch 불가(API 계층은 통과, 브라우저
+  계층만 실패)였다. 그래서 **Windows Playwright**를 n150 UI(LAN, `PLAYWRIGHT_BASE_URL=n150:12505`) 대상으로
+  fallback 실행했다. n150 Linux e2e 상시화에는 n150에서 `sudo npx playwright install-deps chromium`
+  (+firefox) 1회가 필요하다. 상세는 `docs/journal.md` 2026-07-07.
+
 ## 최근 검증 (2026-06-23)
 
 - 로컬 production Docker API/UI: `KTG_LIVE_E2E_MUTATE_PUBLIC_KEYS=1` 기준 Chromium/Firefox 각 230건 중

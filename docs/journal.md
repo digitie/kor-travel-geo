@@ -2,6 +2,44 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-07 (PR #406 관리 UI 개편 n150 배포 + live UI e2e, by claude)
+
+**작업**: 2026-07-06 codex 항목의 예고("live UI e2e는 PR #406 최종 머지 후 백업 리스토어를 제외하고
+이어서 실행한다")를 이어받아, PR #406(shadcn 관리 UI 전면 개편 + `/admin/files` 파일 관리 화면 +
+통합 파일 인벤토리 API, T-283)의 n150 배포와 live UI e2e를 완료했다. PR #406은 이미 main에 머지돼
+있었고(CI backend/frontend/openapi green), 열린 코드 태스크는 없었다. 요청대로 backup/restore는 제외했다.
+
+**진단(배포 전 n150 상태)**:
+- 운영 스택이 **pre-#406 이미지**로 가동 중이었다(`/v1/admin/storage/files` → 404). 앱 소스는 #406이
+  반영돼 있었지만 이미지가 재빌드되지 않았다.
+- UI/API 컨테이너의 admin 인증 env가 **전부 빈 값**(hash/secret/proxy len 0)이라 로그인이 깨져 있었다.
+  원인은 직전 재생성이 docker-manager override의 `${KTG_UI_ADMIN_PASSWORD_HASH:-}` 치환을
+  `--env-file .env` 없이 수행해 조용히 빈 값으로 뜬 것(로컬 배포 런북 §1의 바로 그 함정 재현).
+  시크릿 값 자체는 docker-manager `.env`에 존재했다.
+
+**조치(배포)**:
+- origin/main HEAD 소스를 n150 앱 디렉터리에 rsync 반영(`.env*`·data·artifacts·node_modules·`.next`·
+  `.git`·`*.local.md` 등 제외 → prod 설정 보존).
+- ktdctl과 동일한 `docker compose --env-file .env -f docker-compose.yml -f docker-compose.override.yml`
+  invocation으로 **api·ui만** 재빌드·`--force-recreate`. postgres/DB는 건드리지 않았다(DB 무손상,
+  backup/restore·full-load 제외).
+
+**검증**:
+- 재생성 후 컨테이너 env 복구 확인: UI hash/secret/proxy·API proxy/cidrs 모두 채워짐.
+- 로그인 POST 200 + httpOnly `SameSite=Strict` 세션 쿠키, 틀린 비번 401.
+- `/v1/admin/storage/files` 403(role gate — route 존재 = #406 이미지 배포 확인), readyz/healthz 200,
+  v1 geocode는 구조화 vworld 에러(key 요구)로 route 정상.
+- live UI e2e(`tests/e2e/live`, read-only 구성 — 공개키 mutation·rebuild opt-in 미설정): 배포된 n150
+  스택 대상 **Chromium 229 passed / 4 skipped, Firefox 229 passed / 4 skipped**(각 233 project). 4 skip은
+  의도된 파괴적/mutation opt-in(공개키 생성·rebuild) 2건 + 조건부(when-exists) API 2건. `/admin/files`
+  파일 인벤토리 등 #406 신규 화면 렌더까지 통과.
+
+**환경 메모(ADR-065 fallback 사유)**: n150 Linux Playwright를 먼저 시도했으나, n150 headless에 chromium
+시스템 라이브러리(`libatk-1.0.so.0` 등)가 없고 passwordless sudo가 없어 브라우저 launch가 불가했다
+(API 계층 186건 통과, 브라우저 45건 launch 실패). 그래서 Windows Playwright를 n150 UI(LAN) 대상으로
+fallback 실행했다. n150 Linux e2e 상시화에는 n150에서 `sudo npx playwright install-deps chromium`
+(+firefox) 1회가 필요하다.
+
 ## 2026-07-06 (PR #406 Claude Code 리뷰 후속 반영, by codex)
 
 **작업**: 최근 5일(2026-07-01 KST 이후) Claude Code 공동 작성 PR을 closed 포함으로 확인했다.
