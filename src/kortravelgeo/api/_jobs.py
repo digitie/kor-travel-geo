@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from enum import Enum
 from time import perf_counter
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -28,6 +28,7 @@ from kortravelgeo.api._job_recovery import (
     noop_orchestrator_cancel,
     reconcile_load_job,
 )
+from kortravelgeo.dto.admin import LoadJobState
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.batch import batch_children
 from kortravelgeo.infra.metrics import record_load_job_duration, record_load_job_stage_duration
@@ -234,11 +235,12 @@ UPDATE load_jobs
         Returns the ``(job_id, action)`` decisions for observability/testing.
         """
 
-        rows = await self._dagster_running_rows()
+        rows = await self._dagster_reconcile_rows()
         now = datetime.now(UTC)
         results: list[tuple[str, ReconcileAction]] = []
         for row in rows:
             job_id = str(row["job_id"])
+            job_state = cast("LoadJobState", row["state"])
             lease_valid = is_lease_valid(
                 lease_expires_at=row.get("lease_expires_at"),
                 now=now,
@@ -249,7 +251,7 @@ UPDATE load_jobs
             )
             action = reconcile_load_job(
                 run_state=run_state,
-                job_state="running",
+                job_state=job_state,
                 lease_valid=lease_valid,
             )
             await self._apply_reconcile(
@@ -260,16 +262,22 @@ UPDATE load_jobs
             results.append((job_id, action))
         return results
 
-    async def _dagster_running_rows(self) -> list[dict[str, Any]]:
+    async def _dagster_reconcile_rows(self) -> list[dict[str, Any]]:
         async with self.engine.connect() as conn:
             rows = (
                 await conn.execute(
                     text(
                         """
-SELECT job_id, orchestrator_run_id, lease_expires_at
+SELECT job_id, state, orchestrator_run_id, lease_expires_at
   FROM load_jobs
- WHERE state = 'running'
-   AND executor = 'dagster'
+ WHERE executor = 'dagster'
+   AND (
+     state = 'running'
+     OR (
+       state IN ('failed','cancelled')
+       AND orchestrator_run_id IS NOT NULL
+     )
+   )
  ORDER BY created_at
 """
                     )

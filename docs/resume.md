@@ -19,7 +19,9 @@
   **M1 완결(2026-07-08)**: T-290a(#419)·T-290c(#420)·T-290b(#421·#422, manager #47) 머지. n150에
   Dagster webserver(:12502)+daemon 배포, code location 서빙, **`mv_refresh`를 실제 Dagster run으로
   실행해 SUCCESS**로 M1 게이트 검증(상세·통합 버그·교훈은 journal 2026-07-08 참조). 포트는 map 패턴
-  12502로 확정(초기 12703 정정 #422).
+  12502로 확정(초기 12703 정정 #422). Codex M1 리뷰 후속으로 #420의 terminal split-brain scan
+  누락을 #424로 분리했고, `reconcile_dagster_jobs()`가 `failed`/`cancelled` orphan 후보를 실제 경로에서
+  cancel hook으로 닫도록 보강했다(alembic 0024 partial index 포함).
   **다음 한 작업**: M2 — (A) **T-290f**(scheduled backup @schedule 온램프 + @run_failure_sensor + 알림),
   (B) T-290d/290e 관측 표면(머지 완료)의 n150 배포 검증. M2 완료 후 **live UI e2e #1**(login →
   `/admin/dagster` 렌더 + backup run 가시화).

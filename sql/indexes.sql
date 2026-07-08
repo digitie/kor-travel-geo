@@ -84,6 +84,13 @@ CREATE INDEX IF NOT EXISTS idx_load_jobs_created
 CREATE INDEX IF NOT EXISTS idx_load_jobs_dagster_running
   ON load_jobs (lease_expires_at)
   WHERE executor = 'dagster' AND state = 'running';
+-- Reverse split-brain scan: the app already marked a Dagster-backed job terminal, but
+-- the Dagster run may still be alive and must be terminated by the reconciler.
+CREATE INDEX IF NOT EXISTS idx_load_jobs_dagster_terminal_orphan
+  ON load_jobs (created_at)
+  WHERE executor = 'dagster'
+    AND state IN ('failed','cancelled')
+    AND orchestrator_run_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_consistency_started
   ON load_consistency_reports (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_geo_cache_expires

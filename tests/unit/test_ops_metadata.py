@@ -71,9 +71,12 @@ def test_load_jobs_executor_lease_metadata_and_reconciler_index_declared() -> No
     assert "CHECK (executor IN ('api_in_process','dagster'))" in load_jobs_ddl
     assert "orchestrator_run_id TEXT" in load_jobs_ddl
     assert "lease_expires_at" in load_jobs_ddl
-    # Partial index that the reconciler / startup-recovery hot path relies on.
+    # Partial indexes that the reconciler / startup-recovery hot path relies on.
     assert "idx_load_jobs_dagster_running" in INDEX_SQL
     assert "WHERE executor = 'dagster' AND state = 'running'" in INDEX_SQL
+    assert "idx_load_jobs_dagster_terminal_orphan" in INDEX_SQL
+    assert "state IN ('failed','cancelled')" in INDEX_SQL
+    assert "AND orchestrator_run_id IS NOT NULL" in INDEX_SQL
 
 
 def test_audit_redaction_never_keeps_secrets_dsn_tokens_or_raw_address() -> None:

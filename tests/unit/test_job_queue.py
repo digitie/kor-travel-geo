@@ -152,13 +152,41 @@ async def test_reconcile_dagster_jobs_applies_transitions(
 ) -> None:
     queue = JobQueue(cast("Any", object()))
     rows: list[dict[str, Any]] = [
-        {"job_id": "j-done", "orchestrator_run_id": "r1", "lease_expires_at": None},
-        {"job_id": "j-fail", "orchestrator_run_id": None, "lease_expires_at": None},
-        {"job_id": "j-keep", "orchestrator_run_id": "r3", "lease_expires_at": None},
+        {
+            "job_id": "j-done",
+            "state": "running",
+            "orchestrator_run_id": "r1",
+            "lease_expires_at": None,
+        },
+        {
+            "job_id": "j-fail",
+            "state": "running",
+            "orchestrator_run_id": None,
+            "lease_expires_at": None,
+        },
+        {
+            "job_id": "j-keep",
+            "state": "running",
+            "orchestrator_run_id": "r3",
+            "lease_expires_at": None,
+        },
+        {
+            "job_id": "j-orphan-failed",
+            "state": "failed",
+            "orchestrator_run_id": "r4",
+            "lease_expires_at": None,
+        },
+        {
+            "job_id": "j-orphan-cancelled",
+            "state": "cancelled",
+            "orchestrator_run_id": "r5",
+            "lease_expires_at": None,
+        },
     ]
     done: list[str] = []
     failed: list[tuple[str, str]] = []
     cancelled: list[str] = []
+    orphaned: list[tuple[str, str | None]] = []
 
     async def fake_rows() -> list[dict[str, Any]]:
         return rows
@@ -168,7 +196,7 @@ async def test_reconcile_dagster_jobs_applies_transitions(
     ) -> OrchestratorRunState:
         if orchestrator_run_id == "r1":
             return OrchestratorRunState.SUCCESS
-        if orchestrator_run_id == "r3":
+        if orchestrator_run_id in {"r3", "r4", "r5"}:
             return OrchestratorRunState.RUNNING
         return OrchestratorRunState.MISSING  # r=None + expired lease -> failed
 
@@ -181,11 +209,21 @@ async def test_reconcile_dagster_jobs_applies_transitions(
     async def fake_cancelled(job_id: str) -> None:
         cancelled.append(job_id)
 
-    monkeypatch.setattr(queue, "_dagster_running_rows", fake_rows)
+    async def fake_orphan(
+        job_id: str,
+        reason: str,
+        *,
+        orchestrator_run_id: str | None = None,
+    ) -> None:
+        assert reason
+        orphaned.append((job_id, orchestrator_run_id))
+
+    monkeypatch.setattr(queue, "_dagster_reconcile_rows", fake_rows)
     monkeypatch.setattr(queue, "_liveness_probe", fake_probe)
     monkeypatch.setattr(queue, "_done", fake_done)
     monkeypatch.setattr(queue, "_fail", fake_fail)
     monkeypatch.setattr(queue, "_cancelled", fake_cancelled)
+    monkeypatch.setattr(queue, "_flag_orchestrator_orphan", fake_orphan)
 
     results = await queue.reconcile_dagster_jobs()
 
@@ -196,7 +234,10 @@ async def test_reconcile_dagster_jobs_applies_transitions(
         ("j-done", ReconcileOutcome.CONVERGE_DONE),
         ("j-fail", ReconcileOutcome.CONVERGE_FAILED),
         ("j-keep", ReconcileOutcome.KEEP_RUNNING),
+        ("j-orphan-failed", ReconcileOutcome.FLAG_ORPHAN),
+        ("j-orphan-cancelled", ReconcileOutcome.FLAG_ORPHAN),
     ]
+    assert orphaned == [("j-orphan-failed", "r4"), ("j-orphan-cancelled", "r5")]
 
 
 class _FakeAdminRepo:
