@@ -255,6 +255,32 @@ def _dagster_urls(settings: Settings) -> _DagsterUrls:
     )
 
 
+def _safe_summary_dagster_url(settings: Settings) -> str:
+    """Return a browser-safe Dagster URL for config-error summaries.
+
+    Config errors can come from the public URL itself. In that path we still return a
+    summary DTO, but must not echo a raw invalid value into iframe/link fields.
+    """
+    if settings.dagster_public_url.strip():
+        try:
+            return _validated_http_url(
+                settings.dagster_public_url,
+                setting_name="dagster_public_url",
+                allowed_hosts=None,
+            ).rstrip("/")
+        except DagsterUrlConfigurationError:
+            pass
+    try:
+        return _validated_http_url(
+            settings.dagster_url,
+            setting_name="dagster_url",
+            allowed_hosts=_normalised_allowed_hosts(settings),
+        ).rstrip("/")
+    except DagsterUrlConfigurationError:
+        pass
+    return ""
+
+
 def _dict(value: object) -> JsonDict:
     return value if isinstance(value, dict) else {}
 
@@ -558,7 +584,7 @@ def _run_detail_response(
 def _empty_summary_data(
     *,
     status: Literal["unavailable", "error"],
-    settings: Settings,
+    dagster_url: str,
     graphql_url: str,
     checked_at: datetime,
     errors: list[str],
@@ -567,7 +593,7 @@ def _empty_summary_data(
         status=status,
         # Browser-facing URL even on the outage/error path so the admin iframe keeps
         # the public domain; graphql_url stays the internal backend target.
-        dagster_url=settings.dagster_public_url or settings.dagster_url,
+        dagster_url=dagster_url,
         graphql_url=graphql_url,
         checked_at=checked_at,
         repository_count=0,
@@ -606,7 +632,7 @@ async def get_dagster_summary(
         return _summary_response(
             _empty_summary_data(
                 status="error",
-                settings=settings,
+                dagster_url=_safe_summary_dagster_url(settings),
                 graphql_url=raw_graphql_url,
                 checked_at=checked_at,
                 errors=[str(exc)],
@@ -625,7 +651,7 @@ async def get_dagster_summary(
         return _summary_response(
             _empty_summary_data(
                 status="unavailable",
-                settings=settings,
+                dagster_url=dagster_urls.public_url,
                 graphql_url=dagster_urls.graphql_url,
                 checked_at=checked_at,
                 errors=[_sanitized_request_error(exc)],
@@ -638,7 +664,7 @@ async def get_dagster_summary(
         return _summary_response(
             _empty_summary_data(
                 status="error",
-                settings=settings,
+                dagster_url=dagster_urls.public_url,
                 graphql_url=dagster_urls.graphql_url,
                 checked_at=checked_at,
                 errors=[_graphql_error_message(error) for error in graphql_errors],

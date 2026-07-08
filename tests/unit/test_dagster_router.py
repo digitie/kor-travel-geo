@@ -435,6 +435,7 @@ async def test_dagster_summary_rejects_disallowed_url_before_http_call(
     assert data["status"] == "error"
     assert data["repository_count"] == 0
     assert data["errors"] == ["dagster_url host is not in dagster_allowed_hosts"]
+    assert data["dagster_url"] == ""
 
 
 @pytest.mark.asyncio
@@ -530,6 +531,86 @@ async def test_dagster_summary_returns_public_url_not_allowlisted(
     assert data["dagster_url"] == "https://geo-dagster.digitie.mywire.org"
     # Backend GraphQL URL stays internal.
     assert data["graphql_url"] == "http://dagster.example:12502/graphql"
+
+
+@pytest.mark.asyncio
+async def test_dagster_summary_unavailable_uses_validated_public_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        admin_trusted_proxy_cidrs="127.0.0.0/8",
+        dagster_url="http://dagster.example:12502",
+        dagster_public_url="https://geo-dagster.digitie.mywire.org/",
+        dagster_allowed_hosts=("dagster.example",),
+        dagster_request_timeout_seconds=1.0,
+        geoip_gate_mode="off",
+    )
+
+    async def _raise_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        assert client
+        assert graphql_url == "http://dagster.example:12502/graphql"
+        assert variables
+        assert query
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _raise_post_graphql)
+
+    transport = httpx.ASGITransport(app=_app(settings), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "unavailable"
+    # Outage summaries reuse the validated/normalized browser-facing URL.
+    assert data["dagster_url"] == "https://geo-dagster.digitie.mywire.org"
+    assert data["errors"] == ["Dagster 요청 실패 (ConnectError)"]
+
+
+@pytest.mark.asyncio
+async def test_dagster_summary_invalid_public_url_is_not_echoed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        admin_trusted_proxy_cidrs="127.0.0.0/8",
+        dagster_url="http://dagster.example:12502",
+        dagster_public_url="javascript:alert(1)",
+        dagster_allowed_hosts=("dagster.example",),
+        dagster_request_timeout_seconds=1.0,
+        geoip_gate_mode="off",
+    )
+
+    async def _unexpected_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        assert client
+        assert graphql_url
+        assert variables
+        assert query
+        raise AssertionError("invalid public URL must fail before Dagster is requested")
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _unexpected_post_graphql)
+
+    transport = httpx.ASGITransport(app=_app(settings), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "error"
+    assert data["errors"] == ["dagster_public_url scheme must be http or https"]
+    assert data["dagster_url"] == "http://dagster.example:12502"
+    assert "javascript:alert(1)" not in str(data)
 
 
 @pytest.mark.asyncio

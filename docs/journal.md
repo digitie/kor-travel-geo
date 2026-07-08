@@ -2,6 +2,30 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-09 (T-290 #434 리뷰 후속 — Dagster public URL 오류 응답 보강, by codex)
+
+**작업**: Claude Code의 T-290 후속 PR #433/#434를 통합 브랜치 기준으로 리뷰했다. #433은 이전 리뷰
+이슈(#427/#428/#430/#431/#432)에 대한 후속으로 blocking finding이 없다고 PR 코멘트에 기록했다. #434에서는
+`dagster_public_url` 정상 경로는 검증되지만, summary 오류 응답 경로가 `_empty_summary_data()`에서
+`settings.dagster_public_url` raw 값을 다시 읽어 iframe/link용 `dagster_url`로 반환하는 회귀를 확인했다.
+추적 이슈는 #435로 분리했다.
+
+**변경**:
+- `_empty_summary_data()`가 `Settings`를 받아 raw URL을 다시 읽지 않고, 호출자가 검증된 browser-facing
+  `dagster_url`을 명시적으로 넘기게 했다.
+- `_dagster_urls()` 성공 이후의 Dagster unavailable / GraphQL error summary는 `dagster_urls.public_url`을
+  재사용한다.
+- `_dagster_urls()` 자체가 실패한 config-error summary는 `_safe_summary_dagster_url()`에서 public URL을
+  별도 검증하고, invalid public URL이면 allowlist를 통과한 internal URL로 fallback한다. 둘 다 유효하지
+  않으면 빈 문자열을 반환해 raw invalid value가 iframe/link 필드로 나가지 않게 한다.
+- invalid `dagster_public_url`이 raw로 응답되지 않는 테스트와 outage summary가 정규화된 public URL을
+  유지하는 테스트를 추가했다.
+
+**검증**:
+- `.venv/bin/python -m pytest tests/unit/test_dagster_router.py -q -s` → 14 passed.
+- `.venv/bin/python -m ruff check src/kortravelgeo/api/routers/dagster.py tests/unit/test_dagster_router.py` 통과.
+- `.venv/bin/python -m mypy src/kortravelgeo` 통과.
+
 ## 2026-07-08 (T-290f scheduled backup Dagster 온램프, by codex)
 
 **작업**: M2의 남은 실행엔진 항목인 T-290f를 통합 브랜치 위에서 진행했다. 이 단계는 `db_backup`
