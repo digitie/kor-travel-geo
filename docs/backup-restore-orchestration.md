@@ -376,3 +376,82 @@ sidecar로 도입한다.
 - `load_jobs`/`ops.artifacts` 정본 유지
 - Airflow는 조직 표준이 있을 때의 대안으로 제한
 - Dagster-backed worker 전환 시 필요한 별도 ADR/마이그레이션 조건
+
+---
+
+## 보강 의견 (claude, 2026-07-08) — sibling `kor-travel-map` 실증에 비춘 정합
+
+위 리뷰(codex)의 뼈대에 동의한다: 상태 정본을 오케스트레이터로 통째 옮기지 말 것, leaf(도메인) 로직
+재사용, hot-swap은 수동+typed confirmation, 실패별 retry 분리, 초기엔 superuser DSN 배제. 여기에
+**이미 프로덕션 운영 중인 sibling `kor-travel-map`의 독립 Dagster 실측**을 근거로 두 가지를 보강·조정한다.
+(사용자 결정: "geo 전용 독립 Dagster 운영".)
+
+### 1) 새 근거 — map은 이 결정의 in-house 정답지다
+
+`kor-travel-map`은 서비스 전용 독립 Dagster를 이미 운영한다(@asset 30·@op/@job 20+·@schedule 20·
+@sensor 2). geo는 새로 설계할 필요 없이 그대로 미러할 청사진이 있다(정본:
+`kor-travel-map/docs/architecture/dagster-boundary.md`).
+
+- **패키지**: 독립 `*-dagster` 패키지 + **main lib은 Dagster-free**(단방향 의존, lib는 `@asset`/`@op`/
+  `Definitions`를 쓰지 않음). geo도 `kortravelgeo.dagster.*` namespace 서브패키지로.
+- **리소스**: `definitions.py`가 4-way fallback(value/settings/real/missing-guard)으로 조립 → code
+  location은 항상 로드되고, 자격증명 누락은 import가 아니라 **run init에서 key별 메시지로** 실패한다.
+  DB/RustFS/settings는 API와 **설정만 공유**(리소스 객체 공유 X, 같은 constructor 재사용).
+- **배포**: Dagster 메타는 **별도 DB `<svc>_dagster`**(같은 Postgres 클러스터), `db-init`+`webserver`+
+  `daemon` 3서비스 + `DAGSTER_HOME` 멀티스테이지 Dockerfile.
+- **batch DAG**: map의 `batch_dag.py`가 **geo ADR-017을 이미 미러**했다(consistency gate를 1-op-in-job).
+  → geo full-load는 사실상 1:1 역이식이다.
+
+### 2) 조정 — 종착지는 "Dagster가 API를 호출"이 아니라 "Dagster가 실행, API가 관측"이다
+
+위 문서는 Dagster를 **Admin API를 호출하는 sidecar**로 두고(1~3단계), 실제 실행을 Dagster로 옮기는
+4단계를 "별도 ADR이 필요한 먼 옵션"으로 미룬다. 그런데 **map의 실제 모델은 그 반대다**:
+
+- map: **Dagster op이 main-lib 함수를 직접 호출해 실행**하고, **API는 Dagster webserver의 GraphQL
+  클라이언트로 관측**한다(read: `/v1/ops/dagster/summary`·`/runs/{id}` — SSRF allowlist, Dagster down이어도
+  200+`status=unavailable`; trigger: `launchRun` mutation; queue: sensor가 앱 큐 테이블을 peek→RunRequest).
+  admin은 요약 DTO 카드 + **Dagster UI를 iframe 임베드**한다. "Dagster가 일하려고 API를 부르는" 경로는
+  없다(API→Dagster→API 루프가 되므로).
+
+유지보수성 기준(=사용자 기준)에선 이 차이가 결정적이다. **"Dagster→API→in-process 큐 실행" 모델은
+in-process 큐와 그 부채를 영구 존치**한다 — T-192 drain nudge, **T-193 event-loop starvation
+우회(`_run_loader_off_event_loop`)**, lifespan recovery, advisory-lock 큐. 정작 덜어내고 싶은 "손으로
+키운 미니-오케스트레이터"가 그대로 남는다. map의 executor 모델에선 이 부채가 대부분 **은퇴**한다
+(Dagster op은 daemon executor에서 sync 실행이라 event-loop starvation 자체가 없다).
+
+→ 보강 제안: **codex의 1~3단계는 훌륭한 온램프로 채택하되, 4단계(Dagster 실행)를 "먼 옵션"이 아니라
+확정 종착지로 둔다.** map이 이미 프로덕션에서 그 종착지를 검증했고, leaf(`run_backup_job`/
+`run_restore_job`/loaders/hotswap/정합성 게이트)를 **재사용**하므로 위험은 오케스트레이션 배선에 국한된다.
+
+### 3) "상태 정본 하나" → "깨끗한 2-정본 경계"로 정밀화 (split-brain은 이렇게 풀린다)
+
+codex의 걱정("상태 머신이 둘로 갈라진다")은 **같은 대상을 둘 다 정본으로 만들 때만** 실재한다. map은
+이를 경계로 해소한다(dagster-boundary §9):
+
+- **Dagster run store** = run/event/**schedule/retry 이력** 정본(자체 DB).
+- **앱 progress 테이블**(map `ops.import_jobs` ↔ geo `load_jobs`) = **admin 세밀 progress/cancel** 정본.
+- **누가 실행하든(= Dagster op) 기존 `progress()` 콜백으로 앱 테이블을 갱신** → progress 정본은 하나로
+  유지된다.
+
+즉 4단계에서도 `load_jobs`는 "실행 상태 정본"으로 남되 **큐/스케줄러/복구 책임만 Dagster로 이관**된다.
+위 문서의 `executor`/`orchestrator_run_id`/`lease_expires_at` 컬럼과 executor별 startup recovery·reconciler
+설계가 바로 이 경계를 구현하는 옳은 장치다 — 그대로 채택한다.
+
+### 4) geo 특이사항 & map이 덴 gotcha (그대로 물려받기)
+
+- **은퇴 이득**: `_run_loader_off_event_loop`(T-193), JobQueue drain nudge(T-192), lifespan running→failed
+  일괄 처리 → Dagster executor/run-monitor로 대체.
+- **map gotcha**: `@op`/`@asset` 모듈에 `from __future__ import annotations` 금지(Dagster가 `context`
+  런타임 타입 검증), **op명 ≠ job명**(같으면 repo 로드 실패).
+- **미결 결정 2개**: (a) 패키지 레이아웃 — map식 `packages/` 재편 vs 최소변경 sibling
+  `kor-travel-geo-dagster/`(권장). (b) Dagster 포트 — map이 12702 점유, geo용 신규 포트 배정 후
+  `docs/ports.md` 등재. n150은 host-network라 포트 충돌 주의.
+
+### 보강 결론
+
+codex 결론(Dagster 도입 가치 O, 상태 정본 통짜 이전 X)에 동의한다. 다만 **"sidecar가 API를 호출"에서
+멈추지 말고, map이 이미 검증한 "Dagster가 leaf를 실행 / API가 GraphQL로 관측 / iframe 임베드"를 확정
+종착지로** 삼는 것이 유지보수성 최적이다. split-brain은 "Dagster=run 이력 / 앱 테이블=progress(op이
+기록)"의 깨끗한 경계로 해소된다. 실행 이관의 위험은 leaf 재사용 + map 청사진 + 기존 roundtrip/
+fault-injection/hot-swap 테스트 재검증으로 관리한다. ADR 승격 시 이 **2-정본 경계**와 **4단계 확정**,
+그리고 map `dagster-boundary.md`를 geo판으로 이식하는 것을 명시할 것을 제안한다.
