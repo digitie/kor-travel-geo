@@ -11,12 +11,14 @@
   게이트는 [dagster-migration-plan.md](dagster-migration-plan.md)가 정본. 통합 브랜치
   `agent/claude-dagster-migration`(전 milestone 완료 후 main 머지), 두 에이전트 A(실행엔진/백엔드)·
   B(배포/관측/e2e) 병렬. **완료**: B의 T-290d(API GraphQL observe 라우터
-  `/v1/ops/dagster/summary`, `/v1/ops/dagster/runs/{run_id}`)가 통합 브랜치 위 별도 PR로 완료됐다.
-  main lib은 Dagster를 import하지 않고, API는 trusted admin role gate, SSRF allowlist, 200
-  `status=unavailable` outage 응답을 제공한다. OpenAPI와 UI 생성 타입도 갱신했다. **다음 한 작업**:
-  (A) T-290a(패키지 스캐폴드+resources+mv_refresh @job)와 T-290c(load_jobs executor/recovery 게이트),
-  (B) T-290b(Dagster 배포; webserver host 포트 `12703` 예약은 완료) 또는 T-290e(admin
-  `/admin/dagster`)를 의존성 상태에 맞춰 진행.
+  `/v1/ops/dagster/summary`, `/v1/ops/dagster/runs/{run_id}`)와 T-290e(admin
+  `/admin/dagster` 관측 화면 + sandbox iframe)가 통합 브랜치 위 별도 PR로 완료됐다. main lib은
+  Dagster를 import하지 않고, API는 trusted admin role gate, SSRF allowlist, 200
+  `status=unavailable` outage 응답을 제공한다. UI는 OpenAPI 생성 타입 기반 React Query hook으로
+  summary/run detail을 읽고 repository·schedule/sensor tick·recent run·iframe을 표시한다.
+  **다음 한 작업**: (A) T-290a(패키지 스캐폴드+resources+mv_refresh @job)와 T-290c(load_jobs
+  executor/recovery 게이트), (B) T-290b(Dagster 배포; webserver host 포트 `12703` 예약은 완료)를
+  의존성 상태에 맞춰 진행.
   live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
   미래지향(유지보수성·안정성·완성도·품질).
 
