@@ -2,6 +2,39 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-09 (T-290 M2 live gate — n150 Dagster observe/e2e 검증, by codex)
+
+**작업**: 통합 브랜치 `agent/claude-dagster-migration` HEAD를 n150 소스 트리에 동기화하고, M2 live UI
+e2e #1 게이트를 수행했다. 대상은 `/admin/dagster` summary/runs/iframe 렌더, 기존 `/admin/backups`
+정상 렌더, 그리고 `scheduled_backup_run_due` Dagster run 가시화다. 추적 이슈는 #439다.
+
+**운영 보강**:
+- n150 docker-manager의 `kor-travel-geo-dagster`/`kor-travel-geo-dagster-daemon` 서비스가
+  `KTG_DAGSTER_ADMIN_API_URL`과 `KTG_ADMIN_PROXY_SECRET`을 받지 않아 `scheduled_backup_run_due`가
+  API `run-due` 호출에서 403으로 실패했다. docker-manager 로컬 `docker-compose.override.yml`에 두
+  env pass-through를 추가하고 Dagster webserver/daemon만 재생성했다. 이 변경은 현재 docker-manager
+  운영 파일 보강이며, 이 repo의 코드 변경은 아니다.
+- 첫 수동 launch 1건은 `-a defs`로 만든 일회성 code location 이름이 daemon workspace와 달라
+  dequeue 실패했다. 이후 실제 daemon과 같은 `-m kortravelgeo_dagster.definitions` launch 기준으로
+  재검증했다.
+
+**검증**:
+- n150 API `healthz`/`readyz` 정상, Dagster webserver 직접 200, `/v1/ops/dagster/summary`는
+  `status=ok`와 public browser-facing `dagster_url`을 반환했다.
+- `scheduled_backup_run_due`를 Dagster CLI로 launch해 recent runs에서 `SUCCESS`를 확인했다. 운영
+  `KTG_BACKUP_SCHEDULE_ENABLED`는 비활성이라 실제 `db_backup`은 enqueue되지 않았고, run log는
+  `scheduled backup not enqueued: disabled` no-op 성공으로 남았다.
+- n150 자체 Playwright는 Chromium 시스템 라이브러리 `libatk-1.0.so.0` 누락으로 브라우저 launch가
+  실패했다. 정책상 fallback으로 로컬 Linux Playwright에서 n150 UI에 접속해 검증했다.
+  명령 형태: `PLAYWRIGHT_BASE_URL=http://<n150>:12505 node /tmp/ktg-m2-dagster-smoke.js`
+  (세션 쿠키는 `KTG_UI_SESSION_SECRET`으로 서명, secret 값은 출력하지 않음). 결과:
+  `/admin/dagster` heading/panels/iframe과 `/admin/backups` heading이 모두 렌더됐다.
+- 통합 브랜치에 추가된 공식 live spec
+  `kor-travel-geo-ui/tests/e2e/live/dagster-readonly.spec.ts`는 n150 대상
+  `LIVE_E2E=1 PLAYWRIGHT_BROWSER=chromium ... npx playwright test ...` 실행 시 평문
+  `KTG_LIVE_E2E_ADMIN_PASSWORD`가 없어 설계대로 1 skipped였다. 실제 화면 검증은 위 세션 서명
+  smoke로 보완했다.
+
 ## 2026-07-09 (T-290 #434 리뷰 후속 — Dagster public URL 오류 응답 보강, by codex)
 
 **작업**: Claude Code의 T-290 후속 PR #433/#434를 통합 브랜치 기준으로 리뷰했다. #433은 이전 리뷰

@@ -30,8 +30,17 @@
   없이 수용 가능했고, #434에서는 summary 오류 응답이 invalid `dagster_public_url` raw 값을
   browser-facing `dagster_url`로 되돌려주는 회귀를 #435로 분리했다. 수정 후 오류 응답도 검증/정규화된
   public URL만 iframe/link 필드에 싣는다.
-  **다음 한 작업**: M2 gate — n150 배포 후 **live UI e2e #1**(login → `/admin/dagster` summary/runs/
-  iframe 렌더 + scheduled/triggered backup run 가시화 + 기존 `/admin/backups` 정상)을 수행한다.
+  **M2 live gate 완료(2026-07-09)**: 통합 브랜치 HEAD를 n150에 동기화하고 Dagster webserver/daemon을
+  재생성했다. docker-manager의 geo Dagster 서비스에 `KTG_DAGSTER_ADMIN_API_URL`/
+  `KTG_ADMIN_PROXY_SECRET` pass-through가 없어 `scheduled_backup_run_due`가 403으로 실패하던 배포 설정을
+  운영 override에서 보강했고, 이후 `scheduled_backup_run_due` recent run `SUCCESS`를 확인했다. 운영
+  schedule은 disabled라 실제 `db_backup`은 enqueue되지 않았고 no-op 성공으로 검증됐다. n150 Playwright는
+  `libatk-1.0.so.0` 누락으로 직접 실행이 불가능해 로컬 Linux Playwright에서 n150 UI로 접속하는 fallback
+  smoke를 사용했고, `/admin/dagster` summary/runs/iframe과 기존 `/admin/backups` 렌더를 확인했다. 공식
+  `dagster-readonly.spec.ts`는 평문 live admin password 부재로 설계대로 1 skipped.
+  **다음 한 작업**: M3 착수 — T-290g에서 `db_backup` leaf를 Dagster job/op로 옮기고, T-290h에서
+  `/admin/dagster` run detail에 backup op 로그·artifact 링크를 연결한다. M3 gate는 backup이 Dagster
+  run으로 실행되고 artifact 다운로드와 run/op 로그가 admin UI에서 보이는지 확인하는 **live UI e2e #2**다.
   live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
   미래지향(유지보수성·안정성·완성도·품질).
 
