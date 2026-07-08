@@ -42,8 +42,15 @@ _NOW = datetime(2026, 7, 8, 12, 0, 0, tzinfo=UTC)
             ReconcileOutcome.CONVERGE_FAILED,
             "failed",
         ),
-        # reverse split-brain: run alive but load_jobs already failed -> orphan
+        # reverse split-brain: run alive but load_jobs already terminal-cancelled/failed
         (OrchestratorRunState.RUNNING, "failed", False, ReconcileOutcome.FLAG_ORPHAN, None),
+        (
+            OrchestratorRunState.RUNNING,
+            "cancelled",
+            False,
+            ReconcileOutcome.FLAG_ORPHAN,
+            None,
+        ),
         # already-terminal load_jobs -> noop (no false convergence)
         (OrchestratorRunState.SUCCESS, "done", True, ReconcileOutcome.NOOP, None),
         (OrchestratorRunState.FAILED, "failed", False, ReconcileOutcome.NOOP, None),

@@ -2,6 +2,36 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-08 (T-290c reconciler 리뷰 후속 — terminal orphan 경로 보강, by codex)
+
+**작업**: Claude Code의 T-290 M1 PR #419~#423을 통합 브랜치 기준으로 리뷰했다. #420의
+executor-aware recovery에서 순수 reconciler는 `failed + Dagster RUNNING -> FLAG_ORPHAN`을 갖고
+있지만, 실제 `reconcile_dagster_jobs()` 경로가 `state='running'` 행만 조회하고 `job_state='running'`을
+하드코딩해 해당 분기가 도달 불가능한 결함을 확인했다. 상세 리뷰 코멘트는 #420, 추적 이슈는 #424에
+남겼다.
+
+**변경**:
+- `JobQueue.reconcile_dagster_jobs()`가 Dagster 실행 중인 `running` 행과 terminal orphan 후보
+  (`failed`/`cancelled` + `orchestrator_run_id`)를 함께 스냅샷하고, row의 실제 `state`를
+  `reconcile_load_job()`에 전달하게 했다.
+- app-side `cancelled` 상태에서 Dagster run이 계속 `RUNNING`인 경우도 양방향 cancel 정책상
+  `FLAG_ORPHAN`으로 처리하도록 decision table과 문서를 맞췄다.
+- terminal orphan 후보 scan용 partial index `idx_load_jobs_dagster_terminal_orphan`을 fresh DDL,
+  `sql/indexes.sql`, alembic 0024에 추가했다.
+- public reconcile path 테스트가 `failed`/`cancelled` orphan cancel hook 호출까지 검증하도록 보강했다.
+
+**검증**:
+- `TMPDIR=/tmp uv run --extra api --extra dev pytest -s -q tests/unit/test_job_recovery.py tests/unit/test_job_queue.py tests/unit/test_ops_metadata.py`
+  → 38 passed.
+- `uv run --extra api --extra dev ruff check src/kortravelgeo/api/_job_recovery.py src/kortravelgeo/api/_jobs.py tests/unit/test_job_recovery.py tests/unit/test_job_queue.py tests/unit/test_ops_metadata.py alembic/versions/0024_t290c_orphan_idx.py`
+  통과.
+- `uv run --extra api --extra dev mypy src/kortravelgeo/api/_job_recovery.py src/kortravelgeo/api/_jobs.py`
+  통과.
+- `uv run --extra api --extra dev ruff check .` 통과.
+- `uv run --extra api --extra dev mypy src/kortravelgeo` 통과.
+- `uv run --extra api --extra dev lint-imports` 통과.
+- `TMPDIR=/tmp uv run --extra api --extra dev pytest -q -s` → 1152 passed, 75 skipped.
+
 ## 2026-07-08 (T-290 Dagster 이관 M1 완결 — 패키지·배포·recovery 게이트, by claude/A)
 
 **작업**: [ADR-066](adr/066-geo-independent-dagster-orchestration.md)·[마스터플랜](dagster-migration-plan.md)의

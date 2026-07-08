@@ -23,7 +23,7 @@ B(배포/관측/e2e) 병렬. **기준: 최소수정 X, 미래지향(유지보수
 
 - [x] **T-290a** (A) — `kortravelgeo_dagster` 패키지 스캐폴드 + resources + `mv_refresh` @job (M1) — #419
 - [x] **T-290b** (A) — Dagster 배포(Dockerfile/compose/메타DB/포트 12502) + n150 mv_refresh run SUCCESS (M1) — #421·#422, manager #47
-- [x] **T-290c** (A) — `load_jobs` executor/lease + recovery split + reconciler + cancel 골격 (M1, 4단계 게이트) — #420
+- [x] **T-290c** (A) — `load_jobs` executor/lease + recovery split + reconciler + cancel 골격 (M1, 4단계 게이트) — #420, 리뷰 후속 #424
 - [x] **T-290d** (B) — API GraphQL observe 라우터 (M2) — #417
 - [x] **T-290e** (B) — admin `/admin/dagster` 관측 화면 (M2) — #418
 - [ ] **T-290f** (A) — scheduled backup @schedule 온램프 + @run_failure_sensor + 알림 (M2)

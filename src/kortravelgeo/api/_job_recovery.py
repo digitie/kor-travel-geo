@@ -69,8 +69,8 @@ class ReconcileOutcome(StrEnum):
     CONVERGE_DONE = "converge_done"
     CONVERGE_FAILED = "converge_failed"
     CONVERGE_CANCELLED = "converge_cancelled"
-    #: Dagster still running but ``load_jobs`` already terminal-failed. The operator (or
-    #: the cancel seam) must terminate the Dagster run so both sides agree — the
+    #: Dagster still running but ``load_jobs`` is already failed/cancelled. The operator
+    #: (or the cancel seam) must terminate the Dagster run so both sides agree — the
     #: split-brain the boundary doc forbids ("한쪽만 취소된 상태를 만들지 않는다").
     FLAG_ORPHAN = "flag_orphan"
     #: Already consistent; nothing to write.
@@ -127,7 +127,8 @@ def reconcile_load_job(
     missing + lease valid        running         keep running (grace: run may be starting,
                                                  or probe degraded — never kill a live job)
     missing + lease expired      running         converge → ``failed``
-    running                      failed          flag orphan (terminate the Dagster run)
+    running                      failed         flag orphan (terminate the Dagster run)
+    running                      cancelled      flag orphan (terminate the Dagster run)
     (any)                        terminal        noop (already consistent)
     ===========================  ==============  ==========================================
 
@@ -136,12 +137,12 @@ def reconcile_load_job(
     """
 
     if job_state != "running":
-        # load_jobs is already terminal. The only actionable divergence is a live Dagster
-        # run behind an already-failed job (the reverse split-brain).
-        if job_state == "failed" and run_state is OrchestratorRunState.RUNNING:
+        # load_jobs is already terminal. The actionable divergence is a live Dagster run
+        # behind an already failed/cancelled job (the reverse split-brain).
+        if job_state in {"failed", "cancelled"} and run_state is OrchestratorRunState.RUNNING:
             return ReconcileAction(
                 ReconcileOutcome.FLAG_ORPHAN,
-                "load_jobs failed but Dagster run still running; terminate run",
+                f"load_jobs {job_state} but Dagster run still running; terminate run",
             )
         return ReconcileAction(ReconcileOutcome.NOOP, "load_jobs already terminal")
 
