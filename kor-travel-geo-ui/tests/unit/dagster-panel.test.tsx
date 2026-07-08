@@ -20,8 +20,8 @@ const SUMMARY = {
   data: {
     status: "ok",
     checked_at: "2026-07-08T05:00:00Z",
-    dagster_url: "http://127.0.0.1:12703",
-    graphql_url: "http://127.0.0.1:12703/graphql",
+    dagster_url: "http://127.0.0.1:12502",
+    graphql_url: "http://127.0.0.1:12502/graphql",
     version: "1.11.0",
     repository_count: 1,
     job_count: 2,
@@ -95,8 +95,8 @@ const RUN_DETAILS = {
     data: {
       status: "ok",
       checked_at: "2026-07-08T05:00:01Z",
-      dagster_url: "http://127.0.0.1:12703",
-      graphql_url: "http://127.0.0.1:12703/graphql",
+      dagster_url: "http://127.0.0.1:12502",
+      graphql_url: "http://127.0.0.1:12502/graphql",
       run: SUMMARY.data.recent_runs[0],
       events: [
         {
@@ -118,8 +118,8 @@ const RUN_DETAILS = {
     data: {
       status: "ok",
       checked_at: "2026-07-08T05:00:02Z",
-      dagster_url: "http://127.0.0.1:12703",
-      graphql_url: "http://127.0.0.1:12703/graphql",
+      dagster_url: "http://127.0.0.1:12502",
+      graphql_url: "http://127.0.0.1:12502/graphql",
       run: SUMMARY.data.recent_runs[1],
       events: [
         {
@@ -167,7 +167,7 @@ describe("DagsterPanel", () => {
 
     expect(await screen.findByText("kortravelgeo_dagster.definitions")).toBeTruthy();
     const iframe = screen.getByTitle("Dagster UI");
-    expect(iframe).toHaveAttribute("src", "http://127.0.0.1:12703");
+    expect(iframe).toHaveAttribute("src", "http://127.0.0.1:12502");
     expect(iframe).toHaveAttribute(
       "sandbox",
       "allow-scripts allow-forms allow-popups allow-downloads"

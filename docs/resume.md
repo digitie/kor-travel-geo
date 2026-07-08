@@ -17,7 +17,7 @@
   `status=unavailable` outage 응답을 제공한다. UI는 OpenAPI 생성 타입 기반 React Query hook으로
   summary/run detail을 읽고 repository·schedule/sensor tick·recent run·iframe을 표시한다.
   **다음 한 작업**: (A) T-290a(패키지 스캐폴드+resources+mv_refresh @job)와 T-290c(load_jobs
-  executor/recovery 게이트), (B) T-290b(Dagster 배포; webserver host 포트 `12703` 예약은 완료)를
+  executor/recovery 게이트), (B) T-290b(Dagster 배포; webserver host 포트 `12502` 예약은 완료)를
   의존성 상태에 맞춰 진행.
   live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
   미래지향(유지보수성·안정성·완성도·품질).
