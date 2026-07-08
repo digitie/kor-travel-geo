@@ -26,7 +26,7 @@ B(배포/관측/e2e) 병렬. **기준: 최소수정 X, 미래지향(유지보수
 - [x] **T-290c** (A) — `load_jobs` executor/lease + recovery split + reconciler + cancel 골격 (M1, 4단계 게이트) — #420, 리뷰 후속 #424
 - [x] **T-290d** (B) — API GraphQL observe 라우터 (M2) — #417
 - [x] **T-290e** (B) — admin `/admin/dagster` 관측 화면 (M2) — #418
-- [ ] **T-290f** (A) — scheduled backup @schedule 온램프 + @run_failure_sensor + 알림 (M2)
+- [x] **T-290f** (A) — scheduled backup @schedule 온램프 + @run_failure_sensor + 알림 (M2)
 - [ ] **T-290g** (A) — `db_backup` Dagster 실행 + verify/copy/restore_drill (M3)
 - [ ] **T-290h** (B) — run detail 로그·artifact 링크 + 실패/overdue 알림 UI (M3)
 - [ ] **T-290i** (A) — `db_restore`(새 빈 DB) Dagster 실행, hot-swap 수동 유지, RetryPolicy off (M4)

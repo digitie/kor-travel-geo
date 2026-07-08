@@ -29,7 +29,7 @@ leaf(도메인) 로직은 재사용하되 오케스트레이션은 map 청사진
 | Dagster webserver 포트 | `docs/ports.md`에 신규 예약(예: 12502 후보 — B가 확정·등재) |
 | Dagster 메타 DB | `kor_travel_geo_dagster` (env `KTG_DAGSTER_PG_URL`) |
 | API observe endpoints | `GET /v1/ops/dagster/summary`, `GET /v1/ops/dagster/runs/{run_id}` |
-| API 설정 키 | `KTG_DAGSTER_URL`, `KTG_DAGSTER_ALLOWED_HOSTS`, `KTG_DAGSTER_REPOSITORY_NAME`, `KTG_DAGSTER_REPOSITORY_LOCATION_NAME` |
+| API 설정 키 | `KTG_DAGSTER_URL`, `KTG_DAGSTER_ALLOWED_HOSTS`, `KTG_DAGSTER_REPOSITORY_NAME`, `KTG_DAGSTER_REPOSITORY_LOCATION_NAME`, `KTG_DAGSTER_ADMIN_API_URL` |
 | GraphQL 쿼리 shape | map `routers/dagster.py`의 summary/run-detail 쿼리 이식(참조) |
 | `load_jobs` 신규 필드 | `executor`, `orchestrator_run_id`, `lease_expires_at` |
 | launchRun 계약 | jobName + repository/location + `runConfigData.ops.<op>.config` |

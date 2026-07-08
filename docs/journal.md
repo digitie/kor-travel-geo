@@ -2,6 +2,36 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-08 (T-290f scheduled backup Dagster 온램프, by codex)
+
+**작업**: M2의 남은 실행엔진 항목인 T-290f를 통합 브랜치 위에서 진행했다. 이 단계는 `db_backup`
+leaf를 Dagster로 옮기지 않고, Dagster `@schedule`이 기존 idempotent
+`POST /v1/admin/backups/scheduled/run-due`를 호출하는 온램프다. due 판정, advisory lock, audit, 실제
+backup enqueue는 기존 API/`load_jobs` 경계가 계속 소유한다.
+
+**변경**:
+- `Settings`에 `KTG_DAGSTER_ADMIN_API_URL`을 추가했다. Dagster→geo API 호출은 이 URL과 기존
+  `KTG_ADMIN_PROXY_SECRET`/admin role header 경계를 사용한다.
+- `kortravelgeo_dagster.resources`에 `DagsterAdminApiClient`와 `admin_api` resource를 추가했다.
+- `kortravelgeo_dagster.backup`을 추가해 `scheduled_backup_run_due` job/op,
+  `scheduled_backup` schedule(15분 주기, 기본 STOPPED), `run_failure_sensor`와 optional
+  `failure_notifier` resource 경계를 등록했다.
+- `definitions.py`가 backup job/schedule/sensor와 `admin_api` resource를 aggregate하게 했다.
+- 예제 env와 Dagster 마스터플랜/경계 문서를 새 URL·온램프 구조에 맞췄다.
+
+**검증**:
+- `TMPDIR=/tmp PYTHONPATH=src:kor-travel-geo-dagster/src uv run --python 3.12 --extra api --extra dev --with 'dagster>=1.9,<2' --with 'dagster-webserver>=1.9,<2' --with 'dagster-postgres>=0.25,<1' --with 'boto3>=1.34,<2' --with 'botocore>=1.34,<2' pytest -q -s kor-travel-geo-dagster/tests`
+  → 8 passed.
+- 같은 Dagster 의존성 환경에서 `ruff check kor-travel-geo-dagster/src kor-travel-geo-dagster/tests src/kortravelgeo/settings.py`
+  통과.
+- 같은 Dagster 의존성 환경에서 `mypy kor-travel-geo-dagster/src kor-travel-geo-dagster/tests src/kortravelgeo/settings.py`
+  통과.
+- 같은 Dagster 의존성 환경에서 `dagster definitions validate -m kortravelgeo_dagster.definitions` 통과.
+- `uv run --python 3.12 --extra api --extra dev ruff check .` 통과.
+- `uv run --python 3.12 --extra api --extra dev mypy src/kortravelgeo` 통과.
+- `uv run --python 3.12 --extra api --extra dev lint-imports` 통과.
+- `TMPDIR=/tmp uv run --python 3.12 --extra api --extra dev pytest -q -s` → 1152 passed, 75 skipped.
+
 ## 2026-07-08 (T-290c reconciler 리뷰 후속 — terminal orphan 경로 보강, by codex)
 
 **작업**: Claude Code의 T-290 M1 PR #419~#423을 통합 브랜치 기준으로 리뷰했다. #420의
