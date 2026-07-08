@@ -15,8 +15,11 @@ import asyncio
 import inspect
 import threading
 from collections.abc import Awaitable, Iterator
+from dataclasses import dataclass
 from typing import Any, cast
+from urllib.parse import urljoin, urlparse
 
+import httpx
 from dagster import InitResourceContext, resource
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.infra.engine import make_async_engine
@@ -24,10 +27,90 @@ from kortravelgeo.infra.rustfs import RustfsClient, load_rustfs_config
 from kortravelgeo.settings import Settings
 
 __all__ = [
+    "ACTOR_HEADER",
+    "ADMIN_PROXY_SECRET_HEADER",
+    "DESTRUCTIVE_ADMIN_ROLE",
+    "ROLES_HEADER",
+    "SYSTEM_ACTOR",
+    "DagsterAdminApiClient",
+    "admin_api_resource",
     "client_resource",
     "rustfs_resource",
     "settings_resource",
 ]
+
+ACTOR_HEADER = "x-ktg-actor"
+ROLES_HEADER = "x-ktg-roles"
+ADMIN_PROXY_SECRET_HEADER = "x-ktg-admin-proxy-secret"
+SYSTEM_ACTOR = "system:dagster"
+DESTRUCTIVE_ADMIN_ROLE = "destructive_admin"
+
+
+@dataclass(frozen=True, slots=True)
+class DagsterAdminApiClient:
+    """Small authenticated client for Dagster -> geo admin API onramp calls."""
+
+    base_url: str
+    timeout_seconds: float
+    admin_proxy_secret: str | None = None
+    actor: str = SYSTEM_ACTOR
+    roles: tuple[str, ...] = (DESTRUCTIVE_ADMIN_ROLE,)
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> DagsterAdminApiClient:
+        secret = settings.admin_proxy_secret
+        return cls(
+            base_url=_normalize_http_base_url(settings.dagster_admin_api_url),
+            timeout_seconds=settings.dagster_request_timeout_seconds,
+            admin_proxy_secret=secret.get_secret_value() if secret is not None else None,
+        )
+
+    async def run_due_scheduled_backup(
+        self,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> dict[str, Any]:
+        """Call ``POST /v1/admin/backups/scheduled/run-due`` and return its JSON body."""
+
+        async def _post(client: httpx.AsyncClient) -> dict[str, Any]:
+            response = await client.post(
+                self.url_for("/v1/admin/backups/scheduled/run-due"),
+                headers=self.headers(),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                msg = "scheduled backup run-due response must be a JSON object"
+                raise RuntimeError(msg)
+            return cast("dict[str, Any]", payload)
+
+        if http_client is not None:
+            return await _post(http_client)
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            return await _post(client)
+
+    def url_for(self, path: str) -> str:
+        return urljoin(f"{self.base_url}/", path.lstrip("/"))
+
+    def headers(self) -> dict[str, str]:
+        headers = {
+            ACTOR_HEADER: self.actor,
+            ROLES_HEADER: ",".join(self.roles),
+        }
+        if self.admin_proxy_secret:
+            headers[ADMIN_PROXY_SECRET_HEADER] = self.admin_proxy_secret
+        return headers
+
+
+def _normalize_http_base_url(value: str) -> str:
+    parsed = urlparse(value.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        msg = "KTG_DAGSTER_ADMIN_API_URL must be an absolute http(s) URL"
+        raise ValueError(msg)
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        msg = "KTG_DAGSTER_ADMIN_API_URL must not include userinfo, query, or fragment"
+        raise ValueError(msg)
+    return value.rstrip("/")
 
 
 async def _await_resource_teardown(awaitable: Awaitable[object]) -> None:
@@ -156,3 +239,14 @@ def rustfs_resource(_context: InitResourceContext) -> RustfsClient:
 def settings_resource(_context: InitResourceContext) -> Settings:
     """Default Dagster ``settings`` resource — the source for value/settings resources."""
     return Settings()
+
+
+@resource(
+    description=(
+        "Authenticated geo admin API client for Dagster onramp calls "
+        "(KTG_DAGSTER_ADMIN_API_URL + optional KTG_ADMIN_PROXY_SECRET)."
+    )
+)
+def admin_api_resource(_context: InitResourceContext) -> DagsterAdminApiClient:
+    """Default Dagster ``admin_api`` resource for API-backed orchestration onramps."""
+    return DagsterAdminApiClient.from_settings(Settings())

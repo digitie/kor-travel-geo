@@ -17,10 +17,12 @@ from typing import Any, Final, cast
 from dagster import Definitions, ResourceDefinition, resource
 from kortravelgeo.settings import Settings
 
+from .backup import BACKUP_JOBS, BACKUP_SCHEDULES, BACKUP_SENSORS
 from .mv import MV_REFRESH_JOBS
-from .resources import client_resource, rustfs_resource, settings_resource
+from .resources import admin_api_resource, client_resource, rustfs_resource, settings_resource
 
 REQUIRED_RESOURCE_KEYS: Final[tuple[str, ...]] = (
+    "admin_api",
     "client",
     "rustfs",
     "settings",
@@ -42,6 +44,7 @@ Empty for the M1 scaffold; later milestones populate this to surface a plain
 """
 
 DEFAULT_RESOURCE_DEFINITIONS: Final[dict[str, ResourceDefinition]] = {
+    "admin_api": admin_api_resource,
     "client": client_resource,
     "rustfs": rustfs_resource,
     "settings": settings_resource,
@@ -77,7 +80,9 @@ def _settings_value_resource(key: str, attr: str) -> ResourceDefinition:
 
 
 defs = Definitions(
-    jobs=cast("Any", [*MV_REFRESH_JOBS]),
+    jobs=cast("Any", [*MV_REFRESH_JOBS, *BACKUP_JOBS]),
+    schedules=cast("Any", [*BACKUP_SCHEDULES]),
+    sensors=cast("Any", [*BACKUP_SENSORS]),
     resources={
         key: (
             _value_resource(key, DEFAULT_RESOURCE_VALUES[key])

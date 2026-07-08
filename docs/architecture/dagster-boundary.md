@@ -34,8 +34,8 @@ kor-travel-geo-dagster/            # 별도 설치 distribution (pyproject: kort
   src/kortravelgeo_dagster/
     __init__.py
     definitions.py                 # 단일 module-level defs = Definitions(...) (code location entrypoint)
-    resources.py                   # engine / rustfs / settings resource factory (4-way fallback)
-    backup.py                      # @op/@job: db_backup, verify, copy, restore_drill
+    resources.py                   # engine / rustfs / settings / admin API resource factory
+    backup.py                      # @schedule/@job: scheduled_backup 온램프, 이후 db_backup/verify/copy/drill
     restore.py                     # @op/@job: db_restore(새 빈 DB), (hot-swap은 plan/observe만)
     loaders.py                     # @op: juso/locsum/navi/parcel_link/shp
     full_load.py                   # @op/@job: full_load_batch (main-lib batch_dag 호출)
@@ -103,10 +103,13 @@ code location은 **항상 로드**되고, 자격증명 누락은 import가 아�
 - **관측(read)**: API `/v1/ops/dagster/summary`·`/v1/ops/dagster/runs/{run_id}` — Dagster webserver에
   GraphQL POST 후 forbid-extra DTO로 정규화. **SSRF guard**(scheme http/https, host allowlist, `/graphql`
   경로), **Dagster down이어도 200 + `status=unavailable`**(UI가 outage 렌더).
-- **트리거(write)**: `launchRun` mutation(selector=jobName/repository/location, runConfigData=op config).
+- **트리거(write)**: API → Dagster 방향은 `launchRun` mutation(selector=jobName/repository/location,
+  runConfigData=op config). Dagster → API 온램프(T-290f scheduled backup)는
+  `KTG_DAGSTER_ADMIN_API_URL`의 admin API를 호출하고, 기존 admin proxy actor/role/secret header 경계를
+  그대로 사용한다.
 - API 설정 키(env prefix `KTG_`): `dagster_url`(기본 `http://127.0.0.1:<port>`), `dagster_graphql_url`,
   `dagster_allowed_hosts`, `dagster_request_timeout_seconds`, `dagster_repository_name`,
-  `dagster_repository_location_name`(`kortravelgeo_dagster.definitions`).
+  `dagster_repository_location_name`(`kortravelgeo_dagster.definitions`), `dagster_admin_api_url`.
 
 ## 8. Admin UI 임베드
 

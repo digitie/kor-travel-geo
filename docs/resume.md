@@ -22,9 +22,12 @@
   12502로 확정(초기 12703 정정 #422). Codex M1 리뷰 후속으로 #420의 terminal split-brain scan
   누락을 #424로 분리했고, `reconcile_dagster_jobs()`가 `failed`/`cancelled` orphan 후보를 실제 경로에서
   cancel hook으로 닫도록 보강했다(alembic 0024 partial index 포함).
-  **다음 한 작업**: M2 — (A) **T-290f**(scheduled backup @schedule 온램프 + @run_failure_sensor + 알림),
-  (B) T-290d/290e 관측 표면(머지 완료)의 n150 배포 검증. M2 완료 후 **live UI e2e #1**(login →
-  `/admin/dagster` 렌더 + backup run 가시화).
+  **M2 구현 완료(통합 브랜치 기준)**: T-290d/e 관측 API/UI에 이어 T-290f scheduled backup 온램프도
+  구현됐다. Dagster `scheduled_backup` schedule은 `scheduled_backup_run_due` job을 만들고, op는 기존
+  `POST /v1/admin/backups/scheduled/run-due`를 `KTG_DAGSTER_ADMIN_API_URL`로 호출한다. 실제 backup
+  실행은 T-290g 전까지 기존 in-process `load_jobs` 큐가 맡는다.
+  **다음 한 작업**: M2 gate — n150 배포 후 **live UI e2e #1**(login → `/admin/dagster` summary/runs/
+  iframe 렌더 + scheduled/triggered backup run 가시화 + 기존 `/admin/backups` 정상)을 수행한다.
   live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
   미래지향(유지보수성·안정성·완성도·품질).
 
