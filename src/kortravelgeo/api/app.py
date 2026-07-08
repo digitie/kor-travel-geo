@@ -80,7 +80,7 @@ from kortravelgeo.loaders.text.roadaddr_entrance_loader import load_roadaddr_ent
 from kortravelgeo.settings import Settings, get_settings
 from kortravelgeo.version import __version__
 
-from .routers import admin, geocode, healthz, pobox, reverse, search, v2, zipcode
+from .routers import admin, dagster, geocode, healthz, pobox, reverse, search, v2, zipcode
 
 _LOGGER = logging.getLogger(__name__)
 _PERFORMANCE_LOGGER = logging.getLogger("kortravelgeo.api.performance")
@@ -152,6 +152,7 @@ def create_app() -> FastAPI:
     app.include_router(zipcode.router, prefix="/v1")
     app.include_router(pobox.router, prefix="/v1")
     app.include_router(admin.router, prefix="/v1/admin")
+    app.include_router(dagster.router, prefix="/v1")
     app.include_router(v2.router, prefix="/v2")
     _install_openapi_customization(app)
 

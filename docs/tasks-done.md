@@ -6,6 +6,20 @@
 
 ## 완료
 
+- [x] **T-290d** — API GraphQL observe 라우터 `/v1/ops/dagster/*`(Agent B/Codex,
+  통합 브랜치 `agent/claude-dagster-migration`). Dagster webserver GraphQL을 조회하는
+  `/v1/ops/dagster/summary`와 `/v1/ops/dagster/runs/{run_id}`를 추가했다. main lib은
+  Dagster를 import하지 않고, API는 SSRF 방어(scheme http/https, userinfo 금지, host allowlist,
+  `/graphql` path)와 trusted admin role gate를 적용한다. Dagster webserver down/HTTP 오류는
+  200 `status="unavailable"`로 반환하고, GraphQL top-level error는 message만 노출한다. 설정 키
+  `KTG_DAGSTER_URL`, `KTG_DAGSTER_GRAPHQL_URL`, `KTG_DAGSTER_ALLOWED_HOSTS`,
+  `KTG_DAGSTER_REQUEST_TIMEOUT_SECONDS`, `KTG_DAGSTER_REPOSITORY_NAME`,
+  `KTG_DAGSTER_REPOSITORY_LOCATION_NAME`을 추가하고 `docs/ports.md`에 Dagster webserver
+  `12703`을 예약했으며 OpenAPI와 UI 생성 타입을 갱신했다.
+  `pytest -q -s` 1124 passed/75 skipped, `ruff check .`, `mypy --strict src/kortravelgeo`,
+  `lint-imports`, UI lint/type-check/unit/build가 통과했다. React Doctor는 `ok=true`이나 기존 UI
+  파일 8개에 warning 9건을 보고했다(이번 변경 파일 아님). (2026-07-08)
+
 - [x] **T-278** — Admin UI Next 기본 오류 화면 복구 보강(Agent A/Codex, #390).
   Firefox를 포함한 브라우저에서 Next.js 기본 전역 오류 화면(`This page couldn’t load`,
   `Reload to try again, or go back.`)이 노출될 수 있던 경로를 보강했다. `app/error.tsx`와

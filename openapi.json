@@ -2791,6 +2791,709 @@
         "title": "ConsistencyValidationInput",
         "type": "object"
       },
+      "DagsterAssetGroup": {
+        "additionalProperties": false,
+        "description": "Dagster asset group summary.",
+        "properties": {
+          "asset_count": {
+            "minimum": 0.0,
+            "title": "Asset Count",
+            "type": "integer"
+          },
+          "assets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "group_name": {
+            "title": "Group Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_name",
+          "asset_count",
+          "assets"
+        ],
+        "title": "DagsterAssetGroup",
+        "type": "object"
+      },
+      "DagsterGraphqlError": {
+        "additionalProperties": false,
+        "description": "Dagster GraphQL PythonError summary.",
+        "properties": {
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Name"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "stack": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Stack",
+            "type": "array"
+          }
+        },
+        "title": "DagsterGraphqlError",
+        "type": "object"
+      },
+      "DagsterInstigationTick": {
+        "additionalProperties": false,
+        "description": "Dagster schedule/sensor tick summary.",
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "end_timestamp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Timestamp"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DagsterGraphqlError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Run Ids",
+            "type": "array"
+          },
+          "run_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Run Keys",
+            "type": "array"
+          },
+          "skip_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip Reason"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tick_id": {
+            "title": "Tick Id",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "number"
+          }
+        },
+        "required": [
+          "tick_id",
+          "status",
+          "timestamp"
+        ],
+        "title": "DagsterInstigationTick",
+        "type": "object"
+      },
+      "DagsterJob": {
+        "additionalProperties": false,
+        "description": "Dagster job/pipeline summary.",
+        "properties": {
+          "is_job": {
+            "title": "Is Job",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "is_job"
+        ],
+        "title": "DagsterJob",
+        "type": "object"
+      },
+      "DagsterRepository": {
+        "additionalProperties": false,
+        "description": "Dagster code location/repository summary.",
+        "properties": {
+          "asset_count": {
+            "minimum": 0.0,
+            "title": "Asset Count",
+            "type": "integer"
+          },
+          "asset_groups": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterAssetGroup"
+            },
+            "title": "Asset Groups",
+            "type": "array"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterJob"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "location_name": {
+            "title": "Location Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schedules": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterSchedule"
+            },
+            "title": "Schedules",
+            "type": "array"
+          },
+          "sensors": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterSensor"
+            },
+            "title": "Sensors",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "location_name",
+          "jobs",
+          "schedules",
+          "sensors",
+          "asset_count",
+          "asset_groups"
+        ],
+        "title": "DagsterRepository",
+        "type": "object"
+      },
+      "DagsterResponseMeta": {
+        "additionalProperties": false,
+        "description": "Small response metadata block for Dagster proxy reads.",
+        "properties": {
+          "duration_ms": {
+            "minimum": 0.0,
+            "title": "Duration Ms",
+            "type": "number"
+          }
+        },
+        "required": [
+          "duration_ms"
+        ],
+        "title": "DagsterResponseMeta",
+        "type": "object"
+      },
+      "DagsterRunDetailData": {
+        "additionalProperties": false,
+        "description": "``GET /v1/ops/dagster/runs/{run_id}`` data.",
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "dagster_url": {
+            "title": "Dagster Url",
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "event_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Cursor"
+          },
+          "event_has_more": {
+            "default": false,
+            "title": "Event Has More",
+            "type": "boolean"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterRunEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "graphql_url": {
+            "title": "Graphql Url",
+            "type": "string"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DagsterRunSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "dagster_url",
+          "graphql_url",
+          "checked_at"
+        ],
+        "title": "DagsterRunDetailData",
+        "type": "object"
+      },
+      "DagsterRunDetailResponse": {
+        "additionalProperties": false,
+        "description": "``GET /v1/ops/dagster/runs/{run_id}`` response.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DagsterRunDetailData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/DagsterResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "DagsterRunDetailResponse",
+        "type": "object"
+      },
+      "DagsterRunEvent": {
+        "additionalProperties": false,
+        "description": "Dagster run event/failure summary.",
+        "properties": {
+          "dagster_event_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dagster Event Type"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DagsterGraphqlError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Id"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "required": [
+          "event_type"
+        ],
+        "title": "DagsterRunEvent",
+        "type": "object"
+      },
+      "DagsterRunSummary": {
+        "additionalProperties": false,
+        "description": "Recent Dagster run summary.",
+        "properties": {
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "job_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Name"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "tags": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "object"
+          },
+          "update_time": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Update Time"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "tags"
+        ],
+        "title": "DagsterRunSummary",
+        "type": "object"
+      },
+      "DagsterSchedule": {
+        "additionalProperties": false,
+        "description": "Dagster schedule summary.",
+        "properties": {
+          "cron_schedule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cron Schedule"
+          },
+          "execution_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Timezone"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recent_ticks": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterInstigationTick"
+            },
+            "title": "Recent Ticks",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DagsterSchedule",
+        "type": "object"
+      },
+      "DagsterSensor": {
+        "additionalProperties": false,
+        "description": "Dagster sensor summary.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recent_ticks": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterInstigationTick"
+            },
+            "title": "Recent Ticks",
+            "type": "array"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DagsterSensor",
+        "type": "object"
+      },
+      "DagsterSummaryData": {
+        "additionalProperties": false,
+        "description": "``GET /v1/ops/dagster/summary`` data.",
+        "properties": {
+          "asset_count": {
+            "minimum": 0.0,
+            "title": "Asset Count",
+            "type": "integer"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "dagster_url": {
+            "title": "Dagster Url",
+            "type": "string"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "graphql_url": {
+            "title": "Graphql Url",
+            "type": "string"
+          },
+          "job_count": {
+            "minimum": 0.0,
+            "title": "Job Count",
+            "type": "integer"
+          },
+          "recent_runs": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterRunSummary"
+            },
+            "title": "Recent Runs",
+            "type": "array"
+          },
+          "repositories": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterRepository"
+            },
+            "title": "Repositories",
+            "type": "array"
+          },
+          "repository_count": {
+            "minimum": 0.0,
+            "title": "Repository Count",
+            "type": "integer"
+          },
+          "run_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Run Counts",
+            "type": "object"
+          },
+          "schedule_count": {
+            "minimum": 0.0,
+            "title": "Schedule Count",
+            "type": "integer"
+          },
+          "sensor_count": {
+            "minimum": 0.0,
+            "title": "Sensor Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "status",
+          "dagster_url",
+          "graphql_url",
+          "checked_at",
+          "repository_count",
+          "job_count",
+          "asset_count",
+          "schedule_count",
+          "sensor_count",
+          "run_counts",
+          "repositories",
+          "recent_runs"
+        ],
+        "title": "DagsterSummaryData",
+        "type": "object"
+      },
+      "DagsterSummaryResponse": {
+        "additionalProperties": false,
+        "description": "``GET /v1/ops/dagster/summary`` response.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DagsterSummaryData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/DagsterResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "DagsterSummaryResponse",
+        "type": "object"
+      },
       "DatasetSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -18401,6 +19104,127 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v1/ops/dagster/runs/{run_id}": {
+      "get": {
+        "description": "Dagster GraphQL runOrError를 조회해 최근 event log와 실패 error payload를 admin UI용 DTO로 반환한다. 조회 전용이며 Dagster run을 재실행하거나 상태를 변경하지 않는다.",
+        "operationId": "get_dagster_run_detail_v1_ops_dagster_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "event log cursor. 미지정이면 처음부터 조회한다.",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "event log cursor. 미지정이면 처음부터 조회한다.",
+              "title": "After"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DagsterRunDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dagster run 상세",
+        "tags": [
+          "ops",
+          "dagster"
+        ]
+      }
+    },
+    "/v1/ops/dagster/summary": {
+      "get": {
+        "description": "Dagster GraphQL에서 repository, asset, schedule/sensor, recent run 정보를 읽어 admin UI 요약 DTO로 반환한다. Dagster webserver가 내려가도 200 응답(status=unavailable)으로 UI가 장애 상태를 표시할 수 있게 한다.",
+        "operationId": "get_dagster_summary_v1_ops_dagster_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DagsterSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dagster 운영 요약",
+        "tags": [
+          "ops",
+          "dagster"
         ]
       }
     },
