@@ -13,8 +13,31 @@
 
 ## 진행 중
 
-- **진행 중 작업 없음.** (T-177A~T-177H와 T-183 live UI full-load e2e 완료 —
-  `tasks-done.md` 참조.)
+### T-290 — geo 독립 Dagster 오케스트레이션 이관 (epic)
+
+결정 [ADR-066](adr/066-geo-independent-dagster-orchestration.md), 구현 정본
+[architecture/dagster-boundary.md](architecture/dagster-boundary.md), 단계·분해·contract·e2e 게이트는
+[dagster-migration-plan.md](dagster-migration-plan.md)가 정본. 통합 브랜치
+`agent/claude-dagster-migration`(전 milestone 완료 후 main 머지). 두 에이전트 A(실행엔진/백엔드)·
+B(배포/관측/e2e) 병렬. **기준: 최소수정 X, 미래지향(유지보수성·안정성·완성도·품질·최적구조).**
+
+- [ ] **T-290a** (A) — `kortravelgeo_dagster` 패키지 스캐폴드 + resources + `mv_refresh` @job (M1)
+- [ ] **T-290b** (B) — Dagster 배포(compose/Dockerfile/DB/포트 예약, n150 e2e deps 포함) (M1)
+- [ ] **T-290c** (A) — `load_jobs` executor/lease + recovery split + reconciler + cancel 골격 (M1, 4단계 게이트)
+- [ ] **T-290d** (B) — API GraphQL observe 라우터 `/v1/ops/dagster/*` (M2)
+- [ ] **T-290e** (B) — admin `/admin/dagster` 페이지 + iframe 임베드 (M2)
+- [ ] **T-290f** (A) — scheduled backup @schedule 온램프 + @run_failure_sensor + 알림 (M2)
+- [ ] **T-290g** (A) — `db_backup` Dagster 실행 + verify/copy/restore_drill (M3)
+- [ ] **T-290h** (B) — run detail 로그·artifact 링크 + 실패/overdue 알림 UI (M3)
+- [ ] **T-290i** (A) — `db_restore`(새 빈 DB) Dagster 실행, hot-swap 수동 유지, RetryPolicy off (M4)
+- [ ] **T-290j** (A) — loader + `full_load_batch` Dagster 실행(map batch_dag 미러) (M5)
+- [ ] **T-290k** (A) — in-process 큐/외부 cron/이벤트루프 우회 은퇴, ADR-006/011 superseded (M5)
+- [ ] **T-290l** (B) — live e2e harness/spec를 Dagster 관측까지 확장 + 최종 회귀 정리 (M5)
+
+live UI e2e 게이트: **#1 M2**(관측+온램프) · **#2 M3**(backup 실행) · **#3 M4**(restore 새DB) ·
+**#4 M5**(full-load + 큐 은퇴, 최종 회귀). 상세는 마스터플랜 §3.
+
+(그 외 진행 중 작업 없음. T-177A~T-177H·T-183 완료 — `tasks-done.md` 참조.)
 
 ## 대기
 

@@ -81,6 +81,7 @@
 | ADR-063 | 디버그 UI 지도는 GitHub `maplibre-vworld-react` 패키지를 소비한다 | [063-maplibre-vworld-react-github-map.md](063-maplibre-vworld-react-github-map.md) |
 | ADR-064 | Admin UI 로그인과 공개 API key 관리를 둔다 | [064-ui-login-admin-proxy-public-api-keys.md](064-ui-login-admin-proxy-public-api-keys.md) |
 | ADR-065 | 개발 명령은 Linux 환경에서만 실행한다 | [065-linux-only-development-environment.md](065-linux-only-development-environment.md) |
+| ADR-066 | 백업/복원·적재 오케스트레이션은 서비스 전용 독립 Dagster로 이관한다 | [066-geo-independent-dagster-orchestration.md](066-geo-independent-dagster-orchestration.md) |
 
 ## ADR 표준 형식
 
