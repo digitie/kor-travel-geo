@@ -37,6 +37,7 @@ __all__ = [
     "BACKUP_JOBS",
     "BACKUP_SCHEDULES",
     "BACKUP_SENSORS",
+    "JOB_ID_TAG",
     "SCHEDULED_BACKUP_JOB_TAGS",
     "notify_run_failure_sensor",
     "run_due_scheduled_backup_op",
@@ -54,6 +55,9 @@ SCHEDULED_BACKUP_CRON: Final[str] = "*/15 * * * *"
 """Frequent safe tick; the API ``run-due`` endpoint remains the due/no-op authority."""
 
 SCHEDULED_BACKUP_TIMEZONE: Final[str] = "Asia/Seoul"
+
+JOB_ID_TAG: Final[str] = "kor_travel_geo.job_id"
+"""Dagster run tag carrying the app ``load_jobs`` id when an onramp sets it (else absent)."""
 
 
 @op(
@@ -128,15 +132,15 @@ def scheduled_backup_schedule(context: ScheduleEvaluationContext) -> RunRequest:
     default_status=DefaultSensorStatus.STOPPED,
 )
 def notify_run_failure_sensor(context: RunFailureSensorContext) -> None:
-    """Forward Dagster run failures to an optional deployment-supplied notifier."""
+    """Forward Dagster run failures to an optional deployment-supplied notifier.
 
-    dagster_run = context.dagster_run
-    payload: dict[str, object] = {
-        "run_id": dagster_run.run_id,
-        "job_name": dagster_run.job_name,
-        "status": str(dagster_run.status),
-        "message": getattr(context.failure_event, "message", None),
-    }
+    The payload follows the dagster-boundary §5 contract —
+    ``{job_id, run_id, job_name, status, error_code}`` with sensitive values
+    excluded. The raw Dagster failure ``message`` is deliberately NOT forwarded;
+    only a bounded ``error_code`` (the failure error's class name) is sent.
+    """
+
+    payload = _failure_notification_payload(context)
     notifier = _optional_resource_object(context, "failure_notifier")
     if notifier is None:
         context.log.warning("Dagster run failed without failure_notifier: %s", payload)
@@ -168,6 +172,35 @@ def _optional_resource_object(context: object, name: str) -> object | None:
         return None
     value: object = getattr(resources, name)
     return value
+
+
+def _failure_notification_payload(context: RunFailureSensorContext) -> dict[str, object]:
+    """Build the dagster-boundary §5 failure payload (no raw failure message).
+
+    ``job_id`` is the app ``load_jobs`` id when the Dagster run carries the
+    ``kor_travel_geo.job_id`` tag (a later onramp sets it), otherwise ``None``.
+    """
+    dagster_run = context.dagster_run
+    return {
+        "job_id": dagster_run.tags.get(JOB_ID_TAG),
+        "run_id": dagster_run.run_id,
+        "job_name": dagster_run.job_name,
+        "status": str(dagster_run.status),
+        "error_code": _failure_error_code(context),
+    }
+
+
+def _failure_error_code(context: RunFailureSensorContext) -> str | None:
+    """Return the failure error's class name — a bounded classifier, never the message.
+
+    Forwarding only the error class (e.g. ``Failure``) keeps free-form/sensitive
+    failure text out of the notification payload (dagster-boundary §5).
+    """
+    failure_event = getattr(context, "failure_event", None)
+    event_data = getattr(failure_event, "event_specific_data", None)
+    error = getattr(event_data, "error", None)
+    cls_name = getattr(error, "cls_name", None)
+    return cls_name if isinstance(cls_name, str) else None
 
 
 def _run_due_metadata(payload: dict[str, Any]) -> dict[str, object]:

@@ -105,7 +105,7 @@ const RUN_DETAILS = {
           level: "INFO",
           message: "backup completed",
           step_id: "backup",
-          timestamp: "2026-07-08T05:01:00Z"
+          timestamp: "1783486860"
         }
       ],
       event_cursor: "cursor-1",
@@ -170,13 +170,16 @@ describe("DagsterPanel", () => {
     expect(iframe).toHaveAttribute("src", "http://127.0.0.1:12502");
     expect(iframe).toHaveAttribute(
       "sandbox",
-      "allow-scripts allow-forms allow-popups allow-downloads"
+      "allow-scripts allow-forms allow-popups allow-downloads allow-same-origin"
     );
 
     await waitFor(() =>
       expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_1")
     );
     expect(await screen.findByText("STEP_SUCCESS")).toBeTruthy();
+    // Event timestamp is a numeric epoch string; it renders as a UTC date, not raw epoch.
+    expect(await screen.findByText("2026-07-08 05:01:00")).toBeTruthy();
+    expect(screen.queryByText("1783486860")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "run_2 run 상세" }));
     await waitFor(() =>

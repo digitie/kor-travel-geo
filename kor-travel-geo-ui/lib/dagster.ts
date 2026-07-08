@@ -40,9 +40,12 @@ export function useDagsterRunDetailQuery(runId: string | null) {
   });
 }
 
-export function formatDagsterEpoch(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "-";
-  return new Date(value * 1000).toISOString().slice(0, 19).replace("T", " ");
+export function formatDagsterEpoch(value: number | string | null | undefined): string {
+  // Run start/end arrive as numbers; event timestamps arrive as numeric epoch
+  // strings (DagsterRunEvent.timestamp). Coerce so both render as a UTC date.
+  const epoch = typeof value === "string" ? Number(value) : value;
+  if (epoch == null || !Number.isFinite(epoch)) return "-";
+  return new Date(epoch * 1000).toISOString().slice(0, 19).replace("T", " ");
 }
 
 export function dagsterRunUrl(dagsterUrl: string, runId: string): string {

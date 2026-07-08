@@ -315,7 +315,89 @@ async def test_dagster_summary_returns_unavailable_when_graphql_fails(
     assert data["status"] == "unavailable"
     assert data["repository_count"] == 0
     assert data["recent_runs"] == []
-    assert data["errors"]
+    # Sanitized: class name tag only, never the raw exception text.
+    assert data["errors"] == ["Dagster 요청 실패 (ConnectError)"]
+    assert "connection refused" not in data["errors"][0]
+
+
+@pytest.mark.asyncio
+async def test_dagster_summary_sanitizes_http_status_error_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _raise_status_error(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        assert client
+        assert variables
+        assert query
+        request = httpx.Request("POST", graphql_url)
+        response = httpx.Response(500, request=request)
+        raise httpx.HTTPStatusError(
+            f"Server error '500 Internal Server Error' for url '{graphql_url}'",
+            request=request,
+            response=response,
+        )
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _raise_status_error)
+
+    transport = httpx.ASGITransport(app=_app(), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "unavailable"
+    # The internal Dagster host/URL must never reach the client.
+    assert data["errors"] == ["Dagster 요청 실패 (HTTPStatusError)"]
+    assert "dagster.example" not in data["errors"][0]
+    assert "12502" not in data["errors"][0]
+
+
+@pytest.mark.asyncio
+async def test_dagster_run_detail_sanitizes_http_status_error_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _raise_status_error(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        assert client
+        assert variables
+        assert query
+        request = httpx.Request("POST", graphql_url)
+        response = httpx.Response(502, request=request)
+        raise httpx.HTTPStatusError(
+            f"Server error '502 Bad Gateway' for url '{graphql_url}'",
+            request=request,
+            response=response,
+        )
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _raise_status_error)
+
+    transport = httpx.ASGITransport(app=_app(), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/runs/run-1", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "unavailable"
+    assert data["errors"] == ["Dagster 요청 실패 (HTTPStatusError)"]
+    assert "dagster.example" not in data["errors"][0]
+
+
+def test_graphql_error_message_falls_back_to_generic_without_message() -> None:
+    # Structured error lacking ``message`` -> generic, never echo the raw structure.
+    assert (
+        dagster_mod._graphql_error_message({"locations": [{"line": 1, "column": 2}]})
+        == "Dagster GraphQL 오류 응답"
+    )
+    # Non-dict raw error -> generic, does not echo the raw string.
+    assert dagster_mod._graphql_error_message("internal detail") == "Dagster GraphQL 오류 응답"
 
 
 @pytest.mark.asyncio

@@ -180,7 +180,7 @@ const eventColumns: VirtualColumn<DagsterRunEvent>[] = [
     key: "time",
     header: "time",
     sortValue: (row) => row.timestamp ?? "",
-    cell: (row) => formatTimestamp(row.timestamp)
+    cell: (row) => formatDagsterEpoch(row.timestamp)
   },
   {
     key: "event",
@@ -255,7 +255,7 @@ export function DagsterPanel() {
           loading={summaryQuery.isPending}
         />
         <MetricTile
-          label="failed runs"
+          label="failed (recent)"
           value={failedRunCount(summary).toLocaleString()}
           loading={summaryQuery.isPending}
           hint={summary ? `checked ${formatTimestamp(summary.checked_at)}` : undefined}
@@ -285,7 +285,7 @@ export function DagsterPanel() {
           <iframe
             className="min-h-[520px] w-full rounded-lg border border-border bg-background"
             referrerPolicy="no-referrer"
-            sandbox="allow-scripts allow-forms allow-popups allow-downloads"
+            sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-same-origin"
             src={summary.dagster_url}
             title="Dagster UI"
           />
