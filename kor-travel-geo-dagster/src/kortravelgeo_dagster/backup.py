@@ -12,6 +12,7 @@ annotations at runtime.
 """
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from dagster import (
@@ -114,7 +115,18 @@ def scheduled_backup_run_due_job() -> None:
     ),
 )
 def scheduled_backup_schedule(context: ScheduleEvaluationContext) -> RunRequest:
-    scheduled_at = context.scheduled_execution_time
+    return _scheduled_backup_run_request(context.scheduled_execution_time)
+
+
+def _scheduled_backup_run_request(scheduled_at: datetime | None) -> RunRequest:
+    """Build the scheduled-backup ``RunRequest``.
+
+    Split out of the ``@schedule`` so ``run_key`` derivation (including the
+    no-scheduled-time fallback) is unit-testable without a real
+    ``ScheduleEvaluationContext`` (direct schedule invocation type-checks the context).
+    The ``run_key`` is the scheduled minute's ISO timestamp so Dagster dedups one run
+    per tick; ``None`` when the time is unavailable.
+    """
     run_key = scheduled_at.isoformat() if scheduled_at is not None else None
     return RunRequest(
         run_key=run_key,
@@ -138,8 +150,23 @@ def notify_run_failure_sensor(context: RunFailureSensorContext) -> None:
     ``{job_id, run_id, job_name, status, error_code}`` with sensitive values
     excluded. The raw Dagster failure ``message`` is deliberately NOT forwarded;
     only a bounded ``error_code`` (the failure error's class name) is sent.
+
+    Thin wrapper: the dispatch logic lives in
+    :func:`_dispatch_run_failure_notification` so its branches stay unit-testable
+    without a real ``RunStatusSensorContext`` (direct sensor invocation type-checks
+    the context and rejects a duck-typed fake).
     """
 
+    _dispatch_run_failure_notification(context)
+
+
+def _dispatch_run_failure_notification(context: RunFailureSensorContext) -> None:
+    """Build the §5 failure payload and forward it to the optional ``failure_notifier``.
+
+    Defensive by design: when the ``failure_notifier`` resource is absent or not
+    callable, the failure is logged and swallowed, so a notifier misconfiguration can
+    never turn a monitored run's failure into a *sensor* failure.
+    """
     payload = _failure_notification_payload(context)
     notifier = _optional_resource_object(context, "failure_notifier")
     if notifier is None:
