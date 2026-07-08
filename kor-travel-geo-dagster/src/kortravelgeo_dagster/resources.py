@@ -31,6 +31,7 @@ __all__ = [
     "ADMIN_PROXY_SECRET_HEADER",
     "DESTRUCTIVE_ADMIN_ROLE",
     "ROLES_HEADER",
+    "SCHEDULER_ROLE",
     "SYSTEM_ACTOR",
     "DagsterAdminApiClient",
     "admin_api_resource",
@@ -44,17 +45,31 @@ ROLES_HEADER = "x-ktg-roles"
 ADMIN_PROXY_SECRET_HEADER = "x-ktg-admin-proxy-secret"
 SYSTEM_ACTOR = "system:dagster"
 DESTRUCTIVE_ADMIN_ROLE = "destructive_admin"
+#: Least-privilege role the scheduled-backup on-ramp presents to the geo admin API
+#: (T-290 / ADR-066). Mirrors ``kortravelgeo.api.security.ROLE_SCHEDULER`` as a local
+#: literal so this Dagster package need not import ``kortravelgeo.api`` (and FastAPI) just
+#: to name a role string. ``POST /v1/admin/backups/scheduled/run-due`` is gated to this
+#: role, so the shared-secret system actor gets no destructive scope. A destructive
+#: on-ramp (e.g. a future restore) constructs the client with
+#: ``roles=(DESTRUCTIVE_ADMIN_ROLE,)`` explicitly.
+SCHEDULER_ROLE = "scheduler"
 
 
 @dataclass(frozen=True, slots=True)
 class DagsterAdminApiClient:
-    """Small authenticated client for Dagster -> geo admin API onramp calls."""
+    """Small authenticated client for Dagster -> geo admin API onramp calls.
+
+    Defaults to the least-privilege ``scheduler`` role (T-290 / ADR-066): the only
+    current on-ramp is the scheduled-backup ``run-due`` due-check, which needs no
+    destructive scope. A future destructive on-ramp (e.g. restore) must override
+    ``roles`` explicitly with ``DESTRUCTIVE_ADMIN_ROLE``.
+    """
 
     base_url: str
     timeout_seconds: float
     admin_proxy_secret: str | None = None
     actor: str = SYSTEM_ACTOR
-    roles: tuple[str, ...] = (DESTRUCTIVE_ADMIN_ROLE,)
+    roles: tuple[str, ...] = (SCHEDULER_ROLE,)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> DagsterAdminApiClient:

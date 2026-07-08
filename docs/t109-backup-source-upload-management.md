@@ -1183,8 +1183,11 @@ ADR-049의 admin role gate는 구현 필수다. 현재 admin 라우터에는 애
 | `source_file_manager` | upload session 생성, multipart upload, register, soft-delete, revalidate |
 | `rebuild_operator` | match set activate, rebuild-db, validation run |
 | `destructive_admin` | hard-delete, RustFS object delete, `update_hash_after_verify`, orphaned multipart abort |
+| `scheduler` | 스케줄러 온램프 전용(T-290/ADR-066). `POST /backups/scheduled/run-due` due-check enqueue만 허용하며 파괴 범위가 없다. |
 
 typed confirmation은 `destructive_admin` 권한을 대체하지 않는다. 권한이 있는 사용자가 위험 작업을 실행할 때 추가로 요구하는 확인 절차다.
+
+`scheduler`는 T-290 Dagster 스케줄러 온램프가 `run-due` 게이트를 통과하기 위해 헤더로 제시하는 **최소권한** role이다(#4의 audit `role=system`과는 별개 — audit은 여전히 `system:<job_kind>`로 기록한다). 온램프가 `destructive_admin`을 제시하던 이전 방식(least-privilege 위반)을 대체하며, `run-due`는 `require_role(scheduler, destructive_admin)`으로 게이트한다. 파괴적 온램프(예: 향후 restore)만 `destructive_admin`을 명시적으로 제시한다.
 
 ## API 설계
 
