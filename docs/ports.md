@@ -38,6 +38,7 @@
 | `kor-travel-map` API | `12701` | manager compose 기준 | 다른 서비스 연동 시 참조 |
 | `kor-travel-map` worker/보조 API | `12702` | manager compose 기준 | 다른 서비스 연동 시 참조 |
 | `kor-travel-map` Web UI | `12705` | manager compose 기준 | 다른 서비스 연동 시 참조 |
+| `kor-travel-geo` Dagster webserver | `12703` | `kor-travel-geo-dagster:12703` | T-290 독립 Dagster 관측/API 기본값 |
 | Pinvi API | `12801` | manager compose 기준 | Pinvi 연동 시 참조 |
 | Pinvi Web UI | `12805` | manager compose 기준 | Pinvi 연동 시 참조 |
 | `kor-travel-docker-manager` API | `12901` | manager backend | 관리 대시보드 backend |

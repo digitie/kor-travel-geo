@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-07-08 갱신, by claude)
+## 현재 진척도 (2026-07-08 갱신, by codex)
 
 - ⏳ **T-290 — geo 독립 Dagster 오케스트레이션 이관 (계획·문서화 완료, 구현 착수)** — backup/restore·
   적재 오케스트레이션을 서비스 전용 독립 Dagster(`kortravelgeo_dagster`)로 이관한다. 3라운드 리뷰 수렴
@@ -10,9 +10,15 @@
   구현 정본 [architecture/dagster-boundary.md](architecture/dagster-boundary.md), 단계·분해·contract·e2e
   게이트는 [dagster-migration-plan.md](dagster-migration-plan.md)가 정본. 통합 브랜치
   `agent/claude-dagster-migration`(전 milestone 완료 후 main 머지), 두 에이전트 A(실행엔진/백엔드)·
-  B(배포/관측/e2e) 병렬. **다음 한 작업**: (A) T-290a(패키지 스캐폴드+resources+mv_refresh @job)와
-  T-290c(load_jobs executor/recovery 게이트), (B) T-290b(Dagster 배포/포트 예약). live UI e2e 게이트는
-  #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X, 미래지향(유지보수성·안정성·완성도·품질).
+  B(배포/관측/e2e) 병렬. **완료**: B의 T-290d(API GraphQL observe 라우터
+  `/v1/ops/dagster/summary`, `/v1/ops/dagster/runs/{run_id}`)가 통합 브랜치 위 별도 PR로 완료됐다.
+  main lib은 Dagster를 import하지 않고, API는 trusted admin role gate, SSRF allowlist, 200
+  `status=unavailable` outage 응답을 제공한다. OpenAPI와 UI 생성 타입도 갱신했다. **다음 한 작업**:
+  (A) T-290a(패키지 스캐폴드+resources+mv_refresh @job)와 T-290c(load_jobs executor/recovery 게이트),
+  (B) T-290b(Dagster 배포; webserver host 포트 `12703` 예약은 완료) 또는 T-290e(admin
+  `/admin/dagster`)를 의존성 상태에 맞춰 진행.
+  live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
+  미래지향(유지보수성·안정성·완성도·품질).
 
 - ✅ **PR #406(관리 UI shadcn 전면 개편 + `/admin/files` 파일 관리 화면 + 통합 파일 인벤토리 API,
   T-283) n150 배포 + live UI e2e 완료** — 아래 codex 항목이 남긴 "백업 리스토어를 제외한 live UI e2e

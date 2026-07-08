@@ -24,7 +24,6 @@ B(배포/관측/e2e) 병렬. **기준: 최소수정 X, 미래지향(유지보수
 - [ ] **T-290a** (A) — `kortravelgeo_dagster` 패키지 스캐폴드 + resources + `mv_refresh` @job (M1)
 - [ ] **T-290b** (B) — Dagster 배포(compose/Dockerfile/DB/포트 예약, n150 e2e deps 포함) (M1)
 - [ ] **T-290c** (A) — `load_jobs` executor/lease + recovery split + reconciler + cancel 골격 (M1, 4단계 게이트)
-- [ ] **T-290d** (B) — API GraphQL observe 라우터 `/v1/ops/dagster/*` (M2)
 - [ ] **T-290e** (B) — admin `/admin/dagster` 페이지 + iframe 임베드 (M2)
 - [ ] **T-290f** (A) — scheduled backup @schedule 온램프 + @run_failure_sensor + 알림 (M2)
 - [ ] **T-290g** (A) — `db_backup` Dagster 실행 + verify/copy/restore_drill (M3)

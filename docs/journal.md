@@ -2,6 +2,37 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-08 (T-290d Dagster 관측 API, by codex)
+
+**작업**: 사용자 지시대로 20분 대기 후 신규 브랜치/PR을 확인했다. Claude의 T-290 계획 문서 PR #416은
+CI green 상태라 `agent/claude-dagster-migration`에 머지했고, `main`은 건드리지 않았다. 이후 Agent B
+범위에서 선행 T-290a 패키지 스캐폴드 없이 독립 완료 가능한 T-290d를 먼저 진행했다.
+
+**변경**:
+- `/v1/ops/dagster/summary`, `/v1/ops/dagster/runs/{run_id}` FastAPI 라우터를 추가했다.
+- `kortravelgeo_dagster`는 아직 별도 패키지이므로 main lib에는 Dagster import를 넣지 않고, API가
+  Dagster webserver GraphQL을 read-only로 호출해 admin UI용 DTO로 정규화한다.
+- SSRF 방어를 넣었다: `http`/`https` scheme만 허용, userinfo/query/fragment 금지, host allowlist,
+  GraphQL endpoint path `/graphql` 강제.
+- Dagster webserver가 내려가거나 HTTP/JSON 오류가 나면 HTTP 200 + `status="unavailable"`로 반환한다.
+  GraphQL top-level error는 Python dict repr이 아니라 `message`만 노출한다.
+- `KTG_DAGSTER_URL`, `KTG_DAGSTER_GRAPHQL_URL`, `KTG_DAGSTER_ALLOWED_HOSTS`,
+  `KTG_DAGSTER_REQUEST_TIMEOUT_SECONDS`, `KTG_DAGSTER_REPOSITORY_NAME`,
+  `KTG_DAGSTER_REPOSITORY_LOCATION_NAME` 설정 키를 추가했다.
+- `docs/ports.md`에 `kor-travel-geo` Dagster webserver host 포트 `12703`을 예약했다.
+- OpenAPI와 UI 생성 타입(`types/api.gen.ts`, `lib/schemas.gen.ts`)을 갱신했다.
+
+**검증**:
+- `uv run --python 3.12 --extra api --extra dev ruff check .` 통과.
+- `uv run --python 3.12 --extra api --extra dev mypy --strict src/kortravelgeo` 통과.
+- `uv run --python 3.12 --extra api --extra dev lint-imports` 통과.
+- `uv run --python 3.12 --extra api --extra dev pytest -q -s` → 1124 passed, 75 skipped.
+- `scripts/export_openapi.py`, `kor-travel-geo-ui npm run gen:types` 실행.
+- UI `npm run lint`, `npm run type-check`, `npm run test`(151 passed), `npm run build` 통과.
+- `npx react-doctor@latest . --offline --verbose --json` → `ok=true`, warning 9건. 경고는 기존
+  `LogsPanel`/`OpsPanel`/`HotSwapTab`/`VirtualTable`/ui primitive/auth storage 파일의 선행 경고로,
+  이번 생성 타입·Dagster API 변경 파일과 무관해 PR 범위에 섞지 않았다.
+
 ## 2026-07-07 (PR #406 관리 UI 개편 n150 배포 + live UI e2e, by claude)
 
 **작업**: 2026-07-06 codex 항목의 예고("live UI e2e는 PR #406 최종 머지 후 백업 리스토어를 제외하고

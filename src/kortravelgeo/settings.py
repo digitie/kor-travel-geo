@@ -131,6 +131,21 @@ class Settings(BaseSettings):
     ops_slow_sample_flush_batch_size: int = Field(default=50, ge=1, le=1_000)
     ops_slow_query_explain_enabled: bool = False
     ops_slow_query_explain_timeout_ms: int = Field(default=3_000, ge=1)
+    dagster_url: str = "http://127.0.0.1:12703"
+    dagster_graphql_url: str | None = None
+    dagster_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
+        "127.0.0.1",
+        "localhost",
+        "::1",
+        "kor-travel-geo-dagster",
+        "dagster",
+    )
+    dagster_request_timeout_seconds: float = Field(default=3.0, ge=0.2, le=30.0)
+    dagster_repository_name: str = Field(default="__repository__", min_length=1)
+    dagster_repository_location_name: str = Field(
+        default="kortravelgeo_dagster.definitions",
+        min_length=1,
+    )
     runtime_warm_on_startup: bool = False
     runtime_warm_interval_minutes: int = Field(default=0, ge=0)
     runtime_warm_query_limit: int = Field(default=32, ge=1, le=500)
@@ -253,7 +268,7 @@ class Settings(BaseSettings):
             return tuple(Path(part) for part in value)
         return (Path(str(value)),)
 
-    @field_validator("backup_callback_allowed_hosts", mode="before")
+    @field_validator("backup_callback_allowed_hosts", "dagster_allowed_hosts", mode="before")
     @classmethod
     def normalize_backup_callback_allowed_hosts(cls, value: object) -> tuple[str, ...]:
         if isinstance(value, str):
