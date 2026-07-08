@@ -17,6 +17,7 @@ import {
   Settings,
   ShieldCheck,
   TerminalSquare,
+  Workflow,
   X
 } from "lucide-react";
 import { usePathname } from "next/navigation";
@@ -38,6 +39,7 @@ const adminIcons: Record<AdminPageKey, typeof Search> = {
   files: Files,
   consistency: ListChecks,
   backups: Archive,
+  dagster: Workflow,
   ops: ShieldCheck,
   logs: FileText,
   tables: Database,

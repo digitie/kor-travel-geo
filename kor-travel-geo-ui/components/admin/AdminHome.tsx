@@ -10,7 +10,8 @@ import {
   FolderUp,
   ListChecks,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Workflow
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -37,6 +38,7 @@ const pageIcons: Record<AdminPageKey, typeof Archive> = {
   files: Files,
   consistency: ListChecks,
   backups: Archive,
+  dagster: Workflow,
   ops: ShieldCheck,
   logs: FileText,
   tables: Database,

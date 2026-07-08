@@ -6,6 +6,17 @@
 
 ## 완료
 
+- [x] **T-290e** — admin `/admin/dagster` 페이지 + iframe 임베드(Agent B/Codex,
+  통합 브랜치 `agent/claude-dagster-migration`). T-290d의 OpenAPI 생성 타입을 단일 소스로 삼는
+  `lib/dagster.ts` 타입 alias·React Query hook을 추가하고, 관리 UI에 Dagster summary/run detail
+  관측 화면을 연결했다. `/admin/dagster`는 repository·asset·job·failed run 지표, 최근 run 표,
+  선택 run event log, repository 표, schedule/sensor tick 표, Dagster webserver sandbox iframe을
+  렌더한다. 사이드바와 관리 홈의 `백업·운영` 그룹에도 Dagster 링크를 추가했다. Dagster outage
+  응답(`status="unavailable"`)은 오류 배너와 빈 run 상태로 표시한다. 단위 테스트
+  `dagster-panel.test.tsx`로 정상 summary/run 선택과 outage 표시를 검증했다.
+  UI `lint`, `type-check`, unit test 153건, `build`, React Doctor(`ok=true`, 기존 warning 9건),
+  backend `ruff`/`mypy`/`lint-imports`/`pytest`/OpenAPI drift check가 통과했다. (2026-07-08)
+
 - [x] **T-290d** — API GraphQL observe 라우터 `/v1/ops/dagster/*`(Agent B/Codex,
   통합 브랜치 `agent/claude-dagster-migration`). Dagster webserver GraphQL을 조회하는
   `/v1/ops/dagster/summary`와 `/v1/ops/dagster/runs/{run_id}`를 추가했다. main lib은

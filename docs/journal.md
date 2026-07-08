@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-08 (T-290e Dagster 관리자 관측 화면, by codex)
+
+**작업**: T-290d 관측 API가 통합 브랜치에 머지된 뒤, Agent B 범위의 M2 작업 중 독립 완료 가능한
+T-290e(`/admin/dagster` 관측 화면)를 진행했다. `main`은 건드리지 않고
+`agent/claude-dagster-migration`에서 분기한 PR 단위로 작업했다.
+
+**변경**:
+- `lib/dagster.ts`를 추가해 OpenAPI 생성 타입(`types/api.gen.ts`) 기반 Dagster DTO alias와
+  `useDagsterSummaryQuery`, `useDagsterRunDetailQuery` React Query hook을 제공한다.
+- `/admin/dagster` 페이지와 `DagsterPanel`을 추가했다. 화면은 repository/assets/jobs/failed runs
+  지표, Dagster webserver sandbox iframe, recent runs 표, 선택 run event log, code locations,
+  schedules/sensors tick 표를 렌더한다.
+- `ADMIN_PAGES`와 사이드바/관리 홈 아이콘 매핑을 갱신해 `백업·운영` 그룹에 Dagster 링크를 추가했다.
+- Dagster API의 outage 응답(`status="unavailable"`)은 오류 배너와 빈 run 상태로 표시한다. 실패/
+  overdue 알림과 artifact 링크는 계획대로 T-290h 범위에 남겼다.
+
+**검증**:
+- `kor-travel-geo-ui npm run type-check` 통과.
+- `kor-travel-geo-ui npm run lint` 통과.
+- `kor-travel-geo-ui npm run test` → 153 passed.
+- `kor-travel-geo-ui npm run build` 통과(`/admin/dagster` static route 생성 확인).
+- `npx react-doctor@latest . --offline --verbose --json` → `ok=true`, 기존 warning 9건.
+- `uv run --python 3.12 --extra api --extra dev ruff check .` 통과.
+- `uv run --python 3.12 --extra api --extra dev mypy --strict src/kortravelgeo` 통과.
+- `uv run --python 3.12 --extra api --extra dev lint-imports` 통과.
+- `uv run --python 3.12 --extra api --extra dev pytest -q -s` → 1124 passed, 75 skipped.
+- `scripts/export_openapi.py --check --output openapi.json` 통과.
+
 ## 2026-07-08 (T-290d Dagster 관측 API, by codex)
 
 **작업**: 사용자 지시대로 20분 대기 후 신규 브랜치/PR을 확인했다. Claude의 T-290 계획 문서 PR #416은
