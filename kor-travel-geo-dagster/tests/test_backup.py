@@ -16,6 +16,7 @@ from kortravelgeo_dagster.resources import (
     ADMIN_PROXY_SECRET_HEADER,
     DESTRUCTIVE_ADMIN_ROLE,
     ROLES_HEADER,
+    SCHEDULER_ROLE,
     SYSTEM_ACTOR,
     DagsterAdminApiClient,
 )
@@ -113,9 +114,12 @@ def test_admin_api_client_uses_settings_and_proxy_headers() -> None:
     assert client.url_for("/v1/admin/backups/scheduled/run-due") == (
         "http://geo-api.internal:12501/v1/admin/backups/scheduled/run-due"
     )
+    # #429 least privilege: the scheduled-backup on-ramp presents `scheduler`, not
+    # `destructive_admin`. run-due is gated to scheduler/destructive_admin server-side.
+    assert client.roles == (SCHEDULER_ROLE,)
     assert client.headers() == {
         ACTOR_HEADER: SYSTEM_ACTOR,
-        ROLES_HEADER: DESTRUCTIVE_ADMIN_ROLE,
+        ROLES_HEADER: SCHEDULER_ROLE,
         ADMIN_PROXY_SECRET_HEADER: "shared-secret",
     }
 
@@ -146,5 +150,27 @@ async def test_admin_api_client_posts_run_due() -> None:
     assert payload["enqueued"] is True
     assert requests[0].url == "http://geo-api.internal:12501/v1/admin/backups/scheduled/run-due"
     assert requests[0].headers[ACTOR_HEADER] == SYSTEM_ACTOR
-    assert requests[0].headers[ROLES_HEADER] == DESTRUCTIVE_ADMIN_ROLE
+    assert requests[0].headers[ROLES_HEADER] == SCHEDULER_ROLE
     assert requests[0].headers[ADMIN_PROXY_SECRET_HEADER] == "shared-secret"
+
+
+def test_admin_api_client_defaults_to_least_privilege_scheduler_role() -> None:
+    # Default construction (from_settings) presents only the least-privilege scheduler
+    # role — never destructive_admin (#429 / ADR-066).
+    client = DagsterAdminApiClient.from_settings(
+        Settings(_env_file=None, dagster_admin_api_url="http://geo-api.internal:12501/")
+    )
+    assert client.roles == (SCHEDULER_ROLE,)
+    assert client.headers()[ROLES_HEADER] == SCHEDULER_ROLE
+    assert DESTRUCTIVE_ADMIN_ROLE not in client.headers()[ROLES_HEADER]
+
+
+def test_admin_api_client_allows_explicit_destructive_override() -> None:
+    # A future destructive on-ramp (e.g. restore) may opt in explicitly; the client
+    # does not hardcode scheduler, it only defaults to it.
+    client = DagsterAdminApiClient(
+        base_url="http://geo-api.internal:12501",
+        timeout_seconds=1.0,
+        roles=(DESTRUCTIVE_ADMIN_ROLE,),
+    )
+    assert client.headers()[ROLES_HEADER] == DESTRUCTIVE_ADMIN_ROLE

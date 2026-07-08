@@ -48,6 +48,7 @@ __all__ = [
     "ROLES_HEADER",
     "ROLE_DESTRUCTIVE_ADMIN",
     "ROLE_REBUILD_OPERATOR",
+    "ROLE_SCHEDULER",
     "ROLE_SOURCE_FILE_MANAGER",
     "ROLE_SOURCE_FILE_VIEWER",
     "ROLE_SYSTEM",
@@ -73,6 +74,16 @@ ROLE_SOURCE_FILE_MANAGER = "source_file_manager"
 ROLE_REBUILD_OPERATOR = "rebuild_operator"
 ROLE_DESTRUCTIVE_ADMIN = "destructive_admin"
 
+#: Least-privilege role for the internal scheduled-backup on-ramp (T-290 / ADR-066).
+#: The Dagster ``scheduled_backup`` schedule calls
+#: ``POST /v1/admin/backups/scheduled/run-due``, which only due-checks and enqueues a
+#: scheduled backup — it needs no destructive scope. The Dagster ``admin_api`` on-ramp
+#: presents this role (never ``destructive_admin``) so the shared-secret system actor is
+#: confined to the run-due gate (least privilege). Unlike ``system`` it is
+#: header-carriable, because the on-ramp authenticates as a trusted proxy and must pass
+#: ``_parse_roles`` (which drops any role outside ``KNOWN_ADMIN_ROLES``).
+ROLE_SCHEDULER = "scheduler"
+
 #: Role name reserved for internal job / scheduler actors (doc #4). It is never
 #: derived from request headers; it exists so audit rows can record role="system"
 #: for ``system:<job_kind>`` actors.
@@ -86,6 +97,7 @@ KNOWN_ADMIN_ROLES: frozenset[str] = frozenset(
         ROLE_SOURCE_FILE_MANAGER,
         ROLE_REBUILD_OPERATOR,
         ROLE_DESTRUCTIVE_ADMIN,
+        ROLE_SCHEDULER,
     }
 )
 

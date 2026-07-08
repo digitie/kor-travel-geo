@@ -22,6 +22,7 @@ from kortravelgeo.api.security import (
     KNOWN_ADMIN_ROLES,
     ROLE_DESTRUCTIVE_ADMIN,
     ROLE_REBUILD_OPERATOR,
+    ROLE_SCHEDULER,
     ROLE_SOURCE_FILE_MANAGER,
     ROLE_SOURCE_FILE_VIEWER,
     RequestContext,
@@ -2078,6 +2079,7 @@ async def run_due_scheduled_backup(
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
+    _ctx: RequestContext = Depends(require_role(ROLE_SCHEDULER, ROLE_DESTRUCTIVE_ADMIN)),
 ) -> ScheduledBackupRunResult:
     """Idempotent scheduled-backup trigger for an external cron (T-239).
 
@@ -2086,6 +2088,11 @@ async def run_due_scheduled_backup(
     otherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``
     advisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that
     cannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).
+
+    Gated to ``scheduler`` (the least-privilege role the Dagster on-ramp presents,
+    T-290 / ADR-066) or ``destructive_admin`` (manual operator trigger). This is
+    stricter than the router-wide ``require_role(*KNOWN_ADMIN_ROLES)``: a broad admin
+    role (e.g. ``source_file_viewer``) can no longer enqueue a scheduled backup.
     """
     key = AdvisoryLockKey.global_key(AdvisoryLockNamespace.BACKUP_SCHEDULE)
     try:
