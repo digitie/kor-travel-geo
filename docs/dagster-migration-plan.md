@@ -26,7 +26,7 @@ leaf(도메인) 로직은 재사용하되 오케스트레이션은 map 청사진
 |---|---|
 | distribution / import root | `kortravelgeo-dagster` / `kortravelgeo_dagster` |
 | code location module | `kortravelgeo_dagster.definitions` |
-| Dagster webserver 포트 | `docs/ports.md`에 신규 예약(예: 12703 후보 — B가 확정·등재) |
+| Dagster webserver 포트 | `docs/ports.md`에 신규 예약(예: 12502 후보 — B가 확정·등재) |
 | Dagster 메타 DB | `kor_travel_geo_dagster` (env `KTG_DAGSTER_PG_URL`) |
 | API observe endpoints | `GET /v1/ops/dagster/summary`, `GET /v1/ops/dagster/runs/{run_id}` |
 | API 설정 키 | `KTG_DAGSTER_URL`, `KTG_DAGSTER_ALLOWED_HOSTS`, `KTG_DAGSTER_REPOSITORY_NAME`, `KTG_DAGSTER_REPOSITORY_LOCATION_NAME` |

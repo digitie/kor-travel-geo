@@ -72,7 +72,7 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.ops_slow_sample_flush_batch_size == 50
     assert settings.ops_slow_query_explain_enabled is False
     assert settings.ops_slow_query_explain_timeout_ms == 3_000
-    assert settings.dagster_url == "http://127.0.0.1:12703"
+    assert settings.dagster_url == "http://127.0.0.1:12502"
     assert settings.dagster_graphql_url is None
     assert settings.dagster_allowed_hosts == (
         "127.0.0.1",

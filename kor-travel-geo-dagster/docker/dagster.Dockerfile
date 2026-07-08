@@ -61,6 +61,6 @@ COPY --chown=appuser:appuser kor-travel-geo-dagster/docker/dagster.yaml /opt/dag
 
 USER appuser
 
-EXPOSE 12703
+EXPOSE 12502
 
-CMD ["sh", "-c", "dagster-webserver -m kortravelgeo_dagster.definitions -h 0.0.0.0 -p ${KTG_DAGSTER_PORT:-12703}"]
+CMD ["sh", "-c", "dagster-webserver -m kortravelgeo_dagster.definitions -h 0.0.0.0 -p ${KTG_DAGSTER_PORT:-12502}"]

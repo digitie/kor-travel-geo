@@ -131,7 +131,7 @@ class Settings(BaseSettings):
     ops_slow_sample_flush_batch_size: int = Field(default=50, ge=1, le=1_000)
     ops_slow_query_explain_enabled: bool = False
     ops_slow_query_explain_timeout_ms: int = Field(default=3_000, ge=1)
-    dagster_url: str = "http://127.0.0.1:12703"
+    dagster_url: str = "http://127.0.0.1:12502"
     dagster_graphql_url: str | None = None
     dagster_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
         "127.0.0.1",

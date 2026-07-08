@@ -19,7 +19,7 @@ def _app(settings: Settings | None = None):
     app.dependency_overrides[get_settings] = lambda: settings or Settings(
         _env_file=None,
         admin_trusted_proxy_cidrs="127.0.0.0/8",
-        dagster_url="http://dagster.example:12703",
+        dagster_url="http://dagster.example:12502",
         dagster_allowed_hosts=("dagster.example",),
         dagster_request_timeout_seconds=1.0,
         geoip_gate_mode="off",
@@ -40,7 +40,7 @@ async def test_dagster_summary_parses_graphql_response(
         query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
     ) -> dict[str, Any]:
         assert client
-        assert graphql_url == "http://dagster.example:12703/graphql"
+        assert graphql_url == "http://dagster.example:12502/graphql"
         calls.append({"query": query, "variables": variables})
         return {
             "data": {
@@ -138,8 +138,8 @@ async def test_dagster_summary_parses_graphql_response(
     assert "duration_ms" in body["meta"]
     data = body["data"]
     assert data["status"] == "ok"
-    assert data["dagster_url"] == "http://dagster.example:12703"
-    assert data["graphql_url"] == "http://dagster.example:12703/graphql"
+    assert data["dagster_url"] == "http://dagster.example:12502"
+    assert data["graphql_url"] == "http://dagster.example:12502/graphql"
     assert data["version"] == "1.9.99"
     assert data["repository_count"] == 1
     assert data["job_count"] == 1
@@ -175,7 +175,7 @@ async def test_dagster_run_detail_parses_graphql_response(
         query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
     ) -> dict[str, Any]:
         assert client
-        assert graphql_url == "http://dagster.example:12703/graphql"
+        assert graphql_url == "http://dagster.example:12502/graphql"
         calls.append({"query": query, "variables": variables})
         return {
             "data": {
@@ -325,7 +325,7 @@ async def test_dagster_summary_rejects_disallowed_url_before_http_call(
     settings = Settings(
         _env_file=None,
         admin_trusted_proxy_cidrs="127.0.0.0/8",
-        dagster_url="http://169.254.169.254:12703",
+        dagster_url="http://169.254.169.254:12502",
         dagster_allowed_hosts=("127.0.0.1",),
         geoip_gate_mode="off",
     )

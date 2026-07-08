@@ -31,6 +31,7 @@
 | cAdvisor | `12301` | `cadvisor:8080` | Docker 컨테이너 리소스 exporter |
 | Prometheus | `12401` | `prometheus:9090` | `http://127.0.0.1:12401` |
 | `kor-travel-geo` API | `12501` | `kor-travel-geo-api:12501` | 로컬 단독 실행과 Docker 실행 동일 |
+| `kor-travel-geo` Dagster webserver | `12502` | `kor-travel-geo-dagster:12502` | T-290 독립 Dagster 관측/API. worker/aux 슬롯(map `12702`·concierge `12602`과 동일 패턴) |
 | `kor-travel-geo-ui` | `12505` | `kor-travel-geo-ui:12505` | 로컬 단독 실행과 Docker 실행 동일 |
 | `kor-travel-concierge` API | `12601` | manager compose 기준 | 다른 서비스 연동 시 참조 |
 | `kor-travel-concierge` worker/보조 API | `12602` | manager compose 기준 | 다른 서비스 연동 시 참조 |
@@ -38,7 +39,6 @@
 | `kor-travel-map` API | `12701` | manager compose 기준 | 다른 서비스 연동 시 참조 |
 | `kor-travel-map` worker/보조 API | `12702` | manager compose 기준 | 다른 서비스 연동 시 참조 |
 | `kor-travel-map` Web UI | `12705` | manager compose 기준 | 다른 서비스 연동 시 참조 |
-| `kor-travel-geo` Dagster webserver | `12703` | `kor-travel-geo-dagster:12703` | T-290 독립 Dagster 관측/API 기본값 |
 | Pinvi API | `12801` | manager compose 기준 | Pinvi 연동 시 참조 |
 | Pinvi Web UI | `12805` | manager compose 기준 | Pinvi 연동 시 참조 |
 | `kor-travel-docker-manager` API | `12901` | manager backend | 관리 대시보드 backend |
