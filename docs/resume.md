@@ -51,6 +51,21 @@
   run으로 실행되고 artifact 다운로드와 run/op 로그가 admin UI에서 보이는지 확인하는 **live UI e2e #2**다.
   live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
   미래지향(유지보수성·안정성·완성도·품질).
+  **T-290g 구현 착수 노트(설계 완료, 새 세션에서 집중 구현)**: mv_refresh op(단순 leaf 호출)과 달리
+  T-290g는 라이브 backup 경로 + 신규 API→Dagster launch가 얽힌 마일스톤급이다. 권장 분해:
+  ① **db_backup op/job(self-contained 첫 PR)** — leaf `run_backup_job(engine, settings, payload,
+  cancel_event, progress)`(`infra/backup.py`, in-process 핸들러는 `api/app.py:1125`) 호출 + T-290c
+  `JobQueue.mark_dagster_running(job_id, orchestrator_run_id=context.run_id, ttl)`로 load_jobs 행을
+  dagster executor로 adopt + progress→load_jobs 갱신·lease 갱신 + cancel_event←load_jobs cancel 폴링 +
+  종료 시 done/failed 수렴(`_apply_reconcile`/state writers 재사용). **RetryPolicy off**(artifact 생성=비멱등).
+  테스트는 `build_op_context` + fake load_jobs(#431 op 테스트 방식). ② **launch adapter** — `POST
+  /admin/backups`를 in-process enqueue에서 Dagster `launchRun` mutation으로 라우팅(현재 observe GraphQL만
+  있고 trigger 클라이언트는 미구축 — dagster-boundary §7; `kor_travel_geo.job_id` run 태그로 load_jobs
+  연결). ③ **verify/copy/restore_drill `@job`**(CLI leaf: `cli/main.py` verify_backup/copy_backup/
+  backup_restore_drill). Groundwork 준비됨: T-290c 실행-boundary(`_job_recovery.py` reconcile +
+  `_jobs.py` mark_dagster_running/reconcile_dagster_jobs/cancel seam), mv.py op 템플릿, dagster 검증용
+  **Python 3.12 venv**(미러 `kor-travel-geo-dagster/.venv`, dagster 1.13.12 — 3.14 미러 venv는 dagster
+  미지원). 기존 `test_backup_restore_roundtrip`를 그대로 물린다(plan §"실행-이관 task는 기존 테스트 재사용").
 
 - ✅ **PR #406(관리 UI shadcn 전면 개편 + `/admin/files` 파일 관리 화면 + 통합 파일 인벤토리 API,
   T-283) n150 배포 + live UI e2e 완료** — 아래 codex 항목이 남긴 "백업 리스토어를 제외한 live UI e2e
