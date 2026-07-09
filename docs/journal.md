@@ -2,6 +2,34 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-09 (T-290h Agent B 선행 — Dagster run detail backup artifact 연결, by codex)
+
+**작업**: Agent B의 T-290h 관측 표면 선행 작업으로 `/admin/dagster` run detail에서 Dagster
+`db_backup` run과 백업 artifact를 연결했다. 아직 `POST /admin/backups` → Dagster `launchRun` adapter가
+완료되지 않아 live UI e2e #2는 닫을 수 없지만, launch adapter가 run tag `kor_travel_geo.job_id`를 싣는
+즉시 admin UI에서 load job id, backup artifact 상태·크기·다운로드 링크가 보이도록 준비했다.
+
+**수정**:
+- `DagsterRunDetailData.backup_artifact`와 `DagsterBackupArtifact` DTO 추가.
+- `AdminRepository.get_artifact_by_job_id()`와 `AsyncAddressClient.get_artifact_by_job_id()` 추가.
+- `GET /v1/ops/dagster/runs/{run_id}`가 run tag `kor_travel_geo.job_id`를 읽고 `ops.artifacts.job_id`의
+  최신 `db_backup` artifact를 best-effort로 연결한다. artifact DB 조회 실패는 run/event log 응답을 깨지
+  않고 sanitized error로만 추가한다.
+- `/admin/dagster` run detail에 load job id, backup artifact 이름, 상태, 크기, 다운로드 버튼을 표시한다.
+
+**검증**:
+- `compileall` 대상 파일 통과
+- `pytest -q -s tests/unit/test_dagster_router.py tests/unit/test_infra_repo_sql.py` → 51 passed
+- `pytest -q -s` → 1175 passed, 75 skipped
+- `ruff check .`, `mypy src/kortravelgeo scripts/export_openapi.py`, `lint-imports` 통과
+- `scripts/export_openapi.py --check --output openapi.json` 통과
+- `kor-travel-geo-ui` `npm run gen:types`
+- `kor-travel-geo-ui` `npm run test -- dagster-panel.test.tsx` → 2 passed
+- `kor-travel-geo-ui` `npm run test` → 153 passed
+- `kor-travel-geo-ui` `npm run build`, `npm run lint`, `npm run type-check` 통과
+- `kor-travel-geo-ui` `npx react-doctor@latest . --offline --verbose --json` → `ok=true`, warning 10
+  (기존 iframe sandbox/대형 컴포넌트/web storage 등 잔여 경고)
+
 ## 2026-07-09 (T-290g Claude PR 리뷰 후속 — Dagster load_jobs adopt guard, by codex)
 
 **작업**: Claude Code가 머지한 T-290g 관련 PR #441/#442/#445/#448/#449/#450/#451을 통합 브랜치

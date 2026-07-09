@@ -2820,6 +2820,60 @@
         "title": "DagsterAssetGroup",
         "type": "object"
       },
+      "DagsterBackupArtifact": {
+        "additionalProperties": false,
+        "description": "Backup artifact linked to a Dagster ``db_backup`` run.",
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "state"
+        ],
+        "title": "DagsterBackupArtifact",
+        "type": "object"
+      },
       "DagsterGraphqlError": {
         "additionalProperties": false,
         "description": "Dagster GraphQL PythonError summary.",
@@ -3037,6 +3091,16 @@
         "additionalProperties": false,
         "description": "``GET /v1/ops/dagster/runs/{run_id}`` data.",
         "properties": {
+          "backup_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DagsterBackupArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "checked_at": {
             "format": "date-time",
             "title": "Checked At",

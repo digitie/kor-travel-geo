@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { Download, ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { RefreshButton } from "@/components/admin/shared/RefreshButton";
@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { VirtualTable, type VirtualColumn } from "@/components/ui/VirtualTable";
 import { getErrorMessage } from "@/lib/api";
+import { backupDownloadHref } from "@/lib/backup-workflow";
 import {
   dagsterRunUrl,
   dagsterStatusTone,
@@ -26,7 +27,7 @@ import {
   useDagsterRunDetailQuery,
   useDagsterSummaryQuery
 } from "@/lib/dagster";
-import { formatTimestamp } from "@/lib/format";
+import { formatBytes, formatTimestamp } from "@/lib/format";
 
 type InstigationRow = {
   id: string;
@@ -381,6 +382,9 @@ function RunDetailPanel({
   selectedRunId: string | null;
 }) {
   const run = detail?.run;
+  const backupArtifact = detail?.backup_artifact ?? null;
+  const backupArtifactHref = backupDownloadHref(backupArtifact?.download_url);
+  const loadJobId = run?.tags?.["kor_travel_geo.job_id"];
   return (
     <Panel
       title="Run detail"
@@ -425,6 +429,39 @@ function RunDetailPanel({
             </dd>
             <dt className="text-muted-foreground">job</dt>
             <dd className="min-w-0 break-all">{run?.job_name ?? "-"}</dd>
+            {loadJobId ? (
+              <>
+                <dt className="text-muted-foreground">load job</dt>
+                <dd className="min-w-0 break-all font-mono">{loadJobId}</dd>
+              </>
+            ) : null}
+            {backupArtifact ? (
+              <>
+                <dt className="text-muted-foreground">backup artifact</dt>
+                <dd className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="min-w-0 break-all font-mono">
+                    {backupArtifact.display_name ?? backupArtifact.artifact_id}
+                  </span>
+                  <StatusBadge
+                    value={backupArtifact.state}
+                    tone={dagsterStatusTone(backupArtifact.state)}
+                  />
+                  {backupArtifact.size_bytes != null ? (
+                    <span className="text-muted-foreground">
+                      {formatBytes(backupArtifact.size_bytes)}
+                    </span>
+                  ) : null}
+                  {backupArtifactHref ? (
+                    <Button asChild size="sm" variant="outline">
+                      <a aria-label="backup artifact 다운로드" href={backupArtifactHref}>
+                        <Download aria-hidden="true" />
+                        다운로드
+                      </a>
+                    </Button>
+                  ) : null}
+                </dd>
+              </>
+            ) : null}
             <dt className="text-muted-foreground">started</dt>
             <dd>{formatDagsterEpoch(run?.start_time)}</dd>
             <dt className="text-muted-foreground">updated</dt>

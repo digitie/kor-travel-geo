@@ -63,12 +63,16 @@
   등록). dagster 31 passed. Codex 리뷰 후속 #452로 `LoadJobExecutor.adopt_dagster()`를 보강해,
   Dagster step worker가 API enqueue 직후 취소·종료된 `load_jobs` row나 다른 run이 소유한 row를 재채택해
   leaf를 시작하지 못하게 막았다. 허용 범위는 `queued` row와 같은 Dagster run의 `running` row renewal뿐이다.
+  (#454) observe router의 Dagster URL/SSRF helper를 공유 클라이언트로 빼고 `launch_dagster_run()` groundwork를
+  추가했다.
   ⏭ **② launch adapter(다음 PR)** — `POST /admin/backups`를 in-process enqueue에서 Dagster `launchRun`
-  mutation으로 라우팅한다(현재 observe GraphQL만 있고 trigger 클라이언트는 미구축 — dagster-boundary §7;
-  op config에 `{job_id, payload}` + `kor_travel_geo.job_id` run 태그로 load_jobs 연결). 이 단계에서
-  브리지의 실 SQL(adopt/progress/terminal)이 기존 `test_backup_restore_roundtrip`로 end-to-end 검증된다.
-  ③ **verify/copy/restore_drill `@job`**(CLI leaf: `cli/main.py`). M3 게이트 = **live UI e2e #2**(n150
-  실제 backup 실행, 파괴적).
+  mutation으로 라우팅한다(공유 launch client는 준비됨 — dagster-boundary §7; op config에
+  `{job_id, payload}` + `kor_travel_geo.job_id` run 태그로 load_jobs 연결). 이 단계에서 브리지의 실
+  SQL(adopt/progress/terminal)이 기존 `test_backup_restore_roundtrip`로 end-to-end 검증된다. Agent B
+  선행분으로 `/admin/dagster` run detail은 `kor_travel_geo.job_id` tag가 보이면 `ops.artifacts.job_id`의
+  최신 `db_backup` artifact 상태·크기·다운로드 링크를 표시하도록 준비했다. live UI e2e #2는 launch
+  adapter 머지 뒤 n150 실제 backup 실행으로 닫는다. ③ **verify/copy/restore_drill `@job`**(CLI leaf:
+  `cli/main.py`). M3 게이트 = **live UI e2e #2**(n150 실제 backup 실행, 파괴적).
   Groundwork(재사용): `core.job_recovery` + infra `LoadJobExecutor` + `load_job_bridge`(restore T-290i·
   full-load T-290j도 같은 브리지 사용), mv.py op 템플릿, dagster 검증용 **Python 3.12 venv**(미러
   `kor-travel-geo-dagster/.venv`, dagster 1.13.12 — 3.14 미러 venv는 dagster 미지원).

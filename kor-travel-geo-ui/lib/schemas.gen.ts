@@ -40,6 +40,7 @@ export const apiSchemaNames = [
   "ConsistencySampleRecheckResponse",
   "ConsistencyValidationInput",
   "DagsterAssetGroup",
+  "DagsterBackupArtifact",
   "DagsterGraphqlError",
   "DagsterInstigationTick",
   "DagsterJob",
