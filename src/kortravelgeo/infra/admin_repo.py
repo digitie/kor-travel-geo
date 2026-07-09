@@ -1336,6 +1336,7 @@ DELETE FROM ops.pg_stat_statements_snapshots
         state: str = "queued",
         progress: float = 0.0,
         current_stage: str | None = None,
+        executor: str = "api_in_process",
     ) -> LoadJobRow:
         resolved_job_id = job_id or f"job_{uuid4().hex}"
         payload_summary = _summarize_payload(payload)
@@ -1346,10 +1347,10 @@ DELETE FROM ops.pg_stat_statements_snapshots
                         """
 INSERT INTO load_jobs
   (job_id, kind, payload, state, load_batch_id, parent_job_id,
-   progress, current_stage, payload_summary)
+   progress, current_stage, payload_summary, executor)
 VALUES
   (:job_id, :kind, :payload, :state, :load_batch_id, :parent_job_id,
-   :progress, :current_stage, :payload_summary)
+   :progress, :current_stage, :payload_summary, :executor)
 RETURNING job_id, kind, state, load_batch_id, parent_job_id,
           progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
@@ -1367,6 +1368,7 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                         "progress": progress,
                         "current_stage": current_stage,
                         "payload_summary": payload_summary,
+                        "executor": executor,
                     },
                 )
             ).mappings().one()
