@@ -151,6 +151,11 @@ class Settings(BaseSettings):
         default="kortravelgeo_dagster.definitions",
         min_length=1,
     )
+    # Job kinds (comma-separated) whose EXECUTION is routed to Dagster instead of the
+    # in-process JobQueue (T-290g). Empty (default) keeps every kind in-process; add
+    # "db_backup" to launch backups as Dagster runs. The in-process drain skips
+    # executor='dagster' rows, so a routed kind is never double-executed.
+    dagster_executed_job_kinds: Annotated[tuple[str, ...], NoDecode] = ()
     # Lease TTL for executor='dagster' load_jobs (ADR-066 §5 / dagster-boundary §6). A
     # Dagster op renews this while it runs; executor-aware startup recovery keeps a job
     # 'running' only while its lease is still valid (or a live run is confirmed) and
@@ -279,7 +284,12 @@ class Settings(BaseSettings):
             return tuple(Path(part) for part in value)
         return (Path(str(value)),)
 
-    @field_validator("backup_callback_allowed_hosts", "dagster_allowed_hosts", mode="before")
+    @field_validator(
+        "backup_callback_allowed_hosts",
+        "dagster_allowed_hosts",
+        "dagster_executed_job_kinds",
+        mode="before",
+    )
     @classmethod
     def normalize_backup_callback_allowed_hosts(cls, value: object) -> tuple[str, ...]:
         if isinstance(value, str):
