@@ -10,8 +10,7 @@ from enum import Enum
 from time import perf_counter
 from typing import Any, Protocol, cast
 
-from sqlalchemy import bindparam, text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.core.job_recovery import (
@@ -22,7 +21,6 @@ from kortravelgeo.core.job_recovery import (
     ReconcileAction,
     ReconcileOutcome,
     RunLivenessProbe,
-    compute_lease_expiry,
     is_lease_valid,
     lease_only_liveness_probe,
     noop_orchestrator_cancel,
@@ -31,6 +29,7 @@ from kortravelgeo.core.job_recovery import (
 from kortravelgeo.dto.admin import LoadJobState
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.batch import batch_children
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor
 from kortravelgeo.infra.metrics import record_load_job_duration, record_load_job_stage_duration
 
 
@@ -78,6 +77,10 @@ class JobQueue:
         orchestrator_cancel: OrchestratorCancelHook | None = None,
     ) -> None:
         self.engine = engine
+        # Shared single-row load_jobs writers (T-290g). The queue delegates its per-job
+        # SQL here so the api in-process path and the Dagster op converge one source of
+        # truth; batch-DAG orchestration + stage metrics stay in this class's wrappers.
+        self._executor = LoadJobExecutor(engine, lease_ttl_seconds=lease_ttl_seconds)
         self._semaphore = asyncio.Semaphore(1)
         self._handlers: dict[str, JobHandler] = {}
         self._cancel_events: dict[str, asyncio.Event] = {}
@@ -346,55 +349,19 @@ SELECT job_id, state, orchestrator_run_id, lease_expires_at
         lease expiry.
         """
 
-        expires_at = self._new_lease_expiry(ttl_seconds)
-        async with self.engine.begin() as conn:
-            await conn.execute(
-                text(
-                    """
-UPDATE load_jobs
-   SET executor = 'dagster',
-       orchestrator_run_id = :orchestrator_run_id,
-       lease_expires_at = :expires_at,
-       state = CASE WHEN state = 'queued' THEN 'running' ELSE state END,
-       started_at = COALESCE(started_at, now()),
-       heartbeat_at = now()
- WHERE job_id = :job_id
-"""
-                ),
-                {
-                    "job_id": job_id,
-                    "orchestrator_run_id": orchestrator_run_id,
-                    "expires_at": expires_at,
-                },
-            )
-        return expires_at
+        return await self._executor.adopt_dagster(
+            job_id, orchestrator_run_id, ttl_seconds=ttl_seconds
+        )
 
     async def renew_lease(self, job_id: str, *, ttl_seconds: float | None = None) -> datetime:
         """Renew ``lease_expires_at`` (and heartbeat) for a Dagster-executed job.
 
-        Provided for the later Dagster op wiring that renews the lease as it makes
-        progress; the in-process path never leases, so this is inert for current jobs.
-        Returns the new lease expiry.
+        Provided for the Dagster op wiring that renews the lease as it makes progress; the
+        in-process path never leases. Delegates to :class:`LoadJobExecutor`. Returns the
+        new lease expiry.
         """
 
-        expires_at = self._new_lease_expiry(ttl_seconds)
-        async with self.engine.begin() as conn:
-            await conn.execute(
-                text(
-                    """
-UPDATE load_jobs
-   SET lease_expires_at = :expires_at,
-       heartbeat_at = now()
- WHERE job_id = :job_id
-"""
-                ),
-                {"job_id": job_id, "expires_at": expires_at},
-            )
-        return expires_at
-
-    def _new_lease_expiry(self, ttl_seconds: float | None) -> datetime:
-        ttl = self._lease_ttl_seconds if ttl_seconds is None else ttl_seconds
-        return compute_lease_expiry(now=datetime.now(UTC), ttl_seconds=ttl)
+        return await self._executor.renew_lease(job_id, ttl_seconds=ttl_seconds)
 
     async def _executor_ref(self, job_id: str) -> tuple[str, str | None]:
         """Return ``(executor, orchestrator_run_id)`` for a job, defaulting to the
@@ -529,58 +496,17 @@ UPDATE load_jobs
         return (row["job_id"], row["kind"], row["payload"])
 
     async def _done(self, job_id: str) -> None:
-        async with self.engine.begin() as conn:
-            await conn.execute(
-                text(
-                    """
-UPDATE load_jobs
-   SET state = 'done',
-       progress = 1.0,
-       current_stage = 'done',
-       finished_at = now(),
-       heartbeat_at = now()
- WHERE job_id = :job_id AND state <> 'cancelled'
-"""
-                ),
-                {"job_id": job_id},
-            )
+        await self._executor.mark_done(job_id)
         await self._record_progress(job_id, progress=1.0, stage="done", message="job completed")
         await self._refresh_batch_root(job_id)
 
     async def _cancelled(self, job_id: str) -> None:
-        async with self.engine.begin() as conn:
-            await conn.execute(
-                text(
-                    """
-UPDATE load_jobs
-   SET state = 'cancelled',
-       current_stage = 'cancelled',
-       finished_at = now(),
-       heartbeat_at = now()
- WHERE job_id = :job_id
-"""
-                ),
-                {"job_id": job_id},
-            )
+        await self._executor.mark_cancelled(job_id)
         await self._record_progress(job_id, stage="cancelled", message="job cancelled")
         await self._mark_batch_failed(job_id, "child job cancelled")
 
     async def _fail(self, job_id: str, message: str) -> None:
-        async with self.engine.begin() as conn:
-            await conn.execute(
-                text(
-                    """
-UPDATE load_jobs
-   SET state = 'failed',
-       current_stage = 'failed',
-       error_message = :message,
-       finished_at = now(),
-       heartbeat_at = now()
- WHERE job_id = :job_id
-"""
-                ),
-                {"job_id": job_id, "message": message},
-            )
+        await self._executor.mark_failed(job_id, message)
         await self._record_progress(job_id, stage="failed", message=message)
         await self._mark_batch_failed(job_id, message)
 
@@ -636,35 +562,9 @@ UPDATE load_jobs
         stage: str | None = None,
         message: str | None = None,
     ) -> None:
-        log_tail: list[str] | None = None
-        if message is not None:
-            prefix = datetime.now(UTC).isoformat(timespec="seconds")
-            label = f" [{stage}]" if stage else ""
-            async with self.engine.connect() as conn:
-                existing = await conn.scalar(
-                    text("SELECT log_tail FROM load_jobs WHERE job_id = :job_id"),
-                    {"job_id": job_id},
-                )
-            log_tail = [str(line) for line in (existing or [])]
-            log_tail.append(f"{prefix}{label} {message}")
-            log_tail = log_tail[-200:]
-
-        params: dict[str, Any] = {"job_id": job_id}
-        assignments = ["heartbeat_at = now()"]
-        if progress is not None:
-            params["progress"] = max(0.0, min(1.0, progress))
-            assignments.append("progress = :progress")
-        if stage is not None:
-            params["stage"] = stage
-            assignments.append("current_stage = :stage")
-        if log_tail is not None:
-            params["log_tail"] = log_tail
-            assignments.append("log_tail = :log_tail")
-        stmt = text(f"UPDATE load_jobs SET {', '.join(assignments)} WHERE job_id = :job_id")
-        if log_tail is not None:
-            stmt = stmt.bindparams(bindparam("log_tail", type_=JSONB))
-        async with self.engine.begin() as conn:
-            await conn.execute(stmt, params)
+        await self._executor.set_progress(
+            job_id, progress=progress, stage=stage, message=message
+        )
 
     async def _enqueue_batch_successors(self, job_id: str) -> None:
         row = await self._job_batch_row(job_id)
