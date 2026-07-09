@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-09 (T-290g Claude PR 리뷰 후속 — Dagster load_jobs adopt guard, by codex)
+
+**작업**: Claude Code가 머지한 T-290g 관련 PR #441/#442/#445/#448/#449/#450/#451을 통합 브랜치
+`agent/claude-dagster-migration` 기준으로 리뷰했다. #441 scheduler role 온램프, #442 op/schedule/sensor
+테스트 보강, #445 Dagster URL sanitize, #448/#449 레이어링 추출은 추가 blocking finding 없이 수용 가능했다.
+#450의 `db_backup` Dagster op에서는 `LoadJobExecutor.adopt_dagster()`가 `job_id`만 보고 row를 갱신해,
+API enqueue 직후 사용자가 취소한 terminal/cancelled row도 Dagster step worker가 재채택하고 leaf 실행을
+시작할 수 있는 race를 발견했다. 상세 리뷰 코멘트는 #450에 남겼고, 수정 항목은 #452로 분리했다.
+
+**수정**: `LoadJobExecutor.adopt_dagster()`를 `queued` row 또는 같은 Dagster run이 이미 소유한
+`running` row만 채택하도록 guarded `UPDATE ... RETURNING`으로 바꿨다. terminal row, 다른 run이 소유한
+`running` row, 누락 row는 `LoadJobAdoptionError`로 거부해 `execute_load_job()`이 leaf 실행이나
+done/failed/cancelled terminal mark로 진행하지 않는다. 브리지 테스트에는 adopt 실패 시 leaf와 terminal
+write가 호출되지 않는 회귀 테스트를 추가했고, SQL guard는 infra unit test로 고정했다.
+
+**검증**:
+- `compileall` 대상 파일 통과
+- `TMPDIR=/tmp PYTHONPATH=src:kor-travel-geo-dagster/src uv run --python 3.12 --extra api --extra dev ... pytest -q -s kor-travel-geo-dagster/tests/test_load_job_bridge.py tests/unit/test_infra_repo_sql.py` → 40 passed
+- `.venv/bin/pytest -q -s` → 1170 passed, 75 skipped
+- `.venv/bin/ruff check .` 통과
+- `.venv/bin/mypy src/kortravelgeo scripts/export_openapi.py` 통과
+- `.venv/bin/lint-imports` 통과
+- `.venv/bin/python scripts/export_openapi.py`로 #441의 run-due role 설명 drift를 `openapi.json`에 반영
+- `kor-travel-geo-ui` `npm run gen:types` 실행, `types/api.gen.ts` 설명 주석 갱신
+- 테스트 파일 직접 mypy는 기존 fake/test 함수의 미타입 정의가 CI 범위 밖이라 실패한다. CI의 mypy 게이트는
+  `.github/workflows/ci.yml` 기준 `src/kortravelgeo scripts/export_openapi.py`다.
+
 ## 2026-07-09 (T-290 M2 마무리 + 리뷰 후속 하드닝 — #437/#429/#431/#443/#444, by claude)
 
 **작업**: M2 마일스톤을 마무리하고(#438 live e2e #1 spec 머지), M1/M2 후속 리뷰의 열린 이슈를 모두 정리했다.

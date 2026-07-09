@@ -17,13 +17,21 @@ from kortravelgeo_dagster.load_job_bridge import execute_load_job
 class _FakeExecutor:
     """Records lifecycle calls; ``cancel_after_reads`` flips read_cancel_requested True."""
 
-    def __init__(self, *, cancel_after_reads: int | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        cancel_after_reads: int | None = None,
+        adopt_error: BaseException | None = None,
+    ) -> None:
         self.calls: list[tuple] = []
         self._reads = 0
         self._cancel_after = cancel_after_reads
+        self._adopt_error = adopt_error
 
     async def adopt_dagster(self, job_id, orchestrator_run_id, *, ttl_seconds=None):
         self.calls.append(("adopt", job_id, orchestrator_run_id))
+        if self._adopt_error is not None:
+            raise self._adopt_error
         return None
 
     async def set_progress(self, job_id, *, progress=None, stage=None, message=None):
@@ -123,3 +131,26 @@ async def test_bridge_poll_bridges_load_jobs_cancel_to_event() -> None:
     )
 
     assert observed.get("saw_cancel") is True
+
+
+@pytest.mark.asyncio
+async def test_bridge_adopt_failure_does_not_run_leaf_or_mark_terminal() -> None:
+    ex = _FakeExecutor(adopt_error=RuntimeError("cannot adopt terminal job"))
+    leaf_called = False
+
+    async def leaf(cancel_event, progress):
+        nonlocal leaf_called
+        leaf_called = True
+
+    with pytest.raises(RuntimeError, match="cannot adopt terminal job"):
+        await execute_load_job(
+            job_id="j1",
+            orchestrator_run_id="r",
+            engine=object(),  # type: ignore[arg-type]
+            leaf=leaf,
+            executor=ex,  # type: ignore[arg-type]
+            cancel_poll_seconds=0.01,
+        )
+
+    assert leaf_called is False
+    assert ex.kinds() == ["adopt"]

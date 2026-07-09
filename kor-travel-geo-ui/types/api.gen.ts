@@ -184,6 +184,11 @@ export interface paths {
          *     otherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``
          *     advisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that
          *     cannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).
+         *
+         *     Gated to ``scheduler`` (the least-privilege role the Dagster on-ramp presents,
+         *     T-290 / ADR-066) or ``destructive_admin`` (manual operator trigger). This is
+         *     stricter than the router-wide ``require_role(*KNOWN_ADMIN_ROLES)``: a broad admin
+         *     role (e.g. ``source_file_viewer``) can no longer enqueue a scheduled backup.
          */
         post: operations["run_due_scheduled_backup_v1_admin_backups_scheduled_run_due_post"];
         delete?: never;
