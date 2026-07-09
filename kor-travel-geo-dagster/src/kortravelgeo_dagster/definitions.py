@@ -18,6 +18,7 @@ from dagster import Definitions, ResourceDefinition, resource
 from kortravelgeo.settings import Settings
 
 from .backup import BACKUP_JOBS, BACKUP_SCHEDULES, BACKUP_SENSORS
+from .backup_execute import DB_BACKUP_JOBS
 from .mv import MV_REFRESH_JOBS
 from .resources import admin_api_resource, client_resource, rustfs_resource, settings_resource
 
@@ -80,7 +81,7 @@ def _settings_value_resource(key: str, attr: str) -> ResourceDefinition:
 
 
 defs = Definitions(
-    jobs=cast("Any", [*MV_REFRESH_JOBS, *BACKUP_JOBS]),
+    jobs=cast("Any", [*MV_REFRESH_JOBS, *BACKUP_JOBS, *DB_BACKUP_JOBS]),
     schedules=cast("Any", [*BACKUP_SCHEDULES]),
     sensors=cast("Any", [*BACKUP_SENSORS]),
     resources={
