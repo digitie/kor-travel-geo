@@ -13,9 +13,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
+import httpx
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, ORJSONResponse, StreamingResponse
 
+from kortravelgeo.api._dagster_client import (
+    DagsterLaunchError,
+    DagsterUrlConfigurationError,
+    launch_dagster_run,
+)
 from kortravelgeo.api._jobs import JobQueue
 from kortravelgeo.api.deps import get_client, get_job_queue
 from kortravelgeo.api.security import (
@@ -145,7 +151,13 @@ from kortravelgeo.dto.source import (
     UploadSessionCreateRequest,
     UploadSessionStatus,
 )
-from kortravelgeo.exceptions import ForbiddenError, InvalidInputError, NotFoundError
+from kortravelgeo.exceptions import (
+    ForbiddenError,
+    InvalidInputError,
+    KorTravelGeoError,
+    NotFoundError,
+)
+from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.backup import (
     BACKUP_ARTIFACT_TYPE,
     backup_download_url,
@@ -159,6 +171,7 @@ from kortravelgeo.infra.concurrency import (
     ConcurrentExecutionError,
     cross_process_lock,
 )
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor
 from kortravelgeo.infra.rustfs import (
     RustfsClient,
     RustfsUploadedPart,
@@ -1839,19 +1852,55 @@ async def submit_backup(
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
+    settings = get_settings()
     payload = req.model_dump(exclude_none=True)
-    job_id = await queue.enqueue("db_backup", payload)
+    if "db_backup" in settings.dagster_executed_job_kinds:
+        job_id = await _launch_db_backup_dagster_run(client, settings, payload)
+        executor = "dagster"
+    else:
+        job_id = await queue.enqueue("db_backup", payload)
+        executor = "api_in_process"
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="db_backup.submit",
         outcome="started",
-        payload=payload,
+        payload={**payload, "executor": executor},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,
         **_audit_request(request),
     )
     return status
+
+
+async def _launch_db_backup_dagster_run(
+    client: AsyncAddressClient,
+    settings: Settings,
+    payload: dict[str, Any],
+) -> str:
+    """Create a Dagster-executed ``db_backup`` load_jobs row and launch its Dagster run.
+
+    The row is inserted ``executor='dagster'`` so the in-process drain skips it (T-290g);
+    the Dagster ``db_backup`` op adopts and drives it. A launch failure fails the row and
+    surfaces a 502 rather than leaving a queued row no worker will ever claim.
+    """
+    engine = client._engine()
+    row = await AdminRepository(engine).insert_load_job(
+        kind="db_backup", payload=payload, executor="dagster"
+    )
+    job_id = row.job_id
+    run_config = {"ops": {"run_db_backup": {"config": {"job_id": job_id, "payload": payload}}}}
+    try:
+        await launch_dagster_run(
+            settings,
+            job_name="db_backup",
+            run_config=run_config,
+            tags={"kor_travel_geo.job_id": job_id},
+        )
+    except (DagsterUrlConfigurationError, DagsterLaunchError, httpx.HTTPError) as exc:
+        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
+        raise KorTravelGeoError("Dagster backup launch failed", http_status=502) from exc
+    return job_id
 
 
 @router.get(
