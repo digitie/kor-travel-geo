@@ -65,14 +65,18 @@
   leaf를 시작하지 못하게 막았다. 허용 범위는 `queued` row와 같은 Dagster run의 `running` row renewal뿐이다.
   (#454) observe router의 Dagster URL/SSRF helper를 공유 클라이언트로 빼고 `launch_dagster_run()` groundwork를
   추가했다.
-  ⏭ **② launch adapter(다음 PR)** — `POST /admin/backups`를 in-process enqueue에서 Dagster `launchRun`
-  mutation으로 라우팅한다(공유 launch client는 준비됨 — dagster-boundary §7; op config에
-  `{job_id, payload}` + `kor_travel_geo.job_id` run 태그로 load_jobs 연결). 이 단계에서 브리지의 실
-  SQL(adopt/progress/terminal)이 기존 `test_backup_restore_roundtrip`로 end-to-end 검증된다. Agent B
-  선행분으로 `/admin/dagster` run detail은 `kor_travel_geo.job_id` tag가 보이면 `ops.artifacts.job_id`의
-  최신 `db_backup` artifact 상태·크기·다운로드 링크를 표시하도록 준비했다. live UI e2e #2는 launch
-  adapter 머지 뒤 n150 실제 backup 실행으로 닫는다. ③ **verify/copy/restore_drill `@job`**(CLI leaf:
-  `cli/main.py`). M3 게이트 = **live UI e2e #2**(n150 실제 backup 실행, 파괴적).
+  ✅ **② launch adapter + reroute 완료(2026-07-10)**: (#456) load_jobs를 executor로 라우팅 —
+  in-process drain이 `executor='dagster'` row를 스킵(`_claim_one`/recovery 필터)하고 `insert_load_job`에
+  executor 파라미터 추가(behavior-preserving, 전체 unit 1171 passed). (#457) `POST /admin/backups`를
+  `dagster_executed_job_kinds`(`KTG_DAGSTER_EXECUTED_JOB_KINDS`, 기본 empty→in-process) setting으로 Dagster
+  `launchRun` 라우팅 — dagster row insert + `launch_dagster_run`(op config `{job_id, payload}` +
+  `kor_travel_geo.job_id` 태그), launch 실패 시 row failed + 502. **각 PR은 push→CI(openapi/backend/frontend)
+  green 확인 후 머지**("머지 전 대기"). Agent B 선행분으로 run detail은 `kor_travel_geo.job_id` tag로
+  artifact 링크를 표시하도록 준비됐다.
+  ⏭ **③ verify/copy/restore_drill `@job`**(CLI leaf: `cli/main.py`, 브리지 재사용·비파괴적) + **live UI
+  e2e #2** = M3 게이트: n150에 `KTG_DAGSTER_EXECUTED_JOB_KINDS=db_backup` 설정·배포(docker-manager env 반영)
+  후 실제 backup을 Dagster run으로 실행·검증한다(파괴적). 브리지의 실 SQL(adopt/progress/terminal)은
+  이 단계에서 `test_backup_restore_roundtrip`로 end-to-end 검증된다.
   Groundwork(재사용): `core.job_recovery` + infra `LoadJobExecutor` + `load_job_bridge`(restore T-290i·
   full-load T-290j도 같은 브리지 사용), mv.py op 템플릿, dagster 검증용 **Python 3.12 venv**(미러
   `kor-travel-geo-dagster/.venv`, dagster 1.13.12 — 3.14 미러 venv는 dagster 미지원).
