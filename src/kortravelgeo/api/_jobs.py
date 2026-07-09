@@ -219,7 +219,11 @@ UPDATE load_jobs
             )
             queued = (
                 await conn.execute(
-                    text("SELECT job_id FROM load_jobs WHERE state = 'queued' ORDER BY created_at")
+                    text(
+                        "SELECT job_id FROM load_jobs "
+                        "WHERE state = 'queued' AND executor = 'api_in_process' "
+                        "ORDER BY created_at"
+                    )
                 )
             ).scalars().all()
         return [str(job_id) for job_id in queued]
@@ -471,6 +475,7 @@ SELECT job_id, state, orchestrator_run_id, lease_expires_at
 SELECT job_id, kind, payload
   FROM load_jobs
  WHERE state = 'queued'
+   AND executor = 'api_in_process'
  ORDER BY created_at
  FOR UPDATE SKIP LOCKED
  LIMIT 1

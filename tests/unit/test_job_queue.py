@@ -332,3 +332,16 @@ async def test_apply_reconcile_orphan_requests_orchestrator_cancel(
 
     assert propagated == [("job-z", "run-7")]
     assert any("orphan" in (m or "") for m in messages)
+
+
+def test_in_process_claim_and_recovery_skip_dagster_executed_rows() -> None:
+    # T-290g: the in-process drain must only claim / recover executor='api_in_process'
+    # rows. executor='dagster' rows are driven by their Dagster run (adopted via
+    # adopt_dagster), so the drain must never execute them in-process (no double run).
+    import inspect
+
+    claim = inspect.getsource(JobQueue._claim_one)
+    recover = inspect.getsource(JobQueue._recover_in_process_running)
+    assert "state = 'queued'" in claim
+    assert "executor = 'api_in_process'" in claim
+    assert "executor = 'api_in_process'" in recover
