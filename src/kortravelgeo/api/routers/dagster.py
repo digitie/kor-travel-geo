@@ -281,6 +281,25 @@ def _safe_summary_dagster_url(settings: Settings) -> str:
     return ""
 
 
+def _safe_summary_graphql_url(settings: Settings) -> str:
+    """Return a validated GraphQL URL for config-error summaries/run-details, or "".
+
+    Mirrors :func:`_safe_summary_dagster_url` (#443): the config-error path must not echo
+    the raw ``_candidate_graphql_url`` into a summary/run-detail DTO. ``graphql_url`` is the
+    internal backend target, so it keeps the SSRF host allowlist and the ``/graphql`` path
+    check; an invalid value collapses to ``""`` instead of being surfaced verbatim.
+    """
+    try:
+        return _validated_http_url(
+            _candidate_graphql_url(settings),
+            setting_name="dagster_graphql_url",
+            allowed_hosts=_normalised_allowed_hosts(settings),
+            require_graphql_path=True,
+        )
+    except DagsterUrlConfigurationError:
+        return ""
+
+
 def _dict(value: object) -> JsonDict:
     return value if isinstance(value, dict) else {}
 
@@ -624,7 +643,6 @@ async def get_dagster_summary(
 ) -> DagsterSummaryResponse:
     started_at = perf_counter()
     checked_at = datetime.now(UTC)
-    raw_graphql_url = _candidate_graphql_url(settings)
 
     try:
         dagster_urls = _dagster_urls(settings)
@@ -633,7 +651,7 @@ async def get_dagster_summary(
             _empty_summary_data(
                 status="error",
                 dagster_url=_safe_summary_dagster_url(settings),
-                graphql_url=raw_graphql_url,
+                graphql_url=_safe_summary_graphql_url(settings),
                 checked_at=checked_at,
                 errors=[str(exc)],
             ),
@@ -723,7 +741,6 @@ async def get_dagster_run_detail(
 ) -> DagsterRunDetailResponse:
     started_at = perf_counter()
     checked_at = datetime.now(UTC)
-    raw_graphql_url = _candidate_graphql_url(settings)
 
     try:
         dagster_urls = _dagster_urls(settings)
@@ -731,8 +748,8 @@ async def get_dagster_run_detail(
         return _run_detail_response(
             DagsterRunDetailData(
                 status="error",
-                dagster_url=settings.dagster_url,
-                graphql_url=raw_graphql_url,
+                dagster_url=_safe_summary_dagster_url(settings),
+                graphql_url=_safe_summary_graphql_url(settings),
                 checked_at=checked_at,
                 errors=[str(exc)],
             ),
