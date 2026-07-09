@@ -350,7 +350,9 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     assert "consistency_check" in queue_source
     assert '"strategy": "swap"' in queue_source
     assert "consistency report severity ERROR" in queue_source
-    assert "log_tail" in queue_source
+    # log_tail persistence moved to the shared LoadJobExecutor (T-290g); the queue's
+    # per-job writes delegate there.
+    assert "log_tail" in inspect.getsource(_jobs.LoadJobExecutor)
     assert "kind NOT IN" in queue_source
 
 
