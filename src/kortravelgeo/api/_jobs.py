@@ -14,7 +14,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from kortravelgeo.api._job_recovery import (
+from kortravelgeo.core.job_recovery import (
     DEFAULT_LEASE_TTL_SECONDS,
     EXECUTOR_API_IN_PROCESS,
     EXECUTOR_DAGSTER,
@@ -143,7 +143,7 @@ class JobQueue:
         ``load_jobs`` remains the cancel authority, so the row is converged to
         ``cancelled`` for every executor. For ``executor='dagster'`` jobs the cancel is
         additionally propagated to the Dagster run through the injected
-        :class:`~kortravelgeo.api._job_recovery.OrchestratorCancelHook` seam so we never
+        :class:`~kortravelgeo.core.job_recovery.OrchestratorCancelHook` seam so we never
         leave a one-sided cancel; the reconciler closes any residual gap.
         """
 
@@ -226,8 +226,8 @@ UPDATE load_jobs
 
         Shared by startup recovery and (later) a periodic reconciler tick. The Dagster
         run state is resolved through the injected
-        :class:`~kortravelgeo.api._job_recovery.RunLivenessProbe` seam; the pure decision
-        is :func:`~kortravelgeo.api._job_recovery.reconcile_load_job`. State transitions
+        :class:`~kortravelgeo.core.job_recovery.RunLivenessProbe` seam; the pure decision
+        is :func:`~kortravelgeo.core.job_recovery.reconcile_load_job`. State transitions
         reuse the queue's own ``_done``/``_fail``/``_cancelled`` writers so progress and
         audit stay single-sourced. The probe is invoked *outside* any DB transaction (the
         real one does network I/O), so we snapshot rows first, then converge one by one.

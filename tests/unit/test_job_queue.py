@@ -6,12 +6,12 @@ from typing import Any, cast
 import pytest
 
 from kortravelgeo.api import _jobs
-from kortravelgeo.api._job_recovery import (
+from kortravelgeo.api._jobs import JobQueue
+from kortravelgeo.core.job_recovery import (
     OrchestratorRunState,
     ReconcileAction,
     ReconcileOutcome,
 )
-from kortravelgeo.api._jobs import JobQueue
 
 
 @pytest.mark.asyncio
