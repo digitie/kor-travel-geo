@@ -28,6 +28,10 @@ from kortravelgeo.core.job_recovery import DEFAULT_LEASE_TTL_SECONDS, compute_le
 LOG_TAIL_CAP = 200
 
 
+class LoadJobAdoptionError(RuntimeError):
+    """Raised when a Dagster run must not execute the requested ``load_jobs`` row."""
+
+
 class LoadJobExecutor:
     """Single-row ``load_jobs`` writers shared by the api queue and the Dagster op.
 
@@ -59,22 +63,33 @@ class LoadJobExecutor:
         ttl_seconds: float | None = None,
     ) -> datetime:
         """Adopt a row into the Dagster executor: set ``executor='dagster'``, record the
-        backing run id and an initial lease, and move ``queued`` → ``running`` (leaving an
-        already-terminal state untouched). Returns the new lease expiry."""
+        backing run id and an initial lease, and move ``queued`` → ``running``. A same-run
+        ``running`` row may renew/re-adopt defensively, but terminal rows or rows owned by
+        another Dagster run are rejected so a cancelled job never starts leaf execution.
+        Returns the new lease expiry."""
 
         expires_at = self.lease_expiry(ttl_seconds)
         async with self.engine.begin() as conn:
-            await conn.execute(
+            result = await conn.execute(
                 text(
                     """
 UPDATE load_jobs
    SET executor = 'dagster',
        orchestrator_run_id = :orchestrator_run_id,
        lease_expires_at = :expires_at,
-       state = CASE WHEN state = 'queued' THEN 'running' ELSE state END,
+       state = 'running',
        started_at = COALESCE(started_at, now()),
        heartbeat_at = now()
  WHERE job_id = :job_id
+   AND (
+     state = 'queued'
+     OR (
+       state = 'running'
+       AND executor = 'dagster'
+       AND orchestrator_run_id = :orchestrator_run_id
+     )
+   )
+ RETURNING job_id
 """
                 ),
                 {
@@ -83,6 +98,29 @@ UPDATE load_jobs
                     "expires_at": expires_at,
                 },
             )
+            if result.scalar_one_or_none() is None:
+                row = (
+                    await conn.execute(
+                        text(
+                            """
+SELECT state, executor, orchestrator_run_id
+  FROM load_jobs
+ WHERE job_id = :job_id
+"""
+                        ),
+                        {"job_id": job_id},
+                    )
+                ).mappings().first()
+                if row is None:
+                    msg = f"cannot adopt missing load job: {job_id}"
+                else:
+                    msg = (
+                        "cannot adopt load job for Dagster execution: "
+                        f"job_id={job_id} state={row['state']} "
+                        f"executor={row['executor']} "
+                        f"orchestrator_run_id={row['orchestrator_run_id']}"
+                    )
+                raise LoadJobAdoptionError(msg)
         return expires_at
 
     async def renew_lease(self, job_id: str, *, ttl_seconds: float | None = None) -> datetime:

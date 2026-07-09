@@ -14250,7 +14250,7 @@
     },
     "/v1/admin/backups/scheduled/run-due": {
       "post": {
-        "description": "Idempotent scheduled-backup trigger for an external cron (T-239).\n\nEnqueues exactly one ``retention_class='scheduled'`` backup, and only if scheduling\nis enabled and ``interval_hours`` has elapsed since the last scheduled run (no-op\notherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``\nadvisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that\ncannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).",
+        "description": "Idempotent scheduled-backup trigger for an external cron (T-239).\n\nEnqueues exactly one ``retention_class='scheduled'`` backup, and only if scheduling\nis enabled and ``interval_hours`` has elapsed since the last scheduled run (no-op\notherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``\nadvisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that\ncannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).\n\nGated to ``scheduler`` (the least-privilege role the Dagster on-ramp presents,\nT-290 / ADR-066) or ``destructive_admin`` (manual operator trigger). This is\nstricter than the router-wide ``require_role(*KNOWN_ADMIN_ROLES)``: a broad admin\nrole (e.g. ``source_file_viewer``) can no longer enqueue a scheduled backup.",
         "operationId": "run_due_scheduled_backup_v1_admin_backups_scheduled_run_due_post",
         "responses": {
           "200": {

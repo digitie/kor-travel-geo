@@ -60,7 +60,9 @@
   (#450) 재사용 브리지 `kortravelgeo_dagster.load_job_bridge.execute_load_job`(adopt→progress+lease
   renew+cancel 폴링→done/failed/cancelled 수렴, in-process drain 미러, RetryPolicy off) +
   `backup_execute.run_db_backup_op`/`db_backup` job(`run_backup_job` 호출, `_job_id` 주입, definitions
-  등록). dagster 31 passed.
+  등록). dagster 31 passed. Codex 리뷰 후속 #452로 `LoadJobExecutor.adopt_dagster()`를 보강해,
+  Dagster step worker가 API enqueue 직후 취소·종료된 `load_jobs` row나 다른 run이 소유한 row를 재채택해
+  leaf를 시작하지 못하게 막았다. 허용 범위는 `queued` row와 같은 Dagster run의 `running` row renewal뿐이다.
   ⏭ **② launch adapter(다음 PR)** — `POST /admin/backups`를 in-process enqueue에서 Dagster `launchRun`
   mutation으로 라우팅한다(현재 observe GraphQL만 있고 trigger 클라이언트는 미구축 — dagster-boundary §7;
   op config에 `{job_id, payload}` + `kor_travel_geo.job_id` run 태그로 load_jobs 연결). 이 단계에서

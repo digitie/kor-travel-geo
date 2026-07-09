@@ -356,6 +356,17 @@ def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
     assert "kind NOT IN" in queue_source
 
 
+def test_load_job_executor_adopt_dagster_guards_terminal_rows() -> None:
+    source = inspect.getsource(_jobs.LoadJobExecutor.adopt_dagster)
+
+    assert "state = 'queued'" in source
+    assert "state = 'running'" in source
+    assert "executor = 'dagster'" in source
+    assert "orchestrator_run_id = :orchestrator_run_id" in source
+    assert "RETURNING job_id" in source
+    assert "LoadJobAdoptionError" in source
+
+
 def test_insert_load_batch_preserves_child_queue_order() -> None:
     source = inspect.getsource(admin_repo.AdminRepository.insert_load_batch)
 
