@@ -640,3 +640,80 @@ async def test_dagster_summary_dagster_url_falls_back_to_internal_when_public_em
     # Falls back to the internal dagster_url.
     assert data["dagster_url"] == "http://dagster.example:12502"
     assert data["graphql_url"] == "http://dagster.example:12502/graphql"
+
+
+@pytest.mark.asyncio
+async def test_dagster_summary_invalid_graphql_url_is_not_echoed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A bad dagster_graphql_url makes _dagster_urls raise; the config-error summary must
+    # sanitize graphql_url to "" rather than echoing the raw candidate (#443).
+    settings = Settings(
+        _env_file=None,
+        admin_trusted_proxy_cidrs="127.0.0.0/8",
+        dagster_url="http://dagster.example:12502",
+        dagster_graphql_url="javascript:alert(1)",
+        dagster_allowed_hosts=("dagster.example",),
+        dagster_request_timeout_seconds=1.0,
+        geoip_gate_mode="off",
+    )
+
+    async def _unexpected_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        raise AssertionError("invalid graphql URL must fail before Dagster is requested")
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _unexpected_post_graphql)
+
+    transport = httpx.ASGITransport(app=_app(settings), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "error"
+    assert data["errors"] == ["dagster_graphql_url scheme must be http or https"]
+    assert data["graphql_url"] == ""
+    # dagster_url still resolves (valid); the raw graphql value must not appear anywhere.
+    assert data["dagster_url"] == "http://dagster.example:12502"
+    assert "javascript:alert(1)" not in str(data)
+
+
+@pytest.mark.asyncio
+async def test_dagster_run_detail_config_error_sanitizes_urls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The run-detail config-error path echoed both dagster_url and graphql_url raw (#443).
+    # Both must be sanitized — here to "" since the sole (invalid) URL is dagster_url.
+    settings = Settings(
+        _env_file=None,
+        admin_trusted_proxy_cidrs="127.0.0.0/8",
+        dagster_url="javascript:alert(1)",
+        dagster_allowed_hosts=("dagster.example",),
+        dagster_request_timeout_seconds=1.0,
+        geoip_gate_mode="off",
+    )
+
+    async def _unexpected_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_RUN_DETAIL_QUERY,
+    ) -> dict[str, Any]:
+        raise AssertionError("invalid dagster_url must fail before Dagster is requested")
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _unexpected_post_graphql)
+
+    transport = httpx.ASGITransport(app=_app(settings), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/runs/run-123", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "error"
+    assert data["dagster_url"] == ""
+    assert data["graphql_url"] == ""
+    assert "javascript:alert(1)" not in str(data)
