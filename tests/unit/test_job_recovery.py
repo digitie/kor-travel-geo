@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from kortravelgeo.api._job_recovery import (
+from kortravelgeo.core.job_recovery import (
     DEFAULT_LEASE_TTL_SECONDS,
     EXECUTORS,
     OrchestratorRunState,
