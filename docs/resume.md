@@ -38,6 +38,14 @@
   `libatk-1.0.so.0` 누락으로 직접 실행이 불가능해 로컬 Linux Playwright에서 n150 UI로 접속하는 fallback
   smoke를 사용했고, `/admin/dagster` summary/runs/iframe과 기존 `/admin/backups` 렌더를 확인했다. 공식
   `dagster-readonly.spec.ts`는 평문 live admin password 부재로 설계대로 1 skipped.
+  **M2 후속 하드닝 완료(2026-07-09, by claude)**: M1/M2 리뷰 후속 열린 이슈를 모두 정리했다 —
+  #429(온램프 최소권한 `scheduler` role 신설 + `run-due` 게이트, #441), #431(op/schedule/sensor 테스트
+  커버리지 + dispatch 헬퍼 추출, #442), #443(summary/run-detail config-error 경로의
+  graphql_url·dagster_url raw echo를 `_safe_summary_graphql_url`로 일관 sanitize, #445),
+  #444(docker-manager 레포 Dagster 서비스의 `KTG_ADMIN_PROXY_SECRET` pass-through 누락 → manager #49 +
+  n150 재빌드·검증) 머지·클로즈. #437(mv_refresh ANALYZE)은 leaf가 이미 ANALYZE하므로 무효 정정·클로즈.
+  dagster 패키지 검증용 Python 3.12 venv를 미러 `kor-travel-geo-dagster/.venv`에 구축(재사용). 열린
+  T-290 리뷰 이슈 없음.
   **다음 한 작업**: M3 착수 — T-290g에서 `db_backup` leaf를 Dagster job/op로 옮기고, T-290h에서
   `/admin/dagster` run detail에 backup op 로그·artifact 링크를 연결한다. M3 gate는 backup이 Dagster
   run으로 실행되고 artifact 다운로드와 run/op 로그가 admin UI에서 보이는지 확인하는 **live UI e2e #2**다.

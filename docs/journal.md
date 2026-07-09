@@ -2,6 +2,46 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-09 (T-290 M2 마무리 + 리뷰 후속 하드닝 — #437/#429/#431/#443/#444, by claude)
+
+**작업**: M2 마일스톤을 마무리하고(#438 live e2e #1 spec 머지), M1/M2 후속 리뷰의 열린 이슈를 모두 정리했다.
+
+**#437 정정·클로즈(무효)**: M2 회귀에서 본 v2/geocode no-match 503을 "mv_refresh가 ANALYZE 안 함"으로
+파일했으나, 검증 결과 `refresh_mv` leaf는 concurrent/swap 양 전략 모두 이미 REFRESH 후 ANALYZE한다
+(`postload.py`, 프로젝트 rename 커밋 b5ac977부터). 마intenance 엔진도 `statement_timeout=0`. 503은
+stale-stats가 아니라 대량 refresh 직후 cold-page/near-timeout 경계의 선존 서빙 flap이며 Dagster 회귀가
+아니다. 잘못된 전제였음을 정정 코멘트로 남기고 클로즈.
+
+**#429 온램프 최소권한(머지 #441)**: scheduled_backup 온램프가 `run-due`에 `destructive_admin`을
+제시하던 least-privilege 위반 수정. `security.py`에 헤더 반입 가능한 `scheduler` role 신설
+(+`KNOWN_ADMIN_ROLES`), `run-due`를 `require_role(scheduler, destructive_admin)`로 게이트, dagster
+`DagsterAdminApiClient` 기본 roles를 `(scheduler,)`로(파괴 온램프는 명시 override). role 문자열을 로컬
+리터럴로 유지해 dagster 패키지의 `kortravelgeo.api` 미import(lint-imports 계약) 유지. t109 role 표 +
+dagster-boundary §7 갱신.
+
+**#431 op/schedule/sensor 테스트(머지 #442)**: backup.py의 op/schedule/sensor 본문 미테스트 갭 해소.
+직접 `@sensor`/`@schedule` 호출은 컨텍스트 타입을 강제 검사해 duck-typed fake를 거부하므로, dispatch
+로직을 테스트 가능한 헬퍼(`_dispatch_run_failure_notification`, `_scheduled_backup_run_request`)로
+추출하고 sensor/schedule은 얇은 위임 wrapper로 둠. op은 `build_op_context`로 직접 검증. +13 테스트
+(25 passed). [low] 실패-센서 페이로드 §5 정렬은 선행 머지로 이미 완료됨을 확인.
+
+**codex PR 리뷰**: #436(public-URL 에러 sanitize)·#440(M2 gate docs) 리뷰 — 모두 LGTM. 개선점 이슈화 →
+#443(graphql_url raw echo)·#444(docker-manager Dagster env 누락).
+
+**#444 배포 갭(docker-manager #49 + n150, 클로즈)**: docker-manager 레포의 Dagster webserver/daemon
+서비스에 `KTG_ADMIN_PROXY_SECRET` pass-through가 없어(codex는 n150 로컬 override에만 적용) 레포 기준
+재배포 시 on-ramp 403 회귀. 레포 compose 양 서비스에 `KTG_ADMIN_PROXY_SECRET`+`KTG_DAGSTER_ADMIN_API_URL`
+추가 + `.env.example` 문서화(및 .env.example 주석의 실 prod 도메인을 placeholder로 정정, compose 기본값이
+비어 있다는 사실오류도 수정). n150 재빌드 후 `scheduled_backup_run_due` recent run SUCCESS로 검증.
+
+**#443 graphql_url sanitize(머지 #445, 클로즈)**: #436이 summary의 `dagster_url`만 sanitize했으나,
+summary의 `graphql_url`과 run-detail의 `dagster_url`+`graphql_url`이 config-error 경로에서 raw echo되던
+것을 `_safe_summary_graphql_url` 추가로 두 엔드포인트 모두 일관 sanitize(validated-or-empty). operator
+설정값이라 실벡터는 아닌 방어적 정합성.
+
+**환경**: dagster 패키지 검증용 Python 3.12 전용 venv를 미러의 `kor-travel-geo-dagster/.venv`에 구축
+(dagster 1.13.12; 3.14 미러 venv는 dagster 미지원). M3+ dagster 작업에서 재사용한다.
+
 ## 2026-07-09 (T-290 M2 live gate — n150 Dagster observe/e2e 검증, by codex)
 
 **작업**: 통합 브랜치 `agent/claude-dagster-migration` HEAD를 n150 소스 트리에 동기화하고, M2 live UI
