@@ -7,15 +7,21 @@ router only reads Dagster webserver GraphQL and normalizes it for the admin UI.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any, Literal
-from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Depends, Query
 
+from kortravelgeo.api._dagster_client import (
+    DagsterUrlConfigurationError,
+    _candidate_graphql_url,
+    _dagster_urls,
+    _DagsterUrls,
+    _normalised_allowed_hosts,
+    _validated_http_url,
+)
 from kortravelgeo.api.security import KNOWN_ADMIN_ROLES, require_role
 from kortravelgeo.dto.dagster import (
     DagsterAssetGroup,
@@ -42,7 +48,6 @@ router = APIRouter(
 )
 
 JsonDict = dict[str, Any]
-_ALLOWED_DAGSTER_SCHEMES = {"http", "https"}
 
 _DAGSTER_SUMMARY_QUERY = """
 query KorTravelGeoDagsterSummary($limit: Int!) {
@@ -167,92 +172,8 @@ query KorTravelGeoDagsterRunDetail(
 """
 
 
-@dataclass(frozen=True)
-class _DagsterUrls:
-    dagster_url: str
-    graphql_url: str
-    # Browser-facing URL echoed to the admin UI (iframe/links). Validated as http/https
-    # with a host, but NOT restricted to ``dagster_allowed_hosts`` (that allowlist guards
-    # backend GraphQL calls only; the public URL is never fetched server-side).
-    public_url: str
-
-
-class DagsterUrlConfigurationError(ValueError):
-    """Dagster URL settings failed the backend SSRF allowlist."""
-
-
-def _candidate_graphql_url(settings: Settings) -> str:
-    if settings.dagster_graphql_url:
-        return settings.dagster_graphql_url
-    return f"{settings.dagster_url.rstrip('/')}/graphql"
-
-
-def _normalised_allowed_hosts(settings: Settings) -> set[str]:
-    return {
-        host.strip().lower().rstrip(".")
-        for host in settings.dagster_allowed_hosts
-        if host.strip()
-    }
-
-
-def _validated_http_url(
-    raw_url: str,
-    *,
-    setting_name: str,
-    allowed_hosts: set[str] | None,
-    require_graphql_path: bool = False,
-) -> str:
-    # ``allowed_hosts=None`` skips the SSRF host allowlist (used for the browser-facing
-    # public URL, which is only echoed to the client and never fetched server-side).
-    value = raw_url.strip()
-    parsed = urlsplit(value)
-    scheme = parsed.scheme.lower()
-    if scheme not in _ALLOWED_DAGSTER_SCHEMES:
-        raise DagsterUrlConfigurationError(f"{setting_name} scheme must be http or https")
-    if parsed.username is not None or parsed.password is not None:
-        raise DagsterUrlConfigurationError(f"{setting_name} must not include userinfo")
-    hostname = parsed.hostname
-    if hostname is None:
-        raise DagsterUrlConfigurationError(f"{setting_name} host is required")
-    if allowed_hosts is not None and hostname.lower().rstrip(".") not in allowed_hosts:
-        raise DagsterUrlConfigurationError(
-            f"{setting_name} host is not in dagster_allowed_hosts"
-        )
-    if parsed.query or parsed.fragment:
-        raise DagsterUrlConfigurationError(
-            f"{setting_name} must not include query or fragment"
-        )
-    if require_graphql_path and not parsed.path.rstrip("/").endswith("/graphql"):
-        raise DagsterUrlConfigurationError(f"{setting_name} path must end with /graphql")
-    return urlunsplit((scheme, parsed.netloc, parsed.path, "", ""))
-
-
-def _dagster_urls(settings: Settings) -> _DagsterUrls:
-    allowed_hosts = _normalised_allowed_hosts(settings)
-    dagster_url = _validated_http_url(
-        settings.dagster_url,
-        setting_name="dagster_url",
-        allowed_hosts=allowed_hosts,
-    )
-    graphql_url = _validated_http_url(
-        _candidate_graphql_url(settings),
-        setting_name="dagster_graphql_url",
-        allowed_hosts=allowed_hosts,
-        require_graphql_path=True,
-    )
-    # Browser-facing URL: public domain if set, else fall back to the internal
-    # dagster_url. Not allowlist-checked (allowed_hosts=None) — it is only echoed to
-    # the admin UI, never used for a backend request.
-    public_url = _validated_http_url(
-        settings.dagster_public_url or settings.dagster_url,
-        setting_name="dagster_public_url",
-        allowed_hosts=None,
-    )
-    return _DagsterUrls(
-        dagster_url=dagster_url.rstrip("/"),
-        graphql_url=graphql_url,
-        public_url=public_url.rstrip("/"),
-    )
+# Dagster backend URL resolution + SSRF allowlist live in kortravelgeo.api._dagster_client
+# (shared with the T-290g launch adapter). Imported above; _safe_summary_* below use them.
 
 
 def _safe_summary_dagster_url(settings: Settings) -> str:
