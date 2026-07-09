@@ -724,6 +724,30 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
             ).mappings().first()
         return _ops_artifact(dict(row)) if row else None
 
+    async def get_artifact_by_job_id(
+        self,
+        job_id: str,
+        *,
+        artifact_type: str | None = None,
+    ) -> OpsArtifact | None:
+        clauses = ["job_id = :job_id"]
+        params: dict[str, Any] = {"job_id": job_id}
+        if artifact_type is not None:
+            clauses.append("artifact_type = :artifact_type")
+            params["artifact_type"] = artifact_type
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        _ARTIFACT_SELECT
+                        + f" WHERE {' AND '.join(clauses)}"
+                        + " ORDER BY created_at DESC LIMIT 1"
+                    ),
+                    params,
+                )
+            ).mappings().first()
+        return _ops_artifact(dict(row)) if row else None
+
     async def insert_artifact(
         self,
         *,

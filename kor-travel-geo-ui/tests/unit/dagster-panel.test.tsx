@@ -74,7 +74,7 @@ const SUMMARY = {
         start_time: 1783483200,
         end_time: 1783483260,
         update_time: 1783483260,
-        tags: {}
+        tags: { "kor_travel_geo.job_id": "job-1" }
       },
       {
         run_id: "run_2",
@@ -98,6 +98,13 @@ const RUN_DETAILS = {
       dagster_url: "http://127.0.0.1:12502",
       graphql_url: "http://127.0.0.1:12502/graphql",
       run: SUMMARY.data.recent_runs[0],
+      backup_artifact: {
+        artifact_id: "artifact-1",
+        state: "available",
+        display_name: "backup-r1.tar.zst",
+        size_bytes: 12345,
+        download_url: "/v1/admin/backups/artifact-1/download?token=x"
+      },
       events: [
         {
           event_type: "STEP_SUCCESS",
@@ -177,6 +184,12 @@ describe("DagsterPanel", () => {
       expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_1")
     );
     expect(await screen.findByText("STEP_SUCCESS")).toBeTruthy();
+    expect(await screen.findByText("job-1")).toBeTruthy();
+    expect(await screen.findByText("backup-r1.tar.zst")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "backup artifact 다운로드" })).toHaveAttribute(
+      "href",
+      "/api/proxy/v1/admin/backups/artifact-1/download?token=x"
+    );
     // Event timestamp is a numeric epoch string; it renders as a UTC date, not raw epoch.
     expect(await screen.findByText("2026-07-08 05:01:00")).toBeTruthy();
     expect(screen.queryByText("1783486860")).toBeNull();

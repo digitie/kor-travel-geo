@@ -2,19 +2,41 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 import pytest
 
 from kortravelgeo.api.app import create_app
+from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.routers import dagster as dagster_mod
+from kortravelgeo.dto.admin import OpsArtifact
 from kortravelgeo.settings import Settings, get_settings
 
 _HEADERS = {"X-KTG-Actor": "dagster-test", "X-KTG-Roles": "source_file_viewer"}
 
 
-def _app(settings: Settings | None = None):
+class _ArtifactClient:
+    def __init__(self, artifacts_by_job_id: dict[str, OpsArtifact] | None = None) -> None:
+        self.artifacts_by_job_id = artifacts_by_job_id or {}
+        self.calls: list[tuple[str, str | None]] = []
+
+    async def get_artifact_by_job_id(
+        self,
+        job_id: str,
+        *,
+        artifact_type: str | None = None,
+    ) -> OpsArtifact | None:
+        self.calls.append((job_id, artifact_type))
+        return self.artifacts_by_job_id.get(job_id)
+
+
+def _app(
+    settings: Settings | None = None,
+    *,
+    artifact_client: _ArtifactClient | None = None,
+):
     app = create_app()
     app.dependency_overrides[get_settings] = lambda: settings or Settings(
         _env_file=None,
@@ -24,6 +46,7 @@ def _app(settings: Settings | None = None):
         dagster_request_timeout_seconds=1.0,
         geoip_gate_mode="off",
     )
+    app.dependency_overrides[get_client] = lambda: artifact_client or _ArtifactClient()
     return app
 
 
@@ -167,6 +190,22 @@ async def test_dagster_run_detail_parses_graphql_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[dict[str, object]] = []
+    artifact = OpsArtifact(
+        artifact_id="artifact-1",
+        artifact_type="db_backup",
+        state="available",
+        storage_kind="local_file",
+        storage_uri="/backups/backup-r1.tar.zst",
+        display_name="backup-r1.tar.zst",
+        media_type="application/zstd",
+        compression="zstd",
+        size_bytes=12345,
+        sha256="a" * 64,
+        job_id="job-1",
+        manifest={},
+        created_at=datetime(2026, 7, 9, tzinfo=UTC),
+    )
+    artifact_client = _ArtifactClient({"job-1": artifact})
 
     async def _fake_post_graphql(
         client: httpx.AsyncClient,
@@ -187,7 +226,10 @@ async def test_dagster_run_detail_parses_graphql_response(
                     "startTime": 1710000000.0,
                     "endTime": 1710000030.0,
                     "updateTime": 1710000030.0,
-                    "tags": [{"key": "dagster/job", "value": "db_backup"}],
+                    "tags": [
+                        {"key": "dagster/job", "value": "db_backup"},
+                        {"key": "kor_travel_geo.job_id", "value": "job-1"},
+                    ],
                     "eventConnection": {
                         "cursor": "event-cursor-1",
                         "hasMore": True,
@@ -221,7 +263,10 @@ async def test_dagster_run_detail_parses_graphql_response(
 
     monkeypatch.setattr(dagster_mod, "_post_graphql", _fake_post_graphql)
 
-    transport = httpx.ASGITransport(app=_app(), client=("127.0.0.1", 12345))
+    transport = httpx.ASGITransport(
+        app=_app(artifact_client=artifact_client),
+        client=("127.0.0.1", 12345),
+    )
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
             "/v1/ops/dagster/runs/run-1?page_size=5&after=cursor-0",
@@ -234,6 +279,13 @@ async def test_dagster_run_detail_parses_graphql_response(
     assert data["status"] == "ok"
     assert data["run"]["run_id"] == "run-1"
     assert data["run"]["status"] == "FAILURE"
+    assert data["backup_artifact"]["artifact_id"] == "artifact-1"
+    assert data["backup_artifact"]["display_name"] == "backup-r1.tar.zst"
+    assert data["backup_artifact"]["state"] == "available"
+    assert data["backup_artifact"]["size_bytes"] == 12345
+    assert data["backup_artifact"]["download_url"].startswith(
+        "/v1/admin/backups/artifact-1/download?token="
+    )
     assert data["event_cursor"] == "event-cursor-1"
     assert data["event_has_more"] is True
     assert data["events"][0]["dagster_event_type"] == "STEP_START"
@@ -248,6 +300,7 @@ async def test_dagster_run_detail_parses_graphql_response(
             "variables": {"runId": "run-1", "eventLimit": 5, "afterCursor": "cursor-0"},
         },
     ]
+    assert artifact_client.calls == [("job-1", "db_backup")]
 
 
 @pytest.mark.asyncio

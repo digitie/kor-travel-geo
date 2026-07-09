@@ -22,9 +22,13 @@ from kortravelgeo.api._dagster_client import (
     _normalised_allowed_hosts,
     _validated_http_url,
 )
+from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.security import KNOWN_ADMIN_ROLES, require_role
+from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.dto.admin import OpsArtifact
 from kortravelgeo.dto.dagster import (
     DagsterAssetGroup,
+    DagsterBackupArtifact,
     DagsterGraphqlError,
     DagsterInstigationTick,
     DagsterJob,
@@ -39,6 +43,7 @@ from kortravelgeo.dto.dagster import (
     DagsterSummaryData,
     DagsterSummaryResponse,
 )
+from kortravelgeo.infra.backup import BACKUP_ARTIFACT_TYPE, backup_download_url
 from kortravelgeo.settings import Settings, get_settings
 
 router = APIRouter(
@@ -48,6 +53,8 @@ router = APIRouter(
 )
 
 JsonDict = dict[str, Any]
+
+_JOB_ID_TAG = "kor_travel_geo.job_id"
 
 _DAGSTER_SUMMARY_QUERY = """
 query KorTravelGeoDagsterSummary($limit: Int!) {
@@ -521,6 +528,53 @@ def _run_detail_response(
     return DagsterRunDetailResponse(data=data, meta=_response_meta(started_at=started_at))
 
 
+def _backup_artifact_dto(
+    artifact: OpsArtifact,
+    *,
+    settings: Settings,
+) -> DagsterBackupArtifact:
+    download_url = None
+    if artifact.state == "available" and artifact.sha256:
+        download_url = backup_download_url(artifact, settings)
+    return DagsterBackupArtifact(
+        artifact_id=artifact.artifact_id,
+        state=artifact.state,
+        display_name=artifact.display_name,
+        size_bytes=artifact.size_bytes,
+        download_url=download_url,
+    )
+
+
+async def _with_backup_artifact(
+    detail: DagsterRunDetailData,
+    *,
+    client: AsyncAddressClient,
+    settings: Settings,
+) -> DagsterRunDetailData:
+    job_id = detail.run.tags.get(_JOB_ID_TAG) if detail.run is not None else None
+    if not job_id:
+        return detail
+    try:
+        artifact = await client.get_artifact_by_job_id(
+            job_id,
+            artifact_type=BACKUP_ARTIFACT_TYPE,
+        )
+    except Exception as exc:  # pragma: no cover - exact DB errors are driver-dependent.
+        return detail.model_copy(
+            update={
+                "errors": [
+                    *detail.errors,
+                    f"backup artifact 조회 실패 ({type(exc).__name__})",
+                ]
+            }
+        )
+    if artifact is None:
+        return detail
+    return detail.model_copy(
+        update={"backup_artifact": _backup_artifact_dto(artifact, settings=settings)}
+    )
+
+
 def _empty_summary_data(
     *,
     status: Literal["unavailable", "error"],
@@ -659,6 +713,7 @@ async def get_dagster_run_detail(
         description="event log cursor. 미지정이면 처음부터 조회한다.",
     ),
     settings: Settings = Depends(get_settings),
+    address_client: AsyncAddressClient = Depends(get_client),
 ) -> DagsterRunDetailResponse:
     started_at = perf_counter()
     checked_at = datetime.now(UTC)
@@ -715,11 +770,18 @@ async def get_dagster_run_detail(
         )
 
     data = _dict(payload.get("data"))
+    detail = _parse_run_detail(
+        _dict(data.get("runOrError")),
+        dagster_urls=dagster_urls,
+        checked_at=checked_at,
+    )
+    if detail.status == "ok":
+        detail = await _with_backup_artifact(
+            detail,
+            client=address_client,
+            settings=settings,
+        )
     return _run_detail_response(
-        _parse_run_detail(
-            _dict(data.get("runOrError")),
-            dagster_urls=dagster_urls,
-            checked_at=checked_at,
-        ),
+        detail,
         started_at=started_at,
     )

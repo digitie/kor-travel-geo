@@ -3099,6 +3099,22 @@ export interface components {
             group_name: string;
         };
         /**
+         * DagsterBackupArtifact
+         * @description Backup artifact linked to a Dagster ``db_backup`` run.
+         */
+        DagsterBackupArtifact: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Download Url */
+            download_url?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** State */
+            state: string;
+        };
+        /**
          * DagsterGraphqlError
          * @description Dagster GraphQL PythonError summary.
          */
@@ -3176,6 +3192,7 @@ export interface components {
          * @description ``GET /v1/ops/dagster/runs/{run_id}`` data.
          */
         DagsterRunDetailData: {
+            backup_artifact?: components["schemas"]["DagsterBackupArtifact"] | null;
             /**
              * Checked At
              * Format: date-time

@@ -133,6 +133,16 @@ class DagsterRunEvent(FrozenModel):
     error: DagsterGraphqlError | None = None
 
 
+class DagsterBackupArtifact(FrozenModel):
+    """Backup artifact linked to a Dagster ``db_backup`` run."""
+
+    artifact_id: str
+    state: str
+    display_name: str | None = None
+    size_bytes: int | None = Field(default=None, ge=0)
+    download_url: str | None = None
+
+
 class DagsterRunDetailData(FrozenModel):
     """``GET /v1/ops/dagster/runs/{run_id}`` data."""
 
@@ -141,6 +151,7 @@ class DagsterRunDetailData(FrozenModel):
     graphql_url: str
     checked_at: datetime
     run: DagsterRunSummary | None = None
+    backup_artifact: DagsterBackupArtifact | None = None
     events: list[DagsterRunEvent] = Field(default_factory=list)
     event_cursor: str | None = None
     event_has_more: bool = False

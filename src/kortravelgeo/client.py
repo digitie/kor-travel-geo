@@ -1908,6 +1908,17 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             expires_before=expires_before,
         )
 
+    async def get_artifact_by_job_id(
+        self,
+        job_id: str,
+        *,
+        artifact_type: str | None = None,
+    ) -> OpsArtifact | None:
+        return await AdminRepository(self._engine()).get_artifact_by_job_id(
+            job_id,
+            artifact_type=artifact_type,
+        )
+
     async def file_inventory_page(
         self,
         *,
