@@ -144,7 +144,7 @@ async def run_backup_job(
     cancel_event: asyncio.Event,
     progress: ProgressReporter,
 ) -> None:
-    req = BackupCreateRequest.model_validate(payload)
+    req = BackupCreateRequest.model_validate(_request_payload(payload))
     callback_url = validate_callback_url(req.callback_url, settings.backup_callback_allowed_hosts)
     destination_dir = resolve_backup_destination(req.destination_dir, settings)
     jobs = req.jobs or settings.backup_default_jobs
@@ -380,7 +380,7 @@ async def run_restore_job(
     cancel_event: asyncio.Event,
     progress: ProgressReporter,
 ) -> None:
-    req = RestoreCreateRequest.model_validate(payload)
+    req = RestoreCreateRequest.model_validate(_request_payload(payload))
     callback_url = validate_callback_url(req.callback_url, settings.backup_callback_allowed_hosts)
     jobs = req.jobs or settings.backup_default_jobs
     repo = AdminRepository(engine)
@@ -2536,6 +2536,19 @@ def _is_relative_to(path: Path, root: Path) -> bool:
 def _payload_job_id(payload: Mapping[str, Any]) -> str | None:
     value = payload.get("_job_id")
     return str(value) if isinstance(value, str) and value else None
+
+
+def _request_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Strip internal control keys before request-model validation.
+
+    The JobQueue drain (and the T-290g Dagster op) inject ``_job_id`` — and may inject other
+    ``_``-prefixed control keys — into the job payload to link the run back to its
+    ``load_jobs`` row. The request DTOs (``BackupCreateRequest`` / ``RestoreCreateRequest``)
+    forbid extra fields, so those sentinels must be dropped before ``model_validate``;
+    :func:`_payload_job_id` still reads them from the full payload.
+    """
+
+    return {key: value for key, value in payload.items() if not key.startswith("_")}
 
 
 def artifact_expires_at(settings: Settings, retention_days: int | None) -> datetime:
