@@ -815,7 +815,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
                 action="source.rebuild_db",
                 actor_type="ui",
                 actor_id=actor,
-                outcome="integrity_gate_failed",
+                outcome="failed",
                 payload={"failed_group_ids": list(response.failed_group_ids)},
                 resource_type="source_match_set",
                 resource_id=source_match_set_id,
