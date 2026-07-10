@@ -12,7 +12,7 @@ annotations at runtime.
 """
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from dagster import (
@@ -20,6 +20,7 @@ from dagster import (
     DefaultSensorStatus,
     Failure,
     OpExecutionContext,
+    ResourceParam,
     RunFailureSensorContext,
     RunRequest,
     ScheduleEvaluationContext,
@@ -28,9 +29,10 @@ from dagster import (
     run_failure_sensor,
     schedule,
 )
+from kortravelgeo.client import AsyncAddressClient
 
 from .mv import mv_refresh_job
-from .resources import op_resource, optional_op_resource
+from .resources import op_resource, run_coroutine_blocking
 
 if TYPE_CHECKING:
     from .resources import DagsterAdminApiClient
@@ -40,6 +42,7 @@ __all__ = [
     "BACKUP_SCHEDULES",
     "BACKUP_SENSORS",
     "JOB_ID_TAG",
+    "JOB_KIND_TAG",
     "SCHEDULED_BACKUP_JOB_TAGS",
     "notify_run_failure_sensor",
     "run_due_scheduled_backup_op",
@@ -60,6 +63,9 @@ SCHEDULED_BACKUP_TIMEZONE: Final[str] = "Asia/Seoul"
 
 JOB_ID_TAG: Final[str] = "kor_travel_geo.job_id"
 """Dagster run tag carrying the app ``load_jobs`` id when an onramp sets it (else absent)."""
+
+JOB_KIND_TAG: Final[str] = "kor_travel_geo.job_kind"
+"""Dagster run tag carrying the job kind (e.g. ``scheduled_backup_run_due``, ``mv_refresh``)."""
 
 
 @op(
@@ -144,32 +150,58 @@ def _scheduled_backup_run_request(scheduled_at: datetime | None) -> RunRequest:
     minimum_interval_seconds=60,
     default_status=DefaultSensorStatus.STOPPED,
 )
-def notify_run_failure_sensor(context: RunFailureSensorContext) -> None:
-    """Forward Dagster run failures to an optional deployment-supplied notifier.
+def notify_run_failure_sensor(
+    context: RunFailureSensorContext,
+    client: ResourceParam[AsyncAddressClient],
+    failure_notifier: ResourceParam[object],
+) -> None:
+    """Persist and forward Dagster run failures (T-290h).
 
-    The payload follows the dagster-boundary §5 contract —
-    ``{job_id, run_id, job_name, status, error_code}`` with sensitive values
-    excluded. The raw Dagster failure ``message`` is deliberately NOT forwarded;
-    only a bounded ``error_code`` (the failure error's class name) is sent.
+    On a monitored run's failure this (1) persists a bounded alert to
+    ``ops.run_failure_alerts`` through the in-process ``client`` resource
+    (dagster-boundary §6: client/infra, never api) and (2) forwards the same §5
+    payload — ``{job_id, run_id, job_name, status, error_code}`` — to an optional
+    deployment ``failure_notifier``. The raw Dagster failure ``message`` is never
+    persisted or forwarded; only a bounded ``error_code`` (the failure error's
+    class name) is used.
+
+    ``client`` and ``failure_notifier`` are declared as Pythonic ``ResourceParam``
+    arguments so Dagster resolves them into ``required_resource_keys`` and injects
+    them — ``@run_failure_sensor`` does not expose ``required_resource_keys``, and
+    resource parameters are how run-status sensors request resources
+    (dagster-boundary §3). ``failure_notifier`` defaults to ``None`` (no notifier).
 
     Thin wrapper: the dispatch logic lives in
     :func:`_dispatch_run_failure_notification` so its branches stay unit-testable
-    without a real ``RunStatusSensorContext`` (direct sensor invocation type-checks
-    the context and rejects a duck-typed fake).
+    with plain injected fakes instead of a real ``RunStatusSensorContext`` (direct
+    sensor invocation type-checks the context and rejects a duck-typed fake).
     """
 
-    _dispatch_run_failure_notification(context)
+    _dispatch_run_failure_notification(context, client=client, failure_notifier=failure_notifier)
 
 
-def _dispatch_run_failure_notification(context: RunFailureSensorContext) -> None:
-    """Build the §5 failure payload and forward it to the optional ``failure_notifier``.
+def _dispatch_run_failure_notification(
+    context: RunFailureSensorContext,
+    *,
+    client: AsyncAddressClient | None,
+    failure_notifier: object,
+) -> None:
+    """Persist the failure and forward it to the optional ``failure_notifier``.
 
-    Defensive by design: when the ``failure_notifier`` resource is absent or not
-    callable, the failure is logged and swallowed, so a notifier misconfiguration can
-    never turn a monitored run's failure into a *sensor* failure.
+    The two sinks run independently: persistence to ``ops.run_failure_alerts`` via
+    the ``client`` resource, plus the optional deployment notifier. Both are
+    defensive — a missing/failing sink logs a warning and is swallowed, so neither
+    can turn a monitored run's failure into a *sensor* failure.
     """
     payload = _failure_notification_payload(context)
-    notifier = optional_op_resource(context, "failure_notifier")
+    _persist_run_failure_alert(context, payload, client)
+    _forward_run_failure_notification(context, payload, failure_notifier)
+
+
+def _forward_run_failure_notification(
+    context: RunFailureSensorContext, payload: dict[str, object], notifier: object
+) -> None:
+    """Forward the §5 payload to the optional ``failure_notifier`` resource."""
     if notifier is None:
         context.log.warning("Dagster run failed without failure_notifier: %s", payload)
         return
@@ -177,6 +209,62 @@ def _dispatch_run_failure_notification(context: RunFailureSensorContext) -> None
         context.log.warning("failure_notifier resource is not callable: %r", notifier)
         return
     cast("Callable[[dict[str, object]], None]", notifier)(payload)
+
+
+def _persist_run_failure_alert(
+    context: RunFailureSensorContext,
+    payload: dict[str, object],
+    client: AsyncAddressClient | None,
+) -> None:
+    """Persist the failure to ``ops.run_failure_alerts`` via the ``client`` resource.
+
+    Uses the in-process ``client`` (AsyncAddressClient → repo INSERT), never the
+    ``admin_api`` HTTP resource (dagster-boundary §6). Persists only bounded fields —
+    the run status, error class ``error_code``, and run tags — never the raw failure
+    ``message``. Idempotent on ``run_id`` (repo ``ON CONFLICT DO NOTHING``).
+    """
+    if client is None:
+        context.log.warning("Dagster run failed without client resource; alert not persisted")
+        return
+    dagster_run = context.dagster_run
+    try:
+        run_coroutine_blocking(
+            client.record_run_failure_alert(
+                run_id=cast("str", payload["run_id"]),
+                status=_normalized_run_status(dagster_run),
+                run_failed_at=_failure_run_timestamp(context),
+                job_id=cast("str | None", payload["job_id"]),
+                job_name=cast("str | None", payload["job_name"]),
+                job_kind=dagster_run.tags.get(JOB_KIND_TAG),
+                error_code=cast("str | None", payload["error_code"]),
+            )
+        )
+    except Exception as exc:  # never let persistence fail the sensor
+        context.log.warning("run-failure alert persistence failed: %s", exc)
+
+
+def _normalized_run_status(dagster_run: Any) -> str:
+    """Return a clean run status name (``FAILURE``), matching the observe GraphQL status.
+
+    ``str(DagsterRunStatus.FAILURE)`` is ``"DagsterRunStatus.FAILURE"``; normalize to
+    the bare member name so the persisted status matches ``run.status`` from the
+    observe GraphQL (which the admin UI classifies).
+    """
+    status = getattr(dagster_run, "status", "")
+    name = getattr(status, "name", None)
+    if isinstance(name, str):
+        return name
+    text = str(status)
+    return text.rsplit(".", 1)[-1] if "." in text else text
+
+
+def _failure_run_timestamp(context: RunFailureSensorContext) -> datetime:
+    """Best-effort failure time from the failure event, else now (UTC)."""
+    failure_event = getattr(context, "failure_event", None)
+    raw = getattr(failure_event, "timestamp", None)
+    if isinstance(raw, int | float):
+        return datetime.fromtimestamp(raw, tz=UTC)
+    return datetime.now(UTC)
 
 
 BACKUP_JOBS: Final = [scheduled_backup_run_due_job]

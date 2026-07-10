@@ -130,38 +130,47 @@ def _normalize_http_base_url(value: str) -> str:
     return value.rstrip("/")
 
 
-async def _await_resource_teardown(awaitable: Awaitable[object]) -> None:
-    await awaitable
+async def _await_result(awaitable: Awaitable[object]) -> object:
+    return await awaitable
 
 
-def _run_async_resource_teardown(awaitable: Awaitable[object]) -> None:
-    """Run an async cleanup from a Dagster sync-generator resource teardown.
+def run_coroutine_blocking(awaitable: Awaitable[object]) -> object:
+    """Run an async coroutine to completion from synchronous Dagster code.
 
-    If there is no running loop, run it directly; otherwise run it on a short-lived
-    worker thread so we never call ``asyncio.run`` inside an active event loop.
+    Sensors and resource teardowns run synchronously, but the ``client`` resource
+    and engine disposal are async. If there is no running loop, run it directly;
+    otherwise run it on a short-lived worker thread so we never call ``asyncio.run``
+    inside an active event loop. Returns the coroutine's result and re-raises any
+    exception it raised.
     """
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        asyncio.run(_await_resource_teardown(awaitable))
-        return
+        return asyncio.run(_await_result(awaitable))
 
+    result: list[object] = []
     raised: list[BaseException] = []
 
     def _runner() -> None:
         try:
-            asyncio.run(_await_resource_teardown(awaitable))
+            result.append(asyncio.run(_await_result(awaitable)))
         except BaseException as exc:  # pragma: no cover - exercised via re-raise below
             raised.append(exc)
 
     thread = threading.Thread(
         target=_runner,
-        name="kor-travel-geo-dagster-resource-teardown",
+        name="kor-travel-geo-dagster-sync-call",
     )
     thread.start()
     thread.join()
     if raised:
         raise raised[0]
+    return result[0] if result else None
+
+
+def _run_async_resource_teardown(awaitable: Awaitable[object]) -> None:
+    """Run an async cleanup from a Dagster sync-generator resource teardown."""
+    run_coroutine_blocking(awaitable)
 
 
 def _dispose_async_engine(engine: Any) -> None:

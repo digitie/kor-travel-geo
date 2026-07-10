@@ -3140,6 +3140,16 @@
             "title": "Events",
             "type": "array"
           },
+          "failure_alert": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DagsterRunFailureAlert"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "graphql_url": {
             "title": "Graphql Url",
             "type": "string"
@@ -3272,6 +3282,153 @@
         "title": "DagsterRunEvent",
         "type": "object"
       },
+      "DagsterRunFailureAckResponse": {
+        "additionalProperties": false,
+        "description": "``POST /v1/ops/dagster/runs/{run_id}/ack`` response.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DagsterRunFailureAlert"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/DagsterResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "DagsterRunFailureAckResponse",
+        "type": "object"
+      },
+      "DagsterRunFailureAlert": {
+        "additionalProperties": false,
+        "description": "Persisted Dagster run-failure alert (``ops.run_failure_alerts``, T-290h).\n\nWritten by the Dagster ``run_failure_sensor`` through the ``client`` resource\nand surfaced read-only on run detail / the recent-failures list. Carries only\nbounded fields (the failure ``error_code`` = error class name, never the raw\nfailure message — dagster-boundary §5).",
+        "properties": {
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "job_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Kind"
+          },
+          "job_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Name"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "run_failed_at": {
+            "format": "date-time",
+            "title": "Run Failed At",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "run_failed_at",
+          "recorded_at"
+        ],
+        "title": "DagsterRunFailureAlert",
+        "type": "object"
+      },
+      "DagsterRunFailuresData": {
+        "additionalProperties": false,
+        "description": "``GET /v1/ops/dagster/run-failures`` data (recent, unacknowledged first).",
+        "properties": {
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/DagsterRunFailureAlert"
+            },
+            "title": "Alerts",
+            "type": "array"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checked_at"
+        ],
+        "title": "DagsterRunFailuresData",
+        "type": "object"
+      },
+      "DagsterRunFailuresResponse": {
+        "additionalProperties": false,
+        "description": "``GET /v1/ops/dagster/run-failures`` response.",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DagsterRunFailuresData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/DagsterResponseMeta"
+          }
+        },
+        "required": [
+          "data",
+          "meta"
+        ],
+        "title": "DagsterRunFailuresResponse",
+        "type": "object"
+      },
       "DagsterRunSummary": {
         "additionalProperties": false,
         "description": "Recent Dagster run summary.",
@@ -3373,6 +3530,22 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "next_tick_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Tick At"
+          },
+          "overdue": {
+            "default": false,
+            "title": "Overdue",
+            "type": "boolean"
           },
           "recent_ticks": {
             "items": {
@@ -19171,6 +19344,65 @@
         ]
       }
     },
+    "/v1/ops/dagster/run-failures": {
+      "get": {
+        "description": "Dagster run-failure 센서가 ``ops.run_failure_alerts``에 영속한 실패 알림을 최근순으로 반환한다. 기본은 미확인(unacknowledged) 알림만이며, ``include_acknowledged=true``이면 확인된 알림도 포함한다. app DB를 읽으며 Dagster webserver에 의존하지 않는다.",
+        "operationId": "get_dagster_run_failures_v1_ops_dagster_run_failures_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "true이면 이미 확인(ack)된 알림도 포함한다.",
+            "in": "query",
+            "name": "include_acknowledged",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "true이면 이미 확인(ack)된 알림도 포함한다.",
+              "title": "Include Acknowledged",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DagsterRunFailuresResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dagster run 실패 알림 목록",
+        "tags": [
+          "ops",
+          "dagster"
+        ]
+      }
+    },
     "/v1/ops/dagster/runs/{run_id}": {
       "get": {
         "description": "Dagster GraphQL runOrError를 조회해 최근 event log와 실패 error payload를 admin UI용 DTO로 반환한다. 조회 전용이며 Dagster run을 재실행하거나 상태를 변경하지 않는다.",
@@ -19239,6 +19471,50 @@
           }
         },
         "summary": "Dagster run 상세",
+        "tags": [
+          "ops",
+          "dagster"
+        ]
+      }
+    },
+    "/v1/ops/dagster/runs/{run_id}/ack": {
+      "post": {
+        "description": "``ops.run_failure_alerts``의 해당 run 알림을 확인 처리한다(``acknowledged_at`` 설정). 멱등이며, 이미 확인된 알림은 그대로 반환한다. 알림이 없으면 404.",
+        "operationId": "acknowledge_dagster_run_failure_v1_ops_dagster_runs__run_id__ack_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DagsterRunFailureAckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dagster run 실패 알림 확인(ack)",
         "tags": [
           "ops",
           "dagster"

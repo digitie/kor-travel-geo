@@ -189,3 +189,16 @@ def test_t200_ops_id_rename_migration_renames_every_short_ops_id() -> None:
     # downgrade reverses the renames.
     assert "def downgrade() -> None:" in migration
     assert "reversed(_RENAMES)" in migration
+
+
+def test_t290h_run_failure_alerts_migration() -> None:
+    migration = Path(
+        "alembic/versions/0025_t290h_run_failure_alerts.py"
+    ).read_text(encoding="utf-8")
+    assert 'revision = "0025_t290h_run_failure_alerts"' in migration
+    assert 'down_revision = "0024_t290c_orphan_idx"' in migration
+    assert "CREATE TABLE IF NOT EXISTS ops.run_failure_alerts" in migration
+    assert "run_id          TEXT PRIMARY KEY" in migration
+    assert "idx_ops_run_failure_alerts_unacked_recent" in migration
+    assert "WHERE acknowledged_at IS NULL" in migration
+    assert "DROP TABLE IF EXISTS ops.run_failure_alerts" in migration

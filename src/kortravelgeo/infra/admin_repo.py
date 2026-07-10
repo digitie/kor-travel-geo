@@ -41,6 +41,7 @@ from kortravelgeo.dto.admin import (
     OpsAuditOutcome,
     PgStatStatementSnapshot,
     RollbackPlan,
+    RunFailureAlert,
     ServingRelease,
     TableStat,
     TableStatsSnapshot,
@@ -66,6 +67,12 @@ SELECT audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
        resource_id, job_id, outcome, error_code, payload_redacted,
        payload_hash
   FROM ops.audit_events
+"""
+
+_RUN_FAILURE_ALERT_SELECT = """
+SELECT run_id, job_id, job_name, job_kind, status, error_code,
+       run_failed_at, recorded_at, acknowledged_at
+  FROM ops.run_failure_alerts
 """
 
 _SNAPSHOT_SELECT = """
@@ -412,6 +419,110 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                 )
             ).mappings().all()
         return [_audit_event(dict(row)) for row in rows]
+
+    # --- Dagster run-failure alerts (T-290h) --------------------------------
+
+    async def record_run_failure_alert(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        run_failed_at: datetime,
+        job_id: str | None = None,
+        job_name: str | None = None,
+        job_kind: str | None = None,
+        error_code: str | None = None,
+    ) -> RunFailureAlert:
+        """Idempotently record a failure alert keyed by the Dagster ``run_id``.
+
+        A run fails terminally once, but the sensor may re-evaluate a failed run,
+        so ``ON CONFLICT (run_id) DO NOTHING`` keeps the first record and its
+        ``recorded_at`` stable; a repeat call returns the existing row.
+        """
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        """
+INSERT INTO ops.run_failure_alerts
+  (run_id, job_id, job_name, job_kind, status, error_code, run_failed_at)
+VALUES
+  (:run_id, :job_id, :job_name, :job_kind, :status, :error_code, :run_failed_at)
+ON CONFLICT (run_id) DO NOTHING
+RETURNING run_id, job_id, job_name, job_kind, status, error_code,
+          run_failed_at, recorded_at, acknowledged_at
+"""
+                    ),
+                    {
+                        "run_id": run_id,
+                        "job_id": job_id,
+                        "job_name": job_name,
+                        "job_kind": job_kind,
+                        "status": status,
+                        "error_code": error_code,
+                        "run_failed_at": run_failed_at,
+                    },
+                )
+            ).mappings().first()
+        if row is not None:
+            return _run_failure_alert(dict(row))
+        existing = await self.get_run_failure_alert(run_id)
+        if existing is not None:
+            return existing
+        raise InvalidInputError(f"run_failure_alert insert conflicted but no row for {run_id!r}")
+
+    async def get_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(_RUN_FAILURE_ALERT_SELECT + " WHERE run_id = :run_id"),
+                    {"run_id": run_id},
+                )
+            ).mappings().first()
+        return _run_failure_alert(dict(row)) if row is not None else None
+
+    async def list_run_failure_alerts(
+        self,
+        *,
+        limit: int = 50,
+        unacknowledged_only: bool = True,
+    ) -> list[RunFailureAlert]:
+        where = " WHERE acknowledged_at IS NULL" if unacknowledged_only else ""
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        _RUN_FAILURE_ALERT_SELECT
+                        + where
+                        + " ORDER BY run_failed_at DESC LIMIT :limit"
+                    ),
+                    {"limit": limit},
+                )
+            ).mappings().all()
+        return [_run_failure_alert(dict(row)) for row in rows]
+
+    async def acknowledge_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        """Ack an alert (idempotent). Returns the current row, or ``None`` if unknown."""
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        """
+UPDATE ops.run_failure_alerts
+   SET acknowledged_at = now()
+ WHERE run_id = :run_id AND acknowledged_at IS NULL
+RETURNING run_id, job_id, job_name, job_kind, status, error_code,
+          run_failed_at, recorded_at, acknowledged_at
+"""
+                    ),
+                    {"run_id": run_id},
+                )
+            ).mappings().first()
+        if row is not None:
+            return _run_failure_alert(dict(row))
+        # No row updated: either unknown run_id, or already acknowledged. Return the
+        # current row so the caller can 404 on unknown vs. echo an idempotent ack.
+        return await self.get_run_failure_alert(run_id)
 
     async def list_dataset_snapshots(
         self,
@@ -2622,6 +2733,20 @@ def _audit_event(row: Mapping[str, Any]) -> AuditEvent:
         error_code=row.get("error_code"),
         payload_redacted=_json_dict(row.get("payload_redacted")),
         payload_hash=str(row["payload_hash"]),
+    )
+
+
+def _run_failure_alert(row: Mapping[str, Any]) -> RunFailureAlert:
+    return RunFailureAlert(
+        run_id=str(row["run_id"]),
+        job_id=row.get("job_id"),
+        job_name=row.get("job_name"),
+        job_kind=row.get("job_kind"),
+        status=str(row["status"]),
+        error_code=row.get("error_code"),
+        run_failed_at=row["run_failed_at"],
+        recorded_at=row["recorded_at"],
+        acknowledged_at=row.get("acknowledged_at"),
     )
 
 

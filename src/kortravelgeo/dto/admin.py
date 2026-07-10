@@ -689,6 +689,27 @@ class AuditEvent(FrozenModel):
     payload_hash: str = Field(min_length=64, max_length=64)
 
 
+class RunFailureAlert(FrozenModel):
+    """Persisted Dagster run-failure alert (``ops.run_failure_alerts``, T-290h).
+
+    Written by the Dagster run-failure sensor via the ``client`` resource, read
+    back by the admin observe API. Only bounded fields are stored — ``error_code``
+    is the failure error *class* name, never the raw failure message
+    (dagster-boundary §5). ``run_id`` is the Dagster run id (PK); ``job_id`` is the
+    ``kor_travel_geo.job_id`` run tag when present.
+    """
+
+    run_id: str
+    job_id: str | None = None
+    job_name: str | None = None
+    job_kind: str | None = None
+    status: str
+    error_code: str | None = None
+    run_failed_at: datetime
+    recorded_at: datetime
+    acknowledged_at: datetime | None = None
+
+
 class AdminAuthEventRequest(FrozenModel):
     event_type: Literal["login", "logout"]
     outcome: OpsAuditOutcome
