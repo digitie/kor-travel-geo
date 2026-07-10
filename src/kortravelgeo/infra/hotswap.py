@@ -14,6 +14,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from kortravelgeo.dto.admin import (
+    OpsAuditOutcome,
     RestoreHotSwapExecuteRequest,
     RestoreHotSwapPlan,
     RestoreHotSwapPlanRequest,
@@ -382,7 +383,7 @@ async def execute_restore_hot_swap(
     meta = dict(audit_meta or {})
 
     async def audit(
-        action: str, outcome: str, payload: dict[str, Any], *, resource_id: str | None
+        action: str, outcome: OpsAuditOutcome, payload: dict[str, Any], *, resource_id: str | None
     ) -> None:
         # Best-effort: never let an audit hiccup break (or un-break) a live swap.
         try:
@@ -599,7 +600,9 @@ async def execute_hot_swap_rollback(
         "maintenance_window_id": window.maintenance_window_id,
     }
 
-    async def audit(outcome: str, payload: dict[str, Any], *, resource_id: str | None) -> None:
+    async def audit(
+        outcome: OpsAuditOutcome, payload: dict[str, Any], *, resource_id: str | None
+    ) -> None:
         try:
             await AdminRepository(engine).record_audit_event(
                 action="serving_release.hot_swap_rollback",

@@ -403,7 +403,7 @@ SELECT job_id, kind, state, log_tail
         *,
         action: str,
         actor_type: str,
-        outcome: str,
+        outcome: OpsAuditOutcome,
         payload: dict[str, Any] | None = None,
         actor_id: str | None = None,
         client_ip: str | None = None,

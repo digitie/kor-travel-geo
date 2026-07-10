@@ -694,7 +694,9 @@ async def test_source_rebuild_control_job_fails_before_batch_on_integrity_gate(
         )
 
     assert queue.enqueue_batch_called is False
-    assert audit_calls[0]["outcome"] == "integrity_gate_failed"
+    # audit outcome is the canonical lifecycle value ("failed"); the integrity-gate specifics
+    # stay on the action / progress stage / payload (T-290 audit-outcome type-hardening).
+    assert audit_calls[0]["outcome"] == "failed"
     assert audit_calls[0]["payload"] == {"failed_group_ids": ["g1"]}
     assert any(event.get("stage") == "integrity_gate_failed" for event in progress_events)
 
