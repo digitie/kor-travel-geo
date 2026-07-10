@@ -2,7 +2,24 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-07-09 갱신, by codex)
+## 현재 진척도 (2026-07-10 갱신, by claude)
+
+- ✅ **T-290 유지보수성/직관성 패스 완료 (2026-07-10, by claude)** — 라이브 UI e2e #2(아래)가 드러낸
+  5버그 수정(#459~#461·manager #50·#462/#463) 이후, "이전 작업 리뷰·수정" 요청으로 3개 품질 PR을 추가
+  머지했다. **#464** — ③ CLI leaf verify/copy/restore_drill을 Dagster `@op`/`@job`(mv_refresh 패턴, client
+  leaf 직접 호출)과 일일 restore-drill `@schedule`(최신 available backup 자동 선택, 외부 cron T-239 대체)로
+  이관(dagster 41 tests). **#465** — 감사 outcome을 lifecycle로 재설계: #462/#463의 33개 state→outcome
+  alias 테이블 + 호출부 래핑 + repo coercion이 작업 lifecycle과 domain state를 혼동시켰던 것을, outcome은 각
+  사이트에서 명시("succeeded"/"denied")하고 domain state는 payload/resource에 두어 alias 테이블·헬퍼·coercion
+  전부 제거(타입 `OpsAuditOutcome`만 컴파일타임 가드로 유지; 1190 tests). **#466** — `_job_id` payload 밀반입
+  제거: `JobHandler`를 `(job_id, payload, cancel_event, progress)` 명시 시그니처로 바꿔 drain이 load_jobs id를
+  일급 인자로 전달하고, leaf `run_backup_job`/`run_restore_job(*, job_id)`가 payload를 그대로 검증하며 dagster
+  op도 명시 전달 — `_request_payload`/`_payload_job_id` 삭제(순 −31줄; 1187 main + 41 dagster tests). **남은
+  경미 후보**: (B) dagster 리소스 접근 헬퍼 통일(mv/backup/backup_execute의 `_resource_object` 3중복 +
+  backup_maintenance의 `_client`), (C) resources.py 4-way fallback 복잡도. **다음 단계**: T-290h(`/admin/dagster`
+  run detail에 backup op 로그·artifact 다운로드 UI + 실패/overdue 알림) 또는 T-290i(db_restore Dagster 이관).
+  **미착수**: n150 canonical resync(base compose stale, #50 볼륨이 추가 override로 적용됨 → n150 docker-manager를
+  main으로 resync 권장).
 
 - ⏳ **T-290 — geo 독립 Dagster 오케스트레이션 이관 (계획·문서화 완료, 구현 착수)** — backup/restore·
   적재 오케스트레이션을 서비스 전용 독립 Dagster(`kortravelgeo_dagster`)로 이관한다. 3라운드 리뷰 수렴
