@@ -73,10 +73,29 @@
   `kor_travel_geo.job_id` 태그), launch 실패 시 row failed + 502. **각 PR은 push→CI(openapi/backend/frontend)
   green 확인 후 머지**("머지 전 대기"). Agent B 선행분으로 run detail은 `kor_travel_geo.job_id` tag로
   artifact 링크를 표시하도록 준비됐다.
-  ⏭ **③ verify/copy/restore_drill `@job`**(CLI leaf: `cli/main.py`, 브리지 재사용·비파괴적) + **live UI
-  e2e #2** = M3 게이트: n150에 `KTG_DAGSTER_EXECUTED_JOB_KINDS=db_backup` 설정·배포(docker-manager env 반영)
-  후 실제 backup을 Dagster run으로 실행·검증한다(파괴적). 브리지의 실 SQL(adopt/progress/terminal)은
-  이 단계에서 `test_backup_restore_roundtrip`로 end-to-end 검증된다.
+  ✅ **live UI e2e #2 (M3 게이트) — n150 backup+restore end-to-end 완료(2026-07-10, by claude)**: n150에
+  `KTG_DAGSTER_EXECUTED_JOB_KINDS=db_backup` 설정·배포 후, UI `백업 시작` → **Dagster db_backup run SUCCESS** →
+  available **4.1GB** 아티팩트(전국 실데이터: `tl_juso_text` 6,416,637·건물폴리곤 10,687,732 등 manifest 일치)를
+  확인했다. 이어 복원 위저드(new_database)로 in-process restore를 실행해 `kor_travel_geo_restore`에 **모든
+  테이블+양쪽 MV가 manifest와 정확히 일치(done 100%)**함을 검증했다(restore 자체는 T-290i지만 브리지/도구/볼륨
+  선검증 목적). 이 e2e가 **잠복 버그 5건**을 드러내 모두 수정/우회: (1) drain/op가 주입한 `_job_id`가 strict
+  backup/restore DTO 검증에 걸림 → `infra/backup._request_payload()`로 제어키 제거(**#459 머지**). (2) geo
+  api·dagster 이미지에 pg_dump/pg_restore/zstd 부재("backup tools missing") → 두 Dockerfile에 PGDG
+  `postgresql-client-16`+`zstd`(**#460 머지**). (3) restore dry-run 감사 `outcome="blocked"`(무효 enum, CHECK:
+  started/succeeded/failed/cancelled/denied) → 감사 insert 제약위반 500 → `"denied"`로 수정(자매 hotswap plan
+  핸들러와 일치, **#460 머지**). (4) Dagster가 쓴 backup을 geo-api restore가 못 봄(볼륨 미공유: geo-api는
+  `/data:ro` 마운트인데 앱은 `/app/data/backups` 사용, dagster는 data 볼륨 없음→임시저장소) → 공유 쓰기가능
+  `/app/data/backups` 볼륨(n150 `kor-travel-docker-manager/docker-compose.geo-backup-vol.yml` 추가 override,
+  **docker-manager 정본 반영 필요**). (5) restore heartbeat UPDATE가 5s `pg_statement_timeout_ms`(engine.py
+  connect_args `-c statement_timeout`) 초과 → 66%에서 QueryCanceled 실패 → geo-api `KTG_PG_STATEMENT_TIMEOUT_MS=
+  60000` 우회(n150 적용, **docker-manager 반영 필요**). 4.1GB pg_restore는 전국 실데이터+인덱스+MV refresh(mv_
+  geocode_target/text_search 각 6.4M)+autovacuum 경합으로 느림. **후속(별도, 미착수)**: ③ CLI leaf
+  `@job`(verify/copy/restore_drill) 미이관; T-290h run/op 로그·artifact 다운로드 UI 확인 미검증; restore
+  장기작업 statement_timeout 취약성 — analyze/reconcile은 raw `create_async_engine`(무제한)이라 무사했고
+  heartbeat만 앱 엔진이라 걸렸으므로 loader처럼 `SET LOCAL statement_timeout=0`/QueryCanceled 재시도로 heartbeat를
+  감싸는 코드 하드닝 권장(#5는 우회); `client.record_audit_event(outcome: str)`가 Literal 미검증이라
+  `"conflict"/"created"/"registered"/"invalidated"/f"{action}:ok"` 등 무효 outcome 호출부가 admin.py/app.py에
+  다수 잔존(각 감사 insert에서 500 위험) → `outcome: OpsAuditOutcome` 타입 강화 + 호출부 정리 권장.
   Groundwork(재사용): `core.job_recovery` + infra `LoadJobExecutor` + `load_job_bridge`(restore T-290i·
   full-load T-290j도 같은 브리지 사용), mv.py op 템플릿, dagster 검증용 **Python 3.12 venv**(미러
   `kor-travel-geo-dagster/.venv`, dagster 1.13.12 — 3.14 미러 venv는 dagster 미지원).
