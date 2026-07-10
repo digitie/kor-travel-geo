@@ -97,9 +97,10 @@
   state/action명(`"conflict"/"created"/"invalidated"`(admin.py)·source-file state·registry case state·
   `"integrity_gate_failed"`(app.py) 등)을 넘겨 CHECK 위반 500이 나던 것을, `AdminRepository.record_audit_event`가
   `canonical_audit_outcome()`로 canonical(started/succeeded/failed/cancelled/denied)로 정규화(각 alias 정확 매핑,
-  예 invalidated→succeeded·invalid→failed) — **PR #462**(centralized safety net). **잔여**: 컴파일타임 타입 강화
-  (`record_audit_event(outcome: OpsAuditOutcome)` + mypy가 잡은 ~21개 호출부를 canonical로, hotswap 중첩 `audit`
-  래퍼 2개 포함)는 dynamic outcome(`result.state` 등) 캐스케이드 때문에 별도 PR로 남김. n150 canonical 정리 —
+  예 invalidated→succeeded·invalid→failed) — **PR #462**(centralized safety net). 이어 컴파일타임 타입 강화도 완료:
+  `record_audit_event(outcome: OpsAuditOutcome)`(client+repo) + mypy가 잡은 21개 호출부 canonical화(admin.py 18:
+  리터럴 직접 매핑 + dynamic `result.state`류는 `canonical_audit_outcome(...)` 래핑, app.py 1, hotswap 중첩 `audit`
+  래퍼 2개 타입) — **PR #463**(mypy clean 155 files; #462 coercion은 런타임 net으로 유지). n150 canonical 정리 —
   base docker-compose.yml이 stale(geo-dagster가 로컬 override, pre-#47)이라 #50 볼륨이 base가 아닌 추가 override
   파일(`docker-compose.geo-backup-vol.yml`, statement_timeout 제거·볼륨만)로 적용됨 → n150 docker-manager를 main으로
   resync하고 override의 geo-dagster 중복·추가 파일을 제거해 정본화 권장.
