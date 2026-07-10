@@ -117,7 +117,7 @@ def canonical_audit_outcome(outcome: str) -> OpsAuditOutcome:
     call site; this is the centralized safety net."""
 
     if outcome in _CANONICAL_AUDIT_OUTCOMES:
-        return cast(OpsAuditOutcome, outcome)
+        return cast("OpsAuditOutcome", outcome)
     return _AUDIT_OUTCOME_ALIASES.get(outcome, "succeeded")
 
 
