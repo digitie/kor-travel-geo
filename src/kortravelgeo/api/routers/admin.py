@@ -2185,7 +2185,10 @@ async def restore_dry_run(
     result = await client.restore_dry_run(req)
     await client.record_audit_event(
         action="db_restore.dry_run",
-        outcome="succeeded" if result.can_restore else "blocked",
+        # dry-run always completes; can_restore=False means preflight denied the restore.
+        # "blocked" is not a valid ops.audit_events.outcome (CHECK: started/succeeded/
+        # failed/cancelled/denied) — it raised a constraint violation → 500 (T-290 e2e).
+        outcome="succeeded" if result.can_restore else "denied",
         payload={
             "mode": req.mode,
             "can_restore": result.can_restore,
