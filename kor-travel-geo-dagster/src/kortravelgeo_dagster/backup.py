@@ -31,7 +31,6 @@ from dagster import (
 )
 from kortravelgeo.client import AsyncAddressClient
 
-from .mv import mv_refresh_job
 from .resources import op_resource, run_coroutine_blocking
 
 if TYPE_CHECKING:
@@ -146,7 +145,11 @@ def _scheduled_backup_run_request(scheduled_at: datetime | None) -> RunRequest:
 
 @run_failure_sensor(
     name="run_failure_sensor",
-    monitored_jobs=[scheduled_backup_run_due_job, mv_refresh_job],
+    # Monitor EVERY run in the code location (T-290h) — db_backup, db_restore,
+    # full_load, mv_refresh, the scheduled-backup onramp, and the maintenance leaf
+    # jobs — so any failure is persisted to ops.run_failure_alerts. An explicit
+    # monitored_jobs list would silently miss jobs added later.
+    monitor_all_code_locations=True,
     minimum_interval_seconds=60,
     default_status=DefaultSensorStatus.STOPPED,
 )
