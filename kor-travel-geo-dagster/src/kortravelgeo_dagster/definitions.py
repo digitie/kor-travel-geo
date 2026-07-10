@@ -19,6 +19,7 @@ from dagster import Definitions, ResourceDefinition, resource
 from .backup import BACKUP_JOBS, BACKUP_SCHEDULES, BACKUP_SENSORS
 from .backup_execute import DB_BACKUP_JOBS
 from .backup_maintenance import BACKUP_MAINTENANCE_JOBS, BACKUP_MAINTENANCE_SCHEDULES
+from .db_restore_execute import DB_RESTORE_JOBS
 from .mv import MV_REFRESH_JOBS
 from .resources import admin_api_resource, client_resource, rustfs_resource, settings_resource
 
@@ -66,7 +67,16 @@ def _value_resource(key: str, value: object) -> ResourceDefinition:
 
 
 defs = Definitions(
-    jobs=cast("Any", [*MV_REFRESH_JOBS, *BACKUP_JOBS, *DB_BACKUP_JOBS, *BACKUP_MAINTENANCE_JOBS]),
+    jobs=cast(
+        "Any",
+        [
+            *MV_REFRESH_JOBS,
+            *BACKUP_JOBS,
+            *DB_BACKUP_JOBS,
+            *DB_RESTORE_JOBS,
+            *BACKUP_MAINTENANCE_JOBS,
+        ],
+    ),
     schedules=cast("Any", [*BACKUP_SCHEDULES, *BACKUP_MAINTENANCE_SCHEDULES]),
     sensors=cast("Any", [*BACKUP_SENSORS]),
     resources={
