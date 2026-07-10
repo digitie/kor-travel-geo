@@ -93,10 +93,13 @@
   env 우회(`KTG_PG_STATEMENT_TIMEOUT_MS`) 제거 완료 — app 기본 5s로 복귀해도 코드가 heartbeat를 유지. 4.1GB
   pg_restore는 전국 실데이터+인덱스+MV refresh(mv_geocode_target/text_search 각 6.4M)+autovacuum 경합으로 done까지
   ~2h. **후속(별도, 미착수)**: ③ CLI leaf `@job`(verify/copy/restore_drill) 미이관; T-290h run/op 로그·artifact
-  다운로드 UI 확인 미검증; `client.record_audit_event(outcome: str)`가 Literal 미검증이라
-  `"conflict"/"created"/"registered"/"invalidated"/f"{action}:ok"`(admin.py)·`"rejected"/"accepted"/
-  "integrity_gate_failed"`(app.py) 등 무효 outcome 호출부 다수 잔존(각 감사 insert에서 제약위반 500 위험) →
-  `outcome: OpsAuditOutcome` 타입 강화 + 호출부 정리 권장(dynamic outcome 캐스케이드 주의); n150 canonical 정리 —
+  다운로드 UI 확인 미검증; 감사 outcome — `record_audit_event(outcome: str)`에 여러 핸들러가 리소스
+  state/action명(`"conflict"/"created"/"invalidated"`(admin.py)·source-file state·registry case state·
+  `"integrity_gate_failed"`(app.py) 등)을 넘겨 CHECK 위반 500이 나던 것을, `AdminRepository.record_audit_event`가
+  `canonical_audit_outcome()`로 canonical(started/succeeded/failed/cancelled/denied)로 정규화(각 alias 정확 매핑,
+  예 invalidated→succeeded·invalid→failed) — **PR #462**(centralized safety net). **잔여**: 컴파일타임 타입 강화
+  (`record_audit_event(outcome: OpsAuditOutcome)` + mypy가 잡은 ~21개 호출부를 canonical로, hotswap 중첩 `audit`
+  래퍼 2개 포함)는 dynamic outcome(`result.state` 등) 캐스케이드 때문에 별도 PR로 남김. n150 canonical 정리 —
   base docker-compose.yml이 stale(geo-dagster가 로컬 override, pre-#47)이라 #50 볼륨이 base가 아닌 추가 override
   파일(`docker-compose.geo-backup-vol.yml`, statement_timeout 제거·볼륨만)로 적용됨 → n150 docker-manager를 main으로
   resync하고 override의 geo-dagster 중복·추가 파일을 제거해 정본화 권장.
