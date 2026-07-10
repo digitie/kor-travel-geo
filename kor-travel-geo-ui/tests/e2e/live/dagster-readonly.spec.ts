@@ -47,4 +47,15 @@ test.describe("LIVE admin Dagster observe page", () => {
     const src = await frame.getAttribute("src");
     expect(src ?? "").toMatch(/^https?:\/\//);
   });
+
+  // T-290h (M3): the recent run-failure alerts panel is wired to the live
+  // `/v1/ops/dagster/run-failures` endpoint. On a healthy prod stack it renders the empty
+  // state; the failure banner / op-log grouping / ack are exercised by the unit suite.
+  test("/admin/dagster renders the T-290h run-failure alerts panel", async ({ page }) => {
+    await page.goto("/admin/dagster");
+    await expectNoErrorScreen(page);
+    await expect(page.getByText("최근 실패 알림", { exact: false }).first()).toBeVisible({
+      timeout: LIVE_TIMEOUT
+    });
+  });
 });
