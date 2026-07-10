@@ -43,7 +43,7 @@ class ProgressCallback(Protocol):
     ) -> None: ...
 
 
-JobHandler = Callable[[dict[str, Any], asyncio.Event, ProgressCallback], Awaitable[None]]
+JobHandler = Callable[[str, dict[str, Any], asyncio.Event, ProgressCallback], Awaitable[None]]
 ADVISORY_SLOT_LOAD_QUEUE = 470017
 _CONTROL_KINDS = {
     "full_load_batch",
@@ -433,14 +433,12 @@ SELECT job_id, state, orchestrator_run_id, lease_expires_at
                         elapsed_s=perf_counter() - job_started_at,
                     )
                     continue
-                payload_with_job = dict(payload)
-                payload_with_job.setdefault("_job_id", job_id)
                 cancel_event = asyncio.Event()
                 self._cancel_events[job_id] = cancel_event
                 progress = self._progress_callback(job_id, kind)
                 try:
                     await progress(progress=0.01, stage="running", message="job started")
-                    await handler(payload_with_job, cancel_event, progress)
+                    await handler(job_id, payload, cancel_event, progress)
                 except asyncio.CancelledError:
                     final_state = "cancelled"
                     await self._cancelled(job_id)

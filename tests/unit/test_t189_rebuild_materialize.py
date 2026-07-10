@@ -592,8 +592,8 @@ async def test_source_rebuild_control_job_enqueues_full_load_batch(
         progress_events.append(kwargs)
 
     await queue.handlers["source_rebuild_db"](
+        "job-control",
         {
-            "_job_id": "job-control",
             "source_match_set_id": "ms-1",
             "actor": "tester",
         },
@@ -684,8 +684,8 @@ async def test_source_rebuild_control_job_fails_before_batch_on_integrity_gate(
 
     with pytest.raises(RuntimeError, match="integrity gate failed"):
         await queue.handlers["source_rebuild_db"](
+            "job-control",
             {
-                "_job_id": "job-control",
                 "source_match_set_id": "ms-1",
                 "actor": "tester",
             },
