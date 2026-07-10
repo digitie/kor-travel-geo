@@ -14,12 +14,42 @@
   전부 제거(타입 `OpsAuditOutcome`만 컴파일타임 가드로 유지; 1190 tests). **#466** — `_job_id` payload 밀반입
   제거: `JobHandler`를 `(job_id, payload, cancel_event, progress)` 명시 시그니처로 바꿔 drain이 load_jobs id를
   일급 인자로 전달하고, leaf `run_backup_job`/`run_restore_job(*, job_id)`가 payload를 그대로 검증하며 dagster
-  op도 명시 전달 — `_request_payload`/`_payload_job_id` 삭제(순 −31줄; 1187 main + 41 dagster tests). **남은
-  경미 후보**: (B) dagster 리소스 접근 헬퍼 통일(mv/backup/backup_execute의 `_resource_object` 3중복 +
-  backup_maintenance의 `_client`), (C) resources.py 4-way fallback 복잡도. **다음 단계**: T-290h(`/admin/dagster`
-  run detail에 backup op 로그·artifact 다운로드 UI + 실패/overdue 알림) 또는 T-290i(db_restore Dagster 이관).
-  **미착수**: n150 canonical resync(base compose stale, #50 볼륨이 추가 override로 적용됨 → n150 docker-manager를
-  main으로 resync 권장).
+  op도 명시 전달 — `_request_payload`/`_payload_job_id` 삭제(순 −31줄; 1187 main + 41 dagster tests). 이어 경미
+  후보 2건도 완료: **#468** — dagster op의 리소스 접근을 공유 `resources.op_resource`/`optional_op_resource`
+  하나로 통일(mv/backup/backup_execute의 `_resource_object` 3중복 + backup_maintenance의 `_client` 제거).
+  **#469** — definitions.py 리소스 조립을 map의 4-way(value→settings-value→real→missing)에서 **3-way**로 축소
+  (geo의 `SETTINGS_VALUE_RESOURCES`가 항상 `{}`라 settings-value 분기·`_settings_value_resource`·`Settings`
+  import가 dead code였음). **미착수**: n150 canonical resync(base compose stale, #50 볼륨이 추가 override로
+  적용됨 → n150 docker-manager를 main으로 resync 권장).
+
+- 📋 **T-290h 실행 계획 (다음 세션 착수 — 계획 확정 2026-07-10, by claude)** — `/admin/dagster` run detail에
+  backup **op 로그 + artifact 다운로드 UI + 실패/overdue 알림**을 연결한다. **M3 게이트 = live UI e2e #2**
+  (backup이 Dagster run으로 돌고 로그·artifact·알림이 admin UI에 보이는지). 스코핑(2026-07-10) 결과 **이미 있는
+  것**: artifact 다운로드 링크(`backup_artifact.download_url` → `GET /v1/admin/backups/{id}/download?token=`)·태그
+  연동(`kor_travel_geo.job_id`→load_jobs→artifact)·이벤트 스트림(step_id 포함)·failure sensor(payload만, 미영속).
+  **결정**: 실패 알림은 **cross-run 영속 이력까지**(ops 테이블 신설). 실행은 초장기 세션 회피로 **새 세션**에서.
+  - **Phase 1 — backend 영속**: alembic 마이그레이션으로 `ops.run_failure_alerts`(run_id PK, job_id, job_name,
+    job_kind, status, error_code, run_failed_at, recorded_at, acknowledged_at nullable) 신설.
+    `notify_run_failure_sensor`(dagster `backup.py`)가 기존 optional `failure_notifier` dispatch에 더해 **client
+    리소스 경유** 신규 infra 메서드(`AsyncAddressClient.record_run_failure_alert()` → repo INSERT)로 영속
+    (dagster-boundary §6: sensor는 client/infra 사용·api 금지; §3: sensor에 client 리소스 배선 필요).
+  - **Phase 2 — backend DTO/endpoint**: (a) overdue — 스케줄 summary DTO에 `overdue: bool`(또는 `next_tick_at`)
+    추가, GraphQL `futureTicks`/cron으로 백엔드 계산. (b) run-failures — `GET /v1/ops/dagster/run-failures`(최근
+    미ack 실패 목록) + `DagsterRunFailureAlert` DTO, 선택적 `POST .../{run_id}/ack`; run-detail에 해당 run의
+    `failure_alert` surface. op-log는 이벤트에 step_id가 이미 있어 **프론트 그룹핑**(백엔드 변경 최소).
+  - **Phase 3 — frontend(`DagsterPanel.RunDetailPanel`)**: op별 로그 섹션(이벤트 step_id 그룹핑, backup op 강조),
+    실패 배너(run.status FAILURE/CANCELED + error_code), overdue 배너(summary `overdue`), recent-failures 알림
+    목록(신규 hook). OpenAPI 타입 재생성 + React Query hook 추가.
+  - **Phase 4 — tests**: backend unit(failure-alert repo INSERT·overdue 계산·run-failures endpoint,
+    `test_dagster_router.py` + 마이그레이션 테스트) · dagster(sensor 영속 경로 `test_backup.py`) · frontend unit
+    (`dagster-panel.test.tsx`: op-log 그룹핑·실패/overdue 배너) · openapi drift.
+  - **Phase 5 — live UI e2e #2 (M3 게이트)**: 통합 브랜치 n150 배포(api+dagster+ui) → UI 백업 시작 → Dagster run
+    SUCCESS → run-detail의 op 로그·artifact 다운로드 확인 → 실패 유도로 실패 배너+영속 확인 → overdue 배너 확인.
+    Playwright(로컬 Linux→n150 UI fallback, ADR-065).
+  - **관련 파일**: `api/routers/dagster.py`(run-detail 698–787·summary query·`_with_backup_artifact` 531–576) ·
+    `dto/dagster.py`(`DagsterRunDetailData` 136–166) · dagster `backup.py`(`notify_run_failure_sensor` 141–214) ·
+    `components/admin/DagsterPanel.tsx`(`RunDetailPanel` 365–490·artifact 438–464) · `lib/dagster.ts` ·
+    `app/admin/dagster/page.tsx`.
 
 - ⏳ **T-290 — geo 독립 Dagster 오케스트레이션 이관 (계획·문서화 완료, 구현 착수)** — backup/restore·
   적재 오케스트레이션을 서비스 전용 독립 Dagster(`kortravelgeo_dagster`)로 이관한다. 3라운드 리뷰 수렴
