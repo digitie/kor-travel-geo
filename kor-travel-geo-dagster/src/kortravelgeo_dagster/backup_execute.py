@@ -22,6 +22,7 @@ from kortravelgeo.infra.backup import run_backup_job
 # Runtime imports: this module has no `from __future__ import annotations` (§10), so the
 # nested leaf's `asyncio.Event` / `ProgressReporter` annotations are evaluated eagerly.
 from .load_job_bridge import ProgressReporter, execute_load_job
+from .resources import op_resource
 
 if TYPE_CHECKING:
     from kortravelgeo.client import AsyncAddressClient
@@ -63,8 +64,8 @@ _DB_BACKUP_CONFIG_SCHEMA: Final[dict[str, object]] = {
 async def run_db_backup_op(context: OpExecutionContext) -> dict[str, object]:
     """Run the db_backup leaf as this Dagster run's body, driving its ``load_jobs`` row."""
 
-    client = cast("AsyncAddressClient", _resource_object(context, "client"))
-    settings = cast("Settings", _resource_object(context, "settings"))
+    client = cast("AsyncAddressClient", op_resource(context, "client"))
+    settings = cast("Settings", op_resource(context, "settings"))
     engine = client._engine()
 
     config = cast("Mapping[str, Any]", context.op_config)
@@ -95,10 +96,3 @@ def db_backup_job() -> None:
 
 
 DB_BACKUP_JOBS: Final = [db_backup_job]
-
-
-def _resource_object(context: OpExecutionContext, name: str) -> object:
-    resources = cast("Any", context.resources)
-    if not hasattr(resources, name):
-        raise AttributeError(f"Dagster resource missing: {name}")
-    return getattr(resources, name)

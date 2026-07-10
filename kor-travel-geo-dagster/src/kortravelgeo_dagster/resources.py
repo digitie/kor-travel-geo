@@ -36,6 +36,8 @@ __all__ = [
     "DagsterAdminApiClient",
     "admin_api_resource",
     "client_resource",
+    "op_resource",
+    "optional_op_resource",
     "rustfs_resource",
     "settings_resource",
 ]
@@ -273,3 +275,26 @@ def admin_api_resource(_context: InitResourceContext) -> DagsterAdminApiClient:
     applied at M2 deploy (see docs/architecture/dagster-boundary.md §7).
     """
     return DagsterAdminApiClient.from_settings(Settings())
+
+
+def op_resource(context: object, name: str) -> object:
+    """The named Dagster resource for this op; raises if the run didn't provide it.
+
+    The single accessor every op uses to unwrap ``context.resources`` (dagster-boundary §3),
+    instead of each op module hand-rolling the ``hasattr`` / ``getattr`` dance.
+    """
+    resources = cast("Any", context).resources
+    if not hasattr(resources, name):
+        raise AttributeError(f"Dagster resource missing: {name}")
+    return getattr(resources, name)
+
+
+def optional_op_resource(context: object, name: str) -> object | None:
+    """The named Dagster resource if the run provided it, else ``None`` (optional resources)."""
+    context_obj = cast("Any", context)
+    if not hasattr(context_obj, "resources"):
+        return None
+    resources = context_obj.resources
+    if not hasattr(resources, name):
+        return None
+    return cast("object", getattr(resources, name))

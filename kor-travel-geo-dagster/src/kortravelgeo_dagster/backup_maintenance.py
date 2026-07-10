@@ -18,7 +18,7 @@ at runtime, and stringized annotations break ``@op`` context typing.
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from dagster import (
     DefaultScheduleStatus,
@@ -35,6 +35,8 @@ from dagster import (
     schedule,
 )
 from kortravelgeo.infra.backup import BACKUP_ARTIFACT_TYPE
+
+from .resources import op_resource
 
 if TYPE_CHECKING:
     from kortravelgeo.client import AsyncAddressClient
@@ -65,11 +67,6 @@ RESTORE_DRILL_CRON: Final[str] = "0 4 * * *"
 RESTORE_DRILL_TIMEZONE: Final[str] = "Asia/Seoul"
 
 
-def _client(context: OpExecutionContext) -> "AsyncAddressClient":
-    """The ``AsyncAddressClient`` resource — the geo main-lib entrypoint the ops call."""
-    return cast("AsyncAddressClient", cast("Any", context.resources).client)
-
-
 @op(
     name="verify_backup",
     description="Verify a stored db_backup's integrity (client.verify_backup); corruption raises.",
@@ -79,8 +76,9 @@ def _client(context: OpExecutionContext) -> "AsyncAddressClient":
 async def verify_backup_op(context: OpExecutionContext) -> dict[str, object]:
     config = cast("Mapping[str, str]", context.op_config)
     artifact_id = config["artifact_id"]
+    client = cast("AsyncAddressClient", op_resource(context, "client"))
 
-    result = await _client(context).verify_backup(artifact_id, mode=config["mode"])
+    result = await client.verify_backup(artifact_id, mode=config["mode"])
 
     metadata: dict[str, object] = {
         "artifact_id": result.artifact_id,
@@ -110,8 +108,9 @@ async def verify_backup_op(context: OpExecutionContext) -> dict[str, object]:
 async def copy_backup_op(context: OpExecutionContext) -> dict[str, object]:
     config = cast("Mapping[str, str]", context.op_config)
     artifact_id = config["artifact_id"]
+    client = cast("AsyncAddressClient", op_resource(context, "client"))
 
-    result = await _client(context).copy_backup(artifact_id, target_dir=config["target_dir"])
+    result = await client.copy_backup(artifact_id, target_dir=config["target_dir"])
 
     metadata: dict[str, object] = {
         "artifact_id": result.artifact_id,
@@ -142,7 +141,7 @@ async def copy_backup_op(context: OpExecutionContext) -> dict[str, object]:
     },
 )
 async def restore_drill_op(context: OpExecutionContext) -> dict[str, object]:
-    client = _client(context)
+    client = cast("AsyncAddressClient", op_resource(context, "client"))
     config = cast("Mapping[str, str]", context.op_config)
 
     artifact_id = config.get("artifact_id") or await _latest_backup_artifact_id(client)

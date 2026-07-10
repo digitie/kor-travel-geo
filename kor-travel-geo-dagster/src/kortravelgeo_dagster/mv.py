@@ -12,10 +12,12 @@ IMPORTANT (dagster-boundary §10): this module must NOT use
 """
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from typing import TYPE_CHECKING, Final, Literal, cast
 
 from dagster import Bool, Failure, Field, OpExecutionContext, String, job, op
 from kortravelgeo.loaders.postload import refresh_mv
+
+from .resources import op_resource
 
 if TYPE_CHECKING:
     from kortravelgeo.client import AsyncAddressClient
@@ -71,7 +73,7 @@ async def refresh_geocode_mv_op(context: OpExecutionContext) -> dict[str, object
     but the 'swap' strategy performs DROP/RENAME, so this wiring-proof op does NOT
     attach a RetryPolicy (conservative — ADR-066 §4).
     """
-    client = cast("AsyncAddressClient", _resource_object(context, "client"))
+    client = cast("AsyncAddressClient", op_resource(context, "client"))
     config = cast("Mapping[str, object]", context.op_config)
     strategy = _mv_strategy(config.get("strategy"))
     concurrently = _bool_config(config.get("concurrently"), default=True)
@@ -99,13 +101,6 @@ def mv_refresh_job() -> None:
 
 MV_REFRESH_JOBS: Final = [mv_refresh_job]
 """Job list aggregated by ``definitions.py``."""
-
-
-def _resource_object(context: OpExecutionContext, name: str) -> object:
-    resources = cast("Any", context.resources)
-    if not hasattr(resources, name):
-        raise AttributeError(f"Dagster resource missing: {name}")
-    return getattr(resources, name)
 
 
 def _mv_strategy(value: object) -> Literal["concurrent", "swap"]:
