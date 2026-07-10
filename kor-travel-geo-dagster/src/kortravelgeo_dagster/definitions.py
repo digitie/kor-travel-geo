@@ -1,9 +1,9 @@
 """Dagster code location entrypoint.
 
 Aggregates the per-domain job/schedule/sensor/asset lists into a single
-module-level ``defs`` and assembles resources with map's 4-way fallback:
+module-level ``defs`` and assembles resources with a 3-way fallback:
 
-    value  ->  settings-value  ->  real @resource  ->  missing-guard
+    value  ->  real @resource  ->  missing-guard
 
 The guard raises a key-specific ``RuntimeError`` at *resource init* (not import),
 so ``dagster dev -m kortravelgeo_dagster.definitions`` always loads the code
@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import Any, Final, cast
 
 from dagster import Definitions, ResourceDefinition, resource
-from kortravelgeo.settings import Settings
 
 from .backup import BACKUP_JOBS, BACKUP_SCHEDULES, BACKUP_SENSORS
 from .backup_execute import DB_BACKUP_JOBS
@@ -37,13 +36,6 @@ DEFAULT_RESOURCE_VALUES: Final[dict[str, object]] = {
     "failure_notifier": None,
 }
 """Resource values safe to register even if a deployment does not override them."""
-
-SETTINGS_VALUE_RESOURCES: Final[dict[str, str]] = {}
-"""resource key -> ``Settings`` attribute exposing the same value.
-
-Empty for the M1 scaffold; later milestones populate this to surface a plain
-``Settings`` attribute directly as a resource value (see map's definitions.py).
-"""
 
 DEFAULT_RESOURCE_DEFINITIONS: Final[dict[str, ResourceDefinition]] = {
     "admin_api": admin_api_resource,
@@ -73,14 +65,6 @@ def _value_resource(key: str, value: object) -> ResourceDefinition:
     return _resource
 
 
-def _settings_value_resource(key: str, attr: str) -> ResourceDefinition:
-    @resource(description=f"{key} resource value read from ``Settings.{attr}``.")
-    def _resource() -> object:
-        return getattr(Settings(), attr)
-
-    return _resource
-
-
 defs = Definitions(
     jobs=cast("Any", [*MV_REFRESH_JOBS, *BACKUP_JOBS, *DB_BACKUP_JOBS, *BACKUP_MAINTENANCE_JOBS]),
     schedules=cast("Any", [*BACKUP_SCHEDULES, *BACKUP_MAINTENANCE_SCHEDULES]),
@@ -89,15 +73,12 @@ defs = Definitions(
         key: (
             _value_resource(key, DEFAULT_RESOURCE_VALUES[key])
             if key in DEFAULT_RESOURCE_VALUES
-            else _settings_value_resource(key, SETTINGS_VALUE_RESOURCES[key])
-            if key in SETTINGS_VALUE_RESOURCES
             else DEFAULT_RESOURCE_DEFINITIONS[key]
             if key in DEFAULT_RESOURCE_DEFINITIONS
             else _missing_resource(key)
         )
         for key in REQUIRED_RESOURCE_KEYS
         + tuple(DEFAULT_RESOURCE_VALUES)
-        + tuple(SETTINGS_VALUE_RESOURCES)
         + tuple(DEFAULT_RESOURCE_DEFINITIONS)
     },
 )
