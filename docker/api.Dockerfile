@@ -7,11 +7,23 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# build-essential/gdal for the [loaders] extras; postgresql-client-16 (matches the
+# kor_travel_geo server) + zstd for in-process DB restore/backup (pg_restore/pg_dump).
+# The PG client comes from the PGDG apt repo so its major tracks the server exactly.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       build-essential \
       gdal-bin \
       libgdal-dev \
+      curl \
+      gnupg \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+         -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" \
+         > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 zstd \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md alembic.ini openapi.json ./
