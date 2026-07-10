@@ -7,7 +7,7 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from sqlalchemy import bindparam, text
@@ -38,6 +38,7 @@ from kortravelgeo.dto.admin import (
     MaintenanceWindow,
     MaintenanceWindowCreate,
     OpsArtifact,
+    OpsAuditOutcome,
     PgStatStatementSnapshot,
     RollbackPlan,
     ServingRelease,
@@ -50,6 +51,75 @@ from kortravelgeo.infra.uploads import extract_upload_set_ids
 from kortravelgeo.version import __version__
 
 from ._rows import map_consistency_report, map_load_job
+
+#: The five lifecycle values ``ops.audit_events.outcome`` CHECK permits (== OpsAuditOutcome).
+_CANONICAL_AUDIT_OUTCOMES: frozenset[str] = frozenset(
+    {"started", "succeeded", "failed", "cancelled", "denied"}
+)
+
+#: Historically handlers passed a resource state / action name straight into the untyped
+#: ``record_audit_event(outcome=...)`` (e.g. a source-file state, ``"conflict"``,
+#: ``"created"``). Those are not in the CHECK set, so the audit INSERT raised a constraint
+#: violation → 500 (T-290g live e2e first surfaced it via a restore dry-run "blocked").
+#: Collapse each known non-canonical value onto the lifecycle outcome it means; the exact
+#: value stays queryable via ``action`` / ``payload`` / the audited resource. Unmapped
+#: values fall back to ``"succeeded"`` (the operation reached the audit call).
+_AUDIT_OUTCOME_ALIASES: dict[str, OpsAuditOutcome] = {
+    # literal outcomes some handlers passed directly
+    "conflict": "denied",
+    "created": "succeeded",
+    "registered": "succeeded",
+    "invalidated": "succeeded",
+    "bulk_hard_delete": "succeeded",
+    "integrity_gate_failed": "failed",
+    "accepted": "succeeded",
+    "rejected": "denied",
+    # source-file / artifact lifecycle states
+    "validating": "succeeded",
+    "available": "succeeded",
+    "soft_deleted": "succeeded",
+    "hard_deleted": "succeeded",
+    "quarantined": "failed",
+    "missing": "failed",
+    "delete_failed": "failed",
+    # run-validation states
+    "passed": "succeeded",
+    "warning": "succeeded",
+    "skipped": "succeeded",
+    "not_started": "started",
+    "running": "started",
+    "unknown": "succeeded",
+    "completed": "succeeded",
+    # registry match-set / case states
+    "draft": "succeeded",
+    "validated": "succeeded",
+    "active": "succeeded",
+    "retired": "succeeded",
+    "invalid": "failed",
+    "revalidatable": "succeeded",
+    "restored_from_backup": "succeeded",
+    # reconstruct-check + estimate modes
+    "verified": "succeeded",
+    "reconstruct_unavailable": "failed",
+    "match_set_swap": "succeeded",
+    "legacy_estimate": "succeeded",
+}
+
+
+def canonical_audit_outcome(outcome: str) -> OpsAuditOutcome:
+    """Normalize a caller-supplied audit ``outcome`` onto the ops.audit_events CHECK set.
+
+    Keeps the five canonical lifecycle values; maps a known resource-state / action alias
+    onto the outcome it means (see :data:`_AUDIT_OUTCOME_ALIASES`); otherwise ``"succeeded"``.
+    Prevents a non-canonical outcome from 500-ing the audit INSERT while the precise value
+    remains on ``action`` / ``payload`` / the audited resource. The proper long-term fix is
+    to type ``record_audit_event(outcome: OpsAuditOutcome)`` and pass canonical values at each
+    call site; this is the centralized safety net."""
+
+    if outcome in _CANONICAL_AUDIT_OUTCOMES:
+        return cast("OpsAuditOutcome", outcome)
+    return _AUDIT_OUTCOME_ALIASES.get(outcome, "succeeded")
+
 
 _JOB_SELECT = """
 SELECT job_id, kind, state, load_batch_id, parent_job_id,
@@ -345,6 +415,9 @@ SELECT job_id, kind, state, log_tail
         job_id: str | None = None,
         error_code: str | None = None,
     ) -> AuditEvent:
+        # Normalize onto the ops.audit_events CHECK set — a non-canonical outcome (a resource
+        # state / action name some handlers pass) would otherwise 500 the INSERT (T-290g).
+        outcome = canonical_audit_outcome(outcome)
         payload_redacted, payload_hash = redact_audit_payload(payload)
         async with self.engine.begin() as conn:
             row = (
