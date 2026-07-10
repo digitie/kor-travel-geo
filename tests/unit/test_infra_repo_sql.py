@@ -431,14 +431,14 @@ async def test_batch_consistency_error_reaches_promotion_gate(
     async def record_progress(**kwargs: Any) -> None:
         progress_events.append(kwargs)
 
-    await handler({"load_batch_id": "batch-1"}, asyncio.Event(), record_progress)
+    await handler("job-consistency", {"load_batch_id": "batch-1"}, asyncio.Event(), record_progress)
 
     assert any(
         "batch promotion gate" in str(event.get("message")) for event in progress_events
     )
 
     with pytest.raises(RuntimeError, match="consistency report failed"):
-        await handler({}, asyncio.Event(), record_progress)
+        await handler("job-consistency", {}, asyncio.Event(), record_progress)
 
 
 @pytest.mark.asyncio

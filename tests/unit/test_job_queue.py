@@ -67,11 +67,12 @@ async def test_drain_retries_after_busy_queue_lock(
         return claims.pop(0)
 
     async def fake_handler(
+        job_id: str,
         payload: dict[str, Any],
         _cancel_event: asyncio.Event,
         _progress: _jobs.ProgressCallback,
     ) -> None:
-        handled.append(payload)
+        handled.append({"job_id": job_id, "payload": payload})
 
     async def noop_async(*_args: object, **_kwargs: object) -> None:
         return None
@@ -90,7 +91,7 @@ async def test_drain_retries_after_busy_queue_lock(
 
     await queue._drain_once()
 
-    assert handled == [{"value": 1, "_job_id": "job-1"}]
+    assert handled == [{"job_id": "job-1", "payload": {"value": 1}}]
     assert claims == []
 
 

@@ -69,12 +69,11 @@ async def run_db_backup_op(context: OpExecutionContext) -> dict[str, object]:
 
     config = cast("Mapping[str, Any]", context.op_config)
     job_id = str(config["job_id"])
-    # Mirror the in-process drain: run_backup_job reads the load_jobs id from `_job_id`.
     payload = dict(cast("Mapping[str, Any]", config["payload"]))
-    payload.setdefault("_job_id", job_id)
 
     async def leaf(cancel_event: asyncio.Event, progress: ProgressReporter) -> None:
-        await run_backup_job(engine, settings, payload, cancel_event, progress)
+        # run_backup_job takes the load_jobs id explicitly (no _job_id payload smuggling).
+        await run_backup_job(engine, settings, payload, cancel_event, progress, job_id=job_id)
 
     await execute_load_job(
         job_id=job_id,

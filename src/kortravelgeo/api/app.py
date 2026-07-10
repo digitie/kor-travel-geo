@@ -727,6 +727,7 @@ def _locked_job_handler(
     handler: _jobs.JobHandler,
 ) -> _jobs.JobHandler:
     async def wrapped(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -734,7 +735,7 @@ def _locked_job_handler(
         key = AdvisoryLockKey.for_resource(namespace, resource(payload))
         try:
             async with cross_process_lock(engine, key):
-                await handler(payload, cancel_event, progress)
+                await handler(job_id, payload, cancel_event, progress)
         except ConcurrentExecutionError as exc:
             await progress(stage="lock_conflict", message=f"{exc.code}: {exc.message}")
             raise
@@ -748,14 +749,14 @@ def _locked_global_job_handler(
     handler: _jobs.JobHandler,
 ) -> _jobs.JobHandler:
     async def wrapped(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
     ) -> None:
-        _ = payload
         try:
             async with cross_process_lock(engine, AdvisoryLockKey.global_key(namespace)):
-                await handler(payload, cancel_event, progress)
+                await handler(job_id, payload, cancel_event, progress)
         except ConcurrentExecutionError as exc:
             await progress(stage="lock_conflict", message=f"{exc.code}: {exc.message}")
             raise
@@ -776,6 +777,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
     settings = get_settings()
 
     async def source_rebuild_db(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -788,7 +790,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         reason = _payload_str(payload, "reason")
         download_concurrency = _payload_int(payload, "download_concurrency") or 3
         materialize_concurrency = _payload_int(payload, "materialize_concurrency") or 2
-        control_job_id = _payload_str(payload, "_job_id")
+        control_job_id = job_id
         client = AsyncAddressClient(settings=settings, engine=engine)
 
         await progress(
@@ -848,6 +850,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
 
     async def juso(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -865,6 +868,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await progress(progress=1.0, stage="juso_text_load", message=f"{count} rows loaded")
 
     async def locsum(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -882,6 +886,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await progress(progress=1.0, stage="locsum_load", message=f"{count} rows loaded")
 
     async def daily_juso(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -906,6 +911,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
 
     async def parcel_links(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -928,6 +934,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
 
     async def daily_parcel_links(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -952,6 +959,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
 
     async def roadaddr_entrances(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -974,6 +982,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
 
     async def navi(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -995,6 +1004,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
 
     async def shp(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -1011,6 +1021,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await progress(progress=1.0, stage="shp_polygons_load", message=f"{count} layers loaded")
 
     async def sppn_makarea(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -1026,6 +1037,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await progress(progress=1.0, stage="sppn_makarea_load", message=f"{count} rows loaded")
 
     async def pobox(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -1037,6 +1049,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await progress(progress=1.0, stage="pobox_load", message=f"{count} rows loaded")
 
     async def bulk(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -1048,6 +1061,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         await progress(progress=1.0, stage="bulk_load", message=f"{count} rows loaded")
 
     async def consistency(
+        job_id: str,
         payload: dict[str, Any],
         _cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -1082,6 +1096,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             )
 
     async def mv_refresh(
+        job_id: str,
         payload: dict[str, Any],
         _cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
@@ -1104,7 +1119,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
         forced_metadata = payload.get("forced_promotion_metadata")
         snapshot, release = await repo.record_mv_refresh_release(
-            job_id=_payload_str(payload, "_job_id"),
+            job_id=job_id,
             load_batch_id=load_batch_id,
             strategy=strategy,
             source_match_set_id=_payload_str(payload, "source_match_set_id"),
@@ -1123,18 +1138,20 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
         )
 
     async def db_backup(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
     ) -> None:
-        await run_backup_job(engine, settings, payload, cancel_event, progress)
+        await run_backup_job(engine, settings, payload, cancel_event, progress, job_id=job_id)
 
     async def db_restore(
+        job_id: str,
         payload: dict[str, Any],
         cancel_event: asyncio.Event,
         progress: _jobs.ProgressCallback,
     ) -> None:
-        await run_restore_job(engine, settings, payload, cancel_event, progress)
+        await run_restore_job(engine, settings, payload, cancel_event, progress, job_id=job_id)
 
     queue.register(
         "source_rebuild_db",

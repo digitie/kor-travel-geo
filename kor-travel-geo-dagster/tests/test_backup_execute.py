@@ -25,7 +25,7 @@ async def _noop_progress(*, progress=None, stage=None, message=None):
 
 
 @pytest.mark.asyncio
-async def test_run_db_backup_op_wires_bridge_and_injects_job_id(
+async def test_run_db_backup_op_wires_bridge_and_passes_job_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -37,10 +37,13 @@ async def test_run_db_backup_op_wires_bridge_and_injects_job_id(
         # Drive the leaf to confirm it wraps run_backup_job with the injected payload.
         await leaf(asyncio.Event(), _noop_progress)
 
-    async def fake_run_backup_job(engine, settings, payload, cancel_event, progress):
+    async def fake_run_backup_job(
+        engine, settings, payload, cancel_event, progress, *, job_id=None
+    ):
         captured["payload"] = payload
         captured["settings"] = settings
         captured["leaf_engine"] = engine
+        captured["leaf_job_id"] = job_id
 
     monkeypatch.setattr(backup_execute, "execute_load_job", fake_execute_load_job)
     monkeypatch.setattr(backup_execute, "run_backup_job", fake_run_backup_job)
@@ -59,9 +62,9 @@ async def test_run_db_backup_op_wires_bridge_and_injects_job_id(
     assert captured["engine"] is sentinel_engine
     assert captured["leaf_engine"] is sentinel_engine
     assert captured["orchestrator_run_id"]  # a Dagster run id was passed through
-    # The leaf injected the load_jobs id (_job_id) and preserved the request payload.
-    assert captured["payload"]["_job_id"] == "job-9"
-    assert captured["payload"]["jobs"] == ["addr"]
+    # The leaf received the load_jobs id explicitly; the request payload stays clean.
+    assert captured["leaf_job_id"] == "job-9"
+    assert captured["payload"] == {"jobs": ["addr"]}
     assert captured["settings"] is settings
 
 
