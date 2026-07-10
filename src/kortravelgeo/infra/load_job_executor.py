@@ -14,12 +14,14 @@ the two executors share one source of truth for the ``load_jobs`` transitions.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from kortravelgeo.core.job_recovery import DEFAULT_LEASE_TTL_SECONDS, compute_lease_expiry
 
@@ -55,6 +57,23 @@ class LoadJobExecutor:
         ttl = self._lease_ttl_seconds if ttl_seconds is None else ttl_seconds
         return compute_lease_expiry(now=datetime.now(UTC), ttl_seconds=ttl)
 
+    @asynccontextmanager
+    async def _begin_uncapped(self) -> AsyncIterator[AsyncConnection]:
+        """A write transaction with ``statement_timeout`` disabled.
+
+        Every writer below is a trivial single-row ``load_jobs`` UPDATE, but the executor is
+        bound to the API engine whose ``pg_statement_timeout_ms`` (default 5s) is tuned for
+        fast request queries. During a long-running leaf — a multi-GB ``pg_restore`` saturates
+        the cluster's I/O — even a trivial heartbeat UPDATE's commit fsync can outlive 5s and
+        be cancelled (``QueryCanceled``), which would fail the whole job even though the leaf
+        is fine (T-290g live e2e: a restore died at 66% on the progress heartbeat). Disable the
+        timeout for these liveness/state writes, mirroring the loaders' long transactions; the
+        row is only ever written by its own job, so there is no contended lock to hang on."""
+
+        async with self.engine.begin() as conn:
+            await conn.execute(text("SET LOCAL statement_timeout = 0"))
+            yield conn
+
     async def adopt_dagster(
         self,
         job_id: str,
@@ -69,7 +88,7 @@ class LoadJobExecutor:
         Returns the new lease expiry."""
 
         expires_at = self.lease_expiry(ttl_seconds)
-        async with self.engine.begin() as conn:
+        async with self._begin_uncapped() as conn:
             result = await conn.execute(
                 text(
                     """
@@ -128,7 +147,7 @@ SELECT state, executor, orchestrator_run_id
         the new lease expiry. Called periodically by the op as it makes progress."""
 
         expires_at = self.lease_expiry(ttl_seconds)
-        async with self.engine.begin() as conn:
+        async with self._begin_uncapped() as conn:
             await conn.execute(
                 text(
                     """
@@ -180,14 +199,14 @@ UPDATE load_jobs
         stmt = text(f"UPDATE load_jobs SET {', '.join(assignments)} WHERE job_id = :job_id")
         if log_tail is not None:
             stmt = stmt.bindparams(bindparam("log_tail", type_=JSONB))
-        async with self.engine.begin() as conn:
+        async with self._begin_uncapped() as conn:
             await conn.execute(stmt, params)
 
     async def mark_done(self, job_id: str) -> None:
         """Converge a row to ``done`` (progress 1.0). A row already ``cancelled`` is left
         as-is so a late completion never overrides an operator cancel."""
 
-        async with self.engine.begin() as conn:
+        async with self._begin_uncapped() as conn:
             await conn.execute(
                 text(
                     """
@@ -206,7 +225,7 @@ UPDATE load_jobs
     async def mark_failed(self, job_id: str, message: str) -> None:
         """Converge a row to ``failed`` with ``error_message``."""
 
-        async with self.engine.begin() as conn:
+        async with self._begin_uncapped() as conn:
             await conn.execute(
                 text(
                     """
@@ -225,7 +244,7 @@ UPDATE load_jobs
     async def mark_cancelled(self, job_id: str) -> None:
         """Converge a row to ``cancelled``."""
 
-        async with self.engine.begin() as conn:
+        async with self._begin_uncapped() as conn:
             await conn.execute(
                 text(
                     """
