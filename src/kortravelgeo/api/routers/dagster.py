@@ -1,7 +1,10 @@
 """Dagster observability endpoints.
 
 The Dagster code location lives outside the main ``kortravelgeo`` package. This
-router only reads Dagster webserver GraphQL and normalizes it for the admin UI.
+router reads Dagster webserver GraphQL and normalizes it for the admin UI, and
+surfaces the app-persisted ``ops.run_failure_alerts`` ledger (written by the
+Dagster run-failure sensor, T-290h) via a recent-failures list, a per-run
+``failure_alert`` on run detail, and an acknowledge mutation.
 """
 
 from __future__ import annotations
@@ -12,7 +15,7 @@ from time import perf_counter
 from typing import Any, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from kortravelgeo.api._dagster_client import (
     DagsterUrlConfigurationError,
@@ -25,7 +28,7 @@ from kortravelgeo.api._dagster_client import (
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.security import KNOWN_ADMIN_ROLES, require_role
 from kortravelgeo.client import AsyncAddressClient
-from kortravelgeo.dto.admin import OpsArtifact
+from kortravelgeo.dto.admin import OpsArtifact, RunFailureAlert
 from kortravelgeo.dto.dagster import (
     DagsterAssetGroup,
     DagsterBackupArtifact,
@@ -37,6 +40,10 @@ from kortravelgeo.dto.dagster import (
     DagsterRunDetailData,
     DagsterRunDetailResponse,
     DagsterRunEvent,
+    DagsterRunFailureAckResponse,
+    DagsterRunFailureAlert,
+    DagsterRunFailuresData,
+    DagsterRunFailuresResponse,
     DagsterRunSummary,
     DagsterSchedule,
     DagsterSensor,
@@ -83,6 +90,9 @@ query KorTravelGeoDagsterSummary($limit: Int!) {
               cursor
               error { message stack className }
             }
+          }
+          futureTicks(limit: 2) {
+            results { timestamp }
           }
         }
         sensors {
@@ -328,18 +338,66 @@ def _parse_ticks(raw_ticks: object) -> list[DagsterInstigationTick]:
     return ticks
 
 
-def _parse_schedules(raw_schedules: list[object]) -> list[DagsterSchedule]:
+def _future_tick_timestamps(entry: JsonDict) -> list[float]:
+    """Upcoming scheduled fire times (epoch) from the GraphQL ``futureTicks`` block."""
+    timestamps: list[float] = []
+    for raw in _list(_dict(entry.get("futureTicks")).get("results")):
+        ts = _optional_float(_dict(raw).get("timestamp"))
+        if ts is not None:
+            timestamps.append(ts)
+    return timestamps
+
+
+def _schedule_overdue(
+    *,
+    status: str | None,
+    last_tick_ts: float | None,
+    future_ticks: list[float],
+    now_ts: float,
+    grace_seconds: float,
+) -> bool:
+    """A RUNNING schedule is overdue when it missed a scheduled fire.
+
+    Uses Dagster's own cron evaluation (``futureTicks``) rather than a cron parser:
+    the gap between consecutive future ticks approximates the cron interval, and if
+    more than one interval (plus a grace window) has elapsed since the last actual
+    tick, a fire was missed — the scheduler daemon is behind. Never flags a stopped
+    or never-ticked schedule.
+    """
+    if status != "RUNNING" or last_tick_ts is None or len(future_ticks) < 2:
+        return False
+    interval = future_ticks[1] - future_ticks[0]
+    if interval <= 0:
+        return False
+    return (now_ts - last_tick_ts) > (interval + grace_seconds)
+
+
+def _parse_schedules(
+    raw_schedules: list[object], *, now_ts: float, grace_seconds: float
+) -> list[DagsterSchedule]:
     schedules: list[DagsterSchedule] = []
     for raw in raw_schedules:
         entry = _dict(raw)
         state = _dict(entry.get("scheduleState"))
+        status = _optional_string(state.get("status"))
+        recent_ticks = _parse_ticks(state.get("ticks"))
+        future_ticks = _future_tick_timestamps(entry)
+        last_tick_ts = max((tick.timestamp for tick in recent_ticks), default=None)
         schedules.append(
             DagsterSchedule(
                 name=_string(entry.get("name"), "unknown_schedule"),
                 cron_schedule=_optional_string(entry.get("cronSchedule")),
                 execution_timezone=_optional_string(entry.get("executionTimezone")),
-                status=_optional_string(state.get("status")),
-                recent_ticks=_parse_ticks(state.get("ticks")),
+                status=status,
+                recent_ticks=recent_ticks,
+                next_tick_at=future_ticks[0] if future_ticks else None,
+                overdue=_schedule_overdue(
+                    status=status,
+                    last_tick_ts=last_tick_ts,
+                    future_ticks=future_ticks,
+                    now_ts=now_ts,
+                    grace_seconds=grace_seconds,
+                ),
             )
         )
     return schedules
@@ -377,7 +435,9 @@ def _parse_asset_groups(raw_assets: list[object]) -> list[DagsterAssetGroup]:
     ]
 
 
-def _parse_repositories(raw_connection: JsonDict) -> tuple[list[DagsterRepository], list[str]]:
+def _parse_repositories(
+    raw_connection: JsonDict, *, now_ts: float, grace_seconds: float
+) -> tuple[list[DagsterRepository], list[str]]:
     errors: list[str] = []
     if raw_connection.get("__typename") != "RepositoryConnection":
         message = _optional_string(raw_connection.get("message")) or "Dagster repository 조회 실패"
@@ -393,7 +453,11 @@ def _parse_repositories(raw_connection: JsonDict) -> tuple[list[DagsterRepositor
                 name=_string(entry.get("name"), "__repository__"),
                 location_name=_string(location.get("name"), "unknown_location"),
                 jobs=_parse_jobs(_list(entry.get("pipelines"))),
-                schedules=_parse_schedules(_list(entry.get("schedules"))),
+                schedules=_parse_schedules(
+                    _list(entry.get("schedules")),
+                    now_ts=now_ts,
+                    grace_seconds=grace_seconds,
+                ),
                 sensors=_parse_sensors(_list(entry.get("sensors"))),
                 asset_count=len(assets),
                 asset_groups=_parse_asset_groups(assets),
@@ -575,6 +639,44 @@ async def _with_backup_artifact(
     )
 
 
+def _run_failure_alert_dto(alert: RunFailureAlert) -> DagsterRunFailureAlert:
+    return DagsterRunFailureAlert(
+        run_id=alert.run_id,
+        job_id=alert.job_id,
+        job_name=alert.job_name,
+        job_kind=alert.job_kind,
+        status=alert.status,
+        error_code=alert.error_code,
+        run_failed_at=alert.run_failed_at,
+        recorded_at=alert.recorded_at,
+        acknowledged_at=alert.acknowledged_at,
+    )
+
+
+async def _with_failure_alert(
+    detail: DagsterRunDetailData,
+    *,
+    client: AsyncAddressClient,
+) -> DagsterRunDetailData:
+    """Attach the persisted ``ops.run_failure_alerts`` row for this run, if any."""
+    if detail.run is None:
+        return detail
+    try:
+        alert = await client.get_run_failure_alert(detail.run.run_id)
+    except Exception as exc:  # pragma: no cover - exact DB errors are driver-dependent.
+        return detail.model_copy(
+            update={
+                "errors": [
+                    *detail.errors,
+                    f"failure alert 조회 실패 ({type(exc).__name__})",
+                ]
+            }
+        )
+    if alert is None:
+        return detail
+    return detail.model_copy(update={"failure_alert": _run_failure_alert_dto(alert)})
+
+
 def _empty_summary_data(
     *,
     status: Literal["unavailable", "error"],
@@ -667,7 +769,9 @@ async def get_dagster_summary(
 
     data = _dict(payload.get("data"))
     repositories, repository_errors = _parse_repositories(
-        _dict(data.get("repositoriesOrError"))
+        _dict(data.get("repositoriesOrError")),
+        now_ts=checked_at.timestamp(),
+        grace_seconds=float(settings.dagster_schedule_overdue_grace_seconds),
     )
     recent_runs, run_counts, run_errors = _parse_runs(_dict(data.get("runsOrError")))
     errors = [*repository_errors, *run_errors]
@@ -781,7 +885,65 @@ async def get_dagster_run_detail(
             client=address_client,
             settings=settings,
         )
+        detail = await _with_failure_alert(detail, client=address_client)
     return _run_detail_response(
         detail,
         started_at=started_at,
+    )
+
+
+@router.get(
+    "/run-failures",
+    response_model=DagsterRunFailuresResponse,
+    summary="Dagster run 실패 알림 목록",
+    description=(
+        "Dagster run-failure 센서가 ``ops.run_failure_alerts``에 영속한 실패 알림을 "
+        "최근순으로 반환한다. 기본은 미확인(unacknowledged) 알림만이며, "
+        "``include_acknowledged=true``이면 확인된 알림도 포함한다. app DB를 읽으며 "
+        "Dagster webserver에 의존하지 않는다."
+    ),
+)
+async def get_dagster_run_failures(
+    limit: int = Query(default=50, ge=1, le=200),
+    include_acknowledged: bool = Query(
+        default=False,
+        description="true이면 이미 확인(ack)된 알림도 포함한다.",
+    ),
+    address_client: AsyncAddressClient = Depends(get_client),
+) -> DagsterRunFailuresResponse:
+    started_at = perf_counter()
+    checked_at = datetime.now(UTC)
+    alerts = await address_client.list_run_failure_alerts(
+        limit=limit,
+        unacknowledged_only=not include_acknowledged,
+    )
+    return DagsterRunFailuresResponse(
+        data=DagsterRunFailuresData(
+            checked_at=checked_at,
+            alerts=[_run_failure_alert_dto(alert) for alert in alerts],
+        ),
+        meta=_response_meta(started_at=started_at),
+    )
+
+
+@router.post(
+    "/runs/{run_id}/ack",
+    response_model=DagsterRunFailureAckResponse,
+    summary="Dagster run 실패 알림 확인(ack)",
+    description=(
+        "``ops.run_failure_alerts``의 해당 run 알림을 확인 처리한다(``acknowledged_at`` "
+        "설정). 멱등이며, 이미 확인된 알림은 그대로 반환한다. 알림이 없으면 404."
+    ),
+)
+async def acknowledge_dagster_run_failure(
+    run_id: str,
+    address_client: AsyncAddressClient = Depends(get_client),
+) -> DagsterRunFailureAckResponse:
+    started_at = perf_counter()
+    alert = await address_client.acknowledge_run_failure_alert(run_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="run-failure 알림을 찾을 수 없습니다.")
+    return DagsterRunFailureAckResponse(
+        data=_run_failure_alert_dto(alert),
+        meta=_response_meta(started_at=started_at),
     )

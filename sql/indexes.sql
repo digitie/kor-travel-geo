@@ -100,6 +100,9 @@ CREATE INDEX IF NOT EXISTS idx_ops_audit_events_occurred
   ON ops.audit_events (occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ops_audit_events_action
   ON ops.audit_events (action, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ops_run_failure_alerts_unacked_recent
+  ON ops.run_failure_alerts (run_failed_at DESC)
+  WHERE acknowledged_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_ops_dataset_snapshots_created
   ON ops.dataset_snapshots (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ops_serving_releases_created

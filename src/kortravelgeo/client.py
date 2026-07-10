@@ -70,6 +70,7 @@ from .dto.admin import (
     RestoreHotSwapRollbackRequest,
     RestoreHotSwapRollbackResult,
     RollbackPlan,
+    RunFailureAlert,
     ScheduledBackupStatus,
     ServingRelease,
     TableStat,
@@ -883,6 +884,46 @@ class AsyncAddressClient:
             action=action,
             outcome=outcome,
         )
+
+    # --- Dagster run-failure alerts (T-290h) ------------------------------
+
+    async def record_run_failure_alert(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        run_failed_at: datetime,
+        job_id: str | None = None,
+        job_name: str | None = None,
+        job_kind: str | None = None,
+        error_code: str | None = None,
+    ) -> RunFailureAlert:
+        return await AdminRepository(self._engine()).record_run_failure_alert(
+            run_id=run_id,
+            status=status,
+            run_failed_at=run_failed_at,
+            job_id=job_id,
+            job_name=job_name,
+            job_kind=job_kind,
+            error_code=error_code,
+        )
+
+    async def get_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        return await AdminRepository(self._engine()).get_run_failure_alert(run_id)
+
+    async def list_run_failure_alerts(
+        self,
+        *,
+        limit: int = 50,
+        unacknowledged_only: bool = True,
+    ) -> list[RunFailureAlert]:
+        return await AdminRepository(self._engine()).list_run_failure_alerts(
+            limit=limit,
+            unacknowledged_only=unacknowledged_only,
+        )
+
+    async def acknowledge_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        return await AdminRepository(self._engine()).acknowledge_run_failure_alert(run_id)
 
     # --- Source upload sessions (T-203a) ----------------------------------
 

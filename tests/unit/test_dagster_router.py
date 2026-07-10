@@ -11,16 +11,42 @@ import pytest
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.routers import dagster as dagster_mod
-from kortravelgeo.dto.admin import OpsArtifact
+from kortravelgeo.dto.admin import OpsArtifact, RunFailureAlert
 from kortravelgeo.settings import Settings, get_settings
 
 _HEADERS = {"X-KTG-Actor": "dagster-test", "X-KTG-Roles": "source_file_viewer"}
 
 
+def _alert(run_id: str, *, acknowledged: bool = False, **overrides: Any) -> RunFailureAlert:
+    fields: dict[str, Any] = {
+        "run_id": run_id,
+        "job_id": "job-1",
+        "job_name": "db_backup",
+        "job_kind": "db_backup",
+        "status": "FAILURE",
+        "error_code": "Failure",
+        "run_failed_at": datetime(2026, 7, 10, tzinfo=UTC),
+        "recorded_at": datetime(2026, 7, 10, tzinfo=UTC),
+        "acknowledged_at": datetime(2026, 7, 10, 1, tzinfo=UTC) if acknowledged else None,
+    }
+    fields.update(overrides)
+    return RunFailureAlert(**fields)
+
+
 class _ArtifactClient:
-    def __init__(self, artifacts_by_job_id: dict[str, OpsArtifact] | None = None) -> None:
+    def __init__(
+        self,
+        artifacts_by_job_id: dict[str, OpsArtifact] | None = None,
+        *,
+        failure_alerts: dict[str, RunFailureAlert] | None = None,
+        failure_alert_list: list[RunFailureAlert] | None = None,
+    ) -> None:
         self.artifacts_by_job_id = artifacts_by_job_id or {}
+        self.failure_alerts = failure_alerts or {}
+        self.failure_alert_list = failure_alert_list or []
         self.calls: list[tuple[str, str | None]] = []
+        self.list_calls: list[tuple[int, bool]] = []
+        self.ack_calls: list[str] = []
 
     async def get_artifact_by_job_id(
         self,
@@ -30,6 +56,19 @@ class _ArtifactClient:
     ) -> OpsArtifact | None:
         self.calls.append((job_id, artifact_type))
         return self.artifacts_by_job_id.get(job_id)
+
+    async def get_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        return self.failure_alerts.get(run_id)
+
+    async def list_run_failure_alerts(
+        self, *, limit: int = 50, unacknowledged_only: bool = True
+    ) -> list[RunFailureAlert]:
+        self.list_calls.append((limit, unacknowledged_only))
+        return list(self.failure_alert_list)
+
+    async def acknowledge_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        self.ack_calls.append(run_id)
+        return self.failure_alerts.get(run_id)
 
 
 def _app(
@@ -533,6 +572,233 @@ def test_dagster_summary_openapi_path_is_mounted() -> None:
 
     assert "/v1/ops/dagster/runs/{run_id}" in paths
     assert "/v1/ops/dagster/summary" in paths
+    assert "/v1/ops/dagster/run-failures" in paths
+    assert "/v1/ops/dagster/runs/{run_id}/ack" in paths
+
+
+# --- T-290h: schedule overdue computation (pure) -----------------------------------
+
+
+def test_schedule_overdue_flags_missed_running_schedule() -> None:
+    # last tick 1000s ago; interval 60, grace 100 -> 1000 > 160 -> overdue.
+    assert dagster_mod._schedule_overdue(
+        status="RUNNING", last_tick_ts=0.0, future_ticks=[60.0, 120.0],
+        now_ts=1000.0, grace_seconds=100.0,
+    ) is True
+
+
+def test_schedule_overdue_within_grace_not_flagged() -> None:
+    # last tick 100s ago; interval 60 + grace 100 = 160 -> 100 <= 160 -> not overdue.
+    assert dagster_mod._schedule_overdue(
+        status="RUNNING", last_tick_ts=0.0, future_ticks=[60.0, 120.0],
+        now_ts=100.0, grace_seconds=100.0,
+    ) is False
+
+
+def test_schedule_overdue_ignores_stopped_schedule() -> None:
+    assert dagster_mod._schedule_overdue(
+        status="STOPPED", last_tick_ts=0.0, future_ticks=[60.0, 120.0],
+        now_ts=1_000_000.0, grace_seconds=0.0,
+    ) is False
+
+
+def test_schedule_overdue_needs_two_future_ticks() -> None:
+    assert dagster_mod._schedule_overdue(
+        status="RUNNING", last_tick_ts=0.0, future_ticks=[60.0],
+        now_ts=1_000_000.0, grace_seconds=0.0,
+    ) is False
+
+
+def test_schedule_overdue_without_last_tick_not_flagged() -> None:
+    assert dagster_mod._schedule_overdue(
+        status="RUNNING", last_tick_ts=None, future_ticks=[60.0, 120.0],
+        now_ts=1_000_000.0, grace_seconds=0.0,
+    ) is False
+
+
+# --- T-290h: run-failure alerts endpoints + run-detail surface ---------------------
+
+
+@pytest.mark.asyncio
+async def test_dagster_run_failures_lists_unacknowledged() -> None:
+    client_stub = _ArtifactClient(failure_alert_list=[_alert("run-a"), _alert("run-b")])
+    transport = httpx.ASGITransport(
+        app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/v1/ops/dagster/run-failures?limit=25", headers=_HEADERS
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert [a["run_id"] for a in data["alerts"]] == ["run-a", "run-b"]
+    assert data["alerts"][0]["error_code"] == "Failure"
+    assert data["alerts"][0]["acknowledged_at"] is None
+    assert "checked_at" in data
+    # default is unacknowledged-only, honoring the requested limit.
+    assert client_stub.list_calls == [(25, True)]
+
+
+@pytest.mark.asyncio
+async def test_dagster_run_failures_include_acknowledged() -> None:
+    client_stub = _ArtifactClient(failure_alert_list=[_alert("run-a", acknowledged=True)])
+    transport = httpx.ASGITransport(
+        app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/v1/ops/dagster/run-failures?include_acknowledged=true", headers=_HEADERS
+        )
+
+    assert response.status_code == 200
+    assert client_stub.list_calls == [(50, False)]
+
+
+@pytest.mark.asyncio
+async def test_dagster_run_failure_ack_returns_alert() -> None:
+    client_stub = _ArtifactClient(
+        failure_alerts={"run-a": _alert("run-a", acknowledged=True)}
+    )
+    transport = httpx.ASGITransport(
+        app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/ops/dagster/runs/run-a/ack", headers=_HEADERS
+        )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["run_id"] == "run-a"
+    assert data["acknowledged_at"] is not None
+    assert client_stub.ack_calls == ["run-a"]
+
+
+@pytest.mark.asyncio
+async def test_dagster_run_failure_ack_not_found_returns_404() -> None:
+    client_stub = _ArtifactClient()  # no alert for "missing"
+    transport = httpx.ASGITransport(
+        app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/ops/dagster/runs/missing/ack", headers=_HEADERS
+        )
+
+    assert response.status_code == 404
+    assert client_stub.ack_calls == ["missing"]
+
+
+@pytest.mark.asyncio
+async def test_dagster_run_detail_surfaces_failure_alert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_stub = _ArtifactClient(failure_alerts={"run-1": _alert("run-1")})
+
+    async def _fake_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        return {
+            "data": {
+                "runOrError": {
+                    "__typename": "Run",
+                    "runId": "run-1",
+                    "jobName": "db_backup",
+                    "status": "FAILURE",
+                    "tags": [],
+                    "eventConnection": {"cursor": None, "hasMore": False, "events": []},
+                }
+            }
+        }
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _fake_post_graphql)
+    transport = httpx.ASGITransport(
+        app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/runs/run-1", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "ok"
+    assert data["failure_alert"]["run_id"] == "run-1"
+    assert data["failure_alert"]["error_code"] == "Failure"
+    assert data["errors"] == []
+
+
+@pytest.mark.asyncio
+async def test_dagster_summary_surfaces_next_tick_and_overdue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # RUNNING schedule whose last tick is far in the past with a small future interval
+    # -> overdue; the summary handler uses real now(), so a year-2001 last tick is stale.
+    async def _fake_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        return {
+            "data": {
+                "version": "1.13.13",
+                "repositoriesOrError": {
+                    "__typename": "RepositoryConnection",
+                    "nodes": [
+                        {
+                            "name": "__repository__",
+                            "location": {"name": "loc"},
+                            "pipelines": [],
+                            "schedules": [
+                                {
+                                    "name": "scheduled_backup",
+                                    "cronSchedule": "0 3 * * *",
+                                    "executionTimezone": "Asia/Seoul",
+                                    "scheduleState": {
+                                        "status": "RUNNING",
+                                        "ticks": [
+                                            {
+                                                "tickId": "t1",
+                                                "status": "SUCCESS",
+                                                "timestamp": 1_000_000_000.0,
+                                                "endTimestamp": None,
+                                                "runIds": [],
+                                                "runKeys": [],
+                                                "skipReason": None,
+                                                "cursor": None,
+                                                "error": None,
+                                            }
+                                        ],
+                                    },
+                                    "futureTicks": {
+                                        "results": [
+                                            {"timestamp": 1_000_000_060.0},
+                                            {"timestamp": 1_000_000_120.0},
+                                        ]
+                                    },
+                                }
+                            ],
+                            "sensors": [],
+                            "assetNodes": [],
+                        }
+                    ],
+                },
+                "runsOrError": {"__typename": "Runs", "results": []},
+            }
+        }
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _fake_post_graphql)
+    transport = httpx.ASGITransport(app=_app(), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+
+    assert response.status_code == 200
+    schedule = response.json()["data"]["repositories"][0]["schedules"][0]
+    assert schedule["next_tick_at"] == 1_000_000_060.0
+    assert schedule["overdue"] is True
 
 
 def _empty_summary_payload() -> dict[str, Any]:

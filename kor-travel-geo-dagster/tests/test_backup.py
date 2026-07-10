@@ -12,6 +12,7 @@ from pydantic import SecretStr
 
 from kortravelgeo_dagster.backup import (
     JOB_ID_TAG,
+    JOB_KIND_TAG,
     _dict_value,
     _dispatch_run_failure_notification,
     _failure_notification_payload,
@@ -317,31 +318,48 @@ class _RecordingLog:
         self.warnings.append(msg % args if args else msg)
 
 
-def _failure_context(
-    *, notifier: object = "__unset__", with_resources: bool = True
-) -> _FakeFailureContext:
+class _FakeClient:
+    """Duck-typed ``AsyncAddressClient`` recording ``record_run_failure_alert`` calls."""
+
+    def __init__(self, *, raises: bool = False) -> None:
+        self.calls: list[dict[str, object]] = []
+        self._raises = raises
+
+    async def record_run_failure_alert(self, **kwargs: object) -> dict[str, object]:
+        if self._raises:
+            raise RuntimeError("db unavailable")
+        self.calls.append(kwargs)
+        return kwargs
+
+
+def _failure_context() -> _FakeFailureContext:
     ctx = _FakeFailureContext(
         dagster_run=_FakeDagsterRun(
             run_id="run-1",
             job_name="scheduled_backup_run_due",
             status="DagsterRunStatus.FAILURE",
-            tags={JOB_ID_TAG: "job-7"},
+            tags={JOB_ID_TAG: "job-7", JOB_KIND_TAG: "scheduled_backup_run_due"},
         ),
         failure_event=_FakeFailureEvent(error_cls_name="Failure", message="internal detail"),
     )
     ctx.log = _RecordingLog()  # type: ignore[attr-defined]
-    if with_resources:
-        resources = type("R", (), {})()
-        if notifier != "__unset__":
-            resources.failure_notifier = notifier  # type: ignore[attr-defined]
-        ctx.resources = resources  # type: ignore[attr-defined]
     return ctx
+
+
+def _dispatch(
+    ctx: _FakeFailureContext, *, client: object = None, failure_notifier: object = None
+) -> None:
+    """Invoke the dispatch helper with resources injected explicitly (as the sensor does)."""
+    _dispatch_run_failure_notification(
+        ctx,  # type: ignore[arg-type]
+        client=client,  # type: ignore[arg-type]
+        failure_notifier=failure_notifier,
+    )
 
 
 def test_dispatch_forwards_boundary_payload_to_callable_notifier() -> None:
     received: list[dict[str, object]] = []
-    ctx = _failure_context(notifier=received.append)
-    _dispatch_run_failure_notification(ctx)  # type: ignore[arg-type]
+    _dispatch(_failure_context(), failure_notifier=received.append)
     assert len(received) == 1
     assert received[0]["run_id"] == "run-1"
     assert received[0]["job_id"] == "job-7"
@@ -352,18 +370,50 @@ def test_dispatch_forwards_boundary_payload_to_callable_notifier() -> None:
 
 
 def test_dispatch_without_notifier_warns_and_returns() -> None:
-    ctx = _failure_context(notifier="__unset__")  # resources present, no failure_notifier
-    _dispatch_run_failure_notification(ctx)  # type: ignore[arg-type]  # must not raise
+    ctx = _failure_context()
+    _dispatch(ctx, failure_notifier=None)  # must not raise
     assert ctx.log.warnings  # type: ignore[attr-defined]
 
 
 def test_dispatch_with_non_callable_notifier_warns_and_returns() -> None:
-    ctx = _failure_context(notifier=object())  # non-callable resource
-    _dispatch_run_failure_notification(ctx)  # type: ignore[arg-type]  # must not raise
+    ctx = _failure_context()
+    _dispatch(ctx, failure_notifier=object())  # non-callable resource; must not raise
     assert ctx.log.warnings  # type: ignore[attr-defined]
 
 
-def test_dispatch_when_context_has_no_resources_is_safe() -> None:
-    ctx = _failure_context(with_resources=False)  # no .resources attr at all
-    _dispatch_run_failure_notification(ctx)  # type: ignore[arg-type]  # must not raise
+def test_dispatch_persists_bounded_alert_via_client() -> None:
+    client = _FakeClient()
+    _dispatch(_failure_context(), client=client)
+    assert len(client.calls) == 1
+    call = client.calls[0]
+    assert call["run_id"] == "run-1"
+    assert call["job_id"] == "job-7"
+    assert call["job_name"] == "scheduled_backup_run_due"
+    assert call["job_kind"] == "scheduled_backup_run_due"
+    assert call["error_code"] == "Failure"
+    # status is normalized to the bare run-status name (matches the observe GraphQL).
+    assert call["status"] == "FAILURE"
+    assert isinstance(call["run_failed_at"], datetime)
+    # §5: the raw Dagster failure message must never be persisted.
+    assert "message" not in call
+    assert "internal detail" not in call.values()
+
+
+def test_dispatch_without_client_warns_and_skips_persist() -> None:
+    ctx = _failure_context()
+    _dispatch(ctx, client=None)  # must not raise
     assert ctx.log.warnings  # type: ignore[attr-defined]
+
+
+def test_dispatch_persist_failure_is_swallowed() -> None:
+    ctx = _failure_context()
+    _dispatch(ctx, client=_FakeClient(raises=True))  # persistence error must not raise
+    assert ctx.log.warnings  # type: ignore[attr-defined]
+
+
+def test_dispatch_persist_and_notify_run_independently() -> None:
+    received: list[dict[str, object]] = []
+    client = _FakeClient()
+    _dispatch(_failure_context(), client=client, failure_notifier=received.append)
+    assert len(client.calls) == 1  # persisted
+    assert len(received) == 1  # and notified

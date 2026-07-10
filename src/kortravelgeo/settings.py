@@ -146,6 +146,10 @@ class Settings(BaseSettings):
         "dagster",
     )
     dagster_request_timeout_seconds: float = Field(default=3.0, ge=0.2, le=30.0)
+    # Grace window (seconds) beyond one cron interval before a RUNNING schedule that
+    # missed a fire is flagged ``overdue`` in the summary (T-290h). Generous by default
+    # so a briefly-behind scheduler daemon does not flap the overdue banner.
+    dagster_schedule_overdue_grace_seconds: int = Field(default=300, ge=0, le=86_400)
     dagster_repository_name: str = Field(default="__repository__", min_length=1)
     dagster_repository_location_name: str = Field(
         default="kortravelgeo_dagster.definitions",

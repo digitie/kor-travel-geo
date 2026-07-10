@@ -61,6 +61,12 @@ class DagsterSchedule(FrozenModel):
     execution_timezone: str | None = None
     status: str | None = None
     recent_ticks: list[DagsterInstigationTick] = Field(default_factory=list)
+    # Forward-looking health (T-290h). ``next_tick_at`` is the next scheduled fire
+    # per Dagster's own cron evaluation (raw epoch, like tick timestamps).
+    # ``overdue`` is set when a RUNNING schedule missed its expected fire by more
+    # than the configured grace window (a stuck scheduler daemon).
+    next_tick_at: float | None = None
+    overdue: bool = False
 
 
 class DagsterSensor(FrozenModel):
@@ -143,6 +149,26 @@ class DagsterBackupArtifact(FrozenModel):
     download_url: str | None = None
 
 
+class DagsterRunFailureAlert(FrozenModel):
+    """Persisted Dagster run-failure alert (``ops.run_failure_alerts``, T-290h).
+
+    Written by the Dagster ``run_failure_sensor`` through the ``client`` resource
+    and surfaced read-only on run detail / the recent-failures list. Carries only
+    bounded fields (the failure ``error_code`` = error class name, never the raw
+    failure message — dagster-boundary §5).
+    """
+
+    run_id: str
+    job_id: str | None = None
+    job_name: str | None = None
+    job_kind: str | None = None
+    status: str
+    error_code: str | None = None
+    run_failed_at: datetime
+    recorded_at: datetime
+    acknowledged_at: datetime | None = None
+
+
 class DagsterRunDetailData(FrozenModel):
     """``GET /v1/ops/dagster/runs/{run_id}`` data."""
 
@@ -152,6 +178,7 @@ class DagsterRunDetailData(FrozenModel):
     checked_at: datetime
     run: DagsterRunSummary | None = None
     backup_artifact: DagsterBackupArtifact | None = None
+    failure_alert: DagsterRunFailureAlert | None = None
     events: list[DagsterRunEvent] = Field(default_factory=list)
     event_cursor: str | None = None
     event_has_more: bool = False
@@ -162,4 +189,25 @@ class DagsterRunDetailResponse(FrozenModel):
     """``GET /v1/ops/dagster/runs/{run_id}`` response."""
 
     data: DagsterRunDetailData
+    meta: DagsterResponseMeta
+
+
+class DagsterRunFailuresData(FrozenModel):
+    """``GET /v1/ops/dagster/run-failures`` data (recent, unacknowledged first)."""
+
+    checked_at: datetime
+    alerts: list[DagsterRunFailureAlert] = Field(default_factory=list)
+
+
+class DagsterRunFailuresResponse(FrozenModel):
+    """``GET /v1/ops/dagster/run-failures`` response."""
+
+    data: DagsterRunFailuresData
+    meta: DagsterResponseMeta
+
+
+class DagsterRunFailureAckResponse(FrozenModel):
+    """``POST /v1/ops/dagster/runs/{run_id}/ack`` response."""
+
+    data: DagsterRunFailureAlert
     meta: DagsterResponseMeta
