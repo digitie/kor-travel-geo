@@ -2213,19 +2213,56 @@ async def submit_restore(
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
+    settings = get_settings()
     payload = req.model_dump(exclude_none=True)
-    job_id = await queue.enqueue("db_restore", payload)
+    if "db_restore" in settings.dagster_executed_job_kinds:
+        job_id = await _launch_db_restore_dagster_run(client, settings, payload)
+        executor = "dagster"
+    else:
+        job_id = await queue.enqueue("db_restore", payload)
+        executor = "api_in_process"
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="db_restore.submit",
         outcome="started",
-        payload=payload,
+        payload={**payload, "executor": executor},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,
         **_audit_request(request),
     )
     return status
+
+
+async def _launch_db_restore_dagster_run(
+    client: AsyncAddressClient,
+    settings: Settings,
+    payload: dict[str, Any],
+) -> str:
+    """Create a Dagster-executed ``db_restore`` load_jobs row and launch its Dagster run.
+
+    The row is inserted ``executor='dagster'`` so the in-process drain skips it (T-290i);
+    the Dagster ``db_restore`` op adopts and drives it. A launch failure fails the row and
+    surfaces a 502 rather than leaving a queued row no worker will ever claim. Restore
+    targets a new empty DB; the final hot-swap stays a manual operator step (ADR-036).
+    """
+    engine = client._engine()
+    row = await AdminRepository(engine).insert_load_job(
+        kind="db_restore", payload=payload, executor="dagster"
+    )
+    job_id = row.job_id
+    run_config = {"ops": {"run_db_restore": {"config": {"job_id": job_id, "payload": payload}}}}
+    try:
+        await launch_dagster_run(
+            settings,
+            job_name="db_restore",
+            run_config=run_config,
+            tags={"kor_travel_geo.job_id": job_id},
+        )
+    except (DagsterUrlConfigurationError, DagsterLaunchError, httpx.HTTPError) as exc:
+        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
+        raise KorTravelGeoError("Dagster restore launch failed", http_status=502) from exc
+    return job_id
 
 
 @router.post(
