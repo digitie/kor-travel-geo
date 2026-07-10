@@ -30,6 +30,7 @@ from dagster import (
 )
 
 from .mv import mv_refresh_job
+from .resources import op_resource, optional_op_resource
 
 if TYPE_CHECKING:
     from .resources import DagsterAdminApiClient
@@ -72,7 +73,7 @@ JOB_ID_TAG: Final[str] = "kor_travel_geo.job_id"
 async def run_due_scheduled_backup_op(context: OpExecutionContext) -> dict[str, Any]:
     """Trigger the existing scheduled-backup due-check endpoint once."""
 
-    admin_api = cast("DagsterAdminApiClient", _resource_object(context, "admin_api"))
+    admin_api = cast("DagsterAdminApiClient", op_resource(context, "admin_api"))
     try:
         payload = await admin_api.run_due_scheduled_backup()
     except Exception as exc:
@@ -168,7 +169,7 @@ def _dispatch_run_failure_notification(context: RunFailureSensorContext) -> None
     never turn a monitored run's failure into a *sensor* failure.
     """
     payload = _failure_notification_payload(context)
-    notifier = _optional_resource_object(context, "failure_notifier")
+    notifier = optional_op_resource(context, "failure_notifier")
     if notifier is None:
         context.log.warning("Dagster run failed without failure_notifier: %s", payload)
         return
@@ -181,24 +182,6 @@ def _dispatch_run_failure_notification(context: RunFailureSensorContext) -> None
 BACKUP_JOBS: Final = [scheduled_backup_run_due_job]
 BACKUP_SCHEDULES: Final = [scheduled_backup_schedule]
 BACKUP_SENSORS: Final = [notify_run_failure_sensor]
-
-
-def _resource_object(context: object, name: str) -> object:
-    resources = cast("Any", context).resources
-    if not hasattr(resources, name):
-        raise AttributeError(f"Dagster resource missing: {name}")
-    return getattr(resources, name)
-
-
-def _optional_resource_object(context: object, name: str) -> object | None:
-    context_obj = cast("Any", context)
-    if not hasattr(context_obj, "resources"):
-        return None
-    resources = context_obj.resources
-    if not hasattr(resources, name):
-        return None
-    value: object = getattr(resources, name)
-    return value
 
 
 def _failure_notification_payload(context: RunFailureSensorContext) -> dict[str, object]:
