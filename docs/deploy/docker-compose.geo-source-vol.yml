@@ -1,0 +1,41 @@
+# docker-compose.geo-source-vol.yml — T-290j staging full-load source sharing.
+#
+# WHERE THIS LIVES: drop this file into the `kor-travel-docker-manager` repo (next to
+# docker-compose.yml / docker-compose.geo-backup-vol.yml) and add it as an extra `-f` at
+# deploy time. It is kept here in the geo repo as the source-of-truth artifact because the
+# docker-manager repo is deployed separately (same pattern as geo-backup-vol.yml, which
+# also only lives on the deploy host).
+#
+# WHY: a FILE-DRIVEN `full_load_batch` executed by Dagster reads source archives from the
+# absolute paths carried in its batch_payload. Those files are placed by the operator (a
+# host source dir) or produced by the API container (RustFS materialize), but they are READ
+# by the DAGSTER container — so api + dagster + dagster-daemon must all see them at the SAME
+# path. Today the dagster containers mount only /app/data/backups (geo-backup-vol.yml); a
+# full-load would find no source files. This override adds:
+#   1. a host SOURCE dir (operator-supplied nationwide archives) read-only at /app/data/source
+#   2. a shared MATERIALIZE named volume at /app/data/rustfs/materialized so an API-side
+#      RustFS materialize (source_rebuild_db) is visible to the dagster op — the container's
+#      default materialize dir is ephemeral/unshared (settings.rustfs_materialize_dir).
+#
+# DEPLOY (mirror the geo-backup-vol.yml invocation, appending this override):
+#   docker compose --env-file .env \
+#     -f docker-compose.yml -f docker-compose.override.yml \
+#     -f docker-compose.geo-backup-vol.yml -f docker-compose.geo-source-vol.yml \
+#     up -d kor-travel-geo-api kor-travel-geo-dagster kor-travel-geo-dagster-daemon
+#
+# Set KOR_TRAVEL_GEO_SOURCE_DIR in .env to the host dir holding the source archives.
+services:
+  kor-travel-geo-api:
+    volumes:
+    - ${KOR_TRAVEL_GEO_SOURCE_DIR:-/home/digitie/kor-travel-geo-data/source}:/app/data/source:ro
+    - geo-materialize:/app/data/rustfs/materialized
+  kor-travel-geo-dagster:
+    volumes:
+    - ${KOR_TRAVEL_GEO_SOURCE_DIR:-/home/digitie/kor-travel-geo-data/source}:/app/data/source:ro
+    - geo-materialize:/app/data/rustfs/materialized
+  kor-travel-geo-dagster-daemon:
+    volumes:
+    - ${KOR_TRAVEL_GEO_SOURCE_DIR:-/home/digitie/kor-travel-geo-data/source}:/app/data/source:ro
+    - geo-materialize:/app/data/rustfs/materialized
+volumes:
+  geo-materialize: {}

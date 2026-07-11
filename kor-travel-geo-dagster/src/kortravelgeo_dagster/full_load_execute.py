@@ -22,7 +22,9 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from dagster import Field, OpExecutionContext, Permissive, String, job, op
+from kortravelgeo.infra.scratch_db import scratch_database_dsn
 from kortravelgeo.loaders.batch_dag import run_full_load_batch, run_source_loader
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # Runtime imports: this module has no `from __future__ import annotations` (§10), so the
 # nested leaf's `asyncio.Event` / `ProgressReporter` annotations are evaluated eagerly.
@@ -94,32 +96,50 @@ async def run_full_load_batch_op(context: OpExecutionContext) -> dict[str, objec
 
     client = cast("AsyncAddressClient", op_resource(context, "client"))
     settings = cast("Settings", op_resource(context, "settings"))
-    engine = client._engine()
     ttl = settings.dagster_lease_ttl_seconds
 
     config = cast("Mapping[str, Any]", context.op_config)
     job_id = str(config["job_id"])
     payload = dict(cast("Mapping[str, Any]", config["payload"]))
 
-    async def leaf(cancel_event: asyncio.Event, progress: ProgressReporter) -> None:
-        await run_full_load_batch(
-            engine,
-            batch_id=job_id,
-            payload=payload,
-            cancel_event=cancel_event,
-            progress=progress,
+    # Blue-green staging: when the payload names a target_database, run the WHOLE DAG
+    # (control rows + data + MV swap) against a scratch engine so the serving DB is never
+    # opened. The API launcher already created + schema-inited that DB and inserted the
+    # root/child rows there; this op binds an engine to the same DSN and disposes it after.
+    target_database = payload.get("target_database")
+    if target_database:
+        engine = create_async_engine(scratch_database_dsn(settings.pg_dsn, str(target_database)))
+        dispose_engine = True
+    else:
+        engine = client._engine()
+        dispose_engine = False
+
+    try:
+
+        async def leaf(cancel_event: asyncio.Event, progress: ProgressReporter) -> None:
+            await run_full_load_batch(
+                engine,
+                batch_id=job_id,
+                payload=payload,
+                cancel_event=cancel_event,
+                progress=progress,
+                orchestrator_run_id=context.run_id,
+                lease_ttl_seconds=ttl,
+            )
+
+        await execute_load_job(
+            job_id=job_id,
             orchestrator_run_id=context.run_id,
+            engine=engine,
+            leaf=leaf,
             lease_ttl_seconds=ttl,
         )
-
-    await execute_load_job(
-        job_id=job_id,
-        orchestrator_run_id=context.run_id,
-        engine=engine,
-        leaf=leaf,
-        lease_ttl_seconds=ttl,
+    finally:
+        if dispose_engine:
+            await engine.dispose()
+    context.add_output_metadata(
+        {"job_id": job_id, "kind": "full_load_batch", "target_database": str(target_database or "")}
     )
-    context.add_output_metadata({"job_id": job_id, "kind": "full_load_batch"})
     return {"job_id": job_id}
 
 
