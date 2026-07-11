@@ -269,3 +269,49 @@ async def test_submit_full_load_batch_falls_back_to_in_process_when_not_gated() 
 
     assert batch_id == "batch-inproc-1"
     assert queue.enqueued_batch == _VALID_BATCH_PAYLOAD
+
+
+@pytest.mark.asyncio
+async def test_blue_green_load_status_reads_from_scratch_engine_and_disposes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The blue-green readback binds a throwaway client to the SCRATCH engine (not serving)
+    and always disposes it, so a full_load_batch whose control rows live in the scratch DB
+    returns a real status instead of a serving 404 (the E0404 bug)."""
+    disposed: list[bool] = []
+    seen: dict[str, Any] = {}
+
+    class _FakeEngine:
+        async def dispose(self) -> None:
+            disposed.append(True)
+
+    def fake_scratch_dsn(pg_dsn: str, target: str) -> str:
+        return f"{pg_dsn}##{target}"
+
+    def fake_create_engine(dsn: str) -> _FakeEngine:
+        seen["dsn"] = dsn
+        return _FakeEngine()
+
+    class _FakeClient:
+        def __init__(self, *, settings: Any, engine: Any) -> None:
+            seen["engine"] = engine
+
+        async def load_status(self, job_id: str) -> str:
+            seen["job_id"] = job_id
+            return f"status:{job_id}"
+
+    import kortravelgeo.client as client_mod
+
+    monkeypatch.setattr(launch_mod, "scratch_database_dsn", fake_scratch_dsn)
+    monkeypatch.setattr(launch_mod, "create_async_engine", fake_create_engine)
+    monkeypatch.setattr(client_mod, "AsyncAddressClient", _FakeClient)
+
+    result = await launch_mod.blue_green_load_status(
+        Settings(_env_file=None), "kor_travel_geo_fullload_e2e", "batch-bg-1"
+    )
+
+    assert result == "status:batch-bg-1"
+    assert seen["job_id"] == "batch-bg-1"
+    assert seen["dsn"].endswith("##kor_travel_geo_fullload_e2e")  # bound to scratch DB
+    assert isinstance(seen["engine"], _FakeEngine)  # NOT the serving engine
+    assert disposed == [True]  # scratch engine always disposed
