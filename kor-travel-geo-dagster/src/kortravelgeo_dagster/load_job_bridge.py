@@ -71,7 +71,8 @@ async def execute_load_job(
     a :class:`LoadJobExecutor` is built from ``engine``.
     """
 
-    executor = executor or LoadJobExecutor(engine, lease_ttl_seconds=lease_ttl_seconds or 300.0)
+    ttl = lease_ttl_seconds or 300.0
+    executor = executor or LoadJobExecutor(engine, lease_ttl_seconds=ttl)
     await executor.adopt_dagster(job_id, orchestrator_run_id, ttl_seconds=lease_ttl_seconds)
     cancel_event = asyncio.Event()
 
@@ -87,6 +88,7 @@ async def execute_load_job(
     poll = asyncio.create_task(
         _poll_cancel(executor, job_id, cancel_event, cancel_poll_seconds)
     )
+    heartbeat = asyncio.create_task(_renew_lease_heartbeat(executor, job_id, ttl))
     try:
         await progress(progress=0.01, stage="running", message="job started")
         await leaf(cancel_event, progress)
@@ -100,8 +102,11 @@ async def execute_load_job(
         await executor.mark_done(job_id)
     finally:
         poll.cancel()
+        heartbeat.cancel()
         with suppress(asyncio.CancelledError):
             await poll
+        with suppress(asyncio.CancelledError):
+            await heartbeat
 
 
 async def _poll_cancel(
@@ -121,3 +126,24 @@ async def _poll_cancel(
             cancel_event.set()
             return
         await asyncio.sleep(interval)
+
+
+async def _renew_lease_heartbeat(
+    executor: LoadJobExecutor,
+    job_id: str,
+    ttl_seconds: float,
+) -> None:
+    """Renew the ``load_jobs`` lease independently of the leaf's progress emission.
+
+    The ``progress`` closure renews the lease, but a leaf can stay inside one long
+    synchronous phase for minutes without emitting progress — e.g. ``pg_restore``'s
+    data-load / index-build, or a full-load COPY. Without an independent heartbeat the
+    lease (``ttl_seconds``) expires and the orphan reconciler kills a perfectly healthy
+    run (the T-290i restore failure mode). Renew at ~1/3 the TTL and swallow transient
+    write errors so a blip never tears down the run.
+    """
+    interval = ttl_seconds / 3.0
+    while True:
+        await asyncio.sleep(interval)
+        with suppress(Exception):
+            await executor.renew_lease(job_id, ttl_seconds=ttl_seconds)

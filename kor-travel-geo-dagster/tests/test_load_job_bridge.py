@@ -154,3 +154,29 @@ async def test_bridge_adopt_failure_does_not_run_leaf_or_mark_terminal() -> None
 
     assert leaf_called is False
     assert ex.kinds() == ["adopt"]
+
+
+@pytest.mark.asyncio
+async def test_bridge_heartbeat_renews_lease_without_progress() -> None:
+    # A leaf that runs a while WITHOUT emitting progress (e.g. pg_restore's long
+    # data-load phase) must still keep the lease renewed via the independent heartbeat,
+    # or the orphan reconciler kills a healthy run (the T-290i restore failure mode).
+    ex = _FakeExecutor()
+
+    async def leaf(cancel_event, progress):
+        await asyncio.sleep(0.35)  # no progress() calls -> only the heartbeat renews
+
+    await execute_load_job(
+        job_id="j1",
+        orchestrator_run_id="r",
+        engine=object(),  # type: ignore[arg-type]
+        leaf=leaf,
+        executor=ex,  # type: ignore[arg-type]
+        cancel_poll_seconds=1.0,
+        lease_ttl_seconds=0.3,  # heartbeat interval = ttl/3 = 0.1s
+    )
+
+    renews = [c for c in ex.calls if c[0] == "renew"]
+    # 1 from the initial progress(0.01) + >=2 heartbeat renews over ~0.35s.
+    assert len(renews) >= 3
+    assert "done" in ex.kinds()
