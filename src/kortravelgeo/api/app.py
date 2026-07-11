@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from kortravelgeo.api import _jobs
+from kortravelgeo.api._full_load_launch import submit_full_load_batch
 from kortravelgeo.api.admission import (
     AdmissionController,
     admission_scope_setting_name,
@@ -832,7 +833,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             stage="full_load_batch_enqueue",
             message="source rebuild materialized; enqueueing full_load_batch",
         )
-        batch_job_id = await queue.enqueue_batch(batch_payload)
+        batch_job_id = await submit_full_load_batch(engine, settings, batch_payload, queue=queue)
         if control_job_id is not None:
             await queue.link_job_to_batch(control_job_id, batch_job_id)
         await client.record_rebuild_enqueued(

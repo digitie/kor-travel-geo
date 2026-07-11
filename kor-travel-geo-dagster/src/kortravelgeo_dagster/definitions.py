@@ -20,6 +20,7 @@ from .backup import BACKUP_JOBS, BACKUP_SCHEDULES, BACKUP_SENSORS
 from .backup_execute import DB_BACKUP_JOBS
 from .backup_maintenance import BACKUP_MAINTENANCE_JOBS, BACKUP_MAINTENANCE_SCHEDULES
 from .db_restore_execute import DB_RESTORE_JOBS
+from .full_load_execute import FULL_LOAD_JOBS
 from .mv import MV_REFRESH_JOBS
 from .resources import admin_api_resource, client_resource, rustfs_resource, settings_resource
 
@@ -74,6 +75,7 @@ defs = Definitions(
             *BACKUP_JOBS,
             *DB_BACKUP_JOBS,
             *DB_RESTORE_JOBS,
+            *FULL_LOAD_JOBS,
             *BACKUP_MAINTENANCE_JOBS,
         ],
     ),

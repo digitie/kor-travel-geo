@@ -371,12 +371,23 @@ def test_insert_load_batch_preserves_child_queue_order() -> None:
     source = inspect.getsource(admin_repo.AdminRepository.insert_load_batch)
 
     assert "enumerate(children)" in source
-    assert "payload_summary, created_at" in source
+    # T-290j: the child column list now carries executor between payload_summary/created_at.
+    assert "payload_summary, executor, created_at" in source
     assert (
         "clock_timestamp() + (CAST(:child_order AS integer) * interval '1 microsecond')"
         in source
     )
     assert '"child_order": index' in source
+
+
+def test_insert_load_batch_stamps_executor_and_dagster_root_is_queued() -> None:
+    # T-290j: the executor is stamped on the root + every child; a dagster batch root starts
+    # 'queued' so the Dagster op can adopt it, an in-process root stays 'running'.
+    source = inspect.getsource(admin_repo.AdminRepository.insert_load_batch)
+
+    assert 'executor: str = "api_in_process"' in source
+    assert 'root_state = "queued" if executor == "dagster" else "running"' in source
+    assert '"executor": executor' in source
 
 
 @pytest.mark.asyncio
