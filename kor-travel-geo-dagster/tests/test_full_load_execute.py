@@ -77,6 +77,66 @@ async def test_run_full_load_batch_op_wires_bridge_and_drives_batch_leaf(
 
 
 @pytest.mark.asyncio
+async def test_run_full_load_batch_op_target_database_uses_disposable_scratch_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Staging: a target_database routes the bridge AND leaf to a scratch engine, disposed after."""
+    captured: dict[str, Any] = {}
+    disposed = {"count": 0}
+
+    class _FakeScratchEngine:
+        async def dispose(self) -> None:
+            disposed["count"] += 1
+
+    scratch_engine = _FakeScratchEngine()
+
+    def fake_scratch_dsn(pg_dsn, db_name):
+        captured["scratch_dsn_args"] = (pg_dsn, db_name)
+        return f"scratch-dsn::{db_name}"
+
+    def fake_create_engine(dsn):
+        captured["create_engine_dsn"] = dsn
+        return scratch_engine
+
+    async def fake_execute_load_job(*, job_id, orchestrator_run_id, engine, leaf, **kwargs):
+        captured["engine"] = engine
+        await leaf(asyncio.Event(), _noop_progress)
+
+    async def fake_run_full_load_batch(engine, **kwargs):
+        captured["leaf_engine"] = engine
+
+    monkeypatch.setattr(full_load_execute, "scratch_database_dsn", fake_scratch_dsn)
+    monkeypatch.setattr(full_load_execute, "create_async_engine", fake_create_engine)
+    monkeypatch.setattr(full_load_execute, "execute_load_job", fake_execute_load_job)
+    monkeypatch.setattr(full_load_execute, "run_full_load_batch", fake_run_full_load_batch)
+
+    serving_engine = object()
+    settings = Settings(_env_file=None)
+
+    with build_op_context(
+        resources={"client": _FakeClient(serving_engine), "settings": settings},
+        op_config={
+            "job_id": "batch-2",
+            "payload": {
+                "target_database": "kor_travel_geo_fullload_e2e",
+                "payloads": {"juso_text_load": {}},
+            },
+        },
+    ) as ctx:
+        result = await full_load_execute.run_full_load_batch_op(ctx)
+
+    assert result == {"job_id": "batch-2"}
+    # scratch engine drives BOTH the bridge and the DAG leaf; serving engine never used
+    assert captured["engine"] is scratch_engine
+    assert captured["leaf_engine"] is scratch_engine
+    assert captured["engine"] is not serving_engine
+    assert captured["scratch_dsn_args"] == (settings.pg_dsn, "kor_travel_geo_fullload_e2e")
+    assert captured["create_engine_dsn"] == "scratch-dsn::kor_travel_geo_fullload_e2e"
+    # the per-run scratch engine is disposed exactly once
+    assert disposed["count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_run_source_load_op_wires_bridge_and_drives_loader_leaf(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

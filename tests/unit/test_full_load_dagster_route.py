@@ -107,6 +107,65 @@ async def test_launch_full_load_batch_inserts_dagster_batch_and_launches(
     assert launched["tags"] == {"kor_travel_geo.job_id": "batch-dag-1"}
 
 
+class _FakeScratchEngine:
+    disposed: ClassVar[bool] = False
+
+    async def dispose(self) -> None:
+        _FakeScratchEngine.disposed = True
+
+
+@pytest.mark.asyncio
+async def test_launch_full_load_batch_target_database_routes_rows_to_scratch_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Blue-green staging: the root row is inserted via a scratch engine (never serving)."""
+    _FakeScratchEngine.disposed = False
+    events: dict[str, Any] = {}
+    engines_seen: list[object] = []
+    scratch_engine = _FakeScratchEngine()
+
+    async def fake_ensure(settings, db_name):
+        events["ensured"] = db_name
+
+    def fake_scratch_dsn(pg_dsn, db_name):
+        return f"scratch-dsn::{db_name}"
+
+    def fake_create_engine(dsn):
+        events["engine_dsn"] = dsn
+        return scratch_engine
+
+    class _RecordingRepo(_FakeRepo):
+        def __init__(self, engine: object) -> None:
+            engines_seen.append(engine)
+
+    async def fake_launch(settings, *, job_name, run_config, tags):
+        events["run_config"] = run_config
+        return "run-fl-scratch"
+
+    monkeypatch.setattr(launch_mod, "ensure_scratch_database", fake_ensure)
+    monkeypatch.setattr(launch_mod, "scratch_database_dsn", fake_scratch_dsn)
+    monkeypatch.setattr(launch_mod, "create_async_engine", fake_create_engine)
+    monkeypatch.setattr(launch_mod, "AdminRepository", _RecordingRepo)
+    monkeypatch.setattr(launch_mod, "launch_dagster_run", fake_launch)
+
+    serving_engine = object()
+    payload = {**_VALID_BATCH_PAYLOAD, "target_database": "kor_travel_geo_fullload_e2e"}
+    batch_id = await launch_mod.launch_full_load_batch_dagster_run(
+        serving_engine, Settings(_env_file=None), payload
+    )
+
+    assert batch_id == "batch-dag-1"
+    assert events["ensured"] == "kor_travel_geo_fullload_e2e"
+    assert events["engine_dsn"] == "scratch-dsn::kor_travel_geo_fullload_e2e"
+    # the root row was written via the SCRATCH engine, never the serving one, and it is disposed
+    assert scratch_engine in engines_seen
+    assert serving_engine not in engines_seen
+    assert _FakeScratchEngine.disposed is True
+    # the op still receives target_database (its own engine-resolution reads it)
+    op_payload = events["run_config"]["ops"]["run_full_load_batch"]["config"]["payload"]
+    assert op_payload["target_database"] == "kor_travel_geo_fullload_e2e"
+
+
 @pytest.mark.asyncio
 async def test_launch_full_load_batch_failure_fails_root_cancels_children_and_502(
     monkeypatch: pytest.MonkeyPatch,
