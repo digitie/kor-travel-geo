@@ -22,6 +22,11 @@ from kortravelgeo.api._dagster_client import (
     DagsterUrlConfigurationError,
     launch_dagster_run,
 )
+from kortravelgeo.api._full_load_launch import (
+    FULL_LOAD_BATCH_KIND,
+    launch_source_load_dagster_run,
+    submit_full_load_batch,
+)
 from kortravelgeo.api._jobs import JobQueue
 from kortravelgeo.api.deps import get_client, get_job_queue
 from kortravelgeo.api.security import (
@@ -1834,15 +1839,26 @@ async def submit_load(
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    if req.kind == "full_load_batch":
-        job_id = await queue.enqueue_batch(req.payload)
+    settings = get_settings()
+    engine = client._engine()
+    if req.kind == FULL_LOAD_BATCH_KIND:
+        job_id = await submit_full_load_batch(engine, settings, req.payload, queue=queue)
+        executor = (
+            "dagster"
+            if FULL_LOAD_BATCH_KIND in settings.dagster_executed_job_kinds
+            else "api_in_process"
+        )
+    elif req.kind in settings.dagster_executed_job_kinds:
+        job_id = await launch_source_load_dagster_run(engine, settings, req.kind, req.payload)
+        executor = "dagster"
     else:
         job_id = await queue.enqueue(req.kind, req.payload)
+        executor = "api_in_process"
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="load.submit",
         outcome="started",
-        payload={"kind": req.kind, "payload": req.payload},
+        payload={"kind": req.kind, "payload": req.payload, "executor": executor},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,

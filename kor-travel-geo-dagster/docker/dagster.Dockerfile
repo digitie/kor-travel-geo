@@ -4,11 +4,13 @@
 # dagster package so it can COPY both the main lib (pyproject/src) and the code-location
 # package (kor-travel-geo-dagster/).
 #
-# The kortravelgeo_dagster code location consumes only the BASE kortravelgeo library
-# (client / settings / loaders.postload.refresh_mv are GDAL-free — verified: loaders
-# imports no osgeo). So this image stays on python:3.12-slim and does NOT install GDAL,
-# unlike the API image (docker/api.Dockerfile). Keep it that way — do not add the
-# [loaders]/[api] extras here unless a future op actually needs them.
+# T-290j moved loader / full_load_batch EXECUTION into Dagster ops (run_source_loader /
+# run_full_load_batch call the main-lib loaders). Those leaves — shp/navi/sppn — use GDAL
+# (osgeo) through the `[loaders]` extra, so this image now installs system GDAL and the
+# extra, exactly like the API image (docker/api.Dockerfile). The gdal python wheel is
+# version-pinned to the libgdal in this image (`gdal==$(gdal-config --version)`); builder
+# and runtime install libgdal from the same debian release so the compiled `_gdal` C
+# extension finds a matching shared library at import.
 #
 # One image, two services: the webserver uses the default CMD; the daemon overrides
 # `command:` in compose (`dagster-daemon run -m kortravelgeo_dagster.definitions`).
@@ -24,18 +26,34 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# build-essential + gdal-bin/libgdal-dev for the `[loaders]` extra (osgeo builds against
+# the libgdal headers here; the version is pinned to gdal-config below).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl git \
+    && apt-get install -y --no-install-recommends \
+      build-essential curl git gdal-bin libgdal-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Main library sources (base install, no extras) + the Dagster code-location package.
+# Main library sources (with the [loaders] extra) + the Dagster code-location package.
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY sql ./sql
 COPY kor-travel-geo-dagster ./kor-travel-geo-dagster
 
 RUN python -m pip install --upgrade pip \
-    && python -m pip install --prefix=/install . ./kor-travel-geo-dagster
+    && GDAL_VERSION="$(gdal-config --version)" \
+    && python -m pip install --prefix=/install "gdal==${GDAL_VERSION}" \
+    && python -m pip install --prefix=/install ".[loaders]" ./kor-travel-geo-dagster \
+    && PYTHONPATH="/install/lib/python3.12/site-packages" python - <<'PY'
+import subprocess
+from osgeo import gdal
+
+lib_version = subprocess.check_output(["gdal-config", "--version"], text=True).strip()
+python_version = gdal.VersionInfo("--version")
+print(f"libgdal={lib_version}")
+print(f"python_gdal={python_version}")
+if lib_version not in python_version:
+    raise SystemExit(f"GDAL version mismatch: lib={lib_version}, python={python_version}")
+PY
 
 FROM python:3.12-slim AS runtime
 
@@ -48,12 +66,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# T-290g: the db_backup op shells out to pg_dump + zstd (run_backup_job), so this runtime
-# needs the PostgreSQL 16 client (matches the kor_travel_geo server) and zstd. Installed
-# from the PGDG apt repo so the client major version tracks the server exactly. (The
-# refresh_mv / on-ramp ops stay GDAL-free — no [loaders]/[api] extras here.)
+# Runtime system deps:
+#  - gdal-bin pulls the libgdal shared library the copied osgeo C extension links against
+#    (same debian release as the builder, so the libgdal major matches the built wheel).
+#  - the db_backup/db_restore ops shell out to pg_dump/pg_restore + zstd (run_backup_job /
+#    run_restore_job), so the PostgreSQL 16 client (matches the kor_travel_geo server) and
+#    zstd are installed from the PGDG apt repo.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && apt-get install -y --no-install-recommends ca-certificates curl gnupg gdal-bin \
     && install -d /usr/share/postgresql-common/pgdg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \

@@ -1492,11 +1492,22 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
         payload: dict[str, Any],
         children: Sequence[tuple[str, dict[str, Any]]],
         job_id: str | None = None,
+        executor: str = "api_in_process",
     ) -> LoadJobRow:
-        """Create a batch root row and first-stage child jobs in one transaction."""
+        """Create a batch root row and first-stage child jobs in one transaction.
+
+        ``executor`` is stamped on the root and every child (T-290j). For the default
+        ``api_in_process`` the root starts ``running`` (a tracking row the in-process drain
+        never claims) — byte-for-byte the historical behaviour. For ``dagster`` the root
+        starts ``queued`` so the Dagster full-load op can *adopt* it (``queued`` → ``running``
+        + run id + lease) through the load-job bridge, and every child carries
+        ``executor='dagster'`` so the in-process drain — which claims only
+        ``api_in_process`` rows — never double-executes them.
+        """
 
         root_job_id = job_id or f"batch_{uuid4().hex}"
         root_summary = _summarize_payload(payload)
+        root_state = "queued" if executor == "dagster" else "running"
         async with self.engine.begin() as conn:
             root = (
                 await conn.execute(
@@ -1504,10 +1515,11 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                         """
 INSERT INTO load_jobs
   (job_id, kind, payload, state, load_batch_id, progress, current_stage,
-   payload_summary, started_at, heartbeat_at)
+   payload_summary, executor, started_at, heartbeat_at)
 VALUES
-  (:job_id, 'full_load_batch', :payload, 'running', :load_batch_id, 0.0,
-   'source_loads', :payload_summary, now(), now())
+  (:job_id, 'full_load_batch', :payload, :root_state, :load_batch_id, 0.0,
+   'source_loads', :payload_summary, :executor,
+   CASE WHEN :root_state = 'running' THEN now() ELSE NULL END, now())
 RETURNING job_id, kind, state, load_batch_id, parent_job_id,
           progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
@@ -1520,6 +1532,8 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                         "payload": payload,
                         "load_batch_id": root_job_id,
                         "payload_summary": root_summary,
+                        "root_state": root_state,
+                        "executor": executor,
                     },
                 )
             ).mappings().one()
@@ -1529,10 +1543,10 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                         """
 INSERT INTO load_jobs
   (job_id, kind, payload, state, load_batch_id, parent_job_id,
-   payload_summary, created_at)
+   payload_summary, executor, created_at)
 VALUES
   (:job_id, :kind, :payload, 'queued', :load_batch_id, :parent_job_id,
-   :payload_summary,
+   :payload_summary, :executor,
    clock_timestamp() + (CAST(:child_order AS integer) * interval '1 microsecond'))
 """,
                         "payload",
@@ -1545,10 +1559,40 @@ VALUES
                         "load_batch_id": root_job_id,
                         "parent_job_id": root_job_id,
                         "payload_summary": _summarize_payload(child_payload),
+                        "executor": executor,
                         "child_order": index,
                     },
                 )
         return map_load_job(dict(root))
+
+    async def cancel_queued_batch_children(self, batch_id: str) -> None:
+        """Cancel a batch's not-yet-started children after the batch fails.
+
+        Only ``queued`` children are converged (a running/done child is left intact),
+        mirroring the in-process ``JobQueue`` batch-failure fan-out. Shared by the Dagster
+        batch orchestrator (a child failed mid-DAG) and the API launch-failure cleanup (the
+        Dagster run could not be launched), so a failed batch never leaves child rows no
+        worker will ever claim.
+        """
+
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+UPDATE load_jobs
+   SET state = 'cancelled',
+       current_stage = 'cancelled',
+       error_message = COALESCE(error_message || E'\n', '')
+                       || 'cancelled after batch failure',
+       finished_at = now(),
+       heartbeat_at = now()
+ WHERE load_batch_id = :batch_id
+   AND job_id <> :batch_id
+   AND state = 'queued'
+"""
+                ),
+                {"batch_id": batch_id},
+            )
 
     async def cancel_load_job(self, job_id: str) -> LoadJobRow | None:
         async with self.engine.begin() as conn:
