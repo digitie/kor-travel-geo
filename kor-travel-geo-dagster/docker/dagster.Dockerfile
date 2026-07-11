@@ -39,11 +39,19 @@ COPY src ./src
 COPY sql ./sql
 COPY kor-travel-geo-dagster ./kor-travel-geo-dagster
 
+# One pip resolve: the explicit gdal==<libgdal> pin constrains the [loaders] extra's
+# `gdal>=3.8` to the version matching this image's libgdal. Installing the pin in a SEPARATE
+# `pip install` first does not work with --prefix (pip does not see the /install-only gdal as
+# already-satisfied, so it re-resolves `gdal>=3.8` to the newest sdist and fails the libgdal
+# floor) — they must be in the same invocation.
 RUN python -m pip install --upgrade pip \
     && GDAL_VERSION="$(gdal-config --version)" \
-    && python -m pip install --prefix=/install "gdal==${GDAL_VERSION}" \
-    && python -m pip install --prefix=/install ".[loaders]" ./kor-travel-geo-dagster \
-    && PYTHONPATH="/install/lib/python3.12/site-packages" python - <<'PY'
+    && python -m pip install --prefix=/install \
+         "gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster
+
+# Fail the build on a GDAL lib/binding version skew (belt-and-suspenders; same check the API
+# image runs). osgeo is resolved from the --prefix install tree.
+RUN PYTHONPATH="/install/lib/python3.12/site-packages" python - <<'PY'
 import subprocess
 from osgeo import gdal
 
