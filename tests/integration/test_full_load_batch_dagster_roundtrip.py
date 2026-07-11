@@ -42,7 +42,7 @@ _BATCH_PAYLOAD: dict[str, Any] = {
 }
 
 
-async def _fresh_engine():  # noqa: ANN202 - AsyncEngine, kept unannotated to avoid an import
+async def _fresh_engine():  # returns an AsyncEngine, unannotated to avoid the import
     dsn = os.getenv("KTG_TEST_PG_DSN")
     if not dsn:
         pytest.skip("set KTG_TEST_PG_DSN to a disposable PostgreSQL/PostGIS scratch DB")
@@ -127,7 +127,9 @@ async def test_dagster_batch_roundtrip_converges_all_children(
 
         assert calls.sources == ["juso_text_load", "locsum_load"]
         assert len(calls.mv) == 1
-        after = {r["kind"]: r for r in await _rows(engine, root.job_id) if r["job_id"] != root.job_id}
+        after = {
+            r["kind"]: r for r in await _rows(engine, root.job_id) if r["job_id"] != root.job_id
+        }
         assert after["juso_text_load"]["state"] == "done"
         assert after["locsum_load"]["state"] == "done"
         assert after["consistency_check"]["state"] == "done"
