@@ -4,7 +4,6 @@ import inspect
 
 import pytest
 
-from kortravelgeo.api import app as api_app
 from kortravelgeo.cli import main as cli_main
 from kortravelgeo.infra.concurrency import (
     AdvisoryLockKey,

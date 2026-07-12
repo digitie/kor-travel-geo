@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import inspect
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
-from kortravelgeo.api import app as api_app
 from kortravelgeo.core.consistency_definitions import CASE_DEFINITIONS
 from kortravelgeo.core.normalize import AddrParts
 from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
