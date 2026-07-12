@@ -8,8 +8,6 @@ from typing import Any
 import pytest
 
 from kortravelgeo.api import app as api_app
-from kortravelgeo.infra.load_job_executor import LoadJobExecutor
-from kortravelgeo.loaders import batch_dag
 from kortravelgeo.core.consistency_definitions import CASE_DEFINITIONS
 from kortravelgeo.core.normalize import AddrParts
 from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
@@ -26,7 +24,8 @@ from kortravelgeo.infra import (
     zip_repo,
 )
 from kortravelgeo.infra import sql as infra_sql
-from kortravelgeo.loaders import consistency
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor
+from kortravelgeo.loaders import batch_dag, consistency
 from kortravelgeo.loaders.consistency import CASE_SQL, DEFAULT_CASES
 
 

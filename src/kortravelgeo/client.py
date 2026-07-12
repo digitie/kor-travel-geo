@@ -130,7 +130,6 @@ from .dto.v2 import (
 from .dto.zipcode import ZipcodeResponse
 from .exceptions import InvalidAddressError, NotFoundError
 from .infra.admin_repo import AdminRepository
-from .infra.batch import batch_children
 from .infra.cache import GeoCacheRepository, make_cache_key
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
