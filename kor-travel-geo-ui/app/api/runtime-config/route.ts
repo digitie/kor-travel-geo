@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { recordUiRequest } from "@/lib/metrics";
-import { resolveVWorldApiKey } from "@/lib/runtime-config";
+import { resolveDagsterPublicUrl, resolveVWorldApiKey } from "@/lib/runtime-config";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,8 @@ export function GET() {
   try {
     const response = NextResponse.json(
       {
-        vworldApiKey: resolveVWorldApiKey()
+        vworldApiKey: resolveVWorldApiKey(),
+        dagsterUrl: resolveDagsterPublicUrl()
       },
       {
         headers: {
