@@ -11,7 +11,6 @@ from typing import Any, cast
 import pytest
 from starlette.requests import Request
 
-from kortravelgeo.api import app as api_app
 from kortravelgeo.api.routers import admin
 from kortravelgeo.api.security import ROLE_REBUILD_OPERATOR, RequestContext
 from kortravelgeo.client import AsyncAddressClient
@@ -511,88 +510,13 @@ async def test_rebuild_route_launches_dagster_control_run(
     assert client.audit["job_id"] == "job-control"
 
 
-@pytest.mark.asyncio
-async def test_source_rebuild_control_job_fails_before_batch_on_integrity_gate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class QueueCapture:
-        def __init__(self) -> None:
-            self.handlers: dict[str, Any] = {}
-            self.enqueue_batch_called = False
-
-        def register(self, kind: str, handler: Any) -> None:
-            self.handlers[kind] = handler
-
-        async def enqueue_batch(self, _payload: dict[str, Any]) -> str:
-            self.enqueue_batch_called = True
-            raise AssertionError("integrity failure must not enqueue full_load_batch")
-
-    class NoopLock:
-        async def __aenter__(self) -> None:
-            return None
-
-        async def __aexit__(self, *_args: object) -> bool:
-            return False
-
-    async def fake_prepare(
-        self: AsyncAddressClient,
-        source_match_set_id: str,
-        **_kwargs: Any,
-    ) -> tuple[SourceRebuildDbResponse, None]:
-        del self
-        return (
-            SourceRebuildDbResponse(
-                source_match_set_id=source_match_set_id,
-                enqueued=False,
-                integrity_gate_ok=False,
-                failed_group_ids=("g1",),
-                message="pre-load integrity gate failed; groups quarantined",
-            ),
-            None,
-        )
-
-    audit_calls: list[dict[str, Any]] = []
-
-    async def fake_record_audit_event(self: AsyncAddressClient, **kwargs: Any) -> None:
-        del self
-        audit_calls.append(kwargs)
-
-    monkeypatch.setattr(api_app, "cross_process_lock", lambda *_args, **_kwargs: NoopLock())
-    monkeypatch.setattr(
-        AsyncAddressClient,
-        "prepare_source_match_set_rebuild",
-        fake_prepare,
-    )
-    monkeypatch.setattr(
-        AsyncAddressClient,
-        "record_audit_event",
-        fake_record_audit_event,
-    )
-
-    queue = QueueCapture()
-    api_app._register_default_handlers(cast("Any", queue), cast("Any", object()))
-    progress_events: list[dict[str, Any]] = []
-
-    async def record_progress(**kwargs: Any) -> None:
-        progress_events.append(kwargs)
-
-    with pytest.raises(RuntimeError, match="integrity gate failed"):
-        await queue.handlers["source_rebuild_db"](
-            "job-control",
-            {
-                "source_match_set_id": "ms-1",
-                "actor": "tester",
-            },
-            asyncio.Event(),
-            record_progress,
-        )
-
-    assert queue.enqueue_batch_called is False
-    # audit outcome is the canonical lifecycle value ("failed"); the integrity-gate specifics
-    # stay on the action / progress stage / payload (T-290 audit-outcome type-hardening).
-    assert audit_calls[0]["outcome"] == "failed"
-    assert audit_calls[0]["payload"] == {"failed_group_ids": ["g1"]}
-    assert any(event.get("stage") == "integrity_gate_failed" for event in progress_events)
+# (test_source_rebuild_control_job_fails_before_batch_on_integrity_gate removed in T-290k PR4:
+# the in-process source_rebuild_db handler is retired. The same integrity-gate behavior — a
+# prepare_source_match_set_rebuild that returns no batch_payload fails the rebuild BEFORE any
+# downstream full_load_batch launch — is now covered against the Dagster op in
+# kor-travel-geo-dagster/tests/test_source_rebuild_execute.py
+# ::test_source_rebuild_op_integrity_gate_failure_audits_and_raises. The backend unit suite
+# cannot import kortravelgeo_dagster across the package boundary.)
 
 
 def _plan(

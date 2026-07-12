@@ -4,20 +4,13 @@
 row is converged to ``cancelled`` for every executor, then the intent is mirrored onto the
 long-running worker so we never leave a one-sided cancel:
 
-* ``executor='dagster'`` → a real Dagster ``terminateRun`` via the injected
-  :class:`~kortravelgeo.core.job_recovery.OrchestratorCancelHook`; the reconciler tick converges
-  any residual gap if the terminate is best-effort-dropped.
-* ``executor='api_in_process'`` → the in-process ``cancel_event`` is set through the optional
-  ``in_process_cancel`` callback the still-present :class:`~kortravelgeo.api._jobs.JobQueue`
-  provides during the T-290k transition (PR4 removes the in-process path and this callback).
-
-Replaces ``JobQueue.cancel`` at the endpoint layer without depending on the drain, so PR4 can
-delete the queue while cancel keeps working.
+``executor='dagster'`` → a real Dagster ``terminateRun`` via the injected
+:class:`~kortravelgeo.core.job_recovery.OrchestratorCancelHook`; the reconciler tick converges
+any residual gap if the terminate is best-effort-dropped. All execution is Dagster after T-290k,
+so there is no in-process cancel path — this is the sole endpoint-layer cancel authority.
 """
 
 from __future__ import annotations
-
-from collections.abc import Callable
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -52,18 +45,15 @@ async def cancel_load_job_converged(
     job_id: str,
     *,
     orchestrator_cancel: OrchestratorCancelHook,
-    in_process_cancel: Callable[[str], bool] | None = None,
 ) -> None:
-    """Cancel ``job_id`` and propagate the intent to whichever executor runs it.
+    """Cancel ``job_id`` and propagate the intent to its Dagster run.
 
-    ``in_process_cancel`` (from the transitional JobQueue) sets the local cancel event for
-    ``api_in_process`` rows; ``orchestrator_cancel`` issues ``terminateRun`` for ``dagster``
-    rows. Both the row and its queued batch children converge to ``cancelled`` regardless.
+    ``orchestrator_cancel`` issues ``terminateRun`` for ``dagster`` rows; both the row and its
+    queued batch children converge to ``cancelled`` regardless. All execution is Dagster after
+    T-290k, so a row absent from ``load_jobs`` simply converges with no run to terminate.
     """
 
     executor, orchestrator_run_id = await _executor_ref(engine, job_id)
-    if executor == EXECUTOR_API_IN_PROCESS and in_process_cancel is not None:
-        in_process_cancel(job_id)
     repo = AdminRepository(engine)
     await repo.cancel_load_job(job_id)
     await repo.cancel_queued_batch_children(job_id)

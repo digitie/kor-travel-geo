@@ -21,12 +21,12 @@
 | ADR-003 | 응답 구조는 vworld와 호환되도록 유지한다 | [003-vworld-compatible-response.md](003-vworld-compatible-response.md) |
 | ADR-004 | ORM 위에 raw SQL Repository를 둔다 | [004-raw-sql-repository-over-orm.md](004-raw-sql-repository-over-orm.md) |
 | ADR-005 | 로더는 `ogr2ogr` 대신 GDAL Python binding을 쓴다 | [005-gdal-python-binding-loader.md](005-gdal-python-binding-loader.md) (partially superseded by ADR-012) |
-| ADR-006 | 적재 작업은 단일 인스턴스 in-process 큐로 직렬 처리한다 | [006-in-process-serial-load-queue.md](006-in-process-serial-load-queue.md) |
+| ADR-006 | 적재 작업은 단일 인스턴스 in-process 큐로 직렬 처리한다 _(superseded by ADR-066, T-290k)_ | [006-in-process-serial-load-queue.md](006-in-process-serial-load-queue.md) |
 | ADR-007 | `mv_geocode_target`은 건물당 대표 출입구 1건만 보유한다 | [007-mv-geocode-target-one-entrance-per-building.md](007-mv-geocode-target-one-entrance-per-building.md) |
 | ADR-008 | 로더 의존성은 시스템 GDAL과 동일 버전으로 핀한다 | → 개발 규칙 ([SKILL.md §4](../../SKILL.md) #15) |
 | ADR-009 | 우편번호는 epost OpenAPI(15000302) ZIP을 분기 1회 전량 적재한다 | [009-epost-zip-quarterly-full-load.md](009-epost-zip-quarterly-full-load.md) |
 | ADR-010 | PNU 토지구분 매핑은 infra 레이어에서 조립한다 | [010-pnu-land-class-mapping-in-infra.md](010-pnu-land-class-mapping-in-infra.md) |
-| ADR-011 | 적재 작업 큐 상태는 `load_jobs` 테이블로 영속화한다 | [011-load-jobs-table-persistence.md](011-load-jobs-table-persistence.md) |
+| ADR-011 | 적재 작업 큐 상태는 `load_jobs` 테이블로 영속화한다 _(partially superseded by ADR-066, T-290k — 테이블 유지·실행만 은퇴)_ | [011-load-jobs-table-persistence.md](011-load-jobs-table-persistence.md) |
 | ADR-012 | 적재는 행안부 텍스트 정본 1차 + SHP polygon 보조 하이브리드 | [012-text-canonical-plus-shp-polygon-hybrid.md](012-text-canonical-plus-shp-polygon-hybrid.md) |
 | ADR-013 | 프론트엔드 UI는 내부망 전용, 애플리케이션 인증 없음 | [013-internal-only-ui-no-app-auth.md](013-internal-only-ui-no-app-auth.md) (superseded by ADR-064) |
 | ADR-014 | 기본 예외명은 `KorTravelGeoError`로 둔다 | → 개발 규칙 ([SKILL.md §4](../../SKILL.md) #16) |
