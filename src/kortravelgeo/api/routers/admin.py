@@ -17,11 +17,13 @@ import httpx
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, ORJSONResponse, StreamingResponse
 
+from kortravelgeo.api._cancel import cancel_load_job_converged
 from kortravelgeo.api._dagster_client import (
     DagsterLaunchError,
     DagsterUrlConfigurationError,
     launch_dagster_run,
 )
+from kortravelgeo.api._dagster_recovery import dagster_orchestrator_cancel
 from kortravelgeo.api._full_load_launch import (
     FULL_LOAD_BATCH_KIND,
     launch_source_load_dagster_run,
@@ -2482,7 +2484,15 @@ async def cancel_load(
     client: AsyncAddressClient = Depends(get_client),
     queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    await queue.cancel(job_id)
+    # Queue-free converged cancel (T-290k §2g): converge the load_jobs row + real Dagster
+    # terminateRun for executor='dagster' rows; the transitional queue still stops in-flight
+    # api_in_process drain jobs via signal_in_process_cancel until PR4 removes the drain.
+    await cancel_load_job_converged(
+        client._engine(),
+        job_id,
+        orchestrator_cancel=dagster_orchestrator_cancel(get_settings()),
+        in_process_cancel=queue.signal_in_process_cancel,
+    )
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="load.cancel",

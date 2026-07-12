@@ -16,7 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from kortravelgeo.api import _jobs
+from kortravelgeo.api._dagster_recovery import (
+    dagster_liveness_probe,
+    dagster_orchestrator_cancel,
+)
 from kortravelgeo.api._full_load_launch import submit_full_load_batch
+from kortravelgeo.api._reconciler import DagsterJobReconciler
 from kortravelgeo.api.admission import (
     AdmissionController,
     admission_scope_setting_name,
@@ -34,6 +39,7 @@ from kortravelgeo.infra.concurrency import (
     ConcurrentExecutionError,
     cross_process_lock,
 )
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor
 from kortravelgeo.infra.metrics import (
     PROMETHEUS_CONTENT_TYPE,
     record_api_admission_finished,
@@ -103,6 +109,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _register_default_handlers(queue, client.engine)
     app.state.job_queue = queue
     await queue.recover_startup()
+    # Executor-aware Dagster reconciler (T-290k §2h/§3) — owns the dagster half of startup
+    # recovery (queue.recover_startup now does in-process only) plus a periodic convergence
+    # tick, using the REAL GraphQL run-status probe + terminateRun cancel seam.
+    reconciler = DagsterJobReconciler(
+        client.engine,
+        executor=LoadJobExecutor(
+            client.engine, lease_ttl_seconds=get_settings().dagster_lease_ttl_seconds
+        ),
+        liveness_probe=dagster_liveness_probe(get_settings()),
+        orchestrator_cancel=dagster_orchestrator_cancel(get_settings()),
+    )
+    app.state.job_reconciler = reconciler
+    if get_settings().dagster_reconcile_on_startup:
+        await reconciler.reconcile_once()
+    reconciler_task = _start_dagster_reconciler_scheduler(reconciler, get_settings())
+    app.state.dagster_reconciler_task = reconciler_task
     table_stats_task = _start_table_stats_capture_scheduler(client.engine, get_settings())
     app.state.table_stats_capture_task = table_stats_task
     pg_stat_task = _start_pg_stat_statements_capture_scheduler(client.engine, get_settings())
@@ -120,6 +142,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         for task in (
+            reconciler_task,
             table_stats_task,
             pg_stat_task,
             runtime_warm_task,
@@ -621,6 +644,32 @@ async def _capture_pg_stat_statements_once(engine: AsyncEngine, settings: Settin
             "retention_days": settings.ops_pg_stat_statements_retention_days,
         },
     )
+
+
+def _start_dagster_reconciler_scheduler(
+    reconciler: DagsterJobReconciler,
+    settings: Settings,
+) -> asyncio.Task[None] | None:
+    """Periodic executor-aware reconciler tick (T-290k §3). ``interval <= 0`` disables it
+    (startup-only). Each tick converges ``executor='dagster'`` rows against their real Dagster
+    run state so a job whose lease looks alive but whose run died is failed between restarts."""
+
+    if settings.dagster_reconcile_interval_seconds <= 0:
+        return None
+    return asyncio.create_task(_run_dagster_reconciler_scheduler(reconciler, settings))
+
+
+async def _run_dagster_reconciler_scheduler(
+    reconciler: DagsterJobReconciler,
+    settings: Settings,
+) -> None:
+    interval_s = settings.dagster_reconcile_interval_seconds
+    while interval_s > 0:
+        await asyncio.sleep(interval_s)
+        try:
+            await reconciler.reconcile_once()
+        except Exception:
+            _LOGGER.exception("dagster reconciler tick failed")
 
 
 def _start_runtime_warm_scheduler(

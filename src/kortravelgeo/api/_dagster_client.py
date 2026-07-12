@@ -14,6 +14,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
+from kortravelgeo.core.job_recovery import OrchestratorRunState
 from kortravelgeo.settings import Settings
 
 _ALLOWED_DAGSTER_SCHEMES = {"http", "https"}
@@ -26,6 +27,11 @@ class DagsterUrlConfigurationError(ValueError):
 class DagsterLaunchError(RuntimeError):
     """A Dagster ``launchRun`` mutation did not return a run id (config-invalid, not
     found, unauthorized, ...)."""
+
+
+class DagsterTerminateError(RuntimeError):
+    """A Dagster ``terminateRun`` mutation failed for a reason other than the run being
+    already gone (RunNotFound is treated as success — the run is terminal either way)."""
 
 
 @dataclass(frozen=True)
@@ -203,3 +209,132 @@ def _launch_error_message(result: dict[str, Any]) -> str:
         if messages:
             return "; ".join(messages)
     return "unknown launchRun error"
+
+
+_TERMINATE_RUN_MUTATION = """
+mutation TerminateRun($runId: String!) {
+  terminateRun(runId: $runId) {
+    __typename
+    ... on TerminateRunSuccess { run { runId } }
+    ... on TerminateRunFailure { message }
+    ... on RunNotFoundError { message }
+    ... on PythonError { message }
+    ... on UnauthorizedError { message }
+  }
+}
+"""
+
+
+async def terminate_run(
+    settings: Settings,
+    *,
+    run_id: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> None:
+    """Terminate a Dagster run via the GraphQL ``terminateRun`` mutation (T-290k §2g).
+
+    Closes the app→Dagster side of a cancel so ``load_jobs`` and the Dagster run never end
+    up one-sided (dagster-boundary §6 "한쪽만 취소된 상태를 만들지 않는다"). ``RunNotFound`` is
+    treated as success — a purged/absent run is already terminal. Raises
+    :class:`DagsterTerminateError` on a genuine failure and ``httpx.HTTPError`` on transport
+    errors; the caller (cancel hook / reconciler) treats those as best-effort and lets the
+    reconciler converge any residual divergence.
+    """
+
+    urls = _dagster_urls(settings)
+    request_json = {
+        "query": _TERMINATE_RUN_MUTATION,
+        "variables": {"runId": run_id},
+    }
+
+    async def _post(client: httpx.AsyncClient) -> None:
+        response = await client.post(urls.graphql_url, json=request_json)
+        response.raise_for_status()
+        _parse_terminate_run(response.json())
+
+    if http_client is not None:
+        await _post(http_client)
+        return
+    async with httpx.AsyncClient(timeout=settings.dagster_request_timeout_seconds) as client:
+        await _post(client)
+
+
+def _parse_terminate_run(payload: object) -> None:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    result = data.get("terminateRun") if isinstance(data, dict) else None
+    if not isinstance(result, dict):
+        raise DagsterTerminateError("terminateRun returned no result")
+    typename = result.get("__typename")
+    # Success, or the run is already gone/terminal — both leave no live Dagster run.
+    if typename in {"TerminateRunSuccess", "RunNotFoundError"}:
+        return
+    raise DagsterTerminateError(
+        f"terminateRun failed ({typename}): {_launch_error_message(result)}"
+    )
+
+
+#: Dagster ``RunStatus`` → normalized :class:`OrchestratorRunState`. Any transient/in-flight
+#: status (queued, starting, canceling, ...) maps to RUNNING so the reconciler keeps the job.
+_RUN_STATUS_MAP: dict[str, OrchestratorRunState] = {
+    "SUCCESS": OrchestratorRunState.SUCCESS,
+    "FAILURE": OrchestratorRunState.FAILED,
+    "CANCELED": OrchestratorRunState.CANCELLED,
+    "QUEUED": OrchestratorRunState.RUNNING,
+    "NOT_STARTED": OrchestratorRunState.RUNNING,
+    "MANAGED": OrchestratorRunState.RUNNING,
+    "STARTING": OrchestratorRunState.RUNNING,
+    "STARTED": OrchestratorRunState.RUNNING,
+    "CANCELING": OrchestratorRunState.RUNNING,
+}
+
+_RUN_STATUS_QUERY = """
+query RunStatus($runId: ID!) {
+  runOrError(runId: $runId) {
+    __typename
+    ... on Run { status }
+  }
+}
+"""
+
+
+async def fetch_run_state(
+    settings: Settings,
+    *,
+    run_id: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> OrchestratorRunState:
+    """Resolve a Dagster run's normalized :class:`OrchestratorRunState` via GraphQL.
+
+    The executor-aware reconciler's real :class:`RunLivenessProbe` (T-290k §2h). A run id
+    that Dagster no longer knows (purged history, wrong id) resolves to
+    :attr:`OrchestratorRunState.MISSING`, letting the reconciler fall back to lease grace.
+    Transport failures propagate as ``httpx.HTTPError`` for the probe to grace on.
+    """
+
+    urls = _dagster_urls(settings)
+    request_json = {
+        "query": _RUN_STATUS_QUERY,
+        "variables": {"runId": run_id},
+    }
+
+    async def _post(client: httpx.AsyncClient) -> OrchestratorRunState:
+        response = await client.post(urls.graphql_url, json=request_json)
+        response.raise_for_status()
+        return _parse_run_state(response.json())
+
+    if http_client is not None:
+        return await _post(http_client)
+    async with httpx.AsyncClient(timeout=settings.dagster_request_timeout_seconds) as client:
+        return await _post(client)
+
+
+def _parse_run_state(payload: object) -> OrchestratorRunState:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    result = data.get("runOrError") if isinstance(data, dict) else None
+    if not isinstance(result, dict) or result.get("__typename") != "Run":
+        # RunNotFoundError / PythonError / malformed → no live run reference.
+        return OrchestratorRunState.MISSING
+    status = result.get("status")
+    if isinstance(status, str):
+        return _RUN_STATUS_MAP.get(status, OrchestratorRunState.RUNNING)
+    return OrchestratorRunState.MISSING
