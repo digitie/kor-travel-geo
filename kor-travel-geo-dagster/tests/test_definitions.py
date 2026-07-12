@@ -18,13 +18,21 @@ from kortravelgeo_dagster.definitions import (
     REQUIRED_RESOURCE_KEYS,
     defs,
 )
-from kortravelgeo_dagster.mv import mv_refresh_job, refresh_geocode_mv_op
+from kortravelgeo_dagster.mv import mv_refresh_job, run_mv_refresh_op
 
 
 def test_code_location_loads_mv_refresh_job() -> None:
     job_names = {job.name for job in defs.resolve_all_job_defs()}
     assert "mv_refresh" in job_names
     assert defs.get_job_def("mv_refresh").name == "mv_refresh"
+
+
+def test_code_location_loads_t290k_additive_jobs() -> None:
+    job_names = {job.name for job in defs.resolve_all_job_defs()}
+    assert "consistency_check" in job_names
+    assert "source_rebuild_db" in job_names
+    assert defs.get_job_def("consistency_check").name == "consistency_check"
+    assert defs.get_job_def("source_rebuild_db").name == "source_rebuild_db"
 
 
 def test_code_location_loads_scheduled_backup_onramp() -> None:
@@ -38,13 +46,15 @@ def test_code_location_loads_scheduled_backup_onramp() -> None:
 
 def test_op_name_differs_from_job_name() -> None:
     # Same op/job name makes the code location fail to load (dagster-boundary §10).
-    assert refresh_geocode_mv_op.name == "refresh_geocode_mv"
+    assert run_mv_refresh_op.name == "run_mv_refresh"
     assert mv_refresh_job.name == "mv_refresh"
-    assert refresh_geocode_mv_op.name != mv_refresh_job.name
+    assert run_mv_refresh_op.name != mv_refresh_job.name
 
 
-def test_mv_op_requires_only_client_resource() -> None:
-    assert refresh_geocode_mv_op.required_resource_keys == {"client"}
+def test_mv_op_requires_client_and_settings_resources() -> None:
+    # T-290k: the release-gated mv_refresh bridges to load_jobs, so it needs settings
+    # (lease TTL) alongside client, unlike the T-290a wiring proof.
+    assert run_mv_refresh_op.required_resource_keys == {"client", "settings"}
 
 
 def test_scheduled_backup_op_requires_only_admin_api_resource() -> None:

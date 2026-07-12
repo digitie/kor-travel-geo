@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from .definitions import defs
-from .mv import MV_REFRESH_JOBS, mv_refresh_job, refresh_geocode_mv_op
+from .mv import MV_REFRESH_JOBS, mv_refresh_job, run_mv_refresh_op
 from .resources import client_resource, rustfs_resource, settings_resource
 
 __all__ = [
@@ -17,7 +17,7 @@ __all__ = [
     "client_resource",
     "defs",
     "mv_refresh_job",
-    "refresh_geocode_mv_op",
+    "run_mv_refresh_op",
     "rustfs_resource",
     "settings_resource",
 ]
