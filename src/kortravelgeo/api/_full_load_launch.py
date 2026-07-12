@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     from kortravelgeo.api._jobs import JobQueue
+    from kortravelgeo.dto.admin import LoadJobStatus
     from kortravelgeo.settings import Settings
 
 
@@ -64,8 +65,30 @@ async def _control_engine(
         await scratch_engine.dispose()
 
 
+async def blue_green_load_status(
+    settings: Settings, target_database: str, job_id: str
+) -> LoadJobStatus:
+    """Read a blue-green ``full_load_batch``'s status from its scratch DB.
+
+    When ``payload.target_database`` is set the batch's control rows live in the scratch DB
+    (see :func:`_control_engine`), never serving — so the serving-bound ``client.load_status``
+    would 404. This binds a throwaway client to the scratch engine so the submit endpoint can
+    return the real initial status instead of a spurious not-found.
+    """
+    from kortravelgeo.client import AsyncAddressClient  # local import breaks an import cycle
+
+    scratch_engine = create_async_engine(scratch_database_dsn(settings.pg_dsn, target_database))
+    try:
+        return await AsyncAddressClient(settings=settings, engine=scratch_engine).load_status(
+            job_id
+        )
+    finally:
+        await scratch_engine.dispose()
+
+
 __all__ = [
     "FULL_LOAD_BATCH_KIND",
+    "blue_green_load_status",
     "launch_full_load_batch_dagster_run",
     "launch_source_load_dagster_run",
     "submit_full_load_batch",

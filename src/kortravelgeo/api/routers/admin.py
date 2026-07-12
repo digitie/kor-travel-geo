@@ -24,6 +24,7 @@ from kortravelgeo.api._dagster_client import (
 )
 from kortravelgeo.api._full_load_launch import (
     FULL_LOAD_BATCH_KIND,
+    blue_green_load_status,
     launch_source_load_dagster_run,
     submit_full_load_batch,
 )
@@ -1854,7 +1855,14 @@ async def submit_load(
     else:
         job_id = await queue.enqueue(req.kind, req.payload)
         executor = "api_in_process"
-    status = await client.load_status(job_id)
+    target_database = (
+        req.payload.get("target_database") if req.kind == FULL_LOAD_BATCH_KIND else None
+    )
+    if isinstance(target_database, str) and target_database:
+        # Blue-green staging: the control rows live in the scratch DB, not serving.
+        status = await blue_green_load_status(settings, target_database, job_id)
+    else:
+        status = await client.load_status(job_id)
     await client.record_audit_event(
         action="load.submit",
         outcome="started",
