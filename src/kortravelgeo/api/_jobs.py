@@ -166,6 +166,21 @@ class JobQueue:
                 orchestrator_run_id=orchestrator_run_id,
             )
 
+    def signal_in_process_cancel(self, job_id: str) -> bool:
+        """Set the in-process ``cancel_event`` for a running drain job (T-290k transition).
+
+        The queue-free :func:`~kortravelgeo.api._cancel.cancel_load_job_converged` calls this
+        for ``executor='api_in_process'`` rows so an in-flight drain job still stops promptly
+        while the drain lives; returns whether an event was present. PR4 removes this with the
+        drain.
+        """
+
+        event = self._cancel_events.get(job_id)
+        if event is not None:
+            event.set()
+            return True
+        return False
+
     async def link_job_to_batch(self, job_id: str, load_batch_id: str) -> None:
         """Record the downstream full-load batch id on a control job."""
 
@@ -189,12 +204,13 @@ UPDATE load_jobs
         they were interrupted → mark ``failed`` (unchanged historical behavior; every
         legacy row defaults to ``api_in_process``, so this force-fail is byte-for-byte the
         old query scoped by executor). ``dagster`` running jobs may still be alive in a
-        Dagster run the API does not own, so they are handed to the executor-aware
-        reconciler (:meth:`reconcile_dagster_jobs`) instead of being force-failed.
+        Dagster run the API does not own, so they are deliberately left untouched here — the
+        standalone :class:`~kortravelgeo.api._reconciler.DagsterJobReconciler` owns their
+        convergence at startup and on a periodic tick (T-290k §2h/§3), so the two never
+        double-reconcile the dagster rows.
         """
 
         queued = await self._recover_in_process_running()
-        await self.reconcile_dagster_jobs()
         if queued:
             self._spawn_drain()
 

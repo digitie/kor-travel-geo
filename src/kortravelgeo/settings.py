@@ -166,6 +166,13 @@ class Settings(BaseSettings):
     # fails it once the lease expires with no live-run reference. In-process jobs never
     # take a lease, so this has no effect on current behavior.
     dagster_lease_ttl_seconds: float = Field(default=300.0, ge=1.0, le=86_400.0)
+    # Periodic executor-aware reconciler tick (T-290k PR2). At startup and every
+    # ``dagster_reconcile_interval_seconds`` the DagsterJobReconciler converges
+    # ``executor='dagster'`` load_jobs toward their real Dagster run state (GraphQL run-status
+    # probe), so a job whose lease looks alive but whose run actually died is failed between
+    # restarts — not only at startup. ``0`` disables the periodic tick (startup-only).
+    dagster_reconcile_on_startup: bool = True
+    dagster_reconcile_interval_seconds: float = Field(default=60.0, ge=0.0, le=3_600.0)
     runtime_warm_on_startup: bool = False
     runtime_warm_interval_minutes: int = Field(default=0, ge=0)
     runtime_warm_query_limit: int = Field(default=32, ge=1, le=500)

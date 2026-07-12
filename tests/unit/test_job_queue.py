@@ -99,19 +99,23 @@ async def test_drain_retries_after_busy_queue_lock(
 
 
 @pytest.mark.asyncio
-async def test_recover_startup_fails_in_process_then_reconciles_dagster(
+async def test_recover_startup_is_in_process_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # T-290k PR2: recover_startup no longer reconciles dagster rows — the standalone
+    # DagsterJobReconciler owns that (test_dagster_reconciler.py), run separately in lifespan,
+    # so the two never double-reconcile. recover_startup keeps ONLY the in-process force-fail.
     queue = JobQueue(cast("Any", object()))
     order: list[str] = []
     spawned: list[bool] = []
+    reconcile_called: list[bool] = []
 
     async def fake_recover_in_process() -> list[str]:
         order.append("in_process")
         return []
 
     async def fake_reconcile() -> list[object]:
-        order.append("reconcile")
+        reconcile_called.append(True)
         return []
 
     monkeypatch.setattr(queue, "_recover_in_process_running", fake_recover_in_process)
@@ -120,8 +124,8 @@ async def test_recover_startup_fails_in_process_then_reconciles_dagster(
 
     await queue.recover_startup()
 
-    # in-process force-fail runs first, then the dagster reconciler; no queued -> no drain
-    assert order == ["in_process", "reconcile"]
+    assert order == ["in_process"]
+    assert reconcile_called == []  # dagster reconcile is NOT part of recover_startup anymore
     assert spawned == []
 
 
