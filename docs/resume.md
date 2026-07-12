@@ -2,7 +2,31 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-07-10 갱신, by claude)
+## 현재 진척도 (2026-07-12 갱신, by claude)
+
+- ✅ **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only (2026-07-12, by claude)** — backup/restore·적재
+  오케스트레이션의 독립 Dagster 이관을 끝냈다. 통합 브랜치 `agent/claude-dagster-migration`(HEAD `9bcb949`)에
+  T-290h~l이 모두 병합됐고 n150에 **cutover 배포·검증 완료** — in-process `JobQueue` drain·
+  `_run_loader_off_event_loop`·핸들러 클로저·`get_job_queue`가 **삭제**되고 모든 실행이 Dagster op으로 돈다.
+  - **T-290h**(#471) run-detail op 로그·artifact·실패/overdue 알림. **T-290i**(#472) `db_restore`(새 빈 DB).
+    **T-290j**(#476/#477) loader·`full_load_batch` Dagster 실행(`batch_dag.py` 미러 + GDAL 이미지). **T-290k**:
+    #479 blue-green E0404 · #480 PR1 additive Dagster jobs(`source_rebuild_db`·`consistency_check`·release-gated
+    `mv_refresh`) · #481 PR2 `DagsterJobReconciler` + queue-free cancel + **실제 `terminateRun`/liveness** + 주기
+    reconcile tick · #482 PR3 라우팅 무조건 Dagster(`dagster_executed_job_kinds` 삭제) · #483 PR4 drain 삭제 +
+    DDL `0026`(api_in_process→failed 수렴·executor 기본 `dagster`). **T-290l** 최종 회귀(backend unit 1224 +
+    ruff/mypy(161)/lint-imports/openapi) + reconciler real-liveness 라이브 확인 + Dagster observability 데이터 경로 검증.
+  - **전국 full-load 스테이징 라이브 e2e (blue-green, 프로드 serving 무손상)** — 격리 scratch DB로 Dagster가
+    7 로더 직렬 → `tl_juso_text`=**6,416,637**(serving 정확 일치) → consistency=ERROR(C2 SHP-only 34,699,
+    혼합 기준월 juso 202603<SHP 202604 정당) → **ADR-017 게이트가 mv swap 정확 차단**(ERROR-차단 변형 라이브) →
+    forced mv 빌드로 `mv_geocode_target`·`mv_geocode_text_search` 둘 다 **6,416,637**(swap 경로 검증). scratch drop.
+  - **cutover 검증**: DDL 0026 적용, app이 `get_job_queue` 없이 기동, reconciler 라이브(`fetch_run_state` 실제
+    상태 반환), serving mv 무손상 6,416,637. 경미: co-deploy 직후 reconciler startup이 dagster GraphQL 준비를
+    앞질러 probe가 lease-grace로 degrade(안전, 다음 60s tick 자가복구). n150 빌드 컨텍스트는
+    **`KOR_TRAVEL_GEO_REPO_DIR=/home/digitie/dev/kor-travel-geo` 필수**(기본 `../kor-travel-geo`는 stale non-git).
+  - **다음 한 작업**: `integration→main` 머지 후, geo Dagster 공개 URL(`geo-dagster.digitie.mywire.org`)을
+    관측 화면에 iframe/CSP로 임베드하는 후속 — `prod-geo-dagster-domain` 메모 참조.
+
+### 이전 진척도 (2026-07-10 갱신, by claude)
 
 - ✅ **T-290 유지보수성/직관성 패스 완료 (2026-07-10, by claude)** — 라이브 UI e2e #2(아래)가 드러낸
   5버그 수정(#459~#461·manager #50·#462/#463) 이후, "이전 작업 리뷰·수정" 요청으로 3개 품질 PR을 추가

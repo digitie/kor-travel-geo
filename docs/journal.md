@@ -2,6 +2,37 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-12 (T-290 에픽 완료 — 실행이 Dagster-only + 전국 full-load 스테이징 라이브 e2e, by claude)
+
+**작업**: geo backup/restore·적재 오케스트레이션의 독립 Dagster 이관(T-290)을 끝까지 완료했다. 통합 브랜치
+`agent/claude-dagster-migration`(HEAD `9bcb949`)에 T-290h~l을 병합하고 n150에 cutover 배포·검증했다. 실행이
+프로덕션에서 **Dagster-only**가 되고 in-process `JobQueue` drain이 삭제됐다.
+
+**수정 (PR)**:
+- **#471 T-290h** — run-detail op 로그·artifact + 실패/overdue 알림(`ops.run_failure_alerts` 영속).
+- **#472 T-290i** — `db_restore`(새 빈 DB) Dagster op.
+- **#476/#477/#478 T-290j** — loader·`full_load_batch` Dagster 실행(`batch_dag.py` 미러) + GDAL 이미지 + blue-green target-DB.
+- **#479** — blue-green `full_load_batch` submit E0404 수정(scratch DB에서 상태 readback).
+- **#480 PR1** — additive Dagster jobs(`source_rebuild_db` 단일 op·`consistency_check`·release-gated `mv_refresh`).
+- **#481 PR2** — `DagsterJobReconciler` + queue-free cancel + 실제 `terminateRun`/liveness GraphQL + 주기 reconcile tick.
+- **#482 PR3** — 라우팅 무조건 Dagster, `dagster_executed_job_kinds` 삭제, `insert_load_job` 기본 executor `dagster`.
+- **#483 PR4** — `api/_jobs.py` JobQueue drain + app.py 핸들러/lifespan 큐/`get_job_queue` 삭제; DDL `0026`(api_in_process→failed 수렴·executor 기본 dagster); ADR-006 superseded / 011 partial.
+
+**전국 full-load 스테이징 라이브 e2e (blue-green, 프로드 serving 무손상)**: 격리 scratch DB `kor_travel_geo_fullload_e2e`로
+Dagster가 7 로더 직렬 → `tl_juso_text`=**6,416,637**(serving 정확 일치) → consistency=ERROR(C2 "SHP-only BD_MGT_SN"
+34,699, 혼합 기준월 juso 202603<SHP 202604의 정당한 산물) → **ADR-017 게이트가 mv swap을 정확히 차단**
+(root failed, mv_refresh child 미생성 — "ERROR-차단" 순서 규칙 변형을 라이브 증명) → forced 직접 mv 빌드로
+`mv_geocode_target`·`mv_geocode_text_search` 둘 다 **6,416,637**(serving 정확 일치 — swap 경로 증명). 기준월
+juso=202603, locsum/navi/shp/sppn=202604, roadaddr=202605. 검증 후 scratch DB drop.
+
+**검증**: cutover 후 app이 `get_job_queue` 없이 기동, reconciler 라이브(`fetch_run_state` 실제 상태 반환),
+serving mv 무손상 6,416,637. backend 회귀 unit **1224** + ruff/mypy(161)/lint-imports/openapi green. frontend는
+T-290k 미변경(#3 last-green). 경미: co-deploy 직후 reconciler startup이 dagster GraphQL 준비를 앞질러 probe가
+lease-grace로 degrade(안전, 다음 60s tick 자가복구). n150 빌드 컨텍스트는
+`KOR_TRAVEL_GEO_REPO_DIR=/home/digitie/dev/kor-travel-geo` 필수(기본 `../kor-travel-geo`는 stale non-git).
+
+**남은 후속**: `integration→main` 머지, geo Dagster 공개 URL(`geo-dagster.digitie.mywire.org`) 관측 UI iframe/CSP 임베드.
+
 ## 2026-07-09 (T-290h Agent B 선행 — Dagster run detail backup artifact 연결, by codex)
 
 **작업**: Agent B의 T-290h 관측 표면 선행 작업으로 `/admin/dagster` run detail에서 Dagster

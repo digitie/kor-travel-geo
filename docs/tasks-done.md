@@ -6,6 +6,57 @@
 
 ## 완료
 
+- [x] **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only** (2026-07-12) — geo backup/restore·적재
+  오케스트레이션을 서비스 전용 독립 Dagster로 이관 완료. 통합 브랜치 `agent/claude-dagster-migration`
+  (HEAD `9bcb949`)에 T-290a~l 병합, n150 cutover 배포·검증. **전국 full-load 스테이징 라이브 e2e (blue-green,
+  프로드 serving 무손상)**: 격리 scratch DB `kor_travel_geo_fullload_e2e`로 Dagster가 7 로더 직렬 실행 →
+  `tl_juso_text`=**6,416,637**(serving 정확 일치) → consistency severity=ERROR(C2 "SHP-only BD_MGT_SN"
+  34,699 = 혼합 기준월 juso 202603<SHP 202604의 정당한 산물) → **ADR-017 게이트가 mv swap을 정확히 차단**
+  (root failed, mv_refresh child 미생성 — "ERROR-차단" 순서 규칙 변형을 라이브 증명) → forced 직접 mv 빌드로
+  `mv_geocode_target`·`mv_geocode_text_search` 둘 다 **6,416,637**(serving 정확 일치 — swap 경로 증명).
+  기준월 juso=202603, locsum/navi/shp/sppn=202604, roadaddr=202605. 검증 후 scratch DB drop. cutover 후
+  serving mv 무손상 6,416,637, app이 in-process 큐 없이 기동, reconciler 라이브(`fetch_run_state` 실제 상태 반환).
+  live UI e2e 게이트 #1~#4 전부 통과.
+
+- [x] **T-290l** — live e2e harness를 Dagster 관측까지 확장 + 최종 회귀 (2026-07-12). T-290k cutover 배포본을
+  종합 검증: backend 회귀 unit **1224 passed** + ruff/mypy(161)/lint-imports/openapi drift 전부 green,
+  frontend는 T-290k에서 미변경(#3 live e2e last-green), reconciler 라이브(주기 tick + `fetch_run_state`가
+  Dagster GraphQL로 실제 run 상태 반환 확인), Dagster observability 데이터 경로 검증(run store가 db_backup/
+  db_restore/full_load_batch/mv_refresh/scheduled_backup run으로 채워지고 API 질의 정상). 경미: co-deploy
+  직후 reconciler startup이 dagster GraphQL 준비를 앞질러 probe가 lease-grace로 degrade(안전, 다음 60s tick 자가복구).
+
+- [x] **T-290k** — in-process 실행엔진 은퇴, 실행이 Dagster-only (2026-07-12). 게이트된 4-PR 에픽 + blue-green
+  수정: **#479** blue-green `full_load_batch` submit E0404 수정(scratch DB에서 상태 readback). **#480 PR1**
+  additive Dagster jobs — `source_rebuild_db`(단일 op이 SOURCE_REBUILD_DB 글로벌 락을 materialize+launch 전체에
+  걸쳐 잡음; execute_load_job의 1회 adopt+terminal 때문에 2-op이면 행을 중간 terminal-mark), `consistency_check`,
+  release-gated `mv_refresh`(와이어링-프루프 재작성 — `resolve_text_geometry_links`·`ensure_load_batch_release_gate`·
+  `record_mv_refresh_release` 복원). **#481 PR2** `DagsterJobReconciler`(stateless, 실제 `RunLivenessProbe` =
+  Dagster GraphQL run-status; 장애 시 lease-grace degrade) + queue-free `cancel_load_job_converged`(dagster→실제
+  `terminateRun`, api_in_process→transition용 `signal_in_process_cancel`) + 주기 reconcile tick; recover_startup의
+  dagster 절반 제거로 double-reconcile 회피. **#482 PR3** 라우팅 무조건 Dagster(`dagster_executed_job_kinds` 삭제,
+  전 엔드포인트 launch_*_dagster_run, `insert_load_job` 기본 executor `dagster`). **#483 PR4** `api/_jobs.py`
+  JobQueue drain + app.py 핸들러/`_run_loader_off_event_loop`/lifespan 큐/`get_job_queue` 삭제(−605줄); DDL
+  마이그레이션 `0026_t290k_retire_inproc`(api_in_process 잔여행→failed 수렴 + executor 기본 dagster; CHECK는
+  이력행 위해 IN 유지). ADR-006 `superseded by ADR-066`, ADR-011 `partially superseded`(load_jobs 테이블 유지·
+  실행만 은퇴). n150 cutover 배포·검증.
+
+- [x] **T-290j** — loader + `full_load_batch` Dagster 실행 (2026-07-12) — #476/#477/#478. ADR-017 DAG를
+  Dagster-free 메인 leaf `loaders/batch_dag.py::run_full_load_batch`(직렬 소스로드 → consistency ERROR 게이트 →
+  mv swap, forced_promotion 우회, 형제취소, 자식별 lease heartbeat)로 1:1 이식하고 Dagster op
+  `full_load_execute.py`(`full_load_batch`/`load_source` job)로 브릿지. `insert_load_batch(executor=)`
+  (dagster root='queued'로 op이 adopt, children='dagster'로 드레인 스킵), 게이트를 `submit_load`·
+  `source_rebuild_db`에 배선. #477 dagster 이미지 GDAL 설치 수정(pin + `[loaders]` 단일 pip resolve). #478
+  blue-green target-DB(op이 `payload.target_database`로 스크래치 엔진 해석, `ensure_scratch_database`)로 격리
+  스테이징 검증 지원.
+
+- [x] **T-290i** — `db_restore`(새 빈 DB) Dagster 실행 (2026-07-12) — #472. `run_db_restore` op(op명≠job명,
+  RetryPolicy off)이 `run_restore_job`을 `execute_load_job` 브릿지로 호출; hot-swap은 수동 유지. `submit_restore`
+  게이트 + `_launch_db_restore_dagster_run`(executor='dagster' 행 삽입·launch·실패 시 mark_failed+502).
+
+- [x] **T-290h** — run detail op 로그·artifact + 실패/overdue 알림 UI (2026-07-12) — #471. `ops.run_failure_alerts`
+  영속(마이그레이션 0025), failure sensor가 client 리소스 경유 cross-run 영속, `/v1/dagster/run-failures`·`.../ack` +
+  overdue(futureTicks) DTO, `DagsterPanel`에 실패 배너·overdue 배너·recent-failures 목록·op-log step_id 그룹핑.
+
 - [x] **T-290e** — admin `/admin/dagster` 페이지 + iframe 임베드(Agent B/Codex,
   통합 브랜치 `agent/claude-dagster-migration`). T-290d의 OpenAPI 생성 타입을 단일 소스로 삼는
   `lib/dagster.ts` 타입 alias·React Query hook을 추가하고, 관리 UI에 Dagster summary/run detail
