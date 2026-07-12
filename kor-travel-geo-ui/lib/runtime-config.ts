@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 const PYTHON_VWORLD_KEY = "KTG_VWORLD_API_KEY";
 const UI_VWORLD_KEY = "NEXT_PUBLIC_VWORLD_API_KEY";
+const PYTHON_DAGSTER_URL_KEY = "KTG_DAGSTER_PUBLIC_URL";
+const UI_DAGSTER_URL_KEY = "NEXT_PUBLIC_DAGSTER_URL";
 
 type RuntimeEnv = Partial<NodeJS.ProcessEnv>;
 
@@ -12,13 +14,29 @@ export function resolveVWorldApiKey(
 ): string {
   return (
     normalizeEnvValue(env[PYTHON_VWORLD_KEY]) ||
-    readDotenvVWorldKey(PYTHON_VWORLD_KEY, cwd) ||
+    readDotenvKey(PYTHON_VWORLD_KEY, cwd) ||
     normalizeEnvValue(env[UI_VWORLD_KEY]) ||
-    readDotenvVWorldKey(UI_VWORLD_KEY, cwd)
+    readDotenvKey(UI_VWORLD_KEY, cwd)
   );
 }
 
-function readDotenvVWorldKey(key: string, cwd?: string): string {
+// The browser-facing Dagster UI URL (geo-dagster public domain). Resolved the same
+// way as the VWorld key so an operator sets it once in the backend .env; empty ->
+// the admin Dagster embed hides itself gracefully. NOT used for backend GraphQL
+// (that stays internal `dagster_url`, SSRF-allowlisted).
+export function resolveDagsterPublicUrl(
+  env: RuntimeEnv = process.env,
+  cwd?: string
+): string {
+  return (
+    normalizeEnvValue(env[PYTHON_DAGSTER_URL_KEY]) ||
+    readDotenvKey(PYTHON_DAGSTER_URL_KEY, cwd) ||
+    normalizeEnvValue(env[UI_DAGSTER_URL_KEY]) ||
+    readDotenvKey(UI_DAGSTER_URL_KEY, cwd)
+  );
+}
+
+function readDotenvKey(key: string, cwd?: string): string {
   const candidates = cwd
     ? [join(cwd, "..", ".env"), join(cwd, ".env"), join(cwd, ".env.local")]
     : [
