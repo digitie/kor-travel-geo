@@ -27,15 +27,19 @@ B(배포/관측/e2e) 병렬. **기준: 최소수정 X, 미래지향(유지보수
 - [x] **T-290d** (B) — API GraphQL observe 라우터 (M2) — #417
 - [x] **T-290e** (B) — admin `/admin/dagster` 관측 화면 (M2) — #418
 - [x] **T-290f** (A) — scheduled backup @schedule 온램프 + @run_failure_sensor + 알림 (M2)
-- [ ] **T-290g** (A) — `db_backup` Dagster 실행 + verify/copy/restore_drill (M3)
-- [ ] **T-290h** (B) — run detail 로그·artifact 링크 + 실패/overdue 알림 UI (M3)
-- [ ] **T-290i** (A) — `db_restore`(새 빈 DB) Dagster 실행, hot-swap 수동 유지, RetryPolicy off (M4)
-- [ ] **T-290j** (A) — loader + `full_load_batch` Dagster 실행(map batch_dag 미러) (M5)
-- [ ] **T-290k** (A) — in-process 큐/외부 cron/이벤트루프 우회 은퇴, ADR-006/011 superseded (M5)
-- [ ] **T-290l** (B) — live e2e harness/spec를 Dagster 관측까지 확장 + 최종 회귀 정리 (M5)
+- [x] **T-290g** (A) — `db_backup` Dagster 실행 + verify/copy/restore_drill (M3) — #464 계열
+- [x] **T-290h** (B) — run detail 로그·artifact 링크 + 실패/overdue 알림 UI (M3) — #471
+- [x] **T-290i** (A) — `db_restore`(새 빈 DB) Dagster 실행, hot-swap 수동 유지, RetryPolicy off (M4) — #472
+- [x] **T-290j** (A) — loader + `full_load_batch` Dagster 실행(`batch_dag` 미러 + GDAL 이미지) (M5) — #476/#477
+- [x] **T-290k** (A) — in-process 큐/이벤트루프 우회 은퇴, ADR-006/011 superseded (M5) — #479·#480·#481·#482·#483(DDL 0026)
+- [x] **T-290l** (B) — live e2e harness를 Dagster 관측까지 확장 + 최종 회귀 (M5) — 전국 full-load 스테이징 라이브 e2e 성공(mv=6,416,637), cutover 배포·검증
 
-live UI e2e 게이트: **#1 M2**(관측+온램프) · **#2 M3**(backup 실행) · **#3 M4**(restore 새DB) ·
-**#4 M5**(full-load + 큐 은퇴, 최종 회귀). 상세는 마스터플랜 §3.
+**✅ T-290 에픽 완료 (2026-07-12)** — 통합 브랜치 `agent/claude-dagster-migration`(HEAD `9bcb949`)에 병합·n150
+cutover 배포·검증 완료. 실행이 프로덕션에서 **Dagster-only**(in-process drain 삭제). live UI e2e 게이트 #1~#4
+전부 통과(관측+온램프·backup 실행·restore 새DB·full-load+큐은퇴+최종회귀). 상세는 `tasks-done.md`·`resume.md`.
+
+**남은 후속** (T-290 외): `integration→main` 머지, 그리고 geo Dagster 공개 URL(`geo-dagster.digitie.mywire.org`)을
+관측 화면에 iframe/CSP로 임베드하는 작업.
 
 (그 외 진행 중 작업 없음. T-177A~T-177H·T-183 완료 — `tasks-done.md` 참조.)
 
