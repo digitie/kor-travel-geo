@@ -11,7 +11,6 @@ from typing import Any, cast
 import pytest
 from starlette.requests import Request
 
-from kortravelgeo.api import app as api_app
 from kortravelgeo.api.routers import admin
 from kortravelgeo.api.security import ROLE_REBUILD_OPERATOR, RequestContext
 from kortravelgeo.client import AsyncAddressClient
