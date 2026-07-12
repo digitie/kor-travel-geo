@@ -2235,14 +2235,19 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         )
 
     async def submit_load(self, kind: str, payload: dict[str, Any]) -> LoadJobStatus:
+        # Library direct-DB submit (no Dagster launch); still stamps the legacy
+        # ``api_in_process`` executor. T-290k PR4 migrates/retires this alongside the drain.
         repo = AdminRepository(self._engine())
         if kind == "full_load_batch":
             row = await repo.insert_load_batch(
                 payload=payload,
                 children=batch_children(payload),
+                executor="api_in_process",
             )
         else:
-            row = await repo.insert_load_job(kind=kind, payload=payload)
+            row = await repo.insert_load_job(
+                kind=kind, payload=payload, executor="api_in_process"
+            )
         return _load_job_status(row)
 
     async def cancel_load(self, job_id: str) -> LoadJobStatus:

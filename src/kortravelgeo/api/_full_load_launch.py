@@ -6,11 +6,9 @@ in-process drain never claims them), then launch the Dagster run whose op adopts
 them. A launch failure converges the row(s) to a terminal state and surfaces a 502 rather
 than leaving queued rows no worker will ever claim.
 
-Shared by the admin ``POST /loads`` endpoint AND the ``source_rebuild_db`` control job (which
-materialises a rebuild then submits a ``full_load_batch``), so both reach Dagster through the
-same gate — :func:`submit_full_load_batch` routes to Dagster only when ``full_load_batch`` is
-listed in ``settings.dagster_executed_job_kinds`` and otherwise falls back to the in-process
-:meth:`JobQueue.enqueue_batch` (T-290k retires that fallback).
+Since T-290k PR3 every execution kind routes here unconditionally (the
+``dagster_executed_job_kinds`` opt-in gate and the in-process ``JobQueue`` fallback are gone),
+so a rebuild-driven batch and an operator-submitted one both run as ``executor='dagster'``.
 """
 
 from __future__ import annotations
@@ -37,7 +35,6 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncEngine
 
-    from kortravelgeo.api._jobs import JobQueue
     from kortravelgeo.dto.admin import LoadJobStatus
     from kortravelgeo.settings import Settings
 
@@ -89,8 +86,11 @@ async def blue_green_load_status(
 __all__ = [
     "FULL_LOAD_BATCH_KIND",
     "blue_green_load_status",
+    "launch_consistency_check_dagster_run",
     "launch_full_load_batch_dagster_run",
+    "launch_mv_refresh_dagster_run",
     "launch_source_load_dagster_run",
+    "launch_source_rebuild_dagster_run",
     "submit_full_load_batch",
 ]
 
@@ -174,15 +174,91 @@ async def submit_full_load_batch(
     engine: AsyncEngine,
     settings: Settings,
     payload: dict[str, Any],
-    *,
-    queue: JobQueue,
 ) -> str:
-    """Submit a ``full_load_batch`` to Dagster (when routed) or the in-process queue.
+    """Submit a ``full_load_batch`` — always via Dagster (T-290k PR3).
 
-    The single gate the API endpoint and the ``source_rebuild_db`` control job share so a
-    rebuild-driven batch takes the same executor as an operator-submitted one.
+    Routing is unconditional now that every loader kind executes as a Dagster op; the
+    in-process ``JobQueue.enqueue_batch`` fallback is gone (PR4 deletes the drain).
     """
 
-    if FULL_LOAD_BATCH_KIND in settings.dagster_executed_job_kinds:
-        return await launch_full_load_batch_dagster_run(engine, settings, payload)
-    return await queue.enqueue_batch(payload)
+    return await launch_full_load_batch_dagster_run(engine, settings, payload)
+
+
+async def _launch_control_job(
+    engine: AsyncEngine,
+    settings: Settings,
+    *,
+    kind: str,
+    op_name: str,
+    job_name: str,
+    payload: dict[str, Any],
+) -> str:
+    """Insert a single ``executor='dagster'`` control row and launch its 1-op Dagster job.
+
+    Shared by the ``source_rebuild_db`` / ``consistency_check`` / ``mv_refresh`` launchers —
+    each is a ``{job_id, payload}``-config 1-op job (T-290k PR1). On launch failure the row is
+    marked failed (so no worker leaves it queued) and a 502 surfaces.
+    """
+
+    row = await AdminRepository(engine).insert_load_job(
+        kind=kind, payload=payload, executor="dagster"
+    )
+    job_id = row.job_id
+    run_config = {"ops": {op_name: {"config": {"job_id": job_id, "payload": payload}}}}
+    try:
+        await launch_dagster_run(
+            settings,
+            job_name=job_name,
+            run_config=run_config,
+            tags={"kor_travel_geo.job_id": job_id},
+        )
+    except _LAUNCH_ERRORS as exc:
+        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
+        raise KorTravelGeoError(f"Dagster {job_name} launch failed", http_status=502) from exc
+    return job_id
+
+
+async def launch_source_rebuild_dagster_run(
+    engine: AsyncEngine, settings: Settings, payload: dict[str, Any]
+) -> str:
+    """Launch the ``source_rebuild_db`` control job (integrity gate + materialize + downstream
+    full-load) as a Dagster run (T-290k PR3, replaces the in-process control job)."""
+
+    return await _launch_control_job(
+        engine,
+        settings,
+        kind="source_rebuild_db",
+        op_name="run_source_rebuild_db",
+        job_name="source_rebuild_db",
+        payload=payload,
+    )
+
+
+async def launch_consistency_check_dagster_run(
+    engine: AsyncEngine, settings: Settings, payload: dict[str, Any]
+) -> str:
+    """Launch a standalone ``consistency_check`` as a Dagster run (T-290k PR3)."""
+
+    return await _launch_control_job(
+        engine,
+        settings,
+        kind="consistency_check",
+        op_name="run_consistency_check",
+        job_name="consistency_check",
+        payload=payload,
+    )
+
+
+async def launch_mv_refresh_dagster_run(
+    engine: AsyncEngine, settings: Settings, payload: dict[str, Any]
+) -> str:
+    """Launch a release-gated ``mv_refresh`` as a Dagster run (T-290k PR3)."""
+
+    return await _launch_control_job(
+        engine,
+        settings,
+        kind="mv_refresh",
+        op_name="run_mv_refresh",
+        job_name="mv_refresh",
+        payload=payload,
+    )

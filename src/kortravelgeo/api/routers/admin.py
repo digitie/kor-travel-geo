@@ -27,7 +27,10 @@ from kortravelgeo.api._dagster_recovery import dagster_orchestrator_cancel
 from kortravelgeo.api._full_load_launch import (
     FULL_LOAD_BATCH_KIND,
     blue_green_load_status,
+    launch_consistency_check_dagster_run,
+    launch_mv_refresh_dagster_run,
     launch_source_load_dagster_run,
+    launch_source_rebuild_dagster_run,
     submit_full_load_batch,
 )
 from kortravelgeo.api._jobs import JobQueue
@@ -553,18 +556,22 @@ async def fetch_epost_source(
     request: Request,
     ctx: RequestContext = _SOURCE_MANAGER,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> EpostServerFetchResponse:
-    """Manual epost server-fetch → RustFS register → postal load enqueue (T-207)."""
+    """Manual epost server-fetch → RustFS register → postal load launch (T-207)."""
+    engine = client._engine()
+    settings = get_settings()
     result = await run_epost_server_fetch(
-        engine=client._engine(),
-        settings=get_settings(),
+        engine=engine,
+        settings=settings,
         req=req,
         actor=ctx.actor,
     )
     load_job_id: str | None = None
     if req.enqueue_load:
-        load_job_id = await queue.enqueue(result.load_job_kind, result.load_payload)
+        # Launch the postal load as a Dagster load_source run (T-290k PR3).
+        load_job_id = await launch_source_load_dagster_run(
+            engine, settings, result.load_job_kind, result.load_payload
+        )
     await client.record_audit_event(
         action="source.epost_server_fetch",
         actor_type="ui",
@@ -1585,14 +1592,13 @@ async def rebuild_source_match_set_db(
     request: Request,
     ctx: RequestContext = _REBUILD_OPERATOR,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> SourceRebuildDbResponse:
     """Rebuild the serving DB from a match set (doc "DB 재구성", ~1532-1562).
 
-    Bridges to the EXISTING ``full_load_batch`` loader DAG via a persistent
-    ``source_rebuild_db`` control job. The HTTP request only enqueues the
-    control job; that job then runs the source-archive integrity gate, RustFS
-    materialization, and downstream ``full_load_batch`` enqueue under the
+    Bridges to the EXISTING ``full_load_batch`` loader DAG via a Dagster
+    ``source_rebuild_db`` control job (T-290k PR3). The HTTP request only launches the
+    control run; that op then runs the source-archive integrity gate, RustFS
+    materialization, and downstream ``full_load_batch`` launch under the
     ``source_rebuild_db`` global advisory lock.
 
     ``force_promotion`` (the ERROR-bypass) additionally requires the
@@ -1613,8 +1619,9 @@ async def rebuild_source_match_set_db(
                 f"'{_rebuild_typed_confirmation(source_match_set_id)}'"
             )
 
-    job_id = await queue.enqueue(
-        "source_rebuild_db",
+    job_id = await launch_source_rebuild_dagster_run(
+        client._engine(),
+        get_settings(),
         {
             "source_match_set_id": source_match_set_id,
             "actor": ctx.actor,
@@ -1819,9 +1826,11 @@ async def refresh_mv(
     request: Request,
     strategy: Literal["concurrent", "swap"] = "concurrent",
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    job_id = await queue.enqueue("mv_refresh", {"strategy": strategy})
+    # Launch the release-gated mv_refresh Dagster job (T-290k PR3).
+    job_id = await launch_mv_refresh_dagster_run(
+        client._engine(), get_settings(), {"strategy": strategy}
+    )
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="mv_refresh.submit",
@@ -1840,23 +1849,15 @@ async def submit_load(
     req: LoadSubmitRequest,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
     settings = get_settings()
     engine = client._engine()
+    # Unconditional Dagster routing (T-290k PR3): full_load_batch → its batch job, every
+    # other kind → the load_source op. No in-process fallback.
     if req.kind == FULL_LOAD_BATCH_KIND:
-        job_id = await submit_full_load_batch(engine, settings, req.payload, queue=queue)
-        executor = (
-            "dagster"
-            if FULL_LOAD_BATCH_KIND in settings.dagster_executed_job_kinds
-            else "api_in_process"
-        )
-    elif req.kind in settings.dagster_executed_job_kinds:
-        job_id = await launch_source_load_dagster_run(engine, settings, req.kind, req.payload)
-        executor = "dagster"
+        job_id = await submit_full_load_batch(engine, settings, req.payload)
     else:
-        job_id = await queue.enqueue(req.kind, req.payload)
-        executor = "api_in_process"
+        job_id = await launch_source_load_dagster_run(engine, settings, req.kind, req.payload)
     target_database = (
         req.payload.get("target_database") if req.kind == FULL_LOAD_BATCH_KIND else None
     )
@@ -1868,7 +1869,7 @@ async def submit_load(
     await client.record_audit_event(
         action="load.submit",
         outcome="started",
-        payload={"kind": req.kind, "payload": req.payload, "executor": executor},
+        payload={"kind": req.kind, "payload": req.payload, "executor": "dagster"},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,
@@ -1882,21 +1883,16 @@ async def submit_backup(
     req: BackupCreateRequest,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
     settings = get_settings()
     payload = req.model_dump(exclude_none=True)
-    if "db_backup" in settings.dagster_executed_job_kinds:
-        job_id = await _launch_db_backup_dagster_run(client, settings, payload)
-        executor = "dagster"
-    else:
-        job_id = await queue.enqueue("db_backup", payload)
-        executor = "api_in_process"
+    # Unconditional Dagster routing (T-290k PR3).
+    job_id = await _launch_db_backup_dagster_run(client, settings, payload)
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="db_backup.submit",
         outcome="started",
-        payload={**payload, "executor": executor},
+        payload={**payload, "executor": "dagster"},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,
@@ -2159,7 +2155,6 @@ async def scheduled_backup_status(
 async def run_due_scheduled_backup(
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
     _ctx: RequestContext = Depends(require_role(ROLE_SCHEDULER, ROLE_DESTRUCTIVE_ADMIN)),
 ) -> ScheduledBackupRunResult:
     """Idempotent scheduled-backup trigger for an external cron (T-239).
@@ -2182,7 +2177,8 @@ async def run_due_scheduled_backup(
             if not status.due:
                 return ScheduledBackupRunResult(enqueued=False, status=status)
             payload = scheduled_backup_payload(get_settings())
-            job_id = await queue.enqueue("db_backup", payload)
+            # Launch a Dagster db_backup run (T-290k PR3) — no in-process enqueue, no recursion.
+            job_id = await _launch_db_backup_dagster_run(client, get_settings(), payload)
             await client.record_audit_event(
                 action="db_backup.scheduled_run_due",
                 outcome="started",
@@ -2237,21 +2233,16 @@ async def submit_restore(
     req: RestoreCreateRequest,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
     settings = get_settings()
     payload = req.model_dump(exclude_none=True)
-    if "db_restore" in settings.dagster_executed_job_kinds:
-        job_id = await _launch_db_restore_dagster_run(client, settings, payload)
-        executor = "dagster"
-    else:
-        job_id = await queue.enqueue("db_restore", payload)
-        executor = "api_in_process"
+    # Unconditional Dagster routing (T-290k PR3).
+    job_id = await _launch_db_restore_dagster_run(client, settings, payload)
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="db_restore.submit",
         outcome="started",
-        payload={**payload, "executor": executor},
+        payload={**payload, "executor": "dagster"},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,
@@ -2519,10 +2510,11 @@ async def run_consistency(
     req: ConsistencyRunRequest,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    job_id = await queue.enqueue(
-        "consistency_check",
+    # Launch a standalone consistency_check Dagster run (T-290k PR3).
+    job_id = await launch_consistency_check_dagster_run(
+        client._engine(),
+        get_settings(),
         {
             "scope": req.scope,
             "sido": req.sido,

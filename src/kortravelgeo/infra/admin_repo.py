@@ -1448,7 +1448,7 @@ DELETE FROM ops.pg_stat_statements_snapshots
         state: str = "queued",
         progress: float = 0.0,
         current_stage: str | None = None,
-        executor: str = "api_in_process",
+        executor: str = "dagster",
     ) -> LoadJobRow:
         resolved_job_id = job_id or f"job_{uuid4().hex}"
         payload_summary = _summarize_payload(payload)
@@ -1513,17 +1513,16 @@ UPDATE load_jobs
         payload: dict[str, Any],
         children: Sequence[tuple[str, dict[str, Any]]],
         job_id: str | None = None,
-        executor: str = "api_in_process",
+        executor: str = "dagster",
     ) -> LoadJobRow:
         """Create a batch root row and first-stage child jobs in one transaction.
 
-        ``executor`` is stamped on the root and every child (T-290j). For the default
-        ``api_in_process`` the root starts ``running`` (a tracking row the in-process drain
-        never claims) — byte-for-byte the historical behaviour. For ``dagster`` the root
-        starts ``queued`` so the Dagster full-load op can *adopt* it (``queued`` → ``running``
-        + run id + lease) through the load-job bridge, and every child carries
-        ``executor='dagster'`` so the in-process drain — which claims only
-        ``api_in_process`` rows — never double-executes them.
+        ``executor`` is stamped on the root and every child (T-290j). Since T-290k PR3 the
+        default is ``dagster``: the root starts ``queued`` so the Dagster full-load op can
+        *adopt* it (``queued`` → ``running`` + run id + lease) through the load-job bridge, and
+        every child carries ``executor='dagster'``. The legacy ``api_in_process`` value (root
+        starts ``running`` as an untracked drain row) is only still passed by the retiring
+        in-process ``JobQueue.enqueue_batch`` (deleted in PR4).
         """
 
         root_job_id = job_id or f"batch_{uuid4().hex}"

@@ -114,6 +114,7 @@ class JobQueue:
             job_id=job_id,
             load_batch_id=load_batch_id,
             parent_job_id=parent_job_id,
+            executor="api_in_process",
         )
         self._spawn_drain()
         return row.job_id
@@ -129,6 +130,7 @@ class JobQueue:
             payload=payload,
             children=children,
             job_id=job_id,
+            executor="api_in_process",
         )
         await self._record_progress(
             row.job_id,

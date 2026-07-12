@@ -382,10 +382,11 @@ def test_insert_load_batch_preserves_child_queue_order() -> None:
 
 def test_insert_load_batch_stamps_executor_and_dagster_root_is_queued() -> None:
     # T-290j: the executor is stamped on the root + every child; a dagster batch root starts
-    # 'queued' so the Dagster op can adopt it, an in-process root stays 'running'.
+    # 'queued' so the Dagster op can adopt it, an in-process root stays 'running'. T-290k PR3
+    # flipped the default to 'dagster'.
     source = inspect.getsource(admin_repo.AdminRepository.insert_load_batch)
 
-    assert 'executor: str = "api_in_process"' in source
+    assert 'executor: str = "dagster"' in source
     assert 'root_state = "queued" if executor == "dagster" else "running"' in source
     assert '"executor": executor' in source
 

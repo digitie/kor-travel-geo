@@ -1,9 +1,9 @@
-"""full_load / loader Dagster routing (T-290j): _full_load_launch helpers + the gate.
+"""full_load / loader Dagster routing (T-290j / T-290k PR3): _full_load_launch helpers.
 
 Fakes the repo / executor / launch so these assert only the routing + row bookkeeping (a
-Dagster row is inserted with executor='dagster', the launchRun config names the right op, a
-launch failure converges the row(s) and raises 502, and the shared gate picks Dagster vs the
-in-process queue by ``dagster_executed_job_kinds``).
+Dagster row is inserted with executor='dagster', the launchRun config names the right op, and
+a launch failure converges the row(s) and raises 502). Since T-290k PR3 routing is
+unconditional Dagster — there is no in-process fallback and no ``dagster_executed_job_kinds``.
 """
 
 from __future__ import annotations
@@ -18,12 +18,6 @@ from kortravelgeo.exceptions import KorTravelGeoError
 from kortravelgeo.settings import Settings
 
 _VALID_BATCH_PAYLOAD = {"children": [{"kind": "juso_text_load", "payload": {"path": "/data/juso"}}]}
-
-
-def test_dagster_executed_job_kinds_includes_full_load_batch() -> None:
-    routed = Settings(_env_file=None, dagster_executed_job_kinds="full_load_batch, locsum_load")
-    assert "full_load_batch" in routed.dagster_executed_job_kinds
-    assert "locsum_load" in routed.dagster_executed_job_kinds
 
 
 class _FakeRow:
@@ -62,15 +56,6 @@ class _FakeExecutor:
 
     async def mark_failed(self, job_id: str, message: str) -> None:
         _FakeExecutor.failed = (job_id, message)
-
-
-class _FakeQueue:
-    def __init__(self) -> None:
-        self.enqueued_batch: dict | None = None
-
-    async def enqueue_batch(self, payload: dict) -> str:
-        self.enqueued_batch = payload
-        return "batch-inproc-1"
 
 
 @pytest.fixture(autouse=True)
@@ -236,9 +221,10 @@ async def test_launch_source_load_failure_marks_failed_and_502(
 
 
 @pytest.mark.asyncio
-async def test_submit_full_load_batch_routes_to_dagster_when_gated(
+async def test_submit_full_load_batch_always_launches_dagster(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """T-290k PR3: submit_full_load_batch is unconditional Dagster (no queue, no gate)."""
     called: dict[str, Any] = {}
 
     async def fake_dagster_launch(engine, settings, payload):
@@ -246,29 +232,13 @@ async def test_submit_full_load_batch_routes_to_dagster_when_gated(
         return "batch-dag-9"
 
     monkeypatch.setattr(launch_mod, "launch_full_load_batch_dagster_run", fake_dagster_launch)
-    queue = _FakeQueue()
-    settings = Settings(_env_file=None, dagster_executed_job_kinds="full_load_batch")
 
     batch_id = await launch_mod.submit_full_load_batch(
-        object(), settings, _VALID_BATCH_PAYLOAD, queue=queue
+        object(), Settings(_env_file=None), _VALID_BATCH_PAYLOAD
     )
 
     assert batch_id == "batch-dag-9"
     assert called["payload"] == _VALID_BATCH_PAYLOAD
-    assert queue.enqueued_batch is None  # in-process path was NOT taken
-
-
-@pytest.mark.asyncio
-async def test_submit_full_load_batch_falls_back_to_in_process_when_not_gated() -> None:
-    queue = _FakeQueue()
-    settings = Settings(_env_file=None)  # empty gate
-
-    batch_id = await launch_mod.submit_full_load_batch(
-        object(), settings, _VALID_BATCH_PAYLOAD, queue=queue
-    )
-
-    assert batch_id == "batch-inproc-1"
-    assert queue.enqueued_batch == _VALID_BATCH_PAYLOAD
 
 
 @pytest.mark.asyncio
@@ -315,3 +285,69 @@ async def test_blue_green_load_status_reads_from_scratch_engine_and_disposes(
     assert seen["dsn"].endswith("##kor_travel_geo_fullload_e2e")  # bound to scratch DB
     assert isinstance(seen["engine"], _FakeEngine)  # NOT the serving engine
     assert disposed == [True]  # scratch engine always disposed
+
+
+# --- T-290k PR3 control-job launchers ---------------------------------------------------
+
+_CONTROL_LAUNCHERS = [
+    ("launch_source_rebuild_dagster_run", "source_rebuild_db", "run_source_rebuild_db"),
+    ("launch_consistency_check_dagster_run", "consistency_check", "run_consistency_check"),
+    ("launch_mv_refresh_dagster_run", "mv_refresh", "run_mv_refresh"),
+]
+
+
+@pytest.mark.parametrize(("fn_name", "kind", "op_name"), _CONTROL_LAUNCHERS)
+@pytest.mark.asyncio
+async def test_control_job_launcher_inserts_dagster_row_and_launches(
+    monkeypatch: pytest.MonkeyPatch, fn_name: str, kind: str, op_name: str
+) -> None:
+    launched: dict[str, Any] = {}
+
+    async def fake_launch(settings, *, job_name, run_config, tags):
+        launched.update(job_name=job_name, run_config=run_config, tags=tags)
+        return f"run-{kind}"
+
+    monkeypatch.setattr(launch_mod, "AdminRepository", _FakeRepo)
+    monkeypatch.setattr(launch_mod, "launch_dagster_run", fake_launch)
+
+    payload = {"scope": "full"}
+    job_id = await getattr(launch_mod, fn_name)(object(), Settings(_env_file=None), payload)
+
+    assert job_id == "job-dag-1"
+    assert _FakeRepo.inserted == {"kind": kind, "payload": payload, "executor": "dagster"}
+    assert launched["job_name"] == kind
+    assert launched["run_config"]["ops"][op_name]["config"] == {
+        "job_id": "job-dag-1",
+        "payload": payload,
+    }
+    assert launched["tags"] == {"kor_travel_geo.job_id": "job-dag-1"}
+
+
+@pytest.mark.asyncio
+async def test_control_job_launcher_failure_marks_failed_and_502(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_launch(settings, *, job_name, run_config, tags):
+        raise DagsterLaunchError("no such job")
+
+    monkeypatch.setattr(launch_mod, "AdminRepository", _FakeRepo)
+    monkeypatch.setattr(launch_mod, "LoadJobExecutor", _FakeExecutor)
+    monkeypatch.setattr(launch_mod, "launch_dagster_run", fake_launch)
+
+    with pytest.raises(KorTravelGeoError) as excinfo:
+        await launch_mod.launch_consistency_check_dagster_run(
+            object(), Settings(_env_file=None), {}
+        )
+
+    assert excinfo.value.http_status == 502
+    assert _FakeExecutor.failed[0] == "job-dag-1"
+
+
+def test_insert_load_job_defaults_to_dagster_executor() -> None:
+    """T-290k PR3 DTO guarantee: a load_jobs insert with no explicit executor is 'dagster'."""
+    import inspect
+
+    from kortravelgeo.infra.admin_repo import AdminRepository
+
+    for method in (AdminRepository.insert_load_job, AdminRepository.insert_load_batch):
+        assert inspect.signature(method).parameters["executor"].default == "dagster"

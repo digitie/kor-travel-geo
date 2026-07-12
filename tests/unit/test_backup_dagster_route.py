@@ -1,4 +1,9 @@
-"""submit_backup Dagster routing (T-290g): _launch_db_backup_dagster_run + the routing setting."""
+"""db_backup / db_restore Dagster launch helpers (T-290g/T-290i): the launch bookkeeping.
+
+Routing is unconditional Dagster since T-290k PR3, so these assert only that the launch
+helpers insert an ``executor='dagster'`` row, name the right op, and convert a launch failure
+to a marked-failed row + 502.
+"""
 
 from __future__ import annotations
 
@@ -10,13 +15,6 @@ from kortravelgeo.api._dagster_client import DagsterLaunchError
 from kortravelgeo.api.routers import admin as admin_mod
 from kortravelgeo.exceptions import KorTravelGeoError
 from kortravelgeo.settings import Settings
-
-
-def test_dagster_executed_job_kinds_parses_csv_and_defaults_empty() -> None:
-    routed = Settings(_env_file=None, dagster_executed_job_kinds="db_backup, db_restore")
-    assert "db_backup" in routed.dagster_executed_job_kinds
-    assert "db_restore" in routed.dagster_executed_job_kinds
-    assert Settings(_env_file=None).dagster_executed_job_kinds == ()
 
 
 class _FakeRow:
