@@ -1,4 +1,4 @@
-"""T-290k §2g cancel_load_job_converged: converge the row + real Dagster terminateRun (Dagster-only)."""
+"""T-290k §2g cancel_load_job_converged: converge the load_jobs row + real Dagster terminateRun."""
 
 from __future__ import annotations
 
