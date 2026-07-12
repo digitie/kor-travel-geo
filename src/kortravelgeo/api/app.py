@@ -882,7 +882,7 @@ def _register_default_handlers(queue: _jobs.JobQueue, engine: AsyncEngine) -> No
             stage="full_load_batch_enqueue",
             message="source rebuild materialized; enqueueing full_load_batch",
         )
-        batch_job_id = await submit_full_load_batch(engine, settings, batch_payload, queue=queue)
+        batch_job_id = await submit_full_load_batch(engine, settings, batch_payload)
         if control_job_id is not None:
             await queue.link_job_to_batch(control_job_id, batch_job_id)
         await client.record_rebuild_enqueued(

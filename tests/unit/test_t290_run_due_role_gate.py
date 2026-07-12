@@ -16,7 +16,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from kortravelgeo.api.app import create_app
-from kortravelgeo.api.deps import get_client, get_job_queue
+from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.responses import register_exception_handlers
 from kortravelgeo.api.security import (
     ROLE_DESTRUCTIVE_ADMIN,
@@ -58,7 +58,6 @@ async def test_run_due_rejects_non_scheduler_admin_roles(role: str) -> None:
     app = create_app()
     app.dependency_overrides[get_settings] = _trusted_settings
     app.dependency_overrides[get_client] = lambda: object()
-    app.dependency_overrides[get_job_queue] = lambda: object()
     transport = httpx.ASGITransport(app=app, client=_TRUSTED_PEER)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(

@@ -442,23 +442,25 @@ async def test_prepare_rebuild_uses_attempt_scoped_staging_root(
 
 
 @pytest.mark.asyncio
-async def test_rebuild_route_enqueues_control_job_without_materializing() -> None:
-    class FakeQueue:
-        def __init__(self) -> None:
-            self.enqueued: tuple[str, dict[str, Any]] | None = None
-            self.enqueue_batch_called = False
+async def test_rebuild_route_launches_dagster_control_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-290k PR3: POST /rebuild-db launches the Dagster source_rebuild_db control run
+    (integrity gate + materialize run inside the op), never materializing in the request."""
+    launched: dict[str, Any] = {}
 
-        async def enqueue(self, kind: str, payload: dict[str, Any]) -> str:
-            self.enqueued = (kind, payload)
-            return "job-control"
+    async def fake_launch(engine: Any, settings: Any, payload: dict[str, Any]) -> str:
+        launched["payload"] = payload
+        return "job-control"
 
-        async def enqueue_batch(self, _payload: dict[str, Any]) -> str:
-            self.enqueue_batch_called = True
-            raise AssertionError("route must not enqueue full_load_batch synchronously")
+    monkeypatch.setattr(admin, "launch_source_rebuild_dagster_run", fake_launch)
 
     class FakeClient:
         def __init__(self) -> None:
             self.audit: dict[str, Any] | None = None
+
+        def _engine(self) -> object:
+            return object()
 
         async def prepare_source_match_set_rebuild(self, *_args: Any, **_kwargs: Any) -> None:
             raise AssertionError("route must not materialize during the HTTP request")
@@ -466,7 +468,6 @@ async def test_rebuild_route_enqueues_control_job_without_materializing() -> Non
         async def record_audit_event(self, **kwargs: Any) -> None:
             self.audit = kwargs
 
-    queue = FakeQueue()
     client = FakeClient()
     request = Request(
         {
@@ -488,7 +489,6 @@ async def test_rebuild_route_enqueues_control_job_without_materializing() -> Non
         request,
         ctx=ctx,
         client=cast("Any", client),
-        queue=cast("Any", queue),
     )
 
     assert response == SourceRebuildDbResponse(
@@ -498,123 +498,17 @@ async def test_rebuild_route_enqueues_control_job_without_materializing() -> Non
         forced_promotion=False,
         message="rebuild prepare job queued; integrity gate will run asynchronously",
     )
-    assert queue.enqueued == (
-        "source_rebuild_db",
-        {
-            "source_match_set_id": "ms-1",
-            "actor": "tester",
-            "force_promotion": False,
-            "reason": None,
-            "download_concurrency": 3,
-            "materialize_concurrency": 2,
-        },
-    )
-    assert queue.enqueue_batch_called is False
+    assert launched["payload"] == {
+        "source_match_set_id": "ms-1",
+        "actor": "tester",
+        "force_promotion": False,
+        "reason": None,
+        "download_concurrency": 3,
+        "materialize_concurrency": 2,
+    }
     assert client.audit is not None
     assert client.audit["outcome"] == "started"
     assert client.audit["job_id"] == "job-control"
-
-
-@pytest.mark.asyncio
-async def test_source_rebuild_control_job_enqueues_full_load_batch(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class QueueCapture:
-        def __init__(self) -> None:
-            self.handlers: dict[str, Any] = {}
-            self.batch_payload: dict[str, Any] | None = None
-            self.linked: tuple[str, str] | None = None
-
-        def register(self, kind: str, handler: Any) -> None:
-            self.handlers[kind] = handler
-
-        async def enqueue_batch(self, payload: dict[str, Any]) -> str:
-            self.batch_payload = payload
-            return "batch-1"
-
-        async def link_job_to_batch(self, job_id: str, load_batch_id: str) -> None:
-            self.linked = (job_id, load_batch_id)
-
-    class NoopLock:
-        async def __aenter__(self) -> None:
-            return None
-
-        async def __aexit__(self, *_args: object) -> bool:
-            return False
-
-    async def fake_prepare(
-        self: AsyncAddressClient,
-        source_match_set_id: str,
-        **kwargs: Any,
-    ) -> tuple[SourceRebuildDbResponse, dict[str, Any]]:
-        del self
-        progress = kwargs["progress"]
-        await progress(progress=0.70, stage="rebuild_materialized", message="ok")
-        return (
-            SourceRebuildDbResponse(
-                source_match_set_id=source_match_set_id,
-                enqueued=True,
-                integrity_gate_ok=True,
-            ),
-            {
-                "children": [{"kind": "juso_text_load", "payload": {"path": "/stage"}}],
-                "source_match_set_id": source_match_set_id,
-            },
-        )
-
-    record_calls: list[dict[str, Any]] = []
-
-    async def fake_record_rebuild_enqueued(
-        self: AsyncAddressClient,
-        source_match_set_id: str,
-        **kwargs: Any,
-    ) -> None:
-        del self
-        record_calls.append({"source_match_set_id": source_match_set_id, **kwargs})
-
-    monkeypatch.setattr(api_app, "cross_process_lock", lambda *_args, **_kwargs: NoopLock())
-    monkeypatch.setattr(
-        AsyncAddressClient,
-        "prepare_source_match_set_rebuild",
-        fake_prepare,
-    )
-    monkeypatch.setattr(
-        AsyncAddressClient,
-        "record_rebuild_enqueued",
-        fake_record_rebuild_enqueued,
-    )
-
-    queue = QueueCapture()
-    api_app._register_default_handlers(cast("Any", queue), cast("Any", object()))
-    progress_events: list[dict[str, Any]] = []
-
-    async def record_progress(**kwargs: Any) -> None:
-        progress_events.append(kwargs)
-
-    await queue.handlers["source_rebuild_db"](
-        "job-control",
-        {
-            "source_match_set_id": "ms-1",
-            "actor": "tester",
-        },
-        asyncio.Event(),
-        record_progress,
-    )
-
-    assert queue.batch_payload is not None
-    assert queue.batch_payload["source_match_set_id"] == "ms-1"
-    assert queue.linked == ("job-control", "batch-1")
-    assert record_calls == [
-        {
-            "source_match_set_id": "ms-1",
-            "actor": "tester",
-            "job_id": "batch-1",
-            "load_batch_id": "batch-1",
-            "forced_promotion": False,
-            "reason": None,
-        }
-    ]
-    assert any(event.get("stage") == "full_load_batch_queued" for event in progress_events)
 
 
 @pytest.mark.asyncio
