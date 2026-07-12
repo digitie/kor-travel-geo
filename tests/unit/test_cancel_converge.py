@@ -1,4 +1,4 @@
-"""T-290k §2g cancel_load_job_converged: dual-executor cancel (dagster terminate vs in-process)."""
+"""T-290k §2g cancel_load_job_converged: converge the row + real Dagster terminateRun (Dagster-only)."""
 
 from __future__ import annotations
 
@@ -52,43 +52,33 @@ def _wire(monkeypatch: pytest.MonkeyPatch, executor: str, run_id: str | None) ->
 async def test_dagster_row_terminates_run_and_converges(monkeypatch: pytest.MonkeyPatch) -> None:
     _wire(monkeypatch, "dagster", "run-9")
     terminated: list[tuple[str, str | None]] = []
-    in_process: list[str] = []
 
     async def orchestrator_cancel(*, job_id: str, orchestrator_run_id: str | None) -> None:
         terminated.append((job_id, orchestrator_run_id))
 
-    await cancel_load_job_converged(
-        object(),
-        "j1",
-        orchestrator_cancel=orchestrator_cancel,
-        in_process_cancel=lambda jid: in_process.append(jid) or True,
-    )
+    await cancel_load_job_converged(object(), "j1", orchestrator_cancel=orchestrator_cancel)
 
     assert _FakeRepo.calls["cancel_load_job"] == ["j1"]
     assert _FakeRepo.calls["cancel_children"] == ["j1"]
     assert terminated == [("j1", "run-9")]
-    assert in_process == []  # dagster row must NOT hit the in-process cancel path
     assert _FakeExecutor.progress == ["j1"]
 
 
 @pytest.mark.asyncio
-async def test_in_process_row_sets_cancel_event_not_terminate(
+async def test_non_dagster_row_converges_without_terminate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # A historical/absent api_in_process row (no live Dagster run) still converges the
+    # load_jobs row + queued children, but there is nothing to terminateRun (T-290k retired
+    # the in-process drain, so there is no in-process cancel path either).
     _wire(monkeypatch, "api_in_process", None)
     terminated: list[str] = []
-    in_process: list[str] = []
 
     async def orchestrator_cancel(*, job_id: str, orchestrator_run_id: str | None) -> None:
         terminated.append(job_id)
 
-    await cancel_load_job_converged(
-        object(),
-        "j2",
-        orchestrator_cancel=orchestrator_cancel,
-        in_process_cancel=lambda jid: bool(in_process.append(jid)) or True,
-    )
+    await cancel_load_job_converged(object(), "j2", orchestrator_cancel=orchestrator_cancel)
 
     assert _FakeRepo.calls["cancel_load_job"] == ["j2"]
-    assert in_process == ["j2"]  # in-process drain job stopped via its cancel event
-    assert terminated == []  # no Dagster terminate for an api_in_process row
+    assert _FakeRepo.calls["cancel_children"] == ["j2"]
+    assert terminated == []  # no Dagster terminate for a non-dagster row

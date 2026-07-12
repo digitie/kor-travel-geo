@@ -20,7 +20,7 @@ trail and must remain valid. The ``load_jobs`` table + the Dagster run store 2-r
 Mirrors the fresh-init default in ``src/kortravelgeo/infra/sql.py`` (SCHEMA_SQL) and
 ``sql/ddl/001_schema.sql`` (schema-drift 3-place rule).
 
-Revision ID: 0026_t290k_retire_in_process_executor
+Revision ID: 0026_t290k_retire_inproc
 Revises: 0025_t290h_run_failure_alerts
 Create Date: 2026-07-12
 """
@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from alembic import op
 
-revision = "0026_t290k_retire_in_process_executor"
+revision = "0026_t290k_retire_inproc"
 down_revision = "0025_t290h_run_failure_alerts"
 branch_labels = None
 depends_on = None

@@ -100,17 +100,22 @@ def test_create_app_exposes_expected_routes_without_starting_lifespan() -> None:
     assert "/metrics" in paths
 
 
-def test_api_queue_registers_sppn_makarea_loader() -> None:
-    source = inspect.getsource(app_module._register_default_handlers)
+def test_batch_dag_dispatches_sppn_makarea_loader() -> None:
+    # The sppn_makarea loader (like all source loaders) is now dispatched by the Dagster-executed
+    # batch DAG leaf, not the retired in-process JobQueue handler registry (T-290k).
+    from kortravelgeo.loaders import batch_dag
+
+    source = inspect.getsource(batch_dag)
 
     assert "load_sppn_makarea(" in source
     assert '"sppn_makarea_load"' in source
     assert "AdvisoryLockNamespace.LOAD_SPPN_MAKAREA" in source
-    assert "sppn_makarea" in source
 
 
 @pytest.mark.asyncio
 async def test_loader_thread_wrapper_keeps_api_event_loop_responsive() -> None:
+    from kortravelgeo.loaders import batch_dag
+
     main_thread_id = threading.get_ident()
     worker_thread_ids: list[int] = []
     blocker = threading.Event()
@@ -120,7 +125,7 @@ async def test_loader_thread_wrapper_keeps_api_event_loop_responsive() -> None:
         blocker.wait(0.2)
         return "loaded"
 
-    task = asyncio.create_task(app_module._run_loader_off_event_loop(blocking_loader))
+    task = asyncio.create_task(batch_dag._run_off_event_loop(blocking_loader))
 
     await asyncio.wait_for(asyncio.sleep(0.01), timeout=0.05)
     assert not task.done()

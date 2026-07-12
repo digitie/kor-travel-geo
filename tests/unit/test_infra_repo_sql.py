@@ -390,66 +390,10 @@ def test_insert_load_batch_stamps_executor_and_dagster_root_is_queued() -> None:
     assert '"executor": executor' in source
 
 
-@pytest.mark.asyncio
-async def test_batch_consistency_error_reaches_promotion_gate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class QueueCapture:
-        def __init__(self) -> None:
-            self.handlers: dict[str, Any] = {}
-
-        def register(self, kind: str, handler: Any) -> None:
-            self.handlers[kind] = handler
-
-    class NoopLock:
-        async def __aenter__(self) -> None:
-            return None
-
-        async def __aexit__(self, *_args: object) -> bool:
-            return False
-
-    async def fake_run_all_cases(
-        _engine: object,
-        *,
-        scope: str,
-        cases: tuple[str, ...],
-        generated_by: str,
-        source_set: dict[str, Any],
-        on_progress: Any,
-    ) -> ConsistencyReport:
-        del cases
-        if on_progress is not None:
-            await on_progress(1.0, "C1")
-        now = datetime.now(UTC)
-        return ConsistencyReport(
-            report_id="consistency_error",
-            scope=scope,
-            severity_max="ERROR",
-            source_set=source_set,
-            started_at=now,
-            finished_at=now,
-            cases=(),
-            generated_by=generated_by,  # type: ignore[arg-type]
-        )
-
-    monkeypatch.setattr(api_app, "run_all_cases", fake_run_all_cases)
-    monkeypatch.setattr(api_app, "cross_process_lock", lambda *_args, **_kwargs: NoopLock())
-    queue = QueueCapture()
-    api_app._register_default_handlers(queue, object())  # type: ignore[arg-type]
-    handler = queue.handlers["consistency_check"]
-    progress_events: list[dict[str, Any]] = []
-
-    async def record_progress(**kwargs: Any) -> None:
-        progress_events.append(kwargs)
-
-    await handler("job-consistency", {"load_batch_id": "batch-1"}, asyncio.Event(), record_progress)
-
-    assert any(
-        "batch promotion gate" in str(event.get("message")) for event in progress_events
-    )
-
-    with pytest.raises(RuntimeError, match="consistency report failed"):
-        await handler("job-consistency", {}, asyncio.Event(), record_progress)
+# (test_batch_consistency_error_reaches_promotion_gate removed in T-290k PR4: the in-process
+# consistency handler + its promotion gate are retired; the gate is now covered against the
+# Dagster batch DAG leaf by tests/unit/test_batch_dag.py::test_gate_blocks_mv_on_consistency_error
+# and ::test_forced_promotion_bypasses_error_gate_and_threads_metadata.)
 
 
 @pytest.mark.asyncio
