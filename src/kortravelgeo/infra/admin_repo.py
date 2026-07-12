@@ -1486,6 +1486,27 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
             ).mappings().one()
         return map_load_job(dict(row))
 
+    async def link_job_to_batch(self, job_id: str, load_batch_id: str) -> None:
+        """Record the downstream full-load batch id on a control job (T-290k).
+
+        Relocated from ``JobQueue.link_job_to_batch``: the ``source_rebuild_db`` Dagster
+        control op writes the launched ``full_load_batch`` id onto its own control row so
+        the rebuild -> batch provenance survives without the retired in-process queue.
+        """
+
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+UPDATE load_jobs
+   SET load_batch_id = :load_batch_id,
+       heartbeat_at = now()
+ WHERE job_id = :job_id
+"""
+                ),
+                {"job_id": job_id, "load_batch_id": load_batch_id},
+            )
+
     async def insert_load_batch(
         self,
         *,

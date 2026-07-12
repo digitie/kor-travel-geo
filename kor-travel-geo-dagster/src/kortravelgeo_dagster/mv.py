@@ -1,32 +1,38 @@
-"""Dagster materialized-view refresh job (T-290a wiring proof).
+"""Dagster materialized-view refresh job (T-290k — release-gated, load_jobs-bridged).
 
-Minimal ``@op`` + ``@job`` that refreshes the geo serving materialized views
-(``mv_geocode_target`` / ``mv_geocode_text_search``). Dagster owns only the
-orchestration; the actual refresh logic is the main-lib leaf
-``kortravelgeo.loaders.postload.refresh_mv`` called as-is (no domain-logic
-reimplementation — dagster-boundary §4).
+Runs the geo serving MV refresh as a Dagster op by calling the main-lib leaf
+:func:`kortravelgeo.loaders.batch_dag.run_mv_refresh`, which performs the FULL serving
+sequence the in-process ``mv_refresh`` handler did (``resolve_text_geometry_links`` ->
+``ensure_load_batch_release_gate`` (unless ``forced_promotion``) -> MV swap ->
+``record_mv_refresh_release`` + serving-release write). The earlier T-290a wiring proof
+called ``refresh_mv`` alone and silently dropped the link-resolution, release gate and
+serving-release record; routing the operator endpoint at it would have lost those semantics.
+Bridged to the ``load_jobs`` row via :func:`load_job_bridge.execute_load_job`.
 
 IMPORTANT (dagster-boundary §10): this module must NOT use
-``from __future__ import annotations`` — Dagster validates the ``@op`` function's
-``context`` type at runtime, which requires real (non-stringized) annotations.
+``from __future__ import annotations`` — Dagster validates the ``@op`` ``context`` type at
+runtime, which requires real (non-stringized) annotations.
 """
 
+import asyncio
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Final, Literal, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
-from dagster import Bool, Failure, Field, OpExecutionContext, String, job, op
-from kortravelgeo.loaders.postload import refresh_mv
+from dagster import Field, OpExecutionContext, Permissive, String, job, op
+from kortravelgeo.loaders.batch_dag import run_mv_refresh
 
+from .load_job_bridge import ProgressReporter, execute_load_job
 from .resources import op_resource
 
 if TYPE_CHECKING:
     from kortravelgeo.client import AsyncAddressClient
+    from kortravelgeo.settings import Settings
 
 __all__ = [
     "MV_REFRESH_JOBS",
     "MV_REFRESH_JOB_TAGS",
     "mv_refresh_job",
-    "refresh_geocode_mv_op",
+    "run_mv_refresh_op",
 ]
 
 MV_REFRESH_JOB_TAGS: Final[dict[str, str]] = {
@@ -36,88 +42,65 @@ MV_REFRESH_JOB_TAGS: Final[dict[str, str]] = {
 """Common tags for the mv_refresh Dagster job."""
 
 _MV_REFRESH_CONFIG_SCHEMA: Final[dict[str, object]] = {
-    "strategy": Field(
+    "job_id": Field(
         String,
-        default_value="concurrent",
-        description=(
-            "MV refresh strategy. 'concurrent' runs REFRESH MATERIALIZED VIEW "
-            "[CONCURRENTLY]; 'swap' rebuilds shadow MVs then renames them into place "
-            "(ADR-007/ADR-017)."
-        ),
+        description="The mv_refresh load_jobs id the API created before launching.",
     ),
-    "concurrently": Field(
-        Bool,
-        default_value=True,
+    "payload": Field(
+        Permissive(),  # type: ignore[no-untyped-call]
         description=(
-            "Whether the 'concurrent' strategy uses CONCURRENTLY. Ignored by the "
-            "'swap' strategy."
+            "mv_refresh payload: strategy ('concurrent'|'swap'), load_batch_id, "
+            "source_match_set_id, forced_promotion, forced_promotion_metadata."
         ),
     ),
 }
 
 
 @op(
-    name="refresh_geocode_mv",
+    name="run_mv_refresh",
     description=(
-        "Refresh the geo serving MVs (mv_geocode_target / mv_geocode_text_search) by "
-        "calling the main-lib leaf refresh_mv with the client resource's engine."
+        "Refresh the geo serving MVs via the main-lib run_mv_refresh leaf (resolve links -> "
+        "release gate -> swap -> record serving release), bridged to the load_jobs row. "
+        "No RetryPolicy — the swap performs DROP/RENAME (non-idempotent). Op name != job name."
     ),
-    required_resource_keys={"client"},
+    required_resource_keys={"client", "settings"},
     config_schema=_MV_REFRESH_CONFIG_SCHEMA,
 )
-async def refresh_geocode_mv_op(context: OpExecutionContext) -> dict[str, object]:
-    """Run the geo MV-refresh leaf (``refresh_mv``) as a Dagster op.
+async def run_mv_refresh_op(context: OpExecutionContext) -> dict[str, object]:
+    """Run the release-gated MV refresh as this Dagster run's body."""
 
-    Passes the ``client`` resource's (``AsyncAddressClient``) engine straight to
-    ``refresh_mv`` and records reference/summary metadata. MV refresh is idempotent,
-    but the 'swap' strategy performs DROP/RENAME, so this wiring-proof op does NOT
-    attach a RetryPolicy (conservative — ADR-066 §4).
-    """
     client = cast("AsyncAddressClient", op_resource(context, "client"))
-    config = cast("Mapping[str, object]", context.op_config)
-    strategy = _mv_strategy(config.get("strategy"))
-    concurrently = _bool_config(config.get("concurrently"), default=True)
+    settings = cast("Settings", op_resource(context, "settings"))
+    engine = client._engine()
+    ttl = settings.dagster_lease_ttl_seconds
 
-    await refresh_mv(client._engine(), concurrently=concurrently, strategy=strategy)
+    config = cast("Mapping[str, Any]", context.op_config)
+    job_id = str(config["job_id"])
+    payload = dict(cast("Mapping[str, Any]", config["payload"]))
 
-    metadata: dict[str, object] = {
-        "strategy": strategy,
-        "concurrently": concurrently,
-        "materialized_views": ["mv_geocode_target", "mv_geocode_text_search"],
-    }
-    context.add_output_metadata(metadata)
-    return metadata
+    async def leaf(cancel_event: asyncio.Event, progress: ProgressReporter) -> None:
+        await run_mv_refresh(engine, payload=payload, job_id=job_id, progress=progress)
+
+    await execute_load_job(
+        job_id=job_id,
+        orchestrator_run_id=context.run_id,
+        engine=engine,
+        leaf=leaf,
+        lease_ttl_seconds=ttl,
+    )
+    context.add_output_metadata({"job_id": job_id, "kind": "mv_refresh"})
+    return {"job_id": job_id}
 
 
 @job(
     name="mv_refresh",
     tags=MV_REFRESH_JOB_TAGS,
-    description="Refresh the geo serving materialized views (T-290a wiring proof).",
+    description="Refresh the geo serving materialized views, release-gated (T-290k).",
 )
 def mv_refresh_job() -> None:
     """Operator-facing mv_refresh job (note: op name != job name)."""
-    refresh_geocode_mv_op()
+    run_mv_refresh_op()
 
 
 MV_REFRESH_JOBS: Final = [mv_refresh_job]
 """Job list aggregated by ``definitions.py``."""
-
-
-def _mv_strategy(value: object) -> Literal["concurrent", "swap"]:
-    if value is None or value == "concurrent":
-        return "concurrent"
-    if value == "swap":
-        return "swap"
-    raise Failure(
-        description=f"mv_refresh strategy must be 'concurrent' or 'swap': {value!r}"
-    )
-
-
-def _bool_config(value: object, *, default: bool) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    raise TypeError("boolean config value expected")
