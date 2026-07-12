@@ -5,6 +5,13 @@
 ## [Unreleased]
 
 ### Added
+- **Dagster 관측 API를 추가했다.** `GET /v1/ops/dagster/summary`와
+  `GET /v1/ops/dagster/runs/{run_id}`가 Dagster webserver GraphQL을 읽어 admin UI용
+  summary/run detail DTO로 반환한다. Dagster가 내려가도 HTTP 200 `status="unavailable"`로
+  장애 상태를 표현하며, backend SSRF 방어를 위해 scheme/host/path allowlist를 적용한다.
+- **Dagster 관리자 관측 화면(`/admin/dagster`)을 추가했다.** OpenAPI 생성 타입 기반
+  React Query hook으로 Dagster summary/run detail API를 읽고, repository·asset·job·최근 run·
+  schedule/sensor tick을 표시하며 Dagster webserver를 sandbox iframe으로 임베드한다.
 - **파일 관리 화면(`/admin/files`)과 통합 파일 인벤토리 API를 추가했다.**
   `GET /v1/admin/storage/files`는 원천 파일 그룹·백업/산출물(artifact)·DB에 등록되지 않은
   저장소 객체를 한 목록으로 반환하며, 각 항목의 lifecycle(서빙 사용 중/구성 대기/미사용/

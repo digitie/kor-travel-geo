@@ -31,6 +31,7 @@
 | cAdvisor | `12301` | `cadvisor:8080` | Docker 컨테이너 리소스 exporter |
 | Prometheus | `12401` | `prometheus:9090` | `http://127.0.0.1:12401` |
 | `kor-travel-geo` API | `12501` | `kor-travel-geo-api:12501` | 로컬 단독 실행과 Docker 실행 동일 |
+| `kor-travel-geo` Dagster webserver | `12502` | `kor-travel-geo-dagster:12502` | T-290 독립 Dagster 관측/API. 공개 도메인 `https://geo-dagster.digitie.mywire.org/`(라우터 리버스 프록시 TLS 종단 → `127.0.0.1:12502`, admin iframe용 `KTG_DAGSTER_PUBLIC_URL`; 백엔드 GraphQL은 내부 `12502` 유지). worker/aux 슬롯(map `12702`·concierge `12602`과 동일 패턴) |
 | `kor-travel-geo-ui` | `12505` | `kor-travel-geo-ui:12505` | 로컬 단독 실행과 Docker 실행 동일 |
 | `kor-travel-concierge` API | `12601` | manager compose 기준 | 다른 서비스 연동 시 참조 |
 | `kor-travel-concierge` worker/보조 API | `12602` | manager compose 기준 | 다른 서비스 연동 시 참조 |

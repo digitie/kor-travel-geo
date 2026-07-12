@@ -56,6 +56,7 @@ from .dto.admin import (
     MaintenanceWindowCreate,
     MaintenanceWindowEnd,
     OpsArtifact,
+    OpsAuditOutcome,
     PgStatStatementSnapshot,
     PublicApiKeyCreateResponse,
     PublicApiKeySummary,
@@ -69,6 +70,7 @@ from .dto.admin import (
     RestoreHotSwapRollbackRequest,
     RestoreHotSwapRollbackResult,
     RollbackPlan,
+    RunFailureAlert,
     ScheduledBackupStatus,
     ServingRelease,
     TableStat,
@@ -128,7 +130,6 @@ from .dto.v2 import (
 from .dto.zipcode import ZipcodeResponse
 from .exceptions import InvalidAddressError, NotFoundError
 from .infra.admin_repo import AdminRepository
-from .infra.batch import batch_children
 from .infra.cache import GeoCacheRepository, make_cache_key
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
@@ -842,7 +843,7 @@ class AsyncAddressClient:
         *,
         action: str,
         actor_type: str = "api",
-        outcome: str = "started",
+        outcome: OpsAuditOutcome = "started",
         payload: dict[str, Any] | None = None,
         actor_id: str | None = None,
         client_ip: str | None = None,
@@ -882,6 +883,46 @@ class AsyncAddressClient:
             action=action,
             outcome=outcome,
         )
+
+    # --- Dagster run-failure alerts (T-290h) ------------------------------
+
+    async def record_run_failure_alert(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        run_failed_at: datetime,
+        job_id: str | None = None,
+        job_name: str | None = None,
+        job_kind: str | None = None,
+        error_code: str | None = None,
+    ) -> RunFailureAlert:
+        return await AdminRepository(self._engine()).record_run_failure_alert(
+            run_id=run_id,
+            status=status,
+            run_failed_at=run_failed_at,
+            job_id=job_id,
+            job_name=job_name,
+            job_kind=job_kind,
+            error_code=error_code,
+        )
+
+    async def get_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        return await AdminRepository(self._engine()).get_run_failure_alert(run_id)
+
+    async def list_run_failure_alerts(
+        self,
+        *,
+        limit: int = 50,
+        unacknowledged_only: bool = True,
+    ) -> list[RunFailureAlert]:
+        return await AdminRepository(self._engine()).list_run_failure_alerts(
+            limit=limit,
+            unacknowledged_only=unacknowledged_only,
+        )
+
+    async def acknowledge_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        return await AdminRepository(self._engine()).acknowledge_run_failure_alert(run_id)
 
     # --- Source upload sessions (T-203a) ----------------------------------
 
@@ -1908,6 +1949,17 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             expires_before=expires_before,
         )
 
+    async def get_artifact_by_job_id(
+        self,
+        job_id: str,
+        *,
+        artifact_type: str | None = None,
+    ) -> OpsArtifact | None:
+        return await AdminRepository(self._engine()).get_artifact_by_job_id(
+            job_id,
+            artifact_type=artifact_type,
+        )
+
     async def file_inventory_page(
         self,
         *,
@@ -2181,17 +2233,6 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             for category in CATEGORY_CATALOG
         )
 
-    async def submit_load(self, kind: str, payload: dict[str, Any]) -> LoadJobStatus:
-        repo = AdminRepository(self._engine())
-        if kind == "full_load_batch":
-            row = await repo.insert_load_batch(
-                payload=payload,
-                children=batch_children(payload),
-            )
-        else:
-            row = await repo.insert_load_job(kind=kind, payload=payload)
-        return _load_job_status(row)
-
     async def cancel_load(self, job_id: str) -> LoadJobStatus:
         row = await AdminRepository(self._engine()).cancel_load_job(job_id)
         if row is None:
@@ -2199,19 +2240,6 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
 
             raise NotFoundError(f"cancellable load job not found: {job_id}")
         return _load_job_status(row)
-
-    async def run_consistency_check(
-        self,
-        *,
-        scope: Literal["full", "sido", "recent"] = "full",
-        sido: str | None = None,
-        recent_days: int = 7,
-        cases: tuple[str, ...] | None = None,
-    ) -> LoadJobStatus:
-        return await self.submit_load(
-            "consistency_check",
-            {"scope": scope, "sido": sido, "recent_days": recent_days, "cases": cases},
-        )
 
     async def consistency_report(self, report_id: str) -> ConsistencyReport:
         row = await AdminRepository(self._engine()).consistency_report(report_id)

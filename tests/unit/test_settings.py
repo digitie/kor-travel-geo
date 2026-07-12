@@ -72,6 +72,18 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.ops_slow_sample_flush_batch_size == 50
     assert settings.ops_slow_query_explain_enabled is False
     assert settings.ops_slow_query_explain_timeout_ms == 3_000
+    assert settings.dagster_url == "http://127.0.0.1:12502"
+    assert settings.dagster_graphql_url is None
+    assert settings.dagster_allowed_hosts == (
+        "127.0.0.1",
+        "localhost",
+        "::1",
+        "kor-travel-geo-dagster",
+        "dagster",
+    )
+    assert settings.dagster_request_timeout_seconds == 3.0
+    assert settings.dagster_repository_name == "__repository__"
+    assert settings.dagster_repository_location_name == "kortravelgeo_dagster.definitions"
     assert settings.runtime_warm_on_startup is False
     assert settings.runtime_warm_interval_minutes == 0
     assert settings.runtime_warm_query_limit == 32
@@ -126,6 +138,7 @@ def test_settings_normalize_backup_csv_values() -> None:
         geoip_allow_cidrs="203.0.113.0/24,2001:db8::/32",
         geoip_trusted_proxies="127.0.0.1/32",
         geoip_open_paths="/v1/healthz,/metrics",
+        dagster_allowed_hosts="127.0.0.1,dagster",
         runtime_warm_prewarm_relations="mv_geocode_target,region_radius_parts",
     )
 
@@ -135,6 +148,7 @@ def test_settings_normalize_backup_csv_values() -> None:
     assert str(settings.geoip_allow_cidrs[1]) == "2001:db8::/32"
     assert str(settings.geoip_trusted_proxies[0]) == "127.0.0.1/32"
     assert settings.geoip_open_paths == ("/v1/healthz", "/metrics")
+    assert settings.dagster_allowed_hosts == ("127.0.0.1", "dagster")
     assert settings.runtime_warm_prewarm_relations == (
         "mv_geocode_target",
         "region_radius_parts",

@@ -184,6 +184,11 @@ export interface paths {
          *     otherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``
          *     advisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that
          *     cannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).
+         *
+         *     Gated to ``scheduler`` (the least-privilege role the Dagster on-ramp presents,
+         *     T-290 / ADR-066) or ``destructive_admin`` (manual operator trigger). This is
+         *     stricter than the router-wide ``require_role(*KNOWN_ADMIN_ROLES)``: a broad admin
+         *     role (e.g. ``source_file_viewer``) can no longer enqueue a scheduled backup.
          */
         post: operations["run_due_scheduled_backup_v1_admin_backups_scheduled_run_due_post"];
         delete?: never;
@@ -1966,6 +1971,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ops/dagster/run-failures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dagster run 실패 알림 목록
+         * @description Dagster run-failure 센서가 ``ops.run_failure_alerts``에 영속한 실패 알림을 최근순으로 반환한다. 기본은 미확인(unacknowledged) 알림만이며, ``include_acknowledged=true``이면 확인된 알림도 포함한다. app DB를 읽으며 Dagster webserver에 의존하지 않는다.
+         */
+        get: operations["get_dagster_run_failures_v1_ops_dagster_run_failures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ops/dagster/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dagster run 상세
+         * @description Dagster GraphQL runOrError를 조회해 최근 event log와 실패 error payload를 admin UI용 DTO로 반환한다. 조회 전용이며 Dagster run을 재실행하거나 상태를 변경하지 않는다.
+         */
+        get: operations["get_dagster_run_detail_v1_ops_dagster_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ops/dagster/runs/{run_id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dagster run 실패 알림 확인(ack)
+         * @description ``ops.run_failure_alerts``의 해당 run 알림을 확인 처리한다(``acknowledged_at`` 설정). 멱등이며, 이미 확인된 알림은 그대로 반환한다. 알림이 없으면 404.
+         */
+        post: operations["acknowledge_dagster_run_failure_v1_ops_dagster_runs__run_id__ack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ops/dagster/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dagster 운영 요약
+         * @description Dagster GraphQL에서 repository, asset, schedule/sensor, recent run 정보를 읽어 admin UI 요약 DTO로 반환한다. Dagster webserver가 내려가도 200 응답(status=unavailable)으로 UI가 장애 상태를 표시할 수 있게 한다.
+         */
+        get: operations["get_dagster_summary_v1_ops_dagster_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/readyz": {
         parameters: {
             query?: never;
@@ -3040,6 +3125,339 @@ export interface components {
              * @enum {string}
              */
             state: "passed" | "warning" | "skipped" | "failed" | "not_started" | "validating";
+        };
+        /**
+         * DagsterAssetGroup
+         * @description Dagster asset group summary.
+         */
+        DagsterAssetGroup: {
+            /** Asset Count */
+            asset_count: number;
+            /** Assets */
+            assets: string[];
+            /** Group Name */
+            group_name: string;
+        };
+        /**
+         * DagsterBackupArtifact
+         * @description Backup artifact linked to a Dagster ``db_backup`` run.
+         */
+        DagsterBackupArtifact: {
+            /** Artifact Id */
+            artifact_id: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Download Url */
+            download_url?: string | null;
+            /** Size Bytes */
+            size_bytes?: number | null;
+            /** State */
+            state: string;
+        };
+        /**
+         * DagsterGraphqlError
+         * @description Dagster GraphQL PythonError summary.
+         */
+        DagsterGraphqlError: {
+            /** Class Name */
+            class_name?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Stack */
+            stack?: string[];
+        };
+        /**
+         * DagsterInstigationTick
+         * @description Dagster schedule/sensor tick summary.
+         */
+        DagsterInstigationTick: {
+            /** Cursor */
+            cursor?: string | null;
+            /** End Timestamp */
+            end_timestamp?: number | null;
+            error?: components["schemas"]["DagsterGraphqlError"] | null;
+            /** Run Ids */
+            run_ids?: string[];
+            /** Run Keys */
+            run_keys?: string[];
+            /** Skip Reason */
+            skip_reason?: string | null;
+            /** Status */
+            status: string;
+            /** Tick Id */
+            tick_id: string;
+            /** Timestamp */
+            timestamp: number;
+        };
+        /**
+         * DagsterJob
+         * @description Dagster job/pipeline summary.
+         */
+        DagsterJob: {
+            /** Is Job */
+            is_job: boolean;
+            /** Name */
+            name: string;
+        };
+        /**
+         * DagsterRepository
+         * @description Dagster code location/repository summary.
+         */
+        DagsterRepository: {
+            /** Asset Count */
+            asset_count: number;
+            /** Asset Groups */
+            asset_groups: components["schemas"]["DagsterAssetGroup"][];
+            /** Jobs */
+            jobs: components["schemas"]["DagsterJob"][];
+            /** Location Name */
+            location_name: string;
+            /** Name */
+            name: string;
+            /** Schedules */
+            schedules: components["schemas"]["DagsterSchedule"][];
+            /** Sensors */
+            sensors: components["schemas"]["DagsterSensor"][];
+        };
+        /**
+         * DagsterResponseMeta
+         * @description Small response metadata block for Dagster proxy reads.
+         */
+        DagsterResponseMeta: {
+            /** Duration Ms */
+            duration_ms: number;
+        };
+        /**
+         * DagsterRunDetailData
+         * @description ``GET /v1/ops/dagster/runs/{run_id}`` data.
+         */
+        DagsterRunDetailData: {
+            backup_artifact?: components["schemas"]["DagsterBackupArtifact"] | null;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Dagster Url */
+            dagster_url: string;
+            /** Errors */
+            errors?: string[];
+            /** Event Cursor */
+            event_cursor?: string | null;
+            /**
+             * Event Has More
+             * @default false
+             */
+            event_has_more: boolean;
+            /** Events */
+            events?: components["schemas"]["DagsterRunEvent"][];
+            failure_alert?: components["schemas"]["DagsterRunFailureAlert"] | null;
+            /** Graphql Url */
+            graphql_url: string;
+            run?: components["schemas"]["DagsterRunSummary"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "not_found" | "unavailable" | "error";
+        };
+        /**
+         * DagsterRunDetailResponse
+         * @description ``GET /v1/ops/dagster/runs/{run_id}`` response.
+         */
+        DagsterRunDetailResponse: {
+            data: components["schemas"]["DagsterRunDetailData"];
+            meta: components["schemas"]["DagsterResponseMeta"];
+        };
+        /**
+         * DagsterRunEvent
+         * @description Dagster run event/failure summary.
+         */
+        DagsterRunEvent: {
+            /** Dagster Event Type */
+            dagster_event_type?: string | null;
+            error?: components["schemas"]["DagsterGraphqlError"] | null;
+            /** Event Type */
+            event_type: string;
+            /** Level */
+            level?: string | null;
+            /** Message */
+            message?: string | null;
+            /** Step Id */
+            step_id?: string | null;
+            /** Timestamp */
+            timestamp?: string | null;
+        };
+        /**
+         * DagsterRunFailureAckResponse
+         * @description ``POST /v1/ops/dagster/runs/{run_id}/ack`` response.
+         */
+        DagsterRunFailureAckResponse: {
+            data: components["schemas"]["DagsterRunFailureAlert"];
+            meta: components["schemas"]["DagsterResponseMeta"];
+        };
+        /**
+         * DagsterRunFailureAlert
+         * @description Persisted Dagster run-failure alert (``ops.run_failure_alerts``, T-290h).
+         *
+         *     Written by the Dagster ``run_failure_sensor`` through the ``client`` resource
+         *     and surfaced read-only on run detail / the recent-failures list. Carries only
+         *     bounded fields (the failure ``error_code`` = error class name, never the raw
+         *     failure message — dagster-boundary §5).
+         */
+        DagsterRunFailureAlert: {
+            /** Acknowledged At */
+            acknowledged_at?: string | null;
+            /** Error Code */
+            error_code?: string | null;
+            /** Job Id */
+            job_id?: string | null;
+            /** Job Kind */
+            job_kind?: string | null;
+            /** Job Name */
+            job_name?: string | null;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /**
+             * Run Failed At
+             * Format: date-time
+             */
+            run_failed_at: string;
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * DagsterRunFailuresData
+         * @description ``GET /v1/ops/dagster/run-failures`` data (recent, unacknowledged first).
+         */
+        DagsterRunFailuresData: {
+            /** Alerts */
+            alerts?: components["schemas"]["DagsterRunFailureAlert"][];
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+        };
+        /**
+         * DagsterRunFailuresResponse
+         * @description ``GET /v1/ops/dagster/run-failures`` response.
+         */
+        DagsterRunFailuresResponse: {
+            data: components["schemas"]["DagsterRunFailuresData"];
+            meta: components["schemas"]["DagsterResponseMeta"];
+        };
+        /**
+         * DagsterRunSummary
+         * @description Recent Dagster run summary.
+         */
+        DagsterRunSummary: {
+            /** End Time */
+            end_time?: number | null;
+            /** Job Name */
+            job_name?: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Start Time */
+            start_time?: number | null;
+            /** Status */
+            status: string;
+            /** Tags */
+            tags: {
+                [key: string]: string;
+            };
+            /** Update Time */
+            update_time?: number | null;
+        };
+        /**
+         * DagsterSchedule
+         * @description Dagster schedule summary.
+         */
+        DagsterSchedule: {
+            /** Cron Schedule */
+            cron_schedule?: string | null;
+            /** Execution Timezone */
+            execution_timezone?: string | null;
+            /** Name */
+            name: string;
+            /** Next Tick At */
+            next_tick_at?: number | null;
+            /**
+             * Overdue
+             * @default false
+             */
+            overdue: boolean;
+            /** Recent Ticks */
+            recent_ticks?: components["schemas"]["DagsterInstigationTick"][];
+            /** Status */
+            status?: string | null;
+        };
+        /**
+         * DagsterSensor
+         * @description Dagster sensor summary.
+         */
+        DagsterSensor: {
+            /** Name */
+            name: string;
+            /** Recent Ticks */
+            recent_ticks?: components["schemas"]["DagsterInstigationTick"][];
+            /** Status */
+            status?: string | null;
+        };
+        /**
+         * DagsterSummaryData
+         * @description ``GET /v1/ops/dagster/summary`` data.
+         */
+        DagsterSummaryData: {
+            /** Asset Count */
+            asset_count: number;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /** Dagster Url */
+            dagster_url: string;
+            /** Errors */
+            errors?: string[];
+            /** Graphql Url */
+            graphql_url: string;
+            /** Job Count */
+            job_count: number;
+            /** Recent Runs */
+            recent_runs: components["schemas"]["DagsterRunSummary"][];
+            /** Repositories */
+            repositories: components["schemas"]["DagsterRepository"][];
+            /** Repository Count */
+            repository_count: number;
+            /** Run Counts */
+            run_counts: {
+                [key: string]: number;
+            };
+            /** Schedule Count */
+            schedule_count: number;
+            /** Sensor Count */
+            sensor_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unavailable" | "error";
+            /** Version */
+            version?: string | null;
+        };
+        /**
+         * DagsterSummaryResponse
+         * @description ``GET /v1/ops/dagster/summary`` response.
+         */
+        DagsterSummaryResponse: {
+            data: components["schemas"]["DagsterSummaryData"];
+            meta: components["schemas"]["DagsterResponseMeta"];
         };
         /** DatasetSnapshot */
         DatasetSnapshot: {
@@ -10173,6 +10591,136 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+        };
+    };
+    get_dagster_run_failures_v1_ops_dagster_run_failures_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description true이면 이미 확인(ack)된 알림도 포함한다. */
+                include_acknowledged?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DagsterRunFailuresResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dagster_run_detail_v1_ops_dagster_runs__run_id__get: {
+        parameters: {
+            query?: {
+                page_size?: number;
+                /** @description event log cursor. 미지정이면 처음부터 조회한다. */
+                after?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DagsterRunDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_dagster_run_failure_v1_ops_dagster_runs__run_id__ack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DagsterRunFailureAckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dagster_summary_v1_ops_dagster_summary_get: {
+        parameters: {
+            query?: {
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DagsterSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

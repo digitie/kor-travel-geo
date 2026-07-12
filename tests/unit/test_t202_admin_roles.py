@@ -10,6 +10,7 @@ from kortravelgeo.api.security import (
     KNOWN_ADMIN_ROLES,
     ROLE_DESTRUCTIVE_ADMIN,
     ROLE_REBUILD_OPERATOR,
+    ROLE_SCHEDULER,
     ROLE_SOURCE_FILE_MANAGER,
     ROLE_SOURCE_FILE_VIEWER,
     SOURCE_AUDIT_EVENT_TYPES,
@@ -49,18 +50,33 @@ def _build_app() -> FastAPI:
 # --- role / constant fixtures ---------------------------------------------
 
 
-def test_four_role_names_match_doc() -> None:
+def test_admin_role_names_match_doc() -> None:
     expected = {
         "source_file_viewer",
         "source_file_manager",
         "rebuild_operator",
         "destructive_admin",
+        # T-290 / ADR-066: least-privilege role for the Dagster scheduled-backup on-ramp.
+        "scheduler",
     }
     assert set(KNOWN_ADMIN_ROLES) == expected
     assert ROLE_SOURCE_FILE_VIEWER == "source_file_viewer"
     assert ROLE_SOURCE_FILE_MANAGER == "source_file_manager"
     assert ROLE_REBUILD_OPERATOR == "rebuild_operator"
     assert ROLE_DESTRUCTIVE_ADMIN == "destructive_admin"
+    assert ROLE_SCHEDULER == "scheduler"
+
+
+def test_scheduler_is_header_carriable_but_system_is_not() -> None:
+    # scheduler must survive header parsing (the on-ramp presents it); system must not.
+    assert ROLE_SCHEDULER in KNOWN_ADMIN_ROLES
+    assert "system" not in KNOWN_ADMIN_ROLES
+    ctx = _resolve(
+        _TRUSTED,
+        {"X-KTG-Actor": "system:dagster", "X-KTG-Roles": "scheduler, system"},
+    )
+    assert ctx is not None
+    assert ctx.roles == frozenset({"scheduler"})
 
 
 def test_source_audit_event_types_defined() -> None:

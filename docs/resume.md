@@ -2,7 +2,182 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-07-07 갱신, by claude)
+## 현재 진척도 (2026-07-12 갱신, by claude)
+
+- ✅ **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only (2026-07-12, by claude)** — backup/restore·적재
+  오케스트레이션의 독립 Dagster 이관을 끝냈다. 통합 브랜치 `agent/claude-dagster-migration`(HEAD `9bcb949`)에
+  T-290h~l이 모두 병합됐고 n150에 **cutover 배포·검증 완료** — in-process `JobQueue` drain·
+  `_run_loader_off_event_loop`·핸들러 클로저·`get_job_queue`가 **삭제**되고 모든 실행이 Dagster op으로 돈다.
+  - **T-290h**(#471) run-detail op 로그·artifact·실패/overdue 알림. **T-290i**(#472) `db_restore`(새 빈 DB).
+    **T-290j**(#476/#477) loader·`full_load_batch` Dagster 실행(`batch_dag.py` 미러 + GDAL 이미지). **T-290k**:
+    #479 blue-green E0404 · #480 PR1 additive Dagster jobs(`source_rebuild_db`·`consistency_check`·release-gated
+    `mv_refresh`) · #481 PR2 `DagsterJobReconciler` + queue-free cancel + **실제 `terminateRun`/liveness** + 주기
+    reconcile tick · #482 PR3 라우팅 무조건 Dagster(`dagster_executed_job_kinds` 삭제) · #483 PR4 drain 삭제 +
+    DDL `0026`(api_in_process→failed 수렴·executor 기본 `dagster`). **T-290l** 최종 회귀(backend unit 1224 +
+    ruff/mypy(161)/lint-imports/openapi) + reconciler real-liveness 라이브 확인 + Dagster observability 데이터 경로 검증.
+  - **전국 full-load 스테이징 라이브 e2e (blue-green, 프로드 serving 무손상)** — 격리 scratch DB로 Dagster가
+    7 로더 직렬 → `tl_juso_text`=**6,416,637**(serving 정확 일치) → consistency=ERROR(C2 SHP-only 34,699,
+    혼합 기준월 juso 202603<SHP 202604 정당) → **ADR-017 게이트가 mv swap 정확 차단**(ERROR-차단 변형 라이브) →
+    forced mv 빌드로 `mv_geocode_target`·`mv_geocode_text_search` 둘 다 **6,416,637**(swap 경로 검증). scratch drop.
+  - **cutover 검증**: DDL 0026 적용, app이 `get_job_queue` 없이 기동, reconciler 라이브(`fetch_run_state` 실제
+    상태 반환), serving mv 무손상 6,416,637. 경미: co-deploy 직후 reconciler startup이 dagster GraphQL 준비를
+    앞질러 probe가 lease-grace로 degrade(안전, 다음 60s tick 자가복구). n150 빌드 컨텍스트는
+    **`KOR_TRAVEL_GEO_REPO_DIR=/home/digitie/dev/kor-travel-geo` 필수**(기본 `../kor-travel-geo`는 stale non-git).
+  - **다음 한 작업**: `integration→main` 머지 후, geo Dagster 공개 URL(`geo-dagster.digitie.mywire.org`)을
+    관측 화면에 iframe/CSP로 임베드하는 후속 — `prod-geo-dagster-domain` 메모 참조.
+
+### 이전 진척도 (2026-07-10 갱신, by claude)
+
+- ✅ **T-290 유지보수성/직관성 패스 완료 (2026-07-10, by claude)** — 라이브 UI e2e #2(아래)가 드러낸
+  5버그 수정(#459~#461·manager #50·#462/#463) 이후, "이전 작업 리뷰·수정" 요청으로 3개 품질 PR을 추가
+  머지했다. **#464** — ③ CLI leaf verify/copy/restore_drill을 Dagster `@op`/`@job`(mv_refresh 패턴, client
+  leaf 직접 호출)과 일일 restore-drill `@schedule`(최신 available backup 자동 선택, 외부 cron T-239 대체)로
+  이관(dagster 41 tests). **#465** — 감사 outcome을 lifecycle로 재설계: #462/#463의 33개 state→outcome
+  alias 테이블 + 호출부 래핑 + repo coercion이 작업 lifecycle과 domain state를 혼동시켰던 것을, outcome은 각
+  사이트에서 명시("succeeded"/"denied")하고 domain state는 payload/resource에 두어 alias 테이블·헬퍼·coercion
+  전부 제거(타입 `OpsAuditOutcome`만 컴파일타임 가드로 유지; 1190 tests). **#466** — `_job_id` payload 밀반입
+  제거: `JobHandler`를 `(job_id, payload, cancel_event, progress)` 명시 시그니처로 바꿔 drain이 load_jobs id를
+  일급 인자로 전달하고, leaf `run_backup_job`/`run_restore_job(*, job_id)`가 payload를 그대로 검증하며 dagster
+  op도 명시 전달 — `_request_payload`/`_payload_job_id` 삭제(순 −31줄; 1187 main + 41 dagster tests). 이어 경미
+  후보 2건도 완료: **#468** — dagster op의 리소스 접근을 공유 `resources.op_resource`/`optional_op_resource`
+  하나로 통일(mv/backup/backup_execute의 `_resource_object` 3중복 + backup_maintenance의 `_client` 제거).
+  **#469** — definitions.py 리소스 조립을 map의 4-way(value→settings-value→real→missing)에서 **3-way**로 축소
+  (geo의 `SETTINGS_VALUE_RESOURCES`가 항상 `{}`라 settings-value 분기·`_settings_value_resource`·`Settings`
+  import가 dead code였음). **미착수**: n150 canonical resync(base compose stale, #50 볼륨이 추가 override로
+  적용됨 → n150 docker-manager를 main으로 resync 권장).
+
+- 📋 **T-290h 실행 계획 (다음 세션 착수 — 계획 확정 2026-07-10, by claude)** — `/admin/dagster` run detail에
+  backup **op 로그 + artifact 다운로드 UI + 실패/overdue 알림**을 연결한다. **M3 게이트 = live UI e2e #2**
+  (backup이 Dagster run으로 돌고 로그·artifact·알림이 admin UI에 보이는지). 스코핑(2026-07-10) 결과 **이미 있는
+  것**: artifact 다운로드 링크(`backup_artifact.download_url` → `GET /v1/admin/backups/{id}/download?token=`)·태그
+  연동(`kor_travel_geo.job_id`→load_jobs→artifact)·이벤트 스트림(step_id 포함)·failure sensor(payload만, 미영속).
+  **결정**: 실패 알림은 **cross-run 영속 이력까지**(ops 테이블 신설). 실행은 초장기 세션 회피로 **새 세션**에서.
+  - **Phase 1 — backend 영속**: alembic 마이그레이션으로 `ops.run_failure_alerts`(run_id PK, job_id, job_name,
+    job_kind, status, error_code, run_failed_at, recorded_at, acknowledged_at nullable) 신설.
+    `notify_run_failure_sensor`(dagster `backup.py`)가 기존 optional `failure_notifier` dispatch에 더해 **client
+    리소스 경유** 신규 infra 메서드(`AsyncAddressClient.record_run_failure_alert()` → repo INSERT)로 영속
+    (dagster-boundary §6: sensor는 client/infra 사용·api 금지; §3: sensor에 client 리소스 배선 필요).
+  - **Phase 2 — backend DTO/endpoint**: (a) overdue — 스케줄 summary DTO에 `overdue: bool`(또는 `next_tick_at`)
+    추가, GraphQL `futureTicks`/cron으로 백엔드 계산. (b) run-failures — `GET /v1/ops/dagster/run-failures`(최근
+    미ack 실패 목록) + `DagsterRunFailureAlert` DTO, 선택적 `POST .../{run_id}/ack`; run-detail에 해당 run의
+    `failure_alert` surface. op-log는 이벤트에 step_id가 이미 있어 **프론트 그룹핑**(백엔드 변경 최소).
+  - **Phase 3 — frontend(`DagsterPanel.RunDetailPanel`)**: op별 로그 섹션(이벤트 step_id 그룹핑, backup op 강조),
+    실패 배너(run.status FAILURE/CANCELED + error_code), overdue 배너(summary `overdue`), recent-failures 알림
+    목록(신규 hook). OpenAPI 타입 재생성 + React Query hook 추가.
+  - **Phase 4 — tests**: backend unit(failure-alert repo INSERT·overdue 계산·run-failures endpoint,
+    `test_dagster_router.py` + 마이그레이션 테스트) · dagster(sensor 영속 경로 `test_backup.py`) · frontend unit
+    (`dagster-panel.test.tsx`: op-log 그룹핑·실패/overdue 배너) · openapi drift.
+  - **Phase 5 — live UI e2e #2 (M3 게이트)**: 통합 브랜치 n150 배포(api+dagster+ui) → UI 백업 시작 → Dagster run
+    SUCCESS → run-detail의 op 로그·artifact 다운로드 확인 → 실패 유도로 실패 배너+영속 확인 → overdue 배너 확인.
+    Playwright(로컬 Linux→n150 UI fallback, ADR-065).
+  - **관련 파일**: `api/routers/dagster.py`(run-detail 698–787·summary query·`_with_backup_artifact` 531–576) ·
+    `dto/dagster.py`(`DagsterRunDetailData` 136–166) · dagster `backup.py`(`notify_run_failure_sensor` 141–214) ·
+    `components/admin/DagsterPanel.tsx`(`RunDetailPanel` 365–490·artifact 438–464) · `lib/dagster.ts` ·
+    `app/admin/dagster/page.tsx`.
+
+- ⏳ **T-290 — geo 독립 Dagster 오케스트레이션 이관 (계획·문서화 완료, 구현 착수)** — backup/restore·
+  적재 오케스트레이션을 서비스 전용 독립 Dagster(`kortravelgeo_dagster`)로 이관한다. 3라운드 리뷰 수렴
+  ([backup-restore-orchestration.md](backup-restore-orchestration.md)) → 결정 [ADR-066](adr/066-geo-independent-dagster-orchestration.md),
+  구현 정본 [architecture/dagster-boundary.md](architecture/dagster-boundary.md), 단계·분해·contract·e2e
+  게이트는 [dagster-migration-plan.md](dagster-migration-plan.md)가 정본. 통합 브랜치
+  `agent/claude-dagster-migration`(전 milestone 완료 후 main 머지), 두 에이전트 A(실행엔진/백엔드)·
+  B(배포/관측/e2e) 병렬. **완료**: B의 T-290d(API GraphQL observe 라우터
+  `/v1/ops/dagster/summary`, `/v1/ops/dagster/runs/{run_id}`)와 T-290e(admin
+  `/admin/dagster` 관측 화면 + sandbox iframe)가 통합 브랜치 위 별도 PR로 완료됐다. main lib은
+  Dagster를 import하지 않고, API는 trusted admin role gate, SSRF allowlist, 200
+  `status=unavailable` outage 응답을 제공한다. UI는 OpenAPI 생성 타입 기반 React Query hook으로
+  summary/run detail을 읽고 repository·schedule/sensor tick·recent run·iframe을 표시한다.
+  **M1 완결(2026-07-08)**: T-290a(#419)·T-290c(#420)·T-290b(#421·#422, manager #47) 머지. n150에
+  Dagster webserver(:12502)+daemon 배포, code location 서빙, **`mv_refresh`를 실제 Dagster run으로
+  실행해 SUCCESS**로 M1 게이트 검증(상세·통합 버그·교훈은 journal 2026-07-08 참조). 포트는 map 패턴
+  12502로 확정(초기 12703 정정 #422). Codex M1 리뷰 후속으로 #420의 terminal split-brain scan
+  누락을 #424로 분리했고, `reconcile_dagster_jobs()`가 `failed`/`cancelled` orphan 후보를 실제 경로에서
+  cancel hook으로 닫도록 보강했다(alembic 0024 partial index 포함).
+  **M2 구현 완료(통합 브랜치 기준)**: T-290d/e 관측 API/UI에 이어 T-290f scheduled backup 온램프도
+  구현됐다. Dagster `scheduled_backup` schedule은 `scheduled_backup_run_due` job을 만들고, op는 기존
+  `POST /v1/admin/backups/scheduled/run-due`를 `KTG_DAGSTER_ADMIN_API_URL`로 호출한다. 실제 backup
+  실행은 T-290g 전까지 기존 in-process `load_jobs` 큐가 맡는다.
+  **M2 후속 리뷰(2026-07-09)**: Claude Code 후속 PR #433/#434를 리뷰했다. #433은 blocking finding
+  없이 수용 가능했고, #434에서는 summary 오류 응답이 invalid `dagster_public_url` raw 값을
+  browser-facing `dagster_url`로 되돌려주는 회귀를 #435로 분리했다. 수정 후 오류 응답도 검증/정규화된
+  public URL만 iframe/link 필드에 싣는다.
+  **M2 live gate 완료(2026-07-09)**: 통합 브랜치 HEAD를 n150에 동기화하고 Dagster webserver/daemon을
+  재생성했다. docker-manager의 geo Dagster 서비스에 `KTG_DAGSTER_ADMIN_API_URL`/
+  `KTG_ADMIN_PROXY_SECRET` pass-through가 없어 `scheduled_backup_run_due`가 403으로 실패하던 배포 설정을
+  운영 override에서 보강했고, 이후 `scheduled_backup_run_due` recent run `SUCCESS`를 확인했다. 운영
+  schedule은 disabled라 실제 `db_backup`은 enqueue되지 않았고 no-op 성공으로 검증됐다. n150 Playwright는
+  `libatk-1.0.so.0` 누락으로 직접 실행이 불가능해 로컬 Linux Playwright에서 n150 UI로 접속하는 fallback
+  smoke를 사용했고, `/admin/dagster` summary/runs/iframe과 기존 `/admin/backups` 렌더를 확인했다. 공식
+  `dagster-readonly.spec.ts`는 평문 live admin password 부재로 설계대로 1 skipped.
+  **M2 후속 하드닝 완료(2026-07-09, by claude)**: M1/M2 리뷰 후속 열린 이슈를 모두 정리했다 —
+  #429(온램프 최소권한 `scheduler` role 신설 + `run-due` 게이트, #441), #431(op/schedule/sensor 테스트
+  커버리지 + dispatch 헬퍼 추출, #442), #443(summary/run-detail config-error 경로의
+  graphql_url·dagster_url raw echo를 `_safe_summary_graphql_url`로 일관 sanitize, #445),
+  #444(docker-manager 레포 Dagster 서비스의 `KTG_ADMIN_PROXY_SECRET` pass-through 누락 → manager #49 +
+  n150 재빌드·검증) 머지·클로즈. #437(mv_refresh ANALYZE)은 leaf가 이미 ANALYZE하므로 무효 정정·클로즈.
+  dagster 패키지 검증용 Python 3.12 venv를 미러 `kor-travel-geo-dagster/.venv`에 구축(재사용). 열린
+  T-290 리뷰 이슈 없음.
+  **다음 한 작업**: M3 착수 — T-290g에서 `db_backup` leaf를 Dagster job/op로 옮기고, T-290h에서
+  `/admin/dagster` run detail에 backup op 로그·artifact 링크를 연결한다. M3 gate는 backup이 Dagster
+  run으로 실행되고 artifact 다운로드와 run/op 로그가 admin UI에서 보이는지 확인하는 **live UI e2e #2**다.
+  live UI e2e 게이트는 #1 M2 · #2 M3 · #3 M4 · #4 M5(최종 회귀). 기준: 최소수정 X,
+  미래지향(유지보수성·안정성·완성도·품질).
+  **T-290g 구현 진행 — op 완료, launch adapter 다음(2026-07-09)**: mv_refresh op(단순 leaf 호출)과 달리
+  T-290g는 라이브 backup 경로 + 신규 API→Dagster launch가 얽힌 마일스톤급이라 레이어링부터 잡았다.
+  ✅ **① db_backup op 완료**: (1a, #448) job-recovery primitive를 `api._job_recovery` →
+  `core.job_recovery`로 이동(op/infra가 api 없이 사용, dagster-boundary §6). (1b, #449) load_jobs
+  단일-행 writer를 infra `LoadJobExecutor`(adopt_dagster/renew_lease/set_progress/mark_done·failed·
+  cancelled/read_cancel_requested)로 추출하고 JobQueue가 위임(behavior-preserving, 전체 unit 1165 통과).
+  (#450) 재사용 브리지 `kortravelgeo_dagster.load_job_bridge.execute_load_job`(adopt→progress+lease
+  renew+cancel 폴링→done/failed/cancelled 수렴, in-process drain 미러, RetryPolicy off) +
+  `backup_execute.run_db_backup_op`/`db_backup` job(`run_backup_job` 호출, `_job_id` 주입, definitions
+  등록). dagster 31 passed. Codex 리뷰 후속 #452로 `LoadJobExecutor.adopt_dagster()`를 보강해,
+  Dagster step worker가 API enqueue 직후 취소·종료된 `load_jobs` row나 다른 run이 소유한 row를 재채택해
+  leaf를 시작하지 못하게 막았다. 허용 범위는 `queued` row와 같은 Dagster run의 `running` row renewal뿐이다.
+  (#454) observe router의 Dagster URL/SSRF helper를 공유 클라이언트로 빼고 `launch_dagster_run()` groundwork를
+  추가했다.
+  ✅ **② launch adapter + reroute 완료(2026-07-10)**: (#456) load_jobs를 executor로 라우팅 —
+  in-process drain이 `executor='dagster'` row를 스킵(`_claim_one`/recovery 필터)하고 `insert_load_job`에
+  executor 파라미터 추가(behavior-preserving, 전체 unit 1171 passed). (#457) `POST /admin/backups`를
+  `dagster_executed_job_kinds`(`KTG_DAGSTER_EXECUTED_JOB_KINDS`, 기본 empty→in-process) setting으로 Dagster
+  `launchRun` 라우팅 — dagster row insert + `launch_dagster_run`(op config `{job_id, payload}` +
+  `kor_travel_geo.job_id` 태그), launch 실패 시 row failed + 502. **각 PR은 push→CI(openapi/backend/frontend)
+  green 확인 후 머지**("머지 전 대기"). Agent B 선행분으로 run detail은 `kor_travel_geo.job_id` tag로
+  artifact 링크를 표시하도록 준비됐다.
+  ✅ **live UI e2e #2 (M3 게이트) — n150 backup+restore end-to-end 완료(2026-07-10, by claude)**: n150에
+  `KTG_DAGSTER_EXECUTED_JOB_KINDS=db_backup` 설정·배포 후, UI `백업 시작` → **Dagster db_backup run SUCCESS** →
+  available **4.1GB** 아티팩트(전국 실데이터: `tl_juso_text` 6,416,637·건물폴리곤 10,687,732 등 manifest 일치)를
+  확인했다. 이어 복원 위저드(new_database)로 in-process restore를 실행해 `kor_travel_geo_restore`에 **모든
+  테이블+양쪽 MV가 manifest와 정확히 일치(done 100%)**함을 검증했다(restore 자체는 T-290i지만 브리지/도구/볼륨
+  선검증 목적). 이 e2e가 **잠복 버그 5건**을 드러내 모두 수정/우회: (1) drain/op가 주입한 `_job_id`가 strict
+  backup/restore DTO 검증에 걸림 → `infra/backup._request_payload()`로 제어키 제거(**#459 머지**). (2) geo
+  api·dagster 이미지에 pg_dump/pg_restore/zstd 부재("backup tools missing") → 두 Dockerfile에 PGDG
+  `postgresql-client-16`+`zstd`(**#460 머지**). (3) restore dry-run 감사 `outcome="blocked"`(무효 enum, CHECK:
+  started/succeeded/failed/cancelled/denied) → 감사 insert 제약위반 500 → `"denied"`로 수정(자매 hotswap plan
+  핸들러와 일치, **#460 머지**). (4) Dagster가 쓴 backup을 geo-api restore가 못 봄(볼륨 미공유: geo-api는
+  `/data:ro` 마운트인데 앱은 `/app/data/backups` 사용, dagster는 data 볼륨 없음→임시저장소) → 공유 쓰기가능
+  `/app/data/backups` 볼륨(`KOR_TRAVEL_GEO_BACKUP_DIR`)을 geo-api·dagster·daemon에 마운트 — **docker-manager
+  PR #50 머지**(base compose 정본, `.env.example` 문서화). (5) restore heartbeat UPDATE가 5s
+  `pg_statement_timeout_ms`(engine.py connect_args) 초과 → 66%에서 QueryCanceled 실패 → **#461로 코드 정식
+  수정 머지**: `LoadJobExecutor`의 모든 liveness write(adopt_dagster/renew_lease/set_progress/mark_done·failed·
+  cancelled)를 `_begin_uncapped`(`SET LOCAL statement_timeout=0`)로 감쌈(loader 패턴). n150은 #461 배포 +
+  env 우회(`KTG_PG_STATEMENT_TIMEOUT_MS`) 제거 완료 — app 기본 5s로 복귀해도 코드가 heartbeat를 유지. 4.1GB
+  pg_restore는 전국 실데이터+인덱스+MV refresh(mv_geocode_target/text_search 각 6.4M)+autovacuum 경합으로 done까지
+  ~2h. **후속(별도, 미착수)**: ③ CLI leaf `@job`(verify/copy/restore_drill) 미이관; T-290h run/op 로그·artifact
+  다운로드 UI 확인 미검증; 감사 outcome — `record_audit_event(outcome: str)`에 여러 핸들러가 리소스
+  state/action명(`"conflict"/"created"/"invalidated"`(admin.py)·source-file state·registry case state·
+  `"integrity_gate_failed"`(app.py) 등)을 넘겨 CHECK 위반 500이 나던 것을, `AdminRepository.record_audit_event`가
+  `canonical_audit_outcome()`로 canonical(started/succeeded/failed/cancelled/denied)로 정규화(각 alias 정확 매핑,
+  예 invalidated→succeeded·invalid→failed) — **PR #462**(centralized safety net). 이어 컴파일타임 타입 강화도 완료:
+  `record_audit_event(outcome: OpsAuditOutcome)`(client+repo) + mypy가 잡은 21개 호출부 canonical화(admin.py 18:
+  리터럴 직접 매핑 + dynamic `result.state`류는 `canonical_audit_outcome(...)` 래핑, app.py 1, hotswap 중첩 `audit`
+  래퍼 2개 타입) — **PR #463**(mypy clean 155 files; #462 coercion은 런타임 net으로 유지). n150 canonical 정리 —
+  base docker-compose.yml이 stale(geo-dagster가 로컬 override, pre-#47)이라 #50 볼륨이 base가 아닌 추가 override
+  파일(`docker-compose.geo-backup-vol.yml`, statement_timeout 제거·볼륨만)로 적용됨 → n150 docker-manager를 main으로
+  resync하고 override의 geo-dagster 중복·추가 파일을 제거해 정본화 권장.
+  Groundwork(재사용): `core.job_recovery` + infra `LoadJobExecutor` + `load_job_bridge`(restore T-290i·
+  full-load T-290j도 같은 브리지 사용), mv.py op 템플릿, dagster 검증용 **Python 3.12 venv**(미러
+  `kor-travel-geo-dagster/.venv`, dagster 1.13.12 — 3.14 미러 venv는 dagster 미지원).
 
 - ✅ **PR #406(관리 UI shadcn 전면 개편 + `/admin/files` 파일 관리 화면 + 통합 파일 인벤토리 API,
   T-283) n150 배포 + live UI e2e 완료** — 아래 codex 항목이 남긴 "백업 리스토어를 제외한 live UI e2e

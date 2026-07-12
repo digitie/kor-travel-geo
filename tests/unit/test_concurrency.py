@@ -4,7 +4,6 @@ import inspect
 
 import pytest
 
-from kortravelgeo.api import app as api_app
 from kortravelgeo.cli import main as cli_main
 from kortravelgeo.infra.concurrency import (
     AdvisoryLockKey,
@@ -94,8 +93,12 @@ async def test_cross_process_lock_raises_conflict_when_busy() -> None:
 
 
 def test_cli_and_api_register_cross_process_lock_helpers() -> None:
+    from kortravelgeo.loaders import batch_dag
+
     cli_source = inspect.getsource(cli_main)
-    api_source = inspect.getsource(api_app)
+    # Per-source cross-process locking moved from the retired in-process handlers into the
+    # Dagster-executed batch DAG leaf (T-290k): each source loader runs under its own lock.
+    dag_source = inspect.getsource(batch_dag)
 
     for name in (
         "LOAD_JUSO_TEXT",
@@ -108,9 +111,7 @@ def test_cli_and_api_register_cross_process_lock_helpers() -> None:
     ):
         assert name in cli_source
 
-    assert "_locked_job_handler" in api_source
-    assert "lock_conflict" in api_source
-    assert "cross_process_lock" in api_source
-    assert "AdvisoryLockNamespace.LOAD_JUSO_TEXT" in api_source
-    assert "AdvisoryLockNamespace.MV_REFRESH" in api_source
+    assert "lock_conflict" in dag_source
+    assert "cross_process_lock" in dag_source
+    assert "AdvisoryLockNamespace.LOAD_JUSO_TEXT" in dag_source
     assert "on_busy" not in inspect.getsource(cross_process_lock)

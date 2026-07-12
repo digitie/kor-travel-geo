@@ -10,6 +10,7 @@ export type AdminPageKey =
   | "files"
   | "consistency"
   | "backups"
+  | "dagster"
   | "ops"
   | "logs"
   | "tables"
@@ -56,6 +57,12 @@ export const ADMIN_PAGES: Record<AdminPageKey, AdminPageMeta> = {
     path: "/admin/backups",
     title: "백업/복원",
     description: "DB 백업 생성 · 복원 · 운영 교체(Hot-swap)"
+  },
+  dagster: {
+    key: "dagster",
+    path: "/admin/dagster",
+    title: "Dagster",
+    description: "오케스트레이션 run · schedule · sensor 관측"
   },
   ops: {
     key: "ops",
@@ -104,7 +111,7 @@ export interface AdminNavGroup {
 /** 사이드바 그룹 구성 (관리 홈은 그룹 위에 단독 노출). */
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   { title: "데이터 관리", keys: ["sourceFiles", "files", "consistency"] },
-  { title: "백업·운영", keys: ["backups", "ops", "logs"] },
+  { title: "백업·운영", keys: ["backups", "dagster", "ops", "logs"] },
   { title: "시스템", keys: ["tables", "cache"] },
   { title: "설정", keys: ["settings"] }
 ];

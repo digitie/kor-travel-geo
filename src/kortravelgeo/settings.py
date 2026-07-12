@@ -131,6 +131,43 @@ class Settings(BaseSettings):
     ops_slow_sample_flush_batch_size: int = Field(default=50, ge=1, le=1_000)
     ops_slow_query_explain_enabled: bool = False
     ops_slow_query_explain_timeout_ms: int = Field(default=3_000, ge=1)
+    dagster_url: str = "http://127.0.0.1:12502"
+    # Browser-facing Dagster URL returned to the admin UI for the iframe/links (prod =
+    # the router-proxied public HTTPS domain). Empty -> fall back to `dagster_url`. NOT
+    # used for backend GraphQL (that stays internal `dagster_url`, SSRF-allowlisted).
+    dagster_public_url: str = ""
+    dagster_graphql_url: str | None = None
+    dagster_admin_api_url: str = "http://127.0.0.1:12501"
+    dagster_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
+        "127.0.0.1",
+        "localhost",
+        "::1",
+        "kor-travel-geo-dagster",
+        "dagster",
+    )
+    dagster_request_timeout_seconds: float = Field(default=3.0, ge=0.2, le=30.0)
+    # Grace window (seconds) beyond one cron interval before a RUNNING schedule that
+    # missed a fire is flagged ``overdue`` in the summary (T-290h). Generous by default
+    # so a briefly-behind scheduler daemon does not flap the overdue banner.
+    dagster_schedule_overdue_grace_seconds: int = Field(default=300, ge=0, le=86_400)
+    dagster_repository_name: str = Field(default="__repository__", min_length=1)
+    dagster_repository_location_name: str = Field(
+        default="kortravelgeo_dagster.definitions",
+        min_length=1,
+    )
+    # Lease TTL for executor='dagster' load_jobs (ADR-066 §5 / dagster-boundary §6). A
+    # Dagster op renews this while it runs; executor-aware startup recovery keeps a job
+    # 'running' only while its lease is still valid (or a live run is confirmed) and
+    # fails it once the lease expires with no live-run reference. In-process jobs never
+    # take a lease, so this has no effect on current behavior.
+    dagster_lease_ttl_seconds: float = Field(default=300.0, ge=1.0, le=86_400.0)
+    # Periodic executor-aware reconciler tick (T-290k PR2). At startup and every
+    # ``dagster_reconcile_interval_seconds`` the DagsterJobReconciler converges
+    # ``executor='dagster'`` load_jobs toward their real Dagster run state (GraphQL run-status
+    # probe), so a job whose lease looks alive but whose run actually died is failed between
+    # restarts — not only at startup. ``0`` disables the periodic tick (startup-only).
+    dagster_reconcile_on_startup: bool = True
+    dagster_reconcile_interval_seconds: float = Field(default=60.0, ge=0.0, le=3_600.0)
     runtime_warm_on_startup: bool = False
     runtime_warm_interval_minutes: int = Field(default=0, ge=0)
     runtime_warm_query_limit: int = Field(default=32, ge=1, le=500)
@@ -253,7 +290,11 @@ class Settings(BaseSettings):
             return tuple(Path(part) for part in value)
         return (Path(str(value)),)
 
-    @field_validator("backup_callback_allowed_hosts", mode="before")
+    @field_validator(
+        "backup_callback_allowed_hosts",
+        "dagster_allowed_hosts",
+        mode="before",
+    )
     @classmethod
     def normalize_backup_callback_allowed_hosts(cls, value: object) -> tuple[str, ...]:
         if isinstance(value, str):

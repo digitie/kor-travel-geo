@@ -38,8 +38,10 @@ from kortravelgeo.dto.admin import (
     MaintenanceWindow,
     MaintenanceWindowCreate,
     OpsArtifact,
+    OpsAuditOutcome,
     PgStatStatementSnapshot,
     RollbackPlan,
+    RunFailureAlert,
     ServingRelease,
     TableStat,
     TableStatsSnapshot,
@@ -54,7 +56,8 @@ from ._rows import map_consistency_report, map_load_job
 _JOB_SELECT = """
 SELECT job_id, kind, state, load_batch_id, parent_job_id,
        progress, current_stage, source_yyyymm, source_set,
-       started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
+       started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary,
+       executor, orchestrator_run_id, lease_expires_at
   FROM load_jobs
 """
 
@@ -64,6 +67,12 @@ SELECT audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
        resource_id, job_id, outcome, error_code, payload_redacted,
        payload_hash
   FROM ops.audit_events
+"""
+
+_RUN_FAILURE_ALERT_SELECT = """
+SELECT run_id, job_id, job_name, job_kind, status, error_code,
+       run_failed_at, recorded_at, acknowledged_at
+  FROM ops.run_failure_alerts
 """
 
 _SNAPSHOT_SELECT = """
@@ -332,7 +341,7 @@ SELECT job_id, kind, state, log_tail
         *,
         action: str,
         actor_type: str,
-        outcome: str,
+        outcome: OpsAuditOutcome,
         payload: dict[str, Any] | None = None,
         actor_id: str | None = None,
         client_ip: str | None = None,
@@ -410,6 +419,110 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                 )
             ).mappings().all()
         return [_audit_event(dict(row)) for row in rows]
+
+    # --- Dagster run-failure alerts (T-290h) --------------------------------
+
+    async def record_run_failure_alert(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        run_failed_at: datetime,
+        job_id: str | None = None,
+        job_name: str | None = None,
+        job_kind: str | None = None,
+        error_code: str | None = None,
+    ) -> RunFailureAlert:
+        """Idempotently record a failure alert keyed by the Dagster ``run_id``.
+
+        A run fails terminally once, but the sensor may re-evaluate a failed run,
+        so ``ON CONFLICT (run_id) DO NOTHING`` keeps the first record and its
+        ``recorded_at`` stable; a repeat call returns the existing row.
+        """
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        """
+INSERT INTO ops.run_failure_alerts
+  (run_id, job_id, job_name, job_kind, status, error_code, run_failed_at)
+VALUES
+  (:run_id, :job_id, :job_name, :job_kind, :status, :error_code, :run_failed_at)
+ON CONFLICT (run_id) DO NOTHING
+RETURNING run_id, job_id, job_name, job_kind, status, error_code,
+          run_failed_at, recorded_at, acknowledged_at
+"""
+                    ),
+                    {
+                        "run_id": run_id,
+                        "job_id": job_id,
+                        "job_name": job_name,
+                        "job_kind": job_kind,
+                        "status": status,
+                        "error_code": error_code,
+                        "run_failed_at": run_failed_at,
+                    },
+                )
+            ).mappings().first()
+        if row is not None:
+            return _run_failure_alert(dict(row))
+        existing = await self.get_run_failure_alert(run_id)
+        if existing is not None:
+            return existing
+        raise InvalidInputError(f"run_failure_alert insert conflicted but no row for {run_id!r}")
+
+    async def get_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(_RUN_FAILURE_ALERT_SELECT + " WHERE run_id = :run_id"),
+                    {"run_id": run_id},
+                )
+            ).mappings().first()
+        return _run_failure_alert(dict(row)) if row is not None else None
+
+    async def list_run_failure_alerts(
+        self,
+        *,
+        limit: int = 50,
+        unacknowledged_only: bool = True,
+    ) -> list[RunFailureAlert]:
+        where = " WHERE acknowledged_at IS NULL" if unacknowledged_only else ""
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        _RUN_FAILURE_ALERT_SELECT
+                        + where
+                        + " ORDER BY run_failed_at DESC LIMIT :limit"
+                    ),
+                    {"limit": limit},
+                )
+            ).mappings().all()
+        return [_run_failure_alert(dict(row)) for row in rows]
+
+    async def acknowledge_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
+        """Ack an alert (idempotent). Returns the current row, or ``None`` if unknown."""
+        async with self.engine.begin() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        """
+UPDATE ops.run_failure_alerts
+   SET acknowledged_at = now()
+ WHERE run_id = :run_id AND acknowledged_at IS NULL
+RETURNING run_id, job_id, job_name, job_kind, status, error_code,
+          run_failed_at, recorded_at, acknowledged_at
+"""
+                    ),
+                    {"run_id": run_id},
+                )
+            ).mappings().first()
+        if row is not None:
+            return _run_failure_alert(dict(row))
+        # No row updated: either unknown run_id, or already acknowledged. Return the
+        # current row so the caller can 404 on unknown vs. echo an idempotent ack.
+        return await self.get_run_failure_alert(run_id)
 
     async def list_dataset_snapshots(
         self,
@@ -719,6 +832,30 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
                 await conn.execute(
                     text(_ARTIFACT_SELECT + " WHERE artifact_id = :artifact_id"),
                     {"artifact_id": artifact_id},
+                )
+            ).mappings().first()
+        return _ops_artifact(dict(row)) if row else None
+
+    async def get_artifact_by_job_id(
+        self,
+        job_id: str,
+        *,
+        artifact_type: str | None = None,
+    ) -> OpsArtifact | None:
+        clauses = ["job_id = :job_id"]
+        params: dict[str, Any] = {"job_id": job_id}
+        if artifact_type is not None:
+            clauses.append("artifact_type = :artifact_type")
+            params["artifact_type"] = artifact_type
+        async with self.engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    text(
+                        _ARTIFACT_SELECT
+                        + f" WHERE {' AND '.join(clauses)}"
+                        + " ORDER BY created_at DESC LIMIT 1"
+                    ),
+                    params,
                 )
             ).mappings().first()
         return _ops_artifact(dict(row)) if row else None
@@ -1311,6 +1448,7 @@ DELETE FROM ops.pg_stat_statements_snapshots
         state: str = "queued",
         progress: float = 0.0,
         current_stage: str | None = None,
+        executor: str = "dagster",
     ) -> LoadJobRow:
         resolved_job_id = job_id or f"job_{uuid4().hex}"
         payload_summary = _summarize_payload(payload)
@@ -1321,10 +1459,10 @@ DELETE FROM ops.pg_stat_statements_snapshots
                         """
 INSERT INTO load_jobs
   (job_id, kind, payload, state, load_batch_id, parent_job_id,
-   progress, current_stage, payload_summary)
+   progress, current_stage, payload_summary, executor)
 VALUES
   (:job_id, :kind, :payload, :state, :load_batch_id, :parent_job_id,
-   :progress, :current_stage, :payload_summary)
+   :progress, :current_stage, :payload_summary, :executor)
 RETURNING job_id, kind, state, load_batch_id, parent_job_id,
           progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
@@ -1342,10 +1480,32 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                         "progress": progress,
                         "current_stage": current_stage,
                         "payload_summary": payload_summary,
+                        "executor": executor,
                     },
                 )
             ).mappings().one()
         return map_load_job(dict(row))
+
+    async def link_job_to_batch(self, job_id: str, load_batch_id: str) -> None:
+        """Record the downstream full-load batch id on a control job (T-290k).
+
+        Relocated from ``JobQueue.link_job_to_batch``: the ``source_rebuild_db`` Dagster
+        control op writes the launched ``full_load_batch`` id onto its own control row so
+        the rebuild -> batch provenance survives without the retired in-process queue.
+        """
+
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+UPDATE load_jobs
+   SET load_batch_id = :load_batch_id,
+       heartbeat_at = now()
+ WHERE job_id = :job_id
+"""
+                ),
+                {"job_id": job_id, "load_batch_id": load_batch_id},
+            )
 
     async def insert_load_batch(
         self,
@@ -1353,11 +1513,21 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
         payload: dict[str, Any],
         children: Sequence[tuple[str, dict[str, Any]]],
         job_id: str | None = None,
+        executor: str = "dagster",
     ) -> LoadJobRow:
-        """Create a batch root row and first-stage child jobs in one transaction."""
+        """Create a batch root row and first-stage child jobs in one transaction.
+
+        ``executor`` is stamped on the root and every child (T-290j). Since T-290k PR3 the
+        default is ``dagster``: the root starts ``queued`` so the Dagster full-load op can
+        *adopt* it (``queued`` → ``running`` + run id + lease) through the load-job bridge, and
+        every child carries ``executor='dagster'``. The legacy ``api_in_process`` value (root
+        starts ``running`` as an untracked drain row) is only still passed by the retiring
+        in-process ``JobQueue.enqueue_batch`` (deleted in PR4).
+        """
 
         root_job_id = job_id or f"batch_{uuid4().hex}"
         root_summary = _summarize_payload(payload)
+        root_state = "queued" if executor == "dagster" else "running"
         async with self.engine.begin() as conn:
             root = (
                 await conn.execute(
@@ -1365,10 +1535,11 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                         """
 INSERT INTO load_jobs
   (job_id, kind, payload, state, load_batch_id, progress, current_stage,
-   payload_summary, started_at, heartbeat_at)
+   payload_summary, executor, started_at, heartbeat_at)
 VALUES
-  (:job_id, 'full_load_batch', :payload, 'running', :load_batch_id, 0.0,
-   'source_loads', :payload_summary, now(), now())
+  (:job_id, 'full_load_batch', :payload, :root_state, :load_batch_id, 0.0,
+   'source_loads', :payload_summary, :executor,
+   CASE WHEN :root_state = 'running' THEN now() ELSE NULL END, now())
 RETURNING job_id, kind, state, load_batch_id, parent_job_id,
           progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
@@ -1381,6 +1552,8 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                         "payload": payload,
                         "load_batch_id": root_job_id,
                         "payload_summary": root_summary,
+                        "root_state": root_state,
+                        "executor": executor,
                     },
                 )
             ).mappings().one()
@@ -1390,10 +1563,10 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
                         """
 INSERT INTO load_jobs
   (job_id, kind, payload, state, load_batch_id, parent_job_id,
-   payload_summary, created_at)
+   payload_summary, executor, created_at)
 VALUES
   (:job_id, :kind, :payload, 'queued', :load_batch_id, :parent_job_id,
-   :payload_summary,
+   :payload_summary, :executor,
    clock_timestamp() + (CAST(:child_order AS integer) * interval '1 microsecond'))
 """,
                         "payload",
@@ -1406,10 +1579,40 @@ VALUES
                         "load_batch_id": root_job_id,
                         "parent_job_id": root_job_id,
                         "payload_summary": _summarize_payload(child_payload),
+                        "executor": executor,
                         "child_order": index,
                     },
                 )
         return map_load_job(dict(root))
+
+    async def cancel_queued_batch_children(self, batch_id: str) -> None:
+        """Cancel a batch's not-yet-started children after the batch fails.
+
+        Only ``queued`` children are converged (a running/done child is left intact),
+        mirroring the in-process ``JobQueue`` batch-failure fan-out. Shared by the Dagster
+        batch orchestrator (a child failed mid-DAG) and the API launch-failure cleanup (the
+        Dagster run could not be launched), so a failed batch never leaves child rows no
+        worker will ever claim.
+        """
+
+        async with self.engine.begin() as conn:
+            await conn.execute(
+                text(
+                    """
+UPDATE load_jobs
+   SET state = 'cancelled',
+       current_stage = 'cancelled',
+       error_message = COALESCE(error_message || E'\n', '')
+                       || 'cancelled after batch failure',
+       finished_at = now(),
+       heartbeat_at = now()
+ WHERE load_batch_id = :batch_id
+   AND job_id <> :batch_id
+   AND state = 'queued'
+"""
+                ),
+                {"batch_id": batch_id},
+            )
 
     async def cancel_load_job(self, job_id: str) -> LoadJobRow | None:
         async with self.engine.begin() as conn:
@@ -2594,6 +2797,20 @@ def _audit_event(row: Mapping[str, Any]) -> AuditEvent:
         error_code=row.get("error_code"),
         payload_redacted=_json_dict(row.get("payload_redacted")),
         payload_hash=str(row["payload_hash"]),
+    )
+
+
+def _run_failure_alert(row: Mapping[str, Any]) -> RunFailureAlert:
+    return RunFailureAlert(
+        run_id=str(row["run_id"]),
+        job_id=row.get("job_id"),
+        job_name=row.get("job_name"),
+        job_kind=row.get("job_kind"),
+        status=str(row["status"]),
+        error_code=row.get("error_code"),
+        run_failed_at=row["run_failed_at"],
+        recorded_at=row["recorded_at"],
+        acknowledged_at=row.get("acknowledged_at"),
     )
 
 

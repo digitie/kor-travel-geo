@@ -13,15 +13,32 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
+import httpx
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, ORJSONResponse, StreamingResponse
 
-from kortravelgeo.api._jobs import JobQueue
-from kortravelgeo.api.deps import get_client, get_job_queue
+from kortravelgeo.api._cancel import cancel_load_job_converged
+from kortravelgeo.api._dagster_client import (
+    DagsterLaunchError,
+    DagsterUrlConfigurationError,
+    launch_dagster_run,
+)
+from kortravelgeo.api._dagster_recovery import dagster_orchestrator_cancel
+from kortravelgeo.api._full_load_launch import (
+    FULL_LOAD_BATCH_KIND,
+    blue_green_load_status,
+    launch_consistency_check_dagster_run,
+    launch_mv_refresh_dagster_run,
+    launch_source_load_dagster_run,
+    launch_source_rebuild_dagster_run,
+    submit_full_load_batch,
+)
+from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.security import (
     KNOWN_ADMIN_ROLES,
     ROLE_DESTRUCTIVE_ADMIN,
     ROLE_REBUILD_OPERATOR,
+    ROLE_SCHEDULER,
     ROLE_SOURCE_FILE_MANAGER,
     ROLE_SOURCE_FILE_VIEWER,
     RequestContext,
@@ -144,7 +161,13 @@ from kortravelgeo.dto.source import (
     UploadSessionCreateRequest,
     UploadSessionStatus,
 )
-from kortravelgeo.exceptions import ForbiddenError, InvalidInputError, NotFoundError
+from kortravelgeo.exceptions import (
+    ForbiddenError,
+    InvalidInputError,
+    KorTravelGeoError,
+    NotFoundError,
+)
+from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.backup import (
     BACKUP_ARTIFACT_TYPE,
     backup_download_url,
@@ -158,6 +181,7 @@ from kortravelgeo.infra.concurrency import (
     ConcurrentExecutionError,
     cross_process_lock,
 )
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor
 from kortravelgeo.infra.rustfs import (
     RustfsClient,
     RustfsUploadedPart,
@@ -461,7 +485,7 @@ async def create_upload_session(
             action="source_upload.session_conflict",
             actor_type="ui",
             actor_id=ctx.actor,
-            outcome="conflict",
+            outcome="denied",
             payload={"category": req.category, "user_yyyymm": req.user_yyyymm},
             resource_type="source_upload_session",
             resource_id=existing.upload_session_id,
@@ -475,7 +499,7 @@ async def create_upload_session(
         action="source_upload.session_create",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome="created",
+        outcome="succeeded",
         payload={"category": req.category, "user_yyyymm": req.user_yyyymm},
         resource_type="source_upload_session",
         resource_id=result.session.upload_session_id,
@@ -531,23 +555,27 @@ async def fetch_epost_source(
     request: Request,
     ctx: RequestContext = _SOURCE_MANAGER,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> EpostServerFetchResponse:
-    """Manual epost server-fetch → RustFS register → postal load enqueue (T-207)."""
+    """Manual epost server-fetch → RustFS register → postal load launch (T-207)."""
+    engine = client._engine()
+    settings = get_settings()
     result = await run_epost_server_fetch(
-        engine=client._engine(),
-        settings=get_settings(),
+        engine=engine,
+        settings=settings,
         req=req,
         actor=ctx.actor,
     )
     load_job_id: str | None = None
     if req.enqueue_load:
-        load_job_id = await queue.enqueue(result.load_job_kind, result.load_payload)
+        # Launch the postal load as a Dagster load_source run (T-290k PR3).
+        load_job_id = await launch_source_load_dagster_run(
+            engine, settings, result.load_job_kind, result.load_payload
+        )
     await client.record_audit_event(
         action="source.epost_server_fetch",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome="registered",
+        outcome="succeeded",
         payload={
             "category": req.category,
             "user_yyyymm": req.user_yyyymm,
@@ -810,7 +838,7 @@ async def replace_upload_slot(
         action="source_upload.slot_replace",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome="invalidated",
+        outcome="succeeded",
         payload={"slot": slot_id},
         resource_type="source_upload_session",
         resource_id=session.upload_session_id,
@@ -978,8 +1006,10 @@ async def validate_source_file_group(
         action="source.group_validate",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.validation_state,
-        payload={"category": result.category},
+        # outcome is the operation lifecycle (the validation ran); the domain verdict lives
+        # in the payload (T-290 audit-outcome cleanup).
+        outcome="succeeded",
+        payload={"category": result.category, "validation_state": result.validation_state},
         resource_type="source_file_group",
         resource_id=source_file_group_id,
         **_audit_request(request),
@@ -1018,7 +1048,7 @@ async def soft_delete_source_file_group(
         action="source.soft_delete",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.state,
+        outcome="succeeded",
         payload={"affected_file_count": result.affected_file_count},
         resource_type="source_file_group",
         resource_id=source_file_group_id,
@@ -1050,7 +1080,7 @@ async def restore_source_file_group(
         action="source.restore",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.state,
+        outcome="succeeded",
         payload={"category": result.category},
         resource_type="source_file_group",
         resource_id=source_file_group_id,
@@ -1089,7 +1119,7 @@ async def relink_restored_source_file_group(
         action="source.restored_from_backup_relink",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.state,
+        outcome="succeeded",
         payload={
             "category": result.category,
             "affected_match_set_ids": list(result.affected_match_set_ids),
@@ -1156,7 +1186,7 @@ async def run_source_reconcile(
         action="source.reconcile_run",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.state,
+        outcome="succeeded",
         payload={"prefix": result.prefix, "mode": result.mode,
                  "mismatch_count": result.mismatch_count},
         resource_type="source_storage_reconcile",
@@ -1257,8 +1287,12 @@ async def resolve_source_reconcile_item(
         action="source.reconcile_resolve",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.outcome,
-        payload={"issue_type": result.issue_type, "action": req.action},
+        outcome="succeeded",
+        payload={
+            "issue_type": result.issue_type,
+            "action": req.action,
+            "resolve_outcome": result.outcome,
+        },
         resource_type="source_storage_reconcile_item",
         resource_id=source_storage_reconcile_item_id,
         **_audit_request(request),
@@ -1318,7 +1352,7 @@ async def bulk_hard_delete_source_files(
         action="source.hard_delete",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome="bulk_hard_delete",
+        outcome="succeeded",
         payload={
             "requested": result.requested_count,
             "hard_deleted": result.hard_deleted_count,
@@ -1395,7 +1429,7 @@ async def create_source_match_set(
         action="source_match_set.create",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.match_set.state,
+        outcome="succeeded",
         payload={"name": req.name, "profile": req.profile,
                  "item_count": len(req.items)},
         resource_type="source_match_set",
@@ -1432,7 +1466,7 @@ async def create_restored_from_backup_match_set(
         action="source.restored_from_backup_create",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.state,
+        outcome="succeeded",
         payload={
             "artifact_id": req.artifact_id,
             "created_group_count": len(result.created_group_ids),
@@ -1470,7 +1504,7 @@ async def validate_source_match_set(
         action="source_match_set.validate",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=f"{result.action}:{'ok' if result.ok else 'fail'}",
+        outcome="succeeded" if result.ok else "failed",
         payload={"action": result.action, "ok": result.ok,
                  "reasons": list(result.reasons)},
         resource_type="source_match_set",
@@ -1505,7 +1539,7 @@ async def activate_source_match_set(
         action="source_match_set.activate",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.state,
+        outcome="succeeded",
         payload={"retired_match_set_id": result.retired_match_set_id},
         resource_type="source_match_set",
         resource_id=source_match_set_id,
@@ -1533,7 +1567,7 @@ async def retire_source_match_set(
         action="source_match_set.retire",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.state,
+        outcome="succeeded",
         payload={"was_active": result.was_active},
         resource_type="source_match_set",
         resource_id=source_match_set_id,
@@ -1557,14 +1591,13 @@ async def rebuild_source_match_set_db(
     request: Request,
     ctx: RequestContext = _REBUILD_OPERATOR,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> SourceRebuildDbResponse:
     """Rebuild the serving DB from a match set (doc "DB 재구성", ~1532-1562).
 
-    Bridges to the EXISTING ``full_load_batch`` loader DAG via a persistent
-    ``source_rebuild_db`` control job. The HTTP request only enqueues the
-    control job; that job then runs the source-archive integrity gate, RustFS
-    materialization, and downstream ``full_load_batch`` enqueue under the
+    Bridges to the EXISTING ``full_load_batch`` loader DAG via a Dagster
+    ``source_rebuild_db`` control job (T-290k PR3). The HTTP request only launches the
+    control run; that op then runs the source-archive integrity gate, RustFS
+    materialization, and downstream ``full_load_batch`` launch under the
     ``source_rebuild_db`` global advisory lock.
 
     ``force_promotion`` (the ERROR-bypass) additionally requires the
@@ -1585,8 +1618,9 @@ async def rebuild_source_match_set_db(
                 f"'{_rebuild_typed_confirmation(source_match_set_id)}'"
             )
 
-    job_id = await queue.enqueue(
-        "source_rebuild_db",
+    job_id = await launch_source_rebuild_dagster_run(
+        client._engine(),
+        get_settings(),
         {
             "source_match_set_id": source_match_set_id,
             "actor": ctx.actor,
@@ -1791,9 +1825,11 @@ async def refresh_mv(
     request: Request,
     strategy: Literal["concurrent", "swap"] = "concurrent",
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    job_id = await queue.enqueue("mv_refresh", {"strategy": strategy})
+    # Launch the release-gated mv_refresh Dagster job (T-290k PR3).
+    job_id = await launch_mv_refresh_dagster_run(
+        client._engine(), get_settings(), {"strategy": strategy}
+    )
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="mv_refresh.submit",
@@ -1812,17 +1848,27 @@ async def submit_load(
     req: LoadSubmitRequest,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    if req.kind == "full_load_batch":
-        job_id = await queue.enqueue_batch(req.payload)
+    settings = get_settings()
+    engine = client._engine()
+    # Unconditional Dagster routing (T-290k PR3): full_load_batch → its batch job, every
+    # other kind → the load_source op. No in-process fallback.
+    if req.kind == FULL_LOAD_BATCH_KIND:
+        job_id = await submit_full_load_batch(engine, settings, req.payload)
     else:
-        job_id = await queue.enqueue(req.kind, req.payload)
-    status = await client.load_status(job_id)
+        job_id = await launch_source_load_dagster_run(engine, settings, req.kind, req.payload)
+    target_database = (
+        req.payload.get("target_database") if req.kind == FULL_LOAD_BATCH_KIND else None
+    )
+    if isinstance(target_database, str) and target_database:
+        # Blue-green staging: the control rows live in the scratch DB, not serving.
+        status = await blue_green_load_status(settings, target_database, job_id)
+    else:
+        status = await client.load_status(job_id)
     await client.record_audit_event(
         action="load.submit",
         outcome="started",
-        payload={"kind": req.kind, "payload": req.payload},
+        payload={"kind": req.kind, "payload": req.payload, "executor": "dagster"},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,
@@ -1836,21 +1882,52 @@ async def submit_backup(
     req: BackupCreateRequest,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
+    settings = get_settings()
     payload = req.model_dump(exclude_none=True)
-    job_id = await queue.enqueue("db_backup", payload)
+    # Unconditional Dagster routing (T-290k PR3).
+    job_id = await _launch_db_backup_dagster_run(client, settings, payload)
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="db_backup.submit",
         outcome="started",
-        payload=payload,
+        payload={**payload, "executor": "dagster"},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,
         **_audit_request(request),
     )
     return status
+
+
+async def _launch_db_backup_dagster_run(
+    client: AsyncAddressClient,
+    settings: Settings,
+    payload: dict[str, Any],
+) -> str:
+    """Create a Dagster-executed ``db_backup`` load_jobs row and launch its Dagster run.
+
+    The row is inserted ``executor='dagster'`` so the in-process drain skips it (T-290g);
+    the Dagster ``db_backup`` op adopts and drives it. A launch failure fails the row and
+    surfaces a 502 rather than leaving a queued row no worker will ever claim.
+    """
+    engine = client._engine()
+    row = await AdminRepository(engine).insert_load_job(
+        kind="db_backup", payload=payload, executor="dagster"
+    )
+    job_id = row.job_id
+    run_config = {"ops": {"run_db_backup": {"config": {"job_id": job_id, "payload": payload}}}}
+    try:
+        await launch_dagster_run(
+            settings,
+            job_name="db_backup",
+            run_config=run_config,
+            tags={"kor_travel_geo.job_id": job_id},
+        )
+    except (DagsterUrlConfigurationError, DagsterLaunchError, httpx.HTTPError) as exc:
+        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
+        raise KorTravelGeoError("Dagster backup launch failed", http_status=502) from exc
+    return job_id
 
 
 @router.get(
@@ -2077,7 +2154,7 @@ async def scheduled_backup_status(
 async def run_due_scheduled_backup(
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
+    _ctx: RequestContext = Depends(require_role(ROLE_SCHEDULER, ROLE_DESTRUCTIVE_ADMIN)),
 ) -> ScheduledBackupRunResult:
     """Idempotent scheduled-backup trigger for an external cron (T-239).
 
@@ -2086,6 +2163,11 @@ async def run_due_scheduled_backup(
     otherwise). The decide+enqueue critical section runs under the ``BACKUP_SCHEDULE``
     advisory lock so concurrent triggers cannot double-enqueue; a concurrent caller that
     cannot take the lock returns ``skipped_locked=True`` (still HTTP 200 for the cron).
+
+    Gated to ``scheduler`` (the least-privilege role the Dagster on-ramp presents,
+    T-290 / ADR-066) or ``destructive_admin`` (manual operator trigger). This is
+    stricter than the router-wide ``require_role(*KNOWN_ADMIN_ROLES)``: a broad admin
+    role (e.g. ``source_file_viewer``) can no longer enqueue a scheduled backup.
     """
     key = AdvisoryLockKey.global_key(AdvisoryLockNamespace.BACKUP_SCHEDULE)
     try:
@@ -2094,7 +2176,8 @@ async def run_due_scheduled_backup(
             if not status.due:
                 return ScheduledBackupRunResult(enqueued=False, status=status)
             payload = scheduled_backup_payload(get_settings())
-            job_id = await queue.enqueue("db_backup", payload)
+            # Launch a Dagster db_backup run (T-290k PR3) — no in-process enqueue, no recursion.
+            job_id = await _launch_db_backup_dagster_run(client, get_settings(), payload)
             await client.record_audit_event(
                 action="db_backup.scheduled_run_due",
                 outcome="started",
@@ -2129,7 +2212,10 @@ async def restore_dry_run(
     result = await client.restore_dry_run(req)
     await client.record_audit_event(
         action="db_restore.dry_run",
-        outcome="succeeded" if result.can_restore else "blocked",
+        # dry-run always completes; can_restore=False means preflight denied the restore.
+        # "blocked" is not a valid ops.audit_events.outcome (CHECK: started/succeeded/
+        # failed/cancelled/denied) — it raised a constraint violation → 500 (T-290 e2e).
+        outcome="succeeded" if result.can_restore else "denied",
         payload={
             "mode": req.mode,
             "can_restore": result.can_restore,
@@ -2146,21 +2232,53 @@ async def submit_restore(
     req: RestoreCreateRequest,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
+    settings = get_settings()
     payload = req.model_dump(exclude_none=True)
-    job_id = await queue.enqueue("db_restore", payload)
+    # Unconditional Dagster routing (T-290k PR3).
+    job_id = await _launch_db_restore_dagster_run(client, settings, payload)
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="db_restore.submit",
         outcome="started",
-        payload=payload,
+        payload={**payload, "executor": "dagster"},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,
         **_audit_request(request),
     )
     return status
+
+
+async def _launch_db_restore_dagster_run(
+    client: AsyncAddressClient,
+    settings: Settings,
+    payload: dict[str, Any],
+) -> str:
+    """Create a Dagster-executed ``db_restore`` load_jobs row and launch its Dagster run.
+
+    The row is inserted ``executor='dagster'`` so the in-process drain skips it (T-290i);
+    the Dagster ``db_restore`` op adopts and drives it. A launch failure fails the row and
+    surfaces a 502 rather than leaving a queued row no worker will ever claim. Restore
+    targets a new empty DB; the final hot-swap stays a manual operator step (ADR-036).
+    """
+    engine = client._engine()
+    row = await AdminRepository(engine).insert_load_job(
+        kind="db_restore", payload=payload, executor="dagster"
+    )
+    job_id = row.job_id
+    run_config = {"ops": {"run_db_restore": {"config": {"job_id": job_id, "payload": payload}}}}
+    try:
+        await launch_dagster_run(
+            settings,
+            job_name="db_restore",
+            run_config=run_config,
+            tags={"kor_travel_geo.job_id": job_id},
+        )
+    except (DagsterUrlConfigurationError, DagsterLaunchError, httpx.HTTPError) as exc:
+        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
+        raise KorTravelGeoError("Dagster restore launch failed", http_status=502) from exc
+    return job_id
 
 
 @router.post(
@@ -2268,7 +2386,7 @@ async def restore_hot_swap_source_verify(
         actor_type="ui",
         actor_id=ctx.actor,
         outcome=(
-            "reconstruct_unavailable" if result.reconstruct_unavailable else "verified"
+            "failed" if result.reconstruct_unavailable else "succeeded"
         ),
         payload={
             "entrypoint": result.entrypoint,
@@ -2330,9 +2448,8 @@ async def cancel_job(
     job_id: str,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    return await cancel_load(job_id, request=request, client=client, queue=queue)
+    return await cancel_load(job_id, request=request, client=client)
 
 
 @router.get("/loads", response_model=list[LoadJobStatus], response_model_exclude_none=True)
@@ -2362,9 +2479,14 @@ async def cancel_load(
     job_id: str,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    await queue.cancel(job_id)
+    # Queue-free converged cancel (T-290k §2g): converge the load_jobs row + real Dagster
+    # terminateRun for executor='dagster' rows. All execution is Dagster after T-290k.
+    await cancel_load_job_converged(
+        client._engine(),
+        job_id,
+        orchestrator_cancel=dagster_orchestrator_cancel(get_settings()),
+    )
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="load.cancel",
@@ -2383,10 +2505,11 @@ async def run_consistency(
     req: ConsistencyRunRequest,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    job_id = await queue.enqueue(
-        "consistency_check",
+    # Launch a standalone consistency_check Dagster run (T-290k PR3).
+    job_id = await launch_consistency_check_dagster_run(
+        client._engine(),
+        get_settings(),
         {
             "scope": req.scope,
             "sido": req.sido,
@@ -2664,7 +2787,7 @@ async def rollback_serving_release(
         action="serving_release.rollback",
         actor_type="ui",
         actor_id=ctx.actor,
-        outcome=result.mode,
+        outcome="succeeded",
         payload={
             "mode": result.mode,
             "activated_match_set_id": result.activated_match_set_id,

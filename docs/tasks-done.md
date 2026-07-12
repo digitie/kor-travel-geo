@@ -6,6 +6,82 @@
 
 ## 완료
 
+- [x] **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only** (2026-07-12) — geo backup/restore·적재
+  오케스트레이션을 서비스 전용 독립 Dagster로 이관 완료. 통합 브랜치 `agent/claude-dagster-migration`
+  (HEAD `9bcb949`)에 T-290a~l 병합, n150 cutover 배포·검증. **전국 full-load 스테이징 라이브 e2e (blue-green,
+  프로드 serving 무손상)**: 격리 scratch DB `kor_travel_geo_fullload_e2e`로 Dagster가 7 로더 직렬 실행 →
+  `tl_juso_text`=**6,416,637**(serving 정확 일치) → consistency severity=ERROR(C2 "SHP-only BD_MGT_SN"
+  34,699 = 혼합 기준월 juso 202603<SHP 202604의 정당한 산물) → **ADR-017 게이트가 mv swap을 정확히 차단**
+  (root failed, mv_refresh child 미생성 — "ERROR-차단" 순서 규칙 변형을 라이브 증명) → forced 직접 mv 빌드로
+  `mv_geocode_target`·`mv_geocode_text_search` 둘 다 **6,416,637**(serving 정확 일치 — swap 경로 증명).
+  기준월 juso=202603, locsum/navi/shp/sppn=202604, roadaddr=202605. 검증 후 scratch DB drop. cutover 후
+  serving mv 무손상 6,416,637, app이 in-process 큐 없이 기동, reconciler 라이브(`fetch_run_state` 실제 상태 반환).
+  live UI e2e 게이트 #1~#4 전부 통과.
+
+- [x] **T-290l** — live e2e harness를 Dagster 관측까지 확장 + 최종 회귀 (2026-07-12). T-290k cutover 배포본을
+  종합 검증: backend 회귀 unit **1224 passed** + ruff/mypy(161)/lint-imports/openapi drift 전부 green,
+  frontend는 T-290k에서 미변경(#3 live e2e last-green), reconciler 라이브(주기 tick + `fetch_run_state`가
+  Dagster GraphQL로 실제 run 상태 반환 확인), Dagster observability 데이터 경로 검증(run store가 db_backup/
+  db_restore/full_load_batch/mv_refresh/scheduled_backup run으로 채워지고 API 질의 정상). 경미: co-deploy
+  직후 reconciler startup이 dagster GraphQL 준비를 앞질러 probe가 lease-grace로 degrade(안전, 다음 60s tick 자가복구).
+
+- [x] **T-290k** — in-process 실행엔진 은퇴, 실행이 Dagster-only (2026-07-12). 게이트된 4-PR 에픽 + blue-green
+  수정: **#479** blue-green `full_load_batch` submit E0404 수정(scratch DB에서 상태 readback). **#480 PR1**
+  additive Dagster jobs — `source_rebuild_db`(단일 op이 SOURCE_REBUILD_DB 글로벌 락을 materialize+launch 전체에
+  걸쳐 잡음; execute_load_job의 1회 adopt+terminal 때문에 2-op이면 행을 중간 terminal-mark), `consistency_check`,
+  release-gated `mv_refresh`(와이어링-프루프 재작성 — `resolve_text_geometry_links`·`ensure_load_batch_release_gate`·
+  `record_mv_refresh_release` 복원). **#481 PR2** `DagsterJobReconciler`(stateless, 실제 `RunLivenessProbe` =
+  Dagster GraphQL run-status; 장애 시 lease-grace degrade) + queue-free `cancel_load_job_converged`(dagster→실제
+  `terminateRun`, api_in_process→transition용 `signal_in_process_cancel`) + 주기 reconcile tick; recover_startup의
+  dagster 절반 제거로 double-reconcile 회피. **#482 PR3** 라우팅 무조건 Dagster(`dagster_executed_job_kinds` 삭제,
+  전 엔드포인트 launch_*_dagster_run, `insert_load_job` 기본 executor `dagster`). **#483 PR4** `api/_jobs.py`
+  JobQueue drain + app.py 핸들러/`_run_loader_off_event_loop`/lifespan 큐/`get_job_queue` 삭제(−605줄); DDL
+  마이그레이션 `0026_t290k_retire_inproc`(api_in_process 잔여행→failed 수렴 + executor 기본 dagster; CHECK는
+  이력행 위해 IN 유지). ADR-006 `superseded by ADR-066`, ADR-011 `partially superseded`(load_jobs 테이블 유지·
+  실행만 은퇴). n150 cutover 배포·검증.
+
+- [x] **T-290j** — loader + `full_load_batch` Dagster 실행 (2026-07-12) — #476/#477/#478. ADR-017 DAG를
+  Dagster-free 메인 leaf `loaders/batch_dag.py::run_full_load_batch`(직렬 소스로드 → consistency ERROR 게이트 →
+  mv swap, forced_promotion 우회, 형제취소, 자식별 lease heartbeat)로 1:1 이식하고 Dagster op
+  `full_load_execute.py`(`full_load_batch`/`load_source` job)로 브릿지. `insert_load_batch(executor=)`
+  (dagster root='queued'로 op이 adopt, children='dagster'로 드레인 스킵), 게이트를 `submit_load`·
+  `source_rebuild_db`에 배선. #477 dagster 이미지 GDAL 설치 수정(pin + `[loaders]` 단일 pip resolve). #478
+  blue-green target-DB(op이 `payload.target_database`로 스크래치 엔진 해석, `ensure_scratch_database`)로 격리
+  스테이징 검증 지원.
+
+- [x] **T-290i** — `db_restore`(새 빈 DB) Dagster 실행 (2026-07-12) — #472. `run_db_restore` op(op명≠job명,
+  RetryPolicy off)이 `run_restore_job`을 `execute_load_job` 브릿지로 호출; hot-swap은 수동 유지. `submit_restore`
+  게이트 + `_launch_db_restore_dagster_run`(executor='dagster' 행 삽입·launch·실패 시 mark_failed+502).
+
+- [x] **T-290h** — run detail op 로그·artifact + 실패/overdue 알림 UI (2026-07-12) — #471. `ops.run_failure_alerts`
+  영속(마이그레이션 0025), failure sensor가 client 리소스 경유 cross-run 영속, `/v1/dagster/run-failures`·`.../ack` +
+  overdue(futureTicks) DTO, `DagsterPanel`에 실패 배너·overdue 배너·recent-failures 목록·op-log step_id 그룹핑.
+
+- [x] **T-290e** — admin `/admin/dagster` 페이지 + iframe 임베드(Agent B/Codex,
+  통합 브랜치 `agent/claude-dagster-migration`). T-290d의 OpenAPI 생성 타입을 단일 소스로 삼는
+  `lib/dagster.ts` 타입 alias·React Query hook을 추가하고, 관리 UI에 Dagster summary/run detail
+  관측 화면을 연결했다. `/admin/dagster`는 repository·asset·job·failed run 지표, 최근 run 표,
+  선택 run event log, repository 표, schedule/sensor tick 표, Dagster webserver sandbox iframe을
+  렌더한다. 사이드바와 관리 홈의 `백업·운영` 그룹에도 Dagster 링크를 추가했다. Dagster outage
+  응답(`status="unavailable"`)은 오류 배너와 빈 run 상태로 표시한다. 단위 테스트
+  `dagster-panel.test.tsx`로 정상 summary/run 선택과 outage 표시를 검증했다.
+  UI `lint`, `type-check`, unit test 153건, `build`, React Doctor(`ok=true`, 기존 warning 9건),
+  backend `ruff`/`mypy`/`lint-imports`/`pytest`/OpenAPI drift check가 통과했다. (2026-07-08)
+
+- [x] **T-290d** — API GraphQL observe 라우터 `/v1/ops/dagster/*`(Agent B/Codex,
+  통합 브랜치 `agent/claude-dagster-migration`). Dagster webserver GraphQL을 조회하는
+  `/v1/ops/dagster/summary`와 `/v1/ops/dagster/runs/{run_id}`를 추가했다. main lib은
+  Dagster를 import하지 않고, API는 SSRF 방어(scheme http/https, userinfo 금지, host allowlist,
+  `/graphql` path)와 trusted admin role gate를 적용한다. Dagster webserver down/HTTP 오류는
+  200 `status="unavailable"`로 반환하고, GraphQL top-level error는 message만 노출한다. 설정 키
+  `KTG_DAGSTER_URL`, `KTG_DAGSTER_GRAPHQL_URL`, `KTG_DAGSTER_ALLOWED_HOSTS`,
+  `KTG_DAGSTER_REQUEST_TIMEOUT_SECONDS`, `KTG_DAGSTER_REPOSITORY_NAME`,
+  `KTG_DAGSTER_REPOSITORY_LOCATION_NAME`을 추가하고 `docs/ports.md`에 Dagster webserver
+  `12703`을 예약했으며 OpenAPI와 UI 생성 타입을 갱신했다.
+  `pytest -q -s` 1124 passed/75 skipped, `ruff check .`, `mypy --strict src/kortravelgeo`,
+  `lint-imports`, UI lint/type-check/unit/build가 통과했다. React Doctor는 `ok=true`이나 기존 UI
+  파일 8개에 warning 9건을 보고했다(이번 변경 파일 아님). (2026-07-08)
+
 - [x] **T-278** — Admin UI Next 기본 오류 화면 복구 보강(Agent A/Codex, #390).
   Firefox를 포함한 브라우저에서 Next.js 기본 전역 오류 화면(`This page couldn’t load`,
   `Reload to try again, or go back.`)이 노출될 수 있던 경로를 보강했다. `app/error.tsx`와

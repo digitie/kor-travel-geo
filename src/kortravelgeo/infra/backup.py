@@ -143,13 +143,14 @@ async def run_backup_job(
     payload: dict[str, Any],
     cancel_event: asyncio.Event,
     progress: ProgressReporter,
+    *,
+    job_id: str | None = None,
 ) -> None:
     req = BackupCreateRequest.model_validate(payload)
     callback_url = validate_callback_url(req.callback_url, settings.backup_callback_allowed_hosts)
     destination_dir = resolve_backup_destination(req.destination_dir, settings)
     jobs = req.jobs or settings.backup_default_jobs
     compression_level = req.compression_level or settings.backup_default_compression_level
-    job_id = _payload_job_id(payload)
     artifact_id = str(uuid4())
     display_name = req.display_name or default_backup_filename(compression_level=compression_level)
     archive_path = safe_artifact_path(destination_dir, display_name)
@@ -379,6 +380,8 @@ async def run_restore_job(
     payload: dict[str, Any],
     cancel_event: asyncio.Event,
     progress: ProgressReporter,
+    *,
+    job_id: str | None = None,
 ) -> None:
     req = RestoreCreateRequest.model_validate(payload)
     callback_url = validate_callback_url(req.callback_url, settings.backup_callback_allowed_hosts)
@@ -415,7 +418,7 @@ async def run_restore_job(
             },
             resource_type="maintenance_window",
             resource_id=window.maintenance_window_id,
-            job_id=_payload_job_id(payload),
+            job_id=job_id,
         )
     else:
         current_database = database_name_from_dsn(settings.pg_dsn)
@@ -439,7 +442,7 @@ async def run_restore_job(
         storage_kind="none",
         display_name=f"restore_{target_database}_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}",
         media_type="application/x-ndjson",
-        job_id=_payload_job_id(payload),
+        job_id=job_id,
         manifest={
             "source_artifact_id": source_artifact.artifact_id if source_artifact else None,
             "archive_path": str(archive_path),
@@ -619,7 +622,7 @@ async def run_restore_job(
             target_database=target_database,
             source_manifest=manifest,
             source_artifact_id=source_artifact.artifact_id if source_artifact else None,
-            job_id=_payload_job_id(payload),
+            job_id=job_id,
         )
         relinked_restore_artifact = await repo.update_artifact(
             restore_artifact.artifact_id,
@@ -643,7 +646,7 @@ async def run_restore_job(
             settings,
             target_dsn=target_dsn,
             entrypoint="pg_restore",
-            actor=f"system:{_payload_job_id(payload) or 'db_restore'}",
+            actor=f"system:{job_id or 'db_restore'}",
         )
         if source_verification is not None:
             restore_manifest = {
@@ -680,7 +683,7 @@ async def run_restore_job(
             mode=req.mode,
             target_dsn=target_dsn,
             job_owns_target=job_owns_target,
-            job_id=_payload_job_id(payload),
+            job_id=job_id,
         )
         raise
     except Exception as exc:
@@ -704,7 +707,7 @@ async def run_restore_job(
             mode=req.mode,
             target_dsn=target_dsn,
             job_owns_target=job_owns_target,
-            job_id=_payload_job_id(payload),
+            job_id=job_id,
         )
         raise
     finally:
@@ -2531,11 +2534,6 @@ def _is_relative_to(path: Path, root: Path) -> bool:
     except ValueError:
         return False
     return True
-
-
-def _payload_job_id(payload: Mapping[str, Any]) -> str | None:
-    value = payload.get("_job_id")
-    return str(value) if isinstance(value, str) and value else None
 
 
 def artifact_expires_at(settings: Settings, retention_days: int | None) -> datetime:

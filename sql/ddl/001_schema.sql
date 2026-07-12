@@ -404,6 +404,10 @@ CREATE TABLE IF NOT EXISTS load_jobs (
   started_at        TIMESTAMPTZ,
   finished_at       TIMESTAMPTZ,
   heartbeat_at      TIMESTAMPTZ,
+  executor          TEXT NOT NULL DEFAULT 'dagster'
+                      CHECK (executor IN ('api_in_process','dagster')),
+  orchestrator_run_id TEXT,
+  lease_expires_at  TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -463,6 +467,20 @@ DROP TRIGGER IF EXISTS trg_ops_audit_events_append_only ON ops.audit_events;
 CREATE TRIGGER trg_ops_audit_events_append_only
   BEFORE UPDATE OR DELETE ON ops.audit_events
   FOR EACH ROW EXECUTE FUNCTION ops.audit_events_append_only();
+
+-- Dagster run-failure alert ledger (T-290h). Mutable (acknowledged_at), so no
+-- append-only trigger. run_id (Dagster run id) PK → idempotent sensor re-fire.
+CREATE TABLE IF NOT EXISTS ops.run_failure_alerts (
+  run_id          TEXT PRIMARY KEY,
+  job_id          TEXT,
+  job_name        TEXT,
+  job_kind        TEXT,
+  status          TEXT NOT NULL,
+  error_code      TEXT,
+  run_failed_at   TIMESTAMPTZ NOT NULL,
+  recorded_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  acknowledged_at TIMESTAMPTZ
+);
 
 CREATE TABLE IF NOT EXISTS ops.dataset_snapshots (
   dataset_snapshot_id         UUID PRIMARY KEY,

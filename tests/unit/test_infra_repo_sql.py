@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import inspect
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
-from kortravelgeo.api import _jobs
-from kortravelgeo.api import app as api_app
 from kortravelgeo.core.consistency_definitions import CASE_DEFINITIONS
 from kortravelgeo.core.normalize import AddrParts
 from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
@@ -25,7 +22,8 @@ from kortravelgeo.infra import (
     zip_repo,
 )
 from kortravelgeo.infra import sql as infra_sql
-from kortravelgeo.loaders import consistency
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor
+from kortravelgeo.loaders import batch_dag, consistency
 from kortravelgeo.loaders.consistency import CASE_SQL, DEFAULT_CASES
 
 
@@ -343,22 +341,35 @@ def test_consistency_sample_rows_are_stable_and_decision_ready() -> None:
 
 
 def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
-    queue_source = inspect.getsource(_jobs.JobQueue)
+    # The ADR-017 successor chain now lives in the Dagster-executed batch DAG leaf
+    # (T-290j/T-290k retired the in-process JobQueue): serial source loads → consistency_check
+    # → the promotion gate → mv_refresh swap.
+    dag_source = inspect.getsource(batch_dag.run_full_load_batch)
 
-    assert "full_load_batch" in queue_source
-    assert "source_rebuild_db" in _jobs._CONTROL_KINDS
-    assert "consistency_check" in queue_source
-    assert '"strategy": "swap"' in queue_source
-    assert "consistency report severity ERROR" in queue_source
-    assert "log_tail" in queue_source
-    assert "kind NOT IN" in queue_source
+    assert "consistency_check" in dag_source
+    assert '"strategy": "swap"' in dag_source
+    assert "consistency report severity ERROR" in dag_source
+    # log_tail persistence lives on the shared LoadJobExecutor (T-290g).
+    assert "log_tail" in inspect.getsource(LoadJobExecutor)
+
+
+def test_load_job_executor_adopt_dagster_guards_terminal_rows() -> None:
+    source = inspect.getsource(LoadJobExecutor.adopt_dagster)
+
+    assert "state = 'queued'" in source
+    assert "state = 'running'" in source
+    assert "executor = 'dagster'" in source
+    assert "orchestrator_run_id = :orchestrator_run_id" in source
+    assert "RETURNING job_id" in source
+    assert "LoadJobAdoptionError" in source
 
 
 def test_insert_load_batch_preserves_child_queue_order() -> None:
     source = inspect.getsource(admin_repo.AdminRepository.insert_load_batch)
 
     assert "enumerate(children)" in source
-    assert "payload_summary, created_at" in source
+    # T-290j: the child column list now carries executor between payload_summary/created_at.
+    assert "payload_summary, executor, created_at" in source
     assert (
         "clock_timestamp() + (CAST(:child_order AS integer) * interval '1 microsecond')"
         in source
@@ -366,66 +377,21 @@ def test_insert_load_batch_preserves_child_queue_order() -> None:
     assert '"child_order": index' in source
 
 
-@pytest.mark.asyncio
-async def test_batch_consistency_error_reaches_promotion_gate(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class QueueCapture:
-        def __init__(self) -> None:
-            self.handlers: dict[str, Any] = {}
+def test_insert_load_batch_stamps_executor_and_dagster_root_is_queued() -> None:
+    # T-290j: the executor is stamped on the root + every child; a dagster batch root starts
+    # 'queued' so the Dagster op can adopt it, an in-process root stays 'running'. T-290k PR3
+    # flipped the default to 'dagster'.
+    source = inspect.getsource(admin_repo.AdminRepository.insert_load_batch)
 
-        def register(self, kind: str, handler: Any) -> None:
-            self.handlers[kind] = handler
+    assert 'executor: str = "dagster"' in source
+    assert 'root_state = "queued" if executor == "dagster" else "running"' in source
+    assert '"executor": executor' in source
 
-    class NoopLock:
-        async def __aenter__(self) -> None:
-            return None
 
-        async def __aexit__(self, *_args: object) -> bool:
-            return False
-
-    async def fake_run_all_cases(
-        _engine: object,
-        *,
-        scope: str,
-        cases: tuple[str, ...],
-        generated_by: str,
-        source_set: dict[str, Any],
-        on_progress: Any,
-    ) -> ConsistencyReport:
-        del cases
-        if on_progress is not None:
-            await on_progress(1.0, "C1")
-        now = datetime.now(UTC)
-        return ConsistencyReport(
-            report_id="consistency_error",
-            scope=scope,
-            severity_max="ERROR",
-            source_set=source_set,
-            started_at=now,
-            finished_at=now,
-            cases=(),
-            generated_by=generated_by,  # type: ignore[arg-type]
-        )
-
-    monkeypatch.setattr(api_app, "run_all_cases", fake_run_all_cases)
-    monkeypatch.setattr(api_app, "cross_process_lock", lambda *_args, **_kwargs: NoopLock())
-    queue = QueueCapture()
-    api_app._register_default_handlers(queue, object())  # type: ignore[arg-type]
-    handler = queue.handlers["consistency_check"]
-    progress_events: list[dict[str, Any]] = []
-
-    async def record_progress(**kwargs: Any) -> None:
-        progress_events.append(kwargs)
-
-    await handler({"load_batch_id": "batch-1"}, asyncio.Event(), record_progress)
-
-    assert any(
-        "batch promotion gate" in str(event.get("message")) for event in progress_events
-    )
-
-    with pytest.raises(RuntimeError, match="consistency report failed"):
-        await handler({}, asyncio.Event(), record_progress)
+# (test_batch_consistency_error_reaches_promotion_gate removed in T-290k PR4: the in-process
+# consistency handler + its promotion gate are retired; the gate is now covered against the
+# Dagster batch DAG leaf by tests/unit/test_batch_dag.py::test_gate_blocks_mv_on_consistency_error
+# and ::test_forced_promotion_bypasses_error_gate_and_threads_metadata.)
 
 
 @pytest.mark.asyncio
