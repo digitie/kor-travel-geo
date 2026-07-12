@@ -33,8 +33,7 @@ from kortravelgeo.api._full_load_launch import (
     launch_source_rebuild_dagster_run,
     submit_full_load_batch,
 )
-from kortravelgeo.api._jobs import JobQueue
-from kortravelgeo.api.deps import get_client, get_job_queue
+from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.security import (
     KNOWN_ADMIN_ROLES,
     ROLE_DESTRUCTIVE_ADMIN,
@@ -2449,9 +2448,8 @@ async def cancel_job(
     job_id: str,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
-    return await cancel_load(job_id, request=request, client=client, queue=queue)
+    return await cancel_load(job_id, request=request, client=client)
 
 
 @router.get("/loads", response_model=list[LoadJobStatus], response_model_exclude_none=True)
@@ -2481,16 +2479,13 @@ async def cancel_load(
     job_id: str,
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
-    queue: JobQueue = Depends(get_job_queue),
 ) -> LoadJobStatus:
     # Queue-free converged cancel (T-290k §2g): converge the load_jobs row + real Dagster
-    # terminateRun for executor='dagster' rows; the transitional queue still stops in-flight
-    # api_in_process drain jobs via signal_in_process_cancel until PR4 removes the drain.
+    # terminateRun for executor='dagster' rows. All execution is Dagster after T-290k.
     await cancel_load_job_converged(
         client._engine(),
         job_id,
         orchestrator_cancel=dagster_orchestrator_cancel(get_settings()),
-        in_process_cancel=queue.signal_in_process_cancel,
     )
     status = await client.load_status(job_id)
     await client.record_audit_event(

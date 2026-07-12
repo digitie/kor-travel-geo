@@ -7,8 +7,9 @@ from typing import Any
 
 import pytest
 
-from kortravelgeo.api import _jobs
 from kortravelgeo.api import app as api_app
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor
+from kortravelgeo.loaders import batch_dag
 from kortravelgeo.core.consistency_definitions import CASE_DEFINITIONS
 from kortravelgeo.core.normalize import AddrParts
 from kortravelgeo.dto.admin import ConsistencyCase, ConsistencyReport
@@ -343,21 +344,20 @@ def test_consistency_sample_rows_are_stable_and_decision_ready() -> None:
 
 
 def test_batch_dag_defers_consistency_and_mv_refresh_until_successors() -> None:
-    queue_source = inspect.getsource(_jobs.JobQueue)
+    # The ADR-017 successor chain now lives in the Dagster-executed batch DAG leaf
+    # (T-290j/T-290k retired the in-process JobQueue): serial source loads → consistency_check
+    # → the promotion gate → mv_refresh swap.
+    dag_source = inspect.getsource(batch_dag.run_full_load_batch)
 
-    assert "full_load_batch" in queue_source
-    assert "source_rebuild_db" in _jobs._CONTROL_KINDS
-    assert "consistency_check" in queue_source
-    assert '"strategy": "swap"' in queue_source
-    assert "consistency report severity ERROR" in queue_source
-    # log_tail persistence moved to the shared LoadJobExecutor (T-290g); the queue's
-    # per-job writes delegate there.
-    assert "log_tail" in inspect.getsource(_jobs.LoadJobExecutor)
-    assert "kind NOT IN" in queue_source
+    assert "consistency_check" in dag_source
+    assert '"strategy": "swap"' in dag_source
+    assert "consistency report severity ERROR" in dag_source
+    # log_tail persistence lives on the shared LoadJobExecutor (T-290g).
+    assert "log_tail" in inspect.getsource(LoadJobExecutor)
 
 
 def test_load_job_executor_adopt_dagster_guards_terminal_rows() -> None:
-    source = inspect.getsource(_jobs.LoadJobExecutor.adopt_dagster)
+    source = inspect.getsource(LoadJobExecutor.adopt_dagster)
 
     assert "state = 'queued'" in source
     assert "state = 'running'" in source

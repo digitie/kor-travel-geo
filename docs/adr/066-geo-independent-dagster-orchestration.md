@@ -112,4 +112,6 @@ architecture/../architecture/dagster-boundary.md), 단계·분해는
   A/B 병렬 분해, live UI e2e 게이트대로 이행한다.
 - (문서) geo판 [`docs/architecture/dagster-boundary.md`](../architecture/dagster-boundary.md)를 구현 정본으로
   둔다.
-- (open) 이관 완료 후 ADR-006/011의 in-process 큐 관련 결정을 superseded로 표기한다(실행 은퇴 시점).
+- (done, T-290k) 이관 완료 후 ADR-006/011의 in-process 큐 관련 결정을 superseded로 표기했다 —
+  ADR-006은 `superseded by ADR-066`, ADR-011은 `partially superseded`(테이블 유지·실행만 은퇴).
+  in-process `JobQueue` drain은 삭제됐고 모든 실행은 Dagster op으로 구동된다.

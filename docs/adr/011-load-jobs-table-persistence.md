@@ -1,8 +1,14 @@
 # ADR-011: 적재 작업 큐 상태는 `load_jobs` 테이블로 영속화한다
 
-- 상태: accepted
+- 상태: partially superseded by ADR-066
 - 날짜: 2026-05-23
 - 결정자: human
+
+> **T-290k(ADR-066) 갱신**: `load_jobs` 테이블과 재시작 복구 개념은 **유지**된다(ADR-066 §5/§6이
+> `executor`/`orchestrator_run_id`/`lease_expires_at`로 확장). **은퇴**된 것은 in-process 실행 부분이다 —
+> `Semaphore(1)` drain, `ADVISORY_SLOT_LOAD_QUEUE` + `FOR UPDATE SKIP LOCKED` claim, queued 재선점,
+> lifespan blanket `running→failed`. 이제 실행은 Dagster가 담당하고 `load_jobs`는 상태 원장 겸
+> Dagster run store와의 2-레코드 경계로만 쓰인다.
 
 ## 컨텍스트
 ADR-006은 적재 작업을 `asyncio.Semaphore(1)` 기반 in-process 큐로 직렬 처리하기로 했다. 그러나 분기 풀로드 한 사이클이 30~60분에 달하는 경우 다음 위험이 누적된다.

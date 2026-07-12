@@ -24,8 +24,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import text
 
-from kortravelgeo.api import _jobs
-from kortravelgeo.api.app import _register_default_handlers
+from kortravelgeo.api._full_load_launch import launch_full_load_batch_dagster_run
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.source_categories import SIDO_PARTS, category_by_code
 from kortravelgeo.core.source_validation import GroupValidation, validate_group_manifest
@@ -42,7 +41,7 @@ from kortravelgeo.infra.source_match_set_service import SourceMatchSetRepository
 from kortravelgeo.infra.source_member_scan import scan_group_manifest
 from kortravelgeo.infra.source_upload_repo import SourceUploadSessionRepository
 from kortravelgeo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
-from kortravelgeo.settings import Settings
+from kortravelgeo.settings import Settings, get_settings
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -654,9 +653,8 @@ async def enqueue_and_wait(
     poll_interval_seconds: float,
     timeout_minutes: float,
 ) -> str:
-    queue = _jobs.JobQueue(engine)
-    _register_default_handlers(queue, engine)
-    job_id = await queue.enqueue_batch(batch_payload)
+    # T-290k: full_load_batch executes via Dagster (the in-process JobQueue is retired).
+    job_id = await launch_full_load_batch_dagster_run(engine, get_settings(), batch_payload)
     await client.record_rebuild_enqueued(
         source_match_set_id,
         actor=ACTOR,

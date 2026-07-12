@@ -2234,22 +2234,6 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             for category in CATEGORY_CATALOG
         )
 
-    async def submit_load(self, kind: str, payload: dict[str, Any]) -> LoadJobStatus:
-        # Library direct-DB submit (no Dagster launch); still stamps the legacy
-        # ``api_in_process`` executor. T-290k PR4 migrates/retires this alongside the drain.
-        repo = AdminRepository(self._engine())
-        if kind == "full_load_batch":
-            row = await repo.insert_load_batch(
-                payload=payload,
-                children=batch_children(payload),
-                executor="api_in_process",
-            )
-        else:
-            row = await repo.insert_load_job(
-                kind=kind, payload=payload, executor="api_in_process"
-            )
-        return _load_job_status(row)
-
     async def cancel_load(self, job_id: str) -> LoadJobStatus:
         row = await AdminRepository(self._engine()).cancel_load_job(job_id)
         if row is None:
@@ -2257,19 +2241,6 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
 
             raise NotFoundError(f"cancellable load job not found: {job_id}")
         return _load_job_status(row)
-
-    async def run_consistency_check(
-        self,
-        *,
-        scope: Literal["full", "sido", "recent"] = "full",
-        sido: str | None = None,
-        recent_days: int = 7,
-        cases: tuple[str, ...] | None = None,
-    ) -> LoadJobStatus:
-        return await self.submit_load(
-            "consistency_check",
-            {"scope": scope, "sido": sido, "recent_days": recent_days, "cases": cases},
-        )
 
     async def consistency_report(self, report_id: str) -> ConsistencyReport:
         row = await AdminRepository(self._engine()).consistency_report(report_id)
