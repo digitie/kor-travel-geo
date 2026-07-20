@@ -207,7 +207,7 @@ describe("DagsterPanel", () => {
     apiMocks.requestJson.mockReset();
   });
 
-  it("요약, 최근 run, iframe을 렌더하고 선택한 run 상세를 조회한다", async () => {
+  it("요약, 최근 run을 렌더하고 선택한 run 상세를 조회한다", async () => {
     apiMocks.requestJson.mockImplementation(async (path: string) => {
       if (path === "/ops/dagster/summary") return SUMMARY;
       if (path === "/ops/dagster/run-failures") return EMPTY_FAILURES;
@@ -219,12 +219,6 @@ describe("DagsterPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("kortravelgeo_dagster.definitions")).toBeTruthy();
-    const iframe = screen.getByTitle("Dagster UI");
-    expect(iframe).toHaveAttribute("src", "http://127.0.0.1:12502");
-    expect(iframe).toHaveAttribute(
-      "sandbox",
-      "allow-scripts allow-forms allow-popups allow-downloads allow-same-origin"
-    );
 
     await waitFor(() =>
       expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_1")
