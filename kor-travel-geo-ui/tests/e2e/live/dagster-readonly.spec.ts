@@ -22,7 +22,7 @@ test.describe("LIVE admin Dagster observe page", () => {
     await loginLiveAdminPage(page, "/admin/dagster");
   });
 
-  test("/admin/dagster renders the observe panels (summary, runs, code locations, Dagster UI)", async ({
+  test("/admin/dagster renders the observe panels (summary, runs, code locations, console embed)", async ({
     page
   }) => {
     await page.goto("/admin/dagster");
@@ -33,16 +33,16 @@ test.describe("LIVE admin Dagster observe page", () => {
 
     // Core observe panels render against the live backend (they render even on a Dagster
     // outage via the 200/status=unavailable path; here the geo Dagster webserver is up).
-    for (const title of ["Dagster UI", "Recent runs", "Code locations", "Schedules and sensors"]) {
+    for (const title of ["Recent runs", "Code locations", "Schedules and sensors", "Dagster 콘솔"]) {
       await expect(page.getByText(title, { exact: false }).first()).toBeVisible({
         timeout: LIVE_TIMEOUT
       });
     }
 
-    // The Dagster UI panel embeds the browser-facing URL as an iframe once the observe
-    // summary loads. In prod this is the router-proxied public domain; in dev it falls back
-    // to the internal URL. Either way it must be an absolute http(s) URL.
-    const frame = page.locator('iframe[title="Dagster UI"]');
+    // The single Dagster console embed (DagsterEmbed, #486) renders the browser-facing
+    // KTG_DAGSTER_PUBLIC_URL as an iframe. In prod this is the router-proxied public domain;
+    // in dev it falls back to the internal URL. Either way it must be an absolute http(s) URL.
+    const frame = page.locator('iframe[title="Dagster 웹서버"]');
     await expect(frame).toBeVisible({ timeout: LIVE_TIMEOUT });
     const src = await frame.getAttribute("src");
     expect(src ?? "").toMatch(/^https?:\/\//);

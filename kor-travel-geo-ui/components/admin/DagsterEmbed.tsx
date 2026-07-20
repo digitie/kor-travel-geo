@@ -45,6 +45,7 @@ export function DagsterEmbed({ url }: { url: string }) {
         src={target}
         title="Dagster 웹서버"
         referrerPolicy="no-referrer"
+        sandbox="allow-scripts allow-forms allow-popups allow-downloads allow-same-origin"
         className="h-[760px] w-full rounded-md border bg-background"
       />
     </Panel>

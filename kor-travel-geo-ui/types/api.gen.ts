@@ -1285,7 +1285,7 @@ export interface paths {
         put?: never;
         /**
          * Fetch Epost Source
-         * @description Manual epost server-fetch → RustFS register → postal load enqueue (T-207).
+         * @description Manual epost server-fetch → RustFS register → postal load launch (T-207).
          */
         post: operations["fetch_epost_source_v1_admin_source_files_epost_fetch_post"];
         delete?: never;
@@ -1712,10 +1712,10 @@ export interface paths {
          * Rebuild Source Match Set Db
          * @description Rebuild the serving DB from a match set (doc "DB 재구성", ~1532-1562).
          *
-         *     Bridges to the EXISTING ``full_load_batch`` loader DAG via a persistent
-         *     ``source_rebuild_db`` control job. The HTTP request only enqueues the
-         *     control job; that job then runs the source-archive integrity gate, RustFS
-         *     materialization, and downstream ``full_load_batch`` enqueue under the
+         *     Bridges to the EXISTING ``full_load_batch`` loader DAG via a Dagster
+         *     ``source_rebuild_db`` control job (T-290k PR3). The HTTP request only launches the
+         *     control run; that op then runs the source-archive integrity gate, RustFS
+         *     materialization, and downstream ``full_load_batch`` launch under the
          *     ``source_rebuild_db`` global advisory lock.
          *
          *     ``force_promotion`` (the ERROR-bypass) additionally requires the

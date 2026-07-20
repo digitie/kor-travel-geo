@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseDotenvValue, resolveVWorldApiKey } from "@/lib/runtime-config";
+import { parseDotenvValue, resolveDagsterPublicUrl, resolveVWorldApiKey } from "@/lib/runtime-config";
 
 const tempDirs: string[] = [];
 
@@ -69,5 +69,34 @@ describe("runtime config", () => {
       "quoted-key"
     );
     expect(parseDotenvValue("# KTG_VWORLD_API_KEY=old", "KTG_VWORLD_API_KEY")).toBe("");
+  });
+
+  describe("resolveDagsterPublicUrl", () => {
+    it("공개 URL(KTG_DAGSTER_PUBLIC_URL)이 내부 URL보다 우선한다", () => {
+      expect(
+        resolveDagsterPublicUrl({
+          KTG_DAGSTER_PUBLIC_URL: "https://geo-dagster.example.com/",
+          KTG_DAGSTER_URL: "http://127.0.0.1:12502"
+        })
+      ).toBe("https://geo-dagster.example.com/");
+    });
+
+    it("공개 URL이 없으면 내부 KTG_DAGSTER_URL로 폴백한다 (dev 기본값 동등성)", () => {
+      const root = mkdtempSync(join(tmpdir(), "kor-travel-geo-ui-runtime-"));
+      tempDirs.push(root);
+
+      expect(resolveDagsterPublicUrl({ KTG_DAGSTER_URL: "http://127.0.0.1:19999" }, root)).toBe(
+        "http://127.0.0.1:19999"
+      );
+    });
+
+    it("아무 것도 설정되지 않으면 backend Settings.dagster_url 기본값으로 폴백한다", () => {
+      const root = mkdtempSync(join(tmpdir(), "kor-travel-geo-ui-runtime-"));
+      tempDirs.push(root);
+      const uiDir = join(root, "kor-travel-geo-ui");
+      mkdirSync(uiDir);
+
+      expect(resolveDagsterPublicUrl({}, uiDir)).toBe("http://127.0.0.1:12502");
+    });
   });
 });

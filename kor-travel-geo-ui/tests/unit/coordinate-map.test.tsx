@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CoordinateMap } from "@/components/vworld/CoordinateMap";
-import { CoordinateMapSkeleton } from "@/components/vworld/LazyCoordinateMap";
+import { CoordinateMapSkeleton, LazyCoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import { isMapUsable } from "@/components/vworld/map-utils";
 
 vi.mock("maplibre-gl", () => ({
@@ -38,6 +38,14 @@ describe("CoordinateMap", () => {
 
     expect(screen.getByLabelText("VWorld 지도 로딩")).toBeInTheDocument();
     expect(screen.getByText("지도 로딩 중")).toBeInTheDocument();
+  });
+
+  it("좌표/bbox/geometry가 모두 없으면 로딩이 아니라 대기 상태를 렌더링한다", () => {
+    render(<LazyCoordinateMap point={null} />);
+
+    expect(screen.getByLabelText("VWorld 지도 대기")).toBeInTheDocument();
+    expect(screen.getByText("좌표가 없습니다 — 조회 후 지도가 표시됩니다")).toBeInTheDocument();
+    expect(screen.queryByText("지도 로딩 중")).not.toBeInTheDocument();
   });
 });
 
