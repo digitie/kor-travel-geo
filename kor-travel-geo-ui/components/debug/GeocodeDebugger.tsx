@@ -8,6 +8,7 @@ import type {
   CoordinateBBox,
   MapGeometryOverlay
 } from "@/components/vworld/CoordinateMap";
+import { CandidateAddressSummary, extractCandidates } from "@/components/debug/CandidateAddressSummary";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { postPublicJson } from "@/lib/api";
@@ -134,6 +135,7 @@ export function GeocodeDebugger() {
           </form>
         </Panel>
         <Panel title="응답">
+          <CandidateAddressSummary candidates={extractCandidates(result)} />
           <JsonBlock value={result ?? { status: "READY" }} />
         </Panel>
       </div>
@@ -158,9 +160,7 @@ function geocodeDebuggerReducer(
 }
 
 function firstCandidate(result: unknown): unknown {
-  if (!result || typeof result !== "object") return null;
-  const candidates = (result as { candidates?: unknown }).candidates;
-  return Array.isArray(candidates) ? candidates[0] : null;
+  return extractCandidates(result)[0] ?? null;
 }
 
 function extractPoint(result: unknown): Coordinate | null {

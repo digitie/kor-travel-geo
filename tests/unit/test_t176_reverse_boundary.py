@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from kortravelgeo.core.protocols import ReverseLookup
 from kortravelgeo.core.reverse_geocoder import reverse_geocode
 from kortravelgeo.core.v2 import reverse_v2_from_v1
 from kortravelgeo.dto.address import AddressStructure
@@ -176,6 +177,75 @@ async def test_t176_far_reverse_without_address_or_sppn_context_is_not_found() -
 
     assert converted.status == "NOT_FOUND"
     assert converted.candidates == ()
+
+
+class _SameBuildingReverseRepo:
+    """Fake ReverseRepo returning a road+parcel ReverseLookup pair for one building."""
+
+    def __init__(self) -> None:
+        point = Point(x=127.044, y=37.58)
+        self.rows = [
+            ReverseLookup(
+                bd_mgt_sn="1123010700108190001000001",
+                text="서울특별시 동대문구 왕산로 189-4",
+                address_type="road",
+                point=point,
+                rncode_full="112303005001",
+                distance_m=12.5,
+            ),
+            ReverseLookup(
+                bd_mgt_sn="1123010700108190001000001",
+                text="서울특별시 동대문구 청량리동 819-1",
+                address_type="parcel",
+                point=point,
+                rncode_full="112303005001",
+                distance_m=12.5,
+            ),
+        ]
+
+    async def nearest(self, *_args: object, **_kwargs: object) -> list[ReverseLookup]:
+        return self.rows
+
+    async def sppn_areas(self, *_args: object, **_kwargs: object) -> list[object]:
+        return []
+
+    async def project_reverse_point_5179(self, *_args: object, **_kwargs: object) -> Point | None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_t176_reverse_both_carries_bd_mgt_sn_and_rncode_full_through_v1() -> None:
+    response = await reverse_geocode(
+        _SameBuildingReverseRepo(),
+        ReverseInput(point=Point(x=127.044, y=37.58), radius_m=200),
+    )
+
+    assert [item.bd_mgt_sn for item in response.result] == [
+        "1123010700108190001000001",
+        "1123010700108190001000001",
+    ]
+    assert [item.rncode_full for item in response.result] == ["112303005001", "112303005001"]
+
+
+@pytest.mark.asyncio
+async def test_t176_reverse_v2_road_and_parcel_from_same_building_both_survive_dedupe() -> None:
+    # Regression guard: road/parcel candidates from the SAME building share bd_mgt_sn. The
+    # dedupe key must include match_kind, or dedupe_candidates() collapses them into one and
+    # silently drops the parcel (or road) candidate from "both" reverse results.
+    response = await reverse_geocode(
+        _SameBuildingReverseRepo(),
+        ReverseInput(point=Point(x=127.044, y=37.58), radius_m=200),
+    )
+    converted = reverse_v2_from_v1(
+        ReverseV2Input(lon=127.044, lat=37.58, radius_m=200),
+        response,
+    )
+
+    assert [c.match_kind for c in converted.candidates] == ["road", "parcel"]
+    for candidate in converted.candidates:
+        assert candidate.address is not None
+        assert candidate.address.road_name_code == "112303005001"
+        assert candidate.address.building_management_number == "1123010700108190001000001"
 
 
 def test_t176_reverse_radius_edge_candidate_has_zero_confidence() -> None:

@@ -78,6 +78,8 @@ class _FakeV1Client:
                     point=Point(x=x, y=y),
                     zipcode="06236",
                     distance_m=3.2,
+                    bd_mgt_sn="1168010100108250000028924",
+                    rncode_full="116803122001",
                 ),
             ),
         )
@@ -154,6 +156,11 @@ async def test_v1_reverse_http_response_uses_vworld_envelope() -> None:
     assert body["response"]["input"]["type"] == "BOTH"
     assert body["response"]["result"][0]["type"] == "ROAD"
     assert body["response"]["result"][0]["zipcode"] == "06236"
+    # bd_mgt_sn/rncode_full are additive fields on the v1 wire item (road-address display
+    # follow-up) — not part of VWorld's own contract, but populated unconditionally since
+    # exclude_none only hides them when actually absent.
+    assert body["response"]["result"][0]["bd_mgt_sn"] == "1168010100108250000028924"
+    assert body["response"]["result"][0]["rncode_full"] == "116803122001"
 
 
 @pytest.mark.asyncio

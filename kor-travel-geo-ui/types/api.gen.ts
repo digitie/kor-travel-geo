@@ -7172,9 +7172,13 @@ export interface components {
          * @description Reverse result item whose ``type`` is dropped from the wire in simple mode.
          */
         VWorldReverseResultItem: {
+            /** Bd Mgt Sn */
+            bd_mgt_sn?: string | null;
             /** Distance M */
             distance_m?: number | null;
             point?: components["schemas"]["Point"] | null;
+            /** Rncode Full */
+            rncode_full?: string | null;
             /** @default local */
             source: components["schemas"]["ResultSource"];
             structure: components["schemas"]["AddressStructure"];

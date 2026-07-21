@@ -57,6 +57,8 @@ async def reverse_geocode(
             zip_source="building_bsi_zon_no" if inp.zipcode and row.zip_no else None,
             source="local",
             distance_m=row.distance_m,
+            bd_mgt_sn=row.bd_mgt_sn,
+            rncode_full=row.rncode_full,
         )
         for row in rows
     )
