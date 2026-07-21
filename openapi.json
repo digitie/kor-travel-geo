@@ -13248,6 +13248,17 @@
         "additionalProperties": false,
         "description": "Reverse result item whose ``type`` is dropped from the wire in simple mode.",
         "properties": {
+          "bd_mgt_sn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bd Mgt Sn"
+          },
           "distance_m": {
             "anyOf": [
               {
@@ -13269,6 +13280,17 @@
                 "type": "null"
               }
             ]
+          },
+          "rncode_full": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rncode Full"
           },
           "source": {
             "$ref": "#/components/schemas/ResultSource",

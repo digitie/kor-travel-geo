@@ -13,6 +13,7 @@ from kortravelgeo.core.confidence import SPPN_GRID_CONFIDENCE
 from kortravelgeo.core.v2 import (
     geocode_v2_from_geometry_lookups,
     geocode_v2_from_v1,
+    merge_geocode_v2_responses,
     reverse_v2_from_v1,
     search_v2_from_v1,
 )
@@ -33,6 +34,7 @@ from kortravelgeo.dto.reverse import (
 )
 from kortravelgeo.dto.search import SearchInput, SearchResponse, SearchResultItem
 from kortravelgeo.dto.v2 import (
+    AddressV2,
     BBoxV2,
     CandidateV2,
     GeocodeV2Input,
@@ -300,6 +302,47 @@ async def test_async_client_geocode_merges_local_primary_and_supplemental_candid
     assert response.candidates[1].address is not None
     assert response.candidates[1].address.road_name == "테헤란로"
     assert response.candidates[1].metadata["rncode_full"] == "116803122000"
+
+
+def test_merge_geocode_v2_responses_dedupes_same_building_across_differing_match_kind() -> None:
+    # Regression guard for the reverse-geocode dedupe fix (T-176 follow-up, road-address
+    # display): dedupe_candidates() gained an opt-in split_building_by_match_kind flag so
+    # reverse's legitimate road+parcel-same-building pair survives dedup. Forward-geocode
+    # merge must NOT opt in — _geocode_match_kind() returns "keyword" whenever
+    # GeocodeV2Input.keyword is set regardless of the actual lookup surface, so a primary
+    # candidate (match_kind="keyword") and a supplemental candidate (match_kind="road") for
+    # the SAME building must still collapse to one, or a duplicate leaks into the response.
+    inp = GeocodeV2Input(keyword="테헤란로", road_address="테헤란로 152", limit=10)
+    same_building = AddressV2(type="road", full="서울특별시 강남구 테헤란로 152")
+    primary = GeocodeV2Response(
+        status="OK",
+        input=inp,
+        candidates=(
+            CandidateV2(
+                confidence=1.0,
+                match_kind="keyword",
+                address=same_building,
+                metadata={"bd_mgt_sn": "1168010100108250000028924"},
+            ),
+        ),
+    )
+    supplemental = GeocodeV2Response(
+        status="OK",
+        input=inp,
+        candidates=(
+            CandidateV2(
+                confidence=0.9,
+                match_kind="road",
+                address=same_building,
+                metadata={"bd_mgt_sn": "1168010100108250000028924"},
+            ),
+        ),
+    )
+
+    merged = merge_geocode_v2_responses(inp, primary, supplemental)
+
+    assert len(merged.candidates) == 1
+    assert merged.candidates[0].match_kind == "keyword"
 
 
 @pytest.mark.asyncio

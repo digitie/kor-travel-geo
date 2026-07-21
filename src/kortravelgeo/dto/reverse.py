@@ -60,6 +60,8 @@ class ReverseResultItem(FrozenModel):
     zip_source: ZipSource | None = None
     source: ResultSource = "local"
     distance_m: float | None = Field(default=None, ge=0.0)
+    bd_mgt_sn: str | None = None
+    rncode_full: str | None = None
 
     @field_serializer("type", return_type=VWorldAddressType)
     def serialize_type(self, value: AddressType) -> VWorldAddressType:

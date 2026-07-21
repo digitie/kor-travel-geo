@@ -3,6 +3,7 @@
 import { MousePointer2 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
+import { CandidateAddressSummary, extractCandidates } from "@/components/debug/CandidateAddressSummary";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { postPublicJson } from "@/lib/api";
@@ -69,6 +70,7 @@ export function ReverseDebugger() {
           </form>
         </Panel>
         <Panel title="응답">
+          <CandidateAddressSummary candidates={extractCandidates(result)} />
           <JsonBlock value={result ?? { status: "READY" }} />
         </Panel>
       </div>

@@ -76,7 +76,7 @@ def reverse_v2_from_v1(inp: ReverseV2Input, response: ReverseResponse) -> Revers
     return ReverseV2Response(
         status=response.status,
         input=inp,
-        candidates=dedupe_candidates(candidates),
+        candidates=dedupe_candidates(candidates, split_building_by_match_kind=True),
         region_hint_applied=inp.region_hint,
     )
 
@@ -139,11 +139,14 @@ def dedupe_candidates(
     candidates: Iterable[CandidateV2],
     *,
     limit: int | None = None,
+    split_building_by_match_kind: bool = False,
 ) -> tuple[CandidateV2, ...]:
     seen: set[tuple[object, ...]] = set()
     deduped: list[CandidateV2] = []
     for candidate in candidates:
-        key = _candidate_dedupe_key(candidate)
+        key = _candidate_dedupe_key(
+            candidate, split_building_by_match_kind=split_building_by_match_kind
+        )
         if key in seen:
             continue
         seen.add(key)
@@ -188,13 +191,24 @@ def _merged_geocode_status(responses: tuple[GeocodeV2Response, ...]) -> Status:
     return "NOT_FOUND"
 
 
-def _candidate_dedupe_key(candidate: CandidateV2) -> tuple[object, ...]:
+def _candidate_dedupe_key(
+    candidate: CandidateV2, *, split_building_by_match_kind: bool = False
+) -> tuple[object, ...]:
     national_point_number = _as_str(candidate.metadata.get("national_point_number"))
     if national_point_number:
         return ("sppn", national_point_number)
 
     bd_mgt_sn = _as_str(candidate.metadata.get("bd_mgt_sn"))
     if bd_mgt_sn:
+        # split_building_by_match_kind is reverse-geocode-only (see reverse_v2_from_v1): reverse
+        # legitimately emits a "road" and a "parcel" candidate for the same building (same
+        # bd_mgt_sn) and they must not collapse into one. Forward-geocode merge paths
+        # (merge_geocode_v2_responses) must NOT split on match_kind here — a primary candidate's
+        # match_kind can be "keyword" (whenever GeocodeV2Input.keyword is set, regardless of the
+        # actual lookup surface) while a supplemental same-building candidate is "road"; splitting
+        # there would let a duplicate for one physical building leak into the response.
+        if split_building_by_match_kind:
+            return ("building", bd_mgt_sn, candidate.match_kind)
         return ("building", bd_mgt_sn)
 
     rncode_full = _as_str(
@@ -236,6 +250,12 @@ def _candidate_dedupe_key(candidate: CandidateV2) -> tuple[object, ...]:
 
 
 def _candidate_from_reverse_item(inp: ReverseV2Input, item: ReverseResultItem) -> CandidateV2:
+    metadata = {
+        "distance_m": item.distance_m,
+        "zip_source": item.zip_source,
+        "bd_mgt_sn": item.bd_mgt_sn,
+        "rncode_full": item.rncode_full,
+    }
     return CandidateV2(
         confidence=reverse_distance_confidence(item.distance_m, inp.radius_m),
         match_kind=item.type,
@@ -243,14 +263,14 @@ def _candidate_from_reverse_item(inp: ReverseV2Input, item: ReverseResultItem) -
             full=item.text,
             address_type=item.type,
             structure=item.structure,
-            metadata={"distance_m": item.distance_m, "zip_source": item.zip_source},
+            metadata=metadata,
             postal_code=item.zipcode,
         ),
         point=_to_point_v2(item.point),
         distance_m=item.distance_m,
         region=_region_from_structure(item.structure),
         source=_source_from_v1(item.source),
-        metadata={"distance_m": item.distance_m, "zip_source": item.zip_source},
+        metadata=metadata,
     )
 
 
