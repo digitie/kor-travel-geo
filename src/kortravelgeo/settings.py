@@ -235,7 +235,7 @@ class Settings(BaseSettings):
 
     @field_validator("pg_prepare_threshold", mode="before")
     @classmethod
-    def normalize_pg_prepare_threshold(cls, value: object) -> int | None | object:
+    def normalize_pg_prepare_threshold(cls, value: object) -> int | object | None:
         if value is None or isinstance(value, int):
             return value
         text = str(value).strip().lower()
