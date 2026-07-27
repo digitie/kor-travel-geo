@@ -6,6 +6,23 @@
 
 ## 완료
 
+- [x] **이슈 #299 — T-245 후속: fault-injection 실 실행 보증 + 잔류물 정리 + 변조 보장** (2026-07-27) —
+  PR #495(적대적 리뷰 워크플로우 병렬 2명, `2c44a14`). **M1**: `tests/integration/test_backup_restore_fault_injection.py`가
+  T-245 머지 이후 실제로 실행된 적이 없던 것을 WSL ext4 미러의 throwaway DB(실서비스 데이터 무관)에서
+  처음으로 실행 — 4개 fault-injection 케이스 + 나머지 2개 테스트 전부 green 확인. 이 과정에서 진짜
+  프로덕션 버그를 발견: `cleanup_orphan_restore_target()`이 maintenance 연결 DSN을 `str(url)`로 만드는데
+  SQLAlchemy `URL.__str__` 기본값은 비밀번호를 `"***"`로 마스킹 — 실제 비밀번호가 있는 DSN에서는
+  restore 실패/취소 시 job-owned target을 drop/quarantine하는 cleanup이 100% 조용히 실패하고 있었다
+  (best-effort 정책으로 exception이 swallow돼 안 보임). `render_as_string(hide_password=False)`로 수정.
+  적대적 리뷰(워크플로우 병렬 2명)가 독립적으로 동일한 형제 버그 2건을 추가 발견 — `infra/restore_drill.py`의
+  `_create_drill_database`(T-242 restore drill, 테스트 커버리지 전무), `scripts/benchmark_backup_restore.py`의
+  `_admin_exec`(#298 자체 수정에서 놓침) — 둘 다 같은 패턴으로 수정. **M2**: 각 테스트가 `ops.artifacts`에
+  남기던 db_backup/db_restore_log row를 finally에서 정리 — 3회 연속 실행으로 count 미증가 확인(append-only인
+  `ops.audit_events`와 달리 `ops.artifacts`는 실제 DELETE 허용). **M3**: `_forge_manifest_checksum`이 원본과
+  우연히 같은 값으로 위조하면 조용히 통과하던 것을 실제로 다름을 보장하는 assert로 수정. 회귀테스트 3건
+  추가(각 str(url) 수정 지점), 백엔드 전체 1255 passed. 가능하면 추가하라던 nightly/manual CI workflow는
+  CI/infra 변경의 표준적 유지보수 비용을 이유로 보류.
+
 - [x] **이슈 #302 — T-158 후속: slow observability flush 루프 안정성·보존·route 정규화** (2026-07-27) —
   PR #493(적대적 리뷰어 2명, `27b5cca`). **H1**: `run_slow_observability_flush_loop`의 `while True`가
   flush 본문을 try/except로 감싸지 않아 첫 DB 오류에 background task가 영구 종료되던 문제 수정 — 형제
