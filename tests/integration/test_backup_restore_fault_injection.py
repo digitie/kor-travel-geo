@@ -85,6 +85,30 @@ async def _database_exists(source_dsn: str, database: str) -> bool:
     return value == 1
 
 
+async def _delete_test_artifacts(
+    engine: AsyncEngine,
+    *,
+    artifact_id: str | None = None,
+    display_name_prefix: str | None = None,
+) -> None:
+    """T-245 후속(#299 M2): 이 스위트가 공유 라이브 DB의 ops.artifacts에 남기는 db_backup/
+    db_restore_log row를 정리한다 — 반복 실행해도 누적되지 않도록 항상 finally에서 호출한다.
+    ops.artifacts는 append-only가 아니라(ops.audit_events와 달리) 실제 DELETE가 허용된다."""
+    if artifact_id is None and display_name_prefix is None:
+        return
+    async with engine.begin() as conn:
+        if artifact_id is not None:
+            await conn.execute(
+                text("DELETE FROM ops.artifacts WHERE artifact_id = :artifact_id"),
+                {"artifact_id": artifact_id},
+            )
+        if display_name_prefix is not None:
+            await conn.execute(
+                text("DELETE FROM ops.artifacts WHERE display_name LIKE :pattern"),
+                {"pattern": f"{display_name_prefix}%"},
+            )
+
+
 async def _run_archive_command(argv: tuple[str, ...]) -> None:
     process = await asyncio.create_subprocess_exec(
         *argv,
@@ -149,7 +173,15 @@ def _forge_manifest_checksum(extract_dir: Path) -> None:
     replaced = False
     for index, line in enumerate(lines):
         if line.endswith("  manifest.json"):
-            lines[index] = f"{'0' * 64}  manifest.json"
+            original_line = line
+            forged_line = f"{'0' * 64}  manifest.json"
+            if forged_line == original_line:
+                # A real sha256 digest coincidentally equalling the all-zero sentinel is
+                # ~0 probability but not impossible — guarantee tamper actually happened
+                # rather than silently re-writing the same (untampered) line (#299 M3).
+                msg = "forged manifest.json checksum matches the original — no tamper occurred"
+                raise AssertionError(msg)
+            lines[index] = forged_line
             replaced = True
             break
     if not replaced:
@@ -192,6 +224,7 @@ async def test_restore_rejects_corrupt_archives_and_drops_target(tmp_path: Path)
         update={"restore_failed_target_cleanup": "drop"}
     )
     engine = make_async_engine(settings)
+    artifact_id: str | None = None
     try:
         await build_minimal_serving_schema(engine)
         artifact_id = await make_backup(engine, settings)
@@ -268,6 +301,9 @@ async def test_restore_rejects_corrupt_archives_and_drops_target(tmp_path: Path)
             target_database="ktg_t245_missing_checksum",
         )
     finally:
+        await _delete_test_artifacts(
+            engine, artifact_id=artifact_id, display_name_prefix="restore_ktg_t245_"
+        )
         await engine.dispose()
 
 
@@ -315,6 +351,7 @@ async def test_cancelled_backup_marks_failed_and_removes_partials(tmp_path: Path
         tmp_dir = tmp_path / "tmp"
         assert not list(tmp_dir.glob("backup_*")) if tmp_dir.exists() else True
     finally:
+        await _delete_test_artifacts(engine, display_name_prefix="t245_cancel_")
         await engine.dispose()
 
 
@@ -330,6 +367,7 @@ async def test_replace_current_guards_reject_target_dsn_confirmation_and_window(
     source_dsn = os.environ["KTG_TEST_PG_DSN"]
     settings = roundtrip_settings(source_dsn, tmp_path)
     engine = make_async_engine(settings)
+    artifact_id: str | None = None
     try:
         await build_minimal_serving_schema(engine)
         artifact_id = await make_backup(engine, settings)
@@ -417,4 +455,5 @@ async def test_replace_current_guards_reject_target_dsn_confirmation_and_window(
                 confirmation=wrong_window_confirmation,
             )
     finally:
+        await _delete_test_artifacts(engine, artifact_id=artifact_id)
         await engine.dispose()

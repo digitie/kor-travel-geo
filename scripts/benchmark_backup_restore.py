@@ -637,8 +637,12 @@ async def _admin_exec(
     connect_timeout_s: int = 10,
 ) -> None:
     url = make_url(dsn)
+    # str(url) masks the password as "***" (SQLAlchemy URL.__str__ default) — the same bug
+    # found and fixed in infra/backup.py's cleanup_orphan_restore_target (#299): a real
+    # password DSN made this maintenance connection fail auth every time. Missed here in
+    # #298's own fix pass since this path was never exercised against a real-password DSN.
     engine = create_async_engine(
-        str(url.set(database="postgres")),
+        url.set(database="postgres").render_as_string(hide_password=False),
         isolation_level="AUTOCOMMIT",
         connect_args={"connect_timeout": connect_timeout_s},
     )

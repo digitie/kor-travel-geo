@@ -201,6 +201,46 @@ async def test_create_database_forwards_connect_timeout_to_admin_exec(monkeypatc
     assert calls == [42]
 
 
+async def test_admin_exec_preserves_password_in_maintenance_dsn(monkeypatch) -> None:
+    """#299 후속(적대적 리뷰 발견): infra/backup.py의 cleanup_orphan_restore_target과
+    동일한 str(url) 비밀번호 마스킹 버그가 이 스크립트의 _admin_exec에도 그대로
+    있었다(#298 자체 수정에서 놓침) — 실제 비밀번호 DSN에서는 create_database/
+    drop_database가 매번 인증 실패로 죽는다."""
+    captured_dsns: list[str] = []
+
+    class _FakeConnection:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc_info: object) -> bool:
+            return False
+
+        async def execute(self, *args, **kwargs) -> None:
+            return None
+
+    class _FakeEngine:
+        def connect(self):
+            return _FakeConnection()
+
+        async def dispose(self) -> None:
+            return None
+
+    def fake_create_async_engine(dsn, **kwargs):
+        captured_dsns.append(dsn)
+        return _FakeEngine()
+
+    monkeypatch.setattr(bench, "create_async_engine", fake_create_async_engine)
+
+    await bench._admin_exec(
+        "postgresql+psycopg://addr:s3cr3t_pw@localhost:5432/kor_travel_geo",
+        "SELECT 1",
+    )
+
+    assert len(captured_dsns) == 1
+    assert "s3cr3t_pw" in captured_dsns[0]
+    assert "***" not in captured_dsns[0]
+
+
 def test_invalid_jobs_exits_cleanly_instead_of_raw_traceback(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -1956,8 +1956,14 @@ async def cleanup_orphan_restore_target(
         msg = "cannot clean restore target: DSN has no database"
         raise InvalidInputError(msg)
     target_db = validate_database_identifier(target_db, "target_database")
+    # str(url) masks the password as "***" (SQLAlchemy URL.__str__ default) — that silently
+    # broke this maintenance connection whenever the DSN carries a real password, so the
+    # drop/quarantine cleanup on restore failure/cancel always failed (#299, caught by an
+    # actual live run of the fault-injection suite). render_as_string(hide_password=False)
+    # keeps the real credentials.
     maintenance_engine = create_async_engine(
-        str(url.set(database="postgres")), isolation_level="AUTOCOMMIT"
+        url.set(database="postgres").render_as_string(hide_password=False),
+        isolation_level="AUTOCOMMIT",
     )
     try:
         async with maintenance_engine.connect() as conn:
