@@ -63,7 +63,11 @@ test.describe("업로드 적재 /admin/source-files (T-259)", () => {
     expect(createBody.user_yyyymm).toBe("202606");
     await initiateRequest;
     await completeRequest;
-    await registerRequest;
+    // 실 백엔드는 confirm_user_yyyymm이 세션 user_yyyymm과 일치해야만 register를 허용한다
+    // (RegisterRequest 필수 필드) — mock은 body를 검증하지 않아 이 필드 누락이 조용히
+    // 통과했던 회귀(live e2e로 발견)를 여기서 고정한다.
+    const registerBody = (await registerRequest).postDataJSON();
+    expect(registerBody.confirm_user_yyyymm).toBe("202606");
 
     // multipart 진행 표시(슬롯 'archive' 완료)와 register 결과가 노출된다.
     await expect(card.getByText("완료").first()).toBeVisible();
