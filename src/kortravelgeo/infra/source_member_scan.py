@@ -27,6 +27,7 @@ from kortravelgeo.core.source_layers import (
     ZONE_MAKAREA_LAYER_NAME,
 )
 from kortravelgeo.core.source_validation import (
+    T127_GRID_SHAPE_LAYERS,
     GroupManifest,
     ManifestMember,
     PartManifest,
@@ -44,6 +45,10 @@ _KNOWN_LAYER_NAMES = tuple(
             BUNDLE_CONNECTION_LAYER,
             DETAIL_DONG_POLYGON_LAYER,
             DETAIL_DONG_ENTRANCE_LAYER,
+            # T-127 후속(#307 M1): TL_SPPN_GRID_* (national_point_grid_shape)가
+            # 미등록이라 supplier가 파일명을 감싸면(nationwide_TL_SPPN_GRID_1KM)
+            # canonical 불일치로 failed 오분류됐다.
+            *T127_GRID_SHAPE_LAYERS,
         },
         key=len,
         reverse=True,

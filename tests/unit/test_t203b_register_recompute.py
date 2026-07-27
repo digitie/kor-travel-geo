@@ -392,14 +392,17 @@ def test_t127_detail_address_db_profile_requires_17_adrdc_files() -> None:
     )
     assert validate_group_manifest(manifest).outcome == "passed"
 
+    # T-127 후속(#307 M2): count 부족(shortfall)은 부분/잘린 archive를 뜻할 수
+    # 있어 비차단 warning이 아니라 failed로 승격됐다(#298과 무관, T-247과도
+    # 다른 이슈) — 16/17만 있으면 이제 failed.
     short = GroupManifest(
         category="detail_address_db_full",
         group_kind="single_file",
         parts=(PartManifest(part_key="archive", members=members[:-1]),),
     )
     result = validate_group_manifest(short)
-    assert result.outcome == "warning"
-    assert any("adrdc_" in w for p in result.parts for w in p.warnings)
+    assert result.outcome == "failed"
+    assert any("adrdc_" in r and "원천 불완전" in r for p in result.parts for r in p.reasons)
 
 
 def test_t127_national_point_grid_shape_requires_four_layers_and_sidecars() -> None:
@@ -455,6 +458,27 @@ def test_t127_national_point_grid_center_requires_sppn_text() -> None:
         parts=(PartManifest(part_key="archive", members=(ManifestMember("README.txt"),)),),
     )
     result = validate_group_manifest(missing)
+    assert result.outcome == "failed"
+    assert any("SPPN_" in r for p in result.parts for r in p.reasons)
+
+
+def test_t127_national_point_grid_center_ignores_non_txt_auxiliary_files() -> None:
+    """T-127 후속(#307 M3): SPPN_ startswith가 확장자 제약 없이 넓어서
+    SPPN_checksums.txt.md5 같은 보조 파일까지 카운트해 실 데이터 TXT 부재를
+    가리고 passed로 통과시켰다."""
+    manifest = GroupManifest(
+        category="national_point_grid_center",
+        group_kind="single_file",
+        parts=(
+            PartManifest(
+                part_key="archive",
+                members=(ManifestMember(member_path="SPPN_checksums.txt.md5"),),
+            ),
+        ),
+    )
+
+    result = validate_group_manifest(manifest)
+
     assert result.outcome == "failed"
     assert any("SPPN_" in r for p in result.parts for r in p.reasons)
 
