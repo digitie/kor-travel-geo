@@ -60,8 +60,9 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 
 ### 선행 리뷰 후속
 
-2026-07-27 GitHub 열린 이슈 감사(15건 조사, `tasks-done.md` 참조) 결과 남은 미해결 리뷰 후속 6건. 근거는
-각 이슈 본문·코멘트 참조.
+2026-07-27 GitHub 열린 이슈 감사(15건 조사, `tasks-done.md` 참조) 결과 남은 미해결 리뷰 후속 6건 중
+**이슈 #298은 PR #491로 완료·종료**(아래 tasks-done.md 참조), 나머지 5건이 남았다. 근거는 각 이슈
+본문·코멘트 참조.
 
 - [ ] **이슈 #307** — T-127 후속: optional source validator 매칭 강도(M1/M2/M3). `national_point_grid_shape`의
   TL_SPPN_GRID_* 레이어가 `_KNOWN_LAYER_NAMES` 미등록(M1, false failed), count-shortfall이 failed가 아닌
@@ -74,11 +75,6 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 - [ ] **이슈 #299** — T-245 후속: fault-injection 테스트 실 실행 보증(M1) + 잔류물 정리(M2) +
   `_forge_manifest_checksum` 변조 보장(M3). PR #291 이후 4개 fault-case가 실제 green으로 실행된 증거 없음,
   `ops.ops_artifacts` 잔류행 정리 없음, 체크섬 조작이 실제 변경을 보장하지 않음 — 미해결.
-- [ ] **이슈 #298** — T-247 후속: 벤치마크 안전 가드(M-1/M-2/M-3). `scripts/benchmark_backup_restore.py`의
-  `_execute_item`이 대상 DB가 운영 DB(`database_name_from_dsn(settings.pg_dsn)`)와 같은지 확인하는 fail-fast
-  가드 없이 `drop_database`를 호출 — 운영 DB 삭제 위험 잠재(M-1, 최우선). `--connect-timeout-s`가
-  `_admin_exec`에 미적용(M-2), `--jobs`/`--compression-level` 검증이 plan-only 모드에서도 raw traceback을
-  던짐(M-3) — 미해결.
 - [ ] **이슈 #252** — T-170 후속: v2 geocode 보조 조회 robustness(H1)/test(M2). H1(보조 조회 실패 시 primary
   응답 유지)은 해결·회귀테스트 확인됨. M2는 예외 경로만 테스트되고 `_should_collect_geocode_supplements`의
   false 분기는 여전히 미검증 — 부분 해결이라 닫지 않고 유지.

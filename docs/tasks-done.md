@@ -6,6 +6,17 @@
 
 ## 완료
 
+- [x] **이슈 #298 — T-247 후속: 벤치마크 backup/restore 안전 가드 보강** (2026-07-27) — GitHub 열린 이슈
+  감사에서 유지됐던 6건 중 최우선 안전 이슈를 구현·머지. PR #491(적대적 리뷰어 2명, `c1ba64f`). **M-1**:
+  `drop_database()`에 `current_database == target_database`면 `InvalidInputError`로 거부하는 가드 추가
+  (`infra/backup.py` restore job의 기존 가드와 동일 패턴) — 리뷰에서 "가드가 `build_matrix` plan 단계
+  전에 걸리지 않아 fail-fast가 아니고 plan-only 모드는 검사 자체를 안 거친다"는 should-fix가 나와
+  `build_matrix()`가 `current_database`를 받아 각 target 생성 즉시 검사하도록 승격(팔로업 커밋
+  `0ccbd05`) — plan/execute 두 모드 모두 어떤 백업 작업도 시작하기 전에 걸림. **M-2**:
+  `--connect-timeout-s`를 `_admin_exec`의 별도 admin 엔진까지 전달. **M-3**: `--jobs`/`--compression-level`
+  범위 검증을 인자 파싱 직후로 옮겨 `parser.error()`로 처리 — plan-only 모드에서도 raw traceback 대신
+  깔끔한 CLI 에러(exit 2). 회귀테스트 6건 추가, 백엔드 전체 1246 passed.
+
 - [x] **GitHub 열린 이슈 감사 — 9건 해결 확인 후 종료** (2026-07-27) — 열린 이슈 15건(#379·#361·#360·#359·
   #355·#308·#307·#302·#299·#298·#292·#280·#256·#252·#201)을 현재 코드 상태 대비 재검증. 9건은 근거(파일·
   함수·커밋)를 단 코멘트와 함께 종료: **#379** T-194 live rebuild e2e — 24h 기본 타임아웃 +
