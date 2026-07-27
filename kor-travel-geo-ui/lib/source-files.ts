@@ -17,6 +17,9 @@ export type MultipartCompleteRequest = components["schemas"]["MultipartCompleteR
 export type UploadPartResponse = components["schemas"]["UploadPartResponse"];
 export type EpostServerFetchRequest = components["schemas"]["EpostServerFetchRequest"];
 export type EpostServerFetchResponse = components["schemas"]["EpostServerFetchResponse"];
+export type UploadSessionPreviewValidationResult =
+  components["schemas"]["UploadSessionPreviewValidationResult"];
+export type UploadPreviewPartValidation = components["schemas"]["UploadPreviewPartValidation"];
 
 export type SourceMatchSet = components["schemas"]["SourceMatchSet"];
 export type SourceMatchSetDetail = components["schemas"]["SourceMatchSetDetail"];
@@ -58,6 +61,30 @@ export type ServingRelease = components["schemas"]["ServingRelease"];
 export type DatasetSnapshot = components["schemas"]["DatasetSnapshot"];
 
 // --- Labels (Korean) ---------------------------------------------------------
+
+// #201 drag-drop validation preview outcome — the preview-validate endpoint only
+// ever returns passed/warning/failed (a subset of the broader SourceValidationState
+// lifecycle used elsewhere), but the labels/tones are string-keyed with a safe
+// fallback so an unexpected value still renders instead of crashing.
+const validationOutcomeLabels: Record<string, string> = {
+  passed: "통과",
+  warning: "경고",
+  failed: "실패"
+};
+
+const validationOutcomeTones: Record<string, "ok" | "warn" | "error"> = {
+  passed: "ok",
+  warning: "warn",
+  failed: "error"
+};
+
+export function validationOutcomeLabel(outcome: string): string {
+  return validationOutcomeLabels[outcome] ?? outcome;
+}
+
+export function validationOutcomeTone(outcome: string): "ok" | "warn" | "error" {
+  return validationOutcomeTones[outcome] ?? "warn";
+}
 
 export const sourceRoleLabels: Record<SourceRole, string> = {
   build_required: "필수 구성",
@@ -271,6 +298,8 @@ export const sourceFilesPaths = {
   uploadSessionEvents: (id: string) =>
     `/admin/source-files/upload-sessions/${id}/events`,
   registerSession: (id: string) => `/admin/source-files/upload-sessions/${id}/register`,
+  previewValidateSession: (id: string) =>
+    `/admin/source-files/upload-sessions/${id}/preview-validate`,
   epostFetch: () => "/admin/source-files/epost-fetch",
   matchSets: (state?: string) =>
     `/admin/source-match-sets${state ? `?state=${encodeURIComponent(state)}` : ""}`,

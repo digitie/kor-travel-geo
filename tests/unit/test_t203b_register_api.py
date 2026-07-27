@@ -20,8 +20,10 @@ from kortravelgeo.dto.source import (
     GroupValidationResult,
     RegisterResponse,
     SourceFileRegistered,
+    UploadPreviewPartValidation,
     UploadSessionFileSlot,
     UploadSessionPartStatus,
+    UploadSessionPreviewValidationResult,
     UploadSessionStatus,
 )
 from kortravelgeo.settings import Settings, get_settings, reset_settings, set_settings
@@ -78,6 +80,7 @@ class _FakeClient:
     def __init__(self) -> None:
         self.registered = False
         self.audit_calls: list[str] = []
+        self.audit_resource_types: dict[str, str] = {}
         self.last_structure: GroupValidation | None = None
 
     async def get_upload_session(self, _sid: str) -> UploadSessionStatus:
@@ -130,11 +133,23 @@ class _FakeClient:
             validator_version="t203b.1",
         )
 
+    async def preview_validate_upload_session(self, sid: str):  # type: ignore[no-untyped-def]
+        return UploadSessionPreviewValidationResult(
+            upload_session_id=sid,
+            category="roadname_hangul_full",
+            outcome="passed",
+            parts=(UploadPreviewPartValidation(part_key="archive", outcome="passed"),),
+            validator_version="t127.2",
+        )
+
     async def update_upload_session_state(self, *_a, **_k):  # type: ignore[no-untyped-def]
         return _session(state="failed_register")
 
-    async def record_audit_event(self, *, action: str, **_kwargs):  # type: ignore[no-untyped-def]
+    async def record_audit_event(self, *, action: str, **kwargs):  # type: ignore[no-untyped-def]
         self.audit_calls.append(action)
+        resource_type = kwargs.get("resource_type")
+        if resource_type is not None:
+            self.audit_resource_types[action] = resource_type
         return None
 
 
@@ -187,6 +202,61 @@ async def test_register_happy_path_returns_group() -> None:
     assert client.registered is True
     assert client.last_structure is not None
     assert client.last_structure.outcome == "passed"
+
+
+@pytest.mark.asyncio
+async def test_preview_validate_requires_manager_role() -> None:
+    transport = _transport(_FakeClient())
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.post(
+            "/v1/admin/source-files/upload-sessions/source_upload_abc/preview-validate",
+            headers={"X-KTG-Actor": "bob", "X-KTG-Roles": "source_file_viewer"},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_preview_validate_happy_path() -> None:
+    client = _FakeClient()
+    transport = _transport(client)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.post(
+            "/v1/admin/source-files/upload-sessions/source_upload_abc/preview-validate",
+            headers=_MANAGER_HEADERS,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["outcome"] == "passed"
+    assert body["parts"][0]["part_key"] == "archive"
+    assert "source.upload_session_preview_validate" in client.audit_calls
+    # #201 review fix: must match every other upload-session audit event's
+    # resource_type ("source_upload_session"), not the ad-hoc "upload_session".
+    assert (
+        client.audit_resource_types["source.upload_session_preview_validate"]
+        == "source_upload_session"
+    )
+
+
+@pytest.mark.asyncio
+async def test_preview_validate_client_rejects_non_rustfs_session(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """#201 review fix: a local-storage session must raise InvalidInputError,
+
+    not crash with an unhandled FileNotFoundError from scanning a file that
+    was never downloaded (the deep scan only knows how to materialize bytes
+    from RustFS).
+    """
+    from kortravelgeo.client import AsyncAddressClient
+    from kortravelgeo.exceptions import InvalidInputError
+
+    client = AsyncAddressClient(settings=_SETTINGS)
+
+    async def _fake_get_upload_session(_session_id: str) -> UploadSessionStatus:
+        return _session(storage_kind="local")
+
+    monkeypatch.setattr(client, "get_upload_session", _fake_get_upload_session)
+
+    with pytest.raises(InvalidInputError):
+        await client.preview_validate_upload_session("source_upload_abc")
 
 
 @pytest.mark.asyncio

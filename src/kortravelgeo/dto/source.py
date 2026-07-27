@@ -489,6 +489,32 @@ class GroupValidationResult(FrozenModel):
     validator_version: str
 
 
+class UploadPreviewPartValidation(FrozenModel):
+    """Per-slot structure-validation outcome inside a preview (#201)."""
+
+    part_key: str
+    outcome: SourceValidationState
+    reasons: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
+class UploadSessionPreviewValidationResult(FrozenModel):
+    """``POST .../upload-sessions/{id}/preview-validate`` response (#201).
+
+    A transient, read-only structure-validation preview run against an upload
+    session's already-uploaded (not yet registered) slots — lets the UI show
+    pass/warning/failed before the user commits via ``register``. Nothing is
+    persisted; call again any time slot state changes (unlike
+    :class:`GroupValidationResult`, which is for an already-registered group).
+    """
+
+    upload_session_id: str
+    category: SourceFileCategory
+    outcome: SourceValidationState
+    parts: tuple[UploadPreviewPartValidation, ...] = ()
+    validator_version: str
+
+
 # --- Soft-delete / restore (T-203c) ---------------------------------------
 # Shapes for ``POST .../source-file-groups/{id}/soft-delete`` and ``/restore``
 # (doc "파일 목록/다운로드/삭제" lines ~1438-1445).

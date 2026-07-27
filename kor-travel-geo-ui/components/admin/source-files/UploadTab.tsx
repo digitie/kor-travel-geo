@@ -1,13 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Download, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Upload, Wand2 } from "lucide-react";
 import { useMemo, useReducer, useState } from "react";
 import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
 import { HelpTip } from "@/components/admin/shared/HelpTip";
 import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
 import { RefreshButton } from "@/components/admin/shared/RefreshButton";
 import { YyyymmField } from "@/components/admin/shared/YyyymmField";
+import { UploadWizardDialog } from "@/components/admin/source-files/UploadWizardDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -103,6 +104,7 @@ export function UploadTab() {
   const queryClient = useQueryClient();
   const [viewState, dispatchView] = useReducer(uploadViewReducer, INITIAL_UPLOAD_VIEW_STATE);
   const { activeCategory, progress, conflict, lastResult, epostError } = viewState;
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const { data: catalog } = useQuery({
     queryKey: ["source-file-categories"],
@@ -289,7 +291,15 @@ export function UploadTab() {
     <div className="grid two">
       <Panel
         title="카테고리별 업로드"
-        actions={<RefreshButton iconOnly onClick={() => void refetchSessions()} />}
+        actions={
+          <>
+            <Button onClick={() => setWizardOpen(true)} type="button" variant="outline">
+              <Wand2 aria-hidden="true" />
+              업로드 마법사
+            </Button>
+            <RefreshButton iconOnly onClick={() => void refetchSessions()} />
+          </>
+        }
       >
         <div className="source-card-grid">
           {categories.map((category) => (
@@ -354,6 +364,14 @@ export function UploadTab() {
           }}
         />
       ) : null}
+
+      <UploadWizardDialog
+        categories={categories}
+        maxBytesByCategory={knownMaxBytes}
+        onCompleted={() => setWizardOpen(false)}
+        onOpenChange={setWizardOpen}
+        open={wizardOpen}
+      />
     </div>
   );
 }

@@ -1575,6 +1575,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/preview-validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Validate Upload Session
+         * @description Read-only structure-validation preview for an upload session's already-
+         *     uploaded (not yet registered) slots (#201 — drag-drop validation preview).
+         *
+         *     Same GDAL-free zip/dir listing + pure decision logic as ``.../validate``
+         *     (below), applied to a session's not-yet-committed slots instead of a
+         *     registered group's children. Nothing is persisted — the UI can call this
+         *     any time slot state changes (e.g. after a new file is dropped) to preview
+         *     pass/warning/failed before the user commits via ``register``.
+         */
+        post: operations["preview_validate_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__preview_validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/source-files/upload-sessions/{upload_session_id}/register": {
         parameters: {
             query?: never;
@@ -6837,6 +6864,29 @@ export interface components {
             upload_session_id: string;
         };
         /**
+         * UploadPreviewPartValidation
+         * @description Per-slot structure-validation outcome inside a preview (#201).
+         */
+        UploadPreviewPartValidation: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "unknown" | "not_started" | "running" | "passed" | "warning" | "failed" | "skipped";
+            /** Part Key */
+            part_key: string;
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /**
          * UploadSessionCreateRequest
          * @description ``POST /v1/admin/source-files/upload-sessions`` body.
          *
@@ -6909,6 +6959,37 @@ export interface components {
              * @default false
              */
             uploaded: boolean;
+        };
+        /**
+         * UploadSessionPreviewValidationResult
+         * @description ``POST .../upload-sessions/{id}/preview-validate`` response (#201).
+         *
+         *     A transient, read-only structure-validation preview run against an upload
+         *     session's already-uploaded (not yet registered) slots — lets the UI show
+         *     pass/warning/failed before the user commits via ``register``. Nothing is
+         *     persisted; call again any time slot state changes (unlike
+         *     :class:`GroupValidationResult`, which is for an already-registered group).
+         */
+        UploadSessionPreviewValidationResult: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "roadname_hangul_full" | "locsum_full" | "navi_full" | "electronic_map_full" | "roadaddr_entrance_full" | "zone_shape_full" | "roadaddr_building_shape_bundle" | "detail_dong_shape_bundle" | "detail_address_db_full" | "national_point_grid_shape" | "national_point_grid_center" | "civil_service_institution_map" | "address_db_full" | "building_db_full" | "epost_pobox_full" | "epost_bulk_full";
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "unknown" | "not_started" | "running" | "passed" | "warning" | "failed" | "skipped";
+            /**
+             * Parts
+             * @default []
+             */
+            parts: components["schemas"]["UploadPreviewPartValidation"][];
+            /** Upload Session Id */
+            upload_session_id: string;
+            /** Validator Version */
+            validator_version: string;
         };
         /**
          * UploadSessionStatus
@@ -9969,6 +10050,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SlotReplaceResponse"];
+                };
+            };
+            /** @description Legacy validation error envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+        };
+    };
+    preview_validate_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__preview_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadSessionPreviewValidationResult"];
                 };
             };
             /** @description Legacy validation error envelope */

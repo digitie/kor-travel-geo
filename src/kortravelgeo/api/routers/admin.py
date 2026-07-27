@@ -159,6 +159,7 @@ from kortravelgeo.dto.source import (
     UploadPartResponse,
     UploadSessionConflict,
     UploadSessionCreateRequest,
+    UploadSessionPreviewValidationResult,
     UploadSessionStatus,
 )
 from kortravelgeo.exceptions import (
@@ -981,6 +982,40 @@ async def register_upload_session(
         )
         raise
     return response
+
+
+@router.post(
+    "/source-files/upload-sessions/{upload_session_id}/preview-validate",
+    response_model=UploadSessionPreviewValidationResult,
+    response_model_exclude_none=True,
+)
+async def preview_validate_upload_session(
+    upload_session_id: str,
+    request: Request,
+    ctx: RequestContext = _SOURCE_MANAGER,
+    client: AsyncAddressClient = Depends(get_client),
+) -> UploadSessionPreviewValidationResult:
+    """Read-only structure-validation preview for an upload session's already-
+    uploaded (not yet registered) slots (#201 — drag-drop validation preview).
+
+    Same GDAL-free zip/dir listing + pure decision logic as ``.../validate``
+    (below), applied to a session's not-yet-committed slots instead of a
+    registered group's children. Nothing is persisted — the UI can call this
+    any time slot state changes (e.g. after a new file is dropped) to preview
+    pass/warning/failed before the user commits via ``register``.
+    """
+    result = await client.preview_validate_upload_session(upload_session_id)
+    await client.record_audit_event(
+        action="source.upload_session_preview_validate",
+        actor_type="ui",
+        actor_id=ctx.actor,
+        outcome="succeeded",
+        payload={"category": result.category, "outcome": result.outcome},
+        resource_type="source_upload_session",
+        resource_id=upload_session_id,
+        **_audit_request(request),
+    )
+    return result
 
 
 @router.post(
