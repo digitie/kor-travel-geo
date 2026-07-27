@@ -6,6 +6,16 @@
 
 ## 완료
 
+- [x] **이슈 #252 — T-170 후속: v2 geocode 보조 조회 gate predicate 테스트 커버** (2026-07-27) —
+  PR #497(적대적 리뷰 워크플로우 병렬 2명, `18b856a`). H1(보조 조회 실패 시 primary 응답 유지)은 이미
+  해결·회귀테스트 존재 확인, 코드 변경 없음. M2: `_should_collect_geocode_supplements()`의 5개 false
+  분기(limit<=1, jibun-only, SPPN 결과, non-local source, 입력이 이미 refined.text와 동일) 전부 테스트
+  추가 — `GeometryRepository.road_geometries`를 spy로 감싸 호출 횟수로 게이트 상태를 직접 검증. 게이트의
+  마지막 조건을 임시로 깨서 해당 테스트만 실패함을 확인했고, 리뷰어 2명이 나머지 4개 조건도 각각
+  개별적으로 지웠을 때 대응하는 테스트만 실패함을 독립적으로 재검증 — 5개 분기 전부 상호 독립적으로
+  격리된 커버리지임을 확인. 이슈 원문의 M1/L1은 "참고"(perf 계측/dedup 잠재 이슈)로 명시돼 스코프 제외.
+  테스트 전용 변경, 백엔드 전체 1260 passed(+5).
+
 - [x] **이슈 #299 — T-245 후속: fault-injection 실 실행 보증 + 잔류물 정리 + 변조 보장** (2026-07-27) —
   PR #495(적대적 리뷰 워크플로우 병렬 2명, `2c44a14`). **M1**: `tests/integration/test_backup_restore_fault_injection.py`가
   T-245 머지 이후 실제로 실행된 적이 없던 것을 WSL ext4 미러의 throwaway DB(실서비스 데이터 무관)에서

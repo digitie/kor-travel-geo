@@ -61,16 +61,13 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 ### 선행 리뷰 후속
 
 2026-07-27 GitHub 열린 이슈 감사(15건 조사, `tasks-done.md` 참조) 결과 남은 미해결 리뷰 후속 6건 중
-**이슈 #298은 PR #491, #302는 PR #493, #299는 PR #495로 완료·종료**(아래 tasks-done.md 참조), 나머지
-3건이 남았다. 근거는 각 이슈 본문·코멘트 참조.
+**이슈 #298은 PR #491, #302는 PR #493, #299는 PR #495, #252는 PR #497로 완료·종료**(아래
+tasks-done.md 참조), 나머지 2건이 남았다. 근거는 각 이슈 본문·코멘트 참조.
 
 - [ ] **이슈 #307** — T-127 후속: optional source validator 매칭 강도(M1/M2/M3). `national_point_grid_shape`의
   TL_SPPN_GRID_* 레이어가 `_KNOWN_LAYER_NAMES` 미등록(M1, false failed), count-shortfall이 failed가 아닌
   warning에 그침(M2), `national_point_grid_center`의 SPPN_ prefix 매칭이 `.txt.md5` 등 보조 파일까지
   과매칭(M3) — 3건 모두 현재 코드에 그대로 남아있음.
-- [ ] **이슈 #252** — T-170 후속: v2 geocode 보조 조회 robustness(H1)/test(M2). H1(보조 조회 실패 시 primary
-  응답 유지)은 해결·회귀테스트 확인됨. M2는 예외 경로만 테스트되고 `_should_collect_geocode_supplements`의
-  false 분기는 여전히 미검증 — 부분 해결이라 닫지 않고 유지.
 - [ ] **이슈 #201** — T-224 후속: source category wizard + drag-and-drop 검증 프리뷰. 순수 UX 백로그,
   착수 안 됨(`UploadTab.tsx`가 여전히 클릭 선택 + 기본 `<input type="file">`만 사용). 기준:
   `docs/t220-admin-ui-source-usage-audit.md`, ADR-054.
