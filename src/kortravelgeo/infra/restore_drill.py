@@ -82,8 +82,13 @@ def _drill_target_dsn(pg_dsn: str, temp_database: str) -> str:
 async def _create_drill_database(temp_dsn: str) -> None:
     url = make_url(temp_dsn)
     database = validate_database_identifier(url.database or "", "drill_target")
+    # str(url) masks the password as "***" (SQLAlchemy URL.__str__ default) — the same bug
+    # found and fixed in backup.py's cleanup_orphan_restore_target (#299): a real password
+    # DSN made this maintenance connection fail auth every time, breaking the restore drill's
+    # first step in any real deployment.
     maintenance_engine = create_async_engine(
-        str(url.set(database="postgres")), isolation_level="AUTOCOMMIT"
+        url.set(database="postgres").render_as_string(hide_password=False),
+        isolation_level="AUTOCOMMIT",
     )
     try:
         async with maintenance_engine.connect() as conn:
