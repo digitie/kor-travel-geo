@@ -6,6 +6,22 @@
 
 ## 완료
 
+- [x] **이슈 #505 — 업로드 register 호출이 항상 400으로 실패하던 회귀** (2026-07-27) — PR #506.
+  #201 wizard의 "오늘 작업한거 live ui e2e 진행" 재검증(RustFS bucket 수정 후) 도중 발견: 실
+  백엔드에 대해 업로드 등록(register)이 항상 400으로 실패하고 있었다. `RegisterRequest.confirm_user_yyyymm`
+  (`dto/source.py:431-441`, 필수·기본값 없음, 세션 `user_yyyymm`과 일치해야 함, `admin.py:913`)를
+  프론트엔드 어디서도 채워 보내지 않고 있었던 것 — `UploadWizardDialog.tsx`(마법사, #201에서 신규)와
+  `UploadTab.tsx`(기존 카드형, #201보다 훨씬 이전부터 있던 pre-existing 버그) 둘 다 동일하게
+  `postJson(registerSession(id), {})`로 빈 body를 보내고 있었다. 기존 유닛 테스트와 mock 기반
+  "e2e" Playwright 스펙(`installSourceFilesMock`) 전부 `postJson`/네트워크를 mock해 실제 요청
+  body를 검증한 적이 없어 지금까지 잡히지 않았다 — 실 백엔드 대상 라이브 브라우저 세션으로만
+  재현 가능했던 회귀. 두 호출부 모두 `confirm_user_yyyymm: session.user_yyyymm`을 채우도록 수정,
+  두 테스트 파일에 실제 request body를 검증하는 회귀 assertion 추가(신규 assertion이 원래 버그
+  코드에 대해 fail함을 `git stash`로 직접 확인 후 고정). 라이브 재검증으로 카테고리 선택 →
+  기준월 → 실 파일 업로드 → 사전 점검 → 등록까지 전체 happy path 완주, DB에서
+  `registration_state: "registered"`로 실제 영속된 세션을 직접 확인. 프론트 전체
+  170 passed·lint·type-check·build 통과.
+
 - [x] **이슈 #501 — RustFS multipart upload_part가 create_multipart_upload 직후 항상 실패** (2026-07-27,
   코드 변경 없음) — #201 live e2e 도중 발견한 것을 별도 이슈로 등록했다가 근본 원인을 재조사해 정정·종료.
   처음엔 `kortravelgeo/infra/rustfs.py`의 자체 SigV4 서명 구현 버그로 의심했으나, boto3(검증된 AWS SDK)로
