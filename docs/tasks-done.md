@@ -6,6 +6,21 @@
 
 ## 완료
 
+- [x] **GitHub 열린 이슈 감사 — 9건 해결 확인 후 종료** (2026-07-27) — 열린 이슈 15건(#379·#361·#360·#359·
+  #355·#308·#307·#302·#299·#298·#292·#280·#256·#252·#201)을 현재 코드 상태 대비 재검증. 9건은 근거(파일·
+  함수·커밋)를 단 코멘트와 함께 종료: **#379** T-194 live rebuild e2e — 24h 기본 타임아웃 +
+  `KTG_LIVE_E2E_REBUILD_EXISTING_JOB_ID` 기존 job 채택 opt-in 구현됨. **#361** T-187 GDAL staging 진단 —
+  에러 메시지에 source_file·GDAL 에러 포함, 전용 단위테스트 존재. **#360** T-186 ops ledger gap —
+  `record_mv_refresh_release()` 연결, live e2e 20/20 통과 확인. **#359** T-185 link evidence timeout —
+  T-177G 전용 `statement_timeout_ms=0` 오버라이드 추가(fast-sample 경로 영향 없음). **#355** T-182 disk
+  preflight — `T177PreflightError` + 여유공간 env(`KTG_TEST_FULL_LOAD_E2E_LONGRUN_MIN_FREE_GB`) 구현.
+  **#308** T-105 v2 ADR-060 backlog — 4항목(include_geometry·enum honesty·envelope/에러 통일·lon/lat) 전부
+  T-266~268로 배포. **#292** 후속(Low) — 캐시 write 실패 resilience(T-156)·reconcile HEAD 오류 분류(T-238)
+  둘 다 수정 확인. **#280** T-165 가지도로(X로N길) 정규식 회귀 — `_ROAD_RE` 수정 + 회귀테스트 확인.
+  **#256** T-157 pg_stat retention(PR #341) + JobProgress SSR-safety 패턴 복원(PR #297/T-227) 확인. 6건은
+  결함이 현재 코드에 그대로 남아있어 유지 — `docs/tasks.md` 대기 §선행 리뷰 후속(#307·#302·#299·#298·#252·
+  #201) 참조.
+
 - [x] **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only** (2026-07-12) — geo backup/restore·적재
   오케스트레이션을 서비스 전용 독립 Dagster로 이관 완료. 통합 브랜치 `agent/claude-dagster-migration`
   (HEAD `9bcb949`)에 T-290a~l 병합, n150 cutover 배포·검증. **전국 full-load 스테이징 라이브 e2e (blue-green,
