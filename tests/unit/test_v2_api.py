@@ -423,6 +423,7 @@ async def test_async_client_geocode_skips_supplements_for_jibun_only_input(
 
     assert response.status == "OK"
     assert supplemental_calls == 0
+    assert len(response.candidates) == 1
 
 
 @pytest.mark.asyncio
@@ -458,6 +459,7 @@ async def test_async_client_geocode_skips_supplements_for_sppn_result(
 
     assert response.status == "OK"
     assert supplemental_calls == 0
+    assert len(response.candidates) == 1
 
 
 @pytest.mark.asyncio
@@ -489,6 +491,7 @@ async def test_async_client_geocode_skips_supplements_for_non_local_source(
 
     assert response.status == "OK"
     assert supplemental_calls == 0
+    assert len(response.candidates) == 1
 
 
 @pytest.mark.asyncio
@@ -518,6 +521,7 @@ async def test_async_client_geocode_skips_supplements_when_input_matches_refined
 
     assert response.status == "OK"
     assert supplemental_calls == 0
+    assert len(response.candidates) == 1
 
 
 @pytest.mark.asyncio
