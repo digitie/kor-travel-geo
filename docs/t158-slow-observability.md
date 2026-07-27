@@ -16,7 +16,12 @@ T-157은 `pg_stat_statements` top-N을 주기적으로 저장하지만, "어떤 
   - `KTG_OPS_SLOW_SAMPLE_FLUSH_BATCH_SIZE=50`
   - `KTG_OPS_SLOW_QUERY_EXPLAIN_ENABLED=false`
   - `KTG_OPS_SLOW_QUERY_EXPLAIN_TIMEOUT_MS=3000`
+  - `KTG_OPS_SLOW_SAMPLE_RETENTION_DAYS=7` — `ops.slow_observability_samples` 보존 기간(#302 M1).
+  - `KTG_OPS_SLOW_SAMPLE_PRUNE_INTERVAL_MINUTES=60` — 보존 프루닝 주기. `<=0`이면 비활성. 매초
+    도는 flush 루프와 분리된 저빈도 스케줄러(T-157 pg_stat snapshot 보존과 동일 패턴).
 - `infra.slow_observability`가 process-local queue, sample-rate, per-key 최소 간격, 민감정보 마스킹을 담당한다.
+- flush 루프는 매 pass를 try/except로 감싼다 — DB 오류(커넥션 끊김/statement timeout/restore 중
+  락 등)가 나도 다음 pass를 계속 시도한다(#302 H1).
 - Fresh schema는 `src/kortravelgeo/infra/sql.py`, `sql/ddl/001_schema.sql`, `sql/indexes.sql`에 반영하고 기존 DB upgrade는 `alembic/versions/0021_t158_slow_observability.py`로 처리한다.
 - API middleware는 느린 요청 표본을 `sample_type="api_request"`로, admission timeout은 `sample_type="overload"`로 큐에 넣는다.
 - SQLAlchemy query metric hook은 `KTG_OPS_SLOW_SAMPLES_ENABLED=true`일 때만 slow query callback을 설치한다.

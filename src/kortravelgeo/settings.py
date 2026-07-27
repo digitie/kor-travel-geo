@@ -129,6 +129,8 @@ class Settings(BaseSettings):
     ops_slow_sample_queue_size: int = Field(default=1_000, ge=1, le=100_000)
     ops_slow_sample_flush_interval_ms: int = Field(default=1_000, ge=100)
     ops_slow_sample_flush_batch_size: int = Field(default=50, ge=1, le=1_000)
+    ops_slow_sample_retention_days: int = Field(default=7, ge=1)
+    ops_slow_sample_prune_interval_minutes: int = Field(default=60, ge=0)
     ops_slow_query_explain_enabled: bool = False
     ops_slow_query_explain_timeout_ms: int = Field(default=3_000, ge=1)
     dagster_url: str = "http://127.0.0.1:12502"

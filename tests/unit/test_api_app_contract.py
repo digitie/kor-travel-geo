@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from kortravelgeo.api import app as app_module
 from kortravelgeo.api.app import (
@@ -197,6 +197,103 @@ async def test_performance_monitoring_enqueues_slow_request_sample() -> None:
     assert samples[0].sample_type == "api_request"
     assert samples[0].route == "/items/{item_id}"
     assert "서울특별시" not in str(slow_observability.sample_record(samples[0]))
+
+
+@pytest.mark.asyncio
+async def test_db_query_sample_route_is_templated_not_raw_path_with_param(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """T-158 후속(#302 M2): db_query 표본의 route는 handler 실행 중 request.url.path가
+    아니라 라우트 템플릿이어야 한다 — 그렇지 않으면 throttle key/저장 row가
+    path-param(id 등) 카디널리티만큼 무한 증가한다."""
+    app = FastAPI()
+
+    @app.get("/items/{item_id}")
+    async def item(item_id: str) -> dict[str, Any]:
+        slow_observability.record_slow_query(
+            statement="SELECT 1",
+            parameters=None,
+            elapsed_s=1.0,
+            status="success",
+        )
+        return {"item_id": item_id}
+
+    settings = Settings(
+        ops_slow_samples_enabled=True,
+        ops_slow_query_ms=1,
+        ops_slow_sample_min_interval_ms=0,
+    )
+    slow_observability.configure_slow_observability(settings)
+    _install_performance_monitoring(app, settings)
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/items/507f191e810c19729de860ea")
+
+        samples = slow_observability.pop_slow_samples_for_tests()
+    finally:
+        slow_observability.reset_slow_observability_for_tests()
+
+    assert response.status_code == 200
+    db_samples = [sample for sample in samples if sample.sample_type == "db_query"]
+    assert len(db_samples) == 1
+    assert db_samples[0].route == "/items/{item_id}"
+    assert "507f191e810c19729de860ea" not in (db_samples[0].route or "")
+
+
+def _synthetic_request(app: FastAPI, path: str) -> Request:
+    scope: dict[str, Any] = {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "query_string": b"",
+        "headers": [],
+        "app": app,
+    }
+    return Request(scope)
+
+
+def test_resolve_route_template_before_dispatch_matches_and_falls_back() -> None:
+    app = FastAPI()
+
+    @app.get("/items/{item_id}")
+    async def item(item_id: str) -> dict[str, Any]:
+        return {"item_id": item_id}
+
+    matched = app_module._resolve_route_template_before_dispatch(
+        _synthetic_request(app, "/items/507f191e810c19729de860ea")
+    )
+    unmatched = app_module._resolve_route_template_before_dispatch(
+        _synthetic_request(app, "/no-such-route")
+    )
+
+    assert matched == "/items/{item_id}"
+    assert unmatched == "/no-such-route"
+
+
+def test_observability_route_template_gated_by_enabled_flag() -> None:
+    """T-158 후속(#302, 리뷰 should-fix): 기능이 꺼져 있으면(기본값) route-matching 스캔
+    자체를 하지 않고 저렴한 request.url.path를 그대로 써야 한다."""
+    app = FastAPI()
+
+    @app.get("/items/{item_id}")
+    async def item(item_id: str) -> dict[str, Any]:
+        return {"item_id": item_id}
+
+    request = _synthetic_request(app, "/items/507f191e810c19729de860ea")
+    try:
+        slow_observability.configure_slow_observability(
+            Settings(ops_slow_samples_enabled=False)
+        )
+        assert (
+            app_module._observability_route_template(request)
+            == "/items/507f191e810c19729de860ea"
+        )
+
+        slow_observability.configure_slow_observability(Settings(ops_slow_samples_enabled=True))
+        assert app_module._observability_route_template(request) == "/items/{item_id}"
+    finally:
+        slow_observability.reset_slow_observability_for_tests()
 
 
 @pytest.mark.asyncio
