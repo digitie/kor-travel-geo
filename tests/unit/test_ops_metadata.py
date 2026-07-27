@@ -268,6 +268,7 @@ def test_ops_capture_schedulers_use_settings_and_advisory_locks() -> None:
     assert "ops_pg_stat_statements_retention_days" in module_source
     assert "capture_pg_stat_statement_snapshots(" in module_source
     assert "refresh_pg_stat_statement_metrics" in module_source
+    assert "skip_if_locked=True" in module_source
 
 
 def test_slow_observability_prune_scheduler_uses_retention_settings() -> None:

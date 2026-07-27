@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from kortravelgeo.api import app as app_module
 from kortravelgeo.api.app import (
@@ -241,25 +241,59 @@ async def test_db_query_sample_route_is_templated_not_raw_path_with_param(
     assert "507f191e810c19729de860ea" not in (db_samples[0].route or "")
 
 
-@pytest.mark.asyncio
-async def test_route_template_resolution_falls_back_for_unmatched_route() -> None:
+def _synthetic_request(app: FastAPI, path: str) -> Request:
+    scope: dict[str, Any] = {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "query_string": b"",
+        "headers": [],
+        "app": app,
+    }
+    return Request(scope)
+
+
+def test_resolve_route_template_before_dispatch_matches_and_falls_back() -> None:
     app = FastAPI()
 
     @app.get("/items/{item_id}")
     async def item(item_id: str) -> dict[str, Any]:
         return {"item_id": item_id}
 
-    settings = Settings(ops_slow_samples_enabled=True)
-    slow_observability.configure_slow_observability(settings)
-    _install_performance_monitoring(app, settings)
+    matched = app_module._resolve_route_template_before_dispatch(
+        _synthetic_request(app, "/items/507f191e810c19729de860ea")
+    )
+    unmatched = app_module._resolve_route_template_before_dispatch(
+        _synthetic_request(app, "/no-such-route")
+    )
+
+    assert matched == "/items/{item_id}"
+    assert unmatched == "/no-such-route"
+
+
+def test_observability_route_template_gated_by_enabled_flag() -> None:
+    """T-158 후속(#302, 리뷰 should-fix): 기능이 꺼져 있으면(기본값) route-matching 스캔
+    자체를 하지 않고 저렴한 request.url.path를 그대로 써야 한다."""
+    app = FastAPI()
+
+    @app.get("/items/{item_id}")
+    async def item(item_id: str) -> dict[str, Any]:
+        return {"item_id": item_id}
+
+    request = _synthetic_request(app, "/items/507f191e810c19729de860ea")
     try:
-        transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/no-such-route")
+        slow_observability.configure_slow_observability(
+            Settings(ops_slow_samples_enabled=False)
+        )
+        assert (
+            app_module._observability_route_template(request)
+            == "/items/507f191e810c19729de860ea"
+        )
+
+        slow_observability.configure_slow_observability(Settings(ops_slow_samples_enabled=True))
+        assert app_module._observability_route_template(request) == "/items/{item_id}"
     finally:
         slow_observability.reset_slow_observability_for_tests()
-
-    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

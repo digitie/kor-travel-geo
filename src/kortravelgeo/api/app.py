@@ -61,6 +61,7 @@ from kortravelgeo.infra.slow_observability import (
     reset_request_observability_context,
     run_slow_observability_flush_loop,
     set_request_observability_context,
+    slow_observability_enabled,
 )
 from kortravelgeo.loaders.runtime_warm import run_runtime_warm, runtime_warm_report_metrics
 from kortravelgeo.settings import Settings, get_settings
@@ -299,7 +300,7 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
         started = perf_counter()
         method = request.method
         context_token = set_request_observability_context(
-            method, _resolve_route_template_before_dispatch(request)
+            method, _observability_route_template(request)
         )
         status_code = 500
         cancelled = False
@@ -451,6 +452,16 @@ def _resolve_route_template_before_dispatch(request: Request) -> str:
     return request.url.path
 
 
+def _observability_route_template(request: Request) -> str:
+    """Pre-dispatch route template, but only pay for the route-matching scan when slow
+    observability is enabled — its sole consumer here is ``_REQUEST_CONTEXT``, read solely by
+    ``record_slow_query``. Every other request (the default, feature disabled) keeps the cheap
+    ``request.url.path`` read this replaced."""
+    if not slow_observability_enabled():
+        return request.url.path
+    return _resolve_route_template_before_dispatch(request)
+
+
 def _install_admission_control(app: FastAPI, settings: Settings) -> None:
     controller = build_admission_controller(settings)
     if controller is None:
@@ -469,7 +480,12 @@ def _install_admission_control(app: FastAPI, settings: Settings) -> None:
             return await call_next(request)
 
         method = request.method
-        route = _route_template(request)
+        # Called before call_next, same as performance_monitoring's context-set — scope['route']
+        # isn't populated yet, so the plain _route_template(request) fallback would silently
+        # degrade to the raw path here too. This route feeds admission metrics/logging as well
+        # as record_overload_event's slow_observability throttle key, so (unlike
+        # _observability_route_template) it is not gated behind the slow-observability flag.
+        route = _resolve_route_template_before_dispatch(request)
         acquired_scopes: list[str] = []
         deadline = perf_counter() + timeout_s
         for scope in scopes:
