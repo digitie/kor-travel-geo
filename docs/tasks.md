@@ -61,17 +61,13 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 ### 선행 리뷰 후속
 
 2026-07-27 GitHub 열린 이슈 감사(15건 조사, `tasks-done.md` 참조) 결과 남은 미해결 리뷰 후속 6건 중
-**이슈 #298은 PR #491로 완료·종료**(아래 tasks-done.md 참조), 나머지 5건이 남았다. 근거는 각 이슈
-본문·코멘트 참조.
+**이슈 #298은 PR #491, 이슈 #302는 PR #493으로 완료·종료**(아래 tasks-done.md 참조), 나머지 4건이
+남았다. 근거는 각 이슈 본문·코멘트 참조.
 
 - [ ] **이슈 #307** — T-127 후속: optional source validator 매칭 강도(M1/M2/M3). `national_point_grid_shape`의
   TL_SPPN_GRID_* 레이어가 `_KNOWN_LAYER_NAMES` 미등록(M1, false failed), count-shortfall이 failed가 아닌
   warning에 그침(M2), `national_point_grid_center`의 SPPN_ prefix 매칭이 `.txt.md5` 등 보조 파일까지
   과매칭(M3) — 3건 모두 현재 코드에 그대로 남아있음.
-- [ ] **이슈 #302** — T-158 후속: slow observability flush 루프 안정성(H1)·보존(M1)·route 정규화(M2).
-  `run_slow_observability_flush_loop`의 `while True`가 루프 본문을 try/except로 감싸지 않아 첫 DB 오류에
-  백그라운드 태스크가 영구 종료됨(H1, 프로덕션 활성화 전 필수 수정). `ops.slow_observability_samples` 보존
-  정책 없음(M1), throttle key가 raw `request.url.path` 사용으로 무한 증가(M2) — 미해결.
 - [ ] **이슈 #299** — T-245 후속: fault-injection 테스트 실 실행 보증(M1) + 잔류물 정리(M2) +
   `_forge_manifest_checksum` 변조 보장(M3). PR #291 이후 4개 fault-case가 실제 green으로 실행된 증거 없음,
   `ops.ops_artifacts` 잔류행 정리 없음, 체크섬 조작이 실제 변경을 보장하지 않음 — 미해결.

@@ -6,6 +6,21 @@
 
 ## 완료
 
+- [x] **이슈 #302 — T-158 후속: slow observability flush 루프 안정성·보존·route 정규화** (2026-07-27) —
+  PR #493(적대적 리뷰어 2명, `27b5cca`). **H1**: `run_slow_observability_flush_loop`의 `while True`가
+  flush 본문을 try/except로 감싸지 않아 첫 DB 오류에 background task가 영구 종료되던 문제 수정 — 형제
+  스케줄러(pg_stat capture/table_stats/dagster reconciler)와 동일하게 매 pass를 try/except +
+  `_LOGGER.exception`으로 감쌈. **M1**: `ops.slow_observability_samples`에 프루닝이 없어 무한 증가하던
+  문제 수정 — `prune_slow_observability_samples()` + 전용 저빈도 스케줄러
+  (`ops_slow_sample_prune_interval_minutes` 기본 60분, `ops_slow_sample_retention_days` 기본 7일) 추가,
+  매초 도는 flush 루프와 분리해 hot path 부하 방지. **M2**: `set_request_observability_context`가
+  Starlette 라우팅 전 raw `request.url.path`로 호출돼 db_query 표본의 route/throttle key가
+  path-param(job_id 등) 카디널리티만큼 무한 증가하던 문제 수정 —
+  `_resolve_route_template_before_dispatch()`로 라우팅 전에도 템플릿 경로를 구함. 리뷰 후속으로 (1)
+  이 route-matching 스캔이 기능 비활성(기본값) 상태에서도 매 요청 실행되던 성능 이슈를
+  `slow_observability_enabled()` 게이팅으로 해결, (2) admission control의 overload 표본도 동일한
+  타이밍 결함이 있어 동일 헬퍼로 통일. 회귀테스트 7건 추가, 백엔드 전체 1252 passed.
+
 - [x] **이슈 #298 — T-247 후속: 벤치마크 backup/restore 안전 가드 보강** (2026-07-27) — GitHub 열린 이슈
   감사에서 유지됐던 6건 중 최우선 안전 이슈를 구현·머지. PR #491(적대적 리뷰어 2명, `c1ba64f`). **M-1**:
   `drop_database()`에 `current_database == target_database`면 `InvalidInputError`로 거부하는 가드 추가
