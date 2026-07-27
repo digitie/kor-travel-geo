@@ -236,6 +236,7 @@ def build_matrix(
     jobs: Sequence[int] = DEFAULT_JOBS,
     compression_levels: Sequence[int] = DEFAULT_COMPRESSION_LEVELS,
     target_prefix: str = "ktg_t247_restore",
+    current_database: str | None = None,
 ) -> tuple[BackupRestorePlanItem, ...]:
     items: list[BackupRestorePlanItem] = []
     for profile in profiles:
@@ -244,13 +245,21 @@ def build_matrix(
             for level in compression_levels:
                 _validate_compression_level(level)
                 profile_id = f"{_slug(profile)}_j{job_count}_z{level}"
+                target_database = target_database_name(target_prefix, profile_id)
+                if current_database is not None and target_database == current_database:
+                    msg = (
+                        f"benchmark target_database {target_database!r} "
+                        f"(profile_id={profile_id!r}) must differ from the current "
+                        "database — choose a different --target-prefix"
+                    )
+                    raise InvalidInputError(msg)
                 items.append(
                     BackupRestorePlanItem(
                         profile_id=profile_id,
                         profile=profile,
                         jobs=job_count,
                         compression_level=level,
-                        target_database=target_database_name(target_prefix, profile_id),
+                        target_database=target_database,
                     )
                 )
     return tuple(items)
@@ -376,6 +385,7 @@ async def _async_main(argv: Sequence[str] | None = None) -> int:
         jobs=tuple(args.jobs or DEFAULT_JOBS),
         compression_levels=tuple(args.compression_level or DEFAULT_COMPRESSION_LEVELS),
         target_prefix=args.target_prefix,
+        current_database=current_database,
     )
     (output_dir / "matrix-plan.json").write_text(
         json.dumps([asdict(item) for item in plan], ensure_ascii=False, indent=2) + "\n",

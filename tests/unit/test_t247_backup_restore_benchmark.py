@@ -103,11 +103,60 @@ def test_summarize_results_picks_fastest_and_smallest_archive() -> None:
     assert "총 소요시간 최단" in row.low_power_note
 
 
-async def test_drop_database_refuses_to_drop_operational_database() -> None:
+def test_plan_only_main_refuses_colliding_target_prefix(tmp_path: Path) -> None:
+    dsn = "postgresql+psycopg://user:pass@localhost:5432/boom_serving_ready_j1_z3"
+
+    with pytest.raises(InvalidInputError, match="must differ from the current database"):
+        bench.main(
+            [
+                "--pg-dsn",
+                dsn,
+                "--target-prefix",
+                "boom",
+                "--profile",
+                "serving-ready",
+                "--jobs",
+                "1",
+                "--compression-level",
+                "3",
+                "--output-dir",
+                str(tmp_path),
+            ]
+        )
+
+
+def test_build_matrix_refuses_target_matching_current_database() -> None:
+    plan = bench.build_matrix(
+        profiles=("serving-ready",),
+        jobs=(1,),
+        compression_levels=(3,),
+        target_prefix="x",
+    )
+    colliding_target = plan[0].target_database
+
+    with pytest.raises(InvalidInputError, match="must differ from the current database"):
+        bench.build_matrix(
+            profiles=("serving-ready",),
+            jobs=(1,),
+            compression_levels=(3,),
+            target_prefix="x",
+            current_database=colliding_target,
+        )
+
+
+async def test_drop_database_refuses_to_drop_operational_database(monkeypatch) -> None:
+    calls: list[tuple[object, ...]] = []
+
+    async def fake_admin_exec(*args: object, **kwargs: object) -> None:
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(bench, "_admin_exec", fake_admin_exec)
     dsn = "postgresql+psycopg://user:pass@localhost:5432/kor_travel_geo"
 
     with pytest.raises(InvalidInputError, match="must differ from the current database"):
         await bench.drop_database(dsn, "kor_travel_geo")
+
+    assert calls == []
 
 
 async def test_drop_database_forwards_connect_timeout_to_admin_exec(monkeypatch) -> None:
