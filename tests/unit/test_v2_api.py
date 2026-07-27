@@ -371,6 +371,160 @@ async def test_async_client_geocode_keeps_primary_when_supplemental_lookup_fails
 
 
 @pytest.mark.asyncio
+async def test_async_client_geocode_skips_supplements_when_limit_is_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-170 후속(#252 M2): _should_collect_geocode_supplements의 limit<=1 분기."""
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        return _v1_geocode_response(GeocodeInput(address=address))
+
+    supplemental_calls = 0
+
+    async def spy_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        nonlocal supplemental_calls
+        supplemental_calls += 1
+        return []
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", spy_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(query="테헤란로", limit=1)
+
+    assert response.status == "OK"
+    assert supplemental_calls == 0
+    assert len(response.candidates) == 1
+
+
+@pytest.mark.asyncio
+async def test_async_client_geocode_skips_supplements_for_jibun_only_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-170 후속(#252 M2): jibun_address만 있고 road_address/query가 없는 분기."""
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        return _v1_geocode_response(GeocodeInput(address=address))
+
+    supplemental_calls = 0
+
+    async def spy_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        nonlocal supplemental_calls
+        supplemental_calls += 1
+        return []
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", spy_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(jibun_address="역삼동 823-2", limit=3)
+
+    assert response.status == "OK"
+    assert supplemental_calls == 0
+    assert len(response.candidates) == 1
+
+
+@pytest.mark.asyncio
+async def test_async_client_geocode_skips_supplements_for_sppn_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-170 후속(#252 M2): 국가지점번호(SPPN) 결과 분기."""
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        base = _v1_geocode_response(GeocodeInput(address=address))
+        assert base.x_extension is not None
+        return base.model_copy(
+            update={
+                "x_extension": base.x_extension.model_copy(
+                    update={"national_point_number": "다바 1234 5678"}
+                )
+            }
+        )
+
+    supplemental_calls = 0
+
+    async def spy_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        nonlocal supplemental_calls
+        supplemental_calls += 1
+        return []
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", spy_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(query="테헤란로", limit=3)
+
+    assert response.status == "OK"
+    assert supplemental_calls == 0
+    assert len(response.candidates) == 1
+
+
+@pytest.mark.asyncio
+async def test_async_client_geocode_skips_supplements_for_non_local_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-170 후속(#252 M2): source가 local/cache가 아닌 분기(외부 provider 결과)."""
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        base = _v1_geocode_response(GeocodeInput(address=address))
+        assert base.x_extension is not None
+        return base.model_copy(
+            update={"x_extension": base.x_extension.model_copy(update={"source": "api_juso"})}
+        )
+
+    supplemental_calls = 0
+
+    async def spy_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        nonlocal supplemental_calls
+        supplemental_calls += 1
+        return []
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", spy_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(query="테헤란로", limit=3)
+
+    assert response.status == "OK"
+    assert supplemental_calls == 0
+    assert len(response.candidates) == 1
+
+
+@pytest.mark.asyncio
+async def test_async_client_geocode_skips_supplements_when_input_matches_refined_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-170 후속(#252 M2): 입력 주소가 이미 refined.text와 동일한 분기(추가 보정 불필요)."""
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    refined_text = "서울특별시 강남구 테헤란로 152"
+
+    async def fake_geocode(self: AsyncAddressClient, address: str, **_: Any) -> GeocodeResponse:
+        return _v1_geocode_response(GeocodeInput(address=address))
+
+    supplemental_calls = 0
+
+    async def spy_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        nonlocal supplemental_calls
+        supplemental_calls += 1
+        return []
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", spy_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(query=refined_text, limit=3)
+
+    assert response.status == "OK"
+    assert supplemental_calls == 0
+    assert len(response.candidates) == 1
+
+
+@pytest.mark.asyncio
 async def test_v2_geocode_route_uses_client_dependency() -> None:
     class FakeClient:
         async def geocode(self, **kwargs: Any) -> GeocodeV2Response:
