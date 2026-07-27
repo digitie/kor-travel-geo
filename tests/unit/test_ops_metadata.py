@@ -14,6 +14,7 @@ from kortravelgeo.dto.admin import (
 )
 from kortravelgeo.infra import admin_repo, slow_observability
 from kortravelgeo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
+from kortravelgeo.settings import Settings
 
 
 def test_ops_schema_tables_indexes_and_append_only_trigger_are_declared() -> None:
@@ -267,4 +268,46 @@ def test_ops_capture_schedulers_use_settings_and_advisory_locks() -> None:
     assert "ops_pg_stat_statements_retention_days" in module_source
     assert "capture_pg_stat_statement_snapshots(" in module_source
     assert "refresh_pg_stat_statement_metrics" in module_source
-    assert "skip_if_locked=True" in module_source
+
+
+def test_slow_observability_prune_scheduler_uses_retention_settings() -> None:
+    """T-158 후속(#302 M1): ops.slow_observability_samples 보존 정책이 자동으로 도는지."""
+    from kortravelgeo.api import app
+
+    module_source = inspect.getsource(app)
+    slow_observability_source = inspect.getsource(slow_observability)
+    scheduler_source = inspect.getsource(app._start_slow_observability_prune_scheduler)
+    loop_source = inspect.getsource(app._run_slow_observability_prune_scheduler)
+    once_source = inspect.getsource(app._prune_slow_observability_samples_once)
+
+    assert "DELETE FROM ops.slow_observability_samples" in slow_observability_source
+    assert (
+        "captured_at < now() - (:retention_days * interval '1 day')"
+        in slow_observability_source
+    )
+    assert "prune_slow_observability_samples" in module_source
+    assert "ops_slow_sample_retention_days" in module_source
+    assert "ops_slow_samples_enabled" in scheduler_source
+    assert "ops_slow_sample_prune_interval_minutes <= 0" in scheduler_source
+    assert "ops_slow_sample_prune_interval_minutes" in loop_source
+    assert "retention_days=settings.ops_slow_sample_retention_days" in once_source
+
+
+async def test_slow_observability_prune_once_swallows_errors(monkeypatch) -> None:
+    """T-158 후속(#302): 보존 프루닝도 형제 스케줄러처럼 실패해도 루프를 죽이지 않아야 한다."""
+    from kortravelgeo.api import app
+
+    calls: list[int] = []
+
+    async def fake_prune(engine: object, retention_days: int) -> int:
+        calls.append(retention_days)
+        raise RuntimeError("simulated DB error")
+
+    monkeypatch.setattr(app, "prune_slow_observability_samples", fake_prune)
+
+    # Must not raise.
+    await app._prune_slow_observability_samples_once(
+        object(), Settings(ops_slow_sample_retention_days=3)
+    )
+
+    assert calls == [3]

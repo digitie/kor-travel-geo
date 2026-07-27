@@ -12,6 +12,7 @@ from typing import Any, cast
 from fastapi import FastAPI, Request
 from fastapi.responses import ORJSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncEngine
+from starlette.routing import Match
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from kortravelgeo.api._dagster_recovery import (
@@ -54,6 +55,7 @@ from kortravelgeo.infra.metrics import (
 )
 from kortravelgeo.infra.slow_observability import (
     configure_slow_observability,
+    prune_slow_observability_samples,
     record_overload_event,
     record_slow_api_request,
     reset_request_observability_context,
@@ -106,6 +108,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         get_settings(),
     )
     app.state.slow_observability_task = slow_observability_task
+    slow_observability_prune_task = _start_slow_observability_prune_scheduler(
+        client.engine,
+        get_settings(),
+    )
+    app.state.slow_observability_prune_task = slow_observability_prune_task
     janitor_task = _start_source_janitor_scheduler(client, get_settings())
     app.state.source_janitor_task = janitor_task
     try:
@@ -117,6 +124,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             pg_stat_task,
             runtime_warm_task,
             slow_observability_task,
+            slow_observability_prune_task,
             janitor_task,
         ):
             if task is not None:
@@ -290,7 +298,9 @@ def _install_performance_monitoring(app: FastAPI, settings: Settings) -> None:
     ) -> Response:
         started = perf_counter()
         method = request.method
-        context_token = set_request_observability_context(method, request.url.path)
+        context_token = set_request_observability_context(
+            method, _resolve_route_template_before_dispatch(request)
+        )
         status_code = 500
         cancelled = False
         record_api_request_started(method=method)
@@ -422,6 +432,23 @@ def _route_template(request: Request) -> str:
     route = request.scope.get("route")
     path = getattr(route, "path", None)
     return str(path) if path else request.url.path
+
+
+def _resolve_route_template_before_dispatch(request: Request) -> str:
+    """Route template for use *before* ``call_next`` resolves ``request.scope['route']``.
+
+    Starlette only populates ``scope['route']`` once its router actually dispatches to a
+    matched route, which happens inside ``call_next``. Callers that need the templated route
+    earlier (e.g. to seed observability context before a handler's DB queries run) must match
+    against the app's routes themselves, mirroring what the router does internally.
+    """
+    for route in request.app.routes:
+        match, _ = route.matches(request.scope)
+        if match == Match.FULL:
+            path = getattr(route, "path", None)
+            if path:
+                return str(path)
+    return request.url.path
 
 
 def _install_admission_control(app: FastAPI, settings: Settings) -> None:
@@ -702,6 +729,48 @@ def _start_slow_observability_scheduler(
     if not settings.ops_slow_samples_enabled:
         return None
     return asyncio.create_task(run_slow_observability_flush_loop(engine))
+
+
+def _start_slow_observability_prune_scheduler(
+    engine: AsyncEngine,
+    settings: Settings,
+) -> asyncio.Task[None] | None:
+    if not settings.ops_slow_samples_enabled:
+        return None
+    if settings.ops_slow_sample_prune_interval_minutes <= 0:
+        return None
+    return asyncio.create_task(_run_slow_observability_prune_scheduler(engine, settings))
+
+
+async def _run_slow_observability_prune_scheduler(
+    engine: AsyncEngine,
+    settings: Settings,
+) -> None:
+    interval_s = settings.ops_slow_sample_prune_interval_minutes * 60
+    while True:
+        await asyncio.sleep(interval_s)
+        await _prune_slow_observability_samples_once(engine, settings)
+
+
+async def _prune_slow_observability_samples_once(
+    engine: AsyncEngine,
+    settings: Settings,
+) -> None:
+    try:
+        deleted = await prune_slow_observability_samples(
+            engine, retention_days=settings.ops_slow_sample_retention_days
+        )
+    except Exception:
+        _LOGGER.exception("failed to prune ops.slow_observability_samples")
+        return
+
+    _LOGGER.info(
+        "pruned ops.slow_observability_samples",
+        extra={
+            "deleted_count": deleted,
+            "retention_days": settings.ops_slow_sample_retention_days,
+        },
+    )
 
 
 def _start_source_janitor_scheduler(

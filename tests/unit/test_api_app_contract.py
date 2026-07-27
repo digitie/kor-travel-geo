@@ -200,6 +200,69 @@ async def test_performance_monitoring_enqueues_slow_request_sample() -> None:
 
 
 @pytest.mark.asyncio
+async def test_db_query_sample_route_is_templated_not_raw_path_with_param(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """T-158 후속(#302 M2): db_query 표본의 route는 handler 실행 중 request.url.path가
+    아니라 라우트 템플릿이어야 한다 — 그렇지 않으면 throttle key/저장 row가
+    path-param(id 등) 카디널리티만큼 무한 증가한다."""
+    app = FastAPI()
+
+    @app.get("/items/{item_id}")
+    async def item(item_id: str) -> dict[str, Any]:
+        slow_observability.record_slow_query(
+            statement="SELECT 1",
+            parameters=None,
+            elapsed_s=1.0,
+            status="success",
+        )
+        return {"item_id": item_id}
+
+    settings = Settings(
+        ops_slow_samples_enabled=True,
+        ops_slow_query_ms=1,
+        ops_slow_sample_min_interval_ms=0,
+    )
+    slow_observability.configure_slow_observability(settings)
+    _install_performance_monitoring(app, settings)
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/items/507f191e810c19729de860ea")
+
+        samples = slow_observability.pop_slow_samples_for_tests()
+    finally:
+        slow_observability.reset_slow_observability_for_tests()
+
+    assert response.status_code == 200
+    db_samples = [sample for sample in samples if sample.sample_type == "db_query"]
+    assert len(db_samples) == 1
+    assert db_samples[0].route == "/items/{item_id}"
+    assert "507f191e810c19729de860ea" not in (db_samples[0].route or "")
+
+
+@pytest.mark.asyncio
+async def test_route_template_resolution_falls_back_for_unmatched_route() -> None:
+    app = FastAPI()
+
+    @app.get("/items/{item_id}")
+    async def item(item_id: str) -> dict[str, Any]:
+        return {"item_id": item_id}
+
+    settings = Settings(ops_slow_samples_enabled=True)
+    slow_observability.configure_slow_observability(settings)
+    _install_performance_monitoring(app, settings)
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/no-such-route")
+    finally:
+        slow_observability.reset_slow_observability_for_tests()
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_client_disconnect_cancels_public_address_request_while_body_streams(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

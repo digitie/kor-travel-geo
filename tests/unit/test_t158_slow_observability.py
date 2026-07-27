@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
+
+import pytest
 
 from kortravelgeo.infra import slow_observability
 from kortravelgeo.settings import Settings
@@ -102,6 +105,28 @@ def test_slow_request_and_overload_samples_are_bounded_and_typed() -> None:
     assert len(samples) == 1
     assert samples[0].sample_type == "api_request"
     assert slow_observability.dropped_slow_sample_count() == 1
+
+
+async def test_flush_loop_survives_a_flush_error_and_keeps_running(monkeypatch) -> None:
+    """T-158 후속(#302 H1): 첫 flush 오류에도 루프가 죽지 않고 다음 pass를 계속 시도해야 한다."""
+    slow_observability.configure_slow_observability(
+        Settings(ops_slow_sample_flush_interval_ms=100)
+    )
+    calls = 0
+
+    async def fake_flush(engine: object) -> int:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("simulated DB error")
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(slow_observability, "flush_slow_observability_samples", fake_flush)
+
+    with pytest.raises(asyncio.CancelledError):
+        await slow_observability.run_slow_observability_flush_loop(object())  # type: ignore[arg-type]
+
+    assert calls == 2
 
 
 def test_slow_sample_record_excludes_raw_sql_statement() -> None:

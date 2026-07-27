@@ -44,6 +44,10 @@ VALUES
    :query_preview, :plan, :context)
 """
 ).bindparams(bindparam("plan", type_=JSONB), bindparam("context", type_=JSONB))
+_SLOW_SAMPLE_PRUNE_SQL = text(
+    "DELETE FROM ops.slow_observability_samples "
+    "WHERE captured_at < now() - (:retention_days * interval '1 day')"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,10 +236,19 @@ def record_slow_query(
 
 
 async def run_slow_observability_flush_loop(engine: AsyncEngine) -> None:
-    """Persist queued samples until cancelled."""
+    """Persist queued samples until cancelled.
+
+    Each pass is isolated with try/except (matching the sibling schedulers in ``api/app.py``):
+    a transient DB error (connection drop, statement timeout, a lock held during restore) must
+    not permanently kill this background task, since that would silently stop all future sample
+    persistence — including the batch already popped off the in-memory queue for this pass.
+    """
 
     while True:
-        await flush_slow_observability_samples(engine)
+        try:
+            await flush_slow_observability_samples(engine)
+        except Exception:
+            _LOGGER.exception("slow observability flush failed")
         await asyncio.sleep(_config.flush_interval_ms / 1_000)
 
 
@@ -254,6 +267,20 @@ async def flush_slow_observability_samples(engine: AsyncEngine) -> int:
         async with engine.begin() as conn:
             await conn.execute(_SLOW_SAMPLE_INSERT_SQL, records)
     return len(records)
+
+
+async def prune_slow_observability_samples(engine: AsyncEngine, retention_days: int) -> int:
+    """Delete ``ops.slow_observability_samples`` rows older than ``retention_days``.
+
+    Runs on its own low-frequency scheduler (see ``api/app.py``), independent of the
+    per-second flush loop — pruning every flush pass would add needless DB load to a hot path.
+    """
+    with suppress_slow_observability():
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                _SLOW_SAMPLE_PRUNE_SQL, {"retention_days": retention_days}
+            )
+            return result.rowcount or 0
 
 
 def sample_record(sample: SlowObservabilitySample) -> dict[str, Any]:
