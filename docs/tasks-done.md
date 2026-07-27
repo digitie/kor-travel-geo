@@ -6,6 +6,39 @@
 
 ## 완료
 
+- [x] **이슈 #201 — T-224 후속: source category wizard + drag-and-drop 검증 프리뷰** (2026-07-27) —
+  PR #502(적대적 리뷰 워크플로우 병렬 2명, `9613184`). 원천 파일 업로드 탭에 카테고리 선택 →
+  기준년월 → 파일 업로드(드래그앤드롭/클릭) · 사전 점검 → 확인·등록 4단계 마법사(`UploadWizardDialog`)를
+  추가. 착수 전 AskUserQuestion으로 "드래그앤드롭 검증 프리뷰"의 구현 깊이를 확정 — 클라이언트 shallow
+  검증이나 프리뷰 기능 보류가 아니라 **실제 백엔드 검증 연동**을 선택. 사전 점검 단계는 새
+  `POST /source-files/upload-sessions/{id}/preview-validate` 엔드포인트로 등록 전 upload session의
+  슬롯에 대해 기존 `/source-file-groups/{id}/validate`(등록된 그룹 재검증)와 동일한 실제 구조 검증
+  (`scan_group_manifest` + `validate_group_manifest`)을 수행 — 아무것도 영속화하지 않는 순수 preview.
+  기존 카테고리별 카드 업로드 플로우는 대안 진입점으로 그대로 유지.
+
+  머지 전 실제 브라우저(Playwright)로 WSL 백엔드(마이그레이션된 dev DB + 실 RustFS)에 대해 live e2e
+  진행 — 로그인 → 마법사 열기 → 카테고리 선택 → 기준년월 입력 → 파일 선택까지 실 백엔드로 확인했고,
+  특히 **중복 세션 409 충돌**이 실제로 정확한 한국어 안내 문구를 렌더링하는 것을 확인. 업로드→사전
+  점검→등록 전체 happy path는 이 PR과 무관한 기존 RustFS multipart 인프라 버그(**이슈 #501**로 별도
+  등록 — `create_multipart_upload` 직후 `upload_part`가 즉시 실패, RustFS 컨테이너 재시작 후에도
+  재현, 기존 테스트가 전부 fake sender를 주입해 실 RustFS 경로를 검증한 적이 없었음이 원인)로 라이브
+  완주는 못 했으나 mock 기반 유닛 테스트로 커버.
+
+  적대적 리뷰(워크플로우 병렬 2명)가 독립적으로 같은 HIGH 버그 2건을 발견: (1)
+  `preview_validate_upload_session`이 `storage_kind="local"` 세션에서 RustFS 다운로드 없이 존재하지
+  않는 파일을 스캔해 `FileNotFoundError`로 크래시 — `InvalidInputError`(400)로 명확히 거부하도록 수정.
+  (2) `UploadWizardDialog`의 `oversize` 가드가 계산만 되고 어디에도 연결되지 않아 크기 한도 초과
+  파일도 그대로 업로드가 시작됨(기존 카드형 플로우는 이 가드가 실제로 동작) — 파일 선택 시점에 실제로
+  차단하도록 수정. 리뷰어 B가 추가로 HIGH 1건을 더 발견: 등록 성공 시 부모의 `onCompleted`가 동기적으로
+  다이얼로그를 닫아버려 "등록됐습니다" 완료 화면이 전혀 보이지 않고 다음에 마법사를 열면 이전 세션의
+  완료 화면이 그대로 남아있던 버그 — `onCompleted`는 이제 사용자가 완료 화면을 실제로 닫을 때만
+  호출되고 그 시점에 항상 전체 상태를 리셋하도록 수정. 그 외 MEDIUM: preview-validate 감사 이벤트의
+  `resource_type`이 다른 모든 upload-session 감사 이벤트와 다르게 어긋나 있던 것 통일, preview-validate
+  호출 자체가 일시적으로 실패하면 세션 재사용 없이 "이미 진행 중" 409로 오인되던 막다른 경로에 재시도
+  버튼 추가. object-key 계산 중복(`client.py`/`admin.py` 두 곳)과 preview 결과가 register 시 그대로
+  반영되지 않는 구조적 간극(기존 설계상 분리)은 이 PR 범위 밖 후속 과제로 남김. 회귀테스트 backend
+  1건·frontend 3건 추가, 백엔드 전체 1266 passed·프론트 170 passed.
+
 - [x] **이슈 #307 — T-127 후속: optional source validator 매칭 강도 M1/M2/M3** (2026-07-27) —
   PR #499(적대적 리뷰 워크플로우 병렬 2명, `93eaa30`). **M1**: `TL_SPPN_GRID_*`
   (`national_point_grid_shape`)가 `infra/source_member_scan.py`의 `_KNOWN_LAYER_NAMES` 미등록이라
