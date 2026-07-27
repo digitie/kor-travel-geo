@@ -8,9 +8,12 @@ connection is integration-tested in T-245.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra import backup as backup_module
 from kortravelgeo.infra.backup import (
     quarantine_restore_database_name,
     quote_database_identifier,
@@ -79,6 +82,49 @@ def test_restore_database_identifier_rejects_quotes() -> None:
 
 def test_quote_database_identifier_only_quotes_valid_names() -> None:
     assert quote_database_identifier("kor_travel_geo_restore") == '"kor_travel_geo_restore"'
+
+
+async def test_cleanup_orphan_restore_target_preserves_password_in_maintenance_dsn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#299 (실 라이브 실행이 발견한 회귀): SQLAlchemy URL의 기본 __str__는 비밀번호를
+    ``***``로 마스킹한다. maintenance 연결 DSN을 ``str(url)``로 만들면 실제 비밀번호
+    대신 문자 그대로 ``***``로 인증을 시도해 항상 실패한다 — drop/quarantine cleanup이
+    조용히 100% 실패하던 원인. render_as_string(hide_password=False) 고정을 회귀 방지."""
+    captured_dsns: list[str] = []
+
+    class _FakeConnection:
+        async def __aenter__(self) -> _FakeConnection:
+            return self
+
+        async def __aexit__(self, *exc_info: object) -> bool:
+            return False
+
+        async def execute(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+    class _FakeEngine:
+        def connect(self) -> _FakeConnection:
+            return _FakeConnection()
+
+        async def dispose(self) -> None:
+            return None
+
+    def fake_create_async_engine(dsn: str, **kwargs: Any) -> _FakeEngine:
+        captured_dsns.append(dsn)
+        return _FakeEngine()
+
+    monkeypatch.setattr(backup_module, "create_async_engine", fake_create_async_engine)
+
+    await backup_module.cleanup_orphan_restore_target(
+        "postgresql+psycopg://addr:s3cr3t_pw@localhost:5432/ktg_restore_target",
+        action="drop",
+        timestamp="20260101T000000Z",
+    )
+
+    assert len(captured_dsns) == 1
+    assert "s3cr3t_pw" in captured_dsns[0]
+    assert "***" not in captured_dsns[0]
 
 
 def test_quarantine_name_stays_within_postgres_identifier_limit() -> None:
