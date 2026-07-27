@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UploadWizardDialog } from "@/components/admin/source-files/UploadWizardDialog";
@@ -65,14 +65,17 @@ const SESSION = {
   updated_at: "2026-06-14T00:00:00Z"
 };
 
-function renderDialog(onCompleted = vi.fn()) {
+function renderDialog(
+  onCompleted = vi.fn(),
+  maxBytesByCategory: Map<string, number> = new Map()
+) {
   const queryClient = new QueryClient();
   const onOpenChange = vi.fn();
   render(
     <QueryClientProvider client={queryClient}>
       <UploadWizardDialog
         categories={[CATEGORY]}
-        maxBytesByCategory={new Map()}
+        maxBytesByCategory={maxBytesByCategory}
         onCompleted={onCompleted}
         onOpenChange={onOpenChange}
         open
@@ -131,8 +134,82 @@ describe("UploadWizardDialog (#201)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "등록" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "등록" }));
 
+    // #201 review fix: the success screen must render and stay open (not vanish because
+    // the parent's onCompleted synchronously flips `open` to false) — onCompleted only
+    // fires once the user explicitly dismisses the success screen.
     await waitFor(() => expect(screen.getByText(/업로드가 등록됐습니다/)).toBeTruthy());
+    expect(onCompleted).not.toHaveBeenCalled();
+
+    const doneScreen = screen.getByText(/업로드가 등록됐습니다/).closest(".wizard-done") as HTMLElement;
+    fireEvent.click(within(doneScreen).getByRole("button", { name: "닫기" }));
     expect(onCompleted).toHaveBeenCalled();
+  });
+
+  it("#201 review fix: blocks an oversized file before creating a session", async () => {
+    apiMocks.postJson.mockResolvedValue(SESSION);
+
+    renderDialog(vi.fn(), new Map([["roadname_hangul_full", 10]]));
+
+    fireEvent.click(screen.getByRole("option", { name: /도로명주소 한글 전체분/ }));
+    await waitFor(() => expect(screen.getByLabelText("기준년월")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+
+    const oversizedFile = new File(["x".repeat(100)], "rnaddrkor.zip", {
+      type: "application/zip"
+    });
+    fireEvent.change(screen.getByLabelText("업로드할 파일 선택"), {
+      target: { files: [oversizedFile] }
+    });
+
+    await waitFor(() => expect(screen.getAllByText(/크기 한도.*초과합니다/).length).toBeGreaterThan(0));
+    expect(apiMocks.postJson).not.toHaveBeenCalled();
+    expect(multipartMocks.uploadSlotFile).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "다음" })).toBeDisabled();
+  });
+
+  it("#201 review fix: retries preview-validate without recreating the session after a transient failure", async () => {
+    let previewCalls = 0;
+    apiMocks.postJson.mockImplementation(async (path: string) => {
+      if (path.includes("/preview-validate")) {
+        previewCalls += 1;
+        if (previewCalls === 1) {
+          throw new apiMocks.ApiError("preview backend blip", 500);
+        }
+        return {
+          upload_session_id: "sess-1",
+          category: "roadname_hangul_full",
+          outcome: "passed",
+          parts: [{ part_key: "archive", outcome: "passed", reasons: [], warnings: [] }],
+          validator_version: "t127.2"
+        };
+      }
+      return SESSION; // create session
+    });
+    multipartMocks.uploadSlotFile.mockResolvedValue({ ...SESSION, state: "awaiting_registration" });
+
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("option", { name: /도로명주소 한글 전체분/ }));
+    await waitFor(() => expect(screen.getByLabelText("기준년월")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "다음" }));
+
+    const file = new File(["x"], "rnaddrkor.zip", { type: "application/zip" });
+    fireEvent.change(screen.getByLabelText("업로드할 파일 선택"), { target: { files: [file] } });
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "사전 점검 다시 시도" })).toBeTruthy()
+    );
+    expect(screen.getByRole("button", { name: "다음" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "사전 점검 다시 시도" }));
+
+    await waitFor(() => expect(screen.getAllByText("통과").length).toBeGreaterThan(0));
+    // Only one session should ever have been created — the retry re-used it.
+    const createSessionCalls = apiMocks.postJson.mock.calls.filter(
+      (call: unknown[]) => call[0] === "/admin/source-files/upload-sessions"
+    );
+    expect(createSessionCalls).toHaveLength(1);
+    expect(multipartMocks.uploadSlotFile).toHaveBeenCalledTimes(1);
   });
 
   it("shows a clear message on a 409 duplicate-session conflict", async () => {

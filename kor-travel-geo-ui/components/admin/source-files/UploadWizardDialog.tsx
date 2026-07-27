@@ -100,7 +100,6 @@ export function UploadWizardDialog({
   const category = categories.find((item) => item.category === categoryKey) ?? null;
   const yyyymmValid = isValidYyyymm(userYyyymm);
   const maxBytes = categoryKey ? maxBytesByCategory.get(categoryKey) : undefined;
-  const oversize = Boolean(file && maxBytes && file.size > maxBytes);
 
   const createSession = useMutation({
     mutationFn: (request: { category: string; userYyyymm: string; displayName: string }) =>
@@ -128,7 +127,13 @@ export function UploadWizardDialog({
 
   function handleOpenChange(next: boolean) {
     if (!next) {
+      const wasRegistered = registered !== null;
       dispatch(createInitialState());
+      onOpenChange(next);
+      if (wasRegistered) {
+        onCompleted();
+      }
+      return;
     }
     onOpenChange(next);
   }
@@ -136,6 +141,12 @@ export function UploadWizardDialog({
   async function handleFileSelected(selectedFile: File) {
     dispatch({ file: selectedFile, error: null, preview: null, progress: null, session: null });
     if (!category) return;
+    if (maxBytes && selectedFile.size > maxBytes) {
+      dispatch({
+        error: `파일이 크기 한도 ${formatBytes(maxBytes)}를 초과합니다 — 더 작은 파일을 선택하세요.`
+      });
+      return;
+    }
     dispatch({ busy: true });
     try {
       const newSession = await createSession.mutateAsync({
@@ -167,6 +178,17 @@ export function UploadWizardDialog({
     }
   }
 
+  async function handleRetryPreview() {
+    if (!session) return;
+    dispatch({ busy: true, error: null });
+    try {
+      const result = await previewValidate.mutateAsync(session.upload_session_id);
+      dispatch({ busy: false, preview: result });
+    } catch (err) {
+      dispatch({ busy: false, error: getErrorMessage(err) });
+    }
+  }
+
   async function handleRegister() {
     if (!session) return;
     dispatch({ busy: true, error: null });
@@ -175,7 +197,6 @@ export function UploadWizardDialog({
       dispatch({ busy: false, registered: result });
       toast.success("업로드 완료", "세션이 등록되었습니다.");
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
-      onCompleted();
     } catch (err) {
       dispatch({ busy: false, error: getErrorMessage(err) });
     }
@@ -247,6 +268,13 @@ export function UploadWizardDialog({
               <p className="form-note">구조/멤버/기준월 사전 점검 중…</p>
             ) : null}
             {preview ? <ValidationPreviewResult preview={preview} /> : null}
+            {session && !preview && error && !busy ? (
+              <div className="button-row">
+                <Button onClick={() => void handleRetryPreview()} type="button" variant="outline">
+                  사전 점검 다시 시도
+                </Button>
+              </div>
+            ) : null}
             <div className="button-row">
               <Button onClick={() => dispatch({ step: 2 })} type="button" variant="outline">
                 이전

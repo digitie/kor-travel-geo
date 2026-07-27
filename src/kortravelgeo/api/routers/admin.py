@@ -1011,7 +1011,7 @@ async def preview_validate_upload_session(
         actor_id=ctx.actor,
         outcome="succeeded",
         payload={"category": result.category, "outcome": result.outcome},
-        resource_type="upload_session",
+        resource_type="source_upload_session",
         resource_id=upload_session_id,
         **_audit_request(request),
     )

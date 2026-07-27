@@ -1115,20 +1115,29 @@ class AsyncAddressClient:
         decision logic) applied to a session's slots instead of a registered
         group's children. Nothing is persisted — call again any time slot state
         changes, e.g. after a new file is dropped.
+
+        Only supports ``storage_kind="rustfs"`` sessions: the deep content-level
+        scan needs the real archive bytes, which only RustFS-backed sessions have
+        materialized under a known object key.
         """
         import tempfile
         from pathlib import Path
 
         from .core.source_validation import VALIDATOR_VERSION, validate_group_manifest
+        from .exceptions import InvalidInputError
         from .infra.rustfs import RustfsClient, require_enabled_rustfs
         from .infra.source_janitor import _staging_object_key
         from .infra.source_member_scan import scan_group_manifest
 
         session = await self.get_upload_session(upload_session_id)
-        config = (
-            require_enabled_rustfs(self.settings) if session.storage_kind == "rustfs" else None
-        )
-        rustfs = RustfsClient(config) if config is not None else None
+        if session.storage_kind != "rustfs":
+            msg = (
+                "preview-validate requires a rustfs-backed upload session "
+                f"(got storage_kind={session.storage_kind!r})"
+            )
+            raise InvalidInputError(msg)
+        config = require_enabled_rustfs(self.settings)
+        rustfs = RustfsClient(config)
 
         with tempfile.TemporaryDirectory(prefix="ktg-preview-validate-") as tmp:
             parts: dict[str, Path] = {}
@@ -1139,7 +1148,7 @@ class AsyncAddressClient:
                 if not any(p.completed_at is not None for p in slot_parts):
                     continue
                 object_key = _staging_object_key(
-                    prefix=config.prefix if config else None,
+                    prefix=config.prefix,
                     category=session.category,
                     user_yyyymm=session.user_yyyymm,
                     source_file_group_id=session.source_file_group_id,
@@ -1147,8 +1156,7 @@ class AsyncAddressClient:
                     part_key=slot.part_key,
                 )
                 dest = Path(tmp) / slot.part_key / (slot.part_label or slot.part_key)
-                if rustfs is not None:
-                    await rustfs.download_file(object_key, dest)
+                await rustfs.download_file(object_key, dest)
                 parts[slot.part_key] = dest
             manifest = scan_group_manifest(
                 category=session.category, group_kind=session.group_kind, parts=parts
