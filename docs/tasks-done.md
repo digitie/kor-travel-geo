@@ -6,6 +6,23 @@
 
 ## 완료
 
+- [x] **이슈 #307 — T-127 후속: optional source validator 매칭 강도 M1/M2/M3** (2026-07-27) —
+  PR #499(적대적 리뷰 워크플로우 병렬 2명, `93eaa30`). **M1**: `TL_SPPN_GRID_*`
+  (`national_point_grid_shape`)가 `infra/source_member_scan.py`의 `_KNOWN_LAYER_NAMES` 미등록이라
+  supplier가 파일명을 감싸면(`nationwide_TL_SPPN_GRID_1KM`) canonical 불일치로 failed 오분류되던
+  문제 — `T127_GRID_SHAPE_LAYERS`를 `_KNOWN_LAYER_NAMES`에 포함. **M2**: `required_prefixes` 개수
+  부족(shortfall)이 warning에 그쳐 부분/잘린 archive도 통과하던 문제 — 부족은 failed로 승격(초과는
+  누락이 아니므로 warning 유지). **M3**: `_count_with_prefix`가 확장자 제약 없이 `SPPN_` 등
+  prefix만 확인해 `SPPN_checksums.txt.md5` 같은 체크섬 보조 파일까지 카운트하던 문제 — `.txt`
+  확장자 제약 추가(이 모듈의 모든 프로필이 텍스트 원천임을 실 loader 코드로 확인 후 전역 적용).
+  적대적 리뷰가 두 가지를 추가로 찾음: (1) `VALIDATOR_VERSION`을 안 올려서 이미 등록된 원천이
+  자동 재검증되지 않던 것 — t127.1→t127.2로 승격. (2) M3가 이슈 본문이 직접 예로 든
+  `SPPN_README.txt`(진짜 .txt라 확장자 제약을 통과)는 여전히 못 막는 잔존 gap — 정교한 정규식
+  fix는 실 파일명 패턴 확신 없이 추측하는 셈이라 보류, 프로필 옆에 알려진 한계로 문서화 + 그
+  경계를 고정하는 테스트로 대응. 회귀테스트 4건 추가(M1/M3 각 revert 시 실패 확인, M2 excess
+  케이스, M3 잔존 gap 경계 고정), 기존 테스트 1건을 새 동작(shortfall=failed)에 맞게 갱신.
+  백엔드 전체 1263 passed.
+
 - [x] **이슈 #252 — T-170 후속: v2 geocode 보조 조회 gate predicate 테스트 커버** (2026-07-27) —
   PR #497(적대적 리뷰 워크플로우 병렬 2명, `18b856a`). H1(보조 조회 실패 시 primary 응답 유지)은 이미
   해결·회귀테스트 존재 확인, 코드 변경 없음. M2: `_should_collect_geocode_supplements()`의 5개 false
