@@ -41,7 +41,11 @@ from kortravelgeo.core.source_layers import (
 
 #: Bumped whenever the decision logic / profile expectations change so that
 #: previously ``passed`` validations can be re-run (doc "validator_version").
-VALIDATOR_VERSION = "t127.1"
+#: #307 (T-127 후속 M1/M2/M3) changed decision logic for national_point_grid_shape
+#: (M1) and every SINGLE_FILE_TEXT_PROFILES required-prefix check (M2/M3) — bumped
+#: so already-registered groups re-validate via validator_version_change instead
+#: of silently keeping a stale pre-fix outcome.
+VALIDATOR_VERSION = "t127.2"
 
 ValidationOutcome = Literal["passed", "warning", "failed"]
 
@@ -220,6 +224,13 @@ SINGLE_FILE_TEXT_PROFILES: dict[str, TextMemberProfile] = {
     "detail_address_db_full": TextMemberProfile(
         required_prefixes=(("adrdc_", 17),),
     ),
+    # #307 M3 residual gap: _count_with_prefix's .txt-extension constraint (below)
+    # closes the SPPN_*.txt.md5 checksum-sidecar false positive, but a same-prefix
+    # genuinely-.txt auxiliary file (e.g. SPPN_README.txt) still satisfies this
+    # count=1 requirement and would silently pass with zero real grid-center data.
+    # Narrowing further (e.g. requiring a date/digit token right after SPPN_,
+    # matching real filenames like SPPN_20240508.TXT) needs confirmed real-world
+    # naming coverage first — left as a known limitation, not a blind regex guess.
     "national_point_grid_center": TextMemberProfile(
         required_prefixes=(("SPPN_", 1),),
     ),
@@ -254,8 +265,16 @@ LAYER_PROFILES["national_point_grid_shape"] = LayerProfile(
 
 
 def _count_with_prefix(filenames: tuple[str, ...], prefix: str) -> int:
+    # T-127 후속(#307 M3): 확장자 제약 없는 startswith는 SPPN_*.txt.md5 같은
+    # 체크섬/보조 파일까지 카운트해 실 데이터 TXT 부재를 가릴 수 있었다. 이
+    # 모듈의 모든 프로필이 텍스트 원천이므로 .txt 제약을 전역으로 건다.
     lower = prefix.lower()
-    return sum(1 for name in filenames if _basename(name).lower().startswith(lower))
+    count = 0
+    for name in filenames:
+        basename = _basename(name).lower()
+        if basename.startswith(lower) and basename.endswith(".txt"):
+            count += 1
+    return count
 
 
 def _basename(member_path: str) -> str:
@@ -274,6 +293,12 @@ def _validate_text_part(
         found = _count_with_prefix(filenames, prefix)
         if found == 0:
             reasons.append(f"필수 member 누락: {prefix}*")
+            outcome = "failed"
+        elif expected is not None and found < expected:
+            # T-127 후속(#307 M2): count 부족은 부분/잘린 archive일 수 있어
+            # 비차단 warning이 아니라 failed로 승격한다. 개수 초과는 누락이
+            # 아니므로(부가 파일이 더 있을 뿐) warning으로 그대로 둔다.
+            reasons.append(f"{prefix}* {found}개 (기대 {expected}개, 원천 불완전)")
             outcome = "failed"
         elif expected is not None and found != expected:
             warnings.append(f"{prefix}* {found}개 (기대 {expected}개)")

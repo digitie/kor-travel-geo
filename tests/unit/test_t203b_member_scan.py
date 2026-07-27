@@ -64,6 +64,31 @@ def test_scan_extracts_layer_name_from_supplier_filename(tmp_path: Path) -> None
     assert all(not layer.startswith("TOTAL") for layer in part.layer_names())
 
 
+def test_scan_extracts_grid_shape_layer_name_from_supplier_filename(tmp_path: Path) -> None:
+    """T-127 후속(#307 M1): TL_SPPN_GRID_*가 _KNOWN_LAYER_NAMES 미등록이라
+    supplier가 파일명을 감싸면(nationwide_TL_SPPN_GRID_1KM) canonical 불일치로
+    failed 오분류됐다."""
+    archive = tmp_path / "grid-shape.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        for layer in (
+            "TL_SPPN_GRID_100KM",
+            "TL_SPPN_GRID_10KM",
+            "TL_SPPN_GRID_1KM",
+            "TL_SPPN_GRID_100M",
+        ):
+            for ext in (".shp", ".shx", ".dbf"):
+                zf.writestr(f"nationwide_{layer}{ext}", b"x")
+
+    part = scan_part_manifest(archive, part_key="archive")
+
+    assert part.layer_names() == {
+        "TL_SPPN_GRID_100KM",
+        "TL_SPPN_GRID_10KM",
+        "TL_SPPN_GRID_1KM",
+        "TL_SPPN_GRID_100M",
+    }
+
+
 def test_scan_recovers_cp949_zip_member_names() -> None:
     original = "민원행정기관_202401.shp"
     mojibake = original.encode("cp949").decode("cp437")
