@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from kortravelgeo.exceptions import InvalidInputError
 from scripts import benchmark_backup_restore as bench
 
 if TYPE_CHECKING:
@@ -100,6 +101,75 @@ def test_summarize_results_picks_fastest_and_smallest_archive() -> None:
     assert row.smallest_archive_profile_id == "serving_ready_j4_z19"
     assert row.best_compression_ratio_profile_id == "serving_ready_j4_z19"
     assert "총 소요시간 최단" in row.low_power_note
+
+
+async def test_drop_database_refuses_to_drop_operational_database() -> None:
+    dsn = "postgresql+psycopg://user:pass@localhost:5432/kor_travel_geo"
+
+    with pytest.raises(InvalidInputError, match="must differ from the current database"):
+        await bench.drop_database(dsn, "kor_travel_geo")
+
+
+async def test_drop_database_forwards_connect_timeout_to_admin_exec(monkeypatch) -> None:
+    calls: list[int] = []
+
+    async def fake_admin_exec(
+        dsn: str,
+        statement: str,
+        params: dict[str, object] | None = None,
+        *,
+        connect_timeout_s: int = 10,
+    ) -> None:
+        _ = (dsn, statement, params)
+        calls.append(connect_timeout_s)
+
+    monkeypatch.setattr(bench, "_admin_exec", fake_admin_exec)
+    dsn = "postgresql+psycopg://user:pass@localhost:5432/kor_travel_geo"
+
+    await bench.drop_database(dsn, "kor_travel_geo_other", connect_timeout_s=42)
+
+    assert calls == [42, 42]
+
+
+async def test_create_database_forwards_connect_timeout_to_admin_exec(monkeypatch) -> None:
+    calls: list[int] = []
+
+    async def fake_admin_exec(
+        dsn: str,
+        statement: str,
+        params: dict[str, object] | None = None,
+        *,
+        connect_timeout_s: int = 10,
+    ) -> None:
+        _ = (dsn, statement, params)
+        calls.append(connect_timeout_s)
+
+    monkeypatch.setattr(bench, "_admin_exec", fake_admin_exec)
+    dsn = "postgresql+psycopg://user:pass@localhost:5432/kor_travel_geo"
+
+    await bench.create_database(dsn, "kor_travel_geo_other", connect_timeout_s=42)
+
+    assert calls == [42]
+
+
+def test_invalid_jobs_exits_cleanly_instead_of_raw_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        bench.main(["--jobs", "999", "--output-dir", str(tmp_path)])
+
+    assert exc_info.value.code == 2
+    assert "jobs must be between 1 and 64" in capsys.readouterr().err
+
+
+def test_invalid_compression_level_exits_cleanly_instead_of_raw_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        bench.main(["--compression-level", "99", "--output-dir", str(tmp_path)])
+
+    assert exc_info.value.code == 2
+    assert "compression level must be between 1 and 19" in capsys.readouterr().err
 
 
 def _result(

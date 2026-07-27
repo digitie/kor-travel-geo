@@ -29,6 +29,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from kortravelgeo.exceptions import InvalidInputError  # noqa: E402
 from kortravelgeo.infra.admin_repo import AdminRepository  # noqa: E402
 from kortravelgeo.infra.backup import (  # noqa: E402
     BACKUP_ARTIFACT_TYPE,
@@ -342,7 +343,18 @@ def report_to_json(report: BackupRestoreBenchmarkReport) -> str:
 
 
 async def _async_main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    for job_count in args.jobs or DEFAULT_JOBS:
+        try:
+            _validate_jobs(job_count)
+        except ValueError as exc:
+            parser.error(str(exc))
+    for compression_level in args.compression_level or DEFAULT_COMPRESSION_LEVELS:
+        try:
+            _validate_compression_level(compression_level)
+        except ValueError as exc:
+            parser.error(str(exc))
     run_id = args.run_id or datetime.now(UTC).strftime("t247-backup-restore-%Y%m%dT%H%M%SZ")
     output_dir = args.output_dir or Path("artifacts") / "perf" / run_id
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -392,6 +404,7 @@ async def _async_main(argv: Sequence[str] | None = None) -> int:
                 run_smoke_test=not args.no_smoke_test,
                 run_row_count_check=not args.no_row_count_check,
                 continue_on_error=args.continue_on_error,
+                connect_timeout_s=args.connect_timeout_s,
             )
         finally:
             await engine.dispose()
@@ -447,6 +460,7 @@ async def _execute_matrix(
     run_smoke_test: bool,
     run_row_count_check: bool,
     continue_on_error: bool,
+    connect_timeout_s: int,
 ) -> tuple[BackupRestoreResult, ...]:
     results: list[BackupRestoreResult] = []
     for item in plan:
@@ -462,6 +476,7 @@ async def _execute_matrix(
                     run_analyze=run_analyze,
                     run_smoke_test=run_smoke_test,
                     run_row_count_check=run_row_count_check,
+                    connect_timeout_s=connect_timeout_s,
                 )
             )
         except Exception as exc:
@@ -482,6 +497,7 @@ async def _execute_item(
     run_analyze: bool,
     run_smoke_test: bool,
     run_row_count_check: bool,
+    connect_timeout_s: int,
 ) -> BackupRestoreResult:
     repo = AdminRepository(engine)
     display_name = f"{run_id}_{item.profile_id}_{uuid4().hex[:8]}.tar.zst"
@@ -507,8 +523,12 @@ async def _execute_item(
         output_dir / "size-probe" / item.profile_id,
     )
     size_probe_seconds = time.perf_counter() - size_started
-    await drop_database(settings.pg_dsn, item.target_database)
-    await create_database(settings.pg_dsn, item.target_database)
+    await drop_database(
+        settings.pg_dsn, item.target_database, connect_timeout_s=connect_timeout_s
+    )
+    await create_database(
+        settings.pg_dsn, item.target_database, connect_timeout_s=connect_timeout_s
+    )
     try:
         restore_payload = {
             "artifact_id": artifact.artifact_id,
@@ -523,7 +543,9 @@ async def _execute_item(
         await run_restore_job(engine, settings, restore_payload, asyncio.Event(), _noop_progress)
         restore_seconds = time.perf_counter() - restore_started
     finally:
-        await drop_database(settings.pg_dsn, item.target_database)
+        await drop_database(
+            settings.pg_dsn, item.target_database, connect_timeout_s=connect_timeout_s
+        )
     return BackupRestoreResult(
         profile_id=item.profile_id,
         profile=item.profile,
@@ -568,27 +590,47 @@ async def _dump_size_from_archive(archive_path: Path, work_dir: Path) -> int:
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
-async def create_database(dsn: str, database: str) -> None:
+async def create_database(dsn: str, database: str, *, connect_timeout_s: int = 10) -> None:
     database = validate_database_identifier(database, "target_database")
-    await _admin_exec(dsn, f"CREATE DATABASE {quote_database_identifier(database)}")
+    await _admin_exec(
+        dsn,
+        f"CREATE DATABASE {quote_database_identifier(database)}",
+        connect_timeout_s=connect_timeout_s,
+    )
 
 
-async def drop_database(dsn: str, database: str) -> None:
+async def drop_database(dsn: str, database: str, *, connect_timeout_s: int = 10) -> None:
     database = validate_database_identifier(database, "target_database")
+    current_database = database_name_from_dsn(dsn)
+    if current_database == database:
+        msg = "benchmark target_database must differ from the current database"
+        raise InvalidInputError(msg)
     await _admin_exec(
         dsn,
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
         "WHERE datname = :database AND pid <> pg_backend_pid()",
         {"database": database},
+        connect_timeout_s=connect_timeout_s,
     )
-    await _admin_exec(dsn, f"DROP DATABASE IF EXISTS {quote_database_identifier(database)}")
+    await _admin_exec(
+        dsn,
+        f"DROP DATABASE IF EXISTS {quote_database_identifier(database)}",
+        connect_timeout_s=connect_timeout_s,
+    )
 
 
-async def _admin_exec(dsn: str, statement: str, params: dict[str, object] | None = None) -> None:
+async def _admin_exec(
+    dsn: str,
+    statement: str,
+    params: dict[str, object] | None = None,
+    *,
+    connect_timeout_s: int = 10,
+) -> None:
     url = make_url(dsn)
     engine = create_async_engine(
         str(url.set(database="postgres")),
         isolation_level="AUTOCOMMIT",
+        connect_args={"connect_timeout": connect_timeout_s},
     )
     try:
         async with engine.connect() as conn:
