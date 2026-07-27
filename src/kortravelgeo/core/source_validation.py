@@ -41,7 +41,11 @@ from kortravelgeo.core.source_layers import (
 
 #: Bumped whenever the decision logic / profile expectations change so that
 #: previously ``passed`` validations can be re-run (doc "validator_version").
-VALIDATOR_VERSION = "t127.1"
+#: #307 (T-127 후속 M1/M2/M3) changed decision logic for national_point_grid_shape
+#: (M1) and every SINGLE_FILE_TEXT_PROFILES required-prefix check (M2/M3) — bumped
+#: so already-registered groups re-validate via validator_version_change instead
+#: of silently keeping a stale pre-fix outcome.
+VALIDATOR_VERSION = "t127.2"
 
 ValidationOutcome = Literal["passed", "warning", "failed"]
 
@@ -220,6 +224,13 @@ SINGLE_FILE_TEXT_PROFILES: dict[str, TextMemberProfile] = {
     "detail_address_db_full": TextMemberProfile(
         required_prefixes=(("adrdc_", 17),),
     ),
+    # #307 M3 residual gap: _count_with_prefix's .txt-extension constraint (below)
+    # closes the SPPN_*.txt.md5 checksum-sidecar false positive, but a same-prefix
+    # genuinely-.txt auxiliary file (e.g. SPPN_README.txt) still satisfies this
+    # count=1 requirement and would silently pass with zero real grid-center data.
+    # Narrowing further (e.g. requiring a date/digit token right after SPPN_,
+    # matching real filenames like SPPN_20240508.TXT) needs confirmed real-world
+    # naming coverage first — left as a known limitation, not a blind regex guess.
     "national_point_grid_center": TextMemberProfile(
         required_prefixes=(("SPPN_", 1),),
     ),

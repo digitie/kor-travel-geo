@@ -404,6 +404,19 @@ def test_t127_detail_address_db_profile_requires_17_adrdc_files() -> None:
     assert result.outcome == "failed"
     assert any("adrdc_" in r and "원천 불완전" in r for p in result.parts for r in p.reasons)
 
+    # M2 fix is scoped to shortfall (found < expected) only — an excess (extra
+    # files present, not missing data) must stay the pre-existing warning, not
+    # be promoted to failed too.
+    excess_members = (*members, ManifestMember(member_path="adrdc_17.txt"))
+    excess = GroupManifest(
+        category="detail_address_db_full",
+        group_kind="single_file",
+        parts=(PartManifest(part_key="archive", members=excess_members),),
+    )
+    excess_result = validate_group_manifest(excess)
+    assert excess_result.outcome == "warning"
+    assert any("adrdc_" in w for p in excess_result.parts for w in p.warnings)
+
 
 def test_t127_national_point_grid_shape_requires_four_layers_and_sidecars() -> None:
     layers = tuple(
@@ -481,6 +494,29 @@ def test_t127_national_point_grid_center_ignores_non_txt_auxiliary_files() -> No
 
     assert result.outcome == "failed"
     assert any("SPPN_" in r for p in result.parts for r in p.reasons)
+
+
+def test_t127_national_point_grid_center_known_gap_sppn_readme_still_passes() -> None:
+    """T-127 후속(#307 M3, 리뷰에서 확인된 잔존 gap): .txt 확장자 제약은
+    SPPN_checksums.txt.md5 같은 비-TXT 보조 파일은 막지만, SPPN_README.txt처럼
+    진짜 .txt로 끝나는 보조 문서는 여전히 count를 만족시켜 passed로 통과한다.
+    #307의 수용 기준 문구("비-TXT 보조 파일이 count되지 않음")는 문자 그대로
+    충족하지만, 실 데이터 부재를 완전히 막지는 못하는 알려진 한계 — 이 테스트는
+    그 경계를 명시적으로 고정해 향후 우연한 회귀/착각을 막는다."""
+    manifest = GroupManifest(
+        category="national_point_grid_center",
+        group_kind="single_file",
+        parts=(
+            PartManifest(
+                part_key="archive",
+                members=(ManifestMember(member_path="SPPN_README.txt"),),
+            ),
+        ),
+    )
+
+    result = validate_group_manifest(manifest)
+
+    assert result.outcome == "passed"
 
 
 def test_t127_civil_service_institution_map_requires_one_shp_layer() -> None:
