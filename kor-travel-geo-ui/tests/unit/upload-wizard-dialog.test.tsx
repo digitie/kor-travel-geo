@@ -134,6 +134,21 @@ describe("UploadWizardDialog (#201)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "등록" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "등록" }));
 
+    // Live e2e regression: the real backend rejects register with 400 unless
+    // confirm_user_yyyymm matches the session's own user_yyyymm — the mock above accepts
+    // any body, so only an explicit assertion on the actual call catches a missing field.
+    await waitFor(() =>
+      expect(
+        apiMocks.postJson.mock.calls.some(
+          (call: unknown[]) =>
+            typeof call[0] === "string" &&
+            (call[0] as string).includes("/register") &&
+            (call[1] as { confirm_user_yyyymm?: string } | undefined)?.confirm_user_yyyymm ===
+              "202605"
+        )
+      ).toBe(true)
+    );
+
     // #201 review fix: the success screen must render and stay open (not vanish because
     // the parent's onCompleted synchronously flips `open` to false) — onCompleted only
     // fires once the user explicitly dismisses the success screen.

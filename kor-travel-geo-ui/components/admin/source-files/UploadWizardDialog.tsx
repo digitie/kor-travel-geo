@@ -121,8 +121,10 @@ export function UploadWizardDialog({
   });
 
   const registerSession = useMutation({
-    mutationFn: (sessionId: string) =>
-      postJson<UploadSessionStatus>(sourceFilesPaths.registerSession(sessionId), {})
+    mutationFn: ({ sessionId, userYyyymm }: { sessionId: string; userYyyymm: string }) =>
+      postJson<UploadSessionStatus>(sourceFilesPaths.registerSession(sessionId), {
+        confirm_user_yyyymm: userYyyymm
+      })
   });
 
   function handleOpenChange(next: boolean) {
@@ -193,7 +195,10 @@ export function UploadWizardDialog({
     if (!session) return;
     dispatch({ busy: true, error: null });
     try {
-      const result = await registerSession.mutateAsync(session.upload_session_id);
+      const result = await registerSession.mutateAsync({
+        sessionId: session.upload_session_id,
+        userYyyymm: session.user_yyyymm
+      });
       dispatch({ busy: false, registered: result });
       toast.success("업로드 완료", "세션이 등록되었습니다.");
       void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });

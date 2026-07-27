@@ -264,7 +264,7 @@ export function UploadTab() {
       // After upload completes, register the session into the registry.
       const registered = await postJson<UploadSessionStatus>(
         sourceFilesPaths.registerSession(session.upload_session_id),
-        {}
+        { confirm_user_yyyymm: session.user_yyyymm }
       );
       toast.success("업로드 완료", "세션이 등록되었습니다.");
       dispatchView({
