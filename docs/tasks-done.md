@@ -6,6 +6,23 @@
 
 ## 완료
 
+- [x] **이슈 #501 — RustFS multipart upload_part가 create_multipart_upload 직후 항상 실패** (2026-07-27,
+  코드 변경 없음) — #201 live e2e 도중 발견한 것을 별도 이슈로 등록했다가 근본 원인을 재조사해 정정·종료.
+  처음엔 `kortravelgeo/infra/rustfs.py`의 자체 SigV4 서명 구현 버그로 의심했으나, boto3(검증된 AWS SDK)로
+  동일 RustFS endpoint(`127.0.0.1:12101`)에 대해 같은 multipart 플로우를 직접 재현해도 똑같이
+  `NoSuchUpload`가 나 이 저장소 코드 문제가 아님을 확정. 더 파보니 그 endpoint의 RustFS 인스턴스
+  (컨테이너명이 `pinvi-app-app-rustfs-1`로 다른 프로젝트 소유)에 **`kor-travel-geo` bucket 자체가
+  없었다**(`pinvi-media` bucket만 존재) — `docs/ports.md`가 전제하는 "이미 동작 중인 bucket"이 어느 시점엔가
+  유실됐거나 애초에 생성되지 않았던 것. RustFS 1.0.0-beta.8이 `CreateMultipartUpload`에서는 bucket 존재를
+  검증하지 않아 겉보기엔 성공(200 + 진짜 같은 UploadId)하지만 이후 모든 호출(`UploadPart`/`ListParts`/
+  `ListObjectsV2`/`HeadBucket`)은 정상적으로 실패를 반환하던 것이 크래시의 실체였다. boto3로 `kor-travel-geo`
+  bucket을 생성(기존 `pinvi-media` bucket 무관·비파괴적)한 뒤 KTG 자체 코드로 세션 생성→multipart 업로드
+  (6MB 실 파일)→complete→`preview-validate`까지 전체 happy path를 재현해 전부 200·`outcome: "passed"`로
+  정상 동작 확인. 이 저장소 코드에는 수정할 것이 없어(별도 PR 없음) 로컬 dev 공유 RustFS 인스턴스의 bucket
+  provisioning만 보완하고 이슈를 닫았다. RustFS 1.0.0-beta.8이 존재하지 않는 bucket에 대한
+  `CreateMultipartUpload`를 조용히 성공시키는 완화된 검증은 RustFS 쪽 특성으로 남아있어, 같은 환경 드리프트가
+  재발하면 동일한 증상(초기 단계는 성공, 후속 단계에서만 실패)으로 다시 나타날 수 있다.
+
 - [x] **이슈 #201 — T-224 후속: source category wizard + drag-and-drop 검증 프리뷰** (2026-07-27) —
   PR #502(적대적 리뷰 워크플로우 병렬 2명, `9613184`). 원천 파일 업로드 탭에 카테고리 선택 →
   기준년월 → 파일 업로드(드래그앤드롭/클릭) · 사전 점검 → 확인·등록 4단계 마법사(`UploadWizardDialog`)를
