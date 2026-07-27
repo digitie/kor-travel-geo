@@ -109,8 +109,10 @@ from .dto.source import (
     SourceRebuildDbResponse,
     SourceReconcileItem,
     SourceReconcileRun,
+    UploadPreviewPartValidation,
     UploadSessionCreateRequest,
     UploadSessionPartStatus,
+    UploadSessionPreviewValidationResult,
     UploadSessionStatus,
 )
 from .dto.v2 import (
@@ -1099,6 +1101,74 @@ class AsyncAddressClient:
             decision = validate_group_manifest(manifest)
         return await revalidate_group(
             self._engine(), source_file_group_id, decision=decision, actor=actor
+        )
+
+    async def preview_validate_upload_session(
+        self,
+        upload_session_id: str,
+    ) -> UploadSessionPreviewValidationResult:
+        """Structure-validation preview for an upload session's already-uploaded
+        (not yet registered) slots (#201 — drag-drop validation preview).
+
+        Same mechanism as :meth:`revalidate_source_file_group` (materialize each
+        completed slot from RustFS to a temp dir, GDAL-free zip/dir listing, pure
+        decision logic) applied to a session's slots instead of a registered
+        group's children. Nothing is persisted — call again any time slot state
+        changes, e.g. after a new file is dropped.
+        """
+        import tempfile
+        from pathlib import Path
+
+        from .core.source_validation import VALIDATOR_VERSION, validate_group_manifest
+        from .infra.rustfs import RustfsClient, require_enabled_rustfs
+        from .infra.source_janitor import _staging_object_key
+        from .infra.source_member_scan import scan_group_manifest
+
+        session = await self.get_upload_session(upload_session_id)
+        config = (
+            require_enabled_rustfs(self.settings) if session.storage_kind == "rustfs" else None
+        )
+        rustfs = RustfsClient(config) if config is not None else None
+
+        with tempfile.TemporaryDirectory(prefix="ktg-preview-validate-") as tmp:
+            parts: dict[str, Path] = {}
+            for slot in session.file_slots:
+                slot_parts = await self.upload_session_slot_parts(
+                    session.upload_session_id, part_key=slot.part_key
+                )
+                if not any(p.completed_at is not None for p in slot_parts):
+                    continue
+                object_key = _staging_object_key(
+                    prefix=config.prefix if config else None,
+                    category=session.category,
+                    user_yyyymm=session.user_yyyymm,
+                    source_file_group_id=session.source_file_group_id,
+                    session_id=session.upload_session_id,
+                    part_key=slot.part_key,
+                )
+                dest = Path(tmp) / slot.part_key / (slot.part_label or slot.part_key)
+                if rustfs is not None:
+                    await rustfs.download_file(object_key, dest)
+                parts[slot.part_key] = dest
+            manifest = scan_group_manifest(
+                category=session.category, group_kind=session.group_kind, parts=parts
+            )
+            decision = validate_group_manifest(manifest)
+
+        return UploadSessionPreviewValidationResult(
+            upload_session_id=session.upload_session_id,
+            category=session.category,
+            outcome=decision.outcome,
+            parts=tuple(
+                UploadPreviewPartValidation(
+                    part_key=part.part_key,
+                    outcome=part.outcome,
+                    reasons=part.reasons,
+                    warnings=part.warnings,
+                )
+                for part in decision.parts
+            ),
+            validator_version=VALIDATOR_VERSION,
         )
 
     async def soft_delete_source_file_group(

@@ -20,8 +20,10 @@ from kortravelgeo.dto.source import (
     GroupValidationResult,
     RegisterResponse,
     SourceFileRegistered,
+    UploadPreviewPartValidation,
     UploadSessionFileSlot,
     UploadSessionPartStatus,
+    UploadSessionPreviewValidationResult,
     UploadSessionStatus,
 )
 from kortravelgeo.settings import Settings, get_settings, reset_settings, set_settings
@@ -130,6 +132,15 @@ class _FakeClient:
             validator_version="t203b.1",
         )
 
+    async def preview_validate_upload_session(self, sid: str):  # type: ignore[no-untyped-def]
+        return UploadSessionPreviewValidationResult(
+            upload_session_id=sid,
+            category="roadname_hangul_full",
+            outcome="passed",
+            parts=(UploadPreviewPartValidation(part_key="archive", outcome="passed"),),
+            validator_version="t127.2",
+        )
+
     async def update_upload_session_state(self, *_a, **_k):  # type: ignore[no-untyped-def]
         return _session(state="failed_register")
 
@@ -187,6 +198,33 @@ async def test_register_happy_path_returns_group() -> None:
     assert client.registered is True
     assert client.last_structure is not None
     assert client.last_structure.outcome == "passed"
+
+
+@pytest.mark.asyncio
+async def test_preview_validate_requires_manager_role() -> None:
+    transport = _transport(_FakeClient())
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.post(
+            "/v1/admin/source-files/upload-sessions/source_upload_abc/preview-validate",
+            headers={"X-KTG-Actor": "bob", "X-KTG-Roles": "source_file_viewer"},
+        )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_preview_validate_happy_path() -> None:
+    client = _FakeClient()
+    transport = _transport(client)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.post(
+            "/v1/admin/source-files/upload-sessions/source_upload_abc/preview-validate",
+            headers=_MANAGER_HEADERS,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["outcome"] == "passed"
+    assert body["parts"][0]["part_key"] == "archive"
+    assert "source.upload_session_preview_validate" in client.audit_calls
 
 
 @pytest.mark.asyncio

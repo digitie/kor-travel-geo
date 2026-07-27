@@ -12404,6 +12404,51 @@
         "title": "UploadPartResponse",
         "type": "object"
       },
+      "UploadPreviewPartValidation": {
+        "additionalProperties": false,
+        "description": "Per-slot structure-validation outcome inside a preview (#201).",
+        "properties": {
+          "outcome": {
+            "enum": [
+              "unknown",
+              "not_started",
+              "running",
+              "passed",
+              "warning",
+              "failed",
+              "skipped"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "part_key": {
+            "title": "Part Key",
+            "type": "string"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "part_key",
+          "outcome"
+        ],
+        "title": "UploadPreviewPartValidation",
+        "type": "object"
+      },
       "UploadSessionCreateRequest": {
         "additionalProperties": false,
         "description": "``POST /v1/admin/source-files/upload-sessions`` body.\n\n``user_yyyymm`` is server-mandatory (``^\\d{6}$``): the backend never fills a\nmissing month from the filename or the current date (doc line 1259).",
@@ -12566,6 +12611,71 @@
           "slot"
         ],
         "title": "UploadSessionFileSlot",
+        "type": "object"
+      },
+      "UploadSessionPreviewValidationResult": {
+        "additionalProperties": false,
+        "description": "``POST .../upload-sessions/{id}/preview-validate`` response (#201).\n\nA transient, read-only structure-validation preview run against an upload\nsession's already-uploaded (not yet registered) slots — lets the UI show\npass/warning/failed before the user commits via ``register``. Nothing is\npersisted; call again any time slot state changes (unlike\n:class:`GroupValidationResult`, which is for an already-registered group).",
+        "properties": {
+          "category": {
+            "enum": [
+              "roadname_hangul_full",
+              "locsum_full",
+              "navi_full",
+              "electronic_map_full",
+              "roadaddr_entrance_full",
+              "zone_shape_full",
+              "roadaddr_building_shape_bundle",
+              "detail_dong_shape_bundle",
+              "detail_address_db_full",
+              "national_point_grid_shape",
+              "national_point_grid_center",
+              "civil_service_institution_map",
+              "address_db_full",
+              "building_db_full",
+              "epost_pobox_full",
+              "epost_bulk_full"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "unknown",
+              "not_started",
+              "running",
+              "passed",
+              "warning",
+              "failed",
+              "skipped"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "parts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UploadPreviewPartValidation"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "upload_session_id": {
+            "title": "Upload Session Id",
+            "type": "string"
+          },
+          "validator_version": {
+            "title": "Validator Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_session_id",
+          "category",
+          "outcome",
+          "validator_version"
+        ],
+        "title": "UploadSessionPreviewValidationResult",
         "type": "object"
       },
       "UploadSessionStatus": {
@@ -18436,6 +18546,49 @@
           }
         },
         "summary": "Replace Upload Slot",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/source-files/upload-sessions/{upload_session_id}/preview-validate": {
+      "post": {
+        "description": "Read-only structure-validation preview for an upload session's already-\nuploaded (not yet registered) slots (#201 — drag-drop validation preview).\n\nSame GDAL-free zip/dir listing + pure decision logic as ``.../validate``\n(below), applied to a session's not-yet-committed slots instead of a\nregistered group's children. Nothing is persisted — the UI can call this\nany time slot state changes (e.g. after a new file is dropped) to preview\npass/warning/failed before the user commits via ``register``.",
+        "operationId": "preview_validate_upload_session_v1_admin_source_files_upload_sessions__upload_session_id__preview_validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "upload_session_id",
+            "required": true,
+            "schema": {
+              "title": "Upload Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadSessionPreviewValidationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "Legacy validation error envelope"
+          }
+        },
+        "summary": "Preview Validate Upload Session",
         "tags": [
           "admin"
         ]

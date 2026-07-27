@@ -35,3 +35,5 @@ data/
 *.sqlite3
 
 rebuild_staging/
+
+.playwright-mcp/
