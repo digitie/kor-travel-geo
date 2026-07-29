@@ -40,12 +40,14 @@ metadata만 저장하고 plaintext key는 생성 응답에서 한 번만 반환�
 요청 key로 저장한다. 공개 API key 검증은 요청마다 DB의 활성 key hash를 조회해 생성·폐기 상태를
 즉시 반영한다.
 
-v1/v2 REST API는 외부/비신뢰 클라이언트에 query parameter `key`를 필수로 요구한다. DB에
-활성 공개 API key가 하나 이상 있으면 그 DB key만 유효하다. 활성 DB key가 아직 없으면
-`KTG_VWORLD_API_KEY`가 기본 key로 동작한다. 단, admin API와 같은 trusted proxy identity
-(`X-KTG-Actor`/`X-KTG-Roles`, optional `X-KTG-Admin-Proxy-Secret`)가 확인된 요청은 같은
-로컬 운영 UI 흐름으로 보고 공개 API key 검증을 우회한다. v1은 vworld 호환 error envelope로,
-v2는 구조화 error envelope로 실패를 반환한다.
+v1/v2 REST API는 외부/비신뢰 클라이언트에 공개 API key를 필수로 요구한다. 브라우저와 VWorld
+호환 클라이언트는 query parameter `key`, 서버 간 호출은 `X-KTG-API-Key` header를 사용한다.
+두 위치를 함께 보내면 값이 같아야 하며, 다르면 요청을 거부한다. 이 header는 public endpoint
+인증에만 쓰고 Admin API 역할은 부여하지 않는다. DB에 활성 공개 API key가 하나 이상 있으면
+그 DB key만 유효하다. 활성 DB key가 아직 없으면 `KTG_VWORLD_API_KEY`가 기본 key로 동작한다.
+단, admin API와 같은 trusted proxy identity(`X-KTG-Actor`/`X-KTG-Roles`, optional
+`X-KTG-Admin-Proxy-Secret`)가 확인된 요청은 같은 로컬 운영 UI 흐름으로 보고 공개 API key
+검증을 우회한다. v1은 vworld 호환 error envelope로, v2는 구조화 error envelope로 실패를 반환한다.
 
 ## 근거
 

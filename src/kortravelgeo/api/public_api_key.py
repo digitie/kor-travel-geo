@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import Annotated
 
-from fastapi import Depends, Query, Request
+from fastapi import Depends, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -18,6 +19,8 @@ from kortravelgeo.infra.public_api_keys import (
 )
 from kortravelgeo.settings import Settings, get_settings
 
+PUBLIC_API_KEY_HEADER = "X-KTG-API-Key"
+
 
 async def require_public_api_key(
     request: Request,
@@ -25,27 +28,43 @@ async def require_public_api_key(
     key: str | None = Query(
         default=None,
         alias=PUBLIC_API_KEY_QUERY_PARAM,
-        description="외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+        description=(
+            "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다."
+        ),
+    ),
+    header_key: str | None = Header(
+        default=None,
+        alias=PUBLIC_API_KEY_HEADER,
+        description="서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
     ),
 ) -> None:
     """Require a valid public API key for public REST endpoints."""
 
     if _trusted_public_client(request, settings):
         return
-    _validate_public_api_key_shape(key)
-    assert key is not None
+    api_key = _resolve_public_api_key(key, header_key)
+    _validate_public_api_key_shape(api_key)
+    assert api_key is not None
     engine = _engine_from_request(request)
     if engine is not None:
         active_hashes = await PublicApiKeyRepository(engine).active_key_hashes()
     else:
         active_hashes = frozenset()
     effective_hashes = active_hashes or _vworld_default_key_hashes(settings)
-    if not effective_hashes or not public_api_key_matches(key, effective_hashes):
+    if not effective_hashes or not public_api_key_matches(api_key, effective_hashes):
         raise ApiKeyError("VWorld 호환 인증키가 유효하지 않습니다.")
 
 
 def _trusted_public_client(request: Request, settings: Settings) -> bool:
     return resolve_request_context(request, settings) is not None
+
+
+def _resolve_public_api_key(query_key: str | None, header_key: str | None) -> str | None:
+    if query_key is not None and header_key is not None:
+        if not hmac.compare_digest(query_key, header_key):
+            raise ApiKeyError("공개 API 인증키 전달값이 서로 다릅니다.")
+        return header_key
+    return header_key if header_key is not None else query_key
 
 
 def _validate_public_api_key_shape(key: str | None) -> None:

@@ -22,7 +22,9 @@
 
 - 한 코어(`core/`) 위에 두 인터페이스(Python 라이브러리, REST API)를 노출한다. 두 인터페이스는 같은 함수를 호출하므로 동작이 갈리지 않는다.
 - 프론트엔드는 자체 DB 연결을 갖지 않는다. 모든 DB 접근은 `AsyncAddressClient.engine` 하나의 SQLAlchemy 2 async engine을 통과한다 — 디버거에서 본 EXPLAIN 결과가 운영 쿼리와 같은 환경에서 평가된다.
-- REST v1/v2 공개 주소 API는 외부/비신뢰 클라이언트에 query parameter `key`를 필수로 요구한다.
+- REST v1/v2 공개 주소 API는 외부/비신뢰 클라이언트에 브라우저/VWorld 호환 query parameter
+  `key` 또는 서버 간 호출용 `X-KTG-API-Key` header를 필수로 요구한다. 이 header는 public
+  endpoint 인증에만 쓰이며 Admin API 역할을 부여하지 않는다.
   Admin UI에서 생성한 공개 API key가 DB에 있으면 그 key만 유효하고, 아직 생성된 DB key가 없으면
   `KTG_VWORLD_API_KEY`가 기본 key다. trusted proxy identity가 확인된 UI 요청은 Admin API와
   같은 기준으로 key 검증을 우회한다.

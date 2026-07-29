@@ -9,7 +9,7 @@ from pydantic import SecretStr
 
 from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
-from kortravelgeo.api.public_api_key import require_public_api_key
+from kortravelgeo.api.public_api_key import PUBLIC_API_KEY_HEADER, require_public_api_key
 from kortravelgeo.api.responses import register_exception_handlers
 from kortravelgeo.api.security import ROLE_SOURCE_FILE_VIEWER, require_role
 from kortravelgeo.dto.v2 import GeocodeV2Input, GeocodeV2Response
@@ -103,6 +103,62 @@ async def test_v2_accepts_vworld_default_key_when_no_db_key_exists() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "OK"
+
+
+@pytest.mark.asyncio
+async def test_v2_accepts_public_api_key_header_for_server_clients() -> None:
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: _FakeV2Client()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v2/geocode",
+            headers={PUBLIC_API_KEY_HEADER: _VWORLD_DEFAULT_KEY},
+            json={"query": "서울시청"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "OK"
+
+
+@pytest.mark.asyncio
+async def test_v2_rejects_conflicting_query_and_header_keys() -> None:
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: _FakeV2Client()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v2/geocode",
+            params={"key": _VWORLD_DEFAULT_KEY},
+            headers={PUBLIC_API_KEY_HEADER: "different-key"},
+            json={"query": "서울시청"},
+        )
+
+    payload = response.json()
+    assert response.status_code == 401
+    assert payload["error"]["code"] == "E0401"
+    assert _VWORLD_DEFAULT_KEY not in response.text
+    assert "different-key" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_public_api_key_header_does_not_authorize_admin_route() -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+    viewer_dep = Depends(require_role(ROLE_SOURCE_FILE_VIEWER))
+
+    @app.get("/v1/admin/probe")
+    async def probe(_ctx: Any = viewer_dep) -> dict[str, bool]:
+        return {"ok": True}
+
+    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/v1/admin/probe",
+            headers={PUBLIC_API_KEY_HEADER: _VWORLD_DEFAULT_KEY},
+        )
+
+    assert response.status_code == 403
 
 
 @pytest.mark.asyncio

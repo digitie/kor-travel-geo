@@ -13775,7 +13775,7 @@
             }
           },
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -13788,8 +13788,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
@@ -13916,7 +13934,7 @@
             }
           },
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -13929,8 +13947,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
@@ -14082,7 +14118,7 @@
             }
           },
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -14095,8 +14131,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
@@ -14217,7 +14271,7 @@
             }
           },
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -14230,8 +14284,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
@@ -14346,7 +14418,7 @@
             }
           },
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -14359,8 +14431,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
@@ -19769,7 +19859,7 @@
         "operationId": "geocode_v2_v2_geocode_post",
         "parameters": [
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -19782,8 +19872,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
@@ -19830,7 +19938,7 @@
         "operationId": "regions_within_radius_v2_v2_regions_within_radius_post",
         "parameters": [
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -19843,8 +19951,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
@@ -19891,7 +20017,7 @@
         "operationId": "reverse_v2_v2_reverse_post",
         "parameters": [
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -19904,8 +20030,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
@@ -19952,7 +20096,7 @@
         "operationId": "search_v2_v2_search_post",
         "parameters": [
           {
-            "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
             "in": "query",
             "name": "key",
             "required": false,
@@ -19965,8 +20109,26 @@
                   "type": "null"
                 }
               ],
-              "description": "외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다.",
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
               "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
             }
           }
         ],
