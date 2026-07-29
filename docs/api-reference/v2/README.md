@@ -4,6 +4,13 @@ v2(자체 통합 candidate, ADR-039)의 endpoint 공통 규약이다. 각 endpoi
 `reverse.md`, `search.md`, `regions-within-radius.md`를, 차원별 audit/목표는 `conventions.md`를,
 결정·우선순위는 ADR-060을 본다. v1 vworld 호환(ADR-038)은 별개 표면이며 이 규약과 무관하다.
 
+## 인증
+
+모든 v2 endpoint는 공개 API key를 요구한다. 서버 간 호출은
+`X-KTG-API-Key: <public-api-key>` header를 사용한다. 브라우저/VWorld 호환 호출은 `key`
+query도 사용할 수 있다. 두 위치를 함께 보내면 값이 같아야 하며, 같은 위치의 반복 key는
+거부된다. 이 key는 Admin/ops 권한을 부여하지 않는다.
+
 ## 메서드 · trace (ADR-060 §7)
 
 - **v2는 모두 `POST`** 다. 다중 surface(`query`/`road_address`/…), `bbox`, region hint 같은

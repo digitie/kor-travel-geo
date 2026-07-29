@@ -34,6 +34,7 @@
 ```bash
 curl -X POST "http://localhost:12501/v2/reverse" \
   -H "Content-Type: application/json" \
+  -H "X-KTG-API-Key: ${KTG_PUBLIC_API_KEY}" \
   -d '{"lon":127.036,"lat":37.501,"radius_m":200}'
 ```
 

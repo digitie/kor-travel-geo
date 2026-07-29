@@ -7,7 +7,7 @@
 `kor-travel-geo`(이하 본 패키지)는 한 코어(`core/`) 위에 두 인터페이스를 노출한다.
 
 - **Python 라이브러리 API**: `AsyncAddressClient` — asyncio 컨텍스트 매니저, 주소 조회는 후보 목록 응답만 공개
-- **REST API**: FastAPI 라우터가 core/repository 경로를 호출하는 얇은 wrapper. `/v1/*`는 vworld 호환, `/v2/*`는 후보 목록 응답. 공개 주소 API는 외부/비신뢰 클라이언트에 query parameter `key`를 요구한다. trusted proxy identity가 확인된 요청은 key 검증을 우회한다.
+- **REST API**: FastAPI 라우터가 core/repository 경로를 호출하는 얇은 wrapper. `/v1/*`는 vworld 호환, `/v2/*`는 후보 목록 응답. 공개 주소 API는 외부/비신뢰 클라이언트에 브라우저/VWorld 호환 query parameter `key` 또는 서버 간 호출용 `X-KTG-API-Key` header를 요구한다. 이 header는 Admin API 역할을 부여하지 않는다. trusted proxy identity가 확인된 요청은 key 검증을 우회한다.
 
 두 인터페이스는 같은 코어 함수(`core.geocoder.geocode`, `core.reverse_geocoder.reverse_geocode` 등)를 호출하므로 동작이 갈리지 않는다. REST v1 호환 응답은 `AsyncAddressClient`의 내부 adapter에서만 사용하고, 공개 Python API는 v2 candidate schema로 투영한다. 코어는 DB 어댑터(Repository Protocol)를 받아 작동하므로 단위 테스트 시 in-memory Fake 어댑터로 교체 가능하다.
 

@@ -38,6 +38,7 @@
 ```bash
 curl -X POST "http://localhost:12501/v2/search" \
   -H "Content-Type: application/json" \
+  -H "X-KTG-API-Key: ${KTG_PUBLIC_API_KEY}" \
   -d '{"query":"테헤란로","type":"road","sig_cd":"11680","size":20}'
 ```
 

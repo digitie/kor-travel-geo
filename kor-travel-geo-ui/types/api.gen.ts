@@ -7363,10 +7363,13 @@ export interface operations {
                 fallback?: "off" | "local_only" | "api";
                 sig_cd?: string | null;
                 bjd_cd?: string | null;
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7390,6 +7393,15 @@ export interface operations {
                     "application/json": components["schemas"]["VWorldErrorEnvelope"];
                 };
             };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VWorldErrorEnvelope"];
+                };
+            };
         };
     };
     pobox_v1_address_pobox_get: {
@@ -7401,10 +7413,13 @@ export interface operations {
                 kind?: "PO" | "PG" | "ALL";
                 page?: number;
                 size?: number;
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7428,6 +7443,15 @@ export interface operations {
                     "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
         };
     };
     reverse_geocode_v1_address_reverse_get: {
@@ -7442,10 +7466,13 @@ export interface operations {
                 radius_m?: number | null;
                 sig_cd?: string | null;
                 bjd_cd?: string | null;
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7469,6 +7496,15 @@ export interface operations {
                     "application/json": components["schemas"]["VWorldErrorEnvelope"];
                 };
             };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VWorldErrorEnvelope"];
+                };
+            };
         };
     };
     search_v1_address_search_get: {
@@ -7480,10 +7516,13 @@ export interface operations {
                 size?: number;
                 sig_cd?: string | null;
                 bjd_cd?: string | null;
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7507,6 +7546,15 @@ export interface operations {
                     "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
         };
     };
     zipcode_v1_address_zipcode_get: {
@@ -7517,10 +7565,13 @@ export interface operations {
                 y?: number | null;
                 bd_mgt_sn?: string | null;
                 include_bulk?: boolean;
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7537,6 +7588,15 @@ export interface operations {
             };
             /** @description Legacy validation error envelope */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+            /** @description 공개 API key 인증 실패 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10864,10 +10924,13 @@ export interface operations {
     geocode_v2_v2_geocode_post: {
         parameters: {
             query?: {
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10895,15 +10958,27 @@ export interface operations {
                     "application/json": components["schemas"]["V2ErrorEnvelope"];
                 };
             };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
+                };
+            };
         };
     };
     regions_within_radius_v2_v2_regions_within_radius_post: {
         parameters: {
             query?: {
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10931,15 +11006,27 @@ export interface operations {
                     "application/json": components["schemas"]["V2ErrorEnvelope"];
                 };
             };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
+                };
+            };
         };
     };
     reverse_v2_v2_reverse_post: {
         parameters: {
             query?: {
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10967,15 +11054,27 @@ export interface operations {
                     "application/json": components["schemas"]["V2ErrorEnvelope"];
                 };
             };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
+                };
+            };
         };
     };
     search_v2_v2_search_post: {
         parameters: {
             query?: {
-                /** @description 외부/비신뢰 클라이언트는 필수. trusted admin proxy 요청은 검증을 우회한다. */
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
                 key?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10996,6 +11095,15 @@ export interface operations {
             };
             /** @description v2 error envelope (ADR-060 §4) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
+                };
+            };
+            /** @description 공개 API key 인증 실패 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-29 (`X-KTG-API-Key` 적대적 리뷰 반영, by codex)
+
+**리뷰**: 독립 보안·계약 리뷰 2명이 branch delta를 검토했다. OpenAPI frontend 생성 타입 누락
+(P1), trusted proxy의 query/header 충돌 우회, 중복 credential 축약, non-ASCII
+`compare_digest(str, str)` 500, header shape 위치·길이 제약, 401 envelope·API reference 누락을
+확인했다.
+
+**수정**: query/header 원시 다중값을 직접 읽어 같은 위치의 반복 key를 거부하고, 두 위치 비교는
+UTF-8 bytes constant-time 비교로 바꿨다. trusted proxy도 credential을 보낸 경우 shape·중복·충돌을
+먼저 검증한다. public 9개 operation에 1~128자 header schema와 실제 v1/v2별 401 envelope를
+게시하고 `openapi.json`·frontend 생성 타입·API reference를 동기화했다.
+
+**검증**: 관련 backend 테스트 31개, Ruff 통과. 전체 gate 결과는 PR 최종화 때 별도 최신 항목으로
+기록한다.
+
+## 2026-07-29 (`kor-travel-map` 서버 간 public API key 최소 권한 경계, by codex)
+
+**작업**: Claude Code PR 사후 감사에서 `kor-travel-map` API·worker·Dagster가 Geo Admin proxy
+shared secret을 함께 가지면 침해된 Map 컨테이너가 `X-KTG-Roles`를 위조할 수 있음을 확인했다.
+Admin secret 공유 대신 기존 공개 API key를 `X-KTG-API-Key` header로 전달하는 서버 간 인증 경계를
+추가했다. 이 header는 v1/v2 public endpoint의 기존 `require_public_api_key`에서만 읽고 Admin role
+gate에는 관여하지 않는다. 브라우저/VWorld 호환 `key` query는 유지하며, 두 전달 위치의 값이 다르면
+키 원문을 응답하지 않고 요청을 거부한다.
+
+**검증**: header 성공·충돌 거부·Admin 권한 비부여 단위 테스트를 추가했다. 전체 검증 결과는 PR
+최종화 때 이 항목에 이어 별도 최신 journal 항목으로 기록한다.
+
 ## 2026-07-12 (T-290 에픽 완료 — 실행이 Dagster-only + 전국 full-load 스테이징 라이브 e2e, by claude)
 
 **작업**: geo backup/restore·적재 오케스트레이션의 독립 Dagster 이관(T-290)을 끝까지 완료했다. 통합 브랜치

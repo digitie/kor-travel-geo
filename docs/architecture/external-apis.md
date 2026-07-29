@@ -16,12 +16,14 @@
 
 ## `kor-travel-geo` 공개 REST API key
 
-`/v1/address/*`와 `/v2/*` 공개 REST API는 외부/비신뢰 클라이언트에 VWorld와 같은 query
-parameter `key`를 요구한다. Admin UI `/admin/settings`에서 랜덤 key를 생성하면 DB에는
-SHA-256 hash만 저장되고 plaintext key는 생성 직후 한 번만 반환된다. 활성 DB key가 하나 이상
-있으면 DB key만 유효하다. 아직 UI에서 생성한 활성 DB key가 없으면 `KTG_VWORLD_API_KEY`가
-기본 `key`로 쓰인다. Admin API와 같은 trusted proxy identity가 확인된 요청은 로컬 운영 UI
-호출로 보고 공개 API key 검증을 우회한다.
+`/v1/address/*`와 `/v2/*` 공개 REST API는 외부/비신뢰 클라이언트에 공개 API key를 요구한다.
+브라우저와 VWorld 호환 클라이언트는 query parameter `key`, 서버 간 호출은
+`X-KTG-API-Key` header를 사용한다. 두 위치를 함께 보내면 값이 정확히 같아야 하며, 다르면
+요청을 거부한다. 이 header는 public endpoint 인증에만 쓰이고 Admin API 역할을 부여하지 않는다.
+Admin UI `/admin/settings`에서 랜덤 key를 생성하면 DB에는 SHA-256 hash만 저장되고 plaintext
+key는 생성 직후 한 번만 반환된다. 활성 DB key가 하나 이상 있으면 DB key만 유효하다. 아직 UI에서
+생성한 활성 DB key가 없으면 `KTG_VWORLD_API_KEY`가 기본 key로 쓰인다. Admin API와 같은 trusted
+proxy identity가 확인된 요청은 로컬 운영 UI 호출로 보고 공개 API key 검증을 우회한다.
 
 ## vworld OpenAPI
 

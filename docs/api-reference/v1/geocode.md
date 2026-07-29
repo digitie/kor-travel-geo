@@ -17,6 +17,9 @@
 | `sig_cd` | string | 없음 | 2자리 시도 또는 5자리 시군구 hint |
 | `bjd_cd` | string | 없음 | 8자리 또는 10자리 법정동 hint |
 
+공개 API 인증은 `key` query 또는 `X-KTG-API-Key` header 중 하나가 필수다. 서버 간 호출은
+URL·로그에 key가 남지 않는 header 방식을 사용한다.
+
 ## 출력
 
 HTTP 응답 최상위는 항상 `response`다.
@@ -38,6 +41,7 @@ HTTP 응답 최상위는 항상 `response`다.
 
 ```bash
 curl -G "http://localhost:12501/v1/address/geocode" \
+  -H "X-KTG-API-Key: ${KTG_PUBLIC_API_KEY}" \
   --data-urlencode "address=서울특별시 강남구 테헤란로 152" \
   --data-urlencode "type=road" \
   --data-urlencode "fallback=api"
