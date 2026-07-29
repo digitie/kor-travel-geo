@@ -69,6 +69,7 @@ async with AsyncAddressClient() as client:
 ```bash
 curl -X POST "http://localhost:12501/v2/regions/within-radius" \
   -H "Content-Type: application/json" \
+  -H "X-KTG-API-Key: ${KTG_PUBLIC_API_KEY}" \
   -d '{"lon":126.978,"lat":37.5665,"radius_km":3,"levels":["sigungu","emd"]}'
 ```
 

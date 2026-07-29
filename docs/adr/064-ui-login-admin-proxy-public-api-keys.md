@@ -42,8 +42,10 @@ metadata만 저장하고 plaintext key는 생성 응답에서 한 번만 반환�
 
 v1/v2 REST API는 외부/비신뢰 클라이언트에 공개 API key를 필수로 요구한다. 브라우저와 VWorld
 호환 클라이언트는 query parameter `key`, 서버 간 호출은 `X-KTG-API-Key` header를 사용한다.
-두 위치를 함께 보내면 값이 같아야 하며, 다르면 요청을 거부한다. 이 header는 public endpoint
-인증에만 쓰고 Admin API 역할은 부여하지 않는다. DB에 활성 공개 API key가 하나 이상 있으면
+두 위치를 함께 보내면 값이 같아야 하며, 같은 위치에 key를 반복하면 모호성 없이 거부한다.
+trusted proxy도 key를 보내지 않을 때만 검증을 우회하고, key를 보낸 경우 중복·충돌·shape 오류를
+먼저 거부한다. 이 header는 public endpoint 인증에만 쓰고 Admin API 역할은 부여하지 않는다.
+DB에 활성 공개 API key가 하나 이상 있으면
 그 DB key만 유효하다. 활성 DB key가 아직 없으면 `KTG_VWORLD_API_KEY`가 기본 key로 동작한다.
 단, admin API와 같은 trusted proxy identity(`X-KTG-Actor`/`X-KTG-Roles`, optional
 `X-KTG-Admin-Proxy-Secret`)가 확인된 요청은 같은 로컬 운영 UI 흐름으로 보고 공개 API key
@@ -65,7 +67,7 @@ v1/v2 REST API는 외부/비신뢰 클라이언트에 공개 API key를 필수�
 - Admin UI가 로그인 없이 열리지 않는다.
 - admin API는 지정 UI proxy를 통과한 요청만 정상 권한을 얻는다.
 - 로그인 시도와 로그아웃 기록이 DB 감사 이벤트로 남고 UI에서 확인된다.
-- 외부/비신뢰 v1/v2 클라이언트는 같은 `key` parameter 계약으로 호출할 수 있다.
+- 외부/비신뢰 v1/v2 클라이언트는 `key` query 또는 `X-KTG-API-Key` header 계약으로 호출할 수 있다.
 - trusted proxy를 통과한 Admin UI의 공개 API 호출은 별도 `key` 없이도 동작한다.
 - Web UI에서 공개 API key를 생성·폐기하고 목록을 확인할 수 있다.
 

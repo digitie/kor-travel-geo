@@ -121,6 +121,36 @@ async def test_v2_accepts_public_api_key_header_for_server_clients() -> None:
     assert response.json()["status"] == "OK"
 
 
+def test_public_api_key_header_and_401_are_published_for_all_public_routes() -> None:
+    schema = create_app().openapi()
+    operations = (
+        ("/v1/address/geocode", "get"),
+        ("/v1/address/reverse", "get"),
+        ("/v1/address/search", "get"),
+        ("/v1/address/zipcode", "get"),
+        ("/v1/address/pobox", "get"),
+        ("/v2/geocode", "post"),
+        ("/v2/reverse", "post"),
+        ("/v2/search", "post"),
+        ("/v2/regions/within-radius", "post"),
+    )
+    for path, method in operations:
+        operation = schema["paths"][path][method]
+        header = next(
+            parameter
+            for parameter in operation["parameters"]
+            if parameter["in"] == "header" and parameter["name"] == PUBLIC_API_KEY_HEADER
+        )
+        value_schema = next(
+            candidate
+            for candidate in header["schema"]["anyOf"]
+            if candidate.get("type") == "string"
+        )
+        assert value_schema["minLength"] == 1
+        assert value_schema["maxLength"] == 128
+        assert "401" in operation["responses"]
+
+
 @pytest.mark.asyncio
 async def test_v2_rejects_conflicting_query_and_header_keys() -> None:
     app = create_app()
@@ -139,6 +169,82 @@ async def test_v2_rejects_conflicting_query_and_header_keys() -> None:
     assert payload["error"]["code"] == "E0401"
     assert _VWORLD_DEFAULT_KEY not in response.text
     assert "different-key" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_trusted_proxy_still_rejects_conflicting_public_keys() -> None:
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: _FakeV2Client()
+    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v2/geocode",
+            params={"key": _VWORLD_DEFAULT_KEY},
+            headers={**_TRUSTED_HEADERS, PUBLIC_API_KEY_HEADER: "different-key"},
+            json={"query": "서울시청"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "E0401"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("duplicate_source", ["query", "header"])
+async def test_v2_rejects_duplicate_public_key_values(duplicate_source: str) -> None:
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: _FakeV2Client()
+    transport = httpx.ASGITransport(app=app)
+    params: list[tuple[str, str]] = [("key", _VWORLD_DEFAULT_KEY)]
+    headers: list[tuple[str, str]] = [(PUBLIC_API_KEY_HEADER, _VWORLD_DEFAULT_KEY)]
+    if duplicate_source == "query":
+        params.append(("key", "different-key"))
+    else:
+        headers.append((PUBLIC_API_KEY_HEADER, "different-key"))
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v2/geocode",
+            params=params,
+            headers=headers,
+            json={"query": "서울시청"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "E0401"
+
+
+@pytest.mark.asyncio
+async def test_v2_non_ascii_dual_public_key_is_handled_without_500() -> None:
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: _FakeV2Client()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v2/geocode?key=%C3%A9",
+            headers=[(b"X-KTG-API-Key", b"\xe9")],
+            json={"query": "서울시청"},
+        )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "E0401"
+
+
+@pytest.mark.asyncio
+async def test_v2_header_shape_error_reports_header_location() -> None:
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: _FakeV2Client()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v2/geocode",
+            headers={PUBLIC_API_KEY_HEADER: "x" * 129},
+            json={"query": "서울시청"},
+        )
+
+    payload = response.json()
+    assert response.status_code == 400
+    assert payload["error"]["field"].lower() == "header.x-ktg-api-key"
+    assert "header." in payload["error"]["hint"].lower()
 
 
 @pytest.mark.asyncio

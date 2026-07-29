@@ -18,6 +18,9 @@
 | `sig_cd` | string | 없음 | 시도/시군구 hint |
 | `bjd_cd` | string | 없음 | 법정동 hint |
 
+공개 API 인증은 `key` query 또는 `X-KTG-API-Key` header 중 하나가 필수다. 서버 간 호출은
+URL·로그에 key가 남지 않는 header 방식을 사용한다.
+
 ## 출력
 
 HTTP 응답 최상위는 항상 `response`다.
@@ -38,6 +41,7 @@ HTTP 응답 최상위는 항상 `response`다.
 
 ```bash
 curl -G "http://localhost:12501/v1/address/reverse" \
+  -H "X-KTG-API-Key: ${KTG_PUBLIC_API_KEY}" \
   --data-urlencode "x=127.036" \
   --data-urlencode "y=37.501" \
   --data-urlencode "type=both"

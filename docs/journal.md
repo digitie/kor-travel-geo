@@ -2,6 +2,21 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-07-29 (`X-KTG-API-Key` 적대적 리뷰 반영, by codex)
+
+**리뷰**: 독립 보안·계약 리뷰 2명이 branch delta를 검토했다. OpenAPI frontend 생성 타입 누락
+(P1), trusted proxy의 query/header 충돌 우회, 중복 credential 축약, non-ASCII
+`compare_digest(str, str)` 500, header shape 위치·길이 제약, 401 envelope·API reference 누락을
+확인했다.
+
+**수정**: query/header 원시 다중값을 직접 읽어 같은 위치의 반복 key를 거부하고, 두 위치 비교는
+UTF-8 bytes constant-time 비교로 바꿨다. trusted proxy도 credential을 보낸 경우 shape·중복·충돌을
+먼저 검증한다. public 9개 operation에 1~128자 header schema와 실제 v1/v2별 401 envelope를
+게시하고 `openapi.json`·frontend 생성 타입·API reference를 동기화했다.
+
+**검증**: 관련 backend 테스트 31개, Ruff 통과. 전체 gate 결과는 PR 최종화 때 별도 최신 항목으로
+기록한다.
+
 ## 2026-07-29 (`kor-travel-map` 서버 간 public API key 최소 권한 경계, by codex)
 
 **작업**: Claude Code PR 사후 감사에서 `kor-travel-map` API·worker·Dagster가 Geo Admin proxy

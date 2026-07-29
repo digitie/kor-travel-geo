@@ -42,7 +42,10 @@
 ### Fixed
 - `kor-travel-map` 같은 서버 클라이언트가 공개 API key를 URL query에 남기지 않도록
   `X-KTG-API-Key` header 인증을 추가했다. 이 header는 v1/v2 public endpoint에만 적용되고
-  Admin API 역할을 부여하지 않으며, query `key`와 함께 보낸 값이 다르면 요청을 거부한다.
+  Admin API 역할을 부여하지 않는다. query/header 충돌, 같은 위치의 중복 key, shape 오류는
+  trusted proxy 여부와 무관하게 거부하며 non-ASCII 입력도 500 없이 인증 실패로 처리한다.
+  9개 public operation의 OpenAPI에 header 길이 제약과 실제 401 envelope를 명시하고 frontend
+  생성 타입과 API reference를 함께 갱신했다.
 - Admin UI 로그인 CSRF origin 검사에 `KTG_UI_PUBLIC_ORIGINS` 신뢰 목록을 추가했다. TLS 종단
   프록시가 `X-Forwarded-Proto=https`를 주입하지 못해 내부 origin이 `http`로 재구성되는 운영
   환경에서도, 명시한 공개 HTTPS origin의 로그인 요청은 허용하고 나머지 외부 origin은 계속 거부한다.

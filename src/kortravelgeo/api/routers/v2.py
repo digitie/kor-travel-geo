@@ -27,7 +27,8 @@ router = APIRouter(tags=["v2"])
 # structured 4xx is intended input-safety (T-173). Declaring it makes the published contract
 # match the wire and lets the OpenAPI customization drop the misleading auto-422.
 _V2_VALIDATION_RESPONSES: dict[int | str, dict[str, Any]] = {
-    400: {"model": V2ErrorEnvelope, "description": "v2 error envelope (ADR-060 §4)"}
+    400: {"model": V2ErrorEnvelope, "description": "v2 error envelope (ADR-060 §4)"},
+    401: {"model": V2ErrorEnvelope, "description": "공개 API key 인증 실패"},
 }
 
 

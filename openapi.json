@@ -13782,6 +13782,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -13800,6 +13802,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -13831,6 +13835,16 @@
               }
             },
             "description": "VWorld 호환 검증·도메인 오류"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VWorldErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Geocode",
@@ -13941,6 +13955,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -13959,6 +13975,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -13990,6 +14008,16 @@
               }
             },
             "description": "Legacy validation error envelope"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Pobox",
@@ -14125,6 +14153,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -14143,6 +14173,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -14174,6 +14206,16 @@
               }
             },
             "description": "VWorld 호환 검증·도메인 오류"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VWorldErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Reverse Geocode",
@@ -14278,6 +14320,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -14296,6 +14340,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -14327,6 +14373,16 @@
               }
             },
             "description": "Legacy validation error envelope"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Search",
@@ -14425,6 +14481,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -14443,6 +14501,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -14474,6 +14534,16 @@
               }
             },
             "description": "Legacy validation error envelope"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Zipcode",
@@ -19866,6 +19936,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -19884,6 +19956,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -19925,6 +19999,16 @@
               }
             },
             "description": "v2 error envelope (ADR-060 §4)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Geocode V2",
@@ -19945,6 +20029,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -19963,6 +20049,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -20004,6 +20092,16 @@
               }
             },
             "description": "v2 error envelope (ADR-060 §4)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Regions Within Radius V2",
@@ -20024,6 +20122,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -20042,6 +20142,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -20083,6 +20185,16 @@
               }
             },
             "description": "v2 error envelope (ADR-060 §4)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Reverse V2",
@@ -20103,6 +20215,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -20121,6 +20235,8 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 128,
+                  "minLength": 1,
                   "type": "string"
                 },
                 {
@@ -20162,6 +20278,16 @@
               }
             },
             "description": "v2 error envelope (ADR-060 §4)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
           }
         },
         "summary": "Search V2",

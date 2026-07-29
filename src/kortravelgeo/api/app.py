@@ -202,6 +202,7 @@ _VALIDATION_LEGACY_400 = (
     ("/v1/address/zipcode", "get"),
     ("/v1/address/pobox", "get"),
 )
+_PUBLIC_API_KEY_LEGACY_401 = _VALIDATION_LEGACY_400
 _HTTP_METHODS = {"get", "post", "put", "patch", "delete"}
 _LEGACY_ERROR_ENVELOPE_REF = "#/components/schemas/LegacyErrorEnvelope"
 
@@ -224,6 +225,8 @@ def _install_openapi_customization(app: FastAPI) -> None:
             _drop_validation_422(schema, path=path, method=method)
         for path, method in _VALIDATION_LEGACY_400:
             _publish_legacy_validation_400(schema, path=path, method=method)
+        for path, method in _PUBLIC_API_KEY_LEGACY_401:
+            _publish_legacy_auth_401(schema, path=path, method=method)
         for path, path_item in schema.get("paths", {}).items():
             if not path.startswith("/v1/admin/") or not isinstance(path_item, dict):
                 continue
@@ -254,6 +257,23 @@ def _publish_legacy_validation_400(schema: dict[str, Any], *, path: str, method:
         return
     responses["400"] = {
         "description": "Legacy validation error envelope",
+        "content": {
+            "application/json": {
+                "schema": {"$ref": _LEGACY_ERROR_ENVELOPE_REF},
+            },
+        },
+    }
+
+
+def _publish_legacy_auth_401(schema: dict[str, Any], *, path: str, method: str) -> None:
+    operation = schema.get("paths", {}).get(path, {}).get(method)
+    if not isinstance(operation, dict):
+        return
+    responses = operation.get("responses")
+    if not isinstance(responses, dict) or "401" in responses:
+        return
+    responses["401"] = {
+        "description": "공개 API key 인증 실패",
         "content": {
             "application/json": {
                 "schema": {"$ref": _LEGACY_ERROR_ENVELOPE_REF},
@@ -823,5 +843,4 @@ async def _run_source_janitor_once(client: AsyncAddressClient) -> None:
         _LOGGER.exception("source upload janitor pass failed")
         return
     _LOGGER.info("source upload janitor scheduler pass", extra=summary.model_dump())
-
 

@@ -25,7 +25,10 @@ router = APIRouter(tags=["address"])
     "/address/reverse",
     response_model=VWorldReverseEnvelope,
     response_model_exclude_none=True,
-    responses={400: {"model": VWorldErrorEnvelope, "description": "VWorld 호환 검증·도메인 오류"}},
+    responses={
+        400: {"model": VWorldErrorEnvelope, "description": "VWorld 호환 검증·도메인 오류"},
+        401: {"model": VWorldErrorEnvelope, "description": "공개 API key 인증 실패"},
+    },
 )
 async def reverse_geocode(
     x: float = Query(...),

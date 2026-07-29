@@ -7,8 +7,9 @@
 - [/ ] `kor-travel-map` 서버 간 public API key 최소 권한 경계 진행 중 — Map 컨테이너에 Geo Admin
   proxy shared secret을 공유하지 않고, 기존 공개 API key를 `X-KTG-API-Key` header로 보내도록
   Geo public dependency를 확장했다. header는 v1/v2 public endpoint 인증만 수행하고 Admin 역할을
-  부여하지 않는다. query `key` 호환은 유지하며 두 값이 다르면 거부한다. 남은 작업은 n150 전체
-  gate, 적대적 보안 리뷰, PR CI와 머지다.
+  부여하지 않는다. 독립 보안·계약 리뷰 2명의 P1 1건/P2 7건을 반영해 query/header 충돌,
+  중복 credential, non-ASCII 500, trusted bypass, OpenAPI header 제약·401 envelope, frontend
+  생성 타입과 API reference를 보강했다. 남은 작업은 n150 전체 gate, PR CI와 머지다.
 - ✅ **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only (2026-07-12, by claude)** — backup/restore·적재
   오케스트레이션의 독립 Dagster 이관을 끝냈다. 통합 브랜치 `agent/claude-dagster-migration`(HEAD `9bcb949`)에
   T-290h~l이 모두 병합됐고 n150에 **cutover 배포·검증 완료** — in-process `JobQueue` drain·
