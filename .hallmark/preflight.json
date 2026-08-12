@@ -1,0 +1,13 @@
+{
+  "date": "2026-08-13",
+  "framework": "Next.js 16 app router",
+  "font_stack": "CSS token stack in kor-travel-geo-ui/app/globals.css",
+  "palette": "teal-anchored OKLCH tokens in kor-travel-geo-ui/app/globals.css",
+  "motion": "motion-cut; no animation library dependency",
+  "spacing": "named 4px-derived CSS spacing tokens",
+  "preserved": [
+    "기존 청록 브랜드 색상",
+    "운영 콘솔의 정보 구조와 라우트",
+    "인증 및 API 계약"
+  ]
+}

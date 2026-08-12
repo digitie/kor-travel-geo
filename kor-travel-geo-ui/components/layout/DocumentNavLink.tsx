@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { MouseEvent, ReactNode } from "react";
 
 export function DocumentNavLink({
@@ -14,6 +15,12 @@ export function DocumentNavLink({
   href: string;
   onNavigate?: () => void;
 }) {
+  const pathname = usePathname() ?? "";
+  const active =
+    href === "/admin"
+      ? pathname === href
+      : pathname === href || pathname.startsWith(`${href}/`);
+
   function navigate(event: MouseEvent<HTMLAnchorElement>) {
     if (
       event.defaultPrevented ||
@@ -32,7 +39,13 @@ export function DocumentNavLink({
   }
 
   return (
-    <Link className={className} href={href} prefetch={false} onClick={navigate}>
+    <Link
+      aria-current={active ? "page" : undefined}
+      className={className}
+      href={href}
+      prefetch={false}
+      onClick={navigate}
+    >
       {children}
     </Link>
   );

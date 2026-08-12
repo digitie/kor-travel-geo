@@ -134,8 +134,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <X size={18} />
         </button>
         <div className="brand">
-          <strong>kor-travel-geo-ui</strong>
-          <span>내부 운영 콘솔</span>
+          <span className="brand-mark" aria-hidden="true">
+            <MapPinned size={18} />
+          </span>
+          <div className="brand-copy">
+            <strong>kor-travel-geo-ui</strong>
+            <span>내부 운영 콘솔</span>
+          </div>
         </div>
         <NavGroup title="조회·진단" links={debugLinks} onNavigate={closeMenu} />
         <nav className="nav-group" aria-label="관리 홈">

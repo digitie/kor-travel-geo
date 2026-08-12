@@ -15,6 +15,7 @@ const allProjects = [
   }
 ];
 const selectedBrowser = process.env.PLAYWRIGHT_BROWSER;
+const mockAuthStatePath = (browser: string) => `test-results/mock-auth/state-${browser}.json`;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -25,9 +26,17 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "on-first-retry",
-    ...(mockLogin ? { storageState: "test-results/mock-auth/state.json" } : {})
+    ...(mockLogin ? { storageState: "test-results/mock-auth/state-chromium.json" } : {})
   },
   projects: selectedBrowser
-    ? allProjects.filter((project) => project.name === selectedBrowser)
-    : allProjects
+    ? allProjects
+        .filter((project) => project.name === selectedBrowser)
+        .map((project) => ({
+          ...project,
+          use: mockLogin ? { ...project.use, storageState: mockAuthStatePath(project.name) } : project.use
+        }))
+    : allProjects.map((project) => ({
+        ...project,
+        use: mockLogin ? { ...project.use, storageState: mockAuthStatePath(project.name) } : project.use
+      }))
 });

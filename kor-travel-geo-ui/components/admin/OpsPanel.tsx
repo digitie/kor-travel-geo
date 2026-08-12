@@ -147,7 +147,6 @@ const auditEventColumns: VirtualColumn<AuditEvent>[] = [
 export function OpsPanel() {
   const [opsData, setOpsData] = useState<OpsDataState>(initialOpsDataState);
   const [windowForm, setWindowForm] = useState<MaintenanceWindowFormState>(initialWindowFormState);
-  const [confirmText, setConfirmText] = useState("");
   const [loadFailures, setLoadFailures] = useState<string[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -155,9 +154,6 @@ export function OpsPanel() {
   const { artifacts, auditEvents, lastResult, pgStats, releases, snapshots, stats, windows } =
     opsData;
   const { kind, reason } = windowForm;
-  const kindMeta = maintenanceKindMeta[kind];
-  const reasonValid = reason.trim().length >= REASON_MIN_LENGTH;
-  const reasonInvalid = reason.length > 0 && !reasonValid;
 
   function setLastResult(value: unknown) {
     setOpsData((current) => ({ ...current, lastResult: value }));
@@ -213,10 +209,10 @@ export function OpsPanel() {
     }
   }, []);
 
-  async function createWindow() {
+  async function createWindow(confirmation: string) {
     try {
       const result = await postJson<MaintenanceWindow>("/admin/ops/maintenance-windows", {
-        confirmation: confirmText,
+        confirmation,
         kind,
         reason
       });
@@ -301,100 +297,19 @@ export function OpsPanel() {
           rows={snapshots}
         />
 
-        <Panel
-          title="유지보수 윈도우"
-          description="적재·복원 등 운영 작업 전에 선언하는 잠금 윈도우"
-        >
-          <div className="form-grid">
-            <Field>
-              <div className="flex items-center gap-1">
-                <FieldLabel htmlFor="ops-kind">작업 종류</FieldLabel>
-                <HelpTip label="작업 종류 도움말">
-                  서버 필드 <code>kind</code> — 유지보수 윈도우가 선언하는 작업 종류입니다.
-                </HelpTip>
-              </div>
-              <NativeSelect
-                id="ops-kind"
-                value={kind}
-                onChange={(event) =>
-                  setWindowForm((current) => ({
-                    ...current,
-                    kind: event.target.value as MaintenanceWindowKind
-                  }))
-                }
-              >
-                {maintenanceKinds.map((item) => (
-                  <option key={item} value={item}>
-                    {maintenanceKindMeta[item].label}
-                  </option>
-                ))}
-              </NativeSelect>
-              <FieldDescription className="flex flex-wrap items-center gap-2">
-                {kindMeta.dangerous ? <Badge tone="warn">위험</Badge> : null}
-                <span>
-                  <code>{kind}</code> — {kindMeta.description}
-                </span>
-              </FieldDescription>
-            </Field>
-            <Field data-invalid={reasonInvalid || undefined}>
-              <div className="flex items-center gap-1">
-                <FieldLabel htmlFor="ops-reason">사유</FieldLabel>
-                <HelpTip label="사유 도움말">
-                  서버 필드 <code>reason</code> — 감사 이력에 기록되는 필수 항목입니다.
-                </HelpTip>
-              </div>
-              <Input
-                id="ops-reason"
-                value={reason}
-                placeholder="예: 202606 전국 재적재 사전 점검"
-                aria-invalid={reasonInvalid || undefined}
-                onChange={(event) =>
-                  setWindowForm((current) => ({ ...current, reason: event.target.value }))
-                }
-              />
-              {reasonInvalid ? (
-                <FieldError>사유를 {REASON_MIN_LENGTH}자 이상 입력하세요.</FieldError>
-              ) : (
-                <FieldDescription>필수 입력 ({REASON_MIN_LENGTH}자 이상)</FieldDescription>
-              )}
-            </Field>
-            <ConfirmActionDialog
-              trigger={
-                <Button className="justify-self-start" disabled={!reasonValid} type="button">
-                  <ShieldCheck aria-hidden="true" size={16} />
-                  윈도우 등록
-                </Button>
-              }
-              title="유지보수 윈도우 등록"
-              description={
-                <>
-                  <code>{kind}</code> ({kindMeta.label}) 윈도우를 엽니다 — {kindMeta.description}
-                </>
-              }
-              confirmLabel="윈도우 등록"
-              confirmDisabled={confirmText !== "CONFIRM"}
-              onOpenChange={(open) => {
-                if (!open) setConfirmText("");
-              }}
-              onConfirm={createWindow}
-            >
-              <TypedConfirmField
-                phrase="CONFIRM"
-                value={confirmText}
-                onChange={setConfirmText}
-                label="유지보수 윈도우 확인 문구"
-              />
-            </ConfirmActionDialog>
-          </div>
-          <TableSection
-            caption="유지보수 윈도우 목록"
-            columns={maintenanceWindowColumns}
-            emptyHint="유지보수 윈도우가 없습니다."
-            loading={initialLoading}
-            rowKey={(r) => r.maintenance_window_id}
-            rows={windows}
-          />
-        </Panel>
+        <MaintenanceWindowPanel
+          kind={kind}
+          loading={initialLoading}
+          onConfirm={createWindow}
+          onKindChange={(nextKind) =>
+            setWindowForm((current) => ({ ...current, kind: nextKind }))
+          }
+          onReasonChange={(nextReason) =>
+            setWindowForm((current) => ({ ...current, reason: nextReason }))
+          }
+          reason={reason}
+          windows={windows}
+        />
 
         <OpsTablePanel
           title="테이블 통계 스냅샷"
@@ -446,6 +361,119 @@ export function OpsPanel() {
         <ActionResultPanel result={lastResult} />
       </div>
     </div>
+  );
+}
+
+function MaintenanceWindowPanel({
+  kind,
+  loading,
+  onConfirm,
+  onKindChange,
+  onReasonChange,
+  reason,
+  windows
+}: {
+  kind: MaintenanceWindowKind;
+  loading: boolean;
+  onConfirm: (confirmation: string) => void;
+  onKindChange: (kind: MaintenanceWindowKind) => void;
+  onReasonChange: (reason: string) => void;
+  reason: string;
+  windows: MaintenanceWindow[];
+}) {
+  const [confirmText, setConfirmText] = useState("");
+  const kindMeta = maintenanceKindMeta[kind];
+  const reasonValid = reason.trim().length >= REASON_MIN_LENGTH;
+  const reasonInvalid = reason.length > 0 && !reasonValid;
+
+  return (
+    <Panel
+      title="유지보수 윈도우"
+      description="적재·복원 등 운영 작업 전에 선언하는 잠금 윈도우"
+    >
+      <div className="form-grid">
+        <Field>
+          <div className="flex items-center gap-1">
+            <FieldLabel htmlFor="ops-kind">작업 종류</FieldLabel>
+            <HelpTip label="작업 종류 도움말">
+              서버 필드 <code>kind</code> — 유지보수 윈도우가 선언하는 작업 종류입니다.
+            </HelpTip>
+          </div>
+          <NativeSelect
+            id="ops-kind"
+            value={kind}
+            onChange={(event) => onKindChange(event.target.value as MaintenanceWindowKind)}
+          >
+            {maintenanceKinds.map((item) => (
+              <option key={item} value={item}>
+                {maintenanceKindMeta[item].label}
+              </option>
+            ))}
+          </NativeSelect>
+          <FieldDescription className="flex flex-wrap items-center gap-2">
+            {kindMeta.dangerous ? <Badge tone="warn">위험</Badge> : null}
+            <span>
+              <code>{kind}</code> — {kindMeta.description}
+            </span>
+          </FieldDescription>
+        </Field>
+        <Field data-invalid={reasonInvalid || undefined}>
+          <div className="flex items-center gap-1">
+            <FieldLabel htmlFor="ops-reason">사유</FieldLabel>
+            <HelpTip label="사유 도움말">
+              서버 필드 <code>reason</code> — 감사 이력에 기록되는 필수 항목입니다.
+            </HelpTip>
+          </div>
+          <Input
+            id="ops-reason"
+            value={reason}
+            placeholder="예: 202606 전국 재적재 사전 점검"
+            aria-invalid={reasonInvalid || undefined}
+            onChange={(event) => onReasonChange(event.target.value)}
+          />
+          {reasonInvalid ? (
+            <FieldError>사유를 {REASON_MIN_LENGTH}자 이상 입력하세요.</FieldError>
+          ) : (
+            <FieldDescription>필수 입력 ({REASON_MIN_LENGTH}자 이상)</FieldDescription>
+          )}
+        </Field>
+        <ConfirmActionDialog
+          trigger={
+            <Button className="justify-self-start" disabled={!reasonValid} type="button">
+              <ShieldCheck aria-hidden="true" size={16} />
+              윈도우 등록
+            </Button>
+          }
+          title="유지보수 윈도우 등록"
+          description={
+            <>
+              <code>{kind}</code> ({kindMeta.label}) 윈도우를 엽니다 — {kindMeta.description}
+            </>
+          }
+          confirmLabel="윈도우 등록"
+          confirmDisabled={confirmText !== "CONFIRM"}
+          onOpenChange={(open) => {
+            if (!open) setConfirmText("");
+          }}
+          onConfirm={() => onConfirm(confirmText)}
+        >
+          <TypedConfirmField
+            phrase="CONFIRM"
+            value={confirmText}
+            onChange={setConfirmText}
+            label="유지보수 윈도우 확인 문구"
+          />
+        </ConfirmActionDialog>
+      </div>
+      <TableSection
+        caption="유지보수 윈도우 목록"
+        columns={maintenanceWindowColumns}
+        emptyHint="유지보수 윈도우가 없습니다."
+        loading={loading}
+        rowKey={(row) => row.maintenance_window_id}
+        rows={windows}
+      />
+    </Panel>
   );
 }
 

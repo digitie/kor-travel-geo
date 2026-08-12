@@ -2,7 +2,15 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-07-12 갱신, by claude)
+## 현재 진척도 (2026-08-13 갱신, by codex)
+
+- [/ ] **Hallmark Admin UI Workbench 전면 개편** — 최신 `main` 기준 별도 깨끗한 작업본에서
+  디자인 시스템(`design.md`)과 전역 토큰을 고정하고, 좌측 레일·작은 화면 drawer·관리 홈과
+  공통 panel/header/nav를 일관 개편했다. 외부 iframe은 공개 Dagster URL만 쓰고, 브라우저에
+  남는 공개 API key/VWorld 키는 현재 탭 메모리로 제한했다. backend/frontend 전체 gate,
+  React Doctor(경고 0), mock Chromium navigation e2e, 320~1280px 시각 검증을 마쳤다.
+  **다음 한 작업**: 명시적 staged 보안 점검 후 PR을 만들고, n150에 배포·라이브 검증한 뒤 CI가
+  녹색이면 머지한다.
 
 - [/ ] `kor-travel-map` 서버 간 public API key 최소 권한 경계 진행 중 — Map 컨테이너에 Geo Admin
   proxy shared secret을 공유하지 않고, 기존 공개 API key를 `X-KTG-API-Key` header로 보내도록

@@ -3,8 +3,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useMemo } from "react";
 
-const STORAGE_KEY = "kortravelgeo.vworldApiKey";
 const RUNTIME_KEY_QUERY_KEY = ["runtime-config", "vworld-api-key"] as const;
+
+// VWorld 키의 UI override는 현재 탭에서만 유지한다. 장기 웹 저장소에 API 키를
+// 두지 않아 XSS 노출면을 늘리지 않는다.
+let browserOverrideKey = "";
 
 type VWorldKeySource = "env" | "browser" | "empty" | "loading";
 type RuntimeKeyRecord = {
@@ -37,14 +40,16 @@ async function loadRuntimeKey(): Promise<RuntimeKeyRecord> {
 
   try {
     const response = await fetch("/api/runtime-config", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error("runtime config request failed");
+    }
     const payload = (await response.json()) as { vworldApiKey?: unknown };
     envApiKey = typeof payload.vworldApiKey === "string" ? payload.vworldApiKey.trim() : "";
   } catch {
     envApiKey = "";
   }
 
-  const browserKey =
-    typeof window === "undefined" ? "" : window.localStorage.getItem(STORAGE_KEY)?.trim() ?? "";
+  const browserKey = browserOverrideKey;
 
   return { browserKey, envApiKey };
 }
@@ -73,11 +78,7 @@ export function VWorldKeyProvider({ children }: { children: React.ReactNode }) {
 
   const saveApiKey = useCallback((value: string) => {
     const trimmed = value.trim();
-    if (trimmed) {
-      window.localStorage.setItem(STORAGE_KEY, trimmed);
-    } else {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
+    browserOverrideKey = trimmed;
     queryClient.setQueryData<RuntimeKeyRecord>(RUNTIME_KEY_QUERY_KEY, (current) => ({
       browserKey: trimmed,
       envApiKey: current?.envApiKey ?? envApiKey
@@ -85,7 +86,7 @@ export function VWorldKeyProvider({ children }: { children: React.ReactNode }) {
   }, [envApiKey, queryClient]);
 
   const resetApiKey = useCallback(() => {
-    window.localStorage.removeItem(STORAGE_KEY);
+    browserOverrideKey = "";
     queryClient.setQueryData<RuntimeKeyRecord>(RUNTIME_KEY_QUERY_KEY, (current) => ({
       browserKey: "",
       envApiKey: current?.envApiKey ?? envApiKey

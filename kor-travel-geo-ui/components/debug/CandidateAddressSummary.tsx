@@ -1,17 +1,4 @@
-export type CandidateAddressLike = {
-  address?: {
-    type?: string | null;
-    road_address?: string | null;
-    parcel_address?: string | null;
-    full?: string | null;
-  } | null;
-};
-
-export function extractCandidates(result: unknown): CandidateAddressLike[] {
-  if (!result || typeof result !== "object") return [];
-  const candidates = (result as { candidates?: unknown }).candidates;
-  return Array.isArray(candidates) ? (candidates as CandidateAddressLike[]) : [];
-}
+import { type CandidateAddressLike } from "@/lib/candidate-addresses";
 
 /**
  * Human-readable road/parcel address line(s) above the raw JSON response — the response
@@ -25,8 +12,8 @@ export function CandidateAddressSummary({ candidates }: { candidates: CandidateA
 
   return (
     <ul aria-label="주소 요약" className="mb-3 grid gap-1 text-sm">
-      {rows.map((row, index) => (
-        <li className="flex flex-wrap items-baseline gap-2" key={`${row.label}-${index}-${row.text}`}>
+      {rows.map((row) => (
+        <li className="flex flex-wrap items-baseline gap-2" key={`${row.label}-${row.text}`}>
           <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
             {row.label}
           </span>

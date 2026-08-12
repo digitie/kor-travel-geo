@@ -2,6 +2,26 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-13 (Hallmark Workbench 전면 개편 및 UI 품질·보안 감사, by codex)
+
+**작업**: Hallmark 설계 규칙으로 `kor-travel-geo-ui` 전체를 청록 기반 Workbench로 고정했다.
+좌측 작업 레일, 조밀한 상태 요약, 경계 중심의 작업 패널, 작은 화면 drawer를 일관 적용하고
+`design.md`·`.hallmark/preflight.json`에 장르·토큰·보존 범위를 기록했다. 라우트, 인증, API 및
+폼 작업 흐름은 바꾸지 않았다. CodeGraph MCP가 이번 세션에 노출되지 않아 Linux CLI의
+`codegraph sync`/`status`와 영향 범위 조회를 대신 사용했다.
+
+**감사 수정**: iframe sandbox에서 `allow-same-origin`을 제거하고, 브라우저가 내부 전용
+Dagster URL이나 loopback 주소를 iframe에 쓰지 않게 공개 URL만 허용했다. 생성한 공개 API key와
+VWorld 키는 `localStorage` 대신 현재 탭 메모리에만 보존한다. 업로드 작업 후 목록 무효화,
+virtual table 키보드 접근성, 안정 key, 과대 컴포넌트 분할과 mock 로그인 browser fingerprint를
+함께 정리했다.
+
+**검증**: backend `pytest -q`, `ruff check .`, `mypy src/kortravelgeo`, `lint-imports`,
+OpenAPI freshness check와 frontend `type-check`, lint, 단위 테스트, build, React Doctor를
+통과시켰다. mock 로그인 Chromium Playwright 내비게이션 e2e를 통과했고, 320·375·414·768·1280px
+실제 화면에서 가로 오버플로 없이 Workbench 레이아웃을 확인했다. 프로덕션 배포·라이브 검증·PR CI와
+머지는 이 항목 다음 단계로 진행한다.
+
 ## 2026-07-29 (`X-KTG-API-Key` 적대적 리뷰 반영, by codex)
 
 **리뷰**: 독립 보안·계약 리뷰 2명이 branch delta를 검토했다. OpenAPI frontend 생성 타입 누락

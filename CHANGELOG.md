@@ -23,6 +23,10 @@
   DB 스키마 변경 없이 동작한다.
 
 ### Changed
+- **관리 UI를 Hallmark Workbench 디자인 시스템으로 전면 개편했다.** 청록 기반 OKLCH 토큰,
+  고정 작업 레일과 작은 화면 drawer, 경계 중심 panel, 조밀한 관리 홈을 모든 운영 화면에
+  적용했다. 라우트·인증·API·폼 흐름은 유지하며, 320px부터 데스크톱까지 같은 정보 구조로
+  사용할 수 있다.
 - **관리 UI를 shadcn(radix-nova) 기반으로 전면 개편했다.** 수제 CSS 위젯(버튼·폼·탭·모달·
   배지·진행 바)을 공용 컴포넌트 체계로 통합하고, 네비게이션을 워크플로우 그룹(데이터 관리/
   백업·운영/시스템/설정)으로 재편했으며 중복 별칭 그룹은 제거했다. `/admin`은 리다이렉트
@@ -40,6 +44,13 @@
   글로벌 로그인(storageState)으로 실행한다 (`docs/live-e2e.md` 참고).
 
 ### Fixed
+- 브라우저가 내부 전용 Dagster URL 또는 loopback 주소를 iframe으로 요청하지 않도록 공개
+  Dagster URL만 허용했고, iframe sandbox의 `allow-same-origin` 권한을 제거했다.
+- Admin Settings에서 생성한 공개 API key와 VWorld 키의 브라우저 보관을 `localStorage`에서
+  현재 탭 메모리로 바꿨다. 새로고침·새 탭 뒤에는 다시 입력해야 하며, XSS 뒤 장기 보관 위험을
+  줄인다.
+- mock Playwright 로그인 상태를 각 브라우저의 user-agent fingerprint에 맞춰 만들고,
+  업로드 목록 갱신·virtual table 키보드 조작·동적 목록의 안정 key를 보강했다.
 - `kor-travel-map` 같은 서버 클라이언트가 공개 API key를 URL query에 남기지 않도록
   `X-KTG-API-Key` header 인증을 추가했다. 이 header는 v1/v2 public endpoint에만 적용되고
   Admin API 역할을 부여하지 않는다. query/header 충돌, 같은 위치의 중복 key, shape 오류는

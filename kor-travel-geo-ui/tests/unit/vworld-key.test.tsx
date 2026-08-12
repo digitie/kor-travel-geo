@@ -4,12 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsPanel } from "@/components/admin/SettingsPanel";
 import { VWorldKeyProvider, useVWorldApiKey } from "@/lib/vworld-key";
 
-const VWORLD_STORAGE_KEY = "kortravelgeo.vworldApiKey";
-
-function browserStorage(): Storage {
-  return (globalThis as unknown as Record<string, Storage>)["local" + "Storage"];
-}
-
 function KeyProbe() {
   const { apiKey, source } = useVWorldApiKey();
   return (
@@ -23,9 +17,20 @@ function KeyProbe() {
 function renderSettings(envKey = "env-key") {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => ({
-      json: async () => ({ vworldApiKey: envKey })
-    }))
+    vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === "/api/runtime-config") {
+        return {
+          ok: true,
+          json: async () => ({ vworldApiKey: envKey })
+        };
+      }
+      return {
+        ok: false,
+        status: 503,
+        statusText: "Service Unavailable",
+        text: async () => ""
+      };
+    })
   );
 
   const queryClient = new QueryClient({
@@ -46,10 +51,7 @@ function renderSettings(envKey = "env-key") {
   );
 }
 
-afterEach(() => {
-  browserStorage().clear();
-  vi.unstubAllGlobals();
-});
+afterEach(() => vi.unstubAllGlobals());
 
 describe("VWorld key settings", () => {
   it(".env 런타임 기본값을 지도 키로 사용한다", async () => {
@@ -60,7 +62,7 @@ describe("VWorld key settings", () => {
     expect(screen.getAllByText(".env 기본값").length).toBeGreaterThan(0);
   });
 
-  it("UI 입력값을 저장하면 브라우저 override를 사용한다", async () => {
+  it("UI 입력값을 저장하면 현재 탭 override를 사용한다", async () => {
     renderSettings("env-key");
     const input = await screen.findByLabelText("VWorld 인증키");
     await waitFor(() => expect(input).toHaveValue("env-key"));
@@ -70,19 +72,19 @@ describe("VWorld key settings", () => {
 
     await waitFor(() => expect(screen.getByTestId("api-key")).toHaveTextContent("browser-key"));
     expect(screen.getByTestId("source")).toHaveTextContent("browser");
-    expect(browserStorage().getItem(VWORLD_STORAGE_KEY)).toBe("browser-key");
   });
 
-  it("기본값 버튼은 브라우저 override를 지우고 .env 값을 다시 사용한다", async () => {
-    browserStorage().setItem(VWORLD_STORAGE_KEY, "browser-key");
+  it("기본값 버튼은 현재 탭 override를 지우고 .env 값을 다시 사용한다", async () => {
     renderSettings("env-key");
 
+    const input = await screen.findByLabelText("VWorld 인증키");
+    fireEvent.change(input, { target: { value: "browser-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "저장" }));
     await waitFor(() => expect(screen.getByTestId("api-key")).toHaveTextContent("browser-key"));
     fireEvent.click(screen.getByRole("button", { name: "기본값" }));
 
     await waitFor(() => expect(screen.getByTestId("api-key")).toHaveTextContent("env-key"));
     expect(screen.getByTestId("source")).toHaveTextContent("env");
-    expect(browserStorage().getItem(VWORLD_STORAGE_KEY)).toBeNull();
   });
 
   it("키 입력은 기본 마스킹되고 표시 토글로 평문 전환한다", async () => {

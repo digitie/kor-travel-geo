@@ -252,6 +252,17 @@ export function VirtualTable<T>({
                   className={getRowClassName?.(row.original) || undefined}
                   key={row.id}
                   onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                  onKeyDown={
+                    onRowClick
+                      ? (event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onRowClick(row.original);
+                          }
+                        }
+                      : undefined
+                  }
+                  tabIndex={onRowClick ? 0 : undefined}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const col = colByKey.get(cell.column.id);
@@ -288,7 +299,7 @@ export function VirtualTable<T>({
           </span>
         </div>
       )}
-      <div aria-label={caption} className="vtable-grid" role="table">
+      <div aria-label={caption} className="vtable-grid" role="grid">
         <div
           className="vtable-head"
           role="row"
@@ -356,7 +367,7 @@ export function VirtualTable<T>({
                         <div
                           className={col?.cellClassName ? `vtable-td ${col.cellClassName}` : "vtable-td"}
                           key={cell.id}
-                          role="cell"
+                          role="gridcell"
                           style={col?.align ? { textAlign: col.align } : undefined}
                         >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
