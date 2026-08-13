@@ -9,8 +9,10 @@
   공통 panel/header/nav를 일관 개편했다. 외부 iframe은 공개 Dagster URL만 쓰고, 브라우저에
   남는 공개 API key/VWorld 키는 현재 탭 메모리로 제한했다. backend/frontend 전체 gate,
   React Doctor(경고 0), mock Chromium navigation e2e, 320~1280px 시각 검증을 마쳤다.
-  **다음 한 작업**: 명시적 staged 보안 점검 후 PR을 만들고, n150에 배포·라이브 검증한 뒤 CI가
-  녹색이면 머지한다.
+  **배포 상태**: 프로덕션 UI 배포와 Chromium 관리 홈·메뉴 이동·admin proxy live 검증을 마쳤다.
+  **다음 한 작업**: PR CI가 녹색이면 squash merge한다. 배포 노드에 평문 관리자 비밀번호를
+  보관하지 않아, 정상 비밀번호를 넣는 로그인 POST 200은 운영자가 별도로 확인한다(잘못된
+  비밀번호 401, 세션 검증과 admin API 200은 확인 완료).
 
 - [/ ] `kor-travel-map` 서버 간 public API key 최소 권한 경계 진행 중 — Map 컨테이너에 Geo Admin
   proxy shared secret을 공유하지 않고, 기존 공개 API key를 `X-KTG-API-Key` header로 보내도록
