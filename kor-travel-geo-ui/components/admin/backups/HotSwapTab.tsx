@@ -195,6 +195,63 @@ export function HotSwapTab() {
   const rollbackReady = plan?.rollback_confirmation === rollbackConfirmation;
 
   return (
+    <HotSwapLayout
+      execReady={execReady}
+      onBuildPlan={buildPlan}
+      onExecute={execute}
+      onOpenWindow={openWindow}
+      onRollback={rollback}
+      onStateChange={dispatchState}
+      onVerifySource={verifySource}
+      restoreDbListId={restoreDbListId}
+      restoreDbOptions={restoreDbOptions}
+      rollbackReady={rollbackReady}
+      state={state}
+    />
+  );
+}
+
+function HotSwapLayout({
+  execReady,
+  onBuildPlan,
+  onExecute,
+  onOpenWindow,
+  onRollback,
+  onStateChange,
+  onVerifySource,
+  restoreDbListId,
+  restoreDbOptions,
+  rollbackReady,
+  state
+}: {
+  execReady: boolean;
+  onBuildPlan: () => Promise<void>;
+  onExecute: () => Promise<void>;
+  onOpenWindow: () => Promise<void>;
+  onRollback: () => Promise<void>;
+  onStateChange: (patch: Partial<HotSwapState>) => void;
+  onVerifySource: () => Promise<void>;
+  restoreDbListId: string;
+  restoreDbOptions: string[];
+  rollbackReady: boolean;
+  state: HotSwapState;
+}) {
+  const {
+    restoreDatabase,
+    previousAlias,
+    reason,
+    plan,
+    windowOpened,
+    execConfirmation,
+    rollbackConfirmation,
+    result,
+    sourceVerify,
+    rollbackResult,
+    busy,
+    error
+  } = state;
+
+  return (
     <div className="grid two">
       <Panel
         title="1 · Hot-swap plan"
@@ -226,7 +283,7 @@ export function HotSwapTab() {
             <Input
               id="hs-restore"
               list={restoreDbListId}
-              onChange={(e) => dispatchState({ restoreDatabase: e.target.value })}
+              onChange={(e) => onStateChange({ restoreDatabase: e.target.value })}
               value={restoreDatabase}
             />
             <datalist id={restoreDbListId}>
@@ -246,7 +303,7 @@ export function HotSwapTab() {
             </span>
             <Input
               id="hs-prev"
-              onChange={(e) => dispatchState({ previousAlias: e.target.value })}
+              onChange={(e) => onStateChange({ previousAlias: e.target.value })}
               placeholder="비우면 자동 생성"
               value={previousAlias}
             />
@@ -254,7 +311,7 @@ export function HotSwapTab() {
           <div className="button-row">
             <Button
               disabled={!restoreDatabase || busy === "plan 생성"}
-              onClick={buildPlan}
+              onClick={onBuildPlan}
               type="button"
             >
               plan 생성
@@ -306,13 +363,13 @@ export function HotSwapTab() {
                 </span>
                 <Input
                   id="hs-reason"
-                  onChange={(e) => dispatchState({ reason: e.target.value })}
+                  onChange={(e) => onStateChange({ reason: e.target.value })}
                   value={reason}
                 />
               </Field>
               <Button
                 disabled={!plan.can_execute || busy === "maintenance window 열기"}
-                onClick={openWindow}
+                onClick={onOpenWindow}
                 type="button"
               >
                 maintenance window 열기 (kind=restore)
@@ -335,13 +392,13 @@ export function HotSwapTab() {
               <TypedConfirmField
                 heading="실행 확인"
                 label="typed confirmation"
-                onChange={(value) => dispatchState({ execConfirmation: value })}
+                onChange={(value) => onStateChange({ execConfirmation: value })}
                 phrase={plan.typed_confirmation}
                 value={execConfirmation}
               />
               <Button
                 disabled={!execReady || busy === "hot-swap 실행"}
-                onClick={execute}
+                onClick={onExecute}
                 type="button"
                 variant="destructive"
               >
@@ -375,7 +432,7 @@ export function HotSwapTab() {
           <div className="form-grid">
             <Button
               disabled={busy === "source 재검증"}
-              onClick={verifySource}
+              onClick={onVerifySource}
               type="button"
               variant="outline"
             >
@@ -396,13 +453,13 @@ export function HotSwapTab() {
                 <TypedConfirmField
                   heading="rollback 확인"
                   label="rollback confirmation"
-                  onChange={(value) => dispatchState({ rollbackConfirmation: value })}
+                  onChange={(value) => onStateChange({ rollbackConfirmation: value })}
                   phrase={plan.rollback_confirmation}
                   value={rollbackConfirmation}
                 />
                 <Button
                   disabled={!rollbackReady || busy === "rollback 실행"}
-                  onClick={rollback}
+                  onClick={onRollback}
                   type="button"
                   variant="outline"
                 >

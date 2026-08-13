@@ -2,7 +2,7 @@ import { HelpTip } from "@/components/admin/shared/HelpTip";
 import { cn } from "@/lib/utils";
 
 export interface KeyValueItem {
-  label: React.ReactNode;
+  label: string;
   value: React.ReactNode;
   /** 라벨 옆 도움말 (API 필드명, 계산 방식 등 상세 설명). */
   help?: React.ReactNode;
@@ -23,8 +23,8 @@ export function KeyValueGrid({
 }) {
   return (
     <dl className={cn("criteria-grid", className)}>
-      {items.map((item, index) => (
-        <div key={typeof item.label === "string" ? item.label : index}>
+      {items.map((item) => (
+        <div key={item.label}>
           <dt className="flex items-center gap-1">
             {item.label}
             {item.help ? (

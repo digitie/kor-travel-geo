@@ -53,10 +53,10 @@ const pageIcons: Record<AdminPageKey, typeof Archive> = {
  */
 export function AdminHome() {
   return (
-    <div className="grid gap-4">
+    <div className="admin-home">
       <StatusStrip />
       {ADMIN_NAV_GROUPS.map((group) => (
-        <Panel key={group.title} title={group.title}>
+        <Panel className="admin-nav-panel" key={group.title} title={group.title}>
           <ul className="m-0 grid list-none gap-1 p-0 md:grid-cols-2">
             {group.keys.map((key) => {
               const page = ADMIN_PAGES[key];
@@ -95,7 +95,7 @@ export function AdminHome() {
 
 function StatusStrip() {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="admin-status-strip">
       <StatusCard title="서빙 릴리스" queryKey="admin-home-release" load={loadActiveRelease} />
       <StatusCard title="최근 백업" queryKey="admin-home-backup" load={loadLatestBackup} />
       <StatusCard

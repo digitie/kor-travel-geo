@@ -81,22 +81,20 @@ describe("runtime config", () => {
       ).toBe("https://geo-dagster.example.com/");
     });
 
-    it("공개 URL이 없으면 내부 KTG_DAGSTER_URL로 폴백한다 (dev 기본값 동등성)", () => {
+    it("내부 KTG_DAGSTER_URL은 브라우저 embed URL로 사용하지 않는다", () => {
       const root = mkdtempSync(join(tmpdir(), "kor-travel-geo-ui-runtime-"));
       tempDirs.push(root);
 
-      expect(resolveDagsterPublicUrl({ KTG_DAGSTER_URL: "http://127.0.0.1:19999" }, root)).toBe(
-        "http://127.0.0.1:19999"
-      );
+      expect(resolveDagsterPublicUrl({ KTG_DAGSTER_URL: "http://127.0.0.1:19999" }, root)).toBe("");
     });
 
-    it("아무 것도 설정되지 않으면 backend Settings.dagster_url 기본값으로 폴백한다", () => {
+    it("아무 공개 URL도 설정되지 않으면 빈 값을 반환한다", () => {
       const root = mkdtempSync(join(tmpdir(), "kor-travel-geo-ui-runtime-"));
       tempDirs.push(root);
       const uiDir = join(root, "kor-travel-geo-ui");
       mkdirSync(uiDir);
 
-      expect(resolveDagsterPublicUrl({}, uiDir)).toBe("http://127.0.0.1:12502");
+      expect(resolveDagsterPublicUrl({}, uiDir)).toBe("");
     });
   });
 });

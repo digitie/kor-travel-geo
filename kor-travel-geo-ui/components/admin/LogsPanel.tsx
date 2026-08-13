@@ -62,18 +62,7 @@ export function LogsPanel() {
       {lines === null ? (
         error ? null : <Skeleton className="h-48 w-full" />
       ) : (
-        <pre className="json-box">
-          {lines.length === 0
-            ? "NO LOGS"
-            : lines.map((line, index) => (
-                // 로그 tail은 append-only 스냅샷이라 위치가 곧 identity다 — 내용 접두를
-                // 섞어 재조회 시 안정적인 key를 만든다.
-                <span className={logLineClass(line)} key={`${index}:${line.slice(0, 40)}`}>
-                  {line}
-                  {"\n"}
-                </span>
-              ))}
-        </pre>
+        <pre className="json-box">{lines.length === 0 ? "NO LOGS" : renderLogLines(lines)}</pre>
       )}
     </Panel>
   );
@@ -84,4 +73,18 @@ function logLineClass(line: string): string | undefined {
   if (/\b(ERROR|CRITICAL|FATAL)\b/.test(line)) return "font-semibold text-red-300";
   if (/\bWARN(ING)?\b/.test(line)) return "text-amber-300";
   return undefined;
+}
+
+function renderLogLines(lines: string[]) {
+  const occurrences = new Map<string, number>();
+  return lines.map((line) => {
+    const occurrence = occurrences.get(line) ?? 0;
+    occurrences.set(line, occurrence + 1);
+    return (
+      <span className={logLineClass(line)} key={`${line.slice(0, 80)}:${occurrence}`}>
+        {line}
+        {"\n"}
+      </span>
+    );
+  });
 }

@@ -35,7 +35,7 @@ import { toast } from "@/lib/toast";
 import { useVWorldApiKey } from "@/lib/vworld-key";
 
 const sourceLabels = {
-  browser: "브라우저 저장값",
+  browser: "현재 탭 입력값",
   empty: "미설정",
   env: ".env 기본값",
   loading: "확인 중"
@@ -411,7 +411,7 @@ function VWorldKeyForm({
           <HelpTip label="VWorld 인증키 도움말">
             서버 환경변수 <code>KTG_VWORLD_API_KEY</code>(또는{" "}
             <code>NEXT_PUBLIC_VWORLD_API_KEY</code>) 값이 .env 기본값으로 쓰입니다. 여기서
-            저장한 값은 이 브라우저에서만 우선 적용됩니다.
+            저장한 값은 현재 탭에서만 우선 적용됩니다.
           </HelpTip>
         </span>
         <span className="flex items-center gap-2">

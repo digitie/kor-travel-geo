@@ -1,0 +1,11 @@
+[
+  {
+    "date": "2026-08-13",
+    "macrostructure": "Workbench",
+    "theme": "custom",
+    "theme_axes": "light / grotesk-sans / chromatic-teal",
+    "enrichment": "none",
+    "brief": "kor-travel-geo 내부 운영 콘솔 전체 개편",
+    "scope": "app"
+  }
+]

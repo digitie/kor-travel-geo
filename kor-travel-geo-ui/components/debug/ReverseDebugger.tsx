@@ -3,7 +3,8 @@
 import { MousePointer2 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
-import { CandidateAddressSummary, extractCandidates } from "@/components/debug/CandidateAddressSummary";
+import { CandidateAddressSummary } from "@/components/debug/CandidateAddressSummary";
+import { extractCandidates } from "@/lib/candidate-addresses";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { postPublicJson } from "@/lib/api";

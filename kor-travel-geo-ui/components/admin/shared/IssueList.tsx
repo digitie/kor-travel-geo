@@ -15,7 +15,7 @@ export function IssueList({
 }: {
   tone: "error" | "warn";
   title: React.ReactNode;
-  items: React.ReactNode[];
+  items: string[];
   className?: string;
 }) {
   if (!items.length) return null;
@@ -30,8 +30,8 @@ export function IssueList({
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
         <ul className="m-0 list-disc pl-4">
-          {items.map((item, index) => (
-            <li key={typeof item === "string" ? item : index}>{item}</li>
+          {items.map((item) => (
+            <li key={item}>{item}</li>
           ))}
         </ul>
       </AlertDescription>

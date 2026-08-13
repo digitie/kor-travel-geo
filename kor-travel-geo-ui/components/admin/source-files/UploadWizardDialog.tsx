@@ -109,7 +109,10 @@ export function UploadWizardDialog({
         display_name: request.displayName,
         storage_kind: "rustfs",
         upload_strategy: "multipart"
-      })
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
+    }
   });
 
   const previewValidate = useMutation({
@@ -117,14 +120,20 @@ export function UploadWizardDialog({
       postJson<UploadSessionPreviewValidationResult>(
         sourceFilesPaths.previewValidateSession(sessionId),
         {}
-      )
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
+    }
   });
 
   const registerSession = useMutation({
     mutationFn: ({ sessionId, userYyyymm }: { sessionId: string; userYyyymm: string }) =>
       postJson<UploadSessionStatus>(sourceFilesPaths.registerSession(sessionId), {
         confirm_user_yyyymm: userYyyymm
-      })
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
+    }
   });
 
   function handleOpenChange(next: boolean) {
@@ -201,7 +210,6 @@ export function UploadWizardDialog({
       });
       dispatch({ busy: false, registered: result });
       toast.success("업로드 완료", "세션이 등록되었습니다.");
-      void queryClient.invalidateQueries({ queryKey: ["upload-sessions"] });
     } catch (err) {
       dispatch({ busy: false, error: getErrorMessage(err) });
     }

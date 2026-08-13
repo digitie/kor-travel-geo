@@ -59,15 +59,19 @@ function groupEventsByStep(events: DagsterRunEvent[]): EventGroup[] {
 
 function overdueSchedules(summary: DagsterSummaryData | undefined): OverdueSchedule[] {
   if (!summary) return [];
-  return summary.repositories.flatMap((repository) =>
-    repository.schedules
-      .filter((schedule) => schedule.overdue)
-      .map((schedule) => ({
-        repository: repository.name,
-        name: schedule.name,
-        nextTickAt: schedule.next_tick_at ?? null
-      }))
-  );
+  const overdue: OverdueSchedule[] = [];
+  for (const repository of summary.repositories) {
+    for (const schedule of repository.schedules) {
+      if (schedule.overdue) {
+        overdue.push({
+          repository: repository.name,
+          name: schedule.name,
+          nextTickAt: schedule.next_tick_at ?? null
+        });
+      }
+    }
+  }
+  return overdue;
 }
 
 type InstigationRow = {
@@ -677,9 +681,9 @@ function OpLogGroups({ events }: { events: DagsterRunEvent[] }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {group.events.map((event, index) => (
+                  {group.events.map((event) => (
                     <tr
-                      key={`${event.timestamp ?? ""}:${event.event_type}:${index}`}
+                      key={`${event.timestamp ?? ""}:${event.event_type}:${event.level ?? ""}:${event.message ?? event.error?.message ?? ""}`}
                       className="border-t border-border/50 align-top"
                     >
                       <td className="whitespace-nowrap px-3 py-1 font-mono">

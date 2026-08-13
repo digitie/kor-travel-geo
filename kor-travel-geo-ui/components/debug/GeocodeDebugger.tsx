@@ -8,7 +8,8 @@ import type {
   CoordinateBBox,
   MapGeometryOverlay
 } from "@/components/vworld/CoordinateMap";
-import { CandidateAddressSummary, extractCandidates } from "@/components/debug/CandidateAddressSummary";
+import { CandidateAddressSummary } from "@/components/debug/CandidateAddressSummary";
+import { extractCandidates } from "@/lib/candidate-addresses";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
 import { postPublicJson } from "@/lib/api";

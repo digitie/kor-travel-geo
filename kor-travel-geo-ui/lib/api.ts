@@ -1,5 +1,8 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api/proxy";
-export const PUBLIC_API_KEY_STORAGE_KEY = "kortravelgeo.publicApiKey";
+
+// 공개 API 키는 발급 직후 현재 탭의 디버그 요청에만 적용한다. localStorage에 남기면
+// 동일 origin의 XSS가 키를 읽을 수 있으므로, 새로고침/새 탭에는 의도적으로 유지하지 않는다.
+let activePublicApiKey = "";
 
 export class ApiError extends Error {
   status: number;
@@ -106,18 +109,12 @@ export async function deleteJson<T>(path: string): Promise<T> {
 }
 
 export function savePublicApiKeyForRequests(apiKey: string): void {
-  if (typeof window === "undefined") return;
-  const trimmed = apiKey.trim();
-  if (trimmed) {
-    window.localStorage.setItem(PUBLIC_API_KEY_STORAGE_KEY, trimmed);
-  }
+  activePublicApiKey = apiKey.trim();
 }
 
 export function clearPublicApiKeyForRequestsByHint(keyHint: string): void {
-  if (typeof window === "undefined") return;
-  const current = window.localStorage.getItem(PUBLIC_API_KEY_STORAGE_KEY)?.trim();
-  if (current?.endsWith(keyHint)) {
-    window.localStorage.removeItem(PUBLIC_API_KEY_STORAGE_KEY);
+  if (activePublicApiKey.endsWith(keyHint)) {
+    activePublicApiKey = "";
   }
 }
 
@@ -134,10 +131,7 @@ function pathWithPublicApiKey(path: string, fallbackApiKey: string): string {
 }
 
 function publicApiKeyForRequests(): string {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return window.localStorage.getItem(PUBLIC_API_KEY_STORAGE_KEY)?.trim() ?? "";
+  return activePublicApiKey;
 }
 
 export type LoadJobStatus = {

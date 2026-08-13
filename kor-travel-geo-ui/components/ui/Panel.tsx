@@ -23,7 +23,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={cn("panel", className)}>
+    <section className={cn("panel", className)} data-ui="panel">
       <div className="panel-header">
         <div className="grid min-w-0 gap-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -35,7 +35,7 @@ export function Panel({
           ) : null}
         </div>
         {actions ? (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div className="panel-actions flex shrink-0 flex-wrap items-center justify-end gap-2">
             {actions}
           </div>
         ) : null}

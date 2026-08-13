@@ -18,7 +18,7 @@ describe("DagsterEmbed", () => {
     expect(iframe).toHaveAttribute("src", "https://geo-dagster.example.com/");
     expect(iframe).toHaveAttribute(
       "sandbox",
-      "allow-scripts allow-forms allow-popups allow-downloads allow-same-origin"
+      "allow-scripts allow-forms allow-popups allow-downloads"
     );
     expect(iframe).toHaveAttribute("referrerpolicy", "no-referrer");
   });
