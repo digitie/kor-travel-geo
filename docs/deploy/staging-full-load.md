@@ -57,12 +57,12 @@ curl -sS -X POST http://127.0.0.1:12501/admin/loads \
 
 ```bash
 # 스크래치 DB는 런처가 생성한다(수동 CREATE 불필요). 완료 후:
-docker exec kor-travel-geo-postgres psql -U addr -d kor_travel_geo_fullload_e2e -tA -c \
+docker exec kor-travel-geo-postgres psql -p 12500 -U addr -d kor_travel_geo_fullload_e2e -tA -c \
   "SELECT 'mv_geocode_target', count(*) FROM mv_geocode_target
    UNION ALL SELECT 'tl_juso_text', count(*) FROM tl_juso_text;"
 # 같은 기준월이면 serving 기준선(각 6,416,637)과 대조.
 
-docker exec kor-travel-geo-postgres psql -U addr -d postgres -c \
+docker exec kor-travel-geo-postgres psql -p 12500 -U addr -d postgres -c \
   "DROP DATABASE kor_travel_geo_fullload_e2e;"
 # 검증 후 executed_job_kinds에서 full_load_batch 제거 여부는 T-290k 컷오버에서 결정.
 ```

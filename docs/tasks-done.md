@@ -10,8 +10,8 @@
   `kor-travel-docker-manager` PR #176이 prod PostgreSQL을 프로젝트별 전용 인스턴스 4개(geo `12500`·concierge
   `12600`·map `12700`·pinvi `12800`)로 나눴고 `5432`를 듣는 것은 이제 없다. 이 저장소의 현재 상태 표면
   (`CLAUDE.md`·`docs/ports.md`·`dev-environment*.md`·`architecture*.md`·`.env*.example`·`alembic.ini`·
-  `scripts/docker_app.sh`·`Settings.pg_dsn` 기본값)을 `12500`으로 맞추고 ADR-047/048에 날짜 붙은 갱신 주석을
-  달았다. 과거 기록·테스트 fixture DSN은 그대로. 운영 함정(`docker exec … psql -p 12500` 필수)은
+  `scripts/docker_app.sh`·`scripts/fullload_test.sh`·`docs/deploy/staging-full-load.md`·`Settings.pg_dsn` 기본값)을
+  `12500`으로 맞추고 ADR-047/048은 본문을 두고 `## 후속` + status `amended`로 기록했다. 과거 기록·테스트 fixture DSN은 그대로. 운영 함정(`docker exec … psql -p 12500` 필수)은
   `docs/ports.md`·`resume.md`에 기록. 함께 `resume.md`의 stale `[/ ]` 2건(#509·#510)을 완료로 정리하고
   07-28~08-17 n150 운영 기록(배포 2회·restore DB 31 GB 삭제·public API key 발급/컷오버)을 남겼다.
 

@@ -2,6 +2,49 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-17 (manager ADR-37 반영: geo PostgreSQL 5432 → 12500, 라이브 UI e2e, n150 운영 기록, by claude)
+
+**계기**: `kor-travel-docker-manager` PR #176(2026-08-17 12:24Z 머지, ADR-37)이 prod PostgreSQL을 프로젝트별
+전용 인스턴스 4개로 나누고 포트를 `12x00`으로 정렬했다(geo `12500`·concierge `12600`·map `12700`·pinvi
+`12800`, `5432`를 듣는 것은 없음). 이 저장소는 manager를 포트 source of truth로 삼는데(`docs/ports.md`) 현재
+상태를 말하는 표면이 전부 `5432`였다. 실제로 prod에서 `docker exec kor-travel-geo-postgres psql -U addr …`가
+`-p` 없이 `.s.PGSQL.5432` "No such file"로 실패해 발견했다.
+
+**PR #511**: `Settings.pg_dsn` 기본값·`alembic.ini`·`scripts/docker_app.sh`(`KTG_DB_PORT`, `KTG_DOCKER_PG_DSN`)·
+`scripts/fullload_test.sh`·`.env*.example`·`CLAUDE.md`·`docs/ports.md`·`dev-environment(.md/-recovery.md)`·
+`architecture.md`·`external-apis.md`·`docs/deploy/staging-full-load.md`(psql `-p 12500`)를 `12500`으로;
+ADR-047/048은 본문을 두고 `## 후속` + status `amended`; `t213-data-preservation.md`는 AGENTS.md가 현행 참조로
+가리켜 상단 날짜 주석. 과거 기록·테스트 fixture DSN은 그대로. bridge 모드 주의(`listen_addresses=127.0.0.1`이라
+`host.docker.internal:12500`이 Linux 엔진에서 안 닿을 수 있음)와 "#176 이전 manager checkout은 `KTG_PG_DSN`
+명시" 전환 주의를 `docs/ports.md`에. 적대 리뷰 2명(completeness·correctness 렌즈)의 P2 4/P3 ~14를 반영 —
+`.env.prod.example` 인라인 주석(파일 자체 규칙 위반, `--env-file` 깨짐)·`fullload_test.sh` 누락·staging 런북
+psql·`or` 폴백 "문서화 없음" 오기(ADR-064 §결정·api-keys.md:31에 이미 있음 — 부족한 건 운영 컷오버 경고)·
+pg_hba "고쳐야 한다"(이미 prod 적용 완료)·UI 이미지 빌드 시각 UTC/KST·ADR 인라인 주석 관례·resume 구조·prod
+공개 키 hint 6자 공개 저장소 노출(제거) 등. gate: ruff/mypy(161)/lint-imports/openapi drift/unit 75 + CI 3종 green.
+
+**라이브 UI e2e (#510 Hallmark, 실 백엔드·실 DB·Chromium)**: 로컬 PGDATA 사본(`pgdata-final-20260529`,
+`kor_travel_geo` 31 GB, `mv_geocode_target` 6,416,637)으로 임시 postgres(12599) + WSL 미러 `uvicorn` 12501 +
+Windows Next dev 12505 + Playwright MCP. 27 체크: pass 22 / warn 4 / fail 1 — 로그인·16 라우트 레일 내비·proxy
+전부 200·위저드 열고 취소·공개 API 키 생성→폐기·geocode/reverse 실데이터·드로어·로그아웃 정상. mock e2e가
+못 본 결함을 이슈로: **#512 P1** 업로드 탭이 재개 가능 세션마다 SSE를 열어 브라우저 per-host 6연결 고갈 → 레일
+클릭 5분 hang(9 세션 fixture, curl은 0.79 s); **#513 P2** 로그아웃 후 옛 쿠키로 `/admin`·`/api/runtime-config`
+200(revocation이 Node in-memory Map, Edge middleware 미반영); **#514 P2** 375/320px 업로드 탭 표·카드가
+`overflow-x:clip`에 잘림(#510의 320~1280 검증은 `documentElement.scrollWidth`만 봐서 통과); **#515 P3 묶음**.
+e2e 환경 함정: `.env.local`에 `pbkdf2_sha256$310000$…` 해시를 넣으면 `@next/env`가 `$310000`을 변수 확장해
+13자로 잘린다(따옴표·`\$` 모두 무효) → 프로세스 env로 주입해야 함; 로그인 실패 rate limit(5회/10분)은
+`ops.audit_events`(append-only) 기반이라 재시작으로 안 풀림.
+
+**n150 운영 기록 (07-28~08-17)**: 07-28 `18ad3b0`(Next 16.2.12)·07-29 `1a52ae0`(#509) 배포 — 실제 빌드 컨텍스트
+`/home/digitie/dev/kor-travel-geo`에서 `git reset --hard origin/main` 후 빌드, API·UI를 **순차 단독**
+`--force-recreate` 하니 "UI auth env 비는" 현상 재발 없음. 07-30 `kor_travel_geo_restore`(31 GB, 07-10 in-process
+복원 잔여; 커넥션 0·롤백 alias 0·maintenance window 0) `DROP DATABASE`, 볼륨 89%→82%(여유 53→85 GB, `df` 실측),
+`ops.serving_releases` pending 1·audit 3 보존. 08-08 `kor-travel-map`용 공개 API key 발급 — 그전 `ops.public_api_keys`
+8건 전부 revoked라 `KTG_VWORLD_API_KEY` env 폴백 하나로 24h 26만 건(`/v2/reverse` 배치, 컨테이너 로그 집계)이
+인증되고 있었고, ADR-064 §결정("활성 DB key가 있으면 DB key만 유효")대로 **첫 DB 키 발급 = env 폴백 컷오버**임을
+사용자에게 알린 뒤 발급, 옛 env 키 401 전환 실측. 08-17: 24h 401 0건·public 2xx 238건 → 소비자 전환 완료.
+08-17: manager #177(geo 33 GB 백업 주체 없음) 실측 사실 — `scheduled/status` `enabled:false`, `KTG_BACKUP*` env
+없음, 카탈로그 5건 만료, host bind `data/backups` 비어 있음 → `resume.md` 다음 후보 ①.
+
 ## 2026-08-13 (Hallmark Workbench 프로덕션 UI 배포 및 브라우저 검증, by codex)
 
 **배포**: 검증한 commit archive를 운영 소스 디렉터리에 전개하고 UI 이미지만 재빌드했다. 의존

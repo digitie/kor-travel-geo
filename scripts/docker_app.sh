@@ -74,6 +74,8 @@ Env files (KTG_ENV_FILE 우선 → .env → kor-travel-geo-ui/.env.local):
 
 Important env:
   KTG_DOCKER_NETWORK_MODE=host                 # dev 기본. Docker Desktop 제약 시 bridge
+                                               # bridge면 geo DB(127.0.0.1:12500 바인드)에 host.docker.internal로 못 닿을 수
+                                               # 있으니 KTG_DOCKER_PG_DSN을 bridge에서 닿는 주소로 명시 (docs/ports.md)
   KTG_DOCKER_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo
   KTG_RUSTFS_ENABLED=1
   KTG_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101

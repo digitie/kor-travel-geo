@@ -1,6 +1,6 @@
 # ADR-047: 프로젝트 식별자는 `kor-travel-geo` 계열로 통일한다
 
-- 상태: accepted
+- 상태: accepted, amended 2026-08-17 (PostgreSQL 포트 → manager ADR-37, `## 후속`)
 - 날짜: 2026-06-13
 - 결정자: 사용자 요청, codex
 
@@ -31,7 +31,7 @@
 
 - 패키지 경로, import-linter root, Docker/uvicorn entrypoint, OpenAPI export, benchmark/운영 스크립트가 `kortravelgeo`를 기준으로 동작한다.
 - `.env.example`, `Settings`, Docker 실행 스크립트, UI proxy/runtime config가 `KTG_*`를 기준으로 동작한다.
-- 기본 DSN은 `postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo`를 사용한다. *(2026-08-17 갱신: manager ADR-37로 geo DB가 전용 인스턴스 `127.0.0.1:12500`으로 이동해 기본 DSN도 `…@127.0.0.1:12500/kor_travel_geo`로 바뀌었다 — `docs/ports.md`가 정본.)*
+- 기본 DSN은 `postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo`를 사용한다.
 - RustFS 기본 bucket/prefix는 `kor-travel-geo`다.
 - API 요청 성능 측정은 `kor_travel_geo_api_request_duration_seconds` metric과 `KTG_API_PERFORMANCE_LOGGING_ENABLED` opt-in 로그로 제공한다.
 
@@ -39,3 +39,10 @@
 
 - 실제 GitHub repository slug 변경은 코드 PR만으로 완료되지 않는다. merge 직후 repository 관리 작업으로 slug를 바꾸고, 원격 URL과 에이전트 worktree 안내를 확인해야 한다.
 - 운영 DB 이름을 실제로 바꾸는 시점에는 기존 연결 문자열, 백업/복원 runbook, 외부 에이전트 `.env`를 같은 배포 창에서 갱신해야 한다.
+
+## 후속
+
+- 2026-08-17 — `kor-travel-docker-manager` ADR-37 / PR #176으로 geo PostgreSQL이 통합 인스턴스 `5432`에서
+  geo 전용 인스턴스 `127.0.0.1:12500`으로 이동했다. 위 "결과"의 기본 DSN은 이제
+  `postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo`다(`Settings.pg_dsn`·`alembic.ini`·
+  `.env*.example`). 현재 포트 정본은 `docs/ports.md`.

@@ -4,62 +4,63 @@
 
 ## 현재 진척도 (2026-08-17 갱신, by claude)
 
-- ✅ **manager ADR-37 반영 — geo PostgreSQL `5432` → 전용 인스턴스 `127.0.0.1:12500` (2026-08-17, by claude)** —
+- ✅ **manager ADR-37 반영 — geo PostgreSQL `5432` → 전용 인스턴스 `127.0.0.1:12500` (2026-08-17, PR #511, by claude)** —
   `kor-travel-docker-manager` PR #176(2026-08-17 머지)이 prod PostgreSQL을 프로젝트별 전용 인스턴스 4개로
   나누고 포트를 `12x00` 대역으로 맞췄다(geo `12500`, concierge `12600`, map `12700`, pinvi `12800`;
   **`5432`를 듣는 것은 이제 없다**). 이 저장소는 manager를 포트 source of truth로 삼으므로(`docs/ports.md`)
-  현재 상태를 말하는 표면 전부를 `12500`으로 맞췄다 — `CLAUDE.md`·`docs/ports.md`·`dev-environment*.md`·
-  `architecture*.md`·`.env*.example`·`alembic.ini`·`scripts/docker_app.sh`·`settings.py` 기본 DSN,
-  ADR-047/048에는 날짜 붙은 갱신 주석. 과거 기록(`docs/tNNN-*.md`·journal·tasks-done)과 테스트 fixture
-  DSN 문자열은 그대로 둔다. **운영 함정**: host network라 컨테이너 안 `psql`도 `-p 12500`(소켓
-  `.s.PGSQL.12500`)을 줘야 붙는다(`-p` 생략 시 기본 `5432` 소켓을 찾아 "No such file" 실패 — 실제로 겪음).
-  같은 PR의 적대 리뷰가 실측한 것: 그전 통합 인스턴스는 loopback `pg_hba`가 `trust`라 격리가 0이었고,
-  신규 initdb는 `--auth-host=scram-sha-256`. 기존 PGDATA(geo 33GB)는 pg_hba를 직접 고쳐야 한다(manager 소관).
+  현재 상태를 말하는 표면을 `12500`으로 맞췄다 — `CLAUDE.md`·`docs/ports.md`·`dev-environment*.md`·
+  `architecture*.md`·`docs/deploy/staging-full-load.md`(psql `-p 12500`)·`.env*.example`·`alembic.ini`·
+  `scripts/docker_app.sh`·`scripts/fullload_test.sh`·`Settings.pg_dsn` 기본값; ADR-047/048은 본문 유지 +
+  `## 후속`·status `amended`. 과거 기록(`docs/tNNN-*.md`·journal·tasks-done 본문)과 테스트 fixture DSN은 그대로
+  (단 `t213-data-preservation.md`는 AGENTS.md가 현행 참조로 가리켜 상단에 날짜 주석). **운영 함정**: host
+  network라 컨테이너 안 `psql`도 `-p 12500`(소켓 `.s.PGSQL.12500`) 필수 — 생략 시 `5432` 소켓 "No such file".
+  manager PR #176 적대 리뷰 실측: 그전 통합 인스턴스는 loopback `pg_hba`가 `trust`라 격리 0 → 네 인스턴스 모두
+  `listen_addresses=127.0.0.1` + loopback scram-sha-256을 **prod에 적용 완료**(기존 PGDATA는 initdb 옵션이 안 먹어
+  pg_hba를 직접 고쳤다, manager 소관). bridge 모드 주의는 `docs/ports.md`. 상세는 `docs/journal.md` 2026-08-17.
 - ✅ **Hallmark Admin UI Workbench 전면 개편 (PR #510, 2026-08-13 머지, by codex)** — `main` `64e58d3`.
   청록 OKLCH 토큰·좌측 작업 레일·작은 화면 drawer·공통 panel/header/nav·관리 홈. 공개 API key/VWorld
   키는 현재 탭 메모리만, Dagster iframe은 공개 URL만 + sandbox 축소. backend/frontend gate·React Doctor
-  경고 0·mock Chromium nav e2e·320~1280px 시각 검증. **prod 배포**: UI 이미지 2026-08-12 빌드(codex 작업본
-  기준)로 n150 서빙 중 — 관리 홈·메뉴 이동·admin proxy·틀린 비번 401 확인. 정상 비밀번호 로그인 200은
-  배포 노드에 평문 비번이 없어 운영자 몫. 라이브 UI e2e(실 백엔드·실 브라우저)는 아래 "라이브 e2e" 항목.
+  경고 0·mock Chromium nav e2e·320~1280px 시각 검증. **prod**: UI 이미지 2026-08-13 08:59 KST 빌드(#510 머지
+  12분 전, codex 작업본 기준)로 n150 서빙 중 — 관리 홈·메뉴 이동·admin proxy·틀린 비번 401 확인. 정상 비밀번호
+  로그인 200은 배포 노드에 평문 비번이 없어 운영자 몫. **라이브 UI e2e(실 백엔드·실 브라우저) 결과는 아래.**
 - ✅ **`kor-travel-map` 서버 간 public API key 최소 권한 경계 (PR #509, 2026-07-29 머지·같은 날 n150 배포, by claude/codex)** —
-  Map이 Geo Admin proxy secret 없이 공개 API key를 `X-KTG-API-Key` header로 보낸다. header는 v1/v2 public
-  인증만, Admin 역할 없음. 독립 리뷰 2명 P1 1/P2 7 반영(query/header 충돌·중복 credential·non-ASCII 500·
-  trusted bypass·OpenAPI header 제약·401 envelope·생성 타입·API reference). n150 배포 후 라이브 검증:
-  spec에 `X-KTG-API-Key` 27건, header/query/충돌/중복 각 401 envelope 정확, 기존 `key` query 경로 유지.
+  Map이 Geo Admin proxy secret 없이 공개 API key를 `X-KTG-API-Key` header로 보낸다(public 인증만, Admin 역할
+  없음). 독립 리뷰 2명 P1 1/P2 7 반영. n150 라이브 검증: spec header 27건, header/query/충돌/중복 각 401 envelope,
+  기존 `key` query 경로 유지.
+- **n150 운영 기록 07-28~08-17** (배포 2회, 잔여 restore DB 31 GB 삭제, `kor-travel-map`용 공개 API key 발급 =
+  env 폴백 컷오버, ADR-064 §결정대로 "활성 DB key가 있으면 DB key만 유효")는 `docs/journal.md` 2026-08-17 항목.
 
-### 운영 기록 (2026-07-28 ~ 2026-08-17, n150 prod, by claude)
+### 라이브 UI e2e — Hallmark(#510) 실 백엔드·실 DB·Chromium (2026-08-17, PR #511 게이트, by claude)
 
-- **배포**: 07-28 `18ad3b0`(Next 16.2.12), 07-29 `1a52ae0`(#509) — API·UI 이미지 실제 빌드 컨텍스트
-  `/home/digitie/dev/kor-travel-geo`에서 `git reset --hard origin/main` 후 빌드. **API·UI를 묶지 않고 순차
-  단독 `--force-recreate`** 하니 그전 반복되던 "UI auth env가 비는" 현상이 두 번 다 안 났다.
-- **07-30 잔여 restore DB 삭제**: `kor_travel_geo_restore`(31 GB, 2026-07-10 in-process 복원 잔여, 커넥션 0,
-  `*_previous_*` 롤백 alias 0, maintenance window 0) `DROP DATABASE` — 볼륨 89%→82%(여유 53→85 GB).
-  `ops.serving_releases` pending 행 1·audit 3건은 이력으로 그대로 보존. map/concierge 잔여 DB는 손대지 않음.
-- **08-08 공개 API key 발급 (`kor-travel-map`, hint `G0zoFa`)**: 그전까지 `ops.public_api_keys`는 8건 전부
-  revoked → active 0 → `KTG_VWORLD_API_KEY` env 폴백 하나로 24h 26만 건(`/v2/reverse` 배치)이 인증되고
-  있었다. `public_api_key.py`의 `effective_hashes = active_hashes or _vworld_default_key_hashes(settings)`는
-  **`or`라 DB active 키가 하나라도 생기면 env 폴백이 즉시 꺼진다** — 발급 = 컷오버. 사용자 확인 후 발급했고
-  기존 env 키는 401로 전환됨을 실측. 08-17 확인: 24h 401 **0건**, public 2xx 238건 → 소비자(map)가 새 키로
-  전환 완료. 이 `or` 동작은 의도(정적 공유키 → DB 관리키 강제 이관)로 보이나 **문서화가 없어** 운영자가
-  모르면 프로드 트래픽을 끊는다 — 아래 "다음 한 작업" 후보.
+- 환경: 로컬 임시 postgres(`pgdata-final-20260529` 사본, `kor_travel_geo` 31 GB, `mv_geocode_target` 6,416,637 =
+  전국 실데이터, alembic `0026`) + WSL 미러 `uvicorn` 12501 + Windows Next dev 12505 + Playwright Chromium.
+- 결과: 27개 체크 중 pass 22 / warn 4 / fail 1. 로그인·16개 라우트 레일 내비·`/api/proxy/*` 전부 200·업로드/복원
+  위저드 열고 취소·공개 API 키 생성→폐기 라운드트립·geocode/reverse 실데이터·모바일 드로어·로그아웃 정상.
+- **mock e2e가 못 본 결함 → 이슈로 분리**: **#512 (P1)** 업로드 탭이 재개 가능 세션마다 SSE를 열어 브라우저
+  per-host 6연결을 고갈 → 다른 모든 요청이 수 분 멈춤(9 세션 fixture, 레일 클릭 5분 hang 실측). **#513 (P2)** 로그아웃
+  후 복사한 쿠키로 `/admin`·`/api/runtime-config` 열림(revocation이 Node in-memory Map, Edge middleware 미반영).
+  **#514 (P2)** 375/320px 업로드 탭 표·카드 오버플로가 `overflow-x:clip`에 잘림. **#515 (P3 묶음)** 로그인 페이지 401
+  콘솔 노이즈·드로어 tab order·`/admin/tables` 행 수 0·페이지 title·ops READY placeholder·폐기 키 평문 잔존.
 
-### 라이브 e2e — Hallmark UI(#510) 실 백엔드·실 브라우저 (2026-08-17, by claude)
+### 다음 한 작업
 
-- 실행 환경: 로컬 WSL 미러 backend(`uvicorn` 12501, DSN → 로컬 `pgdata-final-20260529` 사본 `kor_travel_geo`
-  31 GB, `mv_geocode_target` 6,416,637 = 전국 실데이터, alembic `0026` head) + Windows Next dev 12505 + 실 브라우저.
-- 결과는 이 PR 본문·아래 후속 항목에 기록한다(발견 결함은 이슈로 분리).
+**#512 (P1) 업로드 탭 SSE 연결 고갈 수정** — 선택/활성 세션 1건만 구독하거나 단일 멀티플렉스 스트림으로; 회귀는
+세션 ≥7 fixture로 실 브라우저 검증. 운영에서 재개 가능 세션이 6개 이상 쌓이면 관리 콘솔 전체가 멈추므로 최우선.
 
-### 다음 한 작업 (후보, 우선순위 순)
+후보(우선순위 순): ① **[cross-repo] manager #177 — geo 33 GB 인스턴스 백업 주체 없음, 실측 사실**(2026-08-17):
+`GET /v1/admin/backups/scheduled/status` = `{"enabled":false,"reason":"disabled"}`(prod api에 `KTG_BACKUP*` env 없음),
+카탈로그 "available" 5건(07-10/11 T-290 e2e 산출물)은 `expires_at` 08-09/10 만료, host bind
+`/home/digitie/kor-travel-geo/data/backups`(→`/app/data/backups`)는 비어 있음; Dagster `db_backup` op은 5회
+SUCCESS 이력 → 경로는 검증됨. 할 일: prod env 스케줄 backup 활성화(간격·keep_min·retention_class) + Dagster
+`scheduled_backup_run_due` on + 디스크 예산(4.4 GB/본, keep 3 ≈ 13 GB, 08-17 여유 85 GB) + 산출물 600 + 외부 사본
+(T-236). manager #177에 사실 기록, geo 결선은 이 저장소. ② **#513/#514** (P2 두 건). ③ **[cross-repo] manager #178**
+geo postgres `addr/addr` 기본 자격증명·평문 env — 회전은 manager 소관, geo api/dagster의 `KTG_PG_DSN`·
+`KTG_DAGSTER_PG_URL` 동시 갱신 체크리스트를 이 저장소가 기여. ④ `docs/api-reference/operators/api-keys.md`에
+"첫 DB 키 발급 = env 폴백 컷오버" 운영 경고 + 소비자 전환 순서(동작 자체는 ADR-064 §결정·api-keys.md:31에 이미
+문서화됨; 동작을 바꾸려면 ADR-064를 supersede하는 새 ADR). ⑤ #515 P3 묶음.
 
-1. **[cross-repo] manager #177 — geo 33 GB 인스턴스 백업 주체 없음.** 이 저장소의 T-239~244·T-290g(scheduled
-   backup run-due·Dagster daily restore-drill·verify/copy)가 prod에서 실제로 돌고 산출물을 남기는지부터 확인
-   (`GET /v1/admin/backups`, `GET /v1/admin/backups/scheduled/status`, RustFS prefix). 돌고 있으면 manager 이슈에
-   사실을 남기고, 안 돌면 이 저장소가 결선한다.
-2. **[cross-repo] manager #178 — geo postgres superuser `addr/addr` 기본값·평문 env.** 회전은 manager 소관이지만
-   `KTG_PG_DSN`·`KTG_DAGSTER_PG_URL`을 쓰는 geo api/dagster 컨테이너가 같은 트랜잭션으로 갱신돼야 한다 — 회전
-   런북에 이 저장소 쪽 체크리스트 기여.
-3. **public API key 폴백 `or` 동작 문서화** — `docs/api-reference/operators/api-keys.md`에 "첫 DB 키 발급 =
-   env 폴백 컷오버" 경고 + 발급 전 소비자 전환 순서. 코드 변경 여부(둘 다 허용 vs 현행 유지)는 ADR-064에서 결정.
+### 최근 완료 이력
+
 - ✅ **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only (2026-07-12, by claude)** — backup/restore·적재
   오케스트레이션의 독립 Dagster 이관을 끝냈다. 통합 브랜치 `agent/claude-dagster-migration`(HEAD `9bcb949`)에
   T-290h~l이 모두 병합됐고 n150에 **cutover 배포·검증 완료** — in-process `JobQueue` drain·
