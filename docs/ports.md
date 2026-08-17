@@ -4,7 +4,7 @@
 
 | 설정 | 예시 | 비고 |
 |------|------|------|
-| `KTG_PG_DSN` | `postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo` | 이미 동작 중인 PostgreSQL/PostGIS |
+| `KTG_PG_DSN` | `postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo` | 이미 동작 중인 PostgreSQL/PostGIS — **geo 전용 인스턴스 `12500`**(manager ADR-37, 2026-08-17). 그전 통합 `5432`는 더 이상 아무도 듣지 않는다 |
 | `KTG_RUSTFS_ENABLED` | `true` | RustFS bucket을 사용할 때만 활성화 |
 | `KTG_RUSTFS_ENDPOINT_URL` | `http://127.0.0.1:12101` | 이미 동작 중인 S3 호환 endpoint. RustFS console은 manager 기준 `12105` |
 | `KTG_RUSTFS_BUCKET` | `kor-travel-geo` | 이 프로젝트가 사용할 bucket |
@@ -24,7 +24,7 @@
 
 | 표면 | host 포트 | compose 내부 대상 | 비고 |
 |------|-----------|-------------------|------|
-| PostgreSQL/PostGIS | `5432` | `kor-travel-geo-postgres:5432` | 통합 DB. `kor_travel_geo`, `tripmate`, `kor_travel_concierge`, `krtour_map` 등 |
+| PostgreSQL/PostGIS | `12500` | `kor-travel-geo-postgres` (host network, `postgres -p 12500`) | **geo 전용 인스턴스**(manager ADR-37 / PR #176, 2026-08-17): 이 저장소가 쓰는 DB는 `kor_travel_geo`·`kor_travel_geo_dagster`(같은 PGDATA를 이어받아 옛 통합 시절 DB가 남아 있을 수 있음). concierge/map/pinvi는 각자 `12600`/`12700`/`12800`. `127.0.0.1` 바인드, 신규 initdb는 loopback scram-sha-256. host network라 `ports:`가 무시되고 `-p`가 곧 host 포트다 — 컨테이너 안에서 `psql`을 쳐도 `-p 12500`(소켓 `.s.PGSQL.12500`)을 줘야 붙는다 |
 | RustFS S3 API | `12101` | `rustfs:9000` | `KTG_RUSTFS_ENDPOINT_URL`의 host 기준값 |
 | RustFS console | `12105` | `rustfs:9001` | object 확인·수동 삭제 등 운영 콘솔 |
 | Grafana | `12205` | `grafana:3000` | Prometheus datasource 자동 등록 |
@@ -52,7 +52,7 @@ Prometheus scrape 대상은 이 저장소의 API `/metrics`와 `kor-travel-geo-u
 | `kor-travel-geo-ui` metrics | `12505` | `kor-travel-geo-ui:12505/api/metrics` | Docker manager compose 기준 scrape target |
 
 ```bash
-KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo \
+KTG_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo \
 KTG_RUSTFS_ENABLED=true \
 KTG_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101 \
   uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12501
@@ -80,5 +80,9 @@ KTG_API_INTERNAL_URL=http://localhost:12501 npm run dev -- --port 12505
 | 기동 | `docker_app.sh`(기본 host 네트워크 모드) 또는 uvicorn/npm 직접 | `kor-travel-docker-manager` |
 
 - dev에서 `docker_app.sh`는 **host 네트워크 모드가 기본**이라 API/UI/DB/RustFS가 모두 `127.0.0.1`로 일관 동작한다. Docker Desktop의 host 모드 제약이 있으면 `KTG_DOCKER_NETWORK_MODE=bridge`로 바꾼다.
+  **bridge 주의(2026-08-17)**: manager ADR-37부터 geo PostgreSQL이 `listen_addresses=127.0.0.1`이라 bridge 기본값
+  `host.docker.internal:12500`(host-gateway)은 Linux 엔진에서 DB에 닿지 않을 수 있다 — bridge면 `KTG_DOCKER_PG_DSN`을
+  bridge 네트워크에서 닿는 주소로 명시한다(Docker Desktop은 host.docker.internal이 loopback으로 포워딩돼 보통 동작).
+  또 로컬 manager checkout이 #176 이전이면 geo DB가 아직 `5432`에 있으니 `KTG_PG_DSN`을 명시해 쓴다(기본값만 `12500`으로 바뀌었다).
 - dev 스크립트는 같은 컨테이너/포트가 **이미 떠 있으면 새 포트로 우회하지 않는다.** 강제종료 여부를 묻고, 거부하면 작업을 중지한다(`KTG_FORCE_KILL=1`이면 묻지 않고 교체, 비대화형은 안전 중지).
 - prod 공식 도메인 실제 값은 추적 파일에 두지 않고 gitignored `.env.prod`(또는 배포 노드 `app.env`)에만 둔다(서버사이드 `KTG_*` 변수, `NEXT_PUBLIC_*` 아님).

@@ -37,7 +37,7 @@ class Settings(BaseSettings):
         frozen=True,
     )
 
-    pg_dsn: str = "postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo"
+    pg_dsn: str = "postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo"
     pg_pool_size: int = Field(default=10, ge=1)
     pg_max_overflow: int = Field(default=5, ge=0)
     pg_pool_timeout_ms: int = Field(default=1_000, ge=1)

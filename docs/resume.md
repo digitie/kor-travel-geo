@@ -2,24 +2,65 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-08-13 갱신, by codex)
+## 현재 진척도 (2026-08-17 갱신, by claude)
 
-- [/ ] **Hallmark Admin UI Workbench 전면 개편** — 최신 `main` 기준 별도 깨끗한 작업본에서
-  디자인 시스템(`design.md`)과 전역 토큰을 고정하고, 좌측 레일·작은 화면 drawer·관리 홈과
-  공통 panel/header/nav를 일관 개편했다. 외부 iframe은 공개 Dagster URL만 쓰고, 브라우저에
-  남는 공개 API key/VWorld 키는 현재 탭 메모리로 제한했다. backend/frontend 전체 gate,
-  React Doctor(경고 0), mock Chromium navigation e2e, 320~1280px 시각 검증을 마쳤다.
-  **배포 상태**: 프로덕션 UI 배포와 Chromium 관리 홈·메뉴 이동·admin proxy live 검증을 마쳤다.
-  **다음 한 작업**: PR CI가 녹색이면 squash merge한다. 배포 노드에 평문 관리자 비밀번호를
-  보관하지 않아, 정상 비밀번호를 넣는 로그인 POST 200은 운영자가 별도로 확인한다(잘못된
-  비밀번호 401, 세션 검증과 admin API 200은 확인 완료).
+- ✅ **manager ADR-37 반영 — geo PostgreSQL `5432` → 전용 인스턴스 `127.0.0.1:12500` (2026-08-17, PR #511, by claude)** —
+  `kor-travel-docker-manager` PR #176(2026-08-17 머지)이 prod PostgreSQL을 프로젝트별 전용 인스턴스 4개로
+  나누고 포트를 `12x00` 대역으로 맞췄다(geo `12500`, concierge `12600`, map `12700`, pinvi `12800`;
+  **`5432`를 듣는 것은 이제 없다**). 이 저장소는 manager를 포트 source of truth로 삼으므로(`docs/ports.md`)
+  현재 상태를 말하는 표면을 `12500`으로 맞췄다 — `CLAUDE.md`·`docs/ports.md`·`dev-environment*.md`·
+  `architecture*.md`·`docs/deploy/staging-full-load.md`(psql `-p 12500`)·`.env*.example`·`alembic.ini`·
+  `scripts/docker_app.sh`·`scripts/fullload_test.sh`·`Settings.pg_dsn` 기본값; ADR-047/048은 본문 유지 +
+  `## 후속`·status `amended`. 과거 기록(`docs/tNNN-*.md`·journal·tasks-done 본문)과 테스트 fixture DSN은 그대로
+  (단 `t213-data-preservation.md`는 AGENTS.md가 현행 참조로 가리켜 상단에 날짜 주석). **운영 함정**: host
+  network라 컨테이너 안 `psql`도 `-p 12500`(소켓 `.s.PGSQL.12500`) 필수 — 생략 시 `5432` 소켓 "No such file".
+  manager PR #176 적대 리뷰 실측: 그전 통합 인스턴스는 loopback `pg_hba`가 `trust`라 격리 0 → 네 인스턴스 모두
+  `listen_addresses=127.0.0.1` + loopback scram-sha-256을 **prod에 적용 완료**(기존 PGDATA는 initdb 옵션이 안 먹어
+  pg_hba를 직접 고쳤다, manager 소관). bridge 모드 주의는 `docs/ports.md`. 상세는 `docs/journal.md` 2026-08-17.
+- ✅ **Hallmark Admin UI Workbench 전면 개편 (PR #510, 2026-08-13 머지, by codex)** — `main` `64e58d3`.
+  청록 OKLCH 토큰·좌측 작업 레일·작은 화면 drawer·공통 panel/header/nav·관리 홈. 공개 API key/VWorld
+  키는 현재 탭 메모리만, Dagster iframe은 공개 URL만 + sandbox 축소. backend/frontend gate·React Doctor
+  경고 0·mock Chromium nav e2e·320~1280px 시각 검증. **prod**: UI 이미지 2026-08-13 08:59 KST 빌드(#510 머지
+  12분 전, codex 작업본 기준)로 n150 서빙 중 — 관리 홈·메뉴 이동·admin proxy·틀린 비번 401 확인. 정상 비밀번호
+  로그인 200은 배포 노드에 평문 비번이 없어 운영자 몫. **라이브 UI e2e(실 백엔드·실 브라우저) 결과는 아래.**
+- ✅ **`kor-travel-map` 서버 간 public API key 최소 권한 경계 (PR #509, 2026-07-29 머지·같은 날 n150 배포, by claude/codex)** —
+  Map이 Geo Admin proxy secret 없이 공개 API key를 `X-KTG-API-Key` header로 보낸다(public 인증만, Admin 역할
+  없음). 독립 리뷰 2명 P1 1/P2 7 반영. n150 라이브 검증: spec header 27건, header/query/충돌/중복 각 401 envelope,
+  기존 `key` query 경로 유지.
+- **n150 운영 기록 07-28~08-17** (배포 2회, 잔여 restore DB 31 GB 삭제, `kor-travel-map`용 공개 API key 발급 =
+  env 폴백 컷오버, ADR-064 §결정대로 "활성 DB key가 있으면 DB key만 유효")는 `docs/journal.md` 2026-08-17 항목.
 
-- [/ ] `kor-travel-map` 서버 간 public API key 최소 권한 경계 진행 중 — Map 컨테이너에 Geo Admin
-  proxy shared secret을 공유하지 않고, 기존 공개 API key를 `X-KTG-API-Key` header로 보내도록
-  Geo public dependency를 확장했다. header는 v1/v2 public endpoint 인증만 수행하고 Admin 역할을
-  부여하지 않는다. 독립 보안·계약 리뷰 2명의 P1 1건/P2 7건을 반영해 query/header 충돌,
-  중복 credential, non-ASCII 500, trusted bypass, OpenAPI header 제약·401 envelope, frontend
-  생성 타입과 API reference를 보강했다. 남은 작업은 n150 전체 gate, PR CI와 머지다.
+### 라이브 UI e2e — Hallmark(#510) 실 백엔드·실 DB·Chromium (2026-08-17, PR #511 게이트, by claude)
+
+- 환경: 로컬 임시 postgres(`pgdata-final-20260529` 사본, `kor_travel_geo` 31 GB, `mv_geocode_target` 6,416,637 =
+  전국 실데이터, alembic `0026`) + WSL 미러 `uvicorn` 12501 + Windows Next dev 12505 + Playwright Chromium.
+- 결과: 27개 체크 중 pass 22 / warn 4 / fail 1. 로그인·16개 라우트 레일 내비·`/api/proxy/*` 전부 200·업로드/복원
+  위저드 열고 취소·공개 API 키 생성→폐기 라운드트립·geocode/reverse 실데이터·모바일 드로어·로그아웃 정상.
+- **mock e2e가 못 본 결함 → 이슈로 분리**: **#512 (P1)** 업로드 탭이 재개 가능 세션마다 SSE를 열어 브라우저
+  per-host 6연결을 고갈 → 다른 모든 요청이 수 분 멈춤(9 세션 fixture, 레일 클릭 5분 hang 실측). **#513 (P2)** 로그아웃
+  후 복사한 쿠키로 `/admin`·`/api/runtime-config` 열림(revocation이 Node in-memory Map, Edge middleware 미반영).
+  **#514 (P2)** 375/320px 업로드 탭 표·카드 오버플로가 `overflow-x:clip`에 잘림. **#515 (P3 묶음)** 로그인 페이지 401
+  콘솔 노이즈·드로어 tab order·`/admin/tables` 행 수 0·페이지 title·ops READY placeholder·폐기 키 평문 잔존.
+
+### 다음 한 작업
+
+**#512 (P1) 업로드 탭 SSE 연결 고갈 수정** — 선택/활성 세션 1건만 구독하거나 단일 멀티플렉스 스트림으로; 회귀는
+세션 ≥7 fixture로 실 브라우저 검증. 운영에서 재개 가능 세션이 6개 이상 쌓이면 관리 콘솔 전체가 멈추므로 최우선.
+
+후보(우선순위 순): ① **[cross-repo] manager #177 — geo 33 GB 인스턴스 백업 주체 없음, 실측 사실**(2026-08-17):
+`GET /v1/admin/backups/scheduled/status` = `{"enabled":false,"reason":"disabled"}`(prod api에 `KTG_BACKUP*` env 없음),
+카탈로그 "available" 5건(07-10/11 T-290 e2e 산출물)은 `expires_at` 08-09/10 만료, host bind
+`/home/digitie/kor-travel-geo/data/backups`(→`/app/data/backups`)는 비어 있음; Dagster `db_backup` op은 5회
+SUCCESS 이력 → 경로는 검증됨. 할 일: prod env 스케줄 backup 활성화(간격·keep_min·retention_class) + Dagster
+`scheduled_backup_run_due` on + 디스크 예산(4.4 GB/본, keep 3 ≈ 13 GB, 08-17 여유 85 GB) + 산출물 600 + 외부 사본
+(T-236). manager #177에 사실 기록, geo 결선은 이 저장소. ② **#513/#514** (P2 두 건). ③ **[cross-repo] manager #178**
+geo postgres `addr/addr` 기본 자격증명·평문 env — 회전은 manager 소관, geo api/dagster의 `KTG_PG_DSN`·
+`KTG_DAGSTER_PG_URL` 동시 갱신 체크리스트를 이 저장소가 기여. ④ `docs/api-reference/operators/api-keys.md`에
+"첫 DB 키 발급 = env 폴백 컷오버" 운영 경고 + 소비자 전환 순서(동작 자체는 ADR-064 §결정·api-keys.md:31에 이미
+문서화됨; 동작을 바꾸려면 ADR-064를 supersede하는 새 ADR). ⑤ #515 P3 묶음.
+
+### 최근 완료 이력
+
 - ✅ **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only (2026-07-12, by claude)** — backup/restore·적재
   오케스트레이션의 독립 Dagster 이관을 끝냈다. 통합 브랜치 `agent/claude-dagster-migration`(HEAD `9bcb949`)에
   T-290h~l이 모두 병합됐고 n150에 **cutover 배포·검증 완료** — in-process `JobQueue` drain·

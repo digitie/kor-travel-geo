@@ -1,6 +1,6 @@
 # ADR-048: 로컬 API/UI 포트는 Docker 실행과 같은 12501/12505를 사용한다
 
-- 상태: accepted
+- 상태: accepted, amended 2026-08-17 (PostgreSQL 포트 → manager ADR-37, `## 후속`)
 - 날짜: 2026-06-13
 - 결정자: 사용자 요청, codex
 
@@ -34,3 +34,9 @@ ADR-046은 로컬 단독 실행 포트를 API `12201`, UI `12205`로 정했지�
 ## 남은 위험
 
 - VWorld 개발 키의 referrer/domain 제한에 예전 `12205`만 등록돼 있으면 지도 타일 호출이 실패할 수 있다. 로컬 개발용 키에는 `localhost:12505`, `127.0.0.1:12505`, WSL e2e IP와 포트 조합을 등록한다.
+
+## 후속
+
+- 2026-08-17 — 결정 6의 "PostgreSQL은 `5432`"는 manager ADR-37 / PR #176으로 **geo 전용 인스턴스 `12500`**
+  (concierge `12600`, map `12700`, pinvi `12800`; `5432`를 듣는 것은 없음)으로 바뀌었다. 이 ADR의 원칙(manager가
+  source of truth)은 그대로이고 값만 이동 — 현재 값은 `docs/ports.md`.

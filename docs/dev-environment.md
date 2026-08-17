@@ -197,7 +197,7 @@ MCP가 아직 노출되지 않은 세션에서는 작업 로그에 "MCP 미노�
 
 ## 1.3 공식 로컬 포트
 
-이 저장소의 PC/WSL 개발 환경은 `kor-travel-docker-manager`의 포트 정책을 공식값으로 사용한다. PostgreSQL은 표준 포트 `5432`, RustFS는 API `12101`/console `12105`, 관측 스택은 Grafana `12205`/cAdvisor `12301`/Prometheus `12401`, 이 저장소의 API/UI는 `12501`/`12505`를 사용한다. 단독 실행과 Docker 실행 포트를 같게 유지해 manager compose와 scrape target이 어긋나지 않게 한다. 전체 주변 서비스 포트는 `docs/ports.md`에 둔다.
+이 저장소의 PC/WSL 개발 환경은 `kor-travel-docker-manager`의 포트 정책을 공식값으로 사용한다. PostgreSQL은 geo 전용 인스턴스 `12500`(manager ADR-37, 2026-08-17 — 그전 통합 `5432`), RustFS는 API `12101`/console `12105`, 관측 스택은 Grafana `12205`/cAdvisor `12301`/Prometheus `12401`, 이 저장소의 API/UI는 `12501`/`12505`를 사용한다. 단독 실행과 Docker 실행 포트를 같게 유지해 manager compose와 scrape target이 어긋나지 않게 한다. 전체 주변 서비스 포트는 `docs/ports.md`에 둔다.
 
 | 표면 | 공식 host 포트 | 내부 포트 | 비고 |
 |------|----------------|-----------|------|

@@ -23,6 +23,13 @@
   DB 스키마 변경 없이 동작한다.
 
 ### Changed
+- **PostgreSQL 기본 접속을 `localhost:5432` → `127.0.0.1:12500`(geo 전용 인스턴스)으로 맞췄다.**
+  `kor-travel-docker-manager` ADR-37 / PR #176(2026-08-17)이 prod PostgreSQL을 프로젝트별 전용
+  인스턴스로 나누고 포트를 `12x00` 대역으로 정렬했다(geo `12500`; `5432`를 듣는 것은 이제 없다).
+  이 저장소는 manager를 포트 source of truth로 삼으므로 `Settings.pg_dsn` 기본값, `alembic.ini`,
+  `scripts/docker_app.sh`·`scripts/fullload_test.sh`의 `KTG_DB_PORT`/DSN 기본값, `.env*.example`,
+  `CLAUDE.md`·`docs/ports.md`·개발환경/아키텍처 문서·staging 런북(psql `-p 12500`)을 갱신했다. 명시적으로 `KTG_PG_DSN`을 주는
+  배포(manager compose·prod env)는 동작 변화가 없다. 컨테이너 안 `psql`도 `-p 12500`이 필요하다.
 - **관리 UI를 Hallmark Workbench 디자인 시스템으로 전면 개편했다.** 청록 기반 OKLCH 토큰,
   고정 작업 레일과 작은 화면 drawer, 경계 중심 panel, 조밀한 관리 홈을 모든 운영 화면에
   적용했다. 라우트·인증·API·폼 흐름은 유지하며, 320px부터 데스크톱까지 같은 정보 구조로
