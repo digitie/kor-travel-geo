@@ -2,24 +2,64 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-08-13 갱신, by codex)
+## 현재 진척도 (2026-08-17 갱신, by claude)
 
-- [/ ] **Hallmark Admin UI Workbench 전면 개편** — 최신 `main` 기준 별도 깨끗한 작업본에서
-  디자인 시스템(`design.md`)과 전역 토큰을 고정하고, 좌측 레일·작은 화면 drawer·관리 홈과
-  공통 panel/header/nav를 일관 개편했다. 외부 iframe은 공개 Dagster URL만 쓰고, 브라우저에
-  남는 공개 API key/VWorld 키는 현재 탭 메모리로 제한했다. backend/frontend 전체 gate,
-  React Doctor(경고 0), mock Chromium navigation e2e, 320~1280px 시각 검증을 마쳤다.
-  **배포 상태**: 프로덕션 UI 배포와 Chromium 관리 홈·메뉴 이동·admin proxy live 검증을 마쳤다.
-  **다음 한 작업**: PR CI가 녹색이면 squash merge한다. 배포 노드에 평문 관리자 비밀번호를
-  보관하지 않아, 정상 비밀번호를 넣는 로그인 POST 200은 운영자가 별도로 확인한다(잘못된
-  비밀번호 401, 세션 검증과 admin API 200은 확인 완료).
+- ✅ **manager ADR-37 반영 — geo PostgreSQL `5432` → 전용 인스턴스 `127.0.0.1:12500` (2026-08-17, by claude)** —
+  `kor-travel-docker-manager` PR #176(2026-08-17 머지)이 prod PostgreSQL을 프로젝트별 전용 인스턴스 4개로
+  나누고 포트를 `12x00` 대역으로 맞췄다(geo `12500`, concierge `12600`, map `12700`, pinvi `12800`;
+  **`5432`를 듣는 것은 이제 없다**). 이 저장소는 manager를 포트 source of truth로 삼으므로(`docs/ports.md`)
+  현재 상태를 말하는 표면 전부를 `12500`으로 맞췄다 — `CLAUDE.md`·`docs/ports.md`·`dev-environment*.md`·
+  `architecture*.md`·`.env*.example`·`alembic.ini`·`scripts/docker_app.sh`·`settings.py` 기본 DSN,
+  ADR-047/048에는 날짜 붙은 갱신 주석. 과거 기록(`docs/tNNN-*.md`·journal·tasks-done)과 테스트 fixture
+  DSN 문자열은 그대로 둔다. **운영 함정**: host network라 컨테이너 안 `psql`도 `-p 12500`(소켓
+  `.s.PGSQL.12500`)을 줘야 붙는다(`-p` 생략 시 기본 `5432` 소켓을 찾아 "No such file" 실패 — 실제로 겪음).
+  같은 PR의 적대 리뷰가 실측한 것: 그전 통합 인스턴스는 loopback `pg_hba`가 `trust`라 격리가 0이었고,
+  신규 initdb는 `--auth-host=scram-sha-256`. 기존 PGDATA(geo 33GB)는 pg_hba를 직접 고쳐야 한다(manager 소관).
+- ✅ **Hallmark Admin UI Workbench 전면 개편 (PR #510, 2026-08-13 머지, by codex)** — `main` `64e58d3`.
+  청록 OKLCH 토큰·좌측 작업 레일·작은 화면 drawer·공통 panel/header/nav·관리 홈. 공개 API key/VWorld
+  키는 현재 탭 메모리만, Dagster iframe은 공개 URL만 + sandbox 축소. backend/frontend gate·React Doctor
+  경고 0·mock Chromium nav e2e·320~1280px 시각 검증. **prod 배포**: UI 이미지 2026-08-12 빌드(codex 작업본
+  기준)로 n150 서빙 중 — 관리 홈·메뉴 이동·admin proxy·틀린 비번 401 확인. 정상 비밀번호 로그인 200은
+  배포 노드에 평문 비번이 없어 운영자 몫. 라이브 UI e2e(실 백엔드·실 브라우저)는 아래 "라이브 e2e" 항목.
+- ✅ **`kor-travel-map` 서버 간 public API key 최소 권한 경계 (PR #509, 2026-07-29 머지·같은 날 n150 배포, by claude/codex)** —
+  Map이 Geo Admin proxy secret 없이 공개 API key를 `X-KTG-API-Key` header로 보낸다. header는 v1/v2 public
+  인증만, Admin 역할 없음. 독립 리뷰 2명 P1 1/P2 7 반영(query/header 충돌·중복 credential·non-ASCII 500·
+  trusted bypass·OpenAPI header 제약·401 envelope·생성 타입·API reference). n150 배포 후 라이브 검증:
+  spec에 `X-KTG-API-Key` 27건, header/query/충돌/중복 각 401 envelope 정확, 기존 `key` query 경로 유지.
 
-- [/ ] `kor-travel-map` 서버 간 public API key 최소 권한 경계 진행 중 — Map 컨테이너에 Geo Admin
-  proxy shared secret을 공유하지 않고, 기존 공개 API key를 `X-KTG-API-Key` header로 보내도록
-  Geo public dependency를 확장했다. header는 v1/v2 public endpoint 인증만 수행하고 Admin 역할을
-  부여하지 않는다. 독립 보안·계약 리뷰 2명의 P1 1건/P2 7건을 반영해 query/header 충돌,
-  중복 credential, non-ASCII 500, trusted bypass, OpenAPI header 제약·401 envelope, frontend
-  생성 타입과 API reference를 보강했다. 남은 작업은 n150 전체 gate, PR CI와 머지다.
+### 운영 기록 (2026-07-28 ~ 2026-08-17, n150 prod, by claude)
+
+- **배포**: 07-28 `18ad3b0`(Next 16.2.12), 07-29 `1a52ae0`(#509) — API·UI 이미지 실제 빌드 컨텍스트
+  `/home/digitie/dev/kor-travel-geo`에서 `git reset --hard origin/main` 후 빌드. **API·UI를 묶지 않고 순차
+  단독 `--force-recreate`** 하니 그전 반복되던 "UI auth env가 비는" 현상이 두 번 다 안 났다.
+- **07-30 잔여 restore DB 삭제**: `kor_travel_geo_restore`(31 GB, 2026-07-10 in-process 복원 잔여, 커넥션 0,
+  `*_previous_*` 롤백 alias 0, maintenance window 0) `DROP DATABASE` — 볼륨 89%→82%(여유 53→85 GB).
+  `ops.serving_releases` pending 행 1·audit 3건은 이력으로 그대로 보존. map/concierge 잔여 DB는 손대지 않음.
+- **08-08 공개 API key 발급 (`kor-travel-map`, hint `G0zoFa`)**: 그전까지 `ops.public_api_keys`는 8건 전부
+  revoked → active 0 → `KTG_VWORLD_API_KEY` env 폴백 하나로 24h 26만 건(`/v2/reverse` 배치)이 인증되고
+  있었다. `public_api_key.py`의 `effective_hashes = active_hashes or _vworld_default_key_hashes(settings)`는
+  **`or`라 DB active 키가 하나라도 생기면 env 폴백이 즉시 꺼진다** — 발급 = 컷오버. 사용자 확인 후 발급했고
+  기존 env 키는 401로 전환됨을 실측. 08-17 확인: 24h 401 **0건**, public 2xx 238건 → 소비자(map)가 새 키로
+  전환 완료. 이 `or` 동작은 의도(정적 공유키 → DB 관리키 강제 이관)로 보이나 **문서화가 없어** 운영자가
+  모르면 프로드 트래픽을 끊는다 — 아래 "다음 한 작업" 후보.
+
+### 라이브 e2e — Hallmark UI(#510) 실 백엔드·실 브라우저 (2026-08-17, by claude)
+
+- 실행 환경: 로컬 WSL 미러 backend(`uvicorn` 12501, DSN → 로컬 `pgdata-final-20260529` 사본 `kor_travel_geo`
+  31 GB, `mv_geocode_target` 6,416,637 = 전국 실데이터, alembic `0026` head) + Windows Next dev 12505 + 실 브라우저.
+- 결과는 이 PR 본문·아래 후속 항목에 기록한다(발견 결함은 이슈로 분리).
+
+### 다음 한 작업 (후보, 우선순위 순)
+
+1. **[cross-repo] manager #177 — geo 33 GB 인스턴스 백업 주체 없음.** 이 저장소의 T-239~244·T-290g(scheduled
+   backup run-due·Dagster daily restore-drill·verify/copy)가 prod에서 실제로 돌고 산출물을 남기는지부터 확인
+   (`GET /v1/admin/backups`, `GET /v1/admin/backups/scheduled/status`, RustFS prefix). 돌고 있으면 manager 이슈에
+   사실을 남기고, 안 돌면 이 저장소가 결선한다.
+2. **[cross-repo] manager #178 — geo postgres superuser `addr/addr` 기본값·평문 env.** 회전은 manager 소관이지만
+   `KTG_PG_DSN`·`KTG_DAGSTER_PG_URL`을 쓰는 geo api/dagster 컨테이너가 같은 트랜잭션으로 갱신돼야 한다 — 회전
+   런북에 이 저장소 쪽 체크리스트 기여.
+3. **public API key 폴백 `or` 동작 문서화** — `docs/api-reference/operators/api-keys.md`에 "첫 DB 키 발급 =
+   env 폴백 컷오버" 경고 + 발급 전 소비자 전환 순서. 코드 변경 여부(둘 다 허용 vs 현행 유지)는 ADR-064에서 결정.
 - ✅ **T-290 에픽 완료 — 실행이 프로덕션에서 Dagster-only (2026-07-12, by claude)** — backup/restore·적재
   오케스트레이션의 독립 Dagster 이관을 끝냈다. 통합 브랜치 `agent/claude-dagster-migration`(HEAD `9bcb949`)에
   T-290h~l이 모두 병합됐고 n150에 **cutover 배포·검증 완료** — in-process `JobQueue` drain·

@@ -4,7 +4,7 @@
 
 | 설정 | 예시 | 비고 |
 |------|------|------|
-| `KTG_PG_DSN` | `postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo` | 이미 동작 중인 PostgreSQL/PostGIS |
+| `KTG_PG_DSN` | `postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo` | 이미 동작 중인 PostgreSQL/PostGIS — **geo 전용 인스턴스 `12500`**(manager ADR-37, 2026-08-17). 그전 통합 `5432`는 더 이상 아무도 듣지 않는다 |
 | `KTG_RUSTFS_ENABLED` | `true` | RustFS bucket을 사용할 때만 활성화 |
 | `KTG_RUSTFS_ENDPOINT_URL` | `http://127.0.0.1:12101` | 이미 동작 중인 S3 호환 endpoint. RustFS console은 manager 기준 `12105` |
 | `KTG_RUSTFS_BUCKET` | `kor-travel-geo` | 이 프로젝트가 사용할 bucket |
@@ -24,7 +24,7 @@
 
 | 표면 | host 포트 | compose 내부 대상 | 비고 |
 |------|-----------|-------------------|------|
-| PostgreSQL/PostGIS | `5432` | `kor-travel-geo-postgres:5432` | 통합 DB. `kor_travel_geo`, `tripmate`, `kor_travel_concierge`, `krtour_map` 등 |
+| PostgreSQL/PostGIS | `12500` | `kor-travel-geo-postgres` (host network, `postgres -p 12500`) | **geo 전용 인스턴스**(manager ADR-37 / PR #176, 2026-08-17): `kor_travel_geo`·`kor_travel_geo_dagster`만. concierge/map/pinvi는 각자 `12600`/`12700`/`12800`. `127.0.0.1` 바인드, 신규 initdb는 loopback scram-sha-256. host network라 `ports:`가 무시되고 `-p`가 곧 host 포트다 — 컨테이너 안에서 `psql`을 쳐도 `-p 12500`(소켓 `.s.PGSQL.12500`)을 줘야 붙는다 |
 | RustFS S3 API | `12101` | `rustfs:9000` | `KTG_RUSTFS_ENDPOINT_URL`의 host 기준값 |
 | RustFS console | `12105` | `rustfs:9001` | object 확인·수동 삭제 등 운영 콘솔 |
 | Grafana | `12205` | `grafana:3000` | Prometheus datasource 자동 등록 |
@@ -52,7 +52,7 @@ Prometheus scrape 대상은 이 저장소의 API `/metrics`와 `kor-travel-geo-u
 | `kor-travel-geo-ui` metrics | `12505` | `kor-travel-geo-ui:12505/api/metrics` | Docker manager compose 기준 scrape target |
 
 ```bash
-KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo \
+KTG_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo \
 KTG_RUSTFS_ENABLED=true \
 KTG_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101 \
   uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12501

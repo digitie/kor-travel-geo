@@ -6,6 +6,24 @@
 
 ## 완료
 
+- [x] **manager ADR-37 반영 — geo PostgreSQL `5432` → 전용 인스턴스 `127.0.0.1:12500`** (2026-08-17, by claude).
+  `kor-travel-docker-manager` PR #176이 prod PostgreSQL을 프로젝트별 전용 인스턴스 4개(geo `12500`·concierge
+  `12600`·map `12700`·pinvi `12800`)로 나눴고 `5432`를 듣는 것은 이제 없다. 이 저장소의 현재 상태 표면
+  (`CLAUDE.md`·`docs/ports.md`·`dev-environment*.md`·`architecture*.md`·`.env*.example`·`alembic.ini`·
+  `scripts/docker_app.sh`·`Settings.pg_dsn` 기본값)을 `12500`으로 맞추고 ADR-047/048에 날짜 붙은 갱신 주석을
+  달았다. 과거 기록·테스트 fixture DSN은 그대로. 운영 함정(`docker exec … psql -p 12500` 필수)은
+  `docs/ports.md`·`resume.md`에 기록. 함께 `resume.md`의 stale `[/ ]` 2건(#509·#510)을 완료로 정리하고
+  07-28~08-17 n150 운영 기록(배포 2회·restore DB 31 GB 삭제·public API key 발급/컷오버)을 남겼다.
+
+- [x] **PR #510 — Hallmark Workbench 관리 콘솔 전면 개편** (2026-08-13 머지, by codex) — `main` `64e58d3`.
+  청록 OKLCH 토큰·좌측 작업 레일·작은 화면 drawer·공통 panel/header/nav·관리 홈. 공개 API key/VWorld 키
+  현재 탭 메모리 제한, Dagster iframe 공개 URL만 + sandbox 축소. gate·React Doctor 0·mock nav e2e·
+  320~1280px 시각 검증. n150 UI 이미지 2026-08-12 빌드로 서빙 중(관리 홈·메뉴·admin proxy·401 확인).
+
+- [x] **PR #509 — Map 공개 API 키를 전용 헤더 `X-KTG-API-Key`로 전달** (2026-07-29 머지·n150 배포, by claude/codex).
+  Map이 Admin proxy secret 없이 공개 키를 header로 보낸다(public 인증만, Admin 역할 없음). 리뷰 2명 P1 1/P2 7
+  반영. n150 라이브 검증: spec header 27건, header/query/충돌/중복 각 401 envelope, 기존 `key` query 경로 유지.
+
 - [x] **이슈 #505 — 업로드 register 호출이 항상 400으로 실패하던 회귀** (2026-07-27) — PR #506.
   #201 wizard의 "오늘 작업한거 live ui e2e 진행" 재검증(RustFS bucket 수정 후) 도중 발견: 실
   백엔드에 대해 업로드 등록(register)이 항상 400으로 실패하고 있었다. `RegisterRequest.confirm_user_yyyymm`

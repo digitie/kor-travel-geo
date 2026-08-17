@@ -15,7 +15,7 @@ ADR-046은 로컬 단독 실행 포트를 API `12201`, UI `12205`로 정했지�
 3. UI proxy 기본 `KTG_API_INTERNAL_URL`은 `http://localhost:12501`이다.
 4. Playwright 기본 `PLAYWRIGHT_BASE_URL`은 `http://127.0.0.1:12505`이다.
 5. `kor-travel-docker-manager`의 Grafana host `12205`는 그대로 두고, 이 저장소의 UI는 `12505`로 띄워 포트 충돌을 피한다.
-6. 이 저장소가 참조하는 주변 서비스 포트도 `kor-travel-docker-manager`를 source of truth로 삼는다. PostgreSQL은 `5432`, RustFS API/console은 `12101`/`12105`, Grafana/cAdvisor/Prometheus는 `12205`/`12301`/`12401`, concierge는 `12601`/`12602`/`12605`, map은 `12701`/`12702`/`12705`, Pinvi는 `12801`/`12805`, manager 자체는 `12901`/`12905`다.
+6. 이 저장소가 참조하는 주변 서비스 포트도 `kor-travel-docker-manager`를 source of truth로 삼는다. PostgreSQL은 `5432`(→ 2026-08-17 manager ADR-37로 geo 전용 인스턴스 `12500`; `docs/ports.md` 참조), RustFS API/console은 `12101`/`12105`, Grafana/cAdvisor/Prometheus는 `12205`/`12301`/`12401`, concierge는 `12601`/`12602`/`12605`, map은 `12701`/`12702`/`12705`, Pinvi는 `12801`/`12805`, manager 자체는 `12901`/`12905`다.
 7. 과거 작업 로그와 성능 측정 문서의 `12201`/`12205` 및 이전 RustFS `9003`/`9004`는 당시 재현 정보로 남길 수 있지만, 현재 실행 절차 문서와 기본값은 manager 기준 포트만 사용한다.
 
 ## 근거

@@ -78,7 +78,7 @@ DB 복구는 백업에서 restore하거나(ADR-030/036) 전체 적재를 다시 
 기존 DB를 재사용하는 경우 먼저 schema migration을 적용한다.
 
 ```bash
-export KTG_PG_DSN=postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo
+export KTG_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo
 alembic upgrade head
 ```
 

@@ -31,7 +31,7 @@
 
 - 패키지 경로, import-linter root, Docker/uvicorn entrypoint, OpenAPI export, benchmark/운영 스크립트가 `kortravelgeo`를 기준으로 동작한다.
 - `.env.example`, `Settings`, Docker 실행 스크립트, UI proxy/runtime config가 `KTG_*`를 기준으로 동작한다.
-- 기본 DSN은 `postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo`를 사용한다.
+- 기본 DSN은 `postgresql+psycopg://addr:addr@localhost:5432/kor_travel_geo`를 사용한다. *(2026-08-17 갱신: manager ADR-37로 geo DB가 전용 인스턴스 `127.0.0.1:12500`으로 이동해 기본 DSN도 `…@127.0.0.1:12500/kor_travel_geo`로 바뀌었다 — `docs/ports.md`가 정본.)*
 - RustFS 기본 bucket/prefix는 `kor-travel-geo`다.
 - API 요청 성능 측정은 `kor_travel_geo_api_request_duration_seconds` metric과 `KTG_API_PERFORMANCE_LOGGING_ENABLED` opt-in 로그로 제공한다.
 

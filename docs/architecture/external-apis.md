@@ -195,7 +195,7 @@ docs/reverse-geocoding.md §우편번호 lookup 4단계 우선순위에서 사�
 
 ```bash
 # .env (백엔드)
-KTG_PG_DSN=postgresql+psycopg://addr:CHANGEME@localhost:5432/kor_travel_geo
+KTG_PG_DSN=postgresql+psycopg://addr:CHANGEME@127.0.0.1:12500/kor_travel_geo
 KTG_LOG_FORMAT=json
 
 # 외부 API (모두 옵션. 없으면 폴백·자동다운로드 비활성화)
