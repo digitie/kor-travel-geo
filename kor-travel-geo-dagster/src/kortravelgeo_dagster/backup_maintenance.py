@@ -6,10 +6,13 @@ shape as ``mv_refresh`` (dagster-boundary §4). The on-demand sync API/CLI keeps
 same leaves; Dagster just adds scheduling + run observability on top.
 
 The daily restore-drill ``@schedule`` proves the latest backup is restorable without a human
-in the loop, replacing the external cron (T-239). A bad result — verify corruption, a copy
-sha256 mismatch, or a FAIL drill — raises ``Failure`` so the run fails visibly and the
-run-failure sensor fires. None of the three carries a ``RetryPolicy``: all are hard-fail
-(dagster-boundary §6/§9), and a copy retry would risk a double write.
+in the loop, replacing the external cron (T-239). The daily retention-janitor ``@schedule``
+(T-230 leaf) expires TTL-passed archives so a scheduled daily backup (T-239) has bounded disk
+use — without it nothing ever deletes an expired ``.tar.zst``. A bad result — verify corruption,
+a copy sha256 mismatch, a FAIL drill, or a janitor that could not remove an archive — raises
+``Failure`` so the run fails visibly and the run-failure sensor fires. None of the four carries
+a ``RetryPolicy``: all are hard-fail (dagster-boundary §6/§9), and a copy retry would risk a
+double write.
 
 IMPORTANT (dagster-boundary §10): this module must NOT use
 ``from __future__ import annotations`` — Dagster reads the decorated functions' annotations
@@ -21,11 +24,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final, cast
 
 from dagster import (
+    Bool,
     DefaultScheduleStatus,
     Enum,
     EnumValue,
     Failure,
     Field,
+    Int,
     OpExecutionContext,
     RunRequest,
     ScheduleEvaluationContext,
@@ -46,10 +51,13 @@ __all__ = [
     "BACKUP_MAINTENANCE_SCHEDULES",
     "backup_copy_job",
     "backup_restore_drill_job",
+    "backup_retention_janitor_job",
+    "backup_retention_janitor_op",
     "backup_verify_job",
     "copy_backup_op",
     "restore_drill_op",
     "restore_drill_schedule",
+    "retention_janitor_schedule",
     "verify_backup_op",
 ]
 
@@ -65,6 +73,13 @@ RESTORE_DRILL_CRON: Final[str] = "0 4 * * *"
 """Daily 04:00 restore drill (external-cron replacement, T-239)."""
 
 RESTORE_DRILL_TIMEZONE: Final[str] = "Asia/Seoul"
+
+RETENTION_JANITOR_CRON: Final[str] = "0 6 * * *"
+"""Daily 06:00 backup retention janitor (T-230 leaf) — two hours after the 04:00 restore drill so
+a drill still reading yesterday's archive never races its deletion. ``keep_min`` protects the
+newest N regardless of when the daily scheduled backup lands."""
+
+RETENTION_JANITOR_TIMEZONE: Final[str] = "Asia/Seoul"
 
 
 @op(
@@ -172,6 +187,61 @@ async def restore_drill_op(context: OpExecutionContext) -> dict[str, object]:
     return metadata
 
 
+@op(
+    name="retention_janitor",
+    description=(
+        "Expire db_backup archives whose TTL passed, keeping pinned ones and the newest "
+        "keep_min (client.run_backup_retention_janitor, T-230). A pass that could not remove "
+        "an archive raises Failure; skipped_locked (another janitor holds the advisory lock) is "
+        "a no-op success."
+    ),
+    required_resource_keys={"client"},
+    config_schema={
+        "dry_run": Field(
+            Bool,
+            default_value=False,
+            description="report expiry targets without touching files or artifact state.",
+        ),
+        "keep_min_count": Field(
+            Int,
+            is_required=False,
+            description="override Settings.backup_retention_keep_min for this pass.",
+        ),
+    },
+)
+async def backup_retention_janitor_op(context: OpExecutionContext) -> dict[str, object]:
+    client = cast("AsyncAddressClient", op_resource(context, "client"))
+    config = cast("Mapping[str, object]", context.op_config)
+    dry_run = bool(config.get("dry_run", False))
+    keep_min_raw = config.get("keep_min_count")
+    keep_min_count = int(cast("int", keep_min_raw)) if keep_min_raw is not None else None
+
+    result = await client.run_backup_retention_janitor(
+        dry_run=dry_run, keep_min_count=keep_min_count
+    )
+
+    metadata: dict[str, object] = {
+        "dry_run": result.dry_run,
+        "keep_min_count": result.keep_min_count,
+        "skipped_locked": result.skipped_locked,
+        "scanned": result.scanned,
+        "protected_count": result.protected_count,
+        "expired_count": result.expired_count,
+        "failed_count": result.failed_count,
+        "expired_artifact_ids": list(result.expired_artifact_ids),
+        "failed_artifact_ids": list(result.failed_artifact_ids),
+    }
+    context.add_output_metadata(metadata)
+    if result.failed_count:
+        raise Failure(
+            description=(
+                f"backup retention janitor could not expire {result.failed_count} archive(s): "
+                f"{', '.join(result.failed_artifact_ids)}"
+            )
+        )
+    return metadata
+
+
 async def _latest_backup_artifact_id(client: "AsyncAddressClient") -> str:
     """The newest ``available`` db_backup's id (list_artifacts is newest-first)."""
     backups = await client.list_artifacts(
@@ -209,6 +279,15 @@ def backup_restore_drill_job() -> None:
     restore_drill_op()
 
 
+@job(
+    name="backup_retention_janitor",
+    tags={**_MAINTENANCE_TAGS, "kor_travel_geo.job_kind": "backup_retention_janitor"},
+    description="Expire TTL-passed db_backup archives, keeping pinned + newest keep_min (T-230).",
+)
+def backup_retention_janitor_job() -> None:
+    backup_retention_janitor_op()
+
+
 @schedule(
     name="backup_restore_drill_daily",
     job=backup_restore_drill_job,
@@ -233,8 +312,37 @@ def restore_drill_schedule(context: ScheduleEvaluationContext) -> RunRequest:
     )
 
 
-BACKUP_MAINTENANCE_JOBS: Final = [backup_verify_job, backup_copy_job, backup_restore_drill_job]
+@schedule(
+    name="backup_retention_janitor_daily",
+    job=backup_retention_janitor_job,
+    cron_schedule=RETENTION_JANITOR_CRON,
+    execution_timezone=RETENTION_JANITOR_TIMEZONE,
+    default_status=DefaultScheduleStatus.STOPPED,
+    description=(
+        "Daily 06:00 backup retention janitor (T-230). STOPPED by default; enable together with "
+        "KTG_BACKUP_SCHEDULE_ENABLED so a daily scheduled backup has bounded disk use. The op "
+        "reads keep_min from Settings, so the schedule needs no run config."
+    ),
+)
+def retention_janitor_schedule(context: ScheduleEvaluationContext) -> RunRequest:
+    scheduled_at = context.scheduled_execution_time
+    return RunRequest(
+        run_key=scheduled_at.isoformat() if scheduled_at is not None else None,
+        tags={
+            **_MAINTENANCE_TAGS,
+            "kor_travel_geo.job_kind": "backup_retention_janitor",
+            "kor_travel_geo.schedule": "backup_retention_janitor_daily",
+        },
+    )
+
+
+BACKUP_MAINTENANCE_JOBS: Final = [
+    backup_verify_job,
+    backup_copy_job,
+    backup_restore_drill_job,
+    backup_retention_janitor_job,
+]
 """Job list aggregated by ``definitions.py``."""
 
-BACKUP_MAINTENANCE_SCHEDULES: Final = [restore_drill_schedule]
+BACKUP_MAINTENANCE_SCHEDULES: Final = [restore_drill_schedule, retention_janitor_schedule]
 """Schedule list aggregated by ``definitions.py``."""
