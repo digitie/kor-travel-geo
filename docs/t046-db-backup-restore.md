@@ -516,7 +516,7 @@ T-046 1차 구현에서 아직 완전 자동화하지 않은 실패/예외 항�
 | 복원 안전 | 운영 DB 덮어쓰기 위험 | 기본 `new_database`, 현재 DB와 같은 target 거절 |
 | 검증 범위 | 전국 full-load 재실행 비용 | 대구광역시 부분 DB로 최초 통합 검증 |
 | 감사 추적 | 어떤 원천 기준월/row count에서 만든 백업인지 불명확 | `manifest.json`, `source_set`, `row_counts`, SHA256 저장 |
-| 보존 정책 | 오래된 artifact 누적 | `backup_artifact_ttl_days`, delete endpoint, `expired` state. **T-229**: backup finalize가 `expires_at = finalize 시각 + retention_days`(미지정 시 `backup_artifact_ttl_days`)와 `retention_class='default'`를 `update_artifact`로 기록(이전엔 항상 NULL). 자동 만료 정리(janitor)는 T-230. |
+| 보존 정책 | 오래된 artifact 누적 | `backup_artifact_ttl_days`, delete endpoint, `expired` state. **T-229**: backup finalize가 `expires_at = finalize 시각 + retention_days`(미지정 시 `backup_artifact_ttl_days`)와 `retention_class='default'`를 `update_artifact`로 기록(이전엔 항상 NULL). 자동 만료 정리(janitor)는 T-230 (주기 실행은 Dagster `backup_retention_janitor_daily` 06:00 — `docs/architecture/dagster-boundary.md` §5, 2026-08-18). |
 | 보안 | path traversal, symlink escape, SSRF, secret 유출 | allowlist path, tokenized download, callback host allowlist, secret redaction |
 
 ## 구현 후 테스트 항목

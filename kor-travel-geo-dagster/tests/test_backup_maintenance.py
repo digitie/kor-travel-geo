@@ -196,7 +196,7 @@ async def test_restore_drill_op_fail_raises() -> None:
 async def test_retention_janitor_op_defaults_pass_settings_keep_min() -> None:
     client = _FakeClient(janitor=_janitor_result(expired=2))
     with build_op_context(resources={"client": client}, op_config={}) as ctx:
-        result = await backup_maintenance.backup_retention_janitor_op(ctx)
+        result = await backup_maintenance.retention_janitor_op(ctx)
     # no config -> not a dry run, keep_min left to Settings (None passed through)
     assert client.calls["janitor"] == {"dry_run": False, "keep_min_count": None}
     assert result["expired_count"] == 2
@@ -210,17 +210,49 @@ async def test_retention_janitor_op_passes_dry_run_and_keep_min() -> None:
     with build_op_context(
         resources={"client": client}, op_config={"dry_run": True, "keep_min_count": 5}
     ) as ctx:
-        result = await backup_maintenance.backup_retention_janitor_op(ctx)
+        result = await backup_maintenance.retention_janitor_op(ctx)
     assert client.calls["janitor"] == {"dry_run": True, "keep_min_count": 5}
     assert result["dry_run"] is True
     assert result["keep_min_count"] == 5
 
 
 @pytest.mark.asyncio
+async def test_retention_janitor_op_keep_min_zero_is_passed_through() -> None:
+    client = _FakeClient(janitor=_janitor_result(expired=3, keep_min=0))
+    with build_op_context(resources={"client": client}, op_config={"keep_min_count": 0}) as ctx:
+        result = await backup_maintenance.retention_janitor_op(ctx)
+    # explicit 0 must reach the leaf as 0 (not be coerced to None -> Settings default)
+    assert client.calls["janitor"]["keep_min_count"] == 0
+    assert result["keep_min_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_retention_janitor_op_negative_keep_min_raises_before_leaf() -> None:
+    client = _FakeClient(janitor=_janitor_result())
+    with (
+        build_op_context(resources={"client": client}, op_config={"keep_min_count": -1}) as ctx,
+        pytest.raises(Failure) as ei,
+    ):
+        await backup_maintenance.retention_janitor_op(ctx)
+    assert "keep_min_count must be >= 0" in str(ei.value.description)
+    assert "janitor" not in client.calls  # rejected before the leaf ran
+
+
+def test_retention_janitor_job_runs_with_empty_run_config() -> None:
+    # The real config schema must resolve dry_run's default and the optional keep_min_count.
+    client = _FakeClient(janitor=_janitor_result(expired=1))
+    result = backup_maintenance.backup_retention_janitor_job.execute_in_process(
+        resources={"client": client}, run_config={}
+    )
+    assert result.success
+    assert client.calls["janitor"] == {"dry_run": False, "keep_min_count": None}
+
+
+@pytest.mark.asyncio
 async def test_retention_janitor_op_skipped_locked_is_noop_success() -> None:
     client = _FakeClient(janitor=_janitor_result(skipped_locked=True))
     with build_op_context(resources={"client": client}, op_config={}) as ctx:
-        result = await backup_maintenance.backup_retention_janitor_op(ctx)
+        result = await backup_maintenance.retention_janitor_op(ctx)
     assert result["skipped_locked"] is True
     assert result["expired_count"] == 0
 
@@ -232,7 +264,7 @@ async def test_retention_janitor_op_failed_count_raises() -> None:
         build_op_context(resources={"client": client}, op_config={}) as ctx,
         pytest.raises(Failure) as ei,
     ):
-        await backup_maintenance.backup_retention_janitor_op(ctx)
+        await backup_maintenance.retention_janitor_op(ctx)
     assert "could not expire 2 archive(s)" in str(ei.value.description)
     assert "bad-0, bad-1" in str(ei.value.description)
 

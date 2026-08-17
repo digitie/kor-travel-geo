@@ -52,11 +52,11 @@ __all__ = [
     "backup_copy_job",
     "backup_restore_drill_job",
     "backup_retention_janitor_job",
-    "backup_retention_janitor_op",
     "backup_verify_job",
     "copy_backup_op",
     "restore_drill_op",
     "restore_drill_schedule",
+    "retention_janitor_op",
     "retention_janitor_schedule",
     "verify_backup_op",
 ]
@@ -75,9 +75,18 @@ RESTORE_DRILL_CRON: Final[str] = "0 4 * * *"
 RESTORE_DRILL_TIMEZONE: Final[str] = "Asia/Seoul"
 
 RETENTION_JANITOR_CRON: Final[str] = "0 6 * * *"
-"""Daily 06:00 backup retention janitor (T-230 leaf) — two hours after the 04:00 restore drill so
-a drill still reading yesterday's archive never races its deletion. ``keep_min`` protects the
-newest N regardless of when the daily scheduled backup lands."""
+"""Daily 06:00 backup retention janitor (T-230 leaf).
+
+The 04:00 restore drill is protected by ``keep_min >= 1``, not by this spacing: the drill always
+targets the newest ``available`` backup and the janitor keeps the newest ``keep_min`` by
+``created_at`` regardless of expiry. 06:00 is only operational ordering (drill log first, janitor
+log second). The leaf holds just the ``BACKUP_JANITOR`` advisory lock and has no per-artifact
+in-use guard, so an explicit-artifact restore/verify/copy of an *expired, non-newest* archive can
+still race an expiry — the same exposure the on-demand janitor always had.
+
+Disk bound with a daily scheduled backup ≈ ``ceil(backup_artifact_ttl_days * 24 /
+backup_schedule_interval_hours)`` archives (``keep_min`` is a floor, not a cap): size
+``KTG_BACKUP_ARTIFACT_TTL_DAYS`` for the deployment (e.g. 7 → ~8 archives)."""
 
 RETENTION_JANITOR_TIMEZONE: Final[str] = "Asia/Seoul"
 
@@ -209,16 +218,32 @@ async def restore_drill_op(context: OpExecutionContext) -> dict[str, object]:
         ),
     },
 )
-async def backup_retention_janitor_op(context: OpExecutionContext) -> dict[str, object]:
+async def retention_janitor_op(context: OpExecutionContext) -> dict[str, object]:
     client = cast("AsyncAddressClient", op_resource(context, "client"))
     config = cast("Mapping[str, object]", context.op_config)
     dry_run = bool(config.get("dry_run", False))
     keep_min_raw = config.get("keep_min_count")
     keep_min_count = int(cast("int", keep_min_raw)) if keep_min_raw is not None else None
+    if keep_min_count is not None and keep_min_count < 0:
+        # HTTP (ge=0) and CLI (min=0) reject this; the leaf would clamp silently.
+        raise Failure(description=f"keep_min_count must be >= 0, got {keep_min_count}")
 
     result = await client.run_backup_retention_janitor(
         dry_run=dry_run, keep_min_count=keep_min_count
     )
+    if result.skipped_locked:
+        context.log.warning(
+            "backup retention janitor skipped: BACKUP_JANITOR advisory lock held by another process"
+        )
+    else:
+        context.log.info(
+            "backup retention janitor: dry_run=%s scanned=%s protected=%s expired=%s failed=%s",
+            result.dry_run,
+            result.scanned,
+            result.protected_count,
+            result.expired_count,
+            result.failed_count,
+        )
 
     metadata: dict[str, object] = {
         "dry_run": result.dry_run,
@@ -285,7 +310,7 @@ def backup_restore_drill_job() -> None:
     description="Expire TTL-passed db_backup archives, keeping pinned + newest keep_min (T-230).",
 )
 def backup_retention_janitor_job() -> None:
-    backup_retention_janitor_op()
+    retention_janitor_op()
 
 
 @schedule(
@@ -320,8 +345,9 @@ def restore_drill_schedule(context: ScheduleEvaluationContext) -> RunRequest:
     default_status=DefaultScheduleStatus.STOPPED,
     description=(
         "Daily 06:00 backup retention janitor (T-230). STOPPED by default; enable together with "
-        "KTG_BACKUP_SCHEDULE_ENABLED so a daily scheduled backup has bounded disk use. The op "
-        "reads keep_min from Settings, so the schedule needs no run config."
+        "KTG_BACKUP_SCHEDULE_ENABLED so a daily scheduled backup has bounded disk use - about "
+        "ceil(KTG_BACKUP_ARTIFACT_TTL_DAYS*24 / KTG_BACKUP_SCHEDULE_INTERVAL_HOURS) archives "
+        "(keep_min is a floor). The op reads keep_min from Settings, so no run config."
     ),
 )
 def retention_janitor_schedule(context: ScheduleEvaluationContext) -> RunRequest:

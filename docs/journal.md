@@ -2,6 +2,41 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-18 ("백업 켜" — geo prod 첫 백업 + 보존 janitor 스케줄, manager #177 결선, by claude)
+
+**배경**: 08-17 실측으로 geo prod(33 GB)에 백업이 0건임을 확인(manager #177 사실). T-239 스케줄 백업·T-290g Dagster
+`db_backup`·T-230 janitor는 전부 구현돼 있으나 prod에 `KTG_BACKUP*` env가 없어 꺼져 있었다.
+
+**한 것**: ① 수동 안전 백업 — `POST /v1/admin/backups`(destructive_admin, Dagster `db_backup` run) 21:43:45→21:59:28Z
+(15m43s): preflight(db 32.7 GiB, 필요 42.5, 여유 107.8) → dump → archive → checksum → finalize.
+`manual-safety-20260818 (pre-schedule, manager #177).tar.zst` 4,706,720,810 B, `-rw------- 999:999`, sha256
+`58beca96…` quick verify OK, catalog `available`/`default`/expires 09-16, temp 정리, Dagster SUCCESS, 여유 108→101 GB.
+② 설계 공백 발견 — 만료 archive를 지우는 **주기** 실행이 어디에도 없다(T-230은 on-demand). 일일 4.7 GB × 기본 TTL
+30일 = ~140 GB > 여유. → PR #516: `retention_janitor` @op(client leaf 직접 호출) + `backup_retention_janitor` @job +
+`backup_retention_janitor_daily` @schedule(06:00 KST, STOPPED 기본). 적대 리뷰 2명 approve(P3만): cron 근거
+정정(드릴 보호는 06:00 간격이 아니라 keep_min≥1), 디스크 상한 공식 문서화, 음수 keep_min Failure, skipped_locked
+경고 로그, 심볼명 `retention_janitor_op`, keep_min=0 pass-through·job execute_in_process 테스트, t046/드릴 런북 포인터.
+
+**막힌 것**: 스케줄 자체를 켜는 env는 manager compose에 passthrough가 없어 prod host-local
+`~/kor-travel-docker-manager/docker-compose.override.yml`(08-17부터 root:600)에 넣어야 하는데, 에이전트의 root 파일
+편집은 권한 정책이 차단(sudo compose 실행은 허용). 넣을 스니펫(세 서비스 `kor-travel-geo-api`·`kor-travel-geo-dagster`·
+`kor-travel-geo-dagster-daemon` 각각):
+```yaml
+    environment:
+      KTG_BACKUP_SCHEDULE_ENABLED: "true"
+      KTG_BACKUP_SCHEDULE_INTERVAL_HOURS: "24"
+      KTG_BACKUP_ARTIFACT_TTL_DAYS: "7"
+      KTG_BACKUP_RETENTION_KEEP_MIN: "3"
+```
+그 뒤 `sudo -n docker compose --env-file .env -f docker-compose.yml -f docker-compose.override.yml up -d --force-recreate`
+를 api → dagster → dagster-daemon 순차 단독으로, `docker exec kor-travel-geo-dagster-latest dagster schedule start
+scheduled_backup` + `… backup_retention_janitor_daily`, `GET /v1/admin/backups/scheduled/status`가 `enabled:true, due:true`
+→ 15분 내 첫 run-due. 대안: manager compose에 `${KOR_TRAVEL_GEO_BACKUP_*}` passthrough PR + prod `.env`.
+
+**교훈**: (1) "백업 기능이 있다"와 "백업이 돈다"는 다르다 — env 하나로 전체가 꺼져 있었다. (2) 보존 janitor 없는
+스케줄 백업은 디스크 폭탄이다 — 켜기 전에 상한 공식을 문서에 박아라. (3) `display_name`이 그대로 파일명이 된다
+(공백·괄호·`#`) — 셸 도구 친화적이지 않다(스케줄본은 규칙 이름을 쓴다).
+
 ## 2026-08-17 (manager ADR-37 반영: geo PostgreSQL 5432 → 12500, 라이브 UI e2e, n150 운영 기록, by claude)
 
 **계기**: `kor-travel-docker-manager` PR #176(2026-08-17 12:24Z 머지, ADR-37)이 prod PostgreSQL을 프로젝트별

@@ -54,7 +54,7 @@ ktgctl backup restore-drill --artifact-id <id> --base-db kor_travel_geo --jobs 4
 
 ## 운영 주기 · 디스크 점검
 
-- **주기**: 최소 백업 보존주기마다 1회(예: 주 1회) 외부 cron으로 실행한다. full-load/대규모 변경 직후에는 추가로 1회.
+- **주기**: 최소 백업 보존주기마다 1회(예: 주 1회). 주기 실행은 외부 cron이 아니라 Dagster `backup_restore_drill_daily`(04:00, T-290g ③; 만료 정리는 `backup_retention_janitor_daily` 06:00 — `docs/architecture/dagster-boundary.md` §5)로 한다. full-load/대규모 변경 직후에는 추가로 1회.
 - **디스크**: throwaway DB는 serving DB와 같은 cluster·같은 디스크에 잠깐 **DB 1개 분량**을 더 쓴다. 드릴 전 여유 공간이
   `pg_database_size(serving) x 1.3` 이상인지 확인한다(백업 자체의 디스크 가드는 T-228). 여유가 부족하면 드릴을 미루거나 별도 cluster를 쓴다.
 - **work_dir**: 복원 job이 `backup_temp_dir/restore_<id>/`에 archive를 풀므로, 같은 디스크에 archive 해제 크기만큼 임시 공간이 필요하다(job 종료 시 정리됨).

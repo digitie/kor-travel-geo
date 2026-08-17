@@ -83,8 +83,10 @@ code location은 **항상 로드**되고, 자격증명 누락은 import가 아�
 
 - `@schedule`: scheduled backup(cron, `execution_timezone="Asia/Seoul"`, 운영 enable 전 `STOPPED` 기본),
   restore drill(04:00), **retention janitor(06:00, T-230 leaf — 스케줄 백업을 켤 때 함께 켠다; 이것이 없으면
-  만료된 `.tar.zst`를 아무도 지우지 않아 일일 백업이 디스크를 무한히 먹는다)**. 외부 cron 의존 제거(T-239
-  대체). overdue는 schedule tick 이력 + 선택적 freshness로 관측.
+  만료된 `.tar.zst`를 아무도 지우지 않아 일일 백업이 디스크를 무한히 먹는다. 디스크 상한 ≈
+  `ceil(TTL_DAYS×24 / INTERVAL_HOURS)`본, `keep_min`은 하한 — 배포마다 `KTG_BACKUP_ARTIFACT_TTL_DAYS`를
+  정한다. 드릴 보호는 06:00 간격이 아니라 `keep_min ≥ 1`이 최신본을 지키는 것이다)**. 외부 cron 의존
+  제거(T-239 대체). overdue는 schedule tick 이력 + 선택적 freshness로 관측.
 - `@sensor`: (온램프) 앱 큐 테이블 peek → RunRequest(worker가 상태 전이 담당, "peek in sensor, mutate in
   worker"). `@run_failure_sensor`: 실패 시 `failure_notifier`로 `{job_id, run_id, job_name, status,
   error_code}` 전달. `job_id`는 run 태그 `kor_travel_geo.job_id`가 있을 때만(else `None`), `error_code`는

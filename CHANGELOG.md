@@ -9,8 +9,11 @@
   T-230 janitor leaf(`client.run_backup_retention_janitor`)를 verify/copy/restore-drill과 같은 모양의
   `@op`/`@job`으로 감싸고 `STOPPED` 기본 스케줄을 붙였다. T-239 스케줄 백업을 켜면 매일 4.4 GB짜리
   archive가 쌓이는데 지금까지 만료 archive를 지우는 주기 실행이 없었다(on-demand API/CLI뿐) — 스케줄
-  백업과 함께 켜서 `keep_min` + TTL로 디스크 사용을 유계로 만든다. `failed_count > 0`이면 `Failure`로
-  실패 sensor가 울리고, `skipped_locked`는 no-op 성공이다.
+  백업과 함께 켜서 TTL로 디스크 사용을 유계로 만든다 — 상한은 약
+  `ceil(KTG_BACKUP_ARTIFACT_TTL_DAYS × 24 / KTG_BACKUP_SCHEDULE_INTERVAL_HOURS)`본(`keep_min`은
+  하한이지 상한이 아니다; 기본 TTL 30일·24h면 ~30본 × 4.7 GB ≈ 140 GB라 배포마다 TTL을 정해야 한다,
+  prod는 7일 → ~8본 ≈ 38 GB). `failed_count > 0`이면 `Failure`로 실패 sensor가 울리고,
+  `skipped_locked`는 경고 로그 + no-op 성공, 음수 `keep_min_count`는 leaf 호출 전 `Failure`다.
 - **Dagster 관측 API를 추가했다.** `GET /v1/ops/dagster/summary`와
   `GET /v1/ops/dagster/runs/{run_id}`가 Dagster webserver GraphQL을 읽어 admin UI용
   summary/run detail DTO로 반환한다. Dagster가 내려가도 HTTP 200 `status="unavailable"`로
