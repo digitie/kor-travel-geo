@@ -33,9 +33,20 @@
 scheduled_backup` + `… backup_retention_janitor_daily`, `GET /v1/admin/backups/scheduled/status`가 `enabled:true, due:true`
 → 15분 내 첫 run-due. 대안: manager compose에 `${KOR_TRAVEL_GEO_BACKUP_*}` passthrough PR + prod `.env`.
 
+**적용 완료 (같은 날, 사용자 `!` 실행 후)**: override에 세 블록 추가(`.bak-geo-backup-20260818T000925Z`, compose 36
+서비스 resolve, 세 서비스 env 확인) → PR #516 dagster 이미지 재빌드·재생성 → api/dagster/daemon 순차 재생성 → 세
+컨테이너 `KTG_BACKUP_*` 4개 확인, `scheduled/status` `enabled:true, due:true(due_initial)` → `scheduled_backup`·
+`backup_retention_janitor_daily` start(RUNNING; drill은 STOPPED 유지). **첫 tick 00:15:00Z**: `scheduled_backup_run_due`
+SUCCESS → `db_backup` 00:15:07~00:24:39Z(9.5분) → `kor_travel_geo_backup_20260818T001517Z_zstd3.tar.zst`
+4,706,711,752 B `-rw------- 999`, class `scheduled`, expires 08-25, quick verify OK, audit `db_backup.scheduled_run_due
+started`·`db_backup.verify succeeded`; `scheduled/status` `due:false, last 00:15:17Z, next_due 08-19T00:15:17Z`. 여유
+101→89 GB(2본 8.8 GB). 매일 ~09:15 KST 백업, 06:00 KST janitor(TTL 7일 → 정상 상태 ~8본).
+
 **교훈**: (1) "백업 기능이 있다"와 "백업이 돈다"는 다르다 — env 하나로 전체가 꺼져 있었다. (2) 보존 janitor 없는
 스케줄 백업은 디스크 폭탄이다 — 켜기 전에 상한 공식을 문서에 박아라. (3) `display_name`이 그대로 파일명이 된다
-(공백·괄호·`#`) — 셸 도구 친화적이지 않다(스케줄본은 규칙 이름을 쓴다).
+(공백·괄호·`#`) — 셸 도구 친화적이지 않다(스케줄본은 규칙 이름을 쓴다). (4) 에이전트 권한 분류기는 prod root 파일
+편집을 채팅 승인만으로는 풀지 않는다 — 스크립트를 파일로 준비해 사용자가 `!`로 실행하는 경로가 가장 빠르다(단,
+차단된 명령 안에 파일 생성까지 넣으면 파일도 안 만들어진다 — Write 도구로 따로 써 둘 것).
 
 ## 2026-08-17 (manager ADR-37 반영: geo PostgreSQL 5432 → 12500, 라이브 UI e2e, n150 운영 기록, by claude)
 

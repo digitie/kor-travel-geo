@@ -47,20 +47,15 @@
 **#512 (P1) 업로드 탭 SSE 연결 고갈 수정** — 선택/활성 세션 1건만 구독하거나 단일 멀티플렉스 스트림으로; 회귀는
 세션 ≥7 fixture로 실 브라우저 검증. 운영에서 재개 가능 세션이 6개 이상 쌓이면 관리 콘솔 전체가 멈추므로 최우선.
 
-후보(우선순위 순): ① **[cross-repo] manager #177 — geo 33 GB 인스턴스 백업 주체 없음 → 결선 진행 중 (2026-08-18, "백업 켜")**:
-실측(08-17) — `scheduled/status` `enabled:false`(prod api에 `KTG_BACKUP*` env 없음), 카탈로그 "available" 5건은 만료·파일
-없음(host bind 비어 있음). **한 것(08-18)**: (a) 수동 안전 백업 1건 — `POST /v1/admin/backups`(Dagster `db_backup`)
-15m43s, `manual-safety-20260818` 4.71 GB `.tar.zst`, `-rw------- 999`, quick verify sha256 OK, artifact
-`0afb2e31…`, expires 09-16, temp dir 정리됨, 여유 108→101 GB — **geo prod에 백업이 1건 생겼다**. (b) 만료 archive를
-주기적으로 지우는 실행이 없다는 공백 → PR #516 Dagster `backup_retention_janitor_daily`(06:00, STOPPED 기본).
-디스크 상한 ≈ `ceil(TTL_DAYS×24/INTERVAL_HOURS)`본(`keep_min`은 하한): 기본 TTL 30일이면 ~30본×4.7 GB ≈ 140 GB라
-prod는 `KTG_BACKUP_ARTIFACT_TTL_DAYS=7`(→ ~8본 ≈ 38 GB). **남은 것 (운영자 손 필요)**: prod api·dagster·daemon
-컨테이너에 `KTG_BACKUP_SCHEDULE_ENABLED=true`·`_INTERVAL_HOURS=24`·`_ARTIFACT_TTL_DAYS=7`·`_RETENTION_KEEP_MIN=3` —
-manager compose에 passthrough가 없어 host-local `docker-compose.override.yml`(2026-08-17부터 root:600)에 넣어야
-하며 에이전트의 root 파일 편집은 권한 정책이 막는다(스니펫은 journal 08-18) → 넣은 뒤 세 컨테이너 순차 재생성,
-Dagster `scheduled_backup`·`backup_retention_janitor_daily` start, 첫 run-due 확인. 산출물 파일명이
-display_name 그대로라(공백·괄호) 스케줄본은 `kor_travel_geo_backup_<ts>_zstd3.tar.zst` 규칙을 쓴다. 외부 사본
-(T-236 copy)은 그다음. ② **#513/#514** (P2 두 건). ③ **[cross-repo] manager #178**
+후보(우선순위 순): ① ✅ **[cross-repo] manager #177 — geo prod 백업 결선 완료 (2026-08-18, "백업 켜")**: 08-17 실측(스케줄
+백업 env 없음·산출물 0건) → 08-18 (a) 수동 안전 백업 `manual-safety-20260818` 4.71 GB verify OK, (b) PR #516 보존 janitor
+스케줄, (c) prod override(root:600, 사용자 `!` 실행)에 `KTG_BACKUP_SCHEDULE_ENABLED=true`·`_INTERVAL_HOURS=24`·
+`_ARTIFACT_TTL_DAYS=7`·`_RETENTION_KEEP_MIN=3` → api/dagster/daemon 순차 재생성 → `scheduled_backup`·
+`backup_retention_janitor_daily` RUNNING → **첫 `*/15` tick(00:15Z)에서 run-due→`db_backup` 자동 실행,
+`kor_travel_geo_backup_20260818T001517Z_zstd3.tar.zst` 4.71 GB `scheduled` available, verify OK, expires 08-25,
+`scheduled/status` `due:false, next_due_at 08-19T00:15Z`**. 디스크 상한 ~8본 ≈ 38 GB(여유 89 GB). 남은 선택지: 외부 사본
+(T-236 copy 스케줄), 04:00 restore drill 스케줄 on(33 GB 복원 부하 판단), manager `.env` passthrough PR(override 대신
+durable). 상세 journal 08-18. ② **#513/#514** (P2 두 건). ③ **[cross-repo] manager #178**
 geo postgres `addr/addr` 기본 자격증명·평문 env — 회전은 manager 소관, geo api/dagster의 `KTG_PG_DSN`·
 `KTG_DAGSTER_PG_URL` 동시 갱신 체크리스트를 이 저장소가 기여. ④ `docs/api-reference/operators/api-keys.md`에
 "첫 DB 키 발급 = env 폴백 컷오버" 운영 경고 + 소비자 전환 순서(동작 자체는 ADR-064 §결정·api-keys.md:31에 이미
