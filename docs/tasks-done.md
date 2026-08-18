@@ -6,6 +6,12 @@
 
 ## 완료
 
+- [x] **manager #177 결선 — geo prod 스케줄 백업 ON + 보존 janitor 스케줄** (2026-08-18, by claude, "백업 켜"). 08-17 실측
+  geo prod 백업 0건(T-239 env 미설정) → 수동 안전 백업 1건(4.71 GB verify OK) → PR #516 `backup_retention_janitor_daily`
+  (06:00, 디스크 상한 ≈ ceil(TTL×24/interval)본) → prod override에 `KTG_BACKUP_SCHEDULE_ENABLED/INTERVAL_HOURS=24/
+  ARTIFACT_TTL_DAYS=7/RETENTION_KEEP_MIN=3` → `scheduled_backup`·janitor 스케줄 RUNNING → 첫 tick에서 자동 백업
+  `kor_travel_geo_backup_20260818T001517Z_zstd3.tar.zst` 4.71 GB scheduled/verify OK, `next_due 08-19T00:15Z`. journal 08-18.
+
 - [x] **manager ADR-37 반영 — geo PostgreSQL `5432` → 전용 인스턴스 `127.0.0.1:12500`** (2026-08-17, by claude).
   `kor-travel-docker-manager` PR #176이 prod PostgreSQL을 프로젝트별 전용 인스턴스 4개(geo `12500`·concierge
   `12600`·map `12700`·pinvi `12800`)로 나눴고 `5432`를 듣는 것은 이제 없다. 이 저장소의 현재 상태 표면
