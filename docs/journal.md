@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-24 (이슈 #515 — 라이브 e2e 경미 결함 6건 정리, by claude)
+
+라이브 UI e2e에서 나온 P3 묶음. 6건 모두 개별 원인이 달라 하나씩 짚었다.
+
+1. **로그인 페이지 401 콘솔 노이즈** — `VWorldKeyProvider`와 web-vitals 리포터가 루트 레이아웃에
+   있어 인증 전 `/login`에서도 발사되고 미들웨어가 401로 막았다. 둘 다 `usePathname()`으로 `/login`
+   에서는 호출하지 않는다(로그인 화면에는 지도가 없다). 비활성 쿼리는 `isLoading`이 영원히 true라
+   `loading` 계산도 함께 손봤다.
+2. **모바일 드로어 tab order** — 닫힌 드로어를 CSS `transform`으로만 밀어내 링크가 화면 밖에서
+   포커스를 받았다. 모바일 미디어 쿼리 안에서만 `visibility: hidden`(전환 지연으로 슬라이드
+   애니메이션 유지) → 데스크톱 사이드바는 그대로 포커스 가능.
+3. **`/admin/tables` 행 수 0** — `n_live_tup`은 restore/hot-swap이 0으로 리셋하는 러닝 델타라 복원
+   직후 전 테이블이 0행으로 보였다(프로드 실측: 51개 중 **23개가 n_live_tup=0인데 reltuples는 실값**,
+   `mv_geocode_target` 6,416,323). 플래너가 쓰는 `pg_class.reltuples`로 폴백한다(한 번도 ANALYZE 안 된
+   관계는 -1이라 GREATEST로 가드). `최근 갱신`은 vacuum/analyze 타임스탬프라 복원 DB에서 비는 것이
+   정상 — 별도 조치 없음.
+4. **페이지 `<title>`** — `metadata` export가 없던 관리 페이지 8개에 `ADMIN_PAGES` 기반으로 추가.
+5. **`/admin/ops` 가짜 결과** — 초기 state가 `{status:"READY"}`라 아무 작업 전에도 JSON이 보였다.
+   `null`로 바꾸니 `ActionResultPanel`이 이미 갖고 있던 빈 상태 안내가 나온다.
+6. **폐기한 공개 API 키 평문 잔존** — revoke가 목록만 갱신하고 "생성된 키" 박스를 비우지 않았다.
+   hint로 대조해 방금 폐기한 키일 때만 지운다.
+
 ## 2026-08-24 (이슈 #514 — 320/375px 표·카드가 잘려 접근 불가, by claude)
 
 **측정 방법부터 틀려 있었다**: `documentElement.scrollWidth`는 `html/body { overflow-x: clip }` 때문에

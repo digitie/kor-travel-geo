@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -6,6 +7,10 @@ import {
   sanitizeLocalPath,
   verifySessionCookieValueNow
 } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "로그인"
+};
 
 export default async function LoginPage({
   searchParams

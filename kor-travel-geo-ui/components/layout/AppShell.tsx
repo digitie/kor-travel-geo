@@ -59,12 +59,74 @@ const adminNavGroups = ADMIN_NAV_GROUPS.map((group) => ({
   }))
 }));
 
+/** Matches the `@media (max-width: 980px)` breakpoint where the sidebar becomes a drawer. */
+export const DRAWER_MEDIA_QUERY = "(max-width: 980px)";
+
+/**
+ * True while the sidebar is rendered as the off-canvas drawer.
+ *
+ * Needed because the closed drawer must be `inert` (out of the tab order and the a11y tree)
+ * while the *desktop* sidebar — same element, same `menuOpen === false` — must stay fully
+ * focusable. Starts `false` so SSR and the first client paint agree.
+ */
+function useIsDrawerLayout(): boolean {
+  const [isDrawer, setIsDrawer] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(DRAWER_MEDIA_QUERY);
+    const sync = () => setIsDrawer(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+  return isDrawer;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const isDrawerLayout = useIsDrawerLayout();
   const pathname = usePathname();
   const sidebarRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  // A closed drawer is only moved off-screen by a transform, so its links stayed in the tab
+  // order and Tab sent focus somewhere invisible (issue #515). `inert` removes them from both
+  // the tab order and the a11y tree. The CSS keeps a `visibility: hidden` baseline for the
+  // window before this runs (see globals.css) — hydration, on every full page load.
+  //
+  // MUST be declared before useModalA11y: React flushes one commit's passive effects in hook
+  // order, and focusing into an inert subtree is a silent no-op that un-inerting afterwards
+  // does NOT replay. Registered the other way round, opening the drawer left focus stranded on
+  // the hamburger (verified in Chromium and Firefox). tests/unit/app-shell-drawer.test.tsx
+  // pins the ordering.
+  //
+  // Set imperatively: React 18 drops `inert={true}` on the way to the DOM (also covered by
+  // that test), so a JSX prop would silently do nothing. Never applied to the desktop sidebar —
+  // same element, same `menuOpen === false`, but not a drawer.
+  useEffect(() => {
+    sidebarRef.current?.toggleAttribute("inert", isDrawerLayout && !menuOpen);
+  }, [isDrawerLayout, menuOpen]);
+
+  // Growing past the drawer breakpoint while the drawer is open would strand the desktop
+  // layout: body scroll stays locked and <main> stays aria-hidden, while every control that
+  // could close it (top bar, close button, backdrop) is `display: none` outside the media
+  // query — leaving no visible way out.
+  //
+  // Focus has to be re-homed too. On close, useModalA11y restores focus to the hamburger — but
+  // at desktop width the hamburger is inside `.mobile-topbar { display: none }`, and the
+  // `.sidebar-close` the user was probably on is hidden as well, so focus falls to <body> and
+  // a keyboard user loses their place. Hand it to <main> instead.
+  useEffect(() => {
+    if (isDrawerLayout) return;
+    setMenuOpen((wasOpen) => {
+      if (wasOpen && sidebarRef.current?.contains(document.activeElement)) {
+        // After the commit that unlocks <main> (it is aria-hidden while the drawer is open).
+        queueMicrotask(() => mainRef.current?.focus());
+      }
+      return false;
+    });
+  }, [isDrawerLayout]);
 
   // On mobile the sidebar is an off-canvas modal drawer, so give it the same keyboard/AT
   // behavior as the admin dialogs: Escape closes it, focus moves in and is trapped while open,
@@ -169,7 +231,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="content" aria-hidden={menuOpen || undefined}>
+      <main className="content" aria-hidden={menuOpen || undefined} ref={mainRef} tabIndex={-1}>
         {children}
       </main>
     </div>

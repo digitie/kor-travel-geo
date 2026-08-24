@@ -2171,6 +2171,12 @@ textarea {
   color: var(--warn);
 }
 
+.table-stats-legend {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin: var(--space-sm) 0 0;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -2203,13 +2209,26 @@ textarea {
     position: fixed;
     top: 0;
     transform: translateX(-100%);
-    transition: transform var(--duration-normal) var(--ease-default);
+    /* Two layers, on purpose. `inert` on the element (AppShell) is what removes the closed
+       drawer from the tab order AND the a11y tree — but it only exists after hydration, and
+       every navigation in this console is a full page load, so that window recurs on every
+       page. `visibility: hidden` is the JS-free baseline covering it. The delay applies only
+       on close, so hiding does not cut the slide-out short; opening is instant (rule below),
+       which matters because focus moves into the drawer the moment it opens. */
+    transition:
+      transform var(--duration-normal) var(--ease-default),
+      visibility 0s linear var(--duration-normal);
+    visibility: hidden;
     width: min(280px, 84vw);
     z-index: 50;
   }
 
   .app-shell[data-menu-open="true"] .sidebar {
     transform: translateX(0);
+    transition:
+      transform var(--duration-normal) var(--ease-default),
+      visibility 0s linear 0s;
+    visibility: visible;
   }
 
   .sidebar-close {
@@ -2297,10 +2316,19 @@ textarea {
   *,
   *::before,
   *::after {
+    animation-delay: 0s !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+    /* 0s, NOT the usual 0.01ms. A `visibility` transition with a combined duration > 0 still
+       *starts*, and visibility computes to its START value (hidden) at progress 0 — so the
+       drawer is still hidden when focus() runs on open, and focus is silently dropped. Exactly
+       the reduced-motion bug the drawer's `visibility` baseline was added around. Combined
+       duration 0 starts no transition at all, so the value flips immediately.
+       Safe because nothing in this UI listens for `transitionend` (the only reason the 0.01ms
+       idiom exists); `animation-duration` keeps it so animationend still fires. */
+    transition-delay: 0s !important;
+    transition-duration: 0s !important;
   }
 }
 
@@ -2842,14 +2870,5 @@ textarea {
   .grid.two,
   .debug-map-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 150ms !important;
-    transition-duration: 150ms !important;
   }
 }

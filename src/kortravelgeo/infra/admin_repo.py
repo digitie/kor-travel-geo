@@ -221,9 +221,36 @@ SELECT payload
                 await conn.execute(
                     text(
                         """
-SELECT relname AS table_name,
-       GREATEST(n_live_tup, 0)::bigint AS row_count,
-       pg_total_relation_size(relid)::bigint AS size_bytes,
+SELECT s.relname AS table_name,
+       -- `n_live_tup` is a *delta the stats collector accumulates*, and a restore / hot-swap
+       -- resets it — so on a freshly restored DB it is not a row count at all: an untouched
+       -- table reads 0 and a table that took a few writes reads those few writes (issue #515).
+       -- Decide by whether this database's stats entry is ANCHORED: if the collector has ever
+       -- observed a vacuum/analyze of the relation, `n_live_tup` tracks the live-tuple count and
+       -- must win — it correctly reports 0 for a DELETE-emptied or TRUNCATEd table, where
+       -- `reltuples` still holds the pre-delete estimate (or -1). It is not *exact* (ANALYZE
+       -- extrapolates from a sample and the value drifts with writes until the next analyze),
+       -- but it is the closest thing the server offers without counting rows.
+       -- Unanchored, neither signal can be trusted alone: the counters may have been reset
+       -- (`n_live_tup` far too low, `reltuples` still good), or the relation may simply never
+       -- have been analyzed after a logical restore / bulk load (`reltuples` is -1, while
+       -- `n_live_tup` counts every row COPYed in and is good). A reset can only make
+       -- `n_live_tup` *under*count, so take whichever signal is larger — taking `reltuples`
+       -- alone reports 0 for every table of a `pg_restore`d database (`--no-analyze` is a
+       -- supported restore option), which is the very symptom of #515.
+       CASE
+         WHEN COALESCE(
+                s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze
+              ) IS NOT NULL
+           THEN GREATEST(s.n_live_tup, 0)::bigint
+         ELSE GREATEST(GREATEST(s.n_live_tup, 0)::bigint, GREATEST(c.reltuples, 0)::bigint)
+       END AS row_count,
+       -- Lets the UI mark the number as approximate instead of presenting an estimate as exact.
+       -- Every unanchored branch is a guess, including the one that falls through to 0.
+       (
+         COALESCE(s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze) IS NULL
+       ) AS row_count_estimated,
+       pg_total_relation_size(s.relid)::bigint AS size_bytes,
        NULLIF(
          GREATEST(
            COALESCE(last_vacuum, '-infinity'::timestamptz),
@@ -233,9 +260,10 @@ SELECT relname AS table_name,
          ),
          '-infinity'::timestamptz
        )::text AS updated_at
-  FROM pg_stat_user_tables
- WHERE schemaname = 'public'
- ORDER BY relname
+  FROM pg_stat_user_tables s
+  JOIN pg_class c ON c.oid = s.relid
+ WHERE s.schemaname = 'public'
+ ORDER BY s.relname
  LIMIT :limit
 """
                     ),
@@ -246,6 +274,7 @@ SELECT relname AS table_name,
             TableStat(
                 table_name=str(row["table_name"]),
                 row_count=int(row["row_count"] or 0),
+                row_count_estimated=bool(row["row_count_estimated"]),
                 size_bytes=int(row["size_bytes"]) if row["size_bytes"] is not None else None,
                 updated_at=str(row["updated_at"]) if row["updated_at"] is not None else None,
             )
