@@ -41,6 +41,10 @@ from kortravelgeo.loaders.text.parcel_link_loader import (
 from kortravelgeo.loaders.text.roadaddr_entrance_loader import (
     discover_roadaddr_entrance_sources,
 )
+from tests.integration._pg_guard import (
+    is_disposable_test_database,
+    is_protected_database,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -501,12 +505,25 @@ def resolve_data_root(environ: Mapping[str, str] | None = None) -> Path | None:
 
 
 def looks_like_t177_scratch_database(database_name: str) -> bool:
-    normalized = database_name.lower()
-    return (
-        "t177" in normalized
-        or "test" in normalized
-        or "scratch" in normalized
-        or normalized.startswith("tmp_")
+    """Delegates to the one shared predicate (issue #523), plus this harness's own `t177` tag.
+
+    The substring form this replaced was a fourth independent copy that could drift away from the
+    others — and it accepted names like `kor_travel_geo_latest` because it matched substrings.
+
+    `t177` is allowed here and NOT in the shared predicate on purpose. A task tag normally says
+    only which task owns a database (`kor_travel_geo_t213` is a *preserved* baseline, and letting
+    a tag imply "disposable" is the bug #523 is about), but T-177 is by definition the destructive
+    full-load e2e, and its real gate is the typed `RUN-T177-E2E <database>` confirmation in
+    `validate_t177_confirmation` — a name rule is only the outer layer here.
+
+    The protected list still wins: no tag opens production.
+    """
+    if is_protected_database(database_name):
+        return False
+    if is_disposable_test_database(database_name):
+        return True
+    return any(
+        segment == "t177" for segment in re.split(r"[_\-]", database_name.strip().lower())
     )
 
 

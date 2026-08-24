@@ -1242,12 +1242,18 @@ SELECT n.nspname AS schema_name,
        -- in a history it is a lie you cannot tell apart later. Which signal is usable at all
        -- depends on relkind.
        CASE
-         -- 'r'/'m' are the only relkinds selected here that get a `pg_stat_user_tables` row, so
-         -- they follow the ANCHORED rule of `AdminRepository.table_stats` (issue #515): once a
+         -- 'r'/'m' are the relkinds whose `pg_stat_user_tables` row carries a MEANINGFUL live
+         -- count. ('p' gets a row too — `pg_stat_all_tables` covers 'r','t','m','p' — but a
+         -- partitioned parent's counters are structurally zero; see its own branch below.)
+         -- They follow the ANCHORED rule of `AdminRepository.table_stats` (issue #515): once a
          -- vacuum/analyze has been observed, `n_live_tup` is a real live-tuple count and wins
          -- (it correctly reports 0 for a TRUNCATEd relation, where `reltuples` still holds the
-         -- pre-truncate estimate). Unanchored, a counter reset can only make `n_live_tup`
-         -- UNDERcount, so take the larger signal. When neither knows anything, say so: NULL.
+         -- pre-truncate estimate). Unanchored, take the larger signal: the case this branch
+         -- exists for is a counter reset, which can only make `n_live_tup` UNDERcount. That is
+         -- not a universal safety property — a matview REFRESHed to a smaller size leaves
+         -- `reltuples` stale-high, and GREATEST then overstates — but it is the same number the
+         -- previous query produced, and refresh_mv ANALYZEs afterwards so the relation is
+         -- anchored in practice. When neither signal knows anything, say so: NULL.
          WHEN c.relkind IN ('r','m') THEN
            CASE
              WHEN COALESCE(
@@ -1274,6 +1280,11 @@ SELECT n.nspname AS schema_name,
        END AS estimated_rows,
        -- Provenance rides along in the existing `stats` JSONB (below) so a reader can tell an
        -- anchored count from a guess and from "no signal at all".
+       -- Branch order mirrors the value CASE above. The 'p' arm has to come before the generic
+       -- estimate arm: a partitioned parent is gated out of `live_tuples_anchored` (its
+       -- `n_live_tup` is structurally 0), so without its own arm a freshly-ANALYZEd partitioned
+       -- table would stamp `reltuples` — the most authoritative number available for it — as a
+       -- guess, permanently, in a history table.
        CASE
          WHEN c.relkind NOT IN ('r','m','p') THEN 'not_applicable'
          WHEN c.relkind IN ('r','m')
@@ -1281,6 +1292,7 @@ SELECT n.nspname AS schema_name,
                     s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze
                   ) IS NOT NULL
            THEN 'live_tuples_anchored'
+         WHEN c.relkind = 'p' AND c.reltuples >= 0 THEN 'partition_rollup'
          WHEN c.reltuples >= 0 OR COALESCE(s.n_live_tup, 0) > 0 THEN 'unanchored_estimate'
          ELSE 'unknown'
        END AS estimated_rows_source,

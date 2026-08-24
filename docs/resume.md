@@ -4,6 +4,18 @@
 
 ## 현재 진척도 (2026-08-17 갱신, by claude)
 
+- ✅ **이슈 #523 — 테스트 DB 가드 일원화 + 미분석 관계 0행 기록 수정 (2026-08-25, PR #524, by claude)** —
+  opt-in PostgreSQL 테스트의 disposable-DB 판정식이 4벌로 갈라져 있었고 그중 하나가
+  `startswith("kor_travel_geo")`라 **운영 DB를 통과**시켰다(통과 뒤 ops 13개 테이블 `TRUNCATE CASCADE`).
+  가드가 아예 없는 모듈도 3개 있었다. 판정식을 `tests/integration/_pg_guard.py` 하나로 모으고
+  절대 denylist(운영·Dagster·**T-213 보존 DB**·ADR-036 restore 타깃) + throwaway 세그먼트 허용 +
+  `KTG_TEST_PG_ALLOW_WRITES` 명시 opt-in 구조로 바꿨다.
+  **워크플로 영향**: 이 모듈들은 이제 DSN이 스크래치 DB를 가리키지 않으면 skip한다.
+  `kor_travel_geo_codex_pr12_review` 같은 임시 이름을 쓰려면 `KTG_TEST_PG_ALLOW_WRITES=<db이름>`을
+  같이 준다. `kor_travel_geo_t213*`은 opt-in으로도 열리지 않는다.
+  함께: `ops.table_stats_snapshots.estimated_rows`가 미분석 관계(`reltuples = -1`)를 `0행`으로
+  기록하던 것을 relkind별로 나눠 고치고 출처를 `stats.estimated_rows_source`에 남긴다.
+
 - ✅ **manager ADR-37 반영 — geo PostgreSQL `5432` → 전용 인스턴스 `127.0.0.1:12500` (2026-08-17, PR #511, by claude)** —
   `kor-travel-docker-manager` PR #176(2026-08-17 머지)이 prod PostgreSQL을 프로젝트별 전용 인스턴스 4개로
   나누고 포트를 `12x00` 대역으로 맞췄다(geo `12500`, concierge `12600`, map `12700`, pinvi `12800`;

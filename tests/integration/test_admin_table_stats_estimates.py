@@ -32,6 +32,7 @@ from tests.integration._pg_guard import require_disposable_database
 
 _TABLE = "ktg_test_table_stats_probe"
 _FRESH_TABLE = "ktg_test_table_stats_never_analyzed"
+_EMPTY_TABLE = "ktg_test_table_stats_empty_unknown"
 
 
 def _dsn() -> str:
@@ -118,7 +119,7 @@ async def test_table_stats_row_count_survives_a_statistics_reset() -> None:
         raise
     try:
         async with engine.begin() as conn:
-            for name in (_TABLE, _FRESH_TABLE):
+            for name in (_TABLE, _FRESH_TABLE, _EMPTY_TABLE):
                 await conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
             await conn.execute(text(f"CREATE TABLE {_TABLE} (i int)"))
             # Every stage below parks the table past an autovacuum/autoanalyze threshold and
@@ -217,8 +218,55 @@ SELECT pg_stat_reset_single_table_counters(
         count, estimated = await _row_count(engine, _FRESH_TABLE)
         assert count == 300, f"never-analyzed table must use its live count, got {count}"
         assert estimated is True, "an unanalyzed count is still a guess"
+
+        # --- the ops HISTORY capture, which is what issue #523 is actually about --------------
+        # `/admin/tables` is a live read where a 0 is a defensible fallback. A snapshot row is
+        # permanent, so "the server does not know" has to be NULL, and the reader has to be able
+        # to tell which of the three cases produced the number.
+        snapshots = await AdminRepository(engine).capture_table_stats_snapshots(limit=2000)
+        by_name = {(row.object_name, row.object_kind): row for row in snapshots}
+
+        fresh = by_name.get((_FRESH_TABLE, "table"))
+        assert fresh is not None, f"{_FRESH_TABLE} missing from the snapshot capture"
+        assert fresh.estimated_rows == 300, (
+            f"never-analyzed table must record its live count, got {fresh.estimated_rows}"
+        )
+        assert fresh.stats["estimated_rows_source"] == "unanchored_estimate"
+
+        # An empty never-analyzed relation knows nothing: NULL, not 0.
+        async with engine.begin() as conn:
+            await conn.execute(text(f"CREATE TABLE {_EMPTY_TABLE} (i int)"))
+            await conn.execute(_no_autovacuum(_EMPTY_TABLE))
+        await _flush_stats(engine)
+        snapshots = await AdminRepository(engine).capture_table_stats_snapshots(limit=2000)
+        by_name = {(row.object_name, row.object_kind): row for row in snapshots}
+        empty = by_name.get((_EMPTY_TABLE, "table"))
+        assert empty is not None, f"{_EMPTY_TABLE} missing from the snapshot capture"
+        assert empty.estimated_rows is None, (
+            f"unknown must be NULL, not a number: {empty.estimated_rows}"
+        )
+        assert empty.stats["estimated_rows_source"] == "unknown"
+
+        # Indexes have no row count of their own; `reltuples` there counts index ENTRIES.
+        indexes = [row for row in snapshots if row.object_kind == "index"]
+        assert indexes, "expected at least one index row in the capture"
+        assert all(row.estimated_rows is None for row in indexes), (
+            "index rows must not report an entry count in a column named estimated_rows"
+        )
+        assert all(row.stats["estimated_rows_source"] == "not_applicable" for row in indexes)
+
+        # TOAST relations live in pg_toast, which the nspname filter excludes — so the 't' arm
+        # of the relkind CASE is dead. Documented here rather than removed (3-place schema rule).
+        assert not [row for row in snapshots if row.object_kind == "toast"]
+
+        # Saturation must be detected, not silently swallowed.
+        clipped = await AdminRepository(engine).capture_table_stats_snapshots(limit=1)
+        assert len(clipped) == 1
+        assert clipped[0].stats["truncated"] is True
+        assert clipped[0].stats["capture_limit"] == 1
+        assert "truncated" not in snapshots[0].stats
     finally:
         async with engine.begin() as conn:
-            for name in (_TABLE, _FRESH_TABLE):
+            for name in (_TABLE, _FRESH_TABLE, _EMPTY_TABLE):
                 await conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
         await engine.dispose()

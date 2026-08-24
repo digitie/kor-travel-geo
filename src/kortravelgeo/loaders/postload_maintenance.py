@@ -278,6 +278,11 @@ SELECT n.nspname AS schema_name,
          ELSE 'other'
        END AS object_kind,
        NULL::text AS parent_object_name,
+       -- NOTE on relkind 'p': the WHERE below admits partitioned parents, and they have no arm
+       -- of their own here. That is only ACCIDENTALLY correct — a parent's `n_live_tup` is
+       -- structurally 0, so the generic arm reduces to `reltuples`, which is the same answer
+       -- `capture_table_stats_snapshots` reaches through an explicit branch. This project has no
+       -- partitioned tables; if that changes, give it an explicit arm here too.
        -- Same defect as the ops snapshot capture (issue #523), and this report is generated
        -- right after an MV refresh/swap where ANALYZE is opt-in — precisely when `reltuples` is
        -- still -1. `GREATEST(c.reltuples, 0)` would report "never analyzed" as "0 rows". The

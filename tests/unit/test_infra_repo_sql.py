@@ -550,11 +550,18 @@ def _normalized_sql(func) -> str:
     Comment-stripping matters: every clause asserted below also appears in the prose above it,
     so matching raw source passes on a query whose SQL says the opposite of its comments.
     """
+    def _strip(line: str) -> str:
+        # Trailing `#` comments too, not just whole-line ones: an inline
+        # `{"limit": limit + 1},  # +1 detects saturation` would otherwise splice that prose
+        # into the text these tests assert on, which is the failure mode the stripping exists
+        # to prevent.
+        return line.split("--", 1)[0].split("  #", 1)[0]
+
     return re.sub(
         r"\s+",
         " ",
         " ".join(
-            line.split("--", 1)[0]
+            _strip(line)
             for line in inspect.getsource(func).splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         ),
@@ -571,30 +578,29 @@ def test_ops_table_stats_capture_does_not_persist_unknown_row_counts_as_zero() -
     NOTE for future readers: the sibling test for `table_stats` asserts `"c.reltuples >= 0" not
     in sql`. That ban is scoped to THAT method, where it would be a bogus second anchoring
     condition. Here it is the only way to separate "unknown" from "0 rows" — do not "fix" it.
+
+    Behaviour is covered against a real server by
+    tests/integration/test_admin_table_stats_estimates.py, which asserts the actual persisted
+    values. This test deliberately does NOT pin the whole expression as one literal: an earlier
+    revision did, and a purely cosmetic reflow failed it with a message telling the reader the
+    semantics had changed — which invites pasting the new string in and turning the test into a
+    ratchet that can never fail meaningfully.
     """
     sql = _normalized_sql(admin_repo.AdminRepository.capture_table_stats_snapshots)
 
     # The exact regression.
     assert "GREATEST(c.reltuples, 0)::bigint AS estimated_rows" not in sql
-
-    # Pin the whole expression: asserting the parts separately passes on an inverted polarity.
-    assert (
-        "CASE WHEN c.relkind IN ('r','m') THEN"
-        " CASE WHEN COALESCE( s.last_vacuum, s.last_autovacuum, s.last_analyze,"
-        " s.last_autoanalyze ) IS NOT NULL THEN GREATEST(s.n_live_tup, 0)::bigint"
-        " WHEN c.reltuples >= 0 OR COALESCE(s.n_live_tup, 0) > 0"
-        " THEN GREATEST( GREATEST(s.n_live_tup, 0)::bigint, GREATEST(c.reltuples, 0)::bigint )"
-        " ELSE NULL END"
-        " WHEN c.relkind = 'p' AND c.reltuples >= 0 THEN c.reltuples::bigint"
-        " ELSE NULL END AS estimated_rows," in sql
-    ), "the relkind-aware estimated_rows CASE changed; only update this if the SEMANTICS hold"
-
+    # Unknown must be expressible. A query with no NULL arm cannot distinguish "no signal".
+    assert "ELSE NULL END AS estimated_rows," in sql
     # A partitioned parent must NOT go through the anchored branch: it stores no tuples of its
     # own, so `n_live_tup` is structurally 0 while ANALYZE still sets `last_analyze`.
     assert "WHEN c.relkind = 'p' AND c.reltuples >= 0 THEN c.reltuples::bigint" in sql
+    # The anchored arm must be gated to the relkinds whose live counter means something.
+    assert "WHEN c.relkind IN ('r','m') THEN" in sql
     # Provenance so a reader can tell an anchored count from a guess from "no signal".
     assert "END AS estimated_rows_source," in sql
     assert '"estimated_rows_source": row["estimated_rows_source"],' in sql
+    assert "THEN 'partition_rollup'" in sql, "the 'p' arm needs its own provenance label"
     # Saturation must be detected, not silently swallowed.
     assert '{"limit": limit + 1}' in sql
     assert '"truncated": True, "capture_limit": limit' in sql
