@@ -28,6 +28,7 @@ from sqlalchemy import text
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 _TABLE = "ktg_test_table_stats_probe"
 _FRESH_TABLE = "ktg_test_table_stats_never_analyzed"
@@ -40,30 +41,15 @@ def _dsn() -> str:
     return dsn
 
 
-def _looks_like_disposable_test_database(database_name: str) -> bool:
-    normalized = database_name.lower()
-    return (
-        "test" in normalized
-        or normalized.startswith("kor_travel_geo_t")
-        or normalized.startswith("tmp_")
-    )
-
-
 async def _require_disposable(engine) -> None:
     """Refuse to run against anything that might be a real database.
 
-    This test creates tables and resets statistics counters. Even though the reset below is
-    scoped to a single relation, `KTG_TEST_PG_DSN` is routinely pointed at a working database in
-    this repo, so mirror the guard the other opt-in PostgreSQL tests use.
+    This test creates tables and resets statistics counters. The name predicate lives in
+    tests/integration/_pg_guard.py — three drifted copies of it were the subject of issue #523.
     """
+    await require_disposable_database(engine)
     async with engine.connect() as conn:
-        database_name = await conn.scalar(text("SELECT current_database()"))
         version_num = int(await conn.scalar(text("SHOW server_version_num")))
-    if database_name is None or not _looks_like_disposable_test_database(str(database_name)):
-        pytest.skip(
-            "KTG_TEST_PG_DSN must point to a disposable test database whose name includes "
-            f"'test' or starts with 'kor_travel_geo_t'; got {database_name!r}"
-        )
     if version_num < 150000:
         pytest.skip(f"pg_stat_force_next_flush() requires PostgreSQL 15+; got {version_num}")
 

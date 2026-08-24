@@ -11,6 +11,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.infra.sql import INDEX_SQL, SCHEMA_SQL, iter_sql_statements
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -42,8 +43,10 @@ async def test_real_postgres_ops_constraints_when_dsn_is_set() -> None:
 
 
 async def _require_disposable_postgis_database(engine: AsyncEngine) -> None:
+    # Name check first: this module applies the schema and writes, so the guard has to run
+    # before anything else touches the database (issue #523).
+    await require_disposable_database(engine)
     async with engine.connect() as conn:
-        database_name = await conn.scalar(text("SELECT current_database()"))
         available_extensions = (
             await conn.execute(
                 text(
@@ -62,24 +65,9 @@ SELECT name
             "pg_stat_statements",
         } - set(available_extensions)
 
-    if database_name is None or not _looks_like_disposable_test_database(str(database_name)):
-        pytest.skip(
-            "KTG_TEST_PG_DSN must point to a disposable test database "
-            "whose name includes 'test' or starts with 'kor_travel_geo_t'; "
-            f"got {database_name!r}"
-        )
     if missing_extensions:
         missing = ", ".join(sorted(missing_extensions))
         pytest.skip(f"PostGIS test database is missing required extension packages: {missing}")
-
-
-def _looks_like_disposable_test_database(database_name: str) -> bool:
-    normalized = database_name.lower()
-    return (
-        "test" in normalized
-        or normalized.startswith("kor_travel_geo_t")
-        or normalized.startswith("tmp_")
-    )
 
 
 async def _apply_schema(engine: AsyncEngine) -> None:

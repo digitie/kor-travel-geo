@@ -278,7 +278,23 @@ SELECT n.nspname AS schema_name,
          ELSE 'other'
        END AS object_kind,
        NULL::text AS parent_object_name,
-       GREATEST(c.reltuples, 0)::bigint AS estimated_rows,
+       -- Same defect as the ops snapshot capture (issue #523), and this report is generated
+       -- right after an MV refresh/swap where ANALYZE is opt-in — precisely when `reltuples` is
+       -- still -1. `GREATEST(c.reltuples, 0)` would report "never analyzed" as "0 rows". The
+       -- index branch of this UNION already emits NULL for unknown; do the same here.
+       CASE
+         WHEN c.relkind IN ('r','m')
+              AND COALESCE(
+                    s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze
+                  ) IS NOT NULL
+           THEN GREATEST(s.n_live_tup, 0)::bigint
+         WHEN c.reltuples >= 0 OR COALESCE(s.n_live_tup, 0) > 0
+           THEN GREATEST(
+                  GREATEST(s.n_live_tup, 0)::bigint,
+                  GREATEST(c.reltuples, 0)::bigint
+                )
+         ELSE NULL
+       END AS estimated_rows,
        pg_total_relation_size(c.oid)::bigint AS total_bytes,
        pg_relation_size(c.oid)::bigint AS table_bytes,
        pg_indexes_size(c.oid)::bigint AS index_bytes,

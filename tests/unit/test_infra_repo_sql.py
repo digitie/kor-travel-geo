@@ -544,6 +544,82 @@ def test_admin_repo_table_stats_prefers_anchored_live_tuples_over_reltuples() ->
     )
 
 
+def _normalized_sql(func) -> str:
+    """A function's SQL with comments stripped and whitespace collapsed.
+
+    Comment-stripping matters: every clause asserted below also appears in the prose above it,
+    so matching raw source passes on a query whose SQL says the opposite of its comments.
+    """
+    return re.sub(
+        r"\s+",
+        " ",
+        " ".join(
+            line.split("--", 1)[0]
+            for line in inspect.getsource(func).splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ),
+    )
+
+
+def test_ops_table_stats_capture_does_not_persist_unknown_row_counts_as_zero() -> None:
+    """Issue #523: `reltuples` is -1 for "never analyzed", not 0.
+
+    `GREATEST(c.reltuples, 0)` wrote that -1 into `ops.table_stats_snapshots.estimated_rows` as
+    `0 rows` — a persisted HISTORY row that cannot later be told apart from a genuinely empty
+    table. On the production database 20 relations are in that state at any given time.
+
+    NOTE for future readers: the sibling test for `table_stats` asserts `"c.reltuples >= 0" not
+    in sql`. That ban is scoped to THAT method, where it would be a bogus second anchoring
+    condition. Here it is the only way to separate "unknown" from "0 rows" — do not "fix" it.
+    """
+    sql = _normalized_sql(admin_repo.AdminRepository.capture_table_stats_snapshots)
+
+    # The exact regression.
+    assert "GREATEST(c.reltuples, 0)::bigint AS estimated_rows" not in sql
+
+    # Pin the whole expression: asserting the parts separately passes on an inverted polarity.
+    assert (
+        "CASE WHEN c.relkind IN ('r','m') THEN"
+        " CASE WHEN COALESCE( s.last_vacuum, s.last_autovacuum, s.last_analyze,"
+        " s.last_autoanalyze ) IS NOT NULL THEN GREATEST(s.n_live_tup, 0)::bigint"
+        " WHEN c.reltuples >= 0 OR COALESCE(s.n_live_tup, 0) > 0"
+        " THEN GREATEST( GREATEST(s.n_live_tup, 0)::bigint, GREATEST(c.reltuples, 0)::bigint )"
+        " ELSE NULL END"
+        " WHEN c.relkind = 'p' AND c.reltuples >= 0 THEN c.reltuples::bigint"
+        " ELSE NULL END AS estimated_rows," in sql
+    ), "the relkind-aware estimated_rows CASE changed; only update this if the SEMANTICS hold"
+
+    # A partitioned parent must NOT go through the anchored branch: it stores no tuples of its
+    # own, so `n_live_tup` is structurally 0 while ANALYZE still sets `last_analyze`.
+    assert "WHEN c.relkind = 'p' AND c.reltuples >= 0 THEN c.reltuples::bigint" in sql
+    # Provenance so a reader can tell an anchored count from a guess from "no signal".
+    assert "END AS estimated_rows_source," in sql
+    assert '"estimated_rows_source": row["estimated_rows_source"],' in sql
+    # Saturation must be detected, not silently swallowed.
+    assert '{"limit": limit + 1}' in sql
+    assert '"truncated": True, "capture_limit": limit' in sql
+
+
+def test_postload_maintenance_stats_does_not_report_unknown_row_counts_as_zero() -> None:
+    """Issue #523, same defect on the T-146 report — generated right after an MV swap, where
+    ANALYZE is opt-in and `reltuples` is therefore still -1."""
+    from kortravelgeo.loaders import postload_maintenance
+
+    sql = _normalized_sql(postload_maintenance.collect_postload_object_stats)
+
+    assert "GREATEST(c.reltuples, 0)::bigint AS estimated_rows" not in sql
+    assert (
+        "CASE WHEN c.relkind IN ('r','m') AND COALESCE( s.last_vacuum, s.last_autovacuum,"
+        " s.last_analyze, s.last_autoanalyze ) IS NOT NULL"
+        " THEN GREATEST(s.n_live_tup, 0)::bigint"
+        " WHEN c.reltuples >= 0 OR COALESCE(s.n_live_tup, 0) > 0"
+        " THEN GREATEST( GREATEST(s.n_live_tup, 0)::bigint, GREATEST(c.reltuples, 0)::bigint )"
+        " ELSE NULL END AS estimated_rows," in sql
+    )
+    # The index branch already used NULL for "not applicable"; the table branch now matches it.
+    assert "NULL::bigint AS estimated_rows," in sql
+
+
 def test_admin_upload_helpers_prevent_path_escape(tmp_path) -> None:
     from kortravelgeo.api.routers import admin
 
