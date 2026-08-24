@@ -226,23 +226,29 @@ SELECT s.relname AS table_name,
        -- resets it — so on a freshly restored DB it is not a row count at all: an untouched
        -- table reads 0 and a table that took a few writes reads those few writes (issue #515).
        -- Decide by whether this database's stats entry is ANCHORED: if the collector has ever
-       -- observed a vacuum/analyze of the relation, `n_live_tup` is a real live-tuple count and
-       -- must win (it is exact, and it correctly reports 0 for a DELETE-emptied table, where
-       -- `reltuples` would still hold the pre-delete estimate). Otherwise the counters were
-       -- reset and the planner's `reltuples` is the only signal we have. `reltuples` is -1 both
-       -- for never-analyzed and for freshly-TRUNCATEd relations, which we report as 0.
+       -- observed a vacuum/analyze of the relation, `n_live_tup` tracks the live-tuple count and
+       -- must win — it correctly reports 0 for a DELETE-emptied or TRUNCATEd table, where
+       -- `reltuples` still holds the pre-delete estimate (or -1). It is not *exact* (ANALYZE
+       -- extrapolates from a sample and the value drifts with writes until the next analyze),
+       -- but it is the closest thing the server offers without counting rows.
+       -- Unanchored, neither signal can be trusted alone: the counters may have been reset
+       -- (`n_live_tup` far too low, `reltuples` still good), or the relation may simply never
+       -- have been analyzed after a logical restore / bulk load (`reltuples` is -1, while
+       -- `n_live_tup` counts every row COPYed in and is good). A reset can only make
+       -- `n_live_tup` *under*count, so take whichever signal is larger — taking `reltuples`
+       -- alone reports 0 for every table of a `pg_restore`d database (`--no-analyze` is a
+       -- supported restore option), which is the very symptom of #515.
        CASE
          WHEN COALESCE(
                 s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze
               ) IS NOT NULL
            THEN GREATEST(s.n_live_tup, 0)::bigint
-         WHEN c.reltuples >= 0 THEN c.reltuples::bigint
-         ELSE 0
+         ELSE GREATEST(GREATEST(s.n_live_tup, 0)::bigint, GREATEST(c.reltuples, 0)::bigint)
        END AS row_count,
        -- Lets the UI mark the number as approximate instead of presenting an estimate as exact.
+       -- Every unanchored branch is a guess, including the one that falls through to 0.
        (
          COALESCE(s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze) IS NULL
-         AND c.reltuples >= 0
        ) AS row_count_estimated,
        pg_total_relation_size(s.relid)::bigint AS size_bytes,
        NULLIF(

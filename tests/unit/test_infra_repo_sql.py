@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -508,14 +509,33 @@ def test_admin_repo_table_stats_prefers_anchored_live_tuples_over_reltuples() ->
     tests/integration/test_admin_table_stats_estimates.py.
     """
     source = inspect.getsource(admin_repo.AdminRepository)
+    # Strip comments before matching: every clause asserted below also appears in the prose above
+    # it, so a substring test against the raw source passes on a query whose SQL says the
+    # opposite of its comments.
+    sql = " ".join(
+        line.split("--", 1)[0] for line in source.splitlines() if line.strip()
+    )
+    sql = re.sub(r"\s+", " ", sql)
 
-    # The anchor test, not a zero test.
-    assert "s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze" in source
-    assert "WHEN c.reltuples >= 0 THEN c.reltuples::bigint" in source
-    # `reltuples` must never win while the live counter is anchored.
-    assert "NULLIF(GREATEST(s.n_live_tup, 0), 0)" not in source
-    # The estimate has to be flagged so the UI does not present it as exact.
-    assert "AS row_count_estimated" in source
+    # Pin the whole expression, not its parts. Asserting the pieces separately still passes when
+    # the polarity is inverted (`IS NULL`) — i.e. on the maximally wrong query, the one that
+    # trusts `n_live_tup` only when the stats HAVE been reset.
+    assert (
+        "CASE WHEN COALESCE( s.last_vacuum, s.last_autovacuum, s.last_analyze,"
+        " s.last_autoanalyze ) IS NOT NULL THEN GREATEST(s.n_live_tup, 0)::bigint"
+        " ELSE GREATEST(GREATEST(s.n_live_tup, 0)::bigint, GREATEST(c.reltuples, 0)::bigint)"
+        " END AS row_count," in sql
+    )
+    # Unanchored is unanchored: `reltuples >= 0` must not re-enter as a second condition, or a
+    # `pg_restore`d database (reltuples = -1, live counter good) reports 0 for every table.
+    assert "c.reltuples >= 0" not in sql
+    assert "NULLIF(GREATEST(s.n_live_tup, 0), 0)" not in sql
+    # The estimate has to be flagged so the UI does not present it as exact — for the WHOLE
+    # unanchored branch, with no extra qualifier that would leave some guesses labelled exact.
+    assert (
+        "( COALESCE(s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze)"
+        " IS NULL ) AS row_count_estimated," in sql
+    )
 
 
 def test_admin_upload_helpers_prevent_path_escape(tmp_path) -> None:

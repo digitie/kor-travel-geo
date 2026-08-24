@@ -31,10 +31,15 @@ const columns: VirtualColumn<TableStat>[] = [
     sortValue: (r) => r.row_count,
     // `≈` when the count came from the planner's estimate because this database's statistics
     // were reset (restore / hot-swap) and nothing has vacuumed/analyzed since (issue #515).
+    // `≈` alone is announced only at high symbol verbosity and `title` never surfaces on
+    // touch, so carry the meaning in text for AT instead of relying on either.
     cell: (r) =>
       r.row_count_estimated ? (
         <span title="통계 미수집 — 플래너 추정치입니다(ANALYZE 후 정확해집니다).">
-          ≈ {r.row_count.toLocaleString()}
+          <span aria-hidden="true">≈ </span>
+          <span className="sr-only">약 </span>
+          {r.row_count.toLocaleString()}
+          <span className="sr-only">, 추정치</span>
         </span>
       ) : (
         r.row_count.toLocaleString()

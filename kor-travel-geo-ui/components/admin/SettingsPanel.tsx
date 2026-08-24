@@ -342,6 +342,7 @@ function PublicApiKeysSection() {
       onClearGeneratedKey={() =>
         patchState({
           generatedKey: null,
+          generatedKeyId: null,
           notice: { tone: "info", text: "생성된 키 표시를 지웠습니다." }
         })
       }

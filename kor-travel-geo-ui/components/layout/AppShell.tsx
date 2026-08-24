@@ -89,6 +89,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
+  // A closed drawer is only moved off-screen by a transform, so its links stayed in the tab
+  // order and Tab sent focus somewhere invisible (issue #515). `inert` removes them from both
+  // the tab order and the a11y tree. The CSS keeps a `visibility: hidden` baseline for the
+  // window before this runs (see globals.css) — hydration, on every full page load.
+  //
+  // MUST be declared before useModalA11y: React flushes one commit's passive effects in hook
+  // order, and focusing into an inert subtree is a silent no-op that un-inerting afterwards
+  // does NOT replay. Registered the other way round, opening the drawer left focus stranded on
+  // the hamburger (verified in Chromium and Firefox). tests/unit/app-shell-drawer.test.tsx
+  // pins the ordering.
+  //
+  // Set imperatively: React 18 drops `inert={true}` on the way to the DOM (also covered by
+  // that test), so a JSX prop would silently do nothing. Never applied to the desktop sidebar —
+  // same element, same `menuOpen === false`, but not a drawer.
+  useEffect(() => {
+    sidebarRef.current?.toggleAttribute("inert", isDrawerLayout && !menuOpen);
+  }, [isDrawerLayout, menuOpen]);
+
+  // Growing past the drawer breakpoint while the drawer is open would strand the desktop
+  // layout: body scroll stays locked and <main> stays aria-hidden, while every control that
+  // could close it (top bar, close button, backdrop) is `display: none` outside the media
+  // query — leaving no visible way out.
+  useEffect(() => {
+    if (!isDrawerLayout) setMenuOpen(false);
+  }, [isDrawerLayout]);
+
   // On mobile the sidebar is an off-canvas modal drawer, so give it the same keyboard/AT
   // behavior as the admin dialogs: Escape closes it, focus moves in and is trapped while open,
   // and focus returns to the toggle on close. `open` is passed because the drawer is always
@@ -99,18 +125,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     initialFocusRef: closeButtonRef,
     open: menuOpen
   });
-
-  // A closed drawer is only moved off-screen by a transform, so its links stayed in the tab
-  // order and Tab sent focus somewhere invisible (issue #515). `inert` removes them from both
-  // the tab order and the a11y tree, and — unlike toggling `visibility` — it is not tied to a
-  // transition, so it cannot race the focus() that runs when the drawer opens.
-  //
-  // Set imperatively: React 18 drops `inert={true}` on the way to the DOM (verified by
-  // tests/unit/app-shell-drawer.test.tsx), so a JSX prop would silently do nothing. Never
-  // applied to the desktop sidebar — same element, same `menuOpen === false`, but not a drawer.
-  useEffect(() => {
-    sidebarRef.current?.toggleAttribute("inert", isDrawerLayout && !menuOpen);
-  }, [isDrawerLayout, menuOpen]);
 
   // Lock background scroll while the drawer is open so touch scroll-chaining can't move the
   // page behind the backdrop.
