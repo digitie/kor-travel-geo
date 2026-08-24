@@ -2171,6 +2171,12 @@ textarea {
   color: var(--warn);
 }
 
+.table-stats-legend {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin: var(--space-sm) 0 0;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -2314,10 +2320,15 @@ textarea {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    /* Delays too: the drawer pairs `visibility` with a delay that paces the slide-out, and
-       leaving it at 220ms while the slide is ~0ms just re-creates the gap this removes. */
+    /* 0s, NOT the usual 0.01ms. A `visibility` transition with a combined duration > 0 still
+       *starts*, and visibility computes to its START value (hidden) at progress 0 — so the
+       drawer is still hidden when focus() runs on open, and focus is silently dropped. Exactly
+       the reduced-motion bug the drawer's `visibility` baseline was added around. Combined
+       duration 0 starts no transition at all, so the value flips immediately.
+       Safe because nothing in this UI listens for `transitionend` (the only reason the 0.01ms
+       idiom exists); `animation-duration` keeps it so animationend still fires. */
     transition-delay: 0s !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
   }
 }
 

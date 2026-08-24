@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AppShell } from "@/components/layout/AppShell";
+import { AppShell, DRAWER_MEDIA_QUERY } from "@/components/layout/AppShell";
 
 /**
  * Issue #515 — the closed mobile drawer must not hold keyboard focus off-screen.
@@ -51,8 +51,10 @@ const sidebar = () => document.getElementById("app-sidebar");
 const shell = () => document.querySelector(".app-shell");
 
 describe("AppShell 모바일 드로어 (#515)", () => {
+  let viewport: ReturnType<typeof mockViewport>;
+
   beforeEach(() => {
-    mockViewport(true);
+    viewport = mockViewport(true);
   });
 
   afterEach(() => {
@@ -114,7 +116,7 @@ describe("AppShell 모바일 드로어 (#515)", () => {
   });
 
   it("데스크톱 사이드바는 절대 inert가 아니다", () => {
-    mockViewport(false);
+    viewport.setMatches(false);
     render(
       <AppShell>
         <div>본문</div>
@@ -125,7 +127,6 @@ describe("AppShell 모바일 드로어 (#515)", () => {
   });
 
   it("드로어를 연 채 데스크톱 폭으로 넓히면 메뉴가 닫힌다", () => {
-    const viewport = mockViewport(true);
     render(
       <AppShell>
         <div>본문</div>
@@ -145,10 +146,11 @@ describe("AppShell 모바일 드로어 (#515)", () => {
   });
 
   it("JS 브레이크포인트와 CSS 드로어 브레이크포인트가 같은 값이다", () => {
-    // The two live in different languages with nothing tying them together. Drift in the
-    // CSS-smaller direction is the dangerous one: `inert` on a *visible* desktop rail makes the
-    // nav unfocusable and unclickable while looking completely normal.
+    // Compare against the constant itself — asserting a hardcoded "980px" literal stayed green
+    // when the TSX moved to another breakpoint, which is precisely the drift being guarded.
+    // Drift in the CSS-smaller direction is the dangerous one: `inert` on a *visible* desktop
+    // rail makes the nav unfocusable and unclickable while looking completely normal.
     const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
-    expect(css).toContain("@media (max-width: 980px)");
+    expect(css).toContain(`@media ${DRAWER_MEDIA_QUERY}`);
   });
 });

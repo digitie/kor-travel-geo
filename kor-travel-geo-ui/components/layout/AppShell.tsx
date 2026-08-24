@@ -60,7 +60,7 @@ const adminNavGroups = ADMIN_NAV_GROUPS.map((group) => ({
 }));
 
 /** Matches the `@media (max-width: 980px)` breakpoint where the sidebar becomes a drawer. */
-const DRAWER_MEDIA_QUERY = "(max-width: 980px)";
+export const DRAWER_MEDIA_QUERY = "(max-width: 980px)";
 
 /**
  * True while the sidebar is rendered as the off-canvas drawer.
@@ -87,6 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const sidebarRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   // A closed drawer is only moved off-screen by a transform, so its links stayed in the tab
@@ -111,8 +112,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // layout: body scroll stays locked and <main> stays aria-hidden, while every control that
   // could close it (top bar, close button, backdrop) is `display: none` outside the media
   // query — leaving no visible way out.
+  //
+  // Focus has to be re-homed too. On close, useModalA11y restores focus to the hamburger — but
+  // at desktop width the hamburger is inside `.mobile-topbar { display: none }`, and the
+  // `.sidebar-close` the user was probably on is hidden as well, so focus falls to <body> and
+  // a keyboard user loses their place. Hand it to <main> instead.
   useEffect(() => {
-    if (!isDrawerLayout) setMenuOpen(false);
+    if (isDrawerLayout) return;
+    setMenuOpen((wasOpen) => {
+      if (wasOpen && sidebarRef.current?.contains(document.activeElement)) {
+        // After the commit that unlocks <main> (it is aria-hidden while the drawer is open).
+        queueMicrotask(() => mainRef.current?.focus());
+      }
+      return false;
+    });
   }, [isDrawerLayout]);
 
   // On mobile the sidebar is an off-canvas modal drawer, so give it the same keyboard/AT
@@ -218,7 +231,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="content" aria-hidden={menuOpen || undefined}>
+      <main className="content" aria-hidden={menuOpen || undefined} ref={mainRef} tabIndex={-1}>
         {children}
       </main>
     </div>
