@@ -258,6 +258,50 @@ export function isFailedSessionState(state: UploadSessionState): boolean {
 }
 
 /**
+ * How many resumable sessions may hold a live SSE stream at once.
+ *
+ * Browsers cap concurrent HTTP/1.1 connections per origin at 6 (Chrome), and an
+ * open `EventSource` holds one for its whole lifetime. Subscribing per table row
+ * exhausted that budget as soon as ~6 sessions were resumable, and *every* other
+ * same-origin request (rail navigation, react-query, logout) then queued for
+ * minutes (issue #512, found by live e2e). 2 keeps live progress useful for the
+ * sessions that matter while leaving 4 connections for the rest of the console.
+ */
+export const MAX_LIVE_UPLOAD_STREAMS = 2;
+
+/**
+ * Pick the sessions that get a live SSE stream: the `max` most recently updated.
+ *
+ * Everything else falls back to the `uploaded/expected` counter that react-query
+ * polling already refreshes, so no information is lost — only the per-row live
+ * percentage. Ordering is by `updated_at` (falling back to `created_at`), newest
+ * first, with `upload_session_id` as a tiebreaker so the selection is stable
+ * across re-renders (an unstable set would churn EventSources open/closed).
+ */
+export function selectLiveUploadStreamIds(
+  sessions: readonly UploadSessionStatus[],
+  max: number = MAX_LIVE_UPLOAD_STREAMS
+): Set<string> {
+  if (max <= 0) {
+    return new Set();
+  }
+  const activity = (session: UploadSessionStatus): number => {
+    const stamp = session.updated_at ?? session.created_at;
+    const parsed = stamp ? Date.parse(stamp) : Number.NaN;
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+  return new Set(
+    [...sessions]
+      .sort((a, b) => {
+        const delta = activity(b) - activity(a);
+        return delta !== 0 ? delta : a.upload_session_id.localeCompare(b.upload_session_id);
+      })
+      .slice(0, max)
+      .map((session) => session.upload_session_id)
+  );
+}
+
+/**
  * SSE `source_upload.progress` event payload (mirrors backend
  * `SourceUploadProgressEvent`). The events endpoint is a StreamingResponse with
  * no OpenAPI schema, so this is the hand-maintained client contract.

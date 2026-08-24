@@ -34,6 +34,7 @@ import {
   isEpostCategory,
   isResumableSession,
   isValidYyyymm,
+  selectLiveUploadStreamIds,
   servingUsageLabels,
   servingUsageNote,
   servingUsageTones,
@@ -607,6 +608,11 @@ function ResumableSessions({
   sessions: UploadSessionStatus[];
   onSessionTerminal: () => void;
 }) {
+  // Only the most recently updated few sessions hold a live SSE stream: an EventSource
+  // pins one of the browser's 6 per-origin connections for its lifetime, so subscribing
+  // per row froze the whole console once ~6 sessions were resumable (#512). The rest keep
+  // the polled uploaded/expected counter.
+  const liveSessionIds = useMemo(() => selectLiveUploadStreamIds(sessions), [sessions]);
   const columns = useMemo<VirtualColumn<UploadSessionStatus>[]>(
     () => [
       { key: "category", header: "카테고리", cell: (session) => session.category },
@@ -620,11 +626,15 @@ function ResumableSessions({
         key: "progress",
         header: "진행",
         cell: (session) => (
-          <SessionProgressCell onTerminal={onSessionTerminal} session={session} />
+          <SessionProgressCell
+            live={liveSessionIds.has(session.upload_session_id)}
+            onTerminal={onSessionTerminal}
+            session={session}
+          />
         )
       }
     ],
-    [onSessionTerminal]
+    [liveSessionIds, onSessionTerminal]
   );
 
   return (
@@ -637,18 +647,30 @@ function ResumableSessions({
         rowKey={(session) => session.upload_session_id}
         rows={sessions}
       />
+      {sessions.length > liveSessionIds.size ? (
+        <p className="form-note">
+          브라우저 동시 연결 한도 때문에 최근 갱신된 {liveSessionIds.size}건만 실시간 진행률을
+          표시합니다. 나머지는 주기적으로 갱신되는 업로드 수로 표시됩니다.
+        </p>
+      ) : null}
     </Panel>
   );
 }
 
 function SessionProgressCell({
   session,
-  onTerminal
+  onTerminal,
+  live: subscribe
 }: {
   session: UploadSessionStatus;
   onTerminal: () => void;
+  /** Open a live SSE stream for this row. Capped by `selectLiveUploadStreamIds` (#512). */
+  live: boolean;
 }) {
-  const live = useUploadSessionEvents(session.upload_session_id, { onTerminal });
+  const live = useUploadSessionEvents(session.upload_session_id, {
+    enabled: subscribe,
+    onTerminal
+  });
   return <SessionProgress live={live} session={session} />;
 }
 
