@@ -34,6 +34,13 @@ anchored 규칙, `p`(파티션 부모)는 자기 튜플이 없어 `n_live_tup`�
 응답 형태를 바꾸면 openapi·TS 재생성을 부르므로 `LIMIT :limit + 1`로 포화를 탐지해 로그 경고와
 `stats.truncated`만 남긴다.
 
+**prod live 검증(2026-08-25).** capture를 한 번 돌려 실제 기록을 확인했다 — 201개 객체,
+`not_applicable` 302행(인덱스, 전부 NULL) / `unanchored_estimate` 61행 / `unknown` 35행(전부 NULL) /
+`live_tuples_anchored` 4행. 핵심 검사인 "unanchored인데 0으로 기록된 행"은 **0건**이다. 수정 전이면
+`unknown` 35건이 전부 `0`이 되고 인덱스 302건에는 행 수가 아닌 엔트리 수가 들어갔을 자리다.
+`mv_geocode_target`은 `unanchored_estimate`로 6,416,323을 기록했다 — hot-swap 이후 통계가 리셋된
+상태라 `reltuples` 폴백이 도는 것이고, 이게 #515/#523이 만든 동작이다.
+
 **검증에서 배운 것.** 오구현을 하나씩 넣어 각각 다른 단언에서 실패하는지 확인하는 방식을 계속
 썼는데, 이번에는 **테스트 쪽 결함이 네 번 나왔다**: (1) 가드 호출을 지워도 `import` 줄이 남아
 이름 매칭이 통과, (2) 가드를 첫 쓰기 뒤로 옮겨도 통과(호출 시점을 안 봤다), (3) 헬퍼 이름
