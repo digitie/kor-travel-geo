@@ -1699,10 +1699,20 @@ textarea {
   min-width: 0;
 }
 
-.vtable-static > table {
-  display: block;
+/* Scroll region around the table only (see VirtualTable `as="table"`). Deliberately NOT
+   `display: block` on the <table> itself: that re-wraps its children in an anonymous table box
+   whose width is auto, so `.table { width: 100% }` would size the block while the table
+   shrink-wrapped to max-content — every admin table would render narrow, at every viewport. */
+.vtable-scroll {
   max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+}
+
+.vtable-scroll:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 30%, transparent);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 
 .vtable-toolbar {
@@ -1838,18 +1848,15 @@ textarea {
   border-radius: 8px;
   display: grid;
   gap: 10px;
+  /* Grid/flex children default to `min-width: auto`; without this the long category titles and
+     badge rows push the card wider than its column (issue #514). */
+  min-width: 0;
   padding: 12px;
 }
 
 .source-card.active {
   border-color: var(--brand);
   box-shadow: 0 0 0 1px var(--brand);
-}
-
-.source-card {
-  /* Grid/flex children default to `min-width: auto`; without this the long category titles and
-     badge rows push the card wider than its column (issue #514). */
-  min-width: 0;
 }
 
 .source-card-head {

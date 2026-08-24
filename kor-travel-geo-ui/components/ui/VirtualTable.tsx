@@ -214,7 +214,13 @@ export function VirtualTable<T>({
     return (
       <div className="vtable-static">
         {toolbar}
-        <table className={compact ? "table compact" : "table"}>
+        {/* Scroll region wraps ONLY the table (not the toolbar): a wide table must scroll
+            rather than be clipped by the global `overflow-x: clip` (issue #514). It is
+            focusable with an accessible name because a scrollable region has to be operable
+            by keyboard — Chromium refuses to auto-focus a scroller that contains focusable
+            children, and every sortable column header is a button (WCAG 2.1.1). */}
+        <div aria-label={caption ?? "표"} className="vtable-scroll" role="region" tabIndex={0}>
+          <table className={compact ? "table compact" : "table"}>
           {caption ? <caption className="vtable-caption">{caption}</caption> : null}
           {hideHeader ? null : (
             <thead>
@@ -289,7 +295,8 @@ export function VirtualTable<T>({
               ))
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     );
   }
