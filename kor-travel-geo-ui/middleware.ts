@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requestHasValidSession, sanitizeLocalPath } from "@/lib/auth";
+import { PATHNAME_HEADER } from "@/lib/session-headers";
 
 const PUBLIC_PATH_PREFIXES = ["/api/auth/", "/_next/", "/favicon.ico"];
+
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -15,7 +17,13 @@ export async function middleware(request: NextRequest) {
       const redirectPath = sanitizeLocalPath(request.nextUrl.searchParams.get("next"));
       return NextResponse.redirect(new URL(redirectPath, request.url));
     }
-    return NextResponse.next();
+    // Pass the requested path down to the Node-side guard (`lib/session-guard.ts`), which
+    // re-checks revocation and needs somewhere to send the operator back to. `headers()` has
+    // no reliable pathname in the App Router, so the middleware supplies it. A spoofed value
+    // is harmless: it is only fed to `sanitizeLocalPath`, which rejects non-local targets.
+    const forwarded = new Headers(request.headers);
+    forwarded.set(PATHNAME_HEADER, `${pathname}${request.nextUrl.search}`);
+    return NextResponse.next({ request: { headers: forwarded } });
   }
 
   if (pathname.startsWith("/api/")) {
