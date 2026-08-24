@@ -60,6 +60,11 @@
   글로벌 로그인(storageState)으로 실행한다 (`docs/live-e2e.md` 참고).
 
 ### Fixed
+- **로그인/세션 검증 SSR이 Next 16 `ReadonlyHeaders`에서 `?.get is not a function`으로 500나던 버그를
+  고쳤다.** `lib/auth.ts`의 `headersFrom`이 `"headers" in source`로 Request/Headers를 구분했는데, Next 16의
+  `headers()`가 돌려주는 `ReadonlyHeaders`가 자체 `headers` 속성을 노출해 그 heuristic이 HeaderReader가 아닌
+  내부 객체로 파고들었다. 이제 호출 가능한 `get`으로 HeaderReader를 판별한다. 세션 쿠키를 가진 사용자가
+  `/login`(및 `headers()`를 넘기는 서버 컴포넌트)을 렌더할 때 발현했다. 회귀 테스트 추가.
 - 브라우저가 내부 전용 Dagster URL 또는 loopback 주소를 iframe으로 요청하지 않도록 공개
   Dagster URL만 허용했고, iframe sandbox의 `allow-same-origin` 권한을 제거했다.
 - Admin Settings에서 생성한 공개 API key와 VWorld 키의 브라우저 보관을 `localStorage`에서
