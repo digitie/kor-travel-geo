@@ -77,13 +77,37 @@ test.describe("LIVE 세션 폐기 (#513)", () => {
       expect(response.headers()["location"] ?? "").toContain("/login");
     }
 
-    // 5. …and the route that hands out the VWorld API key must 401 without leaking it.
+    // 5. RSC request shapes: a layout `redirect()` is NOT an authorization boundary — Next
+    //    streams a 200 carrying the redirect digest AND the rendered payload for RSC requests,
+    //    and skips already-matching segments on client-side navigation so the layout never runs.
+    //    The authoritative gate is `proxy.ts` (Node runtime); these assert it covers both.
+    const rsc = await api.get("/admin/dagster", {
+      headers: { cookie: cookieHeader, RSC: "1" },
+      maxRedirects: 0
+    });
+    expect(rsc.status(), "RSC 요청도 폐기 세션을 거부해야 한다").toBeGreaterThanOrEqual(300);
+    expect(await rsc.text()).not.toContain("dagsterUrl");
+
+    const routerStateTree = encodeURIComponent(
+      JSON.stringify(["", { children: ["admin", { children: ["logs", { children: ["__PAGE__", {}] }] }] }])
+    );
+    const rscNav = await api.get("/admin/dagster", {
+      headers: { cookie: cookieHeader, RSC: "1", "Next-Router-State-Tree": routerStateTree },
+      maxRedirects: 0
+    });
+    expect(rscNav.status(), "클라이언트 내비게이션 RSC 요청도 거부").toBeGreaterThanOrEqual(300);
+    expect(await rscNav.text()).not.toContain("dagsterUrl");
+
+    // 6. …and the route that hands out the VWorld API key must 401 without leaking it.
     const runtimeConfig = await api.get("/api/runtime-config", {
       headers: { cookie: cookieHeader },
       maxRedirects: 0
     });
     expect(runtimeConfig.status()).toBe(401);
     expect(await runtimeConfig.text()).not.toContain("vworldApiKey");
+
+    // 7. The auth decision must not be cacheable.
+    expect(runtimeConfig.headers()["cache-control"] ?? "").toContain("no-store");
 
     await api.dispose();
   });

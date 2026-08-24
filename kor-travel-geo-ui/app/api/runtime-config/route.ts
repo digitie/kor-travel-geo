@@ -13,7 +13,10 @@ export async function GET() {
     // middleware cannot see revoked sessions, and a cookie copied before logout used to
     // still get the key back (issue #513). Re-validate in Node, where revocation lives.
     if (!(await sessionIsValidInNode())) {
-      const denied = NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+      const denied = NextResponse.json(
+        { error: "AUTH_REQUIRED" },
+        { status: 401, headers: { "cache-control": "no-store" } }
+      );
       statusCode = denied.status;
       return denied;
     }

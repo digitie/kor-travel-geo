@@ -66,9 +66,11 @@
   페이지 쪽에서는 볼 수 없었다. 그래서 복사해 둔 쿠키로 `/admin`이 그대로 렌더되고
   `/api/runtime-config`가 VWorld API 키를 돌려줬다. 이제 폐기 목록을 `globalThis`에 고정해 같은
   프로세스의 모든 레이어가 공유하고, 페이지(`/admin/*`·`/debug/*`)와 키를 반환하는 라우트가
-  Edge middleware가 아니라 **Node에서 authoritative하게** 세션을 재검증한다. middleware가
-  matcher에서 건너뛰던 경로(`*.js`로 끝나는 동적 라우트)도 함께 막힌다. 재로그인 시 원래 가려던
-  경로(`?next=`)도 보존된다.
+  요청 게이트를 Next 16의 **`proxy.ts`(Node 런타임)**로 옮겨 pre-render 단계에서 authoritative하게
+  막는다 — 레이아웃 `redirect()`는 인가 경계가 될 수 없다(RSC 요청에는 렌더 payload가 함께 스트리밍되고,
+  클라이언트 내비게이션은 레이아웃을 아예 건너뛴다). 게이트가 건너뛰던 `*.js` 동적 라우트와
+  `/api/metrics`도 함께 막히고, 재로그인 시 원래 가려던 경로(`?next=`)가 보존되며, 인가 401 응답은
+  `cache-control: no-store`다.
 - **관리 콘솔이 라이브 SSE 스트림으로 브라우저 연결을 고갈시키던 문제를 고쳤다(이슈 #512).**
   원천 파일 업로드 탭은 "재개 가능한 업로드" 행마다, 백업 화면은 진행 중 job마다 `EventSource`를
   열었다. `EventSource`는 수명 내내 연결 하나를 점유하고 브라우저는 origin당 6개(HTTP/1.1)가

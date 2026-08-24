@@ -1,11 +1,11 @@
 import { requireSession } from "@/lib/session-guard";
 
 /**
- * Server-side auth gate for every `/admin/*` page.
+ * Defence-in-depth auth check for `/admin/*`.
  *
- * The Edge middleware cannot see session revocations (issue #513), so a cookie copied before
- * logout would still render the admin shell. Re-validating in the Node runtime here closes
- * that. This makes the admin pages dynamic, which is correct for an auth-gated console.
+ * The authoritative gate is `proxy.ts` (Node runtime, sees revocations). A layout `redirect()`
+ * is NOT sufficient on its own — RSC responses still stream the rendered payload, and
+ * client-side navigation skips already-matching segments so this never runs (issue #513).
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requireSession();

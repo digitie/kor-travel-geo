@@ -1,11 +1,18 @@
+// Pre-render request gate (Next 16 `proxy` convention, formerly `middleware`).
+//
+// Runs in the **Node runtime**, so unlike the old Edge middleware it sees the revocation list
+// in `lib/auth.ts` (pinned to `globalThis`). That makes this the authoritative gate for every
+// request shape — document, RSC, and client-side navigation alike — which a layout `redirect()`
+// cannot be: for an RSC request Next streams a 200 carrying the redirect digest *and* the
+// rendered payload, and on client-side navigation Next skips already-matching segments so the
+// layout never executes at all (issue #513).
 import { NextRequest, NextResponse } from "next/server";
 import { requestHasValidSession, sanitizeLocalPath } from "@/lib/auth";
 import { PATHNAME_HEADER } from "@/lib/session-headers";
 
 const PUBLIC_PATH_PREFIXES = ["/api/auth/", "/_next/", "/favicon.ico"];
 
-
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   if (isPublicPath(pathname)) {
     return NextResponse.next();
@@ -27,7 +34,11 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+    // no-store: an auth decision must never be cached by a proxy or the browser.
+    return NextResponse.json(
+      { error: "AUTH_REQUIRED" },
+      { status: 401, headers: { "cache-control": "no-store" } }
+    );
   }
 
   const nextPath = `${pathname}${request.nextUrl.search}`;

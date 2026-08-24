@@ -6,14 +6,18 @@ import { PATHNAME_HEADER } from "@/lib/session-headers";
 /**
  * Authoritative, Node-runtime session check for server components and route handlers.
  *
- * `middleware.ts` runs on the **Edge runtime** and is only a fast-path gate: it rejects
- * requests with no/expired/forged cookie, but it cannot see the revocation list that the Node
- * logout route writes. A cookie copied before logout therefore satisfies it (issue #513), so
- * anything that renders the app or returns data/secrets re-validates here, in Node.
+ Defence in depth behind `proxy.ts`, which is the authoritative gate (it runs in Node and sees
+ * the revocation list, so it covers document, RSC and client-side-navigation requests alike).
+ * This helper exists for anything that wants to fail closed on its own rather than trust the
+ * pre-render gate.
  *
- * The revocation list itself is pinned to `globalThis` in `lib/auth.ts` — without that, the
- * bundler's per-layer module copies would give pages a different (always empty) map than the
- * logout route, and this guard would silently pass every revoked session.
+ * Do NOT rely on a layout `redirect()` as an authorization boundary: for an RSC request Next
+ * streams a 200 carrying the redirect digest *and* the rendered payload, and on client-side
+ * navigation Next skips already-matching segments so the layout never runs (issue #513).
+ *
+ * The revocation list is pinned to `globalThis` in `lib/auth.ts` — the bundler emits that
+ * module once per layer, so without pinning the pages would read a different (always empty)
+ * map than the logout route and every revoked session would silently pass.
  *
  * Residual limitation: revocation is in-process, so a UI restart clears it and sessions valid
  * until `SESSION_TTL_SECONDS` become replayable again. (The UI runs as a single container —
@@ -31,8 +35,8 @@ export async function sessionIsValidInNode(): Promise<boolean> {
 /**
  * Redirect to `/login` unless the caller holds a still-valid (non-revoked) session.
  *
- * Preserves where the operator was heading in `?next=`, matching the middleware's behaviour so
- * a revoked session does not silently lose its destination on re-login.
+ * Preserves where the operator was heading in `?next=` (the path is handed down by `proxy.ts`)
+ * so a revoked session does not silently lose its destination on re-login.
  */
 export async function requireSession(): Promise<void> {
   if (await sessionIsValidInNode()) {
