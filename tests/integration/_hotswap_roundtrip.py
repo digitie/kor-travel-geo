@@ -104,6 +104,12 @@ async def hot_swap_harness(work_root: Path) -> AsyncIterator[HotSwapHarness]:
     """Build current+restore DBs (restore tagged with a marker); drop all candidates on exit."""
     source_dsn = os.environ["KTG_TEST_PG_DSN"]
     token = uuid4().hex[:8]
+    # `_e2e_` is load-bearing: the shared database guard (tests/integration/_pg_guard.py) only
+    # allows a database whose name carries a throwaway SEGMENT, and these names are invented at
+    # runtime so they cannot be pre-declared in KTG_TEST_PG_ALLOW_WRITES either. Without it this
+    # whole suite skips — which is how the guard silently deleted the only live proof of the
+    # ADR-036 cutover and the T-264 rollback (issue #523 review).
+    token = f"e2e_{token}"
     current_database = f"ktg_t246_cur_{token}"
     restore_database = f"ktg_t246_res_{token}"
     previous_alias = f"ktg_t246_prev_{token}"

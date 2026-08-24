@@ -60,6 +60,11 @@ PROTECTED_DATABASES = frozenset(
 _PROTECTED_PATTERNS = (
     re.compile(r"^kor_travel_geo_t213(?:[_-].*)?$"),  # T-213 preservation baselines
     re.compile(r"^kor_travel_geo_restore(?:[_-].*)?$"),  # ADR-036 hot-swap restore target
+    # The rollback alias is a COPY OF PRODUCTION kept for the retention window, and ADR-036 makes
+    # it the only rollback path. `hotswap._resolve_previous_alias` mints
+    # `kor_travel_geo_previous_<YYYYMMDD>_<HHMMSS>`; the restore *source* was protected but the
+    # rollback copy was not.
+    re.compile(r"^kor_travel_geo.*_(?:previous|quarantine)(?:[_-].*)?$"),
 )
 
 #: Unambiguous throwaway markers, matched against whole segments. Deliberately excludes task tags

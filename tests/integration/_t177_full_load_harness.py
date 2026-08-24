@@ -522,8 +522,12 @@ def looks_like_t177_scratch_database(database_name: str) -> bool:
         return False
     if is_disposable_test_database(database_name):
         return True
+    # `t177g` / `t177h` and friends: the repo's own recorded convention across five runs
+    # (docs/journal.md, docs/resume.md, docs/tasks-done.md) suffixes the tag with a run letter.
+    # Whole-segment matching on a bare "t177" rejected every one of them.
     return any(
-        segment == "t177" for segment in re.split(r"[_\-]", database_name.strip().lower())
+        re.fullmatch(r"t177[a-z]?", segment)
+        for segment in re.split(r"[_\-]", database_name.strip().lower())
     )
 
 
@@ -534,8 +538,9 @@ def expected_confirmation(database_name: str) -> str:
 def validate_t177_confirmation(database_name: str, supplied: str | None) -> None:
     if not looks_like_t177_scratch_database(database_name):
         raise T177PreflightError(
-            f"{ENV_DSN} must point to a scratch DB whose name includes "
-            f"'t177', 'test', or 'scratch'; got {database_name!r}"
+            f"{ENV_DSN} must point to a scratch DB with a throwaway NAME SEGMENT — "
+            f"'t177'/'t177<letter>', 'test', 'scratch', 'tmp', 'e2e' — or one named explicitly "
+            f"in KTG_TEST_PG_ALLOW_WRITES; got {database_name!r}"
         )
     expected = expected_confirmation(database_name)
     if supplied != expected:

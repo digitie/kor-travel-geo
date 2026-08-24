@@ -59,10 +59,10 @@ async def _noop_progress(
 
 async def build_minimal_serving_schema(engine: AsyncEngine) -> None:
     """Create the serving schema (tables/indexes/MVs) + a seeded probe table, idempotently."""
-    # INDEX_SQL contains `TRUNCATE TABLE region_radius_parts` and MV_SQL opens with
-    # `DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target`, so this is destructive against any
-    # real serving database — including the ADR-036 restore target that later gets renamed into
-    # production. It had no database guard at all (issue #523).
+    # Destructive against any real serving database — including the ADR-036 restore target that
+    # later gets renamed into production. SCHEMA_SQL drops the ops audit append-only trigger and
+    # MV_SQL opens with `DROP MATERIALIZED VIEW IF EXISTS mv_geocode_target`. It had no database
+    # guard at all (issue #523).
     await require_disposable_database(engine)
     async with engine.begin() as conn:
         for sql in iter_sql_statements(SCHEMA_SQL):

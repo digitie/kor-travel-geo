@@ -32,9 +32,12 @@ _INTEGRATION_DIR = _TESTS_DIR / "integration"
 
 _GUARD_CALL = "require_disposable_database"
 
-#: Source markers for "this statement writes to the database it is connected to".
-#: `CREATE EXTENSION IF NOT EXISTS` is deliberately NOT here: it is idempotent and the C11-C17
-#: read-only suites issue it against production on purpose.
+#: Source markers for "this statement writes to the database it is connected to", matched in the
+#: TEST module's own source. `CREATE EXTENSION IF NOT EXISTS` is deliberately excluded: it is
+#: idempotent and several suites issue it against a loaded database on purpose.
+#: KNOWN GAP: the C11-C17 suites create and drop staging tables through helpers in `src/`
+#: (`recreate_shape_staging_table`), so their DDL is invisible here and they are NOT in the
+#: derived list. They are not read-only — guarding them is deferred, see issue #525.
 #: Case-SENSITIVE on purpose: matching `truncate` case-insensitively also matches Python
 #: identifiers like `truncated_archive`, which flagged a module that only writes through an
 #: already-guarded helper.
@@ -57,8 +60,12 @@ _WRITER_BODY = re.compile(
 def _calls(source: str, name: str) -> bool:
     """`name(` as a whole identifier — a bare substring test matches `make_async_engine(`."""
     return re.search(rf"(?<![\w.]){re.escape(name)}\s*\(", source) is not None
-#: Modules that write only to databases they create and drop themselves, connecting through the
-#: `postgres` maintenance database. The shared guard would refuse that connection by design.
+
+
+#: Modules that create their own databases and write only to those. `_hotswap_roundtrip.py` does
+#: connect straight to the databases it made (it INSERTs a marker row), so the exemption is about
+#: OWNERSHIP, not about connecting via `postgres`: their names are minted at runtime and carry an
+#: `e2e` segment so the guard inside `build_minimal_serving_schema` still accepts them.
 _MANAGES_OWN_DATABASES = frozenset(
     {"_hotswap_roundtrip.py", "test_scratch_db_roundtrip.py", "_pg_guard.py"}
 )
@@ -73,28 +80,6 @@ def _integration_modules() -> list[Path]:
 
 def _writes_to_the_dsn_database(source: str) -> bool:
     return "KTG_TEST_PG_DSN" in source and bool(_WRITE_AWAIT.search(source))
-
-
-def _guarded_helpers() -> set[str]:
-    """Names of helper coroutines that call the guard themselves.
-
-    A module that delegates its writes to one of these is guarded — requiring the literal call in
-    every module would just push people to copy the guard around again.
-    """
-    helpers: set[str] = set()
-    for path in _integration_modules():
-        source = path.read_text(encoding="utf-8")
-        if f"await {_GUARD_CALL}(" not in source:
-            continue
-        tree = ast.parse(source)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.AsyncFunctionDef) and any(
-                _GUARD_CALL in (ast.get_source_segment(source, inner) or "")
-                for inner in ast.walk(node)
-                if isinstance(inner, ast.Await)
-            ):
-                helpers.add(node.name)
-    return helpers - {_GUARD_CALL}
 
 
 def _modules_requiring_a_guard() -> list[Path]:
@@ -126,6 +111,8 @@ def _modules_requiring_a_guard() -> list[Path]:
         "",
         "geocoder",
         "kor_travel_geo_prod",
+        # ADR-036 rollback alias — a COPY OF PRODUCTION kept for the retention window.
+        "kor_travel_geo_previous_20260529_010203",
     ],
 )
 def test_real_databases_are_refused(name: str) -> None:
@@ -142,6 +129,12 @@ def test_real_databases_are_refused(name: str) -> None:
         "tmp_probe",
         "scratch",
         "geo-test-01",
+        # Minted at runtime by the T-246 hot-swap harness. The `e2e` segment is load-bearing:
+        # without it the guard skipped all three live hot-swap/rollback tests, and the name
+        # cannot be pre-declared in KTG_TEST_PG_ALLOW_WRITES because it does not exist until
+        # the harness runs.
+        "ktg_t246_cur_e2e_deadbeef",
+        "ktg_t246_prev_e2e_deadbeef",
     ],
 )
 def test_scratch_databases_are_allowed(name: str) -> None:
@@ -170,7 +163,13 @@ def test_explicit_opt_in_allows_an_unusual_name() -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["kor_travel_geo", "kor_travel_geo_t213_20260615_r3", "kor_travel_geo_restore"]
+    "name",
+    [
+        "kor_travel_geo",
+        "kor_travel_geo_t213_20260615_r3",
+        "kor_travel_geo_restore",
+        "kor_travel_geo_previous_20260529_010203",
+    ],
 )
 def test_opt_in_never_overrides_a_protected_database(name: str) -> None:
     assert is_protected_database(name) is True
@@ -178,12 +177,19 @@ def test_opt_in_never_overrides_a_protected_database(name: str) -> None:
 
 
 def test_every_write_heavy_module_is_guarded() -> None:
-    helpers = _guarded_helpers()
+    """Every module must call the guard ITSELF.
+
+    An earlier version also accepted "calls a helper that is guarded", resolved from a
+    repo-global pool of guarded function names. That pool contained `engine` (a module-scoped
+    fixture), and the call-matcher matched the *definition* line `async def engine(` — so merely
+    naming a fixture `engine` gave a brand-new unguarded module a free pass. Verified: a module
+    doing `TRUNCATE load_jobs CASCADE` with no guard passed until its fixture was renamed.
+    Every module that currently needs a guard calls it directly, so the branch bought nothing.
+    """
     unguarded = [
         path.name
         for path in _modules_requiring_a_guard()
-        if f"await {_GUARD_CALL}(" not in (source := path.read_text(encoding="utf-8"))
-        and not any(_calls(source, helper) for helper in helpers)
+        if f"await {_GUARD_CALL}(" not in path.read_text(encoding="utf-8")
     ]
     assert unguarded == [], f"modules write to {'KTG_TEST_PG_DSN'} without the guard: {unguarded}"
 
@@ -217,35 +223,42 @@ def _writer_functions(tree: ast.AST, source: str) -> set[str]:
 
 
 def _guard_precedes_first_write(source: str) -> tuple[bool, str]:
-    """True if, in every function that calls the guard, no write is awaited before it."""
+    """True if, in every function that calls the guard, no write happens before it.
+
+    Line-based within the function rather than per-`Await`, because the dominant idiom here is
+
+        for sql in iter_sql_statements(SCHEMA_SQL):
+            await conn.execute(text(sql))
+
+    where the awaited expression is just `conn.execute(text(sql))` and carries no marker at all —
+    the write is named on the `for` line. An earlier version inspected only `Await` source
+    segments and therefore could not see the exact shape it was written to protect: moving the
+    guard below that loop left the suite green.
+    """
     tree = ast.parse(source)
     writers = _writer_functions(tree, source)
+    lines = source.splitlines()
     for func in ast.walk(tree):
         if not isinstance(func, ast.AsyncFunctionDef):
             continue
-        awaits = sorted(
-            (node for node in ast.walk(func) if isinstance(node, ast.Await)),
-            key=lambda n: (n.lineno, n.col_offset),
-        )
-        guard_at = next(
+        end = func.end_lineno or func.lineno
+        guard_line = next(
             (
-                index
-                for index, node in enumerate(awaits)
-                if _GUARD_CALL in (ast.get_source_segment(source, node) or "")
+                n
+                for n in range(func.lineno, end + 1)
+                if f"await {_GUARD_CALL}(" in lines[n - 1]
             ),
             None,
         )
-        if guard_at is None:
+        if guard_line is None:
             continue
-        for node in awaits[:guard_at]:
-            segment = ast.get_source_segment(source, node) or ""
-            hits_writer = any(
-                _calls(segment, name)
-                for name in writers
-                if name != func.name
-            )
-            if _WRITE_AWAIT.search(segment) or hits_writer:
-                return False, f"{func.name}: write awaited at line {node.lineno} before the guard"
+        for n in range(func.lineno + 1, guard_line):
+            line = lines[n - 1]
+            if line.lstrip().startswith("#"):
+                continue
+            hits_writer = any(_calls(line, name) for name in writers if name != func.name)
+            if _WRITER_BODY.search(line) or hits_writer:
+                return False, f"{func.name}: write at line {n} precedes the guard at {guard_line}"
     return True, ""
 
 

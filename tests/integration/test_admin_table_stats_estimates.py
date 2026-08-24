@@ -165,6 +165,24 @@ async def test_table_stats_row_count_survives_a_statistics_reset() -> None:
         assert count == live, f"anchored live count must win when it shrinks, got {count}"
         assert estimated is False
 
+        # Capture the ANCHORED arm here, while `_TABLE` still is anchored — the statistics reset
+        # below un-anchors it, and a capture taken afterwards exercises only the fallback arms.
+        # Without this, reverting `THEN GREATEST(s.n_live_tup, 0)` to `GREATEST(c.reltuples, 0)`
+        # passed the entire suite: the persisted number silently became the stale `reltuples`
+        # while still being labelled `live_tuples_anchored`, in an append-only history.
+        anchored_rows = await AdminRepository(engine).capture_table_stats_snapshots(limit=2000)
+        anchored_row = next(
+            (r for r in anchored_rows if (r.object_name, r.object_kind) == (_TABLE, "table")), None
+        )
+        assert anchored_row is not None, f"{_TABLE} missing from the anchored capture"
+        assert anchored_row.stats["estimated_rows_source"] == "live_tuples_anchored"
+        # `live` is SMALLER than `reltuples` at this point, so this also kills an implementation
+        # that unconditionally takes the larger of the two signals.
+        assert anchored_row.estimated_rows == live, (
+            f"anchored capture must persist the live count {live}, "
+            f"got {anchored_row.estimated_rows} (reltuples={reltuples})"
+        )
+
         # --- unanchored: the collector was reset (restore / hot-swap) ------------------------
         # Scoped to this relation: `pg_stat_reset()` is database-wide and would wipe the
         # autovacuum scheduling state of every other table.

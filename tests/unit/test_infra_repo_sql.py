@@ -581,7 +581,11 @@ def test_ops_table_stats_capture_does_not_persist_unknown_row_counts_as_zero() -
 
     Behaviour is covered against a real server by
     tests/integration/test_admin_table_stats_estimates.py, which asserts the actual persisted
-    values. This test deliberately does NOT pin the whole expression as one literal: an earlier
+    values for all four arms — including the ANCHORED one, which has to be captured before the
+    statistics reset un-anchors the probe table (a capture taken afterwards exercises only the
+    fallbacks, and reverting the anchored arm then passes the whole suite).
+
+    This test deliberately does NOT pin the whole expression as one literal: an earlier
     revision did, and a purely cosmetic reflow failed it with a message telling the reader the
     semantics had changed — which invites pasting the new string in and turning the test into a
     ratchet that can never fail meaningfully.
