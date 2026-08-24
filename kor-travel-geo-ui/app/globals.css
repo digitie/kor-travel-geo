@@ -459,6 +459,8 @@ textarea {
   align-items: center;
   border-bottom: 1px solid var(--line);
   display: flex;
+  /* Title and action row drop onto separate lines instead of overflowing at narrow widths. */
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: space-between;
   padding: 14px 16px;
@@ -598,9 +600,19 @@ textarea {
   width: 16px;
 }
 
+/* Panel titles can carry a bare identifier (e.g. `consistency_77db…`) with no break
+   opportunity, which overflowed the panel at 320/375px (issue #514, /admin/consistency). */
+.panel-header h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .toolbar-inline {
   align-items: center;
   display: inline-flex;
+  /* Without wrapping, a row of buttons overflows the panel at 320/375px and is clipped by the
+     global `overflow-x: clip` (issue #514, /admin/source-files 정합성 탭). */
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1247,9 +1259,9 @@ textarea {
   overflow: auto;
 }
 
-/* The consistency samples table is the only table inside `.table-pane`; scope its
-   wide min-width (horizontal scroll) + active-row highlight to the pane so it survives
-   the VirtualTable (`.vtable-static > table.table`) class structure. */
+/* The samples table keeps a min-width so its columns stay readable; the horizontal
+   scroller now lives on `.vtable-scroll` inside it (VirtualTable), so this container no
+   longer scrolls in practice — kept for non-VirtualTable content in the same pane. */
 .table-pane .table {
   min-width: 980px;
 }
@@ -1692,6 +1704,45 @@ textarea {
 .vtable-grid {
   display: grid;
   gap: 8px;
+  /* A grid item's default `min-width: auto` refuses to shrink below its content, so wide
+     content pushed past the viewport and `html { overflow-x: clip }` silently CUT it off —
+     unreachable even by scrolling (issue #514). `min-width: 0` lets the wrapper shrink; the
+     scroller itself is `.vtable-scroll` (table mode) / `.vtable-grid` below (grid mode). */
+  min-width: 0;
+}
+
+/* Grid mode has no inner <table> to wrap, so the grid container is itself the scroller.
+   The rows must keep their intrinsic width inside it, otherwise the columns would compress
+   instead of scrolling and the header would desync from the body. */
+.vtable-grid {
+  overflow-x: auto;
+}
+
+.vtable-grid > .vtable-head,
+.vtable-grid > .vtable-body {
+  min-width: max-content;
+}
+
+.vtable-grid:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 30%, transparent);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+/* Scroll region around the table only (see VirtualTable `as="table"`). Deliberately NOT
+   `display: block` on the <table> itself: that re-wraps its children in an anonymous table box
+   whose width is auto, so `.table { width: 100% }` would size the block while the table
+   shrink-wrapped to max-content — every admin table would render narrow, at every viewport. */
+.vtable-scroll {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.vtable-scroll:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 30%, transparent);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 
 .vtable-toolbar {
@@ -1815,7 +1866,10 @@ textarea {
 .source-card-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /* `minmax(260px, …)` forces a 260px floor, so at 320/375px the card overflowed its own
+     column and the content was clipped (issue #514). `min(260px, 100%)` keeps the 260px
+     preference on roomy screens and collapses to the available width when narrower. */
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
 }
 
 .source-card {
@@ -1824,6 +1878,9 @@ textarea {
   border-radius: 8px;
   display: grid;
   gap: 10px;
+  /* Grid/flex children default to `min-width: auto`; without this the long category titles and
+     badge rows push the card wider than its column (issue #514). */
+  min-width: 0;
   padding: 12px;
 }
 
@@ -1835,13 +1892,21 @@ textarea {
 .source-card-head {
   align-items: flex-start;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: space-between;
+  min-width: 0;
+}
+
+.source-card-head > * {
+  min-width: 0;
 }
 
 .source-card-title {
   background: none;
   border: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
   cursor: pointer;
   display: grid;
   gap: 2px;
@@ -1883,8 +1948,10 @@ textarea {
 
 .source-card-meta div {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: space-between;
+  min-width: 0;
 }
 
 .source-card-meta dt {
@@ -1894,6 +1961,9 @@ textarea {
 
 .source-card-meta dd {
   font-size: 12px;
+  /* Identifiers here have no break opportunities; `anywhere` also lowers the min-content
+     contribution, which is what lets the flex row shrink instead of overflowing (#514). */
+  overflow-wrap: anywhere;
   text-align: right;
 }
 
@@ -1901,7 +1971,14 @@ textarea {
   border-top: 1px solid var(--line);
   display: grid;
   gap: 8px;
+  min-width: 0;
   padding-top: 10px;
+}
+
+/* A file input reports a wide intrinsic size and would otherwise widen the whole card. */
+.source-card-upload input[type="file"] {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .source-progress-list {

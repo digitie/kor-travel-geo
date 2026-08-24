@@ -34,8 +34,11 @@ export function Panel({
             <p className="m-0 text-xs text-muted-foreground">{description}</p>
           ) : null}
         </div>
+        {/* `min-w-0` (not `shrink-0`) on the action row: with shrink disabled it could not get
+            narrower than its buttons, so at 320/375px it overflowed the panel and was clipped by
+            the global `overflow-x: clip` (issue #514). It still wraps rather than squashing. */}
         {actions ? (
-          <div className="panel-actions flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div className="panel-actions flex min-w-0 flex-wrap items-center justify-end gap-2">
             {actions}
           </div>
         ) : null}

@@ -214,7 +214,19 @@ export function VirtualTable<T>({
     return (
       <div className="vtable-static">
         {toolbar}
-        <table className={compact ? "table compact" : "table"}>
+        {/* Scroll container wraps ONLY the table (not the toolbar — inside, the search box
+            would stretch to the table's scroll width). Focusable because a scrollable area has
+            to be keyboard operable and Chromium will not auto-focus a scroller that contains
+            focusable children, and every sortable header is a button (WCAG 2.1.1).
+            `role="group"`, not `region`: most tables have no caption, so a landmark here would
+            add a pile of identically-named entries to the landmark list. */}
+        <div
+          aria-label={caption ? `${caption} (가로 스크롤)` : "표 가로 스크롤"}
+          className="vtable-scroll"
+          role="group"
+          tabIndex={0}
+        >
+          <table className={compact ? "table compact" : "table"}>
           {caption ? <caption className="vtable-caption">{caption}</caption> : null}
           {hideHeader ? null : (
             <thead>
@@ -289,7 +301,8 @@ export function VirtualTable<T>({
               ))
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     );
   }
