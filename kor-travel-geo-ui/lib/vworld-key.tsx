@@ -74,8 +74,9 @@ export function VWorldKeyProvider({ children }: { children: React.ReactNode }) {
   const envApiKey = runtimeKey?.envApiKey ?? "";
   const browserKey = runtimeKey?.browserKey ?? "";
   const apiKey = browserKey || envApiKey;
-  // `isLoading` stays true forever for a disabled query; on /login we are simply done.
-  const loading = enabled && isLoading;
+  // react-query v5 reports `isLoading = isPending && isFetching`, so a disabled query is
+  // already `isLoading: false` — no extra guard needed on /login.
+  const loading = isLoading;
   const source: VWorldKeySource = loading
     ? "loading"
     : browserKey

@@ -112,6 +112,10 @@ class PublicApiKeyCreateResponse(FrozenModel):
 class TableStat(FrozenModel):
     table_name: str
     row_count: int = Field(ge=0)
+    #: ``row_count`` came from the planner's ``pg_class.reltuples`` because this database's
+    #: statistics were reset (restore / hot-swap) and no vacuum/analyze has been observed since.
+    #: The number is then an approximation — render it as such rather than as an exact count.
+    row_count_estimated: bool = False
     size_bytes: int | None = Field(default=None, ge=0)
     updated_at: str | None = None
 

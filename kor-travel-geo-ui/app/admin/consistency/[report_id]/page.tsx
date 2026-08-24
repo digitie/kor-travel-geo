@@ -1,6 +1,11 @@
+import type { Metadata } from "next";
 import { ConsistencyPanel } from "@/components/admin/ConsistencyPanel";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ADMIN_PAGES } from "@/lib/admin-pages";
+
+export const metadata: Metadata = {
+  title: "정합성 리포트"
+};
 
 export default async function ConsistencyReportPage({
   params

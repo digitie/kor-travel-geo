@@ -11972,6 +11972,11 @@
             "title": "Row Count",
             "type": "integer"
           },
+          "row_count_estimated": {
+            "default": false,
+            "title": "Row Count Estimated",
+            "type": "boolean"
+          },
           "size_bytes": {
             "anyOf": [
               {

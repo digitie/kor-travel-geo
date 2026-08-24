@@ -270,6 +270,8 @@ export type RustfsSyncLocalResult = {
 export type TableStat = {
   table_name: string;
   row_count: number;
+  /** `row_count` is the planner's estimate (stats reset by a restore/hot-swap, no ANALYZE yet). */
+  row_count_estimated?: boolean;
   size_bytes?: number | null;
   updated_at?: string | null;
 };

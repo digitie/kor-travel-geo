@@ -498,6 +498,26 @@ def test_admin_repo_exposes_table_cache_log_metric_queries() -> None:
     assert "jsonb_array_length(log_tail)" in source
 
 
+def test_admin_repo_table_stats_prefers_anchored_live_tuples_over_reltuples() -> None:
+    """Issue #515: a stats reset (restore/hot-swap) makes `n_live_tup` a post-reset delta.
+
+    The query must decide by whether a vacuum/analyze has been OBSERVED for the relation, not by
+    whether the counter happens to be non-zero — otherwise a table that took a few writes since
+    the reset reports those few writes as its row count, and a DELETE-emptied table reports its
+    stale `reltuples`. Behaviour against a real server is covered by
+    tests/integration/test_admin_table_stats_estimates.py.
+    """
+    source = inspect.getsource(admin_repo.AdminRepository)
+
+    # The anchor test, not a zero test.
+    assert "s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze" in source
+    assert "WHEN c.reltuples >= 0 THEN c.reltuples::bigint" in source
+    # `reltuples` must never win while the live counter is anchored.
+    assert "NULLIF(GREATEST(s.n_live_tup, 0), 0)" not in source
+    # The estimate has to be flagged so the UI does not present it as exact.
+    assert "AS row_count_estimated" in source
+
+
 def test_admin_upload_helpers_prevent_path_escape(tmp_path) -> None:
     from kortravelgeo.api.routers import admin
 

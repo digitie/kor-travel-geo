@@ -29,7 +29,16 @@ const columns: VirtualColumn<TableStat>[] = [
     header: "행 수",
     align: "right",
     sortValue: (r) => r.row_count,
-    cell: (r) => r.row_count.toLocaleString()
+    // `≈` when the count came from the planner's estimate because this database's statistics
+    // were reset (restore / hot-swap) and nothing has vacuumed/analyzed since (issue #515).
+    cell: (r) =>
+      r.row_count_estimated ? (
+        <span title="통계 미수집 — 플래너 추정치입니다(ANALYZE 후 정확해집니다).">
+          ≈ {r.row_count.toLocaleString()}
+        </span>
+      ) : (
+        r.row_count.toLocaleString()
+      )
   },
   {
     key: "size_bytes",

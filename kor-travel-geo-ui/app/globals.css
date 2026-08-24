@@ -2203,24 +2203,16 @@ textarea {
     position: fixed;
     top: 0;
     transform: translateX(-100%);
-    /* `visibility: hidden` takes the closed drawer out of the tab order — a CSS transform
-       alone left its links focusable off-screen, so Tab sent focus somewhere invisible
-       (issue #515). Delaying the visibility switch until the slide-out finishes keeps the
-       animation. Scoped to this media query, so the desktop sidebar stays focusable. */
-    transition:
-      transform var(--duration-normal) var(--ease-default),
-      visibility 0s linear var(--duration-normal);
-    visibility: hidden;
+    /* The closed drawer leaves the tab order via `inert` on the element (AppShell), not via a
+       transitioned `visibility` — a transitioned visibility raced the focus() that runs when
+       the drawer opens and, under `prefers-reduced-motion`, left focus outside the dialog. */
+    transition: transform var(--duration-normal) var(--ease-default);
     width: min(280px, 84vw);
     z-index: 50;
   }
 
   .app-shell[data-menu-open="true"] .sidebar {
     transform: translateX(0);
-    transition:
-      transform var(--duration-normal) var(--ease-default),
-      visibility 0s linear 0s;
-    visibility: visible;
   }
 
   .sidebar-close {

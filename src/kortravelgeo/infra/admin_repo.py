@@ -222,16 +222,28 @@ SELECT payload
                     text(
                         """
 SELECT s.relname AS table_name,
-       -- `n_live_tup` is a running delta that a restore / hot-swap resets to 0 until something
-       -- ANALYZEs, so every table read as 0 rows on a freshly restored DB while the planner
-       -- happily used `pg_class.reltuples` (issue #515). Prefer the live counter when it has a
-       -- value, else fall back to the same estimate the planner uses. `reltuples` is -1 when a
-       -- relation has never been analyzed, hence the GREATEST guard.
-       COALESCE(
-         NULLIF(GREATEST(s.n_live_tup, 0), 0),
-         NULLIF(GREATEST(c.reltuples, 0)::bigint, 0),
-         0
-       )::bigint AS row_count,
+       -- `n_live_tup` is a *delta the stats collector accumulates*, and a restore / hot-swap
+       -- resets it — so on a freshly restored DB it is not a row count at all: an untouched
+       -- table reads 0 and a table that took a few writes reads those few writes (issue #515).
+       -- Decide by whether this database's stats entry is ANCHORED: if the collector has ever
+       -- observed a vacuum/analyze of the relation, `n_live_tup` is a real live-tuple count and
+       -- must win (it is exact, and it correctly reports 0 for a DELETE-emptied table, where
+       -- `reltuples` would still hold the pre-delete estimate). Otherwise the counters were
+       -- reset and the planner's `reltuples` is the only signal we have. `reltuples` is -1 both
+       -- for never-analyzed and for freshly-TRUNCATEd relations, which we report as 0.
+       CASE
+         WHEN COALESCE(
+                s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze
+              ) IS NOT NULL
+           THEN GREATEST(s.n_live_tup, 0)::bigint
+         WHEN c.reltuples >= 0 THEN c.reltuples::bigint
+         ELSE 0
+       END AS row_count,
+       -- Lets the UI mark the number as approximate instead of presenting an estimate as exact.
+       (
+         COALESCE(s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze) IS NULL
+         AND c.reltuples >= 0
+       ) AS row_count_estimated,
        pg_total_relation_size(s.relid)::bigint AS size_bytes,
        NULLIF(
          GREATEST(
@@ -256,6 +268,7 @@ SELECT s.relname AS table_name,
             TableStat(
                 table_name=str(row["table_name"]),
                 row_count=int(row["row_count"] or 0),
+                row_count_estimated=bool(row["row_count_estimated"]),
                 size_bytes=int(row["size_bytes"]) if row["size_bytes"] is not None else None,
                 updated_at=str(row["updated_at"]) if row["updated_at"] is not None else None,
             )

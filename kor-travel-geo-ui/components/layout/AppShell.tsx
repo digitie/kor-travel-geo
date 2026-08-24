@@ -59,8 +59,31 @@ const adminNavGroups = ADMIN_NAV_GROUPS.map((group) => ({
   }))
 }));
 
+/** Matches the `@media (max-width: 980px)` breakpoint where the sidebar becomes a drawer. */
+const DRAWER_MEDIA_QUERY = "(max-width: 980px)";
+
+/**
+ * True while the sidebar is rendered as the off-canvas drawer.
+ *
+ * Needed because the closed drawer must be `inert` (out of the tab order and the a11y tree)
+ * while the *desktop* sidebar — same element, same `menuOpen === false` — must stay fully
+ * focusable. Starts `false` so SSR and the first client paint agree.
+ */
+function useIsDrawerLayout(): boolean {
+  const [isDrawer, setIsDrawer] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(DRAWER_MEDIA_QUERY);
+    const sync = () => setIsDrawer(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+  return isDrawer;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const isDrawerLayout = useIsDrawerLayout();
   const pathname = usePathname();
   const sidebarRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -76,6 +99,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     initialFocusRef: closeButtonRef,
     open: menuOpen
   });
+
+  // A closed drawer is only moved off-screen by a transform, so its links stayed in the tab
+  // order and Tab sent focus somewhere invisible (issue #515). `inert` removes them from both
+  // the tab order and the a11y tree, and — unlike toggling `visibility` — it is not tied to a
+  // transition, so it cannot race the focus() that runs when the drawer opens.
+  //
+  // Set imperatively: React 18 drops `inert={true}` on the way to the DOM (verified by
+  // tests/unit/app-shell-drawer.test.tsx), so a JSX prop would silently do nothing. Never
+  // applied to the desktop sidebar — same element, same `menuOpen === false`, but not a drawer.
+  useEffect(() => {
+    sidebarRef.current?.toggleAttribute("inert", isDrawerLayout && !menuOpen);
+  }, [isDrawerLayout, menuOpen]);
 
   // Lock background scroll while the drawer is open so touch scroll-chaining can't move the
   // page behind the backdrop.

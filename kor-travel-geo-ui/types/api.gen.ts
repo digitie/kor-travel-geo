@@ -6735,6 +6735,11 @@ export interface components {
         TableStat: {
             /** Row Count */
             row_count: number;
+            /**
+             * Row Count Estimated
+             * @default false
+             */
+            row_count_estimated: boolean;
             /** Size Bytes */
             size_bytes?: number | null;
             /** Table Name */

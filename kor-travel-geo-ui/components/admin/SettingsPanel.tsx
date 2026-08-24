@@ -221,6 +221,8 @@ type RustfsDraft = {
 type PublicApiKeysState = {
   busy: boolean;
   generatedKey: string | null;
+  /** id of the key whose plaintext is in `generatedKey`, so revoke can match it exactly. */
+  generatedKeyId: string | null;
   label: string;
   notice: SectionNotice | null;
   publicKeys: PublicApiKeySummary[] | null;
@@ -230,6 +232,7 @@ function PublicApiKeysSection() {
   const [state, setState] = useState<PublicApiKeysState>({
     busy: false,
     generatedKey: null,
+    generatedKeyId: null,
     label: "",
     notice: null,
     publicKeys: null
@@ -254,7 +257,7 @@ function PublicApiKeysSection() {
 
   async function createPublicApiKey(event: FormEvent) {
     event.preventDefault();
-    patchState({ busy: true, generatedKey: null, notice: null });
+    patchState({ busy: true, generatedKey: null, generatedKeyId: null, notice: null });
     try {
       const result = await postJson<PublicApiKeyCreateResponse>("/admin/public-api-keys", {
         label: state.label.trim() || null
@@ -263,6 +266,7 @@ function PublicApiKeysSection() {
       setState((current) => ({
         ...current,
         generatedKey: result.key,
+        generatedKeyId: result.item.public_api_key_id,
         label: "",
         notice: {
           tone: "success",
@@ -288,11 +292,12 @@ function PublicApiKeysSection() {
         ...current,
         notice: { tone: "success", text: "공개 API 키를 폐기했습니다." },
         // Drop the just-revoked key's plaintext from the screen — it was still sitting in the
-        // "생성된 키" box under a "이 키는 지금 한 번만 표시됩니다" notice (issue #515).
+        // "생성된 키" box under a "이 키는 지금 한 번만 표시됩니다" notice (issue #515). Matched
+        // on the id rather than the key_hint suffix, so it is exact.
         generatedKey:
-          current.generatedKey && current.generatedKey.endsWith(result.key_hint)
-            ? null
-            : current.generatedKey,
+          current.generatedKeyId === result.public_api_key_id ? null : current.generatedKey,
+        generatedKeyId:
+          current.generatedKeyId === result.public_api_key_id ? null : current.generatedKeyId,
         publicKeys: (current.publicKeys ?? []).map((item) =>
           item.public_api_key_id === result.public_api_key_id ? result : item
         )
