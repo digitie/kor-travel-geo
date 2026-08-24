@@ -269,6 +269,14 @@ test.describe("LIVE public API key security", () => {
       timeout: LIVE_TIMEOUT
     });
 
+    // Issue #515: revoking the key that is currently displayed must also clear its PLAINTEXT
+    // from the screen. It used to linger — a dead secret left readable over the operator's
+    // shoulder, and the "이 키는 지금 한 번만 표시됩니다" promise broken in the worst direction.
+    // The panel matches on the key id, so this also guards against revoking a DIFFERENT key
+    // wiping the shown one (and vice versa).
+    await expect(generatedInput).toHaveCount(0);
+    await expect(page.getByText(generatedKey, { exact: false })).toHaveCount(0);
+
     const directRevoked = await directApiPost(
       request,
       "v2/geocode",

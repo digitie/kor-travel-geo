@@ -255,7 +255,18 @@ test.describe("LIVE ops and consistency browser panels", () => {
   test("ops renders Last Response panel for partial-load diagnostics", async ({ page }) => {
     await gotoAdmin(page, "/admin/ops", ADMIN_PAGES.ops.title);
     await expect(page.getByRole("heading", { name: "최근 결과" })).toBeVisible();
-    await expect(page.locator("pre.json-box").last()).toBeVisible();
+
+    // The panel has TWO valid states: the empty hint until an action has run, and the JSON body
+    // afterwards. It used to always render a `{"status":"READY"}` placeholder that read as a
+    // real response from a load that had never happened — issue #515 removed it, so asserting
+    // the <pre> unconditionally asserts the bug. Scoped to this panel: `pre.json-box` appears
+    // elsewhere on /admin/ops, so an unscoped locator would pass without it.
+    const panel = page.locator('section.panel[data-ui="panel"]', {
+      has: page.getByRole("heading", { name: "최근 결과" })
+    });
+    await expect(
+      panel.locator("pre.json-box").or(panel.getByText("아직 실행한 작업이 없습니다.")).first()
+    ).toBeVisible();
   });
 
   test("consistency renders reports panel and workbench shell", async ({ page }) => {
