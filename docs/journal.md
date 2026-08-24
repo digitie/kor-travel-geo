@@ -2,6 +2,53 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-24 (이슈 #513 — 폐기 세션이 Edge middleware를 통과하던 문제, by claude)
+
+**증상**: 로그아웃 후 복사해 둔 세션 쿠키를 replay하면 `/admin` 200 렌더, `/api/runtime-config`가
+VWorld API 키 반환. `/api/proxy/*`만 401이었다.
+
+**1차 진단(맞음, 그러나 불충분)**: 폐기 목록이 Node in-process `Map`인데 `middleware.ts`는 Edge
+런타임이라 못 본다. → Node에서 재검증하는 가드(`lib/session-guard.ts`)와 `admin/debug` 레이아웃,
+`runtime-config` 검증을 추가했다.
+
+**적대 리뷰가 잡은 것 — 1차 수정은 실제로 동작하지 않았다**: 리뷰어가 `next build && next start`
+프로덕션 빌드로 재현해 `/admin`이 여전히 **200**임을 증명했다. 원인은 Edge/Node 경계가 아니라
+**번들러 레이어별 모듈 인스턴스**였다 — turbopack이 `lib/auth.ts`를 라우트 핸들러 레이어(module id
+45049)와 페이지 SSR 레이어(id 5246)로 각각 내보내 `const revokedSessionIds = new Map()`가 두 벌
+존재했다. 라우트 핸들러끼리는 id가 같아 `/api/runtime-config`·`/api/proxy`만 우연히 동작했던 것.
+
+**최종 수정**: 폐기 목록(과 로그인 실패 버킷)을 `globalThis`에 고정해 같은 프로세스의 모든 레이어가
+한 Map을 공유한다. 여기에 Node 재검증 가드가 얹혀 페이지·키 반환 라우트가 모두 막힌다. middleware가
+matcher(`\.js$` 부정 선읽기)에서 건너뛰던 `[report_id]` 동적 경로도 가드가 덮는다. 재로그인 시
+`?next=` 보존을 위해 middleware가 요청 경로를 `x-ktg-pathname`으로 전달한다(값은 `sanitizeLocalPath`를
+거치므로 open-redirect 불가).
+
+**검증**: 프로덕션 빌드 재현 스크립트로 **수정 전 4/10 → 수정 후 10/10**. 이 결과를 영구 테스트로
+`tests/e2e/live/session-revocation-live.spec.ts`(LIVE_E2E 게이트)에 남겼다. **유닛 테스트로는 이
+버그를 잡을 수 없다** — 모듈을 한 번만 import하므로 revoke/verify가 항상 같은 Map을 본다. 그 사실을
+스펙 상단에 적어 뒀다.
+
+**2차 적대 리뷰 — globalThis 수정 뒤에도 뚫렸다**: 레이아웃 `redirect()`는 **인가 경계가 아니다**.
+리뷰어가 프로덕션 빌드에서 `RSC: 1` 헤더로 `/admin/dagster`를 요청해 **200 + 서버렌더된
+`KTG_DAGSTER_PUBLIC_URL` 값 유출**을 실증했다(Next는 RSC 요청에 redirect digest와 렌더 payload를
+함께 스트리밍한다). `Next-Router-State-Tree`까지 붙이면(=클라이언트 내비게이션) Next가 이미 매칭된
+세그먼트를 건너뛰어 **레이아웃 자체가 실행되지 않는다**. 지금 앱이 무사한 건 `DocumentNavLink`가
+모든 이동을 `window.location.assign`으로 강제하기 때문인데, 이는 통제가 아니라 우연이다.
+
+**최종 구조**: Next 16이 `middleware`를 deprecate하고 도입한 **`proxy.ts`(Node 런타임)**로 전환했다.
+Node에서 돌기 때문에 `globalThis` 폐기 목록이 보이고, 따라서 **document·RSC·클라이언트 내비게이션
+모든 요청 형태에 대해 pre-render 단계에서 authoritative하게** 막힌다. 레이아웃 가드는 defence-in-depth로
+남긴다. `/api/metrics`도 이 게이트가 함께 덮는다(리뷰어가 폐기 쿠키로 200을 확인했던 경로).
+인가 응답(401)에는 `cache-control: no-store`를 붙였다.
+
+**최종 검증(프로덕션 빌드, 14/14)**: 페이지 5종·`.js` 우회 경로·`?next=` 보존·RSC 2종(sentinel 미유출)·
+`/api/metrics` 401·401 no-store. 이 벡터들을 라이브 스펙에 모두 넣었다.
+
+**남는 한계**: 폐기 목록은 여전히 in-process라 UI 재시작 시 사라진다(세션 TTL까지 replay 가능).
+UI는 단일 컨테이너라 복제본 공유 문제는 현재 없다. durable 폐기는 백엔드가 이미 받고 있는
+`admin_auth.logout` audit 이벤트를 활용해 "최신 로그아웃 이후 발급된 세션만 유효"로 좁히는 것이
+자연스러운 후속이며, 그때는 백엔드 오류 시 **fail-closed**여야 한다(현재 rate-limit 경로는 fail-open).
+
 ## 2026-08-24 (이슈 #512 — 관리 콘솔 SSE 연결 고갈 수정, by claude)
 
 **증상**: `/admin/source-files` 업로드 탭이 "재개 가능한 업로드" 행마다 `EventSource`를 열었다.

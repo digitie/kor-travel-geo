@@ -58,8 +58,25 @@ type AuditRow = {
   } | null;
 };
 
-const revokedSessionIds = new Map<string, number>();
-const loginFailures = new Map<string, LoginFailureBucket>();
+/**
+ * Cross-request server state, pinned to `globalThis`.
+ *
+ * The bundler emits this module **once per layer** — route handlers, the SSR/RSC page layer,
+ * and the Edge middleware each get their own module instance with their own module-scope
+ * `const`s. Plain module scope therefore gives the logout route and the pages *different*
+ * revocation maps, which is exactly how a cookie copied before logout kept rendering `/admin`
+ * while `/api/proxy/*` correctly rejected it (issue #513). Hanging the state off `globalThis`
+ * makes every same-process layer share one map.
+ *
+ * Still in-process: the Edge runtime has its own global, and nothing survives a restart —
+ * see `lib/session-guard.ts` for what that does and does not guarantee.
+ */
+const serverState = globalThis as typeof globalThis & {
+  __ktgRevokedSessionIds?: Map<string, number>;
+  __ktgLoginFailures?: Map<string, LoginFailureBucket>;
+};
+const revokedSessionIds = (serverState.__ktgRevokedSessionIds ??= new Map<string, number>());
+const loginFailures = (serverState.__ktgLoginFailures ??= new Map<string, LoginFailureBucket>());
 
 export function adminUsernameFromEnv(env: Env = process.env): string {
   return (env[ADMIN_USERNAME_ENV] ?? "admin").trim() || "admin";
