@@ -15,6 +15,8 @@ import { VirtualTable, type VirtualColumn } from "@/components/ui/VirtualTable";
  *    a scroll container that has focusable descendants and every sortable header is a button
  *    (WCAG 2.1.1),
  *  - the table keeps its native semantics (no `display: block` re-wrapping in the markup).
+ *
+ * The viewport/geometry assertions live in `tests/e2e/live/viewport-overflow-live.spec.ts`.
  */
 
 type Row = { id: string; name: string };
@@ -49,8 +51,10 @@ describe("VirtualTable 가로 스크롤 영역 (#514)", () => {
     expect(scroll, "스크롤 래퍼가 있어야 한다").not.toBeNull();
     // A scrollable region must be reachable by keyboard, and a focusable region needs a name.
     expect(scroll).toHaveAttribute("tabindex", "0");
-    expect(scroll).toHaveAttribute("role", "region");
-    expect(scroll?.getAttribute("aria-label")).toBe("테스트 표");
+    // `group`, not `region`: a landmark per table would flood the landmark list, since most
+    // call sites have no caption and would all be named identically.
+    expect(scroll).toHaveAttribute("role", "group");
+    expect(scroll?.getAttribute("aria-label")).toContain("테스트 표");
   });
 
   it("caption이 없어도 스크롤 영역에 이름이 있다", () => {

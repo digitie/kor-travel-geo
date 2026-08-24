@@ -24,10 +24,21 @@
 스크롤 폭까지 늘어난다(리뷰어 실측 1173px). 카드 쪽(`min-width: 0`, `minmax(min(260px,100%),1fr)`,
 `flex-wrap`, `overflow-wrap`)은 회귀가 없어 유지.
 
+**2차 적대 리뷰 — 같은 실패 모드가 다른 3곳에 살아 있었다**: (a) grid 모드(`.vtable-grid`,
+`/admin/backups` 백업 탭)는 스크롤러가 없어 320px에서 `main.scrollWidth=494`, (b)
+`/admin/consistency`의 패널 제목이 `consistency_77db…` 같은 끊을 곳 없는 식별자라 438px,
+(c) `/admin/source-files` 정합성 탭의 `.toolbar-inline`이 `flex-wrap` 없이 416px. 또 내가 붙인
+`role="region"`이 표마다 랜드마크를 만들어 caption 없는 10곳이 전부 "표"라는 같은 이름으로 잡혔다.
+→ grid 모드에 자체 스크롤러(+`min-width: max-content`로 헤더/본문 정렬 유지), 패널 h2와
+`.toolbar-inline` 수정, 랜드마크 대신 `role="group"` + 구체적 이름으로 변경. 중복 CSS 블록 병합,
+죽은 `.table-pane` 주석 갱신.
+
 **검증**: 실제 globals.css를 로드한 측정에서 좁은 표가 컨테이너를 채우고(1280px 1262=1262, 즉
 shrink-wrap 없음), 빈 상태 `colSpan` 셀도 전체 폭을 차지하며, 넓은 표는 도달 가능하고 `main`이 넘치지
 않는다(6/6). 유닛 테스트는 jsdom이 CSS를 로드하지 않으므로 **마크업 계약**(스크롤 래퍼가 표만 감싸는지,
-포커스 가능·이름 보유, 네이티브 표 시맨틱 유지)을 고정했다.
+포커스 가능·이름 보유, 네이티브 표 시맨틱 유지)을 고정하고, 뷰포트 측정은
+`tests/e2e/live/viewport-overflow-live.spec.ts`(320/375px × 5개 화면, 잘린 요소 0·main 폭·표
+shrink-wrap 0)로 분리했다.
 
 ## 2026-08-24 (이슈 #513 — 폐기 세션이 Edge middleware를 통과하던 문제, by claude)
 

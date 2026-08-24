@@ -598,9 +598,19 @@ textarea {
   width: 16px;
 }
 
+/* Panel titles can carry a bare identifier (e.g. `consistency_77db…`) with no break
+   opportunity, which overflowed the panel at 320/375px (issue #514, /admin/consistency). */
+.panel-header h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .toolbar-inline {
   align-items: center;
   display: inline-flex;
+  /* Without wrapping, a row of buttons overflows the panel at 320/375px and is clipped by the
+     global `overflow-x: clip` (issue #514, /admin/source-files 정합성 탭). */
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1247,9 +1257,9 @@ textarea {
   overflow: auto;
 }
 
-/* The consistency samples table is the only table inside `.table-pane`; scope its
-   wide min-width (horizontal scroll) + active-row highlight to the pane so it survives
-   the VirtualTable (`.vtable-static > table.table`) class structure. */
+/* The samples table keeps a min-width so its columns stay readable; the horizontal
+   scroller now lives on `.vtable-scroll` inside it (VirtualTable), so this container no
+   longer scrolls in practice — kept for non-VirtualTable content in the same pane. */
 .table-pane .table {
   min-width: 980px;
 }
@@ -1692,11 +1702,29 @@ textarea {
 .vtable-grid {
   display: grid;
   gap: 8px;
-  /* A grid item's default `min-width: auto` refuses to shrink below its content, so a wide
-     table pushed past the viewport and `html { overflow-x: clip }` silently CUT the trailing
-     columns off — unreachable even by scrolling (issue #514). `min-width: 0` lets the wrapper
-     shrink; `overflow-x: auto` then gives the table its own scroller. */
+  /* A grid item's default `min-width: auto` refuses to shrink below its content, so wide
+     content pushed past the viewport and `html { overflow-x: clip }` silently CUT it off —
+     unreachable even by scrolling (issue #514). `min-width: 0` lets the wrapper shrink; the
+     scroller itself is `.vtable-scroll` (table mode) / `.vtable-grid` below (grid mode). */
   min-width: 0;
+}
+
+/* Grid mode has no inner <table> to wrap, so the grid container is itself the scroller.
+   The rows must keep their intrinsic width inside it, otherwise the columns would compress
+   instead of scrolling and the header would desync from the body. */
+.vtable-grid {
+  overflow-x: auto;
+}
+
+.vtable-grid > .vtable-head,
+.vtable-grid > .vtable-body {
+  min-width: max-content;
+}
+
+.vtable-grid:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 30%, transparent);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
 }
 
 /* Scroll region around the table only (see VirtualTable `as="table"`). Deliberately NOT
@@ -1924,10 +1952,6 @@ textarea {
   min-width: 0;
 }
 
-.source-card-meta dd {
-  overflow-wrap: anywhere;
-}
-
 .source-card-meta dt {
   color: var(--muted);
   font-size: 12px;
@@ -1935,6 +1959,9 @@ textarea {
 
 .source-card-meta dd {
   font-size: 12px;
+  /* Identifiers here have no break opportunities; `anywhere` also lowers the min-content
+     contribution, which is what lets the flex row shrink instead of overflowing (#514). */
+  overflow-wrap: anywhere;
   text-align: right;
 }
 
