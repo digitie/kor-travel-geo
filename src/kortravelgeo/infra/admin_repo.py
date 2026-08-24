@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from collections.abc import Mapping, Sequence
@@ -133,6 +134,8 @@ _ROW_COUNT_OBJECTS = (
     "mv_geocode_target",
     "mv_geocode_text_search",
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _OPS_TABLE_STATS_ADVISORY_LOCK = 0x4B47_00A0
 _OPS_PG_STAT_STATEMENTS_ADVISORY_LOCK = 0x4B47_00A1
@@ -1233,7 +1236,66 @@ SELECT n.nspname AS schema_name,
          WHEN 't' THEN 'toast'
          ELSE 'other'
        END AS object_kind,
-       GREATEST(c.reltuples, 0)::bigint AS estimated_rows,
+       -- `pg_class.reltuples` is -1 for "never analyzed", not 0 — the state a `pg_restore` or a
+       -- hot-swap leaves behind — so `GREATEST(c.reltuples, 0)` persists "unknown" as "0 rows"
+       -- into an ops HISTORY table (issue #523). On a live read a 0 is a defensible fallback;
+       -- in a history it is a lie you cannot tell apart later. Which signal is usable at all
+       -- depends on relkind.
+       CASE
+         -- 'r'/'m' are the relkinds whose `pg_stat_user_tables` row carries a MEANINGFUL live
+         -- count. ('p' gets a row too — `pg_stat_all_tables` covers 'r','t','m','p' — but a
+         -- partitioned parent's counters are structurally zero; see its own branch below.)
+         -- They follow the ANCHORED rule of `AdminRepository.table_stats` (issue #515): once a
+         -- vacuum/analyze has been observed, `n_live_tup` is a real live-tuple count and wins
+         -- (it correctly reports 0 for a TRUNCATEd relation, where `reltuples` still holds the
+         -- pre-truncate estimate). Unanchored, take the larger signal: the case this branch
+         -- exists for is a counter reset, which can only make `n_live_tup` UNDERcount. That is
+         -- not a universal safety property — a matview REFRESHed to a smaller size leaves
+         -- `reltuples` stale-high, and GREATEST then overstates — but it is the same number the
+         -- previous query produced, and refresh_mv ANALYZEs afterwards so the relation is
+         -- anchored in practice. When neither signal knows anything, say so: NULL.
+         WHEN c.relkind IN ('r','m') THEN
+           CASE
+             WHEN COALESCE(
+                    s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze
+                  ) IS NOT NULL
+               THEN GREATEST(s.n_live_tup, 0)::bigint
+             WHEN c.reltuples >= 0 OR COALESCE(s.n_live_tup, 0) > 0
+               THEN GREATEST(
+                      GREATEST(s.n_live_tup, 0)::bigint,
+                      GREATEST(c.reltuples, 0)::bigint
+                    )
+             ELSE NULL
+           END
+         -- A partitioned parent stores no tuples of its own: ANALYZE sets `last_analyze` (which
+         -- would anchor the branch above) while `n_live_tup` stays 0 forever, so the anchored
+         -- rule would report 0 rows for a partitioned table of any size. `reltuples` — the total
+         -- across partitions — is the only usable signal here.
+         WHEN c.relkind = 'p' AND c.reltuples >= 0 THEN c.reltuples::bigint
+         -- Indexes have no row count of their own (`reltuples` on an index counts index ENTRIES,
+         -- not rows, so plotting it in a column named `estimated_rows` would be a trap), and 't'
+         -- is unreachable under the `nspname IN ('public','ops')` filter because TOAST relations
+         -- live in `pg_toast`. Matches the index branch of `collect_postload_object_stats`.
+         ELSE NULL
+       END AS estimated_rows,
+       -- Provenance rides along in the existing `stats` JSONB (below) so a reader can tell an
+       -- anchored count from a guess and from "no signal at all".
+       -- Branch order mirrors the value CASE above. The 'p' arm has to come before the generic
+       -- estimate arm: a partitioned parent is gated out of `live_tuples_anchored` (its
+       -- `n_live_tup` is structurally 0), so without its own arm a freshly-ANALYZEd partitioned
+       -- table would stamp `reltuples` — the most authoritative number available for it — as a
+       -- guess, permanently, in a history table.
+       CASE
+         WHEN c.relkind NOT IN ('r','m','p') THEN 'not_applicable'
+         WHEN c.relkind IN ('r','m')
+              AND COALESCE(
+                    s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze
+                  ) IS NOT NULL
+           THEN 'live_tuples_anchored'
+         WHEN c.relkind = 'p' AND c.reltuples >= 0 THEN 'partition_rollup'
+         WHEN c.reltuples >= 0 OR COALESCE(s.n_live_tup, 0) > 0 THEN 'unanchored_estimate'
+         ELSE 'unknown'
+       END AS estimated_rows_source,
        pg_total_relation_size(c.oid)::bigint AS total_bytes,
        CASE WHEN c.relkind IN ('r','p','m')
             THEN pg_relation_size(c.oid)::bigint
@@ -1266,9 +1328,20 @@ SELECT n.nspname AS schema_name,
  LIMIT :limit
 """
                     ),
-                    {"limit": limit},
+                    # One extra row so saturation is DETECTED rather than silently swallowed.
+                    {"limit": limit + 1},
                 )
             ).mappings().all()
+            truncated = len(stats_rows) > limit
+            if truncated:
+                # `ORDER BY n.nspname, c.relname` puts 'ops' first, so an overflow drops the tail
+                # of `public` — exactly the source tables this snapshot exists to trend.
+                stats_rows = stats_rows[:limit]
+                _LOGGER.warning(
+                    "ops.table_stats_snapshots capture truncated at limit=%s; "
+                    "raise ops_table_stats_capture_limit",
+                    limit,
+                )
             records = [
                 {
                     "table_stats_snapshot_id": str(uuid4()),
@@ -1289,6 +1362,12 @@ SELECT n.nspname AS schema_name,
                     "stats": {
                         "source": "pg_class_pg_stat_user_tables",
                         "snapshot_link": snapshot_link,
+                        # `estimated_rows` now means what it says: NULL is "the server does not
+                        # know", not "0 rows". Rows written before issue #523 lack this key, so
+                        # the planned row-count trend chart can tell a formula change from a
+                        # data change instead of drawing a step at the deploy timestamp.
+                        "estimated_rows_source": row["estimated_rows_source"],
+                        **({"truncated": True, "capture_limit": limit} if truncated else {}),
                     },
                 }
                 for row in stats_rows

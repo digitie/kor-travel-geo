@@ -31,6 +31,7 @@ from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.infra.sql import SCHEMA_SQL, iter_sql_statements
 from kortravelgeo.loaders import batch_dag
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 pytestmark = pytest.mark.asyncio
 
@@ -47,6 +48,11 @@ async def _fresh_engine():  # returns an AsyncEngine, unannotated to avoid the i
     if not dsn:
         pytest.skip("set KTG_TEST_PG_DSN to a disposable PostgreSQL/PostGIS scratch DB")
     engine = make_async_engine(Settings(pg_dsn=dsn))
+    # `load_jobs(job_id)` is FK-referenced by ops.audit_events, ops.dataset_snapshots,
+    # ops.serving_releases, ops.artifacts, ops.maintenance_windows and ops.source_match_sets, so
+    # the TRUNCATE ... CASCADE below empties the whole ops control plane. This module had no
+    # database guard at all before issue #523.
+    await require_disposable_database(engine)
     async with engine.begin() as conn:
         for statement in iter_sql_statements(SCHEMA_SQL):
             await conn.execute(text(statement))

@@ -36,6 +36,7 @@ from kortravelgeo.loaders.text.roadaddr_entrance_loader import (
     load_roadaddr_entrances,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 DATA_ROOTS = (
     Path("data/juso"),
@@ -60,6 +61,9 @@ async def test_real_postgres_can_load_sppn_makarea_and_lookup_when_dsn_is_set() 
     pytest.importorskip("osgeo.gdal")
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
+        # `load_sppn_makarea(mode="full")` TRUNCATEs tl_sppn_makarea and the daily delta applies
+        # delete-codes to tl_juso_text. This module had no database guard at all (issue #523).
+        await require_disposable_database(engine)
         async with engine.begin() as conn:
             for sql in iter_sql_statements(SCHEMA_SQL):
                 await conn.execute(text(sql))
@@ -156,6 +160,9 @@ async def test_real_postgres_can_load_actual_juso_samples_when_dsn_is_set() -> N
 
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
+        # `load_sppn_makarea(mode="full")` TRUNCATEs tl_sppn_makarea and the daily delta applies
+        # delete-codes to tl_juso_text. This module had no database guard at all (issue #523).
+        await require_disposable_database(engine)
         async with engine.begin() as conn:
             for sql in iter_sql_statements(SCHEMA_SQL):
                 await conn.execute(text(sql))

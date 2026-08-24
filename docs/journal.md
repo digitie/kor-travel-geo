@@ -2,6 +2,52 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-25 (이슈 #523 — 운영 DB를 통과시키던 테스트 가드 + 미분석 관계 0행 기록, by claude)
+
+#515 리뷰에서 범위 밖으로 밀어둔 세 건. 실제 위험도로 다시 매기니 이슈에 적힌 순서가 뒤집혔다.
+
+**P1 — 테스트 DB 가드가 운영 DB를 통과시켰다.** `test_t210_source_integration.py`의 판정식이
+`startswith("kor_travel_geo")`였고, 운영 DB 이름이 정확히 `kor_travel_geo`라 그대로 통과했다.
+통과 뒤에는 스키마를 적용하고 ops 테이블 13개를 `TRUNCATE ... CASCADE` 한다. 조사하다 이슈에
+없던 것을 더 찾았다 — 가드가 **아예 없는** 모듈이 둘 있었고(`test_full_load_batch_dagster_roundtrip.py`
+의 `TRUNCATE load_jobs CASCADE`는 FK로 ops 제어 평면 전체를 비운다), 리뷰 중 셋째(`_backup_roundtrip.py`
+의 `build_minimal_serving_schema` — `INDEX_SQL`의 `TRUNCATE region_radius_parts`와 `MV_SQL`의
+`DROP MATERIALIZED VIEW`)와 넷째 판정식 사본(`_t177_full_load_harness.py`)이 나왔다.
+
+판정식을 `tests/integration/_pg_guard.py` 하나로 모았다. **첫 시도는 이 버그를 방향만 바꿔
+재현했다** — `t\d{2,4}` 세그먼트를 "일회용"으로 허용했는데, `docs/t213-data-preservation.md`가
+`kor_travel_geo_t213_<YYYYMMDD>`를 **보존** 기준 DB 이름으로 규정하고 그 DB는 active serving
+release와 6.4M행 MV를 들고 있다. 태스크 태그는 "누구 소유인가"지 "버려도 된다"가 아니다.
+최종 형태는 (1) 절대 denylist(운영·Dagster·t213 보존본·ADR-036 restore 타깃), (2) 명확한
+throwaway 세그먼트만 허용, (3) 그 밖의 이름은 `KTG_TEST_PG_ALLOW_WRITES`에 DB 이름을 명시.
+denylist는 opt-in으로도 뚫리지 않는다.
+
+**P2 — `reltuples = -1`(미분석)이 `0행`으로 이력에 기록됐다.** 라이브 조회라면 0이 방어적
+기본값이지만 `ops.table_stats_snapshots`는 이력이라 나중에 구분할 수 없다. 운영 실측으로 지금
+public+ops 관계 20개가 이 상태다. relkind마다 쓸 수 있는 신호가 다르다 — `r`/`m`은 #515의
+anchored 규칙, `p`(파티션 부모)는 자기 튜플이 없어 `n_live_tup`이 구조적으로 0인데 ANALYZE는
+`last_analyze`를 세우므로 `reltuples`만, 인덱스는 `reltuples`가 행이 아니라 엔트리 수라 NULL,
+신호가 없으면 NULL. 출처는 기존 `stats` JSONB에 `estimated_rows_source`로 남겨 마이그레이션을
+피했다. MV swap 직후 리포트(`postload_maintenance.py`)도 같은 결함이라 함께 고쳤다.
+
+**P3 — 조용한 절단은 탐지만.** 운영 실측 201/500, 27/200이라 한 번도 걸린 적이 없다. 상한이나
+응답 형태를 바꾸면 openapi·TS 재생성을 부르므로 `LIMIT :limit + 1`로 포화를 탐지해 로그 경고와
+`stats.truncated`만 남긴다.
+
+**prod live 검증(2026-08-25).** capture를 한 번 돌려 실제 기록을 확인했다 — 201개 객체,
+`not_applicable` 302행(인덱스, 전부 NULL) / `unanchored_estimate` 61행 / `unknown` 35행(전부 NULL) /
+`live_tuples_anchored` 4행. 핵심 검사인 "unanchored인데 0으로 기록된 행"은 **0건**이다. 수정 전이면
+`unknown` 35건이 전부 `0`이 되고 인덱스 302건에는 행 수가 아닌 엔트리 수가 들어갔을 자리다.
+`mv_geocode_target`은 `unanchored_estimate`로 6,416,323을 기록했다 — hot-swap 이후 통계가 리셋된
+상태라 `reltuples` 폴백이 도는 것이고, 이게 #515/#523이 만든 동작이다.
+
+**검증에서 배운 것.** 오구현을 하나씩 넣어 각각 다른 단언에서 실패하는지 확인하는 방식을 계속
+썼는데, 이번에는 **테스트 쪽 결함이 네 번 나왔다**: (1) 가드 호출을 지워도 `import` 줄이 남아
+이름 매칭이 통과, (2) 가드를 첫 쓰기 뒤로 옮겨도 통과(호출 시점을 안 봤다), (3) 헬퍼 이름
+부분 문자열이 `make_async_engine(`에 걸림, (4) heredoc이 ``를 실제 backspace 바이트(0x08)로
+써 넣어 정규식이 조용히 무력화. 마지막 건은 파일에 제어문자가 들어간 것이라 grep으로도 안
+보였다 — 이후 저장소 전체를 스캔해 다른 사례가 없는 것을 확인했다.
+
 ## 2026-08-24 (이슈 #515 — 라이브 e2e 경미 결함 6건 정리, by claude)
 
 라이브 UI e2e에서 나온 P3 묶음. 6건 모두 개별 원인이 달라 하나씩 짚었다.

@@ -62,6 +62,7 @@ from kortravelgeo.infra.source_upload_repo import (
     should_fail_storage_state,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -388,15 +389,6 @@ def _xml_error(status: int, code: str) -> httpx.Response:
 # ---------------------------------------------------------------------------
 
 
-def _looks_like_disposable_test_database(database_name: str) -> bool:
-    normalized = database_name.lower()
-    return (
-        "test" in normalized
-        or normalized.startswith("kor_travel_geo")
-        or normalized.startswith("tmp_")
-    )
-
-
 async def _apply_schema_idempotent(engine: AsyncEngine) -> None:
     """Apply SCHEMA_SQL + INDEX_SQL, tolerating an already-applied database.
 
@@ -425,7 +417,6 @@ async def engine() -> AsyncIterator[AsyncEngine]:
         pytest.skip(f"set {DSN_ENV} to a disposable PostGIS-enabled test database")
     eng = make_async_engine(Settings(pg_dsn=dsn))
     async with eng.connect() as conn:
-        database_name = await conn.scalar(text("SELECT current_database()"))
         available = (
             await conn.execute(
                 text(
@@ -434,9 +425,14 @@ async def engine() -> AsyncIterator[AsyncEngine]:
                 )
             )
         ).scalars().all()
-    if database_name is None or not _looks_like_disposable_test_database(str(database_name)):
+    # Shared, segment-matched guard. The predicate that used to live here returned True for the
+    # production database `kor_travel_geo`, and the fixture below TRUNCATEs thirteen ops tables
+    # CASCADE right after applying the schema (issue #523).
+    try:
+        await require_disposable_database(eng)
+    except BaseException:
         await eng.dispose()
-        pytest.skip(f"{DSN_ENV} must point to a disposable test database; got {database_name!r}")
+        raise
     missing = {"postgis", "pg_trgm", "unaccent", "pg_stat_statements"} - set(available)
     if missing:
         await eng.dispose()

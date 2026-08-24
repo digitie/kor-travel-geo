@@ -18,6 +18,7 @@ from kortravelgeo.loaders.augment_harness import (
     recreate_shape_staging_table,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 
 @pytest.mark.asyncio
@@ -30,6 +31,7 @@ async def test_real_postgres_augment_harness_copy_and_measure_when_enabled() -> 
 
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
+        await require_disposable_database(engine)
         async with engine.begin() as conn:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
             await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_left"))

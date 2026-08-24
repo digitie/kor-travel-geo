@@ -362,3 +362,19 @@ def _write_zip(path: Path, members: dict[str, str]) -> None:
     with zipfile.ZipFile(path, "w") as archive:
         for name, content in members.items():
             archive.writestr(name, content)
+
+
+def test_t177_run_letter_suffixed_databases_are_accepted() -> None:
+    """`t177g` / `t177h`: the shape this repo actually used across five recorded runs.
+
+    Whole-segment matching against a bare "t177" rejected every one of them, and the error
+    message still described the old substring rule (issue #523 review).
+    """
+    from tests.integration._t177_full_load_harness import looks_like_t177_scratch_database
+
+    assert looks_like_t177_scratch_database("kor_travel_geo_t177g_codex_20260618133300")
+    assert looks_like_t177_scratch_database("kor_travel_geo_t177h_bench")
+    assert looks_like_t177_scratch_database("kor_travel_geo_t177")
+    # The protected list still wins over any task tag.
+    assert not looks_like_t177_scratch_database("kor_travel_geo")
+    assert not looks_like_t177_scratch_database("kor_travel_geo_t213_20260615_r3")
