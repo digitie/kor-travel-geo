@@ -459,6 +459,8 @@ textarea {
   align-items: center;
   border-bottom: 1px solid var(--line);
   display: flex;
+  /* Title and action row drop onto separate lines instead of overflowing at narrow widths. */
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: space-between;
   padding: 14px 16px;
