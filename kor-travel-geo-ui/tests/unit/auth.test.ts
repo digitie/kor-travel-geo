@@ -81,6 +81,31 @@ describe("admin auth", () => {
     await expect(verifySessionCookieValue(revocable, env, now, source)).resolves.toBe(false);
   });
 
+  it("Next 16 ReadonlyHeaders(자체 get + 내부 headers 속성)를 source로 줘도 fingerprint를 정상 계산한다", async () => {
+    const env = await makeEnv(TEST_PASSWORD);
+    const now = 1_800_000_000_000;
+    // Next 16's `headers()` returns a ReadonlyHeaders whose own `.get()` works but which also
+    // exposes an internal `headers` property that is NOT a HeaderReader. The old
+    // `"headers" in source` heuristic drilled into that and threw `?.get is not a function`
+    // during login-page SSR. headersFrom must key off the callable `get`, not `"headers" in`.
+    const readonlyHeadersLike = {
+      get: (name: string) => (name.toLowerCase() === "user-agent" ? "unit-test-a" : null),
+      headers: {}
+    } as unknown as Headers;
+    const bareSameUa = new Headers({ "user-agent": "unit-test-a" });
+    const bareOtherUa = new Headers({ "user-agent": "unit-test-b" });
+
+    // Must not throw, and the fingerprint must match a bare Headers with the same user-agent.
+    const value = await createSessionCookieValue(readonlyHeadersLike, env, now);
+    await expect(verifySessionCookieValue(value, env, now, bareSameUa)).resolves.toBe(true);
+    await expect(verifySessionCookieValue(value, env, now, bareOtherUa)).resolves.toBe(false);
+    // Symmetric: a bare-Headers cookie verifies against the ReadonlyHeaders-like source.
+    const value2 = await createSessionCookieValue(bareSameUa, env, now);
+    await expect(
+      verifySessionCookieValue(value2, env, now, readonlyHeadersLike)
+    ).resolves.toBe(true);
+  });
+
   it("로그인 실패 횟수를 IP 기준으로 제한하고 성공 후 초기화할 수 있다", () => {
     const source = new Headers({ "x-forwarded-for": `198.51.100.${Date.now() % 255}` });
 

@@ -500,7 +500,15 @@ function headersFrom(source: HeaderReader | RequestLike | null): HeaderReader | 
   if (!source) {
     return null;
   }
-  return "headers" in source ? source.headers : source;
+  // A Headers / Next `ReadonlyHeaders` is itself a HeaderReader — detect it by its callable
+  // `get`, never by `"headers" in source`: Next 16's ReadonlyHeaders exposes its own `headers`
+  // property, so the old `"headers" in source` heuristic drilled into a non-HeaderReader and
+  // threw `?.get is not a function` when `headers()` was passed (e.g. the login page SSR).
+  if (typeof (source as HeaderReader).get === "function") {
+    return source as HeaderReader;
+  }
+  const inner = (source as RequestLike).headers;
+  return inner && typeof inner.get === "function" ? inner : null;
 }
 
 function firstForwardedValue(value: string | null): string | null {
