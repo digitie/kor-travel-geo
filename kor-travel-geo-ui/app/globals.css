@@ -1692,6 +1692,17 @@ textarea {
 .vtable-grid {
   display: grid;
   gap: 8px;
+  /* A grid item's default `min-width: auto` refuses to shrink below its content, so a wide
+     table pushed past the viewport and `html { overflow-x: clip }` silently CUT the trailing
+     columns off — unreachable even by scrolling (issue #514). `min-width: 0` lets the wrapper
+     shrink; `overflow-x: auto` then gives the table its own scroller. */
+  min-width: 0;
+}
+
+.vtable-static > table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .vtable-toolbar {
@@ -1815,7 +1826,10 @@ textarea {
 .source-card-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /* `minmax(260px, …)` forces a 260px floor, so at 320/375px the card overflowed its own
+     column and the content was clipped (issue #514). `min(260px, 100%)` keeps the 260px
+     preference on roomy screens and collapses to the available width when narrower. */
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
 }
 
 .source-card {
@@ -1832,16 +1846,30 @@ textarea {
   box-shadow: 0 0 0 1px var(--brand);
 }
 
+.source-card {
+  /* Grid/flex children default to `min-width: auto`; without this the long category titles and
+     badge rows push the card wider than its column (issue #514). */
+  min-width: 0;
+}
+
 .source-card-head {
   align-items: flex-start;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: space-between;
+  min-width: 0;
+}
+
+.source-card-head > * {
+  min-width: 0;
 }
 
 .source-card-title {
   background: none;
   border: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
   cursor: pointer;
   display: grid;
   gap: 2px;
@@ -1883,8 +1911,14 @@ textarea {
 
 .source-card-meta div {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: space-between;
+  min-width: 0;
+}
+
+.source-card-meta dd {
+  overflow-wrap: anywhere;
 }
 
 .source-card-meta dt {
@@ -1901,7 +1935,14 @@ textarea {
   border-top: 1px solid var(--line);
   display: grid;
   gap: 8px;
+  min-width: 0;
   padding-top: 10px;
+}
+
+/* A file input reports a wide intrinsic size and would otherwise widen the whole card. */
+.source-card-upload input[type="file"] {
+  max-width: 100%;
+  min-width: 0;
 }
 
 .source-progress-list {
