@@ -2,6 +2,39 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-24 (이슈 #512 — 관리 콘솔 SSE 연결 고갈 수정, by claude)
+
+**증상**: `/admin/source-files` 업로드 탭이 "재개 가능한 업로드" 행마다 `EventSource`를 열었다.
+브라우저는 origin당 6 connection(HTTP/1.1, prod는 `next start`)이 한도라 재개 가능 세션이 ~6건을
+넘으면 **관리 콘솔 전체**가 멈췄다(레일 클릭 5분 hang, 같은 시각 curl 0.79s). 라이브 UI e2e로만
+잡혔다 — mock e2e는 SSE를 mock해 재현 불가.
+
+**수정**: `lib/live-stream-budget.ts`(신규)에 공유 상한 `MAX_LIVE_SSE_STREAMS=2`와
+`selectLiveStreamIds()`를 두고, 업로드 탭과 백업 job 목록이 **최근 항목 N건만** 실시간 구독하게
+했다. 선택은 활동시각 desc + id tiebreaker로 안정적이라 EventSource가 재개폐되지 않는다.
+
+**적대 리뷰 2인(프론트 정확성/UX·성능/아키텍처)이 잡은 것 — 전부 반영**:
+- (P1) "나머지는 폴링이 갱신한다"는 내 주장이 **거짓**이었다. `["upload-sessions","all"]` 쿼리에
+  `refetchInterval`이 없고 전역 기본값도 `staleTime` 뿐이라, 라이브 슬롯 밖 세션은 영원히 멈춘
+  카운터를 보여줬다(구현 전에는 모든 행이 SSE terminal로 목록을 무효화했으므로 **내가 만든 회귀**).
+  → 진행 중일 때만 10초 폴링 추가.
+- (P2) `VirtualTable`이 `flexRender`에 매번 새 클로저를 넘겨 셀을 remount → 무관한 리렌더마다
+  스트림이 끊겼다 재연결(업로드 중에는 part마다). 셀 렌더러를 직접 호출하도록 수정 — 모든 관리
+  테이블에 적용된다.
+- (P2) 같은 버그가 `/admin/backups`에도 있었다(진행 중 job마다 스트림, 상한 50). 실측 9 job → 9
+  스트림. 같은 상한 적용.
+- (P2) 순수 selector만 테스트해 **정작 #512를 막는 배선(`enabled`)은 무커버리지**였다.
+  → 컴포넌트 테스트 추가: 6세션 fixture에서 실제 EventSource 생성 수가 2인지 확인. `enabled`를
+  되돌리면 `expected 6 to be 2`로 실패함을 확인 후 고정.
+- (P3) `updated_at`은 계약상 required non-null이라 `?? created_at` 폴백이 죽은 코드였고, 그 경로를
+  테스트가 이중 캐스트로만 도달했다 → 실제 도달 가능한 "형식이 깨진 timestamp"로 교체.
+- (P3) `failed_register`는 terminal이 아니라 resumable로 남지만 이벤트가 오지 않아 슬롯을 영구
+  점유할 수 있었다 → 후순위로.
+- (P3) 중복 id일 때 안내 문구가 실제 라이브 행 수를 과소 표기 → 행 기준으로 계산.
+
+**남은 관찰(별건)**: `lib/multipart-upload.ts`가 파트를 `Promise.all`로 한 번에 올려 업로드 중에는
+연결 여유가 사실상 0이다(유한 요청이라 배수되지는 않음). 필요하면 별도 이슈로 동시 파트 수를 캡.
+
 ## 2026-08-18 ("백업 켜" — geo prod 첫 백업 + 보존 janitor 스케줄, manager #177 결선, by claude)
 
 **배경**: 08-17 실측으로 geo prod(33 GB)에 백업이 0건임을 확인(manager #177 사실). T-239 스케줄 백업·T-290g Dagster

@@ -5,7 +5,9 @@ import {
   isFailedSessionState,
   isResumableSession,
   isValidYyyymm,
+  MAX_LIVE_UPLOAD_STREAMS,
   rebuildPromoteConfirmation,
+  selectLiveUploadStreamIds,
   reconcileIssueLabels,
   servingUsageLabels,
   servingUsageNote,
@@ -151,5 +153,82 @@ describe("source-files helpers", () => {
       "/admin/source-files/reconcile/r1/items?state=open"
     );
     expect(sourceFilesPaths.epostFetch()).toBe("/admin/source-files/epost-fetch");
+  });
+});
+
+describe("live upload SSE stream cap (#512)", () => {
+  function resumable(id: string, updatedAt: string): UploadSessionStatus {
+    return {
+      ...session("uploading"),
+      upload_session_id: id,
+      created_at: "2026-06-01T00:00:00Z",
+      updated_at: updatedAt
+    } as unknown as UploadSessionStatus;
+  }
+
+  it("세션이 많아도 상한만큼만 구독한다 (연결 고갈 회귀 방지)", () => {
+    const sessions = Array.from({ length: 9 }, (_, i) =>
+      resumable(`s${i}`, `2026-06-0${(i % 9) + 1}T00:00:00Z`)
+    );
+    const live = selectLiveUploadStreamIds(sessions);
+    expect(live.size).toBe(MAX_LIVE_UPLOAD_STREAMS);
+  });
+
+  it("가장 최근 갱신된 세션을 고른다", () => {
+    const sessions = [
+      resumable("old", "2026-06-01T00:00:00Z"),
+      resumable("newest", "2026-06-09T00:00:00Z"),
+      resumable("mid", "2026-06-05T00:00:00Z")
+    ];
+    expect([...selectLiveUploadStreamIds(sessions, 2)].sort()).toEqual(["mid", "newest"]);
+  });
+
+  it("updated_at이 깨져 있어도 정렬을 오염시키지 않고 정상 세션이 선택된다", () => {
+    // updated_at은 계약상 필수/non-null이라 누락은 불가능하지만, 형식이 깨진 값은 가능하다.
+    const malformed = resumable("malformed", "not-a-timestamp");
+    const live = selectLiveUploadStreamIds(
+      [malformed, resumable("good", "2026-06-02T00:00:00Z")],
+      1
+    );
+    expect([...live]).toEqual(["good"]);
+  });
+
+  it("failed_* 세션은 진행 중 세션보다 뒤로 밀린다 (슬롯 squat 방지)", () => {
+    // failed_register는 재시도 가능해서 resumable로 남지만 SSE 이벤트가 오지 않는다.
+    const failedRecent = {
+      ...resumable("failed-recent", "2026-06-09T00:00:00Z"),
+      state: "failed_register"
+    } as unknown as UploadSessionStatus;
+    const uploadingOlder = resumable("uploading-older", "2026-06-01T00:00:00Z");
+    expect([...selectLiveUploadStreamIds([failedRecent, uploadingOlder], 1)]).toEqual([
+      "uploading-older"
+    ]);
+  });
+
+  it("세션 수가 상한 이하면 전부 구독한다", () => {
+    const sessions = [resumable("a", "2026-06-01T00:00:00Z")];
+    expect(selectLiveUploadStreamIds(sessions).size).toBe(1);
+  });
+
+  it("같은 입력에 대해 선택이 안정적이다 (EventSource 재개폐 방지)", () => {
+    // Same activity stamp on every row -> id tiebreaker keeps the set stable.
+    const sessions = ["c", "a", "b", "d"].map((id) => resumable(id, "2026-06-01T00:00:00Z"));
+    const first = [...selectLiveUploadStreamIds(sessions, 2)].sort();
+    const shuffled = [sessions[2], sessions[0], sessions[3], sessions[1]];
+    expect([...selectLiveUploadStreamIds(shuffled, 2)].sort()).toEqual(first);
+  });
+
+  it("max가 0 이하면 아무것도 구독하지 않는다", () => {
+    expect(selectLiveUploadStreamIds([resumable("a", "2026-06-01T00:00:00Z")], 0).size).toBe(0);
+  });
+
+  it("입력 배열을 변형하지 않는다", () => {
+    const sessions = [
+      resumable("a", "2026-06-01T00:00:00Z"),
+      resumable("b", "2026-06-09T00:00:00Z")
+    ];
+    const order = sessions.map((s) => s.upload_session_id);
+    selectLiveUploadStreamIds(sessions, 1);
+    expect(sessions.map((s) => s.upload_session_id)).toEqual(order);
   });
 });

@@ -60,6 +60,16 @@
   글로벌 로그인(storageState)으로 실행한다 (`docs/live-e2e.md` 참고).
 
 ### Fixed
+- **관리 콘솔이 라이브 SSE 스트림으로 브라우저 연결을 고갈시키던 문제를 고쳤다(이슈 #512).**
+  원천 파일 업로드 탭은 "재개 가능한 업로드" 행마다, 백업 화면은 진행 중 job마다 `EventSource`를
+  열었다. `EventSource`는 수명 내내 연결 하나를 점유하고 브라우저는 origin당 6개(HTTP/1.1)가
+  한도라, 행이 그만큼 쌓이면 내비게이션·데이터 로드·로그아웃까지 수 분간 멈췄다. 이제 두 화면 모두
+  공유 상한(`MAX_LIVE_SSE_STREAMS`)만큼만 최근 항목을 실시간 구독하고, 나머지는 목록 폴링으로
+  갱신한다(업로드 세션 목록은 진행 중일 때만 10초 주기 폴링). 진행 중이지만 이벤트가 오지 않는
+  `failed_*` 세션은 슬롯을 차지하지 않는다.
+- **표 셀이 불필요하게 remount되던 문제를 고쳤다.** `VirtualTable`이 컬럼 정의를 바꿀 때마다 셀
+  렌더러를 새 클로저로 감싸 React가 이를 새 element type으로 보고 셀 subtree를 통째로 재생성했다.
+  상태를 가진 셀(위 SSE 진행률 등)이 무관한 리렌더마다 끊겼다 다시 연결되던 원인이다.
 - **로그인/세션 검증 SSR이 Next 16 `ReadonlyHeaders`에서 `?.get is not a function`으로 500나던 버그를
   고쳤다.** `lib/auth.ts`의 `headersFrom`이 `"headers" in source`로 Request/Headers를 구분했는데, Next 16의
   `headers()`가 돌려주는 `ReadonlyHeaders`가 자체 `headers` 속성을 노출해 그 heuristic이 HeaderReader가 아닌

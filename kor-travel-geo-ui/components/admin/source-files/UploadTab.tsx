@@ -34,6 +34,7 @@ import {
   isEpostCategory,
   isResumableSession,
   isValidYyyymm,
+  selectLiveUploadStreamIds,
   servingUsageLabels,
   servingUsageNote,
   servingUsageTones,
@@ -51,6 +52,9 @@ import {
 
 const EMPTY_CATEGORIES: SourceFileCategoryInfo[] = [];
 const EMPTY_SESSIONS: UploadSessionStatus[] = [];
+
+/** Session-list poll cadence while any session is still resumable (see the query below, #512). */
+const RESUMABLE_POLL_MS = 10_000;
 
 type DuplicateConflict = {
   category: SourceFileCategoryInfo["category"];
@@ -114,7 +118,13 @@ export function UploadTab() {
 
   const { data: sessions = EMPTY_SESSIONS, refetch: refetchSessions } = useQuery({
     queryKey: ["upload-sessions", "all"],
-    queryFn: () => requestJson<UploadSessionStatus[]>(sourceFilesPaths.uploadSessionsList())
+    queryFn: () => requestJson<UploadSessionStatus[]>(sourceFilesPaths.uploadSessionsList()),
+    // Only a capped number of rows hold a live SSE stream (#512), so the list itself must
+    // poll: without this, a session that finishes outside the live set would sit in
+    // "재개 가능한 업로드" with a frozen counter until the operator refreshed by hand.
+    // Idle (no resumable session) costs nothing — polling stops.
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some(isResumableSession) ? RESUMABLE_POLL_MS : false
   });
   const resumable = useMemo(() => sessions.filter(isResumableSession), [sessions]);
   // 카테고리별 파일 크기 한도 — catalog에는 없어 세션 이력에서 유도한다 (사전 검증용, 근사치).
@@ -607,6 +617,16 @@ function ResumableSessions({
   sessions: UploadSessionStatus[];
   onSessionTerminal: () => void;
 }) {
+  // Only the most recently updated few sessions hold a live SSE stream: an EventSource
+  // pins one of the browser's 6 per-origin connections for its lifetime, so subscribing
+  // per row froze the whole console once ~6 sessions were resumable (#512). The rest keep
+  // the polled uploaded/expected counter.
+  const liveSessionIds = useMemo(() => selectLiveUploadStreamIds(sessions), [sessions]);
+  // Count live ROWS, not set size: duplicate ids would collapse in the Set and under-report.
+  const liveRowCount = useMemo(
+    () => sessions.filter((session) => liveSessionIds.has(session.upload_session_id)).length,
+    [sessions, liveSessionIds]
+  );
   const columns = useMemo<VirtualColumn<UploadSessionStatus>[]>(
     () => [
       { key: "category", header: "카테고리", cell: (session) => session.category },
@@ -620,11 +640,15 @@ function ResumableSessions({
         key: "progress",
         header: "진행",
         cell: (session) => (
-          <SessionProgressCell onTerminal={onSessionTerminal} session={session} />
+          <SessionProgressCell
+            live={liveSessionIds.has(session.upload_session_id)}
+            onTerminal={onSessionTerminal}
+            session={session}
+          />
         )
       }
     ],
-    [onSessionTerminal]
+    [liveSessionIds, onSessionTerminal]
   );
 
   return (
@@ -637,18 +661,30 @@ function ResumableSessions({
         rowKey={(session) => session.upload_session_id}
         rows={sessions}
       />
+      {liveRowCount < sessions.length ? (
+        <p className="form-note">
+          브라우저 동시 연결 한도 때문에 최근 갱신된 {liveRowCount}건만 실시간 진행률을 표시합니다.
+          나머지는 주기적으로 갱신되는 업로드 수로 표시됩니다.
+        </p>
+      ) : null}
     </Panel>
   );
 }
 
 function SessionProgressCell({
   session,
-  onTerminal
+  onTerminal,
+  live: subscribe
 }: {
   session: UploadSessionStatus;
   onTerminal: () => void;
+  /** Open a live SSE stream for this row. Capped by `selectLiveUploadStreamIds` (#512). */
+  live: boolean;
 }) {
-  const live = useUploadSessionEvents(session.upload_session_id, { onTerminal });
+  const live = useUploadSessionEvents(session.upload_session_id, {
+    enabled: subscribe,
+    onTerminal
+  });
   return <SessionProgress live={live} session={session} />;
 }
 

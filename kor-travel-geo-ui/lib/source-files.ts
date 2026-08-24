@@ -1,3 +1,4 @@
+import { MAX_LIVE_SSE_STREAMS, selectLiveStreamIds } from "@/lib/live-stream-budget";
 import type { components } from "@/types/api.gen";
 
 // --- Generated-type aliases (single source of truth: types/api.gen.ts) -------
@@ -255,6 +256,41 @@ export function isTerminalUploadState(state: UploadSessionState): boolean {
 
 export function isFailedSessionState(state: UploadSessionState): boolean {
   return state.startsWith("failed_");
+}
+
+/**
+ * How many resumable sessions may hold a live SSE stream at once (issue #512).
+ *
+ * Re-exported from the shared budget so the upload tab and the backup/restore job list
+ * cannot drift apart; the rationale (browser 6-connection limit) lives there.
+ */
+export const MAX_LIVE_UPLOAD_STREAMS = MAX_LIVE_SSE_STREAMS;
+
+/**
+ * Pick the sessions that get a live SSE stream: the `max` most recently updated ones that
+ * can still emit progress.
+ *
+ * Everything else falls back to the `uploaded/expected` counter, which the session-list
+ * query polls while anything is resumable (`RESUMABLE_POLL_MS` in `UploadTab`) — so no
+ * information is lost, only the per-row live percentage.
+ *
+ * `failed_*` sessions stay "resumable" so the operator can retry, but their stream will
+ * never emit; they are deprioritized so one cannot squat a slot while an actually-uploading
+ * session goes without.
+ */
+export function selectLiveUploadStreamIds(
+  sessions: readonly UploadSessionStatus[],
+  max: number = MAX_LIVE_UPLOAD_STREAMS
+): Set<string> {
+  return selectLiveStreamIds(
+    sessions,
+    {
+      id: (session) => session.upload_session_id,
+      activity: (session) => session.updated_at,
+      deprioritize: (session) => isFailedSessionState(session.state)
+    },
+    max
+  );
 }
 
 /**
