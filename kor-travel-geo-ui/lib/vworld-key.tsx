@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useMemo } from "react";
+import { usePathname } from "next/navigation";
 
 const RUNTIME_KEY_QUERY_KEY = ["runtime-config", "vworld-api-key"] as const;
 
@@ -56,9 +57,15 @@ async function loadRuntimeKey(): Promise<RuntimeKeyRecord> {
 
 export function VWorldKeyProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  // The provider lives in the root layout, so it also mounts on /login where the caller has no
+  // session yet — `/api/runtime-config` answers 401 and the browser logs a console error on
+  // every visit (issue #515). There is no map on the login page, so just don't ask.
+  const pathname = usePathname();
+  const enabled = pathname !== "/login";
   const { data: runtimeKey, isLoading } = useQuery({
     queryKey: RUNTIME_KEY_QUERY_KEY,
     queryFn: loadRuntimeKey,
+    enabled,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false
@@ -67,7 +74,8 @@ export function VWorldKeyProvider({ children }: { children: React.ReactNode }) {
   const envApiKey = runtimeKey?.envApiKey ?? "";
   const browserKey = runtimeKey?.browserKey ?? "";
   const apiKey = browserKey || envApiKey;
-  const loading = isLoading;
+  // `isLoading` stays true forever for a disabled query; on /login we are simply done.
+  const loading = enabled && isLoading;
   const source: VWorldKeySource = loading
     ? "loading"
     : browserKey

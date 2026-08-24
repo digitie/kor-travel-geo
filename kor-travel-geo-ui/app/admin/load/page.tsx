@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { LoadConsole } from "@/components/admin/LoadConsole";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ADMIN_PAGES } from "@/lib/admin-pages";
+
+export const metadata: Metadata = {
+  title: ADMIN_PAGES.load.title,
+  description: ADMIN_PAGES.load.description
+};
 
 export default function LoadPage() {
   return (

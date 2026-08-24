@@ -287,6 +287,12 @@ function PublicApiKeysSection() {
       setState((current) => ({
         ...current,
         notice: { tone: "success", text: "공개 API 키를 폐기했습니다." },
+        // Drop the just-revoked key's plaintext from the screen — it was still sitting in the
+        // "생성된 키" box under a "이 키는 지금 한 번만 표시됩니다" notice (issue #515).
+        generatedKey:
+          current.generatedKey && current.generatedKey.endsWith(result.key_hint)
+            ? null
+            : current.generatedKey,
         publicKeys: (current.publicKeys ?? []).map((item) =>
           item.public_api_key_id === result.public_api_key_id ? result : item
         )

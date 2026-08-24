@@ -1,9 +1,16 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useReportWebVitals } from "next/web-vitals";
 
 export function WebVitalsReporter() {
+  const pathname = usePathname();
   useReportWebVitals((metric) => {
+    // /api/metrics/* requires a session; beaconing from the unauthenticated login page only
+    // produced 401 console noise (issue #515).
+    if (pathname === "/login") {
+      return;
+    }
     const payload = JSON.stringify({
       name: metric.name,
       rating: metric.rating,

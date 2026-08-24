@@ -221,9 +221,18 @@ SELECT payload
                 await conn.execute(
                     text(
                         """
-SELECT relname AS table_name,
-       GREATEST(n_live_tup, 0)::bigint AS row_count,
-       pg_total_relation_size(relid)::bigint AS size_bytes,
+SELECT s.relname AS table_name,
+       -- `n_live_tup` is a running delta that a restore / hot-swap resets to 0 until something
+       -- ANALYZEs, so every table read as 0 rows on a freshly restored DB while the planner
+       -- happily used `pg_class.reltuples` (issue #515). Prefer the live counter when it has a
+       -- value, else fall back to the same estimate the planner uses. `reltuples` is -1 when a
+       -- relation has never been analyzed, hence the GREATEST guard.
+       COALESCE(
+         NULLIF(GREATEST(s.n_live_tup, 0), 0),
+         NULLIF(GREATEST(c.reltuples, 0)::bigint, 0),
+         0
+       )::bigint AS row_count,
+       pg_total_relation_size(s.relid)::bigint AS size_bytes,
        NULLIF(
          GREATEST(
            COALESCE(last_vacuum, '-infinity'::timestamptz),
@@ -233,9 +242,10 @@ SELECT relname AS table_name,
          ),
          '-infinity'::timestamptz
        )::text AS updated_at
-  FROM pg_stat_user_tables
- WHERE schemaname = 'public'
- ORDER BY relname
+  FROM pg_stat_user_tables s
+  JOIN pg_class c ON c.oid = s.relid
+ WHERE s.schemaname = 'public'
+ ORDER BY s.relname
  LIMIT :limit
 """
                     ),

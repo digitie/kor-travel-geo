@@ -85,7 +85,9 @@ type MaintenanceWindowFormState = {
 const initialOpsDataState: OpsDataState = {
   artifacts: [],
   auditEvents: [],
-  lastResult: { status: "READY" },
+  // No action has run yet — render the empty hint instead of a fake {"status":"READY"} JSON
+  // that looks like a real result (issue #515).
+  lastResult: null,
   pgStats: [],
   releases: [],
   snapshots: [],

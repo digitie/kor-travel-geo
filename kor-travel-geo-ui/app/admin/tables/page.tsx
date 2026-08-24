@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { TableStatsPanel } from "@/components/admin/TableStatsPanel";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ADMIN_PAGES } from "@/lib/admin-pages";
+
+export const metadata: Metadata = {
+  title: ADMIN_PAGES.tables.title,
+  description: ADMIN_PAGES.tables.description
+};
 
 export default function TablesPage() {
   return (
