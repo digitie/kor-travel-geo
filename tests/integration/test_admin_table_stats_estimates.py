@@ -32,8 +32,6 @@ from kortravelgeo.settings import Settings
 _TABLE = "ktg_test_table_stats_probe"
 _FRESH_TABLE = "ktg_test_table_stats_never_analyzed"
 
-pytestmark = pytest.mark.longrun
-
 
 def _dsn() -> str:
     dsn = os.getenv("KTG_TEST_PG_DSN")
@@ -68,6 +66,14 @@ async def _require_disposable(engine) -> None:
         )
     if version_num < 150000:
         pytest.skip(f"pg_stat_force_next_flush() requires PostgreSQL 15+; got {version_num}")
+
+
+def _no_autovacuum(table: str):
+    """Keep autovacuum off this probe table for the duration of the test."""
+    return text(
+        f"ALTER TABLE {table} SET "
+        "(autovacuum_enabled = off, toast.autovacuum_enabled = off)"
+    )
 
 
 async def _flush_stats(engine) -> None:
@@ -118,11 +124,21 @@ async def _row_count(engine, table: str = _TABLE) -> tuple[int, bool]:
 async def test_table_stats_row_count_survives_a_statistics_reset() -> None:
     engine = make_async_engine(Settings(pg_dsn=_dsn()))
     try:
+        # Before the try/finally: a skip raised inside it would still run the DDL cleanup
+        # against the database the guard just refused.
         await _require_disposable(engine)
+    except BaseException:
+        await engine.dispose()
+        raise
+    try:
         async with engine.begin() as conn:
             for name in (_TABLE, _FRESH_TABLE):
                 await conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
             await conn.execute(text(f"CREATE TABLE {_TABLE} (i int)"))
+            # Every stage below parks the table past an autovacuum/autoanalyze threshold and
+            # then waits. A worker firing mid-test would re-anchor the relation and make the
+            # assertions blame the query for what autovacuum did.
+            await conn.execute(_no_autovacuum(_TABLE))
             await conn.execute(text(f"INSERT INTO {_TABLE} SELECT generate_series(1, 1000)"))
             await conn.execute(text(f"ANALYZE {_TABLE}"))
         # Publish the setup deltas BEFORE the reset further down. A backend holds its table stats
@@ -205,6 +221,7 @@ SELECT pg_stat_reset_single_table_counters(
         # that falls back to `reltuples` alone -- that one reports 0 for EVERY table here.
         async with engine.begin() as conn:
             await conn.execute(text(f"CREATE TABLE {_FRESH_TABLE} (i int)"))
+            await conn.execute(_no_autovacuum(_FRESH_TABLE))
             await conn.execute(text(f"INSERT INTO {_FRESH_TABLE} SELECT generate_series(1, 300)"))
         await _flush_stats(engine)
         live, reltuples, anchored = await _raw_stats(engine, _FRESH_TABLE)

@@ -508,14 +508,19 @@ def test_admin_repo_table_stats_prefers_anchored_live_tuples_over_reltuples() ->
     stale `reltuples`. Behaviour against a real server is covered by
     tests/integration/test_admin_table_stats_estimates.py.
     """
-    source = inspect.getsource(admin_repo.AdminRepository)
-    # Strip comments before matching: every clause asserted below also appears in the prose above
-    # it, so a substring test against the raw source passes on a query whose SQL says the
-    # opposite of its comments.
-    sql = " ".join(
-        line.split("--", 1)[0] for line in source.splitlines() if line.strip()
+    # Only this method's SQL, and only its SQL: every clause asserted below also appears in the
+    # prose comments above it, so matching against raw source passes on a query whose SQL says
+    # the opposite of its comments.
+    source = inspect.getsource(admin_repo.AdminRepository.table_stats)
+    sql = re.sub(
+        r"\s+",
+        " ",
+        " ".join(
+            line.split("--", 1)[0]
+            for line in source.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ),
     )
-    sql = re.sub(r"\s+", " ", sql)
 
     # Pin the whole expression, not its parts. Asserting the pieces separately still passes when
     # the polarity is inverted (`IS NULL`) — i.e. on the maximally wrong query, the one that
@@ -525,7 +530,8 @@ def test_admin_repo_table_stats_prefers_anchored_live_tuples_over_reltuples() ->
         " s.last_autoanalyze ) IS NOT NULL THEN GREATEST(s.n_live_tup, 0)::bigint"
         " ELSE GREATEST(GREATEST(s.n_live_tup, 0)::bigint, GREATEST(c.reltuples, 0)::bigint)"
         " END AS row_count," in sql
-    )
+    ), "anchored CASE expression changed; update this test only if the SEMANTICS still hold"
+
     # Unanchored is unanchored: `reltuples >= 0` must not re-enter as a second condition, or a
     # `pg_restore`d database (reltuples = -1, live counter good) reports 0 for every table.
     assert "c.reltuples >= 0" not in sql

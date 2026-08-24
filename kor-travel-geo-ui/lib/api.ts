@@ -270,7 +270,11 @@ export type RustfsSyncLocalResult = {
 export type TableStat = {
   table_name: string;
   row_count: number;
-  /** `row_count` is the planner's estimate (stats reset by a restore/hot-swap, no ANALYZE yet). */
+  /**
+   * No vacuum/analyze has been observed for this relation, so `row_count` is a post-reset live
+   * counter or the planner's `reltuples`, whichever is larger. False does not mean exact — an
+   * anchored live count is also extrapolated from a sample and drifts between analyses.
+   */
   row_count_estimated?: boolean;
   size_bytes?: number | null;
   updated_at?: string | null;

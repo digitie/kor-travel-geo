@@ -35,7 +35,7 @@ const columns: VirtualColumn<TableStat>[] = [
     // touch, so carry the meaning in text for AT instead of relying on either.
     cell: (r) =>
       r.row_count_estimated ? (
-        <span title="통계 미수집 — 플래너 추정치입니다(ANALYZE 후 정확해집니다).">
+        <span title="이 테이블에 대한 vacuum/analyze 기록이 없어 근사치입니다. ANALYZE를 돌리면 값이 갱신되지만, 정확한 행 수는 count(*)로만 확인할 수 있습니다.">
           <span aria-hidden="true">≈ </span>
           <span className="sr-only">약 </span>
           {r.row_count.toLocaleString()}
