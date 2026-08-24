@@ -44,6 +44,7 @@ import {
   terminalJobState
 } from "@/lib/backup-workflow";
 import { formatBytes } from "@/lib/format";
+import { selectLiveStreamIds } from "@/lib/live-stream-budget";
 import { httpUrlSchema } from "@/lib/schemas";
 import { toast } from "@/lib/toast";
 
@@ -548,6 +549,18 @@ function BackupJobsPanel({
   onCancelJob: (jobId: string) => Promise<void>;
 }) {
   const activeJobs = jobRows.filter((job) => !terminalJobState(job.state));
+  // Each JobProgress opens an EventSource, and the browser allows only 6 per origin — an
+  // unbounded map over active jobs (the jobs query fetches up to 50) starves the rest of the
+  // page exactly like issue #512 did on the upload tab. Cap the live ones by recency; the
+  // table below still shows every job's polled state.
+  const liveJobIds = useMemo(
+    () =>
+      selectLiveStreamIds(activeJobs, {
+        id: (job) => job.job_id,
+        activity: (job) => job.heartbeat_at ?? job.started_at
+      }),
+    [activeJobs]
+  );
   const columns: VirtualColumn<LoadJobStatus>[] = [
     {
       key: "job",
@@ -612,9 +625,17 @@ function BackupJobsPanel({
     <Panel title="Backup / Restore Jobs">
       {activeJobs.length > 0 ? (
         <div className="job-progress-list">
-          {activeJobs.map((job) => (
-            <JobProgress job={job} key={job.job_id} />
-          ))}
+          {activeJobs
+            .filter((job) => liveJobIds.has(job.job_id))
+            .map((job) => (
+              <JobProgress job={job} key={job.job_id} />
+            ))}
+          {activeJobs.length > liveJobIds.size ? (
+            <p className="form-note">
+              브라우저 동시 연결 한도 때문에 최근 작업 {liveJobIds.size}건만 실시간으로
+              표시합니다. 나머지 진행 중 작업은 아래 목록에서 확인하세요.
+            </p>
+          ) : null}
         </div>
       ) : null}
       <VirtualTable

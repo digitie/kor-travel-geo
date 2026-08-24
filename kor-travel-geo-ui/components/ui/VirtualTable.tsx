@@ -267,7 +267,14 @@ export function VirtualTable<T>({
                   {row.getVisibleCells().map((cell) => {
                     const col = colByKey.get(cell.column.id);
                     const style = col?.align ? { textAlign: col.align } : undefined;
-                    const content = flexRender(cell.column.columnDef.cell, cell.getContext());
+                    // Call the column's cell renderer directly instead of flexRender: the
+                    // columnDef wraps it in a fresh closure on every `columns` change, and
+                    // flexRender uses that closure as an element TYPE — so React unmounted and
+                    // remounted every cell subtree whenever `columns` was rebuilt, tearing down
+                    // stateful cells (e.g. the upload SSE streams of #512) on unrelated renders.
+                    const content = col
+                      ? col.cell(cell.row.original)
+                      : flexRender(cell.column.columnDef.cell, cell.getContext());
                     return col?.rowHeader ? (
                       <th className={col.cellClassName} key={cell.id} scope="row" style={style}>
                         {content}
@@ -370,7 +377,10 @@ export function VirtualTable<T>({
                           role="gridcell"
                           style={col?.align ? { textAlign: col.align } : undefined}
                         >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          {/* Direct call, not flexRender — see the `as="table"` branch above. */}
+                          {col
+                            ? col.cell(cell.row.original)
+                            : flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </div>
                       );
                     })}

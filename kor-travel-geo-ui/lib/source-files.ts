@@ -1,3 +1,4 @@
+import { MAX_LIVE_SSE_STREAMS, selectLiveStreamIds } from "@/lib/live-stream-budget";
 import type { components } from "@/types/api.gen";
 
 // --- Generated-type aliases (single source of truth: types/api.gen.ts) -------
@@ -258,46 +259,37 @@ export function isFailedSessionState(state: UploadSessionState): boolean {
 }
 
 /**
- * How many resumable sessions may hold a live SSE stream at once.
+ * How many resumable sessions may hold a live SSE stream at once (issue #512).
  *
- * Browsers cap concurrent HTTP/1.1 connections per origin at 6 (Chrome), and an
- * open `EventSource` holds one for its whole lifetime. Subscribing per table row
- * exhausted that budget as soon as ~6 sessions were resumable, and *every* other
- * same-origin request (rail navigation, react-query, logout) then queued for
- * minutes (issue #512, found by live e2e). 2 keeps live progress useful for the
- * sessions that matter while leaving 4 connections for the rest of the console.
+ * Re-exported from the shared budget so the upload tab and the backup/restore job list
+ * cannot drift apart; the rationale (browser 6-connection limit) lives there.
  */
-export const MAX_LIVE_UPLOAD_STREAMS = 2;
+export const MAX_LIVE_UPLOAD_STREAMS = MAX_LIVE_SSE_STREAMS;
 
 /**
- * Pick the sessions that get a live SSE stream: the `max` most recently updated.
+ * Pick the sessions that get a live SSE stream: the `max` most recently updated ones that
+ * can still emit progress.
  *
- * Everything else falls back to the `uploaded/expected` counter that react-query
- * polling already refreshes, so no information is lost — only the per-row live
- * percentage. Ordering is by `updated_at` (falling back to `created_at`), newest
- * first, with `upload_session_id` as a tiebreaker so the selection is stable
- * across re-renders (an unstable set would churn EventSources open/closed).
+ * Everything else falls back to the `uploaded/expected` counter, which the session-list
+ * query polls while anything is resumable (`RESUMABLE_POLL_MS` in `UploadTab`) — so no
+ * information is lost, only the per-row live percentage.
+ *
+ * `failed_*` sessions stay "resumable" so the operator can retry, but their stream will
+ * never emit; they are deprioritized so one cannot squat a slot while an actually-uploading
+ * session goes without.
  */
 export function selectLiveUploadStreamIds(
   sessions: readonly UploadSessionStatus[],
   max: number = MAX_LIVE_UPLOAD_STREAMS
 ): Set<string> {
-  if (max <= 0) {
-    return new Set();
-  }
-  const activity = (session: UploadSessionStatus): number => {
-    const stamp = session.updated_at ?? session.created_at;
-    const parsed = stamp ? Date.parse(stamp) : Number.NaN;
-    return Number.isNaN(parsed) ? 0 : parsed;
-  };
-  return new Set(
-    [...sessions]
-      .sort((a, b) => {
-        const delta = activity(b) - activity(a);
-        return delta !== 0 ? delta : a.upload_session_id.localeCompare(b.upload_session_id);
-      })
-      .slice(0, max)
-      .map((session) => session.upload_session_id)
+  return selectLiveStreamIds(
+    sessions,
+    {
+      id: (session) => session.upload_session_id,
+      activity: (session) => session.updated_at,
+      deprioritize: (session) => isFailedSessionState(session.state)
+    },
+    max
   );
 }
 

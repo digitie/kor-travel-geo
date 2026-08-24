@@ -157,7 +157,7 @@ describe("source-files helpers", () => {
 });
 
 describe("live upload SSE stream cap (#512)", () => {
-  function resumable(id: string, updatedAt: string | null): UploadSessionStatus {
+  function resumable(id: string, updatedAt: string): UploadSessionStatus {
     return {
       ...session("uploading"),
       upload_session_id: id,
@@ -165,12 +165,6 @@ describe("live upload SSE stream cap (#512)", () => {
       updated_at: updatedAt
     } as unknown as UploadSessionStatus;
   }
-
-  it("기본 상한은 브라우저 6-connection 한도보다 충분히 작다", () => {
-    // An EventSource holds a connection for its lifetime; leave headroom for navigation.
-    expect(MAX_LIVE_UPLOAD_STREAMS).toBeGreaterThan(0);
-    expect(MAX_LIVE_UPLOAD_STREAMS).toBeLessThan(6);
-  });
 
   it("세션이 많아도 상한만큼만 구독한다 (연결 고갈 회귀 방지)", () => {
     const sessions = Array.from({ length: 9 }, (_, i) =>
@@ -189,20 +183,26 @@ describe("live upload SSE stream cap (#512)", () => {
     expect([...selectLiveUploadStreamIds(sessions, 2)].sort()).toEqual(["mid", "newest"]);
   });
 
-  it("updated_at이 없으면 created_at으로 대체하고, 둘 다 없어도 throw하지 않는다", () => {
-    const withCreatedOnly = {
-      ...resumable("created-only", null),
-      created_at: "2026-06-08T00:00:00Z"
-    } as unknown as UploadSessionStatus;
-    const undated = {
-      ...resumable("undated", null),
-      created_at: null
-    } as unknown as UploadSessionStatus;
+  it("updated_at이 깨져 있어도 정렬을 오염시키지 않고 정상 세션이 선택된다", () => {
+    // updated_at은 계약상 필수/non-null이라 누락은 불가능하지만, 형식이 깨진 값은 가능하다.
+    const malformed = resumable("malformed", "not-a-timestamp");
     const live = selectLiveUploadStreamIds(
-      [undated, withCreatedOnly, resumable("older", "2026-06-02T00:00:00Z")],
+      [malformed, resumable("good", "2026-06-02T00:00:00Z")],
       1
     );
-    expect([...live]).toEqual(["created-only"]);
+    expect([...live]).toEqual(["good"]);
+  });
+
+  it("failed_* 세션은 진행 중 세션보다 뒤로 밀린다 (슬롯 squat 방지)", () => {
+    // failed_register는 재시도 가능해서 resumable로 남지만 SSE 이벤트가 오지 않는다.
+    const failedRecent = {
+      ...resumable("failed-recent", "2026-06-09T00:00:00Z"),
+      state: "failed_register"
+    } as unknown as UploadSessionStatus;
+    const uploadingOlder = resumable("uploading-older", "2026-06-01T00:00:00Z");
+    expect([...selectLiveUploadStreamIds([failedRecent, uploadingOlder], 1)]).toEqual([
+      "uploading-older"
+    ]);
   });
 
   it("세션 수가 상한 이하면 전부 구독한다", () => {
@@ -219,7 +219,7 @@ describe("live upload SSE stream cap (#512)", () => {
   });
 
   it("max가 0 이하면 아무것도 구독하지 않는다", () => {
-    expect(selectLiveUploadStreamIds([resumable("a", null)], 0).size).toBe(0);
+    expect(selectLiveUploadStreamIds([resumable("a", "2026-06-01T00:00:00Z")], 0).size).toBe(0);
   });
 
   it("입력 배열을 변형하지 않는다", () => {
