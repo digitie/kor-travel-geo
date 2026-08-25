@@ -45,10 +45,13 @@
   신설 조항으로 추가한다(v2 첫 사례).
 - admission: `/v2/dataset/*`는 전용 `dataset` scope + **전역 `address` 예산에서 제외**
   (ADR-067 D3). 현재 구조는 전역 `address` scope(모든 `/v1/address/*`·`/v2/*`) 위에
-  엔드포인트 scope 6종이 추가로 얹히는 형태고 전부 기본 비활성이다 — 전용 scope만 추가하면
-  전역 예산 소모가 그대로이므로 `_is_public_address_path`에서 `/v2/dataset/*`를 빼는 것까지가
-  한 세트다. 구현 규모: `admission.py` 3곳 + `Settings` 1개 + `build_admission_controller`
-  분기 1개.
+  엔드포인트 scope 6종이 추가로 얹히는 형태고 전부 기본 비활성이다. 주의 —
+  `scopes_for_path`는 `_is_public_address_path`가 거짓이면 **빈 튜플로 조기 반환**하므로, 그
+  판정에서 `/v2/dataset/*`를 빼면 전용 scope까지 함께 사라진다. 올바른 수정은 판정 분리다:
+  "scope 대상인가"와 "전역 예산 대상인가"를 나눠, dataset 경로는 endpoint scope는 얻되 전역
+  `address` scope 획득만 건너뛴다. 구현 지점: `admission.py`의 `_SCOPE_SETTING_NAMES`·
+  `_endpoint_scope_for_path`·`scopes_for_path`(전역 예산 제외 분기) + `Settings` 1개 +
+  `build_admission_controller` 분기 1개.
 - geo_cache는 `geocode`/`reverse` 호출 내부의 opt-in 캐시라 신규 라우트에 적용되지 않는다
   (확인 완료) — 별도 제외 작업 불필요.
 - 권장 폴링 주기 ≥ 60초를 api-reference에 명문화한다.
@@ -215,11 +218,16 @@
   - **외부 키 어휘 고정**: 공개 map의 키는 enum
     `juso`/`parcel_link`/`locsum`/`navi`/`shp`/`roadaddr_entrance`/`sppn_makarea`/`pobox`로
     고정한다(ADR-067 D2). 형태 B는 이미 kind명이므로 그대로, 형태 A의 source category 코드는
-    매핑표로 변환한다(코드는 `core/source_categories.py` 실재값):
+    매핑표로 변환한다 — 정본은 `source_rebuild_service._CATEGORY_TO_LOAD_KINDS`(rebuild 경로가
+    실제로 이 6개 category만 통과시킨다):
     `roadname_hangul_full → juso`와 `parcel_link` **두 키 모두**(한글 전체분 archive가 지번
     link의 원본이기도 하다), `locsum_full → locsum`, `navi_full → navi`,
-    `roadaddr_building_shape_bundle → shp`, `zone_shape_full → sppn_makarea`,
-    `roadaddr_entrance_full → roadaddr_entrance`, `epost_pobox_full → pobox`. 미지 category는
+    `electronic_map_full → shp`(shp_polygons_load의 원본 — `roadaddr_building_shape_bundle`은
+    rebuild 경로에 연결되지 않는 category라 매핑 대상이 아니다), `zone_shape_full →
+    sppn_makarea`, `roadaddr_entrance_full → roadaddr_entrance`. **`pobox` 키는 현재 어떤
+    writer도 방출하지 않는 예약 키**다(형태 A: `epost_pobox_full`이 rebuild에 비연결, 형태 B:
+    pobox kind 없음) — T-291a가 pobox 적재를 기록하게 될 때 추론 writer에의 추가 여부를 함께
+    확정한다. 미지 category는
     **생략**한다(억지 통과보다 누락이 낫다 — 토큰이 신뢰 신호). 매핑표의 정본은 구현 시
     `core/source_categories.py`와 대조해 확정하고, **writer 형태별 픽스처가 키 어휘 동일성을
     단언**한다(T-291b) — 같은 데이터가 rebuild 경로와 추론 경로에서 다른 키로 나오면 소비자의
@@ -287,8 +295,10 @@
 - **T-291a — 서빙 전환 기록 완결 (선행 조건, ADR-067 D0)**: 위반 5류 전부 —
   (1) `ktgctl load all-sidos --refresh` swap 경로, (2) `run_postload_maintenance(execute_safe)`
   의 `refresh_mv`, (3) `db_restore replace_current`의 active `restore` release 기록,
-  (4) **직접 서빙 base table 단독 적재**(pobox/sppn_makarea/shp_polygons/bulk — 서빙 가시
-  loader kind를 포함한 load job/batch 성공 종료 시 release 기록으로 일반화),
+  (4) **직접 서빙 base table 단독 적재**(pobox/sppn_makarea/shp_polygons/bulk) — 공용
+  post-loader recorder 하나를 두고 **REST 경로는 load job/batch 성공 종료 훅에서, CLI 경로는
+  각 `ktgctl load <kind>` 명령 성공 종료 시** 호출한다(per-source CLI 명령은 `load_jobs` 행
+  없이 로더를 직접 부르므로 job 종료 훅만으로는 CLI 절반이 미기록으로 남는다),
   (5) `scripts/benchmark_mv_refresh.py`의 라이브 shadow-swap. delta 계열 kind 유래는
   `daily_delta`, 그 외 단독 적재는 기존 규칙으로 라벨링. 주의: `record_mv_refresh_release`는
   `release_kind` 인자가 없고 `load_batch_id` 유무로만 `full_load`/`manual_rebuild`를

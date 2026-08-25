@@ -50,8 +50,9 @@ refresh는 `manual_rebuild`로 기록된다.
 
 이 상태로 외부 API를 열면 전국 재적재·pobox 교체 어느 쪽에서도 토큰이 유지되는 **거짓
 음성**이 생긴다(근거 1 위반). 따라서 **T-291a(서빙 전환 기록 완결)가 외부 공개(T-291c)의
-선행 조건**이다: 위 다섯 부류가 종료 시 release를 기록하게 하고(4류는 "서빙 가시 loader
-kind를 포함한 load job/batch 성공 종료 시 기록"으로 일반화), delta 계열 kind
+선행 조건**이다: 위 다섯 부류가 종료 시 release를 기록하게 하고(4류는 공용 post-loader
+recorder를 REST job/batch 종료 훅과 **각 CLI 명령 성공 종료** 양쪽에서 호출 — per-source
+CLI는 `load_jobs` 행 없이 로더를 직접 부른다), delta 계열 kind
 (`daily_juso_delta`·`juso_parcel_link_delta`·`shp_polygons_delta`) 유래는 `daily_delta`로,
 그 외 단독 적재는 기존 규칙(`manual_rebuild`/`full_load`)으로 라벨링한다. 기존
 `release_kind` enum으로 충분하며 스키마 변경은 없다. 본 ADR의 나머지는 T-291a 이후의 세계를
@@ -100,7 +101,8 @@ version_token = "dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32
   않는다. **키 어휘는 외부 고정 enum**(`juso`/`parcel_link`/`locsum`/`navi`/`shp`/
   `roadaddr_entrance`/`sppn_makarea`/`pobox`)으로 계약한다 — 내부 writer가 kind명(형태 B)과
   source category 코드(형태 A: `roadname_hangul_full` 등)라는 서로 다른 어휘를 쓰므로,
-  정규화기가 category 코드를 외부 어휘로 매핑한다(매핑표는 설계 정본 §2, 미지 키는 생략).
+  정규화기가 category 코드를 외부 어휘로 매핑한다(매핑표는 설계 정본 §2, 미지 키는 생략;
+  `pobox`는 현재 어떤 writer도 방출하지 않는 예약 키 — T-291a에서 방출 여부 확정).
   도출 불가 시 필드를 생략하고(exclude_none), 그 경우 토큰만이 신뢰 신호라는 규약을
   문서화한다.
 - 내부 UUID·`source_set_hash`·`mv_hash`·`row_counts`·git/alembic/PostgreSQL 버전·`source_set`
@@ -120,9 +122,12 @@ admission의 현재 구조: 전역 `address` scope가 `/v1/address/*`·`/v2/*` �
 폴링 전용 엔드포인트가 전역 `address` 예산을 함께 소모하면 활성화 시 메타데이터가 지오코딩
 본체를 굶길 수 있다. 따라서 `/v2/dataset/*`는 (1) 전용 `dataset` scope를 얻고 (2) **전역
 `address` 예산에서 제외**한다 — 전용 scope만 추가하고 전역 포함을 유지하면 공유 예산 소모가
-그대로라 목적을 달성하지 못한다. 구현 규모(T-291c): `admission.py`의
-`_SCOPE_SETTING_NAMES`·`_endpoint_scope_for_path`·`_is_public_address_path`(제외 규칙) 3곳 +
-`Settings` 필드 1개 + `build_admission_controller` 분기 1개. admission 비활성 상태의
+그대로라 목적을 달성하지 못한다. 단 `_is_public_address_path`에서 단순 제외하면
+`scopes_for_path`의 조기 반환 때문에 전용 scope까지 사라지므로, "scope 대상"과 "전역 예산
+대상" 판정을 분리해 dataset 경로는 endpoint scope만 얻게 한다. 구현 규모(T-291c):
+`admission.py`의 `_SCOPE_SETTING_NAMES`·`_endpoint_scope_for_path`·`scopes_for_path`(전역
+예산 제외 분기) 3곳 + `Settings` 필드 1개 + `build_admission_controller` 분기 1개.
+admission 비활성 상태의
 backpressure는 서버 측 TTL 캐시 + 권장 폴링 주기(≥60초) + 키 회수다.
 
 ### D4 — API 형태는 v2 POST 고정 + body 조건부 폴링으로 한다
