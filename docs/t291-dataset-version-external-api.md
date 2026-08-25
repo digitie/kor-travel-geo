@@ -23,8 +23,9 @@
 `ops.serving_releases`(uuid·상태·계보·`mv_hash`·`activated_at`), 백업은
 `ops.artifacts.artifact_id`+`sha256`+manifest `active_serving{serving_release_id,…}`.
 이 작업의 빈 곳은 저장이 아니라 (1) **서빙 전환이 빠짐없이 기록되는 것**(ADR-067 D0 — 현재
-3개 경로 미기록, T-291a가 수정), (2) **외부 노출 계약 + 변경 감지 시맨틱**, (3) **admin
-관측**이다. 1차 스키마 변경은 0건이다(ADR-067 D5).
+위반 5류: refresh 3경로 + 직접 서빙 base table 단독 적재 + benchmark 스크립트, T-291a가
+수정), (2) **외부 노출 계약 + 변경 감지 시맨틱**, (3) **admin 관측**이다. 1차 스키마 변경은
+0건이다(ADR-067 D5).
 
 ## 1. 외부 API 계약
 
@@ -42,10 +43,12 @@
 - 응답 헤더 `Cache-Control: no-store` — 변경 감지 엔드포인트가 중간 캐시에 얹히면 감지 지연이
   계약 위반처럼 보인다. v2 공통 규약 문서(`docs/api-reference/v2/README.md`)에 이 헤더 규약을
   신설 조항으로 추가한다(v2 첫 사례).
-- admission: `/v2/dataset/*` **전용 scope**를 둔다(`_endpoint_scope_for_path` 1항목 + 설정
-  1개, ADR-067 D3). 주의 — 현재 admission은 단일 `address` scope에 `/v1/address/*`와 `/v2/*`가
-  함께 들어가고 기본 비활성(`api_max_concurrency=None`)이다. 전용 scope가 없으면 활성화 시
-  폴링이 지오코딩 본체 예산을 소모한다.
+- admission: `/v2/dataset/*`는 전용 `dataset` scope + **전역 `address` 예산에서 제외**
+  (ADR-067 D3). 현재 구조는 전역 `address` scope(모든 `/v1/address/*`·`/v2/*`) 위에
+  엔드포인트 scope 6종이 추가로 얹히는 형태고 전부 기본 비활성이다 — 전용 scope만 추가하면
+  전역 예산 소모가 그대로이므로 `_is_public_address_path`에서 `/v2/dataset/*`를 빼는 것까지가
+  한 세트다. 구현 규모: `admission.py` 3곳 + `Settings` 1개 + `build_admission_controller`
+  분기 1개.
 - geo_cache는 `geocode`/`reverse` 호출 내부의 opt-in 캐시라 신규 라우트에 적용되지 않는다
   (확인 완료) — 별도 제외 작업 불필요.
 - 권장 폴링 주기 ≥ 60초를 api-reference에 명문화한다.
@@ -198,14 +201,27 @@
   - **형태 B**(추론 경로, writer 2곳): `admin_repo._infer_current_source_set`(7종 +
     `source` 키)과 `backup.infer_source_set`(6종, `source` 없음 — restore 후보 스냅샷이 이를
     복사). 형상: `{yyyymm_by_kind: {...}, mixed_yyyymm, source?}` → `yyyymm_by_kind` 사용.
-  - **형태 C**(hot_swap/rollback 기록 경로): 빈 값 → **계보 폴백**:
+  - **형태 C**(hot_swap/rollback 기록 경로): `{"hot_swap": {...}}` /
+    `{"hot_swap_rollback": {...}}` 같은 기준월 없는 메타 전용 payload(빈 dict 아님 — `if not
+    source_set` 판정으로는 놓친다) → **계보 폴백**:
     `parent_dataset_snapshot_id`를 최대 5 hop 소급해 최초 정규화 가능한 `source_set` 채택.
     끝까지 실패하면 `reference_months` 생략.
   - **형태 D**(flat map, `batch_dag._source_set` + 운영자 임의 payload):
     `{category: "YYYYMM"}` 문자열 map — 값이 `^\d{6}$`이면 그대로 채택. `str()` 평탄화로
     repr 문자열이 된 열화값은 무시하고 계보 폴백으로 넘어간다(열화 자체의 수정은 T-291e).
   - **비카테고리 키 denylist**: `load_batch_id`, `rebuild_metadata`, `source`,
-    `yyyymm_by_kind`, `mixed_yyyymm` — map을 순회할 때 건너뛴다(형태 A/D 공용).
+    `yyyymm_by_kind`, `mixed_yyyymm`, `hot_swap`, `hot_swap_rollback` — map을 순회할 때
+    건너뛴다(형태 A/C/D 공용).
+  - **외부 키 어휘 고정**: 공개 map의 키는 enum
+    `juso`/`parcel_link`/`locsum`/`navi`/`shp`/`roadaddr_entrance`/`sppn_makarea`/`pobox`로
+    고정한다(ADR-067 D2). 형태 B는 이미 kind명이므로 그대로, 형태 A의 source category 코드는
+    매핑표로 변환한다: `roadname_hangul_full → juso`, `juso_parcel_link_full → parcel_link`,
+    `locsum_full → locsum`, `navi_full → navi`, `zone_shape_full`/`building_shape_full → shp`,
+    `roadaddr_entrance_full → roadaddr_entrance`, `epost_pobox_full → pobox`. 미지 category는
+    **생략**한다(억지 통과보다 누락이 낫다 — 토큰이 신뢰 신호). 매핑표의 정본은 구현 시
+    `core/source_categories.py`와 대조해 확정하고, **writer 형태별 픽스처가 키 어휘 동일성을
+    단언**한다(T-291b) — 같은 데이터가 rebuild 경로와 추론 경로에서 다른 키로 나오면 소비자의
+    `reference_months.juso` 참조가 조용히 빈다.
   - `reference_months_mixed` = 정규화 결과 값들이 서로 다르면 true.
 
   **계보 1 hop 근거(정정)**: hot-swap 릴리스의 `parent_dataset_snapshot_id`는
@@ -266,17 +282,21 @@
 
 ## 5. 구현 task 분해 (이번 PR은 문서만; a→b→c→d 의존, e 독립)
 
-- **T-291a — 서빙 전환 기록 완결 (선행 조건, ADR-067 D0)**: `ktgctl load all-sidos --refresh`
-  swap 경로·`run_postload_maintenance(execute_safe)`의 `refresh_mv`가 release를 기록하도록
-  배선(`record_mv_refresh_release` 재사용), `db_restore replace_current`가 active `restore`
-  release를 기록, 일변동분 유래 refresh를 `release_kind='daily_delta'`로 라벨링. 기록 누락
-  회귀 테스트 포함.
+- **T-291a — 서빙 전환 기록 완결 (선행 조건, ADR-067 D0)**: 위반 5류 전부 —
+  (1) `ktgctl load all-sidos --refresh` swap 경로, (2) `run_postload_maintenance(execute_safe)`
+  의 `refresh_mv`, (3) `db_restore replace_current`의 active `restore` release 기록,
+  (4) **직접 서빙 base table 단독 적재**(pobox/sppn_makarea/shp_polygons/bulk — 서빙 가시
+  loader kind를 포함한 load job/batch 성공 종료 시 release 기록으로 일반화),
+  (5) `scripts/benchmark_mv_refresh.py`의 라이브 shadow-swap. delta 계열 kind 유래는
+  `daily_delta`, 그 외 단독 적재는 기존 규칙으로 라벨링. 주의: `record_mv_refresh_release`는
+  `release_kind` 인자가 없고 `load_batch_id` 유무로만 `full_load`/`manual_rebuild`를
+  파생하므로 **시그니처 확장이 필요**하다(순수 재배선이 아니다). 기록 누락 회귀 테스트 포함.
 - **T-291b — 토큰·정규화기·공용 사영 (backend 내부만, 스키마 0건)**:
   `core/dataset_version.py`(파생식 + 정규형 고정 + 정규화기 4형태/denylist/폴백) + repository
   공용 사영 + keyset 커서 + 단위 테스트. API 미노출.
 - **T-291c — 외부 v2 엔드포인트**: `dto/v2.py` DTO + `routers/dataset.py` +
   `_V2_VALIDATION_RESPONSES` 재export·`_VALIDATION_STRUCTURED_400` 배선 +
-  `Cache-Control: no-store` + `/v2/dataset/*` 전용 admission scope +
+  `Cache-Control: no-store` + `/v2/dataset/*` 전용 admission scope(+전역 `address` 예산 제외) +
   `scripts/export_openapi.py` 재생성(CI drift) + **api-reference 4건**: 신규
   `docs/api-reference/v2/dataset-version.md`(소비자 프로토콜·보증·엣지 표),
   `docs/api-reference/README.md`(구현 범위·문서 지도), `docs/api-reference/llm-summary.md`

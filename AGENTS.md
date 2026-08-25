@@ -141,7 +141,7 @@ AI 에이전트는 같은 checkout을 번갈아 쓰지 않고, Linux에서 읽�
 2. `SKILL.md` — DO NOT 룰, 자주 묻는 작업, 도메인 어휘
 3. `docs/architecture/architecture.md` — 두 패키지의 관계, 의존 방향
 4. `docs/resume.md` — 현재 진척도와 "다음 한 작업"
-5. `docs/adr/README.md` — 관련 ADR (인덱스 포인터 `docs/decisions.md`)
+5. `docs/adr/README.md` — 관련 ADR 인덱스
 
 Windows 재설치, WSL 초기화, 새 세션에서 이어받는 상황이면 `docs/windows-reinstall-recovery.md`도 함께 읽는다. T-027 실 데이터 전체 적재는 이미 완료됐으므로 별도 금지선이 없다. 빈 DB가 필요하면 백업 복원(ADR-030/ADR-036) 또는 `scripts/fullload_test.sh` 재실행으로 처리한다. T-213/T-214 기준 원천과 산출물 경로는 `docs/t213-data-preservation.md`를 우선 참고하고, 과거 T-027 기준월 분리와 산출물 경로는 `docs/t027-fullload-plan.md`를 참고한다.
 

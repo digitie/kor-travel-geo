@@ -14,11 +14,13 @@ uuid4 파생이라 이력 리셋·복원 후에도 재사용이 없고 신규 �
 
 적대적 리뷰 2명(문서 일관성 / 설계 실질)이 설계의 실질 결함을 잡았다.
 
-- **기반 불변식이 거짓이었다** — "모든 서빙 전환은 release 행을 만든다"고 썼지만, 실제로는
-  `ktgctl load all-sidos --refresh`(전국 적재 문서화 경로)·postload `execute_safe`·restore
-  `replace_current` 세 경로가 release를 기록하지 않는다. 전국 재적재에도 토큰이 안 바뀌는
+- **기반 불변식이 거짓이었다** — "모든 서빙 전환은 release 행을 만든다"고 썼지만, 실제
+  위반이 **다섯 부류**다: refresh 3경로(`ktgctl load all-sidos --refresh`·postload
+  `execute_safe`·restore `replace_current`)에 더해, 2차 재리뷰가 **MV를 거치지 않고 base
+  table을 직접 서빙하는 표면**(pobox·sppn_makarea·건물 polygon)의 단독 적재와 benchmark
+  스크립트의 라이브 shadow-swap을 추가로 찾았다. pobox 파일 하나 교체해도 토큰이 안 바뀌는
   **거짓 음성**(회복 불가 실패 모드)이다. ADR을 "불변식은 이 설계의 요구사항이며 현재
-  미성립, T-291a(기록 완결)가 외부 공개의 선행 조건"으로 재서술했다.
+  미성립, T-291a(기록 완결 — 5류 전부)가 외부 공개의 선행 조건"으로 재서술했다.
 - `release_kind='daily_delta'`는 enum에만 있고 쓰는 코드가 없다 — `change_type: "delta"`가
   도달 불가였다. T-291a의 라벨링에 포함.
 - `rollback → "revert"` 매핑은 hot-swap rollback 사건을 1:1로 노출해 "은닉 위해 coarse"라는
@@ -27,7 +29,8 @@ uuid4 파생이라 이력 리셋·복원 후에도 재사용이 없고 신규 �
   비활성이 사실. 전용 scope를 T-291c에 추가.
 - `source_set` 실전 형태는 3이 아니라 4(+비카테고리 키 오염, `effective_yyyymm` nullable) —
   정규화기 사양을 writer별 픽스처 고정으로 재작성. restore 1-hop 근거도 정정(부모는 manifest
-  복사본이 아니라 교체된 DB의 백업 시점 active 스냅샷).
+  복사본이 아니라 교체된 DB의 백업 시점 active 스냅샷). `reference_months`의 **키 어휘**도
+  writer 계열마다 달랐다(kind명 vs source category 코드) — 외부 고정 enum + 매핑표로 계약.
 - 엣지 표 정정: `rolled_back` 상태는 어떤 코드도 쓰지 않음(전이는 active→superseded뿐),
   restore 3모드 분리, hot-swap smoke 실패 자동 원복(토큰 일시 요동) 행 추가.
 - admin은 신규 패널이 아니라 **기존 `/ops/releases`+OpsPanel releases 표 확장**으로 rescope —
@@ -39,9 +42,10 @@ active ≤ 1을 강제한다.
 
 함께 정리한 문서 불일치: `docs/adr/README.md` 헤더 "다음 후보 = ADR-066"(066은 이미 존재)
 → 068, `CLAUDE.md` "현재 ADR-001~063" → ~067, 그리고 stub인 옛 `docs/decisions.md`를
-가리키던 살아있는 지침 참조 **12곳**(SKILL.md·AGENTS.md·resume·agent-guide 6곳·
-architecture 2곳·frontend-package·dev-environment)을 `docs/adr/`로 일괄 수정(이력 기록물
-2건은 과거 서술이라 유지).
+가리키던 **살아있는 지침·색인 20곳**(SKILL.md·AGENTS.md 2곳·README·resume 2곳·agent-guide
+7곳·architecture 2곳·frontend-package·dev-environment·windows-reinstall-recovery 2곳 등)을
+`docs/adr/`로 일괄 수정. 이력·설계 기록물(doc-consistency-audit, reflection-summary, 과거
+tNNN 설계 문서의 당시 인용 등)은 과거 서술이라 의도적으로 유지.
 
 ## 2026-08-25 (이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot, by claude)
 

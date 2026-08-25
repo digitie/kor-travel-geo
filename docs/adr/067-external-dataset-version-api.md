@@ -23,23 +23,15 @@
 또한 원천별 기준월이 서로 다른 혼합 상태가 정상 운영 상태다(C10 WARN은 품질 신호이지 버그가
 아니다).
 
-## 근거
-
-세 가지 축이 설계를 결정한다.
-
-1. **거짓 음성 불허** — "바뀌었는데 안 바뀌었다고 답하는" 실패만은 회복 경로가 없다(소비자가
-   영원히 재동기화하지 않는다). 거짓 양성(안 바뀌었는데 바뀌었다고 답함)은 불필요한 재동기화
-   1회로 끝나므로 허용한다.
-2. **복원 내성** — hot-swap이 DB 전체를 되돌리는 시스템에서, DB 안에 사는 단조 카운터는 값이
-   재사용되어 1을 위반한다. 토큰은 재사용이 구조적으로 불가능한 재료(uuid4)에서 파생해야 한다.
-3. **최소 노출** — 이 표면은 운영 메타데이터를 외부에 여는 문이다. 소비자의 행동(재동기화
-   여부·방식 결정)에 필요한 최소만 노출한다.
-
 ## 결정
 
-### D0 — 기반 불변식: 모든 서빙 전환은 `ops.serving_releases`에 새 행을 만들어야 한다 (현재 미성립 — T-291a가 선행 조건)
+### D0 — 기반 불변식: 외부에서 관측 가능한 서빙 데이터가 바뀌는 **모든 운영 경로**는 종료 시 `ops.serving_releases`에 새 행을 만들어야 한다 (현재 미성립 — T-291a가 선행 조건)
 
-이 계약의 기반 불변식이다. **현재 코드는 이를 세 경로에서 위반한다**:
+이 계약의 기반 불변식이다. "서빙 전환"은 MV swap만이 아니다 — pobox(`postal_pobox`)·SPPN
+경계(`tl_sppn_makarea`)·건물 polygon(`tl_spbd_buld_polygon`) 등은 **MV를 거치지 않고 base
+table을 직접 서빙**하므로, 그 테이블의 재적재도 외부 응답을 바꾸는 서빙 전환이다.
+
+**현재 코드는 불변식을 다섯 부류에서 위반한다**:
 
 1. `ktgctl load all-sidos --refresh`(기본 `swap=True`) — 전국 적재 문서화 경로가 release를
    기록하지 않는다.
@@ -47,14 +39,23 @@
    갱신하면서 release를 기록하지 않는다.
 3. `db_restore mode="replace_current"` — 라이브 DB를 덮어쓰면서 `pending` 행만 남기고 active
    release를 만들지 않는다.
+4. **직접 서빙 base table의 단독 적재** — `pobox_load`·`sppn_makarea_load`·
+   `shp_polygons_load`·`bulk_load`(REST `submit_load`/CLI 양쪽에서 도달)는 서빙 중인 base
+   table을 TRUNCATE-reload하면서 `refresh_mv`도 release 기록도 하지 않는다.
+5. `scripts/benchmark_mv_refresh.py` — **라이브** MV를 refresh/shadow-swap하면서 release를
+   기록하지 않는다.
 
 또한 `release_kind='daily_delta'`는 enum에만 있고 쓰는 코드가 없다 — 일변동분 적재 후 MV
 refresh는 `manual_rebuild`로 기록된다.
 
-이 상태로 외부 API를 열면 전국 데이터를 통째로 갈아끼워도 토큰이 유지되는 **거짓 음성**이
-생긴다(근거 1 위반). 따라서 **T-291a(서빙 전환 기록 완결)가 외부 공개(T-291c)의 선행
-조건**이다: 위 세 경로가 release를 기록하게 하고, 일변동분 유래 refresh를 `daily_delta`로
-라벨링한다. 본 ADR의 나머지는 T-291a 이후의 세계를 서술한다.
+이 상태로 외부 API를 열면 전국 재적재·pobox 교체 어느 쪽에서도 토큰이 유지되는 **거짓
+음성**이 생긴다(근거 1 위반). 따라서 **T-291a(서빙 전환 기록 완결)가 외부 공개(T-291c)의
+선행 조건**이다: 위 다섯 부류가 종료 시 release를 기록하게 하고(4류는 "서빙 가시 loader
+kind를 포함한 load job/batch 성공 종료 시 기록"으로 일반화), delta 계열 kind
+(`daily_juso_delta`·`juso_parcel_link_delta`·`shp_polygons_delta`) 유래는 `daily_delta`로,
+그 외 단독 적재는 기존 규칙(`manual_rebuild`/`full_load`)으로 라벨링한다. 기존
+`release_kind` enum으로 충분하며 스키마 변경은 없다. 본 ADR의 나머지는 T-291a 이후의 세계를
+서술한다.
 
 ### D1 — 버전 토큰은 active serving release에서 파생한 opaque 토큰으로 한다. 신규 저장 없음
 
@@ -96,7 +97,11 @@ version_token = "dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32
     소비자 행동은 어차피 전체 재동기화로 동일하다. (필요해지면 additive로 재도입 가능 —
     ADR-060.)
 - 기준월은 원천별 map으로 공개한다 — 혼합 기준월이 정상 상태이므로 대표값 하나로 뭉개지
-  않는다. 도출 불가 시 필드를 생략하고(exclude_none), 그 경우 토큰만이 신뢰 신호라는 규약을
+  않는다. **키 어휘는 외부 고정 enum**(`juso`/`parcel_link`/`locsum`/`navi`/`shp`/
+  `roadaddr_entrance`/`sppn_makarea`/`pobox`)으로 계약한다 — 내부 writer가 kind명(형태 B)과
+  source category 코드(형태 A: `roadname_hangul_full` 등)라는 서로 다른 어휘를 쓰므로,
+  정규화기가 category 코드를 외부 어휘로 매핑한다(매핑표는 설계 정본 §2, 미지 키는 생략).
+  도출 불가 시 필드를 생략하고(exclude_none), 그 경우 토큰만이 신뢰 신호라는 규약을
   문서화한다.
 - 내부 UUID·`source_set_hash`·`mv_hash`·`row_counts`·git/alembic/PostgreSQL 버전·`source_set`
   원본, 그리고 **백업 관련 정보 일체**(존재·시각·artifact id·sha256)는 비공개다.
@@ -107,10 +112,17 @@ version_token = "dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32
 전역 적용을 그대로 받는다(`geoip_open_paths` 미추가). 버전 메타데이터는 같은 키로 접근 가능한
 주소 데이터 본체보다 민감하지 않다.
 
-admission은 현재 단일 `address` scope 하나뿐이고 기본은 **비활성**(`api_max_concurrency`
-기본 None)이다. 폴링 전용으로 설계된 엔드포인트가 활성화 시 지오코딩 본체와 같은 예산을
-소모하면 메타데이터가 본품을 굶길 수 있으므로, `/v2/dataset/*`에는 **전용 admission scope**를
-둔다(T-291c, `_endpoint_scope_for_path` 1항목 + 설정 1개). admission 비활성 상태의
+admission의 현재 구조: 전역 `address` scope가 `/v1/address/*`·`/v2/*` 전 경로에 걸리고,
+그 위에 엔드포인트별 scope 6종(geocode/reverse/search/zipcode/pobox/regions)이 **추가로**
+얹힌다(`scopes_for_path`는 엔드포인트 scope에 더해 전역 scope도 항상 획득한다). 전부 기본
+**비활성**(`KTG_API_*_MAX_CONCURRENCY` 미설정 시 미들웨어 자체가 설치되지 않음).
+
+폴링 전용 엔드포인트가 전역 `address` 예산을 함께 소모하면 활성화 시 메타데이터가 지오코딩
+본체를 굶길 수 있다. 따라서 `/v2/dataset/*`는 (1) 전용 `dataset` scope를 얻고 (2) **전역
+`address` 예산에서 제외**한다 — 전용 scope만 추가하고 전역 포함을 유지하면 공유 예산 소모가
+그대로라 목적을 달성하지 못한다. 구현 규모(T-291c): `admission.py`의
+`_SCOPE_SETTING_NAMES`·`_endpoint_scope_for_path`·`_is_public_address_path`(제외 규칙) 3곳 +
+`Settings` 필드 1개 + `build_admission_controller` 분기 1개. admission 비활성 상태의
 backpressure는 서버 측 TTL 캐시 + 권장 폴링 주기(≥60초) + 키 회수다.
 
 ### D4 — API 형태는 v2 POST 고정 + body 조건부 폴링으로 한다
@@ -150,6 +162,18 @@ releases 표가 이미 release 목록을 렌더하므로, 그 응답 DTO(`Servin
 이력 개변·기준월 수기 정정·토큰 회전 UI는 두지 않는다 — ops는 append-only 철학(ADR-033)이고,
 토큰은 파생값이라 회전할 실체가 없다. 키 수명주기는 기존 SettingsPanel이 담당한다.
 
+## 근거
+
+세 가지 축이 설계를 결정한다.
+
+1. **거짓 음성 불허** — "바뀌었는데 안 바뀌었다고 답하는" 실패만은 회복 경로가 없다(소비자가
+   영원히 재동기화하지 않는다). 거짓 양성(안 바뀌었는데 바뀌었다고 답함)은 불필요한 재동기화
+   1회로 끝나므로 허용한다.
+2. **복원 내성** — hot-swap이 DB 전체를 되돌리는 시스템에서, DB 안에 사는 단조 카운터는 값이
+   재사용되어 1을 위반한다. 토큰은 재사용이 구조적으로 불가능한 재료(uuid4)에서 파생해야 한다.
+3. **최소 노출** — 이 표면은 운영 메타데이터를 외부에 여는 문이다. 소비자의 행동(재동기화
+   여부·방식 결정)에 필요한 최소만 노출한다.
+
 ## 결과
 
 ### 엣지 케이스별 거동 (계약, T-291a 이후 기준)
@@ -158,10 +182,11 @@ releases 표가 이미 release 목록을 렌더하므로, 그 응답 DTO(`Servin
 |---|---|---|
 | full_load / manual_rebuild / (T-291a 이후) CLI refresh swap·postload execute_safe | 새 release → 새 토큰 | `changed:true`, `full`. 동일 데이터 재적재도 새 토큰(허용된 과잉 감지) |
 | daily_delta (T-291a의 라벨링 이후) | 새 release → 새 토큰 | `changed:true`, `delta` → 소비자는 증분 갱신 |
+| 직접 서빙 base table 단독 적재 (pobox/sppn/polygon — T-291a 이후) | 새 release → 새 토큰 | `changed:true`, `full`. 현재 코드는 미기록이라 외부 응답이 바뀌어도 토큰 불변인 거짓 음성 — D0 4류 수정 대상 |
 | restore `new_database`(hot-swap 미실행) | `pending` 행만 **라이브** 원장에 추가 | 서빙 미변경 — 사영이 `pending`을 배제하므로 토큰·응답 불변 (정상) |
 | restore `replace_current` | (T-291a 이후) active `restore` 행 기록 → 새 토큰 | `changed:true`, `full`. 현재 코드는 `pending`만 남겨 토큰이 안 바뀌는 거짓 음성 — D0의 수정 대상 |
 | hot-swap restore(ADR-036) | 교체 DB 원장 = 백업 시점 이력 + restore 신규 active 행. 백업~복원 사이 릴리스 소멸 | 새 토큰, `full`. 소비자 저장 토큰이 소멸분이면 `known_version_found:false` → 전체 재동기화 |
-| hot-swap smoke 실패 자동 원복 | 짧게 교체 DB가 서빙된 뒤 원복. **어느 쪽 원장에도 새 행 없음**(감사 로그만) | 그 창에서 폴링한 소비자는 토큰이 T1→T0→T1로 일시 요동 — 과잉 재동기화 1회로 수렴, 계약 위반 아님 |
+| hot-swap smoke 실패 자동 원복 | 짧게 교체 DB가 서빙된 뒤 원복. **어느 쪽 원장에도 새 행 없음**(감사 로그만) | 그 창에서 폴링한 소비자는 백업 시점 토큰을 잠깐 봤다가 원래 토큰으로 복귀 — 과잉 재동기화 최대 2회로 수렴, 계약 위반 아님 |
 | hot-swap rollback(원 DB 복귀) | 이전 원장 복귀 + `rollback` 신규 active 행 | 새 토큰, `full`. 과거 토큰들이 history에 재등장하나 active는 항상 신규 행 → 계약 무변화 |
 | `/v1/admin/ops/releases/{id}/rollback` | source match set 교체만 — release 행도 서빙 객체도 불변 | 서빙 전환이 아니므로 토큰 불변 (이후 재적재/refresh 시점에 감지) |
 | 이력 리셋 / DB 재구축 | 원장 신규 시작 | UUID 파생이라 연속성 요구 자체가 없다. `known_version_found:false`/`since_found:false` → 전체 재동기화 |

@@ -7,7 +7,7 @@
 - 📝 **T-291 — 데이터셋 버전 외부 공개 API 설계 완료, 구현 대기 (2026-08-26, by claude)** —
   외부 소비자의 주소 DB 변경 감지·이력 확인용 `POST /v2/dataset/version`·`/history` 설계.
   버전 토큰은 active serving release 파생 opaque 값(신규 저장 0건, hot-swap 복원에도 재사용
-  없음), 인증은 기존 공개 API 키+GeoIP 게이트 재사용, admin은 `/admin/ops` 읽기 전용 패널.
+  없음), 인증은 기존 공개 API 키+GeoIP 게이트 재사용, admin은 기존 releases 표면 확장(읽기 전용).
   결정 [ADR-067](adr/067-external-dataset-version-api.md)(proposed), 정본
   [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
   적대적 리뷰에서 기반 불변식의 구멍이 확인됐다 — 서빙 전환 3경로(CLI refresh swap·postload

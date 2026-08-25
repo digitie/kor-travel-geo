@@ -242,7 +242,7 @@ codegraph sync && codegraph status
     `ui` / `docs` / `ci` / `chore`
   - `<verb>`: `add` / `fix` / `refactor` / `remove` / `rename` / `perf` /
     `test` / `chore`
-- 작업 단위로 `docs/journal.md`, `docs/resume.md`, (필요 시) `docs/decisions.md`,
+- 작업 단위로 `docs/journal.md`, `docs/resume.md`, (필요 시) `docs/adr/`,
   `CHANGELOG.md` 갱신.
 - 4 게이트 + 해당 시 추가 게이트를 통과 확인(§9).
 

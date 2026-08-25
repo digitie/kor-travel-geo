@@ -45,7 +45,7 @@ README는 입구 역할만 합니다. 세부 절차와 결정은 아래 문서�
 | 프론트엔드 패키지 세부 사양 | [`docs/architecture/frontend-package.md`](docs/architecture/frontend-package.md) |
 | PostgreSQL/PostGIS 데이터 모델 | [`docs/architecture/data-model.md`](docs/architecture/data-model.md) |
 | 외부 API 키와 호출 정책 | [`docs/architecture/external-apis.md`](docs/architecture/external-apis.md) |
-| ADR 인덱스 | [`docs/adr/README.md`](docs/adr/README.md), [`docs/decisions.md`](docs/decisions.md) |
+| ADR 인덱스 | [`docs/adr/README.md`](docs/adr/README.md) |
 
 ## 개발 환경 요약
 
