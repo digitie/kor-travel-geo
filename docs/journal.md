@@ -2,6 +2,32 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-26 (T-291/ADR-067 — 데이터셋 버전 외부 공개 API 설계, by claude)
+
+외부 소비자가 "주소 DB가 바뀌었는가"를 감지하고 이력을 확인해 자기 파생 데이터를 갱신할 수
+있게 하는 외부 API + admin 관측의 **설계 문서만** 작성했다(구현은 T-291a~d 후속).
+
+핵심 판정 — **단조 seq 원장 기각**: hot-swap restore(ADR-036)가 원장 테이블 자체를 백업
+시점으로 되돌리므로(백업 seq=40 → 라이브 43 → 복원 후 다음 발급 41) 같은 epoch 안에서 seq가
+재사용된다. epoch가 스왑되는 DB 안에 있는 한 방어 불가. 채택은 active serving release에서
+파생한 opaque 토큰(`"dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32]`) —
+uuid4 파생이라 이력 리셋·복원 후에도 재사용이 없고 **신규 저장이 0건**이다. 계약은 한 문장:
+토큰 동일 ⇒ 서빙 미변경, 역은 비보증.
+
+공개 필드는 4개뿐(`version_token`/`activated_at`/`change_type` coarse 3종/`reference_months`
+원천별 map+mixed). 내부 UUID·source_set_hash·mv_hash·백업 정보 일체 비공개. 인증은 기존 공개
+API 키(ADR-064)+GeoIP 게이트(ADR-037) 재사용, v2 POST 고정(ADR-060)에 body 조건부 폴링
+(`known_version` → `changed`/`known_version_found`). admin은 `/admin/ops` 읽기 전용 패널 +
+**외부 응답 미리보기**(공개 범위 회귀를 운영자가 눈으로 잡는 표면).
+
+워크플로 스펙의 오류를 문서화 전에 잡았다 — "active 다중은 이론상 가능, partial unique
+index는 T-291d에서 검토"라고 했지만 `idx_ops_serving_releases_one_active`(T-049)가 이미
+DB에서 active ≤ 1을 강제한다. 설계 문서가 실제 스키마와 어긋난 채 나갈 뻔한 자리다.
+
+함께 정리한 문서 불일치: `docs/adr/README.md` 헤더 "다음 후보 = ADR-066"(066은 이미 존재)
+→ 068, `CLAUDE.md` "현재 ADR-001~063" → ~067, `SKILL.md` §7 체크리스트가 stub인 옛
+`docs/decisions.md`를 가리키던 것 → `docs/adr/` + 색인 갱신.
+
 ## 2026-08-25 (이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot, by claude)
 
 #523에서 분리한 항목. 가드를 붙이기 전에 **각 suite가 실제로 어떤 DB를 가리키는지 먼저 감사**했다 —

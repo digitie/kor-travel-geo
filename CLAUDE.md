@@ -88,7 +88,7 @@ cd kor-travel-geo-ui && npm run lint && npm run type-check && npm run test && np
 codegraph sync && codegraph status
 ```
 
-## 주요 결정 사항 (전체: `docs/adr/`, 현재 ADR-001~063)
+## 주요 결정 사항 (전체: `docs/adr/`, 현재 ADR-001~067)
 
 핵심 구조 결정만 발췌한다. 순수 개발 규칙 ADR은 `SKILL.md`로 이관됐고, 전체 색인·분류는
 `docs/adr/README.md`가 정본이다.

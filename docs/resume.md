@@ -4,6 +4,14 @@
 
 ## 현재 진척도 (2026-08-17 갱신, by claude)
 
+- 📝 **T-291 — 데이터셋 버전 외부 공개 API 설계 완료, 구현 대기 (2026-08-26, by claude)** —
+  외부 소비자의 주소 DB 변경 감지·이력 확인용 `POST /v2/dataset/version`·`/history` 설계.
+  버전 토큰은 active serving release 파생 opaque 값(신규 저장 0건, hot-swap 복원에도 재사용
+  없음), 인증은 기존 공개 API 키+GeoIP 게이트 재사용, admin은 `/admin/ops` 읽기 전용 패널.
+  결정 [ADR-067](adr/067-external-dataset-version-api.md)(proposed), 정본
+  [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
+  **다음 한 작업 후보**: T-291a(토큰·정규화기·공용 사영, backend 내부만).
+
 - ✅ **이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot (2026-08-25, PR #526, by claude)** —
   C1x suite 6개가 `src/` 헬퍼를 통해 permanent staging 테이블을 만드는데 마커 정규식이 그걸 못 봐
   무방비였다. **import 기반 도출**로 바꿔 새 writer 모듈이 자동으로 커버되게 했고, 가드가 정당한

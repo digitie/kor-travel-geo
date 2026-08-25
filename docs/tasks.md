@@ -64,6 +64,18 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 **전부 완료·종료** — 이슈 #298은 PR #491, #302는 PR #493, #299는 PR #495, #252는 PR #497, #307은
 PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본문·코멘트 참조.
 
+### 신규 기능
+
+- [ ] **T-291** — 데이터셋 버전 외부 공개 API + admin 버전 관측 (변경 감지). 외부 소비자가
+  주소 DB 변경 여부·이력을 확인하고 자기 파생 데이터를 갱신할 수 있도록, active serving
+  release에서 파생한 opaque 토큰을 `POST /v2/dataset/version`(known_version 조건부 폴링)·
+  `POST /v2/dataset/history`로 공개한다. 인증은 기존 공개 API 키(ADR-064)+GeoIP 게이트
+  (ADR-037) 재사용, 1차 스키마 변경 0건(기존 ops 테이블 사영), admin은 `/admin/ops` 읽기 전용
+  패널+외부 응답 미리보기. 구현은 T-291a(토큰·정규화기·사영) → T-291b(외부 v2 엔드포인트) →
+  T-291c(admin API+UI), T-291d(기록 경로 위생, 독립). 설계 문서 작성 완료(2026-08-26) —
+  결정 [ADR-067](adr/067-external-dataset-version-api.md), 정본
+  [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
+
 ### 선택 후속 (낮은 우선순위)
 
 - **진행 중 작업 없음.** (T-219 잔여 L까지 완료 — `tasks-done.md` 참조.)
