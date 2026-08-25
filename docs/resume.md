@@ -2,7 +2,7 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-08-17 갱신, by claude)
+## 현재 진척도 (2026-08-26 갱신, by claude)
 
 - 📝 **T-291 — 데이터셋 버전 외부 공개 API 설계 완료, 구현 대기 (2026-08-26, by claude)** —
   외부 소비자의 주소 DB 변경 감지·이력 확인용 `POST /v2/dataset/version`·`/history` 설계.
@@ -10,7 +10,10 @@
   없음), 인증은 기존 공개 API 키+GeoIP 게이트 재사용, admin은 `/admin/ops` 읽기 전용 패널.
   결정 [ADR-067](adr/067-external-dataset-version-api.md)(proposed), 정본
   [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
-  **다음 한 작업 후보**: T-291a(토큰·정규화기·공용 사영, backend 내부만).
+  적대적 리뷰에서 기반 불변식의 구멍이 확인됐다 — 서빙 전환 3경로(CLI refresh swap·postload
+  execute_safe·restore replace_current)가 release를 기록하지 않아 재적재에도 토큰이 안 바뀌는
+  거짓 음성이 가능하다. **다음 한 작업 후보**: T-291a(서빙 전환 기록 완결 — 외부 공개의 선행
+  조건, ADR-067 D0).
 
 - ✅ **이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot (2026-08-25, PR #526, by claude)** —
   C1x suite 6개가 `src/` 헬퍼를 통해 permanent staging 테이블을 만드는데 마커 정규식이 그걸 못 봐
@@ -837,7 +840,7 @@ T-197 REST 벤치마크 client disconnect cancellation 오탐 수정, `T-177H` �
 - [ ] 자기 에이전트 고정 worktree(`/mnt/f/dev/kor-travel-geo-*`)에서 Linux `git status --short --branch`가 동작하는지 확인하고, 새 작업 branch를 만든 뒤 `codegraph sync` 실행
 - [ ] `SKILL.md` §4 "DO NOT" 룰 다시 읽기
 - [ ] `docs/architecture/architecture.md`의 의존 방향 확인
-- [ ] `docs/decisions.md`의 ADR-001 ~ ADR-020 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마, ADR-019 Next.js 16 보안 하한선, ADR-020 VWorld MapLibre 지도)
+- [ ] `docs/adr/README.md` 색인에서 핵심 구조 ADR 확인 (특히 **ADR-012 텍스트 정본 + SHP polygon 하이브리드**, ADR-017 batch DAG, ADR-018 `x_extension` 스키마, ADR-019 Next.js 16 보안 하한선, ADR-020 VWorld MapLibre 지도)
 - [ ] 마지막 `docs/journal.md` 엔트리 읽기
 - [ ] Windows 재설치/새 Codex 세션에서 이어받는 경우 `docs/windows-reinstall-recovery.md` 읽기
 - [ ] 테스트 전 고정 worktree를 WSL ext4 테스트 미러로 `rsync --delete` 복사했고, 공용 `data/`를 절대경로 또는 심볼릭 링크로 접근 가능한지 확인
@@ -870,7 +873,7 @@ T-197 REST 벤치마크 client disconnect cancellation 오탐 수정, `T-177H` �
 
 1. `docs/journal.md`에 항목 추가 (날짜·요약·관련 파일·결정·다음 작업)
 2. 본 `docs/resume.md`의 진척도 토글 갱신
-3. 변경된 결정이 있다면 `docs/decisions.md`에 ADR 추가
+3. 변경된 결정이 있다면 `docs/adr/`에 ADR 추가 + 색인 갱신
 4. 사용자 가시 변경이면 `CHANGELOG.md` 갱신
 5. 스키마 변경이면 `scripts/export_openapi.py` 재실행 → 프론트엔드 `gen:types`
 6. 프론트엔드 작업이면 React Doctor 실행 → 경고 수정 → 재실행

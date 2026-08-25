@@ -2,28 +2,29 @@
 
 ## 상태
 
-- 상태: 설계 확정(문서만) — 구현은 T-291a~d 후속
+- 상태: 설계 확정(문서만) — 구현은 T-291a~e 후속
 - 요청일: 2026-08-26
 - 사용자 요구(원문 요지): "백업본, 서비스 중인 데이터셋의 고유번호(혹은 해시)를 저장하고
   그것과 추가 정보(데이터셋 날짜 등)를 외부에서 확인할 수 있는 API와 확인/관리용 admin UI
   요소 추가. 외부에서 주소 DB가 바뀌었는지, 그 히스토리가 어떻게 되는지 확인 후 연관 데이터를
   업데이트하기 위함."
-- 결정 기록: [ADR-067](adr/067-external-dataset-version-api.md) (버전 토큰·공개 범위·인증·
-  저장 전략·admin UI 범위)
+- 결정 기록: [ADR-067](adr/067-external-dataset-version-api.md) (기반 불변식 D0·버전 토큰·
+  공개 범위·인증·저장 전략·admin UI 범위·엣지 표)
 - 관련 문서: [t049-ops-metadata-schema.md](t049-ops-metadata-schema.md)(ops 스키마 기반),
   [t050-ops-hardening.md](t050-ops-hardening.md), [t109-backup-source-upload-management.md](t109-backup-source-upload-management.md)
 - 관련 코드: `src/kortravelgeo/infra/sql.py`(ops DDL), `src/kortravelgeo/infra/admin_repo.py`
-  (release/snapshot 사영), `src/kortravelgeo/api/routers/`(v2 라우터·`require_public_api_key`),
-  `kor-travel-geo-ui/components/admin/OpsPanel.tsx`
+  (release/snapshot 기록·사영), `src/kortravelgeo/api/routers/v2.py`(v2 규약·
+  `_V2_VALIDATION_RESPONSES`), `src/kortravelgeo/api/public_api_key.py`,
+  `src/kortravelgeo/api/admission.py`, `kor-travel-geo-ui/components/admin/OpsPanel.tsx`
 
 ### 요구의 "저장" 부분에 대한 결론
 
 식별자 저장은 **이미 존재한다** — `ops.dataset_snapshots.source_set_hash`(sha256 64-hex),
 `ops.serving_releases`(uuid·상태·계보·`mv_hash`·`activated_at`), 백업은
 `ops.artifacts.artifact_id`+`sha256`+manifest `active_serving{serving_release_id,…}`.
-이 작업의 빈 곳은 저장이 아니라 **외부 노출 계약 + 변경 감지 시맨틱 + admin 관측**이고,
-따라서 1차 스키마 변경은 0건이다(ADR-067 D5). 기록 경로의 사소한 위생(백업 artifact FK 기입
-등)만 T-291d로 분리한다.
+이 작업의 빈 곳은 저장이 아니라 (1) **서빙 전환이 빠짐없이 기록되는 것**(ADR-067 D0 — 현재
+3개 경로 미기록, T-291a가 수정), (2) **외부 노출 계약 + 변경 감지 시맨틱**, (3) **admin
+관측**이다. 1차 스키마 변경은 0건이다(ADR-067 D5).
 
 ## 1. 외부 API 계약
 
@@ -34,11 +35,19 @@
   신설 없음). GeoIP KR 게이트(ADR-037)는 전역 적용을 그대로 받는다(`geoip_open_paths` 미추가,
   403은 기존 legacy envelope `E0403` 유지).
 - v2 공통 envelope `{status, query_id, input}` + `response_model_exclude_none=True`(ADR-060).
-- 검증 오류는 구조화 400 `V2ErrorEnvelope`(ADR-061) — `_V2_VALIDATION_RESPONSES`(dto/v2)와
-  `_VALIDATION_STRUCTURED_400`(app.py) 양쪽 등록 필요.
+- 검증 오류는 구조화 400 `V2ErrorEnvelope`(ADR-061). 배선 2곳: `_V2_VALIDATION_RESPONSES`는
+  `src/kortravelgeo/api/routers/v2.py`에 모듈 프라이빗으로 정의되어 있으므로 재export하거나
+  공용 위치로 승격해 `routers/dataset.py`에서 사용하고, `app.py`의
+  `_VALIDATION_STRUCTURED_400` 하드코딩 튜플에 신규 경로를 추가한다.
 - 응답 헤더 `Cache-Control: no-store` — 변경 감지 엔드포인트가 중간 캐시에 얹히면 감지 지연이
-  계약 위반처럼 보이게 된다.
-- admission은 기존 `/v2/` 전역 semaphore를 그대로 받는다(전용 scope 없음).
+  계약 위반처럼 보인다. v2 공통 규약 문서(`docs/api-reference/v2/README.md`)에 이 헤더 규약을
+  신설 조항으로 추가한다(v2 첫 사례).
+- admission: `/v2/dataset/*` **전용 scope**를 둔다(`_endpoint_scope_for_path` 1항목 + 설정
+  1개, ADR-067 D3). 주의 — 현재 admission은 단일 `address` scope에 `/v1/address/*`와 `/v2/*`가
+  함께 들어가고 기본 비활성(`api_max_concurrency=None`)이다. 전용 scope가 없으면 활성화 시
+  폴링이 지오코딩 본체 예산을 소모한다.
+- geo_cache는 `geocode`/`reverse` 호출 내부의 opt-in 캐시라 신규 라우트에 적용되지 않는다
+  (확인 완료) — 별도 제외 작업 불필요.
 - 권장 폴링 주기 ≥ 60초를 api-reference에 명문화한다.
 
 ### 1.1 `POST /v2/dataset/version` — 현재 버전 + 변경 감지 (폴링 대상)
@@ -72,6 +81,10 @@
 }
 ```
 
+- `change_type`은 **2종** — `"full"`(전체 재동기화 필요) / `"delta"`(증분 갱신 가능).
+  내부 `release_kind` 매핑: `full_load|restore|manual_rebuild|rollback → "full"`,
+  `daily_delta → "delta"`. `"revert"`는 두지 않는다(ADR-067 D2 기각 사유 — hot-swap rollback
+  사건의 1:1 노출).
 - `known_version` 미제공 시 `changed`/`known_version_found` 생략.
 - active release 0건이면 `{"status":"OK", …, "available": false}`(`current` 생략, HTTP 200 —
   소비자 오류 분기 방지).
@@ -109,24 +122,30 @@
 }
 ```
 
-- 정렬: 항상 최신→과거(첫 항목이 현재 서빙과 일치하는 것이 일반). 마지막 페이지면
-  `next_cursor` 생략. entry 모델은 §1.1의 `current`와 동일 모델(`DatasetVersionEntry` 1개).
-- 포함 상태: 내부적으로 `active`/`superseded`/`rolled_back`(한때 실제 서빙된 것)만.
-  `pending`/`failed`는 절대 출현하지 않는다. `state` 필드 자체는 비노출.
+- 정렬: `ordered_at`(= `COALESCE(activated_at, created_at)`) 내림차순, 동률 시 `version_token`
+  내림차순 — tiebreak를 **토큰**으로 두는 이유는 커서가 내부 UUID를 담지 않기 때문이다(아래).
+  `now()` µs 해상도라 동률은 실질적으로 발생하지 않으며, 순서는 표시용일 뿐 변경 신호는
+  토큰뿐이다.
+- 커서 payload = `{before_at, before_token}`(base64url, 내부 UUID 미포함). 사영 계층이 각 행의
+  토큰을 계산한 뒤 `(ordered_at, version_token)` 사전순 조건으로 다음 페이지를 끊는다.
+- 마지막 페이지면 `next_cursor` 생략. entry 모델은 §1.1의 `current`와 동일 모델
+  (`DatasetVersionEntry` 1개).
+- 포함 상태: `active`/`superseded`만 실전에 존재한다(`rolled_back`은 enum에만 있고 쓰는 코드가
+  없음 — 사영 필터는 방어적으로 포함하되 계약은 의존하지 않음). `pending`/`failed`는 절대
+  출현하지 않는다. `state` 필드 자체는 비노출.
 - `since_found: false` = 이력 리셋 → 최신 페이지를 반환하고 전체 재동기화 규약.
 - 이력 보존은 **비보증**(복원 시 백업 이후 이력 소멸 가능)을 명문화한다.
 - 오류: `limit` 범위 밖·`cursor` 해석 실패·토큰 형식 불일치 → 구조화 400. cursor 오류의
   hint는 "이력 처음부터 재조회".
 
-### 1.3 소비자 프로토콜 (api-reference 문서에 명문화, T-291b)
+### 1.3 소비자 프로토콜 (api-reference 문서에 명문화, T-291c)
 
 1. `known_version`을 포함해 폴링(≥60초). `changed:false` → 무동작.
 2. `changed:true, known_version_found:true` → history를 `since_version`으로 소급,
-   `change_type`별 갱신(`delta`=증분, `full`/`revert`=전체) 후 새 토큰 저장.
+   `change_type`별 갱신(`delta`=증분, `full`=전체) 후 새 토큰 저장.
 3. `changed:true, known_version_found:false` → 전체 재동기화 + 새 토큰 저장.
-4. 계약 4항: (a) 토큰은 불투명·동등 비교만 (b) 토큰 동일 ⇒ 미변경, 역은 비보증
-   (c) `reference_months`는 생략 가능하며 비단조(복원 시 역행 가능)
-   (d) 이력 보존 비보증.
+4. 계약 4항: (a) 토큰은 불투명·동등 비교만 (b) 토큰 동일 ⇒ 미변경(D0 성립 전제), 역은 비보증
+   (c) `reference_months`는 생략 가능하며 비단조(복원 시 역행 가능) (d) 이력 보존 비보증.
 
 엣지 케이스별 거동 표는 [ADR-067 "결과"](adr/067-external-dataset-version-api.md) 절이 정본이다.
 
@@ -140,7 +159,11 @@
   version_token = "dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32]
   ```
 
-- **공용 사영 쿼리**(repository, 외부/admin 공용 — admin 미리보기 fidelity의 원천):
+  파생 입력의 정규형은 **소문자 하이픈 포함 36자 UUID 텍스트**로 고정한다 — 사영은
+  `uuid.UUID` 객체를, 백업 manifest는 `::text` 문자열을 주므로 양쪽에서 같은 토큰이 나와야
+  한다(단위 테스트로 고정).
+
+- **공용 사영 쿼리**(repository, 외부/admin 공용 — admin 확장 필드 fidelity의 원천):
 
   ```sql
   SELECT sr.serving_release_id, sr.state, sr.release_kind,
@@ -151,88 +174,124 @@
   FROM ops.serving_releases sr
   JOIN ops.dataset_snapshots ds USING (dataset_snapshot_id)
   WHERE sr.state IN ('active','superseded','rolled_back')
-  ORDER BY ordered_at DESC, sr.serving_release_id DESC
-  LIMIT :limit  -- + keyset 커서 조건
+  ORDER BY ordered_at DESC
+  LIMIT :limit  -- keyset 커서 조건은 사영 계층에서 (ordered_at, version_token)으로 적용
   ```
 
-  인덱스 추가 없음(원장은 수백 행 이하). "현재" = 기존 `state='active'` 단건 조회 재사용 —
-  active ≤ 1은 `idx_ops_serving_releases_one_active` partial unique index(T-049)가 DB에서
-  이미 강제하므로 정렬 tiebreak는 방어적 관성일 뿐이다.
+  "현재" = 기존 `state='active'` 단건 조회 재사용 — active ≤ 1은
+  `idx_ops_serving_releases_one_active` partial unique index(T-049)가 DB에서 강제한다.
 
-- **기준월 정규화기** `normalize_reference_months(source_set)` — `source_set` JSONB의 3가지
-  실전 형태를 흡수한다:
-  - 형태 A(rebuild 경로): `{category: {…, effective_yyyymm}}` → `{category: yyyymm}`
-  - 형태 B(추론/manifest 경로): `{yyyymm_by_kind: {...}, mixed_yyyymm}` → 그대로 사용
-  - 형태 C(hot_swap/rollback/빈 값): 정규화 불가 → **계보 폴백**: `parent_dataset_snapshot_id`
-    를 최대 5 hop 소급해 최초 정규화 가능한 `source_set`을 채택(restore 스냅샷은 백업 manifest
-    의 source_set을 복사해 두므로 실전은 1 hop). 끝까지 실패하면 `reference_months` 생략.
+  **원장 성장 모델**: 사영 대상(active/superseded)은 T-291a 이후 daily delta 기준 연 ~365행씩
+  자란다. 별도로 일일 restore drill이 `pending` restore 행 + snapshot 행을 매일 라이브 원장에
+  남기지만(연 ~365행) 사영의 state 필터가 배제한다. 수천 행 스캔 + sha256 계산도 ms
+  미만이므로 인덱스 추가는 불필요하고, "수백 행" 같은 고정 상한을 설계 근거로 삼지 않는다.
+  drill 오염 정리는 T-291e에서 판단.
+
+- **기준월 정규화기** `normalize_reference_months(source_set)` — `source_set` JSONB의 실전
+  형태 **4가지**를 흡수한다(각 형태의 writer를 단위 테스트로 고정):
+  - **형태 A**(rebuild 경로, `source_rebuild_service`):
+    `{category: {source_file_group_id, group_sha256, user_yyyymm, effective_yyyymm}}` →
+    `{category: effective_yyyymm ?? user_yyyymm}` (`effective_yyyymm`은 nullable — loader
+    자체가 `user_yyyymm` 폴백을 쓰므로 정규화기도 동일 폴백).
+    저장 시 top-level에 **비카테고리 키**가 섞인다: `load_batch_id`(admin_repo가 주입),
+    `rebuild_metadata`(`_snapshot_source_set`이 주입) — denylist로 건너뛴다.
+  - **형태 B**(추론 경로, writer 2곳): `admin_repo._infer_current_source_set`(7종 +
+    `source` 키)과 `backup.infer_source_set`(6종, `source` 없음 — restore 후보 스냅샷이 이를
+    복사). 형상: `{yyyymm_by_kind: {...}, mixed_yyyymm, source?}` → `yyyymm_by_kind` 사용.
+  - **형태 C**(hot_swap/rollback 기록 경로): 빈 값 → **계보 폴백**:
+    `parent_dataset_snapshot_id`를 최대 5 hop 소급해 최초 정규화 가능한 `source_set` 채택.
+    끝까지 실패하면 `reference_months` 생략.
+  - **형태 D**(flat map, `batch_dag._source_set` + 운영자 임의 payload):
+    `{category: "YYYYMM"}` 문자열 map — 값이 `^\d{6}$`이면 그대로 채택. `str()` 평탄화로
+    repr 문자열이 된 열화값은 무시하고 계보 폴백으로 넘어간다(열화 자체의 수정은 T-291e).
+  - **비카테고리 키 denylist**: `load_batch_id`, `rebuild_metadata`, `source`,
+    `yyyymm_by_kind`, `mixed_yyyymm` — map을 순회할 때 건너뛴다(형태 A/D 공용).
   - `reference_months_mixed` = 정규화 결과 값들이 서로 다르면 true.
 
-- **`known_version`/`since_version` 역조회**: 파생 해시라 역산 불가 → 사영 결과 행들(≤수백)에
-  토큰을 계산해 매칭한다. 커서 payload는 `{before_at, before_token}`(내부 UUID 미포함,
-  base64url).
+  **계보 1 hop 근거(정정)**: hot-swap 릴리스의 `parent_dataset_snapshot_id`는
+  `_insert_dataset_snapshot_and_release`가 **교체된(복원된) DB 안의** 당시 active release의
+  snapshot으로 설정한다 — 즉 백업 시점의 형태 A/B 스냅샷이 1 hop 부모다. (restore 후보 단계에서
+  manifest source_set을 복사한 `pending` 스냅샷은 new_database 모드에서 **라이브 DB**에
+  남았다가 스왑으로 폐기되므로 부모가 아니다.) 연속 hot-swap이 누적된 경우에만 다중 hop이
+  필요하며, 5 hop이면 충분하다.
+
+- **`known_version`/`since_version` 역조회**: 파생 해시라 역산 불가 → 사영 결과 행들에 토큰을
+  계산해 매칭한다(위 성장 모델 기준 수천 행 스캔 ms 미만).
 
 - **구현 자유도**: 현재 버전 블록의 in-process TTL 캐시(5~10초)는 허용하되 계약이 아니다.
 
 - **백업 식별**(요구의 "백업본" 부분): 추가 저장 불필요 — `ops.artifacts.artifact_id` +
   `sha256` + manifest `active_serving.serving_release_id`가 이미 있고, 토큰은 manifest의
-  release id에서 파생 계산 가능하다. 외부에는 백업 정보를 일체 노출하지 않으며(ADR-067 D2),
-  admin에서 "백업 시점의 버전 토큰"을 보여주는 것은 T-291d의 기록 위생과 함께 붙인다.
+  release id에서 파생 계산 가능하다(정규형 고정 덕분). 외부에는 백업 정보를 일체 노출하지
+  않으며(ADR-067 D2), admin의 "백업 시점 버전 토큰" 표시는 T-291e에서 기록 위생과 함께 붙인다.
 
-## 3. Admin UI 설계
+## 3. Admin UI 설계 — 기존 releases 표면 확장 (신규 엔드포인트·패널 없음)
 
-**신규 admin API**: `GET /v1/admin/ops/dataset-versions?limit=20&cursor=…` — §2 공용 사영 +
-admin 확장 DTO `AdminDatasetVersion`(외부 필드 전부 + `serving_release_id`,
-`dataset_snapshot_id`, `release_kind` 원값, `state`, `source_set_hash`, `mv_hash`, 정규화
-원본/결과). 외부 DTO와 **별도 모델**로 둔다 — 공개 범위 역류 사고를 모델 수준에서 차단.
+`GET /v1/admin/ops/releases`와 OpsPanel의 releases 표가 이미 존재하므로(필드도
+`serving_release_id`/`dataset_snapshot_id`/`release_kind`/`state`/`mv_hash` 대부분 보유),
+**그 표면을 확장한다** — "중복 UI 없음" 원칙의 자기 적용(ADR-067 D6).
 
-**UI(신규 페이지 없음 — `/admin/ops` OpsPanel 확장)**:
-
-1. **"데이터셋 버전" 패널 1개 추가** — `loadAll`의 Promise.allSettled에 endpoint 1줄 +
-   columns. 컬럼: `version_token`(shortHash+복사), `change_type`(+`release_kind` 원값 병기),
-   `state`, `activated_at`, 기준월 요약 + `혼합` badge, `source_set_hash`(shortHash + HelpTip
-   "외부 API의 `version_token`과 다른 값" 안내).
-2. **행 상세 다이얼로그**(ManifestViewer 템플릿): 내부 id 상관(serving_release/snapshot),
+1. **`ServingRelease` DTO에 additive 필드**: `version_token`, `change_type`,
+   `reference_months`, `reference_months_mixed` — 공용 사영에서 계산. openapi 재생성 +
+   `gen:types` 필요(admin 전용 스키마라 외부 계약 아님).
+2. **OpsPanel releases 표에 컬럼 추가**: `version_token`(shortHash+복사), `change_type`,
+   기준월 요약 + `혼합` badge.
+3. **행 상세 다이얼로그**(ManifestViewer 템플릿): 내부 id 상관(serving_release/snapshot),
    원본 `source_set` JSON, 정규화 결과·계보 hop 표시, **"외부 응답 미리보기"** —
    trusted-proxy 경유 실제 `POST /api/proxy/v2/dataset/version` 호출 결과를 JsonBlock으로
-   렌더(공개 범위 회귀를 운영자가 눈으로 잡는 보안 리뷰 표면), curl 스니펫 복사
+   렌더 + curl 스니펫 복사
    (`curl -X POST https://<host>/v2/dataset/version -H "X-KTG-API-Key: <키>" -d '{"known_version":"…"}'`).
-3. **CurrentConfigTab '현재 serving 구성'에 `version_token` 행 + AdminHome 활성 release
+   **미리보기의 한계**: trusted-proxy는 `require_public_api_key`를 신뢰 클라이언트로
+   우회하므로 검증 대상은 응답 본문의 공개 범위뿐이다 — 인증 동작 검증은 live e2e가 담당.
+4. **CurrentConfigTab '현재 serving 구성'에 `version_token` 행 + AdminHome 활성 release
    StatusCard에 토큰 1줄** (additive).
-4. **관리 동작은 읽기 전용.** 키 발급/회수는 기존 SettingsPanel이 담당 — 중복 UI 없음.
-   이력 개변·수기 정정·토큰 회전 없음(ADR-067 D6).
+5. **관리 동작은 읽기 전용.** 키 발급/회수는 기존 SettingsPanel 담당. 이력 개변·수기 정정·
+   토큰 회전 없음(ADR-067 D6).
 
 ## 4. 테스트 계획
 
-- **단위**(T-291a): 토큰 파생 고정값, 정규화기 형태 A/B/C × 계보 폴백 × 실패 시 생략,
-  keyset 커서 왕복.
-- **계약**(T-291b): `known_version` 왕복(`changed:false`) → release 전환 후
-  (`changed:true`), 이력 리셋 픽스처에서 `known_version_found:false`, `^dv1-` 형식 400,
-  `pending`/`failed` 미출현, 외부 DTO에 내부 필드 부재(공개 범위 회귀 차단).
-- **live e2e**(T-291c): 신규 `dataset-version-live.spec.ts` — 키 발급 → `/v2/dataset/version`
-  → admin 미리보기와 토큰 일치 → `known_version` 왕복 `changed:false` → history `since` 왕복.
-  기존 `admin-api-readonly`/`admin-browser-readonly`/`admin-api-query-matrix`에 신규 GET·패널·
-  limit/cursor 케이스 추가.
-- 테스트는 구현 전 코드에서 실패함을 먼저 확인한다(AGENTS.md Goal-Driven Execution).
+- **단위**(T-291b): 토큰 파생 고정값(+UUID 객체/텍스트 동일성), 정규화기 형태 A/B/C/D ×
+  denylist × `effective→user` 폴백 × 계보 폴백 × 실패 시 생략 — **writer별 실제 형상 픽스처로
+  고정**, keyset 커서 왕복.
+- **기록 완결**(T-291a): CLI refresh swap·postload execute_safe·replace_current 각각이
+  release를 기록하는지, 일변동분 유래 refresh가 `daily_delta`로 라벨링되는지 — 수정 전
+  코드에서 실패함을 먼저 확인(AGENTS.md Goal-Driven Execution).
+- **계약**(T-291c): `known_version` 왕복(`changed:false`) → release 전환 후(`changed:true`),
+  이력 리셋 픽스처에서 `known_version_found:false`, `^dv1-` 형식 400, `pending`/`failed`
+  미출현, 외부 DTO에 내부 필드 부재(공개 범위 회귀 차단), `Cache-Control: no-store`.
+- **live e2e**(T-291d): 신규 `dataset-version-live.spec.ts` — 키 발급 → `/v2/dataset/version`
+  직접 호출(인증 경로) → admin 미리보기와 토큰 일치 → `known_version` 왕복 `changed:false` →
+  history `since` 왕복. 기존 `admin-api-readonly`/`admin-browser-readonly`/
+  `admin-api-query-matrix`에 확장 필드·limit/cursor 케이스 추가.
 
-## 5. 구현 task 분해 (이번 PR은 문서만; a→b→c 의존, d 독립)
+## 5. 구현 task 분해 (이번 PR은 문서만; a→b→c→d 의존, e 독립)
 
-- **T-291a — 토큰·정규화기·공용 사영 (backend 내부만, 스키마 0건)**:
-  `core/dataset_version.py`(파생식 + 정규화기 3형태 + 계보 ≤5 hop) + repository 공용 사영 +
-  keyset 커서 + 단위 테스트. API 미노출.
-- **T-291b — 외부 v2 엔드포인트**: `dto/v2.py` DTO + `routers/dataset.py` + 400 배선 2곳
-  (`_V2_VALIDATION_RESPONSES`/`_VALIDATION_STRUCTURED_400`) + `Cache-Control: no-store` +
-  `scripts/export_openapi.py` 재생성(CI drift) + `docs/api-reference/` v2 문서(소비자 프로토콜·
-  보증·엣지 표) + UI `npm run gen:types`. 계약 테스트 포함.
-- **T-291c — admin API + UI**: `GET /v1/admin/ops/dataset-versions` + OpsPanel 패널 +
-  상세/미리보기/curl + CurrentConfigTab·AdminHome 행 + e2e 확장(§4).
-- **T-291d — 기록 경로 위생 (독립 후속)**: 백업 생성 시 `insert_artifact`에
+- **T-291a — 서빙 전환 기록 완결 (선행 조건, ADR-067 D0)**: `ktgctl load all-sidos --refresh`
+  swap 경로·`run_postload_maintenance(execute_safe)`의 `refresh_mv`가 release를 기록하도록
+  배선(`record_mv_refresh_release` 재사용), `db_restore replace_current`가 active `restore`
+  release를 기록, 일변동분 유래 refresh를 `release_kind='daily_delta'`로 라벨링. 기록 누락
+  회귀 테스트 포함.
+- **T-291b — 토큰·정규화기·공용 사영 (backend 내부만, 스키마 0건)**:
+  `core/dataset_version.py`(파생식 + 정규형 고정 + 정규화기 4형태/denylist/폴백) + repository
+  공용 사영 + keyset 커서 + 단위 테스트. API 미노출.
+- **T-291c — 외부 v2 엔드포인트**: `dto/v2.py` DTO + `routers/dataset.py` +
+  `_V2_VALIDATION_RESPONSES` 재export·`_VALIDATION_STRUCTURED_400` 배선 +
+  `Cache-Control: no-store` + `/v2/dataset/*` 전용 admission scope +
+  `scripts/export_openapi.py` 재생성(CI drift) + **api-reference 4건**: 신규
+  `docs/api-reference/v2/dataset-version.md`(소비자 프로토콜·보증·엣지 표),
+  `docs/api-reference/README.md`(구현 범위·문서 지도), `docs/api-reference/llm-summary.md`
+  (엔드포인트 표), `docs/api-reference/v2/README.md`(Cache-Control 규약 신설) + UI
+  `npm run gen:types`. 계약 테스트 포함.
+- **T-291d — admin 확장**: `ServingRelease` additive 필드 + OpsPanel releases 표 컬럼 +
+  상세/미리보기/curl + CurrentConfigTab·AdminHome 행 + e2e(§4).
+- **T-291e — 기록 경로 위생 (독립 후속)**: 백업 생성 시 `insert_artifact`에
   snapshot/release FK 정식 기입(실패 시 NULL 강등 유지), BackupsPanel "백업 시점 토큰" 컬럼 +
   ManifestViewer 1줄, hot-swap release 기록 시 계보의 yyyymm 블록을 자기 `source_set`에
-  복사(신규 행 자체 완결화), `batch_dag.py`의 `source_set` 평탄화(repr 문자열 열화) 수정.
+  복사(신규 행 자체 완결화), `batch_dag._source_set`의 `str()` 평탄화(repr 열화) 수정,
+  restore drill의 원장 `pending` 행 누적(연 ~365행) 정리 방안 판단.
 
 ## 6. 하지 않는 것
 
 [ADR-067 "하지 않는 것"](adr/067-external-dataset-version-api.md) 절이 정본이다. 요약:
 단조 번호/원장·ETag/304·webhook·내부 해시/UUID 노출·백업 정보 외부 노출·MV 내용 해시·v1
-표면·라이브러리 공개 메서드·키 스코프·이력 편집 UI·1차 스키마 변경.
+표면·라이브러리 공개 메서드·키 스코프·이력 편집 UI·1차 스키마 변경·`change_type: "revert"`.

@@ -19,7 +19,7 @@ CodeGraph는 `docs/codegraph-worktree.md`, 표준 1-PR 운영 절차는
 6. `docs/journal.md` 최신 3 엔트리 — 직전 컨텍스트
 7. `docs/tasks-rule.md` + `docs/tasks.md` — task 번호 체계·병행 순서·PR 루프와,
    resume이 가리키는 현재 항목
-8. 관련 ADR (`docs/decisions.md`)
+8. 관련 ADR (`docs/adr/`, 색인 `docs/adr/README.md`)
 9. 직결 docs (loader면 `docs/architecture/backend-package.md`, UI면 `docs/architecture/frontend-package.md`,
    외부 API면 `docs/architecture/external-apis.md`, 적재면 `docs/t027-fullload-plan.md` /
    `docs/t213-data-preservation.md`)
@@ -62,7 +62,7 @@ worktree가 없으면 `docs/codegraph-worktree.md` §3 "최초 setup". CodeGraph
 
 | 파일 | 역할 | 갱신 시점 |
 |------|------|----------|
-| `docs/decisions.md` | ADR 누적 | 결정이 발생할 때마다 |
+| `docs/adr/` (색인 `docs/adr/README.md`) | ADR 누적(파일당 1개) | 결정이 발생할 때마다 |
 | `docs/resume.md` | 진척도 + "다음 한 작업" | 작업 마무리마다 |
 | `docs/journal.md` | 작업 로그 (역시간순 append) | 작업 끝낼 때마다 |
 | `docs/tasks.md` + `docs/tasks-done.md` | 진행/대기 백로그 + 완료·종료 이력 | 작업 추가/시작/완료 시 (규칙은 `docs/tasks-rule.md`) |
@@ -73,7 +73,7 @@ worktree가 없으면 `docs/codegraph-worktree.md` §3 "최초 setup". CodeGraph
 
 ## 3. ADR 작성 규약
 
-번호: `ADR-NNN` 연번. 현재 번호는 `docs/decisions.md` 맨 위에서 확인한다(다음
+번호: `ADR-NNN` 연번. 현재 번호는 `docs/adr/README.md` 헤더에서 확인한다(다음
 후보는 그 최댓값 + 1).
 
 ```markdown
@@ -131,7 +131,7 @@ worktree가 없으면 `docs/codegraph-worktree.md` §3 "최초 setup". CodeGraph
 
 ## 현재 진척도
 현재 상태는 `docs/resume.md`와 `docs/tasks.md`를 정본으로 본다.
-전국 실 데이터 적재·검증 완료(T-027). 관련 ADR은 `docs/decisions.md`.
+전국 실 데이터 적재·검증 완료(T-027). 관련 ADR은 `docs/adr/`(색인 `docs/adr/README.md`).
 
 ## 다음 한 작업
 (1시간 이내 분량. 시작 파일 / 검증 방법 포함)
@@ -158,7 +158,7 @@ T-2xx), 두 에이전트 병행 순서, PR/리뷰 루프, 사양 참조 — 은
 
 ### 7.1 ADR 추가만
 
-- [ ] `docs/decisions.md`에 추가
+- [ ] `docs/adr/`에 추가 + 색인 갱신
 - [ ] `docs/journal.md` 엔트리
 - [ ] `docs/resume.md` "다음 한 작업" 갱신
 
@@ -275,7 +275,7 @@ gh pr create --repo digitie/kor-travel-geo \
 ## 문서
 - [ ] docs/journal.md 엔트리
 - [ ] docs/resume.md 진척도 갱신
-- [ ] (결정 있음) docs/decisions.md 새 ADR
+- [ ] (결정 있음) docs/adr/ 새 ADR + 색인 갱신
 - [ ] (사용자 가시 변경) CHANGELOG.md
 - [ ] (DTO/스키마 변경) docs/architecture/data-model.md
 

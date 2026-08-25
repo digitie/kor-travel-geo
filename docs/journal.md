@@ -5,28 +5,43 @@
 ## 2026-08-26 (T-291/ADR-067 — 데이터셋 버전 외부 공개 API 설계, by claude)
 
 외부 소비자가 "주소 DB가 바뀌었는가"를 감지하고 이력을 확인해 자기 파생 데이터를 갱신할 수
-있게 하는 외부 API + admin 관측의 **설계 문서만** 작성했다(구현은 T-291a~d 후속).
+있게 하는 외부 API + admin 관측의 **설계 문서만** 작성했다(구현은 T-291a~e 후속).
 
 핵심 판정 — **단조 seq 원장 기각**: hot-swap restore(ADR-036)가 원장 테이블 자체를 백업
-시점으로 되돌리므로(백업 seq=40 → 라이브 43 → 복원 후 다음 발급 41) 같은 epoch 안에서 seq가
-재사용된다. epoch가 스왑되는 DB 안에 있는 한 방어 불가. 채택은 active serving release에서
+시점으로 되돌리므로 같은 epoch 안에서 seq가 재사용된다. 채택은 active serving release에서
 파생한 opaque 토큰(`"dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32]`) —
-uuid4 파생이라 이력 리셋·복원 후에도 재사용이 없고 **신규 저장이 0건**이다. 계약은 한 문장:
-토큰 동일 ⇒ 서빙 미변경, 역은 비보증.
+uuid4 파생이라 이력 리셋·복원 후에도 재사용이 없고 신규 저장이 0건이다.
 
-공개 필드는 4개뿐(`version_token`/`activated_at`/`change_type` coarse 3종/`reference_months`
-원천별 map+mixed). 내부 UUID·source_set_hash·mv_hash·백업 정보 일체 비공개. 인증은 기존 공개
-API 키(ADR-064)+GeoIP 게이트(ADR-037) 재사용, v2 POST 고정(ADR-060)에 body 조건부 폴링
-(`known_version` → `changed`/`known_version_found`). admin은 `/admin/ops` 읽기 전용 패널 +
-**외부 응답 미리보기**(공개 범위 회귀를 운영자가 눈으로 잡는 표면).
+적대적 리뷰 2명(문서 일관성 / 설계 실질)이 설계의 실질 결함을 잡았다.
 
-워크플로 스펙의 오류를 문서화 전에 잡았다 — "active 다중은 이론상 가능, partial unique
-index는 T-291d에서 검토"라고 했지만 `idx_ops_serving_releases_one_active`(T-049)가 이미
-DB에서 active ≤ 1을 강제한다. 설계 문서가 실제 스키마와 어긋난 채 나갈 뻔한 자리다.
+- **기반 불변식이 거짓이었다** — "모든 서빙 전환은 release 행을 만든다"고 썼지만, 실제로는
+  `ktgctl load all-sidos --refresh`(전국 적재 문서화 경로)·postload `execute_safe`·restore
+  `replace_current` 세 경로가 release를 기록하지 않는다. 전국 재적재에도 토큰이 안 바뀌는
+  **거짓 음성**(회복 불가 실패 모드)이다. ADR을 "불변식은 이 설계의 요구사항이며 현재
+  미성립, T-291a(기록 완결)가 외부 공개의 선행 조건"으로 재서술했다.
+- `release_kind='daily_delta'`는 enum에만 있고 쓰는 코드가 없다 — `change_type: "delta"`가
+  도달 불가였다. T-291a의 라벨링에 포함.
+- `rollback → "revert"` 매핑은 hot-swap rollback 사건을 1:1로 노출해 "은닉 위해 coarse"라는
+  자기 논리와 모순 — `full`로 흡수하고 change_type을 2종으로 축소.
+- admission 서술 오류 — "/v2 전역 semaphore"는 없고 단일 `address` scope 공유 + 기본
+  비활성이 사실. 전용 scope를 T-291c에 추가.
+- `source_set` 실전 형태는 3이 아니라 4(+비카테고리 키 오염, `effective_yyyymm` nullable) —
+  정규화기 사양을 writer별 픽스처 고정으로 재작성. restore 1-hop 근거도 정정(부모는 manifest
+  복사본이 아니라 교체된 DB의 백업 시점 active 스냅샷).
+- 엣지 표 정정: `rolled_back` 상태는 어떤 코드도 쓰지 않음(전이는 active→superseded뿐),
+  restore 3모드 분리, hot-swap smoke 실패 자동 원복(토큰 일시 요동) 행 추가.
+- admin은 신규 패널이 아니라 **기존 `/ops/releases`+OpsPanel releases 표 확장**으로 rescope —
+  "중복 UI 없음" 원칙의 자기 적용.
+
+워크플로 스펙의 오류도 문서화 전에 잡았다 — "active 다중은 이론상 가능, partial unique
+index는 후속 검토"라 했으나 `idx_ops_serving_releases_one_active`(T-049)가 이미 DB에서
+active ≤ 1을 강제한다.
 
 함께 정리한 문서 불일치: `docs/adr/README.md` 헤더 "다음 후보 = ADR-066"(066은 이미 존재)
-→ 068, `CLAUDE.md` "현재 ADR-001~063" → ~067, `SKILL.md` §7 체크리스트가 stub인 옛
-`docs/decisions.md`를 가리키던 것 → `docs/adr/` + 색인 갱신.
+→ 068, `CLAUDE.md` "현재 ADR-001~063" → ~067, 그리고 stub인 옛 `docs/decisions.md`를
+가리키던 살아있는 지침 참조 **12곳**(SKILL.md·AGENTS.md·resume·agent-guide 6곳·
+architecture 2곳·frontend-package·dev-environment)을 `docs/adr/`로 일괄 수정(이력 기록물
+2건은 과거 서술이라 유지).
 
 ## 2026-08-25 (이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot, by claude)
 
