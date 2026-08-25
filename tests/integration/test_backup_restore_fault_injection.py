@@ -228,84 +228,86 @@ async def test_restore_rejects_corrupt_archives_and_drops_target(tmp_path: Path)
     artifact_id: str | None = None
     try:
         await require_disposable_database(engine)
-        await build_minimal_serving_schema(engine)
-        artifact_id = await make_backup(engine, settings)
-        repo = AdminRepository(engine)
-        artifact = await repo.get_artifact(artifact_id)
-        assert artifact is not None
-        assert artifact.storage_uri is not None
-        source_archive = Path(artifact.storage_uri)
+        try:
+            await build_minimal_serving_schema(engine)
+            artifact_id = await make_backup(engine, settings)
+            repo = AdminRepository(engine)
+            artifact = await repo.get_artifact(artifact_id)
+            assert artifact is not None
+            assert artifact.storage_uri is not None
+            source_archive = Path(artifact.storage_uri)
 
-        await repo.update_artifact(artifact_id, sha256="0" * 64)
-        await _expect_restore_failure_drops_target(
-            engine,
-            settings,
-            source_dsn=source_dsn,
-            payload={
-                "artifact_id": artifact_id,
-                "target_database": "ktg_t245_sha_flip",
-                "mode": "new_database",
-            },
-            target_database="ktg_t245_sha_flip",
-        )
+            await repo.update_artifact(artifact_id, sha256="0" * 64)
+            await _expect_restore_failure_drops_target(
+                engine,
+                settings,
+                source_dsn=source_dsn,
+                payload={
+                    "artifact_id": artifact_id,
+                    "target_database": "ktg_t245_sha_flip",
+                    "mode": "new_database",
+                },
+                target_database="ktg_t245_sha_flip",
+            )
 
-        truncated_archive = tmp_path / "backups" / "t245_truncated.tar.zst"
-        shutil.copyfile(source_archive, truncated_archive)
-        truncated_archive.chmod(0o600)
-        with truncated_archive.open("r+b") as fh:
-            fh.truncate(max(1, source_archive.stat().st_size // 2))
-        await _expect_restore_failure_drops_target(
-            engine,
-            settings,
-            source_dsn=source_dsn,
-            payload={
-                "archive_path": str(truncated_archive),
-                "target_database": "ktg_t245_truncated",
-                "mode": "new_database",
-            },
-            target_database="ktg_t245_truncated",
-        )
+            truncated_archive = tmp_path / "backups" / "t245_truncated.tar.zst"
+            shutil.copyfile(source_archive, truncated_archive)
+            truncated_archive.chmod(0o600)
+            with truncated_archive.open("r+b") as fh:
+                fh.truncate(max(1, source_archive.stat().st_size // 2))
+            await _expect_restore_failure_drops_target(
+                engine,
+                settings,
+                source_dsn=source_dsn,
+                payload={
+                    "archive_path": str(truncated_archive),
+                    "target_database": "ktg_t245_truncated",
+                    "mode": "new_database",
+                },
+                target_database="ktg_t245_truncated",
+            )
 
-        forged_archive = await _mutated_archive(
-            source_archive,
-            tmp_path / "backups",
-            "t245_internal_checksum_forged",
-            _forge_manifest_checksum,
-        )
-        await _expect_restore_failure_drops_target(
-            engine,
-            settings,
-            source_dsn=source_dsn,
-            payload={
-                "archive_path": str(forged_archive),
-                "target_database": "ktg_t245_checksum_forged",
-                "mode": "new_database",
-            },
-            target_database="ktg_t245_checksum_forged",
-        )
+            forged_archive = await _mutated_archive(
+                source_archive,
+                tmp_path / "backups",
+                "t245_internal_checksum_forged",
+                _forge_manifest_checksum,
+            )
+            await _expect_restore_failure_drops_target(
+                engine,
+                settings,
+                source_dsn=source_dsn,
+                payload={
+                    "archive_path": str(forged_archive),
+                    "target_database": "ktg_t245_checksum_forged",
+                    "mode": "new_database",
+                },
+                target_database="ktg_t245_checksum_forged",
+            )
 
-        missing_checksum_archive = await _mutated_archive(
-            source_archive,
-            tmp_path / "backups",
-            "t245_missing_internal_checksum",
-            _remove_internal_checksums,
-            include_checksums=False,
-        )
-        await _expect_restore_failure_drops_target(
-            engine,
-            settings,
-            source_dsn=source_dsn,
-            payload={
-                "archive_path": str(missing_checksum_archive),
-                "target_database": "ktg_t245_missing_checksum",
-                "mode": "new_database",
-            },
-            target_database="ktg_t245_missing_checksum",
-        )
+            missing_checksum_archive = await _mutated_archive(
+                source_archive,
+                tmp_path / "backups",
+                "t245_missing_internal_checksum",
+                _remove_internal_checksums,
+                include_checksums=False,
+            )
+            await _expect_restore_failure_drops_target(
+                engine,
+                settings,
+                source_dsn=source_dsn,
+                payload={
+                    "archive_path": str(missing_checksum_archive),
+                    "target_database": "ktg_t245_missing_checksum",
+                    "mode": "new_database",
+                },
+                target_database="ktg_t245_missing_checksum",
+            )
+        finally:
+            await _delete_test_artifacts(
+                engine, artifact_id=artifact_id, display_name_prefix="restore_ktg_t245_"
+            )
     finally:
-        await _delete_test_artifacts(
-            engine, artifact_id=artifact_id, display_name_prefix="restore_ktg_t245_"
-        )
         await engine.dispose()
 
 
@@ -323,38 +325,40 @@ async def test_cancelled_backup_marks_failed_and_removes_partials(tmp_path: Path
     cancel_event.set()
     try:
         await require_disposable_database(engine)
-        await build_minimal_serving_schema(engine)
-        with pytest.raises(asyncio.CancelledError):
-            await run_backup_job(
-                engine,
-                settings,
-                {
-                    "profile": "serving-ready",
-                    "jobs": 1,
-                    "compression_level": 3,
-                    "display_name": display_name,
-                },
-                cancel_event,
-                _noop_progress,
+        try:
+            await build_minimal_serving_schema(engine)
+            with pytest.raises(asyncio.CancelledError):
+                await run_backup_job(
+                    engine,
+                    settings,
+                    {
+                        "profile": "serving-ready",
+                        "jobs": 1,
+                        "compression_level": 3,
+                        "display_name": display_name,
+                    },
+                    cancel_event,
+                    _noop_progress,
+                )
+            failed_artifacts = await AdminRepository(engine).list_artifacts(
+                limit=20, artifact_type=BACKUP_ARTIFACT_TYPE, state="failed"
             )
-        failed_artifacts = await AdminRepository(engine).list_artifacts(
-            limit=20, artifact_type=BACKUP_ARTIFACT_TYPE, state="failed"
-        )
-        failed = [
-            artifact
-            for artifact in failed_artifacts
-            if artifact.display_name == display_name
-        ]
-        assert len(failed) == 1
-        assert failed[0].manifest == {"error": "cancelled"}
+            failed = [
+                artifact
+                for artifact in failed_artifacts
+                if artifact.display_name == display_name
+            ]
+            assert len(failed) == 1
+            assert failed[0].manifest == {"error": "cancelled"}
 
-        archive_path = tmp_path / "backups" / display_name
-        assert not archive_path.exists()
-        assert not archive_path.with_name(f"{archive_path.name}.part").exists()
-        tmp_dir = tmp_path / "tmp"
-        assert not list(tmp_dir.glob("backup_*")) if tmp_dir.exists() else True
+            archive_path = tmp_path / "backups" / display_name
+            assert not archive_path.exists()
+            assert not archive_path.with_name(f"{archive_path.name}.part").exists()
+            tmp_dir = tmp_path / "tmp"
+            assert not list(tmp_dir.glob("backup_*")) if tmp_dir.exists() else True
+        finally:
+            await _delete_test_artifacts(engine, display_name_prefix="t245_cancel_")
     finally:
-        await _delete_test_artifacts(engine, display_name_prefix="t245_cancel_")
         await engine.dispose()
 
 
@@ -373,71 +377,20 @@ async def test_replace_current_guards_reject_target_dsn_confirmation_and_window(
     artifact_id: str | None = None
     try:
         await require_disposable_database(engine)
-        await build_minimal_serving_schema(engine)
-        artifact_id = await make_backup(engine, settings)
-        current_database = database_name_from_dsn(settings.pg_dsn)
-        assert current_database is not None
-        expected_confirmation = f"RESTORE {current_database}"
-
-        with pytest.raises(InvalidInputError, match="requires target_database"):
-            await run_restore_job(
-                engine,
-                settings,
-                {
-                    "artifact_id": artifact_id,
-                    "target_dsn": settings.pg_dsn,
-                    "mode": "replace_current",
-                    "confirmation": expected_confirmation,
-                },
-                asyncio.Event(),
-                _noop_progress,
-            )
-
-        with pytest.raises(InvalidInputError, match="requires confirmation"):
-            await run_restore_job(
-                engine,
-                settings,
-                {
-                    "artifact_id": artifact_id,
-                    "target_database": current_database,
-                    "mode": "replace_current",
-                    "confirmation": "RESTORE wrong_database",
-                },
-                asyncio.Event(),
-                _noop_progress,
-            )
-
-        repo = AdminRepository(engine)
-        wrong_window_confirmation = f"RESTORE wrong_window_{uuid4().hex[:8]}"
-        window = await repo.create_maintenance_window(
-            MaintenanceWindowCreate(
-                kind="restore",
-                reason="T-245 wrong-confirmation maintenance window guard",
-                confirmation=wrong_window_confirmation,
-                requested_by="pytest",
-                approved_by="pytest",
-            )
-        )
         try:
-            def fail_if_restore_reaches_pg_restore(*_args: object, **_kwargs: object) -> None:
-                msg = "replace_current window guard unexpectedly reached pg_restore"
-                raise AssertionError(msg)
+            await build_minimal_serving_schema(engine)
+            artifact_id = await make_backup(engine, settings)
+            current_database = database_name_from_dsn(settings.pg_dsn)
+            assert current_database is not None
+            expected_confirmation = f"RESTORE {current_database}"
 
-            monkeypatch.setattr(
-                backup_module,
-                "build_pg_restore_command",
-                fail_if_restore_reaches_pg_restore,
-            )
-            with pytest.raises(
-                InvalidInputError,
-                match="active restore maintenance window with matching confirmation",
-            ):
+            with pytest.raises(InvalidInputError, match="requires target_database"):
                 await run_restore_job(
                     engine,
                     settings,
                     {
                         "artifact_id": artifact_id,
-                        "target_database": current_database,
+                        "target_dsn": settings.pg_dsn,
                         "mode": "replace_current",
                         "confirmation": expected_confirmation,
                     },
@@ -445,19 +398,72 @@ async def test_replace_current_guards_reject_target_dsn_confirmation_and_window(
                     _noop_progress,
                 )
 
-            with pytest.raises(
-                InvalidInputError,
-                match="active restore maintenance window with matching confirmation",
-            ):
-                await repo.require_active_maintenance_window(
+            with pytest.raises(InvalidInputError, match="requires confirmation"):
+                await run_restore_job(
+                    engine,
+                    settings,
+                    {
+                        "artifact_id": artifact_id,
+                        "target_database": current_database,
+                        "mode": "replace_current",
+                        "confirmation": "RESTORE wrong_database",
+                    },
+                    asyncio.Event(),
+                    _noop_progress,
+                )
+
+            repo = AdminRepository(engine)
+            wrong_window_confirmation = f"RESTORE wrong_window_{uuid4().hex[:8]}"
+            window = await repo.create_maintenance_window(
+                MaintenanceWindowCreate(
                     kind="restore",
-                    confirmation=expected_confirmation,
+                    reason="T-245 wrong-confirmation maintenance window guard",
+                    confirmation=wrong_window_confirmation,
+                    requested_by="pytest",
+                    approved_by="pytest",
+                )
+            )
+            try:
+                def fail_if_restore_reaches_pg_restore(*_args: object, **_kwargs: object) -> None:
+                    msg = "replace_current window guard unexpectedly reached pg_restore"
+                    raise AssertionError(msg)
+
+                monkeypatch.setattr(
+                    backup_module,
+                    "build_pg_restore_command",
+                    fail_if_restore_reaches_pg_restore,
+                )
+                with pytest.raises(
+                    InvalidInputError,
+                    match="active restore maintenance window with matching confirmation",
+                ):
+                    await run_restore_job(
+                        engine,
+                        settings,
+                        {
+                            "artifact_id": artifact_id,
+                            "target_database": current_database,
+                            "mode": "replace_current",
+                            "confirmation": expected_confirmation,
+                        },
+                        asyncio.Event(),
+                        _noop_progress,
+                    )
+
+                with pytest.raises(
+                    InvalidInputError,
+                    match="active restore maintenance window with matching confirmation",
+                ):
+                    await repo.require_active_maintenance_window(
+                        kind="restore",
+                        confirmation=expected_confirmation,
+                    )
+            finally:
+                await repo.end_maintenance_window(
+                    maintenance_window_id=window.maintenance_window_id,
+                    confirmation=wrong_window_confirmation,
                 )
         finally:
-            await repo.end_maintenance_window(
-                maintenance_window_id=window.maintenance_window_id,
-                confirmation=wrong_window_confirmation,
-            )
+            await _delete_test_artifacts(engine, artifact_id=artifact_id)
     finally:
-        await _delete_test_artifacts(engine, artifact_id=artifact_id)
         await engine.dispose()

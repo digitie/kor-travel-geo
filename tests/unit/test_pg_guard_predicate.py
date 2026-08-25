@@ -52,6 +52,11 @@ _WRITE_AWAIT = re.compile(
 _WRITER_BODY = re.compile(
     r"\b(?:SCHEMA_SQL|INDEX_SQL|MV_SQL)\b|TRUNCATE\s|CREATE\s+TABLE"
     r"|DROP\s+TABLE|INSERT\s+INTO|CREATE\s+MATERIALIZED"
+    # Without these, `infra.backup` (DROP DATABASE), `infra.hotswap` (ALTER DATABASE ... RENAME —
+    # the ADR-036 cutover itself), `infra.restore_drill` (CREATE DATABASE) and four services
+    # issuing UPDATE/DELETE were all classified as non-writers.
+    r"|DELETE\s+FROM|UPDATE\s+\w|DROP\s+DATABASE|CREATE\s+DATABASE|ALTER\s+DATABASE"
+    r"|REFRESH\s+MATERIALIZED|CREATE\s+INDEX"
 )
 
 
@@ -81,12 +86,17 @@ _MANAGES_OWN_DATABASES = frozenset(
 #: `RUN-T177-E2E <database>` confirmation on top of the name predicate, which it now shares.
 _STRICTER_OWN_GATE = frozenset({"_t177_full_load_harness.py"})
 
-#: Read-only on their current code path. Each entry carries the source token that makes it so, and
-#: `test_read_only_exemptions_still_hold` asserts that token is still present — an exemption
-#: without a pin rots into a hole.
+#: Read-only on their current code path. Each entry pins BOTH sides of the property: the call the
+#: test makes, and the gate in `src/` that makes that call read-only. An exemption without a pin
+#: rots into a hole — and a pin that only greps the TEST file is defeatable by leaving the token
+#: in a comment while changing the call, which was proven against the first version of this.
 _READ_ONLY_ON_CURRENT_PATH = {
-    # `source_restore_service` only writes an audit row when `actor is not None`.
-    "test_t238_manifest_source_reconcile_live.py": "actor=None",
+    "test_t238_manifest_source_reconcile_live.py": (
+        # what the test passes...
+        "actor=None",
+        # ...and the gate in src/ that makes that mean "no write".
+        ("kortravelgeo/infra/source_restore_service.py", "if actor is not None:"),
+    ),
 }
 
 _SRC_DIR = _TESTS_DIR.parent / "src"
@@ -113,7 +123,17 @@ def _writing_src_modules() -> frozenset[str]:
 def _imports_a_writing_module(source: str) -> bool:
     writing = _writing_src_modules()
     return any(
-        (isinstance(node, ast.ImportFrom) and node.module in writing)
+        (
+            isinstance(node, ast.ImportFrom)
+            and node.module is not None
+            and (
+                node.module in writing
+                # `from kortravelgeo.loaders import c11_entrance_sources` — here `node.module` is
+                # the PACKAGE and the submodule is an alias. Checking only `node.module` let a
+                # module that writes slip through purely by changing its import spelling.
+                or any(f"{node.module}.{a.name}" in writing for a in node.names)
+            )
+        )
         or (isinstance(node, ast.Import) and any(a.name in writing for a in node.names))
         for node in ast.walk(ast.parse(source))
     )
@@ -267,12 +287,24 @@ def test_the_derivation_actually_finds_the_known_writers() -> None:
 
 
 def test_read_only_exemptions_still_hold() -> None:
-    """An exemption without a pin rots into a hole."""
-    for module, token in _READ_ONLY_ON_CURRENT_PATH.items():
+    """An exemption without a pin rots into a hole — and the pin has to be two-sided.
+
+    Pinning only the test-side token is defeatable: keep `actor=None` in a comment, change the
+    real call to `actor="pytest"`, and the exemption silently becomes a licence to write. So the
+    gate in `src/` gets pinned too.
+    """
+    src_root = _TESTS_DIR.parent / "src"
+    for module, (token, (src_rel, src_token)) in _READ_ONLY_ON_CURRENT_PATH.items():
         source = (_INTEGRATION_DIR / module).read_text(encoding="utf-8")
-        assert token in source, (
-            f"{module} is exempted because of {token!r}, which is no longer in its source — "
-            f"re-check whether it now writes, and guard it if so"
+        code = " ".join(line.split("#", 1)[0] for line in source.splitlines())
+        assert token in code, (
+            f"{module} is exempted because of {token!r}, which is no longer in its CODE "
+            f"(comments do not count) — re-check whether it now writes, and guard it if so"
+        )
+        gate = (src_root / src_rel).read_text(encoding="utf-8")
+        assert src_token in gate, (
+            f"{module}'s exemption relies on {src_token!r} in {src_rel}, which is gone — "
+            f"the call is no longer guaranteed read-only"
         )
 
 
