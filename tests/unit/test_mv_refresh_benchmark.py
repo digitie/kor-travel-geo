@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 
 import pytest
@@ -12,7 +13,18 @@ from scripts.benchmark_mv_refresh import (
     _statement_phase_name,
     build_parser,
     result_to_json,
+    run_benchmark,
 )
+
+
+def test_run_benchmark_records_a_serving_release() -> None:
+    """T-291a (ADR-067 D0 violation class 5): this script actually refreshes/shadow-swaps the
+    live mv_geocode_target against whatever engine is configured — it must record a serving
+    release like every other real swap, not just the operator CLI/API paths."""
+    source = inspect.getsource(run_benchmark)
+
+    assert "record_mv_refresh_release" in source
+    assert "strategy=strategy" in source
 
 
 def test_mv_refresh_benchmark_parser_requires_strategy() -> None:

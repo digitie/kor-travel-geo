@@ -89,8 +89,11 @@ class _Harness:
         self.fail_source: str | None = None
         self.cancel_source: str | None = None
 
-    async def run_source_loader(self, engine, *, kind, payload, cancel_event, progress):
+    async def run_source_loader(
+        self, engine, *, kind, payload, cancel_event, progress, load_batch_id=None
+    ):
         self.source_calls.append(kind)
+        assert load_batch_id == "batch-1"
         if self.cancel_source == kind:
             raise asyncio.CancelledError
         if self.fail_source == kind:

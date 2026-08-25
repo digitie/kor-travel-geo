@@ -248,6 +248,61 @@ def test_mv_refresh_and_restore_paths_record_ops_release_hooks() -> None:
     assert "dataset_snapshot_id" in restore_source
 
 
+def test_direct_serving_loads_record_their_own_release_outside_a_batch() -> None:
+    """T-291a (ADR-067 D0 violation class 4): pobox/sppn_makarea/shp/bulk are read directly by
+    geocode/reverse/geometry repos, never through mv_geocode_target. A standalone load of one of
+    these (``load_batch_id is None``) must record its own release; a batch child must not — the
+    batch's own consistency gate hasn't run yet when the child loader finishes, and the batch's
+    final ``run_mv_refresh`` step already records the consolidated release once the gate passes.
+    """
+    from kortravelgeo.loaders import batch_dag
+
+    source = inspect.getsource(batch_dag.run_source_loader)
+    leaf_source = inspect.getsource(batch_dag._source_leaf)
+    run_batch_source = inspect.getsource(batch_dag.run_full_load_batch)
+
+    assert frozenset(
+        {"pobox_load", "sppn_makarea_load", "shp_polygons_load", "bulk_load"}
+    ) == batch_dag._DIRECT_SERVING_KINDS
+    assert "load_batch_id is None" in source
+    assert "record_mv_refresh_release" in source
+    assert "load_batch_id=load_batch_id" in leaf_source
+    assert "load_batch_id=batch_id" in run_batch_source
+
+
+def test_postload_maintenance_execute_safe_records_serving_release() -> None:
+    """T-291a (violation class 2): ``execute_safe`` mode runs a real ``refresh_mv`` swap against
+    the configured engine but never recorded a release."""
+    from kortravelgeo.loaders import postload_maintenance
+
+    source = inspect.getsource(postload_maintenance.run_postload_maintenance)
+    assert "record_mv_refresh_release" in source
+
+
+def test_restore_replace_current_activates_instead_of_leaving_pending() -> None:
+    """T-291a (violation class 3): ``db_restore mode=replace_current`` overwrites the database
+    this app is already serving in place — there is no later hot-swap to promote it, so it must
+    be recorded as the active release directly instead of a `pending` candidate nothing ever
+    promotes."""
+    from kortravelgeo.infra import backup
+
+    restore_source = inspect.getsource(backup.run_restore_job)
+    record_source = inspect.getsource(admin_repo.AdminRepository.record_restore_candidate)
+
+    assert 'activate=req.mode == "replace_current"' in restore_source
+    assert '"active" if activate else "pending"' in record_source
+    assert '"released" if activate else "validated"' in record_source
+    assert "activated_by_job_id=job_id if activate else None" in record_source
+
+
+def test_record_mv_refresh_release_release_kind_can_be_overridden() -> None:
+    """T-291a: the derived full_load/manual_rebuild release_kind can be overridden — used to
+    label delta-lineage refreshes (daily_juso_delta/juso_parcel_link_delta/shp delta mode) as
+    ``daily_delta`` instead of the enum value sitting unreachable."""
+    source = inspect.getsource(admin_repo.AdminRepository.record_mv_refresh_release)
+    assert "release_kind = release_kind or (" in source
+
+
 def test_ops_capture_schedulers_use_settings_and_advisory_locks() -> None:
     from kortravelgeo.api import app
 

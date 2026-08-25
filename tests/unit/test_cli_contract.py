@@ -21,6 +21,7 @@ from kortravelgeo.cli.main import (
     load_pobox_command,
     load_roadaddr_entrances_command,
     load_shp_all_command,
+    load_shp_command,
     load_sppn_makarea_command,
 )
 
@@ -93,6 +94,44 @@ def test_epost_cli_loads_through_shared_validation_helpers() -> None:
     assert "_load_bulk_with_cli_validation" in inspect.getsource(load_bulk_command)
     assert "_load_pobox_with_cli_validation" in inspect.getsource(load_epost_command)
     assert "_load_bulk_with_cli_validation" in inspect.getsource(load_epost_command)
+
+
+def test_direct_serving_and_all_sidos_cli_commands_record_serving_release() -> None:
+    """T-291a: pobox/sppn_makarea/shp/bulk are served directly (no MV), and each of these CLI
+    commands bypasses load_jobs entirely — each must record its own serving release on success
+    rather than relying on a later, possibly-never-run `ktgctl refresh mv`."""
+
+    for command in (
+        load_shp_command,
+        load_shp_all_command,
+        load_sppn_makarea_command,
+        load_pobox_command,
+        load_bulk_command,
+        load_epost_command,
+        load_all_sidos_command,
+    ):
+        source = inspect.getsource(command)
+        assert "record_mv_refresh_release" in source, command.__name__
+
+    assert (
+        'release_kind="daily_delta" if mode == "delta" else None'
+        in inspect.getsource(load_shp_command)
+    )
+    assert (
+        'release_kind="daily_delta" if mode == "delta" else None'
+        in inspect.getsource(load_shp_all_command)
+    )
+
+
+def test_daily_delta_cli_commands_can_refresh_and_label_daily_delta() -> None:
+    """release_kind='daily_delta' sat in the enum with no producer before T-291a — the
+    daily-juso/daily-parcel-links CLI commands are now the ones that can emit it."""
+
+    for command in (load_daily_juso_command, load_daily_parcel_links_command):
+        source = inspect.getsource(command)
+        assert "--refresh/--no-refresh" in source
+        assert 'release_kind="daily_delta"' in source
+        assert "record_mv_refresh_release" in source
 
 
 def test_limit_per_file_commands_warn_test_only() -> None:
