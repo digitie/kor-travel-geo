@@ -187,7 +187,7 @@ releases 표가 이미 release 목록을 렌더하므로, 그 응답 DTO(`Servin
 |---|---|---|
 | full_load / manual_rebuild / (T-291a 이후) CLI refresh swap·postload execute_safe | 새 release → 새 토큰 | `changed:true`, `full`. 동일 데이터 재적재도 새 토큰(허용된 과잉 감지) |
 | daily_delta (T-291a의 라벨링 이후) | 새 release → 새 토큰 | `changed:true`, `delta` → 소비자는 증분 갱신 |
-| 직접 서빙 base table 단독 적재 (pobox/sppn/polygon — T-291a 이후) | 새 release → 새 토큰 | `changed:true`, `full`. 현재 코드는 미기록이라 외부 응답이 바뀌어도 토큰 불변인 거짓 음성 — D0 4류 수정 대상 |
+| 직접 서빙 base table 단독 적재 (pobox/sppn/polygon/bulk — T-291a 이후) | 새 release → 새 토큰 | `changed:true`, `full`. 현재 코드는 미기록이라 외부 응답이 바뀌어도 토큰 불변인 거짓 음성 — D0 4류 수정 대상 |
 | restore `new_database`(hot-swap 미실행) | `pending` 행만 **라이브** 원장에 추가 | 서빙 미변경 — 사영이 `pending`을 배제하므로 토큰·응답 불변 (정상) |
 | restore `replace_current` | (T-291a 이후) active `restore` 행 기록 → 새 토큰 | `changed:true`, `full`. 현재 코드는 `pending`만 남겨 토큰이 안 바뀌는 거짓 음성 — D0의 수정 대상 |
 | hot-swap restore(ADR-036) | 교체 DB 원장 = 백업 시점 이력 + restore 신규 active 행. 백업~복원 사이 릴리스 소멸 | 새 토큰, `full`. 소비자 저장 토큰이 소멸분이면 `known_version_found:false` → 전체 재동기화 |
