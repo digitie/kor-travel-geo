@@ -1,6 +1,6 @@
 # 아키텍처
 
-본 문서는 `kor-travel-geo` 백엔드와 `kor-travel-geo-ui` 프론트엔드가 함께 구성하는 한 시스템의 큰 구조를 다룬다. 결정의 역사는 `docs/decisions.md`(ADR)에서 별도로 관리한다.
+본 문서는 `kor-travel-geo` 백엔드와 `kor-travel-geo-ui` 프론트엔드가 함께 구성하는 한 시스템의 큰 구조를 다룬다. 결정의 역사는 `docs/adr/`(ADR, 색인 `docs/adr/README.md`)에서 별도로 관리한다.
 
 ## 두 패키지, 한 시스템
 
@@ -309,5 +309,5 @@ T-050 5차부터 `ops.table_stats_snapshots`는 수동 capture API뿐 아니라 
 - 백엔드 사양서: `docs/architecture/backend-package.md`
 - 프론트엔드 사양서: `docs/architecture/frontend-package.md`
 - 데이터 모델: `docs/architecture/data-model.md`, `docs/architecture/address-db-schema.md`
-- 결정 기록: `docs/decisions.md`
+- 결정 기록: `docs/adr/` (색인 `docs/adr/README.md`)
 - 외부 API: `docs/architecture/external-apis.md`

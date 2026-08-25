@@ -359,4 +359,4 @@ T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/loa
 
 1. nginx/traefik 앞단에 basic auth 또는 OAuth proxy 배치
 2. 사내 SSO 게이트웨이(Cloudflare Access, Tailscale, OpenVPN 등) 뒤로 이동
-3. 마지막 수단으로 NextAuth 도입 — 그때도 `docs/decisions.md`에 새 ADR.
+3. 마지막 수단으로 NextAuth 도입 — 그때도 `docs/adr/`에 새 ADR.

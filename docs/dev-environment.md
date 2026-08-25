@@ -305,6 +305,6 @@ Windows 재설치, WSL 초기화, 새 PC 이전 뒤에는 본 문서의 패키�
 ## 참고
 
 - `docs/geocoding-readiness.md` 0번 체크리스트 — readiness 점검 시 GDAL부터 본다.
-- `docs/decisions.md` ADR-005(GDAL Python binding), ADR-008(시스템 GDAL 버전 핀).
+- ADR-005(GDAL Python binding)·ADR-008(시스템 GDAL 버전 핀) — `docs/adr/`(ADR-008은 SKILL.md §4로 이관된 규칙).
 - `docs/architecture/backend-package.md` §9.2 — `SidoLoader`에서 `gdal.VectorTranslate` 사용.
 - `docs/windows-reinstall-recovery.md` — 재설치·새 세션 복구 절차(Git worktree, NTFS `data/`, `.env`, DB 백업/복원).

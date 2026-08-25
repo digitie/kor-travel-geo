@@ -1,6 +1,6 @@
 # ADR — Architecture Decision Records
 
-`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-066.**
+`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-068.**
 
 - ADR은 **프로그램 핵심 구조**(의존 계층·데이터/식별 모델·패키지/서비스 구조·REST 계약·
   운영 모델) 결정만 둔다. 도메인/ETL·taxonomy·알고리즘·process·운영 결정 중 해당 topic
@@ -82,6 +82,7 @@
 | ADR-064 | Admin UI 로그인과 공개 API key 관리를 둔다 | [064-ui-login-admin-proxy-public-api-keys.md](064-ui-login-admin-proxy-public-api-keys.md) |
 | ADR-065 | 개발 명령은 Linux 환경에서만 실행한다 | [065-linux-only-development-environment.md](065-linux-only-development-environment.md) |
 | ADR-066 | 백업/복원·적재 오케스트레이션은 서비스 전용 독립 Dagster로 이관한다 | [066-geo-independent-dagster-orchestration.md](066-geo-independent-dagster-orchestration.md) |
+| ADR-067 | 데이터셋 버전 외부 공개는 serving release 파생 opaque 토큰 + 최소 공개 원칙으로 한다 (proposed) | [067-external-dataset-version-api.md](067-external-dataset-version-api.md) |
 
 ## ADR 표준 형식
 

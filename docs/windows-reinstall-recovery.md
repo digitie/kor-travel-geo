@@ -140,7 +140,7 @@ git pull --ff-only
 5. `docs/journal.md`의 최신 항목
 6. `docs/dev-environment.md`
 7. `docs/windows-reinstall-recovery.md`
-8. 관련 ADR이 있는 `docs/decisions.md`
+8. 관련 ADR — `docs/adr/` (색인 `docs/adr/README.md`)
 
 빈 DB를 다시 만들어야 하면 `docs/t027-fullload-plan.md`의 기준월 분리, 산출물 경로, 백업/복원(ADR-030/ADR-036) 절차를 참고한다.
 
@@ -246,7 +246,7 @@ Codex가 재설치 후에도 안정적으로 이어가게 하려면 "Codex 내�
 - `docs/t027-fullload-plan.md`: 전체 적재/검증 절차와 기준월 분리
 - `docs/windows-reinstall-recovery.md`: 재설치 후 복구 절차
 
-Codex 세션에서 중요한 판단이 생기면 `docs/journal.md`와 `docs/resume.md`를 갱신하고 커밋한다. 결정의 성격이 바뀌면 `docs/decisions.md`에 ADR로 남긴다. 이렇게 하면 다른 AI agent나 사람이 GitHub만 보고도 같은 맥락을 복구할 수 있다.
+Codex 세션에서 중요한 판단이 생기면 `docs/journal.md`와 `docs/resume.md`를 갱신하고 커밋한다. 결정의 성격이 바뀌면 `docs/adr/`에 ADR로 남긴다. 이렇게 하면 다른 AI agent나 사람이 GitHub만 보고도 같은 맥락을 복구할 수 있다.
 
 ### 5.2 권장: PR 코멘트에 handoff 남기기
 

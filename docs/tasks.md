@@ -64,6 +64,31 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 **전부 완료·종료** — 이슈 #298은 PR #491, #302는 PR #493, #299는 PR #495, #252는 PR #497, #307은
 PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본문·코멘트 참조.
 
+### 신규 기능
+
+- [ ] **T-291** — 데이터셋 버전 외부 공개 API + admin 버전 관측 (변경 감지). 외부 소비자가
+  주소 DB 변경 여부·이력을 확인하고 자기 파생 데이터를 갱신할 수 있도록, active serving
+  release에서 파생한 opaque 토큰을 `POST /v2/dataset/version`(known_version 조건부 폴링)·
+  `POST /v2/dataset/history`로 공개한다. 인증은 기존 공개 API 키(ADR-064)+GeoIP 게이트
+  (ADR-037) 재사용, 1차 스키마 변경 0건(기존 ops 테이블 사영), admin은 기존 releases 표면
+  확장(읽기 전용)+외부 응답 미리보기. 결정
+  [ADR-067](adr/067-external-dataset-version-api.md), 정본
+  [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
+  - [ ] **T-291a** — 서빙 전환 기록 완결 (**외부 공개의 선행 조건**, ADR-067 D0): 위반
+    5류 — refresh 3경로(CLI `all-sidos --refresh`·postload `execute_safe`·restore
+    `replace_current`) + **직접 서빙 base table 단독 적재**(pobox/sppn/polygon/bulk) +
+    benchmark 스크립트 shadow-swap — 가 release를 기록하게 하고, delta 계열 유래를
+    `daily_delta`로 라벨링(`record_mv_refresh_release` 시그니처 확장 필요). 현재는 전국
+    재적재·pobox 교체 어느 쪽도 토큰이 안 바뀌는 거짓 음성이 있다.
+  - [ ] **T-291b** — 토큰·기준월 정규화기(4형태)·공용 사영·keyset 커서 (backend 내부만).
+  - [ ] **T-291c** — 외부 v2 엔드포인트 + 전용 admission scope + openapi/gen:types +
+    api-reference 4건(신규 문서·README·llm-summary·v2 공통 규약 Cache-Control 조항).
+  - [ ] **T-291d** — admin 확장: `ServingRelease` additive 필드 + OpsPanel releases 표
+    컬럼·상세·미리보기·curl + live e2e.
+  - [ ] **T-291e** — 기록 경로 위생(독립): 백업 artifact FK 기입, BackupsPanel 백업 시점
+    토큰, hot-swap source_set 자체 완결화, `batch_dag` repr 열화 수정, restore drill의
+    원장 `pending` 누적 정리 판단.
+
 ### 선택 후속 (낮은 우선순위)
 
 - **진행 중 작업 없음.** (T-219 잔여 L까지 완료 — `tasks-done.md` 참조.)
