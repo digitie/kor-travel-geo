@@ -312,7 +312,9 @@
   `scripts/export_openapi.py` 재생성(CI drift) + **api-reference 4건**: 신규
   `docs/api-reference/v2/dataset-version.md`(소비자 프로토콜·보증·엣지 표),
   `docs/api-reference/README.md`(구현 범위·문서 지도), `docs/api-reference/llm-summary.md`
-  (엔드포인트 표), `docs/api-reference/v2/README.md`(Cache-Control 규약 신설) + UI
+  (엔드포인트 표), `docs/api-reference/v2/README.md`(Cache-Control 규약 신설),
+  `docs/t145-backpressure-failfast.md`(`KTG_API_DATASET_MAX_CONCURRENCY` 행 추가 — 유일한
+  `KTG_API_*_MAX_CONCURRENCY` 열거처) + UI
   `npm run gen:types`. 계약 테스트 포함.
 - **T-291d — admin 확장**: `ServingRelease` additive 필드 + OpsPanel releases 표 컬럼 +
   상세/미리보기/curl + CurrentConfigTab·AdminHome 행 + e2e(§4).
