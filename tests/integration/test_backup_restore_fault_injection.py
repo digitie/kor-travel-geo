@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 
 async def _noop_progress(
@@ -226,6 +227,7 @@ async def test_restore_rejects_corrupt_archives_and_drops_target(tmp_path: Path)
     engine = make_async_engine(settings)
     artifact_id: str | None = None
     try:
+        await require_disposable_database(engine)
         await build_minimal_serving_schema(engine)
         artifact_id = await make_backup(engine, settings)
         repo = AdminRepository(engine)
@@ -320,6 +322,7 @@ async def test_cancelled_backup_marks_failed_and_removes_partials(tmp_path: Path
     cancel_event = asyncio.Event()
     cancel_event.set()
     try:
+        await require_disposable_database(engine)
         await build_minimal_serving_schema(engine)
         with pytest.raises(asyncio.CancelledError):
             await run_backup_job(
@@ -369,6 +372,7 @@ async def test_replace_current_guards_reject_target_dsn_confirmation_and_window(
     engine = make_async_engine(settings)
     artifact_id: str | None = None
     try:
+        await require_disposable_database(engine)
         await build_minimal_serving_schema(engine)
         artifact_id = await make_backup(engine, settings)
         current_database = database_name_from_dsn(settings.pg_dsn)

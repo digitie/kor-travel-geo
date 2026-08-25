@@ -2,6 +2,53 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-25 (이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot, by claude)
+
+#523에서 분리한 항목. 가드를 붙이기 전에 **각 suite가 실제로 어떤 DB를 가리키는지 먼저 감사**했다 —
+#523 P1이 정확히 그 감사를 건너뛰어 T-246 e2e를 죽인 사고였기 때문이다.
+
+감사에서 나온 것
+- **C14는 DB 테스트가 아니다.** engine도 DSN도 없고 순수 ZIP/DBF 파싱이다. 범위에서 뺐다.
+- staging 테이블은 전부 **permanent**다(`ShapeStagingSpec.temporary`가 False 기본이고 아무도
+  True를 넘기지 않는다). 두 번째 세션에서 읽히는 것으로 확인했다.
+- **C15/C16/C17은 안전성이 거꾸로 걸려 있다** — 깨끗한 scratch DB에서는 serving 관계가 없어 skip하고,
+  적재된 운영 DB에서만 돈다. 즉 "안전한 곳에서는 안 돌고 위험한 곳에서만 도는" 구조다.
+- 실제로 `kor_travel_geo` 이름의 DB에 대고 C17을 돌리면 가드 없이 접속해 staging DDL을 실행한다.
+- 반면 **pytest로 이 suite들을 돌린 기록이 문서에 하나도 없다.** T-121/T-122/T-215의 live 검증은
+  `scripts/run_phase1_augment_reports.py`가 `KTG_PG_DSN`으로 돌린 것이라 테스트 경계 가드와 무관하다.
+  그래서 가드를 붙여도 실제로 잃는 커버리지는 없다 — 다만 C15~C17은 대상 DB를 문서에 남겨야 한다
+  (일반 안내인 "예: `kor_travel_geo_test`"는 이들에겐 **틀린 조언**이다. 빈 test DB엔 serving
+  테이블이 없어서 또 skip된다). `hint` 인자를 추가하고 t115~t117 문서에 대상 DB를 적었다.
+
+구조적 빈틈 — 마커 정규식이 `src/` 헬퍼의 쓰기를 못 본다
+C1x는 DDL을 전부 `src/kortravelgeo/loaders/augment_harness.py` 등을 통해 낸다. 테스트 파일만
+훑는 정규식으로는 안 보이고, 그래서 6개가 무방비로 남아 있었다. **import 기반 도출**로 바꿨다:
+`src/` 모듈 중 쓰기 SQL을 가진 것을 추려두고, 그 모듈을 import하는 테스트를 writer로 본다.
+과대 근사이므로 진짜 read-only면 `_READ_ONLY_ON_CURRENT_PATH`에 **근거 토큰과 함께** 등재하고,
+그 토큰이 소스에 남아 있는지 테스트가 검사한다(근거 없는 면제는 구멍으로 썩는다).
+이제 새 `c18_*.py`에 DROP TABLE이 생기면 그걸 import하는 테스트가 같은 커밋에서 자동으로
+가드 필수가 된다 — 누가 기억해야 하는 구조가 아니다.
+
+skip budget — 이번 작업의 핵심
+가드가 정당한 이름을 거부해서 커버리지가 사라지는 걸 잡는 장치가 없었다. `pytest -q`에서 skip은
+"DSN 미설정"과 구분되지 않고, RuntimeWarning도 마찬가지로 안 보인다. DSN을 **설정했는데도** 가드가
+거부하면 세션을 실패시킨다(`KTG_TEST_ALLOW_GUARD_SKIPS=1`로 명시 수용 가능). #523에서 T-246이
+`3 passed`→`3 skipped`로 조용히 사라진 걸 잡았을 유일한 장치다.
+
+try/finally 분리 (감사도 종합도 놓쳤다가 구현 중 확인)
+`pytest.skip`은 `Skipped(BaseException)`을 던지므로, 기존의 단일 `try/finally`면 가드가 거부한
+바로 그 DB에 `DROP TABLE IF EXISTS`가 나간다. 안쪽 try가 staging drop을, 바깥 try가 dispose를
+맡도록 쪼갰다.
+
+`test_backup_restore_hot_swap_roundtrip.py`는 **가드하지 않는다** — 문서화된 DSN이 `.../postgres`
+(보호 대상)이고 모든 쓰기는 하네스가 만든 `ktg_t246_*_e2e_*`로 간다. 여기에 가드를 걸면 #523이
+한 번 낸 사고를 그대로 재현한다. `_MANAGES_OWN_DATABASES`에 이유와 함께 등재했다.
+
+부수: 인덱스 행의 `dead_tuples`도 `estimated_rows`와 같은 결함이었다(인덱스에는
+`pg_stat_user_tables` 행이 아예 없는데 `COALESCE(..., 0)`이 0을 지어냈다). relkind로 막아 NULL을
+남긴다. 계약 변경 없음. `/admin/tables` 절단과 죽은 `toast` 분기는 하지 않기로 했다 —
+실측 27/200이고, toast는 #524가 이미 주석과 테스트로 문서화했다.
+
 ## 2026-08-25 (이슈 #523 — 운영 DB를 통과시키던 테스트 가드 + 미분석 관계 0행 기록, by claude)
 
 #515 리뷰에서 범위 밖으로 밀어둔 세 건. 실제 위험도로 다시 매기니 이슈에 적힌 순서가 뒤집혔다.

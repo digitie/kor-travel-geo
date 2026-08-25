@@ -1316,7 +1316,16 @@ SELECT n.nspname AS schema_name,
             )::bigint
             ELSE NULL
        END AS toast_bytes,
-       GREATEST(COALESCE(s.n_dead_tup, 0), 0)::bigint AS dead_tuples,
+       -- Same defect as `estimated_rows` above (issue #525): indexes get no
+       -- `pg_stat_user_tables` row at all, so `COALESCE(s.n_dead_tup, 0)` wrote a fabricated 0
+       -- into a permanent ops history row. NULL means "no stats entry exists" — and unlike
+       -- `estimated_rows` there is no three-way ambiguity here, so no provenance key is needed:
+       -- after this change an index row can only be NULL, which makes pre-#525 rows
+       -- self-identifying. Keep this relkind list in step with the `estimated_rows` CASE.
+       CASE WHEN c.relkind IN ('r','p','m')
+            THEN GREATEST(COALESCE(s.n_dead_tup, 0), 0)::bigint
+            ELSE NULL
+       END AS dead_tuples,
        s.last_vacuum,
        s.last_analyze
   FROM pg_class c

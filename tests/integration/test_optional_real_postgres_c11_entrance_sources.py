@@ -13,6 +13,7 @@ from kortravelgeo.loaders.c11_entrance_sources import (
     drop_c11_entrance_staging_tables,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 DATA_ROOTS = (
     Path("data/juso"),
@@ -39,27 +40,30 @@ async def test_real_postgres_c11_entrance_sources_sejong_when_enabled() -> None:
     )
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        await require_disposable_database(engine)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
 
-        comparison = await compare_c11_entrance_sources(
-            engine,
-            bundle_zip,
-            electronic_dir,
-            source_yyyymm="202605",
-            sample_limit=3,
-            locsum_table=C11_ELECTRONIC_ENTRANCE_TABLE,
-            roadaddr_table=C11_ELECTRONIC_ENTRANCE_TABLE,
-        )
+            comparison = await compare_c11_entrance_sources(
+                engine,
+                bundle_zip,
+                electronic_dir,
+                source_yyyymm="202605",
+                sample_limit=3,
+                locsum_table=C11_ELECTRONIC_ENTRANCE_TABLE,
+                roadaddr_table=C11_ELECTRONIC_ENTRANCE_TABLE,
+            )
 
-        assert comparison.sido_name == "세종특별자치시"
-        assert comparison.bundle_rows > 0
-        assert comparison.electronic_rows > 0
-        assert comparison.dbf_exact_key_overlap.intersection_count > 0
-        assert all(pair.distance.samples > 0 for pair in comparison.pairs)
-        assert comparison.metrics()["serving_promotion"] is False
+            assert comparison.sido_name == "세종특별자치시"
+            assert comparison.bundle_rows > 0
+            assert comparison.electronic_rows > 0
+            assert comparison.dbf_exact_key_overlap.intersection_count > 0
+            assert all(pair.distance.samples > 0 for pair in comparison.pairs)
+            assert comparison.metrics()["serving_promotion"] is False
+        finally:
+            await drop_c11_entrance_staging_tables(engine)
     finally:
-        await drop_c11_entrance_staging_tables(engine)
         await engine.dispose()
 
 

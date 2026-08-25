@@ -12,6 +12,7 @@ from kortravelgeo.loaders.c12_connection_lines import (
     drop_c12_connection_staging_tables,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 DATA_ROOTS = (
     Path("data/juso"),
@@ -38,27 +39,30 @@ async def test_real_postgres_c12_connection_lines_sejong_when_enabled() -> None:
     )
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        await require_disposable_database(engine)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
 
-        comparison = await compare_c12_connection_lines(
-            engine,
-            bundle_zip,
-            electronic_dir,
-            source_yyyymm="202605",
-            sample_limit=3,
-            tolerance_m=1.0,
-        )
+            comparison = await compare_c12_connection_lines(
+                engine,
+                bundle_zip,
+                electronic_dir,
+                source_yyyymm="202605",
+                sample_limit=3,
+                tolerance_m=1.0,
+            )
 
-        assert comparison.sido_name == "세종특별자치시"
-        assert comparison.connection_rows > 0
-        assert comparison.road_rows > 0
-        assert comparison.entrance_ref_overlap.intersection_count > 0
-        assert comparison.road_key_overlap.intersection_count > 0
-        assert comparison.road_adjacency.total_connections == comparison.connection_rows
-        assert comparison.metrics()["serving_promotion"] is False
+            assert comparison.sido_name == "세종특별자치시"
+            assert comparison.connection_rows > 0
+            assert comparison.road_rows > 0
+            assert comparison.entrance_ref_overlap.intersection_count > 0
+            assert comparison.road_key_overlap.intersection_count > 0
+            assert comparison.road_adjacency.total_connections == comparison.connection_rows
+            assert comparison.metrics()["serving_promotion"] is False
+        finally:
+            await drop_c12_connection_staging_tables(engine)
     finally:
-        await drop_c12_connection_staging_tables(engine)
         await engine.dispose()
 
 

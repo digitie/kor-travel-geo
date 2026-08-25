@@ -16,6 +16,7 @@ each one has been broken in practice:
 from __future__ import annotations
 
 import ast
+import functools
 import re
 from pathlib import Path
 
@@ -35,9 +36,6 @@ _GUARD_CALL = "require_disposable_database"
 #: Source markers for "this statement writes to the database it is connected to", matched in the
 #: TEST module's own source. `CREATE EXTENSION IF NOT EXISTS` is deliberately excluded: it is
 #: idempotent and several suites issue it against a loaded database on purpose.
-#: KNOWN GAP: the C11-C17 suites create and drop staging tables through helpers in `src/`
-#: (`recreate_shape_staging_table`), so their DDL is invisible here and they are NOT in the
-#: derived list. They are not read-only — guarding them is deferred, see issue #525.
 #: Case-SENSITIVE on purpose: matching `truncate` case-insensitively also matches Python
 #: identifiers like `truncated_archive`, which flagged a module that only writes through an
 #: already-guarded helper.
@@ -66,12 +64,59 @@ def _calls(source: str, name: str) -> bool:
 #: connect straight to the databases it made (it INSERTs a marker row), so the exemption is about
 #: OWNERSHIP, not about connecting via `postgres`: their names are minted at runtime and carry an
 #: `e2e` segment so the guard inside `build_minimal_serving_schema` still accepts them.
+#:
+#: `test_backup_restore_hot_swap_roundtrip.py` is the T-246 trap: its documented DSN points at the
+#: `postgres` maintenance database (which is PROTECTED), and every write goes to the harness-minted
+#: `ktg_t246_*_e2e_*` databases. Guarding it at the DSN level would refuse the maintenance
+#: connection and skip the whole suite — exactly the outage issue #523 caused once already.
 _MANAGES_OWN_DATABASES = frozenset(
-    {"_hotswap_roundtrip.py", "test_scratch_db_roundtrip.py", "_pg_guard.py"}
+    {
+        "_hotswap_roundtrip.py",
+        "test_backup_restore_hot_swap_roundtrip.py",
+        "test_scratch_db_roundtrip.py",
+        "_pg_guard.py",
+    }
 )
 #: Guarded by a STRICTER mechanism: `validate_t177_confirmation` demands a typed
 #: `RUN-T177-E2E <database>` confirmation on top of the name predicate, which it now shares.
 _STRICTER_OWN_GATE = frozenset({"_t177_full_load_harness.py"})
+
+#: Read-only on their current code path. Each entry carries the source token that makes it so, and
+#: `test_read_only_exemptions_still_hold` asserts that token is still present — an exemption
+#: without a pin rots into a hole.
+_READ_ONLY_ON_CURRENT_PATH = {
+    # `source_restore_service` only writes an audit row when `actor is not None`.
+    "test_t238_manifest_source_reconcile_live.py": "actor=None",
+}
+
+_SRC_DIR = _TESTS_DIR.parent / "src"
+
+
+@functools.cache
+def _writing_src_modules() -> frozenset[str]:
+    """`src/` modules whose source contains write SQL.
+
+    Derived, never listed. The C11-C17 suites do all their DDL through helpers in `src/`
+    (`recreate_shape_staging_table` and friends), so a marker scan of the TEST file alone cannot
+    see it — which is how six write-heavy suites sat unguarded. Deriving from imports means a new
+    `c18_*.py` with a `DROP TABLE` makes every test importing it guard-required on the same
+    commit, rather than when someone remembers.
+    """
+    return frozenset(
+        ".".join(path.relative_to(_SRC_DIR).with_suffix("").parts)
+        for path in _SRC_DIR.rglob("*.py")
+        if "__pycache__" not in path.parts
+        and _WRITER_BODY.search(path.read_text(encoding="utf-8"))
+    )
+
+
+def _imports_a_writing_module(source: str) -> bool:
+    writing = _writing_src_modules()
+    return any(
+        (isinstance(node, ast.ImportFrom) and node.module in writing)
+        or (isinstance(node, ast.Import) and any(a.name in writing for a in node.names))
+        for node in ast.walk(ast.parse(source))
+    )
 
 
 def _integration_modules() -> list[Path]:
@@ -79,7 +124,14 @@ def _integration_modules() -> list[Path]:
 
 
 def _writes_to_the_dsn_database(source: str) -> bool:
-    return "KTG_TEST_PG_DSN" in source and bool(_WRITE_AWAIT.search(source))
+    """Over-approximates on purpose: a module that imports a writer is treated as a writer.
+
+    If a module caught this way really is read-only, add it to `_READ_ONLY_ON_CURRENT_PATH` with
+    the token that proves it — do NOT add a guard it does not need.
+    """
+    return "KTG_TEST_PG_DSN" in source and (
+        bool(_WRITE_AWAIT.search(source)) or _imports_a_writing_module(source)
+    )
 
 
 def _modules_requiring_a_guard() -> list[Path]:
@@ -89,6 +141,7 @@ def _modules_requiring_a_guard() -> list[Path]:
         for path in _integration_modules()
         if path.name not in _MANAGES_OWN_DATABASES
         and path.name not in _STRICTER_OWN_GATE
+        and path.name not in _READ_ONLY_ON_CURRENT_PATH
         and _writes_to_the_dsn_database(path.read_text(encoding="utf-8"))
     ]
 
@@ -195,15 +248,40 @@ def test_every_write_heavy_module_is_guarded() -> None:
 
 
 def test_the_derivation_actually_finds_the_known_writers() -> None:
-    """Guards the guard: if the marker regex stops matching, the test above passes vacuously."""
+    """Guards the guard: if the detection stops matching, the test above passes vacuously."""
     found = {path.name for path in _modules_requiring_a_guard()}
     for expected in (
         "test_t210_source_integration.py",
         "test_full_load_batch_dagster_roundtrip.py",
         "test_optional_real_postgres_load.py",
         "_backup_roundtrip.py",
+        # Reached only through the import-aware branch: their DDL lives in `src/` helpers, which
+        # is why they sat unguarded (issue #525).
+        "test_optional_real_postgres_c11_entrance_sources.py",
+        "test_optional_real_postgres_c16_address_building_drift.py",
     ):
-        assert expected in found, f"{expected} no longer detected as a writer"
+        assert expected in found, (
+            f"{expected} no longer detected as a writer — if it really became read-only, move it "
+            f"to _READ_ONLY_ON_CURRENT_PATH with a pin; do not silently drop it"
+        )
+
+
+def test_read_only_exemptions_still_hold() -> None:
+    """An exemption without a pin rots into a hole."""
+    for module, token in _READ_ONLY_ON_CURRENT_PATH.items():
+        source = (_INTEGRATION_DIR / module).read_text(encoding="utf-8")
+        assert token in source, (
+            f"{module} is exempted because of {token!r}, which is no longer in its source — "
+            f"re-check whether it now writes, and guard it if so"
+        )
+
+
+def test_src_writer_detection_is_not_vacuous() -> None:
+    """The import-aware branch is only useful if it actually classifies the helper modules."""
+    writing = _writing_src_modules()
+    assert "kortravelgeo.loaders.augment_harness" in writing
+    # ...and does not simply match everything.
+    assert "kortravelgeo.core.normalize" not in writing
 
 
 def _writer_functions(tree: ast.AST, source: str) -> set[str]:

@@ -12,6 +12,10 @@ from kortravelgeo.loaders.c15_civil_service_poi import (
     drop_c15_civil_service_poi_staging_tables,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import (
+    LOADED_SERVING_DB_HINT,
+    require_disposable_database,
+)
 
 DATA_ROOTS = (
     Path("data/juso"),
@@ -31,30 +35,35 @@ async def test_real_postgres_c15_civil_service_poi_sample_when_enabled() -> None
     civil_zip = _require("민원행정기관전자지도_240124.zip")
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
-        async with engine.connect() as conn:
-            mv_exists = await conn.scalar(text("SELECT to_regclass('public.mv_geocode_target')"))
-            if mv_exists is None:
-                pytest.skip("mv_geocode_target is not available")
-            mv_count = await conn.scalar(text("SELECT count(*)::bigint FROM mv_geocode_target"))
-            if not mv_count:
-                pytest.skip("mv_geocode_target is empty")
+        await require_disposable_database(engine, hint=LOADED_SERVING_DB_HINT)
+        try:
+            async with engine.connect() as conn:
+                mv_exists = await conn.scalar(
+                    text("SELECT to_regclass('public.mv_geocode_target')")
+                )
+                if mv_exists is None:
+                    pytest.skip("mv_geocode_target is not available")
+                mv_count = await conn.scalar(text("SELECT count(*)::bigint FROM mv_geocode_target"))
+                if not mv_count:
+                    pytest.skip("mv_geocode_target is empty")
 
-        comparison = await compare_c15_civil_service_poi_distance(
-            engine,
-            civil_zip,
-            source_yyyymm="202401",
-            row_limit=100,
-            sample_limit=5,
-        )
+            comparison = await compare_c15_civil_service_poi_distance(
+                engine,
+                civil_zip,
+                source_yyyymm="202401",
+                row_limit=100,
+                sample_limit=5,
+            )
 
-        metrics = comparison.metrics()
-        assert comparison.poi_rows == 100
-        assert comparison.distance.total_poi_rows == 100
-        assert comparison.distance.parsed_address_rows > 0
-        assert metrics["serving_promotion"] is False
-        assert metrics["geocode_distance_m"]["geocoder_contract"] == "batch_exact_road_lookup"
+            metrics = comparison.metrics()
+            assert comparison.poi_rows == 100
+            assert comparison.distance.total_poi_rows == 100
+            assert comparison.distance.parsed_address_rows > 0
+            assert metrics["serving_promotion"] is False
+            assert metrics["geocode_distance_m"]["geocoder_contract"] == "batch_exact_road_lookup"
+        finally:
+            await drop_c15_civil_service_poi_staging_tables(engine)
     finally:
-        await drop_c15_civil_service_poi_staging_tables(engine)
         await engine.dispose()
 
 
