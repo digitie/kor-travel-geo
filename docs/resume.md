@@ -10,10 +10,11 @@
   없음), 인증은 기존 공개 API 키+GeoIP 게이트 재사용, admin은 기존 releases 표면 확장(읽기 전용).
   결정 [ADR-067](adr/067-external-dataset-version-api.md)(proposed), 정본
   [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
-  적대적 리뷰에서 기반 불변식의 구멍이 확인됐다 — 서빙 전환 3경로(CLI refresh swap·postload
-  execute_safe·restore replace_current)가 release를 기록하지 않아 재적재에도 토큰이 안 바뀌는
-  거짓 음성이 가능하다. **다음 한 작업 후보**: T-291a(서빙 전환 기록 완결 — 외부 공개의 선행
-  조건, ADR-067 D0).
+  적대적 리뷰에서 기반 불변식의 구멍이 확인됐다 — 위반 **5류**: refresh 3경로(CLI refresh
+  swap·postload execute_safe·restore replace_current) + **직접 서빙 base table 단독 적재**
+  (pobox/sppn/polygon — MV를 거치지 않아 pobox 파일 교체만으로도 외부 응답이 바뀌는데 토큰
+  불변) + benchmark 스크립트의 라이브 shadow-swap. **다음 한 작업 후보**: T-291a(서빙 전환
+  기록 완결, 5류 전부 — 외부 공개의 선행 조건, ADR-067 D0).
 
 - ✅ **이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot (2026-08-25, PR #526, by claude)** —
   C1x suite 6개가 `src/` 헬퍼를 통해 permanent staging 테이블을 만드는데 마커 정규식이 그걸 못 봐

@@ -215,8 +215,10 @@
   - **외부 키 어휘 고정**: 공개 map의 키는 enum
     `juso`/`parcel_link`/`locsum`/`navi`/`shp`/`roadaddr_entrance`/`sppn_makarea`/`pobox`로
     고정한다(ADR-067 D2). 형태 B는 이미 kind명이므로 그대로, 형태 A의 source category 코드는
-    매핑표로 변환한다: `roadname_hangul_full → juso`, `juso_parcel_link_full → parcel_link`,
-    `locsum_full → locsum`, `navi_full → navi`, `zone_shape_full`/`building_shape_full → shp`,
+    매핑표로 변환한다(코드는 `core/source_categories.py` 실재값):
+    `roadname_hangul_full → juso`와 `parcel_link` **두 키 모두**(한글 전체분 archive가 지번
+    link의 원본이기도 하다), `locsum_full → locsum`, `navi_full → navi`,
+    `roadaddr_building_shape_bundle → shp`, `zone_shape_full → sppn_makarea`,
     `roadaddr_entrance_full → roadaddr_entrance`, `epost_pobox_full → pobox`. 미지 category는
     **생략**한다(억지 통과보다 누락이 낫다 — 토큰이 신뢰 신호). 매핑표의 정본은 구현 시
     `core/source_categories.py`와 대조해 확정하고, **writer 형태별 픽스처가 키 어휘 동일성을

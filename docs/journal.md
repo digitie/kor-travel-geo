@@ -42,8 +42,8 @@ active ≤ 1을 강제한다.
 
 함께 정리한 문서 불일치: `docs/adr/README.md` 헤더 "다음 후보 = ADR-066"(066은 이미 존재)
 → 068, `CLAUDE.md` "현재 ADR-001~063" → ~067, 그리고 stub인 옛 `docs/decisions.md`를
-가리키던 **살아있는 지침·색인 20곳**(SKILL.md·AGENTS.md 2곳·README·resume 2곳·agent-guide
-7곳·architecture 2곳·frontend-package·dev-environment·windows-reinstall-recovery 2곳 등)을
+가리키던 **살아있는 지침·색인 19곳**(SKILL.md 1·AGENTS.md 2·README 1·resume 2·agent-guide
+7·architecture 2·frontend-package 1·dev-environment 1·windows-reinstall-recovery 2)을
 `docs/adr/`로 일괄 수정. 이력·설계 기록물(doc-consistency-audit, reflection-summary, 과거
 tNNN 설계 문서의 당시 인용 등)은 과거 서술이라 의도적으로 유지.
 
