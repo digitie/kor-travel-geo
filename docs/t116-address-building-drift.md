@@ -2,6 +2,12 @@
 
 `주소DB_전체분`과 `건물DB_전체분`은 현재 serving 정본을 대체하지 않는다. C16은 두 원천을 검증 전용 staging으로 읽어 `tl_juso_text`, `tl_juso_parcel_link`, `tl_spbd_buld_polygon`과 row/key drift를 측정하는 prototype이다. 좌표 적재와 serving 후보 승격은 하지 않는다.
 
+> **대상 DB (이슈 #525)**: 이 테스트는 serving 관계가 이미 있는 DB에서만 돌고, `tests/integration/_pg_guard.py`
+> 가드가 운영 DB(`kor_travel_geo`)와 T-213 보존본을 절대 거부한다(`KTG_TEST_PG_ALLOW_WRITES`로도 안 열린다).
+> 따라서 `KTG_TEST_PG_DSN`은 **적재된 일회용 clone**을 가리켜야 한다 — 예: `kor_travel_geo_fullload_e2e`
+> (`docs/deploy/staging-full-load.md`). 빈 `*_test` DB를 주면 가드는 통과하지만 serving 테이블이 없어
+> 다시 skip된다.
+
 ## 원천
 
 실데이터 파일:

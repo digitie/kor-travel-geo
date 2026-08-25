@@ -2,6 +2,12 @@
 
 `match_jibun_*.txt`는 `navi_full` archive 안의 optional 검증 member다. 독립 source category로 만들지 않고, 내비게이션용DB의 지번 link 후보가 현재 정본 보조 테이블 `tl_juso_parcel_link`와 얼마나 겹치는지 측정한다.
 
+> **대상 DB (이슈 #525)**: 이 테스트는 serving 관계가 이미 있는 DB에서만 돌고, `tests/integration/_pg_guard.py`
+> 가드가 운영 DB(`kor_travel_geo`)와 T-213 보존본을 절대 거부한다(`KTG_TEST_PG_ALLOW_WRITES`로도 안 열린다).
+> 따라서 `KTG_TEST_PG_DSN`은 **적재된 일회용 clone**을 가리켜야 한다 — 예: `kor_travel_geo_fullload_e2e`
+> (`docs/deploy/staging-full-load.md`). 빈 `*_test` DB를 주면 가드는 통과하지만 serving 테이블이 없어
+> 다시 skip된다.
+
 ## 범위
 
 - 입력: materialized `navi_full` 디렉터리 또는 ZIP 안의 `match_jibun_*.txt`.

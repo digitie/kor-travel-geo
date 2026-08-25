@@ -12,6 +12,10 @@ from kortravelgeo.loaders.c16_address_building_drift import (
     drop_c16_address_building_staging_tables,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import (
+    LOADED_SERVING_DB_HINT,
+    require_disposable_database,
+)
 
 DATA_ROOTS = (
     Path("data/juso"),
@@ -32,30 +36,33 @@ async def test_real_postgres_c16_address_building_drift_sample_when_enabled() ->
     building_zip = _require("202605_건물DB_전체분.zip")
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
-        async with engine.connect() as conn:
-            for table in ("tl_juso_text", "tl_juso_parcel_link", "tl_spbd_buld_polygon"):
-                exists = await conn.scalar(text(f"SELECT to_regclass('public.{table}')"))
-                if exists is None:
-                    pytest.skip(f"{table} is not available")
+        await require_disposable_database(engine, hint=LOADED_SERVING_DB_HINT)
+        try:
+            async with engine.connect() as conn:
+                for table in ("tl_juso_text", "tl_juso_parcel_link", "tl_spbd_buld_polygon"):
+                    exists = await conn.scalar(text(f"SELECT to_regclass('public.{table}')"))
+                    if exists is None:
+                        pytest.skip(f"{table} is not available")
 
-        comparison = await compare_c16_address_building_drift(
-            engine,
-            address_zip,
-            building_zip,
-            source_yyyymm="202605",
-            limit_per_member=2,
-            sample_limit=2,
-        )
+            comparison = await compare_c16_address_building_drift(
+                engine,
+                address_zip,
+                building_zip,
+                source_yyyymm="202605",
+                limit_per_member=2,
+                sample_limit=2,
+            )
 
-        metrics = comparison.metrics()
-        assert comparison.staging_rows.address_db_address == 34
-        assert comparison.staging_rows.address_db_jibun == 34
-        assert comparison.staging_rows.building_db_build == 34
-        assert metrics["coordinate_load"] is False
-        assert metrics["serving_promotion"] is False
-        assert len(comparison.comparisons) == 6
+            metrics = comparison.metrics()
+            assert comparison.staging_rows.address_db_address == 34
+            assert comparison.staging_rows.address_db_jibun == 34
+            assert comparison.staging_rows.building_db_build == 34
+            assert metrics["coordinate_load"] is False
+            assert metrics["serving_promotion"] is False
+            assert len(comparison.comparisons) == 6
+        finally:
+            await drop_c16_address_building_staging_tables(engine)
     finally:
-        await drop_c16_address_building_staging_tables(engine)
         await engine.dispose()
 
 

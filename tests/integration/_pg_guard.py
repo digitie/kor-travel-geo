@@ -40,6 +40,29 @@ from sqlalchemy import text
 
 DSN_ENV = "KTG_TEST_PG_DSN"
 
+#: Set to "1" to accept guard refusals instead of failing the session (see conftest).
+ALLOW_SKIPS_ENV = "KTG_TEST_ALLOW_GUARD_SKIPS"
+
+#: Skip-message hint for suites that need a database which already holds serving relations.
+#: The generic "e.g. kor_travel_geo_test" advice is actively wrong for them — a bare `_test`
+#: database has no `mv_geocode_target`, so following it just produces a second, more confusing
+#: skip ("mv_geocode_target is not available").
+LOADED_SERVING_DB_HINT = (
+    "a loaded disposable clone (e.g. kor_travel_geo_fullload_e2e, see "
+    "docs/deploy/staging-full-load.md) — a bare *_test database has no serving tables"
+)
+
+#: Every refusal this session, as (test nodeid, database name). `conftest.pytest_sessionfinish`
+#: fails the run if this is non-empty while a DSN is configured.
+#:
+#: Why: a refusal is a SKIP, and under `pytest -q` a skip is indistinguishable from "DSN not set".
+#: That is exactly how adding this guard to `build_minimal_serving_schema` turned the T-246
+#: hot-swap e2e from `3 passed` into `3 skipped` without anyone noticing — the guard deleted the
+#: only live proof of the ADR-036 cutover. The RuntimeWarning below is not enough; warnings are
+#: just as invisible. If you point the DSN at a database the guard refuses, the run fails loudly
+#: and you fix the DSN (or the name) rather than believing you have coverage you do not have.
+REFUSALS: list[tuple[str, str]] = []
+
 #: Name the database here to allow writes to it when its name does not announce itself as
 #: throwaway. Never overrides the protected list below.
 ALLOW_ENV = "KTG_TEST_PG_ALLOW_WRITES"
@@ -100,20 +123,28 @@ def is_disposable_test_database(database_name: str | None, env: Any = None) -> b
     )
 
 
-async def require_disposable_database(engine: Any) -> str:
+async def require_disposable_database(engine: Any, *, hint: str | None = None) -> str:
     """Skip the test unless ``engine`` points at a disposable scratch DB. Returns its name.
 
     Call this BEFORE applying schema or truncating anything — a guard that runs after the first
     write is not a guard.
+
+    ``hint`` replaces the generic "e.g. kor_travel_geo_test" suggestion for suites that need
+    something more specific. The C15-C17 comparisons, for instance, skip unless the database
+    already holds serving relations, so pointing them at a bare ``*_test`` database produces a
+    second, more confusing skip — the generic advice is actively wrong for them.
     """
     async with engine.connect() as conn:
         database_name = await conn.scalar(text("SELECT current_database()"))
     name = "" if database_name is None else str(database_name)
     if not is_disposable_test_database(name):
+        wanted = hint or (
+            "a disposable scratch database (a 'test' / 'scratch' / 'tmp' / 'rt' / 'e2e' segment, "
+            "e.g. kor_travel_geo_test)"
+        )
         reason = (
-            f"refusing to write to database {name!r}: {DSN_ENV} must name a disposable scratch "
-            f"database (a 'test' / 'scratch' / 'tmp' / 'rt' / 'e2e' segment, e.g. "
-            f"kor_travel_geo_test), or set {ALLOW_ENV}={name!r} to allow it explicitly"
+            f"refusing to write to database {name!r}: {DSN_ENV} must name {wanted}, "
+            f"or set {ALLOW_ENV}={name!r} to allow it explicitly"
         )
         if is_protected_database(name):
             reason = (
@@ -124,5 +155,6 @@ async def require_disposable_database(engine: Any) -> str:
         # "DSN not set", and reading it that way is how someone concludes they have coverage
         # they do not have.
         warnings.warn(reason, RuntimeWarning, stacklevel=2)
+        REFUSALS.append((os.environ.get("PYTEST_CURRENT_TEST", "?"), name))
         pytest.skip(reason)
     return name

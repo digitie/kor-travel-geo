@@ -14,6 +14,7 @@ type Snapshot = {
   object_name: string;
   object_kind: string;
   estimated_rows?: number | null;
+  dead_tuples?: number | null;
   stats?: Record<string, unknown>;
 };
 
@@ -50,6 +51,12 @@ test.describe("LIVE ops table-stats capture (#523)", () => {
     for (const row of indexes) {
       expect(row.estimated_rows ?? null, `index ${row.object_name} reported a row count`).toBeNull();
       expect(row.stats?.estimated_rows_source).toBe("not_applicable");
+      // Same defect class (issue #525): an index has no `pg_stat_user_tables` row, so a
+      // dead-tuple count of 0 was being fabricated into a permanent history row.
+      expect(
+        row.dead_tuples ?? null,
+        `index ${row.object_name} reported a fabricated dead_tuples`
+      ).toBeNull();
     }
 
     // The headline fix: no relation may claim an exact-looking 0 while its statistics are

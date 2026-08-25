@@ -4,6 +4,19 @@
 
 ## 현재 진척도 (2026-08-17 갱신, by claude)
 
+- ✅ **이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot (2026-08-25, PR #526, by claude)** —
+  C1x suite 6개가 `src/` 헬퍼를 통해 permanent staging 테이블을 만드는데 마커 정규식이 그걸 못 봐
+  무방비였다. **import 기반 도출**로 바꿔 새 writer 모듈이 자동으로 커버되게 했고, 가드가 정당한
+  DSN을 거부하면 세션이 실패하는 **skip budget**을 넣었다(#523에서 T-246이 조용히 사라진 걸
+  잡았을 장치). C14는 DB 테스트가 아니라 범위에서 제외.
+  **워크플로 영향**: C15~C17은 serving 관계가 있는 DB에서만 돌므로 `KTG_TEST_PG_DSN`이
+  **적재된 일회용 clone**(`kor_travel_geo_fullload_e2e` 등)을 가리켜야 한다. 빈 `*_test`는 안 된다.
+  `test_backup_restore_hot_swap_roundtrip.py`는 의도적으로 가드하지 않는다(DSN이 `postgres`).
+  **가드가 거부하면 세션이 exit 1이다** — 의도한 상황이면 `KTG_TEST_ALLOW_GUARD_SKIPS=1`을 준다.
+  (예: hot-swap 문서가 안내하는 `.../postgres` DSN으로 통합 스위트 전체를 돌릴 때.)
+  C15~C17이 요구하는 "적재된 일회용 clone"은 `docs/deploy/staging-full-load.md` 절차로 만들지만
+  그 런북은 마지막에 `DROP DATABASE`로 끝난다 — 즉 상시 존재하는 DB가 아니라 그때 만들어 써야 한다.
+
 - ✅ **이슈 #523 — 테스트 DB 가드 일원화 + 미분석 관계 0행 기록 수정 (2026-08-25, PR #524, by claude)** —
   opt-in PostgreSQL 테스트의 disposable-DB 판정식이 4벌로 갈라져 있었고 그중 하나가
   `startswith("kor_travel_geo")`라 **운영 DB를 통과**시켰다(통과 뒤 ops 13개 테이블 `TRUNCATE CASCADE`).

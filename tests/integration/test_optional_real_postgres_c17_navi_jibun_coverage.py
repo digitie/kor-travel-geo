@@ -14,6 +14,10 @@ from kortravelgeo.loaders.c17_navi_jibun_coverage import (
     drop_c17_navi_jibun_staging_tables,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import (
+    LOADED_SERVING_DB_HINT,
+    require_disposable_database,
+)
 
 DATA_ROOTS = (
     Path("data/juso"),
@@ -35,30 +39,33 @@ async def test_real_postgres_c17_navi_jibun_coverage_sample_when_enabled(
     navi_path = _require_navi_match_jibun_source(tmp_path)
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
-        async with engine.connect() as conn:
-            exists = await conn.scalar(text("SELECT to_regclass('public.tl_juso_parcel_link')"))
-            if exists is None:
-                pytest.skip("tl_juso_parcel_link is not available")
+        await require_disposable_database(engine, hint=LOADED_SERVING_DB_HINT)
+        try:
+            async with engine.connect() as conn:
+                exists = await conn.scalar(text("SELECT to_regclass('public.tl_juso_parcel_link')"))
+                if exists is None:
+                    pytest.skip("tl_juso_parcel_link is not available")
 
-        comparison = await compare_c17_navi_jibun_coverage(
-            engine,
-            navi_path,
-            source_yyyymm="202604",
-            limit_per_member=2,
-            sample_limit=2,
-        )
+            comparison = await compare_c17_navi_jibun_coverage(
+                engine,
+                navi_path,
+                source_yyyymm="202604",
+                limit_per_member=2,
+                sample_limit=2,
+            )
 
-        metrics = comparison.metrics()
-        assert comparison.staging_rows == 2
-        assert metrics["coordinate_load"] is False
-        assert metrics["serving_promotion"] is False
-        assert metrics["source_members"] == {
-            "match_jibun_members": 1,
-            "match_jibun_present": 1,
-        }
-        assert len(comparison.comparisons) == 2
+            metrics = comparison.metrics()
+            assert comparison.staging_rows == 2
+            assert metrics["coordinate_load"] is False
+            assert metrics["serving_promotion"] is False
+            assert metrics["source_members"] == {
+                "match_jibun_members": 1,
+                "match_jibun_present": 1,
+            }
+            assert len(comparison.comparisons) == 2
+        finally:
+            await drop_c17_navi_jibun_staging_tables(engine)
     finally:
-        await drop_c17_navi_jibun_staging_tables(engine)
         await engine.dispose()
 
 

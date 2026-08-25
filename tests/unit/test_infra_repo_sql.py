@@ -605,6 +605,14 @@ def test_ops_table_stats_capture_does_not_persist_unknown_row_counts_as_zero() -
     assert "END AS estimated_rows_source," in sql
     assert '"estimated_rows_source": row["estimated_rows_source"],' in sql
     assert "THEN 'partition_rollup'" in sql, "the 'p' arm needs its own provenance label"
+    # `dead_tuples` had the identical defect: the LEFT JOIN is always NULL for indexes, so
+    # COALESCE(..., 0) fabricated a zero into a permanent history row (issue #525).
+    assert "GREATEST(COALESCE(s.n_dead_tup, 0), 0)::bigint AS dead_tuples," not in sql
+    assert (
+        "CASE WHEN c.relkind IN ('r','p','m')"
+        " THEN GREATEST(COALESCE(s.n_dead_tup, 0), 0)::bigint"
+        " ELSE NULL END AS dead_tuples," in sql
+    )
     # Saturation must be detected, not silently swallowed.
     assert '{"limit": limit + 1}' in sql
     assert '"truncated": True, "capture_limit": limit' in sql

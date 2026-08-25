@@ -32,75 +32,77 @@ async def test_real_postgres_augment_harness_copy_and_measure_when_enabled() -> 
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
         await require_disposable_database(engine)
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
-            await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_left"))
-            await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_right"))
-            await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_poly"))
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+                await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_left"))
+                await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_right"))
+                await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_poly"))
 
-        left_spec = ShapeStagingSpec(
-            "_ktg_aug_it_left",
-            (StagingColumn("id"),),
-            geometry_type="Point",
-        )
-        right_spec = ShapeStagingSpec(
-            "_ktg_aug_it_right",
-            (StagingColumn("id"),),
-            geometry_type="Point",
-        )
-        poly_spec = ShapeStagingSpec(
-            "_ktg_aug_it_poly",
-            (StagingColumn("id"),),
-            geometry_type="Polygon",
-        )
-        await recreate_shape_staging_table(engine, left_spec)
-        await recreate_shape_staging_table(engine, right_spec)
-        await recreate_shape_staging_table(engine, poly_spec)
-        await copy_shape_features_to_staging(
-            engine,
-            left_spec,
-            (
-                _feature("A", "POINT (0 0)"),
-                _feature("B", "POINT (10 0)"),
-            ),
-        )
-        await copy_shape_features_to_staging(
-            engine,
-            right_spec,
-            (
-                _feature("A", "POINT (3 4)"),
-                _feature("B", "POINT (10 0)"),
-            ),
-        )
-        await copy_shape_features_to_staging(
-            engine,
-            poly_spec,
-            (_feature("A", "POLYGON ((-1 -1, -1 5, 5 5, 5 -1, -1 -1))"),),
-        )
+            left_spec = ShapeStagingSpec(
+                "_ktg_aug_it_left",
+                (StagingColumn("id"),),
+                geometry_type="Point",
+            )
+            right_spec = ShapeStagingSpec(
+                "_ktg_aug_it_right",
+                (StagingColumn("id"),),
+                geometry_type="Point",
+            )
+            poly_spec = ShapeStagingSpec(
+                "_ktg_aug_it_poly",
+                (StagingColumn("id"),),
+                geometry_type="Polygon",
+            )
+            await recreate_shape_staging_table(engine, left_spec)
+            await recreate_shape_staging_table(engine, right_spec)
+            await recreate_shape_staging_table(engine, poly_spec)
+            await copy_shape_features_to_staging(
+                engine,
+                left_spec,
+                (
+                    _feature("A", "POINT (0 0)"),
+                    _feature("B", "POINT (10 0)"),
+                ),
+            )
+            await copy_shape_features_to_staging(
+                engine,
+                right_spec,
+                (
+                    _feature("A", "POINT (3 4)"),
+                    _feature("B", "POINT (10 0)"),
+                ),
+            )
+            await copy_shape_features_to_staging(
+                engine,
+                poly_spec,
+                (_feature("A", "POLYGON ((-1 -1, -1 5, 5 5, 5 -1, -1 -1))"),),
+            )
 
-        distance = await measure_keyed_distance(
-            engine,
-            "_ktg_aug_it_left",
-            "_ktg_aug_it_right",
-            (JoinKey("id", "id"),),
-        )
-        covers = await measure_keyed_covers(
-            engine,
-            "_ktg_aug_it_poly",
-            "_ktg_aug_it_left",
-            (JoinKey("id", "id"),),
-        )
+            distance = await measure_keyed_distance(
+                engine,
+                "_ktg_aug_it_left",
+                "_ktg_aug_it_right",
+                (JoinKey("id", "id"),),
+            )
+            covers = await measure_keyed_covers(
+                engine,
+                "_ktg_aug_it_poly",
+                "_ktg_aug_it_left",
+                (JoinKey("id", "id"),),
+            )
 
-        assert distance.samples == 2
-        assert distance.max_m == pytest.approx(5.0)
-        assert covers.samples == 1
-        assert covers.covered == 1
-        assert covers.coverage_ratio == pytest.approx(1.0)
+            assert distance.samples == 2
+            assert distance.max_m == pytest.approx(5.0)
+            assert covers.samples == 1
+            assert covers.covered == 1
+            assert covers.coverage_ratio == pytest.approx(1.0)
+        finally:
+            async with engine.begin() as conn:
+                await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_left"))
+                await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_right"))
+                await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_poly"))
     finally:
-        async with engine.begin() as conn:
-            await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_left"))
-            await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_right"))
-            await conn.execute(text("DROP TABLE IF EXISTS _ktg_aug_it_poly"))
         await engine.dispose()
 
 

@@ -2,6 +2,12 @@
 
 `민원행정기관전자지도`는 주소 정본이 아니라 기관 POI 원천이다. 따라서 이번 작업은 일반 주소 후보나 `mv_geocode_target`에 기관명/기관 좌표를 섞지 않고, 원천 SHP point와 기존 도로명주소 geocoder 대표점 사이의 거리만 검증하는 prototype으로 제한한다.
 
+> **대상 DB (이슈 #525)**: 이 테스트는 serving 관계가 이미 있는 DB에서만 돌고, `tests/integration/_pg_guard.py`
+> 가드가 운영 DB(`kor_travel_geo`)와 T-213 보존본을 절대 거부한다(`KTG_TEST_PG_ALLOW_WRITES`로도 안 열린다).
+> 따라서 `KTG_TEST_PG_DSN`은 **적재된 일회용 clone**을 가리켜야 한다 — 예: `kor_travel_geo_fullload_e2e`
+> (`docs/deploy/staging-full-load.md`). 빈 `*_test` DB를 주면 가드는 통과하지만 serving 테이블이 없어
+> 다시 skip된다.
+
 ## 원천
 
 실데이터 파일은 현재 미사용 원천 보존 경로인 `data/juso/unused/민원행정기관전자지도_240124.zip`이다.

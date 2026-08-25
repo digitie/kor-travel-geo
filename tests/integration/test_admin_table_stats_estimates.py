@@ -272,6 +272,11 @@ SELECT pg_stat_reset_single_table_counters(
             "index rows must not report an entry count in a column named estimated_rows"
         )
         assert all(row.stats["estimated_rows_source"] == "not_applicable" for row in indexes)
+        # Same defect class: an index has no `pg_stat_user_tables` row, so a dead-tuple count of
+        # 0 was fabricated into a permanent history row (issue #525).
+        assert all(row.dead_tuples is None for row in indexes), (
+            "index rows must not report a fabricated dead_tuples count"
+        )
 
         # TOAST relations live in pg_toast, which the nspname filter excludes — so the 't' arm
         # of the relkind CASE is dead. Documented here rather than removed (3-place schema rule).

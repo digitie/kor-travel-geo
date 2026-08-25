@@ -12,6 +12,7 @@ from kortravelgeo.loaders.c13_detail_dong import (
     drop_c13_detail_dong_staging_tables,
 )
 from kortravelgeo.settings import Settings
+from tests.integration._pg_guard import require_disposable_database
 
 DATA_ROOTS = (
     Path("data/juso"),
@@ -38,27 +39,30 @@ async def test_real_postgres_c13_detail_dong_sejong_when_enabled() -> None:
     )
     engine = make_async_engine(Settings(pg_dsn=dsn))
     try:
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        await require_disposable_database(engine)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
 
-        comparison = await compare_c13_detail_dong_containment(
-            engine,
-            detail_dong_zip,
-            detail_address_zip,
-            sido_name="세종특별자치시",
-            source_yyyymm="202605",
-            sample_limit=3,
-        )
+            comparison = await compare_c13_detail_dong_containment(
+                engine,
+                detail_dong_zip,
+                detail_address_zip,
+                sido_name="세종특별자치시",
+                source_yyyymm="202605",
+                sample_limit=3,
+            )
 
-        assert comparison.sido_name == "세종특별자치시"
-        assert comparison.detail_dong_rows > 0
-        assert comparison.detail_entrance_rows > 0
-        assert comparison.detail_address_rows > 0
-        assert comparison.entrance_building_ref_overlap.intersection_count > 0
-        assert comparison.entrance_containment.samples > 0
-        assert comparison.metrics()["serving_promotion"] is False
+            assert comparison.sido_name == "세종특별자치시"
+            assert comparison.detail_dong_rows > 0
+            assert comparison.detail_entrance_rows > 0
+            assert comparison.detail_address_rows > 0
+            assert comparison.entrance_building_ref_overlap.intersection_count > 0
+            assert comparison.entrance_containment.samples > 0
+            assert comparison.metrics()["serving_promotion"] is False
+        finally:
+            await drop_c13_detail_dong_staging_tables(engine)
     finally:
-        await drop_c13_detail_dong_staging_tables(engine)
         await engine.dispose()
 
 
