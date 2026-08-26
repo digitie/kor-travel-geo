@@ -400,16 +400,39 @@ async def _snapshot_row(
 
 
 async def _reinsert_row(
-    engine: AsyncEngine, *, table: str, row: Mapping[str, Any], jsonb_columns: Sequence[str]
+    engine: AsyncEngine,
+    *,
+    table: str,
+    row: Mapping[str, Any],
+    jsonb_columns: Sequence[str],
+    upsert_pk: str | None = None,
 ) -> None:
     """Companion to :func:`_snapshot_row` — re-INSERT the exact row content captured before
     ``pg_restore`` ran. ``jsonb_columns`` must be cast explicitly (psycopg can't infer JSONB
-    from a plain Python dict/list parameter the way asyncpg can)."""
+    from a plain Python dict/list parameter the way asyncpg can).
+
+    ``upsert_pk`` (T-296): most snapshotted rows (``load_jobs``, the restore-log artifact,
+    ``ops.maintenance_windows``) are guaranteed absent after ``pg_restore --clean`` — they
+    were created strictly after the backup being restored was taken, so a plain INSERT is
+    correct. The source backup artifact's own ``ops.artifacts`` row is different: it was
+    inserted (``state='creating'``) *before* that backup's own ``pg_dump`` ran, so the
+    backup's dump — and thus the restored table — already contains a stale pre-finalization
+    copy of it. Restoring the row we snapshotted (``state='available'``, real checksum) needs
+    ``INSERT ... ON CONFLICT (upsert_pk) DO UPDATE``, not a plain INSERT, or it collides with
+    that stale copy's primary key."""
     columns = list(row.keys())
-    stmt = text(
+    stmt_sql = (
         f"INSERT INTO {table} ({', '.join(columns)}) "
         f"VALUES ({', '.join(f':{c}' for c in columns)})"
-    ).bindparams(*(bindparam(c, type_=JSONB) for c in jsonb_columns if c in row))
+    )
+    if upsert_pk is not None:
+        update_columns = [c for c in columns if c != upsert_pk]
+        stmt_sql += f" ON CONFLICT ({upsert_pk}) DO UPDATE SET " + ", ".join(
+            f"{c} = EXCLUDED.{c}" for c in update_columns
+        )
+    stmt = text(stmt_sql).bindparams(
+        *(bindparam(c, type_=JSONB) for c in jsonb_columns if c in row)
+    )
     async with engine.begin() as conn:
         await conn.execute(stmt, dict(row))
 
@@ -446,6 +469,16 @@ async def run_restore_job(
     # with_progress(restore_cmd, ...)).
     job_row_snapshot: dict[str, Any] | None = None
     window_row_snapshot: dict[str, Any] | None = None
+    # T-296a: the maintenance_window.authorize audit event (ops.audit_events) is written
+    # before pg_restore and wiped the same way — snapshotted so end_maintenance_window's
+    # audit trail for THIS restore survives, not just the window row it needs to find.
+    audit_event_snapshot: dict[str, Any] | None = None
+    # T-296b: the source backup artifact's own ops.artifacts row is different from the other
+    # three — it was inserted (state='creating') BEFORE that backup's own pg_dump ran, so the
+    # backup's dump already contains a stale pre-finalization copy of it. Re-inserting the
+    # snapshot we take here needs an UPSERT (see _reinsert_row's upsert_pk), not a plain
+    # INSERT, or it collides with that stale copy once pg_restore recreates the table.
+    source_artifact_snapshot: dict[str, Any] | None = None
     if req.mode == "replace_current":
         confirmation = validate_replace_current_restore_request(
             req,
@@ -466,7 +499,14 @@ async def run_restore_job(
             pk_column="maintenance_window_id",
             pk_value=window.maintenance_window_id,
         )
-        await repo.record_audit_event(
+        if source_artifact is not None:
+            source_artifact_snapshot = await _snapshot_row(
+                engine,
+                table="ops.artifacts",
+                pk_column="artifact_id",
+                pk_value=source_artifact.artifact_id,
+            )
+        authorize_event = await repo.record_audit_event(
             action="maintenance_window.authorize",
             actor_type="system",
             outcome="succeeded",
@@ -480,6 +520,12 @@ async def run_restore_job(
             resource_type="maintenance_window",
             resource_id=window.maintenance_window_id,
             job_id=job_id,
+        )
+        audit_event_snapshot = await _snapshot_row(
+            engine,
+            table="ops.audit_events",
+            pk_column="audit_event_id",
+            pk_value=authorize_event.audit_event_id,
         )
     else:
         current_database = database_name_from_dsn(settings.pg_dsn)
@@ -627,20 +673,33 @@ async def run_restore_job(
             log_path=log_path,
         )
         if req.mode == "replace_current":
-            # T-292: re-insert every row snapshotted before pg_restore ran, in FK dependency
-            # order — load_jobs FIRST, since ops.artifacts.job_id and ops.maintenance_
-            # windows.created_by_job_id/closed_by_job_id both reference it (re-inserting the
-            # artifact row with a job_id pg_restore just made unresolvable would trade one
-            # crash for another, exactly as it did before this ordering existed). The
-            # maintenance-window-authorize audit event (logged before pg_restore ran) is
-            # NOT re-created — nothing reads it back, unlike the window row itself, which
-            # end_maintenance_window needs to find after a successful restore.
+            # T-292/T-296: re-insert every row snapshotted before pg_restore ran, in FK
+            # dependency order — load_jobs FIRST, since ops.artifacts.job_id, ops.audit_
+            # events.job_id, and ops.maintenance_windows.created_by_job_id/closed_by_job_id
+            # all reference it (re-inserting any of them with a job_id pg_restore just made
+            # unresolvable would trade one crash for another, exactly as it did before this
+            # ordering existed).
             if job_row_snapshot is not None:
                 await _reinsert_row(
                     engine,
                     table="load_jobs",
                     row=job_row_snapshot,
                     jsonb_columns=("payload", "source_set", "log_tail", "payload_summary"),
+                )
+            if audit_event_snapshot is not None:
+                await _reinsert_row(
+                    engine,
+                    table="ops.audit_events",
+                    row=audit_event_snapshot,
+                    jsonb_columns=("payload_redacted",),
+                )
+            if source_artifact_snapshot is not None:
+                await _reinsert_row(
+                    engine,
+                    table="ops.artifacts",
+                    row=source_artifact_snapshot,
+                    jsonb_columns=("manifest",),
+                    upsert_pk="artifact_id",
                 )
             restore_artifact = await repo.insert_artifact(
                 artifact_id=artifact_id,

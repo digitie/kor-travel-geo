@@ -228,6 +228,49 @@ async def test_replace_current_restore_succeeds_end_to_end_against_nonempty_targ
             "production replace_current restore"
         )
         assert ended.state == "ended"
+
+        # T-296a: the maintenance_window.authorize audit event, logged just before pg_restore
+        # ran, must survive too — wiped by the same --clean mechanism as the other rows.
+        async with engine.connect() as conn:
+            audit_row = (
+                await conn.execute(
+                    text(
+                        "SELECT outcome, resource_id, job_id"
+                        "  FROM ops.audit_events"
+                        " WHERE action = 'maintenance_window.authorize'"
+                        "   AND resource_id = :window_id"
+                    ),
+                    {"window_id": window.maintenance_window_id},
+                )
+            ).mappings().one_or_none()
+        assert audit_row is not None, (
+            "the maintenance_window.authorize audit event must survive the restore — a "
+            "regression here is silent (no exception), just a missing audit trail entry"
+        )
+        assert audit_row["outcome"] == "succeeded"
+        assert audit_row["job_id"] == job.job_id
+
+        # T-296b: the source backup artifact's OWN ops.artifacts row — a DIFFERENT row from
+        # the restore-log artifact checked above — must come back exactly as it was before
+        # the restore (state='available', real checksum), not the stale state='creating'
+        # copy pg_restore recreates from the backup's own (pre-finalization) dump content.
+        async with engine.connect() as conn:
+            source_artifact_row = (
+                await conn.execute(
+                    text(
+                        "SELECT state, sha256, size_bytes"
+                        "  FROM ops.artifacts WHERE artifact_id = :id"
+                    ),
+                    {"id": backup_artifact.artifact_id},
+                )
+            ).mappings().one()
+        assert source_artifact_row["state"] == "available", (
+            "the source backup artifact's row must come back in its finalized state, not the "
+            "stale 'creating' snapshot pg_restore's --clean recreates from the backup's own "
+            "(pre-finalization) dump content"
+        )
+        assert source_artifact_row["sha256"] == backup_artifact.sha256
+        assert source_artifact_row["size_bytes"] == backup_artifact.size_bytes
     finally:
         await engine.dispose()
 
