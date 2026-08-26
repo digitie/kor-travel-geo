@@ -17,6 +17,14 @@ extension actually succeeds cleanly rather than erroring or leaving PostGIS in a
 this scenario was previously untested by ``test_backup_restore_roundtrip.py``'s always-vanilla
 target).
 
+Known limitation (T-296 review): this test installs PostGIS using the SAME role that later
+runs the restore, so ownership always matches. In a real cluster, ``template1``'s PostGIS is
+typically installed by an admin/superuser role distinct from the restore service account —
+``DROP EXTENSION`` requires the extension's owner or a superuser, so a real ownership mismatch
+would make ``pg_restore``'s ``DROP EXTENSION IF EXISTS postgis`` fail with a permission error
+that this same-role setup can never reproduce. Confirming --clean --if-exists tolerates that
+would need a second, lower-privileged role in the test fixture — out of scope here.
+
 Run with a disposable scratch database (see ``tests/integration/_pg_guard.py``)::
 
     KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo_test pytest \
