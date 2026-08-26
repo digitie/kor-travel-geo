@@ -2,6 +2,67 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-26 (T-291b+c — 외부 데이터셋 버전 API, PR #530, by claude)
+
+T-291a 직후 이어서 ADR-067의 외부 표면을 구현했다. T-291b(backend 정규화기/사영/커서)와
+T-291c(외부 v2 엔드포인트)를 하나의 PR로 묶었다 — 전자는 이를 소비하는 endpoint 없이는
+외부 가치가 없어서다.
+
+**`core/dataset_version.py`**(신규, 순수 함수 전용 — infra 의존 없음): 토큰 파생은
+`"dv1-" + sha256("ktg.dataset.version:" + serving_release_id)[:32]`. 기준월 정규화기
+`normalize_reference_months_from_source_set`은 실전 `source_set` 4형태를 흡수한다 —
+(A) rebuild 경로 category 코드(`_CATEGORY_TO_LOAD_KINDS`와 대조해 매핑표 확정,
+`roadname_hangul_full`은 juso+parcel_link 두 키), (B) `admin_repo._infer_current_source_set`
+(7종+source)/`backup.infer_source_set`(6종, source 없음, sppn_makarea 없음) 두 writer의
+서로 다른 shape, (C) hot-swap 기록의 메타 전용 payload(항상 None → 계보 폴백 트리거),
+(D) `batch_dag._source_set`의 flat map(`str()` 평탄화로 열화된 repr 문자열은
+`^\d{6}$` 불일치로 자동 거부). opaque keyset 커서는 `{before_at, before_token}`만 담고
+내부 UUID를 절대 포함하지 않는다.
+
+**`admin_repo.py`**에 `current_dataset_version`/`find_dataset_version`/
+`dataset_version_history` 3개 공용 사영 메서드를 추가했다. `parent_dataset_snapshot_id`
+최대 5 hop 계보 폴백(hot-swap/rollback release의 자기 `source_set`이 정규화 안 될 때)은
+처음엔 스캔한 최대 5000행 전부에 대해 미리 계산했는데, 적대적 리뷰에서 "find_dataset_version
+의 전체 스캔·since_version 이력 조회가 불필요하게 무거워진다"는 지적을 받아 2단계로
+리팩터했다 — 값싼 1차 패스(토큰·정렬 키만, DB 왕복 0회)로 정렬·필터·매칭을 끝낸 뒤, 실제
+반환되는 항목(매칭 1건 또는 페이지당 최대 `limit`건)에 대해서만 `reference_months`를
+해석한다.
+
+**`api/routers/dataset.py`**(신규): `POST /v2/dataset/version`은 `known_version`이 현재
+토큰과 같으면 전체 스캔 없이 바로 `changed:false`를 반환하고(빠른 경로), 다르면
+`find_dataset_version`으로 이력 전체를 뒤져 `known_version_found`를 판정한다.
+`POST /v2/dataset/history`는 `since_version`(하한, 배타)과 `cursor`(상한, 배타)를 각각
+독립적으로 매 요청마다 재계산한다 — 클라이언트가 매 페이지마다 같은 `since_version`을
+재전송해도(설계 문서가 유도하는 패턴) 올바르게 범위가 유지된다.
+
+**`admission.py`**: 전역 `address` 예산과 별개인 전용 `dataset` scope를 추가했다(ADR-067
+D3). `scopes_for_path`가 `_is_public_address_path` 하나로 "scope 대상"과 "전역 예산
+대상"을 함께 판정하던 걸 `_endpoint_scope_for_path`/`_is_global_budget_path` 두 판정으로
+분리했다 — 그냥 dataset 경로를 전역 판정에서 빼기만 하면 조기 반환 때문에 전용 scope까지
+같이 사라진다.
+
+**적대적 리뷰 2명(전문 서브에이전트, 다각도)**이 각 2건씩 실제 결함을 잡았다: (1)
+correctness 리뷰어 — `reference_months_mixed: bool = False`가 `reference_months=None`일
+때도 `exclude_none`을 통과해 `false`로 새던 문제(DTO 자체 docstring·ADR-067 예시 응답과
+모순 — `bool | None`로 고쳐 명시적으로 `None`을 넘기게 함), `_dataset_version_candidates`가
+필터링 전에 스캔한 모든 행의 `reference_months`를 미리 계산하던 낭비(위 리팩터로 해결).
+(2) test-rigor 리뷰어 — `next_cursor` 테스트가 항목 1개짜리 페이지만 써서 `page[0]`과
+`page[-1]`을 구분 못 하는 무판별 테스트였음(뮤테이션으로 확인 — `page[0]`으로 바꿔도
+전부 그린이었다. 2개 항목 페이지 + 커서가 정확히 마지막 항목으로 디코딩되는지 단언하도록
+수정), hot-swap 정규화기 테스트 fixture가 실제 저장 형상을 과소 근사했음(`record_hot_swap_
+release`가 `source_set`과 `snapshot_metadata` 양쪽에 `hot_swap` 키를 넣고 `_snapshot_
+source_set`이 후자를 `rebuild_metadata` 키로 병합해 실제로는 2개 키가 동시에 존재 — fixture를
+그에 맞게 보강). 남은 지적(라이브 DB 통합 테스트 완전 부재 — 특히 `pending`/`failed` 제외
+필터가 실행된 적이 없음)은 T-291f로 분리했다(blocking 아님, T-291b/c 자체 테스트 계획이
+unit+contract만 약속했었고 이건 별도 검증 공백).
+
+**검증**: WSL ext4 미러 `ruff check .`·`mypy src/kortravelgeo scripts/export_openapi.py`·
+`lint-imports`·`python scripts/export_openapi.py --check`(DTO 타입 변경으로 openapi.json
+재생성) 전부 clean, `pytest -q` 1379 passed / 79 skipped / 0 failed. 프론트엔드
+`npm run type-check`·`npm run lint`·`npm run gen:types` clean. n150에 `kor-travel-geo-api`만
+재빌드 배포(이 PR은 Dagster가 실행하는 코드 경로를 건드리지 않아 `kor-travel-geo-dagster`
+재빌드는 생략).
+
 ## 2026-08-26 (T-291a — 서빙 전환 기록 완결, PR #529, by claude)
 
 ADR-067 D0가 지적한 5류 위반(CLI `all-sidos --refresh` swap·postload `execute_safe`·restore
