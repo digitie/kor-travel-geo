@@ -815,6 +815,11 @@ class BackupArtifact(OpsArtifact):
     source_set_yyyymm: dict[str, str | None] | None = None
     source_set_mixed: bool | None = None
     source_inventory_ok: bool | None = None
+    # T-291e: derived read-only from serving_release_id (inherited) — the same
+    # /v2/dataset/version token this backup's active serving release would report, so an
+    # admin can tell "which dataset version was live when this backup was taken" at a
+    # glance. None when serving_release_id is None (pre-T-291e backups, or none active yet).
+    version_token: str | None = None
 
 
 class BenchmarkMetrics(FrozenModel):

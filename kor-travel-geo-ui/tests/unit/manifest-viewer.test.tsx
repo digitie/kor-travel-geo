@@ -17,6 +17,7 @@ const ARTIFACT: BackupArtifact = {
   source_set_yyyymm: { juso: "202603", locsum: "202604" },
   source_set_mixed: true,
   source_inventory_ok: false,
+  version_token: "dv1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   manifest: {
     source_inventory_verification: { ok: false, missing: 2 },
     active_serving: {
@@ -51,6 +52,8 @@ describe("ManifestViewer (T-252)", () => {
     // active serving lineage
     expect(within(dialog).getByText(/release · rel-9/)).toBeTruthy();
     expect(within(dialog).getByText(/match set · ms-9/)).toBeTruthy();
+    // T-291e: backup-time version token
+    expect(within(dialog).getByText(/dv1-a+/)).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "닫기" }));
     expect(onClose).toHaveBeenCalledTimes(1);

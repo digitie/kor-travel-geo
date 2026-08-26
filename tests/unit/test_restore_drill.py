@@ -95,3 +95,36 @@ async def test_create_drill_database_preserves_password_in_maintenance_dsn(
     assert len(captured_dsns) == 1
     assert "s3cr3t_pw" in captured_dsns[0]
     assert "***" not in captured_dsns[0]
+
+
+async def test_cleanup_drill_ledger_rows_delegates_to_repo() -> None:
+    """T-291e: dropping the drill's throwaway DB doesn't touch the pending release+snapshot
+    row record_restore_candidate leaves behind in the main ops ledger — this delegates that
+    cleanup to the repo, keyed by the drill's own target_database."""
+    calls: list[str] = []
+
+    class _FakeRepo:
+        async def delete_pending_restore_candidate_by_target_database(
+            self, target_database: str
+        ) -> int:
+            calls.append(target_database)
+            return 1
+
+    await restore_drill_module._cleanup_drill_ledger_rows(
+        _FakeRepo(), "kor_travel_geo_restoretest_20260616T120000Z"
+    )
+    assert calls == ["kor_travel_geo_restoretest_20260616T120000Z"]
+
+
+async def test_cleanup_drill_ledger_rows_never_raises_on_repo_failure() -> None:
+    """Best-effort, matching _drop_drill_database's convention — a cleanup failure must
+    never mask (or crash past) the drill's actual restore/reconcile/smoke result."""
+
+    class _FailingRepo:
+        async def delete_pending_restore_candidate_by_target_database(
+            self, target_database: str
+        ) -> int:
+            msg = "boom"
+            raise RuntimeError(msg)
+
+    await restore_drill_module._cleanup_drill_ledger_rows(_FailingRepo(), "some_target_db")

@@ -484,6 +484,9 @@ export type BackupArtifact = OpsArtifact & {
   source_set_yyyymm?: Record<string, string | null> | null;
   source_set_mixed?: boolean | null;
   source_inventory_ok?: boolean | null;
+  // T-291e: derived from serving_release_id — same token /v2/dataset/version would report
+  // for the release active when this backup was taken.
+  version_token?: string | null;
 };
 
 export type BackupAllowedDirs = {

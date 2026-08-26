@@ -501,6 +501,102 @@ def test_list_serving_releases_attaches_dataset_version_additive_fields() -> Non
     assert "_with_dataset_version_fields" not in rollback_source
 
 
+def test_snapshot_source_set_merges_resolved_reference_months_under_yyyymm_by_kind() -> None:
+    """T-291e: a hot-swap/rollback row's own source_set (form C, e.g. {"hot_swap": {...}})
+    normalizes to nothing on its own — merging the write-time-resolved lineage result under
+    "yyyymm_by_kind" (form B's own read key) makes this row's stored source_set normalize
+    directly on every future read, without repeating the 5-hop lineage walk."""
+    merged = admin_repo._snapshot_source_set(
+        {"hot_swap": {"current_database": "db1"}},
+        None,
+        {"juso": "202606", "locsum": "202605"},
+    )
+    assert merged["hot_swap"] == {"current_database": "db1"}
+    assert merged["yyyymm_by_kind"] == {"juso": "202606", "locsum": "202605"}
+    # source_set_hash is computed from the ORIGINAL source_set at the call site (unaffected
+    # by this merge) — this only pins that the merge itself doesn't drop resolved_reference_
+    # months when it's falsy, and doesn't add the key at all in that case.
+    assert "yyyymm_by_kind" not in admin_repo._snapshot_source_set(
+        {"hot_swap": {"current_database": "db1"}}, None, None
+    )
+
+
+def test_insert_dataset_snapshot_and_release_self_completes_form_c_rows_at_write_time() -> None:
+    """T-291e: hot-swap/rollback recording resolves the lineage fallback ONCE at write time
+    (reusing _resolve_reference_months_for_conn — the same walk T-291b+c/T-291d read paths
+    use) and stores the result on the row itself, instead of leaving every future read to
+    repeat the 5-hop walk. Rows whose own source_set already normalizes (forms A/B/D) must
+    NOT be resolved again — source-inspection because this function needs a real connection
+    to exercise end-to-end."""
+    source = inspect.getsource(admin_repo._insert_dataset_snapshot_and_release)
+    assert "normalize_reference_months_from_source_set(source_set) is None" in source
+    assert "_resolve_reference_months_for_conn(" in source
+    assert "resolved_reference_months" in source
+    assert "_snapshot_source_set(\n" in source or "_snapshot_source_set(" in source
+
+
+def test_resolve_reference_months_for_conn_is_module_level_and_shared() -> None:
+    """T-291e: extracted from the AdminRepository method (which now just delegates) so both
+    the instance method's existing callers (list_serving_releases, find_dataset_version) and
+    the module-level _insert_dataset_snapshot_and_release can reuse the identical walk — one
+    implementation, not two that could silently diverge."""
+    delegate_source = inspect.getsource(admin_repo.AdminRepository._resolve_reference_months)
+    assert "_resolve_reference_months_for_conn(" in delegate_source
+    assert callable(admin_repo._resolve_reference_months_for_conn)
+
+
+def test_delete_pending_restore_candidate_matches_only_pending_restore_releases() -> None:
+    """T-291e: the daily restore-drill's own record_restore_candidate(activate=False) call
+    always leaves a pending release+snapshot row in the ops ledger even after the drill's
+    throwaway DB is dropped — this deletes exactly that row, via the pure
+    _match_pending_restore_rows predicate (behaviorally tested separately, below)."""
+    source = inspect.getsource(
+        admin_repo.AdminRepository.delete_pending_restore_candidate_by_target_database
+    )
+    assert "state = 'pending' AND release_kind = 'restore'" in source
+    assert "_match_pending_restore_rows(rows, target_database)" in source
+    # release deleted before snapshot — ops.serving_releases.dataset_snapshot_id is ON
+    # DELETE RESTRICT against ops.dataset_snapshots, so the FK forbids the reverse order.
+    release_delete_at = source.index("DELETE FROM ops.serving_releases")
+    snapshot_delete_at = source.index("DELETE FROM ops.dataset_snapshots")
+    assert release_delete_at < snapshot_delete_at
+
+
+def test_match_pending_restore_rows_prefix_boundary_prevents_false_positives() -> None:
+    """T-291e (adversarial review follow-up): the trailing ";" in the matched prefix is
+    what actually prevents a target_database that's a string-prefix of another (e.g. "foo"
+    vs "foobar") from false-matching — not startswith() alone. Extracted as a pure function
+    (no DB object dependencies) specifically so this boundary property is directly
+    testable, matching this same PR's own precedent for items 1/3/4."""
+    rows = [
+        {
+            "serving_release_id": "rel-exact",
+            "dataset_snapshot_id": "snap-exact",
+            "notes": "restore target_database=foo; restore_artifact_id=a1",
+        },
+        {
+            "serving_release_id": "rel-collision",
+            "dataset_snapshot_id": "snap-collision",
+            # "foo" is a plain string-prefix of "foobar" — must NOT match target_database="foo".
+            "notes": "restore target_database=foobar; restore_artifact_id=a2",
+        },
+        {
+            "serving_release_id": "rel-other",
+            "dataset_snapshot_id": "snap-other",
+            "notes": "restore target_database=bar; restore_artifact_id=a3",
+        },
+        {
+            "serving_release_id": "rel-no-notes",
+            "dataset_snapshot_id": "snap-no-notes",
+            "notes": None,
+        },
+    ]
+    assert admin_repo._match_pending_restore_rows(rows, "foo") == [
+        ("rel-exact", "snap-exact")
+    ]
+    assert admin_repo._match_pending_restore_rows(rows, "nonexistent") == []
+
+
 def test_admin_repo_explain_is_select_only_and_uses_json_format() -> None:
     assert admin_repo._validated_explain_sql(" SELECT 1 ") == "SELECT 1"
     with pytest.raises(InvalidInputError):

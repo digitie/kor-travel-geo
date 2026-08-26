@@ -46,6 +46,7 @@ import {
 import { formatBytes } from "@/lib/format";
 import { selectLiveStreamIds } from "@/lib/live-stream-budget";
 import { httpUrlSchema } from "@/lib/schemas";
+import { shortHash } from "@/lib/source-files";
 import { toast } from "@/lib/toast";
 
 const profiles = ["serving-ready", "lean-serving", "forensic"] as const;
@@ -672,6 +673,12 @@ function BackupArtifactsPanel({
       width: "0.8fr",
       sortValue: (a) => a.state,
       cell: (a) => <StatusBadge value={a.state} />
+    },
+    {
+      key: "token",
+      header: "백업 시점 토큰",
+      width: "1fr",
+      cell: (a) => (a.version_token ? <code>{shortHash(a.version_token, 16)}</code> : "-")
     },
     {
       key: "profile",

@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -890,32 +890,11 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         (ADR-067 §2 "계보 1 hop 근거") when it normalizes to nothing — hot-swap/rollback
         release snapshots (form C) carry no category/kind keys of their own."""
 
-        normalized = normalize_reference_months_from_source_set(source_set)
-        if normalized:
-            return normalized
-        current_parent_id = parent_dataset_snapshot_id
-        for _ in range(5):
-            if current_parent_id is None:
-                return None
-            parent_row = (
-                await conn.execute(
-                    text(
-                        "SELECT source_set, parent_dataset_snapshot_id"
-                        "  FROM ops.dataset_snapshots"
-                        " WHERE dataset_snapshot_id = :id"
-                    ),
-                    {"id": current_parent_id},
-                )
-            ).mappings().first()
-            if parent_row is None:
-                return None
-            normalized = normalize_reference_months_from_source_set(
-                _json_dict(parent_row.get("source_set"))
-            )
-            if normalized:
-                return normalized
-            current_parent_id = _optional_str(parent_row.get("parent_dataset_snapshot_id"))
-        return None
+        return await _resolve_reference_months_for_conn(
+            conn,
+            source_set=source_set,
+            parent_dataset_snapshot_id=parent_dataset_snapshot_id,
+        )
 
     async def ensure_load_batch_release_gate(self, load_batch_id: str | None) -> None:
         """Fail before MV swap when the latest load-batch consistency gate is blocking."""
@@ -967,6 +946,49 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                     f"restore_artifact_id={restore_artifact_id}"
                 ),
             )
+
+    async def delete_pending_restore_candidate_by_target_database(
+        self, target_database: str
+    ) -> int:
+        """T-291e: best-effort cleanup for the daily restore-drill's own pending
+        release+snapshot row. :meth:`record_restore_candidate` always inserts one
+        (``activate=False`` for every drill run, ``mode`` is always ``new_database``) — the
+        drill's *throwaway target DB* gets dropped afterwards, but these ops-ledger metadata
+        rows in the *main* serving DB don't unless something does it explicitly. This is that
+        something (called from :func:`kortravelgeo.infra.restore_drill.run_restore_drill`).
+
+        Matched by the exact ``notes`` prefix :meth:`record_restore_candidate` writes
+        (``"restore target_database={target_database};..."``) via a plain Python
+        ``str.startswith`` check after fetching candidate rows — not a SQL ``LIKE`` pattern,
+        so a target database name containing SQL wildcard characters (``_``, ``%`` — restore
+        drill names always contain ``_``) can never cause a false-positive match. Deletes the
+        release row(s) first (``ops.serving_releases.dataset_snapshot_id`` is ``ON DELETE
+        RESTRICT`` against ``ops.dataset_snapshots``), then the snapshot row(s). Any other
+        artifact FK-linked to a deleted row (``ops.artifacts.dataset_snapshot_id``/
+        ``serving_release_id``) is ``ON DELETE SET NULL`` — it survives, just loses the now-
+        meaningless dangling link. Returns the number of release rows deleted (0 or 1 in
+        practice; defensively handles more)."""
+        async with self.engine.begin() as conn:
+            rows = (
+                await conn.execute(
+                    text(
+                        "SELECT serving_release_id, dataset_snapshot_id, notes"
+                        "  FROM ops.serving_releases"
+                        " WHERE state = 'pending' AND release_kind = 'restore'"
+                    )
+                )
+            ).mappings().all()
+            matches = _match_pending_restore_rows(rows, target_database)
+            for release_id, snapshot_id in matches:
+                await conn.execute(
+                    text("DELETE FROM ops.serving_releases WHERE serving_release_id = :id"),
+                    {"id": release_id},
+                )
+                await conn.execute(
+                    text("DELETE FROM ops.dataset_snapshots WHERE dataset_snapshot_id = :id"),
+                    {"id": snapshot_id},
+                )
+        return len(matches)
 
     async def record_hot_swap_release(
         self,
@@ -2782,6 +2804,62 @@ SELECT md5(
     )
 
 
+def _match_pending_restore_rows(
+    rows: Iterable[Any], target_database: str
+) -> list[tuple[str, str]]:
+    """Pure matching predicate for :meth:`AdminRepository.delete_pending_restore_
+    candidate_by_target_database` — no DB object dependencies, so the collision-safety
+    property (a ``target_database`` that's a plain string-prefix of another, e.g.
+    ``"foo"`` vs. ``"foobar"``, must never false-match) is directly testable without a
+    database. The trailing ``";"`` in the prefix is what makes this safe: ``"restore
+    target_database=foobar;...".startswith("restore target_database=foo;")`` is
+    ``False`` — the delimiter, not just ``startswith``, does the real work."""
+    prefix = f"restore target_database={target_database};"
+    return [
+        (row["serving_release_id"], row["dataset_snapshot_id"])
+        for row in rows
+        if (row.get("notes") or "").startswith(prefix)
+    ]
+
+
+async def _resolve_reference_months_for_conn(
+    conn: Any,
+    *,
+    source_set: Mapping[str, Any],
+    parent_dataset_snapshot_id: str | None,
+) -> dict[str, str] | None:
+    """Module-level body of :meth:`AdminRepository._resolve_reference_months` — no ``self``
+    state used, so this is also callable from :func:`_insert_dataset_snapshot_and_release`
+    (T-291e self-completion) without an ``AdminRepository`` instance in scope."""
+
+    normalized = normalize_reference_months_from_source_set(source_set)
+    if normalized:
+        return normalized
+    current_parent_id = parent_dataset_snapshot_id
+    for _ in range(5):
+        if current_parent_id is None:
+            return None
+        parent_row = (
+            await conn.execute(
+                text(
+                    "SELECT source_set, parent_dataset_snapshot_id"
+                    "  FROM ops.dataset_snapshots"
+                    " WHERE dataset_snapshot_id = :id"
+                ),
+                {"id": current_parent_id},
+            )
+        ).mappings().first()
+        if parent_row is None:
+            return None
+        normalized = normalize_reference_months_from_source_set(
+            _json_dict(parent_row.get("source_set"))
+        )
+        if normalized:
+            return normalized
+        current_parent_id = _optional_str(parent_row.get("parent_dataset_snapshot_id"))
+    return None
+
+
 async def _insert_dataset_snapshot_and_release(
     conn: Any,
     *,
@@ -2823,6 +2901,20 @@ SELECT serving_release_id, dataset_snapshot_id
     parent_snapshot_id = _optional_str(previous["dataset_snapshot_id"]) if previous else None
     previous_release_id = _optional_str(previous["serving_release_id"]) if previous else None
 
+    # T-291e: self-complete rows whose own source_set carries no category/kind keys of its
+    # own (form C — hot-swap/rollback metadata payloads) by resolving the lineage walk ONCE
+    # here, at write time, and storing the result under "yyyymm_by_kind" (form B's own read
+    # key) — so every future read of THIS row normalizes directly, without repeating the walk.
+    # Rows whose own source_set already normalizes (forms A/B/D) are already self-sufficient;
+    # resolving again would just echo back the same dict, so skip the redundant work.
+    resolved_reference_months: dict[str, str] | None = None
+    if normalize_reference_months_from_source_set(source_set) is None and parent_snapshot_id:
+        resolved_reference_months = await _resolve_reference_months_for_conn(
+            conn,
+            source_set=source_set,
+            parent_dataset_snapshot_id=parent_snapshot_id,
+        )
+
     if release_state == "active":
         await conn.execute(
             text(
@@ -2863,7 +2955,9 @@ RETURNING dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, so
                 "dataset_snapshot_id": snapshot_id,
                 "state": snapshot_state,
                 "parent_dataset_snapshot_id": parent_snapshot_id,
-                "source_set": _snapshot_source_set(source_set, snapshot_metadata),
+                "source_set": _snapshot_source_set(
+                    source_set, snapshot_metadata, resolved_reference_months
+                ),
                 "source_set_hash": canonical_payload_hash(source_set),
                 "git_commit": git_commit or runtime["git_commit"],
                 "alembic_revision": alembic_revision or runtime["alembic_revision"],
@@ -3340,14 +3434,24 @@ def _default_maintenance_blocks(kind: str) -> dict[str, Any]:
 def _snapshot_source_set(
     source_set: Mapping[str, Any],
     snapshot_metadata: Mapping[str, Any] | None,
+    resolved_reference_months: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Merge read-only snapshot metadata (e.g. ``forced_promotion``) into the
     ``source_set`` JSONB. The ``source_set_hash`` is computed from the original
     ``source_set`` (not this merged copy) so provenance metadata never perturbs
-    the canonical hash. The ``source_match_set_id`` FK column stays the 정본."""
+    the canonical hash. The ``source_match_set_id`` FK column stays the 정본.
+
+    T-291e: ``resolved_reference_months`` (a lineage-walk result computed once at write
+    time, only when the row's own ``source_set`` had no category/kind keys of its own) is
+    stored under ``yyyymm_by_kind`` — the same key form B writers already use — so this
+    row's OWN ``source_set`` becomes self-sufficient for every future read. Also excluded
+    from the hash for the same reason as ``rebuild_metadata``.
+    """
     merged = dict(source_set)
     if snapshot_metadata:
         merged["rebuild_metadata"] = dict(snapshot_metadata)
+    if resolved_reference_months:
+        merged["yyyymm_by_kind"] = dict(resolved_reference_months)
     return merged
 
 

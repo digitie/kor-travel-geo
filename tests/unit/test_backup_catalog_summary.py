@@ -12,7 +12,14 @@ from typing import Any
 
 import pytest
 
-from kortravelgeo.api.routers.admin import backup_catalog_summary, list_backups
+from kortravelgeo.api.routers.admin import (
+    _backup_artifact_response,
+    backup_catalog_summary,
+    list_backups,
+)
+from kortravelgeo.core.dataset_version import derive_version_token
+from kortravelgeo.dto.admin import OpsArtifact
+from kortravelgeo.settings import Settings
 
 
 def test_extracts_source_set_and_inventory_ok() -> None:
@@ -45,6 +52,34 @@ def test_missing_manifest_is_graceful() -> None:
         "source_inventory_ok": None,
     }
     assert backup_catalog_summary({})["source_set_yyyymm"] is None
+
+
+def _artifact(*, serving_release_id: str | None) -> OpsArtifact:
+    return OpsArtifact(
+        artifact_id="art-1",
+        artifact_type="db_backup",
+        state="creating",  # skip download_url wiring — this test is only about version_token
+        storage_kind="local_file",
+        serving_release_id=serving_release_id,
+        created_at=datetime.now(UTC),
+    )
+
+
+def test_backup_artifact_response_derives_version_token_from_serving_release_id() -> None:
+    """T-291e: same derivation as AdminRepository._with_dataset_version_fields (T-291d) —
+    an admin can tell "which dataset version was live when this backup was taken"."""
+    release_id = "9b1f6c7e-1a2b-4c3d-9e4f-abcdefabcdef"
+    response = _backup_artifact_response(
+        _artifact(serving_release_id=release_id), settings=Settings(_env_file=None)
+    )
+    assert response.version_token == derive_version_token(release_id)
+
+
+def test_backup_artifact_response_version_token_none_without_serving_release() -> None:
+    response = _backup_artifact_response(
+        _artifact(serving_release_id=None), settings=Settings(_env_file=None)
+    )
+    assert response.version_token is None
 
 
 class _RecordingClient:

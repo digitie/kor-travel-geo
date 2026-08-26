@@ -2427,6 +2427,8 @@ export interface components {
             storage_kind: "local_file" | "s3" | "gcs" | "none";
             /** Storage Uri */
             storage_uri?: string | null;
+            /** Version Token */
+            version_token?: string | null;
         };
         /**
          * BackupCopyRequest

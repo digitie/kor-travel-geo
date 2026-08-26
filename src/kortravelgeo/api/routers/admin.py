@@ -45,6 +45,7 @@ from kortravelgeo.api.security import (
     require_role,
 )
 from kortravelgeo.client import AsyncAddressClient
+from kortravelgeo.core.dataset_version import derive_version_token
 from kortravelgeo.core.normalize import parse_address
 from kortravelgeo.core.source_categories import CATEGORY_CATALOG, serving_usage_for
 from kortravelgeo.core.source_validation import GroupValidation
@@ -2988,9 +2989,17 @@ def _backup_artifact_response(artifact: OpsArtifact, *, settings: Settings) -> B
     download_url = None
     if artifact.state == "available" and artifact.sha256:
         download_url = backup_download_url(artifact, settings)
+    # T-291e: same derivation as the admin releases list (AdminRepository._with_dataset_
+    # version_fields) — a pure function of serving_release_id, no extra DB round-trip.
+    version_token = (
+        derive_version_token(artifact.serving_release_id)
+        if artifact.serving_release_id
+        else None
+    )
     return BackupArtifact(
         **artifact.model_dump(),
         download_url=download_url,
+        version_token=version_token,
         **backup_catalog_summary(artifact.manifest),
     )
 

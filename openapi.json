@@ -824,6 +824,17 @@
               }
             ],
             "title": "Storage Uri"
+          },
+          "version_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Token"
           }
         },
         "required": [
