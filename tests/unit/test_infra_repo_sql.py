@@ -491,6 +491,10 @@ def test_list_serving_releases_attaches_dataset_version_additive_fields() -> Non
     assert "_resolve_reference_months(" in attach_source
     assert "release.model_copy(" in attach_source
     assert '"source_set": own_source_set' in attach_source
+    # Must attach the *computed* reference_months, not the raw own_source_set — pins the
+    # exact key/value pairing so a copy-paste mistake (e.g. attaching own_source_set under
+    # both keys) fails this test instead of silently leaking un-normalized data.
+    assert '"reference_months": reference_months' in attach_source
     # Other _serving_release() callers (rollback_plan, record_mv_refresh_release) must NOT
     # be forced through the extra per-row snapshot lookup — only the admin list view needs it.
     rollback_source = inspect.getsource(admin_repo.AdminRepository.rollback_plan)

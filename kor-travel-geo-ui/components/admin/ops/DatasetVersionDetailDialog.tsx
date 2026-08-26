@@ -20,6 +20,10 @@ type DatasetVersionPreview = {
   status: string;
   query_id: string;
   available: boolean;
+  // known_version을 보냈을 때만 채워진다 — "현재 활성 릴리스"가 이 다이얼로그가 보여주는
+  // release와 같은지 구분하는 신호(아래 changed/known_version_found로 노출).
+  changed?: boolean;
+  known_version_found?: boolean;
   current?: {
     version_token: string;
     activated_at: string;
@@ -51,7 +55,11 @@ export function DatasetVersionDetailDialog({
     setPreviewLoading(true);
     setPreviewError(null);
     try {
-      const result = await postJson<DatasetVersionPreview>("/v2/dataset/version", {});
+      // known_version을 이 release의 값으로 보낸다 — 그래야 응답의 changed/known_version_found로
+      // "현재 활성 릴리스가 바로 이 release인지"를 판단할 수 있다. version_token이 없는(구버전)
+      // 행은 known_version 없이 호출하고, 그 사실을 아래 안내문에서 밝힌다.
+      const body = release.version_token ? { known_version: release.version_token } : {};
+      const result = await postJson<DatasetVersionPreview>("/v2/dataset/version", body);
       setPreview(result);
     } catch (error) {
       setPreviewError(getErrorMessage(error));
@@ -155,9 +163,30 @@ export function DatasetVersionDetailDialog({
           </div>
           <p className="form-note">
             trusted-proxy 경유 실제 호출입니다 — 응답 본문의 공개 범위만 검증하며, 인증(공개
-            API 키) 동작은 검증하지 않습니다.
+            API 키) 동작은 검증하지 않습니다.{" "}
+            {release.version_token ? (
+              <>
+                <code>known_version</code>에 이 release의 <code>version_token</code>을 실어
+                보내므로, 아래 <code>current</code>는 이 release가 여전히 현재 서빙 중인지를
+                가리킵니다.
+              </>
+            ) : (
+              "이 release는 version_token이 없어 known_version 없이 호출합니다 — 아래 current는 항상 현재 활성 릴리스이며, 이 release와 무관할 수 있습니다."
+            )}
           </p>
           {previewError ? <p className="form-note warn">{previewError}</p> : null}
+          {preview && preview.changed === true ? (
+            <p className="form-note warn">
+              이 release는 더 이상 현재 활성 릴리스가 아닙니다 — 아래 <code>current</code>는
+              지금 서빙 중인 다른 릴리스({preview.current?.version_token ?? "?"})입니다.
+            </p>
+          ) : null}
+          {preview && preview.changed === false ? (
+            <p className="form-note">
+              이 release가 지금도 현재 활성 릴리스입니다 — 아래 <code>current</code>가 이
+              release와 동일합니다.
+            </p>
+          ) : null}
           {preview ? <JsonBlock value={preview} /> : null}
         </section>
 
