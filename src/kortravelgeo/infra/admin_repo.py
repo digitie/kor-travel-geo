@@ -56,6 +56,7 @@ from kortravelgeo.dto.admin import (
 )
 from kortravelgeo.dto.v2 import DatasetVersionEntry
 from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.concurrency import AdvisoryLockKey, AdvisoryLockNamespace
 from kortravelgeo.infra.metrics import sql_fingerprint, sql_operation
 from kortravelgeo.infra.uploads import extract_upload_set_ids
 from kortravelgeo.version import __version__
@@ -944,6 +945,12 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
             else _int_dict(source_manifest.get("row_counts"))
         )
         async with self.engine.begin() as conn:
+            # T-293: _insert_dataset_snapshot_and_release's advisory lock can block behind
+            # another caller's own COUNT(*) over mv_geocode_target (~6.4M rows,
+            # _mv_hash_for_conn) — the default statement_timeout (docs/resume.md #461) would
+            # turn that wait into a crash instead of a graceful wait, exactly like
+            # record_mv_refresh_release already guards against below.
+            await conn.execute(text("SET LOCAL statement_timeout = 0"))
             return await _insert_dataset_snapshot_and_release(
                 conn,
                 snapshot_state="released" if activate else "validated",
@@ -1023,6 +1030,9 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         release id and the rollback alias are kept in notes/metadata for cross-DB tracing.
         """
         async with self.engine.begin() as conn:
+            # T-293: see the matching comment in record_restore_candidate — the advisory
+            # lock's wait must not be cut short by the default statement_timeout.
+            await conn.execute(text("SET LOCAL statement_timeout = 0"))
             _, release = await _insert_dataset_snapshot_and_release(
                 conn,
                 snapshot_state="released",
@@ -1066,6 +1076,9 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         and the pre-rollback release id are kept in notes/metadata for cross-DB tracing.
         """
         async with self.engine.begin() as conn:
+            # T-293: see the matching comment in record_restore_candidate — the advisory
+            # lock's wait must not be cut short by the default statement_timeout.
+            await conn.execute(text("SET LOCAL statement_timeout = 0"))
             _, release = await _insert_dataset_snapshot_and_release(
                 conn,
                 snapshot_state="released",
@@ -2899,6 +2912,30 @@ async def _insert_dataset_snapshot_and_release(
     source_match_set_id: str | None = None,
     snapshot_metadata: Mapping[str, Any] | None = None,
 ) -> tuple[DatasetSnapshot, ServingRelease]:
+    # T-293: SELECT ... FOR UPDATE below only fully serializes concurrent callers when a
+    # matching 'active' row already exists to lock. Two race windows without this:
+    # (1) zero active rows (fresh DB, or a hot-swapped-in database whose own history has
+    #     none yet) — FOR UPDATE locks nothing, so two concurrent activations can both read
+    #     previous=None and both try to INSERT as 'active' (a T-049 partial unique index
+    #     then crashes whichever commits second instead of serializing it);
+    # (2) a row IS already active — the loser's FOR UPDATE blocks on that *original* row,
+    #     but PostgreSQL's documented FOR UPDATE + LIMIT interaction does not re-scan for a
+    #     fresh match once the locked row stops satisfying WHERE (superseded by the
+    #     winner); the loser's SELECT just returns zero rows and previous silently comes
+    #     back None instead of pointing at the winner.
+    # This transaction-scoped advisory lock serializes the whole read-decide-write section
+    # unconditionally, closing both windows. Advisory locks are scoped per-database
+    # (keyed on the connected database's OID) — correct here since every caller's `conn`
+    # always points at whichever physical database it's actually writing to, including the
+    # hot-swap callers that reconnect post-rename.
+    await conn.execute(
+        text("SELECT pg_advisory_xact_lock(:key)"),
+        {
+            "key": AdvisoryLockKey.global_key(
+                AdvisoryLockNamespace.SERVING_RELEASE_ACTIVATION
+            ).as_int()
+        },
+    )
     runtime = await _runtime_versions_for_conn(conn)
     previous = (
         await conn.execute(

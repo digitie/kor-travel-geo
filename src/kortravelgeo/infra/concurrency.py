@@ -44,6 +44,7 @@ class AdvisoryLockNamespace(IntEnum):
     BACKUP_JANITOR = 0x4B47_00A3
     BACKUP_SCHEDULE = 0x4B47_00A4
     RUNTIME_WARM = 0x4B47_00A5
+    SERVING_RELEASE_ACTIVATION = 0x4B47_00A6
 
 
 @dataclass(frozen=True, slots=True)
