@@ -17,6 +17,7 @@ from kortravelgeo.api.app import create_app
 from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.api.routers import dataset as dataset_router
+from kortravelgeo.core.dataset_version import decode_history_cursor
 from kortravelgeo.dto.v2 import DatasetVersionEntry
 
 
@@ -80,6 +81,34 @@ async def _post(app: Any, path: str, json: dict[str, Any] | None = None) -> http
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         return await client.post(path, json=json or {})
+
+
+def test_dataset_version_entry_omits_mixed_flag_alongside_reference_months() -> None:
+    """reference_months_mixed must be omitted from the wire whenever reference_months is —
+    a bool default (`False`) would survive `exclude_none` and leak a misleading literal
+    `false` for entries whose normalization genuinely produced nothing (adversarial review
+    finding: confirmed via a standalone pydantic repro that `reference_months_mixed=False`
+    always serializes even when reference_months=None, since False is not None)."""
+    without_months = DatasetVersionEntry(
+        version_token="dv1-" + "0" * 32,
+        activated_at=datetime(2026, 8, 20, tzinfo=UTC),
+        change_type="full",
+        reference_months=None,
+        reference_months_mixed=None,
+    )
+    dumped = without_months.model_dump(exclude_none=True)
+    assert "reference_months" not in dumped
+    assert "reference_months_mixed" not in dumped
+
+    with_months = DatasetVersionEntry(
+        version_token="dv1-" + "1" * 32,
+        activated_at=datetime(2026, 8, 20, tzinfo=UTC),
+        change_type="full",
+        reference_months={"juso": "202608"},
+        reference_months_mixed=False,
+    )
+    dumped_with_months = with_months.model_dump(exclude_none=True)
+    assert dumped_with_months["reference_months_mixed"] is False
 
 
 @pytest.mark.asyncio
@@ -216,11 +245,20 @@ async def test_history_omits_since_found_when_since_version_not_given() -> None:
 
 @pytest.mark.asyncio
 async def test_history_emits_next_cursor_when_more_pages_remain() -> None:
+    """A single-entry page can't distinguish page[0] from page[-1] — a real regression
+    (picking the wrong end of the page) would silently break pagination monotonicity and
+    this test wouldn't catch it. Use 2 entries and assert the cursor actually decodes to
+    the *last* (oldest) one, matching descending keyset pagination."""
     app = create_app()
-    _FakeRepo.history_page = [_entry("dv1-" + "4" * 32)]
+    newer = _entry("dv1-" + "4" * 32, activated_at=datetime(2026, 8, 20, 3, 0, 0, tzinfo=UTC))
+    older = _entry("dv1-" + "5" * 32, activated_at=datetime(2026, 7, 19, 2, 0, 0, tzinfo=UTC))
+    _FakeRepo.history_page = [newer, older]
     _FakeRepo.history_has_more = True
     response = await _post(app, "/v2/dataset/history")
-    assert response.json()["next_cursor"] is not None
+    next_cursor = response.json()["next_cursor"]
+    assert next_cursor is not None
+    decoded = decode_history_cursor(next_cursor)
+    assert decoded == (older.activated_at, older.version_token)
 
 
 @pytest.mark.asyncio

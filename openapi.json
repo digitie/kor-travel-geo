@@ -4026,9 +4026,15 @@
             "title": "Reference Months"
           },
           "reference_months_mixed": {
-            "default": false,
-            "title": "Reference Months Mixed",
-            "type": "boolean"
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Months Mixed"
           },
           "version_token": {
             "title": "Version Token",

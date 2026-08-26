@@ -106,9 +106,9 @@ def test_normalize_form_a_unmapped_category_is_skipped() -> None:
     assert normalize_reference_months_from_source_set(source_set) is None
 
 
-def test_normalize_form_b_inference_writer_nested_yyyymm_by_kind() -> None:
-    """Form B (admin_repo._infer_current_source_set / backup.infer_source_set):
-    {yyyymm_by_kind: {...}, mixed_yyyymm, source?} — reads the nested map."""
+def test_normalize_form_b_admin_repo_inference_writer_nested_yyyymm_by_kind() -> None:
+    """Form B, writer #1 (admin_repo._infer_current_source_set — 7 kinds + `source` key):
+    {yyyymm_by_kind: {...}, mixed_yyyymm, source} — reads the nested map."""
     source_set = {
         "yyyymm_by_kind": {
             "juso": "202608",
@@ -134,13 +134,58 @@ def test_normalize_form_b_inference_writer_nested_yyyymm_by_kind() -> None:
     assert "navi" not in result  # None value never matches ^\d{6}$
 
 
+def test_normalize_form_b_backup_infer_source_set_writer_distinct_shape() -> None:
+    """Form B, writer #2 (backup.infer_source_set) — 6 kinds, NO `source` key, and no
+    `sppn_makarea` at all (that table isn't part of this writer's fixed table map). A
+    normalizer that only fit writer #1's shape could silently miss this writer's output."""
+    source_set = {
+        "yyyymm_by_kind": {
+            "juso": "202608",
+            "parcel_link": "202608",
+            "locsum": "202607",
+            "navi": "202607",
+            "shp": "202607",
+            "roadaddr_entrance": "202607",
+        },
+        "mixed_yyyymm": True,
+    }
+    result = normalize_reference_months_from_source_set(source_set)
+    assert result == {
+        "juso": "202608",
+        "parcel_link": "202608",
+        "locsum": "202607",
+        "navi": "202607",
+        "shp": "202607",
+        "roadaddr_entrance": "202607",
+    }
+    assert "sppn_makarea" not in result
+
+
 def test_normalize_form_c_hot_swap_metadata_only_normalizes_to_none() -> None:
-    """Form C (hot-swap/rollback recording): {"hot_swap": {...}} carries no category/kind
-    keys at all — must normalize to None (not an empty dict masquerading as "nothing mixed"),
-    signaling the caller to fall back to snapshot lineage."""
-    hot_swap_set = {"hot_swap": {"current_database": "x"}}
+    """Form C (hot-swap/rollback recording). The *actually persisted* source_set carries
+    TWO denylisted top-level keys, not one — record_hot_swap_release passes both
+    source_set={"hot_swap": {...}} AND snapshot_metadata={"hot_swap": {...}}, and
+    _snapshot_source_set merges the latter in under a *second* key,
+    "rebuild_metadata": {"hot_swap": {...}} (admin_repo.py _snapshot_source_set). Neither
+    key carries category/kind data — must normalize to None (not an empty dict
+    masquerading as "nothing mixed"), signaling the caller to fall back to snapshot
+    lineage."""
+    hot_swap_set = {
+        "hot_swap": {"current_database": "x", "restore_database": "y", "previous_alias": "z"},
+        "rebuild_metadata": {
+            "hot_swap": {
+                "previous_alias": "z",
+                "pre_swap_release_id": "rel-1",
+                "maintenance_window_id": "win-1",
+            }
+        },
+    }
     assert normalize_reference_months_from_source_set(hot_swap_set) is None
-    rollback_set = {"hot_swap_rollback": {"rollback_target": "x"}}
+
+    rollback_set = {
+        "hot_swap_rollback": {"current_database": "x", "rollback_target": "y"},
+        "rebuild_metadata": {"hot_swap_rollback": {"rollback_target": "y"}},
+    }
     assert normalize_reference_months_from_source_set(rollback_set) is None
 
 

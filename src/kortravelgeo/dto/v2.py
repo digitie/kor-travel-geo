@@ -304,7 +304,11 @@ class DatasetVersionEntry(FrozenModel):
     activated_at: datetime
     change_type: Literal["full", "delta"]
     reference_months: dict[str, str] | None = None
-    reference_months_mixed: bool = False
+    # bool | None (not bool = False): reference_months_mixed must be omitted alongside
+    # reference_months on the wire, not survive as a literal `false` — exclude_none only
+    # strips None, so the caller passes None explicitly whenever reference_months is absent
+    # (admin_repo._dataset_version_entry), never a default here.
+    reference_months_mixed: bool | None = None
 
 
 class DatasetVersionInput(FrozenModel):

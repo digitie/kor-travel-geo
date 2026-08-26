@@ -3618,11 +3618,8 @@ export interface components {
             reference_months?: {
                 [key: string]: string;
             } | null;
-            /**
-             * Reference Months Mixed
-             * @default false
-             */
-            reference_months_mixed: boolean;
+            /** Reference Months Mixed */
+            reference_months_mixed?: boolean | null;
             /** Version Token */
             version_token: string;
         };

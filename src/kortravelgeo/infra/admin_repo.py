@@ -7,6 +7,7 @@ import logging
 import os
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -109,6 +110,31 @@ SELECT sr.serving_release_id, sr.state, sr.release_kind,
   FROM ops.serving_releases sr
   JOIN ops.dataset_snapshots ds USING (dataset_snapshot_id)
 """
+
+
+@dataclass(frozen=True, slots=True)
+class _DatasetVersionCandidate:
+    """A projectable release's cheap fields — token/sort key computed, but
+    ``reference_months`` deliberately NOT resolved (that can cost up to 5 extra DB
+    round-trips for a lineage fallback). Sorting, filtering, and token-matching only ever
+    need these fields; only the candidates actually returned to a caller get promoted to a
+    full :class:`~kortravelgeo.dto.v2.DatasetVersionEntry` via ``_dataset_version_entry``."""
+
+    version_token: str
+    activated_at: datetime
+    release_kind: str
+    source_set: Mapping[str, Any]
+    parent_dataset_snapshot_id: str | None
+
+
+def _dataset_version_candidate(row: Mapping[str, Any]) -> _DatasetVersionCandidate:
+    return _DatasetVersionCandidate(
+        version_token=derive_version_token(row["serving_release_id"]),
+        activated_at=row["ordered_at"],
+        release_kind=str(row["release_kind"]),
+        source_set=_json_dict(row.get("source_set")),
+        parent_dataset_snapshot_id=_optional_str(row.get("parent_dataset_snapshot_id")),
+    )
 
 _ARTIFACT_SELECT = """
 SELECT artifact_id, artifact_type, state, storage_kind, storage_uri,
@@ -703,17 +729,23 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
             ).mappings().first()
             if row is None:
                 return None
-            return await self._dataset_version_entry(conn, dict(row))
+            return await self._dataset_version_entry(conn, _dataset_version_candidate(dict(row)))
 
     async def find_dataset_version(self, version_token: str) -> DatasetVersionEntry | None:
         """Resolve an opaque ``version_token`` back to its entry, by scanning the
         projectable ledger and deriving each candidate's token (the derivation is a one-way
-        hash — there is nothing to look up directly, per ADR-067 D1)."""
+        hash — there is nothing to look up directly, per ADR-067 D1).
 
-        for entry in await self._dataset_version_candidates():
-            if entry.version_token == version_token:
-                return entry
-        return None
+        Only the *matching* candidate's ``reference_months`` gets resolved (which can cost up
+        to 5 extra DB round-trips for a lineage fallback) — the scan itself is pure/in-memory.
+        """
+
+        candidates = await self._dataset_version_candidates()
+        match = next((c for c in candidates if c.version_token == version_token), None)
+        if match is None:
+            return None
+        async with self.engine.connect() as conn:
+            return await self._dataset_version_entry(conn, match)
 
     async def dataset_version_history(
         self,
@@ -731,27 +763,32 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         client that keeps resending ``since_version`` alongside each page's ``cursor``
         still gets a correctly-bounded range on every page, not just the first. Returns
         ``(page, has_more)`` — ``has_more`` tells the caller whether to emit ``next_cursor``.
+
+        ``reference_months`` is resolved only for the returned page (at most ``limit``
+        entries), not for every candidate scanned to find it.
         """
 
         candidates = await self._dataset_version_candidates()
         if before is not None:
             candidates = [
-                entry
-                for entry in candidates
-                if (entry.activated_at, entry.version_token) < before
+                c for c in candidates if (c.activated_at, c.version_token) < before
             ]
         if since is not None:
             candidates = [
-                entry
-                for entry in candidates
-                if (entry.activated_at, entry.version_token) > since
+                c for c in candidates if (c.activated_at, c.version_token) > since
             ]
-        page = candidates[:limit]
+        page_candidates = candidates[:limit]
         has_more = len(candidates) > limit
+        async with self.engine.connect() as conn:
+            page = [await self._dataset_version_entry(conn, c) for c in page_candidates]
         return page, has_more
 
-    async def _dataset_version_candidates(self) -> list[DatasetVersionEntry]:
-        """All projectable releases (active/superseded/rolled_back — T-291b), newest first.
+    async def _dataset_version_candidates(self) -> list[_DatasetVersionCandidate]:
+        """All projectable releases (active/superseded/rolled_back — T-291b), newest first —
+        cheap fields only (token/activated_at/release_kind/raw source_set). No DB round-trips
+        beyond the one fetch: ``reference_months`` resolution (which can walk snapshot
+        lineage) is deliberately deferred to :meth:`_dataset_version_entry`, called only for
+        candidates actually being returned to a caller.
 
         No contractual row cap (ADR-067 D5 growth-model reasoning: thousands of rows scan +
         hash in ms), but a defensive 5000-row fetch limit bounds a single request's cost —
@@ -768,27 +805,31 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                     )
                 )
             ).mappings().all()
-            entries = [await self._dataset_version_entry(conn, dict(row)) for row in rows]
+        candidates = [_dataset_version_candidate(dict(row)) for row in rows]
         # SQL ordering has no tiebreak on the (unmaterialized) version_token; re-sort in
         # Python per the documented contract. Ties in `ordered_at` (microsecond-resolution
         # now()) don't occur in practice, so this only matters for well-defined-ness.
-        entries.sort(key=lambda entry: (entry.activated_at, entry.version_token), reverse=True)
-        return entries
+        candidates.sort(key=lambda c: (c.activated_at, c.version_token), reverse=True)
+        return candidates
 
     async def _dataset_version_entry(
-        self, conn: Any, row: Mapping[str, Any]
+        self, conn: Any, candidate: _DatasetVersionCandidate
     ) -> DatasetVersionEntry:
         reference_months = await self._resolve_reference_months(
             conn,
-            source_set=_json_dict(row.get("source_set")),
-            parent_dataset_snapshot_id=_optional_str(row.get("parent_dataset_snapshot_id")),
+            source_set=candidate.source_set,
+            parent_dataset_snapshot_id=candidate.parent_dataset_snapshot_id,
         )
         return DatasetVersionEntry(
-            version_token=derive_version_token(row["serving_release_id"]),
-            activated_at=row["ordered_at"],
-            change_type=derive_change_type(str(row["release_kind"])),
+            version_token=candidate.version_token,
+            activated_at=candidate.activated_at,
+            change_type=derive_change_type(candidate.release_kind),
             reference_months=reference_months,
-            reference_months_mixed=reference_months_mixed(reference_months),
+            # None (not the pure function's vacuous False) whenever reference_months itself
+            # is absent, so the two fields are always omitted together on the wire.
+            reference_months_mixed=(
+                reference_months_mixed(reference_months) if reference_months else None
+            ),
         )
 
     async def _resolve_reference_months(
