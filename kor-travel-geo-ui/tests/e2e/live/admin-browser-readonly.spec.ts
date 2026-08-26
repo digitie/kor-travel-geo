@@ -226,6 +226,27 @@ test.describe("LIVE ops and consistency browser panels", () => {
     await expect(page.getByRole("table", { name: "데이터셋 스냅샷 목록" })).toBeVisible();
   });
 
+  // T-291d: the releases table's detail dialog surfaces the dataset-version additive fields
+  // and can preview the real POST /v2/dataset/version response (trusted-proxy, ADR-067 D6).
+  test("ops serving release detail dialog shows version_token and previews /v2/dataset/version", async ({
+    page
+  }) => {
+    await gotoAdmin(page, "/admin/ops", ADMIN_PAGES.ops.title);
+    const releaseTable = page.getByRole("table", { name: "서빙 릴리스 목록" });
+    await expect(releaseTable).toBeVisible();
+    const detailButton = releaseTable
+      .getByRole("button", { name: "데이터셋 버전 상세 보기" })
+      .first();
+    await expect(detailButton).toBeVisible({ timeout: LIVE_TIMEOUT });
+    await detailButton.click();
+
+    await expect(page.getByRole("heading", { name: "데이터셋 버전 상세" })).toBeVisible();
+    await expect(page.getByText(/dv1-[0-9a-f]{32}/)).toBeVisible();
+
+    await page.getByRole("button", { name: "POST /v2/dataset/version 호출" }).click();
+    await expect(page.getByText('"available": true')).toBeVisible({ timeout: LIVE_TIMEOUT });
+  });
+
   test("ops renders the maintenance window form and table", async ({ page }) => {
     await gotoAdmin(page, "/admin/ops", ADMIN_PAGES.ops.title);
     await expect(page.getByRole("heading", { name: "유지보수 윈도우" })).toBeVisible();

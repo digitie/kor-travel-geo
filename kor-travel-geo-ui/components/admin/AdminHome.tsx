@@ -31,6 +31,7 @@ import {
   type ServingRelease
 } from "@/lib/api";
 import { formatTimestamp } from "@/lib/format";
+import { shortHash } from "@/lib/source-files";
 
 const pageIcons: Record<AdminPageKey, typeof Archive> = {
   home: ShieldCheck,
@@ -155,9 +156,11 @@ async function loadActiveRelease(): Promise<StatusValue | null> {
   const releases = await requestJson<ServingRelease[]>("/admin/ops/releases?limit=5");
   const active = releases.find((release) => release.state === "active") ?? releases[0];
   if (!active) return null;
+  const activatedAt = `활성화 ${formatTimestamp(active.activated_at ?? active.created_at)}`;
+  const token = active.version_token ? shortHash(active.version_token, 16) : null;
   return {
     headline: active.mv_name,
-    detail: `활성화 ${formatTimestamp(active.activated_at ?? active.created_at)}`,
+    detail: token ? `${activatedAt} · ${token}` : activatedAt,
     badge: {
       value: active.state,
       tone: active.state === "active" ? "ok" : active.state === "failed" ? "error" : "warn"

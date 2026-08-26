@@ -763,6 +763,18 @@ class ServingRelease(FrozenModel):
     activated_at: datetime | None = None
     notes: str | None = None
     created_at: datetime
+    # T-291d additive fields (ADR-067) — the same public projection /v2/dataset/version
+    # exposes externally, surfaced here read-only for admin observation. Populated only by
+    # AdminRepository.list_serving_releases; other _serving_release() callers
+    # (rollback_plan, record_mv_refresh_release, …) don't need them and leave them None.
+    version_token: str | None = None
+    change_type: Literal["full", "delta"] | None = None
+    reference_months: dict[str, str] | None = None
+    reference_months_mixed: bool | None = None
+    # The linked dataset_snapshot's OWN source_set (raw, pre-normalization) — admin-only
+    # debugging detail, deliberately not part of the external v2 DTO (ADR-067 D2 non-goal).
+    # If reference_months doesn't normalize directly from this, it came from lineage fallback.
+    source_set: dict[str, Any] | None = None
 
 
 class RollbackPlan(FrozenModel):

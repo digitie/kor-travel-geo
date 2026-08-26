@@ -81,6 +81,17 @@ export function CurrentConfigTab() {
                 helpLabel: "릴리스 종류 도움말"
               },
               {
+                label: "버전 토큰",
+                value: shortHash(activeRelease.version_token, 16),
+                help: (
+                  <>
+                    API 필드 <code>version_token</code> — 외부{" "}
+                    <code>POST /v2/dataset/version</code>이 반환하는 값과 동일합니다(ADR-067).
+                  </>
+                ),
+                helpLabel: "버전 토큰 도움말"
+              },
+              {
                 label: "데이터셋 스냅샷",
                 value: activeRelease.dataset_snapshot_id,
                 help: (

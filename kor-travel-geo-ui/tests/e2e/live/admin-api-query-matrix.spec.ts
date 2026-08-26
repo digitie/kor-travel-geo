@@ -72,6 +72,7 @@ const matrix: MatrixCase[] = [
   { name: "releases limit 1", path: "v1/admin/ops/releases", params: { limit: 1 }, limit: 1, rowCheck: stringField("serving_release_id") },
   { name: "releases active", path: "v1/admin/ops/releases", params: { state: "active", limit: 5 }, limit: 5, rowCheck: stringField("serving_release_id") },
   { name: "releases retired", path: "v1/admin/ops/releases", params: { state: "retired", limit: 5 }, limit: 5, rowCheck: stringField("serving_release_id") },
+  { name: "releases version_token (T-291d)", path: "v1/admin/ops/releases", params: { state: "active", limit: 1 }, limit: 1, rowCheck: stringField("version_token") },
   { name: "artifacts limit 1", path: "v1/admin/ops/artifacts", params: { limit: 1 }, limit: 1, rowCheck: stringField("artifact_id") },
   { name: "artifacts db_backup", path: "v1/admin/ops/artifacts", params: { artifact_type: "db_backup", limit: 5 }, limit: 5, rowCheck: stringField("artifact_id") },
   { name: "artifacts benchmark", path: "v1/admin/ops/artifacts", params: { artifact_type: "benchmark", limit: 5 }, limit: 5, rowCheck: stringField("artifact_id") },

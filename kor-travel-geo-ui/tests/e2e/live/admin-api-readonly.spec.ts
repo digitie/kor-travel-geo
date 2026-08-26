@@ -132,6 +132,22 @@ test.describe("LIVE admin API read-only contracts", () => {
     }
   });
 
+  // T-291d: version_token/change_type are the same public projection POST /v2/dataset/version
+  // exposes externally, additive on the admin ServingRelease DTO (ADR-067).
+  test("ops releases carry the T-291d dataset-version additive fields", async ({ request }) => {
+    const res = await proxyGet(request, "v1/admin/ops/releases", { limit: 20 });
+    expect(res.status()).toBe(200);
+    const rows = (await res.json()) as Row[];
+    test.skip(rows.length === 0, "No live serving releases are registered");
+
+    expect(rows.every((row) => typeof row.version_token === "string")).toBe(true);
+    expect(rows.every((row) => row.change_type === "full" || row.change_type === "delta")).toBe(
+      true
+    );
+    // dv1- + 32 lowercase hex chars (core.dataset_version.VERSION_TOKEN_RE).
+    expect(rows.every((row) => /^dv1-[0-9a-f]{32}$/.test(String(row.version_token)))).toBe(true);
+  });
+
   test("ops active release filter is readable", async ({ request }) => {
     const res = await proxyGet(request, "v1/admin/ops/releases", { state: "active", limit: 20 });
     expect(res.status()).toBe(200);

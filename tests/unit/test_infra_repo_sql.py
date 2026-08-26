@@ -477,6 +477,26 @@ def test_mv_refresh_release_metadata_uses_operational_timeout() -> None:
     assert "_collect_row_counts_for_conn" in source
 
 
+def test_list_serving_releases_attaches_dataset_version_additive_fields() -> None:
+    """T-291d: the admin releases list must carry the same version_token/change_type/
+    reference_months fields the external /v2/dataset/version projection computes — reusing
+    _resolve_reference_months (the lineage-fallback walk), not a second, divergent
+    implementation."""
+    list_source = inspect.getsource(admin_repo.AdminRepository.list_serving_releases)
+    assert "_with_dataset_version_fields" in list_source
+
+    attach_source = inspect.getsource(admin_repo.AdminRepository._with_dataset_version_fields)
+    assert "derive_version_token(release.serving_release_id)" in attach_source
+    assert "derive_change_type(release.release_kind)" in attach_source
+    assert "_resolve_reference_months(" in attach_source
+    assert "release.model_copy(" in attach_source
+    assert '"source_set": own_source_set' in attach_source
+    # Other _serving_release() callers (rollback_plan, record_mv_refresh_release) must NOT
+    # be forced through the extra per-row snapshot lookup — only the admin list view needs it.
+    rollback_source = inspect.getsource(admin_repo.AdminRepository.rollback_plan)
+    assert "_with_dataset_version_fields" not in rollback_source
+
+
 def test_admin_repo_explain_is_select_only_and_uses_json_format() -> None:
     assert admin_repo._validated_explain_sql(" SELECT 1 ") == "SELECT 1"
     with pytest.raises(InvalidInputError):
