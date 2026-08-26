@@ -105,11 +105,11 @@ test.describe("LIVE dataset-version API", () => {
     expect(sinceBody.entries.some((entry) => entry.version_token === anchor)).toBe(false);
   });
 
-  test("responses carry Cache-Control: no-store", async ({ request }) => {
-    const res = await proxyPost(request, "v2/dataset/version", {});
-    expect(res.status()).toBe(200);
-    expect(res.headers()["cache-control"]).toBe("no-store");
-  });
+  // Cache-Control 확인은 실 공개 API 직접 호출로만 검증한다 — 신뢰 admin 프록시(app/api/proxy/
+  // [...path]/route.ts)는 upstream 응답 헤더를 content-type만 골라 전달하고 나머지는 버린다
+  // (모든 admin 엔드포인트에 공통인 기존 동작, T-291d로 인한 변화 아님 — 자세한 배경/영향은
+  // T-294). proxyPost로는 이 검증이 구조적으로 불가능하므로 known_version 라운드트립 테스트에
+  // 흡수하지 않고, 아래 mutate opt-in 테스트에서 실 공개 키로 직접 호출해 확인한다.
 
   test("UI can generate a public API key and call /v2/dataset/version directly, matching the admin preview", async ({
     browserName,
@@ -150,6 +150,9 @@ test.describe("LIVE dataset-version API", () => {
     try {
       const direct = await directApiPost(request, "v2/dataset/version", {}, { key: generatedKey });
       expect(direct.status()).toBe(200);
+      // 실 공개 API 직접 호출에서만 검증 가능 — 신뢰 admin 프록시는 upstream Cache-Control을
+      // 전달하지 않는다(T-294).
+      expect(direct.headers()["cache-control"]).toBe("no-store");
       const directBody = (await direct.json()) as DatasetVersionResponse;
       // The direct, real-public-API-key call must return the SAME token the trusted-proxy
       // preview reported — the preview's "limitation" (ADR-067 D6) is that it bypasses auth,

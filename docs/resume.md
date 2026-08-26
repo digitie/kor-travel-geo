@@ -4,6 +4,23 @@
 
 ## 현재 진척도 (2026-08-26 갱신, by claude)
 
+- ✅ **T-291d — admin 확장: dataset-version additive 필드 (2026-08-26, PR #531, by claude)** —
+  `ServingRelease` DTO에 `version_token`/`change_type`/`reference_months`/
+  `reference_months_mixed`/`source_set` 5개 additive 필드를 추가하고, OpsPanel 서빙 릴리스
+  표에 컬럼 4개 + 상세 다이얼로그(`DatasetVersionDetailDialog`)를 붙였다. 상세 다이얼로그의
+  "외부 응답 미리보기"는 기존 admin `/v2/*` 프록시·`require_public_api_key` 신뢰 클라이언트
+  우회를 그대로 재사용해 신규 백엔드/프록시 배선 없이 실제 `POST /v2/dataset/version`을
+  호출한다. 적대적 리뷰 2건 — 미리보기가 known_version 없이 항상 호출해 비활성 행에서도
+  "현재 활성 릴리스"를 보여주던 문제(수정), `DatasetVersionDetailDialog.tsx`에 CI 실행
+  vitest 커버리지가 없던 문제(신규 추가) — 을 반영했다. n150 live e2e(Chromium 244
+  passed/7 skipped, Firefox T-291d 스펙 114 passed/4 skipped)에서 신뢰 admin 프록시가
+  `Cache-Control` 등 응답 헤더를 forwarding하지 않는 기존(모든 admin 엔드포인트 공통) 동작을
+  발견해 T-294로 분리했고, `/admin/dagster` iframe이 n150 `KOR_TRAVEL_GEO_DAGSTER_PUBLIC_URL`
+  공백으로 렌더되지 않는 사전 존재·무관 이슈(n150 `.env` 확인 필요)도 발견했다. **다음 한
+  작업**: T-291e(기록 경로 위생 — 백업 artifact FK, BackupsPanel 토큰, hot-swap source_set
+  자체 완결화, `batch_dag` repr 수정, restore drill 원장 정리 판단) — 정본
+  [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
+
 - ✅ **T-291b+c — 외부 데이터셋 버전 API (2026-08-26, PR #530, by claude)** —
   `POST /v2/dataset/version`(known_version 조건부 폴링)·`POST /v2/dataset/history`를
   공개했다. `core/dataset_version.py` 신규(순수 함수): 토큰 파생(`dv1-` + sha256 prefix),

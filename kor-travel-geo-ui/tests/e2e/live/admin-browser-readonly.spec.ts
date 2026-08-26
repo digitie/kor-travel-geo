@@ -241,7 +241,8 @@ test.describe("LIVE ops and consistency browser panels", () => {
     await detailButton.click();
 
     await expect(page.getByRole("heading", { name: "데이터셋 버전 상세" })).toBeVisible();
-    await expect(page.getByText(/dv1-[0-9a-f]{32}/)).toBeVisible();
+    // dv1- 토큰은 version_token 필드와 curl 스니펫 양쪽에 나타난다 — .first()로 모호성 회피.
+    await expect(page.getByText(/dv1-[0-9a-f]{32}/).first()).toBeVisible();
 
     await page.getByRole("button", { name: "POST /v2/dataset/version 호출" }).click();
     await expect(page.getByText('"available": true')).toBeVisible({ timeout: LIVE_TIMEOUT });

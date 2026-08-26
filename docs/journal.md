@@ -2,6 +2,57 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-26 (T-291d — admin 확장: dataset-version additive 필드, PR #531, by claude)
+
+T-291b+c 직후 이어서 ADR-067의 admin 관측 표면을 구현했다. 새 admin 엔드포인트는 추가하지
+않는다는 ADR-067 D6 원칙에 따라, 기존 `list_serving_releases`가 반환하는 `ServingRelease`에
+외부 `/v2/dataset/version`이 계산하는 것과 동일한 5개 필드(`version_token`/`change_type`/
+`reference_months`/`reference_months_mixed`/`source_set`)를 추가만 했다.
+
+**backend**: `AdminRepository._with_dataset_version_fields`가 스냅샷당 1회 추가 조회(`ops.
+dataset_snapshots`의 `source_set`+`parent_dataset_snapshot_id`) 후 기존 `_resolve_reference_
+months`(T-291b+c의 계보 폴백)를 그대로 재사용한다. `list_serving_releases`는 admin 전용
+저QPS(`limit` 상한 200)라 T-291b+c의 candidate/entry 2단계 분리 없이 직접 N+1 패턴으로
+계산했다 — 공개 API의 최대 5000행 스캔과는 다른 트레이드오프.
+
+**frontend**: OpsPanel 서빙 릴리스 표에 token/change_type/기준월 컬럼과 상세 다이얼로그
+버튼을 추가했다. `DatasetVersionDetailDialog`는 `BackupsPanel`의 `ManifestViewer` 패턴을
+그대로 따르되, "외부 응답 미리보기" 섹션이 실제 `POST /v2/dataset/version`을 trusted-proxy
+경유로 호출한다 — `public_api_key.py`의 `require_public_api_key`가 admin 인증과 같은
+`resolve_request_context` 신뢰-클라이언트 우회를 이미 갖고 있고, `lib/proxy.ts`의
+`buildProxyTarget`도 이미 `/v1/*`·`/v2/*`를 모두 허용해서 신규 배선이 0건이었다.
+
+**적대적 리뷰 2명**이 각 1건씩 blocking을 찾았다. (1) correctness: 미리보기 버튼이
+`known_version` 없이 항상 호출해, superseded/rolled_back 등 비활성 릴리스를 보고 있어도
+응답은 항상 "현재 활성 릴리스"였다 — 행과 무관한 데이터를 그 행의 상태처럼 오인시키는
+UX 버그. `release.version_token`을 `known_version`으로 보내고 응답의 `changed`/
+`known_version_found`로 "이 release가 지금도 현재 활성인지"를 명시적으로 안내하도록
+고쳤다. (2) test-rigor: 신규 unit test(`test_list_serving_releases_attaches_dataset_
+version_additive_fields`, source-inspection 방식)가 `"reference_months": reference_months`
+값 자체는 고정하지 않아 `own_source_set`으로 바뀌어도 통과했다 — assert 1줄 추가 후
+mutation으로 재현·수정 확인. `DatasetVersionDetailDialog.tsx`는 `ManifestViewer.tsx` 선례와
+달리 vitest 커버리지가 전혀 없어 CI에서 한 번도 실행되지 않았다(live e2e만 있고 CI는
+`LIVE_E2E` 미실행) — `manifest-viewer.test.tsx`/`backups-panel.test.tsx` 패턴을 그대로 따라
+5개 테스트를 신규 추가했다.
+
+**n150 배포**에서 두 가지 무관한 발견이 있었다. (a) docker-manager의 단일
+`docker-compose.yml`이 kor-travel-map/pinvi 등 무관 프로젝트의 `${VAR:?...}` 필수
+변수 ~40개를 전부 interpolation하므로 `up -d --no-deps kor-travel-geo-api kor-travel-geo-ui`
+조차 이들이 없으면 실패했다 — 순수 config 파싱 단계 실패(실제 docker 작업 없음)임을 확인한
+뒤, `KOR_TRAVEL_GEO_*` 계열(내 프로젝트의 실제 DSN)은 제외하고 나머지에만 무해한 placeholder
+값 + 임시 catch-all named volume을 얹어 우회했다(`.env` 자체는 건드리지 않음, 다른
+서비스는 전혀 recreate되지 않음 확인). (b) live e2e에서 신뢰 admin 프록시
+(`app/api/proxy/[...path]/route.ts`)가 `content-type` 하나만 forwarding하고 나머지 응답
+헤더(`Cache-Control` 포함)를 전부 버리는 기존 동작을 발견 — `POST /v2/dataset/version`의
+`Cache-Control: no-store`가 프록시 경유로는 검증 불가능해, 실 공개 API 직접 호출(mutate
+opt-in 테스트)로 검증을 옮기고 일반화된 gap은 T-294로 분리했다(모든 admin 엔드포인트
+공통, POST라 실사용 영향은 낮음). `/admin/dagster` iframe도 n150
+`KOR_TRAVEL_GEO_DAGSTER_PUBLIC_URL` 공백으로 렌더되지 않았으나 T-291d와 무관한(코드 변경
+없음) n150 `.env` 설정 문제라 task를 만들지 않고 기록만 남긴다.
+
+n150 live e2e: Chromium 전체 244 passed/7 skipped(1 pre-existing·무관 Dagster 실패
+제외), Firefox T-291d 관련 스펙 114 passed/4 skipped(스킵은 데이터 가용성·mutate opt-in).
+
 ## 2026-08-26 (T-291b+c — 외부 데이터셋 버전 API, PR #530, by claude)
 
 T-291a 직후 이어서 ADR-067의 외부 표면을 구현했다. T-291b(backend 정규화기/사영/커서)와
