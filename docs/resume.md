@@ -4,35 +4,40 @@
 
 ## 현재 진척도 (2026-08-27 갱신, by claude)
 
-- 🚨 **T-297 — n150 디스크 공간 위험 수준 (최우선, 사용자 지시)** — T-292 live
-  restore-drill 검증 중 n150 루트 디스크가 100%까지 차서 실 PostgreSQL crash 발생(자체
-  WAL redo로 복구, 데이터 손실 없음 확인 — 상세는 `tasks.md`/`tasks-done.md` T-292/T-297
-  항목). 남은 스크래치 DB는 DROP해 21G(96%)까지는 확보했지만 여전히 임계 수준. **다음 한
-  작업**: 사용자 지시("t292 머지후 디스크 확보작업부터 먼저 진행")에 따라 T-293~T-296 PR
-  머지보다 이 작업을 먼저 한다 — n150 디스크 사용 내역 실측 후 정리(Docker 이미지/컨테이너
-  레이어, 각 프로젝트 DB 크기, 백업 보존량 등 확인 → prune/정책 재검토/볼륨 확장 중 판단).
+**T-291 계열 후속(T-292~T-296) + T-297 디스크 위험 전부 완료.** T-291a/T-291d 적대적
+리뷰에서 파생된 5개 후속 task(T-292~T-296)를 전부 implement → 적대적 리뷰 2인 →
+반영 → n150 배포/live 검증 → merge 사이클로 완주했다. 도중 T-292 live restore-drill
+검증 중 n150 디스크가 100%까지 차서 실 PostgreSQL crash가 발생했으나(자체 WAL redo로
+복구, 데이터 손실 없음 확인) 사용자 승인 하에 merge를 진행했고, 크래시로 드러난 n150
+디스크 문제 자체는 T-297로 분리해 즉시 해소했다(96%→58%, 189G 여유 — Docker 빌드
+캐시·미참조 이미지 정리, 이 프로젝트가 아니라 공유 호스트의 다른 프로젝트 누적이 원인).
+상세는 각 task의 `tasks-done.md` 항목, 크래시 경위는 `docs/journal.md` 2026-08-27
+항목이 정본.
 
-- ✅ **T-292 — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도
-  (2026-08-26, PR #534, by claude)** — 실제로 종단간 실행해보니 이전엔 몰랐던 버그 3개
-  발견: `--clean --if-exists` 부재로 실 restore 전부 실패, 그 플래그를 고친 뒤엔
-  `replace_current`의 자기참조 wipe가 `load_jobs`/`ops.artifacts`/`ops.maintenance_windows`를
-  같이 지워 두 번째 크래시(FK violation)와 조용한 회귀(`end_maintenance_window` 404)를
-  냈던 것, `record_restore_candidate`가 backup-time manifest `row_counts`를 쓰고 실측
-  reconcile을 무시하던 것. snapshot-before/reinsert-after 패턴(`_snapshot_row`/
-  `_reinsert_row`) + `row_counts_override`로 수정. 적대적 리뷰 2건(고위험 명시) 모두 실제
-  결함 발견 — job_id FK violation(첫 수정 시도가 `job_id=None`으로만 테스트해 놓친 것),
-  저자 자신의 테스트가 `end_maintenance_window` 결과를 단언 안 해 구조적으로 못 잡던 회귀 —
-  둘 다 mutation-검증. 우선순위 낮은 잔여 3건은 T-296으로 분리(PR #538, 완료).
-  n150 live 검증: `new_database` 모드 daily restore-drill을 실 4.7GB backup으로 수동
-  트리거해 4시간+ 동안 수십 개 테이블에 걸친 인덱스 빌드를 `pg_stat_activity`로 직접 관측하며
-  정상 진행 확인했으나, **완주 전 n150 디스크가 100%까지 차서 PostgreSQL이 crash**(drill
-  자체 스크래치 DB가 디스크를 다 채운 순수 용량 문제, `--clean --if-exists`의 결함 아님 —
-  PostgreSQL 자체 WAL redo로 복구, 프로덕션 데이터 무결성 직접 확인 완료, 후속 조치는
-  T-297). Drill을 clean PASS까지 재실행하는 대신(디스크가 여전히 96%로 빠듯해 재시도가
-  같은 크래시 재현 위험), 크래시 전 관측한 광범위한 정상 동작 + 로컬 통합 테스트 전체
-  통과를 근거로 merge — 사용자 승인. **다음 한 작업**: T-297(디스크 확보, 최우선) →
-  이후 T-293(#535)/T-294(#536)/T-295(#537)/T-296(#538) PR 머지, T-294는 UI 재배포 후
-  live Cache-Control 단언 검증 필요.
+- ✅ **T-292**(PR #534) — `replace_current` 종단간 검증, 버그 3개 발견·수정(`--clean
+  --if-exists` 부재, 자기참조 wipe로 인한 FK violation + `end_maintenance_window` 404,
+  row_counts 부정확). n150 `new_database` 모드 daily restore-drill로 4시간+ 정상 동작
+  관측(완주 전 디스크 크래시, 위 참조) + 로컬 통합 테스트 전체 통과 근거로 merge.
+- ✅ **T-293**(PR #535) — 동시 활성화 race 2가지 window(활성 row 0개/이미 존재) 모두
+  advisory lock으로 해소. 원래 신고 시나리오(FOR UPDATE + LIMIT lineage 유실)를 놓쳤던
+  첫 구현을 리뷰가 발견해 두 번째 race 테스트로 보강.
+- ✅ **T-294**(PR #536) — admin BFF 프록시가 `content-type` 외 응답 헤더(`Cache-Control`
+  등)를 전부 drop하던 문제 수정, allowlist 방식. n150 UI 재배포 후 live e2e로
+  `Cache-Control: no-store`가 실제로 프록시를 통과하는 것 확인.
+- ✅ **T-295**(PR #537) — `test_full_load_batch_dagster_roundtrip.py`의 stale
+  monkeypatch 스텁(T-291a `load_batch_id` 추가를 반영 못함) 수정. 테스트 전용, 배포 불필요.
+- ✅ **T-296**(PR #539, 구 #538) — T-292 잔여 3건: 감사 이벤트 재기록 범위 확대(`db_restore.
+  submit`/`maintenance_window.create`도 누락돼 있었음, 리뷰가 발견), 소스 백업 artifact
+  row의 stale-copy 문제(UPSERT로 수정), PostGIS 템플릿 사전설치 시나리오 신규 테스트로
+  확정. n150 API+Dagster 재배포.
+- ✅ **T-297** — 디스크 위험 해소(위 참조). 남은 후속(backup free-space 가드가
+  restore-drill에도 적용되는지, 공유 호스트 이미지 보존 정책)은 낮은 우선순위로
+  `tasks.md`에 유지.
+
+n150 배포 상태: API/UI/Dagster/Dagster-daemon 전부 이번 세션의 최신 main으로 재배포·
+healthy 확인, live e2e(dataset-version 5건 + admin readonly 40건, 스킵 제외 전부
+passed) 통과. **다음 한 작업**: `docs/tasks.md`의 열린 항목은 T-297 후속(낮은 우선순위)과
+보류 중인 T-063(N150/Odroid 실측, 하드웨어 대기)뿐 — 새로 시작할 진행 중 task 없음.
 
 - ✅ **T-291f — dataset-version 메서드 실 Postgres 통합 테스트 (2026-08-26, PR #533, by
   claude)** — T-291b+c 적대적 리뷰에서 발견한 공백(`current_dataset_version`/`find_

@@ -2,7 +2,7 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
-## 2026-08-27 (T-292 merge + n150 Postgres crash → T-297, by claude)
+## 2026-08-27 (T-292~T-296 완주 + n150 Postgres crash → T-297 디스크 확보, by claude)
 
 T-291f 직후 진행, "더이상 테스크가 없을 때 까지 완주할 것" 지시로 T-292~T-296을 순서대로
 implement → 적대적 리뷰 2인 → 리뷰 반영 → n150 배포/검증(해당 시) → merge 사이클로 계속
@@ -72,6 +72,36 @@ reclaimable로 잡혔다. 가장 안전한 것부터 순서대로 처리 — `do
 않았다(사용자에게 범위를 명시적으로 확인받은 두 단계만 진행 — 빌드 캐시, 그다음
 미사용 이미지). T-297은 즉시 위험 해소로 우선순위 하향, 재발 방지(백업 free-space
 가드가 restore-drill에도 적용되는지)만 낮은 우선순위 후속으로 남겼다.
+
+**T-293/T-294/T-295/T-296 merge + n150 재배포 (디스크 확보 직후)**: 디스크 위험 해소를
+확인한 뒤 나머지 4개 PR을 순서대로 머지했다. T-296(PR #538)은 base였던
+`feat/t292-replace-current-restore`가 T-292 머지 후 삭제되며 GitHub이 자동으로 close —
+reopen 시도(`gh pr reopen`)도 실패해 동일 내용으로 새 PR(#539, base=main)을 만들었다.
+이 과정에서 T-296 브랜치가 여전히 T-292의 (스쿼시되기 전) 원본 커밋을 조상으로 갖고
+있어 `main`과의 diff에 T-292 변경분이 그대로 다시 나타나는 문제를 발견 —
+`git rebase --onto origin/main 20f3bad`(T-296 고유 커밋 2개만 재생)로 정리하고
+`--force-with-lease`로 재푸시해 diff를 3파일로 되돌렸다. T-295(테스트 전용, 배포 불필요)
+→ T-293 → T-296 → T-294 순으로 머지.
+
+**n150 재배포**: 공유 인프라 매니저의 docker-compose 다중 프로젝트 interpolation
+문제(이 세션 이전부터 있던 조건부 필수 변수 워크어라운드)에 더해, 이번엔 플레이스홀더로
+채운 변수 중 하나가 실제로는 `kor-travel-map-dagster` 서비스의 볼륨 이름으로
+쓰인다는 걸 처음 발견 — "refers to undefined volume placeholder" 에러가 나서, 기존
+`unused-placeholder-not-real` 외에 `placeholder`라는 이름의 볼륨도 함께 선언해 해결.
+중첩 SSH/WSL 셸을 통과하는 인라인 quoting이 계속 깨져서(예: `docker system df` 이후
+disk-check 쿼리들) 이후로는 SQL/배포 스크립트를 로컬 파일로 작성해 `scp`로 복사 후
+원격에서 실행하는 방식으로 전환 — 훨씬 안정적이었다. 이번 세션에서 처음 지운 빌드
+캐시 때문에 API+Dagster+Dagster-daemon, UI 두 빌드 모두 캐시 없이 처음부터 진행돼
+평소보다 오래 걸렸다(각각 10분+). 배포 후 전부 healthy 확인.
+
+**live e2e 검증**: `dataset-version-live.spec.ts`(T-294의 실제 목표였던 Cache-Control
+검증 포함) 5건 중 3 passed/2 skipped(mutate opt-in 미설정, 예상대로), 이어서 넓은
+회귀 확인용으로 `admin-readonly.spec.ts` + `admin-api-readonly.spec.ts` 40건도
+38 passed/2 skipped(데이터 부재로 스킵, 예상대로) — 전부 정상. T-291a/T-291d 리뷰에서
+파생된 5개 후속 task(T-292~T-296)와 그 과정에서 드러난 T-297 디스크 위험 전부 완료 —
+"더이상 테스크가 없을 때 까지 완주할 것" 지시를 마쳤다. 남은 열린 항목은 T-297의
+낮은-우선순위 후속(재발 방지 판단, 공유 호스트 이미지 보존 정책)과 하드웨어 대기 중인
+T-063뿐, 둘 다 지금 시작할 진행 중 작업은 아니다.
 
 ## 2026-08-26 (T-291f — dataset-version 메서드 실 Postgres 통합 테스트, PR #533, by claude)
 

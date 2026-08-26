@@ -66,53 +66,6 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
 
 ### 신규 기능
 
-- [ ] **T-293** — `_insert_dataset_snapshot_and_release`의 동시 호출 시 lineage 유실
-  가능성 (T-291a 적대적 리뷰에서 발견, PR #529). "활성 release는 항상 1건" 불변식 자체는
-  partial unique index + 무조건 실행되는 `UPDATE ... WHERE state='active'`로 보장되지만,
-  두 트랜잭션이 거의 동시에 진입하면 뒤에 커밋되는 쪽의 `SELECT ... FOR UPDATE`가 이미
-  `superseded`로 바뀐 원래 행에서 블록되었다가 그 행 기준으로 `previous`를 `None`으로
-  결정할 수 있어 `previous_serving_release_id`/`parent_dataset_snapshot_id` 계보가
-  끊길 수 있다(활성 상태 자체는 정상적으로 최종 요청이 이김). T-291a로 직접 서빙 loader·
-  benchmark 스크립트 등 신규 호출 지점이 늘어 동시 호출 가능성이 커졌으므로, INSERT 직전
-  재조회 또는 advisory lock 등으로 보강할지 판단한다.
-- [ ] **T-294** — 신뢰 admin 프록시(`kor-travel-geo-ui/app/api/proxy/[...path]/route.ts`)가
-  upstream 응답 헤더를 `content-type` 하나만 골라 전달하고 나머지(`Cache-Control` 등)는 전부
-  버린다(T-291d n150 live e2e에서 발견 — `dataset-version-live.spec.ts`의
-  `POST /v2/dataset/version` 프록시 호출이 `Cache-Control: no-store` 부재로 실패, 실 공개 API
-  직접 호출 검증으로 대체하고 이 task로 분리). 모든 admin 엔드포인트에 공통인 기존 동작이라
-  T-291d가 만든 회귀는 아니다. 현재 실사용 영향은 낮다 — 이 헤더가 실제로 의미 있는
-  `/v2/dataset/version`·`/v2/dataset/history`가 둘 다 POST이고, 브라우저·대부분의 HTTP
-  캐시는 헤더 유무와 무관하게 POST 응답을 캐시하지 않는다. 그러나 향후 GET 기반 admin
-  엔드포인트가 `ETag`/`Cache-Control`/rate-limit 헤더 같은 응답 헤더에 의존하게 되면 프록시를
-  거치는 순간 조용히 사라진다 — `ALLOWED_FORWARD_HEADERS`(요청 헤더, `lib/proxy.ts`)와
-  대칭되는 응답 헤더 allowlist를 `route.ts`에 추가할지, 아니면 admin 프록시 전체에 획일적으로
-  `Cache-Control: no-store`를 강제할지(어차피 admin은 상호작용형이라 캐시가 필요 없음) 판단한다.
-- [ ] **T-295** — `tests/integration/test_full_load_batch_dagster_roundtrip.py`의
-  `_stub_leaves` 안 `fake_source` monkeypatch 스텁이 `run_source_loader`의 현재 시그니처와
-  어긋난다(T-292 live-scratch-DB 게이트 실행 중 우연히 발견 — T-292와 무관, backup/restore를
-  전혀 건드리지 않는 파일). `run_source_loader`(`loaders/batch_dag.py`)는 T-291a에서
-  `load_batch_id: str | None = None` 키워드 인자를 얻었지만, 이 테스트의 `fake_source(engine,
-  *, kind, payload, cancel_event, progress)` 스텁은 이를 받지 않아
-  `TypeError: fake_source() got an unexpected keyword argument 'load_batch_id'`로 즉시
-  실패한다(`test_dagster_batch_roundtrip_converges_all_children`,
-  `test_dagster_batch_gate_blocks_mv_on_consistency_error` 2건). opt-in 테스트라
-  `KTG_TEST_PG_DSN` 없이 도는 기본 `pytest -q`에서는 드러나지 않는다. `fake_source`에
-  `load_batch_id=None` 파라미터(또는 `**_kwargs`)를 추가하면 해소.
-- [ ] **T-296** — T-292가 고친 `replace_current` 자기참조 wipe 문제의 잔여 항목(우선순위
-  낮음, T-292 적대적 리뷰에서 발견, 크래시는 아니고 조용한 정확도/추적성 손실). (a)
-  `maintenance_window.authorize` 감사 이벤트(`ops.audit_events`)가 복원 시 함께 wipe되는데
-  재기록하지 않는다 — 아무 것도 이를 다시 읽지 않아 현재는 inert로 보이지만, 감사 완결성
-  관점에서 재기록 여부 판단. (b) `record_restore_candidate`가 기록하는
-  `ops.dataset_snapshots.backup_artifact_id`는 FK가 없어 조용히 매달린 참조가 된다 —
-  복원 대상 백업 artifact 자신은 정의상 자기 dump 안에 존재할 수 없으므로(dump 파일이
-  있어야 체크섬/크기를 계산해 artifact를 만들 수 있는 선후관계), `--clean` 복원 후
-  `ops.artifacts`가 백업 시점 상태로 되돌아가면 그 backup_artifact_id는 영구히 풀리지 않는다
-  — "이 스냅샷이 어느 백업에서 복원됐는지" 조회가 매 실 `replace_current` 복원마다 끊긴다.
-  (c) `build_pg_restore_command`에 전역으로 추가한 `--clean --if-exists`가 PostGIS
-  extension을 template로 미리 설치해 둔 `new_database` 대상(빈 테이블이지만 extension은
-  이미 존재)에서 `DROP EXTENSION IF EXISTS postgis` 이후 재생성이 항상 무사히 성공하는지
-  실측 검증되지 않았다(`ensure_target_database_empty`는 테이블만 확인하고 extension은
-  확인하지 않음) — 흔한 pg_restore+PostGIS 마찰 지점이라 별도 테스트로 확정할 가치가 있다.
 - [ ] **T-297** — n150 디스크 공간 위험(2026-08-26 T-292 live restore-drill 검증 중
   실제 PostgreSQL 크래시 발생시킴) 사후 조치. 즉시 위험은 2026-08-27 해소(96%→58%,
   189G 여유 — 아래 참조), 남은 항목은 낮은 우선순위 후속.

@@ -6,6 +6,70 @@
 
 ## 완료
 
+- [x] **T-296 — T-292 `replace_current` 잔여 항목: audit 추적성 + PostGIS 템플릿 검증**
+  (2026-08-26, PR #539 — 구 #538은 base였던 T-292 브랜치가 머지 후 삭제되며 자동 close,
+  동일 내용으로 재생성, by claude). T-292 적대적 리뷰가 낮은 우선순위로 남겨둔 3건. (a)
+  `maintenance_window.authorize` 감사 이벤트만 재기록하던 첫 구현을, test-rigor 리뷰어가
+  같은 wipe 대상 DB에 실 운영 호출자가 쓰는 감사 이벤트가 둘 더 있음을 찾아내
+  (`db_restore.submit` — API 라우터, `maintenance_window.create` — client 계층, 둘 다
+  지금까지 재기록 대상에서 빠져 있었음) 일반화 — action 이름 하드코딩 대신 job_id/
+  resource_id 매칭으로 이 복원 설정 과정에서 기록된 audit_events row를 전부 찾는
+  `_snapshot_restore_audit_events`로 재구현. (b) 소스 백업 자신의 `ops.artifacts` row는
+  그 백업의 `pg_dump`가 실행되기 *전에* insert된(`state='creating'`) row라서 dump 안에
+  이미 그 시점의 stale 버전이 들어있다 — 단순 재INSERT가 아니라 `INSERT ... ON CONFLICT
+  DO UPDATE`(`_reinsert_row`에 `upsert_pk` 옵션 추가)가 필요. (c) 전역 `--clean --if-exists`가
+  PostGIS를 template으로 미리 설치해 둔 `new_database` 대상에서 안전한지 신규 통합
+  테스트(`test_new_database_restore_postgis_preinstalled.py`, 이 프로젝트의 `x_extension`
+  스키마 컨벤션 재현)로 확정. correctness 리뷰어는 별개로, 새로 추가된 audit/artifact
+  재기록 단계 2개가 load_jobs와 `ops.maintenance_windows` 재기록 사이에 끼어들며 운영자
+  영향이 가장 큰 window 재기록의 실패 노출 구간이 넓어졌다는 순서 문제를 찾아 재정렬로
+  대응. 4건 모두 mutation-검증. n150 API+Dagster+Dagster-daemon 재배포, 회귀 없음(live
+  admin e2e 38 passed/2 skipped).
+
+- [x] **T-295 — `fake_source` 스텁이 T-291a의 `load_batch_id` 추가를 놓침** (2026-08-26,
+  PR #537, by claude). `batch_dag.py`의 `run_source_loader`가 T-291a에서 얻은
+  `load_batch_id` 키워드 인자를 `tests/integration/test_full_load_batch_dagster_
+  roundtrip.py`의 monkeypatch 스텁이 반영 못해 `TypeError`로 즉시 실패하던 것을 수정(T-292
+  게이트 실행 중 우연히 발견, T-292와 무관한 파일). 단순히 크래시만 피하지 않고 각 source
+  leaf가 실제로 batch의 job_id를 받는지 검증하는 단언도 추가. 적대적 리뷰 2건 모두 버그
+  없음 확인 — correctness 리뷰어는 새 단언이 실제 코드 경로(모든 자식이 동일한 batch_id를
+  받음, 우연한 통과가 아님)로 검증됨을 확인, test-rigor 리뷰어는 이 스텁이 유일한 stale
+  케이스임을(다른 `fake_consistency`/`fake_mv` 스텁은 정상) 전수 확인. Mutation-verified.
+  테스트 전용 변경이라 n150 배포 불필요.
+
+- [x] **T-294 — 신뢰 admin BFF 프록시가 content-type 외 응답 헤더를 전부 drop**
+  (2026-08-26, PR #536, by claude). `app/api/proxy/[...path]/route.ts`가 upstream 응답을
+  재포장하며 `content-type`만 복사하던 것을 수정 — `/v2/dataset/version`이 명시적으로
+  설정하는 `Cache-Control: no-store`(변경 감지 surface, 캐시되면 목적이 깨짐)와
+  admission-control 429의 `Retry-After`가 프록시를 거치면 사라지던 문제.
+  `lib/proxy.ts`에 `ALLOWED_RESPONSE_HEADERS` 허용목록(content-type/cache-control/
+  retry-after/content-disposition) + `filteredResponseHeaders` 헬퍼 추가.
+  content-encoding/content-length는 의도적 제외(Next.js 런타임 fetch가 이미 압축
+  해제한 본문을 재사용하므로 그대로 복사하면 `ERR_CONTENT_DECODING_FAILED`). 적대적 리뷰 2건
+  — correctness 리뷰어는 버그 0건(디스크 스캐치 worktree로 격리 검증까지 수행, 부수적으로
+  backup 다운로드 `FileResponse`의 Content-Disposition도 같이 고쳐진다는 점 확인),
+  test-rigor 리뷰어는 `dataset-version-live.spec.ts`에 남아있던 "프록시로는 검증이
+  구조적으로 불가능"이라는 이제는 틀린 주석을 발견해 실제 단언 추가로 대체(반영). Mutation-
+  verified. n150 UI 재배포 후 live e2e로 실제 Cache-Control 통과 확인.
+
+- [x] **T-293 — `_insert_dataset_snapshot_and_release` 동시 호출 시 lineage 유실**
+  (2026-08-26, PR #535, by claude). 원래 신고(docs/tasks.md 원문, T-291a 리뷰)는 활성
+  release가 이미 있을 때 지는 쪽의 `SELECT ... FOR UPDATE`가 PostgreSQL의 FOR UPDATE +
+  LIMIT 상호작용으로 새로 매칭되는 row를 재탐색하지 않아 lineage가 조용히 끊기는
+  시나리오였는데, 첫 구현/테스트는 이와 다른 시나리오(활성 row 0개일 때의 크래시)만
+  검증했다는 것을 test-rigor 리뷰어가 발견 — 원래 신고 시나리오를 재현하는 두 번째 테스트
+  (`test_concurrent_activation_with_pre_existing_active_row_preserves_lineage`)를 추가해
+  실제로 `previous_serving_release_id`가 `None`으로 새는 것을 mutation으로 확인 후 수정.
+  트랜잭션 범위 advisory lock(`pg_advisory_xact_lock`,
+  `AdvisoryLockNamespace.SERVING_RELEASE_ACTIVATION`)을 read-decide-write 구간 맨 앞에
+  추가해 두 race window(활성 row 0개/이미 존재) 모두 닫음. correctness 리뷰어는 별개로,
+  `record_restore_candidate`/`record_hot_swap_release`/`record_hot_swap_rollback_release`
+  3곳이 advisory lock의 blocking wait 동안 기본 statement_timeout(5s)에 노출돼 있어
+  특히 활성 release가 없는 hot-swap 직후 상황에서 대기자가 QueryCanceledError로 크래시할
+  수 있음을 발견 — `record_mv_refresh_release`가 이미 하듯 `SET LOCAL statement_timeout = 0`을
+  3곳에 추가. 양쪽 리뷰어 공통으로 테스트의 conn_a/conn_b가 실패 경로에서 leak하던 문제도
+  AsyncExitStack으로 수정. 전부 mutation-검증. n150 API 재배포, 회귀 없음.
+
 - [x] **T-292 — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도**
   (2026-08-26, PR #534, by claude). T-291a 적대적 리뷰에서 발견(PR #529). `replace_current`
   종단간 실행이 이전엔 한 번도 실제로 검증된 적이 없었다 — 실제로 돌려보니 이전엔 몰랐던
