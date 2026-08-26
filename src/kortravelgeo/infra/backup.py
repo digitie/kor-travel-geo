@@ -10,7 +10,7 @@ import os
 import re
 import secrets
 import shutil
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -21,7 +21,8 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -380,6 +381,39 @@ async def run_backup_job(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+async def _snapshot_row(
+    engine: AsyncEngine, *, table: str, pk_column: str, pk_value: str
+) -> dict[str, Any] | None:
+    """T-292: read a row's full current content so :func:`_reinsert_row` can put it back
+    after a ``replace_current`` restore's ``pg_restore --clean --if-exists`` drops and
+    recreates ``table`` from the BACKUP's old content (which never had this row, since it
+    didn't exist yet when the backup was taken). ``SELECT *`` (not a fixed column list) so
+    this keeps working if either table gains columns later."""
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(f"SELECT * FROM {table} WHERE {pk_column} = :pk"),
+                {"pk": pk_value},
+            )
+        ).mappings().first()
+    return dict(row) if row is not None else None
+
+
+async def _reinsert_row(
+    engine: AsyncEngine, *, table: str, row: Mapping[str, Any], jsonb_columns: Sequence[str]
+) -> None:
+    """Companion to :func:`_snapshot_row` — re-INSERT the exact row content captured before
+    ``pg_restore`` ran. ``jsonb_columns`` must be cast explicitly (psycopg can't infer JSONB
+    from a plain Python dict/list parameter the way asyncpg can)."""
+    columns = list(row.keys())
+    stmt = text(
+        f"INSERT INTO {table} ({', '.join(columns)}) "
+        f"VALUES ({', '.join(f':{c}' for c in columns)})"
+    ).bindparams(*(bindparam(c, type_=JSONB) for c in jsonb_columns if c in row))
+    async with engine.begin() as conn:
+        await conn.execute(stmt, dict(row))
+
+
 async def run_restore_job(
     engine: AsyncEngine,
     settings: Settings,
@@ -401,6 +435,17 @@ async def run_restore_job(
         raise InvalidInputError(msg)
     target_database = validate_database_identifier(target_database, "target_database")
     job_owns_target = False  # T-235: True only after we verify the target was empty
+    # T-292: replace_current's target IS the database `repo`/`engine` are already connected
+    # to — pg_restore --clean --if-exists (added so restoring onto this already-populated
+    # target doesn't fail with "already exists" on every object) drops and recreates EVERY
+    # table in that database from the backup's old content, including load_jobs and ops.
+    # maintenance_windows. Rows this function's own caller (or this function itself, for the
+    # restore_artifact below) wrote into those tables before pg_restore runs are gone the
+    # same way once it completes — snapshotted here, re-inserted right after the restore
+    # command succeeds (see the `req.mode == "replace_current"` block after run_process_
+    # with_progress(restore_cmd, ...)).
+    job_row_snapshot: dict[str, Any] | None = None
+    window_row_snapshot: dict[str, Any] | None = None
     if req.mode == "replace_current":
         confirmation = validate_replace_current_restore_request(
             req,
@@ -410,6 +455,16 @@ async def run_restore_job(
         window = await repo.require_active_maintenance_window(
             kind="restore",
             confirmation=confirmation,
+        )
+        if job_id is not None:
+            job_row_snapshot = await _snapshot_row(
+                engine, table="load_jobs", pk_column="job_id", pk_value=job_id
+            )
+        window_row_snapshot = await _snapshot_row(
+            engine,
+            table="ops.maintenance_windows",
+            pk_column="maintenance_window_id",
+            pk_value=window.maintenance_window_id,
         )
         await repo.record_audit_event(
             action="maintenance_window.authorize",
@@ -572,16 +627,21 @@ async def run_restore_job(
             log_path=log_path,
         )
         if req.mode == "replace_current":
-            # T-292: replace_current's target IS the database `repo`/`engine` are already
-            # connected to (validate_replace_current_restore_request enforces this) — so
-            # `--clean --if-exists` (added above so pg_restore doesn't error on every
-            # already-existing object) just dropped and recreated ops.artifacts FROM THE
-            # BACKUP'S OWN OLD CONTENT, which never had this run's `restore_artifact` row
-            # (it didn't exist yet when the backup was taken). Every ops.* write this
-            # function made before pg_restore ran (the artifact insert here, and the
-            # maintenance-window-authorize audit event above) is gone the same way. Restore
-            # just the artifact row — it's what every step from here on (finalize update,
-            # record_restore_candidate's FK, the callback) needs to keep working.
+            # T-292: re-insert every row snapshotted before pg_restore ran, in FK dependency
+            # order — load_jobs FIRST, since ops.artifacts.job_id and ops.maintenance_
+            # windows.created_by_job_id/closed_by_job_id both reference it (re-inserting the
+            # artifact row with a job_id pg_restore just made unresolvable would trade one
+            # crash for another, exactly as it did before this ordering existed). The
+            # maintenance-window-authorize audit event (logged before pg_restore ran) is
+            # NOT re-created — nothing reads it back, unlike the window row itself, which
+            # end_maintenance_window needs to find after a successful restore.
+            if job_row_snapshot is not None:
+                await _reinsert_row(
+                    engine,
+                    table="load_jobs",
+                    row=job_row_snapshot,
+                    jsonb_columns=("payload", "source_set", "log_tail", "payload_summary"),
+                )
             restore_artifact = await repo.insert_artifact(
                 artifact_id=artifact_id,
                 artifact_type=RESTORE_LOG_ARTIFACT_TYPE,
@@ -594,6 +654,13 @@ async def run_restore_job(
                 callback_url=callback_url,
                 callback_state="pending" if callback_url else None,
             )
+            if window_row_snapshot is not None:
+                await _reinsert_row(
+                    engine,
+                    table="ops.maintenance_windows",
+                    row=window_row_snapshot,
+                    jsonb_columns=("blocks",),
+                )
         if req.run_analyze:
             await progress(progress=0.80, stage="analyze", message="target DB ANALYZE 시작")
             await analyze_database(target_dsn)

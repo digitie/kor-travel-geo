@@ -100,6 +100,32 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
   거치는 순간 조용히 사라진다 — `ALLOWED_FORWARD_HEADERS`(요청 헤더, `lib/proxy.ts`)와
   대칭되는 응답 헤더 allowlist를 `route.ts`에 추가할지, 아니면 admin 프록시 전체에 획일적으로
   `Cache-Control: no-store`를 강제할지(어차피 admin은 상호작용형이라 캐시가 필요 없음) 판단한다.
+- [ ] **T-295** — `tests/integration/test_full_load_batch_dagster_roundtrip.py`의
+  `_stub_leaves` 안 `fake_source` monkeypatch 스텁이 `run_source_loader`의 현재 시그니처와
+  어긋난다(T-292 live-scratch-DB 게이트 실행 중 우연히 발견 — T-292와 무관, backup/restore를
+  전혀 건드리지 않는 파일). `run_source_loader`(`loaders/batch_dag.py`)는 T-291a에서
+  `load_batch_id: str | None = None` 키워드 인자를 얻었지만, 이 테스트의 `fake_source(engine,
+  *, kind, payload, cancel_event, progress)` 스텁은 이를 받지 않아
+  `TypeError: fake_source() got an unexpected keyword argument 'load_batch_id'`로 즉시
+  실패한다(`test_dagster_batch_roundtrip_converges_all_children`,
+  `test_dagster_batch_gate_blocks_mv_on_consistency_error` 2건). opt-in 테스트라
+  `KTG_TEST_PG_DSN` 없이 도는 기본 `pytest -q`에서는 드러나지 않는다. `fake_source`에
+  `load_batch_id=None` 파라미터(또는 `**_kwargs`)를 추가하면 해소.
+- [ ] **T-296** — T-292가 고친 `replace_current` 자기참조 wipe 문제의 잔여 항목(우선순위
+  낮음, T-292 적대적 리뷰에서 발견, 크래시는 아니고 조용한 정확도/추적성 손실). (a)
+  `maintenance_window.authorize` 감사 이벤트(`ops.audit_events`)가 복원 시 함께 wipe되는데
+  재기록하지 않는다 — 아무 것도 이를 다시 읽지 않아 현재는 inert로 보이지만, 감사 완결성
+  관점에서 재기록 여부 판단. (b) `record_restore_candidate`가 기록하는
+  `ops.dataset_snapshots.backup_artifact_id`는 FK가 없어 조용히 매달린 참조가 된다 —
+  복원 대상 백업 artifact 자신은 정의상 자기 dump 안에 존재할 수 없으므로(dump 파일이
+  있어야 체크섬/크기를 계산해 artifact를 만들 수 있는 선후관계), `--clean` 복원 후
+  `ops.artifacts`가 백업 시점 상태로 되돌아가면 그 backup_artifact_id는 영구히 풀리지 않는다
+  — "이 스냅샷이 어느 백업에서 복원됐는지" 조회가 매 실 `replace_current` 복원마다 끊긴다.
+  (c) `build_pg_restore_command`에 전역으로 추가한 `--clean --if-exists`가 PostGIS
+  extension을 template로 미리 설치해 둔 `new_database` 대상(빈 테이블이지만 extension은
+  이미 존재)에서 `DROP EXTENSION IF EXISTS postgis` 이후 재생성이 항상 무사히 성공하는지
+  실측 검증되지 않았다(`ensure_target_database_empty`는 테이블만 확인하고 extension은
+  확인하지 않음) — 흔한 pg_restore+PostGIS 마찰 지점이라 별도 테스트로 확정할 가치가 있다.
 
 ### 선택 후속 (낮은 우선순위)
 
