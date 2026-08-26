@@ -5736,6 +5736,8 @@ export interface components {
             activated_at?: string | null;
             /** Activated By Job Id */
             activated_by_job_id?: string | null;
+            /** Change Type */
+            change_type?: ("full" | "delta") | null;
             /** Consistency Gate */
             consistency_gate?: {
                 [key: string]: unknown;
@@ -5762,6 +5764,12 @@ export interface components {
             };
             /** Previous Serving Release Id */
             previous_serving_release_id?: string | null;
+            /** Reference Months */
+            reference_months?: {
+                [key: string]: string;
+            } | null;
+            /** Reference Months Mixed */
+            reference_months_mixed?: boolean | null;
             /**
              * Release Kind
              * @enum {string}
@@ -5771,11 +5779,17 @@ export interface components {
             rollback_target_serving_release_id?: string | null;
             /** Serving Release Id */
             serving_release_id: string;
+            /** Source Set */
+            source_set?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * State
              * @enum {string}
              */
             state: "pending" | "active" | "superseded" | "rolled_back" | "failed";
+            /** Version Token */
+            version_token?: string | null;
         };
         /**
          * ServingReleaseRollbackRequest

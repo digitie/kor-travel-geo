@@ -1,7 +1,8 @@
 "use client";
 
-import { Play, ShieldCheck } from "lucide-react";
+import { FileSearch, Play, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { DatasetVersionDetailDialog } from "@/components/admin/ops/DatasetVersionDetailDialog";
 import { PerfValidationSummary } from "@/components/admin/PerfValidationSummary";
 import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
 import { ConfirmActionDialog } from "@/components/admin/shared/ConfirmActionDialog";
@@ -31,6 +32,7 @@ import {
   requestJson
 } from "@/lib/api";
 import { formatBytes, formatMs } from "@/lib/format";
+import { shortHash } from "@/lib/source-files";
 import { toast } from "@/lib/toast";
 
 const maintenanceKinds = [
@@ -99,12 +101,52 @@ const initialWindowFormState: MaintenanceWindowFormState = {
   reason: ""
 };
 
-const servingReleaseColumns: VirtualColumn<ServingRelease>[] = [
-  { key: "release", header: "release", cell: (r) => r.serving_release_id },
-  { key: "state", header: "state", cell: (r) => <StatusBadge value={r.state} /> },
-  { key: "kind", header: "kind", cell: (r) => r.release_kind },
-  { key: "mv", header: "mv", cell: (r) => r.mv_name }
-];
+/** T-291d: version_token/change_type/기준월 컬럼 + 상세 다이얼로그 트리거. */
+function buildServingReleaseColumns(
+  onViewDetail: (release: ServingRelease) => void
+): VirtualColumn<ServingRelease>[] {
+  return [
+    { key: "release", header: "release", cell: (r) => r.serving_release_id },
+    { key: "state", header: "state", cell: (r) => <StatusBadge value={r.state} /> },
+    { key: "kind", header: "kind", cell: (r) => r.release_kind },
+    { key: "mv", header: "mv", cell: (r) => r.mv_name },
+    {
+      key: "token",
+      header: "version_token",
+      cell: (r) => (r.version_token ? <code>{shortHash(r.version_token, 16)}</code> : "-")
+    },
+    { key: "change_type", header: "change_type", cell: (r) => r.change_type ?? "-" },
+    {
+      key: "months",
+      header: "기준월",
+      cell: (r) =>
+        r.reference_months ? (
+          <span className="inline-flex items-center gap-1">
+            {Object.keys(r.reference_months).length}건
+            {r.reference_months_mixed ? <Badge tone="warn">혼합</Badge> : null}
+          </span>
+        ) : (
+          "-"
+        )
+    },
+    {
+      key: "detail",
+      header: "상세",
+      cell: (r) => (
+        <Button
+          aria-label="데이터셋 버전 상세 보기"
+          onClick={() => onViewDetail(r)}
+          size="icon-sm"
+          title="데이터셋 버전 상세"
+          type="button"
+          variant="outline"
+        >
+          <FileSearch aria-hidden="true" size={16} />
+        </Button>
+      )
+    }
+  ];
+}
 
 const datasetSnapshotColumns: VirtualColumn<DatasetSnapshot>[] = [
   { key: "snapshot", header: "snapshot", cell: (r) => r.dataset_snapshot_id },
@@ -152,6 +194,8 @@ export function OpsPanel() {
   const [loadFailures, setLoadFailures] = useState<string[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [viewingRelease, setViewingRelease] = useState<ServingRelease | null>(null);
+  const servingReleaseColumns = buildServingReleaseColumns(setViewingRelease);
   const [capturing, setCapturing] = useState<"stats" | "pgStats" | null>(null);
   const { artifacts, auditEvents, lastResult, pgStats, releases, snapshots, stats, windows } =
     opsData;
@@ -362,6 +406,12 @@ export function OpsPanel() {
 
         <ActionResultPanel result={lastResult} />
       </div>
+      {viewingRelease ? (
+        <DatasetVersionDetailDialog
+          release={viewingRelease}
+          onClose={() => setViewingRelease(null)}
+        />
+      ) : null}
     </div>
   );
 }

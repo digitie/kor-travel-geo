@@ -636,7 +636,54 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                     params,
                 )
             ).mappings().all()
-        return [_serving_release(dict(row)) for row in rows]
+            releases = [
+                await self._with_dataset_version_fields(conn, _serving_release(dict(row)))
+                for row in rows
+            ]
+        return releases
+
+    async def _with_dataset_version_fields(
+        self, conn: Any, release: ServingRelease
+    ) -> ServingRelease:
+        """T-291d additive fields, computed via the same public projection
+        ``/v2/dataset/version`` uses. ``version_token``/``change_type`` are cheap (derived
+        from columns already on ``release``); ``reference_months`` needs the linked
+        snapshot's ``source_set`` (+ up to 5 lineage hops, same fallback as the external
+        endpoint) — one extra query, only ever called from :meth:`list_serving_releases`
+        (an admin-only, low-QPS surface, unlike the public projection's 5000-row scans)."""
+
+        snapshot_row = (
+            await conn.execute(
+                text(
+                    "SELECT source_set, parent_dataset_snapshot_id"
+                    "  FROM ops.dataset_snapshots"
+                    " WHERE dataset_snapshot_id = :id"
+                ),
+                {"id": release.dataset_snapshot_id},
+            )
+        ).mappings().first()
+        reference_months: dict[str, str] | None = None
+        own_source_set: dict[str, Any] | None = None
+        if snapshot_row is not None:
+            own_source_set = _json_dict(snapshot_row.get("source_set")) or None
+            reference_months = await self._resolve_reference_months(
+                conn,
+                source_set=own_source_set or {},
+                parent_dataset_snapshot_id=_optional_str(
+                    snapshot_row.get("parent_dataset_snapshot_id")
+                ),
+            )
+        return release.model_copy(
+            update={
+                "version_token": derive_version_token(release.serving_release_id),
+                "change_type": derive_change_type(release.release_kind),
+                "reference_months": reference_months,
+                "source_set": own_source_set,
+                "reference_months_mixed": (
+                    reference_months_mixed(reference_months) if reference_months else None
+                ),
+            }
+        )
 
     async def record_mv_refresh_release(
         self,

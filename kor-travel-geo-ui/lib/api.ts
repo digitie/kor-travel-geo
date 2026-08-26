@@ -445,6 +445,13 @@ export type ServingRelease = {
   activated_by_job_id?: string | null;
   activated_at?: string | null;
   created_at: string;
+  // T-291d additive fields — the same public projection POST /v2/dataset/version exposes
+  // externally, surfaced here read-only for admin observation (ADR-067).
+  version_token?: string | null;
+  change_type?: "full" | "delta" | null;
+  reference_months?: Record<string, string> | null;
+  reference_months_mixed?: boolean | null;
+  source_set?: Record<string, unknown> | null;
 };
 
 export type OpsArtifact = {

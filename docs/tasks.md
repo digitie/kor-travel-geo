@@ -102,8 +102,28 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
     구성에 항목 1개만 쓰던 `next_cursor` 테스트의 무판별 문제, hot-swap `source_set`
     정규화기 fixture가 실제 저장 형상(`hot_swap`+`rebuild_metadata` 두 키 동시 존재)을
     과소 근사하던 문제. 남은 라이브 DB 커버리지 공백은 T-291f로 분리했다.
-  - [ ] **T-291d** — admin 확장: `ServingRelease` additive 필드 + OpsPanel releases 표
-    컬럼·상세·미리보기·curl + live e2e.
+  - [x] **T-291d** — admin 확장: `ServingRelease` additive 필드 + OpsPanel releases 표
+    컬럼·상세·미리보기·curl + live e2e — PR #531, n150 live e2e 완료(Chromium 244
+    passed/7 skipped, Firefox T-291d 관련 스펙 114 passed/4 skipped — 스킵은 데이터
+    가용성·mutate opt-in). `dto.admin.ServingRelease`에 5개 additive 필드(`version_token`/
+    `change_type`/`reference_months`/`reference_months_mixed`/`source_set`), `list_serving_
+    releases`가 `_with_dataset_version_fields`로 스냅샷당 1회 추가 조회하며 외부
+    `/v2/dataset/version`과 같은 `_resolve_reference_months` 계보 폴백을 재사용한다(admin
+    전용 저QPS라 T-291b+c의 candidate/entry 2단계 분리 없이 직접 계산). "외부 응답
+    미리보기"는 기존 `/v2/*` admin 프록시·`require_public_api_key` 신뢰 클라이언트 우회를
+    그대로 재사용해 신규 백엔드/프록시 배선이 0건이었다. 적대적 리뷰어 2명이 각 1건씩
+    찾았다 — 미리보기 버튼이 known_version 없이 항상 호출해 비활성(superseded 등) 행에서도
+    응답이 항상 "현재 활성 릴리스"였던 문제(known_version을 이 release의 토큰으로 보내고
+    changed/known_version_found로 명시), 신규 unit test가 `"reference_months":
+    reference_months` 값 자체는 고정하지 않던 공백(assert 추가, mutation으로 재현·검증) +
+    `DatasetVersionDetailDialog.tsx`가 `ManifestViewer.tsx` 선례와 달리 CI에서 실행되는
+    vitest 커버리지가 전혀 없던 문제(신규 추가). n150 live e2e에서 신뢰 admin 프록시가
+    `content-type`만 forwarding하고 나머지 응답 헤더(`Cache-Control` 등)를 모두 버리는
+    기존 동작을 발견 — 실 공개 API 직접 호출 검증으로 대체하고 T-294로 분리했다(모든 admin
+    엔드포인트 공통, T-291d 회귀 아님). live e2e에서 `/admin/dagster` iframe이 n150의
+    `KOR_TRAVEL_GEO_DAGSTER_PUBLIC_URL` 환경변수 공백으로 렌더되지 않는 것도 발견했으나
+    T-291d와 무관한(코드 변경 없음, n150 `.env` 설정) 사전 존재 이슈라 별도 task를 만들지
+    않았다 — n150 `.env`에서 확인 필요.
   - [ ] **T-291e** — 기록 경로 위생(독립): 백업 artifact FK 기입, BackupsPanel 백업 시점
     토큰, hot-swap source_set 자체 완결화, `batch_dag` repr 열화 수정, restore drill의
     원장 `pending` 누적 정리 판단.
@@ -142,6 +162,18 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
   끊길 수 있다(활성 상태 자체는 정상적으로 최종 요청이 이김). T-291a로 직접 서빙 loader·
   benchmark 스크립트 등 신규 호출 지점이 늘어 동시 호출 가능성이 커졌으므로, INSERT 직전
   재조회 또는 advisory lock 등으로 보강할지 판단한다.
+- [ ] **T-294** — 신뢰 admin 프록시(`kor-travel-geo-ui/app/api/proxy/[...path]/route.ts`)가
+  upstream 응답 헤더를 `content-type` 하나만 골라 전달하고 나머지(`Cache-Control` 등)는 전부
+  버린다(T-291d n150 live e2e에서 발견 — `dataset-version-live.spec.ts`의
+  `POST /v2/dataset/version` 프록시 호출이 `Cache-Control: no-store` 부재로 실패, 실 공개 API
+  직접 호출 검증으로 대체하고 이 task로 분리). 모든 admin 엔드포인트에 공통인 기존 동작이라
+  T-291d가 만든 회귀는 아니다. 현재 실사용 영향은 낮다 — 이 헤더가 실제로 의미 있는
+  `/v2/dataset/version`·`/v2/dataset/history`가 둘 다 POST이고, 브라우저·대부분의 HTTP
+  캐시는 헤더 유무와 무관하게 POST 응답을 캐시하지 않는다. 그러나 향후 GET 기반 admin
+  엔드포인트가 `ETag`/`Cache-Control`/rate-limit 헤더 같은 응답 헤더에 의존하게 되면 프록시를
+  거치는 순간 조용히 사라진다 — `ALLOWED_FORWARD_HEADERS`(요청 헤더, `lib/proxy.ts`)와
+  대칭되는 응답 헤더 allowlist를 `route.ts`에 추가할지, 아니면 admin 프록시 전체에 획일적으로
+  `Cache-Control: no-store`를 강제할지(어차피 admin은 상호작용형이라 캐시가 필요 없음) 판단한다.
 
 ### 선택 후속 (낮은 우선순위)
 

@@ -9870,6 +9870,21 @@
             ],
             "title": "Activated By Job Id"
           },
+          "change_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "full",
+                  "delta"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Type"
+          },
           "consistency_gate": {
             "additionalProperties": true,
             "title": "Consistency Gate",
@@ -9927,6 +9942,31 @@
             ],
             "title": "Previous Serving Release Id"
           },
+          "reference_months": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Months"
+          },
+          "reference_months_mixed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Months Mixed"
+          },
           "release_kind": {
             "enum": [
               "full_load",
@@ -9953,6 +9993,18 @@
             "title": "Serving Release Id",
             "type": "string"
           },
+          "source_set": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Set"
+          },
           "state": {
             "enum": [
               "pending",
@@ -9963,6 +10015,17 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "version_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Token"
           }
         },
         "required": [
