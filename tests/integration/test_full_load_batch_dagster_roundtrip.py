@@ -61,10 +61,11 @@ async def _fresh_engine():  # returns an AsyncEngine, unannotated to avoid the i
 
 
 def _stub_leaves(monkeypatch: pytest.MonkeyPatch, *, severity: str = "WARN") -> SimpleNamespace:
-    calls = SimpleNamespace(sources=[], consistency=[], mv=[])
+    calls = SimpleNamespace(sources=[], source_batch_ids=[], consistency=[], mv=[])
 
-    async def fake_source(engine, *, kind, payload, cancel_event, progress):
+    async def fake_source(engine, *, kind, payload, cancel_event, progress, load_batch_id=None):
         calls.sources.append(kind)
+        calls.source_batch_ids.append(load_batch_id)
         await progress(progress=1.0, stage=kind, message=f"{kind} stub done")
 
     async def fake_consistency(engine, *, payload, progress):
@@ -132,6 +133,9 @@ async def test_dagster_batch_roundtrip_converges_all_children(
         )
 
         assert calls.sources == ["juso_text_load", "locsum_load"]
+        # T-291a: every source leaf must receive the batch's own job_id as load_batch_id —
+        # this is what threads load_batch_id onto the loaded rows for downstream lineage.
+        assert calls.source_batch_ids == [root.job_id, root.job_id]
         assert len(calls.mv) == 1
         after = {
             r["kind"]: r for r in await _rows(engine, root.job_id) if r["job_id"] != root.job_id
