@@ -174,6 +174,7 @@ async def run_restore_drill(
         errors.append(f"restore: {exc}")
     finally:
         cleanup_ok = await _drop_drill_database(temp_dsn, timestamp) if created else True
+        await _cleanup_drill_ledger_rows(repo, temp_database)
 
     status = classify_drill_outcome(
         restored=restored, reconcile_ok=reconcile_ok, smoke_ok=smoke_ok
@@ -201,6 +202,19 @@ async def _drop_drill_database(temp_dsn: str, timestamp: str) -> bool:
     except Exception:
         _LOGGER.warning("restore-drill: failed to drop throwaway DB", exc_info=True)
         return False
+
+
+async def _cleanup_drill_ledger_rows(repo: AdminRepository, temp_database: str) -> None:
+    """T-291e: drop this drill's own pending ops.serving_releases/dataset_snapshots row —
+    dropping the throwaway *database* doesn't touch these ops-ledger *metadata* rows in the
+    main serving DB, and a daily drill otherwise accumulates ~365 dead pending rows/year.
+    Best-effort; never raises (cleanup must not mask the drill's actual result), matching
+    :func:`_drop_drill_database`'s convention. A no-op (0 matches) whenever the restore
+    never reached record_restore_candidate (e.g. _create_drill_database itself failed)."""
+    try:
+        await repo.delete_pending_restore_candidate_by_target_database(temp_database)
+    except Exception:
+        _LOGGER.warning("restore-drill: failed to clean up ops ledger rows", exc_info=True)
 
 
 async def _drill_progress(

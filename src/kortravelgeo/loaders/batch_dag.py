@@ -34,6 +34,7 @@ so it stays inside the import-linter ``loaders`` layer and keeps the one-way
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import suppress
 from pathlib import Path
@@ -482,9 +483,26 @@ async def run_source_loader(
 # --------------------------------------------------------------------------------------
 
 
+_YYYYMM_RE = re.compile(r"^\d{6}$")
+
+
 def _source_set(payload: dict[str, Any]) -> dict[str, str]:
+    """T-291e: only keep values that are actually ``YYYYMM`` — blanket ``str()``-flattening
+    a non-string value (``None``, a nested dict, …) previously produced Python-repr garbage
+    (e.g. ``"None"``, ``"{'foo': 'bar'}"``) that ``core.dataset_version``'s normalizer had to
+    silently reject downstream. Omission (dataset_version's own "생략이 억지 통과보다 낫다"
+    principle) beats forcing a value through."""
     raw = payload.get("source_set")
-    result = {str(key): str(value) for key, value in raw.items()} if isinstance(raw, dict) else {}
+    result: dict[str, str] = {}
+    if isinstance(raw, dict):
+        for key, value in raw.items():
+            candidate: str | None = None
+            if isinstance(value, str):
+                candidate = value
+            elif isinstance(value, int):
+                candidate = str(value)
+            if candidate is not None and _YYYYMM_RE.match(candidate):
+                result[str(key)] = candidate
     batch_id = payload.get("load_batch_id")
     if isinstance(batch_id, str):
         result["load_batch_id"] = batch_id

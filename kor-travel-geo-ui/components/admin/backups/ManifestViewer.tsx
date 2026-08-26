@@ -16,6 +16,7 @@ import {
   textValue
 } from "@/components/admin/backups/manifest-utils";
 import type { BackupArtifact } from "@/lib/api";
+import { shortHash } from "@/lib/source-files";
 
 /**
  * Backup manifest reproducibility viewer (T-252): surfaces the T-237/T-240 manifest context —
@@ -101,6 +102,14 @@ export function ManifestViewer({
               <li>release · {textValue(activeServing.serving_release_id) ?? "—"}</li>
               <li>snapshot · {textValue(activeServing.dataset_snapshot_id) ?? "—"}</li>
               <li>match set · {textValue(activeServing.source_match_set_id) ?? "—"}</li>
+              <li>
+                token ·{" "}
+                {artifact.version_token ? (
+                  <code>{shortHash(artifact.version_token, 16)}</code>
+                ) : (
+                  "—"
+                )}
+              </li>
             </ul>
           </section>
         ) : null}

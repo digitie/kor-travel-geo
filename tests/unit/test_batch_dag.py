@@ -256,3 +256,31 @@ async def test_precancelled_batch_raises_before_any_source(
         )
 
     assert harness.source_calls == []
+
+
+def test_source_set_keeps_only_valid_yyyymm_and_drops_repr_flattened_garbage() -> None:
+    """T-291e: a bare ``str()`` used to flatten every value regardless of type, turning
+    ``None``/nested-dict values into Python-repr garbage (``"None"``, ``"{'a': 1}"``) that
+    core.dataset_version's normalizer had to silently reject downstream. Now those values
+    are dropped at the source instead of forced through — omission over a guessed value."""
+    payload = {
+        "source_set": {
+            "juso": "202606",  # valid str YYYYMM — kept as-is
+            "locsum": 202605,  # valid int YYYYMM — coerced to str, kept
+            "navi": None,  # would have become the literal string "None" — dropped
+            "shp": {"nested": "dict"},  # would have become a repr string — dropped
+            "sppn_makarea": "not-a-date",  # non-YYYYMM string — dropped
+            "pobox": "12345",  # wrong digit count — dropped
+        },
+        "load_batch_id": "batch-123",
+    }
+    result = batch_dag._source_set(payload)
+    assert result == {"juso": "202606", "locsum": "202605", "load_batch_id": "batch-123"}
+
+
+def test_source_set_handles_missing_or_non_dict_source_set() -> None:
+    assert batch_dag._source_set({}) == {}
+    assert batch_dag._source_set({"source_set": "not-a-dict"}) == {}
+    assert batch_dag._source_set({"source_set": None, "load_batch_id": "b1"}) == {
+        "load_batch_id": "b1"
+    }

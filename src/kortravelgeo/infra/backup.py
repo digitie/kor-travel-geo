@@ -320,6 +320,10 @@ async def run_backup_job(
         }
 
         await progress(progress=0.97, stage="finalize", message="artifact metadata 저장")
+        # T-291e: FK-link this artifact to the active serving release/snapshot it was taken
+        # from (already captured in manifest["active_serving"], best-effort — None when the
+        # DB had no active release yet). Mirrors the restore-side wiring in resolve_restore_*.
+        active_serving = manifest.get("active_serving") or {}
         updated_artifact = await repo.update_artifact(
             artifact.artifact_id,
             state="available",
@@ -331,6 +335,8 @@ async def run_backup_job(
             # T-239: keep the request's retention_class (``scheduled``/``pinned``/default).
             retention_class=req.retention_class or DEFAULT_BACKUP_RETENTION_CLASS,
             expires_at=artifact_expires_at(settings, req.retention_days),
+            dataset_snapshot_id=active_serving.get("dataset_snapshot_id"),
+            serving_release_id=active_serving.get("serving_release_id"),
             finished=True,
         )
         if updated_artifact is None:

@@ -16,6 +16,7 @@ from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.backup import (
     DEFAULT_BACKUP_RETENTION_CLASS,
     artifact_expires_at,
+    run_backup_job,
 )
 from kortravelgeo.settings import Settings
 
@@ -47,3 +48,16 @@ def test_update_artifact_accepts_expires_at_and_retention_class() -> None:
     params = inspect.signature(AdminRepository.update_artifact).parameters
     assert "expires_at" in params
     assert "retention_class" in params
+
+
+def test_run_backup_job_finalize_wires_active_serving_fk_into_update_artifact() -> None:
+    """T-291e: update_artifact already accepted dataset_snapshot_id/serving_release_id (used
+    by the restore side) — the finalize call here just never passed them, so every backup's
+    ops.artifacts row silently kept its FK at NULL even though manifest["active_serving"]
+    (built earlier in this same function) already has both ids in scope. Source-inspection
+    (per this file's own T-229 precedent) because run_backup_job is I/O-heavy (pg_dump/tar)
+    and not practical to exercise end-to-end in a unit test."""
+    source = inspect.getsource(run_backup_job)
+    assert "active_serving = manifest.get(" in source
+    assert 'dataset_snapshot_id=active_serving.get("dataset_snapshot_id")' in source
+    assert 'serving_release_id=active_serving.get("serving_release_id")' in source
