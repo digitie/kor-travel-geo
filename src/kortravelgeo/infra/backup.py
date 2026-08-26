@@ -399,6 +399,33 @@ async def _snapshot_row(
     return dict(row) if row is not None else None
 
 
+async def _snapshot_restore_audit_events(
+    engine: AsyncEngine, *, job_id: str | None, maintenance_window_id: str
+) -> list[dict[str, Any]]:
+    """T-296: every ``ops.audit_events`` row written while setting up a ``replace_current``
+    restore, on the same database ``--clean`` is about to wipe. Not just
+    ``maintenance_window.authorize`` (recorded by this module, right before ``pg_restore``
+    runs) — real callers also record ``maintenance_window.create`` (``resource_id`` = the
+    window id, no ``job_id`` yet at that point — the window is opened before the restore job
+    even exists) and ``db_restore.submit`` (``job_id`` = this restore's job id, recorded by
+    the API router right after launching it, before ``run_restore_job`` itself runs). Matched
+    by ``job_id`` OR ``resource_id = maintenance_window_id`` rather than a fixed action list,
+    so this doesn't need updating every time a new audit call joins this setup sequence."""
+    conditions = ["resource_id = :window_id"]
+    params: dict[str, Any] = {"window_id": maintenance_window_id}
+    if job_id is not None:
+        conditions.append("job_id = :job_id")
+        params["job_id"] = job_id
+    async with engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text(f"SELECT * FROM ops.audit_events WHERE {' OR '.join(conditions)}"),
+                params,
+            )
+        ).mappings().all()
+    return [dict(row) for row in rows]
+
+
 async def _reinsert_row(
     engine: AsyncEngine,
     *,
@@ -469,10 +496,11 @@ async def run_restore_job(
     # with_progress(restore_cmd, ...)).
     job_row_snapshot: dict[str, Any] | None = None
     window_row_snapshot: dict[str, Any] | None = None
-    # T-296a: the maintenance_window.authorize audit event (ops.audit_events) is written
-    # before pg_restore and wiped the same way — snapshotted so end_maintenance_window's
-    # audit trail for THIS restore survives, not just the window row it needs to find.
-    audit_event_snapshot: dict[str, Any] | None = None
+    # T-296a: every ops.audit_events row written while setting up this restore (the API
+    # router's db_restore.submit, the client's maintenance_window.create, and this module's
+    # own maintenance_window.authorize below) is written before pg_restore and wiped the same
+    # way — see _snapshot_restore_audit_events.
+    audit_event_snapshots: list[dict[str, Any]] = []
     # T-296b: the source backup artifact's own ops.artifacts row is different from the other
     # three — it was inserted (state='creating') BEFORE that backup's own pg_dump ran, so the
     # backup's dump already contains a stale pre-finalization copy of it. Re-inserting the
@@ -506,7 +534,7 @@ async def run_restore_job(
                 pk_column="artifact_id",
                 pk_value=source_artifact.artifact_id,
             )
-        authorize_event = await repo.record_audit_event(
+        await repo.record_audit_event(
             action="maintenance_window.authorize",
             actor_type="system",
             outcome="succeeded",
@@ -521,11 +549,8 @@ async def run_restore_job(
             resource_id=window.maintenance_window_id,
             job_id=job_id,
         )
-        audit_event_snapshot = await _snapshot_row(
-            engine,
-            table="ops.audit_events",
-            pk_column="audit_event_id",
-            pk_value=authorize_event.audit_event_id,
+        audit_event_snapshots = await _snapshot_restore_audit_events(
+            engine, job_id=job_id, maintenance_window_id=window.maintenance_window_id
         )
     else:
         current_database = database_name_from_dsn(settings.pg_dsn)
@@ -679,6 +704,17 @@ async def run_restore_job(
             # all reference it (re-inserting any of them with a job_id pg_restore just made
             # unresolvable would trade one crash for another, exactly as it did before this
             # ordering existed).
+            #
+            # ops.maintenance_windows goes SECOND, right after load_jobs and before the T-296
+            # audit-events/source-artifact steps — deliberately, not just historically. Each
+            # _reinsert_row call is its own short transaction with no shared rollback, so a
+            # failure partway through this sequence leaves everything after it un-reinserted.
+            # The window row is the one with an operator-visible failure mode if it's missing
+            # (end_maintenance_window 404s on a documented runbook step — T-292's original
+            # finding); the audit-events/source-artifact rows are comparatively low-stakes
+            # (a lost/stale audit trail entry, not a broken operator workflow). Keeping the
+            # highest-impact row's reinsert as early as possible minimizes the window in which
+            # a failure in a LATER step could still leave it un-reinserted.
             if job_row_snapshot is not None:
                 await _reinsert_row(
                     engine,
@@ -686,11 +722,18 @@ async def run_restore_job(
                     row=job_row_snapshot,
                     jsonb_columns=("payload", "source_set", "log_tail", "payload_summary"),
                 )
-            if audit_event_snapshot is not None:
+            if window_row_snapshot is not None:
+                await _reinsert_row(
+                    engine,
+                    table="ops.maintenance_windows",
+                    row=window_row_snapshot,
+                    jsonb_columns=("blocks",),
+                )
+            for event_snapshot in audit_event_snapshots:
                 await _reinsert_row(
                     engine,
                     table="ops.audit_events",
-                    row=audit_event_snapshot,
+                    row=event_snapshot,
                     jsonb_columns=("payload_redacted",),
                 )
             if source_artifact_snapshot is not None:
@@ -713,13 +756,6 @@ async def run_restore_job(
                 callback_url=callback_url,
                 callback_state="pending" if callback_url else None,
             )
-            if window_row_snapshot is not None:
-                await _reinsert_row(
-                    engine,
-                    table="ops.maintenance_windows",
-                    row=window_row_snapshot,
-                    jsonb_columns=("blocks",),
-                )
         if req.run_analyze:
             await progress(progress=0.80, stage="analyze", message="target DB ANALYZE 시작")
             await analyze_database(target_dsn)
