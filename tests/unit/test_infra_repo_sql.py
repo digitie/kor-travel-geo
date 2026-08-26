@@ -548,19 +548,53 @@ def test_resolve_reference_months_for_conn_is_module_level_and_shared() -> None:
 def test_delete_pending_restore_candidate_matches_only_pending_restore_releases() -> None:
     """T-291e: the daily restore-drill's own record_restore_candidate(activate=False) call
     always leaves a pending release+snapshot row in the ops ledger even after the drill's
-    throwaway DB is dropped — this deletes exactly that row, matched by the notes prefix
-    record_restore_candidate writes, via a plain Python str.startswith check (never a SQL
-    LIKE pattern, so a target_database containing '_' or '%' can't cause a false match)."""
+    throwaway DB is dropped — this deletes exactly that row, via the pure
+    _match_pending_restore_rows predicate (behaviorally tested separately, below)."""
     source = inspect.getsource(
         admin_repo.AdminRepository.delete_pending_restore_candidate_by_target_database
     )
     assert "state = 'pending' AND release_kind = 'restore'" in source
-    assert '.startswith(prefix)' in source
+    assert "_match_pending_restore_rows(rows, target_database)" in source
     # release deleted before snapshot — ops.serving_releases.dataset_snapshot_id is ON
     # DELETE RESTRICT against ops.dataset_snapshots, so the FK forbids the reverse order.
     release_delete_at = source.index("DELETE FROM ops.serving_releases")
     snapshot_delete_at = source.index("DELETE FROM ops.dataset_snapshots")
     assert release_delete_at < snapshot_delete_at
+
+
+def test_match_pending_restore_rows_prefix_boundary_prevents_false_positives() -> None:
+    """T-291e (adversarial review follow-up): the trailing ";" in the matched prefix is
+    what actually prevents a target_database that's a string-prefix of another (e.g. "foo"
+    vs "foobar") from false-matching — not startswith() alone. Extracted as a pure function
+    (no DB object dependencies) specifically so this boundary property is directly
+    testable, matching this same PR's own precedent for items 1/3/4."""
+    rows = [
+        {
+            "serving_release_id": "rel-exact",
+            "dataset_snapshot_id": "snap-exact",
+            "notes": "restore target_database=foo; restore_artifact_id=a1",
+        },
+        {
+            "serving_release_id": "rel-collision",
+            "dataset_snapshot_id": "snap-collision",
+            # "foo" is a plain string-prefix of "foobar" — must NOT match target_database="foo".
+            "notes": "restore target_database=foobar; restore_artifact_id=a2",
+        },
+        {
+            "serving_release_id": "rel-other",
+            "dataset_snapshot_id": "snap-other",
+            "notes": "restore target_database=bar; restore_artifact_id=a3",
+        },
+        {
+            "serving_release_id": "rel-no-notes",
+            "dataset_snapshot_id": "snap-no-notes",
+            "notes": None,
+        },
+    ]
+    assert admin_repo._match_pending_restore_rows(rows, "foo") == [
+        ("rel-exact", "snap-exact")
+    ]
+    assert admin_repo._match_pending_restore_rows(rows, "nonexistent") == []
 
 
 def test_admin_repo_explain_is_select_only_and_uses_json_format() -> None:

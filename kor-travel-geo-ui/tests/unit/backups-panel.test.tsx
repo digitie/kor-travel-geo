@@ -83,6 +83,11 @@ describe("BackupsPanel tab shell (T-248)", () => {
     // table mounted with the loaded data via its search box + count "1 / 1")
     expect(screen.getByLabelText("목록 검색")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("1 / 1")).toBeTruthy());
+    // T-291e: 백업 시점 토큰 컬럼. VirtualTable's row body needs jsdom height mocking to
+    // render (not set up in this file — see virtual-table.test.tsx), but its header renders
+    // unconditionally from getHeaderGroups(), independent of the row virtualizer — so the
+    // column's existence is verifiable here without adding that broader mocking.
+    expect(screen.getByRole("columnheader", { name: "백업 시점 토큰" })).toBeTruthy();
   });
 
   it("shows the hot-swap plan UI (T-250)", async () => {

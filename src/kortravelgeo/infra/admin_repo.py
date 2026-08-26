@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -968,7 +968,6 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         ``serving_release_id``) is ``ON DELETE SET NULL`` — it survives, just loses the now-
         meaningless dangling link. Returns the number of release rows deleted (0 or 1 in
         practice; defensively handles more)."""
-        prefix = f"restore target_database={target_database};"
         async with self.engine.begin() as conn:
             rows = (
                 await conn.execute(
@@ -979,11 +978,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                     )
                 )
             ).mappings().all()
-            matches = [
-                (row["serving_release_id"], row["dataset_snapshot_id"])
-                for row in rows
-                if (row.get("notes") or "").startswith(prefix)
-            ]
+            matches = _match_pending_restore_rows(rows, target_database)
             for release_id, snapshot_id in matches:
                 await conn.execute(
                     text("DELETE FROM ops.serving_releases WHERE serving_release_id = :id"),
@@ -2807,6 +2802,24 @@ SELECT md5(
             {"mv_row_count": str(mv_row_count)},
         )
     )
+
+
+def _match_pending_restore_rows(
+    rows: Iterable[Any], target_database: str
+) -> list[tuple[str, str]]:
+    """Pure matching predicate for :meth:`AdminRepository.delete_pending_restore_
+    candidate_by_target_database` — no DB object dependencies, so the collision-safety
+    property (a ``target_database`` that's a plain string-prefix of another, e.g.
+    ``"foo"`` vs. ``"foobar"``, must never false-match) is directly testable without a
+    database. The trailing ``";"`` in the prefix is what makes this safe: ``"restore
+    target_database=foobar;...".startswith("restore target_database=foo;")`` is
+    ``False`` — the delimiter, not just ``startswith``, does the real work."""
+    prefix = f"restore target_database={target_database};"
+    return [
+        (row["serving_release_id"], row["dataset_snapshot_id"])
+        for row in rows
+        if (row.get("notes") or "").startswith(prefix)
+    ]
 
 
 async def _resolve_reference_months_for_conn(
