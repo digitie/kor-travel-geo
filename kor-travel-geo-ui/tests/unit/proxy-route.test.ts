@@ -69,6 +69,29 @@ describe("BFF proxy route handler", () => {
     );
   });
 
+  it("upstream의 cache-control/retry-after는 relay하고 content-encoding은 버린다 (T-294)", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+          "retry-after": "3",
+          "content-encoding": "gzip",
+          "set-cookie": "backend-internal=leak"
+        }
+      })
+    );
+    const controller = new AbortController();
+
+    const res = await GET(makeRequest(controller.signal), context);
+
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("retry-after")).toBe("3");
+    expect(res.headers.has("content-encoding")).toBe(false);
+    expect(res.headers.has("set-cookie")).toBe(false);
+  });
+
   it("클라이언트 abort면 499로 매핑하고 upstream 메트릭에 499를 기록한다", async () => {
     const controller = new AbortController();
     controller.abort();
