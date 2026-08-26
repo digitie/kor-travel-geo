@@ -56,6 +56,7 @@ from kortravelgeo.dto.admin import (
 )
 from kortravelgeo.dto.v2 import DatasetVersionEntry
 from kortravelgeo.exceptions import InvalidInputError
+from kortravelgeo.infra.concurrency import AdvisoryLockKey, AdvisoryLockNamespace
 from kortravelgeo.infra.metrics import sql_fingerprint, sql_operation
 from kortravelgeo.infra.uploads import extract_upload_set_ids
 from kortravelgeo.version import __version__
@@ -2883,6 +2884,21 @@ async def _insert_dataset_snapshot_and_release(
     source_match_set_id: str | None = None,
     snapshot_metadata: Mapping[str, Any] | None = None,
 ) -> tuple[DatasetSnapshot, ServingRelease]:
+    # T-293: SELECT ... FOR UPDATE below only serializes concurrent callers when a
+    # matching 'active' row already exists to lock — when the table has zero active
+    # rows (fresh DB, or a hot-swapped-in database whose own history has none yet),
+    # FOR UPDATE locks nothing and two concurrent activations can both read
+    # previous=None and both insert as 'active', leaving two rows active at once with
+    # broken lineage. This transaction-scoped advisory lock serializes the whole
+    # read-decide-write section regardless of whether any row currently matches.
+    await conn.execute(
+        text("SELECT pg_advisory_xact_lock(:key)"),
+        {
+            "key": AdvisoryLockKey.global_key(
+                AdvisoryLockNamespace.SERVING_RELEASE_ACTIVATION
+            ).as_int()
+        },
+    )
     runtime = await _runtime_versions_for_conn(conn)
     previous = (
         await conn.execute(
