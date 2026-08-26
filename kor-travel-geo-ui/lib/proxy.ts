@@ -1,6 +1,18 @@
 import { KNOWN_ADMIN_ROLES, type AdminRole } from "@/lib/roles";
 
 const ALLOWED_FORWARD_HEADERS = new Set(["accept", "content-type", "user-agent"]);
+// Response headers safe to relay verbatim from the backend to the browser. Deliberately
+// excludes content-length/content-encoding/transfer-encoding: the Next.js runtime's fetch
+// already transparently decompresses the upstream body before we re-wrap it in a new
+// Response, so copying content-encoding would claim a compression the bytes no longer have
+// (ERR_CONTENT_DECODING_FAILED in the browser), and content-length for a re-streamed body is
+// the runtime's job, not ours to restate.
+const ALLOWED_RESPONSE_HEADERS = new Set([
+  "content-type",
+  "cache-control",
+  "retry-after",
+  "content-disposition"
+]);
 const KNOWN_ADMIN_ROLE_SET = new Set<string>(KNOWN_ADMIN_ROLES);
 
 const LIVE_E2E_ADMIN_PROXY_ENV = "KTG_LIVE_E2E_ADMIN_PROXY";
@@ -79,6 +91,19 @@ export function forwardedProxyHeaders(
     if (proxySecret) {
       headers.set("X-KTG-Admin-Proxy-Secret", proxySecret);
     }
+  }
+  return headers;
+}
+
+export function filteredResponseHeaders(upstream: Headers): Headers {
+  const headers = new Headers();
+  upstream.forEach((value, key) => {
+    if (ALLOWED_RESPONSE_HEADERS.has(key.toLowerCase())) {
+      headers.set(key, value);
+    }
+  });
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
   }
   return headers;
 }

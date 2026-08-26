@@ -3,6 +3,7 @@ import { ApiError, backendPath } from "@/lib/api";
 import {
   buildProxyRequestInit,
   buildProxyTarget,
+  filteredResponseHeaders,
   forwardedProxyHeaders,
   liveE2EAdminIdentityFromEnv
 } from "@/lib/proxy";
@@ -52,6 +53,37 @@ describe("backendPath", () => {
     expect(headers.has("cookie")).toBe(false);
     expect(headers.has("x-ktg-actor")).toBe(false);
     expect(headers.has("x-ktg-roles")).toBe(false);
+  });
+
+  it("응답 프록시는 알려진 안전 헤더만 relay하고 나머지는 버린다 (T-294)", () => {
+    const headers = filteredResponseHeaders(
+      new Headers({
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+        "retry-after": "3",
+        "content-disposition": 'attachment; filename="export.csv"',
+        "content-encoding": "gzip",
+        "content-length": "1234",
+        "set-cookie": "backend-internal=leak",
+        "x-request-id": "abc-123"
+      })
+    );
+
+    expect(headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(headers.get("cache-control")).toBe("no-store");
+    expect(headers.get("retry-after")).toBe("3");
+    expect(headers.get("content-disposition")).toBe('attachment; filename="export.csv"');
+    expect(headers.has("content-encoding")).toBe(false);
+    expect(headers.has("content-length")).toBe(false);
+    expect(headers.has("set-cookie")).toBe(false);
+    expect(headers.has("x-request-id")).toBe(false);
+  });
+
+  it("응답에 content-type이 없으면 application/json으로 fallback한다", () => {
+    const headers = filteredResponseHeaders(new Headers({ "cache-control": "no-store" }));
+
+    expect(headers.get("content-type")).toBe("application/json");
+    expect(headers.get("cache-control")).toBe("no-store");
   });
 
   it("live e2e admin proxy opt-in일 때만 신뢰 role 헤더를 주입한다", () => {

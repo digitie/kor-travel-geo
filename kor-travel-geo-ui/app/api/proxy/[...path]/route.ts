@@ -5,7 +5,12 @@ import {
   recordProxyUpstream,
   recordUiRequest
 } from "@/lib/metrics";
-import { buildProxyRequestInit, buildProxyTarget, forwardedProxyHeaders } from "@/lib/proxy";
+import {
+  buildProxyRequestInit,
+  buildProxyTarget,
+  filteredResponseHeaders,
+  forwardedProxyHeaders
+} from "@/lib/proxy";
 import { KNOWN_ADMIN_ROLES } from "@/lib/roles";
 
 const INTERNAL_BASE = process.env.KTG_API_INTERNAL_URL ?? "http://localhost:12501";
@@ -43,9 +48,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
       statusCode = response.status;
       return new Response(response.body, {
         status: response.status,
-        headers: {
-          "content-type": response.headers.get("content-type") ?? "application/json"
-        }
+        headers: filteredResponseHeaders(response.headers)
       });
     } catch (error) {
       // Client aborted (navigation / react-query cancel): request.signal aborts
