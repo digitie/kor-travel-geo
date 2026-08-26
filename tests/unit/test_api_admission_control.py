@@ -182,3 +182,64 @@ async def test_admission_control_limits_v2_paths() -> None:
 
     assert [response.status_code for response in responses] == [200, 200]
     assert max_active == 1
+
+
+@pytest.mark.asyncio
+async def test_dataset_scope_excludes_global_address_budget() -> None:
+    """T-291c (ADR-067 D3): /v2/dataset/* must not compete with geocode/reverse/search for
+    the shared global `address` budget — a saturated global scope must not block dataset
+    polling, or vice versa."""
+    app = FastAPI()
+    _install_admission_control(
+        app,
+        Settings(api_max_concurrency=1, api_admission_timeout_ms=1),
+    )
+    entered = asyncio.Event()
+
+    @app.get("/v1/address/geocode")
+    async def geocode() -> dict[str, str]:
+        entered.set()
+        await asyncio.sleep(0.05)
+        return {"status": "OK"}
+
+    @app.post("/v2/dataset/version")
+    async def dataset_version() -> dict[str, str]:
+        return {"status": "OK"}
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        first = asyncio.create_task(client.get("/v1/address/geocode"))
+        await entered.wait()
+        # The global `address` scope is fully saturated by the in-flight geocode call —
+        # a dataset request must still succeed immediately, not queue behind it.
+        dataset_response = await client.post("/v2/dataset/version")
+        await first
+
+    assert dataset_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_dataset_scope_has_its_own_independent_limit() -> None:
+    """The exclusion from the global budget doesn't mean unlimited — /v2/dataset/* still
+    enforces its own dedicated `dataset` scope when configured."""
+    app = FastAPI()
+    _install_admission_control(
+        app,
+        Settings(api_dataset_max_concurrency=1, api_admission_timeout_ms=1),
+    )
+    entered = asyncio.Event()
+
+    @app.post("/v2/dataset/version")
+    async def dataset_version() -> dict[str, str]:
+        entered.set()
+        await asyncio.sleep(0.05)
+        return {"status": "OK"}
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        first = asyncio.create_task(client.post("/v2/dataset/version"))
+        await entered.wait()
+        blocked = await client.post("/v2/dataset/version")
+        await first
+
+    assert blocked.status_code == 429

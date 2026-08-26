@@ -3731,6 +3731,96 @@
         "title": "DagsterSummaryResponse",
         "type": "object"
       },
+      "DatasetHistoryInput": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cursor"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "since_version": {
+            "anyOf": [
+              {
+                "pattern": "^dv1-[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since Version"
+          }
+        },
+        "title": "DatasetHistoryInput",
+        "type": "object"
+      },
+      "DatasetHistoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DatasetVersionEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "input": {
+            "$ref": "#/components/schemas/DatasetHistoryInput"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "string"
+          },
+          "since_found": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since Found"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "status",
+          "input"
+        ],
+        "title": "DatasetHistoryResponse",
+        "type": "object"
+      },
       "DatasetSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -3902,6 +3992,132 @@
           "created_at"
         ],
         "title": "DatasetSnapshot",
+        "type": "object"
+      },
+      "DatasetVersionEntry": {
+        "additionalProperties": false,
+        "description": "One serving release, projected to the external dataset-version contract (ADR-067 D2).\n\n``reference_months``/``reference_months_mixed`` are omitted from the wire response when\nnormalization fails entirely (``response_model_exclude_none``) — the version_token\nremains the only trustworthy change signal in that case (design doc §1.1).",
+        "properties": {
+          "activated_at": {
+            "format": "date-time",
+            "title": "Activated At",
+            "type": "string"
+          },
+          "change_type": {
+            "enum": [
+              "full",
+              "delta"
+            ],
+            "title": "Change Type",
+            "type": "string"
+          },
+          "reference_months": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Months"
+          },
+          "reference_months_mixed": {
+            "default": false,
+            "title": "Reference Months Mixed",
+            "type": "boolean"
+          },
+          "version_token": {
+            "title": "Version Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_token",
+          "activated_at",
+          "change_type"
+        ],
+        "title": "DatasetVersionEntry",
+        "type": "object"
+      },
+      "DatasetVersionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "known_version": {
+            "anyOf": [
+              {
+                "pattern": "^dv1-[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Known Version"
+          }
+        },
+        "title": "DatasetVersionInput",
+        "type": "object"
+      },
+      "DatasetVersionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "changed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatasetVersionEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "input": {
+            "$ref": "#/components/schemas/DatasetVersionInput"
+          },
+          "known_version_found": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Known Version Found"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Status"
+          }
+        },
+        "required": [
+          "status",
+          "input",
+          "available"
+        ],
+        "title": "DatasetVersionResponse",
         "type": "object"
       },
       "EpostServerFetchRequest": {
@@ -19936,6 +20152,192 @@
         "summary": "Readyz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/v2/dataset/history": {
+      "post": {
+        "operationId": "dataset_history_v2_dataset_history_post",
+        "parameters": [
+          {
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
+              "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetHistoryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
+                }
+              }
+            },
+            "description": "v2 error envelope (ADR-060 §4)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
+          }
+        },
+        "summary": "Dataset History",
+        "tags": [
+          "v2-dataset"
+        ]
+      }
+    },
+    "/v2/dataset/version": {
+      "post": {
+        "operationId": "dataset_version_v2_dataset_version_post",
+        "parameters": [
+          {
+            "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다.",
+              "title": "Key"
+            }
+          },
+          {
+            "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+            "in": "header",
+            "name": "X-KTG-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다.",
+              "title": "X-Ktg-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetVersionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
+                }
+              }
+            },
+            "description": "v2 error envelope (ADR-060 §4)"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/V2ErrorEnvelope"
+                }
+              }
+            },
+            "description": "공개 API key 인증 실패"
+          }
+        },
+        "summary": "Dataset Version",
+        "tags": [
+          "v2-dataset"
         ]
       }
     },

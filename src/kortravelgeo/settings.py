@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     api_zipcode_max_concurrency: int | None = Field(default=None, ge=1)
     api_pobox_max_concurrency: int | None = Field(default=None, ge=1)
     api_regions_max_concurrency: int | None = Field(default=None, ge=1)
+    api_dataset_max_concurrency: int | None = Field(default=None, ge=1)
     api_admission_timeout_ms: int = Field(default=30_000, ge=1)
     api_readiness_timeout_ms: int = Field(default=1_000, ge=1)
     api_performance_logging_enabled: bool = False
