@@ -6,6 +6,26 @@
 
 ## 완료
 
+- [x] **T-291f — `AdminRepository` dataset-version 메서드 실 Postgres 통합 테스트**
+  (2026-08-26, PR #533, by claude). T-291b+c 적대적 리뷰에서 발견(PR #530) — `current_
+  dataset_version`/`find_dataset_version`/`dataset_version_history`는 순수 함수 또는
+  fake repo만 검증하고 실제 SQL은 한 번도 실행된 적이 없었다. 프로덕션 코드 변경 없이
+  신규 테스트 파일만 추가(`tests/integration/test_dataset_version_projection.py`,
+  `KTG_TEST_PG_DSN` opt-in) — `_pg_guard.require_disposable_database` 패턴 재사용. 로컬
+  검증은 WSL Docker의 임시 postgis 컨테이너를 `ktgctl init-db` + `alembic stamp head`로
+  부트스트랩(`alembic upgrade head`를 빈 DB에 바로 돌리면 중복 constraint 에러 —
+  `docs/geocoding-readiness.md` 절차가 정본)해 사용하고 테스트 후 제거했다. 적대적 리뷰
+  2건이 각 1건씩 실제 공백을 찾았다 — correctness 리뷰어: `pending`/`failed` 배제만
+  검증했지 `superseded`/`rolled_back`가 실제로 IN-list에 포함되는지는 검증한 적이
+  없어서 그 필터를 좁히는 방향의 회귀(예: `superseded` 오타 누락)는 기존 테스트를 전부
+  통과했을 것(mutation으로 재현·수정 확인). test-rigor 리뷰어: `COALESCE(activated_at,
+  created_at)`의 fallback 분기가 어떤 테스트에서도 관측된 적이 없었고(반환되는 모든 행이
+  `activated_at NOT NULL`), `dataset_version_history`의 `before`/`since` keyset 커서
+  경계 비교가 이 저장소 어디에도 실 DB로 검증된 적이 없었다(신규
+  `test_dataset_version_history_keyset_pagination_bounds`로 추가, mutation으로 재현·
+  수정 확인). 프로덕션 코드 변경이 없어 n150 live e2e는 생략(리뷰어가 diff 확인 후
+  안전하다고 판단).
+
 - [x] **T-291 — 데이터셋 버전 외부 공개 API + admin 버전 관측 (ADR-067)** (2026-08-26, by
   claude). `POST /v2/dataset/version`(known_version 조건부 폴링)·`POST /v2/dataset/history`로
   active serving release에서 파생한 opaque 토큰(`dv1-` + sha256 prefix)·기준월·변경 이력을

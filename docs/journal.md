@@ -2,6 +2,58 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-26 (T-291f — dataset-version 메서드 실 Postgres 통합 테스트, PR #533, by claude)
+
+T-291e 직후 진행. T-291b+c 적대적 리뷰에서 발견된 공백(`current_dataset_version`/`find_
+dataset_version`/`dataset_version_history`가 순수 함수 또는 fake repo만 검증하고 실제
+SQL은 한 번도 실행되지 않음 — 특히 `_DATASET_VERSION_SELECT`의
+`WHERE sr.state IN ('active','superseded','rolled_back')`가 이 표면에서 가장
+안전-critical한 필터인데도)를 닫는다. 신규 파일 하나(`tests/integration/test_dataset_
+version_projection.py`)만 추가, 프로덕션 코드 변경 0건.
+
+**로컬 disposable DB 확보**가 이 task의 첫 난관이었다 — 이 저장소는 Postgres를 직접
+구동하지 않고 `kor-travel-docker-manager`의 공용 인프라에 접속만 하는데, 로컬 개발
+머신에는 그 인프라가 떠 있지 않았다. WSL Docker에 임시 `postgis/postgis:16-3.5-alpine`
+컨테이너를 띄우고 부트스트랩을 시도했는데, `alembic upgrade head`를 빈 DB에 바로
+돌리면 `constraint ... already exists` 에러로 실패했다 — 원인은 `sql/ddl/001_schema.sql`
++ Alembic 마이그레이션 체인이 "빈 DB에서 알렘빅으로 처음부터" 경로가 아니라, `ktgctl
+init-db`(SCHEMA_SQL/INDEX_SQL/MV_SQL 직접 적용) 후 `alembic stamp head`로 버전 테이블만
+현재로 맞추는 것이 정본 부트스트랩 절차였기 때문(`docs/geocoding-readiness.md`에 이미
+문서화돼 있었다). 이 절차로 스키마를 올린 뒤 테스트를 돌리고, 끝나면 컨테이너를
+제거했다 — CI/실행 환경에 영구 인프라를 추가하지 않았다.
+
+**신규 테스트 2개**(리뷰 반영 전): (1) `test_dataset_version_history_excludes_pending_
+and_failed_releases` — `ops.serving_releases`/`ops.dataset_snapshots`에 active/pending/
+failed 행을 직접 INSERT하고, `dataset_version_history`/`find_dataset_version`이
+pending/failed를 실제로 배제하는지 확인(mutation: WHERE절에 pending/failed 추가 시
+실패 확인 후 복원). (2) `test_dataset_version_resolves_reference_months_via_snapshot_
+lineage` — 부모 스냅샷(form B)과 hot-swap 스냅샷(form C, 메타 전용)을 만들어
+`parent_dataset_snapshot_id` 계보 폴백이 실제 스키마에서 동작함을 확인.
+
+**적대적 리뷰 2건**이 각 1건씩 실제 공백을 찾았다. correctness 리뷰어: 두 테스트 모두
+`pending`/`failed`가 **배제**되는지만 검증했지, `superseded`/`rolled_back`가 실제로
+**포함**되는지는 한 번도 검증하지 않았다 — IN-list를 좁히는 방향의 회귀(`superseded`
+오타로 누락 등)는 이 PR의 테스트를 그대로 통과했을 것이다. test-rigor 리뷰어: (a)
+`COALESCE(sr.activated_at, sr.created_at)`의 fallback 분기(`activated_at IS NULL`일
+때)가 어느 테스트에서도 관측된 적이 없었다 — 반환/단언되는 모든 행이 `activated_at
+NOT NULL`이었다. (b) `dataset_version_history`의 `before`/`since` keyset 커서 경계
+비교(실 Postgres가 반환한 timestamp 튜플 비교)가 이 저장소 어디에도 실 DB로 검증된 적이
+없었다 — fake repo는 커서를 무시하고 고정 페이지만 반환하고, T-291b+c의 순수 함수
+테스트는 커서 인코딩/디코딩만 검증했다.
+
+세 발견을 모두 반영했다: test 2의 parent release(`superseded`)에 `find_dataset_
+version` 조회를 추가해 포함을 직접 증명하고, 동시에 그 release의 `activated_at`을
+`NULL`로 바꿔 COALESCE fallback도 함께 검증했다(하나의 fixture 변경으로 두 공백을
+닫음). 신규 `test_dataset_version_history_keyset_pagination_bounds`를 추가해 3개
+release(active 1 + superseded 2, 1시간 간격)로 `before`/`since` 양쪽 경계를 정확히
+검증한다. 세 테스트가 반복하던 engine 생성+guard 보일러플레이트는
+`test_full_load_batch_dagster_roundtrip.py`의 기존 `_fresh_engine()` 선례를 따라
+공유 헬퍼로 추출했다. 두 신규 안전 속성 모두 mutation으로 재현·수정 확인했다 — IN-list에서
+`superseded` 제거 시 실패, `before` 경계를 배타(`<`)에서 포함(`<=`)으로 바꾸면 실패.
+
+프로덕션 코드 변경이 전혀 없어(신규 테스트 파일 1개뿐) n150 배포·live e2e는 생략했다 —
+test-rigor 리뷰어가 diff 확인 후 명시적으로 "안전하게 생략 가능"하다고 판단.
+
 ## 2026-08-26 (T-291e — 기록 경로 위생, PR #532, by claude — T-291 epic 완료)
 
 T-291d 직후 독립 후속으로 진행했다(design doc §5, T-291a~d와 달리 서로 무관한 5개 hygiene
