@@ -18,6 +18,7 @@ _SCOPE_SETTING_NAMES: dict[str, str] = {
     "zipcode": "KTG_API_ZIPCODE_MAX_CONCURRENCY",
     "pobox": "KTG_API_POBOX_MAX_CONCURRENCY",
     "regions": "KTG_API_REGIONS_MAX_CONCURRENCY",
+    "dataset": "KTG_API_DATASET_MAX_CONCURRENCY",
 }
 
 
@@ -41,14 +42,24 @@ class AdmissionController:
         self._in_use: dict[str, int] = dict.fromkeys(self._limits, 0)
 
     def scopes_for_path(self, path: str) -> tuple[str, ...]:
-        if not _is_public_address_path(path):
+        """Scopes this ``path`` should acquire before serving a request.
+
+        Two separate questions, deliberately not collapsed into one predicate (ADR-067 D3):
+        "is this path scope-eligible at all" (``_endpoint_scope_for_path`` or the global
+        address surface) and "does this path also draw from the shared global budget"
+        (``_is_global_budget_path``). ``/v2/dataset/*`` gets its own ``dataset`` endpoint
+        scope but is excluded from the global budget — polling for change-detection must
+        not compete with (or be starved by) geocode/reverse traffic sharing that budget.
+        """
+        endpoint_scope = _endpoint_scope_for_path(path)
+        global_budget_eligible = _is_global_budget_path(path)
+        if endpoint_scope is None and not global_budget_eligible:
             return ()
 
         scopes: list[str] = []
-        endpoint_scope = _endpoint_scope_for_path(path)
         if endpoint_scope is not None and endpoint_scope in self._semaphores:
             scopes.append(endpoint_scope)
-        if ADMISSION_GLOBAL_SCOPE in self._semaphores:
+        if global_budget_eligible and ADMISSION_GLOBAL_SCOPE in self._semaphores:
             scopes.append(ADMISSION_GLOBAL_SCOPE)
         return tuple(scopes)
 
@@ -92,6 +103,8 @@ def build_admission_controller(settings: Settings) -> AdmissionController | None
         limits["pobox"] = settings.api_pobox_max_concurrency
     if settings.api_regions_max_concurrency is not None:
         limits["regions"] = settings.api_regions_max_concurrency
+    if settings.api_dataset_max_concurrency is not None:
+        limits["dataset"] = settings.api_dataset_max_concurrency
     if settings.api_max_concurrency is not None:
         limits[ADMISSION_GLOBAL_SCOPE] = settings.api_max_concurrency
     return AdmissionController(limits) if limits else None
@@ -103,6 +116,16 @@ def admission_scope_setting_name(scope: str) -> str:
 
 def _is_public_address_path(path: str) -> bool:
     return path.startswith("/v1/address/") or path.startswith("/v2/")
+
+
+def _is_global_budget_path(path: str) -> bool:
+    """Paths that draw from the shared global ``address`` budget.
+
+    ``/v2/dataset/*`` is deliberately excluded (ADR-067 D3) even though it is a ``/v2/*``
+    path and therefore scope-eligible via ``_endpoint_scope_for_path`` — it gets its own
+    ``dataset`` scope instead of sharing the geocode/reverse/search budget.
+    """
+    return _is_public_address_path(path) and not path.startswith("/v2/dataset/")
 
 
 def _endpoint_scope_for_path(path: str) -> str | None:
@@ -118,4 +141,6 @@ def _endpoint_scope_for_path(path: str) -> str | None:
         return "pobox"
     if path == "/v2/regions/within-radius":
         return "regions"
+    if path in {"/v2/dataset/version", "/v2/dataset/history"}:
+        return "dataset"
     return None

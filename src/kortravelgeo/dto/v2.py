@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -284,6 +285,59 @@ class RegionsWithinRadiusResponse(FrozenModel):
     sido: tuple[RegionWithinRadiusItem, ...] = ()
     sigungu: tuple[RegionWithinRadiusItem, ...] = ()
     emd: tuple[RegionWithinRadiusItem, ...] = ()
+
+
+#: dv1- + 32 lowercase hex chars (kortravelgeo.core.dataset_version.VERSION_TOKEN_RE) — dto
+#: cannot import core (layered architecture), so the pattern is duplicated here deliberately.
+_VERSION_TOKEN_PATTERN = r"^dv1-[0-9a-f]{32}$"
+
+
+class DatasetVersionEntry(FrozenModel):
+    """One serving release, projected to the external dataset-version contract (ADR-067 D2).
+
+    ``reference_months``/``reference_months_mixed`` are omitted from the wire response when
+    normalization fails entirely (``response_model_exclude_none``) — the version_token
+    remains the only trustworthy change signal in that case (design doc §1.1).
+    """
+
+    version_token: str
+    activated_at: datetime
+    change_type: Literal["full", "delta"]
+    reference_months: dict[str, str] | None = None
+    # bool | None (not bool = False): reference_months_mixed must be omitted alongside
+    # reference_months on the wire, not survive as a literal `false` — exclude_none only
+    # strips None, so the caller passes None explicitly whenever reference_months is absent
+    # (admin_repo._dataset_version_entry), never a default here.
+    reference_months_mixed: bool | None = None
+
+
+class DatasetVersionInput(FrozenModel):
+    known_version: str | None = Field(default=None, pattern=_VERSION_TOKEN_PATTERN)
+
+
+class DatasetVersionResponse(FrozenModel):
+    status: Status
+    query_id: str = Field(default_factory=lambda: uuid4().hex)
+    input: DatasetVersionInput
+    available: bool
+    changed: bool | None = None
+    known_version_found: bool | None = None
+    current: DatasetVersionEntry | None = None
+
+
+class DatasetHistoryInput(FrozenModel):
+    since_version: str | None = Field(default=None, pattern=_VERSION_TOKEN_PATTERN)
+    limit: int = Field(default=20, ge=1, le=100)
+    cursor: str | None = Field(default=None, min_length=1, max_length=512)
+
+
+class DatasetHistoryResponse(FrozenModel):
+    status: Status
+    query_id: str = Field(default_factory=lambda: uuid4().hex)
+    input: DatasetHistoryInput
+    since_found: bool | None = None
+    entries: tuple[DatasetVersionEntry, ...] = ()
+    next_cursor: str | None = None
 
 
 class V2ErrorDetail(FrozenModel):

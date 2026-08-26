@@ -19,8 +19,14 @@ T-145는 T-141 고부하 matrix 이후 API가 포화 상태에서 오래 대기�
 | `KTG_API_ZIPCODE_MAX_CONCURRENCY` | `zipcode` | `/v1/address/zipcode` |
 | `KTG_API_POBOX_MAX_CONCURRENCY` | `pobox` | `/v1/address/pobox` |
 | `KTG_API_REGIONS_MAX_CONCURRENCY` | `regions` | `/v2/regions/within-radius` |
+| `KTG_API_DATASET_MAX_CONCURRENCY` | `dataset` | `/v2/dataset/version`, `/v2/dataset/history` |
 
 모든 값은 unset이면 비활성이다. 전역 cap과 endpoint cap을 함께 설정하면 요청은 endpoint scope를 먼저 얻고, 이어서 전역 `address` scope를 얻는다. 이 순서는 특정 endpoint가 포화됐을 때 전역 slot을 오래 잡지 않게 하기 위한 것이다.
+
+**`dataset` scope는 이 규칙의 예외다**(ADR-067 D3, T-291c) — `/v2/dataset/*`는 endpoint scope만
+얻고 **전역 `address` scope는 얻지 않는다**. 변경 감지 폴링이 geocode/reverse/search와 같은
+공유 예산을 소모하면, 그 예산이 활성화된 상태에서 폴링량이 지오코딩 본체 트래픽을 굶길 수
+있어서다(반대 방향도 마찬가지 — geocode 트래픽이 포화돼도 폴링은 별도 예산으로 계속 응답한다).
 
 Admission 대기 시간은 기존 `KTG_API_ADMISSION_TIMEOUT_MS`를 사용한다. 여러 scope를 얻어야 하는 요청도 하나의 deadline 안에서 처리하며, deadline을 넘으면 이미 얻은 slot을 모두 반납하고 overload 응답을 반환한다.
 

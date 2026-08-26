@@ -4,6 +4,25 @@
 
 ## 현재 진척도 (2026-08-26 갱신, by claude)
 
+- ✅ **T-291b+c — 외부 데이터셋 버전 API (2026-08-26, PR #530, by claude)** —
+  `POST /v2/dataset/version`(known_version 조건부 폴링)·`POST /v2/dataset/history`를
+  공개했다. `core/dataset_version.py` 신규(순수 함수): 토큰 파생(`dv1-` + sha256 prefix),
+  기준월 정규화기(rebuild category 코드·nested `yyyymm_by_kind`·hot-swap 메타 전용·flat
+  map 4형태, writer별 실제 산출 형상을 fixture로 고정), opaque keyset 커서. `admin_repo.py`
+  공용 사영 3메서드 추가 — `parent_dataset_snapshot_id` 최대 5 hop 계보 폴백은 실제 반환
+  대상에만 지연 계산(첫 구현은 스캔한 최대 5000행 전부에 대해 미리 계산해 리뷰에서 지적,
+  필터·slice 이후로 미루도록 리팩터). `admission.py`에 전역 `address` 예산에서 제외된 전용
+  `dataset` scope 추가(ADR-067 D3). 적대적 리뷰어 2명이 각 2건씩 찾았다 —
+  `reference_months_mixed`가 `reference_months` 생략 시에도 `false`로 새던 문제(DTO
+  응답 예시·자체 문서와 모순), 리소스 낭비적인 조기 계산, `next_cursor`·hot-swap 정규화기
+  테스트 2건의 판별력 공백(fixture가 실제 저장 형상을 과소 근사). n150에서 REST로 두
+  endpoint를 직접 호출해 실 서빙 release로부터 파생한 토큰과 이력을 확인했다. 남은 라이브
+  DB 커버리지 공백(`pending`/`failed` 필터가 실제로 동작하는지 등)은 T-291f로 분리했다.
+  **다음 한 작업**: T-291d(admin 확장 — `ServingRelease` additive 필드 + OpsPanel releases
+  표 컬럼·상세·미리보기·curl + live e2e) — 결정
+  [ADR-067](adr/067-external-dataset-version-api.md), 정본
+  [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
+
 - ✅ **T-291a — 서빙 전환 기록 완결 (2026-08-26, PR #529, by claude)** — ADR-067 D0의
   5류 위반(CLI `all-sidos --refresh` swap·postload `execute_safe`·restore `replace_current`
   ·직접 서빙 base table 단독 적재 pobox/sppn/polygon/bulk·benchmark 스크립트 shadow-swap)

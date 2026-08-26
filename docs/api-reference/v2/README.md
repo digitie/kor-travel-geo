@@ -60,6 +60,14 @@ query도 사용할 수 있다. 두 위치를 함께 보내면 값이 같아야 �
   `response_model_exclude_none=True`라 **REST 응답에서는 `geometry`/`bbox` 필드가 생략**된다(`null` 아님).
   상세는 각 endpoint 문서.
 
+## Cache-Control (T-291c, 첫 사례)
+
+- `/v2/dataset/*`(변경 감지 폴링 표면)는 모든 응답에 `Cache-Control: no-store`를 붙인다.
+  중간 캐시가 이 표면에 얹히면 소비자의 변경 감지가 지연되고, 지연은 이 표면의 계약 위반과
+  같다(ADR-067 근거 1 — 거짓 음성 불허). 다른 v2 endpoint(geocode/reverse/search/regions)는
+  캐시 헤더를 아직 명시하지 않는다 — 값이 요청마다 달라질 수 있는 candidate 조회이므로
+  캐시 정책이 필요해지면 별도로 결정한다.
+
 ## enum 정직성 (ADR-060 §2)
 
 - published 후보 enum은 **현재 서버가 emit하는 값만** 담는다(`match_kind`/`point_precision`/`source`).

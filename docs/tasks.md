@@ -86,14 +86,39 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
     확인했다(release `2c4272d6-6acf-44ce-89e7-99a011d7a862`). 적대적 리뷰 2건에서
     `all-sidos --no-refresh` 거짓 양성, 검증 테스트 2건의 공백을 찾아 수정했다. 남은
     should-fix 2건은 T-292·T-293으로 분리했다.
-  - [ ] **T-291b** — 토큰·기준월 정규화기(4형태)·공용 사영·keyset 커서 (backend 내부만).
-  - [ ] **T-291c** — 외부 v2 엔드포인트 + 전용 admission scope + openapi/gen:types +
-    api-reference 4건(신규 문서·README·llm-summary·v2 공통 규약 Cache-Control 조항).
+  - [x] **T-291b+c** — 토큰·기준월 정규화기·공용 사영·keyset 커서(backend 내부) + 외부 v2
+    엔드포인트 + 전용 admission scope + openapi/gen:types + api-reference 4건 — PR #530,
+    n150 live e2e 완료. 하나의 PR로 묶었다(사영/정규화기는 이를 소비하는 엔드포인트 없이는
+    외부 가치가 없어서). `core/dataset_version.py` 신규(순수 함수): 토큰 파생, 정규화기
+    4형태(rebuild category 코드·nested `yyyymm_by_kind`·hot-swap 메타 전용·flat map, 각
+    writer의 실제 산출 형상을 그대로 fixture로 고정), opaque keyset 커서. `admin_repo.py`에
+    `current_dataset_version`/`find_dataset_version`/`dataset_version_history` 추가 —
+    `parent_dataset_snapshot_id` 최대 5 hop 계보 폴백은 실제 반환 대상 항목에만 지연 계산한다
+    (전체 스캔 단계는 토큰만 값싸게 계산). `admission.py`에 전역 `address` 예산에서 제외된
+    전용 `dataset` scope 추가(ADR-067 D3 — "scope 대상"과 "전역 예산 대상" 판정 분리).
+    적대적 리뷰어 2명이 각 2건씩 찾았다: `reference_months_mixed`가 `reference_months` 생략
+    시에도 `false`로 새던 문제(타입을 `bool | None`로 수정), 5000행까지 전부에 대해
+    `reference_months`를 미리 계산하던 비효율(필터·slice 이후로 지연시키는 리팩터), 페이지
+    구성에 항목 1개만 쓰던 `next_cursor` 테스트의 무판별 문제, hot-swap `source_set`
+    정규화기 fixture가 실제 저장 형상(`hot_swap`+`rebuild_metadata` 두 키 동시 존재)을
+    과소 근사하던 문제. 남은 라이브 DB 커버리지 공백은 T-291f로 분리했다.
   - [ ] **T-291d** — admin 확장: `ServingRelease` additive 필드 + OpsPanel releases 표
     컬럼·상세·미리보기·curl + live e2e.
   - [ ] **T-291e** — 기록 경로 위생(독립): 백업 artifact FK 기입, BackupsPanel 백업 시점
     토큰, hot-swap source_set 자체 완결화, `batch_dag` repr 열화 수정, restore drill의
     원장 `pending` 누적 정리 판단.
+
+- [ ] **T-291f** — `AdminRepository` dataset-version 메서드(`current_dataset_version`/
+  `find_dataset_version`/`dataset_version_history`)의 실 Postgres 통합 테스트
+  (T-291b+c 적대적 리뷰에서 발견, PR #530). 이 PR의 테스트는 순수 함수(core) 또는 fake
+  repo(router 계약)만 검증하고 실제 SQL은 한 번도 실행되지 않았다 — 특히 `_DATASET_VERSION_
+  SELECT`의 `WHERE sr.state IN ('active','superseded','rolled_back')` 필터가 `pending`/
+  `failed` release를 실제로 배제하는지가 검증된 적이 없다(이 표면에서 가장 안전-critical한
+  필터인데도). `tests/integration/test_admin_table_stats_estimates.py`의 `KTG_TEST_PG_DSN`
+  + `_pg_guard.require_disposable_database` 패턴을 재사용해 실 disposable DB로 (1)
+  pending/failed release가 사영에서 실제로 빠지는지, (2) `parent_dataset_snapshot_id` 계보
+  폴백이 실제 hot-swap/rollback 행에서 동작하는지, (3) `COALESCE`/`JOIN ... USING` SQL이
+  실제 스키마에서 동작하는지 확인한다.
 
 - [ ] **T-292** — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도
   (T-291a 적대적 리뷰에서 발견, PR #529). (a) `replace_current`는 대상이 이미 서빙 중인

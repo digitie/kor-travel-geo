@@ -2095,6 +2095,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v2/dataset/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dataset History */
+        post: operations["dataset_history_v2_dataset_history_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/dataset/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dataset Version */
+        post: operations["dataset_version_v2_dataset_version_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v2/geocode": {
         parameters: {
             query?: never;
@@ -3486,6 +3520,34 @@ export interface components {
             data: components["schemas"]["DagsterSummaryData"];
             meta: components["schemas"]["DagsterResponseMeta"];
         };
+        /** DatasetHistoryInput */
+        DatasetHistoryInput: {
+            /** Cursor */
+            cursor?: string | null;
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
+            /** Since Version */
+            since_version?: string | null;
+        };
+        /** DatasetHistoryResponse */
+        DatasetHistoryResponse: {
+            /**
+             * Entries
+             * @default []
+             */
+            entries: components["schemas"]["DatasetVersionEntry"][];
+            input: components["schemas"]["DatasetHistoryInput"];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Query Id */
+            query_id?: string;
+            /** Since Found */
+            since_found?: boolean | null;
+            status: components["schemas"]["Status"];
+        };
         /** DatasetSnapshot */
         DatasetSnapshot: {
             /** Alembic Revision */
@@ -3532,6 +3594,53 @@ export interface components {
             table_stats_artifact_id?: string | null;
             /** Validated At */
             validated_at?: string | null;
+        };
+        /**
+         * DatasetVersionEntry
+         * @description One serving release, projected to the external dataset-version contract (ADR-067 D2).
+         *
+         *     ``reference_months``/``reference_months_mixed`` are omitted from the wire response when
+         *     normalization fails entirely (``response_model_exclude_none``) — the version_token
+         *     remains the only trustworthy change signal in that case (design doc §1.1).
+         */
+        DatasetVersionEntry: {
+            /**
+             * Activated At
+             * Format: date-time
+             */
+            activated_at: string;
+            /**
+             * Change Type
+             * @enum {string}
+             */
+            change_type: "full" | "delta";
+            /** Reference Months */
+            reference_months?: {
+                [key: string]: string;
+            } | null;
+            /** Reference Months Mixed */
+            reference_months_mixed?: boolean | null;
+            /** Version Token */
+            version_token: string;
+        };
+        /** DatasetVersionInput */
+        DatasetVersionInput: {
+            /** Known Version */
+            known_version?: string | null;
+        };
+        /** DatasetVersionResponse */
+        DatasetVersionResponse: {
+            /** Available */
+            available: boolean;
+            /** Changed */
+            changed?: boolean | null;
+            current?: components["schemas"]["DatasetVersionEntry"] | null;
+            input: components["schemas"]["DatasetVersionInput"];
+            /** Known Version Found */
+            known_version_found?: boolean | null;
+            /** Query Id */
+            query_id?: string;
+            status: components["schemas"]["Status"];
         };
         /**
          * EpostServerFetchRequest
@@ -8612,6 +8721,7 @@ export interface operations {
         parameters: {
             query?: {
                 strategy?: "concurrent" | "swap";
+                daily_delta?: boolean;
             };
             header?: never;
             path?: never;
@@ -10922,6 +11032,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadinessResponse"];
+                };
+            };
+        };
+    };
+    dataset_history_v2_dataset_history_post: {
+        parameters: {
+            query?: {
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
+                key?: string | null;
+            };
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetHistoryInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetHistoryResponse"];
+                };
+            };
+            /** @description v2 error envelope (ADR-060 §4) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
+                };
+            };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    dataset_version_v2_dataset_version_post: {
+        parameters: {
+            query?: {
+                /** @description 브라우저/VWorld 호환 공개 API 인증키. 서버 간 호출은 X-KTG-API-Key를 사용한다. */
+                key?: string | null;
+            };
+            header?: {
+                /** @description 서버 간 공개 API 인증키. 관리자 권한을 부여하지 않는다. */
+                "X-KTG-API-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetVersionInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetVersionResponse"];
+                };
+            };
+            /** @description v2 error envelope (ADR-060 §4) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
+                };
+            };
+            /** @description 공개 API key 인증 실패 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["V2ErrorEnvelope"];
                 };
             };
         };

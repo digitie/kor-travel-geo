@@ -67,7 +67,18 @@ from kortravelgeo.loaders.runtime_warm import run_runtime_warm, runtime_warm_rep
 from kortravelgeo.settings import Settings, get_settings
 from kortravelgeo.version import __version__
 
-from .routers import admin, dagster, geocode, healthz, pobox, reverse, search, v2, zipcode
+from .routers import (
+    admin,
+    dagster,
+    dataset,
+    geocode,
+    healthz,
+    pobox,
+    reverse,
+    search,
+    v2,
+    zipcode,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _PERFORMANCE_LOGGER = logging.getLogger("kortravelgeo.api.performance")
@@ -160,6 +171,7 @@ def create_app() -> FastAPI:
     app.include_router(admin.router, prefix="/v1/admin")
     app.include_router(dagster.router, prefix="/v1")
     app.include_router(v2.router, prefix="/v2")
+    app.include_router(dataset.router, prefix="/v2/dataset")
     _install_openapi_customization(app)
 
     @app.get("/metrics", include_in_schema=False)
@@ -196,6 +208,8 @@ _VALIDATION_STRUCTURED_400 = (
     ("/v2/reverse", "post"),
     ("/v2/search", "post"),
     ("/v2/regions/within-radius", "post"),
+    ("/v2/dataset/version", "post"),
+    ("/v2/dataset/history", "post"),
 )
 _VALIDATION_LEGACY_400 = (
     ("/v1/address/search", "get"),
