@@ -60,7 +60,11 @@ from sqlalchemy import text
 
 from kortravelgeo.dto.admin import MaintenanceWindowCreate
 from kortravelgeo.infra.admin_repo import AdminRepository
-from kortravelgeo.infra.backup import run_backup_job, run_restore_job
+from kortravelgeo.infra.backup import (
+    _snapshot_restore_audit_events,
+    run_backup_job,
+    run_restore_job,
+)
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.infra.load_job_executor import LoadJobExecutor
 from kortravelgeo.settings import Settings
@@ -228,6 +232,49 @@ async def test_replace_current_restore_succeeds_end_to_end_against_nonempty_targ
             "production replace_current restore"
         )
         assert ended.state == "ended"
+
+        # T-296a: the maintenance_window.authorize audit event, logged just before pg_restore
+        # ran, must survive too — wiped by the same --clean mechanism as the other rows.
+        async with engine.connect() as conn:
+            audit_row = (
+                await conn.execute(
+                    text(
+                        "SELECT outcome, resource_id, job_id"
+                        "  FROM ops.audit_events"
+                        " WHERE action = 'maintenance_window.authorize'"
+                        "   AND resource_id = :window_id"
+                    ),
+                    {"window_id": window.maintenance_window_id},
+                )
+            ).mappings().one_or_none()
+        assert audit_row is not None, (
+            "the maintenance_window.authorize audit event must survive the restore — a "
+            "regression here is silent (no exception), just a missing audit trail entry"
+        )
+        assert audit_row["outcome"] == "succeeded"
+        assert audit_row["job_id"] == job.job_id
+
+        # T-296b: the source backup artifact's OWN ops.artifacts row — a DIFFERENT row from
+        # the restore-log artifact checked above — must come back exactly as it was before
+        # the restore (state='available', real checksum), not the stale state='creating'
+        # copy pg_restore recreates from the backup's own (pre-finalization) dump content.
+        async with engine.connect() as conn:
+            source_artifact_row = (
+                await conn.execute(
+                    text(
+                        "SELECT state, sha256, size_bytes"
+                        "  FROM ops.artifacts WHERE artifact_id = :id"
+                    ),
+                    {"id": backup_artifact.artifact_id},
+                )
+            ).mappings().one()
+        assert source_artifact_row["state"] == "available", (
+            "the source backup artifact's row must come back in its finalized state, not the "
+            "stale 'creating' snapshot pg_restore's --clean recreates from the backup's own "
+            "(pre-finalization) dump content"
+        )
+        assert source_artifact_row["sha256"] == backup_artifact.sha256
+        assert source_artifact_row["size_bytes"] == backup_artifact.size_bytes
     finally:
         await engine.dispose()
 
@@ -271,4 +318,86 @@ async def test_record_restore_candidate_prefers_row_counts_override_over_manifes
                     text("DELETE FROM ops.dataset_snapshots WHERE dataset_snapshot_id = :id"),
                     {"id": snapshot_id},
                 )
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_restore_audit_events_finds_all_setup_events_by_job_id_or_window(
+    tmp_path: Path,
+) -> None:
+    """T-296 follow-up (from adversarial review of the initial T-296a fix): a real
+    ``replace_current`` restore's audit trail isn't just the ``maintenance_window.authorize``
+    event this module itself writes — the API router writes ``db_restore.submit`` (keyed by
+    ``job_id``, no ``resource_id`` tie to the window) and the client writes
+    ``maintenance_window.create`` (keyed by ``resource_id`` = the window id, no ``job_id`` yet
+    at that point, since the window is opened before the restore job exists). This exercises
+    ``_snapshot_restore_audit_events`` directly against all three shapes plus an unrelated
+    event that must NOT match, rather than through the full router/client stack (the
+    end-to-end test above calls ``AdminRepository`` directly, bypassing the router/client
+    layers that actually write ``db_restore.submit``/``maintenance_window.create``)."""
+    engine, _settings, database_name = await _fresh_engine_and_settings(tmp_path)
+    repo = AdminRepository(engine)
+    job = await repo.insert_load_job(kind="db_restore", payload={"mode": "replace_current"})
+    confirmation = f"RESTORE {database_name}"
+    window = await repo.create_maintenance_window(
+        MaintenanceWindowCreate(
+            kind="restore",
+            reason="T-296 _snapshot_restore_audit_events coverage",
+            confirmation=confirmation,
+        )
+    )
+    try:
+        # maintenance_window.create shape: resource_id = window id, job_id = None.
+        create_event = await repo.record_audit_event(
+            action="maintenance_window.create",
+            actor_type="system",
+            outcome="started",
+            payload={},
+            resource_type="maintenance_window",
+            resource_id=window.maintenance_window_id,
+        )
+        # db_restore.submit shape: job_id set, resource_id = job_id (not the window).
+        submit_event = await repo.record_audit_event(
+            action="db_restore.submit",
+            actor_type="system",
+            outcome="started",
+            payload={},
+            resource_type="load_job",
+            resource_id=job.job_id,
+            job_id=job.job_id,
+        )
+        # maintenance_window.authorize shape: both job_id and resource_id = window id.
+        authorize_event = await repo.record_audit_event(
+            action="maintenance_window.authorize",
+            actor_type="system",
+            outcome="succeeded",
+            payload={},
+            resource_type="maintenance_window",
+            resource_id=window.maintenance_window_id,
+            job_id=job.job_id,
+        )
+        # An unrelated event with neither this job_id nor this resource_id — must NOT match.
+        unrelated_job = await repo.insert_load_job(kind="db_backup", payload={})
+        unrelated_event = await repo.record_audit_event(
+            action="db_backup.submit",
+            actor_type="system",
+            outcome="started",
+            payload={},
+            resource_type="load_job",
+            resource_id=unrelated_job.job_id,
+            job_id=unrelated_job.job_id,
+        )
+
+        snapshots = await _snapshot_restore_audit_events(
+            engine, job_id=job.job_id, maintenance_window_id=window.maintenance_window_id
+        )
+        found_ids = {str(row["audit_event_id"]) for row in snapshots}
+
+        assert found_ids == {
+            create_event.audit_event_id,
+            submit_event.audit_event_id,
+            authorize_event.audit_event_id,
+        }
+        assert unrelated_event.audit_event_id not in found_ids
+    finally:
         await engine.dispose()
