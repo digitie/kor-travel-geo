@@ -1859,17 +1859,21 @@ async def get_storage_file_source_group(
 async def refresh_mv(
     request: Request,
     strategy: Literal["concurrent", "swap"] = "concurrent",
+    daily_delta: bool = False,
     client: AsyncAddressClient = Depends(get_client),
 ) -> LoadJobStatus:
-    # Launch the release-gated mv_refresh Dagster job (T-290k PR3).
-    job_id = await launch_mv_refresh_dagster_run(
-        client._engine(), get_settings(), {"strategy": strategy}
-    )
+    # Launch the release-gated mv_refresh Dagster job (T-290k PR3). daily_delta=true labels the
+    # resulting release release_kind='daily_delta' — the documented workflow (t028) is: apply a
+    # batch of daily deltas, then run this refresh separately (T-291a).
+    payload: dict[str, Any] = {"strategy": strategy}
+    if daily_delta:
+        payload["release_kind"] = "daily_delta"
+    job_id = await launch_mv_refresh_dagster_run(client._engine(), get_settings(), payload)
     status = await client.load_status(job_id)
     await client.record_audit_event(
         action="mv_refresh.submit",
         outcome="started",
-        payload={"strategy": strategy},
+        payload={"strategy": strategy, "daily_delta": daily_delta},
         resource_type="load_job",
         resource_id=job_id,
         job_id=job_id,

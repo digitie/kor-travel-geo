@@ -175,6 +175,8 @@ loaded daily tl_juso_text delta: processed=422, upserted=242, deleted=180, lnbr_
 
 daily delta 적용 직후에는 운영 MV가 자동 refresh되지 않는다. `mv_geocode_target` 재계산은 수백만 행 규모의 I/O를 만들 수 있으므로, 운영자는 daily 적용 묶음이 끝난 뒤 `ktgctl refresh mv --swap` 또는 `mv_refresh` job을 별도 점검 창에서 실행한다.
 
+이 refresh가 daily delta 적용에서 유래했다면 `ktgctl refresh mv --swap --daily-delta`(REST는 `POST /maintenance/refresh-mv?daily_delta=true`)로 실행한다 — 기록되는 `ops.serving_releases.release_kind`가 기본값 `manual_rebuild` 대신 `daily_delta`로 라벨링된다(T-291a). 파일 하나만 적용하고 바로 반영을 확인하고 싶다면 `ktgctl load daily-juso`/`daily-parcel-links`에 `--refresh`를 붙여 적재+refresh+`daily_delta` 라벨링을 한 번에 할 수도 있다(기본은 `--no-refresh`로 이 문서가 설명하는 배치 흐름을 그대로 유지한다).
+
 ## 검증
 
 이번 PR에서 추가한 검증 범위:

@@ -89,6 +89,29 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
     토큰, hot-swap source_set 자체 완결화, `batch_dag` repr 열화 수정, restore drill의
     원장 `pending` 누적 정리 판단.
 
+- [ ] **T-292** — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도
+  (T-291a 적대적 리뷰에서 발견, PR #529). (a) `replace_current`는 대상이 이미 서빙 중인
+  현재 DB이므로 `ensure_target_database_empty`를 거치지 않는데, 실제 `pg_restore`가
+  비어있지 않은 DB(특히 `ops.*` 자체를 포함)에 대해 종단간 성공하는지 확인된 적이 없다
+  (기존 `test_replace_current_guards_reject_...`는 가드 거부만 검증하고
+  `build_pg_restore_command`를 raise하도록 monkeypatch해 실제 실행 경로를 우회함) — 실
+  disposable DB로 실제 `replace_current` 종단간 restore를 1회 이상 실행해 확인/보강한다.
+  (b) `record_restore_candidate`가 기록하는 `row_counts`는 백업 시점 manifest 값이며,
+  `run_restore_job`이 `run_row_count_check=True`일 때 이미 계산하는 실측
+  reconcile 결과(`reconcile_block`)를 사용하지 않는다 — `activate=True`(replace_current)
+  경로에서는 이 값이 "지금 서빙 중인 데이터"의 정본 기록이 되므로, `allow_partial` 등으로
+  실제 결과가 manifest와 다를 때 부정확한 기록이 active release에 남는다. 가능하면 reconcile
+  결과를 row_counts로 우선 사용하도록 스레딩한다.
+- [ ] **T-293** — `_insert_dataset_snapshot_and_release`의 동시 호출 시 lineage 유실
+  가능성 (T-291a 적대적 리뷰에서 발견, PR #529). "활성 release는 항상 1건" 불변식 자체는
+  partial unique index + 무조건 실행되는 `UPDATE ... WHERE state='active'`로 보장되지만,
+  두 트랜잭션이 거의 동시에 진입하면 뒤에 커밋되는 쪽의 `SELECT ... FOR UPDATE`가 이미
+  `superseded`로 바뀐 원래 행에서 블록되었다가 그 행 기준으로 `previous`를 `None`으로
+  결정할 수 있어 `previous_serving_release_id`/`parent_dataset_snapshot_id` 계보가
+  끊길 수 있다(활성 상태 자체는 정상적으로 최종 요청이 이김). T-291a로 직접 서빙 loader·
+  benchmark 스크립트 등 신규 호출 지점이 늘어 동시 호출 가능성이 커졌으므로, INSERT 직전
+  재조회 또는 advisory lock 등으로 보강할지 판단한다.
+
 ### 선택 후속 (낮은 우선순위)
 
 - **진행 중 작업 없음.** (T-219 잔여 L까지 완료 — `tasks-done.md` 참조.)

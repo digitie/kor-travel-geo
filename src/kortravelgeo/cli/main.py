@@ -784,11 +784,20 @@ def load_all_sidos_command(
                         strategy="swap" if swap else "concurrent",
                     )
                     typer.echo("refreshed mv_geocode_target")
-                _, release = await AdminRepository(client._engine()).record_mv_refresh_release(
-                    strategy=("swap" if swap else "concurrent") if refresh else None,
-                    notes="CLI load all-sidos" + ("" if refresh else " (--no-refresh)"),
+                # T-291a: juso/parcel/locsum/navi only reach serving via the MV refresh above —
+                # with --no-refresh their new source_yyyymm is NOT yet what's served, so
+                # recording here would be a false positive (a release claiming data changed when
+                # mv_geocode_target didn't). Only record when the MV was actually refreshed, or
+                # when a directly-served base table (pobox/shp/bulk, no MV involved) was loaded.
+                direct_serving_loaded = (
+                    shp_root is not None or pobox_path is not None or bulk_path is not None
                 )
-                typer.echo(f"recorded release={release.serving_release_id}")
+                if refresh or direct_serving_loaded:
+                    _, release = await AdminRepository(client._engine()).record_mv_refresh_release(
+                        strategy=("swap" if swap else "concurrent") if refresh else None,
+                        notes="CLI load all-sidos" + ("" if refresh else " (--no-refresh)"),
+                    )
+                    typer.echo(f"recorded release={release.serving_release_id}")
 
             await _run_with_cli_lock(
                 client._engine(),
@@ -806,6 +815,12 @@ def load_all_sidos_command(
 def refresh_materialized_view(
     concurrently: bool = typer.Option(True, "--concurrently/--no-concurrently"),
     swap: bool = typer.Option(False, "--swap", help="Build shadow MV and rename-swap."),
+    daily_delta: bool = typer.Option(
+        False,
+        "--daily-delta",
+        help="Label the recorded release daily_delta (docs/t028-daily-juso-delta.md workflow: "
+        "apply daily deltas, then refresh separately).",
+    ),
 ) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
@@ -819,6 +834,7 @@ def refresh_materialized_view(
                 _, release = await AdminRepository(client._engine()).record_mv_refresh_release(
                     strategy="swap" if swap else "concurrent",
                     notes="CLI refresh mv",
+                    release_kind="daily_delta" if daily_delta else None,
                 )
                 return release.serving_release_id
 

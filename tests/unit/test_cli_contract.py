@@ -122,16 +122,60 @@ def test_direct_serving_and_all_sidos_cli_commands_record_serving_release() -> N
         in inspect.getsource(load_shp_all_command)
     )
 
+    # all-sidos --no-refresh with no shp/pobox/bulk paths changes nothing servable (juso/
+    # locsum/navi land in base tables the MV wasn't refreshed from) — recording unconditionally
+    # there would be a false positive, the mirror image of the false negative T-291a exists to
+    # fix. Must gate on refresh actually having happened, or a direct-serving path being loaded.
+    all_sidos_source = inspect.getsource(load_all_sidos_command)
+    assert "direct_serving_loaded = (" in all_sidos_source
+    assert "shp_root is not None or pobox_path is not None or bulk_path is not None" in (
+        all_sidos_source
+    )
+    assert "if refresh or direct_serving_loaded:" in all_sidos_source
+
+
+def _indentation_scoped_if_body(source: str, condition: str) -> str:
+    """The literal body text of ``if {condition}:``, delimited by indentation like Python
+    actually scopes it — NOT by slicing between two substrings, which stays "inside" a block
+    for any later code that merely appears before some other anchor text, even after being
+    dedented back out of the if-block entirely."""
+    lines = source.splitlines()
+    header = f"if {condition}:"
+    for index, line in enumerate(lines):
+        if line.strip() != header:
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        body: list[str] = []
+        for later in lines[index + 1 :]:
+            if later.strip() == "":
+                body.append(later)
+                continue
+            if len(later) - len(later.lstrip(" ")) <= indent:
+                break
+            body.append(later)
+        return "\n".join(body)
+    msg = f"no {header!r} block found"
+    raise AssertionError(msg)
+
 
 def test_daily_delta_cli_commands_can_refresh_and_label_daily_delta() -> None:
     """release_kind='daily_delta' sat in the enum with no producer before T-291a — the
-    daily-juso/daily-parcel-links CLI commands are now the ones that can emit it."""
+    daily-juso/daily-parcel-links CLI commands are now the ones that can emit it.
+
+    Checks the recording call is actually *inside* the ``if refresh:`` block by indentation,
+    not merely present somewhere in the function before some later anchor text — a mutation
+    that hoists ``record_mv_refresh_release`` back out to the enclosing scope (still textually
+    before ``return result``) would record a spurious ``daily_delta`` release on every run,
+    including the default ``--no-refresh`` path where no MV refresh happened at all.
+    """
 
     for command in (load_daily_juso_command, load_daily_parcel_links_command):
         source = inspect.getsource(command)
         assert "--refresh/--no-refresh" in source
-        assert 'release_kind="daily_delta"' in source
-        assert "record_mv_refresh_release" in source
+        if_refresh_block = _indentation_scoped_if_body(source, "refresh")
+        assert "await refresh_mv(" in if_refresh_block
+        assert "record_mv_refresh_release(" in if_refresh_block
+        assert 'release_kind="daily_delta"' in if_refresh_block
 
 
 def test_limit_per_file_commands_warn_test_only() -> None:

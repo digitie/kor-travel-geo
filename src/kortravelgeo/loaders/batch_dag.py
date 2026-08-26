@@ -466,7 +466,11 @@ async def run_source_loader(
         await progress(stage="lock_conflict", message=f"{exc.code}: {exc.message}")
         raise
     if kind in _DIRECT_SERVING_KINDS and load_batch_id is None:
-        release_kind = "daily_delta" if payload.get("mode") == "delta" else None
+        # ADR-067 D0's delta-lineage enumeration is exactly daily_juso_delta /
+        # juso_parcel_link_delta / shp_polygons_delta — sppn_makarea/pobox/bulk have no
+        # daily_delta lineage regardless of their own `mode` value.
+        is_shp_delta = kind == "shp_polygons_load" and payload.get("mode") == "delta"
+        release_kind = "daily_delta" if is_shp_delta else None
         await AdminRepository(engine).record_mv_refresh_release(
             notes=f"standalone direct-serving load: {kind}",
             release_kind=release_kind,
@@ -552,6 +556,12 @@ async def run_mv_refresh(
         strategy="swap" if strategy == "swap" else "concurrent",
     )
     forced_metadata = payload.get("forced_promotion_metadata")
+    # T-291a: a standalone refresh (no load_batch_id) following daily-delta loads can be labeled
+    # daily_delta — the documented operator workflow (t028) is apply-deltas-then-refresh-
+    # separately. A full_load_batch's own mv_refresh child always derives full_load regardless
+    # of this payload field (load_batch_id wins below).
+    payload_release_kind = _payload_str(payload, "release_kind")
+    release_kind = "daily_delta" if payload_release_kind == "daily_delta" else None
     snapshot, release = await repo.record_mv_refresh_release(
         job_id=job_id,
         load_batch_id=load_batch_id,
@@ -559,6 +569,7 @@ async def run_mv_refresh(
         source_match_set_id=_payload_str(payload, "source_match_set_id"),
         forced_promotion=forced_promotion,
         forced_promotion_metadata=(forced_metadata if isinstance(forced_metadata, dict) else None),
+        release_kind=None if load_batch_id else release_kind,
     )
     await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")
     await progress(
