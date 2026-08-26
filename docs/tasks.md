@@ -66,19 +66,6 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
 
 ### 신규 기능
 
-- [ ] **T-292** — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도
-  (T-291a 적대적 리뷰에서 발견, PR #529). (a) `replace_current`는 대상이 이미 서빙 중인
-  현재 DB이므로 `ensure_target_database_empty`를 거치지 않는데, 실제 `pg_restore`가
-  비어있지 않은 DB(특히 `ops.*` 자체를 포함)에 대해 종단간 성공하는지 확인된 적이 없다
-  (기존 `test_replace_current_guards_reject_...`는 가드 거부만 검증하고
-  `build_pg_restore_command`를 raise하도록 monkeypatch해 실제 실행 경로를 우회함) — 실
-  disposable DB로 실제 `replace_current` 종단간 restore를 1회 이상 실행해 확인/보강한다.
-  (b) `record_restore_candidate`가 기록하는 `row_counts`는 백업 시점 manifest 값이며,
-  `run_restore_job`이 `run_row_count_check=True`일 때 이미 계산하는 실측
-  reconcile 결과(`reconcile_block`)를 사용하지 않는다 — `activate=True`(replace_current)
-  경로에서는 이 값이 "지금 서빙 중인 데이터"의 정본 기록이 되므로, `allow_partial` 등으로
-  실제 결과가 manifest와 다를 때 부정확한 기록이 active release에 남는다. 가능하면 reconcile
-  결과를 row_counts로 우선 사용하도록 스레딩한다.
 - [ ] **T-293** — `_insert_dataset_snapshot_and_release`의 동시 호출 시 lineage 유실
   가능성 (T-291a 적대적 리뷰에서 발견, PR #529). "활성 release는 항상 1건" 불변식 자체는
   partial unique index + 무조건 실행되는 `UPDATE ... WHERE state='active'`로 보장되지만,
@@ -126,6 +113,28 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
   이미 존재)에서 `DROP EXTENSION IF EXISTS postgis` 이후 재생성이 항상 무사히 성공하는지
   실측 검증되지 않았다(`ensure_target_database_empty`는 테이블만 확인하고 extension은
   확인하지 않음) — 흔한 pg_restore+PostGIS 마찰 지점이라 별도 테스트로 확정할 가치가 있다.
+- [ ] **T-297** — n150 디스크 공간 위험 수준 — 2026-08-26 T-292 live restore-drill
+  검증 중 실제 PostgreSQL 크래시 발생시킴(원인, 결과, 필요 조치는 아래 참조). **최우선**
+  (사용자 지시: "t292 머지후 디스크 확보작업부터 먼저 진행").
+  - 근본 원인: n150 루트 디스크(`/dev/mapper/ubuntu--vg-ubuntu--lv`, 466G)가 restore-drill
+    시작 전부터 이미 98% 사용 중(13G 여유)이었다 — drill의 스크래치 대상 DB
+    (`kor_travel_geo_restoretest_20260826T082157Z`, 전국 규모 backup을 `new_database` 모드로
+    복원 중, 16GB까지 성장하며 다수의 GIST/btree 인덱스를 빌드하던 도중)가 디스크를 100%까지
+    채웠고, PostgreSQL이 WAL을 더 쓸 수 없어 crash했다(unclean shutdown → automatic recovery).
+  - 결과: PostgreSQL은 WAL redo로 자체 복구에 성공했다(69초 만에 "database system is ready to
+    accept connections"). `kor-travel-geo-api-latest` 컨테이너는 복구 완료 전 접속 실패로
+    3회 재시작 루프를 돌다 정상화. 사후 검증: `ops.serving_releases` active release 1건 정상,
+    `mv_geocode_target` 6,416,637 row(알려진 정상값과 일치) — **데이터 손실/손상 없음** 확인.
+    크래시 원인이 `pg_restore --clean --if-exists` 자체의 결함이 아니라 순수 디스크 용량
+    문제임을 확인했으므로(크래시 전 4시간+ 동안 수십 개 테이블/인덱스에 걸쳐 정상 동작 관측),
+    T-292는 이 증거 + 로컬 통합 테스트 전체 통과를 근거로 그대로 merge한다(사용자 승인).
+  - 즉시 조치: 남은 16GB 스크래치 restoretest DB는 즉시 DROP해 21G 여유로 복구했으나, 여전히
+    96% 사용 중 — 임계 수준. **조사·정리 필요**: (1) n150 전체 디스크 사용 내역 실측(Docker
+    이미지/컨테이너 레이어, 각 프로젝트 DB 크기, 백업 아카이브 보존량 등), (2) 무엇이 정리
+    가능한지 판단(오래된 Docker 이미지 `docker system prune`, 오래된 backup artifact 보존
+    정책 재검토, 필요시 볼륨 확장), (3) 재발 방지 — `backup_require_free_space_check`가 이
+    restore-drill 경로(그리고 일반 `new_database` 복원)에도 적용되는지 확인, 적용 안 된다면
+    보강 판단.
 
 ### 선택 후속 (낮은 우선순위)
 

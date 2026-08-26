@@ -2,6 +2,62 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-27 (T-292 merge + n150 Postgres crash → T-297, by claude)
+
+T-291f 직후 진행, "더이상 테스크가 없을 때 까지 완주할 것" 지시로 T-292~T-296을 순서대로
+implement → 적대적 리뷰 2인 → 리뷰 반영 → n150 배포/검증(해당 시) → merge 사이클로 계속
+진행했다. T-293/T-294/T-295/T-296은 각각 PR #535/#536/#537/#538로 구현·적대적 리뷰·리뷰
+반영까지 전부 끝냈다(각 task의 상세 발견은 해당 PR과 곧 추가될 tasks-done.md 항목 참조).
+T-292는 이 항목의 주제다.
+
+**T-292 구현**: `replace_current` 종단간 실행을 한 번도 검증한 적이 없다는 T-291a 리뷰
+지적을 실제로 돌려보니 버그 3개가 드러났다 — `--clean --if-exists` 부재, 그걸 고친 뒤엔
+자기참조 wipe가 `load_jobs`/`ops.artifacts`/`ops.maintenance_windows`를 같이 지우는 문제
+(job_id FK violation + `end_maintenance_window` 404), `record_restore_candidate`가 실측
+reconcile 대신 backup-time manifest row_counts를 쓰던 문제. 적대적 리뷰 2건(디스크
+복구 경로라 명시적으로 고위험 표시) 모두 실제 결함을 찾았고 — job_id FK violation은
+"finding #1, block할 사항", 저자 자신의 테스트가 `end_maintenance_window`를 호출만 하고
+결과를 단언하지 않아 정작 이 회귀를 못 잡던 구조는 "이 리뷰에서 가장 날카로운 발견" — 둘 다
+반영 후 mutation-검증까지 마쳤다. 잔여 낮은 우선순위 3건(감사 이벤트 재기록, backup_
+artifact_id 추적성, PostGIS extension 마찰)은 T-296으로 분리했다.
+
+**T-296 진행 중 추가 발견**: T-296(a)로 `maintenance_window.authorize` 감사 이벤트만
+재기록하는 첫 구현을 냈는데, test-rigor 리뷰어가 같은 wipe 대상 DB에 실 운영 호출자가
+쓰는 감사 이벤트가 둘 더 있음을 찾아냈다(`db_restore.submit` — API 라우터, `maintenance_
+window.create` — client 계층. 둘 다 지금까지 재기록 대상에서 빠져 있었다). action 이름을
+하드코딩하는 대신 job_id/resource_id로 매칭하는 `_snapshot_restore_audit_events`로
+일반화해 재구현. correctness 리뷰어는 별개로, 새로 추가된 재기록 단계 2개가 load_jobs와
+`ops.maintenance_windows` 재기록 사이에 끼어들면서 운영자에게 가장 영향이 큰 window
+재기록의 실패 노출 구간이 넓어졌다는 순서 문제를 찾아 재정렬로 대응했다.
+
+**n150 live 검증과 디스크 crash**: `replace_current`는 두 적대적 리뷰어 모두 프로덕션에
+절대 트리거하지 말라고 명시적으로 권고했으므로, 대신 `new_database` 모드 daily
+restore-drill(daily 스케줄러가 실제로 쓰는 경로)을 실 4.7GB backup artifact로 수동
+트리거해 새 전역 `--clean --if-exists`가 이 안전 경로를 깨지 않는지 확인하기로 했다.
+드릴은 4시간+ 동안 `tl_spbd_buld_polygon`·`tl_navi_buld_centroid`·`tl_locsum_entrc`·
+`tl_roadaddr_entrc` 등 수십 개 테이블에 걸친 GIST/btree 인덱스 빌드·COPY를
+`pg_stat_activity`로 직접 관측하며 정상 진행을 확인했다(client-side `ps aux` CPU time은
+거의 안 움직여서 처음엔 멈춘 것으로 오인했으나, 실제 작업은 서버 프로세스에서 일어나므로
+`pg_stat_activity`로 확인하는 게 맞는 방법이었다).
+
+완주 직전, n150 루트 디스크(466G)가 100%까지 차서 **PostgreSQL이 실제로 crash**했다.
+사후 조사: 디스크는 드릴 시작 전부터 이미 98%(13G 여유)였고, 드릴의 스크래치 대상 DB
+(`kor_travel_geo_restoretest_20260826T082157Z`)가 16GB까지 자라며 다수 인덱스를 빌드하던
+중 나머지 여유분을 다 써버렸다. PostgreSQL은 WAL을 더 쓸 수 없어 unclean shutdown됐고,
+`kor-travel-geo-api-latest` 컨테이너는 DB 접속 실패로 3회 재시작 루프를 돌았다. 다행히
+PostgreSQL은 WAL redo로 69초 만에 자체 복구했다("database system is ready to accept
+connections") — 사후 직접 검증: `ops.serving_releases` active release 1건 정상,
+`mv_geocode_target` 6,416,637 row(알려진 정상값과 정확히 일치). **데이터 손실/손상
+없음**. 크래시 원인이 `--clean --if-exists` 자체의 결함이 아니라 순수 디스크 용량
+문제임을 확인했다(그 전 4시간+ 동안 이미 그 플래그로 수십 개 테이블이 정상 처리됨).
+
+남은 스크래치 restoretest DB(16GB)는 즉시 DROP해 21G(96%)까지 여유를 확보했지만
+여전히 임계 수준이라, drill을 clean PASS까지 재실행하는 대신(재시도가 같은 크래시를
+재현할 실질적 위험이 있었음) 사용자에게 판단을 물었다 — "지금까지 증거로 충분, merge
+진행"으로 결정. 크래시로 드러난 n150 디스크 용량 문제 자체는 T-297로 분리해 최우선으로
+등록했다(사용자 지시: "t292 머지후 디스크 확보작업부터 먼저 진행" — T-293~T-296 PR
+머지보다 먼저 처리).
+
 ## 2026-08-26 (T-291f — dataset-version 메서드 실 Postgres 통합 테스트, PR #533, by claude)
 
 T-291e 직후 진행. T-291b+c 적대적 리뷰에서 발견된 공백(`current_dataset_version`/`find_
