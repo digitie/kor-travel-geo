@@ -571,6 +571,29 @@ async def run_restore_job(
             bounds=(0.20, 0.80),
             log_path=log_path,
         )
+        if req.mode == "replace_current":
+            # T-292: replace_current's target IS the database `repo`/`engine` are already
+            # connected to (validate_replace_current_restore_request enforces this) — so
+            # `--clean --if-exists` (added above so pg_restore doesn't error on every
+            # already-existing object) just dropped and recreated ops.artifacts FROM THE
+            # BACKUP'S OWN OLD CONTENT, which never had this run's `restore_artifact` row
+            # (it didn't exist yet when the backup was taken). Every ops.* write this
+            # function made before pg_restore ran (the artifact insert here, and the
+            # maintenance-window-authorize audit event above) is gone the same way. Restore
+            # just the artifact row — it's what every step from here on (finalize update,
+            # record_restore_candidate's FK, the callback) needs to keep working.
+            restore_artifact = await repo.insert_artifact(
+                artifact_id=artifact_id,
+                artifact_type=RESTORE_LOG_ARTIFACT_TYPE,
+                state="creating",
+                storage_kind="none",
+                display_name=restore_artifact.display_name,
+                media_type="application/x-ndjson",
+                job_id=job_id,
+                manifest=restore_artifact.manifest,
+                callback_url=callback_url,
+                callback_state="pending" if callback_url else None,
+            )
         if req.run_analyze:
             await progress(progress=0.80, stage="analyze", message="target DB ANALYZE 시작")
             await analyze_database(target_dsn)
@@ -584,6 +607,10 @@ async def run_restore_job(
                 message="복원 후 consistency는 별도 target API 연결에서 수행해야 함",
             )
         reconcile_block: dict[str, Any] | None = None
+        # T-292b: real post-restore counts (what's actually in the restored DB), preferred
+        # over source_manifest's backup-time row_counts when available — see
+        # record_restore_candidate's row_counts_override docstring.
+        row_counts_override: dict[str, int] | None = None
         if req.run_row_count_check:
             # T-233: catch a silent partial restore by comparing manifest row counts /
             # MV / sppn against the restored DB. Local import avoids an import cycle.
@@ -594,6 +621,9 @@ async def run_restore_job(
             )
             reconcile = await compare_restore_against_manifest(manifest, target_dsn)
             reconcile_block = reconcile.model_dump()
+            row_counts_override = {
+                diff.object: diff.actual for diff in reconcile.row_count_diffs
+            }
             if not reconcile.ok:
                 await progress(
                     progress=0.94,
@@ -630,6 +660,7 @@ async def run_restore_job(
             source_artifact_id=source_artifact.artifact_id if source_artifact else None,
             job_id=job_id,
             activate=req.mode == "replace_current",
+            row_counts_override=row_counts_override,
         )
         relinked_restore_artifact = await repo.update_artifact(
             restore_artifact.artifact_id,
@@ -989,6 +1020,13 @@ def build_pg_restore_command(
         "--format=directory",
         f"--jobs={jobs}",
         "--verbose",
+        # T-292: --clean --if-exists so a restore over an ALREADY-POPULATED target (T-235
+        # new_database mode's target is verified empty first, but replace_current's target
+        # is by definition the currently-serving DB) drops each object before recreating it
+        # instead of erroring "already exists" on every table/index/constraint. A no-op for
+        # a genuinely empty target (IF EXISTS finds nothing to drop).
+        "--clean",
+        "--if-exists",
     ]
     # T-243: restore only the (non-commented) entries in the filtered TOC list, skipping
     # the corrupted table data files identified by partial-restore planning.
