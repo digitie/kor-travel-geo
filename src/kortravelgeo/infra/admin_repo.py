@@ -916,6 +916,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         source_artifact_id: str | None = None,
         job_id: str | None = None,
         activate: bool = False,
+        row_counts_override: Mapping[str, int] | None = None,
     ) -> tuple[DatasetSnapshot, ServingRelease]:
         """Record a restored database as a release candidate.
 
@@ -924,9 +925,24 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         (T-291a: ``db_restore mode=replace_current``) records it directly as the
         active release instead, since a replace_current restore overwrites the
         database this app is already serving in place — there is no separate
-        hot-swap step to promote it."""
+        hot-swap step to promote it.
+
+        ``row_counts_override`` (T-292b): ``source_manifest["row_counts"]`` is the
+        BACKUP-TIME snapshot, not what's actually in the restored DB right now — an
+        ``allow_partial`` restore, a partial-checksum skip, or any other restore
+        imperfection makes the two diverge. When the caller already computed a
+        real post-restore reconcile (``run_restore_job``'s ``compare_restore_against_
+        manifest``), pass its per-object actual counts here so the row this becomes
+        the record of — especially for ``activate=True``, where it's the canonical
+        "what's now being served" figure — reflects the DB as restored, not as backed
+        up."""
 
         database = _json_dict(source_manifest.get("database"))
+        row_counts = (
+            dict(row_counts_override)
+            if row_counts_override is not None
+            else _int_dict(source_manifest.get("row_counts"))
+        )
         async with self.engine.begin() as conn:
             return await _insert_dataset_snapshot_and_release(
                 conn,
@@ -934,7 +950,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 release_state="active" if activate else "pending",
                 release_kind="restore",
                 source_set=_json_dict(source_manifest.get("source_set")),
-                row_counts=_int_dict(source_manifest.get("row_counts")),
+                row_counts=row_counts,
                 backup_artifact_id=source_artifact_id,
                 created_by_job_id=job_id,
                 activated_by_job_id=job_id if activate else None,

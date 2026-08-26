@@ -10,7 +10,7 @@ import os
 import re
 import secrets
 import shutil
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -21,7 +21,8 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -380,6 +381,39 @@ async def run_backup_job(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+async def _snapshot_row(
+    engine: AsyncEngine, *, table: str, pk_column: str, pk_value: str
+) -> dict[str, Any] | None:
+    """T-292: read a row's full current content so :func:`_reinsert_row` can put it back
+    after a ``replace_current`` restore's ``pg_restore --clean --if-exists`` drops and
+    recreates ``table`` from the BACKUP's old content (which never had this row, since it
+    didn't exist yet when the backup was taken). ``SELECT *`` (not a fixed column list) so
+    this keeps working if either table gains columns later."""
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                text(f"SELECT * FROM {table} WHERE {pk_column} = :pk"),
+                {"pk": pk_value},
+            )
+        ).mappings().first()
+    return dict(row) if row is not None else None
+
+
+async def _reinsert_row(
+    engine: AsyncEngine, *, table: str, row: Mapping[str, Any], jsonb_columns: Sequence[str]
+) -> None:
+    """Companion to :func:`_snapshot_row` — re-INSERT the exact row content captured before
+    ``pg_restore`` ran. ``jsonb_columns`` must be cast explicitly (psycopg can't infer JSONB
+    from a plain Python dict/list parameter the way asyncpg can)."""
+    columns = list(row.keys())
+    stmt = text(
+        f"INSERT INTO {table} ({', '.join(columns)}) "
+        f"VALUES ({', '.join(f':{c}' for c in columns)})"
+    ).bindparams(*(bindparam(c, type_=JSONB) for c in jsonb_columns if c in row))
+    async with engine.begin() as conn:
+        await conn.execute(stmt, dict(row))
+
+
 async def run_restore_job(
     engine: AsyncEngine,
     settings: Settings,
@@ -401,6 +435,17 @@ async def run_restore_job(
         raise InvalidInputError(msg)
     target_database = validate_database_identifier(target_database, "target_database")
     job_owns_target = False  # T-235: True only after we verify the target was empty
+    # T-292: replace_current's target IS the database `repo`/`engine` are already connected
+    # to — pg_restore --clean --if-exists (added so restoring onto this already-populated
+    # target doesn't fail with "already exists" on every object) drops and recreates EVERY
+    # table in that database from the backup's old content, including load_jobs and ops.
+    # maintenance_windows. Rows this function's own caller (or this function itself, for the
+    # restore_artifact below) wrote into those tables before pg_restore runs are gone the
+    # same way once it completes — snapshotted here, re-inserted right after the restore
+    # command succeeds (see the `req.mode == "replace_current"` block after run_process_
+    # with_progress(restore_cmd, ...)).
+    job_row_snapshot: dict[str, Any] | None = None
+    window_row_snapshot: dict[str, Any] | None = None
     if req.mode == "replace_current":
         confirmation = validate_replace_current_restore_request(
             req,
@@ -410,6 +455,16 @@ async def run_restore_job(
         window = await repo.require_active_maintenance_window(
             kind="restore",
             confirmation=confirmation,
+        )
+        if job_id is not None:
+            job_row_snapshot = await _snapshot_row(
+                engine, table="load_jobs", pk_column="job_id", pk_value=job_id
+            )
+        window_row_snapshot = await _snapshot_row(
+            engine,
+            table="ops.maintenance_windows",
+            pk_column="maintenance_window_id",
+            pk_value=window.maintenance_window_id,
         )
         await repo.record_audit_event(
             action="maintenance_window.authorize",
@@ -571,6 +626,41 @@ async def run_restore_job(
             bounds=(0.20, 0.80),
             log_path=log_path,
         )
+        if req.mode == "replace_current":
+            # T-292: re-insert every row snapshotted before pg_restore ran, in FK dependency
+            # order — load_jobs FIRST, since ops.artifacts.job_id and ops.maintenance_
+            # windows.created_by_job_id/closed_by_job_id both reference it (re-inserting the
+            # artifact row with a job_id pg_restore just made unresolvable would trade one
+            # crash for another, exactly as it did before this ordering existed). The
+            # maintenance-window-authorize audit event (logged before pg_restore ran) is
+            # NOT re-created — nothing reads it back, unlike the window row itself, which
+            # end_maintenance_window needs to find after a successful restore.
+            if job_row_snapshot is not None:
+                await _reinsert_row(
+                    engine,
+                    table="load_jobs",
+                    row=job_row_snapshot,
+                    jsonb_columns=("payload", "source_set", "log_tail", "payload_summary"),
+                )
+            restore_artifact = await repo.insert_artifact(
+                artifact_id=artifact_id,
+                artifact_type=RESTORE_LOG_ARTIFACT_TYPE,
+                state="creating",
+                storage_kind="none",
+                display_name=restore_artifact.display_name,
+                media_type="application/x-ndjson",
+                job_id=job_id,
+                manifest=restore_artifact.manifest,
+                callback_url=callback_url,
+                callback_state="pending" if callback_url else None,
+            )
+            if window_row_snapshot is not None:
+                await _reinsert_row(
+                    engine,
+                    table="ops.maintenance_windows",
+                    row=window_row_snapshot,
+                    jsonb_columns=("blocks",),
+                )
         if req.run_analyze:
             await progress(progress=0.80, stage="analyze", message="target DB ANALYZE 시작")
             await analyze_database(target_dsn)
@@ -584,6 +674,10 @@ async def run_restore_job(
                 message="복원 후 consistency는 별도 target API 연결에서 수행해야 함",
             )
         reconcile_block: dict[str, Any] | None = None
+        # T-292b: real post-restore counts (what's actually in the restored DB), preferred
+        # over source_manifest's backup-time row_counts when available — see
+        # record_restore_candidate's row_counts_override docstring.
+        row_counts_override: dict[str, int] | None = None
         if req.run_row_count_check:
             # T-233: catch a silent partial restore by comparing manifest row counts /
             # MV / sppn against the restored DB. Local import avoids an import cycle.
@@ -594,6 +688,9 @@ async def run_restore_job(
             )
             reconcile = await compare_restore_against_manifest(manifest, target_dsn)
             reconcile_block = reconcile.model_dump()
+            row_counts_override = {
+                diff.object: diff.actual for diff in reconcile.row_count_diffs
+            }
             if not reconcile.ok:
                 await progress(
                     progress=0.94,
@@ -630,6 +727,7 @@ async def run_restore_job(
             source_artifact_id=source_artifact.artifact_id if source_artifact else None,
             job_id=job_id,
             activate=req.mode == "replace_current",
+            row_counts_override=row_counts_override,
         )
         relinked_restore_artifact = await repo.update_artifact(
             restore_artifact.artifact_id,
@@ -989,6 +1087,13 @@ def build_pg_restore_command(
         "--format=directory",
         f"--jobs={jobs}",
         "--verbose",
+        # T-292: --clean --if-exists so a restore over an ALREADY-POPULATED target (T-235
+        # new_database mode's target is verified empty first, but replace_current's target
+        # is by definition the currently-serving DB) drops each object before recreating it
+        # instead of erroring "already exists" on every table/index/constraint. A no-op for
+        # a genuinely empty target (IF EXISTS finds nothing to drop).
+        "--clean",
+        "--if-exists",
     ]
     # T-243: restore only the (non-commented) entries in the filtered TOC list, skipping
     # the corrupted table data files identified by partial-restore planning.

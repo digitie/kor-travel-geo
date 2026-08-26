@@ -6,6 +6,50 @@
 
 ## 완료
 
+- [x] **T-292 — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도**
+  (2026-08-26, PR #534, by claude). T-291a 적대적 리뷰에서 발견(PR #529). `replace_current`
+  종단간 실행이 이전엔 한 번도 실제로 검증된 적이 없었다 — 실제로 돌려보니 이전엔 몰랐던
+  버그 3개가 드러났다: (1) `build_pg_restore_command`에 `--clean --if-exists`가 없어
+  이미 서빙 중인(=비어있지 않은) 대상에 대한 모든 실 restore가 "already exists" 오류로
+  실패했다. (2) `replace_current`의 대상은 `repo`/`engine`이 이미 접속 중인 바로 그 DB이므로,
+  (1)을 고친 뒤에도 `--clean --if-exists`는 address-serving 데이터만이 아니라 `load_jobs`·
+  `ops.*` 전체를 백업 시점 내용으로 되돌린다 — 이 함수(또는 호출자)가 `pg_restore` 실행
+  *전에* 써넣은 row(재시작한 job 자신의 `load_jobs` 행, restore 자신의 `ops.artifacts`
+  북키핑 행, 진입에 필요했던 `ops.maintenance_windows` 행)가 전부 같은 방식으로 사라진다.
+  `job_id=None`으로만 테스트한 첫 수정 시도는 자기 테스트는 통과했지만 실제 호출(항상 real
+  job_id)에서는 `ops.artifacts.job_id`가 wiped된 `load_jobs`를 참조하는
+  `ForeignKeyViolation`을 냈을 것 — `load_jobs`를 최우선으로 재기록하는 snapshot-before/
+  reinsert-after 패턴(`_snapshot_row`/`_reinsert_row`)으로 수정, `end_maintenance_window`가
+  복원 후 404하던 문제(운영 런북 단계, `docs/t050-ops-hardening.md`)도 함께 해결. (3)
+  `record_restore_candidate`가 백업 시점 manifest의 `row_counts`를 쓰고 있어서, 실측
+  post-restore reconcile 결과(`run_row_count_check=True`일 때 이미 계산됨)가 있어도
+  무시했다 — `row_counts_override` 파라미터로 실측값이 우선하도록 스레딩.
+
+  적대적 리뷰 2건(고위험 disaster-recovery 경로로 명시적으로 표시, 최대한 회의적으로
+  검토 요청) 모두 실제 버그를 찾았다 — correctness 리뷰어가 위 (2)의 job_id FK 위반을
+  발견("finding #1이자 block할 사항"), test-rigor 리뷰어가 저자 자신의 테스트가 원래는
+  `end_maintenance_window`를 호출하되 결과를 단언하지 않아 정작 이 회귀를 못 잡는
+  구조였음을 발견("이 리뷰에서 가장 날카로운 발견"). 둘 다 mutation-검증까지 마쳐 반영.
+  T-292 자체 리뷰에서 우선순위 낮은 잔여 3건을 T-296으로 분리(감사 이벤트 재기록,
+  `backup_artifact_id` 추적성, PostGIS extension 마찰) — 각각 mutation-검증까지 마쳐
+  T-296(PR #538)으로 반영.
+
+  **n150 live 검증**: `new_database` 모드 daily restore-drill(전국 규모 실 backup
+  artifact, 4.7GB)을 수동 트리거해 새 전역 `--clean --if-exists` 플래그가 안전한(운영자가
+  매일 쓰는) 경로를 깨지 않는지 확인 — `replace_current`는 두 적대적 리뷰어 모두 프로덕션에
+  대해 절대 트리거하지 말 것을 명시적으로 권고했으므로 시도하지 않았다. drill은 4시간+ 동안
+  수십 개 테이블(`tl_spbd_buld_polygon`·`tl_navi_buld_centroid`·`tl_locsum_entrc`·
+  `tl_roadaddr_entrc` 등)에 걸친 GIST/btree 인덱스 빌드·COPY를 `pg_stat_activity`로 직접
+  관측하며 정상 진행을 확인했으나, 완주 전 **n150 디스크가 100%까지 차서 PostgreSQL이
+  crash**했다(원인·사후 검증·조치는 T-297 참조 — drill 자체 스크래치 DB가 디스크를
+  가득 채운 순수 용량 문제였고, `--clean --if-exists` 자체의 결함이 아님을 확인). PostgreSQL은
+  WAL redo로 자체 복구했고 프로덕션 데이터 무결성(active release 1건, mv 6,416,637 row)을
+  직접 확인했다. drill을 clean PASS까지 재실행하는 대신, 크래시 전 관측한 광범위한 정상
+  동작 + 로컬 `test_replace_current_restore.py`/신규 `test_new_database_restore_postgis_
+  preinstalled.py`(T-296, 이 브랜치 자체를 포함해 실 Postgres로 전부 통과) 전체를 근거로
+  merge하기로 사용자 승인을 받았다(디스크가 96%로 여전히 빠듯해 재시도가 같은 크래시를
+  재현할 위험이 있었음).
+
 - [x] **T-291f — `AdminRepository` dataset-version 메서드 실 Postgres 통합 테스트**
   (2026-08-26, PR #533, by claude). T-291b+c 적대적 리뷰에서 발견(PR #530) — `current_
   dataset_version`/`find_dataset_version`/`dataset_version_history`는 순수 함수 또는

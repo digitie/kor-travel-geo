@@ -112,6 +112,13 @@ def test_pg_restore_and_tar_commands_are_parallel_archive_oriented(tmp_path: Pat
     tar = build_tar_create_command(tmp_path / "backup.tar.zst", tmp_path, compression_level=5)
 
     assert restore.argv[:4] == ("pg_restore", "--format=directory", "--jobs=8", "--verbose")
+    # T-292: without --clean --if-exists, restoring onto a non-empty target (every real
+    # replace_current restore, since its target IS the live serving DB) fails outright with
+    # "already exists" on every object the dump also creates — verified end-to-end in
+    # tests/integration/test_replace_current_restore.py. A no-op for a genuinely empty
+    # target (new_database mode, IF EXISTS finds nothing to drop).
+    assert "--clean" in restore.argv
+    assert "--if-exists" in restore.argv
     assert "secret" not in " ".join(restore.argv)
     assert "secret" not in " ".join(restore.safe_argv)
     assert restore.env == {"PGPASSWORD": "secret"}

@@ -2,7 +2,37 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-08-26 갱신, by claude)
+## 현재 진척도 (2026-08-27 갱신, by claude)
+
+- 🚨 **T-297 — n150 디스크 공간 위험 수준 (최우선, 사용자 지시)** — T-292 live
+  restore-drill 검증 중 n150 루트 디스크가 100%까지 차서 실 PostgreSQL crash 발생(자체
+  WAL redo로 복구, 데이터 손실 없음 확인 — 상세는 `tasks.md`/`tasks-done.md` T-292/T-297
+  항목). 남은 스크래치 DB는 DROP해 21G(96%)까지는 확보했지만 여전히 임계 수준. **다음 한
+  작업**: 사용자 지시("t292 머지후 디스크 확보작업부터 먼저 진행")에 따라 T-293~T-296 PR
+  머지보다 이 작업을 먼저 한다 — n150 디스크 사용 내역 실측 후 정리(Docker 이미지/컨테이너
+  레이어, 각 프로젝트 DB 크기, 백업 보존량 등 확인 → prune/정책 재검토/볼륨 확장 중 판단).
+
+- ✅ **T-292 — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도
+  (2026-08-26, PR #534, by claude)** — 실제로 종단간 실행해보니 이전엔 몰랐던 버그 3개
+  발견: `--clean --if-exists` 부재로 실 restore 전부 실패, 그 플래그를 고친 뒤엔
+  `replace_current`의 자기참조 wipe가 `load_jobs`/`ops.artifacts`/`ops.maintenance_windows`를
+  같이 지워 두 번째 크래시(FK violation)와 조용한 회귀(`end_maintenance_window` 404)를
+  냈던 것, `record_restore_candidate`가 backup-time manifest `row_counts`를 쓰고 실측
+  reconcile을 무시하던 것. snapshot-before/reinsert-after 패턴(`_snapshot_row`/
+  `_reinsert_row`) + `row_counts_override`로 수정. 적대적 리뷰 2건(고위험 명시) 모두 실제
+  결함 발견 — job_id FK violation(첫 수정 시도가 `job_id=None`으로만 테스트해 놓친 것),
+  저자 자신의 테스트가 `end_maintenance_window` 결과를 단언 안 해 구조적으로 못 잡던 회귀 —
+  둘 다 mutation-검증. 우선순위 낮은 잔여 3건은 T-296으로 분리(PR #538, 완료).
+  n150 live 검증: `new_database` 모드 daily restore-drill을 실 4.7GB backup으로 수동
+  트리거해 4시간+ 동안 수십 개 테이블에 걸친 인덱스 빌드를 `pg_stat_activity`로 직접 관측하며
+  정상 진행 확인했으나, **완주 전 n150 디스크가 100%까지 차서 PostgreSQL이 crash**(drill
+  자체 스크래치 DB가 디스크를 다 채운 순수 용량 문제, `--clean --if-exists`의 결함 아님 —
+  PostgreSQL 자체 WAL redo로 복구, 프로덕션 데이터 무결성 직접 확인 완료, 후속 조치는
+  T-297). Drill을 clean PASS까지 재실행하는 대신(디스크가 여전히 96%로 빠듯해 재시도가
+  같은 크래시 재현 위험), 크래시 전 관측한 광범위한 정상 동작 + 로컬 통합 테스트 전체
+  통과를 근거로 merge — 사용자 승인. **다음 한 작업**: T-297(디스크 확보, 최우선) →
+  이후 T-293(#535)/T-294(#536)/T-295(#537)/T-296(#538) PR 머지, T-294는 UI 재배포 후
+  live Cache-Control 단언 검증 필요.
 
 - ✅ **T-291f — dataset-version 메서드 실 Postgres 통합 테스트 (2026-08-26, PR #533, by
   claude)** — T-291b+c 적대적 리뷰에서 발견한 공백(`current_dataset_version`/`find_
