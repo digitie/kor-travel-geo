@@ -6,6 +6,34 @@
 
 ## 완료
 
+- [x] **T-291 — 데이터셋 버전 외부 공개 API + admin 버전 관측 (ADR-067)** (2026-08-26, by
+  claude). `POST /v2/dataset/version`(known_version 조건부 폴링)·`POST /v2/dataset/history`로
+  active serving release에서 파생한 opaque 토큰(`dv1-` + sha256 prefix)·기준월·변경 이력을
+  외부 공개. 4개 하위 PR로 순차 진행, 매 PR마다 2인 적대적 리뷰(correctness + test-rigor) +
+  n150 live e2e 완료:
+  - **T-291a**(PR #529) — 서빙 전환 기록 완결(외부 공개의 선행 조건). 위반 5류(CLI
+    `all-sidos --refresh`·postload `execute_safe`·restore `replace_current`·직접 서빙 base
+    table 단독 적재·benchmark shadow-swap) 전부가 `ops.serving_releases`에 release를
+    기록하게 했다.
+  - **T-291b+c**(PR #530) — `core/dataset_version.py`(토큰 파생·기준월 정규화기 4형태·opaque
+    keyset 커서, 순수 함수) + admin_repo 공용 사영 3메서드 + 외부 v2 엔드포인트 + 전용
+    admission scope + api-reference 4건.
+  - **T-291d**(PR #531) — admin `ServingRelease` DTO에 5개 additive 필드 + OpsPanel releases
+    표 컬럼·상세 다이얼로그·"외부 응답 미리보기"(신규 프록시 배선 0건, 기존 admin 프록시
+    재사용) + CurrentConfigTab·AdminHome 표시.
+  - **T-291e**(PR #532) — 독립 기록 경로 위생: 백업 artifact FK 기입, `BackupArtifact.
+    version_token` + BackupsPanel/ManifestViewer 표시, hot-swap/rollback release 자기
+    `source_set` 완결화(계보 폴백을 기록 시점에 풀어 저장), `batch_dag._source_set` repr
+    열화 수정, 일일 restore drill의 pending 원장 행 정리.
+
+  적대적 리뷰에서 발견해 별도 task로 분리한 후속: **T-291f**(dataset-version 메서드 실
+  Postgres 통합 테스트), **T-292**(`db_restore replace_current` 종단간 검증), **T-293**
+  (동시 release 기록 시 lineage 유실 가능성), **T-294**(admin 신뢰 프록시가 upstream
+  응답 헤더를 `content-type` 외엔 forwarding하지 않는 기존 동작). 상세는
+  [ADR-067](adr/067-external-dataset-version-api.md), 정본
+  [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md),
+  각 PR 설명과 `journal.md` 2026-08-26 항목들.
+
 - [x] **manager #177 결선 — geo prod 스케줄 백업 ON + 보존 janitor 스케줄** (2026-08-18, by claude, "백업 켜"). 08-17 실측
   geo prod 백업 0건(T-239 env 미설정) → 수동 안전 백업 1건(4.71 GB verify OK) → PR #516 `backup_retention_janitor_daily`
   (06:00, 디스크 상한 ≈ ceil(TTL×24/interval)본) → prod override에 `KTG_BACKUP_SCHEDULE_ENABLED/INTERVAL_HOURS=24/

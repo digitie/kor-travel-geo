@@ -2,6 +2,71 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-26 (T-291e — 기록 경로 위생, PR #532, by claude — T-291 epic 완료)
+
+T-291d 직후 독립 후속으로 진행했다(design doc §5, T-291a~d와 달리 서로 무관한 5개 hygiene
+항목을 하나로 묶었다).
+
+**(1) 백업 artifact FK**: `run_backup_job`(`infra/backup.py`)의 finalize `update_artifact`
+호출이 `manifest["active_serving"]`(이미 `build_backup_manifest`에서 계산돼 있었다)을 안
+넘기고 있어서, 모든 백업의 `ops.artifacts.dataset_snapshot_id`/`serving_release_id`가
+계속 NULL이었다. `active_serving.get(...)`으로 채우도록 한 줄 고쳤다 — restore 쪽은 이미
+이 FK를 채우고 있었으니 대칭을 맞춘 셈이다.
+
+**(2) `BackupArtifact.version_token`**: `serving_release_id`에서
+`core.dataset_version.derive_version_token`으로 파생(T-291d와 동일 함수, 순수 계산이라
+추가 DB 조회 없음). `_backup_artifact_response`에서 계산해 BackupsPanel "백업 시점 토큰"
+컬럼 + ManifestViewer 1줄로 노출.
+
+**(3) hot-swap/rollback 자기완결화**: `_insert_dataset_snapshot_and_release`가 지금까지는
+hot-swap/rollback 기록(source_set이 `{"hot_swap": {...}}` 같은 메타 전용 payload — 형태
+C)마다 읽을 때마다 `_resolve_reference_months`의 5-hop 계보 폴백을 새로 타야 했다. 이제
+기록 시점에 그 폴백을 한 번 풀어 `"yyyymm_by_kind"` 키로 자기 `source_set`에 병합한다 —
+이후 모든 읽기는 이 행 자체에서 바로 정규화된다. `source_set_hash`는 원본 `source_set`
+기준이라 이 병합의 영향을 받지 않는다(`rebuild_metadata` 병합과 동일한 패턴).
+`_resolve_reference_months`를 module-level `_resolve_reference_months_for_conn`으로
+추출해 인스턴스 메서드(T-291d의 기존 호출자들)와 이 신규 호출자가 같은 구현을 공유한다.
+
+**(4) `batch_dag._source_set` repr 열화 수정**: 값 타입을 안 가리고 `str()`로 평탄화하던
+코드가 `None`/nested dict를 `"None"`/repr 문자열로 만들어, `core.dataset_version`의
+정규화기가 매번 이를 `^\d{6}$` 불일치로 조용히 걸러내고 있었다. 이제 소스에서부터
+`str`/`int` + YYYYMM 정규식 통과 값만 남긴다.
+
+**(5) restore drill 원장 정리**: 일일 restore drill(`ktgctl backup restore-drill`,
+04:00, 항상 `mode=new_database`)이 `run_restore_job` → `record_restore_candidate
+(activate=False)` 경로를 그대로 타면서 매번 `pending` release+snapshot 행을 메인 서빙
+DB의 `ops.*` 원장에 남겼다(drill의 throwaway target DB는 drop되지만 이 메타데이터는 안
+지워짐 — 연 ~365행 누적). drill 종료 시 `notes`의 `"restore target_database={db};"`
+접두어(끝의 `;`가 실제 충돌 방지 장치 — `"foo"`가 `"foobar"`에 오탐하지 않게 한다)로 자기
+행만 찾아 정리하는 `AdminRepository.delete_pending_restore_candidate_by_target_database`를
+추가했다. `ops.serving_releases.dataset_snapshot_id`가 `ops.dataset_snapshots`에 대해
+`ON DELETE RESTRICT`라 release를 먼저 지우고 snapshot을 지운다. best-effort — 정리
+실패가 drill의 PASS/FAIL 결과를 절대 가리지 않는다.
+
+**적대적 리뷰 2명**: correctness 리뷰어는 5개 항목 전부에서 버그를 찾지 못했다 — 특히
+hot-swap 자기완결화의 읽기 경로(`yyyymm_by_kind` 병합이 형제 키와 충돌하지 않음)·해시
+격리·다른 3개 호출자(`record_mv_refresh_release`/`record_restore_candidate`)에 대한
+영향 없음을 실제 데이터 형태까지 추적해 확인했다. test-rigor 리뷰어가 2건을 반영시켰다 —
+`delete_pending_restore_candidate_by_target_database`의 매칭 로직을 순수 함수
+`_match_pending_restore_rows`로 분리해 "foo"/"foobar" 접두어 충돌 방지 속성을 DB 없이
+직접 검증(mutation으로 ";" 제거 시 실패 재현·수정 확인), BackupsPanel 신규 컬럼은 그
+파일의 `VirtualTable` 행이 jsdom height mock 부재로 렌더되지 않는 기존(무관) 한계를
+`getByRole("columnheader", ...)`로 우회해 저비용 검증(헤더는 행 가상화와 무관하게 항상
+렌더된다는 점을 리뷰어가 직접 실증).
+
+**n150 배포**는 T-291d와 달리 `loaders/batch_dag.py`가 바뀌어 Dagster도 재빌드가
+필요했다 — `kor-travel-geo-api`/`-ui`/`-dagster`/`-dagster-daemon` 4개 컨테이너 전부
+재생성했다(daemon은 별도 서비스로, 최초 `up` 명령의 `--no-deps` 대상에서 빠뜨렸다가
+뒤늦게 추가로 재생성). daemon 재기동 직후 로그에서 `scheduled_backup_run_due` 센서가
+정상 실행됨을 확인했다. 항목 1·3·5는 쓰기 경로라 read-only live e2e로 직접 트리거하지
+않았다 — 다음 실제 백업·hot-swap·drill 실행(drill은 매일 04:00 자동)에서 자연 검증된다.
+
+live e2e: Chromium 243 passed/7 skipped. 실패 2건은 사전 존재·무관 — 일시적 503 1건은
+격리 재실행에서 통과(n150 부하), `/admin/dagster` iframe은 n150
+`KOR_TRAVEL_GEO_DAGSTER_PUBLIC_URL` `.env` 공백 문제로 T-291d에서 이미 기록됨.
+
+**T-291 epic(a/b+c/d/e) 전체 완료** — `docs/tasks-done.md`로 이동.
+
 ## 2026-08-26 (T-291d — admin 확장: dataset-version additive 필드, PR #531, by claude)
 
 T-291b+c 직후 이어서 ADR-067의 admin 관측 표면을 구현했다. 새 admin 엔드포인트는 추가하지

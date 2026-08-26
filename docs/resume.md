@@ -4,6 +4,23 @@
 
 ## 현재 진척도 (2026-08-26 갱신, by claude)
 
+- ✅ **T-291e — 기록 경로 위생, T-291 epic 완료 (2026-08-26, PR #532, by claude)** — 독립
+  후속 5개 항목: (1) `run_backup_job` finalize가 `manifest["active_serving"]`을
+  `update_artifact`의 `dataset_snapshot_id`/`serving_release_id`에 채운다(실패/부재 시 자연
+  NULL 강등). (2) `BackupArtifact.version_token` + BackupsPanel "백업 시점 토큰" 컬럼 +
+  ManifestViewer 1줄. (3) hot-swap/rollback release 기록 시 자기 `source_set`이 정규화 안
+  되면 기록 시점에 한 번 계보 폴백을 풀어 `"yyyymm_by_kind"`로 자기 완결화(해시는 원본
+  기준이라 영향 없음). (4) `batch_dag._source_set`의 `str()` 평탄화 repr 열화 수정. (5)
+  일일 restore drill이 남기는 pending 원장 행(연 ~365행) 정리. 적대적 리뷰: correctness
+  리뷰어는 버그 0건, test-rigor 리뷰어 2건 반영(`_match_pending_restore_rows` 순수 함수
+  분리로 접두어 충돌 방지 속성 직접 검증, BackupsPanel 컬럼헤더 저비용 검증). n150 배포는
+  `-api`/`-ui`/`-dagster`/`-dagster-daemon` 4개 컨테이너 전부 재생성(batch_dag.py 변경으로
+  Dagster도 필요) — daemon 재기동 직후 스케줄 센서 정상 실행 확인. live e2e Chromium 243
+  passed/7 skipped(실패 2건은 T-291d에서도 나온 사전 존재·무관 이슈). **T-291 epic(a/b+c/
+  d/e) 전체 완료** — `docs/tasks-done.md`로 이동. **다음 한 작업**: T-291f(`AdminRepository`
+  dataset-version 메서드 실 Postgres 통합 테스트, T-291b+c 리뷰에서 발견) — 정본
+  [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
+
 - ✅ **T-291d — admin 확장: dataset-version additive 필드 (2026-08-26, PR #531, by claude)** —
   `ServingRelease` DTO에 `version_token`/`change_type`/`reference_months`/
   `reference_months_mixed`/`source_set` 5개 additive 필드를 추가하고, OpsPanel 서빙 릴리스
