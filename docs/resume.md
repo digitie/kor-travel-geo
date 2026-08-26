@@ -4,6 +4,20 @@
 
 ## 현재 진척도 (2026-08-26 갱신, by claude)
 
+- ✅ **T-291f — dataset-version 메서드 실 Postgres 통합 테스트 (2026-08-26, PR #533, by
+  claude)** — T-291b+c 적대적 리뷰에서 발견한 공백(`current_dataset_version`/`find_
+  dataset_version`/`dataset_version_history`가 fake repo만 검증하고 실제 SQL은 한 번도
+  실행 안 됨)을 신규 테스트 파일 하나로 닫았다(프로덕션 코드 변경 없음, `KTG_TEST_PG_DSN`
+  opt-in). WSL Docker 임시 postgis 컨테이너를 `ktgctl init-db` + `alembic stamp head`로
+  부트스트랩해 검증(`alembic upgrade head`를 빈 DB에 바로 돌리면 실패 — 절차는
+  `docs/geocoding-readiness.md`). 적대적 리뷰 2건 — `pending`/`failed` 배제만 검증하고
+  `superseded`/`rolled_back` 포함은 검증한 적 없던 공백(IN-list를 좁히는 회귀를 놓칠 뻔),
+  `COALESCE` fallback 분기·`before`/`since` keyset 페이지네이션 경계가 실 DB로 검증된 적
+  없던 공백 — 을 모두 mutation-검증까지 마쳐 반영했다. 프로덕션 코드 변경이 없어 n150
+  live e2e 생략(리뷰어 확인). **다음 한 작업**: T-292(`db_restore mode=replace_current`
+  정합성 검증) 또는 T-293(동시 release 기록 시 lineage 유실 가능성) — 둘 다 T-291a 리뷰에서
+  발견, 순서는 임의.
+
 - ✅ **T-291e — 기록 경로 위생, T-291 epic 완료 (2026-08-26, PR #532, by claude)** — 독립
   후속 5개 항목: (1) `run_backup_job` finalize가 `manifest["active_serving"]`을
   `update_artifact`의 `dataset_snapshot_id`/`serving_release_id`에 채운다(실패/부재 시 자연

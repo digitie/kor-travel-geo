@@ -66,18 +66,6 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
 
 ### 신규 기능
 
-- [ ] **T-291f** — `AdminRepository` dataset-version 메서드(`current_dataset_version`/
-  `find_dataset_version`/`dataset_version_history`)의 실 Postgres 통합 테스트
-  (T-291b+c 적대적 리뷰에서 발견, PR #530). 이 PR의 테스트는 순수 함수(core) 또는 fake
-  repo(router 계약)만 검증하고 실제 SQL은 한 번도 실행되지 않았다 — 특히 `_DATASET_VERSION_
-  SELECT`의 `WHERE sr.state IN ('active','superseded','rolled_back')` 필터가 `pending`/
-  `failed` release를 실제로 배제하는지가 검증된 적이 없다(이 표면에서 가장 안전-critical한
-  필터인데도). `tests/integration/test_admin_table_stats_estimates.py`의 `KTG_TEST_PG_DSN`
-  + `_pg_guard.require_disposable_database` 패턴을 재사용해 실 disposable DB로 (1)
-  pending/failed release가 사영에서 실제로 빠지는지, (2) `parent_dataset_snapshot_id` 계보
-  폴백이 실제 hot-swap/rollback 행에서 동작하는지, (3) `COALESCE`/`JOIN ... USING` SQL이
-  실제 스키마에서 동작하는지 확인한다.
-
 - [ ] **T-292** — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도
   (T-291a 적대적 리뷰에서 발견, PR #529). (a) `replace_current`는 대상이 이미 서빙 중인
   현재 DB이므로 `ensure_target_database_empty`를 거치지 않는데, 실제 `pg_restore`가
