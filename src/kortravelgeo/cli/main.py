@@ -46,11 +46,15 @@ from kortravelgeo.loaders.postload import (
 )
 from kortravelgeo.loaders.shp.polygons_loader import load_shp_polygons
 from kortravelgeo.loaders.sppn_makarea_loader import load_sppn_makarea
-from kortravelgeo.loaders.text.daily_juso_loader import load_daily_juso_delta
+from kortravelgeo.loaders.text.daily_juso_loader import (
+    DailyJusoLoadResult,
+    load_daily_juso_delta,
+)
 from kortravelgeo.loaders.text.juso_hangul_loader import load_juso_hangul
 from kortravelgeo.loaders.text.locsum_loader import load_locsum
 from kortravelgeo.loaders.text.navi_loader import load_navi
 from kortravelgeo.loaders.text.parcel_link_loader import (
+    JusoParcelLinkLoadResult,
     load_daily_parcel_link_delta,
     load_juso_parcel_link_snapshot,
 )
@@ -280,21 +284,39 @@ def load_daily_juso_command(
     path: Path,
     yyyymm: str | None = typer.Option(None, "--yyyymm"),
     limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
+    refresh: bool = typer.Option(False, "--refresh/--no-refresh"),
+    swap: bool = typer.Option(True, "--swap/--concurrent"),
 ) -> None:
     _warn_limit_per_file(limit_per_file)
 
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client._engine() is not None
-            result = await _run_with_cli_lock(
-                client._engine(),
-                _path_lock(AdvisoryLockNamespace.LOAD_DAILY_JUSO, path),
-                lambda: load_daily_juso_delta(
+
+            async def operation() -> DailyJusoLoadResult:
+                result = await load_daily_juso_delta(
                     client._engine(),
                     path,
                     source_yyyymm=yyyymm,
                     limit_per_file=limit_per_file,
-                ),
+                )
+                if refresh:
+                    await refresh_mv(
+                        client._engine(),
+                        concurrently=not swap,
+                        strategy="swap" if swap else "concurrent",
+                    )
+                    await AdminRepository(client._engine()).record_mv_refresh_release(
+                        strategy="swap" if swap else "concurrent",
+                        notes=f"CLI load daily-juso path={path}",
+                        release_kind="daily_delta",
+                    )
+                return result
+
+            result = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_DAILY_JUSO, path),
+                operation,
             )
             typer.echo(
                 "loaded daily tl_juso_text delta: "
@@ -305,6 +327,8 @@ def load_daily_juso_command(
                 f"no_data_sources={result.skipped_no_data_sources}, "
                 f"last_mvmn_de={result.last_mvmn_de or '-'}"
             )
+            if refresh:
+                typer.echo("refreshed mv_geocode_target (release_kind=daily_delta)")
 
     asyncio.run(run())
 
@@ -347,21 +371,39 @@ def load_daily_parcel_links_command(
     path: Path,
     yyyymm: str | None = typer.Option(None, "--yyyymm"),
     limit_per_file: int | None = typer.Option(None, "--limit-per-file", min=1),
+    refresh: bool = typer.Option(False, "--refresh/--no-refresh"),
+    swap: bool = typer.Option(True, "--swap/--concurrent"),
 ) -> None:
     _warn_limit_per_file(limit_per_file)
 
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client._engine() is not None
-            result = await _run_with_cli_lock(
-                client._engine(),
-                _path_lock(AdvisoryLockNamespace.LOAD_DAILY_PARCEL, path),
-                lambda: load_daily_parcel_link_delta(
+
+            async def operation() -> JusoParcelLinkLoadResult:
+                result = await load_daily_parcel_link_delta(
                     client._engine(),
                     path,
                     source_yyyymm=yyyymm,
                     limit_per_file=limit_per_file,
-                ),
+                )
+                if refresh:
+                    await refresh_mv(
+                        client._engine(),
+                        concurrently=not swap,
+                        strategy="swap" if swap else "concurrent",
+                    )
+                    await AdminRepository(client._engine()).record_mv_refresh_release(
+                        strategy="swap" if swap else "concurrent",
+                        notes=f"CLI load daily-parcel-links path={path}",
+                        release_kind="daily_delta",
+                    )
+                return result
+
+            result = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_DAILY_PARCEL, path),
+                operation,
             )
             typer.echo(
                 "loaded daily tl_juso_parcel_link delta: "
@@ -371,6 +413,8 @@ def load_daily_parcel_links_command(
                 f"no_data_sources={result.skipped_no_data_sources}, "
                 f"last_mvmn_de={result.last_mvmn_de or '-'}"
             )
+            if refresh:
+                typer.echo("refreshed mv_geocode_target (release_kind=daily_delta)")
 
     asyncio.run(run())
 
@@ -460,6 +504,10 @@ def load_shp_command(
                     source_yyyymm=yyyymm,
                 )
                 await refresh_region_radius_parts(client._engine())
+                await AdminRepository(client._engine()).record_mv_refresh_release(
+                    notes=f"CLI load shp mode={mode} path={path}",
+                    release_kind="daily_delta" if mode == "delta" else None,
+                )
                 return count
 
             count = await _run_with_cli_lock(
@@ -497,6 +545,10 @@ def load_shp_all_command(
                     total += count
                     typer.echo(f"{sido_dir.name}: {count} layers")
                 await refresh_region_radius_parts(client._engine())
+                await AdminRepository(client._engine()).record_mv_refresh_release(
+                    notes=f"CLI load shp-all mode={mode} root={root}",
+                    release_kind="daily_delta" if mode == "delta" else None,
+                )
 
             await _run_with_cli_lock(
                 client._engine(),
@@ -517,15 +569,23 @@ def load_sppn_makarea_command(
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client._engine() is not None
-            count = await _run_with_cli_lock(
-                client._engine(),
-                _path_lock(AdvisoryLockNamespace.LOAD_SPPN_MAKAREA, path),
-                lambda: load_sppn_makarea(
+
+            async def operation() -> int:
+                count = await load_sppn_makarea(
                     client._engine(),
                     path,
                     mode=mode,
                     source_yyyymm=yyyymm,
-                ),
+                )
+                await AdminRepository(client._engine()).record_mv_refresh_release(
+                    notes=f"CLI load sppn-makarea mode={mode} path={path}",
+                )
+                return count
+
+            count = await _run_with_cli_lock(
+                client._engine(),
+                _path_lock(AdvisoryLockNamespace.LOAD_SPPN_MAKAREA, path),
+                operation,
             )
             typer.echo(f"loaded tl_sppn_makarea rows: {count}")
 
@@ -537,10 +597,18 @@ def load_pobox_command(path: Path) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client._engine() is not None
+
+            async def operation() -> int:
+                count = await _load_pobox_with_cli_validation(client._engine(), path)
+                await AdminRepository(client._engine()).record_mv_refresh_release(
+                    notes=f"CLI load pobox path={path}",
+                )
+                return count
+
             count = await _run_with_cli_lock(
                 client._engine(),
                 _path_lock(AdvisoryLockNamespace.LOAD_POBOX, path),
-                lambda: _load_pobox_with_cli_validation(client._engine(), path),
+                operation,
             )
             typer.echo(f"loaded postal_pobox rows: {count}")
 
@@ -552,10 +620,18 @@ def load_bulk_command(path: Path) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
             assert client._engine() is not None
+
+            async def operation() -> int:
+                count = await _load_bulk_with_cli_validation(client._engine(), path)
+                await AdminRepository(client._engine()).record_mv_refresh_release(
+                    notes=f"CLI load bulk path={path}",
+                )
+                return count
+
             count = await _run_with_cli_lock(
                 client._engine(),
                 _path_lock(AdvisoryLockNamespace.LOAD_BULK, path),
-                lambda: _load_bulk_with_cli_validation(client._engine(), path),
+                operation,
             )
             typer.echo(f"loaded postal_bulk_delivery rows: {count}")
 
@@ -597,15 +673,21 @@ def load_epost_command(
                     resolved = extract_epost_zip(resolved, output_dir / resolved.stem)
                     typer.echo(f"extracted epost ZIP: {resolved}")
                 pobox_file, bulk_file = discover_epost_files(resolved)
+                loaded_kinds: list[str] = []
                 if pobox_file is not None:
                     count = await _load_pobox_with_cli_validation(client._engine(), pobox_file)
                     typer.echo(f"loaded postal_pobox rows: {count}")
+                    loaded_kinds.append("pobox")
                 if bulk_file is not None:
                     count = await _load_bulk_with_cli_validation(client._engine(), bulk_file)
                     typer.echo(f"loaded postal_bulk_delivery rows: {count}")
+                    loaded_kinds.append("bulk")
                 if pobox_file is None and bulk_file is None:
                     typer.echo("no pobox/bulk text files found in epost dataset", err=True)
                     raise typer.Exit(2)
+                await AdminRepository(client._engine()).record_mv_refresh_release(
+                    notes=f"CLI load epost loaded={','.join(loaded_kinds)}",
+                )
 
             await _run_with_cli_lock(
                 client._engine(),
@@ -702,6 +784,20 @@ def load_all_sidos_command(
                         strategy="swap" if swap else "concurrent",
                     )
                     typer.echo("refreshed mv_geocode_target")
+                # T-291a: juso/parcel/locsum/navi only reach serving via the MV refresh above —
+                # with --no-refresh their new source_yyyymm is NOT yet what's served, so
+                # recording here would be a false positive (a release claiming data changed when
+                # mv_geocode_target didn't). Only record when the MV was actually refreshed, or
+                # when a directly-served base table (pobox/shp/bulk, no MV involved) was loaded.
+                direct_serving_loaded = (
+                    shp_root is not None or pobox_path is not None or bulk_path is not None
+                )
+                if refresh or direct_serving_loaded:
+                    _, release = await AdminRepository(client._engine()).record_mv_refresh_release(
+                        strategy=("swap" if swap else "concurrent") if refresh else None,
+                        notes="CLI load all-sidos" + ("" if refresh else " (--no-refresh)"),
+                    )
+                    typer.echo(f"recorded release={release.serving_release_id}")
 
             await _run_with_cli_lock(
                 client._engine(),
@@ -719,6 +815,12 @@ def load_all_sidos_command(
 def refresh_materialized_view(
     concurrently: bool = typer.Option(True, "--concurrently/--no-concurrently"),
     swap: bool = typer.Option(False, "--swap", help="Build shadow MV and rename-swap."),
+    daily_delta: bool = typer.Option(
+        False,
+        "--daily-delta",
+        help="Label the recorded release daily_delta (docs/t028-daily-juso-delta.md workflow: "
+        "apply daily deltas, then refresh separately).",
+    ),
 ) -> None:
     async def run() -> None:
         async with AsyncAddressClient() as client:
@@ -732,6 +834,7 @@ def refresh_materialized_view(
                 _, release = await AdminRepository(client._engine()).record_mv_refresh_release(
                     strategy="swap" if swap else "concurrent",
                     notes="CLI refresh mv",
+                    release_kind="daily_delta" if daily_delta else None,
                 )
                 return release.serving_release_id
 

@@ -420,6 +420,14 @@ _LOADER_DISPATCH: dict[str, tuple[AdvisoryLockNamespace, _SourceLoader]] = {
 }
 
 
+#: kinds whose serving tables are read directly (pobox/reverse/geometry repos), never through
+#: mv_geocode_target — a standalone load of one of these is itself a servable change (T-291a D0
+#: violation class 4) and must record its own release rather than relying on a later mv_refresh.
+_DIRECT_SERVING_KINDS = frozenset(
+    {"pobox_load", "sppn_makarea_load", "shp_polygons_load", "bulk_load"}
+)
+
+
 async def run_source_loader(
     engine: AsyncEngine,
     *,
@@ -427,6 +435,7 @@ async def run_source_loader(
     payload: dict[str, Any],
     cancel_event: asyncio.Event,
     progress: ProgressReporter,
+    load_batch_id: str | None = None,
 ) -> None:
     """Run a single source loader ``kind`` under its per-path advisory lock.
 
@@ -434,6 +443,14 @@ async def run_source_loader(
     entry: it acquires the same cross-process lock keyed on the payload path, then runs the
     main-lib leaf. A lock conflict surfaces as a ``lock_conflict`` stage and re-raises
     (ConcurrentExecutionError → the child row fails), exactly as the in-process handler does.
+
+    ``load_batch_id`` is set only when this call is a ``full_load_batch`` child (see
+    :func:`_source_leaf`); it is never present in the child's own ``payload``. A standalone
+    direct-serving load (``load_batch_id is None``) records its own serving release immediately
+    since these tables bypass the MV entirely (T-291a). A batch child does *not* record here —
+    the batch's own consistency gate has not run yet, so recording now could promote a partial
+    or inconsistent state as ``active`` before the gate decides; the batch's final
+    :func:`run_mv_refresh` step records the consolidated release once the gate passes.
     """
 
     try:
@@ -448,6 +465,16 @@ async def run_source_loader(
     except ConcurrentExecutionError as exc:
         await progress(stage="lock_conflict", message=f"{exc.code}: {exc.message}")
         raise
+    if kind in _DIRECT_SERVING_KINDS and load_batch_id is None:
+        # ADR-067 D0's delta-lineage enumeration is exactly daily_juso_delta /
+        # juso_parcel_link_delta / shp_polygons_delta — sppn_makarea/pobox/bulk have no
+        # daily_delta lineage regardless of their own `mode` value.
+        is_shp_delta = kind == "shp_polygons_load" and payload.get("mode") == "delta"
+        release_kind = "daily_delta" if is_shp_delta else None
+        await AdminRepository(engine).record_mv_refresh_release(
+            notes=f"standalone direct-serving load: {kind}",
+            release_kind=release_kind,
+        )
 
 
 # --------------------------------------------------------------------------------------
@@ -529,6 +556,12 @@ async def run_mv_refresh(
         strategy="swap" if strategy == "swap" else "concurrent",
     )
     forced_metadata = payload.get("forced_promotion_metadata")
+    # T-291a: a standalone refresh (no load_batch_id) following daily-delta loads can be labeled
+    # daily_delta — the documented operator workflow (t028) is apply-deltas-then-refresh-
+    # separately. A full_load_batch's own mv_refresh child always derives full_load regardless
+    # of this payload field (load_batch_id wins below).
+    payload_release_kind = _payload_str(payload, "release_kind")
+    release_kind = "daily_delta" if payload_release_kind == "daily_delta" else None
     snapshot, release = await repo.record_mv_refresh_release(
         job_id=job_id,
         load_batch_id=load_batch_id,
@@ -536,6 +569,7 @@ async def run_mv_refresh(
         source_match_set_id=_payload_str(payload, "source_match_set_id"),
         forced_promotion=forced_promotion,
         forced_promotion_metadata=(forced_metadata if isinstance(forced_metadata, dict) else None),
+        release_kind=None if load_batch_id else release_kind,
     )
     await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")
     await progress(
@@ -554,12 +588,19 @@ async def run_mv_refresh(
 _ChildLeaf = Callable[[asyncio.Event, ProgressReporter], Awaitable[Any]]
 
 
-def _source_leaf(engine: AsyncEngine, kind: str, payload: dict[str, Any]) -> _ChildLeaf:
+def _source_leaf(
+    engine: AsyncEngine, kind: str, payload: dict[str, Any], *, load_batch_id: str
+) -> _ChildLeaf:
     """Bind one source loader to the ``(cancel_event, progress)`` child-leaf shape."""
 
     async def _leaf(cancel_event: asyncio.Event, progress: ProgressReporter) -> None:
         await run_source_loader(
-            engine, kind=kind, payload=payload, cancel_event=cancel_event, progress=progress
+            engine,
+            kind=kind,
+            payload=payload,
+            cancel_event=cancel_event,
+            progress=progress,
+            load_batch_id=load_batch_id,
         )
 
     return _leaf
@@ -712,7 +753,7 @@ async def run_full_load_batch(
                 orchestrator_run_id=orchestrator_run_id,
                 cancel_event=cancel_event,
                 ttl_seconds=lease_ttl_seconds,
-                leaf=_source_leaf(engine, kind, child_payload),
+                leaf=_source_leaf(engine, kind, child_payload, load_batch_id=batch_id),
             )
         except (Exception, asyncio.CancelledError):
             await _cancel_queued_children(engine, batch_id)

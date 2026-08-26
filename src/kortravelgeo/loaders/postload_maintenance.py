@@ -460,6 +460,10 @@ async def run_postload_maintenance(
                 refresh_mv(engine, concurrently=strategy != "swap", strategy=strategy),
             )
         )
+        await AdminRepository(engine).record_mv_refresh_release(
+            strategy=strategy,
+            notes="T-146 postload_maintenance execute_safe",
+        )
         if capture_stats:
             executions.append(
                 await _execute_timed(

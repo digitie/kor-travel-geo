@@ -16312,6 +16312,16 @@
               "title": "Strategy",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "daily_delta",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Daily Delta",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {

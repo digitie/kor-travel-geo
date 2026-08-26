@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.infra.sql import iter_sql_statements
 from kortravelgeo.loaders.postload import (
@@ -150,6 +151,13 @@ async def run_benchmark(
     after = await collect_relation_stats(engine)
     concurrent_after = await _concurrent_session_count(engine)
     wait_events_after = await _wait_event_snapshot(engine)
+    # T-291a (ADR-067 D0 violation class 5): this benchmark actually refreshes/shadow-swaps
+    # the live mv_geocode_target against whatever engine is configured — record it so the
+    # served-dataset ledger never silently misses a real swap.
+    await AdminRepository(engine).record_mv_refresh_release(
+        strategy=strategy,
+        notes=f"benchmark_mv_refresh.py trial={trial_index} cache_warm_hint={cache_warm_hint}",
+    )
     return BenchmarkResult(
         strategy=strategy,
         started_at=started.isoformat(),

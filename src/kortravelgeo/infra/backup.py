@@ -623,6 +623,7 @@ async def run_restore_job(
             source_manifest=manifest,
             source_artifact_id=source_artifact.artifact_id if source_artifact else None,
             job_id=job_id,
+            activate=req.mode == "replace_current",
         )
         relinked_restore_artifact = await repo.update_artifact(
             restore_artifact.artifact_id,

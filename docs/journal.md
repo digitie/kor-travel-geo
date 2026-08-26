@@ -2,6 +2,71 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-26 (T-291a — 서빙 전환 기록 완결, PR #529, by claude)
+
+ADR-067 D0가 지적한 5류 위반(CLI `all-sidos --refresh` swap·postload `execute_safe`·restore
+`replace_current`·직접 서빙 base table 단독 적재 pobox/sppn/polygon/bulk·benchmark 스크립트
+shadow-swap)을 모두 고쳐 `ops.serving_releases`에 release가 기록되게 했다. 스키마 변경은
+0건 — `record_mv_refresh_release`에 `release_kind: str | None` override, `record_restore_
+candidate`에 `activate: bool` 파라미터만 추가했다. `replace_current`는 대상이 이미 서빙 중인
+DB라(호스트 명, hot-swap 없음) `activate=True`로 곧장 active release를 기록한다. 직접 서빙
+kind(`pobox_load`/`sppn_makarea_load`/`shp_polygons_load`/`bulk_load`)는 `run_source_loader`에
+`_DIRECT_SERVING_KINDS` 게이트를 추가했는데, `load_batch_id`가 있는 batch child일 때는 기록을
+건너뛴다 — 그 시점엔 batch의 consistency gate가 아직 안 돌았으므로 여기서 기록하면 gate가
+나중에 막을 상태를 미리 active로 승격시키는 위험이 있다(batch 자신의 최종 `run_mv_refresh`가
+게이트 통과 후 통합 기록한다). CLI 5개 커맨드(shp/shp-all/sppn-makarea/pobox/bulk)는
+`load_jobs` 행 없이 로더를 직접 부르므로 각자 끝에서 기록한다 — ADR 원 목록엔 없던
+`load_epost_command`도 같은 pobox/bulk 헬퍼를 쓰길래 같이 고쳤다(같은 위반류의 완결이지
+새 범위 아님).
+
+`release_kind='daily_delta'`는 CHECK 제약·DTO enum엔 있었지만 쓰는 코드가 없었다. 처음엔
+`daily-juso`/`daily-parcel-links --refresh`·`shp --mode delta`에만 붙였는데, 2번째 적대적
+리뷰어가 실제 문서화된 운영 절차(`docs/t028-daily-juso-delta.md`: daily delta 묶음 적용 후
+별도로 `ktgctl refresh mv`/REST `mv_refresh` job 실행)는 안 건드렸다고 지적했다 — 그래서
+CLI `refresh mv --daily-delta`와 REST `POST /maintenance/refresh-mv?daily_delta=true`에도
+스레딩했다(`run_mv_refresh`에서 `load_batch_id`가 있으면 무조건 무시 — batch는 항상
+full_load). 신규 `_DIRECT_SERVING_KINDS`의 daily_delta 자동 라벨도 애초엔 mode=="delta"인
+4종 전부에 적용했었는데, ADR의 delta 계열 열거(`daily_juso_delta`·`juso_parcel_link_delta`·
+`shp_polygons_delta`)엔 sppn_makarea/pobox/bulk가 없어서 shp만 남기고 좁혔다.
+
+**적대적 리뷰 2명(전문 서브에이전트, 다각도)**이 각 1건씩 blocking을 잡았다: (1) correctness
+리뷰어 — `all-sidos --no-refresh`(shp/pobox/bulk 경로 없이)가 아무것도 안 바뀌었는데도
+`record_mv_refresh_release`를 무조건 호출해 active release를 기록하던 거짓 양성(juso/locsum/
+navi는 MV refresh로만 서빙에 반영되는데 refresh 자체가 없었음) — `refresh or
+direct_serving_loaded` 게이트로 고쳤다. (2) test-rigor 리뷰어 — `release_kind` override
+테스트가 파생 로직 줄만 확인하고 실제 SQL insert에 스레딩되는지는 안 봐서, override를
+call site에서 몰래 버리는 뮤테이션에도 그린이었다(call-site 인자 자체를 확인하도록 보강).
+daily-delta CLI 게이팅 테스트도 같은 문제 — 첫 수정은 `source.split("if refresh:", 1)[1]
+.split("return result", 1)[0]`로 텍스트를 자르는 방식이었는데, record 호출을 `if refresh:`
+블록 밖으로 옮겨도(즉 `--no-refresh`에서도 항상 daily_delta release를 기록) "return result"
+앞에만 있으면 여전히 통과했다 — Python 스코프는 텍스트 위치가 아니라 들여쓰기로 정해지는데
+텍스트 슬라이싱은 그걸 무시하므로 원천적으로 무력한 검증이었다. 들여쓰기 기준으로 블록을
+잘라내는 헬퍼(`_indentation_scoped_if_body`)로 다시 짜고, 두 번 다 뮤테이션(고의로 프로덕션
+코드를 되돌려 실제로 레드가 뜨는지)으로 재검증했다.
+
+**n150 live e2e**: 브랜치를 n150 소스에 체크아웃하고 `kor-travel-geo-api`/`kor-travel-geo-
+dagster`/`kor-travel-geo-dagster-daemon` 세 이미지를 순차로 rebuild+recreate(마이그레이션
+없음, healthy 확인). REST `POST /maintenance/refresh-mv?strategy=concurrent&daily_delta=true`를
+실제로 실행해 `ops.serving_releases`에 `release_kind=daily_delta` active row(`2c4272d6-6acf-
+44ce-89e7-99a011d7a862`, `activated_by_job_id=job_76ef225d8cfc4641bf2558949df5adff`)가
+기록됨을 확인했다 — T-291a 이전엔 이 DB에 active release가 단 하나도 없었다(전부 옛
+`pending`/`restore` 2건뿐)는 것도 이번에 드러나, 5류 위반이 실제로 아무것도 기록 안 하고
+있었음을 재확인했다. 이 refresh 자체는 n150이 다른 프로젝트(kor-travel-map/pinvi/concierge
+등)와 공유하는 호스트라 load average ~14~18까지 올라가며 벤치마크(`docs/t035-mv-refresh-
+benchmark.md` 기준 CONCURRENTLY ~2분) 대비 약 10배 느린 약 96분이 걸렸다 — `pg_stat_activity`
+로 매 단계(REFRESH mv_geocode_target → REFRESH mv_geocode_text_search → 10개 테이블
+row_count 수집)가 실제로 진행 중임을 여러 차례 확인했고, lock 대기·에러는 없었다.
+
+**후속으로 분리한 것(T-291a 범위 밖, 새 task)**: T-292(restore `replace_current`가 실제
+비어있지 않은 서빙 DB에 대해 종단간 검증된 적 없음 + `record_restore_candidate`의
+`row_counts`가 실측 reconcile 대신 백업 시점 manifest 값을 씀), T-293(`_insert_dataset_
+snapshot_and_release` 동시 호출 시 `previous_serving_release_id` 계보가 끊길 수 있는
+사전 존재 race — T-291a로 신규 호출 지점이 늘어 노출도가 커짐).
+
+**검증**: WSL ext4 미러 `ruff check .`·`mypy src/kortravelgeo scripts/export_openapi.py`·
+`lint-imports`·`python scripts/export_openapi.py --check`(daily_delta 쿼리 파라미터로
+`openapi.json` 재생성) 전부 clean, `pytest -q` 1333 passed / 79 skipped / 0 failed.
+
 ## 2026-08-26 (T-291/ADR-067 — 데이터셋 버전 외부 공개 API 설계, by claude)
 
 외부 소비자가 "주소 DB가 바뀌었는가"를 감지하고 이력을 확인해 자기 파생 데이터를 갱신할 수

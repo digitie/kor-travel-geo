@@ -74,12 +74,18 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
   확장(읽기 전용)+외부 응답 미리보기. 결정
   [ADR-067](adr/067-external-dataset-version-api.md), 정본
   [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
-  - [ ] **T-291a** — 서빙 전환 기록 완결 (**외부 공개의 선행 조건**, ADR-067 D0): 위반
-    5류 — refresh 3경로(CLI `all-sidos --refresh`·postload `execute_safe`·restore
-    `replace_current`) + **직접 서빙 base table 단독 적재**(pobox/sppn/polygon/bulk) +
-    benchmark 스크립트 shadow-swap — 가 release를 기록하게 하고, delta 계열 유래를
-    `daily_delta`로 라벨링(`record_mv_refresh_release` 시그니처 확장 필요). 현재는 전국
-    재적재·pobox 교체 어느 쪽도 토큰이 안 바뀌는 거짓 음성이 있다.
+  - [x] **T-291a** — 서빙 전환 기록 완결 (**외부 공개의 선행 조건**, ADR-067 D0) — PR #529,
+    n150 live e2e 완료. 위반 5류(CLI `all-sidos --refresh`·postload `execute_safe`·restore
+    `replace_current`·직접 서빙 base table 단독 적재 pobox/sppn/polygon/bulk·benchmark
+    스크립트 shadow-swap) 전부가 release를 기록한다. `record_mv_refresh_release`에
+    `release_kind` override, `record_restore_candidate`에 `activate` 파라미터를 추가했다.
+    `daily_delta`는 `ktgctl refresh mv --daily-delta`/REST `daily_delta=true`(문서화된
+    daily-delta 운영 흐름의 정본 경로)와 `daily-juso`/`daily-parcel-links --refresh`,
+    `shp --mode delta`에서 라벨링한다. n150에서 REST `daily_delta=true` refresh를 실제
+    실행해 `ops.serving_releases`에 `release_kind=daily_delta` active row가 기록됨을
+    확인했다(release `2c4272d6-6acf-44ce-89e7-99a011d7a862`). 적대적 리뷰 2건에서
+    `all-sidos --no-refresh` 거짓 양성, 검증 테스트 2건의 공백을 찾아 수정했다. 남은
+    should-fix 2건은 T-292·T-293으로 분리했다.
   - [ ] **T-291b** — 토큰·기준월 정규화기(4형태)·공용 사영·keyset 커서 (backend 내부만).
   - [ ] **T-291c** — 외부 v2 엔드포인트 + 전용 admission scope + openapi/gen:types +
     api-reference 4건(신규 문서·README·llm-summary·v2 공통 규약 Cache-Control 조항).
@@ -88,6 +94,29 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
   - [ ] **T-291e** — 기록 경로 위생(독립): 백업 artifact FK 기입, BackupsPanel 백업 시점
     토큰, hot-swap source_set 자체 완결화, `batch_dag` repr 열화 수정, restore drill의
     원장 `pending` 누적 정리 판단.
+
+- [ ] **T-292** — `db_restore mode=replace_current` 정합성 검증 + 기록 데이터 정확도
+  (T-291a 적대적 리뷰에서 발견, PR #529). (a) `replace_current`는 대상이 이미 서빙 중인
+  현재 DB이므로 `ensure_target_database_empty`를 거치지 않는데, 실제 `pg_restore`가
+  비어있지 않은 DB(특히 `ops.*` 자체를 포함)에 대해 종단간 성공하는지 확인된 적이 없다
+  (기존 `test_replace_current_guards_reject_...`는 가드 거부만 검증하고
+  `build_pg_restore_command`를 raise하도록 monkeypatch해 실제 실행 경로를 우회함) — 실
+  disposable DB로 실제 `replace_current` 종단간 restore를 1회 이상 실행해 확인/보강한다.
+  (b) `record_restore_candidate`가 기록하는 `row_counts`는 백업 시점 manifest 값이며,
+  `run_restore_job`이 `run_row_count_check=True`일 때 이미 계산하는 실측
+  reconcile 결과(`reconcile_block`)를 사용하지 않는다 — `activate=True`(replace_current)
+  경로에서는 이 값이 "지금 서빙 중인 데이터"의 정본 기록이 되므로, `allow_partial` 등으로
+  실제 결과가 manifest와 다를 때 부정확한 기록이 active release에 남는다. 가능하면 reconcile
+  결과를 row_counts로 우선 사용하도록 스레딩한다.
+- [ ] **T-293** — `_insert_dataset_snapshot_and_release`의 동시 호출 시 lineage 유실
+  가능성 (T-291a 적대적 리뷰에서 발견, PR #529). "활성 release는 항상 1건" 불변식 자체는
+  partial unique index + 무조건 실행되는 `UPDATE ... WHERE state='active'`로 보장되지만,
+  두 트랜잭션이 거의 동시에 진입하면 뒤에 커밋되는 쪽의 `SELECT ... FOR UPDATE`가 이미
+  `superseded`로 바뀐 원래 행에서 블록되었다가 그 행 기준으로 `previous`를 `None`으로
+  결정할 수 있어 `previous_serving_release_id`/`parent_dataset_snapshot_id` 계보가
+  끊길 수 있다(활성 상태 자체는 정상적으로 최종 요청이 이김). T-291a로 직접 서빙 loader·
+  benchmark 스크립트 등 신규 호출 지점이 늘어 동시 호출 가능성이 커졌으므로, INSERT 직전
+  재조회 또는 advisory lock 등으로 보강할지 판단한다.
 
 ### 선택 후속 (낮은 우선순위)
 

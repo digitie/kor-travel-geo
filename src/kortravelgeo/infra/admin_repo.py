@@ -604,13 +604,18 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         source_match_set_id: str | None = None,
         forced_promotion: bool = False,
         forced_promotion_metadata: Mapping[str, Any] | None = None,
+        release_kind: str | None = None,
     ) -> tuple[DatasetSnapshot, ServingRelease]:
-        """Record the dataset state exposed by a successful MV refresh.
+        """Record the dataset state now exposed to serving.
 
-        When ``source_match_set_id`` is provided (rebuild-db path, T-205b) it is
-        written as the 정본 ``ops.dataset_snapshots.source_match_set_id`` FK and
-        any ``forced_promotion`` provenance is recorded as read-only snapshot
-        metadata (doc step 10, ~1551 / line ~1559)."""
+        Covers an actual MV refresh as well as any other change to what this
+        service serves (T-291a: a direct-serving base table load that bypasses
+        the MV entirely). When ``source_match_set_id`` is provided (rebuild-db
+        path, T-205b) it is written as the 정본 ``ops.dataset_snapshots.source_match_set_id``
+        FK and any ``forced_promotion`` provenance is recorded as read-only
+        snapshot metadata (doc step 10, ~1551 / line ~1559). ``release_kind``
+        overrides the default full_load/manual_rebuild derivation — used to
+        label delta-lineage refreshes as ``daily_delta`` (T-291a)."""
 
         async with self.engine.begin() as conn:
             await conn.execute(text("SET LOCAL statement_timeout = 0"))
@@ -638,7 +643,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 if report is not None
                 else {}
             )
-            release_kind = "full_load" if load_batch_id else "manual_rebuild"
+            release_kind = release_kind or ("full_load" if load_batch_id else "manual_rebuild")
             release_notes = notes or (
                 f"mv_refresh strategy={strategy or 'unknown'}"
                 + (f"; load_batch_id={load_batch_id}" if load_batch_id else "")
@@ -687,20 +692,29 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         source_manifest: Mapping[str, Any],
         source_artifact_id: str | None = None,
         job_id: str | None = None,
+        activate: bool = False,
     ) -> tuple[DatasetSnapshot, ServingRelease]:
-        """Record a restored database as a validated pending release candidate."""
+        """Record a restored database as a release candidate.
+
+        Pending by default (the restored database is not yet serving — a later
+        hot-swap promotes it via :meth:`record_hot_swap_release`). ``activate=True``
+        (T-291a: ``db_restore mode=replace_current``) records it directly as the
+        active release instead, since a replace_current restore overwrites the
+        database this app is already serving in place — there is no separate
+        hot-swap step to promote it."""
 
         database = _json_dict(source_manifest.get("database"))
         async with self.engine.begin() as conn:
             return await _insert_dataset_snapshot_and_release(
                 conn,
-                snapshot_state="validated",
-                release_state="pending",
+                snapshot_state="released" if activate else "validated",
+                release_state="active" if activate else "pending",
                 release_kind="restore",
                 source_set=_json_dict(source_manifest.get("source_set")),
                 row_counts=_int_dict(source_manifest.get("row_counts")),
                 backup_artifact_id=source_artifact_id,
                 created_by_job_id=job_id,
+                activated_by_job_id=job_id if activate else None,
                 git_commit=_optional_text(source_manifest.get("git_commit")),
                 postgres_version=_optional_text(database.get("postgres_version")),
                 postgis_version=_optional_text(database.get("postgis_version")),
