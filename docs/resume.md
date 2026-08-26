@@ -4,17 +4,28 @@
 
 ## 현재 진척도 (2026-08-26 갱신, by claude)
 
-- 📝 **T-291 — 데이터셋 버전 외부 공개 API 설계 완료, 구현 대기 (2026-08-26, by claude)** —
-  외부 소비자의 주소 DB 변경 감지·이력 확인용 `POST /v2/dataset/version`·`/history` 설계.
-  버전 토큰은 active serving release 파생 opaque 값(신규 저장 0건, hot-swap 복원에도 재사용
-  없음), 인증은 기존 공개 API 키+GeoIP 게이트 재사용, admin은 기존 releases 표면 확장(읽기 전용).
-  결정 [ADR-067](adr/067-external-dataset-version-api.md)(proposed), 정본
-  [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
-  적대적 리뷰에서 기반 불변식의 구멍이 확인됐다 — 위반 **5류**: refresh 3경로(CLI refresh
-  swap·postload execute_safe·restore replace_current) + **직접 서빙 base table 단독 적재**
-  (pobox/sppn/polygon — MV를 거치지 않아 pobox 파일 교체만으로도 외부 응답이 바뀌는데 토큰
-  불변) + benchmark 스크립트의 라이브 shadow-swap. **다음 한 작업 후보**: T-291a(서빙 전환
-  기록 완결, 5류 전부 — 외부 공개의 선행 조건, ADR-067 D0).
+- ✅ **T-291a — 서빙 전환 기록 완결 (2026-08-26, PR #529, by claude)** — ADR-067 D0의
+  5류 위반(CLI `all-sidos --refresh` swap·postload `execute_safe`·restore `replace_current`
+  ·직접 서빙 base table 단독 적재 pobox/sppn/polygon/bulk·benchmark 스크립트 shadow-swap)
+  전부가 `ops.serving_releases`에 release를 기록하게 했다. `record_mv_refresh_release`에
+  `release_kind` override, `record_restore_candidate`에 `activate` 파라미터를 추가(스키마
+  변경 0건). `daily_delta` 라벨링은 문서화된 운영 흐름의 정본 경로인 `ktgctl refresh mv
+  --daily-delta`/REST `POST /maintenance/refresh-mv?daily_delta=true`와, 단발 확인용
+  `daily-juso`/`daily-parcel-links --refresh`·`shp --mode delta`에서 붙는다.
+  적대적 리뷰어 2명(correctness/DB semantics, test rigor/scope)이 각 1건씩 blocking을
+  찾았다 — `all-sidos --no-refresh`가 아무것도 안 바뀌었는데도 active release를 기록하던
+  거짓 양성, `release_kind` override·daily-delta gating 검증 테스트 2건이 실제로는
+  판별력이 없던 문제(첫 수정도 텍스트 슬라이싱이라 재차 무력했음 — 들여쓰기 기반 블록
+  추출로 다시 고쳐 mutation으로 재검증). n150에서 REST `daily_delta=true` refresh를 실제
+  실행해 `ops.serving_releases`에 `release_kind=daily_delta` active row(`2c4272d6-6acf-
+  44ce-89e7-99a011d7a862`)가 기록됨을 라이브로 확인했다 — 이 refresh 자체는 이 host의
+  높은 부하(load avg ~14~18, 다른 프로젝트 다수 공유)로 벤치마크 대비 약 10배 느린
+  약 96분이 걸렸으나 매 단계 진행이 확인됐다(오류·lock 대기 없음). 남은 should-fix 2건
+  (restore row_counts가 실측 reconcile 대신 백업 시점 manifest 값을 쓰는 문제, restore
+  `replace_current`의 종단간 미검증, 동시 release 기록 시 lineage 유실 가능성)은
+  T-292·T-293으로 분리했다. **다음 한 작업**: T-291b(토큰·기준월 정규화기·공용 사영·
+  keyset 커서, backend 내부만) — 결정 [ADR-067](adr/067-external-dataset-version-api.md),
+  정본 [t291-dataset-version-external-api.md](t291-dataset-version-external-api.md).
 
 - ✅ **이슈 #525 — C11~C17 가드 + src/ 헬퍼 blind spot (2026-08-25, PR #526, by claude)** —
   C1x suite 6개가 `src/` 헬퍼를 통해 permanent staging 테이블을 만드는데 마커 정규식이 그걸 못 봐
