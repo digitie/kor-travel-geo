@@ -6,6 +6,31 @@
 
 ## 완료
 
+- [x] **T-298 — admin UI 컬러톤을 teal에서 blue 계열로 전환** (2026-08-27, PR #540, by
+  claude, 사용자 지시). `app/globals.css`의 OKLCH 디자인 토큰 시스템에서 brand/accent
+  관련 hue만 회전(184-188 → 240) — lightness·chroma는 그대로 유지해 기존 대비율을
+  보존하는 최소 침습 전략. 대비율 재계산(적대적 리뷰가 실제 렌더링 색으로 재확인,
+  아래 참조): white-on-brand 6.11→6.59:1, brand-ink-on-paper 12.77:1 — 둘 다 WCAG
+  AA(4.5:1/3:1)를 여유 있게 통과. neutral 토큰(ink/rule/muted, hue 210-244)은 이미
+  blue 계열이라 그대로, semantic 색(success/warning/danger/info)도 의미 보존을 위해
+  그대로 두었다. 하드코딩 teal hex(`#0f766e`/`#14b8a6`, CSS var fallback 포함)와
+  `rgb()` literal도 동일 hue-rotation 값으로 함께 치환 — `tailwind.config.ts`의 `brand`
+  하드코딩, `CoordinateMap.tsx`의 지도 마커·polygon fill·line 색상. 새 hex 값은
+  OKLCH→sRGB 변환을 정확히 재현하는 스크립트로 산출(Claude in Chrome 미연결 환경이라
+  로컬 Playwright로 직접 스크린샷 검증).
+
+  적대적 리뷰 2건이 실제 결함을 찾았다 — completeness 리뷰어: map polygon
+  fill-color(`#14b8a6→#3198d6`)만 다른 5개 파생값과 달리 정확한 OKLCH round-trip이
+  아니라 눈대중 값이었음을 발견(원본보다 확연히 어둡고 채도도 높음) → 정확한
+  round-trip 값(`#4da9e4`)으로 교정. 두 리뷰어 모두 독립적으로(OKLab 거리·tritanopia
+  시뮬레이션, 서로 다른 방법론) brand의 새 hue(240)가 기존 semantic `info` 색(255)과
+  15도밖에 차이 나지 않아 청색맹(tritanopia) 사용자에게 구분이 어려워지는 실제 화면
+  충돌 지점 2곳(`DagsterPanel.tsx`, `SettingsPanel.tsx`)을 발견 — 사용자에게 직접
+  트레이드오프를 제시하고 확인받아 hue=240 그대로 유지하기로 결정(텍스트 라벨이 의미를
+  별도 전달하므로 WCAG 위반은 아님, 드문 CVD 유형). T-299로 후속 기록. 별개로 발견한
+  pre-existing 이슈(T-298이 만든 회귀 아님, teal일 때도 동일)인 focus-ring WCAG 1.4.11
+  non-text contrast 미달은 T-300으로 분리.
+
 - [x] **T-296 — T-292 `replace_current` 잔여 항목: audit 추적성 + PostGIS 템플릿 검증**
   (2026-08-26, PR #539 — 구 #538은 base였던 T-292 브랜치가 머지 후 삭제되며 자동 close,
   동일 내용으로 재생성, by claude). T-292 적대적 리뷰가 낮은 우선순위로 남겨둔 3건. (a)

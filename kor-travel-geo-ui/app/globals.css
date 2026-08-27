@@ -1,5 +1,5 @@
 /* Hallmark · pre-emit critique: P5 H4 E5 S5 R5 V4 */
-/* Hallmark · macrostructure: Workbench · theme: custom teal · nav: N3 side rail · footer: rail operation footer · genre: modern-minimal · design-system: design.md · designed-as-app · tone: technical/austere · contrast: pass (40–41) · slop: pass (42–49) · mobile: pass (34, 49–56) */
+/* Hallmark · macrostructure: Workbench · theme: custom blue · nav: N3 side rail · footer: rail operation footer · genre: modern-minimal · design-system: design.md · designed-as-app · tone: technical/austere · contrast: pass (40–41) · slop: pass (42–49) · mobile: pass (34, 49–56) */
 @import "maplibre-gl/dist/maplibre-gl.css";
 /* 자동 소스 감지를 끄고 소스 디렉터리를 명시한다 — CHANGELOG.md나
    playwright test-results의 프로즈 속 `shadow-[var(--…)]` 토큰이 클래스 후보로
@@ -11,12 +11,12 @@
 @config "../tailwind.config.ts";
 
 :root {
-  --color-paper: oklch(0.975 0.008 188);
-  --color-paper-raised: oklch(0.992 0.004 188);
-  --color-paper-muted: oklch(0.95 0.014 188);
-  --color-paper-strong: oklch(0.916 0.021 188);
-  --color-paper-row: oklch(0.985 0.006 188);
-  --color-brand-tint: oklch(0.93 0.035 184);
+  --color-paper: oklch(0.975 0.008 240);
+  --color-paper-raised: oklch(0.992 0.004 240);
+  --color-paper-muted: oklch(0.95 0.014 240);
+  --color-paper-strong: oklch(0.916 0.021 240);
+  --color-paper-row: oklch(0.985 0.006 240);
+  --color-brand-tint: oklch(0.93 0.035 240);
   --color-ink: oklch(0.235 0.023 244);
   --color-ink-soft: oklch(0.35 0.025 244);
   --color-muted: oklch(0.51 0.018 244);
@@ -24,8 +24,8 @@
   --color-disabled: oklch(0.67 0.012 244);
   --color-rule: oklch(0.84 0.014 210);
   --color-rule-strong: oklch(0.72 0.02 210);
-  --color-accent: oklch(0.47 0.104 184);
-  --color-brand-ink: oklch(0.31 0.062 184);
+  --color-accent: oklch(0.47 0.104 240);
+  --color-brand-ink: oklch(0.31 0.062 240);
   --color-accent-ink: var(--color-paper-raised);
   --color-info: oklch(0.5 0.14 255);
   --color-warning: oklch(0.55 0.135 68);
@@ -648,7 +648,7 @@ textarea {
 }
 
 .drop-zone.active {
-  background: #e8f5f3;
+  background: #eaf3fa;
   border-color: var(--brand);
   color: var(--brand-ink);
 }
@@ -810,9 +810,9 @@ textarea {
 .map-box {
   align-items: center;
   background:
-    linear-gradient(90deg, rgb(15 118 110 / 8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(10 97 143 / 8%) 1px, transparent 1px),
     linear-gradient(rgb(29 78 216 / 8%) 1px, transparent 1px),
-    #eef6f5;
+    #eff5f9;
   background-size: 32px 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -853,7 +853,7 @@ textarea {
 .vworld-map-skeleton {
   align-items: center;
   background:
-    linear-gradient(90deg, rgb(15 118 110 / 8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(10 97 143 / 8%) 1px, transparent 1px),
     linear-gradient(rgb(29 78 216 / 8%) 1px, transparent 1px),
     var(--surface-subtle);
   background-size: 32px 32px;
@@ -1267,7 +1267,7 @@ textarea {
 }
 
 .table-pane .active-row {
-  background: #f0fdfa;
+  background: #f1fbff;
 }
 
 .link-button {
@@ -1446,7 +1446,7 @@ textarea {
 }
 
 .wizard-step.active {
-  background: var(--brand, #0f766e);
+  background: var(--brand, #0a618f);
   color: #fff;
   font-weight: 700;
 }
@@ -1548,12 +1548,12 @@ textarea {
 }
 
 .wizard-category-option:hover {
-  border-color: var(--brand, #0f766e);
+  border-color: var(--brand, #0a618f);
 }
 
 .wizard-category-option.active {
-  background: color-mix(in srgb, var(--brand, #0f766e) 8%, white);
-  border-color: var(--brand, #0f766e);
+  background: color-mix(in srgb, var(--brand, #0a618f) 8%, white);
+  border-color: var(--brand, #0a618f);
 }
 
 .upload-dropzone {
@@ -1565,8 +1565,8 @@ textarea {
 }
 
 .upload-dropzone.drag-over {
-  background: color-mix(in srgb, var(--brand, #0f766e) 6%, white);
-  border-color: var(--brand, #0f766e);
+  background: color-mix(in srgb, var(--brand, #0a618f) 6%, white);
+  border-color: var(--brand, #0a618f);
 }
 
 .upload-dropzone.disabled {
@@ -1813,7 +1813,7 @@ textarea {
 }
 
 .vtable-th-sort:hover {
-  color: var(--brand, #0f766e);
+  color: var(--brand, #0a618f);
 }
 
 .vtable-body {
