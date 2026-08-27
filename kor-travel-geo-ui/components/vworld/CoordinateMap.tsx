@@ -229,7 +229,7 @@ function addGeometryOverlay(map: MapLibreMap, geometry: MapGeometryOverlay): voi
       source: OVERLAY_SOURCE_ID,
       type: "fill",
       paint: {
-        "fill-color": "#3198d6",
+        "fill-color": "#4da9e4",
         "fill-opacity": 0.22
       }
     });
