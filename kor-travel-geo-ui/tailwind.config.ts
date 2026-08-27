@@ -52,7 +52,7 @@ const config: Config = {
         },
         line: "#d8dee8",
         panel: "#f7f9fc",
-        brand: "#0a618f",
+        brand: "#2563eb",
         "brand-tint": "var(--brand-tint)",
         info: "#1d4ed8",
         success: "var(--ok)",
