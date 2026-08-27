@@ -2,6 +2,46 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-27 (T-301 — admin UI brand blue를 사용자 레퍼런스 팔레트로 재적용, by claude)
+
+T-298 머지·n150 배포·live e2e 검증까지 끝내고 최종 요약을 보낸 직후, 사용자가
+"파일의 blue 톤으로 다시 적용"이라고 요청했다. 어느 파일인지 즉시 알 수 없어서
+AskUserQuestion으로 두 차례 물었는데, 첫 번째는 "첨부한 html 기준"이라는 답만 왔고
+(어떤 파일인지 여전히 특정 안 됨), 두 번째(강제선택 옵션 두 개 제시)는 "No preference"
+— 둘 다 실질적인 답이 되지 못했다. 결국 사용자가 직접 업로드 파일의 전체 경로를
+`@` 멘션으로 붙여줘서 해결됐다. **교훈**: 정답이 사용자만 아는 out-of-band 파일 경로일
+때는 강제선택 AskUserQuestion이 적합한 도구가 아니다 — 사용자가 직접 경로/텍스트를
+붙여넣을 수 있게 열어두는 편이 낫다.
+
+파일은 "Web Service Color Palette UI Testset"라는 자기완결 HTML 데모 — 10개 서비스
+색상 팔레트(Blue/Green/Purple/Red/...) 각각 main/dark/soft 3색을 정의하고 스와치·
+카드·버튼·배지·탭·alert로 렌더링. 관련있는 건 `Blue: { main: '#2563EB', dark:
+'#1D4ED8', soft: '#DBEAFE' }` — Tailwind blue-600/700/100 그대로였다. T-298이 골랐던
+muted steel-blue(`#0a618f`, chroma 0.104)보다 훨씬 채도 높고(chroma 0.215) 밝은
+(L 0.47→0.546) "전형적인 SaaS 블루"였다.
+
+구현은 T-298과 같은 패턴 — 세 hex를 OKLCH로 역변환(oklch_reverse.py 재사용)해서
+`--color-accent`/`--color-brand-ink`/`--color-brand-tint`에 정확히 대입(round-trip
+검증), `--color-paper` 계열은 새 hue(262.9)로 회전(T-298이 세운 아키텍처 그대로 계승),
+하드코딩 pastel 배경 4곳은 새 accent의 sRGB white-mix로 재산출, 나머지 old-hex
+fallback·tailwind.config.ts·CoordinateMap.tsx도 동일 패턴으로 교체. lint/type-check/
+test(203/203)/build 전부 clean, Playwright(claude-in-chrome 여전히 미연결이라 번들
+Chromium 직접 구동, T-298과 동일 워크어라운드)로 로그인 화면 스크린샷 육안 확인 —
+뚜렷한 vivid blue 버튼이 잘 나왔다.
+
+적대적 리뷰 2건 모두 실이슈 없이 통과했는데, 흥미로운 결과가 하나 나왔다. 리뷰
+전에는 "brand hue가 262.9로 info(255)와 7.9도밖에 안 떨어져서 T-299(tritanopia
+구분성) 우려가 T-298(15도 차이)보다 더 악화됐을 것"이라고 예상했다. 그런데
+accessibility 리뷰어가 Brettel 1997 tritanopia 시뮬레이션 + OKLab distance로 직접
+재계산해보니 정반대였다 — chroma가 거의 2배(0.104→0.215)로 늘어난 효과가 hue-angle
+근접보다 지배적이어서, OKLab distance는 오히려 61% 증가하고 tritanopia ΔE도 2.5배
+증가했다(더 잘 구분됨). **hue-angle만 보고 판단하면 오도될 수 있다**는 걸 실측으로
+확인한 셈 — T-299 문서에 이 재검증 결과를 반영했다. 별도로, 새 accent chroma(0.215)가
+이제 danger semantic(0.175)보다 높아져 시스템에서 가장 채도 높은 토큰이 된 것은
+"technical/austere" 톤(design 주석)과 디자인 긴장을 이룬다는 판단성 지적이 있었으나,
+버그는 아니고 사용자가 이 정확한 레퍼런스 색을 명시적으로 요청했으므로 기록만 하고
+그대로 진행했다.
+
 ## 2026-08-27 (T-298 — admin UI 컬러톤 teal → blue 전환, PR #540, by claude)
 
 T-292~T-297 완주 직후 사용자 지시로 시작. "UI 컬러톤을 파란색 계열로" — 범위는

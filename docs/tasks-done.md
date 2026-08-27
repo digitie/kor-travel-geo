@@ -6,6 +6,41 @@
 
 ## 완료
 
+- [x] **T-301 — admin UI brand blue를 사용자 지정 레퍼런스 팔레트로 재적용** (2026-08-27,
+  by claude, 사용자 지시). T-298이 hue-only rotation으로 골랐던 muted steel-blue
+  (`#0a618f`, oklch L=0.47 C=0.104 H=240)는 사용자 판단으로 채택됐으나, 이후 사용자가
+  구체적인 레퍼런스 팔레트("Web Service Color Palette UI Testset" HTML, 업로드 파일)를
+  제시하며 그 "Blue" 서비스 색으로 다시 적용해달라고 요청 — Tailwind blue-600/700/100
+  (`main: #2563EB`, `dark: #1D4ED8`, `soft: #DBEAFE`). 세 hex를 OKLCH로 역변환(정확한
+  round-trip 검증 완료)해 `--color-accent`→`oklch(0.546 0.215 262.9)`,
+  `--color-brand-ink`→`oklch(0.488 0.217 264.4)`, `--color-brand-tint`→
+  `oklch(0.932 0.032 255.6)`으로 교체. `--color-paper` 계열(페이지/카드/행 배경)은
+  T-298과 동일한 아키텍처를 유지해 hue만 240→262.9로 갱신(L/C 그대로). 하드코딩 pastel
+  배경 4곳(`.drop-zone.active`/`.map-box`·`.vworld-map-skeleton` grid-line/
+  `.table-pane .active-row`)은 새 accent의 sRGB white-mix로 재산출, `var(--brand,
+  #0a618f)` fallback 7곳·`tailwind.config.ts`의 `brand`·`CoordinateMap.tsx`의 마커·
+  polygon fill/line 색상도 동일 교체.
+
+  적대적 리뷰 2건 모두 실이슈 없음. 리뷰어 A(correctness)는 전체 코드베이스에 남은
+  old-hex(`#0a618f`/`0b344c`/`4da9e4`) 없음을 grep으로 확인하고 3개 OKLCH 변환
+  (`#2563eb`/`#1d4ed8`/`#dbeafe`)을 자체 구현한 변환 매트릭스로 독립 재계산해 전부
+  정확함을 검증. 대비율도 재확인: white-on-brand 5.17:1(T-298의 6.59:1보다 마진은
+  줄었으나 AA 4.5:1 여유 통과), brand-ink-on-paper 6.24:1 — 정확히 일치. 리뷰어
+  B(accessibility)는 T-299(brand hue가 기존 semantic `info`와 가까워 tritanopia 구분성
+  저하)가 새 hue(262.9, info와 7.9도 차이로 더 가까워짐)에서 더 악화됐을 것이라는
+  직관을 Brettel 1997 tritanopia 시뮬레이션 + OKLab distance로 직접 재계산해 검증 —
+  결과는 반대: chroma가 거의 2배(0.104→0.215)로 늘어난 게 hue-angle 근접보다 지배적이라
+  OKLab distance는 오히려 61% 증가, tritanopia ΔE도 2.5배 증가(더 잘 구분됨). T-299는
+  이 발견을 반영해 갱신하고 accepted-tradeoff 상태 그대로 유지, 추가 조치 불필요로
+  판단. 별도로 새 accent chroma(0.215)가 이제 danger semantic(0.175)보다 높아져
+  시스템에서 가장 채도 높은 토큰이 된 것이 "technical/austere" 톤(design 주석)과
+  디자인 긴장을 이룬다는 판단성 지적이 있었음 — 버그는 아니고, 사용자가 이 정확한 레퍼런스
+  색을 명시적으로 요청했으므로 기록만 하고 그대로 진행.
+
+  체크: `npm run lint`/`type-check` clean, `npm run test` 203/203 통과, `npm run build`
+  성공, Playwright(claude-in-chrome 미연결이라 번들 Chromium 직접 구동)로 로그인 화면
+  스크린샷 육안 확인. T-298의 배포 인프라(n150 UI 컨테이너만 재배포)를 그대로 재사용.
+
 - [x] **T-298 — admin UI 컬러톤을 teal에서 blue 계열로 전환** (2026-08-27, PR #540, by
   claude, 사용자 지시). `app/globals.css`의 OKLCH 디자인 토큰 시스템에서 brand/accent
   관련 hue만 회전(184-188 → 240) — lightness·chroma는 그대로 유지해 기존 대비율을

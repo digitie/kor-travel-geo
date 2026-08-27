@@ -4,15 +4,25 @@
 
 ## 현재 진척도 (2026-08-27 갱신, by claude)
 
-- ✅ **T-298 — admin UI 컬러톤 teal → blue 전환 (2026-08-27, PR #540, by claude, 사용자
-  지시)** — `app/globals.css` OKLCH 토큰의 brand/accent hue만 회전(184-188→240),
-  lightness·chroma 유지로 대비율 보존(재검증: white-on-brand 6.59:1, brand-ink-on-paper
-  12.77:1, 둘 다 AA 통과). 적대적 리뷰 2건이 실제 결함 1건(map fill-color가 다른 값과
-  달리 정확한 round-trip이 아니었음, 교정 완료)과 실 화면 충돌 지점 2곳이 있는 접근성
-  트레이드오프(brand hue가 기존 info 색과 가까워져 tritanopia 구분성 저하)를 발견 —
-  후자는 사용자에게 직접 확인받아 현재 hue 유지로 결정, T-299로 후속 기록. 부수 발견
-  (T-298과 무관한 pre-existing 이슈)인 focus-ring WCAG 미달은 T-300으로 분리. n150 UI
-  재배포 필요. **다음 한 작업**: PR #540 머지 → n150 UI 재배포·헬스체크.
+- ✅ **T-301 — admin UI brand blue를 사용자 지정 레퍼런스 팔레트로 재적용 (2026-08-27,
+  by claude, 사용자 지시)** — T-298이 골랐던 muted steel-blue(`#0a618f`, hue 240/chroma
+  0.104) 대신, 사용자가 준 레퍼런스 팔레트 HTML의 "Blue"(Tailwind blue-600/700/100:
+  `#2563EB`/`#1D4ED8`/`#DBEAFE`)를 OKLCH 역변환으로 정확히 재현해 brand/accent/tint
+  토큰을 교체(hue 262.9, chroma 0.215로 상승). paper 배경 계열은 동일 hue-rotation
+  아키텍처로 새 hue에 맞춰 갱신. 적대적 리뷰 2건 모두 실이슈 없음 — 특히 리뷰어 B가
+  T-299(brand-info hue 근접) 우려를 더 엄밀한 방법(Brettel 1997 tritanopia sim +
+  OKLab distance)으로 재검증해 chroma가 hue-angle보다 지배적이라 실제로는 더 잘
+  구분됨을 확인(OKLab distance 61%↑, tritanopia ΔE 2.5배↑) — T-299는 그대로
+  accepted-tradeoff 유지, 재조사 불필요. 새 accent chroma(0.215)가 이제 danger
+  semantic(0.175)보다 높아 시스템에서 가장 채도 높은 토큰이 된 것은 "technical/austere"
+  톤과의 디자인 긴장으로 기록만(사용자가 이 정확한 색을 명시적으로 요청). 체크 4종
+  전부 clean, Playwright 스크린샷 육안 확인. n150 UI 재배포 필요. **다음 한 작업**: PR
+  머지 → n150 UI 재배포·헬스체크.
+
+- ✅ **T-298 — admin UI 컬러톤 teal → blue 전환 (2026-08-27, PR #540, 머지·n150 배포
+  완료, by claude, 사용자 지시)** — 최초 blue 전환(hue-only rotation, hue 240). 이후
+  T-301이 정확한 값을 사용자 레퍼런스로 재조정했으므로 현재 실효 색상은 T-301 참조.
+  상세는 `tasks-done.md`.
 
 **T-291 계열 후속(T-292~T-296) + T-297 디스크 위험 전부 완료.** T-291a/T-291d 적대적
 리뷰에서 파생된 5개 후속 task(T-292~T-296)를 전부 implement → 적대적 리뷰 2인 →

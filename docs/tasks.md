@@ -113,6 +113,15 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
   분리도를 확보할지, 혹은 `info` 자체의 hue를 재검토할지. 부수 발견: `tailwind.config.ts`의
   하드코딩 `info: "#1d4ed8"`과 `globals.css`의 `--color-info: oklch(0.5 0.14 255)`가
   T-298 이전부터 서로 다른 값이었다(별개 이슈, 이 task 범위 밖).
+
+  **T-301 재검증(2026-08-27)**: brand hue가 262.9(info와 7.9도 차이, T-298의 240/15도보다
+  더 가까움)로 바뀌면서 hue-angle만 보면 이 우려가 더 악화된 것처럼 보이지만, 적대적
+  리뷰어가 Brettel 1997 tritanopia 시뮬레이션 + OKLab distance로 직접 재계산한 결과는
+  반대였다 — chroma가 거의 2배(0.104→0.215)로 늘어난 게 hue-angle 근접보다 지배적이라
+  OKLab distance 61% 증가, tritanopia ΔE 2.5배 증가(더 잘 구분됨). 즉 hue-angle은
+  이 케이스에서 분리도의 오도(misleading) 지표였다. 따라서 이 task는 T-301로 인해
+  **악화되지 않았고**, 위에 나열된 향후 옵션(hue 재조정/lightness 조정/info 재검토)의
+  긴급도도 낮아졌다 — 여전히 열어두되 우선순위 재상향 근거는 없음.
 - [ ] **T-300** — `.nav-link`/`.button`(shadcn 포함)/`.vtable-grid`/`.vtable-scroll`의
   `:focus-visible` 포커스 링이 WCAG 1.4.11(non-text contrast, 최소 3:1) 미달(T-298
   적대적 리뷰에서 발견, PR #540 — T-298이 만든 회귀 아님, teal일 때도 동일하게 미달했음을
