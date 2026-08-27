@@ -11,12 +11,12 @@
 @config "../tailwind.config.ts";
 
 :root {
-  --color-paper: oklch(0.975 0.008 240);
-  --color-paper-raised: oklch(0.992 0.004 240);
-  --color-paper-muted: oklch(0.95 0.014 240);
-  --color-paper-strong: oklch(0.916 0.021 240);
-  --color-paper-row: oklch(0.985 0.006 240);
-  --color-brand-tint: oklch(0.93 0.035 240);
+  --color-paper: oklch(0.975 0.008 262.9);
+  --color-paper-raised: oklch(0.992 0.004 262.9);
+  --color-paper-muted: oklch(0.95 0.014 262.9);
+  --color-paper-strong: oklch(0.916 0.021 262.9);
+  --color-paper-row: oklch(0.985 0.006 262.9);
+  --color-brand-tint: oklch(0.932 0.032 255.6);
   --color-ink: oklch(0.235 0.023 244);
   --color-ink-soft: oklch(0.35 0.025 244);
   --color-muted: oklch(0.51 0.018 244);
@@ -24,8 +24,8 @@
   --color-disabled: oklch(0.67 0.012 244);
   --color-rule: oklch(0.84 0.014 210);
   --color-rule-strong: oklch(0.72 0.02 210);
-  --color-accent: oklch(0.47 0.104 240);
-  --color-brand-ink: oklch(0.31 0.062 240);
+  --color-accent: oklch(0.546 0.215 262.9);
+  --color-brand-ink: oklch(0.488 0.217 264.4);
   --color-accent-ink: var(--color-paper-raised);
   --color-info: oklch(0.5 0.14 255);
   --color-warning: oklch(0.55 0.135 68);
@@ -648,7 +648,7 @@ textarea {
 }
 
 .drop-zone.active {
-  background: #eaf3fa;
+  background: #f0f4fe;
   border-color: var(--brand);
   color: var(--brand-ink);
 }
@@ -810,9 +810,9 @@ textarea {
 .map-box {
   align-items: center;
   background:
-    linear-gradient(90deg, rgb(10 97 143 / 8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(37 99 235 / 8%) 1px, transparent 1px),
     linear-gradient(rgb(29 78 216 / 8%) 1px, transparent 1px),
-    #eff5f9;
+    #f4f7fe;
   background-size: 32px 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -853,7 +853,7 @@ textarea {
 .vworld-map-skeleton {
   align-items: center;
   background:
-    linear-gradient(90deg, rgb(10 97 143 / 8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(37 99 235 / 8%) 1px, transparent 1px),
     linear-gradient(rgb(29 78 216 / 8%) 1px, transparent 1px),
     var(--surface-subtle);
   background-size: 32px 32px;
@@ -1267,7 +1267,7 @@ textarea {
 }
 
 .table-pane .active-row {
-  background: #f1fbff;
+  background: #f6f9fe;
 }
 
 .link-button {
@@ -1446,7 +1446,7 @@ textarea {
 }
 
 .wizard-step.active {
-  background: var(--brand, #0a618f);
+  background: var(--brand, #2563eb);
   color: #fff;
   font-weight: 700;
 }
@@ -1548,12 +1548,12 @@ textarea {
 }
 
 .wizard-category-option:hover {
-  border-color: var(--brand, #0a618f);
+  border-color: var(--brand, #2563eb);
 }
 
 .wizard-category-option.active {
-  background: color-mix(in srgb, var(--brand, #0a618f) 8%, white);
-  border-color: var(--brand, #0a618f);
+  background: color-mix(in srgb, var(--brand, #2563eb) 8%, white);
+  border-color: var(--brand, #2563eb);
 }
 
 .upload-dropzone {
@@ -1565,8 +1565,8 @@ textarea {
 }
 
 .upload-dropzone.drag-over {
-  background: color-mix(in srgb, var(--brand, #0a618f) 6%, white);
-  border-color: var(--brand, #0a618f);
+  background: color-mix(in srgb, var(--brand, #2563eb) 6%, white);
+  border-color: var(--brand, #2563eb);
 }
 
 .upload-dropzone.disabled {
@@ -1813,7 +1813,7 @@ textarea {
 }
 
 .vtable-th-sort:hover {
-  color: var(--brand, #0a618f);
+  color: var(--brand, #2563eb);
 }
 
 .vtable-body {

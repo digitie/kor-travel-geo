@@ -183,7 +183,7 @@ function LoadedCoordinateMap({
         zoom={DEFAULT_ZOOM}
       >
         <GeometryOverlay geometry={geometry} />
-        {point ? <Marker color="#0a618f" lngLat={[point.x, point.y]} /> : null}
+        {point ? <Marker color="#2563eb" lngLat={[point.x, point.y]} /> : null}
       </VWorldMap>
       {error ? <MapOverlay text={error} /> : null}
     </div>
@@ -229,7 +229,7 @@ function addGeometryOverlay(map: MapLibreMap, geometry: MapGeometryOverlay): voi
       source: OVERLAY_SOURCE_ID,
       type: "fill",
       paint: {
-        "fill-color": "#4da9e4",
+        "fill-color": "#769eec",
         "fill-opacity": 0.22
       }
     });
@@ -238,7 +238,7 @@ function addGeometryOverlay(map: MapLibreMap, geometry: MapGeometryOverlay): voi
       source: OVERLAY_SOURCE_ID,
       type: "line",
       paint: {
-        "line-color": "#0a618f",
+        "line-color": "#2563eb",
         "line-width": 3
       }
     });
