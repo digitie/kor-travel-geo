@@ -2,6 +2,58 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-27 (T-298 — admin UI 컬러톤 teal → blue 전환, PR #540, by claude)
+
+T-292~T-297 완주 직후 사용자 지시로 시작. "UI 컬러톤을 파란색 계열로" — 범위는
+admin UI(`kor-travel-geo-ui`) 전체. globals.css를 읽어보니 shadcn/ui 기반 OKLCH
+커스텀 프로퍼티 토큰 시스템이었고, "teal" 브랜드 색은 몇 개 토큰(paper 배경군·
+brand-tint·accent·brand-ink, hue 184-188)에만 집중돼 있었다 — neutral(ink/rule/muted)은
+이미 hue 210-244로 blue 계열이었다. 가장 안전한 전략은 hue만 회전하고 lightness·
+chroma는 그대로 두는 것(대비율이 그대로 보존된다는 게 OKLCH의 요점) — 실제로는
+이 가정이 100% 참은 아니라는 걸 나중에 적대적 리뷰가 밝혀냈지만(아래 참조), 이번
+케이스에서는 결과적으로 안전한 방향으로 작용했다.
+
+이 worktree에는 Claude in Chrome 확장이 연결돼 있지 않았다(`tabs_context_mcp` 호출이
+"Browser extension is not connected"로 실패) — 색상 변경 작업인데 시각적으로 확인할
+방법이 없다는 게 첫 난관이었다. 두 가지로 우회했다: (1) OKLCH→sRGB 변환을 표준
+Björn Ottosson 행렬로 직접 구현한 Python 스크립트로 정확한 hex 값을 산출(브라우저
+없이도 렌더링 결과와 수학적으로 일치하도록 — 나중에 리뷰어가 독립 구현으로
+교차검증해 정확함을 확인), (2) 로컬에 이미 설치된 Playwright의 Chromium(claude-in-chrome
+확장과는 별개, npm 프로젝트 devDependency)으로 `npm run dev` 스크래치 서버를 띄우고
+직접 스크린샷 스크립트를 짜서 로그인 페이지를 렌더링해 확인 — 실제 눈으로 본 것과
+다름없는 검증이었다.
+
+hue 선택 자체가 예상보다 까다로웠다. 처음엔 hue 230 근방을 시도했는데 변환된 hex를
+HSL로 재환산해보니 ~196도(사람이 보기엔 여전히 "청록/시안"에 가까움)였다 — Tailwind의
+실제 "blue" 계열(blue-500/600/700)을 역변환해보니 OKLCH hue 259-264 근방이라는 걸
+확인하고, 최종적으로 hue 240(HSL ~201도, R채널이 처음 유의미하게 섞이기 시작하는
+지점)을 "명백히 파랗지만 차분한 톤" 경계로 골랐다. 하드코딩된 teal hex(`#0f766e`
+등)와 CSS var fallback 7건, `tailwind.config.ts`의 `brand`, `CoordinateMap.tsx`의
+지도 마커·polygon 색까지 전수 조사(`.ts`/`.tsx`/`.css`/`.json`/`.mjs` 전체, 이 3개
+파일 외 없음 확인) 후 함께 치환.
+
+적대적 리뷰 2건(completeness/correctness 1건 + accessibility/consistency 1건) 결과:
+(1) map polygon fill-color만 다른 5개 파생값과 다르게 정확한 OKLCH round-trip이
+아니라 눈대중 값이었다(원본보다 확연히 어둡고 채도도 높음) — 정확한 round-trip
+값(`#4da9e4`)으로 교정. (2) "같은 OKLCH lightness는 WCAG 대비율을 보존한다"는
+전제가 일반적으로는 참이 아님을 실측으로 확인(WCAG 상대휘도는 다른 R/G/B 가중치를
+쓰는 다른 공식이라 hue-only rotation이 상대휘도를 바꿀 수 있음) — 이번엔 우연히
+유리한 방향으로 움직여 대비율이 오히려 소폭 상승했지만, 앞으로 같은 가정을 안전
+보증으로 쓰면 안 된다는 교훈. (3) 가장 중요한 발견 — 두 리뷰어가 독립적으로(OKLab
+거리, tritanopia 시뮬레이션) brand의 새 hue(240)가 기존 semantic `info` 색(255)과
+15도밖에 안 떨어져 있어 청색맹 사용자에게 구분이 어려워지는 실제 화면 충돌 지점을
+2곳(`DagsterPanel.tsx`의 backup 스텝 브랜드 테두리 안에 바로 붙은 info 배지,
+`SettingsPanel.tsx`의 브랜드 버튼과 info 알림) 찾아냈다. hue를 info에서 더 멀리
+옮기는 시도(210 부근)와 lightness를 낮추는 시도(0.38 부근, tritanopia 분리도가
+5.9→15.0으로 개선됨을 직접 계산으로 확인)를 둘 다 검토했지만, 전자는 "청록"으로
+되돌아갈 위험이 있고 후자는 hue-only rotation이라는 애초의 최소 침습 전략을 벗어나는
+더 큰 변경이라 — 사용자에게 트레이드오프를 직접 제시하고 확인받았다: 현재 hue=240
+그대로 유지(텍스트 라벨이 의미를 별도로 전달하므로 WCAG "use of color" 위반은
+아니고, 드물게 겪는 CVD 유형이라 트레이드오프로 수용). 발견 자체는 T-299로,
+리뷰 중 별개로 발견한 pre-existing 이슈(T-298 회귀 아님 — focus-ring이 teal일
+때도 이미 WCAG 1.4.11 non-text contrast 3:1 미달이었음을 독립 계산으로 확인)는
+T-300으로 각각 분리 기록했다. **다음 한 작업**: PR #540 머지 → n150 UI 재배포.
+
 ## 2026-08-27 (T-292~T-296 완주 + n150 Postgres crash → T-297 디스크 확보, by claude)
 
 T-291f 직후 진행, "더이상 테스크가 없을 때 까지 완주할 것" 지시로 T-292~T-296을 순서대로
