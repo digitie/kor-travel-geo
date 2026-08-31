@@ -13,6 +13,8 @@ import {
   LogOut,
   MapPinned,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Settings,
   ShieldCheck,
@@ -20,6 +22,7 @@ import {
   Workflow,
   X
 } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
@@ -59,8 +62,10 @@ const adminNavGroups = ADMIN_NAV_GROUPS.map((group) => ({
   }))
 }));
 
-/** Matches the `@media (max-width: 980px)` breakpoint where the sidebar becomes a drawer. */
-export const DRAWER_MEDIA_QUERY = "(max-width: 980px)";
+/** Matches the `@media (max-width: 1023px)` breakpoint where the sidebar becomes a drawer. */
+export const DRAWER_MEDIA_QUERY = "(max-width: 1023px)";
+
+const SIDEBAR_COLLAPSED_KEY = "kor-travel-geo:sidebar-collapsed";
 
 /**
  * True while the sidebar is rendered as the off-canvas drawer.
@@ -83,12 +88,25 @@ function useIsDrawerLayout(): boolean {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarStateLoadedRef = useRef(false);
   const isDrawerLayout = useIsDrawerLayout();
   const pathname = usePathname();
   const sidebarRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const mainRef = useRef<HTMLElement>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    sidebarStateLoadedRef.current = true;
+    if (stored === "1") setSidebarCollapsed(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sidebarStateLoadedRef.current) return;
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
+  }, [sidebarCollapsed]);
 
   // A closed drawer is only moved off-screen by a transform, so its links stayed in the tab
   // order and Tab sent focus somewhere invisible (issue #515). `inert` removes them from both
@@ -119,14 +137,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // a keyboard user loses their place. Hand it to <main> instead.
   useEffect(() => {
     if (isDrawerLayout) return;
-    setMenuOpen((wasOpen) => {
-      if (wasOpen && sidebarRef.current?.contains(document.activeElement)) {
-        // After the commit that unlocks <main> (it is aria-hidden while the drawer is open).
-        queueMicrotask(() => mainRef.current?.focus());
-      }
-      return false;
-    });
-  }, [isDrawerLayout]);
+    if (!menuOpen) return;
+    const focusInsideSidebar = sidebarRef.current?.contains(document.activeElement) ?? false;
+    setMenuOpen(false);
+    if (focusInsideSidebar) {
+      // After the commit that unlocks <main> (it is aria-hidden while the drawer is open).
+      queueMicrotask(() => mainRef.current?.focus());
+    }
+  }, [isDrawerLayout, menuOpen]);
 
   // On mobile the sidebar is an off-canvas modal drawer, so give it the same keyboard/AT
   // behavior as the admin dialogs: Escape closes it, focus moves in and is trapped while open,
@@ -157,7 +175,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="app-shell" data-menu-open={menuOpen}>
+    <div
+      className="app-shell"
+      data-menu-open={menuOpen}
+      data-sidebar-collapsed={sidebarCollapsed}
+    >
+      <a className="skip-link" href="#main-content">
+        본문으로 건너뛰기
+      </a>
       <header className="mobile-topbar">
         <button
           className="mobile-menu-toggle"
@@ -185,53 +210,94 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         role={menuOpen ? "dialog" : undefined}
         aria-modal={menuOpen ? true : undefined}
         aria-label={menuOpen ? "내비게이션 메뉴" : undefined}
+        data-slot="admin-shell-rail"
       >
-        <button
-          ref={closeButtonRef}
-          className="sidebar-close"
-          type="button"
-          aria-label="메뉴 닫기"
-          onClick={closeMenu}
-        >
-          <X size={18} />
-        </button>
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            <MapPinned size={18} />
-          </span>
-          <div className="brand-copy">
-            <strong>kor-travel-geo-ui</strong>
-            <span>내부 운영 콘솔</span>
+        <div className="rail-inner">
+          <div className="rail-header">
+            <Link
+              aria-label="kor-travel-geo admin"
+              className="rail-brand"
+              href={ADMIN_PAGES.home.path}
+            >
+              <span className="rail-brand-name">kor-travel-geo</span>
+              <span className="rail-brand-suffix">admin</span>
+              <span aria-hidden="true" className="rail-brand-compact">
+                ktg
+              </span>
+            </Link>
+            <div className="rail-actions">
+              <button
+                ref={closeButtonRef}
+                className="sidebar-close"
+                type="button"
+                aria-label="메뉴 닫기"
+                onClick={closeMenu}
+              >
+                <X size={18} />
+              </button>
+              <button
+                aria-label={sidebarCollapsed ? "좌측 메뉴 펼치기" : "좌측 메뉴 접기"}
+                className="sidebar-collapse"
+                title={sidebarCollapsed ? "좌측 메뉴 펼치기" : "좌측 메뉴 접기"}
+                type="button"
+                onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+              </button>
+            </div>
+          </div>
+          <div className="rail-nav">
+            <NavGroup
+              collapsed={sidebarCollapsed}
+              title="조회·진단"
+              links={debugLinks}
+              onNavigate={closeMenu}
+            />
+            <nav className="nav-group" aria-label="개요">
+              <p className="nav-title">개요</p>
+              <DocumentNavLink
+                ariaLabel={sidebarCollapsed ? ADMIN_PAGES.home.title : undefined}
+                className="nav-link"
+                href={ADMIN_PAGES.home.path}
+                onNavigate={closeMenu}
+                title={sidebarCollapsed ? ADMIN_PAGES.home.title : undefined}
+              >
+                <LayoutDashboard size={17} />
+                <span className="nav-label">{ADMIN_PAGES.home.title}</span>
+              </DocumentNavLink>
+            </nav>
+            {adminNavGroups.map((group) => (
+              <NavGroup
+                collapsed={sidebarCollapsed}
+                key={group.title}
+                title={group.title}
+                links={group.links}
+                onNavigate={closeMenu}
+              />
+            ))}
+          </div>
+          <div className="sidebar-footer">
+            <button
+              aria-label={sidebarCollapsed ? "로그아웃" : undefined}
+              className="nav-link nav-button"
+              title={sidebarCollapsed ? "로그아웃" : undefined}
+              type="button"
+              onClick={() => void logout()}
+            >
+              <LogOut size={17} />
+              <span className="nav-label">로그아웃</span>
+            </button>
           </div>
         </div>
-        <NavGroup title="조회·진단" links={debugLinks} onNavigate={closeMenu} />
-        <nav className="nav-group" aria-label="관리 홈">
-          <p className="nav-title">관리</p>
-          <DocumentNavLink
-            className="nav-link"
-            href={ADMIN_PAGES.home.path}
-            onNavigate={closeMenu}
-          >
-            <LayoutDashboard size={17} />
-            {ADMIN_PAGES.home.title}
-          </DocumentNavLink>
-        </nav>
-        {adminNavGroups.map((group) => (
-          <NavGroup
-            key={group.title}
-            title={group.title}
-            links={group.links}
-            onNavigate={closeMenu}
-          />
-        ))}
-        <div className="sidebar-footer">
-          <button className="nav-link nav-button" type="button" onClick={() => void logout()}>
-            <LogOut size={17} />
-            로그아웃
-          </button>
-        </div>
       </aside>
-      <main className="content" aria-hidden={menuOpen || undefined} ref={mainRef} tabIndex={-1}>
+      <main
+        className="content"
+        aria-hidden={menuOpen || undefined}
+        data-slot="admin-shell-main"
+        id="main-content"
+        ref={mainRef}
+        tabIndex={-1}
+      >
         {children}
       </main>
     </div>
@@ -247,10 +313,12 @@ async function logout() {
 }
 
 function NavGroup({
+  collapsed,
   title,
   links,
   onNavigate
 }: {
+  collapsed: boolean;
   title: string;
   links: { href: string; label: string; icon: typeof Search }[];
   onNavigate: () => void;
@@ -262,13 +330,15 @@ function NavGroup({
         const Icon = link.icon;
         return (
           <DocumentNavLink
+            ariaLabel={collapsed ? link.label : undefined}
             className="nav-link"
             href={link.href}
             key={link.href}
             onNavigate={onNavigate}
+            title={collapsed ? link.label : undefined}
           >
             <Icon size={17} />
-            {link.label}
+            <span className="nav-label">{link.label}</span>
           </DocumentNavLink>
         );
       })}

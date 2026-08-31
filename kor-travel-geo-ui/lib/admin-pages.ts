@@ -108,10 +108,10 @@ export interface AdminNavGroup {
   keys: AdminPageKey[];
 }
 
-/** 사이드바 그룹 구성 (관리 홈은 그룹 위에 단독 노출). */
+/** 최신 map admin의 작업 중심 IA를 geo 도메인에 맞춰 적용한다(관리 홈은 개요에 단독 노출). */
 export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
   { title: "데이터 관리", keys: ["sourceFiles", "files", "consistency"] },
-  { title: "백업·운영", keys: ["backups", "dagster", "ops", "logs"] },
-  { title: "시스템", keys: ["tables", "cache"] },
-  { title: "설정", keys: ["settings"] }
+  { title: "수집 파이프라인", keys: ["dagster", "ops"] },
+  { title: "모니터링", keys: ["logs", "tables", "cache"] },
+  { title: "시스템", keys: ["backups", "settings"] }
 ];

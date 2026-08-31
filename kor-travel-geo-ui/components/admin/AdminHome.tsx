@@ -96,7 +96,7 @@ export function AdminHome() {
 
 function StatusStrip() {
   return (
-    <div className="admin-status-strip">
+    <dl aria-label="운영 상태 요약" className="admin-status-strip">
       <StatusCard title="서빙 릴리스" queryKey="admin-home-release" load={loadActiveRelease} />
       <StatusCard title="최근 백업" queryKey="admin-home-backup" load={loadLatestBackup} />
       <StatusCard
@@ -104,7 +104,7 @@ function StatusStrip() {
         queryKey="admin-home-consistency"
         load={loadLatestConsistency}
       />
-    </div>
+    </dl>
   );
 }
 
@@ -130,25 +130,30 @@ function StatusCard({
   });
 
   return (
-    <Panel title={title} className="min-w-0">
+    <div className="admin-status-item">
+      <dt className="admin-status-label">{title}</dt>
       {isPending ? (
-        <Skeleton className="h-10 w-3/4" />
+        <dd className="admin-status-value">
+          <Skeleton className="h-8 w-3/4" />
+        </dd>
       ) : isError ? (
-        <p className="m-0 text-sm text-muted-foreground">확인 불가</p>
+        <dd className="admin-status-value">
+          <span className="text-sm text-muted-foreground">확인 불가</span>
+        </dd>
       ) : data == null ? (
-        <p className="m-0 text-sm text-muted-foreground">기록 없음</p>
+        <dd className="admin-status-value">
+          <span className="text-sm text-muted-foreground">기록 없음</span>
+        </dd>
       ) : (
-        <div className="grid gap-1">
-          <div className="flex flex-wrap items-center gap-2">
+        <dd className="admin-status-value">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-2">
             <strong className="break-all text-sm">{data.headline}</strong>
             {data.badge ? <StatusBadge value={data.badge.value} tone={data.badge.tone} /> : null}
           </div>
-          {data.detail ? (
-            <span className="text-xs text-muted-foreground">{data.detail}</span>
-          ) : null}
-        </div>
+          {data.detail ? <span className="admin-status-detail">{data.detail}</span> : null}
+        </dd>
       )}
-    </Panel>
+    </div>
   );
 }
 

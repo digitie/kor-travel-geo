@@ -6,6 +6,24 @@
 
 ## 완료
 
+- [x] **T-302 — 최신 kor-travel-map admin workbench UI 동기화** (2026-08-31, PR #542,
+  by codex, 사용자 지시). 최신 map `origin/main`(`2c1cf954`)의 Rail-Workbench 구조를
+  geo admin에 적용했다. 접힘 가능한 좌측 레일과 아이콘 전용 collapsed 상태, 모바일
+  drawer, section·title/actions·meta·description header band, active mark와 조밀한 상태
+  strip을 도입하고, `Panel`/`Card`/`PageHeader`/`DocumentNavLink`/Badge 공통 표면을
+  경계 중심으로 맞췄다. 메뉴는 `개요`·`데이터 관리`·`수집 파이프라인`·`모니터링`·`시스템`으로
+  정리했다. 기존 geo 라우트·API·인증·폼 흐름과 blue 색상 토큰은 유지했으며 map의
+  녹색 팔레트는 복사하지 않았다.
+
+  체크: WSL ext4 미러 `npm run lint`, `npm run type-check`, `npm run test`(41 files /
+  204 tests), `npm run build`, offline React Doctor(오류 0, 기존 `test-noise` 경고 2건),
+  로컬 Chromium navigation e2e 통과. Firefox는 Playwright 바이너리 미설치로 실행 불가.
+  운영 환경에서는 설정된 build context에 후보 archive를 반영하고 UI 이미지를 새로 빌드한 뒤
+  UI만 `--no-deps --force-recreate`했다. API/UI healthy, `/v1/healthz`·`/v1/readyz`·
+  `/login` 200, 미인증 `/admin` 307, 잘못된 로그인 401, collapsed rail bundle과 운영
+  Chromium 로그인 화면을 확인했다. 관리자 비밀번호 원문이 세션에 없어 성공 로그인
+  POST는 추측하지 않았다.
+
 - [x] **T-301 — admin UI brand blue를 사용자 지정 레퍼런스 팔레트로 재적용** (2026-08-27,
   by claude, 사용자 지시). T-298이 hue-only rotation으로 골랐던 muted steel-blue
   (`#0a618f`, oklch L=0.47 C=0.104 H=240)는 사용자 판단으로 채택됐으나, 이후 사용자가
