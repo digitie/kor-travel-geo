@@ -15,12 +15,12 @@
 
 - ✅ **T-297** — 디스크 위험 사후 조치를 완료 처리했다. 남은 재발 방지 검토는 낮은 우선순위
   후속으로 보존한다.
-- 🔄 **T-299** — blue 색상톤을 유지한 상태에서 색각 구분성·상태 의미 전달을 검토하고, 상태 dot과
-  텍스트를 공통 배지에 반영했다. 운영 반영 전 최종 확인 중이다.
-- 🔄 **T-300** — 공통 포커스 링의 비텍스트 대비·키보드 이동·메뉴/테이블 포커스를 보완하고,
-  정합성 판정 모달의 닫힘 후 트리거 복귀까지 반영했다. 운영 반영 전 최종 확인 중이다.
-- 🔄 **T-303** — 최신 `kor-travel-map` 기준 메인 콘텐츠·공용 컴포넌트·메뉴·반응형 표면을
-  전체 동기화했다. draft PR #543의 운영 UI 검증과 머지를 진행 중이다.
+- ✅ **T-299** — blue 색상톤을 유지한 상태에서 색각 구분성·상태 의미 전달을 검토하고, 상태 dot과
+  텍스트를 공통 배지에 반영했다. 운영 Chromium live 검증까지 완료했다(31/31 통과).
+- ✅ **T-300** — 공통 포커스 링의 비텍스트 대비·키보드 이동·메뉴/테이블 포커스를 보완하고,
+  정합성 판정 모달의 닫힘 후 트리거 복귀까지 반영했다. 운영 Chromium live 검증까지 완료했다(31/31 통과).
+- ✅ **T-303** — 최신 `kor-travel-map` 기준 메인 콘텐츠·공용 컴포넌트·메뉴·반응형 표면을
+  전체 동기화했다. 기존 blue 색상톤을 유지하고 운영 UI 검증과 인증 포함 live E2E(31/31)를 완료했다.
 
 ## 진행 중
 
@@ -108,43 +108,6 @@ PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본�
     보강 판단. n150은 다른 프로젝트와 공유하는 호스트라 이미지/빌드 캐시가 다시 쌓일 수
     있으므로, 주기적 `docker system prune` 또는 자동화된 이미지 보존 정책이 있는지(없다면
     kor-travel-docker-manager 쪽에 건의할지) 판단 — 이 저장소 범위 밖일 수 있음.
-- [ ] **T-299** — admin UI brand 색(파란 계열, T-298)이 기존 semantic `info` 색과
-  hue가 가까워(240 vs 255, 15도 차이) 청색맹(tritanopia) 사용자에게 구분이 어려워질
-  위험(T-298 적대적 리뷰 2건이 독립적으로 발견·정량화, PR #540). OKLab 거리 기준
-  brand-vs-info 분리도가 teal 때 대비 약 2.6배 감소(0.142→0.055), tritanopia
-  시뮬레이션에서도 유사한 감소 확인. 실제 화면 충돌 지점 2곳 확인—
-  `components/admin/DagsterPanel.tsx`(backup 스텝 `border-primary/40 bg-primary/5`
-  컨테이너 안에 `Badge tone="info"`가 바로 인접), `components/admin/SettingsPanel.tsx`
-  (공개 API 키 발급 버튼과 `NoticeAlert variant="info"`가 같은 패널). WCAG "use of
-  color" 위반은 아님(텍스트 라벨이 의미를 별도 전달) — T-298 사용자 판단으로 hue=240
-  그대로 유지, 드물게 겪는 CVD 유형이라 트레이드오프로 수용했다. 향후 판단 필요:
-  brand hue를 info에서 더 멀리(210 부근, 다만 "파란색"보다 "청록"에 가까워 보일 위험)
-  옮길지, 아니면 lightness를 낮춰(L 0.47→0.38 부근, tritanopia dE 5.9→15.0로 개선
-  확인됨, 대신 버튼이 더 짙은 남색 톤이 됨 — 범위 확대 필요) 색상각은 유지한 채
-  분리도를 확보할지, 혹은 `info` 자체의 hue를 재검토할지. 부수 발견: `tailwind.config.ts`의
-  하드코딩 `info: "#1d4ed8"`과 `globals.css`의 `--color-info: oklch(0.5 0.14 255)`가
-  T-298 이전부터 서로 다른 값이었다(별개 이슈, 이 task 범위 밖).
-
-  **T-301 재검증(2026-08-27)**: brand hue가 262.9(info와 7.9도 차이, T-298의 240/15도보다
-  더 가까움)로 바뀌면서 hue-angle만 보면 이 우려가 더 악화된 것처럼 보이지만, 적대적
-  리뷰어가 Brettel 1997 tritanopia 시뮬레이션 + OKLab distance로 직접 재계산한 결과는
-  반대였다 — chroma가 거의 2배(0.104→0.215)로 늘어난 게 hue-angle 근접보다 지배적이라
-  OKLab distance 61% 증가, tritanopia ΔE 2.5배 증가(더 잘 구분됨). 즉 hue-angle은
-  이 케이스에서 분리도의 오도(misleading) 지표였다. 따라서 이 task는 T-301로 인해
-  **악화되지 않았고**, 위에 나열된 향후 옵션(hue 재조정/lightness 조정/info 재검토)의
-  긴급도도 낮아졌다 — 여전히 열어두되 우선순위 재상향 근거는 없음.
-- [ ] **T-300** — `.nav-link`/`.button`(shadcn 포함)/`.vtable-grid`/`.vtable-scroll`의
-  `:focus-visible` 포커스 링이 WCAG 1.4.11(non-text contrast, 최소 3:1) 미달(T-298
-  적대적 리뷰에서 발견, PR #540 — T-298이 만든 회귀 아님, teal일 때도 동일하게 미달했음을
-  독립 계산으로 확인). 이 요소들은 `:focus-visible`에서 `outline: 2px solid transparent`로
-  전역 `outline: 2px solid var(--brand)` 폴백을 무력화하고, 유일한 시각 표시가
-  `box-shadow: 0 0 0 Npx color-mix(var(--brand) 24~36%, transparent)` glow뿐인데
-  실제 배경(페이지/카드/사이드바/hover 표면)에 alpha-compositing해 보면 1.3:1~1.8:1
-  수준(brand hue 변경 전후 차이는 ≤0.03, 무관)으로 3:1 기준에 크게 못 미친다. 별도로,
-  `globals.css` 225행(28%, `in srgb`)·529행(18%, `in srgb`)의 이제는 도달 불가능한
-  중복 focus-visible 규칙이 2506행·2649행(각 36%/24%, `in oklch`)에 의해 항상 override
-  되고 있다(죽은 코드, 청소 대상). `.field input:focus-visible`은 전체 불투명도
-  `border-color` 변경도 같이 일어나 문제없음(~6.5:1).
 
 ### 선택 후속 (낮은 우선순위)
 

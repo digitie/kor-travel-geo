@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-31 (T-303 — 운영 UI 반영·인증 live E2E, PR #543, by codex)
+
+PR 후보를 운영 build context에 반영해 UI 이미지만 새로 빌드·재생성했다. API·PostgreSQL·RustFS
+컨테이너는 재기동하지 않았고, 새 UI가 healthy가 된 뒤 API health/ready와 UI `/login`, 미인증
+`/admin` redirect를 재확인했다.
+
+첫 live 런은 프로젝트 Playwright 1.61과 운영 호스트의 캐시 이미지 1.60이 어긋나 브라우저
+실행 파일을 찾지 못해 중단됐다. disposable Linux Playwright container에 일치하는 Chromium을
+설치한 뒤 인증 자격 증명을 프로세스 stdin으로만 주입해 재실행했고, `admin-browser-readonly`
+suite 31/31 통과를 확인했다. suite는 화면·탭·검색·데이터셋 버전 미리보기 범위의 읽기 전용
+검증이며 백업·복원·재빌드·삭제 작업은 실행하지 않았다.
+
+로컬 게이트(`lint`, `type-check`, 단위 테스트 204건, build, React Doctor, 관련 Chromium e2e)와
+원격 PR 체크(frontend/backend/OpenAPI)도 모두 통과했다. T-299/T-300은 상태 dot·텍스트 의미
+전달, opaque focus ring, 키보드 경로, dialog focus 복귀까지 반영하고 운영 검증으로 완료했다.
+
 ## 2026-08-31 (T-303 — 전체 UI parity 리뷰 반영, draft PR #543, by codex)
 
 최신 `kor-travel-map` `origin/main`의 Workbench 기준을 글꼴에 한정하지 않고 메인 콘텐츠,
