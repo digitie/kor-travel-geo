@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requestHasValidSession, sanitizeLocalPath } from "@/lib/auth";
 import { PATHNAME_HEADER } from "@/lib/session-headers";
 
+const PUBLIC_PATHS = new Set(["/login", "/api/metrics"]);
 const PUBLIC_PATH_PREFIXES = ["/api/auth/", "/_next/", "/favicon.ico"];
 
 export async function proxy(request: NextRequest) {
@@ -49,7 +50,7 @@ export async function proxy(request: NextRequest) {
 
 function isPublicPath(pathname: string): boolean {
   return (
-    pathname === "/login" ||
+    PUBLIC_PATHS.has(pathname) ||
     PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   );
 }

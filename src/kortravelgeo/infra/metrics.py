@@ -32,6 +32,11 @@ PROMETHEUS_CONTENT_TYPE: Final[str] = (
     if _prometheus_client is not None
     else "text/plain; version=0.0.4; charset=utf-8"
 )
+# A request that did not match a Starlette route must not use its raw path as a
+# Prometheus label. Otherwise arbitrary 404 URLs can create an unbounded number
+# of time series. Keep the fallback stable while matched routes still expose
+# their normal route templates.
+UNMATCHED_ROUTE: Final[str] = "/<unmatched>"
 
 
 class _NoopMetric:

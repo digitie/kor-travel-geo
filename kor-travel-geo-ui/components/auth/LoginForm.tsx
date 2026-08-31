@@ -51,7 +51,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
             <LockKeyhole size={24} />
           </div>
           <div>
-            <p>kor-travel-geo-ui</p>
+            <p>Geocoder Admin UI</p>
             <h1 id="login-title">관리자 로그인</h1>
           </div>
         </div>

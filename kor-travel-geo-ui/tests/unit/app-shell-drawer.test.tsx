@@ -77,6 +77,20 @@ describe("AppShell 모바일 드로어 (#515)", () => {
     expect(sidebar()?.hasAttribute("inert"), "닫힌 드로어에 inert 속성이 있어야 한다").toBe(true);
   });
 
+  it("제품명을 모바일 상단과 사이드바 홈에 표시한다", () => {
+    render(
+      <AppShell>
+        <div>본문</div>
+      </AppShell>
+    );
+
+    expect(screen.getByRole("link", { name: "Geocoder Admin UI" })).toHaveAttribute(
+      "href",
+      "/admin"
+    );
+    expect(screen.getByText("Geocoder Admin UI", { selector: "strong" })).toBeInTheDocument();
+  });
+
   it("드로어를 열면 inert가 해제된다", () => {
     render(
       <AppShell>

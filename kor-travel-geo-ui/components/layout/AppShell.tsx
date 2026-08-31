@@ -194,7 +194,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           {menuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
-        <strong className="mobile-topbar-title">kor-travel-geo-ui</strong>
+        <strong className="mobile-topbar-title">Geocoder Admin UI</strong>
       </header>
       <button
         className="sidebar-backdrop"
@@ -215,14 +215,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="rail-inner">
           <div className="rail-header">
             <Link
-              aria-label="kor-travel-geo admin"
+              aria-label="Geocoder Admin UI"
               className="rail-brand"
               href={ADMIN_PAGES.home.path}
             >
-              <span className="rail-brand-name">kor-travel-geo</span>
-              <span className="rail-brand-suffix">admin</span>
+              <span className="rail-brand-name">Geocoder</span>
+              <span className="rail-brand-suffix">Admin UI</span>
               <span aria-hidden="true" className="rail-brand-compact">
-                ktg
+                GA
               </span>
             </Link>
             <div className="rail-actions">

@@ -268,7 +268,9 @@ def test_resolve_route_template_before_dispatch_matches_and_falls_back() -> None
     )
 
     assert matched == "/items/{item_id}"
-    assert unmatched == "/no-such-route"
+    # A raw 404 path would let arbitrary URLs create unbounded Prometheus label
+    # cardinality. Matched routes still use their Starlette route template.
+    assert unmatched == "/<unmatched>"
 
 
 def test_observability_route_template_gated_by_enabled_flag() -> None:

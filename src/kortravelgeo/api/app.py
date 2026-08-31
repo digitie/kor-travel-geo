@@ -39,6 +39,7 @@ from kortravelgeo.infra.concurrency import (
 from kortravelgeo.infra.load_job_executor import LoadJobExecutor
 from kortravelgeo.infra.metrics import (
     PROMETHEUS_CONTENT_TYPE,
+    UNMATCHED_ROUTE,
     record_api_admission_finished,
     record_api_admission_rejection,
     record_api_admission_started,
@@ -466,7 +467,7 @@ def _cancels_on_client_disconnect(scope: Scope) -> bool:
 def _route_template(request: Request) -> str:
     route = request.scope.get("route")
     path = getattr(route, "path", None)
-    return str(path) if path else request.url.path
+    return str(path) if path else UNMATCHED_ROUTE
 
 
 def _resolve_route_template_before_dispatch(request: Request) -> str:
@@ -483,7 +484,7 @@ def _resolve_route_template_before_dispatch(request: Request) -> str:
             path = getattr(route, "path", None)
             if path:
                 return str(path)
-    return request.url.path
+    return UNMATCHED_ROUTE
 
 
 def _observability_route_template(request: Request) -> str:
@@ -857,4 +858,3 @@ async def _run_source_janitor_once(client: AsyncAddressClient) -> None:
         _LOGGER.exception("source upload janitor pass failed")
         return
     _LOGGER.info("source upload janitor scheduler pass", extra=summary.model_dump())
-

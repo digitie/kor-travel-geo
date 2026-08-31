@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   // `template` keeps the product name in the tab title for pages that set their own — without
   // it `/admin/backups` rendered a bare "백업/복원" (issue #515).
   title: {
-    default: "kor-travel-geo-ui",
-    template: "%s · kor-travel-geo-ui"
+    default: "Geocoder Admin UI",
+    template: "%s · Geocoder Admin UI"
   },
   description: "도로명주소 지오코딩 운영 도구"
 };

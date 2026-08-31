@@ -32,6 +32,13 @@
   DB 스키마 변경 없이 동작한다.
 
 ### Changed
+- **Prometheus pull 계측과 관리자 UI 제품명을 정리했다.** UI의 정확한 aggregate scrape 경로
+  `/api/metrics`는 `no-store` 응답으로 Prometheus가 인증 없이 pull할 수 있게 했고,
+  Web Vitals 수집(`/api/metrics/web-vitals`)과 나머지 API는 기존 세션 게이트를 유지했다.
+  API에서 매칭되지 않은 404 요청은 원시 URL을 metric label로 사용하지 않고 안정적인
+  `/<unmatched>` route label로 집계해 임의 URL에 의한 time-series cardinality 증가를 막는다.
+  브라우저 제목·로그인·모바일 상단·사이드바 브랜드 표기는 `Geocoder Admin UI`로 통일했으며
+  내부 패키지명·인증 audience·metric prefix는 호환성을 위해 유지했다.
 - **최신 `kor-travel-map` 기준으로 admin 메인 콘텐츠의 전체 look and feel을 보정했다.**
   제목·본문·설명 타이포그래피, 패널/카드 내부 여백과 계층, 표 본문 밀도, 상태 요약과 반응형
   콘텐츠 여백을 맞췄으며 기존 blue 색상톤은 유지했다. 공용 컨트롤·배지·메뉴·focus 상태와

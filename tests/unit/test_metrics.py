@@ -52,6 +52,20 @@ def test_metrics_render_includes_api_request_cancellation_counter() -> None:
     assert 'route="/v1/address/geocode"' in body
 
 
+def test_unmatched_route_label_is_stable() -> None:
+    metrics.record_api_request(
+        method="GET",
+        route="/<unmatched>",
+        status_code=404,
+        elapsed_s=0.001,
+    )
+
+    body = metrics.render_prometheus().decode()
+
+    assert 'route="/<unmatched>"' in body
+    assert "/no-such-route" not in body
+
+
 def test_metrics_render_includes_db_pool_gauges() -> None:
     class FakePool:
         def size(self) -> int:
