@@ -32,6 +32,11 @@
   DB 스키마 변경 없이 동작한다.
 
 ### Changed
+- **최신 `kor-travel-map` admin workbench의 look and feel을 geo admin에 동기화했다.**
+  접힘 가능한 좌측 Rail-Workbench, header band, 조밀한 운영 상태 strip, 경계 중심
+  Panel/Card/Badge 표면과 개요·데이터 관리·수집 파이프라인·모니터링·시스템 메뉴 그룹을
+  적용했다. 기존 geo 라우트·API·인증·폼 흐름과 현재 제품의 blue 색상 토큰은 유지하고,
+  map의 녹색 팔레트는 가져오지 않았다.
 - **PostgreSQL 기본 접속을 `localhost:5432` → `127.0.0.1:12500`(geo 전용 인스턴스)으로 맞췄다.**
   `kor-travel-docker-manager` ADR-37 / PR #176(2026-08-17)이 prod PostgreSQL을 프로젝트별 전용
   인스턴스로 나누고 포트를 `12x00` 대역으로 정렬했다(geo `12500`; `5432`를 듣는 것은 이제 없다).

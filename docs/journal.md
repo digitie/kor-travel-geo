@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-31 (T-302 — 최신 kor-travel-map admin workbench UI 동기화, PR #542, by codex)
+
+사용자 요청에 따라 최신 `kor-travel-map` `origin/main`의 admin shell 커밋
+`2c1cf954`를 기준으로 geo admin의 look and feel·공통 컴포넌트·메뉴 IA를 동기화했다.
+map의 녹색 토큰은 복사하지 않고 현재 geo의 blue 토큰을 그대로 유지했다. Rail 폭·header
+band·nav row·active mark·collapsed icon rail·모바일 drawer의 구조는 map과 맞추되, geo의
+라우트·API·인증·폼 흐름은 변경하지 않았다. `Panel`, `Card`, `PageHeader`,
+`DocumentNavLink`를 공통 시각 계약으로 정리했고, 관리 홈 상태 요약은 map과 같은 조밀한
+분리선 기반 strip으로 바꿨다.
+
+검증은 WSL ext4 미러에서 `npm run lint`, `npm run type-check`, `npm run test`(41 files /
+204 tests), `npm run build`, offline React Doctor를 실행해 모두 통과했다. React Doctor는
+오류 0건·점수 92점이며 기존 `test-noise` 경고 2건만 남았다. 로컬 Chromium navigation
+e2e와 데스크톱·collapsed rail·모바일 drawer 스크린샷을 확인했고, Firefox는 미러에
+Playwright Firefox 바이너리가 없어 실행하지 못했다.
+
+PR 후보를 운영 manager 설정 build context에 archive로 반영해 UI 이미지를 새로 빌드하고,
+API·DB·RustFS를 건드리지 않는 `--no-deps --force-recreate`로 UI만 교체했다. 운영에서
+UI/API 컨테이너 healthy, `/v1/healthz`·`/v1/readyz`·`/login` 200, 미인증 `/admin` 307,
+잘못된 로그인 401, 저장된 인증 설정의 길이 검증, 새 collapsed rail bundle 포함을
+확인했다. 운영 대상 Chromium으로 로그인 화면을 캡처해 blue 버튼과 기존 색상톤을
+육안 확인했다. 관리자 비밀번호 원문은 세션에 없어 성공 로그인 POST는 추측하지 않았다.
+
 ## 2026-08-27 (T-301 — admin UI brand blue를 사용자 레퍼런스 팔레트로 재적용, by claude)
 
 T-298 머지·n150 배포·live e2e 검증까지 끝내고 최종 요약을 보낸 직후, 사용자가

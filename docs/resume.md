@@ -2,7 +2,14 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-08-27 갱신, by claude)
+## 현재 진척도 (2026-08-31 갱신, by codex)
+
+- ✅ **T-302 — 최신 kor-travel-map admin workbench UI 동기화 (PR #542, 운영 배포 완료,
+  by codex)** — 최신 map `origin/main`(`2c1cf954`)의 Rail-Workbench 레이아웃·접힘 가능한
+  레일·header band·조밀한 상태 strip·공통 Panel/Card/Badge 표면·메뉴 IA를 geo admin에
+  적용했다. 기존 geo 라우트·API·인증·폼 흐름과 현재 제품 blue 색상 토큰은 유지했다.
+  WSL ext4 게이트(lint/type-check/test 41 files·204 tests/build/React Doctor), 로컬
+  Chromium navigation, 운영 스모크와 Chromium 로그인 화면 캡처를 완료했다.
 
 - ✅ **T-301 — admin UI brand blue를 사용자 지정 레퍼런스 팔레트로 재적용 (2026-08-27,
   by claude, 사용자 지시)** — T-298이 골랐던 muted steel-blue(`#0a618f`, hue 240/chroma
