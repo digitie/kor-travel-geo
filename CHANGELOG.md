@@ -32,6 +32,9 @@
   DB 스키마 변경 없이 동작한다.
 
 ### Changed
+- **최신 `kor-travel-map` 기준으로 admin 메인 콘텐츠의 전체 look and feel을 보정했다.**
+  제목·본문·설명 타이포그래피, 패널/카드 내부 여백과 계층, 표 본문 밀도, 상태 요약과 반응형
+  콘텐츠 여백을 맞췄으며 기존 blue 색상톤은 유지했다.
 - **최신 `kor-travel-map` admin workbench의 look and feel을 geo admin에 동기화했다.**
   접힘 가능한 좌측 Rail-Workbench, header band, 조밀한 운영 상태 strip, 경계 중심
   Panel/Card/Badge 표면과 개요·데이터 관리·수집 파이프라인·모니터링·시스템 메뉴 그룹을

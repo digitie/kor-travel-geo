@@ -2,6 +2,13 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-31 (T-303 — 메인 콘텐츠 전체 look and feel 대조 시작, by codex)
+
+최신 `kor-travel-map`의 실제 Workbench 스케일을 다시 대조해 페이지 제목 24px, 본문 15px,
+설명 13.5px, sm 패널 16px 내부 여백, 36px 컨트롤, 표 본문 15px 기준을 확인했다. 기존
+geo의 blue 색상 토큰·라우트·인증·접근성 계약은 유지하고 공통 메인 콘텐츠 표면에만 보정한다.
+T-299 색각 구분성 검토와 T-300 포커스 링/키보드 경로 검토를 두 독립 리뷰와 함께 진행한다.
+
 ## 2026-08-31 (T-302 — 최신 kor-travel-map admin workbench UI 동기화, PR #542, by codex)
 
 사용자 요청에 따라 최신 `kor-travel-map` `origin/main`의 admin shell 커밋

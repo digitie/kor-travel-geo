@@ -3376,3 +3376,111 @@ textarea {
     background: var(--overlay);
   }
 }
+
+/* T-303 main content parity — 최신 kor-travel-map의 실제 Workbench 스케일을 공통
+   본문 표면에 적용한다. 기존 blue 토큰·라우트·접근성 계약은 유지한다. */
+@layer base {
+  html,
+  body {
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.content {
+  --content-inline: var(--space-md);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.page-section {
+  margin-bottom: var(--space-3xs);
+}
+
+.page-head-row {
+  gap: var(--space-xs);
+}
+
+.page-title h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.page-meta,
+.page-description {
+  font-size: 0.84375rem;
+  line-height: 1.5;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-radius: 0.5rem;
+}
+
+.panel-header {
+  margin: calc(-1 * var(--space-sm)) calc(-1 * var(--space-sm)) 0;
+  padding: var(--space-sm) var(--space-sm) var(--space-xs);
+}
+
+.panel-header h2 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.375;
+}
+
+.panel-body,
+.admin-nav-panel .panel-body {
+  padding: 0;
+}
+
+.content .table,
+.content .vtable,
+.content .vtable-static,
+.content .vtable-grid,
+.content .vtable-toolbar {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.content .table td,
+.content .vtable-td {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.content .table th,
+.content .vtable-th,
+.content .vtable-th-sort {
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.admin-status-label {
+  font-size: 0.84375rem;
+}
+
+.admin-status-value {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.admin-status-detail {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+@media (min-width: 768px) {
+  .page-head-row {
+    gap: var(--space-md);
+  }
+}
