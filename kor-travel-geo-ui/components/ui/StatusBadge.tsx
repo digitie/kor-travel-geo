@@ -16,6 +16,7 @@ export function StatusBadge({
   const resolved = tone ?? severityClass(value);
   return (
     <Badge tone={resolved} className={`status ${resolved}`}>
+      <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
       {value}
     </Badge>
   );

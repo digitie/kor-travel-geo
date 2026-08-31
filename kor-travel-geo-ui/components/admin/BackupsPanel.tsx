@@ -240,7 +240,7 @@ function BackupsWorkflowGuide({
             {step.hint ? <p>{step.hint}</p> : null}
             {step.cli ? (
               <Collapsible>
-                <CollapsibleTrigger className="inline-flex min-h-9 items-center gap-1 rounded-md px-1.5 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&>svg]:-rotate-90 [&>svg]:transition-transform data-[state=open]:[&>svg]:rotate-0">
+                <CollapsibleTrigger className="inline-flex h-control-sm items-center gap-1 rounded-control px-1.5 text-xs font-medium text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus [&>svg]:-rotate-90 [&>svg]:transition-transform data-[state=open]:[&>svg]:rotate-0">
                   <ChevronDown aria-hidden="true" className="size-3.5" />
                   CLI 명령 보기
                 </CollapsibleTrigger>
@@ -771,6 +771,8 @@ function BackupArtifactsPanel({
   return (
     <Panel title="Backup Artifacts">
       <VirtualTable
+        as="table"
+        caption="백업 artifact 목록"
         columns={columns}
         emptyHint="백업본이 없습니다."
         getSearchText={(a) => a.display_name ?? a.artifact_id}

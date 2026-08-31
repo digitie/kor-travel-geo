@@ -34,7 +34,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "ui-pop-in z-50 w-72 rounded-lg bg-popover p-3 text-sm leading-normal text-popover-foreground shadow-[var(--shadow-modal)] ring-1 ring-foreground/10 outline-none",
+          "ui-pop-in z-50 w-72 rounded-panel border border-border bg-popover p-4 text-xs leading-normal text-popover-foreground shadow-[var(--shadow-modal)] focus-visible:outline-0",
           className
         )}
         {...props}

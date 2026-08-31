@@ -94,7 +94,7 @@ const runColumns = (onSelect: (runId: string) => void): VirtualColumn<DagsterRun
     cell: (row) => (
       <button
         aria-label={`${row.run_id} run 상세`}
-        className="max-w-full truncate text-left font-mono text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="max-w-full truncate rounded-control text-left font-mono text-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         onClick={() => onSelect(row.run_id)}
         type="button"
       >
@@ -615,7 +615,7 @@ function RecentFailuresPanel({ onSelectRun }: { onSelectRun: (runId: string) => 
             >
               <button
                 aria-label={`${alert.run_id} run 상세`}
-                className="max-w-full truncate text-left font-mono text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="max-w-full truncate rounded-control text-left font-mono text-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 onClick={() => onSelectRun(alert.run_id)}
                 type="button"
               >

@@ -4,11 +4,11 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const alertVariants = cva(
-  "relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-lg border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5",
+  "relative grid w-full grid-cols-[0_1fr] items-start gap-y-0.5 rounded-panel border px-4 py-3 text-sm has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] has-[>svg]:gap-x-3 [&>svg]:size-4 [&>svg]:translate-y-0.5",
   {
     variants: {
       variant: {
-        default: "border-border bg-card text-card-foreground [&>svg]:text-muted-foreground",
+        default: "border-border bg-card text-text-primary [&>svg]:text-text-secondary",
         destructive:
           "border-[color-mix(in_srgb,var(--danger)_30%,transparent)] bg-[color-mix(in_srgb,var(--danger)_6%,white)] text-[var(--danger)] [&>svg]:text-[var(--danger)]",
         warning:

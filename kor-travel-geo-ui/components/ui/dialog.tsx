@@ -61,7 +61,7 @@ function DialogContent({
           data-slot="dialog-content"
           data-size={size}
           className={cn(
-            "ui-pop-in relative z-50 grid w-full max-w-lg gap-4 rounded-lg bg-card p-5 text-sm text-card-foreground shadow-[var(--shadow-modal)] ring-1 ring-foreground/10 data-[size=lg]:max-w-3xl",
+            "ui-pop-in relative z-50 grid w-full max-w-lg gap-4 rounded-panel border border-border bg-card p-5 text-sm text-text-primary shadow-modal data-[size=lg]:max-w-3xl",
             className
           )}
           {...props}
@@ -70,7 +70,7 @@ function DialogContent({
           {showCloseButton ? (
             <DialogPrimitive.Close
               data-slot="dialog-close-button"
-              className="absolute top-3 right-3 inline-flex size-9 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="absolute top-3 right-3 inline-flex size-control-sm items-center justify-center rounded-control text-text-secondary hover:bg-surface-subtle hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
               aria-label="닫기"
             >
               <XIcon className="size-4" />

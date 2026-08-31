@@ -2,6 +2,28 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-31 (T-303 — 전체 UI parity 리뷰 반영, draft PR #543, by codex)
+
+최신 `kor-travel-map` `origin/main`의 Workbench 기준을 글꼴에 한정하지 않고 메인 콘텐츠,
+Panel/Card, button/input/select/checkbox/tabs, table, status badge, 메뉴 행, mobile drawer와
+focus 상태까지 전체 대조했다. 기존 geo의 blue 색상톤·라우트·인증·API 흐름은 유지하면서
+본문 15px, 제목 24px, 설명 13.5px, 패널 8px/16px/12px, 기본·보조 컨트롤 36px/30px,
+opaque focus ring과 반응형 content gutter를 map 스케일로 맞췄다. 상태 배지에는 map과 같은
+6px dot을 추가했고, 카드 제목은 heading role을 복구했으며, 백업 artifact 목록은 semantic
+table로 전환했다.
+
+두 독립 적대적 리뷰 결과를 반영했다. (1) 정합성 판정 모달을 닫을 때 승인/보류/거절 원래
+트리거로 포커스를 되돌리고, (2) 모바일 drawer backdrop의 실제 overlay와 stacking을 보장하고,
+(3) 공용 비활성 컨트롤의 반투명 root 스타일을 제거하고 semantic disabled 색으로 바꾸고,
+(4) 640px 이상 태블릿 상태 strip은 3열을 유지하도록 했다. Admin home 메뉴 hover의 이동도
+제거해 메뉴 행이 카드처럼 튀지 않게 했다.
+
+WSL ext4 미러에서 `npm run lint`, `npm run type-check`, `npm run test`(41 files / 204 tests),
+`npm run build`를 통과했다. Chromium Playwright는 정합성 접근성 5건, 백업 접근성 6건,
+Workbench 시각·반응형·drawer 계약 3건을 통과했다. 초기 drawer 측정에서 브라우저가
+token `calc()` z-index를 적용하지 않는 것을 발견해 명시적 stacking level로 수정하고 재검증했다.
+운영 UI 배포·live e2e·PR 머지는 이 검증 뒤 진행한다.
+
 ## 2026-08-31 (T-303 — 메인 콘텐츠 전체 look and feel 대조 시작, by codex)
 
 최신 `kor-travel-map`의 실제 Workbench 스케일을 다시 대조해 페이지 제목 24px, 본문 15px,

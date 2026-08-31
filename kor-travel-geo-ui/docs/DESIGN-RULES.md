@@ -30,13 +30,14 @@
    기본 카드는 `--shadow-card`처럼 4% 수준의 낮은 그림자만 사용한다. modal이나 floating
    표면도 12%를 넘기지 않는다. 색이 들어간 그림자는 쓰지 않는다.
 
-5. 조작 대상은 최소 44px touch target을 가진다.
-   button, input, nav link, icon button, checkbox hit area는 `min-height: 44px` 또는 그에
-   준하는 hit area를 가진다. 시각적으로 작은 checkbox도 pseudo hit area로 클릭 영역을 보강한다.
+5. 조작 대상은 시각 밀도와 touch target을 함께 지킨다.
+   최신 map Workbench의 standalone button/input/select는 기본 36px, 보조 조작은 30px로 맞춘다.
+   nav link와 checkbox hit area처럼 손가락 조작이 잦은 요소는 pseudo hit area를 포함해 최소
+   44px의 클릭 여유를 유지한다.
 
 6. label은 작고 일관되게 표시한다.
-   폼 label, table header, nav group title은 12px, 굵은 weight, `letter-spacing: 0.05em`,
-   uppercase를 기본으로 한다. 한국어 문구는 형태가 바뀌지 않지만 같은 시각 리듬을 유지한다.
+   폼 label은 13.5px, table header는 12px의 중간 굵기로 두고, 한국어 문구에 영문 uppercase
+   리듬을 강제하지 않는다. nav group title과 패널 제목은 정보 계층에 맞춰 한 단계 크게 둔다.
 
 7. 상태 표시는 dot과 text를 함께 쓴다.
    `StatusBadge` 계열은 색만으로 상태를 전달하지 않고 같은 색의 6px dot과 text를 함께 보여 준다.

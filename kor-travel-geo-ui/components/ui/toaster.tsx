@@ -34,7 +34,7 @@ export function Toaster() {
             onOpenChange={(open) => {
               if (!open) dismiss(item.id);
             }}
-            className="grid grid-cols-[auto_1fr_auto] items-start gap-x-2.5 rounded-lg bg-card p-3.5 text-sm shadow-[var(--shadow-modal)] ring-1 ring-foreground/10"
+            className="grid grid-cols-[auto_1fr_auto] items-start gap-x-2.5 rounded-panel border border-border bg-card p-4 text-sm text-text-primary shadow-[var(--shadow-modal)]"
           >
             <Icon aria-hidden="true" className={cn("mt-0.5 size-4", toneClass[item.tone])} />
             <div className="grid gap-0.5">
@@ -49,7 +49,7 @@ export function Toaster() {
             </div>
             <ToastPrimitive.Close
               aria-label="알림 닫기"
-              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="inline-flex size-6 items-center justify-center rounded-control text-text-secondary hover:bg-surface-subtle hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               <X className="size-3.5" />
             </ToastPrimitive.Close>

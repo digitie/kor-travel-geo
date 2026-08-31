@@ -26,7 +26,7 @@ export function HelpTip({
           type="button"
           aria-label={label}
           className={cn(
-            "inline-flex size-5 shrink-0 items-center justify-center rounded-full align-middle text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+            "inline-flex size-5 shrink-0 items-center justify-center rounded-full align-middle text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
             className
           )}
         >
