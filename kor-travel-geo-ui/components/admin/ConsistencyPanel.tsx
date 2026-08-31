@@ -2,7 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, Clock, Download, Play, RotateCw, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject
+} from "react";
 import { AdminTabs, AdminTabsContent } from "@/components/admin/shared/AdminTabs";
 import { ActionResultPanel } from "@/components/admin/shared/ActionResultPanel";
 import { ConfirmActionDialog } from "@/components/admin/shared/ConfirmActionDialog";
@@ -133,6 +140,7 @@ function useConsistencyPanelController(initialReportId: string | null) {
     page: 1
   });
   const [decisionForm, setDecisionForm] = useState<DecisionForm | null>(null);
+  const decisionTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [lastRun, setLastRun] = useState<LoadJobStatus | ConsistencySampleRecheckResponse | null>(null);
 
   const selectedCaseCode = useConsistencyAnalysisStore((state) => state.selectedCaseCode);
@@ -315,6 +323,7 @@ function useConsistencyPanelController(initialReportId: string | null) {
     clearSelection,
     csvHref,
     decisionForm,
+    decisionTriggerRef,
     decisionPending: decisionMutation.isPending,
     effectiveReportId,
     effectiveSelectedCaseCode,
@@ -323,6 +332,10 @@ function useConsistencyPanelController(initialReportId: string | null) {
     lastRun,
     onCloseDecision: () => setDecisionForm(null),
     onDecisionChange: (form: DecisionForm) => setDecisionForm(form),
+    onOpenDecision: (target: DecisionTarget, state: ActionState, trigger: HTMLButtonElement) => {
+      decisionTriggerRef.current = trigger;
+      setDecisionForm(openDecisionForm(target, state));
+    },
     onDecisionSubmit: () => {
       if (decisionForm) {
         decisionMutation.mutate(decisionForm);
@@ -374,6 +387,7 @@ function ConsistencyPanelLayout({ controller }: { controller: ConsistencyPanelCo
           onClose={controller.onCloseDecision}
           onChange={controller.onDecisionChange}
           onSubmit={controller.onDecisionSubmit}
+          returnFocusRef={controller.decisionTriggerRef}
         />
       ) : null}
       <ActionResultPanel result={controller.lastRun} />
@@ -468,7 +482,9 @@ function ConsistencyAnalysisSection({ controller }: { controller: ConsistencyPan
         <BulkBar
           count={controller.effectiveSelectedSampleIds.length}
           onClear={controller.clearSelection}
-          onOpen={(state) => controller.onDecisionChange(openDecisionForm("bulk", state))}
+          onOpen={(state, trigger) => {
+            controller.onOpenDecision("bulk", state, trigger);
+          }}
         />
       ) : null}
       {controller.staleSelectedCount > 0 ? (
@@ -502,7 +518,9 @@ function ConsistencyAnalysisSection({ controller }: { controller: ConsistencyPan
 
         <div className="detail-pane">
           <DecisionPanel
-            onAction={(state) => controller.onDecisionChange(openDecisionForm("single", state))}
+            onAction={(state, trigger) => {
+              controller.onOpenDecision("single", state, trigger);
+            }}
             onRecheck={controller.onRecheck}
             recheckDisabled={controller.recheckDisabled}
             sample={controller.selectedSample}
@@ -642,7 +660,7 @@ function CriteriaPanel({
         </div>
       </dl>
       <Collapsible className="grid justify-items-start gap-2" onOpenChange={setCriteriaOpen} open={criteriaOpen}>
-        <CollapsibleTrigger className="inline-flex min-h-9 items-center gap-1 rounded-md px-1.5 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+        <CollapsibleTrigger className="inline-flex h-control-sm items-center gap-1 rounded-control px-1.5 text-xs font-medium text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
           <ChevronDown
             aria-hidden="true"
             className={cn(
@@ -793,20 +811,35 @@ function BulkBar({
 }: {
   count: number;
   onClear: () => void;
-  onOpen: (state: ActionState) => void;
+  onOpen: (state: ActionState, trigger: HTMLButtonElement) => void;
 }) {
   return (
     <div className="bulk-bar">
       <strong>{count.toLocaleString()}개 선택</strong>
-      <Button onClick={() => onOpen("approved")} size="sm" type="button" variant="outline">
+      <Button
+        onClick={(event) => onOpen("approved", event.currentTarget)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
         <Check aria-hidden="true" />
         승인
       </Button>
-      <Button onClick={() => onOpen("deferred")} size="sm" type="button" variant="outline">
+      <Button
+        onClick={(event) => onOpen("deferred", event.currentTarget)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
         <Clock aria-hidden="true" />
         보류
       </Button>
-      <Button onClick={() => onOpen("rejected")} size="sm" type="button" variant="destructive">
+      <Button
+        onClick={(event) => onOpen("rejected", event.currentTarget)}
+        size="sm"
+        type="button"
+        variant="destructive"
+      >
         <X aria-hidden="true" />
         거절
       </Button>
@@ -862,7 +895,7 @@ function DecisionPanel({
 }: {
   sample: ConsistencyCaseSample | null;
   recheckDisabled: boolean;
-  onAction: (state: ActionState) => void;
+  onAction: (state: ActionState, trigger: HTMLButtonElement) => void;
   onRecheck: () => void;
 }) {
   return (
@@ -872,15 +905,33 @@ function DecisionPanel({
         <DecisionBadge value={sample?.decision_state ?? "unreviewed"} />
       </div>
       <div className="button-row">
-        <Button disabled={!sample} onClick={() => onAction("approved")} size="sm" type="button" variant="outline">
+        <Button
+          disabled={!sample}
+          onClick={(event) => onAction("approved", event.currentTarget)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
           <Check aria-hidden="true" />
           승인
         </Button>
-        <Button disabled={!sample} onClick={() => onAction("deferred")} size="sm" type="button" variant="outline">
+        <Button
+          disabled={!sample}
+          onClick={(event) => onAction("deferred", event.currentTarget)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
           <Clock aria-hidden="true" />
           보류
         </Button>
-        <Button disabled={!sample} onClick={() => onAction("rejected")} size="sm" type="button" variant="destructive">
+        <Button
+          disabled={!sample}
+          onClick={(event) => onAction("rejected", event.currentTarget)}
+          size="sm"
+          type="button"
+          variant="destructive"
+        >
           <X aria-hidden="true" />
           거절
         </Button>
@@ -932,7 +983,8 @@ function DecisionModal({
   sampleCount,
   onChange,
   onClose,
-  onSubmit
+  onSubmit,
+  returnFocusRef
 }: {
   form: DecisionForm;
   pending: boolean;
@@ -940,6 +992,7 @@ function DecisionModal({
   onChange: (form: DecisionForm) => void;
   onClose: () => void;
   onSubmit: () => void;
+  returnFocusRef: MutableRefObject<HTMLButtonElement | null>;
 }) {
   const reasons = decisionReasons[form.state];
   return (
@@ -954,6 +1007,13 @@ function DecisionModal({
           // 접근성 계약 (T-227): 열리면 포커스가 reason select로 이동한다.
           event.preventDefault();
           document.getElementById("consistency-decision-reason")?.focus();
+        }}
+        onCloseAutoFocus={(event) => {
+          const trigger = returnFocusRef.current;
+          if (!trigger?.isConnected) return;
+          event.preventDefault();
+          trigger.focus();
+          returnFocusRef.current = null;
         }}
         showCloseButton={false}
       >
@@ -993,7 +1053,7 @@ function DecisionModal({
             <FieldLabel htmlFor="consistency-decision-note">메모 (선택)</FieldLabel>
             <textarea
               aria-label="메모 (선택)"
-              className="min-h-20 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="min-h-20 w-full rounded-control border border-input bg-card px-3 py-2 text-sm text-text-primary focus-visible:border-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
               id="consistency-decision-note"
               onChange={(event) => onChange({ ...form, note: event.target.value })}
               placeholder="예: 지도 확인 결과 도로 반대편 좌표"

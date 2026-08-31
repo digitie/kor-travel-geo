@@ -47,7 +47,7 @@ export function JsonBlock({ value }: { value: unknown }) {
         type="button"
         aria-label="JSON 복사"
         onClick={() => void copy()}
-        className="absolute top-2 right-2 inline-flex size-8 items-center justify-center rounded-md bg-white/10 text-white/70 opacity-0 transition-opacity duration-[var(--duration-fast)] outline-none group-hover:opacity-100 hover:bg-white/20 hover:text-white focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="absolute top-2 right-2 inline-flex size-8 items-center justify-center rounded-control bg-white/10 text-white/70 opacity-0 transition-opacity duration-fast group-hover:opacity-100 hover:bg-white/20 hover:text-white focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
       >
         {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
       </button>

@@ -9,32 +9,43 @@ import { cn } from "@/lib/utils"
  * and live e2e locates them via `getByLabel`, both of which depend on native
  * select semantics.
  */
-const NativeSelect = React.forwardRef<
-  HTMLSelectElement,
-  React.ComponentProps<"select">
->(function NativeSelect({ className, children, ...props }, ref) {
-  return (
-    <span
-      data-slot="native-select-wrapper"
-      className="relative inline-flex w-full"
-    >
-      <select
-        ref={ref}
-        data-slot="native-select"
-        className={cn(
-          "min-h-11 w-full min-w-0 appearance-none rounded-lg border border-input bg-transparent py-2 pr-9 pl-3 text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease-default)] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm",
-          className
-        )}
-        {...props}
+type NativeSelectProps = Omit<React.ComponentPropsWithRef<"select">, "size"> & {
+  /** map workbench의 두 컨트롤 높이: 기본 36px, 보조 30px. */
+  size?: "default" | "sm"
+}
+
+const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
+  function NativeSelect({ className, children, size = "default", ...props }, ref) {
+    return (
+      <div
+        data-slot="native-select-wrapper"
+        className="group/native-select relative inline-flex w-full"
+        data-size={size}
       >
-        {children}
-      </select>
-      <ChevronDownIcon
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
-      />
-    </span>
-  )
-})
+        <select
+          ref={ref}
+          data-slot="native-select"
+          data-size={size}
+          className={cn(
+            "w-full min-w-0 appearance-none rounded-control border border-input bg-card pr-9 pl-3 text-text-primary transition-[color,background-color,border-color] duration-fast ease-out",
+            "h-control text-sm data-[size=sm]:h-control-sm data-[size=sm]:pl-2.5 data-[size=sm]:text-xs",
+            "hover:bg-surface-subtle focus-visible:border-text-secondary focus-visible:bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+            "disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-secondary aria-invalid:border-destructive",
+            className
+          )}
+          {...props}
+        >
+          {children}
+        </select>
+        <ChevronDownIcon
+          aria-hidden="true"
+          data-slot="native-select-icon"
+          className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-text-secondary group-data-[size=sm]/native-select:right-2.5 group-data-[size=sm]/native-select:size-3.5"
+        />
+      </div>
+    )
+  }
+)
 
 export { NativeSelect }
+export type { NativeSelectProps }

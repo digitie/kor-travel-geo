@@ -6,6 +6,31 @@
 
 ## 완료
 
+- [x] **T-303 — 최신 kor-travel-map 기준 메인 콘텐츠 전체 look and feel 동기화** (2026-08-31,
+  PR #543, by codex, 사용자 지시). 글꼴 크기만이 아니라 본문·패널·카드·폼 컨트롤·테이블·상태
+  요약·메뉴·반응형 여백·focus 상태를 최신 Workbench 스케일에 맞췄다. 기존 geo 라우트·API·인증
+  흐름과 blue 색상톤은 유지했다. 공용 primitive의 상태·접근성 계약과 모바일 drawer도 함께
+  검토했다.
+
+  운영에서는 UI 이미지만 재빌드·재생성했으며 API·PostgreSQL·RustFS 컨테이너는 재기동하지
+  않았다. UI/API health와 `/login` 200, 미인증 `/admin` 307, API health/ready 200을 확인했고,
+  인증 포함 Chromium read-only live UI suite 31/31을 통과했다. PR 체크(frontend/backend/OpenAPI)
+  도 모두 통과했다.
+
+- [x] **T-300 — 공용 focus-visible 대비·키보드 경로 보완** (2026-08-31, PR #543, by codex).
+  메뉴·버튼·입력·탭·표·dialog의 포커스 표시를 불투명 brand outline으로 통일하고, 정합성 판정
+  dialog를 닫을 때 원래 trigger로 포커스를 복귀시켰다. 반응형 drawer의 stacking과 비활성
+  컨트롤 의미 색상도 함께 검증했으며 운영 Chromium live UI suite 31/31을 통과했다.
+
+- [x] **T-299 — blue 색상톤의 상태 의미 전달 보완** (2026-08-31, PR #543, by codex).
+  기존 blue 팔레트를 변경하지 않고 공통 상태 배지에 map과 같은 status dot과 텍스트를 함께
+  표시했다. T-301에서 재검증한 색각 구분성 trade-off는 유지했으며, 운영 Chromium live UI
+  suite 31/31과 공용 접근성 검증을 통과했다.
+
+- [x] **T-297 — 디스크 위험 사후 조치 완료 처리** (2026-08-31, 상태 정리). 즉시 용량 위험은
+  해소됐고 데이터 무결성도 확인된 기존 조치를 완료 이력으로 올렸다. 백업 free-space 가드와
+  공유 호스트 보존 정책 검토는 낮은 우선순위 후속으로 백로그에 남겼다.
+
 - [x] **T-302 — 최신 kor-travel-map admin workbench UI 동기화** (2026-08-31, PR #542,
   by codex, 사용자 지시). 최신 map `origin/main`(`2c1cf954`)의 Rail-Workbench 구조를
   geo admin에 적용했다. 접힘 가능한 좌측 레일과 아이콘 전용 collapsed 상태, 모바일

@@ -1,32 +1,34 @@
 import { cva, type VariantProps } from "class-variance-authority"
 
 export const buttonVariants = cva(
-  "group/button inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-semibold whitespace-nowrap shadow-[var(--shadow-button)] transition-[background-color,border-color,color,box-shadow,transform] duration-[var(--duration-fast)] ease-[var(--ease-default)] outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-control border border-transparent bg-clip-padding font-medium whitespace-nowrap no-underline select-none transition-[color,background-color,border-color,box-shadow,transform] duration-fast ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus active:not-aria-[haspopup]:translate-y-px disabled:cursor-not-allowed aria-disabled:cursor-not-allowed aria-busy:cursor-progress aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        default:
+          "bg-brand text-brand-foreground hover:bg-brand-hover active:bg-brand-hover disabled:bg-surface-muted disabled:text-text-primary aria-disabled:bg-surface-muted aria-disabled:text-text-primary",
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-input bg-card text-text-primary hover:bg-surface-subtle active:bg-surface-muted aria-expanded:bg-surface-subtle aria-expanded:text-text-primary disabled:border-input disabled:bg-card aria-disabled:border-input aria-disabled:bg-card",
         secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "border-brand bg-brand-tint text-brand hover:border-brand-hover hover:text-brand-hover active:border-brand-hover active:text-brand-hover aria-expanded:border-brand aria-expanded:bg-brand-tint aria-expanded:text-brand disabled:border-brand disabled:text-brand aria-disabled:border-brand aria-disabled:text-brand",
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "text-text-secondary hover:bg-surface-subtle hover:text-text-primary active:bg-surface-muted aria-expanded:bg-surface-subtle aria-expanded:text-text-primary disabled:bg-transparent disabled:text-text-secondary aria-disabled:bg-transparent aria-disabled:text-text-secondary",
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary shadow-none underline-offset-4 hover:underline",
+          "border-input bg-card text-destructive hover:border-destructive hover:bg-destructive-tint active:bg-destructive-tint aria-expanded:bg-destructive-tint disabled:border-input disabled:bg-card aria-disabled:border-input aria-disabled:bg-card",
+        "destructive-solid":
+          "bg-destructive text-brand-foreground hover:bg-text-primary hover:text-surface-page active:bg-text-primary active:text-surface-page disabled:bg-surface-muted disabled:text-text-primary aria-disabled:bg-surface-muted aria-disabled:text-text-primary",
+        link: "text-brand underline-offset-4 hover:text-brand-hover hover:underline",
       },
       size: {
         default:
-          "gap-2 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
-        xs: "gap-1.5 rounded-lg px-2.5 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3",
-        sm: "gap-1.5 rounded-lg px-3 text-[13px] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "gap-2 px-3.5 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        icon: "size-11",
-        "icon-xs":
-          "size-11 rounded-lg in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-11 rounded-lg in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-11",
+          "h-control gap-2 px-3.5 text-sm has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        sm: "h-control-sm gap-1.5 px-2.5 text-xs has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-3.5",
+        xs: "h-control-sm gap-1.5 px-2 text-xs has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-control gap-2 px-3.5 text-sm has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        icon: "size-control text-sm",
+        "icon-sm": "size-control-sm text-xs [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-xs": "size-control-sm text-xs [&_svg:not([class*='size-'])]:size-3.5",
+        "icon-lg": "size-control text-sm",
       },
     },
     defaultVariants: {

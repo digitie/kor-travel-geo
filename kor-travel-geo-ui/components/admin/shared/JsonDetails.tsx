@@ -31,7 +31,7 @@ export function JsonDetails({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className={className}>
-      <CollapsibleTrigger className="inline-flex min-h-9 items-center gap-1 rounded-md px-1.5 text-xs font-semibold text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="inline-flex h-control-sm items-center gap-1 rounded-control px-1.5 text-xs font-medium text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
         <ChevronDown
           aria-hidden="true"
           className={cn(

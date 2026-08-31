@@ -66,22 +66,22 @@ export function AdminHome() {
                 <li key={key}>
                   <DocumentNavLink
                     href={page.path}
-                    className="group flex min-h-11 items-center gap-3 rounded-lg px-3 py-2 outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                    className="group relative flex min-h-11 items-center gap-2.5 rounded-control px-3 text-sm font-medium whitespace-nowrap text-text-secondary transition-[color,background-color,border-color] duration-fast ease-out hover:bg-surface-subtle hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus active:bg-surface-muted"
                   >
-                    <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                    <Icon aria-hidden="true" className="size-4 shrink-0 text-brand" />
                     <span className="grid min-w-0 gap-0.5">
-                      <span className="text-sm font-semibold text-foreground">
+                      <span className="text-sm font-medium text-text-primary">
                         {page.title}
                       </span>
                       {page.description ? (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-text-secondary">
                           {page.description}
                         </span>
                       ) : null}
                     </span>
                     <ArrowRight
                       aria-hidden="true"
-                      className="ml-auto size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity duration-[var(--duration-fast)] group-hover:opacity-100"
+                      className="ml-auto size-4 shrink-0 text-text-tertiary opacity-0 transition-opacity duration-fast group-hover:opacity-100 group-focus-visible:opacity-100"
                     />
                   </DocumentNavLink>
                 </li>

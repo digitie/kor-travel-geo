@@ -54,7 +54,7 @@ function AlertDialogContent({
         <AlertDialogPrimitive.Content
           data-slot="alert-dialog-content"
           className={cn(
-            "ui-pop-in relative z-50 grid w-full max-w-lg gap-4 rounded-lg bg-card p-5 text-sm text-card-foreground shadow-[var(--shadow-modal)] ring-1 ring-foreground/10",
+            "ui-pop-in relative z-50 grid w-full max-w-lg gap-4 rounded-panel border border-border bg-card p-5 text-sm text-text-primary shadow-modal",
             className
           )}
           {...props}

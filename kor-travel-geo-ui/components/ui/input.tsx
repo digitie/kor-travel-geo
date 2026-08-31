@@ -2,13 +2,24 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+type InputProps = Omit<React.ComponentProps<"input">, "size"> & {
+  /** map workbench의 두 컨트롤 높이: 기본 36px, 보조 30px. */
+  size?: "default" | "sm"
+}
+
+function Input({ className, type, size = "default", ...props }: InputProps) {
   return (
     <input
       type={type}
       data-slot="input"
+      data-size={size}
       className={cn(
-        "min-h-11 w-full min-w-0 rounded-lg border border-input bg-transparent px-3 py-2 text-base transition-colors duration-[var(--duration-fast)] ease-[var(--ease-default)] outline-none file:inline-flex file:min-h-8 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        "w-full min-w-0 rounded-control border border-input bg-card px-3 text-text-primary transition-[color,background-color,border-color] duration-fast ease-out",
+        "h-control text-sm data-[size=sm]:h-control-sm data-[size=sm]:px-2.5 data-[size=sm]:text-xs",
+        "file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-xs file:font-medium file:text-text-primary placeholder:text-text-tertiary",
+        "hover:bg-surface-subtle focus-visible:border-text-secondary focus-visible:bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+        "disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-secondary read-only:cursor-default read-only:bg-surface-subtle read-only:text-text-secondary",
+        "aria-invalid:border-destructive",
         className
       )}
       {...props}
@@ -17,3 +28,4 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
 }
 
 export { Input }
+export type { InputProps }

@@ -2,6 +2,51 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-08-31 (T-303 — 운영 UI 반영·인증 live E2E, PR #543, by codex)
+
+PR 후보를 운영 build context에 반영해 UI 이미지만 새로 빌드·재생성했다. API·PostgreSQL·RustFS
+컨테이너는 재기동하지 않았고, 새 UI가 healthy가 된 뒤 API health/ready와 UI `/login`, 미인증
+`/admin` redirect를 재확인했다.
+
+첫 live 런은 프로젝트 Playwright 1.61과 운영 호스트의 캐시 이미지 1.60이 어긋나 브라우저
+실행 파일을 찾지 못해 중단됐다. disposable Linux Playwright container에 일치하는 Chromium을
+설치한 뒤 인증 자격 증명을 프로세스 stdin으로만 주입해 재실행했고, `admin-browser-readonly`
+suite 31/31 통과를 확인했다. suite는 화면·탭·검색·데이터셋 버전 미리보기 범위의 읽기 전용
+검증이며 백업·복원·재빌드·삭제 작업은 실행하지 않았다.
+
+로컬 게이트(`lint`, `type-check`, 단위 테스트 204건, build, React Doctor, 관련 Chromium e2e)와
+원격 PR 체크(frontend/backend/OpenAPI)도 모두 통과했다. T-299/T-300은 상태 dot·텍스트 의미
+전달, opaque focus ring, 키보드 경로, dialog focus 복귀까지 반영하고 운영 검증으로 완료했다.
+
+## 2026-08-31 (T-303 — 전체 UI parity 리뷰 반영, draft PR #543, by codex)
+
+최신 `kor-travel-map` `origin/main`의 Workbench 기준을 글꼴에 한정하지 않고 메인 콘텐츠,
+Panel/Card, button/input/select/checkbox/tabs, table, status badge, 메뉴 행, mobile drawer와
+focus 상태까지 전체 대조했다. 기존 geo의 blue 색상톤·라우트·인증·API 흐름은 유지하면서
+본문 15px, 제목 24px, 설명 13.5px, 패널 8px/16px/12px, 기본·보조 컨트롤 36px/30px,
+opaque focus ring과 반응형 content gutter를 map 스케일로 맞췄다. 상태 배지에는 map과 같은
+6px dot을 추가했고, 카드 제목은 heading role을 복구했으며, 백업 artifact 목록은 semantic
+table로 전환했다.
+
+두 독립 적대적 리뷰 결과를 반영했다. (1) 정합성 판정 모달을 닫을 때 승인/보류/거절 원래
+트리거로 포커스를 되돌리고, (2) 모바일 drawer backdrop의 실제 overlay와 stacking을 보장하고,
+(3) 공용 비활성 컨트롤의 반투명 root 스타일을 제거하고 semantic disabled 색으로 바꾸고,
+(4) 640px 이상 태블릿 상태 strip은 3열을 유지하도록 했다. Admin home 메뉴 hover의 이동도
+제거해 메뉴 행이 카드처럼 튀지 않게 했다.
+
+WSL ext4 미러에서 `npm run lint`, `npm run type-check`, `npm run test`(41 files / 204 tests),
+`npm run build`를 통과했다. Chromium Playwright는 정합성 접근성 5건, 백업 접근성 6건,
+Workbench 시각·반응형·drawer 계약 3건을 통과했다. 초기 drawer 측정에서 브라우저가
+token `calc()` z-index를 적용하지 않는 것을 발견해 명시적 stacking level로 수정하고 재검증했다.
+운영 UI 배포·live e2e·PR 머지는 이 검증 뒤 진행한다.
+
+## 2026-08-31 (T-303 — 메인 콘텐츠 전체 look and feel 대조 시작, by codex)
+
+최신 `kor-travel-map`의 실제 Workbench 스케일을 다시 대조해 페이지 제목 24px, 본문 15px,
+설명 13.5px, sm 패널 16px 내부 여백, 36px 컨트롤, 표 본문 15px 기준을 확인했다. 기존
+geo의 blue 색상 토큰·라우트·인증·접근성 계약은 유지하고 공통 메인 콘텐츠 표면에만 보정한다.
+T-299 색각 구분성 검토와 T-300 포커스 링/키보드 경로 검토를 두 독립 리뷰와 함께 진행한다.
+
 ## 2026-08-31 (T-302 — 최신 kor-travel-map admin workbench UI 동기화, PR #542, by codex)
 
 사용자 요청에 따라 최신 `kor-travel-map` `origin/main`의 admin shell 커밋
