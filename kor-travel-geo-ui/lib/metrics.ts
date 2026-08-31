@@ -30,6 +30,35 @@ const WEB_VITAL_BUCKETS = [
   1_000,
   10_000
 ];
+const METRIC_HTTP_METHODS = new Set([
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS"
+]);
+const WEB_VITAL_NAMES = new Set(["CLS", "FCP", "FID", "INP", "LCP", "TTFB"]);
+const WEB_VITAL_RATINGS = new Set(["good", "needs-improvement", "poor"]);
+const WEB_VITAL_STATIC_ROUTES = new Set([
+  "/admin",
+  "/admin/backups",
+  "/admin/cache",
+  "/admin/consistency",
+  "/admin/dagster",
+  "/admin/files",
+  "/admin/load",
+  "/admin/logs",
+  "/admin/ops",
+  "/admin/settings",
+  "/admin/source-files",
+  "/admin/tables",
+  "/debug/explain",
+  "/debug/geocode",
+  "/debug/normalize",
+  "/debug/reverse"
+]);
 
 class CounterMetric {
   private readonly samples = new Map<string, CounterSample>();
@@ -166,8 +195,8 @@ export function recordUiRequest(input: {
   elapsedSeconds: number;
 }): void {
   const labels = {
-    method: input.method,
-    route: input.route,
+    method: normalizeMetricMethod(input.method),
+    route: normalizeMetricRoute(input.route),
     status_code: String(input.statusCode)
   };
   uiRequests.inc(labels);
@@ -182,8 +211,8 @@ export function recordProxyUpstream(input: {
 }): void {
   proxyUpstreamDuration.observe(
     {
-      method: input.method,
-      backend_route: input.backendRoute,
+      method: normalizeMetricMethod(input.method),
+      backend_route: normalizeMetricRoute(input.backendRoute),
       status_code: String(input.statusCode)
     },
     input.elapsedSeconds
@@ -195,14 +224,18 @@ export function recordWebVital(input: {
   route: string;
   rating: string;
   value: number;
-}): void {
+}): boolean {
+  if (!Number.isFinite(input.value) || input.value < 0) {
+    return false;
+  }
   const labels = {
-    name: input.name,
-    route: normalizeMetricRoute(input.route),
-    rating: input.rating || "unknown"
+    name: WEB_VITAL_NAMES.has(input.name) ? input.name : "other",
+    route: normalizeWebVitalRoute(input.route),
+    rating: WEB_VITAL_RATINGS.has(input.rating) ? input.rating : "unknown"
   };
   webVitalsTotal.inc(labels);
   webVitals.observe(labels, input.value);
+  return true;
 }
 
 export function backendRouteForMetrics(pathSegments: string[]): string {
@@ -236,6 +269,25 @@ function normalizeMetricSegment(segment: string): string {
     return ":id";
   }
   return segment;
+}
+
+function normalizeMetricMethod(method: string): string {
+  const normalized = method.toUpperCase();
+  return METRIC_HTTP_METHODS.has(normalized) ? normalized : "other";
+}
+
+function normalizeWebVitalRoute(path: string): string {
+  const normalized = normalizeMetricRoute(path);
+  if (WEB_VITAL_STATIC_ROUTES.has(normalized)) {
+    return normalized;
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length === 3 && parts[0] === "admin" && parts[1] === "consistency") {
+    return "/admin/consistency/:id";
+  }
+  // Web Vitals arrive from a browser pathname. Keep only the known app pages so a crafted
+  // pathname cannot create one time series per arbitrary URL.
+  return "/other";
 }
 
 function normalizeLabels(labelNames: string[], labels: Labels): Labels {

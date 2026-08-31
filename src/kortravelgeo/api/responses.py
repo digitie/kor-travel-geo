@@ -27,7 +27,11 @@ from kortravelgeo.exceptions import (
     InvalidInputError,
     KorTravelGeoError,
 )
-from kortravelgeo.infra.metrics import record_api_db_error, record_db_pool_checkout_timeout
+from kortravelgeo.infra.metrics import (
+    UNMATCHED_ROUTE,
+    record_api_db_error,
+    record_db_pool_checkout_timeout,
+)
 
 _COORDINATE_BOUNDS_ERROR = "kor_travel_geo.coordinate_bounds"
 _COORDINATE_BOUNDS_MESSAGE = KOREA_LON_LAT_BOUNDS_MESSAGE
@@ -256,4 +260,4 @@ def _summarize_validation_errors(errors: Sequence[Mapping[str, Any]]) -> str | N
 def _route_template(request: Request) -> str:
     route = request.scope.get("route")
     path = getattr(route, "path", None)
-    return str(path) if path else request.url.path
+    return str(path) if path else UNMATCHED_ROUTE

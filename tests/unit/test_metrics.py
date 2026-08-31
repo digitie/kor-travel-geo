@@ -43,6 +43,20 @@ def test_metrics_render_includes_api_request_duration_histogram() -> None:
     assert 'route="/v1/healthz"' in body
 
 
+def test_metric_method_label_is_bounded() -> None:
+    metrics.record_api_request(
+        method="CUSTOM-METHOD-9f8e7d6c",
+        route="/v1/healthz",
+        status_code=405,
+        elapsed_s=0.001,
+    )
+
+    body = metrics.render_prometheus().decode()
+
+    assert 'method="other"' in body
+    assert 'method="CUSTOM-METHOD-9f8e7d6c"' not in body
+
+
 def test_metrics_render_includes_api_request_cancellation_counter() -> None:
     metrics.record_api_request_cancelled(method="GET", route="/v1/address/geocode")
 
@@ -50,6 +64,20 @@ def test_metrics_render_includes_api_request_cancellation_counter() -> None:
 
     assert "kor_travel_geo_api_request_cancellations_total" in body
     assert 'route="/v1/address/geocode"' in body
+
+
+def test_unmatched_route_label_is_stable() -> None:
+    metrics.record_api_request(
+        method="GET",
+        route="/<unmatched>",
+        status_code=404,
+        elapsed_s=0.001,
+    )
+
+    body = metrics.render_prometheus().decode()
+
+    assert 'route="/<unmatched>"' in body
+    assert "/no-such-route" not in body
 
 
 def test_metrics_render_includes_db_pool_gauges() -> None:

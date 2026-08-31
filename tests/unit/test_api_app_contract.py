@@ -168,6 +168,23 @@ async def test_performance_logging_uses_route_template_without_query(
 
 
 @pytest.mark.asyncio
+async def test_performance_monitoring_uses_stable_route_label_for_unmatched_404() -> None:
+    app = FastAPI()
+    _install_performance_monitoring(app, Settings())
+
+    unknown_path = "/metrics-cardinality-probe-9f8e7d6c"
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(unknown_path)
+
+    body = metrics.render_prometheus().decode()
+
+    assert response.status_code == 404
+    assert 'route="/<unmatched>"' in body
+    assert unknown_path not in body
+
+
+@pytest.mark.asyncio
 async def test_performance_monitoring_enqueues_slow_request_sample() -> None:
     app = FastAPI()
 
@@ -268,7 +285,9 @@ def test_resolve_route_template_before_dispatch_matches_and_falls_back() -> None
     )
 
     assert matched == "/items/{item_id}"
-    assert unmatched == "/no-such-route"
+    # A raw 404 path would let arbitrary URLs create unbounded Prometheus label
+    # cardinality. Matched routes still use their Starlette route template.
+    assert unmatched == "/<unmatched>"
 
 
 def test_observability_route_template_gated_by_enabled_flag() -> None:

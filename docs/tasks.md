@@ -11,8 +11,11 @@
 "대기"의 우선순위 순서대로 들어가고, 진행 중이 되면 담당자를 표시한다. 완료된 작업은
 `tasks-done.md` 상단에 누적한다.
 
-## 현재 세션 상태 (2026-08-31)
+## 현재 세션 상태 (2026-09-01)
 
+- ✅ **T-304** — Prometheus 계측 경계와 Geocoder Admin UI 브랜딩을 보강했다. n150 API/UI
+  Docker 재배포, 실제 Prometheus target/query 확인, 인증 포함 Chromium live E2E(31/31)를
+  완료했으며 PR #544 merge를 진행한다.
 - ✅ **T-297** — 디스크 위험 사후 조치를 완료 처리했다. 남은 재발 방지 검토는 낮은 우선순위
   후속으로 보존한다.
 - ✅ **T-299** — blue 색상톤을 유지한 상태에서 색각 구분성·상태 의미 전달을 검토하고, 상태 dot과
@@ -74,40 +77,6 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 2026-07-27 GitHub 열린 이슈 감사(15건 조사, `tasks-done.md` 참조) 결과 남은 미해결 리뷰 후속 6건
 **전부 완료·종료** — 이슈 #298은 PR #491, #302는 PR #493, #299는 PR #495, #252는 PR #497, #307은
 PR #499, #201은 PR #502(아래 tasks-done.md 참조). 근거는 각 이슈 본문·코멘트 참조.
-
-### 신규 기능
-
-- [ ] **T-297** — n150 디스크 공간 위험(2026-08-26 T-292 live restore-drill 검증 중
-  실제 PostgreSQL 크래시 발생시킴) 사후 조치. 즉시 위험은 2026-08-27 해소(96%→58%,
-  189G 여유 — 아래 참조), 남은 항목은 낮은 우선순위 후속.
-  - 근본 원인: n150 루트 디스크(`/dev/mapper/ubuntu--vg-ubuntu--lv`, 466G)가 restore-drill
-    시작 전부터 이미 98% 사용 중(13G 여유)이었다 — drill의 스크래치 대상 DB
-    (`kor_travel_geo_restoretest_20260826T082157Z`, 전국 규모 backup을 `new_database` 모드로
-    복원 중, 16GB까지 성장하며 다수의 GIST/btree 인덱스를 빌드하던 도중)가 디스크를 100%까지
-    채웠고, PostgreSQL이 WAL을 더 쓸 수 없어 crash했다(unclean shutdown → automatic recovery).
-  - 결과: PostgreSQL은 WAL redo로 자체 복구에 성공했다(69초 만에 "database system is ready to
-    accept connections"). `kor-travel-geo-api-latest` 컨테이너는 복구 완료 전 접속 실패로
-    3회 재시작 루프를 돌다 정상화. 사후 검증: `ops.serving_releases` active release 1건 정상,
-    `mv_geocode_target` 6,416,637 row(알려진 정상값과 일치) — **데이터 손실/손상 없음** 확인.
-    크래시 원인이 `pg_restore --clean --if-exists` 자체의 결함이 아니라 순수 디스크 용량
-    문제임을 확인했으므로(크래시 전 4시간+ 동안 수십 개 테이블/인덱스에 걸쳐 정상 동작 관측),
-    T-292는 이 증거 + 로컬 통합 테스트 전체 통과를 근거로 그대로 merge한다(사용자 승인).
-  - **즉시 조치 완료 (2026-08-27)**: 남은 16GB 스크래치 restoretest DB DROP(21G 여유,
-    96%) → `docker system df`로 실측하니 이 공유 호스트(n150)의 디스크 압박 대부분이
-    이 프로젝트가 아니라 **Docker 이미지/빌드 캐시 누적**이었다(다른 프로젝트의 시간별
-    스테이징 빌드가 정리 없이 계속 쌓임 — 예: `pinvi-pr477-stage-*` 태그가 서로 다른
-    커밋 해시로 40개+ 존재, 각 ~2GB). `docker builder prune -af`(빌드 캐시, 순수
-    재생성 가능·무위험) → 61.4GB 회수, 85%(68G 여유). 이어서 사용자 확인 후 `docker image
-    prune -af`(어떤 컨테이너도 참조하지 않는 이미지만 삭제, 실행 중 컨테이너는 무영향) →
-    추가 회수, **최종 58% 사용(189G 여유)**. 실행 중이거나 정지된 컨테이너가 참조하는
-    이미지·볼륨은 전혀 건드리지 않았다(볼륨은 76개 중 32.31GB가 미참조로 잡히지만
-    다른 프로젝트 데이터일 수 있어 이번엔 손대지 않음 — 필요해지면 프로젝트별 확인 후
-    별도 판단). **위험 수준 해소, 최우선 아님으로 하향.**
-  - **남은 후속** (낮은 우선순위): 재발 방지 — `backup_require_free_space_check`가 이
-    restore-drill 경로(그리고 일반 `new_database` 복원)에도 적용되는지 확인, 적용 안 된다면
-    보강 판단. n150은 다른 프로젝트와 공유하는 호스트라 이미지/빌드 캐시가 다시 쌓일 수
-    있으므로, 주기적 `docker system prune` 또는 자동화된 이미지 보존 정책이 있는지(없다면
-    kor-travel-docker-manager 쪽에 건의할지) 판단 — 이 저장소 범위 밖일 수 있음.
 
 ### 선택 후속 (낮은 우선순위)
 

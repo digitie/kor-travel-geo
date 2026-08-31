@@ -18,12 +18,15 @@ export async function POST(request: Request) {
       typeof payload.route === "string" &&
       typeof payload.value === "number"
     ) {
-      recordWebVital({
+      const accepted = recordWebVital({
         name: payload.name,
         route: payload.route,
         rating: typeof payload.rating === "string" ? payload.rating : "unknown",
         value: payload.value
       });
+      if (!accepted) {
+        statusCode = 400;
+      }
     } else {
       statusCode = 400;
     }

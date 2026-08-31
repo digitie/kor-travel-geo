@@ -2,6 +2,33 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-01 (T-304 — Prometheus 계측 경계·Geocoder Admin UI 브랜딩, PR #544, by codex)
+
+Prometheus pull 계측을 운영 경계까지 점검했다. UI의 정확한 `/api/metrics` aggregate endpoint는
+`text/plain; version=0.0.4`와 `cache-control: no-store`로 pull할 수 있게 유지하고,
+`/api/metrics/web-vitals`와 `/api/runtime-config`는 미인증 401을 유지했다. API에서 매칭되지 않은
+404는 `/<unmatched>`로 집계한다. API/UI method label은 표준 method allowlist 밖의 값을 `other`로
+접고, Web Vitals name/rating은 제한된 값으로 접으며 known page route가 아닌 pathname은 `/other`로
+집계한다. 유한하지 않거나 음수인 Web Vitals 값은 400으로 거절한다.
+
+브라우저 제목·로그인 화면·모바일 상단·사이드바를 `Geocoder Admin UI`로 확인했다. 기존
+`kor-travel-geo-ui` package 식별자, 인증 audience, metric prefix와 blue 색상톤은 변경하지 않았다.
+두 독립 적대적 리뷰에서 발견한 실제 HTTP 경계·404·label cardinality 테스트 공백을 route handler와
+ASGI 테스트로 보강했다. ext4 미러에서 UI lint/type-check/Vitest 43 files·210 tests/build,
+React Doctor(error 0, 기존 test-noise warning 2), backend pytest 1,407 passed·80 skipped,
+ruff/mypy strict/import-linter를 통과했다.
+
+n150 prod에는 최종 커밋 `68fd1a5` 기준 API/UI Docker 이미지를 캐시 재사용으로 빌드하고
+`--no-deps --force-recreate`로 두 컨테이너만 재생성했다(API/UI 모두 healthy). host-local
+direct probe에서 UI metrics 200, API metrics 200, Prometheus target API에서 두 job `up=1`,
+실제 metric query 응답을 확인했고, 인증 포함 Chromium `admin-browser-readonly` live suite는
+31/31 통과했다. 첫 no-cache build가 이미지 export 뒤 compose context deadline으로 종료된 뒤
+서비스를 교체하지 않고, 최종 커밋은 별도 cached build 성공 후 반영했다.
+
+정확한 `/api/metrics` 공개는 n150 Prometheus가 `127.0.0.1:12505`를 pull하는 기존 내부망
+운영 전제에 따른다. UI는 host network에서 서비스되고 방화벽/manager 설정은 이번 PR에서
+임의 변경하지 않았으므로, 외부망에 노출하는 운영 구성에서는 별도 host/network ACL이 필요하다.
+
 ## 2026-08-31 (T-303 — 운영 UI 반영·인증 live E2E, PR #543, by codex)
 
 PR 후보를 운영 build context에 반영해 UI 이미지만 새로 빌드·재생성했다. API·PostgreSQL·RustFS
