@@ -6,6 +6,22 @@
 
 ## 완료
 
+- [x] **T-304 — Prometheus 계측 경계 강화와 Geocoder Admin UI 브랜딩** (2026-09-01,
+  PR #544, by codex, 사용자 지시). UI exact `/api/metrics` aggregate scrape를 `no-store`로
+  공개하고 nested metrics/runtime-config 세션 게이트를 유지했다. API unmatched 404 route를
+  `/<unmatched>`로 고정했으며 API/UI method label은 표준 allowlist 밖의 값을 `other`로 접었다.
+  Web Vitals name/rating/route를 known 값으로 정규화하고 finite non-negative value만 수집했다.
+  브라우저 제목·로그인·mobile topbar·sidebar를 `Geocoder Admin UI`로 통일하고 package/auth/
+  metric prefix 및 blue tone은 보존했다.
+
+  ext4 전체 게이트(UI lint/type-check/Vitest 43 files·210 tests/build/React Doctor, backend
+  pytest 1,407 passed·80 skipped/ruff/mypy strict/import-linter)와 두 독립 적대적 리뷰를
+  완료했다. n150에서 최종 API/UI 이미지를 빌드해 두 컨테이너만 `--no-deps --force-recreate`
+  했고, API/UI healthy·직접 metrics·Prometheus target/query(`up=1`)를 확인했다. 관리자
+  Chromium read-only live E2E는 31/31 passed이며 title/topbar/sidebar 브랜딩도 운영 응답에서
+  확인했다. n150은 host-network UI와 loopback Prometheus target의 기존 내부망 전제를 사용하므로
+  외부망에 노출하는 구성에서는 host/network ACL이 필요하다.
+
 - [x] **T-303 — 최신 kor-travel-map 기준 메인 콘텐츠 전체 look and feel 동기화** (2026-08-31,
   PR #543, by codex, 사용자 지시). 글꼴 크기만이 아니라 본문·패널·카드·폼 컨트롤·테이블·상태
   요약·메뉴·반응형 여백·focus 상태를 최신 Workbench 스케일에 맞췄다. 기존 geo 라우트·API·인증

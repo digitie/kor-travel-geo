@@ -2,8 +2,15 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-08-31 갱신, by codex)
+## 현재 진척도 (2026-09-01 갱신, by codex)
 
+- ✅ **T-304 — Prometheus 계측 경계 강화와 Geocoder Admin UI 브랜딩 완료** — UI exact
+  `/api/metrics` pull 응답을 `no-store`로 운영하고 nested metrics/runtime-config 세션 게이트,
+  API 404 안정 route label, API/UI method allowlist, Web Vitals allowlist·known route·finite value
+  검증을 추가했다. 브라우저 제목·로그인·모바일 상단·사이드바 이름을 `Geocoder Admin UI`로
+  통일했으며 blue 색상톤과 내부 식별자는 유지했다. ext4 전체 게이트와 두 독립 적대적 리뷰,
+  n150 API/UI Docker 재배포, Prometheus 실제 query/target 확인, Chromium read-only live E2E
+  31/31을 완료했다. PR #544는 CI green 상태로 merge sequence를 진행한다.
 - ✅ **T-303 — 최신 `kor-travel-map` 기준 메인 콘텐츠 전체 look and feel 동기화 완료** —
   페이지 제목·본문 스케일뿐 아니라 패널/카드, 폼 컨트롤, 테이블, 상태 요약, 메뉴, 반응형
   여백과 포커스 표시를 함께 대조해 PR #543에 반영했다. 기존 Workbench 구조와 blue
@@ -33,7 +40,7 @@
   semantic(0.175)보다 높아 시스템에서 가장 채도 높은 토큰이 된 것은 "technical/austere"
   톤과의 디자인 긴장으로 기록만(사용자가 이 정확한 색을 명시적으로 요청). 체크 4종
   전부 clean, Playwright 스크린샷 육안 확인. n150 UI 재배포 필요. **다음 한 작업**: PR
-  머지 → n150 UI 재배포·헬스체크.
+  머지 → n150 UI 재배포·헬스체크는 T-304에서 완료했다.
 
 - ✅ **T-298 — admin UI 컬러톤 teal → blue 전환 (2026-08-27, PR #540, 머지·n150 배포
   완료, by claude, 사용자 지시)** — 최초 blue 전환(hue-only rotation, hue 240). 이후
