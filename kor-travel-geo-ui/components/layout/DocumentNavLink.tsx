@@ -8,12 +8,16 @@ export function DocumentNavLink({
   children,
   className,
   href,
-  onNavigate
+  ariaLabel,
+  onNavigate,
+  title
 }: {
+  ariaLabel?: string;
   children: ReactNode;
   className?: string;
   href: string;
   onNavigate?: () => void;
+  title?: string;
 }) {
   const pathname = usePathname() ?? "";
   const active =
@@ -41,9 +45,11 @@ export function DocumentNavLink({
   return (
     <Link
       aria-current={active ? "page" : undefined}
+      aria-label={ariaLabel}
       className={className}
       href={href}
       prefetch={false}
+      title={title}
       onClick={navigate}
     >
       {children}

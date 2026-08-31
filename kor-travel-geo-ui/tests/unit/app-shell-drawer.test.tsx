@@ -54,12 +54,14 @@ describe("AppShell 모바일 드로어 (#515)", () => {
   let viewport: ReturnType<typeof mockViewport>;
 
   beforeEach(() => {
+    window.localStorage.clear();
     viewport = mockViewport(true);
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    window.localStorage.clear();
     document.body.style.overflow = "";
   });
 
@@ -124,6 +126,21 @@ describe("AppShell 모바일 드로어 (#515)", () => {
     );
     // Same element, same menuOpen === false — inerting here would kill the desktop nav.
     expect(sidebar()?.hasAttribute("inert")).toBe(false);
+  });
+
+  it("데스크톱 레일을 접으면 아이콘 전용 레일과 툴팁 라벨을 사용한다", () => {
+    viewport.setMatches(false);
+    render(
+      <AppShell>
+        <div>본문</div>
+      </AppShell>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "좌측 메뉴 접기" }));
+
+    expect(shell()?.getAttribute("data-sidebar-collapsed")).toBe("true");
+    expect(screen.getByRole("button", { name: "좌측 메뉴 펼치기" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "관리 홈" })).toHaveAttribute("title", "관리 홈");
   });
 
   it("드로어를 연 채 데스크톱 폭으로 넓히면 메뉴가 닫힌다", () => {
