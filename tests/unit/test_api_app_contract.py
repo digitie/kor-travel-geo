@@ -168,6 +168,23 @@ async def test_performance_logging_uses_route_template_without_query(
 
 
 @pytest.mark.asyncio
+async def test_performance_monitoring_uses_stable_route_label_for_unmatched_404() -> None:
+    app = FastAPI()
+    _install_performance_monitoring(app, Settings())
+
+    unknown_path = "/metrics-cardinality-probe-9f8e7d6c"
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(unknown_path)
+
+    body = metrics.render_prometheus().decode()
+
+    assert response.status_code == 404
+    assert 'route="/<unmatched>"' in body
+    assert unknown_path not in body
+
+
+@pytest.mark.asyncio
 async def test_performance_monitoring_enqueues_slow_request_sample() -> None:
     app = FastAPI()
 

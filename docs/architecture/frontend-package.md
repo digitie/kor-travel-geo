@@ -335,13 +335,13 @@ T-049 구현으로 관리 UI에 `/admin/ops` 화면을 추가했다. `/admin/loa
 
 ## A7. 관찰가능성
 
-`kor-travel-geo-ui`는 Next.js 서버 프로세스에서 `/api/metrics`를 노출한다. Prometheus는 앱이 능동 연결하지 않는 pull 방식으로 이 endpoint를 scrape한다. 정확히 `/api/metrics`인 aggregate scrape 경로는 `no-store`로 공개하며, Web Vitals 수집 경로(`/api/metrics/web-vitals`)와 나머지 `/api/*`는 관리자 세션 게이트를 유지한다.
+`kor-travel-geo-ui`는 Next.js 서버 프로세스에서 `/api/metrics`를 노출한다. Prometheus는 앱이 능동 연결하지 않는 pull 방식으로 이 endpoint를 scrape한다. 정확히 `/api/metrics`인 aggregate scrape 경로는 `no-store`로 공개하며, Web Vitals 수집 경로(`/api/metrics/web-vitals`)와 나머지 `/api/*`는 관리자 세션 게이트를 유지한다. 이 endpoint는 UI가 내부망에서만 운영된다는 기존 전제를 따른다. n150의 Prometheus target은 `127.0.0.1:12505`이므로 호스트/네트워크 ACL도 이 전제를 보장해야 한다.
 
 - route handler request total/duration: `/api/runtime-config`, `/api/proxy/[...path]`, `/api/metrics`, `/api/metrics/web-vitals`
 - backend proxy upstream duration: `/v1/*`, `/v2/*` 백엔드 fetch를 method, backend route, status code 기준으로 집계
-- Web Vitals: 브라우저에서 `useReportWebVitals`로 수집한 metric name, route, rating, value를 `/api/metrics/web-vitals`로 전송
+- Web Vitals: 브라우저에서 `useReportWebVitals`로 수집한 metric name, route, rating, value를 `/api/metrics/web-vitals`로 전송. 표준 name/rating만 label로 보존하고 나머지는 `other`/`unknown`으로 접어, 알려진 UI page route가 아닌 pathname은 `/other`로 집계한다. 유한하지 않거나 음수인 value는 400으로 거절한다.
 
-동적 id나 긴 token은 metric label cardinality를 낮추기 위해 `:id`로 정규화하고, 매칭되지 않은 API 404는 `/<unmatched>`로 고정한다. query string, 주소 원문, API key는 metric label에 넣지 않는다.
+동적 id나 긴 token은 metric label cardinality를 낮추기 위해 `:id`로 정규화하고, 매칭되지 않은 API 404는 `/<unmatched>`로 고정한다. HTTP method label은 표준 method allowlist 밖의 값을 `other`로 접는다. query string, 주소 원문, API key는 metric label에 넣지 않는다. 현재 Docker runtime은 API/UI 각각 단일 프로세스 scrape를 전제로 하며, multi-worker/replica를 도입할 때는 target 분리 또는 multiprocess aggregation 정책을 먼저 정해야 한다.
 
 ## A8. DB 일관성 — 단일 엔진
 

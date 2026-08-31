@@ -37,6 +37,9 @@ PROMETHEUS_CONTENT_TYPE: Final[str] = (
 # of time series. Keep the fallback stable while matched routes still expose
 # their normal route templates.
 UNMATCHED_ROUTE: Final[str] = "/<unmatched>"
+_METRIC_HTTP_METHODS: Final[frozenset[str]] = frozenset(
+    {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+)
 
 
 class _NoopMetric:
@@ -301,16 +304,24 @@ def record_external_api_call(provider: str, outcome: str) -> None:
     EXTERNAL_API_CALLS.labels(provider=provider, outcome=outcome).inc()
 
 
+def normalize_metric_method(method: str) -> str:
+    """Keep HTTP method labels finite even when a client sends a custom method."""
+    normalized = method.upper()
+    return normalized if normalized in _METRIC_HTTP_METHODS else "other"
+
+
 def record_api_request_started(*, method: str) -> None:
-    API_REQUESTS_IN_PROGRESS.labels(method=method).inc()
+    API_REQUESTS_IN_PROGRESS.labels(method=normalize_metric_method(method)).inc()
 
 
 def record_api_request_finished(*, method: str) -> None:
-    API_REQUESTS_IN_PROGRESS.labels(method=method).dec()
+    API_REQUESTS_IN_PROGRESS.labels(method=normalize_metric_method(method)).dec()
 
 
 def record_api_request_cancelled(*, method: str, route: str) -> None:
-    API_REQUEST_CANCELLATIONS.labels(method=method, route=route).inc()
+    API_REQUEST_CANCELLATIONS.labels(
+        method=normalize_metric_method(method), route=route
+    ).inc()
 
 
 def record_api_request(
@@ -321,6 +332,7 @@ def record_api_request(
     elapsed_s: float,
     slow_threshold_ms: int | None = None,
 ) -> None:
+    method = normalize_metric_method(method)
     API_REQUESTS.labels(
         method=method,
         route=route,
@@ -355,6 +367,7 @@ def record_api_admission_wait(
     outcome: str,
     elapsed_s: float,
 ) -> None:
+    method = normalize_metric_method(method)
     API_ADMISSION_WAIT.labels(
         method=method,
         route=route,
@@ -364,15 +377,21 @@ def record_api_admission_wait(
 
 
 def record_api_admission_rejection(*, method: str, route: str, scope: str) -> None:
-    API_ADMISSION_REJECTIONS.labels(method=method, route=route, scope=scope).inc()
+    API_ADMISSION_REJECTIONS.labels(
+        method=normalize_metric_method(method), route=route, scope=scope
+    ).inc()
 
 
 def record_db_pool_checkout_timeout(*, method: str, route: str) -> None:
-    PG_POOL_CHECKOUT_TIMEOUTS.labels(method=method, route=route).inc()
+    PG_POOL_CHECKOUT_TIMEOUTS.labels(
+        method=normalize_metric_method(method), route=route
+    ).inc()
 
 
 def record_api_db_error(*, method: str, route: str, error_type: str) -> None:
-    API_DB_ERRORS.labels(method=method, route=route, error_type=error_type).inc()
+    API_DB_ERRORS.labels(
+        method=normalize_metric_method(method), route=route, error_type=error_type
+    ).inc()
 
 
 def record_load_job_duration(*, kind: str, state: str, elapsed_s: float) -> None:

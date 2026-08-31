@@ -51,4 +51,39 @@ describe("Prometheus metrics", () => {
     expect(body).toContain('backend_route="/v2/geocode"');
     expect(body).toContain('name="LCP"');
   });
+
+  it("사용자 입력이 method와 Web Vitals label cardinality를 늘리지 않게 정규화한다", () => {
+    recordUiRequest({
+      method: "CUSTOM-METHOD-9f8e7d6c",
+      route: "/api/metrics",
+      statusCode: 405,
+      elapsedSeconds: 0.001
+    });
+    expect(
+      recordWebVital({
+        name: "LCP",
+        route: "/admin",
+        rating: "good",
+        value: Number.POSITIVE_INFINITY
+      })
+    ).toBe(false);
+    expect(
+      recordWebVital({
+        name: "unbounded-name-9f8e7d6c",
+        route: "/attacker/9f8e7d6c",
+        rating: "unbounded-rating-9f8e7d6c",
+        value: 1
+      })
+    ).toBe(true);
+
+    const body = renderPrometheusMetrics();
+
+    expect(body).toContain('method="other"');
+    expect(body).not.toContain('method="CUSTOM-METHOD-9f8e7d6c"');
+    expect(body).toContain('name="other"');
+    expect(body).toContain('route="/other"');
+    expect(body).toContain('rating="unknown"');
+    expect(body).not.toContain("unbounded-name-9f8e7d6c");
+    expect(body).not.toContain("9f8e7d6c");
+  });
 });
