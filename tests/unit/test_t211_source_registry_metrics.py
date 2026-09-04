@@ -117,16 +117,16 @@ def test_refresh_source_registry_metrics_registers_gauges() -> None:
     body = metrics.render_prometheus().decode()
 
     # T-211 ADDED gauges.
-    assert "kor_travel_geo_source_upload_sessions" in body
+    assert "ktg_source_upload_sessions" in body
     assert 'state="uploading"' in body
-    assert "kor_travel_geo_source_storage_objects" in body
-    assert "kor_travel_geo_source_storage_bytes" in body
+    assert "ktg_source_storage_objects" in body
+    assert "ktg_source_storage_bytes" in body
     assert 'category="locsum_full"' in body
-    assert "kor_travel_geo_source_storage_total_bytes" in body
-    assert "kor_travel_geo_source_storage_quarantined_bytes" in body
-    assert "kor_travel_geo_source_storage_soft_deleted_bytes" in body
-    assert "kor_travel_geo_source_storage_unregistered_bytes" in body
-    assert "kor_travel_geo_source_storage_growth_30d_bytes" in body
+    assert "ktg_source_storage_total_bytes" in body
+    assert "ktg_source_storage_quarantined_bytes" in body
+    assert "ktg_source_storage_soft_deleted_bytes" in body
+    assert "ktg_source_storage_unregistered_bytes" in body
+    assert "ktg_source_storage_growth_30d_bytes" in body
 
 
 def test_t203c_janitor_and_t204_reconcile_metrics_exist_and_are_not_duplicated() -> None:
@@ -143,12 +143,12 @@ def test_t203c_janitor_and_t204_reconcile_metrics_exist_and_are_not_duplicated()
     body = metrics.render_prometheus().decode()
 
     for name in (
-        "kor_travel_geo_source_janitor_runs_total",
-        "kor_travel_geo_source_janitor_sessions_total",
-        "kor_travel_geo_source_janitor_multipart_aborts_total",
-        "kor_travel_geo_source_reconcile_runs_total",
-        "kor_travel_geo_source_reconcile_items_total",
-        "kor_travel_geo_source_reconcile_resolves_total",
+        "ktg_source_janitor_runs_total",
+        "ktg_source_janitor_sessions_total",
+        "ktg_source_janitor_multipart_aborts_total",
+        "ktg_source_reconcile_runs_total",
+        "ktg_source_reconcile_items_total",
+        "ktg_source_reconcile_resolves_total",
     ):
         # Exactly one HELP line per metric family → no duplicate registration.
         assert body.count(f"# HELP {name} ") == 1

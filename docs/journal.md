@@ -2,6 +2,41 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-04 (T-305 — Prometheus metric name prefix kor_travel_geo_ → ktg_ 변경, by claude)
+
+사용자가 "prometheus 로 보내는 값은 prefix를 ktg_ 로 변경. pr 머지까지 진행"이라고 지시.
+같은 turn 중간에 "로그인 동작 방식을 docker manager과 일치화"라는 두 번째 요청이 별도로
+들어왔는데, 조사해보니 kor-travel-geo-ui의 로그인은 이미 docker-manager와 거의 동일했다
+(PBKDF2-SHA256 310k iteration, 8시간 TTL, 5회/10분 rate limit, HMAC 서명 쿠키, 로그인 폼
+UI/UX 패턴까지). 유일한 실질 차이는 세션 revocation 저장 방식(docker-manager는 자체 DB
+AdminSession 테이블, kor-travel-geo-ui는 in-memory globalThis map — 코드 주석에도 이 한계가
+명시돼 있음)이었다. 그런데 더 조사해보니 kor-travel-geo 백엔드(`kortravelgeo`)는 ADR-049
+#5로 문서화된 "백엔드는 세션을 직접 검증하지 않고 Next.js UI가 신뢰된 프록시로 X-KTG-Actor/
+X-KTG-Roles 헤더를 주입한다"는 의도적 아키텍처를 갖고 있어서, "docker-manager와 완전히
+동일한 구조"가 이 기존 결정과 충돌할 수 있음을 발견 — AskUserQuestion으로 두 차례 확인한
+끝에(1차: 정렬 범위 선택, 2차: ADR-049 처리 방식) 사용자가 로그인 일치화 자체를 취소했다.
+**교훈**: 겉보기엔 비슷한 두 구현이라도 그 아래 깔린 아키텍처 결정(ADR)까지 먼저 확인하고
+나서 "동일하게 맞춰라"는 지시의 실제 범위를 사용자에게 되물어야 한다 — 이번엔 사전 조사
+덕분에 구체적인 근거(ADR-049 인용)를 들고 물을 수 있었고, 결과적으로 불필요한 대규모
+아키텍처 변경을 막았다.
+
+Prometheus prefix 변경은 별도 fork 에이전트에 위임했다 — grep 결과 `kor_travel_geo_` 문자열이
+실제 metric 이름 외에도 DB 이름(스크래치/테스트 DB ~440건)·백업 파일명 prefix·벤치마크 job
+이름으로 저장소 전역에 광범위하게 쓰이고 있어서, 전체 치환이 아니라 매 hit을 metric 이름인지
+개별 판정해야 하는 정밀 작업이었다. Fork가 44+5개 실제 metric 이름(API `metrics.py` +
+admin UI `lib/metrics.ts`)만 정확히 골라 바꾸고, 나머지는 전부 정당한 사유와 함께 보고했다
+(직접 스팟체크로 재확인 — `test_restore_hotswap.py`의 DB 이름, `CHANGELOG.md`/`journal.md`의
+과거 기록 언급 모두 옳게 판단됐음을 확인). CHANGELOG.md·journal.md·resume.md·tasks-done.md·
+`docs/adr/047`·`docs/t077-kor-travel-geo-rename.md`처럼 과거 결정·이력을 기록한 append-only
+문서는 "기존 항목 수정 금지" 원칙에 따라 옛 metric 이름 언급을 그대로 두고 새 항목만 추가했다.
+kor-travel-docker-manager repo도 확인해 metric 이름을 하드코딩한 Grafana 대시보드·알림 규칙
+파일이 없음을 확인 — cross-repo 후속 불필요.
+
+체크: 백엔드 unit 전체 1395 passed·ruff·mypy clean, 프런트엔드 lint/type-check/test(210
+passed)/build clean. 사용자가 이후 "완료 후 n150 prod에 배포"를 추가 지시해 merge 후
+n150 API+UI 재배포까지 진행한다(기존 `kor_travel_geo_*` 시계열은 stale 처리, dual-emission
+이행 기간 없이 `ktg_*`로 즉시 전환).
+
 ## 2026-09-01 (T-304 — Prometheus 계측 경계·Geocoder Admin UI 브랜딩, PR #544, by codex)
 
 Prometheus pull 계측을 운영 경계까지 점검했다. UI의 정확한 `/api/metrics` aggregate endpoint는

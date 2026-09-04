@@ -387,7 +387,7 @@ async def test_client_disconnect_cancels_public_address_request_while_body_strea
     body = metrics.render_prometheus().decode()
 
     assert sent_messages == []
-    assert "kor_travel_geo_api_request_cancellations_total" in body
+    assert "ktg_api_request_cancellations_total" in body
     assert 'route="/v1/address/slow"' in body
     assert 'status_code="499"' in body
 

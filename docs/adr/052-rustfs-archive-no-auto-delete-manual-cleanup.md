@@ -18,7 +18,7 @@ PR #131 리뷰(ADR-049 후속 line "RustFS 용량 관리 정책은 별도 ADR로
 5. **미등록 stored object의 import-or-delete SLA.** 등록 deadline이 지난 stored object는 reconcile에서 `registration_expired`로, session·origin이 없는 object는 `object_missing_db`로 분류한다(자동 삭제하지 않음). 운영자는 reconcile resolve(import/extend/delete) 또는 아래 일괄 hard-delete로 수동 결정한다.
 6. **`destructive_admin` typed-confirmation 기반 bulk hard-delete/restore 표면.** 일괄 hard-delete는 `destructive_admin` role과 정확한 typed confirmation **`HARD-DELETE-SOURCES`**(T-205b `REBUILD-PROMOTE {id}` / T-208 `ROLLBACK {id}` 패턴 동형)를 요구한다. 대상은 `soft_deleted`/`quarantined` 등록 파일과 미등록 stored object(`object_missing_db`/`registration_expired`)뿐이다. **active match set이 참조하는 정본 object는 절대 삭제하지 않는다**(T-204 `guard_object_deletion` 규칙 재사용). 개별 복구는 기존 T-203c restore/T-204 `restore_soft_deleted` resolve로 충분하므로 별도 bulk restore 표면은 추가하지 않는다.
 7. **삭제 전 manifest/export 확인(pre-delete safety).** 일괄 hard-delete 직전, 완료된 `db_backup` manifest/export가 존재하거나 운영자가 `manifest_ack=true`로 명시 승인해야 한다. 둘 다 없으면 작업을 거부한다.
-8. **audit + metric + UI 경고.** 각 hard-delete는 `source.hard_delete` audit event로 기록하고, RustFS 오류 시 registry state를 `delete_failed`로 둔다(성공은 `hard_deleted`). hard-delete 결과는 `kor_travel_geo_source_hard_deletes_total` metric으로 노출하고, 용량 카드는 임계값 초과·정리 권장을 경고로 보여준다.
+8. **audit + metric + UI 경고.** 각 hard-delete는 `source.hard_delete` audit event로 기록하고, RustFS 오류 시 registry state를 `delete_failed`로 둔다(성공은 `hard_deleted`). hard-delete 결과는 `ktg_source_hard_deletes_total` metric으로 노출하고, 용량 카드는 임계값 초과·정리 권장을 경고로 보여준다.
 
 ## 근거
 

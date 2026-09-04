@@ -42,11 +42,11 @@ describe("Prometheus metrics", () => {
 
     const body = renderPrometheusMetrics();
 
-    expect(body).toContain("kor_travel_geo_ui_http_requests_total");
-    expect(body).toContain("kor_travel_geo_ui_http_request_duration_seconds_bucket");
-    expect(body).toContain("kor_travel_geo_ui_proxy_upstream_request_duration_seconds_bucket");
-    expect(body).toContain("kor_travel_geo_ui_web_vitals_total");
-    expect(body).toContain("kor_travel_geo_ui_web_vital_value_bucket");
+    expect(body).toContain("ktg_ui_http_requests_total");
+    expect(body).toContain("ktg_ui_http_request_duration_seconds_bucket");
+    expect(body).toContain("ktg_ui_proxy_upstream_request_duration_seconds_bucket");
+    expect(body).toContain("ktg_ui_web_vitals_total");
+    expect(body).toContain("ktg_ui_web_vital_value_bucket");
     expect(body).toContain('route="/api/runtime-config"');
     expect(body).toContain('backend_route="/v2/geocode"');
     expect(body).toContain('name="LCP"');

@@ -156,34 +156,34 @@ class HistogramMetric {
 }
 
 const uiRequests = new CounterMetric(
-  "kor_travel_geo_ui_http_requests_total",
+  "ktg_ui_http_requests_total",
   "Next.js admin UI route handler requests by route, method, and status code.",
   ["method", "route", "status_code"]
 );
 
 const uiRequestDuration = new HistogramMetric(
-  "kor_travel_geo_ui_http_request_duration_seconds",
+  "ktg_ui_http_request_duration_seconds",
   "Next.js admin UI route handler duration in seconds.",
   ["method", "route", "status_code"],
   REQUEST_DURATION_BUCKETS
 );
 
 const proxyUpstreamDuration = new HistogramMetric(
-  "kor_travel_geo_ui_proxy_upstream_request_duration_seconds",
+  "ktg_ui_proxy_upstream_request_duration_seconds",
   "Next.js admin UI backend proxy upstream fetch duration in seconds.",
   ["method", "backend_route", "status_code"],
   REQUEST_DURATION_BUCKETS
 );
 
 const webVitals = new HistogramMetric(
-  "kor_travel_geo_ui_web_vital_value",
+  "ktg_ui_web_vital_value",
   "Browser Web Vitals values reported by the admin UI. Units follow each Web Vital metric.",
   ["name", "route", "rating"],
   WEB_VITAL_BUCKETS
 );
 
 const webVitalsTotal = new CounterMetric(
-  "kor_travel_geo_ui_web_vitals_total",
+  "ktg_ui_web_vitals_total",
   "Browser Web Vitals samples reported by metric name, route, and rating.",
   ["name", "route", "rating"]
 );

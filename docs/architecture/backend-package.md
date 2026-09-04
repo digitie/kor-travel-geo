@@ -211,7 +211,7 @@ ignore_imports = ["kortravelgeo.api.routers.admin -> kortravelgeo.loaders"]
 
 각 예외는 `code: str`(E0xxx)과 `http_status: int`를 가진다. `api/responses.py`가 핸들러 등록.
 
-SQLAlchemy pool checkout timeout은 전용 메시지 `database connection pool checkout timed out` + HTTP 503으로 반환하고 `kor_travel_geo_pg_pool_checkout_timeouts_total{method,route}`에 기록한다. 그 밖의 `DBAPIError` 계열은 운영 장애와 내부 오류로 나눈다(T-178D): 연결/운영 오류(`OperationalError` 또는 `connection_invalidated=True`)는 고정 메시지 `database operation failed` + HTTP 503으로, 그 밖(`ProgrammingError`/`IntegrityError` 등 SQL·스키마·제약 오류)은 고정 메시지 `database statement failed` + HTTP 500으로 반환한다. 세 경우 모두 `code="E0500"`이며 `kor_travel_geo_api_db_errors_total{method,route,error_type}`에 기록하고, SQL 문장·파라미터·DSN은 응답에 노출하지 않는다. VWorld 호환 경로는 `response.error.code="SYSTEM_ERROR"` envelope를 유지한다.
+SQLAlchemy pool checkout timeout은 전용 메시지 `database connection pool checkout timed out` + HTTP 503으로 반환하고 `ktg_pg_pool_checkout_timeouts_total{method,route}`에 기록한다. 그 밖의 `DBAPIError` 계열은 운영 장애와 내부 오류로 나눈다(T-178D): 연결/운영 오류(`OperationalError` 또는 `connection_invalidated=True`)는 고정 메시지 `database operation failed` + HTTP 503으로, 그 밖(`ProgrammingError`/`IntegrityError` 등 SQL·스키마·제약 오류)은 고정 메시지 `database statement failed` + HTTP 500으로 반환한다. 세 경우 모두 `code="E0500"`이며 `ktg_api_db_errors_total{method,route,error_type}`에 기록하고, SQL 문장·파라미터·DSN은 응답에 노출하지 않는다. VWorld 호환 경로는 `response.error.code="SYSTEM_ERROR"` envelope를 유지한다.
 
 ## 4. DTO — pydantic v2
 
@@ -396,9 +396,9 @@ T-158 이후 `ops_slow_samples_enabled=true`이면 admission timeout은 `sample_
 
 Prometheus 지표는 다음을 노출한다.
 
-- `kor_travel_geo_api_admission_wait_seconds{method,route,scope,outcome}` histogram
-- `kor_travel_geo_api_admission_rejections_total{method,route,scope}` counter
-- `kor_travel_geo_api_admission_in_progress{scope}` gauge
+- `ktg_api_admission_wait_seconds{method,route,scope,outcome}` histogram
+- `ktg_api_admission_rejections_total{method,route,scope}` counter
+- `ktg_api_admission_in_progress{scope}` gauge
 
 ### Client disconnect와 query cancellation
 
@@ -406,9 +406,9 @@ Prometheus 지표는 다음을 노출한다.
 
 Prometheus 지표는 다음을 노출한다.
 
-- `kor_travel_geo_api_request_cancellations_total{method,route}` counter
-- `kor_travel_geo_db_query_cancellations_total{operation,query_fingerprint}` counter
-- 기존 `kor_travel_geo_db_queries_total`/`kor_travel_geo_db_query_duration_seconds`의 `status="cancelled"` label
+- `ktg_api_request_cancellations_total{method,route}` counter
+- `ktg_db_query_cancellations_total{operation,query_fingerprint}` counter
+- 기존 `ktg_db_queries_total`/`ktg_db_query_duration_seconds`의 `status="cancelled"` label
 
 ### 라우터 — geocode
 
