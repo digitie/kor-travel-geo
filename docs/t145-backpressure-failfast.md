@@ -47,9 +47,9 @@ Admission timeout은 `RateLimitError(E0200, HTTP 429)`로 변환한다. 비 VWor
 
 | 지표 | type | label | 의미 |
 |------|------|-------|------|
-| `kor_travel_geo_api_admission_wait_seconds` | histogram | `method`, `route`, `scope`, `outcome` | admission slot 대기 시간. `outcome`은 `accepted` 또는 `rejected` |
-| `kor_travel_geo_api_admission_rejections_total` | counter | `method`, `route`, `scope` | admission timeout으로 거절한 요청 수 |
-| `kor_travel_geo_api_admission_in_progress` | gauge | `scope` | 현재 process에서 admission slot을 점유한 요청 수 |
+| `ktg_api_admission_wait_seconds` | histogram | `method`, `route`, `scope`, `outcome` | admission slot 대기 시간. `outcome`은 `accepted` 또는 `rejected` |
+| `ktg_api_admission_rejections_total` | counter | `method`, `route`, `scope` | admission timeout으로 거절한 요청 수 |
+| `ktg_api_admission_in_progress` | gauge | `scope` | 현재 process에서 admission slot을 점유한 요청 수 |
 
 기존 API request duration, slow request, DB pool gauge, pool checkout timeout counter와 함께 보면 "요청 폭주 → admission 대기/거절 → DB pool 포화" 흐름을 분리해서 볼 수 있다.
 

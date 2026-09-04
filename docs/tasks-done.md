@@ -6,6 +6,32 @@
 
 ## 완료
 
+- [x] **T-305 — Prometheus metric name prefix `kor_travel_geo_` → `ktg_` 변경** (2026-09-04,
+  by claude, 사용자 지시). T-304가 명시적으로 보존했던 metric prefix를 사용자가 새로
+  `ktg_`로 바꾸도록 지시 — API 계측(`src/kortravelgeo/infra/metrics.py`, 44개 metric name
+  literal: `Counter`/`Gauge`/`Histogram` 첫 인자만, 파이썬 상수명은 그대로)과 admin UI
+  자체 Prometheus 계측(`kor-travel-geo-ui/lib/metrics.ts`, `kor_travel_geo_ui_*` 5개 →
+  `ktg_ui_*`)를 모두 변경했다. 정밀도가 핵심인 작업이었다 — `kor_travel_geo_` 문자열은
+  실제 metric 이름 외에도 DB 이름(`kor_travel_geo_t042_sppn` 등 스크래치/테스트 DB
+  ~440건), 백업 파일명 prefix(`DEFAULT_BACKUP_DISPLAY_PREFIX`), 벤치마크 job 이름
+  (`--name=kor_travel_geo_randread_8k`)으로도 저장소 전역에 광범위하게 쓰이고 있어, 전체
+  치환이 아니라 매 hit을 실제 metric 이름인지 개별 판정한 뒤에만 바꿨다. 함께 변경: 관련
+  assertion을 가진 백엔드 테스트 3개(`test_metrics.py`/`test_t211_source_registry_metrics.py`/
+  `test_api_app_contract.py`, 총 41개 문자열)와 프런트엔드 테스트 2개(`metrics.test.ts`/
+  `metrics-route.test.ts`, 6개 문자열), 실제 metric 이름을 문서화하는 living 참조 문서
+  8개(`docs/architecture/backend-package.md` 외 admission-control/cache/pg_stat_statements/
+  cancellation 관련 runbook들). CHANGELOG.md·journal.md·resume.md·tasks-done.md·
+  `docs/adr/047`·`docs/t077-kor-travel-geo-rename.md`처럼 과거 결정을 기록한 append-only
+  이력 문서는 원 취지(수정하지 않고 새 항목만 추가)에 따라 옛 metric 이름 언급을 그대로 뒀다.
+
+  체크: 백엔드 unit 전체(1395 passed)·해당 테스트 2건 별도 재확인(21+12 passed)·ruff·mypy
+  전부 clean. 프런트엔드 lint/type-check/test(210 passed, 43 files)/build 전부 clean.
+  kor-travel-docker-manager repo도 확인해 metric 이름을 하드코딩한 Grafana 대시보드·
+  알림 규칙 파일이 없음을 확인(있었다면 별도 후속 필요했을 것). 기존 `kor_travel_geo_*`
+  시계열은 배포 후 더 이상 갱신되지 않고 `ktg_*`로 새로 시작된다(Prometheus 관점에서
+  정상적인 rename 동작 — dual-emission 이행 기간은 두지 않았다, 사용자가 명시적으로
+  요청한 단순 rename이므로).
+
 - [x] **T-304 — Prometheus 계측 경계 강화와 Geocoder Admin UI 브랜딩** (2026-09-01,
   PR #544, by codex, 사용자 지시). UI exact `/api/metrics` aggregate scrape를 `no-store`로
   공개하고 nested metrics/runtime-config 세션 게이트를 유지했다. API unmatched 404 route를

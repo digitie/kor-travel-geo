@@ -11,7 +11,7 @@ describe("Prometheus route handlers", () => {
       "text/plain; version=0.0.4; charset=utf-8"
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.text()).toContain("# HELP kor_travel_geo_ui_http_requests_total");
+    expect(await response.text()).toContain("# HELP ktg_ui_http_requests_total");
   });
 
   it("rejects non-finite or negative Web Vitals values", async () => {

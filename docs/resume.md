@@ -2,7 +2,17 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-01 갱신, by codex)
+## 현재 진척도 (2026-09-04 갱신, by claude)
+
+- ✅ **T-305 — Prometheus metric name prefix `kor_travel_geo_` → `ktg_` 변경 (사용자 지시)** —
+  T-304가 보존했던 prefix를 API 계측 44개(`src/kortravelgeo/infra/metrics.py`)와 admin UI
+  자체 계측 5개(`kor-travel-geo-ui/lib/metrics.ts`)에서 전부 교체. DB 이름·백업 파일명·
+  벤치마크 job 이름 등 같은 문자열을 공유하는 다른 식별자는 hit마다 개별 판정해 건드리지
+  않았다(전체 치환 아님). 관련 테스트 5개·living 참조 문서 8개 동기화, 백엔드/프런트엔드
+  전체 게이트 clean. kor-travel-docker-manager repo에 metric 이름을 하드코딩한 대시보드/
+  알림 파일이 없음을 확인해 cross-repo 후속 불필요. **다음 한 작업**: PR 머지 → n150 API+UI
+  재배포·헬스체크(사용자 지시, 기존 `kor_travel_geo_*` 시계열은 배포 후 stale 처리되고
+  `ktg_*`로 새로 시작됨 — dual-emission 이행 기간 없음).
 
 - ✅ **T-304 — Prometheus 계측 경계 강화와 Geocoder Admin UI 브랜딩 완료** — UI exact
   `/api/metrics` pull 응답을 `no-store`로 운영하고 nested metrics/runtime-config 세션 게이트,

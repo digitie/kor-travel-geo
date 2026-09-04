@@ -16,11 +16,11 @@ def test_metrics_render_includes_external_api_and_admin_gauges() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_external_api_calls_total" in body
-    assert "kor_travel_geo_cache_entries" in body
-    assert "kor_travel_geo_cache_hits " in body
-    assert "kor_travel_geo_cache_hits_total" not in body
-    assert "kor_travel_geo_load_jobs" in body
+    assert "ktg_external_api_calls_total" in body
+    assert "ktg_cache_entries" in body
+    assert "ktg_cache_hits " in body
+    assert "ktg_cache_hits_total" not in body
+    assert "ktg_load_jobs" in body
 
 
 def test_metrics_render_includes_api_request_duration_histogram() -> None:
@@ -36,10 +36,10 @@ def test_metrics_render_includes_api_request_duration_histogram() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_api_requests_total" in body
-    assert "kor_travel_geo_api_slow_requests_total" in body
-    assert "kor_travel_geo_api_requests_in_progress" in body
-    assert "kor_travel_geo_api_request_duration_seconds_bucket" in body
+    assert "ktg_api_requests_total" in body
+    assert "ktg_api_slow_requests_total" in body
+    assert "ktg_api_requests_in_progress" in body
+    assert "ktg_api_request_duration_seconds_bucket" in body
     assert 'route="/v1/healthz"' in body
 
 
@@ -62,7 +62,7 @@ def test_metrics_render_includes_api_request_cancellation_counter() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_api_request_cancellations_total" in body
+    assert "ktg_api_request_cancellations_total" in body
     assert 'route="/v1/address/geocode"' in body
 
 
@@ -104,10 +104,10 @@ def test_metrics_render_includes_db_pool_gauges() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_pg_pool_size" in body
-    assert "kor_travel_geo_pg_pool_checked_in" in body
-    assert "kor_travel_geo_pg_pool_checked_out" in body
-    assert "kor_travel_geo_pg_pool_overflow" in body
+    assert "ktg_pg_pool_size" in body
+    assert "ktg_pg_pool_checked_in" in body
+    assert "ktg_pg_pool_checked_out" in body
+    assert "ktg_pg_pool_overflow" in body
 
 
 def test_metrics_render_includes_db_pool_checkout_timeout_counter() -> None:
@@ -115,7 +115,7 @@ def test_metrics_render_includes_db_pool_checkout_timeout_counter() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_pg_pool_checkout_timeouts_total" in body
+    assert "ktg_pg_pool_checkout_timeouts_total" in body
     assert 'route="/v1/address/geocode"' in body
 
 
@@ -128,7 +128,7 @@ def test_metrics_render_includes_api_db_error_counter() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_api_db_errors_total" in body
+    assert "ktg_api_db_errors_total" in body
     assert 'route="/v1/address/geocode"' in body
     assert 'error_type="OperationalError"' in body
 
@@ -151,9 +151,9 @@ def test_metrics_render_includes_api_admission_counters_and_histograms() -> None
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_api_admission_wait_seconds_bucket" in body
-    assert "kor_travel_geo_api_admission_rejections_total" in body
-    assert "kor_travel_geo_api_admission_in_progress" in body
+    assert "ktg_api_admission_wait_seconds_bucket" in body
+    assert "ktg_api_admission_rejections_total" in body
+    assert "ktg_api_admission_in_progress" in body
     assert 'scope="geocode"' in body
 
 
@@ -168,8 +168,8 @@ def test_metrics_render_includes_load_job_duration_histograms() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_load_job_duration_seconds_bucket" in body
-    assert "kor_travel_geo_load_job_stage_duration_seconds_bucket" in body
+    assert "ktg_load_job_duration_seconds_bucket" in body
+    assert "ktg_load_job_stage_duration_seconds_bucket" in body
     assert 'kind="full_load_batch"' in body
     assert 'stage="source_loads"' in body
     assert 'outcome="completed"' in body
@@ -184,8 +184,8 @@ def test_metrics_render_includes_db_query_duration_histogram() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_db_queries_total" in body
-    assert "kor_travel_geo_db_query_duration_seconds_bucket" in body
+    assert "ktg_db_queries_total" in body
+    assert "ktg_db_query_duration_seconds_bucket" in body
     assert 'operation="select"' in body
     assert 'status="success"' in body
     assert "query_fingerprint=" in body
@@ -200,7 +200,7 @@ def test_metrics_render_includes_db_query_cancellation_counter() -> None:
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_db_query_cancellations_total" in body
+    assert "ktg_db_query_cancellations_total" in body
     assert 'operation="select"' in body
     assert 'status="cancelled"' in body
 
@@ -234,8 +234,8 @@ def test_metrics_render_includes_pg_stat_statement_snapshot_without_query_text()
 
     body = metrics.render_prometheus().decode()
 
-    assert "kor_travel_geo_pg_stat_statements_total_exec_time_ms" in body
-    assert "kor_travel_geo_pg_stat_statements_calls" in body
+    assert "ktg_pg_stat_statements_total_exec_time_ms" in body
+    assert "ktg_pg_stat_statements_calls" in body
     assert 'operation="select"' in body
     assert 'query_fingerprint="abcdef123456"' in body
     assert "mv_geocode_target" not in body

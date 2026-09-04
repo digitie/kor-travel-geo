@@ -33,10 +33,10 @@ T-157은 일회성 benchmark artifact에만 있던 `pg_stat_statements` 관측�
 
 | metric | labels |
 |--------|--------|
-| `kor_travel_geo_pg_stat_statements_total_exec_time_ms` | `rank`, `operation`, `query_fingerprint` |
-| `kor_travel_geo_pg_stat_statements_calls` | `rank`, `operation`, `query_fingerprint` |
-| `kor_travel_geo_pg_stat_statements_mean_exec_time_ms` | `rank`, `operation`, `query_fingerprint` |
-| `kor_travel_geo_pg_stat_statements_max_exec_time_ms` | `rank`, `operation`, `query_fingerprint` |
+| `ktg_pg_stat_statements_total_exec_time_ms` | `rank`, `operation`, `query_fingerprint` |
+| `ktg_pg_stat_statements_calls` | `rank`, `operation`, `query_fingerprint` |
+| `ktg_pg_stat_statements_mean_exec_time_ms` | `rank`, `operation`, `query_fingerprint` |
+| `ktg_pg_stat_statements_max_exec_time_ms` | `rank`, `operation`, `query_fingerprint` |
 
 ## 주의
 

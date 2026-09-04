@@ -398,7 +398,7 @@ UPDATE ops.source_upload_sessions
         """Upload sessions grouped by lifecycle ``state`` (T-211 metric feed).
 
         One aggregate ``GROUP BY state`` over ``ops.source_upload_sessions`` for
-        the ``kor_travel_geo_source_upload_sessions`` gauge.
+        the ``ktg_source_upload_sessions`` gauge.
         """
         async with self.engine.connect() as conn:
             rows = (

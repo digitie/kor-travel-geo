@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+### Changed
+- **Prometheus 계측 metric name prefix를 `kor_travel_geo_`에서 `ktg_`로 변경했다(T-305).**
+  API 계측(`src/kortravelgeo/infra/metrics.py`, 44개 metric)과 admin UI 자체 계측
+  (`kor-travel-geo-ui/lib/metrics.ts`, `kor_travel_geo_ui_*` → `ktg_ui_*` 5개)를 모두
+  포함한다. DB 이름(`kor_travel_geo`, `kor_travel_geo_dagster` 등)·백업 파일명 prefix·
+  벤치마크 job 이름 등 같은 문자열을 공유하는 다른 식별자는 그대로 두었다 — 실제
+  Prometheus metric 식별자만 대상. 기존 `kor_travel_geo_*` 시계열은 이 배포 이후 더 이상
+  갱신되지 않고(Prometheus에서 stale 처리), 같은 데이터가 `ktg_*` 이름으로 새로 시작된다 —
+  기존 Grafana 패널/알림 규칙이 metric 이름을 하드코딩했다면 갱신이 필요하다(이 저장소
+  기준 kor-travel-docker-manager repo에는 metric 이름을 하드코딩한 대시보드/알림 파일이
+  없음을 확인했다).
+
 ### Added
 - **Dagster 백업 보존 janitor job + 일일 스케줄(`backup_retention_janitor_daily`, 06:00 KST)을 추가했다.**
   T-230 janitor leaf(`client.run_backup_retention_janitor`)를 verify/copy/restore-drill과 같은 모양의

@@ -19,17 +19,17 @@ DB 단절, 복구, 느린 DB probe 상황에서 API가 crash 없이 안정적으
 Prometheus에는 API 레벨 DB 드라이버 오류 counter를 추가했다.
 
 ```text
-kor_travel_geo_api_db_errors_total{method,route,error_type}
+ktg_api_db_errors_total{method,route,error_type}
 ```
 
 기존 지표와 역할은 다음처럼 나뉜다.
 
 | 지표 | 의미 |
 |------|------|
-| `kor_travel_geo_pg_pool_checkout_timeouts_total` | SQLAlchemy pool checkout timeout |
-| `kor_travel_geo_api_db_errors_total` | 공개 API까지 올라온 DB 드라이버/연결 오류 |
-| `kor_travel_geo_db_queries_total{status="error"}` | SQLAlchemy query 계측에서 잡은 DB 실행 오류 |
-| `kor_travel_geo_db_query_cancellations_total` | client disconnect 또는 PostgreSQL user cancel로 취소된 query |
+| `ktg_pg_pool_checkout_timeouts_total` | SQLAlchemy pool checkout timeout |
+| `ktg_api_db_errors_total` | 공개 API까지 올라온 DB 드라이버/연결 오류 |
+| `ktg_db_queries_total{status="error"}` | SQLAlchemy query 계측에서 잡은 DB 실행 오류 |
+| `ktg_db_query_cancellations_total` | client disconnect 또는 PostgreSQL user cancel로 취소된 query |
 
 `/v1/readyz`는 T-160에서 만든 구조를 유지한다. DB probe가 `KTG_API_READINESS_TIMEOUT_MS` 안에 끝나지 않으면 `components.database.error_type="TimeoutError"`와 HTTP 503을 반환한다. Pool 포화는 새 DB checkout 없이 `database.status="skipped"`로 fail-fast한다.
 
@@ -65,7 +65,7 @@ python scripts/run_t159_db_fault_injection.py \
 
 - `tests/unit/test_api_responses.py`: `OperationalError`가 일반 경로와 VWorld 경로에서 HTTP 503으로 구조화된다. SQL/파라미터 원문은 응답에 노출되지 않는다.
 - `tests/unit/test_health_readiness.py`: 느린 DB probe가 readiness timeout으로 빠르게 끊기고, 같은 engine이 정상화되면 다음 요청이 200으로 회복된다.
-- `tests/unit/test_metrics.py`: `kor_travel_geo_api_db_errors_total` 지표가 노출된다.
+- `tests/unit/test_metrics.py`: `ktg_api_db_errors_total` 지표가 노출된다.
 
 작업 중 확인한 focused 실행:
 

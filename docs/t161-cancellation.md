@@ -16,8 +16,8 @@
 
 새 Prometheus 지표:
 
-- `kor_travel_geo_api_request_cancellations_total{method,route}`
-- `kor_travel_geo_db_query_cancellations_total{operation,query_fingerprint}`
+- `ktg_api_request_cancellations_total{method,route}`
+- `ktg_db_query_cancellations_total{operation,query_fingerprint}`
 
 기존 DB query 지표에도 `status="cancelled"` label을 허용한다. SQLAlchemy `handle_error`에서 `asyncio.CancelledError` 또는 PostgreSQL `QueryCanceled` 중 "user request" cancel만 취소로 분류한다. Statement timeout은 취소가 아니라 기존 `error`로 남긴다.
 

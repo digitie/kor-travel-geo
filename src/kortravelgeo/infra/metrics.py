@@ -83,169 +83,169 @@ def _histogram(
 
 
 EXTERNAL_API_CALLS = _counter(
-    "kor_travel_geo_external_api_calls_total",
+    "ktg_external_api_calls_total",
     "External geocoding API calls by provider and outcome.",
     ("provider", "outcome"),
 )
-CACHE_ENTRIES = _gauge("kor_travel_geo_cache_entries", "Rows currently stored in geo_cache.")
-CACHE_HITS = _gauge("kor_travel_geo_cache_hits", "Accumulated geo_cache hit count.")
+CACHE_ENTRIES = _gauge("ktg_cache_entries", "Rows currently stored in geo_cache.")
+CACHE_HITS = _gauge("ktg_cache_hits", "Accumulated geo_cache hit count.")
 CACHE_EXPIRED = _gauge(
-    "kor_travel_geo_cache_expired_entries",
+    "ktg_cache_expired_entries",
     "Expired rows currently in geo_cache.",
 )
 LOAD_JOBS = _gauge(
-    "kor_travel_geo_load_jobs",
+    "ktg_load_jobs",
     "Load jobs by kind and persistent state.",
     ("kind", "state"),
 )
 API_REQUESTS = _counter(
-    "kor_travel_geo_api_requests_total",
+    "ktg_api_requests_total",
     "HTTP requests by route template, method, and status code.",
     ("method", "route", "status_code"),
 )
 API_SLOW_REQUESTS = _counter(
-    "kor_travel_geo_api_slow_requests_total",
+    "ktg_api_slow_requests_total",
     "HTTP requests slower than KTG_API_SLOW_REQUEST_MS by route template, method, and status code.",
     ("method", "route", "status_code"),
 )
 API_REQUESTS_IN_PROGRESS = _gauge(
-    "kor_travel_geo_api_requests_in_progress",
+    "ktg_api_requests_in_progress",
     "HTTP requests currently being handled by this API process.",
     ("method",),
 )
 API_REQUEST_CANCELLATIONS = _counter(
-    "kor_travel_geo_api_request_cancellations_total",
+    "ktg_api_request_cancellations_total",
     "HTTP requests cancelled by client disconnect or server-side task cancellation.",
     ("method", "route"),
 )
 API_REQUEST_DURATION = _histogram(
-    "kor_travel_geo_api_request_duration_seconds",
+    "ktg_api_request_duration_seconds",
     "HTTP request duration by route template, method, and status code.",
     ("method", "route", "status_code"),
     (0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
 API_ADMISSION_WAIT = _histogram(
-    "kor_travel_geo_api_admission_wait_seconds",
+    "ktg_api_admission_wait_seconds",
     "Admission-control wait time by route template, method, scope, and outcome.",
     ("method", "route", "scope", "outcome"),
     (0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
 )
 API_ADMISSION_REJECTIONS = _counter(
-    "kor_travel_geo_api_admission_rejections_total",
+    "ktg_api_admission_rejections_total",
     "Admission-control rejected requests by route template, method, and scope.",
     ("method", "route", "scope"),
 )
 API_ADMISSION_IN_PROGRESS = _gauge(
-    "kor_travel_geo_api_admission_in_progress",
+    "ktg_api_admission_in_progress",
     "HTTP requests currently holding an admission-control slot by scope.",
     ("scope",),
 )
 LOAD_JOB_DURATION = _histogram(
-    "kor_travel_geo_load_job_duration_seconds",
+    "ktg_load_job_duration_seconds",
     "Load job wall-clock duration by job kind and final state.",
     ("kind", "state"),
     (0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 300.0, 900.0, 1800.0, 3600.0, 7200.0),
 )
 LOAD_JOB_STAGE_DURATION = _histogram(
-    "kor_travel_geo_load_job_stage_duration_seconds",
+    "ktg_load_job_stage_duration_seconds",
     "Load job stage duration by job kind, stage, and outcome.",
     ("kind", "stage", "outcome"),
     (0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 300.0, 900.0, 1800.0, 3600.0),
 )
 PG_POOL_SIZE = _gauge(
-    "kor_travel_geo_pg_pool_size",
+    "ktg_pg_pool_size",
     "Configured SQLAlchemy DB pool size for this API process.",
 )
 PG_POOL_CHECKED_IN = _gauge(
-    "kor_travel_geo_pg_pool_checked_in",
+    "ktg_pg_pool_checked_in",
     "SQLAlchemy DB pool connections currently idle in this API process.",
 )
 PG_POOL_CHECKED_OUT = _gauge(
-    "kor_travel_geo_pg_pool_checked_out",
+    "ktg_pg_pool_checked_out",
     "SQLAlchemy DB pool connections currently checked out by this API process.",
 )
 PG_POOL_OVERFLOW = _gauge(
-    "kor_travel_geo_pg_pool_overflow",
+    "ktg_pg_pool_overflow",
     "SQLAlchemy DB pool overflow connections currently opened by this API process.",
 )
 PG_POOL_CHECKOUT_TIMEOUTS = _counter(
-    "kor_travel_geo_pg_pool_checkout_timeouts_total",
+    "ktg_pg_pool_checkout_timeouts_total",
     "SQLAlchemy DB pool checkout timeouts by route template and method.",
     ("method", "route"),
 )
 API_DB_ERRORS = _counter(
-    "kor_travel_geo_api_db_errors_total",
+    "ktg_api_db_errors_total",
     "Database driver errors surfaced to API clients by route, method, and error type.",
     ("method", "route", "error_type"),
 )
 DB_QUERIES = _counter(
-    "kor_travel_geo_db_queries_total",
+    "ktg_db_queries_total",
     "SQL queries executed by this API process by operation, fingerprint, and status.",
     ("operation", "query_fingerprint", "status"),
 )
 DB_QUERY_CANCELLATIONS = _counter(
-    "kor_travel_geo_db_query_cancellations_total",
+    "ktg_db_query_cancellations_total",
     "SQL queries cancelled by asyncio cancellation or PostgreSQL user cancellation.",
     ("operation", "query_fingerprint"),
 )
 SOURCE_JANITOR_RUNS = _counter(
-    "kor_travel_geo_source_janitor_runs_total",
+    "ktg_source_janitor_runs_total",
     "Upload-session janitor passes by outcome (ran or skipped on lock conflict).",
     ("outcome",),
 )
 SOURCE_JANITOR_SESSIONS = _counter(
-    "kor_travel_geo_source_janitor_sessions_total",
+    "ktg_source_janitor_sessions_total",
     "Upload sessions processed by the janitor by transition action.",
     ("action",),
 )
 SOURCE_JANITOR_ABORTS = _counter(
-    "kor_travel_geo_source_janitor_multipart_aborts_total",
+    "ktg_source_janitor_multipart_aborts_total",
     "Multipart upload abort attempts by the janitor by outcome.",
     ("outcome",),
 )
 SOURCE_RECONCILE_RUNS = _counter(
-    "kor_travel_geo_source_reconcile_runs_total",
+    "ktg_source_reconcile_runs_total",
     "RustFS reconciliation passes by mode and outcome.",
     ("mode", "outcome"),
 )
 SOURCE_RECONCILE_ITEMS = _counter(
-    "kor_travel_geo_source_reconcile_items_total",
+    "ktg_source_reconcile_items_total",
     "Reconciliation issue items emitted by issue_type and severity.",
     ("issue_type", "severity"),
 )
 SOURCE_RECONCILE_RESOLVES = _counter(
-    "kor_travel_geo_source_reconcile_resolves_total",
+    "ktg_source_reconcile_resolves_total",
     "Reconciliation resolve attempts by action and outcome.",
     ("action", "outcome"),
 )
 SOURCE_HARD_DELETES = _counter(
-    "kor_travel_geo_source_hard_deletes_total",
+    "ktg_source_hard_deletes_total",
     "Manual bulk source-object hard-delete outcomes (T-212/ADR-052).",
     ("outcome",),
 )
 DB_QUERY_DURATION = _histogram(
-    "kor_travel_geo_db_query_duration_seconds",
+    "ktg_db_query_duration_seconds",
     "SQL query duration by operation, fingerprint, and status.",
     ("operation", "query_fingerprint", "status"),
     (0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
 PG_STAT_STATEMENTS_TOTAL_EXEC_MS = _gauge(
-    "kor_travel_geo_pg_stat_statements_total_exec_time_ms",
+    "ktg_pg_stat_statements_total_exec_time_ms",
     "Latest persisted pg_stat_statements top query total execution time in milliseconds.",
     ("rank", "operation", "query_fingerprint"),
 )
 PG_STAT_STATEMENTS_CALLS = _gauge(
-    "kor_travel_geo_pg_stat_statements_calls",
+    "ktg_pg_stat_statements_calls",
     "Latest persisted pg_stat_statements top query call count.",
     ("rank", "operation", "query_fingerprint"),
 )
 PG_STAT_STATEMENTS_MEAN_EXEC_MS = _gauge(
-    "kor_travel_geo_pg_stat_statements_mean_exec_time_ms",
+    "ktg_pg_stat_statements_mean_exec_time_ms",
     "Latest persisted pg_stat_statements top query mean execution time in milliseconds.",
     ("rank", "operation", "query_fingerprint"),
 )
 PG_STAT_STATEMENTS_MAX_EXEC_MS = _gauge(
-    "kor_travel_geo_pg_stat_statements_max_exec_time_ms",
+    "ktg_pg_stat_statements_max_exec_time_ms",
     "Latest persisted pg_stat_statements top query max execution time in milliseconds.",
     ("rank", "operation", "query_fingerprint"),
 )
@@ -256,42 +256,42 @@ PG_STAT_STATEMENTS_MAX_EXEC_MS = _gauge(
 # 30-day growth, and the quarantined / soft_deleted / unregistered byte
 # breakdown — fed from ``compute_source_capacity`` on each /metrics scrape.
 SOURCE_UPLOAD_SESSIONS = _gauge(
-    "kor_travel_geo_source_upload_sessions",
+    "ktg_source_upload_sessions",
     "Upload sessions by lifecycle state.",
     ("state",),
 )
 SOURCE_STORAGE_OBJECTS = _gauge(
-    "kor_travel_geo_source_storage_objects",
+    "ktg_source_storage_objects",
     "Live source-registry objects by category.",
     ("category",),
 )
 SOURCE_STORAGE_BYTES = _gauge(
-    "kor_travel_geo_source_storage_bytes",
+    "ktg_source_storage_bytes",
     "Live source-registry bytes by category.",
     ("category",),
 )
 SOURCE_STORAGE_TOTAL_OBJECTS = _gauge(
-    "kor_travel_geo_source_storage_total_objects",
+    "ktg_source_storage_total_objects",
     "Total live source-registry objects across all categories.",
 )
 SOURCE_STORAGE_TOTAL_BYTES = _gauge(
-    "kor_travel_geo_source_storage_total_bytes",
+    "ktg_source_storage_total_bytes",
     "Total live source-registry bytes across all categories.",
 )
 SOURCE_STORAGE_QUARANTINED_BYTES = _gauge(
-    "kor_travel_geo_source_storage_quarantined_bytes",
+    "ktg_source_storage_quarantined_bytes",
     "Source-registry bytes in quarantined files.",
 )
 SOURCE_STORAGE_SOFT_DELETED_BYTES = _gauge(
-    "kor_travel_geo_source_storage_soft_deleted_bytes",
+    "ktg_source_storage_soft_deleted_bytes",
     "Source-registry bytes in soft-deleted files.",
 )
 SOURCE_STORAGE_UNREGISTERED_BYTES = _gauge(
-    "kor_travel_geo_source_storage_unregistered_bytes",
+    "ktg_source_storage_unregistered_bytes",
     "Stored-but-unregistered object bytes the latest reconcile run found.",
 )
 SOURCE_STORAGE_GROWTH_30D_BYTES = _gauge(
-    "kor_travel_geo_source_storage_growth_30d_bytes",
+    "ktg_source_storage_growth_30d_bytes",
     "Source-registry bytes uploaded within the last 30 days.",
 )
 

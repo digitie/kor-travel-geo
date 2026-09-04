@@ -41,7 +41,7 @@ T-156은 이미 존재하던 `geo_cache` 테이블과 `/v1/admin/cache/metrics`�
   - `KTG_CACHE_TTL_DAYS` / `Settings.cache_ttl_days`
 - 기존 관측면을 그대로 사용한다.
   - `GET /v1/admin/cache/metrics`
-  - Prometheus `kor_travel_geo_cache_entries`, `kor_travel_geo_cache_hits`, `kor_travel_geo_cache_expired_entries`
+  - Prometheus `ktg_cache_entries`, `ktg_cache_hits`, `ktg_cache_expired_entries`
 
 ## 검증
 

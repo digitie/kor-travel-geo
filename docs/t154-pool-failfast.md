@@ -12,7 +12,7 @@ T-047/T-141 고부하 측정에서 드러난 checkout 대기를 무한 tail로 �
 - `infra.engine.make_async_engine()`가 `pool_size`, `max_overflow`, `pool_timeout`, `pool_pre_ping`, `pool_recycle`을 모두 명시한다.
 - SQLAlchemy pool checkout `TimeoutError`는 FastAPI exception handler에서 `DatabaseError(E0500, HTTP 503)`로 변환한다.
 - REST v1 VWorld 호환 경로(`/v1/address/geocode`, `/v1/address/reverse`)는 기존 VWorld error shape를 유지하며, pool timeout은 `SYSTEM_ERROR`로 노출된다.
-- `/metrics`에 `kor_travel_geo_pg_pool_checkout_timeouts_total{method,route}` counter를 추가했다.
+- `/metrics`에 `ktg_pg_pool_checkout_timeouts_total{method,route}` counter를 추가했다.
 - `/v1/readyz` pool detail에 `timeout_ms`를 추가해 현재 process의 checkout 상한을 운영자가 확인할 수 있게 했다.
 - `KTG_TEST_PG_DSN`이 있을 때만 실행되는 opt-in 통합 테스트가 `pool_size=1`, `max_overflow=0`, `pg_pool_timeout_ms=50` 조건에서 두 번째 checkout이 빠르게 실패하는지 검증한다.
 
