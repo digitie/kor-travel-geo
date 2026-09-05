@@ -2,6 +2,25 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-05 (`kor-travel-common` 공통 라이브러리 도입 검토, by codex)
+
+- 요청: `kor-travel-*`와 Pinvi admin 사이 공통 라이브러리의 장단점을 상세 보고하고 geo 문서로 PR·머지.
+- 산출물: [`kor-travel-common-library-review.md`](kor-travel-common-library-review.md) 한 파일에
+  여섯 저장소의 커밋 기준, 기술 구성, 실제 이식 근거와 동작 차이, 장단점·대안·패키지 경계,
+  라이선스·배포 운영, 단계별 검증·철회 기준과 가정에 기반한 투입량을 정리했다.
+- 핵심 근거: map·Pinvi의 UI 파일명 교집합은 27개지만 바이트 일치 파일은 0개다.
+  테이블·버튼의 명시적 이식 기록과 실제 계약 차이를 구분했다. 작은 admin 부품부터 두 소비자로
+  검증하는 권고안이며 인증·도메인 로직 통합이나 패키지 구현·발행은 수행하지 않았다.
+- 환경: 고정 Codex worktree의 원본 Git metadata가 없어 repair가 실패했고 폴더 이동도 거부됐다.
+  기존 폴더는 보존하고 유효한 Geo Git 저장소에서 별도 `kor-travel-geo-codex-common-report`
+  worktree를 만들었다. 테스트는 전용 WSL ext4 미러에서 수행했다.
+  CodeGraph MCP는 이 세션에 노출되지 않았으며 CLI 최초 인덱싱 후 `sync` → `status` 정상 확인.
+- 검증: 문서 참조 식별자·커밋 고정 파일 경로 확인, `git diff --check`,
+  `ruff check .`, `mypy src/kortravelgeo scripts/export_openapi.py`, `lint-imports` 통과.
+  전체 `pytest -q`는 1399 passed·88 skipped·148 warnings(41.44초)였다. 기존 테스트 가상환경을
+  재사용하고 `PYTHONPATH=src`로 전용 미러 소스를 지정했다. 문서 변경으로 앱 코드·DTO·스키마는 바뀌지 않았으며,
+  공통 패키지의 실제 설치 호환성과 운영 브라우저 검증은 후속 시범 범위다.
+
 ## 2026-09-04 (T-305 — Prometheus metric name prefix kor_travel_geo_ → ktg_ 변경, by claude)
 
 사용자가 "prometheus 로 보내는 값은 prefix를 ktg_ 로 변경. pr 머지까지 진행"이라고 지시.

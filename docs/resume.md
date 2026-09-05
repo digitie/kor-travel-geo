@@ -2,7 +2,12 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-04 갱신, by claude)
+## 현재 진척도 (2026-09-05 갱신, by codex)
+
+- ✅ **`kor-travel-common` 도입 검토 보고서 작성** — 여섯 저장소의 원격 `main` 소스로
+  중복·계약 차이, 장단점, 배포 대안, 초기 범위와 비용·검증 기준을
+  [`kor-travel-common-library-review.md`](kor-travel-common-library-review.md) 한 파일에 정리했다.
+  map·Pinvi admin의 작은 부품부터 공유하는 권고안이며 라이브러리 구현·발행은 미착수다.
 
 - ✅ **T-305 — Prometheus metric name prefix `kor_travel_geo_` → `ktg_` 변경 (사용자 지시)** —
   T-304가 보존했던 prefix를 API 계측 44개(`src/kortravelgeo/infra/metrics.py`)와 admin UI
