@@ -2,7 +2,21 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-05 갱신, by codex)
+## 현재 진척도 (2026-09-11 갱신, by claude)
+
+- ✅ **T-306 — `maplibre-vworld-react` 최신 커밋으로 업데이트 (maplibre-gl v6, 사용자 지시)** —
+  핀 커밋 `95b49d3`→`ffa5523`(maplibre-gl 5→6 major bump 포함, 실제 disclosed critical
+  XSS도 해소). v6 ESM-only + NodeNext `.js` 확장자 강제가 이 앱의 "vworld-map-web 원본을
+  Turbopack이 직접 트랜스파일" 아키텍처와 충돌해 빌드가 깨졌던 것을 새 postinstall 스크립트
+  (`scripts/patch-vworld-map-web-esm-imports.mjs`, 설치 후 상대 import의 `.js` 접미사를
+  다시 벗김)로 해결. 3인 병렬 적대적 리뷰(workflow)가 실제 blocker 2건을 찾아냄 —
+  Dockerfile `deps` stage가 `scripts/` COPY 전에 `npm ci`를 실행해 Docker 빌드가 아예
+  실패하는 문제(로컬 checkout 검증만으론 못 잡음), 스크립트가 쓴 `fs.promises.glob`이
+  Node 22+ 전용이라 Node 20 고정인 CI(ADR-019)에서 `npm ci`가 죽는 문제 — 둘 다 수정·재검증
+  완료. medium 3건(postinstall 침묵 실패 강화, WebGL2 미지원 브라우저 에러 로깅·메시지
+  구체화, 테스트 mock v6 대응)도 반영. 로컬에 실제 VWorld API 키를 넣어 `next start` 프로덕션
+  서버로 실제 타일이 렌더링되는 지도까지 스크린샷 확인(콘솔 에러 zero). **다음 한 작업**: PR
+  머지 → n150 UI 재배포·헬스체크·live e2e.
 
 - ✅ **`kor-travel-common` 도입 검토 보고서 작성** — 여섯 저장소의 원격 `main` 소스로
   중복·계약 차이, 장단점, 배포 대안, 초기 범위와 비용·검증 기준을

@@ -4,13 +4,23 @@ import { CoordinateMap } from "@/components/vworld/CoordinateMap";
 import { CoordinateMapSkeleton, LazyCoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import { isMapUsable } from "@/components/vworld/map-utils";
 
-vi.mock("maplibre-gl", () => ({
-  default: {
+// maplibre-gl v6 is named-exports-only (no default export) — mock the shape it
+// actually has. GPUInitializationError is a real class (not just a value) because
+// CoordinateMap.tsx branches on `info.error instanceof GPUInitializationError`.
+vi.mock("maplibre-gl", () => {
+  class GPUInitializationError extends Error {
+    constructor(...args: unknown[]) {
+      super(...(args as []));
+      this.name = "GPUInitializationError";
+    }
+  }
+  return {
     Map: vi.fn(),
     Marker: vi.fn(),
-    NavigationControl: vi.fn()
-  }
-}));
+    NavigationControl: vi.fn(),
+    GPUInitializationError
+  };
+});
 
 const originalApiKey = process.env.NEXT_PUBLIC_VWORLD_API_KEY;
 

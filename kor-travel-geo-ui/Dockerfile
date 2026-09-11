@@ -2,6 +2,10 @@ FROM node:22-alpine AS deps
 
 WORKDIR /app
 COPY package.json package-lock.json ./
+# postinstall (scripts/patch-vworld-map-web-esm-imports.mjs) needs its own file present
+# before `npm ci` runs its lifecycle scripts — the rest of the source only lands later,
+# in the builder stage's `COPY . .`.
+COPY scripts ./scripts
 RUN npm ci
 
 FROM node:22-alpine AS builder
