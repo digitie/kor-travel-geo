@@ -1,5 +1,6 @@
 "use client";
 
+import { GPUInitializationError } from "maplibre-gl";
 import type {
   ErrorEvent as MapLibreErrorEvent,
   Map as MapLibreMap,
@@ -397,7 +398,20 @@ function renderVWorldFallback(info: VWorldMapFallbackInfo) {
 }
 
 function VWorldMapFallback({ info }: { info: VWorldMapFallbackInfo }) {
-  const message = info.reason === "missing-api-key" ? "VWorld API 키 미설정" : "지도 로딩 실패";
+  // `info.error` (present only for reason "map-init-error", e.g. the browser lacking the
+  // WebGL2 support maplibre-gl v6 now requires) is otherwise swallowed by the vendored
+  // VWorldMapView — surface it here so it's at least visible in devtools/error tracking.
+  useEffect(() => {
+    if (info.error) {
+      console.error("[VWorldMap] map initialization failed:", info.error);
+    }
+  }, [info.error]);
+  const message =
+    info.reason === "missing-api-key"
+      ? "VWorld API 키 미설정"
+      : info.error instanceof GPUInitializationError
+        ? "이 브라우저는 지도에 필요한 WebGL2를 지원하지 않습니다"
+        : "지도 로딩 실패";
   return <MapOverlay text={message} />;
 }
 

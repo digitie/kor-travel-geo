@@ -6,6 +6,57 @@
 
 ## 완료
 
+- [x] **T-306 — `maplibre-vworld-react`를 최신 커밋으로 업데이트(maplibre-gl v6 major bump)**
+  (2026-09-11, by claude, 사용자 지시). 사용자 지시 "최신 레포로 업데이트" — 핀 커밋을
+  `95b49d3`(T-292 이전 기존 핀)에서 최신 `ffa5523`(PR #26 "upgrade maplibre-gl to v6")로
+  올렸다. 이 한 커밋이 `maplibre-gl` 5→6 major bump를 포함해 파급이 컸다: v6은 ESM-only
+  배포(CJS/UMD 제거)에 default export도 없어졌고, `vworld-map-web` 패키지는
+  `module`/`moduleResolution`을 NodeNext로 전환하면서 상대 import/export에 `.js`
+  확장자를 강제(TS NodeNext 표준 관례 — 게시된 `dist/`에선 정상 동작). `maplibre-gl` v5의
+  실제 disclosed critical XSS(GHSA-jrc7-96c5-q579)도 이 bump로 해소된다(6.4.1+부터 미해당,
+  최신 6.9.0로 핀).
+
+  **아키텍처 충돌과 해결**: kor-travel-geo-ui는 `maplibre-vworld-react`의 `dist/`(upstream
+  gitignore 대상, tarball에 없음)를 전혀 쓰지 않고 `next.config.mjs`의
+  `transpilePackages`+`resolveAlias`로 `vworld-map-web/src/*.ts(x)` 원본을 Turbopack이
+  직접 트랜스파일하도록 구성돼 있다(barrel 재수출 회피 목적, `lib/vworld.ts` 헤더 주석
+  참조) — NodeNext가 요구하는 `.js` 확장자는 `tsc`만 실제 sibling `.ts`로 재해석하고
+  Turbopack은 하지 않는다(Next 자체 소스의 `experimental.extensionAlias`가 Turbopack
+  미지원 옵션 목록에 있음을 확인). 그 결과 bump 직후 `npm run build`가 vworld-map-web
+  내부 상대 import 전부에서 `Module not found`로 실패했다 — 새 postinstall 스크립트
+  (`scripts/patch-vworld-map-web-esm-imports.mjs`)로 해결: `npm install` 직후
+  `node_modules/maplibre-vworld-react/packages/vworld-map-web/src/**/*.{ts,tsx}`의
+  상대 import/export에서만 `.js` 접미사를 다시 벗겨 Turbopack의 기본 확장자 없는 해석이
+  통하게 만든다(bare package specifier는 건드리지 않음, idempotent).
+
+  적대적 리뷰(workflow, 3인 병렬 + 개별 verify) 9건 중 5건 생존 — blocker 2건 모두
+  세션이 직접 놓친 실제 결함이었다: (1) `Dockerfile`의 `deps` stage가 `scripts/`를
+  COPY하기 *전에* `npm ci`를 실행해 postinstall이 MODULE_NOT_FOUND로 죽어 Docker 빌드
+  자체가 실패(로컬 checkout에서만 검증하고 Dockerfile의 단계별 COPY 순서를 재현하지
+  않았던 검증 공백) — `deps` stage에 `COPY scripts ./scripts`를 `npm ci` 전에 추가해
+  해결, 수정 후 Docker `deps` stage를 정확히 재현한 격리 디렉터리에서 재검증 완료.
+  (2) 스크립트가 쓴 `node:fs/promises`의 `glob`은 Node 22+ 전용인데 이 프로젝트 CI는
+  ADR-019로 Node 20을 명시 고정 — 로컬 Node 25/Docker 이미지 Node 22에서는 안 보이고
+  CI에서만 터지는 결함이었다 — `readdirSync` 기반 수동 재귀 walk로 교체해 Node 버전
+  무관하게 동작하도록 수정(idempotency·에러 경로 모두 재검증). medium 3건도 함께 반영:
+  postinstall이 예상 경로가 없을 때 조용히 no-op하던 것을 "패키지는 있는데 하위 경로가
+  없음"인 경우에 한해 loud fail(`process.exitCode = 1`)하도록 변경(패키지 자체가 없는
+  정상 케이스는 그대로 no-op); maplibre-gl v6의 WebGL2 필수화로 발생하는
+  `GPUInitializationError`가 vendored 패키지 안에서 로깅 없이 삼켜지던 것을
+  `CoordinateMap.tsx`의 fallback에서 `console.error`로 노출하고 `instanceof
+  GPUInitializationError`일 때 "이 브라우저는 지도에 필요한 WebGL2를 지원하지 않습니다"로
+  구체화(기존 "지도 로딩 실패" 범용 메시지 대신); `tests/unit/coordinate-map.test.tsx`의
+  `vi.mock("maplibre-gl", ...)`가 v5식 `{ default: {...} }` 형태로 남아 있던 것을 v6의
+  named-exports 형태로 교정(`GPUInitializationError` 클래스 포함, 실제 map mount
+  경로는 이 3개 테스트 모두 도달하지 않는다는 것도 리뷰로 확인 — jsdom엔 WebGL2가 없어
+  진짜 mount 검증은 구조적으로 불가능, n150 live 확인이 유일한 실경로 검증).
+
+  체크: lint/type-check clean, vitest 210/210 passed, `npm run build` 성공. Docker
+  `deps` stage 정확 재현 검증 별도 완료. 로컬에 진짜 `NEXT_PUBLIC_VWORLD_API_KEY`(에이전트
+  worktree `.env`에서 발견, 사용자 지시로 위치 확인)를 넣어 `next start` 프로덕션 서버로
+  실제 VWorld 타일이 렌더링되는 canvas(WebGL2 컨텍스트 획득 확인)까지 로컬에서 직접
+  스크린샷으로 확인 — 콘솔/페이지 에러 zero.
+
 - [x] **T-305 — Prometheus metric name prefix `kor_travel_geo_` → `ktg_` 변경** (2026-09-04,
   by claude, 사용자 지시). T-304가 명시적으로 보존했던 metric prefix를 사용자가 새로
   `ktg_`로 바꾸도록 지시 — API 계측(`src/kortravelgeo/infra/metrics.py`, 44개 metric name

@@ -2,6 +2,92 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-11 (T-306 — maplibre-vworld-react 최신 커밋 업데이트, maplibre-gl v6, by claude)
+
+사용자 지시 "maplibre vworld react 최신 레포로 업데이트 후 pr 머지하고 n150 prod 에
+디플로이". 이 세션은 ultracode(xhigh + dynamic workflow orchestration)로 진행 중이라
+구현은 직접 하되 적대적 리뷰는 Workflow 도구로 3인 병렬 + 개별 verify 구조를 썼다.
+
+핀 커밋을 `95b49d3`(직전 핀, T-292 이전)에서 upstream 최신 `ffa5523`("chore(web): upgrade
+maplibre-gl to v6", 이 저장소와 같은 계정의 다른 Claude 세션이 이미 만들고 적대적 리뷰까지
+거쳐 머지한 커밋)로 올렸다. 한 커밋인데 파급이 컸다 — `maplibre-gl` 5→6 major bump가
+같이 묻어왔다: v6은 CJS/UMD를 버리고 ESM-only + named-exports-only가 됐고(default export
+제거), 그 여파로 `vworld-map-web` 패키지 자체가 TS `module`/`moduleResolution`을
+NodeNext로 전환하면서 상대 import/export 전체에 `.js` 확장자를 강제하게 됐다(TS NodeNext
+표준 관례 — 게시된 `dist/`에서는 실제 `.js` sibling이 있어 정상 동작). 부가 이득으로
+maplibre-gl 5.24.0의 실제 disclosed critical XSS(GHSA-jrc7-96c5-q579)도 6.4.1+부터
+해소된다는 걸 확인했다(최신 6.9.0으로 핀).
+
+이 `.js` 확장자 강제가 kor-travel-geo-ui의 독특한 소비 방식과 정면으로 충돌했다 — 이 앱은
+`maplibre-vworld-react`의 `dist/`(upstream에서 gitignore 대상이라 tarball에 아예 없음)를
+전혀 안 쓰고, `next.config.mjs`의 `transpilePackages`+`resolveAlias`로 `vworld-map-web/
+src/*.ts(x)` 원본을 Turbopack이 직접 트랜스파일하도록 구성돼 있다(barrel 재수출을 피하려는
+의도적 설계, `lib/vworld.ts` 헤더 주석 참조). `tsc`만 NodeNext의 ".js는 sibling .ts로
+재해석" 로직을 갖고 있고 Turbopack은 없다 — Next 자체 소스(`next/dist/lib/
+turbopack-warning.js`)에서 `experimental.extensionAlias`(webpack 전용 대응 옵션)가
+Turbopack 미지원 목록에 명시돼 있음을 직접 확인해 이걸 증명했다. 그 결과 bump 직후
+`npm run build`가 vworld-map-web 내부 상대 import 전부(~21개 파일)에서 `Module not
+found`로 실패 — 새 postinstall 스크립트(`scripts/patch-vworld-map-web-esm-imports.mjs`)로
+해결했다: `npm install` 직후 설치된 vworld-map-web 소스의 상대 import/export에서만
+`.js` 접미사를 다시 벗겨 Turbopack의 기본 확장자 없는 해석(이미 `.tsx`/`.ts`를 시도함)이
+통하게 만든다. bare package specifier(`from "maplibre-gl"` 등)는 정규식이 relative-path
+prefix(`./`, `../`)를 요구해 건드리지 않는다.
+
+**적대적 리뷰가 실제로 놓칠 뻔한 blocker 2건을 잡아냈다** — 이번 세션에서 가장 값진
+대목이다. 3인 병렬 리뷰(diff-completeness / bundler-migration-risk / runtime-api-compat)
++ 각 finding 개별 verify pass, 총 9건 raw finding 중 5건 생존:
+
+1. **Dockerfile `deps` stage가 `scripts/` COPY *전에* `npm ci`를 실행** — 새 postinstall이
+   `scripts/patch-vworld-map-web-esm-imports.mjs`를 찾다가 MODULE_NOT_FOUND로 죽어
+   Docker 빌드 자체가 `builder` stage(`npm run build`)에 도달하기도 전에 실패한다.
+   내 검증(로컬 checkout에서 `npm ci`/`npm run build`)은 `scripts/`가 이미 package.json
+   옆에 있는 환경에서 돌렸을 뿐, Dockerfile의 단계별 COPY 순서(`deps`는 package.json+lock만,
+   `builder`가 되어야 `COPY . .`)를 재현하지 않았다 — 리뷰어가 정확히 그 순서를
+   격리 디렉터리에서 재현해 실패를 잡아냈다. 수정: `deps` stage에 `npm ci` 전
+   `COPY scripts ./scripts` 추가. 수정 후 같은 방식(package.json+lock+scripts만 있는
+   격리 디렉터리)으로 직접 재현해 성공을 재확인했다.
+2. **`node:fs/promises`의 `glob`은 Node 22+ 전용인데 이 프로젝트 CI는 ADR-019로 Node 20을
+   명시 고정** — 로컬(Node 25.9.0)과 Docker 이미지(node:22-alpine) 둘 다 이 API가 있어서
+   내 검증에서는 전혀 안 보였고, CI의 Node 20 `npm ci`에서만 SyntaxError로 죽는다. 리뷰어가
+   `@types/node`(^20.19.25로 핀)의 실제 타입 선언에 `glob`이 없음과 ADR-019 문서를 근거로
+   찾아냈다. 수정: `readdirSync(..., {withFileTypes:true})` 기반 수동 재귀 walk로 교체 —
+   Node 버전 의존성 완전 제거.
+
+**교훈**: 로컬 checkout에서의 `npm ci`/`npm run build` 성공은 "이 diff가 실제 배포
+파이프라인(Dockerfile의 단계별 COPY, CI의 고정 Node 버전)에서도 통한다"를 보장하지
+않는다 — 특히 새로 추가한 postinstall/lifecycle 훅처럼 "설치 시점에 무엇이 이미 디스크에
+있는가"에 의존하는 변경은 실제 빌드 스테이징을 재현해서 검증해야 한다. 이번엔 적대적
+리뷰가 이 공백을 정확히 메웠다.
+
+medium 3건도 반영: (a) postinstall이 예상 경로가 없을 때 무조건 조용히 no-op하던 것을,
+"패키지는 설치됐는데 그 하위 경로가 없음"(upstream 구조 변경 신호)에 한해
+`process.exitCode = 1`로 loud fail하도록 강화(패키지 자체가 아예 없는 정상 케이스는
+그대로 no-op 유지) — 이 스크립트의 유일한 호출자가 kor-travel-geo-ui 자신의 postinstall뿐이라
+"설치 안 됐을 수도 있다"는 원래 주석의 전제가 이 코드베이스엔 사실상 적용 안 된다는 걸
+리뷰가 정확히 짚었다. (b) maplibre-gl v6의 WebGL2 필수화로 새로 생기는
+`GPUInitializationError`가 vendored 패키지 안에서 로깅 없이 삼켜지던 것을
+`CoordinateMap.tsx`의 fallback에서 `console.error`로 노출하고, `instanceof
+GPUInitializationError`(패키지가 문서화한 권장 판별법)일 때 범용 "지도 로딩 실패" 대신
+"이 브라우저는 지도에 필요한 WebGL2를 지원하지 않습니다"로 구체화 — v5에선 WebGL1으로도
+동작하던 사용자층이 v6에서 새로 겪게 되는 회귀라 UX 관점에서 실질적이었다. (c)
+`tests/unit/coordinate-map.test.tsx`의 `vi.mock("maplibre-gl", ...)`이 v5식
+`{ default: {...} }` 형태로 남아있던 걸 v6 named-exports 형태로 교정(`GPUInitializationError`
+클래스도 mock에 포함, 안 그러면 `instanceof` 체크가 조용히 깨질 잠재 위험이 있었다) — 다만
+실제 map mount 경로는 이 3개 테스트 어느 것도 안 거친다는 것도 리뷰로 확인했다(jsdom엔
+WebGL2가 없어 구조적으로 진짜 mount 테스트가 불가능 — 그래서 "모든 테스트 통과"가 v6
+런타임 호환성에 대한 실증거는 아니라는 게 리뷰의 핵심 통찰).
+
+로컬 실증 검증을 위해 사용자가 "vworld키는 python vworld api 에서 로컬에서 찾아"라고
+알려줘서 `F:\dev\kor-travel-geo-claude\.env`의 `KTG_VWORLD_API_KEY`(백엔드용, UI의
+`NEXT_PUBLIC_VWORLD_API_KEY`와 같은 VWorld 계정 키 공유)를 찾아 로컬 `next start`
+프로덕션 서버에 넣고 `/debug/reverse`를 Playwright로 열어봤다 — 실제 강남역 일대 도로/
+지하철/POI 타일이 정상 렌더링되는 canvas(WebGL2 컨텍스트 획득 확인)를 스크린샷으로
+직접 확인했다, 콘솔/페이지 에러 zero. 이 키는 커밋되지 않았다(테스트 세션의 환경변수로만
+사용).
+
+체크: lint/type-check clean, vitest 210/210, `npm run build` 성공(Docker `deps` stage
+재현 검증 별도 완료).
+
 ## 2026-09-05 (`kor-travel-common` 공통 라이브러리 도입 검토, by codex)
 
 - 요청: `kor-travel-*`와 Pinvi admin 사이 공통 라이브러리의 장단점을 상세 보고하고 geo 문서로 PR·머지.
