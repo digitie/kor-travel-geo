@@ -2,6 +2,81 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-19 (T-307 — geo Dagster 3-프로세스 code-server 분리, by claude)
+
+사용자 지시 "geo의 dagster 구조를 weather과 같이 변경. 공용 db 및 기타구조와 원칙은
+manager 레포 참조". weather는 실제 8시간 무감지 장애(in-process webserver/daemon이
+코드 로드 hang으로 조용히 얼어붙음) 이후 코드 로딩을 별도 `dagster api grpc`
+code-server로 분리하고 webserver/daemon은 `workspace.yaml`의 `load_from: grpc_server`로
+원격 접속하도록 고친 전력이 있다(PR #61). geo는 애초에 `dagster dev` 번들 실행을 쓴 적이
+없고(webserver/daemon 둘 다 항상 `-m kortravelgeo_dagster.definitions`로 별도 프로세스
+in-process 로드) 첫 Dockerfile 주석 초안에서 이 점을 잘못 암시했다가(마치 geo도
+`dagster dev`식 번들이었던 것처럼) 커밋 전에 직접 잡아 weather의 구체적 장애 원인에만
+정확히 귀속시키도록 재작성했다.
+
+**범위를 정확히 잡는 것이 이번 작업의 진짜 난이도였다.** docker-manager가 같은 시기에
+추가한 `docs/platform-topology.md`를 두 개의 병렬 리서치 fork로 교차 확인했다 — 이
+문서는 "모든 프로젝트가 공용 `dagster_shared` Postgres + 공용 webserver/daemon(포트
+11000-11002)을 쓰는" 5단계 미래 마이그레이션을 "결정된 목표이고 아직 만들어지지
+않았다"고 명시하고, 그 1단계가 정확히 "각 프로젝트마다 dagster api grpc code-server를
+별도 서비스로 분리한다 — 이 단계까지는 기존 webserver/daemon을 그대로 둔다"였다. 이걸
+확인하고서야 "weather와 같이"가 code-server 분리까지만을 뜻하고, 공유 DB/webserver
+통합(더 큰, 아직 안 만들어진 미래 단계)은 범위 밖이라고 확신할 수 있었다. weather의
+`run_monitoring`/`run_coordinator`/`retention` config 튜닝도 "구조"가 아니라 별개
+설정으로 판단해 geo에 옮기지 않았다.
+
+**로컬 검증을 Docker/GDAL 없이 먼저 끝냈다.** `kor-travel-geo-dagster`의
+`pyproject.toml`이 `kortravelgeo`의 `[loaders]` extra(GDAL/osgeo 의존)가 아니라 plain
+`kor-travel-geo==0.1.0`만 요구한다는 걸 확인하고, 플레인 venv
+(`dagster-t307-venv`)에서 `dagster api grpc`/`dagster-webserver -w`/`dagster-daemon
+run -w`를 프로덕션과 동일한 커맨드로 직접 기동해 grpc/workspace 배선 전체를 Docker를
+건드리기 전에 검증(67개 테스트 스위트 전체 통과 포함). 이 검증 덕분에 Docker/n150
+단계에서 나온 문제는 배선 자체가 아니라 배포 절차 쪽뿐이었다.
+
+**cross-repo PR 2건**: geo `agent/claude-t307-dagster-code-server-split`(PR #548, 머지
+`c5b753e`) — `kor-travel-geo-dagster/docker/workspace.yaml` 신규, `dagster.Dockerfile`
+CMD 교체 + 포트 12503 EXPOSE, `docs/architecture/dagster-boundary.md` §9 재작성,
+`docs/ports.md`에 12503 행 추가. docker-manager
+`agent/claude-t307-geo-dagster-code-server-split`(PR #357, 머지 `e28fdf7`) —
+`docker-compose.yml`에 `kor-travel-geo-dagster-code-server` 서비스 신규,
+webserver/daemon `command:`를 `-w workspace.yaml`로 명시. docker-manager 쪽에서
+**진짜 gap 하나를 더 찾았다**: `config/docker-targets.yml`의 `containers:` 레지스트리에
+geo dagster 3개 서비스가 애초에 전혀 등록돼 있지 않았다(원래 geo 소유자 몫으로 남아
+있던 gap) — 이번에 정식 등록하면서 하드코딩된 문자열 리터럴 테스트 4개도 동기화했다.
+
+**배포 전에 잡은 잠재 회귀**: code-server가 코드 로딩을 전담하게 되면서 `@schedule`의
+`default_status`가 이제 code-server 로드 시점에만 결정된다는 아키텍처 함의를 추론해,
+n150의 host-local `docker-compose.override.yml`(git 비추적)에 있던 scheduled-backup env
+override가 webserver/daemon에만 있고 새 code-server엔 없다는 걸 배포 전에 발견 —
+누락분을 추가한 뒤에 배포했다. 배포 후 `kortravelgeo_dagster/backup.py`를 직접 읽어
+확인한 결과, 이 env var(`KTG_BACKUP_SCHEDULE_ENABLED`)는 실제로는 `@schedule` 자체의
+`default_status`(코드에 `DefaultScheduleStatus.STOPPED`로 하드코딩돼 있고, 운영자가
+Dagster UI에서 수동으로 켜기 전까지 always STOPPED — env var와 무관)가 아니라, 그
+스케줄이 트리거하는 job의 op가 API run-due 엔드포인트를 호출할 때 런타임에 읽는 값이었다.
+즉 이 fix가 "당장 조용히 스케줄 자체를 꺼뜨렸을" 상황은 아니었던 것으로 판명났지만 —
+op가 실제로 실행되는 프로세스가 이제 code-server이므로, 그 값이 code-server 환경에도
+있어야 하는 것 자체는 여전히 맞는 판단이었다.
+
+**n150 배포**: n150의 실제 배포 디렉터리(`/home/digitie/kor-travel-docker-manager`)는
+git 비추적이고(`ktdctl` 미설치 확인, 직접 `docker compose` invocation이 실제 배포
+방식) origin/main보다 상당히 뒤처져 있어(pinvi/map의 여러 머지된 변경 누락, geo 자신의
+과거 healthcheck 개선조차 반영 안 됨) 전체 파일 덮어쓰기는 다른 프로젝트의 검증 안 된
+변경을 같이 실려 보내는 위험이 있었다 — 대신 geo-dagster 서비스 블록만 정확한 바이트
+범위로 교체하는 surgical splice로 배포했다(원본은 `.bak-t307-*`로 백업, splice
+스크립트는 경계 assertion으로 검증). T-306에서 두 번 겪은 SSH 연결 끊김의 교훈으로
+배포 스크립트를 처음부터 detached(`setsid nohup ... & disown`)로 실행해 이번엔
+끊김 없이 완주했다. 결과: 3개 컨테이너(code-server/webserver/daemon) 전부 healthy,
+webserver GraphQL이 code-server로 정상 프록시(로컬 검증과 동일한 12-job 리스트 확인),
+daemon `dagster-daemon liveness-check` 통과, admin UI `/admin/dagster` iframe HTTP 200,
+map/pinvi/concierge 등 다른 프로젝트 컨테이너 34개 전부 무변동(스코프 밖 변경 없음 확인).
+
+터미널 표시 인코딩 관련 red herring 하나: n150 compose 파일을 `ssh cat > file`로
+가져온 뒤 Python `print(repr(...))`로 한글 텍스트를 찍었더니 깨져 보였다 — 실제 데이터
+손상이 의심돼 `scp`로 다시 가져와도 같은 깨짐이 나와 한때 우려했지만, `Read` 도구(인코딩
+정상 처리)로 확인한 실제 파일 바이트는 시종일관 정상 UTF-8이었다. 이 Bash 파이프라인의
+터미널/stdout 표시 문제일 뿐이었다 — splice 스크립트는 이후 한글 텍스트 출력 대신 경계
+assertion만으로 검증하도록 다시 짰다.
+
 ## 2026-09-11 (T-306 — maplibre-vworld-react 최신 커밋 업데이트, maplibre-gl v6, by claude)
 
 사용자 지시 "maplibre vworld react 최신 레포로 업데이트 후 pr 머지하고 n150 prod 에
