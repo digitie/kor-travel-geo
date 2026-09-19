@@ -6,6 +6,67 @@
 
 ## 완료
 
+- [x] **T-307 — geo Dagster를 weather와 같은 3-프로세스(webserver/daemon/code-server)
+  구조로 분리** (2026-09-19, by claude, 사용자 지시 "geo의 dagster 구조를 weather과 같이
+  변경. 공용 db 및 기타구조와 원칙은 manager 레포 참조"). geo는 기존에 webserver/daemon
+  둘 다 `-m kortravelgeo_dagster.definitions`로 코드를 in-process 로드했다(`dagster dev`
+  번들 실행은 애초에 쓴 적 없음). weather는 실제 8시간 무감지 장애(코드 로드 hang이
+  in-process webserver/daemon 전체를 조용히 얼림) 후 코드를 별도 `dagster api grpc`
+  code-server로 분리하고 webserver/daemon은 `workspace.yaml`로 원격 접속하도록 고쳤다(PR
+  #61) — 그 구조를 geo에 적용했다. `--heartbeat`는 의도적으로 안 씀(`dagster dev`용
+  self-destruct 타이머라 standalone 컨테이너에는 안 맞고, Docker 재시작 정책으로 충분).
+
+  **범위 판단이 핵심이었다**: docker-manager가 같은 시기에 추가한
+  `docs/platform-topology.md`가 "모든 프로젝트가 공용 `dagster_shared` Postgres +
+  공용 webserver/daemon(포트 11000-11002)을 쓴다"는 5단계 미래 마이그레이션을 "결정된
+  목표이고 아직 만들어지지 않았다"고 명시하는데, 그 1단계가 정확히 "각 프로젝트마다
+  dagster api grpc code-server를 별도 서비스로 분리한다 — 이 단계까지는 기존
+  webserver/daemon을 그대로 둔다"였다. weather의 `run_monitoring`/`run_coordinator`/
+  `retention` Dagster config 튜닝은 "구조"가 아니라 별개 설정으로 판단해 geo에는 옮기지
+  않았다. 즉 이번 작업은 code-server 분리까지만이고, 공유 DB/webserver 통합은 명시적으로
+  범위 밖.
+
+  **크로스 레포**: geo `agent/claude-t307-dagster-code-server-split`(PR #548, 머지
+  `c5b753e`) — `kor-travel-geo-dagster/docker/workspace.yaml` 신규(127.0.0.1:12503
+  gRPC 접속, `network_mode: host`라 loopback으로 충분), `dagster.Dockerfile`
+  CMD를 `dagster-webserver -w workspace.yaml`로 교체 + 포트 12503 EXPOSE 추가,
+  `docs/architecture/dagster-boundary.md` §9 재작성(3-프로세스 정확한 커맨드·포트
+  12502=webserver/12503=code-server·"세 프로세스 모두 같은 env var" 원칙),
+  `docs/ports.md`에 12503 행 추가(외부 노출 없음 명시). docker-manager
+  `agent/claude-t307-geo-dagster-code-server-split`(PR #357, 머지 `e28fdf7`) —
+  `docker-compose.yml`에 `kor-travel-geo-dagster-code-server` 서비스 신규(webserver/
+  daemon과 동일 env 블록, `depends_on: service_healthy`), webserver/daemon
+  `command:`를 `-w workspace.yaml`로 명시.
+
+  **발견하고 고친 두 가지 진짜 gap**: (1) `config/docker-targets.yml`의 `containers:`
+  레지스트리에 geo dagster 3개 서비스가 애초에 전혀 등록돼 있지 않았다(원래 geo 소유자
+  몫으로 남아 있던 gap, T-307 계기로 정식 등록 — `geo` target의 `services`/
+  `runtime_services`/`containers` 리스트와 문자열 리터럴을 하드코딩한 테스트 4개
+  (`test_get_targets` 등)를 함께 동기화). (2) code-server가 코드 로딩을 전담하게 되면서
+  `@schedule`의 `default_status`가 이제 code-server가 로드하는 시점에만 결정되는데,
+  n150의 host-local `docker-compose.override.yml`(git 비추적)의 scheduled-backup env
+  override(`KTG_BACKUP_SCHEDULE_ENABLED` 등)가 webserver/daemon에만 있고 code-server엔
+  없었다 — 배포 전에 발견해 code-server 항목을 추가. 배포 후 확인 결과 이 env var는
+  실제로는 `@schedule` 자체의 `default_status`(코드에 `DefaultScheduleStatus.STOPPED`로
+  하드코딩, 운영자가 Dagster UI에서 수동 활성화하기 전까지 항상 STOPPED — env var와
+  무관)가 아니라 스케줄이 트리거하는 job의 op가 API run-due 엔드포인트를 호출할 때
+  런타임에 읽는 값이었다 — 즉 이 fix가 "당장 조용히 스케줄을 꺼뜨렸을" 상황은 아니었지만,
+  op가 실행되는 프로세스가 이제 code-server이므로 그 값이 code-server 환경에 있어야
+  하는 것은 여전히 맞다.
+
+  **검증**: GDAL/Docker 없이 로컬 venv(`kortravelgeo` 메인 라이브러리는 `[loaders]`
+  extra 불필요)에서 `dagster api grpc`/`dagster-webserver -w`/`dagster-daemon run -w`를
+  직접 기동해 grpc/workspace 배선 전체를 프로덕션과 동일한 커맨드로 사전 검증(67개 테스트
+  스위트 전체 통과 포함). n150은 git 비추적(`ktdctl` 미설치, 직접 `docker compose`
+  invocation이 실제 배포 방식)이고 origin/main보다 상당히 뒤처져 있어(pinvi/map의
+  머지된 변경들 누락) 전체 파일 덮어쓰기 대신 geo-dagster 서비스 블록만 정확히 바이트
+  범위로 교체하는 surgical splice로 배포(원본은 `docker-compose.yml.bak-t307-*`로 백업).
+  SSH 연결 끊김을 겪은 T-306의 교훈으로 배포 스크립트를 처음부터 detached(`setsid
+  nohup ... & disown`)로 실행. 결과: 3개 컨테이너 전부 healthy, webserver GraphQL이
+  code-server로 정상 프록시(로컬 검증과 동일한 12-job 리스트), daemon
+  `liveness-check` 통과, admin UI `/admin/dagster` iframe(HTTP 200) 정상, 다른
+  프로젝트(map/pinvi/concierge) 컨테이너 34개 전부 무변동.
+
 - [x] **T-306 — `maplibre-vworld-react`를 최신 커밋으로 업데이트(maplibre-gl v6 major bump)**
   (2026-09-11, by claude, 사용자 지시). 사용자 지시 "최신 레포로 업데이트" — 핀 커밋을
   `95b49d3`(T-292 이전 기존 핀)에서 최신 `ffa5523`(PR #26 "upgrade maplibre-gl to v6")로

@@ -2,7 +2,26 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-11 갱신, by claude)
+## 현재 진척도 (2026-09-19 갱신, by claude)
+
+- ✅ **T-307 — geo Dagster를 weather와 같은 3-프로세스(webserver/daemon/code-server)
+  구조로 분리 (사용자 지시)** — weather가 실제 8시간 무감지 장애 후 코드 로딩을 별도
+  `dagster api grpc` code-server로 분리한 구조를 geo에 적용(webserver/daemon은
+  `workspace.yaml`로 원격 접속, `--heartbeat` 미사용). docker-manager의
+  `docs/platform-topology.md`("결정됐지만 아직 안 만들어진" 5단계 공유 DB/webserver
+  마이그레이션의 1단계가 정확히 이 code-server 분리)를 교차 확인해 범위를 code-server
+  분리까지로 한정 — 공유 DB 통합은 명시적으로 범위 밖. 크로스 레포: geo PR #548(머지
+  `c5b753e`) + docker-manager PR #357(머지 `e28fdf7`). 진행 중 발견·수정한 gap 2건 —
+  (1) `config/docker-targets.yml`에 geo dagster 3개 서비스가 애초에 미등록이었던 것을
+  정식 등록(하드코딩 테스트 4개 동기화), (2) n150 host-local override의 scheduled-backup
+  env가 새 code-server엔 없던 것을 배포 전 발견해 추가(사후 확인 결과 스케줄 자체의
+  RUNNING/STOPPED는 코드에 하드코딩된 `DefaultScheduleStatus.STOPPED`라 이 env와 무관—
+  op 런타임 실행에는 여전히 필요해 fix 자체는 맞았음). Docker/GDAL 없이 로컬 venv로
+  grpc/workspace 배선 전체를 사전 검증 완료. n150은 surgical byte-splice로 배포(전체
+  덮어쓰기 시 다른 프로젝트 미검증 변경까지 실릴 위험 회피), detached 배포로 SSH 끊김
+  없이 완주. 배포 후 3개 컨테이너 전부 healthy, GraphQL job 리스트·daemon
+  liveness-check·admin UI iframe 전부 정상, 다른 프로젝트 컨테이너 34개 무변동 확인.
+  **다음 한 작업**: 없음 — T-307 완료, 사용자 다음 지시 대기.
 
 - ✅ **T-306 — `maplibre-vworld-react` 최신 커밋으로 업데이트 (maplibre-gl v6, 사용자 지시)** —
   핀 커밋 `95b49d3`→`ffa5523`(maplibre-gl 5→6 major bump 포함, 실제 disclosed critical
