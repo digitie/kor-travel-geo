@@ -32,6 +32,7 @@
 | Prometheus | `12401` | `prometheus:9090` | `http://127.0.0.1:12401` |
 | `kor-travel-geo` API | `12501` | `kor-travel-geo-api:12501` | 로컬 단독 실행과 Docker 실행 동일 |
 | `kor-travel-geo` Dagster webserver | `12502` | `kor-travel-geo-dagster:12502` | T-290 독립 Dagster 관측/API. 공개 도메인 `https://geo-dagster.digitie.mywire.org/`(라우터 리버스 프록시 TLS 종단 → `127.0.0.1:12502`, 관리자 `/admin/dagster` 화면에 iframe 임베드(`KTG_DAGSTER_PUBLIC_URL` → UI 컨테이너 env; 백엔드 GraphQL은 내부 `12502` 유지). worker/aux 슬롯(map `12702`·concierge `12602`과 동일 패턴) |
+| `kor-travel-geo` Dagster code-server | `12503` | `kor-travel-geo-dagster-code-server:12503` | T-307: `dagster api grpc`로 code 로드·op 실행을 전담하는 별도 프로세스(kor-travel-weather의 동일 분리 패턴 참조). webserver/daemon은 이 포트로 `workspace.yaml`을 통해 원격 접속하며 더 이상 code를 직접 import하지 않는다. 외부 노출 없음(loopback 전용) |
 | `kor-travel-geo-ui` | `12505` | `kor-travel-geo-ui:12505` | 로컬 단독 실행과 Docker 실행 동일 |
 | `kor-travel-concierge` API | `12601` | manager compose 기준 | 다른 서비스 연동 시 참조 |
 | `kor-travel-concierge` worker/보조 API | `12602` | manager compose 기준 | 다른 서비스 연동 시 참조 |
