@@ -46,7 +46,8 @@ kor-travel-geo-dagster/            # 별도 설치 distribution (pyproject: kort
 ```
 
 `definitions.py`는 도메인 모듈의 상수 리스트(JOBS/SCHEDULES/SENSORS/ASSETS)를 합쳐 하나의 `defs`로
-노출한다. `dagster-webserver -m kortravelgeo_dagster.definitions`로 기동.
+노출한다. code-server가 `dagster api grpc -m kortravelgeo_dagster.definitions`로 이 module을 로드하고,
+webserver/daemon은 `workspace.yaml`을 통해 그 code-server에 원격 접속한다(§9, T-307).
 
 ## 3. Resource (설정만 공유, 객체 공유 X)
 
@@ -145,10 +146,33 @@ at-a-glance, iframe이 full 제어면. iframe `src`와 '새 창' 링크·run 링
 
 - Dagster 메타 = 별도 DB `kor_travel_geo_dagster`(같은 클러스터). `dagster.yaml` `storage.postgres` ←
   `KTG_DAGSTER_PG_URL`. `telemetry.enabled=false`.
-- `docker-manager` compose 신규 서비스: `kor-travel-geo-dagster-db-init`(createdb 멱등) +
-  `kor-travel-geo-dagster`(webserver, `-m kortravelgeo_dagster.definitions -h 0.0.0.0 -p <port>`) +
-  `kor-travel-geo-dagster-daemon`(`dagster-daemon run -m ...`, 포트 없음). 멀티스테이지 Dockerfile +
-  `DAGSTER_HOME`. 포트는 `docs/ports.md`에 신규 예약(map=12702). **n150 host-network 충돌 사전 확인.**
+- **T-307: 3-프로세스 분리 (code-server + webserver + daemon), 같은 image.** 이전에는 webserver·
+  daemon이 각자 `kortravelgeo_dagster.definitions`를 in-process로 로드했다 — 형제 프로젝트
+  `kor-travel-weather`에서 code 로드가 걸리면(hang) 그 프로세스 전체가 조용히 멈추는 사고가 실제로
+  났고(`dagster dev` 번들 방식에서 내부 worker의 heartbeat를 outer proxy가 대신 보지 않는 구조적
+  gap — outer 컨테이너는 "Up" 상태로 남아 `restart: unless-stopped`가 발동하지 않음), weather는
+  독립 `dagster api grpc` 프로세스로 code-server를 분리해 해결했다(2026-09, PR #61). geo도 동일하게
+  분리한다:
+  - `kor-travel-geo-dagster-code-server` — `dagster api grpc -h 0.0.0.0 -p 12503 -m
+    kortravelgeo_dagster.definitions`. 실제 code 로드·op 실행이 일어나는 곳. `--heartbeat` 없이
+    구동해 자체 self-destruct 타이머가 없다 — 일반 crash/OOM만 Docker의 통상 `restart` 정책으로
+    처리하면 된다.
+  - `kor-travel-geo-dagster`(webserver) — `dagster-webserver -w $DAGSTER_HOME/workspace.yaml -h
+    0.0.0.0 -p 12502`. code를 직접 import하지 않고 `workspace.yaml`의 `grpc_server`로 code-server에
+    원격 접속한다.
+  - `kor-travel-geo-dagster-daemon` — `dagster-daemon run -w $DAGSTER_HOME/workspace.yaml`(포트 없음).
+    마찬가지로 원격 접속.
+  - `workspace.yaml`(`kor-travel-geo-dagster/docker/workspace.yaml`, 이미지에 `dagster.yaml`과 같은
+    `$DAGSTER_HOME`로 COPY됨): `load_from: [grpc_server: {host: 127.0.0.1, port: 12503, location_name:
+    kortravelgeo_dagster}]`. `network_mode: host`라 세 컨테이너 모두 loopback으로 통신한다(Docker
+    내부 hostname 불필요).
+  - 세 서비스 모두 **같은 환경변수 집합**을 받는다(weather의 `x-dagster-environment` anchor 패턴과
+    동일 원칙 — 프로세스마다 다르게 env를 골라주면 나중에 드리프트로 조용히 깨진다).
+- `docker-manager` compose 서비스: `kor-travel-geo-dagster-db-init`(createdb 멱등) +
+  `kor-travel-geo-dagster-code-server` + `kor-travel-geo-dagster`(webserver) +
+  `kor-travel-geo-dagster-daemon`. 멀티스테이지 Dockerfile + `DAGSTER_HOME`. 포트는 `docs/ports.md`에
+  예약(webserver=12502, code-server=12503 — map=12702 계열과 동일한 "+1 aux 슬롯" 규약).
+  **n150 host-network 충돌 사전 확인.**
 
 ## 10. Gotcha (map 실측)
 
@@ -156,3 +180,12 @@ at-a-glance, iframe이 full 제어면. iframe `src`와 '새 창' 링크·run 링
 - **op 이름 ≠ job 이름**(같으면 code location 로드 실패).
 - resource는 init 시점에 key별 메시지로 실패(4-way fallback) — import는 항상 성공.
 - 별도 distribution이라 main lib은 dagster를 import할 수 없음(경계가 패키징으로 강제됨) — 의도된 이득.
+- **T-307: code-server를 `--heartbeat` 없이 구동한다.** 그 플래그는 `dagster dev`류 번들 실행이
+  내부 worker를 스스로 죽이는 self-destruct 타이머를 위한 것 — 독립 컨테이너로 뗀 code-server에
+  이 타이머를 넣으면 오히려 weather가 이미 겪은 것과 같은 조용한 정지를 재도입하게 된다.
+  일반 crash/OOM은 Docker `restart: unless-stopped`가 처리한다.
+- **로컬 검증(포트 충돌만 조심)**: GDAL 없이도(`kor-travel-geo` 기본 설치, `[loaders]` extra 불필요)
+  `dagster api grpc -p 12503 -m kortravelgeo_dagster.definitions` +
+  `dagster-webserver -w workspace.yaml` + `dagster-daemon run -w workspace.yaml`을 그대로 로컬에서
+  띄워 `{repositoriesOrError{__typename}}`가 `RepositoryConnection`을 반환하는지, `dagster-daemon
+  liveness-check`가 통과하는지 Docker 없이도 확인할 수 있다(T-307에서 이렇게 실제 검증함).

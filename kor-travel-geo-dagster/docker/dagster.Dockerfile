@@ -12,8 +12,20 @@
 # and runtime install libgdal from the same debian release so the compiled `_gdal` C
 # extension finds a matching shared library at import.
 #
-# One image, two services: the webserver uses the default CMD; the daemon overrides
-# `command:` in compose (`dagster-daemon run -m kortravelgeo_dagster.definitions`).
+# T-307: one image, three services (webserver / daemon / code-server), all launched via
+# explicit `command:` overrides in docker-manager's compose. Webserver and daemon no
+# longer load `kortravelgeo_dagster.definitions` in-process — they attach to a dedicated
+# `dagster api grpc` code-server container over gRPC via workspace.yaml (baked into this
+# image at /opt/dagster/dagster_home/workspace.yaml, port 12503 on the host network).
+# This mirrors kor-travel-weather's fix (2026-09) for a real production incident on
+# weather's (bundled-process) Dagster deployment: an inner code-load worker wedged while
+# the outer process it ran inside stayed "Up", so Docker's `restart: unless-stopped`
+# never fired and the wedge went undetected for hours. Splitting code loading into its
+# own `dagster api grpc` process removes that ambiguity — it IS the whole container, so
+# a wedge/crash is Docker's ordinary restart-policy problem like any other service,
+# not something a wrapping process has to notice and react to on its own.
+# The default CMD below (still webserver) is a documented fallback only; docker-manager's
+# compose sets `command:` explicitly for all three services.
 
 FROM python:3.12-slim AS builder
 
@@ -98,9 +110,10 @@ RUN apt-get update \
 
 COPY --from=builder /install /usr/local
 COPY --chown=appuser:appuser kor-travel-geo-dagster/docker/dagster.yaml /opt/dagster/dagster_home/dagster.yaml
+COPY --chown=appuser:appuser kor-travel-geo-dagster/docker/workspace.yaml /opt/dagster/dagster_home/workspace.yaml
 
 USER appuser
 
-EXPOSE 12502
+EXPOSE 12502 12503
 
-CMD ["sh", "-c", "dagster-webserver -m kortravelgeo_dagster.definitions -h 0.0.0.0 -p ${KTG_DAGSTER_PORT:-12502}"]
+CMD ["sh", "-c", "dagster-webserver -w ${DAGSTER_HOME}/workspace.yaml -h 0.0.0.0 -p ${KTG_DAGSTER_PORT:-12502}"]

@@ -1,0 +1,11 @@
+# T-307: webserver/daemon attach to the code location over gRPC instead of loading
+# `kortravelgeo_dagster.definitions` in-process (see dagster.Dockerfile header comment
+# and docs/architecture/dagster-boundary.md §9 for the rationale — this mirrors
+# kor-travel-weather's fix for a code-load hang silently freezing the whole in-process
+# webserver/daemon). `network_mode: host` on every geo Dagster container (docker-manager
+# compose) means the code-server is reachable via loopback, not a Docker-internal hostname.
+load_from:
+  - grpc_server:
+      host: 127.0.0.1
+      port: 12503
+      location_name: kortravelgeo_dagster
