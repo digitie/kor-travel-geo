@@ -407,13 +407,26 @@ CREATE TABLE IF NOT EXISTS ops.consistency_case_inputs (
     )
 
     # dataset_snapshots gains a nullable link to the source match set registry.
+    # `SCHEMA_SQL` (kortravelgeo.infra.sql) already carries this exact FK as part of
+    # ops.source_match_sets' own DDL block, so a from-scratch bootstrap via 0006
+    # (which replays SCHEMA_SQL verbatim) creates it before this migration runs —
+    # only a from-scratch replay ever hits this; an incrementally-migrated database
+    # (the only path ever exercised until now) never had 0006 see this FK. Guard it
+    # so both orderings converge on the same end state.
     op.execute("ALTER TABLE ops.dataset_snapshots ADD COLUMN IF NOT EXISTS source_match_set_id UUID")
     op.execute(
         """
-ALTER TABLE ops.dataset_snapshots
-  ADD CONSTRAINT fk_ops_dataset_snapshots_source_match_set
-  FOREIGN KEY (source_match_set_id)
-  REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE SET NULL
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'fk_ops_dataset_snapshots_source_match_set'
+  ) THEN
+    ALTER TABLE ops.dataset_snapshots
+      ADD CONSTRAINT fk_ops_dataset_snapshots_source_match_set
+      FOREIGN KEY (source_match_set_id)
+      REFERENCES ops.source_match_sets(source_match_set_id) ON DELETE SET NULL;
+  END IF;
+END $$
 """
     )
 
