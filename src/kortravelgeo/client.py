@@ -13,11 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .core.consistency_definitions import CASE_DEFINITIONS
 from .core.geocoder import geocode as core_geocode
+from .core.normalize import parse_address
 from .core.poboxer import pobox as core_pobox
 from .core.reverse_geocoder import reverse_geocode as core_reverse_geocode
 from .core.searcher import search as core_search
 from .core.source_categories import CATEGORY_CATALOG, serving_usage_for
 from .core.source_validation import GroupValidation
+from .core.sppn import parse_national_point_number
 from .core.v2 import (
     geocode_v2_from_geometry_lookups,
     geocode_v2_from_search,
@@ -279,10 +281,11 @@ class AsyncAddressClient:
 
         address = road_address or jibun_address or query or keyword
         assert address is not None
+        lookup_type = self._geocode_lookup_type(inp)
         try:
             response = await self._geocode_v1(
                 address,
-                type="parcel" if jibun_address and not road_address else "road",
+                type=lookup_type,
                 fallback="api" if fallback == "api" else "local_only",
                 sig_cd=sig_cd,
                 bjd_cd=bjd_cd,
@@ -292,7 +295,7 @@ class AsyncAddressClient:
         converted = geocode_v2_from_v1(inp, response)
         if response.status == "OK":
             converted = await self._with_geocode_geometries(converted)
-            if self._should_collect_geocode_supplements(inp, response, address):
+            if self._should_collect_geocode_supplements(inp, response, address, lookup_type):
                 try:
                     supplemental = await self._geocode_supplemental_road_candidates(
                         inp, address
@@ -311,14 +314,40 @@ class AsyncAddressClient:
         return fallback_response if fallback_response.status == "OK" else converted
 
     @staticmethod
+    def _geocode_lookup_type(inp: GeocodeV2Input) -> Literal["road", "parcel"]:
+        """v2 입력을 내부 v1 lookup type으로 정한다.
+
+        명시 필드(road_address/jibun_address)는 호출자가 고른 type을 그대로 따른다. 자유 텍스트
+        ``query``만 파싱해서 지번 주소면 곧바로 parcel로 보낸다(T-317). 지번 파싱 결과에는
+        도로명이 없어 road lookup은 SQL 없이 NOT_FOUND가 되므로 road 선행 후 parcel 재시도는
+        캐시 왕복만 늘린다. 국가지점번호와 파싱 불가 입력은 기존처럼 road 경로에 맡긴다(core
+        geocode가 국가지점번호를 type과 무관하게 먼저 처리하고, 파싱 불가는 region 후보
+        fallback으로 이어진다).
+        """
+        if inp.road_address:
+            return "road"
+        if inp.jibun_address:
+            return "parcel"
+        if inp.query is None or parse_national_point_number(inp.query) is not None:
+            return "road"
+        try:
+            parts = parse_address(inp.query)
+        except InvalidAddressError:
+            return "road"
+        return "road" if parts.is_road else "parcel"
+
+    @staticmethod
     def _should_collect_geocode_supplements(
         inp: GeocodeV2Input,
         response: GeocodeResponse,
         address: str,
+        lookup_type: Literal["road", "parcel"],
     ) -> bool:
         if inp.limit <= 1:
             return False
-        if inp.jibun_address and not (inp.road_address or inp.query):
+        # 보조 후보는 입력 문자열로 찾는 도로 geometry다. 지번 lookup 입력은 도로명과 맞을 수
+        # 없으므로 느린 도로 geometry 조회를 건너뛴다.
+        if lookup_type == "parcel":
             return False
         if response.x_extension and response.x_extension.national_point_number:
             return False

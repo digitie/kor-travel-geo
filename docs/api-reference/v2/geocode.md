@@ -8,7 +8,7 @@
 
 | 필드 | 타입 | 기본값 | 설명 |
 |------|------|--------|------|
-| `query` | string | 없음 | 통합 주소 질의 |
+| `query` | string | 없음 | 통합 주소 질의. 지번 주소로 파싱되면(예: `삼평동 681`, `태평로1가 31`) 지번 lookup, 그 밖에는 도로명 lookup으로 보낸다 |
 | `road_address` | string | 없음 | 도로명 주소로 강제할 때 사용 |
 | `jibun_address` | string | 없음 | 지번 주소로 강제할 때 사용 |
 | `keyword` | string | 없음 | 장소/키워드 후보 검색 |
@@ -23,7 +23,7 @@
 
 ## 출력
 
-`candidates`는 0개 이상이다. local primary 후보가 있고 입력이 정규화된 exact 주소와 다르면 보조 road geometry 후보가 같은 tuple 뒤쪽에 병합될 수 있다. 중복 후보는 먼저 나온 후보를 유지하는 방식으로 제거한 뒤 `limit`을 적용한다.
+`candidates`는 0개 이상이다. local primary 후보가 있고 입력이 정규화된 exact 주소와 다르면 보조 road geometry 후보가 같은 tuple 뒤쪽에 병합될 수 있다(지번 lookup 결과에는 붙이지 않는다). 중복 후보는 먼저 나온 후보를 유지하는 방식으로 제거한 뒤 `limit`을 적용한다.
 
 ```json
 {

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import pytest
@@ -10,6 +10,7 @@ from kortravelgeo.api.deps import get_client
 from kortravelgeo.api.public_api_key import require_public_api_key
 from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.core.confidence import SPPN_GRID_CONFIDENCE
+from kortravelgeo.core.protocols import AddressLookup
 from kortravelgeo.core.v2 import (
     geocode_v2_from_geometry_lookups,
     geocode_v2_from_v1,
@@ -50,6 +51,10 @@ from kortravelgeo.dto.v2 import (
     SearchV2Response,
 )
 from kortravelgeo.exceptions import InvalidAddressError
+from kortravelgeo.settings import Settings
+
+if TYPE_CHECKING:
+    from kortravelgeo.core.normalize import AddrParts
 
 
 def _v1_geocode_response(inp: GeocodeInput) -> GeocodeResponse:
@@ -522,6 +527,190 @@ async def test_async_client_geocode_skips_supplements_when_input_matches_refined
     assert response.status == "OK"
     assert supplemental_calls == 0
     assert len(response.candidates) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("request_kwargs", "expected_address", "expected_type"),
+    [
+        # T-317: 자유 텍스트 query가 지번으로 파싱되면 parcel lookup으로 보낸다.
+        ({"query": "경기도 성남시 분당구 삼평동 681"}, "경기도 성남시 분당구 삼평동 681", "parcel"),
+        ({"query": "서울특별시 중구 태평로1가 31"}, "서울특별시 중구 태평로1가 31", "parcel"),
+        (
+            {"query": "강원특별자치도 춘천시 신북읍 산 12-3"},
+            "강원특별자치도 춘천시 신북읍 산 12-3",
+            "parcel",
+        ),
+        ({"query": "서울특별시 중구 세종대로 110"}, "서울특별시 중구 세종대로 110", "road"),
+        (
+            {"query": "서울특별시 중구 태평로1가 세종대로 110"},
+            "서울특별시 중구 태평로1가 세종대로 110",
+            "road",
+        ),
+        ({"query": "강남대로94길 20"}, "강남대로94길 20", "road"),
+        # 국가지점번호·파싱 불가 입력은 기존 road 경로를 유지한다.
+        ({"query": "다사 6925 4045"}, "다사 6925 4045", "road"),
+        ({"query": "테헤란로"}, "테헤란로", "road"),
+        # 명시 필드는 호출자가 고른 type을 그대로 따른다.
+        (
+            {"road_address": "경기도 성남시 분당구 삼평동 681"},
+            "경기도 성남시 분당구 삼평동 681",
+            "road",
+        ),
+        (
+            {"jibun_address": "서울특별시 중구 세종대로 110"},
+            "서울특별시 중구 세종대로 110",
+            "parcel",
+        ),
+        (
+            {"road_address": "세종대로 110", "jibun_address": "태평로1가 31"},
+            "세종대로 110",
+            "road",
+        ),
+        (
+            {"jibun_address": "태평로1가 31", "query": "서울특별시 중구 세종대로 110"},
+            "태평로1가 31",
+            "parcel",
+        ),
+    ],
+)
+async def test_async_client_geocode_dispatches_v1_lookup_type(
+    monkeypatch: pytest.MonkeyPatch,
+    request_kwargs: dict[str, str],
+    expected_address: str,
+    expected_type: str,
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    async def fake_geocode(
+        self: AsyncAddressClient, address: str, **kwargs: Any
+    ) -> GeocodeResponse:
+        calls.append((address, kwargs["type"]))
+        return _v1_geocode_response(GeocodeInput(address=address, type=kwargs["type"]))
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(**request_kwargs, limit=1)
+
+    assert calls == [(expected_address, expected_type)]
+    assert response.status == "OK"
+    assert response.candidates[0].match_kind == expected_type
+
+
+@pytest.mark.asyncio
+async def test_async_client_geocode_skips_supplements_for_jibun_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-317: 지번으로 dispatch된 query에는 느린 도로 geometry 보조 조회를 붙이지 않는다."""
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    async def fake_geocode(
+        self: AsyncAddressClient, address: str, **kwargs: Any
+    ) -> GeocodeResponse:
+        return _v1_geocode_response(GeocodeInput(address=address, type=kwargs["type"]))
+
+    supplemental_calls = 0
+
+    async def spy_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        nonlocal supplemental_calls
+        supplemental_calls += 1
+        return []
+
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_v1", fake_geocode)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", spy_road_geometries)
+    client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
+
+    response = await client.geocode(query="성남시 분당구 삼평동 681", limit=3)
+
+    assert response.status == "OK"
+    assert supplemental_calls == 0
+    assert [candidate.match_kind for candidate in response.candidates] == ["parcel"]
+
+
+def _parcel_lookup(text: str, *, emd_nm: str, bd_mgt_sn: str) -> AddressLookup:
+    return AddressLookup(
+        bd_mgt_sn=bd_mgt_sn,
+        text=text,
+        address_type="parcel",
+        point=Point(x=127.1, y=37.4),
+        emd_nm=emd_nm,
+        pt_source="entrance",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "si", "sgg", "emd", "mnnm", "bd_mgt_sn"),
+    [
+        (
+            "경기도 성남시 분당구 삼평동 681",
+            "경기도",
+            "성남시 분당구",
+            "삼평동",
+            681,
+            "41135109317902500023500000",
+        ),
+        (
+            "서울특별시 중구 태평로1가 31",
+            "서울특별시",
+            "중구",
+            "태평로1가",
+            31,
+            "11140103200500100011000000",
+        ),
+    ],
+)
+async def test_async_client_geocode_jibun_query_reaches_parcel_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+    query: str,
+    si: str,
+    sgg: str,
+    emd: str,
+    mnnm: int,
+    bd_mgt_sn: str,
+) -> None:
+    """T-317: POST /v2/geocode {"query": 지번} 이 실제 core geocode를 거쳐 지번 lookup에 닿는다."""
+    from kortravelgeo.infra.geocode_repo import GeocodeRepository
+    from kortravelgeo.infra.geometry_repo import GeometryRepository
+
+    jibun_parts: list[AddrParts] = []
+
+    async def fake_lookup_by_road(self: GeocodeRepository, *_: Any, **__: Any) -> None:
+        raise AssertionError("jibun query must not be looked up as a road address")
+
+    async def fake_lookup_by_jibun(
+        self: GeocodeRepository, parts: AddrParts, **_: Any
+    ) -> AddressLookup:
+        jibun_parts.append(parts)
+        return _parcel_lookup(query, emd_nm=emd, bd_mgt_sn=bd_mgt_sn)
+
+    async def fail_road_geometries(self: GeometryRepository, *_: Any, **__: Any) -> list[Any]:
+        raise AssertionError("parcel hit must not trigger the road geometry fallback")
+
+    monkeypatch.setattr(GeocodeRepository, "lookup_by_road", fake_lookup_by_road)
+    monkeypatch.setattr(GeocodeRepository, "lookup_by_jibun", fake_lookup_by_jibun)
+    monkeypatch.setattr(GeometryRepository, "road_geometries", fail_road_geometries)
+    client = AsyncAddressClient(
+        engine=object(),  # type: ignore[arg-type]
+        settings=Settings(_env_file=None, cache_enabled=False),
+    )
+
+    response = await client.geocode(query=query, limit=3)
+
+    assert response.status == "OK"
+    assert len(jibun_parts) == 1
+    assert jibun_parts[0].si == si
+    assert jibun_parts[0].sgg == sgg
+    assert jibun_parts[0].emd == emd
+    assert jibun_parts[0].mntn_yn == "0"
+    assert jibun_parts[0].mnnm == mnnm
+    assert jibun_parts[0].slno == 0
+    candidate = response.candidates[0]
+    assert candidate.match_kind == "parcel"
+    assert candidate.address is not None
+    assert candidate.address.parcel_address == query
+    assert candidate.metadata["bd_mgt_sn"] == bd_mgt_sn
 
 
 @pytest.mark.asyncio
