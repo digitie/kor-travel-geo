@@ -164,8 +164,12 @@ at-a-glance, iframe이 full 제어면. iframe `src`와 '새 창' 링크·run 링
     마찬가지로 원격 접속.
   - `workspace.yaml`(`kor-travel-geo-dagster/docker/workspace.yaml`, 이미지에 `dagster.yaml`과 같은
     `$DAGSTER_HOME`로 COPY됨): `load_from: [grpc_server: {host: 127.0.0.1, port: 12503, location_name:
-    kortravelgeo_dagster}]`. `network_mode: host`라 세 컨테이너 모두 loopback으로 통신한다(Docker
-    내부 hostname 불필요).
+    kortravelgeo_dagster.definitions}]`. `network_mode: host`라 세 컨테이너 모두 loopback으로 통신한다
+    (Docker 내부 hostname 불필요). **`location_name`은 geo-api의 `KTG_DAGSTER_REPOSITORY_LOCATION_NAME`
+    (기본 `kortravelgeo_dagster.definitions`)과 반드시 같아야 한다** — geo-api가 backup/load/restore/
+    mv_refresh를 `launchRun` selector로 띄울 때 이 이름을 쓴다. T-307이 이 값을 `kortravelgeo_dagster`로
+    바꿔 모든 launch가 `PipelineNotFoundError`로 실패했다(2026-09-19~09-28, T-308에서 발견·복구).
+    `tests/unit/test_dagster_workspace_location.py`가 둘을 묶어 고정한다.
   - 세 서비스 모두 **같은 환경변수 집합**을 받는다(weather의 `x-dagster-environment` anchor 패턴과
     동일 원칙 — 프로세스마다 다르게 env를 골라주면 나중에 드리프트로 조용히 깨진다).
 - `docker-manager` compose 서비스: `kor-travel-geo-dagster-db-init`(createdb 멱등) +
