@@ -25,7 +25,7 @@ dependencies = [
   # <2.2 (T-316): 2.1 is supported — text()-query results need explicit variable annotations
   # under 2.1's TypeVarTuple Row typing (scalar_one()/scalars() otherwise infer Never). Images
   # install unlocked from this file, so keep an upper bound and review 2.2 deliberately.
-  "sqlalchemy[asyncio]>=2.0.35,<2.2",
+  "sqlalchemy[asyncio]>=2.0.35,<2.2,!=2.1.0",
   "geoalchemy2>=0.15",
   "psycopg[binary,pool]>=3.2",
   "anyio>=4.5",
