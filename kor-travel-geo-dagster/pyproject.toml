@@ -27,6 +27,11 @@ dependencies = [
   "dagster>=1.9,<2",
   "dagster-webserver>=1.9,<2",
   "dagster-postgres>=0.25,<1",
+  # <2.1 (T-316): SQLAlchemy 2.1 makes psycopg 3 the default DBAPI for ``postgresql://``
+  # URLs, so a bare-scheme KTG_DAGSTER_PG_URL (Dagster instance storage) would silently
+  # move off psycopg2 (dagster_postgres still reads psycopg2-only ``exc.orig.pgcode``). The
+  # main lib supports 2.1; lift this once the storage driver is chosen and validated.
+  "sqlalchemy<2.1",
   "boto3>=1.34,<2",
   "botocore>=1.34,<2",
   "httpx>=0.27,<1.0",

@@ -201,7 +201,7 @@ def _acquire_stage_lock(pg_url: str) -> tuple[Engine, Connection]:
     engine = create_engine(pg_url)
     conn = engine.connect()
     try:
-        locked = conn.execute(
+        locked: bool = conn.execute(
             text("SELECT pg_try_advisory_lock(hashtext(:lock_key))"),
             {"lock_key": STAGE_LOCK_KEY},
         ).scalar_one()
@@ -389,7 +389,7 @@ def _record_manifest(
     source_files = [source.source_file for source in sources]
     try:
         with engine.begin() as conn:
-            row_count = conn.execute(text(f"SELECT count(*) FROM {TARGET_TABLE}")).scalar_one()
+            row_count: int = conn.execute(text(f"SELECT count(*) FROM {TARGET_TABLE}")).scalar_one()
             conn.execute(
                 text(
                     """

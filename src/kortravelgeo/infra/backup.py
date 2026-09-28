@@ -2721,7 +2721,7 @@ def estimate_backup_space_requirement(
 
 async def _query_database_size_bytes(engine: AsyncEngine) -> int:
     async with engine.connect() as conn:
-        value = (
+        value: int | None = (
             await conn.execute(
                 text("SELECT pg_database_size(current_database())::bigint AS size")
             )

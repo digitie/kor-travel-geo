@@ -22,10 +22,10 @@ classifiers = [
 dependencies = [
   "pydantic>=2.9,<3",
   "pydantic-settings>=2.5",
-  # <2.1: SQLAlchemy 2.1 (2026-09) breaks mypy inference on text()-query results and has
-  # backward-incompatible changes; images install unlocked from this file, so an unbounded
-  # spec would silently ship 2.1 on the next rebuild. Upgrade deliberately.
-  "sqlalchemy[asyncio]>=2.0.35,<2.1",
+  # <2.2 (T-316): 2.1 is supported — text()-query results need explicit variable annotations
+  # under 2.1's TypeVarTuple Row typing (scalar_one()/scalars() otherwise infer Never). Images
+  # install unlocked from this file, so keep an upper bound and review 2.2 deliberately.
+  "sqlalchemy[asyncio]>=2.0.35,<2.2",
   "geoalchemy2>=0.15",
   "psycopg[binary,pool]>=3.2",
   "anyio>=4.5",

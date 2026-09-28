@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import secrets
 import string
+from collections.abc import Sequence
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -67,7 +68,7 @@ class PublicApiKeyRepository:
 
     async def active_key_hashes(self) -> frozenset[str]:
         async with self.engine.connect() as conn:
-            rows = (
+            rows: Sequence[str] = (
                 await conn.execute(
                     text(
                         """

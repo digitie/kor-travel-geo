@@ -28,7 +28,7 @@ module reads rows, calls those functions, and writes results back.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -965,7 +965,7 @@ async def _match_set_object_prefix(
     if match_set_id is None:
         return ""
     async with engine.connect() as conn:
-        keys = (
+        keys: Sequence[str] = (
             await conn.execute(
                 text(
                     """

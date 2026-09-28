@@ -519,7 +519,7 @@ def _acquire_building_polygon_stage_lock(pg_url: str) -> tuple[Engine, Connectio
     engine = create_engine(pg_url)
     conn = engine.connect()
     try:
-        locked = conn.execute(
+        locked: bool = conn.execute(
             text("SELECT pg_try_advisory_lock(hashtext(:lock_key))"),
             {"lock_key": BUILDING_POLYGON_STAGE_LOCK_KEY},
         ).scalar_one()

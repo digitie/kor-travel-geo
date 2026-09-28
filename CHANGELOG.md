@@ -15,6 +15,13 @@
   기존 Grafana 패널/알림 규칙이 metric 이름을 하드코딩했다면 갱신이 필요하다(이 저장소
   기준 kor-travel-docker-manager repo에는 metric 이름을 하드코딩한 대시보드/알림 파일이
   없음을 확인했다).
+- **SQLAlchemy 허용 범위를 `>=2.0.35,<2.1` → `>=2.0.35,<2.2`로 넓혔다(T-316).** 2.1의
+  TypeVarTuple 기반 `Row` 타입 때문에 `text()` 결과의 `scalar_one()`/`scalars().all()`이
+  mypy에서 `Never`로 추론되던 9곳에 변수 타입 주석만 달았다(런타임 동작 변화 없음). 2.1은
+  `postgresql://` URL의 기본 DBAPI를 psycopg2 → psycopg 3으로 바꾸므로, Dagster instance
+  storage(`KTG_DAGSTER_PG_URL`)가 드라이버를 조용히 바꾸지 않도록 `kor-travel-geo-dagster`는
+  `sqlalchemy<2.1`로 묶어 두었다(API 이미지는 2.1, Dagster 이미지는 2.0 유지). 본 라이브러리는
+  DSN을 항상 `postgresql+psycopg://`로 정규화하므로 이 기본 드라이버 변경의 영향을 받지 않는다.
 
 ### Added
 - **Dagster 백업 보존 janitor job + 일일 스케줄(`backup_retention_janitor_daily`, 06:00 KST)을 추가했다.**
