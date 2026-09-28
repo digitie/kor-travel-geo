@@ -12,10 +12,11 @@
   지원하지 않음 — 운영자가 manager ktdctl로 수행")으로 거절하고, Dagster `db_restore`/`backup_restore_drill`/
   `full_load_batch`(scratch) op도 시작 시 같은 사유로 멈춘다. `KTG_DB_LIFECYCLE_MODE=auto|enabled|disabled`(기본
   `auto` — 전용 superuser instance는 그대로 전부 허용), `GET /v1/admin/db-capabilities`를 추가했고 admin UI 백업/복원
-  화면이 이를 읽어 복원 제출·hot-swap 버튼을 비활성화하고 안내한다. `pg_dump`에 `--no-privileges`를 붙였고, 비-superuser로
-  복원할 때는 `pg_restore --no-owner --no-privileges` + 대상 DB에 미리 만들어진 extension/`x_extension` TOC entry
-  제외(`--use-list`)로 복원한다(superuser 복원은 기존과 동일). cluster admin 복원 절차는
-  `docs/t046-db-backup-restore.md` "공용 DB instance (T-312)".
+  화면이 이를 읽어 복원 제출·hot-swap 버튼을 비활성화하고 안내한다. `pg_dump` 형식은 그대로(owner·ACL 포함 —
+  admin의 `x_extension` USAGE grant가 superuser 복원에서 살아남는다)이고, 비-superuser로 복원할 때만
+  `pg_restore --no-owner --no-privileges` + 대상 DB에 미리 만들어진 extension/`x_extension` TOC entry
+  제외(`--use-list`)로 복원한다(superuser 복원은 기존과 동일). 복원 smoke test는 대상 DB owner의 extension schema
+  `USAGE`도 확인한다. cluster admin 복원 절차는 `docs/t046-db-backup-restore.md` "공용 DB instance (T-312)".
 - **Prometheus 계측 metric name prefix를 `kor_travel_geo_`에서 `ktg_`로 변경했다(T-305).**
   API 계측(`src/kortravelgeo/infra/metrics.py`, 44개 metric)과 admin UI 자체 계측
   (`kor-travel-geo-ui/lib/metrics.ts`, `kor_travel_geo_ui_*` → `ktg_ui_*` 5개)를 모두

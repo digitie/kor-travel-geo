@@ -65,6 +65,7 @@ T-308로 geo DB가 공용 control-plane PostgreSQL instance로 옮겨지면서 a
   auto|enabled|disabled), 부족하면 hot-swap plan/execute/rollback을 `E0410`(HTTP 409)로 즉시 거절한다. 같은 판정이
   restore drill, blue-green scratch full-load, `db_restore`에도 적용된다(API 1차, Dagster op 2차).
 - 공용 instance에서의 새 DB 복원·rename 교체는 운영자가 manager `ktdctl`로 수행한다. 절차와 app role 백업의 복원
-  형식(`pg_dump --no-privileges`, 비-superuser 복원 시 `--no-owner --no-privileges` + 미리 만든 extension/`x_extension`
-  TOC 제외)은 `docs/t046-db-backup-restore.md` "공용 DB instance (T-312)" 절.
+  형식(`pg_dump`는 owner·ACL을 그대로 담는다 — `x_extension` USAGE grant 보존. 비-superuser 복원 시에만
+  `--no-owner --no-privileges` + 미리 만든 extension/`x_extension` TOC 제외)은 `docs/t046-db-backup-restore.md`
+  "공용 DB instance (T-312)" 절.
 - 전용(superuser) instance에서는 `auto`가 그대로 허용하므로 이 ADR의 절차·동작은 바뀌지 않는다.

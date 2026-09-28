@@ -480,7 +480,7 @@ async def run_restore_job(
     job_id: str | None = None,
 ) -> None:
     req = RestoreCreateRequest.model_validate(payload)
-    if req.target_dsn is None:
+    if not req.target_dsn:
         # T-312: a restore that runs with the app's own credentials (target_database) needs DB
         # lifecycle rights (new DB / cleanup via the maintenance DB). Refuse before any artifact
         # row or extraction — the Dagster db_restore op and `ktgctl restore create` hit this
@@ -1186,12 +1186,14 @@ def build_pg_dump_command(
         "--format=directory",
         f"--jobs={jobs}",
         "--verbose",
-        # T-312: leave GRANT/REVOKE (ACL) entries out so a dump taken by the shared instance's
-        # app role carries no cluster-specific grants (e.g. the admin's USAGE on x_extension)
-        # and restores into a fresh DB without "role does not exist". The schema itself grants
-        # nothing. --no-owner is NOT passed: pg_dump ignores it for archive formats (owners stay
-        # in the TOC, verified on PG16) — it is a pg_restore-time option instead.
-        "--no-privileges",
+        # T-312: owners and ACLs stay in the dump on purpose. The shared instance's only grant
+        # that matters — the admin's `GRANT USAGE ON SCHEMA x_extension TO <app role>` — lives
+        # solely in the dump's `ACL - SCHEMA x_extension` entry: a superuser `pg_restore --clean`
+        # drops and recreates x_extension from the dump, so a --no-privileges dump would leave
+        # the app role unable to resolve any PostGIS/pg_trgm function after the restore.
+        # Ownership/ACL are stripped at restore time instead, only where the restoring role
+        # cannot apply them (build_pg_restore_command(role_neutral=True)). --no-owner would be
+        # ignored here anyway: pg_dump keeps owners in the TOC for archive formats (PG16).
         "--file",
         str(dump_dir),
         "--dbname",
@@ -2365,7 +2367,7 @@ async def run_restore_dry_run(
     if target_database is not None:
         target_database = validate_database_identifier(target_database, "target_database")
 
-    if req.target_dsn is None:
+    if not req.target_dsn:
         # T-312: mirror run_restore_job's capability gate so can_restore stays honest.
         try:
             await require_db_lifecycle(engine, settings, "db_restore")
@@ -2564,6 +2566,24 @@ SELECT count(*)::bigint
             postgis = await conn.scalar(
                 text("SELECT count(*)::bigint FROM pg_extension WHERE extname = 'postgis'")
             )
+            # T-312: the app role (= the target DB's owner on the shared instance) resolves
+            # PostGIS/pg_trgm through its search_path, which needs USAGE on the extension
+            # schema. A restore that dropped the admin's grant on x_extension still passes the
+            # checks above, then fails every geocode after the swap — catch it here.
+            usage_result = await conn.execute(
+                text(
+                    """
+SELECT DISTINCT d.datdba::regrole::text AS db_owner, n.nspname::text AS schema_name
+  FROM pg_extension e
+  JOIN pg_namespace n ON n.oid = e.extnamespace
+  JOIN pg_database d ON d.datname = current_database()
+ WHERE n.nspname <> 'pg_catalog'
+   AND NOT has_schema_privilege(d.datdba, n.oid, 'USAGE')
+ ORDER BY 1, 2
+"""
+                )
+            )
+            no_usage = usage_result.mappings().all()
     finally:
         await engine.dispose()
     if int(table_count or 0) == 0:
@@ -2571,6 +2591,15 @@ SELECT count(*)::bigint
         raise InvalidInputError(msg)
     if int(postgis or 0) == 0:
         msg = "restore smoke test found no postgis extension"
+        raise InvalidInputError(msg)
+    if no_usage:
+        owner = no_usage[0]["db_owner"]
+        schemas = ", ".join(sorted({row["schema_name"] for row in no_usage}))
+        msg = (
+            f"restore smoke test: database owner {owner} has no USAGE on extension schema "
+            f"{schemas} (PostGIS/pg_trgm calls would fail) — "
+            f"GRANT USAGE ON SCHEMA {schemas} TO {owner}"
+        )
         raise InvalidInputError(msg)
 
 

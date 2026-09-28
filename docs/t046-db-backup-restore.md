@@ -598,14 +598,20 @@ ADR-036 hot-swap(maintenance DB에서 `ALTER DATABASE RENAME`), restore drill(th
 
 ### 백업 형식 (app role로 찍어도 복원 가능)
 
-- `pg_dump`는 이제 `--no-privileges`로 ACL(GRANT/REVOKE) entry를 넣지 않는다. 이 저장소 schema는 GRANT를
-  쓰지 않으므로 잃는 것은 cluster 고유 grant(예: admin의 `x_extension` USAGE)뿐이다.
-- `--no-owner`는 `pg_dump`에 넣지 않는다. archive(directory) 형식에서는 무시되어 owner가 TOC에 그대로 남는다
-  (PG16 실측) — 복원 시점 `pg_restore` 옵션이다.
+- `pg_dump`는 owner와 ACL(GRANT/REVOKE) entry를 **그대로 담는다**(`--no-owner`/`--no-privileges`를 붙이지 않는다).
+  공용 instance에서 의미 있는 grant는 admin의 `GRANT USAGE ON SCHEMA x_extension TO kor_travel_geo_app` 하나인데,
+  이것은 dump의 `ACL - SCHEMA x_extension` entry에만 있다. superuser `pg_restore --clean --if-exists`는 `x_extension`을
+  지우고 dump에서 다시 만들므로, ACL을 뺀 dump를 superuser가 복원하면 app role이 `x_extension` USAGE를 잃고 모든
+  PostGIS/pg_trgm 호출이 `function st_makepoint(...) does not exist`로 실패한다(pg_restore는 exit 0). owner·ACL은
+  복원 시점에, 복원 role이 적용할 수 없을 때만(비-superuser, 아래) 뺀다.
+- `--no-owner`는 어차피 archive(directory) 형식 `pg_dump`에서 무시된다(owner가 TOC에 남음, PG16 실측).
 - app role의 `pg_dump`는 공용 instance에서 성립한다: `public`/`ops`의 모든 relation을 app role이 소유(SELECT
   가능 확인)하고, extension config table `x_extension.spatial_ref_sys`는 `PUBLIC` `SELECT`가 있다
   (config 필터로 표준 SRID는 빠지므로 dump되는 행은 사용자 추가 SRID뿐).
-- checksum/manifest/verify는 바뀌지 않는다. 옛 백업(owner·GRANT 포함)도 그대로 verify되고 아래 경로로 복원된다.
+- dump 명령·checksum/manifest/verify는 T-312 이전과 같다. 옛 백업도 그대로 verify되고 아래 경로로 복원된다.
+- 복원 smoke test(`run_smoke_test`, restore drill, hot-swap 후 smoke 공통)는 대상 DB owner가 extension이 사는
+  schema(`x_extension` 등)에 `USAGE`가 있는지도 확인한다 — grant가 빠진 복원을 성공으로 보고하지 않고
+  `GRANT USAGE ON SCHEMA ... TO <owner>` 힌트로 실패한다.
 
 ### 비-superuser(app role) 복원
 
@@ -620,10 +626,13 @@ extension이 사는 admin 소유 schema를 조회한다(`infra/restore_toc.py`).
    `GRANT`가 실패하지 않고, 모든 객체가 복원 role 소유가 된다.
 3. 건너뛴 entry는 복원 로그 manifest `preprovisioned_toc_skipped`에 남는다.
 
-superuser 복원은 필터가 비고 옵션도 붙지 않아 기존과 같다. 로컬 재현(공용 instance와 같은 role/schema 구성의
-PG16.9 컨테이너)에서 필터 없이 app role로 복원하면 `must be owner of extension`/`must be owner of schema
-x_extension`/`schema "x_extension" already exists`/`permission denied for table spatial_ref_sys`로 exit 1, 필터와
-옵션을 적용하면 exit 0이었다.
+superuser 복원(`target_dsn`에 cluster admin 자격증명)은 필터가 비고 옵션도 붙지 않아 기존과 같다 — dump의
+`SCHEMA - x_extension`·`ACL - SCHEMA x_extension`으로 schema와 app role `USAGE`를 다시 만든다. 로컬 재현(공용
+instance와 같은 role/schema 구성의 PG16 컨테이너)에서 필터 없이 app role로 복원하면 `must be owner of extension`/
+`must be owner of schema x_extension`/`schema "x_extension" already exists`/`permission denied for table
+spatial_ref_sys`로 exit 1, 필터와 옵션을 적용하면 exit 0이었다. 두 경로(app role 복원, superuser 복원) 모두
+`tests/integration/test_t312_shared_instance_restore.py`(opt-in, `KTG_TEST_PG_DSN`=superuser)가 app role로 찍은
+백업을 복원한 뒤 app role 연결에서 PostGIS 함수가 풀리는지 확인한다.
 
 ### cluster admin 복원 절차 (manager `ktdctl` 상당)
 
@@ -655,3 +664,8 @@ pg_restore --format=directory --jobs=4 --no-owner --no-privileges --role=kor_tra
 ```
 
 이후 `ANALYZE`, smoke, 그리고 필요하면 운영 DB와의 rename 교체(ADR-036 절차)를 admin이 수행한다.
+
+manager `ktdctl`이 필터·`--role` 없이 plain superuser `pg_restore --clean --if-exists`로 복원해도 된다 — dump의
+`SCHEMA - x_extension`·`ACL - SCHEMA x_extension` entry가 schema와 `kor_travel_geo_app` `USAGE`를 다시 만들고,
+owner는 dump 그대로(`kor_travel_geo_app`)다. 어느 경로든 교체 전에 app role 연결에서
+`SELECT has_schema_privilege('x_extension', 'USAGE')`가 참이고 PostGIS 함수가 풀리는지 확인한다.

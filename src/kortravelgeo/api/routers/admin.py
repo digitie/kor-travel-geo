@@ -2294,8 +2294,10 @@ async def submit_restore(
     client: AsyncAddressClient = Depends(get_client),
 ) -> LoadJobStatus:
     settings = get_settings()
-    if req.target_dsn is None:
-        # T-312: refuse (E0410) before the load_jobs row / Dagster run exist.
+    if not req.target_dsn:
+        # T-312: refuse (E0410) before the load_jobs row / Dagster run exist. An empty
+        # target_dsn falls back to the app's own credentials (resolve_restore_target_dsn), so it
+        # is gated like an absent one.
         await client.require_db_lifecycle("db_restore")
     payload = req.model_dump(exclude_none=True)
     # Unconditional Dagster routing (T-290k PR3).

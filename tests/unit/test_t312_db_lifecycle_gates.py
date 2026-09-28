@@ -56,7 +56,7 @@ class _SentinelError(Exception):
 # --- pg_dump / pg_restore flags ------------------------------------------------------
 
 
-def test_pg_dump_omits_acls_but_not_owner(tmp_path: Path) -> None:
+def test_pg_dump_keeps_owners_and_acls(tmp_path: Path) -> None:
     cmd = backup_mod.build_pg_dump_command(
         "postgresql+psycopg://app:pw@db:11000/kor_travel_geo",
         tmp_path / "dump",
@@ -64,9 +64,13 @@ def test_pg_dump_omits_acls_but_not_owner(tmp_path: Path) -> None:
         jobs=2,
     )
 
-    assert "--no-privileges" in cmd.argv
-    # pg_dump ignores --no-owner for archive formats (owners stay in the TOC); it is applied
-    # at restore time instead — passing it here would only mislead.
+    # The admin's GRANT USAGE ON SCHEMA x_extension TO <app role> lives only in the dump's ACL
+    # entry; a superuser `pg_restore --clean` recreates x_extension from the dump, so dropping
+    # ACLs at dump time would strip the app role's access to PostGIS. Ownership/ACLs are
+    # stripped at restore time instead, and only for a non-superuser restore (role_neutral).
+    assert "--no-privileges" not in cmd.argv
+    assert "--no-acl" not in cmd.argv
+    # pg_dump ignores --no-owner for archive formats (owners stay in the TOC) anyway.
     assert "--no-owner" not in cmd.argv
 
 
@@ -81,6 +85,79 @@ def test_pg_restore_role_neutral_only_when_asked(tmp_path: Path) -> None:
     assert "--no-privileges" in neutral.argv
     # the flags precede the positional dump dir
     assert neutral.argv[-1] == str(tmp_path)
+
+
+# --- smoke test: DB owner must reach the extension schema -------------------------------
+
+
+class _SmokeResult:
+    def __init__(self, rows: list[dict[str, str]]) -> None:
+        self._rows = rows
+
+    def mappings(self) -> _SmokeResult:
+        return self
+
+    def all(self) -> list[dict[str, str]]:
+        return self._rows
+
+
+class _SmokeConn:
+    def __init__(self, no_usage: list[dict[str, str]]) -> None:
+        self._no_usage = no_usage
+
+    async def __aenter__(self) -> _SmokeConn:
+        return self
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+    async def scalar(self, _stmt: object) -> int:
+        return 5  # public/ops table count and postgis extension count are both present
+
+    async def execute(self, stmt: object) -> _SmokeResult:
+        assert "has_schema_privilege" in str(stmt)
+        return _SmokeResult(self._no_usage)
+
+
+class _SmokeEngine:
+    def __init__(self, no_usage: list[dict[str, str]]) -> None:
+        self._no_usage = no_usage
+        self.disposed = False
+
+    def connect(self) -> _SmokeConn:
+        return _SmokeConn(self._no_usage)
+
+    async def dispose(self) -> None:
+        self.disposed = True
+
+
+@pytest.mark.asyncio
+async def test_smoke_test_fails_when_the_db_owner_lost_extension_schema_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A superuser restore that dropped the admin's x_extension grant must not pass smoke."""
+    engine = _SmokeEngine([{"db_owner": "kor_travel_geo_app", "schema_name": "x_extension"}])
+    monkeypatch.setattr(backup_mod, "create_async_engine", lambda _dsn: engine)
+
+    with pytest.raises(backup_mod.InvalidInputError) as excinfo:
+        await backup_mod.smoke_test_restore("postgresql+psycopg://adm:pw@db/kor_travel_geo_r")
+
+    message = str(excinfo.value)
+    assert "kor_travel_geo_app" in message
+    assert "GRANT USAGE ON SCHEMA x_extension TO kor_travel_geo_app" in message
+    assert engine.disposed
+
+
+@pytest.mark.asyncio
+async def test_smoke_test_passes_when_the_db_owner_reaches_every_extension_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _SmokeEngine([])
+    monkeypatch.setattr(backup_mod, "create_async_engine", lambda _dsn: engine)
+
+    await backup_mod.smoke_test_restore("postgresql+psycopg://adm:pw@db/kor_travel_geo_r")
+
+    assert engine.disposed
 
 
 # --- restore TOC filter wiring ----------------------------------------------------------
@@ -162,14 +239,21 @@ async def test_filter_reads_an_existing_partial_restore_use_list(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"artifact_id": "art-1", "target_database": "kor_travel_geo_restore"},
+        # "" falls back to the app's own credentials (resolve_restore_target_dsn) → gated too
+        {"artifact_id": "art-1", "target_database": "kor_travel_geo_restore", "target_dsn": ""},
+    ],
+)
 async def test_run_restore_job_refuses_before_touching_the_archive(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, payload: dict[str, Any]
 ) -> None:
     async def fail_resolve(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("gate must run before the archive is resolved")
 
     monkeypatch.setattr(backup_mod, "resolve_restore_archive", fail_resolve)
-    payload = {"artifact_id": "art-1", "target_database": "kor_travel_geo_restore"}
 
     with pytest.raises(UnsupportedOnInstanceError, match="DB 복원"):
         await backup_mod.run_restore_job(
@@ -210,8 +294,9 @@ async def test_run_restore_job_passes_the_gate_when_allowed(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("target_dsn", [None, ""])
 async def test_restore_dry_run_reports_the_capability_as_a_blocker(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, target_dsn: str | None
 ) -> None:
     async def empty_ok(_target_dsn: str) -> None:
         return None
@@ -221,7 +306,9 @@ async def test_restore_dry_run_reports_the_capability_as_a_blocker(
 
     monkeypatch.setattr(backup_mod, "ensure_target_database_empty", empty_ok)
     monkeypatch.setattr(backup_mod, "resolve_restore_archive", missing_archive)
-    req = RestoreCreateRequest(archive_path="x.tar.zst", target_database="kor_travel_geo_r")
+    req = RestoreCreateRequest(
+        archive_path="x.tar.zst", target_database="kor_travel_geo_r", target_dsn=target_dsn
+    )
 
     result = await backup_mod.run_restore_dry_run(object(), _DISABLED, req)  # type: ignore[arg-type]
 
@@ -391,8 +478,16 @@ async def test_db_capabilities_endpoint_reports_the_disabled_instance() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"artifact_id": "art-1", "target_database": "kor_travel_geo_restore"},
+        # an empty target_dsn means "the app's own credentials" — must not skip the gate
+        {"artifact_id": "art-1", "target_database": "kor_travel_geo_restore", "target_dsn": ""},
+    ],
+)
 async def test_restore_submit_returns_409_e0410_without_creating_a_job(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, body: dict[str, Any]
 ) -> None:
     launched: list[object] = []
 
@@ -402,11 +497,7 @@ async def test_restore_submit_returns_409_e0410_without_creating_a_job(
 
     monkeypatch.setattr(admin_mod, "_launch_db_restore_dagster_run", record_launch)
 
-    resp = await _post(
-        _app_with(_disabled_client()),
-        "/v1/admin/restores",
-        {"artifact_id": "art-1", "target_database": "kor_travel_geo_restore"},
-    )
+    resp = await _post(_app_with(_disabled_client()), "/v1/admin/restores", body)
 
     assert resp.status_code == 409
     error = resp.json()["response"]
