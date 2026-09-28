@@ -96,6 +96,25 @@ async def test_launch_dagster_run_config_invalid_raises_launch_error() -> None:
             )
 
 
+def test_launch_timeout_defaults_longer_than_read_timeout() -> None:
+    # T-318: launchRun waits on the code-server; the 3s read timeout cut off a real launch.
+    settings = Settings(_env_file=None)
+    assert settings.dagster_launch_timeout_seconds >= 30.0
+    assert settings.dagster_launch_timeout_seconds > settings.dagster_request_timeout_seconds
+
+
+@pytest.mark.asyncio
+async def test_launch_dagster_run_timeout_raises_launch_error_with_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(DagsterLaunchError, match=r"timed out after 30s \(ReadTimeout\)"):
+            await launch_dagster_run(
+                _settings(), job_name="db_backup", run_config={}, http_client=client
+            )
+
+
 @pytest.mark.asyncio
 async def test_launch_dagster_run_rejects_url_config_error_before_posting() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:

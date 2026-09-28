@@ -150,6 +150,10 @@ class Settings(BaseSettings):
         "dagster",
     )
     dagster_request_timeout_seconds: float = Field(default=3.0, ge=0.2, le=30.0)
+    # launchRun은 webserver가 code-server(gRPC)에서 job snapshot을 받아야 끝나므로 조회용
+    # 3초로는 cold code location에서 끊긴다(T-318: 2026-09-28 첫 백업 launch가 3초 timeout으로
+    # 502, run은 Dagster에서 따로 시작됐다). 조회 경로는 짧게 두고 launch만 길게 준다.
+    dagster_launch_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
     # Grace window (seconds) beyond one cron interval before a RUNNING schedule that
     # missed a fire is flagged ``overdue`` in the summary (T-290h). Generous by default
     # so a briefly-behind scheduler daemon does not flap the overdue banner.

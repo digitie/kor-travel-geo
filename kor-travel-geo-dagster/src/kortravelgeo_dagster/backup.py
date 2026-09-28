@@ -82,8 +82,9 @@ async def run_due_scheduled_backup_op(context: OpExecutionContext) -> dict[str, 
     try:
         payload = await admin_api.run_due_scheduled_backup()
     except Exception as exc:
+        # str(ReadTimeout) is empty; keep the exception type so the alert has a reason (T-318).
         raise Failure(
-            description=f"scheduled backup run-due call failed: {exc}",
+            description=f"scheduled backup run-due call failed: {type(exc).__name__}: {exc}",
         ) from exc
 
     metadata = _run_due_metadata(payload)
