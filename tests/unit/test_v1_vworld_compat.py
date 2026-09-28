@@ -14,6 +14,7 @@ from kortravelgeo.dto.geocode import GeocodeExtension, GeocodeInput, GeocodeResp
 from kortravelgeo.dto.reverse import ReverseInput, ReverseResponse, ReverseResultItem
 from kortravelgeo.exceptions import (
     DatabaseError,
+    DatabaseTimeoutError,
     InvalidCoordinateError,
     InvalidInputError,
     KorTravelGeoError,
@@ -360,6 +361,7 @@ async def test_v1_geocode_not_found_returns_200_success_envelope() -> None:
         (InvalidInputError("입력 타입이 올바르지 않습니다"), 400, "INVALID_TYPE", 1),
         (RateLimitError("요청 한도를 초과했습니다"), 429, "OVER_REQUEST_LIMIT", 2),
         (DatabaseError("내부 오류"), 503, "SYSTEM_ERROR", 3),
+        (DatabaseTimeoutError("쿼리 시간 초과"), 504, "SYSTEM_ERROR", 3),
     ],
 )
 @pytest.mark.asyncio

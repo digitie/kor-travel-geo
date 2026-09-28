@@ -35,12 +35,17 @@ class _FakeRepo:
 
 class _FakeExecutor:
     failed: ClassVar[tuple] = ()
+    # False = the Dagster run already adopted the row (queued → running) before the error.
+    still_queued: ClassVar[bool] = True
 
     def __init__(self, _engine: object) -> None:
         pass
 
-    async def mark_failed(self, job_id: str, message: str) -> None:
+    async def mark_launch_failed(self, job_id: str, message: str) -> bool:
+        if not _FakeExecutor.still_queued:
+            return False
         _FakeExecutor.failed = (job_id, message)
+        return True
 
 
 class _FakeClient:
@@ -140,3 +145,26 @@ async def test_launch_db_restore_dagster_run_failure_marks_failed_and_raises_502
     assert excinfo.value.http_status == 502
     assert _FakeExecutor.failed[0] == "job-dag-1"
     assert "job not found" in _FakeExecutor.failed[1]
+
+
+@pytest.mark.asyncio
+async def test_launch_db_backup_error_after_run_adopted_returns_job_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T-318: the launch response failed (e.g. timeout) but the run already adopted the row;
+    # overwriting it to failed would make the reconciler kill a run doing real work.
+    async def fake_launch(settings, *, job_name, run_config, tags):
+        raise DagsterLaunchError("launchRun timed out after 30s (ReadTimeout)")
+
+    monkeypatch.setattr(admin_mod, "AdminRepository", _FakeRepo)
+    monkeypatch.setattr(admin_mod, "LoadJobExecutor", _FakeExecutor)
+    monkeypatch.setattr(admin_mod, "launch_dagster_run", fake_launch)
+    monkeypatch.setattr(_FakeExecutor, "still_queued", False)
+    monkeypatch.setattr(_FakeExecutor, "failed", ())
+
+    job_id = await admin_mod._launch_db_backup_dagster_run(
+        _FakeClient(), Settings(_env_file=None), {}
+    )
+
+    assert job_id == "job-dag-1"
+    assert _FakeExecutor.failed == ()

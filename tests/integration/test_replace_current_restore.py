@@ -42,10 +42,12 @@ all) surfaced THREE genuine, previously-undiscovered bugs, all fixed alongside t
    parameter.
 
 Run with a disposable scratch database (bootstrap via ``ktgctl init-db`` + ``alembic stamp
-head`` — see ``docs/geocoding-readiness.md``)::
+head`` — see ``docs/geocoding-readiness.md``) on a local/dev PostGIS where your role has
+CREATEDB — the shared :11000 instance's ``kor_travel_geo_app`` is NOCREATEDB, so it cannot host
+scratch DBs::
 
-    KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo_test pytest \
-        tests/integration/test_replace_current_restore.py
+    KTG_TEST_PG_DSN=postgresql+psycopg://<user>:<password>@127.0.0.1:<port>/kor_travel_geo_test \
+        pytest tests/integration/test_replace_current_restore.py
 """
 
 from __future__ import annotations

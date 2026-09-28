@@ -5,6 +5,47 @@
 ## [Unreleased]
 
 ### Changed
+- **`/metrics` scrape가 DB를 조회하지 않고, `geo_cache` 전수 scan을 기본 경로에서 없앴다(T-310).**
+  15초 scrape마다 돌던 `geo_cache` 전수 집계가 공용 PostgreSQL instance에서 geo tenant 논리 읽기의
+  대부분이었고, statement timeout·crash 창의 `OperationalError`가 그대로 `/metrics` 503이 됐다. 이제
+  DB 기반 gauge는 API lifespan refresher가 `KTG_METRICS_DB_REFRESH_INTERVAL_SECONDS`(기본 60초)마다
+  source별 5초 상한으로 갱신하고, 실패하면 last-good 값을 유지한 채
+  `ktg_metrics_db_refresh_errors_total{source,error_type}`로만 센다(새 gauge
+  `ktg_metrics_db_refresh_last_success_timestamp_seconds{source}`). 기존 metric 이름·label은 그대로지만
+  `ktg_cache_entries`는 통계 추정치, `ktg_cache_hits`는 마지막 통계 초기화 이후 `geo_cache` UPDATE 누적
+  수로 의미가 바뀐다. `GET /v1/admin/cache/metrics`도 기본은 추정치(`exact=false`)이고 `?exact=true`만
+  전수 집계를 돌린다 — 관리 UI 캐시 화면에 "정확히 세기" 버튼을 추가했다.
+- **`pg_stat_statements` capture를 이 tenant의 role로 한정하고 기본 주기를 5분 → 15분으로 늘렸다(T-310).**
+  공용 instance에서는 같은 DB에도 다른 role의 statement가 쌓여 snapshot top-N에
+  `<insufficient privilege>` 항목이 섞였다. `KTG_OPS_PG_STAT_STATEMENTS_CAPTURE_INTERVAL_MINUTES`를
+  명시한 배포는 그 값이 유지된다.
+- **DB 오류 응답을 원인별로 나눴다(T-309).** 연결은 됐지만 `statement_timeout`(57014)·
+  `lock_timeout`(55P03)·서버 측 취소로 끝나지 못한 쿼리는 새 `DatabaseTimeoutError`(`E0504`,
+  HTTP 504)로 반환하고 `KTG_PG_DSN` 힌트를 주지 않는다(이전에는 모든 `OperationalError`가 "DSN을
+  확인하라"는 503이었다). 연결 실패·인증/권한 실패·연결 수 한도·서빙 MV 미populate는 `E0500`/503을
+  유지하되 각자의 메시지·힌트를 쓴다. VWorld 호환 경로는 `SYSTEM_ERROR` envelope를 유지한다.
+  `ktg_api_db_errors_total`의 `error_type` 라벨은 분류 이름(`statement_timeout`, `lock_timeout`,
+  `query_canceled`, `connection_failed`, `auth_failed`, `too_many_connections`, `mv_not_populated`)이
+  되고, 분류 밖 오류만 예전처럼 예외 클래스 이름이다. 상세: `docs/t309-db-error-classification.md`.
+- **`/v1/readyz`에 `components.serving`을 추가했다(T-309).** 서빙 MV가 비었거나 populate 안 됐거나
+  없으면 HTTP 200 + `ready=true` + `degraded=true`로 알린다(`count(*)` 없이 카탈로그 + `EXISTS`).
+  최초 적재 전 빈 DB는 정상 상태일 수 있어 503으로 올리지 않는다.
+- **v2 geocode의 도로 fallback·보조 후보 조회가 도로 테이블 전체 스캔을 하지 않는다(T-311).**
+  지번·미존재 주소처럼 `NOT_FOUND`로 끝나는 요청과 보조 도로 후보를 붙이는 요청이 매번
+  `tl_sprd_manage` 87.5만 행을 훑어 운영에서 2.7~3.6초(cold 16초, 5초 statement timeout 초과)
+  걸리던 것을, 새 trigram GIN 인덱스(`idx_sprd_manage_rn_nrm_trgm`, Alembic
+  `0027_t311_road_rn_trgm`)로 후보만 읽게 바꿨다(운영 데이터 사본 로컬 실측 중앙값 2.5초 → 22ms).
+  결과는 전체 스캔과 같다. district 후보 검색은 JIT를 끈다(운영 warm 0.53초 → 약 0.2~0.3초).
+- **PostgreSQL 기본 접속을 은퇴한 전용 instance `127.0.0.1:12500` → 공용 제어 평면 instance
+  `127.0.0.1:11000`으로 맞췄다(T-313).** T-308(manager ADR-45)로 geo DB가 공용 instance로 이관되고
+  `12500`은 2026-09-28 은퇴했다. `Settings.pg_dsn` 기본값, `alembic.ini`,
+  `scripts/docker_app.sh`·`scripts/fullload_test.sh`의 `KTG_DB_PORT`/DSN 기본값, `.env.dev.example`·
+  `.env.prod.example`, `docs/ports.md`·아키텍처/복구 문서·staging 런북(psql `-p 11000`)을 갱신했다.
+  기본 role은 `kor_travel_geo_app`이고 비밀번호는 placeholder(`change-me`)라 실제 접속에는 항상
+  `KTG_PG_DSN`을 명시한다. 명시적으로 `KTG_PG_DSN`을 주는 배포(manager compose·prod env)는 동작
+  변화가 없다. 앱 role은 NOCREATEDB라 `KTG_TEST_PG_DSN` 통합 테스트 예시는 CREATEDB 권한이 있는
+  로컬/dev PostGIS를 가리키도록 바꿨다. `scripts/benchmark_query_performance.py`의 오류 메시지
+  DSN 마스킹은 특정 계정명(`addr:addr@`) 대신 임의의 `user:password@`를 가린다.
 - **Prometheus 계측 metric name prefix를 `kor_travel_geo_`에서 `ktg_`로 변경했다(T-305).**
   API 계측(`src/kortravelgeo/infra/metrics.py`, 44개 metric)과 admin UI 자체 계측
   (`kor-travel-geo-ui/lib/metrics.ts`, `kor_travel_geo_ui_*` → `ktg_ui_*` 5개)를 모두

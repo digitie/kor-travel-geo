@@ -24,6 +24,7 @@
 |------|------|---------|------------|------|
 | DB probe 성공, pool 정상 | 200 | `true` | `false` | 트래픽 수신 가능 |
 | DB probe 성공, pool utilization 0.8 이상 | 200 | `true` | `true` | 트래픽 수신은 가능하지만 운영 경고 |
+| DB probe 성공, 서빙 MV가 비었거나 populate 안 됨·없음 (T-309) | 200 | `true` | `true` | `components.serving.status="degraded"`. 최초 적재 전 빈 DB도 정상 상태일 수 있어 503으로 올리지 않는다 |
 | pool 포화 | 503 | `false` | `true` | 새 DB checkout을 만들지 않고 fail-fast |
 | DB 단절/timeout | 503 | `false` | `true` | DB 의존 요청 수신 불가 |
 | API client 미시작 | 503 | `false` | `true` | startup 미완료 또는 lifespan 문제 |

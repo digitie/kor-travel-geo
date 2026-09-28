@@ -22,9 +22,31 @@
 | `E0403` | 403 | 지역 접근 제한 | T-054 GeoIP gate에서 한국 외 공용 IP 또는 DB 부재 strict 차단 |
 | `E0404` | 404 | 찾을 수 없음 | 대상 주소, job, artifact, report 없음 |
 | `E0409` | 409 | 동시 실행 충돌 | T-059 이후 같은 advisory lock key의 CLI/API 운영 작업이 이미 실행 중 |
-| `E0500` | 503·500 | DB 오류 | 연결/운영 오류·pool checkout timeout은 503, SQL·스키마·제약 오류(`ProgrammingError`/`IntegrityError`)는 500 (T-178D) |
+| `E0500` | 503·500 | DB 오류 | 연결/운영 오류·pool checkout timeout은 503, SQL·스키마·제약 오류(`ProgrammingError`/`IntegrityError`)는 500 (T-178D). 503은 메시지·힌트로 세분한다(아래 표, T-309) |
 | `E0501` | 502 | 외부 API 오류 | vworld/juso fallback 호출 실패 |
 | `E0502` | 500 | 로더 오류 | 원천 파일 파싱, 적재, 후처리 실패 |
 | `E0503` | 500 | 설정 오류 | 필수 환경변수 또는 provider 설정 오류 |
+| `E0504` | 504 | DB 쿼리 시간 초과 | 연결은 됐지만 쿼리가 `statement_timeout`(57014)·`lock_timeout`(55P03)·서버 측 취소로 끝나지 못함 (T-309). DSN 문제가 아니다 |
 
 `E0409`는 "성공했지만 0건 처리"와 구분해야 한다. 운영자는 기존 작업이 끝난 뒤 같은 요청을 다시 보내거나, `/v1/admin/jobs`와 `/v1/admin/loads`에서 진행 중인 작업을 먼저 확인한다.
+
+## DB 오류 세분 (T-309)
+
+v2 경로는 `{status:"ERROR", query_id, error:{code, message, hint}}`, VWorld 호환 경로(`/v1/address/*`)는
+`response.error.code="SYSTEM_ERROR"`(level 3) + `text=message`로 같은 분류를 싣는다. 서버 원문 메시지
+(사용자명·DB명·호스트)와 SQL은 분류에만 쓰고 응답에는 싣지 않는다. `ktg_api_db_errors_total{error_type}`
+라벨로 같은 분류를 집계한다.
+
+| `error_type` | 코드 | HTTP | `message` | 판별 |
+|--------------|------|------|-----------|------|
+| `statement_timeout` | `E0504` | 504 | `database query timed out` | SQLSTATE 57014 + "statement timeout" |
+| `lock_timeout` | `E0504` | 504 | `database query timed out waiting for a lock` | SQLSTATE 55P03 |
+| `query_canceled` | `E0504` | 504 | `database query was cancelled` | SQLSTATE 57014 (그 밖의 취소) |
+| `mv_not_populated` | `E0500` | 503 | `serving data is not ready` | SQLSTATE 55000 + "has not been populated" |
+| `too_many_connections` | `E0500` | 503 | `database connection limit reached` | SQLSTATE 53300 또는 연결 단계 메시지 |
+| `auth_failed` | `E0500` | 503 | `database authentication or permission check failed` | SQLSTATE 28xxx 또는 연결 단계 메시지(password 인증 실패, `pg_hba.conf`, `permission denied for database`, role/database 없음) |
+| `connection_failed` | `E0500` | 503 | `database connection failed` | SQLSTATE 없음(연결 단계), 08xxx, 57P01~57P03 |
+| (클래스 이름, 예: `OperationalError`) | `E0500` | 503 | `database operation failed` | 위에 해당하지 않는 운영 오류 |
+
+`connection_failed`·`auth_failed`만 `KTG_PG_DSN` 점검을 힌트로 준다. 시간 초과 계열 힌트는 서빙 MV가
+비었거나 refresh 중일 수 있으니 `/v1/readyz`의 `components.serving`을 보라고 안내한다.

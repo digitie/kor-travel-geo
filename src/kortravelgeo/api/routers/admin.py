@@ -244,9 +244,12 @@ async def explain(
 
 @router.get("/cache/metrics", response_model=CacheMetrics)
 async def cache_metrics(
+    # T-310: 기본은 geo_cache scan 없는 통계 기반 추정치. exact=true만 전수 집계를 돌리며
+    # API statement_timeout이 상한이다(관리 UI의 명시적 "정확히 세기" 요청용).
+    exact: bool = Query(default=False),
     client: AsyncAddressClient = Depends(get_client),
 ) -> CacheMetrics:
-    return await client.cache_metrics()
+    return await client.cache_metrics(exact=exact)
 
 
 @router.get("/logs", response_model=list[str])
@@ -1965,8 +1968,10 @@ async def _launch_db_backup_dagster_run(
             tags={"kor_travel_geo.job_id": job_id},
         )
     except (DagsterUrlConfigurationError, DagsterLaunchError, httpx.HTTPError) as exc:
-        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
-        raise KorTravelGeoError("Dagster backup launch failed", http_status=502) from exc
+        message = f"Dagster launch failed: {exc}"
+        if await LoadJobExecutor(engine).mark_launch_failed(job_id, message):
+            raise KorTravelGeoError("Dagster backup launch failed", http_status=502) from exc
+        # 응답은 실패였지만 run이 이미 row를 adopt했다 — 실행 중인 job으로 돌려준다(T-318).
     return job_id
 
 
@@ -2316,8 +2321,10 @@ async def _launch_db_restore_dagster_run(
             tags={"kor_travel_geo.job_id": job_id},
         )
     except (DagsterUrlConfigurationError, DagsterLaunchError, httpx.HTTPError) as exc:
-        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
-        raise KorTravelGeoError("Dagster restore launch failed", http_status=502) from exc
+        message = f"Dagster launch failed: {exc}"
+        if await LoadJobExecutor(engine).mark_launch_failed(job_id, message):
+            raise KorTravelGeoError("Dagster restore launch failed", http_status=502) from exc
+        # 응답은 실패였지만 run이 이미 row를 adopt했다 — 실행 중인 job으로 돌려준다(T-318).
     return job_id
 
 

@@ -37,23 +37,50 @@ class _FakeSyncEngine:
 
 
 class _FakeResult:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+
     def mappings(self) -> _FakeResult:
         return self
 
-    def one(self) -> dict[str, str]:
-        return {"current_database": "kor_travel_geo", "postgres_version": "16.4"}
+    def one(self) -> dict[str, Any]:
+        return self._rows[0]
+
+    def all(self) -> list[dict[str, Any]]:
+        return self._rows
+
+
+_SERVING_OK = {"mv_geocode_target": "ok", "mv_geocode_text_search": "ok"}
 
 
 class _FakeConnection:
     def __init__(self, engine: _FakeEngine) -> None:
         self.engine = engine
 
-    async def execute(self, _statement: object) -> _FakeResult:
+    async def execute(self, statement: object, _params: object = None) -> _FakeResult:
         if self.engine.mode == "fail":
             raise RuntimeError("database unavailable")
         if self.engine.mode == "slow":
             await asyncio.sleep(1.0)
-        return _FakeResult()
+        sql = str(statement)
+        self.engine.statements.append(sql)
+        serving = self.engine.serving
+        if "pg_class" in sql:
+            if self.engine.serving_fail:
+                raise RuntimeError("catalog unavailable")
+            # 실제 SQL처럼 missing → NULL, not_populated → false.
+            return _FakeResult(
+                [
+                    {
+                        "relation_name": name,
+                        "relispopulated": None if state == "missing" else state != "not_populated",
+                    }
+                    for name, state in serving.items()
+                ]
+            )
+        if "EXISTS" in sql:
+            return _FakeResult([{name: state == "ok" for name, state in serving.items()}])
+        return _FakeResult([{"current_database": "kor_travel_geo", "postgres_version": "16.4"}])
 
 
 class _FakeConnectionContext:
@@ -75,9 +102,14 @@ class _FakeEngine:
         pool: _FakePool | None = None,
         fail: bool = False,
         mode: str = "ok",
+        serving: dict[str, str] | None = None,
+        serving_fail: bool = False,
     ) -> None:
         self.sync_engine = _FakeSyncEngine(pool or _FakePool())
         self.mode = "fail" if fail else mode
+        self.serving = dict(serving or _SERVING_OK)
+        self.serving_fail = serving_fail
+        self.statements: list[str] = []
         self.connect_count = 0
 
     def connect(self) -> _FakeConnectionContext:
@@ -135,7 +167,10 @@ async def test_readyz_returns_ready_when_database_ping_and_pool_are_ok() -> None
     assert payload["components"]["database"]["status"] == "ok"
     assert payload["components"]["pool"]["status"] == "ok"
     assert payload["components"]["pool"]["detail"]["timeout_ms"] == 1000
-    assert engine.connect_count == 1
+    assert payload["components"]["serving"]["status"] == "ok"
+    assert payload["components"]["serving"]["detail"]["relations"] == _SERVING_OK
+    # DB probe 1회 + serving probe 1회(순차) — 동시에 두 connection을 잡지 않는다.
+    assert engine.connect_count == 2
 
 
 @pytest.mark.asyncio
@@ -151,6 +186,7 @@ async def test_readyz_returns_unavailable_when_database_ping_fails() -> None:
     assert payload["degraded"] is True
     assert payload["components"]["database"]["status"] == "unavailable"
     assert payload["components"]["database"]["error_type"] == "RuntimeError"
+    assert payload["components"]["serving"]["status"] == "skipped"
 
 
 @pytest.mark.asyncio
@@ -182,7 +218,8 @@ async def test_readyz_times_out_slow_database_probe_and_recovers() -> None:
     assert recovered_payload["ready"] is True
     assert recovered_payload["degraded"] is False
     assert recovered_payload["components"]["database"]["status"] == "ok"
-    assert engine.connect_count == 2
+    # slow: DB probe만(serving은 skipped) 1회, 회복: DB + serving 2회.
+    assert engine.connect_count == 3
 
 
 @pytest.mark.asyncio
@@ -244,3 +281,70 @@ async def test_readyz_reports_degraded_when_admission_scope_is_saturated() -> No
     assert payload["status"] == "degraded"
     assert payload["components"]["admission"]["status"] == "saturated"
     assert payload["components"]["admission"]["detail"]["scopes"][0]["scope"] == "geocode"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "serving",
+    [
+        # 최초 적재 전(행 없음)과 데이터 없이 복원된 MV(unpopulated) — 2026-09-28 장애 형태.
+        {"mv_geocode_target": "empty", "mv_geocode_text_search": "not_populated"},
+        # migration 전 빈 DB: relation 자체가 없다.
+        {"mv_geocode_target": "missing", "mv_geocode_text_search": "missing"},
+        # 한쪽만 비어도 degraded다.
+        {"mv_geocode_target": "ok", "mv_geocode_text_search": "empty"},
+    ],
+)
+async def test_readyz_reports_degraded_but_ready_when_serving_mvs_are_not_ok(
+    serving: dict[str, str],
+) -> None:
+    engine = _FakeEngine(serving=serving)
+    transport = httpx.ASGITransport(app=_app(_FakeClient(engine)))
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/readyz")
+
+    payload = response.json()
+    # 빈 DB는 정상 상태일 수 있으므로 503(not ready)이 아니라 200 + degraded로 알린다.
+    assert response.status_code == 200
+    assert payload["ready"] is True
+    assert payload["degraded"] is True
+    assert payload["status"] == "degraded"
+    assert payload["components"]["database"]["status"] == "ok"
+    assert payload["components"]["serving"]["status"] == "degraded"
+    assert payload["components"]["serving"]["detail"]["relations"] == serving
+
+
+@pytest.mark.asyncio
+async def test_readyz_serving_probe_never_counts_rows_and_skips_unpopulated_mvs() -> None:
+    engine = _FakeEngine(
+        serving={"mv_geocode_target": "ok", "mv_geocode_text_search": "not_populated"}
+    )
+    transport = httpx.ASGITransport(app=_app(_FakeClient(engine)))
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.get("/v1/readyz")
+
+    probes = " ".join(engine.statements).lower()
+    assert "count(" not in probes
+    exists = [sql for sql in engine.statements if "EXISTS" in sql]
+    assert len(exists) == 1
+    # unpopulated MV를 SELECT하면 오류가 나므로 EXISTS 대상에서 뺀다.
+    assert "mv_geocode_target" in exists[0]
+    assert "mv_geocode_text_search" not in exists[0]
+
+
+@pytest.mark.asyncio
+async def test_readyz_serving_probe_failure_is_unknown_and_not_degraded() -> None:
+    engine = _FakeEngine(serving_fail=True)
+    transport = httpx.ASGITransport(app=_app(_FakeClient(engine)))
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/readyz")
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["ready"] is True
+    assert payload["degraded"] is False
+    assert payload["components"]["serving"]["status"] == "unknown"
+    assert payload["components"]["serving"]["error_type"] == "RuntimeError"

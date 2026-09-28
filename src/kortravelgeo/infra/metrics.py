@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 import re
 from collections.abc import Callable
-from time import perf_counter
+from time import perf_counter, time
 from typing import TYPE_CHECKING, Any, Final
 
 from kortravelgeo.core.source_reconcile import (
@@ -87,8 +87,14 @@ EXTERNAL_API_CALLS = _counter(
     "External geocoding API calls by provider and outcome.",
     ("provider", "outcome"),
 )
-CACHE_ENTRIES = _gauge("ktg_cache_entries", "Rows currently stored in geo_cache.")
-CACHE_HITS = _gauge("ktg_cache_hits", "Accumulated geo_cache hit count.")
+CACHE_ENTRIES = _gauge(
+    "ktg_cache_entries",
+    "Rows currently stored in geo_cache (statistics estimate, no table scan).",
+)
+CACHE_HITS = _gauge(
+    "ktg_cache_hits",
+    "Accumulated geo_cache hit count (UPDATEs on geo_cache since the last stats reset).",
+)
 CACHE_EXPIRED = _gauge(
     "ktg_cache_expired_entries",
     "Expired rows currently in geo_cache.",
@@ -228,6 +234,19 @@ DB_QUERY_DURATION = _histogram(
     "SQL query duration by operation, fingerprint, and status.",
     ("operation", "query_fingerprint", "status"),
     (0.0005, 0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+)
+# T-310: DB-backed gauges (cache/load_jobs/source registry/pg_stat_statements) are refreshed
+# by an API lifespan task, never on the scrape path. A failed refresh keeps the last-good
+# gauge values and is counted here instead of failing the scrape.
+DB_METRICS_REFRESH_ERRORS = _counter(
+    "ktg_metrics_db_refresh_errors_total",
+    "Failed DB-backed /metrics gauge refreshes by source and error type (last-good kept).",
+    ("source", "error_type"),
+)
+DB_METRICS_REFRESH_LAST_SUCCESS = _gauge(
+    "ktg_metrics_db_refresh_last_success_timestamp_seconds",
+    "Unix time of the last successful DB-backed /metrics gauge refresh by source.",
+    ("source",),
 )
 PG_STAT_STATEMENTS_TOTAL_EXEC_MS = _gauge(
     "ktg_pg_stat_statements_total_exec_time_ms",
@@ -392,6 +411,14 @@ def record_api_db_error(*, method: str, route: str, error_type: str) -> None:
     API_DB_ERRORS.labels(
         method=normalize_metric_method(method), route=route, error_type=error_type
     ).inc()
+
+
+def record_db_metrics_refresh_error(*, source: str, error_type: str) -> None:
+    DB_METRICS_REFRESH_ERRORS.labels(source=source, error_type=error_type).inc()
+
+
+def record_db_metrics_refresh_success(*, source: str) -> None:
+    DB_METRICS_REFRESH_LAST_SUCCESS.labels(source=source).set(time())
 
 
 def record_load_job_duration(*, kind: str, state: str, elapsed_s: float) -> None:

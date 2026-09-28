@@ -11,10 +11,11 @@ behind. `AdminRepository.table_stats` therefore has to decide whether the stats 
 
 Each case below kills a specific wrong implementation; see the comments inline.
 
-Run with a disposable scratch database::
+Run with a disposable scratch database on a local/dev PostGIS where your role has CREATEDB (the
+shared :11000 instance's `kor_travel_geo_app` is NOCREATEDB, so it cannot host scratch DBs)::
 
-    KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo_test pytest \
-        tests/integration/test_admin_table_stats_estimates.py
+    KTG_TEST_PG_DSN=postgresql+psycopg://<user>:<password>@127.0.0.1:<port>/kor_travel_geo_test \
+        pytest tests/integration/test_admin_table_stats_estimates.py
 """
 
 from __future__ import annotations
