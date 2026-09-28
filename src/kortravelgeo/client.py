@@ -318,11 +318,18 @@ class AsyncAddressClient:
         """v2 입력을 내부 v1 lookup type으로 정한다.
 
         명시 필드(road_address/jibun_address)는 호출자가 고른 type을 그대로 따른다. 자유 텍스트
-        ``query``만 파싱해서 지번 주소면 곧바로 parcel로 보낸다(T-317). 지번 파싱 결과에는
-        도로명이 없어 road lookup은 SQL 없이 NOT_FOUND가 되므로 road 선행 후 parcel 재시도는
-        캐시 왕복만 늘린다. 국가지점번호와 파싱 불가 입력은 기존처럼 road 경로에 맡긴다(core
-        geocode가 국가지점번호를 type과 무관하게 먼저 처리하고, 파싱 불가는 region 후보
-        fallback으로 이어진다).
+        ``query``만 파싱해서 시도·시군구·읍면동(리)을 모두 갖춘 지번 주소면 곧바로 parcel로
+        보낸다(T-317). 지번 파싱 결과에는 도로명이 없어 road lookup은 SQL 없이 NOT_FOUND가
+        되므로 road 선행 후 parcel 재시도는 캐시 왕복만 늘린다.
+
+        행정구역 anchor가 모자란 지번 파싱(``코엑스 123``, ``삼평동 681``, ``중구 태평로1가
+        31``)은 parcel로 보내지 않는다. 번호만 있는 텍스트도 지번으로 파싱되므로 읍면동·리가
+        없으면 임의 동의 같은 번지를 OK로 돌려주고, 시도+시군구가 없으면
+        ``idx_mv_jibun_name_exact(si_nm, sgg_nm, ...)``를 못 타 전국 지번 index 전체
+        스캔(운영 cold 수~수십 초, API statement_timeout 5초 초과 → 503)이 된다. 이런 입력과
+        국가지점번호·파싱 불가 입력은 기존처럼 road 경로에 맡긴다(core geocode가
+        국가지점번호를 type과 무관하게 먼저 처리하고, 나머지는 SQL 없는 NOT_FOUND 뒤 도로
+        geometry/행정구역 후보 fallback으로 이어진다).
         """
         if inp.road_address:
             return "road"
@@ -334,7 +341,9 @@ class AsyncAddressClient:
             parts = parse_address(inp.query)
         except InvalidAddressError:
             return "road"
-        return "road" if parts.is_road else "parcel"
+        if not parts.is_road and parts.si and parts.sgg and (parts.emd or parts.li):
+            return "parcel"
+        return "road"
 
     @staticmethod
     def _should_collect_geocode_supplements(

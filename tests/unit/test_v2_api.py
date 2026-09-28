@@ -547,10 +547,32 @@ async def test_async_client_geocode_skips_supplements_when_input_matches_refined
             "서울특별시 중구 태평로1가 세종대로 110",
             "road",
         ),
+        ({"query": "서울 중구 을지로2가 199-10"}, "서울 중구 을지로2가 199-10", "parcel"),
+        (
+            {"query": "경기도 양평군 양평읍 양근리 123"},
+            "경기도 양평군 양평읍 양근리 123",
+            "parcel",
+        ),
         ({"query": "강남대로94길 20"}, "강남대로94길 20", "road"),
         # 국가지점번호·파싱 불가 입력은 기존 road 경로를 유지한다.
         ({"query": "다사 6925 4045"}, "다사 6925 4045", "road"),
         ({"query": "테헤란로"}, "테헤란로", "road"),
+        # 지번으로 파싱돼도 시도·시군구·읍면동(리) anchor가 모자라면 road 경로를 유지한다
+        # (전국 지번 index 스캔·임의 동 번지 OK 방지).
+        ({"query": "코엑스 123"}, "코엑스 123", "road"),
+        ({"query": "123"}, "123", "road"),
+        ({"query": "롯데월드타워 123층"}, "롯데월드타워 123층", "road"),
+        ({"query": "강남역 3번 출구"}, "강남역 3번 출구", "road"),
+        ({"query": "테헤란 152"}, "테헤란 152", "road"),
+        ({"query": "서울특별시 강남구 123"}, "서울특별시 강남구 123", "road"),
+        ({"query": "삼평동 681"}, "삼평동 681", "road"),
+        ({"query": "성남시 분당구 삼평동 681"}, "성남시 분당구 삼평동 681", "road"),
+        ({"query": "서울특별시 태평로1가 31"}, "서울특별시 태평로1가 31", "road"),
+        (
+            {"query": "존재하지않는엉터리주소zzqqxx9999"},
+            "존재하지않는엉터리주소zzqqxx9999",
+            "road",
+        ),
         # 명시 필드는 호출자가 고른 type을 그대로 따른다.
         (
             {"road_address": "경기도 성남시 분당구 삼평동 681"},
@@ -621,11 +643,85 @@ async def test_async_client_geocode_skips_supplements_for_jibun_query(
     monkeypatch.setattr(GeometryRepository, "road_geometries", spy_road_geometries)
     client = AsyncAddressClient(engine=object())  # type: ignore[arg-type]
 
-    response = await client.geocode(query="성남시 분당구 삼평동 681", limit=3)
+    response = await client.geocode(query="경기도 성남시 분당구 삼평동 681", limit=3)
 
     assert response.status == "OK"
     assert supplemental_calls == 0
     assert [candidate.match_kind for candidate in response.candidates] == ["parcel"]
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "코엑스 123",
+        "123",
+        "롯데월드타워 123층",
+        "강남역 3번 출구",
+        "테헤란 152",
+        "서울특별시 강남구 123",
+        "삼평동 681",
+        "성남시 분당구 삼평동 681",
+        "중구 태평로1가 31",
+        "서울특별시 태평로1가 31",
+        "존재하지않는엉터리주소zzqqxx9999",
+    ],
+)
+def test_geocode_lookup_type_keeps_anchorless_jibun_query_on_road(query: str) -> None:
+    """T-317 리뷰: 지번으로 파싱되지만 행정구역 anchor가 모자란 query는 parcel로 보내지 않는다."""
+    from kortravelgeo.core.normalize import parse_address
+
+    parts = parse_address(query)
+    assert parts.is_road is False
+    assert parts.mnnm is not None
+    assert not (parts.si and parts.sgg and (parts.emd or parts.li))
+    assert AsyncAddressClient._geocode_lookup_type(GeocodeV2Input(query=query)) == "road"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "query",
+    ["코엑스 123", "서울특별시 강남구 123", "존재하지않는엉터리주소zzqqxx9999"],
+)
+async def test_async_client_geocode_anchorless_jibun_query_skips_parcel_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+    query: str,
+) -> None:
+    """T-317 리뷰: 행정구역 anchor 없는 지번 파싱 query가 전국 지번 lookup으로 새지 않는다.
+
+    core geocode는 road lookup을 SQL 없이 NOT_FOUND로 끝내고(도로명 없음), 이전처럼
+    도로 geometry/행정구역 후보 fallback으로 넘어가야 한다.
+    """
+    from kortravelgeo.infra.geocode_repo import GeocodeRepository
+
+    async def fail_lookup_by_jibun(self: GeocodeRepository, *_: Any, **__: Any) -> None:
+        raise AssertionError("anchorless query must not run the nationwide jibun lookup")
+
+    fallback_addresses: list[str] = []
+
+    async def fake_fallback(
+        self: AsyncAddressClient, inp: GeocodeV2Input, address: str
+    ) -> GeocodeV2Response:
+        fallback_addresses.append(address)
+        return geocode_v2_from_v1(
+            inp,
+            GeocodeResponse(
+                service=ServiceMeta(name="kor-travel-geo", operation="geocode"),
+                status="NOT_FOUND",
+                input=GeocodeInput(address=address),
+            ),
+        )
+
+    monkeypatch.setattr(GeocodeRepository, "lookup_by_jibun", fail_lookup_by_jibun)
+    monkeypatch.setattr(AsyncAddressClient, "_geocode_road_or_region_candidates", fake_fallback)
+    client = AsyncAddressClient(
+        engine=object(),  # type: ignore[arg-type]
+        settings=Settings(_env_file=None, cache_enabled=False),
+    )
+
+    response = await client.geocode(query=query, limit=3)
+
+    assert response.status == "NOT_FOUND"
+    assert fallback_addresses == [query]
 
 
 def _parcel_lookup(text: str, *, emd_nm: str, bd_mgt_sn: str) -> AddressLookup:
