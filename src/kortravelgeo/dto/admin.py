@@ -456,6 +456,11 @@ class CacheMetrics(FrozenModel):
     entries: int = Field(ge=0)
     hits: int = Field(ge=0)
     expired: int = Field(ge=0)
+    #: T-310 — False(기본)면 ``geo_cache``를 scan하지 않은 통계 기반 추정치다: ``entries``는
+    #: 통계 collector/planner 행 수 추정, ``hits``는 마지막 통계 초기화 이후 ``geo_cache``
+    #: UPDATE 누적 수(적중마다 1), ``expired``는 만료 index 범위 count. True면 ``geo_cache``
+    #: 전수 집계(현재 행의 ``sum(hit_count)``)이며 ``?exact=true`` 요청에서만 계산한다.
+    exact: bool = False
 
 
 class LoadSubmitRequest(FrozenModel):

@@ -5,6 +5,20 @@
 ## [Unreleased]
 
 ### Changed
+- **`/metrics` scrape가 DB를 조회하지 않고, `geo_cache` 전수 scan을 기본 경로에서 없앴다(T-310).**
+  15초 scrape마다 돌던 `geo_cache` 전수 집계가 공용 PostgreSQL instance에서 geo tenant 논리 읽기의
+  대부분이었고, statement timeout·crash 창의 `OperationalError`가 그대로 `/metrics` 503이 됐다. 이제
+  DB 기반 gauge는 API lifespan refresher가 `KTG_METRICS_DB_REFRESH_INTERVAL_SECONDS`(기본 60초)마다
+  source별 5초 상한으로 갱신하고, 실패하면 last-good 값을 유지한 채
+  `ktg_metrics_db_refresh_errors_total{source,error_type}`로만 센다(새 gauge
+  `ktg_metrics_db_refresh_last_success_timestamp_seconds{source}`). 기존 metric 이름·label은 그대로지만
+  `ktg_cache_entries`는 통계 추정치, `ktg_cache_hits`는 마지막 통계 초기화 이후 `geo_cache` UPDATE 누적
+  수로 의미가 바뀐다. `GET /v1/admin/cache/metrics`도 기본은 추정치(`exact=false`)이고 `?exact=true`만
+  전수 집계를 돌린다 — 관리 UI 캐시 화면에 "정확히 세기" 버튼을 추가했다.
+- **`pg_stat_statements` capture를 이 tenant의 role로 한정하고 기본 주기를 5분 → 15분으로 늘렸다(T-310).**
+  공용 instance에서는 같은 DB에도 다른 role의 statement가 쌓여 snapshot top-N에
+  `<insufficient privilege>` 항목이 섞였다. `KTG_OPS_PG_STAT_STATEMENTS_CAPTURE_INTERVAL_MINUTES`를
+  명시한 배포는 그 값이 유지된다.
 - **Prometheus 계측 metric name prefix를 `kor_travel_geo_`에서 `ktg_`로 변경했다(T-305).**
   API 계측(`src/kortravelgeo/infra/metrics.py`, 44개 metric)과 admin UI 자체 계측
   (`kor-travel-geo-ui/lib/metrics.ts`, `kor_travel_geo_ui_*` → `ktg_ui_*` 5개)를 모두

@@ -48,6 +48,8 @@ from kortravelgeo.infra.metrics import (
     record_api_request_cancelled,
     record_api_request_finished,
     record_api_request_started,
+    record_db_metrics_refresh_error,
+    record_db_metrics_refresh_success,
     refresh_admin_metrics,
     refresh_db_pool_metrics,
     refresh_pg_stat_statement_metrics,
@@ -114,6 +116,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.table_stats_capture_task = table_stats_task
     pg_stat_task = _start_pg_stat_statements_capture_scheduler(client.engine, get_settings())
     app.state.pg_stat_statements_capture_task = pg_stat_task
+    db_metrics_task = _start_db_metrics_refresh_scheduler(client, get_settings())
+    app.state.db_metrics_refresh_task = db_metrics_task
     runtime_warm_task = _start_runtime_warm_scheduler(client.engine, get_settings())
     app.state.runtime_warm_task = runtime_warm_task
     slow_observability_task = _start_slow_observability_scheduler(
@@ -135,6 +139,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             reconciler_task,
             table_stats_task,
             pg_stat_task,
+            db_metrics_task,
             runtime_warm_task,
             slow_observability_task,
             slow_observability_prune_task,
@@ -177,21 +182,13 @@ def create_app() -> FastAPI:
 
     @app.get("/metrics", include_in_schema=False)
     async def prometheus_metrics(request: Request) -> Response:
-        client = cast("AsyncAddressClient", request.app.state.client)
-        cache = await client.cache_metrics()
-        load_jobs = await client.load_job_metric_counts()
-        assert client.engine is not None
-        refresh_admin_metrics(cache=cache, load_jobs=load_jobs)
-        refresh_db_pool_metrics(client.engine)
-        capacity = await client.source_storage_capacity()
-        session_state_counts = await client.source_upload_session_state_counts()
-        refresh_source_registry_metrics(
-            capacity=capacity, session_state_counts=session_state_counts
-        )
-        pg_stat_rows = await client.list_pg_stat_statement_snapshots(
-            limit=settings.ops_pg_stat_statements_capture_limit
-        )
-        refresh_pg_stat_statement_metrics(pg_stat_rows)
+        # T-310: the scrape never queries the DB. DB-backed gauges are refreshed off this
+        # path by the lifespan task (``_refresh_db_metrics_once``), which keeps last-good
+        # values on failure — so a slow or unavailable DB can no longer fail or stall a
+        # scrape. Only the in-process pool gauges are read here.
+        client = cast("AsyncAddressClient | None", getattr(request.app.state, "client", None))
+        if client is not None and client.engine is not None:
+            refresh_db_pool_metrics(client.engine)
         return Response(render_prometheus(), media_type=PROMETHEUS_CONTENT_TYPE)
 
     return app
@@ -692,6 +689,85 @@ async def _capture_pg_stat_statements_once(engine: AsyncEngine, settings: Settin
             "retention_days": settings.ops_pg_stat_statements_retention_days,
         },
     )
+
+
+# T-310: one source's DB reads are cut off after this long and its gauges keep their last-good
+# values. Matches the API statement_timeout default (5s) and also bounds connect / pool checkout,
+# which hang during shared-instance crash windows (``the database system is in recovery mode``).
+_DB_METRICS_REFRESH_TIMEOUT_S = 5.0
+
+
+def _start_db_metrics_refresh_scheduler(
+    client: AsyncAddressClient,
+    settings: Settings,
+) -> asyncio.Task[None] | None:
+    if settings.metrics_db_refresh_interval_seconds <= 0:
+        return None
+    return asyncio.create_task(_run_db_metrics_refresh_scheduler(client, settings))
+
+
+async def _run_db_metrics_refresh_scheduler(
+    client: AsyncAddressClient,
+    settings: Settings,
+) -> None:
+    interval_s = settings.metrics_db_refresh_interval_seconds
+    while True:
+        await _refresh_db_metrics_once(client, settings)
+        await asyncio.sleep(interval_s)
+
+
+async def _refresh_db_metrics_once(
+    client: AsyncAddressClient,
+    settings: Settings,
+    *,
+    timeout_s: float = _DB_METRICS_REFRESH_TIMEOUT_S,
+) -> None:
+    """Refresh the DB-backed ``/metrics`` gauges once, off the scrape path (T-310).
+
+    Before T-310 every 15s scrape ran these reads inline — including an exact ``geo_cache``
+    aggregate that was most of the geo tenant's logical reads on the shared instance — and any
+    ``OperationalError`` (statement timeout, crash-recovery connect refusal) turned the scrape
+    into a 503. Each source is now bounded by ``timeout_s`` and isolated: a failure is counted
+    in ``ktg_metrics_db_refresh_errors_total`` and leaves that source's gauges at their
+    last-good values while the other sources still refresh.
+    """
+
+    async def cache_load_jobs() -> None:
+        cache = await client.cache_metrics()
+        load_jobs = await client.load_job_metric_counts()
+        refresh_admin_metrics(cache=cache, load_jobs=load_jobs)
+
+    async def source_registry() -> None:
+        capacity = await client.source_storage_capacity()
+        session_state_counts = await client.source_upload_session_state_counts()
+        refresh_source_registry_metrics(
+            capacity=capacity, session_state_counts=session_state_counts
+        )
+
+    async def pg_stat_statements() -> None:
+        rows = await client.list_pg_stat_statement_snapshots(
+            limit=settings.ops_pg_stat_statements_capture_limit
+        )
+        refresh_pg_stat_statement_metrics(rows)
+
+    sources: tuple[tuple[str, Callable[[], Awaitable[None]]], ...] = (
+        ("cache_load_jobs", cache_load_jobs),
+        ("source_registry", source_registry),
+        ("pg_stat_statements", pg_stat_statements),
+    )
+    for source, refresh in sources:
+        try:
+            await asyncio.wait_for(refresh(), timeout=timeout_s)
+        except Exception as exc:
+            error_type = exc.__class__.__name__
+            record_db_metrics_refresh_error(source=source, error_type=error_type)
+            _LOGGER.warning(
+                "DB-backed metrics refresh failed for %s (%s); keeping last-good values",
+                source,
+                error_type,
+            )
+        else:
+            record_db_metrics_refresh_success(source=source)
 
 
 def _start_dagster_reconciler_scheduler(

@@ -119,10 +119,16 @@ class Settings(BaseSettings):
     ops_table_stats_capture_interval_minutes: int = Field(default=0, ge=0)
     ops_table_stats_capture_limit: int = Field(default=500, ge=1, le=2_000)
     ops_table_stats_capture_on_startup: bool = False
-    ops_pg_stat_statements_capture_interval_minutes: int = Field(default=5, ge=0)
+    # T-310: 공용 instance(T-308)에서는 capture마다 모든 tenant의 pg_stat_statements 항목과
+    # query text 파일을 읽는다. snapshot은 추세 관측용이라 15분 간격이면 충분하다.
+    ops_pg_stat_statements_capture_interval_minutes: int = Field(default=15, ge=0)
     ops_pg_stat_statements_capture_limit: int = Field(default=20, ge=1, le=100)
     ops_pg_stat_statements_capture_on_startup: bool = True
     ops_pg_stat_statements_retention_days: int = Field(default=7, ge=1)
+    # T-310: /metrics의 DB 기반 gauge(cache·load_jobs·source registry·pg_stat_statements
+    # snapshot)를 scrape 경로 밖에서 갱신하는 API lifespan 주기. ``0``이면 갱신하지 않는다
+    # (해당 gauge는 기동 후 값이 채워지지 않는다). scrape 자체는 DB를 조회하지 않는다.
+    metrics_db_refresh_interval_seconds: float = Field(default=60.0, ge=0.0, le=3_600.0)
     ops_slow_samples_enabled: bool = False
     ops_slow_query_ms: int = Field(default=250, ge=1)
     ops_slow_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
