@@ -9,11 +9,12 @@ dropped ``previous_alias``, and a concurrent hot-swap fails fast on the ``HOT_SW
 lock.
 
 Opt-in via ``KTG_TEST_PG_DSN`` + the backup CLI tools; skips otherwise so CI stays green. The
-DSN must point at an **isolated** cluster (e.g. the local Docker PostGIS on 15434) — the test
-creates and renames its own throwaway DBs and never touches the configured database itself.
+DSN must point at an **isolated** cluster (e.g. a local/dev Docker PostGIS where your role has
+CREATEDB — never the shared :11000 instance, whose ``kor_travel_geo_app`` is NOCREATEDB) — the
+test creates and renames its own throwaway DBs and never touches the configured database itself.
 
 Run it with, e.g.:
-    KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/postgres \
+    KTG_TEST_PG_DSN=postgresql+psycopg://<user>:<password>@127.0.0.1:<port>/postgres \
         pytest tests/integration/test_backup_restore_hot_swap_roundtrip.py -q
 """
 

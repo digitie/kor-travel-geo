@@ -55,11 +55,41 @@ SELECT 'building'::text AS kind,
 """
 )
 
-_ROAD_GEOMETRY_SQL = text(
-    """
-WITH query_input AS (
+# LIKE 메타문자. 이 문자가 든 입력은 아래 후보 분해가 원래 LIKE 조건과 같지 않다.
+_LIKE_METACHAR_RE = re.compile(r"[%_\\]")
+
+_ROAD_QUERY_INPUT_CTE = """
+query_input AS (
   SELECT regexp_replace(:query, '\\s+', '', 'g') AS query_nrm
+)"""
+
+# score > 0이려면 query_nrm이 full_nrm(= 지역명 부분 || 도로명 rn_nrm)의 부분 문자열이어야 한다.
+# 지역명 부분은 sig_cd만으로 정해진다: tl_scco_sig에 있으면 시도명 || 시군구명(sig_regions),
+# 없으면(시 단위 코드 등) 시도명(sido_regions)이다. 두 표는 합쳐 수백 행이라 매번 계산해도 싸다.
+# road_sigs는 도로 테이블의 sig_cd를 PK 인덱스로 건너뛰며 모으는 loose index scan인데, 시도명만
+# 지역명으로 갖는 행을 찾을 때만(질의가 시도명 안에 들 때) 돌도록 아래 후보 조건에서 막아 둔다.
+_ROAD_REGIONS_CTE = """
+sig_regions AS (
+  SELECT s.sig_cd,
+         regexp_replace(concat_ws('', c.ctp_kor_nm, s.sig_kor_nm), '\\s+', '', 'g')
+           AS region_nrm
+    FROM tl_scco_sig s
+    LEFT JOIN tl_scco_ctprvn c ON c.ctprvn_cd = left(s.sig_cd, 2)
 ),
+sido_regions AS (
+  SELECT c.ctprvn_cd,
+         regexp_replace(c.ctp_kor_nm, '\\s+', '', 'g') AS region_nrm
+    FROM tl_scco_ctprvn c
+),
+road_sigs AS (
+  SELECT min(m.sig_cd) AS sig_cd FROM tl_sprd_manage m
+  UNION ALL
+  SELECT (SELECT min(m.sig_cd) FROM tl_sprd_manage m WHERE m.sig_cd > r.sig_cd)
+    FROM road_sigs r
+   WHERE r.sig_cd IS NOT NULL
+)"""
+
+_ROAD_ROWS_CTE = """
 roads AS (
   SELECT m.sig_cd,
          m.rncode_full,
@@ -90,7 +120,53 @@ roads AS (
      AND (
        CAST(:bjd_cd_prefix AS text) IS NULL
        OR m.sig_cd LIKE left(CAST(:bjd_cd_prefix AS text), 5) || '%'
-     )
+     )"""
+
+# query_nrm이 full_nrm 안에 놓이는 위치는 (1) 도로명 안, (2) 지역명 안, (3) 지역명 끝 + 도로명
+# 앞 셋뿐이다. 세 경우를 각각 인덱스로 찾을 수 있는 조건으로 바꿔 BitmapOr로 후보만 읽는다
+# (1·3은 idx_sprd_manage_rn_nrm_trgm, 2는 PK). (2)에서 시도명만 지역명으로 갖는 행(tl_scco_sig에
+# 없는 sig_cd)은 질의가 어떤 시도명 안에 들 때만 road_sigs로 sig_cd를 모은다(One-Time Filter).
+# 후보는 score > 0인 행의 상위집합이고 점수·정렬은 아래 ranked가 그대로 계산하므로 결과는 전체
+# 스캔과 같다.
+_ROAD_CANDIDATE_FILTER = """
+     AND (
+       regexp_replace(m.rn, '\\s+', '', 'g')
+         LIKE '%' || regexp_replace(:query, '\\s+', '', 'g') || '%'
+       OR m.sig_cd = ANY (ARRAY(
+         SELECT g.sig_cd
+           FROM sig_regions g
+           CROSS JOIN query_input qi
+          WHERE strpos(g.region_nrm, qi.query_nrm) > 0
+         UNION ALL
+         SELECT r.sig_cd
+           FROM road_sigs r
+          WHERE EXISTS (
+                  SELECT 1
+                    FROM sido_regions g
+                    CROSS JOIN query_input qi
+                   WHERE strpos(g.region_nrm, qi.query_nrm) > 0
+                )
+            AND r.sig_cd IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM tl_scco_sig s WHERE s.sig_cd = r.sig_cd)
+       ))
+       OR regexp_replace(m.rn, '\\s+', '', 'g') LIKE ANY (ARRAY(
+         SELECT substr(qi.query_nrm, k + 1) || '%'
+           FROM query_input qi
+           CROSS JOIN generate_series(1, char_length(qi.query_nrm) - 1) AS k
+          WHERE EXISTS (
+                  SELECT 1
+                    FROM sig_regions g
+                   WHERE right(g.region_nrm, k) = left(qi.query_nrm, k)
+                )
+             OR EXISTS (
+                  SELECT 1
+                    FROM sido_regions g
+                   WHERE right(g.region_nrm, k) = left(qi.query_nrm, k)
+                )
+       ))
+     )"""
+
+_ROAD_RANKED_SQL = """
 ),
 ranked AS (
   SELECT *,
@@ -110,6 +186,30 @@ SELECT *
  ORDER BY score DESC, char_length(title), title, rncode_full
  LIMIT :limit
 """
+
+_ROAD_GEOMETRY_SQL = text(
+    "\nWITH RECURSIVE"
+    + _ROAD_QUERY_INPUT_CTE
+    + ","
+    + _ROAD_REGIONS_CTE
+    + ","
+    + _ROAD_ROWS_CTE
+    + _ROAD_CANDIDATE_FILTER
+    + _ROAD_RANKED_SQL
+)
+
+# 후보 조건 없는 전체 스캔(T-311 이전 SQL). 언제 쓰는지는 _road_geometry_sql 참조.
+_ROAD_GEOMETRY_SCAN_SQL = text(
+    "\nWITH" + _ROAD_QUERY_INPUT_CTE + "," + _ROAD_ROWS_CTE + _ROAD_RANKED_SQL
+)
+
+# 트랜잭션 한정 설정. prepared statement의 generic plan은 "(:hint IS NULL OR ...)" 지역 필터를
+# 행 1개로 추정해, 후보가 많은 질의(지역명·한 글자 등)에서 tl_scco_sig를 행마다 순차 스캔하는
+# 중첩 루프를 고른다(로컬 실측 3초 → 11초). 매 실행을 실제 값으로 계획하고, 이 질의에선 이득 없이
+# 수백 ms(cold 수 초)를 쓰는 JIT도 끈다.
+_ROAD_GEOMETRY_PLAN_SETTINGS_SQL = text(
+    "SELECT set_config('plan_cache_mode', 'force_custom_plan', true),"
+    " set_config('jit', 'off', true)"
 )
 
 _REGION_CTPRVN_SQL = text(
@@ -339,8 +439,9 @@ class GeometryRepository:
             "limit": limit,
             **region_params(region_hint),
         }
-        async with self.engine.connect() as conn:
-            rows = (await conn.execute(_ROAD_GEOMETRY_SQL, params)).mappings().all()
+        async with self.engine.begin() as conn:
+            await conn.execute(_ROAD_GEOMETRY_PLAN_SETTINGS_SQL)
+            rows = (await conn.execute(_road_geometry_sql(query), params)).mappings().all()
         return [
             _map_geometry_lookup(dict(row), kind="road", source_table="tl_sprd_manage")
             for row in rows
@@ -375,6 +476,18 @@ class GeometryRepository:
             level: tuple(items) for level, items in grouped.items()
         }
         return result
+
+
+def _road_geometry_sql(query: str) -> TextClause:
+    """Pick the road fallback SQL; both return the same rows where both apply.
+
+    LIKE 메타문자가 든 입력은 후보 분해가 원래 LIKE 조건과 달라 전체 스캔만 정확하다. 공백을 뺀
+    한 글자 입력은 후보가 테이블 절반 가까이라 인덱스 후보 읽기가 전체 스캔보다 느려(로컬 실측
+    "도" 3.2초 → 5.1초) 전체 스캔으로 보낸다.
+    """
+    if _LIKE_METACHAR_RE.search(query) or len("".join(query.split())) <= 1:
+        return _ROAD_GEOMETRY_SCAN_SQL
+    return _ROAD_GEOMETRY_SQL
 
 
 def _parse_building_detail(detail: str | None) -> tuple[int, int, str | None] | None:

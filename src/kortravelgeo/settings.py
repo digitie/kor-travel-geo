@@ -37,7 +37,8 @@ class Settings(BaseSettings):
         frozen=True,
     )
 
-    pg_dsn: str = "postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo"
+    # 공용 instance(:11000, T-308). 비밀번호는 placeholder라 KTG_PG_DSN을 명시한다.
+    pg_dsn: str = "postgresql+psycopg://kor_travel_geo_app:change-me@127.0.0.1:11000/kor_travel_geo"
     pg_pool_size: int = Field(default=10, ge=1)
     pg_max_overflow: int = Field(default=5, ge=0)
     pg_pool_timeout_ms: int = Field(default=1_000, ge=1)
@@ -119,10 +120,16 @@ class Settings(BaseSettings):
     ops_table_stats_capture_interval_minutes: int = Field(default=0, ge=0)
     ops_table_stats_capture_limit: int = Field(default=500, ge=1, le=2_000)
     ops_table_stats_capture_on_startup: bool = False
-    ops_pg_stat_statements_capture_interval_minutes: int = Field(default=5, ge=0)
+    # T-310: 공용 instance(T-308)에서는 capture마다 모든 tenant의 pg_stat_statements 항목과
+    # query text 파일을 읽는다. snapshot은 추세 관측용이라 15분 간격이면 충분하다.
+    ops_pg_stat_statements_capture_interval_minutes: int = Field(default=15, ge=0)
     ops_pg_stat_statements_capture_limit: int = Field(default=20, ge=1, le=100)
     ops_pg_stat_statements_capture_on_startup: bool = True
     ops_pg_stat_statements_retention_days: int = Field(default=7, ge=1)
+    # T-310: /metrics의 DB 기반 gauge(cache·load_jobs·source registry·pg_stat_statements
+    # snapshot)를 scrape 경로 밖에서 갱신하는 API lifespan 주기. ``0``이면 갱신하지 않는다
+    # (해당 gauge는 기동 후 값이 채워지지 않는다). scrape 자체는 DB를 조회하지 않는다.
+    metrics_db_refresh_interval_seconds: float = Field(default=60.0, ge=0.0, le=3_600.0)
     ops_slow_samples_enabled: bool = False
     ops_slow_query_ms: int = Field(default=250, ge=1)
     ops_slow_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
@@ -149,6 +156,10 @@ class Settings(BaseSettings):
         "dagster",
     )
     dagster_request_timeout_seconds: float = Field(default=3.0, ge=0.2, le=30.0)
+    # launchRun은 webserver가 code-server(gRPC)에서 job snapshot을 받아야 끝나므로 조회용
+    # 3초로는 cold code location에서 끊긴다(T-318: 2026-09-28 첫 백업 launch가 3초 timeout으로
+    # 502, run은 Dagster에서 따로 시작됐다). 조회 경로는 짧게 두고 launch만 길게 준다.
+    dagster_launch_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
     # Grace window (seconds) beyond one cron interval before a RUNNING schedule that
     # missed a fire is flagged ``overdue`` in the summary (T-290h). Generous by default
     # so a briefly-behind scheduler daemon does not flap the overdue banner.

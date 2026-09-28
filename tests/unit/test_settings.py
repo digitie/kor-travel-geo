@@ -13,6 +13,18 @@ def test_settings_normalize_postgresql_dsn(monkeypatch: pytest.MonkeyPatch) -> N
     reset_settings()
 
 
+def test_settings_default_pg_dsn_targets_shared_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("KTG_PG_DSN", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    # T-313: 옛 전용 instance(:12500, addr role)는 은퇴했다. 기본값은 공용 instance 앱 role이고
+    # 비밀번호는 placeholder다(실제 값은 KTG_PG_DSN으로만 준다).
+    assert settings.pg_dsn == (
+        "postgresql+psycopg://kor_travel_geo_app:change-me@127.0.0.1:11000/kor_travel_geo"
+    )
+
+
 def test_settings_default_mvm_res_code_actions() -> None:
     settings = Settings()
 
@@ -59,10 +71,11 @@ def test_settings_defaults_match_backend_spec() -> None:
     assert settings.ops_table_stats_capture_interval_minutes == 0
     assert settings.ops_table_stats_capture_limit == 500
     assert settings.ops_table_stats_capture_on_startup is False
-    assert settings.ops_pg_stat_statements_capture_interval_minutes == 5
+    assert settings.ops_pg_stat_statements_capture_interval_minutes == 15
     assert settings.ops_pg_stat_statements_capture_limit == 20
     assert settings.ops_pg_stat_statements_capture_on_startup is True
     assert settings.ops_pg_stat_statements_retention_days == 7
+    assert settings.metrics_db_refresh_interval_seconds == 60.0
     assert settings.ops_slow_samples_enabled is False
     assert settings.ops_slow_query_ms == 250
     assert settings.ops_slow_sample_rate == 1.0

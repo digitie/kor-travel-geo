@@ -842,9 +842,10 @@ class AsyncAddressClient:
         )
         return ExplainResponse(plan=plan)
 
-    async def cache_metrics(self) -> CacheMetrics:
+    async def cache_metrics(self, *, exact: bool = False) -> CacheMetrics:
         return await AdminRepository(self._engine()).cache_metrics(
             enabled=self.settings.cache_enabled,
+            exact=exact,
         )
 
     async def list_public_api_keys(self, *, limit: int = 100) -> list[PublicApiKeySummary]:

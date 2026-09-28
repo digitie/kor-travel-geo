@@ -202,3 +202,23 @@ def test_t290h_run_failure_alerts_migration() -> None:
     assert "idx_ops_run_failure_alerts_unacked_recent" in migration
     assert "WHERE acknowledged_at IS NULL" in migration
     assert "DROP TABLE IF EXISTS ops.run_failure_alerts" in migration
+
+
+def test_t311_road_rn_trgm_migration_matches_fresh_init_index() -> None:
+    from kortravelgeo.infra.sql import INDEX_SQL
+
+    migration = Path("alembic/versions/0027_t311_road_rn_trgm.py").read_text(encoding="utf-8")
+    index_mirror = Path("sql/indexes.sql").read_text(encoding="utf-8")
+    ddl = (
+        "CREATE INDEX IF NOT EXISTS idx_sprd_manage_rn_nrm_trgm\n"
+        "  ON tl_sprd_manage USING GIN ((regexp_replace(rn, '\\s+', '', 'g')) gin_trgm_ops);"
+    )
+
+    assert 'revision = "0027_t311_road_rn_trgm"' in migration
+    assert 'down_revision = "0026_t290k_retire_inproc"' in migration
+    # schema-drift: 마이그레이션, fresh-init INDEX_SQL, sql/indexes.sql이 같은 식을 쓴다.
+    assert ddl in migration
+    assert ddl in INDEX_SQL
+    assert ddl in index_mirror
+    assert "ANALYZE tl_sprd_manage" in migration
+    assert "DROP INDEX IF EXISTS idx_sprd_manage_rn_nrm_trgm" in migration

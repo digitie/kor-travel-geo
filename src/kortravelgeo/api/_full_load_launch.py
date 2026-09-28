@@ -134,11 +134,14 @@ async def launch_full_load_batch_dagster_run(
                 tags={"kor_travel_geo.job_id": batch_id},
             )
         except _LAUNCH_ERRORS as exc:
-            await LoadJobExecutor(control_engine).mark_failed(
+            if await LoadJobExecutor(control_engine).mark_launch_failed(
                 batch_id, f"Dagster launch failed: {exc}"
-            )
-            await AdminRepository(control_engine).cancel_queued_batch_children(batch_id)
-            raise KorTravelGeoError("Dagster full-load launch failed", http_status=502) from exc
+            ):
+                await AdminRepository(control_engine).cancel_queued_batch_children(batch_id)
+                raise KorTravelGeoError(
+                    "Dagster full-load launch failed", http_status=502
+                ) from exc
+            # run이 이미 root를 adopt했다 — children은 그 run이 이어서 돈다(T-318).
         return batch_id
 
 
@@ -165,8 +168,9 @@ async def launch_source_load_dagster_run(
             tags={"kor_travel_geo.job_id": job_id},
         )
     except _LAUNCH_ERRORS as exc:
-        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
-        raise KorTravelGeoError("Dagster loader launch failed", http_status=502) from exc
+        message = f"Dagster launch failed: {exc}"
+        if await LoadJobExecutor(engine).mark_launch_failed(job_id, message):
+            raise KorTravelGeoError("Dagster loader launch failed", http_status=502) from exc
     return job_id
 
 
@@ -213,8 +217,9 @@ async def _launch_control_job(
             tags={"kor_travel_geo.job_id": job_id},
         )
     except _LAUNCH_ERRORS as exc:
-        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
-        raise KorTravelGeoError(f"Dagster {job_name} launch failed", http_status=502) from exc
+        message = f"Dagster launch failed: {exc}"
+        if await LoadJobExecutor(engine).mark_launch_failed(job_id, message):
+            raise KorTravelGeoError(f"Dagster {job_name} launch failed", http_status=502) from exc
     return job_id
 
 
