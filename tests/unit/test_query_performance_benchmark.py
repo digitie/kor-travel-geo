@@ -14,6 +14,7 @@ from scripts.benchmark_query_performance import (
     BenchmarkCase,
     Measurement,
     _case_group_counts,
+    _redact_error,
     _search_exact_params,
     _search_sql_params,
     _settings_for_run,
@@ -42,6 +43,19 @@ def test_query_benchmark_parser_defaults() -> None:
     assert args.disable_prepared_statements is False
     assert args.reset_pg_stat_statements is False
     assert args.pg_stat_limit == 50
+
+
+def test_redact_error_masks_any_dsn_credentials() -> None:
+    exc = RuntimeError(
+        "connection to postgresql+psycopg://kor_travel_geo_app:s3cret@127.0.0.1:11000/"
+        "kor_travel_geo failed"
+    )
+
+    redacted = _redact_error(exc)
+
+    assert "s3cret" not in redacted
+    assert "kor_travel_geo_app" not in redacted
+    assert "postgresql+psycopg://***:***@127.0.0.1:11000/kor_travel_geo failed" in redacted
 
 
 def test_pg_stat_statements_uses_extension_schema_prefix() -> None:

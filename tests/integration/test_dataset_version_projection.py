@@ -19,10 +19,11 @@ timestamps).
 Run with a disposable scratch database (see tests/integration/_pg_guard.py for the naming
 rule — a whole `_`/`-` segment must read as "test"/"scratch"/"tmp"/"e2e"/etc.; bootstrap it
 with `ktgctl init-db` + `alembic stamp head`, not `alembic upgrade head` from empty — see
-docs/geocoding-readiness.md)::
+docs/geocoding-readiness.md). Host it on a local/dev PostGIS where your role has CREATEDB — the
+shared :11000 instance's `kor_travel_geo_app` is NOCREATEDB, so it cannot host scratch DBs::
 
-    KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo_test pytest \
-        tests/integration/test_dataset_version_projection.py
+    KTG_TEST_PG_DSN=postgresql+psycopg://<user>:<password>@127.0.0.1:<port>/kor_travel_geo_test \
+        pytest tests/integration/test_dataset_version_projection.py
 """
 
 from __future__ import annotations

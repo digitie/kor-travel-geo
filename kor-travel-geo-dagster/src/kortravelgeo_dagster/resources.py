@@ -78,7 +78,9 @@ class DagsterAdminApiClient:
         secret = settings.admin_proxy_secret
         return cls(
             base_url=_normalize_http_base_url(settings.dagster_admin_api_url),
-            timeout_seconds=settings.dagster_request_timeout_seconds,
+            # run-due는 API 안에서 launchRun(최대 dagster_launch_timeout_seconds)을 기다리므로
+            # 그보다 길게 기다려야 API가 성공한 호출을 이쪽이 먼저 실패로 적지 않는다(T-318).
+            timeout_seconds=settings.dagster_launch_timeout_seconds + 15.0,
             admin_proxy_secret=secret.get_secret_value() if secret is not None else None,
         )
 

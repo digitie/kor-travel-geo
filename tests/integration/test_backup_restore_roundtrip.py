@@ -6,8 +6,10 @@ original vs. restored ROW_COUNT_OBJECTS (10 objects). Opt-in via ``KTG_TEST_PG_D
 backup CLI tools; it skips otherwise so CI stays green. The setup/backup/restore helpers in
 ``_backup_roundtrip`` are the fixture foundation for the T-245 fault-injection tests.
 
+Point it at a local/dev PostGIS where your role has CREATEDB — the restore creates its own
+target DB, which the shared :11000 instance's ``kor_travel_geo_app`` (NOCREATEDB) cannot do.
 Run it with, e.g.:
-    KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo_rt \
+    KTG_TEST_PG_DSN=postgresql+psycopg://<user>:<password>@127.0.0.1:<port>/kor_travel_geo_rt \
         pytest tests/integration/test_backup_restore_roundtrip.py -q
 """
 

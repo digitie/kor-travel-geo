@@ -25,10 +25,12 @@ would make ``pg_restore``'s ``DROP EXTENSION IF EXISTS postgis`` fail with a per
 that this same-role setup can never reproduce. Confirming --clean --if-exists tolerates that
 would need a second, lower-privileged role in the test fixture — out of scope here.
 
-Run with a disposable scratch database (see ``tests/integration/_pg_guard.py``)::
+Run with a disposable scratch database (see ``tests/integration/_pg_guard.py``) on a local/dev
+PostGIS where your role has CREATEDB — the restore creates its own target DB, which the shared
+:11000 instance's ``kor_travel_geo_app`` (NOCREATEDB) cannot do::
 
-    KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo_test pytest \
-        tests/integration/test_new_database_restore_postgis_preinstalled.py
+    KTG_TEST_PG_DSN=postgresql+psycopg://<user>:<password>@127.0.0.1:<port>/kor_travel_geo_test \
+        pytest tests/integration/test_new_database_restore_postgis_preinstalled.py
 """
 
 from __future__ import annotations

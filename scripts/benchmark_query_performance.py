@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import statistics
 import subprocess
@@ -46,6 +47,8 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 BENCHMARK_SCHEMA_VERSION = 2
+# DSN userinfo (`user:password@`) inside error messages, masked regardless of the role name.
+_DSN_USERINFO_RE = re.compile(r"://[^/@\s]+@")
 
 type QueryGroup = Literal[
     "Q1_ROAD_EXACT",
@@ -1446,8 +1449,7 @@ def _safe_filename(value: str) -> str:
 
 
 def _redact_error(exc: BaseException) -> str:
-    message = str(exc)
-    return message.replace("addr:addr@", "***:***@")
+    return _DSN_USERINFO_RE.sub("://***:***@", str(exc))
 
 
 def _git_output(*args: str) -> str | None:
