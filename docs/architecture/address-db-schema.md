@@ -50,6 +50,8 @@
 - 출입구 nearest (좌표 정본): `tl_locsum_entrc USING GIST(geom)`, same-month `tl_roadaddr_entrc USING GIST(geom)`
 - serving nearest/radius: `mv_geocode_target USING GIST(pt_5179)`
 - 도로명 trigram fuzzy: `tl_juso_text`/`mv_geocode_target USING GIN(rn_nrm gin_trgm_ops)` (`pg_trgm`)
+- v2 도로 관리선 후보(T-311): `tl_sprd_manage USING GIN((regexp_replace(rn, '\s+', '', 'g')) gin_trgm_ops)`
+  — 식이 `infra/geometry_repo.py` SQL과 글자 그대로 같아야 planner가 쓴다
 
 `pg_trgm.similarity_threshold`는 트랜잭션 단위로만 `SET LOCAL` (SKILL.md §4-3).
 

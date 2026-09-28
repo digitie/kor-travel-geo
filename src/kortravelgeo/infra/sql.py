@@ -1144,6 +1144,8 @@ CREATE INDEX IF NOT EXISTS idx_spbd_buld_polygon_resolve
 CREATE INDEX IF NOT EXISTS idx_sprd_manage_geom ON tl_sprd_manage USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sprd_rw_geom ON tl_sprd_rw USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_sprd_manage_rn ON tl_sprd_manage (rncode_full);
+CREATE INDEX IF NOT EXISTS idx_sprd_manage_rn_nrm_trgm
+  ON tl_sprd_manage USING GIN ((regexp_replace(rn, '\\s+', '', 'g')) gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_sprd_intrvl_rds ON tl_sprd_intrvl (sig_cd, rds_man_no);
 
 CREATE INDEX IF NOT EXISTS idx_pobox_lookup
