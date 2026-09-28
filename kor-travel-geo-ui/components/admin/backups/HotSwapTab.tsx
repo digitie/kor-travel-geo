@@ -13,8 +13,10 @@ import { IssueList } from "@/components/admin/shared/IssueList";
 import { JsonDetails } from "@/components/admin/shared/JsonDetails";
 import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
 import { TypedConfirmField } from "@/components/admin/shared/TypedConfirmField";
+import { DbLifecycleNotice } from "@/components/admin/backups/DbLifecycleNotice";
 import { nestedRecord, textValue } from "@/components/admin/backups/manifest-utils";
 import {
+  type DbLifecycleCapabilities,
   MaintenanceWindow,
   type OpsArtifact,
   RestoreHotSwapPlan,
@@ -25,6 +27,7 @@ import {
   postJson,
   requestJson
 } from "@/lib/api";
+import { dbLifecycleBlocked } from "@/lib/backup-workflow";
 import { toast } from "@/lib/toast";
 
 type HotSwapState = {
@@ -61,7 +64,12 @@ function hotSwapReducer(state: HotSwapState, patch: Partial<HotSwapState>): HotS
   return { ...state, ...patch };
 }
 
-export function HotSwapTab() {
+export function HotSwapTab({
+  lifecycle
+}: {
+  /** T-312: 공용 DB instance처럼 ALTER DATABASE RENAME을 못 하면 plan/실행/rollback을 막는다. */
+  lifecycle?: DbLifecycleCapabilities | null;
+}) {
   const [state, dispatchState] = useReducer(hotSwapReducer, INITIAL_HOTSWAP_STATE);
   const {
     restoreDatabase,
@@ -188,15 +196,19 @@ export function HotSwapTab() {
       }
     });
 
+  const blocked = dbLifecycleBlocked(lifecycle);
   const execReady =
+    !blocked &&
     Boolean(plan?.can_execute) &&
     Boolean(windowOpened) &&
     plan?.typed_confirmation === execConfirmation;
-  const rollbackReady = plan?.rollback_confirmation === rollbackConfirmation;
+  const rollbackReady = !blocked && plan?.rollback_confirmation === rollbackConfirmation;
 
   return (
     <HotSwapLayout
+      blocked={blocked}
       execReady={execReady}
+      lifecycle={lifecycle}
       onBuildPlan={buildPlan}
       onExecute={execute}
       onOpenWindow={openWindow}
@@ -212,7 +224,9 @@ export function HotSwapTab() {
 }
 
 function HotSwapLayout({
+  blocked,
   execReady,
+  lifecycle,
   onBuildPlan,
   onExecute,
   onOpenWindow,
@@ -224,7 +238,9 @@ function HotSwapLayout({
   rollbackReady,
   state
 }: {
+  blocked: boolean;
   execReady: boolean;
+  lifecycle?: DbLifecycleCapabilities | null;
   onBuildPlan: () => Promise<void>;
   onExecute: () => Promise<void>;
   onOpenWindow: () => Promise<void>;
@@ -265,6 +281,7 @@ function HotSwapLayout({
           </>
         }
       >
+        <DbLifecycleNotice capabilities={lifecycle} feature="Hot-swap" />
         {error ? (
           <Alert role="alert" variant="destructive">
             <XCircle aria-hidden="true" />
@@ -310,7 +327,7 @@ function HotSwapLayout({
           </Field>
           <div className="button-row">
             <Button
-              disabled={!restoreDatabase || busy === "plan 생성"}
+              disabled={blocked || !restoreDatabase || busy === "plan 생성"}
               onClick={onBuildPlan}
               type="button"
             >
@@ -368,7 +385,7 @@ function HotSwapLayout({
                 />
               </Field>
               <Button
-                disabled={!plan.can_execute || busy === "maintenance window 열기"}
+                disabled={blocked || !plan.can_execute || busy === "maintenance window 열기"}
                 onClick={onOpenWindow}
                 type="button"
               >

@@ -560,3 +560,98 @@ T-046 1차 구현에서 아직 완전 자동화하지 않은 실패/예외 항�
 5. 복원 로그 manifest `partial_restore` 블록에 스킵한 `dumpId`/파일/엔트리/개수를 기록한다. row-count reconcile(T-233)은 스킵된 테이블을 행 수 불일치 **warning**으로 남겨 무엇이 비었는지 드러낸다.
 
 합격: 일부 `.dat` 손상 시 해당 테이블만 스킵하고 나머지는 복원, `allow_partial=false`면 기존(전체 중단) 동작. 손상 archive를 실제로 주입하는 통합 검증은 **T-245**(fault injection)에서 수행한다.
+
+## 공용 DB instance (T-312)
+
+T-308로 geo DB(`kor_travel_geo`, `kor_travel_geo_dagster`)는 공용 control-plane PostgreSQL 16/PostGIS 3.5
+instance(`kor-travel-shared-postgres`)로 옮겨졌다. 2026-09-29 read-only 조회 기준 app role
+`kor_travel_geo_app`은 `rolsuper=f`, `rolcreatedb=f`, `has_database_privilege(..., 'postgres', 'CONNECT')=f`
+이고, 두 DB의 owner다. extension(postgis, pg_trgm, unaccent, pg_stat_statements)은 cluster admin
+(`shared_admin`)이 만든 `x_extension` schema에 있고 app role은 그 schema에 `USAGE`만 있다.
+
+### capability 판정과 조기 거절
+
+ADR-036 hot-swap(maintenance DB에서 `ALTER DATABASE RENAME`), restore drill(throwaway
+`CREATE DATABASE`), blue-green scratch full-load(scratch `CREATE DATABASE`), `db_restore`(새 DB 복원,
+실패 시 maintenance DB에서 drop/quarantine)는 모두 `CREATEDB`(또는 superuser)와 maintenance DB
+`postgres` `CONNECT`가 필요하다. `infra/db_capabilities.py`가 연결 role을 한 번 조회해 5분 캐시하고,
+부족하면 job을 만들기 전에 `UnsupportedOnInstanceError`(`E0410`, HTTP 409)로 거절한다.
+
+| 설정 | 동작 |
+|------|------|
+| `KTG_DB_LIFECYCLE_MODE=auto` (기본) | role 조회. `CREATEDB` + `postgres` `CONNECT`면 지원 — 전용 superuser instance(dev/테스트)는 그대로 전부 허용 |
+| `KTG_DB_LIFECYCLE_MODE=enabled` | 조회 없이 허용 (운영자가 권한을 따로 준 경우 override) |
+| `KTG_DB_LIFECYCLE_MODE=disabled` | 조회 없이 차단 |
+
+| 기능 | 1차(API) | 2차(Dagster/CLI) |
+|------|----------|------------------|
+| hot-swap plan/execute/rollback | `client.restore_hot_swap_plan`/`execute_*` 진입 즉시 (`/restores/hot-swap*`, `ktgctl serving hot-swap-plan`) | — |
+| restore drill | `client.run_restore_drill` 진입 즉시 (`ktgctl backup restore-drill`) | `restore_drill` op 시작 시 `Failure` (daily schedule 포함) |
+| scratch full-load (`full_load_batch` + `target_database`) | `launch_full_load_batch_dagster_run` — scratch DB 생성·row insert 전 | `run_full_load_batch` op가 scratch engine 생성 전 `Failure` |
+| `db_restore` (`new_database`/`replace_current`) | `POST /restores` — load_jobs row·Dagster run 생성 전 | `run_db_restore` op leaf 첫 단계(row를 사유와 함께 failed), `run_restore_job` 첫 단계(`ktgctl restore create`) |
+
+- `target_dsn`을 명시한 복원은 그 DSN의 자격증명으로 도는 운영자 경로라 게이트하지 않는다.
+- `POST /restores/dry-run`은 archive 검증용으로 계속 동작하되 같은 사유를 `blockers`에 넣어 `can_restore=false`를 돌려준다.
+- `GET /v1/admin/db-capabilities`가 판정(`supported`, `reason`, role 속성)을 돌려주고, admin UI 백업/복원 화면은
+  이를 읽어 복원 제출·hot-swap plan/실행/rollback을 비활성화하고 "공용 DB instance에서는 지원하지 않음 — 운영자가
+  manager ktdctl로 수행"을 표시한다. `hot-swap-source-verify`는 수명주기 권한이 필요 없어 그대로 둔다.
+
+### 백업 형식 (app role로 찍어도 복원 가능)
+
+- `pg_dump`는 이제 `--no-privileges`로 ACL(GRANT/REVOKE) entry를 넣지 않는다. 이 저장소 schema는 GRANT를
+  쓰지 않으므로 잃는 것은 cluster 고유 grant(예: admin의 `x_extension` USAGE)뿐이다.
+- `--no-owner`는 `pg_dump`에 넣지 않는다. archive(directory) 형식에서는 무시되어 owner가 TOC에 그대로 남는다
+  (PG16 실측) — 복원 시점 `pg_restore` 옵션이다.
+- app role의 `pg_dump`는 공용 instance에서 성립한다: `public`/`ops`의 모든 relation을 app role이 소유(SELECT
+  가능 확인)하고, extension config table `x_extension.spatial_ref_sys`는 `PUBLIC` `SELECT`가 있다
+  (config 필터로 표준 SRID는 빠지므로 dump되는 행은 사용자 추가 SRID뿐).
+- checksum/manifest/verify는 바뀌지 않는다. 옛 백업(owner·GRANT 포함)도 그대로 verify되고 아래 경로로 복원된다.
+
+### 비-superuser(app role) 복원
+
+`run_restore_job`은 복원 대상 DB에서 현재 role이 superuser인지, 관리할 수 없는(소유하지 않은) extension과 그
+extension이 사는 admin 소유 schema를 조회한다(`infra/restore_toc.py`). 비-superuser면:
+
+1. `pg_restore -l` TOC에서 해당 `EXTENSION`/`COMMENT - EXTENSION`, `SCHEMA - x_extension`,
+   `ACL/COMMENT - SCHEMA x_extension`, namespace가 `x_extension`인 entry(`TABLE DATA x_extension spatial_ref_sys`)를
+   `;`로 주석 처리한 `--use-list`를 만든다(T-243 부분 복원 list와 합성). `public`/`pg_catalog`는 절대 schema 단위로
+   거르지 않는다.
+2. `pg_restore`에 `--no-owner --no-privileges`를 붙인다 — 옛 owner(`addr` 등)로의 `ALTER OWNER`나 없는 role로의
+   `GRANT`가 실패하지 않고, 모든 객체가 복원 role 소유가 된다.
+3. 건너뛴 entry는 복원 로그 manifest `preprovisioned_toc_skipped`에 남는다.
+
+superuser 복원은 필터가 비고 옵션도 붙지 않아 기존과 같다. 로컬 재현(공용 instance와 같은 role/schema 구성의
+PG16.9 컨테이너)에서 필터 없이 app role로 복원하면 `must be owner of extension`/`must be owner of schema
+x_extension`/`schema "x_extension" already exists`/`permission denied for table spatial_ref_sys`로 exit 1, 필터와
+옵션을 적용하면 exit 0이었다.
+
+### cluster admin 복원 절차 (manager `ktdctl` 상당)
+
+공용 instance에서는 새 DB 생성·복원·rename을 운영자가 한다. app role로 찍은 백업을 app role 소유의 새 DB로
+복원하는 수동 절차(로컬 재현으로 exit 0·relation 194개 모두 `kor_travel_geo_app` 소유 확인):
+
+```bash
+# 1) 새 DB (owner = app role) + extension 사전 구성 — superuser/cluster admin
+psql -d postgres -c "CREATE DATABASE kor_travel_geo_restore OWNER kor_travel_geo_app TEMPLATE template0" \
+                 -c "REVOKE CONNECT ON DATABASE kor_travel_geo_restore FROM PUBLIC"
+psql -d kor_travel_geo_restore \
+  -c "CREATE SCHEMA x_extension" -c "GRANT USAGE ON SCHEMA x_extension TO kor_travel_geo_app" \
+  -c "CREATE EXTENSION postgis WITH SCHEMA x_extension" -c "CREATE EXTENSION pg_trgm WITH SCHEMA x_extension" \
+  -c "CREATE EXTENSION unaccent WITH SCHEMA x_extension" -c "CREATE EXTENSION pg_stat_statements WITH SCHEMA x_extension"
+
+# 2) archive 해제 + 내부 checksum 확인
+mkdir restore_work && tar --use-compress-program=zstd -xf <backup>.tar.zst -C restore_work
+(cd restore_work && sha256sum -c --quiet checksums.sha256)
+
+# 3) 미리 만든 extension/x_extension entry를 뺀 TOC list
+pg_restore -l restore_work/dump \
+  | grep -v -E '^[0-9]+; [0-9]+ [0-9]+ (SCHEMA - x_extension |ACL - SCHEMA x_extension |EXTENSION - |COMMENT - EXTENSION |[A-Z][A-Z ]* x_extension )' \
+  > restore_work/restore.list
+
+# 4) app role 권한으로 복원 (--role = SET ROLE → 모든 객체가 app role 소유)
+pg_restore --format=directory --jobs=4 --no-owner --no-privileges --role=kor_travel_geo_app \
+  --use-list restore_work/restore.list --dbname "postgresql://<admin>@<host>:11000/kor_travel_geo_restore" \
+  restore_work/dump
+```
+
+이후 `ANALYZE`, smoke, 그리고 필요하면 운영 DB와의 rename 교체(ADR-036 절차)를 admin이 수행한다.

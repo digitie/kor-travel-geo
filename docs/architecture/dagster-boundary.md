@@ -79,6 +79,10 @@ code location은 **항상 로드**되고, 자격증명 누락은 import가 아�
   window, ADR-036)에 맡긴다. 자동 schedule 금지.
 - **RetryPolicy는 파괴적/비멱등 op에서 끈다.** 자동 retry는 멱등 stage(enqueue 전·외부 copy transient·
   알림)만. `pg_restore` mismatch·checksum mismatch·disk preflight 실패는 자동 retry 금지.
+- **DB 수명주기 capability 2차 방어선(T-312)**: `db_restore`(leaf 첫 단계), `backup_restore_drill`,
+  `full_load_batch`의 scratch(`target_database`) 경로는 op 시작 시 `client.require_db_lifecycle`로 연결 role의
+  `CREATEDB`·maintenance DB `CONNECT`를 확인하고, 없으면(공용 DB instance) 사유를 담은 `Failure`로 멈춘다.
+  API가 1차로 `E0410`을 돌려주지만 Dagster UI 직접 launch·schedule은 API를 거치지 않기 때문이다.
 
 ## 5. Scheduling & Sensors
 

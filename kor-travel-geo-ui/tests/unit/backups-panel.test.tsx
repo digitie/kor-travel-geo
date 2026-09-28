@@ -96,5 +96,46 @@ describe("BackupsPanel tab shell (T-248)", () => {
     selectTab("Hot-swap");
     expect(screen.getByText("1 · Hot-swap plan")).toBeTruthy();
     expect(screen.getByRole("button", { name: "plan 생성" })).toBeTruthy();
+    // capability unknown (endpoint returned a non-capabilities body) → nothing is blocked
+    expect(screen.queryByText(/공용 DB instance에서는 지원하지 않음/)).toBeNull();
+  });
+
+  it("T-312: reads /admin/db-capabilities and gates drill/restore/hot-swap on a shared instance", async () => {
+    apiMocks.requestJson.mockImplementation(async (path: string) => {
+      if (path === "/admin/db-capabilities") {
+        return {
+          mode: "auto",
+          supported: false,
+          reason: "role kor_travel_geo_app: CREATEDB 권한 없음",
+          checked_at: "2026-09-29T00:00:00Z"
+        };
+      }
+      if (path.startsWith("/admin/backups/allowed-dirs")) return { dirs: [], default_dir: null };
+      if (path.startsWith("/admin/backups")) return [ARTIFACT];
+      return [];
+    });
+
+    render(<BackupsPanel />);
+    await screen.findByRole("tablist", { name: "백업/복원 관리 탭" });
+    expect(apiMocks.requestJson).toHaveBeenCalledWith("/admin/db-capabilities");
+    // overview: restore drill (3) and restore/hot-swap (4) steps carry the note
+    await waitFor(() =>
+      expect(
+        screen.getAllByText("공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행")
+          .length
+      ).toBe(2)
+    );
+
+    selectTab("복원");
+    expect(screen.getByText(/DB 복원: 공용 DB instance에서는 지원하지 않음/)).toBeTruthy();
+
+    selectTab("Hot-swap");
+    expect(screen.getByText(/Hot-swap: 공용 DB instance에서는 지원하지 않음/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("복원된 DB 이름"), {
+      target: { value: "kor_travel_geo_restore" }
+    });
+    expect(
+      (screen.getByRole("button", { name: "plan 생성" }) as HTMLButtonElement).disabled
+    ).toBe(true);
   });
 });

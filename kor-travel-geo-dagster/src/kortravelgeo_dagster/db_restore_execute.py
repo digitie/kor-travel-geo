@@ -24,6 +24,7 @@ from kortravelgeo.infra.backup import run_restore_job
 
 # Runtime imports: this module has no `from __future__ import annotations` (§10), so the
 # nested leaf's `asyncio.Event` / `ProgressReporter` annotations are evaluated eagerly.
+from .db_lifecycle import refuse_unsupported_db_lifecycle
 from .load_job_bridge import ProgressReporter, execute_load_job
 from .resources import op_resource
 
@@ -80,6 +81,10 @@ async def run_db_restore_op(context: OpExecutionContext) -> dict[str, object]:
     payload = dict(cast("Mapping[str, Any]", config["payload"]))
 
     async def leaf(cancel_event: asyncio.Event, progress: ProgressReporter) -> None:
+        if not payload.get("target_dsn"):
+            # T-312: refuse inside the leaf so the adopted load_jobs row is failed with the
+            # reason (a run launched straight from Dagster bypasses the API's E0410 gate).
+            await refuse_unsupported_db_lifecycle(client, "db_restore")
         # run_restore_job takes the load_jobs id explicitly (no _job_id payload smuggling).
         await run_restore_job(engine, settings, payload, cancel_event, progress, job_id=job_id)
 

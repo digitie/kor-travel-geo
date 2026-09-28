@@ -77,6 +77,7 @@ from kortravelgeo.dto.admin import (
     ConsistencySamplePage,
     ConsistencySampleRecheckResponse,
     DatasetSnapshot,
+    DbLifecycleCapabilities,
     ExplainRequest,
     ExplainResponse,
     LoadJobStatus,
@@ -2267,6 +2268,25 @@ async def restore_dry_run(
     return result
 
 
+@router.get(
+    "/db-capabilities",
+    response_model=DbLifecycleCapabilities,
+    response_model_exclude_none=True,
+)
+async def db_capabilities(
+    client: AsyncAddressClient = Depends(get_client),
+) -> DbLifecycleCapabilities:
+    """Whether this instance's role can run DB lifecycle features (T-312).
+
+    Hot-swap plan/execute/rollback, restore drill, blue-green scratch full-load and
+    ``db_restore`` need ``CREATEDB`` + ``CONNECT`` on the maintenance ``postgres`` DB. On the
+    shared PostgreSQL instance the app role has neither, so the admin UI disables those actions
+    and the API refuses them early with ``E0410``/409 — the operator runs them with the
+    manager's ``ktdctl``. ``KTG_DB_LIFECYCLE_MODE`` (auto|enabled|disabled) forces the answer.
+    """
+    return await client.db_lifecycle_capabilities()
+
+
 @router.post("/restores", response_model=LoadJobStatus, response_model_exclude_none=True)
 async def submit_restore(
     req: RestoreCreateRequest,
@@ -2274,6 +2294,9 @@ async def submit_restore(
     client: AsyncAddressClient = Depends(get_client),
 ) -> LoadJobStatus:
     settings = get_settings()
+    if req.target_dsn is None:
+        # T-312: refuse (E0410) before the load_jobs row / Dagster run exist.
+        await client.require_db_lifecycle("db_restore")
     payload = req.model_dump(exclude_none=True)
     # Unconditional Dagster routing (T-290k PR3).
     job_id = await _launch_db_restore_dagster_run(client, settings, payload)
@@ -2367,7 +2390,8 @@ async def restore_hot_swap_execute(
     **auto-rolls-back on smoke failure**. A concurrent second hot-swap fails fast (409).
     Records started/succeeded/failed/rolled_back audits + an active `serving_releases`
     row with `previous_release_id` lineage. Live serving DB swap → requires
-    `destructive_admin`. Integration-tested in T-246.
+    `destructive_admin`. Integration-tested in T-246. Refused with `E0410`/409 when the
+    role cannot run DB lifecycle features (see `GET /db-capabilities`, T-312).
     """
     return await client.execute_restore_hot_swap(
         req, actor=ctx.actor, audit_meta=_audit_request(request)
@@ -2392,7 +2416,8 @@ async def restore_hot_swap_rollback(
     maintenance window + exact `rollback_confirmation`. **Rejected once `previous_alias`
     retention has dropped it.** Records a `rollback` serving release with
     previous/rollback_target lineage. Live serving DB swap → requires `destructive_admin`.
-    Integration-tested in T-246.
+    Integration-tested in T-246. Refused with `E0410`/409 when the role cannot run DB
+    lifecycle features (see `GET /db-capabilities`, T-312).
     """
     return await client.execute_hot_swap_rollback(
         req, actor=ctx.actor, audit_meta=_audit_request(request)

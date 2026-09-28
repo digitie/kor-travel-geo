@@ -135,8 +135,9 @@ async def test_launch_full_load_batch_target_database_routes_rows_to_scratch_eng
 
     serving_engine = object()
     payload = {**_VALID_BATCH_PAYLOAD, "target_database": "kor_travel_geo_fullload_e2e"}
+    # T-312: a scratch DB needs DB lifecycle rights; force them on (no role probe on the fake).
     batch_id = await launch_mod.launch_full_load_batch_dagster_run(
-        serving_engine, Settings(_env_file=None), payload
+        serving_engine, Settings(_env_file=None, db_lifecycle_mode="enabled"), payload
     )
 
     assert batch_id == "batch-dag-1"

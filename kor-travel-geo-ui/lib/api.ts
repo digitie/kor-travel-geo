@@ -494,6 +494,20 @@ export type BackupAllowedDirs = {
   default_dir?: string | null;
 };
 
+/** T-312 `GET /v1/admin/db-capabilities` — DB 수명주기 기능(hot-swap·복원·restore drill·scratch) 지원 여부. */
+export type DbLifecycleCapabilities = {
+  mode: "auto" | "enabled" | "disabled";
+  supported: boolean;
+  features?: ("hot_swap" | "restore_drill" | "scratch_full_load" | "db_restore")[];
+  reason?: string | null;
+  role?: string | null;
+  is_superuser?: boolean | null;
+  can_create_database?: boolean | null;
+  can_connect_maintenance_database?: boolean | null;
+  maintenance_database?: string;
+  checked_at: string;
+};
+
 export type RestoreDryRunResult = {
   can_restore: boolean;
   mode: "new_database" | "replace_current";

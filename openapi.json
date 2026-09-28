@@ -4137,6 +4137,111 @@
         "title": "DatasetVersionResponse",
         "type": "object"
       },
+      "DbLifecycleCapabilities": {
+        "additionalProperties": false,
+        "description": "T-312: whether the connected DB role can run DB lifecycle features.\n\nHot-swap (ADR-036 ``ALTER DATABASE RENAME``), restore drill, blue-green scratch full-load\nand ``db_restore`` all need ``CREATEDB`` (or superuser) plus ``CONNECT`` on the maintenance\n``postgres`` DB. A shared PostgreSQL instance's app role has neither, so those features are\nrefused early (``E0410``) and the operator runs them with the manager's ``ktdctl``.\n``mode`` is ``KTG_DB_LIFECYCLE_MODE``; the role facts are ``None`` unless ``mode='auto'``.",
+        "properties": {
+          "can_connect_maintenance_database": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Connect Maintenance Database"
+          },
+          "can_create_database": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Create Database"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "enum": [
+                "hot_swap",
+                "restore_drill",
+                "scratch_full_load",
+                "db_restore"
+              ],
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "is_superuser": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Superuser"
+          },
+          "maintenance_database": {
+            "default": "postgres",
+            "title": "Maintenance Database",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "auto",
+              "enabled",
+              "disabled"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "supported": {
+            "title": "Supported",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "mode",
+          "supported",
+          "checked_at"
+        ],
+        "title": "DbLifecycleCapabilities",
+        "type": "object"
+      },
       "EpostServerFetchRequest": {
         "additionalProperties": false,
         "description": "``POST /v1/admin/source-files/epost-fetch`` body (T-207).\n\nManual operator-triggered server fetch. The server downloads the epost ZIP\nfrom configured OpenAPI settings, extracts the requested postal auxiliary\ntext file, validates it with the T-120 validator, registers it as a\n``single_file`` source archive in RustFS, then optionally enqueues the\ncorresponding loader job. It is not a scheduled downloader and it does not\nparticipate in core ``rebuild-db`` source match sets.",
@@ -16096,6 +16201,28 @@
         ]
       }
     },
+    "/v1/admin/db-capabilities": {
+      "get": {
+        "description": "Whether this instance's role can run DB lifecycle features (T-312).\n\nHot-swap plan/execute/rollback, restore drill, blue-green scratch full-load and\n``db_restore`` need ``CREATEDB`` + ``CONNECT`` on the maintenance ``postgres`` DB. On the\nshared PostgreSQL instance the app role has neither, so the admin UI disables those actions\nand the API refuses them early with ``E0410``/409 — the operator runs them with the\nmanager's ``ktdctl``. ``KTG_DB_LIFECYCLE_MODE`` (auto|enabled|disabled) forces the answer.",
+        "operationId": "db_capabilities_v1_admin_db_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DbLifecycleCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Db Capabilities",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/explain": {
       "post": {
         "operationId": "explain_v1_admin_explain_post",
@@ -17727,7 +17854,7 @@
     },
     "/v1/admin/restores/hot-swap": {
       "post": {
-        "description": "Execute the ADR-036 rename hot-swap (T-241; ADR-036/T-058 plan → execution).\n\nRenames `current↔restore` in two `ALTER DATABASE RENAME` steps under the `HOT_SWAP`\nadvisory lock, only with an active `restore` maintenance window + exact typed\nconfirmation, then refreshes the engine pool, runs a post-swap smoke test, and\n**auto-rolls-back on smoke failure**. A concurrent second hot-swap fails fast (409).\nRecords started/succeeded/failed/rolled_back audits + an active `serving_releases`\nrow with `previous_release_id` lineage. Live serving DB swap → requires\n`destructive_admin`. Integration-tested in T-246.",
+        "description": "Execute the ADR-036 rename hot-swap (T-241; ADR-036/T-058 plan → execution).\n\nRenames `current↔restore` in two `ALTER DATABASE RENAME` steps under the `HOT_SWAP`\nadvisory lock, only with an active `restore` maintenance window + exact typed\nconfirmation, then refreshes the engine pool, runs a post-swap smoke test, and\n**auto-rolls-back on smoke failure**. A concurrent second hot-swap fails fast (409).\nRecords started/succeeded/failed/rolled_back audits + an active `serving_releases`\nrow with `previous_release_id` lineage. Live serving DB swap → requires\n`destructive_admin`. Integration-tested in T-246. Refused with `E0410`/409 when the\nrole cannot run DB lifecycle features (see `GET /db-capabilities`, T-312).",
         "operationId": "restore_hot_swap_execute_v1_admin_restores_hot_swap_post",
         "requestBody": {
           "content": {
@@ -17810,7 +17937,7 @@
     },
     "/v1/admin/restores/hot-swap-rollback": {
       "post": {
-        "description": "Manually roll back a completed hot-swap to the previous serving DB (T-264).\n\nBrings `previous_alias` back as the current DB (renaming the restored DB to\n`restore_database`) under the `HOT_SWAP` advisory lock, only with an active `restore`\nmaintenance window + exact `rollback_confirmation`. **Rejected once `previous_alias`\nretention has dropped it.** Records a `rollback` serving release with\nprevious/rollback_target lineage. Live serving DB swap → requires `destructive_admin`.\nIntegration-tested in T-246.",
+        "description": "Manually roll back a completed hot-swap to the previous serving DB (T-264).\n\nBrings `previous_alias` back as the current DB (renaming the restored DB to\n`restore_database`) under the `HOT_SWAP` advisory lock, only with an active `restore`\nmaintenance window + exact `rollback_confirmation`. **Rejected once `previous_alias`\nretention has dropped it.** Records a `rollback` serving release with\nprevious/rollback_target lineage. Live serving DB swap → requires `destructive_admin`.\nIntegration-tested in T-246. Refused with `E0410`/409 when the role cannot run DB\nlifecycle features (see `GET /db-capabilities`, T-312).",
         "operationId": "restore_hot_swap_rollback_v1_admin_restores_hot_swap_rollback_post",
         "requestBody": {
           "content": {

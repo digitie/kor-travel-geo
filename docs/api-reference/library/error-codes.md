@@ -22,9 +22,12 @@
 | `E0403` | 403 | 지역 접근 제한 | T-054 GeoIP gate에서 한국 외 공용 IP 또는 DB 부재 strict 차단 |
 | `E0404` | 404 | 찾을 수 없음 | 대상 주소, job, artifact, report 없음 |
 | `E0409` | 409 | 동시 실행 충돌 | T-059 이후 같은 advisory lock key의 CLI/API 운영 작업이 이미 실행 중 |
+| `E0410` | 409 | 이 DB instance에서 미지원 | T-312: 연결 role에 `CREATEDB`·maintenance DB `postgres` `CONNECT`가 없어(공용 DB instance) hot-swap·restore drill·scratch full-load·DB 복원을 job 생성 전에 거절. `hint`에 role 사유, `GET /v1/admin/db-capabilities`로 확인 |
 | `E0500` | 503·500 | DB 오류 | 연결/운영 오류·pool checkout timeout은 503, SQL·스키마·제약 오류(`ProgrammingError`/`IntegrityError`)는 500 (T-178D) |
 | `E0501` | 502 | 외부 API 오류 | vworld/juso fallback 호출 실패 |
 | `E0502` | 500 | 로더 오류 | 원천 파일 파싱, 적재, 후처리 실패 |
 | `E0503` | 500 | 설정 오류 | 필수 환경변수 또는 provider 설정 오류 |
 
 `E0409`는 "성공했지만 0건 처리"와 구분해야 한다. 운영자는 기존 작업이 끝난 뒤 같은 요청을 다시 보내거나, `/v1/admin/jobs`와 `/v1/admin/loads`에서 진행 중인 작업을 먼저 확인한다.
+
+`E0410`은 재시도해도 같은 결과다. 공용 DB instance에서는 해당 DB 수명주기 작업을 운영자가 manager `ktdctl`로 수행한다(`KTG_DB_LIFECYCLE_MODE`, `docs/t046-db-backup-restore.md` "공용 DB instance" 절).
