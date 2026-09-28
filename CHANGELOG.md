@@ -5,6 +5,17 @@
 ## [Unreleased]
 
 ### Changed
+- **DB 오류 응답을 원인별로 나눴다(T-309).** 연결은 됐지만 `statement_timeout`(57014)·
+  `lock_timeout`(55P03)·서버 측 취소로 끝나지 못한 쿼리는 새 `DatabaseTimeoutError`(`E0504`,
+  HTTP 504)로 반환하고 `KTG_PG_DSN` 힌트를 주지 않는다(이전에는 모든 `OperationalError`가 "DSN을
+  확인하라"는 503이었다). 연결 실패·인증/권한 실패·연결 수 한도·서빙 MV 미populate는 `E0500`/503을
+  유지하되 각자의 메시지·힌트를 쓴다. VWorld 호환 경로는 `SYSTEM_ERROR` envelope를 유지한다.
+  `ktg_api_db_errors_total`의 `error_type` 라벨은 분류 이름(`statement_timeout`, `lock_timeout`,
+  `query_canceled`, `connection_failed`, `auth_failed`, `too_many_connections`, `mv_not_populated`)이
+  되고, 분류 밖 오류만 예전처럼 예외 클래스 이름이다. 상세: `docs/t309-db-error-classification.md`.
+- **`/v1/readyz`에 `components.serving`을 추가했다(T-309).** 서빙 MV가 비었거나 populate 안 됐거나
+  없으면 HTTP 200 + `ready=true` + `degraded=true`로 알린다(`count(*)` 없이 카탈로그 + `EXISTS`).
+  최초 적재 전 빈 DB는 정상 상태일 수 있어 503으로 올리지 않는다.
 - **Prometheus 계측 metric name prefix를 `kor_travel_geo_`에서 `ktg_`로 변경했다(T-305).**
   API 계측(`src/kortravelgeo/infra/metrics.py`, 44개 metric)과 admin UI 자체 계측
   (`kor-travel-geo-ui/lib/metrics.ts`, `kor_travel_geo_ui_*` → `ktg_ui_*` 5개)를 모두
