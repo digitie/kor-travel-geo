@@ -31,6 +31,13 @@ const ARTIFACT = {
   }
 };
 
+const SHARED_INSTANCE = {
+  mode: "auto" as const,
+  supported: false,
+  reason: "role kor_travel_geo_app: CREATEDB 권한 없음, maintenance DB 'postgres' CONNECT 권한 없음",
+  checked_at: "2026-09-29T00:00:00Z"
+};
+
 describe("RestoreWizard (T-249)", () => {
   beforeEach(() => {
     apiMocks.requestJson.mockReset();
@@ -98,6 +105,64 @@ describe("RestoreWizard (T-249)", () => {
     expect(screen.getByText(/복원 불가로 판정/)).toBeTruthy();
     const submit = screen.getByRole("button", { name: /복원 시작/ });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("T-312: explains and blocks submit on a shared DB instance, dry-run still allowed", async () => {
+    apiMocks.postJson.mockResolvedValue({
+      can_restore: true,
+      mode: "new_database",
+      target_database: "kor_travel_geo_restore",
+      blockers: [],
+      warnings: []
+    });
+
+    render(<RestoreWizard lifecycle={SHARED_INSTANCE} />);
+    // 안내는 위저드 첫 화면부터 보인다 (짧은 한국어 설명 + role 사유)
+    expect(
+      screen.getByText(/DB 복원: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행/)
+    ).toBeTruthy();
+    expect(screen.getByText(/CREATEDB 권한 없음/)).toBeTruthy();
+
+    await waitFor(() => expect(screen.getByRole("option", { name: /backup-202606/ })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("복원할 백업본"), {
+      target: { value: "art-1" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /다음/ }));
+    const dryRun = screen.getByRole("button", { name: /dry-run 실행/ });
+    expect((dryRun as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(dryRun);
+    await waitFor(() => expect(screen.getByText("복원 가능")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /확인 단계로/ }));
+
+    // even with a passing dry-run, submit stays disabled and nothing is posted to /restores
+    const submit = screen.getByRole("button", { name: /복원 시작/ });
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+    expect(apiMocks.postJson).toHaveBeenCalledTimes(1);
+    expect(apiMocks.postJson.mock.calls[0]?.[0]).toBe("/admin/restores/dry-run");
+  });
+
+  it("T-312: a supported instance shows no notice and keeps submit enabled", async () => {
+    apiMocks.postJson.mockResolvedValue({
+      can_restore: true,
+      mode: "new_database",
+      target_database: "kor_travel_geo_restore",
+      blockers: [],
+      warnings: []
+    });
+
+    render(<RestoreWizard lifecycle={{ ...SHARED_INSTANCE, supported: true, reason: null }} />);
+    expect(screen.queryByText(/공용 DB instance에서는 지원하지 않음/)).toBeNull();
+    await waitFor(() => expect(screen.getByRole("option", { name: /backup-202606/ })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("복원할 백업본"), {
+      target: { value: "art-1" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: /다음/ }));
+    fireEvent.click(screen.getByRole("button", { name: /dry-run 실행/ }));
+    await waitFor(() => expect(screen.getByText("복원 가능")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /확인 단계로/ }));
+    expect(
+      (screen.getByRole("button", { name: /복원 시작/ }) as HTMLButtonElement).disabled
+    ).toBe(false);
   });
 
   it("validates target_database as a PostgreSQL identifier before step 2", async () => {

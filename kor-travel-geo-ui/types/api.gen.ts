@@ -490,6 +490,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/db-capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Db Capabilities
+         * @description Whether this instance's role can run DB lifecycle features (T-312).
+         *
+         *     Hot-swap plan/execute/rollback, restore drill, blue-green scratch full-load and
+         *     ``db_restore`` need ``CREATEDB`` + ``CONNECT`` on the maintenance ``postgres`` DB. On the
+         *     shared PostgreSQL instance the app role has neither, so the admin UI disables those actions
+         *     and the API refuses them early with ``E0410``/409 — the operator runs them with the
+         *     manager's ``ktdctl``. ``KTG_DB_LIFECYCLE_MODE`` (auto|enabled|disabled) forces the answer.
+         */
+        get: operations["db_capabilities_v1_admin_db_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/explain": {
         parameters: {
             query?: never;
@@ -1011,7 +1037,8 @@ export interface paths {
          *     **auto-rolls-back on smoke failure**. A concurrent second hot-swap fails fast (409).
          *     Records started/succeeded/failed/rolled_back audits + an active `serving_releases`
          *     row with `previous_release_id` lineage. Live serving DB swap → requires
-         *     `destructive_admin`. Integration-tested in T-246.
+         *     `destructive_admin`. Integration-tested in T-246. Refused with `E0410`/409 when the
+         *     role cannot run DB lifecycle features (see `GET /db-capabilities`, T-312).
          */
         post: operations["restore_hot_swap_execute_v1_admin_restores_hot_swap_post"];
         delete?: never;
@@ -1055,7 +1082,8 @@ export interface paths {
          *     maintenance window + exact `rollback_confirmation`. **Rejected once `previous_alias`
          *     retention has dropped it.** Records a `rollback` serving release with
          *     previous/rollback_target lineage. Live serving DB swap → requires `destructive_admin`.
-         *     Integration-tested in T-246.
+         *     Integration-tested in T-246. Refused with `E0410`/409 when the role cannot run DB
+         *     lifecycle features (see `GET /db-capabilities`, T-312).
          */
         post: operations["restore_hot_swap_rollback_v1_admin_restores_hot_swap_rollback_post"];
         delete?: never;
@@ -3648,6 +3676,50 @@ export interface components {
             /** Query Id */
             query_id?: string;
             status: components["schemas"]["Status"];
+        };
+        /**
+         * DbLifecycleCapabilities
+         * @description T-312: whether the connected DB role can run DB lifecycle features.
+         *
+         *     Hot-swap (ADR-036 ``ALTER DATABASE RENAME``), restore drill, blue-green scratch full-load
+         *     and ``db_restore`` all need ``CREATEDB`` (or superuser) plus ``CONNECT`` on the maintenance
+         *     ``postgres`` DB. A shared PostgreSQL instance's app role has neither, so those features are
+         *     refused early (``E0410``) and the operator runs them with the manager's ``ktdctl``.
+         *     ``mode`` is ``KTG_DB_LIFECYCLE_MODE``; the role facts are ``None`` unless ``mode='auto'``.
+         */
+        DbLifecycleCapabilities: {
+            /** Can Connect Maintenance Database */
+            can_connect_maintenance_database?: boolean | null;
+            /** Can Create Database */
+            can_create_database?: boolean | null;
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /**
+             * Features
+             * @default []
+             */
+            features: ("hot_swap" | "restore_drill" | "scratch_full_load" | "db_restore")[];
+            /** Is Superuser */
+            is_superuser?: boolean | null;
+            /**
+             * Maintenance Database
+             * @default postgres
+             */
+            maintenance_database: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "auto" | "enabled" | "disabled";
+            /** Reason */
+            reason?: string | null;
+            /** Role */
+            role?: string | null;
+            /** Supported */
+            supported: boolean;
         };
         /**
          * EpostServerFetchRequest
@@ -8427,6 +8499,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LegacyErrorEnvelope"];
+                };
+            };
+        };
+    };
+    db_capabilities_v1_admin_db_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DbLifecycleCapabilities"];
                 };
             };
         };

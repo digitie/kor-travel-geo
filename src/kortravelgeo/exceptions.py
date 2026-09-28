@@ -64,6 +64,16 @@ class ConflictError(KorTravelGeoError):
     http_status = 409
 
 
+class UnsupportedOnInstanceError(ConflictError):
+    """The connected DB instance/role cannot run this operation (T-312).
+
+    e.g. hot-swap/restore drill/scratch full-load on a shared PostgreSQL instance where the
+    app role has no ``CREATEDB`` and no ``CONNECT`` on the maintenance ``postgres`` DB.
+    """
+
+    code = "E0410"
+
+
 class DatabaseError(KorTravelGeoError):
     code = "E0500"
     http_status = 503

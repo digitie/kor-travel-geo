@@ -27,6 +27,7 @@ from kortravelgeo.api._dagster_client import (
 from kortravelgeo.exceptions import KorTravelGeoError
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.batch import batch_children
+from kortravelgeo.infra.db_capabilities import require_db_lifecycle
 from kortravelgeo.infra.load_job_executor import LoadJobExecutor
 from kortravelgeo.infra.scratch_db import ensure_scratch_database, scratch_database_dsn
 
@@ -118,6 +119,10 @@ async def launch_full_load_batch_dagster_run(
     """
 
     children = batch_children(payload)
+    if payload.get("target_database"):
+        # T-312: the scratch DB needs CREATE DATABASE via the maintenance DB — refuse (E0410)
+        # before any DB is created or row inserted on an instance whose role cannot.
+        await require_db_lifecycle(engine, settings, "scratch_full_load")
     async with _control_engine(engine, settings, payload) as control_engine:
         root = await AdminRepository(control_engine).insert_load_batch(
             payload=payload, children=children, executor="dagster"

@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 # Runtime imports: this module has no `from __future__ import annotations` (§10), so the
 # nested leaf's `asyncio.Event` / `ProgressReporter` annotations are evaluated eagerly.
+from .db_lifecycle import refuse_unsupported_db_lifecycle
 from .load_job_bridge import ProgressReporter, execute_load_job
 from .resources import op_resource
 
@@ -108,6 +109,9 @@ async def run_full_load_batch_op(context: OpExecutionContext) -> dict[str, objec
     # root/child rows there; this op binds an engine to the same DSN and disposes it after.
     target_database = payload.get("target_database")
     if target_database:
+        # T-312: a scratch DB needs CREATE DATABASE — refuse before touching it (a run launched
+        # straight from Dagster bypasses the API's E0410 gate).
+        await refuse_unsupported_db_lifecycle(client, "scratch_full_load")
         engine = create_async_engine(scratch_database_dsn(settings.pg_dsn, str(target_database)))
         dispose_engine = True
     else:

@@ -75,6 +75,48 @@ describe("HotSwapTab (T-250)", () => {
     expect((execBtn as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("T-312: disables plan on a shared DB instance but keeps source re-verify", async () => {
+    render(
+      <HotSwapTab
+        lifecycle={{
+          mode: "auto",
+          supported: false,
+          reason: "role kor_travel_geo_app: CREATEDB 권한 없음",
+          checked_at: "2026-09-29T00:00:00Z"
+        }}
+      />
+    );
+    expect(
+      screen.getByText(/Hot-swap: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행/)
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("복원된 DB 이름"), {
+      target: { value: "kor_travel_geo_restore" }
+    });
+    const planButton = screen.getByRole("button", { name: "plan 생성" });
+    expect((planButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(planButton);
+    expect(apiMocks.postJson).not.toHaveBeenCalled();
+    // source 재검증은 DB 수명주기 권한이 필요 없으므로 그대로 쓸 수 있다
+    expect(
+      (screen.getByRole("button", { name: "source 재검증" }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
+  it("T-312: a supported instance keeps plan enabled", async () => {
+    render(
+      <HotSwapTab
+        lifecycle={{ mode: "auto", supported: true, checked_at: "2026-09-29T00:00:00Z" }}
+      />
+    );
+    expect(screen.queryByText(/공용 DB instance에서는 지원하지 않음/)).toBeNull();
+    fireEvent.change(screen.getByLabelText("복원된 DB 이름"), {
+      target: { value: "kor_travel_geo_restore" }
+    });
+    expect(
+      (screen.getByRole("button", { name: "plan 생성" }) as HTMLButtonElement).disabled
+    ).toBe(false);
+  });
+
   it("surfaces plan blockers and keeps the window button disabled", async () => {
     apiMocks.postJson.mockResolvedValue({
       ...PLAN,

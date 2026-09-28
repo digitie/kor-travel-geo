@@ -64,6 +64,7 @@ export const apiSchemaNames = [
   "DatasetVersionEntry",
   "DatasetVersionInput",
   "DatasetVersionResponse",
+  "DbLifecycleCapabilities",
   "EpostServerFetchRequest",
   "EpostServerFetchResponse",
   "ExplainRequest",
