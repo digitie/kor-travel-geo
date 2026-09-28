@@ -146,8 +146,12 @@ async def launch_dagster_run(
     The mutation goes to the SSRF-validated **internal** GraphQL URL. Raises
     :class:`DagsterUrlConfigurationError` when the backend URL fails the allowlist, and
     :class:`DagsterLaunchError` when ``launchRun`` does not yield a run (config invalid,
-    job not found, unauthorized, ...). Transport failures surface as ``httpx.HTTPError``.
-    ``http_client`` is injectable for tests; production leaves it ``None``.
+    job not found, unauthorized, ...) or times out. Other transport failures surface as
+    ``httpx.HTTPError``. ``http_client`` is injectable for tests; production leaves it ``None``.
+
+    A timeout is ambiguous — Dagster may still create and start the run after we give up.
+    The caller then marks the load_jobs row failed, and the op's ``adopt_dagster`` rejects
+    that terminal row, so the late run fails without doing work (T-318).
     """
 
     urls = _dagster_urls(settings)
@@ -170,13 +174,20 @@ async def launch_dagster_run(
     }
 
     async def _post(client: httpx.AsyncClient) -> str:
-        response = await client.post(urls.graphql_url, json=request_json)
+        try:
+            response = await client.post(urls.graphql_url, json=request_json)
+        except httpx.TimeoutException as exc:
+            # str(ReadTimeout) is empty, which left "Dagster launch failed: " with no reason.
+            raise DagsterLaunchError(
+                f"launchRun timed out after {settings.dagster_launch_timeout_seconds:g}s "
+                f"({type(exc).__name__}); a late run is rejected by adopt_dagster"
+            ) from exc
         response.raise_for_status()
         return _parse_launch_run(response.json())
 
     if http_client is not None:
         return await _post(http_client)
-    async with httpx.AsyncClient(timeout=settings.dagster_request_timeout_seconds) as client:
+    async with httpx.AsyncClient(timeout=settings.dagster_launch_timeout_seconds) as client:
         return await _post(client)
 
 

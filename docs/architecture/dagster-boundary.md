@@ -126,7 +126,10 @@ code location은 **항상 로드**되고, 자격증명 누락은 import가 아�
   target**·SSRF allowlist), `dagster_public_url`(**브라우저 노출용 공개 URL** — admin iframe/링크에 반환,
   prod=라우터 공개 도메인 `https://geo-dagster.digitie.mywire.org/`; 비우면 `dagster_url`로 폴백; 백엔드
   호출엔 미사용, allowlist 미적용), `dagster_graphql_url`, `dagster_allowed_hosts`,
-  `dagster_request_timeout_seconds`, `dagster_repository_name`,
+  `dagster_request_timeout_seconds`(관측 조회, 기본 3초), `dagster_launch_timeout_seconds`(`launchRun`
+  전용, 기본 30초 — webserver가 code-server gRPC에서 job snapshot을 받는 동안 기다린다. timeout이면 API가
+  load_jobs row를 failed로 두고, 늦게 시작된 run은 `adopt_dagster`가 terminal row를 거부해 일 없이 끝난다 —
+  T-318), `dagster_repository_name`,
   `dagster_repository_location_name`(`kortravelgeo_dagster.definitions`), `dagster_admin_api_url`.
 
 ## 8. Admin UI 임베드
