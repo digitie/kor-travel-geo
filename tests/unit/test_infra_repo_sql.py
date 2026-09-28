@@ -116,6 +116,11 @@ def test_search_repo_supports_district_candidates_from_admin_polygons() -> None:
     assert "ST_PointOnSurface" in sql
     assert "map_region_search" in source
     assert 'search_type == "district"' in source
+    district_start = source.index('search_type == "district"')
+    district_branch = source[district_start : source.index("exact_params")]
+    assert district_branch.index('SET LOCAL jit = off"') < district_branch.index(
+        "_DISTRICT_SEARCH_SQL"
+    )
 
 
 def test_regions_within_radius_sql_keeps_region_geometry_indexable() -> None:
@@ -144,6 +149,129 @@ def test_regions_within_radius_sql_keeps_region_geometry_indexable() -> None:
     assert "ST_Transform(c.geom" not in sql
     assert "ST_Transform(s.geom" not in sql
     assert "ST_Transform(e.geom" not in sql
+
+
+def test_road_geometry_sql_reads_index_backed_candidates_before_ranking() -> None:
+    sql = str(geometry_repo._ROAD_GEOMETRY_SQL)
+    scan_sql = str(geometry_repo._ROAD_GEOMETRY_SCAN_SQL)
+    ranked = geometry_repo._ROAD_RANKED_SQL
+
+    # T-311: query_nrm은 full_nrm(지역명 || 도로명)의 (1) 도로명 안 (2) 지역명 안 (3) 지역명 끝 +
+    # 도로명 앞 중 한 곳에 있어야 한다. 세 갈래를 인덱스 조건으로 바꿔 전체 스캔을 대신한다.
+    assert sql.lstrip().startswith("WITH RECURSIVE")
+    # 지역명 부분: tl_scco_sig 행은 시도명 || 시군구명, 없는 sig_cd는 시도명.
+    assert (
+        "FROM tl_scco_sig s\n    LEFT JOIN tl_scco_ctprvn c ON c.ctprvn_cd = left(s.sig_cd, 2)"
+    ) in sql
+    assert "regexp_replace(c.ctp_kor_nm, '\\s+', '', 'g') AS region_nrm" in sql
+    # (1) 도로명 안
+    assert (
+        "regexp_replace(m.rn, '\\s+', '', 'g')\n"
+        "         LIKE '%' || regexp_replace(:query, '\\s+', '', 'g') || '%'"
+    ) in sql
+    # (2) 지역명 안 — 시도명만 가진 sig_cd는 loose index scan을 One-Time Filter 뒤에 둔다.
+    assert "OR m.sig_cd = ANY (ARRAY(" in sql
+    assert "FROM sig_regions g\n           CROSS JOIN query_input qi\n" in sql
+    assert "(SELECT min(m.sig_cd) FROM tl_sprd_manage m WHERE m.sig_cd > r.sig_cd)" in sql
+    assert (
+        "FROM road_sigs r\n"
+        "          WHERE EXISTS (\n"
+        "                  SELECT 1\n"
+        "                    FROM sido_regions g\n"
+    ) in sql
+    assert "AND NOT EXISTS (SELECT 1 FROM tl_scco_sig s WHERE s.sig_cd = r.sig_cd)" in sql
+    assert sql.count("WHERE strpos(g.region_nrm, qi.query_nrm) > 0") == 2
+    # (3) 지역명 끝 + 도로명 앞
+    assert "OR regexp_replace(m.rn, '\\s+', '', 'g') LIKE ANY (ARRAY(" in sql
+    assert "SELECT substr(qi.query_nrm, k + 1) || '%'" in sql
+    assert "generate_series(1, char_length(qi.query_nrm) - 1) AS k" in sql
+    assert sql.count("WHERE right(g.region_nrm, k) = left(qi.query_nrm, k)") == 2
+    # planner는 인덱스 식이 SQL 식과 글자 그대로 같을 때만 trigram 인덱스를 쓴다.
+    assert (
+        "idx_sprd_manage_rn_nrm_trgm\n"
+        "  ON tl_sprd_manage USING GIN ((regexp_replace(rn, '\\s+', '', 'g')) gin_trgm_ops);"
+    ) in infra_sql.INDEX_SQL
+    # 점수·정렬은 후보 조건 뒤에 전체 스캔 SQL과 같은 식으로 계산한다.
+    assert sql.endswith(ranked)
+    assert scan_sql.endswith(ranked)
+    assert "WHEN full_nrm LIKE '%' || query_nrm || '%' THEN 0.82" in ranked
+    assert "ORDER BY score DESC, char_length(title), title, rncode_full" in ranked
+    assert "sig_regions" not in scan_sql
+    assert "LIKE ANY" not in scan_sql
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "expected_sql"),
+    [
+        ("세종대로", "_ROAD_GEOMETRY_SQL"),
+        ("경기도 성남시 분당구 삼평동 681", "_ROAD_GEOMETRY_SQL"),
+        ("중구", "_ROAD_GEOMETRY_SQL"),
+        # LIKE 메타문자: 후보 분해가 원래 LIKE 조건과 달라 전체 스캔만 정확하다.
+        ("세종_로", "_ROAD_GEOMETRY_SCAN_SQL"),
+        ("판교역로 100%", "_ROAD_GEOMETRY_SCAN_SQL"),
+        ("판교\\역로", "_ROAD_GEOMETRY_SCAN_SQL"),
+        # 공백을 뺀 한 글자: 후보가 테이블 절반 가까이라 전체 스캔이 더 빠르다.
+        ("도", "_ROAD_GEOMETRY_SCAN_SQL"),
+        (" 로 ", "_ROAD_GEOMETRY_SCAN_SQL"),
+    ],
+)
+async def test_road_geometries_uses_full_scan_only_for_like_metachars_or_one_char(
+    query: str, expected_sql: str
+) -> None:
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def all(self) -> list[dict[str, Any]]:
+            return []
+
+    class Conn:
+        def __init__(self) -> None:
+            self.statements: list[object] = []
+            self.params: list[dict[str, Any]] = []
+
+        async def execute(
+            self, statement: object, params: dict[str, Any] | None = None
+        ) -> Result:
+            self.statements.append(statement)
+            self.params.append(params or {})
+            return Result()
+
+    class Connect:
+        def __init__(self, conn: Conn) -> None:
+            self.conn = conn
+
+        async def __aenter__(self) -> Conn:
+            return self.conn
+
+        async def __aexit__(self, *_args: object) -> bool:
+            return False
+
+    class Engine:
+        def __init__(self) -> None:
+            self.conn = Conn()
+
+        def begin(self) -> Connect:
+            return Connect(self.conn)
+
+    engine = Engine()
+
+    rows = await geometry_repo.GeometryRepository(engine).road_geometries(  # type: ignore[arg-type]
+        query, limit=7
+    )
+
+    assert rows == []
+    # 같은 트랜잭션에서 plan 설정을 먼저 걸고 본 질의를 실행한다.
+    assert engine.conn.statements == [
+        geometry_repo._ROAD_GEOMETRY_PLAN_SETTINGS_SQL,
+        getattr(geometry_repo, expected_sql),
+    ]
+    settings_sql = str(geometry_repo._ROAD_GEOMETRY_PLAN_SETTINGS_SQL)
+    assert "set_config('plan_cache_mode', 'force_custom_plan', true)" in settings_sql
+    assert "set_config('jit', 'off', true)" in settings_sql
+    assert engine.conn.params[1]["query"] == query
+    assert engine.conn.params[1]["limit"] == 7
 
 
 def test_text_search_queries_use_slim_mv_before_target_join() -> None:
@@ -222,6 +350,7 @@ def test_region_hint_filters_are_present_on_all_address_lookup_sql_surfaces() ->
         "reverse_nearest": str(reverse_repo._NEAREST_SQL),
         "reverse_radius": str(reverse_repo._RADIUS_SQL),
         "geometry_road": str(geometry_repo._ROAD_GEOMETRY_SQL),
+        "geometry_road_scan": str(geometry_repo._ROAD_GEOMETRY_SCAN_SQL),
     }
 
     for name, sql in statements.items():

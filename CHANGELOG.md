@@ -5,6 +5,12 @@
 ## [Unreleased]
 
 ### Changed
+- **v2 geocode의 도로 fallback·보조 후보 조회가 도로 테이블 전체 스캔을 하지 않는다(T-311).**
+  지번·미존재 주소처럼 `NOT_FOUND`로 끝나는 요청과 보조 도로 후보를 붙이는 요청이 매번
+  `tl_sprd_manage` 87.5만 행을 훑어 운영에서 2.7~3.6초(cold 16초, 5초 statement timeout 초과)
+  걸리던 것을, 새 trigram GIN 인덱스(`idx_sprd_manage_rn_nrm_trgm`, Alembic
+  `0027_t311_road_rn_trgm`)로 후보만 읽게 바꿨다(운영 데이터 사본 로컬 실측 중앙값 2.5초 → 22ms).
+  결과는 전체 스캔과 같다. district 후보 검색은 JIT를 끈다(운영 warm 0.53초 → 약 0.2~0.3초).
 - **PostgreSQL 기본 접속을 은퇴한 전용 instance `127.0.0.1:12500` → 공용 제어 평면 instance
   `127.0.0.1:11000`으로 맞췄다(T-313).** T-308(manager ADR-45)로 geo DB가 공용 instance로 이관되고
   `12500`은 2026-09-28 은퇴했다. `Settings.pg_dsn` 기본값, `alembic.ini`,
