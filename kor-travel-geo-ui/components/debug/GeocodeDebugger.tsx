@@ -10,9 +10,10 @@ import type {
 } from "@/components/vworld/CoordinateMap";
 import { CandidateAddressSummary } from "@/components/debug/CandidateAddressSummary";
 import { extractCandidates } from "@/lib/candidate-addresses";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
-import { postPublicJson } from "@/lib/api";
+import { apiErrorResult, postPublicJson, resultErrorMessage } from "@/lib/api";
 import { geocodeFormSchema } from "@/lib/schemas";
 import { useVWorldApiKey } from "@/lib/vworld-key";
 import type { components } from "@/types/api.gen";
@@ -47,6 +48,7 @@ export function GeocodeDebugger() {
   const [state, dispatch] = useReducer(geocodeDebuggerReducer, initialGeocodeDebuggerState);
   const { apiKey } = useVWorldApiKey();
   const { address, type, fallback, includeGeometry, result, loading } = state;
+  const errorMessage = resultErrorMessage(result);
 
   function mergeState(patch: Partial<GeocodeDebuggerState>) {
     dispatch({ type: "merge", patch });
@@ -77,7 +79,7 @@ export function GeocodeDebugger() {
             };
       mergeState({ result: await postPublicJson<GeocodeV2Response>("/v2/geocode", body, apiKey) });
     } catch (error) {
-      mergeState({ result: { error: error instanceof Error ? error.message : String(error) } });
+      mergeState({ result: apiErrorResult(error) });
     } finally {
       mergeState({ loading: false });
     }
@@ -136,6 +138,11 @@ export function GeocodeDebugger() {
           </form>
         </Panel>
         <Panel title="응답">
+          {errorMessage ? (
+            <Alert role="alert" variant="destructive">
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          ) : null}
           <CandidateAddressSummary candidates={extractCandidates(result)} />
           <JsonBlock value={result ?? { status: "READY" }} />
         </Panel>

@@ -116,6 +116,8 @@ class _SmokeConn:
 
     async def execute(self, stmt: object) -> _SmokeResult:
         assert "has_schema_privilege" in str(stmt)
+        # only the extensions geo calls — an unrelated `tiger` schema must not fail a restore
+        assert "e.extname IN ('postgis', 'pg_trgm', 'unaccent')" in str(stmt)
         return _SmokeResult(self._no_usage)
 
 

@@ -2569,7 +2569,9 @@ SELECT count(*)::bigint
             # T-312: the app role (= the target DB's owner on the shared instance) resolves
             # PostGIS/pg_trgm through its search_path, which needs USAGE on the extension
             # schema. A restore that dropped the admin's grant on x_extension still passes the
-            # checks above, then fails every geocode after the swap — catch it here.
+            # checks above, then fails every geocode after the swap — catch it here. Only the
+            # extensions geo calls are checked: an unrelated one (e.g. postgis_tiger_geocoder's
+            # `tiger` from template_postgis) must not fail a restore / roll back a hot-swap.
             usage_result = await conn.execute(
                 text(
                     """
@@ -2577,7 +2579,7 @@ SELECT DISTINCT d.datdba::regrole::text AS db_owner, n.nspname::text AS schema_n
   FROM pg_extension e
   JOIN pg_namespace n ON n.oid = e.extnamespace
   JOIN pg_database d ON d.datname = current_database()
- WHERE n.nspname <> 'pg_catalog'
+ WHERE e.extname IN ('postgis', 'pg_trgm', 'unaccent')
    AND NOT has_schema_privilege(d.datdba, n.oid, 'USAGE')
  ORDER BY 1, 2
 """

@@ -79,6 +79,13 @@ class DatabaseError(KorTravelGeoError):
     http_status = 503
 
 
+class DatabaseTimeoutError(DatabaseError):
+    """DB cancelled the query (statement/lock timeout, cancel) — not a connection failure."""
+
+    code = "E0504"
+    http_status = 504
+
+
 class ExternalApiError(KorTravelGeoError):
     code = "E0501"
     http_status = 502

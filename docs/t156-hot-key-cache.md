@@ -43,6 +43,25 @@ T-156은 이미 존재하던 `geo_cache` 테이블과 `/v1/admin/cache/metrics`�
   - `GET /v1/admin/cache/metrics`
   - Prometheus `ktg_cache_entries`, `ktg_cache_hits`, `ktg_cache_expired_entries`
 
+### T-310: 전수 scan 제거
+
+처음에는 두 관측면이 모두 `geo_cache` 전수 집계(`count(*)`, `sum(hit_count)`)를 돌렸다. `/metrics`는
+15초 scrape마다 이를 실행해 공용 instance(T-308)에서 geo tenant 논리 읽기의 대부분을 차지했다
+(2026-09-28 stats reset 이후 4,367회·52.7M block, 호출당 평균 65ms·최대 3.5s — cache가 약 12만 행일 때).
+statement timeout과 공용 instance crash 창의 연결 실패가 그대로 `/metrics` 503이 됐다(API 기동 09-25 이후
+`ktg_api_db_errors_total{route="/metrics"}` 234건 — 이 집계 query 자체의 오류가 81건, 나머지는 대부분
+`the database system is in recovery mode` 같은 연결 실패).
+
+- 기본 조회는 heap을 읽지 않는 추정치다(`CacheMetrics.exact=false`).
+  - `entries`: `pg_stat_user_tables.n_live_tup`/`pg_class.reltuples`(`/admin/tables`와 같은 anchored 규칙).
+  - `hits`: 적중마다 `hit_count`를 올리는 UPDATE의 누적 수(`n_tup_upd`). 마지막 통계 초기화 이후 값이며
+    cache clear로 0이 되지 않는다. 만료 행 재저장(upsert 충돌 갱신)도 1로 센다.
+  - `expired`: `idx_geo_cache_expires` 범위 count(만료 행 수에 비례, MV refresh가 cache를 비우므로 평소 0 근처).
+- `GET /v1/admin/cache/metrics?exact=true`만 기존 전수 집계를 돌린다. 관리 UI 캐시 화면의
+  "정확히 세기" 버튼이 이 요청을 보내며 API `statement_timeout`(`KTG_PG_STATEMENT_TIMEOUT_MS`)이 상한이다.
+- Prometheus gauge 이름·label은 그대로다. 값은 scrape가 아니라 API lifespan refresher
+  (`KTG_METRICS_DB_REFRESH_INTERVAL_SECONDS`, 기본 60초)가 추정 모드로 채운다.
+
 ## 검증
 
 - Windows focused unit:

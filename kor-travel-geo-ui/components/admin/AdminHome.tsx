@@ -31,6 +31,7 @@ import {
   type ServingRelease
 } from "@/lib/api";
 import { formatTimestamp } from "@/lib/format";
+import { servingRelationIssues, type ReadinessResponse } from "@/lib/readiness";
 import { shortHash } from "@/lib/source-files";
 
 const pageIcons: Record<AdminPageKey, typeof Archive> = {
@@ -50,7 +51,8 @@ const pageIcons: Record<AdminPageKey, typeof Archive> = {
 
 /**
  * 관리 홈 — 운영 상태 3종 요약과 기능 그룹 안내.
- * 상태 조회는 read-only GET 3건뿐이며 실패 시 카드에 "확인 불가"만 표시한다.
+ * 상태 조회는 read-only GET 4건(릴리스 카드가 `/v1/readyz`도 함께 본다)뿐이며 실패 시
+ * 카드에 "확인 불가"만 표시한다.
  */
 export function AdminHome() {
   return (
@@ -158,8 +160,20 @@ function StatusCard({
 }
 
 async function loadActiveRelease(): Promise<StatusValue | null> {
-  const releases = await requestJson<ServingRelease[]>("/admin/ops/releases?limit=5");
+  const [releases, servingIssues] = await Promise.all([
+    requestJson<ServingRelease[]>("/admin/ops/releases?limit=5"),
+    loadServingIssues()
+  ]);
   const active = releases.find((release) => release.state === "active") ?? releases[0];
+  // 릴리스 원장이 active여도 서빙 MV가 비어 있으면 geocoding은 결과가 없거나 timeout이 난다
+  // (2026-09-28) — 원장 상태보다 실제 서빙 상태를 먼저 드러낸다.
+  if (servingIssues.length > 0) {
+    return {
+      headline: active?.mv_name ?? "서빙 MV",
+      detail: `서빙 MV 준비 안 됨: ${servingIssues.join(", ")}`,
+      badge: { value: "degraded", tone: "error" }
+    };
+  }
   if (!active) return null;
   const activatedAt = `활성화 ${formatTimestamp(active.activated_at ?? active.created_at)}`;
   const token = active.version_token ? shortHash(active.version_token, 16) : null;
@@ -171,6 +185,15 @@ async function loadActiveRelease(): Promise<StatusValue | null> {
       tone: active.state === "active" ? "ok" : active.state === "failed" ? "error" : "warn"
     }
   };
+}
+
+/** readiness 조회 실패(503 포함)는 릴리스 카드를 막지 않는다 — 빈 목록으로 본다. */
+async function loadServingIssues(): Promise<string[]> {
+  try {
+    return servingRelationIssues(await requestJson<ReadinessResponse>("/v1/readyz"));
+  } catch {
+    return [];
+  }
 }
 
 async function loadLatestBackup(): Promise<StatusValue | null> {

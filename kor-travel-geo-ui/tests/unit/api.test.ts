@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, backendPath } from "@/lib/api";
+import {
+  ApiError,
+  apiErrorResult,
+  backendPath,
+  getErrorMessage,
+  parseApiErrorEnvelope,
+  resultErrorMessage
+} from "@/lib/api";
 import {
   buildProxyRequestInit,
   buildProxyTarget,
@@ -147,5 +154,102 @@ describe("backendPath", () => {
 
     const withoutSignal = buildProxyRequestInit("GET", new Headers(), null);
     expect(withoutSignal.signal).toBeUndefined();
+  });
+});
+
+// T-309: 2026-09-28 장애 때 디버그 화면은 v2 envelope를 raw JSON 문자열로 보여 줘
+// "KTG_PG_DSN 확인" 힌트만 눈에 띄었다. 코드·메시지·힌트를 한 줄로 정규화한다.
+const V2_TIMEOUT_BODY = {
+  status: "ERROR",
+  query_id: "q-1",
+  error: {
+    code: "E0504",
+    message: "database query timed out",
+    hint: "the query exceeded the DB statement timeout"
+  }
+};
+
+describe("getErrorMessage — 오류 envelope 정규화", () => {
+  it("v2 envelope는 한국어 라벨·코드·메시지·힌트를 한 줄로 보여 준다", () => {
+    const error = new ApiError(504, JSON.stringify(V2_TIMEOUT_BODY));
+
+    expect(getErrorMessage(error)).toBe(
+      "DB 쿼리 시간 초과 [E0504]: database query timed out — 힌트: the query exceeded the DB statement timeout"
+    );
+  });
+
+  it("v2 envelope의 field를 함께 표시한다", () => {
+    const body = {
+      status: "ERROR",
+      query_id: "q-2",
+      error: { code: "E0100", message: "invalid request data", field: "road_address" }
+    };
+
+    expect(getErrorMessage(new ApiError(400, JSON.stringify(body)))).toBe(
+      "잘못된 입력 [E0100]: invalid request data (필드: road_address)"
+    );
+  });
+
+  it("v1 비 VWorld·admin envelope(errorCode/errorMessage/hint)를 해석한다", () => {
+    const body = {
+      response: {
+        status: "ERROR",
+        errorCode: "E0500",
+        errorMessage: "database connection failed",
+        hint: "check the host/port in KTG_PG_DSN"
+      }
+    };
+
+    expect(getErrorMessage(new ApiError(503, JSON.stringify(body)))).toBe(
+      "DB 오류 [E0500]: database connection failed — 힌트: check the host/port in KTG_PG_DSN"
+    );
+  });
+
+  it("v1 VWorld 호환 envelope(error.code/text)를 해석한다", () => {
+    const body = {
+      response: {
+        service: { name: "address", version: "2.0", operation: "getCoord" },
+        status: "ERROR",
+        error: { level: 3, code: "SYSTEM_ERROR", text: "database query timed out" }
+      }
+    };
+
+    expect(getErrorMessage(new ApiError(504, JSON.stringify(body)))).toBe(
+      "시스템 오류 [SYSTEM_ERROR]: database query timed out"
+    );
+  });
+
+  it("알 수 없는 코드는 일반 라벨로 표시한다", () => {
+    const body = { status: "ERROR", query_id: "q", error: { code: "E9999", message: "boom" } };
+
+    expect(getErrorMessage(new ApiError(500, JSON.stringify(body)))).toBe("API 오류 [E9999]: boom");
+  });
+
+  it("기존 detail·BFF error 문자열·비 JSON 본문 동작은 유지한다", () => {
+    expect(getErrorMessage(new ApiError(502, JSON.stringify({ detail: "epost 서버 응답 없음" })))).toBe(
+      "epost 서버 응답 없음"
+    );
+    expect(getErrorMessage(new ApiError(401, JSON.stringify({ error: "AUTH_REQUIRED" })))).toBe(
+      "AUTH_REQUIRED"
+    );
+    expect(getErrorMessage(new ApiError(403, "Forbidden"))).toBe("Forbidden");
+    expect(parseApiErrorEnvelope({ detail: "x" })).toBeNull();
+    expect(parseApiErrorEnvelope({ response: { status: "OK" } })).toBeNull();
+  });
+});
+
+describe("apiErrorResult / resultErrorMessage", () => {
+  it("요약과 함께 HTTP status와 원본 envelope를 남긴다", () => {
+    const result = apiErrorResult(new ApiError(504, JSON.stringify(V2_TIMEOUT_BODY)));
+
+    expect(result.status).toBe(504);
+    expect(result.response).toEqual(V2_TIMEOUT_BODY);
+    expect(resultErrorMessage(result)).toContain("DB 쿼리 시간 초과 [E0504]");
+  });
+
+  it("일반 Error와 성공 응답을 구분한다", () => {
+    expect(apiErrorResult(new Error("network down"))).toEqual({ error: "network down" });
+    expect(resultErrorMessage({ status: "OK", candidates: [] })).toBeNull();
+    expect(resultErrorMessage(null)).toBeNull();
   });
 });

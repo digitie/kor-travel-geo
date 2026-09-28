@@ -32,13 +32,101 @@ export class ApiError extends Error {
   }
 }
 
+/** 백엔드 오류 envelope에서 뽑은 공통 필드. */
+export type ApiErrorFields = {
+  code?: string;
+  message: string;
+  hint?: string;
+  field?: string;
+};
+
+// 도메인 오류 코드(docs/api-reference/library/error-codes.md)와 VWorld 호환 코드의 한국어 설명.
+const API_ERROR_LABELS: Record<string, string> = {
+  E0100: "잘못된 입력",
+  E0101: "잘못된 주소",
+  E0102: "잘못된 좌표",
+  E0200: "요청 한도 초과",
+  E0401: "API 키 인증 실패",
+  E0403: "접근 제한",
+  E0404: "찾을 수 없음",
+  E0409: "동시 실행 충돌",
+  E0500: "DB 오류",
+  E0501: "외부 API 오류",
+  E0502: "적재 오류",
+  E0503: "설정 오류",
+  E0504: "DB 쿼리 시간 초과",
+  INVALID_KEY: "API 키 인증 실패",
+  INVALID_RANGE: "허용 범위를 벗어난 값",
+  INVALID_TYPE: "잘못된 요청 형식",
+  PARAM_REQUIRED: "필수 파라미터 누락",
+  OVER_REQUEST_LIMIT: "요청 한도 초과",
+  SYSTEM_ERROR: "시스템 오류",
+  UNKNOWN_ERROR: "알 수 없는 오류"
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value ? value : undefined;
+}
+
+/**
+ * 백엔드 오류 envelope를 공통 필드로 정규화한다(해당 모양이 아니면 null).
+ * - v2(ADR-060): `{status:"ERROR", query_id, error:{code, message, hint?, field?}}`
+ * - v1 비 VWorld·admin·GeoIP gate: `{response:{status:"ERROR", errorCode, errorMessage, hint?}}`
+ * - v1 VWorld 호환: `{response:{status:"ERROR", error:{level, code, text}}}`
+ */
+export function parseApiErrorEnvelope(body: unknown): ApiErrorFields | null {
+  const record = asRecord(body);
+  if (!record) return null;
+  const v2 = asRecord(record.error);
+  if (record.status === "ERROR" && v2 && typeof v2.message === "string") {
+    return {
+      code: optionalString(v2.code),
+      message: v2.message,
+      hint: optionalString(v2.hint),
+      field: optionalString(v2.field)
+    };
+  }
+  const response = asRecord(record.response);
+  if (!response || response.status !== "ERROR") return null;
+  if (typeof response.errorMessage === "string") {
+    return {
+      code: optionalString(response.errorCode),
+      message: response.errorMessage,
+      hint: optionalString(response.hint)
+    };
+  }
+  const vworld = asRecord(response.error);
+  if (vworld && typeof vworld.text === "string") {
+    return { code: optionalString(vworld.code), message: vworld.text };
+  }
+  return null;
+}
+
+/** 구조화 오류를 `라벨 [코드]: 메시지 (필드: …) — 힌트: …` 한 줄로 만든다. */
+export function formatApiError(fields: ApiErrorFields): string {
+  const label = (fields.code && API_ERROR_LABELS[fields.code]) || "API 오류";
+  let text = `${fields.code ? `${label} [${fields.code}]` : label}: ${fields.message}`;
+  if (fields.field) text += ` (필드: ${fields.field})`;
+  if (fields.hint) text += ` — 힌트: ${fields.hint}`;
+  return text;
+}
+
 /**
  * 오류를 사용자에게 보여줄 한 줄 문자열로 정리한다. ApiError는 raw JSON 본문 대신
- * detail/error/message 필드를 우선 노출한다.
+ * v1/v2 오류 envelope의 코드·메시지·힌트를 우선 노출하고, 그 밖에는 detail/error/message
+ * 필드를 노출한다.
  */
 export function getErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const body = error.body;
+    const envelope = parseApiErrorEnvelope(body);
+    if (envelope) return formatApiError(envelope);
     if (body && typeof body === "object") {
       const record = body as Record<string, unknown>;
       const candidate = record.detail ?? record.error ?? record.message;
@@ -49,6 +137,31 @@ export function getErrorMessage(error: unknown): string {
   }
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+/**
+ * 디버그 화면 응답 패널용 오류 결과. 읽기 쉬운 한 줄 요약(`error`)과 함께 HTTP status와
+ * 원본 응답 본문을 남겨 envelope 전체를 그대로 확인할 수 있게 한다.
+ */
+export function apiErrorResult(error: unknown): {
+  error: string;
+  status?: number;
+  response?: unknown;
+} {
+  if (error instanceof ApiError) {
+    return {
+      error: getErrorMessage(error),
+      status: error.status,
+      response: error.body ?? error.message
+    };
+  }
+  return { error: getErrorMessage(error) };
+}
+
+/** 디버그 결과 객체의 `error` 요약 문자열(없으면 null). */
+export function resultErrorMessage(result: unknown): string | null {
+  const error = asRecord(result)?.error;
+  return typeof error === "string" && error ? error : null;
 }
 
 export function backendPath(path: string): string {
@@ -285,6 +398,11 @@ export type CacheMetrics = {
   entries: number;
   hits: number;
   expired: number;
+  /**
+   * T-310: false(기본)면 geo_cache를 scan하지 않은 통계 기반 추정치 — `hits`는 마지막 통계
+   * 초기화 이후 geo_cache UPDATE 누적 수다. true는 `?exact=true`로 요청한 전수 집계다.
+   */
+  exact?: boolean;
 };
 
 export type ConsistencyCase = {

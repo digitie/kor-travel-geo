@@ -8,10 +8,10 @@ T-157은 일회성 benchmark artifact에만 있던 `pg_stat_statements` 관측�
   - fresh schema: `src/kortravelgeo/infra/sql.py`, `sql/ddl/001_schema.sql`
   - upgrade: `alembic/versions/0019_t157_pg_stat_snapshots.py`
   - 인덱스: `captured_at DESC, rank`, `query_fingerprint, captured_at DESC`
-- `AdminRepository.capture_pg_stat_statement_snapshots()`가 `x_extension.pg_stat_statements`에서 현재 DB의 top-N query를 읽어 snapshot row로 저장한다.
+- `AdminRepository.capture_pg_stat_statement_snapshots()`가 `x_extension.pg_stat_statements`에서 현재 DB(`dbid`)이면서 현재 role(`userid = current_user`, T-310)이 실행한 top-N query를 읽어 snapshot row로 저장한다. 공용 instance(T-308)에서는 같은 DB에도 cluster admin 등 다른 role의 statement가 쌓이고, app role에게는 그 query가 `<insufficient privilege>`로만 보여 top-N을 오염시켰다(09-24~28 snapshot 18,630행 중 2,735행).
 - `AsyncAddressClient`와 `/v1/admin/ops/pg-stat-statements`, `/v1/admin/ops/pg-stat-statements/capture`를 추가한다.
-- API lifespan scheduler가 기본 5분마다 capture를 수행한다. 수동 capture와 scheduler는 PostgreSQL advisory transaction lock으로 중복 실행을 막는다.
-- `/metrics`는 최신 persisted snapshot을 읽어 Prometheus gauge로 노출한다.
+- API lifespan scheduler가 기본 15분마다 capture를 수행한다(T-310에서 5분 → 15분 — capture마다 공용 instance 전체 tenant의 항목과 query text 파일을 읽는다). 수동 capture와 scheduler는 PostgreSQL advisory transaction lock으로 중복 실행을 막는다.
+- `/metrics` gauge는 최신 persisted snapshot에서 채운다. T-310부터 이 조회는 scrape 경로가 아니라 API lifespan refresher(`KTG_METRICS_DB_REFRESH_INTERVAL_SECONDS`, 기본 60초)가 수행한다.
 - `/admin/ops`는 최신 top-N query를 조회하고 수동 capture를 실행할 수 있다.
 
 ## 노출 원칙
@@ -24,7 +24,7 @@ T-157은 일회성 benchmark artifact에만 있던 `pg_stat_statements` 관측�
 
 | 설정 | 기본값 | 의미 |
 |------|--------|------|
-| `KTG_OPS_PG_STAT_STATEMENTS_CAPTURE_INTERVAL_MINUTES` | `5` | API lifespan scheduler 주기. `0`이면 비활성 |
+| `KTG_OPS_PG_STAT_STATEMENTS_CAPTURE_INTERVAL_MINUTES` | `15` | API lifespan scheduler 주기. `0`이면 비활성 (T-310 전 기본 `5`) |
 | `KTG_OPS_PG_STAT_STATEMENTS_CAPTURE_LIMIT` | `20` | 한 번에 저장할 top-N query 수 |
 | `KTG_OPS_PG_STAT_STATEMENTS_CAPTURE_ON_STARTUP` | `true` | API 시작 직후 1회 capture 여부 |
 | `KTG_OPS_PG_STAT_STATEMENTS_RETENTION_DAYS` | `7` | capture transaction 안에서 이 기간보다 오래된 `ops.pg_stat_statements_snapshots` row를 정리 |

@@ -1478,6 +1478,11 @@
             "title": "Entries",
             "type": "integer"
           },
+          "exact": {
+            "default": false,
+            "title": "Exact",
+            "type": "boolean"
+          },
           "expired": {
             "minimum": 0.0,
             "title": "Expired",
@@ -15471,6 +15476,18 @@
     "/v1/admin/cache/metrics": {
       "get": {
         "operationId": "cache_metrics_v1_admin_cache_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "exact",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Exact",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15481,6 +15498,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LegacyErrorEnvelope"
+                }
+              }
+            },
+            "description": "Legacy validation error envelope"
           }
         },
         "summary": "Cache Metrics",

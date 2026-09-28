@@ -167,6 +167,40 @@ SELECT pg_stat_snapshot_id, captured_at, rank, queryid, query_fingerprint, opera
   FROM ops.pg_stat_statements_snapshots
 """
 
+# T-310: geo_cache 지표 기본값 — heap을 읽지 않는 추정치.
+# - entries: table_stats()와 같은 규칙(#515). vacuum/analyze가 관측된(anchored) 통계면
+#   n_live_tup을, 아니면(restore·crash 뒤 통계 초기화) n_live_tup과 reltuples 중 큰 값을 쓴다.
+# - hits: 적중마다 hit_count를 올리는 UPDATE의 누적 수(pg_stat_user_tables.n_tup_upd).
+#   마지막 통계 초기화 이후 값이고 만료 행 재저장(upsert 충돌 갱신)도 1로 센다. cache clear로는
+#   0이 되지 않는다 — 현재 행의 sum(hit_count)는 exact 모드에서만 본다.
+# - expired: idx_geo_cache_expires 범위 count라 비용이 만료 행 수에 비례한다(MV refresh가
+#   cache를 비우므로 평소 0에 가깝다).
+_CACHE_METRICS_SQL = """
+SELECT CASE
+         WHEN COALESCE(
+                s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze
+              ) IS NOT NULL
+           THEN GREATEST(s.n_live_tup, 0)::bigint
+         ELSE GREATEST(
+                GREATEST(COALESCE(s.n_live_tup, 0), 0)::bigint,
+                GREATEST(c.reltuples, 0)::bigint
+              )
+       END AS entries,
+       GREATEST(COALESCE(s.n_tup_upd, 0), 0)::bigint AS hits,
+       (SELECT count(*) FROM geo_cache WHERE expires_at <= now())::bigint AS expired
+  FROM pg_class c
+  LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
+ WHERE c.oid = 'geo_cache'::regclass
+"""
+
+# 관리 UI가 명시적으로 요청할 때만 쓰는 정확한 집계(geo_cache 전수 scan).
+_CACHE_METRICS_EXACT_SQL = """
+SELECT count(*)::bigint AS entries,
+       COALESCE(sum(hit_count), 0)::bigint AS hits,
+       count(*) FILTER (WHERE expires_at <= now())::bigint AS expired
+  FROM geo_cache
+"""
+
 _ROW_COUNT_OBJECTS = (
     "tl_juso_text",
     "tl_juso_parcel_link",
@@ -351,25 +385,24 @@ SELECT s.relname AS table_name,
             plan = await conn.scalar(text(f"EXPLAIN ({', '.join(options)}) {query}"))
         return plan
 
-    async def cache_metrics(self, *, enabled: bool) -> CacheMetrics:
+    async def cache_metrics(self, *, enabled: bool, exact: bool = False) -> CacheMetrics:
+        """``geo_cache`` 지표. 기본은 전수 scan 없는 통계 기반 추정치다(T-310).
+
+        ``exact=True``만 ``geo_cache`` heap 전체를 읽는 정확한 집계를 돌린다. 이 scan이 15초
+        scrape마다 돌며 공용 instance에서 geo tenant 논리 읽기의 대부분(09-28 기준 호출당
+        ~12K block)을 차지했으므로, 관리 UI의 명시적 요청에만 쓰고 API ``statement_timeout``
+        (``KTG_PG_STATEMENT_TIMEOUT_MS``)이 상한이 된다.
+        """
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        """
-SELECT count(*)::bigint AS entries,
-       COALESCE(sum(hit_count), 0)::bigint AS hits,
-       count(*) FILTER (WHERE expires_at <= now())::bigint AS expired
-  FROM geo_cache
-"""
-                    )
-                )
+                await conn.execute(text(_CACHE_METRICS_EXACT_SQL if exact else _CACHE_METRICS_SQL))
             ).mappings().one()
         return CacheMetrics(
             enabled=enabled,
             entries=int(row["entries"] or 0),
             hits=int(row["hits"] or 0),
             expired=int(row["expired"] or 0),
+            exact=exact,
         )
 
     async def load_job_metric_counts(self) -> list[tuple[str, str, int]]:
@@ -1793,6 +1826,10 @@ SELECT row_number() OVER (ORDER BY total_exec_time DESC, calls DESC)::integer AS
        COALESCE(blk_write_time, 0)::double precision AS blk_write_time_ms
   FROM x_extension.pg_stat_statements
  WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+   -- T-310: 공용 instance에서는 같은 DB에도 다른 role(cluster admin 등)의 statement가
+   -- 쌓인다. 이 tenant의 app role이 실행한 것만 저장한다(남의 항목은 query가
+   -- '<insufficient privilege>'로만 보여 top-N만 오염시켰다).
+   AND userid = (SELECT oid FROM pg_roles WHERE rolname = current_user)
    AND calls > 0
    AND query IS NOT NULL
    AND query NOT ILIKE '%pg_stat_statements%'

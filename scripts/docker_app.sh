@@ -21,7 +21,7 @@ API_HOST_PORT="${KTG_API_PORT:-12501}"
 API_CONTAINER_PORT="${KTG_API_CONTAINER_PORT:-12501}"
 UI_HOST_PORT="${KTG_UI_PORT:-12505}"
 UI_CONTAINER_PORT="${KTG_UI_CONTAINER_PORT:-12505}"
-DB_PORT="${KTG_DB_PORT:-12500}"
+DB_PORT="${KTG_DB_PORT:-11000}"
 DATA_DIR="${KTG_DOCKER_DATA_DIR:-${DATA_DIR:-/mnt/f/dev/kor-travel-geo/data}}"
 
 if [[ "$NETWORK_MODE" == "host" ]]; then
@@ -34,7 +34,8 @@ else
   DEFAULT_RUSTFS_ENDPOINT="http://${HOST_GATEWAY}:12101"
 fi
 
-DEFAULT_PG_DSN="postgresql+psycopg://addr:addr@${DEFAULT_PG_HOST}:${DB_PORT}/kor_travel_geo"
+# 공용 instance 앱 role 기본값. 비밀번호는 placeholder라 KTG_PG_DSN(.env/.env.dev)을 명시한다.
+DEFAULT_PG_DSN="postgresql+psycopg://kor_travel_geo_app:change-me@${DEFAULT_PG_HOST}:${DB_PORT}/kor_travel_geo"
 PG_DSN="${KTG_DOCKER_PG_DSN:-${KTG_PG_DSN:-$DEFAULT_PG_DSN}}"
 UI_API_INTERNAL_URL="${KTG_API_INTERNAL_URL:-$DEFAULT_UI_API_URL}"
 RUSTFS_ENABLED="${KTG_RUSTFS_ENABLED:-0}"
@@ -74,9 +75,9 @@ Env files (KTG_ENV_FILE 우선 → .env → kor-travel-geo-ui/.env.local):
 
 Important env:
   KTG_DOCKER_NETWORK_MODE=host                 # dev 기본. Docker Desktop 제약 시 bridge
-                                               # bridge면 geo DB(127.0.0.1:12500 바인드)에 host.docker.internal로 못 닿을 수
-                                               # 있으니 KTG_DOCKER_PG_DSN을 bridge에서 닿는 주소로 명시 (docs/ports.md)
-  KTG_DOCKER_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo
+                                               # bridge면 geo DB(공용 instance 127.0.0.1:11000 바인드)에 host.docker.internal로
+                                               # 못 닿을 수 있으니 KTG_DOCKER_PG_DSN을 bridge에서 닿는 주소로 명시 (docs/ports.md)
+  KTG_DOCKER_PG_DSN=postgresql+psycopg://kor_travel_geo_app:<password>@127.0.0.1:11000/kor_travel_geo
   KTG_RUSTFS_ENABLED=1
   KTG_RUSTFS_ENDPOINT_URL=http://127.0.0.1:12101
   KTG_RUSTFS_BUCKET=kor-travel-geo

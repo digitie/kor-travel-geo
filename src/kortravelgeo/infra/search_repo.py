@@ -275,6 +275,9 @@ class SearchRepository:
         }
         if search_type == "district":
             async with self.engine.begin() as conn:
+                # 행정구역 표를 모두 훑어 추정 비용이 jit_above_cost를 살짝 넘지만, JIT 컴파일이
+                # 실행보다 비싸다(운영 실측 warm 0.53초 중 0.29초, cold 2.7초). T-311.
+                await conn.execute(text("SET LOCAL jit = off"))
                 rows = (
                     await conn.execute(
                         _DISTRICT_SEARCH_SQL,

@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Changed
+- API 오류 표시를 envelope 기반으로 바꿨다(T-309). `getErrorMessage`가 v2(`error.code/message/hint/field`),
+  v1 비 VWorld·admin(`errorCode/errorMessage/hint`), VWorld(`error.code/text`) envelope를 해석해
+  `DB 쿼리 시간 초과 [E0504]: … — 힌트: …` 형태로 보여 준다. `/debug/geocode`·`/debug/reverse`는 오류를
+  알림으로 띄우고 JSON 패널에 HTTP status와 원본 envelope를 남긴다. 관리 홈 "서빙 릴리스" 카드는
+  `/v1/readyz`의 서빙 MV 상태가 degraded면 `서빙 MV 준비 안 됨`을 먼저 보여 준다.
 - Tailwind CSS를 v3 → v4로 전환했다. `@tailwindcss/postcss` 플러그인,
   `@import "tailwindcss"` + `@config "../tailwind.config.ts"`(기존 테마 설정 보존)로
   바꾸고 `autoprefixer`를 제거했다. 컴포넌트는 이미 v4 호환 idiom(`ring-3`,

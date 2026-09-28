@@ -207,11 +207,11 @@ ignore_imports = ["kortravelgeo.api.routers.admin -> kortravelgeo.loaders"]
 
 ### 3.3 예외
 
-`KorTravelGeoError` (base) 아래 사용자 입력 오류(`InvalidInputError`, `InvalidAddressError`, `InvalidCoordinateError`, `RateLimitError`), 결과 부재(`NotFoundError`), 인프라 오류(`DatabaseError`, `ExternalApiError`, `LoaderError`, `ConfigError`).
+`KorTravelGeoError` (base) 아래 사용자 입력 오류(`InvalidInputError`, `InvalidAddressError`, `InvalidCoordinateError`, `RateLimitError`), 결과 부재(`NotFoundError`), 인프라 오류(`DatabaseError`와 그 하위 `DatabaseTimeoutError`, `ExternalApiError`, `LoaderError`, `ConfigError`).
 
 각 예외는 `code: str`(E0xxx)과 `http_status: int`를 가진다. `api/responses.py`가 핸들러 등록.
 
-SQLAlchemy pool checkout timeout은 전용 메시지 `database connection pool checkout timed out` + HTTP 503으로 반환하고 `ktg_pg_pool_checkout_timeouts_total{method,route}`에 기록한다. 그 밖의 `DBAPIError` 계열은 운영 장애와 내부 오류로 나눈다(T-178D): 연결/운영 오류(`OperationalError` 또는 `connection_invalidated=True`)는 고정 메시지 `database operation failed` + HTTP 503으로, 그 밖(`ProgrammingError`/`IntegrityError` 등 SQL·스키마·제약 오류)은 고정 메시지 `database statement failed` + HTTP 500으로 반환한다. 세 경우 모두 `code="E0500"`이며 `ktg_api_db_errors_total{method,route,error_type}`에 기록하고, SQL 문장·파라미터·DSN은 응답에 노출하지 않는다. VWorld 호환 경로는 `response.error.code="SYSTEM_ERROR"` envelope를 유지한다.
+SQLAlchemy pool checkout timeout은 전용 메시지 `database connection pool checkout timed out` + HTTP 503으로 반환하고 `ktg_pg_pool_checkout_timeouts_total{method,route}`에 기록한다. 그 밖의 `DBAPIError` 계열은 운영 장애와 내부 오류로 나눈다(T-178D): 연결/운영 오류(`OperationalError` 또는 `connection_invalidated=True`)는 HTTP 503으로, 그 밖(`ProgrammingError`/`IntegrityError` 등 SQL·스키마·제약 오류)은 고정 메시지 `database statement failed` + HTTP 500으로 반환한다. 연결/운영 오류는 SQLSTATE(연결 단계 오류는 SQLSTATE가 없으므로 서버 메시지)로 다시 나눈다(T-309): `statement_timeout`(57014)·`lock_timeout`(55P03)·서버 측 취소는 연결 문제가 아니므로 `DatabaseTimeoutError`(`E0504`, HTTP 504)로, 연결 실패·인증/권한 실패·연결 수 한도·서빙 MV 미populate는 `E0500` + HTTP 503에 각자의 메시지·힌트로 반환하고, 분류되지 않은 운영 오류만 `database operation failed`를 쓴다. `KTG_PG_DSN` 점검 힌트는 연결 실패·인증 실패에만 붙는다. 모든 경우 `ktg_api_db_errors_total{method,route,error_type}`에 기록하며 `error_type`은 분류 이름(`statement_timeout`, `connection_failed` 등, 분류 밖은 예외 클래스 이름)이다. SQL 문장·파라미터·DSN·서버 원문 메시지는 응답에 노출하지 않는다. VWorld 호환 경로는 `response.error.code="SYSTEM_ERROR"` envelope를 유지한다. 분류 표는 `docs/api-reference/library/error-codes.md`.
 
 ## 4. DTO — pydantic v2
 
@@ -384,7 +384,7 @@ app.include_router(admin.router, prefix="/v1/admin")
 ### 헬스와 readiness
 
 - `GET /v1/healthz`: process liveness. DB checkout이나 SQL probe를 수행하지 않는다.
-- `GET /v1/readyz`: DB와 SQLAlchemy pool readiness. DB 단절·timeout·API client 미시작은 HTTP 503, `ready=false`, `degraded=true`로 반환한다. Pool 포화 상태에서는 새 DB checkout을 시도하지 않고 HTTP 503으로 fail-fast하며 database component는 `status="skipped"`가 된다. Pool utilization 0.8 이상은 HTTP 200을 유지하지만 `degraded=true`로 운영 경고를 노출한다. Admission control이 활성화된 경우 `components.admission`에 scope별 `limit`/`in_use`/`available`/`utilization`을 포함하며, scope 포화는 HTTP 200 + `degraded=true`로 노출한다. DB 단절·slow probe·복구 시나리오는 `scripts/run_t159_db_fault_injection.py`로 실제 DB 생명주기를 제어하지 않고 재현한다.
+- `GET /v1/readyz`: DB와 SQLAlchemy pool readiness. DB 단절·timeout·API client 미시작은 HTTP 503, `ready=false`, `degraded=true`로 반환한다. Pool 포화 상태에서는 새 DB checkout을 시도하지 않고 HTTP 503으로 fail-fast하며 database component는 `status="skipped"`가 된다. Pool utilization 0.8 이상은 HTTP 200을 유지하지만 `degraded=true`로 운영 경고를 노출한다. DB probe가 성공하면 `components.serving`이 서빙 MV(`mv_geocode_target`, `mv_geocode_text_search`)를 카탈로그(`relispopulated`) + `EXISTS (SELECT 1 ...)`로 확인하고(`count(*)` 금지), 하나라도 `empty`/`not_populated`/`missing`이면 HTTP 200 + `ready=true` + `degraded=true`로 알린다 — 최초 적재 전 빈 DB는 정상 상태일 수 있어 503으로 올리지 않는다(T-309). serving probe 자체가 실패·timeout이면 `status="unknown"`이며 `degraded`에 반영하지 않는다. Admission control이 활성화된 경우 `components.admission`에 scope별 `limit`/`in_use`/`available`/`utilization`을 포함하며, scope 포화는 HTTP 200 + `degraded=true`로 노출한다. DB 단절·slow probe·복구 시나리오는 `scripts/run_t159_db_fault_injection.py`로 실제 DB 생명주기를 제어하지 않고 재현한다.
 
 ### Admission control과 overload 응답
 

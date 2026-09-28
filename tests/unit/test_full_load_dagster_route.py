@@ -50,12 +50,17 @@ class _FakeRepo:
 
 class _FakeExecutor:
     failed: ClassVar[tuple] = ()
+    # False = the Dagster run already adopted the row (queued → running) before the error.
+    still_queued: ClassVar[bool] = True
 
     def __init__(self, _engine: object) -> None:
         pass
 
-    async def mark_failed(self, job_id: str, message: str) -> None:
+    async def mark_launch_failed(self, job_id: str, message: str) -> bool:
+        if not _FakeExecutor.still_queued:
+            return False
         _FakeExecutor.failed = (job_id, message)
+        return True
 
 
 @pytest.fixture(autouse=True)
@@ -63,6 +68,7 @@ def _reset_fakes() -> None:
     _FakeRepo.inserted = {}
     _FakeRepo.cancelled = []
     _FakeExecutor.failed = ()
+    _FakeExecutor.still_queued = True
 
 
 @pytest.mark.asyncio
@@ -173,6 +179,29 @@ async def test_launch_full_load_batch_failure_fails_root_cancels_children_and_50
     assert "job not found" in _FakeExecutor.failed[1]
     # the queued dagster children were cancelled so no worker leaves them stuck
     assert _FakeRepo.cancelled == ["batch-dag-1"]
+
+
+@pytest.mark.asyncio
+async def test_launch_full_load_batch_error_after_root_adopted_keeps_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T-318: an ambiguous launch error after the run adopted the root must neither fail the
+    # root nor cancel the children the run is about to drive.
+    async def fake_launch(settings, *, job_name, run_config, tags):
+        raise DagsterLaunchError("launchRun timed out after 30s (ReadTimeout)")
+
+    monkeypatch.setattr(launch_mod, "AdminRepository", _FakeRepo)
+    monkeypatch.setattr(launch_mod, "LoadJobExecutor", _FakeExecutor)
+    monkeypatch.setattr(launch_mod, "launch_dagster_run", fake_launch)
+    _FakeExecutor.still_queued = False
+
+    batch_id = await launch_mod.launch_full_load_batch_dagster_run(
+        object(), Settings(_env_file=None), _VALID_BATCH_PAYLOAD
+    )
+
+    assert batch_id == "batch-dag-1"
+    assert _FakeExecutor.failed == ()
+    assert _FakeRepo.cancelled == []
 
 
 @pytest.mark.asyncio

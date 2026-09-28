@@ -5,9 +5,10 @@ import { FormEvent, useState } from "react";
 import { LazyCoordinateMap as CoordinateMap } from "@/components/vworld/LazyCoordinateMap";
 import { CandidateAddressSummary } from "@/components/debug/CandidateAddressSummary";
 import { extractCandidates } from "@/lib/candidate-addresses";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { JsonBlock } from "@/components/ui/JsonBlock";
 import { Panel } from "@/components/ui/Panel";
-import { postPublicJson } from "@/lib/api";
+import { apiErrorResult, postPublicJson, resultErrorMessage } from "@/lib/api";
 import { reverseFormSchema } from "@/lib/schemas";
 import { useVWorldApiKey } from "@/lib/vworld-key";
 import type { components } from "@/types/api.gen";
@@ -41,9 +42,11 @@ export function ReverseDebugger() {
       };
       setResult(await postPublicJson<ReverseV2Response>("/v2/reverse", body, apiKey));
     } catch (error) {
-      setResult({ error: error instanceof Error ? error.message : String(error) });
+      setResult(apiErrorResult(error));
     }
   }
+
+  const errorMessage = resultErrorMessage(result);
 
   return (
     <div className="debug-map-layout">
@@ -71,6 +74,11 @@ export function ReverseDebugger() {
           </form>
         </Panel>
         <Panel title="응답">
+          {errorMessage ? (
+            <Alert role="alert" variant="destructive">
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          ) : null}
           <CandidateAddressSummary candidates={extractCandidates(result)} />
           <JsonBlock value={result ?? { status: "READY" }} />
         </Panel>
