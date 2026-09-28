@@ -5,8 +5,10 @@ injects archive/checksum failures and proves ``run_restore_job`` refuses the res
 while dropping the job-owned target DB. The suite is skipped unless ``KTG_TEST_PG_DSN``
 and the backup CLI tools are available, so regular CI stays green.
 
+Point it at a local/dev PostGIS where your role has CREATEDB — the restore creates its own
+target DBs, which the shared :11000 instance's ``kor_travel_geo_app`` (NOCREATEDB) cannot do.
 Run it with, e.g.:
-    KTG_TEST_PG_DSN=postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo_rt \
+    KTG_TEST_PG_DSN=postgresql+psycopg://<user>:<password>@127.0.0.1:<port>/kor_travel_geo_rt \
         pytest tests/integration/test_backup_restore_fault_injection.py -q
 """
 

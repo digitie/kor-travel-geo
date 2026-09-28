@@ -16,6 +16,16 @@
 - **`/v1/readyz`에 `components.serving`을 추가했다(T-309).** 서빙 MV가 비었거나 populate 안 됐거나
   없으면 HTTP 200 + `ready=true` + `degraded=true`로 알린다(`count(*)` 없이 카탈로그 + `EXISTS`).
   최초 적재 전 빈 DB는 정상 상태일 수 있어 503으로 올리지 않는다.
+- **PostgreSQL 기본 접속을 은퇴한 전용 instance `127.0.0.1:12500` → 공용 제어 평면 instance
+  `127.0.0.1:11000`으로 맞췄다(T-313).** T-308(manager ADR-45)로 geo DB가 공용 instance로 이관되고
+  `12500`은 2026-09-28 은퇴했다. `Settings.pg_dsn` 기본값, `alembic.ini`,
+  `scripts/docker_app.sh`·`scripts/fullload_test.sh`의 `KTG_DB_PORT`/DSN 기본값, `.env.dev.example`·
+  `.env.prod.example`, `docs/ports.md`·아키텍처/복구 문서·staging 런북(psql `-p 11000`)을 갱신했다.
+  기본 role은 `kor_travel_geo_app`이고 비밀번호는 placeholder(`change-me`)라 실제 접속에는 항상
+  `KTG_PG_DSN`을 명시한다. 명시적으로 `KTG_PG_DSN`을 주는 배포(manager compose·prod env)는 동작
+  변화가 없다. 앱 role은 NOCREATEDB라 `KTG_TEST_PG_DSN` 통합 테스트 예시는 CREATEDB 권한이 있는
+  로컬/dev PostGIS를 가리키도록 바꿨다. `scripts/benchmark_query_performance.py`의 오류 메시지
+  DSN 마스킹은 특정 계정명(`addr:addr@`) 대신 임의의 `user:password@`를 가린다.
 - **Prometheus 계측 metric name prefix를 `kor_travel_geo_`에서 `ktg_`로 변경했다(T-305).**
   API 계측(`src/kortravelgeo/infra/metrics.py`, 44개 metric)과 admin UI 자체 계측
   (`kor-travel-geo-ui/lib/metrics.ts`, `kor_travel_geo_ui_*` → `ktg_ui_*` 5개)를 모두

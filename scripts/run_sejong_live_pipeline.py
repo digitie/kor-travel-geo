@@ -11,10 +11,11 @@ GDAL loader, proving::
       → REAL shp_polygons loader on the Sejong archive → serving SHP tables
       → dataset_snapshot recorded with the source_match_set_id 정본 FK + verify
 
-Run (WSL ext4 test mirror)::
+Run (WSL ext4 test mirror, against a local/dev scratch PostGIS — never the shared :11000
+instance)::
 
     cd /mnt/f/dev/kor-travel-geo-claude
-    KTG_TEST_PG_DSN='postgresql+psycopg://addr:addr@localhost:15434/kor_travel_geo' \\
+    KTG_TEST_PG_DSN='postgresql+psycopg://<user>:<password>@127.0.0.1:<port>/kor_travel_geo' \\
         ~/ktgvenv/bin/python scripts/run_sejong_live_pipeline.py \\
         --allow-destructive --confirm 'TRUNCATE-SEJONG-RUNBOOK kor_travel_geo'
 

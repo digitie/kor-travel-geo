@@ -84,6 +84,7 @@ KTG_API_INTERNAL_URL=http://localhost:12501 npm run dev -- --port 12505
   **bridge 주의**: geo DB가 있는 공용 instance가 `listen_addresses=127.0.0.1`이라 bridge의
   `host.docker.internal:11000`(host-gateway)은 Linux 엔진에서 DB에 닿지 않을 수 있다 — bridge면 `KTG_DOCKER_PG_DSN`을
   bridge 네트워크에서 닿는 주소로 명시한다(Docker Desktop은 host.docker.internal이 loopback으로 포워딩돼 보통 동작).
-  `Settings.pg_dsn`·`alembic.ini`의 기본값은 아직 옛 `12500`을 가리키므로(T-313) `KTG_PG_DSN`은 항상 명시한다.
+  `Settings.pg_dsn`·`alembic.ini`·`docker_app.sh`의 기본값은 공용 instance(`kor_travel_geo_app@127.0.0.1:11000`)를
+  가리키지만 비밀번호가 placeholder(`change-me`)이므로(T-313) `KTG_PG_DSN`은 항상 명시한다.
 - dev 스크립트는 같은 컨테이너/포트가 **이미 떠 있으면 새 포트로 우회하지 않는다.** 강제종료 여부를 묻고, 거부하면 작업을 중지한다(`KTG_FORCE_KILL=1`이면 묻지 않고 교체, 비대화형은 안전 중지).
 - prod 공식 도메인 실제 값은 추적 파일에 두지 않고 gitignored `.env.prod`(또는 배포 노드 `app.env`)에만 둔다(서버사이드 `KTG_*` 변수, `NEXT_PUBLIC_*` 아님).
