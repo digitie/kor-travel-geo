@@ -4,8 +4,14 @@
 # kor-travel-weather's fix for a code-load hang silently freezing the whole in-process
 # webserver/daemon). `network_mode: host` on every geo Dagster container (docker-manager
 # compose) means the code-server is reachable via loopback, not a Docker-internal hostname.
+#
+# location_name must equal Settings.dagster_repository_location_name — geo-api launches
+# runs (backup/load/restore/mv_refresh) with that exact selector. It is the name the
+# location had while webserver/daemon loaded `-m kortravelgeo_dagster.definitions`
+# in-process; renaming it here made every launchRun fail with PipelineNotFoundError
+# (tests/unit/test_dagster_workspace_location.py pins the two together).
 load_from:
   - grpc_server:
       host: 127.0.0.1
       port: 12503
-      location_name: kortravelgeo_dagster
+      location_name: kortravelgeo_dagster.definitions
