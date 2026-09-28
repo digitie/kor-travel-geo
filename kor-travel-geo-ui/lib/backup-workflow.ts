@@ -1,4 +1,18 @@
-import { API_BASE, backendPath } from "@/lib/api";
+import { API_BASE, backendPath, type DbLifecycleCapabilities } from "@/lib/api";
+
+/** T-312: 공용 DB instance에서 막힌 DB 수명주기 기능(복원·hot-swap·restore drill) 안내 문구. */
+export const DB_LIFECYCLE_UNSUPPORTED_TEXT =
+  "공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행";
+
+/**
+ * T-312: 연결 DB role이 DB 수명주기 기능을 실행할 수 없는지. capability를 아직 못 읽었거나
+ * 조회에 실패하면(null) 막지 않는다 — backend가 E0410으로 최종 거절한다.
+ */
+export function dbLifecycleBlocked(
+  capabilities: DbLifecycleCapabilities | null | undefined
+): capabilities is DbLifecycleCapabilities {
+  return capabilities?.supported === false;
+}
 
 export type BackupPhase =
   | "preflight"

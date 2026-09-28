@@ -14,18 +14,34 @@ from types import SimpleNamespace
 
 import pytest
 from dagster import Failure, build_op_context
+from kortravelgeo.exceptions import UnsupportedOnInstanceError
 
 from kortravelgeo_dagster import backup_maintenance
 
 
 class _FakeClient:
-    def __init__(self, *, verify=None, copy=None, drill=None, backups=None, janitor=None) -> None:
+    def __init__(
+        self,
+        *,
+        verify=None,
+        copy=None,
+        drill=None,
+        backups=None,
+        janitor=None,
+        lifecycle_error=None,
+    ) -> None:
         self._verify = verify
         self._copy = copy
         self._drill = drill
         self._backups = backups or []
         self._janitor = janitor
+        self._lifecycle_error = lifecycle_error
         self.calls: dict[str, dict[str, object]] = {}
+
+    async def require_db_lifecycle(self, feature):
+        self.calls["lifecycle"] = {"feature": feature}
+        if self._lifecycle_error is not None:
+            raise self._lifecycle_error
 
     async def verify_backup(self, artifact_id, *, mode="quick"):
         self.calls["verify"] = {"artifact_id": artifact_id, "mode": mode}
@@ -190,6 +206,40 @@ async def test_restore_drill_op_fail_raises() -> None:
     ):
         await backup_maintenance.restore_drill_op(ctx)
     assert "restore drill FAILED" in str(ei.value.description)
+
+
+@pytest.mark.asyncio
+async def test_restore_drill_op_refuses_unsupported_instance_before_any_lookup() -> None:
+    """T-312: on the shared instance (no CREATEDB) the (daily) drill stops with the reason
+    before resolving a backup or creating the throwaway DB."""
+    client = _FakeClient(
+        drill=_drill_result("PASS"),
+        backups=[SimpleNamespace(artifact_id="latest-1")],
+        lifecycle_error=UnsupportedOnInstanceError(
+            "restore drill: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행",
+            hint="role kor_travel_geo_app: CREATEDB 권한 없음",
+        ),
+    )
+    with (
+        build_op_context(resources={"client": client}, op_config={}) as ctx,
+        pytest.raises(Failure) as ei,
+    ):
+        await backup_maintenance.restore_drill_op(ctx)
+    description = str(ei.value.description)
+    assert "공용 DB instance에서는 지원하지 않음" in description
+    assert "CREATEDB" in description
+    assert client.calls["lifecycle"] == {"feature": "restore_drill"}
+    assert "list" not in client.calls
+    assert "drill" not in client.calls
+
+
+@pytest.mark.asyncio
+async def test_restore_drill_op_checks_capability_on_a_supported_instance() -> None:
+    client = _FakeClient(drill=_drill_result("PASS"))
+    with build_op_context(resources={"client": client}, op_config={"artifact_id": "art-1"}) as ctx:
+        await backup_maintenance.restore_drill_op(ctx)
+    assert client.calls["lifecycle"] == {"feature": "restore_drill"}
+    assert client.calls["drill"]["artifact_id"] == "art-1"
 
 
 @pytest.mark.asyncio

@@ -41,6 +41,7 @@ from dagster import (
 )
 from kortravelgeo.infra.backup import BACKUP_ARTIFACT_TYPE
 
+from .db_lifecycle import refuse_unsupported_db_lifecycle
 from .resources import op_resource
 
 if TYPE_CHECKING:
@@ -168,6 +169,9 @@ async def restore_drill_op(context: OpExecutionContext) -> dict[str, object]:
     client = cast("AsyncAddressClient", op_resource(context, "client"))
     config = cast("Mapping[str, str]", context.op_config)
 
+    # T-312: the throwaway DB needs CREATE DATABASE — on the shared instance the (daily)
+    # drill fails here with the reason instead of a raw permission error mid-run.
+    await refuse_unsupported_db_lifecycle(client, "restore_drill")
     artifact_id = config.get("artifact_id") or await _latest_backup_artifact_id(client)
     # run_restore_drill is clock-free and names the throwaway DB from this timestamp; a fresh
     # per-run value keeps repeat/concurrent drills from colliding on the temp DB name.

@@ -15,6 +15,12 @@
 5. PASS/FAIL·소요시간·archive 크기를 담은 결과 artifact(JSON)를 출력하고, `--output`이 있으면 파일로 남긴다.
 6. **FAIL이면 비0 exit**(reconcile 불일치/smoke 실패/복원 자체 실패) → cron/CI가 알림을 띄울 수 있다.
 
+> **공용 DB instance (T-312)**: throwaway DB `CREATE DATABASE`에는 `CREATEDB`와 maintenance DB `postgres`
+> `CONNECT`가 필요하다. 공용 instance의 app role에는 둘 다 없어서 CLI·Dagster `backup_restore_drill`(daily
+> schedule 포함) 모두 시작 즉시 `E0410` "공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로
+> 수행"으로 멈춘다(`KTG_DB_LIFECYCLE_MODE`, `GET /v1/admin/db-capabilities`). 공용 instance에서의 복원 증명은
+> 운영자가 `docs/t046-db-backup-restore.md` "cluster admin 복원 절차"로 수행한다.
+
 ## 명령
 
 ```bash
