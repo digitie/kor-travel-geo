@@ -122,6 +122,8 @@ def test_admin_api_client_uses_settings_and_proxy_headers() -> None:
     )
 
     assert client.base_url == "http://geo-api.internal:12501"
+    # T-318: run-due waits on the API's own launchRun, so it must outlast the launch timeout.
+    assert client.timeout_seconds > Settings(_env_file=None).dagster_launch_timeout_seconds
     assert client.url_for("/v1/admin/backups/scheduled/run-due") == (
         "http://geo-api.internal:12501/v1/admin/backups/scheduled/run-due"
     )

@@ -150,8 +150,9 @@ async def launch_dagster_run(
     ``httpx.HTTPError``. ``http_client`` is injectable for tests; production leaves it ``None``.
 
     A timeout is ambiguous — Dagster may still create and start the run after we give up.
-    The caller then marks the load_jobs row failed, and the op's ``adopt_dagster`` rejects
-    that terminal row, so the late run fails without doing work (T-318).
+    Callers fail the load_jobs row only while it is still ``queued``
+    (``LoadJobExecutor.mark_launch_failed``): a late run then finds a terminal row and
+    ``adopt_dagster`` rejects it, while a run that adopted first keeps its row (T-318).
     """
 
     urls = _dagster_urls(settings)
@@ -180,7 +181,7 @@ async def launch_dagster_run(
             # str(ReadTimeout) is empty, which left "Dagster launch failed: " with no reason.
             raise DagsterLaunchError(
                 f"launchRun timed out after {settings.dagster_launch_timeout_seconds:g}s "
-                f"({type(exc).__name__}); a late run is rejected by adopt_dagster"
+                f"({type(exc).__name__}); the run may still start"
             ) from exc
         response.raise_for_status()
         return _parse_launch_run(response.json())
