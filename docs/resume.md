@@ -2,7 +2,21 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-19 갱신, by claude)
+## 현재 진척도 (2026-09-28 갱신, by claude)
+
+- ✅ **T-308 — geo DB를 공용 제어 평면 instance `kor-travel-shared-postgres`(:11000)로 이전 +
+  관리 UI geocoding 장애 복구 (사용자 지시)** — `kor_travel_geo`·`kor_travel_geo_dagster` 둘 다
+  role `kor_travel_geo_app`(NOSUPERUSER/NOCREATEDB) 소유로 이전(manager ADR-45, PR #365). 09-20
+  빈 schema로 cutover(Alembic 전체 재생, 0016 FK idempotent 수정 #550). 09-28 "check KTG_PG_DSN"
+  장애는 DSN 문제가 아니었다 — 무기록 데이터 이관(09-24/25)이 serving MV를 비워 두고
+  `spatial_ref_sys`를 지워, forward geocode가 road fallback의 statement timeout(57014 ⊂
+  OperationalError)으로 503이 됐다. 복구: `spatial_ref_sys` 복원, T-307 회귀(Dagster launch
+  `PipelineNotFoundError`, 09-19 이후 백업 포함 전 run 실패) 수정 #551, 공용 instance crash
+  loop(PID 1 postmaster가 고아 `pg_isready` exit 2를 crash로 처리) 수정 manager #433/ADR-52,
+  MV swap refresh(두 MV 각 6,416,637행). live `/v2/geocode` 도로명 200(25~60ms)·reverse 200 확인.
+  n150 약 74GB 정리. 상세 `journal.md` 2026-09-28.
+  **다음 한 작업**: `tasks.md` "T-308 공용 instance 이전 후속"의 T-314(백업 커버리지 복구 +
+  이관본 검증 → 그 뒤 옛 PGDATA/09-19 아카이브 정리)부터.
 
 - ✅ **T-307 — geo Dagster를 weather와 같은 3-프로세스(webserver/daemon/code-server)
   구조로 분리 (사용자 지시)** — weather가 실제 8시간 무감지 장애 후 코드 로딩을 별도

@@ -6,6 +6,31 @@
 
 ## 완료
 
+- [x] **T-308 — geo DB를 공용 제어 평면 instance(`kor-travel-shared-postgres`, :11000)로 이전 +
+  관리 UI geocoding 장애 복구** (2026-09-20~28, by claude, 사용자 지시 "kor-travel-shared-postgres로
+  db를 옮겨놔" → "둘 다", "지금은 데이터 없이 일단 빈 db로 옮겨", 이후 "geocoding admin ui
+  화면에서 db 연결문제 발생").
+
+  **이전**: docker-manager PR #365(ADR-45) — `kor-travel-shared-db-init-geo` one-shot이 role
+  `kor_travel_geo_app`(NOSUPERUSER/NOCREATEDB/NOCREATEROLE)과 `kor_travel_geo`·
+  `kor_travel_geo_dagster`를 만들고 PUBLIC CONNECT 회수(양방향 격리 live 확인). extension은
+  cluster admin이 `x_extension`에 만들고 앱 role에 USAGE만. n150의 두 manager 트리 중 공용
+  instance를 소유한 `/opt` 트리에만 surgical 반영. 09-20 빈 DB에 Alembic 26개 전체 재생 →
+  head `0026_t290k_retire_inproc`, 테이블 수·extension 버전 옛 instance와 일치. 그 과정에서 0016이
+  0006 `SCHEMA_SQL`의 FK를 중복 추가하던 버그를 idempotent 가드로 수정(geo PR #550).
+
+  **09-28 장애 원인·복구** (상세 `journal.md`): 09-24/25 무기록 data-only 이관이 serving MV 2개를
+  0행으로 남기고 `spatial_ref_sys`를 비웠다 → forward geocode가 road fallback statement
+  timeout(57014, `OperationalError` 하위)으로 "check KTG_PG_DSN" 503. reverse는 `geo_cache` 덕에
+  살아 있었을 뿐. 조치: `spatial_ref_sys` 8,500행 복원; T-307이 만든 `workspace.yaml`
+  `location_name` 불일치(09-19 이후 모든 Dagster launch `PipelineNotFoundError`) 원복 + 회귀 테스트,
+  SQLAlchemy `<2.1` 고정(geo PR #551, n150 배포); 공용 instance crash loop(09-25 이후 5회, 전
+  tenant 3~11분) 원인 — postmaster가 PID 1이라 healthcheck timeout으로 고아가 된 `pg_isready`의
+  exit 2를 backend crash로 처리 — 을 `init: true` + exec-form healthcheck로 수정(manager PR #433 /
+  ADR-52, 재생성 다운타임 약 10초); `refresh-mv?strategy=swap`으로 MV 재구축(73분, 두 MV 각
+  6,416,637행, serving release `e0db4ff8` active). live `POST /v2/geocode` 도로명 200(25~60ms),
+  reverse 200, `/v1/readyz` 200. n150 약 74GB 정리(디스크 88%→71%). 후속 T-309~T-317은 `tasks.md`.
+
 - [x] **T-307 — geo Dagster를 weather와 같은 3-프로세스(webserver/daemon/code-server)
   구조로 분리** (2026-09-19, by claude, 사용자 지시 "geo의 dagster 구조를 weather과 같이
   변경. 공용 db 및 기타구조와 원칙은 manager 레포 참조"). geo는 기존에 webserver/daemon

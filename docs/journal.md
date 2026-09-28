@@ -2,6 +2,80 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-28 (T-308 — geo DB 공용 instance(:11000) 이전 + 관리 UI geocoding 장애 복구, by claude)
+
+사용자 지시 "kor-travel-shared-postgres로 db를 옮겨놔"(대상 확인 결과 "둘 다" —
+`kor_travel_geo`와 `kor_travel_geo_dagster`), 이어서 "데이터마이그레이션은 가장 나중에",
+"지금은 데이터 없이 일단 빈 db로 옮겨". docker-manager가 하루 전 ADR-44로 concierge만
+공용 instance로 옮기면서 "geo/map/pinvi는 범위 밖"이라고 적어 둔 상태였으므로 범위를 geo로
+넓히는 ADR-45를 새로 세웠다.
+
+**09-20 — 빈 schema로 이전.** docker-manager PR #365(ADR-45): `kor-travel-shared-db-init-geo`
+one-shot이 role `kor_travel_geo_app`(NOSUPERUSER/NOCREATEDB/NOCREATEROLE)과 빈 DB 2개를
+만들고 PUBLIC CONNECT를 회수한다. extension은 db-init에서 만들지 않았다 — geo schema는
+postgis/pg_trgm/unaccent/pg_stat_statements를 `x_extension`에 두는데, map 커토버 때 initdb가
+심은 확장 배치가 dump와 충돌한 전례가 있어서다. n150에는 docker-manager 트리가 둘이다
+(`/opt/...`가 공용 instance와 concierge, 홈 트리가 geo-api/ui 소유) — 공용 instance를 소유한
+`/opt` 트리에만 새 서비스를 surgical하게 얹었다. 32GB dump는 SSH 끊김으로 도중에 죽었고,
+사용자 지시대로 데이터 없이 Alembic 26개 migration을 빈 DB에 처음부터 재생해 schema만
+올렸다. 이 과정에서 **아무도 빈 DB에서 전체 migration을 재생해 본 적이 없어서** 숨어 있던
+버그가 나왔다: 0016이 0006의 `SCHEMA_SQL`이 이미 만든 FK를 다시 추가한다 → `DO $$ IF NOT
+EXISTS` 가드로 idempotent하게(PR #550). 앱 role은 extension을 만들 수 없으므로 cluster
+admin(`shared_admin`)이 먼저 만들고 `x_extension` USAGE를 부여했다("type geometry does not
+exist"의 원인). geo 컨테이너 정지는 auto-mode classifier가 채팅 승인으로도 통과시키지 않아
+사용자가 `!`로 직접 실행했다.
+
+**09-28 — "geocoding admin UI 화면에서 db 연결문제".** 사용자 보고는 "reverse geocode는 잘
+됨. ktg_pg_dsn 체크하라는 에러". DSN은 멀쩡했다. 실제 사슬:
+
+1. 09-24/25에 **기록 없는 다른 세션**이 data-only dump로 27GB를 공용 instance에 이미 이관해
+   두었다("데이터 이관은 가장 나중에"라는 지시와 별개로). 그 이관은 serving MV
+   (`mv_geocode_target`, `mv_geocode_text_search`)를 refresh하지 않아 둘 다 populated 표시에
+   0행이었고, truncate 단계가 PostGIS `spatial_ref_sys`까지 비워 `ST_Transform`이 "Cannot find
+   SRID (4326)"로 실패했다.
+2. MV가 비어 forward geocode가 road fallback(`_ROAD_GEOMETRY_SQL`)으로 떨어지고, 그 쿼리가
+   5초 `statement_timeout`에 걸린다. `QueryCanceled`(57014)는 psycopg에서 `OperationalError`
+   하위라 geo가 이를 "check KTG_PG_DSN" 503으로 번역했다 — 오해를 부르는 문구의 원인(T-309).
+3. reverse가 "잘 된" 것은 `geo_cache` 덕분이었다. 약 12만 건 캐시가 10-08부터 만료되면 reverse도
+   깨질 상태였다.
+
+복구하려고 MV refresh를 띄우자 **내 T-307 회귀**가 드러났다: `workspace.yaml`의
+`location_name`을 바꿔 geo-api launch selector(`KTG_DAGSTER_REPOSITORY_LOCATION_NAME`)와
+어긋났고, 09-19 이후 모든 run launch(백업 포함)가 `PipelineNotFoundError`였다 → PR #551(원복 +
+두 값이 같음을 고정하는 unit test). 같은 PR에서 SQLAlchemy 2.1.1이 mypy 추론을 깨 CI가 막혀
+`<2.1`로 고정했다(T-316).
+
+**공용 instance crash loop (09-25 이후 5회, 매번 전 tenant 3~11분 장애).** postgres가 컨테이너
+PID 1(init 없음)이고 healthcheck가 shell-form `pg_isready`(timeout 5s)였다. 다른 에이전트의
+rebuild/e2e/BuildKit으로 호스트가 멈칫하면 Docker가 timeout으로 shell만 죽이고, 고아가 된
+`pg_isready`가 PID 1(postmaster)에 입양돼 exit 2로 끝난다. PG16 `CleanupBackend`는 exit 0/1이
+아닌 child를 crash로 보고 전 backend를 리셋한다. → docker-manager PR #433 / ADR-52:
+`init: true` + exec-form healthcheck(+`stop_grace_period`, `shm_size`), compose validator 허용.
+재생성 다운타임 약 10초, 이후 PID 1은 docker-init. refresh 전에 이걸 먼저 배포한 이유: 큰
+MV rebuild가 호스트 부하를 올려 같은 crash를 부르면 다른 tenant까지 같이 넘어간다.
+
+**복구 순서**: `spatial_ref_sys` 8,500행 복원(shared_admin) → #551 geo Dagster 배포 → #433 공용
+instance 재생성 → `POST /v1/admin/maintenance/refresh-mv?strategy=swap`(job
+`job_e0c5da030cc146c895bbae86d1ac1d81`, 13:12 UTC 시작). 사용자 선택에 따라 n150 정리도 먼저
+했다(약 74GB, 디스크 88%→71%): geo 09-17/18 백업 아카이브(janitor API로 만료, 09-19는 남김),
+테스트 컨테이너 15개, dangling 이미지 2.8GB, weather·parking-radar의 옛 DB volume 67GB. 빌드
+캐시는 전부 48시간 안에 쓰인 것이라 남겼고, 옛 geo PGDATA는 선택 범위 밖이라 남겼다(T-314).
+
+**결과 (14:25 UTC 완료, 73분)**: `mv_geocode_target`·`mv_geocode_text_search` 각 6,416,637행
+(T-290l 전국 적재와 동일), `region_radius_parts` 54,316행, `geo_cache` 비움, serving release
+`e0db4ff8`(manual_rebuild) active — 이전 active였던 08-26 daily_delta release는 superseded.
+refresh 동안 공용 instance crash 0건(재생성 후 restart 0). live `POST /v2/geocode`: 도로명
+`서울특별시 중구 세종대로 110`·`경기도 성남시 분당구 판교역로 166`·`부산광역시 해운대구
+해운대해변로 264` 모두 200 OK, 25~60ms(이전엔 5초 timeout 뒤 503). reverse(세종대로 110 좌표)
+200, 156ms — 이제 캐시가 아니라 base table로 응답한다. `/v1/readyz` 200. 검증 중 지번 geocode
+누락 2건을 발견했지만 MV에는 해당 행이 있고 코드 경로 문제라 이관과 무관 — T-317로 분리했다.
+
+**교훈 두 가지**를 memory로 남겼다: (1) n150 SSH는 부하 시 끊긴다 — 30초 넘는 작업은 전부
+`setsid nohup … & disown` + Monitor. (2) 다른 에이전트가 manager와 n150을 계속 바꾼다 — 이번에도
+옛 instance 은퇴(#429), 무기록 데이터 이관, `/opt`에서의 geo Dagster 재생성, 내 배포 몇 분 전의
+manager release 설치가 모두 작업 도중에 일어났다. 매 운영 단계 전에 upstream PR·`/opt` symlink·
+컨테이너 label·lock G를 다시 확인한다.
+
 ## 2026-09-19 (T-307 — geo Dagster 3-프로세스 code-server 분리, by claude)
 
 사용자 지시 "geo의 dagster 구조를 weather과 같이 변경. 공용 db 및 기타구조와 원칙은
