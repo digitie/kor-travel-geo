@@ -2661,6 +2661,11 @@ export interface components {
             enabled: boolean;
             /** Entries */
             entries: number;
+            /**
+             * Exact
+             * @default false
+             */
+            exact: boolean;
             /** Expired */
             expired: number;
             /** Hits */
@@ -8095,7 +8100,9 @@ export interface operations {
     };
     cache_metrics_v1_admin_cache_metrics_get: {
         parameters: {
-            query?: never;
+            query?: {
+                exact?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8109,6 +8116,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CacheMetrics"];
+                };
+            };
+            /** @description Legacy validation error envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegacyErrorEnvelope"];
                 };
             };
         };

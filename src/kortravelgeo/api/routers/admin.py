@@ -244,9 +244,12 @@ async def explain(
 
 @router.get("/cache/metrics", response_model=CacheMetrics)
 async def cache_metrics(
+    # T-310: 기본은 geo_cache scan 없는 통계 기반 추정치. exact=true만 전수 집계를 돌리며
+    # API statement_timeout이 상한이다(관리 UI의 명시적 "정확히 세기" 요청용).
+    exact: bool = Query(default=False),
     client: AsyncAddressClient = Depends(get_client),
 ) -> CacheMetrics:
-    return await client.cache_metrics()
+    return await client.cache_metrics(exact=exact)
 
 
 @router.get("/logs", response_model=list[str])

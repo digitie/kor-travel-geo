@@ -398,6 +398,11 @@ export type CacheMetrics = {
   entries: number;
   hits: number;
   expired: number;
+  /**
+   * T-310: false(기본)면 geo_cache를 scan하지 않은 통계 기반 추정치 — `hits`는 마지막 통계
+   * 초기화 이후 geo_cache UPDATE 누적 수다. true는 `?exact=true`로 요청한 전수 집계다.
+   */
+  exact?: boolean;
 };
 
 export type ConsistencyCase = {
