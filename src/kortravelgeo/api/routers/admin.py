@@ -1968,8 +1968,10 @@ async def _launch_db_backup_dagster_run(
             tags={"kor_travel_geo.job_id": job_id},
         )
     except (DagsterUrlConfigurationError, DagsterLaunchError, httpx.HTTPError) as exc:
-        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
-        raise KorTravelGeoError("Dagster backup launch failed", http_status=502) from exc
+        message = f"Dagster launch failed: {exc}"
+        if await LoadJobExecutor(engine).mark_launch_failed(job_id, message):
+            raise KorTravelGeoError("Dagster backup launch failed", http_status=502) from exc
+        # 응답은 실패였지만 run이 이미 row를 adopt했다 — 실행 중인 job으로 돌려준다(T-318).
     return job_id
 
 
@@ -2319,8 +2321,10 @@ async def _launch_db_restore_dagster_run(
             tags={"kor_travel_geo.job_id": job_id},
         )
     except (DagsterUrlConfigurationError, DagsterLaunchError, httpx.HTTPError) as exc:
-        await LoadJobExecutor(engine).mark_failed(job_id, f"Dagster launch failed: {exc}")
-        raise KorTravelGeoError("Dagster restore launch failed", http_status=502) from exc
+        message = f"Dagster launch failed: {exc}"
+        if await LoadJobExecutor(engine).mark_launch_failed(job_id, message):
+            raise KorTravelGeoError("Dagster restore launch failed", http_status=502) from exc
+        # 응답은 실패였지만 run이 이미 row를 adopt했다 — 실행 중인 job으로 돌려준다(T-318).
     return job_id
 
 

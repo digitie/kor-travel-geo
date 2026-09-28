@@ -78,7 +78,8 @@ DB 복구는 백업에서 restore하거나(ADR-030/036) 전체 적재를 다시 
 기존 DB를 재사용하는 경우 먼저 schema migration을 적용한다.
 
 ```bash
-export KTG_PG_DSN=postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo
+# 공용 instance(:11000) 앱 role. 비밀번호는 manager .env의 KOR_TRAVEL_GEO_SHARED_APP_PASSWORD
+export KTG_PG_DSN=postgresql+psycopg://kor_travel_geo_app:<password>@127.0.0.1:11000/kor_travel_geo
 alembic upgrade head
 ```
 

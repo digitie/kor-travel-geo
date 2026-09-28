@@ -241,6 +241,32 @@ UPDATE load_jobs
                 {"job_id": job_id, "message": message},
             )
 
+    async def mark_launch_failed(self, job_id: str, message: str) -> bool:
+        """Fail a row whose Dagster launch errored — only while it is still ``queued``.
+
+        A launch error can be ambiguous (e.g. a timeout after Dagster already accepted the
+        run). If the run adopted the row first (``queued`` → ``running``), overwriting it to
+        ``failed`` would make the reconciler terminate a run doing real work. Returns ``True``
+        when the row was failed, ``False`` when the run already owns it (T-318)."""
+
+        async with self._begin_uncapped() as conn:
+            result = await conn.execute(
+                text(
+                    """
+UPDATE load_jobs
+   SET state = 'failed',
+       current_stage = 'failed',
+       error_message = :message,
+       finished_at = now(),
+       heartbeat_at = now()
+ WHERE job_id = :job_id AND state = 'queued'
+RETURNING job_id
+"""
+                ),
+                {"job_id": job_id, "message": message},
+            )
+            return result.first() is not None
+
     async def mark_cancelled(self, job_id: str) -> None:
         """Converge a row to ``cancelled``."""
 

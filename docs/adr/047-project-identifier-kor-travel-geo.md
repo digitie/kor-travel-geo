@@ -46,3 +46,7 @@
   geo 전용 인스턴스 `127.0.0.1:12500`으로 이동했다. 위 "결과"의 기본 DSN은 이제
   `postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo`다(`Settings.pg_dsn`·`alembic.ini`·
   `.env*.example`). 현재 포트 정본은 `docs/ports.md`.
+- 2026-09-29 — T-308로 geo DB가 공용 제어 평면 instance `127.0.0.1:11000`(manager ADR-45)으로 이관되고
+  전용 `12500`은 2026-09-28 은퇴했다. T-313부터 기본 DSN은
+  `postgresql+psycopg://kor_travel_geo_app:change-me@127.0.0.1:11000/kor_travel_geo`다 — 앱 role
+  `kor_travel_geo_app`, 비밀번호는 placeholder라 실제 값은 항상 `KTG_PG_DSN`으로 준다.
