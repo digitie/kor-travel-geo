@@ -49,7 +49,7 @@ Git source of truth는 **NTFS** worktree다(편집·branch·commit·PR 기준). 
 |------|-----------|------|
 | FastAPI 백엔드 | `12501` | `uvicorn kortravelgeo.api.app:app --host 127.0.0.1 --port 12501` |
 | `kor-travel-geo-ui` | `12505` | `npm run dev -- --port 12505`, Playwright base URL도 12505 |
-| PostgreSQL + PostGIS (geo 전용 인스턴스) | `12500` | DSN `postgresql+psycopg://addr:addr@127.0.0.1:12500/kor_travel_geo` — manager ADR-37(2026-08-17)로 `5432`→`12500`, `127.0.0.1` 바인드. `docker exec … psql`도 `-p 12500` 필수 |
+| PostgreSQL + PostGIS (공용 제어 평면 instance) | `11000` | DSN `postgresql+psycopg://kor_travel_geo_app:<secret>@127.0.0.1:11000/kor_travel_geo` (Dagster 메타: `…/kor_travel_geo_dagster`) — manager ADR-45(T-308, 2026-09-20). 앱 role은 **NOSUPERUSER/NOCREATEDB** — 확장 생성·`CREATE DATABASE`·`postgres` DB 접속 불가. 옛 전용 instance `12500`은 2026-09-28 은퇴(manager #429). 컨테이너 안 `psql`은 `-p 11000` |
 | RustFS S3 API / console | `12101` / `12105` | `KTG_RUSTFS_ENDPOINT_URL` 기준값 |
 
 ## 데이터 기준월
