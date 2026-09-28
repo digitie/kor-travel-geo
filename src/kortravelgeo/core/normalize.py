@@ -31,6 +31,9 @@ _ROAD_RE = re.compile(
 _JIBUN_RE = re.compile(
     r"(?P<mt>산\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?(?![길로\d])"
 )
+# "태평로1가"·"종로1가"·"을지로2가"처럼 숫자+"가"로 끝나는 토큰은 법정동 이름이다(T-317).
+# 도로명은 대로/로/길로 끝나므로 이 토큰의 "…로" + 숫자를 도로명 + 건물번호로 읽으면 안 된다.
+_LEGAL_DONG_GA_RE = re.compile(r"(?<!\S)[가-힣]+\d+가(?!\S)")
 
 _SIDO_ALIASES = {
     "서울": "서울특별시",
@@ -164,8 +167,13 @@ def parse_address(raw: str) -> AddrParts:
     normalized_without_under = normalize_spaces(normalized.replace("지하", " "))
     tokens = normalized_without_under.split()
     si, sgg, emd, li = _pop_region(tokens)
+    # 법정동 "N가" 토큰은 같은 길이의 공백으로 가려 번호 탐색에서만 뺀다. 길이를 보존하므로
+    # match 위치(detail 잘라내기)는 원문 기준 그대로 쓸 수 있다.
+    number_source = _LEGAL_DONG_GA_RE.sub(
+        lambda match: " " * len(match.group()), normalized_without_under
+    )
 
-    road_match = _ROAD_RE.search(normalized_without_under)
+    road_match = _ROAD_RE.search(number_source)
     if road_match:
         road = normalize_spaces(road_match.group("road").split()[-1])
         main = int(road_match.group("main"))
@@ -189,7 +197,7 @@ def parse_address(raw: str) -> AddrParts:
         )
 
     jibun_match = None
-    for match in _JIBUN_RE.finditer(normalized_without_under):
+    for match in _JIBUN_RE.finditer(number_source):
         jibun_match = match
     if jibun_match is None:
         msg = "address number could not be parsed"
