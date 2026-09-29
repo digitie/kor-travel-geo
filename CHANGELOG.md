@@ -5,6 +5,19 @@
 ## [Unreleased]
 
 ### Changed
+- **DB 수명주기 capability 후속 정리(T-321, T-312 리뷰 low).**
+  hot-swap plan/execute/rollback은 요청의 `maintenance_database`(`--maintenance-db`)를 실제로 조회한다 — 전에는
+  항상 `postgres`를 봐서 hardened cluster에서 다른 maintenance DB를 쓰면 잘못 거절되거나 잘못 통과했다. 이름은 조회
+  전에 식별자 검증하고(형식 오류는 `E0100`), cluster에 없는 DB도 instance 미지원(`E0410`)이 아니라 입력 오류
+  `E0100`이다(`CREATEDB`가 없는 공용 instance는 그대로 `E0410`). 요청이 고른 이름은 capability 캐시에 넣지 않는다(`GET /v1/admin/db-capabilities`는 계속 `postgres`
+  기준). `db_restore`의
+  `E0410` `hint`와 admin UI 복원 위저드가 공용 instance 복원 절차(cluster admin이 app role 소유의 빈 DB를 만든 뒤
+  `ktgctl restore create --target-dsn`)를 안내한다 — UI는 DSN 자격증명을 받지 않고 게이트 범위도 그대로다.
+  E0410으로 거절된 hot-swap plan도 dry-run처럼 `serving_release.hot_swap_plan` `denied` 감사 행을 남긴다. Dagster
+  daily restore drill schedule은 미지원 instance에서 tick을 `SkipReason`으로 건너뛰어 매일 `Failure` run이 쌓이지
+  않는다(op guard는 2차 방어선으로 유지). 공용 instance 백업을 dump owner role(`kor_travel_geo_app`,
+  `shared_admin`)이 없는 다른 cluster에 superuser로 복원할 때 그 role을 `NOLOGIN`으로 먼저 만드는 절차를
+  `docs/t046-db-backup-restore.md`에 추가했다.
 - **공용 DB instance에서 불가능한 DB 수명주기 기능을 일찍 거절하고, app role 백업을 복원 가능한 형식으로 바꿨다(T-312).**
   hot-swap plan/execute/rollback·restore drill·blue-green scratch full-load·`db_restore`는 `CREATEDB`와 maintenance
   DB `postgres` `CONNECT`가 필요한데, 공용 instance(T-308)의 app role에는 둘 다 없어 job을 만든 뒤 raw DB 오류로

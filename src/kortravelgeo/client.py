@@ -143,7 +143,7 @@ from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
 from .infra.geometry_repo import GeometryRepository
-from .infra.hotswap import inspect_restore_hot_swap_plan
+from .infra.hotswap import inspect_restore_hot_swap_plan, validate_maintenance_database
 from .infra.pobox_repo import PoboxRepository
 from .infra.public_api_keys import PublicApiKeyRepository
 from .infra.reverse_repo import ReverseRepository
@@ -2215,15 +2215,32 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         """
         return await db_lifecycle_capabilities(self._engine(), self.settings)
 
-    async def require_db_lifecycle(self, feature: DbLifecycleFeature) -> None:
-        """Raise ``UnsupportedOnInstanceError`` (E0410/409) if ``feature`` cannot run here."""
-        await require_db_lifecycle(self._engine(), self.settings, feature)
+    async def require_db_lifecycle(
+        self,
+        feature: DbLifecycleFeature,
+        *,
+        maintenance_database: str | None = None,
+    ) -> None:
+        """Raise ``UnsupportedOnInstanceError`` (E0410/409) if ``feature`` cannot run here.
+
+        ``maintenance_database`` is the DB a hot-swap request will actually connect to for
+        ``RENAME DATABASE`` (omitted: the instance's ``postgres``). It is validated first
+        (identifier, not the serving DB), so a malformed name is an ``InvalidInputError``
+        (E0100/400) and is never probed; a name missing from the cluster is E0100 too (T-321).
+        """
+        if maintenance_database is not None:
+            maintenance_database = validate_maintenance_database(
+                self.settings, maintenance_database
+            )
+        await require_db_lifecycle(
+            self._engine(), self.settings, feature, maintenance_database=maintenance_database
+        )
 
     async def restore_hot_swap_plan(
         self,
         req: RestoreHotSwapPlanRequest,
     ) -> RestoreHotSwapPlan:
-        await self.require_db_lifecycle("hot_swap")
+        await self.require_db_lifecycle("hot_swap", maintenance_database=req.maintenance_database)
         return await inspect_restore_hot_swap_plan(self.settings, req)
 
     async def execute_restore_hot_swap(
@@ -2242,7 +2259,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         """
         from .infra.hotswap import execute_restore_hot_swap
 
-        await self.require_db_lifecycle("hot_swap")
+        await self.require_db_lifecycle("hot_swap", maintenance_database=req.maintenance_database)
         return await execute_restore_hot_swap(
             self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
         )
@@ -2262,7 +2279,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         """
         from .infra.hotswap import execute_hot_swap_rollback
 
-        await self.require_db_lifecycle("hot_swap")
+        await self.require_db_lifecycle("hot_swap", maintenance_database=req.maintenance_database)
         return await execute_hot_swap_rollback(
             self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
         )

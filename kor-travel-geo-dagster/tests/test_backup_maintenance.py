@@ -10,10 +10,12 @@ skipped_locked = no-op success, failed_count > 0 = Failure).
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
-from dagster import Failure, build_op_context
+from dagster import Failure, RunRequest, SkipReason, build_op_context, build_schedule_context
 from kortravelgeo.exceptions import UnsupportedOnInstanceError
 
 from kortravelgeo_dagster import backup_maintenance
@@ -319,6 +321,74 @@ async def test_retention_janitor_op_failed_count_raises() -> None:
     assert "bad-0, bad-1" in str(ei.value.description)
 
 
+_SHARED_INSTANCE_REFUSAL = UnsupportedOnInstanceError(
+    "restore drill: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행",
+    hint="role kor_travel_geo_app: CREATEDB 권한 없음",
+)
+
+
+def test_restore_drill_schedule_skips_the_tick_on_an_unsupported_instance() -> None:
+    """T-321: enabling the daily drill on the shared instance must not pile up Failure runs."""
+    client = _FakeClient(lifecycle_error=_SHARED_INSTANCE_REFUSAL)
+
+    result = backup_maintenance.restore_drill_schedule(
+        build_schedule_context(resources={"client": client})
+    )
+
+    assert isinstance(result, SkipReason)
+    assert result.skip_message == (
+        "restore drill: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행 "
+        "(role kor_travel_geo_app: CREATEDB 권한 없음)"
+    )
+    assert client.calls == {"lifecycle": {"feature": "restore_drill"}}
+
+
+def test_restore_drill_schedule_tick_evaluation_yields_no_run_when_unsupported() -> None:
+    """Through Dagster's own tick evaluation (the daemon path), not just a direct call."""
+    client = _FakeClient(lifecycle_error=_SHARED_INSTANCE_REFUSAL)
+
+    data = backup_maintenance.restore_drill_schedule.evaluate_tick(
+        build_schedule_context(resources={"client": client})
+    )
+
+    assert data.run_requests == []
+    assert data.skip_message is not None
+    assert "공용 DB instance에서는 지원하지 않음" in data.skip_message
+
+
+def test_restore_drill_schedule_requests_a_run_on_a_supported_instance() -> None:
+    client = _FakeClient()
+    scheduled_at = datetime(2026, 9, 29, 4, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    result = backup_maintenance.restore_drill_schedule(
+        build_schedule_context(resources={"client": client}, scheduled_execution_time=scheduled_at)
+    )
+
+    assert isinstance(result, RunRequest)
+    assert result.run_key == scheduled_at.isoformat()
+    assert result.tags["kor_travel_geo.schedule"] == "backup_restore_drill_daily"
+    assert result.tags["kor_travel_geo.job_kind"] == "backup_restore_drill"
+    assert client.calls == {"lifecycle": {"feature": "restore_drill"}}
+
+
+def test_restore_drill_schedule_still_launches_when_the_capability_check_errors() -> None:
+    """A failing probe (DB down) must not silently skip: the run's op guard reports it and the
+    run-failure sensor alerts — a skipped tick would alert nobody."""
+    client = _FakeClient(lifecycle_error=RuntimeError("connection refused"))
+    scheduled_at = datetime(2026, 9, 29, 4, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+
+    result = backup_maintenance.restore_drill_schedule(
+        build_schedule_context(resources={"client": client}, scheduled_execution_time=scheduled_at)
+    )
+
+    assert isinstance(result, RunRequest)
+    assert result.run_key == scheduled_at.isoformat()
+
+
+def test_restore_drill_schedule_requires_the_client_resource() -> None:
+    assert backup_maintenance.restore_drill_schedule.required_resource_keys == {"client"}
+
+
 def test_retention_janitor_schedule_is_daily_stopped_by_default() -> None:
     from dagster import DefaultScheduleStatus
 
@@ -342,3 +412,8 @@ def test_maintenance_jobs_and_schedule_registered_in_definitions() -> None:
 
     schedule_names = {sched.name for sched in defs.schedules}
     assert {"backup_restore_drill_daily", "backup_retention_janitor_daily"} <= schedule_names
+    # T-321: the drill schedule's `client` resource param must be satisfiable by the code
+    # location's resources, or the daemon errors on every tick.
+    repo = defs.get_repository_def()
+    assert "client" in repo.get_top_level_resources()
+    assert repo.get_schedule_def("backup_restore_drill_daily").required_resource_keys == {"client"}

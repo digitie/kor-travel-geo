@@ -21,7 +21,7 @@ at runtime, and stringized annotations break ``@op`` context typing.
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Final, cast
+from typing import Final, cast
 
 from dagster import (
     Bool,
@@ -32,20 +32,20 @@ from dagster import (
     Field,
     Int,
     OpExecutionContext,
+    ResourceParam,
     RunRequest,
     ScheduleEvaluationContext,
+    SkipReason,
     String,
     job,
     op,
     schedule,
 )
+from kortravelgeo.client import AsyncAddressClient
 from kortravelgeo.infra.backup import BACKUP_ARTIFACT_TYPE
 
-from .db_lifecycle import refuse_unsupported_db_lifecycle
+from .db_lifecycle import db_lifecycle_skip_reason, refuse_unsupported_db_lifecycle
 from .resources import op_resource
-
-if TYPE_CHECKING:
-    from kortravelgeo.client import AsyncAddressClient
 
 __all__ = [
     "BACKUP_MAINTENANCE_JOBS",
@@ -326,10 +326,19 @@ def backup_retention_janitor_job() -> None:
     description=(
         "Daily 04:00 restore drill of the latest available backup (external-cron replacement, "
         "T-239). STOPPED by default; enable per deployment. The op selects the latest backup, "
-        "so the schedule needs no run config."
+        "so the schedule needs no run config. Skips the tick (no run) on an instance whose DB "
+        "role cannot CREATE DATABASE, e.g. the shared PostgreSQL instance (T-321)."
     ),
 )
-def restore_drill_schedule(context: ScheduleEvaluationContext) -> RunRequest:
+def restore_drill_schedule(
+    context: ScheduleEvaluationContext, client: ResourceParam[AsyncAddressClient]
+) -> RunRequest | SkipReason:
+    # T-321: 공용 instance에서 켜 두면 매일 Failure run이 쌓인다 — tick에서 먼저 거른다.
+    # client는 ResourceParam으로 받는다: required_resource_keys로 선언하면 Dagster 1.13의 직접
+    # 호출(build_schedule_context 테스트)이 resource를 kwargs로 넘겨 TypeError가 난다.
+    skip = db_lifecycle_skip_reason(client, "restore_drill", context.log)
+    if skip is not None:
+        return skip
     scheduled_at = context.scheduled_execution_time
     return RunRequest(
         run_key=scheduled_at.isoformat() if scheduled_at is not None else None,
