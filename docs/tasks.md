@@ -57,6 +57,24 @@ URL(`geo-dagster.digitie.mywire.org`)을 관리자 `/admin/dagster` 화면에 if
 (`DagsterEmbed` + `resolveDagsterPublicUrl`, 서버측 `KTG_DAGSTER_PUBLIC_URL` 해석; Dagster UI가
 frame-busting 헤더를 보내지 않아 CSP 변경 불필요). 남은 것은 UI 컨테이너 재배포로 라이브 반영하는 단계뿐.
 
+### T-324 — 공유 Dagster plane(dagster-shared plan) geo 선행 작업
+
+계획 정본: Manager 쪽 `dagster-shared-plan.md`(2026-09-29) §3·§5 stage 0/2/3. branch
+`feat/dagster-shared-stage0`(PR은 아직 없음 — 머지·배포는 소유자 지시 후).
+
+- [x] stage 0(0.4) — 이미지가 `kor-travel-geo-dagster/docker/constraints-dagster.txt`로 exact 설치
+  (dagster 1.13.24 계열, dagster-postgres 0.29.24, pydantic/psycopg/grpcio/protobuf, sqlalchemy 2.1.1),
+  두 `FROM`을 `python:3.12-slim@sha256:f77ac9e4…`(3.12.14)로 digest 핀. CI `dagster` job도 같은 `-c`.
+- [x] 3.3 — `/v1/ops/dagster/summary`·`/runs/{id}`를 geo code location으로 한정(단일 tenant에서도 결과 동일).
+- [x] 2.2(D4) — backup schedule·retention janitor·run-failure sensor `default_status=RUNNING`,
+  restore drill은 `STOPPED`(n150 운영 상태 그대로).
+- [x] 공유 plane 전제 — run-failure sensor의 `monitor_all_code_locations` 제거, entrypoint psycopg2 guard가
+  `KOR_TRAVEL_DAGSTER_SHARED_PG_URL`도 검사.
+- [ ] 머지 후 `ktdctl ensure geo`로 재빌드(stage 0 rollout 2번) — 세 컨테이너 site-packages 1.13.24 확인.
+- [ ] (계획 밖 발견) 공유 instance의 `run_monitoring.max_runtime_seconds`(21600) 기본값이 geo run에도
+  걸린다. 지금 geo instance엔 run_monitoring이 없어 무제한이다. full load·restore가 6시간을 넘을 수
+  있으면 해당 job에 `dagster/max_runtime` tag가 필요하다(값은 계획/소유자 결정).
+
 (그 외 진행 중 작업 없음. T-177A~T-177H·T-183 완료 — `tasks-done.md` 참조.)
 
 ## 대기

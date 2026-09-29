@@ -2,6 +2,29 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-29 (T-324 — 공유 Dagster plane geo 선행 작업, by claude)
+
+Map·PinVi·geo·weather가 한 Dagster webserver/daemon(`dagster_shared`)을 쓰는 계획(Manager 쪽
+`dagster-shared-plan.md`)의 geo 몫. 배포·토폴로지 변경 없음, branch `feat/dagster-shared-stage0`.
+
+**n150 운영 상태를 먼저 읽었다(읽기 전용 GraphQL)**: dagster 1.13.24 / python 3.12.14 / SQLAlchemy 2.1.1,
+instigator 넷 중 `scheduled_backup`·`backup_retention_janitor_daily`·`run_failure_sensor`가 RUNNING인데
+코드 기본값은 전부 STOPPED였다 — DB에서 손으로 켠 상태라 새 `dagster_shared`에서는 조용히 꺼진다.
+`backup_restore_drill_daily`는 STOPPED. run 64건 전부 `.dagster/repository=__repository__@kortravelgeo_dagster.definitions`
+filter에 걸렸다(GraphQL `tags` 출력엔 hidden tag라 안 보이지만 filter는 먹는다 — 처음에 `<missing>`으로 읽혀
+헷갈렸다). `repositoryOrigin`도 전 run에 채워져 있다.
+
+**한 일**: (1) 이미지 exact 설치 — `constraints-dagster.txt` 하나가 정본, pyproject는 floor 유지, 두 `FROM`
+digest 핀, CI `dagster` job도 같은 `-c`, `test_image_constraints.py`가 Dockerfile·pyproject·설치 환경을 묶는다.
+(2) admin API 조회 scoping — summary는 `repositoryOrError`+tag filter, run 상세는 `repositoryOrigin`이 geo가
+아니면 `not_found`(다른 프로젝트 run의 존재도 드러내지 않는다). (3) D4 — 운영 상태를 `default_status`로.
+(4) 계획표에 없던 것 둘: run-failure sensor가 `monitor_all_code_locations=True`였다 — 공유 instance에서는
+Map·weather 실패까지 geo `ops.run_failure_alerts`에 쌓였을 것이다(Dagster 1.13.24 소스로 기본값이 "같은
+location·repository의 모든 job"임을 확인하고 제거). entrypoint psycopg2 guard가 공유 URL env도 검사.
+
+**남긴 것**: 공유 instance의 run_monitoring 기본 max_runtime(21600초)이 geo run에 새로 걸린다(지금은 무제한).
+full load/restore 길이에 따라 `dagster/max_runtime` tag가 필요할 수 있다 — `tasks.md` T-324.
+
 ## 2026-09-29 (T-309~T-318 — T-308 후속 일괄 완주 + 백업 2주 주기, by claude)
 
 사용자 지시 "이어서 완주까지 진행", 도중 "백업주기는 2주에 한번으로". 코드 task 6개(T-309·T-310·
