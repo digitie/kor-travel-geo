@@ -6,6 +6,76 @@
 
 ## 완료
 
+- [x] **T-319·T-320·T-321 — T-309~T-318 리뷰 후속** (2026-09-29, by claude, 사용자 지시 "한도 다 쓸 때까지
+  기록하면서 진행"). workflow로 구현 → 독립 적대적 리뷰(전부 1차 approve, minor만) → minor 반영 → 독립 검증.
+  - **T-319** (#564, `7a7bb22`) — 원천 기준월을 `max(source_yyyymm)` 전수 scan 대신 `load_manifest`에서
+    읽는다(테이블당 1행). 운영엔 juso/locsum/navi/shp manifest가 없었다(그 loader들이 안 썼다) → loader가
+    적재 트랜잭션 안에서 manifest를 쓰게 하고, Alembic `0028_t319_source_month_manifest`가 manifest 없는
+    테이블만 1회 backfill(운영 4개 테이블 ≈ 9.9GB 1회 읽기). 인덱스(42M행 btree 유지비) 대신 메타데이터.
+    리뷰 minor 반영: daily delta가 남긴 낡은 juso manifest도 backfill, pre-T-319 백업을 복원한 DB는 active
+    release snapshot으로 보강 + 복원 뒤 `alembic upgrade head` 문서화, sppn TRUNCATE 시 manifest 삭제.
+    잔여는 T-323.
+  - **T-320** (#563) — `parse_address`가 지번을 "행정구역 바로 뒤 첫 번지"로 잡는다(v1 parcel·
+    `jibun_address`·zipcode·normalize·C15 loader 공통): `상계동 1234 … 1203호` → 1234. 세종특별자치시
+    v2 `query` parcel(`sgg_nm IS NULL` + 읍면동 조건, 인덱스 확인) — `전의면 신흥리 123`이 같은 리 이름의
+    조치원읍 행을 돌려주던 것도 막는다. 리뷰 minor 반영: `737.`·`737번지일원`처럼 번지에 붙은 문장부호·
+    글자는 main처럼 번지로(1차 수정본은 InvalidAddressError로 회귀했었다), 층(`2F`)·단지·관·게이트
+    번호는 번지 아님.
+  - **T-321** (#562, `38953ed`) — T-312 low 후속: hot-swap은 요청한 maintenance DB로 capability 탐지
+    (식별자 검증을 탐지보다 먼저, 탐지 캐시 상한), db_restore E0410 hint·문서에 공용 instance 복원 절차
+    (admin이 빈 DB 생성 → `target_dsn` 복원), 다른 cluster 복원 시 NOLOGIN owner role 선생성 문서,
+    restore-drill schedule이 공용 instance에서 `SkipReason`, 거절된 hot-swap plan도 `denied` audit row.
+
+- [x] **T-309~T-318 — T-308 공용 instance 이전 후속 일괄 완주** (2026-09-29, by claude, 사용자 지시
+  "이어서 완주까지 진행", 도중 "백업주기는 2주에 한번으로"). 각 task를 독립 worktree·PR로 구현하고
+  독립 적대적 리뷰 → 수정 → (blocker/major가 있던 것은) 2차 리뷰를 거쳐 병합했다. 상세는
+  `journal.md` 2026-09-29.
+  - **T-309** (#554, `0296c84`) — DB 오류를 SQLSTATE로 분류: statement/lock timeout·취소는 새
+    `E0504`/HTTP 504(힌트가 DSN이 아니라 서빙 MV·`/v1/readyz`), 연결·인증·연결 수 초과·MV 미populate는
+    `E0500`/503을 문구·힌트로 세분(DSN 힌트는 연결·인증 실패에만). `ktg_api_db_errors_total{error_type}`
+    라벨도 같은 분류. `/v1/readyz`에 `components.serving`(catalog → `EXISTS`, count 없음) — 서빙 MV가
+    비면 200 + `degraded`. UI는 v2/v1/vworld envelope를 한국어 code·hint로 표시, 관리 홈 카드에 degraded.
+  - **T-310** (#556, `bfe8b43`) — `/metrics`가 DB를 조회하지 않는다: DB 기반 gauge는 lifespan
+    refresher(`KTG_METRICS_DB_REFRESH_INTERVAL_SECONDS` 기본 60초, source별 5초 상한, last-good 유지,
+    실패는 `ktg_metrics_db_refresh_errors_total`)가 갱신, cache gauge는 통계 추정치. Cache 패널 정확
+    count는 명시 요청 시만. `pg_stat_statements` capture를 현재 DB·현재 role로 한정, 기본 15분.
+  - **T-311** (#560, `5bb9b46`) — 도로 fallback·보조 후보가 `tl_sprd_manage` 전수 scan 대신 trigram
+    GIN(`idx_sprd_manage_rn_nrm_trgm`, Alembic `0027_t311_road_rn_trgm`)을 탄다(운영 사본 중앙값
+    2.5초 → 22ms, 결과 동일).
+  - **T-312** (#558, `9afd50e`) — `KTG_DB_LIFECYCLE_MODE`(auto|enabled|disabled) capability 탐지로
+    공용 instance에서 hot-swap·restore drill·scratch full-load·DB 복원을 job 생성 전 `E0410`/409로
+    거절, `GET /v1/admin/db-capabilities`, UI 숨김, Dagster op 2차 방어. 1차 리뷰 major(`pg_dump
+    --no-privileges`가 x_extension USAGE grant를 버림)는 dump 형식 원복 + 복원 시에만 역할 중립화 +
+    복원 smoke가 owner의 확장 schema USAGE를 검사(geo가 쓰는 postgis/pg_trgm/unaccent만)로 해결.
+  - **T-313** (#553, `661af7f`) — 기본 DSN·`alembic.ini`·스크립트·예시 env를 공용 instance
+    `127.0.0.1:11000`/`kor_travel_geo_app`(placeholder 비밀번호)로.
+  - **T-316** (#555, `4b65753`) — 본체 SQLAlchemy `>=2.0.35,<2.2,!=2.1.0`(2.1 타입 추론 대응).
+    kor-travel-geo-dagster는 `<2.1` 유지가 **필수**(리뷰 실측: 2.1이면 dagster_postgres가 psycopg 3로
+    바뀌어 `NOTIFY`에서 run 시작 불가) — 새 CI job `dagster`가 이미지와 같은 2.0 resolve로 본체
+    pytest + Dagster 패키지 테스트를 돈다(그전 Dagster 패키지 테스트는 CI 밖).
+  - **T-317** (#557, `b3d666f`) — `parse_address`가 `…로N가` 법정동을 도로+번호로 읽던 문제, v2
+    `query` 지번 dispatch. 1차 리뷰 blocker(지번이 아닌 모든 query가 parcel로), 2차 리뷰 major(호수·
+    층·출구 번호가 번지로 — 운영에서 `상계동 1234 … 1203호` → 엉뚱한 건물 OK)를 "읍면동(리) 바로 다음
+    토큰이 파서의 번지와 같을 때만 parcel" gate로 해결. 남은 것은 T-320.
+  - **T-318** (#559, `22ed1d0`) — `launchRun` 전용 timeout(기본 30초, 조회 3초와 분리). T-315 재배포
+    직후 첫 백업 launch가 3초에 끊겨 502 + 이유 없는 failed row + 따로 도는 run이 됐던 것. 리뷰 반영:
+    launch 오류는 row가 아직 `queued`일 때만 failed(`mark_launch_failed`) — run이 먼저 adopt했으면
+    502 대신 job id, Dagster→API run-due 클라이언트 timeout = launch + 15초.
+  - **T-315** — geo-api/ui를 홈 트리에서 `/opt` 설치본으로 옮겼다(09-28 22:20Z). 이 이동이 Dagster
+    백업 op의 403을 고쳤다 — 두 트리의 `KTG_ADMIN_PROXY_SECRET`이 달라 09-28 `/opt`에서 재생성된
+    Dagster가 API run-due를 호출하면 403이었다. 최종 코드 배포는 `journal.md` 2026-09-29 참조.
+  - **T-314** — 이관본 parity(옛 PGDATA vs 공용 instance, 데이터 테이블 44개 exact 일치) → 새 백업
+    (4.40GB, `retention_class=scheduled`) → 메모리 3GB·CPU 1.5 제한·network 없는 임시 PostGIS로 복원
+    리허설(`pg_restore` rc=0, error 0, 12,250초; 49개 테이블 중 데이터 테이블 21개가 live·09-28 parity와
+    전부 일치, 차이는 백업 뒤에도 쌓인 `pg_stat_statements` snapshot뿐; Alembic `0026`, 인덱스 132 =
+    live 133 − 0027 신규 1) → 통과 후에만 09-19 아카이브(janitor API, `keep_min_count=1` dry-run 확인 뒤)와
+    옛 PGDATA `pgdata-final-20260529`(32GB) 삭제. n150 디스크 79% → 71%.
+  - **백업 주기 2주** — 사용자 결정. n150 live `.env` `KOR_TRAVEL_GEO_BACKUP_SCHEDULE_INTERVAL_HOURS=336`
+    (lock G 아래), manager 문서 #436(`c66ec1c`). keep_min 3이 하한이라 최신 3본(약 6주)이 남는다.
+    Dagster `scheduled_backup`·`backup_retention_janitor_daily`·`run_failure_sensor`는 09-20 Dagster
+    메타 DB 재생성으로 STOPPED가 됐던 것을 다시 RUNNING으로(restore drill은 공용 instance에서 불가라
+    STOPPED 유지).
+
 - [x] **T-308 — geo DB를 공용 제어 평면 instance(`kor-travel-shared-postgres`, :11000)로 이전 +
   관리 UI geocoding 장애 복구** (2026-09-20~28, by claude, 사용자 지시 "kor-travel-shared-postgres로
   db를 옮겨놔" → "둘 다", "지금은 데이터 없이 일단 빈 db로 옮겨", 이후 "geocoding admin ui

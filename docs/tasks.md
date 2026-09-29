@@ -74,41 +74,20 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 
 ### T-308 공용 instance 이전 후속 (2026-09-28 사고 조사에서 나온 것)
 
-근거와 증거는 `docs/journal.md` 2026-09-28 항목. 우선순위 순.
+근거와 증거는 `docs/journal.md` 2026-09-28·2026-09-29 항목. T-309~T-318은 2026-09-29에 완료
+(`tasks-done.md`). 아래는 그 리뷰에서 나온 후속이다. 우선순위 순.
 
-- [ ] **T-314** — 백업 커버리지 복구 + 이관본 검증. 09-19 이후 geo 백업 0건(T-307 launch
-  회귀). 공용 instance 이관본(09-24/25 무기록 data-only 이관)과 옛 PGDATA/09-19 아카이브의
-  테이블별 row count 대조 → 검증된 새 백업 1건 확보 → 그 뒤에만 09-19 아카이브와 옛 PGDATA
-  (`/home/digitie/kor-travel-geo-data/pgdata-final-20260529`, 32.8GB) 정리. `scheduled_backup`
-  재개 여부 결정(Dagster schedule STOPPED, API run-due 경로는 launch 복구로 다시 동작).
-- [ ] **T-309** — DB 오류 분류 정정. `QueryCanceled`(57014)가 `OperationalError` 하위라
-  statement timeout이 "check KTG_PG_DSN" 503으로 보인다(`api/responses.py:186-188`) — timeout을
-  별도 코드/문구로, connect-time permission denied도 구분. UI(`GeocodeDebugger.tsx`,
-  `lib/api.ts getErrorMessage`)가 v2 envelope를 파싱해 한국어로 표시. serving MV가 비어 있으면
-  `/v1/readyz`·관리 홈이 degraded를 보이게.
-- [ ] **T-310** — `/metrics`와 Cache 패널의 `geo_cache` 전수 scan 제거(15초 scrape마다 공용
-  instance 논리 읽기의 대부분) — `reltuples`/TTL 캐시로. `pg_stat_statements` capture를
-  `userid = current_user`로 한정하고 주기 완화. 09-28 확인 시 API 기동(09-25) 이후
-  `ktg_api_db_errors_total{route="/metrics"}`가 `OperationalError` 234건 — scrape 실패 원인도 같이 본다.
-- [ ] **T-317** — 지번 geocode 누락 2건(T-308 검증 중 발견, 이관 전부터 있던 코드 동작 — MV 데이터는
-  정상). (1) `core/normalize.py` `parse_address`가 "N가" 법정동(`태평로1가`, `종로1가`)을 도로
-  `태평로`+번호 1로 읽어 `서울특별시 중구 태평로1가 31`(MV에 행 있음)이 `jibun_address`로도
-  NOT_FOUND. (2) v2 `query` 자유 입력은 `client.py`에서 항상 `type="road"`라 지번 문자열
-  (`성남시 분당구 삼평동 681`)이 약 3초 뒤 NOT_FOUND — 같은 값을 `jibun_address`로 주면 OK.
-  `parse_address(...).is_road`가 False면 parcel 조회를 시도하게.
-- [ ] **T-311** — road fallback(`infra/geometry_repo.py` `_ROAD_GEOMETRY_SQL`) 비용 개선:
-  인덱스 쓸 수 있는 정규화 도로명 조건(trigram) 또는 완전 도로명주소면 생략. MV가 채워져도
-  supplemental/NOT_FOUND 경로가 매 요청 ~5초를 더한다.
-- [ ] **T-312** — 공용 instance에서 불가능한 DB 수명주기 기능 차단: hot-swap plan/execute/rollback
-  (`postgres` DB CONNECT 필요), restore-drill·scratch full-load·replace_current restore
-  (`CREATE DATABASE` 필요)를 capability flag로 막고 UI에서 숨긴다. app role로 복원 가능한 백업
-  형식(`--no-owner/--no-privileges`, extension TOC 필터).
-- [ ] **T-313** — 코드 기본 DSN(`Settings.pg_dsn`, `alembic.ini`)이 은퇴한 `12500`을 가리킨다 —
-  공용 instance 기준으로 정리(테스트 기대값 포함).
-- [ ] **T-315** — geo-api/geo-ui를 `/opt` docker-manager 트리에서 재배포(현재 홈 트리 소유, 그
-  compose는 은퇴한 `kor-travel-geo-postgres`를 `depends_on`). manager 담당과 조율.
-- [ ] **T-316** — SQLAlchemy 2.1 업그레이드 검토(#551에서 `<2.1` 고정 — 2.1.1이 mypy 추론을
-  깨고 하위 호환 변경 포함).
+
+- [ ] **T-323** — T-319 리뷰 잔여 minor: sppn 전체 재적재가 TRUNCATE 뒤 실패하면 manifest row는
+  지워졌지만 active serving release fallback이 이전 기준월을 돌려준다(빈/부분 테이블인데 이전 월).
+  fallback을 "테이블에 행이 있고 manifest가 없을 때"로 좁히거나(`EXISTS … LIMIT 1`), 실패한 재적재를
+  release에 기록하지 않게. 영향은 sppn 재적재 실패 뒤 다음 refresh/백업의 `sppn_makarea` 기준월 1건.
+- [ ] **T-322** — Dagster instance storage 드라이버: kor-travel-geo-dagster는 `sqlalchemy<2.1`이
+  **필수**다(2.1 + bare `postgresql://` → psycopg 3 → dagster_postgres `NOTIFY` SyntaxError로 run
+  시작 불가, T-316 리뷰 실측). manager의 `KOR_TRAVEL_GEO_DAGSTER_PG_URL`을 `postgresql+psycopg2://`로
+  명시하는 안은 **먼저 검증 필요** — dagster_postgres의 event watcher 등이 URL을 `psycopg2.connect`에
+  그대로 넘기면 libpq가 `+psycopg2` scheme을 거부한다. throwaway instance에서 확인한 뒤 적용하거나,
+  pin을 유지한 채 dagster_postgres를 psycopg 3에서 검증하고 pin을 푼다. manager 담당과 조율.
 
 ### 선행 리뷰 후속
 
