@@ -82,12 +82,26 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
   지워졌지만 active serving release fallback이 이전 기준월을 돌려준다(빈/부분 테이블인데 이전 월).
   fallback을 "테이블에 행이 있고 manifest가 없을 때"로 좁히거나(`EXISTS … LIMIT 1`), 실패한 재적재를
   release에 기록하지 않게. 영향은 sppn 재적재 실패 뒤 다음 refresh/백업의 `sppn_makarea` 기준월 1건.
-- [ ] **T-322** — Dagster instance storage 드라이버: kor-travel-geo-dagster는 `sqlalchemy<2.1`이
-  **필수**다(2.1 + bare `postgresql://` → psycopg 3 → dagster_postgres `NOTIFY` SyntaxError로 run
-  시작 불가, T-316 리뷰 실측). manager의 `KOR_TRAVEL_GEO_DAGSTER_PG_URL`을 `postgresql+psycopg2://`로
-  명시하는 안은 **먼저 검증 필요** — dagster_postgres의 event watcher 등이 URL을 `psycopg2.connect`에
-  그대로 넘기면 libpq가 `+psycopg2` scheme을 거부한다. throwaway instance에서 확인한 뒤 적용하거나,
-  pin을 유지한 채 dagster_postgres를 psycopg 3에서 검증하고 pin을 푼다. manager 담당과 조율.
+- [ ] **T-322** — Dagster instance storage 드라이버를 `postgresql+psycopg2://`로 명시(manager 담당과 조율).
+  **검증 완료**(2026-09-29, 상세·실측 표·소스 근거는
+  [`t322-dagster-storage-driver.md`](t322-dagster-storage-driver.md)): dagster_postgres는 pin 범위
+  (0.25~0.29.24) 전체에서 URL을 `psycopg2.connect`/libpq에 넘기는 런타임 경로가 없고(event watcher는
+  SQLAlchemy polling), `postgresql+psycopg2://`는 SQLAlchemy 2.0·2.1 모두 end-to-end 통과. psycopg 3은
+  NOTIFY bind·webserver `with conn:`(연결을 닫는다)·`.pgcode`로 **미지원** — 2.1로 가는 길은 드라이버 명시뿐.
+  `postgres_db:` 형식은 기본 scheme이 `postgresql`이라 단독으로는 해법이 아니다. 남은 운영 절차:
+  1. (manager) n150 `.env`의 `KOR_TRAVEL_GEO_DAGSTER_PG_URL` scheme만 `postgresql://` →
+     `postgresql+psycopg2://`(user/password/host/port/db 동일). manager `.env.example` 153·465행·문서 예시도.
+     현재 이미지(SQLAlchemy 2.0.54)에서는 같은 드라이버라 동작 변화 0, DB migration·재build 불필요.
+  2. 적용 전 Dagster에 STARTED/STARTING run이 0건인지 확인(run은 code-server 안의 자식 프로세스라 재생성 시 끊긴다).
+  3. 세 서비스만 재생성: `kor-travel-geo-dagster-code-server`, `kor-travel-geo-dagster`,
+     `kor-travel-geo-dagster-daemon`(env는 재생성 때만 반영).
+  4. 검증: 세 컨테이너 healthy, 컨테이너 안 `KTG_DAGSTER_PG_URL` scheme이 `postgresql+psycopg2`, webserver
+     GraphQL `runsOrError`가 200(healthcheck의 `repositoriesOrError`만으로는 부족 — DB가 깨져도 200이다),
+     `dagster-daemon liveness-check`, 다음 `scheduled_backup` run-due tick run이 SUCCESS.
+  5. 롤백: 값을 `postgresql://`로 되돌리고 같은 세 서비스 재생성.
+  6. (그 뒤, 선택) `sqlalchemy<2.1` pin 해제는 별도 PR로만 — 조건: 1~4 완료, code location import 시
+     storage URL 드라이버가 psycopg2가 아니면 즉시 실패하는 guard(2.1 + bare URL은 healthcheck를 통과한 채
+     run만 못 돈다), CI `dagster` job의 2.0 assert를 2.1로 바꿔 통과. 그전까지 pin 유지.
 
 ### 선행 리뷰 후속
 

@@ -156,7 +156,9 @@ at-a-glance, iframe이 full 제어면. iframe `src`와 '새 창' 링크·run 링
 ## 9. 저장소 & 배포
 
 - Dagster 메타 = 별도 DB `kor_travel_geo_dagster`(같은 클러스터). `dagster.yaml` `storage.postgres` ←
-  `KTG_DAGSTER_PG_URL`. `telemetry.enabled=false`.
+  `KTG_DAGSTER_PG_URL`. `telemetry.enabled=false`. URL은 드라이버를 명시한 `postgresql+psycopg2://`가
+  권장값이다 — dagster_postgres는 psycopg2 전용이고 SQLAlchemy 2.1+에서 bare `postgresql://`는 psycopg 3로
+  바뀐다(T-322, [`../t322-dagster-storage-driver.md`](../t322-dagster-storage-driver.md)).
 - **T-307: 3-프로세스 분리 (code-server + webserver + daemon), 같은 image.** 이전에는 webserver·
   daemon이 각자 `kortravelgeo_dagster.definitions`를 in-process로 로드했다 — 형제 프로젝트
   `kor-travel-weather`에서 code 로드가 걸리면(hang) 그 프로세스 전체가 조용히 멈추는 사고가 실제로

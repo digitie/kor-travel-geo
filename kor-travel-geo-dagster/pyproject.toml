@@ -32,9 +32,15 @@ dependencies = [
   # on a real Postgres-backed instance: dagster_postgres' ``NOTIFY run_events, %(notify_id)s``
   # then fails with psycopg.errors.SyntaxError (psycopg 3 binds server-side; NOTIFY takes no
   # parameter) at RUN_START, so no run can start. It also reads psycopg2-only
-  # ``exc.orig.pgcode``. The main lib supports 2.1; lift this only after moving the storage URL
-  # to an explicit driver and validating dagster_postgres on it. CI job ``dagster`` keeps this
-  # resolve (main lib on 2.0) under test.
+  # ``exc.orig.pgcode``. The main lib supports 2.1. CI job ``dagster`` keeps this resolve (main
+  # lib on 2.0) under test.
+  # T-322 (docs/t322-dagster-storage-driver.md) validated the way out: dagster_postgres does not
+  # support psycopg 3 at all (its webserver connect hook's ``with conn:`` also CLOSES a psycopg 3
+  # connection, so every GraphQL query 500s while healthchecks still pass), but every runtime
+  # path goes through SQLAlchemy, so an explicit ``postgresql+psycopg2://`` storage URL passes
+  # end to end on 2.0 and 2.1. Lift this only after (1) the manager's KTG_DAGSTER_PG_URL is
+  # ``postgresql+psycopg2://`` in prod, (2) a fail-fast guard rejects a non-psycopg2 storage URL,
+  # and (3) the CI ``dagster`` job asserts and passes on 2.1.
   "sqlalchemy<2.1",
   "boto3>=1.34,<2",
   "botocore>=1.34,<2",

@@ -1,6 +1,12 @@
 telemetry:
   enabled: false
 
+# KTG_DAGSTER_PG_URL is supplied by kor-travel-docker-manager (KOR_TRAVEL_GEO_DAGSTER_PG_URL) and
+# should name the driver explicitly: postgresql+psycopg2://user:pass@host:port/kor_travel_geo_dagster.
+# dagster_postgres only works on psycopg2, and a bare postgresql:// URL silently switches to
+# psycopg 3 on SQLAlchemy 2.1+. Every dagster_postgres runtime path goes through SQLAlchemy, so
+# the +psycopg2 scheme never reaches libpq (T-322, docs/t322-dagster-storage-driver.md).
+# `postgres_db:` is NOT a scheme-free alternative: it rebuilds a URL with scheme=postgresql.
 storage:
   postgres:
     postgres_url:

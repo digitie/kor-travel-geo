@@ -11,9 +11,10 @@
   T-315 완료(geo-api/ui `/opt` 이전 — 두 트리 secret 불일치로 Dagster 백업 run-due가 403이던 것 해소),
   백업 주기 2주(336h, 다음 2026-10-12, manager #436), Dagster backup schedule·janitor·failure sensor
   RUNNING. 상세 `journal.md` 2026-09-29.
-  **다음 한 작업**: `tasks.md`의 T-322(Dagster storage 드라이버 — `postgresql+psycopg2://` scheme은
-  dagster_postgres event watcher가 URL을 `psycopg2.connect`에 그대로 넘길 수 있어 throwaway instance에서 먼저
-  검증) 또는 T-323(sppn 재적재 실패 뒤 기준월 fallback). 둘 다 긴급하지 않다. 배포 스크립트를 다시 쓸 때는
+  **다음 한 작업**: `tasks.md`의 T-322(Dagster storage 드라이버 — throwaway 검증 완료,
+  `docs/t322-dagster-storage-driver.md`: `postgresql+psycopg2://`가 SQLAlchemy 2.0·2.1 모두 통과하고 URL을
+  libpq에 넘기는 경로는 없다. 남은 것은 manager `.env` 값 변경 + geo Dagster 세 서비스 재생성, pin은 유지)
+  또는 T-323(sppn 재적재 실패 뒤 기준월 fallback). 둘 다 긴급하지 않다. 배포 스크립트를 다시 쓸 때는
   서비스별 순차 build(병렬 build는 BuildKit session을 잃고 멈춘다)와 컨테이너 image ID 기준 rollback tag.
 
 - ✅ **T-308 — geo DB를 공용 제어 평면 instance `kor-travel-shared-postgres`(:11000)로 이전 +
