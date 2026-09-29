@@ -10,6 +10,8 @@ from pathlib import Path
 import psycopg
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from kortravelgeo.loaders.manifest import max_source_yyyymm, record_full_load_source_month
+
 from .common import TextSource, as_int, discover_text_sources, iter_pipe_rows, required
 from .juso_hangul_loader import _alchemy_to_libpq
 
@@ -255,6 +257,7 @@ async def copy_navi_rows(
 ) -> tuple[int, int]:
     build_count = 0
     entrance_count = 0
+    build_yyyymm: str | None = None
     async with await psycopg.AsyncConnection.connect(_alchemy_to_libpq(engine)) as conn:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -301,6 +304,7 @@ FROM STDIN
                         )
                     )
                     build_count += 1
+                    build_yyyymm = max_source_yyyymm(build_yyyymm, build_row.source_yyyymm)
             await cur.execute(
                 """
 INSERT INTO tl_navi_buld_centroid AS t (
@@ -335,6 +339,14 @@ ON CONFLICT (bd_mgt_sn) DO UPDATE SET
   loaded_at = now()
 """
             )
+            if build_count:
+                await record_full_load_source_month(
+                    cur,
+                    table_name="tl_navi_buld_centroid",
+                    kind="navi_full",
+                    row_count=build_count,
+                    source_yyyymm=build_yyyymm,
+                )
             await cur.execute(
                 """
 CREATE TEMP TABLE _navi_entrc_staging (

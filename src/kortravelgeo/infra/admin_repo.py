@@ -2781,6 +2781,46 @@ SELECT payload
     return _json_dict(source_set)
 
 
+_SOURCE_YYYYMM_BY_TABLE_SQL = """
+SELECT t.table_name,
+       to_regclass('public.' || t.table_name) IS NOT NULL AS table_exists,
+       m.source_yyyymm
+  FROM unnest(CAST(:table_names AS text[])) AS t(table_name)
+  LEFT JOIN public.load_manifest m ON m.table_name = t.table_name
+"""
+
+
+async def source_yyyymm_by_kind(
+    conn: Any, table_by_kind: Mapping[str, str]
+) -> dict[str, str | None]:
+    """원천 종류별 기준월을 ``load_manifest.source_yyyymm``에서 읽는다(T-319).
+
+    예전에는 테이블마다 ``SELECT max(source_yyyymm)``을 돌렸다 — 인덱스가 없어 1,000만 행
+    테이블마다 parallel seq scan이었고, 운영에서 MV refresh 끝단의 release 기록과 백업
+    preflight가 수 분씩 걸렸다(2026-09-28 preflight 11분). 적재기는 적재할 때 그 테이블의
+    기준월을 manifest에 남기므로(전체분·일변동 모두, 마지막 적재가 이긴다) 여기서는 그 한
+    행만 읽는다.
+
+    manifest 행이 없으면(빈 DB, 또는 T-319 이전에 적재하고 Alembic 0028 backfill도 안 거친
+    DB) scan으로 메우지 않고 ``None``(모름)으로 둔다 — 한도 없는 scan이 이 함수가 없애려는
+    바로 그 비용이다. 테이블 자체가 없으면 예전과 같이 ``None``.
+    """
+
+    rows = (
+        await conn.execute(
+            text(_SOURCE_YYYYMM_BY_TABLE_SQL),
+            {"table_names": list(table_by_kind.values())},
+        )
+    ).mappings().all()
+    by_table = {str(row["table_name"]): row for row in rows}
+    result: dict[str, str | None] = {}
+    for kind, table_name in table_by_kind.items():
+        row = by_table.get(table_name)
+        value = row["source_yyyymm"] if row is not None and row["table_exists"] else None
+        result[kind] = str(value) if value is not None else None
+    return result
+
+
 async def _infer_current_source_set(conn: Any) -> dict[str, Any]:
     tables = {
         "juso": "tl_juso_text",
@@ -2791,17 +2831,7 @@ async def _infer_current_source_set(conn: Any) -> dict[str, Any]:
         "roadaddr_entrance": "tl_roadaddr_entrc",
         "sppn_makarea": "tl_sppn_makarea",
     }
-    yyyymm_by_kind: dict[str, str | None] = {}
-    for kind, table_name in tables.items():
-        exists = await conn.scalar(
-            text("SELECT to_regclass(:name)"),
-            {"name": f"public.{table_name}"},
-        )
-        if exists is None:
-            yyyymm_by_kind[kind] = None
-            continue
-        value = await conn.scalar(text(f"SELECT max(source_yyyymm) FROM public.{table_name}"))
-        yyyymm_by_kind[kind] = str(value) if value is not None else None
+    yyyymm_by_kind = await source_yyyymm_by_kind(conn, tables)
     values = {value for value in yyyymm_by_kind.values() if value}
     return {
         "yyyymm_by_kind": yyyymm_by_kind,
