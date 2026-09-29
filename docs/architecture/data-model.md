@@ -731,7 +731,7 @@ CREATE TABLE load_manifest (
 
 `source_yyyymm`은 단일 테이블/로더 기준월이다. 전국 full-load처럼 여러 원천을 묶는 작업은 `source_set`에 원천별 기준월과 경로를 남긴다. 예를 들어 `tl_juso_text`는 `source_yyyymm='202603'`, `tl_locsum_entrc`는 `source_yyyymm='202604'`일 수 있고, batch root 또는 consistency report의 `source_set.yyyymm_by_kind`가 이 혼합 상태를 설명한다.
 
-**기준월 조회의 정본(T-319).** serving release 기록(`admin_repo._infer_current_source_set`)과 백업 manifest(`backup.infer_source_set`)는 원천 테이블을 `max(source_yyyymm)`로 scan하지 않고 이 테이블의 `source_yyyymm`만 읽는다(`admin_repo.source_yyyymm_by_kind`). 그래서 `source_yyyymm` 행을 쓰는 원천 테이블(`tl_juso_text`, `tl_juso_parcel_link`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_spbd_buld_polygon`, `tl_roadaddr_entrc`, `tl_sppn_makarea`)은 적재기가 적재할 때마다 manifest를 같은 transaction에서 갱신해야 한다.
+**기준월 조회의 정본(T-319).** serving release 기록(`admin_repo._infer_current_source_set`)과 백업 manifest(`backup.infer_source_set`)는 원천 테이블을 `max(source_yyyymm)`로 scan하지 않고 이 테이블의 `source_yyyymm`만 읽는다(`admin_repo.source_yyyymm_by_kind`). 그래서 `source_yyyymm` 행을 쓰는 원천 테이블(`tl_juso_text`, `tl_juso_parcel_link`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_spbd_buld_polygon`, `tl_roadaddr_entrc`, `tl_sppn_makarea`)은 적재기가 적재할 때마다 manifest를 갱신해야 한다(T-319에서 추가한 기록은 모두 데이터와 같은 transaction이다. 구역(`tl_sppn_makarea`) 적재기는 원래대로 적재 뒤 별도 transaction에서 기록한다).
 
 - 규칙은 **마지막 적재가 이긴다** — 값은 그 적재가 쓴 row들의 `source_yyyymm` 최댓값(NULL 제외)이다. 0행 적재는 manifest를 건드리지 않는다. 테이블을 비우는 경로(SHP full 적재의 `TRUNCATE`)는 manifest 행도 지운다.
 - 평소(빈 DB 전국 적재, 같거나 새 기준월 재적재, 일변동)는 옛 `max(source_yyyymm)`와 같다. 더 옛 기준월 원천을 upsert로 덮어 새 기준월 row가 남는 경우(적재기가 삭제하지 않는 `tl_juso_text`/`tl_locsum_entrc`/`tl_navi_buld_centroid`), 그리고 upsert 없는 일변동(삭제만·"No Data")은 manifest가 마지막 적재월을 보인다 — 후자는 T-319 이전부터 일변동 writer의 동작이다.
