@@ -211,7 +211,7 @@ POST /v1/admin/restores/hot-swap-plan
 - `current_database`: 현재 `KTG_PG_DSN`의 DB 이름
 - `restore_database`: rename 대상 복원본 DB
 - `previous_alias`: 현재 DB를 보존할 alias
-- `maintenance_database`: `ALTER DATABASE ... RENAME`을 실행할 maintenance 연결 DB (기본 `postgres`, managed/hardened cluster는 다른 DB 지정 가능)
+- `maintenance_database`: `ALTER DATABASE ... RENAME`을 실행할 maintenance 연결 DB (기본 `postgres`, managed/hardened cluster는 다른 DB 지정 가능). T-312 capability 게이트(`E0410`)도 이 DB의 `CONNECT`를 조회한다 — 조회 전에 식별자·현재 DB 여부를 검증하고, 형식 오류나 cluster에 없는 DB는 `E0100` 입력 오류다(`CREATEDB`가 없는 role이면 `E0410`이 우선, T-321)
 - `typed_confirmation`: maintenance window 생성/실행 시 사용할 확인 문구 (`HOT_SWAP <current> FROM <restore>`)
 - `rollback_confirmation`: alias 보존 기간 안에 수동 rollback할 때 사용할 확인 문구
 - `can_execute`, `blockers`: 현재 cluster 안 DB 존재 여부와 alias 충돌 검증 결과

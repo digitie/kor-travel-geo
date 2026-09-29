@@ -83,6 +83,9 @@ code location은 **항상 로드**되고, 자격증명 누락은 import가 아�
   `full_load_batch`의 scratch(`target_database`) 경로는 op 시작 시 `client.require_db_lifecycle`로 연결 role의
   `CREATEDB`·maintenance DB `CONNECT`를 확인하고, 없으면(공용 DB instance) 사유를 담은 `Failure`로 멈춘다.
   API가 1차로 `E0410`을 돌려주지만 Dagster UI 직접 launch·schedule은 API를 거치지 않기 때문이다.
+  daily restore drill `@schedule`은 한 단계 앞에서 `client` resource(`ResourceParam`)로 같은 판정을 해 미지원이면
+  `SkipReason`을 돌려준다(T-321) — 공용 instance에서 켜 두어도 매일 `Failure` run이 쌓이지 않는다. 판정 자체가
+  실패하면 skip하지 않고 run을 만들어 op guard·run-failure sensor 경로로 넘긴다.
 
 ## 5. Scheduling & Sensors
 
