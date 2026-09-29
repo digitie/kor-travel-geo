@@ -358,6 +358,8 @@ class AsyncAddressClient:
         if parts.is_road or not (parts.si and parts.sgg and last_region_token):
             return "road"
         tokens = parts.normalized.split()
+        if last_region_token not in tokens:  # 파서가 토큰을 합치거나 고친 경우 — 위치를 모른다
+            return "road"
         after_region = " ".join(tokens[tokens.index(last_region_token) + 1 :])
         lot = _LEADING_PARCEL_LOT_RE.match(after_region)
         if lot is None:
