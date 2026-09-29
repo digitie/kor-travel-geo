@@ -28,7 +28,7 @@ from kortravelgeo.dto.admin import (
     RestoreHotSwapPlanRequest,
     RestoreHotSwapRollbackRequest,
 )
-from kortravelgeo.exceptions import UnsupportedOnInstanceError
+from kortravelgeo.exceptions import InvalidInputError, UnsupportedOnInstanceError
 from kortravelgeo.infra import backup as backup_mod
 from kortravelgeo.infra import db_capabilities as caps_mod
 from kortravelgeo.infra import hotswap as hotswap_mod
@@ -611,7 +611,8 @@ async def test_hot_swap_gates_probe_the_requested_maintenance_database(
                 maintenance_database=admin_db,
             )
         )
-    assert probed == [admin_db]  # one probe, then cached for the same maintenance DB
+    # a request-chosen maintenance DB is probed each time — never cached (unbounded key space)
+    assert probed == [admin_db, admin_db, admin_db]
 
     # the default maintenance DB is still refused on this cluster
     with pytest.raises(UnsupportedOnInstanceError, match="hot-swap") as excinfo:
@@ -619,7 +620,133 @@ async def test_hot_swap_gates_probe_the_requested_maintenance_database(
             RestoreHotSwapPlanRequest(restore_database="kor_travel_geo_restore")
         )
     assert excinfo.value.hint == "role ops: maintenance DB 'postgres' CONNECT 권한 없음"
-    assert probed == [admin_db, "postgres"]
+    assert probed == [admin_db, admin_db, admin_db, "postgres"]
+
+
+# --- T-321: the maintenance DB name is validated before the capability probe ---------------
+
+
+def _hot_swap_calls(maintenance_database: str) -> list[Any]:
+    return [
+        lambda client: client.restore_hot_swap_plan(
+            RestoreHotSwapPlanRequest(
+                restore_database="kor_travel_geo_restore",
+                maintenance_database=maintenance_database,
+            )
+        ),
+        lambda client: client.execute_restore_hot_swap(
+            RestoreHotSwapExecuteRequest(
+                restore_database="kor_travel_geo_restore",
+                typed_confirmation="HOT_SWAP x",
+                maintenance_database=maintenance_database,
+            )
+        ),
+        lambda client: client.execute_hot_swap_rollback(
+            RestoreHotSwapRollbackRequest(
+                previous_alias="kor_travel_geo_previous",
+                restore_database="kor_travel_geo_restore",
+                rollback_confirmation="ROLLBACK_HOT_SWAP x",
+                maintenance_database=maintenance_database,
+            )
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("maintenance_database", "message"),
+    [
+        ("bad-name", "maintenance_database must match"),
+        ("kor_travel_geo", "current database cannot be the maintenance database"),
+    ],
+)
+@pytest.mark.parametrize("call", range(3))
+async def test_hot_swap_gates_validate_the_maintenance_database_before_probing(
+    monkeypatch: pytest.MonkeyPatch, maintenance_database: str, message: str, call: int
+) -> None:
+    async def fail_probe(*_args: object) -> caps_mod.DbRoleProbe:
+        raise AssertionError("an invalid maintenance DB name must not be probed")
+
+    async def fail(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("must not reach the planner/executor")
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fail_probe)
+    monkeypatch.setattr(client_mod, "inspect_restore_hot_swap_plan", fail)
+    monkeypatch.setattr(hotswap_mod, "execute_restore_hot_swap", fail)
+    monkeypatch.setattr(hotswap_mod, "execute_hot_swap_rollback", fail)
+    client = AsyncAddressClient(
+        settings=Settings(_env_file=None, db_lifecycle_mode="auto"),
+        engine=_UrlEngine(),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(InvalidInputError, match=message) as excinfo:
+        await _hot_swap_calls(maintenance_database)[call](client)
+
+    assert not isinstance(excinfo.value, UnsupportedOnInstanceError)
+    assert caps_mod._probe_cache == {}
+
+
+def _superuser_client(monkeypatch: pytest.MonkeyPatch) -> AsyncAddressClient:
+    """``auto`` mode on a dedicated superuser instance whose cluster has only ``postgres``."""
+
+    async def fake_probe(_engine: object, maintenance_database: str) -> caps_mod.DbRoleProbe:
+        exists = maintenance_database == "postgres"
+        return caps_mod.DbRoleProbe(
+            role="addr",
+            is_superuser=True,
+            can_create_database=True,
+            can_connect_maintenance_database=exists,
+            maintenance_database_exists=exists,
+        )
+
+    async def fail_plan(*_args: object) -> None:
+        raise AssertionError("must not reach the planner")
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+    monkeypatch.setattr(client_mod, "inspect_restore_hot_swap_plan", fail_plan)
+    return AsyncAddressClient(
+        settings=Settings(_env_file=None, db_lifecycle_mode="auto"),
+        engine=_UrlEngine(),  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("maintenance_database", "message"),
+    [
+        # malformed → rejected by the identifier check before any probe (was 409 E0410 + a
+        # `denied` audit row + a cache entry per distinct string)
+        ("bad-name", "maintenance_database must match"),
+        # well-formed but not in the cluster → the probe answers, still an input error (not E0410)
+        ("typo_db", "maintenance_database does not exist in cluster: typo_db"),
+    ],
+)
+async def test_hot_swap_plan_bad_maintenance_database_is_400_without_denied_audit(
+    monkeypatch: pytest.MonkeyPatch, maintenance_database: str, message: str
+) -> None:
+    client = _superuser_client(monkeypatch)
+    recorded: list[dict[str, Any]] = []
+
+    async def record(**kwargs: Any) -> None:
+        recorded.append(kwargs)
+
+    monkeypatch.setattr(client, "record_audit_event", record)
+
+    resp = await _post(
+        _app_with(client),
+        "/v1/admin/restores/hot-swap-plan",
+        {
+            "restore_database": "kor_travel_geo_restore",
+            "maintenance_database": maintenance_database,
+        },
+    )
+
+    assert resp.status_code == 400
+    error = resp.json()["response"]
+    assert error["errorCode"] == "E0100"
+    assert message in error["errorMessage"]
+    assert recorded == []  # an input error is not a capability refusal
+    assert caps_mod._probe_cache == {}  # request-chosen names never enter the cache
 
 
 # --- T-321: a refused hot-swap plan still leaves a `denied` audit row -----------------------

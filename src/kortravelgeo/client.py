@@ -138,16 +138,12 @@ from .dto.zipcode import ZipcodeResponse
 from .exceptions import InvalidAddressError, NotFoundError
 from .infra.admin_repo import AdminRepository
 from .infra.cache import GeoCacheRepository, make_cache_key
-from .infra.db_capabilities import (
-    MAINTENANCE_DATABASE,
-    db_lifecycle_capabilities,
-    require_db_lifecycle,
-)
+from .infra.db_capabilities import db_lifecycle_capabilities, require_db_lifecycle
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
 from .infra.geometry_repo import GeometryRepository
-from .infra.hotswap import inspect_restore_hot_swap_plan
+from .infra.hotswap import inspect_restore_hot_swap_plan, validate_maintenance_database
 from .infra.pobox_repo import PoboxRepository
 from .infra.public_api_keys import PublicApiKeyRepository
 from .infra.reverse_repo import ReverseRepository
@@ -2223,13 +2219,19 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         self,
         feature: DbLifecycleFeature,
         *,
-        maintenance_database: str = MAINTENANCE_DATABASE,
+        maintenance_database: str | None = None,
     ) -> None:
         """Raise ``UnsupportedOnInstanceError`` (E0410/409) if ``feature`` cannot run here.
 
-        ``maintenance_database`` is the DB the operation will actually connect to for
-        ``CREATE``/``RENAME DATABASE`` — hot-swap requests may pick one other than ``postgres``.
+        ``maintenance_database`` is the DB a hot-swap request will actually connect to for
+        ``RENAME DATABASE`` (omitted: the instance's ``postgres``). It is validated first
+        (identifier, not the serving DB), so a malformed name is an ``InvalidInputError``
+        (E0100/400) and is never probed; a name missing from the cluster is E0100 too (T-321).
         """
+        if maintenance_database is not None:
+            maintenance_database = validate_maintenance_database(
+                self.settings, maintenance_database
+            )
         await require_db_lifecycle(
             self._engine(), self.settings, feature, maintenance_database=maintenance_database
         )

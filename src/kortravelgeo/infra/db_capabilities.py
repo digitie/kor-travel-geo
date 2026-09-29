@@ -23,7 +23,9 @@
 
 maintenance DB는 기본 ``postgres``다(capabilities endpoint·restore drill·scratch·복원 cleanup).
 hot-swap plan/execute/rollback만 요청의 ``maintenance_database``로 다른 DB를 고를 수 있으므로
-(managed/hardened cluster), 그 요청은 실제로 쓸 DB의 ``CONNECT``를 조회한다(T-321).
+(managed/hardened cluster), 그 요청은 실제로 쓸 DB의 ``CONNECT``를 조회한다(T-321). 요청이 고른
+이름은 임의 문자열이므로 캐시하지 않고(기본 DB probe만 캐시), cluster에 없으면 instance 제약이
+아니라 입력 오류(E0100)로 거절한다.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from typing import TYPE_CHECKING, Final
 from sqlalchemy import text
 
 from kortravelgeo.dto.admin import DbLifecycleCapabilities, DbLifecycleFeature, DbLifecycleMode
-from kortravelgeo.exceptions import UnsupportedOnInstanceError
+from kortravelgeo.exceptions import InvalidInputError, UnsupportedOnInstanceError
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -122,7 +124,7 @@ class DbRoleProbe:
     maintenance_database_exists: bool = True
 
 
-_probe_cache: dict[tuple[str, str], tuple[float, DbRoleProbe]] = {}
+_probe_cache: dict[str, tuple[float, DbRoleProbe]] = {}
 
 
 def clear_db_capability_cache() -> None:
@@ -155,9 +157,12 @@ async def probe_db_role(
 
 
 async def _cached_probe(engine: AsyncEngine, maintenance_database: str) -> DbRoleProbe:
-    # password를 가린 URL(드라이버·role·host·port·DB) + maintenance DB가 key — role/instance나
-    # hot-swap이 고른 maintenance DB가 다르면 따로 조회한다.
-    key = (engine.url.render_as_string(hide_password=True), maintenance_database)
+    if maintenance_database != MAINTENANCE_DATABASE:
+        # hot-swap 요청이 고른 이름은 임의 문자열이라 key로 쓰면 캐시가 끝없이 자란다(T-321).
+        # hot-swap은 드문 운영자 작업이므로 매번 catalog를 읽는다.
+        return await probe_db_role(engine, maintenance_database)
+    # password를 가린 URL(드라이버·role·host·port·DB)이 key — role/instance가 다르면 따로 조회한다.
+    key = engine.url.render_as_string(hide_password=True)
     now = monotonic()
     cached = _probe_cache.get(key)
     if cached is not None and cached[0] > now:
@@ -221,17 +226,12 @@ def evaluate_db_lifecycle(
 
 
 async def db_lifecycle_capabilities(
-    engine: AsyncEngine,
-    settings: Settings,
-    *,
-    maintenance_database: str = MAINTENANCE_DATABASE,
+    engine: AsyncEngine, settings: Settings
 ) -> DbLifecycleCapabilities:
     """현재 설정·연결 role 기준 DB 수명주기 기능 지원 여부 (``auto``만 DB를 조회한다)."""
     mode = settings.db_lifecycle_mode
-    probe = await _cached_probe(engine, maintenance_database) if mode == "auto" else None
-    return evaluate_db_lifecycle(
-        mode, probe, checked_at=datetime.now(UTC), maintenance_database=maintenance_database
-    )
+    probe = await _cached_probe(engine, MAINTENANCE_DATABASE) if mode == "auto" else None
+    return evaluate_db_lifecycle(mode, probe, checked_at=datetime.now(UTC))
 
 
 async def require_db_lifecycle(
@@ -239,14 +239,28 @@ async def require_db_lifecycle(
     settings: Settings,
     feature: DbLifecycleFeature,
     *,
-    maintenance_database: str = MAINTENANCE_DATABASE,
+    maintenance_database: str | None = None,
 ) -> None:
     """``feature``를 지원하지 않는 instance면 job을 만들기 전에 E0410/409로 거절한다.
 
-    ``maintenance_database``는 hot-swap 요청이 실제로 연결할 maintenance DB다(기본 ``postgres``).
+    ``maintenance_database``는 hot-swap 요청이 고른(실제로 연결할) maintenance DB다 — 호출자가
+    식별자 검증을 먼저 끝낸 이름이어야 한다. 생략하면 instance 고정값 ``postgres``를 본다.
+    요청이 고른 DB가 cluster에 없으면 instance 제약이 아니라 입력 오류이므로, ``CREATEDB``는
+    있는 role이면 E0410 대신 :class:`InvalidInputError` (E0100/400)로 거절한다(T-321).
     """
-    capabilities = await db_lifecycle_capabilities(
-        engine, settings, maintenance_database=maintenance_database
+    target = MAINTENANCE_DATABASE if maintenance_database is None else maintenance_database
+    mode = settings.db_lifecycle_mode
+    probe = await _cached_probe(engine, target) if mode == "auto" else None
+    if (
+        maintenance_database is not None
+        and probe is not None
+        and probe.can_create_database
+        and not probe.maintenance_database_exists
+    ):
+        msg = f"maintenance_database does not exist in cluster: {maintenance_database}"
+        raise InvalidInputError(msg, hint="cluster에 있는 maintenance DB를 지정(기본 postgres)")
+    capabilities = evaluate_db_lifecycle(
+        mode, probe, checked_at=datetime.now(UTC), maintenance_database=target
     )
     if capabilities.supported:
         return
