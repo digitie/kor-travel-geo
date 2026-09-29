@@ -27,6 +27,7 @@ from kortravelgeo.loaders.juso_map import (
     discover_sido_datasets,
     read_dbf_header,
 )
+from kortravelgeo.loaders.manifest import TRUNCATED_SOURCE_MONTH_SQL
 
 ProgressCallback = Callable[[float], None]
 
@@ -755,12 +756,9 @@ def _truncate_target_tables(pg_url: str, table_names: tuple[str, ...]) -> None:
                     + ", ".join(f"{table}={count}" for table, count in snapshot)
                 )
             conn.execute(text(f"TRUNCATE TABLE {tables}"))
-            # T-319: 비운 테이블의 기준월 manifest도 같이 지운다 — 남겨 두면 빈(또는 새로
-            # 채우는 중인) 테이블에 옛 기준월이 붙는다.
-            conn.execute(
-                text("DELETE FROM load_manifest WHERE table_name = ANY(:table_names)"),
-                {"table_names": list(table_names)},
-            )
+            # T-319/T-323: 비운 테이블의 기준월 manifest를 "모름"(NULL)으로 둔다 — 남겨 두면 옛
+            # 기준월이 붙고, 지우면 active release의 옛 기준월로 메워진다.
+            conn.execute(text(TRUNCATED_SOURCE_MONTH_SQL), {"table_names": list(table_names)})
     finally:
         engine.dispose()
 

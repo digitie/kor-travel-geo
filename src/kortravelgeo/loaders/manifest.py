@@ -35,6 +35,22 @@ ON CONFLICT (table_name) DO UPDATE SET
 """
 
 
+#: T-323: 전체 재적재가 테이블을 비울 때(SHP·구역 ``TRUNCATE``) manifest 행을 지우지 않고 기준월만
+#: "모름"(NULL)으로 둔다. 행을 지우면 ``source_yyyymm_by_kind``가 manifest 없는 legacy 테이블로 보고
+#: active release의 이전 기준월로 메우는데, 재적재가 TRUNCATE 뒤에 실패하면 새 달 행이 섞인 테이블에
+#: 옛 달이 붙는다. NULL 행은 그대로 "모름"으로 읽힌다. 적재가 끝나면 각 적재기의 manifest writer가
+#: 새 달로 덮는다. 행이 없던 테이블(0028 이전 legacy)에는 새 행을 만들지 않는다.
+#: SQLAlchemy ``text()``용.
+TRUNCATED_SOURCE_MONTH_SQL = """
+UPDATE load_manifest
+   SET source_yyyymm = NULL,
+       row_count = 0,
+       source_set = jsonb_build_object('kind', 'truncated_for_full_load'),
+       updated_at = now()
+ WHERE table_name = ANY(:table_names)
+"""
+
+
 @dataclass(frozen=True, slots=True)
 class LoadManifest:
     table_name: str

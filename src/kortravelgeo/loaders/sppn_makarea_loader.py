@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.core.source_layers import ZONE_MAKAREA_LAYER_NAME
 from kortravelgeo.exceptions import LoaderError
+from kortravelgeo.loaders.manifest import TRUNCATED_SOURCE_MONTH_SQL
 
 ProgressCallback = Callable[[float], None]
 
@@ -356,13 +357,10 @@ def _truncate_target(pg_url: str) -> None:
     try:
         with engine.begin() as conn:
             conn.execute(text(f"TRUNCATE TABLE {TARGET_TABLE}"))
-            # T-319: 비운 테이블의 기준월 manifest도 같은 transaction에서 지운다 — 남겨 두면
-            # 빈(또는 새로 채우는 중인) 테이블에 옛 기준월이 붙는다. 적재가 끝나면
-            # ``_record_manifest``가 새로 쓴다.
-            conn.execute(
-                text("DELETE FROM load_manifest WHERE table_name = :table_name"),
-                {"table_name": TARGET_TABLE},
-            )
+            # T-319/T-323: 비운 테이블의 기준월 manifest를 같은 transaction에서 "모름"(NULL)으로
+            # 둔다 — 남겨 두면 옛 기준월이 붙고, 지우면 active release의 옛 기준월로 메워진다.
+            # 적재가 끝나면 ``_record_manifest``가 새로 쓴다.
+            conn.execute(text(TRUNCATED_SOURCE_MONTH_SQL), {"table_names": [TARGET_TABLE]})
     finally:
         engine.dispose()
 
