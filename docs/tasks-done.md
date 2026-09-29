@@ -6,6 +6,15 @@
 
 ## 완료
 
+- [x] **T-322 운영 적용 + T-323** (2026-09-29, by claude, 사용자 지시 "한도 다 쓸 때까지 기록하면서 진행").
+  - **T-322** — throwaway 검증(#566, `docs/t322-dagster-storage-driver.md`)에 따라 geo Dagster storage URL을
+    `postgresql+psycopg2://`로 명시(n150 `.env` scheme만, lock G 아래, 세 서비스 재생성). 현재 이미지는 같은
+    드라이버라 동작 변화 없음 — 목적은 `sqlalchemy<2.1` pin이 풀려도 psycopg 3로 조용히 바뀌지 않게 하는 것.
+    manager `.env.example`·문서는 manager #437. pin 해제는 선택 과제로 `tasks.md`에 남김.
+  - **T-323** (#565, `675ac12`) — SHP·구역 전체 재적재의 TRUNCATE가 manifest 행을 지우는 대신 기준월만
+    NULL("모름")로 둔다. 지우면 T-319 조회가 active release의 옛 기준월로 메워, 재적재가 도중 실패했을 때
+    새 달 행이 섞인 테이블에 옛 달이 붙었다. 같은 배포(07:51Z)로 반영.
+
 - [x] **T-319·T-320·T-321 — T-309~T-318 리뷰 후속** (2026-09-29, by claude, 사용자 지시 "한도 다 쓸 때까지
   기록하면서 진행"). workflow로 구현 → 독립 적대적 리뷰(전부 1차 approve, minor만) → minor 반영 → 독립 검증.
   - **T-319** (#564, `7a7bb22`) — 원천 기준월을 `max(source_yyyymm)` 전수 scan 대신 `load_manifest`에서
