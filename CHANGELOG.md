@@ -5,6 +5,13 @@
 ## [Unreleased]
 
 ### Changed
+- **공유 Dagster plane 선행 작업(T-324).** Dagster 이미지가 `constraints-dagster.txt`로 dagster 1.13.24 계열과
+  주요 라이브러리를 exact 설치하고 base image를 digest로 고정한다. `/v1/ops/dagster/summary`·`/runs/{run_id}`는
+  geo code location의 repository·run만 보여 준다(다른 location의 run id는 `not_found`). `scheduled_backup`·
+  `backup_retention_janitor_daily`·`run_failure_sensor`는 코드 기본값이 RUNNING이 됐고(운영 상태 그대로),
+  run-failure sensor는 자기 location의 run만 감시한다. 응답 스키마 변경 없음.
+  공유 instance의 run 최대 실행 시간 기본값(6시간)을 넘을 수 있는 `full_load_batch`·`load_source`·`db_restore`·
+  `backup_restore_drill`은 job tag `dagster/max_runtime=86400`(24시간)을 싣는다. 나머지 job은 공유 기본값.
 - **지번 주소의 번지를 읍면동·리 바로 다음 토큰으로 읽는다(T-320).** `parse_address`가 마지막 숫자를
   번지로 잡아 `서울특별시 노원구 상계동 1234 주공아파트 101동 1203호`가 v1 `type=parcel`·v2
   `jibun_address`에서 1203번지(운영: 노원검문소, 동일로 1794)로 오답 OK됐다. 이제 읍면동·리가 있는 지번

@@ -19,6 +19,7 @@ from kortravelgeo_dagster.definitions import (
     defs,
 )
 from kortravelgeo_dagster.mv import mv_refresh_job, run_mv_refresh_op
+from kortravelgeo_dagster.run_tags import LONG_RUN_TAGS, MAX_RUNTIME_TAG
 
 
 def test_code_location_loads_mv_refresh_job() -> None:
@@ -42,6 +43,69 @@ def test_code_location_loads_scheduled_backup_onramp() -> None:
     assert scheduled_backup_run_due_job.name == "scheduled_backup_run_due"
     assert scheduled_backup_schedule.name == "scheduled_backup"
     assert notify_run_failure_sensor.name == "run_failure_sensor"
+
+
+# D4 (dagster-shared plan): every instigator's on/off state is declared in code. The shared
+# Dagster instance starts with an empty DB, so a state that lived only in the old DB (prod
+# had these three toggled on by hand) would silently come up STOPPED. This table is the
+# prod state read from n150 on 2026-09-29; a new schedule/sensor must be added here, which
+# forces a deliberate choice instead of inheriting STOPPED.
+_DECLARED_INSTIGATOR_STATUS = {
+    "scheduled_backup": "RUNNING",
+    "backup_retention_janitor_daily": "RUNNING",
+    "backup_restore_drill_daily": "STOPPED",
+    "run_failure_sensor": "RUNNING",
+}
+
+
+def test_every_instigator_declares_its_prod_status_in_code() -> None:
+    repo = defs.get_repository_def()
+    declared = {
+        instigator.name: instigator.default_status.value
+        for instigator in [*repo.schedule_defs, *repo.sensor_defs]
+    }
+    assert declared == _DECLARED_INSTIGATOR_STATUS
+
+
+# Shared-plane max runtime (owner decision 2026-09-30): the shared instance's 6 h
+# run_monitoring default applies to every geo job except the ones that can legitimately run
+# longer, which carry ``dagster/max_runtime`` = 86400 (``kortravelgeo_dagster/run_tags.py``
+# explains each). ``None`` means "no tag — the instance default applies". Every job is listed,
+# so a new job fails this test until someone decides which side it belongs on.
+_EXPECTED_MAX_RUNTIME_TAG: dict[str, str | None] = {
+    "backup_copy": None,
+    "backup_restore_drill": "86400",
+    "backup_retention_janitor": None,
+    "backup_verify": None,
+    "consistency_check": None,
+    "db_backup": None,
+    "db_restore": "86400",
+    "full_load_batch": "86400",
+    "load_source": "86400",
+    "mv_refresh": None,
+    "scheduled_backup_run_due": None,
+    "source_rebuild_db": None,
+}
+
+
+def test_every_job_declares_its_max_runtime() -> None:
+    declared = {
+        job.name: job.tags.get(MAX_RUNTIME_TAG)
+        for job in defs.resolve_all_job_defs()
+        if not job.name.startswith("__")
+    }
+    assert declared == _EXPECTED_MAX_RUNTIME_TAG
+
+
+def test_long_run_tag_is_twenty_four_hours() -> None:
+    assert LONG_RUN_TAGS == {"dagster/max_runtime": "86400"}
+
+
+def test_run_failure_sensor_monitors_only_this_code_location() -> None:
+    # On the shared instance monitor_all_code_locations=True would persist other projects'
+    # run failures into geo's ops.run_failure_alerts. Omitting monitored_jobs already means
+    # "every job in this code location" (Dagster matches the run's location+repository).
+    assert notify_run_failure_sensor._monitor_all_code_locations is False
 
 
 def test_op_name_differs_from_job_name() -> None:

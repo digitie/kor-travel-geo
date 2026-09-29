@@ -63,67 +63,88 @@ JsonDict = dict[str, Any]
 
 _JOB_ID_TAG = "kor_travel_geo.job_id"
 
+# On the shared Dagster webserver (dagster-shared plan, stage 3) one instance holds several
+# projects' code locations and runs. The summary therefore reads only geo's own location:
+# ``repositoryOrError`` with the settings' location/repository selector (the same values
+# launchRun uses) and ``runsOrError`` filtered by ``.dagster/repository`` — the hidden tag
+# Dagster sets on every run at creation (``<repository>@<location>``; GraphQL hides it from
+# ``tags`` output, but the filter still matches it). Against today's single-tenant webserver
+# the result is identical, so this ships before the cutover.
 _DAGSTER_SUMMARY_QUERY = """
-query KorTravelGeoDagsterSummary($limit: Int!) {
+query KorTravelGeoDagsterSummary(
+  $limit: Int!,
+  $repositoryLocationName: String!,
+  $repositoryName: String!,
+  $repositoryLabel: String!
+) {
   version
-  repositoriesOrError {
+  repositoryOrError(
+    repositorySelector: {
+      repositoryLocationName: $repositoryLocationName,
+      repositoryName: $repositoryName
+    }
+  ) {
     __typename
-    ... on RepositoryConnection {
-      nodes {
+    ... on Repository {
+      name
+      location { name }
+      pipelines { name isJob }
+      schedules {
         name
-        location { name }
-        pipelines { name isJob }
-        schedules {
-          name
-          cronSchedule
-          executionTimezone
-          scheduleState {
+        cronSchedule
+        executionTimezone
+        scheduleState {
+          status
+          ticks(limit: 3) {
+            tickId
             status
-            ticks(limit: 3) {
-              tickId
-              status
-              timestamp
-              endTimestamp
-              runIds
-              runKeys
-              skipReason
-              cursor
-              error { message stack className }
-            }
-          }
-          futureTicks(limit: 2) {
-            results { timestamp }
+            timestamp
+            endTimestamp
+            runIds
+            runKeys
+            skipReason
+            cursor
+            error { message stack className }
           }
         }
-        sensors {
-          name
-          sensorState {
-            status
-            ticks(limit: 3) {
-              tickId
-              status
-              timestamp
-              endTimestamp
-              runIds
-              runKeys
-              skipReason
-              cursor
-              error { message stack className }
-            }
-          }
-        }
-        assetNodes {
-          id
-          groupName
-          assetKey { path }
+        futureTicks(limit: 2) {
+          results { timestamp }
         }
       }
+      sensors {
+        name
+        sensorState {
+          status
+          ticks(limit: 3) {
+            tickId
+            status
+            timestamp
+            endTimestamp
+            runIds
+            runKeys
+            skipReason
+            cursor
+            error { message stack className }
+          }
+        }
+      }
+      assetNodes {
+        id
+        groupName
+        assetKey { path }
+      }
+    }
+    ... on RepositoryNotFoundError {
+      message
     }
     ... on PythonError {
       message
     }
   }
-  runsOrError(limit: $limit) {
+  runsOrError(
+    filter: { tags: [{ key: ".dagster/repository", value: $repositoryLabel }] },
+    limit: $limit
+  ) {
     __typename
     ... on Runs {
       results {
@@ -157,6 +178,7 @@ query KorTravelGeoDagsterRunDetail(
       endTime
       updateTime
       tags { key value }
+      repositoryOrigin { repositoryLocationName repositoryName }
       eventConnection(limit: $eventLimit, afterCursor: $afterCursor) {
         cursor
         hasMore
@@ -435,35 +457,59 @@ def _parse_asset_groups(raw_assets: list[object]) -> list[DagsterAssetGroup]:
     ]
 
 
-def _parse_repositories(
-    raw_connection: JsonDict, *, now_ts: float, grace_seconds: float
+def _parse_repository(
+    raw_repository: JsonDict, *, now_ts: float, grace_seconds: float
 ) -> tuple[list[DagsterRepository], list[str]]:
-    errors: list[str] = []
-    if raw_connection.get("__typename") != "RepositoryConnection":
-        message = _optional_string(raw_connection.get("message")) or "Dagster repository 조회 실패"
+    """Parse the location-scoped ``repositoryOrError`` result into 0 or 1 repositories."""
+    if raw_repository.get("__typename") != "Repository":
+        # RepositoryNotFoundError (geo's location is not loaded in this workspace) or
+        # PythonError. Either way nothing of another project's is shown instead.
+        message = _optional_string(raw_repository.get("message")) or "Dagster repository 조회 실패"
         return [], [message]
 
-    repositories: list[DagsterRepository] = []
-    for raw in _list(raw_connection.get("nodes")):
-        entry = _dict(raw)
-        location = _dict(entry.get("location"))
-        assets = _list(entry.get("assetNodes"))
-        repositories.append(
-            DagsterRepository(
-                name=_string(entry.get("name"), "__repository__"),
-                location_name=_string(location.get("name"), "unknown_location"),
-                jobs=_parse_jobs(_list(entry.get("pipelines"))),
-                schedules=_parse_schedules(
-                    _list(entry.get("schedules")),
-                    now_ts=now_ts,
-                    grace_seconds=grace_seconds,
-                ),
-                sensors=_parse_sensors(_list(entry.get("sensors"))),
-                asset_count=len(assets),
-                asset_groups=_parse_asset_groups(assets),
-            )
-        )
-    return repositories, errors
+    location = _dict(raw_repository.get("location"))
+    assets = _list(raw_repository.get("assetNodes"))
+    repository = DagsterRepository(
+        name=_string(raw_repository.get("name"), "__repository__"),
+        location_name=_string(location.get("name"), "unknown_location"),
+        jobs=_parse_jobs(_list(raw_repository.get("pipelines"))),
+        schedules=_parse_schedules(
+            _list(raw_repository.get("schedules")),
+            now_ts=now_ts,
+            grace_seconds=grace_seconds,
+        ),
+        sensors=_parse_sensors(_list(raw_repository.get("sensors"))),
+        asset_count=len(assets),
+        asset_groups=_parse_asset_groups(assets),
+    )
+    return [repository], []
+
+
+def _repository_label(settings: Settings) -> str:
+    """Value of Dagster's ``.dagster/repository`` run tag for geo's code location."""
+    return f"{settings.dagster_repository_name}@{settings.dagster_repository_location_name}"
+
+
+def _summary_variables(settings: Settings, *, limit: int) -> dict[str, object]:
+    return {
+        "limit": limit,
+        "repositoryLocationName": settings.dagster_repository_location_name,
+        "repositoryName": settings.dagster_repository_name,
+        "repositoryLabel": _repository_label(settings),
+    }
+
+
+def _run_belongs_to_location(raw_run: JsonDict, settings: Settings) -> bool:
+    """True when the run was launched from geo's own code location.
+
+    Run ids are global on a shared instance, so a run id alone could name another
+    project's run. The origin is set on every run launched from a code location.
+    """
+    origin = _dict(raw_run.get("repositoryOrigin"))
+    return (
+        origin.get("repositoryLocationName") == settings.dagster_repository_location_name
+        and origin.get("repositoryName") == settings.dagster_repository_name
+    )
 
 
 def _run_tags(entry: JsonDict) -> dict[str, str]:
@@ -519,8 +565,19 @@ def _parse_run_detail(
     *,
     dagster_urls: _DagsterUrls,
     checked_at: datetime,
+    settings: Settings,
 ) -> DagsterRunDetailData:
     typename = _string(raw_run.get("__typename"))
+    if typename == "Run" and not _run_belongs_to_location(raw_run, settings):
+        # Another project's run on a shared instance: answer exactly like an unknown id,
+        # so neither its events nor its existence leak through geo's admin API.
+        return DagsterRunDetailData(
+            status="not_found",
+            dagster_url=dagster_urls.dagster_url,
+            graphql_url=dagster_urls.graphql_url,
+            checked_at=checked_at,
+            errors=["Dagster run을 찾을 수 없습니다."],
+        )
     if typename == "Run":
         event_connection = _dict(raw_run.get("eventConnection"))
         return DagsterRunDetailData(
@@ -740,7 +797,7 @@ async def get_dagster_summary(
             payload = await _post_graphql(
                 client=client,
                 graphql_url=dagster_urls.graphql_url,
-                variables={"limit": page_size},
+                variables=_summary_variables(settings, limit=page_size),
             )
     except (httpx.HTTPError, ValueError) as exc:
         return _summary_response(
@@ -768,8 +825,8 @@ async def get_dagster_summary(
         )
 
     data = _dict(payload.get("data"))
-    repositories, repository_errors = _parse_repositories(
-        _dict(data.get("repositoriesOrError")),
+    repositories, repository_errors = _parse_repository(
+        _dict(data.get("repositoryOrError")),
         now_ts=checked_at.timestamp(),
         grace_seconds=float(settings.dagster_schedule_overdue_grace_seconds),
     )
@@ -878,6 +935,7 @@ async def get_dagster_run_detail(
         _dict(data.get("runOrError")),
         dagster_urls=dagster_urls,
         checked_at=checked_at,
+        settings=settings,
     )
     if detail.status == "ok":
         detail = await _with_backup_artifact(

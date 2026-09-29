@@ -1,0 +1,35 @@
+# Exact versions for the geo Dagster image (dagster-shared plan stage 0, T-324).
+#
+# dagster.Dockerfile installs with `pip install -c <this file>`, so a rebuild cannot drift:
+# pyproject keeps library floors (`dagster>=1.9,<2`), this file is the one place the image's
+# exact versions are written. The Dagster family MUST equal the shared host's version — the
+# host (webserver/daemon) must be >= every code-server (Dagster backcompat policy), so a
+# code-server that silently resolved a newer dagster on rebuild would be out of policy.
+# Upgrade order: host first, then this file. tests/test_image_constraints.py pins the rules.
+#
+# Values = the dagster-shared plan §3 target set, which is also what the live n150 image
+# (python 3.12.14) ran on 2026-09-29.
+
+# Dagster family (host/code-server version contract).
+dagster==1.13.24
+dagster-webserver==1.13.24
+dagster-graphql==1.13.24
+dagster-pipes==1.13.24
+dagster-shared==1.13.24
+dagster-postgres==0.29.24
+
+# Major libraries shared across the Dagster projects.
+pydantic==2.13.5
+pydantic-core==2.46.5
+pydantic-settings==2.15.0
+psycopg==3.3.6
+psycopg-binary==3.3.6
+psycopg-pool==3.3.3
+psycopg2-binary==2.9.13
+grpcio==1.84.0
+grpcio-health-checking==1.81.1
+protobuf==6.33.6
+
+# Not unified across projects (plan §3): geo runs SQLAlchemy 2.1 on purpose (T-322). Pinned
+# here only so a rebuild cannot pick up a newer 2.1.x unreviewed.
+sqlalchemy==2.1.1

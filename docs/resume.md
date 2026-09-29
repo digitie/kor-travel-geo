@@ -4,6 +4,13 @@
 
 ## 현재 진척도 (2026-09-29 갱신, by claude)
 
+- 🔶 **T-324 — 공유 Dagster plane geo 선행 작업** (branch `feat/dagster-shared-stage0`, 미머지) — 이미지 exact
+  constraints + base digest, admin API Dagster 조회 geo location 한정, instigator on/off를 코드로(D4),
+  run-failure sensor 범위를 자기 location으로, entrypoint guard 공유 URL env. 상세 `journal.md` 2026-09-29 T-324.
+  긴 job 넷(`full_load_batch`·`load_source`·`db_restore`·`backup_restore_drill`)은 `dagster/max_runtime=86400`
+  (2026-09-30 소유자 결정, `run_tags.py`). **다음 한 작업**: PR·머지(소유자 지시 시) → `ktdctl ensure geo`
+  재빌드 후 1.13.24 확인.
+
 - ✅ **T-322 마무리 — Dagster 패키지 `sqlalchemy<2.1` pin 해제 + n150 배포** — entrypoint 드라이버 guard,
   CI Postgres storage smoke(2.1). **다음 한 작업**: 없음 — 열린 과제는 보류 T-063(하드웨어)뿐.
 

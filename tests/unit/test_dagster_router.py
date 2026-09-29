@@ -107,68 +107,64 @@ async def test_dagster_summary_parses_graphql_response(
         return {
             "data": {
                 "version": "1.9.99",
-                "repositoriesOrError": {
-                    "__typename": "RepositoryConnection",
-                    "nodes": [
+                "repositoryOrError": {
+                    "__typename": "Repository",
+                    "name": "__repository__",
+                    "location": {"name": "kortravelgeo_dagster.definitions"},
+                    "pipelines": [{"name": "mv_refresh", "isJob": True}],
+                    "schedules": [
                         {
-                            "name": "__repository__",
-                            "location": {"name": "kortravelgeo_dagster.definitions"},
-                            "pipelines": [{"name": "mv_refresh", "isJob": True}],
-                            "schedules": [
-                                {
-                                    "name": "scheduled_backup",
-                                    "cronSchedule": "0 3 * * *",
-                                    "executionTimezone": "Asia/Seoul",
-                                    "scheduleState": {
-                                        "status": "RUNNING",
-                                        "ticks": [
-                                            {
-                                                "tickId": "tick-1",
-                                                "status": "SUCCESS",
-                                                "timestamp": 1710000000.0,
-                                                "endTimestamp": 1710000010.0,
-                                                "runIds": ["run-1"],
-                                                "runKeys": ["scheduled"],
-                                                "skipReason": None,
-                                                "cursor": "cursor-1",
-                                                "error": None,
-                                            }
-                                        ],
-                                    },
-                                }
-                            ],
-                            "sensors": [
-                                {
-                                    "name": "run_failure_sensor",
-                                    "sensorState": {
-                                        "status": "STOPPED",
-                                        "ticks": [
-                                            {
-                                                "tickId": "sensor-tick-1",
-                                                "status": "FAILURE",
-                                                "timestamp": 1710000200.0,
-                                                "endTimestamp": None,
-                                                "runIds": [],
-                                                "runKeys": [],
-                                                "skipReason": None,
-                                                "cursor": None,
-                                                "error": {
-                                                    "message": "sensor failed",
-                                                    "stack": ["frame 1"],
-                                                    "className": "SensorFailure",
-                                                },
-                                            }
-                                        ],
-                                    },
-                                }
-                            ],
-                            "assetNodes": [
-                                {
-                                    "id": "asset-1",
-                                    "groupName": "ops",
-                                    "assetKey": {"path": ["db_backup_artifact"]},
-                                }
-                            ],
+                            "name": "scheduled_backup",
+                            "cronSchedule": "0 3 * * *",
+                            "executionTimezone": "Asia/Seoul",
+                            "scheduleState": {
+                                "status": "RUNNING",
+                                "ticks": [
+                                    {
+                                        "tickId": "tick-1",
+                                        "status": "SUCCESS",
+                                        "timestamp": 1710000000.0,
+                                        "endTimestamp": 1710000010.0,
+                                        "runIds": ["run-1"],
+                                        "runKeys": ["scheduled"],
+                                        "skipReason": None,
+                                        "cursor": "cursor-1",
+                                        "error": None,
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                    "sensors": [
+                        {
+                            "name": "run_failure_sensor",
+                            "sensorState": {
+                                "status": "STOPPED",
+                                "ticks": [
+                                    {
+                                        "tickId": "sensor-tick-1",
+                                        "status": "FAILURE",
+                                        "timestamp": 1710000200.0,
+                                        "endTimestamp": None,
+                                        "runIds": [],
+                                        "runKeys": [],
+                                        "skipReason": None,
+                                        "cursor": None,
+                                        "error": {
+                                            "message": "sensor failed",
+                                            "stack": ["frame 1"],
+                                            "className": "SensorFailure",
+                                        },
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                    "assetNodes": [
+                        {
+                            "id": "asset-1",
+                            "groupName": "ops",
+                            "assetKey": {"path": ["db_backup_artifact"]},
                         }
                     ],
                 },
@@ -219,8 +215,18 @@ async def test_dagster_summary_parses_graphql_response(
         {"group_name": "ops", "asset_count": 1, "assets": ["db_backup_artifact"]}
     ]
     assert data["recent_runs"][0]["run_id"] == "run-1"
+    # Scoped to geo's own code location (dagster-shared stage 3): the selector and the
+    # ``.dagster/repository`` run-tag label both come from settings.
     assert calls == [
-        {"query": dagster_mod._DAGSTER_SUMMARY_QUERY, "variables": {"limit": 3}},
+        {
+            "query": dagster_mod._DAGSTER_SUMMARY_QUERY,
+            "variables": {
+                "limit": 3,
+                "repositoryLocationName": "kortravelgeo_dagster.definitions",
+                "repositoryName": "__repository__",
+                "repositoryLabel": "__repository__@kortravelgeo_dagster.definitions",
+            },
+        },
     ]
 
 
@@ -269,6 +275,10 @@ async def test_dagster_run_detail_parses_graphql_response(
                         {"key": "dagster/job", "value": "db_backup"},
                         {"key": "kor_travel_geo.job_id", "value": "job-1"},
                     ],
+                    "repositoryOrigin": {
+                        "repositoryLocationName": "kortravelgeo_dagster.definitions",
+                        "repositoryName": "__repository__",
+                    },
                     "eventConnection": {
                         "cursor": "event-cursor-1",
                         "hasMore": True,
@@ -710,6 +720,10 @@ async def test_dagster_run_detail_surfaces_failure_alert(
                     "jobName": "db_backup",
                     "status": "FAILURE",
                     "tags": [],
+                    "repositoryOrigin": {
+                        "repositoryLocationName": "kortravelgeo_dagster.definitions",
+                        "repositoryName": "__repository__",
+                    },
                     "eventConnection": {"cursor": None, "hasMore": False, "events": []},
                 }
             }
@@ -745,46 +759,42 @@ async def test_dagster_summary_surfaces_next_tick_and_overdue(
         return {
             "data": {
                 "version": "1.13.13",
-                "repositoriesOrError": {
-                    "__typename": "RepositoryConnection",
-                    "nodes": [
+                "repositoryOrError": {
+                    "__typename": "Repository",
+                    "name": "__repository__",
+                    "location": {"name": "loc"},
+                    "pipelines": [],
+                    "schedules": [
                         {
-                            "name": "__repository__",
-                            "location": {"name": "loc"},
-                            "pipelines": [],
-                            "schedules": [
-                                {
-                                    "name": "scheduled_backup",
-                                    "cronSchedule": "0 3 * * *",
-                                    "executionTimezone": "Asia/Seoul",
-                                    "scheduleState": {
-                                        "status": "RUNNING",
-                                        "ticks": [
-                                            {
-                                                "tickId": "t1",
-                                                "status": "SUCCESS",
-                                                "timestamp": 1_000_000_000.0,
-                                                "endTimestamp": None,
-                                                "runIds": [],
-                                                "runKeys": [],
-                                                "skipReason": None,
-                                                "cursor": None,
-                                                "error": None,
-                                            }
-                                        ],
-                                    },
-                                    "futureTicks": {
-                                        "results": [
-                                            {"timestamp": 1_000_000_060.0},
-                                            {"timestamp": 1_000_000_120.0},
-                                        ]
-                                    },
-                                }
-                            ],
-                            "sensors": [],
-                            "assetNodes": [],
+                            "name": "scheduled_backup",
+                            "cronSchedule": "0 3 * * *",
+                            "executionTimezone": "Asia/Seoul",
+                            "scheduleState": {
+                                "status": "RUNNING",
+                                "ticks": [
+                                    {
+                                        "tickId": "t1",
+                                        "status": "SUCCESS",
+                                        "timestamp": 1_000_000_000.0,
+                                        "endTimestamp": None,
+                                        "runIds": [],
+                                        "runKeys": [],
+                                        "skipReason": None,
+                                        "cursor": None,
+                                        "error": None,
+                                    }
+                                ],
+                            },
+                            "futureTicks": {
+                                "results": [
+                                    {"timestamp": 1_000_000_060.0},
+                                    {"timestamp": 1_000_000_120.0},
+                                ]
+                            },
                         }
                     ],
+                    "sensors": [],
+                    "assetNodes": [],
                 },
                 "runsOrError": {"__typename": "Runs", "results": []},
             }
@@ -804,7 +814,11 @@ async def test_dagster_summary_surfaces_next_tick_and_overdue(
 def _empty_summary_payload() -> dict[str, Any]:
     return {
         "data": {
-            "repositoriesOrError": {"__typename": "RepositoryConnection", "nodes": []},
+            "repositoryOrError": {
+                "__typename": "Repository",
+                "name": "__repository__",
+                "location": {"name": "kortravelgeo_dagster.definitions"},
+            },
             "runsOrError": {"__typename": "Runs", "results": []},
         }
     }
@@ -1036,3 +1050,115 @@ async def test_dagster_run_detail_config_error_sanitizes_urls(
     assert data["dagster_url"] == ""
     assert data["graphql_url"] == ""
     assert "javascript:alert(1)" not in str(data)
+
+
+# dagster-shared stage 3: on a shared webserver the instance also holds other projects'
+# code locations and runs. geo's admin API must only ever surface its own.
+
+
+@pytest.mark.asyncio
+async def test_dagster_summary_reports_missing_own_location_without_falling_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        return {
+            "data": {
+                "version": "1.13.24",
+                "repositoryOrError": {
+                    "__typename": "RepositoryNotFoundError",
+                    "message": "Could not find a repository named __repository__",
+                },
+                "runsOrError": {"__typename": "Runs", "results": []},
+            }
+        }
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _fake_post_graphql)
+    transport = httpx.ASGITransport(app=_app(), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "error"
+    assert data["repository_count"] == 0
+    assert data["repositories"] == []
+    assert data["errors"] == ["Could not find a repository named __repository__"]
+
+
+def test_dagster_summary_query_is_location_scoped() -> None:
+    """The query text itself must not list every repository or every run.
+
+    ``repositoriesOrError`` and an unfiltered ``runsOrError`` would return other projects'
+    data on the shared webserver; the selector/filter variables must actually be used.
+    """
+    query = dagster_mod._DAGSTER_SUMMARY_QUERY
+    assert "repositoriesOrError" not in query
+    assert "repositoryLocationName: $repositoryLocationName" in query
+    assert "repositoryName: $repositoryName" in query
+    assert '{ key: ".dagster/repository", value: $repositoryLabel }' in query
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "origin",
+    [
+        {
+            "repositoryLocationName": "kortravelmap.dagster.definitions",
+            "repositoryName": "__repository__",
+        },
+        {"repositoryLocationName": "kortravelgeo_dagster.definitions", "repositoryName": "other"},
+        None,
+    ],
+)
+async def test_dagster_run_detail_hides_runs_from_other_locations(
+    monkeypatch: pytest.MonkeyPatch, origin: dict[str, str] | None
+) -> None:
+    client_stub = _ArtifactClient(failure_alerts={"run-x": _alert("run-x")})
+
+    async def _fake_post_graphql(
+        client: httpx.AsyncClient,
+        graphql_url: str,
+        variables: dict[str, object],
+        query: str = dagster_mod._DAGSTER_SUMMARY_QUERY,
+    ) -> dict[str, Any]:
+        return {
+            "data": {
+                "runOrError": {
+                    "__typename": "Run",
+                    "runId": "run-x",
+                    "jobName": "secret_other_job",
+                    "status": "FAILURE",
+                    "tags": [{"key": "kor_travel_geo.job_id", "value": "job-1"}],
+                    "repositoryOrigin": origin,
+                    "eventConnection": {
+                        "cursor": "c1",
+                        "hasMore": False,
+                        "events": [{"__typename": "MessageEvent", "message": "other data"}],
+                    },
+                }
+            }
+        }
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", _fake_post_graphql)
+    transport = httpx.ASGITransport(
+        app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
+    )
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/runs/run-x", headers=_HEADERS)
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "not_found"
+    assert data["run"] is None
+    assert data["events"] == []
+    assert data["failure_alert"] is None
+    assert data["backup_artifact"] is None
+    assert "secret_other_job" not in response.text
+    assert "other data" not in response.text
+    # geo's own DB is not consulted for a run that is not geo's.
+    assert client_stub.calls == []

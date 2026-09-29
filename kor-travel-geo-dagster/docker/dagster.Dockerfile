@@ -27,7 +27,11 @@
 # The default CMD below (still webserver) is a documented fallback only; docker-manager's
 # compose sets `command:` explicitly for all three services.
 
-FROM python:3.12-slim AS builder
+# Base image pinned by digest (dagster-shared plan stage 0): python 3.12.14 on debian trixie, the
+# multi-arch index `python:3.12-slim` resolved to on 2026-09-29 (the live n150 image's base).
+# Builder and runtime MUST use the same digest — the GDAL wheel built here links against the
+# libgdal of this debian release. tests/test_image_constraints.py pins both.
+FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -56,9 +60,13 @@ COPY kor-travel-geo-dagster ./kor-travel-geo-dagster
 # `pip install` first does not work with --prefix (pip does not see the /install-only gdal as
 # already-satisfied, so it re-resolves `gdal>=3.8` to the newest sdist and fails the libgdal
 # floor) — they must be in the same invocation.
+# `-c constraints-dagster.txt` (dagster-shared plan stage 0): the Dagster family and the major
+# libraries install at EXACT versions, so a rebuild cannot put this code-server above the
+# shared Dagster host's version. pyproject keeps only floors.
 RUN python -m pip install --upgrade pip \
     && GDAL_VERSION="$(gdal-config --version)" \
     && python -m pip install --prefix=/install \
+         -c ./kor-travel-geo-dagster/docker/constraints-dagster.txt \
          "gdal==${GDAL_VERSION}" ".[loaders]" ./kor-travel-geo-dagster
 
 # Fail the build on a GDAL lib/binding version skew (belt-and-suspenders; same check the API
@@ -75,7 +83,7 @@ if lib_version not in python_version:
     raise SystemExit(f"GDAL version mismatch: lib={lib_version}, python={python_version}")
 PY
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

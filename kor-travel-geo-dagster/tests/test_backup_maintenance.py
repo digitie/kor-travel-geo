@@ -389,13 +389,14 @@ def test_restore_drill_schedule_requires_the_client_resource() -> None:
     assert backup_maintenance.restore_drill_schedule.required_resource_keys == {"client"}
 
 
-def test_retention_janitor_schedule_is_daily_stopped_by_default() -> None:
+def test_retention_janitor_schedule_is_daily_running_by_default() -> None:
     from dagster import DefaultScheduleStatus
 
     sched = backup_maintenance.retention_janitor_schedule
     assert sched.cron_schedule == "0 6 * * *"
     assert sched.execution_timezone == "Asia/Seoul"
-    assert sched.default_status is DefaultScheduleStatus.STOPPED
+    # D4: prod state declared in code (see test_definitions instigator-state test).
+    assert sched.default_status is DefaultScheduleStatus.RUNNING
     assert sched.job.name == "backup_retention_janitor"
 
 

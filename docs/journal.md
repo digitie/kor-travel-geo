@@ -2,6 +2,52 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-30 (T-324 — 긴 geo job의 `dagster/max_runtime`, by claude)
+
+소유자 결정: 공유 instance의 기본 max runtime(6시간)이 geo run에도 걸린다. full load·restore와, 6시간을
+정당하게 넘을 수 있는 job만 `dagster/max_runtime=86400`(24시간). PinVi와 같은 모양 — 작은 `run_tags.py`를
+job tag dict에 합친다(Dagster는 job 정의 tag를 모든 run에 복사하고, run tag가 instance 값보다 우선한다).
+
+**n150 이력(읽기 전용)**: geo Dagster run store는 2026-09-28부터라 짧다(db_backup 최대 0.64h, mv_refresh 1.22h).
+`load_jobs`(2026-07-09~)도 db_restore 최대 2.18h, mv_refresh 1.59h, db_backup 0.72h가 전부 — 6시간 넘은
+run은 없고 운영에서 full load는 아직 한 번도 돌지 않았다. 그래서 full load 길이는 T-033(개발 워크스테이션
+전국 full load 4시간 8분, 그중 SHP 적재 3시간 37분)으로 판단했다. n150은 더 느리다.
+
+**고른 것**: `full_load_batch`(소유자 지정), `db_restore`(소유자 지정), `load_source`(SHP 한 원천만으로
+3시간 37분이라 n150에서 6시간을 넘을 수 있다), `backup_restore_drill`(db_restore와 같은 전체 restore에
+reconcile·smoke까지). `source_rebuild_db`는 materialize 후 `full_load_batch`를 **launch만** 하고 끝나므로
+기본값. 나머지(backup·verify·copy·janitor·consistency·mv_refresh·run-due)도 기본값.
+
+**Map 리뷰 발견의 geo 점검**: Dagster GraphQL은 `Run.tags`에서 hidden `.dagster/*` tag를 뺀다
+(`GrapheneRun.resolve_tags`). geo run 상세의 소유 판정은 처음부터 `repositoryOrigin`을 settings selector와
+비교하고 origin이 없으면 `not_found`라 해당 없음 — `Run.tags`에서 hidden tag를 읽는 코드·fixture도 없다.
+n150 geo webserver(읽기 전용)로 확인: run 72건 모두 `tags`에 `.dagster/repository`가 없고 `repositoryOrigin`은
+`kortravelgeo_dagster.definitions`/`__repository__`, filter는 geo label 72건·Map label 0건. red-check로
+tag 기반 판정(own run 2건 실패)·origin 없음 허용(1건)·판정 제거(3건)를 테스트가 잡는 것도 확인했다.
+
+## 2026-09-29 (T-324 — 공유 Dagster plane geo 선행 작업, by claude)
+
+Map·PinVi·geo·weather가 한 Dagster webserver/daemon(`dagster_shared`)을 쓰는 계획(Manager 쪽
+`dagster-shared-plan.md`)의 geo 몫. 배포·토폴로지 변경 없음, branch `feat/dagster-shared-stage0`.
+
+**n150 운영 상태를 먼저 읽었다(읽기 전용 GraphQL)**: dagster 1.13.24 / python 3.12.14 / SQLAlchemy 2.1.1,
+instigator 넷 중 `scheduled_backup`·`backup_retention_janitor_daily`·`run_failure_sensor`가 RUNNING인데
+코드 기본값은 전부 STOPPED였다 — DB에서 손으로 켠 상태라 새 `dagster_shared`에서는 조용히 꺼진다.
+`backup_restore_drill_daily`는 STOPPED. run 64건 전부 `.dagster/repository=__repository__@kortravelgeo_dagster.definitions`
+filter에 걸렸다(GraphQL `tags` 출력엔 hidden tag라 안 보이지만 filter는 먹는다 — 처음에 `<missing>`으로 읽혀
+헷갈렸다). `repositoryOrigin`도 전 run에 채워져 있다.
+
+**한 일**: (1) 이미지 exact 설치 — `constraints-dagster.txt` 하나가 정본, pyproject는 floor 유지, 두 `FROM`
+digest 핀, CI `dagster` job도 같은 `-c`, `test_image_constraints.py`가 Dockerfile·pyproject·설치 환경을 묶는다.
+(2) admin API 조회 scoping — summary는 `repositoryOrError`+tag filter, run 상세는 `repositoryOrigin`이 geo가
+아니면 `not_found`(다른 프로젝트 run의 존재도 드러내지 않는다). (3) D4 — 운영 상태를 `default_status`로.
+(4) 계획표에 없던 것 둘: run-failure sensor가 `monitor_all_code_locations=True`였다 — 공유 instance에서는
+Map·weather 실패까지 geo `ops.run_failure_alerts`에 쌓였을 것이다(Dagster 1.13.24 소스로 기본값이 "같은
+location·repository의 모든 job"임을 확인하고 제거). entrypoint psycopg2 guard가 공유 URL env도 검사.
+
+**남긴 것**: 공유 instance의 run_monitoring 기본 max_runtime(21600초)이 geo run에 새로 걸린다(지금은 무제한).
+full load/restore 길이에 따라 `dagster/max_runtime` tag가 필요할 수 있다 — `tasks.md` T-324.
+
 ## 2026-09-29 (T-309~T-318 — T-308 후속 일괄 완주 + 백업 2주 주기, by claude)
 
 사용자 지시 "이어서 완주까지 진행", 도중 "백업주기는 2주에 한번으로". 코드 task 6개(T-309·T-310·
