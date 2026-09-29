@@ -17,6 +17,10 @@
   2. 통과 시에만 옛 사본 정리: 09-19 아카이브(`kor_travel_geo_backup_20260919T011519Z_zstd3.tar.zst`,
      admin API janitor로 만료)와 옛 PGDATA `/home/digitie/kor-travel-geo-data/pgdata-final-20260529`(32.8GB).
   3. 이 문서 PR(branch `agent/claude-t308-followups-docs`)의 T-314 항목을 완료로 고쳐 병합.
+  - (02:25Z 재개, 사용자 "한도 다 쓸 때까지 기록하면서 진행") T-319·T-320·T-321을 workflow로 구현 중 —
+    worktree `F:/dev/ktg-wt-t319`/`t320`/`t321`, 각 PR은 적대적 리뷰→수정→재리뷰 후 병합 예정.
+    T-322는 착수 전: dagster_postgres event watcher가 URL을 `psycopg2.connect`에 그대로 넘기므로
+    `postgresql+psycopg2://` scheme 변경은 throwaway instance에서 먼저 검증해야 한다.
 
 - ✅ **T-308 — geo DB를 공용 제어 평면 instance `kor-travel-shared-postgres`(:11000)로 이전 +
   관리 UI geocoding 장애 복구 (사용자 지시)** — `kor_travel_geo`·`kor_travel_geo_dagster` 둘 다
