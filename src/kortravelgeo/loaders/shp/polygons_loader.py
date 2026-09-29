@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -80,6 +81,15 @@ ROAD_INTERVAL_COPY_SQL = f"""
 COPY tl_sprd_intrvl
 ({", ".join(ROAD_INTERVAL_COPY_COLUMNS)})
 FROM STDIN
+"""
+_BUILDING_POLYGON_MANIFEST_SQL = """
+INSERT INTO load_manifest (table_name, row_count, source_yyyymm, source_set, updated_at)
+VALUES (:table_name, :row_count, :source_yyyymm, CAST(:source_set AS jsonb), now())
+ON CONFLICT (table_name) DO UPDATE SET
+  row_count = load_manifest.row_count + EXCLUDED.row_count,
+  source_yyyymm = EXCLUDED.source_yyyymm,
+  source_set = EXCLUDED.source_set,
+  updated_at = now()
 """
 
 
@@ -502,6 +512,22 @@ WHERE NULLIF(BTRIM(bd_mgt_sn::text), '') IS NOT NULL
                 },
             )
             inserted_count = result.rowcount if result.rowcount >= 0 else staged_count
+            if inserted_count > 0:
+                # T-319: 기준월을 같은 transaction에서 manifest에 남긴다(release·백업이 전수
+                # scan 대신 읽는다). 이 테이블은 append만 하고 full 적재는 TRUNCATE가 manifest
+                # 행도 지우므로, row_count는 누적하면 테이블 행 수와 같다.
+                conn.execute(
+                    text(_BUILDING_POLYGON_MANIFEST_SQL),
+                    {
+                        "table_name": plan.target_table,
+                        "row_count": inserted_count,
+                        "source_yyyymm": plan.source_yyyymm,
+                        "source_set": json.dumps(
+                            {"kind": "shp_polygons", "source_file": plan.source_file},
+                            ensure_ascii=False,
+                        ),
+                    },
+                )
             skipped_count = staged_count - inserted_count
             if skipped_count:
                 print(
@@ -729,6 +755,12 @@ def _truncate_target_tables(pg_url: str, table_names: tuple[str, ...]) -> None:
                     + ", ".join(f"{table}={count}" for table, count in snapshot)
                 )
             conn.execute(text(f"TRUNCATE TABLE {tables}"))
+            # T-319: 비운 테이블의 기준월 manifest도 같이 지운다 — 남겨 두면 빈(또는 새로
+            # 채우는 중인) 테이블에 옛 기준월이 붙는다.
+            conn.execute(
+                text("DELETE FROM load_manifest WHERE table_name = ANY(:table_names)"),
+                {"table_names": list(table_names)},
+            )
     finally:
         engine.dispose()
 
