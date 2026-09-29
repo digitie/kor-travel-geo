@@ -84,3 +84,4 @@ ktgctl backup restore-drill --artifact-id <id> --base-db kor_travel_geo --jobs 4
 - 라이브 round-trip(backup→restore→reconcile) 통합 검증: **T-244**.
 - 무결성 온디맨드 검증: **T-231**(`backup verify`). 복원 dry-run preflight: **T-232**. 버전 hard-fail: **T-234**.
 - hot-swap(서빙 DB 교체) 실행: **T-241**(드릴과 달리 라이브 serving을 바꾸므로 maintenance window+typed confirmation 필요).
+- 드릴이 아니라 복원본을 serving으로 올릴 때는 swap 전에 복원본을 대상으로 `alembic upgrade head`를 돌린다 — 복원·hot-swap은 migration을 돌리지 않고, T-319 이전 백업(`0026`/`0027`)에는 `0028` 원천 기준월 manifest 행이 없다(`docs/t046-db-backup-restore.md` "복원 뒤 `alembic upgrade head`").

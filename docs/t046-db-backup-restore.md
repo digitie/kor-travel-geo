@@ -223,6 +223,13 @@ logs/
 
 운영 DB를 직접 덮어쓰는 `--replace-current`는 기본 금지다. 필요한 경우 maintenance mode, 모든 app connection 종료, typed confirmation, 백업 선행 생성, rollback plan을 요구한다. 일반 운영 경로는 "새 DB 복원 → 검증 → `KTG_PG_DSN` 전환 → 앱 재시작"이다.
 
+**복원 뒤 `alembic upgrade head` (T-319).** 복원·hot-swap 흐름은 Alembic migration을 돌리지 않는다. 복원한 DB의
+`alembic_version`이 앱 head보다 낮으면(T-319 이전 백업은 `0026`/`0027`) serving으로 올리기 전(hot-swap·DSN 전환
+전)에 그 DB를 대상으로 `KTG_PG_DSN=<복원 DB DSN> alembic upgrade head`를 돌린다. 예를 들어 `0028`은 원천 기준월
+manifest 행(`load_manifest`)을 채운다 — 건너뛰면 MV refresh·백업이 기록하는 기준월(`source_set.yyyymm_by_kind`,
+`/v2/dataset/version`)은 manifest 행이 없는 원천을 복원본의 active release 기준월로 이어 쓰는 데 그친다(빈 테이블·
+release에 없는 원천은 `null`). 이 upgrade는 manifest 행이 없는 원천 테이블마다 seq scan 1회를 한다.
+
 복원 진행률 phase:
 
 | phase | progress 범위 | 기준 |
@@ -709,7 +716,9 @@ pg_restore --format=directory --jobs=4 --no-owner --no-privileges --role=kor_tra
   restore_work/dump
 ```
 
-이후 `ANALYZE`, smoke, 그리고 필요하면 운영 DB와의 rename 교체(ADR-036 절차)를 admin이 수행한다.
+이후 `ANALYZE`, smoke, 그리고 필요하면 운영 DB와의 rename 교체(ADR-036 절차)를 admin이 수행한다. 교체 전에
+복원본의 `alembic_version`이 앱 head보다 낮으면 복원본을 대상으로 `alembic upgrade head`를 먼저 돌린다(위
+"복원 작업 흐름"의 T-319 항목).
 
 manager `ktdctl`이 필터·`--role` 없이 plain superuser `pg_restore --clean --if-exists`로 복원해도 된다 — dump의
 `SCHEMA - x_extension`·`ACL - SCHEMA x_extension` entry가 schema와 `kor_travel_geo_app` `USAGE`를 다시 만들고,

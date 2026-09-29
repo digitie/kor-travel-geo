@@ -11,6 +11,7 @@ import psycopg
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.infra.pnu import build_pnu
+from kortravelgeo.loaders.manifest import max_source_yyyymm, record_full_load_source_month
 
 from .common import TextSource, as_int, discover_text_sources, iter_pipe_rows, required
 
@@ -164,6 +165,7 @@ async def copy_juso_rows(
     cancel_event: asyncio.Event | None = None,
 ) -> int:
     count = 0
+    loaded_yyyymm: str | None = None
     async with await psycopg.AsyncConnection.connect(_alchemy_to_libpq(engine)) as conn:
         async with conn.cursor() as cur:
             await cur.execute(
@@ -187,6 +189,7 @@ FROM STDIN
                         raise asyncio.CancelledError("juso_hangul_loader cancelled")
                     await copy.write_row(juso_text_copy_tuple(row))
                     count += 1
+                    loaded_yyyymm = max_source_yyyymm(loaded_yyyymm, row.source_yyyymm)
                     if on_progress and count % 10_000 == 0:
                         on_progress(0.0)
             await cur.execute(
@@ -224,6 +227,14 @@ ON CONFLICT (bd_mgt_sn) DO UPDATE SET
   loaded_at = now()
 """
             )
+            if count:
+                await record_full_load_source_month(
+                    cur,
+                    table_name="tl_juso_text",
+                    kind="juso_text_full",
+                    row_count=count,
+                    source_yyyymm=loaded_yyyymm,
+                )
         await conn.commit()
     if on_progress:
         on_progress(1.0)
