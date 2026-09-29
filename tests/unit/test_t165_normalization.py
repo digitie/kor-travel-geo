@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import pytest
 
@@ -415,3 +415,243 @@ async def test_geocode_road_type_does_not_fall_back_to_parcel_for_jibun_text() -
     assert repo.last_jibun_parts is None
     assert repo.last_road_parts is not None
     assert repo.last_road_parts.road_nrm is None
+
+
+# T-320: 지번 번지는 읍면동·리 바로 다음 토큰이다. 마지막 숫자를 번지로 잡던 parser는 뒤따르는
+# 호수·층·동 번호를 번지로 읽어 운영에서 "상계동 1234 … 1203호"가 1203번지(노원검문소)로 OK됐다.
+@pytest.mark.parametrize(
+    ("raw", "region", "mntn_yn", "mnnm", "slno", "detail"),
+    [
+        (
+            "서울특별시 노원구 상계동 1234 주공아파트 101동 1203호",
+            "상계동",
+            "0",
+            1234,
+            0,
+            "주공아파트 101동 1203호",
+        ),
+        ("경기도 성남시 분당구 삼평동 681 101호", "삼평동", "0", 681, 0, "101호"),
+        ("서울특별시 강남구 역삼동 737 2층", "역삼동", "0", 737, 0, "2층"),
+        ("서울특별시 강남구 역삼동 737번지 2층", "역삼동", "0", 737, 0, "2층"),
+        ("서울특별시 강남구 역삼동 737-1번지", "역삼동", "0", 737, 1, None),
+        ("서울특별시 강남구 역삼동 737 외 2필지", "역삼동", "0", 737, 0, "외 2필지"),
+        (
+            "서울특별시 송파구 신천동 29 롯데월드타워 123층",
+            "신천동",
+            "0",
+            29,
+            0,
+            "롯데월드타워 123층",
+        ),
+        ("서울특별시 강남구 삼성동 159 코엑스", "삼성동", "0", 159, 0, "코엑스"),
+        ("강원특별자치도 춘천시 신북읍 산 12-3", "신북읍", "1", 12, 3, None),
+        ("강원특별자치도 춘천시 신북읍 산12-3 번지", "신북읍", "1", 12, 3, None),
+        # 번지 자리의 12-3이 먼저다(뒤의 "산 12-3"은 detail).
+        ("강원특별자치도 춘천시 신북읍 12-3 산 12-3", "신북읍", "0", 12, 3, "산 12-3"),
+        (
+            "서울특별시 중구 을지로2가 199-40 (을지로2가)",
+            "을지로2가",
+            "0",
+            199,
+            40,
+            "을지로2가",
+        ),
+        ("서울특별시 중구 태평로1가 31 서울신문사", "태평로1가", "0", 31, 0, "서울신문사"),
+        ("경기도 양평군 양평읍 양근리 123 번지", "양근리", "0", 123, 0, None),
+        ("제주특별자치도 제주시 애월읍 하귀1리 123", "하귀1리", "0", 123, 0, None),
+        ("세종특별자치시 조치원읍 신흥리 123 101호", "신흥리", "0", 123, 0, "101호"),
+        # #339: 번호에 붙은 호/층 접미사(옛 "642번지 16호" 표기)는 번지 토큰으로 인정한다.
+        ("서울특별시 강남구 역삼동 642-16호", "역삼동", "0", 642, 16, "호"),
+        ("역삼동 642-16층", "역삼동", "0", 642, 16, "층"),
+    ],
+)
+def test_parse_jibun_lot_is_first_token_after_region(
+    raw: str,
+    region: str,
+    mntn_yn: str,
+    mnnm: int,
+    slno: int,
+    detail: str | None,
+) -> None:
+    parts = parse_address(raw)
+
+    assert parts.is_road is False
+    assert (parts.li or parts.emd) == region
+    assert (parts.mntn_yn, parts.mnnm, parts.slno) == (mntn_yn, mnnm, slno)
+    assert parts.detail == detail
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        # 읍면동 바로 다음이 번지가 아니다 — 뒤에 나오는 층·출구·건물 번호는 번지가 아니다.
+        "서울특별시 강남구 역삼동 스타벅스 2층",
+        "경기도 성남시 분당구 삼평동 판교역 1번출구",
+        "서울특별시 송파구 신천동 롯데월드타워 123",
+        "서울특별시 노원구 상계동 101동 1203호",
+        "경기도 성남시 분당구 삼평동 3번출구",
+        "서울특별시 강남구 역삼동 737번지2층",
+        # 본번에 바로 붙은 호/층은 번지를 빠뜨린 호수·층이다(부번까지 적은 "642-16호"만 번지).
+        "서울특별시 노원구 상계동 1203호",
+        "서울특별시 강남구 역삼동 2층",
+        # 행정동·리 이름 속 숫자는 번지가 아니다.
+        "서울특별시 관악구 신림1동",
+        "부산광역시 강서구 대저1동",
+        "서울특별시 동작구 상도1동",
+        "제주특별자치도 제주시 애월읍 하귀1리",
+        "경상남도 남해군 창선면 창선2리",
+        "신림1동",
+        "세종특별자치시 조치원읍 신흥리",
+    ],
+)
+def test_parse_jibun_without_lot_right_after_region_has_no_address_number(raw: str) -> None:
+    # "서울특별시 관악구 신림동"(번호 없음)과 같은 취급 — 엉뚱한 번지로 lookup하지 않는다.
+    with pytest.raises(InvalidAddressError):
+        parse_address(raw)
+
+
+@pytest.mark.parametrize(
+    ("raw", "mnnm"),
+    [
+        # 읍면동·리 anchor가 없으면 번지 자리를 정할 수 없어 기존처럼 마지막 번호를 쓴다.
+        ("코엑스 123", 123),
+        ("롯데월드타워 123층", 123),
+        ("강남역 3번 출구", 3),
+        ("서울특별시 강남구 123", 123),
+        ("삼평동681", 681),
+    ],
+)
+def test_parse_anchorless_jibun_keeps_last_number(raw: str, mnnm: int) -> None:
+    parts = parse_address(raw)
+
+    assert parts.is_road is False
+    assert parts.emd is None
+    assert parts.li is None
+    assert parts.mnnm == mnnm
+
+
+@pytest.mark.parametrize(
+    ("raw", "emd", "li"),
+    [
+        ("세종특별자치시 조치원읍 신흥리 123", "조치원읍", "신흥리"),
+        ("세종 조치원읍 신흥리 123", "조치원읍", "신흥리"),
+        ("세종시 전의면 신흥리 123", "전의면", "신흥리"),
+        ("세종특별자치시 한솔동 123", "한솔동", None),
+    ],
+)
+def test_parse_sejong_jibun_has_no_sgg(raw: str, emd: str, li: str | None) -> None:
+    # 세종특별자치시는 시군구가 없다(MV sgg_nm NULL) — 시도 바로 아래가 읍면동이다.
+    parts = parse_address(raw)
+
+    assert parts.is_road is False
+    assert parts.si == "세종특별자치시"
+    assert parts.sgg is None
+    assert parts.sido_without_sgg is True
+    assert (parts.emd, parts.li, parts.mnnm) == (emd, li, 123)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "서울특별시 태평로1가 31",  # 시군구를 빠뜨린 입력 — 시군구가 없는 시도가 아니다
+        "경기도 성남시 분당구 삼평동 681",
+        "삼평동 681",
+        "세종특별자치시 세종시 조치원읍 신흥리 123",  # 시군구 토큰이 있다
+    ],
+)
+def test_sido_without_sgg_is_only_sejong_without_sgg(raw: str) -> None:
+    assert parse_address(raw).sido_without_sgg is False
+
+
+@pytest.mark.asyncio
+async def test_geocode_parcel_uses_lot_right_after_region_not_trailing_unit() -> None:
+    # v1 type=parcel도 parse_address를 그대로 쓴다 — 1203호가 아니라 1234번지로 lookup한다.
+    repo = RecordingGeocodeRepo(jibun_result=_lookup())
+
+    response = await geocode(
+        repo,
+        GeocodeInput(
+            address="서울특별시 노원구 상계동 1234 주공아파트 101동 1203호", type="parcel"
+        ),
+    )
+
+    assert response.status == "OK"
+    assert repo.last_jibun_parts is not None
+    assert repo.last_jibun_parts.emd == "상계동"
+    assert (repo.last_jibun_parts.mnnm, repo.last_jibun_parts.slno) == (1234, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("address_type", ["road", "parcel"])
+async def test_geocode_dong_name_digit_is_not_a_lot(
+    address_type: Literal["road", "parcel"],
+) -> None:
+    # "신림1동"의 1을 번지로 읽어 lookup하지 않는다(번호 없는 주소 — InvalidAddressError).
+    repo = RecordingGeocodeRepo(jibun_result=_lookup())
+
+    with pytest.raises(InvalidAddressError):
+        await geocode(
+            repo,
+            GeocodeInput(address="서울특별시 관악구 신림1동", type=address_type),
+        )
+    assert repo.last_jibun_parts is None
+    assert repo.last_road_parts is None
+
+
+@pytest.mark.asyncio
+async def test_zipcode_by_jibun_address_uses_lot_right_after_region() -> None:
+    from kortravelgeo.core.protocols import ZipLookup
+    from kortravelgeo.core.zipcoder import zipcode
+    from kortravelgeo.dto.zipcode import ZipcodeInput
+
+    seen: list[AddrParts] = []
+
+    class RecordingZipRepo:
+        async def lookup_zipcode_by_address(
+            self, parts: AddrParts, *, include_bulk: bool
+        ) -> list[ZipLookup]:
+            seen.append(parts)
+            return [ZipLookup(zip_no="01234", source="building_bsi_zon_no")]
+
+    response = await zipcode(
+        RecordingZipRepo(),  # type: ignore[arg-type]
+        ZipcodeInput(address="서울특별시 노원구 상계동 1234 주공아파트 101동 1203호"),
+    )
+
+    assert response.status == "OK"
+    assert [(parts.emd, parts.road_nrm, parts.mnnm) for parts in seen] == [("상계동", None, 1234)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("address", ["서울특별시 관악구 신림1동", "서울특별시 관악구 신림동"])
+@pytest.mark.parametrize("address_type", ["road", "parcel"])
+async def test_v1_geocode_dong_name_digit_answers_like_address_without_number(
+    address: str, address_type: str
+) -> None:
+    # T-320: "신림1동"은 번호 없는 "신림동"과 같은 VWorld 입력 오류다(이전: 1번지로 lookup).
+    import httpx
+
+    from kortravelgeo.api.app import create_app
+    from kortravelgeo.api.deps import get_client
+    from kortravelgeo.api.public_api_key import require_public_api_key
+    from kortravelgeo.client import AsyncAddressClient
+    from kortravelgeo.settings import Settings
+
+    app = create_app()
+    app.dependency_overrides[get_client] = lambda: AsyncAddressClient(
+        engine=object(),  # type: ignore[arg-type]  # SQL에 닿으면 AttributeError
+        settings=Settings(_env_file=None, cache_enabled=False),
+    )
+    app.dependency_overrides[require_public_api_key] = lambda: None
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/v1/address/geocode", params={"address": address, "type": address_type}
+        )
+
+    assert response.status_code == 400
+    error = response.json()["response"]
+    assert error["status"] == "ERROR"
+    assert error["error"]["code"] == "INVALID_TYPE"
+    assert error["error"]["text"] == "address number could not be parsed"

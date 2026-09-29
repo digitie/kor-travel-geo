@@ -379,6 +379,102 @@ def test_geocode_uses_separate_suffix_retry_for_district_only_compound_sigungu_n
     assert geocode_repo._sgg_suffix(AddrParts(raw="", normalized="", sgg="용인시")) is None
 
 
+def test_sido_without_sgg_jibun_sql_pins_null_sgg_for_index_seek() -> None:
+    """T-320: 세종 지번 lookup은 sgg_nm IS NULL을 명시해 idx_mv_jibun_name_exact를 번지까지 탄다."""
+    sql = str(geocode_repo._LOOKUP_JIBUN_SIDO_WITHOUT_SGG)
+
+    assert "WHERE si_nm = CAST(:si AS text)" in sql
+    assert "AND sgg_nm IS NULL" in sql
+    assert "CAST(:sgg AS text)" not in sql
+    assert "AND (CAST(:li AS text) IS NULL OR li_nm = CAST(:li AS text))" in sql
+    assert "AND lnbr_mnnm = :mnnm" in sql
+    # 일반 지번 SQL은 그대로다(시군구가 빠진 다른 시도 입력은 시군구 조건 없이 찾는다).
+    assert "(CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))" in str(
+        geocode_repo._LOOKUP_JIBUN
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("raw", "expected_sql", "expected_params"),
+    [
+        (
+            "세종특별자치시 조치원읍 신흥리 123",
+            "_LOOKUP_JIBUN_SIDO_WITHOUT_SGG",
+            {"si": "세종특별자치시", "emd": "조치원읍", "li": "신흥리", "mnnm": 123},
+        ),
+        (
+            "세종특별자치시 한솔동 산 12-1",
+            "_LOOKUP_JIBUN_SIDO_WITHOUT_SGG",
+            {"si": "세종특별자치시", "emd": "한솔동", "li": None, "mntn_yn": "1", "slno": 1},
+        ),
+        (
+            "경기도 양평군 양평읍 양근리 123",
+            "_LOOKUP_JIBUN",
+            {"si": "경기도", "sgg": "양평군", "emd": "양근리", "mnnm": 123},
+        ),
+        # 시군구를 빠뜨린 세종 외 입력은 기존처럼 시군구 조건 없이 찾는다.
+        (
+            "서울특별시 태평로1가 31",
+            "_LOOKUP_JIBUN",
+            {"si": "서울특별시", "sgg": None, "emd": "태평로1가", "mnnm": 31},
+        ),
+    ],
+)
+async def test_lookup_by_jibun_uses_null_sgg_sql_only_for_sido_without_sgg(
+    raw: str, expected_sql: str, expected_params: dict[str, Any]
+) -> None:
+    from kortravelgeo.core.normalize import parse_address
+
+    class Result:
+        def mappings(self) -> Result:
+            return self
+
+        def first(self) -> None:
+            return None
+
+    class Conn:
+        def __init__(self) -> None:
+            self.statements: list[object] = []
+            self.params: list[dict[str, Any]] = []
+
+        async def execute(self, statement: object, params: dict[str, Any]) -> Result:
+            self.statements.append(statement)
+            self.params.append(params)
+            return Result()
+
+    class Connect:
+        def __init__(self, conn: Conn) -> None:
+            self.conn = conn
+
+        async def __aenter__(self) -> Conn:
+            return self.conn
+
+        async def __aexit__(self, *_args: object) -> bool:
+            return False
+
+    class Engine:
+        def __init__(self) -> None:
+            self.conn = Conn()
+
+        def connect(self) -> Connect:
+            return Connect(self.conn)
+
+    engine = Engine()
+
+    row = await geocode_repo.GeocodeRepository(engine).lookup_by_jibun(  # type: ignore[arg-type]
+        parse_address(raw)
+    )
+
+    assert row is None
+    statement = getattr(geocode_repo, expected_sql)
+    assert engine.conn.statements == [statement]
+    params = engine.conn.params[0]
+    assert expected_params.items() <= params.items()
+    # 실제 SQLAlchemy는 빠진 bind 값을 거부한다 — SQL이 쓰는 이름을 모두 넘겨야 한다.
+    assert set(re.findall(r"(?<!:):(\w+)", str(statement))) <= set(params)
+
+
 def test_reverse_repo_expands_both_address_type() -> None:
     source = inspect.getsource(reverse_repo.ReverseRepository.nearest)
 

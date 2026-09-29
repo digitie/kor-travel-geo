@@ -5,6 +5,25 @@
 ## [Unreleased]
 
 ### Changed
+- **지번 주소의 번지를 읍면동·리 바로 다음 토큰으로 읽는다(T-320).** `parse_address`가 마지막 숫자를
+  번지로 잡아 `서울특별시 노원구 상계동 1234 주공아파트 101동 1203호`가 v1 `type=parcel`·v2
+  `jibun_address`에서 1203번지(운영: 노원검문소, 동일로 1794)로 오답 OK됐다. 이제 읍면동·리가 있는 지번
+  파싱은 그 바로 다음 토큰(`681`, `199-40`, `산 12-3`, `31-2번지`, 부번까지 적은 `642-16호`)을 번지로 쓰고
+  뒤따르는 호수·층·동 번호는 `detail`로 남긴다(같은 입력은 1234번지로 찾아 해당 행이 없으면 NOT_FOUND). 그
+  자리에 번지가 없는 입력(`… 역삼동 스타벅스 2층`, `… 상계동 1203호`)과 동·리 이름 속 숫자뿐인 입력(`서울특별시
+  관악구 신림1동`, `… 애월읍 하귀1리`)은 번호 없는 주소(`서울특별시 관악구 신림동`과 같은 취급)다 — v1
+  `/v1/address/geocode`는 NOT_FOUND 대신 VWorld `ERROR`/`INVALID_TYPE`(HTTP 400), `/v1/address/zipcode`는
+  NOT_FOUND 대신, `/v1/admin/normalize`는 200 대신 `E0101`(400)을 돌려주고, v2 `query`는 예전처럼 행정구역
+  후보 fallback으로 간다. 도로명 파싱과 읍면동·리가 없는 입력(`코엑스 123`)은 그대로다.
+  v2 `query` gate는 이 parser 결과를 그대로 쓰도록 단순화해 `… 삼평동 681 101호`·`… 역삼동 737 2층`·`… 신천동
+  29 롯데월드타워 123층`도 앞 번지로 지번 lookup한다.
+- **세종특별자치시 지번 주소를 v2 `query`로도 찾고, 지번 lookup이 시군구 없이 index를 끝까지 탄다(T-320).**
+  세종은 시군구가 없어(MV `sgg_nm` NULL, 운영 27,879행) T-317 gate를 통과하지 못했고, v1 `type=parcel`·
+  `jibun_address`는 `idx_mv_jibun_name_exact`를 시도 범위 전체로 훑으면서 리 이름만 봐 `세종특별자치시
+  전의면 신흥리 123`이 조치원읍 신흥리 123(군청로 87-16)으로 오답 OK됐다. 이제 세종 지번 lookup은
+  `sgg_nm IS NULL`과 읍면동·리를 함께 거는 별도 SQL을 쓴다(운영 EXPLAIN: Index Cond에 `sgg_nm IS NULL`·번지·
+  `li_nm`, 13 buffers/0.18ms — 기존 경로 434 buffers/5.3ms). 다른 시도에서 시군구를 빠뜨린 입력은 그대로
+  시군구 조건 없이 찾는다.
 - **공용 DB instance에서 불가능한 DB 수명주기 기능을 일찍 거절하고, app role 백업을 복원 가능한 형식으로 바꿨다(T-312).**
   hot-swap plan/execute/rollback·restore drill·blue-green scratch full-load·`db_restore`는 `CREATEDB`와 maintenance
   DB `postgres` `CONNECT`가 필요한데, 공용 instance(T-308)의 app role에는 둘 다 없어 job을 만든 뒤 raw DB 오류로
