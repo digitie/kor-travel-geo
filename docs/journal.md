@@ -86,6 +86,19 @@ count가 `SET` 출력과 섞여 자동 diff가 어긋났다 — 결과 파일을
   비교로 잡았고, 2차 검증은 반대로 너무 느슨해진 틈(`역삼동 2F`가 v2 parcel lot 2)을 잡았다 — 층·단지·관·
   게이트 번호를 번지에서 뺐다(병합 직전 직접 반영).
 
+**T-319·T-320·T-321 배포 (06:05~06:29Z).** 첫 시도는 `compose build api ui dagster`(병렬 다중 서비스)가
+11초 만에 BuildKit session을 잃고("only one connection allowed") 조용히 멈췄다 — 09-29 01시 사고와 같은
+증상. 서비스별 순차 build + `timeout`으로 바꿨고, 두 번째는 Docker Hub token 요청 TLS timeout(일시적)으로
+Dagster build가 실패, 세 번째에 완주. Alembic 0028 backfill은 1분 46초(예상보다 훨씬 짧다 — 4개 테이블
+seq scan). `load_manifest` 7행이 09-28 release의 `yyyymm_by_kind`와 정확히 같다(juso·parcel 202603,
+locsum·navi·spbd 202604, roadaddr·sppn 202605). live: `역삼동 737.` → 737 parcel, `역삼동 2F` → NOT_FOUND,
+`상계동 1234 … 1203호` → query·jibun_address 모두 NOT_FOUND(노원검문소 아님), `세종 전의면 신흥리 123` →
+전의면 parcel, hot-swap-plan `maintenance_database='bad-name'` → 400 E0100(이전 409), 정상 이름 → 409
+E0410 + `denied` audit row, `/v2/dataset/version` reference_months 7개 전부. 배포 스크립트 결함 하나: rollback
+tag를 이미지 **이름**으로 붙여서, 앞선 실패 run이 이름을 새 이미지로 옮긴 뒤의 재시도 run은 새 이미지에
+rollback tag를 붙였다 — 진짜 이전 이미지는 첫 run(`rollback-t319-20260929T055235Z`/`T060553Z`) tag다. 다음
+스크립트는 컨테이너의 image ID(`{{.Image}}`)로 tag해야 한다.
+
 **T-309의 503→504 변경이 소비자에게 미치는 영향 확인.** geo API를 부르는 저장소는 셋 — PinVi
 `apps/api/app/clients/kor_travel_geo.py`는 `status_code >= 500` 전부를 backoff 재시도(504 포함),
 concierge `ktc/etl/admin_region_service.py`(`/v2/reverse`)는 `raise_for_status()`로 5xx 전부 실패 처리,
