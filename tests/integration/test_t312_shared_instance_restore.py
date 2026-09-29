@@ -11,7 +11,9 @@ then the archive is restored into a fresh, admin-provisioned database owned by t
   taken with ``--no-privileges`` lost it: pg_restore exited 0, the old smoke test passed, and every
   PostGIS call by the app role then failed (T-312 review).
 - ``app_role`` — ``target_dsn`` carries the app role's credentials: ``--no-owner --no-privileges``
-  plus the admin-provisioned extension/``x_extension`` TOC entries filtered out.
+  plus the admin-provisioned extension/``x_extension`` TOC entries filtered out. This is the
+  supported shared-instance procedure the ``db_restore`` E0410 hint names (T-321); the same case
+  first asserts that a ``target_database`` restore by this NOCREATEDB role is refused (E0410).
 
 Both are checked the way production uses the result — from an APP ROLE connection with
 ``search_path=public,x_extension``: PostGIS resolves, the restored rows are there, and the restored
@@ -35,8 +37,13 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from kortravelgeo.exceptions import UnsupportedOnInstanceError
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.backup import RESTORE_LOG_ARTIFACT_TYPE, run_restore_job
+from kortravelgeo.infra.db_capabilities import (
+    DB_RESTORE_SHARED_INSTANCE_PROCEDURE,
+    clear_db_capability_cache,
+)
 from kortravelgeo.infra.engine import make_async_engine
 from kortravelgeo.settings import Settings
 from tests.integration._backup_roundtrip import (
@@ -162,6 +169,22 @@ async def test_app_role_backup_restores_with_extension_schema_usage(
 
             target_database = _TARGET_DATABASES[restorer]
             await _provision_database(admin_dsn, target_database)
+            if restorer == "app_role":
+                # T-321: this NOCREATEDB role is exactly what the db_restore gate refuses (auto
+                # mode) — a target_database restore stops before touching the archive, and the
+                # E0410 hint names the procedure the target_dsn restore below then carries out.
+                clear_db_capability_cache()
+                with pytest.raises(UnsupportedOnInstanceError) as excinfo:
+                    await run_restore_job(
+                        source_engine,
+                        settings,
+                        {"artifact_id": artifact_id, "target_database": target_database},
+                        asyncio.Event(),
+                        _noop_progress,
+                    )
+                assert excinfo.value.hint is not None
+                assert "CREATEDB 권한 없음" in excinfo.value.hint
+                assert DB_RESTORE_SHARED_INSTANCE_PROCEDURE in excinfo.value.hint
             payload = {
                 "artifact_id": artifact_id,
                 "target_dsn": _dsn(admin_dsn, target_database, as_app_role=restorer == "app_role"),

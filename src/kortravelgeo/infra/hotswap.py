@@ -183,6 +183,16 @@ def _current_database(settings: Settings) -> str:
     return _validate_database_identifier(current_database, "current_database")
 
 
+def validate_maintenance_database(settings: Settings, maintenance_database: str) -> str:
+    """Validate a hot-swap request's ``maintenance_database`` before anything probes it.
+
+    Same checks the planner/executor apply (identifier regex, not the serving DB). The client
+    runs this ahead of the T-312 capability gate so a malformed name is an E0100 input error
+    rather than a catalog probe that reads as an instance limitation (T-321).
+    """
+    return _maintenance_database(_current_database(settings), maintenance_database)
+
+
 def _maintenance_database(current_database: str, maintenance_database: str) -> str:
     validated = _validate_database_identifier(maintenance_database, "maintenance_database")
     if current_database == validated:

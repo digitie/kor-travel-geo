@@ -14,6 +14,7 @@
   `shadow-[var(--shadow-*)]`, `outline-none`)을 써서 유틸리티 변경은 없다.
 
 ### Added
+- 복원 위저드의 공용 DB instance 안내에 지원되는 복원 절차(cluster admin이 app role 소유의 빈 DB를 만든 뒤 `ktgctl restore create --target-dsn`)를 덧붙였다(T-321). 위저드는 DSN 자격증명을 받지 않는다 — job payload·Dagster run config에 그대로 남기 때문이다. hot-swap 안내에는 붙지 않는다.
 - 백업/복원 화면이 `GET /v1/admin/db-capabilities`(T-312)를 읽어, 공용 DB instance처럼 DB 수명주기 기능을 지원하지 않으면 복원 제출과 hot-swap plan/실행/rollback을 비활성화하고 "공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행"을 표시한다. 개요의 복원 드릴·복원/Hot-swap 단계에도 같은 안내가 붙는다. capability를 못 읽으면 막지 않는다(backend `E0410`이 최종 방어선).
 - live e2e 전용 admin proxy opt-in env(`KTG_LIVE_E2E_ADMIN_PROXY`, `KTG_LIVE_E2E_ADMIN_ACTOR`, `KTG_LIVE_E2E_ADMIN_ROLES`)를 추가했다. 기본 실행에서는 role header를 주입하지 않고, opt-in 상태에서만 source-files admin read를 검증한다.
 - GitHub `digitie/maplibre-vworld-react` 기반 VWorld 지도 dependency와 Next.js 16 Turbopack/Vitest/TypeScript alias를 추가했다.
