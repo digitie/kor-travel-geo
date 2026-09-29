@@ -27,6 +27,15 @@ dependencies = [
   "dagster>=1.9,<2",
   "dagster-webserver>=1.9,<2",
   "dagster-postgres>=0.25,<1",
+  # <2.1 (T-316) is REQUIRED, not cautious: SQLAlchemy 2.1 makes psycopg 3 the default DBAPI
+  # for ``postgresql://`` URLs, and the manager sets a bare-scheme KTG_DAGSTER_PG_URL. Verified
+  # on a real Postgres-backed instance: dagster_postgres' ``NOTIFY run_events, %(notify_id)s``
+  # then fails with psycopg.errors.SyntaxError (psycopg 3 binds server-side; NOTIFY takes no
+  # parameter) at RUN_START, so no run can start. It also reads psycopg2-only
+  # ``exc.orig.pgcode``. The main lib supports 2.1; lift this only after moving the storage URL
+  # to an explicit driver and validating dagster_postgres on it. CI job ``dagster`` keeps this
+  # resolve (main lib on 2.0) under test.
+  "sqlalchemy<2.1",
   "boto3>=1.34,<2",
   "botocore>=1.34,<2",
   "httpx>=0.27,<1.0",
