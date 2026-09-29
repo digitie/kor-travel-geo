@@ -38,13 +38,22 @@ jobs:
           TEMP: /tmp
         run: pytest -q
 
-  # The Dagster image installs the main lib together with kor-travel-geo-dagster, whose
-  # ``sqlalchemy<2.1`` pin resolves the WHOLE image to SQLAlchemy 2.0 (T-316), while the
-  # backend job above resolves 2.1. Loaders, backup/restore, hot-swap and MV refresh run in
-  # that image, so test the main lib on the image's resolve too, plus the Dagster package.
+  # The Dagster image installs the main lib together with kor-travel-geo-dagster in one resolve
+  # (SQLAlchemy 2.1 since T-322 lifted the Dagster package's <2.1 pin). This job tests that
+  # resolve: the main lib, the Dagster package, and a real Postgres-backed Dagster instance
+  # through the psycopg2 storage URL the image requires (dagster_postgres is psycopg2-only).
   dagster:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dagster
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -62,7 +71,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install "gdal==$(gdal-config --version)" \
             -e ".[api,loaders,dev]" -e "./kor-travel-geo-dagster[dev]"
-          python -c "import sqlalchemy; v = sqlalchemy.__version__; print('sqlalchemy', v); assert v.startswith('2.0.'), v"
+          python -c "import sqlalchemy; v = sqlalchemy.__version__; print('sqlalchemy', v); assert v.startswith('2.1.'), v"
       - name: Test main lib on the Dagster image resolve
         env:
           TMPDIR: /tmp
@@ -76,6 +85,33 @@ jobs:
         run: |
           python -c "import kortravelgeo_dagster.definitions"
           pytest -q
+      - name: Dagster instance on Postgres via the image's storage URL (T-322)
+        env:
+          KTG_DAGSTER_PG_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/dagster
+        run: |
+          export DAGSTER_HOME=$(mktemp -d)
+          cp kor-travel-geo-dagster/docker/dagster.yaml "$DAGSTER_HOME/"
+          sh kor-travel-geo-dagster/docker/entrypoint.sh dagster instance migrate
+          python - <<'PY'
+          from dagster import DagsterEventType, DagsterInstance, job, op
+
+          @op
+          def ping() -> int:
+              return 1
+
+          @job
+          def storage_smoke() -> None:
+              ping()
+
+          instance = DagsterInstance.get()
+          result = storage_smoke.execute_in_process(instance=instance)
+          assert result.success
+          run = instance.get_run_by_id(result.run_id)
+          assert run is not None and run.is_success, run
+          events = instance.all_logs(result.run_id)
+          assert any(e.dagster_event and e.dagster_event.event_type == DagsterEventType.RUN_SUCCESS for e in events)
+          print("storage smoke ok:", result.run_id, len(events), "events")
+          PY
 
   frontend:
     runs-on: ubuntu-latest

@@ -111,9 +111,12 @@ RUN apt-get update \
 COPY --from=builder /install /usr/local
 COPY --chown=appuser:appuser kor-travel-geo-dagster/docker/dagster.yaml /opt/dagster/dagster_home/dagster.yaml
 COPY --chown=appuser:appuser kor-travel-geo-dagster/docker/workspace.yaml /opt/dagster/dagster_home/workspace.yaml
+# T-322: storage URL 드라이버 guard. compose는 `command:`만 주므로 세 서비스 모두 이 ENTRYPOINT를 거친다.
+COPY --chmod=0755 kor-travel-geo-dagster/docker/entrypoint.sh /usr/local/bin/ktg-dagster-entrypoint
 
 USER appuser
 
 EXPOSE 12502 12503
 
+ENTRYPOINT ["/usr/local/bin/ktg-dagster-entrypoint"]
 CMD ["sh", "-c", "dagster-webserver -w ${DAGSTER_HOME}/workspace.yaml -h 0.0.0.0 -p ${KTG_DAGSTER_PORT:-12502}"]
