@@ -379,6 +379,194 @@ def test_geocode_uses_separate_suffix_retry_for_district_only_compound_sigungu_n
     assert geocode_repo._sgg_suffix(AddrParts(raw="", normalized="", sgg="용인시")) is None
 
 
+def test_sido_without_sgg_jibun_sql_pins_null_sgg_for_index_seek() -> None:
+    """T-320: 세종 지번 lookup은 sgg_nm IS NULL을 명시해 idx_mv_jibun_name_exact를 번지까지 탄다."""
+    sql = str(geocode_repo._LOOKUP_JIBUN_SIDO_WITHOUT_SGG)
+
+    assert "WHERE si_nm = CAST(:si AS text)" in sql
+    assert "AND sgg_nm IS NULL" in sql
+    assert "CAST(:sgg AS text)" not in sql
+    # 시군구가 가르던 같은 이름의 리(조치원읍·전의면 신흥리)는 읍면동으로 가른다.
+    assert (
+        "AND (CAST(:emd AS text) IS NULL OR emd_nm = CAST(:emd AS text)"
+        " OR li_nm = CAST(:emd AS text))"
+    ) in sql
+    assert "AND (CAST(:li AS text) IS NULL OR li_nm = CAST(:li AS text))" in sql
+    assert "AND lnbr_mnnm = :mnnm" in sql
+    # 일반 지번 SQL은 그대로다(시군구가 빠진 다른 시도 입력은 시군구 조건 없이 찾는다).
+    assert "(CAST(:sgg AS text) IS NULL OR sgg_nm = CAST(:sgg AS text))" in str(
+        geocode_repo._LOOKUP_JIBUN
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("raw", "expected_sql", "expected_params"),
+    [
+        (
+            "세종특별자치시 조치원읍 신흥리 123",
+            "_LOOKUP_JIBUN_SIDO_WITHOUT_SGG",
+            {"si": "세종특별자치시", "emd": "조치원읍", "li": "신흥리", "mnnm": 123},
+        ),
+        (
+            "세종특별자치시 한솔동 산 12-1",
+            "_LOOKUP_JIBUN_SIDO_WITHOUT_SGG",
+            {"si": "세종특별자치시", "emd": "한솔동", "li": None, "mntn_yn": "1", "slno": 1},
+        ),
+        (
+            "경기도 양평군 양평읍 양근리 123",
+            "_LOOKUP_JIBUN",
+            {"si": "경기도", "sgg": "양평군", "emd": "양근리", "mnnm": 123},
+        ),
+        # 시군구를 빠뜨린 세종 외 입력은 기존처럼 시군구 조건 없이 찾는다.
+        (
+            "서울특별시 태평로1가 31",
+            "_LOOKUP_JIBUN",
+            {"si": "서울특별시", "sgg": None, "emd": "태평로1가", "mnnm": 31},
+        ),
+    ],
+)
+async def test_lookup_by_jibun_uses_null_sgg_sql_only_for_sido_without_sgg(
+    raw: str, expected_sql: str, expected_params: dict[str, Any]
+) -> None:
+    from kortravelgeo.core.normalize import parse_address
+
+    engine = _FakeMvEngine([])
+
+    row = await geocode_repo.GeocodeRepository(engine).lookup_by_jibun(  # type: ignore[arg-type]
+        parse_address(raw)
+    )
+
+    assert row is None
+    statement = getattr(geocode_repo, expected_sql)
+    assert engine.statements == [statement]
+    params = engine.params[0]
+    assert expected_params.items() <= params.items()
+    # 실제 SQLAlchemy는 빠진 bind 값을 거부한다 — SQL이 쓰는 이름을 모두 넘겨야 한다.
+    assert set(re.findall(r"(?<!:):(\w+)", str(statement))) <= set(params)
+
+
+def _where_term_holds(term: str, params: dict[str, Any], row: dict[str, Any]) -> bool:
+    if match := re.fullmatch(r"CAST\(:(\w+) AS text\) IS NULL", term):
+        return params[match[1]] is None
+    if match := re.fullmatch(r"(\w+) IS NULL", term):
+        return row[match[1]] is None
+    if match := re.fullmatch(r"(\w+) = (?:CAST\(:(\w+) AS text\)|:(\w+))", term):
+        value = params[match[2] or match[3]]
+        return value is not None and row[match[1]] == value
+    raise AssertionError(f"unsupported WHERE term: {term}")
+
+
+def _where_holds(sql: str, params: dict[str, Any], row: dict[str, Any]) -> bool:
+    """지번 lookup SQL의 WHERE를 한 행에 평가하는 테스트용 소형 해석기(T-320 리뷰).
+
+    이 SQL이 쓰는 형태(``col = CAST(:p AS text)``·``col = :p``·``col IS NULL``·
+    ``CAST(:p AS text) IS NULL``와 그 OR 묶음)만 알고, 모르는 형태를 평가하게 되면 실패한다.
+    """
+    where = sql.split("WHERE", 1)[1].split("ORDER BY", 1)[0]
+    for conjunct in re.split(r"\n\s*AND ", where.strip()):
+        terms = conjunct.strip()
+        if terms.startswith("(") and terms.endswith(")"):
+            terms = terms[1:-1]
+        if not any(_where_term_holds(term.strip(), params, row) for term in terms.split(" OR ")):
+            return False
+    return True
+
+
+class _FakeMvResult:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+
+    def mappings(self) -> _FakeMvResult:
+        return self
+
+    def first(self) -> dict[str, Any] | None:
+        return self.rows[0] if self.rows else None
+
+
+class _FakeMvEngine:
+    """``mv_geocode_target`` 행으로 지번 lookup SQL의 WHERE·ORDER BY·LIMIT 1을 흉내 낸다."""
+
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+        self.statements: list[object] = []
+        self.params: list[dict[str, Any]] = []
+
+    def connect(self) -> _FakeMvEngine:
+        return self
+
+    async def __aenter__(self) -> _FakeMvEngine:
+        return self
+
+    async def __aexit__(self, *_args: object) -> bool:
+        return False
+
+    async def execute(self, statement: object, params: dict[str, Any]) -> _FakeMvResult:
+        self.statements.append(statement)
+        self.params.append(params)
+        matched = [row for row in self.rows if _where_holds(str(statement), params, row)]
+        # ORDER BY CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END, bd_mgt_sn
+        matched.sort(key=lambda row: (row["pt_source"] != "entrance", row["bd_mgt_sn"]))
+        return _FakeMvResult(matched)
+
+
+def _sejong_lot_123_row(
+    bd_mgt_sn: str, emd_nm: str, li_nm: str, rn: str, buld_mnnm: int, buld_slno: int
+) -> dict[str, Any]:
+    return {
+        "bd_mgt_sn": bd_mgt_sn,
+        "road_nm": rn,
+        "buld_mnnm": buld_mnnm,
+        "buld_slno": buld_slno,
+        "buld_se_cd": "0",
+        "si_nm": "세종특별자치시",
+        "sgg_nm": None,
+        "emd_nm": emd_nm,
+        "li_nm": li_nm,
+        "mntn_yn": "0",
+        "lnbr_mnnm": 123,
+        "lnbr_slno": 0,
+        "pt_source": "centroid",
+    }
+
+
+# 운영 mv_geocode_target 행(2026-09 조회): 세종 신흥리는 조치원읍·전의면에 모두 있고 두 곳 다
+# 123번지가 있다. 전의면 123번지는 다른 리(금사리)에도 있다.
+_SEJONG_LOT_123_ROWS = [
+    _sejong_lot_123_row("36110250325800100008700016", "조치원읍", "신흥리", "군청로", 87, 16),
+    _sejong_lot_123_row("36110250325800100009300000", "조치원읍", "신흥리", "군청로", 93, 0),
+    _sejong_lot_123_row("36110370457405000001300000", "전의면", "금사리", "금사길", 13, 0),
+    _sejong_lot_123_row("36110370457428400002700000", "전의면", "신흥리", "생송1길", 27, 0),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("raw", "bd_mgt_sn"),
+    [
+        # 읍면동 조건이 빠지면 bd_mgt_sn이 앞선 조치원읍 신흥리 123(군청로 87-16)으로 OK된다.
+        ("세종특별자치시 전의면 신흥리 123", "36110370457428400002700000"),
+        ("세종특별자치시 조치원읍 신흥리 123", "36110250325800100008700016"),
+        # 리 조건이 빠지면 전의면 신흥리 123이 금사리 123으로 간다.
+        ("세종특별자치시 전의면 금사리 123", "36110370457405000001300000"),
+    ],
+)
+async def test_sejong_jibun_lookup_splits_same_named_li_by_emd(raw: str, bd_mgt_sn: str) -> None:
+    """T-320 리뷰: 시군구가 가르던 같은 이름의 리를 세종에서는 읍면동이 가른다."""
+    from kortravelgeo.core.normalize import parse_address
+
+    engine = _FakeMvEngine(_SEJONG_LOT_123_ROWS)
+
+    found = await geocode_repo.GeocodeRepository(engine).lookup_by_jibun(  # type: ignore[arg-type]
+        parse_address(raw)
+    )
+
+    assert engine.statements == [geocode_repo._LOOKUP_JIBUN_SIDO_WITHOUT_SGG]
+    assert found is not None
+    assert found.bd_mgt_sn == bd_mgt_sn
+    assert found.text == raw
+
+
 def test_reverse_repo_expands_both_address_type() -> None:
     source = inspect.getsource(reverse_repo.ReverseRepository.nearest)
 

@@ -31,6 +31,19 @@ _ROAD_RE = re.compile(
 _JIBUN_RE = re.compile(
     r"(?P<mt>산\s*)?(?P<main>\d+)(?:-(?P<sub>\d+))?(?:\s*(?:번지|번))?(?![길로\d])"
 )
+# 읍면동·리 바로 다음에 오는 번지 토큰("681", "199-40", "산 12-3", "31-2번지", "123 번지")
+# (T-320). 번호에 바로 붙은 동·통·반·출구 번호("101동", "3번출구", "737번지2층")는 번지가
+# 아니다. 호/층은 부번까지 적은 번지에 붙은 접미사("642-16호", #339)만 허용하고, 본번에 바로
+# 붙은 "1203호"·"2층"은 호수·층으로 본다. 그 밖의 글자·문장부호("737.", "737번지일원",
+# "123일대", "'737'")는 번지 뒤 detail이다(T-317까지의 파싱과 같다).
+# 번호 바로 뒤가 층(2F)·단지·관(3관)·게이트면 번지가 아니라 시설 번호다(T-320 2차 검증). "737B"·
+# "737관리사무소"처럼 그 밖의 글자가 붙은 것은 번지로 두고 붙은 글자는 detail로 간다.
+_LOT_UNIT_AFTER = r"[\d동통반]|\s*번\s*(?:출구|게이트)|번지?\d|[Ff](?![A-Za-z])|단지|관(?![가-힣])"
+_LEADING_LOT_RE = re.compile(
+    r"[\"'\u2018\u2019\u201c\u201d]?(?P<mt>산\s*)?(?P<main>\d+)"
+    rf"(?:-(?P<sub>\d+)(?!{_LOT_UNIT_AFTER})|(?![호층]|-\d|{_LOT_UNIT_AFTER}))"
+    r"(?:\s*(?:번지|번))?"
+)
 # "태평로1가"·"종로1가"·"을지로2가"처럼 숫자+"가"로 끝나는 토큰은 법정동 이름이다(T-317).
 # 도로명은 대로/로/길로 끝나므로 이 토큰의 "…로" + 숫자를 도로명 + 건물번호로 읽으면 안 된다.
 _LEGAL_DONG_GA_RE = re.compile(r"(?<!\S)[가-힣]+\d+가(?!\S)")
@@ -72,6 +85,8 @@ _SIDO_ALIASES = {
 }
 
 _SIDO_SUFFIXES = ("특별시", "광역시", "특별자치시", "특별자치도", "자치도", "도")
+# 시군구 없이 시도 바로 아래에 읍면동이 오는 시도. MV ``sgg_nm``이 NULL이다(T-320).
+_SIDO_WITHOUT_SGG = frozenset({"세종특별자치시"})
 _SGG_SUFFIXES = ("시", "군", "구")
 _DONG_SUFFIXES = ("읍", "면", "동", "가", "리")
 
@@ -106,6 +121,11 @@ class AddrParts:
     def sgg_nrm(self) -> str | None:
         return self.sgg.replace(" ", "") if self.sgg else None
 
+    @property
+    def sido_without_sgg(self) -> bool:
+        """시군구가 없는 시도(세종특별자치시) 주소라 시군구 없이도 행정구역이 온전하다."""
+        return self.sgg is None and self.si in _SIDO_WITHOUT_SGG
+
 
 def normalize_spaces(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value).translate(_DASH_TRANSLATION)
@@ -127,7 +147,10 @@ def compact(value: str | None) -> str | None:
     return re.sub(r"\s+", "", value)
 
 
-def _pop_region(tokens: list[str]) -> tuple[str | None, str | None, str | None, str | None]:
+def _pop_region(
+    tokens: list[str],
+) -> tuple[str | None, str | None, str | None, str | None, int]:
+    """앞쪽 행정구역 토큰을 떼어 (시도, 시군구, 읍면동, 리, 소비한 토큰 수)를 돌려준다."""
     si = sgg = emd = li = None
     idx = 0
     if idx < len(tokens) and (
@@ -146,7 +169,8 @@ def _pop_region(tokens: list[str]) -> tuple[str | None, str | None, str | None, 
         idx += 1
     if idx < len(tokens) and tokens[idx].endswith("리"):
         li = tokens[idx]
-    return si, sgg, emd, li
+        idx += 1
+    return si, sgg, emd, li, idx
 
 
 def parse_address(raw: str) -> AddrParts:
@@ -166,7 +190,7 @@ def parse_address(raw: str) -> AddrParts:
     under = "지하" in normalized
     normalized_without_under = normalize_spaces(normalized.replace("지하", " "))
     tokens = normalized_without_under.split()
-    si, sgg, emd, li = _pop_region(tokens)
+    si, sgg, emd, li, region_token_count = _pop_region(tokens)
     # 법정동 "N가" 토큰은 같은 길이의 공백으로 가려 번호 탐색에서만 뺀다. 길이를 보존하므로
     # match 위치(detail 잘라내기)는 원문 기준 그대로 쓸 수 있다.
     number_source = _LEGAL_DONG_GA_RE.sub(
@@ -196,9 +220,18 @@ def parse_address(raw: str) -> AddrParts:
             is_road=True,
         )
 
-    jibun_match = None
-    for match in _JIBUN_RE.finditer(number_source):
-        jibun_match = match
+    jibun_match: re.Match[str] | None = None
+    if emd or li:
+        # 지번 번지는 읍면동·리 바로 다음 토큰이다(T-320). 마지막 숫자를 번지로 잡으면
+        # "상계동 1234 … 1203호"·"역삼동 737 2층"의 호수·층 번호나 "신림1동"·"하귀1리"의
+        # 이름 속 숫자를 번지로 읽는다. 그 자리에 번지가 없으면 번호 없는 주소로 본다.
+        # tokens는 공백 하나로 정규화한 문자열을 나눈 것이라 join 길이 + 1이 다음 토큰 위치다.
+        lot_start = len(" ".join(tokens[:region_token_count])) + 1
+        jibun_match = _LEADING_LOT_RE.match(number_source, lot_start)
+    else:
+        # 읍면동·리 anchor가 없으면 번지 위치를 정할 수 없어 기존처럼 마지막 번호를 쓴다.
+        for match in _JIBUN_RE.finditer(number_source):
+            jibun_match = match
     if jibun_match is None:
         msg = "address number could not be parsed"
         raise InvalidAddressError(msg)
