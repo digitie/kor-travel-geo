@@ -31,15 +31,18 @@ import { type VirtualColumn, VirtualTable } from "@/components/ui/VirtualTable";
 import {
   BackupAllowedDirs,
   BackupArtifact,
+  type DbLifecycleCapabilities,
   LoadJobStatus,
   getErrorMessage,
   postJson,
   requestJson
 } from "@/lib/api";
 import {
+  DB_LIFECYCLE_UNSUPPORTED_TEXT,
   backupDownloadHref,
   backupProfileDescriptions,
   backupProfileLabel,
+  dbLifecycleBlocked,
   stagePhase,
   terminalJobState
 } from "@/lib/backup-workflow";
@@ -65,6 +68,8 @@ type BackupsPanelState = {
   artifacts: BackupArtifact[];
   jobRows: LoadJobStatus[];
   lastResult: unknown;
+  /** T-312 DB 수명주기 capability. null = 아직 모름/조회 실패 → UI는 막지 않는다. */
+  lifecycle: DbLifecycleCapabilities | null;
 };
 
 const initialBackupFormState: BackupFormState = {
@@ -79,7 +84,8 @@ const initialBackupsPanelState: BackupsPanelState = {
   allowedDirsError: false,
   artifacts: [],
   jobRows: [],
-  lastResult: null
+  lastResult: null,
+  lifecycle: null
 };
 
 export type BackupsTabId = "overview" | "backup" | "restore" | "hotswap" | "jobs";
@@ -89,6 +95,8 @@ type BackupWorkflowStep = {
   cli?: string;
   cliHint?: string;
   tab?: BackupsTabId;
+  /** T-312: DB 수명주기 capability가 없으면(공용 DB instance) 수행할 수 없는 단계. */
+  needsDbLifecycle?: boolean;
 };
 
 const BACKUPS_TABS: { id: BackupsTabId; label: string }[] = [
@@ -112,12 +120,14 @@ const BACKUP_WORKFLOW_STEPS: BackupWorkflowStep[] = [
   {
     title: "3. 복원 드릴",
     cli: "ktgctl backup restore-drill --artifact-id <id>",
-    cliHint: "throwaway DB에 복원해 PASS/FAIL을 점검합니다."
+    cliHint: "throwaway DB에 복원해 PASS/FAIL을 점검합니다.",
+    needsDbLifecycle: true
   },
   {
     title: "4. 복원 / Hot-swap",
     hint: "[복원] 탭에서 새 DB로 복원하고, 운영 교체는 [Hot-swap] 탭에서 진행합니다.",
-    tab: "restore"
+    tab: "restore",
+    needsDbLifecycle: true
   }
 ];
 
@@ -133,6 +143,7 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
     deleteArtifact,
     jobRows,
     lastResult,
+    lifecycle,
     loadAll,
     recordResult,
     submitBackup,
@@ -157,6 +168,7 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
         <div className="grid two">
           <BackupsWorkflowGuide
             availableCount={availableArtifacts.length}
+            lifecycleBlocked={dbLifecycleBlocked(lifecycle)}
             onGoTo={setActiveTab}
             onRefresh={loadAll}
             runningCount={runningCount}
@@ -180,6 +192,7 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
       </AdminTabsContent>
       <AdminTabsContent value="restore">
         <RestoreWizard
+          lifecycle={lifecycle}
           onSubmitted={(result) => {
             recordResult(result);
             void loadAll();
@@ -188,7 +201,7 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
         <RestoreReconcilePanel />
       </AdminTabsContent>
       <AdminTabsContent value="hotswap">
-        <HotSwapTab />
+        <HotSwapTab lifecycle={lifecycle} />
       </AdminTabsContent>
       <AdminTabsContent value="jobs">
         <BackupJobsPanel jobRows={jobRows} onCancelJob={cancelJob} />
@@ -199,12 +212,14 @@ export function BackupsPanel({ initialTab = "overview" }: { initialTab?: Backups
 
 function BackupsWorkflowGuide({
   availableCount,
+  lifecycleBlocked,
   onGoTo,
   onRefresh,
   runningCount,
   totalArtifacts
 }: {
   availableCount: number;
+  lifecycleBlocked: boolean;
   onGoTo: (tab: BackupsTabId) => void;
   onRefresh: () => void;
   runningCount: number;
@@ -238,6 +253,9 @@ function BackupsWorkflowGuide({
               ) : null}
             </div>
             {step.hint ? <p>{step.hint}</p> : null}
+            {step.needsDbLifecycle && lifecycleBlocked ? (
+              <p className="form-note">{DB_LIFECYCLE_UNSUPPORTED_TEXT}</p>
+            ) : null}
             {step.cli ? (
               <Collapsible>
                 <CollapsibleTrigger className="inline-flex h-control-sm items-center gap-1 rounded-control px-1.5 text-xs font-medium text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus [&>svg]:-rotate-90 [&>svg]:transition-transform data-[state=open]:[&>svg]:rotate-0">
@@ -261,7 +279,7 @@ function BackupsWorkflowGuide({
 function useBackupsPanelController() {
   const [backupForm, setBackupForm] = useState<BackupFormState>(initialBackupFormState);
   const [panelState, setPanelState] = useState<BackupsPanelState>(initialBackupsPanelState);
-  const { allowedDirs, allowedDirsError, artifacts, jobRows, lastResult } = panelState;
+  const { allowedDirs, allowedDirsError, artifacts, jobRows, lastResult, lifecycle } = panelState;
 
   const availableArtifacts = useMemo(() => {
     const next: BackupArtifact[] = [];
@@ -379,6 +397,26 @@ function useBackupsPanelController() {
     void loadAllowedDirs();
   }, []);
 
+  // T-312: 공용 DB instance(CREATEDB 없음)면 복원/hot-swap/restore drill을 막고 안내한다.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLifecycle() {
+      try {
+        const capabilities = await requestJson<DbLifecycleCapabilities>("/admin/db-capabilities");
+        // 모양이 다르면(구 backend 등) 모르는 상태로 둔다 — backend E0410이 최종 방어선.
+        if (!cancelled && typeof capabilities?.supported === "boolean") {
+          setPanelState((current) => ({ ...current, lifecycle: capabilities }));
+        }
+      } catch {
+        // 조회 실패는 UI를 막지 않는다 (backend가 최종 거절한다).
+      }
+    }
+    void loadLifecycle();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
@@ -397,6 +435,7 @@ function useBackupsPanelController() {
     deleteArtifact,
     jobRows,
     lastResult,
+    lifecycle,
     loadAll,
     recordResult,
     submitBackup,

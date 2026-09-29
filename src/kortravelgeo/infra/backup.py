@@ -35,8 +35,14 @@ from kortravelgeo.dto.admin import (
     RestoreCreateRequest,
     RestoreDryRunResult,
 )
-from kortravelgeo.exceptions import InvalidInputError, NotFoundError
+from kortravelgeo.exceptions import InvalidInputError, NotFoundError, UnsupportedOnInstanceError
 from kortravelgeo.infra.admin_repo import AdminRepository
+from kortravelgeo.infra.db_capabilities import require_db_lifecycle
+from kortravelgeo.infra.restore_toc import (
+    RESTORE_TARGET_ROLE_SQL,
+    RestoreTargetRole,
+    filter_preprovisioned_toc,
+)
 from kortravelgeo.settings import Settings
 from kortravelgeo.version import __version__
 
@@ -474,6 +480,13 @@ async def run_restore_job(
     job_id: str | None = None,
 ) -> None:
     req = RestoreCreateRequest.model_validate(payload)
+    if not req.target_dsn:
+        # T-312: a restore that runs with the app's own credentials (target_database) needs DB
+        # lifecycle rights (new DB / cleanup via the maintenance DB). Refuse before any artifact
+        # row or extraction — the Dagster db_restore op and `ktgctl restore create` hit this
+        # first line; the API already refused before creating the job. An explicit target_dsn
+        # carries its own credentials and is left to the operator.
+        await require_db_lifecycle(engine, settings, "db_restore")
     callback_url = validate_callback_url(req.callback_url, settings.backup_callback_allowed_hosts)
     jobs = req.jobs or settings.backup_default_jobs
     repo = AdminRepository(engine)
@@ -675,11 +688,27 @@ async def run_restore_job(
             )
             raise InvalidInputError(msg)
 
+        # T-312: restoring as a non-superuser (shared instance app role) must skip the
+        # admin-provisioned extension/x_extension entries and ownership/ACL statements.
+        target_role = await inspect_restore_target_role(target_dsn)
+        use_list_path, preprovisioned_skipped = await _apply_preprovisioned_toc_filter(
+            dump_dir, work_dir, use_list_path, target_role
+        )
+        if preprovisioned_skipped:
+            await progress(
+                progress=0.20,
+                stage="restore",
+                message=(
+                    "대상 DB에 미리 설치된 extension/schema TOC "
+                    f"{len(preprovisioned_skipped)}개 제외 (비-superuser 복원)"
+                ),
+            )
         restore_cmd = build_pg_restore_command(
             target_dsn,
             dump_dir,
             jobs=jobs,
             use_list=use_list_path,
+            role_neutral=not target_role.is_superuser,
         )
         await progress(
             progress=0.20,
@@ -799,6 +828,7 @@ async def run_restore_job(
             "source_manifest": manifest,
             "row_count_verification": reconcile_block,
             "partial_restore": partial_restore_info,
+            "preprovisioned_toc_skipped": list(preprovisioned_skipped) or None,
         }
         updated_restore_artifact = await repo.update_artifact(
             restore_artifact.artifact_id,
@@ -1156,6 +1186,14 @@ def build_pg_dump_command(
         "--format=directory",
         f"--jobs={jobs}",
         "--verbose",
+        # T-312: owners and ACLs stay in the dump on purpose. The shared instance's only grant
+        # that matters — the admin's `GRANT USAGE ON SCHEMA x_extension TO <app role>` — lives
+        # solely in the dump's `ACL - SCHEMA x_extension` entry: a superuser `pg_restore --clean`
+        # drops and recreates x_extension from the dump, so a --no-privileges dump would leave
+        # the app role unable to resolve any PostGIS/pg_trgm function after the restore.
+        # Ownership/ACL are stripped at restore time instead, only where the restoring role
+        # cannot apply them (build_pg_restore_command(role_neutral=True)). --no-owner would be
+        # ignored here anyway: pg_dump keeps owners in the TOC for archive formats (PG16).
         "--file",
         str(dump_dir),
         "--dbname",
@@ -1175,6 +1213,7 @@ def build_pg_restore_command(
     *,
     jobs: int,
     use_list: Path | None = None,
+    role_neutral: bool = False,
 ) -> PreparedCommand:
     libpq_dsn, env = to_process_safe_libpq_dsn(target_dsn)
     argv = [
@@ -1190,6 +1229,11 @@ def build_pg_restore_command(
         "--clean",
         "--if-exists",
     ]
+    # T-312: a non-superuser (the shared instance's app role) cannot ALTER OWNER TO another
+    # role or GRANT to roles that only existed on the old dedicated instance — restore every
+    # object as the restoring role and skip ACLs. A superuser restore keeps the dump's owners.
+    if role_neutral:
+        argv += ["--no-owner", "--no-privileges"]
     # T-243: restore only the (non-commented) entries in the filtered TOC list, skipping
     # the corrupted table data files identified by partial-restore planning.
     if use_list is not None:
@@ -1942,6 +1986,56 @@ async def _plan_partial_restore(
     return block, use_list_path
 
 
+async def inspect_restore_target_role(target_dsn: str) -> RestoreTargetRole:
+    """How the restoring role sees the target DB (T-312): superuser? + unmanageable extensions.
+
+    Queried on the restore target itself (``pg_extension``/``pg_namespace`` are per-database).
+    """
+    target_engine = create_async_engine(normalize_sqlalchemy_dsn(target_dsn))
+    try:
+        async with target_engine.connect() as conn:
+            row = (await conn.execute(text(RESTORE_TARGET_ROLE_SQL))).mappings().one()
+    finally:
+        await target_engine.dispose()
+    return RestoreTargetRole(
+        is_superuser=bool(row["is_superuser"]),
+        unmanaged_extensions=tuple(row["extensions"] or ()),
+        unmanaged_extension_schemas=tuple(row["schemas"] or ()),
+    )
+
+
+async def _apply_preprovisioned_toc_filter(
+    dump_dir: Path,
+    work_dir: Path,
+    use_list_path: Path | None,
+    target_role: RestoreTargetRole,
+) -> tuple[Path | None, tuple[str, ...]]:
+    """Comment out the target's admin-provisioned extension/schema TOC entries (T-312).
+
+    Composes with a T-243 partial-restore use-list (filters that list instead of the full TOC).
+    Returns the use-list to pass to ``pg_restore`` and the skipped entries; a superuser target
+    (nothing unmanageable) returns ``use_list_path`` unchanged.
+    """
+    if not (target_role.unmanaged_extensions or target_role.unmanaged_extension_schemas):
+        return use_list_path, ()
+    toc_lines = (
+        (await asyncio.to_thread(use_list_path.read_text, encoding="utf-8")).splitlines()
+        if use_list_path is not None
+        else await capture_pg_restore_toc(dump_dir)
+    )
+    filtered = filter_preprovisioned_toc(
+        toc_lines,
+        extensions=target_role.unmanaged_extensions,
+        schemas=target_role.unmanaged_extension_schemas,
+    )
+    if not filtered.skipped_entries:
+        return use_list_path, ()
+    filtered_path = work_dir / "restore-use-list.txt"
+    filtered_path.write_text("\n".join(filtered.lines) + "\n", encoding="utf-8")
+    os.chmod(filtered_path, 0o600)
+    return filtered_path, filtered.skipped_entries
+
+
 async def capture_pg_restore_toc(dump_dir: Path) -> list[str]:
     """Run ``pg_restore -l`` and return the TOC listing lines (T-243)."""
     prepared = build_pg_restore_list_command(dump_dir)
@@ -2273,6 +2367,15 @@ async def run_restore_dry_run(
     if target_database is not None:
         target_database = validate_database_identifier(target_database, "target_database")
 
+    if not req.target_dsn:
+        # T-312: mirror run_restore_job's capability gate so can_restore stays honest.
+        try:
+            await require_db_lifecycle(engine, settings, "db_restore")
+        except UnsupportedOnInstanceError as exc:
+            blockers.append(f"{exc.message} ({exc.hint})" if exc.hint else exc.message)
+        except Exception as exc:
+            blockers.append(f"DB lifecycle capability check failed: {exc}")
+
     if req.mode == "replace_current":
         if target_database != current_database:
             blockers.append("replace_current target must match the current database")
@@ -2463,6 +2566,26 @@ SELECT count(*)::bigint
             postgis = await conn.scalar(
                 text("SELECT count(*)::bigint FROM pg_extension WHERE extname = 'postgis'")
             )
+            # T-312: the app role (= the target DB's owner on the shared instance) resolves
+            # PostGIS/pg_trgm through its search_path, which needs USAGE on the extension
+            # schema. A restore that dropped the admin's grant on x_extension still passes the
+            # checks above, then fails every geocode after the swap — catch it here. Only the
+            # extensions geo calls are checked: an unrelated one (e.g. postgis_tiger_geocoder's
+            # `tiger` from template_postgis) must not fail a restore / roll back a hot-swap.
+            usage_result = await conn.execute(
+                text(
+                    """
+SELECT DISTINCT d.datdba::regrole::text AS db_owner, n.nspname::text AS schema_name
+  FROM pg_extension e
+  JOIN pg_namespace n ON n.oid = e.extnamespace
+  JOIN pg_database d ON d.datname = current_database()
+ WHERE e.extname IN ('postgis', 'pg_trgm', 'unaccent')
+   AND NOT has_schema_privilege(d.datdba, n.oid, 'USAGE')
+ ORDER BY 1, 2
+"""
+                )
+            )
+            no_usage = usage_result.mappings().all()
     finally:
         await engine.dispose()
     if int(table_count or 0) == 0:
@@ -2470,6 +2593,15 @@ SELECT count(*)::bigint
         raise InvalidInputError(msg)
     if int(postgis or 0) == 0:
         msg = "restore smoke test found no postgis extension"
+        raise InvalidInputError(msg)
+    if no_usage:
+        owner = no_usage[0]["db_owner"]
+        schemas = ", ".join(sorted({row["schema_name"] for row in no_usage}))
+        msg = (
+            f"restore smoke test: database owner {owner} has no USAGE on extension schema "
+            f"{schemas} (PostGIS/pg_trgm calls would fail) — "
+            f"GRANT USAGE ON SCHEMA {schemas} TO {owner}"
+        )
         raise InvalidInputError(msg)
 
 
@@ -2721,7 +2853,7 @@ def estimate_backup_space_requirement(
 
 async def _query_database_size_bytes(engine: AsyncEngine) -> int:
     async with engine.connect() as conn:
-        value = (
+        value: int | None = (
             await conn.execute(
                 text("SELECT pg_database_size(current_database())::bigint AS size")
             )

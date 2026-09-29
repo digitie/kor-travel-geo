@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
@@ -61,7 +61,7 @@ async def inspect_restore_hot_swap_plan(
     engine = create_async_engine(maintenance_dsn)
     try:
         async with engine.connect() as conn:
-            rows = (
+            rows: Sequence[str] = (
                 await conn.execute(
                     text(
                         """
@@ -535,7 +535,7 @@ async def _existing_databases(
     engine = create_async_engine(_dsn_for_database(settings.pg_dsn, maintenance_database))
     try:
         async with engine.connect() as conn:
-            rows = (
+            rows: Sequence[str] = (
                 await conn.execute(
                     text("SELECT datname FROM pg_database WHERE datname = ANY(:names)"),
                     {"names": list(candidates)},

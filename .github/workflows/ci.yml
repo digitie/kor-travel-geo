@@ -38,6 +38,45 @@ jobs:
           TEMP: /tmp
         run: pytest -q
 
+  # The Dagster image installs the main lib together with kor-travel-geo-dagster, whose
+  # ``sqlalchemy<2.1`` pin resolves the WHOLE image to SQLAlchemy 2.0 (T-316), while the
+  # backend job above resolves 2.1. Loaders, backup/restore, hot-swap and MV refresh run in
+  # that image, so test the main lib on the image's resolve too, plus the Dagster package.
+  dagster:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install GDAL system libraries
+        timeout-minutes: 12
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Dpkg::Lock::Timeout=120 install -y --no-install-recommends gdal-bin libgdal-dev
+      - name: Install main lib + Dagster package in one resolve (like dagster.Dockerfile)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "gdal==$(gdal-config --version)" \
+            -e ".[api,loaders,dev]" -e "./kor-travel-geo-dagster[dev]"
+          python -c "import sqlalchemy; v = sqlalchemy.__version__; print('sqlalchemy', v); assert v.startswith('2.0.'), v"
+      - name: Test main lib on the Dagster image resolve
+        env:
+          TMPDIR: /tmp
+          TMP: /tmp
+          TEMP: /tmp
+        run: pytest -q
+      - name: Test Dagster package
+        working-directory: kor-travel-geo-dagster
+        env:
+          TMPDIR: /tmp
+        run: |
+          python -c "import kortravelgeo_dagster.definitions"
+          pytest -q
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

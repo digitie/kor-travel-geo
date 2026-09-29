@@ -5,6 +5,18 @@
 ## [Unreleased]
 
 ### Changed
+- **공용 DB instance에서 불가능한 DB 수명주기 기능을 일찍 거절하고, app role 백업을 복원 가능한 형식으로 바꿨다(T-312).**
+  hot-swap plan/execute/rollback·restore drill·blue-green scratch full-load·`db_restore`는 `CREATEDB`와 maintenance
+  DB `postgres` `CONNECT`가 필요한데, 공용 instance(T-308)의 app role에는 둘 다 없어 job을 만든 뒤 raw DB 오류로
+  늦게 실패했다. 이제 연결 role을 조회(5분 캐시)해 부족하면 job 생성 전에 `E0410`(HTTP 409, "공용 DB instance에서는
+  지원하지 않음 — 운영자가 manager ktdctl로 수행")으로 거절하고, Dagster `db_restore`/`backup_restore_drill`/
+  `full_load_batch`(scratch) op도 시작 시 같은 사유로 멈춘다. `KTG_DB_LIFECYCLE_MODE=auto|enabled|disabled`(기본
+  `auto` — 전용 superuser instance는 그대로 전부 허용), `GET /v1/admin/db-capabilities`를 추가했고 admin UI 백업/복원
+  화면이 이를 읽어 복원 제출·hot-swap 버튼을 비활성화하고 안내한다. `pg_dump` 형식은 그대로(owner·ACL 포함 —
+  admin의 `x_extension` USAGE grant가 superuser 복원에서 살아남는다)이고, 비-superuser로 복원할 때만
+  `pg_restore --no-owner --no-privileges` + 대상 DB에 미리 만들어진 extension/`x_extension` TOC entry
+  제외(`--use-list`)로 복원한다(superuser 복원은 기존과 동일). 복원 smoke test는 대상 DB owner의 extension schema
+  `USAGE`도 확인한다. cluster admin 복원 절차는 `docs/t046-db-backup-restore.md` "공용 DB instance (T-312)".
 - **`/metrics` scrape가 DB를 조회하지 않고, `geo_cache` 전수 scan을 기본 경로에서 없앴다(T-310).**
   15초 scrape마다 돌던 `geo_cache` 전수 집계가 공용 PostgreSQL instance에서 geo tenant 논리 읽기의
   대부분이었고, statement timeout·crash 창의 `OperationalError`가 그대로 `/metrics` 503이 됐다. 이제
@@ -56,6 +68,13 @@
   기존 Grafana 패널/알림 규칙이 metric 이름을 하드코딩했다면 갱신이 필요하다(이 저장소
   기준 kor-travel-docker-manager repo에는 metric 이름을 하드코딩한 대시보드/알림 파일이
   없음을 확인했다).
+- **SQLAlchemy 허용 범위를 `>=2.0.35,<2.1` → `>=2.0.35,<2.2`로 넓혔다(T-316).** 2.1의
+  TypeVarTuple 기반 `Row` 타입 때문에 `text()` 결과의 `scalar_one()`/`scalars().all()`이
+  mypy에서 `Never`로 추론되던 9곳에 변수 타입 주석만 달았다(런타임 동작 변화 없음). 2.1은
+  `postgresql://` URL의 기본 DBAPI를 psycopg2 → psycopg 3으로 바꾸므로, Dagster instance
+  storage(`KTG_DAGSTER_PG_URL`)가 드라이버를 조용히 바꾸지 않도록 `kor-travel-geo-dagster`는
+  `sqlalchemy<2.1`로 묶어 두었다(API 이미지는 2.1, Dagster 이미지는 2.0 유지). 본 라이브러리는
+  DSN을 항상 `postgresql+psycopg://`로 정규화하므로 이 기본 드라이버 변경의 영향을 받지 않는다.
 
 ### Added
 - **Dagster 백업 보존 janitor job + 일일 스케줄(`backup_retention_janitor_daily`, 06:00 KST)을 추가했다.**

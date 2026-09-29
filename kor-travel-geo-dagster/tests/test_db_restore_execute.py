@@ -6,18 +6,26 @@ import asyncio
 from typing import Any
 
 import pytest
-from dagster import build_op_context
+from dagster import Failure, build_op_context
+from kortravelgeo.exceptions import UnsupportedOnInstanceError
 from kortravelgeo.settings import Settings
 
 from kortravelgeo_dagster import db_restore_execute
 
 
 class _FakeClient:
-    def __init__(self, engine: object) -> None:
+    def __init__(self, engine: object, *, lifecycle_error: Exception | None = None) -> None:
         self._eng = engine
+        self._lifecycle_error = lifecycle_error
+        self.lifecycle_checks: list[str] = []
 
     def _engine(self) -> object:
         return self._eng
+
+    async def require_db_lifecycle(self, feature: str) -> None:
+        self.lifecycle_checks.append(feature)
+        if self._lifecycle_error is not None:
+            raise self._lifecycle_error
 
 
 async def _noop_progress(*, progress=None, stage=None, message=None):
@@ -72,6 +80,49 @@ async def test_run_db_restore_op_wires_bridge_and_passes_job_id(
         "target_database": "kor_travel_geo_restore",
     }
     assert captured["settings"] is settings
+
+
+@pytest.mark.asyncio
+async def test_run_db_restore_op_refuses_unsupported_instance_inside_the_leaf(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-312: a run launched straight from Dagster (bypassing the API's E0410 gate) fails the
+    adopted load_jobs row with the capability reason and never reaches run_restore_job."""
+    failed: dict[str, Any] = {}
+
+    async def fake_execute_load_job(*, job_id, orchestrator_run_id, engine, leaf):
+        try:
+            await leaf(asyncio.Event(), _noop_progress)
+        except Exception as exc:  # the real bridge marks the row failed with str(exc)
+            failed["message"] = str(exc)
+            raise
+
+    async def fail_run_restore_job(*_args, **_kwargs):
+        raise AssertionError("run_restore_job must not run on an unsupported instance")
+
+    monkeypatch.setattr(db_restore_execute, "execute_load_job", fake_execute_load_job)
+    monkeypatch.setattr(db_restore_execute, "run_restore_job", fail_run_restore_job)
+    client = _FakeClient(
+        object(),
+        lifecycle_error=UnsupportedOnInstanceError(
+            "DB 복원: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행",
+            hint="role kor_travel_geo_app: CREATEDB 권한 없음",
+        ),
+    )
+
+    with (
+        build_op_context(
+            resources={"client": client, "settings": Settings(_env_file=None)},
+            op_config={"job_id": "job-43", "payload": {"target_database": "kor_travel_geo_r"}},
+        ) as ctx,
+        pytest.raises(Failure) as excinfo,
+    ):
+        await db_restore_execute.run_db_restore_op(ctx)
+
+    assert client.lifecycle_checks == ["db_restore"]
+    assert "공용 DB instance에서는 지원하지 않음" in failed["message"]
+    assert "CREATEDB" in failed["message"]
+    assert "CREATEDB" in (excinfo.value.description or "")
 
 
 def test_db_restore_job_is_registered_in_definitions() -> None:

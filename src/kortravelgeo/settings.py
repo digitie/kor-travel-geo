@@ -229,6 +229,11 @@ class Settings(BaseSettings):
     # T-235: cleanup of a partially-filled new_database target on cancel/fail.
     # quarantine (rename) | drop | keep. replace_current is never auto-cleaned.
     restore_failed_target_cleanup: str = "quarantine"
+    # T-312: DB lifecycle features (hot-swap, restore drill, scratch full-load, db_restore)
+    # need CREATEDB + CONNECT on the maintenance `postgres` DB. `auto` probes the connected
+    # role (a dedicated superuser instance keeps everything enabled); `enabled`/`disabled`
+    # force the answer without probing (e.g. `disabled` on the shared control-plane instance).
+    db_lifecycle_mode: Literal["auto", "enabled", "disabled"] = "auto"
     backup_callback_allowed_hosts: Annotated[tuple[str, ...], NoDecode] = (
         "localhost",
         "127.0.0.1",

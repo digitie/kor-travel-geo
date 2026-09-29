@@ -910,6 +910,32 @@ class RestoreDryRunResult(FrozenModel):
     row_counts: dict[str, int] | None = None
 
 
+DbLifecycleMode = Literal["auto", "enabled", "disabled"]
+DbLifecycleFeature = Literal["hot_swap", "restore_drill", "scratch_full_load", "db_restore"]
+
+
+class DbLifecycleCapabilities(FrozenModel):
+    """T-312: whether the connected DB role can run DB lifecycle features.
+
+    Hot-swap (ADR-036 ``ALTER DATABASE RENAME``), restore drill, blue-green scratch full-load
+    and ``db_restore`` all need ``CREATEDB`` (or superuser) plus ``CONNECT`` on the maintenance
+    ``postgres`` DB. A shared PostgreSQL instance's app role has neither, so those features are
+    refused early (``E0410``) and the operator runs them with the manager's ``ktdctl``.
+    ``mode`` is ``KTG_DB_LIFECYCLE_MODE``; the role facts are ``None`` unless ``mode='auto'``.
+    """
+
+    mode: DbLifecycleMode
+    supported: bool
+    features: tuple[DbLifecycleFeature, ...] = ()
+    reason: str | None = None
+    role: str | None = None
+    is_superuser: bool | None = None
+    can_create_database: bool | None = None
+    can_connect_maintenance_database: bool | None = None
+    maintenance_database: str = "postgres"
+    checked_at: datetime
+
+
 class RestoreDrillResult(FrozenModel):
     """T-242 restore-drill outcome (restore into a throwaway DB → reconcile/smoke → drop).
 

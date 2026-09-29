@@ -52,6 +52,8 @@ from .dto.admin import (
     ConsistencySamplePage,
     ConsistencySampleRecheckResponse,
     DatasetSnapshot,
+    DbLifecycleCapabilities,
+    DbLifecycleFeature,
     ExplainRequest,
     ExplainResponse,
     LoadJobStatus,
@@ -136,6 +138,7 @@ from .dto.zipcode import ZipcodeResponse
 from .exceptions import InvalidAddressError, NotFoundError
 from .infra.admin_repo import AdminRepository
 from .infra.cache import GeoCacheRepository, make_cache_key
+from .infra.db_capabilities import db_lifecycle_capabilities, require_db_lifecycle
 from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
@@ -1415,10 +1418,12 @@ class AsyncAddressClient:
         """Restore a backup into a throwaway DB, reconcile+smoke, then drop it (T-242).
 
         Proves restorability without touching the serving DB; returns a PASS/FAIL result.
-        ``timestamp`` names the throwaway DB deterministically.
+        ``timestamp`` names the throwaway DB deterministically. Refused with ``E0410`` on an
+        instance whose role cannot ``CREATE DATABASE`` (T-312).
         """
         from .infra.restore_drill import run_restore_drill
 
+        await self.require_db_lifecycle("restore_drill")
         return await run_restore_drill(
             self._engine(),
             self.settings,
@@ -2199,10 +2204,24 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
             manifest=manifest,
         )
 
+    async def db_lifecycle_capabilities(self) -> DbLifecycleCapabilities:
+        """Whether the connected role can run DB lifecycle features (T-312).
+
+        Hot-swap / restore drill / blue-green scratch full-load / ``db_restore`` need
+        ``CREATEDB`` + ``CONNECT`` on the maintenance DB — a shared instance's app role has
+        neither. ``KTG_DB_LIFECYCLE_MODE`` (auto|enabled|disabled) can force the answer.
+        """
+        return await db_lifecycle_capabilities(self._engine(), self.settings)
+
+    async def require_db_lifecycle(self, feature: DbLifecycleFeature) -> None:
+        """Raise ``UnsupportedOnInstanceError`` (E0410/409) if ``feature`` cannot run here."""
+        await require_db_lifecycle(self._engine(), self.settings, feature)
+
     async def restore_hot_swap_plan(
         self,
         req: RestoreHotSwapPlanRequest,
     ) -> RestoreHotSwapPlan:
+        await self.require_db_lifecycle("hot_swap")
         return await inspect_restore_hot_swap_plan(self.settings, req)
 
     async def execute_restore_hot_swap(
@@ -2221,6 +2240,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         """
         from .infra.hotswap import execute_restore_hot_swap
 
+        await self.require_db_lifecycle("hot_swap")
         return await execute_restore_hot_swap(
             self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
         )
@@ -2240,6 +2260,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         """
         from .infra.hotswap import execute_hot_swap_rollback
 
+        await self.require_db_lifecycle("hot_swap")
         return await execute_hot_swap_rollback(
             self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
         )

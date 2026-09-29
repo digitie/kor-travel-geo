@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -70,7 +70,7 @@ DELETE FROM {table_name} t
 
 async def _columns(engine: AsyncEngine, table_name: str) -> tuple[str, ...]:
     async with engine.connect() as conn:
-        rows = (
+        rows: Sequence[str] = (
             await conn.execute(
                 text(
                     """

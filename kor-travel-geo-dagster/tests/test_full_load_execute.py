@@ -11,18 +11,26 @@ import asyncio
 from typing import Any
 
 import pytest
-from dagster import build_op_context
+from dagster import Failure, build_op_context
+from kortravelgeo.exceptions import UnsupportedOnInstanceError
 from kortravelgeo.settings import Settings
 
 from kortravelgeo_dagster import full_load_execute
 
 
 class _FakeClient:
-    def __init__(self, engine: object) -> None:
+    def __init__(self, engine: object, *, lifecycle_error: Exception | None = None) -> None:
         self._eng = engine
+        self._lifecycle_error = lifecycle_error
+        self.lifecycle_checks: list[str] = []
 
     def _engine(self) -> object:
         return self._eng
+
+    async def require_db_lifecycle(self, feature: str) -> None:
+        self.lifecycle_checks.append(feature)
+        if self._lifecycle_error is not None:
+            raise self._lifecycle_error
 
 
 async def _noop_progress(*, progress=None, stage=None, message=None):
@@ -134,6 +142,64 @@ async def test_run_full_load_batch_op_target_database_uses_disposable_scratch_en
     assert captured["create_engine_dsn"] == "scratch-dsn::kor_travel_geo_fullload_e2e"
     # the per-run scratch engine is disposed exactly once
     assert disposed["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_run_full_load_batch_op_scratch_refused_on_unsupported_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-312: a scratch full-load launched straight from Dagster stops before any scratch
+    engine exists when the role cannot CREATE DATABASE; a serving full-load is not checked."""
+
+    def fail_create_engine(dsn):
+        raise AssertionError("no scratch engine on an unsupported instance")
+
+    async def fail_execute_load_job(**_kwargs):
+        raise AssertionError("the batch must not start")
+
+    monkeypatch.setattr(full_load_execute, "create_async_engine", fail_create_engine)
+    monkeypatch.setattr(full_load_execute, "execute_load_job", fail_execute_load_job)
+    client = _FakeClient(
+        object(),
+        lifecycle_error=UnsupportedOnInstanceError(
+            "blue-green scratch full-load: 공용 DB instance에서는 지원하지 않음",
+            hint="role kor_travel_geo_app: CREATEDB 권한 없음",
+        ),
+    )
+
+    with (
+        build_op_context(
+            resources={"client": client, "settings": Settings(_env_file=None)},
+            op_config={
+                "job_id": "batch-3",
+                "payload": {"target_database": "kor_travel_geo_fullload_e2e"},
+            },
+        ) as ctx,
+        pytest.raises(Failure) as excinfo,
+    ):
+        await full_load_execute.run_full_load_batch_op(ctx)
+
+    assert client.lifecycle_checks == ["scratch_full_load"]
+    assert "공용 DB instance에서는 지원하지 않음" in (excinfo.value.description or "")
+
+
+@pytest.mark.asyncio
+async def test_run_full_load_batch_op_serving_path_skips_the_capability_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_execute_load_job(**_kwargs):
+        return None
+
+    monkeypatch.setattr(full_load_execute, "execute_load_job", fake_execute_load_job)
+    client = _FakeClient(object(), lifecycle_error=AssertionError("must not be checked"))
+
+    with build_op_context(
+        resources={"client": client, "settings": Settings(_env_file=None)},
+        op_config={"job_id": "batch-4", "payload": {"payloads": {"juso_text_load": {}}}},
+    ) as ctx:
+        await full_load_execute.run_full_load_batch_op(ctx)
+
+    assert client.lifecycle_checks == []
 
 
 @pytest.mark.asyncio

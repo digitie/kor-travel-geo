@@ -25,15 +25,18 @@ import { IssueList } from "@/components/admin/shared/IssueList";
 import { TypedConfirmField } from "@/components/admin/shared/TypedConfirmField";
 import { WizardSteps } from "@/components/admin/shared/WizardSteps";
 import { KeyValueGrid } from "@/components/admin/shared/KeyValueGrid";
+import { DbLifecycleNotice } from "@/components/admin/backups/DbLifecycleNotice";
 import { nestedRecord, textValue, triState } from "@/components/admin/backups/manifest-utils";
 import {
   BackupArtifact,
+  type DbLifecycleCapabilities,
   LoadJobStatus,
   RestoreDryRunResult,
   getErrorMessage,
   postJson,
   requestJson
 } from "@/lib/api";
+import { dbLifecycleBlocked } from "@/lib/backup-workflow";
 import { formatBytes } from "@/lib/format";
 import { pgIdentifierSchema } from "@/lib/schemas";
 import { toast } from "@/lib/toast";
@@ -90,8 +93,11 @@ function artifactOptionLabel(artifact: BackupArtifact): string {
 }
 
 export function RestoreWizard({
+  lifecycle,
   onSubmitted
 }: {
+  /** T-312: 공용 DB instance처럼 DB 복원을 지원하지 않으면 제출을 막고 안내한다. */
+  lifecycle?: DbLifecycleCapabilities | null;
   onSubmitted?: (result: LoadJobStatus) => void;
 }) {
   const [state, dispatchState] = useReducer(
@@ -195,7 +201,9 @@ export function RestoreWizard({
     (expectedConfirmation !== null && confirmation === expectedConfirmation);
   // The dry-run is the safety gate: a can_restore=false result must block submit (not just
   // warn), otherwise the wizard would bypass its own blockers. Codex H1 review of #235.
-  const canSubmit = confirmationValid && !busy && dryRun?.can_restore === true;
+  // T-312: dry-run(archive 검증)은 그대로 허용하되, 지원하지 않는 instance면 제출만 막는다.
+  const canSubmit =
+    confirmationValid && !busy && dryRun?.can_restore === true && !dbLifecycleBlocked(lifecycle);
 
   return (
     <Panel title="복원 위저드">
@@ -203,6 +211,8 @@ export function RestoreWizard({
         current={step - 1}
         steps={[STEP_LABELS[1], STEP_LABELS[2], STEP_LABELS[3], STEP_LABELS[4]]}
       />
+
+      <DbLifecycleNotice capabilities={lifecycle} feature="DB 복원" />
 
       {error ? (
         <Alert role="alert" variant="destructive">
