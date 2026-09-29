@@ -2,6 +2,22 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-30 (T-324 — 긴 geo job의 `dagster/max_runtime`, by claude)
+
+소유자 결정: 공유 instance의 기본 max runtime(6시간)이 geo run에도 걸린다. full load·restore와, 6시간을
+정당하게 넘을 수 있는 job만 `dagster/max_runtime=86400`(24시간). PinVi와 같은 모양 — 작은 `run_tags.py`를
+job tag dict에 합친다(Dagster는 job 정의 tag를 모든 run에 복사하고, run tag가 instance 값보다 우선한다).
+
+**n150 이력(읽기 전용)**: geo Dagster run store는 2026-09-28부터라 짧다(db_backup 최대 0.64h, mv_refresh 1.22h).
+`load_jobs`(2026-07-09~)도 db_restore 최대 2.18h, mv_refresh 1.59h, db_backup 0.72h가 전부 — 6시간 넘은
+run은 없고 운영에서 full load는 아직 한 번도 돌지 않았다. 그래서 full load 길이는 T-033(개발 워크스테이션
+전국 full load 4시간 8분, 그중 SHP 적재 3시간 37분)으로 판단했다. n150은 더 느리다.
+
+**고른 것**: `full_load_batch`(소유자 지정), `db_restore`(소유자 지정), `load_source`(SHP 한 원천만으로
+3시간 37분이라 n150에서 6시간을 넘을 수 있다), `backup_restore_drill`(db_restore와 같은 전체 restore에
+reconcile·smoke까지). `source_rebuild_db`는 materialize 후 `full_load_batch`를 **launch만** 하고 끝나므로
+기본값. 나머지(backup·verify·copy·janitor·consistency·mv_refresh·run-due)도 기본값.
+
 ## 2026-09-29 (T-324 — 공유 Dagster plane geo 선행 작업, by claude)
 
 Map·PinVi·geo·weather가 한 Dagster webserver/daemon(`dagster_shared`)을 쓰는 계획(Manager 쪽

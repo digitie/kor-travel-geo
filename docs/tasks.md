@@ -71,9 +71,11 @@ frame-busting 헤더를 보내지 않아 CSP 변경 불필요). 남은 것은 UI
 - [x] 공유 plane 전제 — run-failure sensor의 `monitor_all_code_locations` 제거, entrypoint psycopg2 guard가
   `KOR_TRAVEL_DAGSTER_SHARED_PG_URL`도 검사.
 - [ ] 머지 후 `ktdctl ensure geo`로 재빌드(stage 0 rollout 2번) — 세 컨테이너 site-packages 1.13.24 확인.
-- [ ] (계획 밖 발견) 공유 instance의 `run_monitoring.max_runtime_seconds`(21600) 기본값이 geo run에도
-  걸린다. 지금 geo instance엔 run_monitoring이 없어 무제한이다. full load·restore가 6시간을 넘을 수
-  있으면 해당 job에 `dagster/max_runtime` tag가 필요하다(값은 계획/소유자 결정).
+- [x] (계획 밖 발견) 공유 instance의 `run_monitoring.max_runtime_seconds`(21600) 기본값이 geo run에도
+  걸린다(지금 geo instance엔 run_monitoring이 없어 무제한). 소유자 결정(2026-09-30): 6시간을 넘을 수 있는
+  job만 `dagster/max_runtime=86400` — `full_load_batch`·`load_source`·`db_restore`·`backup_restore_drill`
+  (`kortravelgeo_dagster/run_tags.py`). 나머지 8개는 공유 기본값. `test_definitions.py`가 12개 job 전부의
+  기대값을 나열해 새 job은 선택을 강제당한다.
 
 (그 외 진행 중 작업 없음. T-177A~T-177H·T-183 완료 — `tasks-done.md` 참조.)
 

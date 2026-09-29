@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from .db_lifecycle import refuse_unsupported_db_lifecycle
 from .load_job_bridge import ProgressReporter, execute_load_job
 from .resources import op_resource
+from .run_tags import LONG_RUN_TAGS
 
 if TYPE_CHECKING:
     from kortravelgeo.client import AsyncAddressClient
@@ -49,10 +50,12 @@ __all__ = [
 FULL_LOAD_BATCH_JOB_TAGS: Final[dict[str, str]] = {
     "kor_travel_geo.job_scope": "load",
     "kor_travel_geo.job_kind": "full_load_batch",
+    **LONG_RUN_TAGS,
 }
 LOAD_SOURCE_JOB_TAGS: Final[dict[str, str]] = {
     "kor_travel_geo.job_scope": "load",
     "kor_travel_geo.job_kind": "load_source",
+    **LONG_RUN_TAGS,
 }
 
 _FULL_LOAD_BATCH_CONFIG_SCHEMA: Final[dict[str, object]] = {

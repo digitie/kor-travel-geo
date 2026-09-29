@@ -46,6 +46,7 @@ from kortravelgeo.infra.backup import BACKUP_ARTIFACT_TYPE
 
 from .db_lifecycle import db_lifecycle_skip_reason, refuse_unsupported_db_lifecycle
 from .resources import op_resource
+from .run_tags import LONG_RUN_TAGS
 
 __all__ = [
     "BACKUP_MAINTENANCE_JOBS",
@@ -301,7 +302,11 @@ def backup_copy_job() -> None:
 
 @job(
     name="backup_restore_drill",
-    tags={**_MAINTENANCE_TAGS, "kor_travel_geo.job_kind": "backup_restore_drill"},
+    tags={
+        **_MAINTENANCE_TAGS,
+        "kor_travel_geo.job_kind": "backup_restore_drill",
+        **LONG_RUN_TAGS,
+    },
     description="Restore-drill a db_backup into a throwaway DB, proving restorability (T-290g ③).",
 )
 def backup_restore_drill_job() -> None:

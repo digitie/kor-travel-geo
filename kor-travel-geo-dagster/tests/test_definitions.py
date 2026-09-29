@@ -19,6 +19,7 @@ from kortravelgeo_dagster.definitions import (
     defs,
 )
 from kortravelgeo_dagster.mv import mv_refresh_job, run_mv_refresh_op
+from kortravelgeo_dagster.run_tags import LONG_RUN_TAGS, MAX_RUNTIME_TAG
 
 
 def test_code_location_loads_mv_refresh_job() -> None:
@@ -64,6 +65,40 @@ def test_every_instigator_declares_its_prod_status_in_code() -> None:
         for instigator in [*repo.schedule_defs, *repo.sensor_defs]
     }
     assert declared == _DECLARED_INSTIGATOR_STATUS
+
+
+# Shared-plane max runtime (owner decision 2026-09-30): the shared instance's 6 h
+# run_monitoring default applies to every geo job except the ones that can legitimately run
+# longer, which carry ``dagster/max_runtime`` = 86400 (``kortravelgeo_dagster/run_tags.py``
+# explains each). ``None`` means "no tag — the instance default applies". Every job is listed,
+# so a new job fails this test until someone decides which side it belongs on.
+_EXPECTED_MAX_RUNTIME_TAG: dict[str, str | None] = {
+    "backup_copy": None,
+    "backup_restore_drill": "86400",
+    "backup_retention_janitor": None,
+    "backup_verify": None,
+    "consistency_check": None,
+    "db_backup": None,
+    "db_restore": "86400",
+    "full_load_batch": "86400",
+    "load_source": "86400",
+    "mv_refresh": None,
+    "scheduled_backup_run_due": None,
+    "source_rebuild_db": None,
+}
+
+
+def test_every_job_declares_its_max_runtime() -> None:
+    declared = {
+        job.name: job.tags.get(MAX_RUNTIME_TAG)
+        for job in defs.resolve_all_job_defs()
+        if not job.name.startswith("__")
+    }
+    assert declared == _EXPECTED_MAX_RUNTIME_TAG
+
+
+def test_long_run_tag_is_twenty_four_hours() -> None:
+    assert LONG_RUN_TAGS == {"dagster/max_runtime": "86400"}
 
 
 def test_run_failure_sensor_monitors_only_this_code_location() -> None:

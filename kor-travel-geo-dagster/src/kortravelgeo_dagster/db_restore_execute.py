@@ -27,6 +27,7 @@ from kortravelgeo.infra.backup import run_restore_job
 from .db_lifecycle import refuse_unsupported_db_lifecycle
 from .load_job_bridge import ProgressReporter, execute_load_job
 from .resources import op_resource
+from .run_tags import LONG_RUN_TAGS
 
 if TYPE_CHECKING:
     from kortravelgeo.client import AsyncAddressClient
@@ -42,6 +43,7 @@ __all__ = [
 DB_RESTORE_JOB_TAGS: Final[dict[str, str]] = {
     "kor_travel_geo.job_scope": "maintenance",
     "kor_travel_geo.job_kind": "db_restore",
+    **LONG_RUN_TAGS,
 }
 
 _DB_RESTORE_CONFIG_SCHEMA: Final[dict[str, object]] = {
