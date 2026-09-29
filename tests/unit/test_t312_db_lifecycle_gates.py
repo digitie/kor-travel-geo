@@ -505,7 +505,10 @@ async def test_restore_submit_returns_409_e0410_without_creating_a_job(
     error = resp.json()["response"]
     assert error["errorCode"] == "E0410"
     assert "공용 DB instance에서는 지원하지 않음" in error["errorMessage"]
-    assert error["hint"] == "KTG_DB_LIFECYCLE_MODE=disabled"
+    # T-321: the reason, then the supported shared-instance procedure (target_dsn path)
+    assert error["hint"] == (
+        f"KTG_DB_LIFECYCLE_MODE=disabled; {caps_mod.DB_RESTORE_SHARED_INSTANCE_PROCEDURE}"
+    )
     assert launched == []
 
 
@@ -533,6 +536,186 @@ async def test_hot_swap_endpoints_return_409_e0410(path: str, body: dict[str, An
 
     assert resp.status_code == 409
     assert resp.json()["response"]["errorCode"] == "E0410"
+
+
+# --- T-321: hot-swap gates probe the request's own maintenance DB -------------------------
+
+
+class _UrlEngine:
+    """Just enough engine for the capability cache key (``engine.url``)."""
+
+    class _Url:
+        def render_as_string(self, *, hide_password: bool) -> str:
+            return "postgresql+psycopg://ops:***@db:5432/kor_travel_geo"
+
+    url = _Url()
+
+
+def _hardened_cluster_client(
+    monkeypatch: pytest.MonkeyPatch, probed: list[str]
+) -> AsyncAddressClient:
+    """``auto`` mode, CREATEDB role; ``postgres`` CONNECT revoked, ``kor_travel_geo_admin`` ok."""
+
+    async def fake_probe(_engine: object, maintenance_database: str) -> caps_mod.DbRoleProbe:
+        probed.append(maintenance_database)
+        return caps_mod.DbRoleProbe(
+            role="ops",
+            is_superuser=False,
+            can_create_database=True,
+            can_connect_maintenance_database=maintenance_database == "kor_travel_geo_admin",
+        )
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+    return AsyncAddressClient(
+        settings=Settings(_env_file=None, db_lifecycle_mode="auto"),
+        engine=_UrlEngine(),  # type: ignore[arg-type]
+    )
+
+
+@pytest.mark.asyncio
+async def test_hot_swap_gates_probe_the_requested_maintenance_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def sentinel(*_args: object, **_kwargs: object) -> None:
+        raise _SentinelError
+
+    monkeypatch.setattr(client_mod, "inspect_restore_hot_swap_plan", sentinel)
+    monkeypatch.setattr(hotswap_mod, "execute_restore_hot_swap", sentinel)
+    monkeypatch.setattr(hotswap_mod, "execute_hot_swap_rollback", sentinel)
+    probed: list[str] = []
+    client = _hardened_cluster_client(monkeypatch, probed)
+    admin_db = "kor_travel_geo_admin"
+
+    # each call passes the gate (the planner/executor sentinel is reached) because the
+    # request's maintenance DB — not `postgres` — is the one probed
+    with pytest.raises(_SentinelError):
+        await client.restore_hot_swap_plan(
+            RestoreHotSwapPlanRequest(
+                restore_database="kor_travel_geo_restore", maintenance_database=admin_db
+            )
+        )
+    with pytest.raises(_SentinelError):
+        await client.execute_restore_hot_swap(
+            RestoreHotSwapExecuteRequest(
+                restore_database="kor_travel_geo_restore",
+                typed_confirmation="HOT_SWAP x",
+                maintenance_database=admin_db,
+            )
+        )
+    with pytest.raises(_SentinelError):
+        await client.execute_hot_swap_rollback(
+            RestoreHotSwapRollbackRequest(
+                previous_alias="kor_travel_geo_previous",
+                restore_database="kor_travel_geo_restore",
+                rollback_confirmation="ROLLBACK_HOT_SWAP x",
+                maintenance_database=admin_db,
+            )
+        )
+    assert probed == [admin_db]  # one probe, then cached for the same maintenance DB
+
+    # the default maintenance DB is still refused on this cluster
+    with pytest.raises(UnsupportedOnInstanceError, match="hot-swap") as excinfo:
+        await client.restore_hot_swap_plan(
+            RestoreHotSwapPlanRequest(restore_database="kor_travel_geo_restore")
+        )
+    assert excinfo.value.hint == "role ops: maintenance DB 'postgres' CONNECT 권한 없음"
+    assert probed == [admin_db, "postgres"]
+
+
+# --- T-321: a refused hot-swap plan still leaves a `denied` audit row -----------------------
+
+
+@pytest.mark.asyncio
+async def test_refused_hot_swap_plan_records_a_denied_audit_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _disabled_client()
+    recorded: list[dict[str, Any]] = []
+
+    async def record(**kwargs: Any) -> None:
+        recorded.append(kwargs)
+
+    monkeypatch.setattr(client, "record_audit_event", record)
+
+    resp = await _post(
+        _app_with(client),
+        "/v1/admin/restores/hot-swap-plan",
+        {"restore_database": "kor_travel_geo_restore", "maintenance_database": "ops_admin"},
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["response"]["errorCode"] == "E0410"
+    assert len(recorded) == 1
+    event = recorded[0]
+    assert event["action"] == "serving_release.hot_swap_plan"
+    assert event["outcome"] == "denied"
+    assert event["error_code"] == "E0410"
+    assert event["resource_type"] == "database"
+    assert event["resource_id"] == "kor_travel_geo_restore"
+    payload = event["payload"]
+    assert payload["current_database"] == "kor_travel_geo"
+    assert payload["restore_database"] == "kor_travel_geo_restore"
+    assert payload["previous_alias"] is None
+    assert payload["maintenance_database"] == "ops_admin"
+    assert payload["blockers"] == [
+        "restore hot-swap: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행 "
+        "(KTG_DB_LIFECYCLE_MODE=disabled)"
+    ]
+    assert event["client_ip"] == _TRUSTED_PEER[0]
+
+
+@pytest.mark.asyncio
+async def test_denied_audit_failure_does_not_mask_the_409(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _disabled_client()
+
+    async def broken(**_kwargs: Any) -> None:
+        raise RuntimeError("audit store down")
+
+    monkeypatch.setattr(client, "record_audit_event", broken)
+
+    resp = await _post(
+        _app_with(client),
+        "/v1/admin/restores/hot-swap-plan",
+        {"restore_database": "kor_travel_geo_restore"},
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["response"]["errorCode"] == "E0410"
+
+
+@pytest.mark.asyncio
+async def test_supported_hot_swap_plan_records_one_audit_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The denied branch must not double-write on the normal path."""
+    client = AsyncAddressClient(settings=_ENABLED, engine=object())  # type: ignore[arg-type]
+    plan = hotswap_mod.build_restore_hot_swap_plan(
+        _ENABLED,
+        RestoreHotSwapPlanRequest(restore_database="kor_travel_geo_restore"),
+        existing_databases={"kor_travel_geo", "kor_travel_geo_restore"},
+    )
+
+    async def fake_plan(*_args: object) -> Any:
+        return plan
+
+    recorded: list[dict[str, Any]] = []
+
+    async def record(**kwargs: Any) -> None:
+        recorded.append(kwargs)
+
+    monkeypatch.setattr(client_mod, "inspect_restore_hot_swap_plan", fake_plan)
+    monkeypatch.setattr(client, "record_audit_event", record)
+
+    resp = await _post(
+        _app_with(client),
+        "/v1/admin/restores/hot-swap-plan",
+        {"restore_database": "kor_travel_geo_restore"},
+    )
+
+    assert resp.status_code == 200
+    assert [event["outcome"] for event in recorded] == ["succeeded"]
 
 
 async def _noop_progress(

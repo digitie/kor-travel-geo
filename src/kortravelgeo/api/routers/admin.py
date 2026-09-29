@@ -6,6 +6,7 @@ import asyncio
 import csv
 import hashlib
 import io
+import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -169,11 +170,13 @@ from kortravelgeo.exceptions import (
     InvalidInputError,
     KorTravelGeoError,
     NotFoundError,
+    UnsupportedOnInstanceError,
 )
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.backup import (
     BACKUP_ARTIFACT_TYPE,
     backup_download_url,
+    database_name_from_dsn,
     resolve_existing_archive_path,
     validate_download_token,
 )
@@ -210,6 +213,7 @@ from kortravelgeo.loaders.epost_server_fetch import (
 from kortravelgeo.settings import Settings, get_settings
 
 router = APIRouter(tags=["admin"], dependencies=[Depends(require_role(*KNOWN_ADMIN_ROLES))])
+_LOGGER = logging.getLogger(__name__)
 _SAFE_TOKEN_RE = re.compile(r"[^0-9A-Za-z가-힣._-]+")
 
 
@@ -2363,7 +2367,13 @@ async def restore_hot_swap_plan(
     request: Request,
     client: AsyncAddressClient = Depends(get_client),
 ) -> RestoreHotSwapPlan:
-    plan = await client.restore_hot_swap_plan(req)
+    try:
+        plan = await client.restore_hot_swap_plan(req)
+    except UnsupportedOnInstanceError as exc:
+        # T-321: dry-run처럼 capability 거절도 denied 감사 행을 남긴다 — E0410은 plan을 만들기
+        # 전에 나가므로 아래 audit까지 오지 않는다.
+        await _record_hot_swap_plan_denied(client, req, request, exc)
+        raise
     await client.record_audit_event(
         action="serving_release.hot_swap_plan",
         outcome="succeeded" if plan.can_execute else "denied",
@@ -2378,6 +2388,34 @@ async def restore_hot_swap_plan(
         **_audit_request(request),
     )
     return plan
+
+
+async def _record_hot_swap_plan_denied(
+    client: AsyncAddressClient,
+    req: RestoreHotSwapPlanRequest,
+    request: Request,
+    exc: UnsupportedOnInstanceError,
+) -> None:
+    """Best-effort ``denied`` audit for an E0410-refused plan — never masks the 409 itself."""
+    blocker = f"{exc.message} ({exc.hint})" if exc.hint else exc.message
+    try:
+        await client.record_audit_event(
+            action="serving_release.hot_swap_plan",
+            outcome="denied",
+            payload={
+                "current_database": database_name_from_dsn(client.settings.pg_dsn),
+                "restore_database": req.restore_database,
+                "previous_alias": req.previous_alias,
+                "maintenance_database": req.maintenance_database,
+                "blockers": [blocker],
+            },
+            resource_type="database",
+            resource_id=req.restore_database,
+            error_code=exc.code,
+            **_audit_request(request),
+        )
+    except Exception:
+        _LOGGER.exception("failed to record serving_release.hot_swap_plan denied audit event")
 
 
 @router.post(

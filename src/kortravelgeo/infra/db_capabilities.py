@@ -20,6 +20,10 @@
   ``CONNECT``할 수 있으면 지원. 전용 superuser instance(dev/테스트)는 그대로 전부 허용된다.
 - ``enabled`` — 조회 없이 허용 (운영자가 권한을 따로 준 경우의 override).
 - ``disabled`` — 조회 없이 차단.
+
+maintenance DB는 기본 ``postgres``다(capabilities endpoint·restore drill·scratch·복원 cleanup).
+hot-swap plan/execute/rollback만 요청의 ``maintenance_database``로 다른 DB를 고를 수 있으므로
+(managed/hardened cluster), 그 요청은 실제로 쓸 DB의 ``CONNECT``를 조회한다(T-321).
 """
 
 from __future__ import annotations
@@ -42,6 +46,7 @@ if TYPE_CHECKING:
 __all__ = [
     "DB_LIFECYCLE_FEATURES",
     "DB_LIFECYCLE_UNSUPPORTED_MESSAGE",
+    "DB_RESTORE_SHARED_INSTANCE_PROCEDURE",
     "MAINTENANCE_DATABASE",
     "DbRoleProbe",
     "clear_db_capability_cache",
@@ -72,6 +77,18 @@ _FEATURE_LABELS: Final[dict[DbLifecycleFeature, str]] = {
     "db_restore": "DB 복원",
 }
 
+#: 공용 instance에서도 되는 대체 경로가 있는 기능은 E0410 hint에 그 절차를 붙인다(T-321).
+#: ``target_dsn``을 명시한 복원은 게이트하지 않으므로, admin이 app role 소유의 빈 DB를 만들어
+#: 주면 app role 자격증명으로 복원된다(비-superuser TOC 필터, T-312 integration test).
+DB_RESTORE_SHARED_INSTANCE_PROCEDURE: Final = (
+    "공용 instance 복원 절차: cluster admin이 app role 소유의 빈 DB(x_extension·extension 사전 "
+    "구성)를 만든 뒤 그 DB를 가리키는 target_dsn으로 복원(ktgctl restore create --target-dsn) — "
+    "docs/t046-db-backup-restore.md '공용 DB instance'"
+)
+_FEATURE_ALTERNATIVES: Final[dict[DbLifecycleFeature, str]] = {
+    "db_restore": DB_RESTORE_SHARED_INSTANCE_PROCEDURE,
+}
+
 #: role 권한은 운영자가 바꿀 때만 달라진다 — 요청마다 catalog를 읽지 않도록 5분 캐시한다.
 _PROBE_TTL_SECONDS: Final = 300.0
 
@@ -80,6 +97,8 @@ _PROBE_SQL: Final = text(
 SELECT current_user::text AS role,
        r.rolsuper AS is_superuser,
        (r.rolsuper OR r.rolcreatedb) AS can_create_database,
+       EXISTS (SELECT 1 FROM pg_database d WHERE d.datname = :maintenance_database)
+           AS maintenance_database_exists,
        COALESCE(
            (SELECT has_database_privilege(d.oid, 'CONNECT')
               FROM pg_database d
@@ -100,9 +119,10 @@ class DbRoleProbe:
     is_superuser: bool
     can_create_database: bool
     can_connect_maintenance_database: bool
+    maintenance_database_exists: bool = True
 
 
-_probe_cache: dict[str, tuple[float, DbRoleProbe]] = {}
+_probe_cache: dict[tuple[str, str], tuple[float, DbRoleProbe]] = {}
 
 
 def clear_db_capability_cache() -> None:
@@ -110,15 +130,18 @@ def clear_db_capability_cache() -> None:
     _probe_cache.clear()
 
 
-async def probe_db_role(engine: AsyncEngine) -> DbRoleProbe:
+async def probe_db_role(
+    engine: AsyncEngine, maintenance_database: str = MAINTENANCE_DATABASE
+) -> DbRoleProbe:
     """연결 role의 속성을 캐시 없이 읽는다.
 
     ``has_database_privilege``에 DB 이름 대신 ``pg_database``에서 찾은 oid를 넘기므로
-    maintenance DB가 없는 cluster에서도 오류 대신 ``False``가 된다.
+    maintenance DB가 없는 cluster에서도 오류 대신 ``False``가 된다(없다는 사실은
+    ``maintenance_database_exists``로 따로 남긴다).
     """
     async with engine.connect() as conn:
         row = (
-            (await conn.execute(_PROBE_SQL, {"maintenance_database": MAINTENANCE_DATABASE}))
+            (await conn.execute(_PROBE_SQL, {"maintenance_database": maintenance_database}))
             .mappings()
             .one()
         )
@@ -127,17 +150,19 @@ async def probe_db_role(engine: AsyncEngine) -> DbRoleProbe:
         is_superuser=bool(row["is_superuser"]),
         can_create_database=bool(row["can_create_database"]),
         can_connect_maintenance_database=bool(row["can_connect_maintenance_database"]),
+        maintenance_database_exists=bool(row["maintenance_database_exists"]),
     )
 
 
-async def _cached_probe(engine: AsyncEngine) -> DbRoleProbe:
-    # password를 가린 URL(드라이버·role·host·port·DB)이 key — role/instance가 다르면 따로 조회한다.
-    key = engine.url.render_as_string(hide_password=True)
+async def _cached_probe(engine: AsyncEngine, maintenance_database: str) -> DbRoleProbe:
+    # password를 가린 URL(드라이버·role·host·port·DB) + maintenance DB가 key — role/instance나
+    # hot-swap이 고른 maintenance DB가 다르면 따로 조회한다.
+    key = (engine.url.render_as_string(hide_password=True), maintenance_database)
     now = monotonic()
     cached = _probe_cache.get(key)
     if cached is not None and cached[0] > now:
         return cached[1]
-    probe = await probe_db_role(engine)
+    probe = await probe_db_role(engine, maintenance_database)
     _probe_cache[key] = (now + _PROBE_TTL_SECONDS, probe)
     return probe
 
@@ -147,15 +172,20 @@ def evaluate_db_lifecycle(
     probe: DbRoleProbe | None,
     *,
     checked_at: datetime,
+    maintenance_database: str = MAINTENANCE_DATABASE,
 ) -> DbLifecycleCapabilities:
     """``mode``와 role probe로 지원 여부·사유를 계산한다 (pure).
 
-    ``auto``에서는 ``CREATEDB``(superuser 포함)와 maintenance DB ``CONNECT``가 둘 다 있어야
-    지원한다. ``enabled``/``disabled``는 probe 없이(``probe=None``) 결정한다.
+    ``auto``에서는 ``CREATEDB``(superuser 포함)와 ``maintenance_database`` ``CONNECT``가 둘 다
+    있어야 지원한다. ``enabled``/``disabled``는 probe 없이(``probe=None``) 결정한다.
     """
     if mode == "enabled":
         return DbLifecycleCapabilities(
-            mode=mode, supported=True, features=DB_LIFECYCLE_FEATURES, checked_at=checked_at
+            mode=mode,
+            supported=True,
+            features=DB_LIFECYCLE_FEATURES,
+            maintenance_database=maintenance_database,
+            checked_at=checked_at,
         )
     if mode == "disabled":
         return DbLifecycleCapabilities(
@@ -163,6 +193,7 @@ def evaluate_db_lifecycle(
             supported=False,
             features=DB_LIFECYCLE_FEATURES,
             reason="KTG_DB_LIFECYCLE_MODE=disabled",
+            maintenance_database=maintenance_database,
             checked_at=checked_at,
         )
     if probe is None:
@@ -171,8 +202,10 @@ def evaluate_db_lifecycle(
     missing: list[str] = []
     if not probe.can_create_database:
         missing.append("CREATEDB 권한 없음")
-    if not probe.can_connect_maintenance_database:
-        missing.append(f"maintenance DB '{MAINTENANCE_DATABASE}' CONNECT 권한 없음")
+    if not probe.maintenance_database_exists:
+        missing.append(f"maintenance DB '{maintenance_database}' 없음")
+    elif not probe.can_connect_maintenance_database:
+        missing.append(f"maintenance DB '{maintenance_database}' CONNECT 권한 없음")
     return DbLifecycleCapabilities(
         mode=mode,
         supported=not missing,
@@ -182,27 +215,43 @@ def evaluate_db_lifecycle(
         is_superuser=probe.is_superuser,
         can_create_database=probe.can_create_database,
         can_connect_maintenance_database=probe.can_connect_maintenance_database,
+        maintenance_database=maintenance_database,
         checked_at=checked_at,
     )
 
 
 async def db_lifecycle_capabilities(
-    engine: AsyncEngine, settings: Settings
+    engine: AsyncEngine,
+    settings: Settings,
+    *,
+    maintenance_database: str = MAINTENANCE_DATABASE,
 ) -> DbLifecycleCapabilities:
     """현재 설정·연결 role 기준 DB 수명주기 기능 지원 여부 (``auto``만 DB를 조회한다)."""
     mode = settings.db_lifecycle_mode
-    probe = await _cached_probe(engine) if mode == "auto" else None
-    return evaluate_db_lifecycle(mode, probe, checked_at=datetime.now(UTC))
+    probe = await _cached_probe(engine, maintenance_database) if mode == "auto" else None
+    return evaluate_db_lifecycle(
+        mode, probe, checked_at=datetime.now(UTC), maintenance_database=maintenance_database
+    )
 
 
 async def require_db_lifecycle(
-    engine: AsyncEngine, settings: Settings, feature: DbLifecycleFeature
+    engine: AsyncEngine,
+    settings: Settings,
+    feature: DbLifecycleFeature,
+    *,
+    maintenance_database: str = MAINTENANCE_DATABASE,
 ) -> None:
-    """``feature``를 지원하지 않는 instance면 job을 만들기 전에 E0410/409로 거절한다."""
-    capabilities = await db_lifecycle_capabilities(engine, settings)
+    """``feature``를 지원하지 않는 instance면 job을 만들기 전에 E0410/409로 거절한다.
+
+    ``maintenance_database``는 hot-swap 요청이 실제로 연결할 maintenance DB다(기본 ``postgres``).
+    """
+    capabilities = await db_lifecycle_capabilities(
+        engine, settings, maintenance_database=maintenance_database
+    )
     if capabilities.supported:
         return
+    hint_parts = [capabilities.reason, _FEATURE_ALTERNATIVES.get(feature)]
     raise UnsupportedOnInstanceError(
         f"{_FEATURE_LABELS[feature]}: {DB_LIFECYCLE_UNSUPPORTED_MESSAGE}",
-        hint=capabilities.reason,
+        hint="; ".join(part for part in hint_parts if part) or None,
     )

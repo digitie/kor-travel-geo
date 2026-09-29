@@ -89,6 +89,8 @@ describe("HotSwapTab (T-250)", () => {
     expect(
       screen.getByText(/Hot-swap: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행/)
     ).toBeTruthy();
+    // T-321: the restore-only target_dsn procedure is not offered for hot-swap
+    expect(screen.queryByText(/ktgctl restore create --target-dsn/)).toBeNull();
     fireEvent.change(screen.getByLabelText("복원된 DB 이름"), {
       target: { value: "kor_travel_geo_restore" }
     });

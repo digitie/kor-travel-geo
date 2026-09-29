@@ -22,7 +22,7 @@
 | `E0403` | 403 | 지역 접근 제한 | T-054 GeoIP gate에서 한국 외 공용 IP 또는 DB 부재 strict 차단 |
 | `E0404` | 404 | 찾을 수 없음 | 대상 주소, job, artifact, report 없음 |
 | `E0409` | 409 | 동시 실행 충돌 | T-059 이후 같은 advisory lock key의 CLI/API 운영 작업이 이미 실행 중 |
-| `E0410` | 409 | 이 DB instance에서 미지원 | T-312: 연결 role에 `CREATEDB`·maintenance DB `postgres` `CONNECT`가 없어(공용 DB instance) hot-swap·restore drill·scratch full-load·DB 복원을 job 생성 전에 거절. `hint`에 role 사유, `GET /v1/admin/db-capabilities`로 확인 |
+| `E0410` | 409 | 이 DB instance에서 미지원 | T-312: 연결 role에 `CREATEDB`·maintenance DB(기본 `postgres`, hot-swap은 요청의 `maintenance_database`, T-321) `CONNECT`가 없어(공용 DB instance) hot-swap·restore drill·scratch full-load·DB 복원을 job 생성 전에 거절. `hint`에 role 사유(DB 복원은 뒤에 공용 instance 복원 절차 — admin이 만든 빈 DB + `target_dsn`), `GET /v1/admin/db-capabilities`로 확인 |
 | `E0500` | 503·500 | DB 오류 | 연결/운영 오류·pool checkout timeout은 503, SQL·스키마·제약 오류(`ProgrammingError`/`IntegrityError`)는 500 (T-178D). 503은 메시지·힌트로 세분한다(아래 표, T-309) |
 | `E0501` | 502 | 외부 API 오류 | vworld/juso fallback 호출 실패 |
 | `E0502` | 500 | 로더 오류 | 원천 파일 파싱, 적재, 후처리 실패 |

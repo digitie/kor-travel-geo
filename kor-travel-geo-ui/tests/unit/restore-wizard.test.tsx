@@ -122,6 +122,9 @@ describe("RestoreWizard (T-249)", () => {
       screen.getByText(/DB 복원: 공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행/)
     ).toBeTruthy();
     expect(screen.getByText(/CREATEDB 권한 없음/)).toBeTruthy();
+    // T-321: the supported shared-instance path (admin-provisioned DB + target_dsn via CLI)
+    expect(screen.getByText(/ktgctl restore create --target-dsn/)).toBeTruthy();
+    expect(screen.getByText(/cluster admin이 app role 소유의 빈 DB/)).toBeTruthy();
 
     await waitFor(() => expect(screen.getByRole("option", { name: /backup-202606/ })).toBeTruthy());
     fireEvent.change(screen.getByLabelText("복원할 백업본"), {
@@ -152,6 +155,7 @@ describe("RestoreWizard (T-249)", () => {
 
     render(<RestoreWizard lifecycle={{ ...SHARED_INSTANCE, supported: true, reason: null }} />);
     expect(screen.queryByText(/공용 DB instance에서는 지원하지 않음/)).toBeNull();
+    expect(screen.queryByText(/ktgctl restore create --target-dsn/)).toBeNull();
     await waitFor(() => expect(screen.getByRole("option", { name: /backup-202606/ })).toBeTruthy());
     fireEvent.change(screen.getByLabelText("복원할 백업본"), {
       target: { value: "art-1" }
