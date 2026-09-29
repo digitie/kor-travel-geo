@@ -18,6 +18,13 @@ run은 없고 운영에서 full load는 아직 한 번도 돌지 않았다. 그�
 reconcile·smoke까지). `source_rebuild_db`는 materialize 후 `full_load_batch`를 **launch만** 하고 끝나므로
 기본값. 나머지(backup·verify·copy·janitor·consistency·mv_refresh·run-due)도 기본값.
 
+**Map 리뷰 발견의 geo 점검**: Dagster GraphQL은 `Run.tags`에서 hidden `.dagster/*` tag를 뺀다
+(`GrapheneRun.resolve_tags`). geo run 상세의 소유 판정은 처음부터 `repositoryOrigin`을 settings selector와
+비교하고 origin이 없으면 `not_found`라 해당 없음 — `Run.tags`에서 hidden tag를 읽는 코드·fixture도 없다.
+n150 geo webserver(읽기 전용)로 확인: run 72건 모두 `tags`에 `.dagster/repository`가 없고 `repositoryOrigin`은
+`kortravelgeo_dagster.definitions`/`__repository__`, filter는 geo label 72건·Map label 0건. red-check로
+tag 기반 판정(own run 2건 실패)·origin 없음 허용(1건)·판정 제거(3건)를 테스트가 잡는 것도 확인했다.
+
 ## 2026-09-29 (T-324 — 공유 Dagster plane geo 선행 작업, by claude)
 
 Map·PinVi·geo·weather가 한 Dagster webserver/daemon(`dagster_shared`)을 쓰는 계획(Manager 쪽
