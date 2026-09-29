@@ -204,8 +204,9 @@
   - **형태 B**(추론 경로, writer 2곳): `admin_repo._infer_current_source_set`(7종 +
     `source` 키)과 `backup.infer_source_set`(6종, `source` 없음 — restore 후보 스냅샷이 이를
     복사). 형상: `{yyyymm_by_kind: {...}, mixed_yyyymm, source?}` → `yyyymm_by_kind` 사용.
-    T-319부터 두 writer는 원천 테이블을 scan하지 않고 `load_manifest.source_yyyymm`을 읽으며, manifest
-    행이 없는 kind는 `null`이다(정규화기가 건너뛰므로 `reference_months`에서 그 키만 빠진다).
+    T-319부터 두 writer는 원천 테이블을 scan하지 않고 `load_manifest.source_yyyymm`을 읽는다. manifest
+    행이 없는 kind는 원천 테이블에 행이 있으면 active release의 기준월(이 문서의 해석 그대로)을 이어 쓰고,
+    그것도 없으면 `null`이다(정규화기가 건너뛰므로 `reference_months`에서 그 키만 빠진다).
   - **형태 C**(hot_swap/rollback 기록 경로): `{"hot_swap": {...}}` /
     `{"hot_swap_rollback": {...}}` 같은 기준월 없는 메타 전용 payload(빈 dict 아님 — `if not
     source_set` 판정으로는 놓친다) → **계보 폴백**:

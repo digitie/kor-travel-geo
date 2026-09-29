@@ -9,13 +9,16 @@
   serving release 기록(MV refresh 끝단, 적재 CLI, 직접 서빙 적재)과 백업 preflight manifest가 원천 테이블마다
   `SELECT max(source_yyyymm)`을 parallel seq scan했다(인덱스 없음 — `tl_navi_buld_centroid`·
   `tl_spbd_buld_polygon` 각 1,070만 행; 2026-09-28 운영 백업 preflight 11분). 이제 두 곳 모두
-  `load_manifest.source_yyyymm` 한 번 조회로 끝나고, manifest 행이 없는 테이블은 scan하지 않고 기준월을
+  `load_manifest.source_yyyymm` 한 번 조회로 끝난다. manifest 행이 없는 테이블은 scan하지 않고, 행이 있으면
+  active serving release의 기준월을 이어 쓰며(T-319 이전 백업을 복원만 한 DB), 비었거나 release에도 없으면
   "모름"(`null`)으로 둔다. 도로명주소 한글·위치정보요약·내비게이션 건물·SHP 건물 polygon 적재기가 적재
-  row의 최댓값을 같은 transaction에서 manifest에 남기고(지번·출입구·일변동·구역은 원래 남겼다), SHP full
-  적재의 `TRUNCATE`는 manifest 행도 지운다. 마지막 적재가 이기는 값이라 평소(전국 적재·같거나 새 기준월
-  재적재·일변동)는 옛 `max()`와 같고, 더 옛 기준월을 upsert로 덮어 새 row가 남는 경우만 다르다. Alembic
-  `0028`이 manifest 행이 없는 테이블에 한해 옛 조회와 같은 값을 한 번 backfill한다(배포 때 그 테이블들 seq
-  scan 1회). 출력 형태(`source_set.yyyymm_by_kind`)는 그대로다.
+  row의 최댓값을 같은 transaction에서 manifest에 남기고(지번·출입구·일변동·구역은 원래 남겼다), SHP·구역
+  full 적재의 `TRUNCATE`는 같은 transaction에서 manifest 행도 지운다. 마지막 적재가 이기는 값이라 평소(전국
+  적재·같거나 새 기준월 재적재·일변동)는 옛 `max()`와 같고, 더 옛 기준월을 upsert로 덮어 새 row가 남는 경우만
+  다르다. Alembic `0028`이 manifest 행이 없는 테이블에 한해 옛 조회와 같은 값을 한 번 backfill하고(배포 때 그
+  테이블들 seq scan 1회), T-319 이전 일변동이 남긴 도로명주소 한글 행은 다시 계산해 `GREATEST(기존, max)`로
+  올린다. 복원·hot-swap은 migration을 돌리지 않으므로 옛 백업을 복원한 DB는 serving으로 올리기 전에
+  `alembic upgrade head`를 돌린다. 출력 형태(`source_set.yyyymm_by_kind`)는 그대로다.
 - **공용 DB instance에서 불가능한 DB 수명주기 기능을 일찍 거절하고, app role 백업을 복원 가능한 형식으로 바꿨다(T-312).**
   hot-swap plan/execute/rollback·restore drill·blue-green scratch full-load·`db_restore`는 `CREATEDB`와 maintenance
   DB `postgres` `CONNECT`가 필요한데, 공용 instance(T-308)의 app role에는 둘 다 없어 job을 만든 뒤 raw DB 오류로

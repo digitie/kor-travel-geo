@@ -2784,6 +2784,7 @@ SELECT payload
 _SOURCE_YYYYMM_BY_TABLE_SQL = """
 SELECT t.table_name,
        to_regclass('public.' || t.table_name) IS NOT NULL AS table_exists,
+       m.table_name IS NOT NULL AS has_manifest_row,
        m.source_yyyymm
   FROM unnest(CAST(:table_names AS text[])) AS t(table_name)
   LEFT JOIN public.load_manifest m ON m.table_name = t.table_name
@@ -2801,9 +2802,14 @@ async def source_yyyymm_by_kind(
     기준월을 manifest에 남기므로(전체분·일변동 모두, 마지막 적재가 이긴다) 여기서는 그 한
     행만 읽는다.
 
-    manifest 행이 없으면(빈 DB, 또는 T-319 이전에 적재하고 Alembic 0028 backfill도 안 거친
-    DB) scan으로 메우지 않고 ``None``(모름)으로 둔다 — 한도 없는 scan이 이 함수가 없애려는
-    바로 그 비용이다. 테이블 자체가 없으면 예전과 같이 ``None``.
+    manifest 행이 없는 kind는 scan으로 메우지 않는다 — 한도 없는 scan이 이 함수가 없애려는
+    바로 그 비용이다. 대신 그 테이블에 행이 있으면 현재 active serving release가 기록한 그
+    kind의 기준월(``/v2/dataset/version``이 보이는 값, 계보 폴백 포함)을 이어 쓴다. T-319 이전
+    백업(Alembic 0026/0027)을 복원만 하고 ``alembic upgrade head``를 안 거친 DB가 다음
+    release·백업에서 기준월을 조용히 잃지 않게 하기 위해서다. 테이블이 비었거나(행 존재
+    probe는 첫 행에서 멈춘다 — scan이 아니다) active release에도 값이 없으면 ``None``(모름).
+    manifest 행이 있으면 ``source_yyyymm``이 NULL이어도 그 값을 믿는다. 테이블 자체가 없으면
+    예전과 같이 ``None``.
     """
 
     rows = (
@@ -2814,11 +2820,41 @@ async def source_yyyymm_by_kind(
     ).mappings().all()
     by_table = {str(row["table_name"]): row for row in rows}
     result: dict[str, str | None] = {}
+    without_manifest: dict[str, str] = {}
     for kind, table_name in table_by_kind.items():
         row = by_table.get(table_name)
-        value = row["source_yyyymm"] if row is not None and row["table_exists"] else None
+        if row is None or not row["table_exists"]:
+            result[kind] = None
+            continue
+        value = row["source_yyyymm"]
         result[kind] = str(value) if value is not None else None
+        if not row["has_manifest_row"]:
+            without_manifest[kind] = table_name
+    if without_manifest:
+        release_months = await _active_release_reference_months(conn)
+        for kind, table_name in without_manifest.items():
+            month = release_months.get(kind)
+            if month and await conn.scalar(
+                text(f"SELECT EXISTS (SELECT 1 FROM public.{table_name})")
+            ):
+                result[kind] = month
     return result
+
+
+async def _active_release_reference_months(conn: Any) -> dict[str, str]:
+    """현재 active serving release의 기준월(``current_dataset_version``과 같은 해석)."""
+
+    row = (
+        await conn.execute(text(_DATASET_VERSION_SELECT + " WHERE sr.state = 'active' LIMIT 1"))
+    ).mappings().first()
+    if row is None:
+        return {}
+    months = await _resolve_reference_months_for_conn(
+        conn,
+        source_set=_json_dict(row.get("source_set")),
+        parent_dataset_snapshot_id=_optional_str(row.get("parent_dataset_snapshot_id")),
+    )
+    return months or {}
 
 
 async def _infer_current_source_set(conn: Any) -> dict[str, Any]:

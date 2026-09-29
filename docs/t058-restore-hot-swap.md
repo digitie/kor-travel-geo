@@ -99,6 +99,9 @@ ADR-030 amend로 본 결정을 반영한다(ADR-036에서 신규 결정 + ADR-03
 - 복원본 DB가 같은 cluster 안에 존재(`kor_travel_geo_restore_<ts>`).
 - 복원본 DB에서 smoke test + consistency check 통과(`load_consistency_reports.severity_max` ≠ `ERROR`).
 - 복원본 DB에서 `mv_geocode_target` 존재 + ANALYZE 완료.
+- 복원본 DB의 `alembic_version`이 앱 head와 같다. 낮으면(T-319 이전 백업은 `0026`/`0027`) swap 전에 복원본을
+  대상으로 `KTG_PG_DSN=<복원본 DSN> alembic upgrade head` — hot-swap은 migration을 돌리지 않는다
+  (`docs/t046-db-backup-restore.md` "복원 뒤 `alembic upgrade head`").
 
 ### 절차
 

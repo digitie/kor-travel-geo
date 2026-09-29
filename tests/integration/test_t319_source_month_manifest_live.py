@@ -5,6 +5,8 @@ manifest 조회(`admin_repo.source_yyyymm_by_kind`)가 옛 전수 scan 조회와
 
 - legacy DB(적재 row는 있고 manifest 행은 없음) → 조회는 scan하지 않고 None → Alembic 0028
   backfill 뒤에는 oracle과 같다. manifest가 이미 있는 테이블은 scan 노드가 아예 실행되지 않는다.
+  예외로 T-319 이전 일변동이 남긴 ``tl_juso_text`` 행은 다시 scan해 올린다.
+- 0028 없이 복원한 DB는 active serving release의 기준월을 이어 쓴다(빈 테이블은 None).
 - 실제 적재기(도로명주소 한글·위치정보요약·내비게이션 건물·SHP 건물 polygon)가 남긴 manifest가
   적재 뒤 oracle과 같다. SHP full 적재의 TRUNCATE는 manifest 행도 지운다.
 
@@ -170,6 +172,128 @@ async def test_backfill_turns_legacy_db_into_manifest_equal_to_max_scan() -> Non
                     )
                 )
                 assert empty_rows == 0  # 빈 테이블에는 행을 만들지 않는다
+            finally:
+                await tx.rollback()
+    finally:
+        await engine.dispose()
+
+
+async def _backfill_scan_lines(conn: AsyncConnection, sql: str, table: str) -> list[str]:
+    plan = (
+        await conn.execute(text("EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) " + sql))
+    ).scalars().all()
+    scan_lines = [line for line in plan if "Scan" in line and table in line]
+    assert scan_lines, plan
+    return scan_lines
+
+
+@pytest.mark.asyncio
+async def test_backfill_rescans_juso_daily_delta_row_but_trusts_full_load_row() -> None:
+    """리뷰 재현: T-319 이전 일변동이 남긴 ``tl_juso_text`` 행(202604)은 그 뒤 더 새 전체분
+    (202606)을 적재해도 갱신되지 않았다. 0028은 이 행만 다시 scan해 기준월을 올린다."""
+    engine = await _fresh_engine()
+    migration = _load_migration()
+    try:
+        async with engine.connect() as conn:
+            tx = await conn.begin()
+            try:
+                await _insert_legacy_juso(conn, ["202606", "202605", None])
+                await conn.execute(
+                    text(
+                        "INSERT INTO load_manifest (table_name, last_delta_at, last_mvmn_de,"
+                        " row_count, source_yyyymm, source_set)"
+                        " VALUES ('tl_juso_text', now(), '20260415', 7, '202604',"
+                        " CAST(:source_set AS jsonb))"
+                    ),
+                    {"source_set": '{"kind": "daily_juso_delta", "upserted_rows": 7}'},
+                )
+                assert (await source_yyyymm_by_kind(conn, _TABLE_BY_KIND))["juso"] == "202604"
+
+                sql = migration.backfill_sql("tl_juso_text")
+                scan_lines = await _backfill_scan_lines(conn, sql, "tl_juso_text")
+                assert not any("never executed" in line for line in scan_lines)
+
+                after = await source_yyyymm_by_kind(conn, _TABLE_BY_KIND)
+                assert after["juso"] == (await _oracle(conn))["juso"] == "202606"
+                row = (
+                    await conn.execute(
+                        text(
+                            "SELECT last_mvmn_de, row_count, source_set ->> 'kind' AS kind"
+                            "  FROM load_manifest WHERE table_name = 'tl_juso_text'"
+                        )
+                    )
+                ).mappings().one()
+                # 일변동 watermark·통계·kind는 그대로다(downgrade가 이 행을 지우지 않는다).
+                assert dict(row) == {
+                    "last_mvmn_de": "20260415",
+                    "row_count": 7,
+                    "kind": "daily_juso_delta",
+                }
+
+                # 전체분 적재기(T-319)가 쓴 행은 믿는다 — scan 노드가 실행되지 않는다.
+                await conn.execute(
+                    text(
+                        "UPDATE load_manifest SET source_yyyymm = '202601',"
+                        " source_set = CAST(:source_set AS jsonb)"
+                        " WHERE table_name = 'tl_juso_text'"
+                    ),
+                    {"source_set": '{"kind": "juso_text_full"}'},
+                )
+                scan_lines = await _backfill_scan_lines(conn, sql, "tl_juso_text")
+                assert all("never executed" in line for line in scan_lines), scan_lines
+                assert (await source_yyyymm_by_kind(conn, _TABLE_BY_KIND))["juso"] == "202601"
+            finally:
+                await tx.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_restored_pre_t319_db_falls_back_to_active_release_months() -> None:
+    """0026/0027 백업을 복원만 한 DB: 원천 행은 있고 0028 manifest 행은 없다. 조회는 scan하지
+    않고 active serving release의 기준월을 이어 쓴다(빈 테이블은 제외)."""
+    engine = await _fresh_engine()
+    try:
+        async with engine.connect() as conn:
+            tx = await conn.begin()
+            try:
+                await _insert_legacy_juso(conn, ["202603"])
+                await conn.execute(
+                    text(
+                        "UPDATE ops.serving_releases SET state = 'superseded'"
+                        " WHERE state = 'active'"
+                    )
+                )
+                snapshot_id = await conn.scalar(
+                    text(
+                        "INSERT INTO ops.dataset_snapshots"
+                        " (dataset_snapshot_id, state, source_set, source_set_hash)"
+                        " VALUES (gen_random_uuid(), 'released', CAST(:source_set AS jsonb),"
+                        " repeat('0', 64)) RETURNING dataset_snapshot_id"
+                    ),
+                    {
+                        "source_set": (
+                            '{"source": "database_manifest_inference", "mixed_yyyymm": true,'
+                            ' "yyyymm_by_kind": {"juso": "202603", "locsum": "202604"}}'
+                        )
+                    },
+                )
+                await conn.execute(
+                    text(
+                        "INSERT INTO ops.serving_releases"
+                        " (serving_release_id, dataset_snapshot_id, state, release_kind,"
+                        "  activated_at)"
+                        " VALUES (gen_random_uuid(), :snapshot_id, 'active', 'restore', now())"
+                    ),
+                    {"snapshot_id": snapshot_id},
+                )
+
+                looked_up = await source_yyyymm_by_kind(conn, _TABLE_BY_KIND)
+                assert looked_up["juso"] == "202603"  # 행이 있다 → release 기준월
+                assert looked_up["locsum"] is None  # 빈 테이블 → release에 있어도 모름
+                assert all(
+                    value is None for kind, value in looked_up.items() if kind != "juso"
+                )
             finally:
                 await tx.rollback()
     finally:

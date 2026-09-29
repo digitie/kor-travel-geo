@@ -3,9 +3,11 @@
 serving release 기록(`admin_repo._infer_current_source_set`)과 백업 manifest
 (`backup.infer_source_set`)가 원천 테이블마다 `max(source_yyyymm)`를 전수 scan하던 것을
 manifest 조회 한 번으로 바꿨다. 여기서는 (1) 조회가 원천 테이블을 건드리지 않고 manifest 값을
-그대로 돌려주는지, manifest가 없으면 scan 대신 None인지, (2) 적재기(도로명주소 한글·위치정보요약·
-내비게이션·SHP 건물)가 적재 row의 최댓값을 같은 transaction에서 manifest에 남기는지, (3) Alembic
-0028 backfill이 manifest 없는 테이블만 한 번 채우는지를 고정한다.
+그대로 돌려주는지, manifest가 없으면 scan 대신 active release 기준월(행이 있을 때) 또는 None인지,
+(2) 적재기(도로명주소 한글·위치정보요약·내비게이션·SHP 건물)가 적재 row의 최댓값을 같은
+transaction에서 manifest에 남기고 테이블을 비우는 경로(SHP·구역 full)가 manifest 행을 지우는지,
+(3) Alembic 0028 backfill이 manifest 없는 테이블(과 옛 일변동 ``tl_juso_text`` 행)만 한 번
+채우는지를 고정한다.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import dataclasses
 import importlib.util
 import inspect
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -22,7 +25,7 @@ import pytest
 from sqlalchemy.engine import make_url
 
 from kortravelgeo.infra import admin_repo, backup
-from kortravelgeo.loaders import manifest
+from kortravelgeo.loaders import manifest, sppn_makarea_loader
 from kortravelgeo.loaders.shp import polygons_loader
 from kortravelgeo.loaders.text import juso_hangul_loader, locsum_loader, navi_loader
 
@@ -41,25 +44,63 @@ class _Result:
     def all(self) -> list[dict[str, Any]]:
         return self._rows
 
+    def first(self) -> dict[str, Any] | None:
+        return self._rows[0] if self._rows else None
+
+
+_PROBE_RE = re.compile(r"SELECT EXISTS \(SELECT 1 FROM public\.(\w+)\)")
+
 
 class _LookupConn:
-    """`_SOURCE_YYYYMM_BY_TABLE_SQL`의 LEFT JOIN을 흉내 낸다. 원천 테이블 scan(`scalar`로 돌던
-    옛 `max(source_yyyymm)`)이 다시 들어오면 statements에 남아 테스트가 잡는다."""
+    """`_SOURCE_YYYYMM_BY_TABLE_SQL`의 LEFT JOIN을 흉내 낸다(``manifest_months``에 키가 있으면
+    manifest 행이 있다 — 값이 None이어도). active serving release 조회와 계보 폴백 조회,
+    행 존재 probe도 흉내 낸다. `scalar`는 probe만 받는다 — 옛 `max(source_yyyymm)` scan이 다시
+    들어오면 거기서 실패한다."""
 
-    def __init__(self, *, existing: set[str], manifest_months: dict[str, str | None]) -> None:
+    def __init__(
+        self,
+        *,
+        existing: set[str],
+        manifest_months: dict[str, str | None],
+        active_source_set: dict[str, Any] | None = None,
+        active_parent_id: str | None = None,
+        snapshots: dict[str, dict[str, Any]] | None = None,
+        nonempty: set[str] | None = None,
+    ) -> None:
         self.existing = existing
         self.manifest_months = manifest_months
+        self.active_source_set = active_source_set
+        self.active_parent_id = active_parent_id
+        self.snapshots = snapshots or {}
+        self.nonempty = nonempty or set()
         self.statements: list[str] = []
 
     async def execute(self, statement: object, params: dict[str, Any] | None = None) -> _Result:
         sql = str(statement)
         self.statements.append(sql)
+        if "ops.serving_releases" in sql:
+            assert "sr.state = 'active'" in sql
+            if self.active_source_set is None:
+                return _Result([])
+            return _Result(
+                [
+                    {
+                        "source_set": self.active_source_set,
+                        "parent_dataset_snapshot_id": self.active_parent_id,
+                    }
+                ]
+            )
+        if "ops.dataset_snapshots" in sql:
+            assert params is not None
+            snapshot = self.snapshots.get(params["id"])
+            return _Result([snapshot] if snapshot is not None else [])
         assert params is not None
         return _Result(
             [
                 {
                     "table_name": name,
                     "table_exists": name in self.existing,
+                    "has_manifest_row": name in self.manifest_months,
                     "source_yyyymm": self.manifest_months.get(name),
                 }
                 for name in params["table_names"]
@@ -67,8 +108,11 @@ class _LookupConn:
         )
 
     async def scalar(self, statement: object, params: dict[str, Any] | None = None) -> object:
-        self.statements.append(str(statement))
-        return "202601"
+        sql = str(statement)
+        self.statements.append(sql)
+        match = _PROBE_RE.fullmatch(sql.strip())
+        assert match is not None, sql
+        return match.group(1) in self.nonempty
 
 
 _ALL_SOURCE_TABLES = {
@@ -82,9 +126,11 @@ _ALL_SOURCE_TABLES = {
 }
 
 
-def _assert_no_source_table_scan(statements: list[str]) -> None:
-    assert len(statements) == 1, statements
+def _assert_no_source_table_scan(statements: list[str], *, count: int = 1) -> None:
+    """manifest 조회 1번(+ manifest 행이 없는 kind가 있으면 active release 조회)뿐이다."""
+    assert len(statements) == count, statements
     assert "load_manifest" in statements[0]
+    assert all("ops.serving_releases" in sql for sql in statements[1:]), statements
     for sql in statements:
         assert "max(" not in sql.lower()
         for table in _ALL_SOURCE_TABLES:
@@ -119,7 +165,113 @@ async def test_source_yyyymm_by_kind_reads_manifest_and_reports_unknown_without_
         "navi": None,
         "sppn_makarea": None,
     }
-    _assert_no_source_table_scan(conn.statements)
+    # navi는 manifest 행이 없어 active release를 찾아보지만(없음) 원천 테이블은 건드리지 않는다.
+    _assert_no_source_table_scan(conn.statements, count=2)
+
+
+_RELEASE_MONTHS = {
+    "juso": "202603",
+    "parcel_link": "202603",
+    "locsum": "202604",
+    "navi": "202604",
+    "shp": "202604",
+    "roadaddr_entrance": "202605",
+    "sppn_makarea": "202605",
+}
+
+
+@pytest.mark.asyncio
+async def test_kinds_without_manifest_row_fall_back_to_active_release_months() -> None:
+    """T-319 이전 백업(0026/0027)을 복원만 한 DB: 원천 테이블에 행은 있고 0028 manifest 행은
+    없다. scan 대신 active release가 기록한 기준월을 이어 쓴다."""
+    conn = _LookupConn(
+        existing=set(_ALL_SOURCE_TABLES),
+        manifest_months={
+            "tl_juso_text": "202609",  # 복원 뒤 새로 적재 — manifest가 release보다 우선
+            "tl_juso_parcel_link": "202603",
+            "tl_roadaddr_entrc": None,  # manifest 행이 있으면 NULL이어도 그대로 믿는다
+        },
+        active_source_set={
+            "source": "database_manifest_inference",
+            "mixed_yyyymm": True,
+            "yyyymm_by_kind": dict(_RELEASE_MONTHS),
+        },
+        # tl_sppn_makarea는 비어 있다(예: full 적재 TRUNCATE 직후) — release 월을 붙이지 않는다.
+        nonempty={"tl_locsum_entrc", "tl_navi_buld_centroid", "tl_spbd_buld_polygon"},
+    )
+
+    source_set = await admin_repo._infer_current_source_set(conn)
+
+    assert source_set["yyyymm_by_kind"] == {
+        "juso": "202609",
+        "parcel_link": "202603",
+        "locsum": "202604",
+        "navi": "202604",
+        "shp": "202604",
+        "roadaddr_entrance": None,
+        "sppn_makarea": None,
+    }
+    probes = [sql for sql in conn.statements if sql.startswith("SELECT EXISTS")]
+    assert sorted(probes) == sorted(
+        f"SELECT EXISTS (SELECT 1 FROM public.{table})"
+        for table in (
+            "tl_locsum_entrc",
+            "tl_navi_buld_centroid",
+            "tl_spbd_buld_polygon",
+            "tl_sppn_makarea",
+        )
+    )
+    assert not any("max(" in sql.lower() for sql in conn.statements)
+
+
+@pytest.mark.asyncio
+async def test_backup_fallback_follows_release_lineage_for_hot_swap_rows() -> None:
+    """hot-swap/rollback이 남긴 form C release는 기준월이 없어 계보(부모 snapshot)를 따라간다
+    — ``/v2/dataset/version``과 같은 해석."""
+    conn = _LookupConn(
+        existing=set(_ALL_SOURCE_TABLES),
+        manifest_months={},
+        active_source_set={"hot_swap": {"target_database": "kor_travel_geo_restore"}},
+        active_parent_id="parent-snapshot",
+        snapshots={
+            "parent-snapshot": {
+                "source_set": {"yyyymm_by_kind": dict(_RELEASE_MONTHS)},
+                "parent_dataset_snapshot_id": None,
+            }
+        },
+        nonempty=set(_ALL_SOURCE_TABLES),
+    )
+
+    class _Connect:
+        async def __aenter__(self) -> _LookupConn:
+            return conn
+
+        async def __aexit__(self, *_exc: object) -> None:
+            return None
+
+    engine = SimpleNamespace(connect=_Connect)
+
+    source_set = await backup.infer_source_set(engine)  # type: ignore[arg-type]
+
+    assert source_set["yyyymm_by_kind"] == {
+        kind: month for kind, month in _RELEASE_MONTHS.items() if kind != "sppn_makarea"
+    }
+    assert source_set["mixed_yyyymm"] is True
+
+
+@pytest.mark.asyncio
+async def test_no_manifest_and_no_active_release_stays_unknown_without_probing() -> None:
+    conn = _LookupConn(
+        existing=set(_ALL_SOURCE_TABLES),
+        manifest_months={},
+        nonempty=set(_ALL_SOURCE_TABLES),
+    )
+
+    source_set = await admin_repo._infer_current_source_set(conn)
+
+    assert set(source_set["yyyymm_by_kind"].values()) == {None}
+    assert source_set["mixed_yyyymm"] is False
+    _assert_no_source_table_scan(conn.statements, count=2)
 
 
 @pytest.mark.asyncio
@@ -443,12 +595,16 @@ _PG_URL = "postgresql+psycopg://u:p@localhost:5432/kor_travel_geo"
 
 
 def _patch_sync_engine(
-    monkeypatch: pytest.MonkeyPatch, *, staged: int = 0, inserted: int = 0
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    staged: int = 0,
+    inserted: int = 0,
+    module: object = polygons_loader,
 ) -> list[tuple[str, Any]]:
     log: list[tuple[str, Any]] = []
     conn = _SyncConn(log, staged=staged, inserted=inserted)
     engine = SimpleNamespace(begin=lambda: _SyncBegin(conn), dispose=lambda: None)
-    monkeypatch.setattr(polygons_loader, "create_engine", lambda _url: engine)
+    monkeypatch.setattr(module, "create_engine", lambda _url: engine)
     return log
 
 
@@ -511,6 +667,21 @@ def test_shp_full_truncate_also_clears_manifest_in_same_transaction(
     assert log[delete_at][1] == {"table_names": ["tl_spbd_buld_polygon", "tl_sprd_intrvl"]}
 
 
+def test_sppn_full_truncate_also_clears_manifest_in_same_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    log = _patch_sync_engine(monkeypatch, module=sppn_makarea_loader)
+
+    sppn_makarea_loader._truncate_target(_PG_URL)
+
+    order = [sql for sql, _ in log]
+    truncate_at = next(i for i, sql in enumerate(order) if sql.startswith("TRUNCATE TABLE"))
+    delete_at = next(i for i, sql in enumerate(order) if "DELETE FROM load_manifest" in sql)
+    assert order.index("BEGIN") < truncate_at < delete_at < order.index("COMMIT")
+    assert order.count("BEGIN") == 1
+    assert log[delete_at][1] == {"table_name": "tl_sppn_makarea"}
+
+
 # --------------------------------------------------------------------------------------
 # Alembic 0028 backfill
 # --------------------------------------------------------------------------------------
@@ -564,3 +735,28 @@ def test_t319_migration_scans_only_tables_without_manifest_and_skips_empty() -> 
     assert "DELETE FROM load_manifest WHERE source_set ->> 'kind' = '{BACKFILL_KIND}'" in (
         downgrade_source
     )
+
+
+def test_t319_migration_rescans_juso_when_its_manifest_row_is_a_daily_delta() -> None:
+    """T-319 이전에는 일변동만 ``tl_juso_text`` 행을 쓰고 전체분 적재기는 갱신하지 않았다 —
+    일변동 뒤 더 새 전체분을 적재한 DB의 그 행은 옛 월이다(리뷰 재현: 202604 vs max 202606)."""
+    migration = _load_migration()
+    sql = migration.backfill_sql("tl_juso_text")
+
+    assert (
+        "WHERE NOT EXISTS (SELECT 1 FROM load_manifest WHERE table_name = 'tl_juso_text'"
+        " AND source_set ->> 'kind' IS DISTINCT FROM 'daily_juso_delta')"
+    ) in sql
+    conflict = sql.split("ON CONFLICT (table_name)", 1)[1]
+    assert "DO UPDATE SET" in conflict
+    assert "GREATEST(load_manifest.source_yyyymm, EXCLUDED.source_yyyymm)" in conflict
+    assert "WHERE load_manifest.source_set ->> 'kind' = 'daily_juso_delta'" in conflict
+    # 일변동 watermark·통계와 kind(→ downgrade 대상 아님)는 그대로 둔다.
+    for column in ("last_delta_at", "last_mvmn_de", "row_count", "source_set ="):
+        assert column not in conflict
+    # 다른 테이블은 manifest 행이 있으면 무조건 믿는다.
+    for table in migration.SOURCE_MONTH_TABLES:
+        if table != "tl_juso_text":
+            other = migration.backfill_sql(table)
+            assert other.rstrip().endswith("ON CONFLICT (table_name) DO NOTHING")
+            assert "daily_juso_delta" not in other
