@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import datetime
@@ -156,6 +157,8 @@ from .infra.zip_repo import ZipRepository
 from .settings import Settings, get_settings
 
 _LOGGER = logging.getLogger(__name__)
+# 행정구역 바로 뒤에 오는 온전한 지번 토큰("681", "199-40", "산 12-3 번지", "31-2번지").
+_LEADING_PARCEL_LOT_RE = re.compile(r"(산\s*)?(\d+)(?:-(\d+))?(?:\s*(?:번지|번))?(?!\S)")
 
 
 def _metadata_str(value: object | None) -> str | None:
@@ -330,6 +333,13 @@ class AsyncAddressClient:
         국가지점번호·파싱 불가 입력은 기존처럼 road 경로에 맡긴다(core geocode가
         국가지점번호를 type과 무관하게 먼저 처리하고, 나머지는 SQL 없는 NOT_FOUND 뒤 도로
         geometry/행정구역 후보 fallback으로 이어진다).
+
+        지번은 읍면동(리) 바로 다음 토큰이어야 하고 파서가 고른 번지와 같아야 한다(T-317 2차
+        리뷰). ``parse_address``는 마지막 숫자를 번지로 잡으므로 ``상계동 1234 … 1203호``·
+        ``역삼동 737 2층``·``삼평동 판교역 1번출구``는 호수·층·출구 번호를, ``관악구 신림1동``은
+        동 이름 속 숫자를 번지로 읽는다. 이런 입력은 엉뚱한 번지 OK 대신 road 경로에 둔다.
+        세종특별자치시는 시군구가 없어(MV ``sgg_nm`` NULL) 이 gate를 통과하지 못하므로 지번
+        lookup은 ``jibun_address``로 요청해야 한다.
         """
         if inp.road_address:
             return "road"
@@ -341,9 +351,16 @@ class AsyncAddressClient:
             parts = parse_address(inp.query)
         except InvalidAddressError:
             return "road"
-        if not parts.is_road and parts.si and parts.sgg and (parts.emd or parts.li):
-            return "parcel"
-        return "road"
+        last_region_token = parts.li or parts.emd
+        if parts.is_road or not (parts.si and parts.sgg and last_region_token):
+            return "road"
+        tokens = parts.normalized.split()
+        after_region = " ".join(tokens[tokens.index(last_region_token) + 1 :])
+        lot = _LEADING_PARCEL_LOT_RE.match(after_region)
+        if lot is None:
+            return "road"
+        leading_lot = (bool(lot.group(1)), int(lot.group(2)), int(lot.group(3) or 0))
+        return "parcel" if leading_lot == (parts.mt, parts.mnnm, parts.slno) else "road"
 
     @staticmethod
     def _should_collect_geocode_supplements(
