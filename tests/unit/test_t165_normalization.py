@@ -463,6 +463,23 @@ async def test_geocode_road_type_does_not_fall_back_to_parcel_for_jibun_text() -
         # #339: 번호에 붙은 호/층 접미사(옛 "642번지 16호" 표기)는 번지 토큰으로 인정한다.
         ("서울특별시 강남구 역삼동 642-16호", "역삼동", "0", 642, 16, "호"),
         ("역삼동 642-16층", "역삼동", "0", 642, 16, "층"),
+        # 번지 뒤에 붙은 문장부호·글자는 detail이다 — T-317(main)과 같은 결과(T-320 리뷰 회귀).
+        ("서울특별시 강남구 역삼동 737.", "역삼동", "0", 737, 0, "."),
+        ("서울특별시 강남구 역삼동 737번지.", "역삼동", "0", 737, 0, "."),
+        ("서울특별시 강남구 역삼동 737-1.", "역삼동", "0", 737, 1, "."),
+        ("서울특별시 강남구 역삼동 737-", "역삼동", "0", 737, 0, "-"),
+        ("서울특별시 강남구 역삼동 737:", "역삼동", "0", 737, 0, ":"),
+        ("서울특별시 강남구 역삼동 737)", "역삼동", "0", 737, 0, ")"),
+        ("서울특별시 강남구 역삼동 '737'", "역삼동", "0", 737, 0, "'"),
+        ("서울특별시 강남구 역삼동 \u2018737\u2019", "역삼동", "0", 737, 0, "\u2019"),
+        ("서울특별시 강남구 역삼동 737B", "역삼동", "0", 737, 0, "B"),
+        ("서울특별시 강남구 역삼동 737앞", "역삼동", "0", 737, 0, "앞"),
+        ("서울특별시 강남구 역삼동 737번지일원", "역삼동", "0", 737, 0, "일원"),
+        ("경기도 양평군 양평읍 양근리 산1-1번지일원", "양근리", "1", 1, 1, "일원"),
+        ("경기도 양평군 양평읍 양근리 123일대", "양근리", "0", 123, 0, "일대"),
+        # main은 마지막 번호(738·1)를 번지로 읽었다 — 첫 번지가 읍면동 바로 다음 토큰이다.
+        ("서울특별시 강남구 역삼동 737·738", "역삼동", "0", 737, 0, "·738"),
+        ("서울특별시 강남구 역삼동 737의1", "역삼동", "0", 737, 0, "의1"),
     ],
 )
 def test_parse_jibun_lot_is_first_token_after_region(
@@ -490,10 +507,14 @@ def test_parse_jibun_lot_is_first_token_after_region(
         "서울특별시 송파구 신천동 롯데월드타워 123",
         "서울특별시 노원구 상계동 101동 1203호",
         "경기도 성남시 분당구 삼평동 3번출구",
+        "경기도 성남시 분당구 삼평동 3번 출구",
         "서울특별시 강남구 역삼동 737번지2층",
+        "서울특별시 강남구 역삼동 737-1동",
+        "서울특별시 강남구 역삼동 3통 2반",
         # 본번에 바로 붙은 호/층은 번지를 빠뜨린 호수·층이다(부번까지 적은 "642-16호"만 번지).
         "서울특별시 노원구 상계동 1203호",
         "서울특별시 강남구 역삼동 2층",
+        "서울특별시 강남구 역삼동 지하1층",
         # 행정동·리 이름 속 숫자는 번지가 아니다.
         "서울특별시 관악구 신림1동",
         "부산광역시 강서구 대저1동",
@@ -579,6 +600,30 @@ async def test_geocode_parcel_uses_lot_right_after_region_not_trailing_unit() ->
     assert repo.last_jibun_parts is not None
     assert repo.last_jibun_parts.emd == "상계동"
     assert (repo.last_jibun_parts.mnnm, repo.last_jibun_parts.slno) == (1234, 0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("address", "lot"),
+    [
+        ("서울특별시 강남구 역삼동 737.", ("0", 737, 0)),
+        ("서울특별시 강남구 역삼동 737번지.", ("0", 737, 0)),
+        ("경기도 양평군 양평읍 양근리 산1-1번지일원", ("1", 1, 1)),
+    ],
+)
+async def test_geocode_parcel_lot_with_glued_suffix_reaches_jibun_lookup(
+    address: str, lot: tuple[str, int, int]
+) -> None:
+    # T-320 리뷰: 번지 뒤 문장부호·글자 때문에 파싱 불가(v1 400)로 떨어지지 않고 main처럼
+    # 지번 lookup에 닿는다.
+    repo = RecordingGeocodeRepo(jibun_result=_lookup())
+
+    response = await geocode(repo, GeocodeInput(address=address, type="parcel"))
+
+    assert response.status == "OK"
+    assert repo.last_jibun_parts is not None
+    parts = repo.last_jibun_parts
+    assert (parts.mntn_yn, parts.mnnm, parts.slno) == lot
 
 
 @pytest.mark.asyncio

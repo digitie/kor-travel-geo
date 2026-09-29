@@ -560,6 +560,12 @@ async def test_async_client_geocode_skips_supplements_when_input_matches_refined
             "서울특별시 노원구 상계동 1234 주공아파트 101동 1203호",
             "parcel",
         ),
+        # T-320 리뷰: 번지 뒤에 붙은 문장부호도 main처럼 지번이다(파싱 불가로 road에 새지 않는다).
+        (
+            {"query": "서울특별시 강남구 역삼동 737."},
+            "서울특별시 강남구 역삼동 737.",
+            "parcel",
+        ),
         # T-320: 세종특별자치시는 시군구 없이 시도+읍면동(리)로 anchor를 갖춘다.
         (
             {"query": "세종특별자치시 조치원읍 신흥리 123"},
