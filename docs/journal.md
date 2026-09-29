@@ -74,6 +74,18 @@ count가 `SET` 출력과 섞여 자동 diff가 어긋났다 — 결과 파일을
 영향 없음). 통과 후 janitor dry-run으로 대상이 09-19 아카이브 하나뿐임을 확인하고 만료, 옛 PGDATA
 32GB는 형제 디렉터리(prometheus·grafana·rustfs live 데이터)를 건드리지 않게 정확한 경로만 지웠다.
 
+**T-319·T-320·T-321 (리뷰 후속 2차 묶음).** 같은 방식(workflow → 적대적 리뷰 → minor 반영 → 독립
+검증)으로 #564·#563·#562를 병합했다. 눈여겨볼 두 가지:
+- T-319의 원래 가정("기준월은 load_manifest에 이미 있다")은 운영에서 절반만 맞았다 — juso 전체분·locsum·
+  navi·SHP loader는 manifest를 쓴 적이 없어 7개 중 3개만 있었다. 그래서 "manifest에서 읽기"만으로는
+  4개가 null이 된다 → loader가 적재 트랜잭션 안에서 쓰게 하고 Alembic 0028이 1회 backfill. 운영 동등성은
+  big-table max를 다시 돌리지 않고 `pg_stats`(n_distinct=1, null_frac=0)와 09-28 refresh release의
+  `yyyymm_by_kind`로 증명했다(load 중인 n150에 10GB scan을 추가하지 않으려고).
+- T-320은 1차 수정본이 **main 대비 회귀**를 만들었다: 번지 토큰 뒤에 공백만 허용해서 `역삼동 737.`·
+  `737번지일원`이 InvalidAddressError(v1 parcel 400, fallback=api까지 못 감). 리뷰가 main·1차·수정본 3자
+  비교로 잡았고, 2차 검증은 반대로 너무 느슨해진 틈(`역삼동 2F`가 v2 parcel lot 2)을 잡았다 — 층·단지·관·
+  게이트 번호를 번지에서 뺐다(병합 직전 직접 반영).
+
 **T-309의 503→504 변경이 소비자에게 미치는 영향 확인.** geo API를 부르는 저장소는 셋 — PinVi
 `apps/api/app/clients/kor_travel_geo.py`는 `status_code >= 500` 전부를 backoff 재시도(504 포함),
 concierge `ktc/etl/admin_region_service.py`(`/v2/reverse`)는 `raise_for_status()`로 5xx 전부 실패 처리,

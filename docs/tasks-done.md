@@ -6,6 +6,26 @@
 
 ## 완료
 
+- [x] **T-319·T-320·T-321 — T-309~T-318 리뷰 후속** (2026-09-29, by claude, 사용자 지시 "한도 다 쓸 때까지
+  기록하면서 진행"). workflow로 구현 → 독립 적대적 리뷰(전부 1차 approve, minor만) → minor 반영 → 독립 검증.
+  - **T-319** (#564, `7a7bb22`) — 원천 기준월을 `max(source_yyyymm)` 전수 scan 대신 `load_manifest`에서
+    읽는다(테이블당 1행). 운영엔 juso/locsum/navi/shp manifest가 없었다(그 loader들이 안 썼다) → loader가
+    적재 트랜잭션 안에서 manifest를 쓰게 하고, Alembic `0028_t319_source_month_manifest`가 manifest 없는
+    테이블만 1회 backfill(운영 4개 테이블 ≈ 9.9GB 1회 읽기). 인덱스(42M행 btree 유지비) 대신 메타데이터.
+    리뷰 minor 반영: daily delta가 남긴 낡은 juso manifest도 backfill, pre-T-319 백업을 복원한 DB는 active
+    release snapshot으로 보강 + 복원 뒤 `alembic upgrade head` 문서화, sppn TRUNCATE 시 manifest 삭제.
+    잔여는 T-323.
+  - **T-320** (#563) — `parse_address`가 지번을 "행정구역 바로 뒤 첫 번지"로 잡는다(v1 parcel·
+    `jibun_address`·zipcode·normalize·C15 loader 공통): `상계동 1234 … 1203호` → 1234. 세종특별자치시
+    v2 `query` parcel(`sgg_nm IS NULL` + 읍면동 조건, 인덱스 확인) — `전의면 신흥리 123`이 같은 리 이름의
+    조치원읍 행을 돌려주던 것도 막는다. 리뷰 minor 반영: `737.`·`737번지일원`처럼 번지에 붙은 문장부호·
+    글자는 main처럼 번지로(1차 수정본은 InvalidAddressError로 회귀했었다), 층(`2F`)·단지·관·게이트
+    번호는 번지 아님.
+  - **T-321** (#562, `38953ed`) — T-312 low 후속: hot-swap은 요청한 maintenance DB로 capability 탐지
+    (식별자 검증을 탐지보다 먼저, 탐지 캐시 상한), db_restore E0410 hint·문서에 공용 instance 복원 절차
+    (admin이 빈 DB 생성 → `target_dsn` 복원), 다른 cluster 복원 시 NOLOGIN owner role 선생성 문서,
+    restore-drill schedule이 공용 instance에서 `SkipReason`, 거절된 hot-swap plan도 `denied` audit row.
+
 - [x] **T-309~T-318 — T-308 공용 instance 이전 후속 일괄 완주** (2026-09-29, by claude, 사용자 지시
   "이어서 완주까지 진행", 도중 "백업주기는 2주에 한번으로"). 각 task를 독립 worktree·PR로 구현하고
   독립 적대적 리뷰 → 수정 → (blocker/major가 있던 것은) 2차 리뷰를 거쳐 병합했다. 상세는

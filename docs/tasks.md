@@ -78,24 +78,10 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 (`tasks-done.md`). 아래는 그 리뷰에서 나온 후속이다. 우선순위 순.
 
 
-- [ ] **T-319** — 원천 기준월 조회가 대형 테이블을 전수 scan한다. 백업 preflight와 MV refresh의
-  serving release lineage가 `SELECT max(source_yyyymm) FROM tl_navi_buld_centroid`(10.7M) 등을
-  테이블마다 parallel seq scan한다 — 2026-09-28 백업 preflight만 11분, MV refresh 끝단에서도 수 분.
-  기준월은 적재 시점에 `load_manifest`/dataset snapshot에 이미 있으므로 거기서 읽거나, 없으면
-  `(source_yyyymm)` 인덱스로 index-only scan이 되게.
-- [ ] **T-320** — 지번 파싱 잔여(T-317 리뷰): v1 `type=parcel`·`jibun_address`는 여전히 **마지막**
-  숫자를 번지로 잡는다(`…상계동 1234 주공아파트 101동 1203호` → 1203). v2 `query`는 위치 gate로
-  막았지만 근본 해법은 `parse_address`가 행정구역 바로 뒤 첫 번지를 잡는 것 — 호출부(v1 geocode
-  양 type, `jibun_address`, `/v1/address/zipcode`, `/v1/admin/normalize`, C15 POI loader) 전수
-  영향 확인 후. 세종특별자치시는 시군구가 없어(MV `sgg_nm` NULL) v2 `query` parcel gate를 못
-  통과한다 — `sgg_nm IS NULL` 조건 + 인덱스 검토 후 허용(시도 단독 조회는 운영 cold 1.4초).
-- [ ] **T-321** — T-312 리뷰 low 후속: (a) capability 탐지가 늘 `postgres` DB CONNECT만 본다 —
-  hot-swap은 다른 maintenance DB를 받으므로 요청 DB로 탐지(또는 문서화). (b) `db_restore` gate가
-  실제 필요보다 넓다 — app role이 admin이 준비한 빈 DB에 `target_dsn`으로 복원하는 경로(TOC 필터로
-  동작 확인)를 UI에서 열지. (c) prod 백업을 다른 cluster에 superuser로 복원하면 dump의 owner
-  (`kor_travel_geo_app`, `shared_admin`)가 없어 실패 — NOLOGIN role 선생성 절차를 문서화.
-  (d) restore-drill schedule을 공용 instance에서 켜면 매 run이 Failure — schedule에서 `SkipReason`.
-  (e) 거절된 hot-swap plan은 audit row(`denied`)를 남기지 않는다.
+- [ ] **T-323** — T-319 리뷰 잔여 minor: sppn 전체 재적재가 TRUNCATE 뒤 실패하면 manifest row는
+  지워졌지만 active serving release fallback이 이전 기준월을 돌려준다(빈/부분 테이블인데 이전 월).
+  fallback을 "테이블에 행이 있고 manifest가 없을 때"로 좁히거나(`EXISTS … LIMIT 1`), 실패한 재적재를
+  release에 기록하지 않게. 영향은 sppn 재적재 실패 뒤 다음 refresh/백업의 `sppn_makarea` 기준월 1건.
 - [ ] **T-322** — Dagster instance storage 드라이버: kor-travel-geo-dagster는 `sqlalchemy<2.1`이
   **필수**다(2.1 + bare `postgresql://` → psycopg 3 → dagster_postgres `NOTIFY` SyntaxError로 run
   시작 불가, T-316 리뷰 실측). manager의 `KOR_TRAVEL_GEO_DAGSTER_PG_URL`을 `postgresql+psycopg2://`로
