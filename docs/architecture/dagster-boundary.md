@@ -89,8 +89,13 @@ code location은 **항상 로드**되고, 자격증명 누락은 import가 아�
 
 ## 5. Scheduling & Sensors
 
-- `@schedule`: scheduled backup(cron, `execution_timezone="Asia/Seoul"`, 운영 enable 전 `STOPPED` 기본),
-  restore drill(04:00), **retention janitor(06:00, T-230 leaf — 스케줄 백업을 켤 때 함께 켠다; 이것이 없으면
+- **on/off 상태는 코드가 정본이다(dagster-shared plan D4)**: `scheduled_backup`·`backup_retention_janitor_daily`·
+  `run_failure_sensor`는 `default_status=RUNNING`, `backup_restore_drill_daily`는 `STOPPED`(2026-09-29 n150 운영
+  상태 그대로). 예전엔 셋이 DB에서만 손으로 켜져 있어 새 instance(공유 `dagster_shared`)에서는 꺼진 채 떴을 것이다.
+  UI 토글은 DB 상태로 코드 기본값을 덮으므로 운영 on/off 변경은 코드 PR로 한다
+  (`kor-travel-geo-dagster/tests/test_definitions.py`의 표가 새 instigator마다 선택을 강제한다).
+- `@schedule`: scheduled backup(cron, `execution_timezone="Asia/Seoul"`, 백업 여부는 API의
+  `KTG_BACKUP_SCHEDULE_ENABLED`가 run-due에서 판정), restore drill(04:00), **retention janitor(06:00, T-230 leaf — 스케줄 백업과 함께 켜져 있다; 이것이 없으면
   만료된 `.tar.zst`를 아무도 지우지 않아 일일 백업이 디스크를 무한히 먹는다. 디스크 상한 ≈
   `ceil(TTL_DAYS×24 / INTERVAL_HOURS)`본, `keep_min`은 하한 — 배포마다 `KTG_BACKUP_ARTIFACT_TTL_DAYS`를
   정한다. 드릴 보호는 06:00 간격이 아니라 `keep_min ≥ 1`이 최신본을 지키는 것이다)**. 외부 cron 의존
@@ -99,6 +104,13 @@ code location은 **항상 로드**되고, 자격증명 누락은 import가 아�
   worker"). `@run_failure_sensor`: 실패 시 `failure_notifier`로 `{job_id, run_id, job_name, status,
   error_code}` 전달. `job_id`는 run 태그 `kor_travel_geo.job_id`가 있을 때만(else `None`), `error_code`는
   실패 error class 이름 같은 bounded 값이다. 원문 failure `message`는 전달하지 않는다(민감값 제외).
+  감시 범위는 **이 code location의 run만**이다(`monitored_jobs` 생략 = 같은 location·repository의 모든 job).
+  `monitor_all_code_locations=True`는 금지 — 공유 Dagster instance에서는 다른 프로젝트의 실패가 geo
+  `ops.run_failure_alerts`에 쌓인다(dagster-shared plan stage 3).
+- **admin API의 Dagster 조회도 geo location으로 한정한다**: `/v1/ops/dagster/summary`는
+  `repositoryOrError`(selector = `KTG_DAGSTER_REPOSITORY_LOCATION_NAME`/`_REPOSITORY_NAME`)와
+  `.dagster/repository` tag로 거른 `runsOrError`를, `/runs/{run_id}`는 run의 `repositoryOrigin`이 geo가
+  아니면 `not_found`를 돌려준다. 단일 tenant webserver에서도 결과가 같다.
 
 ## 6. 상태 경계 (2-정본) & Recovery
 

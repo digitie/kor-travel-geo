@@ -355,10 +355,12 @@ def restore_drill_schedule(
     job=backup_retention_janitor_job,
     cron_schedule=RETENTION_JANITOR_CRON,
     execution_timezone=RETENTION_JANITOR_TIMEZONE,
-    default_status=DefaultScheduleStatus.STOPPED,
+    # D4 (dagster-shared plan): prod ran this RUNNING via a DB-only toggle; declared here so a
+    # fresh Dagster instance keeps it on. It pairs with the RUNNING scheduled_backup schedule.
+    default_status=DefaultScheduleStatus.RUNNING,
     description=(
-        "Daily 06:00 backup retention janitor (T-230). STOPPED by default; enable together with "
-        "KTG_BACKUP_SCHEDULE_ENABLED so a daily scheduled backup has bounded disk use - about "
+        "Daily 06:00 backup retention janitor (T-230). RUNNING by default, paired with the "
+        "scheduled_backup schedule so a daily scheduled backup has bounded disk use - about "
         "ceil(KTG_BACKUP_ARTIFACT_TTL_DAYS*24 / KTG_BACKUP_SCHEDULE_INTERVAL_HOURS) archives "
         "(keep_min is a floor). The op reads keep_min from Settings, so no run config."
     ),

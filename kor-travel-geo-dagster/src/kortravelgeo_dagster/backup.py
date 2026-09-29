@@ -114,11 +114,14 @@ def scheduled_backup_run_due_job() -> None:
     job=scheduled_backup_run_due_job,
     cron_schedule=SCHEDULED_BACKUP_CRON,
     execution_timezone=SCHEDULED_BACKUP_TIMEZONE,
-    default_status=DefaultScheduleStatus.STOPPED,
+    # D4 (dagster-shared plan): on/off state is declared in code, not toggled in the DB.
+    # Prod ran this RUNNING via a DB-only toggle; a fresh shared instance would have brought
+    # it up STOPPED. The API's KTG_BACKUP_SCHEDULE_ENABLED stays the due/no-op authority.
+    default_status=DefaultScheduleStatus.RUNNING,
     description=(
         "Every 15 minutes, call the idempotent geo API scheduled-backup run-due "
-        "endpoint. Kept STOPPED by default; enable in Dagster when the deployment's "
-        "KTG_BACKUP_SCHEDULE_ENABLED policy is ready."
+        "endpoint. RUNNING by default; the API's KTG_BACKUP_SCHEDULE_ENABLED policy "
+        "decides whether a tick actually enqueues a backup."
     ),
 )
 def scheduled_backup_schedule(context: ScheduleEvaluationContext) -> RunRequest:
@@ -146,13 +149,16 @@ def _scheduled_backup_run_request(scheduled_at: datetime | None) -> RunRequest:
 
 @run_failure_sensor(
     name="run_failure_sensor",
-    # Monitor EVERY run in the code location (T-290h) — db_backup, db_restore,
+    # Monitor EVERY run in this code location (T-290h) — db_backup, db_restore,
     # full_load, mv_refresh, the scheduled-backup onramp, and the maintenance leaf
-    # jobs — so any failure is persisted to ops.run_failure_alerts. An explicit
-    # monitored_jobs list would silently miss jobs added later.
-    monitor_all_code_locations=True,
+    # jobs — so any failure is persisted to ops.run_failure_alerts. That is Dagster's
+    # default when monitored_jobs is omitted (an explicit list would silently miss jobs
+    # added later). NOT monitor_all_code_locations: on the shared Dagster instance
+    # (dagster-shared plan stage 3) that would record other projects' run failures into
+    # geo's ops.run_failure_alerts.
     minimum_interval_seconds=60,
-    default_status=DefaultSensorStatus.STOPPED,
+    # D4 (dagster-shared plan): prod ran this RUNNING via a DB-only toggle; declared here.
+    default_status=DefaultSensorStatus.RUNNING,
 )
 def notify_run_failure_sensor(
     context: RunFailureSensorContext,

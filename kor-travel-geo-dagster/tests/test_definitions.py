@@ -44,6 +44,35 @@ def test_code_location_loads_scheduled_backup_onramp() -> None:
     assert notify_run_failure_sensor.name == "run_failure_sensor"
 
 
+# D4 (dagster-shared plan): every instigator's on/off state is declared in code. The shared
+# Dagster instance starts with an empty DB, so a state that lived only in the old DB (prod
+# had these three toggled on by hand) would silently come up STOPPED. This table is the
+# prod state read from n150 on 2026-09-29; a new schedule/sensor must be added here, which
+# forces a deliberate choice instead of inheriting STOPPED.
+_DECLARED_INSTIGATOR_STATUS = {
+    "scheduled_backup": "RUNNING",
+    "backup_retention_janitor_daily": "RUNNING",
+    "backup_restore_drill_daily": "STOPPED",
+    "run_failure_sensor": "RUNNING",
+}
+
+
+def test_every_instigator_declares_its_prod_status_in_code() -> None:
+    repo = defs.get_repository_def()
+    declared = {
+        instigator.name: instigator.default_status.value
+        for instigator in [*repo.schedule_defs, *repo.sensor_defs]
+    }
+    assert declared == _DECLARED_INSTIGATOR_STATUS
+
+
+def test_run_failure_sensor_monitors_only_this_code_location() -> None:
+    # On the shared instance monitor_all_code_locations=True would persist other projects'
+    # run failures into geo's ops.run_failure_alerts. Omitting monitored_jobs already means
+    # "every job in this code location" (Dagster matches the run's location+repository).
+    assert notify_run_failure_sensor._monitor_all_code_locations is False
+
+
 def test_op_name_differs_from_job_name() -> None:
     # Same op/job name makes the code location fail to load (dagster-boundary §10).
     assert run_mv_refresh_op.name == "run_mv_refresh"
