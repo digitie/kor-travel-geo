@@ -77,12 +77,6 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 근거와 증거는 `docs/journal.md` 2026-09-28·2026-09-29 항목. T-309~T-318은 2026-09-29에 완료
 (`tasks-done.md`). 아래는 그 리뷰에서 나온 후속이다. 우선순위 순.
 
-- [ ] **T-314 (진행 중, 2026-09-29 중단)** — 이관본 parity 검증 완료(데이터 테이블 44개 exact 일치)·새
-  검증 백업(`T-314 공용 instance 이관 검증 후 첫 백업 (2026-09-29).tar.zst`, 4.40GB, checksum 51개 OK)
-  확보. **남은 것**: n150 복원 리허설(`/tmp/t314_rehearsal.sh`, 로그 `/tmp/t314_rehearsal.log`, 결과
-  `/tmp/t314-rehearsal/{diff.tsv,pg_restore.log}`, 컨테이너 `ktg-t314-rehearsal` — 끝나면 스스로 정리)
-  결과 확인 → `REHEARSAL_DONE rc=0`·diff 0(또는 설명 가능한 ops 차이)일 때만 09-19 아카이브(janitor
-  API로 만료)와 옛 PGDATA `/home/digitie/kor-travel-geo-data/pgdata-final-20260529`(32.8GB) 삭제.
 
 - [ ] **T-319** — 원천 기준월 조회가 대형 테이블을 전수 scan한다. 백업 preflight와 MV refresh의
   serving release lineage가 `SELECT max(source_yyyymm) FROM tl_navi_buld_centroid`(10.7M) 등을

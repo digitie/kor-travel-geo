@@ -64,6 +64,16 @@ pg_stat_statements snapshot)뿐. Alembic head·확장 이름/버전/schema 동�
 분류돼 보인다 — T-309가 의도한 그대로), warm에서는 도로명 24~100ms, NOT_FOUND 0.23~1.2초(이전
 2.7~3.6초), `상계동 … 1203호`는 엉뚱한 OK 대신 NOT_FOUND.
 
+**T-314 마무리 — 복원 리허설 통과 후 옛 사본 정리.** 새 백업을 network 없는 임시 PostGIS
+(메모리 3GB 상한 — OOM이 나도 공용 instance가 아니라 이 컨테이너만 죽도록)에 복원했다. MV DATA
+항목(REFRESH 명령일 뿐 데이터가 아니다)은 건너뛰었다 — MV 재구축은 09-28 refresh로 이미 증명됐다.
+n150 load(다른 에이전트 작업 포함 22~23) 속에서 `pg_restore -j2`가 3.4시간 걸렸고, 최종 배포 build를
+굶겨 한 번 `docker pause`했다가 풀었다. 결과: rc=0·error 0, 데이터 테이블 21개(원천 tl_* 전부 포함,
+`tl_sprd_intrvl` 16,993,167행까지) live·09-28 parity 기준선과 전부 일치. 리허설 스크립트의 live 측
+count가 `SET` 출력과 섞여 자동 diff가 어긋났다 — 결과 파일을 다시 파싱해 판정했다(스크립트 결함, 판정에는
+영향 없음). 통과 후 janitor dry-run으로 대상이 09-19 아카이브 하나뿐임을 확인하고 만료, 옛 PGDATA
+32GB는 형제 디렉터리(prometheus·grafana·rustfs live 데이터)를 건드리지 않게 정확한 경로만 지웠다.
+
 **T-309의 503→504 변경이 소비자에게 미치는 영향 확인.** geo API를 부르는 저장소는 셋 — PinVi
 `apps/api/app/clients/kor_travel_geo.py`는 `status_code >= 500` 전부를 backoff 재시도(504 포함),
 concierge `ktc/etl/admin_region_service.py`(`/v2/reverse`)는 `raise_for_status()`로 5xx 전부 실패 처리,

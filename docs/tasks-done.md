@@ -44,7 +44,12 @@
   - **T-315** — geo-api/ui를 홈 트리에서 `/opt` 설치본으로 옮겼다(09-28 22:20Z). 이 이동이 Dagster
     백업 op의 403을 고쳤다 — 두 트리의 `KTG_ADMIN_PROXY_SECRET`이 달라 09-28 `/opt`에서 재생성된
     Dagster가 API run-due를 호출하면 403이었다. 최종 코드 배포는 `journal.md` 2026-09-29 참조.
-  - **T-314** — 진행 중(`tasks.md`): 이관본 parity·새 백업은 완료, 복원 리허설·옛 사본 정리 남음.
+  - **T-314** — 이관본 parity(옛 PGDATA vs 공용 instance, 데이터 테이블 44개 exact 일치) → 새 백업
+    (4.40GB, `retention_class=scheduled`) → 메모리 3GB·CPU 1.5 제한·network 없는 임시 PostGIS로 복원
+    리허설(`pg_restore` rc=0, error 0, 12,250초; 49개 테이블 중 데이터 테이블 21개가 live·09-28 parity와
+    전부 일치, 차이는 백업 뒤에도 쌓인 `pg_stat_statements` snapshot뿐; Alembic `0026`, 인덱스 132 =
+    live 133 − 0027 신규 1) → 통과 후에만 09-19 아카이브(janitor API, `keep_min_count=1` dry-run 확인 뒤)와
+    옛 PGDATA `pgdata-final-20260529`(32GB) 삭제. n150 디스크 79% → 71%.
   - **백업 주기 2주** — 사용자 결정. n150 live `.env` `KOR_TRAVEL_GEO_BACKUP_SCHEDULE_INTERVAL_HOURS=336`
     (lock G 아래), manager 문서 #436(`c66ec1c`). keep_min 3이 하한이라 최신 3본(약 6주)이 남는다.
     Dagster `scheduled_backup`·`backup_retention_janitor_daily`·`run_failure_sensor`는 09-20 Dagster

@@ -9,14 +9,8 @@
   (다섯 geo 컨테이너 `/opt`, Alembic `0027_t311_road_rn_trgm`, API SQLAlchemy 2.1.1 / Dagster 2.0.54).
   T-315(geo-api/ui `/opt` 이전) 완료, 백업 주기 2주(336h, manager #436) 반영, Dagster backup schedule·
   janitor·failure sensor RUNNING. 상세 `journal.md` 2026-09-29.
-  **다음 한 작업 (재개 시)**:
-  1. n150 복원 리허설 결과 확인 — `tail /tmp/t314_rehearsal.log`(`REHEARSAL_DONE rc=…`),
-     `/tmp/t314-rehearsal/diff.tsv`(복원본 vs live row count; 09-29 이후 ops 기록 차이만 허용),
-     `pg_restore.log`의 `error:`. 컨테이너 `ktg-t314-rehearsal`은 끝나면 스스로 지워진다(1.5 CPU·3GB 제한,
-     09-29 01:45Z 기준 인덱스 27/132 — 수 시간 남음). 아직 돌고 있으면 기다린다.
-  2. 통과 시에만 옛 사본 정리: 09-19 아카이브(`kor_travel_geo_backup_20260919T011519Z_zstd3.tar.zst`,
-     admin API janitor로 만료)와 옛 PGDATA `/home/digitie/kor-travel-geo-data/pgdata-final-20260529`(32.8GB).
-  3. 이 문서 PR(branch `agent/claude-t308-followups-docs`)의 T-314 항목을 완료로 고쳐 병합.
+  T-314도 02:45Z 완료(복원 리허설 통과 → 09-19 아카이브·옛 PGDATA 삭제).
+  **다음 한 작업**:
   - (02:25Z 재개, 사용자 "한도 다 쓸 때까지 기록하면서 진행") T-319·T-320·T-321을 workflow로 구현 중 —
     worktree `F:/dev/ktg-wt-t319`/`t320`/`t321`, 각 PR은 적대적 리뷰→수정→재리뷰 후 병합 예정.
     T-322는 착수 전: dagster_postgres event watcher가 URL을 `psycopg2.connect`에 그대로 넘기므로
