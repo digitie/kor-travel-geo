@@ -651,9 +651,11 @@ def test_shp_building_insert_without_rows_leaves_manifest_alone(
     assert not [sql for sql, _ in log if "load_manifest" in sql]
 
 
-def test_shp_full_truncate_also_clears_manifest_in_same_transaction(
+def test_shp_full_truncate_marks_manifest_month_unknown_in_same_transaction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # T-323: 행을 지우면 lookup이 legacy로 보고 active release의 옛 기준월로 메운다 — 재적재가
+    # TRUNCATE 뒤 실패하면 옛 달이 붙는다. 행은 두고 기준월만 NULL("모름")로 둔다.
     log = _patch_sync_engine(monkeypatch)
 
     polygons_loader._truncate_target_tables(
@@ -662,12 +664,14 @@ def test_shp_full_truncate_also_clears_manifest_in_same_transaction(
 
     order = [sql for sql, _ in log]
     truncate_at = next(i for i, sql in enumerate(order) if sql.startswith("TRUNCATE TABLE"))
-    delete_at = next(i for i, sql in enumerate(order) if "DELETE FROM load_manifest" in sql)
-    assert truncate_at < delete_at < order.index("COMMIT")
-    assert log[delete_at][1] == {"table_names": ["tl_spbd_buld_polygon", "tl_sprd_intrvl"]}
+    mark_at = next(i for i, sql in enumerate(order) if "UPDATE load_manifest" in sql)
+    assert truncate_at < mark_at < order.index("COMMIT")
+    assert "source_yyyymm = NULL" in order[mark_at]
+    assert not any("DELETE FROM load_manifest" in sql for sql in order)
+    assert log[mark_at][1] == {"table_names": ["tl_spbd_buld_polygon", "tl_sprd_intrvl"]}
 
 
-def test_sppn_full_truncate_also_clears_manifest_in_same_transaction(
+def test_sppn_full_truncate_marks_manifest_month_unknown_in_same_transaction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     log = _patch_sync_engine(monkeypatch, module=sppn_makarea_loader)
@@ -676,10 +680,29 @@ def test_sppn_full_truncate_also_clears_manifest_in_same_transaction(
 
     order = [sql for sql, _ in log]
     truncate_at = next(i for i, sql in enumerate(order) if sql.startswith("TRUNCATE TABLE"))
-    delete_at = next(i for i, sql in enumerate(order) if "DELETE FROM load_manifest" in sql)
-    assert order.index("BEGIN") < truncate_at < delete_at < order.index("COMMIT")
+    mark_at = next(i for i, sql in enumerate(order) if "UPDATE load_manifest" in sql)
+    assert order.index("BEGIN") < truncate_at < mark_at < order.index("COMMIT")
     assert order.count("BEGIN") == 1
-    assert log[delete_at][1] == {"table_name": "tl_sppn_makarea"}
+    assert "source_yyyymm = NULL" in order[mark_at]
+    assert not any("DELETE FROM load_manifest" in sql for sql in order)
+    assert log[mark_at][1] == {"table_names": ["tl_sppn_makarea"]}
+
+
+@pytest.mark.asyncio
+async def test_truncated_manifest_row_stays_unknown_instead_of_stale_release_month() -> None:
+    """T-323: sppn 재적재가 TRUNCATE 뒤 실패해 새 달 행만 일부 들어간 테이블 — manifest 행은 남고
+    기준월이 NULL이므로 active release의 옛 달(202605)로 메우지 않고 None(모름)이다."""
+    conn = _LookupConn(
+        existing={"tl_sppn_makarea"},
+        manifest_months={"tl_sppn_makarea": None},
+        active_source_set={"yyyymm_by_kind": dict(_RELEASE_MONTHS)},
+        nonempty={"tl_sppn_makarea"},
+    )
+
+    result = await admin_repo.source_yyyymm_by_kind(conn, {"sppn_makarea": "tl_sppn_makarea"})
+
+    assert result == {"sppn_makarea": None}
+    assert not any(sql.startswith("SELECT EXISTS") for sql in conn.statements)
 
 
 # --------------------------------------------------------------------------------------
