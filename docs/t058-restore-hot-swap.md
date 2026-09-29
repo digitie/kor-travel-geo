@@ -99,6 +99,9 @@ ADR-030 amend로 본 결정을 반영한다(ADR-036에서 신규 결정 + ADR-03
 - 복원본 DB가 같은 cluster 안에 존재(`kor_travel_geo_restore_<ts>`).
 - 복원본 DB에서 smoke test + consistency check 통과(`load_consistency_reports.severity_max` ≠ `ERROR`).
 - 복원본 DB에서 `mv_geocode_target` 존재 + ANALYZE 완료.
+- 복원본 DB의 `alembic_version`이 앱 head와 같다. 낮으면(T-319 이전 백업은 `0026`/`0027`) swap 전에 복원본을
+  대상으로 `KTG_PG_DSN=<복원본 DSN> alembic upgrade head` — hot-swap은 migration을 돌리지 않는다
+  (`docs/t046-db-backup-restore.md` "복원 뒤 `alembic upgrade head`").
 
 ### 절차
 
@@ -208,7 +211,7 @@ POST /v1/admin/restores/hot-swap-plan
 - `current_database`: 현재 `KTG_PG_DSN`의 DB 이름
 - `restore_database`: rename 대상 복원본 DB
 - `previous_alias`: 현재 DB를 보존할 alias
-- `maintenance_database`: `ALTER DATABASE ... RENAME`을 실행할 maintenance 연결 DB (기본 `postgres`, managed/hardened cluster는 다른 DB 지정 가능)
+- `maintenance_database`: `ALTER DATABASE ... RENAME`을 실행할 maintenance 연결 DB (기본 `postgres`, managed/hardened cluster는 다른 DB 지정 가능). T-312 capability 게이트(`E0410`)도 이 DB의 `CONNECT`를 조회한다 — 조회 전에 식별자·현재 DB 여부를 검증하고, 형식 오류나 cluster에 없는 DB는 `E0100` 입력 오류다(`CREATEDB`가 없는 role이면 `E0410`이 우선, T-321)
 - `typed_confirmation`: maintenance window 생성/실행 시 사용할 확인 문구 (`HOT_SWAP <current> FROM <restore>`)
 - `rollback_confirmation`: alias 보존 기간 안에 수동 rollback할 때 사용할 확인 문구
 - `can_execute`, `blockers`: 현재 cluster 안 DB 존재 여부와 alias 충돌 검증 결과

@@ -288,7 +288,8 @@ await client.geocode(query="왕산로 189-4", sig_cd="11230", bjd_cd="1123010700
 
 - 입력: raw 문자열. 출력: `AddrParts(frozen dataclass)`.
 - 처리: NFKC 정규화, 전각 숫자·대시 변형 접기, 쉼표류 구분자와 공백 정규화, 괄호 노트 분리, 시도 별칭·구/신 표기 정규화(`서울시→서울특별시`, `강원도→강원특별자치도`, `전라북도→전북특별자치도` 등), 시군구 매칭, 도로명/지번 분기 (`ROAD_RE`/`JIBUN_RE`). T-165 이후 도로명과 건물번호 사이 공백이 없는 `성복1로35`, 본번-부번 주변 공백이 있는 `189 - 4`, `번`/`번지` 접미, 괄호·영문 혼용 prefix는 exact lookup에 필요한 `road_nrm`/`mnnm`/`slno`를 유지한다.
-- 산물: `si`, `sgg`, `sgg_nrm`, `emd`, `li`, `road`, `road_nrm`, `mnnm`, `slno`, `mt`(산 여부), `under`(지하), `detail`, `bracket_note`, `is_road`.
+- 지번 번지(T-320): 읍면동·리가 있으면 번지는 그 **바로 다음 토큰**이다(`681`, `199-40`, `산 12-3`, `31-2번지`, 부번까지 적은 `642-16호`). 번호에 붙은 문장부호·글자(`737.`, `'737'`, `산1-1번지일원`)는 예전처럼 번지 뒤 `detail`이고, 번호에 바로 붙은 호수·층·동·통·반·출구 번호(`1203호`, `2층`, `101동`, `3번출구`, `737번지2층`)는 번지가 아니다. 뒤따르는 호수·층·동 번호(`상계동 1234 … 1203호`의 1203)나 동·리 이름 속 숫자(`신림1동`, `하귀1리`)도 번지가 아니며, 그 자리에 번지가 없으면(`역삼동 스타벅스 2층`, `상계동 1203호`) 번호 없는 주소로 `InvalidAddressError`다. 읍면동·리 anchor가 없는 입력(`코엑스 123`)만 예전처럼 마지막 번호를 쓴다. 도로명 파싱은 이 규칙과 무관하다.
+- 산물: `si`, `sgg`, `sgg_nrm`, `emd`, `li`, `road`, `road_nrm`, `mnnm`, `slno`, `mt`(산 여부), `under`(지하), `detail`, `bracket_note`, `is_road`, `sido_without_sgg`(시군구가 없는 시도 — 세종특별자치시 — 이고 시군구 토큰도 없음).
 
 ### 주소 코드 helper (`core/address/`, T-056)
 
@@ -302,7 +303,7 @@ await client.geocode(query="왕산로 189-4", sig_cd="11230", bjd_cd="1123010700
 
 1. `parse_address` → `AddrParts`. `sgg_nrm` 없으면 `InvalidAddressError`.
 2. `type=="road"`: 도로명/본번/부번/지하구분 검증 → `repo.lookup_by_road(...)`. 실패 시 `fallback != "off"`면 `repo.fuzzy_roads(...)`로 5개 후보 재시도 (`confidence = sim`). T-171 이후 fuzzy fallback도 `buld_mnnm`/`buld_slno`/`buld_se_cd`를 모두 맞춘 뒤 `similarity DESC → entrance 우선 → bd_mgt_sn` 순서로 결정적으로 정렬한다.
-3. `type=="parcel"`: 동/번지 검증 → `repo.lookup_by_jibun(...)`.
+3. `type=="parcel"`: 동/번지 검증 → `repo.lookup_by_jibun(...)`. 세종특별자치시(`sido_without_sgg`)는 `sgg_nm IS NULL`을 명시한 별도 SQL로 `idx_mv_jibun_name_exact`를 번지·리까지 타고, 시군구 대신 읍면동으로 같은 이름의 리(조치원읍·전의면 신흥리)를 가른다(T-320).
 4. 결과 없으면 `GeocodeResponse(status="NOT_FOUND")`.
 5. `RefinedAddress(text, structure)` 빌드. `GeocodeExtension(source="local", confidence, bd_mgt_sn, rncode_full, bjd_cd, zip_no, zip_source, buld_nm)`.
 

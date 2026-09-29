@@ -36,7 +36,7 @@ import {
   postJson,
   requestJson
 } from "@/lib/api";
-import { dbLifecycleBlocked } from "@/lib/backup-workflow";
+import { DB_RESTORE_SHARED_INSTANCE_TEXT, dbLifecycleBlocked } from "@/lib/backup-workflow";
 import { formatBytes } from "@/lib/format";
 import { pgIdentifierSchema } from "@/lib/schemas";
 import { toast } from "@/lib/toast";
@@ -212,7 +212,11 @@ export function RestoreWizard({
         steps={[STEP_LABELS[1], STEP_LABELS[2], STEP_LABELS[3], STEP_LABELS[4]]}
       />
 
-      <DbLifecycleNotice capabilities={lifecycle} feature="DB 복원" />
+      <DbLifecycleNotice
+        capabilities={lifecycle}
+        feature="DB 복원"
+        alternative={DB_RESTORE_SHARED_INSTANCE_TEXT}
+      />
 
       {error ? (
         <Alert role="alert" variant="destructive">

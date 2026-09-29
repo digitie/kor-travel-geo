@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import uuid
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import datetime
@@ -143,7 +142,7 @@ from .infra.engine import make_async_engine
 from .infra.external_api import ExternalGeocodeClient
 from .infra.geocode_repo import GeocodeRepository
 from .infra.geometry_repo import GeometryRepository
-from .infra.hotswap import inspect_restore_hot_swap_plan
+from .infra.hotswap import inspect_restore_hot_swap_plan, validate_maintenance_database
 from .infra.pobox_repo import PoboxRepository
 from .infra.public_api_keys import PublicApiKeyRepository
 from .infra.reverse_repo import ReverseRepository
@@ -160,8 +159,6 @@ from .infra.zip_repo import ZipRepository
 from .settings import Settings, get_settings
 
 _LOGGER = logging.getLogger(__name__)
-# 행정구역 바로 뒤에 오는 온전한 지번 토큰("681", "199-40", "산 12-3 번지", "31-2번지").
-_LEADING_PARCEL_LOT_RE = re.compile(r"(산\s*)?(\d+)(?:-(\d+))?(?:\s*(?:번지|번))?(?!\S)")
 
 
 def _metadata_str(value: object | None) -> str | None:
@@ -337,12 +334,12 @@ class AsyncAddressClient:
         국가지점번호를 type과 무관하게 먼저 처리하고, 나머지는 SQL 없는 NOT_FOUND 뒤 도로
         geometry/행정구역 후보 fallback으로 이어진다).
 
-        지번은 읍면동(리) 바로 다음 토큰이어야 하고 파서가 고른 번지와 같아야 한다(T-317 2차
-        리뷰). ``parse_address``는 마지막 숫자를 번지로 잡으므로 ``상계동 1234 … 1203호``·
-        ``역삼동 737 2층``·``삼평동 판교역 1번출구``는 호수·층·출구 번호를, ``관악구 신림1동``은
-        동 이름 속 숫자를 번지로 읽는다. 이런 입력은 엉뚱한 번지 OK 대신 road 경로에 둔다.
-        세종특별자치시는 시군구가 없어(MV ``sgg_nm`` NULL) 이 gate를 통과하지 못하므로 지번
-        lookup은 ``jibun_address``로 요청해야 한다.
+        번지 위치는 ``parse_address``가 정한다(T-320). 읍면동(리)가 있는 지번 파싱은 그 바로
+        다음 토큰을 번지로 잡고, 그 자리에 번지가 없으면(``역삼동 스타벅스 2층``·``관악구
+        신림1동``) 파싱 불가라 road 경로(행정구역 후보 fallback)로 간다. 그래서 ``상계동 1234 …
+        1203호``는 호수가 아니라 1234로 지번 lookup한다. 세종특별자치시는 시군구가 없으므로
+        (MV ``sgg_nm`` NULL) 시도+읍면동(리)만으로 anchor를 갖춘 것으로 본다 — 지번 lookup은
+        ``sgg_nm IS NULL``로 같은 index를 끝까지 탄다.
         """
         if inp.road_address:
             return "road"
@@ -354,18 +351,10 @@ class AsyncAddressClient:
             parts = parse_address(inp.query)
         except InvalidAddressError:
             return "road"
-        last_region_token = parts.li or parts.emd
-        if parts.is_road or not (parts.si and parts.sgg and last_region_token):
+        has_sgg = parts.sgg is not None or parts.sido_without_sgg
+        if parts.is_road or not (parts.si and has_sgg and (parts.li or parts.emd)):
             return "road"
-        tokens = parts.normalized.split()
-        if last_region_token not in tokens:  # 파서가 토큰을 합치거나 고친 경우 — 위치를 모른다
-            return "road"
-        after_region = " ".join(tokens[tokens.index(last_region_token) + 1 :])
-        lot = _LEADING_PARCEL_LOT_RE.match(after_region)
-        if lot is None:
-            return "road"
-        leading_lot = (bool(lot.group(1)), int(lot.group(2)), int(lot.group(3) or 0))
-        return "parcel" if leading_lot == (parts.mt, parts.mnnm, parts.slno) else "road"
+        return "parcel"
 
     @staticmethod
     def _should_collect_geocode_supplements(
@@ -2215,15 +2204,32 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         """
         return await db_lifecycle_capabilities(self._engine(), self.settings)
 
-    async def require_db_lifecycle(self, feature: DbLifecycleFeature) -> None:
-        """Raise ``UnsupportedOnInstanceError`` (E0410/409) if ``feature`` cannot run here."""
-        await require_db_lifecycle(self._engine(), self.settings, feature)
+    async def require_db_lifecycle(
+        self,
+        feature: DbLifecycleFeature,
+        *,
+        maintenance_database: str | None = None,
+    ) -> None:
+        """Raise ``UnsupportedOnInstanceError`` (E0410/409) if ``feature`` cannot run here.
+
+        ``maintenance_database`` is the DB a hot-swap request will actually connect to for
+        ``RENAME DATABASE`` (omitted: the instance's ``postgres``). It is validated first
+        (identifier, not the serving DB), so a malformed name is an ``InvalidInputError``
+        (E0100/400) and is never probed; a name missing from the cluster is E0100 too (T-321).
+        """
+        if maintenance_database is not None:
+            maintenance_database = validate_maintenance_database(
+                self.settings, maintenance_database
+            )
+        await require_db_lifecycle(
+            self._engine(), self.settings, feature, maintenance_database=maintenance_database
+        )
 
     async def restore_hot_swap_plan(
         self,
         req: RestoreHotSwapPlanRequest,
     ) -> RestoreHotSwapPlan:
-        await self.require_db_lifecycle("hot_swap")
+        await self.require_db_lifecycle("hot_swap", maintenance_database=req.maintenance_database)
         return await inspect_restore_hot_swap_plan(self.settings, req)
 
     async def execute_restore_hot_swap(
@@ -2242,7 +2248,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         """
         from .infra.hotswap import execute_restore_hot_swap
 
-        await self.require_db_lifecycle("hot_swap")
+        await self.require_db_lifecycle("hot_swap", maintenance_database=req.maintenance_database)
         return await execute_restore_hot_swap(
             self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
         )
@@ -2262,7 +2268,7 @@ SELECT source_file_id, part_kind, part_key, state, sha256, size_bytes, object_ke
         """
         from .infra.hotswap import execute_hot_swap_rollback
 
-        await self.require_db_lifecycle("hot_swap")
+        await self.require_db_lifecycle("hot_swap", maintenance_database=req.maintenance_database)
         return await execute_hot_swap_rollback(
             self._engine(), self.settings, req, actor=actor, audit_meta=audit_meta
         )

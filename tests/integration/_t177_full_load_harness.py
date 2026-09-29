@@ -980,7 +980,9 @@ RESTART IDENTITY CASCADE
             text(
                 """
 DELETE FROM public.load_manifest
- WHERE table_name IN ('tl_juso_text', 'tl_juso_parcel_link')
+ WHERE table_name IN (
+   'tl_juso_text', 'tl_juso_parcel_link', 'tl_locsum_entrc', 'tl_navi_buld_centroid'
+ )
 """
             )
         )

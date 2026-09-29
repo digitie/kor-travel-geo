@@ -554,6 +554,26 @@ async def test_async_client_geocode_skips_supplements_when_input_matches_refined
             "parcel",
         ),
         ({"query": "강남대로94길 20"}, "강남대로94길 20", "road"),
+        # T-320: 번지는 읍면동 바로 다음 토큰이다(뒤의 1203호가 아니다) — parcel로 보낸다.
+        (
+            {"query": "서울특별시 노원구 상계동 1234 주공아파트 101동 1203호"},
+            "서울특별시 노원구 상계동 1234 주공아파트 101동 1203호",
+            "parcel",
+        ),
+        # T-320 리뷰: 번지 뒤에 붙은 문장부호도 main처럼 지번이다(파싱 불가로 road에 새지 않는다).
+        (
+            {"query": "서울특별시 강남구 역삼동 737."},
+            "서울특별시 강남구 역삼동 737.",
+            "parcel",
+        ),
+        # T-320: 세종특별자치시는 시군구 없이 시도+읍면동(리)로 anchor를 갖춘다.
+        (
+            {"query": "세종특별자치시 조치원읍 신흥리 123"},
+            "세종특별자치시 조치원읍 신흥리 123",
+            "parcel",
+        ),
+        # T-320: 동 이름 속 숫자는 번지가 아니다 — 번호 없는 주소라 road(행정구역 fallback).
+        ({"query": "서울특별시 관악구 신림1동"}, "서울특별시 관악구 신림1동", "road"),
         # 국가지점번호·파싱 불가 입력은 기존 road 경로를 유지한다.
         ({"query": "다사 6925 4045"}, "다사 6925 4045", "road"),
         ({"query": "테헤란로"}, "테헤란로", "road"),
@@ -664,9 +684,10 @@ async def test_async_client_geocode_skips_supplements_for_jibun_query(
         "중구 태평로1가 31",
         "서울특별시 태평로1가 31",
         "존재하지않는엉터리주소zzqqxx9999",
-        # 세종특별자치시는 시군구가 없어(MV sgg_nm NULL) query로는 지번 lookup에 가지 않는다
-        # (문서화된 한계 — 지번 lookup은 jibun_address).
-        "세종특별자치시 조치원읍 신흥리 123",
+        # T-320: 시군구가 없는 시도는 세종특별자치시뿐이다 — 다른 시도에서 시군구를 빠뜨린
+        # 입력과 세종이라도 읍면동(리)이 없는 입력은 anchor가 모자라다.
+        "경기도 삼평동 681",
+        "세종특별자치시 123",
     ],
 )
 def test_geocode_lookup_type_keeps_anchorless_jibun_query_on_road(query: str) -> None:
@@ -680,38 +701,77 @@ def test_geocode_lookup_type_keeps_anchorless_jibun_query_on_road(query: str) ->
     assert AsyncAddressClient._geocode_lookup_type(GeocodeV2Input(query=query)) == "road"
 
 
-# T-317 2차 리뷰: parse_address는 마지막 숫자를 번지로 잡는다. 행정구역을 다 갖춘 query라도
-# 뒤따르는 호수·층·출구 번호나 동/리 이름 속 숫자가 번지로 잡히면 parcel로 보내지 않는다.
-_WRONG_LOT_JIBUN_QUERIES: list[tuple[str, int]] = [
-    # (query, parse_address가 잘못 고른 번지)
-    ("서울특별시 노원구 상계동 1234 주공아파트 101동 1203호", 1203),  # 운영: 오답 OK
-    ("경기도 성남시 분당구 삼평동 681 101호", 101),
-    ("서울특별시 강남구 역삼동 737 2층", 2),
-    ("서울특별시 강남구 역삼동 스타벅스 2층", 2),
-    ("경기도 성남시 분당구 삼평동 판교역 1번출구", 1),
-    ("서울특별시 송파구 신천동 29 롯데월드타워 123층", 123),
-    ("서울특별시 송파구 신천동 롯데월드타워 123", 123),
-    ("강원특별자치도 춘천시 신북읍 12-3 산 12-3", 12),  # 산 여부가 다르다
-    ("서울특별시 관악구 신림1동", 1),
-    ("부산광역시 강서구 대저1동", 1),
-    ("서울특별시 동작구 상도1동", 1),
-    ("제주특별자치도 제주시 애월읍 하귀1리", 1),
-    ("경상남도 남해군 창선면 창선2리", 2),
+# T-317 2차 리뷰 입력 중 읍면동(리) 바로 다음에 번지가 없는 query. 옛 parser는 마지막 숫자(층·
+# 출구·건물 번호나 동/리 이름 속 숫자)를 번지로 잡았고, T-320 parser는 번호 없는 주소로 본다 —
+# 지번 lookup 없이 road 경로(행정구역 후보 fallback)로 간다.
+_NO_LEADING_LOT_JIBUN_QUERIES: list[str] = [
+    "서울특별시 강남구 역삼동 스타벅스 2층",
+    "경기도 성남시 분당구 삼평동 판교역 1번출구",
+    "서울특별시 송파구 신천동 롯데월드타워 123",
+    "서울특별시 노원구 상계동 101동 1203호",
+    "서울특별시 노원구 상계동 1203호",
+    "서울특별시 관악구 신림1동",
+    "부산광역시 강서구 대저1동",
+    "서울특별시 동작구 상도1동",
+    "제주특별자치도 제주시 애월읍 하귀1리",
+    "경상남도 남해군 창선면 창선2리",
+    "세종특별자치시 조치원읍 신흥리",
+]
+
+# T-317 2차 리뷰가 road로 막았던 query 중 읍면동 바로 다음에 번지가 있는 것. 옛 parser가 고른
+# 뒤쪽 번호(주석) 대신 그 번지로 지번 lookup한다(T-320). (query, (산 여부, 본번, 부번))
+_TRAILING_NUMBER_JIBUN_QUERIES: list[tuple[str, tuple[str, int, int]]] = [
+    # 옛 parser 1203 — 운영에서 상계동 1203(노원검문소)으로 오답 OK
+    ("서울특별시 노원구 상계동 1234 주공아파트 101동 1203호", ("0", 1234, 0)),
+    ("경기도 성남시 분당구 삼평동 681 101호", ("0", 681, 0)),  # 옛 parser 101
+    ("서울특별시 강남구 역삼동 737 2층", ("0", 737, 0)),  # 옛 parser 2
+    ("서울특별시 송파구 신천동 29 롯데월드타워 123층", ("0", 29, 0)),  # 옛 parser 123
+    ("서울특별시 강남구 역삼동 737 외 2필지", ("0", 737, 0)),  # 옛 parser 2
+    ("강원특별자치도 춘천시 신북읍 12-3 산 12-3", ("0", 12, 3)),  # 옛 parser 산 12-3
 ]
 
 
-@pytest.mark.parametrize(("query", "wrong_lot"), _WRONG_LOT_JIBUN_QUERIES)
-def test_geocode_lookup_type_keeps_non_leading_lot_query_on_road(
-    query: str, wrong_lot: int
+@pytest.mark.parametrize("query", _NO_LEADING_LOT_JIBUN_QUERIES)
+def test_geocode_lookup_type_keeps_query_without_leading_lot_on_road(query: str) -> None:
+    from kortravelgeo.core.normalize import parse_address
+
+    with pytest.raises(InvalidAddressError):
+        parse_address(query)
+    assert AsyncAddressClient._geocode_lookup_type(GeocodeV2Input(query=query)) == "road"
+
+
+@pytest.mark.parametrize(("query", "lot"), _TRAILING_NUMBER_JIBUN_QUERIES)
+def test_geocode_lookup_type_sends_leading_lot_query_with_trailing_number_to_parcel(
+    query: str, lot: tuple[str, int, int]
 ) -> None:
     from kortravelgeo.core.normalize import parse_address
 
     parts = parse_address(query)
-    # 행정구역 anchor는 모두 있어 anchor 검사만으로는 막히지 않는 입력이다.
     assert parts.is_road is False
-    assert parts.si and parts.sgg and parts.emd
-    assert parts.mnnm == wrong_lot
-    assert AsyncAddressClient._geocode_lookup_type(GeocodeV2Input(query=query)) == "road"
+    assert (parts.mntn_yn, parts.mnnm, parts.slno) == lot
+    assert AsyncAddressClient._geocode_lookup_type(GeocodeV2Input(query=query)) == "parcel"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "세종특별자치시 조치원읍 신흥리 123",
+        "세종 조치원읍 신흥리 123",
+        "세종시 전의면 신흥리 123-4",
+        "세종특별자치시 한솔동 123",
+        "세종특별자치시 조치원읍 신흥리 산 12",
+        "세종특별자치시 조치원읍 신흥리 123 101호",
+    ],
+)
+def test_geocode_lookup_type_sends_sejong_jibun_query_to_parcel(query: str) -> None:
+    """T-320: 세종특별자치시는 시군구가 없어도(MV sgg_nm NULL) 시도+읍면동(리)이면 parcel이다."""
+    from kortravelgeo.core.normalize import parse_address
+
+    parts = parse_address(query)
+    assert parts.is_road is False
+    assert parts.sgg is None
+    assert parts.sido_without_sgg is True
+    assert AsyncAddressClient._geocode_lookup_type(GeocodeV2Input(query=query)) == "parcel"
 
 
 @pytest.mark.parametrize(
@@ -739,7 +799,8 @@ def test_geocode_lookup_type_keeps_road_query_on_road(query: str) -> None:
         "코엑스 123",
         "서울특별시 강남구 123",
         "존재하지않는엉터리주소zzqqxx9999",
-        *(query for query, _ in _WRONG_LOT_JIBUN_QUERIES),
+        "경기도 삼평동 681",
+        *_NO_LEADING_LOT_JIBUN_QUERIES,
     ],
 )
 async def test_async_client_geocode_anchorless_jibun_query_skips_parcel_lookup(
@@ -749,8 +810,8 @@ async def test_async_client_geocode_anchorless_jibun_query_skips_parcel_lookup(
     """T-317 리뷰: anchor 없는 지번 파싱이나 번지가 행정구역 바로 뒤가 아닌 query는 지번
     lookup(전국 index 스캔 또는 엉뚱한 번지 OK)으로 새지 않는다.
 
-    core geocode는 road lookup을 SQL 없이 NOT_FOUND로 끝내고(도로명 없음), 이전처럼
-    도로 geometry/행정구역 후보 fallback으로 넘어가야 한다.
+    core geocode는 road lookup을 SQL 없이 NOT_FOUND로 끝내거나(도로명 없음) 번호 없는 주소로
+    거절하고(T-320), 이전처럼 도로 geometry/행정구역 후보 fallback으로 넘어가야 한다.
     """
     from kortravelgeo.infra.geocode_repo import GeocodeRepository
 
@@ -816,13 +877,23 @@ def _parcel_lookup(text: str, *, emd_nm: str, bd_mgt_sn: str) -> AddressLookup:
             31,
             "11140103200500100011000000",
         ),
+        # T-320: 세종특별자치시는 시군구 없이 지번 lookup한다(운영 행: 조치원읍 신흥리 123 =
+        # 군청로 87-16).
+        (
+            "세종특별자치시 조치원읍 신흥리 123",
+            "세종특별자치시",
+            None,
+            "조치원읍",
+            123,
+            "36110250325800100008700016",
+        ),
     ],
 )
 async def test_async_client_geocode_jibun_query_reaches_parcel_lookup(
     monkeypatch: pytest.MonkeyPatch,
     query: str,
     si: str,
-    sgg: str,
+    sgg: str | None,
     emd: str,
     mnnm: int,
     bd_mgt_sn: str,
@@ -881,6 +952,15 @@ async def test_async_client_geocode_jibun_query_reaches_parcel_lookup(
         ("서울특별시 강남구 삼성동 159 코엑스", "삼성동", "0", 159, 0),
         ("서울특별시 중구 태평로1가 31-2번지", "태평로1가", "0", 31, 2),
         ("서울특별시 중구 을지로2가 199-40 (을지로2가)", "을지로2가", "0", 199, 40),
+        # T-320: 뒤따르는 호수·층 번호가 아니라 읍면동 바로 다음 번지로 lookup한다.
+        ("서울특별시 노원구 상계동 1234 주공아파트 101동 1203호", "상계동", "0", 1234, 0),
+        ("경기도 성남시 분당구 삼평동 681 101호", "삼평동", "0", 681, 0),
+        ("서울특별시 강남구 역삼동 737 2층", "역삼동", "0", 737, 0),
+        ("서울특별시 송파구 신천동 29 롯데월드타워 123층", "신천동", "0", 29, 0),
+        ("강원특별자치도 춘천시 신북읍 12-3 산 12-3", "신북읍", "0", 12, 3),
+        # T-320: 세종특별자치시(시군구 없음)도 query로 지번 lookup에 닿는다.
+        ("세종특별자치시 조치원읍 신흥리 123", "신흥리", "0", 123, 0),
+        ("세종 한솔동 산 12-1", "한솔동", "1", 12, 1),
     ],
 )
 async def test_async_client_geocode_leading_lot_query_reaches_parcel_lookup_with_lot(

@@ -223,6 +223,13 @@ logs/
 
 운영 DB를 직접 덮어쓰는 `--replace-current`는 기본 금지다. 필요한 경우 maintenance mode, 모든 app connection 종료, typed confirmation, 백업 선행 생성, rollback plan을 요구한다. 일반 운영 경로는 "새 DB 복원 → 검증 → `KTG_PG_DSN` 전환 → 앱 재시작"이다.
 
+**복원 뒤 `alembic upgrade head` (T-319).** 복원·hot-swap 흐름은 Alembic migration을 돌리지 않는다. 복원한 DB의
+`alembic_version`이 앱 head보다 낮으면(T-319 이전 백업은 `0026`/`0027`) serving으로 올리기 전(hot-swap·DSN 전환
+전)에 그 DB를 대상으로 `KTG_PG_DSN=<복원 DB DSN> alembic upgrade head`를 돌린다. 예를 들어 `0028`은 원천 기준월
+manifest 행(`load_manifest`)을 채운다 — 건너뛰면 MV refresh·백업이 기록하는 기준월(`source_set.yyyymm_by_kind`,
+`/v2/dataset/version`)은 manifest 행이 없는 원천을 복원본의 active release 기준월로 이어 쓰는 데 그친다(빈 테이블·
+release에 없는 원천은 `null`). 이 upgrade는 manifest 행이 없는 원천 테이블마다 seq scan 1회를 한다.
+
 복원 진행률 phase:
 
 | phase | progress 범위 | 기준 |
@@ -579,22 +586,68 @@ ADR-036 hot-swap(maintenance DB에서 `ALTER DATABASE RENAME`), restore drill(th
 
 | 설정 | 동작 |
 |------|------|
-| `KTG_DB_LIFECYCLE_MODE=auto` (기본) | role 조회. `CREATEDB` + `postgres` `CONNECT`면 지원 — 전용 superuser instance(dev/테스트)는 그대로 전부 허용 |
+| `KTG_DB_LIFECYCLE_MODE=auto` (기본) | role 조회. `CREATEDB` + maintenance DB `CONNECT`면 지원 — 전용 superuser instance(dev/테스트)는 그대로 전부 허용 |
 | `KTG_DB_LIFECYCLE_MODE=enabled` | 조회 없이 허용 (운영자가 권한을 따로 준 경우 override) |
 | `KTG_DB_LIFECYCLE_MODE=disabled` | 조회 없이 차단 |
 
+maintenance DB는 기본 `postgres`다. hot-swap plan/execute/rollback만 요청의 `maintenance_database`(API 필드,
+`ktgctl serving hot-swap-plan --maintenance-db`)로 다른 DB를 고를 수 있으므로, 그 요청은 **실제로 연결할 DB의
+`CONNECT`**를 조회한다(T-321). 예를 들어 `postgres` `CONNECT`가 막힌 hardened cluster에서 `CREATEDB` role이
+`maintenance_database=kor_travel_geo_admin`을 쓰면 hot-swap은 통과하고, 반대로 `postgres`만 되는 role이 연결할 수
+없는 DB를 고르면 raw 연결 오류 대신 E0410으로 거절된다. 이름을 잘못 적은 DB는 `maintenance DB '<name>' 없음`으로
+구분된다. `GET /v1/admin/db-capabilities`·restore drill·scratch·복원 cleanup은 계속 `postgres` 기준이며, probe
+캐시(5분)는 연결 URL + maintenance DB별로 따로 둔다.
+
 | 기능 | 1차(API) | 2차(Dagster/CLI) |
 |------|----------|------------------|
-| hot-swap plan/execute/rollback | `client.restore_hot_swap_plan`/`execute_*` 진입 즉시 (`/restores/hot-swap*`, `ktgctl serving hot-swap-plan`) | — |
-| restore drill | `client.run_restore_drill` 진입 즉시 (`ktgctl backup restore-drill`) | `restore_drill` op 시작 시 `Failure` (daily schedule 포함) |
+| hot-swap plan/execute/rollback | `client.restore_hot_swap_plan`/`execute_*` 진입 즉시, 요청의 `maintenance_database` 기준 (`/restores/hot-swap*`, `ktgctl serving hot-swap-plan`) | — |
+| restore drill | `client.run_restore_drill` 진입 즉시 (`ktgctl backup restore-drill`) | daily schedule은 tick 평가에서 `SkipReason`(run 없음, T-321), `restore_drill` op는 시작 시 `Failure`(수동 launch) |
 | scratch full-load (`full_load_batch` + `target_database`) | `launch_full_load_batch_dagster_run` — scratch DB 생성·row insert 전 | `run_full_load_batch` op가 scratch engine 생성 전 `Failure` |
 | `db_restore` (`new_database`/`replace_current`) | `POST /restores` — load_jobs row·Dagster run 생성 전 | `run_db_restore` op leaf 첫 단계(row를 사유와 함께 failed), `run_restore_job` 첫 단계(`ktgctl restore create`) |
 
-- `target_dsn`을 명시한 복원은 그 DSN의 자격증명으로 도는 운영자 경로라 게이트하지 않는다.
+- `target_dsn`을 명시한 복원은 그 DSN의 자격증명으로 도는 운영자 경로라 게이트하지 않는다 — 공용 instance에서
+  지원하는 복원은 이 경로다(아래 "공용 instance에서 복원하기").
+- `db_restore`의 E0410 `hint`는 role 사유 뒤에 그 절차를 붙인다(`; 공용 instance 복원 절차: ...`). admin UI 복원
+  위저드도 같은 절차를 안내한다.
 - `POST /restores/dry-run`은 archive 검증용으로 계속 동작하되 같은 사유를 `blockers`에 넣어 `can_restore=false`를 돌려준다.
-- `GET /v1/admin/db-capabilities`가 판정(`supported`, `reason`, role 속성)을 돌려주고, admin UI 백업/복원 화면은
-  이를 읽어 복원 제출·hot-swap plan/실행/rollback을 비활성화하고 "공용 DB instance에서는 지원하지 않음 — 운영자가
-  manager ktdctl로 수행"을 표시한다. `hot-swap-source-verify`는 수명주기 권한이 필요 없어 그대로 둔다.
+- `POST /restores/hot-swap-plan`이 E0410으로 거절돼도 dry-run처럼 `serving_release.hot_swap_plan` `denied` 감사
+  행(`error_code=E0410`, payload `blockers`에 사유)을 남긴다(T-321). 감사 기록 실패는 409 응답을 가리지 않는다.
+- daily restore drill schedule(`backup_restore_drill_daily`)은 기본 STOPPED다. 공용 instance에서 켜 두어도 매일
+  `Failure` run이 쌓이지 않고 tick이 사유와 함께 skip된다. capability 조회 자체가 실패하면(DB 연결 불가 등)
+  skip하지 않고 run을 만든다 — op guard가 다시 판정하고 실패는 run-failure sensor 알림으로 간다.
+- `GET /v1/admin/db-capabilities`가 판정(`supported`, `reason`, role 속성, `maintenance_database`)을 돌려주고, admin UI
+  백업/복원 화면은 이를 읽어 복원 제출·hot-swap plan/실행/rollback을 비활성화하고 "공용 DB instance에서는 지원하지
+  않음 — 운영자가 manager ktdctl로 수행"을 표시한다. `hot-swap-source-verify`는 수명주기 권한이 필요 없어 그대로 둔다.
+
+### 공용 instance에서 복원하기 (지원 절차, T-321)
+
+게이트는 `target_dsn` 없는 복원(app 자격증명으로 도는 `target_database` 복원)을 role 권한(`CREATEDB` + maintenance
+`CONNECT`)으로 판정해 막는다 — 실패 시 대상 DB drop/quarantine이 maintenance DB를 쓰기 때문이다. `target_dsn`을
+명시한 복원은 운영자 경로라 게이트하지 않으므로, cluster admin이 빈 DB를 만들어 주면 app role로 `target_dsn` 복원이
+된다(비-superuser TOC 필터 + `--no-owner --no-privileges`, 아래 "비-superuser(app role) 복원"). 게이트 자체는
+넓히지 않았다(T-321 결정 — 넓히려면 cleanup이 maintenance DB 없이 동작해야 한다). 이 경로는 `tests/integration/test_t312_shared_instance_restore.py`(`app_role` case)가 NOCREATEDB role에서
+검증한다 — 같은 role의 `target_database` 복원이 E0410으로 거절되고 hint에 이 절차가 있는 것도 함께 확인한다.
+
+1. **cluster admin**: app role 소유의 빈 DB와 `x_extension`·extension을 만든다 — 아래 "cluster admin 복원 절차"의
+   1)번과 같다(`CREATE DATABASE <새 DB> OWNER kor_travel_geo_app TEMPLATE template0` + `REVOKE CONNECT ... FROM
+   PUBLIC` + `CREATE SCHEMA x_extension` + `GRANT USAGE ... TO kor_travel_geo_app` + `CREATE EXTENSION ... WITH SCHEMA
+   x_extension`).
+2. **운영자**: `pg_restore` 16·`zstd`가 있는 geo API 컨테이너(`docker/api.Dockerfile`)에서 app role 자격증명으로 복원한다.
+   DSN에 비밀번호를 넣지 말고 `PGPASSWORD`(또는 `~/.pgpass`)로 준다 — 명령행 인자는 process 목록에 보인다.
+
+   ```bash
+   PGPASSWORD=<app role 비밀번호> ktgctl restore create --artifact-id <db_backup artifact_id> \
+     --target-dsn "postgresql://kor_travel_geo_app@<host>:11000/<새 DB>"
+   ```
+
+   복원 로그 manifest `preprovisioned_toc_skipped`에 건너뛴 extension/`x_extension` entry가 남고, smoke test가
+   app role의 `x_extension` `USAGE`까지 확인한다.
+3. 실패하면 job 소유 대상 DB의 자동 drop/quarantine은 maintenance DB에 연결하지 못해 실패로 끝난다(best-effort,
+   `db_restore.target_cleanup` `failed` 감사) — 남은 DB는 admin이 drop한다.
+4. serving 교체(ADR-036 rename)는 `CREATEDB`가 필요하므로 계속 admin이 수행한다.
+
+admin UI는 `target_dsn`을 받지 않는다 — DSN 자격증명이 브라우저를 거쳐 `load_jobs.payload`·Dagster run config에 그대로
+남기 때문이다. `POST /v1/admin/restores`에 `target_dsn`을 넣어도 동작하지만 같은 이유로 CLI를 권장한다.
 
 ### 백업 형식 (app role로 찍어도 복원 가능)
 
@@ -663,9 +716,43 @@ pg_restore --format=directory --jobs=4 --no-owner --no-privileges --role=kor_tra
   restore_work/dump
 ```
 
-이후 `ANALYZE`, smoke, 그리고 필요하면 운영 DB와의 rename 교체(ADR-036 절차)를 admin이 수행한다.
+이후 `ANALYZE`, smoke, 그리고 필요하면 운영 DB와의 rename 교체(ADR-036 절차)를 admin이 수행한다. 교체 전에
+복원본의 `alembic_version`이 앱 head보다 낮으면 복원본을 대상으로 `alembic upgrade head`를 먼저 돌린다(위
+"복원 작업 흐름"의 T-319 항목).
 
 manager `ktdctl`이 필터·`--role` 없이 plain superuser `pg_restore --clean --if-exists`로 복원해도 된다 — dump의
 `SCHEMA - x_extension`·`ACL - SCHEMA x_extension` entry가 schema와 `kor_travel_geo_app` `USAGE`를 다시 만들고,
 owner는 dump 그대로(`kor_travel_geo_app`)다. 어느 경로든 교체 전에 app role 연결에서
 `SELECT has_schema_privilege('x_extension', 'USAGE')`가 참이고 PostGIS 함수가 풀리는지 확인한다.
+
+### 다른 cluster로 superuser 복원 — dump owner role 사전 생성 (T-321)
+
+superuser 복원(`ktgctl restore create --target-dsn <superuser DSN>`, manager plain `pg_restore`)은 dump의 owner와
+ACL을 그대로 적용한다(`--no-owner`를 붙이지 않는다 — 위 "백업 형식"). 그래서 공용 instance의 백업을 **그 role이 없는
+다른 cluster**(dev·재해 복구용 새 instance 등)에 superuser로 복원하면 `ALTER ... OWNER TO kor_travel_geo_app`,
+`ALTER SCHEMA x_extension OWNER TO shared_admin`, `GRANT USAGE ... TO kor_travel_geo_app`가
+`role "..." does not exist`로 실패하고 `pg_restore`가 exit 1로 끝나 복원 job도 실패한다. 복원 전에 dump가 참조하는
+role을 대상 cluster에 **`NOLOGIN`으로** 만든다 — 객체 소유와 grant만 받는 role이라 로그인 경로가 늘지 않는다.
+
+```bash
+# 1) archive 해제 뒤 dump가 참조하는 owner/grantee role 목록 (공용 instance 백업이면 kor_travel_geo_app, shared_admin)
+pg_restore --schema-only --file=- restore_work/dump \
+  | grep -oE '(OWNER TO|TO) [a-z_][a-z0-9_]*;' | awk '{print $NF}' | tr -d ';' | sort -u
+
+# 2) 대상 cluster에 없는 role만 NOLOGIN으로 생성 — superuser/cluster admin (public·postgres는 제외)
+psql -d postgres -c "CREATE ROLE kor_travel_geo_app NOLOGIN" -c "CREATE ROLE shared_admin NOLOGIN"
+```
+
+- 대상 cluster에 같은 이름의 role이 이미 있으면(예: 그 cluster도 geo app role을 쓴다) 만들지 않는다 — 그 role이
+  그대로 owner가 된다.
+- 복원된 객체는 `kor_travel_geo_app` 소유다. 그 cluster의 앱이 superuser가 아닌 다른 login role로 붙으면
+  `GRANT kor_travel_geo_app TO <login role>`로 멤버십을 주거나, 처음부터 그 login role 자격증명의 `target_dsn`으로
+  복원한다(비-superuser 경로 — owner·ACL을 빼고 모든 객체가 복원 role 소유가 된다).
+- 복원 경로가 role을 자동으로 만들지는 않는다 — role은 cluster 전역 객체라 DB 하나의 복원이 cluster에 부작용을
+  남기지 않도록 운영자가 명시적으로 만든다.
+
+로컬 재현(PostGIS 16-3.5 컨테이너, 2026-09-29): app role이 owner이고 `x_extension`이 별도 admin role 소유(app role은
+`USAGE`만)인 DB를 app role로 `pg_dump`한 뒤, 두 role을 없앤 cluster에 superuser `pg_restore --clean --if-exists`로
+복원하면 `role "..." does not exist` 오류(`errors ignored on restore: 4`)로 exit 1, 두 role을 `NOLOGIN`으로 만든 뒤 새 DB에 복원하면 exit 0이었고
+테이블 owner·`x_extension` owner·app role `USAGE`가 dump 그대로 복원됐다. 위 1)의 목록 명령은 정확히 그 두 role을
+돌려줬다.

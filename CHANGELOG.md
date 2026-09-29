@@ -5,6 +5,54 @@
 ## [Unreleased]
 
 ### Changed
+- **지번 주소의 번지를 읍면동·리 바로 다음 토큰으로 읽는다(T-320).** `parse_address`가 마지막 숫자를
+  번지로 잡아 `서울특별시 노원구 상계동 1234 주공아파트 101동 1203호`가 v1 `type=parcel`·v2
+  `jibun_address`에서 1203번지(운영: 노원검문소, 동일로 1794)로 오답 OK됐다. 이제 읍면동·리가 있는 지번
+  파싱은 그 바로 다음 토큰(`681`, `199-40`, `산 12-3`, `31-2번지`, 부번까지 적은 `642-16호`)을 번지로 쓰고
+  뒤따르는 호수·층·동 번호는 `detail`로 남긴다(같은 입력은 1234번지로 찾아 해당 행이 없으면 NOT_FOUND).
+  번지에 붙은 문장부호·글자(`737.`, `737번지.`, `'737'`, `산1-1번지일원`, `123일대`)는 예전처럼 번지 뒤
+  `detail`이고, 번호에 바로 붙은 `1203호`·`2층`·`101동`·`3번출구`·`737번지2층`만 번지가 아니다. 그
+  자리에 번지가 없는 입력(`… 역삼동 스타벅스 2층`, `… 상계동 1203호`)과 동·리 이름 속 숫자뿐인 입력(`서울특별시
+  관악구 신림1동`, `… 애월읍 하귀1리`)은 번호 없는 주소(`서울특별시 관악구 신림동`과 같은 취급)다 — v1
+  `/v1/address/geocode`는 NOT_FOUND 대신 VWorld `ERROR`/`INVALID_TYPE`(HTTP 400), `/v1/address/zipcode`는
+  NOT_FOUND 대신, `/v1/admin/normalize`는 200 대신 `E0101`(400)을 돌려주고, v2 `query`는 예전처럼 행정구역
+  후보 fallback으로 간다. 도로명 파싱과 읍면동·리가 없는 입력(`코엑스 123`)은 그대로다.
+  v2 `query` gate는 이 parser 결과를 그대로 쓰도록 단순화해 `… 삼평동 681 101호`·`… 역삼동 737 2층`·`… 신천동
+  29 롯데월드타워 123층`도 앞 번지로 지번 lookup한다.
+- **세종특별자치시 지번 주소를 v2 `query`로도 찾고, 지번 lookup이 시군구 없이 index를 끝까지 탄다(T-320).**
+  세종은 시군구가 없어(MV `sgg_nm` NULL, 운영 27,879행) T-317 gate를 통과하지 못했고, v1 `type=parcel`·
+  `jibun_address`는 `idx_mv_jibun_name_exact`를 시도 범위 전체로 훑으면서 리 이름만 봐 `세종특별자치시
+  전의면 신흥리 123`이 조치원읍 신흥리 123(군청로 87-16)으로 오답 OK됐다. 이제 세종 지번 lookup은
+  `sgg_nm IS NULL`과 읍면동·리를 함께 거는 별도 SQL을 쓴다(운영 EXPLAIN: Index Cond에 `sgg_nm IS NULL`·번지·
+  `li_nm`, 13 buffers/0.18ms — 기존 경로 434 buffers/5.3ms). 다른 시도에서 시군구를 빠뜨린 입력은 그대로
+  시군구 조건 없이 찾는다.
+- **원천 기준월을 `load_manifest`에서 읽어 MV refresh·백업의 대형 테이블 전수 scan을 없앴다(T-319).**
+  serving release 기록(MV refresh 끝단, 적재 CLI, 직접 서빙 적재)과 백업 preflight manifest가 원천 테이블마다
+  `SELECT max(source_yyyymm)`을 parallel seq scan했다(인덱스 없음 — `tl_navi_buld_centroid`·
+  `tl_spbd_buld_polygon` 각 1,070만 행; 2026-09-28 운영 백업 preflight 11분). 이제 두 곳 모두
+  `load_manifest.source_yyyymm` 한 번 조회로 끝난다. manifest 행이 없는 테이블은 scan하지 않고, 행이 있으면
+  active serving release의 기준월을 이어 쓰며(T-319 이전 백업을 복원만 한 DB), 비었거나 release에도 없으면
+  "모름"(`null`)으로 둔다. 도로명주소 한글·위치정보요약·내비게이션 건물·SHP 건물 polygon 적재기가 적재
+  row의 최댓값을 같은 transaction에서 manifest에 남기고(지번·출입구·일변동·구역은 원래 남겼다), SHP·구역
+  full 적재의 `TRUNCATE`는 같은 transaction에서 manifest 행도 지운다. 마지막 적재가 이기는 값이라 평소(전국
+  적재·같거나 새 기준월 재적재·일변동)는 옛 `max()`와 같고, 더 옛 기준월을 upsert로 덮어 새 row가 남는 경우만
+  다르다. Alembic `0028`이 manifest 행이 없는 테이블에 한해 옛 조회와 같은 값을 한 번 backfill하고(배포 때 그
+  테이블들 seq scan 1회), T-319 이전 일변동이 남긴 도로명주소 한글 행은 다시 계산해 `GREATEST(기존, max)`로
+  올린다. 복원·hot-swap은 migration을 돌리지 않으므로 옛 백업을 복원한 DB는 serving으로 올리기 전에
+  `alembic upgrade head`를 돌린다. 출력 형태(`source_set.yyyymm_by_kind`)는 그대로다.
+- **DB 수명주기 capability 후속 정리(T-321, T-312 리뷰 low).**
+  hot-swap plan/execute/rollback은 요청의 `maintenance_database`(`--maintenance-db`)를 실제로 조회한다 — 전에는
+  항상 `postgres`를 봐서 hardened cluster에서 다른 maintenance DB를 쓰면 잘못 거절되거나 잘못 통과했다. 이름은 조회
+  전에 식별자 검증하고(형식 오류는 `E0100`), cluster에 없는 DB도 instance 미지원(`E0410`)이 아니라 입력 오류
+  `E0100`이다(`CREATEDB`가 없는 공용 instance는 그대로 `E0410`). 요청이 고른 이름은 capability 캐시에 넣지 않는다(`GET /v1/admin/db-capabilities`는 계속 `postgres`
+  기준). `db_restore`의
+  `E0410` `hint`와 admin UI 복원 위저드가 공용 instance 복원 절차(cluster admin이 app role 소유의 빈 DB를 만든 뒤
+  `ktgctl restore create --target-dsn`)를 안내한다 — UI는 DSN 자격증명을 받지 않고 게이트 범위도 그대로다.
+  E0410으로 거절된 hot-swap plan도 dry-run처럼 `serving_release.hot_swap_plan` `denied` 감사 행을 남긴다. Dagster
+  daily restore drill schedule은 미지원 instance에서 tick을 `SkipReason`으로 건너뛰어 매일 `Failure` run이 쌓이지
+  않는다(op guard는 2차 방어선으로 유지). 공용 instance 백업을 dump owner role(`kor_travel_geo_app`,
+  `shared_admin`)이 없는 다른 cluster에 superuser로 복원할 때 그 role을 `NOLOGIN`으로 먼저 만드는 절차를
+  `docs/t046-db-backup-restore.md`에 추가했다.
 - **공용 DB instance에서 불가능한 DB 수명주기 기능을 일찍 거절하고, app role 백업을 복원 가능한 형식으로 바꿨다(T-312).**
   hot-swap plan/execute/rollback·restore drill·blue-green scratch full-load·`db_restore`는 `CREATEDB`와 maintenance
   DB `postgres` `CONNECT`가 필요한데, 공용 instance(T-308)의 app role에는 둘 다 없어 job을 만든 뒤 raw DB 오류로

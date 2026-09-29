@@ -93,6 +93,28 @@ WHERE (CAST(:si AS text) IS NULL OR si_nm = CAST(:si AS text))
 """
 )
 
+# 세종특별자치시처럼 시군구가 없는 시도(MV sgg_nm NULL)의 지번 lookup(T-320). ``sgg_nm IS NULL``을
+# 명시해야 idx_mv_jibun_name_exact(si_nm, sgg_nm, mntn_yn, lnbr_mnnm, lnbr_slno, emd_nm,
+# li_nm, ...)가 시도 전체 범위(운영 세종 27,879행)가 아니라 번지·리까지 index 조건으로 탄다.
+# 시군구가 가르던 같은 이름의 리(조치원읍·전의면 신흥리)는 읍면동으로 가른다.
+_LOOKUP_JIBUN_SIDO_WITHOUT_SGG = text(
+    _BASE_SELECT
+    + """
+ WHERE si_nm = CAST(:si AS text)
+   AND sgg_nm IS NULL
+   AND (CAST(:emd AS text) IS NULL OR emd_nm = CAST(:emd AS text) OR li_nm = CAST(:emd AS text))
+   AND (CAST(:li AS text) IS NULL OR li_nm = CAST(:li AS text))
+"""
+    + _REGION_FILTER
+    + """
+   AND mntn_yn = :mntn_yn
+   AND lnbr_mnnm = :mnnm
+   AND lnbr_slno = :slno
+ ORDER BY CASE WHEN pt_source = 'entrance' THEN 0 ELSE 1 END, bd_mgt_sn
+ LIMIT 1
+"""
+)
+
 _FUZZY_ROADS = text(
     """
 WITH candidates AS MATERIALIZED (
@@ -211,15 +233,19 @@ class GeocodeRepository:
     ) -> AddressLookup | None:
         if parts.mnnm is None:
             return None
+        statement = _LOOKUP_JIBUN
+        region_names: dict[str, str | None] = {"sgg": parts.sgg, "emd": parts.li or parts.emd}
+        if parts.sido_without_sgg:
+            statement = _LOOKUP_JIBUN_SIDO_WITHOUT_SGG
+            region_names = {"emd": parts.emd, "li": parts.li}
         async with self.engine.connect() as conn:
             row = (
                 await conn.execute(
-                    _LOOKUP_JIBUN,
+                    statement,
                     {
                         **region_params(region_hint),
+                        **region_names,
                         "si": parts.si,
-                        "sgg": parts.sgg,
-                        "emd": parts.li or parts.emd,
                         "mntn_yn": parts.mntn_yn,
                         "mnnm": parts.mnnm,
                         "slno": parts.slno,

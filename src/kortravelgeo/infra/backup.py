@@ -36,7 +36,7 @@ from kortravelgeo.dto.admin import (
     RestoreDryRunResult,
 )
 from kortravelgeo.exceptions import InvalidInputError, NotFoundError, UnsupportedOnInstanceError
-from kortravelgeo.infra.admin_repo import AdminRepository
+from kortravelgeo.infra.admin_repo import AdminRepository, source_yyyymm_by_kind
 from kortravelgeo.infra.db_capabilities import require_db_lifecycle
 from kortravelgeo.infra.restore_toc import (
     RESTORE_TARGET_ROLE_SQL,
@@ -1650,20 +1650,9 @@ async def infer_source_set(engine: AsyncEngine) -> dict[str, Any]:
         "shp": "tl_spbd_buld_polygon",
         "roadaddr_entrance": "tl_roadaddr_entrc",
     }
-    yyyymm_by_kind: dict[str, str | None] = {}
+    # T-319: 원천 테이블 전수 scan(max(source_yyyymm)) 대신 load_manifest를 읽는다.
     async with engine.connect() as conn:
-        for kind, table_name in tables.items():
-            exists = await conn.scalar(
-                text("SELECT to_regclass(:name)"),
-                {"name": f"public.{table_name}"},
-            )
-            if exists is None:
-                yyyymm_by_kind[kind] = None
-                continue
-            value = await conn.scalar(
-                text(f"SELECT max(source_yyyymm) FROM public.{table_name}")
-            )
-            yyyymm_by_kind[kind] = str(value) if value is not None else None
+        yyyymm_by_kind = await source_yyyymm_by_kind(conn, tables)
     values = {value for value in yyyymm_by_kind.values() if value}
     return {
         "yyyymm_by_kind": yyyymm_by_kind,

@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from kortravelgeo.exceptions import ConflictError, UnsupportedOnInstanceError
+from kortravelgeo.exceptions import ConflictError, InvalidInputError, UnsupportedOnInstanceError
 from kortravelgeo.infra import db_capabilities as caps_mod
 from kortravelgeo.infra.db_capabilities import (
     DB_LIFECYCLE_FEATURES,
@@ -138,7 +138,7 @@ async def test_auto_probe_is_cached_per_engine_url_until_ttl(
     probed: list[str] = []
     clock = {"now": 1_000.0}
 
-    async def fake_probe(engine: _FakeEngine) -> DbRoleProbe:
+    async def fake_probe(engine: _FakeEngine, _maintenance_database: str) -> DbRoleProbe:
         probed.append(engine.url.key)
         return _SHARED_APP_ROLE
 
@@ -167,7 +167,7 @@ async def test_auto_probe_is_cached_per_engine_url_until_ttl(
 async def test_forced_modes_never_touch_the_database(
     monkeypatch: pytest.MonkeyPatch, mode: str, supported: bool
 ) -> None:
-    async def fail_probe(_engine: object) -> DbRoleProbe:
+    async def fail_probe(_engine: object, _maintenance_database: str) -> DbRoleProbe:
         raise AssertionError("forced mode must not probe the DB")
 
     monkeypatch.setattr(caps_mod, "probe_db_role", fail_probe)
@@ -183,7 +183,7 @@ async def test_forced_modes_never_touch_the_database(
 async def test_require_raises_e0410_conflict_with_feature_and_reason(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_probe(_engine: object) -> DbRoleProbe:
+    async def fake_probe(_engine: object, _maintenance_database: str) -> DbRoleProbe:
         return _SHARED_APP_ROLE
 
     monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
@@ -208,7 +208,7 @@ async def test_require_raises_e0410_conflict_with_feature_and_reason(
 
 @pytest.mark.asyncio
 async def test_require_passes_on_a_superuser_instance(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_probe(_engine: object) -> DbRoleProbe:
+    async def fake_probe(_engine: object, _maintenance_database: str) -> DbRoleProbe:
         return _SUPERUSER
 
     monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
@@ -267,6 +267,7 @@ async def test_probe_reads_role_attributes_and_maintenance_connect() -> None:
             "is_superuser": False,
             "can_create_database": False,
             "can_connect_maintenance_database": False,
+            "maintenance_database_exists": True,
         },
         seen,
     )
@@ -279,3 +280,282 @@ async def test_probe_reads_role_attributes_and_maintenance_connect() -> None:
     assert "rolcreatedb" in seen["sql"]
     assert "has_database_privilege(d.oid, 'CONNECT')" in seen["sql"]
     assert "current_user" in seen["sql"]
+    assert "AS maintenance_database_exists" in seen["sql"]
+
+
+# --- T-321: hot-swap probes the maintenance DB it will actually connect to ------------------
+
+
+@pytest.mark.asyncio
+async def test_probe_binds_the_requested_maintenance_database() -> None:
+    seen: dict[str, Any] = {}
+    engine = _ProbeEngine(
+        {
+            "role": "ops",
+            "is_superuser": False,
+            "can_create_database": True,
+            "can_connect_maintenance_database": False,
+            "maintenance_database_exists": False,
+        },
+        seen,
+    )
+
+    probe = await probe_db_role(engine, "kor_travel_geo_admin")  # type: ignore[arg-type]
+
+    assert seen["params"] == {"maintenance_database": "kor_travel_geo_admin"}
+    assert probe.maintenance_database_exists is False
+    assert probe.can_connect_maintenance_database is False
+
+
+def test_evaluate_names_the_requested_maintenance_database() -> None:
+    probe = DbRoleProbe(
+        role="ops",
+        is_superuser=False,
+        can_create_database=True,
+        can_connect_maintenance_database=False,
+    )
+
+    result = evaluate_db_lifecycle(
+        "auto", probe, checked_at=_NOW, maintenance_database="kor_travel_geo_admin"
+    )
+
+    assert result.supported is False
+    assert result.maintenance_database == "kor_travel_geo_admin"
+    assert result.reason == "role ops: maintenance DB 'kor_travel_geo_admin' CONNECT 권한 없음"
+
+
+def test_evaluate_reports_a_missing_maintenance_database_as_missing() -> None:
+    """A typo'd maintenance DB must not read as a privilege problem."""
+    probe = DbRoleProbe(
+        role="addr",
+        is_superuser=True,
+        can_create_database=True,
+        can_connect_maintenance_database=False,
+        maintenance_database_exists=False,
+    )
+
+    result = evaluate_db_lifecycle("auto", probe, checked_at=_NOW, maintenance_database="typo_db")
+
+    assert result.supported is False
+    assert result.reason == "role addr: maintenance DB 'typo_db' 없음"
+
+
+@pytest.mark.parametrize("mode", ["enabled", "disabled"])
+def test_forced_modes_echo_the_requested_maintenance_database(mode: str) -> None:
+    result = evaluate_db_lifecycle(
+        mode,  # type: ignore[arg-type]
+        None,
+        checked_at=_NOW,
+        maintenance_database="kor_travel_geo_admin",
+    )
+
+    assert result.maintenance_database == "kor_travel_geo_admin"
+
+
+def _hardened_cluster_probe(maintenance_database: str) -> DbRoleProbe:
+    """CREATEDB role on a hardened cluster: ``postgres`` CONNECT revoked, an admin DB allowed."""
+    return DbRoleProbe(
+        role="ops",
+        is_superuser=False,
+        can_create_database=True,
+        can_connect_maintenance_database=maintenance_database == "kor_travel_geo_admin",
+    )
+
+
+@pytest.mark.asyncio
+async def test_require_probes_the_requested_maintenance_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probed: list[str] = []
+
+    async def fake_probe(_engine: object, maintenance_database: str = "postgres") -> DbRoleProbe:
+        probed.append(maintenance_database)
+        return _hardened_cluster_probe(maintenance_database)
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+    settings = Settings(_env_file=None)
+    engine = _FakeEngine()
+
+    # the hot-swap's own maintenance DB is connectable → the gate lets it through …
+    await require_db_lifecycle(
+        engine,  # type: ignore[arg-type]
+        settings,
+        "hot_swap",
+        maintenance_database="kor_travel_geo_admin",
+    )
+    # … while the default `postgres` probe (capabilities endpoint, drill, scratch) still refuses
+    with pytest.raises(UnsupportedOnInstanceError) as excinfo:
+        await require_db_lifecycle(engine, settings, "hot_swap")  # type: ignore[arg-type]
+
+    assert probed == ["kor_travel_geo_admin", "postgres"]
+    assert excinfo.value.hint == "role ops: maintenance DB 'postgres' CONNECT 권한 없음"
+    default = await db_lifecycle_capabilities(engine, settings)  # type: ignore[arg-type]
+    assert default.supported is False
+    assert default.maintenance_database == "postgres"
+    assert probed == ["kor_travel_geo_admin", "postgres"]  # the default answer is cached
+
+
+@pytest.mark.asyncio
+async def test_only_the_default_maintenance_database_probe_is_cached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A request-chosen name is an arbitrary string — caching it would grow without bound."""
+    probed: list[str] = []
+
+    async def fake_probe(_engine: object, maintenance_database: str = "postgres") -> DbRoleProbe:
+        probed.append(maintenance_database)
+        return _SUPERUSER
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+    settings = Settings(_env_file=None)
+    engine = _FakeEngine()
+
+    for name in ("admin_a", "admin_b", "admin_c", "admin_a"):
+        await require_db_lifecycle(
+            engine,  # type: ignore[arg-type]
+            settings,
+            "hot_swap",
+            maintenance_database=name,
+        )
+    await require_db_lifecycle(engine, settings, "hot_swap")  # type: ignore[arg-type]
+    await require_db_lifecycle(engine, settings, "hot_swap")  # type: ignore[arg-type]
+
+    assert probed == ["admin_a", "admin_b", "admin_c", "admin_a", "postgres"]
+    assert list(caps_mod._probe_cache) == [engine.url.key]
+
+
+# --- T-321: a request-chosen maintenance DB missing from the cluster is an input error -----
+
+
+def _createdb_role_without(maintenance_database_exists: bool) -> DbRoleProbe:
+    return DbRoleProbe(
+        role="addr",
+        is_superuser=True,
+        can_create_database=True,
+        can_connect_maintenance_database=False,
+        maintenance_database_exists=maintenance_database_exists,
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_requested_maintenance_database_is_an_input_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_probe(_engine: object, _maintenance_database: str = "postgres") -> DbRoleProbe:
+        return _createdb_role_without(maintenance_database_exists=False)
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+
+    with pytest.raises(InvalidInputError) as excinfo:
+        await require_db_lifecycle(
+            _FakeEngine(),  # type: ignore[arg-type]
+            Settings(_env_file=None),
+            "hot_swap",
+            maintenance_database="typo_db",
+        )
+
+    assert not isinstance(excinfo.value, UnsupportedOnInstanceError)
+    assert excinfo.value.code == "E0100"
+    assert excinfo.value.http_status == 400
+    assert excinfo.value.message == "maintenance_database does not exist in cluster: typo_db"
+
+
+@pytest.mark.asyncio
+async def test_missing_default_maintenance_database_stays_an_instance_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Drill/scratch/restore cannot pick another DB — a missing ``postgres`` is the instance's."""
+
+    async def fake_probe(_engine: object, _maintenance_database: str = "postgres") -> DbRoleProbe:
+        return _createdb_role_without(maintenance_database_exists=False)
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+
+    with pytest.raises(UnsupportedOnInstanceError) as excinfo:
+        await require_db_lifecycle(
+            _FakeEngine(),  # type: ignore[arg-type]
+            Settings(_env_file=None),
+            "restore_drill",
+        )
+
+    assert excinfo.value.hint == "role addr: maintenance DB 'postgres' 없음"
+
+
+@pytest.mark.asyncio
+async def test_nocreatedb_role_is_refused_even_when_the_requested_db_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The instance limitation dominates — fixing the name would only lead to the same 409."""
+
+    async def fake_probe(_engine: object, _maintenance_database: str = "postgres") -> DbRoleProbe:
+        return DbRoleProbe(
+            role="kor_travel_geo_app",
+            is_superuser=False,
+            can_create_database=False,
+            can_connect_maintenance_database=False,
+            maintenance_database_exists=False,
+        )
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+
+    with pytest.raises(UnsupportedOnInstanceError) as excinfo:
+        await require_db_lifecycle(
+            _FakeEngine(),  # type: ignore[arg-type]
+            Settings(_env_file=None),
+            "hot_swap",
+            maintenance_database="typo_db",
+        )
+
+    assert excinfo.value.hint == (
+        "role kor_travel_geo_app: CREATEDB 권한 없음, maintenance DB 'typo_db' 없음"
+    )
+
+
+# --- T-321: E0410 for db_restore carries the shared-instance restore procedure -------------
+
+
+@pytest.mark.asyncio
+async def test_db_restore_refusal_hint_carries_the_shared_instance_procedure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_probe(_engine: object, _maintenance_database: str = "postgres") -> DbRoleProbe:
+        return _SHARED_APP_ROLE
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+
+    with pytest.raises(UnsupportedOnInstanceError) as excinfo:
+        await require_db_lifecycle(
+            _FakeEngine(),  # type: ignore[arg-type]
+            Settings(_env_file=None),
+            "db_restore",
+        )
+
+    hint = excinfo.value.hint
+    assert hint is not None
+    reason, procedure = hint.split("; ", 1)
+    assert reason.startswith("role kor_travel_geo_app: CREATEDB 권한 없음")
+    assert procedure == caps_mod.DB_RESTORE_SHARED_INSTANCE_PROCEDURE
+    assert "target_dsn" in procedure
+    assert "ktgctl restore create --target-dsn" in procedure
+    assert "docs/t046-db-backup-restore.md" in procedure
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("feature", ["hot_swap", "restore_drill", "scratch_full_load"])
+async def test_features_without_an_alternative_keep_the_bare_reason(
+    monkeypatch: pytest.MonkeyPatch, feature: str
+) -> None:
+    async def fake_probe(_engine: object, _maintenance_database: str = "postgres") -> DbRoleProbe:
+        return _SHARED_APP_ROLE
+
+    monkeypatch.setattr(caps_mod, "probe_db_role", fake_probe)
+
+    with pytest.raises(UnsupportedOnInstanceError) as excinfo:
+        await require_db_lifecycle(
+            _FakeEngine(),  # type: ignore[arg-type]
+            Settings(_env_file=None),
+            feature,  # type: ignore[arg-type]
+        )
+
+    assert excinfo.value.hint is not None
+    assert "target_dsn" not in excinfo.value.hint

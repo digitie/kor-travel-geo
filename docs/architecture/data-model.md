@@ -731,6 +731,14 @@ CREATE TABLE load_manifest (
 
 `source_yyyymm`은 단일 테이블/로더 기준월이다. 전국 full-load처럼 여러 원천을 묶는 작업은 `source_set`에 원천별 기준월과 경로를 남긴다. 예를 들어 `tl_juso_text`는 `source_yyyymm='202603'`, `tl_locsum_entrc`는 `source_yyyymm='202604'`일 수 있고, batch root 또는 consistency report의 `source_set.yyyymm_by_kind`가 이 혼합 상태를 설명한다.
 
+**기준월 조회의 정본(T-319).** serving release 기록(`admin_repo._infer_current_source_set`)과 백업 manifest(`backup.infer_source_set`)는 원천 테이블을 `max(source_yyyymm)`로 scan하지 않고 이 테이블의 `source_yyyymm`만 읽는다(`admin_repo.source_yyyymm_by_kind`). 그래서 `source_yyyymm` 행을 쓰는 원천 테이블(`tl_juso_text`, `tl_juso_parcel_link`, `tl_locsum_entrc`, `tl_navi_buld_centroid`, `tl_spbd_buld_polygon`, `tl_roadaddr_entrc`, `tl_sppn_makarea`)은 적재기가 적재할 때마다 manifest를 갱신해야 한다(T-319에서 추가한 기록은 모두 데이터와 같은 transaction이다. 구역(`tl_sppn_makarea`) 적재기는 원래대로 적재 뒤 별도 transaction에서 기록한다).
+
+- 규칙은 **마지막 적재가 이긴다** — 값은 그 적재가 쓴 row들의 `source_yyyymm` 최댓값(NULL 제외)이다. 0행 적재는 manifest를 건드리지 않는다. 테이블을 비우는 경로(SHP·구역 full 적재의 `TRUNCATE`)는 같은 transaction에서 manifest 행도 지운다.
+- 평소(빈 DB 전국 적재, 같거나 새 기준월 재적재, 일변동)는 옛 `max(source_yyyymm)`와 같다. 더 옛 기준월 원천을 upsert로 덮어 새 기준월 row가 남는 경우(적재기가 삭제하지 않는 `tl_juso_text`/`tl_locsum_entrc`/`tl_navi_buld_centroid`), 그리고 upsert 없는 일변동(삭제만·"No Data")은 manifest가 마지막 적재월을 보인다 — 후자는 T-319 이전부터 일변동 writer의 동작이다.
+- manifest 행이 없으면(빈 테이블, 또는 T-319 이전에 적재하고 Alembic `0028` backfill을 거치지 않은 DB — 예: 옛 백업을 복원만 한 DB) scan으로 메우지 않는다. 테이블에 행이 있으면(첫 행에서 멈추는 존재 probe) 현재 active serving release가 기록한 그 원천의 기준월(`/v2/dataset/version`과 같은 해석, 계보 폴백 포함)을 이어 쓰고, 테이블이 비었거나 release에도 값이 없으면 `null`(모름)이다. manifest 행이 있으면 `source_yyyymm`이 NULL이어도 그 값을 쓴다. `alembic upgrade head`가 그 테이블들을 한 번 backfill하므로 복원 뒤에는 serving으로 올리기 전에 돌린다(`docs/t046-db-backup-restore.md`).
+- `0028`은 manifest 행이 있는 테이블을 믿되, `tl_juso_text`의 일변동 행(`source_set.kind = 'daily_juso_delta'`)만은 다시 scan해 `source_yyyymm`을 `GREATEST(기존, max)`로 올린다 — T-319 이전에는 전체분 적재기가 그 행을 갱신하지 않아, 일변동 뒤 더 새 전체분을 적재한 DB에는 옛 월이 남아 있었다. 일변동 watermark(`last_delta_at`·`last_mvmn_de`)와 `source_set`은 그대로 둔다.
+- 테이블을 적재기 밖에서 바꿨다면(수동 `TRUNCATE`/`UPDATE`) manifest도 같이 고친다. 테스트 harness의 reset도 같다.
+
 ### `load_codes` (MVM_RES_CD 매핑)
 
 코드 매핑을 settings/DB에서 읽어 핫픽스를 쉽게 한다(SKILL.md §4-6, ADR-006 후속).

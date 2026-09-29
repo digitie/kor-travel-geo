@@ -16,10 +16,12 @@
 6. **FAIL이면 비0 exit**(reconcile 불일치/smoke 실패/복원 자체 실패) → cron/CI가 알림을 띄울 수 있다.
 
 > **공용 DB instance (T-312)**: throwaway DB `CREATE DATABASE`에는 `CREATEDB`와 maintenance DB `postgres`
-> `CONNECT`가 필요하다. 공용 instance의 app role에는 둘 다 없어서 CLI·Dagster `backup_restore_drill`(daily
-> schedule 포함) 모두 시작 즉시 `E0410` "공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로
-> 수행"으로 멈춘다(`KTG_DB_LIFECYCLE_MODE`, `GET /v1/admin/db-capabilities`). 공용 instance에서의 복원 증명은
-> 운영자가 `docs/t046-db-backup-restore.md` "cluster admin 복원 절차"로 수행한다.
+> `CONNECT`가 필요하다. 공용 instance의 app role에는 둘 다 없어서 CLI·Dagster `backup_restore_drill` 모두 시작
+> 즉시 `E0410` "공용 DB instance에서는 지원하지 않음 — 운영자가 manager ktdctl로 수행"으로 멈춘다
+> (`KTG_DB_LIFECYCLE_MODE`, `GET /v1/admin/db-capabilities`). daily schedule(`backup_restore_drill_daily`)은
+> 켜 두어도 run을 만들지 않고 tick을 그 사유로 skip한다(T-321 — 매일 `Failure` run이 쌓이지 않는다). 공용
+> instance에서의 복원 증명은 운영자가 `docs/t046-db-backup-restore.md` "공용 instance에서 복원하기"(admin이 만든 빈
+> DB + `target_dsn`) 또는 "cluster admin 복원 절차"로 수행한다.
 
 ## 명령
 
@@ -82,3 +84,4 @@ ktgctl backup restore-drill --artifact-id <id> --base-db kor_travel_geo --jobs 4
 - 라이브 round-trip(backup→restore→reconcile) 통합 검증: **T-244**.
 - 무결성 온디맨드 검증: **T-231**(`backup verify`). 복원 dry-run preflight: **T-232**. 버전 hard-fail: **T-234**.
 - hot-swap(서빙 DB 교체) 실행: **T-241**(드릴과 달리 라이브 serving을 바꾸므로 maintenance window+typed confirmation 필요).
+- 드릴이 아니라 복원본을 serving으로 올릴 때는 swap 전에 복원본을 대상으로 `alembic upgrade head`를 돌린다 — 복원·hot-swap은 migration을 돌리지 않고, T-319 이전 백업(`0026`/`0027`)에는 `0028` 원천 기준월 manifest 행이 없다(`docs/t046-db-backup-restore.md` "복원 뒤 `alembic upgrade head`").

@@ -356,6 +356,13 @@ def _truncate_target(pg_url: str) -> None:
     try:
         with engine.begin() as conn:
             conn.execute(text(f"TRUNCATE TABLE {TARGET_TABLE}"))
+            # T-319: 비운 테이블의 기준월 manifest도 같은 transaction에서 지운다 — 남겨 두면
+            # 빈(또는 새로 채우는 중인) 테이블에 옛 기준월이 붙는다. 적재가 끝나면
+            # ``_record_manifest``가 새로 쓴다.
+            conn.execute(
+                text("DELETE FROM load_manifest WHERE table_name = :table_name"),
+                {"table_name": TARGET_TABLE},
+            )
     finally:
         engine.dispose()
 
