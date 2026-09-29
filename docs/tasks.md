@@ -105,8 +105,9 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 - [ ] **T-322** — Dagster instance storage 드라이버: kor-travel-geo-dagster는 `sqlalchemy<2.1`이
   **필수**다(2.1 + bare `postgresql://` → psycopg 3 → dagster_postgres `NOTIFY` SyntaxError로 run
   시작 불가, T-316 리뷰 실측). manager의 `KOR_TRAVEL_GEO_DAGSTER_PG_URL`을 `postgresql+psycopg2://`로
-  명시(2.0에서도 동작 — pin이 실수로 풀려도 안전) → dagster_postgres를 psycopg 3에서 검증한 뒤
-  pin 해제. manager 담당과 조율.
+  명시하는 안은 **먼저 검증 필요** — dagster_postgres의 event watcher 등이 URL을 `psycopg2.connect`에
+  그대로 넘기면 libpq가 `+psycopg2` scheme을 거부한다. throwaway instance에서 확인한 뒤 적용하거나,
+  pin을 유지한 채 dagster_postgres를 psycopg 3에서 검증하고 pin을 푼다. manager 담당과 조율.
 
 ### 선행 리뷰 후속
 

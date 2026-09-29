@@ -64,6 +64,11 @@ pg_stat_statements snapshot)뿐. Alembic head·확장 이름/버전/schema 동�
 분류돼 보인다 — T-309가 의도한 그대로), warm에서는 도로명 24~100ms, NOT_FOUND 0.23~1.2초(이전
 2.7~3.6초), `상계동 … 1203호`는 엉뚱한 OK 대신 NOT_FOUND.
 
+**T-309의 503→504 변경이 소비자에게 미치는 영향 확인.** geo API를 부르는 저장소는 셋 — PinVi
+`apps/api/app/clients/kor_travel_geo.py`는 `status_code >= 500` 전부를 backoff 재시도(504 포함),
+concierge `ktc/etl/admin_region_service.py`(`/v2/reverse`)는 `raise_for_status()`로 5xx 전부 실패 처리,
+kor-travel-map admin UI는 HTTP 코드를 그대로 표시. 503만 재시도하는 소비자는 없어 후속 불필요.
+
 ## 2026-09-28 (T-308 — geo DB 공용 instance(:11000) 이전 + 관리 UI geocoding 장애 복구, by claude)
 
 사용자 지시 "kor-travel-shared-postgres로 db를 옮겨놔"(대상 확인 결과 "둘 다" —
