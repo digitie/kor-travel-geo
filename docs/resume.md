@@ -11,8 +11,12 @@
   janitor·failure sensor RUNNING. 상세 `journal.md` 2026-09-29.
   T-314도 02:45Z 완료(복원 리허설 통과 → 09-19 아카이브·옛 PGDATA 삭제).
   **다음 한 작업**:
-  - (02:25Z 재개, 사용자 "한도 다 쓸 때까지 기록하면서 진행") T-319·T-320·T-321을 workflow로 구현 중 —
-    worktree `F:/dev/ktg-wt-t319`/`t320`/`t321`, 각 PR은 적대적 리뷰→수정→재리뷰 후 병합 예정.
+  - (02:25Z 재개, 사용자 "한도 다 쓸 때까지 기록하면서 진행") T-319 #564·T-320 #563·T-321 #562 PR 생성,
+    1차 적대적 리뷰 전부 approve(minor만). minor 반영 workflow 진행 중(03:10Z~) — T-320의 "`737.`처럼
+    번지에 문장부호·접미어가 붙으면 InvalidAddressError"는 main 대비 회귀라 반드시 고친 뒤 병합. 병합 후
+    배포 시 **Alembic 0028**(T-319, 4개 대형 테이블 1회 scan ≈ 9.9GB 읽기 — 배포 창에서 MV refresh·백업·
+    적재 금지)과 `DELETE FROM geo_cache WHERE service='geocode'`(T-320) 필요.
+    worktree `F:/dev/ktg-wt-t319`/`t320`/`t321`.
     T-322는 착수 전: dagster_postgres event watcher가 URL을 `psycopg2.connect`에 그대로 넘기므로
     `postgresql+psycopg2://` scheme 변경은 throwaway instance에서 먼저 검증해야 한다.
 
