@@ -74,41 +74,39 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 
 ### T-308 공용 instance 이전 후속 (2026-09-28 사고 조사에서 나온 것)
 
-근거와 증거는 `docs/journal.md` 2026-09-28 항목. 우선순위 순.
+근거와 증거는 `docs/journal.md` 2026-09-28·2026-09-29 항목. T-309~T-318은 2026-09-29에 완료
+(`tasks-done.md`). 아래는 그 리뷰에서 나온 후속이다. 우선순위 순.
 
-- [ ] **T-314** — 백업 커버리지 복구 + 이관본 검증. 09-19 이후 geo 백업 0건(T-307 launch
-  회귀). 공용 instance 이관본(09-24/25 무기록 data-only 이관)과 옛 PGDATA/09-19 아카이브의
-  테이블별 row count 대조 → 검증된 새 백업 1건 확보 → 그 뒤에만 09-19 아카이브와 옛 PGDATA
-  (`/home/digitie/kor-travel-geo-data/pgdata-final-20260529`, 32.8GB) 정리. `scheduled_backup`
-  재개 여부 결정(Dagster schedule STOPPED, API run-due 경로는 launch 복구로 다시 동작).
-- [ ] **T-309** — DB 오류 분류 정정. `QueryCanceled`(57014)가 `OperationalError` 하위라
-  statement timeout이 "check KTG_PG_DSN" 503으로 보인다(`api/responses.py:186-188`) — timeout을
-  별도 코드/문구로, connect-time permission denied도 구분. UI(`GeocodeDebugger.tsx`,
-  `lib/api.ts getErrorMessage`)가 v2 envelope를 파싱해 한국어로 표시. serving MV가 비어 있으면
-  `/v1/readyz`·관리 홈이 degraded를 보이게.
-- [ ] **T-310** — `/metrics`와 Cache 패널의 `geo_cache` 전수 scan 제거(15초 scrape마다 공용
-  instance 논리 읽기의 대부분) — `reltuples`/TTL 캐시로. `pg_stat_statements` capture를
-  `userid = current_user`로 한정하고 주기 완화. 09-28 확인 시 API 기동(09-25) 이후
-  `ktg_api_db_errors_total{route="/metrics"}`가 `OperationalError` 234건 — scrape 실패 원인도 같이 본다.
-- [ ] **T-317** — 지번 geocode 누락 2건(T-308 검증 중 발견, 이관 전부터 있던 코드 동작 — MV 데이터는
-  정상). (1) `core/normalize.py` `parse_address`가 "N가" 법정동(`태평로1가`, `종로1가`)을 도로
-  `태평로`+번호 1로 읽어 `서울특별시 중구 태평로1가 31`(MV에 행 있음)이 `jibun_address`로도
-  NOT_FOUND. (2) v2 `query` 자유 입력은 `client.py`에서 항상 `type="road"`라 지번 문자열
-  (`성남시 분당구 삼평동 681`)이 약 3초 뒤 NOT_FOUND — 같은 값을 `jibun_address`로 주면 OK.
-  `parse_address(...).is_road`가 False면 parcel 조회를 시도하게.
-- [ ] **T-311** — road fallback(`infra/geometry_repo.py` `_ROAD_GEOMETRY_SQL`) 비용 개선:
-  인덱스 쓸 수 있는 정규화 도로명 조건(trigram) 또는 완전 도로명주소면 생략. MV가 채워져도
-  supplemental/NOT_FOUND 경로가 매 요청 ~5초를 더한다.
-- [ ] **T-312** — 공용 instance에서 불가능한 DB 수명주기 기능 차단: hot-swap plan/execute/rollback
-  (`postgres` DB CONNECT 필요), restore-drill·scratch full-load·replace_current restore
-  (`CREATE DATABASE` 필요)를 capability flag로 막고 UI에서 숨긴다. app role로 복원 가능한 백업
-  형식(`--no-owner/--no-privileges`, extension TOC 필터).
-- [ ] **T-313** — 코드 기본 DSN(`Settings.pg_dsn`, `alembic.ini`)이 은퇴한 `12500`을 가리킨다 —
-  공용 instance 기준으로 정리(테스트 기대값 포함).
-- [ ] **T-315** — geo-api/geo-ui를 `/opt` docker-manager 트리에서 재배포(현재 홈 트리 소유, 그
-  compose는 은퇴한 `kor-travel-geo-postgres`를 `depends_on`). manager 담당과 조율.
-- [ ] **T-316** — SQLAlchemy 2.1 업그레이드 검토(#551에서 `<2.1` 고정 — 2.1.1이 mypy 추론을
-  깨고 하위 호환 변경 포함).
+- [ ] **T-314 (진행 중, 2026-09-29 중단)** — 이관본 parity 검증 완료(데이터 테이블 44개 exact 일치)·새
+  검증 백업(`T-314 공용 instance 이관 검증 후 첫 백업 (2026-09-29).tar.zst`, 4.40GB, checksum 51개 OK)
+  확보. **남은 것**: n150 복원 리허설(`/tmp/t314_rehearsal.sh`, 로그 `/tmp/t314_rehearsal.log`, 결과
+  `/tmp/t314-rehearsal/{diff.tsv,pg_restore.log}`, 컨테이너 `ktg-t314-rehearsal` — 끝나면 스스로 정리)
+  결과 확인 → `REHEARSAL_DONE rc=0`·diff 0(또는 설명 가능한 ops 차이)일 때만 09-19 아카이브(janitor
+  API로 만료)와 옛 PGDATA `/home/digitie/kor-travel-geo-data/pgdata-final-20260529`(32.8GB) 삭제.
+
+- [ ] **T-319** — 원천 기준월 조회가 대형 테이블을 전수 scan한다. 백업 preflight와 MV refresh의
+  serving release lineage가 `SELECT max(source_yyyymm) FROM tl_navi_buld_centroid`(10.7M) 등을
+  테이블마다 parallel seq scan한다 — 2026-09-28 백업 preflight만 11분, MV refresh 끝단에서도 수 분.
+  기준월은 적재 시점에 `load_manifest`/dataset snapshot에 이미 있으므로 거기서 읽거나, 없으면
+  `(source_yyyymm)` 인덱스로 index-only scan이 되게.
+- [ ] **T-320** — 지번 파싱 잔여(T-317 리뷰): v1 `type=parcel`·`jibun_address`는 여전히 **마지막**
+  숫자를 번지로 잡는다(`…상계동 1234 주공아파트 101동 1203호` → 1203). v2 `query`는 위치 gate로
+  막았지만 근본 해법은 `parse_address`가 행정구역 바로 뒤 첫 번지를 잡는 것 — 호출부(v1 geocode
+  양 type, `jibun_address`, `/v1/address/zipcode`, `/v1/admin/normalize`, C15 POI loader) 전수
+  영향 확인 후. 세종특별자치시는 시군구가 없어(MV `sgg_nm` NULL) v2 `query` parcel gate를 못
+  통과한다 — `sgg_nm IS NULL` 조건 + 인덱스 검토 후 허용(시도 단독 조회는 운영 cold 1.4초).
+- [ ] **T-321** — T-312 리뷰 low 후속: (a) capability 탐지가 늘 `postgres` DB CONNECT만 본다 —
+  hot-swap은 다른 maintenance DB를 받으므로 요청 DB로 탐지(또는 문서화). (b) `db_restore` gate가
+  실제 필요보다 넓다 — app role이 admin이 준비한 빈 DB에 `target_dsn`으로 복원하는 경로(TOC 필터로
+  동작 확인)를 UI에서 열지. (c) prod 백업을 다른 cluster에 superuser로 복원하면 dump의 owner
+  (`kor_travel_geo_app`, `shared_admin`)가 없어 실패 — NOLOGIN role 선생성 절차를 문서화.
+  (d) restore-drill schedule을 공용 instance에서 켜면 매 run이 Failure — schedule에서 `SkipReason`.
+  (e) 거절된 hot-swap plan은 audit row(`denied`)를 남기지 않는다.
+- [ ] **T-322** — Dagster instance storage 드라이버: kor-travel-geo-dagster는 `sqlalchemy<2.1`이
+  **필수**다(2.1 + bare `postgresql://` → psycopg 3 → dagster_postgres `NOTIFY` SyntaxError로 run
+  시작 불가, T-316 리뷰 실측). manager의 `KOR_TRAVEL_GEO_DAGSTER_PG_URL`을 `postgresql+psycopg2://`로
+  명시(2.0에서도 동작 — pin이 실수로 풀려도 안전) → dagster_postgres를 psycopg 3에서 검증한 뒤
+  pin 해제. manager 담당과 조율.
 
 ### 선행 리뷰 후속
 

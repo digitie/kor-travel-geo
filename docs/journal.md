@@ -2,6 +2,68 @@
 
 새 항목은 항상 파일 맨 위에 추가(역시간순). 기존 항목은 절대 수정하지 않는다 — 잘못된 결정조차 기록으로 남는 것이 가치다.
 
+## 2026-09-29 (T-309~T-318 — T-308 후속 일괄 완주 + 백업 2주 주기, by claude)
+
+사용자 지시 "이어서 완주까지 진행", 도중 "백업주기는 2주에 한번으로". 코드 task 6개(T-309·T-310·
+T-311·T-312·T-317·T-313+T-316)는 workflow로 각자 독립 worktree·WSL 미러·PR을 만들고, 각 PR을 독립
+적대적 리뷰 → 수정했다. blocker/major가 나온 두 PR(T-317·T-312)과 workflow가 리뷰하지 않은 T-316
+(같은 agent의 두 번째 PR이라 빠졌다)은 2차 리뷰를 따로 돌렸다. 운영 task(T-314·T-315)는 직접 했다.
+
+**리뷰가 실제로 막은 것들** — 적대적 리뷰 없이 병합했다면 운영에 나갔을 결함:
+- T-317 1차: 지번이 아닌 모든 자유 `query`(지역명·키워드)가 parcel lookup으로 가던 dispatch.
+  2차: 호수·층·출구 번호가 번지로 잡혀(파서가 **마지막** 숫자를 번지로) 운영에서
+  `서울특별시 노원구 상계동 1234 주공아파트 101동 1203호` → 노원검문소(동일로 1794)라는 엉뚱한 OK.
+  "읍면동(리) 바로 다음 토큰이 파서의 번지와 같을 때만 parcel" gate로 해결, 5종 mutation으로 테스트가
+  실제로 잡는지 확인. 파서 자체의 근본 수정은 호출부가 넓어 T-320으로 남겼다.
+- T-312 1차: 새 `pg_dump --no-privileges`가 공용 instance에서 유일하게 중요한 ACL(`GRANT USAGE ON
+  SCHEMA x_extension TO kor_travel_geo_app`)을 버려, 복원한 DB에서 PostGIS가 앱 role로 안 돈다.
+  dump 형식을 원복하고 복원 쪽에서만 역할 중립화 + smoke가 owner의 확장 schema USAGE를 검사.
+  2차 low: 그 검사가 모든 확장 schema를 봐서 `template_postgis`의 `tiger`로도 복원 실패·hot-swap
+  자동 rollback이 날 수 있었다 → geo가 쓰는 postgis/pg_trgm/unaccent로 한정(병합 시 직접 반영).
+- T-316: 본체는 SQLAlchemy 2.1.1에서 회귀 없음(통합 46건·live uvicorn smoke까지 2.0/2.1 동일)이지만,
+  kor-travel-geo-dagster의 `<2.1` pin은 **필수**였다 — 2.1이면 bare `postgresql://`가 psycopg 3로 가서
+  dagster_postgres의 `NOTIFY run_events, %(notify_id)s`가 RUN_START에서 SyntaxError, run이 하나도
+  시작 못 한다. 그리고 CI는 2.1만 돌고 Dagster 이미지(2.0 resolve)와 Dagster 패키지 테스트는 CI 밖이었다
+  → 새 CI job `dagster`(2.0 assert + 본체 pytest 1490 + Dagster 패키지 72).
+- T-318(직접 구현): 리뷰가 (1) Dagster→API run-due 클라이언트가 3초라 API가 launch를 최대 30초
+  기다리는 동안 먼저 끊겨 성공한 백업을 실패 알림으로 적는다, (2) launch 오류 뒤 run이 먼저 row를
+  adopt했으면 무조건 `mark_failed`가 덮어써 reconciler가 일하는 run을 죽인다를 잡았다 →
+  `mark_launch_failed`(`WHERE state='queued'`) + run-due timeout = launch + 15초.
+
+**T-318은 배포 중에 발견했다.** T-315로 geo-api/ui를 `/opt`에서 재생성한 직후 첫 백업 launch가
+502였고 load_jobs row는 `Dagster launch failed: `(이유 빈칸)이었다. API가 관측 조회용 3초 timeout으로
+`launchRun`을 불렀고, cold code-server 경유 launch가 3초를 넘겼다. `ReadTimeout`의 `str()`이 빈 문자열이라
+이유도 사라졌다. Dagster에서는 run이 따로 시작됐지만 `adopt_dagster`가 terminal row를 거부해 부작용은
+없었다. 재시도는 1.7초에 성공.
+
+**T-315 — 두 트리 사이의 secret 불일치.** 09-28 `/opt`에서 재생성된 geo Dagster와 홈 트리의 geo-api가
+서로 다른 `KTG_ADMIN_PROXY_SECRET`을 써서, Dagster `scheduled_backup`의 run-due 호출이 403이었다(09-28
+21:45 첫 tick에서 확인). 스케줄이 멈춰 있어 드러나지 않았을 뿐이다. geo-api/ui를 `/opt`에서 재생성해
+다섯 컨테이너가 같은 env를 쓰게 했다(두 `.env`의 geo 키 34개 중 26개 동일, secret·백업 키만 달랐고 DSN은
+같았다). 그 뒤 run-due는 15분마다 SUCCESS.
+
+**백업 2주 주기.** API run-due가 주기의 권위라 `KTG_BACKUP_SCHEDULE_INTERVAL_HOURS=336`(n150 live
+`.env`, lock G 아래에서 한 키만 — installer가 release마다 `.env`를 복사해 넘기므로 유지된다). janitor는
+keep_min 3을 하한으로 지키므로 TTL 7일이어도 최신 3본(약 6주, 13GB)이 남는다. 첫 백업은
+`retention_class=scheduled`로 떠서 주기가 오늘부터 시작한다(next_due 10-12). Dagster schedule 3개는
+09-20 Dagster 메타 DB가 빈 채로 새로 만들어지며 STOPPED가 됐던 것 — 다시 RUNNING(restore drill은 공용
+instance에서 CREATE DATABASE 불가라 STOPPED 유지).
+
+**T-314 — 이관본 검증.** 옛 PGDATA(`pgdata-final-20260529`, clean shut down)를 network 없는 임시
+컨테이너로 띄워 공용 instance와 51개 테이블 exact row count를 대조했다: 데이터 테이블 44개(원천 tl_*
+전부, MV 두 개 6,416,637행, region_radius_parts, codes/manifest)가 **완전히 일치**, 다른 7개는 09-19 이후
+운영 기록(audit·serving release·load_jobs·alert·09-28에 비운 geo_cache·retention으로 줄어든
+pg_stat_statements snapshot)뿐. Alembic head·확장 이름/버전/schema 동일. 옛 cluster의 마지막 job이
+09-19 01:15 백업이라 무기록 이관의 원본은 09-19 상태였다. 새 앱 백업(4.40GB)은 preflight에서
+`max(source_yyyymm)` 전수 scan으로 11분을 썼다(T-319).
+
+**배포 중 사고 하나.** 첫 최종 배포는 n150 load 23(4코어; 다른 에이전트의 pytest·map/transport Dagster +
+내 복원 리허설)에서 BuildKit session healthcheck가 죽어 `compose build`가 조용히 멈췄다(아무것도 재생성
+전 — rollback tag만). 멈춘 build를 정리하고 리허설 컨테이너를 `docker pause`한 뒤 재시도하니 13분에
+끝났다. 배포 직후 각 질의의 첫 cold 실행은 리허설 IO 포화 속에서 5초 timeout(이제 `E0504`/504로 정확히
+분류돼 보인다 — T-309가 의도한 그대로), warm에서는 도로명 24~100ms, NOT_FOUND 0.23~1.2초(이전
+2.7~3.6초), `상계동 … 1203호`는 엉뚱한 OK 대신 NOT_FOUND.
+
 ## 2026-09-28 (T-308 — geo DB 공용 instance(:11000) 이전 + 관리 UI geocoding 장애 복구, by claude)
 
 사용자 지시 "kor-travel-shared-postgres로 db를 옮겨놔"(대상 확인 결과 "둘 다" —

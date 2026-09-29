@@ -2,7 +2,21 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-28 갱신, by claude)
+## 현재 진척도 (2026-09-29 갱신, by claude — 사용자 요청으로 중단, 한도 복구 후 재개)
+
+- ⏸ **T-308 후속 일괄 완주 (사용자 지시 "이어서 완주까지 진행")** — T-309·T-310·T-311·T-312·T-313·
+  T-316·T-317·T-318 **전부 병합**(#553~#560, main `b3d666f`)하고 n150에 **배포·live 검증 완료**
+  (다섯 geo 컨테이너 `/opt`, Alembic `0027_t311_road_rn_trgm`, API SQLAlchemy 2.1.1 / Dagster 2.0.54).
+  T-315(geo-api/ui `/opt` 이전) 완료, 백업 주기 2주(336h, manager #436) 반영, Dagster backup schedule·
+  janitor·failure sensor RUNNING. 상세 `journal.md` 2026-09-29.
+  **다음 한 작업 (재개 시)**:
+  1. n150 복원 리허설 결과 확인 — `tail /tmp/t314_rehearsal.log`(`REHEARSAL_DONE rc=…`),
+     `/tmp/t314-rehearsal/diff.tsv`(복원본 vs live row count; 09-29 이후 ops 기록 차이만 허용),
+     `pg_restore.log`의 `error:`. 컨테이너 `ktg-t314-rehearsal`은 끝나면 스스로 지워진다(1.5 CPU·3GB 제한,
+     09-29 01:45Z 기준 인덱스 27/132 — 수 시간 남음). 아직 돌고 있으면 기다린다.
+  2. 통과 시에만 옛 사본 정리: 09-19 아카이브(`kor_travel_geo_backup_20260919T011519Z_zstd3.tar.zst`,
+     admin API janitor로 만료)와 옛 PGDATA `/home/digitie/kor-travel-geo-data/pgdata-final-20260529`(32.8GB).
+  3. 이 문서 PR(branch `agent/claude-t308-followups-docs`)의 T-314 항목을 완료로 고쳐 병합.
 
 - ✅ **T-308 — geo DB를 공용 제어 평면 instance `kor-travel-shared-postgres`(:11000)로 이전 +
   관리 UI geocoding 장애 복구 (사용자 지시)** — `kor_travel_geo`·`kor_travel_geo_dagster` 둘 다
