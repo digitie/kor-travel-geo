@@ -78,14 +78,6 @@ PostgreSQL DB를 구축하는 방향으로 완료했다. 상세 계획과 Task �
 (`tasks-done.md`). 아래는 그 리뷰에서 나온 후속이다. 우선순위 순.
 
 
-- [ ] **T-322 (운영 적용 완료 — 남은 것은 선택 과제)** — geo Dagster instance storage URL을
-  `postgresql+psycopg2://`로 명시했다(2026-09-29 07:20~07:51Z, 근거 [`t322-dagster-storage-driver.md`](t322-dagster-storage-driver.md)):
-  n150 `.env` scheme만 변경(lock G, 원본 `.env.bak-t322-*`) → Dagster 세 서비스 재생성 → 세 컨테이너 scheme
-  확인, GraphQL `runsOrError` 200, daemon live, 이후 `scheduled_backup` run-due SUCCESS. manager `.env.example`·
-  문서는 manager #437. **남은 선택 과제**: `sqlalchemy<2.1` pin 해제는 별도 PR로만 — 조건: code location
-  import 시 storage URL 드라이버가 psycopg2가 아니면 즉시 실패하는 guard(2.1 + bare URL은 healthcheck를
-  통과한 채 run만 못 돈다), CI `dagster` job의 2.0 assert를 2.1로 바꿔 통과. 그전까지 pin 유지.
-
 ### 선행 리뷰 후속
 
 2026-07-27 GitHub 열린 이슈 감사(15건 조사, `tasks-done.md` 참조) 결과 남은 미해결 리뷰 후속 6건

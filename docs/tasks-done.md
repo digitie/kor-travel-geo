@@ -6,6 +6,13 @@
 
 ## 완료
 
+- [x] **T-322 마무리 — kor-travel-geo-dagster `sqlalchemy<2.1` pin 해제** (2026-09-29, by claude, 사용자 지시
+  "1번만 진행. n150에 디플로이까지 해"). 조건 셋을 갖춘 뒤 해제: (1) 운영 storage URL `postgresql+psycopg2://`
+  (07:51Z 적용), (2) 이미지 ENTRYPOINT `docker/entrypoint.sh`가 세 서비스 모두 시작 전에 드라이버를 확인해
+  아니면 exit 64(bare URL + 2.1은 healthcheck를 통과한 채 run만 못 돈다 — 조용한 고장 대신 재시작 루프), (3) CI
+  `dagster` job이 2.1을 assert하고 Postgres service에 image와 같은 URL로 `dagster instance migrate` + 실제 run
+  (run storage·event log) smoke. 이제 Dagster 이미지도 SQLAlchemy 2.1(본체 `<2.2,!=2.1.0`).
+
 - [x] **T-322 운영 적용 + T-323** (2026-09-29, by claude, 사용자 지시 "한도 다 쓸 때까지 기록하면서 진행").
   - **T-322** — throwaway 검증(#566, `docs/t322-dagster-storage-driver.md`)에 따라 geo Dagster storage URL을
     `postgresql+psycopg2://`로 명시(n150 `.env` scheme만, lock G 아래, 세 서비스 재생성). 현재 이미지는 같은

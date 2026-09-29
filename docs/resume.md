@@ -2,7 +2,10 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-29 08:00Z 갱신, by claude)
+## 현재 진척도 (2026-09-29 갱신, by claude)
+
+- ✅ **T-322 마무리 — Dagster 패키지 `sqlalchemy<2.1` pin 해제 + n150 배포** — entrypoint 드라이버 guard,
+  CI Postgres storage smoke(2.1). **다음 한 작업**: 없음 — 열린 과제는 보류 T-063(하드웨어)뿐.
 
 - ✅ **T-322 운영 적용 + T-323 배포 (07:51Z)** — geo Dagster storage URL `postgresql+psycopg2://`(n150 `.env`,
   manager #437), T-323(#565) 이미지 반영. 검증: 세 Dagster 컨테이너 scheme, GraphQL `runsOrError` 200, daemon
