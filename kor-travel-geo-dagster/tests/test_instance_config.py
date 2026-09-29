@@ -1,0 +1,33 @@
+"""Contract test for the baked-in Dagster instance config (T-322).
+
+``docker/dagster.yaml`` is copied into the image as ``$DAGSTER_HOME/dagster.yaml``. Its storage
+URL comes from kor-travel-docker-manager's ``KOR_TRAVEL_GEO_DAGSTER_PG_URL``, exposed as
+``KTG_DAGSTER_PG_URL`` on the code-server, webserver and daemon services. No database is
+touched: Dagster's own loader validates the file against the instance schema without
+resolving env vars.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from dagster._core.instance.config import dagster_instance_config
+
+_DOCKER_DIR = Path(__file__).resolve().parents[1] / "docker"
+
+
+def test_instance_config_is_valid_and_reads_storage_url_from_manager_env() -> None:
+    """The manager contract is one env var holding a full URL (``postgres_url``).
+
+    T-322 showed that ``postgres_db:`` is not a scheme-free alternative: Dagster rebuilds a URL
+    with ``scheme=postgresql``, which is psycopg 3 on SQLAlchemy 2.1, and switching forms would
+    need the manager to supply five env vars instead. So a change here must be coordinated with
+    the manager, never incidental. The driver itself (``postgresql+psycopg2://``) is chosen in
+    the manager's value; see docs/t322-dagster-storage-driver.md.
+    """
+
+    config, custom_instance_class = dagster_instance_config(str(_DOCKER_DIR))
+
+    assert custom_instance_class is None
+    assert config["storage"] == {"postgres": {"postgres_url": {"env": "KTG_DAGSTER_PG_URL"}}}
+    assert config["telemetry"] == {"enabled": False}
