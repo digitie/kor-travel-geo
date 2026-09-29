@@ -99,6 +99,16 @@ tag를 이미지 **이름**으로 붙여서, 앞선 실패 run이 이름을 새 
 rollback tag를 붙였다 — 진짜 이전 이미지는 첫 run(`rollback-t319-20260929T055235Z`/`T060553Z`) tag다. 다음
 스크립트는 컨테이너의 image ID(`{{.Image}}`)로 tag해야 한다.
 
+**T-322·T-323 (07:20~07:51Z).** T-322는 throwaway 검증 agent가 dagster/dagster-postgres 소스와 URL 형식 ×
+SQLAlchemy 버전 × 동작(migrate·run storage·NOTIFY·watcher·schedule·daemon·webserver) 표로 답을 냈다(#566):
+걱정했던 "`+psycopg2` scheme이 libpq에 닿아 거부된다"는 런타임 경로가 없어 일어나지 않고, 진짜 위험은
+반대쪽 — bare URL + 2.1이면 run은 못 도는데 daemon liveness와 manager healthcheck(`repositoriesOrError`)는
+통과해서 "건강해 보이는 채로" 배포된다는 점이었다. 운영 적용은 `.env` scheme만(lock G, 원본 백업) → T-323
+코드와 함께 api·dagster 이미지 순차 build(GDAL 바인딩 컴파일로 dagster 17분) → Dagster 세 서비스·api 재생성.
+검증은 healthcheck가 아니라 GraphQL `runsOrError` 200 + 데이터, 세 컨테이너의 scheme, daemon live,
+다음 run-due SUCCESS로 했다. 이번 배포 스크립트는 rollback tag를 컨테이너 image ID로 붙였다(앞선 이름 기준
+결함 수정).
+
 **T-309의 503→504 변경이 소비자에게 미치는 영향 확인.** geo API를 부르는 저장소는 셋 — PinVi
 `apps/api/app/clients/kor_travel_geo.py`는 `status_code >= 500` 전부를 backoff 재시도(504 포함),
 concierge `ktc/etl/admin_region_service.py`(`/v2/reverse`)는 `raise_for_status()`로 5xx 전부 실패 처리,

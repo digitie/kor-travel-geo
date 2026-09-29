@@ -2,7 +2,12 @@
 
 새 에이전트 세션이 시작될 때 "지금 어디까지 했고, 다음은 뭐 하면 되나"를 한 화면에서 답한다.
 
-## 현재 진척도 (2026-09-29 06:35Z 갱신, by claude)
+## 현재 진척도 (2026-09-29 08:00Z 갱신, by claude)
+
+- ✅ **T-322 운영 적용 + T-323 배포 (07:51Z)** — geo Dagster storage URL `postgresql+psycopg2://`(n150 `.env`,
+  manager #437), T-323(#565) 이미지 반영. 검증: 세 Dagster 컨테이너 scheme, GraphQL `runsOrError` 200, daemon
+  live, readyz 200, 이후 run-due SUCCESS. **다음 한 작업**: 없음 — 열린 과제는 `tasks.md`의 T-322 선택 과제
+  (`sqlalchemy<2.1` pin 해제, 조건부)와 보류 T-063뿐. 사용자 다음 지시 대기.
 
 - ✅ **T-308 후속 일괄 완주 (사용자 지시 "이어서 완주까지 진행" → "한도 다 쓸 때까지 기록하면서 진행")** —
   T-309~T-321 **전부 병합·n150 배포·live 검증 완료**(#553~#560, #562~#564, main `8423c4c`; 다섯 geo
@@ -11,11 +16,7 @@
   T-315 완료(geo-api/ui `/opt` 이전 — 두 트리 secret 불일치로 Dagster 백업 run-due가 403이던 것 해소),
   백업 주기 2주(336h, 다음 2026-10-12, manager #436), Dagster backup schedule·janitor·failure sensor
   RUNNING. 상세 `journal.md` 2026-09-29.
-  **다음 한 작업**: `tasks.md`의 T-322(Dagster storage 드라이버 — throwaway 검증 완료,
-  `docs/t322-dagster-storage-driver.md`: `postgresql+psycopg2://`가 SQLAlchemy 2.0·2.1 모두 통과하고 URL을
-  libpq에 넘기는 경로는 없다. 남은 것은 manager `.env` 값 변경 + geo Dagster 세 서비스 재생성, pin은 유지)
-  또는 T-323(sppn 재적재 실패 뒤 기준월 fallback). 둘 다 긴급하지 않다. 배포 스크립트를 다시 쓸 때는
-  서비스별 순차 build(병렬 build는 BuildKit session을 잃고 멈춘다)와 컨테이너 image ID 기준 rollback tag.
+  **다음 한 작업**: 위 08:00Z 항목 참조(T-322·T-323 완료).
 
 - ✅ **T-308 — geo DB를 공용 제어 평면 instance `kor-travel-shared-postgres`(:11000)로 이전 +
   관리 UI geocoding 장애 복구 (사용자 지시)** — `kor_travel_geo`·`kor_travel_geo_dagster` 둘 다
