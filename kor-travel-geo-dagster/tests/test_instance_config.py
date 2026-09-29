@@ -15,7 +15,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from dagster._core.instance.config import dagster_instance_config
 
 _DOCKER_DIR = Path(__file__).resolve().parents[1] / "docker"
