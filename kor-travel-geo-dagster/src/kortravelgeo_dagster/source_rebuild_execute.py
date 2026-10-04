@@ -29,7 +29,7 @@ import asyncio
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from dagster import Field, OpExecutionContext, Permissive, String, job, op
+from dagster import Field, OpExecutionContext, Permissive, String, op
 from kortravelgeo.api._full_load_launch import launch_full_load_batch_dagster_run
 from kortravelgeo.infra.admin_repo import AdminRepository
 from kortravelgeo.infra.concurrency import (
@@ -39,6 +39,7 @@ from kortravelgeo.infra.concurrency import (
 )
 
 from .load_job_bridge import ProgressReporter, execute_load_job
+from .recovery import geo_job
 from .resources import op_resource
 
 if TYPE_CHECKING:
@@ -185,7 +186,7 @@ async def run_source_rebuild_db_op(context: OpExecutionContext) -> dict[str, obj
     return {"job_id": job_id}
 
 
-@job(
+@geo_job(
     name="source_rebuild_db",
     tags=SOURCE_REBUILD_DB_JOB_TAGS,
     description="Rebuild the serving DB from a source match set as a Dagster run (T-290k).",

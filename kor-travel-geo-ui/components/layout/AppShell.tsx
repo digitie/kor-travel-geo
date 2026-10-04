@@ -24,7 +24,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { AppMenu, type AppMenuLinkProps } from "@kor-travel/ui/app-menu";
 import { DocumentNavLink } from "@/components/layout/DocumentNavLink";
 import { ADMIN_NAV_GROUPS, ADMIN_PAGES, type AdminPageKey } from "@/lib/admin-pages";
 import { useModalA11y } from "@/lib/use-modal-a11y";
@@ -253,19 +254,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               links={debugLinks}
               onNavigate={closeMenu}
             />
-            <nav className="nav-group" aria-label="개요">
-              <p className="nav-title">개요</p>
-              <DocumentNavLink
-                ariaLabel={sidebarCollapsed ? ADMIN_PAGES.home.title : undefined}
-                className="nav-link"
-                href={ADMIN_PAGES.home.path}
-                onNavigate={closeMenu}
-                title={sidebarCollapsed ? ADMIN_PAGES.home.title : undefined}
-              >
-                <LayoutDashboard size={17} />
-                <span className="nav-label">{ADMIN_PAGES.home.title}</span>
-              </DocumentNavLink>
-            </nav>
+            <NavGroup collapsed={sidebarCollapsed} title="개요"
+              links={[{ href: ADMIN_PAGES.home.path, label: ADMIN_PAGES.home.title, icon: LayoutDashboard }]}
+              onNavigate={closeMenu} />
             {adminNavGroups.map((group) => (
               <NavGroup
                 collapsed={sidebarCollapsed}
@@ -323,25 +314,18 @@ function NavGroup({
   links: { href: string; label: string; icon: typeof Search }[];
   onNavigate: () => void;
 }) {
-  return (
-    <nav className="nav-group" aria-label={title}>
-      <p className="nav-title">{title}</p>
-      {links.map((link) => {
-        const Icon = link.icon;
-        return (
-          <DocumentNavLink
-            ariaLabel={collapsed ? link.label : undefined}
-            className="nav-link"
-            href={link.href}
-            key={link.href}
-            onNavigate={onNavigate}
-            title={collapsed ? link.label : undefined}
-          >
-            <Icon size={17} />
-            <span className="nav-label">{link.label}</span>
-          </DocumentNavLink>
-        );
-      })}
-    </nav>
-  );
+  const pathname = usePathname() ?? "/";
+  return <MenuNavigationContext.Provider value={onNavigate}>
+    <AppMenu pathname={pathname} label={title} groups={[{ id: title, label: title,
+      items: links.map(link => ({ id: link.href, href: link.href, label: link.label,
+        exact: link.href === "/admin", icon: <link.icon size={17} /> })) }]} linkComponent={MenuDocumentLink} />
+  </MenuNavigationContext.Provider>;
+}
+
+const MenuNavigationContext = createContext<() => void>(() => {});
+
+function MenuDocumentLink({ children, className, ...props }: AppMenuLinkProps) {
+  const onNavigate = useContext(MenuNavigationContext);
+  return <DocumentNavLink {...props} ariaLabel={props["aria-label"]} title={props["aria-label"]}
+    className={`${className ?? ""} nav-link`} onNavigate={onNavigate}>{children}</DocumentNavLink>;
 }

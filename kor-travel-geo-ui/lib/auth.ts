@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { sanitizeLocalPath as commonLocalPath } from "@kor-travel/ui/navigation";
 import { clientIpForThrottle, trustedClientIp } from "@/lib/request-ip";
 
 export const SESSION_COOKIE_NAME = "ktg_ui_session";
@@ -315,15 +316,11 @@ export function sanitizeLocalPath(
   raw: string | null | undefined,
   fallback = "/debug/geocode"
 ): string {
-  if (!raw) {
-    return fallback;
-  }
+  if (!raw) return fallback;
   try {
     const decoded = decodeURIComponent(raw);
-    if (!decoded.startsWith("/") || decoded.startsWith("//") || decoded.includes("\\")) {
-      return fallback;
-    }
-    return decoded;
+    const safe = commonLocalPath(decoded);
+    return safe === "/" && decoded !== "/" ? fallback : safe;
   } catch {
     return fallback;
   }

@@ -50,7 +50,8 @@ from kortravelgeo.infra.concurrency import (
     ConcurrentExecutionError,
     cross_process_lock,
 )
-from kortravelgeo.infra.load_job_executor import LoadJobExecutor
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor, LoadJobLeaseLostError
+from kortravelgeo.infra.publication import PublicationGuard, load_job_publication_guard
 from kortravelgeo.loaders.bulk_loader import load_bulk_delivery
 from kortravelgeo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kortravelgeo.loaders.pobox_loader import load_pobox
@@ -555,6 +556,8 @@ async def run_mv_refresh(
     payload: dict[str, Any],
     job_id: str,
     progress: ProgressReporter,
+    cancel_event: asyncio.Event | None = None,
+    publication_guard: PublicationGuard | None = None,
 ) -> None:
     """Resolve text↔geometry links, swap-refresh the serving MVs, and record the serving
     release (port of the ``mv_refresh`` handler). ``forced_promotion`` bypasses ONLY the
@@ -568,11 +571,21 @@ async def run_mv_refresh(
     forced_promotion = _payload_bool(payload, "forced_promotion", default=False)
     if not forced_promotion:
         await repo.ensure_load_batch_release_gate(load_batch_id)
+    if cancel_event is not None and cancel_event.is_set():
+        raise LoadJobLeaseLostError("MV 게시 전에 중지 요청을 확인했습니다.")
+    await progress(stage="mv_refresh", message="MV 게시 소유권 확인")
+    guard_kwargs: dict[str, Any] = (
+        {"publication_guard": publication_guard} if publication_guard is not None else {}
+    )
     await refresh_mv(
         engine,
         concurrently=strategy != "swap",
         strategy="swap" if strategy == "swap" else "concurrent",
+        **guard_kwargs,
     )
+    if cancel_event is not None and cancel_event.is_set():
+        raise LoadJobLeaseLostError("릴리스 활성화 전에 중지 요청을 확인했습니다.")
+    await progress(stage="serving_release", message="릴리스 게시 소유권 확인")
     forced_metadata = payload.get("forced_promotion_metadata")
     # T-291a: a standalone refresh (no load_batch_id) following daily-delta loads can be labeled
     # daily_delta — the documented operator workflow (t028) is apply-deltas-then-refresh-
@@ -588,6 +601,7 @@ async def run_mv_refresh(
         forced_promotion=forced_promotion,
         forced_promotion_metadata=(forced_metadata if isinstance(forced_metadata, dict) else None),
         release_kind=None if load_batch_id else release_kind,
+        **guard_kwargs,
     )
     await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")
     await progress(
@@ -624,7 +638,9 @@ def _source_leaf(
     return _leaf
 
 
-async def _lease_heartbeat(executor: LoadJobExecutor, job_id: str, ttl_seconds: float) -> None:
+async def _lease_heartbeat(
+    executor: LoadJobExecutor, job_id: str, ttl_seconds: float, cancel_event: asyncio.Event
+) -> None:
     """Renew a child row's lease at ~1/3 the TTL, independent of progress emission.
 
     A source loader can stay inside one long COPY without emitting progress; without this
@@ -635,8 +651,14 @@ async def _lease_heartbeat(executor: LoadJobExecutor, job_id: str, ttl_seconds: 
     interval = ttl_seconds / 3.0
     while True:
         await asyncio.sleep(interval)
-        with suppress(Exception):
+        try:
             await executor.renew_lease(job_id, ttl_seconds=ttl_seconds)
+        except LoadJobLeaseLostError:
+            cancel_event.set()
+            return
+        except Exception:
+            # 일시적인 DB 장애와 확인된 소유권 상실을 구별한다.
+            continue
 
 
 async def _drive_child(
@@ -665,7 +687,7 @@ async def _drive_child(
         await executor.set_progress(child_id, progress=progress, stage=stage, message=message)
         await executor.renew_lease(child_id, ttl_seconds=ttl_seconds)
 
-    heartbeat = asyncio.create_task(_lease_heartbeat(executor, child_id, ttl_seconds))
+    heartbeat = asyncio.create_task(_lease_heartbeat(executor, child_id, ttl_seconds, cancel_event))
     try:
         await child_progress(progress=0.01, stage="running", message="job started")
         result = await leaf(cancel_event, child_progress)
@@ -691,22 +713,24 @@ async def _fetch_source_children(
 
     async with engine.connect() as conn:
         rows = (
-            await conn.execute(
-                text(
-                    """
+            (
+                await conn.execute(
+                    text(
+                        """
 SELECT job_id, kind, payload
   FROM load_jobs
  WHERE load_batch_id = :batch_id
    AND job_id <> :batch_id
  ORDER BY created_at
 """
-                ),
-                {"batch_id": batch_id},
+                    ),
+                    {"batch_id": batch_id},
+                )
             )
-        ).mappings().all()
-    return [
-        (str(row["job_id"]), str(row["kind"]), dict(row["payload"] or {})) for row in rows
-    ]
+            .mappings()
+            .all()
+        )
+    return [(str(row["job_id"]), str(row["kind"]), dict(row["payload"] or {})) for row in rows]
 
 
 async def _cancel_queued_children(engine: AsyncEngine, batch_id: str) -> None:
@@ -746,7 +770,9 @@ async def run_full_load_batch(
     root ``done`` on normal return.
     """
 
-    executor = LoadJobExecutor(engine, lease_ttl_seconds=lease_ttl_seconds)
+    executor = LoadJobExecutor(
+        engine, lease_ttl_seconds=lease_ttl_seconds, orchestrator_run_id=orchestrator_run_id
+    )
     repo = AdminRepository(engine)
 
     children = await _fetch_source_children(engine, batch_id)
@@ -817,10 +843,7 @@ async def run_full_load_batch(
     source_match_set_id = _payload_str(payload, "source_match_set_id")
     forced_promotion = _payload_bool(payload, "forced_promotion", default=False)
     if report.severity_max == "ERROR" and not forced_promotion:
-        msg = (
-            f"consistency report severity ERROR; mv_refresh blocked "
-            f"(report {report.report_id})"
-        )
+        msg = f"consistency report severity ERROR; mv_refresh blocked (report {report.report_id})"
         raise FullLoadBatchGateError(msg)
 
     # 4. mv_refresh swap ---------------------------------------------------------------
@@ -847,8 +870,20 @@ async def run_full_load_batch(
     )
     await progress(stage="mv_refresh", message="consistency gate passed; mv_refresh swap running")
 
-    async def _mv_leaf(_ce: asyncio.Event, pr: ProgressReporter) -> None:
-        await run_mv_refresh(engine, payload=mv_payload, job_id=mv_child.job_id, progress=pr)
+    async def _mv_leaf(ce: asyncio.Event, pr: ProgressReporter) -> None:
+        await run_mv_refresh(
+            engine,
+            payload=mv_payload,
+            job_id=mv_child.job_id,
+            progress=pr,
+            cancel_event=ce,
+            publication_guard=load_job_publication_guard(
+                job_id=mv_child.job_id,
+                owner_run_id=orchestrator_run_id,
+                cancel_event=ce,
+                parent_job_id=batch_id,
+            ),
+        )
 
     await _drive_child(
         executor,

@@ -168,6 +168,9 @@ describe("admin auth", () => {
 
   it("next 경로는 로컬 경로만 허용한다", () => {
     expect(sanitizeLocalPath("/admin/settings")).toBe("/admin/settings");
+    expect(sanitizeLocalPath("/%09/evil.example")).toBe("/debug/geocode");
+    expect(sanitizeLocalPath("/\t/evil.example")).toBe("/debug/geocode");
+    expect(sanitizeLocalPath("/%2509/evil.example")).toBe("/debug/geocode");
     expect(sanitizeLocalPath("https://example.com/admin")).toBe("/debug/geocode");
     expect(sanitizeLocalPath("//example.com/admin")).toBe("/debug/geocode");
     expect(sanitizeLocalPath("/admin\\settings")).toBe("/debug/geocode");

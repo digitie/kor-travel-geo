@@ -15,14 +15,20 @@ from __future__ import annotations
 from typing import Any, Final, cast
 
 from dagster import Definitions, ResourceDefinition, resource
+from kortravelcommon.dagster import infrastructure_retry_sensor
 
 from .backup import BACKUP_JOBS, BACKUP_SCHEDULES, BACKUP_SENSORS
 from .backup_execute import DB_BACKUP_JOBS
-from .backup_maintenance import BACKUP_MAINTENANCE_JOBS, BACKUP_MAINTENANCE_SCHEDULES
+from .backup_maintenance import (
+    BACKUP_MAINTENANCE_JOBS,
+    BACKUP_MAINTENANCE_SCHEDULES,
+    backup_verify_job,
+)
 from .consistency_execute import CONSISTENCY_JOBS
 from .db_restore_execute import DB_RESTORE_JOBS
 from .full_load_execute import FULL_LOAD_JOBS
 from .mv import MV_REFRESH_JOBS
+from .recovery import LOCATION_NAME, PROJECT, policy_for_job
 from .resources import admin_api_resource, client_resource, rustfs_resource, settings_resource
 from .source_rebuild_execute import SOURCE_REBUILD_JOBS
 
@@ -84,7 +90,19 @@ defs = Definitions(
         ],
     ),
     schedules=cast("Any", [*BACKUP_SCHEDULES, *BACKUP_MAINTENANCE_SCHEDULES]),
-    sensors=cast("Any", [*BACKUP_SENSORS]),
+    sensors=cast(
+        "Any",
+        [
+            *BACKUP_SENSORS,
+            infrastructure_retry_sensor(
+                name="geo_infrastructure_retry_backup_verify",
+                project=PROJECT,
+                location_name=LOCATION_NAME,
+                job=backup_verify_job,
+                policy=policy_for_job("backup_verify"),
+            ),
+        ],
+    ),
     resources={
         key: (
             _value_resource(key, DEFAULT_RESOURCE_VALUES[key])

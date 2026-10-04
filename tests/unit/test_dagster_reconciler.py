@@ -18,6 +18,23 @@ class _FakeExecutor:
         self.cancelled: list[str] = []
         self.progress: list[tuple[str, str | None, str | None]] = []
 
+    async def reconcile_transition(
+        self,
+        job_id: str,
+        *,
+        state: str,
+        orchestrator_run_id: str | None,
+        lease_expires_at: datetime | None,
+        reason: str,
+    ) -> bool:
+        if state == "done":
+            self.done.append(job_id)
+        elif state == "failed":
+            self.failed.append((job_id, reason))
+        else:
+            self.cancelled.append(job_id)
+        return True
+
     async def mark_done(self, job_id: str) -> None:
         self.done.append(job_id)
 
@@ -82,10 +99,39 @@ async def _noop_cancel(*, job_id: str, orchestrator_run_id: str | None) -> None:
 
 
 @pytest.mark.asyncio
+async def test_timeout_checkpoints_unknown_row_before_budget_exhaustion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from kortravelgeo.api import _reconciler
+
+    clock = iter([0.0, 0.0, 6.0])
+    monkeypatch.setattr(_reconciler, "monotonic", lambda: next(clock))
+
+    async def timeout(**kwargs: Any) -> OrchestratorRunState:
+        raise TimeoutError
+
+    created = datetime.now(UTC)
+    executor = _FakeExecutor()
+    reconciler = _StubReconciler(
+        [_row(created_at=created), _row(job_id="j2", created_at=created)],
+        executor=executor,
+        liveness_probe=timeout,
+        orchestrator_cancel=_noop_cancel,
+    )
+    results = await reconciler.reconcile_once()
+    assert len(results) == 1
+    assert results[0][1].outcome is ReconcileOutcome.KEEP_RUNNING
+    assert reconciler._cursors[False] == (created, "j1")
+    assert not executor.done and not executor.failed and not executor.cancelled
+
+
+@pytest.mark.asyncio
 async def test_success_run_converges_done() -> None:
     ex = _FakeExecutor()
     rec = _StubReconciler(
-        [_row()], executor=ex, liveness_probe=_probe(OrchestratorRunState.SUCCESS),
+        [_row()],
+        executor=ex,
+        liveness_probe=_probe(OrchestratorRunState.SUCCESS),
         orchestrator_cancel=_noop_cancel,
     )
     results = await rec.reconcile_once()
@@ -97,7 +143,9 @@ async def test_success_run_converges_done() -> None:
 async def test_failed_run_converges_failed() -> None:
     ex = _FakeExecutor()
     rec = _StubReconciler(
-        [_row()], executor=ex, liveness_probe=_probe(OrchestratorRunState.FAILED),
+        [_row()],
+        executor=ex,
+        liveness_probe=_probe(OrchestratorRunState.FAILED),
         orchestrator_cancel=_noop_cancel,
     )
     await rec.reconcile_once()

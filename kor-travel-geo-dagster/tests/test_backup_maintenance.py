@@ -15,7 +15,14 @@ from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
-from dagster import Failure, RunRequest, SkipReason, build_op_context, build_schedule_context
+from dagster import (
+    DagsterInstance,
+    Failure,
+    RunRequest,
+    SkipReason,
+    build_op_context,
+    build_schedule_context,
+)
 from kortravelgeo.exceptions import UnsupportedOnInstanceError
 
 from kortravelgeo_dagster import backup_maintenance
@@ -360,10 +367,14 @@ def test_restore_drill_schedule_requests_a_run_on_a_supported_instance() -> None
     client = _FakeClient()
     scheduled_at = datetime(2026, 9, 29, 4, 0, tzinfo=ZoneInfo("Asia/Seoul"))
 
-    result = backup_maintenance.restore_drill_schedule(
-        build_schedule_context(resources={"client": client}, scheduled_execution_time=scheduled_at)
-    )
-
+    with DagsterInstance.local_temp() as instance:
+        result = backup_maintenance.restore_drill_schedule(
+            build_schedule_context(
+                instance=instance,
+                resources={"client": client},
+                scheduled_execution_time=scheduled_at,
+            )
+        )
     assert isinstance(result, RunRequest)
     assert result.run_key == scheduled_at.isoformat()
     assert result.tags["kor_travel_geo.schedule"] == "backup_restore_drill_daily"
@@ -377,10 +388,14 @@ def test_restore_drill_schedule_still_launches_when_the_capability_check_errors(
     client = _FakeClient(lifecycle_error=RuntimeError("connection refused"))
     scheduled_at = datetime(2026, 9, 29, 4, 0, tzinfo=ZoneInfo("Asia/Seoul"))
 
-    result = backup_maintenance.restore_drill_schedule(
-        build_schedule_context(resources={"client": client}, scheduled_execution_time=scheduled_at)
-    )
-
+    with DagsterInstance.local_temp() as instance:
+        result = backup_maintenance.restore_drill_schedule(
+            build_schedule_context(
+                instance=instance,
+                resources={"client": client},
+                scheduled_execution_time=scheduled_at,
+            )
+        )
     assert isinstance(result, RunRequest)
     assert result.run_key == scheduled_at.isoformat()
 

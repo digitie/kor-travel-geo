@@ -17,6 +17,23 @@ from kortravelgeo.settings import Settings, get_settings
 _HEADERS = {"X-KTG-Actor": "dagster-test", "X-KTG-Roles": "source_file_viewer"}
 
 
+def test_observability_budget_is_separate_and_bounded() -> None:
+    from pydantic import ValidationError
+
+    settings = Settings(_env_file=None, dagster_request_timeout_seconds=0.5)
+    assert settings.dagster_request_timeout_seconds == 0.5
+    assert settings.dagster_observability_timeout_seconds == 10.0
+    assert (
+        Settings(
+            _env_file=None, dagster_observability_timeout_seconds=20
+        ).dagster_observability_timeout_seconds
+        == 20
+    )
+    for invalid in (0, 20.1, float("inf")):
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, dagster_observability_timeout_seconds=invalid)
+
+
 def _alert(run_id: str, *, acknowledged: bool = False, **overrides: Any) -> RunFailureAlert:
     fields: dict[str, Any] = {
         "run_id": run_id,
@@ -77,13 +94,16 @@ def _app(
     artifact_client: _ArtifactClient | None = None,
 ):
     app = create_app()
-    app.dependency_overrides[get_settings] = lambda: settings or Settings(
-        _env_file=None,
-        admin_trusted_proxy_cidrs="127.0.0.0/8",
-        dagster_url="http://dagster.example:12502",
-        dagster_allowed_hosts=("dagster.example",),
-        dagster_request_timeout_seconds=1.0,
-        geoip_gate_mode="off",
+    app.dependency_overrides[get_settings] = lambda: (
+        settings
+        or Settings(
+            _env_file=None,
+            admin_trusted_proxy_cidrs="127.0.0.0/8",
+            dagster_url="http://dagster.example:12502",
+            dagster_allowed_hosts=("dagster.example",),
+            dagster_request_timeout_seconds=1.0,
+            geoip_gate_mode="off",
+        )
     )
     app.dependency_overrides[get_client] = lambda: artifact_client or _ArtifactClient()
     return app
@@ -168,6 +188,7 @@ async def test_dagster_summary_parses_graphql_response(
                         }
                     ],
                 },
+                "activeRuns": {"__typename": "Runs", "results": []},
                 "runsOrError": {
                     "__typename": "Runs",
                     "results": [
@@ -591,39 +612,69 @@ def test_dagster_summary_openapi_path_is_mounted() -> None:
 
 def test_schedule_overdue_flags_missed_running_schedule() -> None:
     # last tick 1000s ago; interval 60, grace 100 -> 1000 > 160 -> overdue.
-    assert dagster_mod._schedule_overdue(
-        status="RUNNING", last_tick_ts=0.0, future_ticks=[60.0, 120.0],
-        now_ts=1000.0, grace_seconds=100.0,
-    ) is True
+    assert (
+        dagster_mod._schedule_overdue(
+            status="RUNNING",
+            last_tick_ts=0.0,
+            future_ticks=[60.0, 120.0],
+            now_ts=1000.0,
+            grace_seconds=100.0,
+        )
+        is True
+    )
 
 
 def test_schedule_overdue_within_grace_not_flagged() -> None:
     # last tick 100s ago; interval 60 + grace 100 = 160 -> 100 <= 160 -> not overdue.
-    assert dagster_mod._schedule_overdue(
-        status="RUNNING", last_tick_ts=0.0, future_ticks=[60.0, 120.0],
-        now_ts=100.0, grace_seconds=100.0,
-    ) is False
+    assert (
+        dagster_mod._schedule_overdue(
+            status="RUNNING",
+            last_tick_ts=0.0,
+            future_ticks=[60.0, 120.0],
+            now_ts=100.0,
+            grace_seconds=100.0,
+        )
+        is False
+    )
 
 
 def test_schedule_overdue_ignores_stopped_schedule() -> None:
-    assert dagster_mod._schedule_overdue(
-        status="STOPPED", last_tick_ts=0.0, future_ticks=[60.0, 120.0],
-        now_ts=1_000_000.0, grace_seconds=0.0,
-    ) is False
+    assert (
+        dagster_mod._schedule_overdue(
+            status="STOPPED",
+            last_tick_ts=0.0,
+            future_ticks=[60.0, 120.0],
+            now_ts=1_000_000.0,
+            grace_seconds=0.0,
+        )
+        is False
+    )
 
 
 def test_schedule_overdue_needs_two_future_ticks() -> None:
-    assert dagster_mod._schedule_overdue(
-        status="RUNNING", last_tick_ts=0.0, future_ticks=[60.0],
-        now_ts=1_000_000.0, grace_seconds=0.0,
-    ) is False
+    assert (
+        dagster_mod._schedule_overdue(
+            status="RUNNING",
+            last_tick_ts=0.0,
+            future_ticks=[60.0],
+            now_ts=1_000_000.0,
+            grace_seconds=0.0,
+        )
+        is False
+    )
 
 
 def test_schedule_overdue_without_last_tick_not_flagged() -> None:
-    assert dagster_mod._schedule_overdue(
-        status="RUNNING", last_tick_ts=None, future_ticks=[60.0, 120.0],
-        now_ts=1_000_000.0, grace_seconds=0.0,
-    ) is False
+    assert (
+        dagster_mod._schedule_overdue(
+            status="RUNNING",
+            last_tick_ts=None,
+            future_ticks=[60.0, 120.0],
+            now_ts=1_000_000.0,
+            grace_seconds=0.0,
+        )
+        is False
+    )
 
 
 # --- T-290h: run-failure alerts endpoints + run-detail surface ---------------------
@@ -636,9 +687,7 @@ async def test_dagster_run_failures_lists_unacknowledged() -> None:
         app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
     )
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get(
-            "/v1/ops/dagster/run-failures?limit=25", headers=_HEADERS
-        )
+        response = await client.get("/v1/ops/dagster/run-failures?limit=25", headers=_HEADERS)
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -667,16 +716,12 @@ async def test_dagster_run_failures_include_acknowledged() -> None:
 
 @pytest.mark.asyncio
 async def test_dagster_run_failure_ack_returns_alert() -> None:
-    client_stub = _ArtifactClient(
-        failure_alerts={"run-a": _alert("run-a", acknowledged=True)}
-    )
+    client_stub = _ArtifactClient(failure_alerts={"run-a": _alert("run-a", acknowledged=True)})
     transport = httpx.ASGITransport(
         app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
     )
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/v1/ops/dagster/runs/run-a/ack", headers=_HEADERS
-        )
+        response = await client.post("/v1/ops/dagster/runs/run-a/ack", headers=_HEADERS)
 
     assert response.status_code == 200
     data = response.json()["data"]
@@ -692,9 +737,7 @@ async def test_dagster_run_failure_ack_not_found_returns_404() -> None:
         app=_app(artifact_client=client_stub), client=("127.0.0.1", 12345)
     )
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post(
-            "/v1/ops/dagster/runs/missing/ack", headers=_HEADERS
-        )
+        response = await client.post("/v1/ops/dagster/runs/missing/ack", headers=_HEADERS)
 
     assert response.status_code == 404
     assert client_stub.ack_calls == ["missing"]
@@ -796,6 +839,7 @@ async def test_dagster_summary_surfaces_next_tick_and_overdue(
                     "sensors": [],
                     "assetNodes": [],
                 },
+                "activeRuns": {"__typename": "Runs", "results": []},
                 "runsOrError": {"__typename": "Runs", "results": []},
             }
         }
@@ -819,6 +863,7 @@ def _empty_summary_payload() -> dict[str, Any]:
                 "name": "__repository__",
                 "location": {"name": "kortravelgeo_dagster.definitions"},
             },
+            "activeRuns": {"__typename": "Runs", "results": []},
             "runsOrError": {"__typename": "Runs", "results": []},
         }
     }
@@ -1073,6 +1118,7 @@ async def test_dagster_summary_reports_missing_own_location_without_falling_back
                     "__typename": "RepositoryNotFoundError",
                     "message": "Could not find a repository named __repository__",
                 },
+                "activeRuns": {"__typename": "Runs", "results": []},
                 "runsOrError": {"__typename": "Runs", "results": []},
             }
         }
@@ -1162,3 +1208,92 @@ async def test_dagster_run_detail_hides_runs_from_other_locations(
     assert "other data" not in response.text
     # geo's own DB is not consulted for a run that is not geo's.
     assert client_stub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_summary_includes_old_active_runs_and_deduplicates_recent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake(**kwargs: Any) -> dict[str, Any]:
+        assert "activeRuns: runsOrError" in dagster_mod._DAGSTER_SUMMARY_QUERY
+        assert (
+            "statuses: [NOT_STARTED, QUEUED, STARTING, STARTED, CANCELING]"
+            in dagster_mod._DAGSTER_SUMMARY_QUERY
+        )
+        return {
+            "data": {
+                "repositoryOrError": {
+                    "__typename": "Repository",
+                    "name": "__repository__",
+                    "location": {"name": "kortravelgeo_dagster.definitions"},
+                },
+                "runsOrError": {
+                    "__typename": "Runs",
+                    "results": [
+                        {"runId": "recent", "status": "STARTED"},
+                        {"runId": "done", "status": "SUCCESS"},
+                    ],
+                },
+                "activeRuns": {
+                    "__typename": "Runs",
+                    "results": [
+                        {"runId": "old-active", "status": "STARTED", "startTime": 1},
+                        {"runId": "recent", "status": "STARTED"},
+                    ],
+                },
+            }
+        }
+
+    monkeypatch.setattr(dagster_mod, "_post_graphql", fake)
+    transport = httpx.ASGITransport(app=_app(), client=("127.0.0.1", 12345))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/ops/dagster/summary", headers=_HEADERS)
+    data = response.json()["data"]
+    assert data["status"] == "ok"
+    assert [run["run_id"] for run in data["recent_runs"]] == ["old-active", "recent", "done"]
+    assert data["run_counts"] == {"STARTED": 2, "SUCCESS": 1}
+
+
+@pytest.mark.asyncio
+async def test_graphql_response_limit_stops_reading_before_unbounded_payload() -> None:
+    consumed: list[int] = []
+
+    class Chunks(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for index in range(3):
+                consumed.append(index)
+                yield b" " * (3 * 1024 * 1024)
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, stream=Chunks()))
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(ValueError, match="4 MiB"):
+            await dagster_mod._post_graphql(client, "http://dagster.example/graphql", {})
+    assert consumed == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_slow_graphql_chunks_cannot_extend_total_deadline() -> None:
+    import asyncio
+    from time import monotonic
+
+    class Chunks(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            while True:
+                await asyncio.sleep(0.005)
+                yield b" "
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, stream=Chunks()))
+    async with httpx.AsyncClient(transport=transport, timeout=0.03) as client:
+        started = monotonic()
+        with pytest.raises(httpx.ReadTimeout, match="전체 응답 시간 상한"):
+            await dagster_mod._post_graphql(client, "http://dagster.example/graphql", {})
+        assert monotonic() - started < 0.2
+
+
+def test_tick_history_uses_limited_queries_without_full_history_batch_rank() -> None:
+    assert (
+        dagster_mod._DAGSTER_SUMMARY_QUERY.count(
+            "ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE])"
+        )
+        == 2
+    )

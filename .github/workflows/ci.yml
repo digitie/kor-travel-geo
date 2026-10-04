@@ -77,6 +77,7 @@ jobs:
           python -c "import sqlalchemy; v = sqlalchemy.__version__; print('sqlalchemy', v); assert v.startswith('2.1.'), v"
       - name: Test main lib on the Dagster image resolve
         env:
+          KTG_EXECUTOR_TEST_PG_DSN: postgresql+psycopg://postgres:postgres@localhost:5432/dagster
           TMPDIR: /tmp
           TMP: /tmp
           TEMP: /tmp
@@ -125,7 +126,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: kor-travel-geo-ui/package-lock.json
       - name: Install frontend

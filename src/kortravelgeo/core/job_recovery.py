@@ -58,6 +58,8 @@ class OrchestratorRunState(StrEnum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     RUNNING = "running"
+    #: 조회 실패·권한 오류·불완전 응답은 실행 부재의 증거가 아니다.
+    UNKNOWN = "unknown"
     #: No live run reference could be resolved (unknown/purged run id, or no probe wired).
     MISSING = "missing"
 
@@ -135,6 +137,12 @@ def reconcile_load_job(
     The function is total and side-effect free so it can be exhaustively unit-tested and
     reused unchanged by both startup recovery and the periodic reconciler tick.
     """
+
+    if run_state is OrchestratorRunState.UNKNOWN:
+        return ReconcileAction(
+            ReconcileOutcome.KEEP_RUNNING if job_state == "running" else ReconcileOutcome.NOOP,
+            "Dagster 상태 미확인; 다음 조회에서 다시 판단",
+        )
 
     if job_state != "running":
         # load_jobs is already terminal. The actionable divergence is a live Dagster run

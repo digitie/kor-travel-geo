@@ -27,8 +27,15 @@ _SOURCE_CHILDREN = [
 class _FakeExecutor:
     events: ClassVar[list[tuple]] = []
 
-    def __init__(self, _engine: object, *, lease_ttl_seconds: float = 300.0) -> None:
+    def __init__(
+        self,
+        _engine: object,
+        *,
+        lease_ttl_seconds: float = 300.0,
+        orchestrator_run_id: str | None = None,
+    ) -> None:
         self.ttl = lease_ttl_seconds
+        assert orchestrator_run_id is not None
 
     async def adopt_dagster(self, job_id, orchestrator_run_id, *, ttl_seconds=None):
         _FakeExecutor.events.append(("adopt", job_id, orchestrator_run_id))
@@ -103,7 +110,11 @@ class _Harness:
         self.consistency_payloads.append(payload)
         return SimpleNamespace(severity_max=self.severity, report_id="rep-1")
 
-    async def run_mv_refresh(self, engine, *, payload, job_id, progress):
+    async def run_mv_refresh(
+        self, engine, *, payload, job_id, progress, cancel_event=None, publication_guard=None
+    ):
+        assert cancel_event is not None
+        assert publication_guard is not None
         self.mv_payloads.append(payload)
 
 

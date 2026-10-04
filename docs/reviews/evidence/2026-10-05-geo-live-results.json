@@ -1,0 +1,44 @@
+[
+  {
+    "browser": "chromium",
+    "status": "PASS",
+    "checks": [
+      "anonymous BFF denied",
+      "invalid credentials denied and password cleared",
+      "real scoped Dagster runs loaded with bounded rendered rows",
+      "real run selection and domain detail",
+      "bounded event log pane keeps keyboard focus and readable table",
+      "search and status filtering keep detail",
+      "keyboard focus on scrollable table",
+      "real API outage retains last successful snapshot and signals stale state",
+      "real API recovery manual retry restores fresh snapshot",
+      "collapsed desktop preference preserves mobile navigation and no page overflow",
+      "authenticated SSR encoded-tab redirect stays local",
+      "foreign origin denied",
+      "logout revokes authenticated BFF access"
+    ],
+    "rowCount": 10,
+    "pageErrors": []
+  },
+  {
+    "browser": "firefox",
+    "status": "PASS",
+    "checks": [
+      "anonymous BFF denied",
+      "invalid credentials denied and password cleared",
+      "real scoped Dagster runs loaded with bounded rendered rows",
+      "real run selection and domain detail",
+      "bounded event log pane keeps keyboard focus and readable table",
+      "search and status filtering keep detail",
+      "keyboard focus on scrollable table",
+      "real API outage retains last successful snapshot and signals stale state",
+      "real API recovery manual retry restores fresh snapshot",
+      "collapsed desktop preference preserves mobile navigation and no page overflow",
+      "authenticated SSR encoded-tab redirect stays local",
+      "foreign origin denied",
+      "logout revokes authenticated BFF access"
+    ],
+    "rowCount": 10,
+    "pageErrors": []
+  }
+]

@@ -18,10 +18,11 @@ import asyncio
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from dagster import Field, OpExecutionContext, Permissive, String, job, op
+from dagster import Field, OpExecutionContext, Permissive, String, op
 from kortravelgeo.loaders.batch_dag import run_consistency_check
 
 from .load_job_bridge import ProgressReporter, execute_load_job
+from .recovery import geo_job
 from .resources import op_resource
 
 if TYPE_CHECKING:
@@ -88,7 +89,7 @@ async def run_consistency_check_op(context: OpExecutionContext) -> dict[str, obj
     return {"job_id": job_id}
 
 
-@job(
+@geo_job(
     name="consistency_check",
     tags=CONSISTENCY_CHECK_JOB_TAGS,
     description="Run a standalone registry consistency check as a Dagster run (T-290k).",

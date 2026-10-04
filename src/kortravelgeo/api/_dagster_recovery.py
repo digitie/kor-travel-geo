@@ -4,7 +4,7 @@ These wrap the raw GraphQL calls in :mod:`kortravelgeo.api._dagster_client` with
 semantics the pure ``core.job_recovery`` seams describe but deliberately do not fabricate:
 
 * the **liveness probe** never force-fails a live job on a Dagster *outage* — a transport or
-  URL-config failure degrades to lease grace (``RUNNING`` while the lease is valid), so only a
+  URL-config failure returns ``UNKNOWN`` regardless of lease expiration, so only a
   Dagster run that Dagster itself reports gone/terminal converges the ``load_jobs`` row;
 * the **cancel hook** is best-effort — a failed ``terminateRun`` is logged, not raised, because
   ``load_jobs`` is the cancel authority and the periodic reconciler closes any residual
@@ -48,8 +48,8 @@ def dagster_liveness_probe(settings: Settings) -> RunLivenessProbe:
 
     ``orchestrator_run_id is None`` → ``MISSING`` (never launched / lost id). A reachable
     Dagster maps the run status onto :class:`OrchestratorRunState`. A Dagster *outage*
-    (transport/URL-config error) degrades to lease grace so a monitoring blip never kills a
-    healthy job — exactly the fallback the ``core`` probe protocol documents.
+    (transport/URL-config error) returns ``UNKNOWN`` so a monitoring blip never kills a
+    healthy job, including after lease expiration.
     """
 
     async def probe(
@@ -63,10 +63,10 @@ def dagster_liveness_probe(settings: Settings) -> RunLivenessProbe:
             return await fetch_run_state(settings, run_id=orchestrator_run_id)
         except _PROBE_DEGRADED_ERRORS:
             logger.warning(
-                "Dagster liveness probe degraded for run %s; falling back to lease grace",
+                "Dagster 실행 %s 상태 조회 실패; lease 만료와 무관하게 회수를 보류",
                 orchestrator_run_id,
             )
-            return OrchestratorRunState.RUNNING if lease_valid else OrchestratorRunState.MISSING
+            return OrchestratorRunState.UNKNOWN
 
     return probe
 

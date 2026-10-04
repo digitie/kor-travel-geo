@@ -1,0 +1,9 @@
+{
+  "command": "security-review-geo",
+  "template": "https://github.com/anthropics/claude-code-security-review/blob/main/.claude/commands/security-review.md",
+  "num_turns": 13,
+  "full_raw_sha256": "492813c5669acb3cf3457beeabdcfc81de1933e44df9e8dc9846b4ba1a0eb1f5",
+  "method": "공식 명령 템플릿의 허용 도구·고정 diff 입력을 현재 Windows 읽기 환경에 맞춰 조정. Read/Glob/Grep의 실제 정적 분석만 PASS이며 built-in 0-turn 실행은 PASS로 세지 않음.",
+  "geo": "596b7d177517f3b53cb811e36720d9af9bba582b",
+  "common": "ab21cc3b7b77e5e6d6cd277ca64840761fc4d7a4"
+}

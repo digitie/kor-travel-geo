@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { MouseEvent, ReactNode } from "react";
+import type { ComponentPropsWithRef, MouseEvent, ReactNode } from "react";
 
 export function DocumentNavLink({
   children,
@@ -10,8 +10,9 @@ export function DocumentNavLink({
   href,
   ariaLabel,
   onNavigate,
-  title
-}: {
+  title,
+  ...anchorProps
+}: Omit<ComponentPropsWithRef<"a">, "href"> & {
   ariaLabel?: string;
   children: ReactNode;
   className?: string;
@@ -44,6 +45,7 @@ export function DocumentNavLink({
 
   return (
     <Link
+      {...anchorProps}
       aria-current={active ? "page" : undefined}
       aria-label={ariaLabel}
       className={className}

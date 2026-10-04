@@ -1,0 +1,39 @@
+{
+  "common_product": "73e3ff8b9398e533806d2d1a8435292570169de3",
+  "geo_product": "4c59efe3a778fb160b7d0a4fde2ca08967bf1531",
+  "ui_product": "426de4fbad35282bb558712d922c06268e9aba62",
+  "ui_tarball_sha256": "03feae21b9e44041b648ba6d0defc3b16b97973ed3c7e70a83b91d279afb2f43",
+  "tokens_tarball_sha256": "554ae3f6a18cbf453130b29f8a2d737ddb880101b55e14535cf8d63174b47505",
+  "counts": {
+    "common_python_pass": 69,
+    "common_ui_pass": 48,
+    "common_tools_executed": 337,
+    "common_tools_skip": 1,
+    "geo_backend_pass": 1787,
+    "geo_backend_skip": 111,
+    "geo_focused_pass": 153,
+    "geo_ui_pass": 231,
+    "owned_postgres_pass": 17,
+    "live_checks_per_browser": 13
+  },
+  "not_run": [
+    "운영 daemon 설정 전환",
+    "운영 worker kill",
+    "전체 provider/geometry 재적재",
+    "운영 RSS 실측"
+  ],
+  "logs": {
+    "common-child-crash-tests.log": "1b5b340946d94cbf564c67c2211a1be7c3854b00ba17b93ee941310b2e7046b5",
+    "common-late-child-negative.log": "2d71efa9158346bb3ea70c6b4684062be020c31166edf56b997a56b3d78fd56e",
+    "common-geo-docs-final.log": "1bd6a425a25cd8b31532abd59bea02a23b76c539f3b05fa4a8e1de7b772ddc57",
+    "geo-focused-final.log": "56511365f5d3798808edd1a73d89864b7002526e2adfdc12a024c36275fe64d5",
+    "geo-pytest-full.log": "549ccd7b8f6461b717051e7dcc18ef477018780eacd2a466da79d5e7be69a80f",
+    "geo-ui-test.log": "7dd3f9d81c2d4e98c2723e5cd883cea523dd6089686eeac5555433331e341a0d",
+    "geo-ui-lint.log": "8aa666fe289bc4057fb769ba89adb299ef3d6bec0263fdf134ae97c2b7f66506",
+    "geo-ui-type.log": "a715a11a1c08563b45333960886d2f9644a5e3d66e45360699207495c5b92d88",
+    "geo-ui-build.log": "21a5f51c402b851123a5746d0e65fc75d222b966758626f249d37b04b69dcad5",
+    "geo-ruff-full.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "geo-mypy.log": "1d912ad9a40019f54ac8367f16d41aba6b15eb6127b2941995717ddcb8606bbe",
+    "geo-imports.log": "6450a138e8900313097cf34304cbd60b14c398ce7f68600af72ea712db7311a3"
+  }
+}

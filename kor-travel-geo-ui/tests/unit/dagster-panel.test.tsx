@@ -218,10 +218,10 @@ describe("DagsterPanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByText("kortravelgeo_dagster.definitions")).toBeTruthy();
+    expect((await screen.findAllByText("kortravelgeo_dagster.definitions")).length).toBeGreaterThan(0);
 
     await waitFor(() =>
-      expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_1")
+      expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_1", expect.objectContaining({ signal: expect.any(AbortSignal) }))
     );
     expect(await screen.findByText("STEP_SUCCESS")).toBeTruthy();
     expect(await screen.findByText("job-1")).toBeTruthy();
@@ -236,9 +236,9 @@ describe("DagsterPanel", () => {
     // Op-log grouping surfaces the backup op section (step_id "backup"), emphasized.
     expect(await screen.findByText("backup op")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "run_2 run 상세" }));
+    fireEvent.click(screen.getByRole("button", { name: "실행 상세: mv_refresh_job, run_2" }));
     await waitFor(() =>
-      expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_2")
+      expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/runs/run_2", expect.objectContaining({ signal: expect.any(AbortSignal) }))
     );
     expect(await screen.findByText("RUN_FAILURE")).toBeTruthy();
     // A failed run shows the failure banner sourced from the persisted alert.
@@ -266,10 +266,10 @@ describe("DagsterPanel", () => {
 
     renderPanel();
 
-    expect(await screen.findByText("Dagster 상태: unavailable")).toBeTruthy();
-    expect(screen.getByText("Dagster webserver 연결 실패")).toBeTruthy();
+    expect((await screen.findAllByText(/Dagster 상태: unavailable/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Dagster webserver 연결 실패/).length).toBeGreaterThan(0);
     expect(screen.getAllByText("최근 run이 없습니다.").length).toBeGreaterThan(0);
-    expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/summary");
+    expect(apiMocks.requestJson).toHaveBeenCalledWith("/ops/dagster/summary", expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
   it("최근 실패 알림 목록을 표시하고 확인(ack)한다", async () => {

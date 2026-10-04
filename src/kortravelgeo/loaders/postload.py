@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from kortravelgeo.infra.cache import GeoCacheRepository
+from kortravelgeo.infra.publication import PublicationGuard
 from kortravelgeo.infra.sql import (
     MV_SQL,
     POSTLOAD_SQL,
@@ -49,13 +50,20 @@ async def refresh_mv(
     *,
     concurrently: bool = True,
     strategy: Literal["concurrent", "swap"] = "concurrent",
+    publication_guard: PublicationGuard | None = None,
 ) -> None:
     if strategy == "swap":
         await normalize_mv_index_names(engine)
         await rebuild_mv_next(engine)
         await rebuild_text_search_mv_next(engine)
-        await shadow_swap_mv(engine)
-        await refresh_region_radius_parts(engine)
+        if publication_guard is None:
+            await shadow_swap_mv(engine)
+        else:
+            await shadow_swap_mv(engine, publication_guard=publication_guard)
+        if publication_guard is None:
+            await refresh_region_radius_parts(engine)
+        else:
+            await refresh_region_radius_parts(engine, publication_guard=publication_guard)
         await GeoCacheRepository(engine).clear()
         return
     statement = "REFRESH MATERIALIZED VIEW"
@@ -63,7 +71,8 @@ async def refresh_mv(
         statement += " CONCURRENTLY"
     statement += " mv_geocode_target"
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        # 긴 build 동안 소유 행을 잠그지 않는다. commit 직전 검증 실패는 refresh를 rollback한다.
+        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
         await conn.execute(text(statement))
         text_search_exists = await conn.scalar(text("SELECT to_regclass('mv_geocode_text_search')"))
         if text_search_exists is None:
@@ -77,21 +86,31 @@ async def refresh_mv(
             await conn.execute(text(text_search_statement))
         await conn.execute(text("ANALYZE mv_geocode_target"))
         await conn.execute(text("ANALYZE mv_geocode_text_search"))
-    await refresh_region_radius_parts(engine)
+        if publication_guard is not None:
+            await publication_guard(conn)
+    if publication_guard is None:
+        await refresh_region_radius_parts(engine)
+    else:
+        await refresh_region_radius_parts(engine, publication_guard=publication_guard)
     await GeoCacheRepository(engine).clear()
 
 
-async def refresh_region_radius_parts(engine: AsyncEngine) -> None:
+async def refresh_region_radius_parts(
+    engine: AsyncEngine, *, publication_guard: PublicationGuard | None = None
+) -> None:
     """Rebuild subdivided administrative-region geometry for radius lookup."""
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
         for sql in iter_sql_statements(REGION_RADIUS_PARTS_REFRESH_SQL):
             await conn.execute(text(sql))
+        # serving 테이블도 별도 commit을 갖는다. 긴 재생성 뒤 소유권을 다시 검증한다.
+        if publication_guard is not None:
+            await publication_guard(conn)
 
 
 async def rebuild_mv(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
         await conn.execute(text("DROP MATERIALIZED VIEW IF EXISTS mv_geocode_text_search"))
         for sql in iter_sql_statements(MV_SQL):
             await conn.execute(text(sql))
@@ -99,8 +118,12 @@ async def rebuild_mv(engine: AsyncEngine) -> None:
             await conn.execute(text(sql))
 
 
-async def shadow_swap_mv(engine: AsyncEngine) -> None:
+async def shadow_swap_mv(
+    engine: AsyncEngine, *, publication_guard: PublicationGuard | None = None
+) -> None:
     async with engine.begin() as conn:
+        if publication_guard is not None:
+            await publication_guard(conn)
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
         current_mv = await conn.scalar(text("SELECT to_regclass('mv_geocode_target')"))
         current_text_search_mv = await conn.scalar(
@@ -134,23 +157,25 @@ async def shadow_swap_mv(engine: AsyncEngine) -> None:
         if current_mv is not None:
             await conn.execute(text("DROP MATERIALIZED VIEW mv_geocode_target_old"))
         await rename_mv_next_indexes_for_conn(conn)
+        if publication_guard is not None:
+            await publication_guard(conn)
     async with engine.begin() as conn:
         await conn.execute(text("SET LOCAL lock_timeout = '2s'"))
-        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
         await conn.execute(text("ANALYZE mv_geocode_target"))
         await conn.execute(text("ANALYZE mv_geocode_text_search"))
 
 
 async def rebuild_mv_next(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
         for sql in iter_sql_statements(build_mv_next_sql()):
             await conn.execute(text(sql))
 
 
 async def rebuild_text_search_mv_next(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        await conn.execute(text("SET LOCAL statement_timeout = 0"))
+        await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
         for sql in iter_sql_statements(build_text_search_mv_next_sql()):
             await conn.execute(text(sql))
 

@@ -19,13 +19,14 @@ import asyncio
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from dagster import Field, OpExecutionContext, Permissive, String, job, op
+from dagster import Field, OpExecutionContext, Permissive, String, op
 from kortravelgeo.infra.backup import run_restore_job
 
 # Runtime imports: this module has no `from __future__ import annotations` (§10), so the
 # nested leaf's `asyncio.Event` / `ProgressReporter` annotations are evaluated eagerly.
 from .db_lifecycle import refuse_unsupported_db_lifecycle
 from .load_job_bridge import ProgressReporter, execute_load_job
+from .recovery import geo_job
 from .resources import op_resource
 from .run_tags import LONG_RUN_TAGS
 
@@ -100,7 +101,7 @@ async def run_db_restore_op(context: OpExecutionContext) -> dict[str, object]:
     return {"job_id": job_id}
 
 
-@job(
+@geo_job(
     name="db_restore",
     tags=DB_RESTORE_JOB_TAGS,
     description="Execute a db_restore as a Dagster run (T-290i). Launched by the geo admin API.",

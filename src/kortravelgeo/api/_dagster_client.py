@@ -341,12 +341,15 @@ async def fetch_run_state(
 
 
 def _parse_run_state(payload: object) -> OrchestratorRunState:
+    if isinstance(payload, dict) and payload.get("errors"):
+        return OrchestratorRunState.UNKNOWN
     data = payload.get("data") if isinstance(payload, dict) else None
     result = data.get("runOrError") if isinstance(data, dict) else None
-    if not isinstance(result, dict) or result.get("__typename") != "Run":
-        # RunNotFoundError / PythonError / malformed → no live run reference.
+    if isinstance(result, dict) and result.get("__typename") == "RunNotFoundError":
         return OrchestratorRunState.MISSING
+    if not isinstance(result, dict) or result.get("__typename") != "Run":
+        return OrchestratorRunState.UNKNOWN
     status = result.get("status")
     if isinstance(status, str):
-        return _RUN_STATUS_MAP.get(status, OrchestratorRunState.RUNNING)
-    return OrchestratorRunState.MISSING
+        return _RUN_STATUS_MAP.get(status, OrchestratorRunState.UNKNOWN)
+    return OrchestratorRunState.UNKNOWN

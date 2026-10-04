@@ -59,6 +59,62 @@ class _FakeExecutor:
 
 
 @pytest.mark.asyncio
+async def test_transient_cancel_read_failure_recovers_without_overriding_success() -> None:
+    class FlakyExecutor(_FakeExecutor):
+        async def read_cancel_requested(self, job_id):
+            self._reads += 1
+            if self._reads == 1:
+                raise RuntimeError("temporary read failure")
+            return False
+
+    executor = FlakyExecutor()
+
+    async def leaf(cancel_event, progress):
+        await asyncio.sleep(0.02)
+
+    await execute_load_job(
+        job_id="j1",
+        orchestrator_run_id="r",
+        engine=object(),
+        leaf=leaf,
+        executor=executor,
+        cancel_poll_seconds=0.001,
+    )
+    assert executor._reads > 1
+    assert executor.kinds().count("done") == 1
+    assert "failed" not in executor.kinds()
+
+
+@pytest.mark.asyncio
+async def test_cancel_after_transient_read_failure_still_reaches_leaf() -> None:
+    class FlakyExecutor(_FakeExecutor):
+        async def read_cancel_requested(self, job_id):
+            self._reads += 1
+            if self._reads == 1:
+                raise RuntimeError("temporary read failure")
+            return True
+
+    executor = FlakyExecutor()
+
+    async def leaf(cancel_event, progress):
+        await asyncio.wait_for(cancel_event.wait(), timeout=0.1)
+        raise asyncio.CancelledError
+
+    with pytest.raises(asyncio.CancelledError):
+        await execute_load_job(
+            job_id="j1",
+            orchestrator_run_id="r",
+            engine=object(),
+            leaf=leaf,
+            executor=executor,
+            cancel_poll_seconds=0.001,
+        )
+    assert executor._reads == 2
+    assert "cancelled" in executor.kinds()
+    assert "done" not in executor.kinds()
+
+
+@pytest.mark.asyncio
 async def test_bridge_success_adopts_reports_and_marks_done() -> None:
     ex = _FakeExecutor()
 
@@ -66,8 +122,12 @@ async def test_bridge_success_adopts_reports_and_marks_done() -> None:
         await progress(progress=0.5, stage="dumping", message="halfway")
 
     await execute_load_job(
-        job_id="j1", orchestrator_run_id="run-1", engine=object(),  # type: ignore[arg-type]
-        leaf=leaf, executor=ex, cancel_poll_seconds=0.01,  # type: ignore[arg-type]
+        job_id="j1",
+        orchestrator_run_id="run-1",
+        engine=object(),  # type: ignore[arg-type]
+        leaf=leaf,
+        executor=ex,
+        cancel_poll_seconds=0.01,  # type: ignore[arg-type]
     )
 
     assert ex.calls[0] == ("adopt", "j1", "run-1")
@@ -87,8 +147,12 @@ async def test_bridge_leaf_exception_marks_failed_and_raises_failure() -> None:
 
     with pytest.raises(Failure):
         await execute_load_job(
-            job_id="j1", orchestrator_run_id="r", engine=object(),  # type: ignore[arg-type]
-            leaf=leaf, executor=ex, cancel_poll_seconds=0.01,  # type: ignore[arg-type]
+            job_id="j1",
+            orchestrator_run_id="r",
+            engine=object(),  # type: ignore[arg-type]
+            leaf=leaf,
+            executor=ex,
+            cancel_poll_seconds=0.01,  # type: ignore[arg-type]
         )
 
     assert ("failed", "j1", "boom") in ex.calls
@@ -104,8 +168,12 @@ async def test_bridge_cancelled_error_marks_cancelled_and_reraises() -> None:
 
     with pytest.raises(asyncio.CancelledError):
         await execute_load_job(
-            job_id="j1", orchestrator_run_id="r", engine=object(),  # type: ignore[arg-type]
-            leaf=leaf, executor=ex, cancel_poll_seconds=0.01,  # type: ignore[arg-type]
+            job_id="j1",
+            orchestrator_run_id="r",
+            engine=object(),  # type: ignore[arg-type]
+            leaf=leaf,
+            executor=ex,
+            cancel_poll_seconds=0.01,  # type: ignore[arg-type]
         )
 
     assert "cancelled" in ex.kinds()
@@ -126,8 +194,12 @@ async def test_bridge_poll_bridges_load_jobs_cancel_to_event() -> None:
             await asyncio.sleep(0.005)
 
     await execute_load_job(
-        job_id="j1", orchestrator_run_id="r", engine=object(),  # type: ignore[arg-type]
-        leaf=leaf, executor=ex, cancel_poll_seconds=0.005,  # type: ignore[arg-type]
+        job_id="j1",
+        orchestrator_run_id="r",
+        engine=object(),  # type: ignore[arg-type]
+        leaf=leaf,
+        executor=ex,
+        cancel_poll_seconds=0.005,  # type: ignore[arg-type]
     )
 
     assert observed.get("saw_cancel") is True

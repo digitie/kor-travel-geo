@@ -1,6 +1,6 @@
 # ADR — Architecture Decision Records
 
-`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-068.**
+`kor-travel-geo` / `kor-travel-geo-ui`의 누적 ADR. 파일당 1개(`NNN-<slug>.md`)로 둔다. **다음 후보 = ADR-069.**
 
 - ADR은 **프로그램 핵심 구조**(의존 계층·데이터/식별 모델·패키지/서비스 구조·REST 계약·
   운영 모델) 결정만 둔다. 도메인/ETL·taxonomy·알고리즘·process·운영 결정 중 해당 topic
@@ -16,6 +16,7 @@
 
 | ADR | 제목 | 위치 |
 |-----|------|------|
+| ADR-068 | 공통 Dagster 복구 정책과 운영 UI 채택 | [068-common-dagster-recovery-and-ui.md](068-common-dagster-recovery-and-ui.md) |
 | ADR-001 | PostgreSQL + PostGIS를 1차 저장소로 채택한다 | [001-postgres-postgis-primary-store.md](001-postgres-postgis-primary-store.md) |
 | ADR-002 | 라이브러리 API는 async-only로 둔다 | → 개발 규칙 ([SKILL.md §4](../../SKILL.md) #2) |
 | ADR-003 | 응답 구조는 vworld와 호환되도록 유지한다 | [003-vworld-compatible-response.md](003-vworld-compatible-response.md) |

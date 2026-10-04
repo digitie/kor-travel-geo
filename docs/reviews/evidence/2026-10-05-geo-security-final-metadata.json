@@ -1,0 +1,7 @@
+{
+  "num_turns": 14,
+  "full_raw_sha256": "8672cd53d5ac0d99109ad4b075ab83f30944923f1039b8ad31a8e8dbd559ab57",
+  "geo": "4c59efe3a778fb160b7d0a4fde2ca08967bf1531",
+  "common": "73e3ff8b9398e533806d2d1a8435292570169de3",
+  "method": "앞선 metadata와 동일한 공식 커스터마이즈 명령·읽기 전용 정적 분석. 실제 runtime·live·tarball 검증과 합산하지 않음."
+}

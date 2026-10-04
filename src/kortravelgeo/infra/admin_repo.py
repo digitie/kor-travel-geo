@@ -58,6 +58,7 @@ from kortravelgeo.dto.v2 import DatasetVersionEntry
 from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.concurrency import AdvisoryLockKey, AdvisoryLockNamespace
 from kortravelgeo.infra.metrics import sql_fingerprint, sql_operation
+from kortravelgeo.infra.publication import PublicationGuard
 from kortravelgeo.infra.uploads import extract_upload_set_ids
 from kortravelgeo.version import __version__
 
@@ -730,6 +731,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         forced_promotion: bool = False,
         forced_promotion_metadata: Mapping[str, Any] | None = None,
         release_kind: str | None = None,
+        publication_guard: PublicationGuard | None = None,
     ) -> tuple[DatasetSnapshot, ServingRelease]:
         """Record the dataset state now exposed to serving.
 
@@ -743,7 +745,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         label delta-lineage refreshes as ``daily_delta`` (T-291a)."""
 
         async with self.engine.begin() as conn:
-            await conn.execute(text("SET LOCAL statement_timeout = 0"))
+            await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
             report = (
                 await _latest_consistency_gate_for_batch(conn, load_batch_id)
                 if load_batch_id
@@ -781,7 +783,10 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 }
             row_counts = await _collect_row_counts_for_conn(conn)
             mv_hash = await _mv_hash_for_conn(conn, row_counts.get("mv_geocode_target"))
-            return await _insert_dataset_snapshot_and_release(
+            # 통계 조회 중에는 중지/회수가 가능하도록 소유 행 잠금을 미룬다.
+            if publication_guard is not None:
+                await publication_guard(conn)
+            result = await _insert_dataset_snapshot_and_release(
                 conn,
                 snapshot_state="released",
                 release_state="active",
@@ -797,6 +802,9 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 source_match_set_id=source_match_set_id,
                 snapshot_metadata=snapshot_metadata,
             )
+            if publication_guard is not None:
+                await publication_guard(conn)
+            return result
 
     async def current_dataset_version(self) -> DatasetVersionEntry | None:
         """The active release, projected to the external dataset-version shape (T-291b,
