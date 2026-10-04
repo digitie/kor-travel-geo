@@ -51,6 +51,7 @@ from kortravelgeo.infra.concurrency import (
     cross_process_lock,
 )
 from kortravelgeo.infra.load_job_executor import LoadJobExecutor, LoadJobLeaseLostError
+from kortravelgeo.infra.publication import PublicationGuard, load_job_publication_guard
 from kortravelgeo.loaders.bulk_loader import load_bulk_delivery
 from kortravelgeo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kortravelgeo.loaders.pobox_loader import load_pobox
@@ -555,6 +556,8 @@ async def run_mv_refresh(
     payload: dict[str, Any],
     job_id: str,
     progress: ProgressReporter,
+    cancel_event: asyncio.Event | None = None,
+    publication_guard: PublicationGuard | None = None,
 ) -> None:
     """Resolve text↔geometry links, swap-refresh the serving MVs, and record the serving
     release (port of the ``mv_refresh`` handler). ``forced_promotion`` bypasses ONLY the
@@ -568,11 +571,21 @@ async def run_mv_refresh(
     forced_promotion = _payload_bool(payload, "forced_promotion", default=False)
     if not forced_promotion:
         await repo.ensure_load_batch_release_gate(load_batch_id)
+    if cancel_event is not None and cancel_event.is_set():
+        raise LoadJobLeaseLostError("MV 게시 전에 중지 요청을 확인했습니다.")
+    await progress(stage="mv_refresh", message="MV 게시 소유권 확인")
+    guard_kwargs: dict[str, Any] = (
+        {"publication_guard": publication_guard} if publication_guard is not None else {}
+    )
     await refresh_mv(
         engine,
         concurrently=strategy != "swap",
         strategy="swap" if strategy == "swap" else "concurrent",
+        **guard_kwargs,
     )
+    if cancel_event is not None and cancel_event.is_set():
+        raise LoadJobLeaseLostError("릴리스 활성화 전에 중지 요청을 확인했습니다.")
+    await progress(stage="serving_release", message="릴리스 게시 소유권 확인")
     forced_metadata = payload.get("forced_promotion_metadata")
     # T-291a: a standalone refresh (no load_batch_id) following daily-delta loads can be labeled
     # daily_delta — the documented operator workflow (t028) is apply-deltas-then-refresh-
@@ -588,6 +601,7 @@ async def run_mv_refresh(
         forced_promotion=forced_promotion,
         forced_promotion_metadata=(forced_metadata if isinstance(forced_metadata, dict) else None),
         release_kind=None if load_batch_id else release_kind,
+        **guard_kwargs,
     )
     await progress(progress=1.0, stage="mv_refresh", message="MV refresh 완료")
     await progress(
@@ -856,8 +870,20 @@ async def run_full_load_batch(
     )
     await progress(stage="mv_refresh", message="consistency gate passed; mv_refresh swap running")
 
-    async def _mv_leaf(_ce: asyncio.Event, pr: ProgressReporter) -> None:
-        await run_mv_refresh(engine, payload=mv_payload, job_id=mv_child.job_id, progress=pr)
+    async def _mv_leaf(ce: asyncio.Event, pr: ProgressReporter) -> None:
+        await run_mv_refresh(
+            engine,
+            payload=mv_payload,
+            job_id=mv_child.job_id,
+            progress=pr,
+            cancel_event=ce,
+            publication_guard=load_job_publication_guard(
+                job_id=mv_child.job_id,
+                owner_run_id=orchestrator_run_id,
+                cancel_event=ce,
+                parent_job_id=batch_id,
+            ),
+        )
 
     await _drive_child(
         executor,

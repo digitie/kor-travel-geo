@@ -110,7 +110,11 @@ class _Harness:
         self.consistency_payloads.append(payload)
         return SimpleNamespace(severity_max=self.severity, report_id="rep-1")
 
-    async def run_mv_refresh(self, engine, *, payload, job_id, progress):
+    async def run_mv_refresh(
+        self, engine, *, payload, job_id, progress, cancel_event=None, publication_guard=None
+    ):
+        assert cancel_event is not None
+        assert publication_guard is not None
         self.mv_payloads.append(payload)
 
 

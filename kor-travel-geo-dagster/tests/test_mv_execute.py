@@ -41,11 +41,15 @@ async def test_run_mv_refresh_op_drives_release_gated_leaf(
         captured["lease_ttl_seconds"] = kwargs.get("lease_ttl_seconds")
         await leaf(asyncio.Event(), _noop_progress)
 
-    async def fake_run_mv_refresh(engine, *, payload, job_id, progress):
+    async def fake_run_mv_refresh(
+        engine, *, payload, job_id, progress, cancel_event=None, publication_guard=None
+    ):
         # This is the release-gated leaf (not the bare refresh_mv); assert it is the one called.
         captured["leaf_engine"] = engine
         captured["leaf_payload"] = payload
         captured["leaf_job_id"] = job_id
+        assert cancel_event is not None
+        assert publication_guard is not None
 
     monkeypatch.setattr(mv, "execute_load_job", fake_execute_load_job)
     monkeypatch.setattr(mv, "run_mv_refresh", fake_run_mv_refresh)

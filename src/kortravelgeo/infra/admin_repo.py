@@ -58,6 +58,7 @@ from kortravelgeo.dto.v2 import DatasetVersionEntry
 from kortravelgeo.exceptions import InvalidInputError
 from kortravelgeo.infra.concurrency import AdvisoryLockKey, AdvisoryLockNamespace
 from kortravelgeo.infra.metrics import sql_fingerprint, sql_operation
+from kortravelgeo.infra.publication import PublicationGuard
 from kortravelgeo.infra.uploads import extract_upload_set_ids
 from kortravelgeo.version import __version__
 
@@ -136,6 +137,7 @@ def _dataset_version_candidate(row: Mapping[str, Any]) -> _DatasetVersionCandida
         source_set=_json_dict(row.get("source_set")),
         parent_dataset_snapshot_id=_optional_str(row.get("parent_dataset_snapshot_id")),
     )
+
 
 _ARTIFACT_SELECT = """
 SELECT artifact_id, artifact_type, state, storage_kind, storage_uri,
@@ -246,11 +248,15 @@ class AdminRepository:
     async def get_load_job(self, job_id: str) -> LoadJobRow | None:
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(_JOB_SELECT + " WHERE job_id = :job_id"),
-                    {"job_id": job_id},
+                (
+                    await conn.execute(
+                        text(_JOB_SELECT + " WHERE job_id = :job_id"),
+                        {"job_id": job_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         return map_load_job(dict(row)) if row else None
 
     async def list_load_jobs(
@@ -281,17 +287,21 @@ class AdminRepository:
     async def active_upload_set_ids(self) -> set[str]:
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 SELECT payload
   FROM load_jobs
  WHERE state IN ('queued','running')
    AND payload::text LIKE '%upload_%'
 """
+                        )
                     )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         refs: set[str] = set()
         for row in rows:
             refs.update(extract_upload_set_ids(row["payload"]))
@@ -300,9 +310,10 @@ SELECT payload
     async def table_stats(self, *, limit: int = 200) -> list[TableStat]:
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 SELECT s.relname AS table_name,
        -- `n_live_tup` is a *delta the stats collector accumulates*, and a restore / hot-swap
        -- resets it — so on a freshly restored DB it is not a row count at all: an untouched
@@ -348,10 +359,13 @@ SELECT s.relname AS table_name,
  ORDER BY s.relname
  LIMIT :limit
 """
-                    ),
-                    {"limit": limit},
+                        ),
+                        {"limit": limit},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [
             TableStat(
                 table_name=str(row["table_name"]),
@@ -395,8 +409,14 @@ SELECT s.relname AS table_name,
         """
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(text(_CACHE_METRICS_EXACT_SQL if exact else _CACHE_METRICS_SQL))
-            ).mappings().one()
+                (
+                    await conn.execute(
+                        text(_CACHE_METRICS_EXACT_SQL if exact else _CACHE_METRICS_SQL)
+                    )
+                )
+                .mappings()
+                .one()
+            )
         return CacheMetrics(
             enabled=enabled,
             entries=int(row["entries"] or 0),
@@ -408,35 +428,43 @@ SELECT s.relname AS table_name,
     async def load_job_metric_counts(self) -> list[tuple[str, str, int]]:
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 SELECT kind, state, count(*)::bigint AS count
   FROM load_jobs
  GROUP BY kind, state
  ORDER BY kind, state
 """
+                        )
                     )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [(str(row["kind"]), str(row["state"]), int(row["count"])) for row in rows]
 
     async def recent_log_lines(self, *, limit: int = 200) -> list[str]:
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 SELECT job_id, kind, state, log_tail
   FROM load_jobs
  WHERE jsonb_array_length(log_tail) > 0
  ORDER BY COALESCE(heartbeat_at, finished_at, started_at, created_at) DESC
  LIMIT :limit
 """
-                    ),
-                    {"limit": limit},
+                        ),
+                        {"limit": limit},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         lines: list[str] = []
         for row in rows:
             tail = row["log_tail"]
@@ -466,9 +494,10 @@ SELECT job_id, kind, state, log_tail
         payload_redacted, payload_hash = redact_audit_payload(payload)
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    _json_text(
-                        """
+                (
+                    await conn.execute(
+                        _json_text(
+                            """
 INSERT INTO ops.audit_events
   (audit_event_id, actor_type, actor_id, client_ip_hash, user_agent_hash,
    request_id, trace_id, action, resource_type, resource_id, job_id,
@@ -482,27 +511,30 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
           resource_id, job_id, outcome, error_code, payload_redacted,
           payload_hash
 """,
-                        "payload_redacted",
-                    ),
-                    {
-                        "audit_event_id": str(uuid4()),
-                        "actor_type": actor_type,
-                        "actor_id": actor_id,
-                        "client_ip_hash": hash_identifier(client_ip) if client_ip else None,
-                        "user_agent_hash": hash_identifier(user_agent) if user_agent else None,
-                        "request_id": request_id,
-                        "trace_id": trace_id,
-                        "action": action,
-                        "resource_type": resource_type,
-                        "resource_id": resource_id,
-                        "job_id": job_id,
-                        "outcome": outcome,
-                        "error_code": error_code,
-                        "payload_redacted": payload_redacted,
-                        "payload_hash": payload_hash,
-                    },
+                            "payload_redacted",
+                        ),
+                        {
+                            "audit_event_id": str(uuid4()),
+                            "actor_type": actor_type,
+                            "actor_id": actor_id,
+                            "client_ip_hash": hash_identifier(client_ip) if client_ip else None,
+                            "user_agent_hash": hash_identifier(user_agent) if user_agent else None,
+                            "request_id": request_id,
+                            "trace_id": trace_id,
+                            "action": action,
+                            "resource_type": resource_type,
+                            "resource_id": resource_id,
+                            "job_id": job_id,
+                            "outcome": outcome,
+                            "error_code": error_code,
+                            "payload_redacted": payload_redacted,
+                            "payload_hash": payload_hash,
+                        },
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
         return _audit_event(dict(row))
 
     async def list_audit_events(
@@ -523,11 +555,15 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(_AUDIT_SELECT + where + " ORDER BY occurred_at DESC LIMIT :limit"),
-                    params,
+                (
+                    await conn.execute(
+                        text(_AUDIT_SELECT + where + " ORDER BY occurred_at DESC LIMIT :limit"),
+                        params,
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [_audit_event(dict(row)) for row in rows]
 
     # --- Dagster run-failure alerts (T-290h) --------------------------------
@@ -551,9 +587,10 @@ RETURNING audit_event_id, occurred_at, actor_type, actor_id, client_ip_hash,
         """
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 INSERT INTO ops.run_failure_alerts
   (run_id, job_id, job_name, job_kind, status, error_code, run_failed_at)
 VALUES
@@ -562,18 +599,21 @@ ON CONFLICT (run_id) DO NOTHING
 RETURNING run_id, job_id, job_name, job_kind, status, error_code,
           run_failed_at, recorded_at, acknowledged_at
 """
-                    ),
-                    {
-                        "run_id": run_id,
-                        "job_id": job_id,
-                        "job_name": job_name,
-                        "job_kind": job_kind,
-                        "status": status,
-                        "error_code": error_code,
-                        "run_failed_at": run_failed_at,
-                    },
+                        ),
+                        {
+                            "run_id": run_id,
+                            "job_id": job_id,
+                            "job_name": job_name,
+                            "job_kind": job_kind,
+                            "status": status,
+                            "error_code": error_code,
+                            "run_failed_at": run_failed_at,
+                        },
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         if row is not None:
             return _run_failure_alert(dict(row))
         existing = await self.get_run_failure_alert(run_id)
@@ -584,11 +624,15 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
     async def get_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(_RUN_FAILURE_ALERT_SELECT + " WHERE run_id = :run_id"),
-                    {"run_id": run_id},
+                (
+                    await conn.execute(
+                        text(_RUN_FAILURE_ALERT_SELECT + " WHERE run_id = :run_id"),
+                        {"run_id": run_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         return _run_failure_alert(dict(row)) if row is not None else None
 
     async def list_run_failure_alerts(
@@ -600,34 +644,42 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         where = " WHERE acknowledged_at IS NULL" if unacknowledged_only else ""
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        _RUN_FAILURE_ALERT_SELECT
-                        + where
-                        + " ORDER BY run_failed_at DESC LIMIT :limit"
-                    ),
-                    {"limit": limit},
+                (
+                    await conn.execute(
+                        text(
+                            _RUN_FAILURE_ALERT_SELECT
+                            + where
+                            + " ORDER BY run_failed_at DESC LIMIT :limit"
+                        ),
+                        {"limit": limit},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [_run_failure_alert(dict(row)) for row in rows]
 
     async def acknowledge_run_failure_alert(self, run_id: str) -> RunFailureAlert | None:
         """Ack an alert (idempotent). Returns the current row, or ``None`` if unknown."""
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 UPDATE ops.run_failure_alerts
    SET acknowledged_at = now()
  WHERE run_id = :run_id AND acknowledged_at IS NULL
 RETURNING run_id, job_id, job_name, job_kind, status, error_code,
           run_failed_at, recorded_at, acknowledged_at
 """
-                    ),
-                    {"run_id": run_id},
+                        ),
+                        {"run_id": run_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         if row is not None:
             return _run_failure_alert(dict(row))
         # No row updated: either unknown run_id, or already acknowledged. Return the
@@ -646,11 +698,15 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
             params["state"] = state
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(_SNAPSHOT_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
-                    params,
+                (
+                    await conn.execute(
+                        text(_SNAPSHOT_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
+                        params,
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [_dataset_snapshot(dict(row)) for row in rows]
 
     async def list_serving_releases(
@@ -665,11 +721,15 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
             params["state"] = state
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(_RELEASE_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
-                    params,
+                (
+                    await conn.execute(
+                        text(_RELEASE_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
+                        params,
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             releases = [
                 await self._with_dataset_version_fields(conn, _serving_release(dict(row)))
                 for row in rows
@@ -687,15 +747,19 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         (an admin-only, low-QPS surface, unlike the public projection's 5000-row scans)."""
 
         snapshot_row = (
-            await conn.execute(
-                text(
-                    "SELECT source_set, parent_dataset_snapshot_id"
-                    "  FROM ops.dataset_snapshots"
-                    " WHERE dataset_snapshot_id = :id"
-                ),
-                {"id": release.dataset_snapshot_id},
+            (
+                await conn.execute(
+                    text(
+                        "SELECT source_set, parent_dataset_snapshot_id"
+                        "  FROM ops.dataset_snapshots"
+                        " WHERE dataset_snapshot_id = :id"
+                    ),
+                    {"id": release.dataset_snapshot_id},
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         reference_months: dict[str, str] | None = None
         own_source_set: dict[str, Any] | None = None
         if snapshot_row is not None:
@@ -730,6 +794,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         forced_promotion: bool = False,
         forced_promotion_metadata: Mapping[str, Any] | None = None,
         release_kind: str | None = None,
+        publication_guard: PublicationGuard | None = None,
     ) -> tuple[DatasetSnapshot, ServingRelease]:
         """Record the dataset state now exposed to serving.
 
@@ -743,7 +808,7 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         label delta-lineage refreshes as ``daily_delta`` (T-291a)."""
 
         async with self.engine.begin() as conn:
-            await conn.execute(text("SET LOCAL statement_timeout = 0"))
+            await conn.execute(text("SET LOCAL statement_timeout = '30min'"))
             report = (
                 await _latest_consistency_gate_for_batch(conn, load_batch_id)
                 if load_batch_id
@@ -781,7 +846,10 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 }
             row_counts = await _collect_row_counts_for_conn(conn)
             mv_hash = await _mv_hash_for_conn(conn, row_counts.get("mv_geocode_target"))
-            return await _insert_dataset_snapshot_and_release(
+            # 통계 조회 중에는 중지/회수가 가능하도록 소유 행 잠금을 미룬다.
+            if publication_guard is not None:
+                await publication_guard(conn)
+            result = await _insert_dataset_snapshot_and_release(
                 conn,
                 snapshot_state="released",
                 release_state="active",
@@ -797,6 +865,9 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
                 source_match_set_id=source_match_set_id,
                 snapshot_metadata=snapshot_metadata,
             )
+            if publication_guard is not None:
+                await publication_guard(conn)
+            return result
 
     async def current_dataset_version(self) -> DatasetVersionEntry | None:
         """The active release, projected to the external dataset-version shape (T-291b,
@@ -804,10 +875,14 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
 
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(_DATASET_VERSION_SELECT + " WHERE sr.state = 'active' LIMIT 1")
+                (
+                    await conn.execute(
+                        text(_DATASET_VERSION_SELECT + " WHERE sr.state = 'active' LIMIT 1")
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if row is None:
                 return None
             return await self._dataset_version_entry(conn, _dataset_version_candidate(dict(row)))
@@ -851,13 +926,9 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
 
         candidates = await self._dataset_version_candidates()
         if before is not None:
-            candidates = [
-                c for c in candidates if (c.activated_at, c.version_token) < before
-            ]
+            candidates = [c for c in candidates if (c.activated_at, c.version_token) < before]
         if since is not None:
-            candidates = [
-                c for c in candidates if (c.activated_at, c.version_token) > since
-            ]
+            candidates = [c for c in candidates if (c.activated_at, c.version_token) > since]
         page_candidates = candidates[:limit]
         has_more = len(candidates) > limit
         async with self.engine.connect() as conn:
@@ -878,14 +949,18 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
 
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        _DATASET_VERSION_SELECT
-                        + " WHERE sr.state IN ('active','superseded','rolled_back')"
-                        " ORDER BY ordered_at DESC LIMIT 5000"
+                (
+                    await conn.execute(
+                        text(
+                            _DATASET_VERSION_SELECT
+                            + " WHERE sr.state IN ('active','superseded','rolled_back')"
+                            " ORDER BY ordered_at DESC LIMIT 5000"
+                        )
                     )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         candidates = [_dataset_version_candidate(dict(row)) for row in rows]
         # SQL ordering has no tiebreak on the (unmaterialized) version_token; re-sort in
         # Python per the documented contract. Ties in `ordered_at` (microsecond-resolution
@@ -1026,14 +1101,18 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         practice; defensively handles more)."""
         async with self.engine.begin() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        "SELECT serving_release_id, dataset_snapshot_id, notes"
-                        "  FROM ops.serving_releases"
-                        " WHERE state = 'pending' AND release_kind = 'restore'"
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT serving_release_id, dataset_snapshot_id, notes"
+                            "  FROM ops.serving_releases"
+                            " WHERE state = 'pending' AND release_kind = 'restore'"
+                        )
                     )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             matches = _match_pending_restore_rows(rows, target_database)
             for release_id, snapshot_id in matches:
                 await conn.execute(
@@ -1144,11 +1223,15 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
     async def rollback_plan(self, serving_release_id: str) -> RollbackPlan | None:
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(_RELEASE_SELECT + " WHERE serving_release_id = :serving_release_id"),
-                    {"serving_release_id": serving_release_id},
+                (
+                    await conn.execute(
+                        text(_RELEASE_SELECT + " WHERE serving_release_id = :serving_release_id"),
+                        {"serving_release_id": serving_release_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         if row is None:
             return None
         release = _serving_release(dict(row))
@@ -1193,21 +1276,29 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(_ARTIFACT_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
-                    params,
+                (
+                    await conn.execute(
+                        text(_ARTIFACT_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
+                        params,
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [_ops_artifact(dict(row)) for row in rows]
 
     async def get_artifact(self, artifact_id: str) -> OpsArtifact | None:
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(_ARTIFACT_SELECT + " WHERE artifact_id = :artifact_id"),
-                    {"artifact_id": artifact_id},
+                (
+                    await conn.execute(
+                        text(_ARTIFACT_SELECT + " WHERE artifact_id = :artifact_id"),
+                        {"artifact_id": artifact_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         return _ops_artifact(dict(row)) if row else None
 
     async def get_artifact_by_job_id(
@@ -1223,15 +1314,19 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
             params["artifact_type"] = artifact_type
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        _ARTIFACT_SELECT
-                        + f" WHERE {' AND '.join(clauses)}"
-                        + " ORDER BY created_at DESC LIMIT 1"
-                    ),
-                    params,
+                (
+                    await conn.execute(
+                        text(
+                            _ARTIFACT_SELECT
+                            + f" WHERE {' AND '.join(clauses)}"
+                            + " ORDER BY created_at DESC LIMIT 1"
+                        ),
+                        params,
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         return _ops_artifact(dict(row)) if row else None
 
     async def insert_artifact(
@@ -1259,9 +1354,10 @@ RETURNING run_id, job_id, job_name, job_kind, status, error_code,
     ) -> OpsArtifact:
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    _json_text(
-                        """
+                (
+                    await conn.execute(
+                        _json_text(
+                            """
 INSERT INTO ops.artifacts
   (artifact_id, artifact_type, state, storage_kind, storage_uri, display_name,
    media_type, compression, size_bytes, sha256, retention_class, expires_at,
@@ -1277,31 +1373,34 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
           retention_class, expires_at, job_id, dataset_snapshot_id, serving_release_id,
           manifest, callback_url, callback_state, created_at, finished_at
 """,
-                        "manifest",
-                    ),
-                    {
-                        "artifact_id": artifact_id,
-                        "artifact_type": artifact_type,
-                        "state": state,
-                        "storage_kind": storage_kind,
-                        "storage_uri": storage_uri,
-                        "display_name": display_name,
-                        "media_type": media_type,
-                        "compression": compression,
-                        "size_bytes": size_bytes,
-                        "sha256": sha256,
-                        "retention_class": retention_class,
-                        "expires_at": expires_at,
-                        "job_id": job_id,
-                        "dataset_snapshot_id": dataset_snapshot_id,
-                        "serving_release_id": serving_release_id,
-                        "manifest": manifest or {},
-                        "download_token_hash": download_token_hash,
-                        "callback_url": callback_url,
-                        "callback_state": callback_state,
-                    },
+                            "manifest",
+                        ),
+                        {
+                            "artifact_id": artifact_id,
+                            "artifact_type": artifact_type,
+                            "state": state,
+                            "storage_kind": storage_kind,
+                            "storage_uri": storage_uri,
+                            "display_name": display_name,
+                            "media_type": media_type,
+                            "compression": compression,
+                            "size_bytes": size_bytes,
+                            "sha256": sha256,
+                            "retention_class": retention_class,
+                            "expires_at": expires_at,
+                            "job_id": job_id,
+                            "dataset_snapshot_id": dataset_snapshot_id,
+                            "serving_release_id": serving_release_id,
+                            "manifest": manifest or {},
+                            "download_token_hash": download_token_hash,
+                            "callback_url": callback_url,
+                            "callback_state": callback_state,
+                        },
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
         return _ops_artifact(dict(row))
 
     async def update_artifact(
@@ -1363,7 +1462,7 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
         stmt = text(
             f"""
 UPDATE ops.artifacts
-   SET {', '.join(assignments)}
+   SET {", ".join(assignments)}
  WHERE artifact_id = :artifact_id
 RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
           display_name, media_type, compression, size_bytes, sha256,
@@ -1392,11 +1491,17 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
             params["state"] = state
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(_MAINTENANCE_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"),
-                    params,
+                (
+                    await conn.execute(
+                        text(
+                            _MAINTENANCE_SELECT + where + " ORDER BY created_at DESC LIMIT :limit"
+                        ),
+                        params,
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [_maintenance_window(dict(row)) for row in rows]
 
     async def create_maintenance_window(
@@ -1407,9 +1512,10 @@ RETURNING artifact_id, artifact_type, state, storage_kind, storage_uri,
         blocks = req.blocks or _default_maintenance_blocks(req.kind)
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    _json_text(
-                        """
+                (
+                    await conn.execute(
+                        _json_text(
+                            """
 INSERT INTO ops.maintenance_windows
   (maintenance_window_id, kind, state, starts_at, ends_at, actual_started_at,
    reason, requested_by, approved_by, confirmation_hash, blocks,
@@ -1422,23 +1528,26 @@ RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started
           actual_ended_at, reason, requested_by, approved_by, blocks,
           created_by_job_id, closed_by_job_id, created_at
 """,
-                        "blocks",
-                    ),
-                    {
-                        "maintenance_window_id": str(uuid4()),
-                        "kind": req.kind,
-                        "state": state,
-                        "starts_at": req.starts_at,
-                        "ends_at": req.ends_at,
-                        "reason": req.reason,
-                        "requested_by": req.requested_by,
-                        "approved_by": req.approved_by,
-                        "confirmation_hash": hash_confirmation(req.confirmation),
-                        "blocks": blocks,
-                        "created_by_job_id": req.created_by_job_id,
-                    },
+                            "blocks",
+                        ),
+                        {
+                            "maintenance_window_id": str(uuid4()),
+                            "kind": req.kind,
+                            "state": state,
+                            "starts_at": req.starts_at,
+                            "ends_at": req.ends_at,
+                            "reason": req.reason,
+                            "requested_by": req.requested_by,
+                            "approved_by": req.approved_by,
+                            "confirmation_hash": hash_confirmation(req.confirmation),
+                            "blocks": blocks,
+                            "created_by_job_id": req.created_by_job_id,
+                        },
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
         return _maintenance_window(dict(row))
 
     async def end_maintenance_window(
@@ -1450,9 +1559,10 @@ RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started
     ) -> MaintenanceWindow | None:
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 UPDATE ops.maintenance_windows
    SET state = 'ended',
        actual_ended_at = now(),
@@ -1464,14 +1574,17 @@ RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started
           actual_ended_at, reason, requested_by, approved_by, blocks,
           created_by_job_id, closed_by_job_id, created_at
 """
-                    ),
-                    {
-                        "maintenance_window_id": maintenance_window_id,
-                        "confirmation_hash": hash_confirmation(confirmation),
-                        "closed_by_job_id": closed_by_job_id,
-                    },
+                        ),
+                        {
+                            "maintenance_window_id": maintenance_window_id,
+                            "confirmation_hash": hash_confirmation(confirmation),
+                            "closed_by_job_id": closed_by_job_id,
+                        },
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         return _maintenance_window(dict(row)) if row else None
 
     async def require_active_maintenance_window(
@@ -1482,10 +1595,11 @@ RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started
     ) -> MaintenanceWindow:
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        _MAINTENANCE_SELECT
-                        + """
+                (
+                    await conn.execute(
+                        text(
+                            _MAINTENANCE_SELECT
+                            + """
  WHERE kind = :kind
    AND state = 'active'
    AND starts_at <= now()
@@ -1494,13 +1608,16 @@ RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started
  ORDER BY actual_started_at DESC NULLS LAST, created_at DESC
  LIMIT 1
 """
-                    ),
-                    {
-                        "kind": kind,
-                        "confirmation_hash": hash_confirmation(confirmation),
-                    },
+                        ),
+                        {
+                            "kind": kind,
+                            "confirmation_hash": hash_confirmation(confirmation),
+                        },
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         if row is None:
             msg = f"active {kind} maintenance window with matching confirmation is required"
             raise InvalidInputError(msg)
@@ -1522,15 +1639,19 @@ RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started
             params["dataset_snapshot_id"] = dataset_snapshot_id
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        _TABLE_STATS_SNAPSHOT_SELECT
-                        + where
-                        + " ORDER BY captured_at DESC, schema_name, object_name LIMIT :limit"
-                    ),
-                    params,
+                (
+                    await conn.execute(
+                        text(
+                            _TABLE_STATS_SNAPSHOT_SELECT
+                            + where
+                            + " ORDER BY captured_at DESC, schema_name, object_name LIMIT :limit"
+                        ),
+                        params,
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [_table_stats_snapshot(dict(row)) for row in rows]
 
     async def capture_table_stats_snapshots(
@@ -1559,14 +1680,13 @@ RETURNING maintenance_window_id, kind, state, starts_at, ends_at, actual_started
             if resolved_snapshot_id is None:
                 resolved_snapshot_id = await _active_release_snapshot_id_for_conn(conn)
                 snapshot_link = (
-                    "active_serving_release"
-                    if resolved_snapshot_id is not None
-                    else "unlinked"
+                    "active_serving_release" if resolved_snapshot_id is not None else "unlinked"
                 )
             stats_rows = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 SELECT n.nspname AS schema_name,
        c.relname AS object_name,
        CASE c.relkind
@@ -1678,11 +1798,14 @@ SELECT n.nspname AS schema_name,
  ORDER BY n.nspname, c.relname
  LIMIT :limit
 """
-                    ),
-                    # One extra row so saturation is DETECTED rather than silently swallowed.
-                    {"limit": limit + 1},
+                        ),
+                        # One extra row so saturation is DETECTED rather than silently swallowed.
+                        {"limit": limit + 1},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             truncated = len(stats_rows) > limit
             if truncated:
                 # `ORDER BY n.nspname, c.relname` puts 'ops' first, so an overflow drops the tail
@@ -1806,9 +1929,10 @@ WITH latest AS (
                     )
                 return []
             stats_rows = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 SELECT row_number() OVER (ORDER BY total_exec_time DESC, calls DESC)::integer AS rank,
        queryid::text AS queryid,
        query,
@@ -1836,10 +1960,13 @@ SELECT row_number() OVER (ORDER BY total_exec_time DESC, calls DESC)::integer AS
  ORDER BY total_exec_time DESC, calls DESC
  LIMIT :limit
 """
-                    ),
-                    {"limit": limit},
+                        ),
+                        {"limit": limit},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             records = []
             for row in stats_rows:
                 query = str(row["query"] or "")
@@ -1917,9 +2044,10 @@ DELETE FROM ops.pg_stat_statements_snapshots
         payload_summary = _summarize_payload(payload)
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    _json_text(
-                        """
+                (
+                    await conn.execute(
+                        _json_text(
+                            """
 INSERT INTO load_jobs
   (job_id, kind, payload, state, load_batch_id, parent_job_id,
    progress, current_stage, payload_summary, executor)
@@ -1930,23 +2058,26 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
           progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
 """,
-                        "payload",
-                        "payload_summary",
-                    ),
-                    {
-                        "job_id": resolved_job_id,
-                        "kind": kind,
-                        "payload": payload,
-                        "state": state,
-                        "load_batch_id": load_batch_id,
-                        "parent_job_id": parent_job_id,
-                        "progress": progress,
-                        "current_stage": current_stage,
-                        "payload_summary": payload_summary,
-                        "executor": executor,
-                    },
+                            "payload",
+                            "payload_summary",
+                        ),
+                        {
+                            "job_id": resolved_job_id,
+                            "kind": kind,
+                            "payload": payload,
+                            "state": state,
+                            "load_batch_id": load_batch_id,
+                            "parent_job_id": parent_job_id,
+                            "progress": progress,
+                            "current_stage": current_stage,
+                            "payload_summary": payload_summary,
+                            "executor": executor,
+                        },
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
         return map_load_job(dict(row))
 
     async def link_job_to_batch(self, job_id: str, load_batch_id: str) -> None:
@@ -1993,9 +2124,10 @@ UPDATE load_jobs
         root_state = "queued" if executor == "dagster" else "running"
         async with self.engine.begin() as conn:
             root = (
-                await conn.execute(
-                    _json_text(
-                        """
+                (
+                    await conn.execute(
+                        _json_text(
+                            """
 INSERT INTO load_jobs
   (job_id, kind, payload, state, load_batch_id, progress, current_stage,
    payload_summary, executor, started_at, heartbeat_at)
@@ -2007,19 +2139,22 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
           progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
 """,
-                        "payload",
-                        "payload_summary",
-                    ),
-                    {
-                        "job_id": root_job_id,
-                        "payload": payload,
-                        "load_batch_id": root_job_id,
-                        "payload_summary": root_summary,
-                        "root_state": root_state,
-                        "executor": executor,
-                    },
+                            "payload",
+                            "payload_summary",
+                        ),
+                        {
+                            "job_id": root_job_id,
+                            "payload": payload,
+                            "load_batch_id": root_job_id,
+                            "payload_summary": root_summary,
+                            "root_state": root_state,
+                            "executor": executor,
+                        },
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             for index, (kind, child_payload) in enumerate(children):
                 await conn.execute(
                     _json_text(
@@ -2080,24 +2215,29 @@ UPDATE load_jobs
     async def cancel_load_job(self, job_id: str) -> LoadJobRow | None:
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        _JOB_SELECT
-                        + """
+                (
+                    await conn.execute(
+                        text(
+                            _JOB_SELECT
+                            + """
  WHERE job_id = :job_id
    AND state IN ('queued','running')
  FOR UPDATE
 """
-                    ),
-                    {"job_id": job_id},
+                        ),
+                        {"job_id": job_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if row is None:
                 return None
             updated = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 UPDATE load_jobs
    SET state = 'cancelled',
        finished_at = now(),
@@ -2107,10 +2247,13 @@ RETURNING job_id, kind, state, load_batch_id, parent_job_id,
           progress, current_stage, source_yyyymm, source_set,
           started_at, finished_at, heartbeat_at, error_message, log_tail, payload_summary
 """
-                    ),
-                    {"job_id": job_id},
+                        ),
+                        {"job_id": job_id},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
         return map_load_job(dict(updated))
 
     async def insert_consistency_report(self, report: ConsistencyReport) -> None:
@@ -2136,18 +2279,22 @@ VALUES
     async def consistency_report(self, report_id: str) -> ConsistencyReportRow | None:
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 SELECT report_id, scope, severity_max, source_set, started_at, finished_at,
        cases, generated_by
   FROM load_consistency_reports
  WHERE report_id = :report_id
 """
-                    ),
-                    {"report_id": report_id},
+                        ),
+                        {"report_id": report_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
         return map_consistency_report(dict(row)) if row else None
 
     async def list_consistency_reports(
@@ -2175,9 +2322,10 @@ END >= :min_severity_rank
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        f"""
+                (
+                    await conn.execute(
+                        text(
+                            f"""
 SELECT report_id, scope, severity_max, source_set, started_at, finished_at,
        cases, generated_by
   FROM load_consistency_reports
@@ -2185,10 +2333,13 @@ SELECT report_id, scope, severity_max, source_set, started_at, finished_at,
  ORDER BY started_at DESC
  LIMIT :limit
 """
-                    ),
-                    params,
+                        ),
+                        params,
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         return [map_consistency_report(dict(row)) for row in rows]
 
     async def ensure_consistency_case_samples(self, report_id: str) -> bool:
@@ -2274,19 +2425,23 @@ SELECT count(*)::bigint
         where = " AND ".join(clauses)
         async with self.engine.connect() as conn:
             rows = (
-                await conn.execute(
-                    text(
-                        f"""
+                (
+                    await conn.execute(
+                        text(
+                            f"""
 SELECT *, count(*) OVER()::bigint AS total_count
   FROM ({_CONSISTENCY_SAMPLE_SELECT}) s
  WHERE {where}
  ORDER BY {order_expr} {direction} NULLS LAST, sample_rank ASC
  LIMIT :limit OFFSET :offset
 """
-                    ),
-                    params,
+                        ),
+                        params,
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
         total = int(rows[0]["total_count"]) if rows else 0
         return ConsistencySamplePage(
             report_id=report_id,
@@ -2306,9 +2461,10 @@ SELECT *, count(*) OVER()::bigint AS total_count
         await self.ensure_consistency_case_samples(report_id)
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 WITH base AS (
   SELECT *
     FROM ops.consistency_case_samples
@@ -2364,10 +2520,13 @@ SELECT (SELECT count(*)::bigint FROM base) AS total,
        ) AS distance
   FROM dist
 """
-                    ),
-                    {"report_id": report_id, "case_code": case_code},
+                        ),
+                        {"report_id": report_id, "case_code": case_code},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
         return ConsistencyCaseSummary(
             report_id=report_id,
             case_code=case_code,
@@ -2403,9 +2562,10 @@ SELECT (SELECT count(*)::bigint FROM base) AS total,
         payload_redacted, payload_hash = redact_audit_payload(payload)
         async with self.engine.begin() as conn:
             row = (
-                await conn.execute(
-                    _json_text(
-                        """
+                (
+                    await conn.execute(
+                        _json_text(
+                            """
 UPDATE ops.consistency_case_samples
    SET decision_state = :decision_state,
        reason_code = :reason_code,
@@ -2417,26 +2577,33 @@ UPDATE ops.consistency_case_samples
    AND sample_id::text = :sample_id
 RETURNING *
 """,
-                    ),
-                    {
-                        "report_id": report_id,
-                        "case_code": case_code,
-                        "sample_id": sample_id,
-                        "decision_state": req.decision_state,
-                        "reason_code": req.reason_code,
-                        "note": req.note,
-                        "reviewed_by": req.reviewer,
-                    },
+                        ),
+                        {
+                            "report_id": report_id,
+                            "case_code": case_code,
+                            "sample_id": sample_id,
+                            "decision_state": req.decision_state,
+                            "reason_code": req.reason_code,
+                            "note": req.note,
+                            "reviewed_by": req.reviewer,
+                        },
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if row is None:
                 return None
             selected = (
-                await conn.execute(
-                    text(_CONSISTENCY_SAMPLE_SELECT + " WHERE sample_id::text = :sample_id"),
-                    {"sample_id": sample_id},
+                (
+                    await conn.execute(
+                        text(_CONSISTENCY_SAMPLE_SELECT + " WHERE sample_id::text = :sample_id"),
+                        {"sample_id": sample_id},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             await _insert_consistency_decision_audit(
                 conn,
                 action="consistency.sample.decision",
@@ -2477,9 +2644,10 @@ RETURNING *
         payload_redacted, payload_hash = redact_audit_payload(payload)
         async with self.engine.begin() as conn:
             updated_ids = (
-                await conn.execute(
-                    text(
-                        """
+                (
+                    await conn.execute(
+                        text(
+                            """
 UPDATE ops.consistency_case_samples
    SET decision_state = :decision_state,
        reason_code = :reason_code,
@@ -2491,18 +2659,21 @@ UPDATE ops.consistency_case_samples
    AND sample_id::text = ANY(:sample_ids)
 RETURNING sample_id::text
 """
-                    ),
-                    {
-                        "report_id": report_id,
-                        "case_code": case_code,
-                        "sample_ids": list(req.sample_ids),
-                        "decision_state": req.decision_state,
-                        "reason_code": req.reason_code,
-                        "note": req.note,
-                        "reviewed_by": req.reviewer,
-                    },
+                        ),
+                        {
+                            "report_id": report_id,
+                            "case_code": case_code,
+                            "sample_ids": list(req.sample_ids),
+                            "decision_state": req.decision_state,
+                            "reason_code": req.reason_code,
+                            "note": req.note,
+                            "reviewed_by": req.reviewer,
+                        },
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             ids = [str(row["sample_id"]) for row in updated_ids]
             if not ids:
                 return ConsistencyBulkDecisionResponse(
@@ -2512,11 +2683,17 @@ RETURNING sample_id::text
                     items=(),
                 )
             rows = (
-                await conn.execute(
-                    text(_CONSISTENCY_SAMPLE_SELECT + " WHERE sample_id::text = ANY(:sample_ids)"),
-                    {"sample_ids": ids},
+                (
+                    await conn.execute(
+                        text(
+                            _CONSISTENCY_SAMPLE_SELECT + " WHERE sample_id::text = ANY(:sample_ids)"
+                        ),
+                        {"sample_ids": ids},
+                    )
                 )
-            ).mappings().all()
+                .mappings()
+                .all()
+            )
             await _insert_consistency_decision_audit(
                 conn,
                 action="consistency.sample.bulk_decision",
@@ -2548,26 +2725,31 @@ RETURNING sample_id::text
         await self.ensure_consistency_case_samples(report_id)
         async with self.engine.connect() as conn:
             row = (
-                await conn.execute(
-                    text(
-                        _CONSISTENCY_SAMPLE_SELECT
-                        + """
+                (
+                    await conn.execute(
+                        text(
+                            _CONSISTENCY_SAMPLE_SELECT
+                            + """
  WHERE report_id = :report_id
    AND case_code = :case_code
    AND sample_id::text = :sample_id
 """
-                    ),
-                    {"report_id": report_id, "case_code": case_code, "sample_id": sample_id},
+                        ),
+                        {"report_id": report_id, "case_code": case_code, "sample_id": sample_id},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if row is None:
                 return None
             current = None
             if row.get("bd_mgt_sn"):
                 current = (
-                    await conn.execute(
-                        text(
-                            """
+                    (
+                        await conn.execute(
+                            text(
+                                """
 SELECT bd_mgt_sn,
        CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_X(pt_4326) END AS lon,
        CASE WHEN pt_4326 IS NULL THEN NULL ELSE ST_Y(pt_4326) END AS lat,
@@ -2575,10 +2757,13 @@ SELECT bd_mgt_sn,
   FROM mv_geocode_target
  WHERE bd_mgt_sn = :bd_mgt_sn
 """
-                        ),
-                        {"bd_mgt_sn": row["bd_mgt_sn"]},
+                            ),
+                            {"bd_mgt_sn": row["bd_mgt_sn"]},
+                        )
                     )
-                ).mappings().first()
+                    .mappings()
+                    .first()
+                )
         point = None
         if current and current.get("lon") is not None and current.get("lat") is not None:
             point = ConsistencySamplePoint(x=float(current["lon"]), y=float(current["lat"]))
@@ -2745,19 +2930,23 @@ async def _latest_consistency_gate_for_batch(
     if not load_batch_id:
         return None
     row = (
-        await conn.execute(
-            text(
-                """
+        (
+            await conn.execute(
+                text(
+                    """
 SELECT report_id, severity_max, source_set
   FROM load_consistency_reports
  WHERE source_set ->> 'load_batch_id' = :load_batch_id
  ORDER BY started_at DESC
  LIMIT 1
 """
-            ),
-            {"load_batch_id": load_batch_id},
+                ),
+                {"load_batch_id": load_batch_id},
+            )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     return dict(row) if row else None
 
 
@@ -2813,11 +3002,15 @@ async def source_yyyymm_by_kind(
     """
 
     rows = (
-        await conn.execute(
-            text(_SOURCE_YYYYMM_BY_TABLE_SQL),
-            {"table_names": list(table_by_kind.values())},
+        (
+            await conn.execute(
+                text(_SOURCE_YYYYMM_BY_TABLE_SQL),
+                {"table_names": list(table_by_kind.values())},
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     by_table = {str(row["table_name"]): row for row in rows}
     result: dict[str, str | None] = {}
     without_manifest: dict[str, str] = {}
@@ -2845,8 +3038,10 @@ async def _active_release_reference_months(conn: Any) -> dict[str, str]:
     """현재 active serving release의 기준월(``current_dataset_version``과 같은 해석)."""
 
     row = (
-        await conn.execute(text(_DATASET_VERSION_SELECT + " WHERE sr.state = 'active' LIMIT 1"))
-    ).mappings().first()
+        (await conn.execute(text(_DATASET_VERSION_SELECT + " WHERE sr.state = 'active' LIMIT 1")))
+        .mappings()
+        .first()
+    )
     if row is None:
         return {}
     months = await _resolve_reference_months_for_conn(
@@ -2889,16 +3084,20 @@ async def _collect_row_counts_for_conn(conn: Any) -> dict[str, int]:
 
 async def _runtime_versions_for_conn(conn: Any) -> dict[str, str | None]:
     row = (
-        await conn.execute(
-            text(
-                """
+        (
+            await conn.execute(
+                text(
+                    """
 SELECT current_setting('server_version') AS postgres_version,
        (SELECT extversion FROM pg_extension WHERE extname = 'postgis') AS postgis_version,
        to_regclass('public.alembic_version') AS alembic_version_table
 """
+                )
             )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
     alembic_revision = None
     if row["alembic_version_table"] is not None:
         alembic_revision = await conn.scalar(text("SELECT version_num FROM alembic_version"))
@@ -2911,9 +3110,7 @@ SELECT current_setting('server_version') AS postgres_version,
 
 
 async def _mv_hash_for_conn(conn: Any, mv_row_count: int | None = None) -> str | None:
-    exists = await conn.scalar(
-        text("SELECT to_regclass('public.mv_geocode_target')")
-    )
+    exists = await conn.scalar(text("SELECT to_regclass('public.mv_geocode_target')"))
     if exists is None:
         return None
     if mv_row_count is None:
@@ -2936,9 +3133,7 @@ SELECT md5(
     )
 
 
-def _match_pending_restore_rows(
-    rows: Iterable[Any], target_database: str
-) -> list[tuple[str, str]]:
+def _match_pending_restore_rows(rows: Iterable[Any], target_database: str) -> list[tuple[str, str]]:
     """Pure matching predicate for :meth:`AdminRepository.delete_pending_restore_
     candidate_by_target_database` — no DB object dependencies, so the collision-safety
     property (a ``target_database`` that's a plain string-prefix of another, e.g.
@@ -2972,15 +3167,19 @@ async def _resolve_reference_months_for_conn(
         if current_parent_id is None:
             return None
         parent_row = (
-            await conn.execute(
-                text(
-                    "SELECT source_set, parent_dataset_snapshot_id"
-                    "  FROM ops.dataset_snapshots"
-                    " WHERE dataset_snapshot_id = :id"
-                ),
-                {"id": current_parent_id},
+            (
+                await conn.execute(
+                    text(
+                        "SELECT source_set, parent_dataset_snapshot_id"
+                        "  FROM ops.dataset_snapshots"
+                        " WHERE dataset_snapshot_id = :id"
+                    ),
+                    {"id": current_parent_id},
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         if parent_row is None:
             return None
         normalized = normalize_reference_months_from_source_set(
@@ -3041,9 +3240,10 @@ async def _insert_dataset_snapshot_and_release(
     )
     runtime = await _runtime_versions_for_conn(conn)
     previous = (
-        await conn.execute(
-            text(
-                """
+        (
+            await conn.execute(
+                text(
+                    """
 SELECT serving_release_id, dataset_snapshot_id
   FROM ops.serving_releases
  WHERE state = 'active'
@@ -3051,9 +3251,12 @@ SELECT serving_release_id, dataset_snapshot_id
  LIMIT 1
  FOR UPDATE
 """
+                )
             )
         )
-    ).mappings().first()
+        .mappings()
+        .first()
+    )
     parent_snapshot_id = _optional_str(previous["dataset_snapshot_id"]) if previous else None
     previous_release_id = _optional_str(previous["serving_release_id"]) if previous else None
 
@@ -3085,9 +3288,10 @@ UPDATE ops.serving_releases
     snapshot_id = str(uuid4())
     release_id = str(uuid4())
     snapshot_row = (
-        await conn.execute(
-            _json_text(
-                """
+        (
+            await conn.execute(
+                _json_text(
+                    """
 INSERT INTO ops.dataset_snapshots
   (dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, source_set_hash,
    git_commit, alembic_revision, postgres_version, postgis_version,
@@ -3104,35 +3308,39 @@ RETURNING dataset_snapshot_id, state, parent_dataset_snapshot_id, source_set, so
           performance_artifact_id, backup_artifact_id, created_by_job_id,
           created_at, validated_at
 """,
-                "source_set",
-                "row_counts",
-            ),
-            {
-                "dataset_snapshot_id": snapshot_id,
-                "state": snapshot_state,
-                "parent_dataset_snapshot_id": parent_snapshot_id,
-                "source_set": _snapshot_source_set(
-                    source_set, snapshot_metadata, resolved_reference_months
+                    "source_set",
+                    "row_counts",
                 ),
-                "source_set_hash": canonical_payload_hash(source_set),
-                "git_commit": git_commit or runtime["git_commit"],
-                "alembic_revision": alembic_revision or runtime["alembic_revision"],
-                "postgres_version": postgres_version or runtime["postgres_version"],
-                "postgis_version": postgis_version or runtime["postgis_version"],
-                "row_counts": dict(row_counts),
-                "consistency_report_id": consistency_report_id,
-                "backup_artifact_id": backup_artifact_id,
-                "source_match_set_id": source_match_set_id,
-                "created_by_job_id": created_by_job_id,
-                "validated": snapshot_state in {"validated", "released"},
-            },
+                {
+                    "dataset_snapshot_id": snapshot_id,
+                    "state": snapshot_state,
+                    "parent_dataset_snapshot_id": parent_snapshot_id,
+                    "source_set": _snapshot_source_set(
+                        source_set, snapshot_metadata, resolved_reference_months
+                    ),
+                    "source_set_hash": canonical_payload_hash(source_set),
+                    "git_commit": git_commit or runtime["git_commit"],
+                    "alembic_revision": alembic_revision or runtime["alembic_revision"],
+                    "postgres_version": postgres_version or runtime["postgres_version"],
+                    "postgis_version": postgis_version or runtime["postgis_version"],
+                    "row_counts": dict(row_counts),
+                    "consistency_report_id": consistency_report_id,
+                    "backup_artifact_id": backup_artifact_id,
+                    "source_match_set_id": source_match_set_id,
+                    "created_by_job_id": created_by_job_id,
+                    "validated": snapshot_state in {"validated", "released"},
+                },
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
 
     release_row = (
-        await conn.execute(
-            _json_text(
-                """
+        (
+            await conn.execute(
+                _json_text(
+                    """
 INSERT INTO ops.serving_releases
   (serving_release_id, dataset_snapshot_id, state, release_kind, previous_serving_release_id,
    mv_name, mv_hash, consistency_gate, performance_gate, activated_by_job_id,
@@ -3145,33 +3353,36 @@ RETURNING serving_release_id, dataset_snapshot_id, state, release_kind, previous
           rollback_target_serving_release_id, mv_name, mv_hash, consistency_gate,
           performance_gate, activated_by_job_id, activated_at, notes, created_at
 """,
-                "consistency_gate",
-                "performance_gate",
-            ),
-            {
-                "serving_release_id": release_id,
-                "dataset_snapshot_id": snapshot_id,
-                "state": release_state,
-                "release_kind": release_kind,
-                "previous_serving_release_id": previous_release_id,
-                "mv_hash": mv_hash if mv_hash is not None else (
-                    await _mv_hash_for_conn(conn) if release_state == "active" else None
+                    "consistency_gate",
+                    "performance_gate",
                 ),
-                "consistency_gate": dict(consistency_gate or {}),
-                "performance_gate": dict(performance_gate or {}),
-                "activated_by_job_id": activated_by_job_id if release_state == "active" else None,
-                "active": release_state == "active",
-                "notes": notes,
-            },
+                {
+                    "serving_release_id": release_id,
+                    "dataset_snapshot_id": snapshot_id,
+                    "state": release_state,
+                    "release_kind": release_kind,
+                    "previous_serving_release_id": previous_release_id,
+                    "mv_hash": mv_hash
+                    if mv_hash is not None
+                    else (await _mv_hash_for_conn(conn) if release_state == "active" else None),
+                    "consistency_gate": dict(consistency_gate or {}),
+                    "performance_gate": dict(performance_gate or {}),
+                    "activated_by_job_id": activated_by_job_id
+                    if release_state == "active"
+                    else None,
+                    "active": release_state == "active",
+                    "notes": notes,
+                },
+            )
         )
-    ).mappings().one()
+        .mappings()
+        .one()
+    )
 
     await _insert_ops_audit_event(
         conn,
         action=(
-            "serving_release.activate"
-            if release_state == "active"
-            else "serving_release.candidate"
+            "serving_release.activate" if release_state == "active" else "serving_release.candidate"
         ),
         actor_type="system",
         outcome="succeeded",
@@ -3399,9 +3610,10 @@ def _point_changed(row: Mapping[str, Any], current: Mapping[str, Any] | None) ->
         return current.get("lon") is not None or current.get("lat") is not None
     if current.get("lon") is None or current.get("lat") is None:
         return True
-    return abs(float(row["lon"]) - float(current["lon"])) > 0.000001 or abs(
-        float(row["lat"]) - float(current["lat"])
-    ) > 0.000001
+    return (
+        abs(float(row["lon"]) - float(current["lon"])) > 0.000001
+        or abs(float(row["lat"]) - float(current["lat"])) > 0.000001
+    )
 
 
 def _audit_event(row: Mapping[str, Any]) -> AuditEvent:
@@ -3572,7 +3784,7 @@ def _pg_stat_statement_snapshot(row: Mapping[str, Any]) -> PgStatStatementSnapsh
 def _pg_stat_query_preview(query: str) -> str:
     normalized = _SQL_SPACE_RE.sub(" ", query).strip()
     masked = _SQL_LITERAL_RE.sub("?", normalized)
-    return (masked[:500] or "empty")
+    return masked[:500] or "empty"
 
 
 def _default_maintenance_blocks(kind: str) -> dict[str, Any]:

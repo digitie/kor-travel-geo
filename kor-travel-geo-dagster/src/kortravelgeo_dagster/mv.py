@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from dagster import Field, OpExecutionContext, Permissive, String, op
+from kortravelgeo.infra.publication import load_job_publication_guard
 from kortravelgeo.loaders.batch_dag import run_mv_refresh
 
 from .load_job_bridge import ProgressReporter, execute_load_job
@@ -80,7 +81,18 @@ async def run_mv_refresh_op(context: OpExecutionContext) -> dict[str, object]:
     payload = dict(cast("Mapping[str, Any]", config["payload"]))
 
     async def leaf(cancel_event: asyncio.Event, progress: ProgressReporter) -> None:
-        await run_mv_refresh(engine, payload=payload, job_id=job_id, progress=progress)
+        await run_mv_refresh(
+            engine,
+            payload=payload,
+            job_id=job_id,
+            progress=progress,
+            cancel_event=cancel_event,
+            publication_guard=load_job_publication_guard(
+                job_id=job_id,
+                owner_run_id=context.run_id,
+                cancel_event=cancel_event,
+            ),
+        )
 
     await execute_load_job(
         job_id=job_id,

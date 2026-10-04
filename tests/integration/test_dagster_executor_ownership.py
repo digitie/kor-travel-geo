@@ -99,6 +99,77 @@ async def test_old_owner_cannot_finish_reassigned_job(ownership_engine: AsyncEng
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case", ["done", "failed", "cancelled", "new-owner", "cancel-event", "valid"]
+)
+async def test_publication_guard_protects_actual_mv_swap(
+    ownership_engine: AsyncEngine, case: str
+) -> None:
+    import asyncio
+
+    from kortravelgeo.infra.publication import load_job_publication_guard
+    from kortravelgeo.loaders.postload import shadow_swap_mv
+
+    async with ownership_engine.begin() as conn:
+        for suffix, value in (("", "old"), ("_next", "new")):
+            for name in ("mv_geocode_target", "mv_geocode_text_search"):
+                await conn.execute(
+                    text(f"CREATE MATERIALIZED VIEW {name}{suffix} AS SELECT '{value}' AS value")
+                )
+        if case in {"done", "failed", "cancelled"}:
+            await conn.execute(text("UPDATE load_jobs SET state=:state"), {"state": case})
+        elif case == "new-owner":
+            await conn.execute(text("UPDATE load_jobs SET orchestrator_run_id='replacement'"))
+    cancel_event = asyncio.Event()
+    if case == "cancel-event":
+        cancel_event.set()
+    guard = load_job_publication_guard(
+        job_id="job", owner_run_id="owner", cancel_event=cancel_event
+    )
+    if case == "valid":
+        await shadow_swap_mv(ownership_engine, publication_guard=guard)
+    else:
+        with pytest.raises(LoadJobLeaseLostError):
+            await shadow_swap_mv(ownership_engine, publication_guard=guard)
+    async with ownership_engine.connect() as conn:
+        assert await conn.scalar(text("SELECT value FROM mv_geocode_target")) == (
+            "new" if case == "valid" else "old"
+        )
+        assert await conn.scalar(text("SELECT value FROM mv_geocode_text_search")) == (
+            "new" if case == "valid" else "old"
+        )
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_swap_rolls_back_before_publication_commit(
+    ownership_engine: AsyncEngine, monkeypatch
+) -> None:
+    import asyncio
+
+    from kortravelgeo.infra.publication import load_job_publication_guard
+    from kortravelgeo.loaders import postload
+
+    async with ownership_engine.begin() as conn:
+        for suffix, value in (("", "old"), ("_next", "new")):
+            for name in ("mv_geocode_target", "mv_geocode_text_search"):
+                await conn.execute(
+                    text(f"CREATE MATERIALIZED VIEW {name}{suffix} AS SELECT '{value}' AS value")
+                )
+    cancelled = asyncio.Event()
+
+    async def cancel_before_commit(conn):
+        cancelled.set()
+
+    monkeypatch.setattr(postload, "rename_mv_next_indexes_for_conn", cancel_before_commit)
+    guard = load_job_publication_guard(job_id="job", owner_run_id="owner", cancel_event=cancelled)
+    with pytest.raises(LoadJobLeaseLostError):
+        await postload.shadow_swap_mv(ownership_engine, publication_guard=guard)
+    async with ownership_engine.connect() as conn:
+        assert await conn.scalar(text("SELECT value FROM mv_geocode_target")) == "old"
+        assert await conn.scalar(text("SELECT value FROM mv_geocode_target_next")) == "new"
+
+
+@pytest.mark.asyncio
 async def test_reaper_checks_observed_lease_atomically(ownership_engine: AsyncEngine) -> None:
     expired = datetime.now(UTC) - timedelta(hours=1)
     async with ownership_engine.begin() as conn:

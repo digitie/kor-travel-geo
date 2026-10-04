@@ -29,7 +29,15 @@ Dagster 조회 장애를 실행 부재로 해석하면 lease가 만료된 정상
 ## 결과와 이관
 
 React 19 peer와 Node 22 환경으로 소비자 검증을 수행한다. Python common은 확정된
-430a9e9cd5429204579792b1d4f8e399366dcb2f로 고정한다. UI/tokens는 vendor tarball과
+f801f01b2dc34b642a64bbf847fa268ac172e4ed로 고정한다. UI/tokens는 vendor tarball과
 lock integrity로 고정하며 출처는 vendor/PROVENANCE.md에 기록한다.
 공통 가이드: [Dagster 채택 가이드](https://github.com/digitie/kor-travel-common/blob/main/docs/runbooks/dagster-adoption.md).
 상한은 적재·렌더링 구조의 개선이며 실제 RSS 감소율은 측정하지 않았다.
+
+게시 단계는 자식과 batch root의 running/owner 행을 같은 SQL transaction에서 잠그고,
+실제 MV 교체·release 활성화 직전과 commit 전에 중지 여부를 확인한다. 중지되면 해당
+게시 transaction을 rollback한다. 이전에 commit된 원천 적재와 MV transaction은 보존하며,
+전체 batch를 하나의 transaction으로 묶지는 않는다. MV 유지보수·릴리스 SQL에는 30분 상한을 둔다.
+관측 조회의 전체 응답 예산은 기본 10초(최대 20초)이고 실행/취소의 기존 제한과 분리한다.
+Dagster 1.13.24에서 tick 조회가 전체 이력을 순위 계산하지 않도록 모든 tick status를
+명시해 최신 3건 제한 조회를 사용한다. 응답 크기와 전체 읽기 시간 제한을 함께 적용한다.
