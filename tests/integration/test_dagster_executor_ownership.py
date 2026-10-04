@@ -137,6 +137,34 @@ async def test_status_transactions_have_bounded_sql_and_lock_waits(
 
 
 @pytest.mark.asyncio
+async def test_batch_child_losing_ownership_cannot_finish_or_publish_next_stage(
+    ownership_engine: AsyncEngine,
+) -> None:
+    import asyncio
+
+    from kortravelgeo.loaders.batch_dag import _drive_child
+
+    async def leaf(cancel_event, progress):
+        async with ownership_engine.begin() as conn:
+            await conn.execute(text("UPDATE load_jobs SET state='failed', current_stage='reaped'"))
+        await progress(progress=0.5, stage="late publish")
+        pytest.fail("소유권을 잃은 child는 다음 게시 단계에 도달할 수 없다")
+
+    with pytest.raises(LoadJobLeaseLostError):
+        await _drive_child(
+            LoadJobExecutor(ownership_engine, orchestrator_run_id="owner"),
+            child_id="job",
+            orchestrator_run_id="owner",
+            cancel_event=asyncio.Event(),
+            ttl_seconds=300,
+            leaf=leaf,
+        )
+    async with ownership_engine.connect() as conn:
+        row = (await conn.execute(text("SELECT state,current_stage FROM load_jobs"))).one()
+    assert row == ("failed", "reaped")
+
+
+@pytest.mark.asyncio
 async def test_old_terminal_history_never_starves_active_jobs(
     ownership_engine: AsyncEngine,
 ) -> None:

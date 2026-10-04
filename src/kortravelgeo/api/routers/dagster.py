@@ -9,6 +9,7 @@ Dagster run-failure sensor, T-290h) via a recent-failures list, a per-run
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
@@ -96,7 +97,7 @@ query KorTravelGeoDagsterSummary(
         executionTimezone
         scheduleState {
           status
-          ticks(limit: 3) {
+          ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE]) {
             tickId
             status
             timestamp
@@ -116,7 +117,7 @@ query KorTravelGeoDagsterSummary(
         name
         sensorState {
           status
-          ticks(limit: 3) {
+          ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE]) {
             tickId
             status
             timestamp
@@ -649,16 +650,20 @@ async def _post_graphql(
     query: str = _DAGSTER_SUMMARY_QUERY,
 ) -> JsonDict:
     # 응답을 전부 버퍼링하기 전에 상한을 적용한다. 오류 stack도 무한히 적재하지 않는다.
-    async with client.stream(
-        "POST", graphql_url, json={"query": query, "variables": variables}
-    ) as response:
-        response.raise_for_status()
-        content = bytearray()
-        async for chunk in response.aiter_bytes():
-            if len(content) + len(chunk) > 4 * 1024 * 1024:
-                raise ValueError("Dagster 응답이 4 MiB 상한을 넘었습니다.")
-            content.extend(chunk)
-        return _dict(json.loads(content))
+    try:
+        async with asyncio.timeout(client.timeout.read or 30.0):
+            async with client.stream(
+                "POST", graphql_url, json={"query": query, "variables": variables}
+            ) as response:
+                response.raise_for_status()
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if len(content) + len(chunk) > 4 * 1024 * 1024:
+                        raise ValueError("Dagster 응답이 4 MiB 상한을 넘었습니다.")
+                    content.extend(chunk)
+                return _dict(json.loads(content))
+    except TimeoutError as exc:
+        raise httpx.ReadTimeout("Dagster 전체 응답 시간 상한 초과") from exc
 
 
 def _response_meta(*, started_at: float) -> DagsterResponseMeta:
@@ -819,7 +824,9 @@ async def get_dagster_summary(
         )
 
     try:
-        async with httpx.AsyncClient(timeout=settings.dagster_request_timeout_seconds) as client:
+        async with httpx.AsyncClient(
+            timeout=settings.dagster_observability_timeout_seconds
+        ) as client:
             payload = await _post_graphql(
                 client=client,
                 graphql_url=dagster_urls.graphql_url,
@@ -928,7 +935,9 @@ async def get_dagster_run_detail(
         )
 
     try:
-        async with httpx.AsyncClient(timeout=settings.dagster_request_timeout_seconds) as client:
+        async with httpx.AsyncClient(
+            timeout=settings.dagster_observability_timeout_seconds
+        ) as client:
             payload = await _post_graphql(
                 client=client,
                 graphql_url=dagster_urls.graphql_url,

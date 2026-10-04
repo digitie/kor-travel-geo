@@ -316,7 +316,7 @@ function NavGroup({
 }) {
   const pathname = usePathname() ?? "/";
   return <MenuNavigationContext.Provider value={onNavigate}>
-    <AppMenu pathname={pathname} label={title} groups={[{ id: title, label: collapsed ? undefined : title,
+    <AppMenu pathname={pathname} label={title} groups={[{ id: title, label: title,
       items: links.map(link => ({ id: link.href, href: link.href, label: link.label,
         exact: link.href === "/admin", icon: <link.icon size={17} /> })) }]} linkComponent={MenuDocumentLink} />
   </MenuNavigationContext.Provider>;

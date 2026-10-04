@@ -109,7 +109,7 @@ export function DagsterPanel() {
         loading={summaryQuery.isFetching}
         onRefresh={() => void summaryQuery.refetch()}
         runUrl={runId => dagsterRunUrl(summary?.dagster_url ?? "", runId)}
-        scheduleUrl={(name, repository) => `${(summary?.dagster_url ?? "").replace(/\/$/, "")}/locations/${encodeURIComponent(repository.locationName)}/schedules/${encodeURIComponent(name)}`}
+        scheduleUrl={(name, repository) => `${(summary?.dagster_url ?? "").replace(/\/$/, "")}/locations/${encodeURIComponent(repository.name === "__repository__" ? repository.locationName : `${repository.name}@${repository.locationName}`)}/schedules/${encodeURIComponent(name)}`}
         locationUrl={summary?.dagster_url || undefined}
         showRunDetails
         showRepositories

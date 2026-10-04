@@ -156,6 +156,8 @@ class Settings(BaseSettings):
         "dagster",
     )
     dagster_request_timeout_seconds: float = Field(default=3.0, ge=0.2, le=30.0)
+    # 관측 조회만 별도 예산을 둔다. 실행/취소/생존 확인의 짧은 제한은 유지한다.
+    dagster_observability_timeout_seconds: float = Field(default=10.0, ge=0.2, le=20.0)
     # launchRun은 webserver가 code-server(gRPC)에서 job snapshot을 받아야 끝나므로 조회용
     # 3초로는 cold code location에서 끊긴다(T-318: 2026-09-28 첫 백업 launch가 3초 timeout으로
     # 502, run은 Dagster에서 따로 시작됐다). 조회 경로는 짧게 두고 launch만 길게 준다.

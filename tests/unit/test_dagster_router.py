@@ -17,6 +17,23 @@ from kortravelgeo.settings import Settings, get_settings
 _HEADERS = {"X-KTG-Actor": "dagster-test", "X-KTG-Roles": "source_file_viewer"}
 
 
+def test_observability_budget_is_separate_and_bounded() -> None:
+    from pydantic import ValidationError
+
+    settings = Settings(_env_file=None, dagster_request_timeout_seconds=0.5)
+    assert settings.dagster_request_timeout_seconds == 0.5
+    assert settings.dagster_observability_timeout_seconds == 10.0
+    assert (
+        Settings(
+            _env_file=None, dagster_observability_timeout_seconds=20
+        ).dagster_observability_timeout_seconds
+        == 20
+    )
+    for invalid in (0, 20.1, float("inf")):
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, dagster_observability_timeout_seconds=invalid)
+
+
 def _alert(run_id: str, *, acknowledged: bool = False, **overrides: Any) -> RunFailureAlert:
     fields: dict[str, Any] = {
         "run_id": run_id,
@@ -1252,3 +1269,31 @@ async def test_graphql_response_limit_stops_reading_before_unbounded_payload() -
         with pytest.raises(ValueError, match="4 MiB"):
             await dagster_mod._post_graphql(client, "http://dagster.example/graphql", {})
     assert consumed == [0, 1]
+
+
+@pytest.mark.asyncio
+async def test_slow_graphql_chunks_cannot_extend_total_deadline() -> None:
+    import asyncio
+    from time import monotonic
+
+    class Chunks(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            while True:
+                await asyncio.sleep(0.005)
+                yield b" "
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, stream=Chunks()))
+    async with httpx.AsyncClient(transport=transport, timeout=0.03) as client:
+        started = monotonic()
+        with pytest.raises(httpx.ReadTimeout, match="전체 응답 시간 상한"):
+            await dagster_mod._post_graphql(client, "http://dagster.example/graphql", {})
+        assert monotonic() - started < 0.2
+
+
+def test_tick_history_uses_limited_queries_without_full_history_batch_rank() -> None:
+    assert (
+        dagster_mod._DAGSTER_SUMMARY_QUERY.count(
+            "ticks(limit: 3, statuses: [STARTED, SKIPPED, SUCCESS, FAILURE])"
+        )
+        == 2
+    )

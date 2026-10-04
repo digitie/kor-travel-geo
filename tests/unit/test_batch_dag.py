@@ -27,8 +27,15 @@ _SOURCE_CHILDREN = [
 class _FakeExecutor:
     events: ClassVar[list[tuple]] = []
 
-    def __init__(self, _engine: object, *, lease_ttl_seconds: float = 300.0) -> None:
+    def __init__(
+        self,
+        _engine: object,
+        *,
+        lease_ttl_seconds: float = 300.0,
+        orchestrator_run_id: str | None = None,
+    ) -> None:
         self.ttl = lease_ttl_seconds
+        assert orchestrator_run_id is not None
 
     async def adopt_dagster(self, job_id, orchestrator_run_id, *, ttl_seconds=None):
         _FakeExecutor.events.append(("adopt", job_id, orchestrator_run_id))

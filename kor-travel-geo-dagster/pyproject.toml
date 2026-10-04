@@ -19,7 +19,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "kor-travel-common[dagster] @ git+https://github.com/digitie/kor-travel-common.git@430a9e9cd5429204579792b1d4f8e399366dcb2f#subdirectory=packages/py/kor-travel-common",
+  "kor-travel-common[dagster] @ git+https://github.com/digitie/kor-travel-common.git@92ebfa60ef976d830c08b353de633103650175ad#subdirectory=packages/py/kor-travel-common",
   # Main library. Distribution name is ``kor-travel-geo``; the import root is
   # ``kortravelgeo``. The Dagster code location consumes the main lib one-way
   # (main lib stays Dagster-free — the boundary is enforced by packaging,

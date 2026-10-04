@@ -50,7 +50,7 @@ from kortravelgeo.infra.concurrency import (
     ConcurrentExecutionError,
     cross_process_lock,
 )
-from kortravelgeo.infra.load_job_executor import LoadJobExecutor
+from kortravelgeo.infra.load_job_executor import LoadJobExecutor, LoadJobLeaseLostError
 from kortravelgeo.loaders.bulk_loader import load_bulk_delivery
 from kortravelgeo.loaders.consistency import DEFAULT_CASES, run_all_cases
 from kortravelgeo.loaders.pobox_loader import load_pobox
@@ -624,7 +624,9 @@ def _source_leaf(
     return _leaf
 
 
-async def _lease_heartbeat(executor: LoadJobExecutor, job_id: str, ttl_seconds: float) -> None:
+async def _lease_heartbeat(
+    executor: LoadJobExecutor, job_id: str, ttl_seconds: float, cancel_event: asyncio.Event
+) -> None:
     """Renew a child row's lease at ~1/3 the TTL, independent of progress emission.
 
     A source loader can stay inside one long COPY without emitting progress; without this
@@ -635,8 +637,14 @@ async def _lease_heartbeat(executor: LoadJobExecutor, job_id: str, ttl_seconds: 
     interval = ttl_seconds / 3.0
     while True:
         await asyncio.sleep(interval)
-        with suppress(Exception):
+        try:
             await executor.renew_lease(job_id, ttl_seconds=ttl_seconds)
+        except LoadJobLeaseLostError:
+            cancel_event.set()
+            return
+        except Exception:
+            # 일시적인 DB 장애와 확인된 소유권 상실을 구별한다.
+            continue
 
 
 async def _drive_child(
@@ -665,7 +673,7 @@ async def _drive_child(
         await executor.set_progress(child_id, progress=progress, stage=stage, message=message)
         await executor.renew_lease(child_id, ttl_seconds=ttl_seconds)
 
-    heartbeat = asyncio.create_task(_lease_heartbeat(executor, child_id, ttl_seconds))
+    heartbeat = asyncio.create_task(_lease_heartbeat(executor, child_id, ttl_seconds, cancel_event))
     try:
         await child_progress(progress=0.01, stage="running", message="job started")
         result = await leaf(cancel_event, child_progress)
@@ -691,22 +699,24 @@ async def _fetch_source_children(
 
     async with engine.connect() as conn:
         rows = (
-            await conn.execute(
-                text(
-                    """
+            (
+                await conn.execute(
+                    text(
+                        """
 SELECT job_id, kind, payload
   FROM load_jobs
  WHERE load_batch_id = :batch_id
    AND job_id <> :batch_id
  ORDER BY created_at
 """
-                ),
-                {"batch_id": batch_id},
+                    ),
+                    {"batch_id": batch_id},
+                )
             )
-        ).mappings().all()
-    return [
-        (str(row["job_id"]), str(row["kind"]), dict(row["payload"] or {})) for row in rows
-    ]
+            .mappings()
+            .all()
+        )
+    return [(str(row["job_id"]), str(row["kind"]), dict(row["payload"] or {})) for row in rows]
 
 
 async def _cancel_queued_children(engine: AsyncEngine, batch_id: str) -> None:
@@ -746,7 +756,9 @@ async def run_full_load_batch(
     root ``done`` on normal return.
     """
 
-    executor = LoadJobExecutor(engine, lease_ttl_seconds=lease_ttl_seconds)
+    executor = LoadJobExecutor(
+        engine, lease_ttl_seconds=lease_ttl_seconds, orchestrator_run_id=orchestrator_run_id
+    )
     repo = AdminRepository(engine)
 
     children = await _fetch_source_children(engine, batch_id)
@@ -817,10 +829,7 @@ async def run_full_load_batch(
     source_match_set_id = _payload_str(payload, "source_match_set_id")
     forced_promotion = _payload_bool(payload, "forced_promotion", default=False)
     if report.severity_max == "ERROR" and not forced_promotion:
-        msg = (
-            f"consistency report severity ERROR; mv_refresh blocked "
-            f"(report {report.report_id})"
-        )
+        msg = f"consistency report severity ERROR; mv_refresh blocked (report {report.report_id})"
         raise FullLoadBatchGateError(msg)
 
     # 4. mv_refresh swap ---------------------------------------------------------------
